@@ -3617,11 +3617,11 @@ void clear_linkup_counters(struct hfi1_devdata *dd)
  * is_local_mad() returns 1 if 'mad' is sent from, and destined to the
  * local node, 0 otherwise.
  */
-static int is_local_mad(struct hfi1_ibport *ibp, struct opa_mad *mad,
-			struct ib_wc *in_wc)
+static int is_local_mad(struct hfi1_ibport *ibp, const struct opa_mad *mad,
+			const struct ib_wc *in_wc)
 {
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-	struct opa_smp *smp = (struct opa_smp *)mad;
+	const struct opa_smp *smp = (const struct opa_smp *)mad;
 
 	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
 		return (smp->hop_cnt == 0 &&
@@ -3642,7 +3642,8 @@ static int is_local_mad(struct hfi1_ibport *ibp, struct opa_mad *mad,
  * SMPs which arrive from other nodes are instead checked by
  * opa_smp_check().
  */
-static int opa_local_smp_check(struct hfi1_ibport *ibp, struct ib_wc *in_wc)
+static int opa_local_smp_check(struct hfi1_ibport *ibp,
+			       const struct ib_wc *in_wc)
 {
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	u16 slid = in_wc->slid;
@@ -3677,7 +3678,7 @@ static int opa_local_smp_check(struct hfi1_ibport *ibp, struct ib_wc *in_wc)
 }
 
 static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
-			    u8 port, struct opa_mad *in_mad,
+			    u8 port, const struct opa_mad *in_mad,
 			    struct opa_mad *out_mad,
 			    u32 *resp_len)
 {
@@ -3772,7 +3773,7 @@ bail:
 }
 
 static int process_subn(struct ib_device *ibdev, int mad_flags,
-			u8 port, struct ib_mad *in_mad,
+			u8 port, const struct ib_mad *in_mad,
 			struct ib_mad *out_mad)
 {
 	struct ib_smp *smp = (struct ib_smp *)out_mad;
@@ -3831,7 +3832,7 @@ bail:
 }
 
 static int process_perf_opa(struct ib_device *ibdev, u8 port,
-			    struct opa_mad *in_mad,
+			    const struct opa_mad *in_mad,
 			    struct opa_mad *out_mad, u32 *resp_len)
 {
 	struct opa_pma_mad *pmp = (struct opa_pma_mad *)out_mad;
@@ -3904,9 +3905,11 @@ bail:
 }
 
 static int hfi1_process_opa_mad(struct ib_device *ibdev, int mad_flags,
-			       u8 port, struct ib_wc *in_wc,
-			       struct ib_grh *in_grh, struct opa_mad *in_mad,
-			       struct opa_mad *out_mad, size_t *out_mad_size)
+			        u8 port, const struct ib_wc *in_wc,
+			        const struct ib_grh *in_grh,
+			        const struct opa_mad *in_mad,
+			        struct opa_mad *out_mad, size_t *out_mad_size,
+			        u16 *out_mad_pkey_index)
 {
 	int ret;
 	int pkey_idx;
@@ -3919,7 +3922,7 @@ static int hfi1_process_opa_mad(struct ib_device *ibdev, int mad_flags,
 			hfi1_get_pkey(ibp, 1));
 		pkey_idx = 1;
 	}
-	in_wc->pkey_index = (u16)pkey_idx;
+	*out_mad_pkey_index = (u16)pkey_idx;
 
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
@@ -3951,8 +3954,10 @@ bail:
 }
 
 static int hfi1_process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-			       struct ib_wc *in_wc, struct ib_grh *in_grh,
-			       struct ib_mad *in_mad, struct ib_mad *out_mad)
+			       const struct ib_wc *in_wc,
+			       const struct ib_grh *in_grh,
+			       const struct ib_mad *in_mad,
+			       struct ib_mad *out_mad)
 {
 	int ret;
 
@@ -3989,9 +3994,10 @@ bail:
  * This is called by the ib_mad module.
  */
 int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-		     struct ib_wc *in_wc, struct ib_grh *in_grh,
-		     struct ib_mad_hdr *in_mad, size_t in_mad_size,
-		     struct ib_mad_hdr *out_mad, size_t *out_mad_size)
+		     const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,
+		     struct ib_mad_hdr *out_mad, size_t *out_mad_size,
+		     u16 *out_mad_pkey_index)
 {
 	switch (in_mad->base_version) {
 	case OPA_MGMT_BASE_VERSION:
@@ -4003,11 +4009,12 @@ int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 					    in_wc, in_grh,
 					    (struct opa_mad *)in_mad,
 					    (struct opa_mad *)out_mad,
-					    out_mad_size);
+					    out_mad_size,
+					    out_mad_pkey_index);
 	case IB_MGMT_BASE_VERSION:
 		return hfi1_process_ib_mad(ibdev, mad_flags, port,
 					  in_wc, in_grh,
-					  (struct ib_mad *)in_mad,
+					  (const struct ib_mad *)in_mad,
 					  (struct ib_mad *)out_mad);
 	default:
 		break;

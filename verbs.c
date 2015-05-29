@@ -1406,7 +1406,6 @@ static int query_device(struct ib_device *ibdev,
 		IB_DEVICE_BAD_QKEY_CNTR | IB_DEVICE_SHUTDOWN_PORT |
 		IB_DEVICE_SYS_IMAGE_GUID | IB_DEVICE_RC_RNR_NAK_GEN |
 		IB_DEVICE_PORT_ACTIVE_EVENT | IB_DEVICE_SRQ_RESIZE;
-	props->device_cap_flags2 = IB_DEVICE_OPA_MAD_SUPPORT;
 
 	props->page_size_cap = PAGE_SIZE;
 	props->vendor_id =
@@ -1438,7 +1437,6 @@ static int query_device(struct ib_device *ibdev,
 	props->max_mcast_qp_attach = hfi1_max_mcast_qp_attached;
 	props->max_total_mcast_qp_attach = props->max_mcast_qp_attach *
 		props->max_mcast_grp;
-	props->max_mad_size = OPA_MGMT_MAD_SIZE;
 
 	return 0;
 }
@@ -1520,10 +1518,24 @@ static int query_port(struct ib_device *ibdev, u8 port,
 	return 0;
 }
 
-static enum rdma_protocol_type
-query_protocol(struct ib_device *device, u8 port_num)
+static int port_immutable(struct ib_device *ibdev, u8 port_num,
+			  struct ib_port_immutable *immutable)
 {
-	return RDMA_PROTOCOL_IB;
+	struct ib_port_attr attr;
+	int err;
+
+	err = query_port(ibdev, port_num, &attr);
+	if (err)
+		return err;
+
+	memset(immutable, 0, sizeof(*immutable));
+
+	immutable->pkey_tbl_len = attr.pkey_tbl_len;
+	immutable->gid_tbl_len = attr.gid_tbl_len;
+	immutable->core_cap_flags = RDMA_CORE_PORT_INTEL_OPA;
+	immutable->max_mad_size = OPA_MGMT_MAD_SIZE;
+
+	return 0;
 }
 
 static int modify_device(struct ib_device *device,
@@ -2059,7 +2071,6 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	ibdev->query_device = query_device;
 	ibdev->modify_device = modify_device;
 	ibdev->query_port = query_port;
-	ibdev->query_protocol = query_protocol;
 	ibdev->modify_port = modify_port;
 	ibdev->query_pkey = query_pkey;
 	ibdev->query_gid = query_gid;
@@ -2103,6 +2114,7 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	ibdev->process_mad = hfi1_process_mad;
 	ibdev->mmap = hfi1_mmap;
 	ibdev->dma_ops = &hfi1_dma_mapping_ops;
+	ibdev->get_port_immutable = port_immutable;
 
 	strncpy(ibdev->node_desc, init_utsname()->nodename,
 		sizeof(ibdev->node_desc));

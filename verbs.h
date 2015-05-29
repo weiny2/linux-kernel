@@ -891,9 +891,10 @@ void hfi1_cap_mask_chg(struct hfi1_ibport *ibp);
 void hfi1_sys_guid_chg(struct hfi1_ibport *ibp);
 void hfi1_node_desc_chg(struct hfi1_ibport *ibp);
 int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-		     struct ib_wc *in_wc, struct ib_grh *in_grh,
-		     struct ib_mad_hdr *in_mad, size_t in_mad_size,
-		     struct ib_mad_hdr *out_mad, size_t *out_mad_size);
+		     const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,
+		     struct ib_mad_hdr *out_mad, size_t *out_mad_size,
+		     u16 *out_mad_pkey_index);
 int hfi1_create_agents(struct hfi1_ibdev *dev);
 void hfi1_free_agents(struct hfi1_ibdev *dev);
 
