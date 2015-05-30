@@ -141,7 +141,8 @@ MODULE_PARM_DESC(sdma_comp_size, "Size of User SDMA completion ring. Default: 12
 	do {								\
 		if ((idx) < ARRAY_SIZE((arr)))				\
 			(arr)[(idx++)] = sdma_build_ahg_descriptor(	\
-				(value), (dw), (bit), (width));		\
+				(__force u16)(value), (dw), (bit),	\
+							(width));	\
 		else							\
 			return -ERANGE;					\
 	} while (0)
@@ -606,7 +607,7 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	 */
 	vl = (le16_to_cpu(req->hdr.pbc[0]) >> 12) & 0xF;
 	sc = (((be16_to_cpu(req->hdr.lrh[0]) >> 12) & 0xF) |
-	      ((le16_to_cpu(req->hdr.pbc[1] >> 14) & 0x1) << 4));
+	      (((le16_to_cpu(req->hdr.pbc[1]) >> 14) & 0x1) << 4));
 	if (vl >= hfi1_num_vls(dd->pport->vls_operational) ||
 	    vl != sc_to_vlt(dd, sc)) {
 		SDMA_DBG(req, "Invalid SC(%u)/VL(%u)", sc, vl);
@@ -1341,7 +1342,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 	AHG_HEADER_SET(req->ahg, diff, 15, 16, 16,
 		       cpu_to_le16(req->koffset >> 16));
 	if (req_opcode(req->info.ctrl) == EXPECTED) {
-		u16 val;
+		__le16 val;
 
 		tidval = req->tids[req->tididx];
 
@@ -1372,12 +1373,13 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 			       ((!!(req->omfactor - KDETH_OM_SMALL)) << 15 |
 				((req->tidoffset / req->omfactor) & 0x7fff)));
 		/* KDETH.TIDCtrl, KDETH.TID */
-		val = (cpu_to_le16(EXP_TID_GET(tidval, CTRL) & 0x3) << 10) |
-			cpu_to_le16(EXP_TID_GET(tidval, IDX) & 0x3ff);
+		val = cpu_to_le16(((EXP_TID_GET(tidval, CTRL) & 0x3) << 10) |
+					(EXP_TID_GET(tidval, IDX) & 0x3ff));
 		/* Clear KDETH.SH on last packet */
 		if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT)) {
-			val |= KDETH_GET(hdr->kdeth.ver_tid_offset, INTR) >> 16;
-			val &= ~(1U << 13);
+			val |= cpu_to_le16(KDETH_GET(hdr->kdeth.ver_tid_offset,
+								INTR) >> 16);
+			val &= cpu_to_le16(~(1U << 13));
 			AHG_HEADER_SET(req->ahg, diff, 7, 16, 14, val);
 		} else
 			AHG_HEADER_SET(req->ahg, diff, 7, 16, 12, val);

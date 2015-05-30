@@ -195,7 +195,7 @@ void hfi1_bad_pqkey(struct hfi1_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
  * Send a bad M_Key trap (ch. 14.3.9).
  */
 static void bad_mkey(struct hfi1_ibport *ibp, struct ib_mad_hdr *mad,
-		     u64 mkey, u32 dr_slid, u8 return_path[], u8 hop_cnt)
+		     __be64 mkey, __be32 dr_slid, u8 return_path[], u8 hop_cnt)
 {
 	struct ib_mad_notice_attr data;
 
@@ -214,7 +214,7 @@ static void bad_mkey(struct hfi1_ibport *ibp, struct ib_mad_hdr *mad,
 	data.details.ntc_256.mkey = mkey;
 	if (mad->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
 
-		data.details.ntc_256.dr_slid = dr_slid;
+		data.details.ntc_256.dr_slid = (__force __be16)dr_slid;
 		data.details.ntc_256.dr_trunc_hop = IB_NOTICE_TRAP_DR_NOTICE;
 		if (hop_cnt > ARRAY_SIZE(data.details.ntc_256.dr_rtn_path)) {
 			data.details.ntc_256.dr_trunc_hop |=
@@ -397,7 +397,7 @@ static void set_link_speed_enabled(struct hfi1_pportdata *ppd, u32 s)
 }
 
 static int check_mkey(struct hfi1_ibport *ibp, struct ib_mad_hdr *mad,
-		      int mad_flags, u64 mkey, u32 dr_slid,
+		      int mad_flags, __be64 mkey, __be32 dr_slid,
 		      u8 return_path[], u8 hop_cnt)
 {
 	int valid_mkey = 0;
@@ -644,10 +644,9 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
 
-	pi->port_link_mode  = OPA_PORT_LINK_MODE_OPA << 10;
-	pi->port_link_mode |= OPA_PORT_LINK_MODE_OPA << 5;
-	pi->port_link_mode |= OPA_PORT_LINK_MODE_OPA;
-	pi->port_link_mode = cpu_to_be16(pi->port_link_mode);
+	pi->port_link_mode  = cpu_to_be16(OPA_PORT_LINK_MODE_OPA << 10 |
+					  OPA_PORT_LINK_MODE_OPA << 5 |
+					  OPA_PORT_LINK_MODE_OPA);
 
 	pi->port_ltp_crc_mode = cpu_to_be16(ppd->port_ltp_crc_mode);
 
@@ -749,6 +748,7 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 	u32 am_port = (am & 0x00ff0000) >> 16;
 	u32 start_block = am & 0x7ff;
 	__be16 *p;
+	u16 *q;
 	int i;
 	u16 n_blocks_avail;
 	unsigned npkeys = hfi1_get_npkeys(dd);
@@ -779,11 +779,12 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	p = (__be16 *) data;
+	q = (u16 *)data;
 	/* get the real pkeys if we are requesting the first block */
 	if (start_block == 0) {
-		get_pkeys(dd, port, p);
+		get_pkeys(dd, port, q);
 		for (i = 0; i < npkeys; i++)
-			p[i] = cpu_to_be16(p[i]);
+			p[i] = cpu_to_be16(q[i]);
 		if (resp_len)
 			*resp_len += size;
 	} else
@@ -1242,6 +1243,7 @@ static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 	u32 am_port = (am & 0x00ff0000) >> 16;
 	u32 start_block = am & 0x7ff;
 	u16 *p = (u16 *) data;
+	__be16 *q = (__be16 *)data;
 	int i;
 	u16 n_blocks_avail;
 	unsigned npkeys = hfi1_get_npkeys(dd);
@@ -1268,7 +1270,7 @@ static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	for (i = 0; i < n_blocks_sent * OPA_PARTITION_TABLE_BLK_SIZE; i++)
-		p[i] = be16_to_cpu(p[i]);
+		p[i] = be16_to_cpu(q[i]);
 
 	if (start_block == 0 && set_pkeys(dd, port, p) != 0) {
 		smp->status |= IB_SMP_INVALID_FIELD;
@@ -2243,7 +2245,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 	tmp2 = tmp + read_dev_cntr(dd, C_DC_TX_REPLAY, CNTR_INVALID_VL);
 	if (tmp2 < tmp) {
 		/* overflow/wrapped */
-		rsp->local_link_integrity_errors = (u64) ~0;
+		rsp->local_link_integrity_errors = cpu_to_be64(~0);
 	} else {
 		rsp->local_link_integrity_errors = cpu_to_be64(tmp2);
 	}
@@ -2252,7 +2254,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 					CNTR_INVALID_VL);
 	if (tmp2 > (u32)UINT_MAX || tmp2 < tmp) {
 		/* overflow/wrapped */
-		rsp->link_error_recovery = (u32) ~0;
+		rsp->link_error_recovery = cpu_to_be32(~0);
 	} else {
 		rsp->link_error_recovery = cpu_to_be32(tmp2);
 	}
@@ -2430,7 +2432,7 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
 	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
 	num_vls = hweight32(be32_to_cpu(req->vl_select_mask));
-	vl_select_mask = cpu_to_be32(req->vl_select_mask);
+	vl_select_mask = be32_to_cpu(req->vl_select_mask);
 
 	if (num_ports != 1 || (vl_select_mask & ~VL_MASK_ALL)) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
@@ -2585,8 +2587,8 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
 	counter_size_mode = (be32_to_cpu(pmp->mad_hdr.attr_mod) >> 22) & 0x3;
 
-	num_pslm = hweight64(req->port_select_mask[3]);
-	num_vls = hweight32(req->vl_select_mask);
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+	num_vls = hweight32(be32_to_cpu(req->vl_select_mask));
 
 	if (num_ports != 1 || num_ports != num_pslm ||
 		(counter_size_mode != COUNTER_SIZE_MODE_ALL64)) {
@@ -2636,7 +2638,7 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 	tmp2 = tmp + read_dev_cntr(dd, C_DC_TX_REPLAY, CNTR_INVALID_VL);
 	if (tmp2 < tmp) {
 		/* overflow/wrapped */
-		rsp->local_link_integrity_errors = (u64) ~0;
+		rsp->local_link_integrity_errors = cpu_to_be64(~0);
 	} else {
 		rsp->local_link_integrity_errors = cpu_to_be64(tmp2);
 	}
@@ -2645,7 +2647,7 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 					CNTR_INVALID_VL);
 	if (tmp2 > (u32)UINT_MAX || tmp2 < tmp) {
 		/* overflow/wrapped */
-		rsp->link_error_recovery = (u32) ~0;
+		rsp->link_error_recovery = cpu_to_be32(~0);
 	} else {
 		rsp->link_error_recovery = cpu_to_be32(tmp2);
 	}
@@ -2664,7 +2666,7 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 
 	vlinfo = (struct _vls_ectrs *)&(rsp->vls[0]);
 	vfi = 0;
-	vl_select_mask = cpu_to_be32(req->vl_select_mask);
+	vl_select_mask = be32_to_cpu(req->vl_select_mask);
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 			 8 * sizeof(req->vl_select_mask)) {
 		memset(vlinfo, 0, sizeof(*vlinfo));
@@ -3334,7 +3336,7 @@ static int __subn_set_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 	return __subn_get_opa_led_info(smp, am, data, ibdev, port, resp_len);
 }
 
-static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
+static int subn_get_opa_sma(__be16 attr_id, struct opa_smp *smp, u32 am,
 			    u8 *data, struct ib_device *ibdev, u8 port,
 			    u32 *resp_len)
 {
@@ -3424,7 +3426,7 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 	return ret;
 }
 
-static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
+static int subn_set_opa_sma(__be16 attr_id, struct opa_smp *smp, u32 am,
 			    u8 *data, struct ib_device *ibdev, u8 port,
 			    u32 *resp_len)
 {
@@ -3792,8 +3794,8 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 	}
 
 	ret = check_mkey(ibp, (struct ib_mad_hdr *)smp, mad_flags,
-			 smp->mkey, smp->dr_slid, smp->return_path,
-			 smp->hop_cnt);
+			 smp->mkey, (__force __be32)smp->dr_slid,
+			 smp->return_path, smp->hop_cnt);
 	if (ret) {
 		u32 port_num = be32_to_cpu(smp->attr_mod);
 
@@ -3811,7 +3813,8 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 		    port != port_num)
 			(void) check_mkey(to_iport(ibdev, port_num),
 					  (struct ib_mad_hdr *)smp, 0,
-					  smp->mkey, smp->dr_slid,
+					  smp->mkey,
+					  (__force __be32)smp->dr_slid,
 					  smp->return_path, smp->hop_cnt);
 		ret = IB_MAD_RESULT_FAILURE;
 		goto bail;
