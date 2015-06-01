@@ -560,6 +560,7 @@ struct hfi1_pportdata {
 	 * we can send. Changes when ibmtu changes.
 	 */
 	u32 ibmaxlen;
+	u32 current_egress_rate; /* units [10^6 bits/sec] */
 	/* LID programmed for this instance */
 	u16 lid;
 	/* list of pkeys programmed; 0 if not set */
@@ -1080,6 +1081,67 @@ static inline u32 driver_lstate(struct hfi1_pportdata *ppd)
 static inline u16 generate_jkey(kuid_t uid)
 {
 	return from_kuid(current_user_ns(), uid) & 0xffff;
+}
+
+/*
+ * active_egress_rate
+ *
+ * returns the active egress rate in units of [10^6 bits/sec]
+ */
+static inline u32 active_egress_rate(struct hfi1_pportdata *ppd)
+{
+	u16 link_speed = ppd->link_speed_active;
+	u16 link_width = ppd->link_width_active;
+	u32 egress_rate;
+
+	if (link_speed == OPA_LINK_SPEED_25G)
+		egress_rate = 25000;
+	else /* assume OPA_LINK_SPEED_12_5G */
+		egress_rate = 12500;
+
+	switch (link_width) {
+	case OPA_LINK_WIDTH_4X:
+		egress_rate *= 4;
+		break;
+	case OPA_LINK_WIDTH_3X:
+		egress_rate *= 3;
+		break;
+	case OPA_LINK_WIDTH_2X:
+		egress_rate *= 2;
+		break;
+	default:
+		/* assume IB_WIDTH_1X */
+		break;
+	}
+
+	return egress_rate;
+}
+
+/*
+ * egress_cycles
+ *
+ * Returns the number of 'fabric clock cycles' to egress a packet
+ * of length 'len' bytes, at 'rate' Mbit/s. Since the fabric clock
+ * rate is (approximately) 805 MHz, the units of the returned value
+ * are (1/805 MHz).
+ */
+static inline u32 egress_cycles(u32 len, u32 rate)
+{
+	u32 cycles;
+
+	/*
+	 * cycles is:
+	 *
+	 *          (length) [bits] / (rate) [bits/sec]
+	 *  ---------------------------------------------------
+	 *  fabric_clock_period == 1 /(805 * 10^6) [cycles/sec]
+	 */
+
+	cycles = len * 8; /* bits */
+	cycles *= 805;
+	cycles /= rate;
+
+	return cycles;
 }
 
 void set_link_ipg(struct hfi1_pportdata *ppd);

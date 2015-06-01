@@ -444,8 +444,9 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 
 	/* if 0, fill in a default */
 	if (dp->pbc == 0) {
+		struct hfi1_pportdata *ppd = dd->pport;
 		hfi1_cdbg(PKT, "Generating PBC");
-		dp->pbc = create_pbc(0, 0, 0, total_len);
+		dp->pbc = create_pbc(ppd, 0, 0, 0, total_len);
 	} else {
 		hfi1_cdbg(PKT, "Using passed in PBC");
 	}
@@ -608,12 +609,19 @@ static void adjust_integrity_checks(struct hfi1_devdata *dd)
 
 	spin_lock_irqsave(&dd->sc_lock, sc_flags);
 	for (i = 0; i < dd->num_send_contexts; i++) {
+		int enable;
 		sc = dd->send_contexts[i].sc;
 
 		if (!sc)
 			continue;	/* not allocated */
 
+		enable = likely(!HFI1_CAP_IS_KSET(NO_INTEGRITY)) &&
+			 dd->hfi1_snoop.mode_flag != HFI1_PORT_SNOOP_MODE;
+
 		set_pio_integrity(sc);
+
+		if (enable) /* take HFI_CAP_* flags into account */
+			hfi1_init_ctxt(sc);
 	}
 	spin_unlock_irqrestore(&dd->sc_lock, sc_flags);
 }
@@ -807,11 +815,13 @@ static ssize_t hfi1_snoop_write(struct file *fp, const char __user *data,
 	u32 len;
 	u64 pbc;
 	struct hfi1_ibport *ibp;
+	struct hfi1_pportdata *ppd;
 
 	dd = hfi1_dd_from_sc_inode(fp->f_inode);
 	if (dd == NULL)
 		return -ENODEV;
 
+	ppd = dd->pport;
 	snoop_dbg("received %lu bytes from user", count);
 
 	memset(&dpkt, 0, sizeof(struct diag_pkt));
@@ -863,7 +873,7 @@ static ssize_t hfi1_snoop_write(struct file *fp, const char __user *data,
 		}
 
 		len = (count >> 2) + 2; /* Add in PBC */
-		pbc = create_pbc(0, 0, vl, len);
+		pbc = create_pbc(ppd, 0, 0, vl, len);
 	} else {
 		if (copy_from_user(&pbc, data, sizeof(pbc)))
 			return -EINVAL;
@@ -881,6 +891,8 @@ static ssize_t hfi1_snoop_write(struct file *fp, const char __user *data,
 	dpkt.len = count;
 	dpkt.data = (unsigned long)data;
 
+	len = (count >> 2) + 2; /* Add in PBC */
+	pbc = create_pbc(ppd, 0, 0, vl, len);
 	snoop_dbg("PBC: vl=0x%llx Length=0x%llx",
 		  (pbc >> 12) & 0xf,
 		  (pbc & 0xfff));
@@ -1685,7 +1697,7 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		md.dir = PKT_DIR_EGRESS;
 		if (likely(pbc == 0)) {
 			vl = be16_to_cpu(ahdr->ibh.lrh[0]) >> 12;
-			md.u.pbc = create_pbc(0, qp->s_srate, vl, plen);
+			md.u.pbc = create_pbc(ppd, 0, qp->s_srate, vl, plen);
 		} else {
 			md.u.pbc = 0;
 		}

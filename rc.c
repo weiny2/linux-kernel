@@ -747,7 +747,7 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct hfi1_qp *qp,
 	sc = rcd->sc;
 	plen = 2 /* PBC */ + hwords;
 	vl = sc_to_vlt(ppd->dd, sc5);
-	pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
+	pbc = create_pbc(ppd, pbc_flags, qp->srate_mbps, vl, plen);
 
 	pbuf = sc_buffer_alloc(sc, plen, NULL, NULL);
 	if (!pbuf) {

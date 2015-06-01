@@ -1650,6 +1650,7 @@ int init_pervl_scs(struct hfi1_devdata *dd)
 				  dd->rcd[0]->rcvhdrqentsize, dd->node);
 	if (!dd->vld[15].sc)
 		goto nomem;
+	hfi1_init_ctxt(dd->vld[15].sc);
 	dd->vld[15].mtu = enum_to_mtu(OPA_MTU_2048);
 	for (i = 0; i < num_vls; i++) {
 		/*
@@ -1663,6 +1664,9 @@ int init_pervl_scs(struct hfi1_devdata *dd)
 					 dd->rcd[0]->rcvhdrqentsize, dd->node);
 		if (!dd->vld[i].sc)
 			goto nomem;
+
+		hfi1_init_ctxt(dd->vld[i].sc);
+
 		/* non VL15 start with the max MTU */
 		dd->vld[i].mtu = hfi1_max_mtu;
 	}

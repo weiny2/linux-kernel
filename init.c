@@ -171,7 +171,7 @@ int hfi1_create_ctxts(struct hfi1_devdata *dd)
 			goto nomem;
 		}
 
-		ret = hfi1_init_ctxt(rcd);
+		ret = hfi1_init_ctxt(rcd->sc);
 		if (ret < 0) {
 			dd_dev_err(dd,
 				   "Failed to setup kernel receive context, failing\n");
@@ -366,9 +366,7 @@ void set_link_ipg(struct hfi1_pportdata *ppd)
 	u16 cce, ccti_limit, max_ccti = 0;
 	u16 shift, mult;
 	u64 src;
-	u16 link_speed = ppd->link_speed_active;
-	u16 link_width = ppd->link_width_active;
-	u32 pkt_egress_rate; /* Mbits /sec */
+	u32 current_egress_rate; /* Mbits /sec */
 	u32 max_pkt_time;
 	/*
 	 * max_pkt_time is the maximum packet egress time in units
@@ -400,36 +398,9 @@ void set_link_ipg(struct hfi1_pportdata *ppd)
 	shift = (cce & 0xc000) >> 14;
 	mult = (cce & 0x3fff);
 
-	if (link_speed == OPA_LINK_SPEED_25G)
-		pkt_egress_rate = 25000;
-	else /* assume OPA_LINK_SPEED_12_5G */
-		pkt_egress_rate = 12500;
+	current_egress_rate = active_egress_rate(ppd);
 
-	switch (link_width) {
-	case OPA_LINK_WIDTH_4X:
-		pkt_egress_rate *= 4;
-		break;
-	case OPA_LINK_WIDTH_3X:
-		pkt_egress_rate *= 3;
-		break;
-	case OPA_LINK_WIDTH_2X:
-		pkt_egress_rate *= 2;
-		break;
-	default:
-		/* assume IB_WIDTH_1X */
-		break;
-	}
-
-	/*
-	 * max_pkt_time is:
-	 *
-	 *  (max_packet_length) [bits] / (pkt_egress_rate) [bits/sec]
-	 *  ---------------------------------------------------------
-	 *    fabric_clock_period == (1 / 805 * 10^6) [1/sec]
-	 */
-	max_pkt_time = (ppd->ibmaxlen * 8);
-	max_pkt_time *= 805;
-	max_pkt_time /= pkt_egress_rate;
+	max_pkt_time = egress_cycles(ppd->ibmaxlen, current_egress_rate);
 
 	src = (max_pkt_time >> shift) * mult;
 

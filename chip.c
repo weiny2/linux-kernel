@@ -3603,6 +3603,8 @@ void get_linkup_link_widths(struct hfi1_pportdata *ppd)
 	ppd->link_width_downgrade_rx_active = ppd->link_width_active;
 	/* per OPA spec, on link up LWD.E resets to LWD.S */
 	ppd->link_width_downgrade_enabled = ppd->link_width_downgrade_supported;
+	/* cache the active egress rate (units {10^6 bits/sec]) */
+	ppd->current_egress_rate = active_egress_rate(ppd);
 }
 
 /*
@@ -6135,6 +6137,7 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 	ppd->link_width_active = 0;
 	ppd->link_width_downgrade_tx_active = 0;
 	ppd->link_width_downgrade_rx_active = 0;
+	ppd->current_egress_rate = 0;
 	return 0;
 }
 
@@ -8350,22 +8353,21 @@ u64 hfi1_gpio_mod(struct hfi1_devdata *dd, u32 target, u32 data, u32 dir,
 #define SET_STATIC_RATE_CONTROL_SMASK(r) \
 (r |= SEND_CTXT_CHECK_ENABLE_DISALLOW_PBC_STATIC_RATE_CONTROL_SMASK)
 
-int hfi1_init_ctxt(struct hfi1_ctxtdata *rcd)
+int hfi1_init_ctxt(struct send_context *sc)
 {
-	struct hfi1_devdata *dd = rcd->dd;
-
-	if (rcd->sc) {
+	if (sc != NULL) {
+		struct hfi1_devdata *dd = sc->dd;
 		u64 reg;
-		u8 set = (rcd->sc->type == SC_USER ?
+		u8 set = (sc->type == SC_USER ?
 			  HFI1_CAP_IS_USET(STATIC_RATE_CTRL) :
 			  HFI1_CAP_IS_KSET(STATIC_RATE_CTRL));
-		reg = read_kctxt_csr(dd, rcd->sc->hw_context,
+		reg = read_kctxt_csr(dd, sc->hw_context,
 				     SEND_CTXT_CHECK_ENABLE);
 		if (set)
 			CLEAR_STATIC_RATE_CONTROL_SMASK(reg);
 		else
 			SET_STATIC_RATE_CONTROL_SMASK(reg);
-		write_kctxt_csr(dd, rcd->sc->hw_context,
+		write_kctxt_csr(dd, sc->hw_context,
 				SEND_CTXT_CHECK_ENABLE, reg);
 	}
 	return 0;
@@ -10454,6 +10456,26 @@ bail:
 	return dd;
 }
 
+static u16 delay_cycles(struct hfi1_pportdata *ppd, u32 desired_egress_rate,
+			u32 dw_len)
+{
+	u32 delta_cycles;
+	u32 current_egress_rate = ppd->current_egress_rate;
+	/* rates here are in units of 10^6 bits/sec */
+
+	if (desired_egress_rate == -1)
+		return 0; /* shouldn't happen */
+
+	if (desired_egress_rate >= current_egress_rate)
+		return 0; /* we can't help go faster, only slower */
+
+	delta_cycles = egress_cycles(dw_len * 4, desired_egress_rate) -
+			egress_cycles(dw_len * 4, current_egress_rate);
+
+	return (u16)delta_cycles;
+}
+
+
 /**
  * create_pbc - build a pbc for transmission
  * @flags: special case flags or-ed in built pbc
@@ -10468,11 +10490,16 @@ bail:
  * is for the diagnostic interface which calls this if the user does not
  * supply their own PBC.
  */
-u64 create_pbc(u64 flags, u32 srate, u32 vl, u32 dw_len)
+u64 create_pbc(struct hfi1_pportdata *ppd, u64 flags, int srate_mbs, u32 vl,
+	       u32 dw_len)
 {
-	u64 pbc;
+	u64 pbc, delay = 0;
+
+	if (unlikely(srate_mbs))
+		delay = delay_cycles(ppd, srate_mbs, dw_len);
 
 	pbc = flags
+		| (delay << PBC_STATIC_RATE_CONTROL_COUNT_SHIFT)
 		| ((u64)PBC_IHCRC_NONE << PBC_INSERT_HCRC_SHIFT)
 		| (vl & PBC_VL_MASK) << PBC_VL_SHIFT
 		| (dw_len & PBC_LENGTH_DWS_MASK)
