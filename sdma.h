@@ -405,6 +405,7 @@ struct sdma_engine {
 	void __iomem *tail_csr;
 	u64 imask;			/* clear interrupt mask */
 	u64 idle_mask;
+	u64 progress_mask;
 	/* private: */
 	struct workqueue_struct *wq;
 	/* private: */
@@ -505,16 +506,21 @@ void sdma_wait(struct hfi1_devdata *dd);
  * Return:
  * 1 - empty, 0 - non-empty
  */
-static inline int sdma_empty(struct sdma_engine *engine)
+static inline int sdma_empty(struct sdma_engine *sde)
 {
-	return engine->descq_tail == engine->descq_head;
+	return sde->descq_tail == sde->descq_head;
 }
 
-static inline u16 sdma_descq_freecnt(struct sdma_engine *engine)
+static inline u16 sdma_descq_freecnt(struct sdma_engine *sde)
 {
-	return engine->descq_cnt -
-		(engine->descq_tail -
-		 ACCESS_ONCE(engine->descq_head)) - 1;
+	return sde->descq_cnt -
+		(sde->descq_tail -
+		 ACCESS_ONCE(sde->descq_head)) - 1;
+}
+
+static inline u16 sdma_descq_inprocess(struct sdma_engine *sde)
+{
+	return sde->descq_cnt - sdma_descq_freecnt(sde);
 }
 
 /*
@@ -1064,20 +1070,22 @@ int sdma_map_init(
 	u8 num_vls,
 	u8 *vl_engines);
 
+/* slow path */
+void _sdma_engine_progress_schedule(struct sdma_engine *sde);
+
 /**
  * sdma_engine_progress_schedule() - schedule progress on engine
  * @sde: sdma_engine to schedule progress
+ *
+ * This is the fast path.
  *
  */
 static inline void sdma_engine_progress_schedule(
 	struct sdma_engine *sde)
 {
-	/*
-	 * Need a better mechanism here
-	 * that progresses the ring on a
-	 * CPU away from receive processing
-	 */
-	sdma_engine_interrupt(sde, 0);
+	if (!sde || sdma_descq_inprocess(sde) < (sde->descq_cnt / 8))
+		return;
+	_sdma_engine_progress_schedule(sde);
 }
 
 struct sdma_engine *sdma_select_engine_sc(

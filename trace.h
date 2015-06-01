@@ -779,7 +779,7 @@ TRACE_EVENT(hfi1_sdma_engine_select,
 	)
 );
 
-TRACE_EVENT(hfi1_sdma_engine_interrupt,
+DECLARE_EVENT_CLASS(hfi1_sdma_engine_class,
 	TP_PROTO(
 		struct sdma_engine *sde,
 		u64 status
@@ -801,6 +801,22 @@ TRACE_EVENT(hfi1_sdma_engine_interrupt,
 		__entry->idx,
 		(unsigned long long)__entry->status
 	)
+);
+
+DEFINE_EVENT(hfi1_sdma_engine_class, hfi1_sdma_engine_interrupt,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		u64 status
+	),
+	TP_ARGS(sde, status)
+);
+
+DEFINE_EVENT(hfi1_sdma_engine_class, hfi1_sdma_engine_progress,
+	TP_PROTO(
+		struct sdma_engine *sde,
+		u64 status
+	),
+	TP_ARGS(sde, status)
 );
 
 DECLARE_EVENT_CLASS(hfi1_sdma_ahg_ad,

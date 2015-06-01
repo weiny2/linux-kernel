@@ -748,7 +748,7 @@ static inline void build_ahg(struct hfi1_qp *qp, u32 npsn)
 			qp->s_hdr->ahgcount++;
 			qp->s_hdr->ahgdesc[0] =
 				sdma_build_ahg_descriptor(
-					(u16)cpu_to_be16((u16)npsn),
+					(__force u16)cpu_to_be16((u16)npsn),
 					BTH2_OFFSET,
 					16,
 					16);
@@ -757,7 +757,7 @@ static inline void build_ahg(struct hfi1_qp *qp, u32 npsn)
 				qp->s_hdr->ahgcount++;
 				qp->s_hdr->ahgdesc[1] =
 					sdma_build_ahg_descriptor(
-						(u16)cpu_to_be16(
+						(__force u16)cpu_to_be16(
 							(u16)(npsn >> 16)),
 						BTH2_OFFSET,
 						0,
