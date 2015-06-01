@@ -65,6 +65,8 @@
 #include <linux/cdev.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
+#include <linux/mmu_notifier.h>
+#include <linux/rbtree.h>
 
 #include "chip_registers.h"
 #include "common.h"
@@ -157,6 +159,11 @@ struct ctxt_eager_bufs {
 	} *rcvtids;
 };
 
+struct exp_tid_set {
+	struct list_head list;
+	u32 count;
+};
+
 struct hfi1_ctxtdata {
 	/* shadow the ctxt's RcvCtrl register */
 	u64 rcvctrl;
@@ -213,20 +220,13 @@ struct hfi1_ctxtdata {
 	u32 expected_count;
 	/* index of first expected TID entry. */
 	u32 expected_base;
-	/* cursor into the exp group sets */
-	atomic_t tidcursor;
-	/* number of exp TID groups assigned to the ctxt */
-	u16 numtidgroups;
-	/* size of exp TID group fields in tidusemap */
-	u16 tidmapcnt;
-	/* exp TID group usage bitfield array */
-	unsigned long *tidusemap;
-	/* pinned pages for exp sends, allocated at open */
-	struct page **tid_pg_list;
-	/* dma handles for exp tid pages */
-	dma_addr_t *physshadow;
+
+	struct exp_tid_set tid_group_list;
+	struct exp_tid_set tid_used_list;
+	struct exp_tid_set tid_full_list;
+
 	/* lock protecting all Expected TID data */
-	spinlock_t exp_lock;
+	struct mutex exp_lock;
 	/* number of pio bufs for this ctxt (all procs, if shared) */
 	u32 piocnt;
 	/* first pio buffer for this ctxt */
@@ -1081,6 +1081,8 @@ struct hfi1_devdata {
 #define PT_EAGER    1
 #define PT_INVALID  2
 
+struct mmu_rb_node;
+
 /* Private data for file operations */
 struct hfi1_filedata {
 	struct hfi1_ctxtdata *uctxt;
@@ -1089,7 +1091,26 @@ struct hfi1_filedata {
 	struct hfi1_user_sdma_pkt_q *pq;
 	/* for cpu affinity; -1 if none */
 	int rec_cpu_num;
+	struct mmu_notifier mn;
+	struct rb_root tid_rb_root;
+	u32 tid_limit;
+	u32 tid_used;
+	spinlock_t rb_lock;
+	u32 *invalid_tids;
+	u32 invalid_tid_idx;
+	spinlock_t invalid_lock;
+	int (*mmu_rb_insert)(struct rb_root *, struct mmu_rb_node *);
 };
+
+/* for use in system calls, where we want to know device type, etc. */
+#define fp_to_fd(fp) ((struct hfi1_filedata *)(fp)->private_data)
+#define ctxt_fp(fp) (fp_to_fd((fp))->uctxt)
+#define subctxt_fp(fp) (fp_to_fd((fp))->subctxt)
+#define tidcursor_fp(fp) (fp_to_fd((fp))->tidcursor)
+#define user_sdma_pkt_fp(fp) (fp_to_fd((fp))->pq)
+#define user_sdma_comp_fp(fp) (fp_to_fd((fp))->cq)
+#define notifier_fp(fp) (fp_to_fd((fp))->mn)
+#define rb_fp(fp) (fp_to_fd((fp))->tid_rb_root)
 
 extern struct list_head hfi1_dev_list;
 extern spinlock_t hfi1_devs_lock;
@@ -1398,18 +1419,6 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
 void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 			   u64 pbc, const void *from, size_t count);
 
-/* for use in system calls, where we want to know device type, etc. */
-#define ctxt_fp(fp) \
-	(((struct hfi1_filedata *)(fp)->private_data)->uctxt)
-#define subctxt_fp(fp) \
-	(((struct hfi1_filedata *)(fp)->private_data)->subctxt)
-#define tidcursor_fp(fp) \
-	(((struct hfi1_filedata *)(fp)->private_data)->tidcursor)
-#define user_sdma_pkt_fp(fp) \
-	(((struct hfi1_filedata *)(fp)->private_data)->pq)
-#define user_sdma_comp_fp(fp) \
-	(((struct hfi1_filedata *)(fp)->private_data)->cq)
-
 static inline struct hfi1_devdata *dd_from_ppd(struct hfi1_pportdata *ppd)
 {
 	return ppd->dd;
@@ -1545,8 +1554,8 @@ void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val);
  */
 #define DEFAULT_RCVHDR_ENTSIZE 32
 
-int hfi1_get_user_pages(unsigned long, size_t, struct page **);
-void hfi1_release_user_pages(struct page **, size_t);
+int hfi1_acquire_user_pages(unsigned long, size_t, bool, struct page **);
+void hfi1_release_user_pages(struct page **, size_t, bool);
 
 static inline void clear_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 {
@@ -1595,8 +1604,6 @@ int get_platform_config_field(struct hfi1_devdata *dd,
 			enum platform_config_table_type_encoding table_type,
 			int table_index, int field_index, u32 *data, u32 len);
 
-dma_addr_t hfi1_map_page(struct pci_dev *, struct page *, unsigned long,
-			 size_t, int);
 const char *get_unit_name(int unit);
 
 /*

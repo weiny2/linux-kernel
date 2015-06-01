@@ -222,7 +222,7 @@ struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
 		rcd->numa_id = numa_node_id();
 		rcd->rcv_array_groups = dd->rcv_entries.ngroups;
 
-		spin_lock_init(&rcd->exp_lock);
+		mutex_init(&rcd->exp_lock);
 
 		/*
 		 * Calculate the context's RcvArray entry starting point.
@@ -946,13 +946,10 @@ void hfi1_free_ctxtdata(struct hfi1_devdata *dd, struct hfi1_ctxtdata *rcd)
 	kfree(rcd->egrbufs.buffers);
 
 	sc_free(rcd->sc);
-	vfree(rcd->physshadow);
-	vfree(rcd->tid_pg_list);
 	vfree(rcd->user_event_mask);
 	vfree(rcd->subctxt_uregbase);
 	vfree(rcd->subctxt_rcvegrbuf);
 	vfree(rcd->subctxt_rcvhdr_base);
-	kfree(rcd->tidusemap);
 	kfree(rcd->opstats);
 	kfree(rcd);
 }
