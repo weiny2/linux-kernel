@@ -209,12 +209,12 @@
  * to the driver itself, not the software interfaces it supports.
  */
 #ifndef HFI1_DRIVER_VERSION_BASE
-#define HFI1_DRIVER_VERSION_BASE "0.9-89"
+#define HFI1_DRIVER_VERSION_BASE "0.9-100"
 #endif
 
 /* create the final driver version string */
 #ifdef HFI1_IDSTR
-#define HFI1_DRIVER_VERSION HFI1_DRIVER_VERSION_BASE "0.9-89" HFI1_IDSTR
+#define HFI1_DRIVER_VERSION HFI1_DRIVER_VERSION_BASE "0.9-100" HFI1_IDSTR
 #else
 #define HFI1_DRIVER_VERSION HFI1_DRIVER_VERSION_BASE
 #endif
