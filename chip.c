@@ -1501,6 +1501,7 @@ static u64 access_sw_cpu_##cntr(const struct cntr_entry *entry,		      \
 
 def_access_sw_cpu(rc_acks);
 def_access_sw_cpu(rc_qacks);
+def_access_sw_cpu(rc_delayed_comp);
 
 #define def_access_ibp_counter(cntr) \
 static u64 access_ibp_##cntr(const struct cntr_entry *entry,		      \
@@ -1523,7 +1524,6 @@ def_access_ibp_counter(rc_timeouts);
 def_access_ibp_counter(pkt_drops);
 def_access_ibp_counter(dmawait);
 def_access_ibp_counter(rc_seqnak);
-def_access_ibp_counter(rc_delayed_comp);
 def_access_ibp_counter(rc_dupreq);
 def_access_ibp_counter(rdma_seq);
 def_access_ibp_counter(unaligned);
@@ -1720,7 +1720,6 @@ static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
 [C_SW_IBP_PKT_DROPS] = SW_IBP_CNTR(PktDrop, pkt_drops),
 [C_SW_IBP_DMA_WAIT] = SW_IBP_CNTR(DmaWait, dmawait),
 [C_SW_IBP_RC_SEQNAK] = SW_IBP_CNTR(RcSeqNak, rc_seqnak),
-[C_SW_IBP_RC_DELAYED_COMP] = SW_IBP_CNTR(RcDelayComp, rc_delayed_comp),
 [C_SW_IBP_RC_DUPREQ] = SW_IBP_CNTR(RcDupRew, rc_dupreq),
 [C_SW_IBP_RDMA_SEQ] = SW_IBP_CNTR(RdmaSeq, rdma_seq),
 [C_SW_IBP_UNALIGNED] = SW_IBP_CNTR(Unaligned, unaligned),
@@ -1729,6 +1728,8 @@ static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
 			       access_sw_cpu_rc_acks),
 [C_SW_CPU_RC_QACKS] = CNTR_ELEM("RcQacks", 0, 0, CNTR_NORMAL,
 			       access_sw_cpu_rc_qacks),
+[C_SW_CPU_RC_DELAYED_COMP] = CNTR_ELEM("RcDelayComp", 0, 0, CNTR_NORMAL,
+			       access_sw_cpu_rc_delayed_comp),
 [OVR_LBL(0)] = OVR_ELM(0), [OVR_LBL(1)] = OVR_ELM(1),
 [OVR_LBL(2)] = OVR_ELM(2), [OVR_LBL(3)] = OVR_ELM(3),
 [OVR_LBL(4)] = OVR_ELM(4), [OVR_LBL(5)] = OVR_ELM(5),
@@ -5698,7 +5699,9 @@ static inline int init_cpu_counters(struct hfi1_devdata *dd)
 		ppd->ibport_data.rc_qacks = NULL;
 		ppd->ibport_data.rc_acks = alloc_percpu(u64);
 		ppd->ibport_data.rc_qacks = alloc_percpu(u64);
+		ppd->ibport_data.rc_delayed_comp = alloc_percpu(u64);
 		if ((ppd->ibport_data.rc_acks == NULL) ||
+		    (ppd->ibport_data.rc_delayed_comp == NULL) ||
 		    (ppd->ibport_data.rc_qacks == NULL))
 			return -ENOMEM;
 	}
@@ -7679,10 +7682,12 @@ static void free_cntrs(struct hfi1_devdata *dd)
 		kfree(ppd->scntrs);
 		free_percpu(ppd->ibport_data.rc_acks);
 		free_percpu(ppd->ibport_data.rc_qacks);
+		free_percpu(ppd->ibport_data.rc_delayed_comp);
 		ppd->cntrs = NULL;
 		ppd->scntrs = NULL;
 		ppd->ibport_data.rc_acks = NULL;
 		ppd->ibport_data.rc_qacks = NULL;
+		ppd->ibport_data.rc_delayed_comp = NULL;
 	}
 	kfree(dd->portcntrnames);
 	dd->portcntrnames = NULL;
