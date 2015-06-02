@@ -16,6 +16,7 @@ if [ -z `pidof simics-common` ]; then
     sleep 45
 fi
 ${fxr}/simics/workspace/bin/simics --version
+( cd ${fxr}/simics/workspace/; git log -n1 | head -1 )
 ls -l ${fxr}/simics/FxrRhel7.craff
 ls -l ${fxr}/simics/SynopsisInstructionSetSimulator
 
