@@ -72,12 +72,12 @@ static ssize_t sector_size_store(struct device *dev,
 	ssize_t rc;
 
 	device_lock(dev);
-	nd_bus_lock(dev);
+	nvdimm_bus_lock(dev);
 	rc = nd_sector_size_store(dev, buf, &nd_btt->lbasize,
 			btt_lbasize_supported);
 	dev_dbg(dev, "%s: result: %zd wrote: %s%s", __func__,
 			rc, buf, buf[len - 1] == '\n' ? "" : "\n");
-	nd_bus_unlock(dev);
+	nvdimm_bus_unlock(dev);
 	device_unlock(dev);
 
 	return rc ? rc : len;
@@ -134,7 +134,7 @@ static void nd_btt_ndio_notify_remove(struct nd_io_claim *ndio_claim)
 		return;
 
 	nd_btt = to_nd_btt(ndio_claim->holder);
-	WARN_ON_ONCE(!is_nd_bus_locked(&nd_btt->dev));
+	WARN_ON_ONCE(!is_nvdimm_bus_locked(&nd_btt->dev));
 	dev_dbg(&nd_btt->dev, "%pf: %s: release /dev/%s\n",
 			__builtin_return_address(0), __func__,
 			bdevname(nd_btt->backing_dev, bdev_name));
@@ -158,7 +158,7 @@ static void nd_btt_ndio_notify_remove(struct nd_io_claim *ndio_claim)
 static ssize_t __backing_dev_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+	struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(dev);
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 	char bdev_name[BDEVNAME_SIZE];
 	struct block_device *bdev;
@@ -200,7 +200,7 @@ static ssize_t __backing_dev_store(struct device *dev,
 		goto out;
 	}
 
-	ndio = ndio_lookup(nd_bus, bdevname(bdev->bd_contains, bdev_name));
+	ndio = ndio_lookup(nvdimm_bus, bdevname(bdev->bd_contains, bdev_name));
 	if (!ndio) {
 		dev_dbg(dev, "%s does not have an ndio interface\n",
 				strim(path));
@@ -217,7 +217,7 @@ static ssize_t __backing_dev_store(struct device *dev,
 		goto out;
 	}
 
-	WARN_ON_ONCE(!is_nd_bus_locked(&nd_btt->dev));
+	WARN_ON_ONCE(!is_nvdimm_bus_locked(&nd_btt->dev));
 	nd_btt->backing_dev = bdev;
 
  out:
@@ -230,13 +230,13 @@ static ssize_t backing_dev_store(struct device *dev,
 {
 	ssize_t rc;
 
-	nd_bus_lock(dev);
+	nvdimm_bus_lock(dev);
 	device_lock(dev);
 	rc = __backing_dev_store(dev, attr, buf, len);
 	dev_dbg(dev, "%s: result: %zd wrote: %s%s", __func__,
 			rc, buf, buf[len - 1] == '\n' ? "" : "\n");
 	device_unlock(dev);
-	nd_bus_unlock(dev);
+	nvdimm_bus_unlock(dev);
 
 	return rc;
 }
@@ -244,10 +244,10 @@ static DEVICE_ATTR_RW(backing_dev);
 
 static bool is_nd_btt_idle(struct device *dev)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+	struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(dev);
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 
-	if (nd_bus->nd_btt == nd_btt || dev->driver || nd_btt->backing_dev)
+	if (nvdimm_bus->nd_btt == nd_btt || dev->driver || nd_btt->backing_dev)
 		return false;
 	return true;
 }
@@ -300,7 +300,7 @@ static const struct attribute_group *nd_btt_attribute_groups[] = {
 	NULL,
 };
 
-static struct nd_btt *__nd_btt_create(struct nd_bus *nd_bus,
+static struct nd_btt *__nd_btt_create(struct nvdimm_bus *nvdimm_bus,
 		unsigned long lbasize, u8 *uuid)
 {
 	struct nd_btt *nd_btt = kzalloc(sizeof(*nd_btt), GFP_KERNEL);
@@ -320,15 +320,15 @@ static struct nd_btt *__nd_btt_create(struct nd_bus *nd_bus,
 	nd_btt->uuid = uuid;
 	dev = &nd_btt->dev;
 	dev_set_name(dev, "btt%d", nd_btt->id);
-	dev->parent = &nd_bus->dev;
+	dev->parent = &nvdimm_bus->dev;
 	dev->type = &nd_btt_device_type;
 	dev->groups = nd_btt_attribute_groups;
 	return nd_btt;
 }
 
-struct nd_btt *nd_btt_create(struct nd_bus *nd_bus)
+struct nd_btt *nd_btt_create(struct nvdimm_bus *nvdimm_bus)
 {
-	struct nd_btt *nd_btt = __nd_btt_create(nd_bus, 0, NULL);
+	struct nd_btt *nd_btt = __nd_btt_create(nvdimm_bus, 0, NULL);
 
 	if (!nd_btt)
 		return NULL;
@@ -355,7 +355,7 @@ u64 nd_btt_sb_checksum(struct btt_sb *btt_sb)
 }
 EXPORT_SYMBOL(nd_btt_sb_checksum);
 
-static int nd_btt_autodetect(struct nd_bus *nd_bus, struct nd_io *ndio,
+static int nd_btt_autodetect(struct nvdimm_bus *nvdimm_bus, struct nd_io *ndio,
 		struct block_device *bdev)
 {
 	char name[BDEVNAME_SIZE];
@@ -392,7 +392,7 @@ static int nd_btt_autodetect(struct nd_bus *nd_bus, struct nd_io *ndio,
 		goto out_free_sb;
 
 	lbasize = le32_to_cpu(btt_sb->external_lbasize);
-	nd_btt = __nd_btt_create(nd_bus, lbasize, uuid);
+	nd_btt = __nd_btt_create(nvdimm_bus, lbasize, uuid);
 	if (!nd_btt)
 		goto out_free_uuid;
 
@@ -419,7 +419,7 @@ static int nd_btt_autodetect(struct nd_bus *nd_bus, struct nd_io *ndio,
 	return -ENODEV;
 }
 
-void nd_btt_notify_ndio(struct nd_bus *nd_bus, struct nd_io *ndio)
+void nd_btt_notify_ndio(struct nvdimm_bus *nvdimm_bus, struct nd_io *ndio)
 {
 	struct disk_part_iter piter;
 	struct hd_struct *part;
@@ -432,9 +432,9 @@ void nd_btt_notify_ndio(struct nd_bus *nd_bus, struct nd_io *ndio)
 		bdev = bdget_disk(ndio->disk, part->partno);
 		if (!bdev)
 			continue;
-		if (blkdev_get(bdev, nd_btt_devs_mode, nd_bus) != 0)
+		if (blkdev_get(bdev, nd_btt_devs_mode, nvdimm_bus) != 0)
 			continue;
-		rc = nd_btt_autodetect(nd_bus, ndio, bdev);
+		rc = nd_btt_autodetect(nvdimm_bus, ndio, bdev);
 		if (rc)
 			blkdev_put(bdev, nd_btt_devs_mode);
 		/* no need to scan further in the case of whole disk btt */

@@ -18,10 +18,10 @@
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/nd.h>
-#include "label.h"
-#include "nd.h"
+#include <label.h>
+#include <nd.h>
 
-static void free_data(struct nd_dimm_drvdata *ndd)
+static void free_data(struct nvdimm_drvdata *ndd)
 {
 	if (!ndd)
 		return;
@@ -33,9 +33,9 @@ static void free_data(struct nd_dimm_drvdata *ndd)
 	kfree(ndd);
 }
 
-static int nd_dimm_probe(struct device *dev)
+static int nvdimm_probe(struct device *dev)
 {
-	struct nd_dimm_drvdata *ndd;
+	struct nvdimm_drvdata *ndd;
 	int rc;
 
 	ndd = kzalloc(sizeof(*ndd), GFP_KERNEL);
@@ -50,23 +50,23 @@ static int nd_dimm_probe(struct device *dev)
 	ndd->dpa.end = -1;
 	ndd->dev = dev;
 
-	rc = nd_dimm_init_nsarea(ndd);
+	rc = nvdimm_init_nsarea(ndd);
 	if (rc)
 		goto err;
 
-	rc = nd_dimm_init_config_data(ndd);
+	rc = nvdimm_init_config_data(ndd);
 	if (rc)
 		goto err;
 
 	dev_dbg(dev, "config data size: %d\n", ndd->nsarea.config_size);
 
-	nd_bus_lock(dev);
+	nvdimm_bus_lock(dev);
 	ndd->ns_current = nd_label_validate(ndd);
 	ndd->ns_next = nd_label_next_nsindex(ndd->ns_current);
 	nd_label_copy(ndd, to_next_namespace_index(ndd),
 			to_current_namespace_index(ndd));
 	rc = nd_label_reserve_dpa(ndd);
-	nd_bus_unlock(dev);
+	nvdimm_bus_unlock(dev);
 
 	if (rc)
 		goto err;
@@ -78,38 +78,38 @@ static int nd_dimm_probe(struct device *dev)
 	return rc;
 }
 
-static int nd_dimm_remove(struct device *dev)
+static int nvdimm_remove(struct device *dev)
 {
-	struct nd_dimm_drvdata *ndd = dev_get_drvdata(dev);
+	struct nvdimm_drvdata *ndd = dev_get_drvdata(dev);
 	struct resource *res, *_r;
 
-	nd_bus_lock(dev);
+	nvdimm_bus_lock(dev);
 	dev_set_drvdata(dev, NULL);
 	for_each_dpa_resource_safe(ndd, res, _r)
-		nd_dimm_free_dpa(ndd, res);
-	nd_bus_unlock(dev);
+		nvdimm_free_dpa(ndd, res);
+	nvdimm_bus_unlock(dev);
 	free_data(ndd);
 
 	return 0;
 }
 
-static struct nd_device_driver nd_dimm_driver = {
-	.probe = nd_dimm_probe,
-	.remove = nd_dimm_remove,
+static struct nd_device_driver nvdimm_driver = {
+	.probe = nvdimm_probe,
+	.remove = nvdimm_remove,
 	.drv = {
-		.name = "nd_dimm",
+		.name = "nvdimm",
 	},
 	.type = ND_DRIVER_DIMM,
 };
 
-int __init nd_dimm_init(void)
+int __init nvdimm_init(void)
 {
-	return nd_driver_register(&nd_dimm_driver);
+	return nd_driver_register(&nvdimm_driver);
 }
 
-void nd_dimm_exit(void)
+void nvdimm_exit(void)
 {
-	driver_unregister(&nd_dimm_driver.drv);
+	driver_unregister(&nvdimm_driver.drv);
 }
 
 MODULE_ALIAS_ND_DEVICE(ND_DEVICE_DIMM);

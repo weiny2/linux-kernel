@@ -1,5 +1,5 @@
 /*
- * libnd - Non-volatile-memory Devices Subsystem
+ * libnvdimm - Non-volatile-memory Devices Subsystem
  *
  * Copyright(c) 2013-2015 Intel Corporation. All rights reserved.
  *
@@ -12,9 +12,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
-#ifndef __LIBND_H__
-#define __LIBND_H__
+#ifndef __LIBNVDIMM_H__
+#define __LIBNVDIMM_H__
 #include <linux/sizes.h>
+#include <linux/types.h>
 
 enum {
 	/* when a dimm supports both PMEM and BLK access a label is required */
@@ -31,27 +32,27 @@ enum {
 	DPA_RESOURCE_ADJUSTED = 1 << 0,
 };
 
-extern struct attribute_group nd_bus_attribute_group;
-extern struct attribute_group nd_dimm_attribute_group;
+extern struct attribute_group nvdimm_bus_attribute_group;
+extern struct attribute_group nvdimm_attribute_group;
 extern struct attribute_group nd_device_attribute_group;
 extern struct attribute_group nd_region_attribute_group;
 extern struct attribute_group nd_mapping_attribute_group;
 
-struct nd_dimm;
-struct nd_bus_descriptor;
-typedef int (*ndctl_fn)(struct nd_bus_descriptor *nd_desc,
-		struct nd_dimm *nd_dimm, unsigned int cmd, void *buf,
+struct nvdimm;
+struct nvdimm_bus_descriptor;
+typedef int (*ndctl_fn)(struct nvdimm_bus_descriptor *nd_desc,
+		struct nvdimm *nvdimm, unsigned int cmd, void *buf,
 		unsigned int buf_len);
 
 struct nd_namespace_label;
 struct nd_mapping {
-	struct nd_dimm *nd_dimm;
+	struct nvdimm *nvdimm;
 	struct nd_namespace_label **labels;
 	u64 start;
 	u64 size;
 };
 
-struct nd_bus_descriptor {
+struct nvdimm_bus_descriptor {
 	const struct attribute_group **attr_groups;
 	unsigned long dsm_mask;
 	char *provider_name;
@@ -79,51 +80,52 @@ struct nd_region_desc {
 	int num_lanes;
 };
 
-struct nd_bus;
+struct nvdimm_bus;
+struct module;
 struct device;
 struct nd_blk_region;
 struct nd_blk_region_desc {
-	int (*enable)(struct nd_bus *nd_bus, struct device *dev);
-	void (*disable)(struct nd_bus *nd_bus, struct device *dev);
+	int (*enable)(struct nvdimm_bus *nvdimm_bus, struct device *dev);
+	void (*disable)(struct nvdimm_bus *nvdimm_bus, struct device *dev);
 	int (*do_io)(struct nd_blk_region *ndbr, void *iobuf, u64 len,
 			int write, resource_size_t dpa);
 	struct nd_region_desc ndr_desc;
 };
 
-struct nd_bus *__nd_bus_register(struct device *parent,
-		struct nd_bus_descriptor *nfit_desc, struct module *module);
-#define nd_bus_register(parent, desc) \
-	__nd_bus_register(parent, desc, THIS_MODULE)
-void nd_bus_unregister(struct nd_bus *nd_bus);
-struct nd_bus *to_nd_bus(struct device *dev);
-struct nd_dimm *to_nd_dimm(struct device *dev);
+struct nvdimm_bus *__nvdimm_bus_register(struct device *parent,
+		struct nvdimm_bus_descriptor *nfit_desc, struct module *module);
+#define nvdimm_bus_register(parent, desc) \
+	__nvdimm_bus_register(parent, desc, THIS_MODULE)
+void nvdimm_bus_unregister(struct nvdimm_bus *nvdimm_bus);
+struct nvdimm_bus *to_nvdimm_bus(struct device *dev);
+struct nvdimm *to_nvdimm(struct device *dev);
 struct nd_region *to_nd_region(struct device *dev);
 struct nd_blk_region *to_nd_blk_region(struct device *dev);
-struct nd_bus_descriptor *to_nd_desc(struct nd_bus *nd_bus);
-const char *nd_dimm_name(struct nd_dimm *nd_dimm);
-void *nd_dimm_provider_data(struct nd_dimm *nd_dimm);
-struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus, void *provider_data,
+struct nvdimm_bus_descriptor *to_nd_desc(struct nvdimm_bus *nvdimm_bus);
+const char *nvdimm_name(struct nvdimm *nvdimm);
+void *nvdimm_provider_data(struct nvdimm *nvdimm);
+struct nvdimm *nvdimm_create(struct nvdimm_bus *nvdimm_bus, void *provider_data,
 		const struct attribute_group **groups, unsigned long flags,
 		unsigned long *dsm_mask);
 const struct nd_cmd_desc *nd_cmd_dimm_desc(int cmd);
 const struct nd_cmd_desc *nd_cmd_bus_desc(int cmd);
-u32 nd_cmd_in_size(struct nd_dimm *nd_dimm, int cmd,
+u32 nd_cmd_in_size(struct nvdimm *nvdimm, int cmd,
 		const struct nd_cmd_desc *desc, int idx, void *buf);
-u32 nd_cmd_out_size(struct nd_dimm *nd_dimm, int cmd,
+u32 nd_cmd_out_size(struct nvdimm *nvdimm, int cmd,
 		const struct nd_cmd_desc *desc, int idx, const u32 *in_field,
 		const u32 *out_field);
-int nd_bus_validate_dimm_count(struct nd_bus *nd_bus, int dimm_count);
-struct nd_region *nd_pmem_region_create(struct nd_bus *nd_bus,
+int nvdimm_bus_validate_dimm_count(struct nvdimm_bus *nvdimm_bus, int dimm_count);
+struct nd_region *nvdimm_pmem_region_create(struct nvdimm_bus *nvdimm_bus,
 		struct nd_region_desc *ndr_desc);
-struct nd_region *nd_blk_region_create(struct nd_bus *nd_bus,
+struct nd_region *nvdimm_blk_region_create(struct nvdimm_bus *nvdimm_bus,
 		struct nd_region_desc *ndr_desc);
-struct nd_region *nd_volatile_region_create(struct nd_bus *nd_bus,
+struct nd_region *nvdimm_volatile_region_create(struct nvdimm_bus *nvdimm_bus,
 		struct nd_region_desc *ndr_desc);
 void *nd_region_provider_data(struct nd_region *nd_region);
 void *nd_blk_region_provider_data(struct nd_blk_region *ndbr);
 void nd_blk_region_set_provider_data(struct nd_blk_region *ndbr, void *data);
-struct nd_dimm *nd_blk_region_to_dimm(struct nd_blk_region *ndbr);
+struct nvdimm *nd_blk_region_to_dimm(struct nd_blk_region *ndbr);
 unsigned int nd_region_acquire_lane(struct nd_region *nd_region);
 void nd_region_release_lane(struct nd_region *nd_region, unsigned int lane);
 u64 nd_fletcher64(void *addr, size_t len, bool le);
-#endif /* __LIBND_H__ */
+#endif /* __LIBNVDIMM_H__ */

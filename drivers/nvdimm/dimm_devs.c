@@ -28,24 +28,24 @@ static DEFINE_IDA(dimm_ida);
  * Retrieve bus and dimm handle and return if this bus supports
  * get_config_data commands
  */
-static int __validate_dimm(struct nd_dimm_drvdata *ndd)
+static int __validate_dimm(struct nvdimm_drvdata *ndd)
 {
-	struct nd_dimm *nd_dimm;
+	struct nvdimm *nvdimm;
 
 	if (!ndd)
 		return -EINVAL;
 
-	nd_dimm = to_nd_dimm(ndd->dev);
+	nvdimm = to_nvdimm(ndd->dev);
 
-	if (!nd_dimm->dsm_mask)
+	if (!nvdimm->dsm_mask)
 		return -ENXIO;
-	if (!test_bit(ND_CMD_GET_CONFIG_DATA, nd_dimm->dsm_mask))
+	if (!test_bit(ND_CMD_GET_CONFIG_DATA, nvdimm->dsm_mask))
 		return -ENXIO;
 
 	return 0;
 }
 
-static int validate_dimm(struct nd_dimm_drvdata *ndd)
+static int validate_dimm(struct nvdimm_drvdata *ndd)
 {
 	int rc = __validate_dimm(ndd);
 
@@ -56,14 +56,14 @@ static int validate_dimm(struct nd_dimm_drvdata *ndd)
 }
 
 /**
- * nd_dimm_init_nsarea - determine the geometry of a dimm's namespace area
- * @nd_dimm: dimm to initialize
+ * nvdimm_init_nsarea - determine the geometry of a dimm's namespace area
+ * @nvdimm: dimm to initialize
  */
-int nd_dimm_init_nsarea(struct nd_dimm_drvdata *ndd)
+int nvdimm_init_nsarea(struct nvdimm_drvdata *ndd)
 {
 	struct nd_cmd_get_config_size *cmd = &ndd->nsarea;
-	struct nd_bus *nd_bus = walk_to_nd_bus(ndd->dev);
-	struct nd_bus_descriptor *nd_desc;
+	struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(ndd->dev);
+	struct nvdimm_bus_descriptor *nd_desc;
 	int rc = validate_dimm(ndd);
 
 	if (rc)
@@ -73,16 +73,16 @@ int nd_dimm_init_nsarea(struct nd_dimm_drvdata *ndd)
 		return 0; /* already valid */
 
 	memset(cmd, 0, sizeof(*cmd));
-	nd_desc = nd_bus->nd_desc;
-	return nd_desc->ndctl(nd_desc, to_nd_dimm(ndd->dev),
+	nd_desc = nvdimm_bus->nd_desc;
+	return nd_desc->ndctl(nd_desc, to_nvdimm(ndd->dev),
 			ND_CMD_GET_CONFIG_SIZE, cmd, sizeof(*cmd));
 }
 
-int nd_dimm_init_config_data(struct nd_dimm_drvdata *ndd)
+int nvdimm_init_config_data(struct nvdimm_drvdata *ndd)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(ndd->dev);
+	struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(ndd->dev);
 	struct nd_cmd_get_config_data_hdr *cmd;
-	struct nd_bus_descriptor *nd_desc;
+	struct nvdimm_bus_descriptor *nd_desc;
 	int rc = validate_dimm(ndd);
 	u32 max_cmd_size, config_size;
 	size_t offset;
@@ -112,13 +112,13 @@ int nd_dimm_init_config_data(struct nd_dimm_drvdata *ndd)
 	if (!cmd)
 		return -ENOMEM;
 
-	nd_desc = nd_bus->nd_desc;
+	nd_desc = nvdimm_bus->nd_desc;
 	for (config_size = ndd->nsarea.config_size, offset = 0;
 			config_size; config_size -= cmd->in_length,
 			offset += cmd->in_length) {
 		cmd->in_length = min(config_size, max_cmd_size);
 		cmd->in_offset = offset;
-		rc = nd_desc->ndctl(nd_desc, to_nd_dimm(ndd->dev),
+		rc = nd_desc->ndctl(nd_desc, to_nvdimm(ndd->dev),
 				ND_CMD_GET_CONFIG_DATA, cmd,
 				cmd->in_length + sizeof(*cmd));
 		if (rc || cmd->status) {
@@ -133,14 +133,14 @@ int nd_dimm_init_config_data(struct nd_dimm_drvdata *ndd)
 	return rc;
 }
 
-int nd_dimm_set_config_data(struct nd_dimm_drvdata *ndd, size_t offset,
+int nvdimm_set_config_data(struct nvdimm_drvdata *ndd, size_t offset,
 		void *buf, size_t len)
 {
 	int rc = validate_dimm(ndd);
 	size_t max_cmd_size, buf_offset;
 	struct nd_cmd_set_config_hdr *cmd;
-	struct nd_bus *nd_bus = walk_to_nd_bus(ndd->dev);
-	struct nd_bus_descriptor *nd_desc = nd_bus->nd_desc;
+	struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(ndd->dev);
+	struct nvdimm_bus_descriptor *nd_desc = nvdimm_bus->nd_desc;
 
 	if (rc)
 		return rc;
@@ -170,7 +170,7 @@ int nd_dimm_set_config_data(struct nd_dimm_drvdata *ndd, size_t offset,
 		cmd_size = sizeof(*cmd) + cmd->in_length + sizeof(u32);
 		status = ((void *) cmd) + cmd_size - sizeof(u32);
 
-		rc = nd_desc->ndctl(nd_desc, to_nd_dimm(ndd->dev),
+		rc = nd_desc->ndctl(nd_desc, to_nvdimm(ndd->dev),
 				ND_CMD_SET_CONFIG_DATA, cmd, cmd_size);
 		if (rc || *status) {
 			rc = rc ? rc : -ENXIO;
@@ -182,75 +182,75 @@ int nd_dimm_set_config_data(struct nd_dimm_drvdata *ndd, size_t offset,
 	return rc;
 }
 
-static void nd_dimm_release(struct device *dev)
+static void nvdimm_release(struct device *dev)
 {
-	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
+	struct nvdimm *nvdimm = to_nvdimm(dev);
 
-	ida_simple_remove(&dimm_ida, nd_dimm->id);
-	kfree(nd_dimm);
+	ida_simple_remove(&dimm_ida, nvdimm->id);
+	kfree(nvdimm);
 }
 
-static struct device_type nd_dimm_device_type = {
-	.name = "nd_dimm",
-	.release = nd_dimm_release,
+static struct device_type nvdimm_device_type = {
+	.name = "nvdimm",
+	.release = nvdimm_release,
 };
 
-bool is_nd_dimm(struct device *dev)
+bool is_nvdimm(struct device *dev)
 {
-	return dev->type == &nd_dimm_device_type;
+	return dev->type == &nvdimm_device_type;
 }
 
-struct nd_dimm *to_nd_dimm(struct device *dev)
+struct nvdimm *to_nvdimm(struct device *dev)
 {
-	struct nd_dimm *nd_dimm = container_of(dev, struct nd_dimm, dev);
+	struct nvdimm *nvdimm = container_of(dev, struct nvdimm, dev);
 
-	WARN_ON(!is_nd_dimm(dev));
-	return nd_dimm;
+	WARN_ON(!is_nvdimm(dev));
+	return nvdimm;
 }
-EXPORT_SYMBOL_GPL(to_nd_dimm);
+EXPORT_SYMBOL_GPL(to_nvdimm);
 
-struct nd_dimm *nd_blk_region_to_dimm(struct nd_blk_region *ndbr)
+struct nvdimm *nd_blk_region_to_dimm(struct nd_blk_region *ndbr)
 {
 	struct nd_region *nd_region = &ndbr->nd_region;
 	struct nd_mapping *nd_mapping = &nd_region->mapping[0];
 
-	return nd_mapping->nd_dimm;
+	return nd_mapping->nvdimm;
 }
 EXPORT_SYMBOL_GPL(nd_blk_region_to_dimm);
 
-struct nd_dimm_drvdata *to_ndd(struct nd_mapping *nd_mapping)
+struct nvdimm_drvdata *to_ndd(struct nd_mapping *nd_mapping)
 {
-	struct nd_dimm *nd_dimm = nd_mapping->nd_dimm;
+	struct nvdimm *nvdimm = nd_mapping->nvdimm;
 
-	return dev_get_drvdata(&nd_dimm->dev);
+	return dev_get_drvdata(&nvdimm->dev);
 }
 EXPORT_SYMBOL(to_ndd);
 
-const char *nd_dimm_name(struct nd_dimm *nd_dimm)
+const char *nvdimm_name(struct nvdimm *nvdimm)
 {
-	return dev_name(&nd_dimm->dev);
+	return dev_name(&nvdimm->dev);
 }
-EXPORT_SYMBOL_GPL(nd_dimm_name);
+EXPORT_SYMBOL_GPL(nvdimm_name);
 
-void *nd_dimm_provider_data(struct nd_dimm *nd_dimm)
+void *nvdimm_provider_data(struct nvdimm *nvdimm)
 {
-	if (nd_dimm)
-		return nd_dimm->provider_data;
+	if (nvdimm)
+		return nvdimm->provider_data;
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(nd_dimm_provider_data);
+EXPORT_SYMBOL_GPL(nvdimm_provider_data);
 
 static ssize_t commands_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
+	struct nvdimm *nvdimm = to_nvdimm(dev);
 	int cmd, len = 0;
 
-	if (!nd_dimm->dsm_mask)
+	if (!nvdimm->dsm_mask)
 		return sprintf(buf, "\n");
 
-	for_each_set_bit(cmd, nd_dimm->dsm_mask, BITS_PER_LONG)
-		len += sprintf(buf + len, "%s ", nd_dimm_cmd_name(cmd));
+	for_each_set_bit(cmd, nvdimm->dsm_mask, BITS_PER_LONG)
+		len += sprintf(buf + len, "%s ", nvdimm_cmd_name(cmd));
 	len += sprintf(buf + len, "\n");
 	return len;
 }
@@ -259,15 +259,15 @@ static DEVICE_ATTR_RO(commands);
 static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
 {
-	struct nd_dimm *nd_dimm = to_nd_dimm(dev);
+	struct nvdimm *nvdimm = to_nvdimm(dev);
 
 	/*
 	 * The state may be in the process of changing, userspace should
 	 * quiesce probing if it wants a static answer
 	 */
-	nd_bus_lock(dev);
-	nd_bus_unlock(dev);
-	return sprintf(buf, "%s\n", atomic_read(&nd_dimm->busy)
+	nvdimm_bus_lock(dev);
+	nvdimm_bus_unlock(dev);
+	return sprintf(buf, "%s\n", atomic_read(&nvdimm->busy)
 			? "active" : "idle");
 }
 static DEVICE_ATTR_RO(state);
@@ -275,14 +275,14 @@ static DEVICE_ATTR_RO(state);
 static ssize_t available_slots_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct nd_dimm_drvdata *ndd = dev_get_drvdata(dev);
+	struct nvdimm_drvdata *ndd = dev_get_drvdata(dev);
 	ssize_t rc;
 	u32 nfree;
 
 	if (!ndd)
 		return -ENXIO;
 
-	nd_bus_lock(dev);
+	nvdimm_bus_lock(dev);
 	nfree = nd_label_nfree(ndd);
 	if (nfree - 1 > nfree) {
 		dev_WARN_ONCE(dev, 1, "we ate our last label?\n");
@@ -290,53 +290,53 @@ static ssize_t available_slots_show(struct device *dev,
 	} else
 		nfree--;
 	rc = sprintf(buf, "%d\n", nfree);
-	nd_bus_unlock(dev);
+	nvdimm_bus_unlock(dev);
 	return rc;
 }
 static DEVICE_ATTR_RO(available_slots);
 
-static struct attribute *nd_dimm_attributes[] = {
+static struct attribute *nvdimm_attributes[] = {
 	&dev_attr_state.attr,
 	&dev_attr_commands.attr,
 	&dev_attr_available_slots.attr,
 	NULL,
 };
 
-struct attribute_group nd_dimm_attribute_group = {
-	.attrs = nd_dimm_attributes,
+struct attribute_group nvdimm_attribute_group = {
+	.attrs = nvdimm_attributes,
 };
-EXPORT_SYMBOL_GPL(nd_dimm_attribute_group);
+EXPORT_SYMBOL_GPL(nvdimm_attribute_group);
 
-struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus, void *provider_data,
+struct nvdimm *nvdimm_create(struct nvdimm_bus *nvdimm_bus, void *provider_data,
 		const struct attribute_group **groups, unsigned long flags,
 		unsigned long *dsm_mask)
 {
-	struct nd_dimm *nd_dimm = kzalloc(sizeof(*nd_dimm), GFP_KERNEL);
+	struct nvdimm *nvdimm = kzalloc(sizeof(*nvdimm), GFP_KERNEL);
 	struct device *dev;
 
-	if (!nd_dimm)
+	if (!nvdimm)
 		return NULL;
 
-	nd_dimm->id = ida_simple_get(&dimm_ida, 0, 0, GFP_KERNEL);
-	if (nd_dimm->id < 0) {
-		kfree(nd_dimm);
+	nvdimm->id = ida_simple_get(&dimm_ida, 0, 0, GFP_KERNEL);
+	if (nvdimm->id < 0) {
+		kfree(nvdimm);
 		return NULL;
 	}
-	nd_dimm->provider_data = provider_data;
-	nd_dimm->flags = flags;
-	nd_dimm->dsm_mask = dsm_mask;
-	atomic_set(&nd_dimm->busy, 0);
-	dev = &nd_dimm->dev;
-	dev_set_name(dev, "nmem%d", nd_dimm->id);
-	dev->parent = &nd_bus->dev;
-	dev->type = &nd_dimm_device_type;
-	dev->devt = MKDEV(nd_dimm_major, nd_dimm->id);
+	nvdimm->provider_data = provider_data;
+	nvdimm->flags = flags;
+	nvdimm->dsm_mask = dsm_mask;
+	atomic_set(&nvdimm->busy, 0);
+	dev = &nvdimm->dev;
+	dev_set_name(dev, "nmem%d", nvdimm->id);
+	dev->parent = &nvdimm_bus->dev;
+	dev->type = &nvdimm_device_type;
+	dev->devt = MKDEV(nvdimm_major, nvdimm->id);
 	dev->groups = groups;
 	nd_device_register(dev);
 
-	return nd_dimm;
+	return nvdimm;
 }
-EXPORT_SYMBOL_GPL(nd_dimm_create);
+EXPORT_SYMBOL_GPL(nvdimm_create);
 
 /**
  * nd_blk_available_dpa - account the unused dpa of BLK region
@@ -346,7 +346,7 @@ EXPORT_SYMBOL_GPL(nd_dimm_create);
  */
 resource_size_t nd_blk_available_dpa(struct nd_mapping *nd_mapping)
 {
-	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
 	resource_size_t map_end, busy = 0, available;
 	struct resource *res;
 
@@ -392,7 +392,7 @@ resource_size_t nd_pmem_available_dpa(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping, resource_size_t *overlap)
 {
 	resource_size_t map_end, busy = 0, available, blk_start;
-	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct resource *res;
 	const char *reason;
 
@@ -450,14 +450,14 @@ resource_size_t nd_pmem_available_dpa(struct nd_region *nd_region,
 	return 0;
 }
 
-void nd_dimm_free_dpa(struct nd_dimm_drvdata *ndd, struct resource *res)
+void nvdimm_free_dpa(struct nvdimm_drvdata *ndd, struct resource *res)
 {
-	WARN_ON_ONCE(!is_nd_bus_locked(ndd->dev));
+	WARN_ON_ONCE(!is_nvdimm_bus_locked(ndd->dev));
 	kfree(res->name);
 	__release_region(&ndd->dpa, res->start, resource_size(res));
 }
 
-struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
+struct resource *nvdimm_allocate_dpa(struct nvdimm_drvdata *ndd,
 		struct nd_label_id *label_id, resource_size_t start,
 		resource_size_t n)
 {
@@ -467,7 +467,7 @@ struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
 	if (!name)
 		return NULL;
 
-	WARN_ON_ONCE(!is_nd_bus_locked(ndd->dev));
+	WARN_ON_ONCE(!is_nvdimm_bus_locked(ndd->dev));
 	res = __request_region(&ndd->dpa, start, n, name, 0);
 	if (!res)
 		kfree(name);
@@ -475,11 +475,11 @@ struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
 }
 
 /**
- * nd_dimm_allocated_dpa - sum up the dpa currently allocated to this label_id
- * @nd_dimm: container of dpa-resource-root + labels
+ * nvdimm_allocated_dpa - sum up the dpa currently allocated to this label_id
+ * @nvdimm: container of dpa-resource-root + labels
  * @label_id: dpa resource name of the form {pmem|blk}-<human readable uuid>
  */
-resource_size_t nd_dimm_allocated_dpa(struct nd_dimm_drvdata *ndd,
+resource_size_t nvdimm_allocated_dpa(struct nvdimm_drvdata *ndd,
 		struct nd_label_id *label_id)
 {
 	resource_size_t allocated = 0;
@@ -496,21 +496,21 @@ static int count_dimms(struct device *dev, void *c)
 {
 	int *count = c;
 
-	if (is_nd_dimm(dev))
+	if (is_nvdimm(dev))
 		(*count)++;
 	return 0;
 }
 
-int nd_bus_validate_dimm_count(struct nd_bus *nd_bus, int dimm_count)
+int nvdimm_bus_validate_dimm_count(struct nvdimm_bus *nvdimm_bus, int dimm_count)
 {
 	int count = 0;
 	/* Flush any possible dimm registration failures */
 	nd_synchronize();
 
-	device_for_each_child(&nd_bus->dev, &count, count_dimms);
-	dev_dbg(&nd_bus->dev, "%s: count: %d\n", __func__, count);
+	device_for_each_child(&nvdimm_bus->dev, &count, count_dimms);
+	dev_dbg(&nvdimm_bus->dev, "%s: count: %d\n", __func__, count);
 	if (count != dimm_count)
 		return -ENXIO;
 	return 0;
 }
-EXPORT_SYMBOL_GPL(nd_bus_validate_dimm_count);
+EXPORT_SYMBOL_GPL(nvdimm_bus_validate_dimm_count);

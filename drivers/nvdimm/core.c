@@ -10,11 +10,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
+#include <linux/libnvdimm.h>
 #include <linux/export.h>
 #include <linux/module.h>
 #include <linux/blkdev.h>
 #include <linux/device.h>
-#include <linux/libnd.h>
 #include <linux/ctype.h>
 #include <linux/ndctl.h>
 #include <linux/mutex.h>
@@ -22,39 +22,39 @@
 #include "nd-private.h"
 #include "nd.h"
 
-LIST_HEAD(nd_bus_list);
-DEFINE_MUTEX(nd_bus_list_mutex);
+LIST_HEAD(nvdimm_bus_list);
+DEFINE_MUTEX(nvdimm_bus_list_mutex);
 static DEFINE_IDA(nd_ida);
 
-void nd_bus_lock(struct device *dev)
+void nvdimm_bus_lock(struct device *dev)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+	struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(dev);
 
-	if (!nd_bus)
+	if (!nvdimm_bus)
 		return;
-	mutex_lock(&nd_bus->reconfig_mutex);
+	mutex_lock(&nvdimm_bus->reconfig_mutex);
 }
-EXPORT_SYMBOL(nd_bus_lock);
+EXPORT_SYMBOL(nvdimm_bus_lock);
 
-void nd_bus_unlock(struct device *dev)
+void nvdimm_bus_unlock(struct device *dev)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+	struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(dev);
 
-	if (!nd_bus)
+	if (!nvdimm_bus)
 		return;
-	mutex_unlock(&nd_bus->reconfig_mutex);
+	mutex_unlock(&nvdimm_bus->reconfig_mutex);
 }
-EXPORT_SYMBOL(nd_bus_unlock);
+EXPORT_SYMBOL(nvdimm_bus_unlock);
 
-bool is_nd_bus_locked(struct device *dev)
+bool is_nvdimm_bus_locked(struct device *dev)
 {
-	struct nd_bus *nd_bus = walk_to_nd_bus(dev);
+	struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(dev);
 
-	if (!nd_bus)
+	if (!nvdimm_bus)
 		return false;
-	return mutex_is_locked(&nd_bus->reconfig_mutex);
+	return mutex_is_locked(&nvdimm_bus->reconfig_mutex);
 }
-EXPORT_SYMBOL(is_nd_bus_locked);
+EXPORT_SYMBOL(is_nvdimm_bus_locked);
 
 void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
 		struct device *dev, struct gendisk *disk, unsigned long align)
@@ -128,42 +128,42 @@ u64 nd_fletcher64(void *addr, size_t len, bool le)
 }
 EXPORT_SYMBOL_GPL(nd_fletcher64);
 
-static void nd_bus_release(struct device *dev)
+static void nvdimm_bus_release(struct device *dev)
 {
-	struct nd_bus *nd_bus = container_of(dev, struct nd_bus, dev);
+	struct nvdimm_bus *nvdimm_bus = container_of(dev, struct nvdimm_bus, dev);
 
-	WARN_ON(!list_empty(&nd_bus->ndios));
+	WARN_ON(!list_empty(&nvdimm_bus->ndios));
 
-	ida_simple_remove(&nd_ida, nd_bus->id);
-	kfree(nd_bus);
+	ida_simple_remove(&nd_ida, nvdimm_bus->id);
+	kfree(nvdimm_bus);
 }
 
-struct nd_bus *to_nd_bus(struct device *dev)
+struct nvdimm_bus *to_nvdimm_bus(struct device *dev)
 {
-	struct nd_bus *nd_bus = container_of(dev, struct nd_bus, dev);
+	struct nvdimm_bus *nvdimm_bus = container_of(dev, struct nvdimm_bus, dev);
 
-	WARN_ON(nd_bus->dev.release != nd_bus_release);
-	return nd_bus;
+	WARN_ON(nvdimm_bus->dev.release != nvdimm_bus_release);
+	return nvdimm_bus;
 }
-EXPORT_SYMBOL_GPL(to_nd_bus);
+EXPORT_SYMBOL_GPL(to_nvdimm_bus);
 
-struct nd_bus_descriptor *to_nd_desc(struct nd_bus *nd_bus)
+struct nvdimm_bus_descriptor *to_nd_desc(struct nvdimm_bus *nvdimm_bus)
 {
-	/* struct nd_bus definition is private to libnd */
-	return nd_bus->nd_desc;
+	/* struct nvdimm_bus definition is private to libnvdimm */
+	return nvdimm_bus->nd_desc;
 }
 EXPORT_SYMBOL_GPL(to_nd_desc);
 
-struct nd_bus *walk_to_nd_bus(struct device *nd_dev)
+struct nvdimm_bus *walk_to_nvdimm_bus(struct device *nd_dev)
 {
 	struct device *dev;
 
 	for (dev = nd_dev; dev; dev = dev->parent)
-		if (dev->release == nd_bus_release)
+		if (dev->release == nvdimm_bus_release)
 			break;
 	dev_WARN_ONCE(nd_dev, !dev, "invalid dev, not on nd bus\n");
 	if (dev)
-		return to_nd_bus(dev);
+		return to_nvdimm_bus(dev);
 	return NULL;
 }
 
@@ -313,20 +313,20 @@ static ssize_t commands_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	int cmd, len = 0;
-	struct nd_bus *nd_bus = to_nd_bus(dev);
-	struct nd_bus_descriptor *nd_desc = nd_bus->nd_desc;
+	struct nvdimm_bus *nvdimm_bus = to_nvdimm_bus(dev);
+	struct nvdimm_bus_descriptor *nd_desc = nvdimm_bus->nd_desc;
 
 	for_each_set_bit(cmd, &nd_desc->dsm_mask, BITS_PER_LONG)
-		len += sprintf(buf + len, "%s ", nd_bus_cmd_name(cmd));
+		len += sprintf(buf + len, "%s ", nvdimm_bus_cmd_name(cmd));
 	len += sprintf(buf + len, "\n");
 	return len;
 }
 static DEVICE_ATTR_RO(commands);
 
-static const char *nd_bus_provider(struct nd_bus *nd_bus)
+static const char *nvdimm_bus_provider(struct nvdimm_bus *nvdimm_bus)
 {
-	struct nd_bus_descriptor *nd_desc = nd_bus->nd_desc;
-	struct device *parent = nd_bus->dev.parent;
+	struct nvdimm_bus_descriptor *nd_desc = nvdimm_bus->nd_desc;
+	struct device *parent = nvdimm_bus->dev.parent;
 
 	if (nd_desc->provider_name)
 		return nd_desc->provider_name;
@@ -339,9 +339,9 @@ static const char *nd_bus_provider(struct nd_bus *nd_bus)
 static ssize_t provider_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct nd_bus *nd_bus = to_nd_bus(dev);
+	struct nvdimm_bus *nvdimm_bus = to_nvdimm_bus(dev);
 
-	return sprintf(buf, "%s\n", nd_bus_provider(nd_bus));
+	return sprintf(buf, "%s\n", nvdimm_bus_provider(nvdimm_bus));
 }
 static DEVICE_ATTR_RO(provider);
 
@@ -372,21 +372,21 @@ static DEVICE_ATTR_RO(wait_probe);
 static ssize_t btt_seed_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct nd_bus *nd_bus = to_nd_bus(dev);
+	struct nvdimm_bus *nvdimm_bus = to_nvdimm_bus(dev);
 	ssize_t rc;
 
-	nd_bus_lock(dev);
-	if (nd_bus->nd_btt)
-		rc = sprintf(buf, "%s\n", dev_name(&nd_bus->nd_btt->dev));
+	nvdimm_bus_lock(dev);
+	if (nvdimm_bus->nd_btt)
+		rc = sprintf(buf, "%s\n", dev_name(&nvdimm_bus->nd_btt->dev));
 	else
 		rc = sprintf(buf, "\n");
-	nd_bus_unlock(dev);
+	nvdimm_bus_unlock(dev);
 
 	return rc;
 }
 static DEVICE_ATTR_RO(btt_seed);
 
-static struct attribute *nd_bus_attributes[] = {
+static struct attribute *nvdimm_bus_attributes[] = {
 	&dev_attr_commands.attr,
 	&dev_attr_wait_probe.attr,
 	&dev_attr_provider.attr,
@@ -394,56 +394,56 @@ static struct attribute *nd_bus_attributes[] = {
 	NULL,
 };
 
-struct attribute_group nd_bus_attribute_group = {
-	.attrs = nd_bus_attributes,
+struct attribute_group nvdimm_bus_attribute_group = {
+	.attrs = nvdimm_bus_attributes,
 };
-EXPORT_SYMBOL_GPL(nd_bus_attribute_group);
+EXPORT_SYMBOL_GPL(nvdimm_bus_attribute_group);
 
-struct nd_bus *__nd_bus_register(struct device *parent,
-		struct nd_bus_descriptor *nd_desc, struct module *module)
+struct nvdimm_bus *__nvdimm_bus_register(struct device *parent,
+		struct nvdimm_bus_descriptor *nd_desc, struct module *module)
 {
-	struct nd_bus *nd_bus = kzalloc(sizeof(*nd_bus), GFP_KERNEL);
+	struct nvdimm_bus *nvdimm_bus = kzalloc(sizeof(*nvdimm_bus), GFP_KERNEL);
 	int rc;
 
-	if (!nd_bus)
+	if (!nvdimm_bus)
 		return NULL;
-	INIT_LIST_HEAD(&nd_bus->ndios);
-	INIT_LIST_HEAD(&nd_bus->list);
-	init_waitqueue_head(&nd_bus->probe_wait);
-	nd_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);
-	mutex_init(&nd_bus->reconfig_mutex);
-	if (nd_bus->id < 0) {
-		kfree(nd_bus);
+	INIT_LIST_HEAD(&nvdimm_bus->ndios);
+	INIT_LIST_HEAD(&nvdimm_bus->list);
+	init_waitqueue_head(&nvdimm_bus->probe_wait);
+	nvdimm_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);
+	mutex_init(&nvdimm_bus->reconfig_mutex);
+	if (nvdimm_bus->id < 0) {
+		kfree(nvdimm_bus);
 		return NULL;
 	}
-	nd_bus->nd_desc = nd_desc;
-	nd_bus->module = module;
-	nd_bus->dev.parent = parent;
-	nd_bus->dev.release = nd_bus_release;
-	nd_bus->dev.groups = nd_desc->attr_groups;
-	dev_set_name(&nd_bus->dev, "ndbus%d", nd_bus->id);
-	rc = device_register(&nd_bus->dev);
+	nvdimm_bus->nd_desc = nd_desc;
+	nvdimm_bus->module = module;
+	nvdimm_bus->dev.parent = parent;
+	nvdimm_bus->dev.release = nvdimm_bus_release;
+	nvdimm_bus->dev.groups = nd_desc->attr_groups;
+	dev_set_name(&nvdimm_bus->dev, "ndbus%d", nvdimm_bus->id);
+	rc = device_register(&nvdimm_bus->dev);
 	if (rc) {
-		dev_dbg(&nd_bus->dev, "device registration failed: %d\n", rc);
+		dev_dbg(&nvdimm_bus->dev, "device registration failed: %d\n", rc);
 		goto err;
 	}
 
-	rc = nd_bus_create_ndctl(nd_bus);
+	rc = nvdimm_bus_create_ndctl(nvdimm_bus);
 	if (rc)
 		goto err;
 
-	mutex_lock(&nd_bus_list_mutex);
-	list_add_tail(&nd_bus->list, &nd_bus_list);
-	mutex_unlock(&nd_bus_list_mutex);
+	mutex_lock(&nvdimm_bus_list_mutex);
+	list_add_tail(&nvdimm_bus->list, &nvdimm_bus_list);
+	mutex_unlock(&nvdimm_bus_list_mutex);
 
-	nd_bus->nd_btt = nd_btt_create(nd_bus);
+	nvdimm_bus->nd_btt = nd_btt_create(nvdimm_bus);
 
-	return nd_bus;
+	return nvdimm_bus;
  err:
-	put_device(&nd_bus->dev);
+	put_device(&nvdimm_bus->dev);
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(__nd_bus_register);
+EXPORT_SYMBOL_GPL(__nvdimm_bus_register);
 
 static int child_unregister(struct device *dev, void *data)
 {
@@ -460,22 +460,22 @@ static int child_unregister(struct device *dev, void *data)
 	return 0;
 }
 
-void nd_bus_unregister(struct nd_bus *nd_bus)
+void nvdimm_bus_unregister(struct nvdimm_bus *nvdimm_bus)
 {
-	if (!nd_bus)
+	if (!nvdimm_bus)
 		return;
 
-	mutex_lock(&nd_bus_list_mutex);
-	list_del_init(&nd_bus->list);
-	mutex_unlock(&nd_bus_list_mutex);
+	mutex_lock(&nvdimm_bus_list_mutex);
+	list_del_init(&nvdimm_bus->list);
+	mutex_unlock(&nvdimm_bus_list_mutex);
 
 	nd_synchronize();
-	device_for_each_child(&nd_bus->dev, NULL, child_unregister);
-	nd_bus_destroy_ndctl(nd_bus);
+	device_for_each_child(&nvdimm_bus->dev, NULL, child_unregister);
+	nvdimm_bus_destroy_ndctl(nvdimm_bus);
 
-	device_unregister(&nd_bus->dev);
+	device_unregister(&nvdimm_bus->dev);
 }
-EXPORT_SYMBOL_GPL(nd_bus_unregister);
+EXPORT_SYMBOL_GPL(nvdimm_bus_unregister);
 
 #ifdef CONFIG_BLK_DEV_INTEGRITY
 static int nd_pi_nop_generate_verify(struct blk_integrity_iter *iter)
@@ -513,14 +513,14 @@ EXPORT_SYMBOL(nd_integrity_init);
 
 #endif
 
-static __init int libnd_init(void)
+static __init int libnvdimm_init(void)
 {
 	int rc;
 
-	rc = nd_bus_init();
+	rc = nvdimm_bus_init();
 	if (rc)
 		return rc;
-	rc = nd_dimm_init();
+	rc = nvdimm_init();
 	if (rc)
 		goto err_dimm;
 	rc = nd_region_init();
@@ -528,21 +528,21 @@ static __init int libnd_init(void)
 		goto err_region;
 	return 0;
  err_region:
-	nd_dimm_exit();
+	nvdimm_exit();
  err_dimm:
-	nd_bus_exit();
+	nvdimm_bus_exit();
 	return rc;
 }
 
-static __exit void libnd_exit(void)
+static __exit void libnvdimm_exit(void)
 {
-	WARN_ON(!list_empty(&nd_bus_list));
+	WARN_ON(!list_empty(&nvdimm_bus_list));
 	nd_region_exit();
-	nd_dimm_exit();
-	nd_bus_exit();
+	nvdimm_exit();
+	nvdimm_bus_exit();
 }
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Intel Corporation");
-module_init(libnd_init);
-module_exit(libnd_exit);
+module_init(libnvdimm_init);
+module_exit(libnvdimm_exit);

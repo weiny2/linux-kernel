@@ -19,7 +19,7 @@
 #include <linux/moduleparam.h>
 #include <linux/nd.h>
 #include <linux/sizes.h>
-#include "nd.h"
+#include <nd.h>
 
 struct nd_blk_device {
 	struct request_queue *queue;
@@ -301,7 +301,7 @@ static int nd_blk_probe(struct device *dev)
 	internal_nlba = div_u64(disk_size, blk_dev->internal_lbasize);
 	available_disk_size = internal_nlba * blk_dev->sector_size;
 
-	nd_bus_lock(dev);
+	nvdimm_bus_lock(dev);
 	add_disk(disk);
 
 	if (nd_blk_meta_size(blk_dev)) {
@@ -314,13 +314,13 @@ static int nd_blk_probe(struct device *dev)
 	dev_set_drvdata(dev, blk_dev);
 	nd_init_ndio(&blk_dev->ndio, nd_blk_rw_bytes, dev, disk, 0);
 	nd_register_ndio(&blk_dev->ndio);
-	nd_bus_unlock(dev);
+	nvdimm_bus_unlock(dev);
 
 
 	return 0;
 
  err_unlock_bus:
-	nd_bus_unlock(dev);
+	nvdimm_bus_unlock(dev);
  err_alloc_disk:
 	blk_cleanup_queue(blk_dev->queue);
  err_alloc_queue:

@@ -1,0 +1,37 @@
+ldflags-y += --wrap=ioremap_cache
+ldflags-y += --wrap=ioremap_nocache
+ldflags-y += --wrap=iounmap
+ldflags-y += --wrap=__request_region
+ldflags-y += --wrap=__release_region
+
+DRIVERS := ../../../drivers
+NVDIMM_SRC := $(DRIVERS)/nvdimm
+ACPI_SRC := $(DRIVERS)/acpi
+ccflags-y := -I$(src)/$(NVDIMM_SRC)
+ccflags-y += -I$(src)/$(ACPI_SRC)
+
+obj-m += libnvdimm.o
+obj-m += nd_pmem.o
+obj-m += nd_btt.o
+obj-m += nd_blk.o
+obj-m += nfit.o
+
+nfit-y := $(ACPI_SRC)/nfit.o
+
+nd_pmem-y := $(NVDIMM_SRC)/pmem.o
+
+nd_btt-y := $(NVDIMM_SRC)/btt.o
+
+nd_blk-y := $(NVDIMM_SRC)/blk.o
+
+libnvdimm-y := $(NVDIMM_SRC)/core.o
+libnvdimm-y += $(NVDIMM_SRC)/bus.o
+libnvdimm-y += $(NVDIMM_SRC)/dimm_devs.o
+libnvdimm-y += $(NVDIMM_SRC)/dimm.o
+libnvdimm-y += $(NVDIMM_SRC)/region_devs.o
+libnvdimm-y += $(NVDIMM_SRC)/region.o
+libnvdimm-y += $(NVDIMM_SRC)/namespace_devs.o
+libnvdimm-y += $(NVDIMM_SRC)/label.o
+libnvdimm-y += $(NVDIMM_SRC)/btt_devs.o
+
+obj-m += test/

@@ -13,15 +13,15 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
+#include <linux/libnvdimm.h>
 #include <linux/device.h>
 #include <linux/module.h>
-#include <linux/libnd.h>
 #include <linux/ndctl.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
-#include "../../../acpi/nfit.h"
+#include <nfit.h>
+#include <nd.h>
 #include "nfit_test.h"
-#include "../nd.h"
 
 /*
  * Generate an NFIT table to describe the following topology:
@@ -140,13 +140,13 @@ static struct nfit_test *to_nfit_test(struct device *dev)
 	return container_of(pdev, struct nfit_test, pdev);
 }
 
-static int nfit_test_ctl(struct nd_bus_descriptor *nd_desc,
-		struct nd_dimm *nd_dimm, unsigned int cmd, void *buf,
+static int nfit_test_ctl(struct nvdimm_bus_descriptor *nd_desc,
+		struct nvdimm *nvdimm, unsigned int cmd, void *buf,
 		unsigned int buf_len)
 {
 	struct acpi_nfit_desc *acpi_desc = to_acpi_desc(nd_desc);
 	struct nfit_test *t = container_of(acpi_desc, typeof(*t), acpi_desc);
-	struct nfit_mem *nfit_mem = nd_dimm_provider_data(nd_dimm);
+	struct nfit_mem *nfit_mem = nvdimm_provider_data(nvdimm);
 	int i, rc;
 
 	if (!nfit_mem || !test_bit(cmd, &nfit_mem->dsm_mask))
@@ -393,7 +393,7 @@ static void nfit_test_init_header(struct acpi_table_nfit *nfit, size_t size)
 
 static void nfit_test0_setup(struct nfit_test *t)
 {
-	struct nd_bus_descriptor *nd_desc;
+	struct nvdimm_bus_descriptor *nd_desc;
 	struct acpi_nfit_desc *acpi_desc;
 	struct acpi_nfit_memory_map *memdev;
 	void *nfit_buf = t->nfit_buf;
@@ -887,97 +887,29 @@ static void nfit_test1_setup(struct nfit_test *t)
 	dcr->status_size = 0;
 }
 
-static int nfit_test_blk_region_enable(struct nd_bus *nd_bus, struct device *dev)
-{
-	struct nd_blk_region *ndbr = to_nd_blk_region(dev);
-	struct acpi_nfit_system_address *spa_bdw;
-	struct nfit_blk_mmio *mmio;
-	struct nfit_blk *nfit_blk;
-	struct nfit_mem *nfit_mem;
-	struct nd_dimm *nd_dimm;
-
-	nd_dimm = nd_blk_region_to_dimm(ndbr);
-	nfit_mem = nd_dimm_provider_data(nd_dimm);
-	if (!nfit_mem || !nfit_mem->dcr || !nfit_mem->bdw) {
-		dev_dbg(dev, "%s: missing%s%s%s\n", __func__,
-				nfit_mem ? "" : " nfit_mem",
-				nfit_mem->dcr ? "" : " dcr",
-				nfit_mem->bdw ? "" : " bdw");
-		return -ENXIO;
-	}
-
-	nfit_blk = devm_kzalloc(dev, sizeof(*nfit_blk), GFP_KERNEL);
-	if (!nfit_blk)
-		return -ENOMEM;
-	nd_blk_region_set_provider_data(ndbr, nfit_blk);
-	nfit_blk->nd_region = to_nd_region(dev);
-
-	/* block aperture memory is all we use in nfit_test */
-	nfit_blk->bdw_offset = nfit_mem->bdw->offset;
-	mmio = &nfit_blk->mmio[BDW];
-	spa_bdw = nfit_mem->spa_bdw;
-	mmio->base = __wrap_ioremap_nocache(spa_bdw->address, spa_bdw->length);
-	if (!mmio->base) {
-		release_mem_region(spa_bdw->address, spa_bdw->length);
-		dev_dbg(dev, "%s: %s failed to map bdw\n", __func__,
-				nd_dimm_name(nd_dimm));
-		return -ENOMEM;
-	}
-
-	return 0;
-}
-
-static void nfit_test_blk_region_disable(struct nd_bus *nd_bus, struct device *dev)
-{
-	struct nd_blk_region *ndbr = to_nd_blk_region(dev);
-	struct nfit_blk *nfit_blk = nd_blk_region_provider_data(ndbr);
-	struct acpi_nfit_system_address *spa_bdw;
-	struct nfit_blk_mmio *mmio;
-	struct nfit_mem *nfit_mem;
-	struct nd_dimm *nd_dimm;
-
-	if (!nfit_blk)
-		return; /* never enabled */
-
-	nd_dimm = nd_blk_region_to_dimm(ndbr);
-	nfit_mem = nd_dimm_provider_data(nd_dimm);
-	spa_bdw = nfit_mem->spa_bdw;
-	mmio = &nfit_blk->mmio[BDW];
-	__wrap_iounmap(mmio->base);
-	nd_blk_region_set_provider_data(ndbr, NULL);
-}
-
 static int nfit_test_blk_do_io(struct nd_blk_region *ndbr, void *iobuf,
-		u64 len, int rw, resource_size_t dpa)
+                u64 len, int rw, resource_size_t dpa)
 {
-	struct nfit_blk *nfit_blk = ndbr->blk_provider_data;
-	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
-	struct nd_region *nd_region = &ndbr->nd_region;
-	struct nfit_test_resource *nfit_res;
-	unsigned int bw;
+        struct nfit_blk *nfit_blk = ndbr->blk_provider_data;
+        struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
+        struct nd_region *nd_region = &ndbr->nd_region;
+        unsigned int bw;
 
-	nfit_res = nfit_test_lookup((unsigned long) mmio->base);
-	if (!nfit_res) {
-		dev_WARN_ONCE(&nd_region->dev, 1, "no test resource\n");
-		return -EIO;
-	}
-	dev_vdbg(&nd_region->dev, "%s: base: %p offset: %pa\n",
-			__func__, mmio->base, &dpa);
-	bw = nd_region_acquire_lane(nd_region);
-	if (rw)
-		memcpy(nfit_res->buf + dpa, iobuf, len);
-	else
-		memcpy(iobuf, nfit_res->buf + dpa, len);
-	nd_region_release_lane(nd_region, bw);
+        bw = nd_region_acquire_lane(nd_region);
+        if (rw)
+                memcpy(mmio->base + dpa, iobuf, len);
+        else
+                memcpy(iobuf, mmio->base + dpa, len);
+        nd_region_release_lane(nd_region, bw);
 
-	return 0;
+        return 0;
 }
 
 extern const struct attribute_group *acpi_nfit_attribute_groups[];
 
 static int nfit_test_probe(struct platform_device *pdev)
 {
-	struct nd_bus_descriptor *nd_desc;
+	struct nvdimm_bus_descriptor *nd_desc;
 	struct acpi_nfit_desc *acpi_desc;
 	struct device *dev = &pdev->dev;
 	struct nfit_test *nfit_test;
@@ -1023,18 +955,16 @@ static int nfit_test_probe(struct platform_device *pdev)
 	acpi_desc = &nfit_test->acpi_desc;
 	acpi_desc->dev = &pdev->dev;
 	acpi_desc->nfit = nfit_test->nfit_buf;
-	acpi_desc->blk_enable = nfit_test_blk_region_enable;
-	acpi_desc->blk_disable = nfit_test_blk_region_disable;
 	acpi_desc->blk_do_io = nfit_test_blk_do_io;
 	nd_desc = &acpi_desc->nd_desc;
 	nd_desc->attr_groups = acpi_nfit_attribute_groups;
-	acpi_desc->nd_bus = nd_bus_register(&pdev->dev, nd_desc);
-	if (!acpi_desc->nd_bus)
+	acpi_desc->nvdimm_bus = nvdimm_bus_register(&pdev->dev, nd_desc);
+	if (!acpi_desc->nvdimm_bus)
 		return -ENXIO;
 
 	rc = acpi_nfit_init(acpi_desc, nfit_test->nfit_size);
 	if (rc) {
-		nd_bus_unregister(acpi_desc->nd_bus);
+		nvdimm_bus_unregister(acpi_desc->nvdimm_bus);
 		return rc;
 	}
 
@@ -1046,7 +976,7 @@ static int nfit_test_remove(struct platform_device *pdev)
 	struct nfit_test *nfit_test = to_nfit_test(&pdev->dev);
 	struct acpi_nfit_desc *acpi_desc = &nfit_test->acpi_desc;
 
-	nd_bus_unregister(acpi_desc->nd_bus);
+	nvdimm_bus_unregister(acpi_desc->nvdimm_bus);
 
 	return 0;
 }

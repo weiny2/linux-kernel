@@ -14,8 +14,8 @@
  */
 #ifndef __NFIT_H__
 #define __NFIT_H__
+#include <linux/libnvdimm.h>
 #include <linux/types.h>
-#include <linux/libnd.h>
 #include <linux/uuid.h>
 #include <linux/acpi.h>
 #include <acpi/acuuid.h>
@@ -73,7 +73,7 @@ struct nfit_memdev {
 
 /* assembled tables for a given dimm/memory-device */
 struct nfit_mem {
-	struct nd_dimm *nd_dimm;
+	struct nvdimm *nvdimm;
 	struct acpi_nfit_memory_map *memdev_dcr;
 	struct acpi_nfit_memory_map *memdev_pmem;
 	struct acpi_nfit_memory_map *memdev_bdw;
@@ -89,7 +89,7 @@ struct nfit_mem {
 };
 
 struct acpi_nfit_desc {
-	struct nd_bus_descriptor nd_desc;
+	struct nvdimm_bus_descriptor nd_desc;
 	struct acpi_table_nfit *nfit;
 	struct mutex spa_map_mutex;
 	struct list_head spa_maps;
@@ -99,11 +99,9 @@ struct acpi_nfit_desc {
 	struct list_head dcrs;
 	struct list_head bdws;
 	struct list_head idts;
-	struct nd_bus *nd_bus;
+	struct nvdimm_bus *nvdimm_bus;
 	struct device *dev;
 	unsigned long dimm_dsm_force_en;
-	int (*blk_enable)(struct nd_bus *nd_bus, struct device *dev);
-	void (*blk_disable)(struct nd_bus *nd_bus, struct device *dev);
 	int (*blk_do_io)(struct nd_blk_region *ndbr, void *iobuf,
 			u64 len, int write, resource_size_t dpa);
 };
@@ -153,7 +151,7 @@ static inline struct acpi_nfit_memory_map *__to_nfit_memdev(struct nfit_mem *nfi
 	return nfit_mem->memdev_pmem;
 }
 
-static inline struct acpi_nfit_desc *to_acpi_desc(struct nd_bus_descriptor *nd_desc)
+static inline struct acpi_nfit_desc *to_acpi_desc(struct nvdimm_bus_descriptor *nd_desc)
 {
 	return container_of(nd_desc, struct acpi_nfit_desc, nd_desc);
 }

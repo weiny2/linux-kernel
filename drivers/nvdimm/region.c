@@ -14,7 +14,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/nd.h>
-#include "nd.h"
+#include <nd.h>
 
 struct nd_percpu_lane {
 	int count[CONFIG_ND_MAX_REGIONS];
@@ -105,7 +105,7 @@ static int nd_region_probe(struct device *dev)
 		dev_info(dev, "online cpus (%d) < concurrent i/o lanes (%d) < possible cpus (%d)\n",
 				num_online_cpus(), nd_region->num_lanes,
 				num_possible_cpus());
-		dev_info(dev, "setting nr_cpus=%d may yield better libnd device performance\n",
+		dev_info(dev, "setting nr_cpus=%d may yield better libnvdimm device performance\n",
 				nd_region->num_lanes);
 	}
 
@@ -156,10 +156,10 @@ static int nd_region_remove(struct device *dev)
 	struct nd_region *nd_region = to_nd_region(dev);
 
 	/* flush attribute readers and disable */
-	nd_bus_lock(dev);
+	nvdimm_bus_lock(dev);
 	nd_region->ns_seed = NULL;
 	dev_set_drvdata(dev, NULL);
-	nd_bus_unlock(dev);
+	nvdimm_bus_unlock(dev);
 
 	device_for_each_child(dev, NULL, child_unregister);
 	return 0;

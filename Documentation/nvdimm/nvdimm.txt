@@ -1,40 +1,40 @@
-			  LIBND: Non-Volatile Devices
-	      libnd - kernel / libndctl - userspace helper library
+			  LIBNVDIMM: Non-Volatile Devices
+	      libnvdimm - kernel / libndctl - userspace helper library
 			   linux-nvdimm@lists.01.org
-				      v11
+				      v12
 
 
 	Glossary
 	Overview
 	    Supporting Documents
 	    Git Trees
-	LIBND PMEM and BLK
+	LIBNVDIMM PMEM and BLK
 	Why BLK?
 	    PMEM vs BLK
 	        BLK-REGIONs, PMEM-REGIONs, Atomic Sectors, and DAX
 	Example NVDIMM Platform
-	LIBND Kernel Device Model and LIBNDCTL Userspace API
+	LIBNVDIMM Kernel Device Model and LIBNDCTL Userspace API
 	    LIBNDCTL: Context
 	        libndctl: instantiate a new library context example
-	    LIBND/LIBNDCTL: Bus
-	        libnd: control class device in /sys/class
-	        libnd: bus
+	    LIBNVDIMM/LIBNDCTL: Bus
+	        libnvdimm: control class device in /sys/class
+	        libnvdimm: bus
 	        libndctl: bus enumeration example
-	    LIBND/LIBNDCTL: DIMM (NMEM)
-	        libnd: DIMM (NMEM)
+	    LIBNVDIMM/LIBNDCTL: DIMM (NMEM)
+	        libnvdimm: DIMM (NMEM)
 	        libndctl: DIMM enumeration example
-	    LIBND/LIBNDCTL: Region
-	        libnd: region
+	    LIBNVDIMM/LIBNDCTL: Region
+	        libnvdimm: region
 	        libndctl: region enumeration example
 	        Why Not Encode the Region Type into the Region Name?
 	        How Do I Determine the Major Type of a Region?
-	    LIBND/LIBNDCTL: Namespace
-	        libnd: namespace
+	    LIBNVDIMM/LIBNDCTL: Namespace
+	        libnvdimm: namespace
 	        libndctl: namespace enumeration example
 	        libndctl: namespace creation example
 	        Why the Term "namespace"?
-	    LIBND/LIBNDCTL: Block Translation Table "btt"
-	        libnd: btt layout
+	    LIBNVDIMM/LIBNDCTL: Block Translation Table "btt"
+	        libnvdimm: btt layout
 	        libndctl: btt creation example
 	Summary LIBNDCTL Diagram
 
@@ -78,10 +78,10 @@ BLK or PMEM device.
 Overview
 --------
 
-The LIBND subsystem provides support for three types of NVDIMMs, namely,
+The LIBNVDIMM subsystem provides support for three types of NVDIMMs, namely,
 PMEM, BLK, and NVDIMM devices that can simultaneously support both PMEM
 and BLK mode access.  These three modes of operation are described by
-the "NVDIMM Firmware Interface Table" (NFIT) in ACPI 6.  While the LIBND
+the "NVDIMM Firmware Interface Table" (NFIT) in ACPI 6.  While the LIBNVDIMM
 implementation is generic and supports pre-NFIT platforms, it was guided
 by the superset of capabilities need to support this ACPI 6 definition
 for NVDIMM resources.  The bulk of the kernel implementation is in place
@@ -96,12 +96,12 @@ DSM Interface Example: http://pmem.io/documents/NVDIMM_DSM_Interface_Example.pdf
 Driver Writer's Guide: http://pmem.io/documents/NVDIMM_Driver_Writers_Guide.pdf
 
 Git Trees
-LIBND: https://git.kernel.org/cgit/linux/kernel/git/djbw/nvdimm.git
+LIBNVDIMM: https://git.kernel.org/cgit/linux/kernel/git/djbw/nvdimm.git
 LIBNDCTL: https://github.com/pmem/ndctl.git
 PMEM: https://github.com/01org/prd
 
 
-LIBND PMEM and BLK
+LIBNVDIMM PMEM and BLK
 ------------------
 
 Prior to the arrival of the NFIT, non-volatile memory was described to a
@@ -112,7 +112,8 @@ specification standardizes not only the description of PMEM, but also
 BLK and platform message-passing entry points for control and
 configuration.
 
-For each NVDIMM access method (PMEM, BLK), LIBND provides a block device driver:
+For each NVDIMM access method (PMEM, BLK), LIBNVDIMM provides a block
+device driver:
 
     1. PMEM (nd_pmem.ko): Drives a system-physical-address range.  This
     range is contiguous in system memory and may be interleaved (hardware
@@ -120,7 +121,7 @@ For each NVDIMM access method (PMEM, BLK), LIBND provides a block device driver:
     platform may optionally provide details of which DIMMs are participating
     in the interleave.
 
-    Note that while LIBND describes system-physical-address ranges that may
+    Note that while LIBNVDIMM describes system-physical-address ranges that may
     alias with BLK access as ND_NAMESPACE_PMEM ranges and those without
     alias as ND_NAMESPACE_IO ranges, to the nd_pmem driver there is no
     distinction.  The different device-types are an implementation detail
@@ -189,7 +190,7 @@ This is due to the expectation that the primary usage model for PMEM is
 via DAX, and the BTT is incompatible with DAX.  However, for the cases
 where an application or filesystem still needs atomic sector update
 guarantees it can register a BTT on a PMEM device or partition.  See
-LIBND/NDCTL: Block Translation Table "btt"
+LIBNVDIMM/NDCTL: Block Translation Table "btt"
 
 
 Example NVDIMM Platform
@@ -242,17 +243,17 @@ by a region device with a dynamically assigned id (REGION0 - REGION5).
 
     This bus is provided by the kernel under the device
     /sys/devices/platform/nfit_test.0 when CONFIG_NFIT_TEST is enabled and
-    the nfit_test.ko module is loaded.  This not only test LIBND but the
+    the nfit_test.ko module is loaded.  This not only test LIBNVDIMM but the
     acpi_nfit.ko driver as well.
 
 
-LIBND Kernel Device Model and LIBNDCTL Userspace API
+LIBNVDIMM Kernel Device Model and LIBNDCTL Userspace API
 ----------------------------------------------------
 
-What follows is a description of the LIBND sysfs layout and a
+What follows is a description of the LIBNVDIMM sysfs layout and a
 corresponding object hierarchy diagram as viewed through the LIBNDCTL
 api.  The example sysfs paths and diagrams are relative to the Example
-NVDIMM Platform which is also the LIBND bus used in the LIBNDCTL unit
+NVDIMM Platform which is also the LIBNVDIMM bus used in the LIBNDCTL unit
 test.
 
 LIBNDCTL: Context
@@ -270,7 +271,7 @@ LIBNDCTL: instantiate a new library context example
 	else
 		return NULL;
 
-LIBND/LIBNDCTL: Bus
+LIBNVDIMM/LIBNDCTL: Bus
 -------------------
 
 A bus has a 1:1 relationship with an NFIT.  The current expectation for
@@ -280,7 +281,7 @@ does not preclude it.  The infrastructure supports multiple busses and
 we we use this capability to test multiple NFIT configurations in the
 unit test.
 
-LIBND: control class device in /sys/class
+LIBNVDIMM: control class device in /sys/class
 
 This character device accepts DSM messages to be passed to DIMM
 identified by its NFIT handle.
@@ -292,10 +293,10 @@ identified by its NFIT handle.
 
 
 
-LIBND: bus
+LIBNVDIMM: bus
 
-	struct nd_bus *nd_bus_register(struct device *parent,
-	       struct nd_bus_descriptor *nfit_desc);
+	struct nvdimm_bus *nvdimm_bus_register(struct device *parent,
+	       struct nvdimm_bus_descriptor *nfit_desc);
 
 	/sys/devices/platform/nfit_test.0/ndbus0
 	|-- btt0
@@ -336,7 +337,7 @@ Find the bus handle that describes the bus from Example NVDIMM Platform
 	bus = get_bus_by_provider(ctx, "nfit_test.0");
 
 
-LIBND/LIBNDCTL: DIMM (NMEM)
+LIBNVDIMM/LIBNDCTL: DIMM (NMEM)
 ---------------------------
 
 The DIMM device provides a character device for sending commands to
@@ -349,9 +350,9 @@ describes these devices via "Memory Device to System Physical Address
 Range Mapping Structure", and there is no requirement that they actually
 be physical DIMMs, so we use a more generic name.
 
-LIBND: DIMM (NMEM)
+LIBNVDIMM: DIMM (NMEM)
 
-	struct nd_dimm *nd_dimm_create(struct nd_bus *nd_bus, void *provider_data,
+	struct nvdimm *nvdimm_create(struct nvdimm_bus *nvdimm_bus, void *provider_data,
 			const struct attribute_group **groups, unsigned long flags,
 			unsigned long *dsm_mask);
 
@@ -361,7 +362,7 @@ LIBND: DIMM (NMEM)
 	|   |-- commands
 	|   |-- dev
 	|   |-- devtype
-	|   |-- driver -> ../../../../../bus/nd/drivers/nd_dimm
+	|   |-- driver -> ../../../../../bus/nd/drivers/nvdimm
 	|   |-- modalias
 	|   |-- nfit
 	|   |   |-- device
@@ -407,7 +408,7 @@ Bit 31:28 Reserved
 
 	dimm = get_dimm_by_handle(bus, DIMM_HANDLE(0, 0, 0, 0, 0));
 
-LIBND/LIBNDCTL: Region
+LIBNVDIMM/LIBNDCTL: Region
 ----------------------
 
 A generic REGION device is registered for each PMEM range orBLK-aperture
@@ -416,7 +417,7 @@ sets on the "nfit_test.0" bus.  The primary role of regions are to be a
 container of "mappings".  A mapping is a tuple of <DIMM,
 DPA-start-offset, length>.
 
-LIBND provides a built-in driver for these REGION devices.  This driver
+LIBNVDIMM provides a built-in driver for these REGION devices.  This driver
 is responsible for reconciling the aliased DPA mappings across all
 regions, parsing the LABEL, if present, and then emitting NAMESPACE
 devices with the resolved/exclusive DPA-boundaries for the nd_pmem or
@@ -430,11 +431,11 @@ emits, "devtype" duplicates the DEVTYPE variable stored by udev at the
 at the 'add' event, and finally, the optional "spa_index" is provided in
 the case where the region is defined by a SPA.
 
-LIBND: region
+LIBNVDIMM: region
 
-	struct nd_region *nd_pmem_region_create(struct nd_bus *nd_bus,
+	struct nd_region *nvdimm_pmem_region_create(struct nvdimm_bus *nvdimm_bus,
 			struct nd_region_desc *ndr_desc);
-	struct nd_region *nd_blk_region_create(struct nd_bus *nd_bus,
+	struct nd_region *nvdimm_blk_region_create(struct nvdimm_bus *nvdimm_bus,
 			struct nd_region_desc *ndr_desc);
 
 	/sys/devices/platform/nfit_test.0/ndbus0
@@ -531,7 +532,7 @@ region-attributes for 4 reasons:
     region-types.  Userspace can always rely on the generic region
     attributes like "mappings", "size", etc and the expected child devices
     named "namespace".  This generic format of the device-model hierarchy
-    allows the LIBND and LIBNDCTL implementations to be more uniform and
+    allows the LIBNVDIMM and LIBNDCTL implementations to be more uniform and
     future-proof.
 
     4. There are more robust mechanisms for determining the major type of a
@@ -548,12 +549,12 @@ looking at the kernel header (/usr/include/linux/ndctl.h) to decode the
     1. module alias lookup:
 
     The whole point of region/namespace device type differentiation is to
-    decide which block-device driver will attach to a given LIBND namespace.
+    decide which block-device driver will attach to a given LIBNVDIMM namespace.
     One can simply use the modalias to lookup the resulting module.  It's
     important to note that this method is robust in the presence of a
     vendor-specific driver down the road.  If a vendor-specific
     implementation wants to supplant the standard nd_blk driver it can with
-    minimal impact to the rest of LIBND.
+    minimal impact to the rest of LIBNVDIMM.
 
     In fact, a vendor may also want to have a vendor-specific region-driver
     (outside of nd_region).  For example, if a vendor defined its own LABEL
@@ -591,7 +592,7 @@ looking at the kernel header (/usr/include/linux/ndctl.h) to decode the
     is a simple system-physical-address range.
 
 
-LIBND/LIBNDCTL: Namespace
+LIBNVDIMM/LIBNDCTL: Namespace
 -------------------------
 
 A REGION, after resolving DPA aliasing and LABEL specified boundaries,
@@ -599,7 +600,7 @@ surfaces one or more "namespace" devices.  The arrival of a "namespace"
 device currently triggers either the nd_blk or nd_pmem driver to load
 and register a disk/block device.
 
-LIBND: namespace
+LIBNVDIMM: namespace
 Here is a sample layout from the three major types of NAMESPACE where
 namespace0.0 represents DIMM-info-backed PMEM (note that it has a 'uuid'
 attribute), namespace2.0 represents a BLK namespace (note it has a
@@ -700,14 +701,14 @@ Why the Term "namespace"?
     NVME-namespaces.
 
 
-LIBND/LIBNDCTL: Block Translation Table "btt"
+LIBNVDIMM/LIBNDCTL: Block Translation Table "btt"
 ---------------------------------------------
 
 A BTT (design document: http://pmem.io/2014/09/23/btt.html) is a stacked
 block device driver that fronts either the whole block device or a
 partition of a block device emitted by either a PMEM or BLK NAMESPACE.
 
-LIBND: btt layout
+LIBNVDIMM: btt layout
 Every bus will start out with at least one BTT device which is the seed
 device.  To activate it set the "backing_dev", "uuid", and "sector_size"
 attributes and then bind the device to the nd_btt driver.

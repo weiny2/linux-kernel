@@ -4,6 +4,7 @@
 
 ccflags-y			:= -Os
 ccflags-$(CONFIG_ACPI_DEBUG)	+= -DACPI_DEBUG_OUTPUT
+ccflags-y			+= -I$(src)
 
 #
 # ACPI Boot-Time Table Parsing

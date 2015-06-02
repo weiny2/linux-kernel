@@ -12,10 +12,10 @@
  */
 #ifndef __ND_H__
 #define __ND_H__
-#include <linux/genhd.h>
+#include <linux/libnvdimm.h>
 #include <linux/blkdev.h>
 #include <linux/device.h>
-#include <linux/libnd.h>
+#include <linux/genhd.h>
 #include <linux/mutex.h>
 #include <linux/ndctl.h>
 #include <linux/types.h>
@@ -33,7 +33,7 @@ enum {
 	INT_LBASIZE_ALIGNMENT = 256,
 };
 
-struct nd_dimm_drvdata {
+struct nvdimm_drvdata {
 	struct device *dev;
 	int nsindex_size;
 	struct nd_cmd_get_config_size nsarea;
@@ -48,7 +48,7 @@ struct nd_region_namespaces {
 };
 
 static inline struct nd_namespace_index __iomem *to_namespace_index(
-		struct nd_dimm_drvdata *ndd, int i)
+		struct nvdimm_drvdata *ndd, int i)
 {
 	if (i < 0)
 		return NULL;
@@ -57,13 +57,13 @@ static inline struct nd_namespace_index __iomem *to_namespace_index(
 }
 
 static inline struct nd_namespace_index __iomem *to_current_namespace_index(
-		struct nd_dimm_drvdata *ndd)
+		struct nvdimm_drvdata *ndd)
 {
 	return to_namespace_index(ndd, ndd->ns_current);
 }
 
 static inline struct nd_namespace_index __iomem *to_next_namespace_index(
-		struct nd_dimm_drvdata *ndd)
+		struct nvdimm_drvdata *ndd)
 {
 	return to_namespace_index(ndd, ndd->ns_next);
 }
@@ -116,8 +116,8 @@ struct nd_region {
 };
 
 struct nd_blk_region {
-	int (*enable)(struct nd_bus *nd_bus, struct device *dev);
-	void (*disable)(struct nd_bus *nd_bus, struct device *dev);
+	int (*enable)(struct nvdimm_bus *nvdimm_bus, struct device *dev);
+	void (*disable)(struct nvdimm_bus *nvdimm_bus, struct device *dev);
 	int (*do_io)(struct nd_blk_region *ndbr, void *iobuf, u64 len,
 			int write, resource_size_t dpa);
 	void *blk_provider_data;
@@ -218,7 +218,7 @@ enum nd_async_mode {
 };
 
 int nd_integrity_init(struct gendisk *disk, unsigned long meta_size);
-void wait_nd_bus_probe_idle(struct device *dev);
+void wait_nvdimm_bus_probe_idle(struct device *dev);
 void nd_device_register(struct device *dev);
 void nd_device_unregister(struct device *dev, enum nd_async_mode mode);
 int nd_uuid_store(struct device *dev, u8 **uuid_out, const char *buf,
@@ -234,15 +234,15 @@ void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
 void ndio_del_claim(struct nd_io_claim *ndio_claim);
 struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
 		ndio_notify_remove_fn notify_remove);
-int __init nd_dimm_init(void);
+int __init nvdimm_init(void);
 int __init nd_region_init(void);
-void nd_dimm_exit(void);
+void nvdimm_exit(void);
 void nd_region_exit(void);
-struct nd_dimm;
-struct nd_dimm_drvdata *to_ndd(struct nd_mapping *nd_mapping);
-int nd_dimm_init_nsarea(struct nd_dimm_drvdata *ndd);
-int nd_dimm_init_config_data(struct nd_dimm_drvdata *ndd);
-int nd_dimm_set_config_data(struct nd_dimm_drvdata *ndd, size_t offset,
+struct nvdimm;
+struct nvdimm_drvdata *to_ndd(struct nd_mapping *nd_mapping);
+int nvdimm_init_nsarea(struct nvdimm_drvdata *ndd);
+int nvdimm_init_config_data(struct nvdimm_drvdata *ndd);
+int nvdimm_set_config_data(struct nvdimm_drvdata *ndd, size_t offset,
 		void *buf, size_t len);
 struct nd_btt *to_nd_btt(struct device *dev);
 struct btt_sb;
@@ -251,12 +251,12 @@ struct nd_region *to_nd_region(struct device *dev);
 int nd_region_to_namespace_type(struct nd_region *nd_region);
 int nd_region_register_namespaces(struct nd_region *nd_region, int *err);
 u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
-void nd_bus_lock(struct device *dev);
-void nd_bus_unlock(struct device *dev);
-bool is_nd_bus_locked(struct device *dev);
-int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd);
-void nd_dimm_free_dpa(struct nd_dimm_drvdata *ndd, struct resource *res);
-struct resource *nd_dimm_allocate_dpa(struct nd_dimm_drvdata *ndd,
+void nvdimm_bus_lock(struct device *dev);
+void nvdimm_bus_unlock(struct device *dev);
+bool is_nvdimm_bus_locked(struct device *dev);
+int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd);
+void nvdimm_free_dpa(struct nvdimm_drvdata *ndd, struct resource *res);
+struct resource *nvdimm_allocate_dpa(struct nvdimm_drvdata *ndd,
 		struct nd_label_id *label_id, resource_size_t start,
 		resource_size_t n);
 int nd_blk_region_init(struct nd_region *nd_region);

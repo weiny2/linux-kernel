@@ -15,9 +15,9 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/nd.h>
-#include "nd-private.h"
-#include "label.h"
-#include "nd.h"
+#include <nd-private.h>
+#include <label.h>
+#include <nd.h>
 
 #include <asm-generic/io-64-nonatomic-lo-hi.h>
 
@@ -40,7 +40,7 @@ static u32 best_seq(u32 a, u32 b)
 		return a;
 }
 
-size_t sizeof_namespace_index(struct nd_dimm_drvdata *ndd)
+size_t sizeof_namespace_index(struct nvdimm_drvdata *ndd)
 {
 	u32 index_span;
 
@@ -62,12 +62,12 @@ size_t sizeof_namespace_index(struct nd_dimm_drvdata *ndd)
 	return ndd->nsindex_size;
 }
 
-int nd_dimm_num_label_slots(struct nd_dimm_drvdata *ndd)
+int nvdimm_num_label_slots(struct nvdimm_drvdata *ndd)
 {
 	return ndd->nsarea.config_size / 129;
 }
 
-int nd_label_validate(struct nd_dimm_drvdata *ndd)
+int nd_label_validate(struct nvdimm_drvdata *ndd)
 {
 	/*
 	 * On media label format consists of two index blocks followed
@@ -190,7 +190,7 @@ int nd_label_validate(struct nd_dimm_drvdata *ndd)
 	return -1;
 }
 
-void nd_label_copy(struct nd_dimm_drvdata *ndd,
+void nd_label_copy(struct nvdimm_drvdata *ndd,
 		struct nd_namespace_index __iomem *dst,
 		struct nd_namespace_index __iomem *src)
 {
@@ -202,14 +202,14 @@ void nd_label_copy(struct nd_dimm_drvdata *ndd,
 	memcpy(__io_virt(dst), __io_virt(src), sizeof_namespace_index(ndd));
 }
 
-static struct nd_namespace_label __iomem *nd_label_base(struct nd_dimm_drvdata *ndd)
+static struct nd_namespace_label __iomem *nd_label_base(struct nvdimm_drvdata *ndd)
 {
 	void __iomem *base = to_namespace_index(ndd, 0);
 
 	return base + 2 * sizeof_namespace_index(ndd);
 }
 
-static int to_slot(struct nd_dimm_drvdata *ndd,
+static int to_slot(struct nvdimm_drvdata *ndd,
 		struct nd_namespace_label __iomem *nd_label)
 {
 	return nd_label - nd_label_base(ndd);
@@ -222,13 +222,13 @@ static int to_slot(struct nd_dimm_drvdata *ndd,
 
 /**
  * preamble_index - common variable initialization for nd_label_* routines
- * @nd_dimm: dimm container for the relevant label set
+ * @ndd: dimm container for the relevant label set
  * @idx: namespace_index index
  * @nsindex_out: on return set to the currently active namespace index
  * @free: on return set to the free label bitmap in the index
  * @nslot: on return set to the number of slots in the label space
  */
-static bool preamble_index(struct nd_dimm_drvdata *ndd, int idx,
+static bool preamble_index(struct nvdimm_drvdata *ndd, int idx,
 		struct nd_namespace_index __iomem **nsindex_out,
 		unsigned long **free, u32 *nslot)
 {
@@ -254,7 +254,7 @@ char *nd_label_gen_id(struct nd_label_id *label_id, u8 *uuid, u32 flags)
 	return label_id->id;
 }
 
-static bool preamble_current(struct nd_dimm_drvdata *ndd,
+static bool preamble_current(struct nvdimm_drvdata *ndd,
 		struct nd_namespace_index __iomem **nsindex,
 		unsigned long **free, u32 *nslot)
 {
@@ -262,7 +262,7 @@ static bool preamble_current(struct nd_dimm_drvdata *ndd,
 			free, nslot);
 }
 
-static bool preamble_next(struct nd_dimm_drvdata *ndd,
+static bool preamble_next(struct nvdimm_drvdata *ndd,
 		struct nd_namespace_index __iomem **nsindex,
 		unsigned long **free, u32 *nslot)
 {
@@ -283,7 +283,7 @@ static bool slot_valid(struct nd_namespace_label __iomem *nd_label, u32 slot)
 	return true;
 }
 
-int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd)
+int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd)
 {
 	struct nd_namespace_index __iomem *nsindex;
 	unsigned long *free;
@@ -308,7 +308,7 @@ int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd)
 		memcpy_fromio(label_uuid, nd_label->uuid, NSLABEL_UUID_LEN);
 		flags = readl(&nd_label->flags);
 		nd_label_gen_id(&label_id, label_uuid, flags);
-		res = nd_dimm_allocate_dpa(ndd, &label_id, readq(&nd_label->dpa),
+		res = nvdimm_allocate_dpa(ndd, &label_id, readq(&nd_label->dpa),
 				readq(&nd_label->rawsize));
 		nd_dbg_dpa(nd_region, ndd, res, "reserve\n");
 		if (!res)
@@ -318,7 +318,7 @@ int nd_label_reserve_dpa(struct nd_dimm_drvdata *ndd)
 	return 0;
 }
 
-int nd_label_active_count(struct nd_dimm_drvdata *ndd)
+int nd_label_active_count(struct nvdimm_drvdata *ndd)
 {
 	struct nd_namespace_index __iomem *nsindex;
 	unsigned long *free;
@@ -347,7 +347,7 @@ int nd_label_active_count(struct nd_dimm_drvdata *ndd)
 }
 
 struct nd_namespace_label __iomem *nd_label_active(
-		struct nd_dimm_drvdata *ndd, int n)
+		struct nvdimm_drvdata *ndd, int n)
 {
 	struct nd_namespace_index __iomem *nsindex;
 	unsigned long *free;
@@ -370,7 +370,7 @@ struct nd_namespace_label __iomem *nd_label_active(
 	return NULL;
 }
 
-u32 nd_label_alloc_slot(struct nd_dimm_drvdata *ndd)
+u32 nd_label_alloc_slot(struct nvdimm_drvdata *ndd)
 {
 	struct nd_namespace_index __iomem *nsindex;
 	unsigned long *free;
@@ -379,7 +379,7 @@ u32 nd_label_alloc_slot(struct nd_dimm_drvdata *ndd)
 	if (!preamble_next(ndd, &nsindex, &free, &nslot))
 		return UINT_MAX;
 
-	WARN_ON(!is_nd_bus_locked(ndd->dev));
+	WARN_ON(!is_nvdimm_bus_locked(ndd->dev));
 
 	slot = find_next_bit_le(free, nslot, 0);
 	if (slot == nslot)
@@ -390,7 +390,7 @@ u32 nd_label_alloc_slot(struct nd_dimm_drvdata *ndd)
 	return slot;
 }
 
-bool nd_label_free_slot(struct nd_dimm_drvdata *ndd, u32 slot)
+bool nd_label_free_slot(struct nvdimm_drvdata *ndd, u32 slot)
 {
 	struct nd_namespace_index __iomem *nsindex;
 	unsigned long *free;
@@ -399,28 +399,28 @@ bool nd_label_free_slot(struct nd_dimm_drvdata *ndd, u32 slot)
 	if (!preamble_next(ndd, &nsindex, &free, &nslot))
 		return false;
 
-	WARN_ON(!is_nd_bus_locked(ndd->dev));
+	WARN_ON(!is_nvdimm_bus_locked(ndd->dev));
 
 	if (slot < nslot)
 		return !test_and_set_bit_le(slot, free);
 	return false;
 }
 
-u32 nd_label_nfree(struct nd_dimm_drvdata *ndd)
+u32 nd_label_nfree(struct nvdimm_drvdata *ndd)
 {
 	struct nd_namespace_index __iomem *nsindex;
 	unsigned long *free;
 	u32 nslot;
 
-	WARN_ON(!is_nd_bus_locked(ndd->dev));
+	WARN_ON(!is_nvdimm_bus_locked(ndd->dev));
 
 	if (!preamble_next(ndd, &nsindex, &free, &nslot))
-		return nd_dimm_num_label_slots(ndd);
+		return nvdimm_num_label_slots(ndd);
 
 	return bitmap_weight(free, nslot);
 }
 
-static int nd_label_write_index(struct nd_dimm_drvdata *ndd, int index, u32 seq,
+static int nd_label_write_index(struct nvdimm_drvdata *ndd, int index, u32 seq,
 		unsigned long flags)
 {
 	struct nd_namespace_index __iomem *nsindex;
@@ -431,7 +431,7 @@ static int nd_label_write_index(struct nd_dimm_drvdata *ndd, int index, u32 seq,
 
 	nsindex = to_namespace_index(ndd, index);
 	if (flags & ND_NSINDEX_INIT)
-		nslot = nd_dimm_num_label_slots(ndd);
+		nslot = nvdimm_num_label_slots(ndd);
 	else
 		nslot = readl(&nsindex->nslot);
 
@@ -465,7 +465,7 @@ static int nd_label_write_index(struct nd_dimm_drvdata *ndd, int index, u32 seq,
 	checksum = nd_fletcher64(__io_virt(nsindex),
 			sizeof_namespace_index(ndd), 1);
 	writeq(checksum, &nsindex->checksum);
-	rc = nd_dimm_set_config_data(ndd, readq(&nsindex->myoff),
+	rc = nvdimm_set_config_data(ndd, readq(&nsindex->myoff),
 			__io_virt(nsindex), sizeof_namespace_index(ndd));
 	if (rc < 0)
 		return rc;
@@ -483,7 +483,7 @@ static int nd_label_write_index(struct nd_dimm_drvdata *ndd, int index, u32 seq,
 	return 0;
 }
 
-static unsigned long nd_label_offset(struct nd_dimm_drvdata *ndd,
+static unsigned long nd_label_offset(struct nvdimm_drvdata *ndd,
 		struct nd_namespace_label __iomem *nd_label)
 {
 	return (unsigned long) nd_label
@@ -495,7 +495,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 		int pos)
 {
 	u64 cookie = nd_region_interleave_set_cookie(nd_region), rawsize;
-	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct nd_namespace_label __iomem *victim_label;
 	struct nd_namespace_label __iomem *nd_label;
 	struct nd_namespace_index __iomem *nsindex;
@@ -530,7 +530,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 
 	/* update label */
 	offset = nd_label_offset(ndd, nd_label);
-	rc = nd_dimm_set_config_data(ndd, offset, __io_virt(nd_label),
+	rc = nvdimm_set_config_data(ndd, offset, __io_virt(nd_label),
 			sizeof(struct nd_namespace_label));
 	if (rc < 0)
 		return rc;
@@ -557,7 +557,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 static void del_label(struct nd_mapping *nd_mapping, int l)
 {
 	struct nd_namespace_label __iomem *next_label, *nd_label;
-	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
 	unsigned int slot;
 	int j;
 
@@ -582,7 +582,7 @@ static bool is_old_resource(struct resource *res, struct resource **list, int n)
 	return false;
 }
 
-static struct resource *to_resource(struct nd_dimm_drvdata *ndd,
+static struct resource *to_resource(struct nvdimm_drvdata *ndd,
 		struct nd_namespace_label __iomem *nd_label)
 {
 	struct resource *res;
@@ -608,7 +608,7 @@ static int __blk_label_update(struct nd_region *nd_region,
 		int num_labels)
 {
 	int i, l, alloc, victims, nfree, old_num_resources, nlabel, rc = -ENXIO;
-	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct nd_namespace_label __iomem *nd_label;
 	struct nd_namespace_index __iomem *nsindex;
 	unsigned long *free, *victim_map = NULL;
@@ -713,7 +713,7 @@ static int __blk_label_update(struct nd_region *nd_region,
 
 		/* update label */
 		offset = nd_label_offset(ndd, nd_label);
-		rc = nd_dimm_set_config_data(ndd, offset, __io_virt(nd_label),
+		rc = nvdimm_set_config_data(ndd, offset, __io_virt(nd_label),
 				sizeof(struct nd_namespace_label));
 		if (rc < 0)
 			goto abort;
@@ -790,7 +790,7 @@ static int init_labels(struct nd_mapping *nd_mapping, int num_labels)
 	int i, l, old_num_labels = 0;
 	struct nd_namespace_index __iomem *nsindex;
 	struct nd_namespace_label __iomem *nd_label;
-	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
 	size_t size = (num_labels + 1) * sizeof(struct nd_namespace_label *);
 
 	for_each_label(l, nd_label, nd_mapping->labels)
@@ -835,7 +835,7 @@ static int init_labels(struct nd_mapping *nd_mapping, int num_labels)
 
 static int del_labels(struct nd_mapping *nd_mapping, u8 *uuid)
 {
-	struct nd_dimm_drvdata *ndd = to_ndd(nd_mapping);
+	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct nd_namespace_label __iomem *nd_label;
 	struct nd_namespace_index __iomem *nsindex;
 	u8 label_uuid[NSLABEL_UUID_LEN];

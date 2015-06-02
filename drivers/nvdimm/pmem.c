@@ -24,7 +24,7 @@
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
 #include <linux/nd.h>
-#include "nd.h"
+#include <nd.h>
 
 struct pmem_device {
 	struct request_queue	*pmem_queue;
@@ -237,12 +237,12 @@ static int nd_pmem_probe(struct device *dev)
 	if (IS_ERR(pmem))
 		return PTR_ERR(pmem);
 
-	nd_bus_lock(dev);
+	nvdimm_bus_lock(dev);
 	add_disk(pmem->pmem_disk);
 	dev_set_drvdata(dev, pmem);
 	nd_init_ndio(&pmem->ndio, pmem_rw_bytes, dev, pmem->pmem_disk, 0);
 	nd_register_ndio(&pmem->ndio);
-	nd_bus_unlock(dev);
+	nvdimm_bus_unlock(dev);
 
 	return 0;
 }

@@ -111,7 +111,7 @@ enum {
 	ND_CMD_VENDOR = 9,
 };
 
-static inline const char *nd_bus_cmd_name(unsigned cmd)
+static inline const char *nvdimm_bus_cmd_name(unsigned cmd)
 {
 	static const char * const names[] = {
 		[ND_CMD_ARS_CAP] = "ars_cap",
@@ -124,7 +124,7 @@ static inline const char *nd_bus_cmd_name(unsigned cmd)
 	return "unknown";
 }
 
-static inline const char *nd_dimm_cmd_name(unsigned cmd)
+static inline const char *nvdimm_cmd_name(unsigned cmd)
 {
 	static const char * const names[] = {
 		[ND_CMD_SMART] = "smart",
