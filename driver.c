@@ -849,7 +849,7 @@ void handle_eflags(struct hfi1_packet *packet)
  * The following functions are called by the interrupt handler. They are type
  * specific handlers for each packet type.
  */
-void process_receive_ib(struct hfi1_packet *packet)
+int process_receive_ib(struct hfi1_packet *packet)
 {
 	trace_hfi1_rcvhdr(packet->rcd->ppd->dd,
 			  packet->rcd->ctxt,
@@ -862,48 +862,54 @@ void process_receive_ib(struct hfi1_packet *packet)
 
 	if (unlikely(rhf_err_flags(packet->rhf))) {
 		handle_eflags(packet);
-		return;
+		return RHF_RCV_CONTINUE;
 	}
 
 	hfi1_ib_rcv(packet);
+	return RHF_RCV_CONTINUE;
 }
 
-void process_receive_bypass(struct hfi1_packet *packet)
+int process_receive_bypass(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
 
 	dd_dev_err(packet->rcd->dd,
 	   "Bypass packets are not supported in normal operation. Dropping\n");
+	return RHF_RCV_CONTINUE;
 }
 
-void process_receive_error(struct hfi1_packet *packet)
+int process_receive_error(struct hfi1_packet *packet)
 {
 	handle_eflags(packet);
 	dd_dev_err(packet->rcd->dd,
 		   "Unhandled error packet received. Dropping.\n");
+	return RHF_RCV_CONTINUE;
 }
 
-void process_receive_expected(struct hfi1_packet *packet)
+int process_receive_expected(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
 
 	dd_dev_err(packet->rcd->dd,
 		   "Unhandled expected packet received. Dropping.\n");
+	return RHF_RCV_CONTINUE;
 }
 
-void process_receive_eager(struct hfi1_packet *packet)
+int process_receive_eager(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
 
 	dd_dev_err(packet->rcd->dd,
 		   "Unhandled eager packet received. Dropping.\n");
+	return RHF_RCV_CONTINUE;
 }
 
-void process_receive_invalid(struct hfi1_packet *packet)
+int process_receive_invalid(struct hfi1_packet *packet)
 {
 	dd_dev_err(packet->rcd->dd, "Invalid packet type %d. Dropping\n",
 		rhf_rcv_type(packet->rhf));
+	return RHF_RCV_CONTINUE;
 }

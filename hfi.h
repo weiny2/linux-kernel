@@ -680,7 +680,12 @@ struct hfi1_pportdata {
 	u32 port_error_action;
 };
 
-typedef void (*rhf_rcv_function_ptr)(struct hfi1_packet *packet);
+typedef int (*rhf_rcv_function_ptr)(struct hfi1_packet *packet);
+
+/* return values for the RHF receive functions */
+#define RHF_RCV_CONTINUE  0	/* keep going */
+#define RHF_RCV_DONE	  1	/* stop, this packet processed */
+#define RHF_RCV_REPROCESS 2	/* stop. retain this packet */
 
 struct rcv_array_data {
 	u8 group_size;
@@ -1319,7 +1324,7 @@ void set_up_vl15(struct hfi1_devdata *dd, u8 vau, u16 vl15buf);
 void reset_link_credits(struct hfi1_devdata *dd);
 void assign_remote_cm_au_table(struct hfi1_devdata *dd, u8 vcu);
 
-void snoop_recv_handler(struct hfi1_packet *packet);
+int snoop_recv_handler(struct hfi1_packet *packet);
 int snoop_send_dma_handler(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
 			   u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc);
@@ -1539,12 +1544,12 @@ static inline void flush_wc(void)
 }
 
 void handle_eflags(struct hfi1_packet *packet);
-void process_receive_ib(struct hfi1_packet *packet);
-void process_receive_bypass(struct hfi1_packet *packet);
-void process_receive_error(struct hfi1_packet *packet);
-void process_receive_expected(struct hfi1_packet *packet);
-void process_receive_eager(struct hfi1_packet *packet);
-void process_receive_invalid(struct hfi1_packet *packet);
+int process_receive_ib(struct hfi1_packet *packet);
+int process_receive_bypass(struct hfi1_packet *packet);
+int process_receive_error(struct hfi1_packet *packet);
+int process_receive_expected(struct hfi1_packet *packet);
+int process_receive_eager(struct hfi1_packet *packet);
+int process_receive_invalid(struct hfi1_packet *packet);
 
 extern rhf_rcv_function_ptr snoop_rhf_rcv_functions[8];
 

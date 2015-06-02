@@ -1501,7 +1501,7 @@ static struct snoop_packet *allocate_snoop_packet(u32 hdr_len,
  * there is no specific support. Bottom line is this routine does now even know
  * what a bypass packet is.
  */
-void snoop_recv_handler(struct hfi1_packet *packet)
+int snoop_recv_handler(struct hfi1_packet *packet)
 {
 	struct hfi1_pportdata *ppd = packet->rcd->ppd;
 	struct hfi1_ib_header *hdr = packet->hdr;
@@ -1600,7 +1600,8 @@ void snoop_recv_handler(struct hfi1_packet *packet)
 			if (unlikely(rhf_err_flags(packet->rhf)))
 				handle_eflags(packet);
 
-			return; /* throw the packet on the floor */
+			/* throw the packet on the floor */
+			return RHF_RCV_CONTINUE;
 		}
 		break;
 	default:
@@ -1611,7 +1612,8 @@ void snoop_recv_handler(struct hfi1_packet *packet)
 	 * We do not care what type of packet came in here - just pass it off
 	 * to the normal handler.
 	 */
-	ppd->dd->normal_rhf_rcv_functions[rhf_rcv_type(packet->rhf)](packet);
+	return ppd->dd->normal_rhf_rcv_functions[rhf_rcv_type(packet->rhf)]
+			(packet);
 }
 
 /*
