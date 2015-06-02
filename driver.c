@@ -902,3 +902,8 @@ void process_receive_eager(struct hfi1_packet *packet)
 		   "Unhandled eager packet received. Dropping.\n");
 }
 
+void process_receive_invalid(struct hfi1_packet *packet)
+{
+	dd_dev_err(packet->rcd->dd, "Invalid packet type %d. Dropping\n",
+		rhf_rcv_type(packet->rhf));
+}

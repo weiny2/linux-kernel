@@ -1002,7 +1002,8 @@ struct hfi1_devdata {
 	u8 do_drop;
 
 	/* receive interrupt functions */
-	rhf_rcv_function_ptr rhf_rcv_function_map[5];
+	rhf_rcv_function_ptr *rhf_rcv_function_map;
+	rhf_rcv_function_ptr normal_rhf_rcv_functions[8];
 
 	/*
 	 * Handlers for outgoing data so that snoop/capture does not
@@ -1543,6 +1544,9 @@ void process_receive_bypass(struct hfi1_packet *packet);
 void process_receive_error(struct hfi1_packet *packet);
 void process_receive_expected(struct hfi1_packet *packet);
 void process_receive_eager(struct hfi1_packet *packet);
+void process_receive_invalid(struct hfi1_packet *packet);
+
+extern rhf_rcv_function_ptr snoop_rhf_rcv_functions[8];
 
 void update_sge(struct hfi1_sge_state *ss, u32 length);
 

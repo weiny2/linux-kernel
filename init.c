@@ -650,12 +650,22 @@ int hfi1_init(struct hfi1_devdata *dd, int reinit)
 	struct hfi1_pportdata *ppd;
 
 	/* Set up recv low level handlers */
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_IB] = process_receive_ib;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = process_receive_bypass;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = process_receive_error;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] =
+	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_EXPECTED] =
 						process_receive_expected;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = process_receive_eager;
+	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_EAGER] =
+						process_receive_eager;
+	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_IB] = process_receive_ib;
+	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_ERROR] =
+						process_receive_error;
+	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_BYPASS] =
+						process_receive_bypass;
+	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_INVALID5] =
+						process_receive_invalid;
+	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_INVALID6] =
+						process_receive_invalid;
+	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_INVALID7] =
+						process_receive_invalid;
+	dd->rhf_rcv_function_map = dd->normal_rhf_rcv_functions;
 
 	/* Set up send low level handlers */
 	dd->process_pio_send = hfi1_verbs_send_pio;

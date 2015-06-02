@@ -96,6 +96,18 @@ enum hfi1_filter_status {
 	HFI1_FILTER_MISS
 };
 
+/* snoop processing functions */
+rhf_rcv_function_ptr snoop_rhf_rcv_functions[8] = {
+	[RHF_RCV_TYPE_EXPECTED] = snoop_recv_handler,
+	[RHF_RCV_TYPE_EAGER]    = snoop_recv_handler,
+	[RHF_RCV_TYPE_IB]       = snoop_recv_handler,
+	[RHF_RCV_TYPE_ERROR]    = snoop_recv_handler,
+	[RHF_RCV_TYPE_BYPASS]   = snoop_recv_handler,
+	[RHF_RCV_TYPE_INVALID5] = process_receive_invalid,
+	[RHF_RCV_TYPE_INVALID6] = process_receive_invalid,
+	[RHF_RCV_TYPE_INVALID7] = process_receive_invalid
+};
+
 /* Snoop packet structure */
 struct snoop_packet {
 	struct list_head list;
@@ -703,12 +715,7 @@ static int hfi1_snoop_open(struct inode *in, struct file *fp)
 	 * allocated and get stuck on the snoop_lock before getting added to the
 	 * queue. Same goes for send.
 	 */
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_IB] = snoop_recv_handler;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = snoop_recv_handler;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = snoop_recv_handler;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] = snoop_recv_handler;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = snoop_recv_handler;
-
+	dd->rhf_rcv_function_map = snoop_rhf_rcv_functions;
 	dd->process_pio_send = snoop_send_pio_handler;
 	dd->process_dma_send = snoop_send_pio_handler;
 	dd->pio_inline_send = snoop_inline_pio_send;
@@ -763,14 +770,7 @@ static int hfi1_snoop_release(struct inode *in, struct file *fp)
 	 * User is done snooping and capturing, return control to the normal
 	 * handler. Re-enable SDMA handling.
 	 */
-
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_IB] = process_receive_ib;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = process_receive_bypass;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = process_receive_error;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = process_receive_eager;
-	dd->rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] =
-						process_receive_expected;
-
+	dd->rhf_rcv_function_map = dd->normal_rhf_rcv_functions;
 	dd->process_pio_send = hfi1_verbs_send_pio;
 	dd->process_dma_send = hfi1_verbs_send_dma;
 	dd->pio_inline_send = pio_copy;
@@ -1608,31 +1608,10 @@ void snoop_recv_handler(struct hfi1_packet *packet)
 	}
 
 	/*
-	 * We do not care what type of packet came in here just pass it off to
-	 * its usual handler. See hfi1_init(). We can't just rely on calling
-	 * into the function map array because snoop/capture has hijacked it.
-	 * If we call the IB type specific handler we will be calling
-	 * ourselves recursively.
+	 * We do not care what type of packet came in here - just pass it off
+	 * to the normal handler.
 	 */
-	switch (rhf_rcv_type(packet->rhf)) {
-	case RHF_RCV_TYPE_IB:
-		process_receive_ib(packet);
-		break;
-	case RHF_RCV_TYPE_BYPASS:
-		process_receive_bypass(packet);
-		break;
-	case RHF_RCV_TYPE_ERROR:
-		process_receive_error(packet);
-		break;
-	case RHF_RCV_TYPE_EXPECTED:
-		process_receive_expected(packet);
-		break;
-	case RHF_RCV_TYPE_EAGER:
-		process_receive_eager(packet);
-		break;
-	default:
-		dd_dev_err(ppd->dd, "Unknown packet type dropping!\n");
-	}
+	ppd->dd->normal_rhf_rcv_functions[rhf_rcv_type(packet->rhf)](packet);
 }
 
 /*
