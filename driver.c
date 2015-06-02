@@ -97,9 +97,6 @@ MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("Intel Omni-Path Architecture driver");
 MODULE_VERSION(HFI1_DRIVER_VERSION);
 
-/* See hfi1_init() */
-void (*rhf_rcv_function_map[5])(struct hfi1_packet *packet);
-
 /*
  * MAX_PKT_RCV is the max # if packets processed per receive interrupt.
  */
@@ -502,7 +499,7 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 		 * crashing down. There is no need to eat another
 		 * comparison in this performance critical code.
 		 */
-		rhf_rcv_function_map[etype](&packet);
+		dd->rhf_rcv_function_map[etype](&packet);
 
 		/* On to the next packet */
 skip:

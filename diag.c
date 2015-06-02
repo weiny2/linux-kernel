@@ -703,11 +703,11 @@ static int hfi1_snoop_open(struct inode *in, struct file *fp)
 	 * allocated and get stuck on the snoop_lock before getting added to the
 	 * queue. Same goes for send.
 	 */
-	rhf_rcv_function_map[RHF_RCV_TYPE_IB] = snoop_recv_handler;
-	rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = snoop_recv_handler;
-	rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = snoop_recv_handler;
-	rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] = snoop_recv_handler;
-	rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = snoop_recv_handler;
+	dd->rhf_rcv_function_map[RHF_RCV_TYPE_IB] = snoop_recv_handler;
+	dd->rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = snoop_recv_handler;
+	dd->rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = snoop_recv_handler;
+	dd->rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] = snoop_recv_handler;
+	dd->rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = snoop_recv_handler;
 
 	dd->process_pio_send = snoop_send_pio_handler;
 	dd->process_dma_send = snoop_send_pio_handler;
@@ -764,11 +764,12 @@ static int hfi1_snoop_release(struct inode *in, struct file *fp)
 	 * handler. Re-enable SDMA handling.
 	 */
 
-	rhf_rcv_function_map[RHF_RCV_TYPE_IB] = process_receive_ib;
-	rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = process_receive_bypass;
-	rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = process_receive_error;
-	rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = process_receive_eager;
-	rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] = process_receive_expected;
+	dd->rhf_rcv_function_map[RHF_RCV_TYPE_IB] = process_receive_ib;
+	dd->rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = process_receive_bypass;
+	dd->rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = process_receive_error;
+	dd->rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = process_receive_eager;
+	dd->rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] =
+						process_receive_expected;
 
 	dd->process_pio_send = hfi1_verbs_send_pio;
 	dd->process_dma_send = hfi1_verbs_send_dma;

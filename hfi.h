@@ -999,6 +999,9 @@ struct hfi1_devdata {
 	atomic_t drop_packet;
 	u8 do_drop;
 
+	/* receive interrupt functions */
+	void (*rhf_rcv_function_map[5])(struct hfi1_packet *packet);
+
 	/*
 	 * Handlers for outgoing data so that snoop/capture does not
 	 * have to have its hooks in the send path
@@ -1538,8 +1541,6 @@ void process_receive_bypass(struct hfi1_packet *packet);
 void process_receive_error(struct hfi1_packet *packet);
 void process_receive_expected(struct hfi1_packet *packet);
 void process_receive_eager(struct hfi1_packet *packet);
-
-extern void (*rhf_rcv_function_map[5])(struct hfi1_packet *packet);
 
 void update_sge(struct hfi1_sge_state *ss, u32 length);
 
