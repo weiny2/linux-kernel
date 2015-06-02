@@ -680,6 +680,8 @@ struct hfi1_pportdata {
 	u32 port_error_action;
 };
 
+typedef void (*rhf_rcv_function_ptr)(struct hfi1_packet *packet);
+
 struct rcv_array_data {
 	u8 group_size;
 	u16 ngroups;
@@ -1000,7 +1002,7 @@ struct hfi1_devdata {
 	u8 do_drop;
 
 	/* receive interrupt functions */
-	void (*rhf_rcv_function_map[5])(struct hfi1_packet *packet);
+	rhf_rcv_function_ptr rhf_rcv_function_map[5];
 
 	/*
 	 * Handlers for outgoing data so that snoop/capture does not
