@@ -1053,6 +1053,9 @@ int sdma_init(struct hfi1_devdata *dd, u8 port)
 		/* Create a mask specifically for sdma_idle */
 		sde->idle_mask =
 			(u64)1 << (2*TXE_NUM_SDMA_ENGINES + this_idx);
+		/* Create a mask specifically for sdma_progress */
+		sde->progress_mask =
+			(u64)1 << (TXE_NUM_SDMA_ENGINES + this_idx);
 		spin_lock_init(&sde->tail_lock);
 		seqlock_init(&sde->head_lock);
 		spin_lock_init(&sde->senddmactrl_lock);
@@ -2927,4 +2930,18 @@ void sdma_unfreeze(struct hfi1_devdata *dd)
 	for (i = 0; i < dd->num_sdma; i++)
 		sdma_process_event(&dd->per_sdma[i],
 					sdma_event_e82_hw_unfreeze);
+}
+
+/**
+ * _sdma_engine_progress_schedule() - schedule progress on engine
+ * @sde: sdma_engine to schedule progress
+ *
+ */
+void _sdma_engine_progress_schedule(
+	struct sdma_engine *sde)
+{
+	trace_hfi1_sdma_engine_progress(sde, sde->progress_mask);
+	/* assume we have selected a good cpu */
+	write_csr(sde->dd,
+		  CCE_INT_FORCE + (8*(IS_SDMA_START/64)), sde->progress_mask);
 }

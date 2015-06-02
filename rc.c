@@ -1101,8 +1101,24 @@ static struct hfi1_swqe *do_rc_completion(struct hfi1_qp *qp,
 		}
 		if (++qp->s_last >= qp->s_size)
 			qp->s_last = 0;
-	} else
-		ibp->n_rc_delayed_comp++;
+	} else {
+		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+
+		this_cpu_inc(*ibp->rc_delayed_comp);
+		/*
+		 * If send progress not running attempt to progress
+		 * SDMA queue.
+		 */
+		if (ppd->dd->flags & HFI1_HAS_SEND_DMA) {
+			struct sdma_engine *engine;
+			u8 sc5;
+
+			/* For now use sc to find engine */
+			sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+			engine = qp_to_sdma_engine(qp, sc5);
+			sdma_engine_progress_schedule(engine);
+		}
+	}
 
 	qp->s_retry = qp->s_retry_cnt;
 	update_last_psn(qp, wqe->lpsn);
@@ -1419,39 +1435,12 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 			struct hfi1_ctxtdata *rcd)
 {
 	struct hfi1_swqe *wqe;
-	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	enum ib_wc_status status;
 	unsigned long flags;
 	int diff;
 	u32 pad;
 	u32 aeth;
 	u64 val;
-
-	if ((ppd->dd->flags & HFI1_HAS_SEND_DMA) &&
-	    opcode != OP(RDMA_READ_RESPONSE_MIDDLE)) {
-		/*
-		 * If ACK'd PSN on SDMA busy list try to make progress to
-		 * reclaim SDMA credits.
-		 */
-		if ((cmp_psn(psn, qp->s_sending_psn) >= 0) &&
-		    (cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) <= 0)) {
-
-			/*
-			 * If send tasklet not running attempt to progress
-			 * SDMA queue.
-			 */
-			if (!(qp->s_flags & HFI1_S_BUSY)) {
-				struct sdma_engine *engine;
-				u8 sc5;
-
-				/* For now use sc to find engine */
-				sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-				engine = qp_to_sdma_engine(qp, sc5);
-				BUG_ON(!engine);
-				sdma_engine_progress_schedule(engine);
-			}
-		}
-	}
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK))

@@ -731,7 +731,6 @@ struct hfi1_ibport {
 	__be64 guids[HFI1_GUIDS_PER_PORT	- 1];	/* writable GUIDs */
 	u64 tid;		/* TID for traps */
 	u64 n_rc_resends;
-	u64 n_rc_delayed_comp;
 	u64 n_seq_naks;
 	u64 n_rdma_seq;
 	u64 n_rnr_naks;
@@ -748,8 +747,10 @@ struct hfi1_ibport {
 	/* Hot-path per CPU counters to avoid cacheline trading to update */
 	u64 z_rc_acks;
 	u64 z_rc_qacks;
+	u64 z_rc_delayed_comp;
 	u64 __percpu *rc_acks;
 	u64 __percpu *rc_qacks;
+	u64 __percpu *rc_delayed_comp;
 
 	u32 port_cap_flags;
 	u32 pma_sample_start;
