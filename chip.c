@@ -10167,14 +10167,15 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		int vl;
 		/* init common fields */
 		hfi1_init_pportdata(pdev, ppd, dd, 0, 1);
-		/* DC supports 4 link widths */
-		ppd->link_width_supported =
+		/* Only 4X is enabled and supported... */
+		ppd->link_width_supported =  OPA_LINK_WIDTH_4X;
+		/* ... however, allow downgrade to any width. */
+		ppd->link_width_downgrade_supported =
 			OPA_LINK_WIDTH_1X | OPA_LINK_WIDTH_2X |
 			OPA_LINK_WIDTH_3X | OPA_LINK_WIDTH_4X;
-		ppd->link_width_downgrade_supported =
-					ppd->link_width_supported;
 		/* start out enabling all supported values */
-		ppd->link_width_enabled = ppd->link_width_supported;
+		ppd->link_width_enabled =
+			ppd->link_width_supported;
 		ppd->link_width_downgrade_enabled =
 					ppd->link_width_downgrade_supported;
 		/* link width active is 0 when link is down */
