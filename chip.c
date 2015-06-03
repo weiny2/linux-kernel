@@ -8618,7 +8618,7 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 	    !zalloc_cpumask_var(&rcv, GFP_KERNEL))
 		goto bail;
 	/* use local mask as default */
-	*def = *local_mask;
+	cpumask_copy(def, local_mask);
 	possible = cpumask_weight(def);
 	/* disarm threads from default */
 	ht = cpumask_weight(cpu_sibling_mask(cpumask_first(local_mask)));
