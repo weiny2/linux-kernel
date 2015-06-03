@@ -343,6 +343,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 	qp->s_cur_size = wqe->length;
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_srate = ah_attr->static_rate;
+	qp->srate_mbps = ib_rate_to_mbps(qp->s_srate);
 	qp->s_wqe = wqe;
 	qp->s_sge.sge = wqe->sg_list[0];
 	qp->s_sge.sg_list = wqe->sg_list + 1;
@@ -519,7 +520,7 @@ void return_cnp(struct hfi1_ibport *ibp, struct hfi1_qp *qp, u32 remote_qpn,
 	plen = 2 /* PBC */ + hwords;
 	pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
 	vl = sc_to_vlt(ppd->dd, sc5);
-	pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
+	pbc = create_pbc(ppd, pbc_flags, qp->srate_mbps, vl, plen);
 	if (ctxt) {
 		pbuf = sc_buffer_alloc(ctxt, plen, NULL, NULL);
 		if (pbuf)

@@ -596,7 +596,7 @@ static inline void write_uctxt_csr(struct hfi1_devdata *dd, int ctxt,
 	write_csr(dd, offset0 + (0x1000 * ctxt), value);
 }
 
-u64 create_pbc(u64, u32, u32, u32);
+u64 create_pbc(struct hfi1_pportdata *ppd, u64, int, u32, u32);
 
 /* firmware.c */
 #define NUM_PCIE_SERDES 16	/* number of PCIe serdes on the SBus */
@@ -976,7 +976,7 @@ int hfi1_get_base_kinfo(struct hfi1_ctxtdata *rcd,
 			struct hfi1_ctxt_info *kinfo);
 u64 hfi1_gpio_mod(struct hfi1_devdata *dd, u32 target, u32 data, u32 dir,
 		  u32 mask);
-int hfi1_init_ctxt(struct hfi1_ctxtdata *rcd);
+int hfi1_init_ctxt(struct send_context *sc);
 void hfi1_put_tid(struct hfi1_devdata *dd, u32 index,
 		  u32 type, unsigned long pa, u16 order);
 void hfi1_quiet_serdes(struct hfi1_pportdata *ppd);

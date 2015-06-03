@@ -1223,7 +1223,7 @@ static int setup_ctxt(struct file *fp)
 	 * is not requested or by the master process.
 	 */
 	if (!uctxt->subctxt_cnt || !subctxt_fp(fp)) {
-		ret = hfi1_init_ctxt(uctxt);
+		ret = hfi1_init_ctxt(uctxt->sc);
 		if (ret)
 			goto done;
 
