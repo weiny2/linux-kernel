@@ -248,6 +248,13 @@ xfs_copyin_attrname(
 	strcpy(to->dan_chars, dmattr_prefix);
 
         len = strnlen_user((char __user *)from, DM_ATTR_NAME_SIZE);
+	/*
+	 * strnlen_user() is broken on newer version of Linux.
+	 * fix by manually setting the upper limit.
+	 * strnlen_user() will also count the NULL.
+	 */
+	if (len > DM_ATTR_NAME_SIZE + 1)
+		len = DM_ATTR_NAME_SIZE + 1;
         if (len == 0)
             error = EFAULT;
         else {
