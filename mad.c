@@ -2069,8 +2069,8 @@ struct opa_port_error_info_msg {
 		struct {
 			u8 status_and_code;
 			u8 error_info;
-			__u32 reserved9;
 		} __packed fm_config_ei;
+		__u32 reserved9;
 	} port[1]; /* actual array size defined by #ports in attr modifier */
 };
 
