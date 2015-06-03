@@ -87,7 +87,7 @@
 #include <linux/slab.h>
 #include <linux/flex_array.h>
 #include <linux/posix-timers.h>
-#include <linux/kgraft.h>
+#include <linux/sched.h>
 #ifdef CONFIG_HARDWALL
 #include <asm/hardwall.h>
 #endif
