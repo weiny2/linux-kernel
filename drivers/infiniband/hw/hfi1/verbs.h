@@ -483,6 +483,7 @@ struct hfi1_qp {
 	unsigned long timeout_jiffies;  /* computed from timeout */
 
 	enum ib_mtu path_mtu;
+	int srate_mbps;		/* s_srate (below) converted to Mbit/s */
 	u32 remote_qpn;
 	u32 pmtu;		/* decoded from path_mtu */
 	u32 qkey;               /* QKEY for this QP (for UD or RD) */

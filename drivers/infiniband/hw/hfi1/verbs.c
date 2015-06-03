@@ -1033,6 +1033,8 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 			u32 plen, u32 dwords, u64 pbc)
 {
 	struct hfi1_ibdev *dev = to_idev(qp->ibqp.device);
+	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	struct verbs_txreq *tx;
 	struct sdma_txreq *stx;
 	u64 pbc_flags = 0;
@@ -1068,7 +1070,7 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
 		pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
 
-		pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
+		pbc = create_pbc(ppd, pbc_flags, qp->srate_mbps, vl, plen);
 	}
 	tx->wqe = qp->s_wqe;
 	tx->mr = qp->s_rdma_mr;
@@ -1172,7 +1174,7 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
 		/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
 		pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
-		pbc = create_pbc(pbc_flags, qp->s_srate, vl, plen);
+		pbc = create_pbc(ppd, pbc_flags, qp->srate_mbps, vl, plen);
 	}
 	pbuf = sc_buffer_alloc(sc, plen, NULL, NULL);
 	if (unlikely(pbuf == NULL)) {

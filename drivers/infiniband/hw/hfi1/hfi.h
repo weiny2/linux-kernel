@@ -560,6 +560,7 @@ struct hfi1_pportdata {
 	 * we can send. Changes when ibmtu changes.
 	 */
 	u32 ibmaxlen;
+	u32 current_egress_rate; /* units [10^6 bits/sec] */
 	/* LID programmed for this instance */
 	u16 lid;
 	/* list of pkeys programmed; 0 if not set */
@@ -678,6 +679,13 @@ struct hfi1_pportdata {
 	/* Error events that will cause a port bounce. */
 	u32 port_error_action;
 };
+
+typedef int (*rhf_rcv_function_ptr)(struct hfi1_packet *packet);
+
+/* return values for the RHF receive functions */
+#define RHF_RCV_CONTINUE  0	/* keep going */
+#define RHF_RCV_DONE	  1	/* stop, this packet processed */
+#define RHF_RCV_REPROCESS 2	/* stop. retain this packet */
 
 struct rcv_array_data {
 	u8 group_size;
@@ -998,6 +1006,10 @@ struct hfi1_devdata {
 	atomic_t drop_packet;
 	u8 do_drop;
 
+	/* receive interrupt functions */
+	rhf_rcv_function_ptr *rhf_rcv_function_map;
+	rhf_rcv_function_ptr normal_rhf_rcv_functions[8];
+
 	/*
 	 * Handlers for outgoing data so that snoop/capture does not
 	 * have to have its hooks in the send path
@@ -1080,6 +1092,67 @@ static inline u32 driver_lstate(struct hfi1_pportdata *ppd)
 static inline u16 generate_jkey(kuid_t uid)
 {
 	return from_kuid(current_user_ns(), uid) & 0xffff;
+}
+
+/*
+ * active_egress_rate
+ *
+ * returns the active egress rate in units of [10^6 bits/sec]
+ */
+static inline u32 active_egress_rate(struct hfi1_pportdata *ppd)
+{
+	u16 link_speed = ppd->link_speed_active;
+	u16 link_width = ppd->link_width_active;
+	u32 egress_rate;
+
+	if (link_speed == OPA_LINK_SPEED_25G)
+		egress_rate = 25000;
+	else /* assume OPA_LINK_SPEED_12_5G */
+		egress_rate = 12500;
+
+	switch (link_width) {
+	case OPA_LINK_WIDTH_4X:
+		egress_rate *= 4;
+		break;
+	case OPA_LINK_WIDTH_3X:
+		egress_rate *= 3;
+		break;
+	case OPA_LINK_WIDTH_2X:
+		egress_rate *= 2;
+		break;
+	default:
+		/* assume IB_WIDTH_1X */
+		break;
+	}
+
+	return egress_rate;
+}
+
+/*
+ * egress_cycles
+ *
+ * Returns the number of 'fabric clock cycles' to egress a packet
+ * of length 'len' bytes, at 'rate' Mbit/s. Since the fabric clock
+ * rate is (approximately) 805 MHz, the units of the returned value
+ * are (1/805 MHz).
+ */
+static inline u32 egress_cycles(u32 len, u32 rate)
+{
+	u32 cycles;
+
+	/*
+	 * cycles is:
+	 *
+	 *          (length) [bits] / (rate) [bits/sec]
+	 *  ---------------------------------------------------
+	 *  fabric_clock_period == 1 /(805 * 10^6) [cycles/sec]
+	 */
+
+	cycles = len * 8; /* bits */
+	cycles *= 805;
+	cycles /= rate;
+
+	return cycles;
 }
 
 void set_link_ipg(struct hfi1_pportdata *ppd);
@@ -1251,7 +1324,7 @@ void set_up_vl15(struct hfi1_devdata *dd, u8 vau, u16 vl15buf);
 void reset_link_credits(struct hfi1_devdata *dd);
 void assign_remote_cm_au_table(struct hfi1_devdata *dd, u8 vcu);
 
-void snoop_recv_handler(struct hfi1_packet *packet);
+int snoop_recv_handler(struct hfi1_packet *packet);
 int snoop_send_dma_handler(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
 			   u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
 			   u32 plen, u32 dwords, u64 pbc);
@@ -1471,13 +1544,14 @@ static inline void flush_wc(void)
 }
 
 void handle_eflags(struct hfi1_packet *packet);
-void process_receive_ib(struct hfi1_packet *packet);
-void process_receive_bypass(struct hfi1_packet *packet);
-void process_receive_error(struct hfi1_packet *packet);
-void process_receive_expected(struct hfi1_packet *packet);
-void process_receive_eager(struct hfi1_packet *packet);
+int process_receive_ib(struct hfi1_packet *packet);
+int process_receive_bypass(struct hfi1_packet *packet);
+int process_receive_error(struct hfi1_packet *packet);
+int process_receive_expected(struct hfi1_packet *packet);
+int process_receive_eager(struct hfi1_packet *packet);
+int process_receive_invalid(struct hfi1_packet *packet);
 
-extern void (*rhf_rcv_function_map[5])(struct hfi1_packet *packet);
+extern rhf_rcv_function_ptr snoop_rhf_rcv_functions[8];
 
 void update_sge(struct hfi1_sge_state *ss, u32 length);
 

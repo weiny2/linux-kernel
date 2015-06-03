@@ -832,6 +832,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	if (attr_mask & IB_QP_AV) {
 		qp->remote_ah_attr = attr->ah_attr;
 		qp->s_srate = attr->ah_attr.static_rate;
+		qp->srate_mbps = ib_rate_to_mbps(qp->s_srate);
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {

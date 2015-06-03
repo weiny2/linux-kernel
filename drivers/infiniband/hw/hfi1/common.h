@@ -209,12 +209,12 @@
  * to the driver itself, not the software interfaces it supports.
  */
 #ifndef HFI1_DRIVER_VERSION_BASE
-#define HFI1_DRIVER_VERSION_BASE "0.9-100"
+#define HFI1_DRIVER_VERSION_BASE "0.9-110"
 #endif
 
 /* create the final driver version string */
 #ifdef HFI1_IDSTR
-#define HFI1_DRIVER_VERSION HFI1_DRIVER_VERSION_BASE "0.9-100" HFI1_IDSTR
+#define HFI1_DRIVER_VERSION HFI1_DRIVER_VERSION_BASE "0.9-110" HFI1_IDSTR
 #else
 #define HFI1_DRIVER_VERSION HFI1_DRIVER_VERSION_BASE
 #endif
@@ -300,6 +300,9 @@ struct diag_pkt {
 #define RHF_RCV_TYPE_IB       2 /* normal IB, IB Raw, or IPv6 */
 #define RHF_RCV_TYPE_ERROR    3
 #define RHF_RCV_TYPE_BYPASS   4
+#define RHF_RCV_TYPE_INVALID5 5
+#define RHF_RCV_TYPE_INVALID6 6
+#define RHF_RCV_TYPE_INVALID7 7
 
 /* RHF receive type error - expected packet errors */
 #define RHF_RTE_EXPECTED_FLOW_SEQ_ERR	0x2
