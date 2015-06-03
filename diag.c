@@ -457,6 +457,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 	/* if 0, fill in a default */
 	if (dp->pbc == 0) {
 		struct hfi1_pportdata *ppd = dd->pport;
+
 		hfi1_cdbg(PKT, "Generating PBC");
 		dp->pbc = create_pbc(ppd, 0, 0, 0, total_len);
 	} else {
@@ -622,6 +623,7 @@ static void adjust_integrity_checks(struct hfi1_devdata *dd)
 	spin_lock_irqsave(&dd->sc_lock, sc_flags);
 	for (i = 0; i < dd->num_send_contexts; i++) {
 		int enable;
+
 		sc = dd->send_contexts[i].sc;
 
 		if (!sc)
