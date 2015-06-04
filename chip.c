@@ -8583,7 +8583,7 @@ static int request_intx_irq(struct hfi1_devdata *dd)
 static int request_msix_irqs(struct hfi1_devdata *dd)
 {
 	const struct cpumask *local_mask;
-	cpumask_var_t def, rcv;
+	cpumask_var_t def = NULL, rcv = NULL;
 	int first_general, last_general;
 	int first_sdma, last_sdma;
 	int first_rx, last_rx;
