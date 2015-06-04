@@ -424,16 +424,29 @@ static void hfi_cteq_cleanup(struct hfi_ctx *ctx)
  */
 static int __hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count)
 {
-	u16 start, n;
+	u16 start, size, align, n;
 	int ret = 0;
 	unsigned long flags;
 
-	start = IS_PID_ANY(*base) ? 0 : *base;
+	if (IS_PID_ANY(*base)) {
+		start = 0;
+		/*
+		 * user-space expectation is that multi-pid reservations
+		 * have an even PID as the base of reservation
+		 */
+		align = (count > 1) ? 1 : 0;
+	} else {
+		/* honor request for base PID */
+		start = *base;
+		align = 0;
+	}
+	/* last PID not usable as an RX context */
+	size = HFI_NUM_PIDS - 1;
 
 	spin_lock_irqsave(&dd->ptl_lock, flags);
-	n = bitmap_find_next_zero_area(dd->ptl_map, HFI_NUM_PIDS,
-				       start, count, 0);
-	if (n == -1)
+	n = bitmap_find_next_zero_area(dd->ptl_map, size,
+				       start, count, align);
+	if (n >= size)
 		ret = -EBUSY;
 	if (!IS_PID_ANY(*base) && n != *base)
 		ret = -EBUSY;
