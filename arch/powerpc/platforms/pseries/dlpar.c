@@ -411,6 +411,10 @@ static ssize_t dlpar_cpu_probe(const char *buf, size_t count)
 		return -EINVAL;
 	}
 
+	rc = dlpar_acquire_drc(drc_index);
+	if (rc)
+		return -EINVAL;
+
 	parent = of_find_node_by_path("/cpus");
 	if (!parent) {
 		return -ENODEV;
@@ -422,12 +426,6 @@ static ssize_t dlpar_cpu_probe(const char *buf, size_t count)
 	}
 
 	of_node_put(parent);
-
-	rc = dlpar_acquire_drc(drc_index);
-	if (rc) {
-		dlpar_free_cc_nodes(dn);
-		return -EINVAL;
-	}
 
 	rc = dlpar_attach_node(dn);
 	if (rc) {
