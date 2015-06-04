@@ -114,7 +114,7 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	ud->sid = task_session_vnr(current);
 
 	/* default Portals PID and UID */
-	ud->ctx.ptl_pid = HFI_PID_NONE;
+	ud->ctx.pid = HFI_PID_NONE;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 	ud->ctx.ptl_uid = current_uid();
 #else
@@ -343,21 +343,21 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 
 		/* return mmap tokens of PSB items */
 		ctxt_attach.ct_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_CT,
-						ud->ctx.ptl_pid, HFI_PSB_CT_SIZE);
+						ud->ctx.pid, HFI_PSB_CT_SIZE);
 		ctxt_attach.eq_desc_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_EQ_DESC,
-						ud->ctx.ptl_pid, HFI_PSB_EQ_DESC_SIZE);
+						ud->ctx.pid, HFI_PSB_EQ_DESC_SIZE);
 		ctxt_attach.eq_head_token = HFI_MMAP_PSB_TOKEN(TOK_EVENTS_EQ_HEAD,
-						ud->ctx.ptl_pid, HFI_PSB_EQ_HEAD_SIZE);
+						ud->ctx.pid, HFI_PSB_EQ_HEAD_SIZE);
 		ctxt_attach.pt_token = HFI_MMAP_PSB_TOKEN(TOK_PORTALS_TABLE,
-						ud->ctx.ptl_pid, HFI_PSB_PT_SIZE);
+						ud->ctx.pid, HFI_PSB_PT_SIZE);
 		ctxt_attach.le_me_token = HFI_MMAP_PSB_TOKEN(TOK_LE_ME,
-						ud->ctx.ptl_pid, ud->ctx.le_me_size);
+						ud->ctx.pid, ud->ctx.le_me_size);
 		ctxt_attach.unexpected_token = HFI_MMAP_PSB_TOKEN(TOK_UNEXPECTED,
-						ud->ctx.ptl_pid, ud->ctx.unexpected_size);
+						ud->ctx.pid, ud->ctx.unexpected_size);
 		ctxt_attach.trig_op_token = HFI_MMAP_PSB_TOKEN(TOK_TRIG_OP,
-						ud->ctx.ptl_pid, ud->ctx.trig_op_size);
+						ud->ctx.pid, ud->ctx.trig_op_size);
 
-		ctxt_attach.pid = ud->ctx.ptl_pid;
+		ctxt_attach.pid = ud->ctx.pid;
 		ctxt_attach.pid_base = ud->ctx.pid_base;
 		ctxt_attach.pid_count = ud->ctx.pid_count;
 		break;
@@ -424,7 +424,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	}
 
 	/* validate we have an assigned Portals PID */
-	if (ud->ctx.ptl_pid == HFI_PID_NONE) {
+	if (ud->ctx.pid == HFI_PID_NONE) {
 		ret = -EINVAL;
 		goto done;
 	}

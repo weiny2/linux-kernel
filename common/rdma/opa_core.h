@@ -70,17 +70,6 @@
 #define OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE	cpu_to_be16(0x0091)
 
 /*
- * TODO: These macros are required for compiling against the OPA headers
- * shared with user space. Delete from this file eventually
- */
-#define _HFI_STATIC_INLINE static inline
-#define _HFI_PRINTF(FMT, args...)
-#define _HFI_ASSERT(X)
-#define HFI_TEST_ERR(x, y)
-#define assert(x)
-#define _align64 __aligned(64)
-
-/*
  * TODO - Based on hfi_ctx in common provider. hfi_ctx needs to get moved/merged
  * with data types defined by the common provider logic.
  */
@@ -91,9 +80,7 @@ struct opa_core_device;
 /**
  * struct hfi_ctx - state for HFI resources assigned to this context
  * @devdata: HFI device specific data, private to the hardware driver
- * @pid: dummy Portals Process ID. The user space hfi_ctx has this field
- * @fd: dummy file descriptor. The user space hfi_ctx has this field
- * @ptl_pid: Assigned Portals Process ID
+ * @pid: Assigned Portals Process ID
  * @ptl_uid: Assigned Protection Domain ID
  * @ptl_state_base: Pointer to Portals state in host memory
  * @le_me_addr: Pointer to head of ME/LE descriptor buffer
@@ -127,9 +114,7 @@ struct opa_core_device;
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
-	int	fd;
 	u16	pid;
-	u16	ptl_pid;
 	u32	ptl_uid;
 	void	*ptl_state_base;
 	void    *le_me_addr;

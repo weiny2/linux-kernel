@@ -137,7 +137,7 @@ int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *c
 	int ret;
 
 	/* verify we are attached to Portals */
-	if (ctx->ptl_pid == HFI_PID_NONE)
+	if (ctx->pid == HFI_PID_NONE)
 		return -EPERM;
 
 	/*
@@ -175,7 +175,7 @@ int hfi_cq_update(struct hfi_ctx *ctx, u16 cq_idx, struct hfi_auth_tuple *auth_t
 	int ret = 0;
 
 	/* verify we are attached to Portals */
-	if (ctx->ptl_pid == HFI_PID_NONE)
+	if (ctx->pid == HFI_PID_NONE)
 		return -EPERM;
 
 	/* verify we own specified CQ */
@@ -500,8 +500,7 @@ void hfi_ctxt_unreserve(struct hfi_ctx *ctx)
 /*
  * Associate this process with a Portals PID.
  * Note, hfi_open() sets:
- *   ctx->pid = current->pid
- *   ctx->ptl_pid = HFI_PID_NONE
+ *   ctx->pid = HFI_PID_NONE
  *   ctx->ptl_uid = current_uid()
  */
 int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
@@ -512,7 +511,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	int ret;
 
 	/* only one Portals PID allowed */
-	if (ctx->ptl_pid != HFI_PID_NONE)
+	if (ctx->pid != HFI_PID_NONE)
 		return -EPERM;
 
 	ptl_pid = ctx_assign->pid;
@@ -521,7 +520,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		return ret;
 
 	/* set ptl_pid, hfi_ctxt_cleanup() can handle all errors below */
-	ctx->ptl_pid = ptl_pid;
+	ctx->pid = ptl_pid;
 
 	/* verify range of inputs */
 	if (ctx_assign->trig_op_count > HFI_TRIG_OP_MAX_COUNT)
@@ -661,7 +660,7 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	u16 ptl_pid = ctx->ptl_pid;
+	u16 ptl_pid = ctx->pid;
 	unsigned long flags;
 
 	if (ptl_pid == HFI_PID_NONE)
@@ -693,5 +692,5 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 	}
 
 	/* clear last */
-	ctx->ptl_pid = HFI_PID_NONE;
+	ctx->pid = HFI_PID_NONE;
 }

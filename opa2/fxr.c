@@ -275,7 +275,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	ctx->devdata = dd;
 	ctx->allow_phys_dlid = 1;
 	ctx->sl_mask = -1;
-	ctx->ptl_pid = HFI_PID_NONE;
+	ctx->pid = HFI_PID_NONE;
 	ctx->ptl_uid = 0;
 	/* assign one CQ for privileged commands (DLID, EQ_DESC_WRITE) */
 	ret = hfi_cq_assign_privileged(ctx, &priv_cq_idx);
@@ -511,7 +511,7 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 
 	/* set TX CQ config, enable */
 	tx_cq_config.field.enable = 1;
-	tx_cq_config.field.pid = ctx->ptl_pid;
+	tx_cq_config.field.pid = ctx->pid;
 	tx_cq_config.field.priv_level = unprivileged;
 	tx_cq_config.field.dlid_base = ctx->dlid_base;
 	tx_cq_config.field.phys_dlid = ctx->allow_phys_dlid;
@@ -521,7 +521,7 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 
 	/* set RX CQ config, enable */
 	rx_cq_config.field.enable = 1;
-	rx_cq_config.field.pid = ctx->ptl_pid;
+	rx_cq_config.field.pid = ctx->pid;
 	tx_cq_config.field.priv_level = unprivileged;
 	offset = FXR_RXCI_CFG_CNTRL + (cq_idx * 8);
 	write_csr(dd, offset, rx_cq_config.val);

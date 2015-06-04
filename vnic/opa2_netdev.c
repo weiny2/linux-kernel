@@ -54,12 +54,6 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <rdma/opa_core.h>
-#include <rdma/hfi_misc.h>
-#include <rdma/hfi_tx_base.h>
-#include <rdma/hfi_tx_cmds.h>
-#include <rdma/hfi_rx_cmds.h>
-#include <rdma/hfi_cq_cmd.h>
-#include <rdma/hfi_tx_pio_put.h>
 #include <rdma/hfi_tx.h>
 #include <rdma/hfi_rx.h>
 #include <rdma/hfi_args.h>
@@ -285,9 +279,9 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	hfi_me_handle_t me_handle = 0xc;
 
 	target_id.phys.slid = 0;
-	target_id.phys.ipid = ctx->ptl_pid;
+	target_id.phys.ipid = ctx->pid;
 	match_id.phys.slid = 0;
-	match_id.phys.ipid = ctx->ptl_pid;
+	match_id.phys.ipid = ctx->pid;
 #define PAYLOAD_SIZE 512
 #define HFI_TEST_PT 10
 	/* Create a test TX buffer and initialize it */
@@ -485,7 +479,7 @@ static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
 	ssize_t head_size;
 	int rc;
 
-	ctx->ptl_pid = HFI_PID_NONE;
+	ctx->pid = HFI_PID_NONE;
 	ctx->devdata = odev->dd;
 	ctx_assign.le_me_count = OPA2_NET_ME_COUNT;
 	ctx_assign.unexpected_count = OPA2_NET_UNEX_COUNT;
@@ -497,22 +491,22 @@ static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (rc)
 		return rc;
 	/* stash pointer to array of CT events */
-	rc = ops->ctx_addr(ctx, TOK_EVENTS_CT, ctx->ptl_pid,
+	rc = ops->ctx_addr(ctx, TOK_EVENTS_CT, ctx->pid,
 			   &ctx->ct_addr, &ctx->ct_size);
 	if (rc)
 		goto err;
 	/* stash pointer to array of EQ descs */
-	rc = ops->ctx_addr(ctx, TOK_EVENTS_EQ_DESC, ctx->ptl_pid,
+	rc = ops->ctx_addr(ctx, TOK_EVENTS_EQ_DESC, ctx->pid,
 			   &ctx->eq_addr, &ctx->eq_size);
 	if (rc)
 		goto err;
 	/* stash pointer to array of EQ head pointers */
-	rc = ops->ctx_addr(ctx, TOK_EVENTS_EQ_HEAD, ctx->ptl_pid,
+	rc = ops->ctx_addr(ctx, TOK_EVENTS_EQ_HEAD, ctx->pid,
 			   &ctx->eq_head_addr, &ctx->eq_head_size);
 	if (rc)
 		goto err;
 	/* stash pointer to Portals Table */
-	rc = ops->ctx_addr(ctx, TOK_PORTALS_TABLE, ctx->ptl_pid,
+	rc = ops->ctx_addr(ctx, TOK_PORTALS_TABLE, ctx->pid,
 			   &ctx->pt_addr, &ctx->pt_size);
 	if (rc)
 		goto err;
