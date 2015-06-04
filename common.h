@@ -300,6 +300,9 @@ struct diag_pkt {
 #define RHF_RCV_TYPE_IB       2 /* normal IB, IB Raw, or IPv6 */
 #define RHF_RCV_TYPE_ERROR    3
 #define RHF_RCV_TYPE_BYPASS   4
+#define RHF_RCV_TYPE_INVALID5 5
+#define RHF_RCV_TYPE_INVALID6 6
+#define RHF_RCV_TYPE_INVALID7 7
 
 /* RHF receive type error - expected packet errors */
 #define RHF_RTE_EXPECTED_FLOW_SEQ_ERR	0x2

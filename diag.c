@@ -96,6 +96,18 @@ enum hfi1_filter_status {
 	HFI1_FILTER_MISS
 };
 
+/* snoop processing functions */
+rhf_rcv_function_ptr snoop_rhf_rcv_functions[8] = {
+	[RHF_RCV_TYPE_EXPECTED] = snoop_recv_handler,
+	[RHF_RCV_TYPE_EAGER]    = snoop_recv_handler,
+	[RHF_RCV_TYPE_IB]       = snoop_recv_handler,
+	[RHF_RCV_TYPE_ERROR]    = snoop_recv_handler,
+	[RHF_RCV_TYPE_BYPASS]   = snoop_recv_handler,
+	[RHF_RCV_TYPE_INVALID5] = process_receive_invalid,
+	[RHF_RCV_TYPE_INVALID6] = process_receive_invalid,
+	[RHF_RCV_TYPE_INVALID7] = process_receive_invalid
+};
+
 /* Snoop packet structure */
 struct snoop_packet {
 	struct list_head list;
@@ -444,8 +456,10 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 
 	/* if 0, fill in a default */
 	if (dp->pbc == 0) {
+		struct hfi1_pportdata *ppd = dd->pport;
+
 		hfi1_cdbg(PKT, "Generating PBC");
-		dp->pbc = create_pbc(0, 0, 0, total_len);
+		dp->pbc = create_pbc(ppd, 0, 0, 0, total_len);
 	} else {
 		hfi1_cdbg(PKT, "Using passed in PBC");
 	}
@@ -608,12 +622,20 @@ static void adjust_integrity_checks(struct hfi1_devdata *dd)
 
 	spin_lock_irqsave(&dd->sc_lock, sc_flags);
 	for (i = 0; i < dd->num_send_contexts; i++) {
+		int enable;
+
 		sc = dd->send_contexts[i].sc;
 
 		if (!sc)
 			continue;	/* not allocated */
 
+		enable = likely(!HFI1_CAP_IS_KSET(NO_INTEGRITY)) &&
+			 dd->hfi1_snoop.mode_flag != HFI1_PORT_SNOOP_MODE;
+
 		set_pio_integrity(sc);
+
+		if (enable) /* take HFI_CAP_* flags into account */
+			hfi1_init_ctxt(sc);
 	}
 	spin_unlock_irqrestore(&dd->sc_lock, sc_flags);
 }
@@ -695,12 +717,7 @@ static int hfi1_snoop_open(struct inode *in, struct file *fp)
 	 * allocated and get stuck on the snoop_lock before getting added to the
 	 * queue. Same goes for send.
 	 */
-	rhf_rcv_function_map[RHF_RCV_TYPE_IB] = snoop_recv_handler;
-	rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = snoop_recv_handler;
-	rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = snoop_recv_handler;
-	rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] = snoop_recv_handler;
-	rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = snoop_recv_handler;
-
+	dd->rhf_rcv_function_map = snoop_rhf_rcv_functions;
 	dd->process_pio_send = snoop_send_pio_handler;
 	dd->process_dma_send = snoop_send_pio_handler;
 	dd->pio_inline_send = snoop_inline_pio_send;
@@ -755,13 +772,7 @@ static int hfi1_snoop_release(struct inode *in, struct file *fp)
 	 * User is done snooping and capturing, return control to the normal
 	 * handler. Re-enable SDMA handling.
 	 */
-
-	rhf_rcv_function_map[RHF_RCV_TYPE_IB] = process_receive_ib;
-	rhf_rcv_function_map[RHF_RCV_TYPE_BYPASS] = process_receive_bypass;
-	rhf_rcv_function_map[RHF_RCV_TYPE_ERROR] = process_receive_error;
-	rhf_rcv_function_map[RHF_RCV_TYPE_EAGER] = process_receive_eager;
-	rhf_rcv_function_map[RHF_RCV_TYPE_EXPECTED] = process_receive_expected;
-
+	dd->rhf_rcv_function_map = dd->normal_rhf_rcv_functions;
 	dd->process_pio_send = hfi1_verbs_send_pio;
 	dd->process_dma_send = hfi1_verbs_send_dma;
 	dd->pio_inline_send = pio_copy;
@@ -807,11 +818,13 @@ static ssize_t hfi1_snoop_write(struct file *fp, const char __user *data,
 	u32 len;
 	u64 pbc;
 	struct hfi1_ibport *ibp;
+	struct hfi1_pportdata *ppd;
 
 	dd = hfi1_dd_from_sc_inode(fp->f_inode);
 	if (dd == NULL)
 		return -ENODEV;
 
+	ppd = dd->pport;
 	snoop_dbg("received %lu bytes from user", count);
 
 	memset(&dpkt, 0, sizeof(struct diag_pkt));
@@ -863,7 +876,7 @@ static ssize_t hfi1_snoop_write(struct file *fp, const char __user *data,
 		}
 
 		len = (count >> 2) + 2; /* Add in PBC */
-		pbc = create_pbc(0, 0, vl, len);
+		pbc = create_pbc(ppd, 0, 0, vl, len);
 	} else {
 		if (copy_from_user(&pbc, data, sizeof(pbc)))
 			return -EINVAL;
@@ -881,6 +894,8 @@ static ssize_t hfi1_snoop_write(struct file *fp, const char __user *data,
 	dpkt.len = count;
 	dpkt.data = (unsigned long)data;
 
+	len = (count >> 2) + 2; /* Add in PBC */
+	pbc = create_pbc(ppd, 0, 0, vl, len);
 	snoop_dbg("PBC: vl=0x%llx Length=0x%llx",
 		  (pbc >> 12) & 0xf,
 		  (pbc & 0xfff));
@@ -1488,7 +1503,7 @@ static struct snoop_packet *allocate_snoop_packet(u32 hdr_len,
  * there is no specific support. Bottom line is this routine does now even know
  * what a bypass packet is.
  */
-void snoop_recv_handler(struct hfi1_packet *packet)
+int snoop_recv_handler(struct hfi1_packet *packet)
 {
 	struct hfi1_pportdata *ppd = packet->rcd->ppd;
 	struct hfi1_ib_header *hdr = packet->hdr;
@@ -1587,7 +1602,8 @@ void snoop_recv_handler(struct hfi1_packet *packet)
 			if (unlikely(rhf_err_flags(packet->rhf)))
 				handle_eflags(packet);
 
-			return; /* throw the packet on the floor */
+			/* throw the packet on the floor */
+			return RHF_RCV_CONTINUE;
 		}
 		break;
 	default:
@@ -1595,31 +1611,11 @@ void snoop_recv_handler(struct hfi1_packet *packet)
 	}
 
 	/*
-	 * We do not care what type of packet came in here just pass it off to
-	 * its usual handler. See hfi1_init(). We can't just rely on calling
-	 * into the function map array because snoop/capture has hijacked it.
-	 * If we call the IB type specific handler we will be calling
-	 * ourselves recursively.
+	 * We do not care what type of packet came in here - just pass it off
+	 * to the normal handler.
 	 */
-	switch (rhf_rcv_type(packet->rhf)) {
-	case RHF_RCV_TYPE_IB:
-		process_receive_ib(packet);
-		break;
-	case RHF_RCV_TYPE_BYPASS:
-		process_receive_bypass(packet);
-		break;
-	case RHF_RCV_TYPE_ERROR:
-		process_receive_error(packet);
-		break;
-	case RHF_RCV_TYPE_EXPECTED:
-		process_receive_expected(packet);
-		break;
-	case RHF_RCV_TYPE_EAGER:
-		process_receive_eager(packet);
-		break;
-	default:
-		dd_dev_err(ppd->dd, "Unknown packet type dropping!\n");
-	}
+	return ppd->dd->normal_rhf_rcv_functions[rhf_rcv_type(packet->rhf)]
+			(packet);
 }
 
 /*
@@ -1685,7 +1681,7 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 		md.dir = PKT_DIR_EGRESS;
 		if (likely(pbc == 0)) {
 			vl = be16_to_cpu(ahdr->ibh.lrh[0]) >> 12;
-			md.u.pbc = create_pbc(0, qp->s_srate, vl, plen);
+			md.u.pbc = create_pbc(ppd, 0, qp->s_srate, vl, plen);
 		} else {
 			md.u.pbc = 0;
 		}
