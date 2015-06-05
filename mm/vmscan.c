@@ -571,9 +571,10 @@ static int __remove_mapping(struct address_space *mapping, struct page *page)
 
 	if (PageSwapCache(page)) {
 		swp_entry_t swap = { .val = page_private(page) };
+		mem_cgroup_swapout(page, swap);
 		__delete_from_swap_cache(page);
 		spin_unlock_irq(&mapping->tree_lock);
-		swapcache_free(swap, page);
+		swapcache_free(swap);
 	} else {
 		void (*freepage)(struct page *);
 
@@ -581,7 +582,6 @@ static int __remove_mapping(struct address_space *mapping, struct page *page)
 
 		__delete_from_page_cache(page);
 		spin_unlock_irq(&mapping->tree_lock);
-		mem_cgroup_uncharge_cache_page(page);
 
 		if (freepage != NULL)
 			freepage(page);
@@ -1088,6 +1088,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 		/* See release_pages on why this clear may be necessary */
 		__ClearPageWaiters(page);
 free_it:
+		mem_cgroup_uncharge(page);
 		nr_reclaimed++;
 
 		/*
@@ -1117,12 +1118,13 @@ keep:
 		list_add(&page->lru, &ret_pages);
 		VM_BUG_ON(PageLRU(page) || PageUnevictable(page));
 	}
+	mem_cgroup_uncharge_end();
 
 	free_hot_cold_page_list(&free_pages, true);
 
 	list_splice(&ret_pages, page_list);
 	count_vm_events(PGACTIVATE, pgactivate);
-	mem_cgroup_uncharge_end();
+
 	*ret_nr_dirty += nr_dirty;
 	*ret_nr_congested += nr_congested;
 	*ret_nr_unqueued_dirty += nr_unqueued_dirty;
@@ -1422,6 +1424,8 @@ putback_inactive_pages(struct lruvec *lruvec, struct list_head *page_list)
 			__ClearPageWaiters(page);
 			del_page_from_lru_list(page, lruvec, lru);
 
+			mem_cgroup_uncharge(page);
+
 			if (unlikely(PageCompound(page))) {
 				spin_unlock_irq(&zone->lru_lock);
 				(*get_compound_page_dtor(page))(page);
@@ -1643,6 +1647,8 @@ static void move_active_pages_to_lru(struct lruvec *lruvec,
 			/* See release_pages on why this clear may be necessary */
 			__ClearPageWaiters(page);
 			del_page_from_lru_list(page, lruvec, lru);
+
+			mem_cgroup_uncharge(page);
 
 			if (unlikely(PageCompound(page))) {
 				spin_unlock_irq(&zone->lru_lock);
