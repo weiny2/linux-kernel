@@ -1491,6 +1491,11 @@ long syscall_trace_enter(struct pt_regs *regs)
 				    regs->dx, regs->r10);
 #endif
 
+#if IS_ENABLED(CONFIG_KGRAFT)
+	if (unlikely(test_thread_flag(TIF_KGR_IN_PROGRESS)))
+		kgr_task_safe(current);
+#endif
+
 out:
 	return ret ?: regs->orig_ax;
 }

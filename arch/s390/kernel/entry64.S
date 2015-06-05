@@ -43,9 +43,10 @@ STACK_SIZE  = 1 << STACK_SHIFT
 STACK_INIT = STACK_SIZE - STACK_FRAME_OVERHEAD - __PT_SIZE
 
 _TIF_WORK_SVC = (_TIF_SIGPENDING | _TIF_NOTIFY_RESUME | _TIF_NEED_RESCHED | \
-		 _TIF_MCCK_PENDING | _TIF_PER_TRAP | _TIF_ASCE)
+		 _TIF_MCCK_PENDING | _TIF_PER_TRAP | _TIF_ASCE | \
+		 _TIF_KGR_IN_PROGRESS)
 _TIF_WORK_INT = (_TIF_SIGPENDING | _TIF_NOTIFY_RESUME | _TIF_NEED_RESCHED | \
-		 _TIF_MCCK_PENDING | _TIF_ASCE)
+		 _TIF_MCCK_PENDING | _TIF_ASCE | _TIF_KGR_IN_PROGRESS)
 _TIF_TRACE    = (_TIF_SYSCALL_TRACE | _TIF_SYSCALL_AUDIT | _TIF_SECCOMP | \
 		 _TIF_SYSCALL_TRACEPOINT)
 
@@ -70,6 +71,15 @@ _TIF_TRACE    = (_TIF_SYSCALL_TRACE | _TIF_SYSCALL_AUDIT | _TIF_SECCOMP | \
 	tm	__PT_PSW+1(%r11),0x01	# returning to user ?
 	jz	.+10
 	brasl	%r14,lockdep_sys_exit
+#endif
+	.endm
+
+	.macro	HANDLE_KGRAFT TI_reg
+#if IS_ENABLED(CONFIG_KGRAFT)
+	tm	__TI_flags+7(\TI_reg),_TIF_KGR_IN_PROGRESS
+	jz	0f
+	brasl	%r14,s390_handle_kgraft
+0:
 #endif
 	.endm
 
@@ -220,9 +230,7 @@ sysc_vtime:
 	mvc	__PT_INT_CODE(4,%r11),__LC_SVC_ILC
 sysc_do_svc:
 	oi	__TI_flags+7(%r12),_TIF_SYSCALL
-#if IS_ENABLED(CONFIG_KGRAFT)
-	ni	__TI_flags+5(%r12),255 - (_TIF_KGR_IN_PROGRESS >> 16)
-#endif
+	HANDLE_KGRAFT %r12
 	lg	%r10,__TI_sysc_table(%r12)	# address of system call table
 	llgh	%r8,__PT_INT_CODE+2(%r11)
 	slag	%r8,%r8,2			# shift and test for svc 0
@@ -251,9 +259,6 @@ sysc_tif:
 	tm	__TI_flags+7(%r12),_TIF_WORK_SVC
 	jnz	sysc_work			# check for work
 	ni	__TI_flags+7(%r12),255-_TIF_SYSCALL
-#if IS_ENABLED(CONFIG_KGRAFT)
-	ni	__TI_flags+5(%r12),255 - (_TIF_KGR_IN_PROGRESS >> 16)
-#endif
 sysc_restore:
 	lg	%r14,__LC_VDSO_PER_CPU
 	lmg	%r0,%r10,__PT_R0(%r11)
@@ -274,6 +279,8 @@ sysc_work:
 	jo	sysc_reschedule
 	tm	__TI_flags+7(%r12),_TIF_PER_TRAP
 	jo	sysc_singlestep
+	HANDLE_KGRAFT %r12		# handle kGraft just before signals and
+					# possible syscall restart
 	tm	__TI_flags+7(%r12),_TIF_SIGPENDING
 	jo	sysc_sigpending
 	tm	__TI_flags+7(%r12),_TIF_NOTIFY_RESUME
@@ -568,6 +575,7 @@ io_work_tif:
 	jo	io_mcck_pending
 	tm	__TI_flags+7(%r12),_TIF_NEED_RESCHED
 	jo	io_reschedule
+	HANDLE_KGRAFT %r12
 	tm	__TI_flags+7(%r12),_TIF_SIGPENDING
 	jo	io_sigpending
 	tm	__TI_flags+7(%r12),_TIF_NOTIFY_RESUME

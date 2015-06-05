@@ -79,7 +79,6 @@ struct kgr_patch_fun {
  * @name: name of the patch (to appear in sysfs)
  * @owner: module to refcount on patching
  * @replace_all: revert everything applied before and apply this one instead
- * @immediate: avoid the lazy-switching mechanism and flip the switch ASAP
  * @patches: array of @kgr_patch_fun structures
  */
 struct kgr_patch {
@@ -93,7 +92,6 @@ struct kgr_patch {
 	const char *name;
 	struct module *owner;
 	bool replace_all;
-	bool immediate;
 	struct kgr_patch_fun patches[];
 };
 
@@ -124,11 +122,6 @@ extern void kgr_remove_files(void);
 static inline void kgr_mark_task_in_progress(struct task_struct *p)
 {
 	set_tsk_thread_flag(p, TIF_KGR_IN_PROGRESS);
-}
-
-static inline bool kgr_task_in_progress(struct task_struct *p)
-{
-	return test_tsk_thread_flag(p, TIF_KGR_IN_PROGRESS);
 }
 
 #endif /* IS_ENABLED(CONFIG_KGRAFT) */

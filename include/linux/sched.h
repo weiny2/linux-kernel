@@ -2873,8 +2873,17 @@ static inline void kgr_task_safe(struct task_struct *p)
 {
 	clear_tsk_thread_flag(p, TIF_KGR_IN_PROGRESS);
 }
+
+static inline bool kgr_task_in_progress(struct task_struct *p)
+{
+	return test_tsk_thread_flag(p, TIF_KGR_IN_PROGRESS);
+}
 #else
 static inline void kgr_task_safe(struct task_struct *p) { }
+static inline bool kgr_task_in_progress(struct task_struct *p)
+{
+	return false;
+}
 #endif /* IS_ENABLED(CONFIG_KGRAFT) */
 
 static inline unsigned long task_rlimit(const struct task_struct *tsk,

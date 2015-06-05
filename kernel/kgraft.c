@@ -268,6 +268,26 @@ static void kgr_finalize(void)
 	mutex_unlock(&kgr_in_progress_lock);
 }
 
+static void kgr_send_fake_signal(void)
+{
+	struct task_struct *p, *t;
+
+	read_lock(&tasklist_lock);
+	for_each_process_thread(p, t) {
+		/*
+		 * send fake signal to all non-kthread tasks which are still
+		 * not migrated. kthreads should be migrated now.
+		 */
+		if ((t->flags & PF_KTHREAD) || !kgr_task_in_progress(t))
+			continue;
+
+		spin_lock_irq(&t->sighand->siglock);
+		signal_wake_up(t, 0);
+		spin_unlock_irq(&t->sighand->siglock);
+	}
+	read_unlock(&tasklist_lock);
+}
+
 static void kgr_work_fn(struct work_struct *work)
 {
 	static bool printed = false;
@@ -279,6 +299,8 @@ static void kgr_work_fn(struct work_struct *work)
 				KGR_TIMEOUT);
 			printed = true;
 		}
+		/* send fake signal */
+		kgr_send_fake_signal();
 		/* recheck again later */
 		queue_delayed_work(kgr_wq, &kgr_work, KGR_TIMEOUT * HZ);
 		return;
@@ -892,14 +914,8 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 		goto err_unlock;
 	}
 
-	/*
-	 * If the patch has immediate flag set, avoid the lazy-switching
-	 * between universes completely.
-	 */
-	if (!patch->immediate) {
-		set_bit(0, kgr_immutable);
-		wmb(); /* set_bit before kgr_handle_processes */
-	}
+	set_bit(0, kgr_immutable);
+	wmb(); /* set_bit before kgr_handle_processes */
 
 	/*
 	 * Set kgr_patch before it can be used in kgr_patching_failed if
@@ -937,18 +953,13 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	mutex_unlock(&kgr_in_progress_lock);
 
 	kgr_handle_irqs();
-
-	if (patch->immediate) {
-		kgr_finalize();
-	} else {
-		kgr_handle_processes();
-		wmb(); /* clear_bit after kgr_handle_processes */
-		clear_bit(0, kgr_immutable);
-		/*
-		 * give everyone time to exit kernel, and check after a while
-		 */
-		queue_delayed_work(kgr_wq, &kgr_work, KGR_TIMEOUT * HZ);
-	}
+	kgr_handle_processes();
+	wmb(); /* clear_bit after kgr_handle_processes */
+	clear_bit(0, kgr_immutable);
+	/*
+	 * give everyone time to exit kernel, and check after a while
+	 */
+	queue_delayed_work(kgr_wq, &kgr_work, KGR_TIMEOUT * HZ);
 
 	return 0;
 err_free:
