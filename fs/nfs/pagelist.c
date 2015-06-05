@@ -291,6 +291,14 @@ bool nfs_generic_pg_test(struct nfs_pageio_descriptor *desc, struct nfs_page *pr
 	if (desc->pg_bsize < PAGE_SIZE)
 		return 0;
 
+	/*
+	 * Limit the request size so that we can still allocate a page array
+	 * for it without upsetting the slab allocator.
+	 */
+	if (((desc->pg_count + req->wb_bytes) >> PAGE_SHIFT) *
+			sizeof(struct page) > PAGE_SIZE)
+		return false;
+
 	return desc->pg_count + req->wb_bytes <= desc->pg_bsize;
 }
 EXPORT_SYMBOL_GPL(nfs_generic_pg_test);
