@@ -1,12 +1,6 @@
 #ifndef __LINUX_PAGE_CGROUP_H
 #define __LINUX_PAGE_CGROUP_H
 
-enum {
-	/* flags for mem_cgroup */
-	PCG_USED = 0x01,	/* This page is charged to a memcg */
-	__NR_PCG_FLAGS,
-};
-
 #ifndef __GENERATING_BOUNDS_H
 #include <generated/bounds.h>
 
@@ -21,7 +15,6 @@ enum {
  * then the page cgroup for pfn always exists.
  */
 struct page_cgroup {
-	unsigned long flags;
 	struct mem_cgroup *mem_cgroup;
 };
 
@@ -41,11 +34,6 @@ static inline void __init page_cgroup_init(void)
 
 struct page_cgroup *lookup_page_cgroup(struct page *page);
 struct page *lookup_cgroup_page(struct page_cgroup *pc);
-
-static inline int PageCgroupUsed(struct page_cgroup *pc)
-{
-	return !!(pc->flags & PCG_USED);
-}
 
 #else /* CONFIG_MEMCG */
 struct page_cgroup;
