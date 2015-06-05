@@ -176,7 +176,7 @@ static inline bool is_huge_zero_pmd(pmd_t pmd)
 	return is_huge_zero_page(pmd_page(pmd));
 }
 
-static struct page *get_huge_zero_page(void)
+struct page *get_huge_zero_page(void)
 {
 	struct page *zero_page;
 retry:
@@ -203,7 +203,7 @@ retry:
 	return READ_ONCE(huge_zero_page);
 }
 
-static void put_huge_zero_page(void)
+void put_huge_zero_page(void)
 {
 	/*
 	 * Counter should never go to zero here. Only shrinker can put

@@ -155,6 +155,9 @@ static inline bool is_huge_zero_page(struct page *page)
 	return ACCESS_ONCE(huge_zero_page) == page;
 }
 
+struct page *get_huge_zero_page(void);
+void put_huge_zero_page(void);
+
 #else /* CONFIG_TRANSPARENT_HUGEPAGE */
 #define HPAGE_PMD_SHIFT ({ BUILD_BUG(); 0; })
 #define HPAGE_PMD_MASK ({ BUILD_BUG(); 0; })
