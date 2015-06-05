@@ -692,7 +692,7 @@ int shmem_unuse(swp_entry_t swap, struct page *page)
 	 * the shmem_swaplist_mutex which might hold up shmem_writepage().
 	 * Charged back to the user (not to caller) when swap account is used.
 	 */
-	error = mem_cgroup_cache_charge(page, current->mm, GFP_KERNEL);
+	error = mem_cgroup_charge_file(page, current->mm, GFP_KERNEL);
 	if (error)
 		goto out;
 	/* No radix_tree_preload: swap entry keeps a place for page in tree */
@@ -1108,7 +1108,7 @@ repeat:
 				goto failed;
 		}
 
-		error = mem_cgroup_cache_charge(page, current->mm,
+		error = mem_cgroup_charge_file(page, current->mm,
 						gfp & GFP_RECLAIM_MASK);
 		if (!error) {
 			error = shmem_add_to_page_cache(page, mapping, index,
@@ -1168,7 +1168,7 @@ repeat:
 		if (sgp == SGP_WRITE)
 			init_page_accessed(page);
 
-		error = mem_cgroup_cache_charge(page, current->mm,
+		error = mem_cgroup_charge_file(page, current->mm,
 						gfp & GFP_RECLAIM_MASK);
 		if (error)
 			goto decused;

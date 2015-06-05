@@ -2834,7 +2834,7 @@ gotten:
 	}
 	__SetPageUptodate(new_page);
 
-	if (mem_cgroup_newpage_charge(new_page, mm, GFP_KERNEL))
+	if (mem_cgroup_charge_anon(new_page, mm, GFP_KERNEL))
 		goto oom_free_new;
 
 	mmun_start  = address & PAGE_MASK;
@@ -3291,7 +3291,7 @@ static int do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
 	 */
 	__SetPageUptodate(page);
 
-	if (mem_cgroup_newpage_charge(page, mm, GFP_KERNEL))
+	if (mem_cgroup_charge_anon(page, mm, GFP_KERNEL))
 		goto oom_free_page;
 
 	entry = mk_pte(page, vma->vm_page_prot);
@@ -3363,7 +3363,7 @@ static int __do_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 		if (!cow_page)
 			return VM_FAULT_OOM;
 
-		if (mem_cgroup_newpage_charge(cow_page, mm, GFP_KERNEL)) {
+		if (mem_cgroup_charge_anon(cow_page, mm, GFP_KERNEL)) {
 			page_cache_release(cow_page);
 			return VM_FAULT_OOM;
 		}
