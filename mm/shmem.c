@@ -606,7 +606,7 @@ static int shmem_unuse_inode(struct shmem_inode_info *info,
 	radswap = swp_to_radix_entry(swap);
 	index = radix_tree_locate_item(&mapping->page_tree, radswap);
 	if (index == -1)
-		return 0;
+		return -EAGAIN;	/* tell shmem_unuse we found nothing */
 
 	/*
 	 * Move _head_ to start search for next from here.
@@ -665,7 +665,6 @@ static int shmem_unuse_inode(struct shmem_inode_info *info,
 			spin_unlock(&info->lock);
 			swap_free(swap);
 		}
-		error = 1;	/* not an error, but entry was found */
 	}
 	return error;
 }
@@ -677,7 +676,7 @@ int shmem_unuse(swp_entry_t swap, struct page *page)
 {
 	struct list_head *this, *next;
 	struct shmem_inode_info *info;
-	int found = 0;
+	struct mem_cgroup *memcg;
 	int error = 0;
 
 	/*
@@ -692,10 +691,11 @@ int shmem_unuse(swp_entry_t swap, struct page *page)
 	 * the shmem_swaplist_mutex which might hold up shmem_writepage().
 	 * Charged back to the user (not to caller) when swap account is used.
 	 */
-	error = mem_cgroup_charge_file(page, current->mm, GFP_KERNEL);
+	error = mem_cgroup_try_charge(page, current->mm, GFP_KERNEL, &memcg);
 	if (error)
 		goto out;
 	/* No radix_tree_preload: swap entry keeps a place for page in tree */
+	error = -EAGAIN;
 
 	/* 
 	 * try to shrink the page cache proactively even though
@@ -712,18 +712,22 @@ int shmem_unuse(swp_entry_t swap, struct page *page)
 	list_for_each_safe(this, next, &shmem_swaplist) {
 		info = list_entry(this, struct shmem_inode_info, swaplist);
 		if (info->swapped)
-			found = shmem_unuse_inode(info, swap, &page);
+			error = shmem_unuse_inode(info, swap, &page);
 		else
 			list_del_init(&info->swaplist);
 		cond_resched();
-		if (found)
+		if (error != -EAGAIN)
 			break;
+		/* found nothing in this: move on to search the next */
 	}
 	mutex_unlock(&shmem_swaplist_mutex);
 
-	if (found < 0)
-		error = found;
-	else if (found > 0) {
+	if (error) {
+		if (error != -ENOMEM)
+			error = 0;
+		mem_cgroup_cancel_charge(page, memcg);
+	} else {
+		mem_cgroup_commit_charge(page, memcg, true);
 		if (unlikely(vm_pagecache_limit_mb) && pagecache_over_limit() > 0)
 			shrink_page_cache(GFP_KERNEL, page);
 	}
@@ -1030,6 +1034,7 @@ static int shmem_getpage_gfp(struct inode *inode, pgoff_t index,
 	struct address_space *mapping = inode->i_mapping;
 	struct shmem_inode_info *info;
 	struct shmem_sb_info *sbinfo;
+	struct mem_cgroup *memcg;
 	struct page *page;
 	swp_entry_t swap;
 	int error;
@@ -1108,8 +1113,7 @@ repeat:
 				goto failed;
 		}
 
-		error = mem_cgroup_charge_file(page, current->mm,
-						gfp & GFP_RECLAIM_MASK);
+		error = mem_cgroup_try_charge(page, current->mm, gfp, &memcg);
 		if (!error) {
 			error = shmem_add_to_page_cache(page, mapping, index,
 						gfp, swp_to_radix_entry(swap));
@@ -1125,11 +1129,15 @@ repeat:
 			 * Reset swap.val? No, leave it so "failed" goes back to
 			 * "repeat": reading a hole and writing should succeed.
 			 */
-			if (error)
+			if (error) {
+				mem_cgroup_cancel_charge(page, memcg);
 				delete_from_swap_cache(page);
+			}
 		}
 		if (error)
 			goto failed;
+
+		mem_cgroup_commit_charge(page, memcg, true);
 
 		spin_lock(&info->lock);
 		info->swapped--;
@@ -1168,8 +1176,7 @@ repeat:
 		if (sgp == SGP_WRITE)
 			init_page_accessed(page);
 
-		error = mem_cgroup_charge_file(page, current->mm,
-						gfp & GFP_RECLAIM_MASK);
+		error = mem_cgroup_try_charge(page, current->mm, gfp, &memcg);
 		if (error)
 			goto decused;
 		error = radix_tree_maybe_preload(gfp & GFP_RECLAIM_MASK);
@@ -1179,9 +1186,10 @@ repeat:
 			radix_tree_preload_end();
 		}
 		if (error) {
-			mem_cgroup_uncharge_cache_page(page);
+			mem_cgroup_cancel_charge(page, memcg);
 			goto decused;
 		}
+		mem_cgroup_commit_charge(page, memcg, false);
 		lru_cache_add_anon(page);
 
 		spin_lock(&info->lock);

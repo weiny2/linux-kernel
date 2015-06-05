@@ -666,6 +666,28 @@ void add_page_to_unevictable_list(struct page *page)
 	spin_unlock_irq(&zone->lru_lock);
 }
 
+/**
+ * lru_cache_add_active_or_unevictable
+ * @page:  the page to be added to LRU
+ * @vma:   vma in which page is mapped for determining reclaimability
+ *
+ * Place @page on the active or unevictable LRU list, depending on its
+ * evictability.  Note that if the page is not evictable, it goes
+ * directly back onto it's zone's unevictable list, it does NOT use a
+ * per cpu pagevec.
+ */
+void lru_cache_add_active_or_unevictable(struct page *page,
+					 struct vm_area_struct *vma)
+{
+	VM_BUG_ON(PageLRU(page));
+
+	if (!mlocked_vma_newpage(vma, page)) {
+		SetPageActive(page);
+		lru_cache_add(page);
+	} else
+		add_page_to_unevictable_list(page);
+}
+
 /*
  * If the page can not be invalidated, it is moved to the
  * inactive list to speed up its reclaim.  It is moved to the
