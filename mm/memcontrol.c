@@ -2767,7 +2767,7 @@ static void commit_charge(struct page *page, struct mem_cgroup *memcg,
 	 */
 
 	pc->mem_cgroup = memcg;
-	pc->flags = PCG_USED | PCG_MEM;
+	pc->flags = PCG_USED;
 
 	if (lrucare)
 		unlock_page_lru(page, isolated);
@@ -6572,8 +6572,6 @@ void mem_cgroup_migrate(struct page *oldpage, struct page *newpage,
 	pc = lookup_page_cgroup(oldpage);
 	if (!PageCgroupUsed(pc))
 		return;
-
-	VM_BUG_ON(!(pc->flags & PCG_MEM));
 
 	if (lrucare)
 		lock_page_lru(oldpage, &isolated);
