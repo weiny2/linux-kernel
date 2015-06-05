@@ -1188,6 +1188,9 @@ retry:
 
 	/* clear the DC reset */
 	write_csr(dd, CCE_DC_CTRL, 0);
+	/* Set the LED off */
+	if (is_a0(dd))
+		setextled(dd, 0);
 
 	/* check for any per-lane errors */
 	pci_read_config_dword(dd->pcidev, PCIE_CFG_SPCIE2, &reg32);

@@ -1722,7 +1722,15 @@ static inline void hfi1_reset_cpu_counters(struct hfi1_devdata *dd)
 	}
 }
 
-int hfi1_tempsense_rd(struct hfi1_devdata *dd, struct hfi1_temp *temp);
+/* Control LED state */
+static inline void setextled(struct hfi1_devdata *dd, u32 on)
+{
+	if (on)
+		write_csr(dd, DCC_CFG_LED_CNTRL, 0x1F);
+	else
+		write_csr(dd, DCC_CFG_LED_CNTRL, 0x10);
+}
 
+int hfi1_tempsense_rd(struct hfi1_devdata *dd, struct hfi1_temp *temp);
 
 #endif                          /* _HFI1_KERNEL_H */
