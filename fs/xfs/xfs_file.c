@@ -597,7 +597,9 @@ restart:
 			 * XFS_IOLOCK_EXCL, and so for most cases this wait is a
 			 * no-op.
 			 */
-			inode_dio_wait(inode);
+			error = inode_dio_wait(inode);
+			if (error)
+				return error;
 			goto restart;
 		}
 		error = xfs_zero_eof(ip, iocb->ki_pos, i_size_read(inode), &zero);
