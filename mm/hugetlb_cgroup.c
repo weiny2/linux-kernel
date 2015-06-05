@@ -290,7 +290,7 @@ static int hugetlb_cgroup_write(struct cgroup_subsys_state *css,
 	if (hugetlb_cgroup_is_root(h_cg)) /* Can't set limit on root */
 		return -EINVAL;
 
-	ret = page_counter_memparse(buffer, &nr_pages);
+	ret = page_counter_memparse(buffer, "-1", &nr_pages);
 	if (ret)
 		return ret;
 

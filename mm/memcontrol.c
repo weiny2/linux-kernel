@@ -4414,7 +4414,7 @@ static int mem_cgroup_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	unsigned long nr_pages;
 	int ret;
 
-	ret = page_counter_memparse(buffer, &nr_pages);
+	ret = page_counter_memparse(buffer, "-1", &nr_pages);
 	if (ret)
 		return ret;
 
@@ -4789,7 +4789,7 @@ static int mem_cgroup_usage_register_event(struct cgroup_subsys_state *css,
 	unsigned long usage;
 	int i, size, ret;
 
-	ret = page_counter_memparse(args, &threshold);
+	ret = page_counter_memparse(args, "-1", &threshold);
 	if (ret)
 		return ret;
 

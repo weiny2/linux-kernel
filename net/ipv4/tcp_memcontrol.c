@@ -146,7 +146,7 @@ static int tcp_cgroup_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	switch (cft->private) {
 	case RES_LIMIT:
 		/* see memcontrol.c */
-		ret = page_counter_memparse(buf, &nr_pages);
+		ret = page_counter_memparse(buf, "-1", &nr_pages);
 		if (ret)
 			break;
 		mutex_lock(&tcp_limit_mutex);
