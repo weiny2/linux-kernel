@@ -33,7 +33,9 @@
 #include <linux/hardirq.h> /* for BUG_ON(!in_atomic()) only */
 #include <linux/memcontrol.h>
 #include <linux/cleancache.h>
+#ifndef __GENKSYMS__
 #include <linux/hugetlb.h>
+#endif
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS
