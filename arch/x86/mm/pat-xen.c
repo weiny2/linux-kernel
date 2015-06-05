@@ -538,7 +538,7 @@ int phys_mem_access_prot_allowed(struct file *file, unsigned long mfn,
 	if (file->f_flags & O_DSYNC)
 		flags = _PAGE_CACHE_UC_MINUS;
 
-#ifndef CONFIG_X86_32
+#ifdef CONFIG_X86_32
 #ifndef CONFIG_XEN /* Xen sets correct MTRR type on non-RAM for us. */
 	/*
 	 * On the PPro and successors, the MTRRs are used to set

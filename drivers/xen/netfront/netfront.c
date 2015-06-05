@@ -1027,7 +1027,7 @@ static int network_start_xmit(struct sk_buff *skb, struct net_device *dev)
  	if (np->accel_vif_state.hooks && 
  	    np->accel_vif_state.hooks->start_xmit(skb, dev)) { 
  		/* Fast path has sent this packet */ 
- 		return NETDEV_TX_OK;
+		return NETDEV_TX_OK;
  	} 
 
 	/*
@@ -2231,8 +2231,7 @@ static struct net_device *create_netdev(struct xenbus_device *dev)
 
 	netdev->netdev_ops	= &xennet_netdev_ops;
 	netif_napi_add(netdev, &np->napi, netif_poll, 64);
-	netdev->features        = NETIF_F_IP_CSUM | NETIF_F_RXCSUM |
-				  NETIF_F_GSO_ROBUST;
+	netdev->features        = NETIF_F_RXCSUM | NETIF_F_GSO_ROBUST;
 	netdev->hw_features	= NETIF_F_IP_CSUM | NETIF_F_SG | NETIF_F_TSO;
 
 	/*

@@ -164,6 +164,9 @@ static inline int pgd_large(pgd_t pgd) { return 0; }
 #define SWP_TYPE_BITS (_PAGE_BIT_FILE - _PAGE_BIT_PRESENT - 1)
 #define SWP_OFFSET_SHIFT (_PAGE_BIT_PROTNONE + 1)
 #else
+#ifdef CONFIG_NUMA_BALANCING
+#error Incompatible format for automatic NUMA balancing
+#endif
 #define SWP_TYPE_BITS (_PAGE_BIT_PROTNONE - _PAGE_BIT_PRESENT - 1)
 #define SWP_OFFSET_SHIFT (_PAGE_BIT_FILE + 1)
 #endif

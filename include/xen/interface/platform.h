@@ -134,7 +134,7 @@ struct xenpf_efi_runtime_call {
      * where it holds the single returned value.
      */
     uint32_t misc;
-    unsigned long status;
+    xen_ulong_t status;
     union {
 #define XEN_EFI_GET_TIME_SET_CLEARS_NS 0x00000001
         struct {
@@ -168,7 +168,7 @@ struct xenpf_efi_runtime_call {
 #define XEN_EFI_VARIABLE_RUNTIME_ACCESS     0x00000004
         struct {
             XEN_GUEST_HANDLE(void) name;  /* UCS-2/UTF-16 string */
-            unsigned long size;
+            xen_ulong_t size;
             XEN_GUEST_HANDLE(void) data;
             struct xenpf_efi_guid {
                 uint32_t data1;
@@ -179,7 +179,7 @@ struct xenpf_efi_runtime_call {
         } get_variable, set_variable;
 
         struct {
-            unsigned long size;
+            xen_ulong_t size;
             XEN_GUEST_HANDLE(void) name;  /* UCS-2/UTF-16 string */
             struct xenpf_efi_guid vendor_guid;
         } get_next_variable_name;
@@ -194,14 +194,14 @@ struct xenpf_efi_runtime_call {
 
         struct {
             XEN_GUEST_HANDLE(void) capsule_header_array;
-            unsigned long capsule_count;
+            xen_ulong_t capsule_count;
             uint64_t max_capsule_size;
-            unsigned int reset_type;
+            uint32_t reset_type;
         } query_capsule_capabilities;
 
         struct {
             XEN_GUEST_HANDLE(void) capsule_header_array;
-            unsigned long capsule_count;
+            xen_ulong_t capsule_count;
             uint64_t sg_list; /* machine address */
         } update_capsule;
     } u;
@@ -292,7 +292,7 @@ DEFINE_XEN_GUEST_HANDLE(xenpf_firmware_info_t);
 #define XENPF_enter_acpi_sleep    51
 struct xenpf_enter_acpi_sleep {
 	/* IN variables */
-#if !defined(CONFIG_PARAVIRT_XEN) && __XEN_INTERFACE_VERSION__ < 0x00040300
+#if __XEN_INTERFACE_VERSION__ < 0x00040300 && (!defined(CONFIG_PARAVIRT_XEN) || defined(HAVE_XEN_PLATFORM_COMPAT_H))
 	uint16_t pm1a_cnt_val;      /* PM1a control value. */
 	uint16_t pm1b_cnt_val;      /* PM1b control value. */
 #else
@@ -535,6 +535,39 @@ DEFINE_GUEST_HANDLE_STRUCT(xenpf_core_parking);
 typedef struct xenpf_core_parking xenpf_core_parking_t;
 DEFINE_XEN_GUEST_HANDLE(xenpf_core_parking_t);
 
+/*
+ * Access generic platform resources(e.g., accessing MSR, port I/O, etc)
+ * in unified way. Batch resource operations in one call are supported and
+ * they are always non-preemptible and executed in their original order.
+ * The batch itself returns a negative integer for general errors, or a
+ * non-negative integer for the number of successful operations. For the latter
+ * case, the @ret in the failed entry (if any) indicates the exact error.
+ */
+#define XENPF_resource_op   61
+
+#define XEN_RESOURCE_OP_MSR_READ  0
+#define XEN_RESOURCE_OP_MSR_WRITE 1
+
+struct xenpf_resource_entry {
+    union {
+        uint32_t cmd;   /* IN: XEN_RESOURCE_OP_* */
+        int32_t  ret;   /* OUT: return value for failed entry */
+    } u;
+    uint32_t rsvd;      /* IN: padding and must be zero */
+    uint64_t idx;       /* IN: resource address to access */
+    uint64_t val;       /* IN/OUT: resource value to set/get */
+};
+typedef struct xenpf_resource_entry xenpf_resource_entry_t;
+DEFINE_XEN_GUEST_HANDLE(xenpf_resource_entry_t);
+
+struct xenpf_resource_op {
+    uint32_t nr_entries;    /* number of resource entry */
+    uint32_t cpu;           /* which cpu to run */
+    XEN_GUEST_HANDLE(xenpf_resource_entry_t) entries;
+};
+typedef struct xenpf_resource_op xenpf_resource_op_t;
+DEFINE_XEN_GUEST_HANDLE(xenpf_resource_op_t);
+
 #define XENPF_get_cpu_freq        ('N' << 24)
 #define XENPF_get_cpu_freq_min    (XENPF_get_cpu_freq + 1)
 #define XENPF_get_cpu_freq_max    (XENPF_get_cpu_freq_min + 1)
@@ -571,6 +604,7 @@ struct xen_platform_op {
 		struct xenpf_cpu_hotadd        cpu_add;
 		struct xenpf_mem_hotadd        mem_add;
 		struct xenpf_core_parking      core_parking;
+		struct xenpf_resource_op       resource_op;
 		struct xenpf_get_cpu_freq      get_cpu_freq;
 		uint8_t                        pad[128];
 	} u;

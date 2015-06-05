@@ -25,6 +25,12 @@
 #include <asm/debugreg.h>
 #include <asm/kexec-bzimage64.h>
 
+#ifdef CONFIG_KEXEC_FILE
+static struct kexec_file_ops *kexec_file_loaders[] = {
+		&kexec_bzImage64_ops,
+};
+#endif
+
 #ifdef CONFIG_XEN
 
 #include <xen/interface/kexec.h>
@@ -62,12 +68,6 @@ void machine_kexec_setup_load_arg(xen_kexec_image_t *xki, struct kimage *image)
 #include "machine_kexec_xen.c"
 
 #endif /* CONFIG_XEN */
-
-#ifdef CONFIG_KEXEC_FILE
-static struct kexec_file_ops *kexec_file_loaders[] = {
-		&kexec_bzImage64_ops,
-};
-#endif
 
 static void free_transition_pgtable(struct kimage *image)
 {

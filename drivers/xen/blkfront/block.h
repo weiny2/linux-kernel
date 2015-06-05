@@ -119,7 +119,9 @@ struct blkfront_info
 	struct page *ring_pages[BLK_MAX_RING_PAGES];
 	unsigned long shadow_free;
 	unsigned int feature_flush;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
 	unsigned int flush_op;
+#endif
 	bool feature_discard;
 	bool feature_secdiscard;
 	unsigned int discard_granularity;
@@ -140,7 +142,7 @@ extern int blkif_release(struct gendisk *disk, fmode_t mode);
 extern void blkif_release(struct gendisk *disk, fmode_t mode);
 #endif
 extern int blkif_ioctl(struct block_device *bdev, fmode_t mode,
- 		       unsigned command, unsigned long argument);
+		       unsigned command, unsigned long argument);
 #endif
 extern int blkif_getgeo(struct block_device *, struct hd_geometry *);
 extern int blkif_check(dev_t dev);

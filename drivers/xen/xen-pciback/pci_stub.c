@@ -183,6 +183,21 @@ out:
 	return psdev;
 }
 
+#if defined(CONFIG_XEN) && defined(CONFIG_PCI_MSI)
+static int xen_pcibk_get_owner(struct pci_dev *dev)
+{
+	struct pcistub_device *psdev;
+
+	psdev = pcistub_device_find(pci_domain_nr(dev->bus), dev->bus->number,
+			PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
+
+	if (!psdev || !psdev->pdev)
+		return -1;
+
+	return psdev->pdev->xdev->otherend_id;
+}
+#endif
+
 static struct pci_dev *pcistub_device_get_pci_dev(struct xen_pcibk_device *pdev,
 						  struct pcistub_device *psdev)
 {
@@ -1386,21 +1401,6 @@ static ssize_t permissive_show(struct device_driver *drv, char *buf)
 }
 static DRIVER_ATTR(permissive, S_IRUSR | S_IWUSR, permissive_show,
 		   permissive_add);
-
-#if defined(CONFIG_XEN) && defined(CONFIG_PCI_MSI)
-static int xen_pcibk_get_owner(struct pci_dev *dev)
-{
-	struct pcistub_device *psdev;
-
-	psdev = pcistub_device_find(pci_domain_nr(dev->bus), dev->bus->number,
-			PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
-
-	if (!psdev || !psdev->pdev)
-		return -1;
-
-	return psdev->pdev->xdev->otherend_id;
-}
-#endif
 
 static void pcistub_exit(void)
 {

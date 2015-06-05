@@ -153,7 +153,7 @@ static __always_inline void __ticket_spin_unlock(arch_spinlock_t *lock)
 {
 	register struct __raw_tickets new;
 
-	__add(&lock->tickets.head, 1, UNLOCK_LOCK_PREFIX);
+	__add(&lock->tickets.head, TICKET_LOCK_INC, UNLOCK_LOCK_PREFIX);
 #if !defined(XEN_SPINLOCK_SOURCE) || !CONFIG_XEN_SPINLOCK_ACQUIRE_NESTING
 # undef UNLOCK_LOCK_PREFIX
 #endif
@@ -173,7 +173,7 @@ static inline int __ticket_spin_is_contended(arch_spinlock_t *lock)
 {
 	struct __raw_tickets tmp = ACCESS_ONCE(lock->tickets);
 
-	return (__ticket_t)(tmp.tail - tmp.head) > 1;
+	return (__ticket_t)(tmp.tail - tmp.head) > TICKET_LOCK_INC;
 }
 
 #define __arch_spin(n) __ticket_spin_##n

@@ -922,7 +922,7 @@ static void kimage_terminate(struct kimage *image)
 #define for_each_kimage_entry(image, ptr, entry) \
 	for (ptr = &image->head; (entry = *ptr) && !(entry & IND_DONE); \
 		ptr = (entry & IND_INDIRECTION) ? \
-			kexec_phys_to_virt((entry & PAGE_MASK)): ptr +1)
+			kexec_phys_to_virt((entry & PAGE_MASK)) : ptr + 1)
 
 static void kimage_free_entry(kimage_entry_t entry)
 {

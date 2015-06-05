@@ -122,7 +122,8 @@
 
 static int xen_panic_event(struct notifier_block *, unsigned long, void *);
 static struct notifier_block xen_panic_block = {
-	xen_panic_event, NULL, 0 /* try to go last */
+	.notifier_call = xen_panic_event,
+	.priority = INT_MIN /* try to go last */
 };
 
 unsigned long *phys_to_machine_mapping;
@@ -1083,7 +1084,7 @@ void __init setup_arch(char **cmdline_p)
 	*/
 	ROOT_DEV = MKDEV(UNNAMED_MAJOR,0);
 #else
- 	ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
+	ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
 #endif
 	if (is_initial_xendomain()) {
 		const struct dom0_vga_console_info *info =

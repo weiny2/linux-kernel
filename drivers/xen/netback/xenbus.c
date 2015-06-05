@@ -26,7 +26,7 @@ static DECLARE_RWSEM(teardown_sem);
 
 static int connect_rings(struct backend_info *);
 static void connect(struct backend_info *);
-static void backend_create_netif(struct backend_info *be);
+static int backend_create_netif(struct backend_info *be);
 static void unregister_hotplug_status_watch(struct backend_info *be);
 
 static int netback_remove(struct xenbus_device *dev)
@@ -47,6 +47,7 @@ static int netback_remove(struct xenbus_device *dev)
 	}
 	dev_set_drvdata(&dev->dev, NULL);
 	up_write(&teardown_sem);
+	kfree(be->hotplug_script);
 	kfree(be);
 	return 0;
 }
@@ -73,6 +74,7 @@ static int netback_probe(struct xenbus_device *dev,
 	struct xenbus_transaction xbt;
 	int err;
 	int sg;
+	const char *script;
 	struct backend_info *be = kzalloc(sizeof(struct backend_info),
 					  GFP_KERNEL);
 	if (!be) {
@@ -135,12 +137,23 @@ static int netback_probe(struct xenbus_device *dev,
 
 	netback_probe_accelerators(be, dev);
 
+	script = xenbus_read(XBT_NIL, dev->nodename, "script", NULL);
+	if (IS_ERR(script)) {
+		err = PTR_ERR(script);
+		xenbus_dev_fatal(dev, err, "reading script");
+		goto fail;
+	}
+
+	be->hotplug_script = script;
+
 	err = xenbus_switch_state(dev, XenbusStateInitWait);
 	if (err)
 		goto fail;
 
 	/* This kicks hotplug scripts, so do it immediately. */
-	backend_create_netif(be);
+	err = backend_create_netif(be);
+	if (err)
+		goto fail;
 
 	return 0;
 
@@ -162,22 +175,13 @@ fail:
 static int netback_uevent(struct xenbus_device *xdev, struct kobj_uevent_env *env)
 {
 	struct backend_info *be;
-	char *val;
 
 	DPRINTK("netback_uevent");
 
-	val = xenbus_read(XBT_NIL, xdev->nodename, "script", NULL);
-	if (IS_ERR(val)) {
-		int err = PTR_ERR(val);
-		xenbus_dev_fatal(xdev, err, "reading script");
-		return err;
-	}
-
-	add_uevent_var(env, "script=%s", val);
-	kfree(val);
-
 	down_read(&teardown_sem);
 	be = dev_get_drvdata(&xdev->dev);
+	if (be)
+		add_uevent_var(env, "script=%s", be->hotplug_script);
 	if (be && be->netif)
 		add_uevent_var(env, "vif=%s", be->netif->dev->name);
 	up_read(&teardown_sem);
@@ -186,7 +190,7 @@ static int netback_uevent(struct xenbus_device *xdev, struct kobj_uevent_env *en
 }
 
 
-static void backend_create_netif(struct backend_info *be)
+static int backend_create_netif(struct backend_info *be)
 {
 	int err;
 	long handle;
@@ -194,23 +198,24 @@ static void backend_create_netif(struct backend_info *be)
 	netif_t *netif;
 
 	if (be->netif != NULL)
-		return;
+		return 0;
 
 	err = xenbus_scanf(XBT_NIL, dev->nodename, "handle", "%li", &handle);
 	if (err != 1) {
 		xenbus_dev_fatal(dev, err, "reading handle");
-		return;
+		return (err < 0) ? err : -EINVAL;
 	}
 
 	netif = netif_alloc(&dev->dev, dev->otherend_id, handle);
 	if (IS_ERR(netif)) {
 		err = PTR_ERR(netif);
 		xenbus_dev_fatal(dev, err, "creating interface");
-		return;
+		return err;
 	}
 	be->netif = netif;
 
 	kobject_uevent(&dev->dev.kobj, KOBJ_ONLINE);
+	return 0;
 }
 
 

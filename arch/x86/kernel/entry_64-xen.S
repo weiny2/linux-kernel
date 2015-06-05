@@ -1125,20 +1125,20 @@ restore_all_enable_events:
 	TRACE_IRQS_ON
 	__ENABLE_INTERRUPTS
 
-scrit:	/**** START OF CRITICAL REGION ****/
+.Lscrit: /**** START OF CRITICAL REGION ****/
 	__TEST_PENDING
 	CFI_REMEMBER_STATE
 	jnz  14f			# process more events if necessary...
-        RESTORE_ARGS 1,8,1
+	RESTORE_ARGS 1,8,1
         HYPERVISOR_IRET 0
         
 	CFI_RESTORE_STATE
 14:	__DISABLE_INTERRUPTS
+.Lecrit: /**** END OF CRITICAL REGION ****/
 	SAVE_REST
         movq %rsp,%rdi                  # set the argument again
 	jmp  11b
 	CFI_ENDPROC
-ecrit:  /**** END OF CRITICAL REGION ****/
 # At this point, unlike on x86-32, we don't do the fixup to simplify the 
 # code and the stack frame is more complex on x86-64.
 # When the kernel is interrupted in the critical section, the kernel 

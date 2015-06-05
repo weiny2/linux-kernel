@@ -385,7 +385,7 @@ static int create_name_attr(struct platform_data *pdata, struct device *dev)
 }
 
 static int create_core_attrs(struct temp_data *tdata, struct device *dev,
-				int attr_no)
+			     int attr_no)
 {
 	int err, i;
 	static ssize_t (*const rd_ptr[TOTAL_ATTRS]) (struct device *dev,

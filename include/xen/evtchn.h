@@ -54,7 +54,7 @@ struct irq_cfg {
 	union {
 		int bindcount; /* for dynamic IRQs */
 #ifdef CONFIG_X86_IO_APIC
-		u8 vector; /* for physical IRQs */
+		unsigned int vector; /* for physical IRQs */
 #endif
 	};
 };
@@ -103,7 +103,7 @@ int bind_virq_to_irqaction(
 #else
 #define bind_virq_to_irqaction(virq, cpu, action) \
 	bind_virq_to_irqhandler(virq, cpu, (action)->handler, \
-			 	(action)->flags | IRQF_NOBALANCING, \
+				(action)->flags | IRQF_NOBALANCING, \
 				(action)->name, action)
 #endif
 #if defined(CONFIG_SMP) && !defined(MODULE)

@@ -605,9 +605,6 @@ static void connect(struct blkfront_info *info)
 	if (err <= 0)
 		physical_sector_size = sector_size;
 
-	info->feature_flush = 0;
-	info->flush_op = 0;
-
 	err = xenbus_scanf(XBT_NIL, info->xbdev->otherend,
 			   "feature-barrier", "%d", &barrier);
 	/*
@@ -618,6 +615,8 @@ static void connect(struct blkfront_info *info)
 	 * If there are barriers, then we use flush.
 	 */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
+	info->feature_flush = 0;
+	info->flush_op = 0;
 	if (err > 0 && barrier) {
 		info->feature_flush = REQ_FLUSH | REQ_FUA;
 		info->flush_op = BLKIF_OP_WRITE_BARRIER;
@@ -928,7 +927,8 @@ static void kick_pending_request_queues(struct blkfront_info *info)
 	if (queued)
 		flush_requests(info);
 
-	if (list_empty(&info->resume_split) && !RING_FULL(&info->ring)) {
+	if (list_empty(&info->resume_split) &&
+	    list_empty(&info->resume_list) && !RING_FULL(&info->ring)) {
 		/* Re-enable calldowns. */
 		blk_start_queue(info->rq);
 		/* Kick things off immediately. */
@@ -1010,7 +1010,7 @@ void blkif_release(struct gendisk *disk, fmode_t mode)
 		/* pending switch to state closed */
 		dev_info(disk_to_dev(disk), "releasing disk\n");
 		blkfront_closing(info);
- 	}
+	}
 
 	mutex_unlock(&info->mutex);
 
@@ -1169,10 +1169,11 @@ static int blkif_queue_request(struct request *req)
 		BLKIF_OP_WRITE : BLKIF_OP_READ;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
 	if (req->cmd_flags & (REQ_FLUSH | REQ_FUA))
+		ring_req->operation = info->flush_op;
 #else
 	if (req->cmd_flags & REQ_HARDBARRIER)
+		ring_req->operation = BLKIF_OP_WRITE_BARRIER;
 #endif
-		ring_req->operation = info->flush_op;
 	if (req->cmd_type == REQ_TYPE_BLOCK_PC)
 		ring_req->operation = BLKIF_OP_PACKET;
 
@@ -1569,7 +1570,7 @@ static int blkif_recover(struct blkfront_info *info,
 		ent->copy.frame = (void *)(ent + 1);
 		memcpy(ent->copy.frame, info->shadow[i].frame,
 		       nr_segs * sizeof(*ent->copy.frame));
-		if (info->indirect_segs) {
+		if (ent->copy.req.operation == BLKIF_OP_INDIRECT) {
 			ent->indirect_segs = info->indirect_segs[i];
 			info->indirect_segs[i] = NULL;
 		} else
