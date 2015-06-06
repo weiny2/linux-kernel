@@ -272,11 +272,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->cq_rx_base = (void *)dd->physaddr + FXR_RXCQ_ENTRY;
 
 	ctx = &dd->priv_ctx;
-	ctx->devdata = dd;
-	ctx->allow_phys_dlid = 1;
-	ctx->sl_mask = -1;
-	ctx->pid = HFI_PID_NONE;
-	ctx->ptl_uid = 0;
+	HFI_CTX_INIT(ctx, dd);
 	/* assign one CQ for privileged commands (DLID, EQ_DESC_WRITE) */
 	ret = hfi_cq_assign_privileged(ctx, &priv_cq_idx);
 	if (ret)
