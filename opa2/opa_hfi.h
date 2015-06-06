@@ -114,6 +114,8 @@ struct hfi_devdata {
 	unsigned long ptl_map[HFI_NUM_PIDS / BITS_PER_LONG];
 	spinlock_t ptl_lock;
 	struct hfi_ctx priv_ctx;
+	struct hfi_cq priv_tx_cq;
+	struct hfi_cq priv_rx_cq;
 
 	/* Command Queue State */
 	struct idr cq_pair;
@@ -177,6 +179,9 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
 int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx);
 int hfi_cq_update(struct hfi_ctx *ctx, u16 cq_idx, struct hfi_auth_tuple *auth_table);
 int hfi_cq_release(struct hfi_ctx *ctx, u16 cq_idx);
+int hfi_cq_map(struct hfi_ctx *ctx, u16 cq_idx,
+	       struct hfi_cq *tx, struct hfi_cq *rx);
+void hfi_cq_unmap(struct hfi_cq *tx, struct hfi_cq *rx);
 int hfi_dlid_assign(struct hfi_ctx *ctx,
 		    struct hfi_dlid_assign_args *dlid_assign);
 int hfi_dlid_release(struct hfi_ctx *ctx, u32 dlid_base, u32 count);

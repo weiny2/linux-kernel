@@ -79,6 +79,7 @@ struct opa_core_device;
 /**
  * struct hfi_ctx - state for HFI resources assigned to this context
  * @devdata: HFI device specific data, private to the hardware driver
+ * @type: kernel or user context
  * @pid: Assigned Portals Process ID
  * @ptl_uid: Assigned Protection Domain ID
  * @ptl_state_base: Pointer to Portals state in host memory
@@ -113,6 +114,7 @@ struct opa_core_device;
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
+	u8	type;
 	u16	pid;
 	u32	ptl_uid;
 	void	*ptl_state_base;
@@ -146,8 +148,12 @@ struct hfi_ctx {
 	u64	status_reg[HFI_NUM_NIS * HFI_NUM_CT_RESERVED];
 };
 
+#define HFI_CTX_TYPE_KERNEL	1
+#define HFI_CTX_TYPE_USER	2
+
 #define HFI_CTX_INIT(ctx, dd)		\
 	(ctx)->devdata = (dd);		\
+	(ctx)->type = HFI_CTX_TYPE_KERNEL; \
 	(ctx)->allow_phys_dlid = 1;	\
 	/* allow all SLs by default */	\
 	(ctx)->sl_mask = -1;		\
@@ -263,6 +269,8 @@ struct opa_dev_desc {
  * @cq_assign: Assign a Command Queue for HFI send/receive operations
  * @cq_update: Update configuration of Command Queue
  * @cq_release: Release Command Queue
+ * @cq_map: remap Command Queues into kernel virtual memory
+ * @cq_unmap: unmap Command Queues
  * @ev_assign: Assign an Event Completion Queue or Event Counter
  * @ev_release: Release an Event Completion Queue or Event Counter
  * @dlid_assign: Assign entries from the DLID relocation table
@@ -285,6 +293,9 @@ struct opa_core_ops {
 	int (*cq_update)(struct hfi_ctx *ctx, u16 cq_idx,
 			 struct hfi_auth_tuple *auth_table);
 	int (*cq_release)(struct hfi_ctx *ctx, u16 cq_idx);
+	int (*cq_map)(struct hfi_ctx *ctx,  u16 cq_idx, struct hfi_cq *tx_cq,
+		      struct hfi_cq *rx_cq);
+	void (*cq_unmap)(struct hfi_cq *tx_cq, struct hfi_cq *rx_cq);
 	int (*ev_assign)(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign);
 	int (*ev_release)(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx);
 	int (*dlid_assign)(struct hfi_ctx *ctx,

@@ -74,7 +74,6 @@ static struct opa_core_client opa_netdev = {
  * @pdev - PCIe device backing this net device
  * @ndev - Net device registered
  * @ctx - HFI context
- * @ctx_assign - pointer of the HFI CT table (RO)
  * @cq_idx - command queue index
  * @tx - TX command queue
  * @rx - RX command queue
@@ -474,80 +473,24 @@ static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
 	struct hfi_ctx *ctx = &dev->ctx;
 	struct opa_ctx_assign ctx_assign = {0};
 	struct opa_core_ops *ops = odev->bus_ops;
-	struct hfi_cq *tx = &dev->tx;
-	struct hfi_cq *rx = &dev->rx;
-	ssize_t head_size;
 	int rc;
 
 	HFI_CTX_INIT(ctx, odev->dd);
 	ctx_assign.le_me_count = OPA2_NET_ME_COUNT;
 	ctx_assign.unexpected_count = OPA2_NET_UNEX_COUNT;
-
 	rc = ops->ctx_assign(ctx, &ctx_assign);
 	if (rc)
 		return rc;
-	/* stash pointer to array of CT events */
-	rc = ops->ctx_addr(ctx, TOK_EVENTS_CT, ctx->pid,
-			   &ctx->ct_addr, &ctx->ct_size);
-	if (rc)
-		goto err;
-	/* stash pointer to array of EQ descs */
-	rc = ops->ctx_addr(ctx, TOK_EVENTS_EQ_DESC, ctx->pid,
-			   &ctx->eq_addr, &ctx->eq_size);
-	if (rc)
-		goto err;
-	/* stash pointer to array of EQ head pointers */
-	rc = ops->ctx_addr(ctx, TOK_EVENTS_EQ_HEAD, ctx->pid,
-			   &ctx->eq_head_addr, &ctx->eq_head_size);
-	if (rc)
-		goto err;
-	/* stash pointer to Portals Table */
-	rc = ops->ctx_addr(ctx, TOK_PORTALS_TABLE, ctx->pid,
-			   &ctx->pt_addr, &ctx->pt_size);
-	if (rc)
-		goto err;
-	/* Obtain a pair of command queues */
+
+	/* Obtain a pair of command queues and setup */
 	rc = ops->cq_assign(ctx, NULL, &dev->cq_idx);
 	if (rc)
 		goto err;
-	/* stash pointer to CQ head */
-	rc = ops->ctx_addr(ctx, TOK_CQ_HEAD, dev->cq_idx,
-			   (void **)&tx->head_addr, &head_size);
+	rc = ops->cq_map(ctx, dev->cq_idx, &dev->tx, &dev->rx);
 	if (rc)
 		goto err1;
-	/* stash pointer to TX CQ */
-	rc = ops->ctx_addr(ctx, TOK_CQ_TX, dev->cq_idx,
-			   &tx->base, (ssize_t *)&tx->size);
-	if (rc)
-		goto err1;
-	tx->base = ioremap((u64)tx->base, tx->size);
-	if (!tx->base)
-		goto err1;
-	/* stash pointer to RX CQ */
-	rc = ops->ctx_addr(ctx, TOK_CQ_RX, dev->cq_idx,
-			    &rx->base, (ssize_t *)&rx->size);
-	if (rc)
-		goto err2;
-	rx->base = ioremap((u64)rx->base, rx->size);
-	if (!rx->base)
-		goto err2;
-
-	tx->cq_idx = dev->cq_idx;
-	tx->slots_total = HFI_CQ_TX_ENTRIES;
-	tx->slots_avail = tx->slots_total - 1;
-	tx->slot_idx = (*tx->head_addr);
-	tx->sw_head_idx = tx->slot_idx;
-
-	rx->cq_idx = dev->cq_idx;
-	rx->head_addr = tx->head_addr + 8;
-	rx->slots_total = HFI_CQ_RX_ENTRIES;
-	rx->slots_avail = rx->slots_total - 1;
-	rx->slot_idx = (*rx->head_addr);
-	rx->sw_head_idx = rx->slot_idx;
 
 	return opa2_xfer_test(odev, dev);
-err2:
-	iounmap(tx->base);
 err1:
 	ops->cq_release(ctx, dev->cq_idx);
 err:
@@ -559,13 +502,8 @@ static void opa2_hw_uninit(struct opa_core_device *odev, struct opa_netdev *dev)
 {
 	struct hfi_ctx *ctx = &dev->ctx;
 	struct opa_core_ops *ops = odev->bus_ops;
-	struct hfi_cq *tx = &dev->tx;
-	struct hfi_cq *rx = &dev->rx;
 
-	if (tx->base)
-		iounmap(tx->base);
-	if (rx->base)
-		iounmap(rx->base);
+	ops->cq_unmap(&dev->tx, &dev->rx);
 	ops->cq_release(ctx, dev->cq_idx);
 	odev->bus_ops->ctx_release(ctx);
 }
