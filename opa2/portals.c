@@ -53,6 +53,8 @@
 #include <linux/bitmap.h>
 #include <linux/log2.h>
 #include <linux/sched.h>
+#include <rdma/opa_core.h>
+#include <rdma/hfi_eq.h>
 #include "opa_hfi.h"
 
 static uint cq_alloc_cyclic = 0;
@@ -380,6 +382,7 @@ idr_end:
 
 static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 {
+	struct hfi_devdata *dd = ctx->devdata;
 	union eqd *eq_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_EQ_DESC_OFFSET);
 	union eqd eq_desc;
 	unsigned long flags;
@@ -433,7 +436,18 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	eq_desc_base[eq_idx].val[1] = eq_desc.val[1];
 	wmb();  /* barrier before writing Valid */
 	eq_desc_base[eq_idx].val[0] = eq_desc.val[0];
-	/* TODO - need privileged CQ write to RX CmdQ to complete */
+
+	/* issue write to privileged CQ to complete */
+	ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx, &eq_desc);
+	if (ret < 0) {
+		/*
+		 * TODO - need to define how to handle waiting for CQ slots,
+		 *        (deferred processing to wait for CQ slots?).
+		 */
+		eq_desc_base[eq_idx].val[0] = 0; /* clear valid */
+		idr_remove(&ctx->eq_used, eq_idx);
+		goto idr_end;
+	}
 
 	 /* return index to user */
 	eq_assign->ev_idx = eq_idx;
@@ -447,7 +461,9 @@ idr_end:
 
 static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx)
 {
+	struct hfi_devdata *dd = ctx->devdata;
 	union eqd *eq_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_EQ_DESC_OFFSET);
+	union eqd eq_desc;
 	void *eq_present;
 	unsigned long flags;
 	int ret = 0;
@@ -459,8 +475,18 @@ static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx)
 		goto idr_end;
 	}
 
+	/* need cleared EQ desc to send via RX CQ */
+	eq_desc.val[0] = 0;
+	eq_desc.val[1] = 0;
+
+	/* issue write to privileged CQ to complete EQ release */
+	ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx, &eq_desc);
+	if (ret < 0) {
+		/* TODO - revisit how to handle waiting for CQ slots */
+		goto idr_end;
+	}
+
 	eq_desc_base[eq_idx].val[0] = 0; /* clear valid */
-	/* TODO - privileged CQ write to release EQ */
 
 	idr_remove(&ctx->eq_used, eq_idx);
 idr_end:
