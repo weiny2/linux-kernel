@@ -108,13 +108,12 @@ static int hfi_open(struct inode *inode, struct file *fp)
 
 	/* store HFI HW device pointers */
 	ud->bus_ops = hi->odev->bus_ops;
-	ud->ctx.devdata = hi->odev->dd;
 
 	ud->pid = task_pid_nr(current);
 	ud->sid = task_session_vnr(current);
 
 	/* default Portals PID and UID */
-	ud->ctx.pid = HFI_PID_NONE;
+	HFI_CTX_INIT(&ud->ctx, hi->odev->dd);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 	ud->ctx.ptl_uid = current_uid();
 #else

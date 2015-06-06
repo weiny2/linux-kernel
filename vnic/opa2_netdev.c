@@ -479,13 +479,9 @@ static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
 	ssize_t head_size;
 	int rc;
 
-	ctx->pid = HFI_PID_NONE;
-	ctx->devdata = odev->dd;
+	HFI_CTX_INIT(ctx, odev->dd);
 	ctx_assign.le_me_count = OPA2_NET_ME_COUNT;
 	ctx_assign.unexpected_count = OPA2_NET_UNEX_COUNT;
-	ctx->allow_phys_dlid = 1;
-	ctx->sl_mask = -1;   /* allow all SLs */
-	ctx->ptl_uid = 0;    /* 0 reserved for kernel clients */
 
 	rc = ops->ctx_assign(ctx, &ctx_assign);
 	if (rc)

@@ -74,7 +74,6 @@
  * with data types defined by the common provider logic.
  */
 struct hfi_devdata;
-
 struct opa_core_device;
 
 /**
@@ -146,6 +145,16 @@ struct hfi_ctx {
 	ssize_t	eq_head_size;
 	u64	status_reg[HFI_NUM_NIS * HFI_NUM_CT_RESERVED];
 };
+
+#define HFI_CTX_INIT(ctx, dd)		\
+	(ctx)->devdata = (dd);		\
+	(ctx)->allow_phys_dlid = 1;	\
+	/* allow all SLs by default */	\
+	(ctx)->sl_mask = -1;		\
+	(ctx)->pid = HFI_PID_NONE;	\
+	(ctx)->pid_count = 0;		\
+	/* 0 reserved for kernel clients */ \
+	(ctx)->ptl_uid = 0;
 
 /**
  * enum mmap_token_types -  Types of memory regions mapped by the context and

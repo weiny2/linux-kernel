@@ -64,8 +64,6 @@ void hfi_job_init(struct hfi_userdata *ud)
 
 	ud->ctx.dlid_base = HFI_LID_NONE;
 	ud->ctx.pid_base = HFI_PID_NONE;
-	ud->ctx.allow_phys_dlid = 1;	/* TODO */
-	ud->ctx.sl_mask = -1;		/* TODO - default allowed SLs */
 	INIT_LIST_HEAD(&ud->job_list);
 
 	/* search job_list for PID reservation to inherit */
