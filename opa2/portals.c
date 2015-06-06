@@ -233,6 +233,68 @@ void hfi_cq_cleanup(struct hfi_ctx *ctx)
 	spin_unlock_irqrestore(&dd->cq_lock, flags);
 }
 
+int hfi_cq_map(struct hfi_ctx *ctx, u16 cq_idx,
+	       struct hfi_cq *tx, struct hfi_cq *rx)
+{
+	ssize_t head_size;
+	int rc;
+
+	/* stash pointer to CQ HEAD */
+	rc = hfi_ctxt_hw_addr(ctx, TOK_CQ_HEAD, cq_idx,
+			      (void **)&tx->head_addr, &head_size);
+	if (rc)
+		goto err1;
+
+	/* stash pointer to TX CQ */
+	rc = hfi_ctxt_hw_addr(ctx, TOK_CQ_TX, cq_idx,
+			      &tx->base, (ssize_t *)&tx->size);
+	if (rc)
+		goto err1;
+
+	tx->base = ioremap((u64)tx->base, tx->size);
+	if (!tx->base)
+		goto err1;
+
+	/* stash pointer to RX CQ */
+	rc = hfi_ctxt_hw_addr(ctx, TOK_CQ_RX, cq_idx,
+			      &rx->base, (ssize_t *)&rx->size);
+	if (rc)
+		goto err2;
+	rx->base = ioremap((u64)rx->base, rx->size);
+	if (!rx->base)
+		goto err2;
+
+	tx->cq_idx = cq_idx;
+	tx->slots_total = HFI_CQ_TX_ENTRIES;
+	tx->slots_avail = tx->slots_total - 1;
+	tx->slot_idx = (*tx->head_addr);
+	tx->sw_head_idx = tx->slot_idx;
+
+	rx->cq_idx = cq_idx;
+	rx->head_addr = tx->head_addr + 8;
+	rx->slots_total = HFI_CQ_RX_ENTRIES;
+	rx->slots_avail = rx->slots_total - 1;
+	rx->slot_idx = (*rx->head_addr);
+	rx->sw_head_idx = rx->slot_idx;
+
+	return 0;
+
+err2:
+	iounmap(tx->base);
+err1:
+	return rc;
+}
+
+void hfi_cq_unmap(struct hfi_cq *tx, struct hfi_cq *rx)
+{
+	if (tx->base)
+		iounmap(tx->base);
+	if (rx->base)
+		iounmap(rx->base);
+	tx->base = NULL;
+	rx->base = NULL;
+}
+
 static int hfi_ct_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign)
 {
 	union ptl_ct_event *ct_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_CT_OFFSET);
@@ -318,7 +380,6 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	int num_eqs = HFI_NUM_EVENT_HANDLES;
 	int ret = 0;
 
-	eq_base = eq_assign->ni * num_eqs;
 	if (eq_assign->ni >= HFI_NUM_NIS)
 		return -EINVAL;
 	/* TODO blocking mode coming soon... */
@@ -335,6 +396,14 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		return -EINVAL;
 	if (order > HFI_MAX_EVENT_ORDER)
 		return -EINVAL;
+
+	eq_base = eq_assign->ni * num_eqs;
+	/*
+	 * TODO - first EQ is reserved for result of EQ_DESC_WRITE.
+	 * skip for now for kernel-clients until we copy user-client usage.
+	 */
+	if (ctx->type == HFI_CTX_TYPE_KERNEL)
+		eq_base += 1;
 
 	idr_preload(GFP_KERNEL);
 	spin_lock_irqsave(&ctx->cteq_lock, flags);
@@ -508,7 +577,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	struct hfi_devdata *dd = ctx->devdata;
 	u16 ptl_pid;
 	u32 psb_size, trig_op_size, le_me_off, le_me_size, unexp_size;
-	int ret;
+	int i, ni, ret;
 
 	/* only one Portals PID allowed */
 	if (ctx->pid != HFI_PID_NONE)
@@ -560,6 +629,33 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 
 	/* write PCB (host memory) */
 	hfi_pcb_write(ctx, ptl_pid);
+
+	/* stash pointers to PCB segments (for kernel clients) */
+	ret = hfi_ctxt_hw_addr(ctx, TOK_EVENTS_CT, ctx->pid,
+			       &ctx->ct_addr, &ctx->ct_size);
+	ret |= hfi_ctxt_hw_addr(ctx, TOK_EVENTS_EQ_DESC, ctx->pid,
+				&ctx->eq_addr, &ctx->eq_size);
+	ret |= hfi_ctxt_hw_addr(ctx, TOK_EVENTS_EQ_HEAD, ctx->pid,
+				&ctx->eq_head_addr, &ctx->eq_head_size);
+	ret |= hfi_ctxt_hw_addr(ctx, TOK_PORTALS_TABLE, ctx->pid,
+				&ctx->pt_addr, &ctx->pt_size);
+	/* above tokens do not return any error */
+	BUG_ON(ret != 0);
+
+	if (ctx->type == HFI_CTX_TYPE_KERNEL) {
+		/* assign Status Registers (first 16 CTs) */
+		struct opa_ev_assign ct_assign = {0};
+		for (ni = 0; ni < HFI_NUM_NIS; ni++) {
+			ct_assign.ni = ni;
+			for (i = 0; i < HFI_NUM_CT_RESERVED; i++) {
+				ret |= hfi_ct_assign(ctx, &ct_assign);
+				ctx->status_reg[HFI_SR_INDEX(ni, i)] =
+						ct_assign.ev_idx;
+			}
+		}
+		/* no CTs assigned yet, so above cannot yield error */
+		BUG_ON(ret != 0);
+	}
 
 	return 0;
 

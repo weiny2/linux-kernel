@@ -118,8 +118,10 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	cleanup_interrupts(dd);
 
 	/* release any privileged CQs */
-	if (dd->priv_ctx.devdata)
+	if (dd->priv_ctx.devdata) {
+		hfi_cq_unmap(&dd->priv_tx_cq, &dd->priv_rx_cq);
 		hfi_cq_cleanup(&dd->priv_ctx);
+	}
 
 	hfi_iommu_root_clear_context(dd);
 
@@ -166,6 +168,8 @@ static struct opa_core_ops opa_core_ops = {
 	.cq_assign = hfi_cq_assign,
 	.cq_update = hfi_cq_update,
 	.cq_release = hfi_cq_release,
+	.cq_map = hfi_cq_map,
+	.cq_unmap = hfi_cq_unmap,
 	.ev_assign = hfi_cteq_assign,
 	.ev_release = hfi_cteq_release,
 	.dlid_assign = hfi_dlid_assign,
@@ -277,7 +281,9 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	ret = hfi_cq_assign_privileged(ctx, &priv_cq_idx);
 	if (ret)
 		goto err_post_alloc;
-	/* TODO - next is to write the hfi_cq structs (see VNIC code) */
+	ret = hfi_cq_map(ctx, priv_cq_idx, &dd->priv_tx_cq, &dd->priv_rx_cq);
+	if (ret)
+		goto err_post_alloc;
 
 	/* enable MSI-X */
 	/* TODO - just ask for 64 IRQs for now */
@@ -529,16 +535,13 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr, ssize_t *len)
 {
 	struct hfi_devdata *dd;
-	void *psb_base;
+	void *psb_base = NULL;
 	struct hfi_ctx *cq_ctx;
 	unsigned long flags;
 	int ret = 0;
 
 	BUG_ON(!ctx || !ctx->devdata);
 	dd = ctx->devdata;
-
-	psb_base = ctx->ptl_state_base;
-	BUG_ON(psb_base == NULL);
 
 	/*
 	 * Validate passed in ctxt value.
@@ -557,6 +560,8 @@ int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr, ssize
 			return -EINVAL;
 		break;
 	default:
+		psb_base = ctx->ptl_state_base;
+		BUG_ON(psb_base == NULL);
 		break;
 	}
 
