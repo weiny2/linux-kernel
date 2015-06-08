@@ -211,6 +211,93 @@ static int nfit_spa_type(struct acpi_nfit_system_address *spa)
 	return -1;
 }
 
+static bool add_spa(struct acpi_nfit_desc *acpi_desc,
+		struct acpi_nfit_system_address *spa)
+{
+	struct device *dev = acpi_desc->dev;
+	struct nfit_spa *nfit_spa = devm_kzalloc(dev, sizeof(*nfit_spa),
+			GFP_KERNEL);
+
+	if (!nfit_spa)
+		return false;
+	INIT_LIST_HEAD(&nfit_spa->list);
+	nfit_spa->spa = spa;
+	list_add_tail(&nfit_spa->list, &acpi_desc->spas);
+	dev_dbg(dev, "%s: spa index: %d type: %s\n", __func__,
+			spa->range_index,
+			spa_type_name(nfit_spa_type(spa)));
+	return true;
+}
+
+static bool add_memdev(struct acpi_nfit_desc *acpi_desc,
+		struct acpi_nfit_memory_map *memdev)
+{
+	struct device *dev = acpi_desc->dev;
+	struct nfit_memdev *nfit_memdev = devm_kzalloc(dev,
+			sizeof(*nfit_memdev), GFP_KERNEL);
+
+	if (!nfit_memdev)
+		return false;
+	INIT_LIST_HEAD(&nfit_memdev->list);
+	nfit_memdev->memdev = memdev;
+	list_add_tail(&nfit_memdev->list, &acpi_desc->memdevs);
+	dev_dbg(dev, "%s: memdev handle: %#x spa: %d dcr: %d\n",
+			__func__, memdev->device_handle, memdev->range_index,
+			memdev->region_index);
+	return true;
+}
+
+static bool add_dcr(struct acpi_nfit_desc *acpi_desc,
+		struct acpi_nfit_control_region *dcr)
+{
+	struct device *dev = acpi_desc->dev;
+	struct nfit_dcr *nfit_dcr = devm_kzalloc(dev, sizeof(*nfit_dcr),
+			GFP_KERNEL);
+
+	if (!nfit_dcr)
+		return false;
+	INIT_LIST_HEAD(&nfit_dcr->list);
+	nfit_dcr->dcr = dcr;
+	list_add_tail(&nfit_dcr->list, &acpi_desc->dcrs);
+	dev_dbg(dev, "%s: dcr index: %d windows: %d\n", __func__,
+			dcr->region_index, dcr->windows);
+	return true;
+}
+
+static bool add_bdw(struct acpi_nfit_desc *acpi_desc,
+		struct acpi_nfit_data_region *bdw)
+{
+	struct device *dev = acpi_desc->dev;
+	struct nfit_bdw *nfit_bdw = devm_kzalloc(dev, sizeof(*nfit_bdw),
+			GFP_KERNEL);
+
+	if (!nfit_bdw)
+		return false;
+	INIT_LIST_HEAD(&nfit_bdw->list);
+	nfit_bdw->bdw = bdw;
+	list_add_tail(&nfit_bdw->list, &acpi_desc->bdws);
+	dev_dbg(dev, "%s: bdw dcr: %d windows: %d\n", __func__,
+			bdw->region_index, bdw->windows);
+	return true;
+}
+
+static bool add_idt(struct acpi_nfit_desc *acpi_desc,
+		struct acpi_nfit_interleave *idt)
+{
+	struct device *dev = acpi_desc->dev;
+	struct nfit_idt *nfit_idt = devm_kzalloc(dev, sizeof(*nfit_idt),
+			GFP_KERNEL);
+
+	if (!nfit_idt)
+		return false;
+	INIT_LIST_HEAD(&nfit_idt->list);
+	nfit_idt->idt = idt;
+	list_add_tail(&nfit_idt->list, &acpi_desc->idts);
+	dev_dbg(dev, "%s: idt index: %d num_lines: %d\n", __func__,
+			idt->interleave_index, idt->line_count);
+	return true;
+}
+
 static void *add_table(struct acpi_nfit_desc *acpi_desc, void *table, const void *end)
 {
 	struct device *dev = acpi_desc->dev;
@@ -220,80 +307,28 @@ static void *add_table(struct acpi_nfit_desc *acpi_desc, void *table, const void
 	if (table >= end)
 		return NULL;
 
-	hdr = (struct acpi_nfit_header *) table;
+	hdr = table;
 	switch (hdr->type) {
-	case ACPI_NFIT_TYPE_SYSTEM_ADDRESS: {
-		struct nfit_spa *nfit_spa = devm_kzalloc(dev, sizeof(*nfit_spa),
-				GFP_KERNEL);
-		struct acpi_nfit_system_address *spa = table;
-
-		if (!nfit_spa)
+	case ACPI_NFIT_TYPE_SYSTEM_ADDRESS:
+		if (!add_spa(acpi_desc, table))
 			return err;
-		INIT_LIST_HEAD(&nfit_spa->list);
-		nfit_spa->spa = spa;
-		list_add_tail(&nfit_spa->list, &acpi_desc->spas);
-		dev_dbg(dev, "%s: spa index: %d type: %s\n", __func__,
-				spa->range_index,
-				spa_type_name(nfit_spa_type(spa)));
 		break;
-	}
-	case ACPI_NFIT_TYPE_MEMORY_MAP: {
-		struct nfit_memdev *nfit_memdev = devm_kzalloc(dev,
-				sizeof(*nfit_memdev), GFP_KERNEL);
-		struct acpi_nfit_memory_map *memdev = table;
-
-		if (!nfit_memdev)
+	case ACPI_NFIT_TYPE_MEMORY_MAP:
+		if (!add_memdev(acpi_desc, table))
 			return err;
-		INIT_LIST_HEAD(&nfit_memdev->list);
-		nfit_memdev->memdev = memdev;
-		list_add_tail(&nfit_memdev->list, &acpi_desc->memdevs);
-		dev_dbg(dev, "%s: memdev handle: %#x spa: %d dcr: %d\n",
-				__func__, memdev->device_handle, memdev->range_index,
-				memdev->region_index);
 		break;
-	}
-	case ACPI_NFIT_TYPE_CONTROL_REGION: {
-		struct nfit_dcr *nfit_dcr = devm_kzalloc(dev, sizeof(*nfit_dcr),
-				GFP_KERNEL);
-		struct acpi_nfit_control_region *dcr = table;
-
-		if (!nfit_dcr)
+	case ACPI_NFIT_TYPE_CONTROL_REGION:
+		if (!add_dcr(acpi_desc, table))
 			return err;
-		INIT_LIST_HEAD(&nfit_dcr->list);
-		nfit_dcr->dcr = dcr;
-		list_add_tail(&nfit_dcr->list, &acpi_desc->dcrs);
-		dev_dbg(dev, "%s: dcr index: %d windows: %d\n", __func__,
-				dcr->region_index, dcr->windows);
 		break;
-	}
-	case ACPI_NFIT_TYPE_DATA_REGION: {
-		struct nfit_bdw *nfit_bdw = devm_kzalloc(dev, sizeof(*nfit_bdw),
-				GFP_KERNEL);
-		struct acpi_nfit_data_region *bdw = table;
-
-		if (!nfit_bdw)
+	case ACPI_NFIT_TYPE_DATA_REGION:
+		if (!add_bdw(acpi_desc, table))
 			return err;
-		INIT_LIST_HEAD(&nfit_bdw->list);
-		nfit_bdw->bdw = bdw;
-		list_add_tail(&nfit_bdw->list, &acpi_desc->bdws);
-		dev_dbg(dev, "%s: bdw dcr: %d windows: %d\n", __func__,
-				bdw->region_index, bdw->windows);
 		break;
-	}
-	case ACPI_NFIT_TYPE_INTERLEAVE: {
-		struct nfit_idt *nfit_idt = devm_kzalloc(dev, sizeof(*nfit_idt),
-				GFP_KERNEL);
-		struct acpi_nfit_interleave *idt = table;
-
-		if (!nfit_idt)
+	case ACPI_NFIT_TYPE_INTERLEAVE:
+		if (!add_idt(acpi_desc, table))
 			return err;
-		INIT_LIST_HEAD(&nfit_idt->list);
-		nfit_idt->idt = idt;
-		list_add_tail(&nfit_idt->list, &acpi_desc->idts);
-		dev_dbg(dev, "%s: idt index: %d num_lines: %d\n", __func__,
-				idt->interleave_index, idt->line_count);
 		break;
-	}
 	case ACPI_NFIT_TYPE_FLUSH_ADDRESS:
 		dev_dbg(dev, "%s: flush\n", __func__);
 		break;
