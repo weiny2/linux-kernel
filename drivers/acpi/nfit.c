@@ -760,7 +760,7 @@ static void acpi_nfit_init_dsms(struct acpi_nfit_desc *acpi_desc)
 	if (!adev)
 		return;
 
-	for (i = ND_CMD_ARS_CAP; i <= ND_CMD_ARS_QUERY; i++)
+	for (i = ND_CMD_ARS_CAP; i <= ND_CMD_ARS_STATUS; i++)
 		if (acpi_check_dsm(adev->handle, uuid, 1, 1ULL << i))
 			set_bit(i, &nd_desc->dsm_mask);
 }

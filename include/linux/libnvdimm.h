@@ -25,7 +25,7 @@ enum {
 	ND_IOCTL_MAX_BUFLEN = SZ_4M,
 	ND_CMD_MAX_ELEM = 4,
 	ND_CMD_MAX_ENVELOPE = 16,
-	ND_CMD_ARS_QUERY_MAX = SZ_4K,
+	ND_CMD_ARS_STATUS_MAX = SZ_4K,
 	ND_MAX_MAPPINGS = 32,
 
 	/* mark newly adjusted resources as requiring a label update */
