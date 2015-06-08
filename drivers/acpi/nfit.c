@@ -183,13 +183,22 @@ static int acpi_nfit_ctl(struct nvdimm_bus_descriptor *nd_desc,
 
 static const char *spa_type_name(u16 type)
 {
-	switch (type) {
-	case NFIT_SPA_VOLATILE: return "volatile";
-	case NFIT_SPA_PM: return "pmem";
-	case NFIT_SPA_DCR: return "dimm-control-region";
-	case NFIT_SPA_BDW: return "block-data-window";
-	default: return "unknown";
-	}
+	static const char *to_name[] = {
+		[NFIT_SPA_VOLATILE] = "volatile",
+		[NFIT_SPA_PM] = "pmem",
+		[NFIT_SPA_DCR] = "dimm-control-region",
+		[NFIT_SPA_BDW] = "block-data-window",
+		[NFIT_SPA_VDISK] = "volatile-disk",
+		[NFIT_SPA_VCD] = "volatile-cd",
+		[NFIT_SPA_PDISK] = "persistent-disk",
+		[NFIT_SPA_PCD] = "persistent-cd",
+
+	};
+
+	if (type > NFIT_SPA_PCD)
+		return "unknown";
+
+	return to_name[type];
 }
 
 static int nfit_spa_type(struct acpi_nfit_system_address *spa)
