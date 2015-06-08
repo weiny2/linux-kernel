@@ -1,5 +1,5 @@
-menuconfig NVDIMM_DEVICES
-	bool "NVDIMM (Non-Volatile Memory Device) Support"
+menuconfig LIBNVDIMM
+	tristate "NVDIMM (Non-Volatile Memory Device) Support"
 	help
 	  Generic support for non-volatile memory devices including
 	  ACPI-6-NFIT defined resources.  On platforms that define an
@@ -12,14 +12,10 @@ menuconfig NVDIMM_DEVICES
 	  region which exposes an mmio register set for windowed
 	  access mode to non-volatile memory.
 
-if NVDIMM_DEVICES
-
-config LIBNVDIMM
-	tristate
+if LIBNVDIMM
 
 config BLK_DEV_PMEM
 	tristate "PMEM: Persistent memory block device support"
-	depends on LIBNVDIMM
 	default LIBNVDIMM
 	help
 	  Memory ranges for PMEM are described by either an NFIT
@@ -36,7 +32,6 @@ config BLK_DEV_PMEM
 
 config ND_BLK
 	tristate "BLK: Block data window (aperture) device support"
-	depends on LIBNVDIMM
 	default LIBNVDIMM
 	help
 	  Support NVDIMMs, or other devices, that implement a BLK-mode
@@ -52,7 +47,6 @@ config ND_BTT_DEVS
 
 config ND_BTT
 	tristate "BTT: Block Translation Table (atomic sector updates)"
-	depends on LIBNVDIMM
 	default LIBNVDIMM
 	select ND_BTT_DEVS
 	help
