@@ -16,7 +16,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
-#include "nd-private.h"
+#include "nd-core.h"
 #include "btt.h"
 #include "nd.h"
 

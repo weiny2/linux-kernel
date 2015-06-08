@@ -18,7 +18,7 @@
 #include <linux/io.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
-#include "nd-private.h"
+#include "nd-core.h"
 #include "label.h"
 #include "nd.h"
 

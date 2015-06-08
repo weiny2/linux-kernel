@@ -17,7 +17,7 @@
 #include <linux/sort.h>
 #include <linux/io.h>
 #include <linux/nd.h>
-#include <nd-private.h>
+#include <nd-core.h>
 #include <nd.h>
 
 static DEFINE_IDA(region_ida);

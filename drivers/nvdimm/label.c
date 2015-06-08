@@ -15,7 +15,7 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/nd.h>
-#include <nd-private.h>
+#include <nd-core.h>
 #include <label.h>
 #include <nd.h>
 

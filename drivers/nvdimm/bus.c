@@ -24,7 +24,7 @@
 #include <linux/io.h>
 #include <linux/mm.h>
 #include <linux/nd.h>
-#include <nd-private.h>
+#include <nd-core.h>
 #include <nd.h>
 
 int nvdimm_major;

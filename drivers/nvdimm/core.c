@@ -19,7 +19,7 @@
 #include <linux/ndctl.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
-#include "nd-private.h"
+#include "nd-core.h"
 #include "nd.h"
 
 LIST_HEAD(nvdimm_bus_list);
