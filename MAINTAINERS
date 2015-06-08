@@ -5940,7 +5940,7 @@ F:	drivers/nvdimm/region_devs.c
 F:	drivers/acpi/nfit*
 
 LIBNVDIMM BTT: BLOCK TRANSLATION TABLE
-M:	Vishal Verma <vishal.verma@linux.intel.com>
+M:	Vishal Verma <vishal.l.verma@intel.com>
 L:	linux-nvdimm@lists.01.org
 Q:	https://patchwork.kernel.org/project/linux-nvdimm/list/
 S:	Supported
