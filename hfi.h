@@ -294,6 +294,15 @@ struct hfi1_ctxtdata {
 	struct task_struct *progress;
 	struct list_head sdma_queues;
 	spinlock_t sdma_qlock;
+
+	/*
+	 * The interrupt handler for a particular receive context can vary
+	 * throughout it's lifetime. This is not a lock protected data member so
+	 * it must be updated atomically and the prev and new value must always
+	 * be valid. Worst case is we process an extra interrupt and up to 64
+	 * packets with the wrong interrupt handler.
+	 */
+	void (*do_interrupt)(struct hfi1_ctxtdata *rcd);
 };
 
 /*
@@ -311,6 +320,14 @@ struct hfi1_packet {
 	u16 tlen;
 	u16 hlen;
 	u32 updegr;
+	u32 etail;
+	__le32 *rhf_addr;
+	u32 etype;
+	u32 rsize;
+	u32 maxcnt;
+	u32 hdrqtail;
+	u32 rhqoff;
+	int numpkt;
 };
 
 /*
@@ -1081,6 +1098,8 @@ void hfi1_init_pportdata(struct pci_dev *, struct hfi1_pportdata *,
 void hfi1_free_ctxtdata(struct hfi1_devdata *, struct hfi1_ctxtdata *);
 
 void handle_receive_interrupt(struct hfi1_ctxtdata *);
+void handle_receive_interrupt_nodma_rtail(struct hfi1_ctxtdata *rcd);
+void handle_receive_interrupt_dma_rtail(struct hfi1_ctxtdata *rcd);
 int hfi1_reset_device(int);
 
 /* return the driver's idea of the logical OPA port state */

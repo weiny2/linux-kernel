@@ -705,6 +705,8 @@ int hfi1_init(struct hfi1_devdata *dd, int reinit)
 		if (!rcd)
 			continue;
 
+		rcd->do_interrupt = &handle_receive_interrupt;
+
 		lastfail = hfi1_create_rcvhdrq(dd, rcd);
 		if (!lastfail)
 			lastfail = hfi1_setup_eagerbufs(rcd);

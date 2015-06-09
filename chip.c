@@ -4322,7 +4322,7 @@ static void is_rcv_avail_int(struct hfi1_devdata *dd, unsigned int source)
 		rcd = dd->rcd[source];
 		if (rcd) {
 			if (source < dd->first_user_ctxt)
-				handle_receive_interrupt(rcd);
+				rcd->do_interrupt(rcd);
 			else
 				handle_user_interrupt(rcd);
 			return;	/* OK */
@@ -4504,7 +4504,7 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 	write_csr(rcd->dd, CCE_INT_CLEAR + (8*rcd->ireg), rcd->imask);
 
 	/* handle the interrupt */
-	handle_receive_interrupt(rcd);
+	rcd->do_interrupt(rcd);
 
 	return IRQ_HANDLED;
 }
