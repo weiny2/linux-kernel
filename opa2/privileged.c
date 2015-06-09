@@ -61,7 +61,7 @@ int hfi_dlid_assign(struct hfi_ctx *ctx,
 	BUG_ON(!capable(CAP_SYS_ADMIN));
 
 	/* can only write DLID mapping once */
-	if (ctx->dlid_base != HFI_LID_ANY)
+	if (ctx->dlid_base != HFI_LID_NONE)
 		return -EPERM;
 
 	/* write DLID relocation table */
@@ -70,6 +70,7 @@ int hfi_dlid_assign(struct hfi_ctx *ctx,
 		return ret;
 
 	ctx->dlid_base = dlid_assign->dlid_base;
+	ctx->pid_mode |= HFI_CTX_MODE_LID_VIRTUALIZED;
 
 	return 0;
 }
@@ -84,7 +85,8 @@ int hfi_dlid_release(struct hfi_ctx *ctx, u32 dlid_base, u32 count)
 	if (ret < 0)
 		return ret;
 
-	ctx->dlid_base = HFI_LID_ANY;
+	ctx->dlid_base = HFI_LID_NONE;
+	ctx->pid_mode &= ~HFI_CTX_MODE_LID_VIRTUALIZED;
 
 	return 0;
 }

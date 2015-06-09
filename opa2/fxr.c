@@ -457,11 +457,13 @@ hfi_update_dlid_relocation_table(struct hfi_ctx *ctx,
 		(TXCI_CFG_DLID_RT_t *)dlid_assign->dlid_entries_ptr;
 	u32 offset;
 
+	if (dlid_assign->dlid_base >= DLID_TABLE_SIZE)
+		return -EINVAL;
 	if (dlid_assign->dlid_base + dlid_assign->count > DLID_TABLE_SIZE)
 		return -EINVAL;
 
-	for (offset = FXR_TXCI_CFG_DLID_RT + dlid_assign->dlid_base;
-		offset < FXR_TXCI_CFG_DLID_RT + dlid_assign->count * sizeof(*p);
+	for (offset = dlid_assign->dlid_base * sizeof(*p);
+		offset < (dlid_assign->dlid_base + dlid_assign->count) * sizeof(*p);
 		p++, offset += sizeof(*p)) {
 		/* They must be 0 when granularity = 1 */
 		if (p->field.RPLC_BLK_SIZE != 0)
@@ -469,7 +471,7 @@ hfi_update_dlid_relocation_table(struct hfi_ctx *ctx,
 		if (p->field.RPLC_MATCH != 0)
 			return -EINVAL;
 
-		write_csr(dd, offset, p->val);
+		write_csr(dd, FXR_TXCI_CFG_DLID_RT + offset, p->val);
 	}
 	return 0;
 }
@@ -484,14 +486,15 @@ hfi_reset_dlid_relocation_table(struct hfi_ctx *ctx, u32 dlid_base, u32 count)
 	struct hfi_devdata *dd = ctx->devdata;
 	u32 offset;
 
+	if (dlid_base >= DLID_TABLE_SIZE)
+		return -EINVAL;
 	if (dlid_base + count > DLID_TABLE_SIZE)
 		return -EINVAL;
 
-	for (offset = FXR_TXCI_CFG_DLID_RT + dlid_base;
-		offset < FXR_TXCI_CFG_DLID_RT + count *
-			sizeof(TXCI_CFG_DLID_RT_t);
+	for (offset = dlid_base * sizeof(TXCI_CFG_DLID_RT_t);
+		offset < (dlid_base + count) * sizeof(TXCI_CFG_DLID_RT_t);
 		offset += sizeof(TXCI_CFG_DLID_RT_t))
-		write_csr(dd, offset, 0);
+		write_csr(dd, FXR_TXCI_CFG_DLID_RT + offset, 0);
 	return 0;
 }
 

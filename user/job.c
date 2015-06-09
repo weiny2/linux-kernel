@@ -62,8 +62,8 @@ void hfi_job_init(struct hfi_userdata *ud)
 	struct hfi_userdata *job_info;
 	u16 res_mode;
 
-	ud->ctx.dlid_base = -1;
-	ud->ctx.pid_base = -1;
+	ud->ctx.dlid_base = HFI_LID_NONE;
+	ud->ctx.pid_base = HFI_PID_NONE;
 	ud->ctx.allow_phys_dlid = 1;	/* TODO */
 	ud->ctx.sl_mask = -1;		/* TODO - default allowed SLs */
 	INIT_LIST_HEAD(&ud->job_list);
@@ -134,10 +134,9 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 		return ret;
 	ud->ctx.pid_base = pid_base;
 	ud->ctx.pid_count = count;
+	ud->ctx.pid_mode = 0;
 
 	/* store other resource manager parameters */
-	/* TODO - TPID_CAM setup (pid_mode flag?) */
-	ud->ctx.pid_mode = job_setup->pid_mode;
 	ud->ctx.lid_offset = job_setup->lid_offset;
 	ud->ctx.lid_count = job_setup->lid_count;
 	ud->ctx.sl_mask = job_setup->sl_mask;
@@ -174,9 +173,9 @@ void hfi_job_free(struct hfi_userdata *ud)
 			/* not reservation owner, so just return */
 			/* TODO - likely need to implement reference count */
 			BUG_ON(!list_empty(&ud->job_list));
-			ud->ctx.pid_base = -1;
+			ud->ctx.pid_base = HFI_PID_NONE;
 			ud->ctx.pid_count = 0;
-			ud->ctx.dlid_base = -1;
+			ud->ctx.dlid_base = HFI_LID_NONE;
 			return;
 		}
 
