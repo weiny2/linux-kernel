@@ -89,3 +89,16 @@ int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 	 */
 	return 0;
 }
+
+/**
+ * opa_ib_do_send - perform a send on a QP
+ * @work: contains a pointer to the QP
+ *
+ * Process entries in the send work queue until credit or queue is
+ * exhausted.  Only allow one CPU to send a packet per QP (tasklet).
+ * Otherwise, two threads could send packets out of order.
+ */
+void opa_ib_do_send(struct work_struct *work)
+{
+	/* FXRTODO */
+}
