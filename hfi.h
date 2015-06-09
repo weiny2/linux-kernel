@@ -1480,27 +1480,6 @@ static inline u32 get_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 	return (u32) le64_to_cpu(*rcd->rcvhdrtail_kvaddr);
 }
 
-static inline u32 get_hdrqtail(const struct hfi1_ctxtdata *rcd)
-{
-	const struct hfi1_devdata *dd = rcd->dd;
-	u32 hdrqtail;
-
-	if (!HFI1_CAP_IS_KSET(DMA_RTAIL)) {
-		__le32 *rhf_addr;
-		u32 seq;
-
-		rhf_addr = (__le32 *) rcd->rcvhdrq +
-			rcd->head + dd->rhf_offset;
-		seq = rhf_rcv_seq(rhf_to_cpu(rhf_addr));
-		hdrqtail = rcd->head;
-		if (seq == rcd->seq_cnt)
-			hdrqtail++;
-	} else
-		hdrqtail = get_rcvhdrtail(rcd);
-
-	return hdrqtail;
-}
-
 /*
  * sysfs interface.
  */
@@ -1547,8 +1526,8 @@ void handle_eflags(struct hfi1_packet *packet);
 int process_receive_ib(struct hfi1_packet *packet);
 int process_receive_bypass(struct hfi1_packet *packet);
 int process_receive_error(struct hfi1_packet *packet);
-int process_receive_expected(struct hfi1_packet *packet);
-int process_receive_eager(struct hfi1_packet *packet);
+int kdeth_process_expected(struct hfi1_packet *packet);
+int kdeth_process_eager(struct hfi1_packet *packet);
 int process_receive_invalid(struct hfi1_packet *packet);
 
 extern rhf_rcv_function_ptr snoop_rhf_rcv_functions[8];

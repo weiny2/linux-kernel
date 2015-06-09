@@ -887,7 +887,7 @@ int process_receive_error(struct hfi1_packet *packet)
 	return RHF_RCV_CONTINUE;
 }
 
-int process_receive_expected(struct hfi1_packet *packet)
+int kdeth_process_expected(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
@@ -897,7 +897,7 @@ int process_receive_expected(struct hfi1_packet *packet)
 	return RHF_RCV_CONTINUE;
 }
 
-int process_receive_eager(struct hfi1_packet *packet)
+int kdeth_process_eager(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
