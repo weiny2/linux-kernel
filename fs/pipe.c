@@ -117,59 +117,53 @@ void pipe_wait(struct pipe_inode_info *pipe)
 }
 
 static int
-pipe_iov_copy_from_user(void *to, const struct iovec *iov, unsigned long len,
+pipe_iov_copy_from_user(void *to, struct iovec *iov, unsigned long len,
 			int atomic)
 {
 	unsigned long copy;
-	struct iovec this = *iov;
 
 	while (len > 0) {
-		while (!this.iov_len) {
+		while (!iov->iov_len)
 			iov++;
-			this = *iov;
-		}
-		copy = min_t(unsigned long, len, this.iov_len);
+		copy = min_t(unsigned long, len, iov->iov_len);
 
 		if (atomic) {
-			if (__copy_from_user_inatomic(to, this.iov_base, copy))
+			if (__copy_from_user_inatomic(to, iov->iov_base, copy))
 				return -EFAULT;
 		} else {
-			if (copy_from_user(to, this.iov_base, copy))
+			if (copy_from_user(to, iov->iov_base, copy))
 				return -EFAULT;
 		}
 		to += copy;
 		len -= copy;
-		this.iov_base += copy;
-		this.iov_len -= copy;
+		iov->iov_base += copy;
+		iov->iov_len -= copy;
 	}
 	return 0;
 }
 
 static int
-pipe_iov_copy_to_user(const struct iovec *iov, const void *from,
-		      unsigned long len, int atomic)
+pipe_iov_copy_to_user(struct iovec *iov, const void *from, unsigned long len,
+		      int atomic)
 {
 	unsigned long copy;
-	struct iovec this = *iov;
 
 	while (len > 0) {
-		while (!this.iov_len) {
+		while (!iov->iov_len)
 			iov++;
-			this = *iov;
-		}
-		copy = min_t(unsigned long, len, this.iov_len);
+		copy = min_t(unsigned long, len, iov->iov_len);
 
 		if (atomic) {
-			if (__copy_to_user_inatomic(this.iov_base, from, copy))
+			if (__copy_to_user_inatomic(iov->iov_base, from, copy))
 				return -EFAULT;
 		} else {
-			if (copy_to_user(this.iov_base, from, copy))
+			if (copy_to_user(iov->iov_base, from, copy))
 				return -EFAULT;
 		}
 		from += copy;
 		len -= copy;
-		this.iov_base += copy;
-		this.iov_len -= copy;
+		iov->iov_base += copy;
+		iov->iov_len -= copy;
 	}
 	return 0;
 }
@@ -178,7 +172,7 @@ pipe_iov_copy_to_user(const struct iovec *iov, const void *from,
  * Attempt to pre-fault in the user memory, so we can use atomic copies.
  * Returns the number of bytes not faulted in.
  */
-static int iov_fault_in_pages_write(const struct iovec *iov, unsigned long len)
+static int iov_fault_in_pages_write(struct iovec *iov, unsigned long len)
 {
 	while (!iov->iov_len)
 		iov++;
@@ -200,7 +194,7 @@ static int iov_fault_in_pages_write(const struct iovec *iov, unsigned long len)
 /*
  * Pre-fault in the user memory, so we can use atomic copies.
  */
-static void iov_fault_in_pages_read(const struct iovec *iov, unsigned long len)
+static void iov_fault_in_pages_read(struct iovec *iov, unsigned long len)
 {
 	while (!iov->iov_len)
 		iov++;
@@ -376,13 +370,14 @@ static const struct pipe_buf_operations packet_pipe_buf_ops = {
 };
 
 static ssize_t
-pipe_read(struct kiocb *iocb, const struct iovec *iov,
+pipe_read(struct kiocb *iocb, const struct iovec *_iov,
 	   unsigned long nr_segs, loff_t pos)
 {
 	struct file *filp = iocb->ki_filp;
 	struct pipe_inode_info *pipe = filp->private_data;
 	int do_wakeup;
 	ssize_t ret;
+	struct iovec *iov = (struct iovec *)_iov;
 	size_t total_len;
 
 	total_len = iov_length(iov, nr_segs);
@@ -498,13 +493,14 @@ static inline int is_packetized(struct file *file)
 }
 
 static ssize_t
-pipe_write(struct kiocb *iocb, const struct iovec *iov,
+pipe_write(struct kiocb *iocb, const struct iovec *_iov,
 	    unsigned long nr_segs, loff_t ppos)
 {
 	struct file *filp = iocb->ki_filp;
 	struct pipe_inode_info *pipe = filp->private_data;
 	ssize_t ret;
 	int do_wakeup;
+	struct iovec *iov = (struct iovec *)_iov;
 	size_t total_len;
 	ssize_t chars;
 
