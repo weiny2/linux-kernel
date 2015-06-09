@@ -360,6 +360,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		ctxt_attach.pid = ud->ctx.pid;
 		ctxt_attach.pid_base = ud->ctx.pid_base;
 		ctxt_attach.pid_count = ud->ctx.pid_count;
+		ctxt_attach.pid_mode = ud->ctx.pid_mode;
 		break;
 	case HFI_CMD_CTXT_DETACH:
 		/* release our assigned PID */
