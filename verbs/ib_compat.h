@@ -136,7 +136,14 @@ static inline u8 mtu_int_to_enum(int mtu)
 	case  4096: return IB_MTU_4096;
 	case  8192: return OPA_MTU_8192;
 	case 10240: return OPA_MTU_10240;
-	default: return IB_MTU_4096;
+	default: return -1;
 	}
+}
+
+static inline u8 mtu_int_to_enum_safe(int mtu, u8 if_bad_mtu)
+{
+	int ibmtu = mtu_int_to_enum(mtu);
+
+	return (ibmtu == -1) ? if_bad_mtu : ibmtu;
 }
 #endif

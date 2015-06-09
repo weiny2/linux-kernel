@@ -265,12 +265,6 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	int ret;
 	size_t lcpysz = IB_DEVICE_NAME_MAX;
 
-#if 0
-	ret = opa_ib_qp_init(dev);
-	if (ret)
-		goto err_qp_init;
-#endif
-
 	lcpysz = strlcpy(ibdev->name, name, lcpysz);
 	strlcpy(ibdev->name + lcpysz, "%d", lcpysz);
 	strncpy(ibdev->node_desc, init_utsname()->nodename,
@@ -403,11 +397,16 @@ static void opa_ib_init_port(struct opa_ib_data *ibd,
 	ibp->lid = 0;
 	ibp->sm_lid = 0;
 	ibp->link_width_active = OPA_LINK_WIDTH_4X;
+	/* FXRTODO - this should be not yet defined OPA_LINK_SPEED_32G */
 	ibp->link_speed_active = OPA_LINK_SPEED_25G;
+	/* Below should only set bits defined in OPA PortInfo.CapabilityMask */
 	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_CAP_MASK_NOTICE_SUP;
 	/* Set the default power on value */
 	ibp->pkeys[default_pkey_idx] = FXR_LIM_MGMT_P_KEY;
+
+	RCU_INIT_POINTER(ibp->qp0, NULL);
+	RCU_INIT_POINTER(ibp->qp1, NULL);
 }
 
 static int opa_ib_add(struct opa_core_device *odev)
@@ -438,6 +437,18 @@ static int opa_ib_add(struct opa_core_device *odev)
 	for (i = 0; i < num_ports; i++)
 		opa_ib_init_port(ibd, odev, i);
 
+	ida_init(&ibd->qpn_table);
+	spin_lock_init(&ibd->qpt_lock);
+	INIT_LIST_HEAD(&ibd->pending_mmaps);
+	spin_lock_init(&ibd->pending_lock);
+	ibd->mmap_offset = PAGE_SIZE;
+	spin_lock_init(&ibd->mmap_offset_lock);
+	spin_lock_init(&ibd->n_pds_lock);
+	spin_lock_init(&ibd->n_ahs_lock);
+	spin_lock_init(&ibd->n_cqs_lock);
+	spin_lock_init(&ibd->n_qps_lock);
+	spin_lock_init(&ibd->n_srqs_lock);
+
 	ret = opa_core_set_priv_data(&opa_ib_driver, odev, ibd);
 	if (ret)
 		goto priv_err;
@@ -462,6 +473,7 @@ static void opa_ib_remove(struct opa_core_device *odev)
 	if (!ibd)
 		return;
 	opa_ib_unregister_device(ibd);
+	ida_destroy(&ibd->qpn_table);
 	kfree(ibd);
 	opa_core_clear_priv_data(&opa_ib_driver, odev);
 }

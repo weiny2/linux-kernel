@@ -53,12 +53,14 @@
 #ifndef _OPA_VERBS_H_
 #define _OPA_VERBS_H_
 
+#include <linux/idr.h>
 #include <linux/slab.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/opa_smi.h>
 #include <rdma/opa_port_info.h>
 #include <rdma/opa_core.h>
 #include "ib_compat.h"
+#include "iowait.h"
 
 /* TODO - these carried from WFR driver */
 #define OPA_IB_MAX_RDMA_ATOMIC  16
@@ -68,10 +70,25 @@
 #define OPA_IB_PORT_NUM_PKEYS   16
 #define IB_DEFAULT_GID_PREFIX	cpu_to_be64(0xfe80000000000000ULL)
 
+/*
+ * Return the indexed PKEY from the port PKEY table.
+ */
+#define opa_ib_get_npkeys(ibd)	OPA_IB_PORT_NUM_PKEYS
+#define opa_ib_get_pkey(ibp, index) \
+	((index) >= ARRAY_SIZE((ibp)->pkeys) ? 0 : (ibp)->pkeys[(index)])
+
 /* TODO - placeholders */
+#define OPA_IB_NUM_DATA_VLS	8
 extern __be64 opa_ib_sys_guid;
 
 extern unsigned int opa_ib_max_cqes;
+extern unsigned int opa_ib_max_qp_wrs;
+extern unsigned int opa_ib_max_qps;
+extern unsigned int opa_ib_max_sges;
+
+struct opa_ucontext {
+	struct ib_ucontext ibucontext;
+};
 
 struct opa_ib_pd {
 	struct ib_pd ibpd;
@@ -81,32 +98,332 @@ struct opa_ib_pd {
 struct opa_ib_ah {
 	struct ib_ah ibah;
 	struct ib_ah_attr attr;
+	atomic_t refcount;
 };
 
-struct opa_ib_qp {
-	struct ib_qp ibqp;
+/*
+ * This structure is used by opa_ib_mmap() to validate an offset
+ * when an mmap() request is made.  The vm_area_struct then uses
+ * this as its vm_private_data.
+ */
+struct opa_ib_mmap_info {
+	struct list_head pending_mmaps;
+	struct ib_ucontext *context;
+	void *obj;
+	__u64 offset;
+	struct kref ref;
+	unsigned size;
 };
 
 struct opa_ib_cq {
 	struct ib_cq ibcq;
+	struct opa_ib_mmap_info *ip;
 };
 
 struct opa_ib_mr {
 	struct ib_mr ibmr;
 };
 
-struct opa_ucontext {
-	struct ib_ucontext ibucontext;
+/*
+ * Send work request queue entry.
+ * The size of the sg_list is determined when the QP is created and stored
+ * in qp->s_max_sge.
+ */
+struct opa_ib_swqe {
+	struct ib_send_wr wr;   /* don't use wr.sg_list */
+	u32 psn;                /* first packet sequence number */
+	u32 lpsn;               /* last packet sequence number */
+	u32 ssn;                /* send sequence number */
+	u32 length;             /* total length of data in sg_list */
+	struct ib_sge sg_list[0];
 };
 
+/*
+ * Receive work request queue entry.
+ * The size of the sg_list is determined when the QP (or SRQ) is created
+ * and stored in qp->r_rq.max_sge (or srq->rq.max_sge).
+ */
+struct opa_ib_rwqe {
+	u64 wr_id;
+	u8 num_sge;
+	struct ib_sge sg_list[0];
+};
+
+/*
+ * This structure is used to contain the head pointer, tail pointer,
+ * and receive work queue entries as a single memory allocation so
+ * it can be mmap'ed into user space.
+ * Note that the wq array elements are variable size so you can't
+ * just index into the array to get the N'th element;
+ * use get_rwqe_ptr() instead.
+ */
+struct opa_ib_rwq {
+	u32 head;               /* new work requests posted to the head */
+	u32 tail;               /* receives pull requests from here. */
+	struct opa_ib_rwqe wq[0];
+};
+
+struct opa_ib_rq {
+	struct opa_ib_rwq *wq;
+	u32 size;               /* size of RWQE array */
+	u8 max_sge;
+	/* protect changes in this struct */
+	spinlock_t lock ____cacheline_aligned_in_smp;
+};
+
+struct opa_ib_srq {
+	struct ib_srq ibsrq;
+	struct opa_ib_rq rq;
+	struct opa_ib_mmap_info *ip;
+	/* send signal when number of RWQEs < limit */
+	u32 limit;
+};
+
+struct opa_ib_sge_state {
+	struct ib_sge *sg_list;	/* next SGE to be used if any */
+	struct ib_sge sge;	/* progress state for the current SGE */
+	u32 total_len;
+	u8 num_sge;
+};
+
+/*
+ * This structure holds the information that the send tasklet needs
+ * to send a RDMA read response or atomic operation.
+ */
+struct opa_ib_ack_entry {
+	u8 opcode;
+	u8 sent;
+	u32 psn;
+	u32 lpsn;
+	union {
+		struct ib_sge rdma_sge;
+		u64 atomic_data;
+	};
+};
+
+/*
+ * Variables prefixed with s_ are for the requester (sender).
+ * Variables prefixed with r_ are for the responder (receiver).
+ * Variables prefixed with ack_ are for responder replies.
+ *
+ * Common variables are protected by both r_rq.lock and s_lock in that order
+ * which only happens in modify_qp() or changing the QP 'state'.
+ */
+struct opa_ib_qp {
+	struct ib_qp ibqp;
+	/* read mostly fields above and below */
+	struct ib_ah_attr remote_ah_attr;
+	struct ib_ah_attr alt_ah_attr;
+	struct opa_ib_swqe *s_wq;  /* send work queue */
+	struct opa_ib_mmap_info *ip;
+	unsigned long timeout_jiffies;  /* computed from timeout */
+
+	enum ib_mtu path_mtu;
+	u32 remote_qpn;
+	u32 pmtu;		/* decoded from path_mtu */
+	u32 qkey;               /* QKEY for this QP (for UD or RD) */
+	u32 s_size;             /* send work queue size */
+	u32 s_rnr_timeout;      /* number of milliseconds for RNR timeout */
+
+	u8 state;               /* QP state */
+	u8 qp_access_flags;
+	u8 alt_timeout;         /* Alternate path timeout for this QP */
+	u8 timeout;             /* Timeout for this QP */
+	u8 s_srate;
+	u8 s_mig_state;
+	u8 port_num;
+	u8 s_pkey_index;        /* PKEY index to use */
+	u8 s_alt_pkey_index;    /* Alternate path PKEY index to use */
+	u8 r_max_rd_atomic;     /* max number of RDMA read/atomic to receive */
+	u8 s_max_rd_atomic;     /* max number of RDMA read/atomic to send */
+	u8 s_retry_cnt;         /* number of times to retry */
+	u8 s_rnr_retry_cnt;
+	u8 r_min_rnr_timer;     /* retry timeout value for RNR NAKs */
+	u8 s_max_sge;           /* size of s_wq->sg_list */
+	u8 s_draining;
+	u8 s_sc;		/* SC[0..4] for next packet */
+
+	/* start of read/write fields */
+
+	atomic_t refcount ____cacheline_aligned_in_smp;
+	wait_queue_head_t wait;
+
+	struct opa_ib_ack_entry s_ack_queue[OPA_IB_MAX_RDMA_ATOMIC + 1]
+		____cacheline_aligned_in_smp;
+	struct opa_ib_sge_state s_rdma_read_sge;
+
+	spinlock_t r_lock ____cacheline_aligned_in_smp;      /* used for APM */
+	unsigned long r_aflags;
+	u64 r_wr_id;            /* ID for current receive WQE */
+	u32 r_ack_psn;          /* PSN for next ACK or atomic ACK */
+	u32 r_len;              /* total length of r_sge */
+	u32 r_rcv_len;          /* receive data len processed */
+	u32 r_psn;              /* expected rcv packet sequence number */
+	u32 r_msn;              /* message sequence number */
+	u8 r_state;             /* opcode of last packet received */
+	u8 r_flags;
+	u8 r_head_ack_queue;    /* index into s_ack_queue[] */
+	struct list_head rspwait;	/* link for waiting to respond */
+	struct opa_ib_sge_state r_sge;	/* current receive data */
+	struct opa_ib_rq r_rq;		/* receive work queue */
+
+	spinlock_t s_lock ____cacheline_aligned_in_smp;
+	unsigned long s_aflags;
+	struct opa_ib_sge_state *s_cur_sge;
+	u32 s_flags;
+	struct opa_ib_swqe *s_wqe;
+	struct opa_ib_sge_state s_sge;     /* current send request data */
+#if 0
+	struct opa_ib_mregion *s_rdma_mr;
+#endif
+	u32 s_cur_size;         /* size of send packet in bytes */
+	u32 s_len;              /* total length of s_sge */
+	u32 s_rdma_read_len;    /* total length of s_rdma_read_sge */
+	u32 s_next_psn;         /* PSN for next request */
+	u32 s_last_psn;         /* last response PSN processed */
+	u32 s_sending_psn;      /* lowest PSN that is being sent */
+	u32 s_sending_hpsn;     /* highest PSN that is being sent */
+	u32 s_psn;              /* current packet sequence number */
+	u32 s_ack_rdma_psn;     /* PSN for sending RDMA read responses */
+	u32 s_ack_psn;          /* PSN for acking sends and RDMA writes */
+	u32 s_head;             /* new entries added here */
+	u32 s_tail;             /* next entry to process */
+	u32 s_cur;              /* current work queue entry */
+	u32 s_acked;            /* last un-ACK'ed entry */
+	u32 s_last;             /* last completed entry */
+	u32 s_ssn;              /* SSN of tail entry */
+	u32 s_lsn;              /* limit sequence number (credit) */
+	u16 s_rdma_ack_cnt;
+	s8 s_ahgidx;
+	u8 s_state;             /* opcode of last packet sent */
+	u8 s_ack_state;         /* opcode of packet to ACK */
+	u8 s_nak_state;         /* non-zero if NAK is pending */
+	u8 r_nak_state;         /* non-zero if NAK is pending */
+	u8 s_retry;             /* requester retry counter */
+	u8 s_rnr_retry;         /* requester RNR retry counter */
+	u8 s_num_rd_atomic;     /* number of RDMA read/atomic pending */
+	u8 s_tail_ack_queue;    /* index into s_ack_queue[] */
+
+	struct opa_ib_sge_state s_ack_rdma_sge;
+	struct timer_list s_timer;
+	struct iowait s_iowait;
+
+	struct ib_sge r_sg_list[0] /* verified SGEs */
+		____cacheline_aligned_in_smp;
+};
+
+/*
+ * Atomic bit definitions for r_aflags.
+ */
+#define HFI1_R_WRID_VALID        0
+#define HFI1_R_REWIND_SGE        1
+
+/*
+ * Atomic bit definitions for s_aflags.
+ */
+#define HFI1_S_ECN		0
+
+/*
+ * Bit definitions for r_flags.
+ */
+#define HFI1_R_REUSE_SGE 0x01
+#define HFI1_R_RDMAR_SEQ 0x02
+#define HFI1_R_RSP_NAK   0x04
+#define HFI1_R_RSP_SEND  0x08
+#define HFI1_R_COMM_EST  0x10
+
+/*
+ * Bit definitions for s_flags.
+ *
+ * HFI1_S_SIGNAL_REQ_WR - set if QP send WRs contain completion signaled
+ * HFI1_S_BUSY - send tasklet is processing the QP
+ * HFI1_S_TIMER - the RC retry timer is active
+ * HFI1_S_ACK_PENDING - an ACK is waiting to be sent after RDMA read/atomics
+ * HFI1_S_WAIT_FENCE - waiting for all prior RDMA read or atomic SWQEs
+ *                         before processing the next SWQE
+ * HFI1_S_WAIT_RDMAR - waiting for a RDMA read or atomic SWQE to complete
+ *                         before processing the next SWQE
+ * HFI1_S_WAIT_RNR - waiting for RNR timeout
+ * HFI1_S_WAIT_SSN_CREDIT - waiting for RC credits to process next SWQE
+ * HFI1_S_WAIT_DMA - waiting for send DMA queue to drain before generating
+ *                  next send completion entry not via send DMA
+ * HFI1_S_WAIT_PIO - waiting for a send buffer to be available
+ * HFI1_S_WAIT_TX - waiting for a struct verbs_txreq to be available
+ * HFI1_S_WAIT_DMA_DESC - waiting for DMA descriptors to be available
+ * HFI1_S_WAIT_KMEM - waiting for kernel memory to be available
+ * HFI1_S_WAIT_PSN - waiting for a packet to exit the send DMA queue
+ * HFI1_S_WAIT_ACK - waiting for an ACK packet before sending more requests
+ * HFI1_S_SEND_ONE - send one packet, request ACK, then wait for ACK
+ */
+#define HFI1_S_SIGNAL_REQ_WR	0x0001
+#define HFI1_S_BUSY		0x0002
+#define HFI1_S_TIMER		0x0004
+#define HFI1_S_RESP_PENDING	0x0008
+#define HFI1_S_ACK_PENDING	0x0010
+#define HFI1_S_WAIT_FENCE	0x0020
+#define HFI1_S_WAIT_RDMAR	0x0040
+#define HFI1_S_WAIT_RNR		0x0080
+#define HFI1_S_WAIT_SSN_CREDIT	0x0100
+#define HFI1_S_WAIT_DMA		0x0200
+#define HFI1_S_WAIT_PIO		0x0400
+#define HFI1_S_WAIT_TX		0x0800
+#define HFI1_S_WAIT_DMA_DESC	0x1000
+#define HFI1_S_WAIT_KMEM	0x2000
+#define HFI1_S_WAIT_PSN		0x4000
+#define HFI1_S_WAIT_ACK		0x8000
+#define HFI1_S_SEND_ONE		0x10000
+#define HFI1_S_UNLIMITED_CREDIT	0x20000
+
+/*
+ * Wait flags that would prevent any packet type from being sent.
+ */
+#define HFI1_S_ANY_WAIT_IO (HFI1_S_WAIT_PIO | HFI1_S_WAIT_TX | \
+	HFI1_S_WAIT_DMA_DESC | HFI1_S_WAIT_KMEM)
+
+/*
+ * Wait flags that would prevent send work requests from making progress.
+ */
+#define HFI1_S_ANY_WAIT_SEND (HFI1_S_WAIT_FENCE | HFI1_S_WAIT_RDMAR | \
+	HFI1_S_WAIT_RNR | HFI1_S_WAIT_SSN_CREDIT | HFI1_S_WAIT_DMA | \
+	HFI1_S_WAIT_PSN | HFI1_S_WAIT_ACK)
+
+#define HFI1_S_ANY_WAIT (HFI1_S_ANY_WAIT_IO | HFI1_S_ANY_WAIT_SEND)
+
+/*
+ * Since struct opa_ib_swqe is not a fixed size, we can't simply index into
+ * struct opa_ib_qp.s_wq.  This function does the array index computation.
+ */
+static inline struct opa_ib_swqe *get_swqe_ptr(struct opa_ib_qp *qp,
+					      unsigned n)
+{
+	return (struct opa_ib_swqe *)((char *)qp->s_wq +
+				     (sizeof(struct opa_ib_swqe) +
+				      qp->s_max_sge *
+				      sizeof(struct ib_sge)) * n);
+}
+
+/*
+ * Since struct opa_ib_rwqe is not a fixed size, we can't simply index into
+ * struct opa_ib_rwq.wq.  This function does the array index computation.
+ */
+static inline struct opa_ib_rwqe *get_rwqe_ptr(struct opa_ib_rq *rq, unsigned n)
+{
+	return (struct opa_ib_rwqe *)
+		((char *) rq->wq->wq +
+		 (sizeof(struct opa_ib_rwqe) +
+		  rq->max_sge * sizeof(struct ib_sge)) * n);
+}
+
+
 struct opa_ib_portdata {
+	struct opa_ib_qp __rcu *qp0;
+	struct opa_ib_qp __rcu *qp1;
 	__be64 gid_prefix;
 	__be64 guid;
+
 	u32 lstate;
 	u32 ibmtu;
 	u32 port_cap_flags;
-	u16 lid;
-	u16 sm_lid;
 	u16 link_speed_supported;
 	u16 link_speed_enabled;
 	u16 link_speed_active;
@@ -117,20 +434,44 @@ struct opa_ib_portdata {
 	u16 pkeys[OPA_IB_PORT_NUM_PKEYS];
 	u16 pkey_violations;
 	u16 qkey_violations;
+	u16 lid;
+	u16 sm_lid;
 	u8 lmc;
 	u8 max_vls;
 	u8 sm_sl;
 	u8 subnet_timeout;
+	/* the first 16 entries are sl_to_vl for !STL */
+	u8 sl_to_sc[32];
+	u8 sc_to_sl[32];
+	u8 sc_to_vl[32];
+	u32 vl_mtu[OPA_IB_NUM_DATA_VLS];
 };
 
 struct opa_ib_data {
-	struct opa_core_device *odev;
 	struct ib_device ibdev;
+	struct opa_core_device *odev;
+	struct device *parent_dev;
 	__be64 node_guid;
 	u8 num_pports;
 	u8 oui[3];
 	struct opa_ib_portdata *pport;
-	struct device *parent_dev;
+
+	struct ida qpn_table;
+	spinlock_t qpt_lock;
+	struct list_head pending_mmaps;
+	spinlock_t pending_lock;
+	u32 mmap_offset;
+	spinlock_t mmap_offset_lock;
+	u32 n_pds_allocated;
+	spinlock_t n_pds_lock;
+	u32 n_ahs_allocated;
+	spinlock_t n_ahs_lock;
+	u32 n_cqs_allocated;
+	spinlock_t n_cqs_lock;
+	u32 n_qps_allocated;
+	spinlock_t n_qps_lock;
+	u32 n_srqs_allocated;
+	spinlock_t n_srqs_lock;
 };
 
 #define to_opa_ibpd(pd)	container_of((pd), struct opa_ib_pd, ibpd)
@@ -138,6 +479,7 @@ struct opa_ib_data {
 #define to_opa_ibqp(qp)	container_of((qp), struct opa_ib_qp, ibqp)
 #define to_opa_ibcq(cq)	container_of((cq), struct opa_ib_cq, ibcq)
 #define to_opa_ibmr(mr)	container_of((mr), struct opa_ib_mr, ibmr)
+#define to_opa_ibsrq(srq)	container_of((srq), struct opa_ib_srq, ibsrq)
 #define to_opa_ibdata(ibd)	container_of((ibd), struct opa_ib_data, ibdev)
 #define to_opa_ucontext(ibu)	container_of((ibu),\
 				struct opa_ucontext, ibucontext)
@@ -159,6 +501,7 @@ struct ib_pd *opa_ib_alloc_pd(struct ib_device *ibdev,
 			      struct ib_ucontext *context,
 			      struct ib_udata *udata);
 int opa_ib_dealloc_pd(struct ib_pd *ibpd);
+int opa_ib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 struct ib_ah *opa_ib_create_ah(struct ib_pd *pd,
 			       struct ib_ah_attr *ah_attr);
 int opa_ib_destroy_ah(struct ib_ah *ibah);
@@ -167,6 +510,7 @@ int opa_ib_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
 struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 			       struct ib_qp_init_attr *init_attr,
 			       struct ib_udata *udata);
+struct opa_ib_qp *opa_ib_lookup_qpn(struct opa_ib_portdata *ibp, u32 qpn);
 int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		  int attr_mask, struct ib_udata *udata);
 int opa_ib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
@@ -181,6 +525,11 @@ int opa_ib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flag
 int opa_ib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
 struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc);
 int opa_ib_dereg_mr(struct ib_mr *ibmr);
+struct opa_ib_mmap_info *opa_ib_create_mmap_info(struct opa_ib_data *ibd,
+						 u32 size,
+						 struct ib_ucontext *context,
+						 void *obj);
+void opa_ib_release_mmap_info(struct kref *ref);
 int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr);
 int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
@@ -188,4 +537,5 @@ int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 			struct ib_wc *in_wc, struct ib_grh *in_grh,
 			struct ib_mad *in_mad, struct ib_mad *out_mad);
+void opa_ib_do_send(struct work_struct *work);
 #endif

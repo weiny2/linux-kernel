@@ -92,7 +92,7 @@ int opa_ib_dealloc_pd(struct ib_pd *ibpd)
 	return 0;
 }
 
-static int opa_ib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
+int opa_ib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 {
 	return 0;
 }
