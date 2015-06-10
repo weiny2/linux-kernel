@@ -1156,29 +1156,27 @@ static struct device **create_namespace_io(struct nd_region *nd_region)
 	return devs;
 }
 
-static bool has_uuid_at_pos(struct nd_region *nd_region, u8 *uuid, u64 cookie, u16 pos)
+static bool has_uuid_at_pos(struct nd_region *nd_region, u8 *uuid,
+		u64 cookie, u16 pos)
 {
-	struct nd_namespace_label __iomem *found = NULL;
+	struct nd_namespace_label *found = NULL;
 	int i;
 
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_namespace_label __iomem *nd_label;
-		u8 label_uuid[NSLABEL_UUID_LEN];
-		u8 *found_uuid = NULL;
+		struct nd_namespace_label *nd_label;
+		bool found_uuid = false;
 		int l;
 
 		for_each_label(l, nd_label, nd_mapping->labels) {
-			u64 isetcookie = readq(&nd_label->isetcookie);
-			u16 position = readw(&nd_label->position);
-			u16 nlabel = readw(&nd_label->nlabel);
+			u64 isetcookie = __le64_to_cpu(nd_label->isetcookie);
+			u16 position = __le16_to_cpu(nd_label->position);
+			u16 nlabel = __le16_to_cpu(nd_label->nlabel);
 
 			if (isetcookie != cookie)
 				continue;
 
-			memcpy_fromio(label_uuid, nd_label->uuid,
-					NSLABEL_UUID_LEN);
-			if (memcmp(label_uuid, uuid, NSLABEL_UUID_LEN) != 0)
+			if (memcmp(nd_label->uuid, uuid, NSLABEL_UUID_LEN) != 0)
 				continue;
 
 			if (found_uuid) {
@@ -1187,7 +1185,7 @@ static bool has_uuid_at_pos(struct nd_region *nd_region, u8 *uuid, u64 cookie, u
 						__func__);
 				return false;
 			}
-			found_uuid = label_uuid;
+			found_uuid = true;
 			if (nlabel != nd_region->ndr_mappings)
 				continue;
 			if (position != pos)
@@ -1201,28 +1199,23 @@ static bool has_uuid_at_pos(struct nd_region *nd_region, u8 *uuid, u64 cookie, u
 	return found != NULL;
 }
 
-static int select_pmem_uuid(struct nd_region *nd_region, u8 *pmem_uuid)
+static int select_pmem_id(struct nd_region *nd_region, u8 *pmem_id)
 {
-	struct nd_namespace_label __iomem *select = NULL;
+	struct nd_namespace_label *select = NULL;
 	int i;
 
-	if (!pmem_uuid)
+	if (!pmem_id)
 		return -ENODEV;
 
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_namespace_label __iomem *nd_label;
+		struct nd_namespace_label *nd_label;
 		u64 hw_start, hw_end, pmem_start, pmem_end;
 		int l;
 
-		for_each_label(l, nd_label, nd_mapping->labels) {
-			u8 label_uuid[NSLABEL_UUID_LEN];
-
-			memcpy_fromio(label_uuid, nd_label->uuid,
-					NSLABEL_UUID_LEN);
-			if (memcmp(label_uuid, pmem_uuid, NSLABEL_UUID_LEN) == 0)
+		for_each_label(l, nd_label, nd_mapping->labels)
+			if (memcmp(nd_label->uuid, pmem_id, NSLABEL_UUID_LEN) == 0)
 				break;
-		}
 
 		if (!nd_label) {
 			WARN_ON(1);
@@ -1236,15 +1229,15 @@ static int select_pmem_uuid(struct nd_region *nd_region, u8 *pmem_uuid)
 		 */
 		hw_start = nd_mapping->start;
 		hw_end = hw_start + nd_mapping->size;
-		pmem_start = readq(&select->dpa);
-		pmem_end = pmem_start + readq(&select->rawsize);
+		pmem_start = __le64_to_cpu(select->dpa);
+		pmem_end = pmem_start + __le64_to_cpu(select->rawsize);
 		if (pmem_start == hw_start && pmem_end <= hw_end)
 			/* pass */;
 		else
 			return -EINVAL;
 
-		nd_set_label(nd_mapping->labels, select, 0);
-		nd_set_label(nd_mapping->labels, (void __iomem *) NULL, 1);
+		nd_mapping->labels[0] = select;
+		nd_mapping->labels[1] = NULL;
 	}
 	return 0;
 }
@@ -1257,10 +1250,10 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 		struct nd_namespace_pmem *nspm)
 {
 	u64 cookie = nd_region_interleave_set_cookie(nd_region);
-	struct nd_namespace_label __iomem *nd_label;
-	u8 select_uuid[NSLABEL_UUID_LEN];
+	struct nd_namespace_label *nd_label;
+	u8 select_id[NSLABEL_UUID_LEN];
 	resource_size_t size = 0;
-	u8 *pmem_uuid = NULL;
+	u8 *pmem_id = NULL;
 	int rc = -ENODEV, l;
 	u16 i;
 
@@ -1272,16 +1265,14 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 	 * with any mapping as the reference label
 	 */
 	for_each_label(l, nd_label, nd_region->mapping[0].labels) {
-		u64 isetcookie = readq(&nd_label->isetcookie);
-		u8 label_uuid[NSLABEL_UUID_LEN];
+		u64 isetcookie = __le64_to_cpu(nd_label->isetcookie);
 
 		if (isetcookie != cookie)
 			continue;
 
-		memcpy_fromio(label_uuid, nd_label->uuid,
-				NSLABEL_UUID_LEN);
 		for (i = 0; nd_region->ndr_mappings; i++)
-			if (!has_uuid_at_pos(nd_region, label_uuid, cookie, i))
+			if (!has_uuid_at_pos(nd_region, nd_label->uuid,
+						cookie, i))
 				break;
 		if (i < nd_region->ndr_mappings) {
 			/*
@@ -1292,7 +1283,7 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 			 */
 			rc = -EINVAL;
 			goto err;
-		} else if (pmem_uuid) {
+		} else if (pmem_id) {
 			/*
 			 * If there is more than one valid uuid set, we
 			 * need userspace to clean this up.
@@ -1300,8 +1291,8 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 			rc = -EBUSY;
 			goto err;
 		}
-		memcpy(select_uuid, label_uuid, NSLABEL_UUID_LEN);
-		pmem_uuid = select_uuid;
+		memcpy(select_id, nd_label->uuid, NSLABEL_UUID_LEN);
+		pmem_id = select_id;
 	}
 
 	/*
@@ -1312,18 +1303,17 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 	 * the dimm being enabled (i.e. nd_label_reserve_dpa()
 	 * succeeded).
 	 */
-	rc = select_pmem_uuid(nd_region, pmem_uuid);
+	rc = select_pmem_id(nd_region, pmem_id);
 	if (rc)
 		goto err;
 
 	/* Calculate total size and populate namespace properties from label0 */
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nd_namespace_label __iomem *label0;
+		struct nd_namespace_label *label0 = nd_mapping->labels[0];
 
-		label0 = nd_get_label(nd_mapping->labels, 0);
-		size += readq(&label0->rawsize);
-		if (readw(&label0->position) != 0)
+		size += __le64_to_cpu(label0->rawsize);
+		if (__le16_to_cpu(label0->position) != 0)
 			continue;
 		WARN_ON(nspm->alt_name || nspm->uuid);
 		nspm->alt_name = kmemdup((void __force *) label0->name,
@@ -1467,9 +1457,8 @@ void nd_region_create_blk_seed(struct nd_region *nd_region)
 static struct device **create_namespace_blk(struct nd_region *nd_region)
 {
 	struct nd_mapping *nd_mapping = &nd_region->mapping[0];
-	struct nd_namespace_label __iomem *nd_label;
+	struct nd_namespace_label *nd_label;
 	struct device *dev, **devs = NULL;
-	u8 label_uuid[NSLABEL_UUID_LEN];
 	struct nd_namespace_blk *nsblk;
 	struct nvdimm_drvdata *ndd;
 	int i, l, count = 0;
@@ -1480,7 +1469,7 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 
 	ndd = to_ndd(nd_mapping);
 	for_each_label(l, nd_label, nd_mapping->labels) {
-		u32 flags = readl(&nd_label->flags);
+		u32 flags = __le32_to_cpu(nd_label->flags);
 		char *name[NSLABEL_NAME_LEN];
 		struct device **__devs;
 
@@ -1489,13 +1478,12 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 		else
 			continue;
 
-		memcpy_fromio(label_uuid, nd_label->uuid, NSLABEL_UUID_LEN);
 		for (i = 0; i < count; i++) {
 			nsblk = to_nd_namespace_blk(devs[i]);
-			if (memcmp(nsblk->uuid, label_uuid,
+			if (memcmp(nsblk->uuid, nd_label->uuid,
 						NSLABEL_UUID_LEN) == 0) {
 				res = nsblk_add_resource(nd_region, ndd, nsblk,
-						readq(&nd_label->dpa));
+						__le64_to_cpu(nd_label->dpa));
 				if (!res)
 					goto err;
 				nd_dbg_dpa(nd_region, ndd, res, "%s assign\n",
@@ -1520,16 +1508,17 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 		dev_set_name(dev, "namespace%d.%d", nd_region->id, count);
 		devs[count++] = dev;
 		nsblk->id = -1;
-		nsblk->lbasize = readq(&nd_label->lbasize);
-		nsblk->uuid = kmemdup(label_uuid, NSLABEL_UUID_LEN, GFP_KERNEL);
+		nsblk->lbasize = __le64_to_cpu(nd_label->lbasize);
+		nsblk->uuid = kmemdup(nd_label->uuid, NSLABEL_UUID_LEN,
+				GFP_KERNEL);
 		if (!nsblk->uuid)
 			goto err;
-		memcpy_fromio(name, nd_label->name, NSLABEL_NAME_LEN);
+		memcpy(name, nd_label->name, NSLABEL_NAME_LEN);
 		if (name[0])
 			nsblk->alt_name = kmemdup(name, NSLABEL_NAME_LEN,
 					GFP_KERNEL);
 		res = nsblk_add_resource(nd_region, ndd, nsblk,
-				readq(&nd_label->dpa));
+				__le64_to_cpu(nd_label->dpa));
 		if (!res)
 			goto err;
 		nd_dbg_dpa(nd_region, ndd, res, "%s assign\n",
@@ -1597,15 +1586,15 @@ static int init_active_labels(struct nd_region *nd_region)
 		dev_dbg(ndd->dev, "%s: %d\n", __func__, count);
 		if (!count)
 			continue;
-		nd_mapping->labels = kcalloc(count + 1,
-				sizeof(struct nd_namespace_label *), GFP_KERNEL);
+		nd_mapping->labels = kcalloc(count + 1, sizeof(void *),
+				GFP_KERNEL);
 		if (!nd_mapping->labels)
 			return -ENOMEM;
 		for (j = 0; j < count; j++) {
-			struct nd_namespace_label __iomem *label;
+			struct nd_namespace_label *label;
 
 			label = nd_label_active(ndd, j);
-			nd_set_label(nd_mapping->labels, label, j);
+			nd_mapping->labels[j] = label;
 		}
 	}
 

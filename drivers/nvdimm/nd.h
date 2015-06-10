@@ -47,22 +47,22 @@ struct nd_region_namespaces {
 	int active;
 };
 
-static inline struct nd_namespace_index __iomem *to_namespace_index(
+static inline struct nd_namespace_index *to_namespace_index(
 		struct nvdimm_drvdata *ndd, int i)
 {
 	if (i < 0)
 		return NULL;
 
-	return ((void __iomem *) ndd->data + sizeof_namespace_index(ndd) * i);
+	return ndd->data + sizeof_namespace_index(ndd) * i;
 }
 
-static inline struct nd_namespace_index __iomem *to_current_namespace_index(
+static inline struct nd_namespace_index *to_current_namespace_index(
 		struct nvdimm_drvdata *ndd)
 {
 	return to_namespace_index(ndd, ndd->ns_current);
 }
 
-static inline struct nd_namespace_index __iomem *to_next_namespace_index(
+static inline struct nd_namespace_index *to_next_namespace_index(
 		struct nvdimm_drvdata *ndd)
 {
 	return to_namespace_index(ndd, ndd->ns_next);
@@ -74,26 +74,8 @@ static inline struct nd_namespace_index __iomem *to_next_namespace_index(
 		(unsigned long long) (res ? resource_size(res) : 0), \
 		(unsigned long long) (res ? res->start : 0), ##arg)
 
-/* sparse helpers */
-static inline void nd_set_label(struct nd_namespace_label **labels,
-		struct nd_namespace_label __iomem *label, int idx)
-{
-	labels[idx] = (void __force *) label;
-}
-
-static inline struct nd_namespace_label __iomem *nd_get_label(
-		struct nd_namespace_label **labels, int idx)
-{
-	struct nd_namespace_label __iomem *label = NULL;
-
-	if (labels)
-		label = (struct nd_namespace_label __iomem *) labels[idx];
-
-	return label;
-}
-
 #define for_each_label(l, label, labels) \
-	for (l = 0; (label = nd_get_label(labels, l)); l++)
+	for (l = 0; (label = labels ? labels[l] : NULL); l++)
 
 #define for_each_dpa_resource(ndd, res) \
 	for (res = (ndd)->dpa.child; res; res = res->sibling)

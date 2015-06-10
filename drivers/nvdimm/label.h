@@ -123,13 +123,11 @@ static inline int nd_label_next_nsindex(int index)
 
 struct nvdimm_drvdata;
 int nd_label_validate(struct nvdimm_drvdata *ndd);
-void nd_label_copy(struct nvdimm_drvdata *ndd,
-		struct nd_namespace_index __iomem *dst,
-		struct nd_namespace_index __iomem *src);
+void nd_label_copy(struct nvdimm_drvdata *ndd, struct nd_namespace_index *dst,
+		struct nd_namespace_index *src);
 size_t sizeof_namespace_index(struct nvdimm_drvdata *ndd);
 int nd_label_active_count(struct nvdimm_drvdata *ndd);
-struct nd_namespace_label __iomem *nd_label_active(
-		struct nvdimm_drvdata *ndd, int n);
+struct nd_namespace_label *nd_label_active(struct nvdimm_drvdata *ndd, int n);
 u32 nd_label_alloc_slot(struct nvdimm_drvdata *ndd);
 bool nd_label_free_slot(struct nvdimm_drvdata *ndd, u32 slot);
 u32 nd_label_nfree(struct nvdimm_drvdata *ndd);
