@@ -418,120 +418,102 @@ drop:
 	return;
 }
 
-/*
- * handle_receive_interrupt - receive a packet
- * @rcd: the context
- *
- * Called from interrupt handler for errors or receive interrupt.
- */
-void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
+static inline u32 init_packet(struct hfi1_ctxtdata *rcd,
+			      struct hfi1_packet *packet)
 {
-	struct hfi1_devdata *dd = rcd->dd;
-	__le32 *rhf_addr;
-	u64 rhf;
-	void *ebuf;
-	const u32 rsize = rcd->rcvhdrqentsize;        /* words */
-	const u32 maxcnt = rcd->rcvhdrq_cnt * rsize;   /* words */
-	u32 etail = -1, l, hdrqtail;
-	struct hfi1_message_header *hdr;
-	u32 etype, hlen, tlen, i = 0, updegr = 0;
-	int last;
+
+	packet->rsize = rcd->rcvhdrqentsize; /* words */
+	packet->maxcnt = rcd->rcvhdrq_cnt * packet->rsize; /* words */
+	packet->rcd = rcd;
+	packet->updegr = 0;
+	packet->etail = -1;
+	packet->rhf_addr = (__le32 *) rcd->rcvhdrq + rcd->head +
+			   rcd->dd->rhf_offset;
+	packet->rhf = rhf_to_cpu(packet->rhf_addr);
+	packet->rhqoff = rcd->head;
+	packet->numpkt = 1;
+	return packet->rhqoff;
+
+}
+
+#define RCV_PKT_OK 0x0
+#define RCV_PKT_MAX 0x1
+
+static inline int process_rcv_packet(struct hfi1_packet *packet)
+{
+	int ret = RCV_PKT_OK;
+
+	packet->hdr = hfi1_get_msgheader(packet->rcd->dd,
+					 packet->rhf_addr);
+	packet->hlen = (u8 *)packet->rhf_addr - (u8 *)packet->hdr;
+	packet->etype = rhf_rcv_type(packet->rhf);
+	/* total length */
+	packet->tlen = rhf_pkt_len(packet->rhf); /* in bytes */
+	packet->ebuf = NULL;
+
+	/*
+	 * Call a type specific handler for the packet. We
+	 * should be able to trust that etype won't be beyond
+	 * the range of valid indexes. If so something is really
+	 * wrong and we can probably just let things come
+	 * crashing down. There is no need to eat another
+	 * comparison in this performance critical code.
+	 */
+	packet->rcd->dd->rhf_rcv_function_map[packet->etype](packet);
+
+	/* Set up for the next packet */
+	packet->rhqoff += packet->rsize;
+	if (packet->rhqoff >= packet->maxcnt)
+		packet->rhqoff = 0;
+	if (packet->numpkt == MAX_PKT_RECV)
+		ret = RCV_PKT_MAX;
+
+	packet->rhf_addr = (__le32 *) packet->rcd->rcvhdrq + packet->rhqoff +
+				      packet->rcd->dd->rhf_offset;
+	packet->rhf = rhf_to_cpu(packet->rhf_addr);
+
+	packet->numpkt++;
+
+	return ret;
+}
+
+static inline void process_rcv_update(int last, struct hfi1_packet *packet)
+{
+	/*
+	 * Update head regs etc., every 16 packets, if not last pkt,
+	 * to help prevent rcvhdrq overflows, when many packets
+	 * are processed and queue is nearly full.
+	 * Don't request an interrupt for intermediate updates.
+	 */
+	if (!last && !(packet->numpkt & 0xf)) {
+		update_usrhead(packet->rcd, packet->rhqoff, packet->updegr,
+			       packet->etail, 0, 0);
+		packet->updegr = 0;
+	}
+}
+
+static inline void finish_packet(struct hfi1_packet *packet)
+{
+
+	/*
+	 * Nothing we need to free for the packet.
+	 *
+	 * The only thing we need to do is a final update and call for an
+	 * interrupt
+	 */
+	update_usrhead(packet->rcd, packet->rcd->head, packet->updegr,
+		       packet->etail, rcv_intr_dynamic, packet->numpkt);
+
+}
+
+static inline void process_rcv_qp_work(struct hfi1_packet *packet)
+{
+
+	struct hfi1_ctxtdata *rcd;
 	struct hfi1_qp *qp, *nqp;
-	struct hfi1_packet packet;
 
-	l = rcd->head;
-	rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
-	rhf = rhf_to_cpu(rhf_addr);
+	rcd = packet->rcd;
 
-	if (!HFI1_CAP_IS_KSET(DMA_RTAIL)) {
-		u32 seq = rhf_rcv_seq(rhf);
-
-		if (seq != rcd->seq_cnt)
-			goto bail;
-		hdrqtail = 0;
-	} else {
-		hdrqtail = get_rcvhdrtail(rcd);
-		if (l == hdrqtail)
-			goto bail;
-		smp_rmb();  /* prevent speculative reads of dma'ed hdrq */
-	}
-
-	for (last = 0, i = 1; !last; i += !last) {
-		hdr = hfi1_get_msgheader(dd, rhf_addr);
-		hlen = (u8 *)rhf_addr - (u8 *)hdr;
-		etype = rhf_rcv_type(rhf);
-		/* total length */
-		tlen = rhf_pkt_len(rhf);	/* in bytes */
-		ebuf = NULL;
-		/* retrieve eager buffer details */
-		if (rhf_use_egr_bfr(rhf)) {
-			etail = rhf_egr_index(rhf);
-			ebuf = get_egrbuf(rcd, rhf, &updegr);
-			/*
-			 * Prefetch the contents of the eager buffer.  It is
-			 * OK to send a negative length to prefetch_range().
-			 * The +2 is the size of the RHF.
-			 */
-			prefetch_range(ebuf,
-				tlen - ((rcd->rcvhdrqentsize -
-					  (rhf_hdrq_offset(rhf)+2)) * 4));
-		}
-
-		if (unlikely(dd->do_drop && atomic_xchg(&dd->drop_packet,
-			DROP_PACKET_OFF) == DROP_PACKET_ON)) {
-			dd->do_drop = 0;
-			goto skip;
-		}
-
-		packet.tlen = tlen;
-		packet.hlen = hlen;
-		packet.rhf = rhf;
-		packet.ebuf = ebuf;
-		packet.hdr = hdr;
-		packet.rcd = rcd;
-		packet.updegr = updegr;
-
-		/*
-		 * Call a type specific handler for the packet. We
-		 * should be able to trust that etype won't be beyond
-		 * the range of valid indexes. If so something is really
-		 * wrong and we can probably just let things come
-		 * crashing down. There is no need to eat another
-		 * comparison in this performance critical code.
-		 */
-		dd->rhf_rcv_function_map[etype](&packet);
-
-		/* On to the next packet */
-skip:
-		l += rsize;
-		if (l >= maxcnt)
-			l = 0;
-		if (i == MAX_PKT_RECV)
-			last = 1;
-
-		rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
-		rhf = rhf_to_cpu(rhf_addr);
-
-		if (!HFI1_CAP_IS_KSET(DMA_RTAIL)) {
-			u32 seq = rhf_rcv_seq(rhf);
-
-			if (++rcd->seq_cnt > 13)
-				rcd->seq_cnt = 1;
-			if (seq != rcd->seq_cnt)
-				last = 1;
-		} else if (l == hdrqtail)
-			last = 1;
-		/*
-		 * Update head regs etc., every 16 packets, if not last pkt,
-		 * to help prevent rcvhdrq overflows, when many packets
-		 * are processed and queue is nearly full.
-		 * Don't request an interrupt for intermediate updates.
-		 */
-		if (!last && !(i & 0xf)) {
-			update_usrhead(rcd, l, updegr, etail, 0, 0);
-			updegr = 0;
-		}
-	}
 	/*
 	 * Notify hfi1_destroy_qp() if it is waiting
 	 * for lookaside_qp to finish.
@@ -542,7 +524,7 @@ skip:
 		rcd->lookaside_qp = NULL;
 	}
 
-	rcd->head = l;
+	rcd->head = packet->rhqoff;
 
 	/*
 	 * Iterate over all QPs waiting to respond.
@@ -567,13 +549,161 @@ skip:
 		if (atomic_dec_and_test(&qp->refcount))
 			wake_up(&qp->wait);
 	}
+}
+
+/*
+ * Handle receive interrupts when using the no dma rtail option.
+ */
+void handle_receive_interrupt_nodma_rtail(struct hfi1_ctxtdata *rcd)
+{
+	u32 l, seq;
+	int last = 0;
+	struct hfi1_packet packet;
+
+	l = init_packet(rcd, &packet);
+	seq = rhf_rcv_seq(packet.rhf);
+	if (seq != rcd->seq_cnt)
+		goto bail;
+	packet.hdrqtail = 0;
+
+	while (!last) {
+		last = process_rcv_packet(&packet);
+		seq = rhf_rcv_seq(packet.rhf);
+		if (++rcd->seq_cnt > 13)
+			rcd->seq_cnt = 1;
+		if (seq != rcd->seq_cnt)
+			last = 1;
+		process_rcv_update(last, &packet);
+	}
+	process_rcv_qp_work(&packet);
+bail:
+	finish_packet(&packet);
+}
+
+void handle_receive_interrupt_dma_rtail(struct hfi1_ctxtdata *rcd)
+{
+	u32 l;
+	int last = 0;
+	struct hfi1_packet packet;
+
+	l = init_packet(rcd, &packet);
+	packet.hdrqtail = get_rcvhdrtail(rcd);
+	if (l == packet.hdrqtail)
+		goto bail;
+	smp_rmb();  /* prevent speculative reads of dma'ed hdrq */
+
+	while (!last) {
+		last = process_rcv_packet(&packet);
+		 if (packet.rhqoff == packet.hdrqtail)
+			last = 1;
+		process_rcv_update(last, &packet);
+	}
+	process_rcv_qp_work(&packet);
+bail:
+	finish_packet(&packet);
+
+}
+
+static inline void set_all_nodma_rtail(struct hfi1_devdata *dd)
+{
+	int i;
+
+	for (i = 0; i < dd->first_user_ctxt; i++)
+		dd->rcd[i]->do_interrupt =
+			&handle_receive_interrupt_nodma_rtail;
+}
+
+static inline void set_all_dma_rtail(struct hfi1_devdata *dd)
+{
+	int i;
+
+	for (i = 0; i < dd->first_user_ctxt; i++)
+		dd->rcd[i]->do_interrupt =
+			&handle_receive_interrupt_dma_rtail;
+}
+
+/*
+ * handle_receive_interrupt - receive a packet
+ * @rcd: the context
+ *
+ * Called from interrupt handler for errors or receive interrupt.
+ * This is the slow path interrupt handler.
+ */
+void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
+{
+
+	struct hfi1_devdata *dd = rcd->dd;
+	u32 l;
+	int last = 0, needset = 1;
+	struct hfi1_packet packet;
+
+	l = init_packet(rcd, &packet);
+
+	if (!HFI1_CAP_IS_KSET(DMA_RTAIL)) {
+		u32 seq = rhf_rcv_seq(packet.rhf);
+
+		if (seq != rcd->seq_cnt)
+			goto bail;
+		packet.hdrqtail = 0;
+	} else {
+		packet.hdrqtail = get_rcvhdrtail(rcd);
+		if (l == packet.hdrqtail)
+			goto bail;
+		smp_rmb();  /* prevent speculative reads of dma'ed hdrq */
+	}
+
+	while (!last) {
+
+		if (unlikely(dd->do_drop && atomic_xchg(&dd->drop_packet,
+			DROP_PACKET_OFF) == DROP_PACKET_ON)) {
+			dd->do_drop = 0;
+
+			/* On to the next packet */
+			packet.rhqoff += packet.rsize;
+			packet.rhf_addr = (__le32 *) rcd->rcvhdrq +
+					  packet.rhqoff +
+					  dd->rhf_offset;
+			packet.rhf = rhf_to_cpu(packet.rhf_addr);
+
+		} else {
+			last = process_rcv_packet(&packet);
+		}
+
+		if (!HFI1_CAP_IS_KSET(DMA_RTAIL)) {
+			u32 seq = rhf_rcv_seq(packet.rhf);
+
+			if (++rcd->seq_cnt > 13)
+				rcd->seq_cnt = 1;
+			if (seq != rcd->seq_cnt)
+				last = 1;
+			if (needset) {
+				dd_dev_info(dd,
+					"Switching to NO_DMA_RTAIL\n");
+				set_all_nodma_rtail(dd);
+				needset = 0;
+			}
+		} else {
+			if (packet.rhqoff == packet.hdrqtail)
+				last = 1;
+			if (needset) {
+				dd_dev_info(dd,
+					    "Switching to DMA_RTAIL\n");
+				set_all_dma_rtail(dd);
+				needset = 0;
+			}
+		}
+
+		process_rcv_update(last, &packet);
+	}
+
+	process_rcv_qp_work(&packet);
 
 bail:
 	/*
 	 * Always write head at end, and setup rcv interrupt, even
 	 * if no packets were processed.
 	 */
-	update_usrhead(rcd, rcd->head, updegr, etail, rcv_intr_dynamic, i);
+	finish_packet(&packet);
 }
 
 /*
@@ -865,6 +995,22 @@ int process_receive_ib(struct hfi1_packet *packet)
 		return RHF_RCV_CONTINUE;
 	}
 
+	/* retrieve eager buffer details */
+	if (rhf_use_egr_bfr(packet->rhf)) {
+		packet->etail = rhf_egr_index(packet->rhf);
+		packet->ebuf = get_egrbuf(packet->rcd, packet->rhf,
+				 &packet->updegr);
+		/*
+		 * Prefetch the contents of the eager buffer.  It is
+		 * OK to send a negative length to prefetch_range().
+		 * The +2 is the size of the RHF.
+		 */
+		prefetch_range(packet->ebuf,
+			packet->tlen - ((packet->rcd->rcvhdrqentsize -
+				  (rhf_hdrq_offset(packet->rhf)+2)) * 4));
+	}
+
+
 	hfi1_ib_rcv(packet);
 	return RHF_RCV_CONTINUE;
 }
@@ -887,7 +1033,7 @@ int process_receive_error(struct hfi1_packet *packet)
 	return RHF_RCV_CONTINUE;
 }
 
-int process_receive_expected(struct hfi1_packet *packet)
+int kdeth_process_expected(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);
@@ -897,7 +1043,7 @@ int process_receive_expected(struct hfi1_packet *packet)
 	return RHF_RCV_CONTINUE;
 }
 
-int process_receive_eager(struct hfi1_packet *packet)
+int kdeth_process_eager(struct hfi1_packet *packet)
 {
 	if (unlikely(rhf_err_flags(packet->rhf)))
 		handle_eflags(packet);

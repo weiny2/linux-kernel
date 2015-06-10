@@ -52,6 +52,7 @@
 #include <linux/mutex.h>
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/crc32.h>
 
 #include "hfi.h"
 #include "trace.h"
@@ -66,16 +67,20 @@
 #define DEFAULT_FW_FABRIC_NAME "hfi1_fabric.fw"
 #define DEFAULT_FW_SBUS_NAME "hfi1_sbus.fw"
 #define DEFAULT_FW_PCIE_NAME "hfi1_pcie.fw"
+#define DEFAULT_PLATFORM_CONFIG_NAME "hfi1_platform.dat"
+
 static uint fw_8051_load = 1;
 static uint fw_fabric_serdes_load = 1;
 static uint fw_pcie_serdes_load = 1;
 static uint fw_sbus_load = 1;
+static uint platform_config_load = 1;
 
 /* Firmware file names get set in hfi1_firmware_init() based on the above */
 static char *fw_8051_name;
 static char *fw_fabric_serdes_name;
 static char *fw_sbus_name;
 static char *fw_pcie_serdes_name;
+static char *platform_config_name;
 
 #define SBUS_MAX_POLL_COUNT 100
 #define SBUS_COUNTER(reg, name) \
@@ -162,6 +167,7 @@ static struct firmware_details fw_8051;
 static struct firmware_details fw_fabric;
 static struct firmware_details fw_pcie;
 static struct firmware_details fw_sbus;
+static const struct firmware *platform_config;
 
 /* flags for turn_off_spicos() */
 #define SPICO_SBUS   0x1
@@ -396,7 +402,6 @@ static int obtain_one_firmware(struct hfi1_devdata *dd, const char *name,
 	 */
 	ret = verify_css_header(dd, css);
 	if (ret) {
-		/* assume this is a raw binary, with no CSS header */
 		dd_dev_info(dd, "Invalid CSS header for \"%s\"\n", name);
 	} else if ((css->size*4) == fdet->fw->size) {
 		/* non-augmented firmware file */
@@ -461,10 +466,8 @@ done:
 
 static void dispose_one_firmware(struct firmware_details *fdet)
 {
-	if (fdet->fw) {
-		release_firmware(fdet->fw);
-		fdet->fw = NULL;
-	}
+	release_firmware(fdet->fw);
+	fdet->fw = NULL;
 }
 
 /*
@@ -513,6 +516,16 @@ static int obtain_firmware(struct hfi1_devdata *dd)
 			goto done;
 	}
 
+	if (platform_config_load) {
+		platform_config = NULL;
+		err = request_firmware(&platform_config, platform_config_name,
+						&dd->pcidev->dev);
+		if (err) {
+			err = 0;
+			platform_config = NULL;
+		}
+	}
+
 	/* success */
 	fw_state = FW_ACQUIRED;
 
@@ -543,6 +556,10 @@ void dispose_firmware(void)
 	dispose_one_firmware(&fw_fabric);
 	dispose_one_firmware(&fw_pcie);
 	dispose_one_firmware(&fw_sbus);
+
+	release_firmware(platform_config);
+	platform_config = NULL;
+
 	/* retain the error state, otherwise revert to empty */
 	if (fw_state != FW_ERR)
 		fw_state = FW_EMPTY;
@@ -1204,9 +1221,11 @@ int hfi1_firmware_init(struct hfi1_devdata *dd)
 		fw_sbus_load = 0;
 	}
 
-	/* no 8051 on simulator */
-	if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
+	/* no 8051 or QSFP on simulator */
+	if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
 		fw_8051_load = 0;
+		platform_config_load = 0;
+	}
 
 	if (!fw_8051_name) {
 		if (dd->icode == ICODE_RTL_SILICON)
@@ -1220,8 +1239,283 @@ int hfi1_firmware_init(struct hfi1_devdata *dd)
 		fw_sbus_name = DEFAULT_FW_SBUS_NAME;
 	if (!fw_pcie_serdes_name)
 		fw_pcie_serdes_name = DEFAULT_FW_PCIE_NAME;
+	if (!platform_config_name)
+		platform_config_name = DEFAULT_PLATFORM_CONFIG_NAME;
 
 	return obtain_firmware(dd);
+}
+
+int parse_platform_config(struct hfi1_devdata *dd)
+{
+	struct platform_config_cache *pcfgcache = &dd->pcfg_cache;
+	u32 *ptr = NULL;
+	u32 header1 = 0, header2 = 0, magic_num = 0, crc = 0;
+	u32 record_idx = 0, table_type = 0, table_length_dwords = 0;
+
+	if (platform_config == NULL) {
+		dd_dev_info(dd, "%s: Missing config file\n", __func__);
+		goto bail;
+	}
+	ptr = (u32 *)platform_config->data;
+
+	magic_num = *ptr;
+	ptr++;
+	if (magic_num != PLATFORM_CONFIG_MAGIC_NUM) {
+		dd_dev_info(dd, "%s: Bad config file\n", __func__);
+		goto bail;
+	}
+
+	while (ptr < (u32 *)(platform_config->data + platform_config->size)) {
+		header1 = *ptr;
+		header2 = *(ptr + 1);
+		if (header1 != ~header2) {
+			dd_dev_info(dd, "%s: Failed validation at offset %ld\n",
+				__func__, (ptr - (u32 *)platform_config->data));
+			goto bail;
+		}
+
+		record_idx = *ptr &
+			((1 << PLATFORM_CONFIG_HEADER_RECORD_IDX_LEN_BITS) - 1);
+
+		table_length_dwords = (*ptr >>
+				PLATFORM_CONFIG_HEADER_TABLE_LENGTH_SHIFT) &
+		      ((1 << PLATFORM_CONFIG_HEADER_TABLE_LENGTH_LEN_BITS) - 1);
+
+		table_type = (*ptr >> PLATFORM_CONFIG_HEADER_TABLE_TYPE_SHIFT) &
+			((1 << PLATFORM_CONFIG_HEADER_TABLE_TYPE_LEN_BITS) - 1);
+
+		/* Done with this set of headers */
+		ptr += 2;
+
+		if (record_idx) {
+			/* data table */
+			switch (table_type) {
+			case PLATFORM_CONFIG_SYSTEM_TABLE:
+				pcfgcache->config_tables[table_type].table =
+									ptr;
+				pcfgcache->config_tables[table_type].num_table =
+									1;
+				break;
+			case PLATFORM_CONFIG_PORT_TABLE:
+				pcfgcache->config_tables[table_type].table =
+									ptr;
+				pcfgcache->config_tables[table_type].num_table =
+									2;
+				break;
+			case PLATFORM_CONFIG_RX_PRESET_TABLE:
+				/* rx preset table is 1 DWORD in META_VERSION 0
+				 * fall through */
+			case PLATFORM_CONFIG_TX_PRESET_TABLE:
+				/* tx preset table is 1 DWORD in META_VERSION 0
+				 * fall through */
+			case PLATFORM_CONFIG_QSFP_ATTEN_TABLE:
+				/* qsfp atten table is 1 DWORD in META_VERSION
+				 * 0, fall through */
+			case PLATFORM_CONFIG_VARIABLE_SETTINGS_TABLE:
+				/* variable setting table is 1 DWORD in
+				 * META_VERSION 0
+				 */
+				pcfgcache->config_tables[table_type].table = ptr;
+				pcfgcache->config_tables[table_type].num_table =
+							table_length_dwords;
+				break;
+			default:
+				dd_dev_info(dd,
+				      "%s: Unknown data table %d, offset %ld\n",
+					__func__, table_type,
+				       (ptr - (u32 *)platform_config->data));
+				goto bail; /* We don't trust this file now */
+			}
+		} else {
+			/* metadata table */
+			switch (table_type) {
+			case PLATFORM_CONFIG_SYSTEM_TABLE:
+				/* fall through */
+			case PLATFORM_CONFIG_PORT_TABLE:
+				/* fall through */
+			case PLATFORM_CONFIG_RX_PRESET_TABLE:
+				/* fall through */
+			case PLATFORM_CONFIG_TX_PRESET_TABLE:
+				/* fall through */
+			case PLATFORM_CONFIG_QSFP_ATTEN_TABLE:
+				/* fall through */
+			case PLATFORM_CONFIG_VARIABLE_SETTINGS_TABLE:
+				pcfgcache->config_tables[table_type].table_metadata = ptr;
+				break;
+			default:
+				dd_dev_info(dd,
+				  "%s: Unknown metadata table %d, offset %ld\n",
+				  __func__, table_type,
+				  (ptr - (u32 *)platform_config->data));
+				goto bail; /* We don't trust this file now */
+			}
+		}
+
+		/* Calculate and check table crc */
+		crc = crc32_le(~(u32)0, (unsigned char const *)ptr,
+				(table_length_dwords * 4));
+		crc ^= ~(u32)0;
+
+		/* Jump the table */
+		ptr += table_length_dwords;
+		if (crc != *ptr) {
+			dd_dev_info(dd, "%s: Failed CRC check at offset %ld\n",
+				__func__, (ptr - (u32 *)platform_config->data));
+			goto bail;
+		}
+		/* Jump the CRC DWORD */
+		ptr++;
+	}
+
+	pcfgcache->cache_valid = 1;
+	return 0;
+bail:
+	memset(pcfgcache, 0, sizeof(struct platform_config_cache));
+	return -EINVAL;
+}
+
+static int get_platform_fw_field_metadata(struct hfi1_devdata *dd, int table,
+		int field, u32 *field_len_bits, u32 *field_start_bits)
+{
+	struct platform_config_cache *pcfgcache = &dd->pcfg_cache;
+	u32 *src_ptr = NULL;
+
+	if (!pcfgcache->cache_valid)
+		return -EINVAL;
+
+	switch (table) {
+	case PLATFORM_CONFIG_SYSTEM_TABLE:
+		/* fall through */
+	case PLATFORM_CONFIG_PORT_TABLE:
+		/* fall through */
+	case PLATFORM_CONFIG_RX_PRESET_TABLE:
+		/* fall through */
+	case PLATFORM_CONFIG_TX_PRESET_TABLE:
+		/* fall through */
+	case PLATFORM_CONFIG_QSFP_ATTEN_TABLE:
+		/* fall through */
+	case PLATFORM_CONFIG_VARIABLE_SETTINGS_TABLE:
+		if (field && field < platform_config_table_limits[table])
+			src_ptr =
+			pcfgcache->config_tables[table].table_metadata + field;
+		break;
+	default:
+		dd_dev_info(dd, "%s: Unknown table\n", __func__);
+		break;
+	}
+
+	if (!src_ptr)
+		return -EINVAL;
+
+	if (field_start_bits)
+		*field_start_bits = *src_ptr &
+		      ((1 << METADATA_TABLE_FIELD_START_LEN_BITS) - 1);
+
+	if (field_len_bits)
+		*field_len_bits = (*src_ptr >> METADATA_TABLE_FIELD_LEN_SHIFT)
+		       & ((1 << METADATA_TABLE_FIELD_LEN_LEN_BITS) - 1);
+
+	return 0;
+}
+
+int get_platform_fw_field_length(struct hfi1_devdata *dd, int table, int field,
+					u32 *field_len_bits)
+{
+	return get_platform_fw_field_metadata(dd, table, field, field_len_bits,
+							NULL);
+}
+
+/* This is the central interface to getting data out of the platform config
+ * file. It depends on parse_platform_config() having populated the
+ * platform_config_cache in hfi1_devdata, and checks the cache_valid member to
+ * validate the sanity of the cache.
+ *
+ * The non-obvious parameters:
+ * @table_index: Acts as a look up key into which instance of the tables the
+ * relevant field is fetched from.
+ *
+ * This applies to the data tables that have multiple instances. The port table
+ * is an exception to this rule as each HFI only has one port and thus the
+ * relevant table can be distinguished by hfi_id.
+ *
+ * @data: pointer to memory that will be populated with the field requested.
+ * @len: length of memory pointed by @data in bytes.
+ */
+int get_platform_config_field(struct hfi1_devdata *dd,
+			enum platform_config_table_type_encoding table_type,
+			int table_index, int field_index, u32 *data, u32 len)
+{
+	int ret = 0, wlen = 0, seek = 0;
+	u32 field_len_bits = 0, field_start_bits = 0, *src_ptr = NULL;
+	struct platform_config_cache *pcfgcache = &dd->pcfg_cache;
+
+	if (data)
+		memset(data, 0, len);
+	else
+		return -EINVAL;
+
+	ret = get_platform_fw_field_metadata(dd, table_type, field_index,
+					&field_len_bits, &field_start_bits);
+	if (ret)
+		return -EINVAL;
+
+	/* Convert length to bits */
+	len *= 8;
+
+	/* Our metadata function checked cache_valid and field_index for us */
+	switch (table_type) {
+	case PLATFORM_CONFIG_SYSTEM_TABLE:
+		src_ptr = pcfgcache->config_tables[table_type].table;
+
+		if (field_index != SYSTEM_TABLE_QSFP_POWER_CLASS_MAX) {
+			if (len < field_len_bits)
+				return -EINVAL;
+
+			seek = field_start_bits/8;
+			wlen = field_len_bits/8;
+
+			src_ptr = (u32 *)((u8 *)src_ptr + seek);
+
+			/* We expect the field to be byte aligned and whole byte
+			 * lengths if we are here */
+			memcpy(data, src_ptr, wlen);
+			return 0;
+		}
+		break;
+	case PLATFORM_CONFIG_PORT_TABLE:
+		/* Port table is 4 DWORDS in META_VERSION 0 */
+		src_ptr = dd->hfi1_id ?
+			pcfgcache->config_tables[table_type].table + 4 :
+			pcfgcache->config_tables[table_type].table;
+		break;
+	case PLATFORM_CONFIG_RX_PRESET_TABLE:
+		/* fall through */
+	case PLATFORM_CONFIG_TX_PRESET_TABLE:
+		/* fall through */
+	case PLATFORM_CONFIG_QSFP_ATTEN_TABLE:
+		/* fall through */
+	case PLATFORM_CONFIG_VARIABLE_SETTINGS_TABLE:
+		src_ptr = pcfgcache->config_tables[table_type].table;
+
+		if (table_index <
+			pcfgcache->config_tables[table_type].num_table)
+			src_ptr += table_index;
+		else
+			src_ptr = NULL;
+		break;
+	default:
+		dd_dev_info(dd, "%s: Unknown table\n", __func__);
+		break;
+	}
+
+	if (!src_ptr || len < field_len_bits)
+		return -EINVAL;
+
+	src_ptr += (field_start_bits/32);
+	*data = (*src_ptr >> (field_start_bits % 32)) &
+			((1 << field_len_bits) - 1);
+
+	return 0;
 }
 
 /*
