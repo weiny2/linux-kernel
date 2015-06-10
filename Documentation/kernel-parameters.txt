@@ -2305,6 +2305,9 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 			timeout < 0: reboot immediately
 			Format: <timeout>
 
+	panic_on_warn	panic() instead of WARN().  Useful to cause kdump
+			on a WARN().
+
 	parkbd.port=	[HW] Parallel port number the keyboard adapter is
 			connected to, default is 0.
 			Format: <parport#>

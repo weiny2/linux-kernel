@@ -424,6 +424,7 @@ extern int panic_timeout;
 extern int panic_on_oops;
 extern int panic_on_unrecovered_nmi;
 extern int panic_on_io_nmi;
+extern int panic_on_warn;
 #ifdef CONFIG_SUSE_KERNEL_SUPPORTED
 extern int unsupported;
 #endif
