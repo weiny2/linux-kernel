@@ -1292,7 +1292,7 @@ static int acpi_nfit_register_region(struct acpi_nfit_desc *acpi_desc,
 
 	memset(&res, 0, sizeof(res));
 	memset(&nd_mappings, 0, sizeof(nd_mappings));
-	memset(&ndbr_desc, 0, sizeof(ndr_desc));
+	memset(&ndbr_desc, 0, sizeof(ndbr_desc));
 	res.start = spa->address;
 	res.end = res.start + spa->length - 1;
 	ndr_desc = &ndbr_desc.ndr_desc;
