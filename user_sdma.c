@@ -71,14 +71,6 @@
 #include "common.h" /* for struct hfi1_tid_info */
 #include "trace.h"
 
-/*
- * Debugging aid - allows for quick switching between
- * inline function and non-inline functions (which
- * improve debuggability by making the stack traces
- * a bit easier to decode).
- */
-#define _hfi1_inline inline
-
 static uint hfi1_sdma_comp_ring_size = 128;
 module_param_named(sdma_comp_size, hfi1_sdma_comp_ring_size, uint, S_IRUGO);
 MODULE_PARM_DESC(sdma_comp_size, "Size of User SDMA completion ring. Default: 128");
@@ -289,10 +281,10 @@ static int set_txreq_header(struct user_sdma_request *,
 			    struct user_sdma_txreq *, u32);
 static int set_txreq_header_ahg(struct user_sdma_request *,
 				struct user_sdma_txreq *, u32);
-static _hfi1_inline void set_comp_state(struct user_sdma_request *,
+static inline void set_comp_state(struct user_sdma_request *,
 					enum hfi1_sdma_comp_state, int);
-static _hfi1_inline u32 set_pkt_bth_psn(__be32, u8, u32);
-static _hfi1_inline u32 get_lrh_len(struct hfi1_pkt_header, u32 len);
+static inline u32 set_pkt_bth_psn(__be32, u8, u32);
+static inline u32 get_lrh_len(struct hfi1_pkt_header, u32 len);
 
 static int defer_packet_queue(
 	struct sdma_engine *,
@@ -301,7 +293,7 @@ static int defer_packet_queue(
 	unsigned seq);
 static void activate_packet_queue(struct iowait *, int);
 
-static _hfi1_inline int iovec_may_free(struct user_sdma_iovec *iovec,
+static inline int iovec_may_free(struct user_sdma_iovec *iovec,
 				       void (*free)(struct user_sdma_iovec *))
 {
 	if (ACCESS_ONCE(iovec->offset) == iovec->iov.iov_len) {
@@ -635,7 +627,6 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	idx++;
 
 	/* Save all the IO vector structures */
-	SDMA_DBG(req, "copying %u data iovs", req->data_iovs);
 	while (i < req->data_iovs) {
 		memcpy(&req->iovs[i].iov, iovec + idx++, sizeof(struct iovec));
 		req->iovs[i].offset = 0;
@@ -699,8 +690,7 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		if (likely(ahg >= 0)) {
 			req->ahg_idx = (u8)ahg;
 			set_bit(SDMA_REQ_HAVE_AHG, &req->flags);
-		} else
-			SDMA_DBG(req, "Failed to allocate AHG entry %d", ahg);
+		}
 	}
 
 	set_comp_state(req, QUEUED, 0);
@@ -751,7 +741,7 @@ done:
 	return ret;
 }
 
-static _hfi1_inline u32 compute_data_length(struct user_sdma_request *req,
+static inline u32 compute_data_length(struct user_sdma_request *req,
 					    struct user_sdma_txreq *tx)
 {
 	/*
@@ -790,7 +780,7 @@ static _hfi1_inline u32 compute_data_length(struct user_sdma_request *req,
 	return len;
 }
 
-static _hfi1_inline u32 get_lrh_len(struct hfi1_pkt_header hdr, u32 len)
+static inline u32 get_lrh_len(struct hfi1_pkt_header hdr, u32 len)
 {
 	/* (Size of complete header - size of PBC) + 4B ICRC + data length */
 	return ((sizeof(hdr) - sizeof(hdr.pbc)) + 4 + len);
@@ -823,7 +813,6 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 	if (!maxpkts || maxpkts > req->info.npkts - req->seqnum)
 		maxpkts = req->info.npkts - req->seqnum;
 
-	SDMA_DBG(req, "sending maxpkts=%u %llu", maxpkts, req->seqnum);
 	while (npkts < maxpkts) {
 		u32 datalen = 0, queued = 0, data_sent = 0;
 		u64 iov_offset = 0;
@@ -853,7 +842,6 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		if (req->seqnum == req->info.npkts - 1)
 			tx->flags |= USER_SDMA_TXREQ_FLAGS_LAST_PKT;
 
-		SDMA_DBG(req, "tx->flags=%#x", tx->flags);
 		/*
 		 * Calculate the payload size - this is min of the fragment
 		 * (MTU) size or the remaining bytes in the request but only
@@ -862,8 +850,6 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		if (req->data_len) {
 			iovec = &req->iovs[req->iov_idx];
 			if (ACCESS_ONCE(iovec->offset) == iovec->iov.iov_len) {
-				SDMA_DBG(req, "Vector done %llu %lu\n",
-					 iovec->offset, iovec->iov.iov_len);
 				if (++req->iov_idx == req->data_iovs) {
 					ret = -EFAULT;
 					goto free_txreq;
@@ -1010,9 +996,6 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 				tx->iovec1->offset += iov_offset;
 			else if (tx->iovec2)
 				tx->iovec2->offset += iov_offset;
-			SDMA_DBG(req, "iovec1: %llu iovec2:%llu",
-				 (tx->iovec1 ? tx->iovec1->offset : 0),
-				 (tx->iovec2 ? tx->iovec2->offset : 0));
 		}
 		/*
 		 * It is important to increment this here as it is used to
@@ -1049,7 +1032,7 @@ done:
 /*
  * How many pages in this iovec element?
  */
-static _hfi1_inline int num_user_pages(const struct iovec *iov)
+static inline int num_user_pages(const struct iovec *iov)
 {
 	const unsigned long addr  = (unsigned long) iov->iov_base;
 	const unsigned long len   = iov->iov_len;
@@ -1169,7 +1152,7 @@ static int check_header_template(struct user_sdma_request *req,
  * expected packets encode generation and sequence in the
  * BTH.PSN field so just incrementing will result in errors.
  */
-static _hfi1_inline u32 set_pkt_bth_psn(__be32 bthpsn, u8 expct, u32 frags)
+static inline u32 set_pkt_bth_psn(__be32 bthpsn, u8 expct, u32 frags)
 {
 	u32 val = be32_to_cpu(bthpsn),
 		mask = (HFI1_CAP_IS_KSET(EXTENDED_PSN) ? 0x7fffffffull :
@@ -1272,9 +1255,6 @@ static int set_txreq_header(struct user_sdma_request *req,
 			 * we have to check again. */
 			if (++req->tididx > req->n_tids - 1 ||
 			    !req->tids[req->tididx]) {
-				SDMA_DBG(req, "new tididx=%u, n_tids=%u, %#x",
-					 req->tididx, req->n_tids,
-					 req->tids[req->tididx]);
 				return -EINVAL;
 			}
 			tidval = req->tids[req->tididx];
@@ -1282,14 +1262,12 @@ static int set_txreq_header(struct user_sdma_request *req,
 			req->omfactor = tidlen >= KDETH_OM_MAX_SIZE ?
 				KDETH_OM_LARGE : KDETH_OM_SMALL;
 		}
-		SDMA_DBG(req, "tids[%d]=%#x", req->tididx, tidval);
 		/* Set KDETH.TIDCtrl based on value for this TID. */
 		KDETH_SET(hdr->kdeth.ver_tid_offset, TIDCTRL,
 			  EXP_TID_GET(tidval, CTRL));
 		/* Set KDETH.TID based on value for this TID */
 		KDETH_SET(hdr->kdeth.ver_tid_offset, TID,
 			  EXP_TID_GET(tidval, IDX));
-		SDMA_DBG(req, "Setting TIDOff %u", req->tidoffset);
 		/* Clear KDETH.SH only on the last packet */
 		if (unlikely(tx->flags & USER_SDMA_TXREQ_FLAGS_LAST_PKT))
 			KDETH_SET(hdr->kdeth.ver_tid_offset, SH, 0);
@@ -1357,9 +1335,6 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 			 * we have to check again. */
 			if (++req->tididx > req->n_tids - 1 ||
 			    !req->tids[req->tididx]) {
-				SDMA_DBG(req, "new tididx=%u, n_tids=%u, %#x",
-					 req->tididx, req->n_tids,
-					 req->tids[req->tididx]);
 				return -EINVAL;
 			}
 			tidval = req->tids[req->tididx];
@@ -1440,7 +1415,6 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 	if (!list_empty(&req->txps)) {
 		struct sdma_txreq *t, *p;
 
-		SDMA_DBG(req, "Request still has tx requests\n");
 		list_for_each_entry_safe(t, p, &req->txps, list) {
 			struct user_sdma_txreq *tx =
 				container_of(t, struct user_sdma_txreq, txreq);
@@ -1454,8 +1428,6 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 
 		for (i = 0; i < req->data_iovs; i++)
 			if (req->iovs[i].npages && req->iovs[i].pages) {
-				SDMA_DBG(req, "left over iovec pages %d\n",
-					 req->iovs[i].npages);
 				unpin_vector_pages(&req->iovs[i]);
 			}
 	}
@@ -1465,7 +1437,7 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 	clear_bit(SDMA_REQ_IN_USE, &req->flags);
 }
 
-static _hfi1_inline void set_comp_state(struct user_sdma_request *req,
+static inline void set_comp_state(struct user_sdma_request *req,
 					enum hfi1_sdma_comp_state state,
 					int ret)
 {
@@ -1477,4 +1449,3 @@ static _hfi1_inline void set_comp_state(struct user_sdma_request *req,
 					req->pq->subctxt, req->info.comp_idx,
 					state, ret);
 }
-
