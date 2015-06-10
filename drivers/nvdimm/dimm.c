@@ -18,8 +18,8 @@
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/nd.h>
-#include <label.h>
-#include <nd.h>
+#include "label.h"
+#include "nd.h"
 
 static void free_data(struct nvdimm_drvdata *ndd)
 {

@@ -14,8 +14,8 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/nd.h>
-#include <nd-core.h>
-#include <nd.h>
+#include "nd-core.h"
+#include "nd.h"
 
 #include <asm-generic/io-64-nonatomic-lo-hi.h>
 

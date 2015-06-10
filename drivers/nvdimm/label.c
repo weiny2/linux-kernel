@@ -15,9 +15,9 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/nd.h>
-#include <nd-core.h>
-#include <label.h>
-#include <nd.h>
+#include "nd-core.h"
+#include "label.h"
+#include "nd.h"
 
 #include <asm-generic/io-64-nonatomic-lo-hi.h>
 

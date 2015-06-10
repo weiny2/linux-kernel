@@ -7,8 +7,6 @@ ldflags-y += --wrap=__release_region
 DRIVERS := ../../../drivers
 NVDIMM_SRC := $(DRIVERS)/nvdimm
 ACPI_SRC := $(DRIVERS)/acpi
-ccflags-y := -I$(src)/$(NVDIMM_SRC)
-ccflags-y += -I$(src)/$(ACPI_SRC)
 
 obj-m += libnvdimm.o
 obj-m += nd_pmem.o

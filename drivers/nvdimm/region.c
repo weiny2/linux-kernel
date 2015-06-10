@@ -14,7 +14,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/nd.h>
-#include <nd.h>
+#include "nd.h"
 
 struct nd_percpu_lane {
 	int count[CONFIG_ND_MAX_REGIONS];

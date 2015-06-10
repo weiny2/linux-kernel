@@ -24,8 +24,8 @@
 #include <linux/io.h>
 #include <linux/mm.h>
 #include <linux/nd.h>
-#include <nd-core.h>
-#include <nd.h>
+#include "nd-core.h"
+#include "nd.h"
 
 int nvdimm_major;
 static int nvdimm_bus_major;

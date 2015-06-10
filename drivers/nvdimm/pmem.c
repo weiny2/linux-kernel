@@ -24,7 +24,7 @@
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
 #include <linux/nd.h>
-#include <nd.h>
+#include "nd.h"
 
 struct pmem_device {
 	struct request_queue	*pmem_queue;

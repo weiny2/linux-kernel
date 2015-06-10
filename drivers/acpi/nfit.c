@@ -19,7 +19,7 @@
 #include <linux/acpi.h>
 #include <linux/sort.h>
 #include <linux/io.h>
-#include <nfit.h>
+#include "nfit.h"
 
 #include <asm-generic/io-64-nonatomic-hi-lo.h>
 

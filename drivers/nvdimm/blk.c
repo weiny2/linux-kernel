@@ -19,7 +19,7 @@
 #include <linux/moduleparam.h>
 #include <linux/nd.h>
 #include <linux/sizes.h>
-#include <nd.h>
+#include "nd.h"
 
 struct nd_blk_device {
 	struct request_queue *queue;

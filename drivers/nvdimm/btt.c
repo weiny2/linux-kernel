@@ -23,8 +23,8 @@
 #include <linux/ndctl.h>
 #include <linux/fs.h>
 #include <linux/nd.h>
-#include <btt.h>
-#include <nd.h>
+#include "btt.h"
+#include "nd.h"
 
 enum log_ent_request {
 	LOG_NEW_ENT = 0,
