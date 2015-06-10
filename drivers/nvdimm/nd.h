@@ -30,7 +30,7 @@ enum {
 	 */
 	ND_MAX_LANES = 256,
 	SECTOR_SHIFT = 9,
-	INT_LBASIZE_ALIGNMENT = 256,
+	INT_LBASIZE_ALIGNMENT = 64,
 };
 
 struct nvdimm_drvdata {
