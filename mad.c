@@ -1967,10 +1967,6 @@ struct opa_port_data_counters_msg {
 	} port[1]; /* array size defined by  #ports in attribute modifier */
 };
 
-#define COUNTER_SIZE_MODE_ALL64		0
-#define COUNTER_SIZE_MODE_ALL32		1
-#define COUNTER_SIZE_MODE_MIXED		2
-
 struct opa_port_error_counters64_msg {
 	/* Request contains first two fields, response contains the
 	 * whole magilla */
@@ -2571,7 +2567,6 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 	struct opa_port_error_counters64_msg *req;
 	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
 	u32 num_ports;
-	u32 counter_size_mode;
 	u8 num_pslm;
 	u8 num_vls;
 	struct hfi1_ibport *ibp;
@@ -2585,13 +2580,11 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 	req = (struct opa_port_error_counters64_msg *)pmp->data;
 
 	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
-	counter_size_mode = (be32_to_cpu(pmp->mad_hdr.attr_mod) >> 22) & 0x3;
 
 	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
 	num_vls = hweight32(be32_to_cpu(req->vl_select_mask));
 
-	if (num_ports != 1 || num_ports != num_pslm ||
-		(counter_size_mode != COUNTER_SIZE_MODE_ALL64)) {
+	if (num_ports != 1 || num_ports != num_pslm) {
 		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)pmp);
 	}
