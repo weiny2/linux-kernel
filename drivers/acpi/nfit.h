@@ -37,15 +37,6 @@ enum nfit_uuids {
 	NFIT_UUID_MAX,
 };
 
-#define NFIT_DIMM_HANDLE(node, socket, imc, chan, dimm) \
-	(((node & 0xfff) << 16) | ((socket & 0xf) << 12) \
-	 | ((imc & 0xf) << 8) | ((chan & 0xf) << 4) | (dimm & 0xf))
-#define NFIT_DIMM_NODE(handle) ((handle) >> 16 & 0xfff)
-#define NFIT_DIMM_SOCKET(handle) ((handle) >> 12 & 0xf)
-#define NFIT_DIMM_CHAN(handle) ((handle) >> 8 & 0xf)
-#define NFIT_DIMM_IMC(handle) ((handle) >> 4 & 0xf)
-#define NFIT_DIMM_DIMM(handle) ((handle) & 0xf)
-
 struct nfit_spa {
 	struct acpi_nfit_system_address *spa;
 	struct list_head list;
@@ -144,18 +135,21 @@ static inline struct nfit_spa_mapping *to_spa_map(struct kref *kref)
 	return container_of(kref, struct nfit_spa_mapping, kref);
 }
 
-static inline struct acpi_nfit_memory_map *__to_nfit_memdev(struct nfit_mem *nfit_mem)
+static inline struct acpi_nfit_memory_map *__to_nfit_memdev(
+		struct nfit_mem *nfit_mem)
 {
 	if (nfit_mem->memdev_dcr)
 		return nfit_mem->memdev_dcr;
 	return nfit_mem->memdev_pmem;
 }
 
-static inline struct acpi_nfit_desc *to_acpi_desc(struct nvdimm_bus_descriptor *nd_desc)
+static inline struct acpi_nfit_desc *to_acpi_desc(
+		struct nvdimm_bus_descriptor *nd_desc)
 {
 	return container_of(nd_desc, struct acpi_nfit_desc, nd_desc);
 }
 
 const u8 *to_nfit_uuid(enum nfit_uuids id);
 int acpi_nfit_init(struct acpi_nfit_desc *nfit, acpi_size sz);
+extern const struct attribute_group *acpi_nfit_attribute_groups[];
 #endif /* __NFIT_H__ */

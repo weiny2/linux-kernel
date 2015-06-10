@@ -371,7 +371,8 @@ static int nd_btt_autodetect(struct nvdimm_bus *nvdimm_bus, struct nd_io *ndio,
 		return -ENODEV;
 
 	offset = nd_partition_offset(bdev);
-	rc = ndio->rw_bytes(ndio, btt_sb, offset + SZ_4K, sizeof(*btt_sb), READ);
+	rc = ndio->rw_bytes(ndio, btt_sb, offset + SZ_4K, sizeof(*btt_sb),
+			READ);
 	if (rc)
 		goto out_free_sb;
 

@@ -83,7 +83,7 @@ static ssize_t nstype_show(struct device *dev,
 {
 	struct nd_region *nd_region = to_nd_region(dev->parent);
 
-	return sprintf(buf, "%d\n", nd_region_to_namespace_type(nd_region));
+	return sprintf(buf, "%d\n", nd_region_to_nstype(nd_region));
 }
 static DEVICE_ATTR_RO(nstype);
 
@@ -198,7 +198,9 @@ resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk)
 }
 EXPORT_SYMBOL(nd_namespace_blk_validate);
 
-static int nd_namespace_label_update(struct nd_region *nd_region, struct device *dev)
+
+static int nd_namespace_label_update(struct nd_region *nd_region,
+		struct device *dev)
 {
 	dev_WARN_ONCE(dev, dev->driver,
 			"namespace must be idle during label update\n");
@@ -245,7 +247,7 @@ static ssize_t alt_name_store(struct device *dev,
 	rc = __alt_name_store(dev, buf, len);
 	if (rc >= 0)
 		rc = nd_namespace_label_update(nd_region, dev);
-	dev_dbg(dev, "%s: %s (%zd)\n", __func__, rc < 0 ? "fail" : "success", rc);
+	dev_dbg(dev, "%s: %s(%zd)\n", __func__, rc < 0 ? "fail " : "", rc);
 	nvdimm_bus_unlock(dev);
 	device_unlock(dev);
 
@@ -608,7 +610,8 @@ static int __reserve_free_pmem(struct device *dev, void *data)
 	return 0;
 }
 
-static void release_free_pmem(struct nvdimm_bus *nvdimm_bus, struct nd_mapping *nd_mapping)
+static void release_free_pmem(struct nvdimm_bus *nvdimm_bus,
+		struct nd_mapping *nd_mapping)
 {
 	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct resource *res, *_res;
@@ -624,7 +627,8 @@ static int reserve_free_pmem(struct nvdimm_bus *nvdimm_bus,
 	struct nvdimm *nvdimm = nd_mapping->nvdimm;
 	int rc;
 
-	rc = device_for_each_child(&nvdimm_bus->dev, nvdimm, __reserve_free_pmem);
+	rc = device_for_each_child(&nvdimm_bus->dev, nvdimm,
+			__reserve_free_pmem);
 	if (rc)
 		release_free_pmem(nvdimm_bus, nd_mapping);
 	return rc;
@@ -667,7 +671,8 @@ static int grow_dpa_allocation(struct nd_region *nd_region,
 				if (rc)
 					return rc;
 			}
-			rem = scan_allocate(nd_region, nd_mapping, label_id, rem);
+			rem = scan_allocate(nd_region, nd_mapping,
+					label_id, rem);
 			if (blk_only)
 				release_free_pmem(nvdimm_bus, nd_mapping);
 
@@ -764,7 +769,8 @@ static ssize_t __size_store(struct device *dev, unsigned long long val)
 	val = div_u64(val, nd_region->ndr_mappings);
 	allocated = div_u64(allocated, nd_region->ndr_mappings);
 	if (val < allocated)
-		rc = shrink_dpa_allocation(nd_region, &label_id, allocated - val);
+		rc = shrink_dpa_allocation(nd_region, &label_id,
+				allocated - val);
 	else
 		rc = grow_dpa_allocation(nd_region, &label_id, val - allocated);
 
@@ -1091,7 +1097,8 @@ static struct attribute *nd_namespace_attributes[] = {
 	NULL,
 };
 
-static umode_t nd_namespace_attr_visible(struct kobject *kobj, struct attribute *a, int n)
+static umode_t namespace_visible(struct kobject *kobj,
+		struct attribute *a, int n)
 {
 	struct device *dev = container_of(kobj, struct device, kobj);
 
@@ -1119,7 +1126,7 @@ static umode_t nd_namespace_attr_visible(struct kobject *kobj, struct attribute 
 
 static struct attribute_group nd_namespace_attribute_group = {
 	.attrs = nd_namespace_attributes,
-	.is_visible = nd_namespace_attr_visible,
+	.is_visible = namespace_visible,
 };
 
 static const struct attribute_group *nd_namespace_attribute_groups[] = {
@@ -1339,7 +1346,8 @@ static int find_pmem_label_set(struct nd_region *nd_region,
 		dev_dbg(&nd_region->dev, "%s: label not found\n", __func__);
 		break;
 	default:
-		dev_dbg(&nd_region->dev, "%s: unexpected err: %d\n", __func__, rc);
+		dev_dbg(&nd_region->dev, "%s: unexpected err: %d\n",
+				__func__, rc);
 		break;
 	}
 	return rc;
@@ -1407,7 +1415,8 @@ struct resource *nsblk_add_resource(struct nd_region *nd_region,
 		return NULL;
 	nsblk->res = (struct resource **) res;
 	for_each_dpa_resource(ndd, res)
-		if (strcmp(res->name, label_id.id) == 0 && res->start == start) {
+		if (strcmp(res->name, label_id.id) == 0
+				&& res->start == start) {
 			nsblk->res[nsblk->num_resources++] = res;
 			return res;
 		}
@@ -1614,7 +1623,7 @@ int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 		return rc;
 	}
 
-	type = nd_region_to_namespace_type(nd_region);
+	type = nd_region_to_nstype(nd_region);
 	switch (type) {
 	case ND_DEVICE_NAMESPACE_IO:
 		devs = create_namespace_io(nd_region);

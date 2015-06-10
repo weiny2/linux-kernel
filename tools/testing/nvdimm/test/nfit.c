@@ -105,6 +105,10 @@ struct nfit_test_dcr {
 	__u8 aperature[BDW_SIZE];
 };
 
+#define NFIT_DIMM_HANDLE(node, socket, imc, chan, dimm) \
+	(((node & 0xfff) << 16) | ((socket & 0xf) << 12) \
+	 | ((imc & 0xf) << 8) | ((chan & 0xf) << 4) | (dimm & 0xf))
+
 static u32 handle[NUM_DCR] = {
 	[0] = NFIT_DIMM_HANDLE(0, 0, 0, 0, 0),
 	[1] = NFIT_DIMM_HANDLE(0, 0, 0, 0, 1),
@@ -280,7 +284,8 @@ static void *test_alloc(struct nfit_test *t, size_t size, dma_addr_t *dma)
 	return __test_alloc(t, size, dma, buf);
 }
 
-static void *test_alloc_coherent(struct nfit_test *t, size_t size, dma_addr_t *dma)
+static void *test_alloc_coherent(struct nfit_test *t, size_t size,
+		dma_addr_t *dma)
 {
 	struct device *dev = &t->pdev.dev;
 	void *buf = dma_alloc_coherent(dev, size, dma, GFP_KERNEL);
@@ -364,7 +369,8 @@ static int nfit_test0_alloc(struct nfit_test *t)
 static int nfit_test1_alloc(struct nfit_test *t)
 {
 	size_t nfit_size = sizeof(struct acpi_table_nfit)
-		+ sizeof(struct acpi_nfit_system_address) + sizeof(struct acpi_nfit_memory_map)
+		+ sizeof(struct acpi_nfit_system_address)
+		+ sizeof(struct acpi_nfit_memory_map)
 		+ sizeof(struct acpi_nfit_control_region);
 
 	t->nfit_buf = test_alloc(t, nfit_size, &t->nfit_dma);
@@ -888,24 +894,22 @@ static void nfit_test1_setup(struct nfit_test *t)
 }
 
 static int nfit_test_blk_do_io(struct nd_blk_region *ndbr, void *iobuf,
-                u64 len, int rw, resource_size_t dpa)
+		u64 len, int rw, resource_size_t dpa)
 {
-        struct nfit_blk *nfit_blk = ndbr->blk_provider_data;
-        struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
-        struct nd_region *nd_region = &ndbr->nd_region;
-        unsigned int bw;
+	struct nfit_blk *nfit_blk = ndbr->blk_provider_data;
+	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
+	struct nd_region *nd_region = &ndbr->nd_region;
+	unsigned int bw;
 
-        bw = nd_region_acquire_lane(nd_region);
-        if (rw)
-                memcpy(mmio->base + dpa, iobuf, len);
-        else
-                memcpy(iobuf, mmio->base + dpa, len);
-        nd_region_release_lane(nd_region, bw);
+	bw = nd_region_acquire_lane(nd_region);
+	if (rw)
+		memcpy(mmio->base + dpa, iobuf, len);
+	else
+		memcpy(iobuf, mmio->base + dpa, len);
+	nd_region_release_lane(nd_region, bw);
 
-        return 0;
+	return 0;
 }
-
-extern const struct attribute_group *acpi_nfit_attribute_groups[];
 
 static int nfit_test_probe(struct platform_device *pdev)
 {
@@ -921,12 +925,18 @@ static int nfit_test_probe(struct platform_device *pdev)
 	if (nfit_test->num_dcr) {
 		int num = nfit_test->num_dcr;
 
-		nfit_test->dimm = devm_kcalloc(dev, num, sizeof(void *), GFP_KERNEL);
-		nfit_test->dimm_dma = devm_kcalloc(dev, num, sizeof(dma_addr_t), GFP_KERNEL);
-		nfit_test->label = devm_kcalloc(dev, num, sizeof(void *), GFP_KERNEL);
-		nfit_test->label_dma = devm_kcalloc(dev, num, sizeof(dma_addr_t), GFP_KERNEL);
-		nfit_test->dcr = devm_kcalloc(dev, num, sizeof(struct nfit_test_dcr *), GFP_KERNEL);
-		nfit_test->dcr_dma = devm_kcalloc(dev, num, sizeof(dma_addr_t), GFP_KERNEL);
+		nfit_test->dimm = devm_kcalloc(dev, num, sizeof(void *),
+				GFP_KERNEL);
+		nfit_test->dimm_dma = devm_kcalloc(dev, num, sizeof(dma_addr_t),
+				GFP_KERNEL);
+		nfit_test->label = devm_kcalloc(dev, num, sizeof(void *),
+				GFP_KERNEL);
+		nfit_test->label_dma = devm_kcalloc(dev, num,
+				sizeof(dma_addr_t), GFP_KERNEL);
+		nfit_test->dcr = devm_kcalloc(dev, num,
+				sizeof(struct nfit_test_dcr *), GFP_KERNEL);
+		nfit_test->dcr_dma = devm_kcalloc(dev, num,
+				sizeof(dma_addr_t), GFP_KERNEL);
 		if (nfit_test->dimm && nfit_test->dimm_dma && nfit_test->label
 				&& nfit_test->label_dma && nfit_test->dcr
 				&& nfit_test->dcr_dma)
@@ -938,7 +948,8 @@ static int nfit_test_probe(struct platform_device *pdev)
 	if (nfit_test->num_pm) {
 		int num = nfit_test->num_pm;
 
-		nfit_test->spa_set = devm_kcalloc(dev, num, sizeof(void *), GFP_KERNEL);
+		nfit_test->spa_set = devm_kcalloc(dev, num, sizeof(void *),
+				GFP_KERNEL);
 		nfit_test->spa_set_dma = devm_kcalloc(dev, num,
 				sizeof(dma_addr_t), GFP_KERNEL);
 		if (nfit_test->spa_set && nfit_test->spa_set_dma)

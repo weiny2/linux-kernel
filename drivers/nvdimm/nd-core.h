@@ -10,8 +10,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
-#ifndef __ND_PRIVATE_H__
-#define __ND_PRIVATE_H__
+#ifndef __ND_CORE_H__
+#define __ND_CORE_H__
 #include <linux/libnvdimm.h>
 #include <linux/device.h>
 #include <linux/libnvdimm.h>
@@ -67,18 +67,19 @@ static inline struct nd_btt *nd_btt_create(struct nvdimm_bus *nvdimm_bus)
 	return NULL;
 }
 
-static inline void nd_btt_notify_ndio(struct nvdimm_bus *nvdimm_bus, struct nd_io *ndio)
+static inline void nd_btt_notify_ndio(struct nvdimm_bus *nvdimm_bus,
+		struct nd_io *ndio)
 {
 }
 #endif
 struct nvdimm_bus *walk_to_nvdimm_bus(struct device *nd_dev);
 int __init nvdimm_bus_init(void);
 void nvdimm_bus_exit(void);
-void nd_region_probe_start(struct nvdimm_bus *nvdimm_bus, struct device *dev);
-void nd_region_probe_end(struct nvdimm_bus *nvdimm_bus, struct device *dev, int rc);
+void nd_region_probe_success(struct nvdimm_bus *nvdimm_bus, struct device *dev);
+void nd_region_probe_fail(struct nvdimm_bus *nvdimm_bus, struct device *dev);
 struct nd_region;
 void nd_region_create_blk_seed(struct nd_region *nd_region);
-void nd_region_notify_remove(struct nvdimm_bus *nvdimm_bus, struct device *dev, int rc);
+void nd_region_disable(struct nvdimm_bus *nvdimm_bus, struct device *dev);
 int nvdimm_bus_create_ndctl(struct nvdimm_bus *nvdimm_bus);
 void nvdimm_bus_destroy_ndctl(struct nvdimm_bus *nvdimm_bus);
 void nd_synchronize(void);
@@ -104,4 +105,4 @@ struct resource *nsblk_add_resource(struct nd_region *nd_region,
 		struct nvdimm_drvdata *ndd, struct nd_namespace_blk *nsblk,
 		resource_size_t start);
 int nvdimm_num_label_slots(struct nvdimm_drvdata *ndd);
-#endif /* __ND_PRIVATE_H__ */
+#endif /* __ND_CORE_H__ */

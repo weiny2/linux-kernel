@@ -40,7 +40,7 @@ static int to_nd_device_type(struct device *dev)
 	else if (is_nd_blk(dev))
 		return ND_DEVICE_REGION_BLK;
 	else if (is_nd_pmem(dev->parent) || is_nd_blk(dev->parent))
-		return nd_region_to_namespace_type(to_nd_region(dev->parent));
+		return nd_region_to_nstype(to_nd_region(dev->parent));
 	else if (is_nd_btt(dev))
 		return ND_DEVICE_BTT;
 
@@ -71,6 +71,21 @@ static struct module *to_bus_provider(struct device *dev)
 	return NULL;
 }
 
+static void nvdimm_bus_probe_start(struct nvdimm_bus *nvdimm_bus)
+{
+	nvdimm_bus_lock(&nvdimm_bus->dev);
+	nvdimm_bus->probe_active++;
+	nvdimm_bus_unlock(&nvdimm_bus->dev);
+}
+
+static void nvdimm_bus_probe_end(struct nvdimm_bus *nvdimm_bus)
+{
+	nvdimm_bus_lock(&nvdimm_bus->dev);
+	if (--nvdimm_bus->probe_active == 0)
+		wake_up(&nvdimm_bus->probe_wait);
+	nvdimm_bus_unlock(&nvdimm_bus->dev);
+}
+
 static int nvdimm_bus_probe(struct device *dev)
 {
 	struct nd_device_driver *nd_drv = to_nd_device_driver(dev->driver);
@@ -81,9 +96,13 @@ static int nvdimm_bus_probe(struct device *dev)
 	if (!try_module_get(provider))
 		return -ENXIO;
 
-	nd_region_probe_start(nvdimm_bus, dev);
+	nvdimm_bus_probe_start(nvdimm_bus);
 	rc = nd_drv->probe(dev);
-	nd_region_probe_end(nvdimm_bus, dev, rc);
+	if (rc == 0)
+		nd_region_probe_success(nvdimm_bus, dev);
+	else
+		nd_region_probe_fail(nvdimm_bus, dev);
+	nvdimm_bus_probe_end(nvdimm_bus);
 
 	dev_dbg(&nvdimm_bus->dev, "%s.probe(%s) = %d\n", dev->driver->name,
 			dev_name(dev), rc);
@@ -115,7 +134,7 @@ static int nvdimm_bus_remove(struct device *dev)
 	int rc;
 
 	rc = nd_drv->remove(dev);
-	nd_region_notify_remove(nvdimm_bus, dev, rc);
+	nd_region_disable(nvdimm_bus, dev);
 
 	dev_dbg(&nvdimm_bus->dev, "%s.remove(%s) = %d\n", dev->driver->name,
 			dev_name(dev), rc);
@@ -303,7 +322,8 @@ int nd_unregister_ndio(struct nd_io *ndio)
 }
 EXPORT_SYMBOL(nd_unregister_ndio);
 
-static struct nd_io *__ndio_lookup(struct nvdimm_bus *nvdimm_bus, const char *diskname)
+static struct nd_io *__ndio_lookup(struct nvdimm_bus *nvdimm_bus,
+		const char *diskname)
 {
 	struct nd_io *ndio;
 
@@ -358,8 +378,8 @@ int nvdimm_bus_create_ndctl(struct nvdimm_bus *nvdimm_bus)
 	dev_t devt = MKDEV(nvdimm_bus_major, nvdimm_bus->id);
 	struct device *dev;
 
-	dev = device_create(nd_class, &nvdimm_bus->dev, devt, nvdimm_bus, "ndctl%d",
-			nvdimm_bus->id);
+	dev = device_create(nd_class, &nvdimm_bus->dev, devt, nvdimm_bus,
+			"ndctl%d", nvdimm_bus->id);
 
 	if (IS_ERR(dev)) {
 		dev_dbg(&nvdimm_bus->dev, "failed to register ndctl%d: %ld\n",
@@ -500,7 +520,8 @@ void wait_nvdimm_bus_probe_idle(struct device *dev)
 		if (nvdimm_bus->probe_active == 0)
 			break;
 		nvdimm_bus_unlock(&nvdimm_bus->dev);
-		wait_event(nvdimm_bus->probe_wait, nvdimm_bus->probe_active == 0);
+		wait_event(nvdimm_bus->probe_wait,
+				nvdimm_bus->probe_active == 0);
 		nvdimm_bus_lock(&nvdimm_bus->dev);
 	} while (true);
 }
@@ -605,8 +626,8 @@ static int __nd_ioctl(struct nvdimm_bus *nvdimm_bus, struct nvdimm *nvdimm,
 			copy = min_t(u32, sizeof(out_env) - out_len, out_size);
 		else
 			copy = 0;
-		if (copy && copy_from_user(&out_env[out_len], p + in_len + out_len,
-					copy))
+		if (copy && copy_from_user(&out_env[out_len],
+					p + in_len + out_len, copy))
 			return -EFAULT;
 		out_len += out_size;
 	}
@@ -616,7 +637,7 @@ static int __nd_ioctl(struct nvdimm_bus *nvdimm_bus, struct nvdimm *nvdimm,
 		return -EFAULT;
 
 	if (buf_len > ND_IOCTL_MAX_BUFLEN) {
-		dev_dbg(dev, "%s:%s cmd: %s buf_len: %zd > %d\n", __func__,
+		dev_dbg(dev, "%s:%s cmd: %s buf_len: %zu > %d\n", __func__,
 				dimm_name, cmd_name, buf_len,
 				ND_IOCTL_MAX_BUFLEN);
 		return -EINVAL;
@@ -690,11 +711,13 @@ static long nvdimm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	list_for_each_entry(nvdimm_bus, &nvdimm_bus_list, list) {
 		struct device *dev = device_find_child(&nvdimm_bus->dev,
 				file->private_data, match_dimm);
+		struct nvdimm *nvdimm;
 
 		if (!dev)
 			continue;
 
-		rc = __nd_ioctl(nvdimm_bus, to_nvdimm(dev), read_only, cmd, arg);
+		nvdimm = to_nvdimm(dev);
+		rc = __nd_ioctl(nvdimm_bus, nvdimm, read_only, cmd, arg);
 		put_device(dev);
 		break;
 	}

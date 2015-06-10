@@ -14,6 +14,7 @@
  */
 #ifndef __LIBNVDIMM_H__
 #define __LIBNVDIMM_H__
+#include <linux/kernel.h>
 #include <linux/sizes.h>
 #include <linux/types.h>
 
@@ -92,6 +93,13 @@ struct nd_blk_region_desc {
 	struct nd_region_desc ndr_desc;
 };
 
+static inline struct nd_blk_region_desc *to_blk_region_desc(
+		struct nd_region_desc *ndr_desc)
+{
+	return container_of(ndr_desc, struct nd_blk_region_desc, ndr_desc);
+
+}
+
 struct nvdimm_bus *__nvdimm_bus_register(struct device *parent,
 		struct nvdimm_bus_descriptor *nfit_desc, struct module *module);
 #define nvdimm_bus_register(parent, desc) \
@@ -114,7 +122,7 @@ u32 nd_cmd_in_size(struct nvdimm *nvdimm, int cmd,
 u32 nd_cmd_out_size(struct nvdimm *nvdimm, int cmd,
 		const struct nd_cmd_desc *desc, int idx, const u32 *in_field,
 		const u32 *out_field);
-int nvdimm_bus_validate_dimm_count(struct nvdimm_bus *nvdimm_bus, int dimm_count);
+int nvdimm_bus_check_dimm_count(struct nvdimm_bus *nvdimm_bus, int dimm_count);
 struct nd_region *nvdimm_pmem_region_create(struct nvdimm_bus *nvdimm_bus,
 		struct nd_region_desc *ndr_desc);
 struct nd_region *nvdimm_blk_region_create(struct nvdimm_bus *nvdimm_bus,

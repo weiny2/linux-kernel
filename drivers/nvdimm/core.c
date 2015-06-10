@@ -92,7 +92,8 @@ void ndio_del_claim(struct nd_io_claim *ndio_claim)
 struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
 		ndio_notify_remove_fn notify_remove)
 {
-	struct nd_io_claim *ndio_claim = kzalloc(sizeof(*ndio_claim), GFP_KERNEL);
+	struct nd_io_claim *ndio_claim = kzalloc(sizeof(*ndio_claim),
+			GFP_KERNEL);
 
 	if (!ndio_claim)
 		return NULL;
@@ -120,7 +121,7 @@ u64 nd_fletcher64(void *addr, size_t len, bool le)
 	int i;
 
 	for (i = 0; i < len / sizeof(u32); i++) {
-		lo32 += le ? le32_to_cpu(buf[i]) : buf[i];
+		lo32 += le ? le32_to_cpu((__le32) buf[i]) : buf[i];
 		hi32 += lo32;
 	}
 
@@ -130,18 +131,19 @@ EXPORT_SYMBOL_GPL(nd_fletcher64);
 
 static void nvdimm_bus_release(struct device *dev)
 {
-	struct nvdimm_bus *nvdimm_bus = container_of(dev, struct nvdimm_bus, dev);
+	struct nvdimm_bus *nvdimm_bus;
 
+	nvdimm_bus = container_of(dev, struct nvdimm_bus, dev);
 	WARN_ON(!list_empty(&nvdimm_bus->ndios));
-
 	ida_simple_remove(&nd_ida, nvdimm_bus->id);
 	kfree(nvdimm_bus);
 }
 
 struct nvdimm_bus *to_nvdimm_bus(struct device *dev)
 {
-	struct nvdimm_bus *nvdimm_bus = container_of(dev, struct nvdimm_bus, dev);
+	struct nvdimm_bus *nvdimm_bus;
 
+	nvdimm_bus = container_of(dev, struct nvdimm_bus, dev);
 	WARN_ON(nvdimm_bus->dev.release != nvdimm_bus_release);
 	return nvdimm_bus;
 }
@@ -402,9 +404,10 @@ EXPORT_SYMBOL_GPL(nvdimm_bus_attribute_group);
 struct nvdimm_bus *__nvdimm_bus_register(struct device *parent,
 		struct nvdimm_bus_descriptor *nd_desc, struct module *module)
 {
-	struct nvdimm_bus *nvdimm_bus = kzalloc(sizeof(*nvdimm_bus), GFP_KERNEL);
+	struct nvdimm_bus *nvdimm_bus;
 	int rc;
 
+	nvdimm_bus = kzalloc(sizeof(*nvdimm_bus), GFP_KERNEL);
 	if (!nvdimm_bus)
 		return NULL;
 	INIT_LIST_HEAD(&nvdimm_bus->ndios);
@@ -424,7 +427,7 @@ struct nvdimm_bus *__nvdimm_bus_register(struct device *parent,
 	dev_set_name(&nvdimm_bus->dev, "ndbus%d", nvdimm_bus->id);
 	rc = device_register(&nvdimm_bus->dev);
 	if (rc) {
-		dev_dbg(&nvdimm_bus->dev, "device registration failed: %d\n", rc);
+		dev_dbg(&nvdimm_bus->dev, "registration failed: %d\n", rc);
 		goto err;
 	}
 

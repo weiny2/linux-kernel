@@ -127,7 +127,7 @@ int nvdimm_init_config_data(struct nvdimm_drvdata *ndd)
 		}
 		memcpy(ndd->data + offset, cmd->out_buf, cmd->in_length);
 	}
-	dev_dbg(ndd->dev, "%s: len: %zd rc: %d\n", __func__, offset, rc);
+	dev_dbg(ndd->dev, "%s: len: %zu rc: %d\n", __func__, offset, rc);
 	kfree(cmd);
 
 	return rc;
@@ -359,7 +359,8 @@ resource_size_t nd_blk_available_dpa(struct nd_mapping *nd_mapping)
 			resource_size_t end = min(map_end, res->end);
 
 			busy += end - res->start + 1;
-		} else if (res->end >= nd_mapping->start && res->end <= map_end) {
+		} else if (res->end >= nd_mapping->start
+				&& res->end <= map_end) {
 			busy += res->end - nd_mapping->start;
 		} else if (nd_mapping->start > res->start
 				&& nd_mapping->start < res->end) {
@@ -391,7 +392,7 @@ resource_size_t nd_blk_available_dpa(struct nd_mapping *nd_mapping)
 resource_size_t nd_pmem_available_dpa(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping, resource_size_t *overlap)
 {
-	resource_size_t map_end, busy = 0, available, blk_start;
+	resource_size_t map_start, map_end, busy = 0, available, blk_start;
 	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
 	struct resource *res;
 	const char *reason;
@@ -399,13 +400,14 @@ resource_size_t nd_pmem_available_dpa(struct nd_region *nd_region,
 	if (!ndd)
 		return 0;
 
-	map_end = nd_mapping->start + nd_mapping->size - 1;
-	blk_start = max(nd_mapping->start, map_end + 1 - *overlap);
+	map_start = nd_mapping->start;
+	map_end = map_start + nd_mapping->size - 1;
+	blk_start = max(map_start, map_end + 1 - *overlap);
 	for_each_dpa_resource(ndd, res)
-		if (res->start >= nd_mapping->start && res->start < map_end) {
+		if (res->start >= map_start && res->start < map_end) {
 			if (strncmp(res->name, "blk", 3) == 0)
 				blk_start = min(blk_start, res->start);
-			else if (res->start != nd_mapping->start) {
+			else if (res->start != map_start) {
 				reason = "misaligned to iset";
 				goto err;
 			} else {
@@ -416,27 +418,26 @@ resource_size_t nd_pmem_available_dpa(struct nd_region *nd_region,
 				busy += resource_size(res);
 				continue;
 			}
-		} else if (res->end >= nd_mapping->start && res->end <= map_end) {
+		} else if (res->end >= map_start && res->end <= map_end) {
 			if (strncmp(res->name, "blk", 3) == 0) {
 				/*
 				 * If a BLK allocation overlaps the start of
 				 * PMEM the entire interleave set may now only
 				 * be used for BLK.
 				 */
-				blk_start = nd_mapping->start;
+				blk_start = map_start;
 			} else {
 				reason = "misaligned to iset";
 				goto err;
 			}
-		} else if (nd_mapping->start > res->start
-				&& nd_mapping->start < res->end) {
+		} else if (map_start > res->start && map_start < res->end) {
 			/* total eclipse of the mapping */
 			busy += nd_mapping->size;
-			blk_start = nd_mapping->start;
+			blk_start = map_start;
 		}
 
 	*overlap = map_end + 1 - blk_start;
-	available = blk_start - nd_mapping->start;
+	available = blk_start - map_start;
 	if (busy < available)
 		return available - busy;
 	return 0;
@@ -501,7 +502,7 @@ static int count_dimms(struct device *dev, void *c)
 	return 0;
 }
 
-int nvdimm_bus_validate_dimm_count(struct nvdimm_bus *nvdimm_bus, int dimm_count)
+int nvdimm_bus_check_dimm_count(struct nvdimm_bus *nvdimm_bus, int dimm_count)
 {
 	int count = 0;
 	/* Flush any possible dimm registration failures */
@@ -513,4 +514,4 @@ int nvdimm_bus_validate_dimm_count(struct nvdimm_bus *nvdimm_bus, int dimm_count
 		return -ENXIO;
 	return 0;
 }
-EXPORT_SYMBOL_GPL(nvdimm_bus_validate_dimm_count);
+EXPORT_SYMBOL_GPL(nvdimm_bus_check_dimm_count);

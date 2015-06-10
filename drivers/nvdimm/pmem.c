@@ -135,7 +135,8 @@ static const struct block_device_operations pmem_fops = {
 	.direct_access =	pmem_direct_access,
 };
 
-static struct pmem_device *pmem_alloc(struct device *dev, struct resource *res, int id)
+static struct pmem_device *pmem_alloc(struct device *dev,
+		struct resource *res, int id)
 {
 	struct pmem_device *pmem;
 	struct gendisk *disk;
@@ -151,7 +152,8 @@ static struct pmem_device *pmem_alloc(struct device *dev, struct resource *res, 
 
 	err = -EINVAL;
 	if (!request_mem_region(pmem->phys_addr, pmem->size, "pmem")) {
-		dev_warn(dev, "could not reserve region [0x%pa:0x%zx]\n", &pmem->phys_addr, pmem->size);
+		dev_warn(dev, "could not reserve region [0x%pa:0x%zx]\n",
+				&pmem->phys_addr, pmem->size);
 		goto out_free_dev;
 	}
 
@@ -224,7 +226,7 @@ static int nd_pmem_probe(struct device *dev)
 		return -ENODEV;
 	}
 
-	if (nd_region_to_namespace_type(nd_region) == ND_DEVICE_NAMESPACE_PMEM) {
+	if (nd_region_to_nstype(nd_region) == ND_DEVICE_NAMESPACE_PMEM) {
 		struct nd_namespace_pmem *nspm = to_nd_namespace_pmem(dev);
 
 		if (!nspm->uuid) {

@@ -230,7 +230,7 @@ struct nd_btt *to_nd_btt(struct device *dev);
 struct btt_sb;
 u64 nd_btt_sb_checksum(struct btt_sb *btt_sb);
 struct nd_region *to_nd_region(struct device *dev);
-int nd_region_to_namespace_type(struct nd_region *nd_region);
+int nd_region_to_nstype(struct nd_region *nd_region);
 int nd_region_register_namespaces(struct nd_region *nd_region, int *err);
 u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
 void nvdimm_bus_lock(struct device *dev);
