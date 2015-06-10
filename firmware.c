@@ -1291,31 +1291,20 @@ int parse_platform_config(struct hfi1_devdata *dd)
 			/* data table */
 			switch (table_type) {
 			case PLATFORM_CONFIG_SYSTEM_TABLE:
-				pcfgcache->config_tables[table_type].table =
-									ptr;
 				pcfgcache->config_tables[table_type].num_table =
 									1;
 				break;
 			case PLATFORM_CONFIG_PORT_TABLE:
-				pcfgcache->config_tables[table_type].table =
-									ptr;
 				pcfgcache->config_tables[table_type].num_table =
 									2;
 				break;
 			case PLATFORM_CONFIG_RX_PRESET_TABLE:
-				/* rx preset table is 1 DWORD in META_VERSION 0
-				 * fall through */
+				/* fall through */
 			case PLATFORM_CONFIG_TX_PRESET_TABLE:
-				/* tx preset table is 1 DWORD in META_VERSION 0
-				 * fall through */
+				/* fall through */
 			case PLATFORM_CONFIG_QSFP_ATTEN_TABLE:
-				/* qsfp atten table is 1 DWORD in META_VERSION
-				 * 0, fall through */
+				/* fall through */
 			case PLATFORM_CONFIG_VARIABLE_SETTINGS_TABLE:
-				/* variable setting table is 1 DWORD in
-				 * META_VERSION 0
-				 */
-				pcfgcache->config_tables[table_type].table = ptr;
 				pcfgcache->config_tables[table_type].num_table =
 							table_length_dwords;
 				break;
@@ -1326,6 +1315,7 @@ int parse_platform_config(struct hfi1_devdata *dd)
 				       (ptr - (u32 *)platform_config->data));
 				goto bail; /* We don't trust this file now */
 			}
+			pcfgcache->config_tables[table_type].table = ptr;
 		} else {
 			/* metadata table */
 			switch (table_type) {
@@ -1340,7 +1330,6 @@ int parse_platform_config(struct hfi1_devdata *dd)
 			case PLATFORM_CONFIG_QSFP_ATTEN_TABLE:
 				/* fall through */
 			case PLATFORM_CONFIG_VARIABLE_SETTINGS_TABLE:
-				pcfgcache->config_tables[table_type].table_metadata = ptr;
 				break;
 			default:
 				dd_dev_info(dd,
@@ -1349,6 +1338,8 @@ int parse_platform_config(struct hfi1_devdata *dd)
 				  (ptr - (u32 *)platform_config->data));
 				goto bail; /* We don't trust this file now */
 			}
+			pcfgcache->config_tables[table_type].table_metadata =
+									ptr;
 		}
 
 		/* Calculate and check table crc */
