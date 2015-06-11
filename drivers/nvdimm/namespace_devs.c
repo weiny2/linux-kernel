@@ -17,8 +17,6 @@
 #include "nd-core.h"
 #include "nd.h"
 
-#include <asm-generic/io-64-nonatomic-lo-hi.h>
-
 static void namespace_io_release(struct device *dev)
 {
 	struct nd_namespace_io *nsio = to_nd_namespace_io(dev);
@@ -1004,8 +1002,7 @@ static ssize_t resource_show(struct device *dev,
 static DEVICE_ATTR_RO(resource);
 
 static const unsigned long ns_lbasize_supported[] = { 512, 520, 528,
-							4096, 4104, 4160, 4224,
-							0 };
+	4096, 4104, 4160, 4224, 0 };
 
 static ssize_t sector_size_show(struct device *dev,
 		struct device_attribute *attr, char *buf)

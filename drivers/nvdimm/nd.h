@@ -100,8 +100,8 @@ struct nd_region {
 struct nd_blk_region {
 	int (*enable)(struct nvdimm_bus *nvdimm_bus, struct device *dev);
 	void (*disable)(struct nvdimm_bus *nvdimm_bus, struct device *dev);
-	int (*do_io)(struct nd_blk_region *ndbr, void *iobuf, u64 len,
-			int write, resource_size_t dpa);
+	int (*do_io)(struct nd_blk_region *ndbr, resource_size_t dpa,
+			void *iobuf, u64 len, int rw);
 	void *blk_provider_data;
 	struct nd_region nd_region;
 };
@@ -116,83 +116,13 @@ static inline unsigned nd_inc_seq(unsigned seq)
 	return next[seq & 3];
 }
 
-struct nd_io;
-/**
- * nd_rw_bytes_fn() - access bytes relative to the "whole disk" namespace device
- * @ndio: per-namespace context
- * @buf: source / target for the write / read
- * @offset: offset relative to the start of the namespace device
- * @n: num bytes to access
- * @flags: READ, WRITE, and other REQ_* flags
- *
- * Note: Implementations may assume that offset + n never crosses ndio->align
- */
-typedef int (*nd_rw_bytes_fn)(struct nd_io *ndio, void *buf, size_t offset,
-		size_t n, unsigned long flags);
-#define nd_data_dir(flags) (flags & 1)
-
-/**
- * struct nd_io - info for byte-aligned access to nd devices
- * @rw_bytes: operation to perform byte-aligned access
- * @align: a single ->rw_bytes() request may not cross this alignment
- * @gendisk: whole disk block device for the namespace
- * @list: for the core to cache a list of "ndio"s for later association
- * @dev: namespace device
- * @claims: list of clients using this interface
- * @lock: protect @claims mutation
- */
-struct nd_io {
-	nd_rw_bytes_fn rw_bytes;
-	unsigned long align;
-	struct gendisk *disk;
-	struct list_head list;
-	struct device *dev;
-	struct list_head claims;
-	spinlock_t lock;
-};
-
-struct nd_io_claim;
-typedef void (*ndio_notify_remove_fn)(struct nd_io_claim *ndio_claim);
-
-/**
- * struct nd_io_claim - instance of a claim on a parent ndio
- * @notify_remove: ndio is going away, release resources
- * @holder: object that has claimed this ndio
- * @parent: ndio in use
- * @holder: holder device
- * @list: claim peers
- *
- * An ndio may be claimed multiple times, consider the case of a btt
- * instance per partition on a namespace.
- */
-struct nd_io_claim {
-	struct nd_io *parent;
-	ndio_notify_remove_fn notify_remove;
-	struct list_head list;
-	struct device *holder;
-};
-
 struct nd_btt {
 	struct device dev;
-	struct nd_io *ndio;
 	struct block_device *backing_dev;
 	unsigned long lbasize;
 	u8 *uuid;
-	u64 offset;
 	int id;
-	struct nd_io_claim *ndio_claim;
 };
-
-static inline u64 nd_partition_offset(struct block_device *bdev)
-{
-	struct hd_struct *p;
-
-	if (bdev == bdev->bd_contains)
-		return 0;
-
-	p = bdev->bd_part;
-	return ((u64) p->start_sect) << SECTOR_SHIFT;
-}
 
 enum nd_async_mode {
 	ND_SYNC,
@@ -209,13 +139,6 @@ ssize_t nd_sector_size_show(unsigned long current_lbasize,
 		const unsigned long *supported, char *buf);
 ssize_t nd_sector_size_store(struct device *dev, const char *buf,
 		unsigned long *current_lbasize, const unsigned long *supported);
-int nd_register_ndio(struct nd_io *ndio);
-int nd_unregister_ndio(struct nd_io *ndio);
-void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
-		struct device *dev, struct gendisk *disk, unsigned long align);
-void ndio_del_claim(struct nd_io_claim *ndio_claim);
-struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
-		ndio_notify_remove_fn notify_remove);
 int __init nvdimm_init(void);
 int __init nd_region_init(void);
 void nvdimm_exit(void);
@@ -236,6 +159,10 @@ u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
 void nvdimm_bus_lock(struct device *dev);
 void nvdimm_bus_unlock(struct device *dev);
 bool is_nvdimm_bus_locked(struct device *dev);
+int nvdimm_bus_add_disk(struct gendisk *disk);
+int nvdimm_bus_add_integrity_disk(struct gendisk *disk, u32 lbasize,
+		sector_t size);
+void nvdimm_bus_remove_disk(struct gendisk *disk);
 int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd);
 void nvdimm_free_dpa(struct nvdimm_drvdata *ndd, struct resource *res);
 struct resource *nvdimm_allocate_dpa(struct nvdimm_drvdata *ndd,

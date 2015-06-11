@@ -26,7 +26,6 @@ struct nd_blk_device {
 	struct gendisk *disk;
 	struct nd_namespace_blk *nsblk;
 	struct nd_blk_region *ndbr;
-	struct nd_io ndio;
 	size_t disk_size;
 	u32 sector_size;
 	u32 internal_lbasize;
@@ -92,8 +91,8 @@ static int nd_blk_rw_integrity(struct nd_blk_device *blk_dev,
 
 		cur_len = min(len, bv.bv_len);
 		iobuf = kmap_atomic(bv.bv_page);
-		err = ndbr->do_io(ndbr, iobuf + bv.bv_offset, cur_len, rw,
-					dev_offset);
+		err = ndbr->do_io(ndbr, dev_offset, iobuf + bv.bv_offset,
+				cur_len, rw);
 		kunmap_atomic(iobuf);
 		if (err)
 			return err;
@@ -144,7 +143,7 @@ static int nd_blk_do_bvec(struct nd_blk_device *blk_dev,
 			return -EIO;
 
 		iobuf = kmap_atomic(page);
-		err = ndbr->do_io(ndbr, iobuf + off, cur_len, rw, dev_offset);
+		err = ndbr->do_io(ndbr, dev_offset, iobuf + off, cur_len, rw);
 		kunmap_atomic(iobuf);
 		if (err)
 			return err;
@@ -216,34 +215,30 @@ static void nd_blk_make_request(struct request_queue *q, struct bio *bio)
 	bio_endio(bio, err);
 }
 
-static int nd_blk_rw_bytes(struct nd_io *ndio, void *iobuf, size_t offset,
-		size_t n, unsigned long flags)
+static int nd_blk_rw_bytes(struct gendisk *disk, resource_size_t offset,
+		void *iobuf, size_t n, int rw)
 {
-	struct nd_namespace_blk *nsblk;
-	struct nd_blk_device *blk_dev;
-	int rw = nd_data_dir(flags);
-	struct nd_blk_region *ndbr;
+	struct nd_blk_device *blk_dev = disk->private_data;
+	struct nd_namespace_blk *nsblk = blk_dev->nsblk;
+	struct nd_blk_region *ndbr = blk_dev->ndbr;
 	resource_size_t	dev_offset;
 
-	blk_dev = container_of(ndio, typeof(*blk_dev), ndio);
-	ndbr = blk_dev->ndbr;
-	nsblk = blk_dev->nsblk;
 	dev_offset = to_dev_offset(nsblk, offset, n);
 
 	if (unlikely(offset + n > blk_dev->disk_size)) {
-		dev_WARN_ONCE(ndio->dev, 1, "%s: request out of range\n",
-				__func__);
+		dev_WARN_ONCE(disk_to_dev(disk), 1, "request out of range\n");
 		return -EFAULT;
 	}
 
 	if (dev_offset == SIZE_MAX)
 		return -EIO;
 
-	return ndbr->do_io(ndbr, iobuf, n, rw, dev_offset);
+	return ndbr->do_io(ndbr, dev_offset, iobuf, n, rw);
 }
 
 static const struct block_device_operations nd_blk_fops = {
-	.owner =		THIS_MODULE,
+	.owner = THIS_MODULE,
+	.rw_bytes = nd_blk_rw_bytes,
 };
 
 static int nd_blk_probe(struct device *dev)
@@ -300,27 +295,17 @@ static int nd_blk_probe(struct device *dev)
 
 	internal_nlba = div_u64(disk_size, blk_dev->internal_lbasize);
 	available_disk_size = internal_nlba * blk_dev->sector_size;
-
-	nvdimm_bus_lock(dev);
-	add_disk(disk);
-
-	if (nd_blk_meta_size(blk_dev)) {
-		err = nd_integrity_init(disk, nd_blk_meta_size(blk_dev));
-		if (err)
-			goto err_unlock_bus;
-	}
-	set_capacity(disk, available_disk_size >> SECTOR_SHIFT);
-
 	dev_set_drvdata(dev, blk_dev);
-	nd_init_ndio(&blk_dev->ndio, nd_blk_rw_bytes, dev, disk, 0);
-	nd_register_ndio(&blk_dev->ndio);
-	nvdimm_bus_unlock(dev);
-
+	err = nvdimm_bus_add_integrity_disk(disk, nd_blk_meta_size(blk_dev),
+			available_disk_size >> SECTOR_SHIFT);
+	if (err)
+		goto err_add_disk;
 
 	return 0;
 
- err_unlock_bus:
-	nvdimm_bus_unlock(dev);
+ err_add_disk:
+	del_gendisk(disk);
+	put_disk(disk);
  err_alloc_disk:
 	blk_cleanup_queue(blk_dev->queue);
  err_alloc_queue:
@@ -332,10 +317,7 @@ static int nd_blk_remove(struct device *dev)
 {
 	struct nd_blk_device *blk_dev = dev_get_drvdata(dev);
 
-	nd_unregister_ndio(&blk_dev->ndio);
-	blk_integrity_unregister(blk_dev->disk);
-	del_gendisk(blk_dev->disk);
-	put_disk(blk_dev->disk);
+	nvdimm_bus_remove_disk(blk_dev->disk);
 	blk_cleanup_queue(blk_dev->queue);
 	kfree(blk_dev);
 

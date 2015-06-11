@@ -14,6 +14,7 @@
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
+#include <linux/blkdev.h>
 #include <linux/fcntl.h>
 #include <linux/async.h>
 #include <linux/genhd.h>
@@ -242,107 +243,71 @@ int __nd_driver_register(struct nd_device_driver *nd_drv, struct module *owner,
 }
 EXPORT_SYMBOL(__nd_driver_register);
 
-/**
- * nd_register_ndio() - register byte-aligned access capability for an nd-bdev
- * @disk: child gendisk of the ndio namepace device
- * @ndio: initialized ndio instance to register
- *
- * LOCKING: hold nvdimm_bus_lock() over the creation of ndio->disk and the
- * subsequent nd_region_ndio event
- */
-int nd_register_ndio(struct nd_io *ndio)
+int nvdimm_bus_add_integrity_disk(struct gendisk *disk, u32 lbasize,
+		sector_t size)
 {
+	const struct block_device_operations *ops = disk->fops;
+	struct device *dev = disk->driverfs_dev;
 	struct nvdimm_bus *nvdimm_bus;
-	struct device *dev;
-
-	if (!ndio || !ndio->dev || !ndio->disk || !list_empty(&ndio->list)
-			|| !ndio->rw_bytes || !list_empty(&ndio->claims)) {
-		pr_debug("%s bad parameters from %pf\n", __func__,
-				__builtin_return_address(0));
-		return -EINVAL;
-	}
-
-	dev = ndio->dev;
-	nvdimm_bus = walk_to_nvdimm_bus(dev);
-	if (!nvdimm_bus)
-		return -EINVAL;
-
-	WARN_ON_ONCE(!is_nvdimm_bus_locked(&nvdimm_bus->dev));
-	list_add(&ndio->list, &nvdimm_bus->ndios);
-
-	/* TODO: generic infrastructure for 3rd party ndio claimers */
-	nd_btt_notify_ndio(nvdimm_bus, ndio);
-
-	return 0;
-}
-EXPORT_SYMBOL(nd_register_ndio);
-
-/**
- * __nd_unregister_ndio() - try to remove an ndio interface
- * @ndio: interface to remove
- */
-static int __nd_unregister_ndio(struct nd_io *ndio)
-{
-	struct nd_io_claim *ndio_claim, *_n;
-	struct nvdimm_bus *nvdimm_bus;
-	LIST_HEAD(claims);
-
-	nvdimm_bus = walk_to_nvdimm_bus(ndio->dev);
-	if (!nvdimm_bus || list_empty(&ndio->list))
-		return -ENXIO;
-
-	spin_lock(&ndio->lock);
-	list_splice_init(&ndio->claims, &claims);
-	spin_unlock(&ndio->lock);
-
-	list_for_each_entry_safe(ndio_claim, _n, &claims, list)
-		ndio_claim->notify_remove(ndio_claim);
-
-	list_del_init(&ndio->list);
-
-	return 0;
-}
-
-int nd_unregister_ndio(struct nd_io *ndio)
-{
-	struct device *dev = ndio->dev;
 	int rc;
 
-	nvdimm_bus_lock(dev);
-	rc = __nd_unregister_ndio(ndio);
-	nvdimm_bus_unlock(dev);
+	nvdimm_bus = walk_to_nvdimm_bus(dev);
+	if (!nvdimm_bus || !ops->rw_bytes)
+		return -EINVAL;
 
 	/*
-	 * Flush in case ->notify_remove() kicked off asynchronous device
-	 * unregistration
+	 * Take the bus lock here to prevent userspace racing to
+	 * initiate actions on the newly availble block device while
+	 * autodetect scanning is still in flight.
 	 */
-	nd_synchronize();
+	nvdimm_bus_lock(&nvdimm_bus->dev);
+	add_disk(disk);
+	rc = nd_integrity_init(disk, lbasize);
+	if (size)
+		set_capacity(disk, size);
+	nd_btt_add_disk(nvdimm_bus, disk);
+	nvdimm_bus_unlock(&nvdimm_bus->dev);
 
 	return rc;
 }
-EXPORT_SYMBOL(nd_unregister_ndio);
+EXPORT_SYMBOL(nvdimm_bus_add_integrity_disk);
 
-static struct nd_io *__ndio_lookup(struct nvdimm_bus *nvdimm_bus,
-		const char *diskname)
+/**
+ * nvdimm_bus_add_disk() - attach and run actions on an nvdimm block device
+ * @disk: disk device being registered
+ *
+ * Note, that @disk must be a descendant of an nvdimm_bus
+ */
+int nvdimm_bus_add_disk(struct gendisk *disk)
 {
-	struct nd_io *ndio;
-
-	list_for_each_entry(ndio, &nvdimm_bus->ndios, list)
-		if (strcmp(diskname, ndio->disk->disk_name) == 0)
-			return ndio;
-
-	return NULL;
+	return nvdimm_bus_add_integrity_disk(disk, 0, 0);
 }
+EXPORT_SYMBOL(nvdimm_bus_add_disk);
 
-struct nd_io *ndio_lookup(struct nvdimm_bus *nvdimm_bus, const char *diskname)
+void nvdimm_bus_remove_disk(struct gendisk *disk)
 {
-	struct nd_io *ndio;
+	struct device *dev = disk_to_dev(disk);
+	struct nvdimm_bus *nvdimm_bus;
 
-	WARN_ON_ONCE(!is_nvdimm_bus_locked(&nvdimm_bus->dev));
-	ndio = __ndio_lookup(nvdimm_bus, diskname);
+	nvdimm_bus = walk_to_nvdimm_bus(dev);
+	if (!nvdimm_bus)
+		return;
 
-	return ndio;
+	nvdimm_bus_lock(&nvdimm_bus->dev);
+	nd_btt_remove_disk(nvdimm_bus, disk);
+	nvdimm_bus_unlock(&nvdimm_bus->dev);
+
+	/*
+	 * Flush in case *_notify_remove() kicked off asynchronous
+	 * device unregistration
+	 */
+	nd_synchronize();
+
+	blk_integrity_unregister(disk);
+	del_gendisk(disk);
+	put_disk(disk);
 }
+EXPORT_SYMBOL(nvdimm_bus_remove_disk);
 
 static ssize_t modalias_show(struct device *dev, struct device_attribute *attr,
 		char *buf)

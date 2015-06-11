@@ -33,43 +33,46 @@ enum log_ent_request {
 
 static int btt_major;
 
-static int nd_btt_rw_bytes(struct nd_btt *nd_btt, void *buf, size_t offset,
-		size_t n, unsigned long flags)
+static int arena_read_bytes(struct arena_info *arena, resource_size_t offset,
+		void *buf, size_t n)
 {
-	struct nd_io *ndio = nd_btt->ndio;
+	struct nd_btt *nd_btt = arena->nd_btt;
+	struct block_device *bdev = nd_btt->backing_dev;
 
-	if (unlikely(nd_data_dir(flags) == WRITE)
-			&& bdev_read_only(nd_btt->backing_dev))
-		return -EACCES;
-
-	return ndio->rw_bytes(ndio, buf, offset + nd_btt->offset, n, flags);
+	/* arena offsets are 4K from the base of the device */
+	offset += SZ_4K;
+	return bdev_read_bytes(bdev, offset, buf, n);
 }
 
-static int arena_rw_bytes(struct arena_info *arena, void *buf, size_t n,
-		size_t offset, unsigned long flags)
+static int arena_write_bytes(struct arena_info *arena, resource_size_t offset,
+		void *buf, size_t n)
 {
-	/* yes, FIXME,  'offset' and 'n' are swapped */
-	return nd_btt_rw_bytes(arena->nd_btt, buf, offset, n, flags);
+	struct nd_btt *nd_btt = arena->nd_btt;
+	struct block_device *bdev = nd_btt->backing_dev;
+
+	/* arena offsets are 4K from the base of the device */
+	offset += SZ_4K;
+	return bdev_write_bytes(bdev, offset, buf, n);
 }
 
 static int btt_info_write(struct arena_info *arena, struct btt_sb *super)
 {
 	int ret;
 
-	ret = arena_rw_bytes(arena, super, sizeof(struct btt_sb),
-			arena->info2off, WRITE);
+	ret = arena_write_bytes(arena, arena->info2off, super,
+			sizeof(struct btt_sb));
 	if (ret)
 		return ret;
 
-	return arena_rw_bytes(arena, super, sizeof(struct btt_sb),
-			arena->infooff, WRITE);
+	return arena_write_bytes(arena, arena->infooff, super,
+			sizeof(struct btt_sb));
 }
 
 static int btt_info_read(struct arena_info *arena, struct btt_sb *super)
 {
 	WARN_ON(!super);
-	return arena_rw_bytes(arena, super, sizeof(struct btt_sb),
-			arena->infooff, READ);
+	return arena_read_bytes(arena, arena->infooff, super,
+			sizeof(struct btt_sb));
 }
 
 /*
@@ -83,7 +86,7 @@ static int __btt_map_write(struct arena_info *arena, u32 lba, __le32 mapping)
 	u64 ns_off = arena->mapoff + (lba * MAP_ENT_SIZE);
 
 	WARN_ON(lba >= arena->external_nlba);
-	return arena_rw_bytes(arena, &mapping, MAP_ENT_SIZE, ns_off, WRITE);
+	return arena_write_bytes(arena, ns_off, &mapping, MAP_ENT_SIZE);
 }
 
 static int btt_map_write(struct arena_info *arena, u32 lba, u32 mapping,
@@ -139,7 +142,7 @@ static int btt_map_read(struct arena_info *arena, u32 lba, u32 *mapping,
 
 	WARN_ON(lba >= arena->external_nlba);
 
-	ret = arena_rw_bytes(arena, &in, MAP_ENT_SIZE, ns_off, READ);
+	ret = arena_read_bytes(arena, ns_off, &in, MAP_ENT_SIZE);
 	if (ret)
 		return ret;
 
@@ -186,8 +189,9 @@ static int btt_log_read_pair(struct arena_info *arena, u32 lane,
 			struct log_entry *ent)
 {
 	WARN_ON(!ent);
-	return arena_rw_bytes(arena, ent, 2 * LOG_ENT_SIZE,
-			arena->logoff + (2 * lane * LOG_ENT_SIZE), READ);
+	return arena_read_bytes(arena,
+			arena->logoff + (2 * lane * LOG_ENT_SIZE), ent,
+			2 * LOG_ENT_SIZE);
 }
 
 static struct dentry *debugfs_root;
@@ -348,13 +352,13 @@ static int __btt_log_write(struct arena_info *arena, u32 lane,
 	void *src = ent;
 
 	/* split the 16B write into atomic, durable halves */
-	ret = arena_rw_bytes(arena, src, log_half, ns_off, WRITE);
+	ret = arena_write_bytes(arena, ns_off, src, log_half);
 	if (ret)
 		return ret;
 
 	ns_off += log_half;
 	src += log_half;
-	return arena_rw_bytes(arena, src, log_half, ns_off, WRITE);
+	return arena_write_bytes(arena, ns_off, src, log_half);
 }
 
 static int btt_flog_write(struct arena_info *arena, u32 lane, u32 sub,
@@ -394,8 +398,8 @@ static int btt_map_init(struct arena_info *arena)
 	while (mapsize) {
 		size_t size = min(mapsize, chunk_size);
 
-		ret = arena_rw_bytes(arena, zerobuf, size,
-				arena->mapoff + offset, WRITE);
+		ret = arena_write_bytes(arena, arena->mapoff + offset, zerobuf,
+				size);
 		if (ret)
 			goto free;
 
@@ -895,7 +899,7 @@ static int btt_data_read(struct arena_info *arena, struct page *page,
 	u64 nsoff = to_namespace_offset(arena, lba);
 	void *mem = kmap_atomic(page);
 
-	ret = arena_rw_bytes(arena, mem + off, len, nsoff, READ);
+	ret = arena_read_bytes(arena, nsoff, mem + off, len);
 	kunmap_atomic(mem);
 
 	return ret;
@@ -908,7 +912,7 @@ static int btt_data_write(struct arena_info *arena, u32 lba,
 	u64 nsoff = to_namespace_offset(arena, lba);
 	void *mem = kmap_atomic(page);
 
-	ret = arena_rw_bytes(arena, mem + off, len, nsoff, WRITE);
+	ret = arena_write_bytes(arena, nsoff, mem + off, len);
 	kunmap_atomic(mem);
 
 	return ret;
@@ -949,8 +953,13 @@ static int btt_rw_integrity(struct btt *btt, struct bio_integrity_payload *bip,
 
 		cur_len = min(len, bv.bv_len);
 		mem = kmap_atomic(bv.bv_page);
-		ret = arena_rw_bytes(arena, mem + bv.bv_offset, cur_len,
-				meta_nsoff, rw);
+		if (rw)
+			ret = arena_write_bytes(arena, meta_nsoff,
+					mem + bv.bv_offset, cur_len);
+		else
+			ret = arena_read_bytes(arena, meta_nsoff,
+					mem + bv.bv_offset, cur_len);
+
 		kunmap_atomic(mem);
 		if (ret)
 			return ret;
@@ -1419,18 +1428,25 @@ static void unlink_btt(struct nd_btt *nd_btt)
 	sysfs_remove_link(dir, "nd_btt");
 }
 
+static struct nd_region *nd_btt_to_region(struct nd_btt *nd_btt)
+{
+	struct block_device *bdev = nd_btt->backing_dev;
+	struct device *disk_dev = disk_to_dev(bdev->bd_disk);
+	struct device *namespace_dev = disk_dev->parent;
+
+	return to_nd_region(namespace_dev->parent);
+}
+
 static int nd_btt_probe(struct device *dev)
 {
 	struct nd_btt *nd_btt = to_nd_btt(dev);
-	struct nd_io_claim *ndio_claim = nd_btt->ndio_claim;
 	struct nd_region *nd_region;
 	struct block_device *bdev;
 	struct btt *btt;
 	size_t rawsize;
 	int rc;
 
-	if (!ndio_claim || !nd_btt->uuid || !nd_btt->backing_dev
-			|| !nd_btt->lbasize)
+	if (!nd_btt->uuid || !nd_btt->backing_dev || !nd_btt->lbasize)
 		return -ENODEV;
 
 	rc = link_btt(nd_btt);
@@ -1440,15 +1456,12 @@ static int nd_btt_probe(struct device *dev)
 	bdev = nd_btt->backing_dev;
 	sync_blockdev(bdev);
 	invalidate_bdev(bdev);
-	/* the first 4K of a device is padding */
-	nd_btt->offset = nd_partition_offset(bdev) + SZ_4K;
 	rawsize = (bdev->bd_part->nr_sects << SECTOR_SHIFT) - SZ_4K;
 	if (rawsize < ARENA_MIN_SIZE) {
 		rc = -ENXIO;
 		goto err_btt;
 	}
-	nd_btt->ndio = nd_btt->ndio_claim->parent;
-	nd_region = to_nd_region(nd_btt->ndio->dev->parent);
+	nd_region = nd_btt_to_region(nd_btt);
 	btt = btt_init(nd_btt, rawsize, nd_btt->lbasize, nd_btt->uuid,
 			nd_region);
 	if (!btt) {

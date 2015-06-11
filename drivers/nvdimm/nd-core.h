@@ -23,15 +23,12 @@ extern struct list_head nvdimm_bus_list;
 extern struct mutex nvdimm_bus_list_mutex;
 extern int nvdimm_major;
 
-struct nd_io_claim;
 struct nd_btt;
-struct nd_io;
 
 struct nvdimm_bus {
 	struct nvdimm_bus_descriptor *nd_desc;
 	wait_queue_head_t probe_wait;
 	struct module *module;
-	struct list_head ndios;
 	struct list_head list;
 	struct device dev;
 	int id, probe_active;
@@ -48,14 +45,15 @@ struct nvdimm {
 	int id;
 };
 
-struct nd_io *ndio_lookup(struct nvdimm_bus *nvdimm_bus, const char *diskname);
 bool is_nvdimm(struct device *dev);
 bool is_nd_pmem(struct device *dev);
 bool is_nd_blk(struct device *dev);
+struct gendisk;
 #if IS_ENABLED(CONFIG_ND_BTT_DEVS)
 bool is_nd_btt(struct device *dev);
 struct nd_btt *nd_btt_create(struct nvdimm_bus *nvdimm_bus);
-void nd_btt_notify_ndio(struct nvdimm_bus *nvdimm_bus, struct nd_io *ndio);
+void nd_btt_add_disk(struct nvdimm_bus *nvdimm_bus, struct gendisk *disk);
+void nd_btt_remove_disk(struct nvdimm_bus *nvdimm_bus, struct gendisk *disk);
 #else
 static inline bool is_nd_btt(struct device *dev)
 {
@@ -67,8 +65,13 @@ static inline struct nd_btt *nd_btt_create(struct nvdimm_bus *nvdimm_bus)
 	return NULL;
 }
 
-static inline void nd_btt_notify_ndio(struct nvdimm_bus *nvdimm_bus,
-		struct nd_io *ndio)
+static inline void nd_btt_add_disk(struct nvdimm_bus *nvdimm_bus,
+		struct gendisk *disk)
+{
+}
+
+static inline void nd_btt_remove_disk(struct nvdimm_bus *nvdimm_bus,
+		struct gendisk *disk)
 {
 }
 #endif

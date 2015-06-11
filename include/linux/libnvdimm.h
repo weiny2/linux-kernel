@@ -88,8 +88,8 @@ struct nd_blk_region;
 struct nd_blk_region_desc {
 	int (*enable)(struct nvdimm_bus *nvdimm_bus, struct device *dev);
 	void (*disable)(struct nvdimm_bus *nvdimm_bus, struct device *dev);
-	int (*do_io)(struct nd_blk_region *ndbr, void *iobuf, u64 len,
-			int write, resource_size_t dpa);
+	int (*do_io)(struct nd_blk_region *ndbr, resource_size_t dpa,
+			void *iobuf, u64 len, int rw);
 	struct nd_region_desc ndr_desc;
 };
 

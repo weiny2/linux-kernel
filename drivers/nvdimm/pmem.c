@@ -29,7 +29,6 @@
 struct pmem_device {
 	struct request_queue	*pmem_queue;
 	struct gendisk		*pmem_disk;
-	struct nd_io		ndio;
 
 	/* One contiguous memory region per device */
 	phys_addr_t		phys_addr;
@@ -94,22 +93,20 @@ static int pmem_rw_page(struct block_device *bdev, sector_t sector,
 	return 0;
 }
 
-static int pmem_rw_bytes(struct nd_io *ndio, void *buf, size_t offset,
-		size_t n, unsigned long flags)
+static int pmem_rw_bytes(struct gendisk *disk, resource_size_t offset,
+			void *buf, size_t size, int rw)
 {
-	struct pmem_device *pmem = container_of(ndio, typeof(*pmem), ndio);
-	int rw = nd_data_dir(flags);
+	struct pmem_device *pmem = disk->private_data;
 
-	if (unlikely(offset + n > pmem->size)) {
-		dev_WARN_ONCE(ndio->dev, 1, "%s: request out of range\n",
-				__func__);
+	if (unlikely(offset + size > pmem->size)) {
+		dev_WARN_ONCE(disk_to_dev(disk), 1, "request out of range\n");
 		return -EFAULT;
 	}
 
 	if (rw == READ)
-		memcpy(buf, pmem->virt_addr + offset, n);
+		memcpy(buf, pmem->virt_addr + offset, size);
 	else
-		memcpy(pmem->virt_addr + offset, buf, n);
+		memcpy(pmem->virt_addr + offset, buf, size);
 
 	return 0;
 }
@@ -132,6 +129,7 @@ static long pmem_direct_access(struct block_device *bdev, sector_t sector,
 static const struct block_device_operations pmem_fops = {
 	.owner =		THIS_MODULE,
 	.rw_page =		pmem_rw_page,
+	.rw_bytes =		pmem_rw_bytes,
 	.direct_access =	pmem_direct_access,
 };
 
@@ -204,8 +202,7 @@ out:
 
 static void pmem_free(struct pmem_device *pmem)
 {
-	del_gendisk(pmem->pmem_disk);
-	put_disk(pmem->pmem_disk);
+	nvdimm_bus_remove_disk(pmem->pmem_disk);
 	blk_cleanup_queue(pmem->pmem_queue);
 	iounmap(pmem->virt_addr);
 	release_mem_region(pmem->phys_addr, pmem->size);
@@ -239,12 +236,8 @@ static int nd_pmem_probe(struct device *dev)
 	if (IS_ERR(pmem))
 		return PTR_ERR(pmem);
 
-	nvdimm_bus_lock(dev);
-	add_disk(pmem->pmem_disk);
 	dev_set_drvdata(dev, pmem);
-	nd_init_ndio(&pmem->ndio, pmem_rw_bytes, dev, pmem->pmem_disk, 0);
-	nd_register_ndio(&pmem->ndio);
-	nvdimm_bus_unlock(dev);
+	nvdimm_bus_add_disk(pmem->pmem_disk);
 
 	return 0;
 }
@@ -253,7 +246,6 @@ static int nd_pmem_remove(struct device *dev)
 {
 	struct pmem_device *pmem = dev_get_drvdata(dev);
 
-	nd_unregister_ndio(&pmem->ndio);
 	pmem_free(pmem);
 	return 0;
 }

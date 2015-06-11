@@ -93,8 +93,8 @@ struct acpi_nfit_desc {
 	struct nvdimm_bus *nvdimm_bus;
 	struct device *dev;
 	unsigned long dimm_dsm_force_en;
-	int (*blk_do_io)(struct nd_blk_region *ndbr, void *iobuf,
-			u64 len, int write, resource_size_t dpa);
+	int (*blk_do_io)(struct nd_blk_region *ndbr, resource_size_t dpa,
+			void *iobuf, u64 len, int rw);
 };
 
 enum nd_blk_mmio_selector {

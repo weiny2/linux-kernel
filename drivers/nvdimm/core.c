@@ -56,63 +56,6 @@ bool is_nvdimm_bus_locked(struct device *dev)
 }
 EXPORT_SYMBOL(is_nvdimm_bus_locked);
 
-void nd_init_ndio(struct nd_io *ndio, nd_rw_bytes_fn rw_bytes,
-		struct device *dev, struct gendisk *disk, unsigned long align)
-{
-	memset(ndio, 0, sizeof(*ndio));
-	INIT_LIST_HEAD(&ndio->claims);
-	INIT_LIST_HEAD(&ndio->list);
-	spin_lock_init(&ndio->lock);
-	ndio->dev = dev;
-	ndio->disk = disk;
-	ndio->align = align;
-	ndio->rw_bytes = rw_bytes;
-}
-EXPORT_SYMBOL(nd_init_ndio);
-
-void ndio_del_claim(struct nd_io_claim *ndio_claim)
-{
-	struct nd_io *ndio;
-	struct device *holder;
-
-	if (!ndio_claim)
-		return;
-	ndio = ndio_claim->parent;
-	holder = ndio_claim->holder;
-
-	dev_dbg(holder, "%s: drop %s\n", __func__, dev_name(ndio->dev));
-	spin_lock(&ndio->lock);
-	list_del(&ndio_claim->list);
-	spin_unlock(&ndio->lock);
-	put_device(ndio->dev);
-	kfree(ndio_claim);
-	put_device(holder);
-}
-
-struct nd_io_claim *ndio_add_claim(struct nd_io *ndio, struct device *holder,
-		ndio_notify_remove_fn notify_remove)
-{
-	struct nd_io_claim *ndio_claim = kzalloc(sizeof(*ndio_claim),
-			GFP_KERNEL);
-
-	if (!ndio_claim)
-		return NULL;
-
-	INIT_LIST_HEAD(&ndio_claim->list);
-	ndio_claim->parent = ndio;
-	get_device(ndio->dev);
-
-	spin_lock(&ndio->lock);
-	list_add(&ndio_claim->list, &ndio->claims);
-	spin_unlock(&ndio->lock);
-
-	ndio_claim->holder = holder;
-	ndio_claim->notify_remove = notify_remove;
-	get_device(holder);
-
-	return ndio_claim;
-}
-
 u64 nd_fletcher64(void *addr, size_t len, bool le)
 {
 	u32 *buf = addr;
@@ -134,7 +77,6 @@ static void nvdimm_bus_release(struct device *dev)
 	struct nvdimm_bus *nvdimm_bus;
 
 	nvdimm_bus = container_of(dev, struct nvdimm_bus, dev);
-	WARN_ON(!list_empty(&nvdimm_bus->ndios));
 	ida_simple_remove(&nd_ida, nvdimm_bus->id);
 	kfree(nvdimm_bus);
 }
@@ -410,7 +352,6 @@ struct nvdimm_bus *__nvdimm_bus_register(struct device *parent,
 	nvdimm_bus = kzalloc(sizeof(*nvdimm_bus), GFP_KERNEL);
 	if (!nvdimm_bus)
 		return NULL;
-	INIT_LIST_HEAD(&nvdimm_bus->ndios);
 	INIT_LIST_HEAD(&nvdimm_bus->list);
 	init_waitqueue_head(&nvdimm_bus->probe_wait);
 	nvdimm_bus->id = ida_simple_get(&nd_ida, 0, 0, GFP_KERNEL);
@@ -496,6 +437,9 @@ int nd_integrity_init(struct gendisk *disk, unsigned long meta_size)
 		.tag_size = meta_size,
 	};
 	int ret;
+
+	if (meta_size == 0)
+		return 0;
 
 	ret = blk_integrity_register(disk, &integrity);
 	if (ret)

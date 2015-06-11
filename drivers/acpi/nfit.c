@@ -979,9 +979,9 @@ static void write_blk_ctl(struct nfit_blk *nfit_blk, unsigned int bw,
 	/* FIXME: conditionally perform read-back if mandated by firmware */
 }
 
-static int acpi_nfit_blk_single_io(struct nfit_blk *nfit_blk, void *iobuf,
-		unsigned int len, int write, resource_size_t dpa,
-		unsigned int bw)
+static int acpi_nfit_blk_single_io(struct nfit_blk *nfit_blk,
+		resource_size_t dpa, void *iobuf, size_t len, int rw,
+		unsigned int lane)
 {
 	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
 	unsigned int copied = 0;
@@ -989,9 +989,9 @@ static int acpi_nfit_blk_single_io(struct nfit_blk *nfit_blk, void *iobuf,
 	int rc;
 
 	base_offset = nfit_blk->bdw_offset + dpa % L1_CACHE_BYTES
-		+ bw * mmio->size;
+		+ lane * mmio->size;
 	/* TODO: non-temporal access, flush hints, cache management etc... */
-	write_blk_ctl(nfit_blk, bw, dpa, len, write);
+	write_blk_ctl(nfit_blk, lane, dpa, len, rw);
 	while (len) {
 		unsigned int c;
 		u64 offset;
@@ -1002,13 +1002,13 @@ static int acpi_nfit_blk_single_io(struct nfit_blk *nfit_blk, void *iobuf,
 			offset = to_interleave_offset(base_offset + copied,
 					mmio);
 			div_u64_rem(offset, mmio->line_size, &line_offset);
-			c = min(len, mmio->line_size - line_offset);
+			c = min_t(size_t, len, mmio->line_size - line_offset);
 		} else {
 			offset = base_offset + nfit_blk->bdw_offset;
 			c = len;
 		}
 
-		if (write)
+		if (rw)
 			memcpy(mmio->aperture + offset, iobuf + copied, c);
 		else
 			memcpy(iobuf + copied, mmio->aperture + offset, c);
@@ -1016,32 +1016,32 @@ static int acpi_nfit_blk_single_io(struct nfit_blk *nfit_blk, void *iobuf,
 		copied += c;
 		len -= c;
 	}
-	rc = read_blk_stat(nfit_blk, bw) ? -EIO : 0;
+	rc = read_blk_stat(nfit_blk, lane) ? -EIO : 0;
 	return rc;
 }
 
-static int acpi_nfit_blk_region_do_io(struct nd_blk_region *ndbr, void *iobuf,
-		u64 len, int write, resource_size_t dpa)
+static int acpi_nfit_blk_region_do_io(struct nd_blk_region *ndbr,
+		resource_size_t dpa, void *iobuf, u64 len, int rw)
 {
 	struct nfit_blk *nfit_blk = nd_blk_region_provider_data(ndbr);
 	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
 	struct nd_region *nd_region = nfit_blk->nd_region;
-	unsigned int bw, copied = 0;
+	unsigned int lane, copied = 0;
 	int rc = 0;
 
-	bw = nd_region_acquire_lane(nd_region);
+	lane = nd_region_acquire_lane(nd_region);
 	while (len) {
 		u64 c = min(len, mmio->size);
 
-		rc = acpi_nfit_blk_single_io(nfit_blk, iobuf + copied, c, write,
-				dpa + copied, bw);
+		rc = acpi_nfit_blk_single_io(nfit_blk, dpa + copied,
+				iobuf + copied, c, rw, lane);
 		if (rc)
 			break;
 
 		copied += c;
 		len -= c;
 	}
-	nd_region_release_lane(nd_region, bw);
+	nd_region_release_lane(nd_region, lane);
 
 	return rc;
 }

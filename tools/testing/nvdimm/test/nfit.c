@@ -893,20 +893,20 @@ static void nfit_test1_setup(struct nfit_test *t)
 	dcr->status_size = 0;
 }
 
-static int nfit_test_blk_do_io(struct nd_blk_region *ndbr, void *iobuf,
-		u64 len, int rw, resource_size_t dpa)
+static int nfit_test_blk_do_io(struct nd_blk_region *ndbr, resource_size_t dpa,
+		void *iobuf, u64 len, int rw)
 {
 	struct nfit_blk *nfit_blk = ndbr->blk_provider_data;
 	struct nfit_blk_mmio *mmio = &nfit_blk->mmio[BDW];
 	struct nd_region *nd_region = &ndbr->nd_region;
-	unsigned int bw;
+	unsigned int lane;
 
-	bw = nd_region_acquire_lane(nd_region);
+	lane = nd_region_acquire_lane(nd_region);
 	if (rw)
 		memcpy(mmio->base + dpa, iobuf, len);
 	else
 		memcpy(iobuf, mmio->base + dpa, len);
-	nd_region_release_lane(nd_region, bw);
+	nd_region_release_lane(nd_region, lane);
 
 	return 0;
 }
