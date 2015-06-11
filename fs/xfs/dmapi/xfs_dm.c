@@ -723,7 +723,6 @@ xfs_dm_f_set_eventlist(
 
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
 	xfs_trans_commit(tp, 0);
-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
 
 	return(0);
 }
@@ -2628,7 +2627,6 @@ xfs_dm_set_region(
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
 //	igrab(inode);
 	xfs_trans_commit(tp, 0);
-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
 
 	/* Return the proper value for *exactflagp depending upon whether or not
 	   we "changed" the user's managed region.  In other words, if the user
