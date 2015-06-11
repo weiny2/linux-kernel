@@ -755,8 +755,8 @@ xfs_setattr_size(
 		return XFS_ERROR(error);
 
 	ASSERT(S_ISREG(ip->i_d.di_mode));
-	ASSERT((mask & (ATTR_UID|ATTR_GID|ATTR_ATIME|ATTR_ATIME_SET|
-			ATTR_MTIME_SET|ATTR_KILL_PRIV|ATTR_TIMES_SET)) == 0);
+	ASSERT((mask & (ATTR_ATIME_SET|ATTR_MTIME_SET|ATTR_KILL_PRIV|
+			ATTR_TIMES_SET)) == 0);
 
 	if (DM_EVENT_ENABLED(ip, DM_EVENT_TRUNCATE) &&
 	    !(flags & XFS_ATTR_DMI)) {

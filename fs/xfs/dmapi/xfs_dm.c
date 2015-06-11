@@ -2524,8 +2524,15 @@ xfs_dm_set_fileattr(
 		iattr.ia_size = stat.fa_size;
 	}
 
-	if (iattr.ia_valid & ATTR_SIZE)
-		return -xfs_setattr_size(XFS_I(inode), &iattr, XFS_ATTR_DMI);
+	if (iattr.ia_valid & ATTR_SIZE) {
+		int error = -xfs_setattr_size(XFS_I(inode), &iattr,
+					      XFS_ATTR_DMI);
+		if (error ||
+		    ((iattr.ia_valid & (ATTR_ATIME|ATTR_UID|ATTR_GID)) == 0))
+			return error;
+		/* clear flags handled by xfs_setattr_size */
+		iattr.ia_valid &= ~(ATTR_SIZE|ATTR_CTIME|ATTR_MTIME);
+	}
 	return -xfs_setattr_nonsize(XFS_I(inode), &iattr, XFS_ATTR_DMI);
 }
 
