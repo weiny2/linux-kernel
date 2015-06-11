@@ -1409,13 +1409,6 @@ static int get_platform_fw_field_metadata(struct hfi1_devdata *dd, int table,
 	return 0;
 }
 
-int get_platform_fw_field_length(struct hfi1_devdata *dd, int table, int field,
-					u32 *field_len_bits)
-{
-	return get_platform_fw_field_metadata(dd, table, field, field_len_bits,
-							NULL);
-}
-
 /* This is the central interface to getting data out of the platform config
  * file. It depends on parse_platform_config() having populated the
  * platform_config_cache in hfi1_devdata, and checks the cache_valid member to
