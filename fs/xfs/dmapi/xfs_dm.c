@@ -865,6 +865,7 @@ xfs_dm_rdwr(
 	struct file	*file;
 	struct dentry	*dentry;
 	struct path	path;
+	struct path	dpath;
 	struct xfs_mount *mp = ip->i_mount;
 
 	if ((off < 0) || (off > i_size_read(inode)) || !S_ISREG(inode->i_mode))
@@ -906,7 +907,11 @@ xfs_dm_rdwr(
 	if (error)
 		return -error;
 
-	file = dentry_open(&path, oflags, cred);
+	/* create a path structure for the inode passed into function */
+	dpath.mnt = path.mnt;
+	dpath.dentry = dentry;
+	file = dentry_open(&dpath, oflags, cred);
+	/* path_put() will only dput the directory dentry, so we do it here */
 	dput(dentry);
 	if (IS_ERR(file)) {
 		path_put(&path);
@@ -914,11 +919,12 @@ xfs_dm_rdwr(
 	}
 	file->f_mode |= FMODE_NOCMTIME;
 
-	if (fmode & FMODE_READ) {
+	if (fmode & FMODE_READ && file->f_op->read != NULL) {
 		xfer = file->f_op->read(file, bufp, len, (loff_t*)&off);
-	} else {
+	} else if (fmode & FMODE_WRITE && file->f_op->write != NULL) {
 		xfer = file->f_op->write(file, bufp, len, (loff_t*)&off);
-	}
+	} else
+		xfer = -EINVAL; /* error code when f_op functions are NULL */
 
 	if (xfer >= 0) {
 		*rvp = xfer;
