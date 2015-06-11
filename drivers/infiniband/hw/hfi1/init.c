@@ -651,9 +651,9 @@ int hfi1_init(struct hfi1_devdata *dd, int reinit)
 
 	/* Set up recv low level handlers */
 	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_EXPECTED] =
-						process_receive_expected;
+						kdeth_process_expected;
 	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_EAGER] =
-						process_receive_eager;
+						kdeth_process_eager;
 	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_IB] = process_receive_ib;
 	dd->normal_rhf_rcv_functions[RHF_RCV_TYPE_ERROR] =
 						process_receive_error;
@@ -704,6 +704,8 @@ int hfi1_init(struct hfi1_devdata *dd, int reinit)
 		rcd = dd->rcd[i];
 		if (!rcd)
 			continue;
+
+		rcd->do_interrupt = &handle_receive_interrupt;
 
 		lastfail = hfi1_create_rcvhdrq(dd, rcd);
 		if (!lastfail)

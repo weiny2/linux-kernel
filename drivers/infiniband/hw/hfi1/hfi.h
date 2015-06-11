@@ -73,6 +73,7 @@
 #include "chip.h"
 #include "mad.h"
 #include "qsfp.h"
+#include "platform_config.h"
 
 /* bumped 1 from s/w major version of TrueScale */
 #define HFI1_CHIP_VERS_MAJ 3U
@@ -294,6 +295,15 @@ struct hfi1_ctxtdata {
 	struct task_struct *progress;
 	struct list_head sdma_queues;
 	spinlock_t sdma_qlock;
+
+	/*
+	 * The interrupt handler for a particular receive context can vary
+	 * throughout it's lifetime. This is not a lock protected data member so
+	 * it must be updated atomically and the prev and new value must always
+	 * be valid. Worst case is we process an extra interrupt and up to 64
+	 * packets with the wrong interrupt handler.
+	 */
+	void (*do_interrupt)(struct hfi1_ctxtdata *rcd);
 };
 
 /*
@@ -311,6 +321,14 @@ struct hfi1_packet {
 	u16 tlen;
 	u16 hlen;
 	u32 updegr;
+	u32 etail;
+	__le32 *rhf_addr;
+	u32 etype;
+	u32 rsize;
+	u32 maxcnt;
+	u32 hdrqtail;
+	u32 rhqoff;
+	int numpkt;
 };
 
 /*
@@ -939,8 +957,7 @@ struct hfi1_devdata {
 	u16 rhf_offset; /* offset of RHF within receive header entry */
 	u16 irev;	/* implementation revision */
 
-	u8 board_atten;
-
+	struct platform_config_cache pcfg_cache;
 	/* control high-level access to qsfp */
 	struct mutex qsfp_i2c_mutex;
 
@@ -1081,6 +1098,8 @@ void hfi1_init_pportdata(struct pci_dev *, struct hfi1_pportdata *,
 void hfi1_free_ctxtdata(struct hfi1_devdata *, struct hfi1_ctxtdata *);
 
 void handle_receive_interrupt(struct hfi1_ctxtdata *);
+void handle_receive_interrupt_nodma_rtail(struct hfi1_ctxtdata *rcd);
+void handle_receive_interrupt_dma_rtail(struct hfi1_ctxtdata *rcd);
 int hfi1_reset_device(int);
 
 /* return the driver's idea of the logical OPA port state */
@@ -1480,27 +1499,6 @@ static inline u32 get_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 	return (u32) le64_to_cpu(*rcd->rcvhdrtail_kvaddr);
 }
 
-static inline u32 get_hdrqtail(const struct hfi1_ctxtdata *rcd)
-{
-	const struct hfi1_devdata *dd = rcd->dd;
-	u32 hdrqtail;
-
-	if (!HFI1_CAP_IS_KSET(DMA_RTAIL)) {
-		__le32 *rhf_addr;
-		u32 seq;
-
-		rhf_addr = (__le32 *) rcd->rcvhdrq +
-			rcd->head + dd->rhf_offset;
-		seq = rhf_rcv_seq(rhf_to_cpu(rhf_addr));
-		hdrqtail = rcd->head;
-		if (seq == rcd->seq_cnt)
-			hdrqtail++;
-	} else
-		hdrqtail = get_rcvhdrtail(rcd);
-
-	return hdrqtail;
-}
-
 /*
  * sysfs interface.
  */
@@ -1529,6 +1527,10 @@ void hfi1_enable_intx(struct pci_dev *);
 void hfi1_nomsix(struct hfi1_devdata *);
 void restore_pci_variables(struct hfi1_devdata *dd);
 int do_pcie_gen3_transition(struct hfi1_devdata *dd);
+int parse_platform_config(struct hfi1_devdata *dd);
+int get_platform_config_field(struct hfi1_devdata *dd,
+			enum platform_config_table_type_encoding table_type,
+			int table_index, int field_index, u32 *data, u32 len);
 
 dma_addr_t hfi1_map_page(struct pci_dev *, struct page *, unsigned long,
 			 size_t, int);
@@ -1547,8 +1549,8 @@ void handle_eflags(struct hfi1_packet *packet);
 int process_receive_ib(struct hfi1_packet *packet);
 int process_receive_bypass(struct hfi1_packet *packet);
 int process_receive_error(struct hfi1_packet *packet);
-int process_receive_expected(struct hfi1_packet *packet);
-int process_receive_eager(struct hfi1_packet *packet);
+int kdeth_process_expected(struct hfi1_packet *packet);
+int kdeth_process_eager(struct hfi1_packet *packet);
 int process_receive_invalid(struct hfi1_packet *packet);
 
 extern rhf_rcv_function_ptr snoop_rhf_rcv_functions[8];
