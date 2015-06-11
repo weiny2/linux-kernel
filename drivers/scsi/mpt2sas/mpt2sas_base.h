@@ -671,6 +671,7 @@ typedef void (*MPT2SAS_FLUSH_RUNNING_CMDS)(struct MPT2SAS_ADAPTER *ioc);
  * @ir_firmware: IR firmware present
  * @bars: bitmask of BAR's that must be configured
  * @mask_interrupts: ignore interrupt
+ * @dma_mask: used to set the consistent dma mask
  * @fault_reset_work_q_name: fw fault work queue
  * @fault_reset_work_q: ""
  * @fault_reset_work: ""
@@ -813,6 +814,7 @@ struct MPT2SAS_ADAPTER {
 	u8		ir_firmware;
 	int		bars;
 	u8		mask_interrupts;
+	int		dma_mask;
 
 	/* fw fault handler */
 	char		fault_reset_work_q_name[20];
@@ -985,12 +987,12 @@ struct MPT2SAS_ADAPTER {
 	/* reply post queue */
 	u16 		reply_post_queue_depth;
 	struct reply_post_struct *reply_post;
+	u8		rdpq_array_capable;
+	u8		rdpq_array_enable;
+	u8		rdpq_array_enable_assigned;
 	struct dma_pool *reply_post_free_dma_pool;
 	u8		reply_queue_count;
 	struct list_head reply_queue_list;
-	u8              rdpq_array_capable;
-	u8              rdpq_array_enable;
-	u8              rdpq_array_enable_assigned;
 
 	struct list_head delayed_tr_list;
 	struct list_head delayed_tr_volume_list;
