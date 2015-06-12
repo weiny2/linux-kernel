@@ -8585,7 +8585,8 @@ static int request_intx_irq(struct hfi1_devdata *dd)
 static int request_msix_irqs(struct hfi1_devdata *dd)
 {
 	const struct cpumask *local_mask;
-	cpumask_var_t def = NULL, rcv = NULL;
+	cpumask_var_t def, rcv;
+	bool def_ret, rcv_ret;
 	int first_general, last_general;
 	int first_sdma, last_sdma;
 	int first_rx, last_rx;
@@ -8616,8 +8617,9 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 	if (cpumask_first(local_mask) >= nr_cpu_ids)
 		local_mask = topology_core_cpumask(0);
 
-	if (!zalloc_cpumask_var(&def, GFP_KERNEL) ||
-	    !zalloc_cpumask_var(&rcv, GFP_KERNEL))
+	def_ret = zalloc_cpumask_var(&def, GFP_KERNEL);
+	rcv_ret = zalloc_cpumask_var(&rcv, GFP_KERNEL);
+	if (!def_ret || !rcv_ret)
 		goto bail;
 	/* use local mask as default */
 	cpumask_copy(def, local_mask);
