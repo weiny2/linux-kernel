@@ -51,6 +51,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/utsname.h>
 #include <rdma/fxr/fxr_fast_path_defs.h>
 #include <rdma/fxr/fxr_tx_ci_csrs.h>
 #include <rdma/fxr/fxr_rx_ci_csrs.h>
@@ -62,6 +63,8 @@
 #include <rdma/fxr/fxr_rx_hp_csrs.h>
 #include <rdma/fxr/fxr_linkmux_defs.h>
 #include <rdma/fxr/fxr_lm_csrs.h>
+#include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
+#include <rdma/fxr/fxr_tx_otr_pkt_top_csrs.h>
 #include "opa_hfi.h"
 
 /* TODO - should come from HW headers */
@@ -69,24 +72,22 @@
 
 #define DLID_TABLE_SIZE (64 * 1024) /* 64k */
 
-/* TODO - for now, start FXR in loopback */
-static uint force_loopback = 1;
+/* TODO: delete module parameter when possible */
+static uint force_loopback;
 module_param(force_loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(force_loopback, "Force FXR into loopback");
 
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
 
-#if 0
-/* Unused for now */
 static u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
+
 	BUG_ON(dd->kregbase[0] == NULL);
 	val = readq(dd->kregbase[0] + offset);
 	return le64_to_cpu(val);
 }
-#endif
 
 static void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
@@ -96,10 +97,50 @@ static void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 
 static void init_csrs(const struct hfi_devdata *dd)
 {
-	LM_CONFIG_t lm_config = {.val = 0};
+	if (force_loopback) {
+		LM_CONFIG_t lm_config = {.val = 0};
 
-	lm_config.field.FORCE_LOOPBACK = force_loopback;
-	write_csr(dd, FXR_LM_CONFIG, lm_config.val);
+		lm_config.field.FORCE_LOOPBACK = force_loopback;
+		write_csr(dd, FXR_LM_CONFIG, lm_config.val);
+	 } else {
+		LM_CONFIG_PORT0_t lmp0 = {.val = 0};
+		LM_CONFIG_PORT1_t lmp1 = {.val = 0};
+		txotr_pkt_cfg_timeout_t txotr_timeout = {.val = 0};
+
+		txotr_timeout.val = read_csr(dd, FXR_TXOTR_PKT_CFG_TIMEOUT);
+		/*
+		 * Set the length of the timeout interval used to retransmit
+		 * outstanding packets to 1 second for Simics back to back.
+		 * TODO: Determine right value for FPGA & Silicon.
+		 */
+		txotr_timeout.field.SCALER = 0x00047869;
+		write_csr(dd, FXR_TXOTR_PKT_CFG_TIMEOUT, txotr_timeout.val);
+		/*
+		 * Set the SLID based on the hostname to enable back to back
+		 * support in Simics.
+		 * TODO: Delete this hack once the LID is received via MADs
+		 */
+		if (!strcmp(utsname()->nodename, "viper0")) {
+			u8 lid = 0;
+
+			lmp0.field.DLID = lid;
+			write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
+			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0, lid);
+			lmp1.field.DLID = ++lid;
+			write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
+			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1, lid);
+		}
+		if (!strcmp(utsname()->nodename, "viper1")) {
+			u8 lid = 2;
+
+			lmp0.field.DLID = lid;
+			write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
+			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0, lid);
+			lmp1.field.DLID = ++lid;
+			write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
+			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1, lid);
+		}
+	}
 }
 
 /*
