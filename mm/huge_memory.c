@@ -1411,7 +1411,10 @@ int zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 			spin_unlock(ptl);
 			return 1;
 		}
-		pgtable = pgtable_trans_huge_withdraw(tlb->mm, pmd);
+		if (vma->vm_file && IS_DAX(vma->vm_file->f_mapping->host))
+			pgtable = NULL;
+		else
+			pgtable = pgtable_trans_huge_withdraw(tlb->mm, pmd);
 		if (is_huge_zero_pmd(orig_pmd)) {
 			atomic_long_dec(&tlb->mm->nr_ptes);
 			spin_unlock(ptl);
@@ -1426,7 +1429,8 @@ int zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 			spin_unlock(ptl);
 			tlb_remove_page(tlb, page);
 		}
-		pte_free(tlb->mm, pgtable);
+		if (pgtable)
+			pte_free(tlb->mm, pgtable);
 		ret = 1;
 	}
 	return ret;

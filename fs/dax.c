@@ -464,6 +464,7 @@ int dax_fault(struct vm_area_struct *vma, struct vm_fault *vmf,
 }
 EXPORT_SYMBOL_GPL(dax_fault);
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGES
 /*
  * The 'colour' (ie low bits) within a PMD of a page offset.  This comes up
  * more often than one might expect in the below function.
@@ -478,7 +479,7 @@ static int do_dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
 	struct inode *inode = mapping->host;
 	struct buffer_head bh;
 	unsigned blkbits = inode->i_blkbits;
-	unsigned long aligned_addr = address & PMD_MASK;
+	unsigned long pmd_addr = address & PMD_MASK;
 	long length;
 	void *kaddr;
 	pgoff_t size, pgoff;
@@ -490,12 +491,12 @@ static int do_dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
 	if ((flags & FAULT_FLAG_WRITE) && !(vma->vm_flags & VM_SHARED))
 		return VM_FAULT_FALLBACK;
 	/* If the PMD would extend outside the VMA */
-	if (aligned_addr < vma->vm_start)
+	if (pmd_addr < vma->vm_start)
 		return VM_FAULT_FALLBACK;
-	if ((aligned_addr + PMD_SIZE) > vma->vm_end)
+	if ((pmd_addr + PMD_SIZE) > vma->vm_end)
 		return VM_FAULT_FALLBACK;
 
-	pgoff = ((aligned_addr - vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
+	pgoff = ((pmd_addr - vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
 	size = (i_size_read(inode) + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	if (pgoff >= size)
 		return VM_FAULT_SIGBUS;
@@ -506,24 +507,17 @@ static int do_dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
 	memset(&bh, 0, sizeof(bh));
 	block = (sector_t)pgoff << (PAGE_SHIFT - blkbits);
 
-	/* Start by seeing if we already have an allocated block */
 	bh.b_size = PMD_SIZE;
-	length = get_block(inode, block, &bh, 0);
+	length = get_block(inode, block, &bh, !!(flags & FAULT_FLAG_WRITE));
 	if (length)
 		return VM_FAULT_SIGBUS;
-
-	if ((!buffer_mapped(&bh) && !buffer_unwritten(&bh)) ||
-						bh.b_size != PMD_SIZE) {
-		bh.b_size = PMD_SIZE;
-		length = get_block(inode, block, &bh, 1);
-		count_vm_event(PGMAJFAULT);
-		mem_cgroup_count_vm_event(vma->vm_mm, PGMAJFAULT);
-		major = VM_FAULT_MAJOR;
-		if (length)
-			return VM_FAULT_SIGBUS;
-		if (bh.b_size != PMD_SIZE)
-			return VM_FAULT_FALLBACK;
-	}
+	/*
+	 * If the filesystem isn't willing to tell us the length of a hole,
+	 * just fall back to PTEs.  Calling get_block 512 times in a loop
+	 * because the filesystem is lame is ridiculous.
+	 */
+	if (!buffer_size_valid(&bh) || bh.b_size < PMD_SIZE)
+		return VM_FAULT_FALLBACK;
 
 	i_mmap_lock_read(mapping);
 
@@ -534,22 +528,47 @@ static int do_dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
 	if ((pgoff | PG_PMD_COLOUR) >= size)
 		goto fallback;
 
-	sector = bh.b_blocknr << (blkbits - 9);
-	length = bdev_direct_access(bh.b_bdev, sector, &kaddr, &pfn, bh.b_size);
-	if (length < 0)
-		goto sigbus;
-	if (length < PMD_SIZE)
-		goto fallback;
-	if (pfn & PG_PMD_COLOUR)
-		goto fallback;	/* not aligned */
+	if (is_huge_zero_pmd(*pmd))
+		unmap_mapping_range(mapping, pgoff << PAGE_SHIFT, PMD_SIZE, 0);
 
-	if (buffer_unwritten(&bh) || buffer_new(&bh)) {
-		int i;
-		for (i = 0; i < PTRS_PER_PMD; i++)
-			clear_page(kaddr + i * PAGE_SIZE);
+	if (!(flags & FAULT_FLAG_WRITE) &&
+	    !buffer_mapped(&bh) && buffer_uptodate(&bh)) {
+		bool set;
+		spinlock_t *ptl;
+		struct mm_struct *mm = vma->vm_mm;
+		struct page *zero_page = get_huge_zero_page();
+		if (unlikely(!zero_page)) {
+			count_vm_event(THP_FAULT_FALLBACK);
+			goto fallback;
+		}
+		ptl = pmd_lock(mm, pmd);
+		set = set_huge_zero_page(NULL, mm, vma, pmd_addr, pmd,
+								zero_page);
+		spin_unlock(ptl);
+		length = set ? PMD_SIZE : -EBUSY;
+	} else {
+		sector = bh.b_blocknr << (blkbits - 9);
+		length = bdev_direct_access(bh.b_bdev, sector, &kaddr, &pfn,
+						bh.b_size);
+		if (length < 0)
+			goto sigbus;
+		if (length < PMD_SIZE)
+			goto fallback;
+		if (pfn & PG_PMD_COLOUR)
+			goto fallback;	/* not aligned */
+
+		if (buffer_unwritten(&bh) || buffer_new(&bh)) {
+			int i;
+			for (i = 0; i < PTRS_PER_PMD; i++)
+				clear_page(kaddr + i * PAGE_SIZE);
+			count_vm_event(PGMAJFAULT);
+			mem_cgroup_count_vm_event(vma->vm_mm, PGMAJFAULT);
+			major = VM_FAULT_MAJOR;
+		}
+
+		length = vm_insert_pfn_pmd(vma, address, pmd, pfn);
 	}
 
-	length = vm_insert_pfn_pmd(vma, address, pmd, pfn);
 	i_mmap_unlock_read(mapping);
 
 	if (bh.b_end_io)
@@ -597,6 +616,7 @@ int dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
 	return result;
 }
 EXPORT_SYMBOL_GPL(dax_pmd_fault);
+#endif /* CONFIG_TRANSPARENT_HUGEPAGES */
 
 /**
  * dax_pfn_mkwrite - handle first write to DAX page
