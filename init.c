@@ -516,8 +516,8 @@ void hfi1_init_pportdata(struct pci_dev *pdev, struct hfi1_pportdata *ppd,
 	spin_lock_init(&ppd->cc_state_lock);
 	spin_lock_init(&ppd->cc_log_lock);
 	size = sizeof(struct cc_state);
-	ppd->cc_state = kzalloc(size, GFP_KERNEL);
-	if (!ppd->cc_state)
+	RCU_INIT_POINTER(ppd->cc_state, kzalloc(size, GFP_KERNEL));
+	if (!rcu_dereference(ppd->cc_state))
 		goto bail;
 	return;
 
