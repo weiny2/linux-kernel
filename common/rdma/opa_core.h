@@ -241,11 +241,12 @@ struct hfi_dlid_assign_args;
 /**
  * struct opa_pport_desc - Used for querying immutable per port
  * opa*_hfi HW  details
- * @devdata: underlying hfi* device structure
  * @pguid: port GUID for this port
+ * @lid: LID for this port
  */
 struct opa_pport_desc {
 	__be64 pguid;
+	u32 lid;
 };
 
 /**
