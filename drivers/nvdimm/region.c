@@ -123,6 +123,7 @@ static int nd_region_probe(struct device *dev)
 
 	num_ns->active = rc;
 	num_ns->count = rc + err;
+	set_dev_node(dev, nd_region->numa_node);
 	dev_set_drvdata(dev, num_ns);
 
 	if (err == 0)

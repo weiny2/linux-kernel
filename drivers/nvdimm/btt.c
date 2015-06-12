@@ -1468,6 +1468,8 @@ static int nd_btt_probe(struct device *dev)
 		rc = -ENOMEM;
 		goto err_btt;
 	}
+
+	set_dev_node(dev, nd_region->numa_node);
 	dev_set_drvdata(dev, btt);
 
 	return 0;
