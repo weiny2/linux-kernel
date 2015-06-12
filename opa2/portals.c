@@ -55,6 +55,8 @@
 #include <linux/sched.h>
 #include "opa_hfi.h"
 
+static uint cq_alloc_cyclic = 1;
+
 static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *ptl_pid);
 static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid);
 
@@ -113,7 +115,11 @@ static int __hfi_cq_assign(struct hfi_ctx *ctx, u16 *cq_idx)
 
 	idr_preload(GFP_KERNEL);
 	spin_lock_irqsave(&dd->cq_lock, flags);
-	ret = idr_alloc_cyclic(&dd->cq_pair, ctx, 0, HFI_CQ_COUNT, GFP_NOWAIT);
+	if (cq_alloc_cyclic)
+		ret = idr_alloc_cyclic(&dd->cq_pair, ctx, 0, HFI_CQ_COUNT,
+				       GFP_NOWAIT);
+	else
+		ret = idr_alloc(&dd->cq_pair, ctx, 0, HFI_CQ_COUNT, GFP_NOWAIT);
 	spin_unlock_irqrestore(&dd->cq_lock, flags);
 	idr_preload_end();
 	if (ret < 0)
