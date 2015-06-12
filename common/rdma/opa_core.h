@@ -79,6 +79,7 @@ struct opa_core_device;
 /**
  * struct hfi_ctx - state for HFI resources assigned to this context
  * @devdata: HFI device specific data, private to the hardware driver
+ * @mode: returned from CTXT_ASSIGN.pid_mode
  * @type: kernel or user context
  * @pid: Assigned Portals Process ID
  * @ptl_uid: Assigned Protection Domain ID
@@ -114,6 +115,7 @@ struct opa_core_device;
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
+	u16	mode;
 	u8	type;
 	u16	pid;
 	u32	ptl_uid;
