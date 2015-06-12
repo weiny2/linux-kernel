@@ -126,9 +126,11 @@ static void init_csrs(const struct hfi_devdata *dd)
 			lmp0.field.DLID = lid;
 			write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
 			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0, lid);
+			dd->pport[0].lid = lid;
 			lmp1.field.DLID = ++lid;
 			write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
 			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1, lid);
+			dd->pport[1].lid = lid;
 		}
 		if (!strcmp(utsname()->nodename, "viper1")) {
 			u8 lid = 2;
@@ -136,9 +138,11 @@ static void init_csrs(const struct hfi_devdata *dd)
 			lmp0.field.DLID = lid;
 			write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
 			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0, lid);
+			dd->pport[0].lid = lid;
 			lmp1.field.DLID = ++lid;
 			write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
 			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1, lid);
+			dd->pport[1].lid = lid;
 		}
 	}
 }
@@ -188,6 +192,7 @@ static void hfi_port_desc(struct opa_core_device *odev,
 	struct hfi_pportdata *ppd = get_ppd_pn(odev->dd, port_num);
 
 	pdesc->pguid = ppd->pguid;
+	pdesc->lid = ppd->lid;
 }
 
 static void hfi_device_desc(struct opa_core_device *odev,

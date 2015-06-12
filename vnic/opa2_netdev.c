@@ -246,6 +246,7 @@ int hfi_tx_write(struct hfi_cq *tx, struct hfi_ctx *ctx,
 
 static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 {
+	struct opa_core_ops *ops = odev->bus_ops;
 	struct hfi_ctx *ctx = &dev->ctx;
 	struct hfi_cq *tx = &dev->tx;
 	struct hfi_cq *rx = &dev->rx;
@@ -276,10 +277,13 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	hfi_size_t min_free = 2048;
 	hfi_user_ptr_t user_ptr = (hfi_user_ptr_t)&user_ptr;
 	hfi_me_handle_t me_handle = 0xc;
+	struct opa_pport_desc pdesc;
 
-	target_id.phys.slid = 0;
+	ops->get_port_desc(odev, &pdesc, 1);
+
+	target_id.phys.slid = pdesc.lid;
 	target_id.phys.ipid = ctx->pid;
-	match_id.phys.slid = 0;
+	match_id.phys.slid = pdesc.lid;
 	match_id.phys.ipid = ctx->pid;
 #define PAYLOAD_SIZE 512
 #define HFI_TEST_PT 10

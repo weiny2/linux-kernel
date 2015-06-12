@@ -84,6 +84,8 @@ struct hfi_msix_entry {
 struct hfi_pportdata {
 	/* port_guid identifying port */
 	__be64 pguid;
+	/* LID for this port */
+	u32 lid;
 };
 
 /* device data struct contains only per-HFI info. */
