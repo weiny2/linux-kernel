@@ -61,6 +61,8 @@
 #include <rdma/fxr/fxr_rx_hiarb_csrs.h>
 #include <rdma/fxr/fxr_rx_hp_defs.h>
 #include <rdma/fxr/fxr_rx_hp_csrs.h>
+#include <rdma/fxr/fxr_rx_e2e_csrs.h>
+#include <rdma/fxr/fxr_rx_e2e_defs.h>
 #include <rdma/fxr/fxr_linkmux_defs.h>
 #include <rdma/fxr/fxr_lm_csrs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
@@ -93,6 +95,22 @@ static void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
 	BUG_ON(dd->kregbase[0] == NULL);
 	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
+}
+
+static void hfi_init_e2e_csrs(const struct hfi_devdata *dd)
+{
+	RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM_t flt = {.val = 0};
+
+	flt.field.valid = 1;
+	flt.field.l4 = PTL_RTS;
+	flt.field.l2_mask = ~0;
+	flt.field.l4_mask = 0;
+	flt.field.opcode_mask = ~0;
+	flt.field.cnt_m1 = 2;
+	write_csr(dd, FXR_RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM, flt.val);
+
+	flt.field.l4 = PTL_REND_EVENT;
+	write_csr(dd, FXR_RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM + 8, flt.val);
 }
 
 static void init_csrs(const struct hfi_devdata *dd)
@@ -145,6 +163,7 @@ static void init_csrs(const struct hfi_devdata *dd)
 			dd->pport[1].lid = lid;
 		}
 	}
+	hfi_init_e2e_csrs(dd);
 }
 
 /*
