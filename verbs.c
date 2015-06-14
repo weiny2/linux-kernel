@@ -1370,11 +1370,14 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 }
 
 static int query_device(struct ib_device *ibdev,
-			struct ib_device_attr *props)
+			struct ib_device_attr *props,
+			struct ib_udata *uhw)
 {
 	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
 	struct hfi1_ibdev *dev = to_idev(ibdev);
 
+	if (uhw->inlen || uhw->outlen)
+		return -EINVAL;
 	memset(props, 0, sizeof(*props));
 
 	props->device_cap_flags = IB_DEVICE_BAD_PKEY_CNTR |

@@ -219,7 +219,7 @@ static void send_complete(struct kthread_work *work)
 /**
  * hfi1_create_cq - create a completion queue
  * @ibdev: the device this completion queue is attached to
- * @entries: the minimum size of the completion queue
+ * @attr: creation attributes
  * @context: unused by the driver
  * @udata: user data for libibverbs.so
  *
@@ -228,27 +228,29 @@ static void send_complete(struct kthread_work *work)
  *
  * Called by ib_create_cq() in the generic verbs code.
  */
-struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
-			     int comp_vector, struct ib_ucontext *context,
-			     struct ib_udata *udata)
+struct ib_cq *hfi1_create_cq(
+	struct ib_device *ibdev,
+	const struct ib_cq_init_attr *attr,
+	struct ib_ucontext *context,
+	struct ib_udata *udata)
 {
 	struct hfi1_ibdev *dev = to_idev(ibdev);
 	struct hfi1_cq *cq;
 	struct hfi1_cq_wc *wc;
 	struct ib_cq *ret;
 	u32 sz;
+	unsigned int entries = attr->cqe;
 
-	if (entries < 1 || entries > hfi1_max_cqes) {
-		ret = ERR_PTR(-EINVAL);
-		goto done;
-	}
+	if (attr->flags)
+		return ERR_PTR(-EINVAL);
+
+	if (entries < 1 || entries > hfi1_max_cqes)
+		return ERR_PTR(-EINVAL);
 
 	/* Allocate the completion queue structure. */
 	cq = kmalloc(sizeof(*cq), GFP_KERNEL);
-	if (!cq) {
-		ret = ERR_PTR(-ENOMEM);
-		goto done;
-	}
+	if (!cq)
+		return ERR_PTR(-ENOMEM);
 
 	/*
 	 * Allocate the completion queue entries and head/tail pointers.
