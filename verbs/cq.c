@@ -53,6 +53,23 @@
 #include "verbs.h"
 
 /**
+ * opa_ib_poll_cq - poll for work completion entries
+ * @ibcq: the completion queue to poll
+ * @num_entries: the maximum number of entries to return
+ * @entry: pointer to array where work completions are placed
+ *
+ * This may be called from interrupt context.  Also called by ib_poll_cq()
+ * in the generic verbs code.
+ *
+ * Return: Number of completion entries polled on success, otherwise
+ * returns an errno.
+ */
+int opa_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
+{
+	return -ENOSYS;
+}
+
+/**
  * opa_ib_create_cq - create a completion queue
  * @ibdev: the device this completion queue is attached to
  * @entries: the minimum size of the completion queue
@@ -98,23 +115,6 @@ int opa_ib_destroy_cq(struct ib_cq *ibcq)
 
 	kfree(cq);
 	return 0;
-}
-
-/**
- * opa_ib_poll_cq - poll for work completion entries
- * @ibcq: the completion queue to poll
- * @num_entries: the maximum number of entries to return
- * @entry: pointer to array where work completions are placed
- *
- * This may be called from interrupt context.  Also called by ib_poll_cq()
- * in the generic verbs code.
- *
- * Return: Number of completion entries polled on success, otherwise
- * returns an errno.
- */
-int opa_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
-{
-	return -ENOSYS;
 }
 
 /**
