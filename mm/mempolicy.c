@@ -2563,7 +2563,7 @@ static void __init check_numabalancing_enable(void)
 
 	if (num_online_nodes() > 1 && !numabalancing_override) {
 		printk(KERN_INFO "%s automatic NUMA balancing. "
-			"Configure with numa_balancing= or sysctl",
+			"Configure with numa_balancing= or the kernel.numa_balancing sysctl",
 			numabalancing_default ? "Enabling" : "Disabling");
 		set_numabalancing_state(numabalancing_default);
 	}

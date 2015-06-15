@@ -2020,7 +2020,7 @@ tcm_vhost_make_tpg(struct se_wwn *wwn,
 
 	if (strstr(name, "tpgt_") != name)
 		return ERR_PTR(-EINVAL);
-	if (kstrtou16(name + 5, 10, &tpgt) || tpgt > VHOST_SCSI_MAX_TARGET)
+	if (kstrtou16(name + 5, 10, &tpgt) || tpgt >= VHOST_SCSI_MAX_TARGET)
 		return ERR_PTR(-EINVAL);
 
 	tpg = kzalloc(sizeof(struct tcm_vhost_tpg), GFP_KERNEL);
