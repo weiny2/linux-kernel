@@ -73,6 +73,32 @@ extern __be64 opa_ib_sys_guid;
 
 extern unsigned int opa_ib_max_cqes;
 
+struct opa_ib_pd {
+	struct ib_pd ibpd;
+	int is_user;
+};
+
+struct opa_ib_ah {
+	struct ib_ah ibah;
+	struct ib_ah_attr attr;
+};
+
+struct opa_ib_qp {
+	struct ib_qp ibqp;
+};
+
+struct opa_ib_cq {
+	struct ib_cq ibcq;
+};
+
+struct opa_ib_mr {
+	struct ib_mr ibmr;
+};
+
+struct opa_ucontext {
+	struct ib_ucontext ibucontext;
+};
+
 struct opa_ib_portdata {
 	__be64 gid_prefix;
 	__be64 guid;
@@ -105,32 +131,6 @@ struct opa_ib_data {
 	u8 oui[3];
 	struct opa_ib_portdata *pport;
 	struct device *parent_dev;
-};
-
-struct opa_ib_pd {
-	struct ib_pd ibpd;
-	int is_user;
-};
-
-struct opa_ib_ah {
-	struct ib_ah ibah;
-	struct ib_ah_attr attr;
-};
-
-struct opa_ib_qp {
-	struct ib_qp ibqp;
-};
-
-struct opa_ib_cq {
-	struct ib_cq ibcq;
-};
-
-struct opa_ib_mr {
-	struct ib_mr ibmr;
-};
-
-struct opa_ucontext {
-	struct ib_ucontext ibucontext;
 };
 
 #define to_opa_ibpd(pd)	container_of((pd), struct opa_ib_pd, ibpd)

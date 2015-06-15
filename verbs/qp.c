@@ -53,6 +53,43 @@
 #include "verbs.h"
 
 /**
+ * opa_ib_modify_qp - modify the attributes of a queue pair
+ * @ibqp: the queue pair who's attributes we're modifying
+ * @attr: the new attributes
+ * @attr_mask: the mask of attributes to modify
+ * @udata: user data for libibverbs.so
+ *
+ * Return: 0 on success, otherwise returns an errno.
+ */
+int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
+		     int attr_mask, struct ib_udata *udata)
+{
+	/*
+	 * FXRTODO: return success to enable ib_* kernel modules and libraries
+	 * depending on this to continue thinking that qp is enabled.
+	 * This way Dr Route SMPs loopback works.
+	 * This function is to be enabled as part of VPD dev task
+	 */
+	return 0;
+}
+
+/**
+ * opa_ib_query_qp - query the attributes of a queue pair
+ * @ibqp: the queue pair who's attributes we want
+ * @attr: requested QP attribute values returned here
+ * @attr_mask: the mask of attributes to query
+ * @init_attr: initialization defaults for QP attributes returned here
+ *
+ * Return: 0 on success and attributes returned in @attr, otherwise
+ * returns an errno.
+ */
+int opa_ib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
+		    int attr_mask, struct ib_qp_init_attr *init_attr)
+{
+	return -ENOSYS;
+}
+
+/**
  * opa_ib_create_qp - create a queue pair for a device
  * @ibpd: the protection domain who's device we create the queue pair for
  * @init_attr: the attributes of the queue pair
@@ -92,41 +129,4 @@ int opa_ib_destroy_qp(struct ib_qp *ibqp)
 
 	kfree(qp);
 	return 0;
-}
-
-/**
- * opa_ib_modify_qp - modify the attributes of a queue pair
- * @ibqp: the queue pair who's attributes we're modifying
- * @attr: the new attributes
- * @attr_mask: the mask of attributes to modify
- * @udata: user data for libibverbs.so
- *
- * Return: 0 on success, otherwise returns an errno.
- */
-int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		     int attr_mask, struct ib_udata *udata)
-{
-	/*
-	 * FXRTODO: return success to enable ib_* kernel modules and libraries
-	 * depending on this to continue thinking that qp is enabled.
-	 * This way Dr Route SMPs loopback works.
-	 * This function is to be enabled as part of VPD dev task
-	 */
-	return 0;
-}
-
-/**
- * opa_ib_query_qp - query the attributes of a queue pair
- * @ibqp: the queue pair who's attributes we want
- * @attr: requested QP attribute values returned here
- * @attr_mask: the mask of attributes to query
- * @init_attr: initialization defaults for QP attributes returned here
- *
- * Return: 0 on success and attributes returned in @attr, otherwise
- * returns an errno.
- */
-int opa_ib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		    int attr_mask, struct ib_qp_init_attr *init_attr)
-{
-	return -ENOSYS;
 }
