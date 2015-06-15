@@ -966,6 +966,7 @@ void hfi1_free_devdata(struct hfi1_devdata *dd)
 	hfi1_dbg_ibdev_exit(&dd->verbs_dev);
 	rcu_barrier(); /* wait for rcu callbacks to complete */
 	free_percpu(dd->int_counter);
+	free_percpu(dd->rcv_limit);
 	ib_dealloc_device(&dd->verbs_dev.ibdev);
 }
 
@@ -1032,6 +1033,14 @@ struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 		ret = -ENOMEM;
 		hfi1_early_err(&pdev->dev,
 			       "Could not allocate per-cpu int_counter\n");
+		goto bail;
+	}
+
+	dd->rcv_limit = alloc_percpu(u64);
+	if (!dd->rcv_limit) {
+		ret = -ENOMEM;
+		hfi1_early_err(&pdev->dev,
+			       "Could not allocate per-cpu rcv_limit\n");
 		goto bail;
 	}
 
