@@ -465,8 +465,10 @@ static inline int process_rcv_packet(struct hfi1_packet *packet)
 	packet->rhqoff += packet->rsize;
 	if (packet->rhqoff >= packet->maxcnt)
 		packet->rhqoff = 0;
-	if (packet->numpkt == MAX_PKT_RECV)
+	if (packet->numpkt == MAX_PKT_RECV) {
 		ret = RCV_PKT_MAX;
+		this_cpu_inc(*packet->rcd->dd->rcv_limit);
+	}
 
 	packet->rhf_addr = (__le32 *) packet->rcd->rcvhdrq + packet->rhqoff +
 				      packet->rcd->dd->rhf_offset;

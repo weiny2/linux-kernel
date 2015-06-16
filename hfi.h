@@ -838,8 +838,10 @@ struct hfi1_devdata {
 
 	/* reset value */
 	u64 z_int_counter;
+	u64 z_rcv_limit;
 	/* percpu int_counter */
 	u64 __percpu *int_counter;
+	u64 __percpu *rcv_limit;
 
 	/* number of receive contexts in use by the driver */
 	u32 num_rcv_contexts;
@@ -1714,6 +1716,7 @@ static inline void hfi1_reset_cpu_counters(struct hfi1_devdata *dd)
 	int i;
 
 	dd->z_int_counter = get_all_cpu_total(dd->int_counter);
+	dd->z_rcv_limit = get_all_cpu_total(dd->rcv_limit);
 
 	ppd = (struct hfi1_pportdata *)(dd + 1);
 	for (i = 0; i < dd->num_pports; i++, ppd++) {

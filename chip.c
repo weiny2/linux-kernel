@@ -1489,6 +1489,15 @@ static u64 access_sw_cpu_intr(const struct cntr_entry *entry,
 			      mode, data);
 }
 
+static u64 access_sw_cpu_rcv_limit(const struct cntr_entry *entry,
+			      void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	return read_write_cpu(dd, &dd->z_rcv_limit, dd->rcv_limit, vl,
+			      mode, data);
+}
+
 #define def_access_sw_cpu(cntr) \
 static u64 access_sw_cpu_##cntr(const struct cntr_entry *entry,		      \
 			      void *context, int vl, int mode, u64 data)      \
@@ -1671,6 +1680,8 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 			 CNTR_SYNTH),
 [C_SW_CPU_INTR] = CNTR_ELEM("Intr", 0, 0, CNTR_NORMAL,
 			    access_sw_cpu_intr),
+[C_SW_CPU_RCV_LIM] = CNTR_ELEM("RcvLimit", 0, 0, CNTR_NORMAL,
+			    access_sw_cpu_rcv_limit),
 };
 
 static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
