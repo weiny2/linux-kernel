@@ -79,8 +79,8 @@ struct opa_core_device;
 /**
  * struct hfi_ctx - state for HFI resources assigned to this context
  * @devdata: HFI device specific data, private to the hardware driver
- * @mode: returned from CTXT_ASSIGN.pid_mode
  * @type: kernel or user context
+ * @mode: Describes if PIDs or LIDs are virtualized or not
  * @pid: Assigned Portals Process ID
  * @ptl_uid: Assigned Protection Domain ID
  * @ptl_state_base: Pointer to Portals state in host memory
@@ -98,7 +98,6 @@ struct opa_core_device;
  * @sl_mask: Mask of allowed service levels for this context
  * @pid_base: Base of contiguous assigned PIDs on this LID
  * @pid_count: Number of PIDs assigned on this LID
- * @pid_mode: Describes if PIDs or LIDs are virtualized or not
  * @cq_pair_num_assigned: Counter of assigned Command Queues
  * @ct_used: IDR table of allocated Event Counters (CTs)
  * @eq_used: IDR table of allocated Events Queues
@@ -115,8 +114,8 @@ struct opa_core_device;
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
-	u16	mode;
 	u8	type;
+	u16	mode;
 	u16	pid;
 	u32	ptl_uid;
 	void	*ptl_state_base;
@@ -134,7 +133,6 @@ struct hfi_ctx {
 	u32	sl_mask;
 	u16	pid_base;
 	u16	pid_count;
-	u16	pid_mode;
 	u16	cq_pair_num_assigned;
 	struct idr ct_used;
 	struct idr eq_used;
@@ -156,6 +154,7 @@ struct hfi_ctx {
 #define HFI_CTX_INIT(ctx, dd)		\
 	(ctx)->devdata = (dd);		\
 	(ctx)->type = HFI_CTX_TYPE_KERNEL; \
+	(ctx)->mode = 0;		\
 	(ctx)->allow_phys_dlid = 1;	\
 	/* allow all SLs by default */	\
 	(ctx)->sl_mask = -1;		\
