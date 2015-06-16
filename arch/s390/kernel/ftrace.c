@@ -56,6 +56,7 @@
  */
 
 unsigned long ftrace_plt;
+unsigned long ftrace_oco_plt;
 
 int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
 		       unsigned long addr)
@@ -66,21 +67,28 @@ int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
 int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec,
 		    unsigned long addr)
 {
+	void *ip = (void *) rec->ip - MCOUNT_IP_FIXUP;
 	struct ftrace_insn orig, new, old;
+	int oco = 0;
 
-	if (probe_kernel_read(&old, (void *) rec->ip, sizeof(old)))
+	if (probe_kernel_read(&old, ip, sizeof(old)))
 		return -EFAULT;
 	if (addr == MCOUNT_ADDR) {
 		/* Initial code replacement */
 #ifdef CC_USING_HOTPATCH
-		/* We expect to see brcl 0,0 */
-		ftrace_generate_nop_insn(&orig);
+		/* Special oco code detection... */
+		oco = is_ftrace_oco_orig(&old, (unsigned long) ip);
+		if (oco)
+			orig = old;
+		else
+			/* We expect to see brcl 0,0 */
+			ftrace_generate_nop_insn(&orig, 0);
 #else
 		/* We expect to see stg r14,8(r15) */
 		orig.opc = 0xe3e0;
 		orig.disp = 0xf0080024;
 #endif
-		ftrace_generate_nop_insn(&new);
+		ftrace_generate_nop_insn(&new, oco);
 	} else if (old.opc == BREAKPOINT_INSTRUCTION) {
 		/*
 		 * If we find a breakpoint instruction, a kprobe has been
@@ -90,26 +98,34 @@ int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec,
 		 * handler can execute a nop, if it reaches this breakpoint.
 		 */
 		new.opc = orig.opc = BREAKPOINT_INSTRUCTION;
-		orig.disp = KPROBE_ON_FTRACE_CALL;
-		new.disp = KPROBE_ON_FTRACE_NOP;
+		if (old.disp == KPROBE_ON_FTRACE_CALL) {
+			orig.disp = KPROBE_ON_FTRACE_CALL;
+			new.disp = KPROBE_ON_FTRACE_NOP;
+		} else {
+			orig.disp = KPROBE_ON_FTRACE_OCO_CALL;
+			new.disp = KPROBE_ON_FTRACE_OCO_NOP;
+		}
 	} else {
 		/* Replace ftrace call with a nop. */
-		ftrace_generate_call_insn(&orig, rec->ip);
-		ftrace_generate_nop_insn(&new);
+		oco = is_ftrace_oco_call(&old, (unsigned long) ip);
+		ftrace_generate_call_insn(&orig, (unsigned long) ip, oco);
+		ftrace_generate_nop_insn(&new, oco);
 	}
 	/* Verify that the to be replaced code matches what we expect. */
 	if (memcmp(&orig, &old, sizeof(old)))
 		return -EINVAL;
-	if (probe_kernel_write((void *) rec->ip, &new, sizeof(new)))
+	if (probe_kernel_write(ip, &new, sizeof(new)))
 		return -EPERM;
 	return 0;
 }
 
 int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 {
+	void *ip = (void *) rec->ip - MCOUNT_IP_FIXUP;
 	struct ftrace_insn orig, new, old;
+	int oco;
 
-	if (probe_kernel_read(&old, (void *) rec->ip, sizeof(old)))
+	if (probe_kernel_read(&old, ip, sizeof(old)))
 		return -EFAULT;
 	if (old.opc == BREAKPOINT_INSTRUCTION) {
 		/*
@@ -120,17 +136,23 @@ int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 		 * handler can execute a brasl if it reaches this breakpoint.
 		 */
 		new.opc = orig.opc = BREAKPOINT_INSTRUCTION;
-		orig.disp = KPROBE_ON_FTRACE_NOP;
-		new.disp = KPROBE_ON_FTRACE_CALL;
+		if (old.disp == KPROBE_ON_FTRACE_NOP) {
+			orig.disp = KPROBE_ON_FTRACE_NOP;
+			new.disp = KPROBE_ON_FTRACE_CALL;
+		} else {
+			orig.disp = KPROBE_ON_FTRACE_OCO_NOP;
+			new.disp = KPROBE_ON_FTRACE_OCO_CALL;
+		}
 	} else {
 		/* Replace nop with an ftrace call. */
-		ftrace_generate_nop_insn(&orig);
-		ftrace_generate_call_insn(&new, rec->ip);
+		oco = is_ftrace_oco_nop(&old, (unsigned long) ip);
+		ftrace_generate_nop_insn(&orig, oco);
+		ftrace_generate_call_insn(&new, (unsigned long) ip, oco);
 	}
 	/* Verify that the to be replaced code matches what we expect. */
 	if (memcmp(&orig, &old, sizeof(old)))
 		return -EINVAL;
-	if (probe_kernel_write((void *) rec->ip, &new, sizeof(new)))
+	if (probe_kernel_write(ip, &new, sizeof(new)))
 		return -EPERM;
 	return 0;
 }
@@ -160,6 +182,18 @@ static int __init ftrace_plt_init(void)
 	ip[3] = FTRACE_ADDR >> 32;
 	ip[4] = FTRACE_ADDR & 0xffffffff;
 	set_memory_ro(ftrace_plt, 1);
+#ifdef CC_USING_HOTPATCH
+	ftrace_oco_plt = (unsigned long) module_alloc(PAGE_SIZE);
+	if (!ftrace_oco_plt)
+		panic("cannot allocate ftrace oco plt\n");
+	ip = (unsigned int *) ftrace_oco_plt;
+	ip[0] = 0x0d10e310; /* basr 1,0; lg 1,10(1); br 1 */
+	ip[1] = 0x100a0004;
+	ip[2] = 0x07f10000;
+	ip[3] = FTRACE_OCO_ADDR >> 32;
+	ip[4] = FTRACE_OCO_ADDR & 0xffffffff;
+	set_memory_ro(ftrace_oco_plt, 1);
+#endif /* CC_USING_HOTPATCH */
 	return 0;
 }
 device_initcall(ftrace_plt_init);
@@ -176,7 +210,7 @@ unsigned long __kprobes prepare_ftrace_return(unsigned long parent,
 
 	if (unlikely(atomic_read(&current->tracing_graph_pause)))
 		goto out;
-	ip = (ip & PSW_ADDR_INSN) - MCOUNT_INSN_SIZE;
+	ip = (ip & PSW_ADDR_INSN) - MCOUNT_INSN_SIZE + MCOUNT_IP_FIXUP;
 	if (ftrace_push_return_trace(parent, ip, &trace.depth, 0) == -EBUSY)
 		goto out;
 	trace.func = ip;
@@ -190,6 +224,29 @@ out:
 	return parent;
 }
 
+#ifdef CC_USING_HOTPATCH
+unsigned long __kprobes prepare_ftrace_oco_return(unsigned long parent,
+						  unsigned long ip)
+{
+	struct ftrace_graph_ent trace;
+
+	if (unlikely(atomic_read(&current->tracing_graph_pause)))
+		goto out;
+	ip = (ip & PSW_ADDR_INSN) - MCOUNT_OCO_INSN_SIZE + MCOUNT_IP_FIXUP;
+	if (ftrace_push_return_trace(parent, ip, &trace.depth, 0) == -EBUSY)
+		goto out;
+	trace.func = ip;
+	/* Only trace if the calling function expects to. */
+	if (!ftrace_graph_entry(&trace)) {
+		current->curr_ret_stack--;
+		goto out;
+	}
+	parent = (unsigned long) return_to_handler;
+out:
+	return parent;
+}
+#endif /* CC_USING_HOTPATCH */
+
 /*
  * Patch the kernel code at ftrace_graph_caller location. The instruction
  * there is branch relative on condition. To enable the ftrace graph code
@@ -202,6 +259,9 @@ int ftrace_enable_ftrace_graph_caller(void)
 {
 	u8 op = 0x04; /* set mask field to zero */
 
+#ifdef CC_USING_HOTPATCH
+	probe_kernel_write(__va(ftrace_oco_graph_caller)+1, &op, sizeof(op));
+#endif
 	return probe_kernel_write(__va(ftrace_graph_caller)+1, &op, sizeof(op));
 }
 
@@ -209,6 +269,9 @@ int ftrace_disable_ftrace_graph_caller(void)
 {
 	u8 op = 0xf4; /* set mask field to all ones */
 
+#ifdef CC_USING_HOTPATCH
+	probe_kernel_write(__va(ftrace_oco_graph_caller)+1, &op, sizeof(op));
+#endif
 	return probe_kernel_write(__va(ftrace_graph_caller)+1, &op, sizeof(op));
 }
 
