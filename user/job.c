@@ -83,7 +83,7 @@ void hfi_job_init(struct hfi_userdata *ud)
 			ud->ctx.lid_count = job_info->ctx.lid_count;
 			ud->ctx.pid_base = job_info->ctx.pid_base;
 			ud->ctx.pid_count = job_info->ctx.pid_count;
-			ud->ctx.pid_mode = job_info->ctx.pid_mode;
+			ud->ctx.mode = job_info->ctx.mode;
 			ud->ctx.sl_mask = job_info->ctx.sl_mask;
 			ud->ctx.auth_mask = job_info->ctx.auth_mask;
 			memcpy(ud->ctx.auth_uid, job_info->ctx.auth_uid,
@@ -108,7 +108,7 @@ int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info)
 	job_info->lid_count = ud->ctx.lid_count;
 	job_info->pid_base = ud->ctx.pid_base;
 	job_info->pid_count = ud->ctx.pid_count;
-	job_info->pid_mode = ud->ctx.pid_mode;
+	job_info->pid_mode = ud->ctx.mode;
 	job_info->sl_mask = ud->ctx.sl_mask;
 	memcpy(job_info->auth_uid, ud->ctx.auth_uid, sizeof(ud->ctx.auth_uid));
 	return 0;
@@ -132,7 +132,6 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 		return ret;
 	ud->ctx.pid_base = pid_base;
 	ud->ctx.pid_count = count;
-	ud->ctx.pid_mode = 0;
 
 	/* store other resource manager parameters */
 	ud->ctx.lid_offset = job_setup->lid_offset;

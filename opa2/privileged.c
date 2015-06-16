@@ -70,7 +70,7 @@ int hfi_dlid_assign(struct hfi_ctx *ctx,
 		return ret;
 
 	ctx->dlid_base = dlid_assign->dlid_base;
-	ctx->pid_mode |= HFI_CTX_MODE_LID_VIRTUALIZED;
+	ctx->mode |= HFI_CTX_MODE_LID_VIRTUALIZED;
 
 	return 0;
 }
@@ -86,7 +86,7 @@ int hfi_dlid_release(struct hfi_ctx *ctx, u32 dlid_base, u32 count)
 		return ret;
 
 	ctx->dlid_base = HFI_LID_NONE;
-	ctx->pid_mode &= ~HFI_CTX_MODE_LID_VIRTUALIZED;
+	ctx->mode &= ~HFI_CTX_MODE_LID_VIRTUALIZED;
 
 	return 0;
 }
