@@ -579,7 +579,6 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 		goto out_put_lowerpath;
 	}
 
-
 	ufs->upper_mnt = clone_private_mount(&upperpath);
 	err = PTR_ERR(ufs->upper_mnt);
 	if (IS_ERR(ufs->upper_mnt)) {
