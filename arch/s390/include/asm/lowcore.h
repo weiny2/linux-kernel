@@ -138,7 +138,12 @@ struct _lowcore {
 	__u32	softirq_pending;		/* 0x02ec */
 	__u32	percpu_offset;			/* 0x02f0 */
 	__u32	machine_flags;			/* 0x02f4 */
+#ifndef __GENKSYMS__
+	__u32	spinlock_lockval;		/* 0x02f8 */
+	__u8	pad_0x02fc[0x0300-0x02fc];	/* 0x02fc */
+#else
 	__u8	pad_0x02f8[0x0300-0x02f8];	/* 0x02fc */
+#endif
 
 	/* Interrupt response block */
 	__u8	irb[96];			/* 0x0300 */
@@ -284,7 +289,12 @@ struct _lowcore {
 	__u64	machine_flags;			/* 0x0388 */
 	__u8	pad_0x0390[0x0398-0x0390];	/* 0x0390 */
 	__u64	gmap;				/* 0x0398 */
+#ifndef __GENKSYMS__
+	__u32	spinlock_lockval;		/* 0x03a0 */
+	__u8	pad_0x03a4[0x0400-0x03a4];	/* 0x03a4 */
+#else
 	__u8	pad_0x03a0[0x0400-0x03a0];	/* 0x03a0 */
+#endif
 
 	/* Interrupt response block. */
 	__u8	irb[96];			/* 0x0400 */
