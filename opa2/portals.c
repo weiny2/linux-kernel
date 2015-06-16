@@ -572,6 +572,18 @@ void hfi_ctxt_unreserve(struct hfi_ctx *ctx)
 	ctx->pid_count = 0;
 }
 
+/* Initialize the Unexpected Free List */
+static void hfi_uh_init(struct hfi_ctx *ctx, u16 unexpected_count)
+{
+	int idx;
+	hfi_uh_t *p = ctx->le_me_addr + ctx->le_me_size;
+
+	/* Add all the Unexpected Headers to the free list which begins in
+	   UH[0] */
+	for (idx = 0; idx < unexpected_count; idx++)
+		p++->k.next = (idx+1) % unexpected_count;
+}
+
 /*
  * Associate this process with a Portals PID.
  * Note, hfi_open() sets:
@@ -662,6 +674,9 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		/* no CTs assigned yet, so above cannot yield error */
 		BUG_ON(ret != 0);
 	}
+
+	/* Initialize the Unexpected Free List */
+	hfi_uh_init(ctx, ctx_assign->unexpected_count);
 
 	return 0;
 
