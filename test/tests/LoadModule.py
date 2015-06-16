@@ -226,7 +226,7 @@ def main():
     for host in hostlist:
         print host.get_name(), "module load address is:"
         cmd = "cat /sys/module/hfi1/sections/.init.text"
-        (err, out) = do_ssh(host, cmd)
+        out = do_ssh(host, cmd)
         print out
 
     RegLib.test_pass("Driver loaded, adapters up SM running.")
