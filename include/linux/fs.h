@@ -1335,16 +1335,16 @@ struct super_block {
 	struct workqueue_struct *s_dio_done_wq;
 
 	/*
+	 * Indicates how deep in a filesystem stack this SB is
+	 */
+	int s_stack_depth;
+
+	/*
 	 * Keep the lru lists last in the structure so they always sit on their
 	 * own individual cachelines.
 	 */
 	struct list_lru		s_dentry_lru ____cacheline_aligned_in_smp;
 	struct list_lru		s_inode_lru ____cacheline_aligned_in_smp;
-
-	/*
-	 * Indicates how deep in a filesystem stack this SB is
-	 */
-	int s_stack_depth;
 };
 
 extern struct timespec current_fs_time(struct super_block *sb);
