@@ -197,11 +197,11 @@ EXPORT_SYMBOL(airq_iv_release);
 unsigned long airq_iv_alloc(struct airq_iv *iv, unsigned long num)
 {
 	const unsigned long be_to_le = BITS_PER_LONG - 1;
-	unsigned long bit, i;
+	unsigned long bit, i, flags;
 
 	if (!iv->avail || num == 0)
 		return -1UL;
-	spin_lock(&iv->lock);
+	spin_lock_irqsave(&iv->lock, flags);
 	bit = find_first_bit_left(iv->avail, iv->bits);
 	while (bit + num <= iv->bits) {
 		for (i = 1; i < num; i++)
@@ -219,9 +219,8 @@ unsigned long airq_iv_alloc(struct airq_iv *iv, unsigned long num)
 	}
 	if (bit + num > iv->bits)
 		bit = -1UL;
-	spin_unlock(&iv->lock);
+	spin_unlock_irqrestore(&iv->lock, flags);
 	return bit;
-
 }
 EXPORT_SYMBOL(airq_iv_alloc);
 
@@ -234,12 +233,11 @@ EXPORT_SYMBOL(airq_iv_alloc);
 void airq_iv_free(struct airq_iv *iv, unsigned long bit, unsigned long num)
 {
 	const unsigned long be_to_le = BITS_PER_LONG - 1;
-
-	unsigned long i;
+	unsigned long i, flags;
 
 	if (!iv->avail || num == 0)
 		return;
-	spin_lock(&iv->lock);
+	spin_lock_irqsave(&iv->lock, flags);
 	for (i = 0; i < num; i++) {
 		/* Clear (possibly left over) interrupt bit */
 		clear_bit((bit + i) ^ be_to_le, iv->vector);
@@ -251,7 +249,7 @@ void airq_iv_free(struct airq_iv *iv, unsigned long bit, unsigned long num)
 		while (iv->end > 0 && !test_bit((iv->end - 1) ^ be_to_le, iv->avail))
 			iv->end--;
 	}
-	spin_unlock(&iv->lock);
+	spin_unlock_irqrestore(&iv->lock, flags);
 }
 EXPORT_SYMBOL(airq_iv_free);
 
