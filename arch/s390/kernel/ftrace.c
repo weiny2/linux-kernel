@@ -59,10 +59,9 @@ int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
 int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec,
 		    unsigned long addr)
 {
-	void *ip = (void *) rec->ip - MCOUNT_IP_FIXUP;
 	struct ftrace_insn orig, new, old;
 
-	if (probe_kernel_read(&old, ip, sizeof(old)))
+	if (probe_kernel_read(&old, (void *) rec->ip, sizeof(old)))
 		return -EFAULT;
 	if (addr == MCOUNT_ADDR) {
 		/* Initial code replacement; we expect to see stg r14,8(r15) */
@@ -82,23 +81,22 @@ int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec,
 		new.disp = KPROBE_ON_FTRACE_NOP;
 	} else {
 		/* Replace ftrace call with a nop. */
-		ftrace_generate_call_insn(&orig, (unsigned long) ip);
+		ftrace_generate_call_insn(&orig, rec->ip);
 		ftrace_generate_nop_insn(&new);
 	}
 	/* Verify that the to be replaced code matches what we expect. */
 	if (memcmp(&orig, &old, sizeof(old)))
 		return -EINVAL;
-	if (probe_kernel_write(ip, &new, sizeof(new)))
+	if (probe_kernel_write((void *) rec->ip, &new, sizeof(new)))
 		return -EPERM;
 	return 0;
 }
 
 int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 {
-	void *ip = (void *) rec->ip - MCOUNT_IP_FIXUP;
 	struct ftrace_insn orig, new, old;
 
-	if (probe_kernel_read(&old, ip, sizeof(old)))
+	if (probe_kernel_read(&old, (void *) rec->ip, sizeof(old)))
 		return -EFAULT;
 	if (old.opc == BREAKPOINT_INSTRUCTION) {
 		/*
@@ -114,12 +112,12 @@ int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 	} else {
 		/* Replace nop with an ftrace call. */
 		ftrace_generate_nop_insn(&orig);
-		ftrace_generate_call_insn(&new, (unsigned long) ip);
+		ftrace_generate_call_insn(&new, rec->ip);
 	}
 	/* Verify that the to be replaced code matches what we expect. */
 	if (memcmp(&orig, &old, sizeof(old)))
 		return -EINVAL;
-	if (probe_kernel_write(ip, &new, sizeof(new)))
+	if (probe_kernel_write((void *) rec->ip, &new, sizeof(new)))
 		return -EPERM;
 	return 0;
 }
@@ -165,7 +163,7 @@ unsigned long __kprobes prepare_ftrace_return(unsigned long parent,
 
 	if (unlikely(atomic_read(&current->tracing_graph_pause)))
 		goto out;
-	ip = (ip & PSW_ADDR_INSN) - MCOUNT_INSN_SIZE + MCOUNT_IP_FIXUP;
+	ip = (ip & PSW_ADDR_INSN) - MCOUNT_INSN_SIZE;
 	if (ftrace_push_return_trace(parent, ip, &trace.depth, 0) == -EBUSY)
 		goto out;
 	trace.func = ip;
