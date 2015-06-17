@@ -160,7 +160,6 @@ static int qat_alg_do_precomputes(struct icp_qat_hw_auth_algo_blk *hash,
 				  const uint8_t *auth_key,
 				  unsigned int auth_keylen)
 {
-	struct qat_auth_state auth_state;
 	struct {
 		struct shash_desc shash;
 		char ctx[crypto_shash_descsize(ctx->hash_tfm)];
@@ -170,26 +169,24 @@ static int qat_alg_do_precomputes(struct icp_qat_hw_auth_algo_blk *hash,
 	struct sha512_state sha512;
 	int block_size = crypto_shash_blocksize(ctx->hash_tfm);
 	int digest_size = crypto_shash_digestsize(ctx->hash_tfm);
-	uint8_t *ipad = auth_state.data;
-	uint8_t *opad = ipad + block_size;
+	char ipad[block_size];
+	char opad[block_size];
 	__be32 *hash_state_out;
 	__be64 *hash512_state_out;
 	int i, offset;
 
-	memset(auth_state.data, 0, sizeof(auth_state.data));
+	memset(ipad, 0, block_size);
+	memset(opad, 0, block_size);
 	desc.shash.tfm = ctx->hash_tfm;
 	desc.shash.flags = 0x0;
 
 	if (auth_keylen > block_size) {
-		char buff[SHA512_BLOCK_SIZE];
 		int ret = crypto_shash_digest(&desc.shash, auth_key,
-					      auth_keylen, buff);
+					      auth_keylen, ipad);
 		if (ret)
 			return ret;
 
-		memcpy(ipad, buff, digest_size);
-		memcpy(opad, buff, digest_size);
-		memzero_explicit(buff, sizeof(buff));
+		memcpy(opad, ipad, digest_size);
 	} else {
 		memcpy(ipad, auth_key, auth_keylen);
 		memcpy(opad, auth_key, auth_keylen);
