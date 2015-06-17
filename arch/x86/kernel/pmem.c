@@ -78,4 +78,4 @@ static __init int register_e820_pmem(void)
 	platform_device_unregister(&e820_pmem);
 	return -ENXIO;
 }
-late_initcall(register_e820_pmem);
+device_initcall(register_e820_pmem);

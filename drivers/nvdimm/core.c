@@ -491,5 +491,5 @@ static __exit void libnvdimm_exit(void)
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Intel Corporation");
-module_init(libnvdimm_init);
+subsys_initcall(libnvdimm_init);
 module_exit(libnvdimm_exit);
