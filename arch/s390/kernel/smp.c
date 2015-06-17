@@ -159,9 +159,9 @@ static void pcpu_ec_call(struct pcpu *pcpu, int ec_bit)
 {
 	int order;
 
-	set_bit(ec_bit, &pcpu->ec_mask);
-	order = pcpu_running(pcpu) ?
-		SIGP_EXTERNAL_CALL : SIGP_EMERGENCY_SIGNAL;
+	if (test_and_set_bit(ec_bit, &pcpu->ec_mask))
+		return;
+	order = pcpu_running(pcpu) ? SIGP_EXTERNAL_CALL : SIGP_EMERGENCY_SIGNAL;
 	pcpu_sigp_retry(pcpu, order, 0);
 }
 
@@ -185,6 +185,7 @@ static int pcpu_alloc_lowcore(struct pcpu *pcpu, int cpu)
 	lc->panic_stack = pcpu->panic_stack + PAGE_SIZE
 		- STACK_FRAME_OVERHEAD - sizeof(struct pt_regs);
 	lc->cpu_nr = cpu;
+	lc->spinlock_lockval = arch_spin_lockval(cpu);
 #ifndef CONFIG_64BIT
 	if (MACHINE_HAS_IEEE) {
 		lc->extended_save_area_addr = get_zeroed_page(GFP_KERNEL);
@@ -238,6 +239,7 @@ static void pcpu_prepare_secondary(struct pcpu *pcpu, int cpu)
 
 	atomic_inc(&init_mm.context.attach_count);
 	lc->cpu_nr = cpu;
+	lc->spinlock_lockval = arch_spin_lockval(cpu);
 	lc->percpu_offset = __per_cpu_offset[cpu];
 	lc->kernel_asce = S390_lowcore.kernel_asce;
 	lc->machine_flags = S390_lowcore.machine_flags;
@@ -532,6 +534,11 @@ EXPORT_SYMBOL(smp_ctl_clear_bit);
 
 #if defined(CONFIG_ZFCPDUMP) || defined(CONFIG_CRASH_DUMP)
 
+/*
+ * This is a temporary workaround to keep the SLES 12 kabi checker happy,
+ * the zfcpdump_save_areas symbol is not used by 3rd party modules.
+ * This has to be removed for SLES 12 SP1, before a new kabi is defined.
+ */
 struct save_area *zfcpdump_save_areas[NR_CPUS + 1];
 EXPORT_SYMBOL_GPL(zfcpdump_save_areas);
 
@@ -545,15 +552,9 @@ static void __init smp_get_save_area(int cpu, u16 address)
 	if (!OLDMEM_BASE && (address == boot_cpu_address ||
 			     ipl_info.type != IPL_TYPE_FCP_DUMP))
 		return;
-	if (cpu >= NR_CPUS) {
-		pr_warning("CPU %i exceeds the maximum %i and is excluded "
-			   "from the dump\n", cpu, NR_CPUS - 1);
-		return;
-	}
-	save_area = kmalloc(sizeof(struct save_area), GFP_KERNEL);
+	save_area = dump_save_area_create(cpu);
 	if (!save_area)
 		panic("could not allocate memory for save area\n");
-	zfcpdump_save_areas[cpu] = save_area;
 #ifdef CONFIG_CRASH_DUMP
 	if (address == boot_cpu_address) {
 		/* Copy the registers of the boot cpu. */
@@ -826,6 +827,7 @@ void __init smp_cpus_done(unsigned int max_cpus)
 void __init smp_setup_processor_id(void)
 {
 	S390_lowcore.cpu_nr = 0;
+	S390_lowcore.spinlock_lockval = arch_spin_lockval(0);
 }
 
 /*
