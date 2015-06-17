@@ -2144,6 +2144,10 @@ static int shmem_rename2(struct inode *old_dir, struct dentry *old_dentry, struc
 	inode->i_ctime = CURRENT_TIME;
 	return 0;
 }
+static int shmem_rename_legacy(struct inode *old_dir, struct dentry *old_dentry, struct inode *new_dir, struct dentry *new_dentry)
+{
+	return shmem_rename2(old_dir, old_dentry, new_dir, new_dentry, 0);
+}
 
 static int shmem_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
@@ -2806,6 +2810,7 @@ static const struct inode_operations shmem_dir_inode_operations = {
 	.mkdir		= shmem_mkdir,
 	.rmdir		= shmem_rmdir,
 	.mknod		= shmem_mknod,
+	.rename		= shmem_rename_legacy,
 	.rename2	= shmem_rename2,
 	.tmpfile	= shmem_tmpfile,
 #endif
