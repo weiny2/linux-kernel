@@ -4176,7 +4176,7 @@ SYSCALL_DEFINE5(renameat2, int, olddfd, const char __user *, oldname,
 	bool should_retry = false;
 	int error;
 
-	if (flags)
+	if (flags & ~RENAME_NOREPLACE)
 		return -EINVAL;
 
 retry:
@@ -4202,6 +4202,8 @@ retry:
 		goto exit2;
 
 	new_dir = newnd.path.dentry;
+	if (flags & RENAME_NOREPLACE)
+		error = -EEXIST;
 	if (newnd.last_type != LAST_NORM)
 		goto exit2;
 
@@ -4224,22 +4226,25 @@ retry_deleg:
 	error = -ENOENT;
 	if (!old_dentry->d_inode)
 		goto exit4;
-	/* unless the source is a directory trailing slashes give -ENOTDIR */
-	if (!S_ISDIR(old_dentry->d_inode->i_mode)) {
-		error = -ENOTDIR;
-		if (oldnd.last.name[oldnd.last.len])
-			goto exit4;
-		if (newnd.last.name[newnd.last.len])
-			goto exit4;
-	}
-	/* source should not be ancestor of target */
-	error = -EINVAL;
-	if (old_dentry == trap)
-		goto exit4;
 	new_dentry = lookup_hash(&newnd);
 	error = PTR_ERR(new_dentry);
 	if (IS_ERR(new_dentry))
 		goto exit4;
+	error = -EEXIST;
+	if ((flags & RENAME_NOREPLACE) && new_dentry->d_inode)
+		goto exit5;
+	/* unless the source is a directory trailing slashes give -ENOTDIR */
+	if (!S_ISDIR(old_dentry->d_inode->i_mode)) {
+		error = -ENOTDIR;
+		if (oldnd.last.name[oldnd.last.len])
+			goto exit5;
+		if (newnd.last.name[newnd.last.len])
+			goto exit5;
+	}
+	/* source should not be ancestor of target */
+	error = -EINVAL;
+	if (old_dentry == trap)
+		goto exit5;
 	/* target should not be an ancestor of source */
 	error = -ENOTEMPTY;
 	if (new_dentry == trap)
