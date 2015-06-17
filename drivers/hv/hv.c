@@ -314,7 +314,11 @@ static void hv_init_clockevent_device(struct clock_event_device *dev, int cpu)
 	dev->features = CLOCK_EVT_FEAT_ONESHOT;
 	dev->cpumask = cpumask_of(cpu);
 	dev->rating = 1000;
-	dev->owner = THIS_MODULE;
+	/*
+	 * Avoid settint dev->owner = THIS_MODULE deliberately as doing so will
+	 * result in clockevents_config_and_register() taking additional
+	 * references to the hv_vmbus module making it impossible to unload.
+	 */
 
 	dev->set_mode = hv_ce_setmode;
 	dev->set_next_event = hv_ce_set_next_event;
@@ -472,6 +476,22 @@ void hv_synic_init(void *arg)
 }
 
 /*
+ * hv_synic_clockevents_cleanup - Cleanup clockevent devices
+ */
+void hv_synic_clockevents_cleanup(void)
+{
+#if 0
+	int cpu;
+
+	if (!(ms_hyperv.features & HV_X64_MSR_SYNTIMER_AVAILABLE))
+		return;
+
+	for_each_online_cpu(cpu)
+		clockevents_unbind_device(hv_context.clk_evt[cpu], cpu);
+#endif
+}
+
+/*
  * hv_synic_cleanup - Cleanup routine for hv_synic_init().
  */
 void hv_synic_cleanup(void *arg)
@@ -484,6 +504,11 @@ void hv_synic_cleanup(void *arg)
 
 	if (!hv_context.synic_initialized)
 		return;
+
+	/* Turn off clockevent device */
+	if (ms_hyperv.features & HV_X64_MSR_SYNTIMER_AVAILABLE)
+		hv_ce_setmode(CLOCK_EVT_MODE_SHUTDOWN,
+			      hv_context.clk_evt[cpu]);
 
 	rdmsrl(HV_X64_MSR_SINT0 + VMBUS_MESSAGE_SINT, shared_sint.as_uint64);
 
