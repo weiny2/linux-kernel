@@ -1151,6 +1151,7 @@ static struct device **create_namespace_io(struct nd_region *nd_region)
 
 	dev = &nsio->dev;
 	dev->type = &namespace_io_device_type;
+	dev->parent = &nd_region->dev;
 	res = &nsio->res;
 	res->name = dev_name(&nd_region->dev);
 	res->flags = IORESOURCE_MEM;
@@ -1364,6 +1365,7 @@ static struct device **create_namespace_pmem(struct nd_region *nd_region)
 
 	dev = &nspm->nsio.dev;
 	dev->type = &namespace_pmem_device_type;
+	dev->parent = &nd_region->dev;
 	res = &nspm->nsio.res;
 	res->name = dev_name(&nd_region->dev);
 	res->flags = IORESOURCE_MEM;
@@ -1512,6 +1514,7 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 			goto err;
 		dev = &nsblk->dev;
 		dev->type = &namespace_blk_device_type;
+		dev->parent = &nd_region->dev;
 		dev_set_name(dev, "namespace%d.%d", nd_region->id, count);
 		devs[count++] = dev;
 		nsblk->id = -1;
@@ -1552,6 +1555,7 @@ static struct device **create_namespace_blk(struct nd_region *nd_region)
 			goto err;
 		dev = &nsblk->dev;
 		dev->type = &namespace_blk_device_type;
+		dev->parent = &nd_region->dev;
 		devs[count++] = dev;
 	}
 
@@ -1659,7 +1663,6 @@ int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 		if (id < 0)
 			break;
 		dev_set_name(dev, "namespace%d.%d", nd_region->id, id);
-		dev->parent = &nd_region->dev;
 		dev->groups = nd_namespace_attribute_groups;
 		nd_device_register(dev);
 	}
