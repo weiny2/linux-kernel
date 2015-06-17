@@ -135,6 +135,7 @@ static const struct block_device_operations pmem_fops = {
 #ifdef CONFIG_COMPAT
 	.compat_ioctl =		nvdimm_bdev_ioctl,
 #endif
+	.revalidate_disk =	nvdimm_revalidate_disk,
 };
 
 static struct pmem_device *pmem_alloc(struct device *dev,

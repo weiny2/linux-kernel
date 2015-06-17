@@ -243,6 +243,32 @@ int __nd_driver_register(struct nd_device_driver *nd_drv, struct module *owner,
 }
 EXPORT_SYMBOL(__nd_driver_register);
 
+int nvdimm_revalidate_disk(struct gendisk *disk)
+{
+	int i;
+	struct device *dev = disk->driverfs_dev;
+	struct nd_region *nd_region = walk_to_nd_region(dev);
+
+	if (!nd_region)
+		return 0;
+
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct nvdimm *nvdimm = nd_mapping->nvdimm;
+
+		if ((nvdimm->flags & NDD_UNARMED) && !get_disk_ro(disk)) {
+			dev_dbg(dev, "%s: unarmed, marking disk %s ro\n",
+					dev_name(&nvdimm->dev),
+					dev_name(disk_to_dev(disk)));
+			set_disk_ro(disk, 1);
+			break;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(nvdimm_revalidate_disk);
+
 int nvdimm_bus_add_integrity_disk(struct gendisk *disk, u32 lbasize,
 		sector_t size)
 {
@@ -265,6 +291,7 @@ int nvdimm_bus_add_integrity_disk(struct gendisk *disk, u32 lbasize,
 	rc = nd_integrity_init(disk, lbasize);
 	if (size)
 		set_capacity(disk, size);
+	revalidate_disk(disk);
 	nd_btt_add_disk(nvdimm_bus, disk);
 	nvdimm_bus_unlock(&nvdimm_bus->dev);
 

@@ -243,6 +243,7 @@ static const struct block_device_operations nd_blk_fops = {
 #ifdef CONFIG_COMPAT
 	.compat_ioctl = nvdimm_bdev_compat_ioctl,
 #endif
+	.revalidate_disk = nvdimm_revalidate_disk,
 };
 
 static int nd_blk_probe(struct device *dev)

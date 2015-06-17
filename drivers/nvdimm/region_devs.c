@@ -83,6 +83,19 @@ struct nd_blk_region *to_nd_blk_region(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(to_nd_blk_region);
 
+struct nd_region *walk_to_nd_region(struct device *nd_dev)
+{
+	struct device *dev;
+
+	for (dev = nd_dev; dev; dev = dev->parent)
+		if (dev->type->release == nd_region_release)
+			break;
+	dev_WARN_ONCE(nd_dev, !dev, "invalid dev, not an nd_region descendant\n");
+	if (dev)
+		return to_nd_region(dev);
+	return NULL;
+}
+
 void *nd_region_provider_data(struct nd_region *nd_region)
 {
 	return nd_region->provider_data;
