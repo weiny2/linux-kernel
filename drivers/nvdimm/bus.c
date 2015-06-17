@@ -102,7 +102,7 @@ static int nvdimm_bus_probe(struct device *dev)
 	if (rc == 0)
 		nd_region_probe_success(nvdimm_bus, dev);
 	else
-		nd_region_probe_fail(nvdimm_bus, dev);
+		nd_region_disable(nvdimm_bus, dev);
 	nvdimm_bus_probe_end(nvdimm_bus);
 
 	dev_dbg(&nvdimm_bus->dev, "%s.probe(%s) = %d\n", dev->driver->name,

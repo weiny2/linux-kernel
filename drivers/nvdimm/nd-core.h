@@ -93,7 +93,6 @@ struct nvdimm_bus *walk_to_nvdimm_bus(struct device *nd_dev);
 int __init nvdimm_bus_init(void);
 void nvdimm_bus_exit(void);
 void nd_region_probe_success(struct nvdimm_bus *nvdimm_bus, struct device *dev);
-void nd_region_probe_fail(struct nvdimm_bus *nvdimm_bus, struct device *dev);
 struct nd_region;
 void nd_region_create_blk_seed(struct nd_region *nd_region);
 void nd_region_disable(struct nvdimm_bus *nvdimm_bus, struct device *dev);
@@ -123,4 +122,5 @@ struct resource *nsblk_add_resource(struct nd_region *nd_region,
 		struct nvdimm_drvdata *ndd, struct nd_namespace_blk *nsblk,
 		resource_size_t start);
 int nvdimm_num_label_slots(struct nvdimm_drvdata *ndd);
+void get_ndd(struct nvdimm_drvdata *ndd);
 #endif /* __ND_CORE_H__ */

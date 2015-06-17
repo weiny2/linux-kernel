@@ -396,21 +396,23 @@ u64 nd_region_interleave_set_cookie(struct nd_region *nd_region)
 static void nd_region_notify_driver_action(struct nvdimm_bus *nvdimm_bus,
 		struct device *dev, bool probe)
 {
-	if (is_nd_pmem(dev) || is_nd_blk(dev)) {
+	if (!probe && (is_nd_pmem(dev) || is_nd_blk(dev))) {
 		struct nd_region *nd_region = to_nd_region(dev);
 		int i;
 
 		for (i = 0; i < nd_region->ndr_mappings; i++) {
 			struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+			struct nvdimm_drvdata *ndd = nd_mapping->ndd;
 			struct nvdimm *nvdimm = nd_mapping->nvdimm;
 
-			if (probe)
-				atomic_inc(&nvdimm->busy);
-			else if (!probe)
-				atomic_dec(&nvdimm->busy);
+			kfree(nd_mapping->labels);
+			nd_mapping->labels = NULL;
+			put_ndd(ndd);
+			nd_mapping->ndd = NULL;
+			atomic_dec(&nvdimm->busy);
 		}
 
-		if (is_nd_pmem(dev) || probe)
+		if (is_nd_pmem(dev))
 			return;
 
 		to_nd_blk_region(dev)->disable(nvdimm_bus, dev);
@@ -427,13 +429,6 @@ static void nd_region_notify_driver_action(struct nvdimm_bus *nvdimm_bus,
 void nd_region_probe_success(struct nvdimm_bus *nvdimm_bus, struct device *dev)
 {
 	nd_region_notify_driver_action(nvdimm_bus, dev, true);
-}
-
-/* on failed probe of a blk region tell the provider to undo the enable */
-void nd_region_probe_fail(struct nvdimm_bus *nvdimm_bus, struct device *dev)
-{
-	if (is_nd_blk(dev))
-		to_nd_blk_region(dev)->disable(nvdimm_bus, dev);
 }
 
 void nd_region_disable(struct nvdimm_bus *nvdimm_bus, struct device *dev)

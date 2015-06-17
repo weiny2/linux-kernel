@@ -222,9 +222,43 @@ struct nvdimm_drvdata *to_ndd(struct nd_mapping *nd_mapping)
 {
 	struct nvdimm *nvdimm = nd_mapping->nvdimm;
 
+	WARN_ON_ONCE(!is_nvdimm_bus_locked(&nvdimm->dev));
+
 	return dev_get_drvdata(&nvdimm->dev);
 }
 EXPORT_SYMBOL(to_ndd);
+
+void nvdimm_drvdata_release(struct kref *kref)
+{
+	struct nvdimm_drvdata *ndd = container_of(kref, typeof(*ndd), kref);
+	struct device *dev = ndd->dev;
+	struct resource *res, *_r;
+
+	dev_dbg(dev, "%s\n", __func__);
+
+	nvdimm_bus_lock(dev);
+	for_each_dpa_resource_safe(ndd, res, _r)
+		nvdimm_free_dpa(ndd, res);
+	nvdimm_bus_unlock(dev);
+
+	if (ndd->data && is_vmalloc_addr(ndd->data))
+		vfree(ndd->data);
+	else
+		kfree(ndd->data);
+	kfree(ndd);
+	put_device(dev);
+}
+
+void get_ndd(struct nvdimm_drvdata *ndd)
+{
+	kref_get(&ndd->kref);
+}
+
+void put_ndd(struct nvdimm_drvdata *ndd)
+{
+	if (ndd)
+		kref_put(&ndd->kref, nvdimm_drvdata_release);
+}
 
 const char *nvdimm_name(struct nvdimm *nvdimm)
 {

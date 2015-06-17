@@ -149,7 +149,8 @@ static resource_size_t nd_namespace_blk_size(struct nd_namespace_blk *nsblk)
 	return size;
 }
 
-resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk)
+static resource_size_t __nd_namespace_blk_validate(
+		struct nd_namespace_blk *nsblk)
 {
 	struct nd_region *nd_region = to_nd_region(nsblk->dev.parent);
 	struct nd_mapping *nd_mapping = &nd_region->mapping[0];
@@ -158,7 +159,7 @@ resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk)
 	struct resource *res;
 	int count, i;
 
-	if (!nsblk->uuid || !nsblk->lbasize)
+	if (!nsblk->uuid || !nsblk->lbasize || !ndd)
 		return 0;
 
 	count = 0;
@@ -193,6 +194,17 @@ resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk)
 	}
 
 	return nd_namespace_blk_size(nsblk);
+}
+
+resource_size_t nd_namespace_blk_validate(struct nd_namespace_blk *nsblk)
+{
+	resource_size_t size;
+
+	nvdimm_bus_lock(&nsblk->dev);
+	size = __nd_namespace_blk_validate(nsblk);
+	nvdimm_bus_unlock(&nsblk->dev);
+
+	return size;
 }
 EXPORT_SYMBOL(nd_namespace_blk_validate);
 
@@ -1577,6 +1589,7 @@ static int init_active_labels(struct nd_region *nd_region)
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 		struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
+		struct nvdimm *nvdimm = nd_mapping->nvdimm;
 		int count, j;
 
 		/*
@@ -1584,14 +1597,15 @@ static int init_active_labels(struct nd_region *nd_region)
 		 * being activated if it aliases DPA.
 		 */
 		if (!ndd) {
-			struct nvdimm *nvdimm = nd_mapping->nvdimm;
-
 			if ((nvdimm->flags & NDD_ALIASING) == 0)
 				return 0;
 			dev_dbg(&nd_region->dev, "%s: is disabled, failing probe\n",
 					dev_name(&nd_mapping->nvdimm->dev));
 			return -ENXIO;
 		}
+		nd_mapping->ndd = ndd;
+		atomic_inc(&nvdimm->busy);
+		get_ndd(ndd);
 
 		count = nd_label_active_count(ndd);
 		dev_dbg(ndd->dev, "%s: %d\n", __func__, count);
@@ -1689,15 +1703,8 @@ int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 	kfree(devs);
 
  err:
-	if (rc == -ENODEV) {
-		for (i = 0; i < nd_region->ndr_mappings; i++) {
-			struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-
-			kfree(nd_mapping->labels);
-			nd_mapping->labels = NULL;
-		}
+	if (rc == -ENODEV)
 		return rc;
-	}
 
 	return i;
 }

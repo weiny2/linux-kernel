@@ -40,6 +40,7 @@ struct nvdimm_drvdata {
 	void *data;
 	int ns_current, ns_next;
 	struct resource dpa;
+	struct kref kref;
 };
 
 struct nd_region_namespaces {
@@ -169,6 +170,8 @@ int nvdimm_bdev_ioctl(struct block_device *bdev, fmode_t mode,
 int nvdimm_bdev_compat_ioctl(struct block_device *bdev, fmode_t mode,
 		unsigned int cmd, unsigned long arg);
 int nvdimm_revalidate_disk(struct gendisk *disk);
+void nvdimm_drvdata_release(struct kref *kref);
+void put_ndd(struct nvdimm_drvdata *ndd);
 int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd);
 void nvdimm_free_dpa(struct nvdimm_drvdata *ndd, struct resource *res);
 struct resource *nvdimm_allocate_dpa(struct nvdimm_drvdata *ndd,
