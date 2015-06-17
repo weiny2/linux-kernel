@@ -122,7 +122,7 @@ static ssize_t backing_dev_show(struct device *dev,
 		return sprintf(buf, "\n");
 }
 
-static const fmode_t nd_btt_devs_mode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
+static const fmode_t nd_btt_devs_mode = FMODE_READ | FMODE_EXCL;
 
 static void nd_btt_remove_bdev(struct nd_btt *nd_btt, const char *caller)
 {
@@ -363,6 +363,46 @@ u64 nd_btt_sb_checksum(struct btt_sb *btt_sb)
 	return sum;
 }
 EXPORT_SYMBOL(nd_btt_sb_checksum);
+
+int set_btt_ro(struct block_device *bdev, struct device *dev, int ro)
+{
+	struct nd_btt *nd_btt = to_nd_btt(dev);
+
+	if (!dev->driver)
+		return 0;
+
+	/* we can only mark a btt device rw if its backing device is rw */
+	if (bdev_read_only(nd_btt->backing_dev) && !ro)
+		return -EBUSY;
+
+	set_device_ro(bdev, ro);
+	return 0;
+}
+
+int set_btt_disk_ro(struct device *dev, void *data)
+{
+	struct block_device *bdev = data;
+	struct nd_btt *nd_btt;
+	struct btt *btt;
+
+	if (!is_nd_btt(dev))
+		return 0;
+
+	nd_btt = to_nd_btt(dev);
+	if (nd_btt->backing_dev != bdev)
+		return 0;
+
+	/*
+	 * We have the lock at this point and have flushed probing.  We
+	 * are guaranteed that the btt driver is unbound, or has
+	 * completed setup operations and is blocked from initiating
+	 * disk teardown until we are done walking these pointers.
+	 */
+	btt = dev_get_drvdata(dev);
+	if (btt && btt->btt_disk)
+		set_disk_ro(btt->btt_disk, 1);
+	return 0;
+}
 
 static struct nd_btt *__nd_btt_autodetect(struct nvdimm_bus *nvdimm_bus,
 		struct block_device *bdev, struct btt_sb *btt_sb)

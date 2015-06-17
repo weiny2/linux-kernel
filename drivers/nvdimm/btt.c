@@ -1248,10 +1248,29 @@ static int btt_getgeo(struct block_device *bd, struct hd_geometry *geo)
 	return 0;
 }
 
+static int btt_revalidate_disk(struct gendisk *disk)
+{
+	struct btt *btt = disk->private_data;
+	struct nd_btt *nd_btt = btt->nd_btt;
+	struct block_device *bdev = nd_btt->backing_dev;
+	char name[BDEVNAME_SIZE];
+
+	dev_dbg(&nd_btt->dev, "backing dev: %s read-%s", bdevname(bdev, name),
+			bdev_read_only(bdev) ? "only" : "write");
+	if (bdev_read_only(bdev))
+		set_disk_ro(disk, 1);
+	return 0;
+}
+
 static const struct block_device_operations btt_fops = {
 	.owner =		THIS_MODULE,
 	.rw_page =		btt_rw_page,
 	.getgeo =		btt_getgeo,
+	.ioctl =		nvdimm_bdev_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl =		nvdimm_bdev_compat_ioctl,
+#endif
+	.revalidate_disk =	btt_revalidate_disk,
 };
 
 static int btt_blk_init(struct btt *btt)
@@ -1296,6 +1315,7 @@ static int btt_blk_init(struct btt *btt)
 	}
 
 	set_capacity(btt->btt_disk, btt->nlba * btt->sector_size >> 9);
+	revalidate_disk(btt->btt_disk);
 
 	return 0;
 
@@ -1335,6 +1355,7 @@ static struct btt *btt_init(struct nd_btt *nd_btt, unsigned long long rawsize,
 	int ret;
 	struct btt *btt;
 	struct device *dev = &nd_btt->dev;
+	struct block_device *bdev = nd_btt->backing_dev;
 
 	btt = kzalloc(sizeof(struct btt), GFP_KERNEL);
 	if (!btt)
@@ -1354,7 +1375,13 @@ static struct btt *btt_init(struct nd_btt *nd_btt, unsigned long long rawsize,
 		goto out_free;
 	}
 
-	if (btt->init_state != INIT_READY) {
+	if (btt->init_state != INIT_READY && bdev_read_only(bdev)) {
+		char name[BDEVNAME_SIZE];
+
+		dev_info(dev, "%s is read-only, unable to init btt metadata\n",
+				bdevname(bdev, name));
+		goto out_free;
+	} else if (btt->init_state != INIT_READY) {
 		btt->num_arenas = (rawsize / ARENA_MAX_SIZE) +
 			((rawsize % ARENA_MAX_SIZE) ? 1 : 0);
 		dev_dbg(dev, "init: %d arenas for %llu rawsize\n",
@@ -1369,7 +1396,7 @@ static struct btt *btt_init(struct nd_btt *nd_btt, unsigned long long rawsize,
 		ret = btt_meta_init(btt);
 		if (ret) {
 			dev_err(dev, "init: error in meta_init: %d\n", ret);
-			return NULL;
+			goto out_free;
 		}
 	}
 
@@ -1483,7 +1510,10 @@ static int nd_btt_remove(struct device *dev)
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 	struct btt *btt = dev_get_drvdata(dev);
 
+	nvdimm_bus_lock(dev);
 	btt_fini(btt);
+	nvdimm_bus_unlock(dev);
+
 	unlink_btt(nd_btt);
 
 	return 0;

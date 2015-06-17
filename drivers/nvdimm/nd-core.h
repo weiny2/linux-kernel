@@ -49,11 +49,14 @@ bool is_nvdimm(struct device *dev);
 bool is_nd_pmem(struct device *dev);
 bool is_nd_blk(struct device *dev);
 struct gendisk;
+struct block_device;
 #if IS_ENABLED(CONFIG_ND_BTT_DEVS)
 bool is_nd_btt(struct device *dev);
 struct nd_btt *nd_btt_create(struct nvdimm_bus *nvdimm_bus);
 void nd_btt_add_disk(struct nvdimm_bus *nvdimm_bus, struct gendisk *disk);
 void nd_btt_remove_disk(struct nvdimm_bus *nvdimm_bus, struct gendisk *disk);
+int set_btt_ro(struct block_device *bdev, struct device *dev, int ro);
+int set_btt_disk_ro(struct device *dev, void *data);
 #else
 static inline bool is_nd_btt(struct device *dev)
 {
@@ -73,6 +76,17 @@ static inline void nd_btt_add_disk(struct nvdimm_bus *nvdimm_bus,
 static inline void nd_btt_remove_disk(struct nvdimm_bus *nvdimm_bus,
 		struct gendisk *disk)
 {
+}
+
+static inline int set_btt_ro(struct block_device *bdev, struct device *dev,
+		int ro)
+{
+	return 0;
+}
+
+static inline int set_btt_disk_ro(struct device *dev, void *data)
+{
+	return 0;
 }
 #endif
 struct nvdimm_bus *walk_to_nvdimm_bus(struct device *nd_dev);

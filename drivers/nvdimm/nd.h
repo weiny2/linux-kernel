@@ -164,6 +164,10 @@ int nvdimm_bus_add_disk(struct gendisk *disk);
 int nvdimm_bus_add_integrity_disk(struct gendisk *disk, u32 lbasize,
 		sector_t size);
 void nvdimm_bus_remove_disk(struct gendisk *disk);
+int nvdimm_bdev_ioctl(struct block_device *bdev, fmode_t mode,
+		unsigned int cmd, unsigned long arg);
+int nvdimm_bdev_compat_ioctl(struct block_device *bdev, fmode_t mode,
+		unsigned int cmd, unsigned long arg);
 int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd);
 void nvdimm_free_dpa(struct nvdimm_drvdata *ndd, struct resource *res);
 struct resource *nvdimm_allocate_dpa(struct nvdimm_drvdata *ndd,

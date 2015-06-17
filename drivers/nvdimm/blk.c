@@ -239,6 +239,10 @@ static int nd_blk_rw_bytes(struct gendisk *disk, resource_size_t offset,
 static const struct block_device_operations nd_blk_fops = {
 	.owner = THIS_MODULE,
 	.rw_bytes = nd_blk_rw_bytes,
+	.ioctl = nvdimm_bdev_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = nvdimm_bdev_compat_ioctl,
+#endif
 };
 
 static int nd_blk_probe(struct device *dev)

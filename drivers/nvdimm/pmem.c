@@ -131,6 +131,10 @@ static const struct block_device_operations pmem_fops = {
 	.rw_page =		pmem_rw_page,
 	.rw_bytes =		pmem_rw_bytes,
 	.direct_access =	pmem_direct_access,
+	.ioctl =		nvdimm_bdev_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl =		nvdimm_bdev_ioctl,
+#endif
 };
 
 static struct pmem_device *pmem_alloc(struct device *dev,

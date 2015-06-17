@@ -309,6 +309,61 @@ void nvdimm_bus_remove_disk(struct gendisk *disk)
 }
 EXPORT_SYMBOL(nvdimm_bus_remove_disk);
 
+static int set_namespace_ro(struct block_device *bdev,
+		struct nvdimm_bus *nvdimm_bus, int ro)
+{
+	set_device_ro(bdev, ro);
+
+	/*
+	 * It's possible to mark the backing device rw while leaving the
+	 * btt device read-only.  However, marking a backing device
+	 * read-only always marks the parent btt read-only.
+	 */
+	if (!ro)
+		return 0;
+	return device_for_each_child(&nvdimm_bus->dev, bdev, set_btt_disk_ro);
+}
+
+int nvdimm_bdev_ioctl(struct block_device *bdev, fmode_t mode,
+		unsigned int cmd, unsigned long arg)
+{
+	int rc, ro;
+	struct gendisk *disk = bdev->bd_disk;
+	struct device *dev = disk->driverfs_dev;
+	struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(dev);
+
+	if (cmd != BLKROSET)
+		return -ENOTTY;
+
+	if (get_user(ro, (int __user *)(arg)))
+		return -EFAULT;
+
+	if (ro == 0 || ro == 1)
+		/* pass */;
+	else
+		return -EINVAL;
+
+	nvdimm_bus_lock(&nvdimm_bus->dev);
+	wait_nvdimm_bus_probe_idle(&nvdimm_bus->dev);
+	if (bdev_read_only(bdev) == ro)
+		rc = 0;
+	else if (is_nd_btt(dev))
+		rc = set_btt_ro(bdev, dev, ro);
+	else
+		rc = set_namespace_ro(bdev, nvdimm_bus, ro);
+	nvdimm_bus_unlock(&nvdimm_bus->dev);
+
+	return rc;
+}
+EXPORT_SYMBOL(nvdimm_bdev_ioctl);
+
+int nvdimm_bdev_compat_ioctl(struct block_device *bdev, fmode_t mode,
+		unsigned int cmd, unsigned long arg)
+{
+	return nvdimm_bdev_ioctl(bdev, mode, cmd, arg);
+}
+EXPORT_SYMBOL(nvdimm_bdev_compat_ioctl);
+
 static ssize_t modalias_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
 {
