@@ -158,10 +158,12 @@ static void ovl_cache_free(struct list_head *list)
 	INIT_LIST_HEAD(list);
 }
 
-static int ovl_fill_merge(void *buf, const char *name, int namelen,
-			  loff_t offset, u64 ino, unsigned int d_type)
+static int ovl_fill_merge(struct dir_context *ctx, const char *name,
+			  int namelen, loff_t offset, u64 ino,
+			  unsigned int d_type)
 {
-	struct ovl_readdir_data *rdd = buf;
+	struct ovl_readdir_data *rdd =
+		container_of(ctx, struct ovl_readdir_data, ctx);
 
 	rdd->count++;
 	if (!rdd->is_merge)
