@@ -1143,8 +1143,11 @@ static int __init hfi1_mod_init(void)
 		goto bail;
 
 	/* validate max MTU before any devices start */
-	if (!valid_opa_mtu(hfi1_max_mtu))
+	if (!valid_opa_max_mtu(hfi1_max_mtu)) {
+		pr_err("Invalid max_mtu 0x%x, using 0x%x instead\n",
+		       hfi1_max_mtu, HFI1_DEFAULT_MAX_MTU);
 		hfi1_max_mtu = HFI1_DEFAULT_MAX_MTU;
+	}
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi1_cu > 128 || !is_power_of_2(hfi1_cu))
 		hfi1_cu = 1;

@@ -1326,9 +1326,10 @@ static inline int valid_ib_mtu(unsigned int mtu)
 		mtu == 1024 || mtu == 2048 ||
 		mtu == 4096;
 }
-static inline int valid_opa_mtu(unsigned int mtu)
+static inline int valid_opa_max_mtu(unsigned int mtu)
 {
-	return valid_ib_mtu(mtu) || mtu == 8192 || mtu == 10240;
+	return mtu >= 2048 &&
+		(valid_ib_mtu(mtu) || mtu == 8192 || mtu == 10240);
 }
 
 int set_mtu(struct hfi1_pportdata *);
