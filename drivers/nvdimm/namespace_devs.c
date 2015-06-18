@@ -1655,10 +1655,8 @@ int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 	}
 	nvdimm_bus_unlock(&nd_region->dev);
 
-	if (!devs) {
-		rc = -ENODEV;
-		goto err;
-	}
+	if (!devs)
+		return -ENODEV;
 
 	for (i = 0; devs[i]; i++) {
 		struct device *dev = devs[i];
@@ -1702,7 +1700,6 @@ int nd_region_register_namespaces(struct nd_region *nd_region, int *err)
 	}
 	kfree(devs);
 
- err:
 	if (rc == -ENODEV)
 		return rc;
 

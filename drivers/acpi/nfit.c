@@ -1546,7 +1546,6 @@ MODULE_DEVICE_TABLE(acpi, acpi_nfit_ids);
 static struct acpi_driver acpi_nfit_driver = {
 	.name = KBUILD_MODNAME,
 	.ids = acpi_nfit_ids,
-	.flags = ACPI_DRIVER_ALL_NOTIFY_EVENTS,
 	.ops = {
 		.add = acpi_nfit_add,
 		.remove = acpi_nfit_remove,
