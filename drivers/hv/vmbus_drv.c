@@ -1092,6 +1092,7 @@ cleanup:
 	return ret;
 }
 
+#if 0
 static void __exit vmbus_exit(void)
 {
 	int cpu;
@@ -1108,9 +1109,9 @@ static void __exit vmbus_exit(void)
 	hv_cpu_hotplug_quirk(false);
 	vmbus_disconnect();
 }
+#endif
 
 
 MODULE_LICENSE("GPL");
 
 subsys_initcall(hv_acpi_init);
-module_exit(vmbus_exit);

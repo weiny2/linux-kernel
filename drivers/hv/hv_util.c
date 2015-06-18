@@ -433,15 +433,16 @@ static int __init init_hyperv_utils(void)
 	return vmbus_driver_register(&util_drv);
 }
 
+#if 0
 static void exit_hyperv_utils(void)
 {
 	pr_info("De-Registered HyperV Utility Driver\n");
 
 	vmbus_driver_unregister(&util_drv);
 }
+#endif
 
 module_init(init_hyperv_utils);
-module_exit(exit_hyperv_utils);
 
 MODULE_DESCRIPTION("Hyper-V Utilities");
 MODULE_LICENSE("GPL");
