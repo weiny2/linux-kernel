@@ -402,8 +402,7 @@ int pcie_speeds(struct hfi1_devdata *dd)
 
 	/* check against expected pcie width and complain if "wrong" */
 	if (dd->lbus_width < 16)
-		dd_dev_err(dd, "PCIe width %u (x16 HCA), performance reduced\n",
-			dd->lbus_width);
+		dd_dev_err(dd, "PCIe width %u (x16 HCA)\n", dd->lbus_width);
 
 	return 0;
 }
