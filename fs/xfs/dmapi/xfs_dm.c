@@ -1556,10 +1556,10 @@ typedef struct dm_readdir_cb {
 } dm_readdir_cb_t;
 
 STATIC int
-dm_filldir(void *__buf, const char *name, int namelen, loff_t offset,
-		u64 ino, unsigned int d_type)
+dm_filldir(struct dir_context *ctx, const char *name, int namelen,
+		loff_t offset, u64 ino, unsigned int d_type)
 {
-	dm_readdir_cb_t *cb = __buf;
+	dm_readdir_cb_t *cb = container_of(ctx, struct dm_readdir_cb, ctx);
 	dm_stat_t	*statp = cb->kstat;
 	size_t		len;
 	int		error;
