@@ -4701,8 +4701,7 @@ static int do_8051_command(
 	write_csr(dd, DC_DC8051_CFG_HOST_CMD_0, reg);
 
 	/* wait for completion, alternate: interrupt */
-	timeout = jiffies + msecs_to_jiffies(
-				quick_linkup ? 20000 : DC8051_COMMAND_TIMEOUT);
+	timeout = jiffies + msecs_to_jiffies(DC8051_COMMAND_TIMEOUT);
 	while (1) {
 		reg = read_csr(dd, DC_DC8051_CFG_HOST_CMD_1);
 		completed = reg & DC_DC8051_CFG_HOST_CMD_1_COMPLETED_SMASK;
