@@ -4936,9 +4936,16 @@ static void read_last_remote_state(struct hfi1_devdata *dd, u32 *lrs)
 void hfi1_read_link_quality(struct hfi1_devdata *dd, u8 *link_quality)
 {
 	u32 frame;
+	int ret;
 
-	read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG, &frame);
-	*link_quality = (frame >> LINK_QUALITY_SHIFT) & LINK_QUALITY_MASK;
+	*link_quality = 0;
+	if (dd->pport->host_link_state & HLS_UP) {
+		ret = read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG,
+					&frame);
+		if (ret == HCMD_SUCCESS)
+			*link_quality = (frame >> LINK_QUALITY_SHIFT)
+						& LINK_QUALITY_MASK;
+	}
 }
 
 static void read_planned_down_reason_code(struct hfi1_devdata *dd, u8 *pdrrc)
