@@ -3363,8 +3363,11 @@ void handle_link_down(struct work_struct *work)
 	u8 lcl_reason, neigh_reason = 0;
 	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
 								link_down_work);
-	lcl_reason = 0;
 
+	/* go offline first, then deal with reasons */
+	set_link_state(ppd, HLS_DN_OFFLINE);
+
+	lcl_reason = 0;
 	read_planned_down_reason_code(ppd->dd, &neigh_reason);
 
 	/*
@@ -3375,7 +3378,6 @@ void handle_link_down(struct work_struct *work)
 		lcl_reason = OPA_LINKDOWN_REASON_NEIGHBOR_UNKNOWN;
 
 	set_link_down_reason(ppd, lcl_reason, neigh_reason, 0);
-	set_link_state(ppd, HLS_DN_OFFLINE);
 
 	/* disable the port */
 	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
