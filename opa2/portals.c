@@ -139,7 +139,6 @@ static int __hfi_cq_assign(struct hfi_ctx *ctx, u16 *cq_idx)
 
 int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx)
 {
-	struct hfi_devdata *dd = ctx->devdata;
 	int ret;
 
 	/* verify we are attached to Portals */
@@ -158,18 +157,21 @@ int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *c
 
 	ret = __hfi_cq_assign(ctx, cq_idx);
 	if (!ret)
-		hfi_cq_config(ctx, *cq_idx, dd->cq_head_base, auth_table, 1);
+		hfi_cq_config(ctx, *cq_idx, auth_table, 1);
 	return ret;
 }
 
 int hfi_cq_assign_privileged(struct hfi_ctx *ctx, u16 *cq_idx)
 {
-	struct hfi_devdata *dd = ctx->devdata;
 	int ret;
+
+	/* verify system PID */
+	if (ctx->pid != HFI_PID_SYSTEM)
+		return -EPERM;
 
 	ret = __hfi_cq_assign(ctx, cq_idx);
 	if (!ret)
-		hfi_cq_config(ctx, *cq_idx, dd->cq_head_base, NULL, 0);
+		hfi_cq_config(ctx, *cq_idx, NULL, 0);
 	return ret;
 }
 
@@ -643,7 +645,8 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		    psb_size, trig_op_size, le_me_size, unexp_size);
 
 	/* set PASID entry for w/PASID translations */
-	hfi_iommu_set_pasid(dd, current->mm, ptl_pid);
+	hfi_iommu_set_pasid(dd, (ctx->type == HFI_CTX_TYPE_USER) ?
+			    current->mm : NULL, ptl_pid);
 
 	/* write PCB (host memory) */
 	hfi_pcb_write(ctx, ptl_pid);

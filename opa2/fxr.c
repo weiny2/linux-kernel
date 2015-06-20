@@ -184,10 +184,10 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 
 	cleanup_interrupts(dd);
 
-	/* release any privileged CQs */
+	/* release system context and any privileged CQs */
 	if (dd->priv_ctx.devdata) {
 		hfi_cq_unmap(&dd->priv_tx_cq, &dd->priv_rx_cq);
-		hfi_cq_cleanup(&dd->priv_ctx);
+		hfi_ctxt_cleanup(&dd->priv_ctx);
 	}
 
 	hfi_iommu_root_clear_context(dd);
@@ -270,6 +270,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	struct opa_core_device_id bus_id;
 	struct hfi_ctx *ctx;
 	u16 priv_cq_idx;
+	struct opa_ctx_assign ctx_assign = {0};
 
 	dd = hfi_alloc_devdata(pdev);
 	if (IS_ERR(dd))
@@ -345,6 +346,12 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 
 	ctx = &dd->priv_ctx;
 	HFI_CTX_INIT(ctx, dd);
+	/* configure system PID/PASID needed by privileged CQs */
+	ctx_assign.pid = HFI_PID_SYSTEM;
+	ret = hfi_ctxt_attach(ctx, &ctx_assign);
+	if (ret)
+		goto err_post_alloc;
+
 	/* assign one CQ for privileged commands (DLID, EQ_DESC_WRITE) */
 	ret = hfi_cq_assign_privileged(ctx, &priv_cq_idx);
 	if (ret)
@@ -579,8 +586,8 @@ hfi_reset_dlid_relocation_table(struct hfi_ctx *ctx, u32 dlid_base, u32 count)
  * Write CSRs to configure a TX and RX Command Queue.
  * Authentication Tuple UIDs have been pre-validated by caller.
  */
-void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
-		   struct hfi_auth_tuple *auth_table, bool unprivileged)
+void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx,
+		   struct hfi_auth_tuple *auth_table, bool user_priv)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	u32 offset;
@@ -592,7 +599,7 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 	/* set TX CQ config, enable */
 	tx_cq_config.field.enable = 1;
 	tx_cq_config.field.pid = ctx->pid;
-	tx_cq_config.field.priv_level = unprivileged;
+	tx_cq_config.field.priv_level = user_priv;
 	tx_cq_config.field.dlid_base = ctx->dlid_base;
 	tx_cq_config.field.phys_dlid = ctx->allow_phys_dlid;
 	tx_cq_config.field.sl_enable = ctx->sl_mask;
@@ -602,7 +609,7 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
 	/* set RX CQ config, enable */
 	rx_cq_config.field.enable = 1;
 	rx_cq_config.field.pid = ctx->pid;
-	tx_cq_config.field.priv_level = unprivileged;
+	tx_cq_config.field.priv_level = user_priv;
 	offset = FXR_RXCI_CFG_CNTRL + (cq_idx * 8);
 	write_csr(dd, offset, rx_cq_config.val);
 }
