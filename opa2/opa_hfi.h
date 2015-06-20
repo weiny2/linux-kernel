@@ -63,6 +63,7 @@
 
 #define HFI_NUM_BARS		2
 #define HFI_NUM_PPORTS		2
+#define HFI_PID_SYSTEM		0
 
 /* In accordance with stl vol 1 section 4.1 */
 #define PGUID_MASK		(~(0x3UL << 32))
@@ -165,8 +166,8 @@ int hfi_user_cleanup(struct hfi_ctx *ud);
 /* HFI specific functions */
 int hfi_cq_assign_privileged(struct hfi_ctx *ctx, u16 *cq_idx);
 void hfi_cq_cleanup(struct hfi_ctx *ctx);
-void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx, void *head_base,
-		   struct hfi_auth_tuple *auth_table, bool unprivileged);
+void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx,
+		   struct hfi_auth_tuple *auth_table, bool user_priv);
 void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 			  struct hfi_auth_tuple *auth_table);
 int hfi_update_dlid_relocation_table(struct hfi_ctx *ctx,
@@ -200,7 +201,8 @@ int hfi_iommu_root_alloc(void);
 void hfi_iommu_root_free(void);
 int hfi_iommu_root_set_context(struct hfi_devdata *dd);
 void hfi_iommu_root_clear_context(struct hfi_devdata *dd);
-void hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *mm, u16 pasid);
+void hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *user_mm,
+			 u16 pasid);
 void hfi_iommu_clear_pasid(struct hfi_devdata *dd, u16 pasid);
 
 #define get_ppd_pn(dd, pn)		(&(dd)->pport[pnum_to_pidx(pn)])

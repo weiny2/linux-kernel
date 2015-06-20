@@ -70,6 +70,7 @@
  * Root[pci_bus]->Context[pci_device_func]->PASID[process_address_space_id]
  */
 
+#include <linux/kthread.h>
 #include <linux/types.h>
 #include <rdma/fxr/iommu_cr_top_regs.h>
 #include <rdma/fxr/translation_structs.h>
@@ -78,6 +79,7 @@
 #define NUM_CTXT_ENTRIES 256
 
 static union ExtendedRootEntry_t *iommu_root_tbl;
+static struct mm_struct *iommu_mm;
 
 static void write_iommu_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
@@ -94,6 +96,8 @@ static void write_iommu_csr32(const struct hfi_devdata *dd, u32 offset, u32 valu
 int
 hfi_iommu_root_alloc(void)
 {
+	int ret = 0;
+
 	if (iommu_root_tbl)
 		return -EEXIST;
 
@@ -101,12 +105,37 @@ hfi_iommu_root_alloc(void)
 	iommu_root_tbl = (void *)get_zeroed_page(GFP_KERNEL);
 	if (!iommu_root_tbl)
 		return -ENOMEM;
+
+	/*
+	 * We need valid MM struct for system PASID and kernel clients to
+	 * access kernel virtual memory.  The thread that probes/loads modules
+	 * is not likely present when the IOMMU is doing address translation.
+	 * When Linux pasid APIs are available, supervisor-privileged PASIDs
+	 * will be associated with master kernel page tables.
+	 * As Linux pasid support is not available and Linux doesn't export
+	 * init_mm, we will just hold this task's MM and release when driver
+	 * is unloaded.
+	 */
+	iommu_mm = get_task_mm(current);
+	if (!iommu_mm) {
+		ret = -EFAULT;
+		goto err;
+	}
+
 	return 0;
+
+err:
+	hfi_iommu_root_free();
+	return ret;
 }
 
 void
 hfi_iommu_root_free(void)
 {
+	if (iommu_mm) {
+		mmput(iommu_mm);
+		iommu_mm = NULL;
+	}
 	if (iommu_root_tbl) {
 		free_page((u64)iommu_root_tbl);
 		iommu_root_tbl = NULL;
@@ -201,12 +230,19 @@ hfi_iommu_root_clear_context(struct hfi_devdata *dd)
 }
 
 void
-hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *mm, u16 pasid)
+hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *user_mm, u16 pasid)
 {
 	union PasidEntry_t p_entry, *p_tbl;
+	struct mm_struct *mm;
 
 	p_tbl = (union PasidEntry_t *)dd->iommu_pasid_tbl;
+	/*
+	 * if user_mm is NULL, then request is for PASID with kernel-privileged
+	 * (supervisor) access
+	 */
+	mm = (user_mm) ? user_mm : iommu_mm;
 
+	p_entry.val = 0;
 	p_entry.SRE = 1;
 	/* this is level-1 (w/PASID) translation pg_table */
 	p_entry.FLPTPTR = virt_to_phys(mm->pgd) >> PAGE_SHIFT;
