@@ -131,7 +131,7 @@
  * user contexts, the set can be further filtered by using the
  * HFI1_CAP_RESERVED_MASK bits.
  */
-#define HFI1_CAP_WRITABLE_MASK   (HFI1_CAP_ENABLE_SMA |			\
+#define HFI1_CAP_WRITABLE_MASK   (HFI1_CAP_SWAP_QSFP_SB |		\
 				 HFI1_CAP_SDMA_AHG |			\
 				 HFI1_CAP_HDRSUPP |			\
 				 HFI1_CAP_MULTI_PKT_EGR |		\
@@ -145,7 +145,7 @@
  * set in the user bitmask.
  */
 #define HFI1_CAP_RESERVED_MASK   ((HFI1_CAP_SDMA |			\
-				  HFI1_CAP_ENABLE_SMA |			\
+				  HFI1_CAP_SWAP_QSFP_SB |		\
 				  HFI1_CAP_USE_SDMA_HEAD |		\
 				  HFI1_CAP_EXTENDED_PSN |		\
 				  HFI1_CAP_PRINT_UNIMPL |		\
@@ -163,7 +163,6 @@
 				 HFI1_CAP_NODROP_RHQ_FULL |		\
 				 HFI1_CAP_NODROP_EGR_FULL |		\
 				 HFI1_CAP_SDMA |			\
-				 HFI1_CAP_ENABLE_SMA |			\
 				 HFI1_CAP_PRINT_UNIMPL |		\
 				 HFI1_CAP_STATIC_RATE_CTRL |		\
 				 HFI1_CAP_QSFP_ENABLED |		\

@@ -567,8 +567,6 @@ static void qp_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_SMI:
 	case IB_QPT_GSI:
-		if (!HFI1_CAP_IS_KSET(ENABLE_SMA))
-			break;
 		/* FALLTHROUGH */
 	case IB_QPT_UD:
 		hfi1_ud_rcv(ibp, hdr, rcv_flags, data, tlen, qp);

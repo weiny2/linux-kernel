@@ -2556,7 +2556,7 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 			spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock,
 						flags);
 			write_csr(dd,
-					dd->hfi1_id ?
+				(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
 						ASIC_QSFP2_INVERT :
 						ASIC_QSFP1_INVERT,
 				qsfp_int_mgmt);
@@ -2578,7 +2578,7 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 
 			qsfp_int_mgmt &= ~(u64)QSFP_HFI0_MODPRST_N;
 			write_csr(dd,
-					dd->hfi1_id ?
+				(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
 						ASIC_QSFP2_INVERT :
 						ASIC_QSFP1_INVERT,
 				qsfp_int_mgmt);
@@ -5392,24 +5392,29 @@ static void reset_qsfp(struct hfi1_pportdata *ppd)
 	u64 mask, qsfp_mask;
 
 	mask = (u64)QSFP_HFI0_RESET_N;
-	qsfp_mask = read_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_OE : ASIC_QSFP1_OE);
-	qsfp_mask |= mask;
-	write_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_OE : ASIC_QSFP1_OE,
-		qsfp_mask);
 
 	qsfp_mask = read_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_OUT : ASIC_QSFP1_OUT);
-	qsfp_mask &= ~mask;
+			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+				ASIC_QSFP2_OE : ASIC_QSFP1_OE);
+	qsfp_mask |= mask;
+
 	write_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_OUT : ASIC_QSFP1_OUT,
-		qsfp_mask);
+			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+				ASIC_QSFP2_OE : ASIC_QSFP1_OE, qsfp_mask);
+
+	qsfp_mask = read_csr(dd,
+			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+				ASIC_QSFP2_OUT : ASIC_QSFP1_OUT);
+	qsfp_mask &= ~mask;
+
+	write_csr(dd,
+			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+				ASIC_QSFP2_OUT : ASIC_QSFP1_OUT, qsfp_mask);
 	udelay(10);
 	qsfp_mask |= mask;
 	write_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_OUT : ASIC_QSFP1_OUT,
-		qsfp_mask);
+		(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB))?
+				ASIC_QSFP2_OUT : ASIC_QSFP1_OUT, qsfp_mask);
 }
 
 static int handle_qsfp_error_conditions(struct hfi1_pportdata *ppd,
@@ -5638,7 +5643,7 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 	qsfp_mask = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
 	/* Clear current status to avoid spurious interrupts */
 	write_csr(dd,
-			dd->hfi1_id ?
+			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
 				ASIC_QSFP2_CLEAR :
 				ASIC_QSFP1_CLEAR,
 		qsfp_mask);
@@ -5646,15 +5651,16 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 	/* Handle active low nature of INT_N and MODPRST_N pins */
 	if (qsfp_mod_present(ppd))
 		qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
-	write_csr(dd,
-		  dd->hfi1_id ? ASIC_QSFP2_INVERT : ASIC_QSFP1_INVERT,
+
+	write_csr(dd, (dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+		  ASIC_QSFP2_INVERT : ASIC_QSFP1_INVERT,
 		  qsfp_mask);
 
 	/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
 	qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
-	write_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_MASK : ASIC_QSFP1_MASK,
-		qsfp_mask);
+	write_csr(dd, (dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+			ASIC_QSFP2_MASK : ASIC_QSFP1_MASK,
+			qsfp_mask);
 
 	if (qsfp_mod_present(ppd)) {
 		msleep(3000);
@@ -8367,7 +8373,8 @@ u64 hfi1_gpio_mod(struct hfi1_devdata *dd, u32 target, u32 data, u32 dir,
 {
 	u64 qsfp_oe, target_oe;
 
-	target_oe = target ? ASIC_QSFP2_OE : ASIC_QSFP1_OE;
+	target_oe = (target ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+			ASIC_QSFP2_OE : ASIC_QSFP1_OE;
 	if (mask) {
 		/* We are writing register bits, so lock access */
 		dir &= mask;
@@ -8382,7 +8389,8 @@ u64 hfi1_gpio_mod(struct hfi1_devdata *dd, u32 target, u32 data, u32 dir,
 	 * in the same call, so read should call this function again
 	 * to get valid data
 	 */
-	return read_csr(dd, target ? ASIC_QSFP2_IN : ASIC_QSFP1_IN);
+	return read_csr(dd, (target ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB))?
+				ASIC_QSFP2_IN : ASIC_QSFP1_IN);
 }
 
 #define CLEAR_STATIC_RATE_CONTROL_SMASK(r) \
