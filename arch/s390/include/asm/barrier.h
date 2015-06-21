@@ -25,6 +25,8 @@
 #define rmb()				mb()
 #define wmb()				mb()
 #define read_barrier_depends()		do { } while(0)
+#define dma_rmb()			rmb()
+#define dma_wmb()			wmb()
 #define smp_mb()			mb()
 #define smp_rmb()			rmb()
 #define smp_wmb()			wmb()
