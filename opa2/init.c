@@ -78,7 +78,7 @@ static struct pci_driver hfi_driver = {
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd;
-	size_t psize = sizeof(struct hfi_pportdata *) * HFI_NUM_PORTS;
+	size_t psize = sizeof(struct hfi_pportdata) * HFI_NUM_PORTS;
 
 	dd = kzalloc(sizeof(*dd) + psize, GFP_KERNEL);
 	if (!dd)
