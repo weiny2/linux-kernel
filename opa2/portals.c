@@ -55,7 +55,7 @@
 #include <linux/sched.h>
 #include "opa_hfi.h"
 
-static uint cq_alloc_cyclic = 1;
+static uint cq_alloc_cyclic = 0;
 
 static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *ptl_pid);
 static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid);

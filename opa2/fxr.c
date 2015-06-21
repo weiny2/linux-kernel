@@ -52,6 +52,9 @@
 
 #include <linux/module.h>
 #include <linux/utsname.h>
+#if 1 /* TODO: should be __SIMICS__ instead of 1 */
+#include <linux/delay.h>
+#endif
 #include <rdma/fxr/fxr_fast_path_defs.h>
 #include <rdma/fxr/fxr_tx_ci_csrs.h>
 #include <rdma/fxr/fxr_rx_ci_csrs.h>
@@ -482,11 +485,17 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
  */
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
 {
-	/* write 0 to disable CSR (enable=0) */
-	write_csr(dd, FXR_TXCI_CFG_CSR + (cq_idx * 8), 0);
-	write_csr(dd, FXR_RXCI_CFG_CNTRL + (cq_idx * 8), 0);
+	TXCI_CFG_RESET_t tx_cq_reset = {.val = 0};
+	RXCI_CFG_CQ_RESET_t rx_cq_reset = {.val = 0};
 
-	/* TODO - Drain or Reset CQ */
+	/* reset CQ state, as CQ head starts at 0 */
+	tx_cq_reset.field.reset_cq = cq_idx;
+	rx_cq_reset.field.reset_cq = cq_idx;
+	write_csr(dd, FXR_TXCI_CFG_RESET, tx_cq_reset.val);
+	write_csr(dd, FXR_RXCI_CFG_CQ_RESET, rx_cq_reset.val);
+#if 1 /* TODO: should be __SIMICS__ instead of 1 */
+	msleep(1); /* 'reset to zero' is not visible for a few cycles in Simics */
+#endif
 }
 
 void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
