@@ -1456,8 +1456,6 @@ struct net_device {
 
 	/* group the device belongs to */
 	int group;
-
-	struct pm_qos_request	pm_qos_req;
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)
 
