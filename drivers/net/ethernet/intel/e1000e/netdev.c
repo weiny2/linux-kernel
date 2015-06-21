@@ -6247,6 +6247,7 @@ static int __e1000_resume(struct pci_dev *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int e1000e_pm_thaw(struct device *dev)
 {
 	struct net_device *netdev = pci_get_drvdata(to_pci_dev(dev));
@@ -6267,7 +6268,6 @@ static int e1000e_pm_thaw(struct device *dev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int e1000e_pm_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
