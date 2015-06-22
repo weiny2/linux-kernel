@@ -787,12 +787,15 @@ enum tcp_ca_event {
 #define TCP_CA_MAX	128
 #define TCP_CA_BUF_MAX	(TCP_CA_NAME_MAX*TCP_CA_MAX)
 
+#define TCP_CA_UNSPEC	0
+
 #define TCP_CONG_NON_RESTRICTED 0x1
 #define TCP_CONG_RTT_STAMP	0x2
 
 struct tcp_congestion_ops {
 	struct list_head	list;
-	unsigned long flags;
+	u32 key;
+	u32 flags;
 
 	/* initialize private data (optional) */
 	void (*init)(struct sock *sk);
@@ -839,6 +842,10 @@ extern u32 tcp_reno_ssthresh(struct sock *sk);
 extern void tcp_reno_cong_avoid(struct sock *sk, u32 ack, u32 in_flight);
 extern u32 tcp_reno_min_cwnd(const struct sock *sk);
 extern struct tcp_congestion_ops tcp_reno;
+
+struct tcp_congestion_ops *tcp_ca_find_key(u32 key);
+u32 tcp_ca_get_key_by_name(const char *name);
+char *tcp_ca_get_name_by_key(u32 key, char *buffer);
 
 static inline void tcp_set_ca_state(struct sock *sk, const u8 ca_state)
 {
