@@ -418,7 +418,10 @@ static inline struct opa_ib_rwqe *get_rwqe_ptr(struct opa_ib_rq *rq, unsigned n)
 struct opa_ib_portdata {
 	struct opa_ib_qp __rcu *qp0;
 	struct opa_ib_qp __rcu *qp1;
+	/* non-zero when timer is set */
+	unsigned long mkey_lease_timeout;
 	__be64 gid_prefix;
+	__be64 mkey;
 	__be64 guid;
 
 	u32 lstate;
@@ -430,15 +433,18 @@ struct opa_ib_portdata {
 	u16 link_width_supported;
 	u16 link_width_enabled;
 	u16 link_width_active;
+	u16 mkey_lease_period;
 	/* list of pkeys programmed; 0 if not set */
 	u16 pkeys[OPA_IB_PORT_NUM_PKEYS];
 	u16 pkey_violations;
 	u16 qkey_violations;
+	u16 mkey_violations;
 	u16 lid;
 	u16 sm_lid;
 	u8 lmc;
 	u8 max_vls;
 	u8 sm_sl;
+	u8 mkeyprot;
 	u8 subnet_timeout;
 	/* the first 16 entries are sl_to_vl for !STL */
 	u8 sl_to_sc[32];

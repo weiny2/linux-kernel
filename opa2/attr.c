@@ -52,6 +52,7 @@
 #include "opa_hfi.h"
 #include <rdma/opa_smi.h>
 #include <rdma/ib_mad.h>
+#include <rdma/opa_port_info.h>
 
 static int hfi_reply(struct ib_mad_hdr *ibh)
 {
@@ -68,8 +69,16 @@ static int hfi_reply(struct ib_mad_hdr *ibh)
 static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 				u32 am, u8 *data, u8 port, u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	u32 num_ports = OPA_AM_NPORT(am);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	if (num_ports != 1) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		return hfi_reply(ibh);
+	}
+
+	return hfi_reply(ibh);
 }
 
 static int __subn_get_hfi_psi(struct hfi_devdata *dd, struct opa_smp *smp,
@@ -268,8 +277,16 @@ int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 				u32 am, u8 *data, u8 port, u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	u32 num_ports = OPA_AM_NPORT(am);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	if (num_ports != 1) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		return hfi_reply(ibh);
+	}
+
+	return hfi_reply(ibh);
 }
 
 static int __subn_set_hfi_pkeytable(struct hfi_devdata *dd, struct opa_smp *smp,

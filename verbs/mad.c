@@ -111,48 +111,125 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	return reply(ibh);
 }
 
+/*
+ * Send a bad M_Key trap (ch. 14.3.9).
+ */
+static void bad_mkey(struct opa_ib_portdata *ibp, struct ib_mad_hdr *mad,
+		     __be64 mkey, __be32 dr_slid, u8 return_path[], u8 hop_cnt)
+{
+	struct ib_mad_notice_attr data;
+
+	/* Send violation trap */
+	data.generic_type = IB_NOTICE_TYPE_SECURITY;
+	data.prod_type_msb = 0;
+	data.prod_type_lsb = IB_NOTICE_PROD_CA;
+	data.trap_num = IB_NOTICE_TRAP_BAD_MKEY;
+	data.issuer_lid = cpu_to_be16(ibp->lid);
+	data.toggle_count = 0;
+	memset(&data.details, 0, sizeof(data.details));
+	data.details.ntc_256.lid = data.issuer_lid;
+	data.details.ntc_256.method = mad->method;
+	data.details.ntc_256.attr_id = mad->attr_id;
+	data.details.ntc_256.attr_mod = mad->attr_mod;
+	data.details.ntc_256.mkey = mkey;
+	if (mad->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
+
+		data.details.ntc_256.dr_slid = (__force __be16)dr_slid;
+		data.details.ntc_256.dr_trunc_hop = IB_NOTICE_TRAP_DR_NOTICE;
+		if (hop_cnt > ARRAY_SIZE(data.details.ntc_256.dr_rtn_path)) {
+			data.details.ntc_256.dr_trunc_hop |=
+				IB_NOTICE_TRAP_DR_TRUNC;
+			hop_cnt = ARRAY_SIZE(data.details.ntc_256.dr_rtn_path);
+		}
+		data.details.ntc_256.dr_trunc_hop |= hop_cnt;
+		memcpy(data.details.ntc_256.dr_rtn_path, return_path,
+		       hop_cnt);
+	}
+
+#if 0
+	/* FXRTODO: JIRA STL-1138 */
+	send_trap(ibp, &data, sizeof(data));
+#endif
+}
+
+static int check_mkey(struct opa_ib_portdata *ibp, struct ib_mad_hdr *mad,
+		      int mad_flags, __be64 mkey, __be32 dr_slid,
+		      u8 return_path[], u8 hop_cnt)
+{
+	int valid_mkey = 0;
+	int ret = 0;
+
+	/* Is the mkey in the process of expiring? */
+	if (ibp->mkey_lease_timeout &&
+	    time_after_eq(jiffies, ibp->mkey_lease_timeout)) {
+		/* Clear timeout and mkey protection field. */
+		ibp->mkey_lease_timeout = 0;
+		ibp->mkeyprot = 0;
+	}
+
+	if ((mad_flags & IB_MAD_IGNORE_MKEY) ||  ibp->mkey == 0 ||
+	    ibp->mkey == mkey)
+		valid_mkey = 1;
+
+	/* Unset lease timeout on any valid Get/Set/TrapRepress */
+	if (valid_mkey && ibp->mkey_lease_timeout &&
+	    (mad->method == IB_MGMT_METHOD_GET ||
+	     mad->method == IB_MGMT_METHOD_SET ||
+	     mad->method == IB_MGMT_METHOD_TRAP_REPRESS))
+		ibp->mkey_lease_timeout = 0;
+
+	if (!valid_mkey) {
+		switch (mad->method) {
+		case IB_MGMT_METHOD_GET:
+			/* Bad mkey not a violation below level 2 */
+			if (ibp->mkeyprot < 2)
+				break;
+		case IB_MGMT_METHOD_SET:
+		case IB_MGMT_METHOD_TRAP_REPRESS:
+			if (ibp->mkey_violations != 0xFFFF)
+				++ibp->mkey_violations;
+			if (!ibp->mkey_lease_timeout && ibp->mkey_lease_period)
+				ibp->mkey_lease_timeout = jiffies +
+					ibp->mkey_lease_period * HZ;
+			/* Generate a trap notice. */
+			bad_mkey(ibp, mad, mkey, dr_slid, return_path,
+				 hop_cnt);
+			ret = 1;
+		}
+	}
+
+	return ret;
+}
+
 static int process_subn(struct ib_device *ibdev, int mad_flags,
 			u8 port, struct ib_mad *in_mad,
 			struct ib_mad *out_mad)
 {
 	struct ib_smp *smp = (struct ib_smp *)out_mad;
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 	int ret = 0;
 
 	*out_mad = *in_mad;
+	if (!ibp) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		ret = reply((struct ib_mad_hdr *)smp);
+		goto bail;
+	}
+
 	if (smp->class_version != 1) {
 		smp->status |= cpu_to_be16(IB_MGMT_MAD_STATUS_BAD_VERSION);
 		ret = reply((struct ib_mad_hdr *)smp);
 		goto bail;
 	}
 
-	/* FXRTODO: Implement mkey for FXR */
-#if 0
 	ret = check_mkey(ibp, (struct ib_mad_hdr *)smp, mad_flags,
 			 smp->mkey, smp->dr_slid, smp->return_path,
 			 smp->hop_cnt);
 	if (ret) {
-		u32 port_num = be32_to_cpu(smp->attr_mod);
-
-		/*
-		 * If this is a get/set portinfo, we already check the
-		 * M_Key if the MAD is for another port and the M_Key
-		 * is OK on the receiving port. This check is needed
-		 * to increment the error counters when the M_Key
-		 * fails to match on *both* ports.
-		 */
-		if (in_mad->mad_hdr.attr_id == IB_SMP_ATTR_PORT_INFO &&
-		    (smp->method == IB_MGMT_METHOD_GET ||
-		     smp->method == IB_MGMT_METHOD_SET) &&
-		    port_num && port_num <= ibdev->phys_port_cnt &&
-		    port != port_num)
-			(void) check_mkey(to_iport(ibdev, port_num),
-					  (struct ib_mad_hdr *)smp, 0,
-					  smp->mkey, smp->dr_slid,
-					  smp->return_path, smp->hop_cnt);
 		ret = IB_MAD_RESULT_FAILURE;
 		goto bail;
 	}
-#endif
 
 	switch (smp->method) {
 	case IB_MGMT_METHOD_GET:
@@ -237,10 +314,26 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
-							u32 *resp_len)
+					u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct opa_port_info *pi = (struct opa_port_info *)data;
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	u32 num_ports = OPA_AM_NPORT(am);
+
+	if (num_ports != 1)
+		return reply((struct ib_mad_hdr *)smp);
+
+	pi->lid = cpu_to_be32(ibp->lid);
+
+	/* Only return the mkey if the protection field allows it. */
+	if (!(ibp->mkey != smp->mkey && ibp->mkeyprot == 1))
+		pi->mkey = ibp->mkey;
+
+	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
+	pi->mkeyprotect_lmc = ibp->mkeyprot << MKEY_SHIFT;
+	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
+
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
@@ -487,8 +580,22 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					      u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct opa_port_info *pi = (struct opa_port_info *)data;
+	u32 num_ports = OPA_AM_NPORT(am);
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+
+	if (num_ports != 1)
+		return reply((struct ib_mad_hdr *)smp);
+
+	ibp->mkey = pi->mkey;
+	ibp->mkey_lease_period = be16_to_cpu(pi->mkey_lease_period);
+	ibp->mkeyprot = (pi->mkeyprotect_lmc & OPA_PI_MASK_MKEY_PROT_BIT)
+							>> MKEY_SHIFT;
+
+	if (pi->mkey_violations == 0)
+		ibp->mkey_violations = 0;
+
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
@@ -687,10 +794,7 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 {
 	struct opa_smp *smp = (struct opa_smp *)out_mad;
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
-#if 0
-	struct qib_ibport *ibp = to_iport(ibdev, port);
-	/* XXX struct qib_pportdata *ppd = ppd_from_ibp(ibp);*/
-#endif
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 	u8 *data;
 	u32 am;
 	__be16 attr_id;
@@ -701,41 +805,27 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 
 	am = be32_to_cpu(smp->attr_mod);
 	attr_id = smp->attr_id;
+	if (!ibp) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		ret = reply((struct ib_mad_hdr *)smp);
+		goto bail;
+	}
+
 	if (smp->class_version != OPA_SMI_CLASS_VERSION) {
 		smp->status |= cpu_to_be16(IB_MGMT_MAD_STATUS_BAD_VERSION);
 		ret = reply(ibh);
 		goto bail;
 	}
 
-	/* FXRTODO: Implement mkey check */
-#if 0
 	ret = check_mkey(ibp, (struct ib_mad_hdr *)smp, mad_flags, smp->mkey,
 			 smp->route.dr.dr_slid, smp->route.dr.return_path,
 			 smp->hop_cnt);
 	if (ret) {
-		u32 port_num = be32_to_cpu(smp->attr_mod);
-
-		/*
-		 * If this is a get/set portinfo, we already check the
-		 * M_Key if the MAD is for another port and the M_Key
-		 * is OK on the receiving port. This check is needed
-		 * to increment the error counters when the M_Key
-		 * fails to match on *both* ports.
-		 */
-		if (attr_id == IB_SMP_ATTR_PORT_INFO &&
-		    (smp->method == IB_MGMT_METHOD_GET ||
-		     smp->method == IB_MGMT_METHOD_SET) &&
-		    port_num && port_num <= ibdev->phys_port_cnt &&
-		    port != port_num)
-			(void) check_mkey(to_iport(ibdev, port_num),
-					  (struct ib_mad_hdr *)smp, 0,
-					  smp->mkey, smp->route.dr.dr_slid,
-					  smp->route.dr.return_path,
-					  smp->hop_cnt);
 		ret = IB_MAD_RESULT_FAILURE;
 		goto bail;
 	}
-#endif
+
 	*resp_len = opa_get_smp_header_size(smp);
 
 	switch (smp->method) {
