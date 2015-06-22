@@ -75,7 +75,7 @@ DEFINE_SPINLOCK(hfi1_devs_lock);
 LIST_HEAD(hfi1_dev_list);
 DEFINE_MUTEX(hfi1_mutex);	/* general driver use */
 
-unsigned int hfi1_max_mtu;
+unsigned int hfi1_max_mtu = HFI1_DEFAULT_MAX_MTU;
 module_param_named(max_mtu, hfi1_max_mtu, uint, S_IRUGO);
 MODULE_PARM_DESC(max_mtu, "Set max MTU bytes, default is 8192");
 
