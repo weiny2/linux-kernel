@@ -845,7 +845,14 @@ extern struct tcp_congestion_ops tcp_reno;
 
 struct tcp_congestion_ops *tcp_ca_find_key(u32 key);
 u32 tcp_ca_get_key_by_name(const char *name);
+#ifdef CONFIG_INET
 char *tcp_ca_get_name_by_key(u32 key, char *buffer);
+#else
+static inline char *tcp_ca_get_name_by_key(u32 key, char *buffer)
+{
+	return NULL;
+}
+#endif
 
 static inline void tcp_set_ca_state(struct sock *sk, const u8 ca_state)
 {
