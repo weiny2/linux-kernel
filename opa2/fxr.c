@@ -211,7 +211,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 static void hfi_port_desc(struct opa_core_device *odev,
 				struct opa_pport_desc *pdesc, u8 port_num)
 {
-	struct hfi_pportdata *ppd = get_ppd_pn(odev->dd, port_num);
+	struct hfi_pportdata *ppd = to_hfi_ppd(odev->dd, port_num);
 
 	pdesc->pguid = ppd->pguid;
 	pdesc->lid = ppd->lid;

@@ -205,8 +205,17 @@ void hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *user_mm,
 			 u16 pasid);
 void hfi_iommu_clear_pasid(struct hfi_devdata *dd, u16 pasid);
 
-#define get_ppd_pn(dd, pn)		(&(dd)->pport[pnum_to_pidx(pn)])
-#define get_ppd_pidx(dd, idx)		(&(dd)->pport[idx])
+static inline struct hfi_pportdata *to_hfi_ppd(struct hfi_devdata *dd,
+							u8 port)
+{
+	u8 pidx = port - 1; /* IB number port from 1, hdw from 0 */
+
+	if (pidx >= dd->num_pports) {
+		WARN_ON(pidx >= dd->num_pports);
+		return NULL;
+	}
+	return &(dd->pport[pidx]);
+}
 
 int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 			u32 am, u8 *data, u8 port, u32 *resp_len);

@@ -58,6 +58,8 @@
 
 #define FXR_LIM_MGMT_P_KEY       0x7FFF
 
+#define MKEY_SHIFT		6
+
 struct ib_node_info {
 	u8 base_version;
 	u8 class_version;
@@ -72,5 +74,104 @@ struct ib_node_info {
 	u8 local_port_num;
 	u8 vendor_id[3];
 } __packed;
+
+struct ib_mad_notice_attr {
+	u8 generic_type;
+	u8 prod_type_msb;
+	__be16 prod_type_lsb;
+	__be16 trap_num;
+	__be16 issuer_lid;
+	__be16 toggle_count;
+
+	union {
+		struct {
+			u8	details[54];
+		} raw_data;
+
+		struct {
+			__be16	reserved;
+			__be16	lid;		/* where violation happened */
+			u8	port_num;	/* where violation happened */
+		} __packed ntc_129_131;
+
+		struct {
+			__be16	reserved;
+			__be16	lid;		/* LID where change occurred */
+			u8	reserved2;
+			u8	local_changes;	/* low bit - local changes */
+			__be32	new_cap_mask;	/* new capability mask */
+			u8	reserved3;
+			u8	change_flags;	/* low 3 bits only */
+		} __packed ntc_144;
+
+		struct {
+			__be16	reserved;
+			__be16	lid;		/* lid where sys guid changed */
+			__be16	reserved2;
+			__be64	new_sys_guid;
+		} __packed ntc_145;
+
+		struct {
+			__be16	reserved;
+			__be16	lid;
+			__be16	dr_slid;
+			u8	method;
+			u8	reserved2;
+			__be16	attr_id;
+			__be32	attr_mod;
+			__be64	mkey;
+			u8	reserved3;
+			u8	dr_trunc_hop;
+			u8	dr_rtn_path[30];
+		} __packed ntc_256;
+
+		struct {
+			__be16		reserved;
+			__be16		lid1;
+			__be16		lid2;
+			__be32		key;
+			__be32		sl_qp1;	/* SL: high 4 bits */
+			__be32		qp2;	/* high 8 bits reserved */
+			union ib_gid	gid1;
+			union ib_gid	gid2;
+		} __packed ntc_257_258;
+
+	} details;
+};
+
+/*
+ * Generic trap/notice types
+ */
+#define IB_NOTICE_TYPE_FATAL	0x80
+#define IB_NOTICE_TYPE_URGENT	0x81
+#define IB_NOTICE_TYPE_SECURITY	0x82
+#define IB_NOTICE_TYPE_SM	0x83
+#define IB_NOTICE_TYPE_INFO	0x84
+
+/*
+ * Generic trap/notice producers
+ */
+#define IB_NOTICE_PROD_CA		cpu_to_be16(1)
+#define IB_NOTICE_PROD_SWITCH		cpu_to_be16(2)
+#define IB_NOTICE_PROD_ROUTER		cpu_to_be16(3)
+#define IB_NOTICE_PROD_CLASS_MGR	cpu_to_be16(4)
+
+/*
+ * Generic trap/notice numbers
+ */
+#define IB_NOTICE_TRAP_LLI_THRESH	cpu_to_be16(129)
+#define IB_NOTICE_TRAP_EBO_THRESH	cpu_to_be16(130)
+#define IB_NOTICE_TRAP_FLOW_UPDATE	cpu_to_be16(131)
+#define IB_NOTICE_TRAP_CAP_MASK_CHG	cpu_to_be16(144)
+#define IB_NOTICE_TRAP_SYS_GUID_CHG	cpu_to_be16(145)
+#define IB_NOTICE_TRAP_BAD_MKEY		cpu_to_be16(256)
+#define IB_NOTICE_TRAP_BAD_PKEY		cpu_to_be16(257)
+#define IB_NOTICE_TRAP_BAD_QKEY		cpu_to_be16(258)
+
+/*
+ * Generic trap/notice M_Key violation flags in dr_trunc_hop (trap 256).
+ */
+#define IB_NOTICE_TRAP_DR_NOTICE	0x80
+#define IB_NOTICE_TRAP_DR_TRUNC		0x40
 
 #endif				/* _OPA_MAD_H */
