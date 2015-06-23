@@ -501,7 +501,7 @@ void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
 	write_csr(dd, FXR_TXCI_CFG_RESET, tx_cq_reset.val);
 	write_csr(dd, FXR_RXCI_CFG_CQ_RESET, rx_cq_reset.val);
 #if 1 /* TODO: should be __SIMICS__ instead of 1 */
-	msleep(1); /* 'reset to zero' is not visible for a few cycles in Simics */
+	mdelay(1); /* 'reset to zero' is not visible for a few cycles in Simics */
 #endif
 }
 
