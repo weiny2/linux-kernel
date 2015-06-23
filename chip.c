@@ -3808,8 +3808,9 @@ void handle_verify_cap(struct work_struct *work)
 	ppd->neighbor_fm_security =
 		read_csr(dd, DC_DC8051_STS_REMOTE_FM_SECURITY) &
 		DC_DC8051_STS_LOCAL_FM_SECURITY_DISABLED_MASK;
-	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor Port Number: %d Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
-		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_port_number, ppd->neighbor_type,
+	dd_dev_info(dd,
+		"Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
+		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
 		ppd->mgmt_allowed, ppd->neighbor_fm_security);
 	if (neigh_is_hfi(ppd))
 		ppd->part_enforce =
