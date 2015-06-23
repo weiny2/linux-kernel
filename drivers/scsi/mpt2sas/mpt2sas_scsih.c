@@ -8148,6 +8148,7 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct MPT2SAS_ADAPTER *ioc;
 	struct Scsi_Host *shost;
+	int rv = -ENODEV;
 
 	shost = scsi_host_alloc(&scsih_driver_template,
 	    sizeof(struct MPT2SAS_ADAPTER));
@@ -8250,6 +8251,7 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (!ioc->firmware_event_thread) {
 		printk(MPT2SAS_ERR_FMT "failure at %s:%d/%s()!\n",
 		    ioc->name, __FILE__, __LINE__, __func__);
+		rv = -ENODEV;
 		goto out_thread_fail;
 	}
 
@@ -8257,6 +8259,7 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if ((mpt2sas_base_attach(ioc))) {
 		printk(MPT2SAS_ERR_FMT "failure at %s:%d/%s()!\n",
 		    ioc->name, __FILE__, __LINE__, __func__);
+		rv = -ENODEV;
 		goto out_attach_fail;
 	}
 
@@ -8274,7 +8277,8 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	} else
 		ioc->hide_drives = 0;
 
-	if ((scsi_add_host(shost, &pdev->dev))) {
+	rv = scsi_add_host(shost, &pdev->dev);
+	if (rv) {
 		printk(MPT2SAS_ERR_FMT "failure at %s:%d/%s()!\n",
 		    ioc->name, __FILE__, __LINE__, __func__);
 		goto out_add_shost_fail;
@@ -8292,7 +8296,7 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	list_del(&ioc->list);
 	scsi_remove_host(shost);
 	scsi_host_put(shost);
-	return -ENODEV;
+	return rv;
 }
 
 #ifdef CONFIG_PM
