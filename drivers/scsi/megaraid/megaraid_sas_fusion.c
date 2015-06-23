@@ -2357,6 +2357,7 @@ int megasas_reset_fusion(struct Scsi_Host *shost, int iotimeout)
 		printk(KERN_WARNING "megaraid_sas: Hardware critical error, "
 		       "returning FAILED for scsi%d.\n",
 			instance->host->host_no);
+		mutex_unlock(&instance->reset_mutex);
 		return FAILED;
 	}
 
