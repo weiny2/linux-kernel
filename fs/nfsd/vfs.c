@@ -1081,7 +1081,7 @@ static int wait_for_concurrent_writes(struct file *file)
 	int err = 0;
 
 	if (atomic_read(&inode->i_writecount) > 1
-	    || (last_ino == inode->i_ino && last_dev == inode->i_sb->s_dev)) {
+	    || (last_ino == inode->i_ino && last_dev == inode_get_dev(inode))) {
 		dprintk("nfsd: write defer %d\n", task_pid_nr(current));
 		msleep(10);
 		dprintk("nfsd: write resume %d\n", task_pid_nr(current));
@@ -1092,7 +1092,7 @@ static int wait_for_concurrent_writes(struct file *file)
 		err = vfs_fsync(file, 0);
 	}
 	last_ino = inode->i_ino;
-	last_dev = inode->i_sb->s_dev;
+	last_dev = inode_get_dev(inode);
 	return err;
 }
 
@@ -1190,7 +1190,7 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	inode = file_inode(file);
 
 	/* Get readahead parameters */
-	ra = nfsd_get_raparms(inode->i_sb->s_dev, inode->i_ino);
+	ra = nfsd_get_raparms(inode_get_dev(inode), inode->i_ino);
 
 	if (ra && ra->p_set)
 		file->f_ra = ra->p_ra;

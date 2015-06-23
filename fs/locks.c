@@ -2250,8 +2250,8 @@ void locks_remove_flock(struct file *filp)
 			 */
 			WARN(!IS_FLOCK(fl),
 				"leftover lock: dev=%u:%u ino=%lu type=%hhd flags=0x%x start=%lld end=%lld\n",
-				MAJOR(inode->i_sb->s_dev),
-				MINOR(inode->i_sb->s_dev), inode->i_ino,
+				MAJOR(inode_get_dev(inode)),
+				MINOR(inode_get_dev(inode)), inode->i_ino,
 				fl->fl_type, fl->fl_flags,
 				fl->fl_start, fl->fl_end);
 
@@ -2364,8 +2364,8 @@ static void lock_get_status(struct seq_file *f, struct file_lock *fl,
 #else
 		/* userspace relies on this representation of dev_t ;-( */
 		seq_printf(f, "%d %02x:%02x:%ld ", fl_pid,
-				MAJOR(inode->i_sb->s_dev),
-				MINOR(inode->i_sb->s_dev), inode->i_ino);
+				MAJOR(inode_get_dev(inode)),
+				MINOR(inode_get_dev(inode)), inode->i_ino);
 #endif
 	} else {
 		seq_printf(f, "%d <none>:0 ", fl_pid);

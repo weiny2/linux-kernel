@@ -364,7 +364,7 @@ static int audit_get_nd(struct audit_watch *watch, struct path *parent)
 	mutex_unlock(&parent->dentry->d_inode->i_mutex);
 	if (d->d_inode) {
 		/* update watch filter fields */
-		watch->dev = d->d_inode->i_sb->s_dev;
+		watch->dev = inode_get_dev(d->d_inode);
 		watch->ino = d->d_inode->i_ino;
 	}
 	dput(d);
@@ -494,7 +494,7 @@ static int audit_watch_handle_event(struct fsnotify_group *group,
 	};
 
 	if (mask & (FS_CREATE|FS_MOVED_TO) && inode)
-		audit_update_watch(parent, dname, inode->i_sb->s_dev, inode->i_ino, 0);
+		audit_update_watch(parent, dname, inode_get_dev(inode), inode->i_ino, 0);
 	else if (mask & (FS_DELETE|FS_MOVED_FROM))
 		audit_update_watch(parent, dname, (dev_t)-1, (unsigned long)-1, 1);
 	else if (mask & (FS_DELETE_SELF|FS_UNMOUNT|FS_MOVE_SELF))
