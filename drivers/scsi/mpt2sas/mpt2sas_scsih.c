@@ -105,11 +105,6 @@ static int missing_delay[2] = {-1, -1};
 module_param_array(missing_delay, int, NULL, 0);
 MODULE_PARM_DESC(missing_delay, " device missing delay , io missing delay");
 
-static int unblock_io;
-module_param(unblock_io, int, 0);
-MODULE_PARM_DESC(unblock_io,
-"unblocks I/O if set to 1 when device is undergoing addition (default=0)");
-
 /* scsi-mid layer global parmeter is max_report_luns, which is 511 */
 #define MPT2SAS_MAX_LUN (16895)
 static int max_lun = MPT2SAS_MAX_LUN;
@@ -132,11 +127,6 @@ static int disable_discovery = -1;
 module_param(disable_discovery, int, 0);
 MODULE_PARM_DESC(disable_discovery, " disable discovery ");
 
-/* Enable or disable EEDP support */
-static int disable_eedp;
-module_param(disable_eedp, uint, 0);
-MODULE_PARM_DESC(disable_eedp, " disable EEDP support: (default=0)");
-
 /* permit overriding the host protection capabilities mask (EEDP/T10 PI) */
 static int prot_mask = 0;
 module_param(prot_mask, int, 0);
@@ -155,7 +145,7 @@ struct sense_info {
 };
 
 
-#define MPT2SAS_TURN_ON_PFA_LED (0xFFFC)
+#define MPT2SAS_TURN_ON_FAULT_LED (0xFFFC)
 #define MPT2SAS_PORT_ENABLE_COMPLETE (0xFFFD)
 #define MPT2SAS_REMOVE_UNRESPONDING_DEVICES (0xFFFF)
 /**
@@ -2910,7 +2900,7 @@ _scsih_fw_event_cleanup_queue(struct MPT2SAS_ADAPTER *ioc)
 		return;
 
 	list_for_each_entry_safe(fw_event, next, &ioc->fw_event_list, list) {
-		if (cancel_delayed_work(&fw_event->delayed_work)) {
+		if (cancel_delayed_work_sync(&fw_event->delayed_work)) {
 			_scsih_fw_event_free(ioc, fw_event);
 			continue;
 		}
@@ -2968,34 +2958,6 @@ _scsih_ublock_io_device(struct MPT2SAS_ADAPTER *ioc, u64 sas_address)
 			    MPT2SAS_INFO_FMT "SDEV_RUNNING: "
 			    "sas address(0x%016llx)\n", ioc->name,
 				(unsigned long long)sas_address));
-			sas_device_priv_data->block = 0;
-			scsi_internal_device_unblock(sdev, SDEV_RUNNING);
-		}
-	}
-}
-
-/**
- * _scsih_ublock_io_device_to_running - set the device state to SDEV_RUNNING
- * @ioc: per adapter object
- * @sas_addr: sas address
- *
- * unblock the device to receive IO during device addition. Device
- * responsiveness is not checked before unblocking
- */
-static void
-_scsih_ublock_io_device_to_running(struct MPT2SAS_ADAPTER *ioc, u64 sas_address)
-{
-	struct MPT2SAS_DEVICE *sas_device_priv_data;
-	struct scsi_device *sdev;
-
-	shost_for_each_device(sdev, ioc->shost) {
-		sas_device_priv_data = sdev->hostdata;
-		if (!sas_device_priv_data)
-			continue;
-		if (sas_device_priv_data->sas_target->sas_address
-		    != sas_address)
-			continue;
-		if (sas_device_priv_data->block) {
 			sas_device_priv_data->block = 0;
 			scsi_internal_device_unblock(sdev, SDEV_RUNNING);
 		}
@@ -3112,23 +3074,21 @@ _scsih_block_io_to_children_attached_to_ex(struct MPT2SAS_ADAPTER *ioc,
 }
 
 /**
- * _scsih_handle_io_to_children_attached_directly
+ * _scsih_block_io_to_children_attached_directly
  * @ioc: per adapter object
  * @event_data: topology change event data
  *
- * This routine set sdev state to SDEV_BLOCK or SDEV_RUNNING for all devices
- * direct attached during device pull/reconnect.
+ * This routine set sdev state to SDEV_BLOCK for all devices
+ * direct attached during device pull.
  */
 static void
-_scsih_handle_io_to_children_attached_directly(struct MPT2SAS_ADAPTER *ioc,
-	Mpi2EventDataSasTopologyChangeList_t *event_data)
+_scsih_block_io_to_children_attached_directly(struct MPT2SAS_ADAPTER *ioc,
+    Mpi2EventDataSasTopologyChangeList_t *event_data)
 {
 	int i;
 	u16 handle;
 	u16 reason_code;
 	u8 phy_number;
-	struct _sas_device *sas_device;
-	u8 link_rate, prev_link_rate;
 
 	for (i = 0; i < event_data->NumEntries; i++) {
 		handle = le16_to_cpu(event_data->PHY[i].AttachedDevHandle);
@@ -3139,24 +3099,6 @@ _scsih_handle_io_to_children_attached_directly(struct MPT2SAS_ADAPTER *ioc,
 		    MPI2_EVENT_SAS_TOPO_RC_MASK;
 		if (reason_code == MPI2_EVENT_SAS_TOPO_RC_DELAY_NOT_RESPONDING)
 			_scsih_block_io_device(ioc, handle);
-		else if ((reason_code == MPI2_EVENT_SAS_TOPO_RC_PHY_CHANGED) &&
-		    (unblock_io == 1)) {
-			/* unblock only if device is in the process of addition
-			 * within the SCSI Mid Layer (sas_rphy_add) to prevent
-			 * deadlock. Unblocking in other cases can lead to data
-			 * corruption */
-
-			link_rate = event_data->PHY[i].LinkRate >> 4;
-			prev_link_rate = event_data->PHY[i].LinkRate & 0xF;
-			sas_device = _scsih_sas_device_find_by_handle(ioc,
-					handle);
-			if (!sas_device)
-				continue;
-			if ((link_rate > prev_link_rate) &&
-			    (sas_device->pend_sas_rphy_add == 1))
-				_scsih_ublock_io_device_to_running(ioc,
-				    sas_device->sas_address);
-		}
 	}
 }
 
@@ -3548,7 +3490,7 @@ _scsih_check_topo_delete_events(struct MPT2SAS_ADAPTER *ioc,
 
 	expander_handle = le16_to_cpu(event_data->ExpanderDevHandle);
 	if (expander_handle < ioc->sas_hba.num_phys) {
-		_scsih_handle_io_to_children_attached_directly(ioc, event_data);
+		_scsih_block_io_to_children_attached_directly(ioc, event_data);
 		return;
 	}
 	if (event_data->ExpStatus ==
@@ -3566,7 +3508,7 @@ _scsih_check_topo_delete_events(struct MPT2SAS_ADAPTER *ioc,
 				_scsih_block_io_device(ioc, handle);
 		} while (test_and_clear_bit(handle, ioc->blocking_handles));
 	} else if (event_data->ExpStatus == MPI2_EVENT_SAS_TOPO_ES_RESPONDING)
-		_scsih_handle_io_to_children_attached_directly(ioc, event_data);
+		_scsih_block_io_to_children_attached_directly(ioc, event_data);
 
 	if (event_data->ExpStatus != MPI2_EVENT_SAS_TOPO_ES_NOT_RESPONDING)
 		return;
@@ -3917,8 +3859,7 @@ _scsih_setup_direct_io(struct MPT2SAS_ADAPTER *ioc, struct scsi_cmnd *scmd,
 	struct _raid_device *raid_device, Mpi2SCSIIORequest_t *mpi_request,
 	u16 smid)
 {
-	u32 p_lba, stripe_off, stripe_unit, column, io_size;
-	u64 v_lba;
+	u32 v_lba, p_lba, stripe_off, stripe_unit, column, io_size;
 	u32 stripe_sz, stripe_exp;
 	u8 num_pds, *cdb_ptr, i;
 	u8 cdb0 = scmd->cmnd[0];
@@ -3935,17 +3876,12 @@ _scsih_setup_direct_io(struct MPT2SAS_ADAPTER *ioc, struct scsi_cmnd *scmd,
 			| cdb_ptr[5])) {
 			io_size = scsi_bufflen(scmd) >>
 			    raid_device->block_exponent;
-
-			/* get virtual lba */
-			if (cdb0 < READ_16)
-				v_lba = be32_to_cpu(*(__be32 *)(&cdb_ptr[2]));
-			else
-				v_lba = be64_to_cpu(*(__be64 *)(&cdb_ptr[2]));
-
 			i = (cdb0 < READ_16) ? 2 : 6;
+			/* get virtual lba */
+			v_lba = be32_to_cpu(*(__be32 *)(&cdb_ptr[i]));
 
 			if (((u64)v_lba + (u64)io_size - 1) <=
-				raid_device->max_lba) {
+			    (u32)raid_device->max_lba) {
 				stripe_sz = raid_device->stripe_sz;
 				stripe_exp = raid_device->stripe_exponent;
 				stripe_off = v_lba & (stripe_sz - 1);
@@ -4093,8 +4029,7 @@ _scsih_qcmd(struct Scsi_Host *shost, struct scsi_cmnd *scmd)
 	}
 	mpi_request = mpt2sas_base_get_msg_frame(ioc, smid);
 	memset(mpi_request, 0, sizeof(Mpi2SCSIIORequest_t));
-	if (!ioc->disable_eedp_support)
-		_scsih_setup_eedp(scmd, mpi_request);
+	_scsih_setup_eedp(scmd, mpi_request);
 	if (scmd->cmd_len == 32)
 		mpi_control |= 4 << MPI2_SCSIIO_CONTROL_ADDCDBLEN_SHIFT;
 	mpi_request->Function = MPI2_FUNCTION_SCSI_IO_REQUEST;
@@ -4257,20 +4192,14 @@ _scsih_scsi_ioc_info(struct MPT2SAS_ADAPTER *ioc, struct scsi_cmnd *scmd,
 		desc_ioc_state = "scsi ext terminated";
 		break;
 	case MPI2_IOCSTATUS_EEDP_GUARD_ERROR:
-		if (!ioc->disable_eedp_support) {
-			desc_ioc_state = "eedp guard error";
-			break;
-		}
+		desc_ioc_state = "eedp guard error";
+		break;
 	case MPI2_IOCSTATUS_EEDP_REF_TAG_ERROR:
-		if (!ioc->disable_eedp_support) {
-			desc_ioc_state = "eedp ref tag error";
-			break;
-		}
+		desc_ioc_state = "eedp ref tag error";
+		break;
 	case MPI2_IOCSTATUS_EEDP_APP_TAG_ERROR:
-		if (!ioc->disable_eedp_support) {
-			desc_ioc_state = "eedp app tag error";
-			break;
-		}
+		desc_ioc_state = "eedp app tag error";
+		break;
 	default:
 		desc_ioc_state = "unknown";
 		break;
@@ -4380,7 +4309,7 @@ _scsih_scsi_ioc_info(struct MPT2SAS_ADAPTER *ioc, struct scsi_cmnd *scmd,
 #endif
 
 /**
- * _scsih_turn_on_pfa_led - illuminate PFA LED
+ * _scsih_turn_on_fault_led - illuminate Fault LED
  * @ioc: per adapter object
  * @handle: device handle
  * Context: process
@@ -4388,15 +4317,10 @@ _scsih_scsi_ioc_info(struct MPT2SAS_ADAPTER *ioc, struct scsi_cmnd *scmd,
  * Return nothing.
  */
 static void
-_scsih_turn_on_pfa_led(struct MPT2SAS_ADAPTER *ioc, u16 handle)
+_scsih_turn_on_fault_led(struct MPT2SAS_ADAPTER *ioc, u16 handle)
 {
 	Mpi2SepReply_t mpi_reply;
 	Mpi2SepRequest_t mpi_request;
-	struct _sas_device *sas_device;
-
-	sas_device = _scsih_sas_device_find_by_handle(ioc, handle);
-	if (!sas_device)
-		return;
 
 	memset(&mpi_request, 0, sizeof(Mpi2SepRequest_t));
 	mpi_request.Function = MPI2_FUNCTION_SCSI_ENCLOSURE_PROCESSOR;
@@ -4405,47 +4329,6 @@ _scsih_turn_on_pfa_led(struct MPT2SAS_ADAPTER *ioc, u16 handle)
 	    cpu_to_le32(MPI2_SEP_REQ_SLOTSTATUS_PREDICTED_FAULT);
 	mpi_request.DevHandle = cpu_to_le16(handle);
 	mpi_request.Flags = MPI2_SEP_REQ_FLAGS_DEVHANDLE_ADDRESS;
-	if ((mpt2sas_base_scsi_enclosure_processor(ioc, &mpi_reply,
-	    &mpi_request)) != 0) {
-		printk(MPT2SAS_ERR_FMT "failure at %s:%d/%s()!\n", ioc->name,
-		__FILE__, __LINE__, __func__);
-		return;
-	}
-	sas_device->pfa_led_on = 1;
-
-
-	if (mpi_reply.IOCStatus || mpi_reply.IOCLogInfo) {
-		dewtprintk(ioc, printk(MPT2SAS_INFO_FMT
-		 "enclosure_processor: ioc_status (0x%04x), loginfo(0x%08x)\n",
-		 ioc->name, le16_to_cpu(mpi_reply.IOCStatus),
-		 le32_to_cpu(mpi_reply.IOCLogInfo)));
-		return;
-	}
-}
-
-/**
- * _scsih_turn_off_pfa_led - turn off PFA LED
- * @ioc: per adapter object
- * @sas_device: sas device whose PFA LED has to turned off
- * Context: process
- *
- * Return nothing.
- */
-static void
-_scsih_turn_off_pfa_led(struct MPT2SAS_ADAPTER *ioc,
-	struct _sas_device *sas_device)
-{
-	Mpi2SepReply_t mpi_reply;
-	Mpi2SepRequest_t mpi_request;
-
-	memset(&mpi_request, 0, sizeof(Mpi2SepRequest_t));
-	mpi_request.Function = MPI2_FUNCTION_SCSI_ENCLOSURE_PROCESSOR;
-	mpi_request.Action = MPI2_SEP_REQ_ACTION_WRITE_STATUS;
-	mpi_request.SlotStatus = 0;
-	mpi_request.Slot = cpu_to_le16(sas_device->slot);
-	mpi_request.DevHandle = 0;
-	mpi_request.EnclosureHandle = cpu_to_le16(sas_device->enclosure_handle);
-	mpi_request.Flags = MPI2_SEP_REQ_FLAGS_ENCLOSURE_SLOT_ADDRESS;
 	if ((mpt2sas_base_scsi_enclosure_processor(ioc, &mpi_reply,
 	    &mpi_request)) != 0) {
 		printk(MPT2SAS_ERR_FMT "failure at %s:%d/%s()!\n", ioc->name,
@@ -4463,7 +4346,7 @@ _scsih_turn_off_pfa_led(struct MPT2SAS_ADAPTER *ioc,
 }
 
 /**
- * _scsih_send_event_to_turn_on_pfa_led - fire delayed event
+ * _scsih_send_event_to_turn_on_fault_led - fire delayed event
  * @ioc: per adapter object
  * @handle: device handle
  * Context: interrupt.
@@ -4471,14 +4354,14 @@ _scsih_turn_off_pfa_led(struct MPT2SAS_ADAPTER *ioc,
  * Return nothing.
  */
 static void
-_scsih_send_event_to_turn_on_pfa_led(struct MPT2SAS_ADAPTER *ioc, u16 handle)
+_scsih_send_event_to_turn_on_fault_led(struct MPT2SAS_ADAPTER *ioc, u16 handle)
 {
 	struct fw_event_work *fw_event;
 
 	fw_event = kzalloc(sizeof(struct fw_event_work), GFP_ATOMIC);
 	if (!fw_event)
 		return;
-	fw_event->event = MPT2SAS_TURN_ON_PFA_LED;
+	fw_event->event = MPT2SAS_TURN_ON_FAULT_LED;
 	fw_event->device_handle = handle;
 	fw_event->ioc = ioc;
 	_scsih_fw_event_add(ioc, fw_event);
@@ -4522,7 +4405,7 @@ _scsih_smart_predicted_fault(struct MPT2SAS_ADAPTER *ioc, u16 handle)
 	spin_unlock_irqrestore(&ioc->sas_device_lock, flags);
 
 	if (ioc->pdev->subsystem_vendor == PCI_VENDOR_ID_IBM)
-		_scsih_send_event_to_turn_on_pfa_led(ioc, handle);
+		_scsih_send_event_to_turn_on_fault_led(ioc, handle);
 
 	/* insert into event log */
 	sz = offsetof(Mpi2EventNotificationReply_t, EventData) +
@@ -4738,10 +4621,8 @@ _scsih_io_done(struct MPT2SAS_ADAPTER *ioc, u16 smid, u8 msix_index, u32 reply)
 	case MPI2_IOCSTATUS_EEDP_GUARD_ERROR:
 	case MPI2_IOCSTATUS_EEDP_REF_TAG_ERROR:
 	case MPI2_IOCSTATUS_EEDP_APP_TAG_ERROR:
-		if (!ioc->disable_eedp_support) {
-			_scsih_eedp_error_handling(scmd, ioc_status);
-			break;
-		}
+		_scsih_eedp_error_handling(scmd, ioc_status);
+		break;
 	case MPI2_IOCSTATUS_SCSI_PROTOCOL_ERROR:
 	case MPI2_IOCSTATUS_INVALID_FUNCTION:
 	case MPI2_IOCSTATUS_INVALID_SGL:
@@ -5444,12 +5325,6 @@ _scsih_remove_device(struct MPT2SAS_ADAPTER *ioc,
     struct _sas_device *sas_device)
 {
 	struct MPT2SAS_TARGET *sas_target_priv_data;
-
-	if ((ioc->pdev->subsystem_vendor == PCI_VENDOR_ID_IBM) &&
-		(sas_device->pfa_led_on)) {
-		_scsih_turn_off_pfa_led(ioc, sas_device);
-		sas_device->pfa_led_on = 0;
-	}
 
 	dewtprintk(ioc, printk(MPT2SAS_INFO_FMT "%s: enter: "
 	    "handle(0x%04x), sas_addr(0x%016llx)\n", ioc->name, __func__,
@@ -7567,8 +7442,8 @@ _firmware_event_work(struct work_struct *work)
 		dewtprintk(ioc, printk(MPT2SAS_INFO_FMT "port enable: complete "
 		    "from worker thread\n", ioc->name));
 		break;
-	case MPT2SAS_TURN_ON_PFA_LED:
-		_scsih_turn_on_pfa_led(ioc, fw_event->device_handle);
+	case MPT2SAS_TURN_ON_FAULT_LED:
+		_scsih_turn_on_fault_led(ioc, fw_event->device_handle);
 		break;
 	case MPI2_EVENT_SAS_TOPOLOGY_CHANGE_LIST:
 		_scsih_sas_topology_change_event(ioc, fw_event);
@@ -8342,18 +8217,15 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto out_add_shost_fail;
 	}
 
-	ioc->disable_eedp_support = disable_eedp;
-	if (!ioc->disable_eedp_support) {
-		/* register EEDP capabilities with SCSI layer */
-		if (prot_mask)
-			scsi_host_set_prot(shost, prot_mask);
-		else
-			scsi_host_set_prot(shost, SHOST_DIF_TYPE1_PROTECTION
+	/* register EEDP capabilities with SCSI layer */
+	if (prot_mask)
+		scsi_host_set_prot(shost, prot_mask);
+	else
+		scsi_host_set_prot(shost, SHOST_DIF_TYPE1_PROTECTION
 				   | SHOST_DIF_TYPE2_PROTECTION
 				   | SHOST_DIF_TYPE3_PROTECTION);
 
-		scsi_host_set_guard(shost, SHOST_DIX_GUARD_CRC);
-	}
+	scsi_host_set_guard(shost, SHOST_DIX_GUARD_CRC);
 
 	/* event thread */
 	snprintf(ioc->firmware_event_name, sizeof(ioc->firmware_event_name),
@@ -8386,16 +8258,24 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		}
 	} else
 		ioc->hide_drives = 0;
+
+	if ((scsi_add_host(shost, &pdev->dev))) {
+		printk(MPT2SAS_ERR_FMT "failure at %s:%d/%s()!\n",
+		    ioc->name, __FILE__, __LINE__, __func__);
+		goto out_add_shost_fail;
+	}
+
 	scsi_scan_host(shost);
 
 	return 0;
 
+ out_add_shost_fail:
+	mpt2sas_base_detach(ioc);
  out_attach_fail:
 	destroy_workqueue(ioc->firmware_event_thread);
  out_thread_fail:
 	list_del(&ioc->list);
 	scsi_remove_host(shost);
- out_add_shost_fail:
 	scsi_host_put(shost);
 	return -ENODEV;
 }
