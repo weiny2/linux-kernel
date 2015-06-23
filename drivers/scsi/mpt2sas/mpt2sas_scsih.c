@@ -183,7 +183,7 @@ struct fw_event_work {
 	u8			VP_ID;
 	u8			ignore;
 	u16			event;
-	void			*event_data;
+	char			event_data[0] __aligned(4);
 };
 
 /* raid transport support */
@@ -2844,7 +2844,6 @@ _scsih_fw_event_free(struct MPT2SAS_ADAPTER *ioc, struct fw_event_work
 
 	spin_lock_irqsave(&ioc->fw_event_lock, flags);
 	list_del(&fw_event->list);
-	kfree(fw_event->event_data);
 	kfree(fw_event);
 	spin_unlock_irqrestore(&ioc->fw_event_lock, flags);
 }
@@ -3578,7 +3577,8 @@ _scsih_check_topo_delete_events(struct MPT2SAS_ADAPTER *ioc,
 		if (fw_event->event != MPI2_EVENT_SAS_TOPOLOGY_CHANGE_LIST ||
 		    fw_event->ignore)
 			continue;
-		local_event_data = fw_event->event_data;
+		local_event_data = (Mpi2EventDataSasTopologyChangeList_t *)
+			fw_event->event_data;
 		if (local_event_data->ExpStatus ==
 		    MPI2_EVENT_SAS_TOPO_ES_ADDED ||
 		    local_event_data->ExpStatus ==
@@ -5629,7 +5629,9 @@ _scsih_sas_topology_change_event(struct MPT2SAS_ADAPTER *ioc,
 	u64 sas_address;
 	unsigned long flags;
 	u8 link_rate, prev_link_rate;
-	Mpi2EventDataSasTopologyChangeList_t *event_data = fw_event->event_data;
+	Mpi2EventDataSasTopologyChangeList_t *event_data =
+		(Mpi2EventDataSasTopologyChangeList_t *)
+		fw_event->event_data;
 
 #ifdef CONFIG_SCSI_MPT2SAS_LOGGING
 	if (ioc->logging_level & MPT_DEBUG_EVENT_WORK_TASK)
@@ -5824,7 +5826,8 @@ _scsih_sas_device_status_change_event(struct MPT2SAS_ADAPTER *ioc,
 	u64 sas_address;
 	unsigned long flags;
 	Mpi2EventDataSasDeviceStatusChange_t *event_data =
-	    fw_event->event_data;
+		(Mpi2EventDataSasDeviceStatusChange_t *)
+		fw_event->event_data;
 
 #ifdef CONFIG_SCSI_MPT2SAS_LOGGING
 	if (ioc->logging_level & MPT_DEBUG_EVENT_WORK_TASK)
@@ -5919,6 +5922,7 @@ _scsih_sas_enclosure_dev_status_change_event(struct MPT2SAS_ADAPTER *ioc,
 #ifdef CONFIG_SCSI_MPT2SAS_LOGGING
 	if (ioc->logging_level & MPT_DEBUG_EVENT_WORK_TASK)
 		_scsih_sas_enclosure_dev_status_change_event_debug(ioc,
+		     (Mpi2EventDataSasEnclDevStatusChange_t *)
 		     fw_event->event_data);
 #endif
 }
@@ -5943,7 +5947,9 @@ _scsih_sas_broadcast_primitive_event(struct MPT2SAS_ADAPTER *ioc,
 	u32 termination_count;
 	u32 query_count;
 	Mpi2SCSITaskManagementReply_t *mpi_reply;
-	Mpi2EventDataSasBroadcastPrimitive_t *event_data = fw_event->event_data;
+	Mpi2EventDataSasBroadcastPrimitive_t *event_data =
+		(Mpi2EventDataSasBroadcastPrimitive_t *)
+		fw_event->event_data;
 	u16 ioc_status;
 	unsigned long flags;
 	int r;
@@ -6094,7 +6100,9 @@ static void
 _scsih_sas_discovery_event(struct MPT2SAS_ADAPTER *ioc,
     struct fw_event_work *fw_event)
 {
-	Mpi2EventDataSasDiscovery_t *event_data = fw_event->event_data;
+	Mpi2EventDataSasDiscovery_t *event_data =
+		(Mpi2EventDataSasDiscovery_t *)
+		fw_event->event_data;
 
 #ifdef CONFIG_SCSI_MPT2SAS_LOGGING
 	if (ioc->logging_level & MPT_DEBUG_EVENT_WORK_TASK) {
@@ -6482,7 +6490,9 @@ _scsih_sas_ir_config_change_event(struct MPT2SAS_ADAPTER *ioc,
 	Mpi2EventIrConfigElement_t *element;
 	int i;
 	u8 foreign_config;
-	Mpi2EventDataIrConfigChangeList_t *event_data = fw_event->event_data;
+	Mpi2EventDataIrConfigChangeList_t *event_data =
+		(Mpi2EventDataIrConfigChangeList_t *)
+		fw_event->event_data;
 
 #ifdef CONFIG_SCSI_MPT2SAS_LOGGING
 	if ((ioc->logging_level & MPT_DEBUG_EVENT_WORK_TASK)
@@ -6550,7 +6560,9 @@ _scsih_sas_ir_volume_event(struct MPT2SAS_ADAPTER *ioc,
 	u16 handle;
 	u32 state;
 	int rc;
-	Mpi2EventDataIrVolume_t *event_data = fw_event->event_data;
+	Mpi2EventDataIrVolume_t *event_data =
+		(Mpi2EventDataIrVolume_t *)
+		fw_event->event_data;
 
 	if (ioc->shost_recovery)
 		return;
@@ -6634,7 +6646,9 @@ _scsih_sas_ir_physical_disk_event(struct MPT2SAS_ADAPTER *ioc,
 	Mpi2ConfigReply_t mpi_reply;
 	Mpi2SasDevicePage0_t sas_device_pg0;
 	u32 ioc_status;
-	Mpi2EventDataIrPhysicalDisk_t *event_data = fw_event->event_data;
+	Mpi2EventDataIrPhysicalDisk_t *event_data =
+		(Mpi2EventDataIrPhysicalDisk_t *)
+		fw_event->event_data;
 	u64 sas_address;
 
 	if (ioc->shost_recovery)
@@ -6757,7 +6771,9 @@ static void
 _scsih_sas_ir_operation_status_event(struct MPT2SAS_ADAPTER *ioc,
     struct fw_event_work *fw_event)
 {
-	Mpi2EventDataIrOperationStatus_t *event_data = fw_event->event_data;
+	Mpi2EventDataIrOperationStatus_t *event_data =
+		(Mpi2EventDataIrOperationStatus_t *)
+		fw_event->event_data;
 	static struct _raid_device *raid_device;
 	unsigned long flags;
 	u16 handle;
@@ -7717,23 +7733,15 @@ mpt2sas_scsih_event_callback(struct MPT2SAS_ADAPTER *ioc, u8 msix_index,
 		return;
 	}
 
-	fw_event = kzalloc(sizeof(struct fw_event_work), GFP_ATOMIC);
+	sz = le16_to_cpu(mpi_reply->EventDataLength) * 4;
+	fw_event = kzalloc(sizeof(*fw_event) + sz, GFP_ATOMIC);
 	if (!fw_event) {
 		printk(MPT2SAS_ERR_FMT "failure at %s:%d/%s()!\n",
 		    ioc->name, __FILE__, __LINE__, __func__);
 		return;
 	}
-	sz = le16_to_cpu(mpi_reply->EventDataLength) * 4;
-	fw_event->event_data = kzalloc(sz, GFP_ATOMIC);
-	if (!fw_event->event_data) {
-		printk(MPT2SAS_ERR_FMT "failure at %s:%d/%s()!\n",
-		    ioc->name, __FILE__, __LINE__, __func__);
-		kfree(fw_event);
-		return;
-	}
 
-	memcpy(fw_event->event_data, mpi_reply->EventData,
-	    sz);
+	memcpy(fw_event->event_data, mpi_reply->EventData, sz);
 	fw_event->ioc = ioc;
 	fw_event->VF_ID = mpi_reply->VF_ID;
 	fw_event->VP_ID = mpi_reply->VP_ID;
