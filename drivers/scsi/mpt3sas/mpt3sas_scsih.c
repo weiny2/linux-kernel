@@ -7794,6 +7794,7 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct MPT3SAS_ADAPTER *ioc;
 	struct Scsi_Host *shost;
+	int rv;
 
 	shost = scsi_host_alloc(&scsih_driver_template,
 	    sizeof(struct MPT3SAS_ADAPTER));
@@ -7886,6 +7887,7 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (!ioc->firmware_event_thread) {
 		pr_err(MPT3SAS_FMT "failure at %s:%d/%s()!\n",
 		    ioc->name, __FILE__, __LINE__, __func__);
+		rv = -ENODEV;
 		goto out_thread_fail;
 	}
 
@@ -7893,12 +7895,13 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if ((mpt3sas_base_attach(ioc))) {
 		pr_err(MPT3SAS_FMT "failure at %s:%d/%s()!\n",
 		    ioc->name, __FILE__, __LINE__, __func__);
+		rv = -ENODEV;
 		goto out_attach_fail;
 	}
-	if ((scsi_add_host(shost, &pdev->dev))) {
+	rv = scsi_add_host(shost, &pdev->dev);
+	if (rv) {
 		pr_err(MPT3SAS_FMT "failure at %s:%d/%s()!\n",
 		    ioc->name, __FILE__, __LINE__, __func__);
-		list_del(&ioc->list);
 		goto out_add_shost_fail;
 	}
 
@@ -7911,7 +7914,7 @@ out_add_shost_fail:
  out_thread_fail:
 	list_del(&ioc->list);
 	scsi_host_put(shost);
-	return -ENODEV;
+	return rv;
 }
 
 #ifdef CONFIG_PM
