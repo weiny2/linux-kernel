@@ -4126,6 +4126,6 @@ int btrfs_verify_qgroup_counts(struct btrfs_fs_info *fs_info, u64 qgroupid,
 /*
  * Module parameter
  */
-extern bool allow_unsupported;
+extern bool btrfs_allow_unsupported;
 
 #endif

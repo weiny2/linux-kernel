@@ -145,7 +145,7 @@ void btrfs_inherit_iflags(struct inode *inode, struct inode *dir)
 	/*
 	 * This should not happen, but just in case
 	 */
-	if (!allow_unsupported && (flags & BTRFS_INODE_COMPRESS)) {
+	if (!btrfs_allow_unsupported && (flags & BTRFS_INODE_COMPRESS)) {
 		printk_once(KERN_WARNING
 			"btrfs: detected directory with compression bit set, not inherited, load module with allow_unsupported=1\n");
 		flags &= ~BTRFS_INODE_COMPRESS;
@@ -214,7 +214,7 @@ static int btrfs_ioctl_setflags(struct file *file, void __user *arg)
 	if (copy_from_user(&flags, arg, sizeof(flags)))
 		return -EFAULT;
 
-	if (!allow_unsupported && (flags & FS_COMPR_FL)) {
+	if (!btrfs_allow_unsupported && (flags & FS_COMPR_FL)) {
 		printk_ratelimited(KERN_WARNING
 			"btrfs: IOC_SETFLAGS: enabling compression is not supported, load module with allow_unsupported=1\n");
 		return -EOPNOTSUPP;
@@ -5075,7 +5075,7 @@ long btrfs_ioctl(struct file *file, unsigned int
 	case BTRFS_IOC_BALANCE_PROGRESS:
 		return btrfs_ioctl_balance_progress(root, argp);
 	case BTRFS_IOC_SET_RECEIVED_SUBVOL:
-		if (!allow_unsupported) {
+		if (!btrfs_allow_unsupported) {
 			printk(KERN_WARNING "btrfs: IOC_SET_RECEIVED_SUBVOL is not supported, load module with allow_unsupported=1\n");
 			ret = -EOPNOTSUPP;
 			break;
@@ -5100,7 +5100,7 @@ long btrfs_ioctl(struct file *file, unsigned int
 	case BTRFS_IOC_QUOTA_RESCAN_WAIT:
 		return btrfs_ioctl_quota_rescan_wait(file, argp);
 	case BTRFS_IOC_DEV_REPLACE:
-		if (!allow_unsupported) {
+		if (!btrfs_allow_unsupported) {
 			printk(KERN_WARNING "btrfs: IOC_DEV_REPLACE is not supported, load module with allow_unsupported=1\n");
 			ret = -EOPNOTSUPP;
 			break;
