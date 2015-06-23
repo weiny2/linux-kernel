@@ -1489,6 +1489,15 @@ static u64 access_sw_cpu_intr(const struct cntr_entry *entry,
 			      mode, data);
 }
 
+static u64 access_sw_cpu_rcv_limit(const struct cntr_entry *entry,
+			      void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	return read_write_cpu(dd, &dd->z_rcv_limit, dd->rcv_limit, vl,
+			      mode, data);
+}
+
 #define def_access_sw_cpu(cntr) \
 static u64 access_sw_cpu_##cntr(const struct cntr_entry *entry,		      \
 			      void *context, int vl, int mode, u64 data)      \
@@ -1671,6 +1680,8 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 			 CNTR_SYNTH),
 [C_SW_CPU_INTR] = CNTR_ELEM("Intr", 0, 0, CNTR_NORMAL,
 			    access_sw_cpu_intr),
+[C_SW_CPU_RCV_LIM] = CNTR_ELEM("RcvLimit", 0, 0, CNTR_NORMAL,
+			    access_sw_cpu_rcv_limit),
 };
 
 static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
@@ -3352,8 +3363,11 @@ void handle_link_down(struct work_struct *work)
 	u8 lcl_reason, neigh_reason = 0;
 	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
 								link_down_work);
-	lcl_reason = 0;
 
+	/* go offline first, then deal with reasons */
+	set_link_state(ppd, HLS_DN_OFFLINE);
+
+	lcl_reason = 0;
 	read_planned_down_reason_code(ppd->dd, &neigh_reason);
 
 	/*
@@ -3364,7 +3378,6 @@ void handle_link_down(struct work_struct *work)
 		lcl_reason = OPA_LINKDOWN_REASON_NEIGHBOR_UNKNOWN;
 
 	set_link_down_reason(ppd, lcl_reason, neigh_reason, 0);
-	set_link_state(ppd, HLS_DN_OFFLINE);
 
 	/* disable the port */
 	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
@@ -4690,8 +4703,7 @@ static int do_8051_command(
 	write_csr(dd, DC_DC8051_CFG_HOST_CMD_0, reg);
 
 	/* wait for completion, alternate: interrupt */
-	timeout = jiffies + msecs_to_jiffies(
-				quick_linkup ? 20000 : DC8051_COMMAND_TIMEOUT);
+	timeout = jiffies + msecs_to_jiffies(DC8051_COMMAND_TIMEOUT);
 	while (1) {
 		reg = read_csr(dd, DC_DC8051_CFG_HOST_CMD_1);
 		completed = reg & DC_DC8051_CFG_HOST_CMD_1_COMPLETED_SMASK;
@@ -4925,9 +4937,16 @@ static void read_last_remote_state(struct hfi1_devdata *dd, u32 *lrs)
 void hfi1_read_link_quality(struct hfi1_devdata *dd, u8 *link_quality)
 {
 	u32 frame;
+	int ret;
 
-	read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG, &frame);
-	*link_quality = (frame >> LINK_QUALITY_SHIFT) & LINK_QUALITY_MASK;
+	*link_quality = 0;
+	if (dd->pport->host_link_state & HLS_UP) {
+		ret = read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG,
+					&frame);
+		if (ret == HCMD_SUCCESS)
+			*link_quality = (frame >> LINK_QUALITY_SHIFT)
+						& LINK_QUALITY_MASK;
+	}
 }
 
 static void read_planned_down_reason_code(struct hfi1_devdata *dd, u8 *pdrrc)
@@ -8585,7 +8604,8 @@ static int request_intx_irq(struct hfi1_devdata *dd)
 static int request_msix_irqs(struct hfi1_devdata *dd)
 {
 	const struct cpumask *local_mask;
-	cpumask_var_t def = NULL, rcv = NULL;
+	cpumask_var_t def, rcv;
+	bool def_ret, rcv_ret;
 	int first_general, last_general;
 	int first_sdma, last_sdma;
 	int first_rx, last_rx;
@@ -8616,8 +8636,9 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 	if (cpumask_first(local_mask) >= nr_cpu_ids)
 		local_mask = topology_core_cpumask(0);
 
-	if (!zalloc_cpumask_var(&def, GFP_KERNEL) ||
-	    !zalloc_cpumask_var(&rcv, GFP_KERNEL))
+	def_ret = zalloc_cpumask_var(&def, GFP_KERNEL);
+	rcv_ret = zalloc_cpumask_var(&rcv, GFP_KERNEL);
+	if (!def_ret || !rcv_ret)
 		goto bail;
 	/* use local mask as default */
 	cpumask_copy(def, local_mask);

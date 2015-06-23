@@ -1427,9 +1427,8 @@ static void user_sdma_free_request(struct user_sdma_request *req)
 		int i;
 
 		for (i = 0; i < req->data_iovs; i++)
-			if (req->iovs[i].npages && req->iovs[i].pages) {
+			if (req->iovs[i].npages && req->iovs[i].pages)
 				unpin_vector_pages(&req->iovs[i]);
-			}
 	}
 	if (req->user_proc)
 		put_task_struct(req->user_proc);
