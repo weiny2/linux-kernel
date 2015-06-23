@@ -210,18 +210,51 @@ struct megasas_cmd *megasas_get_cmd(struct megasas_instance
 	unsigned long flags;
 	struct megasas_cmd *cmd = NULL;
 
-	spin_lock_irqsave(&instance->cmd_pool_lock, flags);
+	spin_lock_irqsave(&instance->mfi_pool_lock, flags);
 
 	if (!list_empty(&instance->cmd_pool)) {
 		cmd = list_entry((&instance->cmd_pool)->next,
 				 struct megasas_cmd, list);
 		list_del_init(&cmd->list);
+		atomic_set(&cmd->mfi_mpt_pthr, MFI_MPT_DETACHED);
 	} else {
 		printk(KERN_ERR "megasas: Command pool empty!\n");
 	}
 
-	spin_unlock_irqrestore(&instance->cmd_pool_lock, flags);
+	spin_unlock_irqrestore(&instance->mfi_pool_lock, flags);
 	return cmd;
+}
+
+/**
+ * __megasas_return_cmd -	Return a cmd to free command pool
+ * @instance:		Adapter soft state
+ * @cmd:		Command packet to be returned to free command pool
+ */
+inline void
+__megasas_return_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd)
+{
+	/*
+	 * Don't go ahead and free the MFI frame, if corresponding
+	 * MPT frame is not freed(valid for only fusion adapters).
+	 * In case of MFI adapters, anyways for any allocated MFI
+	 * frame will have cmd->mfi_mpt_mpthr set to MFI_MPT_DETACHED
+	 */
+	if (atomic_read(&cmd->mfi_mpt_pthr) != MFI_MPT_DETACHED)
+		return;
+
+	cmd->scmd = NULL;
+	cmd->frame_count = 0;
+	cmd->is_wait_event = 0;
+	cmd->mpt_pthr_cmd_blocked = NULL;
+
+	if ((instance->pdev->device != PCI_DEVICE_ID_LSI_FUSION) &&
+	    (instance->pdev->device != PCI_DEVICE_ID_LSI_INVADER) &&
+	    (instance->pdev->device != PCI_DEVICE_ID_LSI_FURY) &&
+	    (reset_devices))
+		cmd->frame->hdr.cmd = MFI_CMD_INVALID;
+
+	atomic_set(&cmd->mfi_mpt_pthr, MFI_LIST_ADDED);
+	list_add(&cmd->list, (&instance->cmd_pool)->next);
 }
 
 /**
@@ -234,19 +267,9 @@ megasas_return_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&instance->cmd_pool_lock, flags);
-
-	cmd->scmd = NULL;
-	cmd->frame_count = 0;
-	if ((instance->pdev->device != PCI_DEVICE_ID_LSI_FUSION) &&
-	    (instance->pdev->device != PCI_DEVICE_ID_LSI_PLASMA) &&
-	    (instance->pdev->device != PCI_DEVICE_ID_LSI_INVADER) &&
-	    (instance->pdev->device != PCI_DEVICE_ID_LSI_FURY) &&
-	    (reset_devices))
-		cmd->frame->hdr.cmd = MFI_CMD_INVALID;
-	list_add_tail(&cmd->list, &instance->cmd_pool);
-
-	spin_unlock_irqrestore(&instance->cmd_pool_lock, flags);
+	spin_lock_irqsave(&instance->mfi_pool_lock, flags);
+	__megasas_return_cmd(instance, cmd);
+	spin_unlock_irqrestore(&instance->mfi_pool_lock, flags);
 }
 
 
@@ -936,13 +959,14 @@ megasas_issue_polled(struct megasas_instance *instance, struct megasas_cmd *cmd)
  * Max wait time is MEGASAS_INTERNAL_CMD_WAIT_TIME secs
  * Used to issue ioctl commands.
  */
-static int
+int
 megasas_issue_blocked_cmd(struct megasas_instance *instance,
 			  struct megasas_cmd *cmd, int timeout)
 {
 	int ret = 0;
 	cmd->cmd_status = ENODATA;
 
+	cmd->is_wait_event = 1;
 	instance->instancet->issue_dcmd(instance, cmd);
 	if (timeout) {
 		ret = wait_event_timeout(instance->int_cmd_wait_q,
@@ -1914,7 +1938,12 @@ out:
 				    new_affiliation_111,
 				    new_affiliation_111_h);
 	}
-	megasas_return_cmd(instance, cmd);
+
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 
 	return retval;
 }
@@ -2081,7 +2110,11 @@ out:
 				    (MAX_LOGICAL_DRIVES + 1) *
 				    sizeof(struct MR_LD_VF_AFFILIATION),
 				    new_affiliation, new_affiliation_h);
-	megasas_return_cmd(instance, cmd);
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 
 	return retval;
 }
@@ -2541,7 +2574,12 @@ megasas_service_aen(struct megasas_instance *instance, struct megasas_cmd *cmd)
 		cmd->abort_aen = 0;
 
 	instance->aen_cmd = NULL;
-	megasas_return_cmd(instance, cmd);
+
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 
 	if ((instance->unload == 0) &&
 		((instance->issuepend_done == 1))) {
@@ -2917,7 +2955,8 @@ megasas_complete_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd,
 					       "failed, status = 0x%x.\n",
 					       cmd->frame->hdr.cmd_status);
 				else {
-					megasas_return_cmd(instance, cmd);
+					megasas_return_mfi_mpt_pthr(instance,
+						cmd, cmd->mpt_pthr_cmd_blocked);
 					spin_unlock_irqrestore(
 						instance->host->host_lock,
 						flags);
@@ -2925,7 +2964,8 @@ megasas_complete_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd,
 				}
 			} else
 				instance->map_id++;
-			megasas_return_cmd(instance, cmd);
+			megasas_return_mfi_mpt_pthr(instance, cmd,
+				cmd->mpt_pthr_cmd_blocked);
 
 			/*
 			 * Set fast path IO to ZERO.
@@ -3081,7 +3121,7 @@ megasas_internal_reset_defer_cmds(struct megasas_instance *instance)
 	unsigned long flags;
 
 	defer_index     = 0;
-	spin_lock_irqsave(&instance->cmd_pool_lock, flags);
+	spin_lock_irqsave(&instance->mfi_pool_lock, flags);
 	for (i = 0; i < max_cmd; i++) {
 		cmd = instance->cmd_list[i];
 		if (cmd->sync_cmd == 1 || cmd->scmd) {
@@ -3102,7 +3142,7 @@ megasas_internal_reset_defer_cmds(struct megasas_instance *instance)
 				&instance->internal_reset_pending_q);
 		}
 	}
-	spin_unlock_irqrestore(&instance->cmd_pool_lock, flags);
+	spin_unlock_irqrestore(&instance->mfi_pool_lock, flags);
 }
 
 
@@ -3667,7 +3707,9 @@ int megasas_alloc_cmds(struct megasas_instance *instance)
 	int j;
 	u32 max_cmd;
 	struct megasas_cmd *cmd;
+	struct fusion_context *fusion;
 
+	fusion = instance->ctrl_context;
 	max_cmd = instance->max_mfi_cmds;
 
 	/*
@@ -3700,13 +3742,11 @@ int megasas_alloc_cmds(struct megasas_instance *instance)
 		}
 	}
 
-	/*
-	 * Add all the commands to command pool (instance->cmd_pool)
-	 */
 	for (i = 0; i < max_cmd; i++) {
 		cmd = instance->cmd_list[i];
 		memset(cmd, 0, sizeof(struct megasas_cmd));
 		cmd->index = i;
+		atomic_set(&cmd->mfi_mpt_pthr, MFI_LIST_ADDED);
 		cmd->scmd = NULL;
 		cmd->instance = instance;
 
@@ -3777,7 +3817,11 @@ megasas_get_pd_list(struct megasas_instance *instance)
 	dcmd->sgl.sge32[0].phys_addr = cpu_to_le32(ci_h);
 	dcmd->sgl.sge32[0].length = cpu_to_le32(MEGASAS_MAX_PD * sizeof(struct MR_PD_LIST));
 
-	ret = megasas_issue_polled(instance, cmd);
+	if (instance->ctrl_context && !instance->mask_interrupts)
+		ret = megasas_issue_blocked_cmd(instance, cmd,
+			MEGASAS_BLOCKED_CMD_TIMEOUT);
+	else
+		ret = megasas_issue_polled(instance, cmd);
 
 	/*
 	* the following function will get the instance PD LIST.
@@ -3809,7 +3853,12 @@ megasas_get_pd_list(struct megasas_instance *instance)
 	pci_free_consistent(instance->pdev,
 				MEGASAS_MAX_PD * sizeof(struct MR_PD_LIST),
 				ci, ci_h);
-	megasas_return_cmd(instance, cmd);
+
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 
 	return ret;
 }
@@ -3868,9 +3917,14 @@ megasas_get_ld_list(struct megasas_instance *instance)
 	dcmd->sgl.sge32[0].length = cpu_to_le32(sizeof(struct MR_LD_LIST));
 	dcmd->pad_0  = 0;
 
-	ret = megasas_issue_polled(instance, cmd);
-	if (ret == 0)
-		ld_count = le32_to_cpu(ci->ldCount);
+	if (instance->ctrl_context && !instance->mask_interrupts)
+		ret = megasas_issue_blocked_cmd(instance, cmd,
+			MEGASAS_BLOCKED_CMD_TIMEOUT);
+	else
+		ret = megasas_issue_polled(instance, cmd);
+
+
+	ld_count = le32_to_cpu(ci->ldCount);
 
 	/* the following function will get the instance PD LIST */
 
@@ -3891,7 +3945,11 @@ megasas_get_ld_list(struct megasas_instance *instance)
 				ci,
 				ci_h);
 
-	megasas_return_cmd(instance, cmd);
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 	return ret;
 }
 
@@ -3952,13 +4010,11 @@ megasas_ld_list_query(struct megasas_instance *instance, u8 query_type)
 	dcmd->sgl.sge32[0].length = cpu_to_le32(sizeof(struct MR_LD_TARGETID_LIST));
 	dcmd->pad_0  = 0;
 
-	ret = megasas_issue_polled(instance, cmd);
-	if (!ret && dcmd->cmd_status) {
-		/* On failure, call older LD list DCMD */
-		ret = 1;
-	}
-	if (!ret)
-		tgtid_count = le32_to_cpu(ci->count);
+	if (instance->ctrl_context && !instance->mask_interrupts)
+		ret = megasas_issue_blocked_cmd(instance, cmd,
+			MEGASAS_BLOCKED_CMD_TIMEOUT);
+	else
+		ret = megasas_issue_polled(instance, cmd);
 
 	if (tgtid_count == 0) {
 		/* No drives found, try the older LD list DCMD */
@@ -3977,7 +4033,11 @@ megasas_ld_list_query(struct megasas_instance *instance, u8 query_type)
 	pci_free_consistent(instance->pdev, sizeof(struct MR_LD_TARGETID_LIST),
 			    ci, ci_h);
 
-	megasas_return_cmd(instance, cmd);
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 
 	return ret;
 }
@@ -4034,14 +4094,23 @@ megasas_get_ctrl_info(struct megasas_instance *instance,
 	dcmd->sgl.sge32[0].length = cpu_to_le32(sizeof(struct megasas_ctrl_info));
 	dcmd->mbox.b[0] = 1;
 
-	ret = megasas_issue_polled(instance, cmd);
+	if (instance->ctrl_context && !instance->mask_interrupts)
+		ret = megasas_issue_blocked_cmd(instance, cmd,
+			MEGASAS_BLOCKED_CMD_TIMEOUT);
+	else
+		ret = megasas_issue_polled(instance, cmd);
+
 	if (!ret)
 		memcpy(ctrl_info, ci, sizeof(struct megasas_ctrl_info));
 
 	pci_free_consistent(instance->pdev, sizeof(struct megasas_ctrl_info),
 			    ci, ci_h);
 
-	megasas_return_cmd(instance, cmd);
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 	return ret;
 }
 
@@ -4090,11 +4159,17 @@ int megasas_set_crash_dump_params(struct megasas_instance *instance,
 	dcmd->sgl.sge32[0].phys_addr = cpu_to_le32(instance->crash_dump_h);
 	dcmd->sgl.sge32[0].length = cpu_to_le32(CRASH_DMA_BUF_SIZE);
 
-	if (!megasas_issue_polled(instance, cmd))
-		ret = 0;
+	if (instance->ctrl_context && !instance->mask_interrupts)
+		ret = megasas_issue_blocked_cmd(instance, cmd,
+			MEGASAS_BLOCKED_CMD_TIMEOUT);
 	else
-		ret = -1;
-	megasas_return_cmd(instance, cmd);
+		ret = megasas_issue_polled(instance, cmd);
+
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 	return ret;
 }
 
@@ -4676,7 +4751,11 @@ megasas_get_seq_num(struct megasas_instance *instance,
 	pci_free_consistent(instance->pdev, sizeof(struct megasas_evt_log_info),
 			    el_info, el_info_h);
 
-	megasas_return_cmd(instance, cmd);
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 
 	return 0;
 }
@@ -5031,7 +5110,7 @@ static int megasas_probe_one(struct pci_dev *pdev,
 		}
 		fusion = instance->ctrl_context;
 		INIT_LIST_HEAD(&fusion->cmd_pool);
-		spin_lock_init(&fusion->cmd_pool_lock);
+		spin_lock_init(&fusion->mpt_pool_lock);
 		memset(fusion->load_balance_info, 0,
 			sizeof(struct LD_LOAD_BALANCE_INFO) * MAX_LOGICAL_DRIVES_EXT);
 	}
@@ -5102,7 +5181,7 @@ static int megasas_probe_one(struct pci_dev *pdev,
 	init_waitqueue_head(&instance->int_cmd_wait_q);
 	init_waitqueue_head(&instance->abort_cmd_wait_q);
 
-	spin_lock_init(&instance->cmd_pool_lock);
+	spin_lock_init(&instance->mfi_pool_lock);
 	spin_lock_init(&instance->hba_lock);
 	spin_lock_init(&instance->completion_lock);
 
@@ -5122,7 +5201,7 @@ static int megasas_probe_one(struct pci_dev *pdev,
 		instance->flag_ieee = 1;
 		sema_init(&instance->ioctl_sem, MEGASAS_SKINNY_INT_CMDS);
 	} else
-		sema_init(&instance->ioctl_sem, MEGASAS_INT_CMDS);
+		sema_init(&instance->ioctl_sem, (MEGASAS_INT_CMDS - 5));
 
 	megasas_dbg_lvl = 0;
 	instance->flag = 0;
@@ -5334,7 +5413,11 @@ static void megasas_flush_cache(struct megasas_instance *instance)
 		dev_err(&instance->pdev->dev, "Command timedout"
 			" from %s\n", __func__);
 
-	megasas_return_cmd(instance, cmd);
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 
 	return;
 }
@@ -5381,7 +5464,11 @@ static void megasas_shutdown_controller(struct megasas_instance *instance,
 		dev_err(&instance->pdev->dev, "Command timedout"
 			"from %s\n", __func__);
 
-	megasas_return_cmd(instance, cmd);
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 
 	return;
 }
@@ -6042,9 +6129,14 @@ megasas_mgmt_fw_ioctl(struct megasas_instance *instance,
 					  le32_to_cpu(kern_sge32[i].length),
 					  kbuff_arr[i],
 					  le32_to_cpu(kern_sge32[i].phys_addr));
+			kbuff_arr[i] = NULL;
 	}
 
-	megasas_return_cmd(instance, cmd);
+	if (instance->ctrl_context && cmd->mpt_pthr_cmd_blocked)
+		megasas_return_mfi_mpt_pthr(instance, cmd,
+			cmd->mpt_pthr_cmd_blocked);
+	else
+		megasas_return_cmd(instance, cmd);
 	return error;
 }
 
