@@ -3353,6 +3353,16 @@ void handle_link_up(struct work_struct *work)
 	}
 }
 
+/* Several pieces of LNI information were cached for SMA in ppd.
+ * Reset these on link down */
+void reset_neighbor_info(struct hfi1_pportdata *ppd)
+{
+	ppd->neighbor_guid = 0;
+	ppd->neighbor_port_number = 0;
+	ppd->neighbor_type = 0;
+	ppd->neighbor_fm_security = 0;
+}
+
 /*
  * Handle a link down interrupt from the 8051.
  *
@@ -3378,6 +3388,8 @@ void handle_link_down(struct work_struct *work)
 		lcl_reason = OPA_LINKDOWN_REASON_NEIGHBOR_UNKNOWN;
 
 	set_link_down_reason(ppd, lcl_reason, neigh_reason, 0);
+
+	reset_neighbor_info(ppd);
 
 	/* disable the port */
 	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
@@ -3657,7 +3669,9 @@ void handle_verify_cap(struct work_struct *work)
 	 *	CSR DC8051_STS_REMOTE_GUID
 	 *	CSR DC8051_STS_REMOTE_NODE_TYPE
 	 *	CSR DC8051_STS_REMOTE_FM_SECURITY
+	 *	CSR DC8051_STS_REMOTE_PORT_NO
 	 */
+
 	read_vc_remote_phy(dd, &power_management, &continious);
 	read_vc_remote_fabric(
 		dd,
@@ -3786,14 +3800,16 @@ void handle_verify_cap(struct work_struct *work)
 
 	ppd->neighbor_guid =
 		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
+	ppd->neighbor_port_number = read_csr(dd, DC_DC8051_STS_REMOTE_PORT_NO) &
+					DC_DC8051_STS_REMOTE_PORT_NO_VAL_SMASK;
 	ppd->neighbor_type =
 		read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE) &
 		DC_DC8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
 	ppd->neighbor_fm_security =
 		read_csr(dd, DC_DC8051_STS_REMOTE_FM_SECURITY) &
 		DC_DC8051_STS_LOCAL_FM_SECURITY_DISABLED_MASK;
-	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
-		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
+	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor Port Number: %d Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
+		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_port_number, ppd->neighbor_type,
 		ppd->mgmt_allowed, ppd->neighbor_fm_security);
 	if (neigh_is_hfi(ppd))
 		ppd->part_enforce =
