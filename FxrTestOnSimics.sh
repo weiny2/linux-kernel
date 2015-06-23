@@ -8,11 +8,8 @@ export LD_LIBRARY_PATH=${fxr}/simics/SynopsisInstructionSetSimulator/lib
 export SNPSLMD_LICENSE_FILE="26586@irslic003.ir.intel.com:26586@synopsys03p.elic.intel.com"
 
 # Am I invoked by Jenkins?
-if pwd | grep --quiet /opt/jenkins; then
-    ByJenkins=yes
-else
-    ByJenkins=no
-fi
+ByJenkins=no
+[ `id -un` == root ] && pwd | grep --quiet jenkins && ByJenkins=yes
 
 if [ ${ByJenkins} == yes ] ; then
     # make sure no simics process running
