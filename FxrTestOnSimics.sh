@@ -7,15 +7,36 @@ viper1=5022
 export LD_LIBRARY_PATH=${fxr}/simics/SynopsisInstructionSetSimulator/lib
 export SNPSLMD_LICENSE_FILE="26586@irslic003.ir.intel.com:26586@synopsys03p.elic.intel.com"
 
-# start simics if not yet
-if [ -z `pidof simics-common` ]; then
+# Am I invoked by Jenkins?
+if pwd | grep --quiet /opt/jenkins; then
+    ByJenkins=yes
+else
+    ByJenkins=no
+fi
+
+if [ ${ByJenkins} == yes ] ; then
+    # make sure no simics process running
+    killall simics-common
+
+    # start simics
     pushd ${fxr}/simics/workspace
     ./simics -no-win -e '$disk_image=../FxrRhel7.craff' \
 	FXR.simics >../simics.log &
     popd
-    sleep 45
+    sleep 40
+else # manual invocation
+    # start simics if not yet
+    if [ -z `pidof simics-common` ]; then
+	pushd ${fxr}/simics/workspace
+	./simics -no-win -e '$disk_image=../FxrRhel7.craff' \
+	    FXR.simics >../simics.log &
+	popd
+	sleep 40
+    fi
 fi
+
 # show which version/commit of Simics, craff file and others I am using
+pwd; git log -n1 | head -1
 ${fxr}/simics/workspace/bin/simics --version
 ( cd ${fxr}/simics/workspace/; git log -n1 | head -1 )
 ls -l ${fxr}/simics/FxrRhel7.craff
@@ -63,4 +84,10 @@ res=$?
 if [ ! ${res} ]; then
     echo fail on harness.
 fi
+
+if [ ${ByJenkins} == yes ] ; then
+    # stop simics
+    killall simics-common
+fi
+
 exit $res
