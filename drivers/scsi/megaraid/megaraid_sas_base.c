@@ -4149,7 +4149,7 @@ static int megasas_init_fw(struct megasas_instance *instance)
 	memset(instance->pd_list, 0 ,
 		(MEGASAS_MAX_PD * sizeof(struct megasas_pd_list)));
 	if (megasas_get_pd_list(instance) < 0) {
-		dev_err(&instance->pdev->dev, "failed to get PD list\n");
+		printk(KERN_ERR "megasas: failed to get PD list\n");
 		goto fail_init_adapter;
 	}
 
@@ -6154,24 +6154,24 @@ megasas_aen_polling(struct work_struct *work)
 	}
 
 	if (doscan) {
-		printk(KERN_INFO "megaraid_sas: scanning for scsi%d...\n",
-		       instance->host->host_no);
-		megasas_get_pd_list(instance);
-		for (i = 0; i < MEGASAS_MAX_PD_CHANNELS; i++) {
-			for (j = 0; j < MEGASAS_MAX_DEV_PER_CHANNEL; j++) {
-				pd_index = i*MEGASAS_MAX_DEV_PER_CHANNEL + j;
-				sdev1 = scsi_device_lookup(host, i, j, 0);
-				if (instance->pd_list[pd_index].driveState ==
-							MR_PD_STATE_SYSTEM) {
-					if (!sdev1) {
-						scsi_add_device(host, i, j, 0);
-					}
-					if (sdev1)
-						scsi_device_put(sdev1);
-				} else {
-					if (sdev1) {
-						scsi_remove_device(sdev1);
-						scsi_device_put(sdev1);
+		printk(KERN_INFO "scanning ...\n");
+		if (megasas_get_pd_list(instance) == 0) {
+			for (i = 0; i < MEGASAS_MAX_PD_CHANNELS; i++) {
+				for (j = 0; j < MEGASAS_MAX_DEV_PER_CHANNEL; j++) {
+					pd_index = i*MEGASAS_MAX_DEV_PER_CHANNEL + j;
+					sdev1 = scsi_device_lookup(host, i, j, 0);
+					if (instance->pd_list[pd_index].driveState ==
+					    MR_PD_STATE_SYSTEM) {
+						if (!sdev1) {
+							scsi_add_device(host, i, j, 0);
+						}
+						if (sdev1)
+							scsi_device_put(sdev1);
+					} else {
+						if (sdev1) {
+							scsi_remove_device(sdev1);
+							scsi_device_put(sdev1);
+						}
 					}
 				}
 			}
