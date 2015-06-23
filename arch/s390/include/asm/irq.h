@@ -55,7 +55,6 @@ enum interruption_class {
 	IRQIO_VIR,
 	NMI_NMI,
 	CPU_RST,
-	IRQIO_VAI,
 	NR_ARCH_IRQS
 };
 
