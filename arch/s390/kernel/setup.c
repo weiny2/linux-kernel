@@ -372,6 +372,10 @@ static void __init setup_lowcore(void)
 	mem_assign_absolute(S390_lowcore.restart_source, lc->restart_source);
 	mem_assign_absolute(S390_lowcore.restart_psw, lc->restart_psw);
 
+#ifdef CONFIG_SMP
+	lc->spinlock_lockval = arch_spin_lockval(0);
+#endif
+
 	set_prefix((u32)(unsigned long) lc);
 	lowcore_ptr[0] = lc;
 }
@@ -946,6 +950,9 @@ static void __init setup_hwcaps(void)
 	case 0x2827:
 	case 0x2828:
 		strcpy(elf_platform, "zEC12");
+		break;
+	case 0x2964:
+		strcpy(elf_platform, "z13");
 		break;
 	}
 }

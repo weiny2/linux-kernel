@@ -219,18 +219,18 @@ static int save_sigregs_gprs_high(struct pt_regs *regs, __u32 __user *uregs)
 
 	for (i = 0; i < NUM_GPRS; i++)
 		gprs_high[i] = regs->gprs[i] >> 32;
-
-	return __copy_to_user(uregs, &gprs_high, sizeof(gprs_high));
+	if (__copy_to_user(uregs, &gprs_high, sizeof(gprs_high)))
+		return -EFAULT;
+	return 0;
 }
 
 static int restore_sigregs_gprs_high(struct pt_regs *regs, __u32 __user *uregs)
 {
 	__u32 gprs_high[NUM_GPRS];
-	int err, i;
+	int i;
 
-	err = __copy_from_user(&gprs_high, uregs, sizeof(gprs_high));
-	if (err)
-		return err;
+	if (__copy_from_user(&gprs_high, uregs, sizeof(gprs_high)))
+		return -EFAULT;
 	for (i = 0; i < NUM_GPRS; i++)
 		*(__u32 *)&regs->gprs[i] = gprs_high[i];
 	return 0;

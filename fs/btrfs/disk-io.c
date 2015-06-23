@@ -2440,7 +2440,7 @@ int open_ctree(struct super_block *sb,
 		set_bit(BTRFS_FS_STATE_ERROR, &fs_info->fs_state);
 
 	if (btrfs_super_flags(disk_super) & BTRFS_SUPER_FLAG_SEEDING) {
-		if (!allow_unsupported) {
+		if (!btrfs_allow_unsupported) {
 			printk(KERN_WARNING "btrfs: seeding mode is not supported, load module with allow_unsupported=1\n");
 			ret = -EOPNOTSUPP;
 			goto fail_alloc;
@@ -2530,7 +2530,7 @@ int open_ctree(struct super_block *sb,
 		goto fail_alloc;
 	}
 	if (features & BTRFS_FEATURE_INCOMPAT_RAID56) {
-		if (!allow_unsupported) {
+		if (!btrfs_allow_unsupported) {
 			printk(KERN_WARNING "btrfs: RAID56 is supported read-only, load module with allow_unsupported=1\n");
 			sb->s_flags |= MS_RDONLY;
 		}
