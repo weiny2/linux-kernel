@@ -2584,11 +2584,10 @@ _scsih_fw_event_cleanup_queue(struct MPT3SAS_ADAPTER *ioc)
 		return;
 
 	list_for_each_entry_safe(fw_event, next, &ioc->fw_event_list, list) {
-		if (cancel_delayed_work(&fw_event->delayed_work)) {
+		if (cancel_delayed_work_sync(&fw_event->delayed_work)) {
 			_scsih_fw_event_free(ioc, fw_event);
 			continue;
 		}
-		fw_event->cancel_pending_work = 1;
 	}
 }
 
@@ -7099,7 +7098,7 @@ static void
 _mpt3sas_fw_work(struct MPT3SAS_ADAPTER *ioc, struct fw_event_work *fw_event)
 {
 	/* the queue is being flushed so ignore this event */
-	if (ioc->remove_host || fw_event->cancel_pending_work ||
+	if (ioc->remove_host ||
 	    ioc->pci_error_recovery) {
 		_scsih_fw_event_free(ioc, fw_event);
 		return;
@@ -7499,9 +7498,9 @@ static void _scsih_remove(struct pci_dev *pdev)
 	}
 
 	sas_remove_host(shost);
+	scsi_remove_host(shost);
 	mpt3sas_base_detach(ioc);
 	list_del(&ioc->list);
-	scsi_remove_host(shost);
 	scsi_host_put(shost);
 }
 
@@ -7869,20 +7868,11 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		}
 	}
 
-	if ((scsi_add_host(shost, &pdev->dev))) {
-		pr_err(MPT3SAS_FMT "failure at %s:%d/%s()!\n",
-		    ioc->name, __FILE__, __LINE__, __func__);
-		list_del(&ioc->list);
-		goto out_add_shost_fail;
-	}
-
-	ioc->disable_eedp_support = disable_eedp;
-	if (!ioc->disable_eedp_support) {
-		/* register EEDP capabilities with SCSI layer */
-		if (prot_mask > 0)
-			scsi_host_set_prot(shost, prot_mask);
-		else
-			scsi_host_set_prot(shost, SHOST_DIF_TYPE1_PROTECTION
+	/* register EEDP capabilities with SCSI layer */
+	if (prot_mask > 0)
+		scsi_host_set_prot(shost, prot_mask);
+	else {
+		scsi_host_set_prot(shost, SHOST_DIF_TYPE1_PROTECTION
 				   | SHOST_DIF_TYPE2_PROTECTION
 				   | SHOST_DIF_TYPE3_PROTECTION);
 
@@ -7905,15 +7895,21 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		    ioc->name, __FILE__, __LINE__, __func__);
 		goto out_attach_fail;
 	}
+	if ((scsi_add_host(shost, &pdev->dev))) {
+		pr_err(MPT3SAS_FMT "failure at %s:%d/%s()!\n",
+		    ioc->name, __FILE__, __LINE__, __func__);
+		list_del(&ioc->list);
+		goto out_add_shost_fail;
+	}
+
 	scsi_scan_host(shost);
 	return 0;
-
+out_add_shost_fail:
+	mpt3sas_base_detach(ioc);
  out_attach_fail:
 	destroy_workqueue(ioc->firmware_event_thread);
  out_thread_fail:
 	list_del(&ioc->list);
-	scsi_remove_host(shost);
- out_add_shost_fail:
 	scsi_host_put(shost);
 	return -ENODEV;
 }
