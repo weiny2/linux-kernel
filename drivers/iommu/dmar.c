@@ -26,7 +26,7 @@
  * These routines are used by both DMA-remapping and Interrupt-remapping
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt /* has to precede printk.h */
+#define pr_fmt(fmt)     "DMAR: " fmt
 
 #include <linux/pci.h>
 #include <linux/dmar.h>
@@ -750,7 +750,7 @@ int __init dmar_table_init(void)
 		ret = parse_dmar_table();
 		if (ret < 0) {
 			if (ret != -ENODEV)
-				pr_info("parse DMAR table failure.\n");
+				pr_info("Parse DMAR table failure.\n");
 		} else  if (list_empty(&dmar_drhd_units)) {
 			pr_info("No DMAR devices found\n");
 			ret = -ENODEV;
@@ -806,7 +806,7 @@ static int __init check_zero_address(void)
 
 			addr = early_ioremap(drhd->address, VTD_PAGE_SIZE);
 			if (!addr ) {
-				printk("IOMMU: can't validate: %llx\n", drhd->address);
+				pr_err("Can't validate DRHD address: %llx\n", drhd->address);
 				goto failed;
 			}
 			cap = dmar_readq(addr + DMAR_CAP_REG);
@@ -877,14 +877,14 @@ static int map_iommu(struct intel_iommu *iommu, u64 phys_addr)
 	iommu->reg_size = VTD_PAGE_SIZE;
 
 	if (!request_mem_region(iommu->reg_phys, iommu->reg_size, iommu->name)) {
-		pr_err("IOMMU: can't reserve memory\n");
+		pr_err("Can't reserve memory\n");
 		err = -EBUSY;
 		goto out;
 	}
 
 	iommu->reg = ioremap(iommu->reg_phys, iommu->reg_size);
 	if (!iommu->reg) {
-		pr_err("IOMMU: can't map the region\n");
+		pr_err("Can't map the region\n");
 		err = -ENOMEM;
 		goto release;
 	}
@@ -908,13 +908,13 @@ static int map_iommu(struct intel_iommu *iommu, u64 phys_addr)
 		iommu->reg_size = map_size;
 		if (!request_mem_region(iommu->reg_phys, iommu->reg_size,
 					iommu->name)) {
-			pr_err("IOMMU: can't reserve memory\n");
+			pr_err("Can't reserve memory\n");
 			err = -EBUSY;
 			goto out;
 		}
 		iommu->reg = ioremap(iommu->reg_phys, iommu->reg_size);
 		if (!iommu->reg) {
-			pr_err("IOMMU: can't map the region\n");
+			pr_err("Can't map the region\n");
 			err = -ENOMEM;
 			goto release;
 		}
@@ -953,7 +953,7 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 
 	err = map_iommu(iommu, drhd->reg_base_addr);
 	if (err) {
-		pr_err("IOMMU: failed to map %s\n", iommu->name);
+		pr_err("Failed to map %s\n", iommu->name);
 		goto error;
 	}
 
@@ -977,8 +977,8 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 	iommu->node = -1;
 
 	ver = readl(iommu->reg + DMAR_VER_REG);
-	pr_info("IOMMU %d: reg_base_addr %llx ver %d:%d cap %llx ecap %llx\n",
-		iommu->seq_id,
+	pr_info("%s: reg_base_addr %llx ver %d:%d cap %llx ecap %llx\n",
+		iommu->name,
 		(unsigned long long)drhd->reg_base_addr,
 		DMAR_VER_MAJOR(ver), DMAR_VER_MINOR(ver),
 		(unsigned long long)iommu->cap,
@@ -1568,7 +1568,7 @@ int dmar_set_interrupt(struct intel_iommu *iommu)
 
 	irq = create_irq();
 	if (!irq) {
-		pr_err("IOMMU: no free vectors\n");
+		pr_err("No free IRQ vectors\n");
 		return -EINVAL;
 	}
 
@@ -1585,7 +1585,7 @@ int dmar_set_interrupt(struct intel_iommu *iommu)
 
 	ret = request_irq(irq, dmar_fault, IRQF_NO_THREAD, iommu->name, iommu);
 	if (ret)
-		pr_err("IOMMU: can't request irq\n");
+		pr_err("Can't request irq\n");
 	return ret;
 }
 

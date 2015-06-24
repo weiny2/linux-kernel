@@ -1,3 +1,6 @@
+
+#define pr_fmt(fmt)     "DMAR-IR: " fmt
+
 #include <linux/interrupt.h>
 #include <linux/dmar.h>
 #include <linux/spinlock.h>
@@ -94,8 +97,7 @@ static int alloc_irte(struct intel_iommu *iommu, int irq, u16 count)
 	}
 
 	if (mask > ecap_max_handle_mask(iommu->ecap)) {
-		printk(KERN_ERR
-		       "Requested mask %x exceeds the max invalidation handle"
+		pr_err("Requested mask %x exceeds the max invalidation handle"
 		       " mask value %Lx\n", mask,
 		       ecap_max_handle_mask(iommu->ecap));
 		return -1;
@@ -327,7 +329,7 @@ static int set_ioapic_sid(struct irte *irte, int apic)
 	up_read(&dmar_global_lock);
 
 	if (sid == 0) {
-		pr_warning("Failed to set source-id of IOAPIC (%d)\n", apic);
+		pr_warn("Failed to set source-id of IOAPIC (%d)\n", apic);
 		return -1;
 	}
 
@@ -354,7 +356,7 @@ static int set_hpet_sid(struct irte *irte, u8 id)
 	up_read(&dmar_global_lock);
 
 	if (sid == 0) {
-		pr_warning("Failed to set source-id of HPET block (%d)\n", id);
+		pr_warn("Failed to set source-id of HPET block (%d)\n", id);
 		return -1;
 	}
 
@@ -557,7 +559,7 @@ static void __init intel_cleanup_irq_remapping(void)
 	}
 
 	if (x2apic_supported())
-		pr_warn("Failed to enable irq remapping.  You are vulnerable to irq-injection attacks.\n");
+		pr_warn("Failed to enable irq remapping. You are vulnerable to irq-injection attacks.\n");
 }
 
 static int __init intel_prepare_irq_remapping(void)
@@ -570,8 +572,7 @@ static int __init intel_prepare_irq_remapping(void)
 		return -ENODEV;
 
 	if (irq_remap_broken) {
-		printk(KERN_WARNING
-			"This system BIOS has enabled interrupt remapping\n"
+		pr_warn("This system BIOS has enabled interrupt remapping\n"
 			"on a chipset that contains an erratum making that\n"
 			"feature unstable.  To maintain system stability\n"
 			"interrupt remapping is being disabled.  Please\n"
@@ -588,7 +589,7 @@ static int __init intel_prepare_irq_remapping(void)
 		return -ENODEV;
 
 	if (parse_ioapics_under_ir() != 1) {
-		printk(KERN_INFO "Not enabling interrupt remapping\n");
+		pr_info("Not enabling interrupt remapping\n");
 		goto error;
 	}
 
@@ -654,8 +655,8 @@ static int __init intel_enable_irq_remapping(void)
 	 */
 	for_each_iommu(iommu, drhd)
 		if (eim && !ecap_eim_support(iommu->ecap)) {
-			printk(KERN_INFO "DRHD %Lx: EIM not supported by DRHD, "
-			       " ecap %Lx\n", drhd->reg_base_addr, iommu->ecap);
+			pr_info("DRHD %Lx: EIM not supported by DRHD, "
+				" ecap %Lx\n", drhd->reg_base_addr, iommu->ecap);
 			goto error;
 		}
 
@@ -666,7 +667,7 @@ static int __init intel_enable_irq_remapping(void)
 		int ret = dmar_enable_qi(iommu);
 
 		if (ret) {
-			printk(KERN_ERR "DRHD %Lx: failed to enable queued, "
+			pr_err("DRHD %Lx: failed to enable queued, "
 			       " invalidation, ecap %Lx, ret %d\n",
 			       drhd->reg_base_addr, iommu->ecap, ret);
 			goto error;
@@ -1124,14 +1125,12 @@ static int intel_msi_alloc_irq(struct pci_dev *dev, int irq, int nvec)
 	down_read(&dmar_global_lock);
 	iommu = map_dev_to_ir(dev);
 	if (!iommu) {
-		printk(KERN_ERR
-		       "Unable to map PCI %s to iommu\n", pci_name(dev));
+		pr_err("Unable to map PCI %s to iommu\n", pci_name(dev));
 		index = -ENOENT;
 	} else {
 		index = alloc_irte(iommu, irq, nvec);
 		if (index < 0) {
-			printk(KERN_ERR
-			       "Unable to allocate %d IRTE for PCI %s\n",
+			pr_err("Unable to allocate %d IRTE for PCI %s\n",
 			       nvec, pci_name(dev));
 			index = -ENOSPC;
 		}
