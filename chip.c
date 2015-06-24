@@ -3355,7 +3355,7 @@ void handle_link_up(struct work_struct *work)
 
 /* Several pieces of LNI information were cached for SMA in ppd.
  * Reset these on link down */
-void reset_neighbor_info(struct hfi1_pportdata *ppd)
+static void reset_neighbor_info(struct hfi1_pportdata *ppd)
 {
 	ppd->neighbor_guid = 0;
 	ppd->neighbor_port_number = 0;
