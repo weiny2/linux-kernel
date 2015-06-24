@@ -180,6 +180,9 @@ static inline void dmar_writeq(void __iomem *addr, u64 val)
 #define DMA_GSTS_IRES (((u32)1) << 25)
 #define DMA_GSTS_CFIS (((u32)1) << 23)
 
+/* DMA_RTADDR_REG */
+#define DMA_RTADDR_RTT (((u64)1) << 11)
+
 /* CCMD_REG */
 #define DMA_CCMD_ICC (((u64)1) << 63)
 #define DMA_CCMD_GLOBAL_INVL (((u64)1) << 61)
