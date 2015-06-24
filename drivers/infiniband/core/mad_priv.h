@@ -192,6 +192,7 @@ struct ib_mad_qp_info {
 	struct ib_mad_snoop_private **snoop_table;
 	int snoop_table_size;
 	atomic_t snoop_count;
+	int supports_jumbo_mads;
 };
 
 struct ib_mad_port_private {
@@ -208,6 +209,7 @@ struct ib_mad_port_private {
 	struct workqueue_struct *wq;
 	struct work_struct work;
 	struct ib_mad_qp_info qp_info[IB_MAD_QPS_CORE];
+	int    supports_jumbo_mads;
 };
 
 int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr);
