@@ -568,22 +568,57 @@ static int __init intel_irq_remapping_supported(void)
 	return 1;
 }
 
+static void __init intel_cleanup_irq_remapping(void)
+{
+	struct dmar_drhd_unit *drhd;
+	struct intel_iommu *iommu;
+
+	for_each_iommu(iommu, drhd) {
+		if (ecap_ir_support(iommu->ecap)) {
+			iommu_disable_irq_remapping(iommu);
+			intel_teardown_irq_remapping(iommu);
+		}
+	}
+
+	if (x2apic_supported())
+		pr_warn("Failed to enable irq remapping.  You are vulnerable to irq-injection attacks.\n");
+}
+
+static int __init intel_prepare_irq_remapping(void)
+{
+	struct dmar_drhd_unit *drhd;
+	struct intel_iommu *iommu;
+
+	if (dmar_table_init() < 0)
+		return -1;
+
+	if (parse_ioapics_under_ir() != 1) {
+		printk(KERN_INFO "Not enabling interrupt remapping\n");
+		goto error;
+	}
+
+	for_each_iommu(iommu, drhd) {
+		if (!ecap_ir_support(iommu->ecap))
+			continue;
+
+		/* Do the allocations early */
+		if (intel_setup_irq_remapping(iommu))
+			goto error;
+	}
+	return 0;
+error:
+	intel_cleanup_irq_remapping();
+	return -1;
+}
+
 static int __init intel_enable_irq_remapping(void)
 {
 	struct dmar_drhd_unit *drhd;
 	struct intel_iommu *iommu;
-	bool x2apic_present;
 	int setup = 0;
 	int eim = 0;
 
-	x2apic_present = x2apic_supported();
-
-	if (parse_ioapics_under_ir() != 1) {
-		printk(KERN_INFO "Not enable interrupt remapping\n");
-		goto error;
-	}
-
-	if (x2apic_present) {
+	if (x2apic_supported()) {
 		pr_info("Queued invalidation will be enabled to support x2apic and Intr-remapping.\n");
 
 		eim = !dmar_x2apic_optout();
@@ -651,9 +686,6 @@ static int __init intel_enable_irq_remapping(void)
 		if (!ecap_ir_support(iommu->ecap))
 			continue;
 
-		if (intel_setup_irq_remapping(iommu))
-			goto error;
-
 		iommu_set_irq_remapping(iommu, eim);
 		setup = 1;
 	}
@@ -679,8 +711,10 @@ error:
 	 * handle error condition gracefully here!
 	 */
 
-	if (x2apic_present)
+	if (x2apic_supported())
 		pr_warn("Failed to enable irq remapping.  You are vulnerable to irq-injection attacks.\n");
+
+	intel_cleanup_irq_remapping();
 
 	return -1;
 }
@@ -1158,7 +1192,7 @@ static int intel_setup_hpet_msi(unsigned int irq, unsigned int id)
 
 struct irq_remap_ops intel_irq_remap_ops = {
 	.supported		= intel_irq_remapping_supported,
-	.prepare		= dmar_table_init,
+	.prepare		= intel_prepare_irq_remapping,
 	.enable			= intel_enable_irq_remapping,
 	.disable		= disable_irq_remapping,
 	.reenable		= reenable_irq_remapping,
