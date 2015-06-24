@@ -4671,7 +4671,6 @@ static int do_8051_command(
 	 */
 	spin_lock_irqsave(&dd->dc8051_lock, flags);
 
-
 	/* We can't send any commands to the 8051 if it's in reset */
 	if (dd->dc_shutdown) {
 		return_code = -ENODEV;
@@ -4785,24 +4784,41 @@ static int load_8051_config(struct hfi1_devdata *dd, u8 field_id,
 	return ret;
 }
 
-static int read_8051_config(struct hfi1_devdata *dd, u8 field_id,
-			    u8 lane_id, u32 *config_data)
+/*
+ * Read the 8051 firmware "registers".  Use the RAM directly.  Always
+ * set the result, even on error.
+ * Return 0 on success, -errno on failure
+ */
+static int read_8051_config(struct hfi1_devdata *dd, u8 field_id, u8 lane_id,
+			    u32 *result)
 {
-	u64 in_data;
-	u64 out_data;
+	u64 big_data;
+	u32 addr;
 	int ret;
 
-	in_data = (u64)field_id << READ_DATA_FIELD_ID_SHIFT
-			| (u64)lane_id << READ_DATA_LANE_ID_SHIFT;
-	ret = do_8051_command(dd, HCMD_READ_CONFIG_DATA, in_data,
-				&out_data);
-	if (ret != HCMD_SUCCESS) {
-		dd_dev_err(dd,
-			"read 8051 config: field id %d, lane %d, err %d failed\n",
-			(int)field_id, (int)lane_id, ret);
-		out_data = 0;
+	/* address start depends on the lane_id */
+	if (lane_id < 4)
+		addr = (4 * NUM_GENERAL_FIELDS)
+			+ (lane_id * 4 * NUM_LANE_FIELDS);
+	else
+		addr = 0;
+	addr += field_id * 4;
+
+	/* read is in 8-byte chunks, hardware will truncate the address down */
+	ret = read_8051_data(dd, addr, 8, &big_data);
+
+	if (ret == 0) {
+		/* extract the 4 bytes we want */
+		if (addr & 0x4)
+			*result = (u32)(big_data >> 32);
+		else
+			*result = (u32)big_data;
+	} else {
+		*result = 0;
+		dd_dev_err(dd, "%s: direct read failed, lane %d, field %d!\n",
+			__func__, lane_id, field_id);
 	}
-	*config_data = (out_data >> READ_DATA_DATA_SHIFT) & READ_DATA_DATA_MASK;
+
 	return ret;
 }
 
@@ -4960,7 +4976,7 @@ void hfi1_read_link_quality(struct hfi1_devdata *dd, u8 *link_quality)
 	if (dd->pport->host_link_state & HLS_UP) {
 		ret = read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG,
 					&frame);
-		if (ret == HCMD_SUCCESS)
+		if (ret == 0)
 			*link_quality = (frame >> LINK_QUALITY_SHIFT)
 						& LINK_QUALITY_MASK;
 	}
@@ -5018,7 +5034,7 @@ static void check_fabric_firmware_versions(struct hfi1_devdata *dd)
 	/* 4 lanes */
 	for (lane = 0; lane < 4; lane++) {
 		ret = read_8051_config(dd, SPICO_FW_VERSION, lane, &frame);
-		if (ret != HCMD_SUCCESS) {
+		if (ret) {
 			dd_dev_err(
 				dd,
 				"Unable to read lane %d firmware details\n",
@@ -5311,7 +5327,7 @@ static int set_local_link_attributes(struct hfi1_pportdata *ppd)
 	/* set the max rate - need to read-modify-write */
 	ret = read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
 		&rx_polarity_inversion, &max_rate);
-	if (ret != HCMD_SUCCESS)
+	if (ret)
 		goto set_local_link_attributes_fail;
 
 	/* set the max rate to the fastest enabled */
