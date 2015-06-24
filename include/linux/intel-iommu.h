@@ -307,6 +307,9 @@ enum {
 	MAX_SR_DMAR_REGS
 };
 
+#define VTD_FLAG_TRANS_PRE_ENABLED	(1 << 0)
+#define VTD_FLAG_IRQ_REMAP_PRE_ENABLED	(1 << 1)
+
 struct intel_iommu {
 	void __iomem	*reg; /* Pointer to hardware regs, virtual addr */
 	u64 		reg_phys; /* physical address of hw register set */
@@ -337,6 +340,7 @@ struct intel_iommu {
 	struct ir_table *ir_table;	/* Interrupt remapping info */
 #endif
 	int		node;
+	u32		flags;      /* Software defined flags */
 };
 
 static inline void __iommu_flush_cache(
