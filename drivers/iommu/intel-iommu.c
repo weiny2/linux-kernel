@@ -4246,8 +4246,6 @@ static struct notifier_block intel_iommu_memory_nb = {
 int __init intel_iommu_init(void)
 {
 	int ret = -ENODEV;
-	struct dmar_drhd_unit *drhd;
-	struct intel_iommu *iommu;
 
 	/* VT-d is required for a TXT/tboot launch, so enforce that */
 	force_on = tboot_force_iommu();
@@ -4264,13 +4262,6 @@ int __init intel_iommu_init(void)
 			panic("tboot: Failed to initialize DMAR table\n");
 		goto out_free_dmar;
 	}
-
-	/*
-	 * Disable translation if already enabled prior to OS handover.
-	 */
-	for_each_active_iommu(iommu, drhd)
-		if (iommu->gcmd & DMA_GCMD_TE)
-			iommu_disable_translation(iommu);
 
 	if (dmar_dev_scope_init() < 0) {
 		if (force_on)
