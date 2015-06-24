@@ -37,6 +37,7 @@ struct hpet_scope {
 #define IR_X2APIC_MODE(mode) (mode ? (1 << 11) : 0)
 #define IRTE_DEST(dest) ((x2apic_mode) ? dest : dest << 8)
 
+static int __read_mostly eim_mode;
 static struct ioapic_scope ir_ioapic[MAX_IO_APICS];
 static struct hpet_scope ir_hpet[MAX_HPET_TBS];
 
@@ -566,6 +567,7 @@ static int __init intel_prepare_irq_remapping(void)
 {
 	struct dmar_drhd_unit *drhd;
 	struct intel_iommu *iommu;
+	int eim = 0;
 
 	/* First check whether IRQ remapping should be enabled */
 	if (disable_irq_remap)
@@ -598,6 +600,26 @@ static int __init intel_prepare_irq_remapping(void)
 		if (!ecap_ir_support(iommu->ecap))
 			goto error;
 
+	/* Detect remapping mode: lapic or x2apic */
+	if (x2apic_supported()) {
+		eim = !dmar_x2apic_optout();
+		if (!eim) {
+			pr_info("x2apic is disabled because BIOS sets x2apic opt out bit.");
+			pr_info("Use 'intremap=no_x2apic_optout' to override the BIOS setting.\n");
+		}
+	}
+
+	for_each_iommu(iommu, drhd) {
+		if (eim && !ecap_eim_support(iommu->ecap)) {
+			pr_info("%s does not support EIM\n", iommu->name);
+			eim = 0;
+		}
+	}
+
+	eim_mode = eim;
+	if (eim)
+		pr_info("Queued invalidation will be enabled to support x2apic and Intr-remapping.\n");
+
 	/* Do the allocations early */
 	for_each_iommu(iommu, drhd)
 		if (intel_setup_irq_remapping(iommu))
@@ -615,18 +637,6 @@ static int __init intel_enable_irq_remapping(void)
 	struct dmar_drhd_unit *drhd;
 	struct intel_iommu *iommu;
 	int setup = 0;
-	int eim = 0;
-
-	if (x2apic_supported()) {
-		pr_info("Queued invalidation will be enabled to support x2apic and Intr-remapping.\n");
-
-		eim = !dmar_x2apic_optout();
-		if (!eim)
-			printk(KERN_WARNING
-				"Your BIOS is broken and requested that x2apic be disabled.\n"
-				"This will slightly decrease performance.\n"
-				"Use 'intremap=no_x2apic_optout' to override BIOS request.\n");
-	}
 
 	for_each_iommu(iommu, drhd) {
 		/*
@@ -651,16 +661,6 @@ static int __init intel_enable_irq_remapping(void)
 	}
 
 	/*
-	 * check for the Interrupt-remapping support
-	 */
-	for_each_iommu(iommu, drhd)
-		if (eim && !ecap_eim_support(iommu->ecap)) {
-			pr_info("DRHD %Lx: EIM not supported by DRHD, "
-				" ecap %Lx\n", drhd->reg_base_addr, iommu->ecap);
-			goto error;
-		}
-
-	/*
 	 * Enable queued invalidation for all the DRHD's.
 	 */
 	for_each_iommu(iommu, drhd) {
@@ -678,7 +678,7 @@ static int __init intel_enable_irq_remapping(void)
 	 * Setup Interrupt-remapping for all the DRHD's now.
 	 */
 	for_each_iommu(iommu, drhd) {
-		iommu_set_irq_remapping(iommu, eim);
+		iommu_set_irq_remapping(iommu, eim_mode);
 		setup = 1;
 	}
 
@@ -694,9 +694,9 @@ static int __init intel_enable_irq_remapping(void)
 	 */
 	x86_io_apic_ops.print_entries = intel_ir_io_apic_print_entries;
 
-	pr_info("Enabled IRQ remapping in %s mode\n", eim ? "x2apic" : "xapic");
+	pr_info("Enabled IRQ remapping in %s mode\n", eim_mode ? "x2apic" : "xapic");
 
-	return eim ? IRQ_REMAP_X2APIC_MODE : IRQ_REMAP_XAPIC_MODE;
+	return eim_mode ? IRQ_REMAP_X2APIC_MODE : IRQ_REMAP_XAPIC_MODE;
 
 error:
 	/*
