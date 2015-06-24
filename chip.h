@@ -359,6 +359,11 @@
 #define ICODE_FUNCTIONAL_SIMULATOR	0x03
 
 /*
+ * 8051 data memory size.
+ */
+#define DC8051_DATA_MEM_SIZE 0x1000
+
+/*
  * 8051 firmware registers
  */
 #define NUM_GENERAL_FIELDS 0x17
@@ -1018,4 +1023,3 @@ struct is_table {
 };
 
 #endif /* _CHIP_H */
-
