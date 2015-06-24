@@ -3154,7 +3154,9 @@ domains_done:
 		if (ret)
 			goto free_iommu;
 
-		ret = iommu_enable_translation(iommu);
+		ret = 0;
+		if (!translation_pre_enabled(iommu))
+			ret = iommu_enable_translation(iommu);
 		if (ret)
 			goto free_iommu;
 
