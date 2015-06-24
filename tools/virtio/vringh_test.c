@@ -22,7 +22,7 @@ static u64 user_addr_offset;
 #define RINGSIZE 256
 #define ALIGN 4096
 
-static bool never_notify_host(struct virtqueue *vq)
+static void never_notify_host(struct virtqueue *vq)
 {
 	abort();
 }
@@ -65,22 +65,17 @@ struct guest_virtio_device {
 	unsigned long notifies;
 };
 
-static bool parallel_notify_host(struct virtqueue *vq)
+static void parallel_notify_host(struct virtqueue *vq)
 {
-	int rc;
 	struct guest_virtio_device *gvdev;
 
 	gvdev = container_of(vq->vdev, struct guest_virtio_device, vdev);
-	rc = write(gvdev->to_host_fd, "", 1);
-	if (rc < 0)
-		return false;
+	write(gvdev->to_host_fd, "", 1);
 	gvdev->notifies++;
-	return true;
 }
 
-static bool no_notify_host(struct virtqueue *vq)
+static void no_notify_host(struct virtqueue *vq)
 {
-	return true;
 }
 
 #define NUM_XFERS (10000000)

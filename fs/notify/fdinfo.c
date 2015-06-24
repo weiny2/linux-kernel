@@ -90,7 +90,7 @@ static int inotify_fdinfo(struct seq_file *m, struct fsnotify_mark *mark)
 		ret = seq_printf(m, "inotify wd:%x ino:%lx sdev:%x "
 				 "mask:%x ignored_mask:%x ",
 				 inode_mark->wd, inode->i_ino,
-				 inode->i_sb->s_dev,
+				 inode_get_dev(inode),
 				 mark->mask, mark->ignored_mask);
 		ret |= show_mark_fhandle(m, inode);
 		ret |= seq_putc(m, '\n');
@@ -127,7 +127,7 @@ static int fanotify_fdinfo(struct seq_file *m, struct fsnotify_mark *mark)
 			goto out;
 		ret = seq_printf(m, "fanotify ino:%lx sdev:%x "
 				 "mflags:%x mask:%x ignored_mask:%x ",
-				 inode->i_ino, inode->i_sb->s_dev,
+				 inode->i_ino, inode_get_dev(inode),
 				 mflags, mark->mask, mark->ignored_mask);
 		ret |= show_mark_fhandle(m, inode);
 		ret |= seq_putc(m, '\n');

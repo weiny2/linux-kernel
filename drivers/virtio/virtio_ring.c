@@ -81,7 +81,7 @@ struct vring_virtqueue
 	u16 last_used_idx;
 
 	/* How to notify other side. FIXME: commonalize hcalls! */
-	bool (*notify)(struct virtqueue *vq);
+	void (*notify)(struct virtqueue *vq);
 
 #ifdef DEBUG
 	/* They're supposed to lock for us. */
@@ -173,8 +173,6 @@ static inline int vring_add_indirect(struct vring_virtqueue *vq,
 	head = vq->free_head;
 	vq->vring.desc[head].flags = VRING_DESC_F_INDIRECT;
 	vq->vring.desc[head].addr = virt_to_phys(desc);
-	/* kmemleak gives a false positive, as it's hidden by virt_to_phys */
-	kmemleak_ignore(desc);
 	vq->vring.desc[head].len = i * sizeof(struct vring_desc);
 
 	/* Update free pointer */
@@ -202,11 +200,6 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 	START_USE(vq);
 
 	BUG_ON(data == NULL);
-
-	if (unlikely(vq->broken)) {
-		END_USE(vq);
-		return -EIO;
-	}
 
 #ifdef DEBUG
 	{
@@ -314,7 +307,7 @@ add_head:
  * Caller must ensure we don't call this with other virtqueue operations
  * at the same time (except where noted).
  *
- * Returns zero or a negative error (ie. ENOSPC, ENOMEM, EIO).
+ * Returns zero or a negative error (ie. ENOSPC, ENOMEM).
  */
 int virtqueue_add_sgs(struct virtqueue *_vq,
 		      struct scatterlist *sgs[],
@@ -352,7 +345,7 @@ EXPORT_SYMBOL_GPL(virtqueue_add_sgs);
  * Caller must ensure we don't call this with other virtqueue operations
  * at the same time (except where noted).
  *
- * Returns zero or a negative error (ie. ENOSPC, ENOMEM, EIO).
+ * Returns zero or a negative error (ie. ENOSPC, ENOMEM).
  */
 int virtqueue_add_outbuf(struct virtqueue *vq,
 			 struct scatterlist sg[], unsigned int num,
@@ -374,7 +367,7 @@ EXPORT_SYMBOL_GPL(virtqueue_add_outbuf);
  * Caller must ensure we don't call this with other virtqueue operations
  * at the same time (except where noted).
  *
- * Returns zero or a negative error (ie. ENOSPC, ENOMEM, EIO).
+ * Returns zero or a negative error (ie. ENOSPC, ENOMEM).
  */
 int virtqueue_add_inbuf(struct virtqueue *vq,
 			struct scatterlist sg[], unsigned int num,
@@ -435,22 +428,13 @@ EXPORT_SYMBOL_GPL(virtqueue_kick_prepare);
  * @vq: the struct virtqueue
  *
  * This does not need to be serialized.
- *
- * Returns false if host notify failed or queue is broken, otherwise true.
  */
-bool virtqueue_notify(struct virtqueue *_vq)
+void virtqueue_notify(struct virtqueue *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
-	if (unlikely(vq->broken))
-		return false;
-
 	/* Prod other side to tell it about changes. */
-	if (!vq->notify(_vq)) {
-		vq->broken = true;
-		return false;
-	}
-	return true;
+	vq->notify(_vq);
 }
 EXPORT_SYMBOL_GPL(virtqueue_notify);
 
@@ -463,14 +447,11 @@ EXPORT_SYMBOL_GPL(virtqueue_notify);
  *
  * Caller must ensure we don't call this with other virtqueue
  * operations at the same time (except where noted).
- *
- * Returns false if kick failed, otherwise true.
  */
-bool virtqueue_kick(struct virtqueue *vq)
+void virtqueue_kick(struct virtqueue *vq)
 {
 	if (virtqueue_kick_prepare(vq))
-		return virtqueue_notify(vq);
-	return true;
+		virtqueue_notify(vq);
 }
 EXPORT_SYMBOL_GPL(virtqueue_kick);
 
@@ -761,7 +742,7 @@ struct virtqueue *vring_new_virtqueue(unsigned int index,
 				      struct virtio_device *vdev,
 				      bool weak_barriers,
 				      void *pages,
-				      bool (*notify)(struct virtqueue *),
+				      void (*notify)(struct virtqueue *),
 				      void (*callback)(struct virtqueue *),
 				      const char *name)
 {
@@ -855,28 +836,5 @@ unsigned int virtqueue_get_vring_size(struct virtqueue *_vq)
 	return vq->vring.num;
 }
 EXPORT_SYMBOL_GPL(virtqueue_get_vring_size);
-
-bool virtqueue_is_broken(struct virtqueue *_vq)
-{
-	struct vring_virtqueue *vq = to_vvq(_vq);
-
-	return vq->broken;
-}
-EXPORT_SYMBOL_GPL(virtqueue_is_broken);
-
-/*
- * This should prevent the device from being used, allowing drivers to
- * recover.  You may need to grab appropriate locks to flush.
- */
-void virtio_break_device(struct virtio_device *dev)
-{
-	struct virtqueue *_vq;
-
-	list_for_each_entry(_vq, &dev->vqs, list) {
-		struct vring_virtqueue *vq = to_vvq(_vq);
-		vq->broken = true;
-	}
-}
-EXPORT_SYMBOL_GPL(virtio_break_device);
 
 MODULE_LICENSE("GPL");

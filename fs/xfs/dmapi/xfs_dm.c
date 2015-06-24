@@ -723,7 +723,6 @@ xfs_dm_f_set_eventlist(
 
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
 	xfs_trans_commit(tp, 0);
-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
 
 	return(0);
 }
@@ -865,6 +864,7 @@ xfs_dm_rdwr(
 	struct file	*file;
 	struct dentry	*dentry;
 	struct path	path;
+	struct path	dpath;
 	struct xfs_mount *mp = ip->i_mount;
 
 	if ((off < 0) || (off > i_size_read(inode)) || !S_ISREG(inode->i_mode))
@@ -906,7 +906,11 @@ xfs_dm_rdwr(
 	if (error)
 		return -error;
 
-	file = dentry_open(&path, oflags, cred);
+	/* create a path structure for the inode passed into function */
+	dpath.mnt = path.mnt;
+	dpath.dentry = dentry;
+	file = dentry_open(&dpath, oflags, cred);
+	/* path_put() will only dput the directory dentry, so we do it here */
 	dput(dentry);
 	if (IS_ERR(file)) {
 		path_put(&path);
@@ -914,11 +918,12 @@ xfs_dm_rdwr(
 	}
 	file->f_mode |= FMODE_NOCMTIME;
 
-	if (fmode & FMODE_READ) {
+	if (fmode & FMODE_READ && file->f_op->read != NULL) {
 		xfer = file->f_op->read(file, bufp, len, (loff_t*)&off);
-	} else {
+	} else if (fmode & FMODE_WRITE && file->f_op->write != NULL) {
 		xfer = file->f_op->write(file, bufp, len, (loff_t*)&off);
-	}
+	} else
+		xfer = -EINVAL; /* error code when f_op functions are NULL */
 
 	if (xfer >= 0) {
 		*rvp = xfer;
@@ -2519,8 +2524,15 @@ xfs_dm_set_fileattr(
 		iattr.ia_size = stat.fa_size;
 	}
 
-	if (iattr.ia_valid & ATTR_SIZE)
-		return -xfs_setattr_size(XFS_I(inode), &iattr, XFS_ATTR_DMI);
+	if (iattr.ia_valid & ATTR_SIZE) {
+		int error = -xfs_setattr_size(XFS_I(inode), &iattr,
+					      XFS_ATTR_DMI);
+		if (error ||
+		    ((iattr.ia_valid & (ATTR_ATIME|ATTR_UID|ATTR_GID)) == 0))
+			return error;
+		/* clear flags handled by xfs_setattr_size */
+		iattr.ia_valid &= ~(ATTR_SIZE|ATTR_CTIME|ATTR_MTIME);
+	}
 	return -xfs_setattr_nonsize(XFS_I(inode), &iattr, XFS_ATTR_DMI);
 }
 
@@ -2622,7 +2634,6 @@ xfs_dm_set_region(
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
 //	igrab(inode);
 	xfs_trans_commit(tp, 0);
-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
 
 	/* Return the proper value for *exactflagp depending upon whether or not
 	   we "changed" the user's managed region.  In other words, if the user

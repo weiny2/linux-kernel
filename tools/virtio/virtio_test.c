@@ -41,14 +41,13 @@ struct vdev_info {
 	struct vhost_memory *mem;
 };
 
-bool vq_notify(struct virtqueue *vq)
+void vq_notify(struct virtqueue *vq)
 {
 	struct vq_info *info = vq->priv;
 	unsigned long long v = 1;
 	int r;
 	r = write(info->kick, &v, sizeof v);
 	assert(r == sizeof v);
-	return true;
 }
 
 void vq_callback(struct virtqueue *vq)

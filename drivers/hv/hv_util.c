@@ -340,12 +340,8 @@ static int util_probe(struct hv_device *dev,
 
 	set_channel_read_state(dev->channel, false);
 
-	ret = vmbus_open(dev->channel, 4 * PAGE_SIZE, 4 * PAGE_SIZE, NULL, 0,
-			srv->util_cb, dev->channel);
-	if (ret)
-		goto error;
-
 	hv_set_drvdata(dev, srv);
+
 	/*
 	 * Based on the host; initialize the framework and
 	 * service version numbers we will negotiate.
@@ -365,6 +361,11 @@ static int util_probe(struct hv_device *dev,
 		hb_srv_version = HB_VERSION;
 	}
 
+	ret = vmbus_open(dev->channel, 4 * PAGE_SIZE, 4 * PAGE_SIZE, NULL, 0,
+			srv->util_cb, dev->channel);
+	if (ret)
+		goto error;
+
 	return 0;
 
 error:
@@ -379,9 +380,9 @@ static int util_remove(struct hv_device *dev)
 {
 	struct hv_util_service *srv = hv_get_drvdata(dev);
 
-	vmbus_close(dev->channel);
 	if (srv->util_deinit)
 		srv->util_deinit();
+	vmbus_close(dev->channel);
 	kfree(srv->recv_buffer);
 
 	return 0;
@@ -432,15 +433,16 @@ static int __init init_hyperv_utils(void)
 	return vmbus_driver_register(&util_drv);
 }
 
+#if 0
 static void exit_hyperv_utils(void)
 {
 	pr_info("De-Registered HyperV Utility Driver\n");
 
 	vmbus_driver_unregister(&util_drv);
 }
+#endif
 
 module_init(init_hyperv_utils);
-module_exit(exit_hyperv_utils);
 
 MODULE_DESCRIPTION("Hyper-V Utilities");
 MODULE_LICENSE("GPL");
