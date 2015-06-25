@@ -52,6 +52,94 @@
 
 #include "verbs.h"
 
+/*
+ * Define an ib_cq_notify value that is not valid so we know when CQ
+ * notifications are armed.
+ */
+#define IB_CQ_NONE      (IB_CQ_NEXT_COMP + 1)
+
+/**
+ * opa_ib_cq_enter - add a new entry to the completion queue
+ * @cq: completion queue
+ * @entry: work completion entry to add
+ * @sig: true if @entry is a solicited entry
+ *
+ * This may be called with qp->s_lock held.
+ */
+void opa_ib_cq_enter(struct opa_ib_cq *cq, struct ib_wc *entry, int solicited)
+{
+	struct opa_ib_cq_wc *wc;
+	unsigned long flags;
+	u32 head;
+	u32 next;
+
+	spin_lock_irqsave(&cq->lock, flags);
+
+	/*
+	 * Note that the head pointer might be writable by user processes.
+	 * Take care to verify it is a sane value.
+	 */
+	wc = cq->queue;
+	head = wc->head;
+	if (head >= (unsigned) cq->ibcq.cqe) {
+		head = cq->ibcq.cqe;
+		next = 0;
+	} else
+		next = head + 1;
+	if (unlikely(next == wc->tail)) {
+		spin_unlock_irqrestore(&cq->lock, flags);
+		if (cq->ibcq.event_handler) {
+			struct ib_event ev;
+
+			ev.device = cq->ibcq.device;
+			ev.element.cq = &cq->ibcq;
+			ev.event = IB_EVENT_CQ_ERR;
+			cq->ibcq.event_handler(&ev, cq->ibcq.cq_context);
+		}
+		return;
+	}
+	if (cq->ip) {
+		wc->uqueue[head].wr_id = entry->wr_id;
+		wc->uqueue[head].status = entry->status;
+		wc->uqueue[head].opcode = entry->opcode;
+		wc->uqueue[head].vendor_err = entry->vendor_err;
+		wc->uqueue[head].byte_len = entry->byte_len;
+		wc->uqueue[head].ex.imm_data =
+			(__u32 __force)entry->ex.imm_data;
+		wc->uqueue[head].qp_num = entry->qp->qp_num;
+		wc->uqueue[head].src_qp = entry->src_qp;
+		wc->uqueue[head].wc_flags = entry->wc_flags;
+		wc->uqueue[head].pkey_index = entry->pkey_index;
+		wc->uqueue[head].slid = entry->slid;
+		wc->uqueue[head].sl = entry->sl;
+		wc->uqueue[head].dlid_path_bits = entry->dlid_path_bits;
+		wc->uqueue[head].port_num = entry->port_num;
+		/* Make sure entry is written before the head index. */
+		smp_wmb();
+	} else
+		wc->kqueue[head] = *entry;
+	wc->head = next;
+
+	if (cq->notify == IB_CQ_NEXT_COMP ||
+	    (cq->notify == IB_CQ_SOLICITED &&
+	     (solicited || entry->status != IB_WC_SUCCESS))) {
+		struct kthread_worker *worker;
+		/*
+		 * This will cause send_complete() to be called in
+		 * another thread.
+		 */
+		smp_read_barrier_depends(); /* see opa_ib_cq_exit */
+		worker = cq->ibd->worker;
+		if (likely(worker)) {
+			cq->notify = IB_CQ_NONE;
+			cq->triggered++;
+			queue_kthread_work(worker, &cq->comptask);
+		}
+	}
+
+	spin_unlock_irqrestore(&cq->lock, flags);
+}
+
 /**
  * opa_ib_poll_cq - poll for work completion entries
  * @ibcq: the completion queue to poll
@@ -66,7 +154,69 @@
  */
 int opa_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
 {
-	return -ENOSYS;
+	struct opa_ib_cq *cq = to_opa_ibcq(ibcq);
+	struct opa_ib_cq_wc *wc;
+	unsigned long flags;
+	int npolled;
+	u32 tail;
+
+	/* The kernel can only poll a kernel completion queue */
+	if (cq->ip) {
+		npolled = -EINVAL;
+		goto bail;
+	}
+
+	spin_lock_irqsave(&cq->lock, flags);
+
+	wc = cq->queue;
+	tail = wc->tail;
+	if (tail > (u32) cq->ibcq.cqe)
+		tail = (u32) cq->ibcq.cqe;
+	for (npolled = 0; npolled < num_entries; ++npolled, ++entry) {
+		if (tail == wc->head)
+			break;
+		/* The kernel doesn't need a RMB since it has the lock. */
+		*entry = wc->kqueue[tail];
+		if (tail >= cq->ibcq.cqe)
+			tail = 0;
+		else
+			tail++;
+	}
+	wc->tail = tail;
+
+	spin_unlock_irqrestore(&cq->lock, flags);
+
+bail:
+	return npolled;
+}
+
+static void send_complete(struct kthread_work *work)
+{
+	struct opa_ib_cq *cq = container_of(work, struct opa_ib_cq, comptask);
+
+	/*
+	 * The completion handler will most likely rearm the notification
+	 * and poll for all pending entries.  If a new completion entry
+	 * is added while we are in this routine, queue_work()
+	 * won't call us again until we return so we check triggered to
+	 * see if we need to call the handler again.
+	 */
+	for (;;) {
+		u8 triggered = cq->triggered;
+
+		/*
+		 * IPoIB connected mode assumes the callback is from a
+		 * soft IRQ. We simulate this by blocking "bottom halves".
+		 * See the implementation for ipoib_cm_handle_tx_wc(),
+		 * netif_tx_lock_bh() and netif_tx_lock().
+		 */
+		local_bh_disable();
+		cq->ibcq.comp_handler(&cq->ibcq, cq->ibcq.cq_context);
+		local_bh_enable();
+
+		if (cq->triggered == triggered)
+			return;
+	}
 }
 
 /**
@@ -85,19 +235,106 @@ struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev, int entries,
 			       int comp_vector, struct ib_ucontext *context,
 			       struct ib_udata *udata)
 {
+	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
 	struct opa_ib_cq *cq;
+	struct opa_ib_cq_wc *wc;
 	struct ib_cq *ret;
+	u32 sz;
 
-	if (entries < 1 || entries > opa_ib_max_cqes)
-		return ERR_PTR(-EINVAL);
+	if (entries < 1 || entries > opa_ib_max_cqes) {
+		ret = ERR_PTR(-EINVAL);
+		goto done;
+	}
 
 	/* Allocate the completion queue structure. */
-	cq = kzalloc(sizeof(*cq), GFP_KERNEL);
-	if (!cq)
-		return ERR_PTR(-ENOMEM);
+	cq = kmalloc(sizeof(*cq), GFP_KERNEL);
+	if (!cq) {
+		ret = ERR_PTR(-ENOMEM);
+		goto done;
+	}
 
-	/* ib_create_cq() will initialize cq->ibcq except for cq->ibcq.cqe */
+	/*
+	 * Allocate the completion queue entries and head/tail pointers.
+	 * This is allocated separately so that it can be resized and
+	 * also mapped into user space.
+	 * We need to use vmalloc() in order to support mmap and large
+	 * numbers of entries.
+	 */
+	sz = sizeof(*wc);
+	if (udata && udata->outlen >= sizeof(__u64))
+		sz += sizeof(struct ib_uverbs_wc) * (entries + 1);
+	else
+		sz += sizeof(struct ib_wc) * (entries + 1);
+	wc = vmalloc_user(sz);
+	if (!wc) {
+		ret = ERR_PTR(-ENOMEM);
+		goto bail_cq;
+	}
+
+	/*
+	 * Return the address of the WC as the offset to mmap.
+	 * See opa_ib_mmap() for details.
+	 */
+	if (udata && udata->outlen >= sizeof(__u64)) {
+		int err;
+
+		cq->ip = opa_ib_create_mmap_info(ibd, sz, context, wc);
+		if (!cq->ip) {
+			ret = ERR_PTR(-ENOMEM);
+			goto bail_wc;
+		}
+
+		err = ib_copy_to_udata(udata, &cq->ip->offset,
+				       sizeof(cq->ip->offset));
+		if (err) {
+			ret = ERR_PTR(err);
+			goto bail_ip;
+		}
+	} else
+		cq->ip = NULL;
+
+	spin_lock(&ibd->n_cqs_lock);
+	if (ibd->n_cqs_allocated == opa_ib_max_cqs) {
+		spin_unlock(&ibd->n_cqs_lock);
+		ret = ERR_PTR(-ENOMEM);
+		goto bail_ip;
+	}
+
+	ibd->n_cqs_allocated++;
+	spin_unlock(&ibd->n_cqs_lock);
+
+	if (cq->ip) {
+		spin_lock_irq(&ibd->pending_lock);
+		list_add(&cq->ip->pending_mmaps, &ibd->pending_mmaps);
+		spin_unlock_irq(&ibd->pending_lock);
+	}
+
+	/*
+	 * ib_create_cq() will initialize cq->ibcq except for cq->ibcq.cqe.
+	 * The number of entries should be >= the number requested or return
+	 * an error.
+	 */
+	cq->ibd = ibd;
+	cq->ibcq.cqe = entries;
+	cq->notify = IB_CQ_NONE;
+	cq->triggered = 0;
+	spin_lock_init(&cq->lock);
+	init_kthread_work(&cq->comptask, send_complete);
+	wc->head = 0;
+	wc->tail = 0;
+	cq->queue = wc;
+
 	ret = &cq->ibcq;
+
+	goto done;
+
+bail_ip:
+	kfree(cq->ip);
+bail_wc:
+	vfree(wc);
+bail_cq:
+	kfree(cq);
+done:
 	return ret;
 }
 
@@ -111,9 +348,19 @@ struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev, int entries,
  */
 int opa_ib_destroy_cq(struct ib_cq *ibcq)
 {
+	struct opa_ib_data *ibd = to_opa_ibdata(ibcq->device);
 	struct opa_ib_cq *cq = to_opa_ibcq(ibcq);
 
+	flush_kthread_work(&cq->comptask);
+	spin_lock(&ibd->n_cqs_lock);
+	ibd->n_cqs_allocated--;
+	spin_unlock(&ibd->n_cqs_lock);
+	if (cq->ip)
+		kref_put(&cq->ip->ref, opa_ib_release_mmap_info);
+	else
+		vfree(cq->queue);
 	kfree(cq);
+
 	return 0;
 }
 
@@ -129,13 +376,25 @@ int opa_ib_destroy_cq(struct ib_cq *ibcq)
  */
 int opa_ib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags)
 {
+	struct opa_ib_cq *cq = to_opa_ibcq(ibcq);
+	unsigned long flags;
+	int ret = 0;
+
+	spin_lock_irqsave(&cq->lock, flags);
 	/*
-	 * FXRTODO: return success to enable ib_* kernel modules and libraries
-	 * depending on this to continue thinking that cq is enabled.
-	 * This way Dr Route SMPs loopback works.
-	 * This function is to be enabled as part of VPD dev task
+	 * Don't change IB_CQ_NEXT_COMP to IB_CQ_SOLICITED but allow
+	 * any other transitions (see C11-31 and C11-32 in ch. 11.4.2.2).
 	 */
-	return 0;
+	if (cq->notify != IB_CQ_NEXT_COMP)
+		cq->notify = notify_flags & IB_CQ_SOLICITED_MASK;
+
+	if ((notify_flags & IB_CQ_REPORT_MISSED_EVENTS) &&
+	    cq->queue->head != cq->queue->tail)
+		ret = 1;
+
+	spin_unlock_irqrestore(&cq->lock, flags);
+
+	return ret;
 }
 
 /**
@@ -146,5 +405,155 @@ int opa_ib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flag
  */
 int opa_ib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 {
-	return -ENOSYS;
+	struct opa_ib_cq *cq = to_opa_ibcq(ibcq);
+	struct opa_ib_cq_wc *old_wc;
+	struct opa_ib_cq_wc *wc;
+	u32 head, tail, n;
+	int ret;
+	u32 sz;
+
+	if (cqe < 1 || cqe > opa_ib_max_cqes) {
+		ret = -EINVAL;
+		goto bail;
+	}
+
+	/*
+	 * Need to use vmalloc() if we want to support large #s of entries.
+	 */
+	sz = sizeof(*wc);
+	if (udata && udata->outlen >= sizeof(__u64))
+		sz += sizeof(struct ib_uverbs_wc) * (cqe + 1);
+	else
+		sz += sizeof(struct ib_wc) * (cqe + 1);
+	wc = vmalloc_user(sz);
+	if (!wc) {
+		ret = -ENOMEM;
+		goto bail;
+	}
+
+	/* Check that we can write the offset to mmap. */
+	if (udata && udata->outlen >= sizeof(__u64)) {
+		__u64 offset = 0;
+
+		ret = ib_copy_to_udata(udata, &offset, sizeof(offset));
+		if (ret)
+			goto bail_free;
+	}
+
+	spin_lock_irq(&cq->lock);
+	/*
+	 * Make sure head and tail are sane since they
+	 * might be user writable.
+	 */
+	old_wc = cq->queue;
+	head = old_wc->head;
+	if (head > (u32) cq->ibcq.cqe)
+		head = (u32) cq->ibcq.cqe;
+	tail = old_wc->tail;
+	if (tail > (u32) cq->ibcq.cqe)
+		tail = (u32) cq->ibcq.cqe;
+	if (head < tail)
+		n = cq->ibcq.cqe + 1 + head - tail;
+	else
+		n = head - tail;
+	if (unlikely((u32)cqe < n)) {
+		ret = -EINVAL;
+		goto bail_unlock;
+	}
+	for (n = 0; tail != head; n++) {
+		if (cq->ip)
+			wc->uqueue[n] = old_wc->uqueue[tail];
+		else
+			wc->kqueue[n] = old_wc->kqueue[tail];
+		if (tail == (u32) cq->ibcq.cqe)
+			tail = 0;
+		else
+			tail++;
+	}
+	cq->ibcq.cqe = cqe;
+	wc->head = n;
+	wc->tail = 0;
+	cq->queue = wc;
+	spin_unlock_irq(&cq->lock);
+
+	vfree(old_wc);
+
+	if (cq->ip) {
+		struct opa_ib_data *ibd = to_opa_ibdata(ibcq->device);
+		struct opa_ib_mmap_info *ip = cq->ip;
+
+		opa_ib_update_mmap_info(ibd, ip, sz, wc);
+
+		/*
+		 * Return the offset to mmap.
+		 * See opa_ib_mmap() for details.
+		 */
+		if (udata && udata->outlen >= sizeof(__u64)) {
+			ret = ib_copy_to_udata(udata, &ip->offset,
+					       sizeof(ip->offset));
+			if (ret)
+				goto bail;
+		}
+
+		spin_lock_irq(&ibd->pending_lock);
+		if (list_empty(&ip->pending_mmaps))
+			list_add(&ip->pending_mmaps, &ibd->pending_mmaps);
+		spin_unlock_irq(&ibd->pending_lock);
+	}
+
+	ret = 0;
+	goto bail;
+
+bail_unlock:
+	spin_unlock_irq(&cq->lock);
+bail_free:
+	vfree(wc);
+bail:
+	return ret;
+}
+
+int opa_ib_cq_init(struct opa_ib_data *ibd)
+{
+	int ret = 0;
+	int cpu;
+	struct task_struct *task;
+
+	if (ibd->worker)
+		return 0;
+	ibd->worker = kzalloc(sizeof(*ibd->worker), GFP_KERNEL);
+	if (!ibd->worker)
+		return -ENOMEM;
+	init_kthread_worker(ibd->worker);
+	task = kthread_create_on_node(
+		kthread_worker_fn,
+		ibd->worker,
+		ibd->assigned_node_id,
+		"opa_ib_cq%d", ibd->odev->index);
+	if (IS_ERR(task))
+		goto task_fail;
+	cpu = cpumask_first(cpumask_of_node(ibd->assigned_node_id));
+	kthread_bind(task, cpu);
+	wake_up_process(task);
+out:
+	return ret;
+task_fail:
+	ret = PTR_ERR(task);
+	kfree(ibd->worker);
+	ibd->worker = NULL;
+	goto out;
+}
+
+void opa_ib_cq_exit(struct opa_ib_data *ibd)
+{
+	struct kthread_worker *worker;
+
+	worker = ibd->worker;
+	if (!worker)
+		return;
+	/* blocks future queuing from send_complete() */
+	ibd->worker = NULL;
+	smp_wmb(); /* See opa_ib_cq_enter */
+	flush_kthread_worker(worker);
+	kthread_stop(worker->task);
+	kfree(worker);
 }

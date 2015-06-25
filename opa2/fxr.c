@@ -225,6 +225,7 @@ static void hfi_device_desc(struct opa_core_device *odev,
 	memcpy(desc->oui, dd->oui, ARRAY_SIZE(dd->oui));
 	desc->num_pports = dd->num_pports;
 	desc->nguid = dd->nguid;
+	desc->numa_node = dd->node;
 }
 
 static struct opa_core_ops opa_core_ops = {

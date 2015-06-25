@@ -54,8 +54,10 @@
 #define _OPA_VERBS_H_
 
 #include <linux/idr.h>
+#include <linux/kthread.h>
 #include <linux/slab.h>
 #include <rdma/ib_verbs.h>
+#include <rdma/ib_user_verbs.h>
 #include <rdma/opa_smi.h>
 #include <rdma/opa_port_info.h>
 #include <rdma/opa_core.h>
@@ -82,6 +84,7 @@
 extern __be64 opa_ib_sys_guid;
 
 extern unsigned int opa_ib_max_cqes;
+extern unsigned int opa_ib_max_cqs;
 extern unsigned int opa_ib_max_qp_wrs;
 extern unsigned int opa_ib_max_qps;
 extern unsigned int opa_ib_max_sges;
@@ -115,8 +118,29 @@ struct opa_ib_mmap_info {
 	unsigned size;
 };
 
+/*
+ * This structure is used to contain the head pointer, tail pointer,
+ * and completion queue entries as a single memory allocation so
+ * it can be mmap'ed into user space.
+ */
+struct opa_ib_cq_wc {
+	u32 head;               /* index of next entry to fill */
+	u32 tail;               /* index of next ib_poll_cq() entry */
+	union {
+		/* these are actually size ibcq.cqe + 1 */
+		struct ib_uverbs_wc uqueue[0];
+		struct ib_wc kqueue[0];
+	};
+};
+
 struct opa_ib_cq {
 	struct ib_cq ibcq;
+	struct kthread_work comptask;
+	struct opa_ib_data *ibd;
+	spinlock_t lock;	/* protect changes in this struct */
+	u8 notify;
+	u8 triggered;
+	struct opa_ib_cq_wc *queue;
 	struct opa_ib_mmap_info *ip;
 };
 
@@ -460,6 +484,7 @@ struct opa_ib_data {
 	__be64 node_guid;
 	u8 num_pports;
 	u8 oui[3];
+	int assigned_node_id;
 	struct opa_ib_portdata *pport;
 
 	struct ida qpn_table;
@@ -478,6 +503,9 @@ struct opa_ib_data {
 	spinlock_t n_qps_lock;
 	u32 n_srqs_allocated;
 	spinlock_t n_srqs_lock;
+
+	/* per device cq worker */
+	struct kthread_worker *worker;
 };
 
 #define to_opa_ibpd(pd)	container_of((pd), struct opa_ib_pd, ibpd)
@@ -522,20 +550,26 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 int opa_ib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		    int attr_mask, struct ib_qp_init_attr *init_attr);
 int opa_ib_destroy_qp(struct ib_qp *ibqp);
+int opa_ib_cq_init(struct opa_ib_data *ibd);
+void opa_ib_cq_exit(struct opa_ib_data *ibd);
+void opa_ib_cq_enter(struct opa_ib_cq *cq, struct ib_wc *entry, int solicited);
+int opa_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry);
 struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev, int entries,
 			       int comp_vector, struct ib_ucontext *context,
 			       struct ib_udata *udata);
 int opa_ib_destroy_cq(struct ib_cq *ibcq);
-int opa_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry);
 int opa_ib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags);
 int opa_ib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
 struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc);
 int opa_ib_dereg_mr(struct ib_mr *ibmr);
+void opa_ib_release_mmap_info(struct kref *ref);
 struct opa_ib_mmap_info *opa_ib_create_mmap_info(struct opa_ib_data *ibd,
 						 u32 size,
 						 struct ib_ucontext *context,
 						 void *obj);
-void opa_ib_release_mmap_info(struct kref *ref);
+void opa_ib_update_mmap_info(struct opa_ib_data *ibd,
+			     struct opa_ib_mmap_info *ip,
+			     u32 size, void *obj);
 int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr);
 int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
