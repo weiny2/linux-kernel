@@ -72,7 +72,7 @@ static struct opa_core_client opa_ib_driver = {
 __be64 opa_ib_sys_guid;
 static unsigned int opa_ib_max_mtu = 8192;
 static unsigned int opa_ib_default_mtu = 4096;
-static unsigned int opa_ib_num_vls = 8;
+static unsigned int opa_ib_num_vls = OPA_IB_NUM_DATA_VLS;
 
 /* TODO - to be used in various alloc routines */
 /* Maximum number of protection domains to support */
@@ -383,6 +383,7 @@ static void opa_ib_unregister_device(struct opa_ib_data *ibd)
 static void opa_ib_init_port(struct opa_ib_data *ibd,
 			struct opa_core_device *odev, u8 pidx)
 {
+	int i;
 	u32 default_pkey_idx = 1;
 	struct opa_ib_portdata *ibp = &ibd->pport[pidx];
 	struct opa_pport_desc pdesc;
@@ -394,7 +395,7 @@ static void opa_ib_init_port(struct opa_ib_data *ibd,
 	ibp->guid = pdesc.pguid;
 	ibp->ibmtu = opa_ib_default_mtu;
 	ibp->max_vls = opa_ib_num_vls;
-	ibp->lid = 0;
+	ibp->lid = pdesc.lid;
 	ibp->sm_lid = 0;
 	ibp->link_width_active = OPA_LINK_WIDTH_4X;
 	/* FXRTODO - this should be not yet defined OPA_LINK_SPEED_32G */
@@ -407,6 +408,23 @@ static void opa_ib_init_port(struct opa_ib_data *ibd,
 
 	RCU_INIT_POINTER(ibp->qp0, NULL);
 	RCU_INIT_POINTER(ibp->qp1, NULL);
+
+	/* MTU is per-VL */
+	for (i = 0; i < ibp->max_vls; i++)
+		ibp->vl_mtu[i] = ibp->ibmtu;
+
+	/* 
+	 * FXRTODO: quick hack at initial SL to SC to VL tables.
+	 * Likely this needs to be retrieved from opa2_hfi.
+	 */
+	for (i = 0; i < ARRAY_SIZE(ibp->sl_to_sc); i++) {
+		ibp->sl_to_sc[i] = i;
+		ibp->sc_to_sl[i] = i;
+	}
+	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_vl); i++)
+		ibp->sc_to_vl[i] = i % ibp->max_vls;
+	/* management SC15 always uses VL15 */
+	ibp->sc_to_vl[15] = 15;
 }
 
 static int opa_ib_add(struct opa_core_device *odev)
