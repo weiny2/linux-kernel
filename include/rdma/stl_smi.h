@@ -85,6 +85,7 @@ struct stl_smp {
 #define STL_ATTRIB_ID_PARTITION_TABLE		cpu_to_be16(0x0016)
 #define STL_ATTRIB_ID_SL_TO_SC_MAP		cpu_to_be16(0x0017)
 #define STL_ATTRIB_ID_VL_ARBITRATION		cpu_to_be16(0x0018)
+#define STL_ATTRIB_ID_SM_INFO			cpu_to_be16(0x0020)
 #define STL_ATTRIB_ID_CABLE_INFO		cpu_to_be16(0x0032)
 #define STL_ATTRIB_ID_AGGREGATE			cpu_to_be16(0x0080)
 #define STL_ATTRIB_ID_SC_TO_SL_MAP		cpu_to_be16(0x0082)
