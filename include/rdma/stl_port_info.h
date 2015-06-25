@@ -295,9 +295,9 @@ struct stl_port_info {
 	struct {
 		__be16 supported;
 		__be16 enabled;
-		__be16 active;
+		__be16 tx_active;
+		__be16 rx_active;
 	} link_width_downgrade;
-	__be16 reserved3;
 	__be16 port_link_mode;                  /* 1 res, 5 bits, 5 bits, 5 bits */
 	__be16 port_ltp_crc_mode;               /* 4 res, 4 bits, 4 bits, 4 bits */
 
