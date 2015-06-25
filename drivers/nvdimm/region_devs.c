@@ -83,19 +83,6 @@ struct nd_blk_region *to_nd_blk_region(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(to_nd_blk_region);
 
-struct nd_region *walk_to_nd_region(struct device *nd_dev)
-{
-	struct device *dev;
-
-	for (dev = nd_dev; dev; dev = dev->parent)
-		if (dev->type->release == nd_region_release)
-			break;
-	dev_WARN_ONCE(nd_dev, !dev, "invalid dev, not an nd_region descendant\n");
-	if (dev)
-		return to_nd_region(dev);
-	return NULL;
-}
-
 void *nd_region_provider_data(struct nd_region *nd_region)
 {
 	return nd_region->provider_data;
@@ -340,10 +327,52 @@ static ssize_t namespace_seed_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(namespace_seed);
 
+static ssize_t btt_seed_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+	ssize_t rc;
+
+	nvdimm_bus_lock(dev);
+	if (nd_region->btt_seed)
+		rc = sprintf(buf, "%s\n", dev_name(nd_region->btt_seed));
+	else
+		rc = sprintf(buf, "\n");
+	nvdimm_bus_unlock(dev);
+
+	return rc;
+}
+static DEVICE_ATTR_RO(btt_seed);
+
+static ssize_t read_only_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	return sprintf(buf, "%d\n", nd_region->ro);
+}
+
+static ssize_t read_only_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t len)
+{
+	bool ro;
+	int rc = strtobool(buf, &ro);
+	struct nd_region *nd_region = to_nd_region(dev);
+
+	if (rc)
+		return rc;
+
+	nd_region->ro = ro;
+	return len;
+}
+static DEVICE_ATTR_RW(read_only);
+
 static struct attribute *nd_region_attributes[] = {
 	&dev_attr_size.attr,
 	&dev_attr_nstype.attr,
 	&dev_attr_mappings.attr,
+	&dev_attr_btt_seed.attr,
+	&dev_attr_read_only.attr,
 	&dev_attr_set_cookie.attr,
 	&dev_attr_available_size.attr,
 	&dev_attr_namespace_seed.attr,
@@ -389,17 +418,19 @@ u64 nd_region_interleave_set_cookie(struct nd_region *nd_region)
 
 /*
  * Upon successful probe/remove, take/release a reference on the
- * associated dimms in the interleave set, on successful probe of a BLK
- * namespace check if we need a new seed, and on remove of a BLK region
- * notify the provider to disable the region.
+ * associated interleave set (if present), and plant new btt + namespace
+ * seeds.  Also, on the removal of a BLK region, notify the provider to
+ * disable the region.
  */
 static void nd_region_notify_driver_action(struct nvdimm_bus *nvdimm_bus,
 		struct device *dev, bool probe)
 {
+	struct nd_region *nd_region;
+
 	if (!probe && (is_nd_pmem(dev) || is_nd_blk(dev))) {
-		struct nd_region *nd_region = to_nd_region(dev);
 		int i;
 
+		nd_region = to_nd_region(dev);
 		for (i = 0; i < nd_region->ndr_mappings; i++) {
 			struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 			struct nvdimm_drvdata *ndd = nd_mapping->ndd;
@@ -409,19 +440,27 @@ static void nd_region_notify_driver_action(struct nvdimm_bus *nvdimm_bus,
 			nd_mapping->labels = NULL;
 			put_ndd(ndd);
 			nd_mapping->ndd = NULL;
-			atomic_dec(&nvdimm->busy);
+			if (ndd)
+				atomic_dec(&nvdimm->busy);
 		}
 
 		if (is_nd_pmem(dev))
 			return;
 
 		to_nd_blk_region(dev)->disable(nvdimm_bus, dev);
-	} else if (dev->parent && is_nd_blk(dev->parent) && probe) {
-		struct nd_region *nd_region = to_nd_region(dev->parent);
-
+	}
+	if (dev->parent && is_nd_blk(dev->parent) && probe) {
+		nd_region = to_nd_region(dev->parent);
 		nvdimm_bus_lock(dev);
 		if (nd_region->ns_seed == dev)
 			nd_region_create_blk_seed(nd_region);
+		nvdimm_bus_unlock(dev);
+	}
+	if (is_nd_btt(dev) && probe) {
+		nd_region = to_nd_region(dev->parent);
+		nvdimm_bus_lock(dev);
+		if (nd_region->btt_seed == dev)
+			nd_region_create_btt_seed(nd_region);
 		nvdimm_bus_unlock(dev);
 	}
 }
@@ -570,7 +609,9 @@ static struct nd_region *nd_region_create(struct nvdimm_bus *nvdimm_bus,
 {
 	struct nd_region *nd_region;
 	struct device *dev;
-	u16 i;
+	void *region_buf;
+	unsigned int i;
+	int ro = 0;
 
 	for (i = 0; i < ndr_desc->num_mappings; i++) {
 		struct nd_mapping *nd_mapping = &ndr_desc->nd_mapping[i];
@@ -582,6 +623,9 @@ static struct nd_region *nd_region_create(struct nvdimm_bus *nvdimm_bus,
 
 			return NULL;
 		}
+
+		if (nvdimm->flags & NDD_UNARMED)
+			ro = 1;
 	}
 
 	if (dev_type == &nd_blk_device_type) {
@@ -597,28 +641,21 @@ static struct nd_region *nd_region_create(struct nvdimm_bus *nvdimm_bus,
 			ndbr->enable = ndbr_desc->enable;
 			ndbr->disable = ndbr_desc->disable;
 			ndbr->do_io = ndbr_desc->do_io;
-		} else
-			nd_region = NULL;
+		}
+		region_buf = ndbr;
 	} else {
 		nd_region = kzalloc(sizeof(struct nd_region)
 				+ sizeof(struct nd_mapping)
 				* ndr_desc->num_mappings,
 				GFP_KERNEL);
+		region_buf = nd_region;
 	}
 
-	if (!nd_region)
+	if (!region_buf)
 		return NULL;
 	nd_region->id = ida_simple_get(&region_ida, 0, 0, GFP_KERNEL);
-	if (nd_region->id < 0) {
-		kfree(nd_region);
-		return NULL;
-	} else if (nd_region->id >= CONFIG_ND_MAX_REGIONS) {
-		dev_err(&nvdimm_bus->dev, "max region limit %d reached\n",
-				CONFIG_ND_MAX_REGIONS);
-		ida_simple_remove(&region_ida, nd_region->id);
-		kfree(nd_region);
-		return NULL;
-	}
+	if (nd_region->id < 0)
+		goto err_id;
 
 	memcpy(nd_region->mapping, ndr_desc->nd_mapping,
 			sizeof(struct nd_mapping) * ndr_desc->num_mappings);
@@ -632,8 +669,10 @@ static struct nd_region *nd_region_create(struct nvdimm_bus *nvdimm_bus,
 	nd_region->provider_data = ndr_desc->provider_data;
 	nd_region->nd_set = ndr_desc->nd_set;
 	nd_region->num_lanes = ndr_desc->num_lanes;
+	nd_region->ro = ro;
 	nd_region->numa_node = ndr_desc->numa_node;
 	ida_init(&nd_region->ns_ida);
+	ida_init(&nd_region->btt_ida);
 	dev = &nd_region->dev;
 	dev_set_name(dev, "region%d", nd_region->id);
 	dev->parent = &nvdimm_bus->dev;
@@ -644,6 +683,10 @@ static struct nd_region *nd_region_create(struct nvdimm_bus *nvdimm_bus,
 	nd_device_register(dev);
 
 	return nd_region;
+
+ err_id:
+	kfree(region_buf);
+	return NULL;
 }
 
 struct nd_region *nvdimm_pmem_region_create(struct nvdimm_bus *nvdimm_bus,

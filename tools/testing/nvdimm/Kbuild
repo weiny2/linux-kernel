@@ -34,7 +34,7 @@ libnvdimm-y += $(NVDIMM_SRC)/region_devs.o
 libnvdimm-y += $(NVDIMM_SRC)/region.o
 libnvdimm-y += $(NVDIMM_SRC)/namespace_devs.o
 libnvdimm-y += $(NVDIMM_SRC)/label.o
-libnvdimm-$(CONFIG_ND_BTT_DEVS) += $(NVDIMM_SRC)/btt_devs.o
+libnvdimm-$(CONFIG_BTT) += $(NVDIMM_SRC)/btt_devs.o
 libnvdimm-y += config_check.o
 
 obj-m += test/

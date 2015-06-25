@@ -123,14 +123,14 @@ static int nd_region_probe(struct device *dev)
 
 	num_ns->active = rc;
 	num_ns->count = rc + err;
-	set_dev_node(dev, nd_region->numa_node);
 	dev_set_drvdata(dev, num_ns);
 
+	if (rc && err && rc == err)
+		return -ENODEV;
+
+	nd_region->btt_seed = nd_btt_create(nd_region);
 	if (err == 0)
 		return 0;
-
-	if (rc == err)
-		return -ENODEV;
 
 	/*
 	 * Given multiple namespaces per region, we do not want to
@@ -159,6 +159,7 @@ static int nd_region_remove(struct device *dev)
 	/* flush attribute readers and disable */
 	nvdimm_bus_lock(dev);
 	nd_region->ns_seed = NULL;
+	nd_region->btt_seed = NULL;
 	dev_set_drvdata(dev, NULL);
 	nvdimm_bus_unlock(dev);
 

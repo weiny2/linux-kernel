@@ -21,15 +21,15 @@
 #include <linux/io.h>
 #include "nfit.h"
 
+/*
+ * For readq() and writeq() on 32-bit builds, the hi-lo, lo-hi order is
+ * irrelevant.
+ */
 #include <asm-generic/io-64-nonatomic-hi-lo.h>
 
 static bool force_enable_dimms;
 module_param(force_enable_dimms, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(force_enable_dimms, "Ignore _STA (ACPI DIMM device) status");
-
-static bool force_rw;
-module_param(force_rw, bool, S_IRUGO|S_IWUSR);
-MODULE_PARM_DESC(force_rw, "Enable writes to DIMMs that failed to arm");
 
 static u8 nfit_uuid[NFIT_UUID_MAX][16];
 
@@ -802,7 +802,7 @@ static int acpi_nfit_register_dimms(struct acpi_nfit_desc *acpi_desc)
 			flags |= NDD_ALIASING;
 
 		mem_flags = __to_nfit_memdev(nfit_mem)->flags;
-		if ((mem_flags & ACPI_NFIT_MEM_ARMED) && !force_rw)
+		if (mem_flags & ACPI_NFIT_MEM_ARMED)
 			flags |= NDD_UNARMED;
 
 		rc = acpi_nfit_add_dimm(acpi_desc, nfit_mem, device_handle);

@@ -15,11 +15,9 @@
 #include <linux/libnvdimm.h>
 #include <linux/blkdev.h>
 #include <linux/device.h>
-#include <linux/genhd.h>
 #include <linux/mutex.h>
 #include <linux/ndctl.h>
 #include <linux/types.h>
-#include <linux/fs.h>
 #include "label.h"
 
 enum {
@@ -88,12 +86,13 @@ static inline struct nd_namespace_index *to_next_namespace_index(
 struct nd_region {
 	struct device dev;
 	struct ida ns_ida;
+	struct ida btt_ida;
 	struct device *ns_seed;
+	struct device *btt_seed;
 	u16 ndr_mappings;
 	u64 ndr_size;
 	u64 ndr_start;
-	int id, num_lanes;
-	int numa_node;
+	int id, num_lanes, ro, numa_node;
 	void *provider_data;
 	struct nd_interleave_set *nd_set;
 	struct nd_mapping mapping[0];
@@ -118,9 +117,11 @@ static inline unsigned nd_inc_seq(unsigned seq)
 	return next[seq & 3];
 }
 
+struct btt;
 struct nd_btt {
 	struct device dev;
-	struct block_device *backing_dev;
+	struct nd_namespace_common *ndns;
+	struct btt *btt;
 	unsigned long lbasize;
 	u8 *uuid;
 	int id;
@@ -154,6 +155,27 @@ int nvdimm_set_config_data(struct nvdimm_drvdata *ndd, size_t offset,
 struct nd_btt *to_nd_btt(struct device *dev);
 struct btt_sb;
 u64 nd_btt_sb_checksum(struct btt_sb *btt_sb);
+#if IS_ENABLED(CONFIG_BTT)
+int nd_btt_probe(struct nd_namespace_common *ndns, void *drvdata);
+bool is_nd_btt(struct device *dev);
+struct device *nd_btt_create(struct nd_region *nd_region);
+#else
+static inline nd_btt_probe(struct nd_namespace_common *ndns, void *drvdata)
+{
+	return -ENODEV;
+}
+
+static inline bool is_nd_btt(struct device *dev)
+{
+	return false;
+}
+
+static inline struct device *nd_btt_create(struct nd_region *nd_region)
+{
+	return NULL;
+}
+
+#endif
 struct nd_region *to_nd_region(struct device *dev);
 int nd_region_to_nstype(struct nd_region *nd_region);
 int nd_region_register_namespaces(struct nd_region *nd_region, int *err);
@@ -161,14 +183,6 @@ u64 nd_region_interleave_set_cookie(struct nd_region *nd_region);
 void nvdimm_bus_lock(struct device *dev);
 void nvdimm_bus_unlock(struct device *dev);
 bool is_nvdimm_bus_locked(struct device *dev);
-int nvdimm_bus_add_disk(struct gendisk *disk);
-int nvdimm_bus_add_integrity_disk(struct gendisk *disk, u32 lbasize,
-		sector_t size);
-void nvdimm_bus_remove_disk(struct gendisk *disk);
-int nvdimm_bdev_ioctl(struct block_device *bdev, fmode_t mode,
-		unsigned int cmd, unsigned long arg);
-int nvdimm_bdev_compat_ioctl(struct block_device *bdev, fmode_t mode,
-		unsigned int cmd, unsigned long arg);
 int nvdimm_revalidate_disk(struct gendisk *disk);
 void nvdimm_drvdata_release(struct kref *kref);
 void put_ndd(struct nvdimm_drvdata *ndd);
@@ -177,8 +191,13 @@ void nvdimm_free_dpa(struct nvdimm_drvdata *ndd, struct resource *res);
 struct resource *nvdimm_allocate_dpa(struct nvdimm_drvdata *ndd,
 		struct nd_label_id *label_id, resource_size_t start,
 		resource_size_t n);
+resource_size_t nvdimm_namespace_capacity(struct nd_namespace_common *ndns);
+struct nd_namespace_common *nvdimm_namespace_common_probe(struct device *dev);
+int nvdimm_namespace_attach_btt(struct nd_namespace_common *ndns);
+int nvdimm_namespace_detach_btt(struct nd_namespace_common *ndns);
+const char *nvdimm_namespace_disk_name(struct nd_namespace_common *ndns,
+		char *name);
 int nd_blk_region_init(struct nd_region *nd_region);
-void nd_blk_queue_init(struct request_queue *q);
 void __nd_iostat_start(struct bio *bio, unsigned long *start);
 static inline bool nd_iostat_start(struct bio *bio, unsigned long *start)
 {

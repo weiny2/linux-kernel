@@ -214,16 +214,6 @@ ssize_t nd_sector_size_store(struct device *dev, const char *buf,
 	}
 }
 
-void nd_blk_queue_init(struct request_queue *q)
-{
-	blk_queue_max_hw_sectors(q, UINT_MAX);
-	blk_queue_bounce_limit(q, BLK_BOUNCE_ANY);
-	if (IS_ENABLED(CONFIG_ND_IOSTAT))
-		queue_flag_set_unlocked(QUEUE_FLAG_IO_STAT, q);
-	queue_flag_set_unlocked(QUEUE_FLAG_NONROT, q);
-}
-EXPORT_SYMBOL(nd_blk_queue_init);
-
 void __nd_iostat_start(struct bio *bio, unsigned long *start)
 {
 	struct gendisk *disk = bio->bi_bdev->bd_disk;
@@ -313,28 +303,10 @@ static ssize_t wait_probe_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(wait_probe);
 
-static ssize_t btt_seed_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct nvdimm_bus *nvdimm_bus = to_nvdimm_bus(dev);
-	ssize_t rc;
-
-	nvdimm_bus_lock(dev);
-	if (nvdimm_bus->nd_btt)
-		rc = sprintf(buf, "%s\n", dev_name(&nvdimm_bus->nd_btt->dev));
-	else
-		rc = sprintf(buf, "\n");
-	nvdimm_bus_unlock(dev);
-
-	return rc;
-}
-static DEVICE_ATTR_RO(btt_seed);
-
 static struct attribute *nvdimm_bus_attributes[] = {
 	&dev_attr_commands.attr,
 	&dev_attr_wait_probe.attr,
 	&dev_attr_provider.attr,
-	&dev_attr_btt_seed.attr,
 	NULL,
 };
 
@@ -379,8 +351,6 @@ struct nvdimm_bus *__nvdimm_bus_register(struct device *parent,
 	mutex_lock(&nvdimm_bus_list_mutex);
 	list_add_tail(&nvdimm_bus->list, &nvdimm_bus_list);
 	mutex_unlock(&nvdimm_bus_list_mutex);
-
-	nvdimm_bus->nd_btt = nd_btt_create(nvdimm_bus);
 
 	return nvdimm_bus;
  err:

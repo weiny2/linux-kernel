@@ -37,22 +37,22 @@ static int arena_read_bytes(struct arena_info *arena, resource_size_t offset,
 		void *buf, size_t n)
 {
 	struct nd_btt *nd_btt = arena->nd_btt;
-	struct block_device *bdev = nd_btt->backing_dev;
+	struct nd_namespace_common *ndns = nd_btt->ndns;
 
 	/* arena offsets are 4K from the base of the device */
 	offset += SZ_4K;
-	return bdev_read_bytes(bdev, offset, buf, n);
+	return nvdimm_read_bytes(ndns, offset, buf, n);
 }
 
 static int arena_write_bytes(struct arena_info *arena, resource_size_t offset,
 		void *buf, size_t n)
 {
 	struct nd_btt *nd_btt = arena->nd_btt;
-	struct block_device *bdev = nd_btt->backing_dev;
+	struct nd_namespace_common *ndns = nd_btt->ndns;
 
 	/* arena offsets are 4K from the base of the device */
 	offset += SZ_4K;
-	return bdev_write_bytes(bdev, offset, buf, n);
+	return nvdimm_write_bytes(ndns, offset, buf, n);
 }
 
 static int btt_info_write(struct arena_info *arena, struct btt_sb *super)
@@ -1248,36 +1248,17 @@ static int btt_getgeo(struct block_device *bd, struct hd_geometry *geo)
 	return 0;
 }
 
-static int btt_revalidate_disk(struct gendisk *disk)
-{
-	struct btt *btt = disk->private_data;
-	struct nd_btt *nd_btt = btt->nd_btt;
-	struct block_device *bdev = nd_btt->backing_dev;
-	char name[BDEVNAME_SIZE];
-
-	dev_dbg(&nd_btt->dev, "backing dev: %s read-%s", bdevname(bdev, name),
-			bdev_read_only(bdev) ? "only" : "write");
-	if (bdev_read_only(bdev))
-		set_disk_ro(disk, 1);
-	return 0;
-}
-
 static const struct block_device_operations btt_fops = {
 	.owner =		THIS_MODULE,
 	.rw_page =		btt_rw_page,
 	.getgeo =		btt_getgeo,
-	.ioctl =		nvdimm_bdev_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl =		nvdimm_bdev_compat_ioctl,
-#endif
-	.revalidate_disk =	btt_revalidate_disk,
+	.revalidate_disk =	nvdimm_revalidate_disk,
 };
 
 static int btt_blk_init(struct btt *btt)
 {
 	struct nd_btt *nd_btt = btt->nd_btt;
-	char name[BDEVNAME_SIZE];
-	int ret;
+	struct nd_namespace_common *ndns = nd_btt->ndns;
 
 	/* create a new disk and request queue for btt */
 	btt->btt_queue = blk_alloc_queue(GFP_KERNEL);
@@ -1286,12 +1267,11 @@ static int btt_blk_init(struct btt *btt)
 
 	btt->btt_disk = alloc_disk(0);
 	if (!btt->btt_disk) {
-		ret = -ENOMEM;
-		goto out_free_queue;
+		blk_cleanup_queue(btt->btt_queue);
+		return -ENOMEM;
 	}
 
-	sprintf(btt->btt_disk->disk_name, "%ss",
-			bdevname(nd_btt->backing_dev, name));
+	nvdimm_namespace_disk_name(ndns, btt->btt_disk->disk_name);
 	btt->btt_disk->driverfs_dev = &btt->nd_btt->dev;
 	btt->btt_disk->major = btt_major;
 	btt->btt_disk->first_minor = 0;
@@ -1302,26 +1282,27 @@ static int btt_blk_init(struct btt *btt)
 
 	blk_queue_make_request(btt->btt_queue, btt_make_request);
 	blk_queue_logical_block_size(btt->btt_queue, btt->sector_size);
-	nd_blk_queue_init(btt->btt_queue);
+	blk_queue_max_hw_sectors(btt->btt_queue, UINT_MAX);
+	blk_queue_bounce_limit(btt->btt_queue, BLK_BOUNCE_ANY);
+	queue_flag_set_unlocked(QUEUE_FLAG_NONROT, btt->btt_queue);
 	btt->btt_queue->queuedata = btt;
 
 	set_capacity(btt->btt_disk, 0);
 	add_disk(btt->btt_disk);
-
 	if (btt_meta_size(btt)) {
-		ret = nd_integrity_init(btt->btt_disk, btt_meta_size(btt));
-		if (ret)
-			goto out_free_queue;
-	}
+		int rc = nd_integrity_init(btt->btt_disk, btt_meta_size(btt));
 
+		if (rc) {
+			del_gendisk(btt->btt_disk);
+			put_disk(btt->btt_disk);
+			blk_cleanup_queue(btt->btt_queue);
+			return rc;
+		}
+	}
 	set_capacity(btt->btt_disk, btt->nlba * btt->sector_size >> 9);
 	revalidate_disk(btt->btt_disk);
 
 	return 0;
-
-out_free_queue:
-	blk_cleanup_queue(btt->btt_queue);
-	return ret;
 }
 
 static void btt_blk_cleanup(struct btt *btt)
@@ -1355,7 +1336,6 @@ static struct btt *btt_init(struct nd_btt *nd_btt, unsigned long long rawsize,
 	int ret;
 	struct btt *btt;
 	struct device *dev = &nd_btt->dev;
-	struct block_device *bdev = nd_btt->backing_dev;
 
 	btt = kzalloc(sizeof(struct btt), GFP_KERNEL);
 	if (!btt)
@@ -1375,11 +1355,9 @@ static struct btt *btt_init(struct nd_btt *nd_btt, unsigned long long rawsize,
 		goto out_free;
 	}
 
-	if (btt->init_state != INIT_READY && bdev_read_only(bdev)) {
-		char name[BDEVNAME_SIZE];
-
+	if (btt->init_state != INIT_READY && nd_region->ro) {
 		dev_info(dev, "%s is read-only, unable to init btt metadata\n",
-				bdevname(bdev, name));
+				dev_name(&nd_region->dev));
 		goto out_free;
 	} else if (btt->init_state != INIT_READY) {
 		btt->num_arenas = (rawsize / ARENA_MAX_SIZE) +
@@ -1434,99 +1412,42 @@ static void btt_fini(struct btt *btt)
 	}
 }
 
-static int link_btt(struct nd_btt *nd_btt)
+int nvdimm_namespace_attach_btt(struct nd_namespace_common *ndns)
 {
-	struct block_device *bdev = nd_btt->backing_dev;
-	struct kobject *dir = &part_to_dev(bdev->bd_part)->kobj;
-
-	return sysfs_create_link(dir, &nd_btt->dev.kobj, "nd_btt");
-}
-
-static void unlink_btt(struct nd_btt *nd_btt)
-{
-	struct block_device *bdev = nd_btt->backing_dev;
-	struct kobject *dir;
-
-	/* if backing_dev was deleted first we may have nothing to unlink */
-	if (!nd_btt->backing_dev)
-		return;
-
-	dir = &part_to_dev(bdev->bd_part)->kobj;
-	sysfs_remove_link(dir, "nd_btt");
-}
-
-static struct nd_region *nd_btt_to_region(struct nd_btt *nd_btt)
-{
-	struct block_device *bdev = nd_btt->backing_dev;
-	struct device *disk_dev = disk_to_dev(bdev->bd_disk);
-	struct device *namespace_dev = disk_dev->parent;
-
-	return to_nd_region(namespace_dev->parent);
-}
-
-static int nd_btt_probe(struct device *dev)
-{
-	struct nd_btt *nd_btt = to_nd_btt(dev);
+	struct nd_btt *nd_btt = to_nd_btt(ndns->claim);
 	struct nd_region *nd_region;
-	struct block_device *bdev;
 	struct btt *btt;
 	size_t rawsize;
-	int rc;
 
-	if (!nd_btt->uuid || !nd_btt->backing_dev || !nd_btt->lbasize)
+	if (!nd_btt->uuid || !nd_btt->ndns || !nd_btt->lbasize)
 		return -ENODEV;
 
-	rc = link_btt(nd_btt);
-	if (rc)
-		return rc;
-
-	bdev = nd_btt->backing_dev;
-	sync_blockdev(bdev);
-	invalidate_bdev(bdev);
-	rawsize = (bdev->bd_part->nr_sects << SECTOR_SHIFT) - SZ_4K;
+	rawsize = nvdimm_namespace_capacity(ndns) - SZ_4K;
 	if (rawsize < ARENA_MIN_SIZE) {
-		rc = -ENXIO;
-		goto err_btt;
+		return -ENXIO;
 	}
-	nd_region = nd_btt_to_region(nd_btt);
+	nd_region = to_nd_region(nd_btt->dev.parent);
 	btt = btt_init(nd_btt, rawsize, nd_btt->lbasize, nd_btt->uuid,
 			nd_region);
-	if (!btt) {
-		rc = -ENOMEM;
-		goto err_btt;
-	}
-
-	set_dev_node(dev, nd_region->numa_node);
-	dev_set_drvdata(dev, btt);
+	if (!btt)
+		return -ENOMEM;
+	nd_btt->btt = btt;
 
 	return 0;
- err_btt:
-	unlink_btt(nd_btt);
-	return rc;
 }
+EXPORT_SYMBOL(nvdimm_namespace_attach_btt);
 
-static int nd_btt_remove(struct device *dev)
+int nvdimm_namespace_detach_btt(struct nd_namespace_common *ndns)
 {
-	struct nd_btt *nd_btt = to_nd_btt(dev);
-	struct btt *btt = dev_get_drvdata(dev);
+	struct nd_btt *nd_btt = to_nd_btt(ndns->claim);
+	struct btt *btt = nd_btt->btt;
 
-	nvdimm_bus_lock(dev);
 	btt_fini(btt);
-	nvdimm_bus_unlock(dev);
-
-	unlink_btt(nd_btt);
+	nd_btt->btt = NULL;
 
 	return 0;
 }
-
-static struct nd_device_driver nd_btt_driver = {
-	.probe = nd_btt_probe,
-	.remove = nd_btt_remove,
-	.drv = {
-		.name = "nd_btt",
-	},
-	.type = ND_DRIVER_BTT,
-};
+EXPORT_SYMBOL(nvdimm_namespace_detach_btt);
 
 static int __init nd_btt_init(void)
 {
@@ -1544,13 +1465,8 @@ static int __init nd_btt_init(void)
 		goto err_debugfs;
 	}
 
-	rc = nd_driver_register(&nd_btt_driver);
-	if (rc < 0)
-		goto err_driver;
 	return 0;
 
- err_driver:
-	debugfs_remove_recursive(debugfs_root);
  err_debugfs:
 	unregister_blkdev(btt_major, "btt");
 
@@ -1559,7 +1475,6 @@ static int __init nd_btt_init(void)
 
 static void __exit nd_btt_exit(void)
 {
-	driver_unregister(&nd_btt_driver.drv);
 	debugfs_remove_recursive(debugfs_root);
 	unregister_blkdev(btt_major, "btt");
 }

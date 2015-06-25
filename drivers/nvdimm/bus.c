@@ -42,14 +42,18 @@ static int to_nd_device_type(struct device *dev)
 		return ND_DEVICE_REGION_BLK;
 	else if (is_nd_pmem(dev->parent) || is_nd_blk(dev->parent))
 		return nd_region_to_nstype(to_nd_region(dev->parent));
-	else if (is_nd_btt(dev))
-		return ND_DEVICE_BTT;
 
 	return 0;
 }
 
 static int nvdimm_bus_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
+	/*
+	 * Ensure that region devices always have their numa node set as
+	 * early as possible.
+	 */
+	if (is_nd_pmem(dev) || is_nd_blk(dev))
+		set_dev_node(dev, to_nd_region(dev)->numa_node);
 	return add_uevent_var(env, "MODALIAS=" ND_DEVICE_MODALIAS_FMT,
 			to_nd_device_type(dev));
 }
@@ -107,20 +111,6 @@ static int nvdimm_bus_probe(struct device *dev)
 
 	dev_dbg(&nvdimm_bus->dev, "%s.probe(%s) = %d\n", dev->driver->name,
 			dev_name(dev), rc);
-
-	/* check if our btt-seed has sprouted, and plant another */
-	if (rc == 0 && is_nd_btt(dev) && dev == &nvdimm_bus->nd_btt->dev) {
-		const char *sep = "", *name = "", *status = "failed";
-
-		nvdimm_bus->nd_btt = nd_btt_create(nvdimm_bus);
-		if (nvdimm_bus->nd_btt) {
-			status = "succeeded";
-			sep = ": ";
-			name = dev_name(&nvdimm_bus->nd_btt->dev);
-		}
-		dev_dbg(&nvdimm_bus->dev, "btt seed creation %s%s%s\n",
-				status, sep, name);
-	}
 
 	if (rc != 0)
 		module_put(provider);
@@ -245,151 +235,21 @@ EXPORT_SYMBOL(__nd_driver_register);
 
 int nvdimm_revalidate_disk(struct gendisk *disk)
 {
-	int i;
 	struct device *dev = disk->driverfs_dev;
-	struct nd_region *nd_region = walk_to_nd_region(dev);
+	struct nd_region *nd_region = to_nd_region(dev->parent);
+	const char *pol = nd_region->ro ? "only" : "write";
 
-	if (!nd_region)
+	if (nd_region->ro == get_disk_ro(disk))
 		return 0;
 
-	for (i = 0; i < nd_region->ndr_mappings; i++) {
-		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
-		struct nvdimm *nvdimm = nd_mapping->nvdimm;
-
-		if ((nvdimm->flags & NDD_UNARMED) && !get_disk_ro(disk)) {
-			dev_dbg(dev, "%s: unarmed, marking disk %s ro\n",
-					dev_name(&nvdimm->dev),
-					dev_name(disk_to_dev(disk)));
-			set_disk_ro(disk, 1);
-			break;
-		}
-	}
+	dev_info(dev, "%s read-%s, marking %s read-%s\n",
+			dev_name(&nd_region->dev), pol, disk->disk_name, pol);
+	set_disk_ro(disk, nd_region->ro);
 
 	return 0;
+
 }
 EXPORT_SYMBOL(nvdimm_revalidate_disk);
-
-int nvdimm_bus_add_integrity_disk(struct gendisk *disk, u32 lbasize,
-		sector_t size)
-{
-	const struct block_device_operations *ops = disk->fops;
-	struct device *dev = disk->driverfs_dev;
-	struct nvdimm_bus *nvdimm_bus;
-	int rc;
-
-	nvdimm_bus = walk_to_nvdimm_bus(dev);
-	if (!nvdimm_bus || !ops->rw_bytes)
-		return -EINVAL;
-
-	/*
-	 * Take the bus lock here to prevent userspace racing to
-	 * initiate actions on the newly availble block device while
-	 * autodetect scanning is still in flight.
-	 */
-	nvdimm_bus_lock(&nvdimm_bus->dev);
-	add_disk(disk);
-	rc = nd_integrity_init(disk, lbasize);
-	if (size)
-		set_capacity(disk, size);
-	revalidate_disk(disk);
-	nd_btt_add_disk(nvdimm_bus, disk);
-	nvdimm_bus_unlock(&nvdimm_bus->dev);
-
-	return rc;
-}
-EXPORT_SYMBOL(nvdimm_bus_add_integrity_disk);
-
-/**
- * nvdimm_bus_add_disk() - attach and run actions on an nvdimm block device
- * @disk: disk device being registered
- *
- * Note, that @disk must be a descendant of an nvdimm_bus
- */
-int nvdimm_bus_add_disk(struct gendisk *disk)
-{
-	return nvdimm_bus_add_integrity_disk(disk, 0, 0);
-}
-EXPORT_SYMBOL(nvdimm_bus_add_disk);
-
-void nvdimm_bus_remove_disk(struct gendisk *disk)
-{
-	struct device *dev = disk_to_dev(disk);
-	struct nvdimm_bus *nvdimm_bus;
-
-	nvdimm_bus = walk_to_nvdimm_bus(dev);
-	if (!nvdimm_bus)
-		return;
-
-	nvdimm_bus_lock(&nvdimm_bus->dev);
-	nd_btt_remove_disk(nvdimm_bus, disk);
-	nvdimm_bus_unlock(&nvdimm_bus->dev);
-
-	/*
-	 * Flush in case *_notify_remove() kicked off asynchronous
-	 * device unregistration
-	 */
-	nd_synchronize();
-
-	blk_integrity_unregister(disk);
-	del_gendisk(disk);
-	put_disk(disk);
-}
-EXPORT_SYMBOL(nvdimm_bus_remove_disk);
-
-static int set_namespace_ro(struct block_device *bdev,
-		struct nvdimm_bus *nvdimm_bus, int ro)
-{
-	set_device_ro(bdev, ro);
-
-	/*
-	 * It's possible to mark the backing device rw while leaving the
-	 * btt device read-only.  However, marking a backing device
-	 * read-only always marks the parent btt read-only.
-	 */
-	if (!ro)
-		return 0;
-	return device_for_each_child(&nvdimm_bus->dev, bdev, set_btt_disk_ro);
-}
-
-int nvdimm_bdev_ioctl(struct block_device *bdev, fmode_t mode,
-		unsigned int cmd, unsigned long arg)
-{
-	int rc, ro;
-	struct gendisk *disk = bdev->bd_disk;
-	struct device *dev = disk->driverfs_dev;
-	struct nvdimm_bus *nvdimm_bus = walk_to_nvdimm_bus(dev);
-
-	if (cmd != BLKROSET)
-		return -ENOTTY;
-
-	if (get_user(ro, (int __user *)(arg)))
-		return -EFAULT;
-
-	if (ro == 0 || ro == 1)
-		/* pass */;
-	else
-		return -EINVAL;
-
-	nvdimm_bus_lock(&nvdimm_bus->dev);
-	wait_nvdimm_bus_probe_idle(&nvdimm_bus->dev);
-	if (bdev_read_only(bdev) == ro)
-		rc = 0;
-	else if (is_nd_btt(dev))
-		rc = set_btt_ro(bdev, dev, ro);
-	else
-		rc = set_namespace_ro(bdev, nvdimm_bus, ro);
-	nvdimm_bus_unlock(&nvdimm_bus->dev);
-
-	return rc;
-}
-EXPORT_SYMBOL(nvdimm_bdev_ioctl);
-
-int nvdimm_bdev_compat_ioctl(struct block_device *bdev, fmode_t mode,
-		unsigned int cmd, unsigned long arg)
-{
-	return nvdimm_bdev_ioctl(bdev, mode, cmd, arg);
-}
-EXPORT_SYMBOL(nvdimm_bdev_compat_ioctl);
 
 static ssize_t modalias_show(struct device *dev, struct device_attribute *attr,
 		char *buf)

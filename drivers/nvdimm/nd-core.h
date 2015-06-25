@@ -23,8 +23,6 @@ extern struct list_head nvdimm_bus_list;
 extern struct mutex nvdimm_bus_list_mutex;
 extern int nvdimm_major;
 
-struct nd_btt;
-
 struct nvdimm_bus {
 	struct nvdimm_bus_descriptor *nd_desc;
 	wait_queue_head_t probe_wait;
@@ -33,7 +31,6 @@ struct nvdimm_bus {
 	struct device dev;
 	int id, probe_active;
 	struct mutex reconfig_mutex;
-	struct nd_btt *nd_btt;
 };
 
 struct nvdimm {
@@ -48,53 +45,13 @@ struct nvdimm {
 bool is_nvdimm(struct device *dev);
 bool is_nd_pmem(struct device *dev);
 bool is_nd_blk(struct device *dev);
-struct gendisk;
-struct block_device;
-#if IS_ENABLED(CONFIG_ND_BTT_DEVS)
-bool is_nd_btt(struct device *dev);
-struct nd_btt *nd_btt_create(struct nvdimm_bus *nvdimm_bus);
-void nd_btt_add_disk(struct nvdimm_bus *nvdimm_bus, struct gendisk *disk);
-void nd_btt_remove_disk(struct nvdimm_bus *nvdimm_bus, struct gendisk *disk);
-int set_btt_ro(struct block_device *bdev, struct device *dev, int ro);
-int set_btt_disk_ro(struct device *dev, void *data);
-#else
-static inline bool is_nd_btt(struct device *dev)
-{
-	return false;
-}
-
-static inline struct nd_btt *nd_btt_create(struct nvdimm_bus *nvdimm_bus)
-{
-	return NULL;
-}
-
-static inline void nd_btt_add_disk(struct nvdimm_bus *nvdimm_bus,
-		struct gendisk *disk)
-{
-}
-
-static inline void nd_btt_remove_disk(struct nvdimm_bus *nvdimm_bus,
-		struct gendisk *disk)
-{
-}
-
-static inline int set_btt_ro(struct block_device *bdev, struct device *dev,
-		int ro)
-{
-	return 0;
-}
-
-static inline int set_btt_disk_ro(struct device *dev, void *data)
-{
-	return 0;
-}
-#endif
 struct nvdimm_bus *walk_to_nvdimm_bus(struct device *nd_dev);
 int __init nvdimm_bus_init(void);
 void nvdimm_bus_exit(void);
 void nd_region_probe_success(struct nvdimm_bus *nvdimm_bus, struct device *dev);
 struct nd_region;
 void nd_region_create_blk_seed(struct nd_region *nd_region);
+void nd_region_create_btt_seed(struct nd_region *nd_region);
 void nd_region_disable(struct nvdimm_bus *nvdimm_bus, struct device *dev);
 int nvdimm_bus_create_ndctl(struct nvdimm_bus *nvdimm_bus);
 void nvdimm_bus_destroy_ndctl(struct nvdimm_bus *nvdimm_bus);
@@ -110,7 +67,6 @@ bool nd_is_uuid_unique(struct device *dev, u8 *uuid);
 struct nd_region;
 struct nvdimm_drvdata;
 struct nd_mapping;
-struct nd_region *walk_to_nd_region(struct device *nd_dev);
 resource_size_t nd_pmem_available_dpa(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping, resource_size_t *overlap);
 resource_size_t nd_blk_available_dpa(struct nd_mapping *nd_mapping);
@@ -123,4 +79,5 @@ struct resource *nsblk_add_resource(struct nd_region *nd_region,
 		resource_size_t start);
 int nvdimm_num_label_slots(struct nvdimm_drvdata *ndd);
 void get_ndd(struct nvdimm_drvdata *ndd);
+resource_size_t __nvdimm_namespace_capacity(struct nd_namespace_common *ndns);
 #endif /* __ND_CORE_H__ */
