@@ -1175,20 +1175,12 @@ static int btt_do_bvec(struct btt *btt, struct bio_integrity_payload *bip,
 static void btt_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct bio_integrity_payload *bip = bio_integrity(bio);
-	struct block_device *bdev = bio->bi_bdev;
 	struct btt *btt = q->queuedata;
 	struct bvec_iter iter;
 	unsigned long start;
 	struct bio_vec bvec;
 	int err = 0, rw;
 	bool do_acct;
-
-	if (bio_end_sector(bio) > get_capacity(bdev->bd_disk)) {
-		err = -EIO;
-		goto out;
-	}
-
-	rw = bio_data_dir(bio);
 
 	/*
 	 * bio_integrity_enabled also checks if the bio already has an
@@ -1202,6 +1194,7 @@ static void btt_make_request(struct request_queue *q, struct bio *bio)
 	}
 
 	do_acct = nd_iostat_start(bio, &start);
+	rw = bio_data_dir(bio);
 	bio_for_each_segment(bvec, bio, iter) {
 		unsigned int len = bvec.bv_len;
 

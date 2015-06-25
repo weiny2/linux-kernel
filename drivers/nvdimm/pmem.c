@@ -23,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
+#include <linux/pmem.h>
 #include <linux/nd.h>
 #include "nd.h"
 
@@ -32,7 +33,7 @@ struct pmem_device {
 
 	/* One contiguous memory region per device */
 	phys_addr_t		phys_addr;
-	void			*virt_addr;
+	void __pmem		*virt_addr;
 	size_t			size;
 };
 
@@ -44,13 +45,14 @@ static void pmem_do_bvec(struct pmem_device *pmem, struct page *page,
 {
 	void *mem = kmap_atomic(page);
 	size_t pmem_off = sector << 9;
+	void __pmem *pmem_addr = pmem->virt_addr + pmem_off;
 
 	if (rw == READ) {
-		memcpy(mem + off, pmem->virt_addr + pmem_off, len);
+		memcpy_from_pmem(mem + off, pmem_addr, len);
 		flush_dcache_page(page);
 	} else {
 		flush_dcache_page(page);
-		memcpy(pmem->virt_addr + pmem_off, mem + off, len);
+		memcpy_to_pmem(pmem_addr, mem + off, len);
 	}
 
 	kunmap_atomic(mem);
@@ -58,18 +60,12 @@ static void pmem_do_bvec(struct pmem_device *pmem, struct page *page,
 
 static void pmem_make_request(struct request_queue *q, struct bio *bio)
 {
-	int err = 0;
 	bool do_acct;
 	unsigned long start;
 	struct bio_vec bvec;
 	struct bvec_iter iter;
 	struct block_device *bdev = bio->bi_bdev;
 	struct pmem_device *pmem = bdev->bd_disk->private_data;
-
-	if (unlikely(bio_end_sector(bio) > get_capacity(bdev->bd_disk))) {
-		err = -EIO;
-		goto out;
-	}
 
 	do_acct = nd_iostat_start(bio, &start);
 	bio_for_each_segment(bvec, bio, iter)
@@ -78,8 +74,10 @@ static void pmem_make_request(struct request_queue *q, struct bio *bio)
 	if (do_acct)
 		nd_iostat_end(bio, start);
 
-out:
-	bio_endio(bio, err);
+	if (bio_data_dir(bio))
+		wmb_pmem();
+
+	bio_endio(bio, 0);
 }
 
 static int pmem_rw_page(struct block_device *bdev, sector_t sector,
@@ -102,7 +100,8 @@ static long pmem_direct_access(struct block_device *bdev, sector_t sector,
 	if (!pmem)
 		return -ENODEV;
 
-	*kaddr = pmem->virt_addr + offset;
+	/* FIXME convert DAX to comprehend that this mapping has a lifetime */
+	*kaddr = (void __force *) pmem->virt_addr + offset;
 	*pfn = (pmem->phys_addr + offset) >> PAGE_SHIFT;
 
 	return pmem->size - offset;
@@ -126,6 +125,8 @@ static struct pmem_device *pmem_alloc(struct device *dev,
 
 	pmem->phys_addr = res->start;
 	pmem->size = resource_size(res);
+	if (!arch_has_pmem_api())
+		dev_warn(dev, "unable to guarantee persistence of writes\n");
 
 	if (!request_mem_region(pmem->phys_addr, pmem->size, dev_name(dev))) {
 		dev_warn(dev, "could not reserve region [0x%pa:0x%zx]\n",
@@ -134,7 +135,7 @@ static struct pmem_device *pmem_alloc(struct device *dev,
 		return ERR_PTR(-EBUSY);
 	}
 
-	pmem->virt_addr = ioremap_nocache(pmem->phys_addr, pmem->size);
+	pmem->virt_addr = memremap_pmem(pmem->phys_addr, pmem->size);
 	if (!pmem->virt_addr) {
 		release_mem_region(pmem->phys_addr, pmem->size);
 		kfree(pmem);
@@ -199,16 +200,18 @@ static int pmem_rw_bytes(struct nd_namespace_common *ndns,
 	}
 
 	if (rw == READ)
-		memcpy(buf, pmem->virt_addr + offset, size);
-	else
-		memcpy(pmem->virt_addr + offset, buf, size);
+		memcpy_from_pmem(buf, pmem->virt_addr + offset, size);
+	else {
+		memcpy_to_pmem(pmem->virt_addr + offset, buf, size);
+		wmb_pmem();
+	}
 
 	return 0;
 }
 
 static void pmem_free(struct pmem_device *pmem)
 {
-	iounmap(pmem->virt_addr);
+	memunmap_pmem(pmem->virt_addr);
 	release_mem_region(pmem->phys_addr, pmem->size);
 	kfree(pmem);
 }
