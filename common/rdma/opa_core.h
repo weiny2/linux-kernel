@@ -261,11 +261,13 @@ struct opa_pport_desc {
  * @oui: Organizational Unique Identifier
  * @num_pports: Number of physical ports
  * @nguid: node GUID, unique per node
+ * @numa_node: numa node of device
  */
 struct opa_dev_desc {
 	u8 oui[3];
 	u8 num_pports;
 	__be64 nguid;
+	int numa_node;
 };
 
 /**

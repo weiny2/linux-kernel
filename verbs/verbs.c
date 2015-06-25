@@ -429,6 +429,7 @@ static int opa_ib_add(struct opa_core_device *odev)
 	ibd->num_pports = num_ports;
 	ibd->node_guid = desc.nguid;
 	memcpy(ibd->oui, desc.oui, ARRAY_SIZE(ibd->oui));
+	ibd->assigned_node_id = desc.numa_node;
 	ibd->pport = (struct opa_ib_portdata *)(ibd + 1);
 	ibd->parent_dev = odev->dev.parent;
 	ibd->odev = odev;
@@ -449,6 +450,10 @@ static int opa_ib_add(struct opa_core_device *odev)
 	spin_lock_init(&ibd->n_qps_lock);
 	spin_lock_init(&ibd->n_srqs_lock);
 
+	ret = opa_ib_cq_init(ibd);
+	if (ret)
+		goto cq_init_err;
+
 	ret = opa_core_set_priv_data(&opa_ib_driver, odev, ibd);
 	if (ret)
 		goto priv_err;
@@ -459,6 +464,8 @@ static int opa_ib_add(struct opa_core_device *odev)
 ib_reg_err:
 	opa_core_clear_priv_data(&opa_ib_driver, odev);
 priv_err:
+	opa_ib_cq_exit(ibd);
+cq_init_err:
 	kfree(ibd);
 exit:
 	dev_err(&odev->dev, "%s error rc %d\n", __func__, ret);
@@ -473,6 +480,7 @@ static void opa_ib_remove(struct opa_core_device *odev)
 	if (!ibd)
 		return;
 	opa_ib_unregister_device(ibd);
+	opa_ib_cq_exit(ibd);
 	ida_destroy(&ibd->qpn_table);
 	kfree(ibd);
 	opa_core_clear_priv_data(&opa_ib_driver, odev);
