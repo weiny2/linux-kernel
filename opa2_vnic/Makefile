@@ -4,3 +4,4 @@
 #
 
 obj-m += opa_vnic_bus/
+obj-m += opa_vnic/
