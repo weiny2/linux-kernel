@@ -59,9 +59,9 @@
 #define OPA_PORT_LTP_CRC_MODE_48	4	/* 48-bit LTP CRC mode (optional) */
 #define OPA_PORT_LTP_CRC_MODE_12_16_PER_LANE 8	/* 12/16-bit per lane LTP CRC mode */
 
-/* Link Down Reason; indicated as follows: */
+/* Link Down / Neighbor Link Down Reason; indicated as follows: */
 #define OPA_LINKDOWN_REASON_NONE				0	/* No specified reason */
-#define OPA_LINKDOWN_REASON_BAD_LT				1
+#define OPA_LINKDOWN_REASON_RCV_ERROR_0				1
 #define OPA_LINKDOWN_REASON_BAD_PKT_LEN				2
 #define OPA_LINKDOWN_REASON_PKT_TOO_LONG			3
 #define OPA_LINKDOWN_REASON_PKT_TOO_SHORT			4
@@ -69,19 +69,64 @@
 #define OPA_LINKDOWN_REASON_BAD_DLID				6
 #define OPA_LINKDOWN_REASON_BAD_L2				7
 #define OPA_LINKDOWN_REASON_BAD_SC				8
-#define OPA_LINKDOWN_REASON_BAD_MID_TAIL			9
-#define OPA_LINKDOWN_REASON_BAD_FECN				10
-#define OPA_LINKDOWN_REASON_PREEMPT_ERROR			11
-#define OPA_LINKDOWN_REASON_PREEMPT_VL15			12
-#define OPA_LINKDOWN_REASON_BAD_VL_MARKER			13
-#define OPA_LINKDOWN_REASON_BAD_HEAD_DIST			14
-#define OPA_LINKDOWN_REASON_BAD_TAIL_DIST			15
-#define OPA_LINKDOWN_REASON_BAD_CTRL_DIST			16
-#define OPA_LINKDOWN_REASON_BAD_CREDIT_ACK			17
-#define OPA_LINKDOWN_REASON_UNSUPPORTED_VL_MARKER		18
-#define OPA_LINKDOWN_REASON_BAD_PREEMPT				19
-#define OPA_LINKDOWN_REASON_BAD_CONTROL_FLIT			20
-#define OPA_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN		21
+#define OPA_LINKDOWN_REASON_RCV_ERROR_8				9
+#define OPA_LINKDOWN_REASON_BAD_MID_TAIL			10
+#define OPA_LINKDOWN_REASON_RCV_ERROR_10			11
+#define OPA_LINKDOWN_REASON_PREEMPT_ERROR			12
+#define OPA_LINKDOWN_REASON_PREEMPT_VL15			13
+#define OPA_LINKDOWN_REASON_BAD_VL_MARKER			14
+#define OPA_LINKDOWN_REASON_RCV_ERROR_14			15
+#define OPA_LINKDOWN_REASON_RCV_ERROR_15			16
+#define OPA_LINKDOWN_REASON_BAD_HEAD_DIST			17
+#define OPA_LINKDOWN_REASON_BAD_TAIL_DIST			18
+#define OPA_LINKDOWN_REASON_BAD_CTRL_DIST			19
+#define OPA_LINKDOWN_REASON_BAD_CREDIT_ACK			20
+#define OPA_LINKDOWN_REASON_UNSUPPORTED_VL_MARKER		21
+#define OPA_LINKDOWN_REASON_BAD_PREEMPT				22
+#define OPA_LINKDOWN_REASON_BAD_CONTROL_FLIT			23
+#define OPA_LINKDOWN_REASON_EXCEED_MULTICAST_LIMIT		24
+#define OPA_LINKDOWN_REASON_RCV_ERROR_24			25
+#define OPA_LINKDOWN_REASON_RCV_ERROR_25			26
+#define OPA_LINKDOWN_REASON_RCV_ERROR_26			27
+#define OPA_LINKDOWN_REASON_RCV_ERROR_27			28
+#define OPA_LINKDOWN_REASON_RCV_ERROR_28			29
+#define OPA_LINKDOWN_REASON_RCV_ERROR_29			30
+#define OPA_LINKDOWN_REASON_RCV_ERROR_30			31
+#define OPA_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN		32
+#define OPA_LINKDOWN_REASON_UNKNOWN				33
+/* 34 -reserved */
+#define OPA_LINKDOWN_REASON_REBOOT				35
+#define OPA_LINKDOWN_REASON_NEIGHBOR_UNKNOWN			36
+/* 37-38 reserved */
+#define OPA_LINKDOWN_REASON_FM_BOUNCE				39
+#define OPA_LINKDOWN_REASON_SPEED_POLICY			40
+#define OPA_LINKDOWN_REASON_WIDTH_POLICY			41
+/* 42-48 reserved */
+#define OPA_LINKDOWN_REASON_DISCONNECTED			49
+#define OPA_LINKDOWN_REASONLOCAL_MEDIA_NOT_INSTALLED		50
+#define OPA_LINKDOWN_REASON_NOT_INSTALLED			51
+#define OPA_LINKDOWN_REASON_CHASSIS_CONFIG			52
+/* 53 reserved */
+#define OPA_LINKDOWN_REASON_END_TO_END_NOT_INSTALLED		54
+/* 55 reserved */
+#define OPA_LINKDOWN_REASON_POWER_POLICY			56
+#define OPA_LINKDOWN_REASON_LINKSPEED_POLICY			57
+#define OPA_LINKDOWN_REASON_LINKWIDTH_POLICY			58
+/* 59 reserved */
+#define OPA_LINKDOWN_REASON_SWITCH_MGMT				60
+#define OPA_LINKDOWN_REASON_SMA_DISABLED			61
+/* 62 reserved */
+#define OPA_LINKDOWN_REASON_TRANSIENT				63
+/* 64-255 reserved */
+
+/* OPA Link Init reason; indicated as follows: */
+/* 3-7; 11-15 reserved */
+#define OPA_LINKINIT_REASON_NOP                 0
+#define OPA_LINKINIT_REASON_LINKUP              (1 << 4)
+#define OPA_LINKINIT_REASON_FLAPPING            (2 << 4)
+#define OPA_LINKINIT_OUTSIDE_POLICY             (8 << 4)
+#define OPA_LINKINIT_QUARANTINED                (9 << 4)
+#define OPA_LINKINIT_INSUFIC_CAPABILITY         (10 << 4)
 
 /*  OPA Link speed, continued from IB_LINK_SPEED and indicated as follows:
  * values are additive for Supported and Enabled fields
@@ -148,6 +193,7 @@ enum port_info_field_masks {
 	OPA_PI_MASK_SMSL                          = 0x1F,
 	/* partenforce_filterraw */
 	/* Filter Raw In/Out bits 1 and 2 were removed */
+	OPA_PI_MASK_LINKINIT_REASON               = 0xF0,
 	OPA_PI_MASK_PARTITION_ENFORCE_IN          = 0x08,
 	OPA_PI_MASK_PARTITION_ENFORCE_OUT         = 0x04,
 	/* operational_vls */
@@ -272,7 +318,7 @@ struct opa_port_info {
 	u8     mkeyprotect_lmc;                   /* 2 bits, 2 res, 4 bits */
 	u8     smsl;                              /* 3 res, 5 bits */
 
-	u8     partenforce_filterraw;             /* 4 res, bit fields */
+	u8     partenforce_filterraw;             /* bit fields */
 	u8     operational_vls;                    /* 3 res, 5 bits */
 	__be16 pkey_8b;
 	__be16 pkey_10b;
@@ -285,7 +331,7 @@ struct opa_port_info {
 	__be32 sa_qp;                             /* 8 bits, 24 bits */
 	u8     neigh_port_num;
 	u8     link_down_reason;
-	u8     localphy_overrun_errors;	          /* 4 bits, 4 bits */
+	u8     neigh_link_down_reason;
 	u8     clientrereg_subnettimeout;	  /* 1 bit, 2 bits, 5 */
 
 	struct {
@@ -349,20 +395,27 @@ struct opa_port_info {
 		u8 vlstall_hoqlife;             /* 3 bits, 5 bits */
 	} xmit_q[OPA_MAX_VLS];
 
+	struct {
+		u8 addr[16];
+	} ipaddr_ipv6;
 
-	union ib_gid ip_addr_primary;
+	struct {
+		u8 addr[4];
+	} ipaddr_ipv4;
 
-	union ib_gid ip_addr_secondary;
+	u32    reserved6;
+	u32    reserved7;
+	u32    reserved8;
 
 	__be64 neigh_node_guid;
 
 	__be32 ib_cap_mask;
-	__be16 reserved6;                       /* was ib_cap_mask2 */
+	__be16 reserved9;                    /* was ib_cap_mask2 */
 	__be16 opa_cap_mask;
 
-	__be32 reserved7;                       /* was link_roundtrip_latency */
+	__be32 reserved10;                   /* was link_roundtrip_latency */
 	__be16 overall_buffer_space;
-	__be16 reserved8;                       /* was max_credit_hint */
+	__be16 reserved11;                   /* was max_credit_hint */
 
 	__be16 diag_code;
 	struct {
@@ -374,8 +427,8 @@ struct opa_port_info {
 
 	u8     resptimevalue;		        /* 3 res, 5 bits */
 	u8     local_port_num;
-	u8     ganged_port_details;
-	u8     reserved9;                       /* was guid_cap */
+	u8     reserved12;
+	u8     reserved13;                       /* was guid_cap */
 } __attribute__ ((packed));
 
 #endif /* OPA_PORT_INFO_H */
