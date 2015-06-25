@@ -86,11 +86,12 @@
 /*  STL Link speed, continued from IB_LINK_SPEED and indicated as follows:
  * values are additive for Supported and Enabled fields
  */
-#define STL_LINK_SPEED_RESERVED         0x0080  /*  Reserved (1-5 Gbps) */
-#define STL_LINK_SPEED_12_5G            0x0100  /*  12.5 Gbps */
-#define STL_LINK_SPEED_25G              0x0200  /*  25.78125?  Gbps (EDR) */
-#define STL_LINK_SPEED_RESERVED3        0x0400  /*  Reserved (>25G) */
-#define STL_LINK_SPEED_ALL_SUPPORTED    0x03FF  /*  valid only for STL LinkSpeedEnabled */
+#define STL_LINK_SPEED_NOP              0x0000  /*  Reserved (1-5 Gbps) */
+#define STL_LINK_SPEED_12_5G            0x0001  /*  12.5 Gbps */
+#define STL_LINK_SPEED_25G              0x0002  /*  25.78125?  Gbps (EDR) */
+
+/* This should be in the driver but left here to keep the compile working */
+#define STL_LINK_SPEED_ALL_SUPPORTED    (STL_LINK_SPEED_12_5G | STL_LINK_SPEED_25G)
 
 /*  STL Link width
  */
