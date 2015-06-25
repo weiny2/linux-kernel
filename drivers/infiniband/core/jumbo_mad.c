@@ -138,7 +138,7 @@ static void jumbo_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 
 	INIT_LIST_HEAD(&mad_recv_wc->rmpp_list);
 	list_add(&mad_recv_wc->recv_buf.list, &mad_recv_wc->rmpp_list);
-	if (kernel_rmpp_agent(&mad_agent_priv->agent)) {
+	if (ib_mad_kernel_rmpp_agent(&mad_agent_priv->agent)) {
 		mad_recv_wc = jumbo_process_rmpp_recv_wc(mad_agent_priv,
 						      mad_recv_wc);
 		if (!mad_recv_wc) {
@@ -153,9 +153,9 @@ static void jumbo_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 		mad_send_wr = ib_find_send_mad(mad_agent_priv, mad_recv_wc);
 		if (!mad_send_wr) {
 			spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
-			if (mad_agent_priv->agent.flags & IB_MAD_USER_RMPP
+			if (!ib_mad_kernel_rmpp_agent(&mad_agent_priv->agent)
 			   && ib_is_mad_class_rmpp(mad_recv_wc->recv_buf.mad->mad_hdr.mgmt_class)
-			   && (ib_get_rmpp_flags(&((struct jumbo_rmpp_mad *)mad_recv_wc->recv_buf.mad)->rmpp_hdr)
+			   && (ib_get_rmpp_flags(&((struct jumbo_rmpp_mad *)mad_recv_wc->recv_buf.mad)->base.rmpp_hdr)
 					& IB_MGMT_RMPP_FLAG_ACTIVE)) {
 				// user rmpp is in effect
 				mad_recv_wc->wc->wr_id = 0;
