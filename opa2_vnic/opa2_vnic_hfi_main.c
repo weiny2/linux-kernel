@@ -6,7 +6,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright (c) 2014 - 2015 Intel Corporation.
+ * Copyright (c) 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
@@ -19,7 +19,7 @@
  *
  * BSD LICENSE
  *
- * Copyright (c) 2014 - 2015 Intel Corporation.
+ * Copyright (c) 2015 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -47,10 +47,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Intel(R) Omni-Path Gen2 network driver
+ * Intel(R) Omni-Path Gen2 specific support for VNIC functionality.
  */
 #include <linux/etherdevice.h>
-#include <linux/ethtool.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <rdma/opa_core.h>
@@ -58,11 +57,14 @@
 #include <rdma/hfi_rx.h>
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_ct.h>
+#include <linux/opa_vnic.h>
+
+#include "opa2_vnic_hfi.h"
 
 static int opa_netdev_probe(struct opa_core_device *odev);
 static void opa_netdev_remove(struct opa_core_device *odev);
 
-static struct opa_core_client opa_netdev = {
+static struct opa_core_client opa_vnic_clnt = {
 	.name = KBUILD_MODNAME,
 	.add = opa_netdev_probe,
 	.remove = opa_netdev_remove
@@ -71,124 +73,21 @@ static struct opa_core_client opa_netdev = {
 /*
  * struct opa_netdev - OPA2 net device specific fields
  *
- * @pdev - PCIe device backing this net device
- * @ndev - Net device registered
  * @ctx - HFI context
  * @cq_idx - command queue index
  * @tx - TX command queue
  * @rx - RX command queue
  */
 struct opa_netdev {
-	struct pci_dev		*pdev;
-	struct net_device	*ndev;
 	struct hfi_ctx		ctx;
 	u16			cq_idx;
 	struct hfi_cq		tx;
 	struct hfi_cq		rx;
 };
 
-#define OPA2_RXQ_SIZE 0
 #define OPA2_NET_ME_COUNT 256
 #define OPA2_NET_UNEX_COUNT 512
 #define OPA2_TX_TIMEOUT_MS 1000
-
-enum {
-	OPA_LINK_DOWN = 0,
-	OPA_LINK_UP,
-};
-
-static netdev_tx_t opa_netdev_start_xmit(struct sk_buff *skb,
-					 struct net_device *ndev)
-{
-	/* TODO: Use the TX command queue to send this skb */
-	netdev_printk(KERN_INFO, ndev, "%s %d\n", __func__, __LINE__);
-	return NETDEV_TX_OK;
-}
-
-static int opa_netdev_open(struct net_device *ndev)
-{
-	struct sk_buff *skb;
-	int rc, i;
-
-	netdev_printk(KERN_INFO, ndev, "%s %d\n", __func__, __LINE__);
-	for (i = 0; i < OPA2_RXQ_SIZE; i++) {
-		/* Allocate some RX buffers */
-		skb = netdev_alloc_skb(ndev, ndev->mtu + ETH_HLEN);
-		if (!skb) {
-			rc = -ENOMEM;
-			goto err;
-		}
-		/* TODO: Use the RX command queue to post RX buffers */
-	}
-
-	netif_carrier_off(ndev);
-	netdev_printk(KERN_INFO, ndev, "%s %d\n", __func__, __LINE__);
-	return 0;
-err:
-	/* TODO: Free RX buffers allocated */
-	return rc;
-}
-
-static int opa_netdev_close(struct net_device *ndev)
-{
-	/* TODO: Free RX buffers allocated */
-	netdev_printk(KERN_INFO, ndev, "%s %d\n", __func__, __LINE__);
-	return 0;
-}
-
-static int opa_netdev_change_mtu(struct net_device *ndev, int new_mtu)
-{
-	/* TODO: Free RX buffers previously allocated and allocate new ones */
-	netdev_printk(KERN_INFO, ndev, "%s %d\n", __func__, __LINE__);
-	return 0;
-}
-
-static const struct net_device_ops opa_netdev_ops = {
-	.ndo_open = opa_netdev_open,
-	.ndo_stop = opa_netdev_close,
-	.ndo_start_xmit = opa_netdev_start_xmit,
-	.ndo_change_mtu = opa_netdev_change_mtu,
-	.ndo_set_mac_address = eth_mac_addr,
-};
-
-#if 0
- /* Disabling since it is resulting in crashes on rhel 7.0 */
-static void opa_get_drvinfo(struct net_device *ndev,
-			    struct ethtool_drvinfo *info)
-{
-	struct opa_netdev *dev = netdev_priv(ndev);
-
-	netdev_printk(KERN_INFO, ndev, "%s %d\n", __func__, __LINE__);
-	strlcpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
-	strlcpy(info->bus_info, pci_name(dev->pdev), sizeof(info->bus_info));
-}
-#endif
-
-static int opa_get_settings(struct net_device *ndev, struct ethtool_cmd *cmd)
-{
-	netdev_printk(KERN_INFO, ndev, "%s %d\n", __func__, __LINE__);
-	cmd->supported = SUPPORTED_Backplane;
-	cmd->advertising = ADVERTISED_Backplane;
-	ethtool_cmd_speed_set(cmd, SPEED_UNKNOWN);
-	cmd->duplex = DUPLEX_FULL;
-	cmd->port = PORT_OTHER;
-	cmd->phy_address = 0;
-	cmd->transceiver = XCVR_DUMMY1;
-	cmd->autoneg = AUTONEG_ENABLE;
-	cmd->maxtxpkt = 0;
-	cmd->maxrxpkt = 0;
-
-	return 0;
-}
-
-static const struct ethtool_ops opa_ethtool_ops = {
-#if 0
-	 /* Disabling since it is resulting in crashes on rhel 7.0 */
-	.get_drvinfo = opa_get_drvinfo,
-#endif
-	.get_link = ethtool_op_get_link,
-	.get_settings = opa_get_settings,
-};
 
 static inline int
 __hfi_ct_wait(struct hfi_ctx *ctx, hfi_ct_handle_t ct_h,
@@ -243,6 +142,34 @@ int hfi_tx_write(struct hfi_cq *tx, struct hfi_ctx *ctx,
 
 	return rc;
 }
+
+int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev, struct sk_buff *skb)
+{
+	return 0;
+}
+
+struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
+{
+	return NULL;
+}
+
+int opa2_vnic_hfi_open(struct opa_vnic_device *vdev, opa_vnic_hfi_evt_cb_fn cb)
+{
+	vdev->vnic_cb = cb;
+	return 0;
+}
+
+void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
+{
+	vdev->vnic_cb = NULL;
+}
+
+int opa2_vnic_hfi_init(struct opa_vnic_device *vdev)
+{
+	return 0;
+}
+
+void opa2_vnic_hfi_deinit(struct opa_vnic_device *vdev) { }
 
 static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 {
@@ -472,8 +399,9 @@ err1:
 	return rc;
 }
 
-static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
+int opa2_vnic_hfi_setup(struct opa_core_device *odev)
 {
+	struct opa_netdev *dev = opa_core_get_priv_data(&opa_vnic_clnt, odev);
 	struct hfi_ctx *ctx = &dev->ctx;
 	struct opa_ctx_assign ctx_assign = {0};
 	struct opa_core_ops *ops = odev->bus_ops;
@@ -508,8 +436,9 @@ err:
 	return rc;
 }
 
-static void opa2_hw_uninit(struct opa_core_device *odev, struct opa_netdev *dev)
+void opa2_vnic_hfi_cleanup(struct opa_core_device *odev)
 {
+	struct opa_netdev *dev = opa_core_get_priv_data(&opa_vnic_clnt, odev);
 	struct hfi_ctx *ctx = &dev->ctx;
 	struct opa_core_ops *ops = odev->bus_ops;
 
@@ -520,70 +449,56 @@ static void opa2_hw_uninit(struct opa_core_device *odev, struct opa_netdev *dev)
 
 static int opa_netdev_probe(struct opa_core_device *odev)
 {
-	struct net_device *ndev;
 	struct opa_netdev *dev;
 	int rc;
 
-	ndev = alloc_etherdev(sizeof(struct opa_netdev));
-	if (!ndev)
-		return -ENOMEM;
-
-	dev = netdev_priv(ndev);
-	rc = opa_core_set_priv_data(&opa_netdev, odev, dev);
+	dev = kzalloc(sizeof(struct opa_netdev), GFP_KERNEL);
+	rc = opa_core_set_priv_data(&opa_vnic_clnt, odev, dev);
 	if (rc)
 		goto priv_err;
-	dev->ndev = ndev;
-	ndev->features = NETIF_F_HIGHDMA;
-	ndev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
-	ndev->hw_features = ndev->features;
-	ndev->watchdog_timeo = msecs_to_jiffies(OPA2_TX_TIMEOUT_MS);
-	random_ether_addr(ndev->perm_addr);
-	memcpy(ndev->dev_addr, ndev->perm_addr, ndev->addr_len);
-	ndev->netdev_ops = &opa_netdev_ops;
-	ndev->ethtool_ops = &opa_ethtool_ops;
 
-	rc = opa2_hw_init(odev, dev);
+	rc = opa2_vnic_hfi_setup(odev);
 	if (rc)
-		goto hw_err;
-	rc = register_netdev(ndev);
+		goto vnic_err;
+
+	rc = opa2_vnic_hfi_add_vports(odev);
 	if (rc)
-		goto netdev_err;
+		goto vport_err;
+
 	return 0;
-netdev_err:
-	opa2_hw_uninit(odev, dev);
-hw_err:
-	opa_core_clear_priv_data(&opa_netdev, odev);
+
+vport_err:
+	opa2_vnic_hfi_cleanup(odev);
+vnic_err:
+	opa_core_clear_priv_data(&opa_vnic_clnt, odev);
 priv_err:
-	free_netdev(ndev);
-	dev_err(&odev->dev, "%s error rc %d\n", __func__, rc);
+	dev_err(&odev->dev, "error initializing vnic client %d\n", rc);
+	kfree(dev);
 	return rc;
 }
 
 static void opa_netdev_remove(struct opa_core_device *odev)
 {
-	struct net_device *ndev;
-	struct opa_netdev *dev = opa_core_get_priv_data(&opa_netdev, odev);
+	struct opa_netdev *dev = opa_core_get_priv_data(&opa_vnic_clnt, odev);
 
-	if (!dev)
-		return;
-	ndev = dev->ndev;
-	unregister_netdev(ndev);
-	opa2_hw_uninit(odev, dev);
-	free_netdev(ndev);
-	opa_core_clear_priv_data(&opa_netdev, odev);
+	opa2_vnic_hfi_remove_vports(odev);
+	opa2_vnic_hfi_cleanup(odev);
+	opa_core_clear_priv_data(&opa_vnic_clnt, odev);
+	kfree(dev);
 }
 
 static int __init opa_netdev_init_module(void)
 {
-	return opa_core_client_register(&opa_netdev);
+	return opa_core_client_register(&opa_vnic_clnt);
 }
 module_init(opa_netdev_init_module);
 
 static void __exit opa_netdev_exit_module(void)
 {
-	opa_core_client_unregister(&opa_netdev);
+	opa_core_client_unregister(&opa_vnic_clnt);
 }
 module_exit(opa_netdev_exit_module);
+
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel Corporation");
 MODULE_DESCRIPTION("Intel(R) Omni-Path Gen2 Network Driver");
