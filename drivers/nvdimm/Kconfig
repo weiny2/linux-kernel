@@ -65,14 +65,4 @@ config BTT
 
 	  Select Y if unsure
 
-config ND_MAX_REGIONS
-	int "Maximum number of regions supported by the sub-system"
-	default 64
-	---help---
-	  A 'region' corresponds to an individual DIMM or an interleave
-	  set of DIMMs.  A typical maximally configured system may have
-	  up to 32 DIMMs.
-
-	  Leave the default of 64 if you are unsure.
-
 endif

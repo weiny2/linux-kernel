@@ -16,82 +16,6 @@
 #include <linux/nd.h>
 #include "nd.h"
 
-struct nd_percpu_lane {
-	int count[CONFIG_ND_MAX_REGIONS];
-	spinlock_t lock[CONFIG_ND_MAX_REGIONS];
-};
-
-static DEFINE_PER_CPU(struct nd_percpu_lane, nd_percpu_lane);
-
-static void __init nd_region_init_locks(void)
-{
-	unsigned int i, j;
-
-	for (i = 0; i < nr_cpu_ids; i++)
-		for (j = 0; j < CONFIG_ND_MAX_REGIONS; j++) {
-			struct nd_percpu_lane *ndl;
-
-			ndl = per_cpu_ptr(&nd_percpu_lane, i);
-			spin_lock_init(&ndl->lock[j]);
-			ndl->count[j] = 0;
-		}
-}
-
-/**
- * nd_region_acquire_lane - allocate and lock a lane
- * @nd_region: region id and number of lanes possible
- *
- * A lane correlates to a BLK-data-window and/or a log slot in the BTT.
- * We optimize for the common case where there are 256 lanes, one
- * per-cpu.  For larger systems we need to lock to share lanes.  For now
- * this implementation assumes the cost of maintaining an allocator for
- * free lanes is on the order of the lock hold time, so it implements a
- * static lane = cpu % num_lanes mapping.
- *
- * In the case of a BTT instance on top of a BLK namespace a lane may be
- * acquired recursively.  We lock on the first instance.
- *
- * In the case of a BTT instance on top of PMEM, we only acquire a lane
- * for the BTT metadata updates.
- */
-unsigned int nd_region_acquire_lane(struct nd_region *nd_region)
-{
-	unsigned int cpu, lane;
-
-	cpu = get_cpu();
-	if (nd_region->num_lanes < nr_cpu_ids) {
-		struct nd_percpu_lane *ndl_lock, *ndl_count;
-		unsigned int id = nd_region->id;
-
-		lane = cpu % nd_region->num_lanes;
-		ndl_count = per_cpu_ptr(&nd_percpu_lane, cpu);
-		ndl_lock = per_cpu_ptr(&nd_percpu_lane, lane);
-		if (ndl_count->count[id]++ == 0)
-			spin_lock(&ndl_lock->lock[id]);
-	} else
-		lane = cpu;
-
-	return lane;
-}
-EXPORT_SYMBOL(nd_region_acquire_lane);
-
-void nd_region_release_lane(struct nd_region *nd_region, unsigned int lane)
-{
-	if (nd_region->num_lanes < nr_cpu_ids) {
-		unsigned int cpu = get_cpu();
-		unsigned int id = nd_region->id;
-		struct nd_percpu_lane *ndl_lock, *ndl_count;
-
-		ndl_count = per_cpu_ptr(&nd_percpu_lane, cpu);
-		ndl_lock = per_cpu_ptr(&nd_percpu_lane, lane);
-		if (--ndl_count->count[id] == 0)
-			spin_unlock(&ndl_lock->lock[id]);
-		put_cpu();
-	}
-	put_cpu();
-}
-EXPORT_SYMBOL(nd_region_release_lane);
-
 static int nd_region_probe(struct device *dev)
 {
 	int err, rc;
@@ -178,7 +102,6 @@ static struct nd_device_driver nd_region_driver = {
 
 int __init nd_region_init(void)
 {
-	nd_region_init_locks();
 	return nd_driver_register(&nd_region_driver);
 }
 

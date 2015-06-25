@@ -83,6 +83,11 @@ static inline struct nd_namespace_index *to_next_namespace_index(
 	for (res = (ndd)->dpa.child, next = res ? res->sibling : NULL; \
 			res; res = next, next = next ? next->sibling : NULL)
 
+struct nd_percpu_lane {
+	int count;
+	spinlock_t lock;
+};
+
 struct nd_region {
 	struct device dev;
 	struct ida ns_ida;
@@ -95,6 +100,7 @@ struct nd_region {
 	int id, num_lanes, ro, numa_node;
 	void *provider_data;
 	struct nd_interleave_set *nd_set;
+	struct nd_percpu_lane __percpu *lane;
 	struct nd_mapping mapping[0];
 };
 
