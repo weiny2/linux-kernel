@@ -402,6 +402,11 @@ static void update_sm_ah(struct work_struct *work)
 		return;
 	}
 
+	if (port_attr.state != IB_PORT_ACTIVE) {
+		new_ah = NULL;
+		goto update;
+	}
+
 	new_ah = kmalloc(sizeof *new_ah, GFP_KERNEL);
 	if (!new_ah) {
 		printk(KERN_WARNING "Couldn't allocate new SM AH\n");
@@ -428,6 +433,7 @@ static void update_sm_ah(struct work_struct *work)
 		return;
 	}
 
+update:
 	spin_lock_irq(&port->ah_lock);
 	if (port->sm_ah)
 		kref_put(&port->sm_ah->ref, free_sm_ah);
