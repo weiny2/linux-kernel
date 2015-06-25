@@ -3487,11 +3487,18 @@ static void add_full_mgmt_pkey(struct hfi1_pportdata *ppd)
 static u16 link_width_to_bits(struct hfi1_devdata *dd, u16 width)
 {
 	switch (width) {
+	case 0:
+		/*
+		 * Simulator and quick linkup do not set the width.
+		 * Just set it to 4x without complaint.
+		 */
+		if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR || quick_linkup)
+			return OPA_LINK_WIDTH_4X;
+		return 0; /* no lanes up */
 	case 1: return OPA_LINK_WIDTH_1X;
 	case 2: return OPA_LINK_WIDTH_2X;
 	case 3: return OPA_LINK_WIDTH_3X;
 	default:
-		/* NOTE: 0 in simulation */
 		dd_dev_info(dd, "%s: invalid width %d, using 4\n",
 			__func__, width);
 		/* fall through */
@@ -3597,7 +3604,6 @@ static void get_linkup_widths(struct hfi1_devdata *dd, u16 *tx_width,
 	read_vc_local_link_width(dd, &misc_bits, &local_flags, &widths);
 	tx = widths >> 12;
 	rx = (widths >> 8) & 0xf;
-	dd_dev_info(dd, "%s: active tx %d, active rx %d\n", __func__, tx, rx);
 
 	*tx_width = link_width_to_bits(dd, tx);
 	*rx_width = link_width_to_bits(dd, rx);
