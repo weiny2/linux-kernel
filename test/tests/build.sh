@@ -61,6 +61,8 @@ if [ $checkpatch -eq 1 ];then
 	scripts/checkpatch.pl -F --no-tree *.[ch] | scripts/build_checkpatch_whitelist.sh > checkpatch.current
 	if ! diff -c test/tests/checkpatch.whitelist checkpatch.current; then
 		echo "Failed checkpatch whitelist comparison"
+	else
+		echo "Checkpatch test passed"
 	fi
 	rm -f checkpatch.current
 fi
