@@ -292,12 +292,26 @@ struct stl_port_info {
 		__be16 enabled;
 		__be16 active;
 	} link_width;
+#ifndef USE_PI_LWD_TX_RX_ACTIVE
+#define USE_PI_LWD_TX_RX_ACTIVE 0
+#endif
+#if USE_PI_LWD_TX_RX_ACTIVE
 	struct {
 		__be16 supported;
 		__be16 enabled;
 		__be16 tx_active;
 		__be16 rx_active;
 	} link_width_downgrade;
+#define PI_LWD_TX_RX_ACTIVE_SUP 1
+#else /* use old definition */
+	struct {
+		__be16 supported;
+		__be16 enabled;
+		__be16 active;
+	} link_width_downgrade;
+	__be16 reserved3;
+#define PI_LWD_TX_RX_ACTIVE_SUP 0
+#endif
 	__be16 port_link_mode;                  /* 1 res, 5 bits, 5 bits, 5 bits */
 	__be16 port_ltp_crc_mode;               /* 4 res, 4 bits, 4 bits, 4 bits */
 
