@@ -276,9 +276,6 @@ struct hfi1_ctxtdata {
 	/* ctxt rcvhdrq head offset */
 	u32 head;
 	u32 pkt_count;
-	/* look-aside fields */
-	struct hfi1_qp *lookaside_qp;
-	u32 lookaside_qpn;
 	/* QPs waiting for context processing */
 	struct list_head qp_wait_list;
 	/* interrupt handling */

@@ -664,22 +664,9 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		if (atomic_dec_return(&mcast->refcount) <= 1)
 			wake_up(&mcast->wait);
 	} else {
-		if (rcd->lookaside_qp) {
-			if (rcd->lookaside_qpn != qp_num) {
-				if (atomic_dec_and_test(
-					&rcd->lookaside_qp->refcount))
-					wake_up(&rcd->lookaside_qp->wait);
-				rcd->lookaside_qp = NULL;
-			}
-		}
-		if (!rcd->lookaside_qp) {
-			qp = hfi1_lookup_qpn(ibp, qp_num);
-			if (!qp)
-				goto drop;
-			rcd->lookaside_qp = qp;
-			rcd->lookaside_qpn = qp_num;
-		} else
-			qp = rcd->lookaside_qp;
+		qp = hfi1_lookup_qpn(ibp, qp_num);
+		if (!qp)
+			goto drop;
 
 		if (lnh == HFI1_LRH_GRH)
 			rcv_flags |= HFI1_HAS_GRH;
