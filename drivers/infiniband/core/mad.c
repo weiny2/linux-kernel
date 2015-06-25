@@ -759,7 +759,6 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	 */
 
 	if (smp->base_version == JUMBO_MGMT_BASE_VERSION) {
-#warning "FIXME there needs to be a selection for the STL SM Class version here"
 		if ((stl_get_smp_direction(stl_smp)
 			? stl_smp->route.dr.dr_dlid : stl_smp->route.dr.dr_slid) ==
 			STL_LID_PERMISSIVE &&
@@ -3316,7 +3315,6 @@ static void ib_mad_init_device(struct ib_device *device)
 {
 	int start, end, i;
 
-#warning "FIXME for upstream: allow STL transport here as well"
 	if (rdma_node_get_transport(device->node_type) != RDMA_TRANSPORT_IB)
 		return;
 
