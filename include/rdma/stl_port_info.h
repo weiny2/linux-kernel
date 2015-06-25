@@ -185,6 +185,7 @@ enum port_info_field_masks {
 	STL_PI_MASK_PORT_MODE_SC2SC_MAPPING       = 0x0008,
 	STL_PI_MASK_PORT_MODE_VL_MARKER           = 0x0010,
 	STL_PI_MASK_PORT_PASS_THROUGH             = 0x0020,
+	STL_PI_MASK_PORT_ACTIVE_OPTOMIZE          = 0x0040,
 	/* flit_control.interleave */
 	STL_PI_MASK_INTERLEAVE_DIST_SUP           = (0x0003 << 12),
 	STL_PI_MASK_INTERLEAVE_DIST_ENABLE        = (0x0003 << 10),
@@ -192,30 +193,31 @@ enum port_info_field_masks {
 	STL_PI_MASK_INTERLEAVE_MAX_NEST_RX        = (0x001F <<  0),
 
 	/* port_error_action */
-	STL_PI_MASK_EX_BUFFER_OVERRUN             = 0x80000000,
-		/* 3 bits reserved */
-	STL_PI_MASK_FM_CFG_BAD_CONTROL_FLIT       = 0x00400000,
-	STL_PI_MASK_FM_CFG_BAD_PREEMPT            = 0x00200000,
-	STL_PI_MASK_FM_CFG_UNSUPPORTED_VL_MARKER  = 0x00100000,
-	STL_PI_MASK_FM_CFG_BAD_CRDT_ACK           = 0x00080000,
-	STL_PI_MASK_FM_CFG_BAD_CTRL_DIST          = 0x00040000,
-	STL_PI_MASK_FM_CFG_BAD_TAIL_DIST          = 0x00020000,
-	STL_PI_MASK_FM_CFG_BAD_HEAD_DIST          = 0x00010000,
+	STL_PI_MASK_EX_BUFFER_OVERRUN                  = 0x80000000,
+		/* 7 bits reserved */
+	STL_PI_MASK_FM_CFG_ERR_EXCEED_MULTICAST_LIMIT  = 0x00800000,
+	STL_PI_MASK_FM_CFG_BAD_CONTROL_FLIT            = 0x00400000,
+	STL_PI_MASK_FM_CFG_BAD_PREEMPT                 = 0x00200000,
+	STL_PI_MASK_FM_CFG_UNSUPPORTED_VL_MARKER       = 0x00100000,
+	STL_PI_MASK_FM_CFG_BAD_CRDT_ACK                = 0x00080000,
+	STL_PI_MASK_FM_CFG_BAD_CTRL_DIST               = 0x00040000,
+	STL_PI_MASK_FM_CFG_BAD_TAIL_DIST               = 0x00020000,
+	STL_PI_MASK_FM_CFG_BAD_HEAD_DIST               = 0x00010000,
 		/* 2 bits reserved */
-	STL_PI_MASK_PORT_RCV_BAD_VL_MARKER        = 0x00002000,
-	STL_PI_MASK_PORT_RCV_PREEMPT_VL15         = 0x00001000,
-	STL_PI_MASK_PORT_RCV_PREEMPT_ERROR        = 0x00000800,
-	STL_PI_MASK_PORT_RCV_BAD_FECN             = 0x00000400,
-	STL_PI_MASK_PORT_RCV_BAD_MidTail          = 0x00000200,
+	STL_PI_MASK_PORT_RCV_BAD_VL_MARKER             = 0x00002000,
+	STL_PI_MASK_PORT_RCV_PREEMPT_VL15              = 0x00001000,
+	STL_PI_MASK_PORT_RCV_PREEMPT_ERROR             = 0x00000800,
 		/* 1 bit reserved */
-	STL_PI_MASK_PORT_RCV_BAD_SC               = 0x00000080,
-	STL_PI_MASK_PORT_RCV_BAD_L2               = 0x00000040,
-	STL_PI_MASK_PORT_RCV_BAD_DLID             = 0x00000020,
-	STL_PI_MASK_PORT_RCV_BAD_SLID             = 0x00000010,
-	STL_PI_MASK_PORT_RCV_PKTLEN_TOOSHORT      = 0x00000008,
-	STL_PI_MASK_PORT_RCV_PKTLEN_TOOLONG       = 0x00000004,
-	STL_PI_MASK_PORT_RCV_BAD_PKTLEN           = 0x00000002,
-	STL_PI_MASK_PORT_RCV_BAD_LT               = 0x00000001,
+	STL_PI_MASK_PORT_RCV_BAD_MidTail               = 0x00000200,
+		/* 1 bit reserved */
+	STL_PI_MASK_PORT_RCV_BAD_SC                    = 0x00000080,
+	STL_PI_MASK_PORT_RCV_BAD_L2                    = 0x00000040,
+	STL_PI_MASK_PORT_RCV_BAD_DLID                  = 0x00000020,
+	STL_PI_MASK_PORT_RCV_BAD_SLID                  = 0x00000010,
+	STL_PI_MASK_PORT_RCV_PKTLEN_TOOSHORT           = 0x00000008,
+	STL_PI_MASK_PORT_RCV_PKTLEN_TOOLONG            = 0x00000004,
+	STL_PI_MASK_PORT_RCV_BAD_PKTLEN                = 0x00000002,
+	STL_PI_MASK_PORT_RCV_BAD_LT                    = 0x00000001,
 
 	/* pass_through.res_drctl */
 	STL_PI_MASK_PASS_THROUGH_DR_CONTROL       = 0x01,
@@ -285,7 +287,7 @@ struct stl_port_info {
 	__be32 sm_trap_qp;                        /* 8 bits, 24 bits */
 
 	__be32 sa_qp;                             /* 8 bits, 24 bits */
-	u8     reserved2;
+	u8     neigh_port_num;
 	u8     link_down_reason;
 	u8     localphy_overrun_errors;	          /* 4 bits, 4 bits */
 	u8     clientrereg_subnettimeout;	  /* 1 bit, 2 bits, 5 */
@@ -309,7 +311,7 @@ struct stl_port_info {
 	__be16 port_link_mode;                  /* 1 res, 5 bits, 5 bits, 5 bits */
 	__be16 port_ltp_crc_mode;               /* 4 res, 4 bits, 4 bits, 4 bits */
 
-	__be16 port_mode;                       /* 10 res, bit fields */
+	__be16 port_mode;                       /* 9 res, bit fields */
 	struct {
 		__be16 supported;
 		__be16 enabled;
