@@ -3324,6 +3324,10 @@ static int __init ib_mad_init_module(void)
 	ib_mad_cache = kmem_cache_create("ib_mad",
 					 sizeof(struct ib_mad_private),
 					 0,
+					 SLAB_DEBUG_FREE |
+					 SLAB_RED_ZONE |
+					 SLAB_POISON |
+					 SLAB_STORE_USER |
 					 SLAB_HWCACHE_ALIGN,
 					 NULL);
 	if (!ib_mad_cache) {
@@ -3335,6 +3339,10 @@ static int __init ib_mad_init_module(void)
 	jumbo_mad_cache = kmem_cache_create("ib_mad_jumbo",
 					 sizeof(struct jumbo_mad_private),
 					 0,
+					 SLAB_DEBUG_FREE |
+					 SLAB_RED_ZONE |
+					 SLAB_POISON |
+					 SLAB_STORE_USER |
 					 SLAB_HWCACHE_ALIGN,
 					 NULL);
 	if (!jumbo_mad_cache) {
