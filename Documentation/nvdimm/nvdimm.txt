@@ -1,7 +1,7 @@
 			  LIBNVDIMM: Non-Volatile Devices
 	      libnvdimm - kernel / libndctl - userspace helper library
 			   linux-nvdimm@lists.01.org
-				      v12
+				      v13
 
 
 	Glossary
@@ -299,8 +299,6 @@ LIBNVDIMM: bus
 	       struct nvdimm_bus_descriptor *nfit_desc);
 
 	/sys/devices/platform/nfit_test.0/ndbus0
-	|-- btt0
-	|-- btt_seed
 	|-- commands
 	|-- nd
 	|-- nfit
@@ -441,6 +439,8 @@ LIBNVDIMM: region
 	/sys/devices/platform/nfit_test.0/ndbus0
 	|-- region0
 	|   |-- available_size
+	|   |-- btt0
+	|   |-- btt_seed
 	|   |-- devtype
 	|   |-- driver -> ../../../../../bus/nd/drivers/nd_region
 	|   |-- init_namespaces
@@ -450,6 +450,7 @@ LIBNVDIMM: region
 	|   |-- modalias
 	|   |-- namespace0.0
 	|   |-- namespace_seed
+	|   |-- numa_node
 	|   |-- nfit
 	|   |   `-- spa_index
 	|   |-- nstype
@@ -612,7 +613,9 @@ LABEL).
 	|-- alt_name
 	|-- devtype
 	|-- dpa_extents
+	|-- force_raw
 	|-- modalias
+	|-- numa_node
 	|-- resource
 	|-- size
 	|-- subsystem -> ../../../../../../bus/nd
@@ -623,7 +626,9 @@ LABEL).
 	|-- alt_name
 	|-- devtype
 	|-- dpa_extents
+	|-- force_raw
 	|-- modalias
+	|-- numa_node
 	|-- sector_size
 	|-- size
 	|-- subsystem -> ../../../../../../bus/nd
@@ -635,7 +640,9 @@ LABEL).
 	|   `-- pmem0
 	|-- devtype
 	|-- driver -> ../../../../../../bus/nd/drivers/pmem
+	|-- force_raw
 	|-- modalias
+	|-- numa_node
 	|-- resource
 	|-- size
 	|-- subsystem -> ../../../../../../bus/nd
@@ -709,15 +716,17 @@ block device driver that fronts either the whole block device or a
 partition of a block device emitted by either a PMEM or BLK NAMESPACE.
 
 LIBNVDIMM: btt layout
-Every bus will start out with at least one BTT device which is the seed
-device.  To activate it set the "backing_dev", "uuid", and "sector_size"
-attributes and then bind the device to the nd_btt driver.
+Every region will start out with at least one BTT device which is the
+seed device.  To activate it set the "namespace", "uuid", and
+"sector_size" attributes and then bind the device to the nd_pmem or
+nd_blk driver depending on the region type.
 
-	/sys/devices/platform/nfit_test.1/ndbus0/btt0/
-	|-- backing_dev
+	/sys/devices/platform/nfit_test.1/ndbus0/region0/btt0/
+	|-- namespace
 	|-- delete
 	|-- devtype
 	|-- modalias
+	|-- numa_node
 	|-- sector_size
 	|-- subsystem -> ../../../../../bus/nd
 	|-- uevent
@@ -725,53 +734,47 @@ attributes and then bind the device to the nd_btt driver.
 
 LIBNDCTL: btt creation example
 Similar to namespaces an idle BTT device is automatically created per
-bus.  Each time this "seed" btt device is configured and enabled a new
+region.  Each time this "seed" btt device is configured and enabled a new
 seed is created.  Creating a BTT configuration involves two steps of
-finding and idle BTT and assigning it to front a PMEM or BLK namespace.
+finding and idle BTT and assigning it to consume a PMEM or BLK namespace.
 
-	static struct ndctl_btt *get_idle_btt(struct ndctl_bus *bus)
+	static struct ndctl_btt *get_idle_btt(struct ndctl_region *region)
 	{
 		struct ndctl_btt *btt;
 
-		ndctl_btt_foreach(bus, btt)
-			if (!ndctl_btt_is_enabled(btt) && !ndctl_btt_is_configured(btt))
+		ndctl_btt_foreach(region, btt)
+			if (!ndctl_btt_is_enabled(btt)
+					&& !ndctl_btt_is_configured(btt))
 				return btt;
 
 		return NULL;
 	}
 
-	static int configure_btt(struct ndctl_bus *bus, struct btt_parameters *parameters)
+	static int configure_btt(struct ndctl_region *region,
+			struct btt_parameters *parameters)
 	{
-		btt = get_idle_btt(bus);
+		btt = get_idle_btt(region);
 
-		sprintf(bdevpath, "/dev/%s",
-				ndctl_namespace_get_block_device(parameters->ndns));
 		ndctl_btt_set_uuid(btt, parameters->uuid);
 		ndctl_btt_set_sector_size(btt, parameters->sector_size);
-		ndctl_btt_set_backing_dev(btt, parameters->bdevpath);
+		ndctl_btt_set_namespace(btt, parameters->ndns);
+		/* turn off raw mode device */
+		ndctl_namespace_disable(parameters->ndns);
+		/* turn on btt access */
 		ndctl_btt_enable(btt);
 	}
 
-Once instantiated a "nd_btt" link will be created under the
-"backing_dev" (pmem0) block device:
+Once instantiated a new inactive btt seed device will appear underneath
+the region.
 
-	/sys/block/pmem0/
-	|-- alignment_offset
-	|-- bdi -> ../../../../../../../virtual/bdi/259:0
-	|-- capability
-	|-- dev
-	|-- device -> ../../../namespace0.0
-	|-- discard_alignment
-	|-- ext_range
-	|-- holders
-	|-- inflight
-	|-- nd_btt -> ../../../../btt0
-
-...and a new inactive seed device will appear on the bus.
-
-Once a "backing_dev" is disabled its associated BTT will be
-automatically deleted.  This deletion is only at the device model level.
-In order to destroy a BTT the "info block" needs to be destroyed.
+Once a "namespace" is removed from a BTT that instance of the BTT device
+will be deleted or otherwise reset to default values.  This deletion is
+only at the device model level.  In order to destroy a BTT the "info
+block" needs to be destroyed.  Note, that to destroy a BTT the media
+needs to be written in raw mode.  By default, the kernel will autodetect
+the presence of a BTT and disable raw mode.  This autodetect behavior
+can be suppressed by enabling raw mode for the namespace via the
+ndctl_namespace_set_raw_mode() api.
 
 
 Summary LIBNDCTL Diagram
