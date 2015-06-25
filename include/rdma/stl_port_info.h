@@ -86,20 +86,20 @@
 /*  STL Link speed, continued from IB_LINK_SPEED and indicated as follows:
  * values are additive for Supported and Enabled fields
  */
-#define STL_LINK_SPEED_RESERVED         0x80    /*  Reserved (1-5 Gbps) */
-#define STL_LINK_SPEED_12_5G            0x100   /*  12.5 Gbps */
-#define STL_LINK_SPEED_25G              0x200   /*  25.78125?  Gbps (EDR) */
-#define STL_LINK_SPEED_RESERVED3        0x400   /*  Reserved (>25G) */
+#define STL_LINK_SPEED_RESERVED         0x0080  /*  Reserved (1-5 Gbps) */
+#define STL_LINK_SPEED_12_5G            0x0100  /*  12.5 Gbps */
+#define STL_LINK_SPEED_25G              0x0200  /*  25.78125?  Gbps (EDR) */
+#define STL_LINK_SPEED_RESERVED3        0x0400  /*  Reserved (>25G) */
 #define STL_LINK_SPEED_ALL_SUPPORTED    0x03FF  /*  valid only for STL LinkSpeedEnabled */
 
 /*  STL Link width, continued from IB_LINK_WIDTH and indicated as follows:
  * values are additive for Supported and Enabled fields
  */
-#define STL_LINK_WIDTH_2X   0x0010
-#define STL_LINK_WIDTH_3X   0x0020
-#define STL_LINK_WIDTH_6X   0x0040
-#define STL_LINK_WIDTH_9X   0x0080
-#define STL_LINK_WIDTH_16X  0x0100
+#define STL_LINK_WIDTH_2X            0x0010
+#define STL_LINK_WIDTH_3X            0x0020
+#define STL_LINK_WIDTH_6X            0x0040
+#define STL_LINK_WIDTH_9X            0x0080
+#define STL_LINK_WIDTH_16X           0x0100
 #define STL_LINK_WIDTH_ALL_SUPPORTED 0x0FFF /*  valid only for LinkWidthEnabled */
 
 /**
