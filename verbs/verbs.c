@@ -365,9 +365,9 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	ibdev->dealloc_fmr = opa_ib_dealloc_fmr;
 	ibdev->attach_mcast = opa_ib_multicast_attach;
 	ibdev->detach_mcast = opa_ib_multicast_detach;
+#endif
 	ibdev->mmap = opa_ib_mmap;
 	ibdev->dma_ops = &opa_ib_dma_mapping_ops;
-#endif
 
 	ret = ib_register_device(ibdev, NULL); //opa_ib_create_port_files);
 	if (ret)
