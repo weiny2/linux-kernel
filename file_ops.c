@@ -1921,7 +1921,8 @@ static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
 		offset += filp->f_pos;
 		break;
 	case SEEK_END:
-		offset = (dd->kregend - dd->kregbase) - offset;
+		offset = ((dd->kregend - dd->kregbase) + DC8051_DATA_MEM_SIZE) -
+			offset;
 		break;
 	default:
 		return -EINVAL;
@@ -1930,7 +1931,7 @@ static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
 	if (offset < 0)
 		return -EINVAL;
 
-	if (offset >= dd->kregend - dd->kregbase)
+	if (offset >= (dd->kregend - dd->kregbase) + DC8051_DATA_MEM_SIZE)
 		return -EINVAL;
 
 	filp->f_pos = offset;
@@ -1938,13 +1939,16 @@ static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
 	return filp->f_pos;
 }
 
+
 /* NOTE: assumes unsigned long is 8 bytes */
 static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 			loff_t *f_pos)
 {
 	struct hfi1_devdata *dd = filp->private_data;
-	void __iomem *base;
-	unsigned long total, data, csr_off;
+	void __iomem *base = dd->kregbase;
+	unsigned long total, csr_off,
+		barlen = (dd->kregend - dd->kregbase);
+	u64 data;
 
 	/* only read 8 byte quantities */
 	if ((count % 8) != 0)
@@ -1956,9 +1960,11 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 	if ((unsigned long)buf % 8 != 0)
 		return -EINVAL;
 	/* must be in range */
-	if (*f_pos + count > dd->kregend - dd->kregbase)
+	if (*f_pos + count > (barlen + DC8051_DATA_MEM_SIZE))
 		return -EINVAL;
-	base = (void __iomem *)(dd->kregbase + *f_pos);
+	/* only set the base if we are not starting past the BAR */
+	if (*f_pos < barlen)
+		base += *f_pos;
 	csr_off = *f_pos;
 	for (total = 0; total < count; total += 8, csr_off += 8) {
 		/* accessing LCB CSRs requires more checks */
@@ -1979,7 +1985,19 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 				|| csr_off == ASIC_QSFP2_CLEAR
 				|| csr_off == ASIC_QSFP2_FORCE)
 			data = 0;
-		else
+		else if (csr_off >= barlen) {
+			/*
+			 * read_8051_data can read more than just 8 bytes at
+			 * a time. However, folding this into the loop and
+			 * handling the reads in 8 byte increments allows us
+			 * to smoothly transition from chip memory to 8051
+			 * memory.
+			 */
+			if (read_8051_data(dd,
+					   (u32)(csr_off - barlen),
+					   sizeof(data), &data))
+				break; /* failed */
+		} else
 			data = readq(base + total);
 		if (put_user(data, (unsigned long __user *)(buf + total)))
 			break;

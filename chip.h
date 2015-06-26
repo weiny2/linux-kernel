@@ -358,6 +358,17 @@
 #define ICODE_FPGA_EMULATION	0x02
 #define ICODE_FUNCTIONAL_SIMULATOR	0x03
 
+/*
+ * 8051 data memory size.
+ */
+#define DC8051_DATA_MEM_SIZE 0x1000
+
+/*
+ * 8051 firmware registers
+ */
+#define NUM_GENERAL_FIELDS 0x17
+#define NUM_LANE_FIELDS    0x8
+
 /* 8051 general register Field IDs */
 #define TX_SETTINGS		     0x06
 #define VERIFY_CAP_LOCAL_PHY	     0x07
@@ -388,9 +399,9 @@
 
 /* READ_DATA 8051 command shifts and fields */
 #define READ_DATA_FIELD_ID_SHIFT 40
-#define READ_DATA_FIELD_ID_MASK 0xfull
+#define READ_DATA_FIELD_ID_MASK 0xffull
 #define READ_DATA_LANE_ID_SHIFT 32
-#define READ_DATA_LANE_ID_MASK 0xfull
+#define READ_DATA_LANE_ID_MASK 0xffull
 #define READ_DATA_DATA_SHIFT   0x0
 #define READ_DATA_DATA_MASK   0xffffffffull
 
@@ -515,7 +526,7 @@ enum {
 /* timeouts */
 #define LINK_RESTART_DELAY 1000		/* link restart delay, in ms */
 #define TIMEOUT_8051_START 5000         /* 8051 start timeout, in ms */
-#define DC8051_COMMAND_TIMEOUT 5000	/* DC8051 command timeout, in ms */
+#define DC8051_COMMAND_TIMEOUT 20000	/* DC8051 command timeout, in ms */
 #define FREEZE_STATUS_TIMEOUT 20	/* wait for freeze indicators, in ms */
 #define VL_STATUS_CLEAR_TIMEOUT 5000	/* per-VL status clear, in ms */
 #define CCE_STATUS_TIMEOUT 10		/* time to clear CCE Status, in ms */
@@ -618,6 +629,7 @@ void dispose_firmware(void);
 int acquire_hw_mutex(struct hfi1_devdata *dd);
 void release_hw_mutex(struct hfi1_devdata *dd);
 void fabric_serdes_reset(struct hfi1_devdata *dd);
+int read_8051_data(struct hfi1_devdata *dd, u32 addr, u32 len, u64 *result);
 
 /* chip.c */
 void read_misc_status(struct hfi1_devdata *dd, u8 *ver_a, u8 *ver_b);
@@ -763,6 +775,7 @@ enum {
 	C_DC_PG_STS_TX_SBE_CNT,
 	C_DC_PG_STS_TX_MBE_CNT,
 	C_SW_CPU_INTR,
+	C_SW_CPU_RCV_LIM,
 	DEV_CNTR_LAST  /* Must be kept last */
 };
 
@@ -1010,4 +1023,3 @@ struct is_table {
 };
 
 #endif /* _CHIP_H */
-

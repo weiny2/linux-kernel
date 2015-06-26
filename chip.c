@@ -1489,6 +1489,15 @@ static u64 access_sw_cpu_intr(const struct cntr_entry *entry,
 			      mode, data);
 }
 
+static u64 access_sw_cpu_rcv_limit(const struct cntr_entry *entry,
+			      void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	return read_write_cpu(dd, &dd->z_rcv_limit, dd->rcv_limit, vl,
+			      mode, data);
+}
+
 #define def_access_sw_cpu(cntr) \
 static u64 access_sw_cpu_##cntr(const struct cntr_entry *entry,		      \
 			      void *context, int vl, int mode, u64 data)      \
@@ -1671,6 +1680,8 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 			 CNTR_SYNTH),
 [C_SW_CPU_INTR] = CNTR_ELEM("Intr", 0, 0, CNTR_NORMAL,
 			    access_sw_cpu_intr),
+[C_SW_CPU_RCV_LIM] = CNTR_ELEM("RcvLimit", 0, 0, CNTR_NORMAL,
+			    access_sw_cpu_rcv_limit),
 };
 
 static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
@@ -2545,7 +2556,7 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 			spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock,
 						flags);
 			write_csr(dd,
-					dd->hfi1_id ?
+				(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
 						ASIC_QSFP2_INVERT :
 						ASIC_QSFP1_INVERT,
 				qsfp_int_mgmt);
@@ -2567,7 +2578,7 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 
 			qsfp_int_mgmt &= ~(u64)QSFP_HFI0_MODPRST_N;
 			write_csr(dd,
-					dd->hfi1_id ?
+				(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
 						ASIC_QSFP2_INVERT :
 						ASIC_QSFP1_INVERT,
 				qsfp_int_mgmt);
@@ -3342,6 +3353,16 @@ void handle_link_up(struct work_struct *work)
 	}
 }
 
+/* Several pieces of LNI information were cached for SMA in ppd.
+ * Reset these on link down */
+static void reset_neighbor_info(struct hfi1_pportdata *ppd)
+{
+	ppd->neighbor_guid = 0;
+	ppd->neighbor_port_number = 0;
+	ppd->neighbor_type = 0;
+	ppd->neighbor_fm_security = 0;
+}
+
 /*
  * Handle a link down interrupt from the 8051.
  *
@@ -3352,8 +3373,11 @@ void handle_link_down(struct work_struct *work)
 	u8 lcl_reason, neigh_reason = 0;
 	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
 								link_down_work);
-	lcl_reason = 0;
 
+	/* go offline first, then deal with reasons */
+	set_link_state(ppd, HLS_DN_OFFLINE);
+
+	lcl_reason = 0;
 	read_planned_down_reason_code(ppd->dd, &neigh_reason);
 
 	/*
@@ -3364,7 +3388,8 @@ void handle_link_down(struct work_struct *work)
 		lcl_reason = OPA_LINKDOWN_REASON_NEIGHBOR_UNKNOWN;
 
 	set_link_down_reason(ppd, lcl_reason, neigh_reason, 0);
-	set_link_state(ppd, HLS_DN_OFFLINE);
+
+	reset_neighbor_info(ppd);
 
 	/* disable the port */
 	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
@@ -3462,11 +3487,18 @@ static void add_full_mgmt_pkey(struct hfi1_pportdata *ppd)
 static u16 link_width_to_bits(struct hfi1_devdata *dd, u16 width)
 {
 	switch (width) {
+	case 0:
+		/*
+		 * Simulator and quick linkup do not set the width.
+		 * Just set it to 4x without complaint.
+		 */
+		if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR || quick_linkup)
+			return OPA_LINK_WIDTH_4X;
+		return 0; /* no lanes up */
 	case 1: return OPA_LINK_WIDTH_1X;
 	case 2: return OPA_LINK_WIDTH_2X;
 	case 3: return OPA_LINK_WIDTH_3X;
 	default:
-		/* NOTE: 0 in simulation */
 		dd_dev_info(dd, "%s: invalid width %d, using 4\n",
 			__func__, width);
 		/* fall through */
@@ -3572,7 +3604,6 @@ static void get_linkup_widths(struct hfi1_devdata *dd, u16 *tx_width,
 	read_vc_local_link_width(dd, &misc_bits, &local_flags, &widths);
 	tx = widths >> 12;
 	rx = (widths >> 8) & 0xf;
-	dd_dev_info(dd, "%s: active tx %d, active rx %d\n", __func__, tx, rx);
 
 	*tx_width = link_width_to_bits(dd, tx);
 	*rx_width = link_width_to_bits(dd, rx);
@@ -3644,7 +3675,9 @@ void handle_verify_cap(struct work_struct *work)
 	 *	CSR DC8051_STS_REMOTE_GUID
 	 *	CSR DC8051_STS_REMOTE_NODE_TYPE
 	 *	CSR DC8051_STS_REMOTE_FM_SECURITY
+	 *	CSR DC8051_STS_REMOTE_PORT_NO
 	 */
+
 	read_vc_remote_phy(dd, &power_management, &continious);
 	read_vc_remote_fabric(
 		dd,
@@ -3773,13 +3806,16 @@ void handle_verify_cap(struct work_struct *work)
 
 	ppd->neighbor_guid =
 		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
+	ppd->neighbor_port_number = read_csr(dd, DC_DC8051_STS_REMOTE_PORT_NO) &
+					DC_DC8051_STS_REMOTE_PORT_NO_VAL_SMASK;
 	ppd->neighbor_type =
 		read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE) &
 		DC_DC8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
 	ppd->neighbor_fm_security =
 		read_csr(dd, DC_DC8051_STS_REMOTE_FM_SECURITY) &
 		DC_DC8051_STS_LOCAL_FM_SECURITY_DISABLED_MASK;
-	dd_dev_info(dd, "Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
+	dd_dev_info(dd,
+		"Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
 		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
 		ppd->mgmt_allowed, ppd->neighbor_fm_security);
 	if (neigh_is_hfi(ppd))
@@ -4641,7 +4677,6 @@ static int do_8051_command(
 	 */
 	spin_lock_irqsave(&dd->dc8051_lock, flags);
 
-
 	/* We can't send any commands to the 8051 if it's in reset */
 	if (dd->dc_shutdown) {
 		return_code = -ENODEV;
@@ -4690,8 +4725,7 @@ static int do_8051_command(
 	write_csr(dd, DC_DC8051_CFG_HOST_CMD_0, reg);
 
 	/* wait for completion, alternate: interrupt */
-	timeout = jiffies + msecs_to_jiffies(
-				quick_linkup ? 20000 : DC8051_COMMAND_TIMEOUT);
+	timeout = jiffies + msecs_to_jiffies(DC8051_COMMAND_TIMEOUT);
 	while (1) {
 		reg = read_csr(dd, DC_DC8051_CFG_HOST_CMD_1);
 		completed = reg & DC_DC8051_CFG_HOST_CMD_1_COMPLETED_SMASK;
@@ -4756,24 +4790,41 @@ static int load_8051_config(struct hfi1_devdata *dd, u8 field_id,
 	return ret;
 }
 
-static int read_8051_config(struct hfi1_devdata *dd, u8 field_id,
-			    u8 lane_id, u32 *config_data)
+/*
+ * Read the 8051 firmware "registers".  Use the RAM directly.  Always
+ * set the result, even on error.
+ * Return 0 on success, -errno on failure
+ */
+static int read_8051_config(struct hfi1_devdata *dd, u8 field_id, u8 lane_id,
+			    u32 *result)
 {
-	u64 in_data;
-	u64 out_data;
+	u64 big_data;
+	u32 addr;
 	int ret;
 
-	in_data = (u64)field_id << READ_DATA_FIELD_ID_SHIFT
-			| (u64)lane_id << READ_DATA_LANE_ID_SHIFT;
-	ret = do_8051_command(dd, HCMD_READ_CONFIG_DATA, in_data,
-				&out_data);
-	if (ret != HCMD_SUCCESS) {
-		dd_dev_err(dd,
-			"read 8051 config: field id %d, lane %d, err %d failed\n",
-			(int)field_id, (int)lane_id, ret);
-		out_data = 0;
+	/* address start depends on the lane_id */
+	if (lane_id < 4)
+		addr = (4 * NUM_GENERAL_FIELDS)
+			+ (lane_id * 4 * NUM_LANE_FIELDS);
+	else
+		addr = 0;
+	addr += field_id * 4;
+
+	/* read is in 8-byte chunks, hardware will truncate the address down */
+	ret = read_8051_data(dd, addr, 8, &big_data);
+
+	if (ret == 0) {
+		/* extract the 4 bytes we want */
+		if (addr & 0x4)
+			*result = (u32)(big_data >> 32);
+		else
+			*result = (u32)big_data;
+	} else {
+		*result = 0;
+		dd_dev_err(dd, "%s: direct read failed, lane %d, field %d!\n",
+			__func__, lane_id, field_id);
 	}
-	*config_data = (out_data >> READ_DATA_DATA_SHIFT) & READ_DATA_DATA_MASK;
+
 	return ret;
 }
 
@@ -4925,9 +4976,16 @@ static void read_last_remote_state(struct hfi1_devdata *dd, u32 *lrs)
 void hfi1_read_link_quality(struct hfi1_devdata *dd, u8 *link_quality)
 {
 	u32 frame;
+	int ret;
 
-	read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG, &frame);
-	*link_quality = (frame >> LINK_QUALITY_SHIFT) & LINK_QUALITY_MASK;
+	*link_quality = 0;
+	if (dd->pport->host_link_state & HLS_UP) {
+		ret = read_8051_config(dd, LINK_QUALITY_INFO, GENERAL_CONFIG,
+					&frame);
+		if (ret == 0)
+			*link_quality = (frame >> LINK_QUALITY_SHIFT)
+						& LINK_QUALITY_MASK;
+	}
 }
 
 static void read_planned_down_reason_code(struct hfi1_devdata *dd, u8 *pdrrc)
@@ -4982,7 +5040,7 @@ static void check_fabric_firmware_versions(struct hfi1_devdata *dd)
 	/* 4 lanes */
 	for (lane = 0; lane < 4; lane++) {
 		ret = read_8051_config(dd, SPICO_FW_VERSION, lane, &frame);
-		if (ret != HCMD_SUCCESS) {
+		if (ret) {
 			dd_dev_err(
 				dd,
 				"Unable to read lane %d firmware details\n",
@@ -5275,7 +5333,7 @@ static int set_local_link_attributes(struct hfi1_pportdata *ppd)
 	/* set the max rate - need to read-modify-write */
 	ret = read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
 		&rx_polarity_inversion, &max_rate);
-	if (ret != HCMD_SUCCESS)
+	if (ret)
 		goto set_local_link_attributes_fail;
 
 	/* set the max rate to the fastest enabled */
@@ -5356,24 +5414,29 @@ static void reset_qsfp(struct hfi1_pportdata *ppd)
 	u64 mask, qsfp_mask;
 
 	mask = (u64)QSFP_HFI0_RESET_N;
-	qsfp_mask = read_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_OE : ASIC_QSFP1_OE);
-	qsfp_mask |= mask;
-	write_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_OE : ASIC_QSFP1_OE,
-		qsfp_mask);
 
 	qsfp_mask = read_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_OUT : ASIC_QSFP1_OUT);
-	qsfp_mask &= ~mask;
+			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+				ASIC_QSFP2_OE : ASIC_QSFP1_OE);
+	qsfp_mask |= mask;
+
 	write_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_OUT : ASIC_QSFP1_OUT,
-		qsfp_mask);
+			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+				ASIC_QSFP2_OE : ASIC_QSFP1_OE, qsfp_mask);
+
+	qsfp_mask = read_csr(dd,
+			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+				ASIC_QSFP2_OUT : ASIC_QSFP1_OUT);
+	qsfp_mask &= ~mask;
+
+	write_csr(dd,
+			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+				ASIC_QSFP2_OUT : ASIC_QSFP1_OUT, qsfp_mask);
 	udelay(10);
 	qsfp_mask |= mask;
 	write_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_OUT : ASIC_QSFP1_OUT,
-		qsfp_mask);
+		(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+				ASIC_QSFP2_OUT : ASIC_QSFP1_OUT, qsfp_mask);
 }
 
 static int handle_qsfp_error_conditions(struct hfi1_pportdata *ppd,
@@ -5602,7 +5665,7 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 	qsfp_mask = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
 	/* Clear current status to avoid spurious interrupts */
 	write_csr(dd,
-			dd->hfi1_id ?
+			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
 				ASIC_QSFP2_CLEAR :
 				ASIC_QSFP1_CLEAR,
 		qsfp_mask);
@@ -5610,15 +5673,16 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 	/* Handle active low nature of INT_N and MODPRST_N pins */
 	if (qsfp_mod_present(ppd))
 		qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
-	write_csr(dd,
-		  dd->hfi1_id ? ASIC_QSFP2_INVERT : ASIC_QSFP1_INVERT,
+
+	write_csr(dd, (dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+		  ASIC_QSFP2_INVERT : ASIC_QSFP1_INVERT,
 		  qsfp_mask);
 
 	/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
 	qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
-	write_csr(dd,
-		dd->hfi1_id ? ASIC_QSFP2_MASK : ASIC_QSFP1_MASK,
-		qsfp_mask);
+	write_csr(dd, (dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+			ASIC_QSFP2_MASK : ASIC_QSFP1_MASK,
+			qsfp_mask);
 
 	if (qsfp_mod_present(ppd)) {
 		msleep(3000);
@@ -8331,7 +8395,8 @@ u64 hfi1_gpio_mod(struct hfi1_devdata *dd, u32 target, u32 data, u32 dir,
 {
 	u64 qsfp_oe, target_oe;
 
-	target_oe = target ? ASIC_QSFP2_OE : ASIC_QSFP1_OE;
+	target_oe = (target ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+			ASIC_QSFP2_OE : ASIC_QSFP1_OE;
 	if (mask) {
 		/* We are writing register bits, so lock access */
 		dir &= mask;
@@ -8346,7 +8411,8 @@ u64 hfi1_gpio_mod(struct hfi1_devdata *dd, u32 target, u32 data, u32 dir,
 	 * in the same call, so read should call this function again
 	 * to get valid data
 	 */
-	return read_csr(dd, target ? ASIC_QSFP2_IN : ASIC_QSFP1_IN);
+	return read_csr(dd, (target ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+				ASIC_QSFP2_IN : ASIC_QSFP1_IN);
 }
 
 #define CLEAR_STATIC_RATE_CONTROL_SMASK(r) \
@@ -8585,7 +8651,8 @@ static int request_intx_irq(struct hfi1_devdata *dd)
 static int request_msix_irqs(struct hfi1_devdata *dd)
 {
 	const struct cpumask *local_mask;
-	cpumask_var_t def = NULL, rcv = NULL;
+	cpumask_var_t def, rcv;
+	bool def_ret, rcv_ret;
 	int first_general, last_general;
 	int first_sdma, last_sdma;
 	int first_rx, last_rx;
@@ -8616,8 +8683,9 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 	if (cpumask_first(local_mask) >= nr_cpu_ids)
 		local_mask = topology_core_cpumask(0);
 
-	if (!zalloc_cpumask_var(&def, GFP_KERNEL) ||
-	    !zalloc_cpumask_var(&rcv, GFP_KERNEL))
+	def_ret = zalloc_cpumask_var(&def, GFP_KERNEL);
+	rcv_ret = zalloc_cpumask_var(&rcv, GFP_KERNEL);
+	if (!def_ret || !rcv_ret)
 		goto bail;
 	/* use local mask as default */
 	cpumask_copy(def, local_mask);

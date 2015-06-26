@@ -75,7 +75,7 @@ DEFINE_SPINLOCK(hfi1_devs_lock);
 LIST_HEAD(hfi1_dev_list);
 DEFINE_MUTEX(hfi1_mutex);	/* general driver use */
 
-unsigned int hfi1_max_mtu;
+unsigned int hfi1_max_mtu = HFI1_DEFAULT_MAX_MTU;
 module_param_named(max_mtu, hfi1_max_mtu, uint, S_IRUGO);
 MODULE_PARM_DESC(max_mtu, "Set max MTU bytes, default is 8192");
 
@@ -333,12 +333,6 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			}
 
 			spin_unlock(&qp->r_lock);
-			/*
-			 * Notify hfi1_destroy_qp() if it is waiting
-			 * for us to finish.
-			 */
-			if (atomic_dec_and_test(&qp->refcount))
-				wake_up(&qp->wait);
 		} /* Unicast QP */
 	} /* Valid packet with TIDErr */
 
@@ -400,9 +394,6 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			default:
 				goto drop;
 			}
-			/* drop qp->refcount, wake waiters if it's 0 */
-			if (atomic_dec_and_test(&qp->refcount))
-				wake_up(&qp->wait);
 
 			process_becn(ppd, sl, rlid, lqpn, rqpn, svc_type);
 		}
@@ -465,8 +456,10 @@ static inline int process_rcv_packet(struct hfi1_packet *packet)
 	packet->rhqoff += packet->rsize;
 	if (packet->rhqoff >= packet->maxcnt)
 		packet->rhqoff = 0;
-	if (packet->numpkt == MAX_PKT_RECV)
+	if (packet->numpkt == MAX_PKT_RECV) {
 		ret = RCV_PKT_MAX;
+		this_cpu_inc(*packet->rcd->dd->rcv_limit);
+	}
 
 	packet->rhf_addr = (__le32 *) packet->rcd->rcvhdrq + packet->rhqoff +
 				      packet->rcd->dd->rhf_offset;
@@ -513,17 +506,6 @@ static inline void process_rcv_qp_work(struct hfi1_packet *packet)
 	struct hfi1_qp *qp, *nqp;
 
 	rcd = packet->rcd;
-
-	/*
-	 * Notify hfi1_destroy_qp() if it is waiting
-	 * for lookaside_qp to finish.
-	 */
-	if (rcd->lookaside_qp) {
-		if (atomic_dec_and_test(&rcd->lookaside_qp->refcount))
-			wake_up(&rcd->lookaside_qp->wait);
-		rcd->lookaside_qp = NULL;
-	}
-
 	rcd->head = packet->rhqoff;
 
 	/*
