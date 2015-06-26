@@ -440,7 +440,20 @@ static inline int process_rcv_packet(struct hfi1_packet *packet)
 	packet->etype = rhf_rcv_type(packet->rhf);
 	/* total length */
 	packet->tlen = rhf_pkt_len(packet->rhf); /* in bytes */
-	packet->ebuf = NULL;
+	/* retrieve eager buffer details */
+	if (rhf_use_egr_bfr(packet->rhf)) {
+		packet->etail = rhf_egr_index(packet->rhf);
+		packet->ebuf = get_egrbuf(packet->rcd, packet->rhf,
+				 &packet->updegr);
+		/*
+		 * Prefetch the contents of the eager buffer.  It is
+		 * OK to send a negative length to prefetch_range().
+		 * The +2 is the size of the RHF.
+		 */
+		prefetch_range(packet->ebuf,
+			packet->tlen - ((packet->rcd->rcvhdrqentsize -
+				  (rhf_hdrq_offset(packet->rhf)+2)) * 4));
+	}
 
 	/*
 	 * Call a type specific handler for the packet. We
@@ -976,22 +989,6 @@ int process_receive_ib(struct hfi1_packet *packet)
 		handle_eflags(packet);
 		return RHF_RCV_CONTINUE;
 	}
-
-	/* retrieve eager buffer details */
-	if (rhf_use_egr_bfr(packet->rhf)) {
-		packet->etail = rhf_egr_index(packet->rhf);
-		packet->ebuf = get_egrbuf(packet->rcd, packet->rhf,
-				 &packet->updegr);
-		/*
-		 * Prefetch the contents of the eager buffer.  It is
-		 * OK to send a negative length to prefetch_range().
-		 * The +2 is the size of the RHF.
-		 */
-		prefetch_range(packet->ebuf,
-			packet->tlen - ((packet->rcd->rcvhdrqentsize -
-				  (rhf_hdrq_offset(packet->rhf)+2)) * 4));
-	}
-
 
 	hfi1_ib_rcv(packet);
 	return RHF_RCV_CONTINUE;
