@@ -34,9 +34,7 @@
 #include <linux/hugetlb.h>
 #include <linux/memcontrol.h>
 #include <linux/cleancache.h>
-#ifndef __GENKSYMS__
 #include <linux/hugetlb.h>
-#endif
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS

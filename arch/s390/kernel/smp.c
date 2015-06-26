@@ -534,14 +534,6 @@ EXPORT_SYMBOL(smp_ctl_clear_bit);
 
 #if defined(CONFIG_ZFCPDUMP) || defined(CONFIG_CRASH_DUMP)
 
-/*
- * This is a temporary workaround to keep the SLES 12 kabi checker happy,
- * the zfcpdump_save_areas symbol is not used by 3rd party modules.
- * This has to be removed for SLES 12 SP1, before a new kabi is defined.
- */
-struct save_area *zfcpdump_save_areas[NR_CPUS + 1];
-EXPORT_SYMBOL_GPL(zfcpdump_save_areas);
-
 static void __init smp_get_save_area(int cpu, u16 address)
 {
 	void *lc = pcpu_devices[0].lowcore;

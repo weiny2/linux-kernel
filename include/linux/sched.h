@@ -557,6 +557,7 @@ struct signal_struct {
 	 * Live threads maintain their own counters and add to these
 	 * in __exit_signal, except for the group leader.
 	 */
+	seqlock_t stats_lock;
 	cputime_t utime, stime, cutime, cstime;
 	cputime_t gtime;
 	cputime_t cgtime;
@@ -620,11 +621,7 @@ struct signal_struct {
 	struct mutex cred_guard_mutex;	/* guard against foreign influences on
 					 * credential calculations
 					 * (notably. ptrace) */
-#ifdef __GENKSYMS__
 	void *suse_kabi_padding;
-#else
-	seqlock_t *stats_lock;
-#endif
 };
 
 /*
