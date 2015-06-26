@@ -158,6 +158,9 @@ struct hfi_ctx {
 #define HFI_CTX_TYPE_KERNEL	1
 #define HFI_CTX_TYPE_USER	2
 
+/* TODO - move this to opa-headers */
+#define HFI_CTX_MODE_BYPASS	0x100
+
 #define HFI_CTX_INIT(ctx, dd)		\
 	(ctx)->devdata = (dd);		\
 	(ctx)->type = HFI_CTX_TYPE_KERNEL; \
@@ -169,6 +172,10 @@ struct hfi_ctx {
 	(ctx)->pid_count = 0;		\
 	/* 0 reserved for kernel clients */ \
 	(ctx)->ptl_uid = 0;
+
+#define HFI_CTX_INIT_BYPASS(ctx, dd) 	\
+	HFI_CTX_INIT(ctx, dd);		\
+	(ctx)->mode |= HFI_CTX_MODE_BYPASS;
 
 /**
  * enum mmap_token_types -  Types of memory regions mapped by the context and
