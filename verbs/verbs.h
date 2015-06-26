@@ -517,6 +517,10 @@ struct opa_ib_portdata {
 	u8 sc_to_sl[32];
 	u8 sc_to_vl[32];
 	u32 vl_mtu[OPA_IB_NUM_DATA_VLS];
+
+	struct hfi_ctx ctx;
+	struct hfi_cq cmdq_tx;
+	struct hfi_cq cmdq_rx;
 };
 
 struct opa_ib_data {
