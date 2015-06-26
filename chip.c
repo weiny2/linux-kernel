@@ -5435,7 +5435,7 @@ static void reset_qsfp(struct hfi1_pportdata *ppd)
 	udelay(10);
 	qsfp_mask |= mask;
 	write_csr(dd,
-		(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB))?
+		(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
 				ASIC_QSFP2_OUT : ASIC_QSFP1_OUT, qsfp_mask);
 }
 
@@ -8411,7 +8411,7 @@ u64 hfi1_gpio_mod(struct hfi1_devdata *dd, u32 target, u32 data, u32 dir,
 	 * in the same call, so read should call this function again
 	 * to get valid data
 	 */
-	return read_csr(dd, (target ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB))?
+	return read_csr(dd, (target ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
 				ASIC_QSFP2_IN : ASIC_QSFP1_IN);
 }
 
