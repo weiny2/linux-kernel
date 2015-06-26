@@ -58,6 +58,49 @@
 #define is_qp_dma_blocked(qp, sc) 0
 
 /**
+ * opa_ib_copy_sge - copy data to SGE memory
+ * @ss: the SGE state
+ * @data: the data to copy
+ * @length: the length of the data
+ */
+void opa_ib_copy_sge(struct opa_ib_sge_state *ss, void *data, u32 length,
+		     int release)
+{
+	struct ib_sge *sge = &ss->sge;
+
+	while (length) {
+		u32 len = sge->length;
+
+		if (len > length)
+			len = length;
+		BUG_ON(len == 0);
+		if (data) {
+			memcpy((void *)sge->addr, data, len);
+			data += len;
+		}
+		sge->addr += len;
+		sge->length -= len;
+		if (sge->length == 0) {
+			/* FXRTODO - WFR has hfi1_put_mr() here */
+			if (--ss->num_sge)
+				*sge = *ss->sg_list++;
+		}
+		/* FXRTODO - WFR has multi-segment stuff here */
+		length -= len;
+	}
+}
+
+/**
+ * opa_ib_skip_sge - skip over SGE memory
+ * @ss: the SGE state
+ * @length: the number of bytes to skip
+ */
+void opa_ib_skip_sge(struct opa_ib_sge_state *ss, u32 length, int release)
+{
+	opa_ib_copy_sge(ss, NULL, length, release);
+}
+
+/**
  * post_one_send - post one RC, UC, or UD send work request
  * @qp: the QP to post on
  * @wr: the work request to send

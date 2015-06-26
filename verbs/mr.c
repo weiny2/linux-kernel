@@ -58,7 +58,7 @@
  * @acc: access flags
  *
  * Note that all DMA addresses should be created via the
- * struct ib_dma_mapping_ops functions (see opa_ib_dma.c).
+ * struct ib_dma_mapping_ops functions (see dma.c).
  *
  * Return: the memory region on success, otherwise returns an errno.
  */
@@ -111,9 +111,31 @@ int opa_ib_dereg_mr(struct ib_mr *ibmr)
 int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
 		   struct ib_sge *isge, struct ib_sge *sge, int acc)
 {
-	/* TODO - copy sge to isge?? */
+	/*
+	 * We use LKEY == zero for kernel virtual addresses
+	 * (see opa_ib_get_dma_mr and dma.c).
+	 */
+	rcu_read_lock();
+	if (sge->lkey == 0) {
+		if (pd->is_user)
+			goto bail;
+		/* FXRTODO - MR reference count */
+		rcu_read_unlock();
 
+		isge->addr = sge->addr;
+		isge->length = sge->length;
+		goto ok;
+	}
+	/* FXRTODO - WFR lkey != 0 */
+	/* FXRTODO - WFR multi-segment stuff */
+	goto bail;
+
+ok:
 	return 1;
+bail:
+	rcu_read_unlock();
+	return 0;
+
 }
 
 /**
@@ -132,7 +154,33 @@ int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
 int opa_ib_rkey_ok(struct opa_ib_qp *qp, struct ib_sge *sge,
 		   u32 len, u64 vaddr, u32 rkey, int acc)
 {
+	/*
+	 * We use RKEY == zero for kernel virtual addresses
+	 * (see opa_ib_get_dma_mr and dma.c).
+
+	 */
+	rcu_read_lock();
+	if (rkey == 0) {
+		struct opa_ib_pd *pd = to_opa_ibpd(qp->ibqp.pd);
+
+		if (pd->is_user)
+			goto bail;
+		/* FXRTODO - MR reference count */
+		rcu_read_unlock();
+
+		sge->addr = vaddr;
+		sge->length = len;
+		goto ok;
+	}
+	/* FXRTODO - WFR rkey != 0 */
+	/* FXRTODO - WFR multi-segment stuff */
+	goto bail;
+
+ok:
 	return 1;
+bail:
+	rcu_read_unlock();
+	return 0;
 }
 
 /*

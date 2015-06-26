@@ -106,6 +106,7 @@ extern unsigned int opa_ib_max_cqs;
 extern unsigned int opa_ib_max_qp_wrs;
 extern unsigned int opa_ib_max_qps;
 extern unsigned int opa_ib_max_sges;
+extern struct ib_dma_mapping_ops opa_ib_dma_mapping_ops;
 
 struct opa_ib_header;
 
@@ -614,6 +615,7 @@ struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc);
 int opa_ib_dereg_mr(struct ib_mr *ibmr);
 int opa_ib_fast_reg_mr(struct opa_ib_qp *qp, struct ib_send_wr *wr);
 void opa_ib_release_mmap_info(struct kref *ref);
+int opa_ib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
 struct opa_ib_mmap_info *opa_ib_create_mmap_info(struct opa_ib_data *ibd,
 						 u32 size,
 						 struct ib_ucontext *context,
@@ -627,6 +629,9 @@ void opa_ib_schedule_send(struct opa_ib_qp *qp);
 void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
 			  enum ib_wc_status status);
 int opa_ib_make_ud_req(struct opa_ib_qp *qp);
+void opa_ib_copy_sge(struct opa_ib_sge_state *ss, void *data, u32 length,
+		     int release);
+void opa_ib_skip_sge(struct opa_ib_sge_state *ss, u32 length, int release);
 int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr);
 int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,

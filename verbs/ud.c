@@ -188,48 +188,30 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 		goto bail_unlock;
 	}
 
-#if 0
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		opa_ib_copy_sge(&qp->r_sge, &ah_attr->grh,
 				sizeof(struct ib_grh), 1);
 		wc.wc_flags |= IB_WC_GRH;
 	} else
 		opa_ib_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
-#endif
 	ssge.sg_list = swqe->sg_list + 1;
 	ssge.sge = *swqe->sg_list;
 	ssge.num_sge = swqe->wr.num_sge;
 	sge = &ssge.sge;
-#if 0
 	while (length) {
 		u32 len = sge->length;
 
 		if (len > length)
 			len = length;
-		if (len > sge->sge_length)
-			len = sge->sge_length;
 		BUG_ON(len == 0);
-		opa_ib_copy_sge(&qp->r_sge, sge->vaddr, len, 1);
-		sge->vaddr += len;
+		opa_ib_copy_sge(&qp->r_sge, (void *)sge->addr, len, 1);
+		sge->addr += len;
 		sge->length -= len;
-		sge->sge_length -= len;
-		if (sge->sge_length == 0) {
-			if (--ssge.num_sge)
-				*sge = *ssge.sg_list++;
-		} else if (sge->length == 0 && sge->mr->lkey) {
-			if (++sge->n >= HFI1_SEGSZ) {
-				if (++sge->m >= sge->mr->mapsz)
-					break;
-				sge->n = 0;
-			}
-			sge->vaddr =
-				sge->mr->map[sge->m]->segs[sge->n].vaddr;
-			sge->length =
-				sge->mr->map[sge->m]->segs[sge->n].length;
-		}
+		if ((sge->length == 0) && (--ssge.num_sge))
+			*sge = *ssge.sg_list++;
+		/* FXRTODO - WFR has multi-segment stuff here */
 		length -= len;
 	}
-#endif
 	opa_ib_put_ss(&qp->r_sge);
 	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		goto bail_unlock;
@@ -686,7 +668,6 @@ void opa_ib_ud_rcv(struct opa_ib_portdata *ibp, struct opa_ib_header *hdr,
 		qp->r_flags |= HFI1_R_REUSE_SGE;
 		goto drop;
 	}
-#if 0
 	if (has_grh) {
 		opa_ib_copy_sge(&qp->r_sge, &hdr->u.l.grh,
 			     sizeof(struct ib_grh), 1);
@@ -694,7 +675,6 @@ void opa_ib_ud_rcv(struct opa_ib_portdata *ibp, struct opa_ib_header *hdr,
 	} else
 		opa_ib_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
 	opa_ib_copy_sge(&qp->r_sge, data, wc.byte_len - sizeof(struct ib_grh), 1);
-#endif
 	opa_ib_put_ss(&qp->r_sge);
 	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		return;
