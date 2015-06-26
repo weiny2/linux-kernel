@@ -745,7 +745,6 @@ static noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 		tx = list_entry(l, struct verbs_txreq, txreq.list);
 		tx->qp = qp;
-		atomic_inc(&qp->refcount);
 	} else {
 		if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK &&
 		    list_empty(&qp->s_iowait.list)) {
@@ -778,7 +777,6 @@ static inline struct verbs_txreq *get_txreq(struct hfi1_ibdev *dev,
 		spin_unlock_irqrestore(&dev->pending_lock, flags);
 		tx = list_entry(l, struct verbs_txreq, txreq.list);
 		tx->qp = qp;
-		atomic_inc(&qp->refcount);
 	} else {
 		/* call slow path to get the extra lock */
 		spin_unlock_irqrestore(&dev->pending_lock, flags);
@@ -796,8 +794,6 @@ void hfi1_put_txreq(struct verbs_txreq *tx)
 	qp = tx->qp;
 	dev = to_idev(qp->ibqp.device);
 
-	if (atomic_dec_and_test(&qp->refcount))
-		wake_up(&qp->wait);
 	if (tx->mr) {
 		hfi1_put_mr(tx->mr);
 		tx->mr = NULL;
