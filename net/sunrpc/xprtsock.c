@@ -2143,6 +2143,8 @@ static void xs_abort_connection(struct sock_xprt *transport)
 	 */
 	memset(&any, 0, sizeof(any));
 	any.sa_family = AF_UNSPEC;
+	if (transport->inet)
+		transport->inet->sk_err = 0;
 	result = kernel_connect(transport->sock, &any, sizeof(any), 0);
 	trace_rpc_socket_reset_connection(&transport->xprt,
 			transport->sock, result);
