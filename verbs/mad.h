@@ -55,6 +55,7 @@
 #include <rdma/opa_smi.h>
 #include <rdma/ib_mad.h>
 #include <rdma/opa_port_info.h>
+#include <rdma/opa_core_ib.h>
 
 #define FXR_LIM_MGMT_P_KEY       0x7FFF
 

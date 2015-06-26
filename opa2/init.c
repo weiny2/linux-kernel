@@ -101,6 +101,7 @@ void hfi_pport_init(struct hfi_devdata *dd)
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
 		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
+		ppd->lstate = IB_PORT_DOWN;
 	}
 }
 

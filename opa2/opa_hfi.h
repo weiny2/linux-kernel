@@ -89,6 +89,56 @@
 #define pidx_to_pnum(id)	((id) + 1)
 #define pnum_to_pidx(pn)	((pn) - 1)
 
+/*
+ * HFI or Host Link States
+ *
+ * These describe the states the driver thinks the logical and physical
+ * states are in.  Used as an argument to set_link_state().  Implemented
+ * as bits for easy multi-state checking.  The actual state can only be
+ * one.
+ *
+ * FXRTODO: STL2 related states need to be added
+ * Ganged, ShallowSleep and DeepSleep.
+ */
+#define __HLS_UP_INIT_BP	0
+#define __HLS_UP_ARMED_BP	1
+#define __HLS_UP_ACTIVE_BP	2
+#define __HLS_DN_DOWNDEF_BP	3	/* link down default */
+#define __HLS_DN_POLL_BP	4
+#define __HLS_DN_DISABLE_BP	5
+#define __HLS_DN_OFFLINE_BP	6
+#define __HLS_VERIFY_CAP_BP	7
+#define __HLS_GOING_UP_BP	8
+#define __HLS_GOING_OFFLINE_BP  9
+#define __HLS_LINK_COOLDOWN_BP 10
+
+#define HLS_UP_INIT	  (1 << __HLS_UP_INIT_BP)
+#define HLS_UP_ARMED	  (1 << __HLS_UP_ARMED_BP)
+#define HLS_UP_ACTIVE	  (1 << __HLS_UP_ACTIVE_BP)
+#define HLS_DN_DOWNDEF	  (1 << __HLS_DN_DOWNDEF_BP) /* link down default */
+#define HLS_DN_POLL	  (1 << __HLS_DN_POLL_BP)
+#define HLS_DN_DISABLE	  (1 << __HLS_DN_DISABLE_BP)
+#define HLS_DN_OFFLINE	  (1 << __HLS_DN_OFFLINE_BP)
+#define HLS_VERIFY_CAP	  (1 << __HLS_VERIFY_CAP_BP)
+#define HLS_GOING_UP	  (1 << __HLS_GOING_UP_BP)
+#define HLS_GOING_OFFLINE (1 << __HLS_GOING_OFFLINE_BP)
+#define HLS_LINK_COOLDOWN (1 << __HLS_LINK_COOLDOWN_BP)
+
+#define HLS_UP (HLS_UP_INIT | HLS_UP_ARMED | HLS_UP_ACTIVE)
+
+/* SMA idle flit payload commands */
+#define SMA_IDLE_ARM	1
+#define SMA_IDLE_ACTIVE 2
+
+struct hfi_link_down_reason {
+	/*
+	 * SMA-facing value.  Should be set from .latest when
+	 * HLS_UP_* -> HLS_DN_* transition actually occurs.
+	 */
+	u8 sma;
+	u8 latest;
+};
+
 struct hfi_msix_entry {
 	struct msix_entry msix;
 	void *arg;
@@ -102,12 +152,36 @@ struct hfi_msix_entry {
  * @lid: LID for this port
  * @psn_base_rx_e2e: PSN base for RX E2E
  * @psn_base_tx_otr: PSN base for TX OTR
+ * @lstate: Logical link state
+ * @neighbor_normal: State of neighbor's port's Logical link state
+ *	0 - Neighbor Down/Init
+ *	1 - Neighbhor LinkArmed/LinkActive
+ * @is_sm_config_started: indicates that FM has started configuration for this
+ *	port.
+ * @offline_disabled_reason: offline reason
+ * @is_active_optimize_enabled: if enabled, then LinkArmed -> LinkActive state
+ *	change propogates this event to neighboring port via SMA Idle Flit
+ *	messages
+ *@local_link_down_reason: Reason why this port transitioned to link down
+ *@local_link_down_reason: Reason why the neighboring port transitioned to
+ *	link down
+ *@remote_link_down_reason: Value to be sent to link peer on LinkDown
  */
 struct hfi_pportdata {
+	/* port_guid identifying port */
 	__be64 pguid;
 	u32 lid;
 	void *psn_base_rx_e2e[HFI_MAX_TC];
 	void *psn_base_tx_otr[HFI_MAX_TC];
+
+	u32 lstate;
+	u8 neighbor_normal;
+	u8 is_sm_config_started;
+	u8 offline_disabled_reason;
+	u8 is_active_optimize_enabled;
+	struct hfi_link_down_reason local_link_down_reason;
+	struct hfi_link_down_reason neigh_link_down_reason;
+	u8 remote_link_down_reason;
 };
 
 /* device data struct contains only per-HFI info. */
@@ -171,6 +245,12 @@ struct hfi_devdata {
 	/* Lock to synchronize access to priv_cq */
 	spinlock_t priv_tx_cq_lock;
 };
+
+/* return the driver's idea of the logical OPA port state */
+static inline u32 hfi_driver_lstate(struct hfi_pportdata *ppd)
+{
+	return ppd->lstate; /* use the cached value */
+}
 
 void hfi_pport_init(struct hfi_devdata *dd);
 int hfi_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent);
@@ -247,6 +327,12 @@ int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 			u32 am, u8 *data, u8 port, u32 *resp_len);
 int hfi_set_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 				 u32 am, u8 *data, u8 port, u32 *resp_len);
+
+void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
+			  u8 neigh_reason, u8 rem_reason);
+int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
+int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message);
+u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is

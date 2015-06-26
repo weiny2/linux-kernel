@@ -58,25 +58,6 @@
 #include <rdma/opa_smi.h>
 
 /*
- * FXRTODO: OPA-specific definitions which are
- * required by opa_ib and opa2_hfi, and which aren't yet in the linux
- * IB core. Need to find the appropriate header file these.
- */
-
-/* OPA SMA attribute IDs */
-#define OPA_ATTRIB_ID_CONGESTION_INFO		cpu_to_be16(0x008b)
-#define OPA_ATTRIB_ID_HFI_CONGESTION_LOG	cpu_to_be16(0x008f)
-#define OPA_ATTRIB_ID_HFI_CONGESTION_SETTING	cpu_to_be16(0x0090)
-#define OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE	cpu_to_be16(0x0091)
-
-/* attribute modifier macros */
-#define OPA_AM_NPORT_SHIFT	24
-#define OPA_AM_NPORT_MASK	0xff
-#define OPA_AM_NPORT_SMASK	(OPA_AM_NPORT_MASK << OPA_AM_NPORT_SHIFT)
-#define OPA_AM_NPORT(am)	(((am) >> OPA_AM_NPORT_SHIFT) & \
-					OPA_AM_NPORT_MASK)
-
-/*
  * TODO - Based on hfi_ctx in common provider. hfi_ctx needs to get moved/merged
  * with data types defined by the common provider logic.
  */
