@@ -39,6 +39,10 @@ def main():
     host2 = test_info.get_host_record(1)
     print host2
 
+    loopback = 0
+    if host1.get_name() == host2.get_name():
+        loopback = 1
+
     ################
     # body of test #
     ################
@@ -48,9 +52,10 @@ def main():
     if err:
         RegLib.test_fail("Could not load ipoib on host1")
 
-    (err, out) = do_ssh(host2, "modprobe ib_ipoib")
-    if err:
-        RegLib.test_fail("Could not load ipoib on host2")
+    if not loopback:
+        (err, out) = do_ssh(host2, "modprobe ib_ipoib")
+        if err:
+            RegLib.test_fail("Could not load ipoib on host2")
 
     RegLib.test_log(0,"Waiting 10 seconds for Ipoib to get running")
     time.sleep(10)
@@ -58,15 +63,17 @@ def main():
     if err:
          RegLib.test_fail("Could not ifup ib0 on host1")
 
-    (err, out) = do_ssh(host2, "ifup ib0")
-    if err:
-        RegLib.test_fail("Could not ifup ib0 on host1")
+    if not loopback:
+        (err, out) = do_ssh(host2, "ifup ib0")
+        if err:
+            RegLib.test_fail("Could not ifup ib0 on host1")
 
     # insure not running on either host
     cmd = "pkill qperf"
     err = do_ssh(host1, "pkill qperf", run_as_root=False)
-    cmd = "pkill qperf"
-    err = do_ssh(host2, "pkill qperf", run_as_root=False)
+    if not loopback:
+        cmd = "pkill qperf"
+        err = do_ssh(host2, "pkill qperf", run_as_root=False)
 
     # Start qperf on host1 (server)
     child_pid = os.fork()
@@ -99,9 +106,10 @@ def main():
     if err:
         RegLib.test_fail("Could not unload ipoib on host1")
 
-    (err, out) = do_ssh(host2, "rmmod ib_ipoib")
-    if err:
-        RegLib.test_fail("Could not unload ipoib on host2")
+    if not loopback:
+        (err, out) = do_ssh(host2, "rmmod ib_ipoib")
+        if err:
+            RegLib.test_fail("Could not unload ipoib on host2")
 
     RegLib.test_log(0, "Waiting 10 seconds for Ipoib to stop running")
     time.sleep(10)
