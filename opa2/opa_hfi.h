@@ -64,6 +64,7 @@
 #define HFI_NUM_BARS		2
 #define HFI_NUM_PPORTS		2
 #define HFI_PID_SYSTEM		0
+#define HFI_PID_BYPASS_BASE	0xF00
 
 /* In accordance with stl vol 1 section 4.1 */
 #define PGUID_MASK		(~(0x3UL << 32))

@@ -479,7 +479,7 @@ static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
 	struct opa_core_ops *ops = odev->bus_ops;
 	int rc;
 
-	HFI_CTX_INIT(ctx, odev->dd);
+	HFI_CTX_INIT_BYPASS(ctx, odev->dd);
 	ctx_assign.pid = HFI_PID_ANY;
 	ctx_assign.le_me_count = OPA2_NET_ME_COUNT;
 	ctx_assign.unexpected_count = OPA2_NET_UNEX_COUNT;
