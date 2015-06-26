@@ -1109,7 +1109,6 @@ static int init_one(struct pci_dev *, const struct pci_device_id *);
 static const struct pci_device_id hfi1_pci_tbl[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL0) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL1) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL2) },
 	{ 0, }
 };
 
@@ -1367,7 +1366,6 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	switch (ent->device) {
 	case PCI_DEVICE_ID_INTEL0:
 	case PCI_DEVICE_ID_INTEL1:
-	case PCI_DEVICE_ID_INTEL2:
 		dd = hfi1_init_dd(pdev, ent);
 		break;
 	default:
