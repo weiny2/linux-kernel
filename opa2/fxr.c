@@ -71,6 +71,7 @@
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs.h>
 #include "opa_hfi.h"
+#include <rdma/opa_core_ib.h>
 
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
@@ -262,6 +263,43 @@ static void hfi_rx_e2e_uninit(const struct hfi_devdata *dd)
 			}
 		}
 	}
+}
+
+u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd)
+{
+	/*
+	 * FXRTODO: To be implemented as part of LNI
+	 * for now return as disabled
+	 */
+	return IB_PORTPHYSSTATE_DISABLED;
+}
+
+void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
+			  u8 neigh_reason, u8 rem_reason)
+{
+	/* FXRTODO: To be implemented as part of LNI */
+}
+
+/*
+ * Change the physical and/or logical link state.
+ *
+ * Returns 0 on success, -errno on failure.
+ */
+int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
+{
+	/* FXRTODO: To be implemented as part of LNI */
+	return -EINVAL;
+}
+
+/*
+ * Send an idle SMA message.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message)
+{
+	/* FXRTODO: To be implemented as part of MNH/FC commands */
+	return -EINVAL;
 }
 
 /*

@@ -53,6 +53,8 @@
 #include <rdma/opa_smi.h>
 #include <rdma/ib_mad.h>
 #include <rdma/opa_port_info.h>
+#include <rdma/opa_core_ib.h>
+#include "attr.h"
 
 static int hfi_reply(struct ib_mad_hdr *ibh)
 {
@@ -71,12 +73,40 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 {
 	u32 num_ports = OPA_AM_NPORT(am);
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
+	struct opa_port_info *pi = (struct opa_port_info *)data;
+	u32 lstate;
 
 	if (num_ports != 1) {
 		smp->status |=
 			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
 		return hfi_reply(ibh);
 	}
+
+	lstate = hfi_driver_lstate(ppd);
+
+	/*
+	 * FXTODO: WFR  has ledenable_offlinereason as alternative
+	 * to offline_reason. Why ?
+	 */
+	pi->port_states.offline_reason = ppd->neighbor_normal << NNORMAL_SHIFT;
+	pi->port_states.offline_reason |=
+			ppd->is_sm_config_started << SM_CONFIG_SHIFT;
+	pi->port_states.offline_reason |= ppd->offline_disabled_reason &
+				OPA_PI_MASK_OFFLINE_REASON;
+
+	if (start_of_sm_config && (lstate == IB_PORT_INIT))
+		ppd->is_sm_config_started = 1;
+
+	pi->port_states.portphysstate_portstate =
+		(hfi_ibphys_portstate(ppd) << PHYSPORTSTATE_SHIFT) | lstate;
+
+	pi->port_mode = cpu_to_be16(
+				ppd->is_active_optimize_enabled ?
+					OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE : 0);
+	pi->link_down_reason = ppd->local_link_down_reason.sma;
+	pi->neigh_link_down_reason = ppd->neigh_link_down_reason.sma;
 
 	return hfi_reply(ibh);
 }
@@ -274,17 +304,149 @@ int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 	return ret;
 }
 
+static int set_port_states(struct hfi_devdata *dd, struct hfi_pportdata *ppd,
+				struct opa_smp *smp, u32 lstate, u32 pstate,
+				u8 suppress_idle_sma)
+{
+	/* HFI driver clubs pstate and lstate to Host Link State (HLS) */
+	u32 hls;
+	int ret;
+
+	if (pstate && !(lstate == IB_PORT_DOWN || lstate == IB_PORT_NOP)) {
+		pr_warn("SubnSet(OPA_PortInfo) port state invalid; port phys\
+				state 0x%x link state 0x%x\n", pstate, lstate);
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	}
+
+	/*
+	 * Only state changes of DOWN, ARM, and ACTIVE are valid
+	 * and must be in the correct state to take effect (see 7.2.6).
+	 */
+	switch (lstate) {
+	case IB_PORT_NOP:
+		if (pstate == IB_PORTPHYSSTATE_NOP)
+			break;
+		/* FALLTHROUGH */
+	case IB_PORT_DOWN:
+		switch (pstate) {
+		case IB_PORTPHYSSTATE_NOP:
+			hls = HLS_DN_DOWNDEF;
+			break;
+		case IB_PORTPHYSSTATE_POLLING:
+			hls = HLS_DN_POLL;
+			hfi_set_link_down_reason(ppd,
+			     OPA_LINKDOWN_REASON_FM_BOUNCE, 0,
+			     OPA_LINKDOWN_REASON_FM_BOUNCE);
+			break;
+		case IB_PORTPHYSSTATE_DISABLED:
+			hls = HLS_DN_DISABLE;
+			break;
+		default:
+			pr_warn("SubnSet(OPA_PortInfo) invalid Physical state 0x%x\n",
+				lstate);
+			smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			goto done;
+		}
+
+		hfi_set_link_state(ppd, hls);
+		if (hls == HLS_DN_DISABLE && (ppd->offline_disabled_reason >
+		    OPA_LINKDOWN_REASON_SMA_DISABLED ||
+		    ppd->offline_disabled_reason == OPA_LINKDOWN_REASON_NONE))
+			ppd->offline_disabled_reason =
+			OPA_LINKDOWN_REASON_SMA_DISABLED;
+		/*
+		 * Don't send a reply if the response would be sent
+		 * through the disabled port.
+		 */
+		if (hls == HLS_DN_DISABLE && smp->hop_cnt)
+			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
+		break;
+	case IB_PORT_ARMED:
+		ret = hfi_set_link_state(ppd, HLS_UP_ARMED);
+		if ((ret == 0) && (suppress_idle_sma == 0))
+			hfi_send_idle_sma(dd, SMA_IDLE_ARM);
+		break;
+	case IB_PORT_ACTIVE:
+		if (ppd->neighbor_normal) {
+			ret = hfi_set_link_state(ppd, HLS_UP_ACTIVE);
+			if (ret == 0)
+				hfi_send_idle_sma(dd, SMA_IDLE_ACTIVE);
+		} else {
+			pr_warn("SubnSet(OPA_PortInfo) Cannot move to Active \
+						with NeighborNormal 0\n");
+			smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		}
+		break;
+	default:
+		pr_warn("SubnSet(OPA_PortInfo) invalid state 0x%x\n", lstate);
+		smp->status |=
+		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	}
+done:
+	return 0;
+}
+
 static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 				u32 am, u8 *data, u8 port, u32 *resp_len)
 {
 	u32 num_ports = OPA_AM_NPORT(am);
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
+	struct opa_port_info *pi = (struct opa_port_info *)data;
+	u8 ls_old, ls_new, ps_new;
+	int ret;
+	u8 invalid = 0;
 
 	if (num_ports != 1) {
 		smp->status |=
 			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
 		return hfi_reply(ibh);
 	}
+
+	ls_old = hfi_driver_lstate(ppd);
+
+	if (pi->link_down_reason == 0) {
+		ppd->local_link_down_reason.sma = 0;
+		ppd->local_link_down_reason.latest = 0;
+	}
+
+	if (pi->neigh_link_down_reason == 0) {
+		ppd->neigh_link_down_reason.sma = 0;
+		ppd->neigh_link_down_reason.latest = 0;
+	}
+
+	ppd->is_active_optimize_enabled =
+			!!(be16_to_cpu(pi->port_mode)
+					& OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE);
+
+	ls_new = pi->port_states.portphysstate_portstate &
+			OPA_PI_MASK_PORT_STATE;
+	ps_new = (pi->port_states.portphysstate_portstate &
+		OPA_PI_MASK_PORT_PHYSICAL_STATE) >> PHYSPORTSTATE_SHIFT;
+
+	if (ls_old == IB_PORT_INIT) {
+		if (start_of_sm_config) {
+			if (ls_new == ls_old || (ls_new == IB_PORT_ARMED))
+				ppd->is_sm_config_started = 1;
+		} else if (ls_new == IB_PORT_ARMED) {
+			if (ppd->is_sm_config_started == 0)
+				invalid = 1;
+		}
+	}
+
+	/*
+	 * Do the port state change now that the other link parameters
+	 * have been set.
+	 * Changing the port physical state only makes sense if the link
+	 * is down or is being set to down.
+	 */
+	ret = set_port_states(dd, ppd, smp, ls_new, ps_new, invalid);
+	if (ret)
+		return ret;
 
 	return hfi_reply(ibh);
 }

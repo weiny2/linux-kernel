@@ -6,7 +6,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright (c) 2015 Intel Corporation.
+ * Copyright (c) 2014 - 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
@@ -19,7 +19,7 @@
  *
  * BSD LICENSE
  *
- * Copyright (c) 2015 Intel Corporation.
+ * Copyright (c) 2014 - 2015 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -47,83 +47,14 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Intel(R) OPA Gen2 IB Driver
+ * Intel(R) Omni-Path Gen2 HFI PCIe Driver
  */
 
-#ifndef _OPA_IB_COMPAT_H_
-#define _OPA_IB_COMPAT_H_
+#ifndef _ATTR_H
+#define _ATTR_H
 
-/*
- * This file is temporary and all logic should be eventually provided
- * via include/rdma/opa*.h.
- * IB will have a OPA link-layer in Gen2 timeframe with core functions
- * to distinguish OPA vs IB differences.
- */
+#define PHYSPORTSTATE_SHIFT		4
+#define NNORMAL_SHIFT			4
+#define SM_CONFIG_SHIFT			5
 
-/* see rate_show() in ib core/sysfs.c */
-static inline u16 opa_speed_to_ib(u16 in)
-{
-	u16 out = 0;
-
-	if (in & OPA_LINK_SPEED_25G)
-		out |= IB_SPEED_EDR;
-	if (in & OPA_LINK_SPEED_12_5G)
-		out |= IB_SPEED_QDR;
-
-	return out;
-}
-
-/*
- * Convert a single STL link width (no multiple flags) to an IB value.
- * A zero STL link width means link down, which means the IB width value
- * is a don't care.
- */
-static inline u16 opa_width_to_ib(u16 in)
-{
-	switch (in) {
-	case OPA_LINK_WIDTH_1X:
-	/* map 2x and 3x to 1x as they don't exist in IB */
-	case OPA_LINK_WIDTH_2X:
-	case OPA_LINK_WIDTH_3X:
-		return IB_WIDTH_1X;
-	default: /* link down or unknown, return our largest width */
-	case OPA_LINK_WIDTH_4X:
-		return IB_WIDTH_4X;
-	}
-}
-
-static inline int mtu_enum_to_int(u8 mtu)
-{
-	switch (mtu) {
-	case IB_MTU_256:  return  256;
-	case IB_MTU_512:  return  512;
-	case IB_MTU_1024: return 1024;
-	case IB_MTU_2048: return 2048;
-	case IB_MTU_4096: return 4096;
-	case OPA_MTU_8192:  return 8192;
-	case OPA_MTU_10240: return 10240;
-	default: return -1;
-	}
-}
-
-static inline u8 mtu_int_to_enum(int mtu)
-{
-	switch (mtu) {
-	case   256: return IB_MTU_256;
-	case   512: return IB_MTU_512;
-	case  1024: return IB_MTU_1024;
-	case  2048: return IB_MTU_2048;
-	case  4096: return IB_MTU_4096;
-	case  8192: return OPA_MTU_8192;
-	case 10240: return OPA_MTU_10240;
-	default: return -1;
-	}
-}
-
-static inline u8 mtu_int_to_enum_safe(int mtu, u8 if_bad_mtu)
-{
-	int ibmtu = mtu_int_to_enum(mtu);
-
-	return (ibmtu == -1) ? if_bad_mtu : ibmtu;
-}
-#endif
+#endif	/* _ATTR_H */
