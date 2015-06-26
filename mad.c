@@ -1390,7 +1390,7 @@ static int __subn_get_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 	void *vp = (void *) data;
 	size_t size = 4 * sizeof(u64);
 
-	if (port != 1 || n_blocks != 1) {
+	if (n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
@@ -1414,7 +1414,7 @@ static int __subn_set_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 	struct hfi1_pportdata *ppd;
 	int lstate;
 
-	if (port != 1 || n_blocks != 1 || async_update) {
+	if (n_blocks != 1 || async_update) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
@@ -1445,7 +1445,7 @@ static int __subn_get_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 	void *vp = (void *) data;
 	int size;
 
-	if (port != 1 || n_blocks != 1) {
+	if (n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
@@ -1470,7 +1470,7 @@ static int __subn_set_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 	void *vp = (void *) data;
 	int lstate;
 
-	if (port != 1 || n_blocks != 1) {
+	if (n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
@@ -3237,7 +3237,7 @@ static int __subn_get_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 	u32 nport = OPA_AM_NPORT(am);
 	u64 reg;
 
-	if (port != 1 || nport != 1 || OPA_AM_PORTNUM(am)) {
+	if (nport != 1 || OPA_AM_PORTNUM(am)) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
@@ -3262,7 +3262,7 @@ static int __subn_set_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 	u32 nport = OPA_AM_NPORT(am);
 	int on = !!(be32_to_cpu(p->rsvd_led_mask) & OPA_LED_MASK);
 
-	if (port != 1 || nport != 1 || OPA_AM_PORTNUM(am)) {
+	if (nport != 1 || OPA_AM_PORTNUM(am)) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
