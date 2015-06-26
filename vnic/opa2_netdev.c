@@ -495,7 +495,12 @@ static int opa2_hw_init(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (rc)
 		goto err1;
 
-	return opa2_xfer_test(odev, dev);
+	rc = opa2_xfer_test(odev, dev);
+	if (rc)
+		goto err2;
+	return 0;
+err2:
+	ops->cq_unmap(&dev->tx, &dev->rx);
 err1:
 	ops->cq_release(ctx, dev->cq_idx);
 err:
