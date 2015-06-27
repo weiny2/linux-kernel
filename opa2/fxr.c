@@ -100,9 +100,10 @@ static void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
 }
 
-static void hfi_init_e2e_csrs(const struct hfi_devdata *dd)
+static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 {
 	RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM_t flt = {.val = 0};
+	RXE2E_CFG_VALID_TC_SLID_t tc_slid = {.val = 0};
 
 	flt.field.valid = 1;
 	flt.field.l4 = PTL_RTS;
@@ -114,6 +115,23 @@ static void hfi_init_e2e_csrs(const struct hfi_devdata *dd)
 
 	flt.field.l4 = PTL_REND_EVENT;
 	write_csr(dd, FXR_RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM + 8, flt.val);
+
+	tc_slid.field.max_slid_p0 = HFI_MAX_LID_SUPP;
+	tc_slid.field.tc_valid_p0 = 0xf;
+	tc_slid.field.max_slid_p1 = HFI_MAX_LID_SUPP;
+	tc_slid.field.tc_valid_p1 = 0xf;
+	write_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID, tc_slid.val);
+}
+
+static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
+{
+	txotr_pkt_cfg_valid_tc_dlid_t tc_slid = {.val = 0};
+
+	tc_slid.field.max_dlid_p0 = HFI_MAX_LID_SUPP;
+	tc_slid.field.tc_valid_p0 = 0xf;
+	tc_slid.field.max_dlid_p1 = HFI_MAX_LID_SUPP;
+	tc_slid.field.tc_valid_p1 = 0xf;
+	write_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID, tc_slid.val);
 }
 
 static void init_csrs(const struct hfi_devdata *dd)
@@ -142,31 +160,108 @@ static void init_csrs(const struct hfi_devdata *dd)
 		 * TODO: Delete this hack once the LID is received via MADs
 		 */
 		if (!strcmp(utsname()->nodename, "viper0")) {
-			u8 lid = 0;
-
-			lmp0.field.DLID = lid;
-			write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
-			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0, lid);
-			dd->pport[0].lid = lid;
-			lmp1.field.DLID = ++lid;
-			write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
-			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1, lid);
-			dd->pport[1].lid = lid;
+			dd->pport[0].lid = 0;
+			dd->pport[1].lid = 1;
 		}
 		if (!strcmp(utsname()->nodename, "viper1")) {
-			u8 lid = 2;
+			dd->pport[0].lid = 2;
+			dd->pport[1].lid = 3;
+		}
+		lmp0.field.DLID = dd->pport[0].lid;
+		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
+		write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0, dd->pport[0].lid);
+		lmp1.field.DLID = dd->pport[1].lid;
+		write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
+		write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1, dd->pport[1].lid);
+	}
+	hfi_init_rx_e2e_csrs(dd);
+	hfi_init_tx_otr_csrs(dd);
+}
 
-			lmp0.field.DLID = lid;
-			write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
-			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0, lid);
-			dd->pport[0].lid = lid;
-			lmp1.field.DLID = ++lid;
-			write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
-			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1, lid);
-			dd->pport[1].lid = lid;
+static int hfi_tx_otr_init(const struct hfi_devdata *dd)
+{
+	int i, j, rc = 0;
+	u32 offset = FXR_TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC;
+	txotr_pkt_cfg_psn_base_addr_p0_tc_t psn_base = {.val = 0};
+	struct hfi_pportdata *port;
+	void *va;
+
+	for (i = 0; i < HFI_NUM_PPORTS; i++) {
+		port = &dd->pport[i];
+		for (j = 0; j < HFI_MAX_TC; j++) {
+			va = vmalloc(HFI_PSN_SIZE);
+			if (!va) {
+				rc = -ENOMEM;
+				goto done;
+			}
+			psn_base.field.address = (u64)va >> PAGE_SHIFT;
+			port->psn_base_tx_otr[j] = va;
+			write_csr(dd, offset + i * 0x20 + j * 8, psn_base.val);
 		}
 	}
-	hfi_init_e2e_csrs(dd);
+done:
+	return rc;
+}
+
+static int hfi_rx_e2e_init(const struct hfi_devdata *dd)
+{
+	int i, j, rc = 0;
+	u32 offset = FXR_RXE2E_CFG_PSN_BASE_ADDR_P0_TC;
+	RXE2E_CFG_PSN_BASE_ADDR_P0_TC_t psn_base = {.val = 0};
+	struct hfi_pportdata *port;
+	void *va;
+
+	for (i = 0; i < HFI_NUM_PPORTS; i++) {
+		port = &dd->pport[i];
+		for (j = 0; j < HFI_MAX_TC; j++) {
+			va = vmalloc(HFI_PSN_SIZE);
+			if (!va) {
+				rc = -ENOMEM;
+				goto done;
+			}
+			psn_base.field.address = (u64)va >> PAGE_SHIFT;
+			port->psn_base_rx_e2e[j] = va;
+			write_csr(dd, offset + i * 0x20 + j * 8, psn_base.val);
+		}
+	}
+done:
+	return rc;
+}
+
+static void hfi_tx_otr_uninit(const struct hfi_devdata *dd)
+{
+	int i, j;
+	struct hfi_pportdata *port;
+	u32 offset = FXR_TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC;
+
+	for (i = 0; i < HFI_NUM_PPORTS; i++) {
+		port = &dd->pport[i];
+		for (j = 0; j < HFI_MAX_TC; j++) {
+			if (port->psn_base_tx_otr[j]) {
+				vfree(port->psn_base_tx_otr[j]);
+				port->psn_base_tx_otr[j] = NULL;
+				write_csr(dd, offset + i * 0x20 + j * 8, 0x0);
+			}
+		}
+	}
+}
+
+static void hfi_rx_e2e_uninit(const struct hfi_devdata *dd)
+{
+	int i, j;
+	struct hfi_pportdata *port;
+	u32 offset = FXR_RXE2E_CFG_PSN_BASE_ADDR_P0_TC;
+
+	for (i = 0; i < HFI_NUM_PPORTS; i++) {
+		port = &dd->pport[i];
+		for (j = 0; j < HFI_MAX_TC; j++) {
+			if (port->psn_base_rx_e2e[j]) {
+				vfree(port->psn_base_rx_e2e[j]);
+				port->psn_base_rx_e2e[j] = NULL;
+				write_csr(dd, offset + i * 0x20 + j * 8, 0x0);
+			}
+		}
+	}
 }
 
 /*
@@ -191,6 +286,10 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	}
 
 	hfi_iommu_root_clear_context(dd);
+
+	hfi_tx_otr_uninit(dd);
+
+	hfi_rx_e2e_uninit(dd);
 
 	/* free host memory for FXR and Portals resources */
 	if (dd->cq_head_base)
@@ -243,6 +342,7 @@ static struct opa_core_ops opa_core_ops = {
 	.ev_release = hfi_cteq_release,
 	.dlid_assign = hfi_dlid_assign,
 	.dlid_release = hfi_dlid_release,
+	.e2e_ctrl = hfi_e2e_ctrl,
 	.get_device_desc = hfi_device_desc,
 	.get_port_desc = hfi_port_desc,
 	.get_sma = hfi_get_sma,
@@ -290,6 +390,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	spin_lock_init(&dd->ptl_lock);
 	idr_init(&dd->cq_pair);
 	spin_lock_init(&dd->cq_lock);
+	spin_lock_init(&dd->priv_tx_cq_lock);
 
 	for (i = 0; i < HFI_NUM_BARS; i++) {
 		addr = pci_resource_start(pdev, i);
@@ -306,6 +407,14 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	}
 	/* FXR resources are on BAR0 (used for io_remap, etc.) */
 	dd->physaddr = dd->pcibar[0];
+
+	ret = hfi_tx_otr_init(dd);
+	if (ret)
+		goto err_post_alloc;
+
+	ret = hfi_rx_e2e_init(dd);
+	if (ret)
+		goto err_post_alloc;
 
 	/* Ensure CSRs are sane, we can't trust they haven't been manipulated */
 	init_csrs(dd);

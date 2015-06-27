@@ -205,8 +205,18 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	hfi_user_ptr_t user_ptr = (hfi_user_ptr_t)&user_ptr;
 	hfi_me_handle_t me_handle = 0xc;
 	struct opa_pport_desc pdesc;
+	struct opa_e2e_ctrl e2e;
 
 	ops->get_port_desc(odev, &pdesc, 1);
+
+	e2e.slid = pdesc.lid;
+	e2e.dlid = pdesc.lid;
+	e2e.sl = 0;
+	e2e.op = PTL_SINGLE_CONNECT;
+
+	rc = ops->e2e_ctrl(ctx, &e2e);
+	if (rc)
+		return rc;
 
 	target_id.phys.slid = pdesc.lid;
 	target_id.phys.ipid = ctx->pid;
@@ -216,8 +226,10 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 #define HFI_TEST_PT 10
 	/* Create a test TX buffer and initialize it */
 	tx_base = kzalloc(PAYLOAD_SIZE, GFP_KERNEL);
-	if (!tx_base)
-		return -ENOMEM;
+	if (!tx_base) {
+		rc = -ENOMEM;
+		goto err0;
+	}
 	memset(tx_base, 0xc0, PAYLOAD_SIZE);
 
 	/* Create a test RX buffer */
@@ -389,6 +401,8 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 
 	kfree(rx_base);
 	kfree(tx_base);
+	e2e.op = PTL_SINGLE_DESTROY;
+	ops->e2e_ctrl(ctx, &e2e);
 	return 0;
 err3:
 	kfree(rx_base1);
@@ -396,6 +410,9 @@ err2:
 	kfree(rx_base);
 err1:
 	kfree(tx_base);
+err0:
+	e2e.op = PTL_SINGLE_DESTROY;
+	ops->e2e_ctrl(ctx, &e2e);
 	return rc;
 }
 

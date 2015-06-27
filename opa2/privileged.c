@@ -51,7 +51,131 @@
  */
 
 #include <linux/sched.h>
+#include <rdma/opa_core.h>
+#include <rdma/hfi_tx.h>
+#include <rdma/hfi_args.h>
+#include <rdma/hfi_ct.h>
 #include "opa_hfi.h"
+
+/* Poll on a counting event to return success, failure or time out */
+static int
+__hfi_ct_wait(struct hfi_ctx *ctx, hfi_ct_handle_t ct_h,
+	      unsigned long threshold, unsigned long timeout_ms,
+	      unsigned long *ct_val)
+{
+	unsigned long val;
+	unsigned long exit_jiffies = jiffies + msecs_to_jiffies(timeout_ms);
+
+	while (1) {
+		if (hfi_ct_get_failure(ctx, ct_h))
+			return -EFAULT;
+		val = hfi_ct_get_success(ctx, ct_h);
+		if (val >= threshold)
+			break;
+		if (time_after(jiffies, exit_jiffies))
+			return -ETIME;
+		schedule();
+	}
+
+	if (ct_val)
+		*ct_val = val;
+
+	return 0;
+}
+
+/* Format an E2E control message, transmit it and wait for an acknowledgment */
+static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
+			    int tc, int port, enum ptl_op_e2e_ctrl op)
+{
+	union hfi_tx_cq_command tx_cmd;
+	hfi_tx_e2e_control_t *command = &tx_cmd.e2e_ctrl;
+	struct hfi_ctx *ctx = &dd->priv_ctx;
+	hfi_cmd_t cmd;
+	u16 cmd_length = 8;
+	u16 cmd_slots = _HFI_CMD_SLOTS(cmd_length);
+	hfi_process_t target_id;
+	hfi_ack_req_t ack_req = PTL_CT_ACK_REQ;
+	hfi_md_options_t md_options = PTL_MD_EVENT_CT_ACK;
+	hfi_ct_handle_t ct_tx;
+	hfi_ct_alloc_args_t ct_alloc = {0};
+	hfi_ni_t ni = PTL_NONMATCHING_PHYSICAL;
+	unsigned long flags;
+	int rc;
+
+	memset(&tx_cmd, 0x0, sizeof(tx_cmd));
+	target_id.phys.slid = dlid;
+	target_id.phys.ipid = dd->priv_ctx.pid;
+	cmd.ptl_opcode_low = op;
+	cmd.ttype = BUFFERED;
+	ct_alloc.ni = ni;
+	rc = hfi_ct_alloc(ctx, &ct_alloc, &ct_tx);
+	if (rc < 0)
+		goto err;
+
+	_hfi_format_base_put_flit0(ctx, ni, &command->flit0, cmd,
+				   E2E_CTRL, cmd_length, target_id, 0, 0,
+				   FXR_TRUE, ack_req, md_options, PTL_EQ_NONE,
+				   ct_tx, 0, 0);
+	command->flit0.a.sh = 0;
+	command->flit0.a.sl = tc;
+	command->flit0.a.rc = RC_DETERMINISTIC_0;
+	command->flit0.a.pt = port;
+
+	command->flit1.e.max_dist = 27; /* TODO: Why? */
+
+	spin_lock_irqsave(&dd->priv_tx_cq_lock, flags);
+	/* Transmit the E2E message */
+	do {
+		rc = hfi_tx_cmd_put_match(&dd->priv_tx_cq, command->command,
+					  0, 0, cmd_slots);
+	} while (rc == -EAGAIN);
+	spin_unlock_irqrestore(&dd->priv_tx_cq_lock, flags);
+
+	/* Wait for an acknowledgment */
+	rc = __hfi_ct_wait(ctx, ct_tx, 1, HFI_TX_TIMEOUT_MS, NULL);
+	if (rc < 0) {
+		/* TODO: Should failure and timeout be handled the same */
+		dd_dev_err(dd, "e2e op %d slid %d dlid %d tc %d port %d fail rc %d\n",
+			   op, slid, dlid, tc, port, rc);
+		goto err;
+	} else {
+		dd_dev_info(dd, "e2e op %d slid %d dlid %d tc %d port %d success\n",
+			    op, slid, dlid, tc, port);
+	}
+err:
+	return rc;
+}
+
+int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	u8 port, tc;
+
+	if (e2e->slid == dd->pport[0].lid)
+		port = 0;
+	else if (e2e->slid == dd->pport[1].lid)
+		port = 1;
+	else
+		return -EINVAL;
+
+	if (e2e->dlid >= HFI_MAX_LID_SUPP)
+		return -EINVAL;
+
+	if (e2e->op > PTL_SINGLE_DESTROY)
+		return -EINVAL;
+	/*
+	 * TODO: The SL <-> TC mapping is currently hard coded in
+	 * Simics. At some point we need to determine the mapping
+	 * from the CSR registers instead.
+	 */
+	tc = e2e->sl % HFI_MAX_TC;
+	/*
+	 * TODO: Query if E2E connection is already setup
+	 * via PTL_E2E_STATUS_REQ once supported before
+	 * initiating a new connection or teardown
+	 */
+	return hfi_put_e2e_ctrl(dd, e2e->slid, e2e->dlid, tc, port, e2e->op);
+}
 
 int hfi_dlid_assign(struct hfi_ctx *ctx,
 		    struct hfi_dlid_assign_args *dlid_assign)
