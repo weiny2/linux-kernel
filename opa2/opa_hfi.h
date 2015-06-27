@@ -66,6 +66,18 @@
 #define HFI_PID_SYSTEM		0
 #define HFI_PID_BYPASS_BASE	0xF00
 
+/* Maximum number of traffic classes supported */
+#define HFI_MAX_TC		4
+
+/* Maximum number of unicast LIDs supported */
+#define HFI_MAX_LID_SUPP	(0xBFFF)
+
+/* Size of packet sequence number state assuming LMC = 0 */
+#define HFI_PSN_SIZE		(HFI_MAX_LID_SUPP * 8)
+
+/* TX timeout for E2E control messages */
+#define HFI_TX_TIMEOUT_MS	100
+
 /* In accordance with stl vol 1 section 4.1 */
 #define PGUID_MASK		(~(0x3UL << 32))
 #define PORT_GUID(ng, pn)	(((be64_to_cpu(ng)) & PGUID_MASK) |\
@@ -83,11 +95,19 @@ struct hfi_msix_entry {
 	cpumask_var_t mask;
 };
 
+/*
+ * hfi_pportdata - HFI port specific information
+ *
+ * @pguid: port_guid identifying port
+ * @lid: LID for this port
+ * @psn_base_rx_e2e: PSN base for RX E2E
+ * @psn_base_tx_otr: PSN base for TX OTR
+ */
 struct hfi_pportdata {
-	/* port_guid identifying port */
 	__be64 pguid;
-	/* LID for this port */
 	u32 lid;
+	void *psn_base_rx_e2e[HFI_MAX_TC];
+	void *psn_base_tx_otr[HFI_MAX_TC];
 };
 
 /* device data struct contains only per-HFI info. */
@@ -147,6 +167,9 @@ struct hfi_devdata {
 
 	/* OUI comes from the HW. Used everywhere as 3 separate bytes. */
 	u8 oui[3];
+
+	/* Lock to synchronize access to priv_cq */
+	spinlock_t priv_tx_cq_lock;
 };
 
 void hfi_pport_init(struct hfi_devdata *dd);
@@ -198,6 +221,7 @@ int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count);
 void hfi_ctxt_unreserve(struct hfi_ctx *ctx);
 int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int token, u16 ctxt, void **addr,
 		     ssize_t *len);
+int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e_ctrl);
 
 int hfi_iommu_root_alloc(void);
 void hfi_iommu_root_free(void);

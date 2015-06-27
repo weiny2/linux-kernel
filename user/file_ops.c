@@ -149,8 +149,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_job_setup_args job_setup;
 	struct hfi_mpin_args mpin;
 	struct hfi_munpin_args munpin;
+	struct hfi_e2e_args e2e;
 	struct opa_ctx_assign ctx_assign;
 	struct opa_ev_assign ev_assign;
+	struct opa_e2e_ctrl e2e_ctrl;
 	int need_admin = 0;
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *copy_ptr = NULL;
@@ -239,6 +241,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_MUNPIN:
 		copy_in = sizeof(munpin);
 		copy_ptr = &munpin;
+		break;
+	case HFI_CMD_E2E_OP:
+		copy_in = sizeof(e2e);
+		copy_ptr = &e2e;
 		break;
 	default:
 		ret = -EINVAL;
@@ -384,6 +390,13 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_MUNPIN:
 		ret = hfi_munpin(ud, &munpin);
+		break;
+	case HFI_CMD_E2E_OP:
+		e2e_ctrl.slid = e2e.slid;
+		e2e_ctrl.dlid = e2e.dlid;
+		e2e_ctrl.sl = e2e.sl;
+		e2e_ctrl.op = e2e.op;
+		ret = ops->e2e_ctrl(&ud->ctx, &e2e_ctrl);
 		break;
 	default:
 		ret = -EINVAL;

@@ -244,6 +244,20 @@ struct opa_ev_assign {
 	u16 ev_idx;
 };
 
+/**
+ * struct opa_e2e_ctrl - Used with opa_core_ops.e2e_ctrl operation
+ * @slid: source LID
+ * @dlid: destination LID
+ * @sl: service level
+ * @op: Type of E2E control message
+ */
+struct opa_e2e_ctrl {
+	u32 slid;
+	u32 dlid;
+	u8 sl;
+	enum ptl_op_e2e_ctrl op;
+};
+
 /*
  * opa_ev_assign.mode bits, intent is upper bits for specifying EV mechanism,
  * lower bits for controlling behavior
@@ -295,6 +309,7 @@ struct opa_dev_desc {
  * @ev_release: Release an Event Completion Queue or Event Counter
  * @dlid_assign: Assign entries from the DLID relocation table
  * @dlid_release: Release entries from the DLID relocation table
+ * @e2e_ctrl: Initiate E2E control messages
  * @get_device_desc: get device (node) specific HW details
  * @get_port_desc: get port specific HW details
  * @get_sma: get method for opa sma to get HW related attributes
@@ -322,6 +337,7 @@ struct opa_core_ops {
 	int (*dlid_assign)(struct hfi_ctx *ctx,
 			   struct hfi_dlid_assign_args *dlid_assign);
 	int (*dlid_release)(struct hfi_ctx *ctx, u32 dlid_base, u32 count);
+	int (*e2e_ctrl)(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e_ctrl);
 	void (*get_device_desc)(struct opa_core_device *odev,
 						struct opa_dev_desc *desc);
 	void (*get_port_desc)(struct opa_core_device *odev,
