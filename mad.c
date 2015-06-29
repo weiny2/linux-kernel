@@ -771,54 +771,61 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 }
 
 static int set_port_states(struct hfi1_pportdata *ppd, struct opa_smp *smp,
-			   u32 state, u32 lstate, int suppress_idle_sma)
+			   u32 logical_state, u32 phys_state,
+			   int suppress_idle_sma)
 {
 	struct hfi1_devdata *dd = ppd->dd;
+	u32 link_state;
 	int ret;
 
-	if (lstate && !(state == IB_PORT_DOWN || state == IB_PORT_NOP)) {
-		pr_warn("SubnSet(OPA_PortInfo) port state invalid; state 0x%x link state 0x%x\n",
-			state, lstate);
+	if ((phys_state != IB_PORTPHYSSTATE_NOP) &&
+	    !(logical_state == IB_PORT_DOWN ||
+	      logical_state == IB_PORT_NOP)){
+		pr_warn("SubnSet(OPA_PortInfo) port state invalid: logical_state 0x%x physical_state 0x%x\n",
+			logical_state, phys_state);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
 	/*
-	 * Only state changes of DOWN, ARM, and ACTIVE are valid
-	 * and must be in the correct state to take effect (see 7.2.6).
+	 * Logical state changes are summarized in OPAv1g1 spec.,
+	 * Table 9-12; physical state changes are summarized in
+	 * OPAv1g1 spec., Table 6.4.
 	 */
-	switch (state) {
+	switch (logical_state) {
 	case IB_PORT_NOP:
-		if (lstate == 0)
+		if (phys_state == IB_PORTPHYSSTATE_NOP)
 			break;
 		/* FALLTHROUGH */
 	case IB_PORT_DOWN:
-		if (lstate == 0)
-			lstate = HLS_DN_DOWNDEF;
-		else if (lstate == 2) {
-			lstate = HLS_DN_POLL;
+		if (phys_state == IB_PORTPHYSSTATE_NOP)
+			link_state = HLS_DN_DOWNDEF;
+		else if (phys_state == IB_PORTPHYSSTATE_POLLING) {
+			link_state = HLS_DN_POLL;
 			set_link_down_reason(ppd,
 			     OPA_LINKDOWN_REASON_FM_BOUNCE, 0,
 			     OPA_LINKDOWN_REASON_FM_BOUNCE);
-		} else if (lstate == 3)
-			lstate = HLS_DN_DISABLE;
+		} else if (phys_state == IB_PORTPHYSSTATE_DISABLED)
+			link_state = HLS_DN_DISABLE;
 		else {
-			pr_warn("SubnSet(OPA_PortInfo) invalid Physical state 0x%x\n",
-				lstate);
+			pr_warn("SubnSet(OPA_PortInfo) invalid physical state 0x%x\n",
+				phys_state);
 			smp->status |= IB_SMP_INVALID_FIELD;
 			break;
 		}
 
-		set_link_state(ppd, lstate);
-		if (lstate == HLS_DN_DISABLE && (ppd->offline_disabled_reason >
-		    OPA_LINKDOWN_REASON_SMA_DISABLED ||
-		    ppd->offline_disabled_reason == OPA_LINKDOWN_REASON_NONE))
+		set_link_state(ppd, link_state);
+		if (link_state == HLS_DN_DISABLE &&
+		    (ppd->offline_disabled_reason >
+		     OPA_LINKDOWN_REASON_SMA_DISABLED ||
+		     ppd->offline_disabled_reason ==
+		     OPA_LINKDOWN_REASON_NONE))
 			ppd->offline_disabled_reason =
 			OPA_LINKDOWN_REASON_SMA_DISABLED;
 		/*
 		 * Don't send a reply if the response would be sent
 		 * through the disabled port.
 		 */
-		if (lstate == HLS_DN_DISABLE && smp->hop_cnt)
+		if (link_state == HLS_DN_DISABLE && smp->hop_cnt)
 			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 		break;
 	case IB_PORT_ARMED:
@@ -837,7 +844,8 @@ static int set_port_states(struct hfi1_pportdata *ppd, struct opa_smp *smp,
 		}
 		break;
 	default:
-		pr_warn("SubnSet(OPA_PortInfo) invalid state 0x%x\n", state);
+		pr_warn("SubnSet(OPA_PortInfo) invalid logical state 0x%x\n",
+			logical_state);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
