@@ -358,6 +358,17 @@
 #define ICODE_FPGA_EMULATION	0x02
 #define ICODE_FUNCTIONAL_SIMULATOR	0x03
 
+/*
+ * 8051 data memory size.
+ */
+#define DC8051_DATA_MEM_SIZE 0x1000
+
+/*
+ * 8051 firmware registers
+ */
+#define NUM_GENERAL_FIELDS 0x17
+#define NUM_LANE_FIELDS    0x8
+
 /* 8051 general register Field IDs */
 #define TX_SETTINGS		     0x06
 #define VERIFY_CAP_LOCAL_PHY	     0x07
@@ -388,9 +399,9 @@
 
 /* READ_DATA 8051 command shifts and fields */
 #define READ_DATA_FIELD_ID_SHIFT 40
-#define READ_DATA_FIELD_ID_MASK 0xfull
+#define READ_DATA_FIELD_ID_MASK 0xffull
 #define READ_DATA_LANE_ID_SHIFT 32
-#define READ_DATA_LANE_ID_MASK 0xfull
+#define READ_DATA_LANE_ID_MASK 0xffull
 #define READ_DATA_DATA_SHIFT   0x0
 #define READ_DATA_DATA_MASK   0xffffffffull
 
@@ -618,6 +629,7 @@ void dispose_firmware(void);
 int acquire_hw_mutex(struct hfi1_devdata *dd);
 void release_hw_mutex(struct hfi1_devdata *dd);
 void fabric_serdes_reset(struct hfi1_devdata *dd);
+int read_8051_data(struct hfi1_devdata *dd, u32 addr, u32 len, u64 *result);
 
 /* chip.c */
 void read_misc_status(struct hfi1_devdata *dd, u8 *ver_a, u8 *ver_b);
@@ -1011,4 +1023,3 @@ struct is_table {
 };
 
 #endif /* _CHIP_H */
-

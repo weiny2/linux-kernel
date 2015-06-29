@@ -668,6 +668,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->overall_buffer_space = cpu_to_be16(dd->link_credits);
 
 	pi->neigh_node_guid = ppd->neighbor_guid;
+	pi->neigh_port_num = ppd->neighbor_port_number;
 	pi->port_neigh_mode =
 		(ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) |
 		(ppd->mgmt_allowed ? OPA_PI_MASK_NEIGH_MGMT_ALLOWED : 0) |

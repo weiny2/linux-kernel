@@ -78,9 +78,12 @@ static void ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 	u32 length;
 	enum ib_qp_type sqptype, dqptype;
 
+	rcu_read_lock();
+
 	qp = hfi1_lookup_qpn(ibp, swqe->wr.wr.ud.remote_qpn);
 	if (!qp) {
 		ibp->n_pkt_drops++;
+		rcu_read_unlock();
 		return;
 	}
 
@@ -251,8 +254,7 @@ static void ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 bail_unlock:
 	spin_unlock_irqrestore(&qp->r_lock, flags);
 drop:
-	if (atomic_dec_and_test(&qp->refcount))
-		wake_up(&qp->wait);
+	rcu_read_unlock();
 }
 
 /**

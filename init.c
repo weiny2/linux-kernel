@@ -1023,6 +1023,7 @@ struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	spin_lock_init(&dd->hfi1_diag_trans_lock);
 	spin_lock_init(&dd->sc_init_lock);
 	spin_lock_init(&dd->dc8051_lock);
+	spin_lock_init(&dd->dc8051_memlock);
 	mutex_init(&dd->qsfp_i2c_mutex);
 	seqlock_init(&dd->sc2vl_lock);
 	spin_lock_init(&dd->sde_map_lock);
@@ -1108,7 +1109,6 @@ static int init_one(struct pci_dev *, const struct pci_device_id *);
 static const struct pci_device_id hfi1_pci_tbl[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL0) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL1) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL2) },
 	{ 0, }
 };
 
@@ -1366,7 +1366,6 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	switch (ent->device) {
 	case PCI_DEVICE_ID_INTEL0:
 	case PCI_DEVICE_ID_INTEL1:
-	case PCI_DEVICE_ID_INTEL2:
 		dd = hfi1_init_dd(pdev, ent);
 		break;
 	default:

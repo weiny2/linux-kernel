@@ -230,6 +230,78 @@ static const u8 all_pcie_serdes_broadcast = 0xe0;
 static void dispose_one_firmware(struct firmware_details *fdet);
 
 /*
+ * Read a single 64-bit value from 8051 data memory.
+ *
+ * Expects:
+ * o caller to have already set up data read, no auto increment
+ * o caller to turn off read enable when finished
+ *
+ * The address argument is a byte offset.  Bits 0:2 in the address are
+ * ignored - i.e. the hardware will always do aligned 8-byte reads as if
+ * the lower bits are zero.
+ *
+ * Return 0 on success, -ENXIO on a read error (timeout).
+ */
+static int __read_8051_data(struct hfi1_devdata *dd, u32 addr, u64 *result)
+{
+	u64 reg;
+	int count;
+
+	/* start the read at the given address */
+	reg = ((addr & DC_DC8051_CFG_RAM_ACCESS_CTRL_ADDRESS_MASK)
+			<< DC_DC8051_CFG_RAM_ACCESS_CTRL_ADDRESS_SHIFT)
+		| DC_DC8051_CFG_RAM_ACCESS_CTRL_READ_ENA_SMASK;
+	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_CTRL, reg);
+
+	/* wait until ACCESS_COMPLETED is set */
+	count = 0;
+	while ((read_csr(dd, DC_DC8051_CFG_RAM_ACCESS_STATUS)
+		    & DC_DC8051_CFG_RAM_ACCESS_STATUS_ACCESS_COMPLETED_SMASK)
+		    == 0) {
+		count++;
+		if (count > DC8051_ACCESS_TIMEOUT) {
+			dd_dev_err(dd, "timeout reading 8051 data\n");
+			return -ENXIO;
+		}
+		ndelay(10);
+	}
+
+	/* gather the data */
+	*result = read_csr(dd, DC_DC8051_CFG_RAM_ACCESS_RD_DATA);
+
+	return 0;
+}
+
+/*
+ * Read 8051 data starting at addr, for len bytes.  Will read in 8-byte chunks.
+ * Return 0 on success, -errno on error.
+ */
+int read_8051_data(struct hfi1_devdata *dd, u32 addr, u32 len, u64 *result)
+{
+	unsigned long flags;
+	u32 done;
+	int ret = 0;
+
+	spin_lock_irqsave(&dd->dc8051_memlock, flags);
+
+	/* data read set-up, no auto-increment */
+	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_SETUP, 0);
+
+	for (done = 0; done < len; addr += 8, done += 8, result++) {
+		ret = __read_8051_data(dd, addr, result);
+		if (ret)
+			break;
+	}
+
+	/* turn off read enable */
+	write_csr(dd, DC_DC8051_CFG_RAM_ACCESS_CTRL, 0);
+
+	spin_unlock_irqrestore(&dd->dc8051_memlock, flags);
+
+	return ret;
+}
+
+/*
  * Write data or code to the 8051 code or data RAM.
  */
 static int write_8051(struct hfi1_devdata *dd, int code, u32 start,
