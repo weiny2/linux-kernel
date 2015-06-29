@@ -303,9 +303,9 @@ def main():
     base_dir = test_info.get_base_dir()
     if base_dir == "":
         if test_info.is_mpiverbs():
-            base_dir = "/usr/mpi/gcc/openmpi-1.8.2a1/tests/intel_mpitest/"
+            base_dir = test_info.mpiverbs_path + "/tests/intel_mpitest/"
         else:
-            base_dir = "/usr/mpi/gcc/openmpi-1.8.2a1-hfi/tests/intel_mpitest/"
+            base_dir = test_info.mpipsm_path + "/tests/intel_mpitest/"
         print "Using default base_dir of", base_dir
     else:
         print "Using user defined base_dir of", base_dir

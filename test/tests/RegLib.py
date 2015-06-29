@@ -393,6 +393,7 @@ class TestInfo:
 
     def __init__(self):
         self.get_parse_standard_args()
+        self.get_mpi_dir()
 
     global simics_key
 
@@ -405,6 +406,8 @@ class TestInfo:
     mpiverbs = False
     paramdict = None
     np = "6"
+    mpiverbs_path = ""
+    mpipsm_path = ""
 
     def get_hfi_src(self):
         return self.hfi_src
@@ -414,6 +417,21 @@ class TestInfo:
 
     def is_fpga(self):
         return self.fpga
+
+    def get_mpi_dir(self):
+        if os.path.exists("/usr/mpi/gcc/openmpi-1.8.5/bin/mpirun"):
+            self.mpiverbs_path = "/usr/mpi/gcc/openmpi-1.8.5"
+	elif os.path.exists("/usr/mpi/gcc/openmpi-1.8.2a1/bin/mpirun"):
+            self.mpiverbs_path = "/usr/mpi/gcc/openmpi-1.8.2a1"
+        else:
+            test_log(0, "could not find verbs MPI path")
+
+        if os.path.exists("/usr/mpi/gcc/openmpi-1.8.5-hfi/bin/mpirun"):
+            self.mpipsm_path = "/usr/mpi/gcc/openmpi-1.8.5-hfi"
+	elif os.path.exists("/usr/mpi/gcc/openmpi-1.8.2a1-hfi/bin/mpirun"):
+            self.mpipsm_path = "/usr/mpi/gcc/openmpi-1.8.2a1-hfi"
+        else:
+            test_log(0, "could not find PSM MPI path")
 
     def get_parse_standard_args(self):
         parser = OptionParser()
@@ -705,15 +723,15 @@ class TestInfo:
 
     def get_mpi_lib_path(self):
         if self.mpiverbs:
-            return "/usr/mpi/gcc/openmpi-1.8.2a1/lib64"
+            return self.mpiverbs_path + "/lib64"
         else:
-            return "/usr/mpi/gcc/openmpi-1.8.2a1-hfi/lib64"
+            return self.mpipsm_path + "/lib64"
 
     def get_mpi_bin_path(self):
         if self.mpiverbs:
-            return "/usr/mpi/gcc/openmpi-1.8.2a1/bin"
+            return self.mpiverbs_path + "/bin"
         else:
-            return "/usr/mpi/gcc/openmpi-1.8.2a1-hfi/bin"
+            return self.mpipsm_path + "/bin"
 
     def get_mpi_opts(self):
         if not self.mpiverbs:
@@ -724,9 +742,9 @@ class TestInfo:
 
     def get_osu_benchmark_dir(self):
         if self.mpiverbs:
-            return "/usr/mpi/gcc/openmpi-1.8.2a1/tests/osu_benchmarks-3.1.1/"
+            return self.mpiverbs_path + "/tests/osu_benchmarks-3.1.1/"
         else:
-            return "/usr/mpi/gcc/openmpi-1.8.2a1-hfi/tests/osu_benchmarks-3.1.1/"
+            return self.mpipsm_path + "/tests/osu_benchmarks-3.1.1/"
 
     def get_mod_parms(self):
         return self.module_params
