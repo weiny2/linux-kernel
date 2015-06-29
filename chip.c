@@ -2168,7 +2168,7 @@ static void update_rcverr_timer(unsigned long opaque)
 		set_link_down_reason(ppd,
 		  OPA_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN, 0,
 			OPA_LINKDOWN_REASON_EXCESSIVE_BUFFER_OVERRUN);
-		start_link(ppd);
+		queue_work(ppd->hfi1_wq, &ppd->link_bounce_work);
 	}
 	dd->rcv_ovfl_cnt = (u32) cur_ovfl_cnt;
 
@@ -3402,6 +3402,23 @@ void handle_link_down(struct work_struct *work)
 		start_link(ppd);
 }
 
+void handle_link_bounce(struct work_struct *work)
+{
+	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
+							link_bounce_work);
+
+	/*
+	 * Only do something if the link is currently up.
+	 */
+	if (ppd->host_link_state & HLS_UP) {
+		set_link_state(ppd, HLS_DN_OFFLINE);
+		start_link(ppd);
+	} else {
+		dd_dev_info(ppd->dd, "%s: link not up (%s), nothing to do\n",
+			__func__, link_state_name(ppd->host_link_state));
+	}
+}
+
 /*
  * Mask conversion: Capability exchange to Port LTP.  The capability
  * exchange has an implicit 16b CRC that is mandatory.
@@ -4111,8 +4128,6 @@ static const char * const port_rcv_txt[] = {
 	"PreemptError: Preempting with same VL",
 [12] =
 	"PreemptVL15: Preempting a VL15 packet",
-[13] =
-	"BadVLMarker: VL Marker for an unpreempted VL",
 };
 
 #define OPA_LDR_FMCONFIG_OFFSET 16
@@ -4165,7 +4180,7 @@ static void handle_dcc_err(struct hfi1_devdata *dd, u32 unused, u64 reg)
 			break;
 		case 8:
 			extra = fm_config_txt[info];
-			if (!do_bounce && ppd->port_error_action &
+			if (ppd->port_error_action &
 			    OPA_PI_MASK_FM_CFG_UNSUPPORTED_VL_MARKER) {
 				do_bounce = 1;
 				/*
@@ -4185,9 +4200,8 @@ static void handle_dcc_err(struct hfi1_devdata *dd, u32 unused, u64 reg)
 
 		if (reason_valid && !do_bounce) {
 			do_bounce = ppd->port_error_action &
-			(1 << (OPA_LDR_FMCONFIG_OFFSET + info));
-			lcl_reason = (lcl_reason ? lcl_reason :
-			  info + OPA_LINKDOWN_REASON_BAD_HEAD_DIST);
+					(1 << (OPA_LDR_FMCONFIG_OFFSET + info));
+			lcl_reason = info + OPA_LINKDOWN_REASON_BAD_HEAD_DIST;
 		}
 
 		/* just report this */
@@ -4213,7 +4227,7 @@ static void handle_dcc_err(struct hfi1_devdata *dd, u32 unused, u64 reg)
 			 dd->err_info_rcvport.packet_flit1 = hdr0;
 			 dd->err_info_rcvport.packet_flit2 = hdr1;
 		}
-		switch (info & 0xf) {
+		switch (info) {
 		case 1:
 		case 2:
 		case 3:
@@ -4224,8 +4238,7 @@ static void handle_dcc_err(struct hfi1_devdata *dd, u32 unused, u64 reg)
 		case 9:
 		case 11:
 		case 12:
-		case 13:
-			extra = port_rcv_txt[info & 0xf];
+			extra = port_rcv_txt[info];
 			break;
 		default:
 			reason_valid = 0;
@@ -4236,9 +4249,8 @@ static void handle_dcc_err(struct hfi1_devdata *dd, u32 unused, u64 reg)
 
 		if (reason_valid && !do_bounce) {
 			do_bounce = ppd->port_error_action &
-			  (1 << ((info & 0xf) + OPA_LDR_PORTRCV_OFFSET));
-			lcl_reason =
-			  (info & 0xf) + OPA_LINKDOWN_REASON_RCV_ERROR_0;
+					(1 << (OPA_LDR_PORTRCV_OFFSET + info));
+			lcl_reason = info + OPA_LINKDOWN_REASON_RCV_ERROR_0;
 		}
 
 		/* just report this */
@@ -4271,7 +4283,7 @@ static void handle_dcc_err(struct hfi1_devdata *dd, u32 unused, u64 reg)
 	if (do_bounce) {
 		dd_dev_info(dd, "%s: PortErrorAction bounce\n", __func__);
 		set_link_down_reason(ppd, lcl_reason, 0, lcl_reason);
-		start_link(ppd);
+		queue_work(ppd->hfi1_wq, &ppd->link_bounce_work);
 	}
 }
 
@@ -6263,6 +6275,9 @@ void set_link_down_reason(struct hfi1_pportdata *ppd, u8 lcl_reason,
 
 /*
  * Change the physical and/or logical link state.
+ *
+ * Do not call this routine while inside an interrupt.  It contains
+ * calls to routines that can take multiple seconds to finish.
  *
  * Returns 0 on success, -errno on failure.
  */
