@@ -1474,6 +1474,8 @@ struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra);
 #define HFI1_LED_LOG 2  /* Logical (link) YELLOW LED */
 void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val);
 
+#define HFI1_CREDIT_RETURN_RATE (100)
+
 /*
  * The number of words for the KDETH protocol field.  If this is
  * larger then the actual field used, then part of the payload
