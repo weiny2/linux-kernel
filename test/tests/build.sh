@@ -4,8 +4,8 @@
 #
 # Author: Dennis Dalessandro (dennis.dalessandro@intel.com)
 #
-# Feed in five args, the path to the kernel build dir, your WFR sourece dir, sparse flag,
-# checkpatch flag, and the path to the kernel dir for coccinelle
+# Feed in six args, the path to the kernel build dir, your WFR source dir, sparse flag,
+# checkpatch flag, the path to the kernel dir for coccinelle, and klocwork flag.
 
 kernel_build=$1
 if [ -z $1 ]; then
@@ -28,6 +28,11 @@ if [ -z $4 ]; then
 fi
 
 kernel_cocci=$5
+
+klocwork=$6
+if [ -z $6 ]; then
+	klocwork=0
+fi
 
 if [ ! -d $kernel_build ]; then
 	echo "Could not find dir: $kernel_build for kernel build"
@@ -79,6 +84,31 @@ if [ ! -z $kernel_cocci ];then
 	else
 		echo "Failed to do coccicheck. Could not find dir: $kernel_cocci"
 	fi
+fi
+
+if [ $klocwork -eq 1 ];then
+	cd $wfr_src
+	rm -f klocwork.current
+	if [ ! -d "$PWD/.kwlp" ]; then
+		kwcheck create --license-host kwlic.intel.com --license-port 7500
+		if [ $? -ne 0 ]; then
+			echo "Failed to do kwcheck create"
+			exit 1
+		fi
+	fi
+	rm -rf ./.kwlp/workingcache/*
+	kwshell make
+	if [ $? -ne 0 ]; then
+		echo "Failed to do kwshell make"
+		exit 1
+	fi
+	kwcheck run
+	if [ $? -ne 0 ]; then
+		echo "Failed to do kwcheck run"
+		exit 1
+	fi
+	kwcheck list -F detailed > ./test/tests/klocwork.current
+	exit
 fi
 
 echo "Doing build in $PWD"
