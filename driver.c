@@ -303,9 +303,12 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 		if (lid < HFI1_MULTICAST_LID_BASE) {
 			struct hfi1_qp *qp;
 
+			rcu_read_lock();
 			qp = hfi1_lookup_qpn(ibp, qp_num);
-			if (!qp)
+			if (!qp) {
+				rcu_read_unlock();
 				goto drop;
+			}
 
 			/*
 			 * Handle only RC QPs - for other QP types drop error
@@ -333,6 +336,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			}
 
 			spin_unlock(&qp->r_lock);
+			rcu_read_unlock();
 		} /* Unicast QP */
 	} /* Valid packet with TIDErr */
 
@@ -376,9 +380,12 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			sl = ibp->sc_to_sl[sc5];
 
 			lqpn = be32_to_cpu(bth[1]) & HFI1_QPN_MASK;
+			rcu_read_lock();
 			qp = hfi1_lookup_qpn(ibp, lqpn);
-			if (qp == NULL)
+			if (qp == NULL) {
+				rcu_read_unlock();
 				goto drop;
+			}
 
 			switch (qp->ibqp.qp_type) {
 			case IB_QPT_UD:
@@ -396,6 +403,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			}
 
 			process_becn(ppd, sl, rlid, lqpn, rqpn, svc_type);
+			rcu_read_unlock();
 		}
 
 		packet->rhf &= ~RHF_RCV_TYPE_ERR_SMASK;
