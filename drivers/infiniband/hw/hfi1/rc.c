@@ -1879,14 +1879,10 @@ void process_becn(struct hfi1_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
 
 	cca_timer = &ppd->cca_timer[sl];
 
-	rcu_read_lock();
-
 	cc_state = get_cc_state(ppd);
 
-	if (cc_state == NULL) {
-		rcu_read_unlock();
+	if (cc_state == NULL)
 		return;
-	}
 
 	/*
 	 * 1) increase CCTI (for this SL)
@@ -1910,8 +1906,6 @@ void process_becn(struct hfi1_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
 	}
 
 	spin_unlock(&ppd->cca_timer_lock);
-
-	rcu_read_unlock();
 
 	ccti = cca_timer->ccti;
 

@@ -664,15 +664,19 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		if (atomic_dec_return(&mcast->refcount) <= 1)
 			wake_up(&mcast->wait);
 	} else {
+		rcu_read_lock();
 		qp = hfi1_lookup_qpn(ibp, qp_num);
-		if (!qp)
+		if (!qp) {
+			rcu_read_unlock();
 			goto drop;
+		}
 
 		if (lnh == HFI1_LRH_GRH)
 			rcv_flags |= HFI1_HAS_GRH;
 		if (rhf_dc_info(packet->rhf))
 			rcv_flags |= HFI1_SC4_BIT;
 		qp_rcv(rcd, hdr, rcv_flags, data, tlen, qp);
+		rcu_read_unlock();
 	}
 	return;
 
