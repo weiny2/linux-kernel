@@ -190,7 +190,8 @@ int hfi_dlid_assign(struct hfi_ctx *ctx,
 		    struct hfi_dlid_assign_args *dlid_assign);
 int hfi_dlid_release(struct hfi_ctx *ctx, u32 dlid_base, u32 count);
 int hfi_cteq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign);
-int hfi_cteq_release(struct hfi_ctx *ctx, u16 eq_mode, u16 eq_idx);
+int hfi_cteq_release(struct hfi_ctx *ctx, u16 eq_mode, u16 eq_idx,
+		     u64 user_data);
 int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
 void hfi_ctxt_cleanup(struct hfi_ctx *ctx);
 int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count);

@@ -228,6 +228,7 @@ struct opa_ctx_assign {
  * struct opa_ev_assign - Used with opa_core_ops.ev_assign operation
  * @ni: Network Interface for operation
  * @mode: Mode bits for EV assignment behavior
+ * @user_data: Data returned via completion upon successful EV assignment
  * @base: Base of event buffer in host memory
  * @size: Size specified as number of events
  * @threshold: Num events before blocking EV wakes user
@@ -236,6 +237,7 @@ struct opa_ctx_assign {
 struct opa_ev_assign {
 	u16 ni;
 	u16 mode;
+	u64 user_data;
 	u64 base;
 	u64 size;
 	u64 threshold;
@@ -315,7 +317,8 @@ struct opa_core_ops {
 		      struct hfi_cq *rx_cq);
 	void (*cq_unmap)(struct hfi_cq *tx_cq, struct hfi_cq *rx_cq);
 	int (*ev_assign)(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign);
-	int (*ev_release)(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx);
+	int (*ev_release)(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx,
+			  u64 user_data);
 	int (*dlid_assign)(struct hfi_ctx *ctx,
 			   struct hfi_dlid_assign_args *dlid_assign);
 	int (*dlid_release)(struct hfi_ctx *ctx, u32 dlid_base, u32 count);
