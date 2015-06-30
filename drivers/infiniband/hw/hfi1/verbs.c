@@ -567,8 +567,6 @@ static void qp_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_SMI:
 	case IB_QPT_GSI:
-		if (!HFI1_CAP_IS_KSET(ENABLE_SMA))
-			break;
 		/* FALLTHROUGH */
 	case IB_QPT_UD:
 		hfi1_ud_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
@@ -666,22 +664,9 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		if (atomic_dec_return(&mcast->refcount) <= 1)
 			wake_up(&mcast->wait);
 	} else {
-		if (rcd->lookaside_qp) {
-			if (rcd->lookaside_qpn != qp_num) {
-				if (atomic_dec_and_test(
-					&rcd->lookaside_qp->refcount))
-					wake_up(&rcd->lookaside_qp->wait);
-				rcd->lookaside_qp = NULL;
-			}
-		}
-		if (!rcd->lookaside_qp) {
-			qp = hfi1_lookup_qpn(ibp, qp_num);
-			if (!qp)
-				goto drop;
-			rcd->lookaside_qp = qp;
-			rcd->lookaside_qpn = qp_num;
-		} else
-			qp = rcd->lookaside_qp;
+		qp = hfi1_lookup_qpn(ibp, qp_num);
+		if (!qp)
+			goto drop;
 
 		if (lnh == HFI1_LRH_GRH)
 			rcv_flags |= HFI1_HAS_GRH;
@@ -760,7 +745,6 @@ static noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 		tx = list_entry(l, struct verbs_txreq, txreq.list);
 		tx->qp = qp;
-		atomic_inc(&qp->refcount);
 	} else {
 		if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK &&
 		    list_empty(&qp->s_iowait.list)) {
@@ -793,7 +777,6 @@ static inline struct verbs_txreq *get_txreq(struct hfi1_ibdev *dev,
 		spin_unlock_irqrestore(&dev->pending_lock, flags);
 		tx = list_entry(l, struct verbs_txreq, txreq.list);
 		tx->qp = qp;
-		atomic_inc(&qp->refcount);
 	} else {
 		/* call slow path to get the extra lock */
 		spin_unlock_irqrestore(&dev->pending_lock, flags);
@@ -811,8 +794,6 @@ void hfi1_put_txreq(struct verbs_txreq *tx)
 	qp = tx->qp;
 	dev = to_idev(qp->ibqp.device);
 
-	if (atomic_dec_and_test(&qp->refcount))
-		wake_up(&qp->wait);
 	if (tx->mr) {
 		hfi1_put_mr(tx->mr);
 		tx->mr = NULL;

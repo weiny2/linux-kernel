@@ -353,33 +353,28 @@ bail:
  * @qpt: the QP table
  * @qpn: the QP number to look up
  *
- * The caller is responsible for decrementing the QP reference count
- * when done.
+ * The caller must hold the rcu_read_lock(), and keep the lock until
+ * the returned qp is no longer in use.
  */
-struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp, u32 qpn)
+struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp,
+				u32 qpn) __must_hold(RCU)
 {
 	struct hfi1_qp *qp = NULL;
 
-	rcu_read_lock();
 	if (unlikely(qpn <= 1)) {
 		if (qpn == 0)
 			qp = rcu_dereference(ibp->qp0);
 		else
 			qp = rcu_dereference(ibp->qp1);
-		if (qp)
-			atomic_inc(&qp->refcount);
 	} else {
 		struct hfi1_ibdev *dev = &ppd_from_ibp(ibp)->dd->verbs_dev;
 		unsigned n = qpn_hash(dev->qp_dev, qpn);
 
 		for (qp = rcu_dereference(dev->qp_dev->qp_table[n]); qp;
 			qp = rcu_dereference(qp->next))
-			if (qp->ibqp.qp_num == qpn) {
-				atomic_inc(&qp->refcount);
+			if (qp->ibqp.qp_num == qpn)
 				break;
-			}
 	}
-	rcu_read_unlock();
 	return qp;
 }
 

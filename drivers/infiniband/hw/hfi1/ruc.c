@@ -389,6 +389,8 @@ static void ruc_loopback(struct hfi1_qp *sqp)
 	int release;
 	int ret;
 
+	rcu_read_lock();
+
 	/*
 	 * Note that we check the responder QP state after
 	 * checking the requester's state.
@@ -659,8 +661,7 @@ clr_busy:
 unlock:
 	spin_unlock_irqrestore(&sqp->s_lock, flags);
 done:
-	if (qp && atomic_dec_and_test(&qp->refcount))
-		wake_up(&qp->wait);
+	rcu_read_unlock();
 }
 
 /**

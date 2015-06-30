@@ -276,9 +276,6 @@ struct hfi1_ctxtdata {
 	/* ctxt rcvhdrq head offset */
 	u32 head;
 	u32 pkt_count;
-	/* look-aside fields */
-	struct hfi1_qp *lookaside_qp;
-	u32 lookaside_qpn;
 	/* QPs waiting for context processing */
 	struct list_head qp_wait_list;
 	/* interrupt handling */
@@ -606,6 +603,7 @@ struct hfi1_pportdata {
 	u8 neighbor_type;
 	u8 neighbor_normal;
 	u8 neighbor_fm_security; /* 1 if firmware checking is disabled */
+	u8 neighbor_port_number;
 	u8 is_sm_config_started;
 	u8 offline_disabled_reason;
 	u8 is_active_optimize_enabled;
@@ -838,8 +836,10 @@ struct hfi1_devdata {
 
 	/* reset value */
 	u64 z_int_counter;
+	u64 z_rcv_limit;
 	/* percpu int_counter */
 	u64 __percpu *int_counter;
+	u64 __percpu *rcv_limit;
 
 	/* number of receive contexts in use by the driver */
 	u32 num_rcv_contexts;
@@ -859,6 +859,8 @@ struct hfi1_devdata {
 	spinlock_t uctxt_lock; /* rcd and user context changes */
 	/* exclusive access to 8051 */
 	spinlock_t dc8051_lock;
+	/* exclusive access to 8051 memory */
+	spinlock_t dc8051_memlock;
 	int dc8051_timed_out;	/* remember if the 8051 timed out */
 	/*
 	 * A page that will hold event notification bitmaps for all
@@ -1324,9 +1326,10 @@ static inline int valid_ib_mtu(unsigned int mtu)
 		mtu == 1024 || mtu == 2048 ||
 		mtu == 4096;
 }
-static inline int valid_opa_mtu(unsigned int mtu)
+static inline int valid_opa_max_mtu(unsigned int mtu)
 {
-	return valid_ib_mtu(mtu) || mtu == 8192 || mtu == 10240;
+	return mtu >= 2048 &&
+		(valid_ib_mtu(mtu) || mtu == 8192 || mtu == 10240);
 }
 
 int set_mtu(struct hfi1_pportdata *);
@@ -1589,7 +1592,6 @@ extern struct mutex hfi1_mutex;
 #define PCI_VENDOR_ID_INTEL 0x8086
 #define PCI_DEVICE_ID_INTEL0 0x24f0
 #define PCI_DEVICE_ID_INTEL1 0x24f1
-#define PCI_DEVICE_ID_INTEL2 0x24f2
 
 #define HFI1_PKT_USER_SC_INTEGRITY					    \
 	(SEND_CTXT_CHECK_ENABLE_DISALLOW_NON_KDETH_PACKETS_SMASK	    \
@@ -1714,6 +1716,7 @@ static inline void hfi1_reset_cpu_counters(struct hfi1_devdata *dd)
 	int i;
 
 	dd->z_int_counter = get_all_cpu_total(dd->int_counter);
+	dd->z_rcv_limit = get_all_cpu_total(dd->rcv_limit);
 
 	ppd = (struct hfi1_pportdata *)(dd + 1);
 	for (i = 0; i < dd->num_pports; i++, ppd++) {

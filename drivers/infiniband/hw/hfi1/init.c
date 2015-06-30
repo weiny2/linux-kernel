@@ -516,8 +516,8 @@ void hfi1_init_pportdata(struct pci_dev *pdev, struct hfi1_pportdata *ppd,
 	spin_lock_init(&ppd->cc_state_lock);
 	spin_lock_init(&ppd->cc_log_lock);
 	size = sizeof(struct cc_state);
-	ppd->cc_state = kzalloc(size, GFP_KERNEL);
-	if (!ppd->cc_state)
+	RCU_INIT_POINTER(ppd->cc_state, kzalloc(size, GFP_KERNEL));
+	if (!rcu_dereference(ppd->cc_state))
 		goto bail;
 	return;
 
@@ -966,6 +966,7 @@ void hfi1_free_devdata(struct hfi1_devdata *dd)
 	hfi1_dbg_ibdev_exit(&dd->verbs_dev);
 	rcu_barrier(); /* wait for rcu callbacks to complete */
 	free_percpu(dd->int_counter);
+	free_percpu(dd->rcv_limit);
 	ib_dealloc_device(&dd->verbs_dev.ibdev);
 }
 
@@ -1022,6 +1023,7 @@ struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	spin_lock_init(&dd->hfi1_diag_trans_lock);
 	spin_lock_init(&dd->sc_init_lock);
 	spin_lock_init(&dd->dc8051_lock);
+	spin_lock_init(&dd->dc8051_memlock);
 	mutex_init(&dd->qsfp_i2c_mutex);
 	seqlock_init(&dd->sc2vl_lock);
 	spin_lock_init(&dd->sde_map_lock);
@@ -1032,6 +1034,14 @@ struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 		ret = -ENOMEM;
 		hfi1_early_err(&pdev->dev,
 			       "Could not allocate per-cpu int_counter\n");
+		goto bail;
+	}
+
+	dd->rcv_limit = alloc_percpu(u64);
+	if (!dd->rcv_limit) {
+		ret = -ENOMEM;
+		hfi1_early_err(&pdev->dev,
+			       "Could not allocate per-cpu rcv_limit\n");
 		goto bail;
 	}
 
@@ -1099,7 +1109,6 @@ static int init_one(struct pci_dev *, const struct pci_device_id *);
 static const struct pci_device_id hfi1_pci_tbl[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL0) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL1) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL2) },
 	{ 0, }
 };
 
@@ -1134,8 +1143,11 @@ static int __init hfi1_mod_init(void)
 		goto bail;
 
 	/* validate max MTU before any devices start */
-	if (!valid_opa_mtu(hfi1_max_mtu))
+	if (!valid_opa_max_mtu(hfi1_max_mtu)) {
+		pr_err("Invalid max_mtu 0x%x, using 0x%x instead\n",
+		       hfi1_max_mtu, HFI1_DEFAULT_MAX_MTU);
 		hfi1_max_mtu = HFI1_DEFAULT_MAX_MTU;
+	}
 	/* valid CUs run from 1-128 in powers of 2 */
 	if (hfi1_cu > 128 || !is_power_of_2(hfi1_cu))
 		hfi1_cu = 1;
@@ -1354,7 +1366,6 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	switch (ent->device) {
 	case PCI_DEVICE_ID_INTEL0:
 	case PCI_DEVICE_ID_INTEL1:
-	case PCI_DEVICE_ID_INTEL2:
 		dd = hfi1_init_dd(pdev, ent);
 		break;
 	default:

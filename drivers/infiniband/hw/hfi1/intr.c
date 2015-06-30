@@ -141,6 +141,9 @@ void handle_linkup_change(struct hfi1_devdata *dd, u32 linkup)
 			ppd->neighbor_type =
 				read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE) &
 					DC_DC8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
+			ppd->neighbor_port_number =
+				read_csr(dd, DC_DC8051_STS_REMOTE_PORT_NO) &
+					DC_DC8051_STS_REMOTE_PORT_NO_VAL_SMASK;
 			dd_dev_info(dd,
 				"Neighbor GUID: %llx Neighbor type %d\n",
 				be64_to_cpu(ppd->neighbor_guid),

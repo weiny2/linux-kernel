@@ -1105,15 +1105,18 @@ void pio_kernel_unfreeze(struct hfi1_devdata *dd)
 static int pio_init_wait_progress(struct hfi1_devdata *dd)
 {
 	u64 reg;
-	int count = 0;
+	int max, count = 0;
 
+	/* max is the longest possible HW init time / delay */
+	max = (dd->icode == ICODE_FPGA_EMULATION) ? 120 : 5;
 	while (1) {
 		reg = read_csr(dd, SEND_PIO_INIT_CTXT);
 		if (!(reg & SEND_PIO_INIT_CTXT_PIO_INIT_IN_PROGRESS_SMASK))
 			break;
-		mdelay(20);
-		if (count++ > 10)
+		if (count >= max)
 			return -ETIMEDOUT;
+		udelay(5);
+		count++;
 	}
 
 	return reg & SEND_PIO_INIT_CTXT_PIO_INIT_ERR_SMASK ? -EIO : 0;
@@ -1129,12 +1132,7 @@ void pio_reset_all(struct hfi1_devdata *dd)
 
 	/* make sure the init engine is not busy */
 	ret = pio_init_wait_progress(dd);
-	if (ret == -ETIMEDOUT) {
-		dd_dev_err(dd,
-			"PIO send context init is stuck, not initializing PIO blocks\n");
-		return;
-	}
-
+	/* ignore any timeout */
 	if (ret == -EIO) {
 		/* clear the error */
 		write_csr(dd, SEND_PIO_ERR_CLEAR,

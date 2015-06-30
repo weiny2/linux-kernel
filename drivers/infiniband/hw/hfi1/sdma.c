@@ -971,8 +971,11 @@ static void sdma_clean(struct hfi1_devdata *dd, size_t num_engines)
 			kfree(sde->tx_ring);
 		sde->tx_ring = NULL;
 	}
-	kfree(dd->sdma_map);
-	dd->sdma_map = NULL;
+	spin_lock_irq(&dd->sde_map_lock);
+	kfree(rcu_access_pointer(dd->sdma_map));
+	RCU_INIT_POINTER(dd->sdma_map, NULL);
+	spin_unlock_irq(&dd->sde_map_lock);
+	synchronize_rcu();
 	kfree(dd->per_sdma);
 	dd->per_sdma = NULL;
 }
