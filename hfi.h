@@ -315,6 +315,8 @@ struct hfi1_packet {
 	void *hdr;
 	struct hfi1_ctxtdata *rcd;
 	u64 rhf;
+	struct hfi1_qp *qp;
+	struct hfi1_other_headers *ohdr;
 	u16 tlen;
 	u16 hlen;
 	u32 updegr;
@@ -326,6 +328,8 @@ struct hfi1_packet {
 	u32 hdrqtail;
 	u32 rhqoff;
 	int numpkt;
+	u32 rcv_flags;
+	int has_grh;
 };
 
 /*
@@ -698,6 +702,8 @@ struct hfi1_pportdata {
 };
 
 typedef int (*rhf_rcv_function_ptr)(struct hfi1_packet *packet);
+
+typedef void (*opcode_handler)(struct hfi1_packet *packet);
 
 /* return values for the RHF receive functions */
 #define RHF_RCV_CONTINUE  0	/* keep going */

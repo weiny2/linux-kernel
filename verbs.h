@@ -572,6 +572,7 @@ struct hfi1_qp {
 	u8 s_rnr_retry;         /* requester RNR retry counter */
 	u8 s_num_rd_atomic;     /* number of RDMA read/atomic pending */
 	u8 s_tail_ack_queue;    /* index into s_ack_queue[] */
+	u8 allowed_ops;		/* high order bits of allowed opcodes */
 
 	struct hfi1_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
@@ -915,6 +916,9 @@ void hfi1_free_agents(struct hfi1_ibdev *dev);
 #endif
 #define PSN_MODIFY_MASK 0xFFFFFF
 
+/* Number of bits to pay attention to in the opcode for checking qp type */
+#define OPCODE_QP_MASK 0xE0
+
 /*
  * Compare the lower 24 bits of the msn values.
  * Returns an integer <, ==, or > than zero.
@@ -968,11 +972,11 @@ void hfi1_copy_sge(struct hfi1_sge_state *ss, void *data, u32 length,
 
 void hfi1_skip_sge(struct hfi1_sge_state *ss, u32 length, int release);
 
-void hfi1_uc_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
-		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
+void hfi1_cnp_rcv(struct hfi1_packet *packet);
 
-void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
-		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
+void hfi1_uc_rcv(struct hfi1_packet *packet);
+
+void hfi1_rc_rcv(struct hfi1_packet *packet);
 
 void hfi1_rc_hdrerr(
 	struct hfi1_ctxtdata *rcd,
@@ -992,8 +996,7 @@ void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr);
 
 void hfi1_rc_error(struct hfi1_qp *qp, enum ib_wc_status err);
 
-void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
-		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
+void hfi1_ud_rcv(struct hfi1_packet *packet);
 
 int hfi1_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey);
 

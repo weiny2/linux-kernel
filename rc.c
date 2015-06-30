@@ -1934,9 +1934,14 @@ void process_becn(struct hfi1_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
  * for the given QP.
  * Called at interrupt level.
  */
-void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
-		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp)
+void hfi1_rc_rcv(struct hfi1_packet *packet)
 {
+	struct hfi1_ctxtdata *rcd = packet->rcd;
+	struct hfi1_ib_header *hdr = packet->hdr;
+	u32 rcv_flags = packet->rcv_flags;
+	void *data = packet->ebuf;
+	u32 tlen = packet->tlen;
+	struct hfi1_qp *qp = packet->qp;
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	struct hfi1_other_headers *ohdr;
