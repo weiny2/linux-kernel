@@ -438,7 +438,8 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	eq_desc_base[eq_idx].val[0] = eq_desc.val[0];
 
 	/* issue write to privileged CQ to complete */
-	ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx, &eq_desc);
+	ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx, &eq_desc,
+				      eq_assign->user_data);
 	if (ret < 0) {
 		/*
 		 * TODO - need to define how to handle waiting for CQ slots,
@@ -459,7 +460,7 @@ idr_end:
 	return ret;
 }
 
-static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx)
+static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx, u64 user_data)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	union eqd *eq_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_EQ_DESC_OFFSET);
@@ -480,7 +481,8 @@ static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx)
 	eq_desc.val[1] = 0;
 
 	/* issue write to privileged CQ to complete EQ release */
-	ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx, &eq_desc);
+	ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx, &eq_desc,
+				      user_data);
 	if (ret < 0) {
 		/* TODO - revisit how to handle waiting for CQ slots */
 		goto idr_end;
@@ -503,12 +505,12 @@ int hfi_cteq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign)
 		return hfi_eq_assign(ctx, ev_assign);
 }
 
-int hfi_cteq_release(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx)
+int hfi_cteq_release(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx, u64 user_data)
 {
 	if (ev_mode & OPA_EV_MODE_COUNTER)
 		return hfi_ct_release(ctx, ev_idx);
 	else
-		return hfi_eq_release(ctx, ev_idx);
+		return hfi_eq_release(ctx, ev_idx, user_data);
 }
 
 static void hfi_cteq_cleanup(struct hfi_ctx *ctx)

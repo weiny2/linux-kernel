@@ -260,6 +260,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 
 	/* If the command comes with user data, copy it. */
 	if (copy_in) {
+		if (copy_in != cmd.length) {
+			ret = -EINVAL;
+			goto err_cmd;
+		}
 		if (copy_from_user(copy_ptr, user_data, copy_in)) {
 			ret = -EFAULT;
 			goto err_cmd;
@@ -300,11 +304,13 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		ct_assign.ct_idx = ev_assign.ev_idx;
 		break;
 	case HFI_CMD_CT_RELEASE:
-		ret = ops->ev_release(&ud->ctx, OPA_EV_MODE_COUNTER, ct_release.ct_idx);
+		ret = ops->ev_release(&ud->ctx, OPA_EV_MODE_COUNTER,
+				      ct_release.ct_idx, 0);
 		break;
 	case HFI_CMD_EQ_ASSIGN:
 		ev_assign.ni = eq_assign.ni;
 		ev_assign.mode = eq_assign.mode;
+		ev_assign.user_data = eq_assign.user_data;
 		ev_assign.base = eq_assign.base;
 		ev_assign.size = (1 << eq_assign.order);
 		/* TODO - we might want software threshold for blocking EQs? */
@@ -313,7 +319,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		eq_assign.eq_idx = ev_assign.ev_idx;
 		break;
 	case HFI_CMD_EQ_RELEASE:
-		ret = ops->ev_release(&ud->ctx, 0, eq_release.eq_idx);
+		ret = ops->ev_release(&ud->ctx, 0, eq_release.eq_idx,
+				      eq_release.user_data);
 		break;
 	case HFI_CMD_DLID_ASSIGN:
 		/* must be called after JOB_SETUP and match total LIDs */
