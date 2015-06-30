@@ -559,6 +559,7 @@ struct hfi1_pportdata {
 	struct work_struct sma_message_work;
 	struct work_struct freeze_work;
 	struct work_struct link_downgrade_work;
+	struct work_struct link_bounce_work;
 	/* host link state variables */
 	struct mutex hls_lock;
 	u32 host_link_state;
