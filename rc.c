@@ -775,7 +775,7 @@ queue_ack:
 		qp->s_nak_state = qp->r_nak_state;
 		qp->s_ack_psn = qp->r_ack_psn;
 		if (is_fecn)
-			set_bit(HFI1_S_ECN, &qp->s_aflags);
+			qp->s_flags |= HFI1_S_ECN;
 
 		/* Schedule the send tasklet. */
 		hfi1_schedule_send(qp);

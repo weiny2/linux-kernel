@@ -1405,6 +1405,22 @@ static inline struct hfi1_ibport *to_iport(struct ib_device *ibdev, u8 port)
 }
 
 /*
+ * Return the indexed PKEY from the port PKEY table.
+ */
+static inline u16 hfi1_get_pkey(struct hfi1_ibport *ibp, unsigned index)
+{
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+	u16 ret;
+
+	if (index >= ARRAY_SIZE(ppd->pkeys))
+		ret = 0;
+	else
+		ret = ppd->pkeys[index];
+
+	return ret;
+}
+
+/*
  * Readers of cc_state must call get_cc_state() under rcu_read_lock().
  * Writers of cc_state must call get_cc_state() under cc_state_lock.
  */

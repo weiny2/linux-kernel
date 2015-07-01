@@ -1827,22 +1827,6 @@ unsigned hfi1_get_npkeys(struct hfi1_devdata *dd)
 	return ARRAY_SIZE(dd->pport[0].pkeys);
 }
 
-/*
- * Return the indexed PKEY from the port PKEY table.
- */
-unsigned hfi1_get_pkey(struct hfi1_ibport *ibp, unsigned index)
-{
-	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-	unsigned ret;
-
-	if (index >= ARRAY_SIZE(ppd->pkeys))
-		ret = 0;
-	else
-		ret = ppd->pkeys[index];
-
-	return ret;
-}
-
 static int query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 		      u16 *pkey)
 {

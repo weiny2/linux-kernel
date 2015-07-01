@@ -537,7 +537,6 @@ struct hfi1_qp {
 	struct hfi1_rq r_rq;             /* receive work queue */
 
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
-	unsigned long s_aflags;
 	struct hfi1_sge_state *s_cur_sge;
 	u32 s_flags;
 	struct hfi1_swqe *s_wqe;
@@ -590,11 +589,6 @@ struct hfi1_qp {
 #define HFI1_R_REWIND_SGE        1
 
 /*
- * Atomic bit definitions for s_aflags.
- */
-#define HFI1_S_ECN		0
-
-/*
  * Bit definitions for r_flags.
  */
 #define HFI1_R_REUSE_SGE 0x01
@@ -625,6 +619,7 @@ struct hfi1_qp {
  * HFI1_S_WAIT_PSN - waiting for a packet to exit the send DMA queue
  * HFI1_S_WAIT_ACK - waiting for an ACK packet before sending more requests
  * HFI1_S_SEND_ONE - send one packet, request ACK, then wait for ACK
+ * HFI1_S_ECN - a BECN was queued to the send engine
  */
 #define HFI1_S_SIGNAL_REQ_WR	0x0001
 #define HFI1_S_BUSY		0x0002
@@ -646,6 +641,7 @@ struct hfi1_qp {
 #define HFI1_S_UNLIMITED_CREDIT	0x20000
 #define HFI1_S_AHG_VALID		0x40000
 #define HFI1_S_AHG_CLEAR		0x80000
+#define HFI1_S_ECN		0x100000
 
 /*
  * Wait flags that would prevent any packet type from being sent.
@@ -1142,8 +1138,6 @@ void hfi1_unregister_ib_device(struct hfi1_devdata *);
 void hfi1_ib_rcv(struct hfi1_packet *packet);
 
 unsigned hfi1_get_npkeys(struct hfi1_devdata *);
-
-unsigned hfi1_get_pkey(struct hfi1_ibport *, unsigned);
 
 int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *hdr,
 			u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
