@@ -770,6 +770,159 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 	return reply((struct ib_mad_hdr *)smp);
 }
 
+enum {
+	HFI_TRANSITION_DISALLOWED,
+	HFI_TRANSITION_IGNORED,
+	HFI_TRANSITION_ALLOWED,
+	HFI_TRANSITION_UNDEFINED,
+};
+
+/*
+ * Use shortened names to improve readability of
+ * {logical,physical}_state_transitions
+ */
+enum {
+	__D = HFI_TRANSITION_DISALLOWED,
+	__I = HFI_TRANSITION_IGNORED,
+	__A = HFI_TRANSITION_ALLOWED,
+	__U = HFI_TRANSITION_UNDEFINED,
+};
+
+/*
+ * IB_PORTPHYSSTATE_POLLING (2) through OPA_PORTPHYSSTATE_MAX (11) are
+ * represented in physical_state_transitions.
+ */
+#define __N_PHYSTATES (OPA_PORTPHYSSTATE_MAX - IB_PORTPHYSSTATE_POLLING + 1)
+
+/*
+ * Within physical_state_transitions, rows represent "old" states,
+ * columns "new" states, and physical_state_transitions.allowed[old][new]
+ * indicates if the transition from old state to new state is legal (see
+ * OPAg1v1, Table 6-4).
+ */
+static const struct {
+	u8 allowed[__N_PHYSTATES][__N_PHYSTATES];
+} physical_state_transitions = {
+	{
+		/* 2    3    4    5    6    7    8    9   10   11 */
+	/* 2 */	{ __A, __A, __D, __D, __D, __D, __D, __D, __D, __D },
+	/* 3 */	{ __A, __I, __D, __D, __D, __D, __D, __D, __D, __A },
+	/* 4 */	{ __U, __U, __U, __U, __U, __U, __U, __U, __U, __U },
+	/* 5 */	{ __A, __A, __D, __I, __D, __D, __D, __D, __D, __D },
+	/* 6 */	{ __U, __U, __U, __U, __U, __U, __U, __U, __U, __U },
+	/* 7 */	{ __D, __A, __D, __D, __D, __I, __D, __D, __D, __D },
+	/* 8 */	{ __U, __U, __U, __U, __U, __U, __U, __U, __U, __U },
+	/* 9 */	{ __I, __A, __D, __D, __D, __D, __D, __I, __D, __D },
+	/*10 */	{ __U, __U, __U, __U, __U, __U, __U, __U, __U, __U },
+	/*11 */	{ __D, __A, __D, __D, __D, __D, __D, __D, __D, __I },
+	}
+};
+
+/*
+ * IB_PORT_DOWN (1) through IB_PORT_ACTIVE_DEFER (5) are represented
+ * logical_state_transitions
+ */
+
+#define __N_LOGICAL_STATES (IB_PORT_ACTIVE_DEFER - IB_PORT_DOWN + 1)
+
+/*
+ * Within logical_state_transitions rows represent "old" states,
+ * columns "new" states, and logical_state_transitions.allowed[old][new]
+ * indicates if the transition from old state to new state is legal (see
+ * OPAg1v1, Table 9-12).
+ */
+static const struct {
+	u8 allowed[__N_LOGICAL_STATES][__N_LOGICAL_STATES];
+} logical_state_transitions = {
+	{
+		/* 1    2    3    4    5 */
+	/* 1 */	{ __I, __D, __D, __D, __U},
+	/* 2 */	{ __D, __I, __A, __D, __U},
+	/* 3 */	{ __D, __D, __I, __A, __U},
+	/* 4 */	{ __D, __D, __I, __I, __U},
+	/* 5 */	{ __U, __U, __U, __U, __U},
+	}
+};
+
+static int logical_transition_allowed(int old, int new)
+{
+	if (old < IB_PORT_NOP || old > IB_PORT_ACTIVE_DEFER ||
+	    new < IB_PORT_NOP || new > IB_PORT_ACTIVE_DEFER) {
+		pr_warn("invalid logical state(s) (old %d new %d)\n",
+			old, new);
+		return HFI_TRANSITION_UNDEFINED;
+	}
+
+	if (new == IB_PORT_NOP)
+		return HFI_TRANSITION_ALLOWED; /* always allowed */
+
+	/* adjust states for indexing into logical_state_transitions */
+	old -= IB_PORT_DOWN;
+	new -= IB_PORT_DOWN;
+
+	return logical_state_transitions.allowed[old][new];
+}
+
+static int physical_transition_allowed(int old, int new)
+{
+	if (old < IB_PORTPHYSSTATE_NOP || old > OPA_PORTPHYSSTATE_MAX ||
+	    new < IB_PORTPHYSSTATE_NOP || new > OPA_PORTPHYSSTATE_MAX) {
+		pr_warn("invalid physical state(s) (old %d new %d)\n",
+			old, new);
+		return HFI_TRANSITION_UNDEFINED;
+	}
+
+	if (new == IB_PORTPHYSSTATE_NOP)
+		return HFI_TRANSITION_ALLOWED; /* always allowed */
+
+	/* adjust states for indexing into physical_state_transitions */
+	old -= IB_PORTPHYSSTATE_POLLING;
+	new -= IB_PORTPHYSSTATE_POLLING;
+
+	return physical_state_transitions.allowed[old][new];
+}
+
+static int port_states_transition_allowed(struct hfi1_pportdata *ppd,
+					  u32 logical_new, u32 physical_new)
+{
+	struct hfi1_devdata *dd = ppd->dd;
+	u32 physical_old = chip_to_opa_pstate(dd, read_physical_state(dd));
+	u32 logical_old = get_logical_state(ppd);
+	int ret, logical_allowed, physical_allowed;
+
+	logical_allowed = ret =
+		logical_transition_allowed(logical_old, logical_new);
+
+	if (ret == HFI_TRANSITION_DISALLOWED ||
+	    ret == HFI_TRANSITION_UNDEFINED) {
+		pr_warn("invalid logical state transition %s -> %s\n",
+			opa_lstate_name(logical_old),
+			opa_lstate_name(logical_new));
+		return ret;
+	}
+
+	physical_allowed = ret =
+		physical_transition_allowed(physical_old, physical_new);
+
+	if (ret == HFI_TRANSITION_DISALLOWED ||
+	    ret == HFI_TRANSITION_UNDEFINED) {
+		pr_warn("invalid physical state transition %s -> %s\n",
+			opa_pstate_name(physical_old),
+			opa_pstate_name(physical_new));
+		return ret;
+	}
+
+	if (logical_allowed == HFI_TRANSITION_IGNORED &&
+	    physical_allowed == HFI_TRANSITION_IGNORED)
+		return HFI_TRANSITION_IGNORED;
+
+	/*
+	 * Either physical_allowed or logical_allowed is
+	 * HFI_TRANSITION_ALLOWED.
+	 */
+	return HFI_TRANSITION_ALLOWED;
+}
+
 static int set_port_states(struct hfi1_pportdata *ppd, struct opa_smp *smp,
 			   u32 logical_state, u32 phys_state,
 			   int suppress_idle_sma)
@@ -777,6 +930,17 @@ static int set_port_states(struct hfi1_pportdata *ppd, struct opa_smp *smp,
 	struct hfi1_devdata *dd = ppd->dd;
 	u32 link_state;
 	int ret;
+
+	ret = port_states_transition_allowed(ppd, logical_state, phys_state);
+	if (ret == HFI_TRANSITION_DISALLOWED ||
+	    ret == HFI_TRANSITION_UNDEFINED) {
+		/* error message emitted above */
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return 0;
+	}
+
+	if (ret == HFI_TRANSITION_IGNORED)
+		return 0;
 
 	if ((phys_state != IB_PORTPHYSSTATE_NOP) &&
 	    !(logical_state == IB_PORT_DOWN ||

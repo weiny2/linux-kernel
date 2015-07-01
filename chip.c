@@ -1020,7 +1020,6 @@ static int do_8051_command(struct hfi1_devdata *dd, u32 type, u64 in_data,
 static int read_idle_sma(struct hfi1_devdata *dd, u64 *data);
 static int thermal_init(struct hfi1_devdata *dd);
 
-static u32 read_physical_state(struct hfi1_devdata *dd);
 static int wait_logical_linkstate(struct hfi1_pportdata *ppd, u32 state,
 				  int msecs);
 static void read_planned_down_reason_code(struct hfi1_devdata *dd, u8 *pdrrc);
@@ -4559,7 +4558,7 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 
 /* ========================================================================= */
 
-static u32 read_physical_state(struct hfi1_devdata *dd)
+u32 read_physical_state(struct hfi1_devdata *dd)
 {
 	u64 reg;
 
@@ -8250,7 +8249,7 @@ static u32 chip_to_opa_lstate(struct hfi1_devdata *dd, u32 chip_lstate)
 	}
 }
 
-static u32 chip_to_opa_pstate(struct hfi1_devdata *dd, u32 chip_pstate)
+u32 chip_to_opa_pstate(struct hfi1_devdata *dd, u32 chip_pstate)
 {
 	/* look at the HFI meta-states only */
 	switch (chip_pstate & 0xf0) {
@@ -8274,7 +8273,7 @@ static u32 chip_to_opa_pstate(struct hfi1_devdata *dd, u32 chip_pstate)
 }
 
 /* return the OPA port logical state name */
-static const char *opa_lstate_name(u32 lstate)
+const char *opa_lstate_name(u32 lstate)
 {
 	static const char * const port_logical_names[] = {
 		"PORT_NOP",
@@ -8290,7 +8289,7 @@ static const char *opa_lstate_name(u32 lstate)
 }
 
 /* return the OPA port physical state name */
-static const char *opa_pstate_name(u32 pstate)
+const char *opa_pstate_name(u32 pstate)
 {
 	static const char * const port_physical_names[] = {
 		"PHYS_NOP",
@@ -8315,7 +8314,7 @@ static const char *opa_pstate_name(u32 pstate)
  * Read the hardware link state and set the driver's cached value of it.
  * Return the (new) current value.
  */
-static u32 get_logical_state(struct hfi1_pportdata *ppd)
+u32 get_logical_state(struct hfi1_pportdata *ppd)
 {
 	u32 new_state;
 
