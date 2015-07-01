@@ -498,6 +498,8 @@ static void opa_netdev_remove(struct opa_core_device *odev)
 {
 	struct opa_netdev *dev = opa_core_get_priv_data(&opa_vnic_clnt, odev);
 
+	if (!dev)
+		return;
 	opa2_vnic_hfi_remove_vports(odev);
 	opa2_vnic_hfi_cleanup(odev);
 	opa_core_clear_priv_data(&opa_vnic_clnt, odev);
