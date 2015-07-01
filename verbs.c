@@ -1993,7 +1993,7 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 
 	/*
 	 * The system image GUID is supposed to be the same for all
-	 * IB HCAs in a single system but since there can be other
+	 * HFIs in a single system but since there can be other
 	 * device types in the system, we can't be sure this is unique.
 	 */
 	if (!ib_hfi1_sys_image_guid)
