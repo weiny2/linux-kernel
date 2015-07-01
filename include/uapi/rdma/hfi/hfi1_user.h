@@ -88,7 +88,7 @@
 #define HFI1_CAP_SDMA_AHG         (1UL <<  2) /* Enable SDMA AHG support */
 #define HFI1_CAP_EXTENDED_PSN     (1UL <<  3) /* Enable Extended PSN support */
 #define HFI1_CAP_HDRSUPP          (1UL <<  4) /* Enable Header Suppression */
-#define HFI1_CAP_ENABLE_SMA       (1UL <<  5) /* Enable driver SM Agent */
+#define HFI1_CAP_SWAP_QSFP_SB     (1UL <<  5) /* Swap QSFP sideband between ports */
 #define HFI1_CAP_USE_SDMA_HEAD    (1UL <<  6) /* DMA Hdr Q tail vs. use CSR */
 #define HFI1_CAP_MULTI_PKT_EGR    (1UL <<  7) /* Enable multi-packet Egr buffs*/
 #define HFI1_CAP_NODROP_RHQ_FULL  (1UL <<  8) /* Don't drop on Hdr Q full */
