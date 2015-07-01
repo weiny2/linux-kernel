@@ -1710,6 +1710,13 @@ static inline u64 hfi1_pkt_base_sdma_integrity(struct hfi1_devdata *dd)
 #define dd_dev_err(dd, fmt, ...) \
 	dev_err(&(dd)->pcidev->dev, "%s: " fmt, \
 			get_unit_name((dd)->unit), ##__VA_ARGS__)
+#define dd_dev_warn(dd, fmt, ...) \
+	dev_warn(&(dd)->pcidev->dev, "%s: " fmt, \
+			get_unit_name((dd)->unit), ##__VA_ARGS__)
+
+#define dd_dev_warn_ratelimited(dd, fmt, ...) \
+	dev_warn_ratelimited(&(dd)->pcidev->dev, "%s: " fmt, \
+			get_unit_name((dd)->unit), ##__VA_ARGS__)
 
 #define dd_dev_info(dd, fmt, ...) \
 	dev_info(&(dd)->pcidev->dev, "%s: " fmt, \
