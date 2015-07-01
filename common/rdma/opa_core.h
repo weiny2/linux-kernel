@@ -142,21 +142,25 @@ struct hfi_ctx {
 /* TODO - move this to opa-headers */
 #define HFI_CTX_MODE_BYPASS	0x100
 
-#define HFI_CTX_INIT(ctx, dd)		\
-	(ctx)->devdata = (dd);		\
-	(ctx)->type = HFI_CTX_TYPE_KERNEL; \
-	(ctx)->mode = 0;		\
-	(ctx)->allow_phys_dlid = 1;	\
-	/* allow all SLs by default */	\
-	(ctx)->sl_mask = -1;		\
-	(ctx)->pid = HFI_PID_NONE;	\
-	(ctx)->pid_count = 0;		\
-	/* 0 reserved for kernel clients */ \
-	(ctx)->ptl_uid = 0;
+#define HFI_CTX_INIT(ctx, dd)			\
+	do {					\
+		(ctx)->devdata = (dd);		\
+		(ctx)->type = HFI_CTX_TYPE_KERNEL; \
+		(ctx)->mode = 0;		\
+		(ctx)->allow_phys_dlid = 1;	\
+		/* allow all SLs by default */	\
+		(ctx)->sl_mask = -1;		\
+		(ctx)->pid = HFI_PID_NONE;	\
+		(ctx)->pid_count = 0;		\
+		/* 0 reserved for kernel clients */ \
+		(ctx)->ptl_uid = 0;		\
+	} while (0)
 
-#define HFI_CTX_INIT_BYPASS(ctx, dd) 	\
-	HFI_CTX_INIT(ctx, dd);		\
-	(ctx)->mode |= HFI_CTX_MODE_BYPASS;
+#define HFI_CTX_INIT_BYPASS(ctx, dd)		\
+	do {					\
+		HFI_CTX_INIT((ctx), (dd));	\
+		(ctx)->mode |= HFI_CTX_MODE_BYPASS; \
+	} while (0)
 
 /**
  * enum mmap_token_types -  Types of memory regions mapped by the context and
