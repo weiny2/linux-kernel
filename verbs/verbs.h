@@ -97,7 +97,6 @@
 	((index) >= ARRAY_SIZE((ibp)->pkeys) ? 0 : (ibp)->pkeys[(index)])
 
 /* TODO - placeholders */
-#define OPA_IB_NUM_DATA_VLS	8
 extern __be64 opa_ib_sys_guid;
 
 extern const int ib_qp_state_ops[];
@@ -491,8 +490,9 @@ struct opa_ib_portdata {
 	u64 n_vl15_dropped;
 
 	u32 lstate;
-	u32 ibmtu;
 	u32 port_cap_flags;
+	u16 ibmtu;
+	u16 ibmaxmtu;
 	u16 link_speed_supported;
 	u16 link_speed_enabled;
 	u16 link_speed_active;
@@ -516,7 +516,7 @@ struct opa_ib_portdata {
 	u8 sl_to_sc[32];
 	u8 sc_to_sl[32];
 	u8 sc_to_vl[32];
-	u32 vl_mtu[OPA_IB_NUM_DATA_VLS];
+	u32 vl_mtu[OPA_MAX_VLS];
 
 	struct hfi_ctx ctx;
 	struct hfi_cq cmdq_tx;
@@ -578,6 +578,12 @@ static inline struct opa_ib_portdata *to_opa_ibportdata(struct ib_device *ibdev,
 	return &(ibd->pport[pidx]);
 }
 
+static inline u8 valid_ib_mtu(u16 mtu)
+{
+	return mtu == 256 || mtu == 512 ||
+		mtu == 1024 || mtu == 2048 ||
+		mtu == 4096;
+}
 struct ib_pd *opa_ib_alloc_pd(struct ib_device *ibdev,
 			      struct ib_ucontext *context,
 			      struct ib_udata *udata);

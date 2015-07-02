@@ -92,38 +92,4 @@ static inline u16 opa_width_to_ib(u16 in)
 	}
 }
 
-static inline int mtu_enum_to_int(u8 mtu)
-{
-	switch (mtu) {
-	case IB_MTU_256:  return  256;
-	case IB_MTU_512:  return  512;
-	case IB_MTU_1024: return 1024;
-	case IB_MTU_2048: return 2048;
-	case IB_MTU_4096: return 4096;
-	case OPA_MTU_8192:  return 8192;
-	case OPA_MTU_10240: return 10240;
-	default: return -1;
-	}
-}
-
-static inline u8 mtu_int_to_enum(int mtu)
-{
-	switch (mtu) {
-	case   256: return IB_MTU_256;
-	case   512: return IB_MTU_512;
-	case  1024: return IB_MTU_1024;
-	case  2048: return IB_MTU_2048;
-	case  4096: return IB_MTU_4096;
-	case  8192: return OPA_MTU_8192;
-	case 10240: return OPA_MTU_10240;
-	default: return -1;
-	}
-}
-
-static inline u8 mtu_int_to_enum_safe(int mtu, u8 if_bad_mtu)
-{
-	int ibmtu = mtu_int_to_enum(mtu);
-
-	return (ibmtu == -1) ? if_bad_mtu : ibmtu;
-}
 #endif

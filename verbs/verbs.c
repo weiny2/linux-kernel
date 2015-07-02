@@ -58,6 +58,7 @@
 #include <linux/pci.h>
 #include "mad.h"
 #include "verbs.h"
+#include <rdma/opa_core_ib.h>
 
 /* FXRTODO - need definition of eager buffer */
 #define OPA2_IB_ME_COUNT 1024
@@ -73,9 +74,6 @@ static struct opa_core_client opa_ib_driver = {
 
 /* TODO - placeholders */
 __be64 opa_ib_sys_guid;
-static unsigned int opa_ib_max_mtu = 8192;
-static unsigned int opa_ib_default_mtu = 4096;
-static unsigned int opa_ib_num_vls = OPA_IB_NUM_DATA_VLS;
 
 /* TODO - to be used in various alloc routines */
 /* Maximum number of protection domains to support */
@@ -214,8 +212,19 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	props->active_speed = (u8)opa_speed_to_ib(ibp->link_speed_active);
 	props->max_vl_num = ibp->max_vls;
 	props->init_type_reply = 0;
-	props->max_mtu = mtu_int_to_enum(opa_ib_max_mtu);
-	props->active_mtu = mtu_int_to_enum(ibp->ibmtu);
+
+	/* Once we are a "first class" citizen and have added the OPA MTUs to
+	 * the core we can advertise the larger MTU enum to the ULPs, for now
+	 * advertise only 4K.
+	 *
+	 * Those applications which are either OPA aware or pass the MTU enum
+	 * from the Path Records to us will get the new 8k MTU.  Those that
+	 * attempt to process the MTU enum may fail in various ways.
+	 */
+	props->max_mtu = opa_mtu_to_enum_safe((valid_ib_mtu(ibp->ibmaxmtu) ?
+				      ibp->ibmaxmtu : 4096), IB_MTU_4096);
+	props->active_mtu = valid_ib_mtu(ibp->ibmtu) ?
+		opa_mtu_to_enum_safe(ibp->ibmtu, IB_MTU_2048) : props->max_mtu;
 	props->subnet_timeout = ibp->subnet_timeout;
 
 	return 0;
@@ -459,8 +468,8 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	ibp->odev = odev;
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->guid = pdesc.pguid;
-	ibp->ibmtu = opa_ib_default_mtu;
-	ibp->max_vls = opa_ib_num_vls;
+	ibp->ibmaxmtu = pdesc.ibmaxmtu;
+	ibp->max_vls = pdesc.num_vls_supported;
 	ibp->lid = pdesc.lid;
 	ibp->sm_lid = 0;
 	ibp->link_width_active = OPA_LINK_WIDTH_4X;
@@ -477,7 +486,8 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 
 	/* MTU is per-VL */
 	for (i = 0; i < ibp->max_vls; i++)
-		ibp->vl_mtu[i] = ibp->ibmtu;
+		ibp->vl_mtu[i] = pdesc.vl_mtu[i];
+	ibp->vl_mtu[15] = pdesc.vl_mtu[15];
 
 	/*
 	 * FXRTODO: quick hack at initial SL to SC to VL tables.

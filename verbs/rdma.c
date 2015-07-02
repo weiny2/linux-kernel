@@ -205,7 +205,7 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 
 		sc5 = ibp->sl_to_sc[ah->attr.sl];
 		vl = ibp->sc_to_vl[sc5];
-		if (vl < OPA_IB_NUM_DATA_VLS)
+		if (vl < OPA_MAX_VLS)
 			if (wqe->length > ibp->vl_mtu[vl])
 				goto bail_inval_free;
 

@@ -52,9 +52,8 @@
 #include "opa_hfi.h"
 #include <rdma/opa_smi.h>
 #include <rdma/ib_mad.h>
-#include <rdma/opa_port_info.h>
-#include <rdma/opa_core_ib.h>
 #include "attr.h"
+#include <rdma/opa_core_ib.h>
 
 static int hfi_reply(struct ib_mad_hdr *ibh)
 {
@@ -71,12 +70,14 @@ static int hfi_reply(struct ib_mad_hdr *ibh)
 static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 				u32 am, u8 *data, u8 port, u32 *resp_len)
 {
-	u32 num_ports = OPA_AM_NPORT(am);
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
-	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
 	struct opa_port_info *pi = (struct opa_port_info *)data;
+	int i;
+	u32 num_ports = OPA_AM_NPORT(am);
+	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
 	u32 lstate;
+	u8 mtu;
 
 	if (num_ports != 1) {
 		smp->status |=
@@ -85,6 +86,9 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	}
 
 	lstate = hfi_driver_lstate(ppd);
+
+	if (start_of_sm_config && (lstate == IB_PORT_INIT))
+		ppd->is_sm_config_started = 1;
 
 	/*
 	 * FXTODO: WFR  has ledenable_offlinereason as alternative
@@ -96,9 +100,26 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	pi->port_states.offline_reason |= ppd->offline_disabled_reason &
 				OPA_PI_MASK_OFFLINE_REASON;
 
-	if (start_of_sm_config && (lstate == IB_PORT_INIT))
-		ppd->is_sm_config_started = 1;
+	pi->operational_vls =
+		hfi_get_ib_cfg(ppd, HFI_IB_CFG_OP_VLS);
 
+	memset(pi->neigh_mtu.pvlx_to_mtu, 0, sizeof(pi->neigh_mtu.pvlx_to_mtu));
+	for (i = 0; i < ppd->vls_supported; i++) {
+		mtu = opa_mtu_to_enum_safe(dd->vl_mtu[i], OPA_MTU_10240);
+		if ((i % 2) == 0)
+			pi->neigh_mtu.pvlx_to_mtu[i / 2] |= (mtu << 4);
+		else
+			pi->neigh_mtu.pvlx_to_mtu[i / 2] |= mtu;
+	}
+
+	/* don't forget VL 15 */
+	mtu = opa_mtu_to_enum(dd->vl_mtu[15]);
+	pi->neigh_mtu.pvlx_to_mtu[15 / 2] |= mtu;
+
+	pi->vl.cap = ppd->vls_supported;
+	/* VL Arbitration table doesn't exist for FXR */
+
+	pi->mtucap = (u8)HFI_DEFAULT_MAX_MTU;
 	pi->port_states.portphysstate_portstate =
 		(hfi_ibphys_portstate(ppd) << PHYSPORTSTATE_SHIFT) | lstate;
 
@@ -398,8 +419,9 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
 	struct opa_port_info *pi = (struct opa_port_info *)data;
 	u8 ls_old, ls_new, ps_new;
-	int ret;
-	u8 invalid = 0;
+	u16 mtu;
+	u8 vls;
+	int ret, i, invalid = 0, call_set_mtu = 0;
 
 	if (num_ports != 1) {
 		smp->status |=
@@ -422,6 +444,64 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	ppd->is_active_optimize_enabled =
 			!!(be16_to_cpu(pi->port_mode)
 					& OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE);
+
+	ppd->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_VL_HIGH_LIMIT,
+				    ppd->vl_high_limit);
+
+	for (i = 0; i < ppd->vls_supported; i++) {
+		mtu = opa_pi_to_mtu(pi, i);
+
+		if (mtu == INVALID_MTU) {
+			smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			/* use the existing mtu */
+			continue;
+		}
+
+		if (dd->vl_mtu[i] != mtu) {
+			dd_dev_info(dd,
+				"MTU change on vl %d from %d to %d\n",
+				i, dd->vl_mtu[i], mtu);
+			dd->vl_mtu[i] = mtu;
+			call_set_mtu++;
+		}
+	}
+
+	/*
+	 * As per OPAV1 spec: VL15 must support and be configured
+	 * for operation with a 2048 or larger MTU.
+	 */
+	mtu = opa_enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[15 / 2] & 0xF);
+	if (mtu < HFI_MIN_VL_15_MTU || mtu == INVALID_MTU) {
+			smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			/* use the existing VL15 MTU */
+	} else {
+		if (dd->vl_mtu[15] != mtu) {
+			dd_dev_info(dd,
+				"MTU change on vl 15 from %d to %d\n",
+				dd->vl_mtu[15], mtu);
+			dd->vl_mtu[15] = mtu;
+			call_set_mtu++;
+		}
+	}
+
+	if (call_set_mtu)
+		hfi_set_mtu(ppd);
+
+	/* Set operational VLs */
+	vls = pi->operational_vls & OPA_PI_MASK_OPERATIONAL_VL;
+	if (vls) {
+		if (vls > ppd->vls_supported) {
+			pr_warn("SubnSet(OPA_PortInfo) VL's supported invalid %d\n",
+				pi->operational_vls);
+			smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		} else
+			(void)hfi_set_ib_cfg(ppd, HFI_IB_CFG_OP_VLS,
+						vls);
+	}
 
 	ls_new = pi->port_states.portphysstate_portstate &
 			OPA_PI_MASK_PORT_STATE;

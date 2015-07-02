@@ -267,6 +267,136 @@ static void hfi_rx_e2e_uninit(const struct hfi_devdata *dd)
 	}
 }
 
+/*
+ * Set Send Length
+ * @ppd - per port data
+ */
+static void hfi_set_send_length(struct hfi_pportdata *ppd)
+{
+	/*FXRTODO: HW related code to change MTU */
+}
+
+int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	int val = 0;
+
+	switch (which) {
+	case HFI_IB_CFG_OP_VLS:
+		val = ppd->vls_operational;
+		break;
+	default:
+		dd_dev_info(dd, "%s: which %d: not implemented\n",
+			__func__, which);
+		break;
+	}
+
+	return val;
+}
+
+int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	int ret = 0;
+
+	switch (which) {
+	case HFI_IB_CFG_VL_HIGH_LIMIT:
+		/* FXRTODO: Implement FXR equivalent */
+#if 0
+		/*
+		 * The VL Arbitrator high limit is sent in units of 4k
+		 * bytes, while HFI stores it in units of 64 bytes.
+		 */
+		val *= 4096/64;
+		reg = ((u64)val & SEND_HIGH_PRIORITY_LIMIT_LIMIT_MASK)
+			<< SEND_HIGH_PRIORITY_LIMIT_LIMIT_SHIFT;
+		write_csr(ppd->dd, SEND_HIGH_PRIORITY_LIMIT, reg);
+#endif
+		break;
+	case HFI_IB_CFG_OP_VLS:
+		if (ppd->vls_operational != val) {
+			ppd->vls_operational = val;
+		 /* FXRTODO: Implement FXR equivalent */
+#if	0
+			ret = sdma_map_init(
+				ppd->dd,
+				ppd->port - 1,
+				hfi1_num_vls(val),
+				NULL);
+#endif
+		}
+		break;
+	case HFI_IB_CFG_MTU:
+		hfi_set_send_length(ppd);
+		break;
+	default:
+		dd_dev_info(dd, "%s: which %d: not implemented\n",
+			__func__, which);
+		break;
+	}
+
+	return ret;
+}
+
+/*
+ * set_mtu - set the MTU
+ * @ppd: the per port data
+ *
+ * We can handle "any" incoming size, the issue here is whether we
+ * need to restrict our outgoing size.  We do not deal with what happens
+ * to programs that are already running when the size changes.
+ */
+int hfi_set_mtu(struct hfi_pportdata *ppd)
+{
+	int ret = 0;
+
+	/*
+	 * FXRTODO: is ibmaxlen needed for FXR ? In WFR
+	 * it was only used in egress_cycles.
+	 */
+#if 0
+	ppd->ibmaxlen = ppd->ibmtu + lrh_max_header_bytes(ppd->dd);
+#endif
+
+	mutex_lock(&ppd->hls_lock);
+	/* FXRTODO: Fix the MTU change dependency for FXR */
+#if 0
+	if (ppd->host_link_state == HLS_UP_INIT
+			|| ppd->host_link_state == HLS_UP_ARMED
+			|| ppd->host_link_state == HLS_UP_ACTIVE)
+		is_up = 1;
+
+	drain = !is_ax(dd) && is_up;
+
+	if (drain)
+		/*
+		 * MTU is specified per-VL. To ensure that no packet gets
+		 * stuck (due, e.g., to the MTU for the packet's VL being
+		 * reduced), empty the per-VL FIFOs before adjusting MTU.
+		 */
+		ret = stop_drain_data_vls(dd);
+
+	if (ret) {
+		dd_dev_err(dd, "%s: cannot stop/drain VLs - refusing to change per-VL MTUs\n",
+			   __func__);
+		goto err;
+	}
+#endif
+
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_MTU, 0);
+
+	/* FXRTODO: Fix the MTU change dependency for FXR */
+#if 0
+	if (drain)
+		open_fill_data_vls(dd); /* reopen all VLs */
+
+err:
+#endif
+	mutex_unlock(&ppd->hls_lock);
+
+	return ret;
+}
+
 u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd)
 {
 	/*
@@ -365,9 +495,16 @@ static void hfi_port_desc(struct opa_core_device *odev,
 				struct opa_pport_desc *pdesc, u8 port_num)
 {
 	struct hfi_pportdata *ppd = to_hfi_ppd(odev->dd, port_num);
+	struct hfi_devdata *dd = odev->dd;
+	int i;
 
 	pdesc->pguid = ppd->pguid;
 	pdesc->lid = ppd->lid;
+	pdesc->num_vls_supported = ppd->vls_supported;
+	for (i = 0; i < ppd->vls_supported; i++)
+		pdesc->vl_mtu[i] = dd->vl_mtu[i];
+	pdesc->vl_mtu[15] = dd->vl_mtu[15];
+	pdesc->ibmaxmtu = HFI_DEFAULT_MAX_MTU;
 }
 
 static void hfi_device_desc(struct opa_core_device *odev,
@@ -403,6 +540,34 @@ static struct opa_core_ops opa_core_ops = {
 	.get_sma = hfi_get_sma,
 	.set_sma = hfi_set_sma,
 };
+
+/*
+ * hfi_pport_init - initialize per port
+ * data structs
+ */
+void hfi_pport_init(struct hfi_devdata *dd)
+{
+	struct hfi_pportdata *ppd;
+	u8 port;
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		ppd = to_hfi_ppd(dd, port);
+		ppd->dd = dd;
+		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
+		ppd->lstate = IB_PORT_DOWN;
+		mutex_init(&ppd->hls_lock);
+
+		ppd->vls_supported = HFI_NUM_DATA_VLS;
+
+		/*
+		 * Set the default MTU only for VL 15
+		 * For rest of the data VLs, MTU of 0
+		 * is valid as per the spec
+		 */
+		dd->vl_mtu[15] = HFI_MIN_VL_15_MTU;
+		ppd->vls_operational = ppd->vls_supported;
+	}
+}
 
 /**
  * hfi_pci_dd_init - chip-specific initialization

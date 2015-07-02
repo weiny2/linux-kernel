@@ -90,22 +90,6 @@ struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev)
 }
 
 /*
- * hfi_pport_init - initialize per port
- * data structs
- */
-void hfi_pport_init(struct hfi_devdata *dd)
-{
-	struct hfi_pportdata *ppd;
-	u8 port;
-
-	for (port = 1; port <= dd->num_pports; port++) {
-		ppd = to_hfi_ppd(dd, port);
-		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
-		ppd->lstate = IB_PORT_DOWN;
-	}
-}
-
-/*
  * Device probe - where life begins.
  */
 static int hfi_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
