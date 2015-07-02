@@ -6214,7 +6214,7 @@ bool mem_cgroup_low(struct mem_cgroup *root, struct mem_cgroup *memcg)
 	if (memcg == root_mem_cgroup)
 		return false;
 
-	if (page_counter_read(&memcg->memory) > memcg->low_limit)
+	if (page_counter_read(&memcg->memory) >= memcg->low_limit)
 		return false;
 
 	while (memcg != root) {
@@ -6223,7 +6223,7 @@ bool mem_cgroup_low(struct mem_cgroup *root, struct mem_cgroup *memcg)
 		if (memcg == root_mem_cgroup)
 			break;
 
-		if (page_counter_read(&memcg->memory) > memcg->low_limit)
+		if (page_counter_read(&memcg->memory) >= memcg->low_limit)
 			return false;
 	}
 	return true;
