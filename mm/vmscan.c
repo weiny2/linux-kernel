@@ -88,6 +88,9 @@ struct scan_control {
 	/* Can pages be swapped as part of reclaim? */
 	unsigned int may_swap:1;
 
+	/* Can cgroups be reclaimed below their normal consumption range? */
+	unsigned int may_thrash:1;
+
 	unsigned int hibernation_mode:1;
 
 	/* One of the zones is ready for compaction */
@@ -2263,6 +2266,11 @@ static bool shrink_zone(struct zone *zone, struct scan_control *sc)
 			struct lruvec *lruvec;
 			int swappiness;
 
+			if (mem_cgroup_low(root, memcg)) {
+				if (!sc->may_thrash)
+					continue;
+			}
+
 			lruvec = mem_cgroup_zone_lruvec(zone, memcg);
 			swappiness = mem_cgroup_swappiness(memcg);
 
@@ -2283,8 +2291,7 @@ static bool shrink_zone(struct zone *zone, struct scan_control *sc)
 				mem_cgroup_iter_break(root, memcg);
 				break;
 			}
-			memcg = mem_cgroup_iter(root, memcg, &reclaim);
-		} while (memcg);
+		} while ((memcg = mem_cgroup_iter(root, memcg, &reclaim)));
 
 		vmpressure(sc->gfp_mask, sc->target_mem_cgroup,
 			   sc->nr_scanned - nr_scanned,
@@ -2484,10 +2491,11 @@ static bool shrink_zones(struct zonelist *zonelist, struct scan_control *sc)
 static unsigned long do_try_to_free_pages(struct zonelist *zonelist,
 					  struct scan_control *sc)
 {
+	int initial_priority = sc->priority;
 	unsigned long total_scanned = 0;
 	unsigned long writeback_threshold;
 	bool zones_reclaimable;
-
+retry:
 	delayacct_freepages_start();
 
 	if (global_reclaim(sc))
@@ -2536,6 +2544,13 @@ static unsigned long do_try_to_free_pages(struct zonelist *zonelist,
 	/* Aborted reclaim to try compaction? don't OOM, then */
 	if (sc->compaction_ready)
 		return 1;
+
+	/* Untapped cgroup reserves?  Don't OOM, retry. */
+	if (!sc->may_thrash) {
+		sc->priority = initial_priority;
+		sc->may_thrash = 1;
+		goto retry;
+	}
 
 	/* Any of the zones still reclaimable?  Don't OOM. */
 	if (zones_reclaimable)

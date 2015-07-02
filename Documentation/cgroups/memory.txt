@@ -58,6 +58,7 @@ Brief summary of control files.
 				 (See 5.5 for details)
  memory.limit_in_bytes		 # set/show limit of memory usage
  memory.memsw.limit_in_bytes	 # set/show limit of memory+Swap usage
+ memory.low_limit_in_bytes	 # set/show low limit for reclaim protection
  memory.failcnt			 # show the number of memory usage hits limits
  memory.memsw.failcnt		 # show the number of memory+Swap hits limits
  memory.max_usage_in_bytes	 # show max memory usage recorded
@@ -245,6 +246,12 @@ cgroup. (See 10. OOM Control below.)
 The reclaim algorithm has not been modified for cgroups, except that
 pages that are selected for reclaiming come from the per-cgroup LRU
 list.
+
+A memcg might be protected from the reclaim by setting low_limit_in_bytes.
+Groups which are under this limit are excluded from the reclaim and the
+memory pressure is conveyed to other memcgs. If there is no memcg eligible
+for the reclaim because of the low limit, though, the limit is ignored
+before the OOM killer is invoked.
 
 NOTE: Reclaim does not work for the root cgroup, since we cannot set any
 limits on the root cgroup.
