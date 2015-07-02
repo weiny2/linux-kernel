@@ -13,6 +13,11 @@ cur_dir=$PWD
 echo "Checking for yum updates for ifs-kernel-devel"
 sudo yum update ifs-kernel-updates-devel
 
+echo "Removing previously build RPMs, Press ENTER to continue"
+read junk
+
+rm -f /nfs/sc/disks/fabric_work/$USER/rpmbuild/RPMS/x86_64/*
+
 echo "Syncing Driver"
 echo "--------------"
 cd $driver
@@ -107,7 +112,8 @@ echo "PSM drop is $psm_drop"
 echo "Building Diagtools"
 echo "------------"
 cd $diags
-rm -f *.tar.gz
+make distclean
+rm -f *.tar.gz .diags.* *.spec
 make dist
 diags_drop=`ls hfi1-utils*.tar.gz  | awk 'BEGIN { FS="-"} ; { print $3 "-" $4 }' | awk 'BEGIN { FS="." } ; {print $1 "." $2}'`
 rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi1-diagtools-sw-$diags_drop.tar.gz | tee .diags.ship
@@ -116,7 +122,7 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 
-rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfi1-diagtools-sw-noship-$diags_drop.tar.gz | tee .diags.noship
+rpmbuild --define 'require_kver 3.12.18-wfr+' -ta hfidiags-$diags_drop.tar.gz | tee .diags.noship
 if [ $? -ne 0 ]; then
 	echo "Build failed see .diags.noship"
 	exit 1
@@ -157,6 +163,9 @@ done
 echo "Changing repo perms"
 ssh $yum_server "cd $yum_dir && chmod 755 *" 
 cd $cur_dir
+
+echo "RPMs built"
+ls /nfs/sc/disks/fabric_work/$USER/rpmbuild/RPMS/x86_64/
 
 echo "Versions Updated:"
 echo "Driver: $driver_drop"
