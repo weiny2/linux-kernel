@@ -126,8 +126,9 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 	spin_lock_irqsave(&dd->priv_tx_cq_lock, flags);
 	/* Transmit the E2E message */
 	do {
-		rc = hfi_tx_cmd_put_match(&dd->priv_tx_cq, command->command,
-					  0, 0, cmd_slots);
+		rc = hfi_tx_cmd_put_buff(&dd->priv_tx_cq,
+					 command->command,
+					 cmd_slots);
 	} while (rc == -EAGAIN);
 	spin_unlock_irqrestore(&dd->priv_tx_cq_lock, flags);
 
