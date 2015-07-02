@@ -215,7 +215,7 @@ const u8 hdr_len_by_opcode[256] = {
 	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = 12 + 8 + 12
 };
 
-const opcode_handler opcode_handler_tbl[256] = {
+static const opcode_handler opcode_handler_tbl[256] = {
 	/* RC */
 	[IB_OPCODE_RC_SEND_FIRST]                     = &hfi1_rc_rcv,
 	[IB_OPCODE_RC_SEND_MIDDLE]                    = &hfi1_rc_rcv,
