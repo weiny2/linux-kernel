@@ -1035,16 +1035,23 @@ static int nvme_submit_sync_cmd(struct nvme_dev *dev, int q_idx,
 		return ret;
 	}
 	unlock_nvmeq(nvmeq);
-	schedule_timeout(timeout);
+	ret = schedule_timeout(timeout);
 
-	if (cmdinfo.status == -EINTR) {
-		nvmeq = lock_nvmeq(dev, q_idx);
-		if (nvmeq) {
-			nvme_abort_command(nvmeq, cmdid);
-			unlock_nvmeq(nvmeq);
-		}
-		return -EINTR;
+	/*
+	 * Ensure that sync_completion has either run, or that it will
+	 * never run.
+	 */
+	nvmeq = lock_nvmeq(dev, q_idx);
+	if (nvmeq) {
+		nvme_abort_command(nvmeq, cmdid);
+		unlock_nvmeq(nvmeq);
 	}
+
+	/*
+	 * We never got the completion
+	 */
+	if (cmdinfo.status == -EINTR)
+		return -EINTR;
 
 	if (result)
 		*result = cmdinfo.result;
