@@ -470,6 +470,10 @@ struct hfi1_sge_state;
 #define CNTR_MODE_W		0x0
 #define CNTR_MODE_R		0x1
 
+/* VLs Supported/Operational */
+#define HFI1_MIN_VLS_SUPPORTED 1
+#define HFI1_MAX_VLS_SUPPORTED 8
+
 static inline void incr_cntr64(u64 *cntr)
 {
 	if (*cntr < (u64)-1LL)

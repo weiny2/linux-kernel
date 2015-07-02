@@ -70,7 +70,7 @@ uint kdeth_qp;
 module_param_named(kdeth_qp, kdeth_qp, uint, S_IRUGO);
 MODULE_PARM_DESC(kdeth_qp, "Set the KDETH queue pair prefix");
 
-uint num_vls = 8;
+uint num_vls = HFI1_MAX_VLS_SUPPORTED;
 module_param(num_vls, uint, S_IRUGO);
 MODULE_PARM_DESC(num_vls, "Set number of Virtual Lanes to use (1-8)");
 
@@ -6011,7 +6011,7 @@ static void set_send_length(struct hfi1_pportdata *ppd)
 		SEND_LEN_CHECK1_LEN_VL15_SHIFT;
 	int i;
 
-	for (i = 0; i < hfi1_num_vls(ppd->vls_supported); i++) {
+	for (i = 0; i < ppd->vls_supported; i++) {
 		if (dd->vld[i].mtu > maxvlmtu)
 			maxvlmtu = dd->vld[i].mtu;
 		if (i <= 3)
@@ -6027,7 +6027,7 @@ static void set_send_length(struct hfi1_pportdata *ppd)
 	write_csr(dd, SEND_LEN_CHECK1, len2);
 	/* adjust kernel credit return thresholds based on new MTUs */
 	/* all kernel receive contexts have the same hdrqentsize */
-	for (i = 0; i < hfi1_num_vls(ppd->vls_supported); i++) {
+	for (i = 0; i < ppd->vls_supported; i++) {
 		sc_set_cr_threshold(dd->vld[i].sc,
 			sc_mtu_to_threshold(dd->vld[i].sc, dd->vld[i].mtu,
 				dd->rcd[0]->rcvhdrqentsize));
@@ -6632,7 +6632,7 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 			ret = sdma_map_init(
 				ppd->dd,
 				ppd->port - 1,
-				hfi1_num_vls(val),
+				val,
 				NULL);
 		}
 		break;
@@ -10324,26 +10324,14 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		/* link width active is 0 when link is down */
 		/* link width downgrade active is 0 when link is down */
 
-		switch (num_vls) {
-		case 1:
-			ppd->vls_supported = IB_VL_VL0;
-			break;
-		case 2:
-			ppd->vls_supported = IB_VL_VL0_1;
-			break;
-		default:
+		if (num_vls < HFI1_MIN_VLS_SUPPORTED
+			|| num_vls > HFI1_MAX_VLS_SUPPORTED) {
 			hfi1_early_err(&pdev->dev,
-				       "Invalid num_vls %u, using 4 VLs\n",
-				    num_vls);
-			num_vls = 4;
-			/* fall through */
-		case 4:
-			ppd->vls_supported = IB_VL_VL0_3;
-			break;
-		case 8:
-			ppd->vls_supported = IB_VL_VL0_7;
-			break;
+				       "Invalid num_vls %u, using %u VLs\n",
+				    num_vls, HFI1_MAX_VLS_SUPPORTED);
+			num_vls = HFI1_MAX_VLS_SUPPORTED;
 		}
+		ppd->vls_supported = num_vls;
 		ppd->vls_operational = ppd->vls_supported;
 		/* Set the default MTU. */
 		for (vl = 0; vl < num_vls; vl++)
@@ -10424,10 +10412,9 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	}
 	/* insure num_vls isn't larger than number of sdma engines */
 	if (HFI1_CAP_IS_KSET(SDMA) && num_vls > dd->chip_sdma_engines) {
-		dd_dev_err(dd, "num_vls %u too large, using 4 VLs\n",
-				num_vls);
-		num_vls = 4;
-		ppd->vls_supported = IB_VL_VL0_3;
+		dd_dev_err(dd, "num_vls %u too large, using %u VLs\n",
+				num_vls, HFI1_MAX_VLS_SUPPORTED);
+		ppd->vls_supported = num_vls = HFI1_MAX_VLS_SUPPORTED;
 		ppd->vls_operational = ppd->vls_supported;
 	}
 

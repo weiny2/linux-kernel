@@ -593,7 +593,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->mkeyprotect_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
 
 	memset(pi->neigh_mtu.pvlx_to_mtu, 0, sizeof(pi->neigh_mtu.pvlx_to_mtu));
-	for (i = 0; i < hfi1_num_vls(ppd->vls_supported); i++) {
+	for (i = 0; i < ppd->vls_supported; i++) {
 		mtu = mtu_to_enum(dd->vld[i].mtu, HFI1_DEFAULT_ACTIVE_MTU);
 		if ((i % 2) == 0)
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= (mtu << 4);
@@ -604,8 +604,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	mtu = mtu_to_enum(dd->vld[15].mtu, 2048);
 	pi->neigh_mtu.pvlx_to_mtu[15/2] |= mtu;
 	pi->smsl = ibp->sm_sl & OPA_PI_MASK_SMSL;
-	pi->operational_vls =
-		hfi1_num_vls(hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS));
+	pi->operational_vls = hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS);
 	pi->partenforce_filterraw |=
 		(ppd->linkinit_reason & OPA_PI_MASK_LINKINIT_REASON);
 	if (ppd->part_enforce & HFI1_PART_ENFORCE_IN)
@@ -617,7 +616,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->pkey_violations = cpu_to_be16(ibp->pkey_violations);
 	pi->qkey_violations = cpu_to_be16(ibp->qkey_violations);
 
-	pi->vl.cap = hfi1_num_vls(ppd->vls_supported);
+	pi->vl.cap = ppd->vls_supported;
 	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
 	pi->vl.arb_high_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_CAP);
 	pi->vl.arb_low_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_LOW_CAP);
@@ -1184,7 +1183,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_LIMIT,
 				    ibp->vl_high_limit);
 
-	for (i = 0; i < hfi1_num_vls(ppd->vls_supported); i++) {
+	for (i = 0; i < ppd->vls_supported; i++) {
 		if ((i % 2) == 0)
 			mtu = enum_to_mtu((pi->neigh_mtu.pvlx_to_mtu[i/2] >> 4)
 					  & 0xF);
@@ -1224,15 +1223,12 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	/* Set operational VLs */
 	vls = pi->operational_vls & OPA_PI_MASK_OPERATIONAL_VL;
 	if (vls) {
-		int vl_enum = hfi1_vls_to_ib_enum(vls);
-
-		if (vls > hfi1_num_vls(ppd->vls_supported) || vl_enum < 0) {
+		if (vls > ppd->vls_supported) {
 			pr_warn("SubnSet(OPA_PortInfo) VL's supported invalid %d\n",
 				pi->operational_vls);
 			smp->status |= IB_SMP_INVALID_FIELD;
 		} else
-			(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS,
-						vl_enum);
+			(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS, vls);
 	}
 
 	if (pi->mkey_violations == 0)

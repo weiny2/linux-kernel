@@ -600,7 +600,7 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	vl = (le16_to_cpu(req->hdr.pbc[0]) >> 12) & 0xF;
 	sc = (((be16_to_cpu(req->hdr.lrh[0]) >> 12) & 0xF) |
 	      (((le16_to_cpu(req->hdr.pbc[1]) >> 14) & 0x1) << 4));
-	if (vl >= hfi1_num_vls(dd->pport->vls_operational) ||
+	if (vl >= dd->pport->vls_operational ||
 	    vl != sc_to_vlt(dd, sc)) {
 		SDMA_DBG(req, "Invalid SC(%u)/VL(%u)", sc, vl);
 		ret = -EINVAL;

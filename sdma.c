@@ -854,7 +854,6 @@ int sdma_map_init(struct hfi1_devdata *dd, u8 port, u8 num_vls, u8 *vl_engines)
 
 	if (!(dd->flags & HFI1_HAS_SEND_DMA))
 		return 0;
-	BUG_ON(num_vls > hfi1_num_vls(ppd->vls_supported));
 	if (!vl_engines) {
 		/* truncate divide */
 		sde_per_vl = dd->num_sdma / num_vls;
@@ -1162,7 +1161,7 @@ int sdma_init(struct hfi1_devdata *dd, u8 port)
 	dd->flags |= HFI1_HAS_SEND_DMA;
 	dd->flags |= idle_cnt ? HFI1_HAS_SDMA_TIMEOUT : 0;
 	dd->num_sdma = num_engines;
-	if (sdma_map_init(dd, port, hfi1_num_vls(ppd->vls_operational), NULL))
+	if (sdma_map_init(dd, port, ppd->vls_operational, NULL))
 		goto bail;
 	dd_dev_info(dd, "SDMA num_sdma: %u\n", dd->num_sdma);
 	return 0;
