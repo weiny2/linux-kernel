@@ -20,6 +20,7 @@ grep "FAIL" mail.tmp
 if [ $? -eq 0 ]; then
 	echo "Sending failure mail"
 	mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Test on fpga2_3 for build $build FAILED" dennis.dalessandro@intel.com < mail.tmp
+	mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Test on fpga2_3 for build $build FAILED" jubin.john@intel.com < mail.tmp
 else
 	echo "Sending success mail"
 	mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Test on fpga2_3 for build $build SUCCESS" dennis.dalessandro@intel.com < mail.tmp

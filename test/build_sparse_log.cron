@@ -3,6 +3,7 @@
 grep "Sparse check failed\!" sparse.*.log
 if [ $? -eq 0 ]; then
         mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Sparse check FAILED" dennis.dalessandro@intel.com < sparse.*.log
+        mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Sparse check FAILED" jubin.john@intel.com < sparse.*.log
 else
         mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Sparse check SUCCESS" dennis.dalessandro@intel.com < sparse.*.log
 fi
