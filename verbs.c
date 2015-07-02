@@ -1422,6 +1422,7 @@ static int query_device(struct ib_device *ibdev,
 	props->max_qp = hfi1_max_qps;
 	props->max_qp_wr = hfi1_max_qp_wrs;
 	props->max_sge = hfi1_max_sges;
+	props->max_sge_rd = hfi1_max_sges;
 	props->max_cq = hfi1_max_cqs;
 	props->max_ah = hfi1_max_ahs;
 	props->max_cqe = hfi1_max_cqes;
