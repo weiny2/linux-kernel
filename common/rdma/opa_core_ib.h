@@ -51,6 +51,9 @@
  */
 #ifndef _OPA_CORE_IB_H_
 #define _OPA_CORE_IB_H_
+#include <rdma/opa_port_info.h>
+
+#define OPA_MAX_VLS		32
 
 /* OPA SMA attribute IDs */
 #define OPA_ATTRIB_ID_CONGESTION_INFO		cpu_to_be16(0x008b)
@@ -71,6 +74,79 @@
 						OPA_AM_START_SM_CFG_SHIFT)
 #define OPA_AM_START_SM_CFG(am)		(((am) >> OPA_AM_START_SM_CFG_SHIFT) \
 						& OPA_AM_START_SM_CFG_MASK)
+
+#define OPA_MTU_0     0
+#define INVALID_MTU	0xffff
+#define INVALID_MTU_ENC	0xff
+
+/*
+ * Convert MTU sizes to 4bit number format
+ * described in IB 1.3 (14.2.5.6) and OPA spec
+ */
+static inline u16 opa_enum_to_mtu(u8 emtu)
+{
+	switch (emtu) {
+	case OPA_MTU_0:     return 0;
+	case IB_MTU_256:   return 256;
+	case IB_MTU_512:   return 512;
+	case IB_MTU_1024:  return 1024;
+	case IB_MTU_2048:  return 2048;
+	case IB_MTU_4096:  return 4096;
+	case OPA_MTU_8192:  return 8192;
+	case OPA_MTU_10240: return 10240;
+	default: return INVALID_MTU;
+	}
+}
+
+/*
+ * Convert 4bit number format
+ * described in IB 1.3 (14.2.5.6) and OPA spec
+ * to MTU sizes in bytes
+ */
+static inline u8 opa_mtu_to_enum(u16 mtu)
+{
+	switch (mtu) {
+	case   256: return IB_MTU_256;
+	case   512: return IB_MTU_512;
+	case  1024: return IB_MTU_1024;
+	case  2048: return IB_MTU_2048;
+	case  4096: return IB_MTU_4096;
+	case  8192: return OPA_MTU_8192;
+	case 10240: return OPA_MTU_10240;
+	default: return INVALID_MTU_ENC;
+	}
+}
+
+static inline u8 opa_mtu_to_enum_safe(u16 mtu, u8 if_bad_mtu)
+{
+	u8 ibmtu = opa_mtu_to_enum(mtu);
+
+	return (ibmtu == INVALID_MTU_ENC) ? if_bad_mtu : ibmtu;
+}
+
+/*
+ * Helper function to read mtu field for a given VL from
+ * opa_port_info
+ */
+static inline int opa_pi_to_mtu(struct opa_port_info *pi, int vl_num)
+{
+	u8 mtu_enc;
+	u16 mtu;
+
+	mtu = pi->neigh_mtu.pvlx_to_mtu[vl_num / 2];
+	if (!(vl_num % 2))
+		mtu_enc = (mtu >> 4) & 0xF;
+	else
+		mtu_enc = mtu & 0xF;
+
+	mtu = opa_enum_to_mtu(mtu_enc);
+
+	WARN(mtu == INVALID_MTU,
+		"SubnSet(OPA_PortInfo) mtu(enc) %u invalid for VL %d\n",
+				mtu_enc, vl_num);
+
+	return mtu;
+}
 
 /*
  * OPA port physical states

@@ -53,6 +53,7 @@
 #include <linux/sched.h>
 #include "verbs.h"
 #include "packet.h"
+#include <rdma/opa_core_ib.h>
 
 /*
  * Allocate the next available QPN or
@@ -336,16 +337,16 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	 */
 	if (attr_mask & IB_QP_PATH_MTU) {
 		struct opa_ib_portdata *ibp;
-		int mtu;
+		u16 mtu;
 
 		ibp = to_opa_ibportdata(ibdev, qp->port_num);
 
-		mtu = mtu_enum_to_int(attr->path_mtu);
-		if (mtu == -1)
+		mtu = opa_enum_to_mtu(attr->path_mtu);
+		if (mtu == INVALID_MTU)
 			goto inval;
 
 		if (mtu > ibp->ibmtu)
-			pmtu = mtu_int_to_enum_safe(ibp->ibmtu, IB_MTU_2048);
+			pmtu = opa_mtu_to_enum_safe(ibp->ibmtu, IB_MTU_2048);
 		else
 			pmtu = attr->path_mtu;
 	}
@@ -470,7 +471,7 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	if (attr_mask & IB_QP_PATH_MTU) {
 		struct opa_ib_portdata *ibp;
 		u8 sc, vl;
-		u32 mtu;
+		u16 mtu;
 
 		ibp = to_opa_ibportdata(ibdev, qp->port_num);
 
@@ -481,10 +482,10 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		sc = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 		vl = ibp->sc_to_vl[sc];
 
-		mtu = mtu_enum_to_int(pmtu);
-		if (vl < OPA_IB_NUM_DATA_VLS)
-			mtu = min_t(u32, mtu, ibp->vl_mtu[vl]);
-		pmtu = mtu_int_to_enum_safe(mtu, OPA_MTU_8192);
+		mtu = opa_enum_to_mtu(pmtu);
+		if (vl < ibp->max_vls)
+			mtu = min_t(u16, mtu, ibp->vl_mtu[vl]);
+		pmtu = opa_mtu_to_enum_safe(mtu, OPA_MTU_8192);
 
 		qp->path_mtu = pmtu;
 		qp->pmtu = mtu;

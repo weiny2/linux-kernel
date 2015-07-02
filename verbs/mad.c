@@ -581,8 +581,9 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 					      u32 *resp_len)
 {
 	struct opa_port_info *pi = (struct opa_port_info *)data;
-	u32 num_ports = OPA_AM_NPORT(am);
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	int i, ret;
+	u32 num_ports = OPA_AM_NPORT(am);
 
 	if (num_ports != 1)
 		return reply((struct ib_mad_hdr *)smp);
@@ -595,7 +596,29 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	if (pi->mkey_violations == 0)
 		ibp->mkey_violations = 0;
 
-	return reply((struct ib_mad_hdr *)smp);
+	/*
+	 * From here on all attributes that are handled in SMA-HFI but cached in
+	 * SMA-IB are updated by calling get portinfo.
+	 */
+	ret = subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev, port,
+					resp_len);
+
+	if (ret == IB_MAD_RESULT_FAILURE)
+		goto err;
+
+	pi = (struct opa_port_info *)data;
+
+	 /* Update the per VL mtu cached here in IB layer */
+	for (i = 0; i < ibp->max_vls; i++) {
+		ibp->vl_mtu[i] = opa_pi_to_mtu(pi, i);
+		if (ibp->ibmtu < ibp->vl_mtu[i])
+			ibp->ibmtu = ibp->vl_mtu[i];
+	}
+
+	ibp->vl_mtu[15] = opa_enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[15 / 2] &
+						0xF);
+err:
+	return ret;
 }
 
 static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,

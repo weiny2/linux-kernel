@@ -58,11 +58,13 @@
 #include <rdma/hfi_cmd.h>
 #include <rdma/opa_core.h>
 
+extern unsigned int hfi_max_mtu;
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME
 
 #define HFI_NUM_BARS		2
 #define HFI_NUM_PPORTS		2
+#define HFI_MAX_VLS		32
 #define HFI_PID_SYSTEM		0
 #define HFI_PID_BYPASS_BASE	0xF00
 
@@ -77,6 +79,15 @@
 
 /* TX timeout for E2E control messages */
 #define HFI_TX_TIMEOUT_MS	100
+
+/* use this MTU size if none other is given */
+#define HFI_DEFAULT_ACTIVE_MTU 10240
+/* use this MTU size as the default maximum */
+#define HFI_DEFAULT_MAX_MTU	10240
+/* The largest MAD packet size. */
+#define HFI_MIN_VL_15_MTU		2048
+/* Number of Data VLs supported */
+#define HFI_NUM_DATA_VLS	8
 
 /* In accordance with stl vol 1 section 4.1 */
 #define PGUID_MASK		(~(0x3UL << 32))
@@ -130,6 +141,10 @@
 #define SMA_IDLE_ARM	1
 #define SMA_IDLE_ACTIVE 2
 
+#define HFI_IB_CFG_OP_VLS 10 /* operational VLs */
+#define HFI_IB_CFG_MTU 17 /* update MTU in IBC */
+#define HFI_IB_CFG_VL_HIGH_LIMIT 19
+
 struct hfi_link_down_reason {
 	/*
 	 * SMA-facing value.  Should be set from .latest when
@@ -156,11 +171,17 @@ struct hfi_event_queue {
 /*
  * hfi_pportdata - HFI port specific information
  *
+ * @dd: pointer to the per node hfi_devdata
  * @pguid: port_guid identifying port
  * @lid: LID for this port
  * @psn_base_rx_e2e: PSN base for RX E2E
  * @psn_base_tx_otr: PSN base for TX OTR
  * @lstate: Logical link state
+ * @ibmtu: The MTU programmed for this port
+ * @vls_supported: Virtual lane supported
+ * @vls_operational: Virtual lane operational
+ * @vl_high_limit: Limit of high priority compenent of
+ *	VL Arbitration table
  * @neighbor_normal: State of neighbor's port's Logical link state
  *	0 - Neighbor Down/Init
  *	1 - Neighbhor LinkArmed/LinkActive
@@ -176,13 +197,18 @@ struct hfi_event_queue {
  *@remote_link_down_reason: Value to be sent to link peer on LinkDown
  */
 struct hfi_pportdata {
-	/* port_guid identifying port */
+	struct hfi_devdata *dd;
 	__be64 pguid;
 	u32 lid;
 	void *psn_base_rx_e2e[HFI_MAX_TC];
 	void *psn_base_tx_otr[HFI_MAX_TC];
 
+	struct mutex hls_lock;
 	u32 lstate;
+	u32 ibmtu;
+	u8 vls_supported;
+	u8 vls_operational;
+	u8 vl_high_limit;
 	u8 neighbor_normal;
 	u8 is_sm_config_started;
 	u8 offline_disabled_reason;
@@ -210,6 +236,8 @@ struct hfi_devdata {
 	u8 __iomem *kregend[HFI_NUM_BARS];
 	/* physical address of chip for io_remap, etc. */
 	resource_size_t physaddr;
+	/* Per VL data. Enough for all VLs but not all elements are set/used.*/
+	u16 vl_mtu[OPA_MAX_VLS];
 
 	/* MSI-X information */
 	struct hfi_msix_entry *msix_entries;
@@ -262,7 +290,6 @@ static inline u32 hfi_driver_lstate(struct hfi_pportdata *ppd)
 	return ppd->lstate; /* use the cached value */
 }
 
-void hfi_pport_init(struct hfi_devdata *dd);
 int hfi_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent);
 void hfi_pci_cleanup(struct pci_dev *pdev);
 struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
@@ -345,6 +372,9 @@ void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
 int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message);
 u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
+int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which);
+int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val);
+int hfi_set_mtu(struct hfi_pportdata *ppd);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is
