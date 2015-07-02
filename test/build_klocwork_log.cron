@@ -3,6 +3,7 @@
 grep "failed" klocwork.*.log
 if [ $? -eq 0 ]; then
         mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] klocwork check FAILED" dennis.dalessandro@intel.com < klocwork.*.log
+        mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] klocwork check FAILED" jubin.john@intel.com < klocwork.*.log
 else
         mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] klocwork check SUCCESS" dennis.dalessandro@intel.com < klocwork.*.log
 fi
