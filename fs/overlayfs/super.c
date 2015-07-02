@@ -30,6 +30,7 @@ MODULE_LICENSE("GPL");
 struct ovl_config {
 	char *lowerdir;
 	char *upperdir;
+	bool default_permissions;
 };
 
 /* private information held for overlayfs's superblock */
@@ -152,6 +153,21 @@ struct dentry *ovl_entry_real(struct ovl_entry *oe, bool *is_upper)
 		*is_upper = false;
 	}
 	return realdentry;
+}
+
+struct vfsmount *ovl_entry_mnt_real(struct ovl_entry *oe, struct inode *inode,
+				    bool is_upper)
+{
+	struct ovl_fs *ofs = inode->i_sb->s_fs_info;
+
+	return is_upper ? ofs->upper_mnt : ofs->lower_mnt;
+}
+
+bool ovl_is_default_permissions(struct inode *inode)
+{
+	struct ovl_fs *ofs = inode->i_sb->s_fs_info;
+
+	return ofs->config.default_permissions;
 }
 
 bool ovl_dentry_is_opaque(struct dentry *dentry)
@@ -461,6 +477,8 @@ static int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 
 	seq_printf(m, ",lowerdir=%s", ufs->config.lowerdir);
 	seq_printf(m, ",upperdir=%s", ufs->config.upperdir);
+	if (ufs->config.default_permissions)
+		seq_puts(m, ",default_permissions");
 	return 0;
 }
 
@@ -474,12 +492,14 @@ static const struct super_operations ovl_super_operations = {
 enum {
 	OPT_LOWERDIR,
 	OPT_UPPERDIR,
+	OPT_DEFAULT_PERMISSIONS,
 	OPT_ERR,
 };
 
 static const match_table_t ovl_tokens = {
 	{OPT_LOWERDIR,			"lowerdir=%s"},
 	{OPT_UPPERDIR,			"upperdir=%s"},
+	{OPT_DEFAULT_PERMISSIONS,	"default_permissions"},
 	{OPT_ERR,			NULL}
 };
 
@@ -511,6 +531,10 @@ static int ovl_parse_opt(char *opt, struct ovl_config *config)
 			config->lowerdir = match_strdup(&args[0]);
 			if (!config->lowerdir)
 				return -ENOMEM;
+			break;
+
+		case OPT_DEFAULT_PERMISSIONS:
+			config->default_permissions = true;
 			break;
 
 		default:
