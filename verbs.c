@@ -973,7 +973,6 @@ static int build_verbs_tx_desc(
 	struct hfi1_pio_header *phdr;
 	u16 hdrbytes = tx->hdr_dwords << 2;
 
-
 	phdr = &dev->pio_hdrs[tx->hdr_inx].phdr;
 	if (!ahdr->ahgcount) {
 		ret = sdma_txinit_ahg(
@@ -1063,9 +1062,11 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 	if (IS_ERR(tx))
 		goto bail_tx;
 
-	if (!qp->s_hdr->sde)
+	if (!qp->s_hdr->sde) {
 		tx->sde = sde = qp_to_sdma_engine(qp, sc5);
-	else
+		if (!sde)
+			goto bail_no_sde;
+	} else
 		tx->sde = sde = qp->s_hdr->sde;
 
 	if (likely(pbc == 0)) {
@@ -1089,6 +1090,9 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 	if (unlikely(ret == -ECOMM))
 		goto bail_ecomm;
 	return ret;
+
+bail_no_sde:
+	hfi1_put_txreq(tx);
 bail_ecomm:
 	/* The current one got "sent" */
 	return 0;
@@ -1457,7 +1461,6 @@ static inline u16 opa_speed_to_ib(u16 in)
 	if (in & OPA_LINK_SPEED_12_5G)
 		out |= IB_SPEED_FDR;
 
-	BUG_ON(!out);
 	return out;
 }
 

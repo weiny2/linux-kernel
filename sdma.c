@@ -759,7 +759,8 @@ struct sdma_engine *sdma_select_engine_vl(
 	struct sdma_map_elem *e;
 	struct sdma_engine *rval;
 
-	BUG_ON(vl > 8);
+	if (WARN_ON(vl > 8))
+		return NULL;
 
 	rcu_read_lock();
 	m = rcu_dereference(dd->sdma_map);
@@ -853,6 +854,7 @@ int sdma_map_init(struct hfi1_devdata *dd, u8 port, u8 num_vls, u8 *vl_engines)
 
 	if (!(dd->flags & HFI1_HAS_SEND_DMA))
 		return 0;
+
 	if (!vl_engines) {
 		/* truncate divide */
 		sde_per_vl = dd->num_sdma / num_vls;

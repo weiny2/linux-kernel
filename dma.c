@@ -71,14 +71,16 @@ static int hfi1_mapping_error(struct ib_device *dev, u64 dma_addr)
 static u64 hfi1_dma_map_single(struct ib_device *dev, void *cpu_addr,
 			       size_t size, enum dma_data_direction direction)
 {
-	BUG_ON(!valid_dma_direction(direction));
+	if (WARN_ON(!valid_dma_direction(direction)))
+		return BAD_DMA_ADDRESS;
+
 	return (u64) cpu_addr;
 }
 
 static void hfi1_dma_unmap_single(struct ib_device *dev, u64 addr, size_t size,
 				  enum dma_data_direction direction)
 {
-	BUG_ON(!valid_dma_direction(direction));
+	/* This is a stub, nothing to be done here */
 }
 
 static u64 hfi1_dma_map_page(struct ib_device *dev, struct page *page,
@@ -87,25 +89,23 @@ static u64 hfi1_dma_map_page(struct ib_device *dev, struct page *page,
 {
 	u64 addr;
 
-	BUG_ON(!valid_dma_direction(direction));
+	if (WARN_ON(!valid_dma_direction(direction)))
+		return BAD_DMA_ADDRESS;
 
-	if (offset + size > PAGE_SIZE) {
-		addr = BAD_DMA_ADDRESS;
-		goto done;
-	}
+	if (offset + size > PAGE_SIZE)
+		return BAD_DMA_ADDRESS;
 
 	addr = (u64) page_address(page);
 	if (addr)
 		addr += offset;
 
-done:
 	return addr;
 }
 
 static void hfi1_dma_unmap_page(struct ib_device *dev, u64 addr, size_t size,
 				enum dma_data_direction direction)
 {
-	BUG_ON(!valid_dma_direction(direction));
+	/* This is a stub, nothing to be done here */
 }
 
 static int hfi1_map_sg(struct ib_device *dev, struct scatterlist *sgl,
@@ -116,7 +116,8 @@ static int hfi1_map_sg(struct ib_device *dev, struct scatterlist *sgl,
 	int i;
 	int ret = nents;
 
-	BUG_ON(!valid_dma_direction(direction));
+	if (WARN_ON(!valid_dma_direction(direction)))
+		return BAD_DMA_ADDRESS;
 
 	for_each_sg(sgl, sg, nents, i) {
 		addr = (u64) page_address(sg_page(sg));
@@ -136,7 +137,7 @@ static void hfi1_unmap_sg(struct ib_device *dev,
 			  struct scatterlist *sg, int nents,
 			 enum dma_data_direction direction)
 {
-	BUG_ON(!valid_dma_direction(direction));
+	/* This is a stub, nothing to be done here */
 }
 
 static void hfi1_sync_single_for_cpu(struct ib_device *dev, u64 addr,

@@ -1491,7 +1491,7 @@ static void iowait_wakeup(struct iowait *wait, int reason)
 {
 	struct hfi1_qp *qp = container_of(wait, struct hfi1_qp, s_iowait);
 
-	BUG_ON(reason != SDMA_AVAIL_REASON);
+	WARN_ON(reason != SDMA_AVAIL_REASON);
 	hfi1_qp_wakeup(qp, HFI1_S_WAIT_DMA_DESC);
 }
 
@@ -1573,7 +1573,7 @@ struct sdma_engine *qp_to_sdma_engine(struct hfi1_qp *qp, u8 sc5)
 	default:
 		break;
 	}
-	sde =  sdma_select_engine_sc(dd, qp->ibqp.qp_num >> dd->qos_shift, sc5);
+	sde = sdma_select_engine_sc(dd, qp->ibqp.qp_num >> dd->qos_shift, sc5);
 	return sde;
 }
 

@@ -1297,7 +1297,8 @@ static u64 dev_access_u32_csr(const struct cntr_entry *entry,
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
 
-	BUG_ON(vl != CNTR_INVALID_VL);
+	if (vl != CNTR_INVALID_VL)
+		return 0;
 	return read_write_csr(dd, entry->csr, mode, data);
 }
 
@@ -1310,10 +1311,12 @@ static u64 dev_access_u64_csr(const struct cntr_entry *entry, void *context,
 	u64 csr = entry->csr;
 
 	if (entry->flags & CNTR_VL) {
-		BUG_ON(vl == CNTR_INVALID_VL);
+		if (vl == CNTR_INVALID_VL)
+			return 0;
 		csr += 8 * vl;
 	} else {
-		BUG_ON(vl != CNTR_INVALID_VL);
+		if (vl != CNTR_INVALID_VL)
+			return 0;
 	}
 
 	val = read_write_csr(dd, csr, mode, data);
@@ -1327,7 +1330,8 @@ static u64 dc_access_lcb_cntr(const struct cntr_entry *entry, void *context,
 	u32 csr = entry->csr;
 	int ret = 0;
 
-	BUG_ON(vl != CNTR_INVALID_VL);
+	if (vl != CNTR_INVALID_VL)
+		return 0;
 	if (mode == CNTR_MODE_R)
 		ret = read_lcb_csr(dd, csr, &data);
 	else if (mode == CNTR_MODE_W)
@@ -1348,7 +1352,8 @@ static u64 port_access_u32_csr(const struct cntr_entry *entry, void *context,
 {
 	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
-	BUG_ON(vl != CNTR_INVALID_VL);
+	if (vl != CNTR_INVALID_VL)
+		return 0;
 	return read_write_csr(ppd->dd, entry->csr, mode, data);
 }
 
@@ -1360,10 +1365,12 @@ static u64 port_access_u64_csr(const struct cntr_entry *entry,
 	u64 csr = entry->csr;
 
 	if (entry->flags & CNTR_VL) {
-		BUG_ON(vl == CNTR_INVALID_VL);
+		if (vl == CNTR_INVALID_VL)
+			return 0;
 		csr += 8 * vl;
 	} else {
-		BUG_ON(vl != CNTR_INVALID_VL);
+		if (vl != CNTR_INVALID_VL)
+			return 0;
 	}
 	val = read_write_csr(ppd->dd, csr, mode, data);
 	return val;
@@ -1395,7 +1402,8 @@ static u64 access_sw_link_dn_cnt(const struct cntr_entry *entry, void *context,
 {
 	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
-	BUG_ON(vl != CNTR_INVALID_VL);
+	if (vl != CNTR_INVALID_VL)
+		return 0;
 	return read_write_sw(ppd->dd, &ppd->link_downed, mode, data);
 }
 
@@ -1404,7 +1412,8 @@ static u64 access_sw_link_up_cnt(const struct cntr_entry *entry, void *context,
 {
 	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
-	BUG_ON(vl != CNTR_INVALID_VL);
+	if (vl != CNTR_INVALID_VL)
+		return 0;
 	return read_write_sw(ppd->dd, &ppd->link_up, mode, data);
 }
 
@@ -2477,7 +2486,6 @@ static void handle_sdma_eng_err(struct hfi1_devdata *dd,
 	struct sdma_engine *sde;
 
 	sde = &dd->per_sdma[source];
-	/* BUG_ON(source != 0); */
 #ifdef CONFIG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "CONFIG SDMA(%u) %s:%d %s()\n", sde->this_idx,
 		   slashstrip(__FILE__), __LINE__, __func__);
@@ -6620,12 +6628,14 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 	case HFI1_IB_CFG_OP_VLS:
 		if (ppd->vls_operational != val) {
 			ppd->vls_operational = val;
-			BUG_ON(!ppd->port);
-			ret = sdma_map_init(
-				ppd->dd,
-				ppd->port - 1,
-				val,
-				NULL);
+			if (!ppd->port)
+				ret = -EINVAL;
+			else
+				ret = sdma_map_init(
+					ppd->dd,
+					ppd->port - 1,
+					val,
+					NULL);
 		}
 		break;
 	/*

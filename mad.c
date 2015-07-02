@@ -1234,8 +1234,11 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 			pr_warn("SubnSet(OPA_PortInfo) VL's supported invalid %d\n",
 				pi->operational_vls);
 			smp->status |= IB_SMP_INVALID_FIELD;
-		} else
-			(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS, vls);
+		} else {
+			if (hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS,
+						vls) == -EINVAL)
+				smp->status |= IB_SMP_INVALID_FIELD;
+		}
 	}
 
 	if (pi->mkey_violations == 0)
