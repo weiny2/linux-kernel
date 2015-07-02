@@ -5,7 +5,8 @@ fxr=/mnt/fabric/fxr
 viper0=4022
 viper1=5022
 export LD_LIBRARY_PATH=${fxr}/simics/SynopsisInstructionSetSimulator/lib
-export SNPSLMD_LICENSE_FILE="26586@irslic003.ir.intel.com:26586@synopsys03p.elic.intel.com"
+export SNPSLMD_LICENSE_FILE="26586@synopsys03p.elic.intel.com"
+export LM_PROJECT=”FDO”
 
 # Am I invoked by Jenkins?
 ByJenkins=no
@@ -20,7 +21,7 @@ if [ ${ByJenkins} == yes ] ; then
     ./simics -no-win -e '$disk_image=../FxrRhel7.craff' \
 	FXR.simics >../simics.log &
     popd
-    sleep 40
+    sleep 120
 else # manual invocation
     # start simics if not yet
     if [ -z `pidof simics-common` ]; then
@@ -28,7 +29,7 @@ else # manual invocation
 	./simics -no-win -e '$disk_image=../FxrRhel7.craff' \
 	    FXR.simics >../simics.log &
 	popd
-	sleep 40
+	sleep 120
     fi
 fi
 
