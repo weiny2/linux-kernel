@@ -92,7 +92,21 @@ struct nvme_id_ns {
 	__u8			mc;
 	__u8			dpc;
 	__u8			dps;
-	__u8			rsvd30[98];
+	__u8			nmic;
+	__u8			rescap;
+	__u8			fpi;
+	__u8			rsvd33;
+	__le16			nawun;
+	__le16			nawupf;
+	__le16			nacwu;
+	__le16			nabsn;
+	__le16			nabo;
+	__le16			nabspf;
+	__u16			rsvd46;
+	__le64			nvmcap[2];
+	__u8			rsvd64[40];
+	__u8			nguid[16];
+	__u8			eui64[8];
 	struct nvme_lbaf	lbaf[16];
 	__u8			rsvd192[192];
 	__u8			vs[3712];
@@ -521,6 +535,8 @@ struct nvme_passthru_cmd {
 	__u32	timeout_ms;
 	__u32	result;
 };
+
+#define NVME_VS(major, minor) (((major) << 16) | ((minor) << 8))
 
 #define nvme_admin_cmd nvme_passthru_cmd
 
