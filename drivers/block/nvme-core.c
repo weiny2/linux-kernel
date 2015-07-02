@@ -1572,7 +1572,7 @@ static int nvme_configure_admin_queue(struct nvme_dev *dev)
 
 	nvmeq = raw_nvmeq(dev, 0);
 	if (!nvmeq) {
-		nvmeq = nvme_alloc_queue(dev, 0, 64, 0);
+		nvmeq = nvme_alloc_queue(dev, 0, 256, 0);
 		if (!nvmeq)
 			return -ENOMEM;
 	}
