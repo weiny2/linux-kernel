@@ -1195,6 +1195,9 @@ xfs_vm_releasepage(
 
 	trace_xfs_releasepage(page->mapping->host, page, 0, 0);
 
+	if (PageDirty(page))
+		return 0;
+
 	xfs_count_page_state(page, &delalloc, &unwritten);
 
 	if (WARN_ON(delalloc))
