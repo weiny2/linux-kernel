@@ -485,7 +485,7 @@ static int do_dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
 	pgoff_t size, pgoff;
 	sector_t block, sector;
 	unsigned long pfn;
-	int major = 0;
+	int result = 0;
 
 	/* Fall back to PTEs if we're going to COW */
 	if ((flags & FAULT_FLAG_WRITE) && !(vma->vm_flags & VM_SHARED))
@@ -511,20 +511,22 @@ static int do_dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
 	length = get_block(inode, block, &bh, !!(flags & FAULT_FLAG_WRITE));
 	if (length)
 		return VM_FAULT_SIGBUS;
+	i_mmap_lock_read(mapping);
+
 	/*
 	 * If the filesystem isn't willing to tell us the length of a hole,
 	 * just fall back to PTEs.  Calling get_block 512 times in a loop
-	 * because the filesystem is lame is ridiculous.
+	 * would be silly.
 	 */
 	if (!buffer_size_valid(&bh) || bh.b_size < PMD_SIZE)
-		return VM_FAULT_FALLBACK;
-
-	i_mmap_lock_read(mapping);
+		goto fallback;
 
 	/* Guard against a race with truncate */
 	size = (i_size_read(inode) + PAGE_SIZE - 1) >> PAGE_SHIFT;
-	if (pgoff >= size)
-		goto sigbus;
+	if (pgoff >= size) {
+		result = VM_FAULT_SIGBUS;
+		goto out;
+	}
 	if ((pgoff | PG_PMD_COLOUR) >= size)
 		goto fallback;
 
@@ -537,25 +539,24 @@ static int do_dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
 		spinlock_t *ptl;
 		struct mm_struct *mm = vma->vm_mm;
 		struct page *zero_page = get_huge_zero_page();
-		if (unlikely(!zero_page)) {
-			count_vm_event(THP_FAULT_FALLBACK);
+		if (unlikely(!zero_page))
 			goto fallback;
-		}
+
 		ptl = pmd_lock(mm, pmd);
 		set = set_huge_zero_page(NULL, mm, vma, pmd_addr, pmd,
 								zero_page);
 		spin_unlock(ptl);
-		length = set ? PMD_SIZE : -EBUSY;
+		result = VM_FAULT_NOPAGE;
 	} else {
 		sector = bh.b_blocknr << (blkbits - 9);
 		length = bdev_direct_access(bh.b_bdev, sector, &kaddr, &pfn,
 						bh.b_size);
-		if (length < 0)
-			goto sigbus;
-		if (length < PMD_SIZE)
+		if (length < 0) {
+			result = VM_FAULT_SIGBUS;
+			goto out;
+		}
+		if ((length < PMD_SIZE) || (pfn & PG_PMD_COLOUR))
 			goto fallback;
-		if (pfn & PG_PMD_COLOUR)
-			goto fallback;	/* not aligned */
 
 		if (buffer_unwritten(&bh) || buffer_new(&bh)) {
 			int i;
@@ -563,31 +564,24 @@ static int do_dax_pmd_fault(struct vm_area_struct *vma, unsigned long address,
 				clear_page(kaddr + i * PAGE_SIZE);
 			count_vm_event(PGMAJFAULT);
 			mem_cgroup_count_vm_event(vma->vm_mm, PGMAJFAULT);
-			major = VM_FAULT_MAJOR;
+			result |= VM_FAULT_MAJOR;
 		}
 
-		length = vm_insert_pfn_pmd(vma, address, pmd, pfn);
+		result |= vmf_insert_pfn_pmd(vma, address, pmd, pfn);
 	}
 
+ out:
 	i_mmap_unlock_read(mapping);
 
 	if (bh.b_end_io)
 		bh.b_end_io(&bh, 1);
 
-	if (length == -ENOMEM)
-		return VM_FAULT_OOM | major;
-	/* -EBUSY is fine, somebody else faulted on the same PMD */
-	if ((length < 0) && (length != -EBUSY))
-		return VM_FAULT_SIGBUS | major;
-	return VM_FAULT_NOPAGE | major;
+	return result;
 
  fallback:
-	i_mmap_unlock_read(mapping);
-	return VM_FAULT_FALLBACK | major;
-
- sigbus:
-	i_mmap_unlock_read(mapping);
-	return VM_FAULT_SIGBUS | major;
+	count_vm_event(THP_FAULT_FALLBACK);
+	result = VM_FAULT_FALLBACK;
+	goto out;
 }
 
 /**

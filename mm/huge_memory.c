@@ -840,27 +840,20 @@ static int insert_pfn_pmd(struct vm_area_struct *vma, unsigned long addr,
 			pmd_t *pmd, unsigned long pfn, pgprot_t prot)
 {
 	struct mm_struct *mm = vma->vm_mm;
-	int retval;
 	pmd_t entry;
 	spinlock_t *ptl;
 
 	ptl = pmd_lock(mm, pmd);
-	retval = -EBUSY;
-	if (!pmd_none(*pmd))
-		goto out_unlock;
-
-	/* Ok, finally just insert the thing.. */
-	entry = pmd_mkspecial(pmd_mkhuge(pfn_pmd(pfn, prot)));
-	set_pmd_at(mm, addr, pmd, entry);
-	update_mmu_cache_pmd(vma, addr, pmd);
-
-	retval = 0;
- out_unlock:
+	if (pmd_none(*pmd)) {
+		entry = pmd_mkspecial(pmd_mkhuge(pfn_pmd(pfn, prot)));
+		set_pmd_at(mm, addr, pmd, entry);
+		update_mmu_cache_pmd(vma, addr, pmd);
+	}
 	spin_unlock(ptl);
-	return retval;
+	return VM_FAULT_NOPAGE;
 }
 
-int vm_insert_pfn_pmd(struct vm_area_struct *vma, unsigned long addr,
+int vmf_insert_pfn_pmd(struct vm_area_struct *vma, unsigned long addr,
 					pmd_t *pmd, unsigned long pfn)
 {
 	pgprot_t pgprot = vma->vm_page_prot;
@@ -877,12 +870,12 @@ int vm_insert_pfn_pmd(struct vm_area_struct *vma, unsigned long addr,
 	BUG_ON((vma->vm_flags & VM_MIXEDMAP) && pfn_valid(pfn));
 
 	if (addr < vma->vm_start || addr >= vma->vm_end)
-		return -EFAULT;
+		return VM_FAULT_SIGBUS;
 	if (track_pfn_insert(vma, &pgprot, pfn))
-		return -EINVAL;
+		return VM_FAULT_SIGBUS;
 	return insert_pfn_pmd(vma, addr, pmd, pfn, pgprot);
 }
-EXPORT_SYMBOL(vm_insert_pfn_pmd);
+EXPORT_SYMBOL(vmf_insert_pfn_pmd);
 
 int copy_huge_pmd(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		  pmd_t *dst_pmd, pmd_t *src_pmd, unsigned long addr,
