@@ -5224,6 +5224,7 @@ static void beiscsi_quiesce(struct beiscsi_hba *phba,
 			free_irq(phba->pcidev->irq, phba);
 		}
 	pci_disable_msix(phba->pcidev);
+	cancel_delayed_work_sync(&phba->beiscsi_hw_check_task);
 
 	for (i = 0; i < phba->num_cpus; i++) {
 		pbe_eq = &phwi_context->be_eq[i];
@@ -5245,7 +5246,6 @@ static void beiscsi_quiesce(struct beiscsi_hba *phba,
 		hwi_cleanup(phba);
 	}
 
-	cancel_delayed_work_sync(&phba->beiscsi_hw_check_task);
 }
 
 static void beiscsi_remove(struct pci_dev *pcidev)
