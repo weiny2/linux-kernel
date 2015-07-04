@@ -2110,7 +2110,7 @@ unsigned int beiscsi_process_cq(struct be_eq_obj *pbe_eq)
 		cri_index = BE_GET_CRI_FROM_CID(cid);
 		ep = phba->ep_array[cri_index];
 
-		if (ep == NULL) {
+		if (unlikely(ep == NULL)) {
 			/* connection has already been freed
 			 * just move on to next one
 			 */
