@@ -279,6 +279,12 @@ struct be_cmd_resp_eq_create {
 	u16 rsvd0;		/* sword */
 } __packed;
 
+struct be_set_eqd {
+	u32 eq_id;
+	u32 phase;
+	u32 delay_multiplier;
+} __packed;
+
 struct mgmt_chap_format {
 	u32 flags;
 	u8  intr_chap_name[256];
@@ -630,7 +636,7 @@ struct be_cmd_req_modify_eq_delay {
 		__le32 eq_id;
 		__le32 phase;
 		__le32 delay_multiplier;
-	} delay[8];
+	} delay[MAX_CPUS];
 } __packed;
 
 /******************** Get MAC ADDR *******************/
@@ -716,6 +722,8 @@ unsigned int be_cmd_get_port_speed(struct beiscsi_hba *phba);
 
 void free_mcc_tag(struct be_ctrl_info *ctrl, unsigned int tag);
 
+int be_cmd_modify_eq_delay(struct beiscsi_hba *phba, struct be_set_eqd *,
+			    int num);
 int beiscsi_mccq_compl(struct beiscsi_hba *phba,
 			uint32_t tag, struct be_mcc_wrb **wrb,
 			struct be_dma_mem *mbx_cmd_mem);
