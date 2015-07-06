@@ -885,9 +885,8 @@ static int physical_transition_allowed(int old, int new)
 static int port_states_transition_allowed(struct hfi1_pportdata *ppd,
 					  u32 logical_new, u32 physical_new)
 {
-	struct hfi1_devdata *dd = ppd->dd;
-	u32 physical_old = chip_to_opa_pstate(dd, read_physical_state(dd));
-	u32 logical_old = get_logical_state(ppd);
+	u32 physical_old = driver_physical_state(ppd);
+	u32 logical_old = driver_logical_state(ppd);
 	int ret, logical_allowed, physical_allowed;
 
 	logical_allowed = ret =

@@ -671,6 +671,8 @@ u32 chip_to_opa_pstate(struct hfi1_devdata *dd, u32 chip_pstate);
 u32 get_logical_state(struct hfi1_pportdata *ppd);
 const char *opa_lstate_name(u32 lstate);
 const char *opa_pstate_name(u32 pstate);
+u32 driver_physical_state(struct hfi1_pportdata *ppd);
+u32 driver_logical_state(struct hfi1_pportdata *ppd);
 
 int acquire_lcb_access(struct hfi1_devdata *dd, int sleep_ok);
 int release_lcb_access(struct hfi1_devdata *dd, int sleep_ok);
