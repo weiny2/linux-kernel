@@ -269,6 +269,13 @@ class HostInfo:
 
         return None #error if we got to here
 
+    def file_exists(self, path):
+        cmd = "test -e " + path
+        (err, out) = self.send_ssh(cmd)
+        if err:
+            return False
+        return True
+
     def wait_for_socket(self, port, state, timeout=1, attempts=60):
         """ Waits for the socket at the given port to reach a specific state"""
 
@@ -419,16 +426,17 @@ class TestInfo:
         return self.fpga
 
     def get_mpi_dir(self):
-        if os.path.exists("/usr/mpi/gcc/openmpi-1.8.5/bin/mpirun"):
+        host = self.get_host_record(0)
+        if host.file_exists("/usr/mpi/gcc/openmpi-1.8.5/bin/mpirun"):
             self.mpiverbs_path = "/usr/mpi/gcc/openmpi-1.8.5"
-	elif os.path.exists("/usr/mpi/gcc/openmpi-1.8.2a1/bin/mpirun"):
+	elif host.file_exists("/usr/mpi/gcc/openmpi-1.8.2a1/bin/mpirun"):
             self.mpiverbs_path = "/usr/mpi/gcc/openmpi-1.8.2a1"
         else:
             test_log(0, "could not find verbs MPI path")
 
-        if os.path.exists("/usr/mpi/gcc/openmpi-1.8.5-hfi/bin/mpirun"):
+        if host.file_exists("/usr/mpi/gcc/openmpi-1.8.5-hfi/bin/mpirun"):
             self.mpipsm_path = "/usr/mpi/gcc/openmpi-1.8.5-hfi"
-	elif os.path.exists("/usr/mpi/gcc/openmpi-1.8.2a1-hfi/bin/mpirun"):
+	elif host.file_exists("/usr/mpi/gcc/openmpi-1.8.2a1-hfi/bin/mpirun"):
             self.mpipsm_path = "/usr/mpi/gcc/openmpi-1.8.2a1-hfi"
         else:
             test_log(0, "could not find PSM MPI path")
