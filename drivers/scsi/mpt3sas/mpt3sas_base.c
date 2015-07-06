@@ -1363,7 +1363,7 @@ _base_build_sg_scmd_ieee(struct MPT3SAS_ADAPTER *ioc,
 
 	sg_scmd = scsi_sglist(scmd);
 	sges_left = scsi_dma_map(scmd);
-	if (!sges_left) {
+	if (sges_left < 0) {
 		sdev_printk(KERN_ERR, scmd->device,
 			"pci_map_sg failed: request for %d bytes!\n",
 			scsi_bufflen(scmd));
@@ -1432,7 +1432,7 @@ _base_build_sg_scmd_ieee(struct MPT3SAS_ADAPTER *ioc,
  fill_in_last_segment:
 
 	/* fill the last segment */
-	while (sges_left) {
+	while (sges_left > 0) {
 		if (sges_left == 1)
 			_base_add_sg_single_ieee(sg_local,
 			    simple_sgl_flags_last, 0, sg_dma_len(sg_scmd),
@@ -1816,6 +1816,36 @@ _base_enable_msix(struct MPT3SAS_ADAPTER *ioc)
 }
 
 /**
+ * mpt3sas_base_unmap_resources - free controller resources
+ * @ioc: per adapter object
+ */
+void
+mpt3sas_base_unmap_resources(struct MPT3SAS_ADAPTER *ioc)
+{
+	struct pci_dev *pdev = ioc->pdev;
+
+	dexitprintk(ioc, printk(MPT3SAS_FMT "%s\n",
+		ioc->name, __func__));
+
+	_base_free_irq(ioc);
+	_base_disable_msix(ioc);
+
+	if (ioc->msix96_vector)
+		kfree(ioc->replyPostRegisterIndex);
+
+	if (ioc->chip_phys) {
+		iounmap(ioc->chip);
+		ioc->chip_phys = 0;
+	}
+
+	if (pci_is_enabled(pdev)) {
+		pci_release_selected_regions(ioc->pdev, ioc->bars);
+		pci_disable_pcie_error_reporting(pdev);
+		pci_disable_device(pdev);
+	}
+}
+
+/**
  * mpt3sas_base_map_resources - map in controller resources (io/irq/memap)
  * @ioc: per adapter object
  *
@@ -1948,14 +1978,7 @@ mpt3sas_base_map_resources(struct MPT3SAS_ADAPTER *ioc)
 	return 0;
 
  out_fail:
-	if (ioc->chip_phys)
-		iounmap(ioc->chip);
-	ioc->chip_phys = 0;
-	pci_release_selected_regions(ioc->pdev, ioc->bars);
-	pci_disable_pcie_error_reporting(pdev);
-	pci_disable_device(pdev);
-	if (ioc->msix96_vector)
-		kfree(ioc->replyPostRegisterIndex);
+	mpt3sas_base_unmap_resources(ioc);
 	return r;
 }
 
@@ -2345,6 +2368,99 @@ _base_display_intel_branding(struct MPT3SAS_ADAPTER *ioc)
 
 
 /**
+ * _base_display_dell_branding - Display branding string
+ * @ioc: per adapter object
+ *
+ * Return nothing.
+ */
+static void
+_base_display_dell_branding(struct MPT3SAS_ADAPTER *ioc)
+{
+	if (ioc->pdev->subsystem_vendor != PCI_VENDOR_ID_DELL)
+		return;
+
+	switch (ioc->pdev->device) {
+	case MPI25_MFGPAGE_DEVID_SAS3008:
+		switch (ioc->pdev->subsystem_device) {
+		case MPT3SAS_DELL_12G_HBA_SSDID:
+			pr_info(MPT3SAS_FMT "%s\n", ioc->name,
+				MPT3SAS_DELL_12G_HBA_BRANDING);
+			break;
+		default:
+			pr_info(MPT3SAS_FMT
+			   "Dell 12Gbps HBA: Subsystem ID: 0x%X\n", ioc->name,
+			   ioc->pdev->subsystem_device);
+			break;
+		}
+		break;
+	default:
+		pr_info(MPT3SAS_FMT
+			"Dell 12Gbps HBA: Subsystem ID: 0x%X\n", ioc->name,
+			ioc->pdev->subsystem_device);
+		break;
+	}
+}
+
+/**
+ * _base_display_cisco_branding - Display branding string
+ * @ioc: per adapter object
+ *
+ * Return nothing.
+ */
+static void
+_base_display_cisco_branding(struct MPT3SAS_ADAPTER *ioc)
+{
+	if (ioc->pdev->subsystem_vendor != PCI_VENDOR_ID_CISCO)
+		return;
+
+	switch (ioc->pdev->device) {
+	case MPI25_MFGPAGE_DEVID_SAS3008:
+		switch (ioc->pdev->subsystem_device) {
+		case MPT3SAS_CISCO_12G_8E_HBA_SSDID:
+			pr_info(MPT3SAS_FMT "%s\n", ioc->name,
+				MPT3SAS_CISCO_12G_8E_HBA_BRANDING);
+			break;
+		case MPT3SAS_CISCO_12G_8I_HBA_SSDID:
+			pr_info(MPT3SAS_FMT "%s\n", ioc->name,
+				MPT3SAS_CISCO_12G_8I_HBA_BRANDING);
+			break;
+		case MPT3SAS_CISCO_12G_AVILA_HBA_SSDID:
+			pr_info(MPT3SAS_FMT "%s\n", ioc->name,
+				MPT3SAS_CISCO_12G_AVILA_HBA_BRANDING);
+			break;
+		default:
+			pr_info(MPT3SAS_FMT
+			  "Cisco 12Gbps SAS HBA: Subsystem ID: 0x%X\n",
+			  ioc->name, ioc->pdev->subsystem_device);
+			break;
+		}
+		break;
+	case MPI25_MFGPAGE_DEVID_SAS3108_1:
+		switch (ioc->pdev->subsystem_device) {
+		case MPT3SAS_CISCO_12G_AVILA_HBA_SSDID:
+			pr_info(MPT3SAS_FMT "%s\n", ioc->name,
+			MPT3SAS_CISCO_12G_AVILA_HBA_BRANDING);
+			break;
+		case MPT3SAS_CISCO_12G_COLUSA_MEZZANINE_HBA_SSDID:
+			pr_info(MPT3SAS_FMT "%s\n", ioc->name,
+			MPT3SAS_CISCO_12G_COLUSA_MEZZANINE_HBA_BRANDING);
+			break;
+		default:
+			pr_info(MPT3SAS_FMT
+			 "Cisco 12Gbps SAS HBA: Subsystem ID: 0x%X\n",
+			 ioc->name, ioc->pdev->subsystem_device);
+			break;
+		}
+		break;
+	default:
+		 pr_info(MPT3SAS_FMT
+			"Cisco 12Gbps SAS HBA: Subsystem ID: 0x%X\n",
+			ioc->name, ioc->pdev->subsystem_device);
+		break;
+	}
+}
+
+/**
  * _base_display_ioc_capabilities - Disply IOC's capabilities.
  * @ioc: per adapter object
  *
@@ -2374,6 +2490,8 @@ _base_display_ioc_capabilities(struct MPT3SAS_ADAPTER *ioc)
 	    bios_version & 0x000000FF);
 
 	_base_display_intel_branding(ioc);
+	_base_display_dell_branding(ioc);
+	_base_display_cisco_branding(ioc);
 
 	pr_info(MPT3SAS_FMT "Protocol=(", ioc->name);
 
@@ -3193,6 +3311,9 @@ _base_wait_on_iocstate(struct MPT3SAS_ADAPTER *ioc, u32 ioc_state, int timeout,
  * Notes: MPI2_HIS_IOC2SYS_DB_STATUS - set to one when IOC writes to doorbell.
  */
 static int
+_base_diag_reset(struct MPT3SAS_ADAPTER *ioc, int sleep_flag);
+
+static int
 _base_wait_for_doorbell_int(struct MPT3SAS_ADAPTER *ioc, int timeout,
 	int sleep_flag)
 {
@@ -3735,6 +3856,64 @@ _base_get_port_facts(struct MPT3SAS_ADAPTER *ioc, int port, int sleep_flag)
 }
 
 /**
+ * _base_wait_for_iocstate - Wait until the card is in READY or OPERATIONAL
+ * @ioc: per adapter object
+ * @timeout:
+ * @sleep_flag: CAN_SLEEP or NO_SLEEP
+ *
+ * Returns 0 for success, non-zero for failure.
+ */
+static int
+_base_wait_for_iocstate(struct MPT3SAS_ADAPTER *ioc, int timeout,
+	int sleep_flag)
+{
+	u32 ioc_state;
+	int rc;
+
+	dinitprintk(ioc, printk(MPT3SAS_FMT "%s\n", ioc->name,
+	    __func__));
+
+	if (ioc->pci_error_recovery) {
+		dfailprintk(ioc, printk(MPT3SAS_FMT
+		    "%s: host in pci error recovery\n", ioc->name, __func__));
+		return -EFAULT;
+	}
+
+	ioc_state = mpt3sas_base_get_iocstate(ioc, 0);
+	dhsprintk(ioc, printk(MPT3SAS_FMT "%s: ioc_state(0x%08x)\n",
+	    ioc->name, __func__, ioc_state));
+
+	if (((ioc_state & MPI2_IOC_STATE_MASK) == MPI2_IOC_STATE_READY) ||
+	    (ioc_state & MPI2_IOC_STATE_MASK) == MPI2_IOC_STATE_OPERATIONAL)
+		return 0;
+
+	if (ioc_state & MPI2_DOORBELL_USED) {
+		dhsprintk(ioc, printk(MPT3SAS_FMT
+		    "unexpected doorbell active!\n", ioc->name));
+		goto issue_diag_reset;
+	}
+
+	if ((ioc_state & MPI2_IOC_STATE_MASK) == MPI2_IOC_STATE_FAULT) {
+		mpt3sas_base_fault_info(ioc, ioc_state &
+		    MPI2_DOORBELL_DATA_MASK);
+		goto issue_diag_reset;
+	}
+
+	ioc_state = _base_wait_on_iocstate(ioc, MPI2_IOC_STATE_READY,
+	    timeout, sleep_flag);
+	if (ioc_state) {
+		dfailprintk(ioc, printk(MPT3SAS_FMT
+		    "%s: failed going to ready state (ioc_state=0x%x)\n",
+		    ioc->name, __func__, ioc_state));
+		return -EFAULT;
+	}
+
+ issue_diag_reset:
+	rc = _base_diag_reset(ioc, sleep_flag);
+	return rc;
+}
+
+/**
  * _base_get_ioc_facts - obtain ioc facts reply and save in ioc
  * @ioc: per adapter object
  * @sleep_flag: CAN_SLEEP or NO_SLEEP
@@ -3752,6 +3931,13 @@ _base_get_ioc_facts(struct MPT3SAS_ADAPTER *ioc, int sleep_flag)
 	dinitprintk(ioc, pr_info(MPT3SAS_FMT "%s\n", ioc->name,
 	    __func__));
 
+	r = _base_wait_for_iocstate(ioc, 10, sleep_flag);
+	if (r) {
+		dfailprintk(ioc, printk(MPT3SAS_FMT
+		    "%s: failed getting to correct state\n",
+		    ioc->name, __func__));
+		return r;
+	}
 	mpi_reply_sz = sizeof(Mpi2IOCFactsReply_t);
 	mpi_request_sz = sizeof(Mpi2IOCFactsRequest_t);
 	memset(&mpi_request, 0, mpi_request_sz);
@@ -3837,7 +4023,7 @@ _base_send_ioc_init(struct MPT3SAS_ADAPTER *ioc, int sleep_flag)
 	mpi_request.WhoInit = MPI2_WHOINIT_HOST_DRIVER;
 	mpi_request.VF_ID = 0; /* TODO */
 	mpi_request.VP_ID = 0;
-	mpi_request.MsgVersion = cpu_to_le16(MPI2_VERSION);
+	mpi_request.MsgVersion = cpu_to_le16(MPI25_VERSION);
 	mpi_request.HeaderVersion = cpu_to_le16(MPI2_HEADER_VERSION);
 
 	if (_base_is_controller_msix_enabled(ioc))
@@ -4625,8 +4811,6 @@ _base_make_ioc_operational(struct MPT3SAS_ADAPTER *ioc, int sleep_flag)
 void
 mpt3sas_base_free_resources(struct MPT3SAS_ADAPTER *ioc)
 {
-	struct pci_dev *pdev = ioc->pdev;
-
 	dexitprintk(ioc, pr_info(MPT3SAS_FMT "%s\n", ioc->name,
 	    __func__));
 
@@ -4637,21 +4821,7 @@ mpt3sas_base_free_resources(struct MPT3SAS_ADAPTER *ioc)
 		ioc->shost_recovery = 0;
 	}
 
-	_base_free_irq(ioc);
-	_base_disable_msix(ioc);
-
-	if (ioc->msix96_vector)
-		kfree(ioc->replyPostRegisterIndex);
-
-	if (ioc->chip_phys && ioc->chip)
-		iounmap(ioc->chip);
-	ioc->chip_phys = 0;
-
-	if (pci_is_enabled(pdev)) {
-		pci_release_selected_regions(ioc->pdev, ioc->bars);
-		pci_disable_pcie_error_reporting(pdev);
-		pci_disable_device(pdev);
-	}
+	mpt3sas_base_unmap_resources(ioc);
 	return;
 }
 
@@ -4722,7 +4892,6 @@ mpt3sas_base_attach(struct MPT3SAS_ADAPTER *ioc)
 	ioc->build_sg_scmd = &_base_build_sg_scmd_ieee;
 	ioc->build_sg = &_base_build_sg_ieee;
 	ioc->build_zero_len_sge = &_base_build_zero_len_sge_ieee;
-	ioc->mpi25 = 1;
 	ioc->sge_size_ieee = sizeof(Mpi2IeeeSgeSimple64_t);
 
 	/*

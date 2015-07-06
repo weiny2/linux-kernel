@@ -71,8 +71,8 @@
 #define MPT3SAS_DRIVER_NAME		"mpt3sas"
 #define MPT3SAS_AUTHOR "Avago Technologies <MPT-FusionLinux.pdl@avagotech.com>"
 #define MPT3SAS_DESCRIPTION	"LSI MPT Fusion SAS 3.0 Device Driver"
-#define MPT3SAS_DRIVER_VERSION		"04.100.00.00"
-#define MPT3SAS_MAJOR_VERSION		4
+#define MPT3SAS_DRIVER_VERSION		"09.100.00.00"
+#define MPT3SAS_MAJOR_VERSION		9
 #define MPT3SAS_MINOR_VERSION		100
 #define MPT3SAS_BUILD_VERSION		0
 #define MPT3SAS_RELEASE_VERSION	00
@@ -152,6 +152,36 @@
 #define MPT3SAS_INTEL_RS3UC080_SSDID    0x3524
 
 /*
+ * Dell HBA branding
+ */
+#define MPT3SAS_DELL_12G_HBA_BRANDING       \
+	"Dell 12Gbps HBA"
+
+/*
+ * Dell HBA SSDIDs
+ */
+#define MPT3SAS_DELL_12G_HBA_SSDID	0x1F46
+
+/*
+ * Cisco HBA branding
+ */
+#define MPT3SAS_CISCO_12G_8E_HBA_BRANDING		\
+		"Cisco 9300-8E 12G SAS HBA"
+#define MPT3SAS_CISCO_12G_8I_HBA_BRANDING		\
+		"Cisco 9300-8i 12G SAS HBA"
+#define MPT3SAS_CISCO_12G_AVILA_HBA_BRANDING	\
+		"Cisco 12G Modular SAS Pass through Controller"
+#define MPT3SAS_CISCO_12G_COLUSA_MEZZANINE_HBA_BRANDING		\
+		"UCS C3X60 12G SAS Pass through Controller"
+/*
+ * Cisco HBA SSSDIDs
+ */
+#define MPT3SAS_CISCO_12G_8E_HBA_SSDID  0x14C
+#define MPT3SAS_CISCO_12G_8I_HBA_SSDID  0x154
+#define MPT3SAS_CISCO_12G_AVILA_HBA_SSDID  0x155
+#define MPT3SAS_CISCO_12G_COLUSA_MEZZANINE_HBA_SSDID  0x156
+
+/*
  * status bits for ioc->diag_buffer_status
  */
 #define MPT3_DIAG_BUFFER_IS_REGISTERED	(0x01)
@@ -179,6 +209,8 @@
 #define MFG10_GF0_R10_DISPLAY                  (0x00000004)
 #define MFG10_GF0_SSD_DATA_SCRUB_DISABLE       (0x00000008)
 #define MFG10_GF0_SINGLE_DRIVE_R0              (0x00000010)
+
+#define VIRTUAL_IO_FAILED_RETRY			(0x32010081)
 
 /* OEM Specific Flags will come from OEM specific header files */
 struct Mpi2ManufacturingPage10_t {
@@ -301,7 +333,8 @@ struct _internal_cmd {
  * @responding: used in _scsih_sas_device_mark_responding
  * @fast_path: fast path feature enable bit
  * @pfa_led_on: flag for PFA LED status
- *
+ * @pend_sas_rphy_add: flag to check if device is in sas_rphy_add()
+ *	addition routine.
  */
 struct _sas_device {
 	struct list_head list;
@@ -322,6 +355,9 @@ struct _sas_device {
 	u8	responding;
 	u8	fast_path;
 	u8	pfa_led_on;
+	u8	pend_sas_rphy_add;
+	u8	enclosure_level;
+	u8	connector_name[4];
 };
 
 /**
@@ -822,7 +858,6 @@ struct MPT3SAS_ADAPTER {
 	MPT_BUILD_SG_SCMD build_sg_scmd;
 	MPT_BUILD_SG    build_sg;
 	MPT_BUILD_ZERO_LEN_SGE build_zero_len_sge;
-	u8              mpi25;
 	u16             sge_size_ieee;
 
 	/* function ptr for MPI sg elements only */
