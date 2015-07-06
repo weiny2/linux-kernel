@@ -776,6 +776,7 @@ void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 	u32 nwords;
 	u32 extra_bytes;
 	u8 sc5;
+	u32 bth1;
 
 	/* Construct the header. */
 	extra_bytes = -qp->s_cur_size & 3;
@@ -823,10 +824,13 @@ void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 	bth0 |= hfi1_get_pkey(ibp, qp->s_pkey_index);
 	bth0 |= extra_bytes << 20;
 	ohdr->bth[0] = cpu_to_be32(bth0);
-	ohdr->bth[1] = cpu_to_be32(qp->remote_qpn);
-	if (test_and_clear_bit(HFI1_S_ECN, &qp->s_aflags))
+	bth1 = qp->remote_qpn;
+	if (qp->s_flags & HFI1_S_ECN) {
+		qp->s_flags &= ~HFI1_S_ECN;
 		/* we recently received a FECN, so return a BECN */
-		ohdr->bth[1] |= cpu_to_be32(HFI1_BECN_MASK << HFI1_BECN_SHIFT);
+		bth1 |= (HFI1_BECN_MASK << HFI1_BECN_SHIFT);
+	}
+	ohdr->bth[1] = cpu_to_be32(bth1);
 	ohdr->bth[2] = cpu_to_be32(bth2);
 }
 

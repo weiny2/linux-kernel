@@ -258,9 +258,14 @@ unlock:
  * for the given QP.
  * Called at interrupt level.
  */
-void hfi1_uc_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
-		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp)
+void hfi1_uc_rcv(struct hfi1_packet *packet)
 {
+	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
+	struct hfi1_ib_header *hdr = packet->hdr;
+	u32 rcv_flags = packet->rcv_flags;
+	void *data = packet->ebuf;
+	u32 tlen = packet->tlen;
+	struct hfi1_qp *qp = packet->qp;
 	struct hfi1_other_headers *ohdr;
 	u32 opcode;
 	u32 hdrsize;

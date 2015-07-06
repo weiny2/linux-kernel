@@ -431,6 +431,8 @@ static inline u32 init_packet(struct hfi1_ctxtdata *rcd,
 	packet->rhf = rhf_to_cpu(packet->rhf_addr);
 	packet->rhqoff = rcd->head;
 	packet->numpkt = 1;
+	packet->rcv_flags = 0;
+	packet->has_grh = 0;
 	return packet->rhqoff;
 
 }

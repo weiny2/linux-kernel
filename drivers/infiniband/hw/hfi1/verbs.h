@@ -537,7 +537,6 @@ struct hfi1_qp {
 	struct hfi1_rq r_rq;             /* receive work queue */
 
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
-	unsigned long s_aflags;
 	struct hfi1_sge_state *s_cur_sge;
 	u32 s_flags;
 	struct hfi1_swqe *s_wqe;
@@ -572,6 +571,7 @@ struct hfi1_qp {
 	u8 s_rnr_retry;         /* requester RNR retry counter */
 	u8 s_num_rd_atomic;     /* number of RDMA read/atomic pending */
 	u8 s_tail_ack_queue;    /* index into s_ack_queue[] */
+	u8 allowed_ops;		/* high order bits of allowed opcodes */
 
 	struct hfi1_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
@@ -587,11 +587,6 @@ struct hfi1_qp {
  */
 #define HFI1_R_WRID_VALID        0
 #define HFI1_R_REWIND_SGE        1
-
-/*
- * Atomic bit definitions for s_aflags.
- */
-#define HFI1_S_ECN		0
 
 /*
  * Bit definitions for r_flags.
@@ -624,6 +619,7 @@ struct hfi1_qp {
  * HFI1_S_WAIT_PSN - waiting for a packet to exit the send DMA queue
  * HFI1_S_WAIT_ACK - waiting for an ACK packet before sending more requests
  * HFI1_S_SEND_ONE - send one packet, request ACK, then wait for ACK
+ * HFI1_S_ECN - a BECN was queued to the send engine
  */
 #define HFI1_S_SIGNAL_REQ_WR	0x0001
 #define HFI1_S_BUSY		0x0002
@@ -645,6 +641,7 @@ struct hfi1_qp {
 #define HFI1_S_UNLIMITED_CREDIT	0x20000
 #define HFI1_S_AHG_VALID		0x40000
 #define HFI1_S_AHG_CLEAR		0x80000
+#define HFI1_S_ECN		0x100000
 
 /*
  * Wait flags that would prevent any packet type from being sent.
@@ -915,6 +912,9 @@ void hfi1_free_agents(struct hfi1_ibdev *dev);
 #endif
 #define PSN_MODIFY_MASK 0xFFFFFF
 
+/* Number of bits to pay attention to in the opcode for checking qp type */
+#define OPCODE_QP_MASK 0xE0
+
 /*
  * Compare the lower 24 bits of the msn values.
  * Returns an integer <, ==, or > than zero.
@@ -968,11 +968,11 @@ void hfi1_copy_sge(struct hfi1_sge_state *ss, void *data, u32 length,
 
 void hfi1_skip_sge(struct hfi1_sge_state *ss, u32 length, int release);
 
-void hfi1_uc_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
-		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
+void hfi1_cnp_rcv(struct hfi1_packet *packet);
 
-void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
-		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
+void hfi1_uc_rcv(struct hfi1_packet *packet);
+
+void hfi1_rc_rcv(struct hfi1_packet *packet);
 
 void hfi1_rc_hdrerr(
 	struct hfi1_ctxtdata *rcd,
@@ -992,8 +992,7 @@ void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr);
 
 void hfi1_rc_error(struct hfi1_qp *qp, enum ib_wc_status err);
 
-void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
-		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp);
+void hfi1_ud_rcv(struct hfi1_packet *packet);
 
 int hfi1_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey);
 
@@ -1139,8 +1138,6 @@ void hfi1_unregister_ib_device(struct hfi1_devdata *);
 void hfi1_ib_rcv(struct hfi1_packet *packet);
 
 unsigned hfi1_get_npkeys(struct hfi1_devdata *);
-
-unsigned hfi1_get_pkey(struct hfi1_ibport *, unsigned);
 
 int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *hdr,
 			u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
