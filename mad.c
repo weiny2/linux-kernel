@@ -2222,13 +2222,14 @@ static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
-static void a0_portstatus(struct hfi1_devdata *dd,
+static void a0_portstatus(struct hfi1_pportdata *ppd,
 			  struct opa_port_status_rsp *rsp, u32 vl_select_mask)
 {
-	if (!is_bx(dd)) {
+	if (!is_bx(ppd->dd)) {
 		unsigned long vl;
 		int vfi = 0;
-		u64 sum_vl_xmit_wait = 0;
+		u64 max_vl_xmit_wait = 0, tmp;
+		u32 vl_all_mask = VL_MASK_ALL;
 		u64 rcv_data, rcv_bubble;
 
 		rcv_data = be64_to_cpu(rsp->port_rcv_data);
@@ -2255,20 +2256,14 @@ static void a0_portstatus(struct hfi1_devdata *dd,
 			vfi++;
 		}
 
-		vfi = 0;
-		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
-				 8 * sizeof(vl_select_mask)) {
-			u64 tmp = sum_vl_xmit_wait +
-				be64_to_cpu(rsp->vls[vfi++].port_vl_xmit_wait);
-			if (tmp < sum_vl_xmit_wait) {
-				/* we wrapped */
-				sum_vl_xmit_wait = (u64) ~0;
-				break;
-			}
-			sum_vl_xmit_wait = tmp;
+		for_each_set_bit(vl, (unsigned long *)&(vl_all_mask),
+				 8 * sizeof(vl_all_mask)) {
+			tmp = read_port_cntr(ppd, C_TX_WAIT_VL,
+					     idx_from_vl(vl));
+			if (tmp > max_vl_xmit_wait)
+				max_vl_xmit_wait = tmp;
 		}
-		if (be64_to_cpu(rsp->port_xmit_wait) > sum_vl_xmit_wait)
-			rsp->port_xmit_wait = cpu_to_be64(sum_vl_xmit_wait);
+		rsp->port_xmit_wait = cpu_to_be64(max_vl_xmit_wait);
 	}
 }
 
@@ -2427,7 +2422,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 		vfi++;
 	}
 
-	a0_portstatus(dd, rsp, vl_select_mask);
+	a0_portstatus(ppd, rsp, vl_select_mask);
 
 	return reply((struct ib_mad_hdr *)pmp);
 }
