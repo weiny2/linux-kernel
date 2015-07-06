@@ -240,6 +240,11 @@ normal:
 
 bail:
 	qp->s_ack_state = OP(ACKNOWLEDGE);
+	/*
+	 * Ensure s_rdma_ack_cnt changes are committed prior to resetting
+	 * HFI1_S_RESP_PENDING
+	 */
+	smp_wmb();
 	qp->s_flags &= ~(HFI1_S_RESP_PENDING
 				| HFI1_S_ACK_PENDING
 				| HFI1_S_AHG_VALID);
@@ -692,18 +697,17 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct hfi1_qp *qp,
 	struct pio_buf *pbuf;
 	struct hfi1_ib_header hdr;
 	struct hfi1_other_headers *ohdr;
-	unsigned long flags;
-
-	spin_lock_irqsave(&qp->s_lock, flags);
-
-	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK))
-		goto unlock;
 
 	/* Don't send ACK or NAK if a RDMA read or atomic is pending. */
-	if ((qp->s_flags & HFI1_S_RESP_PENDING) || qp->s_rdma_ack_cnt)
+	if (qp->s_flags & HFI1_S_RESP_PENDING)
 		goto queue_ack;
 
-	/* Construct the header with s_lock held so APM doesn't change it. */
+	/* Ensure s_rdma_ack_cnt changes are committed */
+	smp_read_barrier_depends();
+	if (qp->s_rdma_ack_cnt)
+		goto queue_ack;
+
+	/* Construct the header */
 	/* header size in 32-bit words LRH+BTH+AETH = (8+12+4)/4 */
 	hwords = 6;
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
@@ -738,11 +742,9 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct hfi1_qp *qp,
 	ohdr->bth[1] |= cpu_to_be32((!!is_fecn) << HFI1_BECN_SHIFT);
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->r_ack_psn));
 
-	spin_unlock_irqrestore(&qp->s_lock, flags);
-
 	/* Don't try to send ACKs if the link isn't ACTIVE */
 	if (driver_lstate(ppd) != IB_PORT_ACTIVE)
-		goto done;
+		return;
 
 	sc = rcd->sc;
 	plen = 2 /* PBC */ + hwords;
@@ -757,7 +759,6 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct hfi1_qp *qp,
 		 * so that when enough buffer space becomes available,
 		 * the ACK is sent ahead of other outgoing packets.
 		 */
-		spin_lock_irqsave(&qp->s_lock, flags);
 		goto queue_ack;
 	}
 
@@ -766,24 +767,18 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct hfi1_qp *qp,
 	/* write the pbc and data */
 	ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc, &hdr, hwords);
 
-	goto done;
+	return;
 
 queue_ack:
-	if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) {
 		this_cpu_inc(*ibp->rc_qacks);
 		qp->s_flags |= HFI1_S_ACK_PENDING | HFI1_S_RESP_PENDING;
 		qp->s_nak_state = qp->r_nak_state;
 		qp->s_ack_psn = qp->r_ack_psn;
 		if (is_fecn)
-			set_bit(HFI1_S_ECN, &qp->s_aflags);
+			qp->s_flags |= HFI1_S_ECN;
 
 		/* Schedule the send tasklet. */
 		hfi1_schedule_send(qp);
-	}
-unlock:
-	spin_unlock_irqrestore(&qp->s_lock, flags);
-done:
-	return;
 }
 
 /**
@@ -1934,9 +1929,14 @@ void process_becn(struct hfi1_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
  * for the given QP.
  * Called at interrupt level.
  */
-void hfi1_rc_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
-		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp)
+void hfi1_rc_rcv(struct hfi1_packet *packet)
 {
+	struct hfi1_ctxtdata *rcd = packet->rcd;
+	struct hfi1_ib_header *hdr = packet->hdr;
+	u32 rcv_flags = packet->rcv_flags;
+	void *data = packet->ebuf;
+	u32 tlen = packet->tlen;
+	struct hfi1_qp *qp = packet->qp;
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	struct hfi1_other_headers *ohdr;

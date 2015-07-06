@@ -1020,7 +1020,6 @@ static int do_8051_command(struct hfi1_devdata *dd, u32 type, u64 in_data,
 static int read_idle_sma(struct hfi1_devdata *dd, u64 *data);
 static int thermal_init(struct hfi1_devdata *dd);
 
-static u32 read_physical_state(struct hfi1_devdata *dd);
 static int wait_logical_linkstate(struct hfi1_pportdata *ppd, u32 state,
 				  int msecs);
 static void read_planned_down_reason_code(struct hfi1_devdata *dd, u8 *pdrrc);
@@ -4559,7 +4558,7 @@ static irqreturn_t receive_context_interrupt(int irq, void *data)
 
 /* ========================================================================= */
 
-static u32 read_physical_state(struct hfi1_devdata *dd)
+u32 read_physical_state(struct hfi1_devdata *dd)
 {
 	u64 reg;
 
@@ -6260,6 +6259,64 @@ static const char *link_state_reason_name(struct hfi1_pportdata *ppd, u32 state)
 		}
 	}
 	return "";
+}
+
+/*
+ * driver_physical_state - convert the driver's notion of a port's
+ * state (an HLS_*) into a physical state (a {IB,OPA}_PORTPHYSSTATE_*).
+ * Return -1 (converted to a u32) to indicate error.
+ */
+u32 driver_physical_state(struct hfi1_pportdata *ppd)
+{
+	switch (ppd->host_link_state) {
+	case HLS_UP_INIT:
+	case HLS_UP_ARMED:
+	case HLS_UP_ACTIVE:
+		return IB_PORTPHYSSTATE_LINKUP;
+	case HLS_DN_POLL:
+		return IB_PORTPHYSSTATE_POLLING;
+	case HLS_DN_DISABLE:
+		return IB_PORTPHYSSTATE_DISABLED;
+	case HLS_DN_OFFLINE:
+		return OPA_PORTPHYSSTATE_OFFLINE;
+	case HLS_VERIFY_CAP:
+		return IB_PORTPHYSSTATE_POLLING;
+	case HLS_GOING_UP:
+		return IB_PORTPHYSSTATE_POLLING;
+	case HLS_GOING_OFFLINE:
+		return OPA_PORTPHYSSTATE_OFFLINE;
+	case HLS_LINK_COOLDOWN:
+		return OPA_PORTPHYSSTATE_OFFLINE;
+	case HLS_DN_DOWNDEF:
+	default:
+		dd_dev_err(ppd->dd, "invalid host_link_state 0x%x\n",
+			   ppd->host_link_state);
+		return  -1;
+	}
+}
+
+/*
+ * driver_logical_state - convert the driver's notion of a port's
+ * state (an HLS_*) into a logical state (a IB_PORT_*). Return -1
+ * (converted to a u32) to indicate error.
+ */
+u32 driver_logical_state(struct hfi1_pportdata *ppd)
+{
+	if (ppd->host_link_state && !(ppd->host_link_state & HLS_UP))
+		return IB_PORT_DOWN;
+
+	switch (ppd->host_link_state & HLS_UP) {
+	case HLS_UP_INIT:
+		return IB_PORT_INIT;
+	case HLS_UP_ARMED:
+		return IB_PORT_ARMED;
+	case HLS_UP_ACTIVE:
+		return IB_PORT_ACTIVE;
+	default:
+		dd_dev_err(ppd->dd, "invalid host_link_state 0x%x\n",
+			   ppd->host_link_state);
+	return -1;
+	}
 }
 
 void set_link_down_reason(struct hfi1_pportdata *ppd, u8 lcl_reason,
@@ -8250,7 +8307,7 @@ static u32 chip_to_opa_lstate(struct hfi1_devdata *dd, u32 chip_lstate)
 	}
 }
 
-static u32 chip_to_opa_pstate(struct hfi1_devdata *dd, u32 chip_pstate)
+u32 chip_to_opa_pstate(struct hfi1_devdata *dd, u32 chip_pstate)
 {
 	/* look at the HFI meta-states only */
 	switch (chip_pstate & 0xf0) {
@@ -8274,7 +8331,7 @@ static u32 chip_to_opa_pstate(struct hfi1_devdata *dd, u32 chip_pstate)
 }
 
 /* return the OPA port logical state name */
-static const char *opa_lstate_name(u32 lstate)
+const char *opa_lstate_name(u32 lstate)
 {
 	static const char * const port_logical_names[] = {
 		"PORT_NOP",
@@ -8290,7 +8347,7 @@ static const char *opa_lstate_name(u32 lstate)
 }
 
 /* return the OPA port physical state name */
-static const char *opa_pstate_name(u32 pstate)
+const char *opa_pstate_name(u32 pstate)
 {
 	static const char * const port_physical_names[] = {
 		"PHYS_NOP",
@@ -8315,7 +8372,7 @@ static const char *opa_pstate_name(u32 pstate)
  * Read the hardware link state and set the driver's cached value of it.
  * Return the (new) current value.
  */
-static u32 get_logical_state(struct hfi1_pportdata *ppd)
+u32 get_logical_state(struct hfi1_pportdata *ppd)
 {
 	u32 new_state;
 
