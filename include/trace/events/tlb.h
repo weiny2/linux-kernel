@@ -12,7 +12,7 @@
 	{ TLB_REMOTE_SHOOTDOWN,		"remote shootdown" },		\
 	{ TLB_LOCAL_SHOOTDOWN,		"local shootdown" },		\
 	{ TLB_LOCAL_MM_SHOOTDOWN,	"local mm shootdown" },		\
-	{ TLB_REMOTE_SENT_IPI,		"remote ipi send" }
+	{ TLB_REMOTE_SEND_IPI,		"remote ipi send" }
 
 TRACE_EVENT(tlb_flush,
 
