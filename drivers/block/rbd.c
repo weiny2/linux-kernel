@@ -213,6 +213,7 @@ enum obj_request_type {
 enum obj_operation_type {
 	OBJ_OP_WRITE,
 	OBJ_OP_READ,
+	OBJ_OP_DISCARD,
 };
 
 enum obj_req_flags {
@@ -281,6 +282,7 @@ enum img_req_flags {
 	IMG_REQ_WRITE,		/* I/O direction: read = 0, write = 1 */
 	IMG_REQ_CHILD,		/* initiator: block = 0, child image = 1 */
 	IMG_REQ_LAYERED,	/* ENOENT handling: normal = 0, layered = 1 */
+	IMG_REQ_DISCARD,	/* discard: normal = 0, discard request = 1 */
 };
 
 struct rbd_img_request {
@@ -781,6 +783,8 @@ static char* obj_op_name(enum obj_operation_type op_type)
 		return "read";
 	case OBJ_OP_WRITE:
 		return "write";
+	case OBJ_OP_DISCARD:
+		return "discard";
 	default:
 		return "???";
 	}
@@ -1661,6 +1665,21 @@ static bool img_request_write_test(struct rbd_img_request *img_request)
 	return test_bit(IMG_REQ_WRITE, &img_request->flags) != 0;
 }
 
+/*
+ * Set the discard flag when the img_request is an discard request
+ */
+static void img_request_discard_set(struct rbd_img_request *img_request)
+{
+	set_bit(IMG_REQ_DISCARD, &img_request->flags);
+	smp_mb();
+}
+
+static bool img_request_discard_test(struct rbd_img_request *img_request)
+{
+	smp_mb();
+	return test_bit(IMG_REQ_DISCARD, &img_request->flags) != 0;
+}
+
 static void img_request_child_set(struct rbd_img_request *img_request)
 {
 	set_bit(IMG_REQ_CHILD, &img_request->flags);
@@ -1783,6 +1802,18 @@ static void rbd_osd_write_callback(struct rbd_obj_request *obj_request)
 	obj_request_done_set(obj_request);
 }
 
+static void rbd_osd_discard_callback(struct rbd_obj_request *obj_request)
+{
+	dout("%s: obj %p result %d %llu\n", __func__, obj_request,
+		obj_request->result, obj_request->length);
+	/*
+	 * There is no such thing as a successful short discard.  Set
+	 * it to our originally-requested length.
+	 */
+	obj_request->xferred = obj_request->length;
+	obj_request_done_set(obj_request);
+}
+
 /*
  * For a simple stat call there's nothing to do.  We'll do more if
  * this is part of a write sequence for a layered image.
@@ -1833,6 +1864,11 @@ static void rbd_osd_req_callback(struct ceph_osd_request *osd_req,
 		break;
 	case CEPH_OSD_OP_STAT:
 		rbd_osd_stat_callback(obj_request);
+		break;
+	case CEPH_OSD_OP_DELETE:
+	case CEPH_OSD_OP_TRUNCATE:
+	case CEPH_OSD_OP_ZERO:
+		rbd_osd_discard_callback(obj_request);
 		break;
 	case CEPH_OSD_OP_CALL:
 	case CEPH_OSD_OP_NOTIFY_ACK:
@@ -1892,10 +1928,14 @@ static struct ceph_osd_request *rbd_osd_req_create(
 	struct ceph_osd_client *osdc;
 	struct ceph_osd_request *osd_req;
 
-	if (obj_request_img_data_test(obj_request) && op_type == OBJ_OP_WRITE) {
+	if (obj_request_img_data_test(obj_request) &&
+		(op_type == OBJ_OP_DISCARD || op_type == OBJ_OP_WRITE)) {
 		struct rbd_img_request *img_request = obj_request->img_request;
-
-		rbd_assert(img_request_write_test(img_request));
+		if (op_type == OBJ_OP_WRITE) {
+			rbd_assert(img_request_write_test(img_request));
+		} else {
+			rbd_assert(img_request_discard_test(img_request));
+		}
 		snapc = img_request->snapc;
 	}
 
@@ -1909,7 +1949,7 @@ static struct ceph_osd_request *rbd_osd_req_create(
 	if (!osd_req)
 		return NULL;	/* ENOMEM */
 
-	if (op_type == OBJ_OP_WRITE)
+	if (op_type == OBJ_OP_WRITE || op_type == OBJ_OP_DISCARD)
 		osd_req->r_flags = CEPH_OSD_FLAG_WRITE | CEPH_OSD_FLAG_ONDISK;
 	else
 		osd_req->r_flags = CEPH_OSD_FLAG_READ;
@@ -2124,7 +2164,10 @@ static struct rbd_img_request *rbd_img_request_create(
 	img_request->offset = offset;
 	img_request->length = length;
 	img_request->flags = 0;
-	if (op_type == OBJ_OP_WRITE) {
+	if (op_type == OBJ_OP_DISCARD) {
+		img_request_discard_set(img_request);
+		img_request->snapc = snapc;
+	} else if (op_type == OBJ_OP_WRITE) {
 		img_request_write_set(img_request);
 		img_request->snapc = snapc;
 	} else {
@@ -2225,8 +2268,12 @@ static bool rbd_img_obj_end_request(struct rbd_obj_request *obj_request)
 		struct rbd_device *rbd_dev = img_request->rbd_dev;
 		enum obj_operation_type op_type;
 
-		op_type = img_request_write_test(img_request) ? OBJ_OP_WRITE :
-								OBJ_OP_READ;
+		if (img_request_discard_test(img_request))
+			op_type = OBJ_OP_DISCARD;
+		else if (img_request_write_test(img_request))
+			op_type = OBJ_OP_WRITE;
+		else
+			op_type = OBJ_OP_READ;
 
 		rbd_warn(rbd_dev, "%s %llx at %llx (%llx)",
 			obj_op_name(op_type), obj_request->length,
@@ -2318,7 +2365,9 @@ static int rbd_img_request_fill(struct rbd_img_request *img_request,
 	unsigned int bio_offset = 0;
 	struct page **pages = NULL;
 	enum obj_operation_type op_type;
+	u64 object_size = rbd_obj_bytes(&rbd_dev->header);
 	u64 img_offset;
+	u64 img_end;
 	u64 resid;
 	u16 opcode;
 
@@ -2326,14 +2375,14 @@ static int rbd_img_request_fill(struct rbd_img_request *img_request,
 		(int)type, data_desc);
 
 	img_offset = img_request->offset;
+	img_end = rbd_dev->header.image_size;
 	resid = img_request->length;
 	rbd_assert(resid > 0);
 
 	if (type == OBJ_REQUEST_BIO) {
 		bio_list = data_desc;
 		rbd_assert(img_offset == bio_list->bi_sector << SECTOR_SHIFT);
-	} else {
-		rbd_assert(type == OBJ_REQUEST_PAGES);
+	} else if (type == OBJ_REQUEST_PAGES) {
 		pages = data_desc;
 	}
 
@@ -2374,7 +2423,7 @@ static int rbd_img_request_fill(struct rbd_img_request *img_request,
 								GFP_ATOMIC);
 			if (!obj_request->bio_list)
 				goto out_unwind;
-		} else {
+		} else if (type == OBJ_REQUEST_PAGES) {
 			unsigned int page_count;
 
 			obj_request->pages = pages;
@@ -2385,7 +2434,19 @@ static int rbd_img_request_fill(struct rbd_img_request *img_request,
 			pages += page_count;
 		}
 
-		if (img_request_write_test(img_request)) {
+		if (img_request_discard_test(img_request)) {
+			op_type = OBJ_OP_DISCARD;
+			if (!offset && (length == object_size)
+				&& (!img_request_layered_test(img_request) ||
+					(rbd_dev->parent_overlap <=
+						obj_request->img_offset)))
+				opcode = CEPH_OSD_OP_DELETE;
+			else if ((offset + length == object_size) ||
+				(obj_request->img_offset + length == img_end))
+				opcode = CEPH_OSD_OP_TRUNCATE;
+			else
+				opcode = CEPH_OSD_OP_ZERO;
+		} else if (img_request_write_test(img_request)) {
 			op_type = OBJ_OP_WRITE;
 			opcode = CEPH_OSD_OP_WRITE;
 		} else {
@@ -2414,12 +2475,13 @@ static int rbd_img_request_fill(struct rbd_img_request *img_request,
 		if (type == OBJ_REQUEST_BIO)
 			osd_req_op_extent_osd_data_bio(osd_req, which,
 					obj_request->bio_list, length);
-		else
+		else if (type == OBJ_REQUEST_PAGES)
 			osd_req_op_extent_osd_data_pages(osd_req, which,
 					obj_request->pages, length,
 					offset & ~PAGE_MASK, false, false);
 
-		if (op_type == OBJ_OP_WRITE)
+		/* Discards are also writes */
+		if (op_type == OBJ_OP_WRITE || op_type == OBJ_OP_DISCARD)
 			rbd_osd_req_format_write(obj_request);
 		else
 			rbd_osd_req_format_read(obj_request);
@@ -3271,7 +3333,9 @@ static void rbd_handle_request(struct rbd_device *rbd_dev, struct request *rq)
 	u64 mapping_size;
 	int result;
 
-	if (rq->cmd_flags & REQ_WRITE)
+	if (rq->cmd_flags & REQ_DISCARD)
+		op_type = OBJ_OP_DISCARD;
+	else if (rq->cmd_flags & REQ_WRITE)
 		op_type = OBJ_OP_WRITE;
 	else
 		op_type = OBJ_OP_READ;
@@ -3337,7 +3401,12 @@ static void rbd_handle_request(struct rbd_device *rbd_dev, struct request *rq)
 	}
 	img_request->rq = rq;
 
-	result = rbd_img_request_fill(img_request, OBJ_REQUEST_BIO, rq->bio);
+	if (op_type == OBJ_OP_DISCARD)
+		result = rbd_img_request_fill(img_request, OBJ_REQUEST_NODATA,
+					      NULL);
+	else
+		result = rbd_img_request_fill(img_request, OBJ_REQUEST_BIO,
+					      rq->bio);
 	if (result)
 		goto err_img_request;
 
@@ -3708,6 +3777,11 @@ static int rbd_init_disk(struct rbd_device *rbd_dev)
 	blk_queue_max_segment_size(q, segment_size);
 	blk_queue_io_min(q, segment_size);
 	blk_queue_io_opt(q, segment_size);
+
+	/* enable the discard support */
+	queue_flag_set_unlocked(QUEUE_FLAG_DISCARD, q);
+	q->limits.discard_granularity = segment_size;
+	q->limits.discard_alignment = segment_size;
 
 	blk_queue_merge_bvec(q, rbd_merge_bvec);
 	disk->queue = q;
