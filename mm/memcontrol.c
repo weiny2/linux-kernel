@@ -248,6 +248,9 @@ struct mem_cgroup {
 	struct page_counter memsw;
 	struct page_counter kmem;
 
+	unsigned long low_limit;
+	unsigned long high_limit_unused; /* just a placeholder in case we need it later */
+
 	unsigned long soft_limit;
 
 	/* vmpressure notifications */
@@ -4219,6 +4222,7 @@ enum {
 	RES_MAX_USAGE,
 	RES_FAILCNT,
 	RES_SOFT_LIMIT,
+	RES_LOW_LIMIT,
 };
  
 static ssize_t mem_cgroup_read(struct cgroup_subsys_state *css,
@@ -4265,6 +4269,9 @@ static ssize_t mem_cgroup_read(struct cgroup_subsys_state *css,
 		break;
 	case RES_SOFT_LIMIT:
 		val = (u64)memcg->soft_limit * PAGE_SIZE;
+		break;
+	case RES_LOW_LIMIT:
+		val = (u64)memcg->low_limit * PAGE_SIZE;
 		break;
 	default:
 		BUG();
@@ -4438,7 +4445,15 @@ static int mem_cgroup_write(struct cgroup_subsys_state *css, struct cftype *cft,
 		}
 		break;
 	case RES_SOFT_LIMIT:
+		WARN(nr_pages != PAGE_COUNTER_MAX && memcg->low_limit,
+				"Using soft limit with low limit is not supported.\n");
 		memcg->soft_limit = nr_pages;
+		ret = 0;
+		break;
+	case RES_LOW_LIMIT:
+		WARN(nr_pages && memcg->soft_limit != PAGE_COUNTER_MAX,
+				"Using soft limit with low limit is not supported.\n");
+		memcg->low_limit = nr_pages;
 		ret = 0;
 		break;
 	}
@@ -5106,6 +5121,12 @@ static struct cftype mem_cgroup_files[] = {
 	{
 		.name = "soft_limit_in_bytes",
 		.private = MEMFILE_PRIVATE(_MEM, RES_SOFT_LIMIT),
+		.write_string = mem_cgroup_write,
+		.read = mem_cgroup_read,
+	},
+	{
+		.name = "low_limit_in_bytes",
+		.private = MEMFILE_PRIVATE(_MEM, RES_LOW_LIMIT),
 		.write_string = mem_cgroup_write,
 		.read = mem_cgroup_read,
 	},
@@ -6170,6 +6191,43 @@ static void __init enable_swap_cgroup(void)
 {
 }
 #endif
+
+/**
+ * mem_cgroup_low - check if memory consumption is below the normal range
+ * @root: the highest ancestor to consider
+ * @memcg: the memory cgroup to check
+ *
+ * Returns %true if memory consumption of @memcg, and that of all
+ * configurable ancestors up to @root, is below the normal range.
+ */
+bool mem_cgroup_low(struct mem_cgroup *root, struct mem_cgroup *memcg)
+{
+	if (mem_cgroup_disabled())
+		return false;
+
+	/*
+	 * The toplevel group doesn't have a configurable range, so
+	 * it's never low when looked at directly, and it is not
+	 * considered an ancestor when assessing the hierarchy.
+	 */
+
+	if (memcg == root_mem_cgroup)
+		return false;
+
+	if (page_counter_read(&memcg->memory) >= memcg->low_limit)
+		return false;
+
+	while (memcg != root) {
+		memcg = parent_mem_cgroup(memcg);
+
+		if (memcg == root_mem_cgroup)
+			break;
+
+		if (page_counter_read(&memcg->memory) >= memcg->low_limit)
+			return false;
+	}
+	return true;
+}
 
 #ifdef CONFIG_MEMCG_SWAP
 /**
