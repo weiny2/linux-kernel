@@ -11,7 +11,8 @@
 	{ TLB_FLUSH_ON_TASK_SWITCH,	"flush on task switch" },	\
 	{ TLB_REMOTE_SHOOTDOWN,		"remote shootdown" },		\
 	{ TLB_LOCAL_SHOOTDOWN,		"local shootdown" },		\
-	{ TLB_LOCAL_MM_SHOOTDOWN,	"local mm shootdown" }
+	{ TLB_LOCAL_MM_SHOOTDOWN,	"local mm shootdown" },		\
+	{ TLB_REMOTE_SENT_IPI,		"remote ipi send" }
 
 TRACE_EVENT(tlb_flush,
 
