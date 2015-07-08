@@ -431,7 +431,7 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 		__entry->lver =
 			(u8)(be16_to_cpu(hdr->lrh[0]) >> 8) & 0xf;
 		__entry->sl =
-			(u8)(be16_to_cpu(hdr->lrh[0] >> 4) & 0xf);
+			(u8)(be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
 		__entry->lnh =
 			(u8)(be16_to_cpu(hdr->lrh[0]) & 3);
 		__entry->dlid =
@@ -556,7 +556,7 @@ TRACE_EVENT(snoop_capture,
 		__entry->dlid = be16_to_cpu(hdr->lrh[1]);
 		__entry->qpn = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
 		__entry->opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0xff;
-		__entry->sl = (u8)(be16_to_cpu(hdr->lrh[0] >> 4) & 0xf);
+		__entry->sl = (u8)(be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
 		__entry->pkey =	be32_to_cpu(ohdr->bth[0]) & 0xffff;
 		__entry->hdr_len = hdr_len;
 		__entry->data_len = data_len;

@@ -1691,7 +1691,7 @@ int hfi1_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 	ppd = ppd_from_ibp(ibp);
 	sc5 = ibp->sl_to_sc[ah_attr->sl];
 	dd = dd_from_ppd(ppd);
-	if (sc_to_vlt(dd, sc5) > num_vls)
+	if (sc_to_vlt(dd, sc5) > num_vls && sc_to_vlt(dd, sc5) != 0xf)
 		goto bail;
 	return 0;
 bail:

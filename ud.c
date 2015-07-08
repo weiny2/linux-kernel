@@ -877,7 +877,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		wc.pkey_index = 0;
 
 	wc.slid = be16_to_cpu(hdr->lrh[3]);
-	sc = (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
+	sc = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
 	sc |= sc4_bit;
 	wc.sl = ibp->sc_to_sl[sc];
 
