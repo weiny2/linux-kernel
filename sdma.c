@@ -846,7 +846,6 @@ static void sdma_map_rcu_callback(struct rcu_head *list)
 int sdma_map_init(struct hfi1_devdata *dd, u8 port, u8 num_vls, u8 *vl_engines)
 {
 	int i, j;
-	struct hfi1_pportdata *ppd = dd->pport + port;
 	int extra, sde_per_vl;
 	int engine = 0;
 	u8 lvl_engines[OPA_MAX_VLS];
