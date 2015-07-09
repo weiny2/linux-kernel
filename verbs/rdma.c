@@ -457,22 +457,9 @@ void opa_ib_rcv(struct opa_ib_packet *packet)
 	} else
 #endif
 	{
-		if (rcd->lookaside_qp) {
-			if (rcd->lookaside_qpn != qp_num) {
-				if (atomic_dec_and_test(
-					&rcd->lookaside_qp->refcount))
-					wake_up(&rcd->lookaside_qp->wait);
-					rcd->lookaside_qp = NULL;
-				}
-		}
-		if (!rcd->lookaside_qp) {
-			qp = opa_ib_lookup_qpn(ibp, qp_num);
-			if (!qp)
-				goto drop;
-			rcd->lookaside_qp = qp;
-			rcd->lookaside_qpn = qp_num;
-		} else
-			qp = rcd->lookaside_qp;
+		qp = opa_ib_lookup_qpn(ibp, qp_num);
+		if (!qp)
+			goto drop;
 
 		if (lnh == HFI1_LRH_GRH)
 			rcv_flags |= HFI1_HAS_GRH;

@@ -152,25 +152,22 @@ static void remove_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
  * @ibp: IB portdata
  * @qpn: the QP number to look up
  *
- * The caller is responsible for decrementing the QP reference count
- * when done.
+ * The caller must hold the rcu_read_lock(), and keep the lock until
+ * the returned qp is no longer in use.
  *
  * Return: the queue pair on success, otherwise returns an errno.
  */
-struct opa_ib_qp *opa_ib_lookup_qpn(struct opa_ib_portdata *ibp, u32 qpn)
+struct opa_ib_qp *opa_ib_lookup_qpn(struct opa_ib_portdata *ibp,
+				    u32 qpn) __must_hold(RCU)
 {
 	struct opa_ib_qp *qp = NULL;
 
-	rcu_read_lock();
 	if (unlikely(qpn <= 1)) {
 		if (qpn == 0)
 			qp = rcu_dereference(ibp->qp0);
 		else
 			qp = rcu_dereference(ibp->qp1);
-		if (qp)
-			atomic_inc(&qp->refcount);
 	}
-	rcu_read_unlock();
 	return qp;
 }
 
