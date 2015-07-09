@@ -90,6 +90,11 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	if (start_of_sm_config && (lstate == IB_PORT_INIT))
 		ppd->is_sm_config_started = 1;
 
+	pi->lid = cpu_to_be32(ppd->lid);
+	pi->sm_lid = cpu_to_be32(ppd->sm_lid);
+	pi->smsl = ppd->smsl & OPA_PI_MASK_SMSL;
+	pi->mkeyprotect_lmc |= ppd->lmc;
+
 	/*
 	 * FXTODO: WFR  has ledenable_offlinereason as alternative
 	 * to offline_reason. Why ?
@@ -413,15 +418,16 @@ done:
 static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 				u32 am, u8 *data, u8 port, u32 *resp_len)
 {
-	u32 num_ports = OPA_AM_NPORT(am);
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
-	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
 	struct opa_port_info *pi = (struct opa_port_info *)data;
-	u8 ls_old, ls_new, ps_new;
-	u16 mtu;
-	u8 vls;
 	int ret, i, invalid = 0, call_set_mtu = 0;
+	u32 num_ports = OPA_AM_NPORT(am);
+	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
+	u32 lid, smlid;
+	u16 mtu;
+	u8 ls_old, ls_new, ps_new;
+	u8 vls, lmc, smsl;
 
 	if (num_ports != 1) {
 		smp->status |=
@@ -429,7 +435,81 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		return hfi_reply(ibh);
 	}
 
+	/*
+	 * FXRTODO:
+	 * Currently this check ensures that the LID is 16bit
+	 * i.e the packet is 9B
+	 *
+	 * When we support 16B packets on FXR, there will
+	 * be additional check/modifications for 24 bit LID here.
+	 *
+	 * bail out early if the LID and SMLID are invalid
+	 */
+	lid = be32_to_cpu(pi->lid);
+	if (!IS_VALID_LID_SIZE(lid)) {
+		pr_warn("OPA_PortInfo lid out of range: %X ", lid);
+		pr_warn("(> 16b LIDs not supported)\n");
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		return hfi_reply(ibh);
+	}
+
+	smlid = be32_to_cpu(pi->sm_lid);
+	if (!IS_VALID_LID_SIZE(smlid)) {
+		pr_warn("OPA_PortInfo SM lid out of range: %X ", smlid);
+		pr_warn("(> 16b LIDs not supported)\n");
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		return hfi_reply(ibh);
+	}
+
+	smsl = pi->smsl & OPA_PI_MASK_SMSL;
+	lmc = pi->mkeyprotect_lmc & OPA_PI_MASK_LMC;
 	ls_old = hfi_driver_lstate(ppd);
+
+	/* Must be a valid unicast LID address. */
+	if ((lid == 0 && ls_old > IB_PORT_INIT) ||
+	     lid >= HFI_MULTICAST_LID_BASE) {
+		/*
+		 * FXRTODO: HFI_MULTICAST_LID_BASE valid for 9B only.
+		 * modify this check for 16B
+		 */
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		pr_warn("SubnSet(OPA_PortInfo) lid invalid 0x%x\n", lid);
+	} else if (ppd->lid != lid ||
+		 ppd->lmc != lmc) {
+		/* FXRTODO: implement uevent update ? */
+#if 0
+		if (ppd->lid != lid)
+			hfi1_set_uevent_bits(ppd, _HFI1_EVENT_LID_CHANGE_BIT);
+		if (ppd->lmc != lmc)
+			hfi1_set_uevent_bits(ppd, _HFI1_EVENT_LMC_CHANGE_BIT);
+#endif
+		ppd->lid = lid;
+		ppd->lmc = lmc;
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_LIDLMC, 0);
+	}
+
+	/*
+	 * SMA-HFI is handling smlid and smsl because it has a dependency
+	 * on old link state which is maintained in HFI.
+	 *
+	 * FXRTODO: modify this code when adding 16B support
+	 *
+	 * Must be a valid unicast LID address
+	 */
+	if ((smlid == 0 && ls_old > IB_PORT_INIT) ||
+	     smlid >= HFI_MULTICAST_LID_BASE) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		pr_warn("SubnSet(OPA_PortInfo) smlid invalid 0x%x\n", smlid);
+	} else if (smlid != ppd->sm_lid || smsl != ppd->smsl) {
+		if (smlid != ppd->sm_lid)
+			ppd->sm_lid = smlid;
+		if (smsl != ppd->smsl)
+			ppd->smsl = smsl;
+	}
 
 	if (pi->link_down_reason == 0) {
 		ppd->local_link_down_reason.sma = 0;

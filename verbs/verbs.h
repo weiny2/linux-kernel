@@ -509,7 +509,7 @@ struct opa_ib_portdata {
 	u16 sm_lid;
 	u8 lmc;
 	u8 max_vls;
-	u8 sm_sl;
+	u8 smsl;
 	u8 mkeyprot;
 	u8 subnet_timeout;
 	/* the first 16 entries are sl_to_vl for !STL */

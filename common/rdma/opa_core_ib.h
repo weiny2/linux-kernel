@@ -76,6 +76,8 @@
 						& OPA_AM_START_SM_CFG_MASK)
 
 #define OPA_MTU_0     0
+#define OPA_INVALID_LID_MASK	0xFFFF0000
+#define IS_VALID_LID_SIZE(lid) (!((lid) & (OPA_INVALID_LID_MASK)))
 #define INVALID_MTU	0xffff
 #define INVALID_MTU_ENC	0xff
 
