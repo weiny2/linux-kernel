@@ -1928,6 +1928,31 @@ struct opa_pma_mad {
 	u8 data[2024];
 } __packed;
 
+struct opa_class_port_info {
+	u8 base_version;
+	u8 class_version;
+	__be16 cap_mask;
+	__be32 cap_mask2_resp_time;
+
+	u8 redirect_gid[16];
+	__be32 redirect_tc_fl;
+	__be32 redirect_lid;
+	__be32 redirect_sl_qp;
+	__be32 redirect_qkey;
+
+	u8 trap_gid[16];
+	__be32 trap_tc_fl;
+	__be32 trap_lid;
+	__be32 trap_hl_qp;
+	__be32 trap_qkey;
+
+	__be16 trap_pkey;
+	__be16 redirect_pkey;
+
+	u8 trap_sl_rsvd;
+	u8 reserved[3];
+} __packed;
+
 struct opa_port_status_req {
 	__u8 port_num;
 	__u8 reserved[3];
@@ -2201,11 +2226,10 @@ enum error_info_selects {
 };
 
 static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
-				     struct ib_device *ibdev)
+				struct ib_device *ibdev, u32 *resp_len)
 {
-	struct ib_class_port_info *p =
-		(struct ib_class_port_info *)pmp->data;
-	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
+	struct opa_class_port_info *p =
+		(struct opa_class_port_info *)pmp->data;
 
 	memset(pmp->data, 0, sizeof(pmp->data));
 
@@ -2215,14 +2239,12 @@ static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
 	p->base_version = JUMBO_MGMT_BASE_VERSION;
 	p->class_version = OPA_SMI_CLASS_VERSION;
 	/*
-	 * Set the most significant bit of CM2 to indicate support for
-	 * congestion statistics
-	 */
-	p->reserved[0] = dd->psxmitwait_supported << 7;
-	/*
 	 * Expected response time is 4.096 usec. * 2^18 == 1.073741824 sec.
 	 */
-	p->resp_time_value = 18;
+	p->cap_mask2_resp_time = 18;
+
+	if (resp_len)
+		*resp_len += sizeof(*p);
 
 	return reply((struct ib_mad_hdr *)pmp);
 }
@@ -2274,7 +2296,7 @@ static void a0_portstatus(struct hfi1_pportdata *ppd,
 
 
 static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
-				  struct ib_device *ibdev, u8 port)
+			struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
 	struct opa_port_status_req *req =
 		(struct opa_port_status_req *)pmp->data;
@@ -2429,6 +2451,9 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 
 	a0_portstatus(ppd, rsp, vl_select_mask);
 
+	if (resp_len)
+		*resp_len += response_data_size;
+
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
@@ -2520,7 +2545,7 @@ static void a0_datacounters(struct hfi1_devdata *dd, struct _port_dctrs *rsp,
 }
 
 static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
-				    struct ib_device *ibdev, u8 port)
+			struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
 	struct opa_port_data_counters_msg *req =
 		(struct opa_port_data_counters_msg *)pmp->data;
@@ -2669,11 +2694,15 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	}
 
 	a0_datacounters(dd, rsp, vl_select_mask);
+
+	if (resp_len)
+		*resp_len += response_data_size;
+
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
-				  struct ib_device *ibdev, u8 port)
+			struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
 	size_t response_data_size;
 	struct _port_ectrs *rsp;
@@ -2782,11 +2811,14 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 		vfi++;
 	}
 
+	if (resp_len)
+		*resp_len += response_data_size;
+
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
-				 struct ib_device *ibdev, u8 port)
+			struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
 	size_t response_data_size;
 	struct _port_ei *rsp;
@@ -2874,11 +2906,14 @@ static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 	/* FMConfigErrorInfo */
 	rsp->fm_config_ei.status_and_code = dd->err_info_fmconfig;
 
+	if (resp_len)
+		*resp_len += response_data_size;
+
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
-				  struct ib_device *ibdev, u8 port)
+			struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
 	struct opa_clear_port_status *req =
 		(struct opa_clear_port_status *)pmp->data;
@@ -2900,7 +2935,6 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 	 * handled, so when pma_get_opa_portstatus() gets a fix,
 	 * the corresponding change should be made here as well.
 	 */
-
 
 	if (counter_select & CS_PORT_XMIT_DATA)
 		write_dev_cntr(dd, C_DC_XMIT_FLITS, CNTR_INVALID_VL, 0);
@@ -3019,11 +3053,14 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 		/* port_vl_xmit_discards ??? */
 	}
 
+	if (resp_len)
+		*resp_len += sizeof(*req);
+
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
-				 struct ib_device *ibdev, u8 port)
+			struct ib_device *ibdev, u8 port, u32 *resp_len)
 {
 	struct _port_ei *rsp;
 	struct opa_port_error_info_msg *req;
@@ -3089,6 +3126,9 @@ static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
 	if (error_info_select & ES_FM_CONFIG_ERROR_INFO)
 		/* turn off status bit */
 		dd->err_info_fmconfig &= ~OPA_EI_STATUS_SMASK;
+
+	if (resp_len)
+		*resp_len += sizeof(*req);
 
 	return reply((struct ib_mad_hdr *)pmp);
 }
@@ -3951,25 +3991,29 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 		return reply((struct ib_mad_hdr *)pmp);
 	}
 
-	*resp_len = sizeof(struct jumbo_mad);
+	*resp_len = sizeof(pmp->mad_hdr);
 
 	switch (pmp->mad_hdr.method) {
 	case IB_MGMT_METHOD_GET:
 		switch (pmp->mad_hdr.attr_id) {
 		case IB_PMA_CLASS_PORT_INFO:
-			ret = pma_get_opa_classportinfo(pmp, ibdev);
+			ret = pma_get_opa_classportinfo(pmp, ibdev, resp_len);
 			goto bail;
 		case OPA_PM_ATTRIB_ID_PORT_STATUS:
-			ret = pma_get_opa_portstatus(pmp, ibdev, port);
+			ret = pma_get_opa_portstatus(pmp, ibdev, port,
+								resp_len);
 			goto bail;
 		case OPA_PM_ATTRIB_ID_DATA_PORT_COUNTERS:
-			ret = pma_get_opa_datacounters(pmp, ibdev, port);
+			ret = pma_get_opa_datacounters(pmp, ibdev, port,
+								resp_len);
 			goto bail;
 		case OPA_PM_ATTRIB_ID_ERROR_PORT_COUNTERS:
-			ret = pma_get_opa_porterrors(pmp, ibdev, port);
+			ret = pma_get_opa_porterrors(pmp, ibdev, port,
+								resp_len);
 			goto bail;
 		case OPA_PM_ATTRIB_ID_ERROR_INFO:
-			ret = pma_get_opa_errorinfo(pmp, ibdev, port);
+			ret = pma_get_opa_errorinfo(pmp, ibdev, port,
+								resp_len);
 			goto bail;
 		default:
 			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
@@ -3980,10 +4024,12 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 	case IB_MGMT_METHOD_SET:
 		switch (pmp->mad_hdr.attr_id) {
 		case OPA_PM_ATTRIB_ID_CLEAR_PORT_STATUS:
-			ret = pma_set_opa_portstatus(pmp, ibdev, port);
+			ret = pma_set_opa_portstatus(pmp, ibdev, port,
+								resp_len);
 			goto bail;
 		case OPA_PM_ATTRIB_ID_ERROR_INFO:
-			ret = pma_set_opa_errorinfo(pmp, ibdev, port);
+			ret = pma_set_opa_errorinfo(pmp, ibdev, port,
+								resp_len);
 			goto bail;
 		default:
 			pmp->mad_hdr.status |= IB_SMP_UNSUP_METH_ATTR;
