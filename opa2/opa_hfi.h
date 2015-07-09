@@ -68,6 +68,8 @@ extern unsigned int hfi_max_mtu;
 #define HFI_PID_SYSTEM		0
 #define HFI_PID_BYPASS_BASE	0xF00
 
+/* FXRTODO: based on 16bit (9B) LID */
+#define HFI_MULTICAST_LID_BASE	0xC000
 /* Maximum number of traffic classes supported */
 #define HFI_MAX_TC		4
 
@@ -141,6 +143,7 @@ extern unsigned int hfi_max_mtu;
 #define SMA_IDLE_ARM	1
 #define SMA_IDLE_ACTIVE 2
 
+#define HFI_IB_CFG_LIDLMC 0 /* LID and Mask*/
 #define HFI_IB_CFG_OP_VLS 10 /* operational VLs */
 #define HFI_IB_CFG_MTU 17 /* update MTU in IBC */
 #define HFI_IB_CFG_VL_HIGH_LIMIT 19
@@ -174,10 +177,14 @@ struct hfi_event_queue {
  * @dd: pointer to the per node hfi_devdata
  * @pguid: port_guid identifying port
  * @lid: LID for this port
+ * @sm_lid: LID of the SM
  * @psn_base_rx_e2e: PSN base for RX E2E
  * @psn_base_tx_otr: PSN base for TX OTR
  * @lstate: Logical link state
  * @ibmtu: The MTU programmed for this port
+ * @smsl: Service level to use for SM
+ * @lmc: LID mask control
+ * @pnum: port number of this port
  * @vls_supported: Virtual lane supported
  * @vls_operational: Virtual lane operational
  * @vl_high_limit: Limit of high priority compenent of
@@ -200,12 +207,16 @@ struct hfi_pportdata {
 	struct hfi_devdata *dd;
 	__be64 pguid;
 	u32 lid;
+	u32 sm_lid;
 	void *psn_base_rx_e2e[HFI_MAX_TC];
 	void *psn_base_tx_otr[HFI_MAX_TC];
 
 	struct mutex hls_lock;
 	u32 lstate;
 	u32 ibmtu;
+	u8 smsl;
+	u8 lmc;
+	u8 pnum;
 	u8 vls_supported;
 	u8 vls_operational;
 	u8 vl_high_limit;

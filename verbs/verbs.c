@@ -193,7 +193,7 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	props->lid = ibp->lid;
 	props->lmc = ibp->lmc;
 	props->sm_lid = ibp->sm_lid;
-	props->sm_sl = ibp->sm_sl;
+	props->sm_sl = ibp->smsl;
 #if 0
 	//props->state = dd->f_iblink_state(ppd);
 	//props->phys_state = dd->f_ibphys_portstate(ppd);

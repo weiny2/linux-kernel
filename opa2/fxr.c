@@ -268,6 +268,57 @@ static void hfi_rx_e2e_uninit(const struct hfi_devdata *dd)
 }
 
 /*
+ * FXRTODO: Currently lid is being assigned statically by
+ * the driver (see init_csrs)depending on the hostname of the simics model.
+ * Remove that code once this path is verified using opafm
+ */
+static void hfi_set_lid_lmc(struct hfi_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	LM_CONFIG_PORT0_t lmp0 = {.val = 0};
+	LM_CONFIG_PORT1_t lmp1 = {.val = 0};
+	u64 lmp_val;
+	u32 lmp_offset;
+	u32 slid_offset;
+
+	switch (ppd->pnum) {
+	case 1:
+		lmp0.field.DLID = ppd->lid;
+		if (!ppd->lmc) {
+			lmp0.field.LMC_ENABLE = 1;
+			lmp0.field.LMC_WIDTH = ppd->lmc;
+		}
+		lmp_offset = FXR_LM_CONFIG_PORT0;
+		slid_offset = FXR_TXOTR_PKT_CFG_SLID_PT0;
+		lmp_val = lmp0.val;
+		break;
+	case 2:
+		lmp1.field.DLID = ppd->lid;
+		if (!ppd->lmc) {
+			lmp1.field.LMC_ENABLE = 1;
+			lmp1.field.LMC_WIDTH = ppd->lmc;
+		}
+		lmp_offset = FXR_LM_CONFIG_PORT1;
+		slid_offset = FXR_TXOTR_PKT_CFG_SLID_PT1;
+		lmp_val = lmp1.val;
+		break;
+	default:
+		dd_dev_err(dd, "Illegal port number %d\n", ppd->pnum);
+		BUG_ON(1);
+		return;
+	}
+
+
+	write_csr(dd, lmp_offset, lmp_val);
+	write_csr(dd, slid_offset, ppd->lid);
+
+	/*
+	 * FXTODO: Initiate any HW events that needs to trigger due
+	 * to LID and LMC change here.
+	 */
+}
+
+/*
  * Set Send Length
  * @ppd - per port data
  */
@@ -300,6 +351,9 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val)
 	int ret = 0;
 
 	switch (which) {
+	case HFI_IB_CFG_LIDLMC:
+		hfi_set_lid_lmc(ppd);
+		break;
 	case HFI_IB_CFG_VL_HIGH_LIMIT:
 		/* FXRTODO: Implement FXR equivalent */
 #if 0
@@ -553,6 +607,7 @@ void hfi_pport_init(struct hfi_devdata *dd)
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
 		ppd->dd = dd;
+		ppd->pnum = port;
 		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
 		ppd->lstate = IB_PORT_DOWN;
 		mutex_init(&ppd->hls_lock);

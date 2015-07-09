@@ -323,8 +323,6 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	if (num_ports != 1)
 		return reply((struct ib_mad_hdr *)smp);
 
-	pi->lid = cpu_to_be32(ibp->lid);
-
 	/* Only return the mkey if the protection field allows it. */
 	if (!(ibp->mkey != smp->mkey && ibp->mkeyprot == 1))
 		pi->mkey = ibp->mkey;
@@ -582,11 +580,34 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 {
 	struct opa_port_info *pi = (struct opa_port_info *)data;
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
-	int i, ret;
 	u32 num_ports = OPA_AM_NPORT(am);
+	u32 lid, smlid, opa_lid;
+	struct ib_event event;
+	int i, ret;
+	u8 smsl, lmc;
 
 	if (num_ports != 1)
 		return reply((struct ib_mad_hdr *)smp);
+
+	event.device = ibdev;
+	event.element.port_num = port;
+
+	/*
+	 * FXRTODO: Change this to 24bit checks once driver
+	 * supports 24 bit LIDS
+	 *
+	 * SMA-HFI bailed out early and so should we for bad
+	 * LID and SMLID.
+	 */
+	opa_lid = be32_to_cpu(pi->lid);
+	if (!IS_VALID_LID_SIZE(opa_lid))
+		return subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev,
+					port, resp_len);
+
+	smlid = be32_to_cpu(pi->sm_lid);
+	if (!IS_VALID_LID_SIZE(smlid))
+		return subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev,
+					port, resp_len);
 
 	ibp->mkey = pi->mkey;
 	ibp->mkey_lease_period = be16_to_cpu(pi->mkey_lease_period);
@@ -615,8 +636,60 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 			ibp->ibmtu = ibp->vl_mtu[i];
 	}
 
-	ibp->vl_mtu[15] = opa_enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[15 / 2] &
-						0xF);
+	ibp->vl_mtu[15] = opa_enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[15 / 2]
+									& 0xF);
+	lmc = pi->mkeyprotect_lmc & OPA_PI_MASK_LMC;
+	lid = be32_to_cpu(pi->lid);
+
+	if (ibp->lid != lid || ibp->lmc !=  lmc) {
+		if (ibp->lmc !=  lmc) {
+			ibp->lmc = lmc;
+			/* FXRTODO: Figure out what these uvents are for */
+#if 0
+			hfi1_set_uevent_bits(ppd, _HFI1_EVENT_LMC_CHANGE_BIT);
+#endif
+		}
+		if (ibp->lid !=  lid) {
+			ibp->lid = lid;
+#if 0
+			hfi1_set_uevent_bits(ppd, _HFI1_EVENT_LID_CHANGE_BIT);
+#endif
+		}
+		event.event = IB_EVENT_LID_CHANGE;
+		ib_dispatch_event(&event);
+	}
+
+	smlid = be32_to_cpu(pi->sm_lid);
+	smsl = pi->smsl & OPA_PI_MASK_SMSL;
+
+	if (smlid != ibp->sm_lid || smsl != ibp->smsl) {
+		/*
+		 * FXRTODO: These are needed for sending trap
+		 * to FM. Implement this as part of that task.
+		 * Idea on allocating sm_ah based on code review
+		 * 1. Per port static variable
+		 * 2. Allocate here when new SM lid is assigned
+		 */
+#if 0
+		spin_lock_irqsave(&ibp->lock, flags);
+		if (ibp->sm_ah) {
+			if (smlid != ibp->sm_lid)
+				ibp->sm_ah->attr.dlid = smlid;
+			if (smsl != ibp->smsl)
+				ibp->sm_ah->attr.sl = smsl;
+		}
+		spin_unlock_irqrestore(&ibp->lock, flags);
+#endif
+		if (smlid != ibp->sm_lid) {
+			pr_info("SubnSet(OPA_PortInfo) smlid 0x%x\n", smlid);
+			ibp->sm_lid = smlid;
+		}
+
+		if (smsl != ibp->smsl)
+			ibp->smsl = smsl;
+		event.event = IB_EVENT_SM_CHANGE;
+		ib_dispatch_event(&event);
+	}
 err:
 	return ret;
 }
