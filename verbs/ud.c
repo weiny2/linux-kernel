@@ -80,9 +80,12 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 	ibdev = sqp->ibqp.device;
 	ibp = to_opa_ibportdata(ibdev, sqp->port_num);
 
+	rcu_read_lock();
+
 	qp = opa_ib_lookup_qpn(ibp, swqe->wr.wr.ud.remote_qpn);
 	if (!qp) {
 		ibp->n_pkt_drops++;
+		rcu_read_unlock();
 		return;
 	}
 
@@ -243,8 +246,7 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 bail_unlock:
 	spin_unlock_irqrestore(&qp->r_lock, flags);
 drop:
-	if (atomic_dec_and_test(&qp->refcount))
-		wake_up(&qp->wait);
+	rcu_read_unlock();
 }
 
 /**
