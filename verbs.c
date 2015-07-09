@@ -715,7 +715,7 @@ static void mem_timer(unsigned long data)
 	struct iowait *wait;
 	unsigned long flags;
 
-	spin_lock_irqsave(&dev->pending_lock, flags);
+	write_seqlock_irqsave(&dev->iowait_lock, flags);
 	if (!list_empty(list)) {
 		wait = list_first_entry(list, struct iowait, list);
 		qp = container_of(wait, struct hfi1_qp, s_iowait);
@@ -724,7 +724,7 @@ static void mem_timer(unsigned long data)
 		if (!list_empty(list))
 			mod_timer(&dev->mem_timer, jiffies + 1);
 	}
-	spin_unlock_irqrestore(&dev->pending_lock, flags);
+	write_sequnlock_irqrestore(&dev->iowait_lock, flags);
 
 	if (qp)
 		hfi1_qp_wakeup(qp, HFI1_S_WAIT_KMEM);
@@ -757,18 +757,10 @@ static noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
 	struct verbs_txreq *tx;
 	unsigned long flags;
 
-	spin_lock_irqsave(&qp->s_lock, flags);
-	spin_lock(&dev->pending_lock);
-
-	if (!list_empty(&dev->txreq_free)) {
-		struct list_head *l = dev->txreq_free.next;
-
-		list_del(l);
-		spin_unlock(&dev->pending_lock);
-		spin_unlock_irqrestore(&qp->s_lock, flags);
-		tx = list_entry(l, struct verbs_txreq, txreq.list);
-		tx->qp = qp;
-	} else {
+	tx = kmem_cache_alloc(dev->verbs_txreq_cache, GFP_ATOMIC);
+	if (!tx) {
+		spin_lock_irqsave(&qp->s_lock, flags);
+		write_seqlock(&dev->iowait_lock);
 		if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK &&
 		    list_empty(&qp->s_iowait.list)) {
 			dev->n_txwait++;
@@ -778,7 +770,7 @@ static noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
 			atomic_inc(&qp->refcount);
 		}
 		qp->s_flags &= ~HFI1_S_BUSY;
-		spin_unlock(&dev->pending_lock);
+		write_sequnlock(&dev->iowait_lock);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 		tx = ERR_PTR(-EBUSY);
 	}
@@ -789,22 +781,13 @@ static inline struct verbs_txreq *get_txreq(struct hfi1_ibdev *dev,
 					    struct hfi1_qp *qp)
 {
 	struct verbs_txreq *tx;
-	unsigned long flags;
 
-	spin_lock_irqsave(&dev->pending_lock, flags);
-	/* assume the list non empty */
-	if (likely(!list_empty(&dev->txreq_free))) {
-		struct list_head *l = dev->txreq_free.next;
-
-		list_del(l);
-		spin_unlock_irqrestore(&dev->pending_lock, flags);
-		tx = list_entry(l, struct verbs_txreq, txreq.list);
-		tx->qp = qp;
-	} else {
-		/* call slow path to get the extra lock */
-		spin_unlock_irqrestore(&dev->pending_lock, flags);
+	tx = kmem_cache_alloc(dev->verbs_txreq_cache, GFP_ATOMIC);
+	if (!tx)
+		/* call slow path to get the lock */
 		tx =  __get_txreq(dev, qp);
-	}
+	if (tx)
+		tx->qp = qp;
 	return tx;
 }
 
@@ -813,6 +796,7 @@ void hfi1_put_txreq(struct verbs_txreq *tx)
 	struct hfi1_ibdev *dev;
 	struct hfi1_qp *qp;
 	unsigned long flags;
+	unsigned int seq;
 
 	qp = tx->qp;
 	dev = to_idev(qp->ibqp.device);
@@ -823,23 +807,26 @@ void hfi1_put_txreq(struct verbs_txreq *tx)
 	}
 	sdma_txclean(dd_from_dev(dev), &tx->txreq);
 
-	spin_lock_irqsave(&dev->pending_lock, flags);
+	/* Free verbs_txreq and return to slab cache */
+	kmem_cache_free(dev->verbs_txreq_cache, tx);
 
-	/* Put struct back on free list */
-	list_add(&tx->txreq.list, &dev->txreq_free);
+	do {
+		seq = read_seqbegin(&dev->iowait_lock);
+		if (!list_empty(&dev->txwait)) {
+			struct iowait *wait;
 
-	if (!list_empty(&dev->txwait)) {
-		struct iowait *wait;
-
-		/* Wake up first QP wanting a free struct */
-		wait = list_first_entry(&dev->txwait, struct iowait, list);
-		qp = container_of(wait, struct hfi1_qp, s_iowait);
-		list_del_init(&qp->s_iowait.list);
-		/* refcount held until actual wake up */
-		spin_unlock_irqrestore(&dev->pending_lock, flags);
-		hfi1_qp_wakeup(qp, HFI1_S_WAIT_TX);
-	} else
-		spin_unlock_irqrestore(&dev->pending_lock, flags);
+			write_seqlock_irqsave(&dev->iowait_lock, flags);
+			/* Wake up first QP wanting a free struct */
+			wait = list_first_entry(&dev->txwait, struct iowait,
+						list);
+			qp = container_of(wait, struct hfi1_qp, s_iowait);
+			list_del_init(&qp->s_iowait.list);
+			/* refcount held until actual wake up */
+			write_sequnlock_irqrestore(&dev->iowait_lock, flags);
+			hfi1_qp_wakeup(qp, HFI1_S_WAIT_TX);
+			break;
+		}
+	} while (read_seqretry(&dev->iowait_lock, seq));
 }
 
 /*
@@ -860,9 +847,8 @@ static void verbs_sdma_complete(
 		hfi1_send_complete(qp, tx->wqe, IB_WC_SUCCESS);
 	else if (qp->ibqp.qp_type == IB_QPT_RC) {
 		struct hfi1_ib_header *hdr;
-		struct hfi1_ibdev *dev = to_idev(qp->ibqp.device);
 
-		hdr = &dev->pio_hdrs[tx->hdr_inx].phdr.hdr;
+		hdr = &tx->phdr.hdr;
 		hfi1_rc_send_complete(qp, hdr);
 	}
 	if (drained) {
@@ -889,7 +875,7 @@ static int wait_kmem(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) {
-		spin_lock(&dev->pending_lock);
+		write_seqlock(&dev->iowait_lock);
 		if (list_empty(&qp->s_iowait.list)) {
 			if (list_empty(&dev->memwait))
 				mod_timer(&dev->mem_timer, jiffies + 1);
@@ -898,7 +884,7 @@ static int wait_kmem(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 			trace_hfi1_qpsleep(qp, HFI1_S_WAIT_KMEM);
 			atomic_inc(&qp->refcount);
 		}
-		spin_unlock(&dev->pending_lock);
+		write_sequnlock(&dev->iowait_lock);
 		qp->s_flags &= ~HFI1_S_BUSY;
 		ret = -EBUSY;
 	}
@@ -968,12 +954,11 @@ static int build_verbs_tx_desc(
 	struct ahg_ib_header *ahdr,
 	u64 pbc)
 {
-	struct hfi1_ibdev *dev = to_idev(tx->qp->ibqp.device);
 	int ret = 0;
 	struct hfi1_pio_header *phdr;
 	u16 hdrbytes = tx->hdr_dwords << 2;
 
-	phdr = &dev->pio_hdrs[tx->hdr_inx].phdr;
+	phdr = &tx->phdr;
 	if (!ahdr->ahgcount) {
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
@@ -989,11 +974,10 @@ static int build_verbs_tx_desc(
 		phdr->pbc = cpu_to_le64(pbc);
 		memcpy(&phdr->hdr, &ahdr->ibh, hdrbytes - sizeof(phdr->pbc));
 		/* add the header */
-		ret = sdma_txadd_daddr(
+		ret = sdma_txadd_kvaddr(
 			sde->dd,
 			&tx->txreq,
-			dev->pio_hdrs_phys + tx->hdr_inx *
-				sizeof(struct tx_pio_header),
+			&tx->phdr,
 			tx->hdr_dwords << 2);
 		if (ret)
 			goto bail_txadd;
@@ -1123,7 +1107,7 @@ static int no_bufs_available(struct hfi1_qp *qp, struct send_context *sc)
 	 */
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) {
-		spin_lock(&dev->pending_lock);
+		write_seqlock(&dev->iowait_lock);
 		if (list_empty(&qp->s_iowait.list)) {
 			struct hfi1_ibdev *dev = &dd->verbs_dev;
 			int was_empty;
@@ -1138,7 +1122,7 @@ static int no_bufs_available(struct hfi1_qp *qp, struct send_context *sc)
 			if (was_empty)
 				hfi1_sc_wantpiobuf_intr(sc, 1);
 		}
-		spin_unlock(&dev->pending_lock);
+		write_sequnlock(&dev->iowait_lock);
 		qp->s_flags &= ~HFI1_S_BUSY;
 		ret = -EBUSY;
 	}
@@ -1908,6 +1892,13 @@ static void init_ibport(struct hfi1_pportdata *ppd)
 	RCU_INIT_POINTER(ibp->qp1, NULL);
 }
 
+static void verbs_txreq_kmem_cache_ctor(void *obj)
+{
+	struct verbs_txreq *tx = (struct verbs_txreq *)obj;
+
+	memset(tx, 0, sizeof(*tx));
+}
+
 /**
  * hfi1_register_ib_device - register our device with the infiniband core
  * @dd: the device data structure
@@ -1961,38 +1952,22 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 		RCU_INIT_POINTER(dev->lk_table.table[i], NULL);
 	INIT_LIST_HEAD(&dev->pending_mmaps);
 	spin_lock_init(&dev->pending_lock);
+	seqlock_init(&dev->iowait_lock);
 	dev->mmap_offset = PAGE_SIZE;
 	spin_lock_init(&dev->mmap_offset_lock);
 	INIT_LIST_HEAD(&dev->txwait);
 	INIT_LIST_HEAD(&dev->memwait);
-	INIT_LIST_HEAD(&dev->txreq_free);
 
 	descq_cnt = sdma_get_descq_cnt();
-	/*
-	 * AHG mode copy requires header be on cache line
-	 */
-	dev->pio_hdr_bytes = descq_cnt * sizeof(struct tx_pio_header);
-	if (descq_cnt) {
-		dev->pio_hdrs = dma_zalloc_coherent(&dd->pcidev->dev,
-						dev->pio_hdr_bytes,
-						&dev->pio_hdrs_phys,
-						GFP_KERNEL);
-		if (!dev->pio_hdrs) {
-			ret = -ENOMEM;
-			goto err_hdrs;
-		}
-	}
 
-	for (i = 0; i < descq_cnt; i++) {
-		struct verbs_txreq *tx;
-
-		tx = kzalloc(sizeof(*tx), GFP_KERNEL);
-		if (!tx) {
-			ret = -ENOMEM;
-			goto err_tx;
-		}
-		tx->hdr_inx = i;
-		list_add(&tx->txreq.list, &dev->txreq_free);
+	/* SLAB_HWCACHE_ALIGN for AHG */
+	dev->verbs_txreq_cache = kmem_cache_create("hfi1_vtxreq_cache",
+						   sizeof(struct verbs_txreq),
+						   0, SLAB_HWCACHE_ALIGN,
+						   verbs_txreq_kmem_cache_ctor);
+	if (!dev->verbs_txreq_cache) {
+		ret = -ENOMEM;
+		goto err_verbs_txreq;
 	}
 
 	/*
@@ -2111,20 +2086,8 @@ err_class:
 err_agents:
 	ib_unregister_device(ibdev);
 err_reg:
-err_tx:
-	while (!list_empty(&dev->txreq_free)) {
-		struct list_head *l = dev->txreq_free.next;
-		struct verbs_txreq *tx;
-
-		list_del(l);
-		tx = list_entry(l, struct verbs_txreq, txreq.list);
-		kfree(tx);
-	}
-	if (dev->pio_hdrs)
-		dma_free_coherent(&dd->pcidev->dev,
-				  dev->pio_hdr_bytes,
-				  dev->pio_hdrs, dev->pio_hdrs_phys);
-err_hdrs:
+err_verbs_txreq:
+	kmem_cache_destroy(dev->verbs_txreq_cache);
 	free_pages((unsigned long) dev->lk_table.table, get_order(lk_tab_size));
 err_lk:
 	hfi1_qp_exit(dev);
@@ -2155,18 +2118,7 @@ void hfi1_unregister_ib_device(struct hfi1_devdata *dd)
 
 	hfi1_qp_exit(dev);
 	del_timer_sync(&dev->mem_timer);
-	while (!list_empty(&dev->txreq_free)) {
-		struct list_head *l = dev->txreq_free.next;
-		struct verbs_txreq *tx;
-
-		list_del(l);
-		tx = list_entry(l, struct verbs_txreq, txreq.list);
-		kfree(tx);
-	}
-	if (dev->pio_hdrs)
-		dma_free_coherent(&dd->pcidev->dev,
-				  dev->pio_hdr_bytes,
-				  dev->pio_hdrs, dev->pio_hdrs_phys);
+	kmem_cache_destroy(dev->verbs_txreq_cache);
 	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
 	free_pages((unsigned long) dev->lk_table.table,
 		   get_order(lk_tab_size));

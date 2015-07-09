@@ -1506,6 +1506,30 @@ static u64 access_sw_cpu_rcv_limit(const struct cntr_entry *entry,
 			      mode, data);
 }
 
+static u64 access_sw_pio_wait(const struct cntr_entry *entry,
+			      void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	return dd->verbs_dev.n_piowait;
+}
+
+static u64 access_sw_vtx_wait(const struct cntr_entry *entry,
+			      void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	return dd->verbs_dev.n_txwait;
+}
+
+static u64 access_sw_kmem_wait(const struct cntr_entry *entry,
+			       void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	return dd->verbs_dev.n_kmem_wait;
+}
+
 #define def_access_sw_cpu(cntr) \
 static u64 access_sw_cpu_##cntr(const struct cntr_entry *entry,		      \
 			      void *context, int vl, int mode, u64 data)      \
@@ -1690,6 +1714,12 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 			    access_sw_cpu_intr),
 [C_SW_CPU_RCV_LIM] = CNTR_ELEM("RcvLimit", 0, 0, CNTR_NORMAL,
 			    access_sw_cpu_rcv_limit),
+[C_SW_VTX_WAIT] = CNTR_ELEM("vTxWait", 0, 0, CNTR_NORMAL,
+			    access_sw_vtx_wait),
+[C_SW_PIO_WAIT] = CNTR_ELEM("PioWait", 0, 0, CNTR_NORMAL,
+			    access_sw_pio_wait),
+[C_SW_KMEM_WAIT] = CNTR_ELEM("KmemWait", 0, 0, CNTR_NORMAL,
+			    access_sw_kmem_wait),
 };
 
 static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {

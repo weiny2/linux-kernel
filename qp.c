@@ -511,14 +511,14 @@ int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 	if (qp->s_flags & HFI1_S_ANY_WAIT_SEND)
 		qp->s_flags &= ~HFI1_S_ANY_WAIT_SEND;
 
-	spin_lock(&dev->pending_lock);
+	write_seqlock(&dev->iowait_lock);
 	if (!list_empty(&qp->s_iowait.list) && !(qp->s_flags & HFI1_S_BUSY)) {
 		qp->s_flags &= ~HFI1_S_ANY_WAIT_IO;
 		list_del_init(&qp->s_iowait.list);
 		if (atomic_dec_and_test(&qp->refcount))
 			wake_up(&qp->wait);
 	}
-	spin_unlock(&dev->pending_lock);
+	write_sequnlock(&dev->iowait_lock);
 
 	if (!(qp->s_flags & HFI1_S_BUSY)) {
 		qp->s_hdrwords = 0;
@@ -597,13 +597,13 @@ static void flush_iowait(struct hfi1_qp *qp)
 	struct hfi1_ibdev *dev = to_idev(qp->ibqp.device);
 	unsigned long flags;
 
-	spin_lock_irqsave(&dev->pending_lock, flags);
+	write_seqlock_irqsave(&dev->iowait_lock, flags);
 	if (!list_empty(&qp->s_iowait.list)) {
 		list_del_init(&qp->s_iowait.list);
 		if (atomic_dec_and_test(&qp->refcount))
 			wake_up(&qp->wait);
 	}
-	spin_unlock_irqrestore(&dev->pending_lock, flags);
+	write_sequnlock_irqrestore(&dev->iowait_lock, flags);
 }
 
 static inline int opa_mtu_enum_to_int(int mtu)
@@ -1458,7 +1458,7 @@ static int iowait_sleep(
 		/* Make a common routine? */
 		dev = &sde->dd->verbs_dev;
 		list_add_tail(&stx->list, &wait->tx_head);
-		spin_lock(&dev->pending_lock);
+		write_seqlock(&dev->iowait_lock);
 		if (sdma_progress(sde, seq, stx))
 			goto eagain;
 		if (list_empty(&qp->s_iowait.list)) {
@@ -1471,7 +1471,7 @@ static int iowait_sleep(
 			trace_hfi1_qpsleep(qp, HFI1_S_WAIT_DMA_DESC);
 			atomic_inc(&qp->refcount);
 		}
-		spin_unlock(&dev->pending_lock);
+		write_sequnlock(&dev->iowait_lock);
 		qp->s_flags &= ~HFI1_S_BUSY;
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 		ret = -EBUSY;
@@ -1481,7 +1481,7 @@ static int iowait_sleep(
 	}
 	return ret;
 eagain:
-	spin_unlock(&dev->pending_lock);
+	write_sequnlock(&dev->iowait_lock);
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 	list_del_init(&stx->list);
 	return -EAGAIN;

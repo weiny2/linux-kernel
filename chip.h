@@ -784,6 +784,9 @@ enum {
 	C_DC_PG_STS_TX_MBE_CNT,
 	C_SW_CPU_INTR,
 	C_SW_CPU_RCV_LIM,
+	C_SW_VTX_WAIT,
+	C_SW_PIO_WAIT,
+	C_SW_KMEM_WAIT,
 	DEV_CNTR_LAST  /* Must be kept last */
 };
 
