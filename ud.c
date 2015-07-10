@@ -561,7 +561,7 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
 	if (sc5 != 0xf)
 		return 1;
 
-	if (ingress_pkey_check(ppd, pkey, sc5, qp->s_pkey_index, slid))
+	if (rcv_pkey_check(ppd, pkey, sc5, slid))
 		return 1;
 
 	/*
@@ -742,9 +742,13 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 			sc5 |= sc4_bit;
 
 			slid = be16_to_cpu(hdr->lrh[3]);
-			if (unlikely(ingress_pkey_check(ppd, pkey, sc5,
-							qp->s_pkey_index,
-							slid))) {
+			if (unlikely(rcv_pkey_check(ppd, pkey, sc5, slid))) {
+				/*
+				 * Traps will not be sent for packets dropped
+				 * by the HW. This is fine, as sending trap
+				 * for invalid pkeys is optional according to
+				 * IB spec (release 1.3, section 10.9.4)
+				 */
 				hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
 					       pkey,
 					       (be16_to_cpu(hdr->lrh[0]) >> 4) &

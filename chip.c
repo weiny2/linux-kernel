@@ -3472,11 +3472,6 @@ static int lcb_to_port_ltp(int lcb_crc)
 	return port_ltp;
 }
 
-static int neigh_is_hfi(struct hfi1_pportdata *ppd)
-{
-	return (ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) == 0;
-}
-
 /*
  * Our neighbor has indicated that we are allowed to act as a fabric
  * manager, so place the full management partition key in the second
@@ -3834,9 +3829,6 @@ void handle_verify_cap(struct work_struct *work)
 		"Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
 		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
 		ppd->mgmt_allowed, ppd->neighbor_fm_security);
-	if (neigh_is_hfi(ppd))
-		ppd->part_enforce =
-			HFI1_PART_ENFORCE_IN | HFI1_PART_ENFORCE_OUT;
 	if (ppd->mgmt_allowed)
 		add_full_mgmt_pkey(ppd);
 
@@ -9151,6 +9143,7 @@ static void set_partition_keys(struct hfi1_pportdata *ppd)
 		}
 	}
 
+	/* Always enable HW pkeys check when pkeys table is set */
 	add_rcvctrl(dd, RCV_CTRL_RCV_PARTITION_KEY_ENABLE_SMASK);
 }
 

@@ -1289,7 +1289,9 @@ static void ingress_pkey_table_fail(struct hfi1_pportdata *ppd, u16 pkey,
  * ingress_pkey_check - Return 0 if the ingress pkey is valid, return 1
  * otherwise. Use the criteria in the OPAv1 spec, section 9.10.14. idx
  * is a hint as to the best place in the partition key table to begin
- * searching.
+ * searching. This function should not be called on the data path because
+ * of performance reasons. On datapath pkey check is expected to be done
+ * by HW and rcv_pkey_check function should be called instead.
  */
 static inline int ingress_pkey_check(struct hfi1_pportdata *ppd, u16 pkey,
 				     u8 sc5, u8 idx, u16 slid)
@@ -1313,6 +1315,28 @@ static inline int ingress_pkey_check(struct hfi1_pportdata *ppd, u16 pkey,
 	if (!ingress_pkey_table_search(ppd, pkey))
 		return 0;
 
+bad:
+	ingress_pkey_table_fail(ppd, pkey, slid);
+	return 1;
+}
+
+/*
+ * rcv_pkey_check - Return 0 if the ingress pkey is valid, return 1
+ * otherwise. It only ensures pkey is vlid for QP0. This function
+ * should be called on the data path instead of ingress_pkey_check
+ * as on data path, pkey check is done by HW (except for QP0).
+ */
+static inline int rcv_pkey_check(struct hfi1_pportdata *ppd, u16 pkey,
+				 u8 sc5, u16 slid)
+{
+	if (!(ppd->part_enforce & HFI1_PART_ENFORCE_IN))
+		return 0;
+
+	/* If SC15, pkey[0:14] must be 0x7fff */
+	if ((sc5 == 0xf) && ((pkey & PKEY_LOW_15_MASK) != PKEY_LOW_15_MASK))
+		goto bad;
+
+	return 0;
 bad:
 	ingress_pkey_table_fail(ppd, pkey, slid);
 	return 1;
