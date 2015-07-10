@@ -369,7 +369,7 @@ err:
  * @sqp: the sending QP
  *
  * This is called from hfi1_do_send() to
- * forward a WQE addressed to the same HCA.
+ * forward a WQE addressed to the same HFI.
  * Note that although we are single threaded due to the tasklet, we still
  * have to protect against post_send().  We don't have to worry about
  * receive interrupts since this is a connected protocol and all packets

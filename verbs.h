@@ -135,53 +135,11 @@ struct hfi1_packet;
 
 #define IB_DEFAULT_GID_PREFIX	cpu_to_be64(0xfe80000000000000ULL)
 
-/* Values for set/get portinfo VLCap OperationalVLs */
-#define IB_VL_VL0       1
-#define IB_VL_VL0_1     2
-#define IB_VL_VL0_3     3
-#define IB_VL_VL0_7     4
-#define IB_VL_VL0_14    5
-
 /* flags passed by hfi1_ib_rcv() */
 enum {
 	HFI1_HAS_GRH = (1 << 0),
 	HFI1_SC4_BIT = (1 << 1), /* indicates the DC set the SC[4] bit */
 };
-
-static inline int hfi1_num_vls(int vls)
-{
-	switch (vls) {
-	default:
-	case IB_VL_VL0:
-		return 1;
-	case IB_VL_VL0_1:
-		return 2;
-	case IB_VL_VL0_3:
-		return 4;
-	case IB_VL_VL0_7:
-		return 8;
-	case IB_VL_VL0_14:
-		return 15;
-	}
-}
-
-static inline int hfi1_vls_to_ib_enum(u8 num_vls)
-{
-	switch (num_vls) {
-	case 1:
-		return IB_VL_VL0;
-	case 2:
-		return IB_VL_VL0_1;
-	case 4:
-		return IB_VL_VL0_3;
-	case 8:
-		return IB_VL_VL0_7;
-	case 15:
-		return IB_VL_VL0_14;
-	default:
-	return -1;
-	}
-}
 
 struct ib_reth {
 	__be64 vaddr;

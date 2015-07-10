@@ -61,7 +61,7 @@
  * @swqe: the send work request
  *
  * This is called from hfi1_make_ud_req() to forward a WQE addressed
- * to the same HCA.
+ * to the same HFI.
  * Note that the receive interrupt handler may be calling hfi1_ud_rcv()
  * while this is being called.
  */

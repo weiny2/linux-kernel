@@ -770,15 +770,17 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct hfi1_qp *qp,
 	return;
 
 queue_ack:
-		this_cpu_inc(*ibp->rc_qacks);
-		qp->s_flags |= HFI1_S_ACK_PENDING | HFI1_S_RESP_PENDING;
-		qp->s_nak_state = qp->r_nak_state;
-		qp->s_ack_psn = qp->r_ack_psn;
-		if (is_fecn)
-			qp->s_flags |= HFI1_S_ECN;
+	this_cpu_inc(*ibp->rc_qacks);
+	spin_lock(&qp->s_lock);
+	qp->s_flags |= HFI1_S_ACK_PENDING | HFI1_S_RESP_PENDING;
+	qp->s_nak_state = qp->r_nak_state;
+	qp->s_ack_psn = qp->r_ack_psn;
+	if (is_fecn)
+		qp->s_flags |= HFI1_S_ECN;
 
-		/* Schedule the send tasklet. */
-		hfi1_schedule_send(qp);
+	/* Schedule the send tasklet. */
+	hfi1_schedule_send(qp);
+	spin_unlock(&qp->s_lock);
 }
 
 /**

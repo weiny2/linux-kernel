@@ -87,7 +87,7 @@ void __cm_reset(struct hfi1_devdata *dd, u64 sendctrl)
 /* global control of PIO send */
 void pio_send_control(struct hfi1_devdata *dd, int op)
 {
-	u64 reg;
+	u64 reg, mask;
 	unsigned long flags;
 	int write = 1;	/* write sendctrl back */
 	int flush = 0;	/* re-read sendctrl to make sure it is flushed */
@@ -98,6 +98,12 @@ void pio_send_control(struct hfi1_devdata *dd, int op)
 	switch (op) {
 	case PSC_GLOBAL_ENABLE:
 		reg |= SEND_CTRL_SEND_ENABLE_SMASK;
+	/* Fall through */
+	case PSC_DATA_VL_ENABLE:
+		/* Disallow sending on VLs not enabled */
+		mask = (((~0ull)<<num_vls) & SEND_CTRL_UNSUPPORTED_VL_MASK)<<
+				SEND_CTRL_UNSUPPORTED_VL_SHIFT;
+		reg = (reg & ~SEND_CTRL_UNSUPPORTED_VL_SMASK) | mask;
 		break;
 	case PSC_GLOBAL_DISABLE:
 		reg &= ~SEND_CTRL_SEND_ENABLE_SMASK;
@@ -111,9 +117,6 @@ void pio_send_control(struct hfi1_devdata *dd, int op)
 	case PSC_CM_RESET:
 		__cm_reset(dd, reg);
 		write = 0; /* CSR already written (and flushed) */
-		break;
-	case PSC_DATA_VL_ENABLE:
-		reg &= ~SEND_CTRL_UNSUPPORTED_VL_SMASK;
 		break;
 	case PSC_DATA_VL_DISABLE:
 		reg |= SEND_CTRL_UNSUPPORTED_VL_SMASK;
@@ -784,6 +787,12 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 	/* set up write-through credit_ctrl */
 	sc->credit_ctrl = reg;
 	write_kctxt_csr(dd, hw_context, SC(CREDIT_CTRL), reg);
+
+	/* User send contexts should not allow sending on VL15 */
+	if (type == SC_USER) {
+		reg = 1ULL << 15;
+		write_kctxt_csr(dd, hw_context, SC(CHECK_VL), reg);
+	}
 
 	spin_unlock_irqrestore(&dd->sc_lock, flags);
 
