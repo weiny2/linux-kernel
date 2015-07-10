@@ -315,6 +315,8 @@ struct hfi1_packet {
 	void *hdr;
 	struct hfi1_ctxtdata *rcd;
 	u64 rhf;
+	struct hfi1_qp *qp;
+	struct hfi1_other_headers *ohdr;
 	u16 tlen;
 	u16 hlen;
 	u32 updegr;
@@ -326,6 +328,8 @@ struct hfi1_packet {
 	u32 hdrqtail;
 	u32 rhqoff;
 	int numpkt;
+	u32 rcv_flags;
+	int has_grh;
 };
 
 /*
@@ -466,6 +470,10 @@ struct hfi1_sge_state;
 #define CNTR_MODE_W		0x0
 #define CNTR_MODE_R		0x1
 
+/* VLs Supported/Operational */
+#define HFI1_MIN_VLS_SUPPORTED 1
+#define HFI1_MAX_VLS_SUPPORTED 8
+
 static inline void incr_cntr64(u64 *cntr)
 {
 	if (*cntr < (u64)-1LL)
@@ -559,6 +567,7 @@ struct hfi1_pportdata {
 	struct work_struct sma_message_work;
 	struct work_struct freeze_work;
 	struct work_struct link_downgrade_work;
+	struct work_struct link_bounce_work;
 	/* host link state variables */
 	struct mutex hls_lock;
 	u32 host_link_state;
@@ -697,6 +706,8 @@ struct hfi1_pportdata {
 };
 
 typedef int (*rhf_rcv_function_ptr)(struct hfi1_packet *packet);
+
+typedef void (*opcode_handler)(struct hfi1_packet *packet);
 
 /* return values for the RHF receive functions */
 #define RHF_RCV_CONTINUE  0	/* keep going */
@@ -1398,6 +1409,22 @@ static inline struct hfi1_ibport *to_iport(struct ib_device *ibdev, u8 port)
 }
 
 /*
+ * Return the indexed PKEY from the port PKEY table.
+ */
+static inline u16 hfi1_get_pkey(struct hfi1_ibport *ibp, unsigned index)
+{
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+	u16 ret;
+
+	if (index >= ARRAY_SIZE(ppd->pkeys))
+		ret = 0;
+	else
+		ret = ppd->pkeys[index];
+
+	return ret;
+}
+
+/*
  * Readers of cc_state must call get_cc_state() under rcu_read_lock().
  * Writers of cc_state must call get_cc_state() under cc_state_lock.
  */
@@ -1446,6 +1473,8 @@ struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra);
 #define HFI1_LED_PHYS 1 /* Physical (linktraining) GREEN LED */
 #define HFI1_LED_LOG 2  /* Logical (link) YELLOW LED */
 void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val);
+
+#define HFI1_CREDIT_RETURN_RATE (100)
 
 /*
  * The number of words for the KDETH protocol field.  If this is
@@ -1680,6 +1709,13 @@ static inline u64 hfi1_pkt_base_sdma_integrity(struct hfi1_devdata *dd)
 		  get_unit_name((dd)->unit), ##__VA_ARGS__)
 #define dd_dev_err(dd, fmt, ...) \
 	dev_err(&(dd)->pcidev->dev, "%s: " fmt, \
+			get_unit_name((dd)->unit), ##__VA_ARGS__)
+#define dd_dev_warn(dd, fmt, ...) \
+	dev_warn(&(dd)->pcidev->dev, "%s: " fmt, \
+			get_unit_name((dd)->unit), ##__VA_ARGS__)
+
+#define dd_dev_warn_ratelimited(dd, fmt, ...) \
+	dev_warn_ratelimited(&(dd)->pcidev->dev, "%s: " fmt, \
 			get_unit_name((dd)->unit), ##__VA_ARGS__)
 
 #define dd_dev_info(dd, fmt, ...) \

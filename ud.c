@@ -61,7 +61,7 @@
  * @swqe: the send work request
  *
  * This is called from hfi1_make_ud_req() to forward a WQE addressed
- * to the same HCA.
+ * to the same HFI.
  * Note that the receive interrupt handler may be calling hfi1_ud_rcv()
  * while this is being called.
  */
@@ -638,8 +638,7 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
  * for the given QP.
  * Called at interrupt level.
  */
-void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
-		 u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp)
+void hfi1_ud_rcv(struct hfi1_packet *packet)
 {
 	struct hfi1_other_headers *ohdr;
 	int opcode;
@@ -650,6 +649,13 @@ void hfi1_ud_rcv(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 	u32 src_qp;
 	u16 dlid, pkey;
 	int mgmt_pkey_idx = -1;
+	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
+	struct hfi1_ib_header *hdr = packet->hdr;
+	u32 rcv_flags = packet->rcv_flags;
+	void *data = packet->ebuf;
+	u32 tlen = packet->tlen;
+	struct hfi1_qp *qp = packet->qp;
+
 	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
 	int sc4_bit = (!!(rcv_flags & HFI1_SC4_BIT)) << 4;
 	u8 sc;

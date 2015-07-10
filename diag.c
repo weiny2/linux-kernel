@@ -1482,9 +1482,9 @@ static struct snoop_packet *allocate_snoop_packet(u32 hdr_len,
 
 	struct snoop_packet *packet = NULL;
 
-	packet = kzalloc(sizeof(struct snoop_packet) + hdr_len + data_len
+	packet = kmalloc(sizeof(struct snoop_packet) + hdr_len + data_len
 			 + md_len,
-			 GFP_ATOMIC);
+			 GFP_ATOMIC | __GFP_NOWARN);
 	if (likely(packet))
 		INIT_LIST_HEAD(&packet->list);
 
@@ -1549,9 +1549,9 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 		s_packet = allocate_snoop_packet(header_size,
 						 tlen - header_size,
 						 md_len);
+
 		if (unlikely(s_packet == NULL)) {
-			dd_dev_err(ppd->dd,
-				"Unable to allocate snoop/capture packet\n");
+			dd_dev_warn_ratelimited(ppd->dd, "Unable to allocate snoop/capture packet\n");
 			break;
 		}
 
@@ -1668,12 +1668,13 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 
 	/* not using ss->total_len as arg 2 b/c that does not count CRC */
 	s_packet = allocate_snoop_packet(hdr_len, tlen - hdr_len, md_len);
-	s_packet->total_len = tlen + md_len;
+
 	if (unlikely(s_packet == NULL)) {
-		dd_dev_err(ppd->dd,
-			   "Unable to allocate snoop/capture packet\n");
+		dd_dev_warn_ratelimited(ppd->dd, "Unable to allocate snoop/capture packet\n");
 		goto out;
 	}
+
+	s_packet->total_len = tlen + md_len;
 
 	if (md_len > 0) {
 		memset(&md, 0, sizeof(struct capture_md));
@@ -1837,12 +1838,13 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 			md_len = sizeof(struct capture_md);
 
 		s_packet = allocate_snoop_packet(packet_len, 0, md_len);
-		s_packet->total_len = packet_len + md_len;
+
 		if (unlikely(s_packet == NULL)) {
-			dd_dev_err(dd,
-			   "Unable to allocate snoop/capture packet\n");
+			dd_dev_warn_ratelimited(dd, "Unable to allocate snoop/capture packet\n");
 			goto inline_pio_out;
 		}
+
+		s_packet->total_len = packet_len + md_len;
 
 		/* Fill in the metadata for the packet */
 		if (md_len > 0) {

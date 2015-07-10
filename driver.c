@@ -303,9 +303,12 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 		if (lid < HFI1_MULTICAST_LID_BASE) {
 			struct hfi1_qp *qp;
 
+			rcu_read_lock();
 			qp = hfi1_lookup_qpn(ibp, qp_num);
-			if (!qp)
+			if (!qp) {
+				rcu_read_unlock();
 				goto drop;
+			}
 
 			/*
 			 * Handle only RC QPs - for other QP types drop error
@@ -333,6 +336,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			}
 
 			spin_unlock(&qp->r_lock);
+			rcu_read_unlock();
 		} /* Unicast QP */
 	} /* Valid packet with TIDErr */
 
@@ -376,9 +380,12 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			sl = ibp->sc_to_sl[sc5];
 
 			lqpn = be32_to_cpu(bth[1]) & HFI1_QPN_MASK;
+			rcu_read_lock();
 			qp = hfi1_lookup_qpn(ibp, lqpn);
-			if (qp == NULL)
+			if (qp == NULL) {
+				rcu_read_unlock();
 				goto drop;
+			}
 
 			switch (qp->ibqp.qp_type) {
 			case IB_QPT_UD:
@@ -396,6 +403,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			}
 
 			process_becn(ppd, sl, rlid, lqpn, rqpn, svc_type);
+			rcu_read_unlock();
 		}
 
 		packet->rhf &= ~RHF_RCV_TYPE_ERR_SMASK;
@@ -423,6 +431,8 @@ static inline u32 init_packet(struct hfi1_ctxtdata *rcd,
 	packet->rhf = rhf_to_cpu(packet->rhf_addr);
 	packet->rhqoff = rcd->head;
 	packet->numpkt = 1;
+	packet->rcv_flags = 0;
+	packet->has_grh = 0;
 	return packet->rhqoff;
 
 }
@@ -440,7 +450,20 @@ static inline int process_rcv_packet(struct hfi1_packet *packet)
 	packet->etype = rhf_rcv_type(packet->rhf);
 	/* total length */
 	packet->tlen = rhf_pkt_len(packet->rhf); /* in bytes */
-	packet->ebuf = NULL;
+	/* retrieve eager buffer details */
+	if (rhf_use_egr_bfr(packet->rhf)) {
+		packet->etail = rhf_egr_index(packet->rhf);
+		packet->ebuf = get_egrbuf(packet->rcd, packet->rhf,
+				 &packet->updegr);
+		/*
+		 * Prefetch the contents of the eager buffer.  It is
+		 * OK to send a negative length to prefetch_range().
+		 * The +2 is the size of the RHF.
+		 */
+		prefetch_range(packet->ebuf,
+			packet->tlen - ((packet->rcd->rcvhdrqentsize -
+				  (rhf_hdrq_offset(packet->rhf)+2)) * 4));
+	}
 
 	/*
 	 * Call a type specific handler for the packet. We
@@ -736,7 +759,7 @@ int set_mtu(struct hfi1_pportdata *ppd)
 	int i, drain, ret = 0, is_up = 0;
 
 	ppd->ibmtu = 0;
-	for (i = 0; i < hfi1_num_vls(ppd->vls_supported); i++)
+	for (i = 0; i < ppd->vls_supported; i++)
 		if (ppd->ibmtu < dd->vld[i].mtu)
 			ppd->ibmtu = dd->vld[i].mtu;
 	ppd->ibmaxlen = ppd->ibmtu + lrh_max_header_bytes(ppd->dd);
@@ -976,22 +999,6 @@ int process_receive_ib(struct hfi1_packet *packet)
 		handle_eflags(packet);
 		return RHF_RCV_CONTINUE;
 	}
-
-	/* retrieve eager buffer details */
-	if (rhf_use_egr_bfr(packet->rhf)) {
-		packet->etail = rhf_egr_index(packet->rhf);
-		packet->ebuf = get_egrbuf(packet->rcd, packet->rhf,
-				 &packet->updegr);
-		/*
-		 * Prefetch the contents of the eager buffer.  It is
-		 * OK to send a negative length to prefetch_range().
-		 * The +2 is the size of the RHF.
-		 */
-		prefetch_range(packet->ebuf,
-			packet->tlen - ((packet->rcd->rcvhdrqentsize -
-				  (rhf_hdrq_offset(packet->rhf)+2)) * 4));
-	}
-
 
 	hfi1_ib_rcv(packet);
 	return RHF_RCV_CONTINUE;

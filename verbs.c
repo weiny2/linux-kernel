@@ -215,6 +215,49 @@ const u8 hdr_len_by_opcode[256] = {
 	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = 12 + 8 + 12
 };
 
+static const opcode_handler opcode_handler_tbl[256] = {
+	/* RC */
+	[IB_OPCODE_RC_SEND_FIRST]                     = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_SEND_MIDDLE]                    = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_SEND_LAST]                      = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE]       = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_SEND_ONLY]                      = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_SEND_ONLY_WITH_IMMEDIATE]       = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_FIRST]               = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]              = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST]                = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_ACKNOWLEDGE]                    = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_COMPARE_SWAP]                   = &hfi1_rc_rcv,
+	[IB_OPCODE_RC_FETCH_ADD]                      = &hfi1_rc_rcv,
+	/* UC */
+	[IB_OPCODE_UC_SEND_FIRST]                     = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_SEND_MIDDLE]                    = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_SEND_LAST]                      = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_SEND_ONLY]                      = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST]                = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY]                = &hfi1_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = &hfi1_uc_rcv,
+	/* UD */
+	[IB_OPCODE_UD_SEND_ONLY]                      = &hfi1_ud_rcv,
+	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = &hfi1_ud_rcv,
+	/* CNP */
+	[CNP_OPCODE]				      = &hfi1_cnp_rcv
+};
+
 /*
  * System image GUID.
  */
@@ -538,55 +581,26 @@ bail:
 	return ret;
 }
 
-/**
- * qp_rcv - processing an incoming packet on a QP
- * @rcd: the context pointer
- * @hdr: the packet header
- * @rcv_flags: flags relevant to rcv processing
- * @data: the packet data
- * @tlen: the packet length
- * @qp: the QP the packet came on
- *
- * This is called from hfi1_ib_rcv() to process an incoming packet
- * for the given QP.
- * Called at interrupt level.
+/*
+ * Make sure the QP is ready and able to accept the given opcode.
  */
-static void qp_rcv(struct hfi1_ctxtdata *rcd, struct hfi1_ib_header *hdr,
-		   u32 rcv_flags, void *data, u32 tlen, struct hfi1_qp *qp)
+static inline int qp_ok(int opcode, struct hfi1_packet *packet)
 {
-	struct hfi1_ibport *ibp = &rcd->ppd->ibport_data;
+	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
 
-	spin_lock(&qp->r_lock);
-
-	/* Check for valid receive state. */
-	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK)) {
+	if (!(ib_hfi1_state_ops[packet->qp->state] & HFI1_PROCESS_RECV_OK)) {
 		ibp->n_pkt_drops++;
-		goto unlock;
+		return 0;
 	}
 
-	switch (qp->ibqp.qp_type) {
-	case IB_QPT_SMI:
-	case IB_QPT_GSI:
-		/* FALLTHROUGH */
-	case IB_QPT_UD:
-		hfi1_ud_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
-		break;
+	if (((opcode & OPCODE_QP_MASK) == packet->qp->allowed_ops) ||
+	    (opcode == CNP_OPCODE))
+		return 1;
 
-	case IB_QPT_RC:
-		hfi1_rc_rcv(rcd, hdr, rcv_flags, data, tlen, qp);
-		break;
-
-	case IB_QPT_UC:
-		hfi1_uc_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
-		break;
-
-	default:
-		break;
-	}
-
-unlock:
-	spin_unlock(&qp->r_lock);
+	ibp->n_pkt_drops++;
+	return 0;
 }
+
 
 /**
  * hfi1_ib_rcv - process an incoming packet
@@ -600,14 +614,11 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 {
 	struct hfi1_ctxtdata *rcd = packet->rcd;
 	struct hfi1_ib_header *hdr = packet->hdr;
-	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
 	struct hfi1_pportdata *ppd = rcd->ppd;
 	struct hfi1_ibport *ibp = &ppd->ibport_data;
 	struct hfi1_other_headers *ohdr;
-	struct hfi1_qp *qp;
 	u32 qp_num;
-	u32 rcv_flags = 0;
 	int lnh;
 	u8 opcode;
 	u16 lid;
@@ -652,11 +663,16 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		mcast = hfi1_mcast_find(ibp, &hdr->u.l.grh.dgid);
 		if (mcast == NULL)
 			goto drop;
-		rcv_flags |= HFI1_HAS_GRH;
+		packet->rcv_flags |= HFI1_HAS_GRH;
 		if (rhf_dc_info(packet->rhf))
-			rcv_flags |= HFI1_SC4_BIT;
-		list_for_each_entry_rcu(p, &mcast->qp_list, list)
-			qp_rcv(rcd, hdr, rcv_flags, data, tlen, p->qp);
+			packet->rcv_flags |= HFI1_SC4_BIT;
+		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
+			packet->qp = p->qp;
+			spin_lock(&packet->qp->r_lock);
+			if (likely((qp_ok(opcode, packet))))
+				opcode_handler_tbl[opcode](packet);
+			spin_unlock(&packet->qp->r_lock);
+		}
 		/*
 		 * Notify hfi1_multicast_detach() if it is waiting for us
 		 * to finish.
@@ -664,15 +680,22 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		if (atomic_dec_return(&mcast->refcount) <= 1)
 			wake_up(&mcast->wait);
 	} else {
-		qp = hfi1_lookup_qpn(ibp, qp_num);
-		if (!qp)
+		rcu_read_lock();
+		packet->qp = hfi1_lookup_qpn(ibp, qp_num);
+		if (!packet->qp) {
+			rcu_read_unlock();
 			goto drop;
+		}
 
 		if (lnh == HFI1_LRH_GRH)
-			rcv_flags |= HFI1_HAS_GRH;
+			packet->rcv_flags |= HFI1_HAS_GRH;
 		if (rhf_dc_info(packet->rhf))
-			rcv_flags |= HFI1_SC4_BIT;
-		qp_rcv(rcd, hdr, rcv_flags, data, tlen, qp);
+			packet->rcv_flags |= HFI1_SC4_BIT;
+		spin_lock(&packet->qp->r_lock);
+		if (likely((qp_ok(opcode, packet))))
+			opcode_handler_tbl[opcode](packet);
+		spin_unlock(&packet->qp->r_lock);
+		rcu_read_unlock();
 	}
 	return;
 
@@ -1126,7 +1149,7 @@ struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5)
 	u8 vl;
 
 	vl = sc_to_vlt(dd, sc5);
-	if (vl >= hfi1_num_vls(ppd->vls_supported) && vl != 15)
+	if (vl >= ppd->vls_supported && vl != 15)
 		return NULL;
 	return dd->vld[vl].sc;
 }
@@ -1398,6 +1421,7 @@ static int query_device(struct ib_device *ibdev,
 	props->max_qp = hfi1_max_qps;
 	props->max_qp_wr = hfi1_max_qp_wrs;
 	props->max_sge = hfi1_max_sges;
+	props->max_sge_rd = hfi1_max_sges;
 	props->max_cq = hfi1_max_cqs;
 	props->max_ah = hfi1_max_ahs;
 	props->max_cqe = hfi1_max_cqes;
@@ -1479,7 +1503,7 @@ static int query_port(struct ib_device *ibdev, u8 port,
 	props->active_width = (u8)opa_width_to_ib(ppd->link_width_active);
 	/* see rate_show() in ib core/sysfs.c */
 	props->active_speed = (u8)opa_speed_to_ib(ppd->link_speed_active);
-	props->max_vl_num = hfi1_num_vls(ppd->vls_supported);
+	props->max_vl_num = ppd->vls_supported;
 	props->init_type_reply = 0;
 
 	/* Once we are a "first class" citizen and have added the OPA MTUs to
@@ -1823,22 +1847,6 @@ unsigned hfi1_get_npkeys(struct hfi1_devdata *dd)
 	return ARRAY_SIZE(dd->pport[0].pkeys);
 }
 
-/*
- * Return the indexed PKEY from the port PKEY table.
- */
-unsigned hfi1_get_pkey(struct hfi1_ibport *ibp, unsigned index)
-{
-	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-	unsigned ret;
-
-	if (index >= ARRAY_SIZE(ppd->pkeys))
-		ret = 0;
-	else
-		ret = ppd->pkeys[index];
-
-	return ret;
-}
-
 static int query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 		      u16 *pkey)
 {
@@ -2004,7 +2012,7 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 
 	/*
 	 * The system image GUID is supposed to be the same for all
-	 * IB HCAs in a single system but since there can be other
+	 * HFIs in a single system but since there can be other
 	 * device types in the system, we can't be sure this is unique.
 	 */
 	if (!ib_hfi1_sys_image_guid)
@@ -2192,4 +2200,16 @@ void hfi1_schedule_send(struct hfi1_qp *qp)
 
 		iowait_schedule(&qp->s_iowait, ppd->hfi1_wq);
 	}
+}
+
+void hfi1_cnp_rcv(struct hfi1_packet *packet)
+{
+	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
+
+	if (packet->qp->ibqp.qp_type == IB_QPT_UC)
+		hfi1_uc_rcv(packet);
+	else if (packet->qp->ibqp.qp_type == IB_QPT_UD)
+		hfi1_ud_rcv(packet);
+	else
+		ibp->n_pkt_drops++;
 }

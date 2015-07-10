@@ -1170,6 +1170,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		qp->ibqp.qp_num = err;
 		qp->port_num = init_attr->port_num;
 		reset_qp(qp, init_attr->qp_type);
+
 		break;
 
 	default:
@@ -1231,6 +1232,29 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 	}
 
 	ret = &qp->ibqp;
+
+	/*
+	 * We have our QP and its good, now keep track of what types of opcodes
+	 * can be processed on this QP. We do this by keeping track of what the
+	 * 3 high order bits of the opcode are.
+	 */
+	switch (init_attr->qp_type) {
+	case IB_QPT_SMI:
+	case IB_QPT_GSI:
+	case IB_QPT_UD:
+		qp->allowed_ops = IB_OPCODE_UD_SEND_ONLY & OPCODE_QP_MASK;
+		break;
+	case IB_QPT_RC:
+		qp->allowed_ops = IB_OPCODE_RC_SEND_ONLY & OPCODE_QP_MASK;
+		break;
+	case IB_QPT_UC:
+		qp->allowed_ops = IB_OPCODE_UC_SEND_ONLY & OPCODE_QP_MASK;
+		break;
+	default:
+		ret = ERR_PTR(-EINVAL);
+		goto bail_ip;
+	}
+
 	goto bail;
 
 bail_ip:

@@ -593,7 +593,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->mkeyprotect_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
 
 	memset(pi->neigh_mtu.pvlx_to_mtu, 0, sizeof(pi->neigh_mtu.pvlx_to_mtu));
-	for (i = 0; i < hfi1_num_vls(ppd->vls_supported); i++) {
+	for (i = 0; i < ppd->vls_supported; i++) {
 		mtu = mtu_to_enum(dd->vld[i].mtu, HFI1_DEFAULT_ACTIVE_MTU);
 		if ((i % 2) == 0)
 			pi->neigh_mtu.pvlx_to_mtu[i/2] |= (mtu << 4);
@@ -604,8 +604,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	mtu = mtu_to_enum(dd->vld[15].mtu, 2048);
 	pi->neigh_mtu.pvlx_to_mtu[15/2] |= mtu;
 	pi->smsl = ibp->sm_sl & OPA_PI_MASK_SMSL;
-	pi->operational_vls =
-		hfi1_num_vls(hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS));
+	pi->operational_vls = hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS);
 	pi->partenforce_filterraw |=
 		(ppd->linkinit_reason & OPA_PI_MASK_LINKINIT_REASON);
 	if (ppd->part_enforce & HFI1_PART_ENFORCE_IN)
@@ -617,7 +616,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->pkey_violations = cpu_to_be16(ibp->pkey_violations);
 	pi->qkey_violations = cpu_to_be16(ibp->qkey_violations);
 
-	pi->vl.cap = hfi1_num_vls(ppd->vls_supported);
+	pi->vl.cap = ppd->vls_supported;
 	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
 	pi->vl.arb_high_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_CAP);
 	pi->vl.arb_low_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_LOW_CAP);
@@ -770,55 +769,225 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 	return reply((struct ib_mad_hdr *)smp);
 }
 
+enum {
+	HFI_TRANSITION_DISALLOWED,
+	HFI_TRANSITION_IGNORED,
+	HFI_TRANSITION_ALLOWED,
+	HFI_TRANSITION_UNDEFINED,
+};
+
+/*
+ * Use shortened names to improve readability of
+ * {logical,physical}_state_transitions
+ */
+enum {
+	__D = HFI_TRANSITION_DISALLOWED,
+	__I = HFI_TRANSITION_IGNORED,
+	__A = HFI_TRANSITION_ALLOWED,
+	__U = HFI_TRANSITION_UNDEFINED,
+};
+
+/*
+ * IB_PORTPHYSSTATE_POLLING (2) through OPA_PORTPHYSSTATE_MAX (11) are
+ * represented in physical_state_transitions.
+ */
+#define __N_PHYSTATES (OPA_PORTPHYSSTATE_MAX - IB_PORTPHYSSTATE_POLLING + 1)
+
+/*
+ * Within physical_state_transitions, rows represent "old" states,
+ * columns "new" states, and physical_state_transitions.allowed[old][new]
+ * indicates if the transition from old state to new state is legal (see
+ * OPAg1v1, Table 6-4).
+ */
+static const struct {
+	u8 allowed[__N_PHYSTATES][__N_PHYSTATES];
+} physical_state_transitions = {
+	{
+		/* 2    3    4    5    6    7    8    9   10   11 */
+	/* 2 */	{ __A, __A, __D, __D, __D, __D, __D, __D, __D, __D },
+	/* 3 */	{ __A, __I, __D, __D, __D, __D, __D, __D, __D, __A },
+	/* 4 */	{ __U, __U, __U, __U, __U, __U, __U, __U, __U, __U },
+	/* 5 */	{ __A, __A, __D, __I, __D, __D, __D, __D, __D, __D },
+	/* 6 */	{ __U, __U, __U, __U, __U, __U, __U, __U, __U, __U },
+	/* 7 */	{ __D, __A, __D, __D, __D, __I, __D, __D, __D, __D },
+	/* 8 */	{ __U, __U, __U, __U, __U, __U, __U, __U, __U, __U },
+	/* 9 */	{ __I, __A, __D, __D, __D, __D, __D, __I, __D, __D },
+	/*10 */	{ __U, __U, __U, __U, __U, __U, __U, __U, __U, __U },
+	/*11 */	{ __D, __A, __D, __D, __D, __D, __D, __D, __D, __I },
+	}
+};
+
+/*
+ * IB_PORT_DOWN (1) through IB_PORT_ACTIVE_DEFER (5) are represented
+ * logical_state_transitions
+ */
+
+#define __N_LOGICAL_STATES (IB_PORT_ACTIVE_DEFER - IB_PORT_DOWN + 1)
+
+/*
+ * Within logical_state_transitions rows represent "old" states,
+ * columns "new" states, and logical_state_transitions.allowed[old][new]
+ * indicates if the transition from old state to new state is legal (see
+ * OPAg1v1, Table 9-12).
+ */
+static const struct {
+	u8 allowed[__N_LOGICAL_STATES][__N_LOGICAL_STATES];
+} logical_state_transitions = {
+	{
+		/* 1    2    3    4    5 */
+	/* 1 */	{ __I, __D, __D, __D, __U},
+	/* 2 */	{ __D, __I, __A, __D, __U},
+	/* 3 */	{ __D, __D, __I, __A, __U},
+	/* 4 */	{ __D, __D, __I, __I, __U},
+	/* 5 */	{ __U, __U, __U, __U, __U},
+	}
+};
+
+static int logical_transition_allowed(int old, int new)
+{
+	if (old < IB_PORT_NOP || old > IB_PORT_ACTIVE_DEFER ||
+	    new < IB_PORT_NOP || new > IB_PORT_ACTIVE_DEFER) {
+		pr_warn("invalid logical state(s) (old %d new %d)\n",
+			old, new);
+		return HFI_TRANSITION_UNDEFINED;
+	}
+
+	if (new == IB_PORT_NOP)
+		return HFI_TRANSITION_ALLOWED; /* always allowed */
+
+	/* adjust states for indexing into logical_state_transitions */
+	old -= IB_PORT_DOWN;
+	new -= IB_PORT_DOWN;
+
+	return logical_state_transitions.allowed[old][new];
+}
+
+static int physical_transition_allowed(int old, int new)
+{
+	if (old < IB_PORTPHYSSTATE_NOP || old > OPA_PORTPHYSSTATE_MAX ||
+	    new < IB_PORTPHYSSTATE_NOP || new > OPA_PORTPHYSSTATE_MAX) {
+		pr_warn("invalid physical state(s) (old %d new %d)\n",
+			old, new);
+		return HFI_TRANSITION_UNDEFINED;
+	}
+
+	if (new == IB_PORTPHYSSTATE_NOP)
+		return HFI_TRANSITION_ALLOWED; /* always allowed */
+
+	/* adjust states for indexing into physical_state_transitions */
+	old -= IB_PORTPHYSSTATE_POLLING;
+	new -= IB_PORTPHYSSTATE_POLLING;
+
+	return physical_state_transitions.allowed[old][new];
+}
+
+static int port_states_transition_allowed(struct hfi1_pportdata *ppd,
+					  u32 logical_new, u32 physical_new)
+{
+	u32 physical_old = driver_physical_state(ppd);
+	u32 logical_old = driver_logical_state(ppd);
+	int ret, logical_allowed, physical_allowed;
+
+	logical_allowed = ret =
+		logical_transition_allowed(logical_old, logical_new);
+
+	if (ret == HFI_TRANSITION_DISALLOWED ||
+	    ret == HFI_TRANSITION_UNDEFINED) {
+		pr_warn("invalid logical state transition %s -> %s\n",
+			opa_lstate_name(logical_old),
+			opa_lstate_name(logical_new));
+		return ret;
+	}
+
+	physical_allowed = ret =
+		physical_transition_allowed(physical_old, physical_new);
+
+	if (ret == HFI_TRANSITION_DISALLOWED ||
+	    ret == HFI_TRANSITION_UNDEFINED) {
+		pr_warn("invalid physical state transition %s -> %s\n",
+			opa_pstate_name(physical_old),
+			opa_pstate_name(physical_new));
+		return ret;
+	}
+
+	if (logical_allowed == HFI_TRANSITION_IGNORED &&
+	    physical_allowed == HFI_TRANSITION_IGNORED)
+		return HFI_TRANSITION_IGNORED;
+
+	/*
+	 * Either physical_allowed or logical_allowed is
+	 * HFI_TRANSITION_ALLOWED.
+	 */
+	return HFI_TRANSITION_ALLOWED;
+}
+
 static int set_port_states(struct hfi1_pportdata *ppd, struct opa_smp *smp,
-			   u32 state, u32 lstate, int suppress_idle_sma)
+			   u32 logical_state, u32 phys_state,
+			   int suppress_idle_sma)
 {
 	struct hfi1_devdata *dd = ppd->dd;
+	u32 link_state;
 	int ret;
 
-	if (lstate && !(state == IB_PORT_DOWN || state == IB_PORT_NOP)) {
-		pr_warn("SubnSet(OPA_PortInfo) port state invalid; state 0x%x link state 0x%x\n",
-			state, lstate);
+	ret = port_states_transition_allowed(ppd, logical_state, phys_state);
+	if (ret == HFI_TRANSITION_DISALLOWED ||
+	    ret == HFI_TRANSITION_UNDEFINED) {
+		/* error message emitted above */
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return 0;
+	}
+
+	if (ret == HFI_TRANSITION_IGNORED)
+		return 0;
+
+	if ((phys_state != IB_PORTPHYSSTATE_NOP) &&
+	    !(logical_state == IB_PORT_DOWN ||
+	      logical_state == IB_PORT_NOP)){
+		pr_warn("SubnSet(OPA_PortInfo) port state invalid: logical_state 0x%x physical_state 0x%x\n",
+			logical_state, phys_state);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
 	/*
-	 * Only state changes of DOWN, ARM, and ACTIVE are valid
-	 * and must be in the correct state to take effect (see 7.2.6).
+	 * Logical state changes are summarized in OPAv1g1 spec.,
+	 * Table 9-12; physical state changes are summarized in
+	 * OPAv1g1 spec., Table 6.4.
 	 */
-	switch (state) {
+	switch (logical_state) {
 	case IB_PORT_NOP:
-		if (lstate == 0)
+		if (phys_state == IB_PORTPHYSSTATE_NOP)
 			break;
 		/* FALLTHROUGH */
 	case IB_PORT_DOWN:
-		if (lstate == 0)
-			lstate = HLS_DN_DOWNDEF;
-		else if (lstate == 2) {
-			lstate = HLS_DN_POLL;
+		if (phys_state == IB_PORTPHYSSTATE_NOP)
+			link_state = HLS_DN_DOWNDEF;
+		else if (phys_state == IB_PORTPHYSSTATE_POLLING) {
+			link_state = HLS_DN_POLL;
 			set_link_down_reason(ppd,
 			     OPA_LINKDOWN_REASON_FM_BOUNCE, 0,
 			     OPA_LINKDOWN_REASON_FM_BOUNCE);
-		} else if (lstate == 3)
-			lstate = HLS_DN_DISABLE;
+		} else if (phys_state == IB_PORTPHYSSTATE_DISABLED)
+			link_state = HLS_DN_DISABLE;
 		else {
-			pr_warn("SubnSet(OPA_PortInfo) invalid Physical state 0x%x\n",
-				lstate);
+			pr_warn("SubnSet(OPA_PortInfo) invalid physical state 0x%x\n",
+				phys_state);
 			smp->status |= IB_SMP_INVALID_FIELD;
 			break;
 		}
 
-		set_link_state(ppd, lstate);
-		if (lstate == HLS_DN_DISABLE && (ppd->offline_disabled_reason >
-		    OPA_LINKDOWN_REASON_SMA_DISABLED ||
-		    ppd->offline_disabled_reason == OPA_LINKDOWN_REASON_NONE))
+		set_link_state(ppd, link_state);
+		if (link_state == HLS_DN_DISABLE &&
+		    (ppd->offline_disabled_reason >
+		     OPA_LINKDOWN_REASON_SMA_DISABLED ||
+		     ppd->offline_disabled_reason ==
+		     OPA_LINKDOWN_REASON_NONE))
 			ppd->offline_disabled_reason =
 			OPA_LINKDOWN_REASON_SMA_DISABLED;
 		/*
 		 * Don't send a reply if the response would be sent
 		 * through the disabled port.
 		 */
-		if (lstate == HLS_DN_DISABLE && smp->hop_cnt)
+		if (link_state == HLS_DN_DISABLE && smp->hop_cnt)
 			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 		break;
 	case IB_PORT_ARMED:
@@ -837,7 +1006,8 @@ static int set_port_states(struct hfi1_pportdata *ppd, struct opa_smp *smp,
 		}
 		break;
 	default:
-		pr_warn("SubnSet(OPA_PortInfo) invalid state 0x%x\n", state);
+		pr_warn("SubnSet(OPA_PortInfo) invalid logical state 0x%x\n",
+			logical_state);
 		smp->status |= IB_SMP_INVALID_FIELD;
 	}
 
@@ -1013,7 +1183,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_LIMIT,
 				    ibp->vl_high_limit);
 
-	for (i = 0; i < hfi1_num_vls(ppd->vls_supported); i++) {
+	for (i = 0; i < ppd->vls_supported; i++) {
 		if ((i % 2) == 0)
 			mtu = enum_to_mtu((pi->neigh_mtu.pvlx_to_mtu[i/2] >> 4)
 					  & 0xF);
@@ -1053,15 +1223,12 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	/* Set operational VLs */
 	vls = pi->operational_vls & OPA_PI_MASK_OPERATIONAL_VL;
 	if (vls) {
-		int vl_enum = hfi1_vls_to_ib_enum(vls);
-
-		if (vls > hfi1_num_vls(ppd->vls_supported) || vl_enum < 0) {
+		if (vls > ppd->vls_supported) {
 			pr_warn("SubnSet(OPA_PortInfo) VL's supported invalid %d\n",
 				pi->operational_vls);
 			smp->status |= IB_SMP_INVALID_FIELD;
 		} else
-			(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS,
-						vl_enum);
+			(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_OP_VLS, vls);
 	}
 
 	if (pi->mkey_violations == 0)
@@ -1382,7 +1549,7 @@ static int __subn_get_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 	void *vp = (void *) data;
 	size_t size = 4 * sizeof(u64);
 
-	if (port != 1 || n_blocks != 1) {
+	if (n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
@@ -1406,7 +1573,7 @@ static int __subn_set_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 	struct hfi1_pportdata *ppd;
 	int lstate;
 
-	if (port != 1 || n_blocks != 1 || async_update) {
+	if (n_blocks != 1 || async_update) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
@@ -1437,7 +1604,7 @@ static int __subn_get_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 	void *vp = (void *) data;
 	int size;
 
-	if (port != 1 || n_blocks != 1) {
+	if (n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
@@ -1462,7 +1629,7 @@ static int __subn_set_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 	void *vp = (void *) data;
 	int lstate;
 
-	if (port != 1 || n_blocks != 1) {
+	if (n_blocks != 1) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
@@ -2050,13 +2217,14 @@ static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
 	return reply((struct ib_mad_hdr *)pmp);
 }
 
-static void a0_portstatus(struct hfi1_devdata *dd,
+static void a0_portstatus(struct hfi1_pportdata *ppd,
 			  struct opa_port_status_rsp *rsp, u32 vl_select_mask)
 {
-	if (!is_bx(dd)) {
+	if (!is_bx(ppd->dd)) {
 		unsigned long vl;
 		int vfi = 0;
-		u64 sum_vl_xmit_wait = 0;
+		u64 max_vl_xmit_wait = 0, tmp;
+		u32 vl_all_mask = VL_MASK_ALL;
 		u64 rcv_data, rcv_bubble;
 
 		rcv_data = be64_to_cpu(rsp->port_rcv_data);
@@ -2083,20 +2251,14 @@ static void a0_portstatus(struct hfi1_devdata *dd,
 			vfi++;
 		}
 
-		vfi = 0;
-		for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
-				 8 * sizeof(vl_select_mask)) {
-			u64 tmp = sum_vl_xmit_wait +
-				be64_to_cpu(rsp->vls[vfi++].port_vl_xmit_wait);
-			if (tmp < sum_vl_xmit_wait) {
-				/* we wrapped */
-				sum_vl_xmit_wait = (u64) ~0;
-				break;
-			}
-			sum_vl_xmit_wait = tmp;
+		for_each_set_bit(vl, (unsigned long *)&(vl_all_mask),
+				 8 * sizeof(vl_all_mask)) {
+			tmp = read_port_cntr(ppd, C_TX_WAIT_VL,
+					     idx_from_vl(vl));
+			if (tmp > max_vl_xmit_wait)
+				max_vl_xmit_wait = tmp;
 		}
-		if (be64_to_cpu(rsp->port_xmit_wait) > sum_vl_xmit_wait)
-			rsp->port_xmit_wait = cpu_to_be64(sum_vl_xmit_wait);
+		rsp->port_xmit_wait = cpu_to_be64(max_vl_xmit_wait);
 	}
 }
 
@@ -2255,7 +2417,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 		vfi++;
 	}
 
-	a0_portstatus(dd, rsp, vl_select_mask);
+	a0_portstatus(ppd, rsp, vl_select_mask);
 
 	return reply((struct ib_mad_hdr *)pmp);
 }
@@ -3229,7 +3391,7 @@ static int __subn_get_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 	u32 nport = OPA_AM_NPORT(am);
 	u64 reg;
 
-	if (port != 1 || nport != 1 || OPA_AM_PORTNUM(am)) {
+	if (nport != 1 || OPA_AM_PORTNUM(am)) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
@@ -3254,7 +3416,7 @@ static int __subn_set_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 	u32 nport = OPA_AM_NPORT(am);
 	int on = !!(be32_to_cpu(p->rsvd_led_mask) & OPA_LED_MASK);
 
-	if (port != 1 || nport != 1 || OPA_AM_PORTNUM(am)) {
+	if (nport != 1 || OPA_AM_PORTNUM(am)) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
