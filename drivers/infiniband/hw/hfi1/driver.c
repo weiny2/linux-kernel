@@ -759,7 +759,7 @@ int set_mtu(struct hfi1_pportdata *ppd)
 	int i, drain, ret = 0, is_up = 0;
 
 	ppd->ibmtu = 0;
-	for (i = 0; i < hfi1_num_vls(ppd->vls_supported); i++)
+	for (i = 0; i < ppd->vls_supported; i++)
 		if (ppd->ibmtu < dd->vld[i].mtu)
 			ppd->ibmtu = dd->vld[i].mtu;
 	ppd->ibmaxlen = ppd->ibmtu + lrh_max_header_bytes(ppd->dd);

@@ -1149,7 +1149,7 @@ struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5)
 	u8 vl;
 
 	vl = sc_to_vlt(dd, sc5);
-	if (vl >= hfi1_num_vls(ppd->vls_supported) && vl != 15)
+	if (vl >= ppd->vls_supported && vl != 15)
 		return NULL;
 	return dd->vld[vl].sc;
 }
@@ -1504,7 +1504,7 @@ static int query_port(struct ib_device *ibdev, u8 port,
 	props->active_width = (u8)opa_width_to_ib(ppd->link_width_active);
 	/* see rate_show() in ib core/sysfs.c */
 	props->active_speed = (u8)opa_speed_to_ib(ppd->link_speed_active);
-	props->max_vl_num = hfi1_num_vls(ppd->vls_supported);
+	props->max_vl_num = ppd->vls_supported;
 	props->init_type_reply = 0;
 
 	/* Once we are a "first class" citizen and have added the OPA MTUs to
@@ -1993,7 +1993,7 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 
 	/*
 	 * The system image GUID is supposed to be the same for all
-	 * IB HCAs in a single system but since there can be other
+	 * HFIs in a single system but since there can be other
 	 * device types in the system, we can't be sure this is unique.
 	 */
 	if (!ib_hfi1_sys_image_guid)

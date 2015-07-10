@@ -470,6 +470,10 @@ struct hfi1_sge_state;
 #define CNTR_MODE_W		0x0
 #define CNTR_MODE_R		0x1
 
+/* VLs Supported/Operational */
+#define HFI1_MIN_VLS_SUPPORTED 1
+#define HFI1_MAX_VLS_SUPPORTED 8
+
 static inline void incr_cntr64(u64 *cntr)
 {
 	if (*cntr < (u64)-1LL)
@@ -1470,6 +1474,8 @@ struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra);
 #define HFI1_LED_LOG 2  /* Logical (link) YELLOW LED */
 void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int val);
 
+#define HFI1_CREDIT_RETURN_RATE (100)
+
 /*
  * The number of words for the KDETH protocol field.  If this is
  * larger then the actual field used, then part of the payload
@@ -1703,6 +1709,13 @@ static inline u64 hfi1_pkt_base_sdma_integrity(struct hfi1_devdata *dd)
 		  get_unit_name((dd)->unit), ##__VA_ARGS__)
 #define dd_dev_err(dd, fmt, ...) \
 	dev_err(&(dd)->pcidev->dev, "%s: " fmt, \
+			get_unit_name((dd)->unit), ##__VA_ARGS__)
+#define dd_dev_warn(dd, fmt, ...) \
+	dev_warn(&(dd)->pcidev->dev, "%s: " fmt, \
+			get_unit_name((dd)->unit), ##__VA_ARGS__)
+
+#define dd_dev_warn_ratelimited(dd, fmt, ...) \
+	dev_warn_ratelimited(&(dd)->pcidev->dev, "%s: " fmt, \
 			get_unit_name((dd)->unit), ##__VA_ARGS__)
 
 #define dd_dev_info(dd, fmt, ...) \
