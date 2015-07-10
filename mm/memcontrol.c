@@ -249,7 +249,6 @@ struct mem_cgroup {
 	struct page_counter kmem;
 
 	unsigned long low_limit;
-	unsigned long high_limit_unused; /* just a placeholder in case we need it later */
 
 	unsigned long soft_limit;
 
