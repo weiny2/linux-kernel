@@ -415,12 +415,6 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	}
 
 	eq_base = eq_assign->ni * num_eqs;
-	/*
-	 * TODO - first EQ is reserved for result of EQ_DESC_WRITE.
-	 * skip for now for kernel-clients until we copy user-client usage.
-	 */
-	if (ctx->type == HFI_CTX_TYPE_KERNEL)
-		eq_base += 1;
 
 	idr_preload(GFP_KERNEL);
 	spin_lock(&ctx->cteq_lock);
@@ -486,6 +480,31 @@ idr_end:
 	idr_preload_end();
 
 	return ret;
+}
+
+int _hfi_eq_assign(struct hfi_ctx *ctx)
+{
+	struct opa_ev_assign eq_assign = {0};
+	int ni, ret;
+
+	for (ni = 0; ni < HFI_NUM_NIS; ni++) {
+		eq_assign.ni = ni;
+		/* uses 4Kbytes - TODO how much do we need? */
+		eq_assign.size = 64;
+		ret = hfi_eq_assign(ctx, &eq_assign);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+int hfi_eq_assign_privileged(struct hfi_ctx *ctx)
+{
+	/* verify system PID */
+	if (ctx->pid != HFI_PID_SYSTEM)
+		return -EPERM;
+
+	return _hfi_eq_assign(ctx);
 }
 
 /*
@@ -827,6 +846,11 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 			}
 		}
 		/* no CTs assigned yet, so above cannot yield error */
+		BUG_ON(ret != 0);
+		/* EQ0 for system PID is assigned after the RX CQ is enabled */
+		if (HFI_PID_SYSTEM != ctx->pid)
+			ret = _hfi_eq_assign(ctx);
+		/* no EQs assigned yet, so above cannot yield error */
 		BUG_ON(ret != 0);
 	}
 

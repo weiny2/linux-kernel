@@ -745,6 +745,11 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
+	/* assign one EQ for privileged events */
+	ret = hfi_eq_assign_privileged(ctx);
+	if (ret)
+		goto err_post_alloc;
+
 	/* enable MSI-X */
 	/* TODO - just ask for 64 IRQs for now */
 	ret = setup_interrupts(dd, /* HFI_NUM_INTERRUPTS */ 64, 0);
