@@ -192,13 +192,15 @@ static int hfi_tx_otr_init(const struct hfi_devdata *dd)
 	for (i = 0; i < HFI_NUM_PPORTS; i++) {
 		port = &dd->pport[i];
 		for (j = 0; j < HFI_MAX_TC; j++) {
+			struct hfi_ptcdata *tc = &port->ptc[i];
+
 			va = vmalloc(HFI_PSN_SIZE);
 			if (!va) {
 				rc = -ENOMEM;
 				goto done;
 			}
 			psn_base.field.address = (u64)va >> PAGE_SHIFT;
-			port->psn_base_tx_otr[j] = va;
+			tc->psn_base_tx_otr = va;
 			write_csr(dd, offset + i * 0x20 + j * 8, psn_base.val);
 		}
 	}
@@ -217,13 +219,15 @@ static int hfi_rx_e2e_init(const struct hfi_devdata *dd)
 	for (i = 0; i < HFI_NUM_PPORTS; i++) {
 		port = &dd->pport[i];
 		for (j = 0; j < HFI_MAX_TC; j++) {
+			struct hfi_ptcdata *tc = &port->ptc[i];
+
 			va = vmalloc(HFI_PSN_SIZE);
 			if (!va) {
 				rc = -ENOMEM;
 				goto done;
 			}
 			psn_base.field.address = (u64)va >> PAGE_SHIFT;
-			port->psn_base_rx_e2e[j] = va;
+			tc->psn_base_rx_e2e = va;
 			write_csr(dd, offset + i * 0x20 + j * 8, psn_base.val);
 		}
 	}
@@ -240,9 +244,11 @@ static void hfi_tx_otr_uninit(const struct hfi_devdata *dd)
 	for (i = 0; i < HFI_NUM_PPORTS; i++) {
 		port = &dd->pport[i];
 		for (j = 0; j < HFI_MAX_TC; j++) {
-			if (port->psn_base_tx_otr[j]) {
-				vfree(port->psn_base_tx_otr[j]);
-				port->psn_base_tx_otr[j] = NULL;
+			struct hfi_ptcdata *tc = &port->ptc[i];
+
+			if (tc->psn_base_tx_otr) {
+				vfree(tc->psn_base_tx_otr);
+				tc->psn_base_tx_otr = NULL;
 				write_csr(dd, offset + i * 0x20 + j * 8, 0x0);
 			}
 		}
@@ -258,9 +264,11 @@ static void hfi_rx_e2e_uninit(const struct hfi_devdata *dd)
 	for (i = 0; i < HFI_NUM_PPORTS; i++) {
 		port = &dd->pport[i];
 		for (j = 0; j < HFI_MAX_TC; j++) {
-			if (port->psn_base_rx_e2e[j]) {
-				vfree(port->psn_base_rx_e2e[j]);
-				port->psn_base_rx_e2e[j] = NULL;
+			struct hfi_ptcdata *tc = &port->ptc[i];
+
+			if (tc->psn_base_rx_e2e) {
+				vfree(tc->psn_base_rx_e2e);
+				tc->psn_base_rx_e2e = NULL;
 				write_csr(dd, offset + i * 0x20 + j * 8, 0x0);
 			}
 		}
@@ -515,6 +523,8 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	if (dd->bus_dev)
 		opa_core_unregister_device(dd->bus_dev);
 
+	hfi_e2e_destroy(dd);
+
 	cleanup_interrupts(dd);
 
 	/* release system context and any privileged CQs */
@@ -596,6 +606,20 @@ static struct opa_core_ops opa_core_ops = {
 };
 
 /*
+ * hfi_ptc_init - initialize per traffic class data structs per port
+ */
+void hfi_ptc_init(struct hfi_pportdata *ppd)
+{
+	int i;
+
+	for (i = 0; i < HFI_MAX_TC; i++) {
+		struct hfi_ptcdata *tc = &ppd->ptc[i];
+
+		ida_init(&tc->e2e_state_cache);
+	}
+}
+
+/*
  * hfi_pport_init - initialize per port
  * data structs
  */
@@ -621,6 +645,7 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		 */
 		dd->vl_mtu[15] = HFI_MIN_VL_15_MTU;
 		ppd->vls_operational = ppd->vls_supported;
+		hfi_ptc_init(ppd);
 	}
 }
 
@@ -666,6 +691,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	idr_init(&dd->cq_pair);
 	spin_lock_init(&dd->cq_lock);
 	spin_lock_init(&dd->priv_tx_cq_lock);
+	mutex_init(&dd->e2e_lock);
 
 	for (i = 0; i < HFI_NUM_BARS; i++) {
 		addr = pci_resource_start(pdev, i);

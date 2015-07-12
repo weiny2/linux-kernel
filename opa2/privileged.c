@@ -150,7 +150,10 @@ err:
 int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 {
 	struct hfi_devdata *dd = ctx->devdata;
+	struct hfi_ptcdata *ptc;
 	u8 port, tc;
+	struct ida *cache;
+	int ret;
 
 	if (e2e->slid == dd->pport[0].lid)
 		port = 0;
@@ -162,20 +165,85 @@ int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 	if (e2e->dlid >= HFI_MAX_LID_SUPP)
 		return -EINVAL;
 
-	if (e2e->op > PTL_SINGLE_DESTROY)
-		return -EINVAL;
 	/*
 	 * TODO: The SL <-> TC mapping is currently hard coded in
 	 * Simics. At some point we need to determine the mapping
 	 * from the CSR registers instead.
 	 */
 	tc = e2e->sl % HFI_MAX_TC;
+
+	ptc = &dd->pport[port].ptc[tc];
+	cache = &ptc->e2e_state_cache;
+
+	mutex_lock(&dd->e2e_lock);
+	/* Check if a new entry can be inserted into the cache */
+	ret = ida_simple_get(cache, e2e->dlid, e2e->dlid + 1, GFP_KERNEL);
 	/*
-	 * TODO: Query if E2E connection is already setup
-	 * via PTL_E2E_STATUS_REQ once supported before
-	 * initiating a new connection or teardown
+	 * If the entry is allocated then the E2E connection is established
+	 * already and there is no need to initiate another E2E connection
 	 */
-	return hfi_put_e2e_ctrl(dd, e2e->slid, e2e->dlid, tc, port, e2e->op);
+	if (-ENOSPC == ret) {
+		ret = 0;
+		goto unlock;
+	}
+	/* Bail out upon other IDA failures */
+	if (ret < 0)
+		goto unlock;
+	/* Initiate an E2E connection if one did not exist */
+	ret = hfi_put_e2e_ctrl(dd, e2e->slid, e2e->dlid,
+			       tc, port, PTL_SINGLE_CONNECT);
+	if (ret < 0)
+		/* remove the entry from the cache upon failure */
+		ida_remove(cache, e2e->dlid);
+	else
+		/*
+		 * If it succeeded, then the cache is updated and the next
+		 * connection request for this SLID, DLID, TC tuple will
+		 * hit the cache without initiating an E2E connection
+		 * message to the peer. Update the max DLID for this TC
+		 */
+		ptc->max_e2e_dlid = MAX(ptc->max_e2e_dlid, e2e->dlid);
+unlock:
+	mutex_unlock(&dd->e2e_lock);
+	return ret;
+}
+
+/* Tear down all existing E2E connections */
+void hfi_e2e_destroy(struct hfi_devdata *dd)
+{
+	u8 port, tc;
+	u32 dlid;
+	int ret;
+
+	mutex_lock(&dd->e2e_lock);
+	for (port = 0; port < HFI_NUM_PPORTS; port++) {
+		u32 slid = dd->pport[port].lid;
+
+		for (tc = 0; tc < HFI_MAX_TC; tc++) {
+			struct hfi_ptcdata *ptc = &dd->pport[port].ptc[tc];
+			struct ida *cache = &ptc->e2e_state_cache;
+
+			for (dlid = 0; dlid <= ptc->max_e2e_dlid; dlid++) {
+				ret = ida_simple_get(cache, dlid, dlid + 1,
+						     GFP_KERNEL);
+				if (-ENOSPC != ret)
+					continue;
+				hfi_put_e2e_ctrl(dd, slid, dlid,
+						 tc, port,
+						 PTL_SINGLE_DESTROY);
+				/*
+				 * TODO: implement mechanism to inform the
+				 * peer to invalidate its cache. Either the
+				 * FXR HW has to provide a notification
+				 * mechanism or custom node to node
+				 * messages need to be implemented in SW
+				 * via the system PID TX/RX CQs.
+				 */
+			}
+			ida_destroy(cache);
+		}
+	}
+	mutex_unlock(&dd->e2e_lock);
 }
 
 int hfi_dlid_assign(struct hfi_ctx *ctx,

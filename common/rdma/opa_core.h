@@ -235,13 +235,11 @@ struct opa_ev_assign {
  * @slid: source LID
  * @dlid: destination LID
  * @sl: service level
- * @op: Type of E2E control message
  */
 struct opa_e2e_ctrl {
 	u32 slid;
 	u32 dlid;
 	u8 sl;
-	enum ptl_op_e2e_ctrl op;
 };
 
 /*

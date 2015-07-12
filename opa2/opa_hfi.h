@@ -172,14 +172,29 @@ struct hfi_event_queue {
 };
 
 /*
+ * hfi_ptcdata - HFI traffic class specific information per port
+ * @psn_base_rx_e2e: PSN base for RX E2E
+ * @psn_base_tx_otr: PSN base for TX OTR
+ * @e2e_state_cache: E2E connection state cache
+ * @max_e2e_dlid: Maximum DLID to which an E2E connection has been
+ *	established which is used to detect the DLID till which
+ *	destroy messages have to be sent during driver unload
+ */
+struct hfi_ptcdata {
+	void *psn_base_rx_e2e;
+	void *psn_base_tx_otr;
+	struct ida e2e_state_cache;
+	u32 max_e2e_dlid;
+};
+
+/*
  * hfi_pportdata - HFI port specific information
  *
  * @dd: pointer to the per node hfi_devdata
  * @pguid: port_guid identifying port
  * @lid: LID for this port
+ * @ptc: per traffic class specific fields
  * @sm_lid: LID of the SM
- * @psn_base_rx_e2e: PSN base for RX E2E
- * @psn_base_tx_otr: PSN base for TX OTR
  * @lstate: Logical link state
  * @ibmtu: The MTU programmed for this port
  * @smsl: Service level to use for SM
@@ -208,9 +223,7 @@ struct hfi_pportdata {
 	__be64 pguid;
 	u32 lid;
 	u32 sm_lid;
-	void *psn_base_rx_e2e[HFI_MAX_TC];
-	void *psn_base_tx_otr[HFI_MAX_TC];
-
+	struct hfi_ptcdata ptc[HFI_MAX_TC];
 	struct mutex hls_lock;
 	u32 lstate;
 	u32 ibmtu;
@@ -293,6 +306,9 @@ struct hfi_devdata {
 
 	/* Lock to synchronize access to priv_cq */
 	spinlock_t priv_tx_cq_lock;
+
+	/* Mutex lock synchronizing E2E operations */
+	struct mutex e2e_lock;
 };
 
 /* return the driver's idea of the logical OPA port state */
@@ -353,6 +369,7 @@ void hfi_ctxt_unreserve(struct hfi_ctx *ctx);
 int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int token, u16 ctxt, void **addr,
 		     ssize_t *len);
 int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e_ctrl);
+void hfi_e2e_destroy(struct hfi_devdata *dd);
 
 int hfi_iommu_root_alloc(void);
 void hfi_iommu_root_free(void);
