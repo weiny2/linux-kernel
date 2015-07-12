@@ -237,7 +237,6 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	e2e.slid = pdesc.lid;
 	e2e.dlid = pdesc.lid;
 	e2e.sl = 0;
-	e2e.op = PTL_SINGLE_CONNECT;
 
 	rc = ops->e2e_ctrl(ctx, &e2e);
 	if (rc)
@@ -426,8 +425,6 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 
 	kfree(rx_base);
 	kfree(tx_base);
-	e2e.op = PTL_SINGLE_DESTROY;
-	ops->e2e_ctrl(ctx, &e2e);
 	return 0;
 err3:
 	kfree(rx_base1);
@@ -436,8 +433,6 @@ err2:
 err1:
 	kfree(tx_base);
 err0:
-	e2e.op = PTL_SINGLE_DESTROY;
-	ops->e2e_ctrl(ctx, &e2e);
 	return rc;
 }
 

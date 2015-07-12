@@ -130,6 +130,42 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	return 0;
 }
 
+static int hfi_e2e_conn(struct hfi_userdata *ud,
+			struct hfi_e2e_conn_args __user *e2e_args)
+{
+	struct opa_core_ops *ops = ud->bus_ops;
+	struct hfi_e2e_conn e2e_conn;
+	struct hfi_e2e_conn_args e2e;
+	struct opa_e2e_ctrl e2e_ctrl;
+	int i, num_conn = 0;
+
+	/* Copy the details for this array of connection requests */
+	if (copy_from_user(&e2e, e2e_args, sizeof(*e2e_args)))
+		return -EFAULT;
+	for (i = 0; i < e2e.num_req; i++) {
+		/* Copy the details for this connection */
+		if (copy_from_user(&e2e_conn, &e2e.e2e_req[i],
+				   sizeof(e2e_conn)))
+			return -EFAULT;
+		e2e_ctrl.slid = e2e_conn.slid;
+		e2e_ctrl.dlid = e2e_conn.dlid;
+		e2e_ctrl.sl = e2e_conn.sl;
+		/* Initiate the E2E connection */
+		e2e_conn.conn_status = ops->e2e_ctrl(&ud->ctx, &e2e_ctrl);
+		/* Inform user space about the connection status */
+		if (copy_to_user(&e2e.e2e_req[i].conn_status,
+				 &e2e_conn.conn_status,
+				 sizeof(e2e_conn.conn_status)))
+			return -EFAULT;
+		if (!e2e_conn.conn_status)
+			num_conn++;
+	}
+	/* Inform user space about the number of connections established */
+	if (copy_to_user(&e2e_args->num_conn, &num_conn, sizeof(num_conn)))
+		return -EFAULT;
+	return 0;
+}
+
 static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 			 loff_t *offset)
 {
@@ -150,10 +186,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_job_setup_args job_setup;
 	struct hfi_mpin_args mpin;
 	struct hfi_munpin_args munpin;
-	struct hfi_e2e_args e2e;
 	struct opa_ctx_assign ctx_assign;
 	struct opa_ev_assign ev_assign;
-	struct opa_e2e_ctrl e2e_ctrl;
 	int need_admin = 0;
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *copy_ptr = NULL;
@@ -247,9 +281,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		copy_in = sizeof(munpin);
 		copy_ptr = &munpin;
 		break;
-	case HFI_CMD_E2E_OP:
-		copy_in = sizeof(e2e);
-		copy_ptr = &e2e;
+	case HFI_CMD_E2E_CONN:
 		break;
 	default:
 		ret = -EINVAL;
@@ -401,12 +433,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_MUNPIN:
 		ret = hfi_munpin(ud, &munpin);
 		break;
-	case HFI_CMD_E2E_OP:
-		e2e_ctrl.slid = e2e.slid;
-		e2e_ctrl.dlid = e2e.dlid;
-		e2e_ctrl.sl = e2e.sl;
-		e2e_ctrl.op = e2e.op;
-		ret = ops->e2e_ctrl(&ud->ctx, &e2e_ctrl);
+	case HFI_CMD_E2E_CONN:
+		ret = hfi_e2e_conn(ud, user_data);
 		break;
 	default:
 		ret = -EINVAL;
