@@ -1761,7 +1761,7 @@ static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
 {
 	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
 	u32 addr = OPA_AM_CI_ADDR(am);
-	u32 len = OPA_AM_CI_LEN(am);
+	u32 len = OPA_AM_CI_LEN(am) + 1;
 	int ret;
 
 #define __CI_PAGE_SIZE (1 << 7) /* 128 bytes */
@@ -1769,9 +1769,9 @@ static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
 #define __CI_PAGE_NUM(a) ((a) & __CI_PAGE_MASK)
 
 	/* check that addr is within spec, and
-	 * addr and (addr + len) are on the same "page" */
+	 * addr and (addr + len - 1) are on the same "page" */
 	if (addr >= 4096 ||
-		(__CI_PAGE_NUM(addr) != __CI_PAGE_NUM(addr + len))) {
+		(__CI_PAGE_NUM(addr) != __CI_PAGE_NUM(addr + len - 1))) {
 		smp->status |= IB_SMP_INVALID_FIELD;
 		return reply((struct ib_mad_hdr *)smp);
 	}
