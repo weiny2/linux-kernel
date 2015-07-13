@@ -10104,8 +10104,12 @@ static void init_txe(struct hfi1_devdata *dd)
 	/* set the local CU to AU mapping */
 	assign_local_cm_au_table(dd, dd->vcu);
 
-	/* Set reasonable default for Credit Return Timer */
-	write_csr(dd, SEND_CM_TIMER_CTRL, HFI1_CREDIT_RETURN_RATE);
+	/*
+	 * Set reasonable default for Credit Return Timer
+	 * Don't set on Simulator - causes it to choke.
+	 */
+	if (dd->icode != ICODE_FUNCTIONAL_SIMULATOR)
+		write_csr(dd, SEND_CM_TIMER_CTRL, HFI1_CREDIT_RETURN_RATE);
 }
 
 int hfi1_set_ctxt_jkey(struct hfi1_devdata *dd, unsigned ctxt, u16 jkey)
