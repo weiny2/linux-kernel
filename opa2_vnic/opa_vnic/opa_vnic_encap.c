@@ -50,8 +50,6 @@
  * Intel(R) Omni-Path VNIC encapsulation/decapsulation function.
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
 #include <linux/module.h>

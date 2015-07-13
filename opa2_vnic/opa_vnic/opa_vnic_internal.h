@@ -63,10 +63,15 @@
 #define OPA_VNIC_HDR_LEN      (OPA_VNIC_L2_HDR_LEN + \
 			       OPA_VNIC_L4_HDR_LEN)
 
-/* OPA VNIC netdev private data structure */
+/**
+ * struct opa_vnic_adapter - OPA VNIC netdev private data structure
+ * @netdev: pointer to associated netdev
+ * @vdev: pointer to opa vnic device
+ * @napi: netdev napi structure
+ */
 struct opa_vnic_adapter {
 	struct net_device        *netdev;
-	struct opa_vnic_device   *vdev;     /* opa vnic device */
+	struct opa_vnic_device   *vdev;
 
 	struct napi_struct        napi;
 };
@@ -85,11 +90,9 @@ struct opa_vnic_adapter {
 extern char opa_vnic_driver_name[];
 extern const char opa_vnic_driver_version[];
 
-extern void opa_vnic_encap_skb(struct opa_vnic_adapter *adapter,
-			       struct sk_buff *skb);
-extern void opa_vnic_decap_skb(struct opa_vnic_adapter *adapter,
-			       struct sk_buff *skb);
+void opa_vnic_encap_skb(struct opa_vnic_adapter *adapter, struct sk_buff *skb);
+void opa_vnic_decap_skb(struct opa_vnic_adapter *adapter, struct sk_buff *skb);
 
-extern void opa_vnic_set_ethtool_ops(struct net_device *ndev);
+void opa_vnic_set_ethtool_ops(struct net_device *ndev);
 
 #endif /* _OPA_VNIC_INTERNAL_H */
