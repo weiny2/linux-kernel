@@ -55,6 +55,7 @@
 
 #include "opa2_vnic_hfi.h"
 
+/* TODO: Remove this module param later, SM will provide this info */
 uint num_veswports = 2;
 module_param(num_veswports, uint, S_IRUGO);
 MODULE_PARM_DESC(num_veswports, "number of vESWPorts");
