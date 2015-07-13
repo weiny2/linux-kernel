@@ -57,6 +57,7 @@
 #if 1 /* TODO: should be __SIMICS__ instead of 1 */
 #include <linux/delay.h>
 #endif
+#include <rdma/fxr/fxr_top_defs.h>
 #include <rdma/fxr/fxr_fast_path_defs.h>
 #include <rdma/fxr/fxr_tx_ci_csrs.h>
 #include <rdma/fxr/fxr_rx_ci_csrs.h>
@@ -752,8 +753,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		hfi_cq_head_config(dd, i, dd->cq_head_base);
 
 	/* TX and RX command queues - fast path access */
-	dd->cq_tx_base = (void *)dd->physaddr + FXR_TXCQ_ENTRY;
-	dd->cq_rx_base = (void *)dd->physaddr + FXR_RXCQ_ENTRY;
+	dd->cq_tx_base = (void *)dd->physaddr + FXR_TX_CQ_ENTRY;
+	dd->cq_rx_base = (void *)dd->physaddr + FXR_RX_CQ_ENTRY;
 
 	ctx = &dd->priv_ctx;
 	HFI_CTX_INIT(ctx, dd);
@@ -827,8 +828,8 @@ err_post_alloc:
 
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 {
-	rx_cfg_hiarb_pcb_low_t pcb_low = {.val = 0};
-	rx_cfg_hiarb_pcb_high_t pcb_high = {.val = 0};
+	RX_HIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
+	RX_HIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
 	RXHP_CFG_PTE_CACHE_ACCESS_CTL_t pte_cache_access = {.val = 0};
 	RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_t eq_cache_access = {.val = 0};
 	RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t trig_op_cache_access = {.val = 0};
@@ -837,8 +838,8 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	union trig_op_cache_addr trig_op_cache_tag;
 
 	/* write PCB_LOW first to clear valid bit */
-	write_csr(dd, FXR_RX_CFG_HIARB_PCB_LOW + (ptl_pid * 8), pcb_low.val);
-	write_csr(dd, FXR_RX_CFG_HIARB_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
+	write_csr(dd, FXR_RX_HIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
+	write_csr(dd, FXR_RX_HIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
 
 	/* invalidate cached host memory in HFI for Portals Tables by PID */
 	pte_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
@@ -875,14 +876,14 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	/* TODO - above incomplete, deferred processing to wait for .ack bit */
 
 	/* TODO - write fake simics CSR to flush mini-TLB (AT interface TBD) */
-	write_csr(dd, 0x2820000, 1);
+	write_csr(dd, FXR_RX_HIARB_CSRS + 0x20000, 1);
 }
 
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	rx_cfg_hiarb_pcb_low_t pcb_low = {.val = 0};
-	rx_cfg_hiarb_pcb_high_t pcb_high = {.val = 0};
+	RX_HIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
+	RX_HIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
 	u64 psb_addr;
 
 	psb_addr = (u64)ctx->ptl_state_base;
@@ -894,8 +895,8 @@ void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid)
 	pcb_high.field.unexpected_size = (ctx->unexpected_size >> PAGE_SHIFT);
 	pcb_high.field.le_me_size = (ctx->le_me_size >> PAGE_SHIFT);
 
-	write_csr(dd, FXR_RX_CFG_HIARB_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
-	write_csr(dd, FXR_RX_CFG_HIARB_PCB_LOW + (ptl_pid * 8), pcb_low.val);
+	write_csr(dd, FXR_RX_HIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
+	write_csr(dd, FXR_RX_HIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
 }
 
 /* Write CSR address for CQ head index, maintained by FXR */
@@ -921,8 +922,8 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 
 	/* set CQ head, should be set after CQ reset */
 	cq_head.field.valid = 1;
-	cq_head.field.hd_ptr_host_addr =
-			(u64)HFI_CQ_HEAD_ADDR(head_base, cq_idx);
+	cq_head.field.hd_ptr_host_addr_56_4 =
+			(u64)HFI_CQ_HEAD_ADDR(head_base, cq_idx) >> 4;
 	write_csr(dd, head_offset, cq_head.val);
 }
 
