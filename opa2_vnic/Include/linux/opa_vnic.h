@@ -66,7 +66,15 @@ typedef void (*opa_vnic_hfi_evt_cb_fn)(struct net_device *netdev,
 
 struct opa_vnic_device;
 
-/* OPA VNIC HFI functions */
+/**
+ * struct opa_vnic_hfi_ops - OPA VNIC HFI functions
+ * @hfi_init: Initialize the hfi device
+ * @hfi_deinit: De-initialize the hfi device
+ * @hfi_open: Open vnic hfi device for vnic traffic
+ * @hfi_close: Close vnic hfi device for vnic traffic
+ * @hfi_put_skb: transmit an skb
+ * @hfi_get_skb: receive an skb
+ */
 struct opa_vnic_hfi_ops {
 	int (*hfi_init)(struct opa_vnic_device *vdev);
 	void (*hfi_deinit)(struct opa_vnic_device *vdev);
@@ -77,20 +85,30 @@ struct opa_vnic_hfi_ops {
 	struct sk_buff *(*hfi_get_skb)(struct opa_vnic_device *vdev);
 };
 
-/* OPA virtual NIC device */
+/**
+ * struct opa_vnic_device - OPA virtual NIC device
+ * @dev: device
+ * @id: unique opa vnic device instance
+ * @netdev: pointer to associated netdev
+ * @bus_ops: opa vnic bus operations
+ * @vnic_cb: vnic callback function
+ * @hfi_priv: hfi private data pointer
+ * @opa_mtu: MTU of opa link
+ * @lid: LID of opa port
+ */
 struct opa_vnic_device {
-	struct device             dev;
-	int                       id;       /* unique device instance */
-	struct net_device        *netdev;   /* associated netdev */
+	struct device                dev;
+	int                          id;
+	struct net_device           *netdev;
 
-	struct opa_vnic_hfi_ops     *bus_ops;     /* bus ops */
+	struct opa_vnic_hfi_ops     *bus_ops;
 
-	opa_vnic_hfi_evt_cb_fn       vnic_cb;     /* vnic callback fn */
-	void                        *hfi_priv;    /* hfi private data pointer */
+	opa_vnic_hfi_evt_cb_fn       vnic_cb;
+	void                        *hfi_priv;
 
 	/* TODO: mtu and lid can change dynamically, need to fix */
-	u32                          opa_mtu;     /* MTU of OPA link */
-	u32                          lid;         /* LID of OPA port */
+	u32                          opa_mtu;
+	u32                          lid;
 };
 
 /* OPA virtual NIC driver */
@@ -99,13 +117,13 @@ struct opa_vnic_driver {
 };
 
 /* Interface functions */
-extern int opa_vnic_driver_register(struct opa_vnic_driver *drv);
-extern void opa_vnic_driver_unregister(struct opa_vnic_driver *drv);
+int opa_vnic_driver_register(struct opa_vnic_driver *drv);
+void opa_vnic_driver_unregister(struct opa_vnic_driver *drv);
 
-extern struct opa_vnic_device *opa_vnic_device_register(int id, void *priv,
-						struct opa_vnic_hfi_ops *ops);
-extern void opa_vnic_device_unregister(struct opa_vnic_device *vdev);
+struct opa_vnic_device *opa_vnic_device_register(int id, void *priv,
+						 struct opa_vnic_hfi_ops *ops);
+void opa_vnic_device_unregister(struct opa_vnic_device *vdev);
 
-extern struct opa_vnic_device *opa_vnic_get_dev(int id);
+struct opa_vnic_device *opa_vnic_get_dev(int id);
 
 #endif /* _OPA_VNIC_H */

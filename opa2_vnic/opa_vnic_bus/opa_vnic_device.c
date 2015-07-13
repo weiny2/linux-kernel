@@ -53,8 +53,6 @@
 #include <linux/module.h>
 #include <linux/opa_vnic.h>
 
-#define DRV_VERSION "1.0"
-
 static struct idr opa_vnic_idr;
 
 /* opa_vnic_match_device - device, driver match function */
@@ -76,7 +74,7 @@ static void opa_vnic_dev_release(struct device *dev)
 	struct opa_vnic_device *vdev = container_of(dev,
 					    struct opa_vnic_device, dev);
 
-	pr_info("releasing vport %d\n", vdev->id);
+	kfree(vdev);
 }
 
 /* opa_vnic_get_dev - get opa vnic device */
@@ -112,7 +110,7 @@ struct opa_vnic_device *opa_vnic_device_register(int id, void *priv,
 	if (rc)
 		goto dev_err;
 
-	dev_info(&vdev->dev, "vnic added vport\n");
+	dev_info(&vdev->dev, "added vport\n");
 	return vdev;
 
 dev_err:
@@ -126,10 +124,11 @@ EXPORT_SYMBOL_GPL(opa_vnic_device_register);
 /* opa_vnic_device_unregister - unregister opa vnic device */
 void opa_vnic_device_unregister(struct opa_vnic_device *vdev)
 {
-	dev_info(&vdev->dev, "vnic removing vport\n");
+	int id = vdev->id;
+
+	dev_info(&vdev->dev, "removing vport\n");
 	device_unregister(&vdev->dev);
-	idr_remove(&opa_vnic_idr, vdev->id);
-	kfree(vdev);
+	idr_remove(&opa_vnic_idr, id);
 }
 EXPORT_SYMBOL_GPL(opa_vnic_device_unregister);
 
@@ -160,7 +159,6 @@ int opa_vnic_bus_init(void)
 	}
 
 	idr_init(&opa_vnic_idr);
-	pr_info("opa vnic bus init done\n");
 	return 0;
 }
 module_init(opa_vnic_bus_init);
@@ -170,11 +168,9 @@ void opa_vnic_bus_deinit(void)
 {
 	idr_destroy(&opa_vnic_idr);
 	bus_unregister(&opa_vnic_bus);
-	pr_info("opa vnic bus deinit done\n");
 }
 module_exit(opa_vnic_bus_deinit);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Intel Corporation");
 MODULE_DESCRIPTION("Intel(R) Omni-Path Virtual Network Controller bus driver");
-MODULE_VERSION(DRV_VERSION);
