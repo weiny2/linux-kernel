@@ -58,20 +58,18 @@
 #include <linux/opa_vnic.h>
 
 /* vnic hfi internal functions */
-extern int opa2_vnic_hfi_setup(struct opa_core_device *odev);
-extern void opa2_vnic_hfi_cleanup(struct opa_core_device *odev);
+int opa2_vnic_hfi_setup(struct opa_core_device *odev);
+void opa2_vnic_hfi_cleanup(struct opa_core_device *odev);
 
-extern int opa2_vnic_hfi_add_vports(struct opa_core_device *odev);
-extern void opa2_vnic_hfi_remove_vports(struct opa_core_device *odev);
+int opa2_vnic_hfi_add_vports(struct opa_core_device *odev);
+void opa2_vnic_hfi_remove_vports(struct opa_core_device *odev);
 
 /* vnic device bus ops */
-extern int opa2_vnic_hfi_init(struct opa_vnic_device *vdev);
-extern void opa2_vnic_hfi_deinit(struct opa_vnic_device *vdev);
-extern int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
-			      opa_vnic_hfi_evt_cb_fn cb);
-extern void opa2_vnic_hfi_close(struct opa_vnic_device *vdev);
-extern int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
-				 struct sk_buff *skb);
-extern struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev);
+int opa2_vnic_hfi_init(struct opa_vnic_device *vdev);
+void opa2_vnic_hfi_deinit(struct opa_vnic_device *vdev);
+int opa2_vnic_hfi_open(struct opa_vnic_device *vdev, opa_vnic_hfi_evt_cb_fn cb);
+void opa2_vnic_hfi_close(struct opa_vnic_device *vdev);
+int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev, struct sk_buff *skb);
+struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev);
 
 #endif /* _OPA2_VNIC_HFI_H */
