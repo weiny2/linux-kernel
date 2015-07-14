@@ -231,6 +231,31 @@ inline void megasas_return_mfi_mpt_pthr(struct megasas_instance *instance,
 }
 
 /**
+ * megasas_fire_cmd_fusion -	Sends command to the FW
+ */
+static void
+megasas_fire_cmd_fusion(struct megasas_instance *instance,
+		union MEGASAS_REQUEST_DESCRIPTOR_UNION *req_desc)
+{
+#if defined(writeq) && defined(CONFIG_64BIT)
+	u64 req_data = (((u64)le32_to_cpu(req_desc->u.high) << 32) |
+			le32_to_cpu(req_desc->u.low));
+
+	writeq(req_data, &instance->reg_set->inbound_low_queue_port);
+#else
+	unsigned long flags;
+
+	spin_lock_irqsave(&instance->hba_lock, flags);
+	writel(le32_to_cpu(req_desc->u.low),
+		&instance->reg_set->inbound_low_queue_port);
+	writel(le32_to_cpu(req_desc->u.high),
+		&instance->reg_set->inbound_high_queue_port);
+	spin_unlock_irqrestore(&instance->hba_lock, flags);
+#endif
+}
+
+
+/**
  * megasas_teardown_frame_pool_fusion -	Destroy the cmd frame DMA pool
  * @instance:				Adapter soft state
  */
@@ -734,8 +759,7 @@ megasas_ioc_init_fusion(struct megasas_instance *instance)
 			break;
 	}
 
-	instance->instancet->fire_cmd(instance, req_desc.u.low,
-				      req_desc.u.high, instance->reg_set);
+	megasas_fire_cmd_fusion(instance, &req_desc);
 
 	wait_and_poll(instance, cmd, MFI_POLL_TIMEOUT_SECS);
 
@@ -1152,34 +1176,6 @@ fail_alloc_cmds:
 	megasas_free_cmds(instance);
 fail_alloc_mfi_cmds:
 	return 1;
-}
-
-/**
- * megasas_fire_cmd_fusion -	Sends command to the FW
- * @frame_phys_addr :		Physical address of cmd
- * @frame_count :		Number of frames for the command
- * @regs :			MFI register set
- */
-void
-megasas_fire_cmd_fusion(struct megasas_instance *instance,
-			dma_addr_t req_desc_lo,
-			u32 req_desc_hi,
-			struct megasas_register_set __iomem *regs)
-{
-#if defined(writeq) && defined(CONFIG_64BIT)
-	u64 req_data = (((u64)le32_to_cpu(req_desc_hi) << 32) |
-			le32_to_cpu(req_desc_lo));
-
-	writeq(req_data, &(regs)->inbound_low_queue_port);
-#else
-	unsigned long flags;
-
-	spin_lock_irqsave(&instance->hba_lock, flags);
-
-	writel(le32_to_cpu(req_desc_lo), &(regs)->inbound_low_queue_port);
-	writel(le32_to_cpu(req_desc_hi), &(regs)->inbound_high_queue_port);
-	spin_unlock_irqrestore(&instance->hba_lock, flags);
-#endif
 }
 
 /**
@@ -2016,9 +2012,7 @@ megasas_build_and_issue_cmd_fusion(struct megasas_instance *instance,
 	 */
 	atomic_inc(&instance->fw_outstanding);
 
-	instance->instancet->fire_cmd(instance,
-				      req_desc->u.low, req_desc->u.high,
-				      instance->reg_set);
+	megasas_fire_cmd_fusion(instance, req_desc);
 
 	return 0;
 }
@@ -2396,8 +2390,7 @@ megasas_issue_dcmd_fusion(struct megasas_instance *instance,
 		return;
 	}
 	atomic_set(&cmd->mfi_mpt_pthr, MFI_MPT_ATTACHED);
-	instance->instancet->fire_cmd(instance, req_desc->u.low,
-				      req_desc->u.high, instance->reg_set);
+	megasas_fire_cmd_fusion(instance, req_desc);
 }
 
 /**
@@ -2607,11 +2600,9 @@ void megasas_refire_mgmt_cmd(struct megasas_instance *instance)
 		req_desc = megasas_get_request_descriptor
 					(instance, smid - 1);
 		if (req_desc && (cmd_mfi->frame->dcmd.opcode !=
-				cpu_to_le32(MR_DCMD_LD_MAP_GET_INFO))) {
-			instance->instancet->fire_cmd(instance,
-				req_desc->u.low, req_desc->u.high,
-				instance->reg_set);
-		} else
+				cpu_to_le32(MR_DCMD_LD_MAP_GET_INFO)))
+			megasas_fire_cmd_fusion(instance, req_desc);
+		else
 			megasas_return_cmd(instance, cmd_mfi);
 	}
 }
@@ -3044,7 +3035,6 @@ void megasas_fusion_ocr_wq(struct work_struct *work)
 }
 
 struct megasas_instance_template megasas_instance_template_fusion = {
-	.fire_cmd = megasas_fire_cmd_fusion,
 	.enable_intr = megasas_enable_intr_fusion,
 	.disable_intr = megasas_disable_intr_fusion,
 	.clear_intr = megasas_clear_intr_fusion,
