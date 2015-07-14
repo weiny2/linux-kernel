@@ -53,15 +53,28 @@
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
 #include <linux/module.h>
+#include <linux/if_ether.h>
 #include <linux/opa_vnic.h>
 
 #include "opa_vnic_internal.h"
 
-/*
- * NOTE: OPA header (L2+L4) is only 12 bytes.
- * This structure has overlay over ethernet packet data.
+/**
+ * struct opa_bypass10_pkt - opa bypass10 (10B) packet format
+ * @slid: source lid
+ * @length: length of packet
+ * @b: BECN
+ * @dlid: destination lid
+ * @sc: service class
+ * @rc: route control
+ * @f: FECN
+ * @l2: L2 type (1=10B, 2=16B)
+ * @lt: link transfer field
+ * @l4: L4 type
+ * @pkey: partition key
+ * @entropy: entropy
+ * @l4_hdr: L4 header
  */
-union bypass10_pkt {
+union opa_bypass10_pkt {
 	struct {
 	struct {
 		uint64_t        slid    : 20;
@@ -71,34 +84,67 @@ union bypass10_pkt {
 		uint64_t        sc      : 5;
 		uint64_t        rc      : 3;
 		uint64_t        f       : 1;
-		uint64_t        l2      : 2;  /* 1=10B, 2=16B */
+		uint64_t        l2      : 2;
 		uint64_t        lt      : 1;
 	};
 	struct {
-		uint64_t        l4      : 4;
-		uint64_t        pkey    : 4;
-		uint64_t        entropy : 8;
-		uint64_t        l4_hdr  : 16;
-		uint64_t        payload : 32;
+		uint32_t        l4      : 4;
+		uint32_t        pkey    : 4;
+		uint32_t        entropy : 8;
+		uint32_t        l4_hdr  : 16;
 	};
-	} __attribute__ ((__packed__));
-	uint64_t val[2];
+	} __packed;
+	uint32_t dw[3];
 };
 
-/* vnic_insert_hdr - insert opa header */
-static void vnic_insert_hdr(void *data, u32 len, u8 vswt_id)
-{
-	union bypass10_pkt *hdr = data;
+#define OPA_VNIC_IS_DMAC_MCAST(mac_hdr)  ((mac_hdr)->h_dest[0] & 0x01)
+#define OPA_VNIC_IS_DMAC_LOCAL(mac_hdr)  ((mac_hdr)->h_dest[0] & 0x02)
 
-	/* TODO: dummy header parms for now, fix later */
-	hdr->slid = 0;
-	hdr->dlid = 2;
+/* TODO: add 16B support; 10B dlid has 20 bits */
+#define OPA_VNIC_DLID_MASK 0xfffff
+
+/* opa_vnic_get_dlid - return the dlid */
+static uint32_t opa_vnic_get_dlid(struct opa_veswport_info *info,
+				  struct ethhdr *mac_hdr)
+{
+	uint32_t dlid;
+
+	if (OPA_VNIC_IS_DMAC_MCAST(mac_hdr)) {
+		/* TODO: use dlid miss rule for now, fix later */
+		dlid = info->vesw.u_mcast_dlid;
+	} else if (OPA_VNIC_IS_DMAC_LOCAL(mac_hdr)) {
+		/* locally administered mac address */
+		dlid = ((uint32_t)mac_hdr->h_dest[3] << 16) |
+		       ((uint32_t)mac_hdr->h_dest[4] << 8)  |
+		       mac_hdr->h_dest[5];
+	} else {
+		/* globally administered mac address */
+		/* TODO: use dlid miss rule for now, fix later */
+		dlid = info->vesw.u_ucast_dlid[0];
+	}
+
+	return dlid & OPA_VNIC_DLID_MASK;
+}
+
+/* opa_vnic_populate_hdr - populate opa header */
+static void opa_vnic_populate_hdr(struct opa_veswport_info *info, void *opa_hdr,
+				  struct ethhdr *mac_hdr, u32 len, u32 lid)
+{
+	union opa_bypass10_pkt *hdr = opa_hdr;
+
+	/* TODO: minimum header parms for now, update later */
+	hdr->slid = lid;
+	hdr->dlid = opa_vnic_get_dlid(info, mac_hdr);
+
 	hdr->length = len >> 3;
 	if (len & 0x7)
 		hdr->length += 1;
 
-	hdr->l2 = 1; /* 10B */
-	hdr->l4_hdr = vswt_id;
+	/* TODO: only 10B is supported now, add 16B support later */
+	hdr->l2 = 1;
+
+	hdr->pkey = info->vesw.pkey;
+	hdr->l4_hdr = info->vesw.vesw_id;
 }
 
 /* opa_vnic_encap_skb - encap skb packet */
@@ -106,6 +152,8 @@ void opa_vnic_encap_skb(struct opa_vnic_adapter *adapter, struct sk_buff *skb)
 {
 	unsigned int pad_len;
 	struct opa_vnic_device *vdev = adapter->vdev;
+	struct opa_veswport_info *info = &adapter->info;
+	struct ethhdr *mac_hdr = (struct ethhdr *)skb_mac_header(skb);
 
 	skb_push(skb, OPA_VNIC_HDR_LEN);
 	memset(skb->data, 0, OPA_VNIC_HDR_LEN);
@@ -118,7 +166,8 @@ void opa_vnic_encap_skb(struct opa_vnic_adapter *adapter, struct sk_buff *skb)
 
 	pad_len += 8;
 
-	vnic_insert_hdr(skb->data, skb->len + pad_len, vdev->id);
+	opa_vnic_populate_hdr(info, skb->data, mac_hdr,
+			      skb->len + pad_len, vdev->lid);
 }
 
 /* opa_vnic_decap_skb - decap skb packet */
