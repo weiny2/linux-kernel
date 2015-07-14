@@ -435,6 +435,7 @@ check_size:
 	packet = (struct hv_netvsc_packet *)skb->head;
 
 	packet->status = 0;
+	packet->xmit_more = false;
 #if 0
 	packet->xmit_more = skb->xmit_more;
 #endif
