@@ -9027,45 +9027,40 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 		num_kernel_contexts = num_online_nodes();
 	num_kernel_contexts =
 		max_t(int, MIN_KERNEL_KCTXTS, num_kernel_contexts);
-
+	/*
+	 * Every kernel receive context needs an ACK send context.
+	 * one send context is allocated for each VL{0-7} and VL15
+	 */
+	if (num_kernel_contexts > (dd->chip_send_contexts - num_vls - 1)) {
+		dd_dev_err(dd,
+			   "Reducing # kernel rcv contexts to: %d, from %d\n",
+			   (int)(dd->chip_send_contexts - num_vls - 1),
+			   (int)num_kernel_contexts);
+		num_kernel_contexts = dd->chip_send_contexts - num_vls - 1;
+	}
 	/*
 	 * User contexts: (to be fixed later)
+	 *	- set to num_rcv_contexts if non-zero
 	 *	- default to 1 user context per CPU
 	 */
-	num_user_contexts = num_online_cpus();
+	if (num_rcv_contexts)
+		num_user_contexts = num_rcv_contexts;
+	else
+		num_user_contexts = num_online_cpus();
 
 	total_contexts = num_kernel_contexts + num_user_contexts;
 
 	/*
 	 * Adjust the counts given a global max.
-	 *	- always cut out user contexts before kernel contexts
-	 *	- only extend user contexts
 	 */
-	if (num_rcv_contexts) {
-		if (num_rcv_contexts < total_contexts) {
-			/* cut back, user first */
-			if (num_rcv_contexts < num_kernel_contexts) {
-				num_kernel_contexts = num_rcv_contexts;
-				num_user_contexts = 0;
-			} else {
-				num_user_contexts = num_rcv_contexts
-							- num_kernel_contexts;
-			}
-		} else {
-			/* extend the user context count */
-			num_user_contexts = num_rcv_contexts
-							- num_kernel_contexts;
-		}
+	if (total_contexts > dd->chip_rcv_contexts) {
+		dd_dev_err(dd,
+			   "Reducing # user receive contexts to: %d, from %d\n",
+			   (int)(dd->chip_rcv_contexts - num_kernel_contexts),
+			   (int)num_user_contexts);
+		num_user_contexts = dd->chip_rcv_contexts - num_kernel_contexts;
 		/* recalculate */
 		total_contexts = num_kernel_contexts + num_user_contexts;
-	}
-
-	if (total_contexts > dd->chip_rcv_contexts) {
-		/* don't silently adjust, complain and fail */
-		dd_dev_err(dd,
-			"not enough physical contexts: want %d, have %d\n",
-			(int)total_contexts, (int)dd->chip_rcv_contexts);
-		return -ENOSPC;
 	}
 
 	/* the first N are kernel contexts, the rest are user contexts */

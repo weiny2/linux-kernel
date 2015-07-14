@@ -78,12 +78,13 @@
 #define HFI1_MAX_EAGER_BUFFER_SIZE (256 * 1024) /* 256KB */
 
 /*
- * Number of receive contexts we are configured to use (to allow for more pio
- * buffers per ctxt, etc.)  Zero means use chip value.
+ * Number of user receive contexts we are configured to use (to allow for more
+ * pio buffers per ctxt, etc.)  Zero means use one user context per CPU.
  */
 uint num_rcv_contexts;
 module_param_named(num_rcv_contexts, num_rcv_contexts, uint, S_IRUGO);
-MODULE_PARM_DESC(num_rcv_contexts, "Set max number of receive contexts to use");
+MODULE_PARM_DESC(
+	num_rcv_contexts, "Set max number of user receive contexts to use");
 
 u8 krcvqs[RXE_NUM_DATA_VL];
 int krcvqsset;

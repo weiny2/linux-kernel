@@ -314,7 +314,7 @@ int init_sc_pools_and_sizes(struct hfi1_devdata *dd)
 		} else if (i == SC_KERNEL) {
 			count = num_vls + 1 /* VL15 */;
 		} else if (count == SCC_PER_CPU) {
-			count = num_online_cpus();
+			count = dd->num_rcv_contexts - dd->n_krcv_queues;
 		} else if (count < 0) {
 			dd_dev_err(
 				dd,
