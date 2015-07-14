@@ -921,7 +921,7 @@ extern struct megasas_instance_template megasas_instance_template_fusion;
  * @instance:			Adapter soft state
  * @cmd:			Command packet to be issued
  *
- * For polling, MFI requires the cmd_status to be set to 0xFF before posting.
+ * For polling, MFI requires the cmd_status to be set to MFI_STAT_INVALID_STATUS before posting.
  */
 int
 megasas_issue_polled(struct megasas_instance *instance, struct megasas_cmd *cmd)
@@ -963,20 +963,21 @@ megasas_issue_blocked_cmd(struct megasas_instance *instance,
 			  struct megasas_cmd *cmd, int timeout)
 {
 	int ret = 0;
-	cmd->cmd_status = ENODATA;
+	cmd->cmd_status_drv = MFI_STAT_INVALID_STATUS;
 
 	cmd->is_wait_event = 1;
 	instance->instancet->issue_dcmd(instance, cmd);
 	if (timeout) {
 		ret = wait_event_timeout(instance->int_cmd_wait_q,
-				cmd->cmd_status != ENODATA, timeout * HZ);
+				cmd->cmd_status_drv != MFI_STAT_INVALID_STATUS,
+				timeout * HZ);
 		if (!ret)
 			return 1;
 	} else
 		wait_event(instance->int_cmd_wait_q,
-				cmd->cmd_status != ENODATA);
+				cmd->cmd_status_drv != MFI_STAT_INVALID_STATUS);
 
-	return 0;
+	return (cmd->cmd_status_drv == MFI_STAT_OK) ? 0 : 1;
 }
 
 /**
@@ -1009,7 +1010,7 @@ megasas_issue_blocked_abort_cmd(struct megasas_instance *instance,
 	 * Prepare and issue the abort frame
 	 */
 	abort_fr->cmd = MFI_CMD_ABORT;
-	abort_fr->cmd_status = 0xFF;
+	abort_fr->cmd_status = MFI_STAT_INVALID_STATUS;
 	abort_fr->flags = cpu_to_le16(0);
 	abort_fr->abort_context = cpu_to_le32(cmd_to_abort->index);
 	abort_fr->abort_mfi_phys_addr_lo =
@@ -1018,13 +1019,13 @@ megasas_issue_blocked_abort_cmd(struct megasas_instance *instance,
 		cpu_to_le32(upper_32_bits(cmd_to_abort->frame_phys_addr));
 
 	cmd->sync_cmd = 1;
-	cmd->cmd_status = ENODATA;
+	cmd->cmd_status_drv = MFI_STAT_INVALID_STATUS;
 
 	instance->instancet->issue_dcmd(instance, cmd);
 
 	if (timeout) {
 		ret = wait_event_timeout(instance->abort_cmd_wait_q,
-				cmd->cmd_status != ENODATA, timeout * HZ);
+				cmd->cmd_status_drv != MFI_STAT_INVALID_STATUS, timeout * HZ);
 		if (!ret) {
 			dev_err(&instance->pdev->dev, "Command timedout"
 				"from %s\n", __func__);
@@ -1032,7 +1033,7 @@ megasas_issue_blocked_abort_cmd(struct megasas_instance *instance,
 		}
 	} else
 		wait_event(instance->abort_cmd_wait_q,
-				cmd->cmd_status != ENODATA);
+				cmd->cmd_status_drv != MFI_STAT_INVALID_STATUS);
 
 	cmd->sync_cmd = 0;
 
@@ -1933,7 +1934,7 @@ static int megasas_get_ld_vf_affiliation_111(struct megasas_instance *instance,
 	memset(dcmd->mbox.b, 0, MFI_MBOX_SIZE);
 
 	dcmd->cmd = MFI_CMD_DCMD;
-	dcmd->cmd_status = 0xFF;
+	dcmd->cmd_status = MFI_STAT_INVALID_STATUS;
 	dcmd->sge_count = 1;
 	dcmd->flags = cpu_to_le16(MFI_FRAME_DIR_BOTH);
 	dcmd->timeout = 0;
@@ -2050,7 +2051,7 @@ static int megasas_get_ld_vf_affiliation_12(struct megasas_instance *instance,
 	memset(dcmd->mbox.b, 0, MFI_MBOX_SIZE);
 
 	dcmd->cmd = MFI_CMD_DCMD;
-	dcmd->cmd_status = 0xFF;
+	dcmd->cmd_status = MFI_STAT_INVALID_STATUS;
 	dcmd->sge_count = 1;
 	dcmd->flags = cpu_to_le16(MFI_FRAME_DIR_BOTH);
 	dcmd->timeout = 0;
@@ -2223,7 +2224,7 @@ int megasas_sriov_start_heartbeat(struct megasas_instance *instance,
 
 	dcmd->mbox.s[0] = cpu_to_le16(sizeof(struct MR_CTRL_HB_HOST_MEM));
 	dcmd->cmd = MFI_CMD_DCMD;
-	dcmd->cmd_status = 0xFF;
+	dcmd->cmd_status = MFI_STAT_INVALID_STATUS;
 	dcmd->sge_count = 1;
 	dcmd->flags = cpu_to_le16(MFI_FRAME_DIR_BOTH);
 	dcmd->timeout = 0;
@@ -2238,20 +2239,11 @@ int megasas_sriov_start_heartbeat(struct megasas_instance *instance,
 
 	retval = megasas_issue_polled(instance, cmd);
 	if (retval < 0) {
-		printk(KERN_WARNING "megasas: SR-IOV: MR_DCMD_CTRL_SHARED_HOST"
-		       "_MEM_ALLOC DCMD timed out for scsi%d\n",
-		       instance->host->host_no);
-		goto out;
-	}
-
-
-	if (dcmd->cmd_status) {
-		printk(KERN_WARNING "megasas: SR-IOV: MR_DCMD_CTRL_SHARED_HOST"
-		       "_MEM_ALLOC DCMD failed with status 0x%x for scsi%d\n",
-		       dcmd->cmd_status,
-		       instance->host->host_no);
+		dev_warn(&instance->pdev->dev, "SR-IOV: MR_DCMD_CTRL_SHARED_HOST"
+			"_MEM_ALLOC DCMD %s for scsi%d\n",
+			(dcmd->cmd_status == MFI_STAT_INVALID_STATUS) ?
+			"timed out" : "failed", instance->host->host_no);
 		retval = 1;
-		goto out;
 	}
 
 out:
@@ -2347,7 +2339,7 @@ static int megasas_wait_for_outstanding(struct megasas_instance *instance)
 						"reset queue\n",
 						reset_cmd);
 
-				reset_cmd->cmd_status = ENODATA;
+				reset_cmd->cmd_status_drv = MFI_STAT_INVALID_STATUS;
 				instance->instancet->fire_cmd(instance,
 						reset_cmd->frame_phys_addr,
 						0, instance->reg_set);
@@ -2844,11 +2836,7 @@ static void
 megasas_complete_int_cmd(struct megasas_instance *instance,
 			 struct megasas_cmd *cmd)
 {
-	cmd->cmd_status = cmd->frame->io.cmd_status;
-
-	if (cmd->cmd_status == ENODATA) {
-		cmd->cmd_status = 0;
-	}
+	cmd->cmd_status_drv = cmd->frame->io.cmd_status;
 	wake_up(&instance->int_cmd_wait_q);
 }
 
@@ -2867,7 +2855,7 @@ megasas_complete_abort(struct megasas_instance *instance,
 {
 	if (cmd->sync_cmd) {
 		cmd->sync_cmd = 0;
-		cmd->cmd_status = 0;
+		cmd->cmd_status_drv = 0;
 		wake_up(&instance->abort_cmd_wait_q);
 	}
 
@@ -3115,7 +3103,7 @@ megasas_issue_pending_cmds_again(struct megasas_instance *instance)
 			printk(KERN_NOTICE "megasas: %p synchronous cmd"
 						"on the internal reset queue,"
 						"issue it again.\n", cmd);
-			cmd->cmd_status = ENODATA;
+			cmd->cmd_status_drv = MFI_STAT_INVALID_STATUS;
 			instance->instancet->fire_cmd(instance,
 							cmd->frame_phys_addr ,
 							0, instance->reg_set);
@@ -3856,7 +3844,7 @@ megasas_get_pd_list(struct megasas_instance *instance)
 	dcmd->mbox.b[0] = MR_PD_QUERY_TYPE_EXPOSED_TO_HOST;
 	dcmd->mbox.b[1] = 0;
 	dcmd->cmd = MFI_CMD_DCMD;
-	dcmd->cmd_status = 0xFF;
+	dcmd->cmd_status = MFI_STAT_INVALID_STATUS;
 	dcmd->sge_count = 1;
 	dcmd->flags = cpu_to_le16(MFI_FRAME_DIR_READ);
 	dcmd->timeout = 0;
@@ -3956,7 +3944,7 @@ megasas_get_ld_list(struct megasas_instance *instance)
 	if (instance->supportmax256vd)
 		dcmd->mbox.b[0] = 1;
 	dcmd->cmd = MFI_CMD_DCMD;
-	dcmd->cmd_status = 0xFF;
+	dcmd->cmd_status = MFI_STAT_INVALID_STATUS;
 	dcmd->sge_count = 1;
 	dcmd->flags = cpu_to_le16(MFI_FRAME_DIR_READ);
 	dcmd->timeout = 0;
@@ -4049,7 +4037,7 @@ megasas_ld_list_query(struct megasas_instance *instance, u8 query_type)
 		dcmd->mbox.b[2] = 1;
 
 	dcmd->cmd = MFI_CMD_DCMD;
-	dcmd->cmd_status = 0xFF;
+	dcmd->cmd_status = MFI_STAT_INVALID_STATUS;
 	dcmd->sge_count = 1;
 	dcmd->flags = cpu_to_le16(MFI_FRAME_DIR_READ);
 	dcmd->timeout = 0;
@@ -4189,7 +4177,7 @@ megasas_get_ctrl_info(struct megasas_instance *instance)
 	memset(dcmd->mbox.b, 0, MFI_MBOX_SIZE);
 
 	dcmd->cmd = MFI_CMD_DCMD;
-	dcmd->cmd_status = 0xFF;
+	dcmd->cmd_status = MFI_STAT_INVALID_STATUS;
 	dcmd->sge_count = 1;
 	dcmd->flags = cpu_to_le16(MFI_FRAME_DIR_READ);
 	dcmd->timeout = 0;
@@ -4260,7 +4248,7 @@ int megasas_set_crash_dump_params(struct megasas_instance *instance,
 	memset(dcmd->mbox.b, 0, MFI_MBOX_SIZE);
 	dcmd->mbox.b[0] = crash_buf_state;
 	dcmd->cmd = MFI_CMD_DCMD;
-	dcmd->cmd_status = 0xFF;
+	dcmd->cmd_status = MFI_STAT_INVALID_STATUS;
 	dcmd->sge_count = 1;
 	dcmd->flags = cpu_to_le16(MFI_FRAME_DIR_NONE);
 	dcmd->timeout = 0;
@@ -4331,7 +4319,7 @@ megasas_issue_init_mfi(struct megasas_instance *instance)
 	initq_info->consumer_index_phys_addr_lo = cpu_to_le32(instance->consumer_h);
 
 	init_frame->cmd = MFI_CMD_INIT;
-	init_frame->cmd_status = 0xFF;
+	init_frame->cmd_status = MFI_STAT_INVALID_STATUS;
 	init_frame->queue_info_new_phys_addr_lo =
 		cpu_to_le32(lower_32_bits(initq_info_h));
 	init_frame->queue_info_new_phys_addr_hi =
