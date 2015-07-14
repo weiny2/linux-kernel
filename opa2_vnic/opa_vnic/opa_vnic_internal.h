@@ -56,6 +56,8 @@
 
 #include <linux/etherdevice.h>
 
+#include "opa_vnic_encap.h"
+
 #define OPA_VNIC_L2_HDR_LEN   10
 #define OPA_VNIC_L4_HDR_LEN   2
 #define OPA_VNIC_MAX_PAD_LEN  16
@@ -68,12 +70,17 @@
  * @netdev: pointer to associated netdev
  * @vdev: pointer to opa vnic device
  * @napi: netdev napi structure
+ * @dentry: pointer to debugfs entry
+ * @info: virtual ethernet switch port information
  */
 struct opa_vnic_adapter {
 	struct net_device        *netdev;
 	struct opa_vnic_device   *vdev;
 
 	struct napi_struct        napi;
+
+	struct dentry            *dentry;
+	struct opa_veswport_info  info;
 };
 
 #define v_dbg(format, arg...) \
@@ -94,5 +101,10 @@ void opa_vnic_encap_skb(struct opa_vnic_adapter *adapter, struct sk_buff *skb);
 void opa_vnic_decap_skb(struct opa_vnic_adapter *adapter, struct sk_buff *skb);
 
 void opa_vnic_set_ethtool_ops(struct net_device *ndev);
+
+void opa_vnic_dbg_vport_init(struct opa_vnic_adapter *adapter);
+void opa_vnic_dbg_vport_exit(struct opa_vnic_adapter *adapter);
+void opa_vnic_dbg_init(void);
+void opa_vnic_dbg_exit(void);
 
 #endif /* _OPA_VNIC_INTERNAL_H */

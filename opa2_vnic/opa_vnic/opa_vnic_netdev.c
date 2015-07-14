@@ -252,6 +252,7 @@ static int opa_vnic_drv_probe(struct device *dev)
 		goto netdev_err;
 
 	netif_carrier_off(netdev);
+	opa_vnic_dbg_vport_init(adapter);
 	v_info("initialized\n");
 
 	return 0;
@@ -270,7 +271,9 @@ static int opa_vnic_drv_remove(struct device *dev)
 {
 	struct opa_vnic_device *vdev = container_of(dev,
 					    struct opa_vnic_device, dev);
+	struct opa_vnic_adapter *adapter = netdev_priv(vdev->netdev);
 
+	opa_vnic_dbg_vport_exit(adapter);
 	unregister_netdev(vdev->netdev);
 	vdev->bus_ops->hfi_deinit(vdev);
 	free_netdev(vdev->netdev);
@@ -296,6 +299,7 @@ static int __init opa_vnic_init_module(void)
 
 	pr_info("Intel(R) Omni-Path Virtual Network Driver - %s\n",
 		opa_vnic_driver_version);
+	opa_vnic_dbg_init();
 	rc = opa_vnic_driver_register(&opa_vnic_drv);
 	if (rc)
 		pr_err("Driver register failed %d\n", rc);
@@ -308,6 +312,7 @@ module_init(opa_vnic_init_module);
 static void __exit opa_vnic_exit_module(void)
 {
 	opa_vnic_driver_unregister(&opa_vnic_drv);
+	opa_vnic_dbg_exit();
 }
 module_exit(opa_vnic_exit_module);
 
