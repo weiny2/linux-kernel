@@ -2890,6 +2890,7 @@ static void lpt_program_iclkip(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
+	int clock = to_intel_crtc(crtc)->config.adjusted_mode.clock;
 	u32 divsel, phaseinc, auxdiv, phasedir = 0;
 	u32 temp;
 
@@ -2907,13 +2908,13 @@ static void lpt_program_iclkip(struct drm_crtc *crtc)
 			SBI_ICLK);
 
 	/* 20MHz is a corner case which is out of range for the 7-bit divisor */
-	if (crtc->mode.clock == 20000) {
+	if (clock == 20000) {
 		auxdiv = 1;
 		divsel = 0x41;
 		phaseinc = 0x20;
 	} else {
 		/* The iCLK virtual clock root frequency is in MHz,
-		 * but the crtc->mode.clock in in KHz. To get the divisors,
+		 * but the adjusted_mode->clock in in KHz. To get the divisors,
 		 * it is necessary to divide one by another, so we
 		 * convert the virtual clock precision to KHz here for higher
 		 * precision.
@@ -2922,7 +2923,7 @@ static void lpt_program_iclkip(struct drm_crtc *crtc)
 		u32 iclk_pi_range = 64;
 		u32 desired_divisor, msb_divisor_value, pi_value;
 
-		desired_divisor = (iclk_virtual_root_freq / crtc->mode.clock);
+		desired_divisor = (iclk_virtual_root_freq / clock);
 		msb_divisor_value = desired_divisor / iclk_pi_range;
 		pi_value = desired_divisor % iclk_pi_range;
 
@@ -2938,7 +2939,7 @@ static void lpt_program_iclkip(struct drm_crtc *crtc)
 		~SBI_SSCDIVINTPHASE_INCVAL_MASK);
 
 	DRM_DEBUG_KMS("iCLKIP clock: found settings for %dKHz refresh rate: auxdiv=%x, divsel=%x, phasedir=%x, phaseinc=%x\n",
-			crtc->mode.clock,
+			clock,
 			auxdiv,
 			divsel,
 			phasedir,
