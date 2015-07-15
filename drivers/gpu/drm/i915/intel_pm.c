@@ -1109,7 +1109,7 @@ static void pineview_update_wm(struct drm_device *dev)
 
 	crtc = single_enabled_crtc(dev);
 	if (crtc) {
-		int clock = crtc->mode.clock;
+		int clock = to_intel_crtc(crtc)->config.adjusted_mode.clock;
 		int pixel_size = crtc->fb->bits_per_pixel / 8;
 
 		/* Display SR */
@@ -1170,6 +1170,7 @@ static bool g4x_compute_wm0(struct drm_device *dev,
 			    int *cursor_wm)
 {
 	struct drm_crtc *crtc;
+	const struct drm_display_mode *adjusted_mode;
 	int htotal, hdisplay, clock, pixel_size;
 	int line_time_us, line_count;
 	int entries, tlb_miss;
@@ -1181,9 +1182,10 @@ static bool g4x_compute_wm0(struct drm_device *dev,
 		return false;
 	}
 
-	htotal = crtc->mode.htotal;
-	hdisplay = crtc->mode.hdisplay;
-	clock = crtc->mode.clock;
+	adjusted_mode = &to_intel_crtc(crtc)->config.adjusted_mode;
+	clock = adjusted_mode->clock;
+	htotal = adjusted_mode->htotal;
+	hdisplay = to_intel_crtc(crtc)->config.requested_mode.hdisplay;
 	pixel_size = crtc->fb->bits_per_pixel / 8;
 
 	/* Use the small buffer method to calculate plane watermark */
@@ -1254,6 +1256,7 @@ static bool g4x_compute_srwm(struct drm_device *dev,
 			     int *display_wm, int *cursor_wm)
 {
 	struct drm_crtc *crtc;
+	const struct drm_display_mode *adjusted_mode;
 	int hdisplay, htotal, pixel_size, clock;
 	unsigned long line_time_us;
 	int line_count, line_size;
@@ -1266,9 +1269,10 @@ static bool g4x_compute_srwm(struct drm_device *dev,
 	}
 
 	crtc = intel_get_crtc_for_plane(dev, plane);
-	hdisplay = crtc->mode.hdisplay;
-	htotal = crtc->mode.htotal;
-	clock = crtc->mode.clock;
+	adjusted_mode = &to_intel_crtc(crtc)->config.adjusted_mode;
+	clock = adjusted_mode->clock;
+	htotal = adjusted_mode->htotal;
+	hdisplay = to_intel_crtc(crtc)->config.requested_mode.hdisplay;
 	pixel_size = crtc->fb->bits_per_pixel / 8;
 
 	line_time_us = (htotal * 1000) / clock;
@@ -1307,7 +1311,7 @@ static bool vlv_compute_drain_latency(struct drm_device *dev,
 	if (!intel_crtc_active(crtc))
 		return false;
 
-	clock = crtc->mode.clock;	/* VESA DOT Clock */
+	clock = to_intel_crtc(crtc)->config.adjusted_mode.clock;
 	pixel_size = crtc->fb->bits_per_pixel / 8;	/* BPP */
 
 	entries = (clock / 1000) * pixel_size;
@@ -1492,9 +1496,11 @@ static void i965_update_wm(struct drm_device *dev)
 	if (crtc) {
 		/* self-refresh has much higher latency */
 		static const int sr_latency_ns = 12000;
-		int clock = crtc->mode.clock;
-		int htotal = crtc->mode.htotal;
-		int hdisplay = crtc->mode.hdisplay;
+		const struct drm_display_mode *adjusted_mode =
+			&to_intel_crtc(crtc)->config.adjusted_mode;
+		int clock = adjusted_mode->clock;
+		int htotal = adjusted_mode->htotal;
+		int hdisplay = to_intel_crtc(crtc)->config.requested_mode.hdisplay;
 		int pixel_size = crtc->fb->bits_per_pixel / 8;
 		unsigned long line_time_us;
 		int entries;
@@ -1570,7 +1576,7 @@ static void i9xx_update_wm(struct drm_device *dev)
 		if (IS_GEN2(dev))
 			cpp = 4;
 
-		planea_wm = intel_calculate_wm(crtc->mode.clock,
+		planea_wm = intel_calculate_wm(to_intel_crtc(crtc)->config.adjusted_mode.clock,
 					       wm_info, fifo_size, cpp,
 					       latency_ns);
 		enabled = crtc;
@@ -1584,7 +1590,7 @@ static void i9xx_update_wm(struct drm_device *dev)
 		if (IS_GEN2(dev))
 			cpp = 4;
 
-		planeb_wm = intel_calculate_wm(crtc->mode.clock,
+		planeb_wm = intel_calculate_wm(to_intel_crtc(crtc)->config.adjusted_mode.clock,
 					       wm_info, fifo_size, cpp,
 					       latency_ns);
 		if (enabled == NULL)
@@ -1621,9 +1627,11 @@ static void i9xx_update_wm(struct drm_device *dev)
 	if (HAS_FW_BLC(dev) && enabled) {
 		/* self-refresh has much higher latency */
 		static const int sr_latency_ns = 6000;
-		int clock = enabled->mode.clock;
-		int htotal = enabled->mode.htotal;
-		int hdisplay = enabled->mode.hdisplay;
+		const struct drm_display_mode *adjusted_mode =
+			&to_intel_crtc(enabled)->config.adjusted_mode;
+		int clock = adjusted_mode->clock;
+		int htotal = adjusted_mode->htotal;
+		int hdisplay = to_intel_crtc(crtc)->config.requested_mode.hdisplay;
 		int pixel_size = enabled->fb->bits_per_pixel / 8;
 		unsigned long line_time_us;
 		int entries;
@@ -1683,7 +1691,8 @@ static void i830_update_wm(struct drm_device *dev)
 	if (crtc == NULL)
 		return;
 
-	planea_wm = intel_calculate_wm(crtc->mode.clock, &i830_wm_info,
+	planea_wm = intel_calculate_wm(to_intel_crtc(crtc)->config.adjusted_mode.clock,
+				       &i830_wm_info,
 				       dev_priv->display.get_fifo_size(dev, 0),
 				       4, latency_ns);
 	fwater_lo = I915_READ(FW_BLC) & ~0xfff;
@@ -1755,6 +1764,7 @@ static bool ironlake_compute_srwm(struct drm_device *dev, int level, int plane,
 				  int *fbc_wm, int *display_wm, int *cursor_wm)
 {
 	struct drm_crtc *crtc;
+	const struct drm_display_mode *adjusted_mode;
 	unsigned long line_time_us;
 	int hdisplay, htotal, pixel_size, clock;
 	int line_count, line_size;
@@ -1767,9 +1777,10 @@ static bool ironlake_compute_srwm(struct drm_device *dev, int level, int plane,
 	}
 
 	crtc = intel_get_crtc_for_plane(dev, plane);
-	hdisplay = crtc->mode.hdisplay;
-	htotal = crtc->mode.htotal;
-	clock = crtc->mode.clock;
+	adjusted_mode = &to_intel_crtc(crtc)->config.adjusted_mode;
+	clock = adjusted_mode->clock;
+	htotal = adjusted_mode->htotal;
+	hdisplay = to_intel_crtc(crtc)->config.requested_mode.hdisplay;
 	pixel_size = crtc->fb->bits_per_pixel / 8;
 
 	line_time_us = (htotal * 1000) / clock;
@@ -2912,7 +2923,7 @@ sandybridge_compute_sprite_wm(struct drm_device *dev, int plane,
 		return false;
 	}
 
-	clock = crtc->mode.clock;
+	clock = to_intel_crtc(crtc)->config.adjusted_mode.clock;
 
 	/* Use the small buffer method to calculate the sprite watermark */
 	entries = ((clock * pixel_size / 1000) * display_latency_ns) / 1000;
@@ -2947,7 +2958,7 @@ sandybridge_compute_sprite_srwm(struct drm_device *dev, int plane,
 	}
 
 	crtc = intel_get_crtc_for_plane(dev, plane);
-	clock = crtc->mode.clock;
+	clock = to_intel_crtc(crtc)->config.adjusted_mode.clock;
 	if (!clock) {
 		*sprite_wm = 0;
 		return false;
