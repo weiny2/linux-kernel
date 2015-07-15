@@ -1349,6 +1349,20 @@ void intel_ddi_get_config(struct intel_encoder *encoder,
 			      pipe_config->pipe_bpp, dev_priv->vbt.edp_bpp);
 		dev_priv->vbt.edp_bpp = pipe_config->pipe_bpp;
 	}
+
+	switch (temp & TRANS_DDI_MODE_SELECT_MASK) {
+	case TRANS_DDI_MODE_SELECT_HDMI:
+	case TRANS_DDI_MODE_SELECT_DVI:
+	case TRANS_DDI_MODE_SELECT_FDI:
+		break;
+	case TRANS_DDI_MODE_SELECT_DP_SST:
+	case TRANS_DDI_MODE_SELECT_DP_MST:
+		pipe_config->has_dp_encoder = true;
+		intel_dp_get_m_n(intel_crtc, pipe_config);
+		break;
+	default:
+		break;
+	}
 }
 
 static void intel_ddi_destroy(struct drm_encoder *encoder)
