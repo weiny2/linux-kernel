@@ -5077,7 +5077,7 @@ static void vlv_crtc_clock_get(struct intel_crtc *crtc,
 	clock.vco = refclk * clock.m1 * clock.m2 / clock.n;
 	clock.dot = 2 * clock.vco / (clock.p1 * clock.p2);
 
-	pipe_config->adjusted_mode.clock = clock.dot / 10;
+	pipe_config->port_clock = clock.dot / 10;
 }
 
 static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
@@ -5141,6 +5141,11 @@ static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
 						     DPLL_PORTC_READY_MASK |
 						     DPLL_PORTB_READY_MASK);
 	}
+
+	if (IS_VALLEYVIEW(dev))
+		vlv_crtc_clock_get(crtc, pipe_config);
+	else
+		i9xx_crtc_clock_get(crtc, pipe_config);
 
 	return true;
 }
