@@ -753,8 +753,8 @@ intel_dp_set_clock(struct intel_encoder *encoder,
 			pipe_config->dpll.n = 5;
 			pipe_config->dpll.p1 = 3;
 			pipe_config->dpll.p2 = 2;
-			pipe_config->dpll.m1 = 5;
-			pipe_config->dpll.m2 = 3;
+			pipe_config->dpll.m1 = 3;
+			pipe_config->dpll.m2 = 81;
 		} else {
 			pipe_config->dpll.n = 1;
 			pipe_config->dpll.p1 = 2;
