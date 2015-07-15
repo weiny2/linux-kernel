@@ -417,7 +417,7 @@ drop:
 	return;
 }
 
-static inline u32 init_packet(struct hfi1_ctxtdata *rcd,
+static inline void init_packet(struct hfi1_ctxtdata *rcd,
 			      struct hfi1_packet *packet)
 {
 
@@ -433,8 +433,6 @@ static inline u32 init_packet(struct hfi1_ctxtdata *rcd,
 	packet->numpkt = 1;
 	packet->rcv_flags = 0;
 	packet->has_grh = 0;
-	return packet->rhqoff;
-
 }
 
 #ifndef CONFIG_PRESCAN_RXQ
@@ -745,15 +743,14 @@ static inline void process_rcv_qp_work(struct hfi1_packet *packet)
  */
 void handle_receive_interrupt_nodma_rtail(struct hfi1_ctxtdata *rcd)
 {
-	u32 l, seq;
+	u32 seq;
 	int last = 0;
 	struct hfi1_packet packet;
 
-	l = init_packet(rcd, &packet);
+	init_packet(rcd, &packet);
 	seq = rhf_rcv_seq(packet.rhf);
 	if (seq != rcd->seq_cnt)
 		goto bail;
-	packet.hdrqtail = 0;
 
 	prescan_rxq(&packet);
 
@@ -773,13 +770,13 @@ bail:
 
 void handle_receive_interrupt_dma_rtail(struct hfi1_ctxtdata *rcd)
 {
-	u32 l;
+	u32 hdrqtail;
 	int last = 0;
 	struct hfi1_packet packet;
 
-	l = init_packet(rcd, &packet);
-	packet.hdrqtail = get_rcvhdrtail(rcd);
-	if (l == packet.hdrqtail)
+	init_packet(rcd, &packet);
+	hdrqtail = get_rcvhdrtail(rcd);
+	if (packet.rhqoff == hdrqtail)
 		goto bail;
 	smp_rmb();  /* prevent speculative reads of dma'ed hdrq */
 
@@ -787,7 +784,7 @@ void handle_receive_interrupt_dma_rtail(struct hfi1_ctxtdata *rcd)
 
 	while (!last) {
 		last = process_rcv_packet(&packet);
-		 if (packet.rhqoff == packet.hdrqtail)
+		if (packet.rhqoff == hdrqtail)
 			last = 1;
 		process_rcv_update(last, &packet);
 	}
@@ -826,21 +823,21 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 {
 
 	struct hfi1_devdata *dd = rcd->dd;
-	u32 l;
+	u32 hdrqtail;
 	int last = 0, needset = 1;
 	struct hfi1_packet packet;
 
-	l = init_packet(rcd, &packet);
+	init_packet(rcd, &packet);
 
 	if (!HFI1_CAP_IS_KSET(DMA_RTAIL)) {
 		u32 seq = rhf_rcv_seq(packet.rhf);
 
 		if (seq != rcd->seq_cnt)
 			goto bail;
-		packet.hdrqtail = 0;
+		hdrqtail = 0;
 	} else {
-		packet.hdrqtail = get_rcvhdrtail(rcd);
-		if (l == packet.hdrqtail)
+		hdrqtail = get_rcvhdrtail(rcd);
+		if (packet.rhqoff == hdrqtail)
 			goto bail;
 		smp_rmb();  /* prevent speculative reads of dma'ed hdrq */
 	}
@@ -878,7 +875,7 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 				needset = 0;
 			}
 		} else {
-			if (packet.rhqoff == packet.hdrqtail)
+			if (packet.rhqoff == hdrqtail)
 				last = 1;
 			if (needset) {
 				dd_dev_info(dd,

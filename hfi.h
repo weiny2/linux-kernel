@@ -338,7 +338,6 @@ struct hfi1_packet {
 	u32 etype;
 	u32 rsize;
 	u32 maxcnt;
-	u32 hdrqtail;
 	u32 rhqoff;
 	int numpkt;
 	u32 rcv_flags;
