@@ -76,8 +76,12 @@ extern unsigned int hfi_max_mtu;
 /* Maximum number of unicast LIDs supported */
 #define HFI_MAX_LID_SUPP	(0xBFFF)
 
-/* Size of packet sequence number state assuming LMC = 0 */
-#define HFI_PSN_SIZE		(HFI_MAX_LID_SUPP * 8)
+/*
+ * Size of packet sequence number state assuming LMC = 0
+ * The same PSN buffer is used for both TX and RX and hence
+ * the multiplication by 2
+ */
+#define HFI_PSN_SIZE		(2 * HFI_MAX_LID_SUPP * 8)
 
 /* TX timeout for E2E control messages */
 #define HFI_TX_TIMEOUT_MS	100
@@ -173,16 +177,14 @@ struct hfi_event_queue {
 
 /*
  * hfi_ptcdata - HFI traffic class specific information per port
- * @psn_base_rx_e2e: PSN base for RX E2E
- * @psn_base_tx_otr: PSN base for TX OTR
+ * @psn_base: packet sequence number buffer used for TX/RX
  * @e2e_state_cache: E2E connection state cache
  * @max_e2e_dlid: Maximum DLID to which an E2E connection has been
  *	established which is used to detect the DLID till which
  *	destroy messages have to be sent during driver unload
  */
 struct hfi_ptcdata {
-	void *psn_base_rx_e2e;
-	void *psn_base_tx_otr;
+	void *psn_base;
 	struct ida e2e_state_cache;
 	u32 max_e2e_dlid;
 };
