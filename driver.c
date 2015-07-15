@@ -437,6 +437,190 @@ static inline u32 init_packet(struct hfi1_ctxtdata *rcd,
 
 }
 
+#ifndef CONFIG_PRESCAN_RXQ
+static void prescan_rxq(struct hfi1_packet *packet) {}
+#else /* CONFIG_PRESCAN_RXQ */
+static int prescan_receive_queue;
+
+static void process_ecn(struct hfi1_qp *qp, struct hfi1_ib_header *hdr,
+			struct hfi1_other_headers *ohdr,
+			u64 rhf, struct ib_grh *grh)
+{
+	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	u32 bth1;
+	u8 sc5, svc_type;
+	int is_fecn, is_becn;
+
+	switch (qp->ibqp.qp_type) {
+	case IB_QPT_UD:
+		svc_type = IB_CC_SVCTYPE_UD;
+		break;
+	case IB_QPT_UC:	/* LATER */
+	case IB_QPT_RC:	/* LATER */
+	default:
+		return;
+	}
+
+	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) &
+			HFI1_FECN_MASK;
+	is_becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) &
+			HFI1_BECN_MASK;
+
+	sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
+	if (rhf_dc_info(rhf))
+		sc5 |= 0x10;
+
+	if (is_fecn) {
+		u32 src_qpn = be32_to_cpu(ohdr->u.ud.deth[1]) & HFI1_QPN_MASK;
+		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+		u16 dlid = be16_to_cpu(hdr->lrh[1]);
+		u16 slid = be16_to_cpu(hdr->lrh[3]);
+
+		return_cnp(ibp, qp, src_qpn, pkey, dlid, slid, sc5, grh);
+	}
+
+	if (is_becn) {
+		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+		u32 lqpn =  be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
+		u8 sl = ibp->sc_to_sl[sc5];
+
+		process_becn(ppd, sl, 0, lqpn, 0, svc_type);
+	}
+
+	/* turn off BECN, or FECN */
+	bth1 = be32_to_cpu(ohdr->bth[1]);
+	bth1 &= ~(HFI1_FECN_MASK << HFI1_FECN_SHIFT);
+	bth1 &= ~(HFI1_BECN_MASK << HFI1_BECN_SHIFT);
+	ohdr->bth[1] = cpu_to_be32(bth1);
+}
+
+struct ps_mdata {
+	struct hfi1_ctxtdata *rcd;
+	u32 rsize;
+	u32 maxcnt;
+	u32 ps_head;
+	u32 ps_tail;
+	u32 ps_seq;
+};
+
+static inline void init_ps_mdata(struct ps_mdata *mdata,
+				 struct hfi1_packet *packet)
+{
+	struct hfi1_ctxtdata *rcd = packet->rcd;
+
+	mdata->rcd = rcd;
+	mdata->rsize = packet->rsize;
+	mdata->maxcnt = packet->maxcnt;
+
+	if (rcd->ps_state.initialized == 0) {
+		mdata->ps_head = packet->rhqoff;
+		rcd->ps_state.initialized++;
+	} else
+		mdata->ps_head = rcd->ps_state.ps_head;
+
+	if (HFI1_CAP_IS_KSET(DMA_RTAIL)) {
+		mdata->ps_tail = packet->hdrqtail;
+		mdata->ps_seq = 0; /* not used with DMA_RTAIL */
+	} else {
+		mdata->ps_tail = 0; /* used only with DMA_RTAIL*/
+		mdata->ps_seq = rcd->seq_cnt;
+	}
+}
+
+static inline int ps_done(struct ps_mdata *mdata, u64 rhf)
+{
+	if (HFI1_CAP_IS_KSET(DMA_RTAIL))
+		return mdata->ps_head == mdata->ps_tail;
+	return mdata->ps_seq != rhf_rcv_seq(rhf);
+}
+
+static inline void update_ps_mdata(struct ps_mdata *mdata)
+{
+	struct hfi1_ctxtdata *rcd = mdata->rcd;
+
+	mdata->ps_head += mdata->rsize;
+	if (mdata->ps_head > mdata->maxcnt)
+		mdata->ps_head = 0;
+	rcd->ps_state.ps_head = mdata->ps_head;
+	if (!HFI1_CAP_IS_KSET(DMA_RTAIL)) {
+		if (++mdata->ps_seq > 13)
+			mdata->ps_seq = 1;
+	}
+}
+
+/*
+ * prescan_rxq - search through the receive queue looking for packets
+ * containing Excplicit Congestion Notifications (FECNs, or BECNs).
+ * When an ECN is found, process the Congestion Notification, and toggle
+ * it off.
+ */
+static void prescan_rxq(struct hfi1_packet *packet)
+{
+	struct hfi1_ctxtdata *rcd = packet->rcd;
+	struct ps_mdata mdata;
+
+	if (!prescan_receive_queue)
+		return;
+
+	init_ps_mdata(&mdata, packet);
+
+	while (1) {
+		struct hfi1_devdata *dd = rcd->dd;
+		struct hfi1_ibport *ibp = &rcd->ppd->ibport_data;
+		__le32 *rhf_addr = (__le32 *) rcd->rcvhdrq + mdata.ps_head +
+					 dd->rhf_offset;
+		struct hfi1_qp *qp;
+		struct hfi1_ib_header *hdr;
+		struct hfi1_other_headers *ohdr;
+		struct ib_grh *grh = NULL;
+		u64 rhf = rhf_to_cpu(rhf_addr);
+		u32 etype = rhf_rcv_type(rhf), qpn;
+		int is_ecn = 0;
+		u8 lnh;
+
+		if (ps_done(&mdata, rhf))
+			break;
+
+		if (etype != RHF_RCV_TYPE_IB)
+			goto next;
+
+		hdr = (struct hfi1_ib_header *)
+			hfi1_get_msgheader(dd, rhf_addr);
+		lnh = be16_to_cpu(hdr->lrh[0]) & 3;
+
+		if (lnh == HFI1_LRH_BTH)
+			ohdr = &hdr->u.oth;
+		else if (lnh == HFI1_LRH_GRH) {
+			ohdr = &hdr->u.l.oth;
+			grh = &hdr->u.l.grh;
+		} else
+			goto next; /* just in case */
+
+		is_ecn |= be32_to_cpu(ohdr->bth[1]) &
+			(HFI1_FECN_MASK << HFI1_FECN_SHIFT);
+		is_ecn |= be32_to_cpu(ohdr->bth[1]) &
+			(HFI1_BECN_MASK << HFI1_BECN_SHIFT);
+
+		if (!is_ecn)
+			goto next;
+
+		qpn = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
+		rcu_read_lock();
+		qp = hfi1_lookup_qpn(ibp, qpn);
+
+		if (qp == NULL) {
+			rcu_read_unlock();
+			goto next;
+		}
+
+		process_ecn(qp, hdr, ohdr, rhf, grh);
+		rcu_read_unlock();
+next:
+		update_ps_mdata(&mdata);
+	}
+}
+#endif /* CONFIG_PRESCAN_RXQ */
+
 #define RCV_PKT_OK 0x0
 #define RCV_PKT_MAX 0x1
 
@@ -571,6 +755,8 @@ void handle_receive_interrupt_nodma_rtail(struct hfi1_ctxtdata *rcd)
 		goto bail;
 	packet.hdrqtail = 0;
 
+	prescan_rxq(&packet);
+
 	while (!last) {
 		last = process_rcv_packet(&packet);
 		seq = rhf_rcv_seq(packet.rhf);
@@ -596,6 +782,8 @@ void handle_receive_interrupt_dma_rtail(struct hfi1_ctxtdata *rcd)
 	if (l == packet.hdrqtail)
 		goto bail;
 	smp_rmb();  /* prevent speculative reads of dma'ed hdrq */
+
+	prescan_rxq(&packet);
 
 	while (!last) {
 		last = process_rcv_packet(&packet);
@@ -656,6 +844,8 @@ void handle_receive_interrupt(struct hfi1_ctxtdata *rcd)
 			goto bail;
 		smp_rmb();  /* prevent speculative reads of dma'ed hdrq */
 	}
+
+	prescan_rxq(&packet);
 
 	while (!last) {
 
@@ -1017,8 +1207,11 @@ int process_receive_bypass(struct hfi1_packet *packet)
 int process_receive_error(struct hfi1_packet *packet)
 {
 	handle_eflags(packet);
-	dd_dev_err(packet->rcd->dd,
-		   "Unhandled error packet received. Dropping.\n");
+
+	if (unlikely(rhf_err_flags(packet->rhf)))
+		dd_dev_err(packet->rcd->dd,
+			   "Unhandled error packet received. Dropping.\n");
+
 	return RHF_RCV_CONTINUE;
 }
 
