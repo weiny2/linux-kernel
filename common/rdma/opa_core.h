@@ -336,9 +336,11 @@ struct opa_core_ops {
 	void (*get_port_desc)(struct opa_core_device *odev,
 				struct opa_pport_desc *pdesc, u8 port_num);
 	int (*get_sma)(struct opa_core_device *odev, u16 attr_id,
-		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len);
+		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len,
+		u8 *sma_status);
 	int (*set_sma)(struct opa_core_device *odev, u16 attr_id,
-		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len);
+		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len,
+		u8 *sma_status);
 };
 
 /**

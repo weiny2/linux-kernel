@@ -318,10 +318,6 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 {
 	struct opa_port_info *pi = (struct opa_port_info *)data;
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
-	u32 num_ports = OPA_AM_NPORT(am);
-
-	if (num_ports != 1)
-		return reply((struct ib_mad_hdr *)smp);
 
 	/* Only return the mkey if the protection field allows it. */
 	if (!(ibp->mkey != smp->mkey && ibp->mkeyprot == 1))
@@ -555,22 +551,33 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
 	struct opa_core_device *odev = ibd->odev;
 	struct opa_core_ops *ops = odev->bus_ops;
+	u8 sma_status = OPA_SMA_SUCCESS;
 
 	/*
 	 * Let the opa*_hfi driver process the MAD attribute first. This way
 	 * any methods that are unsupported by the HW can be detected early.
 	 */
-	ret = ops->get_sma(odev, attr_id, smp, am, data, port, resp_len);
+	ret = ops->get_sma(odev, attr_id, smp, am, data, port, resp_len,
+								&sma_status);
 
-	/* The packet cannot be consumed */
-	if (ret == IB_MAD_RESULT_FAILURE)
-		goto err;
-
-	if (!(smp->status &
-		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB)))
-		ret = __subn_get_opa_sma(attr_id, smp, am, data,
-					       ibdev, port, resp_len);
-err:
+	if (ret != IB_MAD_RESULT_FAILURE) {
+		switch (sma_status) {
+		case OPA_SMA_SUCCESS:
+			ret = __subn_get_opa_sma(attr_id, smp, am, data,
+						       ibdev, port, resp_len);
+			break;
+		case OPA_SMA_FAIL_WITH_DATA:
+		case OPA_SMA_FAIL_WITH_NO_DATA:
+			/*
+			 * SMA-HFI failed. The failure is reported in status
+			 * field of the MAD header.
+			 */
+			break;
+		default:
+			pr_warn("Illegal sma status reported by (Get)SMA\n");
+			BUG_ON(1);
+		}
+	}
 	return ret;
 }
 
@@ -580,34 +587,13 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 {
 	struct opa_port_info *pi = (struct opa_port_info *)data;
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
-	u32 num_ports = OPA_AM_NPORT(am);
-	u32 lid, smlid, opa_lid;
+	u32 lid, smlid;
 	struct ib_event event;
 	int i, ret;
 	u8 smsl, lmc;
 
-	if (num_ports != 1)
-		return reply((struct ib_mad_hdr *)smp);
-
 	event.device = ibdev;
 	event.element.port_num = port;
-
-	/*
-	 * FXRTODO: Change this to 24bit checks once driver
-	 * supports 24 bit LIDS
-	 *
-	 * SMA-HFI bailed out early and so should we for bad
-	 * LID and SMLID.
-	 */
-	opa_lid = be32_to_cpu(pi->lid);
-	if (!IS_VALID_LID_SIZE(opa_lid))
-		return subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev,
-					port, resp_len);
-
-	smlid = be32_to_cpu(pi->sm_lid);
-	if (!IS_VALID_LID_SIZE(smlid))
-		return subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev,
-					port, resp_len);
 
 	ibp->mkey = pi->mkey;
 	ibp->mkey_lease_period = be16_to_cpu(pi->mkey_lease_period);
@@ -864,22 +850,43 @@ static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
 	struct opa_core_device *odev = ibd->odev;
 	struct opa_core_ops *ops = odev->bus_ops;
+	u8 sma_status = OPA_SMA_SUCCESS;
 
 	/*
 	 * Let the opa*_hfi driver process the MAD attribute first. This way
 	 * any methods that are unsupported by the HW can be detected early.
 	 */
-	ret = ops->set_sma(odev, attr_id, smp, am, data, port, resp_len);
+	ret = ops->set_sma(odev, attr_id, smp, am, data, port, resp_len,
+								&sma_status);
 
-	/* The packet cannot be consumed */
-	if (ret == IB_MAD_RESULT_FAILURE)
-		goto err;
-
-	if (!(smp->status &
-		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB)))
-		ret = __subn_set_opa_sma(attr_id, smp, am, data,
+	/*
+	 * Response to Set attributes is by Get, and they are called inside the
+	 * corresponding Set attributes. In some failure cases we need to
+	 * respond back to FM with the get of the corresponding set attribute.
+	 * That is being done here. This is to avoid redundant attribute
+	 * component error checking both in SMA-HFI and SMA-IB.
+	 */
+	if (ret != IB_MAD_RESULT_FAILURE) {
+		switch (sma_status) {
+		case OPA_SMA_SUCCESS:
+			ret = __subn_set_opa_sma(attr_id, smp, am, data,
 					       ibdev, port, resp_len);
-err:
+			break;
+		case OPA_SMA_FAIL_WITH_DATA:
+			ret = subn_get_opa_sma(smp->attr_id, smp, am, data,
+					ibdev, port, resp_len);
+			break;
+		case OPA_SMA_FAIL_WITH_NO_DATA:
+			/*
+			 * SMA-HFI failed. The failure is reported in status
+			 * field of the MAD header.
+			 */
+			break;
+		default:
+			pr_warn("Illegal sma status reported by (Set)SMA\n");
+			BUG_ON(1);
+		}
+	}
 	return ret;
 }
 
