@@ -50,7 +50,7 @@
 
 #include <linux/err.h>
 #include <linux/vmalloc.h>
-#include <linux/jhash.h>
+#include <linux/hash.h>
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/seq_file.h>
@@ -84,7 +84,7 @@ static inline unsigned mk_qpn(struct hfi1_qpn_table *qpt,
 /*
  * Convert the AETH credit code into the number of credits.
  */
-static u32 credit_table[31] = {
+static const u16 credit_table[31] = {
 	0,                      /* 0 */
 	1,                      /* 1 */
 	2,                      /* 2 */
@@ -225,13 +225,6 @@ static void free_qpn(struct hfi1_qpn_table *qpt, u32 qpn)
 		clear_bit(qpn & BITS_PER_PAGE_MASK, map->page);
 }
 
-static inline unsigned qpn_hash(struct hfi1_qp_ibdev *dev, u32 qpn)
-{
-	return jhash_1word(qpn, dev->qp_rnd) &
-		(dev->qp_table_size - 1);
-}
-
-
 /*
  * Put the QP into the hash table.
  * The hash table holds a reference to the QP.
@@ -240,18 +233,17 @@ static void insert_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 {
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	unsigned long flags;
-	unsigned n = qpn_hash(dev->qp_dev, qp->ibqp.qp_num);
 
 	atomic_inc(&qp->refcount);
 	spin_lock_irqsave(&dev->qp_dev->qpt_lock, flags);
 
-	if (qp->ibqp.qp_num == 0)
-		rcu_assign_pointer(ibp->qp0, qp);
-	else if (qp->ibqp.qp_num == 1)
-		rcu_assign_pointer(ibp->qp1, qp);
-	else {
+	if (qp->ibqp.qp_num <= 1) {
+		rcu_assign_pointer(ibp->qp[qp->ibqp.qp_num], qp);
+	} else {
+		u32 n = qpn_hash(dev->qp_dev, qp->ibqp.qp_num);
 		qp->next = dev->qp_dev->qp_table[n];
 		rcu_assign_pointer(dev->qp_dev->qp_table[n], qp);
+		trace_hfi1_qpinsert(qp, n);
 	}
 
 	spin_unlock_irqrestore(&dev->qp_dev->qpt_lock, flags);
@@ -264,18 +256,18 @@ static void insert_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 static void remove_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 {
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
-	unsigned n = qpn_hash(dev->qp_dev, qp->ibqp.qp_num);
+	u32 n = qpn_hash(dev->qp_dev, qp->ibqp.qp_num);
 	unsigned long flags;
 	int removed = 1;
 
 	spin_lock_irqsave(&dev->qp_dev->qpt_lock, flags);
 
-	if (rcu_dereference_protected(ibp->qp0,
+	if (rcu_dereference_protected(ibp->qp[0],
 			lockdep_is_held(&dev->qp_dev->qpt_lock)) == qp) {
-		RCU_INIT_POINTER(ibp->qp0, NULL);
-	} else if (rcu_dereference_protected(ibp->qp1,
+		RCU_INIT_POINTER(ibp->qp[0], NULL);
+	} else if (rcu_dereference_protected(ibp->qp[1],
 			lockdep_is_held(&dev->qp_dev->qpt_lock)) == qp) {
-		RCU_INIT_POINTER(ibp->qp1, NULL);
+		RCU_INIT_POINTER(ibp->qp[1], NULL);
 	} else {
 		struct hfi1_qp *q;
 		struct hfi1_qp __rcu **qpp;
@@ -291,6 +283,7 @@ static void remove_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 				 rcu_dereference_protected(qp->next,
 				 lockdep_is_held(&dev->qp_dev->qpt_lock)));
 				removed = 1;
+				trace_hfi1_qpremove(qp, n);
 				break;
 			}
 	}
@@ -323,9 +316,9 @@ static unsigned free_all_qps(struct hfi1_devdata *dd)
 		if (!hfi1_mcast_tree_empty(ibp))
 			qp_inuse++;
 		rcu_read_lock();
-		if (rcu_dereference(ibp->qp0))
+		if (rcu_dereference(ibp->qp[0]))
 			qp_inuse++;
-		if (rcu_dereference(ibp->qp1))
+		if (rcu_dereference(ibp->qp[1]))
 			qp_inuse++;
 		rcu_read_unlock();
 	}
@@ -346,36 +339,6 @@ static unsigned free_all_qps(struct hfi1_devdata *dd)
 	synchronize_rcu();
 bail:
 	return qp_inuse;
-}
-
-/**
- * hfi1_lookup_qpn - return the QP with the given QPN
- * @qpt: the QP table
- * @qpn: the QP number to look up
- *
- * The caller must hold the rcu_read_lock(), and keep the lock until
- * the returned qp is no longer in use.
- */
-struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp,
-				u32 qpn) __must_hold(RCU)
-{
-	struct hfi1_qp *qp = NULL;
-
-	if (unlikely(qpn <= 1)) {
-		if (qpn == 0)
-			qp = rcu_dereference(ibp->qp0);
-		else
-			qp = rcu_dereference(ibp->qp1);
-	} else {
-		struct hfi1_ibdev *dev = &ppd_from_ibp(ibp)->dd->verbs_dev;
-		unsigned n = qpn_hash(dev->qp_dev, qpn);
-
-		for (qp = rcu_dereference(dev->qp_dev->qp_table[n]); qp;
-			qp = rcu_dereference(qp->next))
-			if (qp->ibqp.qp_num == qpn)
-				break;
-	}
-	return qp;
 }
 
 /**
@@ -1507,8 +1470,7 @@ int hfi1_qp_init(struct hfi1_ibdev *dev)
 		goto nomem;
 	/* allocate hash table */
 	dev->qp_dev->qp_table_size = hfi1_qp_table_size;
-	get_random_bytes(&dev->qp_dev->qp_rnd,
-		sizeof(dev->qp_dev->qp_rnd));
+	dev->qp_dev->qp_table_bits = ilog2(hfi1_qp_table_size);
 	dev->qp_dev->qp_table =
 		kmalloc(dev->qp_dev->qp_table_size *
 				sizeof(*dev->qp_dev->qp_table),
@@ -1638,9 +1600,9 @@ int qp_iter_next(struct qp_iter *iter)
 				ibp = &ppd->ibport_data;
 
 				if (!(n & 1))
-					qp = rcu_dereference(ibp->qp0);
+					qp = rcu_dereference(ibp->qp[0]);
 				else
-					qp = rcu_dereference(ibp->qp1);
+					qp = rcu_dereference(ibp->qp[1]);
 			} else {
 				qp = rcu_dereference(
 					dev->qp_dev->qp_table[

@@ -1755,7 +1755,7 @@ struct ib_ah *hfi1_create_qp0_ah(struct hfi1_ibport *ibp, u16 dlid)
 	attr.dlid = dlid;
 	attr.port_num = ppd_from_ibp(ibp)->port;
 	rcu_read_lock();
-	qp0 = rcu_dereference(ibp->qp0);
+	qp0 = rcu_dereference(ibp->qp[0]);
 	if (qp0)
 		ah = ib_create_ah(qp0->ibqp.pd, &attr);
 	rcu_read_unlock();
@@ -1888,8 +1888,8 @@ static void init_ibport(struct hfi1_pportdata *ppd)
 	ibp->pma_counter_select[3] = IB_PMA_PORT_RCV_PKTS;
 	ibp->pma_counter_select[4] = IB_PMA_PORT_XMIT_WAIT;
 
-	RCU_INIT_POINTER(ibp->qp0, NULL);
-	RCU_INIT_POINTER(ibp->qp1, NULL);
+	RCU_INIT_POINTER(ibp->qp[0], NULL);
+	RCU_INIT_POINTER(ibp->qp[1], NULL);
 }
 
 static void verbs_txreq_kmem_cache_ctor(void *obj)

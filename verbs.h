@@ -671,8 +671,7 @@ static inline void inc_opstats(
 }
 
 struct hfi1_ibport {
-	struct hfi1_qp __rcu *qp0;
-	struct hfi1_qp __rcu *qp1;
+	struct hfi1_qp __rcu *qp[2];
 	struct ib_mad_agent *send_agent;	/* agent for SMI (traps) */
 	struct hfi1_ah *sm_ah;
 	struct hfi1_ah *smi_ah;

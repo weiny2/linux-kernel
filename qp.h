@@ -50,6 +50,7 @@
  *
  */
 
+#include <linux/hash.h>
 #include "verbs.h"
 
 #define QPN_MAX                 (1 << 24)
@@ -77,21 +78,43 @@ struct hfi1_qpn_table {
 
 struct hfi1_qp_ibdev {
 	u32 qp_table_size;
-	u32 qp_rnd;
+	u32 qp_table_bits;
 	struct hfi1_qp __rcu **qp_table;
 	spinlock_t qpt_lock;
 	struct hfi1_qpn_table qpn_table;
 };
 
+static inline u32 qpn_hash(struct hfi1_qp_ibdev *dev, u32 qpn)
+{
+	return hash_32(qpn, dev->qp_table_bits);
+}
+
 /**
  * hfi1_lookup_qpn - return the QP with the given QPN
- * @ibp: a pointer to the IB port
+ * @ibp: the ibport
  * @qpn: the QP number to look up
  *
- * The caller is responsible for decrementing the QP reference count
- * when done.
+ * The caller must hold the rcu_read_lock(), and keep the lock until
+ * the returned qp is no longer in use.
  */
-struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp, u32 qpn);
+static inline struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp,
+				u32 qpn) __must_hold(RCU)
+{
+	struct hfi1_qp *qp = NULL;
+
+	if (unlikely(qpn <= 1)) {
+		qp = rcu_dereference(ibp->qp[qpn]);
+	} else {
+		struct hfi1_ibdev *dev = &ppd_from_ibp(ibp)->dd->verbs_dev;
+		u32 n = qpn_hash(dev->qp_dev, qpn);
+
+		for (qp = rcu_dereference(dev->qp_dev->qp_table[n]); qp;
+			qp = rcu_dereference(qp->next))
+			if (qp->ibqp.qp_num == qpn)
+				break;
+	}
+	return qp;
+}
 
 /**
  * hfi1_error_qp - put a QP into the error state
@@ -203,4 +226,4 @@ int qp_iter_next(struct qp_iter *iter);
  */
 void qp_iter_print(struct seq_file *s, struct qp_iter *iter);
 
-#endif /* _PIO_H */
+#endif /* _QP_H */
