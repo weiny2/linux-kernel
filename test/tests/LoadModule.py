@@ -27,19 +27,23 @@ def is_driver_loaded(host, driver_name):
 
 def unload_driver(host, driver_name):
     attempts = 3
-    loaded = True
     while (attempts > 0):
         cmd = "/sbin/rmmod " + driver_name
         do_ssh(host, cmd)
+        # give it a couple seconds for the unload to take effect
+        time.sleep(10)
         loaded = is_driver_loaded(host, driver_name)
         if loaded == False:
             RegLib.test_log(5, "Driver unloaded")
-            attempts = 0
+            return True
         else:
             attempts = attempts - 1
-            RegLib.test_log(5, "Could not unload driver");
-            time.sleep(30)
-    return not loaded
+            RegLib.test_log(5, "Could not unload driver")
+            RegLib.test_log(5, "Attempts left = %d" % attempts)
+            if (attempts != 0):
+                RegLib.test_log(5, "Trying again in 30 secs")
+                time.sleep(30)
+    return False
 
 def load_driver(host, driver_name, driver_path, driver_opts):
     cmd = "/sbin/insmod " + driver_path + " " + driver_opts
@@ -145,7 +149,7 @@ def main():
         RegLib.test_log(5, "host%d parms: %s" % (x, host_parms[x]))
       
     opafm_host = None
-    
+   
     if sm != "none":
         RegLib.test_log(0, "Trying to determine which node the fm is running on")
         for host in hostlist:
@@ -179,9 +183,13 @@ def main():
             removed = unload_driver(host, driver_name)
             if removed == False:
                 RegLib.test_fail(name + " Could not remove HFI driver")
+                # If we could not remove the driver it is a failure so bail.
+                # We gave it 90 seconds if it takes longer something is wonky.
+                RegLib.test_fail("Could not remove driver after 90 seconds!")
         
-        #RegLib.test_log(0, "Sleeping 10 seconds after removing driver to let things settle")
-        #time.sleep(10)
+        # Make sure rdma service is running before loading the driver
+        cmd = "service rdma start"
+        do_ssh(host, cmd)
 
         RegLib.test_log(0, name + " Loading Driver")
         driver_parms = host_parms[hostlist.index(host)]
@@ -198,13 +206,17 @@ def main():
     if sm == "none":
         RegLib.test_pass("Driver loaded sm/fm not running")
 
-    if opafm_host == None: #chose host1 by default
+    if opafm_host == None: #choose host1 by default
         opafm_host = hostlist[0]
-    RegLib.test_log(0, "Starting opafm on %s" % opafm_host.get_name())
-    start_sm(opafm_host, "opafm")
-    active = is_sm_active(opafm_host, "opafm")
-    if active != 0:
-        RegLib.test_fail("Could not start opafm")
+
+    if opafm_host.is_switched_config():
+        RegLib.test_log(0, "Switched configuration, not starting SM")
+    else:
+        RegLib.test_log(0, "Starting opafm on %s" % opafm_host.get_name())
+        start_sm(opafm_host, "opafm")
+        active = is_sm_active(opafm_host, "opafm")
+        if active != 0:
+            RegLib.test_fail("Could not start opafm")
 
     # Driver loaded and sm ready now wait till links are active on both
     # nodes.
@@ -229,7 +241,7 @@ def main():
         out = do_ssh(host, cmd)
         print out
 
-    RegLib.test_pass("Driver loaded, adapters up SM running.")
+    RegLib.test_pass("Driver loaded, adapters up SM running in the fabric.")
 
 if __name__ == "__main__":
     main()

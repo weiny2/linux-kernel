@@ -248,35 +248,35 @@ test_list = [
     { "test_name" : "SnoopHijack",
       "test_exe" : "Snoop.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default,quick",
+      "type" : "snoop,default,quick,noswitch",
       "desc" : "Run snoop hijack tests.",
     },
 
     { "test_name" : "PacketCapture",
       "test_exe" : "Pcap.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default,quick",
+      "type" : "snoop,default,quick,noswitch",
       "desc" : "Run simple packet capture tests.",
     },
 
     { "test_name" : "SnoopIntegrity",
       "test_exe" : "SnoopInteg.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default,quick",
+      "type" : "snoop,default,quick,noswitch",
       "desc" : "Sweep fabric and check MD5 sums of packets *requires ifs_fm*",
     },
 
     { "test_name" : "SnoopFilter",
       "test_exe" : "SnoopFilter.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop_unit",
+      "type" : "snoop_unit,noswitch",
       "desc" : "Run snoop filter tests",
     },
 
     { "test_name" : "SnoopIoctl",
       "test_exe" : "SnoopIoctl.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default",
+      "type" : "snoop,default,noswitch",
       "desc" : "Run snoop IOCTL tests (modifies HFI state and kills SM.",
     },
 
@@ -290,7 +290,7 @@ test_list = [
     { "test_name" : "Loopback-Test",
       "test_exe" : "Loopback.py",
       "args" : "--nodelist %HOST[1]% --hfisrc %HFI_SRC% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
-      "type" : "default,quick",
+      "type" : "default,quick,noswitch",
       "desc" : "Test loopback. LCB on Simics, Serdes on FPGA, both on ASIC."
     },
 
@@ -355,6 +355,7 @@ if test_info.list_only:
 # bail and fail. Once we have swizzled the command line run the test and look at
 # the retrun value.
 simics = test_info.is_simics()
+switched = test_info.is_switched()
 fullset = True
 if test_info.get_test_list():
     tlist = test_info.get_test_list()
@@ -373,6 +374,7 @@ for test in tests_to_run:
     else: test_types = all_test_types
     for test_type in test_types:
         run_it = 0
+        
         if test_type == curr_type:
             run_it = 1
 
@@ -380,8 +382,15 @@ for test in tests_to_run:
             run_it = 1
 
         # tests can be classified as multiple types so check them all
+        # we could also need to exclude some test types
         curr_types = re.split(r',',curr_type)
         for temp_type in curr_types:
+            if switched:
+                if temp_type == "noswitch":
+                    run_it = 0
+                    WARN(curr_name + " : " + "SKIPPED!")
+                    break
+
             if temp_type == test_type:
                 run_it = 1
 

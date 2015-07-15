@@ -263,7 +263,7 @@ class HostInfo:
             return None
 
         for line in out:
-            matchObj = re.match(r"0x\d+", line)
+            matchObj = re.match(r"0x\S+", line)
             if matchObj:
                 return line.strip()
 
@@ -394,6 +394,14 @@ class HostInfo:
                     sys.stdout.flush()
             return ssh.returncode
 
+    def is_switched_config(self):
+        """ Determines what the neighbor is """
+        cmd =  "opasmaquery -o portinfo"
+        (result, out) = self.send_ssh(cmd)
+        for line in out:
+            if "Switch" in line:
+                return True
+        return False
 
 class TestInfo:
     """A simple regression test info class"""
@@ -409,6 +417,7 @@ class TestInfo:
     hfi_src = None
     kbuild_dir = None
     simics = False
+    switch =  False
     fpga = False
     mpiverbs = False
     paramdict = None
@@ -421,6 +430,9 @@ class TestInfo:
 
     def is_simics(self):
         return self.simics
+
+    def is_switched(self):
+        return self.switch
 
     def is_fpga(self):
         return self.fpga
@@ -466,6 +478,10 @@ class TestInfo:
         parser.add_option("--kbuild", dest="kbuild",
                           help="Path to kbuild dir",
                           metavar="PATH")
+
+        parser.add_option("--switch", action="store_true", dest="switch",
+                          help="Nodes are in a switched configuration"
+                               + " some tests will be skipped.")
 
         parser.add_option("--simics", action="store_true", dest="simics",
                           help="Run on simics environment. Optional if using "
@@ -536,6 +552,12 @@ class TestInfo:
             self.simics = False
         else:
             self.force_root = True
+
+        self.switch = options.switch
+        if self.switch == None:
+            self.switch = False
+        else:
+            self.switch = True
 
         self.fpga = options.fpga
         if self.fpga == None:
