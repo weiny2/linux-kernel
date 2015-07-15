@@ -394,9 +394,9 @@ static inline struct hfi_pportdata *to_hfi_ppd(struct hfi_devdata *dd,
 }
 
 int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
-			u32 am, u8 *data, u8 port, u32 *resp_len);
+		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status);
 int hfi_set_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
-				 u32 am, u8 *data, u8 port, u32 *resp_len);
+		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status);
 
 void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 			  u8 neigh_reason, u8 rem_reason);

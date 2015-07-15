@@ -169,4 +169,14 @@ enum opa_port_phys_state {
 	OPA_PORTPHYSSTATE_MAX = 11,
 	/* values 12-15 are reserved/ignored */
 };
+
+/*
+ * States reported by SMA-HFI
+ * to SMA-IB
+ */
+enum opa_sma_status {
+	OPA_SMA_SUCCESS = 0,
+	OPA_SMA_FAIL_WITH_DATA,
+	OPA_SMA_FAIL_WITH_NO_DATA,
+};
 #endif /* _OPA_CORE_IB_H_ */
