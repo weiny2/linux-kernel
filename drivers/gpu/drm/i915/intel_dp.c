@@ -700,7 +700,20 @@ intel_dp_set_clock(struct intel_encoder *encoder,
 		}
 		pipe_config->clock_set = true;
 	} else if (IS_VALLEYVIEW(dev)) {
-		/* FIXME: Need to figure out optimized DP clocks for vlv. */
+		if (link_bw == DP_LINK_BW_1_62) {
+			pipe_config->dpll.n = 5;
+			pipe_config->dpll.p1 = 3;
+			pipe_config->dpll.p2 = 2;
+			pipe_config->dpll.m1 = 5;
+			pipe_config->dpll.m2 = 3;
+		} else {
+			pipe_config->dpll.n = 1;
+			pipe_config->dpll.p1 = 2;
+			pipe_config->dpll.p2 = 2;
+			pipe_config->dpll.m1 = 2;
+			pipe_config->dpll.m2 = 27;
+		}
+		pipe_config->clock_set = true;
 	}
 }
 
