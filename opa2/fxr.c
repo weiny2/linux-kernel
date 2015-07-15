@@ -182,95 +182,56 @@ static void init_csrs(const struct hfi_devdata *dd)
 	hfi_init_tx_otr_csrs(dd);
 }
 
-static int hfi_tx_otr_init(const struct hfi_devdata *dd)
+static int hfi_psn_init(const struct hfi_devdata *dd)
 {
 	int i, j, rc = 0;
-	u32 offset = FXR_TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC;
-	txotr_pkt_cfg_psn_base_addr_p0_tc_t psn_base = {.val = 0};
 	struct hfi_pportdata *port;
-	void *va;
+	u32 tx_offset = FXR_TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC;
+	txotr_pkt_cfg_psn_base_addr_p0_tc_t tx_psn_base = {.val = 0};
+	u32 rx_offset = FXR_RXE2E_CFG_PSN_BASE_ADDR_P0_TC;
+	RXE2E_CFG_PSN_BASE_ADDR_P0_TC_t rx_psn_base = {.val = 0};
 
 	for (i = 0; i < HFI_NUM_PPORTS; i++) {
 		port = &dd->pport[i];
 		for (j = 0; j < HFI_MAX_TC; j++) {
 			struct hfi_ptcdata *tc = &port->ptc[i];
 
-			va = vmalloc(HFI_PSN_SIZE);
-			if (!va) {
+			tc->psn_base = vmalloc(HFI_PSN_SIZE);
+			if (!tc->psn_base) {
 				rc = -ENOMEM;
 				goto done;
 			}
-			psn_base.field.address = (u64)va >> PAGE_SHIFT;
-			tc->psn_base_tx_otr = va;
-			write_csr(dd, offset + i * 0x20 + j * 8, psn_base.val);
+			tx_psn_base.field.address =
+				(u64)tc->psn_base >> PAGE_SHIFT;
+			rx_psn_base.field.address =
+				(u64)tc->psn_base >> PAGE_SHIFT;
+			write_csr(dd, tx_offset + i * 0x20 + j * 8,
+				  tx_psn_base.val);
+			write_csr(dd, rx_offset + i * 0x20 + j * 8,
+				  rx_psn_base.val);
 		}
 	}
 done:
 	return rc;
 }
 
-static int hfi_rx_e2e_init(const struct hfi_devdata *dd)
-{
-	int i, j, rc = 0;
-	u32 offset = FXR_RXE2E_CFG_PSN_BASE_ADDR_P0_TC;
-	RXE2E_CFG_PSN_BASE_ADDR_P0_TC_t psn_base = {.val = 0};
-	struct hfi_pportdata *port;
-	void *va;
-
-	for (i = 0; i < HFI_NUM_PPORTS; i++) {
-		port = &dd->pport[i];
-		for (j = 0; j < HFI_MAX_TC; j++) {
-			struct hfi_ptcdata *tc = &port->ptc[i];
-
-			va = vmalloc(HFI_PSN_SIZE);
-			if (!va) {
-				rc = -ENOMEM;
-				goto done;
-			}
-			psn_base.field.address = (u64)va >> PAGE_SHIFT;
-			tc->psn_base_rx_e2e = va;
-			write_csr(dd, offset + i * 0x20 + j * 8, psn_base.val);
-		}
-	}
-done:
-	return rc;
-}
-
-static void hfi_tx_otr_uninit(const struct hfi_devdata *dd)
+static void hfi_psn_uninit(const struct hfi_devdata *dd)
 {
 	int i, j;
 	struct hfi_pportdata *port;
-	u32 offset = FXR_TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC;
+	u32 tx_offset = FXR_TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC;
+	u32 rx_offset = FXR_RXE2E_CFG_PSN_BASE_ADDR_P0_TC;
 
 	for (i = 0; i < HFI_NUM_PPORTS; i++) {
 		port = &dd->pport[i];
 		for (j = 0; j < HFI_MAX_TC; j++) {
 			struct hfi_ptcdata *tc = &port->ptc[i];
 
-			if (tc->psn_base_tx_otr) {
-				vfree(tc->psn_base_tx_otr);
-				tc->psn_base_tx_otr = NULL;
-				write_csr(dd, offset + i * 0x20 + j * 8, 0x0);
-			}
-		}
-	}
-}
-
-static void hfi_rx_e2e_uninit(const struct hfi_devdata *dd)
-{
-	int i, j;
-	struct hfi_pportdata *port;
-	u32 offset = FXR_RXE2E_CFG_PSN_BASE_ADDR_P0_TC;
-
-	for (i = 0; i < HFI_NUM_PPORTS; i++) {
-		port = &dd->pport[i];
-		for (j = 0; j < HFI_MAX_TC; j++) {
-			struct hfi_ptcdata *tc = &port->ptc[i];
-
-			if (tc->psn_base_rx_e2e) {
-				vfree(tc->psn_base_rx_e2e);
-				tc->psn_base_rx_e2e = NULL;
-				write_csr(dd, offset + i * 0x20 + j * 8, 0x0);
+			if (tc->psn_base) {
+				vfree(tc->psn_base);
+				tc->psn_base = NULL;
+				write_csr(dd, tx_offset + i * 0x20 + j * 8, 0);
+				write_csr(dd, rx_offset + i * 0x20 + j * 8, 0);
 			}
 		}
 	}
@@ -536,9 +497,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 
 	hfi_iommu_root_clear_context(dd);
 
-	hfi_tx_otr_uninit(dd);
-
-	hfi_rx_e2e_uninit(dd);
+	hfi_psn_uninit(dd);
 
 	/* free host memory for FXR and Portals resources */
 	if (dd->cq_head_base)
@@ -710,11 +669,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* FXR resources are on BAR0 (used for io_remap, etc.) */
 	dd->physaddr = dd->pcibar[0];
 
-	ret = hfi_tx_otr_init(dd);
-	if (ret)
-		goto err_post_alloc;
-
-	ret = hfi_rx_e2e_init(dd);
+	ret = hfi_psn_init(dd);
 	if (ret)
 		goto err_post_alloc;
 
