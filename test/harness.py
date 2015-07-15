@@ -248,35 +248,35 @@ test_list = [
     { "test_name" : "SnoopHijack",
       "test_exe" : "Snoop.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default,quick,noswitch",
+      "type" : "snoop,default,quick",
       "desc" : "Run snoop hijack tests.",
     },
 
     { "test_name" : "PacketCapture",
       "test_exe" : "Pcap.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default,quick,noswitch",
+      "type" : "snoop,default,quick",
       "desc" : "Run simple packet capture tests.",
     },
 
     { "test_name" : "SnoopIntegrity",
       "test_exe" : "SnoopInteg.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default,quick,noswitch",
+      "type" : "snoop,default,quick,",
       "desc" : "Sweep fabric and check MD5 sums of packets *requires ifs_fm*",
     },
 
     { "test_name" : "SnoopFilter",
       "test_exe" : "SnoopFilter.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop_unit,noswitch",
+      "type" : "snoop_unit,nosm",
       "desc" : "Run snoop filter tests",
     },
 
     { "test_name" : "SnoopIoctl",
       "test_exe" : "SnoopIoctl.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "snoop,default,noswitch",
+      "type" : "snoop,default",
       "desc" : "Run snoop IOCTL tests (modifies HFI state and kills SM.",
     },
 
@@ -290,7 +290,7 @@ test_list = [
     { "test_name" : "Loopback-Test",
       "test_exe" : "Loopback.py",
       "args" : "--nodelist %HOST[1]% --hfisrc %HFI_SRC% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
-      "type" : "default,quick,noswitch",
+      "type" : "default,quick,nosm",
       "desc" : "Test loopback. LCB on Simics, Serdes on FPGA, both on ASIC."
     },
 
@@ -355,7 +355,7 @@ if test_info.list_only:
 # bail and fail. Once we have swizzled the command line run the test and look at
 # the retrun value.
 simics = test_info.is_simics()
-switched = test_info.is_switched()
+sm = test_info.which_sm()
 fullset = True
 if test_info.get_test_list():
     tlist = test_info.get_test_list()
@@ -385,15 +385,16 @@ for test in tests_to_run:
         # we could also need to exclude some test types
         curr_types = re.split(r',',curr_type)
         for temp_type in curr_types:
-            if switched:
-                if temp_type == "noswitch":
-                    run_it = 0
-                    WARN(curr_name + " : " + "SKIPPED!")
-                    break
 
             if temp_type == test_type:
                 run_it = 1
 
+            if run_it:
+                if sm == "remote":
+                    if temp_type == "nosm":
+                        run_it = 0
+                        WARN(curr_name + " : " + "SKIPPED!")
+                        break
         if run_it:
             # Now we need to replace the variables in the curr_args with the
             # right values

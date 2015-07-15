@@ -150,7 +150,7 @@ def main():
       
     opafm_host = None
    
-    if sm != "none":
+    if sm == "local":
         RegLib.test_log(0, "Trying to determine which node the fm is running on")
         for host in hostlist:
             active = is_sm_active(host, "opafm")
@@ -203,20 +203,19 @@ def main():
         #RegLib.test_log(0, "Sleeping 10 seconds after loading driver to let things settle")
         #time.sleep(10)
 
-    if sm == "none":
-        RegLib.test_pass("Driver loaded sm/fm not running")
-
     if opafm_host == None: #choose host1 by default
         opafm_host = hostlist[0]
 
-    if opafm_host.is_switched_config():
-        RegLib.test_log(0, "Switched configuration, not starting SM")
-    else:
+    if sm == "local":
         RegLib.test_log(0, "Starting opafm on %s" % opafm_host.get_name())
         start_sm(opafm_host, "opafm")
         active = is_sm_active(opafm_host, "opafm")
         if active != 0:
             RegLib.test_fail("Could not start opafm")
+    elif sm =="remote":
+        RegLib.test_log(0, "Not starting SM")  
+    else:
+        RegLib.test_pass("Driver loading. Ignoring SM")
 
     # Driver loaded and sm ready now wait till links are active on both
     # nodes.
