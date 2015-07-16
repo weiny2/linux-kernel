@@ -633,6 +633,7 @@ static inline int process_rcv_packet(struct hfi1_packet *packet)
 	/* total length */
 	packet->tlen = rhf_pkt_len(packet->rhf); /* in bytes */
 	/* retrieve eager buffer details */
+	packet->ebuf = 0;
 	if (rhf_use_egr_bfr(packet->rhf)) {
 		packet->etail = rhf_egr_index(packet->rhf);
 		packet->ebuf = get_egrbuf(packet->rcd, packet->rhf,
