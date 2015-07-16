@@ -417,7 +417,6 @@ class TestInfo:
     hfi_src = None
     kbuild_dir = None
     simics = False
-    switch =  False
     fpga = False
     mpiverbs = False
     paramdict = None
@@ -430,9 +429,6 @@ class TestInfo:
 
     def is_simics(self):
         return self.simics
-
-    def is_switched(self):
-        return self.switch
 
     def is_fpga(self):
         return self.fpga
@@ -479,10 +475,6 @@ class TestInfo:
                           help="Path to kbuild dir",
                           metavar="PATH")
 
-        parser.add_option("--switch", action="store_true", dest="switch",
-                          help="Nodes are in a switched configuration"
-                               + " some tests will be skipped.")
-
         parser.add_option("--simics", action="store_true", dest="simics",
                           help="Run on simics environment. Optional if using "
                                + "viper0,viper1 as nodelist")
@@ -525,10 +517,10 @@ class TestInfo:
                           metavar="LIST",
                           default="")
         parser.add_option("--sm", dest="sm",
-                          help="Which SM to use. Valid values are opensm, " +
-                          "opafm, detect, or none. Default: detect",
+                          help="Which SM to use. Valid values are none, remote, or " +
+                          "local. Default: local",
                           metavar="SM",
-                          default="detect")
+                          default="local")
         parser.add_option("--basedir", dest="base_dir",
                           help="Optional base directory to pass to a test. Used to source executables and such.",
                           metavar="PATH",
@@ -552,12 +544,6 @@ class TestInfo:
             self.simics = False
         else:
             self.force_root = True
-
-        self.switch = options.switch
-        if self.switch == None:
-            self.switch = False
-        else:
-            self.switch = True
 
         self.fpga = options.fpga
         if self.fpga == None:
