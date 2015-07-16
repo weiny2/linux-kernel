@@ -2241,7 +2241,7 @@ static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
 	/*
 	 * Expected response time is 4.096 usec. * 2^18 == 1.073741824 sec.
 	 */
-	p->cap_mask2_resp_time = 18;
+	p->cap_mask2_resp_time = cpu_to_be32(18);
 
 	if (resp_len)
 		*resp_len += sizeof(*p);
