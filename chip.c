@@ -3606,19 +3606,12 @@ static void get_link_widths(struct hfi1_devdata *dd, u16 *tx_width,
 	rx = nibble_to_count(enable_lane_rx);
 
 	/*
-	 * Remove the setting of link_speed_active in this routine
-	 * when the 8051 firmware is using the "real" LNI and not the
-	 * "engineering" LNI.
-	 *
 	 * Set link_speed_active here, overriding what was set in
-	 * handle_verify_cap().  This is because the 8051 firmware using
-	 * the "engineering" LNI does not correctly set the max_speed field.
-	 * For now, to find the speed, look at max_rate after link up.  This
-	 * routine is called in handle_verify_cap(),after linkup, and during
-	 * a downgrade.  max_rate should not change after linkup so
-	 * re-setting link_speed_active here should not matter.
+	 * handle_verify_cap().  The ASIC 8051 firmware does not correctly
+	 * set the max_rate field in handle_verify_cap until v0.19.
 	 */
-	if (dd->icode == ICODE_RTL_SILICON) {
+	if ((dd->icode == ICODE_RTL_SILICON)
+				&& (dd->dc8051_ver < dc8051_ver(0, 19))) {
 		/* max_rate: 0 = 12.5G, 1 = 25G */
 		switch (max_rate) {
 		case 0:
@@ -3810,18 +3803,30 @@ void handle_verify_cap(struct work_struct *work)
 			reg & ~SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
 	}
 
-	/* remote_tx_rate: 0 = 12.5G, 1 = 25G */
-	switch (remote_tx_rate) {
-	case 0:
-		ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
-		break;
-	default:
+	ppd->link_speed_active = 0;	/* invalid value */
+	if (dd->dc8051_ver < dc8051_ver(0, 20)) {
+		/* remote_tx_rate: 0 = 12.5G, 1 = 25G */
+		switch (remote_tx_rate) {
+		case 0:
+			ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
+			break;
+		case 1:
+			ppd->link_speed_active = OPA_LINK_SPEED_25G;
+			break;
+		}
+	} else {
+		/* actual rate is highest bit of the ANDed rates */
+		u8 rate = remote_tx_rate & ppd->local_tx_rate;
+
+		if (rate & 2)
+			ppd->link_speed_active = OPA_LINK_SPEED_25G;
+		else if (rate & 1)
+			ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
+	}
+	if (ppd->link_speed_active == 0) {
 		dd_dev_err(dd, "%s: unexpected remote tx rate %d, using 25Gb\n",
 			__func__, (int)remote_tx_rate);
-		/* fall through */
-	case 1:
 		ppd->link_speed_active = OPA_LINK_SPEED_25G;
-		break;
 	}
 
 	/*
@@ -5377,25 +5382,33 @@ static int set_local_link_attributes(struct hfi1_pportdata *ppd)
 	u8 enable_lane_tx;
 	u8 tx_polarity_inversion;
 	u8 rx_polarity_inversion;
-	u8 max_rate;
 	int ret;
 
 	/* reset our fabric serdes to clear any lingering problems */
 	fabric_serdes_reset(dd);
 
-	/* set the max rate - need to read-modify-write */
+	/* set the local tx rate - need to read-modify-write */
 	ret = read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
-		&rx_polarity_inversion, &max_rate);
+		&rx_polarity_inversion, &ppd->local_tx_rate);
 	if (ret)
 		goto set_local_link_attributes_fail;
 
-	/* set the max rate to the fastest enabled */
-	if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
-		max_rate = 1;
-	else
-		max_rate = 0;
+	if (dd->dc8051_ver < dc8051_ver(0, 20)) {
+		/* set the tx rate to the fastest enabled */
+		if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
+			ppd->local_tx_rate = 1;
+		else
+			ppd->local_tx_rate = 0;
+	} else {
+		/* set the tx rate to all enabled */
+		ppd->local_tx_rate = 0;
+		if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
+			ppd->local_tx_rate |= 2;
+		if (ppd->link_speed_enabled & OPA_LINK_SPEED_12_5G)
+			ppd->local_tx_rate |= 1;
+	}
 	ret = write_tx_settings(dd, enable_lane_tx, tx_polarity_inversion,
-		     rx_polarity_inversion, max_rate);
+		     rx_polarity_inversion, ppd->local_tx_rate);
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 

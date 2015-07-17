@@ -631,6 +631,7 @@ struct hfi1_pportdata {
 	u8 driver_link_ready;	/* driver ready for active link */
 	u8 link_enabled;	/* link enabled? */
 	u8 linkinit_reason;
+	u8 local_tx_rate;	/* rate given to 8051 firmware */
 
 	/* placeholders for IB MAD packet settings */
 	u8 overrun_threshold;
@@ -981,6 +982,7 @@ struct hfi1_devdata {
 
 	u16 rhf_offset; /* offset of RHF within receive header entry */
 	u16 irev;	/* implementation revision */
+	u16 dc8051_ver; /* 8051 firmware version */
 
 	struct platform_config_cache pcfg_cache;
 	/* control high-level access to qsfp */
@@ -1080,6 +1082,9 @@ struct hfi1_devdata {
 	u64 lcb_err_en;
 	u8 dc_shutdown;
 };
+
+/* 8051 firmware version helper */
+#define dc8051_ver(a, b) ((a) << 8 | (b))
 
 /* f_put_tid types */
 #define PT_EXPECTED 0
