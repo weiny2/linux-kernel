@@ -535,6 +535,12 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ppd = dd->pport + (port - 1);
 	ibp = &ppd->ibport_data;
 
+	if (ppd->vls_supported/2 > ARRAY_SIZE(pi->neigh_mtu.pvlx_to_mtu) ||
+		ppd->vls_supported > ARRAY_SIZE(dd->vld)) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)smp);
+	}
+
 	pi->lid = cpu_to_be32(ppd->lid);
 
 	/* Only return the mkey if the protection field allows it. */
@@ -859,6 +865,8 @@ static int logical_transition_allowed(int old, int new)
 	old -= IB_PORT_DOWN;
 	new -= IB_PORT_DOWN;
 
+	if (old < 0 || new < 0)
+		return HFI_TRANSITION_UNDEFINED;
 	return logical_state_transitions.allowed[old][new];
 }
 
@@ -878,6 +886,8 @@ static int physical_transition_allowed(int old, int new)
 	old -= IB_PORTPHYSSTATE_POLLING;
 	new -= IB_PORTPHYSSTATE_POLLING;
 
+	if (old < 0 || new < 0)
+		return HFI_TRANSITION_UNDEFINED;
 	return physical_state_transitions.allowed[old][new];
 }
 
@@ -1190,6 +1200,11 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_LIMIT,
 				    ibp->vl_high_limit);
 
+	if (ppd->vls_supported/2 > ARRAY_SIZE(pi->neigh_mtu.pvlx_to_mtu) ||
+		ppd->vls_supported > ARRAY_SIZE(dd->vld)) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)smp);
+	}
 	for (i = 0; i < ppd->vls_supported; i++) {
 		if ((i % 2) == 0)
 			mtu = enum_to_mtu((pi->neigh_mtu.pvlx_to_mtu[i/2] >> 4)
