@@ -247,40 +247,33 @@ static void hfi_set_lid_lmc(struct hfi_pportdata *ppd)
 	struct hfi_devdata *dd = ppd->dd;
 	LM_CONFIG_PORT0_t lmp0 = {.val = 0};
 	LM_CONFIG_PORT1_t lmp1 = {.val = 0};
-	u64 lmp_val;
-	u32 lmp_offset;
-	u32 slid_offset;
 
 	switch (ppd->pnum) {
 	case 1:
+		lmp0.val = read_csr(dd, FXR_LM_CONFIG_PORT0);
 		lmp0.field.DLID = ppd->lid;
 		if (!ppd->lmc) {
 			lmp0.field.LMC_ENABLE = 1;
 			lmp0.field.LMC_WIDTH = ppd->lmc;
 		}
-		lmp_offset = FXR_LM_CONFIG_PORT0;
-		slid_offset = FXR_TXOTR_PKT_CFG_SLID_PT0;
-		lmp_val = lmp0.val;
+		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
+		write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0, ppd->lid);
 		break;
 	case 2:
+		lmp1.val = read_csr(dd, FXR_LM_CONFIG_PORT1);
 		lmp1.field.DLID = ppd->lid;
 		if (!ppd->lmc) {
 			lmp1.field.LMC_ENABLE = 1;
 			lmp1.field.LMC_WIDTH = ppd->lmc;
 		}
-		lmp_offset = FXR_LM_CONFIG_PORT1;
-		slid_offset = FXR_TXOTR_PKT_CFG_SLID_PT1;
-		lmp_val = lmp1.val;
+		write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
+		write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1, ppd->lid);
 		break;
 	default:
 		dd_dev_err(dd, "Illegal port number %d\n", ppd->pnum);
 		BUG_ON(1);
 		return;
 	}
-
-
-	write_csr(dd, lmp_offset, lmp_val);
-	write_csr(dd, slid_offset, ppd->lid);
 
 	/*
 	 * FXTODO: Initiate any HW events that needs to trigger due
