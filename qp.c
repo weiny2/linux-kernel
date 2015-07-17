@@ -241,6 +241,7 @@ static void insert_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 		rcu_assign_pointer(ibp->qp[qp->ibqp.qp_num], qp);
 	} else {
 		u32 n = qpn_hash(dev->qp_dev, qp->ibqp.qp_num);
+
 		qp->next = dev->qp_dev->qp_table[n];
 		rcu_assign_pointer(dev->qp_dev->qp_table[n], qp);
 		trace_hfi1_qpinsert(qp, n);
