@@ -484,6 +484,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 
 	/* release system context and any privileged CQs */
 	if (dd->priv_ctx.devdata) {
+		__hfi_eq_release(&dd->priv_ctx);
 		hfi_cq_unmap(&dd->priv_tx_cq, &dd->priv_rx_cq);
 		hfi_ctxt_cleanup(&dd->priv_ctx);
 	}

@@ -100,6 +100,7 @@ struct opa_ib_qp;
  * @eq_head_addr: Pointer to the event queue head pointers table
  * @eq_head_size: Size of the event queue head pointers table
  * @status_reg: Status Registers (SR) in each NI
+ * @eq_base: EQ 0 base for each NI
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
@@ -135,6 +136,7 @@ struct hfi_ctx {
 	void	*eq_head_addr;
 	ssize_t	eq_head_size;
 	u64	status_reg[HFI_NUM_NIS * HFI_NUM_CT_RESERVED];
+	void	*eq_base[HFI_NUM_NIS];
 };
 
 #define HFI_CTX_TYPE_KERNEL	1

@@ -336,6 +336,7 @@ int hfi_user_cleanup(struct hfi_ctx *ud);
 /* HFI specific functions */
 int hfi_cq_assign_privileged(struct hfi_ctx *ctx, u16 *cq_idx);
 int hfi_eq_assign_privileged(struct hfi_ctx *ctx);
+void __hfi_eq_release(struct hfi_ctx *ctx);
 void hfi_cq_cleanup(struct hfi_ctx *ctx);
 void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx,
 		   struct hfi_auth_tuple *auth_table, bool user_priv);

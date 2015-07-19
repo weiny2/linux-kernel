@@ -396,9 +396,6 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		return -EINVAL;
 	if (eq_assign->base & (HFI_EQ_ALIGNMENT - 1))
 		return -EFAULT;
-	if (!access_ok(VERIFY_WRITE, eq_assign->base,
-		       eq_assign->size * HFI_EQ_ENTRY_SIZE))
-		return -EFAULT;
 
 	/* FXR requires EQ size as power of 2 */
 	if (is_power_of_2(eq_assign->size))
@@ -486,14 +483,25 @@ int _hfi_eq_assign(struct hfi_ctx *ctx)
 {
 	struct opa_ev_assign eq_assign = {0};
 	int ni, ret;
+	u32 *eq_head_array, *eq_head_addr;
 
 	for (ni = 0; ni < HFI_NUM_NIS; ni++) {
 		eq_assign.ni = ni;
-		/* uses 4Kbytes - TODO how much do we need? */
 		eq_assign.size = 64;
+		/* TODO: Need to ensure alignment */
+		eq_assign.base = (u64)kzalloc(eq_assign.size *
+					      HFI_EQ_ENTRY_SIZE,
+					      GFP_KERNEL);
+		if (!eq_assign.base)
+			return -ENOMEM;
 		ret = hfi_eq_assign(ctx, &eq_assign);
 		if (ret)
 			return ret;
+		ctx->eq_base[ni] = (void *)eq_assign.base;
+		eq_head_array = ctx->eq_head_addr;
+		/* Reset the EQ SW head */
+		eq_head_addr = &eq_head_array[ni];
+		*eq_head_addr = 0;
 	}
 	return 0;
 }
@@ -571,6 +579,19 @@ idr_end:
 	spin_unlock(&ctx->cteq_lock);
 
 	return ret;
+}
+
+void __hfi_eq_release(struct hfi_ctx *ctx)
+{
+	int ni;
+
+	for (ni = 0; ni < HFI_NUM_NIS; ni++) {
+		if (ctx->eq_base[ni]) {
+			hfi_eq_release(ctx, ni * HFI_NUM_EVENT_HANDLES, 0);
+			kfree(ctx->eq_base[ni]);
+			ctx->eq_base[ni] = NULL;
+		}
+	}
 }
 
 static int __hfi_eq_wait_condition(struct hfi_ctx *ctx, u16 eq_idx)
@@ -970,6 +991,9 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 	spin_lock_irqsave(&dd->ptl_lock, flags);
 	BUG_ON(idr_find(&dd->ptl_user, ptl_pid) != ctx);
 	spin_unlock_irqrestore(&dd->ptl_lock, flags);
+
+	/* release EQ 0 in each NI */
+	__hfi_eq_release(ctx);
 
 	/* first release any assigned CQs */
 	hfi_cq_cleanup(ctx);
