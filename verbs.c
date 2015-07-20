@@ -354,34 +354,25 @@ void hfi1_skip_sge(struct hfi1_sge_state *ss, u32 length, int release)
  * @qp: the QP to post on
  * @wr: the work request to send
  */
-static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr,
-			 int *scheduled)
+static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 {
 	struct hfi1_swqe *wqe;
 	u32 next;
 	int i;
 	int j;
 	int acc;
-	int ret;
-	unsigned long flags;
 	struct hfi1_lkey_table *rkt;
 	struct hfi1_pd *pd;
-	u8 sc5;
 	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct hfi1_pportdata *ppd;
 	struct hfi1_ibport *ibp;
 
-	spin_lock_irqsave(&qp->s_lock, flags);
+	/* IB spec says that num_sge == 0 is OK. */
+	if (unlikely(wr->num_sge > qp->s_max_sge))
+		return -EINVAL;
+
 	ppd = &dd->pport[qp->port_num - 1];
 	ibp = &ppd->ibport_data;
-
-	/* Check that state is OK to post send. */
-	if (unlikely(!(ib_hfi1_state_ops[qp->state] & HFI1_POST_SEND_OK)))
-		goto bail_inval;
-
-	/* IB spec says that num_sge == 0 is OK. */
-	if (wr->num_sge > qp->s_max_sge)
-		goto bail_inval;
 
 	/*
 	 * Don't allow RDMA reads or atomic operations on UC or
@@ -390,35 +381,33 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr,
 	 */
 	if (wr->opcode == IB_WR_FAST_REG_MR) {
 		if (hfi1_fast_reg_mr(qp, wr))
-			goto bail_inval;
+			return -EINVAL;
 	} else if (qp->ibqp.qp_type == IB_QPT_UC) {
 		if ((unsigned) wr->opcode >= IB_WR_RDMA_READ)
-			goto bail_inval;
+			return -EINVAL;
 	} else if (qp->ibqp.qp_type != IB_QPT_RC) {
 		/* Check IB_QPT_SMI, IB_QPT_GSI, IB_QPT_UD opcode */
 		if (wr->opcode != IB_WR_SEND &&
 		    wr->opcode != IB_WR_SEND_WITH_IMM)
-			goto bail_inval;
+			return -EINVAL;
 		/* Check UD destination address PD */
 		if (qp->ibqp.pd != wr->wr.ud.ah->pd)
-			goto bail_inval;
+			return -EINVAL;
 	} else if ((unsigned) wr->opcode > IB_WR_ATOMIC_FETCH_AND_ADD)
-		goto bail_inval;
+		return -EINVAL;
 	else if (wr->opcode >= IB_WR_ATOMIC_CMP_AND_SWP &&
 		   (wr->num_sge == 0 ||
 		    wr->sg_list[0].length < sizeof(u64) ||
 		    wr->sg_list[0].addr & (sizeof(u64) - 1)))
-		goto bail_inval;
+		return -EINVAL;
 	else if (wr->opcode >= IB_WR_RDMA_READ && !qp->s_max_rd_atomic)
-		goto bail_inval;
+		return -EINVAL;
 
 	next = qp->s_head + 1;
 	if (next >= qp->s_size)
 		next = 0;
-	if (next == qp->s_last) {
-		ret = -ENOMEM;
-		goto bail;
-	}
+	if (next == qp->s_last)
+		return -ENOMEM;
 
 	rkt = &to_idev(qp->ibqp.device)->lk_table;
 	pd = to_ipd(qp->ibqp.pd);
@@ -448,45 +437,24 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr,
 	    qp->ibqp.qp_type == IB_QPT_RC) {
 		if (wqe->length > 0x80000000U)
 			goto bail_inval_free;
-		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 	} else {
 		struct hfi1_ah *ah = to_iah(wr->wr.ud.ah);
-		u8 vl;
-
-		sc5 = ibp->sl_to_sc[ah->attr.sl];
-		vl = sc_to_vlt(dd, sc5);
-		if (vl < PER_VL_SEND_CONTEXTS)
-			if (wqe->length > dd->vld[vl].mtu)
-				goto bail_inval_free;
 
 		atomic_inc(&ah->refcount);
 	}
 	wqe->ssn = qp->s_ssn++;
 	qp->s_head = next;
 
-	ret = 0;
-	goto bail;
+	return 0;
 
 bail_inval_free:
+	/* release mr holds */
 	while (j) {
 		struct hfi1_sge *sge = &wqe->sg_list[--j];
 
 		hfi1_put_mr(sge->mr);
 	}
-bail_inval:
-	ret = -EINVAL;
-bail:
-	if (!ret && !wr->next) {
-		struct sdma_engine *sde;
-
-		sde = qp_to_sdma_engine(qp, sc5);
-		if (sde && !sdma_empty(sde)) {
-			hfi1_schedule_send(qp);
-			*scheduled = 1;
-		}
-	}
-	spin_unlock_irqrestore(&qp->s_lock, flags);
-	return ret;
+	return -EINVAL;
 }
 
 /**
@@ -502,21 +470,35 @@ static int post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 {
 	struct hfi1_qp *qp = to_iqp(ibqp);
 	int err = 0;
-	int scheduled = 0;
+	int call_send;
+	unsigned long flags;
+	unsigned nreq = 0;
+
+	spin_lock_irqsave(&qp->s_lock, flags);
+
+	/* Check that state is OK to post send. */
+	if (unlikely(!(ib_hfi1_state_ops[qp->state] & HFI1_POST_SEND_OK))) {
+		spin_unlock_irqrestore(&qp->s_lock, flags);
+		return -EINVAL;
+	}
+
+	/* sq empty and not list -> call send */
+	call_send = qp->s_head == qp->s_tail && !wr->next;
 
 	for (; wr; wr = wr->next) {
-		err = post_one_send(qp, wr, &scheduled);
-		if (err) {
+		err = post_one_send(qp, wr);
+		if (unlikely(err)) {
 			*bad_wr = wr;
 			goto bail;
 		}
+		nreq++;
 	}
-
-	/* Try to do the send work in the caller's context. */
-	if (!scheduled)
-		hfi1_do_send(&qp->s_iowait.iowork);
-
 bail:
+	if (nreq && !call_send)
+		hfi1_schedule_send(qp);
+	spin_unlock_irqrestore(&qp->s_lock, flags);
+	if (nreq && call_send)
+		hfi1_do_send(&qp->s_iowait.iowork);
 	return err;
 }
 
