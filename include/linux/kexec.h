@@ -31,6 +31,10 @@
 #error KEXEC_CONTROL_MEMORY_LIMIT not defined
 #endif
 
+#ifndef KEXEC_CONTROL_MEMORY_GFP
+#define KEXEC_CONTROL_MEMORY_GFP GFP_KERNEL
+#endif
+
 #ifndef KEXEC_CONTROL_PAGE_SIZE
 #error KEXEC_CONTROL_PAGE_SIZE not defined
 #endif
@@ -343,5 +347,6 @@ static inline void crash_kexec(struct pt_regs *regs) {
 #endif
 }
 static inline int kexec_should_crash(struct task_struct *p) { return 0; }
+#define kexec_in_progress false
 #endif /* CONFIG_KEXEC */
 #endif /* LINUX_KEXEC_H */

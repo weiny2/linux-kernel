@@ -1031,6 +1031,7 @@ static int contains_pending_extent(struct btrfs_trans_handle *trans,
 	struct extent_map *em;
 	struct list_head *search_list = &trans->transaction->pending_chunks;
 	int ret = 0;
+	u64 physical_start = *start;
 
 again:
 	list_for_each_entry(em, search_list, list) {
@@ -1039,15 +1040,31 @@ again:
 
 		map = (struct map_lookup *)em->bdev;
 		for (i = 0; i < map->num_stripes; i++) {
+			u64 end;
+
 			if (map->stripes[i].dev != device)
 				continue;
-			if (map->stripes[i].physical >= *start + len ||
+			if (map->stripes[i].physical >= physical_start + len ||
 			    map->stripes[i].physical + em->orig_block_len <=
-			    *start)
+			    physical_start)
 				continue;
-			*start = map->stripes[i].physical +
-				em->orig_block_len;
-			ret = 1;
+			/*
+			 * Make sure that while processing the pinned list we do
+			 * not override our *start with a lower value, because
+			 * we can have pinned chunks that fall within this
+			 * device hole and that have lower physical addresses
+			 * than the pending chunks we processed before. If we
+			 * do not take this special care we can end up getting
+			 * 2 pending chunks that start at the same physical
+			 * device offsets because the end offset of a pinned
+			 * chunk can be equal to the start offset of some
+			 * pending chunk.
+			 */
+			end = map->stripes[i].physical + em->orig_block_len;
+			if (end > *start) {
+				*start = end;
+				ret = 1;
+			}
 		}
 	}
 	if (search_list == &trans->transaction->pending_chunks) {
@@ -1166,8 +1183,14 @@ again:
 			 */
 			if (contains_pending_extent(trans, device,
 						    &search_start,
-						    hole_size))
-				hole_size = 0;
+						    hole_size)) {
+				if (key.offset >= search_start) {
+					hole_size = key.offset - search_start;
+				} else {
+					WARN_ON_ONCE(1);
+					hole_size = 0;
+				}
+			}
 
 			if (hole_size > max_hole_size) {
 				max_hole_start = search_start;
@@ -3844,6 +3867,7 @@ int btrfs_shrink_device(struct btrfs_device *device, u64 new_size)
 	int slot;
 	int failed = 0;
 	bool retried = false;
+	bool checked_pending_chunks = false;
 	struct extent_buffer *l;
 	struct btrfs_key key;
 	struct btrfs_super_block *super_copy = root->fs_info->super_copy;
@@ -3926,15 +3950,6 @@ again:
 		goto again;
 	} else if (failed && retried) {
 		ret = -ENOSPC;
-		lock_chunks(root);
-
-		device->total_bytes = old_size;
-		if (device->writeable)
-			device->fs_devices->total_rw_bytes += diff;
-		spin_lock(&root->fs_info->free_chunk_lock);
-		root->fs_info->free_chunk_space += diff;
-		spin_unlock(&root->fs_info->free_chunk_lock);
-		unlock_chunks(root);
 		goto done;
 	}
 
@@ -3947,6 +3962,34 @@ again:
 
 	lock_chunks(root);
 
+	/*
+	 * We checked in the above loop all device extents that were already in
+	 * the device tree. However before we have updated the device's
+	 * total_bytes to the new size, we might have had chunk allocations that
+	 * have not complete yet (new block groups attached to transaction
+	 * handles), and therefore their device extents were not yet in the
+	 * device tree and we missed them in the loop above. So if we have any
+	 * pending chunk using a device extent that overlaps the device range
+	 * that we can not use anymore, commit the current transaction and
+	 * repeat the search on the device tree - this way we guarantee we will
+	 * not have chunks using device extents that end beyond 'new_size'.
+	 */
+	if (!checked_pending_chunks) {
+		u64 start = new_size;
+		u64 len = old_size - new_size;
+
+		if (contains_pending_extent(trans, device, &start, len)) {
+			unlock_chunks(root);
+			checked_pending_chunks = true;
+			failed = 0;
+			retried = false;
+			ret = btrfs_commit_transaction(trans, root);
+			if (ret)
+				goto done;
+			goto again;
+		}
+	}
+
 	device->disk_total_bytes = new_size;
 	WARN_ON(diff > old_total);
 	btrfs_set_super_total_bytes(super_copy, old_total - diff);
@@ -3957,6 +4000,16 @@ again:
 	btrfs_end_transaction(trans, root);
 done:
 	btrfs_free_path(path);
+	if (ret) {
+		lock_chunks(root);
+		device->total_bytes = old_size;
+		if (device->writeable)
+			device->fs_devices->total_rw_bytes += diff;
+		spin_lock(&root->fs_info->free_chunk_lock);
+		root->fs_info->free_chunk_space += diff;
+		spin_unlock(&root->fs_info->free_chunk_lock);
+		unlock_chunks(root);
+	}
 	return ret;
 }
 

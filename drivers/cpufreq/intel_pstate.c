@@ -687,10 +687,16 @@ static const struct x86_cpu_id intel_pstate_cpu_ids[] = {
 	ICPU(0x37, byt_params),
 	ICPU(0x3a, core_params),
 	ICPU(0x3c, core_params),
+	ICPU(0x3d, core_params),
 	ICPU(0x3e, core_params),
 	ICPU(0x3f, core_params),
 	ICPU(0x45, core_params),
 	ICPU(0x46, core_params),
+	ICPU(0x47, core_params),
+	ICPU(0x4c, byt_params),
+	ICPU(0x4e, core_params),
+	ICPU(0x4f, core_params),
+	ICPU(0x56, core_params),
 	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, intel_pstate_cpu_ids);

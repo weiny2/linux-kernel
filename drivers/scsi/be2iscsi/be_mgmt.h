@@ -335,5 +335,10 @@ void beiscsi_offload_cxn_v0(struct beiscsi_offload_params *params,
 void beiscsi_offload_cxn_v2(struct beiscsi_offload_params *params,
 			     struct wrb_handle *pwrb_handle);
 void beiscsi_ue_detect(struct beiscsi_hba *phba);
+int be_cmd_modify_eq_delay(struct beiscsi_hba *phba,
+			 struct be_set_eqd *, int num);
+
+int beiscsi_logout_fw_sess(struct beiscsi_hba *phba,
+			    uint32_t fw_sess_handle);
 
 #endif

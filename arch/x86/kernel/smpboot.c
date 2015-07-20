@@ -470,7 +470,7 @@ void set_cpu_sibling_map(int cpu)
 			} else if (i != cpu && !c->booted_cores)
 				c->booted_cores = cpu_data(i).booted_cores;
 		}
-		if (match_die(c, o) == !topology_same_node(c, o))
+		if (match_die(c, o) && !topology_same_node(c, o))
 			primarily_use_numa_for_topology();
 	}
 }
@@ -967,7 +967,7 @@ int native_cpu_up(unsigned int cpu, struct task_struct *tidle)
 	check_tsc_sync_source(cpu);
 	local_irq_restore(flags);
 
-	while (!cpu_online(cpu)) {
+	while (!cpu_online(cpu) || !cpu_active(cpu)) {
 		cpu_relax();
 		touch_nmi_watchdog();
 	}

@@ -40,6 +40,7 @@
 #include <asm/mshyperv.h>
 #include <linux/notifier.h>
 #include <linux/ptrace.h>
+#include <linux/kdebug.h>
 #include "hyperv_vmbus.h"
 
 
@@ -50,12 +51,18 @@ static struct completion probe_event;
 static int irq;
 
 
-static int hyperv_panic_event(struct notifier_block *nb,
-			unsigned long event, void *ptr)
+static void hyperv_report_panic(struct pt_regs *regs)
 {
-	struct pt_regs *regs;
+	static bool panic_reported;
 
-	regs = current_pt_regs();
+	/*
+	 * We prefer to report panic on 'die' chain as we have proper
+	 * registers to report, but if we miss it (e.g. on BUG()) we need
+	 * to report it on 'panic'.
+	 */
+	if (panic_reported)
+		return;
+	panic_reported = true;
 
 	wrmsrl(HV_X64_MSR_CRASH_P0, regs->ip);
 	wrmsrl(HV_X64_MSR_CRASH_P1, regs->ax);
@@ -67,9 +74,32 @@ static int hyperv_panic_event(struct notifier_block *nb,
 	 * Let Hyper-V know there is crash data available
 	 */
 	wrmsrl(HV_X64_MSR_CRASH_CTL, HV_CRASH_CTL_CRASH_NOTIFY);
+}
+
+static int hyperv_panic_event(struct notifier_block *nb, unsigned long val,
+			      void *args)
+{
+	struct pt_regs *regs;
+
+	regs = current_pt_regs();
+
+	hyperv_report_panic(regs);
 	return NOTIFY_DONE;
 }
 
+static int hyperv_die_event(struct notifier_block *nb, unsigned long val,
+			    void *args)
+{
+	struct die_args *die = (struct die_args *)args;
+	struct pt_regs *regs = die->regs;
+
+	hyperv_report_panic(regs);
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block hyperv_die_block = {
+	.notifier_call = hyperv_die_event,
+};
 static struct notifier_block hyperv_panic_block = {
 	.notifier_call = hyperv_panic_event,
 };
@@ -864,6 +894,7 @@ static int vmbus_bus_init(int irq)
 	 * Only register if the crash MSRs are available
 	 */
 	if (ms_hyperv.features & HV_FEATURE_GUEST_CRASH_MSR_AVAILABLE) {
+		register_die_notifier(&hyperv_die_block);
 		atomic_notifier_chain_register(&panic_notifier_list,
 					       &hyperv_panic_block);
 	}
@@ -1057,6 +1088,15 @@ acpi_walk_err:
 	return ret_val;
 }
 
+static int vmbus_acpi_remove(struct acpi_device *device)
+{
+	int ret = 0;
+
+	if (hyperv_mmio.start && hyperv_mmio.end)
+		ret = release_resource(&hyperv_mmio);
+	return ret;
+}
+
 static const struct acpi_device_id vmbus_acpi_device_ids[] = {
 	{"VMBUS", 0},
 	{"VMBus", 0},
@@ -1069,7 +1109,31 @@ static struct acpi_driver vmbus_acpi_driver = {
 	.ids = vmbus_acpi_device_ids,
 	.ops = {
 		.add = vmbus_acpi_add,
+		.remove = vmbus_acpi_remove,
 	},
+};
+
+static void hv_kexec_handler(void)
+{
+	int cpu;
+
+	hv_synic_clockevents_cleanup();
+	vmbus_initiate_unload();
+	for_each_online_cpu(cpu)
+		smp_call_function_single(cpu, hv_synic_cleanup, NULL, 1);
+	hv_cleanup();
+};
+
+static void hv_crash_handler(struct pt_regs *regs)
+{
+	vmbus_initiate_unload();
+	/*
+	 * In crash handler we can't schedule synic cleanup for all CPUs,
+	 * doing the cleanup for current CPU only. This should be sufficient
+	 * for kdump.
+	 */
+	hv_synic_cleanup(NULL);
+	hv_cleanup();
 };
 
 static int __init hv_acpi_init(void)
@@ -1104,6 +1168,9 @@ static int __init hv_acpi_init(void)
 	if (ret)
 		goto cleanup;
 
+	hv_setup_kexec_handler(hv_kexec_handler);
+	hv_setup_crash_handler(hv_crash_handler);
+
 	return 0;
 
 cleanup:
@@ -1117,17 +1184,27 @@ static void __exit vmbus_exit(void)
 {
 	int cpu;
 
+	hv_remove_kexec_handler();
+	hv_remove_crash_handler();
 	vmbus_connection.conn_state = DISCONNECTED;
 	hv_synic_clockevents_cleanup();
+	vmbus_disconnect();
 	hv_remove_vmbus_irq();
+	tasklet_kill(&msg_dpc);
 	vmbus_free_channels();
+	if (ms_hyperv.features & HV_FEATURE_GUEST_CRASH_MSR_AVAILABLE) {
+		atomic_notifier_chain_unregister(&panic_notifier_list,
+						 &hyperv_panic_block);
+	}
 	bus_unregister(&hv_bus);
 	hv_cleanup();
-	for_each_online_cpu(cpu)
+	for_each_online_cpu(cpu) {
+		unregister_die_notifier(&hyperv_die_block);
 		smp_call_function_single(cpu, hv_synic_cleanup, NULL, 1);
+	}
+	hv_synic_free();
 	acpi_bus_unregister_driver(&vmbus_acpi_driver);
 	hv_cpu_hotplug_quirk(false);
-	vmbus_disconnect();
 }
 #endif
 
