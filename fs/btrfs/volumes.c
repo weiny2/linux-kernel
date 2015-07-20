@@ -1031,6 +1031,7 @@ static int contains_pending_extent(struct btrfs_trans_handle *trans,
 	struct extent_map *em;
 	struct list_head *search_list = &trans->transaction->pending_chunks;
 	int ret = 0;
+	u64 physical_start = *start;
 
 again:
 	list_for_each_entry(em, search_list, list) {
@@ -1039,15 +1040,31 @@ again:
 
 		map = (struct map_lookup *)em->bdev;
 		for (i = 0; i < map->num_stripes; i++) {
+			u64 end;
+
 			if (map->stripes[i].dev != device)
 				continue;
-			if (map->stripes[i].physical >= *start + len ||
+			if (map->stripes[i].physical >= physical_start + len ||
 			    map->stripes[i].physical + em->orig_block_len <=
-			    *start)
+			    physical_start)
 				continue;
-			*start = map->stripes[i].physical +
-				em->orig_block_len;
-			ret = 1;
+			/*
+			 * Make sure that while processing the pinned list we do
+			 * not override our *start with a lower value, because
+			 * we can have pinned chunks that fall within this
+			 * device hole and that have lower physical addresses
+			 * than the pending chunks we processed before. If we
+			 * do not take this special care we can end up getting
+			 * 2 pending chunks that start at the same physical
+			 * device offsets because the end offset of a pinned
+			 * chunk can be equal to the start offset of some
+			 * pending chunk.
+			 */
+			end = map->stripes[i].physical + em->orig_block_len;
+			if (end > *start) {
+				*start = end;
+				ret = 1;
+			}
 		}
 	}
 	if (search_list == &trans->transaction->pending_chunks) {
@@ -1166,8 +1183,14 @@ again:
 			 */
 			if (contains_pending_extent(trans, device,
 						    &search_start,
-						    hole_size))
-				hole_size = 0;
+						    hole_size)) {
+				if (key.offset >= search_start) {
+					hole_size = key.offset - search_start;
+				} else {
+					WARN_ON_ONCE(1);
+					hole_size = 0;
+				}
+			}
 
 			if (hole_size > max_hole_size) {
 				max_hole_start = search_start;
