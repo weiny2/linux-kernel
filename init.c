@@ -78,12 +78,13 @@
 #define HFI1_MAX_EAGER_BUFFER_SIZE (256 * 1024) /* 256KB */
 
 /*
- * Number of receive contexts we are configured to use (to allow for more pio
- * buffers per ctxt, etc.)  Zero means use chip value.
+ * Number of user receive contexts we are configured to use (to allow for more
+ * pio buffers per ctxt, etc.)  Zero means use one user context per CPU.
  */
 uint num_rcv_contexts;
 module_param_named(num_rcv_contexts, num_rcv_contexts, uint, S_IRUGO);
-MODULE_PARM_DESC(num_rcv_contexts, "Set max number of receive contexts to use");
+MODULE_PARM_DESC(
+	num_rcv_contexts, "Set max number of user receive contexts to use");
 
 u8 krcvqs[RXE_NUM_DATA_VL];
 int krcvqsset;
@@ -252,7 +253,7 @@ struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
 		rcd->eager_base = base * dd->rcv_entries.group_size;
 
 		/* Validate and initialize Rcv Hdr Q variables */
-		if (rcvhdrcnt & HDRQ_INCREMENT) {
+		if (rcvhdrcnt % HDRQ_INCREMENT) {
 			dd_dev_err(dd,
 				   "ctxt%u: header queue count %d must be divisible by %d\n",
 				   rcd->ctxt, rcvhdrcnt, HDRQ_INCREMENT);

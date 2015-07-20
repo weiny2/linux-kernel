@@ -314,7 +314,7 @@ int init_sc_pools_and_sizes(struct hfi1_devdata *dd)
 		} else if (i == SC_KERNEL) {
 			count = num_vls + 1 /* VL15 */;
 		} else if (count == SCC_PER_CPU) {
-			count = num_online_cpus();
+			count = dd->num_rcv_contexts - dd->n_krcv_queues;
 		} else if (count < 0) {
 			dd_dev_err(
 				dd,
@@ -1506,7 +1506,7 @@ static void sc_piobufavail(struct send_context *sc)
 	 * could end up with QPs on the wait list with the interrupt
 	 * disabled.
 	 */
-	spin_lock_irqsave(&dev->pending_lock, flags);
+	write_seqlock_irqsave(&dev->iowait_lock, flags);
 	while (!list_empty(list)) {
 		struct iowait *wait;
 
@@ -1525,7 +1525,7 @@ static void sc_piobufavail(struct send_context *sc)
 	if (n)
 		hfi1_sc_wantpiobuf_intr(sc, 0);
 full:
-	spin_unlock_irqrestore(&dev->pending_lock, flags);
+	write_sequnlock_irqrestore(&dev->iowait_lock, flags);
 
 	for (i = 0; i < n; i++)
 		hfi1_qp_wakeup(qps[i], HFI1_S_WAIT_PIO);

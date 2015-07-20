@@ -306,9 +306,8 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 			    qp->alt_ah_attr.grh.dgid.global.interface_id))
 				goto err;
 		}
-		if (unlikely(ingress_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
-						sc5, qp->s_alt_pkey_index,
-						be16_to_cpu(hdr->lrh[3])))) {
+		if (unlikely(rcv_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
+					    sc5, be16_to_cpu(hdr->lrh[3])))) {
 			hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
 				       (u16)bth0,
 				       (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
@@ -339,9 +338,8 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 			    qp->remote_ah_attr.grh.dgid.global.interface_id))
 				goto err;
 		}
-		if (unlikely(ingress_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
-						sc5, qp->s_pkey_index,
-						be16_to_cpu(hdr->lrh[3])))) {
+		if (unlikely(rcv_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
+					    sc5, be16_to_cpu(hdr->lrh[3])))) {
 			hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
 				       (u16)bth0,
 				       (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
