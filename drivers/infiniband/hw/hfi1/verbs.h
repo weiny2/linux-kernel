@@ -52,7 +52,7 @@
 #define HFI1_VERBS_H
 
 #include <linux/types.h>
-#include <linux/spinlock.h>
+#include <linux/seqlock.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/kref.h>
@@ -671,8 +671,7 @@ static inline void inc_opstats(
 }
 
 struct hfi1_ibport {
-	struct hfi1_qp __rcu *qp0;
-	struct hfi1_qp __rcu *qp1;
+	struct hfi1_qp __rcu *qp[2];
 	struct ib_mad_agent *send_agent;	/* agent for SMI (traps) */
 	struct hfi1_ah *sm_ah;
 	struct hfi1_ah *smi_ah;
@@ -741,18 +740,20 @@ struct hfi1_ibdev {
 
 	/* QP numbers are shared by all IB ports */
 	struct hfi1_lkey_table lk_table;
+	/* protect wait lists */
+	seqlock_t iowait_lock;
 	struct list_head txwait;        /* list for wait verbs_txreq */
 	struct list_head memwait;       /* list for wait kernel memory */
 	struct list_head txreq_free;
+	struct kmem_cache *verbs_txreq_cache;
 	struct timer_list mem_timer;
-	struct tx_pio_header *pio_hdrs;
-	size_t pio_hdr_bytes;
-	dma_addr_t pio_hdrs_phys;
-	/* list of QPs waiting for RNR timer */
-	spinlock_t pending_lock; /* protect wait lists, PMA counters, etc. */
 
-	u32 n_piowait;
-	u32 n_txwait;
+	/* other waiters */
+	spinlock_t pending_lock;
+
+	u64 n_piowait;
+	u64 n_txwait;
+	u64 n_kmem_wait;
 
 	u32 n_pds_allocated;    /* number of PDs allocated for device */
 	spinlock_t n_pds_lock;

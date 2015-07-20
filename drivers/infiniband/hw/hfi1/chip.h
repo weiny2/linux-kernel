@@ -496,8 +496,7 @@ enum {
 	CAP_CRC_12B_16B_PER_LANE = (1 << 2) /* 12b-16b per lane CRC */
 };
 
-#define SUPPORTED_CRCS (CAP_CRC_14B | CAP_CRC_48B | \
-			    CAP_CRC_12B_16B_PER_LANE)
+#define SUPPORTED_CRCS (CAP_CRC_14B | CAP_CRC_48B)
 
 /* misc status version fields */
 #define STS_FM_VERSION_A_SHIFT 16
@@ -784,6 +783,9 @@ enum {
 	C_DC_PG_STS_TX_MBE_CNT,
 	C_SW_CPU_INTR,
 	C_SW_CPU_RCV_LIM,
+	C_SW_VTX_WAIT,
+	C_SW_PIO_WAIT,
+	C_SW_KMEM_WAIT,
 	DEV_CNTR_LAST  /* Must be kept last */
 };
 
