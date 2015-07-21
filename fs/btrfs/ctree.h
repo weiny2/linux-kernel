@@ -1715,6 +1715,7 @@ struct btrfs_fs_info {
 	spinlock_t unused_bgs_lock;
 	struct list_head unused_bgs;
 	struct mutex unused_bg_unpin_mutex;
+	struct mutex delete_unused_bgs_mutex;
 
 	/*
 	 * Chunks that can't be freed yet (under a trim/discard operation)
