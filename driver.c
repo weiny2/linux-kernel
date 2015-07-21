@@ -430,7 +430,7 @@ static inline void init_packet(struct hfi1_ctxtdata *rcd,
 			   rcd->dd->rhf_offset;
 	packet->rhf = rhf_to_cpu(packet->rhf_addr);
 	packet->rhqoff = rcd->head;
-	packet->numpkt = 1;
+	packet->numpkt = 0;
 	packet->rcv_flags = 0;
 	packet->has_grh = 0;
 }
@@ -657,11 +657,13 @@ static inline int process_rcv_packet(struct hfi1_packet *packet)
 	 * comparison in this performance critical code.
 	 */
 	packet->rcd->dd->rhf_rcv_function_map[packet->etype](packet);
+	packet->numpkt++;
 
 	/* Set up for the next packet */
 	packet->rhqoff += packet->rsize;
 	if (packet->rhqoff >= packet->maxcnt)
 		packet->rhqoff = 0;
+
 	if (packet->numpkt == MAX_PKT_RECV) {
 		ret = RCV_PKT_MAX;
 		this_cpu_inc(*packet->rcd->dd->rcv_limit);
@@ -670,8 +672,6 @@ static inline int process_rcv_packet(struct hfi1_packet *packet)
 	packet->rhf_addr = (__le32 *) packet->rcd->rcvhdrq + packet->rhqoff +
 				      packet->rcd->dd->rhf_offset;
 	packet->rhf = rhf_to_cpu(packet->rhf_addr);
-
-	packet->numpkt++;
 
 	return ret;
 }
