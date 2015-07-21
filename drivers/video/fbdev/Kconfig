@@ -699,7 +699,7 @@ config FB_MAC
 
 config FB_HP300
 	bool
-	depends on (FB = y) && DIO
+	depends on (FB = y) && DIO && ARCH_HAS_MEMREMAP
 	select FB_CFB_IMAGEBLIT
 	default y
 

@@ -357,7 +357,6 @@ static inline void memcpy_toio(volatile void __iomem *to, const void *from,
  * ioremap_nocache()	Device		n/a		n/a
  * memremap(WB)		Normal		Writeback	Read allocate
  * ioremap_wc()		Normal		Non-cacheable	n/a
- * ioremap_wt()		Normal		Non-cacheable	n/a
  *
  * All device mappings have the following properties:
  * - no access speculation
@@ -394,7 +393,6 @@ void __iomem *ioremap(resource_size_t res_cookie, size_t size);
 
 void __iomem *ioremap_wc(resource_size_t res_cookie, size_t size);
 #define ioremap_wc ioremap_wc
-#define ioremap_wt ioremap_wc
 
 void iounmap(volatile void __iomem *iomem_cookie);
 #define iounmap iounmap

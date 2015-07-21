@@ -3,8 +3,6 @@
 
 #ifdef __KERNEL__
 
-#define ARCH_HAS_IOREMAP_WT
-
 #include <asm/virtconvert.h>
 #include <asm-generic/iomap.h>
 
@@ -154,10 +152,6 @@ static inline void *ioremap(unsigned long physaddr, unsigned long size)
 static inline void *ioremap_nocache(unsigned long physaddr, unsigned long size)
 {
 	return __ioremap(physaddr, size, IOMAP_NOCACHE_SER);
-}
-static inline void *ioremap_wt(unsigned long physaddr, unsigned long size)
-{
-	return __ioremap(physaddr, size, IOMAP_WRITETHROUGH);
 }
 #define	iounmap(addr)	do { } while(0)
 

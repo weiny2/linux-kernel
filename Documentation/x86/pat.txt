@@ -40,7 +40,7 @@ ioremap_wc             |    --    |    --      |       WC         |
                        |          |            |                  |
 memremap(MEMREMAP_WB)  |    WB    |    WB      |       WB         |
                        |          |            |                  |
-ioremap_wt             |    --    |    --      |       WT         |
+memremap(MEMREMAP_WT)  |    --    |    --      |       WT         |
                        |          |            |                  |
 set_memory_uc          |    UC-   |    --      |       --         |
  set_memory_wb         |          |            |                  |
