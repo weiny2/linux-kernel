@@ -69,7 +69,6 @@
 #include <rdma/fxr/fxr_rx_hp_csrs.h>
 #include <rdma/fxr/fxr_rx_e2e_csrs.h>
 #include <rdma/fxr/fxr_rx_e2e_defs.h>
-#include <rdma/fxr/fxr_linkmux_defs.h>
 #include <rdma/fxr/fxr_lm_csrs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs.h>
@@ -248,7 +247,7 @@ static void hfi_set_lid_lmc(struct hfi_pportdata *ppd)
 	LM_CONFIG_PORT0_t lmp0 = {.val = 0};
 	LM_CONFIG_PORT1_t lmp1 = {.val = 0};
 
-	switch (ppd->pnum) {
+	switch (ppd_to_pnum(ppd)) {
 	case 1:
 		lmp0.val = read_csr(dd, FXR_LM_CONFIG_PORT0);
 		lmp0.field.DLID = ppd->lid;
@@ -270,8 +269,6 @@ static void hfi_set_lid_lmc(struct hfi_pportdata *ppd)
 		write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1, ppd->lid);
 		break;
 	default:
-		dd_dev_err(dd, "Illegal port number %d\n", ppd->pnum);
-		BUG_ON(1);
 		return;
 	}
 
@@ -288,6 +285,89 @@ static void hfi_set_lid_lmc(struct hfi_pportdata *ppd)
 static void hfi_set_send_length(struct hfi_pportdata *ppd)
 {
 	/*FXRTODO: HW related code to change MTU */
+}
+
+static void hfi_enable_pkey_checks(struct hfi_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	LM_CONFIG_PORT0_t lmp0;
+	LM_CONFIG_PORT1_t lmp1;
+
+	switch (ppd_to_pnum(ppd)) {
+	case 1:
+		lmp0.val = read_csr(dd, FXR_LM_CONFIG_PORT0);
+		if (!lmp0.field.ENABLE_PKEY) {
+			lmp0.field.ENABLE_PKEY = 1;
+			write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
+		}
+		break;
+	case 2:
+		lmp1.val = read_csr(dd, FXR_LM_CONFIG_PORT1);
+		if (!lmp1.field.ENABLE_PKEY) {
+			lmp1.field.ENABLE_PKEY = 1;
+			write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
+		}
+		break;
+	default:
+		return;
+	}
+}
+
+/*
+ * Set the device/port partition key table. The MAD code
+ * will ensure that, at least, the partial management
+ * partition key is present in the table.
+ */
+static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	LM_PKEY_ARRAY_PORT0_t lpa0;
+	LM_PKEY_ARRAY_PORT1_t lpa1;
+	u32 lpa_offset;
+	int i;
+
+	switch (ppd_to_pnum(ppd)) {
+	case 1:
+		for (i = 0; i < HFI_MAX_PKEYS; i++) {
+			u16 pkey = ppd->pkeys[i];
+
+			lpa_offset = FXR_LM_PKEY_ARRAY_PORT0 + (0x08 * i);
+
+			/*
+			 * FXRTODO: Need clarification on this. HAS is
+			 * not clear. Right now it is assumed that if
+			 * number of 1s in CAM is * even, then set
+			 * PARITY bit.
+			 */
+			lpa0.field.PARITY = !hfi_parity(HFI_PKEY_CAM(pkey));
+			lpa0.field.MEMBER_TYPE = HFI_PKEY_MEMBER_TYPE(pkey);
+			lpa0.field.CAM_ENTRY = HFI_PKEY_CAM(pkey);
+			write_csr(dd, lpa_offset, lpa0.val);
+		}
+		break;
+	case 2:
+		for (i = 0; i < HFI_MAX_PKEYS; i++) {
+			u16 pkey = ppd->pkeys[i];
+
+			lpa_offset = FXR_LM_PKEY_ARRAY_PORT1 + (0x08 * i);
+
+			/*
+			 * FXRTODO: Need clarification on this. HAS is
+			 * not clear. Right now it is assumed that if
+			 * number of 1s in CAM is * even, then set
+			 * PARITY bit.
+			 */
+			lpa1.field.PARITY = !hfi_parity(HFI_PKEY_CAM(pkey));
+			lpa1.field.MEMBER_TYPE = HFI_PKEY_MEMBER_TYPE(pkey);
+			lpa1.field.CAM_ENTRY = HFI_PKEY_CAM(pkey);
+			write_csr(dd, lpa_offset, lpa1.val);
+		}
+		break;
+	default:
+		return;
+	}
+
+	hfi_enable_pkey_checks(ppd);
 }
 
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
@@ -345,6 +425,13 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val)
 		break;
 	case HFI_IB_CFG_MTU:
 		hfi_set_send_length(ppd);
+		break;
+	case HFI_IB_CFG_PKEYS:
+		/*FXRTODO: Implement HFI capability set/get support in verbs */
+#if 0
+		if (HFI1_CAP_IS_KSET(PKEY_CHECK))
+#endif
+			hfi_set_pkey_table(ppd);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
@@ -522,6 +609,8 @@ static void hfi_port_desc(struct opa_core_device *odev,
 	for (i = 0; i < ppd->vls_supported; i++)
 		pdesc->vl_mtu[i] = dd->vl_mtu[i];
 	pdesc->vl_mtu[15] = dd->vl_mtu[15];
+	pdesc->pkey_tlen = HFI_MAX_PKEYS;
+	pdesc->pkeys = ppd->pkeys;
 	pdesc->ibmaxmtu = HFI_DEFAULT_MAX_MTU;
 }
 
@@ -590,6 +679,13 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		ppd->lstate = IB_PORT_DOWN;
 		mutex_init(&ppd->hls_lock);
 
+		/*
+		 * Since OPA uses management pkey there is no
+		 * need to initialize entry 0 with default application
+		 * pkey 0x8001 as mentioned in ib spec v1.3
+		 */
+		ppd->pkeys[OPA_LIM_MGMT_PKEY_IDX] = OPA_LIM_MGMT_PKEY;
+		(void)hfi_set_ib_cfg(ppd, HFI_IB_CFG_PKEYS, 0);
 		ppd->vls_supported = HFI_NUM_DATA_VLS;
 
 		/*

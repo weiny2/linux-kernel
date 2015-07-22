@@ -342,8 +342,10 @@ static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	/* This is implemented in SMA-HFI*/
+	return reply(ibh);
 }
 
 static int __subn_get_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
@@ -684,8 +686,35 @@ static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					       u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	u32 start_block = OPA_AM_START_BLK(am);
+	u32 n_blocks_sent = OPA_AM_NBLK(am);
+	u32 end_block;
+	int ret;
+
+	end_block = start_block + n_blocks_sent;
+
+	ret = subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev, port,
+					resp_len);
+
+	if (ret == IB_MAD_RESULT_FAILURE)
+		goto err;
+
+	/*
+	 * FXRTODO: Need a notification path from opa_core device
+	 * to opa_core clients
+	 */
+#if 0
+	if (pkey_changed) {
+		struct ib_event event;
+		event.event = IB_EVENT_PKEY_CHANGE;
+		event.device = ibdev;
+		event.element.port_num = port;
+		ib_dispatch_event(&event);
+	}
+#endif
+
+err:
+	return ret;
 }
 
 static int __subn_set_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
@@ -999,7 +1028,7 @@ static int process_stl_mad(struct ib_device *ibdev, int mad_flags,
 	int pkey_idx;
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 
-	pkey_idx = opa_ib_lookup_pkey_idx(ibp, OPA_LIM_MGMT_P_KEY);
+	pkey_idx = opa_ib_lookup_pkey_idx(ibp, OPA_LIM_MGMT_PKEY);
 	if (pkey_idx < 0) {
 		pr_warn("failed to find limited mgmt pkey, defaulting 0x%x\n",
 			opa_ib_get_pkey(ibp, 1));

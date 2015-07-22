@@ -259,6 +259,8 @@ struct hfi_dlid_assign_args;
  * @pguid: port GUID for this port
  * @lid: LID for this port
  * @ibmaxmtu: A constant max MTU chosen during driver load time
+ * @pkey_tlen: Length of PKEY table
+ * @pkeys: pointer to the pkey table
  * @num_vls_supported: Number of VL supported
  * @vl_mtu: Array of per VL MTU
  */
@@ -266,6 +268,8 @@ struct opa_pport_desc {
 	__be64 pguid;
 	u32 lid;
 	u16 ibmaxmtu;
+	u16 pkey_tlen;
+	u16 *pkeys;
 	u8 num_vls_supported;
 	u16 vl_mtu[OPA_MAX_VLS];
 };

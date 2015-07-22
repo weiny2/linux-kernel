@@ -148,8 +148,39 @@ static int __subn_get_hfi_psi(struct hfi_devdata *dd, struct opa_smp *smp,
 static int __subn_get_hfi_pkeytable(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	size_t size;
+	u32 n_blocks_req = OPA_AM_NBLK(am);
+	u32 start_block = OPA_AM_START_BLK(am);
+	u32 end_block;
+	__be16 *pkeys = (__be16 *)data;
+	int i, j, k;
+
+	end_block = start_block + n_blocks_req;
+	size = (n_blocks_req * OPA_PKEY_TABLE_BLK_COUNT) * sizeof(u16);
+
+	if (n_blocks_req == 0 || end_block > HFI_PKEY_BLOCKS_AVAIL ||
+	    n_blocks_req > OPA_NUM_PKEY_BLOCKS_PER_SMP) {
+		pr_warn("OPA Get PKey AM Invalid : s 0x%x; req 0x%x; ",
+			start_block, n_blocks_req);
+		pr_warn(" avail 0x%x; blk/smp 0x%lx\n", HFI_PKEY_BLOCKS_AVAIL,
+			OPA_NUM_PKEY_BLOCKS_PER_SMP);
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+		return hfi_reply(ibh);
+	}
+
+	for (i = start_block, k = 0; i < end_block; i++)
+		for (j = 0; j < OPA_PKEY_TABLE_BLK_COUNT; j++, k++)
+			pkeys[k] = cpu_to_be16(ppd->pkeys[i *
+					OPA_PKEY_TABLE_BLK_COUNT + j]);
+
+	if (resp_len)
+		*resp_len += size;
+
+	return hfi_reply(ibh);
 }
 
 static int __subn_get_hfi_sl_to_sc(struct hfi_devdata *dd, struct opa_smp *smp,
@@ -621,11 +652,103 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	return hfi_reply(ibh);
 }
 
+ /*
+ * @returns the index of lim_pkey if found or -1 if not found
+ */
+int hfi_lookup_lim_pkey_idx(struct hfi_pportdata *ppd)
+{
+	unsigned i;
+
+	for (i = 0; i < HFI_MAX_PKEYS; i++)
+		if (ppd->pkeys[i] == OPA_LIM_MGMT_PKEY)
+			return i;
+
+	/* no match...  */
+	return -1;
+}
+
 static int __subn_set_hfi_pkeytable(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	u32 n_blocks_sent = OPA_AM_NBLK(am);
+	u32 start_block = OPA_AM_START_BLK(am);
+	u32 end_block;
+	__be16 *pkeys = (__be16 *)data;
+	int i, j, k;
+	u8 update_mgmt_pkey = 0, pkey_changed = 0;
+
+	end_block = start_block + n_blocks_sent;
+
+	if (n_blocks_sent == 0 || end_block > HFI_PKEY_BLOCKS_AVAIL ||
+		n_blocks_sent > OPA_NUM_PKEY_BLOCKS_PER_SMP) {
+		pr_warn("OPA Get PKey AM Invalid : s 0x%x; req 0x%x; ",
+			start_block, n_blocks_sent);
+		pr_warn(" avail 0x%x; blk/smp 0x%lx\n", HFI_PKEY_BLOCKS_AVAIL,
+			OPA_NUM_PKEY_BLOCKS_PER_SMP);
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+		return hfi_reply(ibh);
+	}
+
+	 /* Table update should contain update to OPA_LIM_MGMT_PKEY */
+	for (i = 0; i < n_blocks_sent * OPA_PKEY_TABLE_BLK_COUNT; i++) {
+		if (be16_to_cpu(pkeys[i]) == OPA_LIM_MGMT_PKEY) {
+			update_mgmt_pkey = 1;
+			break;
+		}
+	}
+
+	if (!update_mgmt_pkey) {
+		int mgmt_idx = hfi_lookup_lim_pkey_idx(ppd);
+
+		/* we should always have mgmt pkey set in the pkeyTable */
+		if (mgmt_idx == -1) {
+			WARN_ONCE(1, "Mgmt Pkey not present in PkeyTable\n");
+			return IB_MAD_RESULT_FAILURE;
+		}
+
+		/*
+		 * Since the setPkeyTable can set tables in blocks
+		 * it is possible that FM is trying to change
+		 * a blockin pkeytable that doesn't contain mgmt pkey.
+		 * Check for that condition here.
+		 */
+		if (mgmt_idx >= (start_block * OPA_PKEY_TABLE_BLK_COUNT) &&
+			mgmt_idx < (end_block * OPA_PKEY_TABLE_BLK_COUNT)) {
+			/*
+			 * The FM was trying to replace a pkey table block
+			 * which will leave no mgmt pkey in the entire
+			 * pkey table. Donot allow that.
+			 */
+			pr_warn("Update does not contain mgmt pkey\n");
+			smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+			return hfi_reply(ibh);
+		}
+	}
+
+	for (i = start_block, k = 0; i < end_block; i++) {
+		for (j = 0; j < OPA_PKEY_TABLE_BLK_COUNT; j++, k++) {
+			u16 pidx = i * OPA_PKEY_TABLE_BLK_COUNT + j;
+			u16 curr_pkey = ppd->pkeys[pidx];
+			u16 new_pkey = be16_to_cpu(pkeys[k]);
+
+			if (curr_pkey == new_pkey)
+				continue;
+
+			ppd->pkeys[pidx] = new_pkey;
+			pkey_changed = 1;
+		}
+	}
+
+	if (pkey_changed)
+		(void)hfi_set_ib_cfg(ppd, HFI_IB_CFG_PKEYS, 0);
+
+	return hfi_reply(ibh);
 }
 
 static int __subn_set_hfi_sl_to_sc(struct hfi_devdata *dd, struct opa_smp *smp,

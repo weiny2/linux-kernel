@@ -57,6 +57,7 @@
 #include <linux/slab.h>
 #include <rdma/hfi_cmd.h>
 #include <rdma/opa_core.h>
+#include <rdma/fxr/fxr_linkmux_defs.h>
 
 extern unsigned int hfi_max_mtu;
 #define DRIVER_NAME		KBUILD_MODNAME
@@ -94,6 +95,8 @@ extern unsigned int hfi_max_mtu;
 #define HFI_MIN_VL_15_MTU		2048
 /* Number of Data VLs supported */
 #define HFI_NUM_DATA_VLS	8
+/* Number of PKey entries in the HW */
+#define HFI_MAX_PKEYS		LM_PKEY_ARRAY_SIZE
 
 /* In accordance with stl vol 1 section 4.1 */
 #define PGUID_MASK		(~(0x3UL << 32))
@@ -105,6 +108,16 @@ extern unsigned int hfi_max_mtu;
 
 #define pidx_to_pnum(id)	((id) + 1)
 #define pnum_to_pidx(pn)	((pn) - 1)
+
+#define HFI_PKEY_CAM_SHIFT		0
+#define HFI_PKEY_CAM_MASK		0x7fff
+#define HFI_PKEY_CAM(pkey)		(((pkey) >> HFI_PKEY_CAM_SHIFT) & \
+					HFI_PKEY_CAM_MASK)
+
+#define HFI_PKEY_MEMBER_SHIFT		15
+#define HFI_PKEY_MEMBER_MASK		0x1
+#define HFI_PKEY_MEMBER_TYPE(pkey)	(((pkey) >> HFI_PKEY_MEMBER_SHIFT) & \
+					HFI_PKEY_MEMBER_MASK)
 
 /*
  * HFI or Host Link States
@@ -149,6 +162,7 @@ extern unsigned int hfi_max_mtu;
 
 #define HFI_IB_CFG_LIDLMC 0 /* LID and Mask*/
 #define HFI_IB_CFG_OP_VLS 10 /* operational VLs */
+#define HFI_IB_CFG_PKEYS 16 /* update partition keys */
 #define HFI_IB_CFG_MTU 17 /* update MTU in IBC */
 #define HFI_IB_CFG_VL_HIGH_LIMIT 19
 
@@ -229,6 +243,7 @@ struct hfi_pportdata {
 	struct mutex hls_lock;
 	u32 lstate;
 	u32 ibmtu;
+	u16 pkeys[HFI_MAX_PKEYS];
 	u8 smsl;
 	u8 lmc;
 	u8 pnum;
@@ -392,6 +407,30 @@ static inline struct hfi_pportdata *to_hfi_ppd(struct hfi_devdata *dd,
 		return NULL;
 	}
 	return &(dd->pport[pidx]);
+}
+
+static inline int ppd_to_pnum(struct hfi_pportdata *ppd)
+{
+	u8 pnum = ppd->pnum;
+	struct hfi_devdata *dd = ppd->dd;
+
+	if (unlikely(pnum == 0 || pnum > dd->num_pports)) {
+		WARN(1, "Invalid port number");
+		return -1;
+	}
+
+	return (int)pnum;
+}
+
+static inline u8 hfi_parity(u16 val)
+{
+	int i, m = 0;
+
+	/* m is 1 for odd parity */
+	for (i = 0; i < sizeof(val) * 8; i++, val >>= 1)
+		m ^= (val & 0x1);
+
+	return m;
 }
 
 int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
