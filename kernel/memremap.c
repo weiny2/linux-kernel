@@ -16,22 +16,13 @@
 #include <linux/mm.h>
 #include <linux/memory_hotplug.h>
 
-#ifndef ioremap_cache
-/* temporary while we convert existing ioremap_cache users to memremap */
-__weak void __iomem *ioremap_cache(resource_size_t offset, unsigned long size)
-{
-	return ioremap(offset, size);
-}
-#endif
-
-/* temporary while we convert arch implementations to arch_memremap */
 __weak void *arch_memremap(resource_size_t offset, size_t size,
 		unsigned long flags)
 {
-	if (flags & MEMREMAP_WB)
-		return (void __force *) ioremap_cache(offset, size);
-	else if (flags & MEMREMAP_WT)
-		return (void __force *) ioremap_wt(offset, size);
+	if (!IS_ENABLED(CONFIG_MMU))
+		return (void *) (unsigned long) offset;
+	WARN_ONCE(1, "%s in %s should only be called in NOMMU configurations\n",
+			__func__, __FILE__);
 	return NULL;
 }
 

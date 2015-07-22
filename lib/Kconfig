@@ -523,6 +523,7 @@ config ARCH_HAS_SG_CHAIN
 	bool
 
 config ARCH_HAS_MEMREMAP
+	default !MMU
 	bool
 
 config ARCH_HAS_PMEM_API

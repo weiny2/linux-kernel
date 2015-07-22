@@ -32,8 +32,6 @@ API                    |    RAM   |  ACPI,...  |  Reserved/Holes  |
                        |          |            |                  |
 ioremap                |    --    |    UC-     |       UC-        |
                        |          |            |                  |
-ioremap_cache          |    --    |    WB      |       WB         |
-                       |          |            |                  |
 ioremap_uc             |    --    |    UC      |       UC         |
                        |          |            |                  |
 ioremap_nocache        |    --    |    UC-     |       UC-        |
