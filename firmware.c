@@ -1284,9 +1284,6 @@ clear:
 
 int hfi1_firmware_init(struct hfi1_devdata *dd)
 {
-	/* we do not expect more than 2 HFIs */
-	BUG_ON(dd->hfi1_id >= 2);
-
 	/* only RTL can use these */
 	if (dd->icode != ICODE_RTL_SILICON) {
 		fw_fabric_serdes_load = 0;

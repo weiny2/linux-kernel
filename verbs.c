@@ -283,7 +283,7 @@ void hfi1_copy_sge(
 			len = length;
 		if (len > sge->sge_length)
 			len = sge->sge_length;
-		BUG_ON(len == 0);
+		WARN_ON_ONCE(len == 0);
 		memcpy(sge->vaddr, data, len);
 		sge->vaddr += len;
 		sge->length -= len;
@@ -325,7 +325,7 @@ void hfi1_skip_sge(struct hfi1_sge_state *ss, u32 length, int release)
 			len = length;
 		if (len > sge->sge_length)
 			len = sge->sge_length;
-		BUG_ON(len == 0);
+		WARN_ON_ONCE(len == 0);
 		sge->vaddr += len;
 		sge->length -= len;
 		sge->sge_length -= len;
@@ -882,7 +882,7 @@ static int build_verbs_ulp_payload(
 			len = length;
 		if (len > ss->sge.sge_length)
 			len = ss->sge.sge_length;
-		BUG_ON(len == 0);
+		WARN_ON_ONCE(len == 0);
 		ret = sdma_txadd_kvaddr(
 			sde->dd,
 			&tx->txreq,

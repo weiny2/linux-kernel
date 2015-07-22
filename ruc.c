@@ -541,7 +541,7 @@ again:
 			len = sge->length;
 		if (len > sge->sge_length)
 			len = sge->sge_length;
-		BUG_ON(len == 0);
+		WARN_ON_ONCE(len == 0);
 		hfi1_copy_sge(&qp->r_sge, sge->vaddr, len, release);
 		sge->vaddr += len;
 		sge->length -= len;
