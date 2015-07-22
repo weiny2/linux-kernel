@@ -127,6 +127,7 @@ static int opa_ib_query_device(struct ib_device *ibdev,
 			       struct ib_device_attr *props)
 {
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct opa_ib_portdata *ibp1 = to_opa_ibportdata(ibdev, 1);
 
 	memset(props, 0, sizeof(*props));
 
@@ -169,7 +170,7 @@ static int opa_ib_query_device(struct ib_device *ibdev,
 	props->max_srq_sge = opa_ib_max_srq_sges;
 	/* props->local_ca_ack_delay */
 	props->atomic_cap = IB_ATOMIC_GLOB;
-	props->max_pkeys = OPA_IB_PORT_NUM_PKEYS;
+	props->max_pkeys = ibp1->pkey_tlen;
 	props->max_mcast_grp = opa_ib_max_mcast_grps;
 	props->max_mcast_qp_attach = opa_ib_max_mcast_qp_attached;
 	props->max_total_mcast_qp_attach = props->max_mcast_qp_attach *
@@ -205,7 +206,7 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	props->port_cap_flags = ibp->port_cap_flags;
 	props->gid_tbl_len = 1;
 	props->max_msg_sz = OPA_IB_MAX_MSG_SZ;
-	props->pkey_tbl_len = OPA_IB_PORT_NUM_PKEYS;
+	props->pkey_tbl_len = ibp->pkey_tlen;
 	props->bad_pkey_cntr = ibp->pkey_violations;
 	props->qkey_viol_cntr = ibp->qkey_violations;
 	props->active_width = (u8)opa_width_to_ib(ibp->link_width_active);
@@ -235,7 +236,7 @@ static int opa_ib_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 {
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 
-	if (!ibp || index >= ARRAY_SIZE(ibp->pkeys))
+	if (!ibp || index >= ibp->pkey_tlen)
 		return -EINVAL;
 
 	*pkey = ibp->pkeys[index];
@@ -458,7 +459,6 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 			struct opa_core_device *odev, u8 pidx)
 {
 	int i, ret;
-	u32 default_pkey_idx = 1;
 	struct opa_ib_portdata *ibp = &ibd->pport[pidx];
 	struct opa_pport_desc pdesc;
 	struct opa_core_ops *ops = odev->bus_ops;
@@ -478,8 +478,8 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	/* Below should only set bits defined in OPA PortInfo.CapabilityMask */
 	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_CAP_MASK_NOTICE_SUP;
-	/* Set the default power on value */
-	ibp->pkeys[default_pkey_idx] = OPA_LIM_MGMT_P_KEY;
+	ibp->pkey_tlen = pdesc.pkey_tlen;
+	ibp->pkeys = pdesc.pkeys;
 
 	RCU_INIT_POINTER(ibp->qp0, NULL);
 	RCU_INIT_POINTER(ibp->qp1, NULL);

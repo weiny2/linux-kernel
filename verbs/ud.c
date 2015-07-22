@@ -443,19 +443,19 @@ int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey)
 {
 	unsigned i;
 
-	if (pkey == OPA_FULL_MGMT_P_KEY || pkey == OPA_LIM_MGMT_P_KEY) {
+	if (pkey == OPA_FULL_MGMT_PKEY || pkey == OPA_LIM_MGMT_PKEY) {
 		unsigned lim_idx = -1;
 
-		for (i = 0; i < ARRAY_SIZE(ibp->pkeys); ++i) {
+		for (i = 0; i < ibp->pkey_tlen; ++i) {
 			/* here we look for an exact match */
 			if (ibp->pkeys[i] == pkey)
 				return i;
-			if (ibp->pkeys[i] == OPA_LIM_MGMT_P_KEY)
+			if (ibp->pkeys[i] == OPA_LIM_MGMT_PKEY)
 				lim_idx = i;
 		}
 
 		/* did not find 0xffff return 0x7fff idx if found */
-		if (pkey == OPA_FULL_MGMT_P_KEY)
+		if (pkey == OPA_FULL_MGMT_PKEY)
 			return lim_idx;
 
 		/* no match...  */
@@ -464,7 +464,7 @@ int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey)
 
 	pkey &= 0x7fff; /* remove limited/full membership bit */
 
-	for (i = 0; i < ARRAY_SIZE(ibp->pkeys); ++i)
+	for (i = 0; i < ibp->pkey_tlen; ++i)
 		if ((ibp->pkeys[i] & 0x7fff) == pkey)
 			return i;
 

@@ -71,8 +71,8 @@
 #define OPA_IB_MAX_MSG_SZ       0x80000000
 #define OPA_IB_PORT_NUM_PKEYS   16
 #define IB_DEFAULT_GID_PREFIX	cpu_to_be64(0xfe80000000000000ULL)
-#define OPA_LIM_MGMT_P_KEY       0x7FFF
-#define OPA_FULL_MGMT_P_KEY      0xFFFF
+#define OPA_LIM_MGMT_PKEY       0x7FFF
+#define OPA_FULL_MGMT_PKEY      0xFFFF
 
 /* Flags for checking QP state (see ib_hfi1_state_ops[]) */
 #define HFI1_POST_SEND_OK                0x01
@@ -89,12 +89,6 @@
 #define HFI1_HAS_GRH                     0x1
 #define HFI1_SC4_BIT                     0x2
 
-/*
- * Return the indexed PKEY from the port PKEY table.
- */
-#define opa_ib_get_npkeys(ibd)	OPA_IB_PORT_NUM_PKEYS
-#define opa_ib_get_pkey(ibp, index) \
-	((index) >= ARRAY_SIZE((ibp)->pkeys) ? 0 : (ibp)->pkeys[(index)])
 
 /* TODO - placeholders */
 extern __be64 opa_ib_sys_guid;
@@ -500,8 +494,9 @@ struct opa_ib_portdata {
 	u16 link_width_enabled;
 	u16 link_width_active;
 	u16 mkey_lease_period;
+	u16 pkey_tlen;
 	/* list of pkeys programmed; 0 if not set */
-	u16 pkeys[OPA_IB_PORT_NUM_PKEYS];
+	u16 *pkeys;
 	u16 pkey_violations;
 	u16 qkey_violations;
 	u16 mkey_violations;
@@ -577,6 +572,20 @@ static inline struct opa_ib_portdata *to_opa_ibportdata(struct ib_device *ibdev,
 	}
 	return &(ibd->pport[pidx]);
 }
+
+/*
+ * Return the indexed PKEY from the port PKEY table.
+ */
+
+static inline u16 opa_ib_get_npkeys(struct opa_ib_data *ibd)
+{
+	struct opa_ib_portdata *ibp1 = to_opa_ibportdata(&ibd->ibdev, 1);
+
+	return ibp1->pkey_tlen;
+}
+
+#define opa_ib_get_pkey(ibp, index) \
+	((index) >= ((ibp)->pkey_tlen) ? 0 : (ibp)->pkeys[(index)])
 
 static inline u8 valid_ib_mtu(u16 mtu)
 {
