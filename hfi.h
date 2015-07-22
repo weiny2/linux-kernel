@@ -544,12 +544,10 @@ struct hfi1_pportdata {
 	struct hfi1_ibport ibport_data;
 
 	struct hfi1_devdata *dd;
-	struct kobject pport_kobj;
 	struct kobject pport_cc_kobj;
 	struct kobject sc2vl_kobj;
 	struct kobject sl2sc_kobj;
 	struct kobject vl2mtu_kobj;
-	struct kobject diagc_kobj;
 
 	/* QSFP support */
 	struct qsfp_data qsfp_info;

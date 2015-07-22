@@ -53,154 +53,6 @@
 #include "mad.h"
 #include "trace.h"
 
-/* start of per-port functions */
-/*
- * Get/Set heartbeat enable. OR of 1=enabled, 2=auto
- */
-static ssize_t show_hrtbt_enb(struct hfi1_pportdata *ppd, char *buf)
-{
-	int ret;
-
-	ret = hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_HRTBT);
-	ret = scnprintf(buf, PAGE_SIZE, "%d\n", ret);
-	return ret;
-}
-
-static ssize_t store_hrtbt_enb(struct hfi1_pportdata *ppd, const char *buf,
-			       size_t count)
-{
-	struct hfi1_devdata *dd = ppd->dd;
-	int ret;
-	u16 val;
-
-	ret = kstrtou16(buf, 0, &val);
-	if (ret) {
-		dd_dev_err(dd, "attempt to set invalid Heartbeat enable\n");
-		return ret;
-	}
-
-	/*
-	 * Set the "intentional" heartbeat enable per either of
-	 * "Enable" and "Auto", as these are normally set together.
-	 * This bit is consulted when leaving loopback mode,
-	 * because entering loopback mode overrides it and automatically
-	 * disables heartbeat.
-	 */
-	ret = hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_HRTBT, val);
-	return ret < 0 ? ret : count;
-}
-
-static ssize_t store_led_override(struct hfi1_pportdata *ppd, const char *buf,
-				  size_t count)
-{
-	struct hfi1_devdata *dd = ppd->dd;
-	int ret;
-	u16 val;
-
-	ret = kstrtou16(buf, 0, &val);
-	if (ret) {
-		dd_dev_err(dd, "attempt to set invalid LED override\n");
-		return ret;
-	}
-
-	hfi1_set_led_override(ppd, val);
-	return count;
-}
-
-static ssize_t show_status(struct hfi1_pportdata *ppd, char *buf)
-{
-	ssize_t ret;
-
-	if (!ppd->statusp)
-		ret = -EINVAL;
-	else
-		ret = scnprintf(buf, PAGE_SIZE, "0x%llx\n",
-				(unsigned long long) *(ppd->statusp));
-	return ret;
-}
-
-/*
- * For userland compatibility, these offsets must remain fixed.
- * They are strings for HFI1_STATUS_*
- */
-static const char * const hfi1_status_str[] = {
-	"Initted",
-	"",
-	"",
-	"",
-	"",
-	"Present",
-	"IB_link_up",
-	"IB_configured",
-	"",
-	"Fatal_Hardware_Error",
-	NULL,
-};
-
-static ssize_t show_status_str(struct hfi1_pportdata *ppd, char *buf)
-{
-	int i, any;
-	u64 s;
-	ssize_t ret;
-
-	if (!ppd->statusp) {
-		ret = -EINVAL;
-		goto bail;
-	}
-
-	s = *(ppd->statusp);
-	*buf = '\0';
-	for (any = i = 0; s && hfi1_status_str[i]; i++) {
-		if (s & 1) {
-			/* if overflow */
-			if (any && strlcat(buf, " ", PAGE_SIZE) >= PAGE_SIZE)
-				break;
-			if (strlcat(buf, hfi1_status_str[i], PAGE_SIZE) >=
-					PAGE_SIZE)
-				break;
-			any = 1;
-		}
-		s >>= 1;
-	}
-	if (any)
-		strlcat(buf, "\n", PAGE_SIZE);
-
-	ret = strlen(buf);
-
-bail:
-	return ret;
-}
-
-/* end of per-port functions */
-
-/*
- * Start of per-port file structures and support code
- * Because we are fitting into other infrastructure, we have to supply the
- * full set of kobject/sysfs_ops structures and routines.
- */
-#define HFI1_PORT_ATTR(name, mode, show, store) \
-	static struct hfi1_port_attr port_attr_##name = \
-		__ATTR(name, mode, show, store)
-
-struct hfi1_port_attr {
-	struct attribute attr;
-	ssize_t (*show)(struct hfi1_pportdata *, char *);
-	ssize_t (*store)(struct hfi1_pportdata *, const char *, size_t);
-};
-
-HFI1_PORT_ATTR(led_override, S_IWUSR, NULL, store_led_override);
-HFI1_PORT_ATTR(hrtbt_enable, S_IWUSR | S_IRUGO, show_hrtbt_enb,
-	       store_hrtbt_enb);
-HFI1_PORT_ATTR(status, S_IRUGO, show_status, NULL);
-HFI1_PORT_ATTR(status_str, S_IRUGO, show_status_str, NULL);
-
-static struct attribute *port_default_attributes[] = {
-	&port_attr_led_override.attr,
-	&port_attr_hrtbt_enable.attr,
-	&port_attr_status.attr,
-	&port_attr_status_str.attr,
-	NULL
-};
 
 /*
  * Start of per-port congestion control structures and support code
@@ -297,42 +149,6 @@ static struct bin_attribute cc_setting_bin_attr = {
 	.attr = {.name = "cc_settings_bin", .mode = 0444},
 	.read = read_cc_setting_bin,
 	.size = PAGE_SIZE,
-};
-
-
-static ssize_t portattr_show(struct kobject *kobj,
-			     struct attribute *attr, char *buf)
-{
-	struct hfi1_port_attr *pattr =
-		container_of(attr, struct hfi1_port_attr, attr);
-	struct hfi1_pportdata *ppd =
-		container_of(kobj, struct hfi1_pportdata, pport_kobj);
-
-	return pattr->show(ppd, buf);
-}
-
-static ssize_t portattr_store(struct kobject *kobj,
-			      struct attribute *attr,
-			      const char *buf, size_t len)
-{
-	struct hfi1_port_attr *pattr =
-		container_of(attr, struct hfi1_port_attr, attr);
-	struct hfi1_pportdata *ppd =
-		container_of(kobj, struct hfi1_pportdata, pport_kobj);
-
-	return pattr->store(ppd, buf, len);
-}
-
-
-static const struct sysfs_ops hfi1_port_ops = {
-	.show = portattr_show,
-	.store = portattr_store,
-};
-
-static struct kobj_type hfi1_port_ktype = {
-	.release = port_release,
-	.sysfs_ops = &hfi1_port_ops,
-	.default_attrs = port_default_attributes
 };
 
 /* Start sc2vl */
@@ -619,122 +435,6 @@ static struct kobj_type hfi1_vl2mtu_ktype = {
 	.default_attrs = vl2mtu_default_attributes
 };
 
-/* Start diag_counters */
-#define HFI1_DIAGC_NORMAL 0x0
-#define HFI1_DIAGC_PCPU   0x1
-
-#define HFI1_DIAGC_ATTR(N) \
-	static struct hfi1_diagc_attr diagc_attr_##N = { \
-		.attr = { .name = __stringify(N), .mode = 0664 }, \
-		.counter = offsetof(struct hfi1_ibport, n_##N), \
-		.type = HFI1_DIAGC_NORMAL, \
-		.vl = CNTR_INVALID_VL \
-	}
-
-#define HFI1_DIAGC_ATTR_PCPU(N, V, L) \
-	static struct hfi1_diagc_attr diagc_attr_##N = { \
-		.attr = { .name = __stringify(N), .mode = 0664 }, \
-		.counter = V, \
-		.type = HFI1_DIAGC_PCPU, \
-		.vl = L \
-	}
-
-struct hfi1_diagc_attr {
-	struct attribute attr;
-	size_t counter;
-	int type;
-	int vl;
-};
-
-HFI1_DIAGC_ATTR(rc_resends);
-HFI1_DIAGC_ATTR_PCPU(rc_acks, C_SW_CPU_RC_ACKS, CNTR_INVALID_VL);
-HFI1_DIAGC_ATTR_PCPU(rc_qacks, C_SW_CPU_RC_QACKS, CNTR_INVALID_VL);
-HFI1_DIAGC_ATTR_PCPU(rc_delayed_comp, C_SW_CPU_RC_DELAYED_COMP,
-	CNTR_INVALID_VL);
-HFI1_DIAGC_ATTR(seq_naks);
-HFI1_DIAGC_ATTR(rdma_seq);
-HFI1_DIAGC_ATTR(rnr_naks);
-HFI1_DIAGC_ATTR(other_naks);
-HFI1_DIAGC_ATTR(rc_timeouts);
-HFI1_DIAGC_ATTR(loop_pkts);
-HFI1_DIAGC_ATTR(pkt_drops);
-HFI1_DIAGC_ATTR(dmawait);
-HFI1_DIAGC_ATTR(unaligned);
-HFI1_DIAGC_ATTR(rc_dupreq);
-HFI1_DIAGC_ATTR(rc_seqnak);
-
-static struct attribute *diagc_default_attributes[] = {
-	&diagc_attr_rc_resends.attr,
-	&diagc_attr_rc_acks.attr,
-	&diagc_attr_rc_qacks.attr,
-	&diagc_attr_rc_delayed_comp.attr,
-	&diagc_attr_seq_naks.attr,
-	&diagc_attr_rdma_seq.attr,
-	&diagc_attr_rnr_naks.attr,
-	&diagc_attr_other_naks.attr,
-	&diagc_attr_rc_timeouts.attr,
-	&diagc_attr_loop_pkts.attr,
-	&diagc_attr_pkt_drops.attr,
-	&diagc_attr_dmawait.attr,
-	&diagc_attr_unaligned.attr,
-	&diagc_attr_rc_dupreq.attr,
-	&diagc_attr_rc_seqnak.attr,
-	NULL
-};
-
-static ssize_t diagc_attr_show(struct kobject *kobj, struct attribute *attr,
-			       char *buf)
-{
-	struct hfi1_diagc_attr *dattr =
-		container_of(attr, struct hfi1_diagc_attr, attr);
-	struct hfi1_pportdata *ppd =
-		container_of(kobj, struct hfi1_pportdata, diagc_kobj);
-	struct hfi1_ibport *hfip = &ppd->ibport_data;
-
-	switch (dattr->type) {
-	case (HFI1_DIAGC_PCPU):
-		return(sprintf(buf, "%lld\n",
-			read_port_cntr(ppd,
-				       dattr->counter,
-				       dattr->vl)));
-	case (HFI1_DIAGC_NORMAL):
-		/* Fall through */
-	default:
-		return sprintf(buf, "%u\n",
-			*(u32 *)((char *)hfip + dattr->counter));
-	}
-}
-
-static ssize_t diagc_attr_store(struct kobject *kobj, struct attribute *attr,
-				const char *buf, size_t size)
-{
-	struct hfi1_diagc_attr *dattr =
-		container_of(attr, struct hfi1_diagc_attr, attr);
-	struct hfi1_pportdata *ppd =
-		container_of(kobj, struct hfi1_pportdata, diagc_kobj);
-	struct hfi1_ibport *hfip = &ppd->ibport_data;
-	u32 val;
-	int ret;
-
-	ret = kstrtou32(buf, 0, &val);
-	if (ret)
-		return ret;
-	*(u32 *)((char *)hfip + dattr->counter) = val;
-	return size;
-}
-
-static const struct sysfs_ops hfi1_diagc_ops = {
-	.show = diagc_attr_show,
-	.store = diagc_attr_store,
-};
-
-static struct kobj_type diagc_ktype = {
-	.release = port_release,
-	.sysfs_ops = &hfi1_diagc_ops,
-	.default_attrs = diagc_default_attributes
-};
-
-/* End diag_counters */
 
 /* end of per-port file structures and support code */
 
@@ -932,20 +632,9 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 			"Skipping infiniband class with invalid port %u\n",
 			port_num);
-		ret = -ENODEV;
-		goto bail;
+		return -ENODEV;
 	}
 	ppd = &dd->pport[port_num - 1];
-
-	ret = kobject_init_and_add(&ppd->pport_kobj, &hfi1_port_ktype, kobj,
-				   "linkcontrol");
-	if (ret) {
-		dd_dev_err(dd,
-			"Skipping linkcontrol sysfs info, (err %d) port %u\n",
-			ret, port_num);
-		goto bail;
-	}
-	kobject_uevent(&ppd->pport_kobj, KOBJ_ADD);
 
 	ret = kobject_init_and_add(&ppd->sc2vl_kobj, &hfi1_sc2vl_ktype, kobj,
 				   "sc2vl");
@@ -953,16 +642,17 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 			   "Skipping sc2vl sysfs info, (err %d) port %u\n",
 			   ret, port_num);
-		goto bail_link;
+		goto bail;
 	}
 	kobject_uevent(&ppd->sc2vl_kobj, KOBJ_ADD);
+
 	ret = kobject_init_and_add(&ppd->sl2sc_kobj, &hfi1_sl2sc_ktype, kobj,
 				   "sl2sc");
 	if (ret) {
 		dd_dev_err(dd,
 			   "Skipping sl2sc sysfs info, (err %d) port %u\n",
 			   ret, port_num);
-		goto bail_link;
+		goto bail;
 	}
 	kobject_uevent(&ppd->sl2sc_kobj, KOBJ_ADD);
 
@@ -972,19 +662,10 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 			   "Skipping vl2mtu sysfs info, (err %d) port %u\n",
 			   ret, port_num);
-		goto bail_sl;
+		goto bail;
 	}
 	kobject_uevent(&ppd->vl2mtu_kobj, KOBJ_ADD);
 
-	ret = kobject_init_and_add(&ppd->diagc_kobj, &diagc_ktype, kobj,
-				   "diag_counters");
-	if (ret) {
-		dd_dev_err(dd,
-			"Skipping diag_counters sysfs info, (err %d) port %u\n",
-			ret, port_num);
-		goto bail_mtu;
-	}
-	kobject_uevent(&ppd->diagc_kobj, KOBJ_ADD);
 
 	ret = kobject_init_and_add(&ppd->pport_cc_kobj, &port_cc_ktype,
 				   kobj, "CCMgtA");
@@ -992,7 +673,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 		 "Skipping Congestion Control sysfs info, (err %d) port %u\n",
 		 ret, port_num);
-		goto bail_diagc;
+		goto bail;
 	}
 
 	kobject_uevent(&ppd->pport_cc_kobj, KOBJ_ADD);
@@ -1003,7 +684,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 		 "Skipping Congestion Control setting sysfs info, (err %d) port %u\n",
 		 ret, port_num);
-		goto bail_cc;
+		goto bail;
 	}
 
 	ret = sysfs_create_bin_file(&ppd->pport_cc_kobj,
@@ -1012,7 +693,8 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 		 "Skipping Congestion Control table sysfs info, (err %d) port %u\n",
 		 ret, port_num);
-		goto bail_cc_entry_bin;
+		sysfs_remove_bin_file(&ppd->pport_cc_kobj, &cc_setting_bin_attr);
+		goto bail;
 	}
 
 	dd_dev_info(dd,
@@ -1021,19 +703,11 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 
 	return 0;
 
-bail_cc_entry_bin:
-	sysfs_remove_bin_file(&ppd->pport_cc_kobj, &cc_setting_bin_attr);
-bail_cc:
-	kobject_put(&ppd->pport_cc_kobj);
-bail_diagc:
-	kobject_put(&ppd->diagc_kobj);
-bail_mtu:
-	kobject_put(&ppd->vl2mtu_kobj);
-bail_sl:
-	kobject_put(&ppd->sc2vl_kobj);
-bail_link:
-	kobject_put(&ppd->pport_kobj);
 bail:
+	kobject_put(&ppd->pport_cc_kobj);
+	kobject_put(&ppd->vl2mtu_kobj);
+	kobject_put(&ppd->sl2sc_kobj);
+	kobject_put(&ppd->sc2vl_kobj);
 	return ret;
 }
 
@@ -1069,13 +743,15 @@ void hfi1_verbs_unregister_sysfs(struct hfi1_devdata *dd)
 	for (i = 0; i < dd->num_pports; i++) {
 		ppd = &dd->pport[i];
 
-		sysfs_remove_bin_file(&ppd->pport_cc_kobj,
-			&cc_setting_bin_attr);
-		sysfs_remove_bin_file(&ppd->pport_cc_kobj,
-			&cc_table_bin_attr);
+		if (&ppd->pport_cc_kobj) {
+			sysfs_remove_bin_file(&ppd->pport_cc_kobj,
+					      &cc_setting_bin_attr);
+			sysfs_remove_bin_file(&ppd->pport_cc_kobj,
+					      &cc_table_bin_attr);
+		}
 		kobject_put(&ppd->pport_cc_kobj);
 		kobject_put(&ppd->vl2mtu_kobj);
+		kobject_put(&ppd->sl2sc_kobj);
 		kobject_put(&ppd->sc2vl_kobj);
-		kobject_put(&ppd->pport_kobj);
 	}
 }
