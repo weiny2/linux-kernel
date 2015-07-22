@@ -233,8 +233,12 @@ def main():
         RegLib.test_fail(name + " Unable to get active state on at least 1 node")
 
     # Before bailing out dump the kmod load address in case we need to do some
-    # debugging later.
+    # debugging later. We also need to restart irq balance for best performance.
     for host in hostlist:
+        RegLib.test_log(0, "Restarting irq balacne on %s" % host.get_name())
+        cmd = "service irqbalance restart"
+        out = do_ssh(host, cmd)
+        print out
         print host.get_name(), "module load address is:"
         cmd = "cat /sys/module/hfi1/sections/.init.text"
         out = do_ssh(host, cmd)
