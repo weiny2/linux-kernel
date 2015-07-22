@@ -32,9 +32,8 @@ kernel_cocci=$5
 grep Santiago /etc/redhat-release
 if [[ $? -eq 0 ]]; then
 	echo "RHEL 6 detected. Skipping cocci check"
-	kernel_cocci=0
+	kernel_cocci=""
 fi
-
 
 klocwork=$6
 if [ -z $6 ]; then
