@@ -10,3 +10,9 @@
 Module.symvers
 cscope.*
 modules.order
+*~
+.\#*
+*.rej
+*.orig
+.kwlp
+.kwps
