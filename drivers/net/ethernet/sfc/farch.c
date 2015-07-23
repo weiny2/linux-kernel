@@ -20,6 +20,8 @@
 #include "efx.h"
 #include "nic.h"
 #include "farch_regs.h"
+#include "sriov.h"
+#include "siena_sriov.h"
 #include "io.h"
 #include "workarounds.h"
 
@@ -226,6 +228,9 @@ static int efx_alloc_special_buffer(struct efx_nic *efx,
 				    struct efx_special_buffer *buffer,
 				    unsigned int len)
 {
+#ifdef CONFIG_SFC_SRIOV
+	struct siena_nic_data *nic_data = efx->nic_data;
+#endif
 	len = ALIGN(len, EFX_BUF_SIZE);
 
 	if (efx_nic_alloc_buffer(efx, &buffer->buf, len, GFP_KERNEL))
@@ -237,8 +242,8 @@ static int efx_alloc_special_buffer(struct efx_nic *efx,
 	buffer->index = efx->next_buffer_table;
 	efx->next_buffer_table += buffer->entries;
 #ifdef CONFIG_SFC_SRIOV
-	BUG_ON(efx_sriov_enabled(efx) &&
-	       efx->vf_buftbl_base < efx->next_buffer_table);
+	BUG_ON(efx_siena_sriov_enabled(efx) &&
+	       nic_data->vf_buftbl_base < efx->next_buffer_table);
 #endif
 
 	netif_dbg(efx, probe, efx->net_dev,
@@ -311,7 +316,6 @@ static inline void efx_farch_push_tx_desc(struct efx_tx_queue *tx_queue,
  */
 void efx_farch_tx_write(struct efx_tx_queue *tx_queue)
 {
-
 	struct efx_tx_buffer *buffer;
 	efx_qword_t *txd;
 	unsigned write_ptr;
@@ -643,7 +647,7 @@ static bool efx_check_tx_flush_complete(struct efx_nic *efx)
 }
 
 /* Flush all the transmit queues, and continue flushing receive queues until
- * they're all flushed. Wait for the DRAIN events to be recieved so that there
+ * they're all flushed. Wait for the DRAIN events to be received so that there
  * are no more RX and TX events left on any channel. */
 static int efx_farch_do_flush(struct efx_nic *efx)
 {
@@ -668,7 +672,7 @@ static int efx_farch_do_flush(struct efx_nic *efx)
 		 * the firmware (though we will still have to poll for
 		 * completion). If that fails, fall back to the old scheme.
 		 */
-		if (efx_sriov_enabled(efx)) {
+		if (efx_siena_sriov_enabled(efx)) {
 			rc = efx_mcdi_flush_rxqs(efx);
 			if (!rc)
 				goto wait;
@@ -741,6 +745,28 @@ int efx_farch_fini_dmaq(struct efx_nic *efx)
 
 	return rc;
 }
+
+/* Reset queue and flush accounting after FLR
+ *
+ * One possible cause of FLR recovery is that DMA may be failing (eg. if bus
+ * mastering was disabled), in which case we don't receive (RXQ) flush
+ * completion events.  This means that efx->rxq_flush_outstanding remained at 4
+ * after the FLR; also, efx->active_queues was non-zero (as no flush completion
+ * events were received, and we didn't go through efx_check_tx_flush_complete())
+ * If we don't fix this up, on the next call to efx_realloc_channels() we won't
+ * flush any RX queues because efx->rxq_flush_outstanding is at the limit of 4
+ * for batched flush requests; and the efx->active_queues gets messed up because
+ * we keep incrementing for the newly initialised queues, but it never went to
+ * zero previously.  Then we get a timeout every time we try to restart the
+ * queues, as it doesn't go back to zero when we should be flushing the queues.
+ */
+void efx_farch_finish_flr(struct efx_nic *efx)
+{
+	atomic_set(&efx->rxq_flush_pending, 0);
+	atomic_set(&efx->rxq_flush_outstanding, 0);
+	atomic_set(&efx->active_queues, 0);
+}
+
 
 /**************************************************************************
  *
@@ -1084,7 +1110,7 @@ efx_farch_handle_tx_flush_done(struct efx_nic *efx, efx_qword_t *event)
 }
 
 /* If this flush done event corresponds to a &struct efx_rx_queue: If the flush
- * was succesful then send an %EFX_CHANNEL_MAGIC_RX_DRAIN, otherwise add
+ * was successful then send an %EFX_CHANNEL_MAGIC_RX_DRAIN, otherwise add
  * the RX queue back to the mask of RX queues in need of flushing.
  */
 static void
@@ -1174,13 +1200,17 @@ efx_farch_handle_driver_event(struct efx_channel *channel, efx_qword_t *event)
 		netif_vdbg(efx, hw, efx->net_dev, "channel %d TXQ %d flushed\n",
 			   channel->channel, ev_sub_data);
 		efx_farch_handle_tx_flush_done(efx, event);
-		efx_sriov_tx_flush_done(efx, event);
+#ifdef CONFIG_SFC_SRIOV
+		efx_siena_sriov_tx_flush_done(efx, event);
+#endif
 		break;
 	case FSE_AZ_RX_DESCQ_FLS_DONE_EV:
 		netif_vdbg(efx, hw, efx->net_dev, "channel %d RXQ %d flushed\n",
 			   channel->channel, ev_sub_data);
 		efx_farch_handle_rx_flush_done(efx, event);
-		efx_sriov_rx_flush_done(efx, event);
+#ifdef CONFIG_SFC_SRIOV
+		efx_siena_sriov_rx_flush_done(efx, event);
+#endif
 		break;
 	case FSE_AZ_EVQ_INIT_DONE_EV:
 		netif_dbg(efx, hw, efx->net_dev,
@@ -1218,8 +1248,11 @@ efx_farch_handle_driver_event(struct efx_channel *channel, efx_qword_t *event)
 				  " RX Q %d is disabled.\n", ev_sub_data,
 				  ev_sub_data);
 			efx_schedule_reset(efx, RESET_TYPE_DMA_ERROR);
-		} else
-			efx_sriov_desc_fetch_err(efx, ev_sub_data);
+		}
+#ifdef CONFIG_SFC_SRIOV
+		else
+			efx_siena_sriov_desc_fetch_err(efx, ev_sub_data);
+#endif
 		break;
 	case FSE_BZ_TX_DSC_ERROR_EV:
 		if (ev_sub_data < EFX_VI_BASE) {
@@ -1228,8 +1261,11 @@ efx_farch_handle_driver_event(struct efx_channel *channel, efx_qword_t *event)
 				  " TX Q %d is disabled.\n", ev_sub_data,
 				  ev_sub_data);
 			efx_schedule_reset(efx, RESET_TYPE_DMA_ERROR);
-		} else
-			efx_sriov_desc_fetch_err(efx, ev_sub_data);
+		}
+#ifdef CONFIG_SFC_SRIOV
+		else
+			efx_siena_sriov_desc_fetch_err(efx, ev_sub_data);
+#endif
 		break;
 	default:
 		netif_vdbg(efx, hw, efx->net_dev,
@@ -1248,6 +1284,9 @@ int efx_farch_ev_process(struct efx_channel *channel, int budget)
 	int ev_code;
 	int tx_packets = 0;
 	int spent = 0;
+
+	if (budget <= 0)
+		return spent;
 
 	read_ptr = channel->eventq_read_ptr;
 
@@ -1290,9 +1329,11 @@ int efx_farch_ev_process(struct efx_channel *channel, int budget)
 		case FSE_AZ_EV_CODE_DRIVER_EV:
 			efx_farch_handle_driver_event(channel, &event);
 			break;
+#ifdef CONFIG_SFC_SRIOV
 		case FSE_CZ_EV_CODE_USER_EV:
-			efx_sriov_event(channel, &event);
+			efx_siena_sriov_event(channel, &event);
 			break;
+#endif
 		case FSE_CZ_EV_CODE_MCDI_EV:
 			efx_mcdi_process_event(channel, &event);
 			break;
@@ -1609,7 +1650,6 @@ irqreturn_t efx_farch_msi_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-
 /* Setup RSS indirection table.
  * This maps from the hash value of the packet to RXQ
  */
@@ -1645,6 +1685,10 @@ void efx_farch_dimension_resources(struct efx_nic *efx, unsigned sram_lim_qw)
 {
 	unsigned vi_count, buftbl_min;
 
+#ifdef CONFIG_SFC_SRIOV
+	struct siena_nic_data *nic_data = efx->nic_data;
+#endif
+
 	/* Account for the buffer table entries backing the datapath channels
 	 * and the descriptor caches for those channels.
 	 */
@@ -1655,28 +1699,32 @@ void efx_farch_dimension_resources(struct efx_nic *efx, unsigned sram_lim_qw)
 	vi_count = max(efx->n_channels, efx->n_tx_channels * EFX_TXQ_TYPES);
 
 #ifdef CONFIG_SFC_SRIOV
-	if (efx_sriov_wanted(efx)) {
-		unsigned vi_dc_entries, buftbl_free, entries_per_vf, vf_limit;
+	if (efx->type->sriov_wanted) {
+		if (efx->type->sriov_wanted(efx)) {
+			unsigned vi_dc_entries, buftbl_free;
+			unsigned entries_per_vf, vf_limit;
 
-		efx->vf_buftbl_base = buftbl_min;
+			nic_data->vf_buftbl_base = buftbl_min;
 
-		vi_dc_entries = RX_DC_ENTRIES + TX_DC_ENTRIES;
-		vi_count = max(vi_count, EFX_VI_BASE);
-		buftbl_free = (sram_lim_qw - buftbl_min -
-			       vi_count * vi_dc_entries);
+			vi_dc_entries = RX_DC_ENTRIES + TX_DC_ENTRIES;
+			vi_count = max(vi_count, EFX_VI_BASE);
+			buftbl_free = (sram_lim_qw - buftbl_min -
+				       vi_count * vi_dc_entries);
 
-		entries_per_vf = ((vi_dc_entries + EFX_VF_BUFTBL_PER_VI) *
-				  efx_vf_size(efx));
-		vf_limit = min(buftbl_free / entries_per_vf,
-			       (1024U - EFX_VI_BASE) >> efx->vi_scale);
+			entries_per_vf = ((vi_dc_entries +
+					   EFX_VF_BUFTBL_PER_VI) *
+					  efx_vf_size(efx));
+			vf_limit = min(buftbl_free / entries_per_vf,
+				       (1024U - EFX_VI_BASE) >> efx->vi_scale);
 
-		if (efx->vf_count > vf_limit) {
-			netif_err(efx, probe, efx->net_dev,
-				  "Reducing VF count from from %d to %d\n",
-				  efx->vf_count, vf_limit);
-			efx->vf_count = vf_limit;
+			if (efx->vf_count > vf_limit) {
+				netif_err(efx, probe, efx->net_dev,
+					  "Reducing VF count from from %d to %d\n",
+					  efx->vf_count, vf_limit);
+				efx->vf_count = vf_limit;
+			}
+			vi_count += efx->vf_count * efx_vf_size(efx);
 		}
-		vi_count += efx->vf_count * efx_vf_size(efx);
 	}
 #endif
 
@@ -2909,6 +2957,9 @@ void efx_farch_filter_sync_rx_mode(struct efx_nic *efx)
 	union efx_multicast_hash *mc_hash = &efx->multicast_hash;
 	u32 crc;
 	int bit;
+
+	if (!efx_dev_registered(efx))
+		return;
 
 	netif_addr_lock_bh(net_dev);
 
