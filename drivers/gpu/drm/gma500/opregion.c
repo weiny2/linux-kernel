@@ -297,7 +297,7 @@ void psb_intel_opregion_fini(struct drm_device *dev)
 	cancel_work_sync(&opregion->asle_work);
 
 	/* just clear all opregion memory pointers now */
-	iounmap(opregion->header);
+	memunmap(opregion->header);
 	opregion->header = NULL;
 	opregion->acpi = NULL;
 	opregion->swsci = NULL;
@@ -310,8 +310,8 @@ int psb_intel_opregion_setup(struct drm_device *dev)
 	struct drm_psb_private *dev_priv = dev->dev_private;
 	struct psb_intel_opregion *opregion = &dev_priv->opregion;
 	u32 opregion_phy, mboxes;
-	void __iomem *base;
 	int err = 0;
+	void *base;
 
 	pci_read_config_dword(dev->pdev, PCI_ASLS, &opregion_phy);
 	if (opregion_phy == 0) {
@@ -322,7 +322,7 @@ int psb_intel_opregion_setup(struct drm_device *dev)
 	INIT_WORK(&opregion->asle_work, psb_intel_opregion_asle_work);
 
 	DRM_DEBUG("OpRegion detected at 0x%8x\n", opregion_phy);
-	base = acpi_os_ioremap(opregion_phy, 8*1024);
+	base = memremap(opregion_phy, 8*1024, MEMREMAP_WB);
 	if (!base)
 		return -ENOMEM;
 
@@ -351,7 +351,7 @@ int psb_intel_opregion_setup(struct drm_device *dev)
 	return 0;
 
 err_out:
-	iounmap(base);
+	memunmap(base);
 	return err;
 }
 
