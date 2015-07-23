@@ -1070,12 +1070,6 @@ static int s390_tdb_set(struct task_struct *target,
 	return 0;
 }
 
-static int s390_vxrs_active(struct task_struct *target,
-			      const struct user_regset *regset)
-{
-	return !!target->thread.vxrs;
-}
-
 static int s390_vxrs_low_get(struct task_struct *target,
 			     const struct user_regset *regset,
 			     unsigned int pos, unsigned int count,
@@ -1084,6 +1078,8 @@ static int s390_vxrs_low_get(struct task_struct *target,
 	__u64 vxrs[__NUM_VXRS_LOW];
 	int i;
 
+	if (!MACHINE_HAS_VX)
+		return -ENODEV;
 	if (target->thread.vxrs) {
 		if (target == current)
 			save_vx_regs(target->thread.vxrs);
@@ -1102,6 +1098,8 @@ static int s390_vxrs_low_set(struct task_struct *target,
 	__u64 vxrs[__NUM_VXRS_LOW];
 	int i, rc;
 
+	if (!MACHINE_HAS_VX)
+		return -ENODEV;
 	if (!target->thread.vxrs) {
 		rc = alloc_vector_registers(target);
 		if (rc)
@@ -1127,6 +1125,8 @@ static int s390_vxrs_high_get(struct task_struct *target,
 {
 	__vector128 vxrs[__NUM_VXRS_HIGH];
 
+	if (!MACHINE_HAS_VX)
+		return -ENODEV;
 	if (target->thread.vxrs) {
 		if (target == current)
 			save_vx_regs(target->thread.vxrs);
@@ -1144,6 +1144,8 @@ static int s390_vxrs_high_set(struct task_struct *target,
 {
 	int rc;
 
+	if (!MACHINE_HAS_VX)
+		return -ENODEV;
 	if (!target->thread.vxrs) {
 		rc = alloc_vector_registers(target);
 		if (rc)
@@ -1228,7 +1230,6 @@ static const struct user_regset s390_regsets[] = {
 		.n = __NUM_VXRS_LOW,
 		.size = sizeof(__u64),
 		.align = sizeof(__u64),
-		.active = s390_vxrs_active,
 		.get = s390_vxrs_low_get,
 		.set = s390_vxrs_low_set,
 	},
@@ -1237,7 +1238,6 @@ static const struct user_regset s390_regsets[] = {
 		.n = __NUM_VXRS_HIGH,
 		.size = sizeof(__vector128),
 		.align = sizeof(__vector128),
-		.active = s390_vxrs_active,
 		.get = s390_vxrs_high_get,
 		.set = s390_vxrs_high_set,
 	},
@@ -1451,7 +1451,6 @@ static const struct user_regset s390_compat_regsets[] = {
 		.n = __NUM_VXRS_LOW,
 		.size = sizeof(__u64),
 		.align = sizeof(__u64),
-		.active = s390_vxrs_active,
 		.get = s390_vxrs_low_get,
 		.set = s390_vxrs_low_set,
 	},
@@ -1460,7 +1459,6 @@ static const struct user_regset s390_compat_regsets[] = {
 		.n = __NUM_VXRS_HIGH,
 		.size = sizeof(__vector128),
 		.align = sizeof(__vector128),
-		.active = s390_vxrs_active,
 		.get = s390_vxrs_high_get,
 		.set = s390_vxrs_high_set,
 	},
