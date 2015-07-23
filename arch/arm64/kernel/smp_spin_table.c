@@ -21,11 +21,11 @@
 #include <linux/of.h>
 #include <linux/smp.h>
 #include <linux/types.h>
+#include <linux/io.h>
 
 #include <asm/cacheflush.h>
 #include <asm/cpu_ops.h>
 #include <asm/cputype.h>
-#include <asm/io.h>
 #include <asm/smp_plat.h>
 
 extern void secondary_holding_pen(void);
@@ -73,19 +73,19 @@ static int smp_spin_table_cpu_init(unsigned int cpu)
 
 static int smp_spin_table_cpu_prepare(unsigned int cpu)
 {
-	__le64 __iomem *release_addr;
+	__le64 *release_addr;
 
 	if (!cpu_release_addr[cpu])
 		return -ENODEV;
 
 	/*
 	 * The cpu-release-addr may or may not be inside the linear mapping.
-	 * As ioremap_cache will either give us a new mapping or reuse the
-	 * existing linear mapping, we can use it to cover both cases. In
-	 * either case the memory will be MT_NORMAL.
+	 * As memremap will either give us a new mapping or reuse the existing
+	 * linear mapping, we can use it to cover both cases. In either case
+	 * the memory will be MT_NORMAL.
 	 */
-	release_addr = ioremap_cache(cpu_release_addr[cpu],
-				     sizeof(*release_addr));
+	release_addr = memremap(cpu_release_addr[cpu], sizeof(*release_addr),
+			MEMREMAP_WB);
 	if (!release_addr)
 		return -ENOMEM;
 
@@ -97,15 +97,14 @@ static int smp_spin_table_cpu_prepare(unsigned int cpu)
 	 * the boot protocol.
 	 */
 	writeq_relaxed(__pa(secondary_holding_pen), release_addr);
-	__flush_dcache_area((__force void *)release_addr,
-			    sizeof(*release_addr));
+	__flush_dcache_area(release_addr, sizeof(*release_addr));
 
 	/*
 	 * Send an event to wake up the secondary CPU.
 	 */
 	sev();
 
-	iounmap(release_addr);
+	memunmap(release_addr);
 
 	return 0;
 }

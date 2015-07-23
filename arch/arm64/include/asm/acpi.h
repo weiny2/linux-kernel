@@ -33,10 +33,7 @@
 static inline void __iomem *acpi_os_ioremap(acpi_physical_address phys,
 					    acpi_size size)
 {
-	if (!page_is_ram(phys >> PAGE_SHIFT))
-		return ioremap(phys, size);
-
-	return ioremap_cache(phys, size);
+	return memremap(phys, size, MEMREMAP_WB);
 }
 #define acpi_os_ioremap acpi_os_ioremap
 
