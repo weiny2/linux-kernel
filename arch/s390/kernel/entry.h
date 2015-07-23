@@ -76,4 +76,6 @@ long sys_rt_sigreturn(void);
 long sys32_sigreturn(void);
 long sys32_rt_sigreturn(void);
 
+long sys_s390_pci_mmio_write(unsigned long, const void __user *, size_t);
+long sys_s390_pci_mmio_read(unsigned long, void __user *, size_t);
 #endif /* _ENTRY_H */
