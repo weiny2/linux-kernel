@@ -255,7 +255,7 @@ static const opcode_handler opcode_handler_tbl[256] = {
 	[IB_OPCODE_UD_SEND_ONLY]                      = &hfi1_ud_rcv,
 	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = &hfi1_ud_rcv,
 	/* CNP */
-	[CNP_OPCODE]				      = &hfi1_cnp_rcv
+	[IB_OPCODE_CNP]				      = &hfi1_cnp_rcv
 };
 
 /*
@@ -594,7 +594,7 @@ static inline int qp_ok(int opcode, struct hfi1_packet *packet)
 	}
 
 	if (((opcode & OPCODE_QP_MASK) == packet->qp->allowed_ops) ||
-	    (opcode == CNP_OPCODE))
+	    (opcode == IB_OPCODE_CNP))
 		return 1;
 
 	ibp->n_pkt_drops++;

@@ -508,7 +508,7 @@ void return_cnp(struct hfi1_ibport *ibp, struct hfi1_qp *qp, u32 remote_qpn,
 
 	lrh0 |= (sc5 & 0xf) << 12 | sl << 4;
 
-	bth0 = pkey | (CNP_OPCODE << 24);
+	bth0 = pkey | (IB_OPCODE_CNP << 24);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 
 	ohdr->bth[1] = cpu_to_be32(remote_qpn | (1 << HFI1_BECN_SHIFT));
@@ -706,7 +706,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 
 	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 
-	if (!is_mcast && (opcode != CNP_OPCODE) && is_fecn) {
+	if (!is_mcast && (opcode != IB_OPCODE_CNP) && is_fecn) {
 		u16 slid = be16_to_cpu(hdr->lrh[3]);
 		u8 sc5;
 
