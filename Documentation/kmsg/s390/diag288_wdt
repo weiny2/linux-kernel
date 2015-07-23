@@ -1,15 +1,4 @@
 /*?
- * Text: "The watchdog was deactivated\n"
- * Severity: Informational
- * Description:
- * Diagnose instruction 0x288 was called to activate the diag288 watchdog.
- * The diagnose call returned an error that cannot be handled by the device driver.
- * The watchdog stays inactive.
- * User action:
- * Contact your support organization.
- */
-
-/*?
  * Text: "The watchdog cannot be activated\n"
  * Severity: Error
  * Description:
@@ -32,27 +21,6 @@
  * User action:
  * Confirm that the diag288 watchdog is supported in your environment.
  * Use a watchdog that is supported in your environment.
- */
-
-/*?
- * Text: "The watchdog was activated\n"
- * Severity: Informational
- * Description:
- * The diag288 watchdog is operational and counting.
- * If the watchdog times out, the watchdog device driver will trigger the configured timeout action.
- * User action:
- * None.
- */
-
-/*?
- * Text: "Linux runs in an environment that does not support the diag288 watchdog\n"
- * Severity: Error
- * Description:
- * The diag288 watchdog requires an LPAR or z/VM environment.
- * You cannot use the diag288 watchdog.
- * User action:
- * Run your Linux instance in LPAR mode or as a z/VM guest
- * or use a watchdog that is supported in your environment.
  */
 
 /*?
@@ -94,24 +62,4 @@
  * device node by issuing 'echo V > /dev/watchdog'.
  * iii) If the device driver still prevents Linux from being suspended,
  * contact your support organization.
- */
-
-/*?
- * Text: "The watchdog device driver detected a z/VM environment\n"
- * Severity: Informational
- * Description:
- * The diag288 watchdog device driver is running on a z/VM guest.
- * If the watchdog is activated, it will run in z/VM mode.
- * User action:
- * None.
- */
-
-/*?
- * Text: "The watchdog device driver detected an LPAR environment\n"
- * Severity: Informational
- * Description:
- * The diag288 watchdog device driver is running on a Linux instance in LPAR mode.
- * If the watchdog is activated, it will run in LPAR mode.
- * User action:
- * None.
  */
