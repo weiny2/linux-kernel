@@ -136,7 +136,7 @@ void suspend_nvs_free(void)
 			entry->data = NULL;
 			if (entry->kaddr) {
 				if (entry->unmap) {
-					iounmap(entry->kaddr);
+					memunmap(entry->kaddr);
 					entry->unmap = false;
 				} else {
 					acpi_os_unmap_iomem(entry->kaddr,
@@ -180,7 +180,7 @@ int suspend_nvs_save(void)
 
 			entry->kaddr = acpi_os_get_iomem(phys, size);
 			if (!entry->kaddr) {
-				entry->kaddr = acpi_os_ioremap(phys, size);
+				entry->kaddr = acpi_os_memremap(phys, size);
 				entry->unmap = !!entry->kaddr;
 			}
 			if (!entry->kaddr) {
@@ -197,7 +197,7 @@ int suspend_nvs_save(void)
  *	suspend_nvs_restore - restore NVS memory regions
  *
  *	This function is going to be called with interrupts disabled, so it
- *	cannot iounmap the virtual addresses used to access the NVS region.
+ *	cannot memunmap the virtual addresses used to access the NVS region.
  */
 void suspend_nvs_restore(void)
 {
