@@ -483,7 +483,7 @@ static int post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 	}
 
 	/* sq empty and not list -> call send */
-	call_send = qp->s_head == qp->s_tail && !wr->next;
+	call_send = qp->s_head == qp->s_last && !wr->next;
 
 	for (; wr; wr = wr->next) {
 		err = post_one_send(qp, wr);
