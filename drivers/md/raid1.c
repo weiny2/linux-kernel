@@ -2934,8 +2934,10 @@ static int run(struct mddev *mddev)
 	}
 
 	ret =  md_integrity_register(mddev);
-	if (ret)
+	if (ret) {
+		md_unregister_thread(&mddev->thread);
 		stop(mddev);
+	}
 	return ret;
 }
 
