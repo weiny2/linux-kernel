@@ -68,6 +68,7 @@ static const struct irq_class irqclass_sub_desc[NR_ARCH_IRQS] = {
 	[IRQEXT_CMS] = {.name = "CMS", .desc = "[EXT] CPU-Measurement: Sampling"},
 	[IRQEXT_CMC] = {.name = "CMC", .desc = "[EXT] CPU-Measurement: Counter"},
 	[IRQEXT_CMR] = {.name = "CMR", .desc = "[EXT] CPU-Measurement: RI"},
+	[IRQEXT_FTP] = {.name = "FTP", .desc = "[EXT] HMC FTP Service"},
 	[IRQIO_CIO]  = {.name = "CIO", .desc = "[I/O] Common I/O Layer Interrupt"},
 	[IRQIO_QAI]  = {.name = "QAI", .desc = "[I/O] QDIO Adapter Interrupt"},
 	[IRQIO_DAS]  = {.name = "DAS", .desc = "[I/O] DASD"},

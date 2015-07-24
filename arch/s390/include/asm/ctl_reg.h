@@ -61,6 +61,23 @@
 	__ctl_load(__dummy, cr, cr);	\
 })
 
+union ctlreg0 {
+	unsigned long val;
+	struct {
+#ifdef CONFIG_64BIT
+		unsigned long	   : 32;
+#endif
+		unsigned long	   : 3;
+		unsigned long lap  : 1; /* Low-address-protection control */
+		unsigned long	   : 4;
+		unsigned long edat : 1; /* Enhanced-DAT-enablement control */
+		unsigned long	   : 4;
+		unsigned long afp  : 1; /* AFP-register control */
+		unsigned long vx   : 1; /* Vector enablement control */
+		unsigned long	   : 17;
+	};
+};
+
 #ifdef CONFIG_SMP
 
 extern void smp_ctl_set_bit(int cr, int bit);
