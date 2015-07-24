@@ -111,9 +111,6 @@ enum opa_port_phys_state {
 	/* values 12-15 are reserved/ignored */
 };
 
-/* where best to put this opcode? */
-#define CNP_OPCODE 0x80
-
 /* OPA_PORT_TYPE_* definitions - these belong in opa_port_info.h */
 #define OPA_PORT_TYPE_UNKNOWN          0
 #define OPA_PORT_TYPE_DISCONNECTED     1
