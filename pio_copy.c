@@ -368,8 +368,6 @@ static inline void jcopy(u8 *dest, const u8 *src, u32 n)
 static inline void read_low_bytes(struct pio_buf *pbuf, const void *from,
 							unsigned int nbytes)
 {
-	BUG_ON(nbytes >= 8);
-
 	jcopy(&pbuf->carry.val8[0], from, nbytes);
 	pbuf->carry_bytes = nbytes;
 }

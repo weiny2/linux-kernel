@@ -435,7 +435,7 @@ int get_cable_info(struct hfi1_devdata *dd, u32 port_num, u32 addr, u32 len,
 		   u8 *data)
 {
 	struct hfi1_pportdata *ppd;
-	u32 excess_len = len;
+	u32 excess_len = 0;
 	int ret = 0;
 
 	if (port_num > dd->num_pports || port_num < 1) {
@@ -461,7 +461,7 @@ int get_cable_info(struct hfi1_devdata *dd, u32 port_num, u32 addr, u32 len,
 		goto set_zeroes;
 	}
 
-	if ((addr + len) >= (QSFP_MAX_NUM_PAGES * 128)) {
+	if ((addr + len) > (QSFP_MAX_NUM_PAGES * 128)) {
 		excess_len = (addr + len) - (QSFP_MAX_NUM_PAGES * 128);
 		memcpy(data, &ppd->qsfp_info.cache[addr], (len - excess_len));
 		data += (len - excess_len);

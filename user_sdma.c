@@ -330,10 +330,10 @@ static int defer_packet_queue(
 	 * it is supposed to be enqueued.
 	 */
 	xchg(&pq->state, SDMA_PKT_Q_DEFERRED);
-	spin_lock(&dev->pending_lock);
+	write_seqlock(&dev->iowait_lock);
 	if (list_empty(&pq->busy.list))
 		list_add_tail(&pq->busy.list, &sde->dmawait);
-	spin_unlock(&dev->pending_lock);
+	write_sequnlock(&dev->iowait_lock);
 	return -EBUSY;
 eagain:
 	return -EAGAIN;

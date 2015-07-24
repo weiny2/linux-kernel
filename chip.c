@@ -1297,7 +1297,8 @@ static u64 dev_access_u32_csr(const struct cntr_entry *entry,
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
 
-	BUG_ON(vl != CNTR_INVALID_VL);
+	if (vl != CNTR_INVALID_VL)
+		return 0;
 	return read_write_csr(dd, entry->csr, mode, data);
 }
 
@@ -1310,10 +1311,12 @@ static u64 dev_access_u64_csr(const struct cntr_entry *entry, void *context,
 	u64 csr = entry->csr;
 
 	if (entry->flags & CNTR_VL) {
-		BUG_ON(vl == CNTR_INVALID_VL);
+		if (vl == CNTR_INVALID_VL)
+			return 0;
 		csr += 8 * vl;
 	} else {
-		BUG_ON(vl != CNTR_INVALID_VL);
+		if (vl != CNTR_INVALID_VL)
+			return 0;
 	}
 
 	val = read_write_csr(dd, csr, mode, data);
@@ -1327,7 +1330,8 @@ static u64 dc_access_lcb_cntr(const struct cntr_entry *entry, void *context,
 	u32 csr = entry->csr;
 	int ret = 0;
 
-	BUG_ON(vl != CNTR_INVALID_VL);
+	if (vl != CNTR_INVALID_VL)
+		return 0;
 	if (mode == CNTR_MODE_R)
 		ret = read_lcb_csr(dd, csr, &data);
 	else if (mode == CNTR_MODE_W)
@@ -1348,7 +1352,8 @@ static u64 port_access_u32_csr(const struct cntr_entry *entry, void *context,
 {
 	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
-	BUG_ON(vl != CNTR_INVALID_VL);
+	if (vl != CNTR_INVALID_VL)
+		return 0;
 	return read_write_csr(ppd->dd, entry->csr, mode, data);
 }
 
@@ -1360,10 +1365,12 @@ static u64 port_access_u64_csr(const struct cntr_entry *entry,
 	u64 csr = entry->csr;
 
 	if (entry->flags & CNTR_VL) {
-		BUG_ON(vl == CNTR_INVALID_VL);
+		if (vl == CNTR_INVALID_VL)
+			return 0;
 		csr += 8 * vl;
 	} else {
-		BUG_ON(vl != CNTR_INVALID_VL);
+		if (vl != CNTR_INVALID_VL)
+			return 0;
 	}
 	val = read_write_csr(ppd->dd, csr, mode, data);
 	return val;
@@ -1395,7 +1402,8 @@ static u64 access_sw_link_dn_cnt(const struct cntr_entry *entry, void *context,
 {
 	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
-	BUG_ON(vl != CNTR_INVALID_VL);
+	if (vl != CNTR_INVALID_VL)
+		return 0;
 	return read_write_sw(ppd->dd, &ppd->link_downed, mode, data);
 }
 
@@ -1404,7 +1412,8 @@ static u64 access_sw_link_up_cnt(const struct cntr_entry *entry, void *context,
 {
 	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
 
-	BUG_ON(vl != CNTR_INVALID_VL);
+	if (vl != CNTR_INVALID_VL)
+		return 0;
 	return read_write_sw(ppd->dd, &ppd->link_up, mode, data);
 }
 
@@ -1495,6 +1504,30 @@ static u64 access_sw_cpu_rcv_limit(const struct cntr_entry *entry,
 
 	return read_write_cpu(dd, &dd->z_rcv_limit, dd->rcv_limit, vl,
 			      mode, data);
+}
+
+static u64 access_sw_pio_wait(const struct cntr_entry *entry,
+			      void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	return dd->verbs_dev.n_piowait;
+}
+
+static u64 access_sw_vtx_wait(const struct cntr_entry *entry,
+			      void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	return dd->verbs_dev.n_txwait;
+}
+
+static u64 access_sw_kmem_wait(const struct cntr_entry *entry,
+			       void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	return dd->verbs_dev.n_kmem_wait;
 }
 
 #define def_access_sw_cpu(cntr) \
@@ -1681,6 +1714,12 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 			    access_sw_cpu_intr),
 [C_SW_CPU_RCV_LIM] = CNTR_ELEM("RcvLimit", 0, 0, CNTR_NORMAL,
 			    access_sw_cpu_rcv_limit),
+[C_SW_VTX_WAIT] = CNTR_ELEM("vTxWait", 0, 0, CNTR_NORMAL,
+			    access_sw_vtx_wait),
+[C_SW_PIO_WAIT] = CNTR_ELEM("PioWait", 0, 0, CNTR_NORMAL,
+			    access_sw_pio_wait),
+[C_SW_KMEM_WAIT] = CNTR_ELEM("KmemWait", 0, 0, CNTR_NORMAL,
+			    access_sw_kmem_wait),
 };
 
 static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
@@ -2477,7 +2516,6 @@ static void handle_sdma_eng_err(struct hfi1_devdata *dd,
 	struct sdma_engine *sde;
 
 	sde = &dd->per_sdma[source];
-	/* BUG_ON(source != 0); */
 #ifdef CONFIG_SDMA_VERBOSITY
 	dd_dev_err(sde->dd, "CONFIG SDMA(%u) %s:%d %s()\n", sde->this_idx,
 		   slashstrip(__FILE__), __LINE__, __func__);
@@ -2841,8 +2879,20 @@ void set_up_vl15(struct hfi1_devdata *dd, u8 vau, u16 vl15buf)
 {
 	/* leave shared count at zero for both global and VL15 */
 	write_global_credit(dd, vau, vl15buf, 0);
-	write_csr(dd, SEND_CM_CREDIT_VL15, (u64)vl15buf
+
+	/* We may need some credits for another VL when sending packets
+	 * with the snoop interface. Dividing it down the middle for VL15
+	 * and VL0 should suffice.
+	 */
+	if (unlikely(dd->hfi1_snoop.mode_flag == HFI1_PORT_SNOOP_MODE)) {
+		write_csr(dd, SEND_CM_CREDIT_VL15, (u64)(vl15buf >> 1)
 		    << SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT);
+		write_csr(dd, SEND_CM_CREDIT_VL, (u64)(vl15buf >> 1)
+		    << SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT);
+	} else {
+		write_csr(dd, SEND_CM_CREDIT_VL15, (u64)vl15buf
+			<< SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT);
+	}
 }
 
 /*
@@ -3472,11 +3522,6 @@ static int lcb_to_port_ltp(int lcb_crc)
 	return port_ltp;
 }
 
-static int neigh_is_hfi(struct hfi1_pportdata *ppd)
-{
-	return (ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) == 0;
-}
-
 /*
  * Our neighbor has indicated that we are allowed to act as a fabric
  * manager, so place the full management partition key in the second
@@ -3561,19 +3606,12 @@ static void get_link_widths(struct hfi1_devdata *dd, u16 *tx_width,
 	rx = nibble_to_count(enable_lane_rx);
 
 	/*
-	 * Remove the setting of link_speed_active in this routine
-	 * when the 8051 firmware is using the "real" LNI and not the
-	 * "engineering" LNI.
-	 *
 	 * Set link_speed_active here, overriding what was set in
-	 * handle_verify_cap().  This is because the 8051 firmware using
-	 * the "engineering" LNI does not correctly set the max_speed field.
-	 * For now, to find the speed, look at max_rate after link up.  This
-	 * routine is called in handle_verify_cap(),after linkup, and during
-	 * a downgrade.  max_rate should not change after linkup so
-	 * re-setting link_speed_active here should not matter.
+	 * handle_verify_cap().  The ASIC 8051 firmware does not correctly
+	 * set the max_rate field in handle_verify_cap until v0.19.
 	 */
-	if (dd->icode == ICODE_RTL_SILICON) {
+	if ((dd->icode == ICODE_RTL_SILICON)
+				&& (dd->dc8051_ver < dc8051_ver(0, 19))) {
 		/* max_rate: 0 = 12.5G, 1 = 25G */
 		switch (max_rate) {
 		case 0:
@@ -3765,18 +3803,30 @@ void handle_verify_cap(struct work_struct *work)
 			reg & ~SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
 	}
 
-	/* remote_tx_rate: 0 = 12.5G, 1 = 25G */
-	switch (remote_tx_rate) {
-	case 0:
-		ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
-		break;
-	default:
+	ppd->link_speed_active = 0;	/* invalid value */
+	if (dd->dc8051_ver < dc8051_ver(0, 20)) {
+		/* remote_tx_rate: 0 = 12.5G, 1 = 25G */
+		switch (remote_tx_rate) {
+		case 0:
+			ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
+			break;
+		case 1:
+			ppd->link_speed_active = OPA_LINK_SPEED_25G;
+			break;
+		}
+	} else {
+		/* actual rate is highest bit of the ANDed rates */
+		u8 rate = remote_tx_rate & ppd->local_tx_rate;
+
+		if (rate & 2)
+			ppd->link_speed_active = OPA_LINK_SPEED_25G;
+		else if (rate & 1)
+			ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
+	}
+	if (ppd->link_speed_active == 0) {
 		dd_dev_err(dd, "%s: unexpected remote tx rate %d, using 25Gb\n",
 			__func__, (int)remote_tx_rate);
-		/* fall through */
-	case 1:
 		ppd->link_speed_active = OPA_LINK_SPEED_25G;
-		break;
 	}
 
 	/*
@@ -3834,9 +3884,6 @@ void handle_verify_cap(struct work_struct *work)
 		"Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
 		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
 		ppd->mgmt_allowed, ppd->neighbor_fm_security);
-	if (neigh_is_hfi(ppd))
-		ppd->part_enforce =
-			HFI1_PART_ENFORCE_IN | HFI1_PART_ENFORCE_OUT;
 	if (ppd->mgmt_allowed)
 		add_full_mgmt_pkey(ppd);
 
@@ -5335,25 +5382,33 @@ static int set_local_link_attributes(struct hfi1_pportdata *ppd)
 	u8 enable_lane_tx;
 	u8 tx_polarity_inversion;
 	u8 rx_polarity_inversion;
-	u8 max_rate;
 	int ret;
 
 	/* reset our fabric serdes to clear any lingering problems */
 	fabric_serdes_reset(dd);
 
-	/* set the max rate - need to read-modify-write */
+	/* set the local tx rate - need to read-modify-write */
 	ret = read_tx_settings(dd, &enable_lane_tx, &tx_polarity_inversion,
-		&rx_polarity_inversion, &max_rate);
+		&rx_polarity_inversion, &ppd->local_tx_rate);
 	if (ret)
 		goto set_local_link_attributes_fail;
 
-	/* set the max rate to the fastest enabled */
-	if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
-		max_rate = 1;
-	else
-		max_rate = 0;
+	if (dd->dc8051_ver < dc8051_ver(0, 20)) {
+		/* set the tx rate to the fastest enabled */
+		if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
+			ppd->local_tx_rate = 1;
+		else
+			ppd->local_tx_rate = 0;
+	} else {
+		/* set the tx rate to all enabled */
+		ppd->local_tx_rate = 0;
+		if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
+			ppd->local_tx_rate |= 2;
+		if (ppd->link_speed_enabled & OPA_LINK_SPEED_12_5G)
+			ppd->local_tx_rate |= 1;
+	}
 	ret = write_tx_settings(dd, enable_lane_tx, tx_polarity_inversion,
-		     rx_polarity_inversion, max_rate);
+		     rx_polarity_inversion, ppd->local_tx_rate);
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
@@ -6628,12 +6683,14 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 	case HFI1_IB_CFG_OP_VLS:
 		if (ppd->vls_operational != val) {
 			ppd->vls_operational = val;
-			BUG_ON(!ppd->port);
-			ret = sdma_map_init(
-				ppd->dd,
-				ppd->port - 1,
-				val,
-				NULL);
+			if (!ppd->port)
+				ret = -EINVAL;
+			else
+				ret = sdma_map_init(
+					ppd->dd,
+					ppd->port - 1,
+					val,
+					NULL);
 		}
 		break;
 	/*
@@ -8708,7 +8765,7 @@ static int request_intx_irq(struct hfi1_devdata *dd)
 {
 	int ret;
 
-	snprintf(dd->intx_name, sizeof(dd->intx_name), DRIVER_NAME"%d",
+	snprintf(dd->intx_name, sizeof(dd->intx_name), DRIVER_NAME"_%d",
 		dd->unit);
 	ret = request_irq(dd->pcidev->irq, general_interrupt,
 				  IRQF_SHARED, dd->intx_name, dd);
@@ -8809,7 +8866,7 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 			handler = general_interrupt;
 			arg = dd;
 			snprintf(me->name, sizeof(me->name),
-				DRIVER_NAME"%d", dd->unit);
+				DRIVER_NAME"_%d", dd->unit);
 			err_info = "general";
 		} else if (first_sdma <= i && i < last_sdma) {
 			idx = i - first_sdma;
@@ -8817,7 +8874,7 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 			handler = sdma_interrupt;
 			arg = sde;
 			snprintf(me->name, sizeof(me->name),
-				DRIVER_NAME"%d sdma%d", dd->unit, idx);
+				DRIVER_NAME"_%d sdma%d", dd->unit, idx);
 			err_info = "sdma";
 			remap_sdma_interrupts(dd, idx, i);
 		} else if (first_rx <= i && i < last_rx) {
@@ -8836,7 +8893,7 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 			handler = receive_context_interrupt;
 			arg = rcd;
 			snprintf(me->name, sizeof(me->name),
-				DRIVER_NAME"%d kctxt%d", dd->unit, idx);
+				DRIVER_NAME"_%d kctxt%d", dd->unit, idx);
 			err_info = "receive context";
 			remap_receive_available_interrupt(dd, idx, i);
 		} else {
@@ -9025,45 +9082,40 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 		num_kernel_contexts = num_online_nodes();
 	num_kernel_contexts =
 		max_t(int, MIN_KERNEL_KCTXTS, num_kernel_contexts);
-
+	/*
+	 * Every kernel receive context needs an ACK send context.
+	 * one send context is allocated for each VL{0-7} and VL15
+	 */
+	if (num_kernel_contexts > (dd->chip_send_contexts - num_vls - 1)) {
+		dd_dev_err(dd,
+			   "Reducing # kernel rcv contexts to: %d, from %d\n",
+			   (int)(dd->chip_send_contexts - num_vls - 1),
+			   (int)num_kernel_contexts);
+		num_kernel_contexts = dd->chip_send_contexts - num_vls - 1;
+	}
 	/*
 	 * User contexts: (to be fixed later)
+	 *	- set to num_rcv_contexts if non-zero
 	 *	- default to 1 user context per CPU
 	 */
-	num_user_contexts = num_online_cpus();
+	if (num_rcv_contexts)
+		num_user_contexts = num_rcv_contexts;
+	else
+		num_user_contexts = num_online_cpus();
 
 	total_contexts = num_kernel_contexts + num_user_contexts;
 
 	/*
 	 * Adjust the counts given a global max.
-	 *	- always cut out user contexts before kernel contexts
-	 *	- only extend user contexts
 	 */
-	if (num_rcv_contexts) {
-		if (num_rcv_contexts < total_contexts) {
-			/* cut back, user first */
-			if (num_rcv_contexts < num_kernel_contexts) {
-				num_kernel_contexts = num_rcv_contexts;
-				num_user_contexts = 0;
-			} else {
-				num_user_contexts = num_rcv_contexts
-							- num_kernel_contexts;
-			}
-		} else {
-			/* extend the user context count */
-			num_user_contexts = num_rcv_contexts
-							- num_kernel_contexts;
-		}
+	if (total_contexts > dd->chip_rcv_contexts) {
+		dd_dev_err(dd,
+			   "Reducing # user receive contexts to: %d, from %d\n",
+			   (int)(dd->chip_rcv_contexts - num_kernel_contexts),
+			   (int)num_user_contexts);
+		num_user_contexts = dd->chip_rcv_contexts - num_kernel_contexts;
 		/* recalculate */
 		total_contexts = num_kernel_contexts + num_user_contexts;
-	}
-
-	if (total_contexts > dd->chip_rcv_contexts) {
-		/* don't silently adjust, complain and fail */
-		dd_dev_err(dd,
-			"not enough physical contexts: want %d, have %d\n",
-			(int)total_contexts, (int)dd->chip_rcv_contexts);
-		return -ENOSPC;
 	}
 
 	/* the first N are kernel contexts, the rest are user contexts */
@@ -9151,6 +9203,7 @@ static void set_partition_keys(struct hfi1_pportdata *ppd)
 		}
 	}
 
+	/* Always enable HW pkeys check when pkeys table is set */
 	add_rcvctrl(dd, RCV_CTRL_RCV_PARTITION_KEY_ENABLE_SMASK);
 }
 
@@ -10111,8 +10164,12 @@ static void init_txe(struct hfi1_devdata *dd)
 	/* set the local CU to AU mapping */
 	assign_local_cm_au_table(dd, dd->vcu);
 
-	/* Set reasonable default for Credit Return Timer */
-	write_csr(dd, SEND_CM_TIMER_CTRL, HFI1_CREDIT_RETURN_RATE);
+	/*
+	 * Set reasonable default for Credit Return Timer
+	 * Don't set on Simulator - causes it to choke.
+	 */
+	if (dd->icode != ICODE_FUNCTIONAL_SIMULATOR)
+		write_csr(dd, SEND_CM_TIMER_CTRL, HFI1_CREDIT_RETURN_RATE);
 }
 
 int hfi1_set_ctxt_jkey(struct hfi1_devdata *dd, unsigned ctxt, u16 jkey)

@@ -326,6 +326,37 @@ DEFINE_EVENT(hfi1_qpsleepwakeup_template, hfi1_qpsleep,
 	     TP_ARGS(qp, flags));
 
 #undef TRACE_SYSTEM
+#define TRACE_SYSTEM hfi1_qphash
+DECLARE_EVENT_CLASS(hfi1_qphash_template,
+	TP_PROTO(struct hfi1_qp *qp, u32 bucket),
+	TP_ARGS(qp, bucket),
+	TP_STRUCT__entry(
+		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
+		__field(u32, qpn)
+		__field(u32, bucket)
+	),
+	TP_fast_assign(
+		DD_DEV_ASSIGN(dd_from_ibdev(qp->ibqp.device))
+		__entry->qpn = qp->ibqp.qp_num;
+		__entry->bucket = bucket;
+	),
+	TP_printk(
+		"[%s] qpn 0x%x bucket %u",
+		__get_str(dev),
+		__entry->qpn,
+		__entry->bucket
+	)
+);
+
+DEFINE_EVENT(hfi1_qphash_template, hfi1_qpinsert,
+	TP_PROTO(struct hfi1_qp *qp, u32 bucket),
+	TP_ARGS(qp, bucket));
+
+DEFINE_EVENT(hfi1_qphash_template, hfi1_qpremove,
+	TP_PROTO(struct hfi1_qp *qp, u32 bucket),
+	TP_ARGS(qp, bucket));
+
+#undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_ibhdrs
 
 u8 ibhdr_exhdr_len(struct hfi1_ib_header *hdr);
@@ -434,7 +465,7 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 		__entry->lver =
 			(u8)(be16_to_cpu(hdr->lrh[0]) >> 8) & 0xf;
 		__entry->sl =
-			(u8)(be16_to_cpu(hdr->lrh[0] >> 4) & 0xf);
+			(u8)(be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
 		__entry->lnh =
 			(u8)(be16_to_cpu(hdr->lrh[0]) & 3);
 		__entry->dlid =
@@ -559,7 +590,7 @@ TRACE_EVENT(snoop_capture,
 		__entry->dlid = be16_to_cpu(hdr->lrh[1]);
 		__entry->qpn = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
 		__entry->opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0xff;
-		__entry->sl = (u8)(be16_to_cpu(hdr->lrh[0] >> 4) & 0xf);
+		__entry->sl = (u8)(be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
 		__entry->pkey =	be32_to_cpu(ohdr->bth[0]) & 0xffff;
 		__entry->hdr_len = hdr_len;
 		__entry->data_len = data_len;
