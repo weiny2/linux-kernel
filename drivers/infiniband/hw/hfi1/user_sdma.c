@@ -62,6 +62,7 @@
 #include <linux/kthread.h>
 #include <linux/mmu_context.h>
 #include <linux/module.h>
+#include <linux/vmalloc.h>
 
 #include "hfi.h"
 #include "sdma.h"
