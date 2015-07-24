@@ -164,12 +164,12 @@ static void init_csrs(const struct hfi_devdata *dd)
 		 * TODO: Delete this hack once the LID is received via MADs
 		 */
 		if (!strcmp(utsname()->nodename, "viper0")) {
-			dd->pport[0].lid = 0;
-			dd->pport[1].lid = 1;
+			dd->pport[0].lid = 1;
+			dd->pport[1].lid = 2;
 		}
 		if (!strcmp(utsname()->nodename, "viper1")) {
-			dd->pport[0].lid = 2;
-			dd->pport[1].lid = 3;
+			dd->pport[0].lid = 3;
+			dd->pport[1].lid = 4;
 		}
 		lmp0.field.DLID = dd->pport[0].lid;
 		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
