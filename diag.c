@@ -894,8 +894,6 @@ static ssize_t hfi1_snoop_write(struct file *fp, const char __user *data,
 	dpkt.len = count;
 	dpkt.data = (unsigned long)data;
 
-	len = (count >> 2) + 2; /* Add in PBC */
-	pbc = create_pbc(ppd, 0, 0, vl, len);
 	snoop_dbg("PBC: vl=0x%llx Length=0x%llx",
 		  (pbc >> 12) & 0xf,
 		  (pbc & 0xfff));
