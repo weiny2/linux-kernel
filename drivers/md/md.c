@@ -5211,7 +5211,8 @@ int md_run(struct mddev *mddev)
 	}
 	if (err) {
 		mddev_detach(mddev);
-		pers->stop(mddev);
+		if (mddev->private)
+			pers->stop(mddev);
 		module_put(pers->owner);
 		bitmap_destroy(mddev);
 		return err;
