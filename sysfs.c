@@ -693,7 +693,8 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 		 "Skipping Congestion Control table sysfs info, (err %d) port %u\n",
 		 ret, port_num);
-		sysfs_remove_bin_file(&ppd->pport_cc_kobj, &cc_setting_bin_attr);
+		sysfs_remove_bin_file(&ppd->pport_cc_kobj,
+				      &cc_setting_bin_attr);
 		goto bail;
 	}
 
