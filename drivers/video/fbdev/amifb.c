@@ -52,6 +52,7 @@
 #include <linux/ioport.h>
 #include <linux/platform_device.h>
 #include <linux/uaccess.h>
+#include <linux/io.h>
 
 #include <asm/irq.h>
 #include <asm/amigahw.h>
@@ -3705,8 +3706,8 @@ default_chipset:
 	 * access the videomem with writethrough cache
 	 */
 	info->fix.smem_start = (u_long)ZTWO_PADDR(videomemory);
-	videomemory = (u_long)ioremap_wt(info->fix.smem_start,
-					 info->fix.smem_len);
+	videomemory = (u_long)memremap(info->fix.smem_start, info->fix.smem_len,
+			MEMREMAP_WT);
 	if (!videomemory) {
 		dev_warn(&pdev->dev,
 			 "Unable to map videomem cached writethrough\n");
