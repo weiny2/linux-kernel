@@ -8820,7 +8820,8 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 	cpumask_copy(def, local_mask);
 	possible = cpumask_weight(def);
 	/* disarm threads from default */
-	ht = cpumask_weight(cpu_sibling_mask(cpumask_first(local_mask)));
+	ht = cpumask_weight(
+			topology_sibling_cpumask(cpumask_first(local_mask)));
 	for (i = possible/ht; i < possible; i++)
 		cpumask_clear_cpu(i, def);
 	/* reset possible */
