@@ -54,6 +54,7 @@
 #include <linux/moduleparam.h>
 #include <linux/bitops.h>
 #include <linux/timer.h>
+#include <linux/vmalloc.h>
 
 #include "hfi.h"
 #include "common.h"
