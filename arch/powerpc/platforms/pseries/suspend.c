@@ -35,6 +35,15 @@ static struct rtas_suspend_me_data suspend_data;
 static atomic_t suspending;
 
 /**
+ * HACK HACK. Make kabi happy (bsc#38934)
+**/
+bool system_entering_hibernation(void)
+{
+	return 0;
+}
+EXPORT_SYMBOL(system_entering_hibernation);
+
+/**
  * pseries_suspend_begin - First phase of hibernation
  *
  * Check to ensure we are in a valid state to hibernate

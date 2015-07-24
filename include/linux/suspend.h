@@ -329,7 +329,11 @@ static inline void swsusp_unset_page_free(struct page *p) {}
 
 static inline void hibernation_set_ops(const struct platform_hibernation_ops *ops) {}
 static inline int hibernate(void) { return -ENOSYS; }
+#ifndef CONFIG_PPC_PSERIES
 static inline bool system_entering_hibernation(void) { return false; }
+#else
+bool system_entering_hibernation(void);
+#endif
 #endif /* CONFIG_HIBERNATION */
 
 /* Hibernation and suspend events */
