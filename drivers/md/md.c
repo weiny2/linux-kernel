@@ -3544,7 +3544,7 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 {
 	char clevel[16];
 	ssize_t rv = len;
-	struct md_personality *pers;
+	struct md_personality *pers, *oldpers;
 	long level;
 	void *priv;
 	struct md_rdev *rdev;
@@ -3635,25 +3635,19 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 	/* Looks like we have a winner */
 	mddev_suspend(mddev);
 	mddev_detach(mddev);
-	mddev->pers->stop(mddev);
-	
-	if (mddev->pers->sync_request == NULL &&
-	    pers->sync_request != NULL) {
-		/* need to add the md_redundancy_group */
-		if (sysfs_create_group(&mddev->kobj, &md_redundancy_group))
-			printk(KERN_WARNING
-			       "md: cannot register extra attributes for %s\n",
-			       mdname(mddev));
-		mddev->sysfs_action = sysfs_get_dirent(mddev->kobj.sd, NULL, "sync_action");
-	}		
-	if (mddev->pers->sync_request != NULL &&
-	    pers->sync_request == NULL) {
-		/* need to remove the md_redundancy_group */
-		if (mddev->to_remove == NULL)
-			mddev->to_remove = &md_redundancy_group;
-	}
+	oldpers = mddev->pers;
+	oldpers->stop(mddev);
+	mddev->pers = pers;
+	mddev->private = priv;
+	strlcpy(mddev->clevel, pers->name, sizeof(mddev->clevel));
+	mddev->level = mddev->new_level;
+	mddev->layout = mddev->new_layout;
+	mddev->chunk_sectors = mddev->new_chunk_sectors;
+	mddev->delta_disks = 0;
+	mddev->reshape_backwards = 0;
+	mddev->degraded = 0;
 
-	if (mddev->pers->sync_request == NULL &&
+	if (oldpers->sync_request == NULL &&
 	    mddev->external) {
 		/* We are converting from a no-redundancy array
 		 * to a redundancy array and metadata is managed
@@ -3665,6 +3659,22 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 		mddev->in_sync = 0;
 		mddev->safemode_delay = 0;
 		mddev->safemode = 0;
+	}
+
+	if (oldpers->sync_request == NULL &&
+	    pers->sync_request != NULL) {
+		/* need to add the md_redundancy_group */
+		if (sysfs_create_group(&mddev->kobj, &md_redundancy_group))
+			printk(KERN_WARNING
+			       "md: cannot register extra attributes for %s\n",
+			       mdname(mddev));
+		mddev->sysfs_action = sysfs_get_dirent(mddev->kobj.sd, NULL, "sync_action");
+	}
+	if (oldpers->sync_request != NULL &&
+	    pers->sync_request == NULL) {
+		/* need to remove the md_redundancy_group */
+		if (mddev->to_remove == NULL)
+			mddev->to_remove = &md_redundancy_group;
 	}
 
 	rdev_for_each(rdev, mddev) {
@@ -3692,17 +3702,7 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 		}
 	}
 
-	module_put(mddev->pers->owner);
-	mddev->pers = pers;
-	mddev->private = priv;
-	strlcpy(mddev->clevel, pers->name, sizeof(mddev->clevel));
-	mddev->level = mddev->new_level;
-	mddev->layout = mddev->new_layout;
-	mddev->chunk_sectors = mddev->new_chunk_sectors;
-	mddev->delta_disks = 0;
-	mddev->reshape_backwards = 0;
-	mddev->degraded = 0;
-	if (mddev->pers->sync_request == NULL) {
+	if (pers->sync_request == NULL) {
 		/* this is now an array without redundancy, so
 		 * it must always be in_sync
 		 */
