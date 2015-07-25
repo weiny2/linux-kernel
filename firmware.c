@@ -1617,7 +1617,7 @@ done:
  */
 void read_guid(struct hfi1_devdata *dd)
 {
-	dd->base_guid = cpu_to_be64(read_csr(dd, DC_DC8051_CFG_LOCAL_GUID));
+	dd->base_guid = read_csr(dd, DC_DC8051_CFG_LOCAL_GUID);
 	dd_dev_info(dd, "GUID %llx",
-		(unsigned long long)be64_to_cpu(dd->base_guid));
+		(unsigned long long)dd->base_guid);
 }

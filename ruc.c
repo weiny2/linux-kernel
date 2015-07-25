@@ -266,7 +266,7 @@ static __be64 get_sguid(struct hfi1_ibport *ibp, unsigned index)
 	if (!index) {
 		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 
-		return ppd->guid;
+		return cpu_to_be64(ppd->guid);
 	}
 	return ibp->guids[index - 1];
 }
@@ -687,7 +687,8 @@ u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
 	hdr->sgid.global.subnet_prefix = ibp->gid_prefix;
 	hdr->sgid.global.interface_id =
 		grh->sgid_index && grh->sgid_index < ARRAY_SIZE(ibp->guids) ?
-		ibp->guids[grh->sgid_index - 1] : ppd_from_ibp(ibp)->guid;
+		ibp->guids[grh->sgid_index - 1] :
+			cpu_to_be64(ppd_from_ibp(ibp)->guid);
 	hdr->dgid = grh->dgid;
 
 	/* GRH header size in 32-bit words. */
