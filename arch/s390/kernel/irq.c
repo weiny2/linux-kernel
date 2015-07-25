@@ -86,6 +86,7 @@ static const struct irq_class irqclass_sub_desc[NR_ARCH_IRQS] = {
 	{.irq = IRQIO_PCI,  .name = "PCI", .desc = "[I/O] PCI Interrupt" },
 	{.irq = IRQIO_MSI,  .name = "MSI", .desc = "[I/O] MSI Interrupt" },
 	{.irq = IRQIO_VIR,  .name = "VIR", .desc = "[I/O] Virtual I/O Devices"},
+	{.irq = IRQIO_VAI,  .name = "VAI", .desc = "[I/O] Virtual I/O Devices AI"},
 	{.irq = NMI_NMI,    .name = "NMI", .desc = "[NMI] Machine Check"},
 	{.irq = CPU_RST,    .name = "RST", .desc = "[CPU] CPU Restart"},
 };
