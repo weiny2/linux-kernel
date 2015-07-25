@@ -2069,32 +2069,3 @@
  * User action:
  * Check cabling of the DASD device and retry to enable the device.
  */
-
-/*?
- * Text: "Service on the storage server caused path %x.%02x to go offline"
- * Severity: Warning
- * Parameter:
- *   @1: channel subsystem ID
- *   @2: CHPID
- * Description:
- * A channel path to the DASD has been set offline because of
- * a service action on the storage server. The path will be set back
- * online automatically when the service action is completed.
- * User action:
- * None.
- */
-
-/*?
- * Text: "Path %x.%02x is back online after service on the storage server"
- * Severity: Informational
- * Parameter:
- *   @1: channel subsystem ID
- *   @2: CHPID
- * Description:
- * A path had been set offline temporarily because of a service
- * action on the storage server.
- * The service action has completed, and the channel path is available
- * again.
- * User action:
- * None.
- */
