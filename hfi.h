@@ -327,22 +327,27 @@ struct hfi1_packet {
 	void *ebuf;
 	void *hdr;
 	struct hfi1_ctxtdata *rcd;
-	u64 rhf;
+	__le32 *rhf_addr;
 	struct hfi1_qp *qp;
 	struct hfi1_other_headers *ohdr;
-	u16 tlen;
-	u16 hlen;
-	u32 updegr;
-	u32 etail;
-	__le32 *rhf_addr;
-	u32 etype;
-	u32 rsize;
+	u64 rhf;
 	u32 maxcnt;
 	u32 rhqoff;
+	u32 hdrqtail;
 	int numpkt;
-	u32 rcv_flags;
-	int has_grh;
+	u16 tlen;
+	u16 hlen;
+	s16 etail;
+	u16 rsize;
+	u8 updegr;
+	u8 rcv_flags;
+	u8 etype;
 };
+
+static inline bool has_sc4_bit(struct hfi1_packet *p)
+{
+	return !!rhf_dc_info(p->rhf);
+}
 
 /*
  * Private data for snoop/capture support.
