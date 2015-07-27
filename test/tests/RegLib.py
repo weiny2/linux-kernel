@@ -408,7 +408,8 @@ class TestInfo:
 
     def __init__(self):
         self.get_parse_standard_args()
-        self.get_mpi_dir()
+        if self.get_host_count() > 0:
+            self.get_mpi_dir()
 
     global simics_key
 
