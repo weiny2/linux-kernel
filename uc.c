@@ -49,6 +49,7 @@
  */
 
 #include "hfi.h"
+#include "qp.h"
 #include "sdma.h"
 #include "qp.h"
 

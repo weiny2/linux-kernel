@@ -738,8 +738,9 @@ static noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
 		qp->s_flags &= ~HFI1_S_BUSY;
 		write_sequnlock(&dev->iowait_lock);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
-		tx = ERR_PTR(-EBUSY);
+		return ERR_PTR(-EBUSY);
 	}
+	tx->qp = qp;
 	return tx;
 }
 
@@ -749,11 +750,10 @@ static inline struct verbs_txreq *get_txreq(struct hfi1_ibdev *dev,
 	struct verbs_txreq *tx;
 
 	tx = kmem_cache_alloc(dev->verbs_txreq_cache, GFP_ATOMIC);
-	if (!tx)
+	if (unlikely(!tx))
 		/* call slow path to get the lock */
-		tx =  __get_txreq(dev, qp);
-	if (tx)
-		tx->qp = qp;
+		return __get_txreq(dev, qp);
+	tx->qp = qp;
 	return tx;
 }
 
