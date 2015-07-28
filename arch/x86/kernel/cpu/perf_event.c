@@ -25,6 +25,7 @@
 #include <linux/cpu.h>
 #include <linux/bitops.h>
 #include <linux/device.h>
+#include <linux/percpu.h>
 
 #include <asm/apic.h>
 #include <asm/stacktrace.h>
@@ -34,6 +35,7 @@
 #include <asm/timer.h>
 #include <asm/desc.h>
 #include <asm/ldt.h>
+#include <asm/mmu_context.h>
 
 #include "perf_event.h"
 
@@ -1970,18 +1972,35 @@ static unsigned long get_segment_base(unsigned int segment)
 	int idx = segment >> 3;
 
 	if ((segment & SEGMENT_TI_MASK) == SEGMENT_LDT) {
+		int ldt_size;
+		void *ldt;
+
 		if (idx > LDT_ENTRIES)
 			return 0;
 
-		if (idx > current->active_mm->context.size)
+		/* IRQs are off, so this synchronizes with smp_store_release */
+		ldt_size = current->active_mm->context.size;
+		ldt = lockless_dereference(current->active_mm->context.ldt);
+
+		/*
+		 * Prevent races between two threads sharing an address space,
+		 * one doing load_mm_ldt() in switch_mm() and the other updating
+		 * context.ldt and context.size. X86 is strongly ordered but the
+		 * compiler might do some reordering, thus use an smp_rmb() at
+		 * the end which evaluates to a compiler barrier except on PPRO
+		 * where an actual LFENCE is generated.
+		 */
+		smp_rmb();
+
+		if (!ldt || idx > ldt_size)
 			return 0;
 
-		desc = current->active_mm->context.ldt;
+		desc = ldt;
 	} else {
 		if (idx > GDT_ENTRIES)
 			return 0;
 
-		desc = __this_cpu_ptr(&gdt_page.gdt[0]);
+		desc = this_cpu_ptr(gdt_page.gdt);
 	}
 
 	return get_desc_base(desc + idx);
