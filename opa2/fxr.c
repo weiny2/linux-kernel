@@ -701,7 +701,14 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		 * pkey 0x8001 as mentioned in ib spec v1.3
 		 */
 		ppd->pkeys[OPA_LIM_MGMT_PKEY_IDX] = OPA_LIM_MGMT_PKEY;
+
+		/*
+		 * FXRTODO: Disabling for now since we are not yet
+		 * PKEY ready
+		 */
+#if 0
 		(void)hfi_set_ib_cfg(ppd, HFI_IB_CFG_PKEYS, 0);
+#endif
 		ppd->vls_supported = HFI_NUM_DATA_VLS;
 
 		/*
