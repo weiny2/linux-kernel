@@ -138,7 +138,7 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID, tc_slid.val);
 }
 
-static void init_csrs(const struct hfi_devdata *dd)
+static void init_csrs(struct hfi_devdata *dd)
 {
 	if (force_loopback) {
 		LM_CONFIG_t lm_config = {.val = 0};
@@ -166,10 +166,23 @@ static void init_csrs(const struct hfi_devdata *dd)
 		if (!strcmp(utsname()->nodename, "viper0")) {
 			dd->pport[0].lid = 1;
 			dd->pport[1].lid = 2;
+			/*
+			 * FXRTODO: read nodeguid from MNH Register
+			 * 8051_CFG_LOCAL_GUID. This register is
+			 * yet to be implemented in Simics.
+			 */
+			dd->nguid = cpu_to_be64(NODE_GUID);
 		}
 		if (!strcmp(utsname()->nodename, "viper1")) {
 			dd->pport[0].lid = 3;
 			dd->pport[1].lid = 4;
+			/*
+			 * FXRTODO: read nodeguid from MNH Register
+			 * 8051_CFG_LOCAL_GUID. This register is
+			 * yet to be implemented in Simics. Temporarily
+			 * keeping node guid unique
+			 */
+			dd->nguid = cpu_to_be64(NODE_GUID + 1);
 		}
 		lmp0.field.DLID = dd->pport[0].lid;
 		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
@@ -794,12 +807,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
-	/*
-	 * FXRTODO: read nodeguid from MNH Register
-	 * 8051_CFG_LOCAL_GUID. This register is
-	 * yet to be implemented in Simics.
-	 */
-	dd->nguid = NODE_GUID;
 
 	/* per port init */
 	dd->num_pports = HFI_NUM_PPORTS;
