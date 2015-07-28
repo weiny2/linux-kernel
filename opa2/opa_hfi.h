@@ -181,6 +181,7 @@ struct hfi_msix_entry {
 	cpumask_var_t mask;
 	struct list_head irq_wait_head;
 	rwlock_t irq_wait_lock;
+	struct hfi_devdata *dd;
 };
 
 struct hfi_event_queue {

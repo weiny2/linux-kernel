@@ -72,6 +72,7 @@
 #include <rdma/fxr/fxr_lm_csrs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs.h>
+#include <rdma/fxr/fxr_pcim_defs.h>
 #include "opa_hfi.h"
 #include <rdma/opa_core_ib.h>
 
@@ -538,11 +539,26 @@ int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message)
 	return -EINVAL;
 }
 
+static void hfi_ack_interrupts(const struct hfi_devdata *dd)
+{
+	int i;
+	u64 val;
+
+	for (i = 0; i <= PCIM_MAX_INT_CSRS; i++) {
+		val = read_csr(dd, FXR_PCIM_INT_STS + i * 8);
+
+		/* Clear the interrupt status read */
+		if (val)
+			write_csr(dd, FXR_PCIM_INT_CLR + i * 8, val);
+	}
+}
+
 static irqreturn_t irq_eq_handler(int irq, void *dev_id)
 {
 	struct hfi_msix_entry *me = dev_id;
 	struct hfi_event_queue *eq;
 
+	hfi_ack_interrupts(me->dd);
 	/* wake head waiter for each EQ using this IRQ */
 	read_lock(&me->irq_wait_lock);
 	list_for_each_entry(eq, &me->irq_wait_head, irq_wait_chain)
@@ -828,6 +844,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
+	hfi_ack_interrupts(dd);
+
 	/* configure IRQs for EQ groups */
 	n_irqs = min_t(int, dd->num_msix_entries, HFI_NUM_EQ_INTERRUPTS);
 	for (i = 0; i < n_irqs; i++) {
@@ -836,6 +854,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		BUG_ON(me->arg != NULL);
 		INIT_LIST_HEAD(&me->irq_wait_head);
 		rwlock_init(&me->irq_wait_lock);
+		me->dd = dd;
 
 		dd_dev_dbg(dd, "request for IRQ %d:%d\n", i, me->msix.vector);
 		ret = request_irq(me->msix.vector, irq_eq_handler, 0,
