@@ -27,8 +27,8 @@
 #include "transaction.h"
 #include "xattr.h"
 #include "disk-io.h"
-#include "props.h"
 #include "locking.h"
+#include "props.h"
 
 
 ssize_t __btrfs_getxattr(struct inode *inode, const char *name,
