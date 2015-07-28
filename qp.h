@@ -226,4 +226,10 @@ int qp_iter_next(struct qp_iter *iter);
  */
 void qp_iter_print(struct seq_file *s, struct qp_iter *iter);
 
+/**
+ * qp_comm_est - handle trap with QP established
+ * @qp: the QP
+ */
+void qp_comm_est(struct hfi1_qp *qp);
+
 #endif /* _QP_H */

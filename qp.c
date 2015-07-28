@@ -1672,3 +1672,18 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   sde,
 		   sde ? sde->this_idx : 0);
 }
+
+void qp_comm_est(struct hfi1_qp *qp)
+{
+	qp->r_flags |= HFI1_R_COMM_EST;
+	if (qp->ibqp.event_handler) {
+		struct ib_event ev;
+
+		ev.device = qp->ibqp.device;
+		ev.element.qp = &qp->ibqp;
+		ev.event = IB_EVENT_COMM_EST;
+		qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
+	}
+}
+
+

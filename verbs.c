@@ -568,17 +568,15 @@ bail:
  */
 static inline int qp_ok(int opcode, struct hfi1_packet *packet)
 {
-	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
+	struct hfi1_ibport *ibp;
 
-	if (!(ib_hfi1_state_ops[packet->qp->state] & HFI1_PROCESS_RECV_OK)) {
-		ibp->n_pkt_drops++;
-		return 0;
-	}
-
+	if (!(ib_hfi1_state_ops[packet->qp->state] & HFI1_PROCESS_RECV_OK))
+		goto dropit;
 	if (((opcode & OPCODE_QP_MASK) == packet->qp->allowed_ops) ||
 	    (opcode == IB_OPCODE_CNP))
 		return 1;
-
+dropit:
+	ibp = &packet->rcd->ppd->ibport_data;
 	ibp->n_pkt_drops++;
 	return 0;
 }
@@ -599,44 +597,38 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	u32 tlen = packet->tlen;
 	struct hfi1_pportdata *ppd = rcd->ppd;
 	struct hfi1_ibport *ibp = &ppd->ibport_data;
-	struct hfi1_other_headers *ohdr;
 	u32 qp_num;
 	int lnh;
 	u8 opcode;
 	u16 lid;
 
-	/* 24 == LRH+BTH+CRC */
-	if (unlikely(tlen < 24))
-		goto drop;
-
-	/* Check for a valid destination LID (see ch. 7.11.1). */
-	lid = be16_to_cpu(hdr->lrh[1]);
-
 	/* Check for GRH */
 	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
 	if (lnh == HFI1_LRH_BTH)
-		ohdr = &hdr->u.oth;
+		packet->ohdr = &hdr->u.oth;
 	else if (lnh == HFI1_LRH_GRH) {
 		u32 vtf;
 
-		ohdr = &hdr->u.l.oth;
+		packet->ohdr = &hdr->u.l.oth;
 		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
 			goto drop;
 		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
 		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
 			goto drop;
+		packet->rcv_flags |= HFI1_HAS_GRH;
 	} else
 		goto drop;
 
 	trace_input_ibhdr(rcd->dd, hdr);
 
-	opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0x7f;
+	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
 	inc_opstats(tlen, &rcd->opstats->stats[opcode]);
 
 	/* Get the destination QP number. */
-	qp_num = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
-	if ((lid >= HFI1_MULTICAST_LID_BASE) &&
-	    (lid != HFI1_PERMISSIVE_LID)) {
+	qp_num = be32_to_cpu(packet->ohdr->bth[1]) & HFI1_QPN_MASK;
+	lid = be16_to_cpu(hdr->lrh[1]);
+	if (unlikely((lid >= HFI1_MULTICAST_LID_BASE) &&
+	    (lid != HFI1_PERMISSIVE_LID))) {
 		struct hfi1_mcast *mcast;
 		struct hfi1_mcast_qp *p;
 
@@ -645,9 +637,6 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		mcast = hfi1_mcast_find(ibp, &hdr->u.l.grh.dgid);
 		if (mcast == NULL)
 			goto drop;
-		packet->rcv_flags |= HFI1_HAS_GRH;
-		if (rhf_dc_info(packet->rhf))
-			packet->rcv_flags |= HFI1_SC4_BIT;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
 			packet->qp = p->qp;
 			spin_lock(&packet->qp->r_lock);
@@ -668,11 +657,6 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 			rcu_read_unlock();
 			goto drop;
 		}
-
-		if (lnh == HFI1_LRH_GRH)
-			packet->rcv_flags |= HFI1_HAS_GRH;
-		if (rhf_dc_info(packet->rhf))
-			packet->rcv_flags |= HFI1_SC4_BIT;
 		spin_lock(&packet->qp->r_lock);
 		if (likely((qp_ok(opcode, packet))))
 			opcode_handler_tbl[opcode](packet);

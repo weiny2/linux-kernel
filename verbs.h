@@ -138,7 +138,6 @@ struct hfi1_packet;
 /* flags passed by hfi1_ib_rcv() */
 enum {
 	HFI1_HAS_GRH = (1 << 0),
-	HFI1_SC4_BIT = (1 << 1), /* indicates the DC set the SC[4] bit */
 };
 
 struct ib_reth {
@@ -450,6 +449,7 @@ struct hfi1_qp {
 	u32 s_ahgpsn;           /* set to the psn in the copy of the header */
 
 	u8 state;               /* QP state */
+	u8 allowed_ops;		/* high order bits of allowed opcodes */
 	u8 qp_access_flags;
 	u8 alt_timeout;         /* Alternate path timeout for this QP */
 	u8 timeout;             /* Timeout for this QP */
@@ -467,7 +467,6 @@ struct hfi1_qp {
 	u8 s_draining;
 
 	/* start of read/write fields */
-
 	atomic_t refcount ____cacheline_aligned_in_smp;
 	wait_queue_head_t wait;
 
@@ -529,7 +528,6 @@ struct hfi1_qp {
 	u8 s_rnr_retry;         /* requester RNR retry counter */
 	u8 s_num_rd_atomic;     /* number of RDMA read/atomic pending */
 	u8 s_tail_ack_queue;    /* index into s_ack_queue[] */
-	u8 allowed_ops;		/* high order bits of allowed opcodes */
 
 	struct hfi1_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
@@ -657,7 +655,7 @@ struct hfi1_opcode_stats {
 };
 
 struct hfi1_opcode_stats_perctx {
-	struct hfi1_opcode_stats stats[128];
+	struct hfi1_opcode_stats stats[256];
 };
 
 static inline void inc_opstats(
