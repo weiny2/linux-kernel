@@ -326,6 +326,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
 	pi->mkeyprotect_lmc = ibp->mkeyprot << MKEY_SHIFT;
 	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
+	if (resp_len)
+		*resp_len += sizeof(struct opa_port_info);
 
 	return reply((struct ib_mad_hdr *)smp);
 }
