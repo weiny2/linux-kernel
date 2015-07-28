@@ -515,6 +515,21 @@ err:
 	return ret;
 }
 
+/*
+ * Apply the link width downgrade enabled policy against the current active
+ * link widths.
+ *
+ * Called when the enabled policy changes or the active link widths change.
+ */
+void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
+				int refresh_widths)
+{
+	/*
+	 * FXRTODO: FC dependent link width code.
+	 * JIRA STL-66
+	 */
+}
+
 u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd)
 {
 	/*
@@ -724,6 +739,33 @@ void hfi_pport_init(struct hfi_devdata *dd)
 #endif
 		ppd->vls_supported = HFI_NUM_DATA_VLS;
 
+		ppd->link_width_supported =
+			OPA_LINK_WIDTH_1X | OPA_LINK_WIDTH_2X |
+			OPA_LINK_WIDTH_3X | OPA_LINK_WIDTH_4X;
+		ppd->link_width_downgrade_supported =
+			ppd->link_width_supported;
+		/* start out enabling only 4X */
+		ppd->link_width_enabled = OPA_LINK_WIDTH_4X;
+
+		ppd->link_width_downgrade_enabled =
+					ppd->link_width_downgrade_supported;
+
+		/*
+		 * FXRTODO: FXR supports 32Gb/s. This needs to be added to
+		 * opa_port_info.h
+		 */
+		ppd->link_speed_supported = OPA_LINK_SPEED_25G;
+		ppd->link_speed_enabled = dd->pport->link_speed_supported;
+		ppd->link_speed_active = OPA_LINK_SPEED_25G;
+
+		/*
+		 * FXRTODO: These 3 variables are to be initialized during LNI.
+		 * Move this to LNI code and initialize appropriately once
+		 * the code is implemented.
+		 */
+		ppd->link_width_active = OPA_LINK_WIDTH_4X;
+		ppd->link_width_downgrade_tx_active = ppd->link_width_active;
+		ppd->link_width_downgrade_rx_active = ppd->link_width_active;
 		/*
 		 * Set the default MTU only for VL 15
 		 * For rest of the data VLs, MTU of 0

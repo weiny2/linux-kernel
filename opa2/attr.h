@@ -58,4 +58,8 @@
 #define SM_CONFIG_SHIFT		5
 #define HFI_PKEY_BLOCKS_AVAIL	(HFI_MAX_PKEYS / OPA_PARTITION_TABLE_BLK_SIZE)
 
+/* the reset value from the FM is supposed to be 0xffff, handle both */
+#define HFI_LINK_WIDTH_RESET_OLD 0x0fff
+#define HFI_LINK_WIDTH_RESET 0xffff
+
 #endif	/* _ATTR_H */

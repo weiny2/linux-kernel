@@ -96,6 +96,22 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	pi->smsl = ppd->smsl & OPA_PI_MASK_SMSL;
 	pi->mkeyprotect_lmc |= ppd->lmc;
 
+	pi->link_width.enabled = cpu_to_be16(ppd->link_width_enabled);
+	pi->link_width.supported = cpu_to_be16(ppd->link_width_supported);
+	pi->link_width.active = cpu_to_be16(ppd->link_width_active);
+
+	pi->link_width_downgrade.supported =
+			cpu_to_be16(ppd->link_width_downgrade_supported);
+	pi->link_width_downgrade.enabled =
+			cpu_to_be16(ppd->link_width_downgrade_enabled);
+	pi->link_width_downgrade.tx_active =
+			cpu_to_be16(ppd->link_width_downgrade_tx_active);
+	pi->link_width_downgrade.rx_active =
+			cpu_to_be16(ppd->link_width_downgrade_rx_active);
+
+	pi->link_speed.supported = cpu_to_be16(ppd->link_speed_supported);
+	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
+	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
 	/*
 	 * FXTODO: WFR  has ledenable_offlinereason as alternative
 	 * to offline_reason. Why ?
@@ -452,6 +468,21 @@ static int set_port_states(struct hfi_devdata *dd, struct hfi_pportdata *ppd,
 done:
 	return 0;
 }
+static void hfi_set_link_width_enabled(struct hfi_pportdata *ppd, u32 w)
+{
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_LWID_ENB, w);
+}
+
+static void hfi_set_link_width_downgrade_enabled(struct hfi_pportdata *ppd,
+								u32 w)
+{
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_LWID_DG_ENB, w);
+}
+
+static void hfi_set_link_speed_enabled(struct hfi_pportdata *ppd, u32 s)
+{
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_SPD_ENB, s);
+}
 
 static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
@@ -460,10 +491,11 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
 	struct opa_port_info *pi = (struct opa_port_info *)data;
 	int ret, i, invalid = 0, call_set_mtu = 0;
+	int call_link_downgrade_policy = 0;
 	u32 num_ports = OPA_AM_NPORT(am);
 	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
 	u32 lid, smlid;
-	u16 mtu;
+	u16 lse, lwe, mtu;
 	u8 ls_old, ls_new, ps_new;
 	u8 vls, lmc, smsl;
 
@@ -504,6 +536,43 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		return hfi_reply(ibh);
 	}
 
+	lwe = be16_to_cpu(pi->link_width.enabled);
+	if (lwe) {
+		if (lwe == HFI_LINK_WIDTH_RESET
+				|| lwe == HFI_LINK_WIDTH_RESET_OLD)
+			hfi_set_link_width_enabled(ppd,
+					ppd->link_width_supported);
+		else if ((lwe & ~ppd->link_width_supported) == 0)
+			hfi_set_link_width_enabled(ppd, lwe);
+		else
+			smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	}
+	lwe = be16_to_cpu(pi->link_width_downgrade.enabled);
+	/* LWD.E is always applied - 0 means "disabled" */
+	if (lwe == HFI_LINK_WIDTH_RESET
+			|| lwe == HFI_LINK_WIDTH_RESET_OLD) {
+		hfi_set_link_width_downgrade_enabled(ppd,
+				ppd->link_width_downgrade_supported);
+	} else if ((lwe & ~ppd->link_width_downgrade_supported) == 0) {
+		/* only set and apply if something changed */
+		if (lwe != ppd->link_width_downgrade_enabled) {
+			hfi_set_link_width_downgrade_enabled(ppd, lwe);
+			call_link_downgrade_policy = 1;
+		}
+	} else {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	}
+
+	lse = be16_to_cpu(pi->link_speed.enabled);
+	if (lse) {
+		if (lse & be16_to_cpu(pi->link_speed.supported))
+			hfi_set_link_speed_enabled(ppd, lse);
+		else
+			smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	}
 	smsl = pi->smsl & OPA_PI_MASK_SMSL;
 	lmc = pi->mkeyprotect_lmc & OPA_PI_MASK_LMC;
 	ls_old = hfi_driver_lstate(ppd);
@@ -648,6 +717,15 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	ret = set_port_states(dd, ppd, smp, ls_new, ps_new, invalid);
 	if (ret)
 		return ret;
+
+	/*
+	 * Apply the new link downgrade policy.  This may result in a link
+	 * bounce.  Do this after everything else so things are settled.
+	 * Possible problem: if setting the port state above fails, then
+	 * the policy change is not applied.
+	 */
+	if (call_link_downgrade_policy)
+		hfi_apply_link_downgrade_policy(ppd, 0);
 
 	return hfi_reply(ibh);
 }
