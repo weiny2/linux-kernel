@@ -557,10 +557,10 @@ struct hfi1_pportdata {
 	/* QSFP support */
 	struct qsfp_data qsfp_info;
 
-	/* GUID for this interface, in network order */
-	__be64 guid;
-	/* GUID for peer interface, in network order */
-	__be64 neighbor_guid;
+	/* GUID for this interface, in host order */
+	u64 guid;
+	/* GUID for peer interface, in host order */
+	u64 neighbor_guid;
 
 	/* up or down physical link state */
 	u32 linkup;
@@ -905,7 +905,7 @@ struct hfi1_devdata {
 	/* revision register shadow */
 	u64 revision;
 	/* Base GUID for device (network order) */
-	__be64 base_guid;
+	u64 base_guid;
 
 	/* these are the "32 bit" regs */
 

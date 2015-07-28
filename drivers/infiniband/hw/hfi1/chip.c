@@ -3871,7 +3871,7 @@ void handle_verify_cap(struct work_struct *work)
 	set_8051_lcb_access(dd);
 
 	ppd->neighbor_guid =
-		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
+		read_csr(dd, DC_DC8051_STS_REMOTE_GUID);
 	ppd->neighbor_port_number = read_csr(dd, DC_DC8051_STS_REMOTE_PORT_NO) &
 					DC_DC8051_STS_REMOTE_PORT_NO_VAL_SMASK;
 	ppd->neighbor_type =
@@ -3882,7 +3882,7 @@ void handle_verify_cap(struct work_struct *work)
 		DC_DC8051_STS_LOCAL_FM_SECURITY_DISABLED_MASK;
 	dd_dev_info(dd,
 		"Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
-		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
+		ppd->neighbor_guid, ppd->neighbor_type,
 		ppd->mgmt_allowed, ppd->neighbor_fm_security);
 	if (ppd->mgmt_allowed)
 		add_full_mgmt_pkey(ppd);
@@ -5773,11 +5773,11 @@ int bringup_serdes(struct hfi1_pportdata *ppd)
 	if (HFI1_CAP_IS_KSET(EXTENDED_PSN))
 		add_rcvctrl(dd, RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK);
 
-	guid = be64_to_cpu(ppd->guid);
+	guid = ppd->guid;
 	if (!guid) {
 		if (dd->base_guid)
-			guid = be64_to_cpu(dd->base_guid) + ppd->port - 1;
-		ppd->guid = cpu_to_be64(guid);
+			guid = dd->base_guid + ppd->port - 1;
+		ppd->guid = guid;
 	}
 
 	/* the link defaults to enabled */
@@ -10300,7 +10300,7 @@ void hfi1_start_cleanup(struct hfi1_devdata *dd)
 }
 
 #define HFI_BASE_GUID(dev) \
-	(be64_to_cpu((dev)->base_guid) & ~(1ULL << GUID_HFI_INDEX_SHIFT))
+	((dev)->base_guid & ~(1ULL << GUID_HFI_INDEX_SHIFT))
 
 /*
  * Certain chip functions need to be initialized only once per asic
@@ -10593,20 +10593,12 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	/* set up LCB access - must be after set_up_interrupts() */
 	init_lcb_access(dd);
 
-	/*
-	 * GUID is now stored in big endian by the function above, swap it.
-	 *
-	 * Despite the multiple uses here there are more uses of the GUID in big
-	 * endian format, mostly in the mad layer. At some point we should
-	 * convert to host byte order and convert to network when we want to
-	 * stuff it into a packet.
-	 */
 	snprintf(dd->serial, SERIAL_MAX, "0x%08llx\n",
-		 be64_to_cpu(dd->base_guid) & 0xFFFFFF);
+		 dd->base_guid & 0xFFFFFF);
 
-	dd->oui1 = be64_to_cpu(dd->base_guid) >> 56 & 0xFF;
-	dd->oui2 = be64_to_cpu(dd->base_guid) >> 48 & 0xFF;
-	dd->oui3 = be64_to_cpu(dd->base_guid) >> 40 & 0xFF;
+	dd->oui1 = dd->base_guid >> 56 & 0xFF;
+	dd->oui2 = dd->base_guid >> 48 & 0xFF;
+	dd->oui3 = dd->base_guid >> 40 & 0xFF;
 
 	ret = load_firmware(dd); /* asymmetric with dispose_firmware() */
 	if (ret)

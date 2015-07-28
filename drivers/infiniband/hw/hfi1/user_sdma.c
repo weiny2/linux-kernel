@@ -858,7 +858,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 					goto free_txreq;
 				}
 				iovec = &req->iovs[req->iov_idx];
-				BUG_ON(iovec->offset);
+				WARN_ON(iovec->offset);
 			}
 
 			/*

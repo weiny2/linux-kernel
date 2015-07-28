@@ -771,7 +771,7 @@ static inline int _sdma_txadd_daddr(
 		tx,
 		type,
 		addr, len);
-	BUG_ON(len > tx->tlen);
+	WARN_ON(len > tx->tlen);
 	tx->tlen -= len;
 	/* special cases for last */
 	if (!tx->tlen) {

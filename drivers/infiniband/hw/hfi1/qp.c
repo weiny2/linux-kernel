@@ -206,7 +206,7 @@ static int alloc_qpn(struct hfi1_devdata *dd, struct hfi1_qpn_table *qpt,
 			offset = qpt->incr | ((offset & 1) ^ 1);
 		}
 		/* there can be no bits at shift and below */
-		BUG_ON(offset & (dd->qos_shift - 1));
+		WARN_ON(offset & (dd->qos_shift - 1));
 		qpn = mk_qpn(qpt, map, offset);
 	}
 

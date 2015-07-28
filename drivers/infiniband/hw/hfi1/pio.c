@@ -402,7 +402,7 @@ int init_sc_pools_and_sizes(struct hfi1_devdata *dd)
 		if (dd->sc_sizes[i].size < 0) {
 			unsigned pool = wildcard_to_pool(dd->sc_sizes[i].size);
 
-			BUG_ON(pool >= NUM_SC_POOLS);
+			WARN_ON_ONCE(pool >= NUM_SC_POOLS);
 			dd->sc_sizes[i].size = mem_pool_info[pool].size;
 		}
 		/* make sure we are not larger than what is allowed by the HW */
@@ -1449,7 +1449,7 @@ void sc_del_credit_return_intr(struct send_context *sc)
 {
 	unsigned long flags;
 
-	BUG_ON(sc->credit_intr_count == 0);
+	WARN_ON(sc->credit_intr_count == 0);
 
 	/* lock must surround both the count change and the CSR update */
 	spin_lock_irqsave(&sc->credit_ctrl_lock, flags);

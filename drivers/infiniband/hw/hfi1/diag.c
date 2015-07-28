@@ -147,7 +147,7 @@ static const struct file_operations diagpkt_file_ops = {
  * This is used for communication with user space for snoop extended IOCTLs
  */
 struct hfi1_link_info {
-	 __be64 node_guid;
+	__be64 node_guid;
 	u8 port_mode;
 	u8 port_state;
 	u16 link_speed_active;
@@ -1109,7 +1109,7 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			if ((cmd == HFI1_SNOOP_IOCGETLINKSTATE_EXTRA) ||
 			    (cmd == HFI1_SNOOP_IOCSETLINKSTATE_EXTRA)) {
 				link_info.port_state = value;
-				link_info.node_guid = ppd->guid;
+				link_info.node_guid = cpu_to_be64(ppd->guid);
 				link_info.link_speed_active =
 							ppd->link_speed_active;
 				link_info.link_width_active =
