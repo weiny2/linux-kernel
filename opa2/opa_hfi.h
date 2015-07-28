@@ -161,6 +161,11 @@ extern unsigned int hfi_max_mtu;
 #define SMA_IDLE_ACTIVE 2
 
 #define HFI_IB_CFG_LIDLMC 0 /* LID and Mask*/
+#define HFI_IB_CFG_LWID_DG_ENB 1 /* allowed Link-width downgrade */
+#define HFI_IB_CFG_LWID_ENB 2 /* allowed Link-width */
+#define HFI_IB_CFG_LWID 3 /* currently active Link-width */
+#define HFI_IB_CFG_SPD_ENB 4 /* allowed Link speeds */
+#define HFI_IB_CFG_SPD 5 /* current Link spd */
 #define HFI_IB_CFG_OP_VLS 10 /* operational VLs */
 #define HFI_IB_CFG_PKEYS 16 /* update partition keys */
 #define HFI_IB_CFG_MTU 17 /* update MTU in IBC */
@@ -214,6 +219,16 @@ struct hfi_ptcdata {
  * @sm_lid: LID of the SM
  * @lstate: Logical link state
  * @ibmtu: The MTU programmed for this port
+ * @link_width_supported: Supported link width
+ * @link_width_downgrade_supported: Supported link width downgrading
+ * @link_speed_supported: Supported link speed
+ * @link_width_enabled: Enabled link width
+ * @link_width_downgrade_enabled: Enabled link width downgrading
+ * @link_speed_enabled: Enabled link speed
+ * @link_width_active: Currently active link width
+ * @link_width_downgrade_tx_active: Current TX side link width downgrading
+ * @link_width_downgrade_rx_active: Current RX side link width downgrading
+ * @link_speed_active: Current active link speed
  * @smsl: Service level to use for SM
  * @lmc: LID mask control
  * @pnum: port number of this port
@@ -245,6 +260,16 @@ struct hfi_pportdata {
 	u32 lstate;
 	u32 ibmtu;
 	u16 pkeys[HFI_MAX_PKEYS];
+	u16 link_width_supported;
+	u16 link_width_downgrade_supported;
+	u16 link_speed_supported;
+	u16 link_width_enabled;
+	u16 link_width_downgrade_enabled;
+	u16 link_speed_enabled;
+	u16 link_width_active;
+	u16 link_width_downgrade_tx_active;
+	u16 link_width_downgrade_rx_active;
+	u16 link_speed_active;
 	u8 smsl;
 	u8 lmc;
 	u8 pnum;
@@ -441,6 +466,8 @@ int hfi_set_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 
 void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 			  u8 neigh_reason, u8 rem_reason);
+void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
+						int refresh_widths);
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
 int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message);
 u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
