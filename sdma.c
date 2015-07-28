@@ -2778,7 +2778,7 @@ void _sdma_txreq_ahgadd(
 	u32 i, shift = 0, desc = 0;
 	u8 mode;
 
-	BUG_ON(num_ahg > 9 || (ahg_hlen & 3) || ahg_hlen == 4);
+	WARN_ON_ONCE(num_ahg > 9 || (ahg_hlen & 3) || ahg_hlen == 4);
 	/* compute mode */
 	if (num_ahg == 1)
 		mode = SDMA_AHG_APPLY_UPDATE1;
