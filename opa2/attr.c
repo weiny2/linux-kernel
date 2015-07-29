@@ -142,6 +142,7 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	/* VL Arbitration table doesn't exist for FXR */
 
 	pi->mtucap = (u8)HFI_DEFAULT_MAX_MTU;
+	pi->port_ltp_crc_mode = cpu_to_be16(ppd->port_ltp_crc_mode);
 	pi->port_states.portphysstate_portstate =
 		(hfi_ibphys_portstate(ppd) << PHYSPORTSTATE_SHIFT) | lstate;
 
@@ -496,6 +497,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
 	u32 lid, smlid;
 	u16 lse, lwe, mtu;
+	u16 crc_enabled;
 	u8 ls_old, ls_new, ps_new;
 	u8 vls, lmc, smsl;
 
@@ -691,6 +693,25 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		} else
 			(void)hfi_set_ib_cfg(ppd, HFI_IB_CFG_OP_VLS,
 						vls);
+	}
+
+	crc_enabled = be16_to_cpu(pi->port_ltp_crc_mode);
+
+	if (HFI_LTP_CRC_ENABLED(crc_enabled)) {
+		u16 crc_lcb_mode;
+
+		ppd->port_crc_mode_enabled = hfi_port_ltp_to_cap(crc_enabled);
+
+		/*
+		 * FXRTODO: Setting of CRC mode should be done as part of
+		 * LNI. See handle_verify_cap code in WFR. Until then
+		 * change the crc mode here.
+		 */
+		ppd->port_ltp_crc_mode |=
+			hfi_cap_to_port_ltp(ppd->port_crc_mode_enabled) <<
+					HFI_LTP_CRC_ENABLED_SHIFT;
+		crc_lcb_mode = hfi_port_ltp_to_lcb(dd, crc_enabled);
+		hfi_set_crc_mode(dd, crc_lcb_mode);
 	}
 
 	ls_new = pi->port_states.portphysstate_portstate &

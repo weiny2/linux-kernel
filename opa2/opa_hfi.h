@@ -171,6 +171,53 @@ extern unsigned int hfi_max_mtu;
 #define HFI_IB_CFG_MTU 17 /* update MTU in IBC */
 #define HFI_IB_CFG_VL_HIGH_LIMIT 19
 
+/* verify capability fabric CRC size bits */
+enum {
+	HFI_CAP_CRC_14B = (1 << 0), /* 14b CRC */
+	HFI_CAP_CRC_48B = (1 << 1), /* 48b CRC */
+	HFI_CAP_CRC_12B_16B_PER_LANE = (1 << 2) /* 12b-16b per lane CRC */
+};
+
+#define HFI_SUPPORTED_CRCS (HFI_CAP_CRC_14B | HFI_CAP_CRC_48B)
+
+/* LCB_CFG_CRC_MODE TX_VAL and RX_VAL CRC mode values */
+enum {
+	HFI_LCB_CRC_16B = 0,	/* 16b CRC */
+	HFI_LCB_CRC_14B = 1,	/* 14b CRC */
+	HFI_LCB_CRC_48B = 2,	/* 48b CRC */
+	HFI_LCB_CRC_12B_16B_PER_LANE = 3	/* 12b-16b per lane CRC */
+};
+
+/* the following enum is (almost) a copy/paste of the definition
+ * in the OPA spec, section 20.2.2.6.8 (PortInfo) */
+enum {
+	OPA_PORT_LTP_CRC_MODE_NONE = 0,
+	OPA_PORT_LTP_CRC_MODE_14 = 1, /* 14-bit LTP CRC mode (optional) */
+	OPA_PORT_LTP_CRC_MODE_16 = 2, /* 16-bit LTP CRC mode */
+	/* 48-bit overlapping LTP CRC mode (optional) */
+	OPA_PORT_LTP_CRC_MODE_48 = 4,
+	/* 12 to 16 bit per lane LTP CRC mode (optional) */
+	OPA_PORT_LTP_CRC_MODE_PER_LANE = 8
+};
+
+#define HFI_LTP_CRC_SUPPORTED_SHIFT	8
+#define HFI_LTP_CRC_SUPPORTED_MASK	0xf
+#define HFI_LTP_CRC_SUPPORTED(val)	(((val) >> \
+					HFI_LTP_CRC_SUPPORTED_SHIFT) & \
+					HFI_LTP_CRC_SUPPORTED_MASK)
+
+#define HFI_LTP_CRC_ENABLED_SHIFT	4
+#define HFI_LTP_CRC_ENABLED_MASK	0xf
+#define HFI_LTP_CRC_ENABLED(val)	(((val) >> \
+					HFI_LTP_CRC_ENABLED_SHIFT) & \
+					HFI_LTP_CRC_ENABLED_MASK)
+
+#define HFI_LTP_CRC_ACTIVE_SHIFT	0
+#define HFI_LTP_CRC_ACTIVE_MASK		0xf
+#define HFI_LTP_CRC_ACTIVE(val)		(((val) >> \
+					HFI_LTP_CRC_ENABLED_SHIFT) & \
+					HFI_LTP_CRC_ACTIVE_MASK)
+
 struct hfi_link_down_reason {
 	/*
 	 * SMA-facing value.  Should be set from .latest when
@@ -229,6 +276,8 @@ struct hfi_ptcdata {
  * @link_width_downgrade_tx_active: Current TX side link width downgrading
  * @link_width_downgrade_rx_active: Current RX side link width downgrading
  * @link_speed_active: Current active link speed
+ * @port_ltp_crc_mode: Supported, enabled and active LTP CRC modes
+ * @port_crc_mode_enabled: CRC mode to be enabled
  * @smsl: Service level to use for SM
  * @lmc: LID mask control
  * @pnum: port number of this port
@@ -270,6 +319,8 @@ struct hfi_pportdata {
 	u16 link_width_downgrade_tx_active;
 	u16 link_width_downgrade_rx_active;
 	u16 link_speed_active;
+	u16 port_ltp_crc_mode;
+	u8 port_crc_mode_enabled;
 	u8 smsl;
 	u8 lmc;
 	u8 pnum;
@@ -474,7 +525,10 @@ u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which);
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val);
 int hfi_set_mtu(struct hfi_pportdata *ppd);
-
+u16 hfi_port_ltp_to_cap(u16 port_ltp);
+u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp);
+u16 hfi_cap_to_port_ltp(u16 cap);
+void hfi_set_crc_mode(struct hfi_devdata *dd, u16 crc_lcb_mode);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of

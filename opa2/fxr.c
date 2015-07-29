@@ -70,6 +70,7 @@
 #include <rdma/fxr/fxr_rx_e2e_csrs.h>
 #include <rdma/fxr/fxr_rx_e2e_defs.h>
 #include <rdma/fxr/fxr_lm_csrs.h>
+#include <rdma/fxr/fxr_fc_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs.h>
 #include <rdma/fxr/fxr_pcim_defs.h>
@@ -707,6 +708,100 @@ void hfi_ptc_init(struct hfi_pportdata *ppd)
 }
 
 /*
+ * Mask conversion: Capability exchange to Port LTP.  The capability
+ * exchange has an implicit 16b CRC that is mandatory.
+ */
+u16 hfi_cap_to_port_ltp(u16 cap)
+{
+	/* this mode is mandatory */
+	u16 port_ltp = OPA_PORT_LTP_CRC_MODE_16;
+
+	if (cap & HFI_CAP_CRC_14B)
+		port_ltp |= OPA_PORT_LTP_CRC_MODE_14;
+	if (cap & HFI_CAP_CRC_48B)
+		port_ltp |= OPA_PORT_LTP_CRC_MODE_48;
+	if (cap & HFI_CAP_CRC_12B_16B_PER_LANE)
+		port_ltp |= OPA_PORT_LTP_CRC_MODE_PER_LANE;
+
+	return port_ltp;
+}
+
+/* Convert an OPA Port LTP mask to capability mask */
+u16 hfi_port_ltp_to_cap(u16 port_ltp)
+{
+	u16 cap_mask = 0;
+
+	if (port_ltp & OPA_PORT_LTP_CRC_MODE_14)
+		cap_mask |= HFI_CAP_CRC_14B;
+	if (port_ltp & OPA_PORT_LTP_CRC_MODE_48)
+		cap_mask |= HFI_CAP_CRC_48B;
+	if (port_ltp & OPA_PORT_LTP_CRC_MODE_PER_LANE)
+		cap_mask |= HFI_CAP_CRC_12B_16B_PER_LANE;
+
+	return cap_mask;
+}
+
+/*
+ * Convert a single FC LCB CRC mode to an OPA Port LTP mask.
+ */
+static u16 hfi_lcb_to_port_ltp(struct hfi_devdata *dd, u16 lcb_crc)
+{
+	u16 port_ltp = 0;
+
+	switch (lcb_crc) {
+	case HFI_LCB_CRC_12B_16B_PER_LANE:
+		port_ltp = OPA_PORT_LTP_CRC_MODE_PER_LANE;
+		break;
+	case HFI_LCB_CRC_48B:
+		port_ltp = OPA_PORT_LTP_CRC_MODE_48;
+		break;
+	case HFI_LCB_CRC_14B:
+		port_ltp = OPA_PORT_LTP_CRC_MODE_14;
+		break;
+	case HFI_LCB_CRC_16B:
+		port_ltp = OPA_PORT_LTP_CRC_MODE_16;
+		break;
+	default:
+		dd_dev_warn(dd, "Invalid lcb crc. Driver might be in bad state");
+	}
+
+	return port_ltp;
+}
+
+/*
+ * Convert a OPA Port LTP mask to a single FC LCB CRC mode
+ */
+u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp)
+{
+	u16 lcb_crc = 0;
+
+	switch (port_ltp) {
+	case OPA_PORT_LTP_CRC_MODE_PER_LANE:
+		lcb_crc = HFI_LCB_CRC_12B_16B_PER_LANE;
+		break;
+	case OPA_PORT_LTP_CRC_MODE_48:
+		lcb_crc = HFI_LCB_CRC_48B;
+		break;
+	case OPA_PORT_LTP_CRC_MODE_14:
+		lcb_crc = HFI_LCB_CRC_14B;
+		break;
+	case OPA_PORT_LTP_CRC_MODE_16:
+		lcb_crc = HFI_LCB_CRC_16B;
+		break;
+	default:
+		dd_dev_warn(dd, "Invalid ltp crc. Driver might be in bad state");
+	}
+
+	return lcb_crc;
+}
+
+void hfi_set_crc_mode(struct hfi_devdata *dd, u16 crc_lcb_mode)
+{
+	write_csr(dd, FC_LCB_CFG_CRC_MODE,
+		(u64)crc_lcb_mode << FC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
+}
+
+/*
  * hfi_pport_init - initialize per port
  * data structs
  */
@@ -714,6 +809,7 @@ void hfi_pport_init(struct hfi_devdata *dd)
 {
 	struct hfi_pportdata *ppd;
 	u8 port;
+	u16 crc_val;
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
@@ -766,6 +862,28 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		ppd->link_width_active = OPA_LINK_WIDTH_4X;
 		ppd->link_width_downgrade_tx_active = ppd->link_width_active;
 		ppd->link_width_downgrade_rx_active = ppd->link_width_active;
+
+		ppd->port_crc_mode_enabled = HFI_SUPPORTED_CRCS;
+		/* initialize supported LTP CRC mode */
+		ppd->port_ltp_crc_mode = hfi_cap_to_port_ltp(HFI_SUPPORTED_CRCS) <<
+					HFI_LTP_CRC_SUPPORTED_SHIFT;
+		/* initialize enabled LTP CRC mode */
+		ppd->port_ltp_crc_mode |= hfi_cap_to_port_ltp(HFI_SUPPORTED_CRCS) <<
+					HFI_LTP_CRC_ENABLED_SHIFT;
+
+		/*
+		 * FXRTODO: These need to be moved to LNI code.
+		 * Each port needs to negotiate on the CRC
+		 * that is to be used with the neighboring port.
+		 *
+		 * crc_val is obtained during LNI process
+		 * from the neighbor port.
+		 */
+		crc_val = HFI_LCB_CRC_14B;
+		ppd->port_ltp_crc_mode |= hfi_lcb_to_port_ltp(dd, crc_val) <<
+					HFI_LTP_CRC_ACTIVE_SHIFT;
+		hfi_set_crc_mode(dd, crc_val);
+
 		/*
 		 * Set the default MTU only for VL 15
 		 * For rest of the data VLs, MTU of 0
