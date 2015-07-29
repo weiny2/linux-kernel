@@ -122,11 +122,19 @@ enum {
 
 enum {
 	MLX5_WQE_CTRL_CQ_UPDATE		= 2 << 2,
+	MLX5_WQE_CTRL_CQ_UPDATE_AND_EQE	= 3 << 2,
 	MLX5_WQE_CTRL_SOLICITED		= 1 << 1,
 };
 
 enum {
+	MLX5_SEND_WQE_DS	= 16,
 	MLX5_SEND_WQE_BB	= 64,
+};
+
+#define MLX5_SEND_WQEBB_NUM_DS	(MLX5_SEND_WQE_BB / MLX5_SEND_WQE_DS)
+
+enum {
+	MLX5_SEND_WQE_MAX_WQEBBS	= 16,
 };
 
 enum {
@@ -178,6 +186,23 @@ struct mlx5_wqe_ctrl_seg {
 	u8			rsvd[2];
 	u8			fm_ce_se;
 	__be32			imm;
+};
+
+enum {
+	MLX5_ETH_WQE_L3_INNER_CSUM      = 1 << 4,
+	MLX5_ETH_WQE_L4_INNER_CSUM      = 1 << 5,
+	MLX5_ETH_WQE_L3_CSUM            = 1 << 6,
+	MLX5_ETH_WQE_L4_CSUM            = 1 << 7,
+};
+
+struct mlx5_wqe_eth_seg {
+	u8              rsvd0[4];
+	u8              cs_flags;
+	u8              rsvd1;
+	__be16          mss;
+	__be32          rsvd2;
+	__be16          inline_hdr_sz;
+	u8              inline_hdr_start[2];
 };
 
 struct mlx5_wqe_xrc_seg {
