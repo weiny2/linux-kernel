@@ -332,6 +332,8 @@ struct mlx5_core_mr {
 
 enum mlx5_res_type {
 	MLX5_RES_QP,
+	MLX5_RES_SRQ,
+	MLX5_RES_XSRQ,
 };
 
 struct mlx5_core_rsc_common {
@@ -341,6 +343,7 @@ struct mlx5_core_rsc_common {
 };
 
 struct mlx5_core_srq {
+	struct mlx5_core_rsc_common	common; /* must be first */
 	u32		srqn;
 	int		max;
 	int		max_gs;
@@ -633,7 +636,8 @@ struct mlx5_cmd_mailbox *mlx5_alloc_cmd_mailbox_chain(struct mlx5_core_dev *dev,
 void mlx5_free_cmd_mailbox_chain(struct mlx5_core_dev *dev,
 				 struct mlx5_cmd_mailbox *head);
 int mlx5_core_create_srq(struct mlx5_core_dev *dev, struct mlx5_core_srq *srq,
-			 struct mlx5_create_srq_mbox_in *in, int inlen);
+			 struct mlx5_create_srq_mbox_in *in, int inlen,
+			 int is_xrc);
 int mlx5_core_destroy_srq(struct mlx5_core_dev *dev, struct mlx5_core_srq *srq);
 int mlx5_core_query_srq(struct mlx5_core_dev *dev, struct mlx5_core_srq *srq,
 			struct mlx5_query_srq_mbox_out *out);
