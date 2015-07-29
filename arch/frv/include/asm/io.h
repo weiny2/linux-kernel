@@ -272,11 +272,6 @@ static inline void __iomem *ioremap_wt(unsigned long physaddr, unsigned long siz
 	return __ioremap(physaddr, size, IOMAP_WRITETHROUGH);
 }
 
-static inline void __iomem *ioremap_fullcache(unsigned long physaddr, unsigned long size)
-{
-	return __ioremap(physaddr, size, IOMAP_FULL_CACHING);
-}
-
 #define ioremap_wc ioremap_nocache
 #define ioremap_uc ioremap_nocache
 
