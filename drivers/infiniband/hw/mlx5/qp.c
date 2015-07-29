@@ -1094,6 +1094,7 @@ static void destroy_qp_common(struct mlx5_ib_dev *dev, struct mlx5_ib_qp *qp)
 	in = kzalloc(sizeof(*in), GFP_KERNEL);
 	if (!in)
 		return;
+
 	if (qp->state != IB_QPS_RESET)
 		if (mlx5_core_qp_modify(dev->mdev, to_mlx5_state(qp->state),
 					MLX5_QP_STATE_RST, in, 0, &qp->mqp))
