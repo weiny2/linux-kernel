@@ -225,6 +225,9 @@ struct mlx5_cmd_stats {
 };
 
 struct mlx5_cmd {
+	void	       *cmd_alloc_buf;
+	dma_addr_t	alloc_dma;
+	int		alloc_size;
 	void	       *cmd_buf;
 	dma_addr_t	dma;
 	u16		cmdif_rev;
