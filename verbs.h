@@ -641,6 +641,8 @@ static inline struct hfi1_rwqe *get_rwqe_ptr(struct hfi1_rq *rq, unsigned n)
 		  rq->max_sge * sizeof(struct ib_sge)) * n);
 }
 
+#define MAX_LKEY_TABLE_BITS 23
+
 struct hfi1_lkey_table {
 	spinlock_t lock; /* protect changes in this struct */
 	u32 next;               /* next unused index (speeds search) */

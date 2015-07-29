@@ -1906,9 +1906,15 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	 */
 	spin_lock_init(&dev->lk_table.lock);
 	dev->lk_table.max = 1 << hfi1_lkey_table_size;
+	/* ensure generation is at least 4 bits (keys.c) */
+	if (hfi1_lkey_table_size > MAX_LKEY_TABLE_BITS) {
+		dd_dev_warn(dd, "lkey bits %u too large, reduced to %u\n",
+			      hfi1_lkey_table_size, MAX_LKEY_TABLE_BITS);
+		hfi1_lkey_table_size = MAX_LKEY_TABLE_BITS;
+	}
 	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
 	dev->lk_table.table = (struct hfi1_mregion __rcu **)
-		__get_free_pages(GFP_KERNEL, get_order(lk_tab_size));
+		vmalloc(lk_tab_size);
 	if (dev->lk_table.table == NULL) {
 		ret = -ENOMEM;
 		goto err_lk;
@@ -2054,7 +2060,7 @@ err_agents:
 err_reg:
 err_verbs_txreq:
 	kmem_cache_destroy(dev->verbs_txreq_cache);
-	free_pages((unsigned long) dev->lk_table.table, get_order(lk_tab_size));
+	vfree(dev->lk_table.table);
 err_lk:
 	hfi1_qp_exit(dev);
 err_qp_init:
@@ -2067,7 +2073,6 @@ void hfi1_unregister_ib_device(struct hfi1_devdata *dd)
 {
 	struct hfi1_ibdev *dev = &dd->verbs_dev;
 	struct ib_device *ibdev = &dev->ibdev;
-	unsigned lk_tab_size;
 
 	hfi1_verbs_unregister_sysfs(dd);
 
@@ -2085,9 +2090,7 @@ void hfi1_unregister_ib_device(struct hfi1_devdata *dd)
 	hfi1_qp_exit(dev);
 	del_timer_sync(&dev->mem_timer);
 	kmem_cache_destroy(dev->verbs_txreq_cache);
-	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
-	free_pages((unsigned long) dev->lk_table.table,
-		   get_order(lk_tab_size));
+	vfree(dev->lk_table.table);
 }
 
 /*
