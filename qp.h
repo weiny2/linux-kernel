@@ -123,12 +123,12 @@ static inline struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp,
  */
 static inline void clear_ahg(struct hfi1_qp *qp)
 {
-        qp->s_hdr->ahgcount = 0;
-        qp->s_flags &= ~(HFI1_S_AHG_VALID | HFI1_S_AHG_CLEAR);
-        if (qp->s_sde && qp->s_ahgidx >= 0)
-                sdma_ahg_free(qp->s_sde, qp->s_ahgidx);
-        qp->s_ahgidx = -1;
-        qp->s_sde = NULL;
+	qp->s_hdr->ahgcount = 0;
+	qp->s_flags &= ~(HFI1_S_AHG_VALID | HFI1_S_AHG_CLEAR);
+	if (qp->s_sde && qp->s_ahgidx >= 0)
+		sdma_ahg_free(qp->s_sde, qp->s_ahgidx);
+	qp->s_ahgidx = -1;
+	qp->s_sde = NULL;
 }
 
 /**
