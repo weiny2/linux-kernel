@@ -919,6 +919,7 @@ static int load_8051_firmware(struct hfi1_devdata *dd,
 	read_misc_status(dd, &ver_a, &ver_b);
 	dd_dev_info(dd, "8051 firmware version %d.%d\n",
 		(int)ver_b, (int)ver_a);
+	dd->dc8051_ver = dc8051_ver(ver_b, ver_a);
 
 	return 0;
 }

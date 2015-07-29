@@ -375,6 +375,7 @@ struct sdma_txreq {
 };
 
 struct verbs_txreq {
+	struct hfi1_pio_header	phdr;
 	struct sdma_txreq       txreq;
 	struct hfi1_qp           *qp;
 	struct hfi1_swqe         *wqe;

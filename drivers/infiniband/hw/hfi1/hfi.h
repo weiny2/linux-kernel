@@ -139,6 +139,15 @@ extern const struct pci_error_handlers hfi1_pci_err_handler;
 struct hfi1_opcode_stats_perctx;
 #endif
 
+/*
+ * struct ps_state keeps state associated with RX queue "prescanning"
+ * (prescanning for FECNs, and BECNs), if prescanning is in use.
+ */
+struct ps_state {
+	u32 ps_head;
+	int initialized;
+};
+
 struct ctxt_eager_bufs {
 	ssize_t size;            /* total size of eager buffers */
 	u32 count;               /* size of buffers array */
@@ -293,6 +302,10 @@ struct hfi1_ctxtdata {
 	struct list_head sdma_queues;
 	spinlock_t sdma_qlock;
 
+#ifdef CONFIG_PRESCAN_RXQ
+	struct ps_state ps_state;
+#endif /* CONFIG_PRESCAN_RXQ */
+
 	/*
 	 * The interrupt handler for a particular receive context can vary
 	 * throughout it's lifetime. This is not a lock protected data member so
@@ -325,7 +338,6 @@ struct hfi1_packet {
 	u32 etype;
 	u32 rsize;
 	u32 maxcnt;
-	u32 hdrqtail;
 	u32 rhqoff;
 	int numpkt;
 	u32 rcv_flags;
@@ -532,12 +544,10 @@ struct hfi1_pportdata {
 	struct hfi1_ibport ibport_data;
 
 	struct hfi1_devdata *dd;
-	struct kobject pport_kobj;
 	struct kobject pport_cc_kobj;
 	struct kobject sc2vl_kobj;
 	struct kobject sl2sc_kobj;
 	struct kobject vl2mtu_kobj;
-	struct kobject diagc_kobj;
 
 	/* QSFP support */
 	struct qsfp_data qsfp_info;
@@ -619,6 +629,7 @@ struct hfi1_pportdata {
 	u8 driver_link_ready;	/* driver ready for active link */
 	u8 link_enabled;	/* link enabled? */
 	u8 linkinit_reason;
+	u8 local_tx_rate;	/* rate given to 8051 firmware */
 
 	/* placeholders for IB MAD packet settings */
 	u8 overrun_threshold;
@@ -969,6 +980,7 @@ struct hfi1_devdata {
 
 	u16 rhf_offset; /* offset of RHF within receive header entry */
 	u16 irev;	/* implementation revision */
+	u16 dc8051_ver; /* 8051 firmware version */
 
 	struct platform_config_cache pcfg_cache;
 	/* control high-level access to qsfp */
@@ -1068,6 +1080,9 @@ struct hfi1_devdata {
 	u64 lcb_err_en;
 	u8 dc_shutdown;
 };
+
+/* 8051 firmware version helper */
+#define dc8051_ver(a, b) ((a) << 8 | (b))
 
 /* f_put_tid types */
 #define PT_EXPECTED 0
@@ -1289,7 +1304,9 @@ static void ingress_pkey_table_fail(struct hfi1_pportdata *ppd, u16 pkey,
  * ingress_pkey_check - Return 0 if the ingress pkey is valid, return 1
  * otherwise. Use the criteria in the OPAv1 spec, section 9.10.14. idx
  * is a hint as to the best place in the partition key table to begin
- * searching.
+ * searching. This function should not be called on the data path because
+ * of performance reasons. On datapath pkey check is expected to be done
+ * by HW and rcv_pkey_check function should be called instead.
  */
 static inline int ingress_pkey_check(struct hfi1_pportdata *ppd, u16 pkey,
 				     u8 sc5, u8 idx, u16 slid)
@@ -1313,6 +1330,28 @@ static inline int ingress_pkey_check(struct hfi1_pportdata *ppd, u16 pkey,
 	if (!ingress_pkey_table_search(ppd, pkey))
 		return 0;
 
+bad:
+	ingress_pkey_table_fail(ppd, pkey, slid);
+	return 1;
+}
+
+/*
+ * rcv_pkey_check - Return 0 if the ingress pkey is valid, return 1
+ * otherwise. It only ensures pkey is vlid for QP0. This function
+ * should be called on the data path instead of ingress_pkey_check
+ * as on data path, pkey check is done by HW (except for QP0).
+ */
+static inline int rcv_pkey_check(struct hfi1_pportdata *ppd, u16 pkey,
+				 u8 sc5, u16 slid)
+{
+	if (!(ppd->part_enforce & HFI1_PART_ENFORCE_IN))
+		return 0;
+
+	/* If SC15, pkey[0:14] must be 0x7fff */
+	if ((sc5 == 0xf) && ((pkey & PKEY_LOW_15_MASK) != PKEY_LOW_15_MASK))
+		goto bad;
+
+	return 0;
 bad:
 	ingress_pkey_table_fail(ppd, pkey, slid);
 	return 1;

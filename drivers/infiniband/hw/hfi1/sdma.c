@@ -54,6 +54,7 @@
 #include <linux/moduleparam.h>
 #include <linux/bitops.h>
 #include <linux/timer.h>
+#include <linux/vmalloc.h>
 
 #include "hfi.h"
 #include "common.h"
@@ -759,7 +760,8 @@ struct sdma_engine *sdma_select_engine_vl(
 	struct sdma_map_elem *e;
 	struct sdma_engine *rval;
 
-	BUG_ON(vl > 8);
+	if (WARN_ON(vl > 8))
+		return NULL;
 
 	rcu_read_lock();
 	m = rcu_dereference(dd->sdma_map);
@@ -853,6 +855,7 @@ int sdma_map_init(struct hfi1_devdata *dd, u8 port, u8 num_vls, u8 *vl_engines)
 
 	if (!(dd->flags & HFI1_HAS_SEND_DMA))
 		return 0;
+
 	if (!vl_engines) {
 		/* truncate divide */
 		sde_per_vl = dd->num_sdma / num_vls;
@@ -1396,7 +1399,7 @@ static void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 {
 	struct iowait *wait, *nw;
 	struct iowait *waits[SDMA_WAIT_BATCH_SIZE];
-	unsigned i, n = 0;
+	unsigned i, n = 0, seq;
 	struct sdma_txreq *stx;
 	struct hfi1_ibdev *dev = &sde->dd->verbs_dev;
 
@@ -1406,29 +1409,40 @@ static void sdma_desc_avail(struct sdma_engine *sde, unsigned avail)
 	dd_dev_err(sde->dd, "avail: %u\n", avail);
 #endif
 
-	spin_lock(&dev->pending_lock);
-	/* Search wait list for first QP wanting DMA descriptors. */
-	list_for_each_entry_safe(wait, nw, &sde->dmawait, list) {
-		u16 num_desc = 0;
+	do {
+		seq = read_seqbegin(&dev->iowait_lock);
+		if (!list_empty(&sde->dmawait)) {
+			/* at least one item */
+			write_seqlock(&dev->iowait_lock);
+			/* Harvest waiters wanting DMA descriptors */
+			list_for_each_entry_safe(
+					wait,
+					nw,
+					&sde->dmawait,
+					list) {
+				u16 num_desc = 0;
 
-		if (!wait->wakeup)
-			continue;
-		if (n == ARRAY_SIZE(waits))
+				if (!wait->wakeup)
+					continue;
+				if (n == ARRAY_SIZE(waits))
+					break;
+				if (!list_empty(&wait->tx_head)) {
+					stx = list_first_entry(
+						&wait->tx_head,
+						struct sdma_txreq,
+						list);
+					num_desc = stx->num_desc;
+				}
+				if (num_desc > avail)
+					break;
+				avail -= num_desc;
+				list_del_init(&wait->list);
+				waits[n++] = wait;
+			}
+			write_sequnlock(&dev->iowait_lock);
 			break;
-		if (!list_empty(&wait->tx_head)) {
-			stx = list_first_entry(
-				&wait->tx_head,
-				struct sdma_txreq,
-				list);
-			num_desc = stx->num_desc;
 		}
-		if (num_desc > avail)
-			break;
-		avail -= num_desc;
-		list_del_init(&wait->list);
-		waits[n++] = wait;
-	}
-	spin_unlock(&dev->pending_lock);
+	} while (read_seqretry(&dev->iowait_lock, seq));
 
 	for (i = 0; i < n; i++)
 		waits[i]->wakeup(waits[i], SDMA_AVAIL_REASON);
