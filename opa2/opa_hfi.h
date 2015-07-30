@@ -493,6 +493,10 @@ int hfi_set_mtu(struct hfi_pportdata *ppd);
 	dev_dbg(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
 		 (dd)->unit, ##__VA_ARGS__)
 
+#define dd_dev_warn(dd, fmt, ...) \
+	dev_warn(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
+		 (dd)->unit, ##__VA_ARGS__)
+
 /* printk wrappers (pr_warn, etc) can also be used for general debugging. */
 #undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
