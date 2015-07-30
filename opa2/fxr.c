@@ -57,6 +57,7 @@
 #if 1 /* TODO: should be __SIMICS__ instead of 1 */
 #include <linux/delay.h>
 #endif
+#include <linux/bitops.h>
 #include <rdma/fxr/fxr_top_defs.h>
 #include <rdma/fxr/fxr_fast_path_defs.h>
 #include <rdma/fxr/fxr_tx_ci_csrs.h>
@@ -586,7 +587,24 @@ int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message)
 	return -EINVAL;
 }
 
-static void hfi_ack_interrupts(const struct hfi_devdata *dd)
+static void hfi_ack_interrupt(struct hfi_msix_entry *me)
+{
+	struct hfi_devdata *dd = me->dd;
+	/*
+	 * There are 320 interrupt sources with status bits implemented in 5
+	 * 64 bit CSRs. The offset of the CSR to write is computed as below
+	 */
+	u32 offset = me->intr_src >> 6;
+	/*
+	 * Writing a 1 to the interrupt source which fired clears the interrupt
+	 * whereas a zero has no effect. Clear the interrupt unconditionally
+	 * without reading since it must be set if we received an interrupt.
+	 */
+	write_csr(dd, FXR_PCIM_INT_CLR + offset * 8,
+		  BIT_ULL(me->intr_src & 0x3f));
+}
+
+static void hfi_ack_all_interrupts(const struct hfi_devdata *dd)
 {
 	int i;
 	u64 val;
@@ -605,7 +623,7 @@ static irqreturn_t irq_eq_handler(int irq, void *dev_id)
 	struct hfi_msix_entry *me = dev_id;
 	struct hfi_event_queue *eq;
 
-	hfi_ack_interrupts(me->dd);
+	hfi_ack_interrupt(me);
 	/* wake head waiter for each EQ using this IRQ */
 	read_lock(&me->irq_wait_lock);
 	list_for_each_entry(eq, &me->irq_wait_head, irq_wait_chain)
@@ -1055,7 +1073,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
-	hfi_ack_interrupts(dd);
+	hfi_ack_all_interrupts(dd);
 
 	/* configure IRQs for EQ groups */
 	n_irqs = min_t(int, dd->num_msix_entries, HFI_NUM_EQ_INTERRUPTS);
@@ -1066,6 +1084,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		INIT_LIST_HEAD(&me->irq_wait_head);
 		rwlock_init(&me->irq_wait_lock);
 		me->dd = dd;
+		me->intr_src = i;
 
 		dd_dev_dbg(dd, "request for IRQ %d:%d\n", i, me->msix.vector);
 		ret = request_irq(me->msix.vector, irq_eq_handler, 0,

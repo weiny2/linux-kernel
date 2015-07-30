@@ -234,6 +234,7 @@ struct hfi_msix_entry {
 	struct list_head irq_wait_head;
 	rwlock_t irq_wait_lock;
 	struct hfi_devdata *dd;
+	int intr_src;
 };
 
 struct hfi_event_queue {
@@ -566,6 +567,10 @@ void hfi_set_crc_mode(struct hfi_devdata *dd, u16 crc_lcb_mode);
 #define dd_dev_warn(dd, fmt, ...) \
 	dev_warn(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
 		 (dd)->unit, ##__VA_ARGS__)
+
+#ifndef BIT_ULL
+#define BIT_ULL(nr)             (1ULL << (nr))
+#endif
 
 /* printk wrappers (pr_warn, etc) can also be used for general debugging. */
 #undef pr_fmt
