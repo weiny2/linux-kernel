@@ -287,6 +287,8 @@ struct hfi_ptcdata {
  * @sm_lid: LID of the SM
  * @lstate: Logical link state
  * @ibmtu: The MTU programmed for this port
+ * @port_error_action: contains bit mask for various errors. The HFI
+ *	should initiate link-bounce when the corresponding error occurs.
  * @link_width_supported: Supported link width
  * @link_width_downgrade_supported: Supported link width downgrading
  * @link_speed_supported: Supported link speed
