@@ -106,6 +106,7 @@ static void free_ldt_struct(void *ldt, int ldt_size)
  */
 int init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 {
+	struct ldt_struct *new_ldt;
 	struct mm_struct *old_mm;
 	int retval = 0;
 
@@ -117,23 +118,28 @@ int init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 	}
 
 	mutex_lock(&old_mm->context.lock);
-	if (old_mm->context.ldt) {
-		struct ldt_struct *new_ldt =
-			alloc_ldt_struct(old_mm->context.size);
-		if (!new_ldt) {
-			retval = -ENOMEM;
-			goto out_unlock;
-		}
+	if (!old_mm->context.ldt)
+		goto out_unlock;
 
-		memcpy(new_ldt->entries, old_mm->context.ldt,
-		       new_ldt->size * LDT_ENTRY_SIZE);
-		finalize_ldt_struct(new_ldt);
 
-		mm->context.ldt  = new_ldt->entries;
-		mm->context.size = new_ldt->size;
-	} else {
-		mm->context.ldt = NULL;
+	new_ldt = alloc_ldt_struct(old_mm->context.size);
+	if (!new_ldt) {
+		retval = -ENOMEM;
+		goto out_unlock;
 	}
+
+	memcpy(new_ldt->entries, old_mm->context.ldt, new_ldt->size * LDT_ENTRY_SIZE);
+	finalize_ldt_struct(new_ldt);
+
+	mm->context.ldt  = new_ldt->entries;
+	mm->context.size = new_ldt->size;
+
+	/*
+	 * This is different from upstream - we use new_ldt only up to here and
+	 * and copy its contents into mm->context members.
+	 * Free it here.
+	 */
+	kfree(new_ldt);
 
 out_unlock:
 	mutex_unlock(&old_mm->context.lock);
@@ -258,17 +264,23 @@ static int write_ldt(void __user *ptr, unsigned long bytecount, int oldmode)
 	if (!new_ldt)
 		goto out_unlock;
 
-	if (old_ldt) {
-		memcpy(new_ldt->entries, old_ldt,
-		       oldsize * LDT_ENTRY_SIZE);
-	}
+	if (old_ldt)
+		memcpy(new_ldt->entries, old_ldt, oldsize * LDT_ENTRY_SIZE);
+
 	memset(new_ldt->entries + oldsize * LDT_ENTRY_SIZE, 0,
 	       (newsize - oldsize) * LDT_ENTRY_SIZE);
+
 	new_ldt->entries[ldt_info.entry_number] = ldt;
 	finalize_ldt_struct(new_ldt);
 
 	install_ldt(mm, new_ldt);
 	free_ldt_struct(old_ldt, oldsize);
+
+	/*
+	 * Container new_ldt is not needed anymore, free it.
+	 */
+	kfree(new_ldt);
+
 	error = 0;
 
 out_unlock:
