@@ -472,6 +472,14 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	ibp->max_vls = pdesc.num_vls_supported;
 	ibp->lid = pdesc.lid;
 	ibp->sm_lid = 0;
+	/*
+	 * FXRTODO: These need to be reset to their
+	 * defaults after every linkup also. Once LNI code is up
+	 * and working. we will need a notification to the
+	 * verbs layer on linkup event.
+	 */
+	ibp->sm_trap_qp = OPA_DEFAULT_SM_TRAP_QP;
+	ibp->sa_qp = OPA_DEFAULT_SA_QP;
 	ibp->link_width_active = OPA_LINK_WIDTH_4X;
 	/* FXRTODO - this should be not yet defined OPA_LINK_SPEED_32G */
 	ibp->link_speed_active = OPA_LINK_SPEED_25G;

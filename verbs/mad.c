@@ -326,6 +326,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
 	pi->mkeyprotect_lmc = ibp->mkeyprot << MKEY_SHIFT;
 	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
+	pi->sm_trap_qp = cpu_to_be32(ibp->sm_trap_qp);
+	pi->sa_qp = cpu_to_be32(ibp->sa_qp);
 	if (resp_len)
 		*resp_len += sizeof(struct opa_port_info);
 
@@ -603,6 +605,8 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ibp->mkey_lease_period = be16_to_cpu(pi->mkey_lease_period);
 	ibp->mkeyprot = (pi->mkeyprotect_lmc & OPA_PI_MASK_MKEY_PROT_BIT)
 							>> MKEY_SHIFT;
+	ibp->sm_trap_qp = be32_to_cpu(pi->sm_trap_qp);
+	ibp->sa_qp = be32_to_cpu(pi->sa_qp);
 
 	if (pi->mkey_violations == 0)
 		ibp->mkey_violations = 0;
