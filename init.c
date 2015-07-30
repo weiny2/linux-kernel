@@ -418,6 +418,7 @@ static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
 	int sl;
 	u16 ccti, ccti_timer, ccti_min;
 	struct cc_state *cc_state;
+	unsigned long flags;
 
 	cca_timer = container_of(t, struct cca_timer, hrtimer);
 	ppd = cca_timer->ppd;
@@ -441,7 +442,7 @@ static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
 	ccti_min = cc_state->cong_setting.entries[sl].ccti_min;
 	ccti_timer = cc_state->cong_setting.entries[sl].ccti_timer;
 
-	spin_lock(&ppd->cca_timer_lock);
+	spin_lock_irqsave(&ppd->cca_timer_lock, flags);
 
 	ccti = cca_timer->ccti;
 
@@ -450,7 +451,7 @@ static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
 		set_link_ipg(ppd);
 	}
 
-	spin_unlock(&ppd->cca_timer_lock);
+	spin_unlock_irqrestore(&ppd->cca_timer_lock, flags);
 
 	rcu_read_unlock();
 
