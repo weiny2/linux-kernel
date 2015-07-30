@@ -89,6 +89,8 @@
 #define HFI1_HAS_GRH                     0x1
 #define HFI1_SC4_BIT                     0x2
 
+#define OPA_DEFAULT_SM_TRAP_QP			0x0
+#define OPA_DEFAULT_SA_QP			0x1
 
 /* TODO - placeholders */
 extern __be64 opa_ib_sys_guid;
@@ -485,6 +487,8 @@ struct opa_ib_portdata {
 
 	u32 lstate;
 	u32 port_cap_flags;
+	u32 sm_trap_qp;
+	u32 sa_qp;
 	u16 ibmtu;
 	u16 ibmaxmtu;
 	u16 link_speed_supported;
