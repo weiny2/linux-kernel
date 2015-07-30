@@ -154,6 +154,7 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 					OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE : 0);
 	pi->link_down_reason = ppd->local_link_down_reason.sma;
 	pi->neigh_link_down_reason = ppd->neigh_link_down_reason.sma;
+	pi->port_error_action = cpu_to_be32(ppd->port_error_action);
 	pi->neigh_node_guid = ppd->neighbor_guid;
 	pi->neigh_port_num = ppd->neighbor_port_number;
 	pi->port_neigh_mode =
@@ -548,6 +549,12 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		return hfi_reply(ibh);
 	}
 
+	/*
+	 * FXRTODO: This mask is to be read during FC/MNH error interrupts
+	 * and if the error matches the bits in this mask then link
+	 * bounce is initiated by the driver. See JIRA STL-70.
+	 */
+	ppd->port_error_action = be32_to_cpu(pi->port_error_action);
 	lwe = be16_to_cpu(pi->link_width.enabled);
 	if (lwe) {
 		if (lwe == HFI_LINK_WIDTH_RESET
