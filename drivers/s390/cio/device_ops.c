@@ -563,23 +563,14 @@ out_unlock:
 	return rc;
 }
 
-/**
- * chp_get_chp_desc - return newly allocated channel-path descriptor
- * @cdev: device to obtain the descriptor for
- * @chp_idx: index of the channel path
- *
- * On success return a newly allocated copy of the channel-path description
- * data associated with the given channel path. Return %NULL on error.
- */
-struct channel_path_desc *ccw_device_get_chp_desc(struct ccw_device *cdev,
-						  int chp_idx)
+void *ccw_device_get_chp_desc(struct ccw_device *cdev, int chp_no)
 {
 	struct subchannel *sch;
 	struct chp_id chpid;
 
 	sch = to_subchannel(cdev->dev.parent);
 	chp_id_init(&chpid);
-	chpid.id = sch->schib.pmcw.chpid[chp_idx];
+	chpid.id = sch->schib.pmcw.chpid[chp_no];
 	return chp_get_chp_desc(chpid);
 }
 
