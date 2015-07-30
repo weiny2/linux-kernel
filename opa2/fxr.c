@@ -173,6 +173,15 @@ static void init_csrs(struct hfi_devdata *dd)
 			 * yet to be implemented in Simics.
 			 */
 			dd->nguid = cpu_to_be64(NODE_GUID);
+
+			/*
+			 * FXRTODO: Read this from DC_DC8051_STS_REMOTE_GUID
+			 * equivalent in MNH
+			 *
+			 * Move this code to 8051 INTR handler
+			 */
+			dd->pport[0].neighbor_guid = cpu_to_be64(NODE_GUID + 1);
+			dd->pport[1].neighbor_guid = cpu_to_be64(NODE_GUID + 1);
 		}
 		if (!strcmp(utsname()->nodename, "viper1")) {
 			dd->pport[0].lid = 3;
@@ -184,6 +193,15 @@ static void init_csrs(struct hfi_devdata *dd)
 			 * keeping node guid unique
 			 */
 			dd->nguid = cpu_to_be64(NODE_GUID + 1);
+
+			/*
+			 * FXRTODO: Read this from DC_DC8051_STS_REMOTE_GUID
+			 * equivalent in MNH
+			 *
+			 * Move this code to 8051 INTR handler
+			 */
+			dd->pport[0].neighbor_guid = cpu_to_be64(NODE_GUID);
+			dd->pport[1].neighbor_guid = cpu_to_be64(NODE_GUID);
 		}
 		lmp0.field.DLID = dd->pport[0].lid;
 		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
@@ -818,6 +836,25 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
 		ppd->lstate = IB_PORT_DOWN;
 		mutex_init(&ppd->hls_lock);
+
+		/*
+		 * FXRTODO: The below 4 variables
+		 * are set during 8051 interrupt handler
+		 * and are read from appropriate 8051
+		 * registers. Move this code to 8051 INTR handler.
+		 */
+		ppd->mgmt_allowed = 0x1;
+		/* WFR ref reg: DC_DC8051_STS_REMOTE_NODE_TYPE */
+		ppd->neighbor_type = 0;
+		/* WFR ref reg: DC_DC8051_STS_REMOTE_FM_SECURITY */
+		ppd->neighbor_fm_security = 0;
+		/*
+		 * WFR ref reg: DC_DC8051_STS_REMOTE_PORT_NO
+		 * Current value reflects simics B2B setup :
+		 * viper0-port1 <-> viper1-port1
+		 * viper0-port2 <-> viper1-port2
+		 */
+		ppd->neighbor_port_number = port;
 
 		/*
 		 * Since OPA uses management pkey there is no
