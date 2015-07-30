@@ -77,7 +77,7 @@ done
 
 # run quick test.
 cd opa-headers.git/test
-./harness.py --nodelist=viper0 --type=quick
+./harness.py --nodelist=viper0,viper1 --type=quick
 res=$?
 if [ ! ${res} ]; then
     echo fail on harness.
