@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, Mellanox Technologies. All rights reserved.
+ * Copyright (c) 2013-2015, Mellanox Technologies, Ltd.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,49 +30,26 @@
  * SOFTWARE.
  */
 
-#include <linux/kernel.h>
-#include <linux/module.h>
+#ifndef __MLX5_VPORT_H__
+#define __MLX5_VPORT_H__
+
 #include <linux/mlx5/driver.h>
-#include <linux/mlx5/cmd.h>
-#include "mlx5_core.h"
 
-int mlx5_core_mad_ifc(struct mlx5_core_dev *dev, const void *inb, void *outb,
-		      u16 opmod, u8 port)
-{
-	struct mlx5_mad_ifc_mbox_in *in = NULL;
-	struct mlx5_mad_ifc_mbox_out *out = NULL;
-	int err;
+u8 mlx5_query_vport_state(struct mlx5_core_dev *mdev, u8 opmod);
+void mlx5_query_nic_vport_mac_address(struct mlx5_core_dev *mdev, u8 *addr);
+int mlx5_query_hca_vport_gid(struct mlx5_core_dev *dev, u8 other_vport,
+			     u8 port_num, u16  vf_num, u16 gid_index,
+			     union ib_gid *gid);
+int mlx5_query_hca_vport_pkey(struct mlx5_core_dev *dev, u8 other_vport,
+			      u8 port_num, u16 vf_num, u16 pkey_index,
+			      u16 *pkey);
+int mlx5_query_hca_vport_context(struct mlx5_core_dev *dev,
+				 u8 other_vport, u8 port_num,
+				 u16 vf_num,
+				 struct mlx5_hca_vport_context *rep);
+int mlx5_query_hca_vport_system_image_guid(struct mlx5_core_dev *dev,
+					   u64 *sys_image_guid);
+int mlx5_query_hca_vport_node_guid(struct mlx5_core_dev *dev,
+				   u64 *node_guid);
 
-	in = kzalloc(sizeof(*in), GFP_KERNEL);
-	if (!in)
-		return -ENOMEM;
-
-	out = kzalloc(sizeof(*out), GFP_KERNEL);
-	if (!out) {
-		err = -ENOMEM;
-		goto out;
-	}
-
-	in->hdr.opcode = cpu_to_be16(MLX5_CMD_OP_MAD_IFC);
-	in->hdr.opmod = cpu_to_be16(opmod);
-	in->port = port;
-
-	memcpy(in->data, inb, sizeof(in->data));
-
-	err = mlx5_cmd_exec(dev, in, sizeof(*in), out, sizeof(*out));
-	if (err)
-		goto out;
-
-	if (out->hdr.status) {
-		err = mlx5_cmd_status_to_err(&out->hdr);
-		goto out;
-	}
-
-	memcpy(outb, out->data, sizeof(out->data));
-
-out:
-	kfree(out);
-	kfree(in);
-	return err;
-}
-EXPORT_SYMBOL_GPL(mlx5_core_mad_ifc);
+#endif /* __MLX5_VPORT_H__ */

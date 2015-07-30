@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, Mellanox Technologies inc.  All rights reserved.
+ * Copyright (c) 2013-2015, Mellanox Technologies. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -264,8 +264,6 @@ struct mlx5_ib_mr {
 	__be64			*pas;
 	dma_addr_t		dma;
 	int			npages;
-	struct completion	done;
-	enum ib_wc_status	status;
 	struct mlx5_ib_dev     *dev;
 	struct mlx5_create_mkey_mbox_out out;
 	struct mlx5_core_sig_ctx    *sig;
@@ -276,6 +274,17 @@ struct mlx5_ib_fast_reg_page_list {
 	__be64			       *mapped_page_list;
 	dma_addr_t			map;
 };
+
+struct mlx5_ib_umr_context {
+	enum ib_wc_status	status;
+	struct completion	done;
+};
+
+static inline void mlx5_ib_init_umr_context(struct mlx5_ib_umr_context *context)
+{
+	context->status = -1;
+	init_completion(&context->done);
+}
 
 struct umr_common {
 	struct ib_pd	*pd;
@@ -347,15 +356,14 @@ struct mlx5_ib_resources {
 	struct ib_xrcd	*x1;
 	struct ib_pd	*p0;
 	struct ib_srq	*s0;
+	struct ib_srq	*s1;
 };
 
 struct mlx5_ib_dev {
 	struct ib_device		ib_dev;
-	struct mlx5_core_dev		mdev;
+	struct mlx5_core_dev		*mdev;
 	MLX5_DECLARE_DOORBELL_LOCK(uar_lock);
-	struct list_head		eqs_list;
 	int				num_ports;
-	int				num_comp_vectors;
 	/* serialize update of capability mask
 	 */
 	struct mutex			cap_mask_mutex;
@@ -445,16 +453,6 @@ static inline struct mlx5_ib_ah *to_mah(struct ib_ah *ibah)
 	return container_of(ibah, struct mlx5_ib_ah, ibah);
 }
 
-static inline struct mlx5_ib_dev *mlx5_core2ibdev(struct mlx5_core_dev *dev)
-{
-	return container_of(dev, struct mlx5_ib_dev, mdev);
-}
-
-static inline struct mlx5_ib_dev *mlx5_pci2ibdev(struct pci_dev *pdev)
-{
-	return mlx5_core2ibdev(pci2mlx5_core_dev(pdev));
-}
-
 int mlx5_ib_db_map_user(struct mlx5_ib_ucontext *context, unsigned long virt,
 			struct mlx5_db *db);
 void mlx5_ib_db_unmap_user(struct mlx5_ib_ucontext *context, struct mlx5_db *db);
@@ -462,8 +460,8 @@ void __mlx5_ib_cq_clean(struct mlx5_ib_cq *cq, u32 qpn, struct mlx5_ib_srq *srq)
 void mlx5_ib_cq_clean(struct mlx5_ib_cq *cq, u32 qpn, struct mlx5_ib_srq *srq);
 void mlx5_ib_free_srq_wqe(struct mlx5_ib_srq *srq, int wqe_index);
 int mlx5_MAD_IFC(struct mlx5_ib_dev *dev, int ignore_mkey, int ignore_bkey,
-		 int port, struct ib_wc *in_wc, struct ib_grh *in_grh,
-		 void *in_mad, void *response_mad);
+		 u8 port, const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+		 const void *in_mad, void *response_mad);
 struct ib_ah *create_ib_ah(struct ib_ah_attr *ah_attr,
 			   struct mlx5_ib_ah *ah);
 struct ib_ah *mlx5_ib_create_ah(struct ib_pd *pd, struct ib_ah_attr *ah_attr);
@@ -519,15 +517,30 @@ int mlx5_ib_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
 int mlx5_ib_unmap_fmr(struct list_head *fmr_list);
 int mlx5_ib_fmr_dealloc(struct ib_fmr *ibfmr);
 int mlx5_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
-			struct ib_wc *in_wc, struct ib_grh *in_grh,
-			struct ib_mad *in_mad, struct ib_mad *out_mad);
+			const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+			const struct ib_mad *in_mad, struct ib_mad *out_mad);
 struct ib_xrcd *mlx5_ib_alloc_xrcd(struct ib_device *ibdev,
 					  struct ib_ucontext *context,
 					  struct ib_udata *udata);
 int mlx5_ib_dealloc_xrcd(struct ib_xrcd *xrcd);
-int mlx5_vector2eqn(struct mlx5_ib_dev *dev, int vector, int *eqn, int *irqn);
 int mlx5_ib_get_buf_offset(u64 addr, int page_shift, u32 *offset);
 int mlx5_query_ext_port_caps(struct mlx5_ib_dev *dev, u8 port);
+int mlx5_query_mad_ifc_smp_attr_node_info(struct ib_device *ibdev,
+					  struct ib_smp *out_mad);
+int mlx5_query_mad_ifc_system_image_guid(struct ib_device *ibdev,
+					 __be64 *sys_image_guid);
+int mlx5_query_mad_ifc_max_pkeys(struct ib_device *ibdev,
+				 u16 *max_pkeys);
+int mlx5_query_mad_ifc_vendor_id(struct ib_device *ibdev,
+				 u32 *vendor_id);
+int mlx5_query_mad_ifc_node_desc(struct mlx5_ib_dev *dev, char *node_desc);
+int mlx5_query_mad_ifc_node_guid(struct mlx5_ib_dev *dev, __be64 *node_guid);
+int mlx5_query_mad_ifc_pkey(struct ib_device *ibdev, u8 port, u16 index,
+			    u16 *pkey);
+int mlx5_query_mad_ifc_gids(struct ib_device *ibdev, u8 port, int index,
+			    union ib_gid *gid);
+int mlx5_query_mad_ifc_port(struct ib_device *ibdev, u8 port,
+			    struct ib_port_attr *props);
 int mlx5_ib_query_port(struct ib_device *ibdev, u8 port,
 		       struct ib_port_attr *props);
 int mlx5_ib_init_fmr(struct mlx5_ib_dev *dev);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, Mellanox Technologies inc.  All rights reserved.
+ * Copyright (c) 2013-2015, Mellanox Technologies. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -40,6 +40,15 @@
 #define MLX5_SIG_WQE_SIZE	(MLX5_SEND_WQE_BB * 5)
 #define MLX5_DIF_SIZE		8
 #define MLX5_STRIDE_BLOCK_OP	0x400
+#define MLX5_CPY_GRD_MASK	0xc0
+#define MLX5_CPY_APP_MASK	0x30
+#define MLX5_CPY_REF_MASK	0x0f
+#define MLX5_BSF_INC_REFTAG	(1 << 6)
+#define MLX5_BSF_INL_VALID	(1 << 15)
+#define MLX5_BSF_REFRESH_DIF	(1 << 14)
+#define MLX5_BSF_REPEAT_BLOCK	(1 << 7)
+#define MLX5_BSF_APPTAG_ESCAPE	0x1
+#define MLX5_BSF_APPREF_ESCAPE	0x2
 
 enum mlx5_qp_optpar {
 	MLX5_QP_OPTPAR_ALT_ADDR_PATH		= 1 << 0,
@@ -122,11 +131,19 @@ enum {
 
 enum {
 	MLX5_WQE_CTRL_CQ_UPDATE		= 2 << 2,
+	MLX5_WQE_CTRL_CQ_UPDATE_AND_EQE	= 3 << 2,
 	MLX5_WQE_CTRL_SOLICITED		= 1 << 1,
 };
 
 enum {
+	MLX5_SEND_WQE_DS	= 16,
 	MLX5_SEND_WQE_BB	= 64,
+};
+
+#define MLX5_SEND_WQEBB_NUM_DS	(MLX5_SEND_WQE_BB / MLX5_SEND_WQE_DS)
+
+enum {
+	MLX5_SEND_WQE_MAX_WQEBBS	= 16,
 };
 
 enum {
@@ -146,6 +163,7 @@ enum {
 
 enum {
 	MLX5_QP_LAT_SENSITIVE	= 1 << 28,
+	MLX5_QP_BLOCK_MCAST	= 1 << 30,
 	MLX5_QP_ENABLE_SIG	= 1 << 31,
 };
 
@@ -177,6 +195,23 @@ struct mlx5_wqe_ctrl_seg {
 	u8			rsvd[2];
 	u8			fm_ce_se;
 	__be32			imm;
+};
+
+enum {
+	MLX5_ETH_WQE_L3_INNER_CSUM      = 1 << 4,
+	MLX5_ETH_WQE_L4_INNER_CSUM      = 1 << 5,
+	MLX5_ETH_WQE_L3_CSUM            = 1 << 6,
+	MLX5_ETH_WQE_L4_CSUM            = 1 << 7,
+};
+
+struct mlx5_wqe_eth_seg {
+	u8              rsvd0[4];
+	u8              cs_flags;
+	u8              rsvd1;
+	__be16          mss;
+	__be32          rsvd2;
+	__be16          inline_hdr_sz;
+	u8              inline_hdr_start[2];
 };
 
 struct mlx5_wqe_xrc_seg {
@@ -286,6 +321,22 @@ struct mlx5_wqe_inline_seg {
 	__be32	byte_count;
 };
 
+enum mlx5_sig_type {
+	MLX5_DIF_CRC = 0x1,
+	MLX5_DIF_IPCS = 0x2,
+};
+
+struct mlx5_bsf_inl {
+	__be16		vld_refresh;
+	__be16		dif_apptag;
+	__be32		dif_reftag;
+	u8		sig_type;
+	u8		rp_inv_seed;
+	u8		rsvd[3];
+	u8		dif_inc_ref_guard_check;
+	__be16		dif_app_bitmask_check;
+};
+
 struct mlx5_bsf {
 	struct mlx5_bsf_basic {
 		u8		bsf_size_sbs;
@@ -309,14 +360,8 @@ struct mlx5_bsf {
 		__be32		w_tfs_psv;
 		__be32		m_tfs_psv;
 	} ext;
-	struct mlx5_bsf_inl {
-		__be32		w_inl_vld;
-		__be32		w_rsvd;
-		__be64		w_block_format;
-		__be32		m_inl_vld;
-		__be32		m_rsvd;
-		__be64		m_block_format;
-	} inl;
+	struct mlx5_bsf_inl	w_inl;
+	struct mlx5_bsf_inl	m_inl;
 };
 
 struct mlx5_klm {
@@ -341,10 +386,9 @@ struct mlx5_stride_block_ctrl_seg {
 };
 
 struct mlx5_core_qp {
+	struct mlx5_core_rsc_common	common; /* must be first */
 	void (*event)		(struct mlx5_core_qp *, int);
 	int			qpn;
-	atomic_t		refcount;
-	struct completion	free;
 	struct mlx5_rsc_debug	*dbg;
 	int			pid;
 };

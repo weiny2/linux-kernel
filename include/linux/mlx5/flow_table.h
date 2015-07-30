@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, Mellanox Technologies. All rights reserved.
+ * Copyright (c) 2013-2015, Mellanox Technologies, Ltd.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,49 +30,25 @@
  * SOFTWARE.
  */
 
-#include <linux/kernel.h>
-#include <linux/module.h>
+#ifndef MLX5_FLOW_TABLE_H
+#define MLX5_FLOW_TABLE_H
+
 #include <linux/mlx5/driver.h>
-#include <linux/mlx5/cmd.h>
-#include "mlx5_core.h"
 
-int mlx5_core_mad_ifc(struct mlx5_core_dev *dev, const void *inb, void *outb,
-		      u16 opmod, u8 port)
-{
-	struct mlx5_mad_ifc_mbox_in *in = NULL;
-	struct mlx5_mad_ifc_mbox_out *out = NULL;
-	int err;
+struct mlx5_flow_table_group {
+	u8	log_sz;
+	u8	match_criteria_enable;
+	u32	match_criteria[MLX5_ST_SZ_DW(fte_match_param)];
+};
 
-	in = kzalloc(sizeof(*in), GFP_KERNEL);
-	if (!in)
-		return -ENOMEM;
+void *mlx5_create_flow_table(struct mlx5_core_dev *dev, u8 level, u8 table_type,
+			     u16 num_groups,
+			     struct mlx5_flow_table_group *group);
+void mlx5_destroy_flow_table(void *flow_table);
+int mlx5_add_flow_table_entry(void *flow_table, u8 match_criteria_enable,
+			      void *match_criteria, void *flow_context,
+			      u32 *flow_index);
+void mlx5_del_flow_table_entry(void *flow_table, u32 flow_index);
+u32 mlx5_get_flow_table_id(void *flow_table);
 
-	out = kzalloc(sizeof(*out), GFP_KERNEL);
-	if (!out) {
-		err = -ENOMEM;
-		goto out;
-	}
-
-	in->hdr.opcode = cpu_to_be16(MLX5_CMD_OP_MAD_IFC);
-	in->hdr.opmod = cpu_to_be16(opmod);
-	in->port = port;
-
-	memcpy(in->data, inb, sizeof(in->data));
-
-	err = mlx5_cmd_exec(dev, in, sizeof(*in), out, sizeof(*out));
-	if (err)
-		goto out;
-
-	if (out->hdr.status) {
-		err = mlx5_cmd_status_to_err(&out->hdr);
-		goto out;
-	}
-
-	memcpy(outb, out->data, sizeof(out->data));
-
-out:
-	kfree(out);
-	kfree(in);
-	return err;
-}
-EXPORT_SYMBOL_GPL(mlx5_core_mad_ifc);
+#endif /* MLX5_FLOW_TABLE_H */
