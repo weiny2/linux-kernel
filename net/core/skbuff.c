@@ -364,6 +364,7 @@ static struct page *__page_frag_refill(struct netdev_alloc_cache *nc,
 	if (order) {
 		gfp_mask |= __GFP_COMP | __GFP_NOWARN | __GFP_NORETRY |
 			    __GFP_NOMEMALLOC;
+		gfp_mask &= ~__GFP_WAIT;
 		page = alloc_pages_node(NUMA_NO_NODE, gfp_mask, order);
 		nc->frag.size = PAGE_SIZE << (page ? order : 0);
 	}
