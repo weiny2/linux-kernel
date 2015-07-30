@@ -112,6 +112,9 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	pi->link_speed.supported = cpu_to_be16(ppd->link_speed_supported);
 	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
 	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
+
+	pi->port_phys_conf = hfi_porttype(ppd) & 0xf;
+
 	/*
 	 * FXTODO: WFR  has ledenable_offlinereason as alternative
 	 * to offline_reason. Why ?
