@@ -261,6 +261,7 @@ struct hfi_ptcdata {
  *
  * @dd: pointer to the per node hfi_devdata
  * @pguid: port_guid identifying port
+ * @neighbor_guid: Node guid of the neighboring port
  * @lid: LID for this port
  * @ptc: per traffic class specific fields
  * @sm_lid: LID of the SM
@@ -285,15 +286,25 @@ struct hfi_ptcdata {
  * @vls_operational: Virtual lane operational
  * @vl_high_limit: Limit of high priority compenent of
  *	VL Arbitration table
+ * @neighbor_type: Node type of neighboring port
+ *			0 - HCA
+ *			1 - Switch
  * @neighbor_normal: State of neighbor's port's Logical link state
  *	0 - Neighbor Down/Init
  *	1 - Neighbhor LinkArmed/LinkActive
+ * @neighbor_fm_security: Configuration of a switch pin which can be used to
+ *	disable firmware authentication during switch ASIC boot.
+ *	0 - Authenticated
+ *	1 - Authentication bypassed
+ * @neighbor_port_number: Port number of the neighboring port
  * @is_sm_config_started: indicates that FM has started configuration for this
  *	port.
  * @offline_disabled_reason: offline reason
  * @is_active_optimize_enabled: if enabled, then LinkArmed -> LinkActive state
  *	change propogates this event to neighboring port via SMA Idle Flit
  *	messages
+ * @mgmt_allowed: Indicates if neighbor is allowing this node to be a mgmt node
+ *	(information received via LNI)
  *@local_link_down_reason: Reason why this port transitioned to link down
  *@local_link_down_reason: Reason why the neighboring port transitioned to
  *	link down
@@ -302,6 +313,7 @@ struct hfi_ptcdata {
 struct hfi_pportdata {
 	struct hfi_devdata *dd;
 	__be64 pguid;
+	__be64 neighbor_guid;
 	u32 lid;
 	u32 sm_lid;
 	struct hfi_ptcdata ptc[HFI_MAX_TC];
@@ -327,10 +339,14 @@ struct hfi_pportdata {
 	u8 vls_supported;
 	u8 vls_operational;
 	u8 vl_high_limit;
+	u8 neighbor_type;
 	u8 neighbor_normal;
+	u8 neighbor_fm_security;
+	u8 neighbor_port_number;
 	u8 is_sm_config_started;
 	u8 offline_disabled_reason;
 	u8 is_active_optimize_enabled;
+	u8 mgmt_allowed;
 	struct hfi_link_down_reason local_link_down_reason;
 	struct hfi_link_down_reason neigh_link_down_reason;
 	u8 remote_link_down_reason;

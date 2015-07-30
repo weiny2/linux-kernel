@@ -151,6 +151,13 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 					OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE : 0);
 	pi->link_down_reason = ppd->local_link_down_reason.sma;
 	pi->neigh_link_down_reason = ppd->neigh_link_down_reason.sma;
+	pi->neigh_node_guid = ppd->neighbor_guid;
+	pi->neigh_port_num = ppd->neighbor_port_number;
+	pi->port_neigh_mode =
+		(ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) |
+		(ppd->mgmt_allowed ? OPA_PI_MASK_NEIGH_MGMT_ALLOWED : 0) |
+		(ppd->neighbor_fm_security ?
+			OPA_PI_MASK_NEIGH_FW_AUTH_BYPASS : 0);
 
 	return hfi_reply(ibh);
 }
