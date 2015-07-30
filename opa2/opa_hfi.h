@@ -63,6 +63,25 @@ extern unsigned int hfi_max_mtu;
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME
 
+enum {
+	/* Port type is undefined */
+	HFI_PORT_TYPE_UNKNOWN = 0,
+	/* port is not currently usable, CableInfo not available */
+	HFI_PORT_TYPE_DISCONNECTED = 1,
+	/* A fixed backplane port in a director class switch. All HFI ASICS */
+	HFI_PORT_TYPE_FIXED = 2,
+	/* A backplane port in a blade system, possibly mixed configuration */
+	HFI_PORT_TYPE_VARIABLE = 3,
+	/* Implies a SFF-8636 defined format for CableInfo (QSFP) */
+	HFI_PORT_TYPE_STANDARD = 4,
+	/*
+	 * Intel Silicon Photonics x16 mid-board module connector is
+	 * integrated onto system board
+	 */
+	HFI_PORT_TYPE_SI_PHOTONICS = 5,
+	/* 6 - 15 are reserved */
+};
+
 #define HFI_NUM_BARS		2
 #define HFI_NUM_PPORTS		2
 #define HFI_MAX_VLS		32
@@ -538,6 +557,7 @@ void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
 						int refresh_widths);
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
 int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message);
+u8 hfi_porttype(struct hfi_pportdata *ppd);
 u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which);
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val);

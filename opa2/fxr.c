@@ -404,6 +404,12 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 	hfi_enable_pkey_checks(ppd);
 }
 
+u8 hfi_porttype(struct hfi_pportdata *ppd)
+{
+	/* FXRTODO: QSFP logic goes here to decide port type */
+	return HFI_PORT_TYPE_STANDARD;
+}
+
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
 {
 	struct hfi_devdata *dd = ppd->dd;
