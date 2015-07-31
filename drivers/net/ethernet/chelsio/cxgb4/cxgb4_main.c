@@ -5753,7 +5753,6 @@ static int adap_init0(struct adapter *adap)
 					    "No Configuration File present "
 					    "on adapter. Using hard-wired "
 					    "configuration parameters.\n");
-					goto bye;
 					ret = adap_init0_no_config(adap, reset);
 				}
 			}
