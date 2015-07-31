@@ -229,7 +229,7 @@ int hfi1_count_units(int *npresentp, int *nupp)
  * contiguous).
  */
 static inline void *get_egrbuf(const struct hfi1_ctxtdata *rcd, u64 rhf,
-			       u32 *update)
+			       u8 *update)
 {
 	u32 idx = rhf_egr_index(rhf), offset = rhf_egr_buf_offset(rhf);
 
@@ -432,7 +432,6 @@ static inline void init_packet(struct hfi1_ctxtdata *rcd,
 	packet->rhqoff = rcd->head;
 	packet->numpkt = 0;
 	packet->rcv_flags = 0;
-	packet->has_grh = 0;
 }
 
 #ifndef CONFIG_PRESCAN_RXQ
@@ -689,6 +688,7 @@ static inline void process_rcv_update(int last, struct hfi1_packet *packet)
 			       packet->etail, 0, 0);
 		packet->updegr = 0;
 	}
+	packet->rcv_flags = 0;
 }
 
 static inline void finish_packet(struct hfi1_packet *packet)

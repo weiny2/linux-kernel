@@ -266,7 +266,7 @@ static __be64 get_sguid(struct hfi1_ibport *ibp, unsigned index)
 	if (!index) {
 		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 
-		return ppd->guid;
+		return cpu_to_be64(ppd->guid);
 	}
 	return ibp->guids[index - 1];
 }
@@ -541,7 +541,7 @@ again:
 			len = sge->length;
 		if (len > sge->sge_length)
 			len = sge->sge_length;
-		BUG_ON(len == 0);
+		WARN_ON_ONCE(len == 0);
 		hfi1_copy_sge(&qp->r_sge, sge->vaddr, len, release);
 		sge->vaddr += len;
 		sge->length -= len;
@@ -687,24 +687,12 @@ u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
 	hdr->sgid.global.subnet_prefix = ibp->gid_prefix;
 	hdr->sgid.global.interface_id =
 		grh->sgid_index && grh->sgid_index < ARRAY_SIZE(ibp->guids) ?
-		ibp->guids[grh->sgid_index - 1] : ppd_from_ibp(ibp)->guid;
+		ibp->guids[grh->sgid_index - 1] :
+			cpu_to_be64(ppd_from_ibp(ibp)->guid);
 	hdr->dgid = grh->dgid;
 
 	/* GRH header size in 32-bit words. */
 	return sizeof(struct ib_grh) / sizeof(u32);
-}
-
-/*
- * free_ahg - clear ahg from QP
- */
-void clear_ahg(struct hfi1_qp *qp)
-{
-	qp->s_hdr->ahgcount = 0;
-	qp->s_flags &= ~(HFI1_S_AHG_VALID | HFI1_S_AHG_CLEAR);
-	if (qp->s_sde)
-		sdma_ahg_free(qp->s_sde, qp->s_ahgidx);
-	qp->s_ahgidx = -1;
-	qp->s_sde = NULL;
 }
 
 #define BTH2_OFFSET (offsetof(struct hfi1_pio_header, hdr.u.oth.bth[2]) / 4)

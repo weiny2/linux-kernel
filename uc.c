@@ -49,7 +49,9 @@
  */
 
 #include "hfi.h"
+#include "qp.h"
 #include "sdma.h"
+#include "qp.h"
 
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_UC_##x
@@ -266,62 +268,52 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
 	struct hfi1_qp *qp = packet->qp;
-	struct hfi1_other_headers *ohdr;
+	struct hfi1_other_headers *ohdr = packet->ohdr;
 	u32 opcode;
-	u32 hdrsize;
+	u32 hdrsize = packet->hlen;
 	u32 psn;
 	u32 pad;
 	struct ib_wc wc;
 	u32 pmtu = qp->pmtu;
 	struct ib_reth *reth;
-	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
-	int is_becn, is_fecn, ret;
+	int has_grh = rcv_flags & HFI1_HAS_GRH;
+	int ret;
+	u32 bth1;
 	struct ib_grh *grh = NULL;
-
-	/* Check for GRH */
-	if (!has_grh) {
-		ohdr = &hdr->u.oth;
-		hdrsize = 8 + 12;       /* LRH + BTH */
-	} else {
-		ohdr = &hdr->u.l.oth;
-		hdrsize = 8 + 40 + 12;  /* LRH + GRH + BTH */
-		grh = &hdr->u.l.grh;
-	}
 
 	opcode = be32_to_cpu(ohdr->bth[0]);
 	if (hfi1_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
 		return;
 
-	is_becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
-		& HFI1_BECN_MASK;
-	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
-		& HFI1_FECN_MASK;
+	bth1 = be32_to_cpu(ohdr->bth[1]);
+	if (unlikely(bth1 & (HFI1_BECN_SMASK | HFI1_FECN_SMASK))) {
+		if (bth1 & HFI1_BECN_SMASK) {
+			struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+			u32 rqpn, lqpn;
+			u16 rlid = be16_to_cpu(hdr->lrh[3]);
+			u8 sl, sc5;
 
-	if (is_becn) {
-		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-		u32 rqpn, lqpn;
-		u16 rlid = be16_to_cpu(hdr->lrh[3]);
-		u8 sl, sc5;
+			lqpn = bth1 & HFI1_QPN_MASK;
+			rqpn = qp->remote_qpn;
 
-		lqpn = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
-		rqpn = qp->remote_qpn;
+			sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+			sl = ibp->sc_to_sl[sc5];
 
-		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-		sl = ibp->sc_to_sl[sc5];
+			process_becn(ppd, sl, rlid, lqpn, rqpn,
+					IB_CC_SVCTYPE_UC);
+		}
 
-		process_becn(ppd, sl, rlid, lqpn, rqpn, IB_CC_SVCTYPE_UC);
-	}
+		if (bth1 & HFI1_FECN_SMASK) {
+			u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+			u16 slid = be16_to_cpu(hdr->lrh[3]);
+			u16 dlid = be16_to_cpu(hdr->lrh[1]);
+			u32 src_qp = qp->remote_qpn;
+			u8 sc5;
 
-	if (is_fecn) {
-		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
-		u16 slid = be16_to_cpu(hdr->lrh[3]);
-		u16 dlid = be16_to_cpu(hdr->lrh[1]);
-		u32 src_qp = qp->remote_qpn;
-		u8 sc5;
+			sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 
-		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-
-		return_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc5, grh);
+			return_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc5, grh);
+		}
 	}
 
 	psn = be32_to_cpu(ohdr->bth[2]);
@@ -387,17 +379,8 @@ inv:
 		goto inv;
 	}
 
-	if (qp->state == IB_QPS_RTR && !(qp->r_flags & HFI1_R_COMM_EST)) {
-		qp->r_flags |= HFI1_R_COMM_EST;
-		if (qp->ibqp.event_handler) {
-			struct ib_event ev;
-
-			ev.device = qp->ibqp.device;
-			ev.element.qp = &qp->ibqp;
-			ev.event = IB_EVENT_COMM_EST;
-			qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
-		}
-	}
+	if (qp->state == IB_QPS_RTR && !(qp->r_flags & HFI1_R_COMM_EST))
+		qp_comm_est(qp);
 
 	/* OK, process the packet. */
 	switch (opcode) {
@@ -438,7 +421,6 @@ send_first:
 	case OP(SEND_LAST_WITH_IMMEDIATE):
 send_last_imm:
 		wc.ex.imm_data = ohdr->u.imm_data;
-		hdrsize += 4;
 		wc.wc_flags = IB_WC_WITH_IMM;
 		goto send_last;
 	case OP(SEND_LAST):
@@ -498,7 +480,6 @@ rdma_first:
 			goto drop;
 		}
 		reth = &ohdr->u.rc.reth;
-		hdrsize += sizeof(*reth);
 		qp->r_len = be32_to_cpu(reth->length);
 		qp->r_rcv_len = 0;
 		qp->r_sge.sg_list = NULL;
@@ -540,7 +521,6 @@ rdma_first:
 	case OP(RDMA_WRITE_LAST_WITH_IMMEDIATE):
 		wc.ex.imm_data = ohdr->u.imm_data;
 rdma_last_imm:
-		hdrsize += 4;
 		wc.wc_flags = IB_WC_WITH_IMM;
 
 		/* Get the number of bytes the message was padded by. */

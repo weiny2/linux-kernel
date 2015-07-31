@@ -327,22 +327,27 @@ struct hfi1_packet {
 	void *ebuf;
 	void *hdr;
 	struct hfi1_ctxtdata *rcd;
-	u64 rhf;
+	__le32 *rhf_addr;
 	struct hfi1_qp *qp;
 	struct hfi1_other_headers *ohdr;
-	u16 tlen;
-	u16 hlen;
-	u32 updegr;
-	u32 etail;
-	__le32 *rhf_addr;
-	u32 etype;
-	u32 rsize;
+	u64 rhf;
 	u32 maxcnt;
 	u32 rhqoff;
+	u32 hdrqtail;
 	int numpkt;
-	u32 rcv_flags;
-	int has_grh;
+	u16 tlen;
+	u16 hlen;
+	s16 etail;
+	u16 rsize;
+	u8 updegr;
+	u8 rcv_flags;
+	u8 etype;
 };
+
+static inline bool has_sc4_bit(struct hfi1_packet *p)
+{
+	return !!rhf_dc_info(p->rhf);
+}
 
 /*
  * Private data for snoop/capture support.
@@ -552,10 +557,10 @@ struct hfi1_pportdata {
 	/* QSFP support */
 	struct qsfp_data qsfp_info;
 
-	/* GUID for this interface, in network order */
-	__be64 guid;
-	/* GUID for peer interface, in network order */
-	__be64 neighbor_guid;
+	/* GUID for this interface, in host order */
+	u64 guid;
+	/* GUID for peer interface, in host order */
+	u64 neighbor_guid;
 
 	/* up or down physical link state */
 	u32 linkup;
@@ -900,7 +905,7 @@ struct hfi1_devdata {
 	/* revision register shadow */
 	u64 revision;
 	/* Base GUID for device (network order) */
-	__be64 base_guid;
+	u64 base_guid;
 
 	/* these are the "32 bit" regs */
 
