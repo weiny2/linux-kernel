@@ -1629,11 +1629,6 @@ static int vxlan6_xmit_skb(struct vxlan_sock *vs,
 	int min_headroom;
 	int err;
 
-	if (!skb->encapsulation) {
-		skb_reset_inner_headers(skb);
-		skb->encapsulation = 1;
-	}
-
 	skb_scrub_packet(skb, xnet);
 
 	min_headroom = LL_RESERVED_SPACE(dst->dev) + dst->header_len
@@ -1652,6 +1647,11 @@ static int vxlan6_xmit_skb(struct vxlan_sock *vs,
 			return -ENOMEM;
 
 		skb->vlan_tci = 0;
+	}
+
+	if (!skb->encapsulation) {
+		skb_reset_inner_headers(skb);
+		skb->encapsulation = 1;
 	}
 
 	vxh = (struct vxlanhdr *) __skb_push(skb, sizeof(*vxh));
@@ -1721,11 +1721,6 @@ int vxlan_xmit_skb(struct vxlan_sock *vs,
 	int min_headroom;
 	int err;
 
-	if (!skb->encapsulation) {
-		skb_reset_inner_headers(skb);
-		skb->encapsulation = 1;
-	}
-
 	min_headroom = LL_RESERVED_SPACE(rt->dst.dev) + rt->dst.header_len
 			+ VXLAN_HLEN + sizeof(struct iphdr)
 			+ (vlan_tx_tag_present(skb) ? VLAN_HLEN : 0);
@@ -1742,6 +1737,11 @@ int vxlan_xmit_skb(struct vxlan_sock *vs,
 			return -ENOMEM;
 
 		skb->vlan_tci = 0;
+	}
+
+	if (!skb->encapsulation) {
+		skb_reset_inner_headers(skb);
+		skb->encapsulation = 1;
 	}
 
 	vxh = (struct vxlanhdr *) __skb_push(skb, sizeof(*vxh));
