@@ -666,6 +666,7 @@ extern void ipv6_proxy_select_ident(struct sk_buff *skb);
 
 extern int ip6_dst_hoplimit(struct dst_entry *dst);
 
+#if IS_ENABLED(CONFIG_IPV6)
 static inline void ip6_set_txhash(struct sock *sk)
 {
 	struct inet_sock *inet = inet_sk(sk);
@@ -679,6 +680,11 @@ static inline void ip6_set_txhash(struct sock *sk)
 
 	sk->sk_txhash = flow_hash_from_keys(&keys);
 }
+
+#else
+static inline void ip6_set_txhash(struct sock *sk) { }
+#endif
+
 
 /*
  *	Header manipulation
