@@ -152,6 +152,26 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	pi->port_mode = cpu_to_be16(
 				ppd->is_active_optimize_enabled ?
 					OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE : 0);
+	/*
+	 * FXRTODO:
+	 * 1. STL2 spec says that the enabled field is
+	 *    to be refered to verify that the ingress packet matches
+	 *    the formats in this mask. This is not done in WFR
+	 *    for some reason. If there is a valid reason then
+	 *    would that apply even for FXR ?
+	 * 2. If we should implement this check according to STL2
+	 *    spec (section 9.10.7), then probably that needs
+	 *    to be done in the verbs layer. This will make this
+	 *    field part of per port IB structure and be queried
+	 *    by get_port_desc opa_core op. STL-1660
+	 * 3. Once we add 16B support in the driver then driver
+	 *    should advertize this in the supported field.
+	 *    STL-1661
+	 */
+	pi->port_packet_format.supported =
+		cpu_to_be16(OPA_PORT_PACKET_FORMAT_9B);
+	pi->port_packet_format.enabled =
+		cpu_to_be16(OPA_PORT_PACKET_FORMAT_9B);
 	pi->link_down_reason = ppd->local_link_down_reason.sma;
 	pi->neigh_link_down_reason = ppd->neigh_link_down_reason.sma;
 	pi->port_error_action = cpu_to_be32(ppd->port_error_action);
