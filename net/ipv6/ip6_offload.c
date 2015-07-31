@@ -168,8 +168,8 @@ out:
 static int ipv6_exthdrs_len(struct ipv6hdr *iph,
 			    const struct net_offload **opps)
 {
-	struct ipv6_opt_hdr *opth = NULL;
-	int len = 0, proto, optlen;
+	struct ipv6_opt_hdr *opth = (void *)iph;
+	int len = 0, proto, optlen = sizeof(*iph);
 
 	proto = iph->nexthdr;
 	for (;;) {
@@ -180,10 +180,7 @@ static int ipv6_exthdrs_len(struct ipv6hdr *iph,
 			if (!((*opps)->flags & INET6_PROTO_GSO_EXTHDR))
 				break;
 		}
-		if (opth == NULL)
-			opth = (void *)(iph+1);
-		else
-			opth = (void *)opth + optlen;
+		opth = (void *)opth + optlen;
 		optlen = ipv6_optlen(opth);
 		len += optlen;
 		proto = opth->nexthdr;
