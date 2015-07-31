@@ -1867,6 +1867,45 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 	}
 }
 
+static int
+sd_zbc_report_zones(struct scsi_disk *sdkp, sector_t start_lba,
+		    unsigned char *buffer, int bufflen )
+{
+	struct scsi_device *sdp = sdkp->device;
+	const int timeout = sdp->request_queue->rq_timeout
+		* SD_FLUSH_TIMEOUT_MULTIPLIER;
+	struct scsi_sense_hdr sshdr;
+	unsigned char cmd[16];
+	int result;
+
+	if (!scsi_device_online(sdp)) {
+		sd_printk(KERN_INFO, sdkp, "device not online\n");
+		return -ENODEV;
+	}
+
+	sd_printk(KERN_INFO, sdkp, "REPORT ZONES lba %zu len %d\n",
+		  start_lba, bufflen);
+
+	memset(cmd, 0, 16);
+	cmd[0] = ZBC_IN;
+	cmd[1] = ZI_REPORT_ZONES;
+	put_unaligned_be64(start_lba, &cmd[2]);
+	put_unaligned_be32(bufflen, &cmd[10]);
+	memset(buffer, 0, bufflen);
+
+	result = scsi_execute_req(sdp, cmd, DMA_FROM_DEVICE,
+				  buffer, bufflen, &sshdr,
+				  timeout, SD_MAX_RETRIES, NULL);
+
+	if (result) {
+		sd_printk(KERN_NOTICE, sdkp,
+			  "REPORT ZONES lba %zu failed with %d/%d\n",
+			  start_lba, host_byte(result), driver_byte(result));
+
+		return -EIO;
+	}
+	return 0;
+}
 
 /*
  * Determine whether disk supports Data Integrity Field.
@@ -2600,6 +2639,7 @@ static void sd_read_block_limits(struct scsi_disk *sdkp)
 		}
 	}
 
+	sdkp->zoned = (buffer[8] >> 4) & 3;
  out:
 	kfree(buffer);
 }
@@ -2687,6 +2727,41 @@ static void sd_read_write_same(struct scsi_disk *sdkp, unsigned char *buffer)
 		sdkp->ws10 = 1;
 }
 
+static void sd_read_zones(struct scsi_disk *sdkp, unsigned char *buffer)
+{
+	int retval;
+	unsigned char *desc;
+	u32 rep_len;
+	u8 same;
+	u64 zone_len;
+
+	if (sdkp->zoned != 1)
+		/* Device managed, no special handling required */
+		return;
+
+	retval = sd_zbc_report_zones(sdkp, 0, buffer, SD_BUF_SIZE);
+	if (retval < 0)
+		return;
+
+	rep_len = get_unaligned_be32(&buffer[0]);
+	same = buffer[4] & 0xf;
+	if (same != 2 && same != 3) {
+		sd_printk(KERN_WARNING, sdkp,
+			  "REPORT ZONES SAME type %d not supported\n", same);
+		return;
+	}
+	if (rep_len < 64) {
+		sd_printk(KERN_WARNING, sdkp,
+			  "REPORT ZONES report invalid length %u\n",
+			  rep_len);
+		return;
+	}
+	/* Read the zone length from the first zone descriptor */
+	desc = &buffer[64];
+	zone_len = get_unaligned_be64(&desc[8]);
+	blk_queue_chunk_sectors(sdkp->disk->queue, zone_len);
+}
+
 static int sd_try_extended_inquiry(struct scsi_device *sdp)
 {
 	/* Attempt VPD inquiry if the device blacklist explicitly calls
@@ -2752,6 +2827,7 @@ static int sd_revalidate_disk(struct gendisk *disk)
 		sd_read_cache_type(sdkp, buffer);
 		sd_read_app_tag_own(sdkp, buffer);
 		sd_read_write_same(sdkp, buffer);
+		sd_read_zones(sdkp, buffer);
 	}
 
 	sdkp->first_scan = 0;
