@@ -2908,58 +2908,18 @@ static void cxgb4vf_pci_shutdown(struct pci_dev *pdev)
 	pci_set_drvdata(pdev, NULL);
 }
 
-/*
- * PCI Device registration data structures.
+/* Macros needed to support the PCI Device ID Table ...
  */
-#define CH_DEVICE(devid, idx) \
-	{ PCI_VENDOR_ID_CHELSIO, devid, PCI_ANY_ID, PCI_ANY_ID, 0, 0, idx }
+#define CH_PCI_DEVICE_ID_TABLE_DEFINE_BEGIN \
+	static struct pci_device_id cxgb4vf_pci_tbl[] = {
+#define CH_PCI_DEVICE_ID_FUNCTION	0x8
 
-static DEFINE_PCI_DEVICE_TABLE(cxgb4vf_pci_tbl) = {
-	CH_DEVICE(0xb000, 0),	/* PE10K FPGA */
-	CH_DEVICE(0x4801, 0),	/* T420-cr */
-	CH_DEVICE(0x4802, 0),	/* T422-cr */
-	CH_DEVICE(0x4803, 0),	/* T440-cr */
-	CH_DEVICE(0x4804, 0),	/* T420-bch */
-	CH_DEVICE(0x4805, 0),   /* T440-bch */
-	CH_DEVICE(0x4806, 0),	/* T460-ch */
-	CH_DEVICE(0x4807, 0),	/* T420-so */
-	CH_DEVICE(0x4808, 0),	/* T420-cx */
-	CH_DEVICE(0x4809, 0),	/* T420-bt */
-	CH_DEVICE(0x480a, 0),   /* T404-bt */
-	CH_DEVICE(0x480d, 0),   /* T480-cr */
-	CH_DEVICE(0x480e, 0),   /* T440-lp-cr */
-	CH_DEVICE(0x5801, 0),	/* T520-cr */
-	CH_DEVICE(0x5802, 0),	/* T522-cr */
-	CH_DEVICE(0x5803, 0),	/* T540-cr */
-	CH_DEVICE(0x5804, 0),	/* T520-bch */
-	CH_DEVICE(0x5805, 0),   /* T540-bch */
-	CH_DEVICE(0x5806, 0),	/* T540-ch */
-	CH_DEVICE(0x5807, 0),	/* T520-so */
-	CH_DEVICE(0x5808, 0),	/* T520-cx */
-	CH_DEVICE(0x5809, 0),	/* T520-bt */
-	CH_DEVICE(0x580a, 0),   /* T504-bt */
-	CH_DEVICE(0x580b, 0),   /* T520-sr */
-	CH_DEVICE(0x580c, 0),   /* T504-bt */
-	CH_DEVICE(0x580d, 0),   /* T580-cr */
-	CH_DEVICE(0x580e, 0),   /* T540-lp-cr */
-	CH_DEVICE(0x580f, 0),   /* Amsterdam */
-	CH_DEVICE(0x5810, 0),   /* T580-lp-cr */
-	CH_DEVICE(0x5811, 0),   /* T520-lp-cr */
-	CH_DEVICE(0x5812, 0),   /* T560-cr */
-	CH_DEVICE(0x5813, 0),   /* T580-cr */
-	CH_DEVICE(0x5814, 0),   /* T580-so-cr */
-	CH_DEVICE(0x5815, 0),   /* T502-bt */
-	CH_DEVICE(0x5880, 0),
-	CH_DEVICE(0x5881, 0),
-	CH_DEVICE(0x5882, 0),
-	CH_DEVICE(0x5883, 0),
-	CH_DEVICE(0x5884, 0),
-	CH_DEVICE(0x5885, 0),
-	CH_DEVICE(0x5886, 0),
-	CH_DEVICE(0x5887, 0),
-	CH_DEVICE(0x5888, 0),
-	{ 0, }
-};
+#define CH_PCI_ID_TABLE_ENTRY(devid) \
+		{ PCI_VDEVICE(CHELSIO, (devid)), 0 }
+
+#define CH_PCI_DEVICE_ID_TABLE_DEFINE_END { 0, } }
+
+#include "../cxgb4/t4_pci_id_tbl.h"
 
 MODULE_DESCRIPTION(DRV_DESC);
 MODULE_AUTHOR("Chelsio Communications");
