@@ -2593,13 +2593,13 @@ void scsi_build_sense_buffer(int desc, u8 *buf, u8 key, u8 asc, u8 ascq)
 {
 	if (desc) {
 		buf[0] = 0x72;	/* descriptor, current */
-		buf[1] = key;
+		buf[1] = key & 0x0f;
 		buf[2] = asc;
 		buf[3] = ascq;
 		buf[7] = 0;
 	} else {
 		buf[0] = 0x70;	/* fixed, current */
-		buf[2] = key;
+		buf[2] = key & 0x0f;
 		buf[7] = 0xa;
 		buf[12] = asc;
 		buf[13] = ascq;
@@ -2632,7 +2632,11 @@ void scsi_set_sense_information(u8 *buf, u64 info)
 		put_unaligned_be64(info, &ucp[4]);
 	} else if ((buf[0] & 0x7f) == 0x70) {
 		buf[0] |= 0x80;
-		put_unaligned_be64(info, &buf[3]);
+		/*
+		 * Fixed format sense reserves only 32 bits for the
+		 * 'information' field
+		 */
+		put_unaligned_be32((u32)info, &buf[3]);
 	}
 }
 EXPORT_SYMBOL(scsi_set_sense_information);
