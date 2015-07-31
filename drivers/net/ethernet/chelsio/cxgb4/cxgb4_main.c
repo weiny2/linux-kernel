@@ -68,6 +68,7 @@
 #include "t4_values.h"
 #include "t4_msg.h"
 #include "t4fw_api.h"
+#include "t4fw_version.h"
 #include "cxgb4_dcb.h"
 #include "cxgb4_debugfs.h"
 #include "clip_tbl.h"
