@@ -842,12 +842,17 @@ static void name_msix_vecs(struct adapter *adap)
 	for_each_rdmarxq(&adap->sge, i)
 		snprintf(adap->msix_info[msi_idx++].desc, n, "%s-rdma%d",
 			 adap->port[0]->name, i);
+
+	for_each_rdmaciq(&adap->sge, i)
+		snprintf(adap->msix_info[msi_idx++].desc, n, "%s-rdma-ciq%d",
+			 adap->port[0]->name, i);
 }
 
 static int request_msix_queue_irqs(struct adapter *adap)
 {
 	struct sge *s = &adap->sge;
-	int err, ethqidx, ofldqidx = 0, rdmaqidx = 0, msi_index = 2;
+	int err, ethqidx, ofldqidx = 0, rdmaqidx = 0, rdmaciqqidx = 0;
+	int msi_index = 2;
 
 	err = request_irq(adap->msix_info[1].vec, t4_sge_intr_msix, 0,
 			  adap->msix_info[1].desc, &s->fw_evtq);
@@ -881,9 +886,21 @@ static int request_msix_queue_irqs(struct adapter *adap)
 			goto unwind;
 		msi_index++;
 	}
+	for_each_rdmaciq(s, rdmaciqqidx) {
+		err = request_irq(adap->msix_info[msi_index].vec,
+				  t4_sge_intr_msix, 0,
+				  adap->msix_info[msi_index].desc,
+				  &s->rdmaciq[rdmaciqqidx].rspq);
+		if (err)
+			goto unwind;
+		msi_index++;
+	}
 	return 0;
 
 unwind:
+	while (--rdmaciqqidx >= 0)
+		free_irq(adap->msix_info[--msi_index].vec,
+			 &s->rdmaciq[rdmaciqqidx].rspq);
 	while (--rdmaqidx >= 0)
 		free_irq(adap->msix_info[--msi_index].vec,
 			 &s->rdmarxq[rdmaqidx].rspq);
@@ -909,6 +926,8 @@ static void free_msix_queue_irqs(struct adapter *adap)
 		free_irq(adap->msix_info[msi_index++].vec, &s->ofldrxq[i].rspq);
 	for_each_rdmarxq(s, i)
 		free_irq(adap->msix_info[msi_index++].vec, &s->rdmarxq[i].rspq);
+	for_each_rdmaciq(s, i)
+		free_irq(adap->msix_info[msi_index++].vec, &s->rdmaciq[i].rspq);
 }
 
 /**
@@ -1071,7 +1090,8 @@ freeout:	t4_free_sge_resources(adap);
 		if (msi_idx > 0)
 			msi_idx++;
 		err = t4_sge_alloc_rxq(adap, &q->rspq, false, dev, msi_idx,
-				       &q->fl, uldrx_handler);
+				       q->fl.size ? &q->fl : NULL,
+				       uldrx_handler);
 		if (err)
 			goto freeout;
 		memset(&q->stats, 0, sizeof(q->stats));
@@ -1088,11 +1108,26 @@ freeout:	t4_free_sge_resources(adap);
 		if (msi_idx > 0)
 			msi_idx++;
 		err = t4_sge_alloc_rxq(adap, &q->rspq, false, adap->port[i],
-				       msi_idx, &q->fl, uldrx_handler);
+				       msi_idx, q->fl.size ? &q->fl : NULL,
+				       uldrx_handler);
 		if (err)
 			goto freeout;
 		memset(&q->stats, 0, sizeof(q->stats));
 		s->rdma_rxq[i] = q->rspq.abs_id;
+	}
+
+	for_each_rdmaciq(s, i) {
+		struct sge_ofld_rxq *q = &s->rdmaciq[i];
+
+		if (msi_idx > 0)
+			msi_idx++;
+		err = t4_sge_alloc_rxq(adap, &q->rspq, false, adap->port[i],
+				       msi_idx, q->fl.size ? &q->fl : NULL,
+				       uldrx_handler);
+		if (err)
+			goto freeout;
+		memset(&q->stats, 0, sizeof(q->stats));
+		s->rdma_ciq[i] = q->rspq.abs_id;
 	}
 
 	for_each_port(adap, i) {
@@ -3825,7 +3860,9 @@ static void uld_attach(struct adapter *adap, unsigned int uld)
 	lli.mtus = adap->params.mtus;
 	if (uld == CXGB4_ULD_RDMA) {
 		lli.rxq_ids = adap->sge.rdma_rxq;
+		lli.ciq_ids = adap->sge.rdma_ciq;
 		lli.nrxq = adap->sge.rdmaqs;
+		lli.nciq = adap->sge.rdmaciqs;
 	} else if (uld == CXGB4_ULD_ISCSI) {
 		lli.rxq_ids = adap->sge.ofld_rxq;
 		lli.nrxq = adap->sge.ofldqsets;
@@ -5786,6 +5823,7 @@ static void cfg_queues(struct adapter *adap)
 {
 	struct sge *s = &adap->sge;
 	int i, q10g = 0, n10g = 0, qidx = 0;
+	int ciq_size;
 
 	for_each_port(adap, i)
 		n10g += is_x_10g_port(&adap2pinfo(adap, i)->link_cfg);
@@ -5824,6 +5862,7 @@ static void cfg_queues(struct adapter *adap)
 			s->ofldqsets = adap->params.nports;
 		/* For RDMA one Rx queue per channel suffices */
 		s->rdmaqs = adap->params.nports;
+		s->rdmaciqs = adap->params.nports;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(s->ethrxq); i++) {
@@ -5856,6 +5895,19 @@ static void cfg_queues(struct adapter *adap)
 		init_rspq(&r->rspq, 0, 0, 511, 64);
 		r->rspq.uld = CXGB4_ULD_RDMA;
 		r->fl.size = 72;
+	}
+
+	ciq_size = 64 + adap->vres.cq.size + adap->tids.nftids;
+	if (ciq_size > SGE_MAX_IQ_SIZE) {
+		CH_WARN(adap, "CIQ size too small for available IQs\n");
+		ciq_size = SGE_MAX_IQ_SIZE;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(s->rdmaciq); i++) {
+		struct sge_ofld_rxq *r = &s->rdmaciq[i];
+
+		init_rspq(&r->rspq, 0, 0, ciq_size, 64);
+		r->rspq.uld = CXGB4_ULD_RDMA;
 	}
 
 	init_rspq(&s->fw_evtq, 6, 0, 512, 64);
@@ -5906,9 +5958,9 @@ static int enable_msix(struct adapter *adap)
 
 	want = s->max_ethqsets + EXTRA_VECS;
 	if (is_offload(adap)) {
-		want += s->rdmaqs + s->ofldqsets;
+		want += s->rdmaqs + s->rdmaciqs + s->ofldqsets;
 		/* need nchan for each possible ULD */
-		ofld_need = 2 * nchan;
+		ofld_need = 3 * nchan;
 	}
 	need = adap->params.nports + EXTRA_VECS + ofld_need;
 
