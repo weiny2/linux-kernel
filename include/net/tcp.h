@@ -31,6 +31,7 @@
 #include <linux/crypto.h>
 #include <linux/cryptohash.h>
 #include <linux/kref.h>
+#include <linux/ktime.h>
 
 #include <net/inet_connection_sock.h>
 #include <net/inet_timewait_sock.h>
@@ -484,7 +485,6 @@ extern int __cookie_v4_check(const struct iphdr *iph, const struct tcphdr *th,
 extern struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb, 
 				    struct ip_options *opt);
 #ifdef CONFIG_SYN_COOKIES
-#include <linux/ktime.h>
 
 /* Syncookies use a monotonic timer which increments every 60 seconds.
  * This counter is used both as a hash input and partially encoded into
@@ -628,7 +628,7 @@ static inline void tcp_bound_rto(const struct sock *sk)
 
 static inline u32 __tcp_set_rto(const struct tcp_sock *tp)
 {
-	return (tp->srtt >> 3) + tp->rttvar;
+	return usecs_to_jiffies((tp->srtt_us >> 3) + tp->rttvar_us);
 }
 
 extern void tcp_set_rto(struct sock *sk);
@@ -667,6 +667,11 @@ static inline u32 tcp_rto_min(struct sock *sk)
 	return rto_min;
 }
 
+static inline u32 tcp_rto_min_us(struct sock *sk)
+{
+	return jiffies_to_usecs(tcp_rto_min(sk));
+}
+
 static inline bool tcp_ca_dst_locked(const struct dst_entry *dst)
 {
 	return dst_metric_locked(dst, RTAX_CC_ALGO);
@@ -701,6 +706,12 @@ void tcp_send_window_probe(struct sock *sk);
  */
 #define tcp_time_stamp		((__u32)(jiffies))
 
+static inline u32 tcp_skb_timestamp(const struct sk_buff *skb)
+{
+	return skb->skb_mstamp.stamp_jiffies;
+}
+
+
 #define tcp_flag_byte(th) (((u_int8_t *)th)[13])
 
 #define TCPHDR_FIN 0x01
@@ -727,7 +738,7 @@ struct tcp_skb_cb {
 	} header;	/* For incoming frames		*/
 	__u32		seq;		/* Starting sequence number	*/
 	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
-	__u32		when;		/* used to compute rtt's	*/
+	__u32		tcp_tw_isn;	/* isn chosen by tcp_timewait_state_process() */
 	__u8		tcp_flags;	/* TCP header flags. (tcp[13])	*/
 
 	__u8		sacked;		/* State flags for SACK/FACK.	*/
@@ -735,8 +746,10 @@ struct tcp_skb_cb {
 #define TCPCB_SACKED_RETRANS	0x02	/* SKB retransmitted		*/
 #define TCPCB_LOST		0x04	/* SKB is lost			*/
 #define TCPCB_TAGBITS		0x07	/* All tag bits			*/
+#define TCPCB_REPAIRED		0x10	/* SKB repaired (no skb_mstamp)	*/
 #define TCPCB_EVER_RETRANS	0x80	/* Ever retransmitted frame	*/
-#define TCPCB_RETRANS		(TCPCB_SACKED_RETRANS|TCPCB_EVER_RETRANS)
+#define TCPCB_RETRANS		(TCPCB_SACKED_RETRANS|TCPCB_EVER_RETRANS| \
+				TCPCB_REPAIRED)
 
 	__u8		ip_dsfield;	/* IPv4 tos or IPv6 dsfield	*/
 	/* 1 byte hole */
@@ -796,7 +809,6 @@ enum tcp_ca_event {
 #define TCP_CA_UNSPEC	0
 
 #define TCP_CONG_NON_RESTRICTED 0x1
-#define TCP_CONG_RTT_STAMP	0x2
 
 struct tcp_congestion_ops {
 	struct list_head	list;
