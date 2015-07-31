@@ -2572,7 +2572,8 @@ static int vxlan_newlink(struct net *net, struct net_device *dev,
 
 		dev->needed_headroom = lowerdev->hard_header_len +
 				       (use_ipv6 ? VXLAN6_HEADROOM : VXLAN_HEADROOM);
-	}
+	} else if (use_ipv6)
+		vxlan->flags |= VXLAN_F_IPV6;
 
 	if (data[IFLA_VXLAN_TOS])
 		vxlan->tos  = nla_get_u8(data[IFLA_VXLAN_TOS]);
