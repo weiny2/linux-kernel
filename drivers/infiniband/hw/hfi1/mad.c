@@ -327,14 +327,15 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 		return reply((struct ib_mad_hdr *)smp);
 	}
 
-	ni->port_guid = dd->pport[pidx].guid;
+	ni->port_guid = cpu_to_be64(dd->pport[pidx].guid);
 	ni->base_version = JUMBO_MGMT_BASE_VERSION;
 	ni->class_version = OPA_SMI_CLASS_VERSION;
 	ni->node_type = 1;     /* channel adapter */
 	ni->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
 	ni->system_image_guid = ib_hfi1_sys_image_guid;
-	ni->node_guid = dd->pport->guid; /* Use first-port GUID as node */
+	/* Use first-port GUID as node */
+	ni->node_guid = cpu_to_be64(dd->pport->guid);
 	ni->partition_cap = cpu_to_be16(hfi1_get_npkeys(dd));
 	ni->device_id = cpu_to_be16(dd->pcidev->device);
 	ni->revision = cpu_to_be32(dd->minrev);
@@ -361,7 +362,7 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	    dd->pport[pidx].guid == 0)
 		smp->status |= IB_SMP_INVALID_FIELD;
 	else
-		nip->port_guid = dd->pport[pidx].guid;
+		nip->port_guid = cpu_to_be64(dd->pport[pidx].guid);
 
 	nip->base_version = JUMBO_MGMT_BASE_VERSION;
 	nip->class_version = OPA_SMI_CLASS_VERSION;
@@ -369,7 +370,8 @@ static int subn_get_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	nip->num_ports = ibdev->phys_port_cnt;
 	/* This is already in network order */
 	nip->sys_guid = ib_hfi1_sys_image_guid;
-	nip->node_guid = dd->pport->guid; /* Use first-port GUID as node */
+	 /* Use first-port GUID as node */
+	nip->node_guid = cpu_to_be64(dd->pport->guid);
 	nip->partition_cap = cpu_to_be16(hfi1_get_npkeys(dd));
 	nip->device_id = cpu_to_be16(dd->pcidev->device);
 	nip->revision = cpu_to_be32(dd->minrev);
@@ -672,7 +674,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	/* buffer info for FM */
 	pi->overall_buffer_space = cpu_to_be16(dd->link_credits);
 
-	pi->neigh_node_guid = ppd->neighbor_guid;
+	pi->neigh_node_guid = cpu_to_be64(ppd->neighbor_guid);
 	pi->neigh_port_num = ppd->neighbor_port_number;
 	pi->port_neigh_mode =
 		(ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) |

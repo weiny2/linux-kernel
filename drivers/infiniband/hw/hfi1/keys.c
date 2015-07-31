@@ -105,6 +105,10 @@ int hfi1_alloc_lkey(struct hfi1_mregion *mr, int dma_region)
 	 * unrestricted LKEY.
 	 */
 	rkt->gen++;
+	/*
+	 * bits are capped in verbs.c to ensure enough bits for
+	 * generation number
+	 */
 	mr->lkey = (r << (32 - hfi1_lkey_table_size)) |
 		((((1 << (24 - hfi1_lkey_table_size)) - 1) & rkt->gen)
 		 << 8);
