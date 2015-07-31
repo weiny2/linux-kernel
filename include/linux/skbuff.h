@@ -2804,7 +2804,7 @@ static inline bool skb_rx_queue_recorded(const struct sk_buff *skb)
 }
 
 extern u16 __skb_tx_hash(const struct net_device *dev,
-			 const struct sk_buff *skb,
+			 struct sk_buff *skb,
 			 unsigned int num_tx_queues);
 
 #ifdef CONFIG_XFRM
