@@ -1128,16 +1128,12 @@ static int be_vid_config(struct be_adapter *adapter)
 				MCC_ADDL_STATUS_INSUFFICIENT_RESOURCES)
 			goto set_vlan_promisc;
 		dev_err(dev, "Setting HW VLAN filtering failed\n");
-	} else {
-		if (adapter->flags & BE_FLAGS_VLAN_PROMISC) {
-			/* hw VLAN filtering re-enabled. */
-			status = be_cmd_rx_filter(adapter,
-						  BE_FLAGS_VLAN_PROMISC, OFF);
-			if (!status) {
-				dev_info(dev,
-					 "Disabling VLAN Promiscuous mode\n");
-				adapter->flags &= ~BE_FLAGS_VLAN_PROMISC;
-			}
+	} else if (adapter->flags & BE_FLAGS_VLAN_PROMISC) {
+		status = be_cmd_rx_filter(adapter, BE_IF_FLAGS_VLAN_PROMISCUOUS,
+					  OFF);
+		if (!status) {
+			dev_info(dev, "Disabling VLAN Promiscuous mode\n");
+			adapter->flags &= ~BE_FLAGS_VLAN_PROMISC;
 		}
 	}
 
@@ -1147,7 +1143,7 @@ set_vlan_promisc:
 	if (adapter->flags & BE_FLAGS_VLAN_PROMISC)
 		return 0;
 
-	status = be_cmd_rx_filter(adapter, BE_FLAGS_VLAN_PROMISC, ON);
+	status = be_cmd_rx_filter(adapter, BE_IF_FLAGS_VLAN_PROMISCUOUS, ON);
 	if (!status) {
 		dev_info(dev, "Enable VLAN Promiscuous mode\n");
 		adapter->flags |= BE_FLAGS_VLAN_PROMISC;
@@ -1199,7 +1195,7 @@ static void be_clear_promisc(struct be_adapter *adapter)
 	adapter->promiscuous = false;
 	adapter->flags &= ~(BE_FLAGS_VLAN_PROMISC | BE_FLAGS_MCAST_PROMISC);
 
-	be_cmd_rx_filter(adapter, IFF_PROMISC, OFF);
+	be_cmd_rx_filter(adapter, BE_IF_FLAGS_ALL_PROMISCUOUS, OFF);
 }
 
 static void be_set_rx_mode(struct net_device *netdev)
@@ -1208,7 +1204,7 @@ static void be_set_rx_mode(struct net_device *netdev)
 	int status;
 
 	if (netdev->flags & IFF_PROMISC) {
-		be_cmd_rx_filter(adapter, IFF_PROMISC, ON);
+		be_cmd_rx_filter(adapter, BE_IF_FLAGS_ALL_PROMISCUOUS, ON);
 		adapter->promiscuous = true;
 		goto done;
 	}
@@ -1235,7 +1231,8 @@ static void be_set_rx_mode(struct net_device *netdev)
 		}
 
 		if (netdev_uc_count(netdev) > be_max_uc(adapter)) {
-			be_cmd_rx_filter(adapter, IFF_PROMISC, ON);
+			be_cmd_rx_filter(adapter, BE_IF_FLAGS_ALL_PROMISCUOUS,
+					 ON);
 			adapter->promiscuous = true;
 			goto done;
 		}
@@ -1248,7 +1245,7 @@ static void be_set_rx_mode(struct net_device *netdev)
 		}
 	}
 
-	status = be_cmd_rx_filter(adapter, IFF_MULTICAST, ON);
+	status = be_cmd_rx_filter(adapter, BE_IF_FLAGS_MULTICAST, ON);
 	if (!status) {
 		if (adapter->flags & BE_FLAGS_MCAST_PROMISC)
 			adapter->flags &= ~BE_FLAGS_MCAST_PROMISC;
@@ -1262,7 +1259,7 @@ set_mcast_promisc:
 	/* Set to MCAST promisc mode if setting MULTICAST address fails
 	 * or if num configured exceeds what we support
 	 */
-	status = be_cmd_rx_filter(adapter, IFF_ALLMULTI, ON);
+	status = be_cmd_rx_filter(adapter, BE_IF_FLAGS_MCAST_PROMISCUOUS, ON);
 	if (!status)
 		adapter->flags |= BE_FLAGS_MCAST_PROMISC;
 done:
