@@ -3952,7 +3952,7 @@ static int be_flash_skyhawk(struct be_adapter *adapter,
 	fsec = get_fsec_info(adapter, filehdr_size + img_hdrs_size, fw);
 	if (!fsec) {
 		dev_err(dev, "Invalid Cookie. FW image may be corrupted\n");
-		return -1;
+		return -EINVAL;
 	}
 
 	for (i = 0; i < le32_to_cpu(fsec->fsec_hdr.num_images); i++) {
