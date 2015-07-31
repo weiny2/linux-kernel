@@ -44,16 +44,17 @@
 void mlx5_ib_cont_pages(struct ib_umem *umem, u64 addr, int *count, int *shift,
 			int *ncont, int *order)
 {
-	struct ib_umem_chunk *chunk;
 	unsigned long tmp;
 	unsigned long m;
-	int i, j, k;
+	int i, k;
 	u64 base = 0;
 	int p = 0;
 	int skip;
 	int mask;
 	u64 len;
 	u64 pfn;
+	struct scatterlist *sg;
+	int entry;
 	unsigned long page_shift = ilog2(umem->page_size);
 
 	addr = addr >> page_shift;
@@ -62,32 +63,31 @@ void mlx5_ib_cont_pages(struct ib_umem *umem, u64 addr, int *count, int *shift,
 	skip = 1 << m;
 	mask = skip - 1;
 	i = 0;
-	list_for_each_entry(chunk, &umem->chunk_list, list)
-		for (j = 0; j < chunk->nmap; j++) {
-			len = sg_dma_len(&chunk->page_list[j]) >> page_shift;
-			pfn = sg_dma_address(&chunk->page_list[j]) >> page_shift;
-			for (k = 0; k < len; k++) {
-				if (!(i & mask)) {
-					tmp = (unsigned long)pfn;
-					m = min_t(unsigned long, m, find_first_bit(&tmp, sizeof(tmp)));
+	for_each_sg(umem->sg_head.sgl, sg, umem->nmap, entry) {
+		len = sg_dma_len(sg) >> page_shift;
+		pfn = sg_dma_address(sg) >> page_shift;
+		for (k = 0; k < len; k++) {
+			if (!(i & mask)) {
+				tmp = (unsigned long)pfn;
+				m = min(m, find_first_bit(&tmp, sizeof(tmp)));
+				skip = 1 << m;
+				mask = skip - 1;
+				base = pfn;
+				p = 0;
+			} else {
+				if (base + p != pfn) {
+					tmp = (unsigned long)p;
+					m = find_first_bit(&tmp, sizeof(tmp));
 					skip = 1 << m;
 					mask = skip - 1;
 					base = pfn;
 					p = 0;
-				} else {
-					if (base + p != pfn) {
-						tmp = (unsigned long)p;
-						m = find_first_bit(&tmp, sizeof(tmp));
-						skip = 1 << m;
-						mask = skip - 1;
-						base = pfn;
-						p = 0;
-					}
 				}
-				p++;
-				i++;
 			}
+			p++;
+			i++;
 		}
+	}
 
 	if (i) {
 		m = min_t(unsigned long, ilog2(roundup_pow_of_two(i)), m);
@@ -114,32 +114,32 @@ void mlx5_ib_populate_pas(struct mlx5_ib_dev *dev, struct ib_umem *umem,
 	unsigned long umem_page_shift = ilog2(umem->page_size);
 	int shift = page_shift - umem_page_shift;
 	int mask = (1 << shift) - 1;
-	struct ib_umem_chunk *chunk;
-	int i, j, k;
+	int i, k;
 	u64 cur = 0;
 	u64 base;
 	int len;
+	struct scatterlist *sg;
+	int entry;
 
 	i = 0;
-	list_for_each_entry(chunk, &umem->chunk_list, list)
-		for (j = 0; j < chunk->nmap; j++) {
-			len = sg_dma_len(&chunk->page_list[j]) >> umem_page_shift;
-			base = sg_dma_address(&chunk->page_list[j]);
-			for (k = 0; k < len; k++) {
-				if (!(i & mask)) {
-					cur = base + (k << umem_page_shift);
-					if (umr)
-						cur |= 3;
+	for_each_sg(umem->sg_head.sgl, sg, umem->nmap, entry) {
+		len = sg_dma_len(sg) >> PAGE_SHIFT;
+		base = sg_dma_address(sg);
+		for (k = 0; k < len; k++) {
+			if (!(i & mask)) {
+				cur = base + (k << PAGE_SHIFT);
+				if (umr)
+					cur |= 3;
 
-					pas[i >> shift] = cpu_to_be64(cur);
-					mlx5_ib_dbg(dev, "pas[%d] 0x%llx\n",
-						    i >> shift, be64_to_cpu(pas[i >> shift]));
-				}  else
-					mlx5_ib_dbg(dev, "=====> 0x%llx\n",
-						    base + (k << umem_page_shift));
-				i++;
-			}
+				pas[i >> shift] = cpu_to_be64(cur);
+				mlx5_ib_dbg(dev, "pas[%d] 0x%llx\n",
+					    i >> shift, be64_to_cpu(pas[i >> shift]));
+			}  else
+				mlx5_ib_dbg(dev, "=====> 0x%llx\n",
+					    base + (k << PAGE_SHIFT));
+			i++;
 		}
+	}
 }
 
 int mlx5_ib_get_buf_offset(u64 addr, int page_shift, u32 *offset)
