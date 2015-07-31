@@ -4406,7 +4406,6 @@ static int cxgb4_inet6addr_handler(struct notifier_block *this,
 		 * bond. We need to find such different adapters and add clip
 		 * in all of them only once.
 		 */
-		read_lock(&bond->lock);
 		bond_for_each_slave(bond, slave, iter) {
 			if (!first_pdev) {
 				ret = clip_add(slave->dev, ifa, event);
@@ -4420,7 +4419,6 @@ static int cxgb4_inet6addr_handler(struct notifier_block *this,
 				   to_pci_dev(slave->dev->dev.parent))
 					ret = clip_add(slave->dev, ifa, event);
 		}
-		read_unlock(&bond->lock);
 	} else
 		ret = clip_add(ifa->idev->dev, ifa, event);
 
