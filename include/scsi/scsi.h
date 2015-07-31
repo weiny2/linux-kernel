@@ -151,6 +151,7 @@ enum scsi_timeouts {
 #define VERIFY_16	      0x8f
 #define SYNCHRONIZE_CACHE_16  0x91
 #define WRITE_SAME_16	      0x93
+#define ZBC_IN		      0x95
 #define SERVICE_ACTION_IN     0x9e
 /* values for service action in */
 #define	SAI_READ_CAPACITY_16  0x10
@@ -177,6 +178,8 @@ enum scsi_timeouts {
 #define MO_SET_PRIORITY       0x0e
 #define MO_SET_TIMESTAMP      0x0f
 #define MO_MANAGEMENT_PROTOCOL_OUT 0x10
+/* values for ZBC_IN */
+#define ZI_REPORT_ZONES	      0x00
 /* values for variable length command */
 #define XDREAD_32	      0x03
 #define XDWRITE_32	      0x04
