@@ -538,7 +538,7 @@ static ssize_t tp_la_write(struct file *file, const char __user *buf,
 	char s[32];
 	unsigned long val;
 	size_t size = min(sizeof(s) - 1, count);
-	struct adapter *adap = FILE_DATA(file)->i_private;
+	struct adapter *adap = file_inode(file)->i_private;
 
 	if (copy_from_user(s, buf, size))
 		return -EFAULT;
@@ -647,7 +647,7 @@ static int pm_stats_open(struct inode *inode, struct file *file)
 static ssize_t pm_stats_clear(struct file *file, const char __user *buf,
 			      size_t count, loff_t *pos)
 {
-	struct adapter *adap = FILE_DATA(file)->i_private;
+	struct adapter *adap = file_inode(file)->i_private;
 
 	t4_write_reg(adap, PM_RX_STAT_CONFIG_A, 0);
 	t4_write_reg(adap, PM_TX_STAT_CONFIG_A, 0);
@@ -1005,7 +1005,7 @@ static ssize_t mbox_write(struct file *file, const char __user *buf,
 		   &data[7], &c) < 8 || c != '\n')
 		return -EINVAL;
 
-	ino = FILE_DATA(file);
+	ino = file_inode(file);
 	mbox = (uintptr_t)ino->i_private & 7;
 	adap = ino->i_private - mbox;
 	addr = adap->regs + PF_REG(mbox, CIM_PF_MAILBOX_DATA_A);
@@ -1034,7 +1034,7 @@ static ssize_t flash_read(struct file *file, char __user *buf, size_t count,
 			  loff_t *ppos)
 {
 	loff_t pos = *ppos;
-	loff_t avail = FILE_DATA(file)->i_size;
+	loff_t avail = file_inode(file)->i_size;
 	struct adapter *adap = file->private_data;
 
 	if (pos < 0)
@@ -1479,7 +1479,7 @@ static ssize_t rss_key_write(struct file *file, const char __user *buf,
 	int i, j;
 	u32 key[10];
 	char s[100], *p;
-	struct adapter *adap = FILE_DATA(file)->i_private;
+	struct adapter *adap = file_inode(file)->i_private;
 
 	if (count > sizeof(s) - 1)
 		return -EINVAL;
