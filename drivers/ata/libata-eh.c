@@ -2206,6 +2206,8 @@ static inline int ata_eh_worth_retry(struct ata_queued_cmd *qc)
 		return 1;	/* otherwise retry anything from fs stack */
 	if (qc->err_mask & AC_ERR_INVALID)
 		return 0;	/* don't retry these */
+	if (qc->flags & ATA_QCFLAG_SENSE_VALID)
+		return 0;	/* Autosense, no need to retry here */
 	return qc->err_mask != AC_ERR_DEV;  /* retry if not dev error */
 }
 
