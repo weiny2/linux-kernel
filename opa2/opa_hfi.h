@@ -342,6 +342,7 @@ struct hfi_pportdata {
 	struct mutex hls_lock;
 	u32 lstate;
 	u32 ibmtu;
+	u32 port_error_action;
 	u16 pkeys[HFI_MAX_PKEYS];
 	u16 link_width_supported;
 	u16 link_width_downgrade_supported;
