@@ -3298,6 +3298,68 @@ static unsigned int ata_scsi_zbc_in_xlat(struct ata_queued_cmd *qc)
 	return 1;
 }
 
+static unsigned int ata_scsi_zbc_out_xlat(struct ata_queued_cmd *qc)
+{
+	struct ata_taskfile *tf = &qc->tf;
+	struct scsi_cmnd *scmd = qc->scsicmd;
+	struct ata_device *dev = qc->dev;
+	const u8 *cdb = scmd->cmnd;
+	u8 reset_all, sa;
+	u64 block;
+	u32 n_block;
+
+	if (unlikely(scmd->cmd_len < 16))
+		goto invalid_fld;
+
+	/*
+	 * The service action definition got moved from
+	 * 0x00 to 0x04 with zbc-r02, so accept both.
+	 */
+	sa = cdb[1] & 0x1f;
+	/* Compatibility with ZBC r01 */
+	if (!sa)
+		sa = ZO_RESET_WRITE_POINTER;
+	if (sa != ZO_RESET_WRITE_POINTER)
+		goto invalid_fld;
+
+	scsi_16_lba_len(cdb, &block, &n_block);
+	if (n_block) {
+		/*
+		 * ZAC MANAGEMENT OUT doesn't define any length
+		 */
+		goto invalid_fld;
+	}
+	if (block > dev->n_sectors)
+		goto out_of_range;
+
+	reset_all = cdb[14] & 0x1;
+
+	tf->protocol = ATA_PROT_NODATA;
+	tf->command = ATA_CMD_ZAC_MGMT_OUT;
+	tf->feature = sa;
+	tf->hob_feature = reset_all & 0x1;
+
+	tf->lbah = (block >> 16) & 0xff;
+	tf->lbam = (block >> 8) & 0xff;
+	tf->lbal = block & 0xff;
+	tf->hob_lbah = (block >> 40) & 0xff;
+	tf->hob_lbam = (block >> 32) & 0xff;
+	tf->hob_lbal = (block >> 24) & 0xff;
+	tf->device |= ATA_LBA;
+	tf->flags |= ATA_TFLAG_ISADDR | ATA_TFLAG_DEVICE | ATA_TFLAG_LBA48;
+
+	return 0;
+
+ invalid_fld:
+	ata_scsi_set_sense(scmd, ILLEGAL_REQUEST, 0x24, 0x00);
+	/* "Invalid field in cdb" */
+	return 1;
+ out_of_range:
+	ata_scsi_set_sense(scmd, ILLEGAL_REQUEST, 0x21, 0x00);
+	/* "Logical Block Address out of range" */
+	return 1;
+}
+
 /**
  *	ata_mselect_caching - Simulate MODE SELECT for caching info page
  *	@qc: Storage for translated ATA taskfile
@@ -3527,6 +3589,9 @@ static inline ata_xlat_func_t ata_get_xlat_func(struct ata_device *dev, u8 cmd)
 
 	case ZBC_IN:
 		return ata_scsi_zbc_in_xlat;
+
+	case ZBC_OUT:
+		return ata_scsi_zbc_out_xlat;
 
 	case START_STOP:
 		return ata_scsi_start_stop_xlat;

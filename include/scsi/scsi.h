@@ -151,6 +151,7 @@ enum scsi_timeouts {
 #define VERIFY_16	      0x8f
 #define SYNCHRONIZE_CACHE_16  0x91
 #define WRITE_SAME_16	      0x93
+#define ZBC_OUT		      0x94
 #define ZBC_IN		      0x95
 #define SERVICE_ACTION_IN     0x9e
 /* values for service action in */
@@ -180,6 +181,11 @@ enum scsi_timeouts {
 #define MO_MANAGEMENT_PROTOCOL_OUT 0x10
 /* values for ZBC_IN */
 #define ZI_REPORT_ZONES	      0x00
+/* values for ZBC_OUT */
+#define ZO_CLOSE_ZONE	      0x01
+#define ZO_OPEN_ZONE	      0x02
+#define ZO_FINISH_ZONE	      0x03
+#define ZO_RESET_WRITE_POINTER 0x04
 /* values for variable length command */
 #define XDREAD_32	      0x03
 #define XDWRITE_32	      0x04
