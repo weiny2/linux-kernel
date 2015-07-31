@@ -2141,7 +2141,6 @@ void igb_set_fw_version(struct igb_adapter *adapter)
 		}
 		break;
 	}
-	return;
 }
 
 /**
