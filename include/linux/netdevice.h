@@ -1669,7 +1669,10 @@ struct napi_gro_cb {
 	unsigned long age;
 
 	/* Used in ipv6_gro_receive() */
-	int	proto;
+	u16	proto;
+
+	/* Used in udp_gro_receive */
+	u16	udp_mark;
 
 	/* used to support CHECKSUM_COMPLETE for tunneling protocols */
 	__wsum	csum;
@@ -1721,6 +1724,11 @@ struct packet_offload {
 	}							\
 	pcpu_stats;						\
 })
+
+struct udp_offload {
+	__be16			 port;
+	struct offload_callbacks callbacks;
+};
 
 #include <linux/notifier.h>
 
