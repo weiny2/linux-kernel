@@ -319,18 +319,20 @@ static int c4iw_query_device(struct ib_device *ibdev,
 	props->vendor_id = (u32)dev->rdev.lldi.pdev->vendor;
 	props->vendor_part_id = (u32)dev->rdev.lldi.pdev->device;
 	props->max_mr_size = T4_MAX_MR_SIZE;
-	props->max_qp = T4_MAX_NUM_QP;
-	props->max_qp_wr = T4_MAX_QP_DEPTH;
+	props->max_qp = dev->rdev.lldi.vr->qp.size / 2;
+	props->max_qp_wr = dev->rdev.hw_queue.t4_max_qp_depth;
 	props->max_sge = T4_MAX_RECV_SGE;
 	props->max_sge_rd = 1;
-	props->max_qp_rd_atom = c4iw_max_read_depth;
-	props->max_qp_init_rd_atom = c4iw_max_read_depth;
-	props->max_cq = T4_MAX_NUM_CQ;
-	props->max_cqe = T4_MAX_CQ_DEPTH;
+	props->max_res_rd_atom = dev->rdev.lldi.max_ird_adapter;
+	props->max_qp_rd_atom = min(dev->rdev.lldi.max_ordird_qp,
+				    c4iw_max_read_depth);
+	props->max_qp_init_rd_atom = props->max_qp_rd_atom;
+	props->max_cq = dev->rdev.lldi.vr->qp.size;
+	props->max_cqe = dev->rdev.hw_queue.t4_max_cq_depth;
 	props->max_mr = c4iw_num_stags(&dev->rdev);
 	props->max_pd = T4_MAX_NUM_PD;
 	props->local_ca_ack_delay = 0;
-	props->max_fast_reg_page_list_len = T4_MAX_FR_DEPTH;
+	props->max_fast_reg_page_list_len = t4_max_fr_depth(use_dsgl);
 
 	return 0;
 }
@@ -407,10 +409,10 @@ static ssize_t show_fw_ver(struct device *dev, struct device_attribute *attr,
 	PDBG("%s dev 0x%p\n", __func__, dev);
 
 	return sprintf(buf, "%u.%u.%u.%u\n",
-			FW_HDR_FW_VER_MAJOR_GET(c4iw_dev->rdev.lldi.fw_vers),
-			FW_HDR_FW_VER_MINOR_GET(c4iw_dev->rdev.lldi.fw_vers),
-			FW_HDR_FW_VER_MICRO_GET(c4iw_dev->rdev.lldi.fw_vers),
-			FW_HDR_FW_VER_BUILD_GET(c4iw_dev->rdev.lldi.fw_vers));
+			FW_HDR_FW_VER_MAJOR_G(c4iw_dev->rdev.lldi.fw_vers),
+			FW_HDR_FW_VER_MINOR_G(c4iw_dev->rdev.lldi.fw_vers),
+			FW_HDR_FW_VER_MICRO_G(c4iw_dev->rdev.lldi.fw_vers),
+			FW_HDR_FW_VER_BUILD_G(c4iw_dev->rdev.lldi.fw_vers));
 }
 
 static ssize_t show_hca(struct device *dev, struct device_attribute *attr,
@@ -501,7 +503,7 @@ int c4iw_register_device(struct c4iw_dev *dev)
 	dev->ibdev.node_type = RDMA_NODE_RNIC;
 	memcpy(dev->ibdev.node_desc, C4IW_NODE_DESC, sizeof(C4IW_NODE_DESC));
 	dev->ibdev.phys_port_cnt = dev->rdev.lldi.nports;
-	dev->ibdev.num_comp_vectors = 1;
+	dev->ibdev.num_comp_vectors =  dev->rdev.lldi.nciq;
 	dev->ibdev.dma_device = &(dev->rdev.lldi.pdev->dev);
 	dev->ibdev.query_device = c4iw_query_device;
 	dev->ibdev.query_port = c4iw_query_port;
