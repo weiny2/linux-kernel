@@ -33,6 +33,7 @@
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/tcp.h>
+#include <linux/prefetch.h>
 #include "en.h"
 
 static inline int mlx5e_alloc_rx_wqe(struct mlx5e_rq *rq,
