@@ -1649,7 +1649,10 @@ struct napi_gro_cb {
 	int data_offset;
 
 	/* This is non-zero if the packet cannot be merged with the new skb. */
-	int flush;
+	u16	flush;
+
+	/* Save the IP ID here and check when we get to the transport layer */
+	u16	flush_id;
 
 	/* Number of segments aggregated. */
 	u16	count;
@@ -1666,7 +1669,13 @@ struct napi_gro_cb {
 	unsigned long age;
 
 	/* Used in ipv6_gro_receive() */
-	int	proto;
+	u16	proto;
+
+	/* Used in udp_gro_receive */
+	u16	udp_mark;
+
+	/* used to support CHECKSUM_COMPLETE for tunneling protocols */
+	__wsum	csum;
 
 	/* used in skb_gro_receive() slow path */
 	struct sk_buff *last;
@@ -1693,7 +1702,7 @@ struct offload_callbacks {
 	int			(*gso_send_check)(struct sk_buff *skb);
 	struct sk_buff		**(*gro_receive)(struct sk_buff **head,
 					       struct sk_buff *skb);
-	int			(*gro_complete)(struct sk_buff *skb);
+	int			(*gro_complete)(struct sk_buff *skb, int nhoff);
 };
 
 struct packet_offload {
@@ -1715,6 +1724,11 @@ struct packet_offload {
 	}							\
 	pcpu_stats;						\
 })
+
+struct udp_offload {
+	__be16			 port;
+	struct offload_callbacks callbacks;
+};
 
 #include <linux/notifier.h>
 
@@ -1916,15 +1930,18 @@ static inline void *skb_gro_header_slow(struct sk_buff *skb, unsigned int hlen,
 	return skb->data + offset;
 }
 
-static inline void *skb_gro_mac_header(struct sk_buff *skb)
-{
-	return NAPI_GRO_CB(skb)->frag0 ?: skb_mac_header(skb);
-}
-
 static inline void *skb_gro_network_header(struct sk_buff *skb)
 {
 	return (NAPI_GRO_CB(skb)->frag0 ?: skb->data) +
 	       skb_network_offset(skb);
+}
+
+static inline void skb_gro_postpull_rcsum(struct sk_buff *skb,
+					const void *start, unsigned int len)
+{
+	if (skb->ip_summed == CHECKSUM_COMPLETE)
+		NAPI_GRO_CB(skb)->csum = csum_sub(NAPI_GRO_CB(skb)->csum,
+						  csum_partial(start, len, 0));
 }
 
 static inline int dev_hard_header(struct sk_buff *skb, struct net_device *dev,
@@ -2366,7 +2383,7 @@ static inline int netif_set_xps_queue(struct net_device *dev,
  * as a distribution range limit for the returned value.
  */
 static inline u16 skb_tx_hash(const struct net_device *dev,
-			      const struct sk_buff *skb)
+			      struct sk_buff *skb)
 {
 	return __skb_tx_hash(dev, skb, dev->real_num_tx_queues);
 }
@@ -2471,6 +2488,8 @@ extern gro_result_t	napi_gro_receive(struct napi_struct *napi,
 extern void		napi_gro_flush(struct napi_struct *napi, bool flush_old);
 extern struct sk_buff *	napi_get_frags(struct napi_struct *napi);
 extern gro_result_t	napi_gro_frags(struct napi_struct *napi);
+struct packet_offload *gro_find_receive_by_type(__be16 type);
+struct packet_offload *gro_find_complete_by_type(__be16 type);
 
 static inline void napi_free_frags(struct napi_struct *napi)
 {

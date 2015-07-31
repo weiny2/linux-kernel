@@ -30,6 +30,7 @@
 #include <net/inet_sock.h>
 #include <net/snmp.h>
 #include <net/flow.h>
+#include <net/flow_keys.h>
 
 struct sock;
 
@@ -100,13 +101,18 @@ extern int		ip_rcv(struct sk_buff *skb, struct net_device *dev,
 			       struct packet_type *pt, struct net_device *orig_dev);
 extern int		ip_local_deliver(struct sk_buff *skb);
 extern int		ip_mr_input(struct sk_buff *skb);
-extern int		ip_output(struct sk_buff *skb);
-extern int		ip_mc_output(struct sk_buff *skb);
+int ip_output(struct sock *sk, struct sk_buff *skb);
+int ip_mc_output(struct sock *sk, struct sk_buff *skb);
 extern int		ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff *));
 extern int		ip_do_nat(struct sk_buff *skb);
 extern void		ip_send_check(struct iphdr *ip);
 extern int		__ip_local_out(struct sk_buff *skb);
-extern int		ip_local_out(struct sk_buff *skb);
+int ip_local_out_sk(struct sock *sk, struct sk_buff *skb);
+static inline int ip_local_out(struct sk_buff *skb)
+{
+	return ip_local_out_sk(skb->sk, skb);
+}
+
 extern int		ip_queue_xmit(struct sk_buff *skb, struct flowi *fl);
 extern void		ip_init(void);
 extern int		ip_append_data(struct sock *sk, struct flowi4 *fl4,
@@ -290,6 +296,19 @@ static inline void ip_select_ident_segs(struct sk_buff *skb, struct sock *sk, in
 static inline void ip_select_ident(struct sk_buff *skb, struct sock *sk)
 {
 	ip_select_ident_segs(skb, sk, 1);
+}
+
+static inline void inet_set_txhash(struct sock *sk)
+{
+	struct inet_sock *inet = inet_sk(sk);
+	struct flow_keys keys;
+
+	keys.src = inet->inet_saddr;
+	keys.dst = inet->inet_daddr;
+	keys.port16[0] = inet->inet_sport;
+	keys.port16[1] = inet->inet_dport;
+
+	sk->sk_txhash = flow_hash_from_keys(&keys);
 }
 
 /*

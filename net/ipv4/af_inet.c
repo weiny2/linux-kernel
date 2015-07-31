@@ -1407,8 +1407,12 @@ static struct sk_buff **inet_gro_receive(struct sk_buff **head,
 		if (!NAPI_GRO_CB(p)->same_flow)
 			continue;
 
-		iph2 = ip_hdr(p);
-
+		iph2 = (struct iphdr *)(p->data + off);
+		/* The above works because, with the exception of the top
+		 * (inner most) layer, we only aggregate pkts with the same
+		 * hdr length so all the hdrs we'll need to verify will start
+		 * at the same offset.
+		 */
 		if ((iph->protocol ^ iph2->protocol) |
 		    ((__force u32)iph->saddr ^ (__force u32)iph2->saddr) |
 		    ((__force u32)iph->daddr ^ (__force u32)iph2->daddr)) {
@@ -1420,13 +1424,24 @@ static struct sk_buff **inet_gro_receive(struct sk_buff **head,
 		NAPI_GRO_CB(p)->flush |=
 			(iph->ttl ^ iph2->ttl) |
 			(iph->tos ^ iph2->tos) |
-			(__force int)((iph->frag_off ^ iph2->frag_off) & htons(IP_DF)) |
-			((u16)(ntohs(iph2->id) + NAPI_GRO_CB(p)->count) ^ id);
+			((iph->frag_off ^ iph2->frag_off) & htons(IP_DF));
 
+		/* Save the IP ID check to be included later when we get to
+		 * the transport layer so only the inner most IP ID is checked.
+		 * This is because some GSO/TSO implementations do not
+		 * correctly increment the IP ID for the outer hdrs.
+		 */
+		NAPI_GRO_CB(p)->flush_id =
+			    ((u16)(ntohs(iph2->id) + NAPI_GRO_CB(p)->count) ^ id);
 		NAPI_GRO_CB(p)->flush |= flush;
 	}
 
 	NAPI_GRO_CB(skb)->flush |= flush;
+	skb_set_network_header(skb, off);
+	/* The above will be needed by the transport layer if there is one
+	 * immediately following this IP hdr.
+	 */
+
 	skb_gro_pull(skb, sizeof(*iph));
 	skb_set_transport_header(skb, skb_gro_offset(skb));
 
@@ -1441,13 +1456,16 @@ out:
 	return pp;
 }
 
-static int inet_gro_complete(struct sk_buff *skb)
+static int inet_gro_complete(struct sk_buff *skb, int nhoff)
 {
-	__be16 newlen = htons(skb->len - skb_network_offset(skb));
-	struct iphdr *iph = ip_hdr(skb);
+	__be16 newlen = htons(skb->len - nhoff);
+	struct iphdr *iph = (struct iphdr *)(skb->data + nhoff);
 	const struct net_offload *ops;
 	int proto = iph->protocol;
 	int err = -ENOSYS;
+
+	if (skb->encapsulation)
+		skb_set_inner_network_header(skb, nhoff);
 
 	csum_replace2(&iph->check, iph->tot_len, newlen);
 	iph->tot_len = newlen;
@@ -1457,7 +1475,11 @@ static int inet_gro_complete(struct sk_buff *skb)
 	if (WARN_ON(!ops || !ops->callbacks.gro_complete))
 		goto out_unlock;
 
-	err = ops->callbacks.gro_complete(skb);
+	/* Only need to add sizeof(*iph) to get to the next hdr below
+	 * because any hdr with option will have been flushed in
+	 * inet_gro_receive().
+	 */
+	err = ops->callbacks.gro_complete(skb, nhoff + sizeof(*iph));
 
 out_unlock:
 	rcu_read_unlock();

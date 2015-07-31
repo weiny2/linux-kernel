@@ -296,6 +296,8 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	if (err)
 		goto late_failure;
 
+	ip6_set_txhash(sk);
+
 	if (!tp->write_seq && likely(!tp->repair))
 		tp->write_seq = secure_tcpv6_sequence_number(np->saddr.s6_addr32,
 							     np->daddr.s6_addr32,
@@ -1189,6 +1191,8 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newnp->saddr = treq->loc_addr;
 	newnp->rcv_saddr = treq->loc_addr;
 	newsk->sk_bound_dev_if = treq->iif;
+
+	ip6_set_txhash(newsk);
 
 	/* Now IPv6 options...
 

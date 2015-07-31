@@ -3786,7 +3786,7 @@ static int napi_gro_complete(struct sk_buff *skb)
 		if (ptype->type != type || !ptype->callbacks.gro_complete)
 			continue;
 
-		err = ptype->callbacks.gro_complete(skb);
+		err = ptype->callbacks.gro_complete(skb, 0);
 		break;
 	}
 	rcu_read_unlock();
@@ -3842,13 +3842,51 @@ static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 		diffs |= p->vlan_tci ^ skb->vlan_tci;
 		if (maclen == ETH_HLEN)
 			diffs |= compare_ether_header(skb_mac_header(p),
-						      skb_gro_mac_header(skb));
+						      skb_mac_header(skb));
 		else if (!diffs)
 			diffs = memcmp(skb_mac_header(p),
-				       skb_gro_mac_header(skb),
+				       skb_mac_header(skb),
 				       maclen);
 		NAPI_GRO_CB(p)->same_flow = !diffs;
 		NAPI_GRO_CB(p)->flush = 0;
+	}
+}
+
+static void skb_gro_reset_offset(struct sk_buff *skb)
+{
+	const struct skb_shared_info *pinfo = skb_shinfo(skb);
+	const skb_frag_t *frag0 = &pinfo->frags[0];
+
+	NAPI_GRO_CB(skb)->data_offset = 0;
+	NAPI_GRO_CB(skb)->frag0 = NULL;
+	NAPI_GRO_CB(skb)->frag0_len = 0;
+
+	if (skb_mac_header(skb) == skb_tail_pointer(skb) &&
+	    pinfo->nr_frags &&
+	    !PageHighMem(skb_frag_page(frag0))) {
+		NAPI_GRO_CB(skb)->frag0 = skb_frag_address(frag0);
+		NAPI_GRO_CB(skb)->frag0_len = skb_frag_size(frag0);
+	}
+}
+
+static void gro_pull_from_frag0(struct sk_buff *skb, int grow)
+{
+	struct skb_shared_info *pinfo = skb_shinfo(skb);
+
+	BUG_ON(skb->end - skb->tail < grow);
+
+	memcpy(skb_tail_pointer(skb), NAPI_GRO_CB(skb)->frag0, grow);
+
+	skb->data_len -= grow;
+	skb->tail += grow;
+
+	pinfo->frags[0].page_offset += grow;
+	skb_frag_size_sub(&pinfo->frags[0], grow);
+
+	if (unlikely(!skb_frag_size(&pinfo->frags[0]))) {
+		skb_frag_unref(skb, 0);
+		memmove(pinfo->frags, pinfo->frags + 1,
+			--pinfo->nr_frags * sizeof(pinfo->frags[0]));
 	}
 }
 
@@ -3860,6 +3898,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	struct list_head *head = &offload_base;
 	int same_flow;
 	enum gro_result ret;
+	int grow;
 
 	if (!(skb->dev->features & NETIF_F_GRO) || netpoll_rx_on(skb))
 		goto normal;
@@ -3868,6 +3907,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 		goto normal;
 
 	gro_list_prepare(napi, skb);
+	NAPI_GRO_CB(skb)->csum = skb->csum; /* Needed for CHECKSUM_COMPLETE */
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(ptype, head, list) {
@@ -3879,6 +3919,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 		NAPI_GRO_CB(skb)->same_flow = 0;
 		NAPI_GRO_CB(skb)->flush = 0;
 		NAPI_GRO_CB(skb)->free = 0;
+		NAPI_GRO_CB(skb)->udp_mark = 0;
 
 		pp = ptype->callbacks.gro_receive(&napi->gro_list, skb);
 		break;
@@ -3915,27 +3956,9 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	ret = GRO_HELD;
 
 pull:
-	if (skb_headlen(skb) < skb_gro_offset(skb)) {
-		int grow = skb_gro_offset(skb) - skb_headlen(skb);
-
-		BUG_ON(skb->end - skb->tail < grow);
-
-		memcpy(skb_tail_pointer(skb), NAPI_GRO_CB(skb)->frag0, grow);
-
-		skb->tail += grow;
-		skb->data_len -= grow;
-
-		skb_shinfo(skb)->frags[0].page_offset += grow;
-		skb_frag_size_sub(&skb_shinfo(skb)->frags[0], grow);
-
-		if (unlikely(!skb_frag_size(&skb_shinfo(skb)->frags[0]))) {
-			skb_frag_unref(skb, 0);
-			memmove(skb_shinfo(skb)->frags,
-				skb_shinfo(skb)->frags + 1,
-				--skb_shinfo(skb)->nr_frags * sizeof(skb_frag_t));
-		}
-	}
-
+	grow = skb_gro_offset(skb) - skb_headlen(skb);
+	if (grow > 0)
+		gro_pull_from_frag0(skb, grow);
 ok:
 	return ret;
 
@@ -3944,6 +3967,33 @@ normal:
 	goto pull;
 }
 
+struct packet_offload *gro_find_receive_by_type(__be16 type)
+{
+	struct list_head *offload_head = &offload_base;
+	struct packet_offload *ptype;
+
+	list_for_each_entry_rcu(ptype, offload_head, list) {
+		if (ptype->type != type || !ptype->callbacks.gro_receive)
+			continue;
+		return ptype;
+	}
+	return NULL;
+}
+EXPORT_SYMBOL(gro_find_receive_by_type);
+
+struct packet_offload *gro_find_complete_by_type(__be16 type)
+{
+	struct list_head *offload_head = &offload_base;
+	struct packet_offload *ptype;
+
+	list_for_each_entry_rcu(ptype, offload_head, list) {
+		if (ptype->type != type || !ptype->callbacks.gro_complete)
+			continue;
+		return ptype;
+	}
+	return NULL;
+}
+EXPORT_SYMBOL(gro_find_complete_by_type);
 
 static gro_result_t napi_skb_finish(gro_result_t ret, struct sk_buff *skb)
 {
@@ -3972,23 +4022,6 @@ static gro_result_t napi_skb_finish(gro_result_t ret, struct sk_buff *skb)
 	return ret;
 }
 
-static void skb_gro_reset_offset(struct sk_buff *skb)
-{
-	const struct skb_shared_info *pinfo = skb_shinfo(skb);
-	const skb_frag_t *frag0 = &pinfo->frags[0];
-
-	NAPI_GRO_CB(skb)->data_offset = 0;
-	NAPI_GRO_CB(skb)->frag0 = NULL;
-	NAPI_GRO_CB(skb)->frag0_len = 0;
-
-	if (skb_mac_header(skb) == skb_tail_pointer(skb) &&
-	    pinfo->nr_frags &&
-	    !PageHighMem(skb_frag_page(frag0))) {
-		NAPI_GRO_CB(skb)->frag0 = skb_frag_address(frag0);
-		NAPI_GRO_CB(skb)->frag0_len = skb_frag_size(frag0);
-	}
-}
-
 gro_result_t napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 {
 	skb_gro_reset_offset(skb);
@@ -4005,6 +4038,8 @@ static void napi_reuse_skb(struct napi_struct *napi, struct sk_buff *skb)
 	skb->vlan_tci = 0;
 	skb->dev = napi->dev;
 	skb->skb_iif = 0;
+	skb->encapsulation = 0;
+	skb_shinfo(skb)->gso_type = 0;
 	skb->truesize = SKB_TRUESIZE(skb_end_offset(skb));
 
 	napi->skb = skb;
@@ -4022,17 +4057,16 @@ struct sk_buff *napi_get_frags(struct napi_struct *napi)
 }
 EXPORT_SYMBOL(napi_get_frags);
 
-static gro_result_t napi_frags_finish(struct napi_struct *napi, struct sk_buff *skb,
-			       gro_result_t ret)
+static gro_result_t napi_frags_finish(struct napi_struct *napi,
+				      struct sk_buff *skb,
+				      gro_result_t ret)
 {
 	switch (ret) {
 	case GRO_NORMAL:
 	case GRO_HELD:
+		__skb_push(skb, ETH_HLEN);
 		skb->protocol = eth_type_trans(skb, skb->dev);
-
-		if (ret == GRO_HELD)
-			skb_gro_pull(skb, -ETH_HLEN);
-		else if (netif_receive_skb(skb))
+		if (ret == GRO_NORMAL && netif_receive_skb(skb))
 			ret = GRO_DROP;
 		break;
 
@@ -4048,39 +4082,42 @@ static gro_result_t napi_frags_finish(struct napi_struct *napi, struct sk_buff *
 	return ret;
 }
 
+/* Upper GRO stack assumes network header starts at gro_offset=0
+ * Drivers could call both napi_gro_frags() and napi_gro_receive()
+ * We copy ethernet header into skb->data to have a common layout.
+ */
 static struct sk_buff *napi_frags_skb(struct napi_struct *napi)
 {
 	struct sk_buff *skb = napi->skb;
-	struct ethhdr *eth;
-	unsigned int hlen;
-	unsigned int off;
+	const struct ethhdr *eth;
+	unsigned int hlen = sizeof(*eth);
 
 	napi->skb = NULL;
 
 	skb_reset_mac_header(skb);
 	skb_gro_reset_offset(skb);
 
-	off = skb_gro_offset(skb);
-	hlen = off + sizeof(*eth);
-	eth = skb_gro_header_fast(skb, off);
-	if (skb_gro_header_hard(skb, hlen)) {
-		eth = skb_gro_header_slow(skb, hlen, off);
+	eth = skb_gro_header_fast(skb, 0);
+	if (unlikely(skb_gro_header_hard(skb, hlen))) {
+		eth = skb_gro_header_slow(skb, hlen, 0);
 		if (unlikely(!eth)) {
 			napi_reuse_skb(napi, skb);
-			skb = NULL;
-			goto out;
+			return NULL;
 		}
+	} else {
+		gro_pull_from_frag0(skb, hlen);
+		NAPI_GRO_CB(skb)->frag0 += hlen;
+		NAPI_GRO_CB(skb)->frag0_len -= hlen;
 	}
-
-	skb_gro_pull(skb, sizeof(*eth));
+	__skb_pull(skb, hlen);
 
 	/*
 	 * This works because the only protocols we care about don't require
-	 * special handling.  We'll fix it up properly at the end.
+	 * special handling.
+	 * We'll fix it up properly in napi_frags_finish()
 	 */
 	skb->protocol = eth->h_proto;
 
-out:
 	return skb;
 }
 

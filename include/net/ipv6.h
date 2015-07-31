@@ -19,6 +19,7 @@
 #include <net/if_inet6.h>
 #include <net/ndisc.h>
 #include <net/flow.h>
+#include <net/flow_keys.h>
 #include <net/snmp.h>
 
 #define SIN6_LEN_RFC2133	24
@@ -665,6 +666,26 @@ extern void ipv6_proxy_select_ident(struct sk_buff *skb);
 
 extern int ip6_dst_hoplimit(struct dst_entry *dst);
 
+#if IS_ENABLED(CONFIG_IPV6)
+static inline void ip6_set_txhash(struct sock *sk)
+{
+	struct inet_sock *inet = inet_sk(sk);
+	struct ipv6_pinfo *np = inet6_sk(sk);
+	struct flow_keys keys;
+
+	keys.src = (__force __be32)ipv6_addr_hash(&np->saddr);
+	keys.dst = (__force __be32)ipv6_addr_hash(&np->daddr);
+	keys.port16[0] = inet->inet_sport;
+	keys.port16[1] = inet->inet_dport;
+
+	sk->sk_txhash = flow_hash_from_keys(&keys);
+}
+
+#else
+static inline void ip6_set_txhash(struct sock *sk) { }
+#endif
+
+
 /*
  *	Header manipulation
  */
@@ -740,7 +761,7 @@ extern struct dst_entry *	ip6_blackhole_route(struct net *net,
  *	skb processing functions
  */
 
-extern int			ip6_output(struct sk_buff *skb);
+int ip6_output(struct sock *sk, struct sk_buff *skb);
 extern int			ip6_forward(struct sk_buff *skb);
 extern int			ip6_input(struct sk_buff *skb);
 extern int			ip6_mc_input(struct sk_buff *skb);
