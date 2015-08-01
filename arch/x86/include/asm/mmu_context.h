@@ -39,8 +39,6 @@ static inline void load_mm_ldt(struct mm_struct *mm)
 	int ldt_size;
 	void *ldt;
 
-	DEBUG_LOCKS_WARN_ON(!irqs_disabled());
-
 	/* lockless_dereference synchronizes with smp_store_release */
 	ldt_size = mm->context.size;
 	ldt = lockless_dereference(mm->context.ldt);
@@ -72,6 +70,8 @@ static inline void load_mm_ldt(struct mm_struct *mm)
 		set_ldt(ldt, ldt_size);
 	else
 		clear_LDT();
+
+	DEBUG_LOCKS_WARN_ON(preemptible());
 }
 
 /*
