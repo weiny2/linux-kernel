@@ -22,6 +22,7 @@
 #include <linux/time.h>
 #include <linux/highuid.h>
 #include <linux/pagemap.h>
+#include <linux/dax.h>
 #include <linux/quotaops.h>
 #include <linux/string.h>
 #include <linux/buffer_head.h>
@@ -493,7 +494,11 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 				retval = map->m_len;
 			map->m_len = retval;
 		} else if (ext4_es_is_delayed(&es) || ext4_es_is_hole(&es)) {
-			retval = 0;
+			map->m_flags |= EXT4_MAP_UPTODATE;
+			retval = es.es_len - (map->m_lblk - es.es_lblk);
+			if (retval > map->m_len)
+				retval = map->m_len;
+			map->m_len = retval;
 		} else {
 			BUG_ON(1);
 		}
@@ -3020,6 +3025,17 @@ static int ext4_get_block_write_nolock(struct inode *inode, sector_t iblock,
 			       EXT4_GET_BLOCKS_NO_LOCK);
 }
 
+int ext4_get_block_dax(struct inode *inode, sector_t iblock,
+		   struct buffer_head *bh_result, int create)
+{
+	int flags = EXT4_GET_BLOCKS_PRE_IO | EXT4_GET_BLOCKS_UNWRIT_EXT;
+	if (create)
+		flags |= EXT4_GET_BLOCKS_CREATE;
+	ext4_debug("ext4_get_block_dax: inode %lu, create flag %d\n",
+		   inode->i_ino, create);
+	return _ext4_get_block(inode, iblock, bh_result, flags);
+}
+
 static void ext4_end_io_dio(struct kiocb *iocb, loff_t offset,
 			    ssize_t size, void *private)
 {
@@ -3579,7 +3595,9 @@ int ext4_punch_hole(struct inode *inode, loff_t offset, loff_t length)
 
 	/* Wait all existing dio workers, newcomers will block on i_mutex */
 	ext4_inode_block_unlocked_dio(inode);
-	inode_dio_wait(inode);
+	ret = inode_dio_wait(inode);
+	if (ret)
+		goto out_dio;
 
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
 		credits = ext4_writepage_trans_blocks(inode);
@@ -4756,8 +4774,10 @@ int ext4_setattr(struct dentry *dentry, struct iattr *attr)
 		if (orphan) {
 			if (!ext4_should_journal_data(inode)) {
 				ext4_inode_block_unlocked_dio(inode);
-				inode_dio_wait(inode);
+				rc = inode_dio_wait(inode);
 				ext4_inode_resume_unlocked_dio(inode);
+				if (rc)
+					goto err_out;
 			} else
 				ext4_wait_for_tail_page_commit(inode);
 		}
@@ -5154,7 +5174,11 @@ int ext4_change_inode_journal_flag(struct inode *inode, int val)
 
 	/* Wait for all existing dio workers */
 	ext4_inode_block_unlocked_dio(inode);
-	inode_dio_wait(inode);
+	err = inode_dio_wait(inode);
+	if (err) {
+		ext4_inode_resume_unlocked_dio(inode);
+		return err;
+	}
 
 	jbd2_journal_lock_updates(journal);
 

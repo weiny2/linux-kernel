@@ -618,7 +618,9 @@ restart:
 			 * XFS_IOLOCK_EXCL, and so for most cases this wait is a
 			 * no-op.
 			 */
-			inode_dio_wait(inode);
+			error = inode_dio_wait(inode);
+			if (error)
+				return error;
 			goto restart;
 		}
 		error = xfs_zero_eof(ip, iocb->ki_pos, i_size_read(inode), &zero);
@@ -754,9 +756,11 @@ xfs_file_dio_aio_write(
 	 * If we are doing unaligned IO, wait for all other IO to drain,
 	 * otherwise demote the lock if we had to flush cached pages
 	 */
-	if (unaligned_io)
-		inode_dio_wait(inode);
-	else if (iolock == XFS_IOLOCK_EXCL) {
+	if (unaligned_io) {
+		ret = inode_dio_wait(inode);
+		if (ret)
+			goto out;
+	} else if (iolock == XFS_IOLOCK_EXCL) {
 		xfs_rw_ilock_demote(ip, XFS_IOLOCK_EXCL);
 		iolock = XFS_IOLOCK_SHARED;
 	}
@@ -1530,8 +1534,36 @@ xfs_filemap_fault(
 	return ret;
 }
 
+STATIC int
+xfs_filemap_pmd_fault(
+	struct vm_area_struct	*vma,
+	unsigned long		addr,
+	pmd_t			*pmd,
+	unsigned int		flags)
+{
+	struct inode		*inode = file_inode(vma->vm_file);
+	struct xfs_inode	*ip = XFS_I(inode);
+	int			ret;
+
+	if (!IS_DAX(inode))
+		return VM_FAULT_FALLBACK;
+
+	trace_xfs_filemap_pmd_fault(ip);
+
+	sb_start_pagefault(inode->i_sb);
+	file_update_time(vma->vm_file);
+	xfs_ilock(XFS_I(inode), XFS_MMAPLOCK_SHARED);
+	ret = __dax_pmd_fault(vma, addr, pmd, flags, xfs_get_blocks_direct,
+				    xfs_end_io_dax_write);
+	xfs_iunlock(XFS_I(inode), XFS_MMAPLOCK_SHARED);
+	sb_end_pagefault(inode->i_sb);
+
+	return ret;
+}
+
 static const struct vm_operations_struct xfs_file_vm_ops = {
 	.fault		= xfs_filemap_fault,
+	.pmd_fault	= xfs_filemap_pmd_fault,
 	.map_pages	= filemap_map_pages,
 	.page_mkwrite	= xfs_filemap_page_mkwrite,
 };
@@ -1544,7 +1576,7 @@ xfs_file_mmap(
 	file_accessed(filp);
 	vma->vm_ops = &xfs_file_vm_ops;
 	if (IS_DAX(file_inode(filp)))
-		vma->vm_flags |= VM_MIXEDMAP;
+		vma->vm_flags |= VM_MIXEDMAP | VM_HUGEPAGE;
 	return 0;
 }
 
