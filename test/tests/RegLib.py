@@ -499,6 +499,11 @@ class TestInfo:
                           help="Optional location to diag libs. Default: <none>",
                           metavar="PATH")
 
+        parser.add_option("--perfpath", dest="perf_path",
+                          help="Optional location of perftest. Default: /bin",
+                          metavar="PATH",
+                          default="/bin")
+
         parser.add_option("--mpiverbs", action="store_true", dest="mpiverbs",
                           help="Run MPI over verbs instead of the default PSM")
 
@@ -680,6 +685,8 @@ class TestInfo:
         if options.np:
             self.np = options.np
 
+        self.perf_path = options.perf_path
+
     def get_host_list(self):
         host_list = []
         for host in self.nodelist:
@@ -801,4 +808,7 @@ class TestInfo:
 
     def get_np(self):
         return self.np
+
+    def get_perf_path(self):
+        return self.perf_path
 
