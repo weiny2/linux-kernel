@@ -7,6 +7,17 @@ host1=$2
 host2=$3
 
 uptime=0
+run_host=$host1
+ipostl_server=$host2
+ipostl_client=$run_host
+
+hostfile="${host1}_${host2}.hosts"
+perf_git="/nfs/sc/disks/fabric_work/ddalessa/perf_analysis/perfromance_team-fab_perf"
+verbs_dir="/nfs_scratch/driver_perf/Verbs/verbs-perf-check-r1.0"
+turbo="noturbo"
+WFRMPI="/usr/mpi/gcc/openmpi-1.8.5-hfi"
+datestamp=`date "+%m-%d-%y"`
+logdir="/nfs/sc/disks/fabric_mirror/scratch/wfr_reg_test/daily_logs/RHEL7"
 
 get_uptime () {
 	host=$1
@@ -35,7 +46,7 @@ check_up() {
 			fi
 
 			if [ $cur_uptime -gt $uptime ]; then
-				echo "Host never rebooted after 120 seconds"
+				echo "Host never rebooted after 120 seconds ($cur_uptime $uptime)"
 				return 1
 			fi
 
@@ -48,7 +59,7 @@ check_up() {
 		fi
 		echo "Checking again in 30 seconds"
 		sleep 30
-	done 
+	done
 
 	return 1
 }
@@ -66,7 +77,7 @@ do_reboot() {
 	else
 		echo "$host never came up"
 		power_cycle $host1
-	
+
 	fi
 	check_up $host $uptime
 	if [ $? -eq 0]; then
@@ -77,21 +88,128 @@ do_reboot() {
 	fi
 }
 
-# Reboot the hosts to get rid of anything that is fouled up
-echo "Rebooting $host1"
-do_reboot $host1
-if [ $? -ne 0 ]; then
-	echo "$host1 never rebooted cleanlyi"
-	exit 1
-fi
+function do_mpi_perf()
+{
+	ssh -t $run_host "cd $perf_git/scripts/regression/osu-perf-check && \
+		WFRMPI=$WFRMPI PATH=$WFRMPI/bin:$PATH make clean"
 
-echo "Rebooting $host2"
-do_reboot $host2
-if [ $? -ne 0 ]; then
-	echo "$host2 never rebooted cleanly"
-	exit 1
+	ssh -t $run_host "cd $perf_git/scripts/regression/osu-perf-check && \
+		WFRMPI=$WFRMPI PATH=$WFRMPI/bin:$PATH make"
+
+	ssh -t $run_host "cd $perf_git/scripts/regression/osu-perf-check && \
+		WFRMPI=$WFRMPI ./run.sh $hostfile $turbo"
+	mv $perf_git/scripts/regression/osu-perf-check/OUTPUT-$datestamp $logdir/mpi_perf.$datestamp
+}
+
+function load_ipoib()
+{
+	echo "Starting IPoIB"
+	ssh root@$ipostl_server "modprobe ib_ipoib && ifup ib0"
+	if [[ $? -ne 0 ]]; then
+		echo "FAIL: Could not bringup ib0 on $ipostl_server"
+		exit 1
+	fi
+
+	ssh root@$ipostl_client "modprobe ib_ipoib && ifup ib0"
+	if [[ $? -ne 0 ]]; then
+		echo "FAIL: Could not bringup ib0 on $ipostl_client"
+		exit 1
+	fi
+}
+
+function do_ipostl_perf()
+{
+
+	load_ipoib
+
+	echo "Starting test"
+	ssh -t $run_host "cd $perf_git/scripts/regression/ipostl-perf-check && \
+		./run-ipostl.sh $ipostl_server $ipostl_server-ib \
+		$ipostl_client-ib $datestamp"
+
+	mv $perf_git/scripts/regression/ipostl-perf-check/$datestamp $logdir/ipostl_perf.$datestamp
+}
+
+function do_verbs_perf()
+{
+	load_ipoib
+
+	echo "Starting verbs perf"
+	ssh -t $run_host "cd $verbs_dir &&
+	 	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/nfs/sc/disks/fabric_files/tools/intel/impi/5.0.3.048/intel64/lib/:/usr/lib64 \
+		WFRBUILDS=/nfs_scratch/perfromance_team-fab_perf/wfr-sys/wfr-builds/rh7.0/floor \
+		WFRDRIVER=$WFRBUILDS/driver/hfi1.ko \
+		WFRMPI=$WFRBUILDS/mpi/openmpi-1.8.2 \
+	 	WFRDIAGS=$WFRBUILDS/diags/hfidiags \
+	 	WFROPAFM=$WFRBUILDS/opafm-config \
+		WFRSCRIPTS=$WFRBUILDS/scripts \
+		./run-Verbs-LZ-1QP-Tests.sh $host2-ib $logdir/ibverbs.$datestamp"
+
+	# No need to move the data it is already where it needs to be
+}
+
+if [[ $mode -eq "perf" ]]; then
+
+
+	# Make sure the hosts are up, they should have been rebooted by the other tests, no need to
+	# force yet another reboot.
+	ping -c 1 -t 3 $host1
+	if [[ $? -ne 0 ]]; then
+		echo "FAIL: $host1 does not ping"
+		exit 1
+	fi
+
+	ping -c 1 -t 3 $host2
+	if [[ $? -ne 0 ]]; then
+		echo "FAIL: $host2 does not ping"
+		exit 1
+	fi
+
+	echo "Hosts are up and ready"
+
+	# Make sure the driver is loaded
+	cd tests
+	./LoadModule.py --nodelist $host1,$host2
+	if [[ $? -ne 0 ]]; then
+		echo FAIL: Load Module error
+		exit 1
+	fi
+
+	# Pull in any of the perf team's fixes
+	cd $perf_git
+	echo "Updating git tree"
+	git remote update && stg rebase origin/master
+	if [[ $? -ne 0 ]]; then
+		echo "FAIL: Git error"
+		exit 1
+	fi
+
+	# Create the host file for MPI tests
+	echo $host1 > scripts/regression/osu-perf-check/$hostfile
+	echo $host2 >> scripts/regression/osu-perf-check/$hostfile
+
+	do_mpi_perf
+	do_ipostl_perf
+	do_verbs_perf
+
+else
+	# Reboot the hosts to get rid of anything that is fouled up
+	echo "Rebooting $host1"
+	do_reboot $host1
+	if [ $? -ne 0 ]; then
+		echo "$host1 never rebooted cleanlyi"
+		exit 1
+	fi
+
+	echo "Rebooting $host2"
+	do_reboot $host2
+	if [ $? -ne 0 ]; then
+		echo "$host2 never rebooted cleanly"
+		exit 1
+	fi
+
+	./harness.py --type $mode --nodelist $host1,$host2
 fi
-./harness.py --type $mode --nodelist $host1,$host2
 
 # Reboot and hope for the best no need to wait around.
 ssh root@$host1 'reboot'&
