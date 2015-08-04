@@ -179,16 +179,18 @@ enum {
 #define SMA_IDLE_ARM	1
 #define SMA_IDLE_ACTIVE 2
 
-#define HFI_IB_CFG_LIDLMC 0 /* LID and Mask*/
-#define HFI_IB_CFG_LWID_DG_ENB 1 /* allowed Link-width downgrade */
-#define HFI_IB_CFG_LWID_ENB 2 /* allowed Link-width */
-#define HFI_IB_CFG_LWID 3 /* currently active Link-width */
-#define HFI_IB_CFG_SPD_ENB 4 /* allowed Link speeds */
-#define HFI_IB_CFG_SPD 5 /* current Link spd */
-#define HFI_IB_CFG_OP_VLS 10 /* operational VLs */
-#define HFI_IB_CFG_PKEYS 16 /* update partition keys */
-#define HFI_IB_CFG_MTU 17 /* update MTU in IBC */
-#define HFI_IB_CFG_VL_HIGH_LIMIT 19
+enum {
+	HFI_IB_CFG_LIDLMC = 0,		/* LID and Mask*/
+	HFI_IB_CFG_LWID_DG_ENB,		/* allowed Link-width downgrade */
+	HFI_IB_CFG_LWID_ENB,		/* allowed Link-width */
+	HFI_IB_CFG_LWID,		/* currently active Link-width */
+	HFI_IB_CFG_SPD_ENB,		/* allowed Link speeds */
+	HFI_IB_CFG_SPD,			/* current Link spd */
+	HFI_IB_CFG_OP_VLS,		/* operational VLs */
+	HFI_IB_CFG_PKEYS,		/* update partition keys */
+	HFI_IB_CFG_MTU,			/* update MTU in IBC */
+	HFI_IB_CFG_VL_HIGH_LIMIT,	/* Change VL high limit */
+};
 
 /* verify capability fabric CRC size bits */
 enum {
