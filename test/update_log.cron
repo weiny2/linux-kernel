@@ -1,8 +1,0 @@
-#!/bin/bash
-# To subscribe to these notices enter your email below and check-in the change.
-grep "Failed" update.*.log
-if [ $? -eq 0 ]; then
-        mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Auto Update FAILED" dennis.dalessandro@intel.com < update.*.log
-else
-        mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Auto Update SUCCESS" dennis.dalessandro@intel.com < update.*.log
-fi

@@ -1,0 +1,16 @@
+#!/bin/bash
+# Generic script to scrape a log file and send email notification
+
+logfile=$1.*.log
+keyword=$2
+title=$1
+
+build=`git rev-parse --short HEAD`
+grep "$keyword" $logfile
+if [ $? -eq 0 ]; then
+	to="`cat failed_reg.subscribers`"
+        mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] $title for commit $build FAILED" $to  < $logfile
+else
+	to="`cat passing_reg.subscribers`"
+        mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] $title for commit $build SUCCESS" $to  < $logfile
+fi
