@@ -502,7 +502,7 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	 * Likely this needs to be retrieved from opa2_hfi.
 	 */
 	for (i = 0; i < ARRAY_SIZE(ibp->sl_to_sc); i++) {
-		ibp->sl_to_sc[i] = i;
+		ibp->sl_to_sc[i] = pdesc.sl_to_sc[i];
 		ibp->sc_to_sl[i] = i;
 	}
 	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_vl); i++)
