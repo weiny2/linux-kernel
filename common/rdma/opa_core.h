@@ -262,6 +262,7 @@ struct hfi_dlid_assign_args;
  * @pkey_tlen: Length of PKEY table
  * @pkeys: pointer to the pkey table
  * @num_vls_supported: Number of VL supported
+ * @sl_to_sc: Service lane to Service class mapping table
  * @vl_mtu: Array of per VL MTU
  */
 struct opa_pport_desc {
@@ -271,6 +272,7 @@ struct opa_pport_desc {
 	u16 pkey_tlen;
 	u16 *pkeys;
 	u8 num_vls_supported;
+	u8 sl_to_sc[OPA_MAX_SLS];
 	u16 vl_mtu[OPA_MAX_VLS];
 };
 

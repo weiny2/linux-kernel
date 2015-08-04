@@ -428,6 +428,47 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
 	return val;
 }
 
+/* FXRTODO: MC/TC -> SL see STL-1700 */
+void hfi_sl_to_sc_mc_tc(struct hfi_pportdata *ppd, u8 *sc, u8 *mc, u8 *tc)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 reg[4];
+	u32 reg_addr;
+	int i, j, k;
+	int nregs = ARRAY_SIZE(reg);
+
+	switch (ppd_to_pnum(ppd)) {
+	case 1:
+		reg_addr = FXR_TXCI_CFG_SL0_TO_TC;
+		break;
+	case 2:
+		reg_addr = FXR_TXCI_CFG_SL4_TO_TC;
+		break;
+	default:
+		return;
+	}
+
+	for (i = 0; i < nregs; i++)
+		reg[i] = read_csr(dd, reg_addr + i * 8);
+
+	for (i = 0, j = 0; i < nregs; i++) {
+		for (k = 0; k < 64; k += 8, j++) {
+			if (sc)
+				hfi_set_bits(&reg[i], sc[j], HFI_SL_TO_SC_MASK,
+						k + HFI_SL_TO_SC_SHIFT);
+			if (mc)
+				hfi_set_bits(&reg[i], mc[j], HFI_SL_TO_MC_MASK,
+						k + HFI_SL_TO_MC_SHIFT);
+			if (tc)
+				hfi_set_bits(&reg[i], tc[j], HFI_SL_TO_TC_MASK,
+						k + HFI_SL_TO_TC_SHIFT);
+		}
+	}
+
+	for (i = 0; i < nregs; i++)
+		write_csr(dd, reg_addr + i * 8, reg[i]);
+}
+
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -472,6 +513,9 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val)
 		if (HFI1_CAP_IS_KSET(PKEY_CHECK))
 #endif
 			hfi_set_pkey_table(ppd);
+		break;
+	case HFI_IB_CFG_SL_TO_SC:
+		hfi_sl_to_sc_mc_tc(ppd, ppd->sl_to_sc, NULL, NULL);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
@@ -699,6 +743,8 @@ static void hfi_port_desc(struct opa_core_device *odev,
 	pdesc->pkey_tlen = HFI_MAX_PKEYS;
 	pdesc->pkeys = ppd->pkeys;
 	pdesc->ibmaxmtu = HFI_DEFAULT_MAX_MTU;
+	for (i = 0; i < ARRAY_SIZE(ppd->sl_to_sc); i++)
+		pdesc->sl_to_sc[i] = ppd->sl_to_sc[i];
 }
 
 static void hfi_device_desc(struct opa_core_device *odev,
@@ -850,6 +896,7 @@ void hfi_set_crc_mode(struct hfi_devdata *dd, u16 crc_lcb_mode)
 void hfi_pport_init(struct hfi_devdata *dd)
 {
 	struct hfi_pportdata *ppd;
+	int i;
 	u8 port;
 	u16 crc_val;
 
@@ -952,6 +999,9 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		 */
 		dd->vl_mtu[15] = HFI_MIN_VL_15_MTU;
 		ppd->vls_operational = ppd->vls_supported;
+		for (i = 0; i < ARRAY_SIZE(ppd->sl_to_sc); i++)
+			ppd->sl_to_sc[i] = i;
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0);
 		hfi_ptc_init(ppd);
 	}
 }

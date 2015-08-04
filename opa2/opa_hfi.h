@@ -138,6 +138,13 @@ enum {
 #define HFI_PKEY_MEMBER_TYPE(pkey)	(((pkey) >> HFI_PKEY_MEMBER_SHIFT) & \
 					HFI_PKEY_MEMBER_MASK)
 
+#define HFI_SL_TO_SC_SHIFT	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_SC_SHIFT
+#define HFI_SL_TO_SC_MASK	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_SC_MASK
+#define HFI_SL_TO_MC_SHIFT	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_MC_SHIFT
+#define HFI_SL_TO_MC_MASK	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_MC_MASK
+#define HFI_SL_TO_TC_SHIFT	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_TC_SHIFT
+#define HFI_SL_TO_TC_MASK	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_TC_MASK
+
 /*
  * HFI or Host Link States
  *
@@ -190,6 +197,7 @@ enum {
 	HFI_IB_CFG_PKEYS,		/* update partition keys */
 	HFI_IB_CFG_MTU,			/* update MTU in IBC */
 	HFI_IB_CFG_VL_HIGH_LIMIT,	/* Change VL high limit */
+	HFI_IB_CFG_SL_TO_SC,		/* Change SLtoSC mapping */
 };
 
 /* verify capability fabric CRC size bits */
@@ -329,6 +337,7 @@ struct hfi_ptcdata {
  *	messages
  * @mgmt_allowed: Indicates if neighbor is allowing this node to be a mgmt node
  *	(information received via LNI)
+ * @sl_to_sc: Service lane to Service class mapping table
  *@local_link_down_reason: Reason why this port transitioned to link down
  *@local_link_down_reason: Reason why the neighboring port transitioned to
  *	link down
@@ -372,6 +381,7 @@ struct hfi_pportdata {
 	u8 offline_disabled_reason;
 	u8 is_active_optimize_enabled;
 	u8 mgmt_allowed;
+	u8 sl_to_sc[OPA_MAX_SLS];
 	struct hfi_link_down_reason local_link_down_reason;
 	struct hfi_link_down_reason neigh_link_down_reason;
 	u8 remote_link_down_reason;
@@ -538,6 +548,14 @@ static inline int ppd_to_pnum(struct hfi_pportdata *ppd)
 	}
 
 	return (int)pnum;
+}
+
+static inline void hfi_set_bits(u64 *target, u64 val, u64 mask, u8 shift)
+{
+	/* clear */
+	*target &=  ~(mask << shift);
+	/* set */
+	*target |= (val & mask) << shift;
 }
 
 static inline u8 hfi_parity(u16 val)

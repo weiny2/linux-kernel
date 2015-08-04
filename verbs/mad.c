@@ -356,8 +356,10 @@ static int __subn_get_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	/* This is implemented in SMA-HFI*/
+	return reply(ibh);
 }
 
 static int __subn_get_opa_sc_to_sl(struct opa_smp *smp, u32 am, u8 *data,
@@ -727,8 +729,23 @@ static int __subn_set_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					      u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	int ret, i;
+	u8 *p;
+
+	ret = subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev, port,
+					resp_len);
+
+	if (ret == IB_MAD_RESULT_FAILURE)
+		goto err;
+
+	p = (u8 *)data;
+
+	for (i = 0; i < ARRAY_SIZE(ibp->sl_to_sc); i++)
+		ibp->sl_to_sc[i] = p[i];
+
+err:
+	return ret;
 }
 
 static int __subn_set_opa_sc_to_sl(struct opa_smp *smp, u32 am, u8 *data,
