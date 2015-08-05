@@ -148,7 +148,7 @@ function do_verbs_perf()
 	# No need to move the data it is already where it needs to be
 }
 
-if [[ $mode -eq "perf" ]]; then
+if [[ $mode == "perf" ]]; then
 
 
 	# Make sure the hosts are up, they should have been rebooted by the other tests, no need to
@@ -178,7 +178,7 @@ if [[ $mode -eq "perf" ]]; then
 	# Pull in any of the perf team's fixes
 	cd $perf_git
 	echo "Updating git tree"
-	git remote update && stg rebase origin/master
+	git remote update && /nfs/sc/disks/fabric_work/ddalessa/stgit/stgit-0.16/stg rebase origin/master
 	if [[ $? -ne 0 ]]; then
 		echo "FAIL: Git error"
 		exit 1

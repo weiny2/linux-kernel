@@ -1,0 +1,60 @@
+#!/bin/bash
+
+datestamp=`date "+%m-%d-%y"`
+perf_git="/nfs/sc/disks/fabric_work/ddalessa/perf_analysis/perfromance_team-fab_perf"
+logdir="/nfs/sc/disks/fabric_mirror/scratch/wfr_reg_test/daily_logs/RHEL7"
+
+build=`git rev-parse --short HEAD`
+
+mpi_log=$logdir/mpi_perf.$datestamp/no-turbo/summary
+ipostl_log=$logdir/ipostl_perf.$datestamp/ipostl-summary.txt
+verbs_log=$logdir/ibverbs.$datestamp/VerbsLZSummary.csv
+
+# As many addresses as needed, separated by white space
+email="`cat perf_reg.subscribers`"
+
+echo "Nightly performance regression test for build $build" > mail.tmp
+echo "" > mail.tmp
+echo "Logs: " >> mail.tmp
+echo $mpi_log >> mail.tmp
+echo $ipostl_log >> mail.tmp
+stdout=$logdir/`ls perf.*.log`
+echo "StdOut: $stdout" >> mail.tmp
+echo "" >> mail.tmp
+cat $mpi_log >> mail.tmp
+echo "" >> mail.tmp
+cat $ipostl_log >> mail.tmp
+echo "" >> mail.tmp
+cat $verbs_log >> mail.tmp
+echo "" >> mail.tmp
+
+
+# For detailed output uncomment the following but it shows up as an attachment.
+#cat perf.*.log >> mail.tmp
+
+# MPI
+grep "fail" $mpi_log
+if [ $? -eq 0 ]; then
+        mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Perf Reg at $build FAILED" $email < mail.tmp
+	rm mail.tmp
+	exit 0
+fi
+
+# IPoSTL
+grep "fail" $ipostl_log
+if [ $? -eq 0 ]; then
+        mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Perf Reg at $build FAILED" $email < mail.tmp
+	rm mail.tmp
+	exit 0
+fi
+
+# Verbs
+grep "Test_Failed" $verbs_log
+if [ $? -eq 0 ]; then
+        mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Perf Reg at $build FAILED" $email < mail.tmp
+	rm mail.tmp
+	exit 0
+fi
+
+mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Perf Reg at $build SUCCESS" $email < $ipostl_log
+rm mail.tmp
