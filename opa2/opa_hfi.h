@@ -198,6 +198,7 @@ enum {
 	HFI_IB_CFG_MTU,			/* update MTU in IBC */
 	HFI_IB_CFG_VL_HIGH_LIMIT,	/* Change VL high limit */
 	HFI_IB_CFG_SL_TO_SC,		/* Change SLtoSC mapping */
+	HFI_IB_CFG_SC_TO_SL,		/* Change SCtoSL mapping */
 };
 
 /* verify capability fabric CRC size bits */
@@ -337,7 +338,8 @@ struct hfi_ptcdata {
  *	messages
  * @mgmt_allowed: Indicates if neighbor is allowing this node to be a mgmt node
  *	(information received via LNI)
- * @sl_to_sc: Service lane to Service class mapping table
+ * @sl_to_sc: service level to service class mapping table
+ * @sc_to_sl: service class to service level mapping table
  *@local_link_down_reason: Reason why this port transitioned to link down
  *@local_link_down_reason: Reason why the neighboring port transitioned to
  *	link down
@@ -382,6 +384,7 @@ struct hfi_pportdata {
 	u8 is_active_optimize_enabled;
 	u8 mgmt_allowed;
 	u8 sl_to_sc[OPA_MAX_SLS];
+	u8 sc_to_sl[OPA_MAX_SCS];
 	struct hfi_link_down_reason local_link_down_reason;
 	struct hfi_link_down_reason neigh_link_down_reason;
 	u8 remote_link_down_reason;
