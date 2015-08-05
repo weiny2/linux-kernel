@@ -469,6 +469,11 @@ void hfi_sl_to_sc_mc_tc(struct hfi_pportdata *ppd, u8 *sc, u8 *mc, u8 *tc)
 		write_csr(dd, reg_addr + i * 8, reg[i]);
 }
 
+static void hfi_sc_to_sl(struct hfi_pportdata *ppd)
+{
+	/* FXRTODO: Register not yet defined in HAS. STL-1703 */
+}
+
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -516,6 +521,9 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val)
 		break;
 	case HFI_IB_CFG_SL_TO_SC:
 		hfi_sl_to_sc_mc_tc(ppd, ppd->sl_to_sc, NULL, NULL);
+		break;
+	case HFI_IB_CFG_SC_TO_SL:
+		hfi_sc_to_sl(ppd);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
@@ -745,6 +753,8 @@ static void hfi_port_desc(struct opa_core_device *odev,
 	pdesc->ibmaxmtu = HFI_DEFAULT_MAX_MTU;
 	for (i = 0; i < ARRAY_SIZE(ppd->sl_to_sc); i++)
 		pdesc->sl_to_sc[i] = ppd->sl_to_sc[i];
+	for (i = 0; i < ARRAY_SIZE(ppd->sc_to_sl); i++)
+		pdesc->sc_to_sl[i] = ppd->sc_to_sl[i];
 }
 
 static void hfi_device_desc(struct opa_core_device *odev,
@@ -1001,6 +1011,8 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		ppd->vls_operational = ppd->vls_supported;
 		for (i = 0; i < ARRAY_SIZE(ppd->sl_to_sc); i++)
 			ppd->sl_to_sc[i] = i;
+		for (i = 0; i < ARRAY_SIZE(ppd->sc_to_sl); i++)
+			ppd->sc_to_sl[i] = i;
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0);
 		hfi_ptc_init(ppd);
 	}

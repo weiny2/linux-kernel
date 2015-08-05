@@ -259,8 +259,26 @@ static int __subn_get_hfi_sl_to_sc(struct hfi_devdata *dd, struct opa_smp *smp,
 static int __subn_get_hfi_sc_to_sl(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	size_t size = sizeof(ppd->sc_to_sl);
+	unsigned i;
+	u8 *p = (u8 *)data;
+
+	if (am) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+		return hfi_reply(ibh);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(ppd->sc_to_sl); i++)
+		p[i] = ppd->sc_to_sl[i];
+
+	if (resp_len)
+		*resp_len += size;
+
+	return hfi_reply(ibh);
 }
 
 static int __subn_get_hfi_sc_to_vlt(struct hfi_devdata *dd, struct opa_smp *smp,
@@ -946,8 +964,39 @@ done:
 static int __subn_set_hfi_sc_to_sl(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	int i;
+	int sc_len = ARRAY_SIZE(ppd->sc_to_sl);
+	u8 *p = (u8 *)data;
+	u8 map_changed = 0;
+
+	if (am)
+		goto err;
+
+	/* sl entry should be 5 bits long */
+	for (i = 0; i < sc_len; i++)
+		if (p[i] >= OPA_MAX_SLS)
+			goto err;
+
+	for (i = 0; i < sc_len; i++) {
+		if (ppd->sc_to_sl[i] != p[i]) {
+			map_changed = 1;
+			ppd->sc_to_sl[i] = p[i];
+		}
+	}
+
+	if (map_changed)
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_SL, 0);
+
+	goto done;
+
+err:
+	smp->status |=
+		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+done:
+	return hfi_reply(ibh);
 }
 
 static int __subn_set_hfi_sc_to_vlt(struct hfi_devdata *dd, struct opa_smp *smp,
