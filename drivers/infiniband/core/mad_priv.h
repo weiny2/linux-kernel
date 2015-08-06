@@ -59,7 +59,10 @@
 
 /* Registration table sizes */
 #define MAX_MGMT_CLASS		80
-#define MAX_MGMT_VERSION	8
+#define MAX_MGMT_VERSION	0x83 /* FIXME -- STL specific
+					how big should this be for STL?
+					This makes the version table huge
+					for agent registrations */
 #define MAX_MGMT_OUI		8
 #define MAX_MGMT_VENDOR_RANGE2	(IB_MGMT_CLASS_VENDOR_RANGE2_END - \
 				IB_MGMT_CLASS_VENDOR_RANGE2_START + 1)
@@ -207,6 +210,7 @@ struct ib_mad_port_private {
 	struct ib_mr *mr;
 
 	spinlock_t reg_lock;
+	/* FIXME with increased version range this table is huge */
 	struct ib_mad_mgmt_version_table version[MAX_MGMT_VERSION];
 	struct list_head agent_list;
 	struct workqueue_struct *wq;
