@@ -893,7 +893,7 @@ static inline int sdma_txadd_kvaddr(
 
 	if ((unlikely(tx->num_desc == tx->desc_limit))) {
 		rval = ext_coal_sdma_tx_descs(dd, tx, SDMA_MAP_SINGLE,
-					      kvaddr, 0, 0, len);
+					      kvaddr, NULL, 0, len);
 		if (rval <= 0)
 			return rval;
 	}
