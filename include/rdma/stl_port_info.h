@@ -86,21 +86,19 @@
 /*  STL Link speed, continued from IB_LINK_SPEED and indicated as follows:
  * values are additive for Supported and Enabled fields
  */
-#define STL_LINK_SPEED_RESERVED         0x80    /*  Reserved (1-5 Gbps) */
-#define STL_LINK_SPEED_12_5G            0x100   /*  12.5 Gbps */
-#define STL_LINK_SPEED_25G              0x200   /*  25.78125?  Gbps (EDR) */
-#define STL_LINK_SPEED_RESERVED3        0x400   /*  Reserved (>25G) */
-#define STL_LINK_SPEED_ALL_SUPPORTED    0x03FF  /*  valid only for STL LinkSpeedEnabled */
+#define STL_LINK_SPEED_NOP              0x0000  /*  Reserved (1-5 Gbps) */
+#define STL_LINK_SPEED_12_5G            0x0001  /*  12.5 Gbps */
+#define STL_LINK_SPEED_25G              0x0002  /*  25.78125?  Gbps (EDR) */
 
-/*  STL Link width, continued from IB_LINK_WIDTH and indicated as follows:
- * values are additive for Supported and Enabled fields
+/* This should be in the driver but left here to keep the compile working */
+#define STL_LINK_SPEED_ALL_SUPPORTED    (STL_LINK_SPEED_12_5G | STL_LINK_SPEED_25G)
+
+/*  STL Link width
  */
-#define STL_LINK_WIDTH_2X   0x0010
-#define STL_LINK_WIDTH_3X   0x0020
-#define STL_LINK_WIDTH_6X   0x0040
-#define STL_LINK_WIDTH_9X   0x0080
-#define STL_LINK_WIDTH_16X  0x0100
-#define STL_LINK_WIDTH_ALL_SUPPORTED 0x0FFF /*  valid only for LinkWidthEnabled */
+#define STL_LINK_WIDTH_1X            0x0001
+#define STL_LINK_WIDTH_2X            0x0002
+#define STL_LINK_WIDTH_3X            0x0004
+#define STL_LINK_WIDTH_4X            0x0008
 
 /**
  * STL Cap Mask 3 values
@@ -122,9 +120,15 @@ enum {
 	STL_MTU_10240 = 9,
 };
 
+enum {
+	STL_PORT_PHYS_CONF_DISCONNECTED = 0,
+	STL_PORT_PHYS_CONF_STANDARD     = 1,
+	STL_PORT_PHYS_CONF_FIXED        = 2,
+	STL_PORT_PHYS_CONF_VARIABLE     = 3,
+	STL_PORT_PHYS_CONF_SI_PHOTO     = 4
+};
+
 enum port_info_field_masks {
-	/* vl.inittype */
-	STL_PI_MASK_INITTYPE                      = 0x0F,
 	/* vl.cap */
 	STL_PI_MASK_VL_CAP                        = 0x1F,
 	/* port_states.offline_reason */
@@ -135,6 +139,8 @@ enum port_info_field_masks {
 	/* port_states.portphysstate_portstate */
 	STL_PI_MASK_PORT_PHYSICAL_STATE           = 0xF0,
 	STL_PI_MASK_PORT_STATE                    = 0x0F,
+	/* port_phys_conf */
+	STL_PI_MASK_PORT_PHYSICAL_CONF            = 0x0F,
 	/* collectivemask_multicastmask */
 	STL_PI_MASK_COLLECT_MASK                  = 0x38,
 	STL_PI_MASK_MULTICAST_MASK                = 0x07,
@@ -144,10 +150,9 @@ enum port_info_field_masks {
 	/* smsl */
 	STL_PI_MASK_SMSL                          = 0x1F,
 	/* partenforce_filterraw */
+	/* Filter Raw In/Out bits 1 and 2 were removed */
 	STL_PI_MASK_PARTITION_ENFORCE_IN          = 0x08,
 	STL_PI_MASK_PARTITION_ENFORCE_OUT         = 0x04,
-	STL_PI_MASK_FILTER_RAW_IN                 = 0x02,
-	STL_PI_MASK_FILTER_RAW_OUT                = 0x01,
 	/* operational_vls */
 	STL_PI_MASK_OPERATIONAL_VL                = 0x1F,
 	/* sa_qp */
@@ -175,6 +180,7 @@ enum port_info_field_masks {
 	STL_PI_MASK_PORT_MODE_SC2SC_MAPPING       = 0x0008,
 	STL_PI_MASK_PORT_MODE_VL_MARKER           = 0x0010,
 	STL_PI_MASK_PORT_PASS_THROUGH             = 0x0020,
+	STL_PI_MASK_PORT_ACTIVE_OPTOMIZE          = 0x0040,
 	/* flit_control.interleave */
 	STL_PI_MASK_INTERLEAVE_DIST_SUP           = (0x0003 << 12),
 	STL_PI_MASK_INTERLEAVE_DIST_ENABLE        = (0x0003 << 10),
@@ -182,30 +188,31 @@ enum port_info_field_masks {
 	STL_PI_MASK_INTERLEAVE_MAX_NEST_RX        = (0x001F <<  0),
 
 	/* port_error_action */
-	STL_PI_MASK_EX_BUFFER_OVERRUN             = 0x80000000,
-		/* 3 bits reserved */
-	STL_PI_MASK_FM_CFG_BAD_CONTROL_FLIT       = 0x00400000,
-	STL_PI_MASK_FM_CFG_BAD_PREEMPT            = 0x00200000,
-	STL_PI_MASK_FM_CFG_UNSUPPORTED_VL_MARKER  = 0x00100000,
-	STL_PI_MASK_FM_CFG_BAD_CRDT_ACK           = 0x00080000,
-	STL_PI_MASK_FM_CFG_BAD_CTRL_DIST          = 0x00040000,
-	STL_PI_MASK_FM_CFG_BAD_TAIL_DIST          = 0x00020000,
-	STL_PI_MASK_FM_CFG_BAD_HEAD_DIST          = 0x00010000,
+	STL_PI_MASK_EX_BUFFER_OVERRUN                  = 0x80000000,
+		/* 7 bits reserved */
+	STL_PI_MASK_FM_CFG_ERR_EXCEED_MULTICAST_LIMIT  = 0x00800000,
+	STL_PI_MASK_FM_CFG_BAD_CONTROL_FLIT            = 0x00400000,
+	STL_PI_MASK_FM_CFG_BAD_PREEMPT                 = 0x00200000,
+	STL_PI_MASK_FM_CFG_UNSUPPORTED_VL_MARKER       = 0x00100000,
+	STL_PI_MASK_FM_CFG_BAD_CRDT_ACK                = 0x00080000,
+	STL_PI_MASK_FM_CFG_BAD_CTRL_DIST               = 0x00040000,
+	STL_PI_MASK_FM_CFG_BAD_TAIL_DIST               = 0x00020000,
+	STL_PI_MASK_FM_CFG_BAD_HEAD_DIST               = 0x00010000,
 		/* 2 bits reserved */
-	STL_PI_MASK_PORT_RCV_BAD_VL_MARKER        = 0x00002000,
-	STL_PI_MASK_PORT_RCV_PREEMPT_VL15         = 0x00001000,
-	STL_PI_MASK_PORT_RCV_PREEMPT_ERROR        = 0x00000800,
-	STL_PI_MASK_PORT_RCV_BAD_FECN             = 0x00000400,
-	STL_PI_MASK_PORT_RCV_BAD_MidTail          = 0x00000200,
+	STL_PI_MASK_PORT_RCV_BAD_VL_MARKER             = 0x00002000,
+	STL_PI_MASK_PORT_RCV_PREEMPT_VL15              = 0x00001000,
+	STL_PI_MASK_PORT_RCV_PREEMPT_ERROR             = 0x00000800,
 		/* 1 bit reserved */
-	STL_PI_MASK_PORT_RCV_BAD_SC               = 0x00000080,
-	STL_PI_MASK_PORT_RCV_BAD_L2               = 0x00000040,
-	STL_PI_MASK_PORT_RCV_BAD_DLID             = 0x00000020,
-	STL_PI_MASK_PORT_RCV_BAD_SLID             = 0x00000010,
-	STL_PI_MASK_PORT_RCV_PKTLEN_TOOSHORT      = 0x00000008,
-	STL_PI_MASK_PORT_RCV_PKTLEN_TOOLONG       = 0x00000004,
-	STL_PI_MASK_PORT_RCV_BAD_PKTLEN           = 0x00000002,
-	STL_PI_MASK_PORT_RCV_BAD_LT               = 0x00000001,
+	STL_PI_MASK_PORT_RCV_BAD_MidTail               = 0x00000200,
+		/* 1 bit reserved */
+	STL_PI_MASK_PORT_RCV_BAD_SC                    = 0x00000080,
+	STL_PI_MASK_PORT_RCV_BAD_L2                    = 0x00000040,
+	STL_PI_MASK_PORT_RCV_BAD_DLID                  = 0x00000020,
+	STL_PI_MASK_PORT_RCV_BAD_SLID                  = 0x00000010,
+	STL_PI_MASK_PORT_RCV_PKTLEN_TOOSHORT           = 0x00000008,
+	STL_PI_MASK_PORT_RCV_PKTLEN_TOOLONG            = 0x00000004,
+	STL_PI_MASK_PORT_RCV_BAD_PKTLEN                = 0x00000002,
+	STL_PI_MASK_PORT_RCV_BAD_LT                    = 0x00000001,
 
 	/* pass_through.res_drctl */
 	STL_PI_MASK_PASS_THROUGH_DR_CONTROL       = 0x01,
@@ -224,9 +231,6 @@ enum port_info_field_masks {
 	STL_PI_MASK_VL_STALL                      = (0x03 << 5),
 	STL_PI_MASK_HOQ_LIFE                      = (0x1F << 0),
 
-	/* link_roundtrip_latency */
-	STL_PI_MASK_LINK_ROUND_TRIP_LAT           = 0x00FFFFFF,
-
 	/* port_neigh_mode */
 	STL_PI_MASK_NEIGH_MGMT_ALLOWED            = (0x01 << 3),
 	STL_PI_MASK_NEIGH_FW_AUTH_BYPASS          = (0x01 << 2),
@@ -235,8 +239,7 @@ enum port_info_field_masks {
 	/* resptime_value */
 	STL_PI_MASK_RESPONSE_TIME_VALUE           = 0x1F,
 
-	/* inittypereply_mtucap */
-	STL_PI_MASK_INIT_TYPE_REPLY               = 0xF0,
+	/* mtucap */
 	STL_PI_MASK_MTU_CAP                       = 0x0F,
 };
 
@@ -245,7 +248,7 @@ struct stl_port_info {
 	__be32 flow_control_mask;
 
 	struct {
-		u8     inittype;                  /* 4 res, 4 bits */
+		u8     res;                       /* was inittype */
 		u8     cap;                       /* 3 res, 5 bits */
 		__be16 high_limit;
 		__be16 preempt_limit;
@@ -259,7 +262,7 @@ struct stl_port_info {
 		u8     unsleepstate_downdefstate; /* 4 bits, 4 bits */
 		u8     portphysstate_portstate;   /* 4 bits, 4 bits */
 	} port_states;
-	u8     reserved;
+	u8     port_phys_conf;                    /* 4 res, 4 bits */
 	u8     collectivemask_multicastmask;      /* 2 res, 3, 3 */
 	u8     mkeyprotect_lmc;                   /* 2 bits, 2 res, 4 bits */
 	u8     smsl;                              /* 3 res, 5 bits */
@@ -275,7 +278,7 @@ struct stl_port_info {
 	__be32 sm_trap_qp;                        /* 8 bits, 24 bits */
 
 	__be32 sa_qp;                             /* 8 bits, 24 bits */
-	u8     reserved2;
+	u8     neigh_port_num;
 	u8     link_down_reason;
 	u8     localphy_overrun_errors;	          /* 4 bits, 4 bits */
 	u8     clientrereg_subnettimeout;	  /* 1 bit, 2 bits, 5 */
@@ -293,13 +296,13 @@ struct stl_port_info {
 	struct {
 		__be16 supported;
 		__be16 enabled;
-		__be16 active;
+		__be16 tx_active;
+		__be16 rx_active;
 	} link_width_downgrade;
-	__be16 reserved3;
 	__be16 port_link_mode;                  /* 1 res, 5 bits, 5 bits, 5 bits */
 	__be16 port_ltp_crc_mode;               /* 4 res, 4 bits, 4 bits, 4 bits */
 
-	__be16 port_mode;                       /* 10 res, bit fields */
+	__be16 port_mode;                       /* 9 res, bit fields */
 	struct {
 		__be16 supported;
 		__be16 enabled;
@@ -349,12 +352,12 @@ struct stl_port_info {
 	__be64 neigh_node_guid;
 
 	__be32 ib_cap_mask;
-	__be16 ib_cap_mask2;
+	__be16 reserved6;                       /* was ib_cap_mask2 */
 	__be16 stl_cap_mask;
 
-	__be32 link_roundtrip_latency;          /* 8 res, 24 bits */
+	__be32 reserved7;                       /* was link_roundtrip_latency */
 	__be16 overall_buffer_space;
-	__be16 max_credit_hint;
+	__be16 reserved8;                       /* was max_credit_hint */
 
 	__be16 diag_code;
 	struct {
@@ -362,12 +365,12 @@ struct stl_port_info {
 		u8 wire;
 	} replay_depth;
 	u8     port_neigh_mode;
-	u8     inittypereply_mtucap;            /* 4 bits, 4 bits */
+	u8     mtucap;                          /* 4 res, 4 bits */
 
 	u8     resptimevalue;		        /* 3 res, 5 bits */
 	u8     local_port_num;
 	u8     ganged_port_details;
-	u8     guid_cap;
+	u8     reserved9;                       /* was guid_cap */
 } __attribute__ ((packed));
 
 #endif /* STL_PORT_INFO_H */
