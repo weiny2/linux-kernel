@@ -50,6 +50,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("kernel IB MAD API");
 MODULE_AUTHOR("Hal Rosenstock");
 MODULE_AUTHOR("Sean Hefty");
+MODULE_AUTHOR("Ira Weiny");
 
 static int mad_sendq_size = IB_MAD_QP_SEND_SIZE;
 static int mad_recvq_size = IB_MAD_QP_RECV_SIZE;
@@ -58,6 +59,11 @@ module_param_named(send_queue_size, mad_sendq_size, int, 0444);
 MODULE_PARM_DESC(send_queue_size, "Size of send queue in number of work requests");
 module_param_named(recv_queue_size, mad_recvq_size, int, 0444);
 MODULE_PARM_DESC(recv_queue_size, "Size of receive queue in number of work requests");
+
+static int mad_support_jumbo = 1;
+module_param_named(support_jumbo, mad_support_jumbo, int, 0444);
+MODULE_PARM_DESC(support_jumbo,
+	"Enable Jumbo MAD support on devices which support them (default 1)");
 
 static struct kmem_cache *ib_mad_cache;
 
@@ -2823,7 +2829,7 @@ static void init_mad_qp(struct ib_mad_port_private *port_priv,
 }
 
 static int create_mad_qp(struct ib_mad_qp_info *qp_info,
-			 enum ib_qp_type qp_type)
+			 enum ib_qp_type qp_type, int supports_jumbo_mads)
 {
 	struct ib_qp_init_attr	qp_init_attr;
 	int ret;
@@ -2850,6 +2856,7 @@ static int create_mad_qp(struct ib_mad_qp_info *qp_info,
 	/* Use minimum queue sizes unless the CQ is resized */
 	qp_info->send_queue.max_active = mad_sendq_size;
 	qp_info->recv_queue.max_active = mad_recvq_size;
+	qp_info->supports_jumbo_mads = supports_jumbo_mads;
 	return 0;
 
 error:
@@ -2863,6 +2870,19 @@ static void destroy_mad_qp(struct ib_mad_qp_info *qp_info)
 
 	ib_destroy_qp(qp_info->qp);
 	kfree(qp_info->snoop_table);
+}
+
+static int
+mad_device_supports_jumbo_mads(struct ib_device *device)
+{
+	if (mad_support_jumbo) {
+		struct ib_device_attr attr;
+		if (!ib_query_device(device, &attr))
+			return ((attr.device_cap_flags
+				& IB_DEVICE_JUMBO_MAD_SUPPORT)
+				== IB_DEVICE_JUMBO_MAD_SUPPORT);
+	}
+	return (0);
 }
 
 /*
@@ -2920,12 +2940,19 @@ static int ib_mad_port_open(struct ib_device *device,
 		goto error5;
 	}
 
+	port_priv->supports_jumbo_mads = mad_device_supports_jumbo_mads(device);
+	if (port_priv->supports_jumbo_mads)
+		printk(KERN_INFO PFX "Jumbo MAD support enabled for %s:%d\n",
+				device->name, port_num);
+
 	if (has_smi) {
-		ret = create_mad_qp(&port_priv->qp_info[0], IB_QPT_SMI);
+		ret = create_mad_qp(&port_priv->qp_info[0], IB_QPT_SMI,
+				    port_priv->supports_jumbo_mads);
 		if (ret)
 			goto error6;
 	}
-	ret = create_mad_qp(&port_priv->qp_info[1], IB_QPT_GSI);
+	ret = create_mad_qp(&port_priv->qp_info[1], IB_QPT_GSI,
+			    port_priv->supports_jumbo_mads);
 	if (ret)
 		goto error7;
 
