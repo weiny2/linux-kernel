@@ -742,6 +742,7 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	 * hop_ptr or hop_cnt.  See section 14.2.2, Vol 1 IB spec.
 	 */
 	if (smp->base_version == JUMBO_MGMT_BASE_VERSION) {
+#warning "FIXME there needs to be a selection for the STL SM Class version here"
 		if ((stl_get_smp_direction(stl_smp)
 		     ? stl_smp->route.dr.dr_dlid : stl_smp->route.dr.dr_slid) ==
 		     STL_LID_PERMISSIVE &&
@@ -2473,6 +2474,12 @@ static void cancel_mads(struct ib_mad_agent_private *mad_agent_priv)
 			mad_send_wr->status = IB_WC_WR_FLUSH_ERR;
 			mad_send_wr->refcount -= (mad_send_wr->timeout > 0);
 		}
+#if 0
+		list_del(&mad_send_wr->agent_list);
+		mad_agent_priv->agent.send_handler(&mad_agent_priv->agent,
+						   &mad_send_wc);
+		deref_mad_agent(mad_agent_priv);
+#endif
 	}
 
 	/* Empty wait list to prevent receives from finding a request */
@@ -3183,6 +3190,7 @@ static void ib_mad_init_device(struct ib_device *device)
 {
 	int start, end, i;
 
+#warning "FIXME for upstream: allow STL transport here as well"
 	if (rdma_node_get_transport(device->node_type) != RDMA_TRANSPORT_IB)
 		return;
 
