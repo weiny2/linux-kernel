@@ -108,20 +108,20 @@
 #define HFI1_RCVDHR_ENTSIZE_32   (1UL << 2)
 
 /*
- * If the unit is specified via open, HCA choice is fixed.  If port is
+ * If the unit is specified via open, HFI choice is fixed.  If port is
  * specified, it's also fixed.  Otherwise we try to spread contexts
- * across ports and HCAs, using different algorithms.  WITHIN is
+ * across ports and HFIs, using different algorithms.  WITHIN is
  * the old default, prior to this mechanism.
  */
-#define HFI1_ALG_ACROSS 0 /* round robin contexts across HCAs, then
+#define HFI1_ALG_ACROSS 0 /* round robin contexts across HFIs, then
 			  * ports; this is the default */
-#define HFI1_ALG_WITHIN 1 /* use all contexts on an HCA (round robin
-			  * active ports within), then next HCA */
+#define HFI1_ALG_WITHIN 1 /* use all contexts on an HFI (round robin
+			  * active ports within), then next HFI */
 #define HFI1_ALG_COUNT  2 /* number of algorithm choices */
 
 
 /* User commands. */
-#define HFI1_CMD_ASSIGN_CTXT     1	/* allocate HCA and context */
+#define HFI1_CMD_ASSIGN_CTXT     1	/* allocate HFI and context */
 #define HFI1_CMD_CTXT_INFO       2	/* find out what resources we got */
 #define HFI1_CMD_USER_INFO       3	/* set up userspace */
 #define HFI1_CMD_TID_UPDATE      4	/* update expected TID entries */
