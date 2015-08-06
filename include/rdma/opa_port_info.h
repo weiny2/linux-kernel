@@ -159,8 +159,8 @@
  * new MTU values
  */
 enum {
-	OPA_MTU_8192  = 8,
-	OPA_MTU_10240 = 9,
+	OPA_MTU_8192  = 6,
+	OPA_MTU_10240 = 7,
 };
 
 enum {

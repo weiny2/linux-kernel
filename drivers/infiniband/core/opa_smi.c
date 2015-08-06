@@ -31,13 +31,13 @@
  *
  */
 
-#include "stl_smi.h"
+#include "opa_smi.h"
 
 /*
  * Fixup a directed route SMP for sending
  * Return 0 if the SMP should be discarded
  */
-enum smi_action stl_smi_handle_dr_smp_send(struct stl_smp *smp,
+enum smi_action opa_smi_handle_dr_smp_send(struct opa_smp *smp,
 				       u8 node_type, int port_num)
 {
 	u8 hop_ptr, hop_cnt;
@@ -50,7 +50,7 @@ enum smi_action stl_smi_handle_dr_smp_send(struct stl_smp *smp,
 	if (hop_cnt >= IB_SMP_MAX_PATH_HOPS)
 		return IB_SMI_DISCARD;
 
-	if (!stl_get_smp_direction(smp)) {
+	if (!opa_get_smp_direction(smp)) {
 		/* C14-9:1 */
 		if (hop_cnt && hop_ptr == 0) {
 			smp->hop_ptr++;
@@ -74,7 +74,7 @@ enum smi_action stl_smi_handle_dr_smp_send(struct stl_smp *smp,
 			/* smp->return_path set when received */
 			smp->hop_ptr++;
 			return (node_type == RDMA_NODE_IB_SWITCH ||
-				smp->route.dr.dr_dlid == STL_LID_PERMISSIVE ?
+				smp->route.dr.dr_dlid == OPA_LID_PERMISSIVE ?
 				IB_SMI_HANDLE : IB_SMI_DISCARD);
 		}
 
@@ -105,7 +105,7 @@ enum smi_action stl_smi_handle_dr_smp_send(struct stl_smp *smp,
 			smp->hop_ptr--;
 			/* C14-13:3 -- SMPs destined for SM shouldn't be here */
 			return (node_type == RDMA_NODE_IB_SWITCH ||
-				smp->route.dr.dr_slid == STL_LID_PERMISSIVE ?
+				smp->route.dr.dr_slid == OPA_LID_PERMISSIVE ?
 				IB_SMI_HANDLE : IB_SMI_DISCARD);
 		}
 
@@ -122,7 +122,7 @@ enum smi_action stl_smi_handle_dr_smp_send(struct stl_smp *smp,
  * Adjust information for a received SMP
  * Return 0 if the SMP should be dropped
  */
-enum smi_action stl_smi_handle_dr_smp_recv(struct stl_smp *smp, u8 node_type,
+enum smi_action opa_smi_handle_dr_smp_recv(struct opa_smp *smp, u8 node_type,
 				       int port_num, int phys_port_cnt)
 {
 	u8 hop_ptr, hop_cnt;
@@ -135,7 +135,7 @@ enum smi_action stl_smi_handle_dr_smp_recv(struct stl_smp *smp, u8 node_type,
 	if (hop_cnt >= IB_SMP_MAX_PATH_HOPS)
 		return IB_SMI_DISCARD;
 
-	if (!stl_get_smp_direction(smp)) {
+	if (!opa_get_smp_direction(smp)) {
 		/* C14-9:1 -- sender should have incremented hop_ptr */
 		if (hop_cnt && hop_ptr == 0)
 			return IB_SMI_DISCARD;
@@ -158,7 +158,7 @@ enum smi_action stl_smi_handle_dr_smp_recv(struct stl_smp *smp, u8 node_type,
 			/* smp->hop_ptr updated when sending */
 
 			return (node_type == RDMA_NODE_IB_SWITCH ||
-				smp->route.dr.dr_dlid == STL_LID_PERMISSIVE ?
+				smp->route.dr.dr_dlid == OPA_LID_PERMISSIVE ?
 				IB_SMI_HANDLE : IB_SMI_DISCARD);
 		}
 
@@ -187,7 +187,7 @@ enum smi_action stl_smi_handle_dr_smp_recv(struct stl_smp *smp, u8 node_type,
 
 		/* C14-13:3 -- We're at the end of the DR segment of path */
 		if (hop_ptr == 1) {
-			if (smp->route.dr.dr_slid == STL_LID_PERMISSIVE) {
+			if (smp->route.dr.dr_slid == OPA_LID_PERMISSIVE) {
 				/* giving SMP to SM - update hop_ptr */
 				smp->hop_ptr--;
 				return IB_SMI_HANDLE;
@@ -203,21 +203,21 @@ enum smi_action stl_smi_handle_dr_smp_recv(struct stl_smp *smp, u8 node_type,
 	}
 }
 
-enum smi_forward_action stl_smi_check_forward_dr_smp(struct stl_smp *smp)
+enum smi_forward_action opa_smi_check_forward_dr_smp(struct opa_smp *smp)
 {
 	u8 hop_ptr, hop_cnt;
 
 	hop_ptr = smp->hop_ptr;
 	hop_cnt = smp->hop_cnt;
 
-	if (!stl_get_smp_direction(smp)) {
+	if (!opa_get_smp_direction(smp)) {
 		/* C14-9:2 -- intermediate hop */
 		if (hop_ptr && hop_ptr < hop_cnt)
 			return IB_SMI_FORWARD;
 
 		/* C14-9:3 -- at the end of the DR segment of path */
 		if (hop_ptr == hop_cnt)
-			return (smp->route.dr.dr_dlid == STL_LID_PERMISSIVE ?
+			return (smp->route.dr.dr_dlid == OPA_LID_PERMISSIVE ?
 				IB_SMI_SEND : IB_SMI_LOCAL);
 
 		/* C14-9:4 -- hop_ptr = hop_cnt + 1 -> give to SMA/SM */
@@ -230,7 +230,7 @@ enum smi_forward_action stl_smi_check_forward_dr_smp(struct stl_smp *smp)
 
 		/* C14-13:3 -- at the end of the DR segment of path */
 		if (hop_ptr == 1)
-			return (smp->route.dr.dr_slid != STL_LID_PERMISSIVE ?
+			return (smp->route.dr.dr_slid != OPA_LID_PERMISSIVE ?
 				IB_SMI_SEND : IB_SMI_LOCAL);
 	}
 	return IB_SMI_LOCAL;
@@ -240,8 +240,8 @@ enum smi_forward_action stl_smi_check_forward_dr_smp(struct stl_smp *smp)
  * Return the forwarding port number from initial_path for outgoing SMP and
  * from return_path for returning SMP
  */
-int stl_smi_get_fwd_port(struct stl_smp *smp)
+int opa_smi_get_fwd_port(struct opa_smp *smp)
 {
-	return (!stl_get_smp_direction(smp) ? smp->route.dr.initial_path[smp->hop_ptr+1] :
+	return (!opa_get_smp_direction(smp) ? smp->route.dr.initial_path[smp->hop_ptr+1] :
 		smp->route.dr.return_path[smp->hop_ptr-1]);
 }

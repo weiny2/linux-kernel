@@ -36,7 +36,7 @@
 #include <linux/slab.h>
 
 #include "mad_priv.h"
-#include "stl_smi.h"
+#include "opa_smi.h"
 #include "jumbo_mad.h"
 #include "jumbo_mad_rmpp.h"
 #include "agent.h"
@@ -57,7 +57,7 @@
 
 
 static enum smi_action
-handle_stl_smi(struct ib_mad_port_private *port_priv,
+handle_opa_smi(struct ib_mad_port_private *port_priv,
 	       struct ib_mad_qp_info *qp_info,
 	       struct ib_wc *wc,
 	       int port_num,
@@ -66,29 +66,29 @@ handle_stl_smi(struct ib_mad_port_private *port_priv,
 {
 	enum smi_forward_action retsmi;
 
-	if (stl_smi_handle_dr_smp_recv(&recv->mad.smp,
+	if (opa_smi_handle_dr_smp_recv(&recv->mad.smp,
 				   port_priv->device->node_type,
 				   port_num,
 				   port_priv->device->phys_port_cnt) ==
 				   IB_SMI_DISCARD)
 		return (IB_SMI_DISCARD);
 
-	retsmi = stl_smi_check_forward_dr_smp(&recv->mad.smp);
+	retsmi = opa_smi_check_forward_dr_smp(&recv->mad.smp);
 	if (retsmi == IB_SMI_LOCAL)
 		return (IB_SMI_HANDLE);
 
 	if (retsmi == IB_SMI_SEND) { /* don't forward */
-		if (stl_smi_handle_dr_smp_send(&recv->mad.smp,
+		if (opa_smi_handle_dr_smp_send(&recv->mad.smp,
 					   port_priv->device->node_type,
 					   port_num) == IB_SMI_DISCARD)
 			return (IB_SMI_DISCARD);
 
-		if (stl_smi_check_local_smp(&recv->mad.smp, port_priv->device) == IB_SMI_DISCARD)
+		if (opa_smi_check_local_smp(&recv->mad.smp, port_priv->device) == IB_SMI_DISCARD)
 			return (IB_SMI_DISCARD);
 
 	}
 #if 0
-STL does not yet run Linux in the Switch
+OPA does not yet run Linux in the Switch
  else if (port_priv->device->node_type == RDMA_NODE_IB_SWITCH) {
 		/* forward case for switches */
 		memcpy(response, recv, sizeof(*response));
@@ -99,7 +99,7 @@ STL does not yet run Linux in the Switch
 		agent_send_response((struct ib_mad *)&response->mad.mad,
 				    &response->grh, wc,
 				    port_priv->device,
-				    stl_smi_get_fwd_port(&recv->mad.smp),
+				    opa_smi_get_fwd_port(&recv->mad.smp),
 				    qp_info->qp->qp_num);
 
 		return (IB_SMI_DISCARD);
@@ -119,8 +119,8 @@ jumbo_handle_smi(struct ib_mad_port_private *port_priv,
 {
 	if (recv->mad.mad.mad_hdr.base_version == JUMBO_MGMT_BASE_VERSION) {
 		switch (recv->mad.mad.mad_hdr.class_version) {
-			case STL_SMI_CLASS_VERSION:
-				return handle_stl_smi(port_priv, qp_info, wc, port_num, recv, response);
+			case OPA_SMI_CLASS_VERSION:
+				return handle_opa_smi(port_priv, qp_info, wc, port_num, recv, response);
 			/* stub for other Jumbo SMI versions */
 		}
 	}
@@ -239,8 +239,8 @@ static bool generate_unmatched_resp(struct jumbo_mad_private *recv,
 			    IB_MGMT_CLASS_SUBN_LID_ROUTED ||
 			    recv->mad.mad.mad_hdr.mgmt_class ==
 			    IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
-				*resp_len = stl_get_smp_header_size(
-							(struct stl_smp *)&recv->mad.smp);
+				*resp_len = opa_get_smp_header_size(
+							(struct opa_smp *)&recv->mad.smp);
 			else
 				*resp_len = sizeof(struct ib_mad_hdr);
 		}
