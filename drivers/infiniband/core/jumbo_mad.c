@@ -264,6 +264,7 @@ void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
 	recv->header.wc = *wc;
 	recv->header.recv_wc.wc = &recv->header.wc;
 	base_version = recv->mad.mad.mad_hdr.base_version;
+/* FIXME This should be based off the wc data length */
 	if (base_version == JUMBO_MGMT_BASE_VERSION)
 		recv->header.recv_wc.mad_len = sizeof(struct jumbo_mad);
 	else

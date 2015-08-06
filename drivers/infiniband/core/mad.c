@@ -1942,6 +1942,8 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 		}
 	}
 
+/* FIXME when mad_recv_wc is jumbo it is not necessarily 2048 bytes */
+
 	/* Complete corresponding request */
 	if (ib_response_mad(mad_recv_wc->recv_buf.mad)) {
 		spin_lock_irqsave(&mad_agent_priv->lock, flags);
