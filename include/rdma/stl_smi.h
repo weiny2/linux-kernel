@@ -85,6 +85,9 @@ struct stl_smp {
 #define STL_ATTRIB_ID_PARTITION_TABLE		cpu_to_be16(0x0016)
 #define STL_ATTRIB_ID_SL_TO_SC_MAP		cpu_to_be16(0x0017)
 #define STL_ATTRIB_ID_VL_ARBITRATION		cpu_to_be16(0x0018)
+#define STL_ATTRIB_ID_SM_INFO			cpu_to_be16(0x0020)
+#define STL_ATTRIB_ID_CABLE_INFO		cpu_to_be16(0x0032)
+#define STL_ATTRIB_ID_AGGREGATE			cpu_to_be16(0x0080)
 #define STL_ATTRIB_ID_SC_TO_SL_MAP		cpu_to_be16(0x0082)
 #define STL_ATTRIB_ID_SC_TO_VLR_MAP		cpu_to_be16(0x0083)
 #define STL_ATTRIB_ID_SC_TO_VLT_MAP		cpu_to_be16(0x0084)
@@ -139,6 +142,14 @@ static inline size_t stl_get_smp_data_size(struct stl_smp *smp)
 		return sizeof(smp->route.dr.data);
 	else
 		return sizeof(smp->route.lid.data);
+}
+
+static inline size_t stl_get_smp_header_size(struct stl_smp *smp)
+{
+	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
+		return sizeof(*smp) - sizeof(smp->route.dr.data);
+	else
+		return sizeof(*smp) - sizeof(smp->route.lid.data);
 }
 
 #endif /* STL_SMI_H */
