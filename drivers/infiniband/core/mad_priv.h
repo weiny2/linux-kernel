@@ -163,6 +163,7 @@ struct ib_mad_send_wr_private {
 	struct ib_sge sg_list[IB_MAD_SEND_REQ_MAX_SG];
 	__be64 tid;
 	unsigned long timeout;
+	unsigned long sq_timeout;
 	int max_retries;
 	int retries_left;
 	int retry;
@@ -228,6 +229,7 @@ struct ib_mad_qp_info {
 	int snoop_table_size;
 	atomic_t snoop_count;
 	int supports_jumbo_mads;
+	int send_queue_stalled;
 };
 
 struct ib_mad_port_private {
