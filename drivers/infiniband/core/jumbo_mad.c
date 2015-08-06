@@ -31,6 +31,7 @@
  *
  */
 
+#define pr_fmt(fmt) PFX fmt
 
 #include <linux/slab.h>
 
@@ -197,7 +198,7 @@ static int validate_jumbo_mad(struct jumbo_mad *mad, u32 qp_num)
 	/* MAD version can be IB or JUMBO */
 	if (mad->mad_hdr.base_version != JUMBO_MGMT_BASE_VERSION
 	    && mad->mad_hdr.base_version != IB_MGMT_BASE_VERSION) {
-		printk(KERN_ERR PFX "Jumbo MAD received with unsupported base "
+		pr_err("Jumbo MAD received with unsupported base "
 		       "version %d\n", mad->mad_hdr.base_version);
 		goto out;
 	}
@@ -280,7 +281,7 @@ void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
 
 	response = kmem_cache_alloc(jumbo_mad_cache, GFP_KERNEL);
 	if (!response) {
-		printk(KERN_ERR PFX "ib_mad_recv_done_jumbo_handler no memory "
+		pr_err("ib_mad_recv_done_jumbo_handler no memory "
 		       "for response buffer (jumbo)\n");
 		goto out;
 	}
@@ -327,8 +328,8 @@ void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
 	if (mad_agent) {
 		jumbo_mad_complete_recv(mad_agent, &recv->header.recv_wc);
 		/*
-		 * recv is freed up in error cases in ib_mad_complete_recv
-		 * or via recv_handler in ib_mad_complete_recv()
+		 * recv is freed up in error cases in jumbo_mad_complete_recv
+		 * or via recv_handler in jumbo_mad_complete_recv()
 		 */
 		recv = NULL;
 	} else if ((ret & IB_MAD_RESULT_SUCCESS) &&
@@ -365,7 +366,7 @@ int ib_mad_post_jumbo_rcv_mads(struct ib_mad_qp_info *qp_info,
 	struct ib_mad_queue *recv_queue = &qp_info->recv_queue;
 
 	if (unlikely(!qp_info->supports_jumbo_mads)) {
-		printk(KERN_ERR PFX "Attempt to post jumbo MAD on non-jumbo QP\n");
+		pr_err("Attempt to post jumbo MAD on non-jumbo QP\n");
 		return (-EINVAL);
 	}
 
@@ -386,7 +387,7 @@ int ib_mad_post_jumbo_rcv_mads(struct ib_mad_qp_info *qp_info,
 		} else {
 			mad_priv = kmem_cache_alloc(jumbo_mad_cache, GFP_KERNEL);
 			if (!mad_priv) {
-				printk(KERN_ERR PFX "No memory for jumbo receive buffer\n");
+				pr_err("No memory for jumbo receive buffer\n");
 				ret = -ENOMEM;
 				break;
 			}
@@ -419,7 +420,7 @@ int ib_mad_post_jumbo_rcv_mads(struct ib_mad_qp_info *qp_info,
 					    DMA_FROM_DEVICE);
 			BUG_ON(!(mad_priv->header.flags & IB_MAD_PRIV_FLAG_JUMBO));
 			kmem_cache_free(jumbo_mad_cache, mad_priv);
-			printk(KERN_ERR PFX "ib_post_recv failed: %d\n", ret);
+			pr_err("ib_post_recv failed: %d\n", ret);
 			break;
 		}
 	} while (post);
