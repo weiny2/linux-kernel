@@ -68,16 +68,23 @@
 #define MAX_MGMT_VENDOR_RANGE2	(IB_MGMT_CLASS_VENDOR_RANGE2_END - \
 				IB_MGMT_CLASS_VENDOR_RANGE2_START + 1)
 
+/* shared betwee mad.c and jumbo_mad.c */
+extern struct kmem_cache *jumbo_mad_cache;
+
 struct ib_mad_list_head {
 	struct list_head list;
 	struct ib_mad_queue *mad_queue;
 };
 
+enum ib_mad_private_flags {
+	IB_MAD_PRIV_FLAG_JUMBO = (1 << 0)
+};
 struct ib_mad_private_header {
 	struct ib_mad_list_head mad_list;
 	struct ib_mad_recv_wc recv_wc;
 	struct ib_wc wc;
 	u64 mapping;
+	u64 flags;
 } __attribute__ ((packed));
 
 struct ib_mad_private {
@@ -253,5 +260,33 @@ void ib_mark_mad_done(struct ib_mad_send_wr_private *mad_send_wr);
 
 void ib_reset_mad_timeout(struct ib_mad_send_wr_private *mad_send_wr,
 			  int timeout_ms);
+
+static inline void deref_mad_agent(struct ib_mad_agent_private *mad_agent_priv)
+{
+	if (atomic_dec_and_test(&mad_agent_priv->refcount))
+		complete(&mad_agent_priv->comp);
+}
+
+
+void dequeue_mad(struct ib_mad_list_head *mad_list);
+struct ib_mad_agent_private * find_mad_agent(
+				struct ib_mad_port_private *port_priv,
+				struct ib_mad *mad);
+
+void snoop_recv(struct ib_mad_qp_info *qp_info,
+		struct ib_mad_recv_wc *mad_recv_wc,
+		int mad_snoop_flags);
+void wait_for_response(struct ib_mad_send_wr_private *mad_send_wr);
+void adjust_timeout(struct ib_mad_agent_private *mad_agent_priv);
+enum smi_action handle_ib_smi(struct ib_mad_port_private *port_priv,
+			      struct ib_mad_qp_info *qp_info,
+			      struct ib_wc *wc,
+			      int port_num,
+			      struct ib_mad_private *recv,
+			      struct ib_mad_private *response);
+static inline int kernel_rmpp_agent(struct ib_mad_agent *agent)
+{
+	return (agent->rmpp_version && !(agent->flags & IB_MAD_USER_RMPP));
+}
 
 #endif	/* __IB_MAD_PRIV_H__ */
