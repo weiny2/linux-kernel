@@ -594,15 +594,15 @@ void __hfi_eq_release(struct hfi_ctx *ctx)
 	}
 }
 
-static int __hfi_eq_wait_condition(struct hfi_ctx *ctx, u16 eq_idx)
+/* Returns true if there is a valid pending event and false otherwise */
+static bool __hfi_eq_wait_condition(struct hfi_ctx *ctx, u16 eq_idx)
 {
-	/*
-	 * TODO - using refactored hfi_eq.h to test for event.
-	 * We should pin this page to prevent potential page fault here?
-	 */
-	u64 *eq_entry = NULL;
-	eq_entry = _hfi_eq_next_entry(ctx, eq_idx);
-	return (*eq_entry & TARGET_EQENTRY_V_MASK);
+	void *entry;
+	int ret = hfi_eq_peek(ctx, eq_idx, &entry);
+
+	if (ret >= 0 && ret != HFI_EQ_EMPTY)
+		return true;
+	return false;
 }
 
 static int hfi_eq_wait_single(struct hfi_ctx *ctx, u16 eq_idx, long timeout)
