@@ -284,9 +284,5 @@ enum smi_action handle_ib_smi(struct ib_mad_port_private *port_priv,
 			      int port_num,
 			      struct ib_mad_private *recv,
 			      struct ib_mad_private *response);
-static inline int kernel_rmpp_agent(struct ib_mad_agent *agent)
-{
-	return (agent->rmpp_version && !(agent->flags & IB_MAD_USER_RMPP));
-}
 
 #endif	/* __IB_MAD_PRIV_H__ */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2013 Intel Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -28,23 +28,26 @@
  * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
  */
 
-#ifndef __JUMBO_MAD_H__
-#define __JUMBO_MAD_H__
+#ifndef __JUMBO_MAD_RMPP_H__
+#define __JUMBO_MAD_RMPP_H__
 
-#include "mad_priv.h"
+#include "mad_rmpp.h"
 
-int ib_mad_post_jumbo_rcv_mads(struct ib_mad_qp_info *qp_info,
-				    struct jumbo_mad_private *mad);
-void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
-				    struct ib_wc *wc,
-				    struct ib_mad_private_header *mad_priv_hdr,
-				    struct ib_mad_qp_info *qp_info);
+int jumbo_send_rmpp_mad(struct ib_mad_send_wr_private *mad_send_wr);
 
-void jumbo_free_recv_mad(struct ib_mad_recv_wc *mad_recv_wc);
+struct ib_mad_recv_wc *
+jumbo_process_rmpp_recv_wc(struct ib_mad_agent_private *agent,
+			struct ib_mad_recv_wc *mad_recv_wc);
 
-void jumbo_mad_complete_send_wr(struct ib_mad_send_wr_private *mad_send_wr,
-			     struct ib_mad_send_wc *mad_send_wc);
-#endif /* __JUMBO_MAD_H__ */
+int jumbo_process_rmpp_send_wc(struct ib_mad_send_wr_private *mad_send_wr,
+			    struct ib_mad_send_wc *mad_send_wc);
+
+void jumbo_rmpp_send_handler(struct ib_mad_send_wc *mad_send_wc);
+
+void jumbo_cancel_rmpp_recvs(struct ib_mad_agent_private *agent);
+
+int jumbo_retry_rmpp(struct ib_mad_send_wr_private *mad_send_wr);
+
+#endif	/* __MAD_RMPP_H__ */

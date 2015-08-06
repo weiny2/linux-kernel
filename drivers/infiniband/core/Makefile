@@ -12,7 +12,7 @@ ib_core-y :=			packer.o ud_header.o verbs.o sysfs.o \
 ib_core-$(CONFIG_INFINIBAND_USER_MEM) += umem.o
 
 ib_mad-y :=			mad.o smi.o agent.o mad_rmpp.o stl_smi.o \
-				jumbo_mad.o
+				jumbo_mad.o jumbo_mad_rmpp.o
 
 ib_sa-y :=			sa_query.o multicast.o
 
