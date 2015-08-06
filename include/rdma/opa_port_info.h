@@ -33,6 +33,11 @@
 #if !defined(OPA_PORT_INFO_H)
 #define OPA_PORT_INFO_H
 
+/* Temporary until HFI driver is updated */
+#ifndef USE_PI_LED_ENABLE
+#define USE_PI_LED_ENABLE 0
+#endif
+
 /* OPA Port link mode, indicated as follows:
  * values are additive for Supported and Enabled fields
  */
@@ -175,8 +180,9 @@ enum {
 enum port_info_field_masks {
 	/* vl.cap */
 	OPA_PI_MASK_VL_CAP                        = 0x1F,
-	/* port_states.offline_reason */
+	/* port_states.ledenable_offlinereason */
 	OPA_PI_MASK_OFFLINE_REASON                = 0x0F,
+	OPA_PI_MASK_LED_ENABLE                    = 0x40,
 	/* port_states.unsleepstate_downdefstate */
 	OPA_PI_MASK_UNSLEEP_STATE                 = 0xF0,
 	OPA_PI_MASK_DOWNDEF_STATE                 = 0x0F,
@@ -288,12 +294,23 @@ enum port_info_field_masks {
 	OPA_PI_MASK_MTU_CAP                       = 0x0F,
 };
 
+#if USE_PI_LED_ENABLE
 struct opa_port_states {
 	u8     reserved;
-	u8     offline_reason;            /* 2 res,  6 bits */
+	u8     ledenable_offlinereason;   /* 1 res, 1 bit, 6 bits */
 	u8     reserved2;
 	u8     portphysstate_portstate;   /* 4 bits, 4 bits */
 };
+#define PI_LED_ENABLE_SUP 1
+#else
+struct opa_port_states {
+	u8     reserved;
+	u8     offline_reason;            /* 2 res, 6 bits */
+	u8     reserved2;
+	u8     portphysstate_portstate;   /* 4 bits, 4 bits */
+};
+#define PI_LED_ENABLE_SUP 0
+#endif
 
 struct opa_port_state_info {
 	struct opa_port_states port_states;
