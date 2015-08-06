@@ -491,17 +491,16 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 			  tx_handle);
 	if (rc < 0)
 		goto err5;
-
-	/* Wait for TX command 2 to complete */
-	rc = __hfi_ct_wait(ctx, ct_tx, 2, OPA2_TX_TIMEOUT_MS, NULL);
+	/* Block for an EQ interrupt */
+	rc = ops->ev_wait_single(ctx, OPA_EV_MODE_BLOCKING, eq_tx,
+				 OPA2_TX_TIMEOUT_MS);
 	if (rc < 0) {
-		dev_info(&odev->dev, "TX CT event 2 failure, %d\n", rc);
+		dev_info(&odev->dev, "TX EQ 2 intr fail rc %d\n", rc);
 		goto err5;
 	} else {
-		dev_info(&odev->dev, "TX CT event 2 success\n");
+		dev_info(&odev->dev, "TX EQ 2 intr success\n");
 	}
-
-	rc = __hfi_eq_wait(ctx, rx, eq_tx, (void **)&eq_entry);
+	hfi_eq_get(ctx, rx, eq_tx, (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
