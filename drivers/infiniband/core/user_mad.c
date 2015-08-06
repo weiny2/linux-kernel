@@ -616,6 +616,7 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 	mutex_lock(&file->mutex);
 
 	if (!file->port->ib_dev) {
+		pr_notice("ib_umad_reg_agent: invalid device\n");
 		ret = -EPIPE;
 		goto out;
 	}
@@ -626,6 +627,8 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 	}
 
 	if (ureq.qpn != 0 && ureq.qpn != 1) {
+		pr_notice("ib_umad_reg_agent: invalid QPN %d specified\n",
+			ureq.qpn);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -634,6 +637,8 @@ static int ib_umad_reg_agent(struct ib_umad_file *file, void __user *arg,
 		if (!__get_agent(file, agent_id))
 			goto found;
 
+	pr_notice("ib_umad_reg_agent: Max Agents (%u) reached\n",
+		IB_UMAD_MAX_AGENTS);
 	ret = -ENOMEM;
 	goto out;
 
