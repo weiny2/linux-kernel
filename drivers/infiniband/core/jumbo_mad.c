@@ -219,7 +219,8 @@ out:
 }
 
 static bool generate_unmatched_resp(struct jumbo_mad_private *recv,
-				    struct jumbo_mad_private *response)
+				    struct jumbo_mad_private *response,
+				    u32 *resp_len)
 {
 	if (recv->mad.mad.mad_hdr.method == IB_MGMT_METHOD_GET ||
 	    recv->mad.mad.mad_hdr.method == IB_MGMT_METHOD_SET) {
@@ -232,6 +233,17 @@ static bool generate_unmatched_resp(struct jumbo_mad_private *recv,
 			cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB);
 		if (recv->mad.mad.mad_hdr.mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 			response->mad.mad.mad_hdr.status |= IB_SMP_DIRECTION;
+
+		if (recv->mad.mad.mad_hdr.base_version == JUMBO_MGMT_BASE_VERSION) {
+			if (recv->mad.mad.mad_hdr.mgmt_class ==
+			    IB_MGMT_CLASS_SUBN_LID_ROUTED ||
+			    recv->mad.mad.mad_hdr.mgmt_class ==
+			    IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
+				*resp_len = stl_get_smp_header_size(
+							(struct stl_smp *)&recv->mad.smp);
+			else
+				*resp_len = sizeof(struct ib_mad_hdr);
+		}
 
 		return true;
 	} else {
@@ -253,6 +265,7 @@ void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
 	int port_num;
 	int ret = IB_MAD_RESULT_SUCCESS;
 	u8 base_version;
+	u32 resp_len = 0;
 
 	recv = container_of(mad_priv_hdr, struct jumbo_mad_private, header);
 	ib_dma_unmap_single(port_priv->device,
@@ -265,9 +278,8 @@ void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
 	recv->header.wc = *wc;
 	recv->header.recv_wc.wc = &recv->header.wc;
 	base_version = recv->mad.mad.mad_hdr.base_version;
-/* FIXME This should be based off the wc data length */
 	if (base_version == JUMBO_MGMT_BASE_VERSION)
-		recv->header.recv_wc.mad_len = sizeof(struct jumbo_mad);
+		recv->header.recv_wc.mad_len = wc->byte_len - sizeof(struct ib_grh);
 	else
 		recv->header.recv_wc.mad_len = sizeof(struct ib_mad);
 	recv->header.recv_wc.recv_buf.mad = (struct ib_mad *)&recv->mad.mad;
@@ -310,6 +322,7 @@ void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
 						     wc, &recv->grh,
 						     (struct ib_mad *)&recv->mad.mad,
 						     (struct ib_mad *)&response->mad.mad);
+		resp_len = wc->byte_len;
 		if (ret & IB_MAD_RESULT_SUCCESS) {
 			if (ret & IB_MAD_RESULT_CONSUMED)
 				goto out;
@@ -318,7 +331,8 @@ void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
 						    &recv->grh, wc,
 						    port_priv->device,
 						    port_num,
-						    qp_info->qp->qp_num);
+						    qp_info->qp->qp_num,
+						    resp_len);
 				goto out;
 			}
 		}
@@ -333,9 +347,11 @@ void ib_mad_recv_done_jumbo_handler(struct ib_mad_port_private *port_priv,
 		 */
 		recv = NULL;
 	} else if ((ret & IB_MAD_RESULT_SUCCESS) &&
-		   generate_unmatched_resp(recv, response)) {
+		   generate_unmatched_resp(recv, response, &resp_len)) {
 		agent_send_jumbo_response(&response->mad.mad, &recv->grh, wc,
-				    port_priv->device, port_num, qp_info->qp->qp_num);
+				    port_priv->device, port_num,
+				    qp_info->qp->qp_num,
+				    resp_len);
 	}
 
 out:

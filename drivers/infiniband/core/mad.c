@@ -807,10 +807,18 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 		     send_wr->wr.ud.pkey_index,
 		     send_wr->wr.ud.port_num, &mad_wc);
 
+	if (smp->base_version == JUMBO_MGMT_BASE_VERSION) {
+		mad_wc.byte_len = mad_send_wr->send_buf.hdr_len
+					+ mad_send_wr->send_buf.data_len
+					+ sizeof(struct ib_grh);
+	}
+
 	/* No GRH for DR SMP */
 	/* FIXME for upstream:
 	 * Once again drivers which support jumbo MADS know we will be passing them
 	 * a jumbo mad for the response.
+	 * Also we need to add a parameter here for the response length
+	 * For now we use the WC.byte_len
 	 */
 	ret = device->process_mad(device, 0, port_num, &mad_wc, NULL,
 				  (struct ib_mad *)smp,
@@ -876,6 +884,9 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	local->mad_send_wr = mad_send_wr;
 	/* FIXME upstream; pkey_index valid for IB ??? */
 	local->mad_send_wr->send_wr.wr.ud.pkey_index = mad_wc.pkey_index;
+	/* FIXME upstream; mad_wc.byte_len should be additional param in
+	 * process_mad */
+	local->return_wc_byte_len = mad_wc.byte_len;
 	/* Reference MAD agent until send side of local completion handled */
 	atomic_inc(&mad_agent_priv->refcount);
 	/* Queue local completion to local list */
@@ -2609,7 +2620,7 @@ static void local_completions(struct work_struct *work)
 
 			base_version = local->mad_priv->mad.mad.mad_hdr.base_version;
 			if (base_version == JUMBO_MGMT_BASE_VERSION)
-				local->mad_priv->header.recv_wc.mad_len = sizeof(struct jumbo_mad);
+				local->mad_priv->header.recv_wc.mad_len = local->return_wc_byte_len;
 			else
 				local->mad_priv->header.recv_wc.mad_len = sizeof(struct ib_mad);
 
