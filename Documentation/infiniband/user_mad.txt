@@ -26,7 +26,7 @@ Creating MAD agents
   ioctl.  Also, all agents registered through a file descriptor will
   be unregistered when the descriptor is closed.
 
-  2013 -- a new registration ioctl is now provided which allows additional
+  2014 -- a new registration ioctl is now provided which allows additional
        fields to be provided during registration.
        Users of this registration call are implicitly setting the use of
        pkey_index (see below).
