@@ -41,6 +41,7 @@
 #include <linux/workqueue.h>
 #include <rdma/ib_mad.h>
 #include <rdma/ib_smi.h>
+#include <rdma/stl_smi.h>
 
 
 #define PFX "ib_mad: "
@@ -86,6 +87,26 @@ struct ib_mad_private {
 		struct ib_mad mad;
 		struct ib_rmpp_mad rmpp_mad;
 		struct ib_smp smp;
+	} mad;
+} __attribute__ ((packed));
+
+/**
+ * It might be possible to define this as part of the ib_mad_private by simply
+ * extending the union there.
+ * The problem is I don't know what other RDMA hardware will do if you attempt
+ * to post >256B Rcv WR on their managment QP's.
+ * Therefore we are going to try and keep this structure separate and only use
+ * it on jumbo_mad capable devices.
+ * Furthermore, this allows us to use smaller kmem_cache's on non-jumbo capable
+ * devices for less memory ussage.
+ */
+struct jumbo_mad_private {
+	struct ib_mad_private_header header;
+	struct ib_grh grh;
+	union {
+		struct jumbo_mad mad;
+		struct jumbo_rmpp_mad rmpp_mad;
+		struct stl_smp smp;
 	} mad;
 } __attribute__ ((packed));
 
@@ -153,7 +174,7 @@ struct ib_mad_send_wr_private {
 
 struct ib_mad_local_private {
 	struct list_head completion_list;
-	struct ib_mad_private *mad_priv;
+	struct ib_mad_private *mad_priv; /* can be jumbo_mad_private */
 	struct ib_mad_agent_private *recv_mad_agent;
 	struct ib_mad_send_wr_private *mad_send_wr;
 };
