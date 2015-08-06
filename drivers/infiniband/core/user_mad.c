@@ -741,7 +741,6 @@ out:
 	return ret;
 }
 
-static struct ib_user_mad_reg_req2 zero_ureq = { 0 };
 static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 {
 	struct ib_user_mad_reg_req2 ureq;
@@ -762,14 +761,6 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 
 	if (copy_from_user(&ureq, arg, sizeof(ureq))) {
 		ret = -EFAULT;
-		goto out;
-	}
-
-	if (ureq.res != 0
-	    || memcmp(ureq.res2, zero_ureq.res2, sizeof(ureq.res2))) {
-		pr_notice("user_mad: ib_umad_reg_agent2 failed: "
-			"reserved fields set\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
@@ -810,8 +801,18 @@ found:
 		memset(&req, 0, sizeof(req));
 		req.mgmt_class         = ureq.mgmt_class;
 		req.mgmt_class_version = ureq.mgmt_class_version;
-		memcpy(req.oui, ureq.oui, sizeof(req.oui));
-		memcpy(req.method_mask, ureq.method_mask, sizeof(req.method_mask));
+		if (ureq.oui & 0xff000000) {
+			dev_notice(file->port->dev,
+				   "ib_umad_reg_agent2 failed: oui invalid 0x%08x\n",
+				   ureq.oui);
+			ret = -EINVAL;
+			goto out;
+		}
+		req.oui[2] =  ureq.oui & 0x0000ff;
+		req.oui[1] = (ureq.oui & 0x00ff00) >> 8;
+		req.oui[0] = (ureq.oui & 0xff0000) >> 16;
+		memcpy(req.method_mask, ureq.method_mask,
+			sizeof(req.method_mask));
 	}
 
 	agent = ib_register_mad_agent(file->port->ib_dev, file->port->port_num,
