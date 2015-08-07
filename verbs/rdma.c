@@ -54,6 +54,53 @@
 #include "verbs.h"
 #include "packet.h"
 
+static void opa_ib_cnp_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
+typedef void (*opcode_handler)(struct opa_ib_qp *qp,
+			       struct opa_ib_packet *packet);
+
+static const opcode_handler opcode_handler_tbl[256] = {
+	/* RC */
+	[IB_OPCODE_RC_SEND_FIRST]                     = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_SEND_MIDDLE]                    = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_SEND_LAST]                      = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE]       = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_SEND_ONLY]                      = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_SEND_ONLY_WITH_IMMEDIATE]       = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_FIRST]               = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]              = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST]                = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_ACKNOWLEDGE]                    = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_COMPARE_SWAP]                   = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_FETCH_ADD]                      = &opa_ib_rc_rcv,
+	/* UC */
+	[IB_OPCODE_UC_SEND_FIRST]                     = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_SEND_MIDDLE]                    = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_SEND_LAST]                      = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_SEND_ONLY]                      = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST]                = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY]                = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = &opa_ib_uc_rcv,
+	/* UD */
+	[IB_OPCODE_UD_SEND_ONLY]                      = &opa_ib_ud_rcv,
+	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = &opa_ib_ud_rcv,
+	/* CNP */
+	[CNP_OPCODE]				      = &opa_ib_cnp_rcv
+};
+
 /**
  * opa_ib_copy_sge - copy data to SGE memory
  * @ss: the SGE state
@@ -338,49 +385,20 @@ bail:
 	return ret;
 }
 
-/**
- * opa_ib_qp_rcv - processing an incoming packet on a QP
- * @ctx: the context pointer
- * @hdr: the packet header
- * @rcv_flags: flags relevant to rcv processing
- * @data: the packet data
- * @tlen: the packet length
- * @qp: the QP the packet came on
- *
- * This is called from opa_ib_rcv() to process an incoming packet
- * for the given QP.
- * Called at interrupt level.
+/*
+ * Make sure the QP is ready and able to accept the given opcode.
  */
-static void opa_ib_qp_rcv(struct hfi_ctx *ctx, struct opa_ib_header *hdr,
-			  u32 rcv_flags, void *data, u32 tlen, struct opa_ib_qp *qp)
+static inline bool is_qp_ok(struct opa_ib_portdata *ibp,
+			    struct opa_ib_qp *qp, int opcode)
 {
-	struct opa_ib_portdata *ibp;
-
-	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
-
-	spin_lock(&qp->r_lock);
-
-	/* Check for valid receive state. */
-	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK)) {
+	if ((ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) &&
+	    (((opcode & OPCODE_QP_MASK) == qp->allowed_ops) ||
+	     (opcode == CNP_OPCODE))) {
+		return true;
+	} else {
 		ibp->n_pkt_drops++;
-		goto unlock;
+		return false;
 	}
-
-	switch (qp->ibqp.qp_type) {
-	case IB_QPT_SMI:
-	case IB_QPT_GSI:
-	case IB_QPT_UD:
-		opa_ib_ud_rcv(ibp, hdr, rcv_flags, data, tlen, qp);
-		break;
-	/* FXRTODO RC/UC support */
-	case IB_QPT_RC:
-	case IB_QPT_UC:
-	default:
-		break;
-	}
-
-unlock:
-	spin_unlock(&qp->r_lock);
 }
 
 /**
@@ -393,15 +411,12 @@ unlock:
  */
 void opa_ib_rcv(struct opa_ib_packet *packet)
 {
-	struct hfi_ctx *rcd = packet->ctx;
 	struct opa_ib_header *hdr = packet->hdr;
-	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
 	struct opa_ib_portdata *ibp = packet->ibp;
 	struct ib_l4_headers *ohdr;
 	struct opa_ib_qp *qp;
 	u32 qp_num;
-	u32 rcv_flags = 0;
 	int lnh;
 	u8 opcode;
 	u16 lid;
@@ -451,11 +466,15 @@ void opa_ib_rcv(struct opa_ib_packet *packet)
 		mcast = opa_ib_mcast_find(ibp, &hdr->u.l.grh.dgid);
 		if (mcast == NULL)
 			goto drop;
-		rcv_flags |= HFI1_HAS_GRH;
+		packet->rcv_flags |= HFI1_HAS_GRH;
 		if (rhf_dc_info(packet->rhf))
-			rcv_flags |= HFI1_SC4_BIT;
-		list_for_each_entry_rcu(p, &mcast->qp_list, list)
-			opa_ib_qp_rcv(rcd, hdr, rcv_flags, data, tlen, p->qp);
+			packet->rcv_flags |= HFI1_SC4_BIT;
+		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
+			spin_lock(&qp->r_lock);
+			if (likely((is_qp_ok(ibp, qp, opcode))))
+				opcode_handler_tbl[opcode](qp, packet);
+			spin_unlock(&qp->r_lock);
+		}
 		/*
 		 * Notify multicast_detach() if it is waiting for us
 		 * to finish.
@@ -465,20 +484,39 @@ void opa_ib_rcv(struct opa_ib_packet *packet)
 	} else
 #endif
 	{
+		rcu_read_lock();
 		qp = opa_ib_lookup_qpn(ibp, qp_num);
-		if (!qp)
+		if (!qp) {
+			rcu_read_unlock();
 			goto drop;
+		}
 
 		if (lnh == HFI1_LRH_GRH)
-			rcv_flags |= HFI1_HAS_GRH;
+			packet->rcv_flags |= HFI1_HAS_GRH;
 #if 0
 		if (rhf_dc_info(packet->rhf))
-			rcv_flags |= HFI1_SC4_BIT;
+			packet->rcv_flags |= HFI1_SC4_BIT;
 #endif
-		opa_ib_qp_rcv(rcd, hdr, rcv_flags, data, tlen, qp);
+		spin_lock(&qp->r_lock);
+		if (likely((is_qp_ok(ibp, qp, opcode))))
+			opcode_handler_tbl[opcode](qp, packet);
+		spin_unlock(&qp->r_lock);
+		rcu_read_unlock();
 	}
 	return;
 
 drop:
 	ibp->n_pkt_drops++;
+}
+
+static void opa_ib_cnp_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
+{
+	struct opa_ib_portdata *ibp = packet->ibp;
+
+	if (qp->ibqp.qp_type == IB_QPT_UC)
+		opa_ib_uc_rcv(qp, packet);
+	else if (qp->ibqp.qp_type == IB_QPT_UD)
+		opa_ib_ud_rcv(qp, packet);
+	else
+		ibp->n_pkt_drops++;
 }

@@ -65,8 +65,7 @@ typedef void (*restart_t)(struct work_struct *work);
 
 /**
  * struct iowait - linkage for delayed progress/waiting
- * @list: used to add/insert into QP/PQ wait lists
- * @tx_head: overflow list of sdma_txreq's
+ * @tx_head: overflow list of send WGEs
  * @sleep: no space callback
  * @wakeup: space callback
  * @iowork: workqueue overhead
@@ -94,7 +93,6 @@ typedef void (*restart_t)(struct work_struct *work);
  */
 
 struct iowait {
-	struct list_head list;
 	struct list_head tx_head;
 #if 0 /* FXRTODO -  SDMA -> TX_CQ */
 	int (*sleep)(
@@ -139,7 +137,6 @@ static inline void iowait_init(
 #endif
 {
 	wait->count = 0;
-	INIT_LIST_HEAD(&wait->list);
 	INIT_LIST_HEAD(&wait->tx_head);
 	INIT_WORK(&wait->iowork, func);
 	init_waitqueue_head(&wait->wait_dma);

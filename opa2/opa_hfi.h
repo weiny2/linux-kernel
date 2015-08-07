@@ -320,7 +320,7 @@ struct hfi_ptcdata {
  * @vl_high_limit: Limit of high priority compenent of
  *	VL Arbitration table
  * @neighbor_type: Node type of neighboring port
- *			0 - HCA
+ *			0 - HFI
  *			1 - Switch
  * @neighbor_normal: State of neighbor's port's Logical link state
  *	0 - Neighbor Down/Init

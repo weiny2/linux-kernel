@@ -60,7 +60,7 @@
  * @swqe: the send work request
  *
  * This is called from opa_ib_make_ud_req() to forward a WQE addressed
- * to the same HCA.
+ * to the same HFI.
  * Note that the receive interrupt handler may be calling opa_ib_ud_rcv()
  * while this is being called.
  */
@@ -479,19 +479,14 @@ int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey)
 
 /**
  * opa_ib_ud_rcv - receive an incoming UD packet
- * @ibp: the port the packet came in on
- * @hdr: the packet header
- * @rcv_flags: flags relevant to rcv processing
- * @data: the packet data
- * @tlen: the packet length
  * @qp: the QP the packet came on
+ * @packet: incoming packet information
  *
- * This is called from opa_ib_qp_rcv() to process an incoming UD packet
+ * This is called from opa_ib_rcv() to process an incoming UD packet
  * for the given QP.
  * Called at interrupt level.
  */
-void opa_ib_ud_rcv(struct opa_ib_portdata *ibp, struct opa_ib_header *hdr,
-		   u32 rcv_flags, void *data, u32 tlen, struct opa_ib_qp *qp)
+void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 {
 	struct ib_l4_headers *ohdr;
 	int opcode;
@@ -502,6 +497,11 @@ void opa_ib_ud_rcv(struct opa_ib_portdata *ibp, struct opa_ib_header *hdr,
 	u32 src_qp;
 	u16 dlid, slid, pkey;
 	int mgmt_pkey_idx = -1;
+	struct opa_ib_portdata *ibp = packet->ibp;
+	struct opa_ib_header *hdr = packet->hdr;
+	u32 rcv_flags = packet->rcv_flags;
+	void *data = packet->ebuf;
+	u32 tlen = packet->tlen;
 	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
 	int sc4_bit = (!!(rcv_flags & HFI1_SC4_BIT)) << 4;
 	u8 sc5;
@@ -576,9 +576,17 @@ void opa_ib_ud_rcv(struct opa_ib_portdata *ibp, struct opa_ib_header *hdr,
 			goto drop;
 		if (qp->ibqp.qp_num > 1) {
 #if 0 /* FXRTODO */
-			if (unlikely(ingress_pkey_check(ibp, pkey, sc5,
-							qp->s_pkey_index,
-							slid))) {
+			/*
+			 * FXRTODO - WFR introduced this more light-weight pkey
+			 * check.  Verify this is valid for 9B packets on FXR.
+			 */
+			if (unlikely(rcv_pkey_check(ibp, pkey, sc5, slid))) {
+				/*
+				 * Traps will not be sent for packets dropped
+				 * by the HW. This is fine, as sending trap
+				 * for invalid pkeys is optional according to
+				 * IB spec (release 1.3, section 10.9.4)
+				 */
 				opa_ib_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
 						 pkey, sl,
 						 src_qp, qp->ibqp.qp_num,
@@ -701,11 +709,6 @@ void opa_ib_ud_rcv(struct opa_ib_portdata *ibp, struct opa_ib_header *hdr,
 		wc.pkey_index = 0;
 
 	wc.slid = slid;
-	/*
-	 * TODO - BUG existed here with computing SC,
-	 *        (verified with WFR team and fixed here)
-	 * Delete this comment after inspecting offical WFR driver fix.
-	 */
 	wc.sl = ibp->sc_to_sl[sc5];
 
 	/*

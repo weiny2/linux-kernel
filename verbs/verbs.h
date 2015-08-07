@@ -104,6 +104,7 @@ extern unsigned int opa_ib_max_sges;
 extern struct ib_dma_mapping_ops opa_ib_dma_mapping_ops;
 
 struct opa_ib_header;
+struct opa_ib_packet;
 
 struct opa_ucontext {
 	struct ib_ucontext ibucontext;
@@ -333,7 +334,6 @@ struct opa_ib_qp {
 	struct opa_ib_rq r_rq;		/* receive work queue */
 
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
-	unsigned long s_aflags;
 	struct opa_ib_sge_state *s_cur_sge;
 	u32 s_flags;
 	struct opa_ib_swqe *s_wqe;
@@ -369,6 +369,7 @@ struct opa_ib_qp {
 	u8 s_rnr_retry;         /* requester RNR retry counter */
 	u8 s_num_rd_atomic;     /* number of RDMA read/atomic pending */
 	u8 s_tail_ack_queue;    /* index into s_ack_queue[] */
+	u8 allowed_ops;		/* high order bits of allowed opcodes */
 
 	struct opa_ib_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
@@ -383,11 +384,6 @@ struct opa_ib_qp {
  */
 #define HFI1_R_WRID_VALID        0
 #define HFI1_R_REWIND_SGE        1
-
-/*
- * Atomic bit definitions for s_aflags.
- */
-#define HFI1_S_ECN		0
 
 /*
  * Bit definitions for r_flags.
@@ -420,6 +416,7 @@ struct opa_ib_qp {
  * HFI1_S_WAIT_PSN - waiting for a packet to exit the send DMA queue
  * HFI1_S_WAIT_ACK - waiting for an ACK packet before sending more requests
  * HFI1_S_SEND_ONE - send one packet, request ACK, then wait for ACK
+ * HFI1_S_ECN - a  BECN was queued to the send engine
  */
 #define HFI1_S_SIGNAL_REQ_WR	0x0001
 #define HFI1_S_BUSY		0x0002
@@ -439,6 +436,7 @@ struct opa_ib_qp {
 #define HFI1_S_WAIT_ACK		0x8000
 #define HFI1_S_SEND_ONE		0x10000
 #define HFI1_S_UNLIMITED_CREDIT	0x20000
+#define HFI1_S_ECN		0x40000
 
 /*
  * Wait flags that would prevent any packet type from being sent.
@@ -454,6 +452,9 @@ struct opa_ib_qp {
 	HFI1_S_WAIT_PSN | HFI1_S_WAIT_ACK)
 
 #define HFI1_S_ANY_WAIT (HFI1_S_ANY_WAIT_IO | HFI1_S_ANY_WAIT_SEND)
+
+/* Number of bits to pay attention to in the opcode for checking qp type */
+#define OPCODE_QP_MASK 0xE0
 
 /*
  * Since struct opa_ib_swqe is not a fixed size, we can't simply index into
@@ -482,8 +483,7 @@ static inline struct opa_ib_rwqe *get_rwqe_ptr(struct opa_ib_rq *rq, unsigned n)
 
 struct opa_ib_portdata {
 	struct opa_core_device *odev;
-	struct opa_ib_qp __rcu *qp0;
-	struct opa_ib_qp __rcu *qp1;
+	struct opa_ib_qp __rcu *qp[2];
 	/* non-zero when timer is set */
 	unsigned long mkey_lease_timeout;
 	__be64 gid_prefix;
@@ -590,9 +590,21 @@ static inline struct opa_ib_portdata *to_opa_ibportdata(struct ib_device *ibdev,
 }
 
 /*
+ * Return the QP with the given QPN
+ */
+static inline struct opa_ib_qp *opa_ib_lookup_qpn(struct opa_ib_portdata *ibp,
+						  u32 qpn) __must_hold(RCU)
+{
+	struct opa_ib_qp *qp = NULL;
+
+	if (unlikely(qpn <= 1))
+		qp = rcu_dereference(ibp->qp[qpn]);
+	return qp;
+}
+
+/*
  * Return the indexed PKEY from the port PKEY table.
  */
-
 static inline u16 opa_ib_get_npkeys(struct opa_ib_data *ibd)
 {
 	struct opa_ib_portdata *ibp1 = to_opa_ibportdata(&ibd->ibdev, 1);
@@ -639,8 +651,9 @@ int opa_ib_destroy_cq(struct ib_cq *ibcq);
 int opa_ib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags);
 int opa_ib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
 void opa_ib_rc_error(struct opa_ib_qp *qp, enum ib_wc_status err);
-void opa_ib_ud_rcv(struct opa_ib_portdata *ibp, struct opa_ib_header *hdr,
-		   u32 rcv_flags, void *data, u32 tlen, struct opa_ib_qp *qp);
+void opa_ib_rc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
+void opa_ib_uc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
+void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
 int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey);
 int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
 		   struct ib_sge *isge, struct ib_sge *sge, int acc);

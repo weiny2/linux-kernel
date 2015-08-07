@@ -239,7 +239,7 @@ int hfi_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
 	 */
 	if (minw && width < minw)
 		dd_dev_err(dd,
-			    "PCIe width %u (x%u HCA), performance reduced\n",
+			    "PCIe width %u (x%u HFI), performance reduced\n",
 			    width, minw);
 
 err_pcie:

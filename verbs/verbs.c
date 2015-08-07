@@ -155,6 +155,7 @@ static int opa_ib_query_device(struct ib_device *ibdev,
 	props->max_qp = opa_ib_max_qps;
 	props->max_qp_wr = opa_ib_max_qp_wrs;
 	props->max_sge = opa_ib_max_sges;
+	props->max_sge_rd = opa_ib_max_sges;
 	props->max_cq = opa_ib_max_cqs;
 	props->max_ah = opa_ib_max_ahs;
 	props->max_cqe = opa_ib_max_cqes;
@@ -448,8 +449,8 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	ibp->pkey_tlen = pdesc.pkey_tlen;
 	ibp->pkeys = pdesc.pkeys;
 
-	RCU_INIT_POINTER(ibp->qp0, NULL);
-	RCU_INIT_POINTER(ibp->qp1, NULL);
+	RCU_INIT_POINTER(ibp->qp[0], NULL);
+	RCU_INIT_POINTER(ibp->qp[1], NULL);
 
 	/* MTU is per-VL */
 	for (i = 0; i < ibp->max_vls; i++)
