@@ -5716,8 +5716,7 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 	u64 qsfp_mask;
 
 	if (loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB ||
-			ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR ||
-			!HFI1_CAP_IS_KSET(QSFP_ENABLED)) {
+			ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
 		ppd->driver_link_ready = 1;
 		return;
 	}
@@ -6205,7 +6204,7 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 
 	if (do_wait) {
 		/* it can take a while for the link to go down */
-		ret = wait_phy_linkstate(dd, PLS_OFFLINE, 5000);
+		ret = wait_phy_linkstate(dd, PLS_OFFLINE, 10000);
 		if (ret < 0)
 			return ret;
 	}
