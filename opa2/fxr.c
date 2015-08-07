@@ -129,6 +129,36 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID, tc_slid.val);
 }
 
+static int hfi_mtu_to_mc_tc_shift(const struct hfi_devdata *dd, int mtu)
+{
+	switch (mtu) {
+	case 128: return 0;
+	case IB_MTU_256: return 1;
+	case IB_MTU_512: return 2;
+	case IB_MTU_1024: return 3;
+	case IB_MTU_2048: return 4;
+	case IB_MTU_4096: return 5;
+	case OPA_MTU_8192: return 6;
+	case OPA_MTU_10240: return 7;
+	default:
+		dd_dev_warn(dd, "invalid mtu");
+		return INVALID_MTU_ENC;
+	}
+}
+
+static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, int mtu)
+{
+	int i;
+	u64 reg = 0;
+	u64 val = hfi_mtu_to_mc_tc_shift(dd, mtu);
+
+	for (i = 0; i < 8; i++)
+		reg |= (val << (i * 4));
+	write_csr(dd, FXR_TXOTR_PKT_CFG_RFS, reg);
+	write_csr(dd, FXR_TXOTR_PKT_CFG_MTU_PT0, reg);
+	write_csr(dd, FXR_TXOTR_PKT_CFG_MTU_PT1, reg);
+}
+
 static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 {
 	txotr_pkt_cfg_valid_tc_dlid_t tc_slid = {.val = 0};
@@ -138,6 +168,9 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 	tc_slid.field.max_dlid_p1 = HFI_MAX_LID_SUPP;
 	tc_slid.field.tc_valid_p1 = 0xf;
 	write_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID, tc_slid.val);
+
+	/* FXRTODO: Re-initialize if FM requests different MTU? */
+	hfi_init_tx_otr_mtu(dd, OPA_MTU_8192);
 }
 
 static void init_csrs(struct hfi_devdata *dd)
