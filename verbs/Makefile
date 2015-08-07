@@ -17,5 +17,6 @@ opa2_ib-y += qp.o
 opa2_ib-y += rdma.o
 opa2_ib-y += rc.o
 opa2_ib-y += ruc.o
+opa2_ib-y += uc.o
 opa2_ib-y += ud.o
 opa2_ib-y += verbs.o

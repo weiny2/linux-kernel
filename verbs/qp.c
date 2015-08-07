@@ -108,10 +108,8 @@ static void insert_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
 
 	atomic_inc(&qp->refcount);
 	spin_lock_irqsave(&ibd->qpt_lock, flags);
-	if (qp->ibqp.qp_num == 0)
-		rcu_assign_pointer(ibp->qp0, qp);
-	else if (qp->ibqp.qp_num == 1)
-		rcu_assign_pointer(ibp->qp1, qp);
+	if (qp->ibqp.qp_num <= 1)
+		rcu_assign_pointer(ibp->qp[qp->ibqp.qp_num], qp);
 	/* FXRTODO - else use hash table for QPs > 1 */
 	spin_unlock_irqrestore(&ibd->qpt_lock, flags);
 }
@@ -130,12 +128,12 @@ static void remove_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
 	if (qp->ibqp.qp_num <= 1) {
 		ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
 
-		if (rcu_dereference_protected(ibp->qp0,
+		if (rcu_dereference_protected(ibp->qp[0],
 		    lockdep_is_held(&ibd->qpt_lock)) == qp)
-			RCU_INIT_POINTER(ibp->qp0, NULL);
-		else if (rcu_dereference_protected(ibp->qp1,
+			RCU_INIT_POINTER(ibp->qp[0], NULL);
+		else if (rcu_dereference_protected(ibp->qp[1],
 			 lockdep_is_held(&ibd->qpt_lock)) == qp)
-			RCU_INIT_POINTER(ibp->qp1, NULL);
+			RCU_INIT_POINTER(ibp->qp[1], NULL);
 	}
 	/* FXRTODO - QPs > 1 */
 	spin_unlock_irqrestore(&ibd->qpt_lock, flags);
@@ -145,30 +143,6 @@ static void remove_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
 		if (atomic_dec_and_test(&qp->refcount))
 			wake_up(&qp->wait);
 	}
-}
-
-/**
- * opa_ib_lookup_qpn - return the QP with the given QPN
- * @ibp: IB portdata
- * @qpn: the QP number to look up
- *
- * The caller must hold the rcu_read_lock(), and keep the lock until
- * the returned qp is no longer in use.
- *
- * Return: the queue pair on success, otherwise returns an errno.
- */
-struct opa_ib_qp *opa_ib_lookup_qpn(struct opa_ib_portdata *ibp,
-				    u32 qpn) __must_hold(RCU)
-{
-	struct opa_ib_qp *qp = NULL;
-
-	if (unlikely(qpn <= 1)) {
-		if (qpn == 0)
-			qp = rcu_dereference(ibp->qp0);
-		else
-			qp = rcu_dereference(ibp->qp1);
-	}
-	return qp;
 }
 
 /**
@@ -236,16 +210,7 @@ static void flush_tx_list(struct opa_ib_qp *qp)
 
 static void flush_iowait(struct opa_ib_qp *qp)
 {
-	struct opa_ib_data *ibd = to_opa_ibdata(qp->ibqp.device);
-	unsigned long flags;
-
-	spin_lock_irqsave(&ibd->pending_lock, flags);
-	if (!list_empty(&qp->s_iowait.list)) {
-		list_del_init(&qp->s_iowait.list);
-		if (atomic_dec_and_test(&qp->refcount))
-			wake_up(&qp->wait);
-	}
-	spin_unlock_irqrestore(&ibd->pending_lock, flags);
+	/* FXRTODO looks to be unneeded if we avoid adding a verbs_txreq */
 }
 
 /**
@@ -801,6 +766,29 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 	}
 
 	ret = &qp->ibqp;
+
+	/*
+	 * We have our QP and its good, now keep track of what types of opcodes
+	 * can be processed on this QP. We do this by keeping track of what the
+	 * 3 high order bits of the opcode are.
+	 */
+	switch (init_attr->qp_type) {
+	case IB_QPT_SMI:
+	case IB_QPT_GSI:
+	case IB_QPT_UD:
+		qp->allowed_ops = IB_OPCODE_UD_SEND_ONLY & OPCODE_QP_MASK;
+		break;
+	case IB_QPT_RC:
+		qp->allowed_ops = IB_OPCODE_RC_SEND_ONLY & OPCODE_QP_MASK;
+		break;
+	case IB_QPT_UC:
+		qp->allowed_ops = IB_OPCODE_UC_SEND_ONLY & OPCODE_QP_MASK;
+		break;
+	default:
+		ret = ERR_PTR(-EINVAL);
+		goto bail_ip;
+	}
+
 	goto bail;
 
 bail_ip:

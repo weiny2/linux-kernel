@@ -170,6 +170,7 @@ struct opa_ib_packet {
 	u16 tlen;
 	u16 hlen;
 	u32 updegr;
+	u32 rcv_flags;
 };
 
 /* where best to put this opcode? */
