@@ -54,9 +54,6 @@
 #include "verbs.h"
 #include "packet.h"
 
-/* FXRTODO - TX support */
-#define is_qp_dma_blocked(qp, sc) 0
-
 /**
  * opa_ib_copy_sge - copy data to SGE memory
  * @ss: the SGE state
@@ -226,8 +223,16 @@ bail_inval:
 	ret = -EINVAL;
 bail:
 	if (!ret && !wr->next) {
-		/* FXRTODO - revisit, we likely need this */
-		if (is_qp_dma_blocked(qp, sc5)) {
+		/*
+		 * FXRTODO - revisit versus WFR code.
+		 * This appears to kick the workqueue if other prior Verbs
+		 * requests are still pending, versus returning which will
+		 * execute the work queue function directly in this process.
+		 * WFR will test if the single SDMA engine selected by
+		 * the SC is busy, we currently use one TX Command Queue
+		 * so cannot do the more narrow check..
+		 */
+		if (is_iowait_sdma_busy(&qp->s_iowait)) {
 			opa_ib_schedule_send(qp);
 			*scheduled = 1;
 		}

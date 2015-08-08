@@ -356,6 +356,8 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 	qp->s_sge.sg_list = wqe->sg_list + 1;
 	qp->s_sge.num_sge = wqe->wr.num_sge;
 	qp->s_sge.total_len = wqe->length;
+	/* TODO - for now, store this in WGE instead of verbs_txreq (WFR) */
+	wqe->s_sge = &qp->s_sge;
 
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		/* Header size in 32-bit words. */

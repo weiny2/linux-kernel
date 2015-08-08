@@ -532,14 +532,7 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val)
 	case HFI_IB_CFG_OP_VLS:
 		if (ppd->vls_operational != val) {
 			ppd->vls_operational = val;
-		 /* FXRTODO: Implement FXR equivalent */
-#if	0
-			ret = sdma_map_init(
-				ppd->dd,
-				ppd->port - 1,
-				hfi1_num_vls(val),
-				NULL);
-#endif
+			/* FXRTODO: if we map contexts to VLs, update here. */
 		}
 		break;
 	case HFI_IB_CFG_MTU:
