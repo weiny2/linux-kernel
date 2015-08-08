@@ -413,48 +413,6 @@ static void opa_ib_unregister_device(struct opa_ib_data *ibd)
 	ib_unregister_device(&ibd->ibdev);
 }
 
-static int opa_ib_hw_init(struct opa_ib_portdata *ibp)
-{
-	struct hfi_ctx *ctx = &ibp->ctx;
-	struct opa_ctx_assign ctx_assign = {0};
-	struct opa_core_ops *ops = ibp->odev->bus_ops;
-	u16 cq_idx;
-	int rc;
-
-	HFI_CTX_INIT_BYPASS(ctx, ibp->odev->dd);
-	ctx_assign.pid = HFI_PID_ANY;
-	ctx_assign.le_me_count = OPA2_IB_ME_COUNT;
-	rc = ops->ctx_assign(ctx, &ctx_assign);
-	if (rc)
-		return rc;
-
-	/* Obtain a pair of command queues and setup */
-	rc = ops->cq_assign(ctx, NULL, &cq_idx);
-	if (rc)
-		goto err;
-	rc = ops->cq_map(ctx, cq_idx, &ibp->cmdq_tx, &ibp->cmdq_rx);
-	if (rc)
-		goto err1;
-
-	return 0;
-err1:
-	ops->cq_release(ctx, cq_idx);
-err:
-	ops->ctx_release(ctx);
-	return rc;
-}
-
-static void opa_ib_hw_uninit(struct opa_ib_portdata *ibp)
-{
-	struct hfi_ctx *ctx = &ibp->ctx;
-	struct opa_core_ops *ops = ibp->odev->bus_ops;
-	u16 cq_idx = ibp->cmdq_tx.cq_idx;
-
-	ops->cq_unmap(&ibp->cmdq_tx, &ibp->cmdq_rx);
-	ops->cq_release(ctx, cq_idx);
-	ops->ctx_release(ctx);
-}
-
 static int opa_ib_init_port(struct opa_ib_data *ibd,
 			struct opa_core_device *odev, u8 pidx)
 {
@@ -462,6 +420,7 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	struct opa_ib_portdata *ibp = &ibd->pport[pidx];
 	struct opa_pport_desc pdesc;
 	struct opa_core_ops *ops = odev->bus_ops;
+	u16 cq_idx;
 
 	ops->get_port_desc(odev, &pdesc, pidx + 1);
 
@@ -510,15 +469,33 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	/* management SC15 always uses VL15 */
 	ibp->sc_to_vl[15] = 15;
 
-	/* FXRTODO: assign Portals PID, currently one per port */
-	ret = opa_ib_hw_init(ibp);
+	ibp->ctx = &ibd->ctx;
+	spin_lock_init(&ibp->cmdq_tx_lock);
+	spin_lock_init(&ibp->cmdq_rx_lock);
 
+	/*
+	 * Obtain a pair of command queues for this port and setup
+	 * TODO - later we will likely allocate a pool of Contexts
+	 * (and CQs) to choose based on QPN or SC.
+	 */
+	ret = ops->cq_assign(ibp->ctx, NULL, &cq_idx);
+	if (ret)
+		goto err;
+	ret = ops->cq_map(ibp->ctx, cq_idx, &ibp->cmdq_tx, &ibp->cmdq_rx);
+	if (ret)
+		ops->cq_release(ibp->ctx, cq_idx);
+
+err:
 	return ret;
 }
 
 static void opa_ib_uninit_port(struct opa_ib_portdata *ibp)
 {
-	opa_ib_hw_uninit(ibp);
+	struct opa_core_ops *ops = ibp->odev->bus_ops;
+	u16 cq_idx = ibp->cmdq_tx.cq_idx;
+
+	ops->cq_unmap(&ibp->cmdq_tx, &ibp->cmdq_rx);
+	ops->cq_release(ibp->ctx, cq_idx);
 }
 
 static int opa_ib_add(struct opa_core_device *odev)
@@ -529,6 +506,7 @@ static int opa_ib_add(struct opa_core_device *odev)
 	struct opa_ib_portdata *ibp;
 	struct opa_dev_desc desc;
 	struct opa_core_ops *ops = odev->bus_ops;
+	struct opa_ctx_assign ctx_assign = {0};
 
 	ops->get_device_desc(odev, &desc);
 	num_ports = desc.num_pports;
@@ -562,6 +540,14 @@ static int opa_ib_add(struct opa_core_device *odev)
 	if (ret)
 		goto cq_init_err;
 
+	/* Allocate FXR Context */
+	HFI_CTX_INIT_BYPASS(&ibd->ctx, odev->dd);
+	ctx_assign.pid = HFI_PID_ANY;
+	ctx_assign.le_me_count = OPA2_IB_ME_COUNT;
+	ret = ops->ctx_assign(&ibd->ctx, &ctx_assign);
+	if (ret)
+		goto ctx_err;
+
 	/* FXRTODO: Move pkey support to opa2_hfi  */
 	for (i = 0; i < num_ports; i++) {
 		ret = opa_ib_init_port(ibd, odev, i);
@@ -587,6 +573,8 @@ priv_err:
 	for (i = 0; i < num_ports; i++)
 		opa_ib_uninit_port(&ibd->pport[i]);
 port_err:
+	ops->ctx_release(&ibd->ctx);
+ctx_err:
 	opa_ib_cq_exit(ibd);
 cq_init_err:
 	kfree(ibd);
@@ -599,6 +587,7 @@ static void opa_ib_remove(struct opa_core_device *odev)
 {
 	int i;
 	struct opa_ib_data *ibd;
+	struct opa_core_ops *ops = odev->bus_ops;
 
 	ibd = opa_core_get_priv_data(&opa_ib_driver, odev);
 	if (!ibd)
@@ -606,6 +595,7 @@ static void opa_ib_remove(struct opa_core_device *odev)
 	opa_ib_unregister_device(ibd);
 	for (i = 0; i < ibd->num_pports; i++)
 		opa_ib_uninit_port(&ibd->pport[i]);
+	ops->ctx_release(&ibd->ctx);
 	opa_ib_cq_exit(ibd);
 	ida_destroy(&ibd->qpn_table);
 	kfree(ibd);

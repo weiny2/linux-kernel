@@ -224,6 +224,82 @@ bail:
 }
 
 /**
+ * send_wqe() - submit a WGE to hardware Command Queue
+ * @ibp: outgoing port
+ * @wait: wait structure to use when no slots (may be NULL)
+ * @wge: WGE to submit
+ *
+ * Submit the WGE into the CMDQ.  If a iowait structure is
+ * non-NULL the packet will be queued to the list in wait.
+ * TODO - see WFR's sdma_send_txreq() as reference.
+ *
+ * Return: TBD
+ */
+int send_wqe(struct opa_ib_portdata *ibp, struct iowait *wait,
+	     struct opa_ib_swqe *wqe)
+{
+	/* Length of payload is wqe->length */
+
+	return 0;
+}
+
+/**
+ * opa_ib_verbs_send - send a packet
+ * @qp: the QP to send on
+ * @hdr: the packet header
+ * @hdrwords: the number of 32-bit words in the header
+ * @ss: the SGE to send
+ * @len: the length of the packet in bytes
+ *
+ * Return: zero if packet is sent or queued OK, non-zero
+ * and clear qp->s_flags HFI1_S_BUSY otherwise.
+ */
+int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
+		      u32 hdrwords, struct opa_ib_sge_state *ss, u32 len)
+{
+	struct opa_ib_portdata *ibp;
+	int ret = 0;
+	unsigned long flags = 0;
+
+	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+
+	//ret = egress_pkey_check(ibp, &hdr->ibh, qp);
+	if (unlikely(ret)) {
+		//hfi1_cdbg(PIO, "%s() Failed. Completing with err", __func__);
+		spin_lock_irqsave(&qp->s_lock, flags);
+		opa_ib_send_complete(qp, qp->s_wqe, IB_WC_GENERAL_ERR);
+		spin_unlock_irqrestore(&qp->s_lock, flags);
+		return -EINVAL;
+	}
+
+	/*
+	 * Send from TX overflow list first.
+	 * TODO - not fully integrated, we should reuse if we can. WFR
+	 * enqueues to this list in sdma_check_progress via sleep callback.
+	 */
+	if (!list_empty(&qp->s_iowait.tx_head)) {
+		struct opa_ib_swqe *wqe;
+
+		wqe = list_first_entry(
+			&qp->s_iowait.tx_head,
+			struct opa_ib_swqe,
+			pending_list);
+		list_del_init(&wqe->pending_list);
+		/* send queued pending WGE into fabric */
+		ret = send_wqe(ibp, &qp->s_iowait, wqe);
+		/*
+		 * TODO - why does WFR just return without enqueuing the
+		 * WQE that would have been sent below (qp->s_wqe).
+		 */
+		return ret;
+	}
+
+	/* send WGE into fabric */
+	ret = send_wqe(ibp, &qp->s_iowait, qp->s_wqe);
+	return ret;
+}
+
+/**
  * opa_ib_do_send - perform a send on a QP
  * @work: contains a pointer to the QP
  *
@@ -261,11 +337,10 @@ void opa_ib_do_send(struct work_struct *work)
 			 * If the packet cannot be sent now, return and
 			 * the send tasklet will be woken up later.
 			 */
-#if 0
 			if (opa_ib_verbs_send(qp, qp->s_hdr, qp->s_hdrwords,
 					      qp->s_cur_sge, qp->s_cur_size))
 				break;
-#endif
+
 			/* Record that s_hdr is empty. */
 			qp->s_hdrwords = 0;
 		}

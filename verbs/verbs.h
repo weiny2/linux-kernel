@@ -183,6 +183,14 @@ struct opa_ib_swqe {
 	u32 lpsn;               /* last packet sequence number */
 	u32 ssn;                /* send sequence number */
 	u32 length;             /* total length of data in sg_list */
+
+	/*
+	 * TODO - try maintaining all state here instead of creating a
+	 * verbs_txreq and sdma_txreq as WFR does
+	 */
+	struct list_head pending_list;
+	struct opa_ib_sge_state	*s_sge;
+
 	struct ib_sge sg_list[0];
 };
 
@@ -512,14 +520,16 @@ struct opa_ib_portdata {
 	u8 mkeyprot;
 	u8 subnet_timeout;
 	/* the first 16 entries are sl_to_vl for !STL */
-	u8 sl_to_sc[32];
-	u8 sc_to_sl[32];
-	u8 sc_to_vl[32];
+	u8 sl_to_sc[OPA_MAX_SLS];
+	u8 sc_to_sl[OPA_MAX_SCS];
+	u8 sc_to_vl[OPA_MAX_SCS];
 	u32 vl_mtu[OPA_MAX_VLS];
 
-	struct hfi_ctx ctx;
+	struct hfi_ctx *ctx;
 	struct hfi_cq cmdq_tx;
 	struct hfi_cq cmdq_rx;
+	spinlock_t cmdq_tx_lock;
+	spinlock_t cmdq_rx_lock;
 };
 
 struct opa_ib_data {
@@ -552,6 +562,8 @@ struct opa_ib_data {
 
 	/* per device cq worker */
 	struct kthread_worker *worker;
+
+	struct hfi_ctx ctx;
 };
 
 #define to_opa_ibpd(pd)	container_of((pd), struct opa_ib_pd, ibpd)
