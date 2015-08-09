@@ -1093,6 +1093,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	idr_init(&dd->cq_pair);
 	spin_lock_init(&dd->cq_lock);
 	spin_lock_init(&dd->priv_tx_cq_lock);
+	spin_lock_init(&dd->priv_rx_cq_lock);
 	mutex_init(&dd->e2e_lock);
 
 	for (i = 0; i < HFI_NUM_BARS; i++) {

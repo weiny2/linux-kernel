@@ -388,6 +388,7 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 				  HFI_PSB_EQ_DESC_OFFSET);
 	union eqd eq_desc;
 	u16 eq_base;
+	unsigned long sflags;
 	int order, eq_idx, msix_idx = 0;
 	int num_eqs = HFI_NUM_EVENT_HANDLES;
 	int ret = 0;
@@ -456,9 +457,11 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	wmb();  /* barrier before writing Valid */
 	eq_desc_base[eq_idx].val[0] = eq_desc.val[0];
 
+	spin_lock_irqsave(&dd->priv_rx_cq_lock, sflags);
 	/* issue write to privileged CQ to complete */
 	ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx, &eq_desc,
 				      eq_assign->user_data);
+	spin_unlock_irqrestore(&dd->priv_rx_cq_lock, sflags);
 	if (ret < 0) {
 		/*
 		 * TODO - need to define how to handle waiting for CQ slots,
@@ -548,6 +551,7 @@ static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx, u64 user_data)
 				  HFI_PSB_EQ_DESC_OFFSET);
 	union eqd eq_desc;
 	void *eq_present;
+	unsigned long sflags;
 	int ret = 0;
 
 	spin_lock(&ctx->cteq_lock);
@@ -564,9 +568,11 @@ static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx, u64 user_data)
 	eq_desc.val[0] = 0;
 	eq_desc.val[1] = 0;
 
+	spin_lock_irqsave(&dd->priv_rx_cq_lock, sflags);
 	/* issue write to privileged CQ to complete EQ release */
 	ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx, &eq_desc,
 				      user_data);
+	spin_unlock_irqrestore(&dd->priv_rx_cq_lock, sflags);
 	if (ret < 0) {
 		/* TODO - revisit how to handle waiting for CQ slots */
 		goto idr_end;

@@ -452,8 +452,11 @@ struct hfi_devdata {
 	/* OUI comes from the HW. Used everywhere as 3 separate bytes. */
 	u8 oui[3];
 
-	/* Lock to synchronize access to priv_cq */
+	/* Lock to synchronize access to tx_priv_cq */
 	spinlock_t priv_tx_cq_lock;
+
+	/* Lock to synchronize access to rx_priv_cq */
+	spinlock_t priv_rx_cq_lock;
 
 	/* Mutex lock synchronizing E2E operations */
 	struct mutex e2e_lock;
