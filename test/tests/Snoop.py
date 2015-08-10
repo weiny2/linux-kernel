@@ -45,8 +45,8 @@ def snoop_do_not_intercept_outgoing(host, lid1, lid2):
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
                     # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
-                    dlid = "0x" + dlid
-                    slid = "0x" + slid
+                    dlid = hex(int(dlid))
+                    slid = hex(int(slid))
                     if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
                     elif (dlid == lid2) and (slid == lid1):
@@ -88,8 +88,8 @@ def snoop_intercept_outgoing(host, lid1, lid2):
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
                     # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
-                    dlid = "0x" + dlid
-                    slid = "0x" + slid
+                    dlid = hex(int(dlid))
+                    slid = hex(int(slid))
                     if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
                     elif (dlid == lid2) and (slid == lid1):
@@ -133,8 +133,8 @@ def snoop_intercept_outgoing_2(host, lid1, lid2, drop_send="0"):
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
                     # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
-                    dlid = "0x" + dlid
-                    slid = "0x" + slid
+                    dlid = hex(int(dlid))
+                    slid = hex(int(slid))
                     if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
                     elif (dlid == lid2) and (slid == lid1):
@@ -176,8 +176,8 @@ def snoop_intercept_outgoing_3(host,lid1, lid2):
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
                     # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
-                    dlid = "0x" + dlid
-                    slid = "0x" + slid
+                    dlid = hex(int(dlid))
+                    slid = hex(int(slid))
                     if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
                     elif (dlid == lid2) and (slid == lid1):
@@ -215,8 +215,8 @@ def capture_do_not_intercept_outgoing(host, lid1, lid2):
                     # byte ICRC = 36 or 9 Dwords. There is a 16 byte header
                     # for Pcap metadata but it is not included in PacketBytes.
                     # The test does a 5x ping pong
-                    dlid = "0x" + dlid
-                    slid = "0x" + slid
+                    dlid = hex(int(dlid))
+                    slid = hex(int(slid))
                     if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
                     elif (dlid == lid2) and (slid == lid1):
@@ -251,8 +251,8 @@ def capture_do_not_intercept_outgoing_2(host, lid1, lid2):
                 dlid = matchObj.group(3)
                 if size == "36":
                     # Why 36? See previous function
-                    dlid = "0x" + dlid
-                    slid = "0x" + slid
+                    lid = hex(int(dlid))
+                    lid = hex(int(slid))
                     if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
                     elif (dlid == lid2) and (slid == lid1):

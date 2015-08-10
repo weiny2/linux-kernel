@@ -38,8 +38,8 @@ def start_pcap(host, lid1, lid2):
                     # Why 36? This is because it is a 2 byte write which gets
                     # padded to 4 bytes. So 4 byte payload + 28 byte header + 4
                     # byte ICRC = 36 or 9 Dwords. The test does a 5x ping pong
-                    dlid = "0x" + dlid
-                    slid = "0x" + slid
+                    dlid = hex(int(dlid))
+                    slid = hex(int(slid))
                     if (dlid == lid1) and (slid == lid2):
                         ping = ping+1
                     elif (dlid == lid2) and (slid == lid1):
