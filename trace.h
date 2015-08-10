@@ -1336,22 +1336,17 @@ DECLARE_EVENT_CLASS(hfi1_trace_template,
 
 /*
  * It may be nice to macroize the __hfi1_trace but the va_* stuff requires an
- * actual function to work and can not be in a macro. Also the fmt can not be a
- * constant char * because we need to be able to manipulate the \n if it is
- * present.
+ * actual function to work and can not be in a macro.
  */
-#define __hfi1_trace_event(lvl) \
+#define __hfi1_trace_def(lvl) \
+void __hfi1_trace_##lvl(const char *funct, char *fmt, ...);		\
+									\
 DEFINE_EVENT(hfi1_trace_template, hfi1_ ##lvl,				\
 	TP_PROTO(const char *function, struct va_format *vaf),		\
 	TP_ARGS(function, vaf))
 
-#ifdef HFI1_TRACE_DO_NOT_CREATE_INLINES
-#define __hfi1_trace_fn(fn) __hfi1_trace_event(fn)
-#else
-#define __hfi1_trace_fn(fn) \
-__hfi1_trace_event(fn); \
-__printf(2, 3) \
-static inline void __hfi1_trace_##fn(const char *func, char *fmt, ...)	\
+#define __hfi1_trace_fn(lvl) \
+void __hfi1_trace_##lvl(const char *func, char *fmt, ...)		\
 {									\
 	struct va_format vaf = {					\
 		.fmt = fmt,						\
@@ -1360,36 +1355,29 @@ static inline void __hfi1_trace_##fn(const char *func, char *fmt, ...)	\
 									\
 	va_start(args, fmt);						\
 	vaf.va = &args;							\
-	trace_hfi1_ ##fn(func, &vaf);					\
+	trace_hfi1_ ##lvl(func, &vaf);					\
 	va_end(args);							\
 	return;								\
 }
-#endif
 
 /*
- * To create a new trace level simply define it as below. This will create all
- * the hooks for calling hfi1_cdbg(LVL, fmt, ...); as well as take care of all
+ * To create a new trace level simply define it below and as a __hfi1_trace_fn
+ * in trace.c. This will create all the hooks for calling
+ * hfi1_cdbg(LVL, fmt, ...); as well as take care of all
  * the debugfs stuff.
  */
-__hfi1_trace_fn(RVPKT);
-__hfi1_trace_fn(INIT);
-__hfi1_trace_fn(VERB);
-__hfi1_trace_fn(PKT);
-__hfi1_trace_fn(PROC);
-__hfi1_trace_fn(MM);
-__hfi1_trace_fn(ERRPKT);
-__hfi1_trace_fn(SDMA);
-__hfi1_trace_fn(VPKT);
-__hfi1_trace_fn(LINKVERB);
-__hfi1_trace_fn(VERBOSE);
-__hfi1_trace_fn(DEBUG);
-__hfi1_trace_fn(SNOOP);
-__hfi1_trace_fn(CNTR);
-__hfi1_trace_fn(PIO);
-__hfi1_trace_fn(DC8051);
-__hfi1_trace_fn(FIRMWARE);
-__hfi1_trace_fn(RCVCTRL);
-__hfi1_trace_fn(TID);
+__hfi1_trace_def(PKT);
+__hfi1_trace_def(PROC);
+__hfi1_trace_def(SDMA);
+__hfi1_trace_def(LINKVERB);
+__hfi1_trace_def(DEBUG);
+__hfi1_trace_def(SNOOP);
+__hfi1_trace_def(CNTR);
+__hfi1_trace_def(PIO);
+__hfi1_trace_def(DC8051);
+__hfi1_trace_def(FIRMWARE);
+__hfi1_trace_def(RCVCTRL);
+__hfi1_trace_def(TID);
 
 #define hfi1_cdbg(which, fmt, ...) \
 	__hfi1_trace_##which(__func__, fmt, ##__VA_ARGS__)
