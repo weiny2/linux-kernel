@@ -210,17 +210,14 @@ static void __kprobes copy_instruction(struct kprobe *p)
 	s64 disp, new_disp;
 	u64 addr, new_addr;
 
-	if (ftrace_location(ip + MCOUNT_IP_FIXUP) == ip + MCOUNT_IP_FIXUP) {
-		int oco;
+	if (ftrace_location(ip) == ip) {
 		/*
 		 * If kprobes patches the instruction that is morphed by
 		 * ftrace make sure that kprobes always sees the branch
 		 * "jg .+24" that skips the mcount block or the "brcl 0,0"
 		 * in case of hotpatch.
 		 */
-		oco = is_ftrace_oco_nop((struct ftrace_insn *)ip, ip) ||
-			is_ftrace_oco_call((struct ftrace_insn *)ip, ip);
-		ftrace_generate_nop_insn((struct ftrace_insn *)p->ainsn.insn, oco);
+		ftrace_generate_nop_insn((struct ftrace_insn *)p->ainsn.insn);
 		p->ainsn.is_ftrace_insn = 1;
 	} else
 		memcpy(p->ainsn.insn, p->addr, ((*p->addr >> 14) + 3) & -2);
@@ -302,7 +299,6 @@ static int __kprobes swap_instruction(void *data)
 	struct swap_insn_args *args = data;
 	struct ftrace_insn new_insn, *insn;
 	struct kprobe *p = args->p;
-	unsigned long ip;
 	size_t len;
 
 	new_insn.opc = args->arm_kprobe ? BREAKPOINT_INSTRUCTION : p->opcode;
@@ -311,31 +307,15 @@ static int __kprobes swap_instruction(void *data)
 		goto skip_ftrace;
 	len = sizeof(new_insn);
 	insn = (struct ftrace_insn *) p->addr;
-	ip = (unsigned long) p->addr;
 	if (args->arm_kprobe) {
-		if (is_ftrace_nop(insn, ip))
+		if (is_ftrace_nop(insn))
 			new_insn.disp = KPROBE_ON_FTRACE_NOP;
-		else if (is_ftrace_call(insn, ip))
+		else
 			new_insn.disp = KPROBE_ON_FTRACE_CALL;
-		else if (is_ftrace_oco_nop(insn, ip))
-			new_insn.disp = KPROBE_ON_FTRACE_OCO_NOP;
-		else /* is_ftrace_oco_call */
-			new_insn.disp = KPROBE_ON_FTRACE_OCO_CALL;
 	} else {
-		switch (insn->disp) {
-		case KPROBE_ON_FTRACE_NOP:
-			ftrace_generate_nop_insn(&new_insn, 0);
-			break;
-		case KPROBE_ON_FTRACE_CALL:
-			ftrace_generate_call_insn(&new_insn, ip, 0);
-			break;
-		case KPROBE_ON_FTRACE_OCO_NOP:
-			ftrace_generate_nop_insn(&new_insn, 1);
-			break;
-		case KPROBE_ON_FTRACE_OCO_CALL:
-			ftrace_generate_call_insn(&new_insn, ip, 1);
-			break;
-		}
+		ftrace_generate_call_insn(&new_insn, (unsigned long)p->addr);
+		if (insn->disp == KPROBE_ON_FTRACE_NOP)
+			ftrace_generate_nop_insn(&new_insn);
 	}
 skip_ftrace:
 	kcb->kprobe_status = KPROBE_SWAP_INST;
@@ -650,6 +630,7 @@ static void __kprobes resume_execution(struct kprobe *p, struct pt_regs *regs)
 		struct ftrace_insn *insn = (struct ftrace_insn *) p->addr;
 		struct ftrace_insn call_insn;
 
+		ftrace_generate_call_insn(&call_insn, (unsigned long) p->addr);
 		/*
 		 * A kprobe on an enabled ftrace call site actually single
 		 * stepped an unconditional branch (ftrace nop equivalent).
@@ -657,12 +638,7 @@ static void __kprobes resume_execution(struct kprobe *p, struct pt_regs *regs)
 		 * was executed instead.
 		 */
 		if (insn->disp == KPROBE_ON_FTRACE_CALL) {
-			ftrace_generate_call_insn(&call_insn, (unsigned long) p->addr, 0);
 			ip += call_insn.disp * 2 - MCOUNT_INSN_SIZE;
-			regs->gprs[0] = (unsigned long)p->addr + sizeof(*insn);
-		} else if (insn->disp == KPROBE_ON_FTRACE_OCO_CALL) {
-			ftrace_generate_call_insn(&call_insn, (unsigned long) p->addr, 1);
-			ip += call_insn.disp * 2 - MCOUNT_OCO_INSN_SIZE;
 			regs->gprs[0] = (unsigned long)p->addr + sizeof(*insn);
 		}
 	}

@@ -36,12 +36,12 @@ ENTRY(ftrace_caller)
 	stg	%r0,(STACK_PTREGS_PSW+8)(%r15)
 	stmg	%r2,%r14,(STACK_PTREGS_GPRS+2*8)(%r15)
 #ifdef CONFIG_HAVE_MARCH_Z196_FEATURES
-	aghik	%r2,%r0,-(MCOUNT_INSN_SIZE-MCOUNT_IP_FIXUP)
+	aghik	%r2,%r0,-MCOUNT_INSN_SIZE
 	lgrl	%r4,function_trace_op
 	lgrl	%r1,ftrace_trace_function
 #else
 	lgr	%r2,%r0
-	aghi	%r2,-(MCOUNT_INSN_SIZE-MCOUNT_IP_FIXUP)
+	aghi	%r2,-MCOUNT_INSN_SIZE
 	larl	%r4,function_trace_op
 	lg	%r4,0(%r4)
 	larl	%r1,ftrace_trace_function
@@ -80,48 +80,3 @@ ENTRY(return_to_handler)
 	br	%r14
 
 #endif
-
-#ifdef CC_USING_HOTPATCH
-
-ENTRY(ftrace_oco_caller)
-	.globl	ftrace_oco_regs_caller
-	.set	ftrace_oco_regs_caller,ftrace_oco_caller
-	lgr	%r1,%r15
-	aghi	%r0,MCOUNT_OCO_RETURN_FIXUP
-	aghi	%r15,-STACK_FRAME_SIZE
-	stg	%r1,__SF_BACKCHAIN(%r15)
-	stg	%r1,(STACK_PTREGS_GPRS+15*8)(%r15)
-	stg	%r0,(STACK_PTREGS_PSW+8)(%r15)
-	stmg	%r2,%r14,(STACK_PTREGS_GPRS+2*8)(%r15)
-#ifdef CONFIG_HAVE_MARCH_Z196_FEATURES
-	aghik	%r2,%r0,-MCOUNT_OCO_RETURN_FIXUP
-	lgrl	%r4,function_trace_op
-	lgrl	%r1,ftrace_trace_function
-#else
-	lgr	%r2,%r0
-	aghi	%r2,-MCOUNT_OCO_RETURN_FIXUP
-	larl	%r4,function_trace_op
-	lg	%r4,0(%r4)
-	larl	%r1,ftrace_trace_function
-	lg	%r1,0(%r1)
-#endif
-	lgr	%r3,%r14
-	la	%r5,STACK_PTREGS(%r15)
-	basr	%r14,%r1
-#ifdef CONFIG_FUNCTION_GRAPH_TRACER
-# The j instruction gets runtime patched to a nop instruction.
-# See ftrace_enable_ftrace_graph_caller.
-ENTRY(ftrace_oco_graph_caller)
-	j	ftrace_oco_graph_caller_end
-	lg	%r2,(STACK_PTREGS_GPRS+14*8)(%r15)
-	lg	%r3,(STACK_PTREGS_PSW+8)(%r15)
-	brasl	%r14,prepare_ftrace_oco_return
-	stg	%r2,(STACK_PTREGS_GPRS+14*8)(%r15)
-ftrace_oco_graph_caller_end:
-	.globl	ftrace_oco_graph_caller_end
-#endif
-	lg	%r1,(STACK_PTREGS_PSW+8)(%r15)
-	lmg	%r2,%r15,(STACK_PTREGS_GPRS+2*8)(%r15)
-	br	%r1
-
-#endif /* CC_USING_HOTPATCH */

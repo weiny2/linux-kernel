@@ -17,13 +17,12 @@
 #ifndef ASM_KGR_H
 #define ASM_KGR_H
 
-#include <asm/ftrace.h>
 #include <asm/ptrace.h>
 #include <linux/stacktrace.h>
 
 static inline void kgr_set_regs_ip(struct pt_regs *regs, unsigned long ip)
 {
-	regs->psw.addr = ip - MCOUNT_IP_FIXUP;
+	regs->psw.addr = ip;
 }
 
 static inline bool kgr_needs_lazy_migration(struct task_struct *p)
