@@ -348,7 +348,7 @@ load_b:
 			A = !!vlan_tx_tag_present(skb);
 			continue;
 		case BPF_S_ANC_PAY_OFFSET:
-			A = __skb_get_poff(skb);
+			A = skb_get_poff(skb);
 			continue;
 		case BPF_S_ANC_NLATTR: {
 			struct nlattr *nla;
