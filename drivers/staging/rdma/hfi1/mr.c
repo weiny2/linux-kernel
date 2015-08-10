@@ -69,10 +69,12 @@ static int init_mregion(struct hfi1_mregion *mr, struct ib_pd *pd,
 {
 	int m, i = 0;
 	int rval = 0;
+	struct hfi1_devdata *dd = dd_from_ibdev(pd->device);
 
 	m = (count + HFI1_SEGSZ - 1) / HFI1_SEGSZ;
 	for (; i < m; i++) {
-		mr->map[i] = kzalloc(sizeof(*mr->map[0]), GFP_KERNEL);
+		mr->map[i] = kzalloc_node(sizeof(*mr->map[0]), GFP_KERNEL,
+					  dd->node);
 		if (!mr->map[i])
 			goto bail;
 	}
