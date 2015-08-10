@@ -2,7 +2,7 @@
     Copyright (c) 1998 - 2002  Frodo Looijaard <frodol@dds.nl>,
     Philip Edelbrock <phil@netroedge.com>, and Mark D. Studebaker
     <mdsxyz123@yahoo.com>
-    Copyright (C) 2007 - 2012  Jean Delvare <khali@linux-fr.org>
+    Copyright (C) 2007 - 2014  Jean Delvare <jdelvare@suse.de>
     Copyright (C) 2010         Intel Corporation,
                                David Woodhouse <dwmw2@infradead.org>
 
@@ -114,11 +114,15 @@
 
 /* PCI Address Constants */
 #define SMBBAR		4
+#define SMBPCICTL	0x004
 #define SMBPCISTS	0x006
 #define SMBHSTCFG	0x040
 
 /* Host status bits for SMBPCISTS */
 #define SMBPCISTS_INTS		0x08
+
+/* Control bits for SMBPCICTL */
+#define SMBPCICTL_INTDIS	0x0400
 
 /* Host configuration bits for SMBHSTCFG */
 #define SMBHSTCFG_HST_EN	1
@@ -377,6 +381,7 @@ static int i801_transaction(struct i801_priv *priv, int xact)
 {
 	int status;
 	int result;
+	const struct i2c_adapter *adap = &priv->adapter;
 
 	result = i801_check_pre(priv);
 	if (result < 0)
@@ -385,7 +390,14 @@ static int i801_transaction(struct i801_priv *priv, int xact)
 	if (priv->features & FEATURE_IRQ) {
 		outb_p(xact | SMBHSTCNT_INTREN | SMBHSTCNT_START,
 		       SMBHSTCNT(priv));
-		wait_event(priv->waitq, (status = priv->status));
+		result = wait_event_timeout(priv->waitq,
+					    (status = priv->status),
+					    adap->timeout);
+		if (!result) {
+			status = -ETIMEDOUT;
+			dev_warn(&priv->pci_dev->dev,
+				 "Timeout waiting for interrupt!\n");
+		}
 		priv->status = 0;
 		return i801_check_post(priv, status);
 	}
@@ -533,6 +545,7 @@ static int i801_block_transaction_byte_by_byte(struct i801_priv *priv,
 	int smbcmd;
 	int status;
 	int result;
+	const struct i2c_adapter *adap = &priv->adapter;
 
 	result = i801_check_pre(priv);
 	if (result < 0)
@@ -561,7 +574,14 @@ static int i801_block_transaction_byte_by_byte(struct i801_priv *priv,
 		priv->data = &data->block[1];
 
 		outb_p(priv->cmd | SMBHSTCNT_START, SMBHSTCNT(priv));
-		wait_event(priv->waitq, (status = priv->status));
+		result = wait_event_timeout(priv->waitq,
+					    (status = priv->status),
+					    adap->timeout);
+		if (!result) {
+			status = -ETIMEDOUT;
+			dev_warn(&priv->pci_dev->dev,
+				 "Timeout waiting for interrupt!\n");
+		}
 		priv->status = 0;
 		return i801_check_post(priv, status);
 	}
@@ -1219,6 +1239,25 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		outb_p(inb_p(SMBAUXCTL(priv)) &
 		       ~(SMBAUXCTL_CRC | SMBAUXCTL_E32B), SMBAUXCTL(priv));
 
+	/* Default timeout in interrupt mode: 200 ms */
+	priv->adapter.timeout = HZ / 5;
+
+	if (priv->features & FEATURE_IRQ) {
+		u16 pcictl, pcists;
+
+		/* Complain if an interrupt is already pending */
+		pci_read_config_word(priv->pci_dev, SMBPCISTS, &pcists);
+		if (pcists & SMBPCISTS_INTS)
+			dev_warn(&dev->dev, "An interrupt is pending!\n");
+
+		/* Check if interrupts have been disabled */
+		pci_read_config_word(priv->pci_dev, SMBPCICTL, &pcictl);
+		if (pcictl & SMBPCICTL_INTDIS) {
+			dev_info(&dev->dev, "Interrupts are disabled\n");
+			priv->features &= ~FEATURE_IRQ;
+		}
+	}
+
 	if (priv->features & FEATURE_IRQ) {
 		init_waitqueue_head(&priv->waitq);
 
@@ -1227,10 +1266,11 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		if (err) {
 			dev_err(&dev->dev, "Failed to allocate irq %d: %d\n",
 				dev->irq, err);
-			goto exit_release;
+			priv->features &= ~FEATURE_IRQ;
 		}
-		dev_info(&dev->dev, "SMBus using PCI Interrupt\n");
 	}
+	dev_info(&dev->dev, "SMBus using %s\n",
+		 priv->features & FEATURE_IRQ ? "PCI interrupt" : "polling");
 
 	/* set up the sysfs linkage to our parent device */
 	priv->adapter.dev.parent = &dev->dev;
@@ -1257,7 +1297,6 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 exit_free_irq:
 	if (priv->features & FEATURE_IRQ)
 		free_irq(dev->irq, priv);
-exit_release:
 	pci_release_region(dev, SMBBAR);
 exit:
 	kfree(priv);
