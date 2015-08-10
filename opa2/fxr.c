@@ -170,7 +170,7 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID, tc_slid.val);
 
 	/* FXRTODO: Re-initialize if FM requests different MTU? */
-	hfi_init_tx_otr_mtu(dd, OPA_MTU_8192);
+	hfi_init_tx_otr_mtu(dd, IB_MTU_4096);
 }
 
 static void init_csrs(struct hfi_devdata *dd)
