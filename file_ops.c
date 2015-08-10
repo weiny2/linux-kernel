@@ -763,6 +763,9 @@ static int hfi1_file_close(struct inode *inode, struct file *fp)
 	if (fdata->pq)
 		hfi1_user_sdma_free_queues(fdata);
 
+	/* release the cpu */
+	hfi1_put_proc_affinity(dd, fdata->rec_cpu_num);
+
 	/*
 	 * Clear any left over, unhandled events so the next process that
 	 * gets this context doesn't get confused.
@@ -854,8 +857,14 @@ static int assign_ctxt(struct file *fp, struct hfi1_user_info *uinfo)
 
 	mutex_lock(&hfi1_mutex);
 	/* First, lets check if we need to setup a shared context? */
-	if (uinfo->subctxt_cnt)
+	if (uinfo->subctxt_cnt) {
+		struct hfi1_filedata *fd = fp_to_fd(fp);
+
 		ret = find_shared_ctxt(fp, uinfo);
+		if (ret)
+			fd->rec_cpu_num = hfi1_get_proc_affinity(
+				fd->uctxt->dd, fd->uctxt->numa_id);
+	}
 
 	/*
 	 * We execute the following block if we couldn't find a
@@ -972,8 +981,9 @@ static int allocate_ctxt(struct file *fp, struct hfi1_devdata *dd,
 			 struct hfi1_user_info *uinfo)
 {
 	struct hfi1_ctxtdata *uctxt;
+	struct hfi1_filedata *fd = fp_to_fd(fp);
 	unsigned ctxt;
-	int ret;
+	int ret, numa;
 
 	if (dd->flags & HFI1_FROZEN) {
 		/*
@@ -993,17 +1003,29 @@ static int allocate_ctxt(struct file *fp, struct hfi1_devdata *dd,
 	if (ctxt == dd->num_rcv_contexts)
 		return -EBUSY;
 
-	uctxt = hfi1_create_ctxtdata(dd->pport, ctxt);
+	fd->rec_cpu_num = hfi1_get_proc_affinity(dd, -1);
+	if (fd->rec_cpu_num != -1)
+		numa = cpu_to_node(fd->rec_cpu_num);
+	else
+		numa = numa_node_id();
+	uctxt = hfi1_create_ctxtdata(dd->pport, ctxt, numa);
 	if (!uctxt) {
 		dd_dev_err(dd,
 			   "Unable to allocate ctxtdata memory, failing open\n");
 		return -ENOMEM;
 	}
+	hfi1_cdbg(PROC, "[%u:%u] pid %u assigned to CPU %d (NUMA %u)",
+		  uctxt->ctxt, subctxt_fp(fp), current->pid, fd->rec_cpu_num,
+		  uctxt->numa_id);
+
 	/*
 	 * Allocate and enable a PIO send context.
 	 */
-	uctxt->sc = sc_alloc(dd, SC_USER, uctxt->rcvhdrqentsize,
-			     uctxt->numa_id);
+	if (MEM_AFF_DEV_NUMA(CREDIT_RET))
+		numa = uctxt->dd->node;
+	else
+		numa = uctxt->numa_id;
+	uctxt->sc = sc_alloc(dd, SC_USER, uctxt->rcvhdrqentsize, numa);
 	if (!uctxt->sc)
 		return -ENOMEM;
 

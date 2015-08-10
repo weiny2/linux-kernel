@@ -1068,6 +1068,9 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		}
 	}
 
+	dev = to_idev(ibpd->device);
+	dd = dd_from_dev(dev);
+
 	switch (init_attr->qp_type) {
 	case IB_QPT_SMI:
 	case IB_QPT_GSI:
@@ -1082,7 +1085,8 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		sz = sizeof(struct hfi1_sge) *
 			init_attr->cap.max_send_sge +
 			sizeof(struct hfi1_swqe);
-		swq = vmalloc((init_attr->cap.max_send_wr + 1) * sz);
+		swq = vmalloc_node((init_attr->cap.max_send_wr + 1) * sz,
+				   dd->node);
 		if (swq == NULL) {
 			ret = ERR_PTR(-ENOMEM);
 			goto bail;
@@ -1098,13 +1102,14 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		} else if (init_attr->cap.max_recv_sge > 1)
 			sg_list_sz = sizeof(*qp->r_sg_list) *
 				(init_attr->cap.max_recv_sge - 1);
-		qp = kzalloc(sz + sg_list_sz, GFP_KERNEL);
+		qp = kzalloc_node(sz + sg_list_sz, GFP_KERNEL, dd->node);
 		if (!qp) {
 			ret = ERR_PTR(-ENOMEM);
 			goto bail_swq;
 		}
 		RCU_INIT_POINTER(qp->next, NULL);
-		qp->s_hdr = kzalloc(sizeof(*qp->s_hdr), GFP_KERNEL);
+		qp->s_hdr = kzalloc_node(sizeof(*qp->s_hdr), GFP_KERNEL,
+					 dd->node);
 		if (!qp->s_hdr) {
 			ret = ERR_PTR(-ENOMEM);
 			goto bail_qp;
@@ -1119,8 +1124,14 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 			qp->r_rq.max_sge = init_attr->cap.max_recv_sge;
 			sz = (sizeof(struct ib_sge) * qp->r_rq.max_sge) +
 				sizeof(struct hfi1_rwqe);
-			qp->r_rq.wq = vmalloc_user(sizeof(struct hfi1_rwq) +
-						   qp->r_rq.size * sz);
+			if (udata)
+				qp->r_rq.wq = vmalloc_user(
+					sizeof(struct hfi1_rwq) +
+					qp->r_rq.size * sz);
+			else
+				qp->r_rq.wq = vmalloc_node(
+					sizeof(struct hfi1_rwq) +
+					qp->r_rq.size * sz, dd->node);
 			if (!qp->r_rq.wq) {
 				ret = ERR_PTR(-ENOMEM);
 				goto bail_qp;
@@ -1147,8 +1158,6 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		qp->s_max_sge = init_attr->cap.max_send_sge;
 		if (init_attr->sq_sig_type == IB_SIGNAL_REQ_WR)
 			qp->s_flags = HFI1_S_SIGNAL_REQ_WR;
-		dev = to_idev(ibpd->device);
-		dd = dd_from_dev(dev);
 		err = alloc_qpn(dd, &dev->qp_dev->qpn_table, init_attr->qp_type,
 				init_attr->port_num);
 		if (err < 0) {
@@ -1495,16 +1504,17 @@ int hfi1_qp_init(struct hfi1_ibdev *dev)
 	int ret = -ENOMEM;
 
 	/* allocate parent object */
-	dev->qp_dev = kzalloc(sizeof(*dev->qp_dev), GFP_KERNEL);
+	dev->qp_dev = kzalloc_node(sizeof(*dev->qp_dev), GFP_KERNEL,
+				   dd->node);
 	if (!dev->qp_dev)
 		goto nomem;
 	/* allocate hash table */
 	dev->qp_dev->qp_table_size = hfi1_qp_table_size;
 	dev->qp_dev->qp_table_bits = ilog2(hfi1_qp_table_size);
 	dev->qp_dev->qp_table =
-		kmalloc(dev->qp_dev->qp_table_size *
-				sizeof(*dev->qp_dev->qp_table),
-			GFP_KERNEL);
+		kmalloc_node(dev->qp_dev->qp_table_size *
+			     sizeof(*dev->qp_dev->qp_table),
+			     GFP_KERNEL, dd->node);
 	if (!dev->qp_dev->qp_table)
 		goto nomem;
 	for (i = 0; i < dev->qp_dev->qp_table_size; i++)

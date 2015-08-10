@@ -1935,7 +1935,7 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	}
 	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
 	dev->lk_table.table = (struct hfi1_mregion __rcu **)
-		vmalloc(lk_tab_size);
+		vmalloc_node(lk_tab_size, dd->node);
 	if (dev->lk_table.table == NULL) {
 		ret = -ENOMEM;
 		goto err_lk;

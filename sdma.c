@@ -1049,13 +1049,15 @@ int sdma_init(struct hfi1_devdata *dd, u8 port)
 		num_engines, descq_cnt);
 
 	/* alloc memory for array of send engines */
-	dd->per_sdma = kcalloc(num_engines, sizeof(*dd->per_sdma), GFP_KERNEL);
+	dd->per_sdma = kzalloc_node(num_engines * sizeof(*dd->per_sdma),
+				    GFP_KERNEL, dd->node);
 	if (!dd->per_sdma)
 		return -ENOMEM;
 
 	idle_cnt = ns_to_cclock(dd, idle_cnt);
 	if (!sdma_desct_intr)
 		sdma_desct_intr = descq_cnt / 2;
+
 	/* Allocate memory for SendDMA descriptor FIFOs */
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
 		sde = &dd->per_sdma[this_idx];
