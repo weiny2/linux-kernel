@@ -153,6 +153,8 @@ static void fm10k_reinit(struct fm10k_intfc *interface)
 
 	rtnl_lock();
 
+	fm10k_iov_suspend(interface->pdev);
+
 	if (netif_running(netdev))
 		fm10k_close(netdev);
 
@@ -171,6 +173,8 @@ static void fm10k_reinit(struct fm10k_intfc *interface)
 
 	if (netif_running(netdev))
 		fm10k_open(netdev);
+
+	fm10k_iov_resume(interface->pdev);
 
 	rtnl_unlock();
 
@@ -261,6 +265,9 @@ static void fm10k_mbx_subtask(struct fm10k_intfc *interface)
 {
 	/* process upstream mailbox and update device state */
 	fm10k_watchdog_update_host_state(interface);
+
+	/* process downstream mailboxes */
+	fm10k_iov_mbx(interface);
 }
 
 /**
@@ -976,6 +983,7 @@ static irqreturn_t fm10k_msix_mbx_pf(int irq, void *data)
 	/* service mailboxes */
 	if (fm10k_mbx_trylock(interface)) {
 		mbx->ops.process(hw, mbx);
+		fm10k_iov_event(interface);
 		fm10k_mbx_unlock(interface);
 	}
 
@@ -1159,6 +1167,11 @@ static s32 fm10k_update_pvid(struct fm10k_hw *hw, u32 **results,
 		return FM10K_ERR_PARAM;
 
 	interface = container_of(hw, struct fm10k_intfc, hw);
+
+	/* check to see if this belongs to one of the VFs */
+	err = fm10k_iov_update_pvid(interface, glort, pvid);
+	if (!err)
+		return 0;
 
 	/* we need to reset if default VLAN was just updated */
 	if (pvid != hw->mac.default_vid)
@@ -1478,6 +1491,10 @@ static int fm10k_sw_init(struct fm10k_intfc *interface,
 	memcpy(&hw->mac.ops, fi->mac_ops, sizeof(hw->mac.ops));
 	hw->mac.type = fi->mac;
 
+	/* Setup IOV handlers */
+	if (fi->iov_ops)
+		memcpy(&hw->iov.ops, fi->iov_ops, sizeof(hw->iov.ops));
+
 	/* Set common capability flags and settings */
 	rss = min_t(int, FM10K_MAX_RSS_INDICES, num_online_cpus());
 	interface->ring_feature[RING_F_RSS].limit = rss;
@@ -1509,6 +1526,9 @@ static int fm10k_sw_init(struct fm10k_intfc *interface,
 
 	/* initialize hardware statistics */
 	hw->mac.ops.update_hw_stats(hw, &interface->stats);
+
+	/* Set upper limit on IOV VFs that can be allocated */
+	pci_sriov_set_totalvfs(pdev, hw->iov.total_vfs);
 
 	/* Start with random Ethernet address */
 	eth_random_addr(hw->mac.addr);
@@ -1709,6 +1729,9 @@ static int fm10k_probe(struct pci_dev *pdev,
 	/* print warning for non-optimal configurations */
 	fm10k_slot_warn(interface);
 
+	/* enable SR-IOV after registering netdev to enforce PF/VF ordering */
+	fm10k_iov_configure(pdev, 0);
+
 	/* clear the service task disable bit to allow service task to start */
 	clear_bit(__FM10K_SERVICE_DISABLE, &interface->state);
 
@@ -1751,6 +1774,9 @@ static void fm10k_remove(struct pci_dev *pdev)
 	/* free netdev, this may bounce the interrupts due to setup_tc */
 	if (netdev->reg_state == NETREG_REGISTERED)
 		unregister_netdev(netdev);
+
+	/* release VFs */
+	fm10k_iov_disable(pdev);
 
 	/* disable mailbox interrupt */
 	fm10k_mbx_free_irq(interface);
@@ -1828,6 +1854,9 @@ static int fm10k_resume(struct pci_dev *pdev)
 	if (err)
 		return err;
 
+	/* restore SR-IOV interface */
+	fm10k_iov_resume(pdev);
+
 	netif_device_attach(netdev);
 
 	return 0;
@@ -1848,6 +1877,8 @@ static int fm10k_suspend(struct pci_dev *pdev, pm_message_t state)
 	int err = 0;
 
 	netif_device_detach(netdev);
+
+	fm10k_iov_suspend(pdev);
 
 	rtnl_lock();
 
@@ -1990,6 +2021,7 @@ static struct pci_driver fm10k_driver = {
 	.suspend		= fm10k_suspend,
 	.resume			= fm10k_resume,
 #endif
+	.sriov_configure	= fm10k_iov_configure,
 	.err_handler		= &fm10k_err_handler
 };
 
