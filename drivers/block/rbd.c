@@ -790,6 +790,16 @@ static int parse_rbd_opts_token(char *c, void *private)
 	return 0;
 }
 
+static int obj_num_ops(enum obj_operation_type op_type)
+{
+	switch (op_type) {
+	case OBJ_OP_WRITE:
+		return 2;
+	default:
+		return 1;
+	}
+}
+
 static char* obj_op_name(enum obj_operation_type op_type)
 {
 	switch (op_type) {
@@ -2018,7 +2028,7 @@ static struct ceph_osd_request *rbd_osd_req_create(
 		snapc = img_request->snapc;
 	}
 
-	rbd_assert(num_ops == 1 || ((op_type == OBJ_OP_WRITE) && num_ops == 2));
+	rbd_assert(num_ops == 1 || obj_num_ops(op_type) == num_ops);
 
 	/* Allocate and initialize the request, for the num_ops ops */
 
@@ -2618,8 +2628,7 @@ static int rbd_img_request_fill(struct rbd_img_request *img_request,
 		}
 
 		osd_req = rbd_osd_req_create(rbd_dev, op_type,
-					(op_type == OBJ_OP_WRITE) ? 2 : 1,
-					obj_request);
+					     obj_num_ops(op_type), obj_request);
 		if (!osd_req)
 			goto out_unwind;
 
