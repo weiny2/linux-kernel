@@ -52,8 +52,6 @@
 struct mac_res {
 	struct list_head list;
 	u64 mac;
-	int ref_count;
-	u8 smac_index;
 	u8 port;
 };
 
@@ -220,11 +218,6 @@ struct res_fs_rule {
 	struct res_common	com;
 	int			qpn;
 };
-
-static int mlx4_is_eth(struct mlx4_dev *dev, int port)
-{
-	return dev->caps.port_mask[port] == MLX4_PORT_TYPE_IB ? 0 : 1;
-}
 
 static void *res_tracker_lookup(struct rb_root *root, u64 res_id)
 {
@@ -607,34 +600,15 @@ static void update_gid(struct mlx4_dev *dev, struct mlx4_cmd_mailbox *inbox,
 	struct mlx4_qp_context	*qp_ctx = inbox->buf + 8;
 	enum mlx4_qp_optpar	optpar = be32_to_cpu(*(__be32 *) inbox->buf);
 	u32			ts = (be32_to_cpu(qp_ctx->flags) >> 16) & 0xff;
-	int port;
 
-	if (MLX4_QP_ST_UD == ts) {
-		port = (qp_ctx->pri_path.sched_queue >> 6 & 1) + 1;
-		if (mlx4_is_eth(dev, port))
-			qp_ctx->pri_path.mgid_index = mlx4_get_base_gid_ix(dev, slave) | 0x80;
-		else
-			qp_ctx->pri_path.mgid_index = slave | 0x80;
+	if (MLX4_QP_ST_UD == ts)
+		qp_ctx->pri_path.mgid_index = 0x80 | slave;
 
-	} else if (MLX4_QP_ST_RC == ts || MLX4_QP_ST_XRC == ts || MLX4_QP_ST_UC == ts) {
-		if (optpar & MLX4_QP_OPTPAR_PRIMARY_ADDR_PATH) {
-			port = (qp_ctx->pri_path.sched_queue >> 6 & 1) + 1;
-			if (mlx4_is_eth(dev, port)) {
-				qp_ctx->pri_path.mgid_index += mlx4_get_base_gid_ix(dev, slave);
-				qp_ctx->pri_path.mgid_index &= 0x7f;
-			} else {
-				qp_ctx->pri_path.mgid_index = slave & 0x7F;
-			}
-		}
-		if (optpar & MLX4_QP_OPTPAR_ALT_ADDR_PATH) {
-			port = (qp_ctx->alt_path.sched_queue >> 6 & 1) + 1;
-			if (mlx4_is_eth(dev, port)) {
-				qp_ctx->alt_path.mgid_index += mlx4_get_base_gid_ix(dev, slave);
-				qp_ctx->alt_path.mgid_index &= 0x7f;
-			} else {
-				qp_ctx->alt_path.mgid_index = slave & 0x7F;
-			}
-		}
+	if (MLX4_QP_ST_RC == ts || MLX4_QP_ST_UC == ts) {
+		if (optpar & MLX4_QP_OPTPAR_PRIMARY_ADDR_PATH)
+			qp_ctx->pri_path.mgid_index = slave & 0x7F;
+		if (optpar & MLX4_QP_OPTPAR_ALT_ADDR_PATH)
+			qp_ctx->alt_path.mgid_index = slave & 0x7F;
 	}
 }
 
@@ -645,6 +619,7 @@ static int update_vport_qp_param(struct mlx4_dev *dev,
 	struct mlx4_qp_context	*qpc = inbox->buf + 8;
 	struct mlx4_vport_oper_state *vp_oper;
 	struct mlx4_priv *priv;
+	u32 qp_type;
 	int port;
 
 	port = (qpc->pri_path.sched_queue & 0x40) ? 2 : 1;
@@ -652,6 +627,12 @@ static int update_vport_qp_param(struct mlx4_dev *dev,
 	vp_oper = &priv->mfunc.master.vf_oper[slave].vport[port];
 
 	if (MLX4_VGT != vp_oper->state.default_vlan) {
+		qp_type	= (be32_to_cpu(qpc->flags) >> 16) & 0xff;
+		if (MLX4_QP_ST_RC == qp_type ||
+		    (MLX4_QP_ST_UD == qp_type &&
+		     !mlx4_is_qp_reserved(dev, qpn)))
+			return -EINVAL;
+
 		/* the reserved QPs (special, proxy, tunnel)
 		 * do not operate over vlans
 		 */
@@ -1678,39 +1659,11 @@ static int srq_alloc_res(struct mlx4_dev *dev, int slave, int op, int cmd,
 	return err;
 }
 
-static int mac_find_smac_ix_in_slave(struct mlx4_dev *dev, int slave, int port,
-				     u8 smac_index, u64 *mac)
+static int mac_add_to_slave(struct mlx4_dev *dev, int slave, u64 mac, int port)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	struct mlx4_resource_tracker *tracker = &priv->mfunc.master.res_tracker;
-	struct list_head *mac_list =
-		&tracker->slave_list[slave].res_list[RES_MAC];
-	struct mac_res *res, *tmp;
-
-	list_for_each_entry_safe(res, tmp, mac_list, list) {
-		if (res->smac_index == smac_index && res->port == (u8) port) {
-			*mac = res->mac;
-			return 0;
-		}
-	}
-	return -ENOENT;
-}
-
-static int mac_add_to_slave(struct mlx4_dev *dev, int slave, u64 mac, int port, u8 smac_index)
-{
-	struct mlx4_priv *priv = mlx4_priv(dev);
-	struct mlx4_resource_tracker *tracker = &priv->mfunc.master.res_tracker;
-	struct list_head *mac_list =
-		&tracker->slave_list[slave].res_list[RES_MAC];
-	struct mac_res *res, *tmp;
-
-	list_for_each_entry_safe(res, tmp, mac_list, list) {
-		if (res->mac == mac && res->port == (u8) port) {
-			/* mac found. update ref count */
-			++res->ref_count;
-			return 0;
-		}
-	}
+	struct mac_res *res;
 
 	if (mlx4_grant_resource(dev, slave, RES_MAC, 1, port))
 		return -EINVAL;
@@ -1721,8 +1674,6 @@ static int mac_add_to_slave(struct mlx4_dev *dev, int slave, u64 mac, int port, 
 	}
 	res->mac = mac;
 	res->port = (u8) port;
-	res->smac_index = smac_index;
-	res->ref_count = 1;
 	list_add_tail(&res->list,
 		      &tracker->slave_list[slave].res_list[RES_MAC]);
 	return 0;
@@ -1739,11 +1690,9 @@ static void mac_del_from_slave(struct mlx4_dev *dev, int slave, u64 mac,
 
 	list_for_each_entry_safe(res, tmp, mac_list, list) {
 		if (res->mac == mac && res->port == (u8) port) {
-			if (!--res->ref_count) {
-				list_del(&res->list);
-				mlx4_release_resource(dev, slave, RES_MAC, 1, port);
-				kfree(res);
-			}
+			list_del(&res->list);
+			mlx4_release_resource(dev, slave, RES_MAC, 1, port);
+			kfree(res);
 			break;
 		}
 	}
@@ -1756,13 +1705,10 @@ static void rem_slave_macs(struct mlx4_dev *dev, int slave)
 	struct list_head *mac_list =
 		&tracker->slave_list[slave].res_list[RES_MAC];
 	struct mac_res *res, *tmp;
-	int i;
 
 	list_for_each_entry_safe(res, tmp, mac_list, list) {
 		list_del(&res->list);
-		/* dereference the mac the num times the slave referenced it */
-		for (i = 0; i < res->ref_count; i++)
-			__mlx4_unregister_mac(dev, res->port, res->mac);
+		__mlx4_unregister_mac(dev, res->port, res->mac);
 		mlx4_release_resource(dev, slave, RES_MAC, 1, res->port);
 		kfree(res);
 	}
@@ -1774,7 +1720,6 @@ static int mac_alloc_res(struct mlx4_dev *dev, int slave, int op, int cmd,
 	int err = -EINVAL;
 	int port;
 	u64 mac;
-	u8 smac_index;
 
 	if (op != RES_OP_RESERVE_AND_MAP)
 		return err;
@@ -1784,13 +1729,12 @@ static int mac_alloc_res(struct mlx4_dev *dev, int slave, int op, int cmd,
 
 	err = __mlx4_register_mac(dev, port, mac);
 	if (err >= 0) {
-		smac_index = err;
 		set_param_l(out_param, err);
 		err = 0;
 	}
 
 	if (!err) {
-		err = mac_add_to_slave(dev, slave, mac, port, smac_index);
+		err = mac_add_to_slave(dev, slave, mac, port);
 		if (err)
 			__mlx4_unregister_mac(dev, port, mac);
 	}
@@ -2790,8 +2734,6 @@ static int verify_qp_parameters(struct mlx4_dev *dev,
 	u32			qp_type;
 	struct mlx4_qp_context	*qp_ctx;
 	enum mlx4_qp_optpar	optpar;
-	int port;
-	int num_gids;
 
 	qp_ctx  = inbox->buf + 8;
 	qp_type	= (be32_to_cpu(qp_ctx->flags) >> 16) & 0xff;
@@ -2799,7 +2741,6 @@ static int verify_qp_parameters(struct mlx4_dev *dev,
 
 	switch (qp_type) {
 	case MLX4_QP_ST_RC:
-	case MLX4_QP_ST_XRC:
 	case MLX4_QP_ST_UC:
 		switch (transition) {
 		case QP_TRANS_INIT2RTR:
@@ -2808,24 +2749,13 @@ static int verify_qp_parameters(struct mlx4_dev *dev,
 		case QP_TRANS_SQD2SQD:
 		case QP_TRANS_SQD2RTS:
 			if (slave != mlx4_master_func_num(dev))
-				if (optpar & MLX4_QP_OPTPAR_PRIMARY_ADDR_PATH) {
-					port = (qp_ctx->pri_path.sched_queue >> 6 & 1) + 1;
-					if (dev->caps.port_mask[port] != MLX4_PORT_TYPE_IB)
-						num_gids = mlx4_get_slave_num_gids(dev, slave);
-					else
-						num_gids = 1;
-					if (qp_ctx->pri_path.mgid_index >= num_gids)
+				/* slaves have only gid index 0 */
+				if (optpar & MLX4_QP_OPTPAR_PRIMARY_ADDR_PATH)
+					if (qp_ctx->pri_path.mgid_index)
 						return -EINVAL;
-				}
-				if (optpar & MLX4_QP_OPTPAR_ALT_ADDR_PATH) {
-					port = (qp_ctx->alt_path.sched_queue >> 6 & 1) + 1;
-					if (dev->caps.port_mask[port] != MLX4_PORT_TYPE_IB)
-						num_gids = mlx4_get_slave_num_gids(dev, slave);
-					else
-						num_gids = 1;
-					if (qp_ctx->alt_path.mgid_index >= num_gids)
+				if (optpar & MLX4_QP_OPTPAR_ALT_ADDR_PATH)
+					if (qp_ctx->alt_path.mgid_index)
 						return -EINVAL;
-				}
 			break;
 		default:
 			break;
@@ -3338,25 +3268,6 @@ int mlx4_INIT2INIT_QP_wrapper(struct mlx4_dev *dev, int slave,
 	return mlx4_GEN_QP_wrapper(dev, slave, vhcr, inbox, outbox, cmd);
 }
 
-static int roce_verify_mac(struct mlx4_dev *dev, int slave,
-				struct mlx4_qp_context *qpc,
-				struct mlx4_cmd_mailbox *inbox)
-{
-	u64 mac;
-	int port;
-	u32 ts = (be32_to_cpu(qpc->flags) >> 16) & 0xff;
-	u8 sched = *(u8 *)(inbox->buf + 64);
-	u8 smac_ix;
-
-	port = (sched >> 6 & 1) + 1;
-	if (mlx4_is_eth(dev, port) && (ts != MLX4_QP_ST_MLX)) {
-		smac_ix = qpc->pri_path.grh_mylmc & 0x7f;
-		if (mac_find_smac_ix_in_slave(dev, slave, port, smac_ix, &mac))
-			return -ENOENT;
-	}
-	return 0;
-}
-
 int mlx4_INIT2RTR_QP_wrapper(struct mlx4_dev *dev, int slave,
 			     struct mlx4_vhcr *vhcr,
 			     struct mlx4_cmd_mailbox *inbox,
@@ -3378,9 +3289,6 @@ int mlx4_INIT2RTR_QP_wrapper(struct mlx4_dev *dev, int slave,
 	err = verify_qp_parameters(dev, inbox, QP_TRANS_INIT2RTR, slave);
 	if (err)
 		return err;
-
-	if (roce_verify_mac(dev, slave, qpc, inbox))
-		return -EINVAL;
 
 	update_pkey_index(dev, slave, inbox);
 	update_gid(dev, inbox, (u8)slave);
