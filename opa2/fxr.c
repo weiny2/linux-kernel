@@ -188,10 +188,10 @@ static void init_csrs(struct hfi_devdata *dd)
 		txotr_timeout.val = read_csr(dd, FXR_TXOTR_PKT_CFG_TIMEOUT);
 		/*
 		 * Set the length of the timeout interval used to retransmit
-		 * outstanding packets to 1 second for Simics back to back.
+		 * outstanding packets to 5 seconds for Simics back to back.
 		 * TODO: Determine right value for FPGA & Silicon.
 		 */
-		txotr_timeout.field.SCALER = 0x00047869;
+		txotr_timeout.field.SCALER = 0x165A0D;
 		write_csr(dd, FXR_TXOTR_PKT_CFG_TIMEOUT, txotr_timeout.val);
 		/*
 		 * Set the SLID based on the hostname to enable back to back
