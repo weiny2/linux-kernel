@@ -53,6 +53,7 @@ struct sbc_ops {
 	sense_reason_t (*execute_write_same)(struct se_cmd *cmd);
 	sense_reason_t (*execute_write_same_unmap)(struct se_cmd *cmd);
 	sense_reason_t (*execute_unmap)(struct se_cmd *cmd);
+	sense_reason_t (*execute_compare_and_write)(struct se_cmd *cmd);
 };
 
 int	transport_subsystem_register(struct se_subsystem_api *);

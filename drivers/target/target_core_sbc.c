@@ -869,8 +869,13 @@ sbc_parse_cdb(struct se_cmd *cmd, struct sbc_ops *ops)
 		cmd->t_task_nolb = sectors;
 		cmd->se_cmd_flags |= SCF_SCSI_DATA_CDB | SCF_COMPARE_AND_WRITE;
 		cmd->execute_rw = ops->execute_rw;
-		cmd->execute_cmd = sbc_compare_and_write;
-		cmd->transport_complete_callback = compare_and_write_callback;
+		if (ops->execute_compare_and_write) {
+			cmd->execute_cmd = ops->execute_compare_and_write;
+		} else {
+			cmd->execute_cmd = sbc_compare_and_write;
+			cmd->transport_complete_callback =
+						compare_and_write_callback;
+		}
 		break;
 	case READ_CAPACITY:
 		size = READ_CAP_LEN;
