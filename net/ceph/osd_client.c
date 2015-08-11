@@ -192,6 +192,7 @@ void osd_req_op_extent_osd_data_pages(struct ceph_osd_request *osd_req,
 	case CEPH_OSD_OP_READ:
 	case CEPH_OSD_OP_ZERO:
 	case CEPH_OSD_OP_TRUNCATE:
+	case CEPH_OSD_OP_CMPEXT:
 		ceph_osd_data_pages_init(&op->extent.response_data, pages,
 					 length, alignment, pages_from_pool,
 					 own_pages);
@@ -267,6 +268,7 @@ void osd_req_op_extent_osd_data_sg(struct ceph_osd_request *osd_req,
 				      sgl, init_sg_offset, length);
 		break;
 	case CEPH_OSD_OP_WRITE:
+	case CEPH_OSD_OP_CMPEXT:
 		ceph_osd_data_sg_init(&op->extent.request_data,
 				      sgl, init_sg_offset, length);
 		break;
@@ -367,6 +369,10 @@ static void osd_req_op_data_release(struct ceph_osd_request *osd_req,
 		ceph_osd_data_release(&op->extent.response_data);
 		break;
 	case CEPH_OSD_OP_WRITE:
+		ceph_osd_data_release(&op->extent.request_data);
+		break;
+	case CEPH_OSD_OP_CMPEXT:
+		ceph_osd_data_release(&op->extent.response_data);
 		ceph_osd_data_release(&op->extent.request_data);
 		break;
 	case CEPH_OSD_OP_CALL:
@@ -562,13 +568,14 @@ void osd_req_op_extent_init(struct ceph_osd_request *osd_req,
 	size_t payload_len = 0;
 
 	BUG_ON(opcode != CEPH_OSD_OP_READ && opcode != CEPH_OSD_OP_WRITE &&
-	       opcode != CEPH_OSD_OP_ZERO && opcode != CEPH_OSD_OP_TRUNCATE);
+	       opcode != CEPH_OSD_OP_ZERO && opcode != CEPH_OSD_OP_TRUNCATE &&
+	       opcode != CEPH_OSD_OP_CMPEXT);
 
 	op->extent.offset = offset;
 	op->extent.length = length;
 	op->extent.truncate_size = truncate_size;
 	op->extent.truncate_seq = truncate_seq;
-	if (opcode == CEPH_OSD_OP_WRITE)
+	if (opcode == CEPH_OSD_OP_WRITE || opcode == CEPH_OSD_OP_CMPEXT)
 		payload_len += length;
 
 	op->payload_len = payload_len;
@@ -748,6 +755,7 @@ static u64 osd_req_encode_op(struct ceph_osd_request *req,
 	case CEPH_OSD_OP_WRITE:
 	case CEPH_OSD_OP_ZERO:
 	case CEPH_OSD_OP_TRUNCATE:
+	case CEPH_OSD_OP_CMPEXT:
 		dst->extent.offset = cpu_to_le64(src->extent.offset);
 		dst->extent.length = cpu_to_le64(src->extent.length);
 		dst->extent.truncate_size =
@@ -757,6 +765,14 @@ static u64 osd_req_encode_op(struct ceph_osd_request *req,
 		if (src->op == CEPH_OSD_OP_WRITE) {
 			osd_data = &src->extent.request_data;
 			ceph_osdc_msg_data_add(req->r_request, osd_data);
+
+			request_data_len = src->extent.length;
+		} else if (src->op == CEPH_OSD_OP_CMPEXT) {
+			osd_data = &src->extent.request_data;
+			ceph_osdc_msg_data_add(req->r_request, osd_data);
+
+			osd_data = &src->extent.response_data;
+			ceph_osdc_msg_data_add(req->r_reply, osd_data);
 
 			request_data_len = src->extent.length;
 		} else {
@@ -856,7 +872,8 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 
 	BUG_ON(opcode != CEPH_OSD_OP_READ && opcode != CEPH_OSD_OP_WRITE &&
 	       opcode != CEPH_OSD_OP_ZERO && opcode != CEPH_OSD_OP_TRUNCATE &&
-	       opcode != CEPH_OSD_OP_CREATE && opcode != CEPH_OSD_OP_DELETE);
+	       opcode != CEPH_OSD_OP_CREATE && opcode != CEPH_OSD_OP_DELETE &&
+	       opcode != CEPH_OSD_OP_CMPEXT);
 
 	req = ceph_osdc_alloc_request(osdc, snapc, num_ops, use_mempool,
 					GFP_NOFS);

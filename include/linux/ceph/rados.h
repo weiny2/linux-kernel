@@ -212,6 +212,8 @@ extern const char *ceph_osd_state_name(int s);
 	/* sync */							    \
 	f(SYNC_READ,	__CEPH_OSD_OP(RD, DATA, 11),	"sync_read")	    \
 									    \
+	f(CMPEXT,	__CEPH_OSD_OP(RD, DATA, 31),	"cmpext")	    \
+									    \
 	/* write */							    \
 	f(WRITE,	__CEPH_OSD_OP(WR, DATA, 1),	"write")	    \
 	f(WRITEFULL,	__CEPH_OSD_OP(WR, DATA, 2),	"writefull")	    \
