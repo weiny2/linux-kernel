@@ -1589,7 +1589,8 @@ static void rbd_img_request_get(struct rbd_img_request *img_request)
 static bool img_request_child_test(struct rbd_img_request *img_request);
 static void rbd_parent_request_destroy(struct kref *kref);
 static void rbd_img_request_destroy(struct kref *kref);
-static void rbd_img_request_put(struct rbd_img_request *img_request)
+
+void rbd_img_request_put(struct rbd_img_request *img_request)
 {
 	rbd_assert(img_request != NULL);
 	dout("%s: img %p (was %d)\n", __func__, img_request,
@@ -1599,6 +1600,7 @@ static void rbd_img_request_put(struct rbd_img_request *img_request)
 	else
 		kref_put(&img_request->kref, rbd_img_request_destroy);
 }
+EXPORT_SYMBOL(rbd_img_request_put);
 
 static inline void rbd_img_obj_request_add(struct rbd_img_request *img_request,
 					struct rbd_obj_request *obj_request)
@@ -2331,11 +2333,10 @@ static bool rbd_dev_parent_get(struct rbd_device *rbd_dev)
  * that comprises the image request, and the Linux request pointer
  * (if there is one).
  */
-static struct rbd_img_request *rbd_img_request_create(
-					struct rbd_device *rbd_dev,
-					u64 offset, u64 length,
-					enum obj_operation_type op_type,
-					struct ceph_snap_context *snapc)
+struct rbd_img_request *rbd_img_request_create(struct rbd_device *rbd_dev,
+					       u64 offset, u64 length,
+					       enum obj_operation_type op_type,
+					       struct ceph_snap_context *snapc)
 {
 	struct rbd_img_request *img_request;
 
@@ -2380,6 +2381,7 @@ static struct rbd_img_request *rbd_img_request_create(
 
 	return img_request;
 }
+EXPORT_SYMBOL(rbd_img_request_create);
 
 static void rbd_img_request_destroy(struct kref *kref)
 {
@@ -2632,9 +2634,8 @@ static void rbd_img_obj_request_fill(struct rbd_obj_request *obj_request,
  * function assumes data_desc describes memory sufficient to hold
  * all data described by the image request.
  */
-static int rbd_img_request_fill(struct rbd_img_request *img_request,
-					enum obj_request_type type,
-					void *data_desc)
+int rbd_img_request_fill(struct rbd_img_request *img_request,
+			 enum obj_request_type type, void *data_desc)
 {
 	struct rbd_device *rbd_dev = img_request->rbd_dev;
 	struct rbd_obj_request *obj_request = NULL;
@@ -2758,6 +2759,7 @@ out_unwind:
 
 	return -ENOMEM;
 }
+EXPORT_SYMBOL(rbd_img_request_fill);
 
 int rbd_img_cmp_and_write_request_fill(struct rbd_img_request *img_request,
 				       struct scatterlist *cmp_sgl,
@@ -3262,7 +3264,7 @@ static int rbd_img_obj_request_submit(struct rbd_obj_request *obj_request)
 	return rbd_img_obj_exists_submit(obj_request);
 }
 
-static int rbd_img_request_submit(struct rbd_img_request *img_request)
+int rbd_img_request_submit(struct rbd_img_request *img_request)
 {
 	struct rbd_obj_request *obj_request;
 	struct rbd_obj_request *next_obj_request;
@@ -3278,6 +3280,7 @@ static int rbd_img_request_submit(struct rbd_img_request *img_request)
 
 	return 0;
 }
+EXPORT_SYMBOL(rbd_img_request_submit);
 
 static void rbd_img_parent_read_callback(struct rbd_img_request *img_request)
 {
