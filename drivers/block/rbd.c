@@ -302,6 +302,7 @@ struct rbd_img_request {
 
 	struct request		*rq;		/* block request */
 	struct rbd_obj_request	*obj_request;	/* obj req initiator */
+	void			*lio_cmd_data;	/* lio specific data */
 
 	struct page		**copyup_pages;
 	u32			copyup_page_count;
