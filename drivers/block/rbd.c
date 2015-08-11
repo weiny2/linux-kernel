@@ -32,6 +32,7 @@
 #include <linux/ceph/osd_client.h>
 #include <linux/ceph/mon_client.h>
 #include <linux/ceph/decode.h>
+#include <linux/ceph/librbd.h>
 #include <linux/parser.h>
 #include <linux/bsearch.h>
 
@@ -48,15 +49,6 @@
 #include "rbd_types.h"
 
 #define RBD_DEBUG	/* Activate rbd_assert() calls */
-
-/*
- * The basic unit of block I/O is a sector.  It is interpreted in a
- * number of contexts in Linux (blk, bio, genhd), but the default is
- * universally 512 bytes.  These symbols are just slightly more
- * meaningful than the bare numbers they represent.
- */
-#define	SECTOR_SHIFT	9
-#define	SECTOR_SIZE	(1ULL << SECTOR_SHIFT)
 
 /*
  * Increment the given counter and return its updated value.
@@ -91,8 +83,6 @@ static int atomic_dec_return_safe(atomic_t *v)
 	return -EINVAL;
 }
 
-#define RBD_DRV_NAME "rbd"
-
 #define RBD_MINORS_PER_MAJOR		256
 #define RBD_SINGLE_MAJOR_PART_SHIFT	4
 
@@ -122,35 +112,6 @@ static int atomic_dec_return_safe(atomic_t *v)
 /* Features supported by this (client software) implementation. */
 
 #define RBD_FEATURES_SUPPORTED	(RBD_FEATURES_ALL)
-
-/*
- * An RBD device name will be "rbd#", where the "rbd" comes from
- * RBD_DRV_NAME above, and # is a unique integer identifier.
- * MAX_INT_FORMAT_WIDTH is used in ensuring DEV_NAME_LEN is big
- * enough to hold all possible device names.
- */
-#define DEV_NAME_LEN		32
-#define MAX_INT_FORMAT_WIDTH	((5 * sizeof (int)) / 2 + 1)
-
-/*
- * block device image metadata (in-memory version)
- */
-struct rbd_image_header {
-	/* These six fields never change for a given rbd image */
-	char *object_prefix;
-	__u8 obj_order;
-	__u8 crypt_type;
-	__u8 comp_type;
-	u64 stripe_unit;
-	u64 stripe_count;
-	u64 features;		/* Might be changeable someday? */
-
-	/* The remaining fields need to be updated occasionally */
-	u64 image_size;
-	struct ceph_snap_context *snapc;
-	char *snap_names;	/* format 1 only */
-	u64 *snap_sizes;	/* format 1 only */
-};
 
 /*
  * An rbd image specification.
@@ -199,25 +160,10 @@ struct rbd_client {
 	struct list_head	node;
 };
 
-struct rbd_img_request;
-typedef void (*rbd_img_callback_t)(struct rbd_img_request *);
-
 #define	BAD_WHICH	U32_MAX		/* Good which or bad which, which? */
 
 struct rbd_obj_request;
 typedef void (*rbd_obj_callback_t)(struct rbd_obj_request *);
-
-enum obj_request_type {
-	OBJ_REQUEST_NODATA, OBJ_REQUEST_BIO, OBJ_REQUEST_PAGES, OBJ_REQUEST_SG,
-};
-
-enum obj_operation_type {
-	OBJ_OP_WRITE,
-	OBJ_OP_READ,
-	OBJ_OP_DISCARD,
-	OBJ_OP_CMP_AND_WRITE,
-	OBJ_OP_WRITESAME,
-};
 
 enum obj_req_flags {
 	OBJ_REQ_DONE,		/* completion flag: not done = 0, done = 1 */
@@ -294,98 +240,12 @@ enum img_req_flags {
 	IMG_REQ_WRITESAME,	/* normal = 0, write same = 1 */
 };
 
-struct rbd_img_request {
-	struct rbd_device	*rbd_dev;
-	u64			offset;	/* starting image byte offset */
-	u64			length;	/* byte count from offset */
-	unsigned long		flags;
-
-	u64			snap_id;	/* for reads */
-	struct ceph_snap_context *snapc;	/* for writes */
-
-	struct request		*rq;		/* block request */
-	struct rbd_obj_request	*obj_request;	/* obj req initiator */
-	void			*lio_cmd_data;	/* lio specific data */
-
-	struct page		**copyup_pages;
-	u32			copyup_page_count;
-	spinlock_t		completion_lock;/* protects next_completion */
-	u32			next_completion;
-	rbd_img_callback_t	callback;
-	/*
-	 * xferred is the bytes that have successfully been transferred.
-	 * completed is the bytes that have been accounted for and includes
-	 * both failed and successfully transffered bytes.
-	 */
-	u64			xferred;/* aggregate bytes transferred */
-	u64			completed;
-	int			result;	/* first nonzero obj_request result */
-
-	u32			obj_request_count;
-	struct list_head	obj_requests;	/* rbd_obj_request structs */
-
-	struct kref		kref;
-};
-
 #define for_each_obj_request(ireq, oreq) \
 	list_for_each_entry(oreq, &(ireq)->obj_requests, links)
 #define for_each_obj_request_from(ireq, oreq) \
 	list_for_each_entry_from(oreq, &(ireq)->obj_requests, links)
 #define for_each_obj_request_safe(ireq, oreq, n) \
 	list_for_each_entry_safe_reverse(oreq, n, &(ireq)->obj_requests, links)
-
-struct rbd_mapping {
-	u64                     size;
-	u64                     features;
-	bool			read_only;
-};
-
-/*
- * a single device
- */
-struct rbd_device {
-	int			dev_id;		/* blkdev unique id */
-
-	int			major;		/* blkdev assigned major */
-	int			minor;
-	struct gendisk		*disk;		/* blkdev's gendisk and rq */
-
-	u32			image_format;	/* Either 1 or 2 */
-	struct rbd_client	*rbd_client;
-
-	char			name[DEV_NAME_LEN]; /* blkdev name, e.g. rbd3 */
-
-	struct list_head	rq_queue;	/* incoming rq queue */
-	spinlock_t		lock;		/* queue, flags, open_count */
-	struct work_struct	rq_work;
-
-	struct rbd_image_header	header;
-	unsigned long		flags;		/* possibly lock protected */
-	struct rbd_spec		*spec;
-
-	char			*header_name;
-
-	struct ceph_file_layout	layout;
-
-	struct ceph_osd_event   *watch_event;
-	struct rbd_obj_request	*watch_request;
-
-	struct rbd_spec		*parent_spec;
-	u64			parent_overlap;
-	atomic_t		parent_ref;
-	struct rbd_device	*parent;
-
-	/* protects updating the header */
-	struct rw_semaphore     header_rwsem;
-
-	struct rbd_mapping	mapping;
-
-	struct list_head	node;
-
-	/* sysfs related */
-	struct device		dev;
-	unsigned long		open_count;	/* protected by lock */
-};
 
 /*
  * Flag bits for rbd_dev->flags.  If atomicity is required,
@@ -425,8 +285,6 @@ static struct workqueue_struct *rbd_wq;
 static bool single_major = false;
 module_param(single_major, bool, S_IRUGO);
 MODULE_PARM_DESC(single_major, "Use a single major number for all rbd devices (default: false)");
-
-static int rbd_img_request_submit(struct rbd_img_request *img_request);
 
 static void rbd_dev_device_release(struct device *dev);
 
