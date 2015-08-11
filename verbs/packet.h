@@ -148,8 +148,9 @@ struct opa_ib_header {
 	} u;
 } __packed;
 
-/* FXRTODO - extend similar to WFR's ahg_ib_header */
+/* IB header prefixed with 8-bytes of OPA2-specific data */
 struct opa_ib_dma_header {
+	uint64_t opa2_hdr_reserved;
 	struct opa_ib_header ibh;
 };
 
@@ -163,13 +164,13 @@ struct opa_ib_dma_header {
 struct opa_ib_packet {
 	struct hfi_ctx *ctx;
 	struct opa_ib_portdata *ibp;
-	/* FXRTODO - verify these makes sense and are set */
 	void *ebuf;
 	void *hdr;
 	u64 rhf;
+	u8 port;
 	u16 tlen;
 	u16 hlen;
-	u32 updegr;
+	u32 etype;
 	u32 rcv_flags;
 };
 
@@ -238,4 +239,137 @@ u32 opa_ib_make_grh(struct opa_ib_portdata *ibp, struct ib_grh *hdr,
 	/* GRH header size in 32-bit words. */
 	return sizeof(struct ib_grh) / sizeof(u32);
 }
+
+/*
+ * Receive Header Flags
+ */
+#define RHF_PKT_LEN_SHIFT	0
+#define RHF_PKT_LEN_MASK	0xfffull
+#define RHF_PKT_LEN_SMASK (RHF_PKT_LEN_MASK << RHF_PKT_LEN_SHIFT)
+
+#define RHF_EGR_INDEX_SHIFT	12
+#define RHF_EGR_INDEX_MASK	0x7ffull
+#define RHF_EGR_INDEX_SMASK (RHF_EGR_INDEX_MASK << RHF_EGR_INDEX_SHIFT)
+
+#define RHF_EGR_OFFSET_SHIFT	24
+#define RHF_EGR_OFFSET_MASK	0xfffull
+#define RHF_EGR_OFFSET_SMASK (RHF_EGR_OFFSET_MASK << RHF_EGR_OFFSET_SHIFT)
+
+#define RHF_PORT_SHIFT		41
+#define RHF_PORT_MASK		0x1ull
+#define RHF_PORT_SMASK (RHF_PORT_MASK << RHF_PORT_SHIFT)
+
+#define RHF_RCV_TYPE_ERR_SHIFT	42
+#define RHF_RCV_TYPE_ERR_MASK	0x7ul
+#define RHF_RCV_TYPE_ERR_SMASK (RHF_RCV_TYPE_ERR_MASK << RHF_RCV_TYPE_ERR_SHIFT)
+#define RHF_TID_ERR		(0x1ull << 45)
+#define RHF_LEN_ERR		(0x1ull << 46)
+#define RHF_ICRC_ERR		(0x1ull << 47)
+#define RHF_K_HDR_LEN_ERR	(0x1ull << 53)
+
+#define RHF_HDR_LEN_SHIFT	48
+#define RHF_HDR_LEN_MASK	0x1full
+#define RHF_HDR_LEN_SMASK (RHF_HDR_LEN_MASK << RHF_HDR_LEN_SHIFT)
+
+#define RHF_DC_INFO_SHIFT	54
+#define RHF_DC_INFO_MASK	0x1ull
+#define RHF_DC_INFO_SMASK (RHF_DC_INFO_MASK << RHF_DC_INFO_SHIFT)
+
+#define RHF_USE_EGR_BFR_SHIFT	55
+#define RHF_USE_EGR_BFR_MASK	0x1ull
+#define RHF_USE_EGR_BFR_SMASK (RHF_USE_EGR_BFR_MASK << RHF_USE_EGR_BFR_SHIFT)
+
+#define RHF_RCV_TYPE_SHIFT	56
+#define RHF_RCV_TYPE_MASK	0x3full
+#define RHF_RCV_TYPE_SMASK (RHF_RCV_TYPE_MASK << RHF_RCV_TYPE_SHIFT)
+
+/* RHF receive types */
+#define RHF_RCV_TYPE_EXPECTED 0x30
+#define RHF_RCV_TYPE_EAGER    0x31
+#define RHF_RCV_TYPE_IB       0x32 /* normal IB, IB Raw, or IPv6 */
+#define RHF_RCV_TYPE_ERROR    0x33
+#define RHF_RCV_TYPE_BYPASS   0x34
+#define RHF_RCV_TYPE_INVALID5 0x35
+#define RHF_RCV_TYPE_INVALID6 0x36
+#define RHF_RCV_TYPE_INVALID7 0x37
+
+/* RHF receive type error - expected packet errors */
+#define RHF_RTE_EXPECTED_FLOW_SEQ_ERR	0x2
+#define RHF_RTE_EXPECTED_FLOW_GEN_ERR	0x4
+
+/* RHF receive type error - eager packet errors */
+#define RHF_RTE_EAGER_NO_ERR		0x0
+
+/* RHF receive type error - IB packet errors */
+#define RHF_RTE_IB_NO_ERR		0x0
+
+/* RHF receive type error - error packet errors */
+#define RHF_RTE_ERROR_NO_ERR		0x0
+#define RHF_RTE_ERROR_OP_CODE_ERR	0x1
+#define RHF_RTE_ERROR_KHDR_MIN_LEN_ERR	0x2
+#define RHF_RTE_ERROR_KHDR_HCRC_ERR	0x3
+#define RHF_RTE_ERROR_KHDR_KVER_ERR	0x4
+#define RHF_RTE_ERROR_CONTEXT_ERR	0x5
+#define RHF_RTE_ERROR_KHDR_TID_ERR	0x6
+
+/* RHF receive type error - bypass packet errors */
+#define RHF_RTE_BYPASS_NO_ERR		0x0
+
+static inline __u64 rhf_to_cpu(const __le32 *rbuf)
+{
+	return __le64_to_cpu(*((__le64 *)rbuf));
+}
+
+static inline u32 rhf_rcv_type(u64 rhf)
+{
+	return (rhf >> RHF_RCV_TYPE_SHIFT) & RHF_RCV_TYPE_MASK;
+}
+
+static inline u32 rhf_rcv_type_err(u64 rhf)
+{
+	return (rhf >> RHF_RCV_TYPE_ERR_SHIFT) & RHF_RCV_TYPE_ERR_MASK;
+}
+
+/* return size is in bytes, not DWORDs */
+static inline u32 rhf_pkt_len(u64 rhf)
+{
+	return ((rhf & RHF_PKT_LEN_SMASK) >> RHF_PKT_LEN_SHIFT) << 2;
+}
+
+/* return size is in bytes, not DWORDs */
+static inline u32 rhf_hdr_len(u64 rhf)
+{
+	return ((rhf & RHF_HDR_LEN_SMASK) >> RHF_HDR_LEN_SHIFT) << 2;
+}
+
+static inline u64 *rhf_get_hdr(struct opa_ib_packet *pkt, u64 *rhf_entry)
+{
+	return (rhf_entry + 1);
+}
+
+static inline u32 rhf_egr_index(u64 rhf)
+{
+	return (rhf >> RHF_EGR_INDEX_SHIFT) & RHF_EGR_INDEX_MASK;
+}
+
+static inline u64 rhf_use_egr_bfr(u64 rhf)
+{
+	return rhf & RHF_USE_EGR_BFR_SMASK;
+}
+
+static inline u64 rhf_sc4(u64 rhf)
+{
+	return rhf & RHF_DC_INFO_SMASK;
+}
+
+static inline u32 rhf_egr_buf_offset(u64 rhf)
+{
+	return (rhf >> RHF_EGR_OFFSET_SHIFT) & RHF_EGR_OFFSET_MASK;
+}
+
+static inline u32 rhf_port(u64 rhf)
+{
+	return (rhf >> RHF_PORT_SHIFT) & RHF_PORT_MASK;
+}
+
 #endif

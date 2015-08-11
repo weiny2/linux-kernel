@@ -405,11 +405,10 @@ static inline bool is_qp_ok(struct opa_ib_portdata *ibp,
  * opa_ib_rcv - process an incoming packet
  * @packet: data packet information
  *
- * This is called to process an incoming packet at interrupt level.
- * FXRTODO: for FXR, this is called upon EQ event?
- * Tlen is the length of the header + data + CRC in bytes.
+ * Called from receive kthread upon processing event in RHQ.
+ * packet->tlen is the length of the header + data + CRC in bytes.
  */
-void opa_ib_rcv(struct opa_ib_packet *packet)
+static void opa_ib_rcv(struct opa_ib_packet *packet)
 {
 	struct opa_ib_header *hdr = packet->hdr;
 	u32 tlen = packet->tlen;
@@ -420,9 +419,6 @@ void opa_ib_rcv(struct opa_ib_packet *packet)
 	int lnh;
 	u8 opcode;
 	u16 lid;
-
-	/* FXRTODO: delete me when opa2_ib is stable */
-	BUG_ON(!ibp);
 
 	/* 24 == LRH+BTH+CRC */
 	if (unlikely(tlen < 24))
@@ -455,6 +451,9 @@ void opa_ib_rcv(struct opa_ib_packet *packet)
 
 	/* Get the destination QP number. */
 	qp_num = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
+	dev_dbg(&ibp->odev->dev, "PT %d: IB packet for QPN %d\n",
+		ibp->port_num, qp_num);
+
 #if 0 /* FXRTODO - mcast */
 	if ((lid >= HFI1_MULTICAST_LID_BASE) &&
 	    (lid != HFI1_PERMISSIVE_LID)) {
@@ -493,10 +492,9 @@ void opa_ib_rcv(struct opa_ib_packet *packet)
 
 		if (lnh == HFI1_LRH_GRH)
 			packet->rcv_flags |= HFI1_HAS_GRH;
-#if 0
-		if (rhf_dc_info(packet->rhf))
+		if (rhf_sc4(packet->rhf))
 			packet->rcv_flags |= HFI1_SC4_BIT;
-#endif
+
 		spin_lock(&qp->r_lock);
 		if (likely((is_qp_ok(ibp, qp, opcode))))
 			opcode_handler_tbl[opcode](qp, packet);
@@ -519,4 +517,78 @@ static void opa_ib_cnp_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 		opa_ib_ud_rcv(qp, packet);
 	else
 		ibp->n_pkt_drops++;
+}
+
+static void process_rcv_packet(struct opa_ib_portdata *ibp, u64 *rhf_entry,
+			       struct opa_ib_packet *packet)
+{
+	u16 idx, off;
+	u64 rhf = *rhf_entry;
+
+	packet->rcv_flags = 0;
+	packet->hdr = rhf_get_hdr(packet, rhf_entry);
+	packet->hlen = rhf_hdr_len(rhf);  /* in bytes */
+	packet->tlen = rhf_pkt_len(rhf);  /* in bytes */
+	packet->etype = rhf_rcv_type(rhf);
+	idx = rhf_egr_index(rhf);
+	off = rhf_egr_buf_offset(rhf);
+	if (packet->etype < RHF_RCV_TYPE_EAGER ||
+	    packet->etype > RHF_RCV_TYPE_BYPASS)
+		packet->ebuf = NULL;
+	else
+		packet->ebuf = opa_ib_rcv_get_ebuf(ibp, idx, off);
+
+	packet->port = rhf_port(rhf);
+	dev_dbg(&ibp->odev->dev,
+		"PT %d: RX type 0x%x hlen %d tlen %d egr %d %d ebuf %p\n",
+		packet->port, packet->etype, packet->hlen, packet->tlen,
+		idx, off, packet->ebuf);
+	/*
+	 * As the RHQ may be shared across multiple ports, we perform a lookup here
+	 * of the associated IB portdata structure, which can differ from the passed
+	 * in argument that contains the Eager Buffer for this RHQ.
+	 */
+	packet->ibp = &(ibp->ibd->pport[packet->port]);
+}
+
+/*
+ * This is the RX kthread function, created per Receive Header Queue (RHQ).
+ * There may be a RHQ per port (disjoint mode) or shared between the 2 ports.
+ */
+int opa_ib_rcv_wait(void *data)
+{
+	struct opa_ib_portdata *ibp = data;
+	struct opa_ib_packet pkt;
+	int rc;
+	u64 *rhf_entry;
+
+	dev_info(&ibp->odev->dev, "RX kthread %d starting\n", ibp->port_num);
+	allow_signal(SIGINT);
+	while (!kthread_should_stop()) {
+		rhf_entry = NULL;
+		rc = _opa_ib_rcv_wait(ibp, &rhf_entry);
+		if (rc < 0) {
+			dev_warn(&ibp->odev->dev, "RX EQ failure, %d\n", rc);
+			/* TODO - handle this */
+			continue;
+		}
+
+		if (rhf_entry) {
+			/* parse packet header and call opa_ib_rcv() to handle */
+			process_rcv_packet(ibp, rhf_entry, &pkt);
+			if (pkt.etype == RHF_RCV_TYPE_IB)
+				opa_ib_rcv(&pkt);
+			else
+				dev_warn(&ibp->odev->dev,
+					 "PT %d: Unexpected packet! 0x%x\n",
+					 pkt.port, pkt.etype);
+
+			/* mark RHF entry as processed */
+			opa_ib_rcv_advance(ibp, rhf_entry);
+		}
+	}
+
+	dev_info(&ibp->odev->dev, "RX kthread %d stopping\n",
+		 ibp->port_num);
+	return 0;
 }

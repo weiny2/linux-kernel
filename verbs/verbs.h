@@ -190,6 +190,9 @@ struct opa_ib_swqe {
 	 */
 	struct list_head pending_list;
 	struct opa_ib_sge_state	*s_sge;
+	struct opa_ib_dma_header *s_hdr; /* next packet header to send */
+	u16 s_hdrwords; 	         /* size of s_hdr in 32 bit words */
+	u8 s_sl;
 
 	struct ib_sge sg_list[0];
 };
@@ -482,6 +485,7 @@ static inline struct opa_ib_rwqe *get_rwqe_ptr(struct opa_ib_rq *rq, unsigned n)
 
 struct opa_ib_portdata {
 	struct opa_core_device *odev;
+	struct opa_ib_data *ibd;
 	struct opa_ib_qp __rcu *qp[2];
 	/* non-zero when timer is set */
 	unsigned long mkey_lease_timeout;
@@ -515,6 +519,7 @@ struct opa_ib_portdata {
 	u16 sm_lid;
 	u8 lmc;
 	u8 max_vls;
+	u8 port_num;
 	u8 smsl;
 	u8 mkeyprot;
 	u8 subnet_timeout;
@@ -529,6 +534,11 @@ struct opa_ib_portdata {
 	struct hfi_cq cmdq_rx;
 	spinlock_t cmdq_tx_lock;
 	spinlock_t cmdq_rx_lock;
+	struct task_struct *rcv_task;
+	uint16_t rcv_eq;
+	uint16_t rcv_egr_last_idx;
+	void *rcv_eq_base;
+	void *rcv_egr_base;
 };
 
 struct opa_ib_data {
@@ -653,6 +663,7 @@ void opa_ib_rc_error(struct opa_ib_qp *qp, enum ib_wc_status err);
 void opa_ib_rc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
 void opa_ib_uc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
 void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
+int opa_ib_rcv_wait(void *data);
 int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey);
 int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
 		   struct ib_sge *isge, struct ib_sge *sge, int acc);
@@ -686,4 +697,17 @@ int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 			struct ib_wc *in_wc, struct ib_grh *in_grh,
 			struct ib_mad *in_mad, struct ib_mad *out_mad);
+
+/* Device specific */
+int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe);
+void opa_ib_rcv_start(struct opa_ib_portdata *ibp);
+void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset);
+void opa_ib_rcv_advance(struct opa_ib_portdata *ibp, u64 *rhf_entry);
+int _opa_ib_rcv_wait(struct opa_ib_portdata *ibp, u64 **rhf_entry);
+int opa_ib_rcv_init(struct opa_ib_portdata *ibp);
+void opa_ib_rcv_uninit(struct opa_ib_portdata *ibp);
+int opa_ib_ctx_init(struct opa_ib_data *ibd);
+void opa_ib_ctx_uninit(struct opa_ib_data *ibd);
+int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp);
+void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp);
 #endif

@@ -60,9 +60,7 @@
 #include "verbs.h"
 #include <rdma/opa_core_ib.h>
 
-/* FXRTODO - need definition of eager buffer */
-#define OPA2_IB_ME_COUNT 1024
-
+static void opa_ib_uninit_port(struct opa_ib_portdata *ibp);
 static int opa_ib_add(struct opa_core_device *odev);
 static void opa_ib_remove(struct opa_core_device *odev);
 static void opa_ib_event_notify(struct opa_core_device *odev,
@@ -461,10 +459,10 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	struct opa_ib_portdata *ibp = &ibd->pport[pidx];
 	struct opa_pport_desc pdesc;
 	struct opa_core_ops *ops = odev->bus_ops;
-	u16 cq_idx;
 
 	ops->get_port_desc(odev, &pdesc, pidx + 1);
 
+	ibp->ibd = ibd;
 	ibp->odev = odev;
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->guid = pdesc.pguid;
@@ -488,6 +486,7 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 		IB_PORT_CAP_MASK_NOTICE_SUP;
 	ibp->pkey_tlen = pdesc.pkey_tlen;
 	ibp->pkeys = pdesc.pkeys;
+	ibp->port_num = pidx;
 
 	RCU_INIT_POINTER(ibp->qp[0], NULL);
 	RCU_INIT_POINTER(ibp->qp[1], NULL);
@@ -504,33 +503,22 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_vl); i++)
 		ibp->sc_to_vl[i] = pdesc.sc_to_vl[i];
 
-	ibp->ctx = &ibd->ctx;
-	spin_lock_init(&ibp->cmdq_tx_lock);
-	spin_lock_init(&ibp->cmdq_rx_lock);
+	ret = opa_ib_ctx_init_port(ibp);
+	if (ret < 0)
+		goto ctx_init_err;
 
-	/*
-	 * Obtain a pair of command queues for this port and setup
-	 * TODO - later we will likely allocate a pool of Contexts
-	 * (and CQs) to choose based on QPN or SC.
-	 */
-	ret = ops->cq_assign(ibp->ctx, NULL, &cq_idx);
-	if (ret)
-		goto err;
-	ret = ops->cq_map(ibp->ctx, cq_idx, &ibp->cmdq_tx, &ibp->cmdq_rx);
-	if (ret)
-		ops->cq_release(ibp->ctx, cq_idx);
+	/* start RX processing, call this last after no errors */
+	opa_ib_rcv_start(ibp);
+	return 0;
 
-err:
+ctx_init_err:
+	opa_ib_uninit_port(ibp);
 	return ret;
 }
 
 static void opa_ib_uninit_port(struct opa_ib_portdata *ibp)
 {
-	struct opa_core_ops *ops = ibp->odev->bus_ops;
-	u16 cq_idx = ibp->cmdq_tx.cq_idx;
-
-	ops->cq_unmap(&ibp->cmdq_tx, &ibp->cmdq_rx);
-	ops->cq_release(ibp->ctx, cq_idx);
+	opa_ib_ctx_uninit_port(ibp);
 }
 
 static int opa_ib_add(struct opa_core_device *odev)
@@ -541,7 +529,6 @@ static int opa_ib_add(struct opa_core_device *odev)
 	struct opa_ib_portdata *ibp;
 	struct opa_dev_desc desc;
 	struct opa_core_ops *ops = odev->bus_ops;
-	struct opa_ctx_assign ctx_assign = {0};
 
 	ops->get_device_desc(odev, &desc);
 	num_ports = desc.num_pports;
@@ -575,13 +562,8 @@ static int opa_ib_add(struct opa_core_device *odev)
 	if (ret)
 		goto cq_init_err;
 
-	/* Allocate FXR Context */
-	HFI_CTX_INIT(&ibd->ctx, odev->dd, odev->bus_ops);
-	ibd->ctx.mode |= HFI_CTX_MODE_BYPASS_9B;
-	ibd->ctx.qpn_map_idx = 0; /* this context is for QPN 0 and 1 */
-	ctx_assign.pid = HFI_PID_ANY;
-	ctx_assign.le_me_count = OPA2_IB_ME_COUNT;
-	ret = ops->ctx_assign(&ibd->ctx, &ctx_assign);
+	/* Allocate Management Context */
+	ret = opa_ib_ctx_init(ibd);
 	if (ret)
 		goto ctx_err;
 
@@ -610,7 +592,7 @@ priv_err:
 	for (i = 0; i < num_ports; i++)
 		opa_ib_uninit_port(&ibd->pport[i]);
 port_err:
-	ops->ctx_release(&ibd->ctx);
+	opa_ib_ctx_uninit(ibd);
 ctx_err:
 	opa_ib_cq_exit(ibd);
 cq_init_err:
@@ -624,7 +606,6 @@ static void opa_ib_remove(struct opa_core_device *odev)
 {
 	int i;
 	struct opa_ib_data *ibd;
-	struct opa_core_ops *ops = odev->bus_ops;
 
 	ibd = opa_core_get_priv_data(&opa_ib_driver, odev);
 	if (!ibd)
@@ -632,7 +613,7 @@ static void opa_ib_remove(struct opa_core_device *odev)
 	opa_ib_unregister_device(ibd);
 	for (i = 0; i < ibd->num_pports; i++)
 		opa_ib_uninit_port(&ibd->pport[i]);
-	ops->ctx_release(&ibd->ctx);
+	opa_ib_ctx_uninit(ibd);
 	opa_ib_cq_exit(ibd);
 	ida_destroy(&ibd->qpn_table);
 	kfree(ibd);
