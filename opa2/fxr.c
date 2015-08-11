@@ -1142,7 +1142,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->cq_rx_base = (void *)dd->physaddr + FXR_RX_CQ_ENTRY;
 
 	ctx = &dd->priv_ctx;
-	HFI_CTX_INIT(ctx, dd);
+	HFI_CTX_INIT(ctx, dd, &opa_core_ops);
 	/* configure system PID/PASID needed by privileged CQs */
 	ctx_assign.pid = HFI_PID_SYSTEM;
 	ret = hfi_ctxt_attach(ctx, &ctx_assign);

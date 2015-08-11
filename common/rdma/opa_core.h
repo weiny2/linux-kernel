@@ -68,6 +68,7 @@ struct opa_ib_qp;
 /**
  * struct hfi_ctx - state for HFI resources assigned to this context
  * @devdata: HFI device specific data, private to the hardware driver
+ * @ops: OPA_CORE device operations
  * @type: kernel or user context
  * @mode: Describes if PIDs or LIDs are virtualized or not
  * @pid: Assigned Portals Process ID
@@ -101,9 +102,12 @@ struct opa_ib_qp;
  * @eq_head_size: Size of the event queue head pointers table
  * @status_reg: Status Registers (SR) in each NI
  * @eq_base: EQ 0 base for each NI
+ * @le_me_free_list: List of free ME/LE handles
+ * @le_me_free_index: Index of first free handle
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
+	struct opa_core_ops *ops;
 	u8	type;
 	u16	mode;
 	u16	pid;
@@ -137,6 +141,8 @@ struct hfi_ctx {
 	ssize_t	eq_head_size;
 	u64	status_reg[HFI_NUM_NIS * HFI_NUM_CT_RESERVED];
 	void	*eq_base[HFI_NUM_NIS];
+	hfi_me_handle_t *le_me_free_list;
+	uint32_t	le_me_free_index;
 };
 
 #define HFI_CTX_TYPE_KERNEL	1
@@ -145,9 +151,10 @@ struct hfi_ctx {
 /* TODO - move this to opa-headers */
 #define HFI_CTX_MODE_BYPASS	0x100
 
-#define HFI_CTX_INIT(ctx, dd)			\
+#define HFI_CTX_INIT(ctx, dd, bus_ops)		\
 	do {					\
 		(ctx)->devdata = (dd);		\
+		(ctx)->ops = (bus_ops);		\
 		(ctx)->type = HFI_CTX_TYPE_KERNEL; \
 		(ctx)->mode = 0;		\
 		(ctx)->allow_phys_dlid = 1;	\
@@ -159,9 +166,9 @@ struct hfi_ctx {
 		(ctx)->ptl_uid = 0;		\
 	} while (0)
 
-#define HFI_CTX_INIT_BYPASS(ctx, dd)		\
+#define HFI_CTX_INIT_BYPASS(ctx, dd, ops)	\
 	do {					\
-		HFI_CTX_INIT((ctx), (dd));	\
+		HFI_CTX_INIT((ctx), (dd), (ops));   \
 		(ctx)->mode |= HFI_CTX_MODE_BYPASS; \
 	} while (0)
 

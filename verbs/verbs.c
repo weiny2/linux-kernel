@@ -542,7 +542,7 @@ static int opa_ib_add(struct opa_core_device *odev)
 		goto cq_init_err;
 
 	/* Allocate FXR Context */
-	HFI_CTX_INIT_BYPASS(&ibd->ctx, odev->dd);
+	HFI_CTX_INIT_BYPASS(&ibd->ctx, odev->dd, odev->bus_ops);
 	ctx_assign.pid = HFI_PID_ANY;
 	ctx_assign.le_me_count = OPA2_IB_ME_COUNT;
 	ret = ops->ctx_assign(&ibd->ctx, &ctx_assign);

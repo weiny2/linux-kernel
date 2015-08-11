@@ -58,6 +58,7 @@
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_ct.h>
 #include <rdma/hfi_eq.h>
+#include <rdma/hfi_pt.h>
 #include <linux/opa_vnic.h>
 
 #include "opa2_vnic_hfi.h"
@@ -89,48 +90,6 @@ struct opa_netdev {
 #define OPA2_NET_ME_COUNT 256
 #define OPA2_NET_UNEX_COUNT 512
 #define OPA2_TX_TIMEOUT_MS 100
-
-static inline int
-__hfi_ct_wait(struct hfi_ctx *ctx, hfi_ct_handle_t ct_h,
-	      unsigned long threshold, unsigned long timeout_ms,
-	      unsigned long *ct_val)
-{
-	unsigned long val;
-	unsigned long exit_jiffies = jiffies + msecs_to_jiffies(timeout_ms);
-
-	while (1) {
-		if (hfi_ct_get_failure(ctx, ct_h))
-			return -EFAULT;
-		val = hfi_ct_get_success(ctx, ct_h);
-		if (val >= threshold)
-			break;
-		if (time_after(jiffies, exit_jiffies))
-			return -ETIME;
-		schedule();
-	}
-
-	if (ct_val)
-		*ct_val = val;
-
-	return 0;
-}
-
-static inline int __hfi_eq_wait(struct hfi_ctx *ctx, struct hfi_cq *rx,
-				hfi_eq_handle_t eq, void **eq_entry)
-{
-	unsigned long exit_jiffies = jiffies +
-			msecs_to_jiffies(OPA2_TX_TIMEOUT_MS);
-
-	while (1) {
-		hfi_eq_get(ctx, rx, eq, eq_entry);
-		if (*eq_entry)
-			break;
-		if (time_after(jiffies, exit_jiffies))
-			return -ETIME;
-		schedule();
-	}
-	return 0;
-}
 
 int hfi_tx_write(struct hfi_cq *tx, struct hfi_ctx *ctx,
 		 hfi_ni_t ni, void *start, hfi_size_t length,
@@ -253,9 +212,7 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	struct hfi_cq *rx = &dev->rx;
 	int n_slots, rc;
 	void *tx_base, *rx_base, *rx_base1;
-	union ptentry_fp1 *pt_array, *ptentry;
-	union ptentry_fp0 *pt0_array, *pt0entry;
-	union fp_le_options le_opts;
+	uint32_t pt_idx, pt_idx1;
 	hfi_rx_cq_command_t rx_cmd;
 	hfi_ni_t ni = PTL_NONMATCHING_PHYSICAL;
 	hfi_hdr_data_t hdr_data = 0x1;
@@ -274,6 +231,8 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 					PTL_ME_NO_TRUNCATE | PTL_EVENT_CT_COMM);
 	hfi_ct_handle_t ct_rx, ct_tx;
 	hfi_ct_alloc_args_t ct_alloc = {0};
+	hfi_pt_alloc_args_t pt_alloc = {0};
+	hfi_pt_fast_alloc_args_t pt_falloc = {0};
 	hfi_size_t min_free = 2048;
 	hfi_user_ptr_t user_ptr = 0xc0de;
 	hfi_me_handle_t me_handle = 0xc;
@@ -319,38 +278,6 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 		goto err2;
 	}
 
-	pt_array = (union ptentry_fp1 *)ctx->pt_addr;
-	ptentry = &pt_array[HFI_PT_INDEX(PTL_NONMATCHING_PHYSICAL,
-					 HFI_TEST_PT)];
-
-	/* Check that the requested PT entry is unused */
-	if (ptentry->v) {
-		rc = -EBUSY;
-		goto err3;
-	}
-
-	/* use PTL args->flags */
-	if (flags & PTL_OP_PUT)
-		le_opts.op_put = 1;
-	if (flags & PTL_OP_GET)
-		le_opts.op_get = 1;
-	if (flags & PTL_IOVEC)
-		le_opts.iovec = 1;
-	if (flags & PTL_EVENT_CT_COMM) {
-		le_opts.event_ct_comm = 1;
-		if (flags & PTL_EVENT_CT_BYTES)
-			le_opts.event_ct_bytes = 1;
-	}
-	if (flags & PTL_EVENT_COMM_DISABLE)
-		le_opts.event_comm_disable = 1;
-	/* TODO - else, test eq_array[eq_handle].v bit? */
-	if (flags & PTL_EVENT_SUCCESS_DISABLE)
-		le_opts.event_success_disable = 1;
-	if (flags & PTL_ACK_DISABLE)
-		le_opts.ack_disable = 1;
-	if (flags & PTL_NO_ATOMIC)
-		le_opts.no_atomic = 1;
-
 	ct_alloc.ni = ni;
 	rc = hfi_ct_alloc(ctx, &ct_alloc, &ct_tx);
 	if (rc < 0)
@@ -366,7 +293,8 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (rc)
 		goto err4;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	rc = __hfi_eq_wait(ctx, rx, 0x0, (void **)&eq_entry);
+	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_TX_TIMEOUT_MS,
+			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
@@ -383,7 +311,8 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (rc)
 		goto err4;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	rc = __hfi_eq_wait(ctx, rx, 0x0, (void **)&eq_entry);
+	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_TX_TIMEOUT_MS,
+			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
@@ -394,42 +323,24 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 		dev_info(&odev->dev, "TX EQ failure rc %d\n", rc);
 	}
 
-	memset(ptentry, 0, sizeof(*ptentry));
+	pt_falloc.ni = PTL_NONMATCHING_PHYSICAL;
+	pt_falloc.pt_idx = HFI_TEST_PT;
+	pt_falloc.flags = flags;
+	pt_falloc.start = (uint64_t)rx_base;
+	pt_falloc.length = PAYLOAD_SIZE;
+	pt_falloc.ct_handle = ct_rx;
+	pt_falloc.eq_handle = eq_rx;
 	/* Populate an RX buffer into a PT entry */
-	ptentry->user_id = ctx->ptl_uid;
-	ptentry->length = PAYLOAD_SIZE;
-	ptentry->ct_handle = ct_rx;
-	ptentry->eq_handle = eq_rx;
-	ptentry->start = (uint64_t)rx_base;
-	ptentry->le_low = le_opts.val & 0x7;
-	ptentry->le_mid = (le_opts.val >> 3) & 0x1F;
-	ptentry->le_high = (le_opts.val >> 8) & 0x3;
-	ptentry->ni = PTL_NONMATCHING_PHYSICAL;
-	ptentry->fp = 1;
-	ptentry->v = 1;
-
-	pt0_array = (union ptentry_fp0 *)ctx->pt_addr;
-	pt0entry = &pt0_array[HFI_PT_INDEX(PTL_NONMATCHING_PHYSICAL,
-					   HFI_TEST_PT + 1)];
-	/* Check that the requested PT entry is unused */
-	if (pt0entry->v) {
-		rc = -EBUSY;
+	rc = hfi_pt_fast_alloc(ctx, rx, &pt_falloc, &pt_idx);
+	if (rc < 0)
 		goto err5;
-	}
 
-	pt0entry->priority_head = 0;
-	pt0entry->priority_tail = 0;
-	pt0entry->overflow_head = 0;
-	pt0entry->unexpected_tail = 0;
-	pt0entry->eq_handle = eq_rx;
-	pt0entry->bc = 0;
-	pt0entry->ot = 0;
-	pt0entry->uo = 0;
-	pt0entry->fc = 0;
-	pt0entry->ni = ni;
-	pt0entry->fp = 0;
-	pt0entry->enable = 1;
-	pt0entry->v = 1;
+	pt_alloc.ni = PTL_NONMATCHING_PHYSICAL;
+	pt_alloc.pt_idx = HFI_TEST_PT + 1;
+	pt_alloc.eq_handle = eq_rx;
+	rc = hfi_pt_alloc(ctx, rx, &pt_alloc, &pt_idx1);
+	if (rc < 0)
+		goto err5;
 
 	n_slots = hfi_format_rx_append(ctx, ni,
 				       rx_base1,
@@ -460,7 +371,7 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 		goto err5;
 
 	/* Wait for TX command 1 to complete */
-	rc = __hfi_ct_wait(ctx, ct_tx, 1, OPA2_TX_TIMEOUT_MS, NULL);
+	rc = hfi_ct_wait_timed(ctx, ct_tx, 1, OPA2_TX_TIMEOUT_MS, NULL);
 	if (rc < 0) {
 		dev_info(&odev->dev, "TX CT event 1 failure, %d\n", rc);
 		goto err5;
@@ -468,7 +379,8 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 		dev_info(&odev->dev, "TX CT event 1 success\n");
 	}
 
-	rc = __hfi_eq_wait(ctx, rx, eq_tx, (void **)&eq_entry);
+	rc = hfi_eq_wait_timed(ctx, rx, eq_tx, OPA2_TX_TIMEOUT_MS,
+			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
@@ -491,16 +403,16 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 			  tx_handle);
 	if (rc < 0)
 		goto err5;
+
 	/* Block for an EQ interrupt */
-	rc = ops->ev_wait_single(ctx, OPA_EV_MODE_BLOCKING, eq_tx,
-				 OPA2_TX_TIMEOUT_MS);
+	rc = hfi_eq_wait_irq(ctx, rx, eq_tx, OPA2_TX_TIMEOUT_MS,
+			     (void **)&eq_entry);
 	if (rc < 0) {
 		dev_info(&odev->dev, "TX EQ 2 intr fail rc %d\n", rc);
 		goto err5;
 	} else {
 		dev_info(&odev->dev, "TX EQ 2 intr success\n");
 	}
-	hfi_eq_get(ctx, rx, eq_tx, (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
@@ -512,14 +424,15 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	}
 
 	/* Wait to receive from peer */
-	rc = __hfi_ct_wait(ctx, ct_rx, 1, OPA2_TX_TIMEOUT_MS, NULL);
+	rc = hfi_ct_wait_timed(ctx, ct_rx, 1, OPA2_TX_TIMEOUT_MS, NULL);
 	if (rc < 0) {
 		dev_info(&odev->dev, "RX CT failure, %d\n", rc);
 		goto err5;
 	} else {
 		dev_info(&odev->dev, "RX CT success\n");
 	}
-	rc = __hfi_eq_wait(ctx, rx, eq_rx, (void **)&eq_entry);
+	rc = hfi_eq_wait_timed(ctx, rx, eq_rx, OPA2_TX_TIMEOUT_MS,
+			       (void **)&eq_entry);
 	if (eq_entry) {
 		union target_EQEntry *rx_event =
 			(union target_EQEntry *)eq_entry;
@@ -529,7 +442,8 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	} else {
 		dev_info(&odev->dev, "RX EQ 1 failure, %d\n", rc);
 	}
-	rc = __hfi_eq_wait(ctx, rx, eq_rx, (void **)&eq_entry);
+	rc = hfi_eq_wait_timed(ctx, rx, eq_rx, OPA2_TX_TIMEOUT_MS,
+			       (void **)&eq_entry);
 	if (eq_entry) {
 		union target_EQEntry *rx_event =
 			(union target_EQEntry *)eq_entry;
@@ -579,7 +493,7 @@ int opa2_vnic_hfi_setup(struct opa_core_device *odev)
 	struct opa_core_ops *ops = odev->bus_ops;
 	int rc;
 
-	HFI_CTX_INIT_BYPASS(ctx, odev->dd);
+	HFI_CTX_INIT_BYPASS(ctx, odev->dd, odev->bus_ops);
 	ctx_assign.pid = HFI_PID_ANY;
 	ctx_assign.le_me_count = OPA2_NET_ME_COUNT;
 	ctx_assign.unexpected_count = OPA2_NET_UNEX_COUNT;
