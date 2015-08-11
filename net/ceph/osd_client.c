@@ -145,12 +145,20 @@ osd_req_op_raw_data_in(struct ceph_osd_request *osd_req, unsigned int which)
 }
 
 struct ceph_osd_data *
-osd_req_op_extent_osd_data(struct ceph_osd_request *osd_req,
-			unsigned int which)
+osd_req_op_extent_osd_request_data(struct ceph_osd_request *osd_req,
+				   unsigned int which)
 {
-	return osd_req_op_data(osd_req, which, extent, osd_data);
+	return osd_req_op_data(osd_req, which, extent, request_data);
 }
-EXPORT_SYMBOL(osd_req_op_extent_osd_data);
+EXPORT_SYMBOL(osd_req_op_extent_osd_request_data);
+
+struct ceph_osd_data *
+osd_req_op_extent_osd_response_data(struct ceph_osd_request *osd_req,
+				    unsigned int which)
+{
+	return osd_req_op_data(osd_req, which, extent, response_data);
+}
+EXPORT_SYMBOL(osd_req_op_extent_osd_response_data);
 
 struct ceph_osd_data *
 osd_req_op_cls_response_data(struct ceph_osd_request *osd_req,
@@ -178,21 +186,46 @@ void osd_req_op_extent_osd_data_pages(struct ceph_osd_request *osd_req,
 			u64 length, u32 alignment,
 			bool pages_from_pool, bool own_pages)
 {
-	struct ceph_osd_data *osd_data;
+	struct ceph_osd_req_op *op = &osd_req->r_ops[which];
 
-	osd_data = osd_req_op_data(osd_req, which, extent, osd_data);
-	ceph_osd_data_pages_init(osd_data, pages, length, alignment,
-				pages_from_pool, own_pages);
+	switch (op->op) {
+	case CEPH_OSD_OP_READ:
+	case CEPH_OSD_OP_ZERO:
+	case CEPH_OSD_OP_TRUNCATE:
+		ceph_osd_data_pages_init(&op->extent.response_data, pages,
+					 length, alignment, pages_from_pool,
+					 own_pages);
+		break;
+	case CEPH_OSD_OP_WRITE:
+		ceph_osd_data_pages_init(&op->extent.request_data, pages,
+					  length, alignment, pages_from_pool,
+					  own_pages);
+		break;
+	default:
+		BUG();
+	}
 }
 EXPORT_SYMBOL(osd_req_op_extent_osd_data_pages);
 
 void osd_req_op_extent_osd_data_pagelist(struct ceph_osd_request *osd_req,
 			unsigned int which, struct ceph_pagelist *pagelist)
 {
-	struct ceph_osd_data *osd_data;
+	struct ceph_osd_req_op *op = &osd_req->r_ops[which];
 
-	osd_data = osd_req_op_data(osd_req, which, extent, osd_data);
-	ceph_osd_data_pagelist_init(osd_data, pagelist);
+	switch (op->op) {
+	case CEPH_OSD_OP_READ:
+	case CEPH_OSD_OP_ZERO:
+	case CEPH_OSD_OP_TRUNCATE:
+		ceph_osd_data_pagelist_init(&op->extent.response_data,
+					    pagelist);
+		break;
+	case CEPH_OSD_OP_WRITE:
+		ceph_osd_data_pagelist_init(&op->extent.request_data,
+					    pagelist);
+		break;
+	default:
+		BUG();
+	}
 }
 EXPORT_SYMBOL(osd_req_op_extent_osd_data_pagelist);
 
@@ -200,10 +233,22 @@ EXPORT_SYMBOL(osd_req_op_extent_osd_data_pagelist);
 void osd_req_op_extent_osd_data_bio(struct ceph_osd_request *osd_req,
 			unsigned int which, struct bio *bio, size_t bio_length)
 {
-	struct ceph_osd_data *osd_data;
+	struct ceph_osd_req_op *op = &osd_req->r_ops[which];
 
-	osd_data = osd_req_op_data(osd_req, which, extent, osd_data);
-	ceph_osd_data_bio_init(osd_data, bio, bio_length);
+	switch (op->op) {
+	case CEPH_OSD_OP_READ:
+	case CEPH_OSD_OP_ZERO:
+	case CEPH_OSD_OP_TRUNCATE:
+		ceph_osd_data_bio_init(&op->extent.response_data, bio,
+				       bio_length);
+		break;
+	case CEPH_OSD_OP_WRITE:
+		ceph_osd_data_bio_init(&op->extent.request_data, bio,
+				       bio_length);
+		break;
+	default:
+		BUG();
+	}
 }
 EXPORT_SYMBOL(osd_req_op_extent_osd_data_bio);
 #endif /* CONFIG_BLOCK */
@@ -212,10 +257,22 @@ void osd_req_op_extent_osd_data_sg(struct ceph_osd_request *osd_req,
 			unsigned int which, struct scatterlist *sgl,
 			unsigned int init_sg_offset, u64 length)
 {
-	struct ceph_osd_data *osd_data;
+	struct ceph_osd_req_op *op = &osd_req->r_ops[which];
 
-	osd_data = osd_req_op_data(osd_req, which, extent, osd_data);
-	ceph_osd_data_sg_init(osd_data, sgl, init_sg_offset, length);
+	switch (op->op) {
+	case CEPH_OSD_OP_READ:
+	case CEPH_OSD_OP_ZERO:
+	case CEPH_OSD_OP_TRUNCATE:
+		ceph_osd_data_sg_init(&op->extent.response_data,
+				      sgl, init_sg_offset, length);
+		break;
+	case CEPH_OSD_OP_WRITE:
+		ceph_osd_data_sg_init(&op->extent.request_data,
+				      sgl, init_sg_offset, length);
+		break;
+	default:
+		BUG();
+	}
 }
 EXPORT_SYMBOL(osd_req_op_extent_osd_data_sg);
 
@@ -307,8 +364,10 @@ static void osd_req_op_data_release(struct ceph_osd_request *osd_req,
 
 	switch (op->op) {
 	case CEPH_OSD_OP_READ:
+		ceph_osd_data_release(&op->extent.response_data);
+		break;
 	case CEPH_OSD_OP_WRITE:
-		ceph_osd_data_release(&op->extent.osd_data);
+		ceph_osd_data_release(&op->extent.request_data);
 		break;
 	case CEPH_OSD_OP_CALL:
 		ceph_osd_data_release(&op->cls.request_info);
@@ -689,19 +748,21 @@ static u64 osd_req_encode_op(struct ceph_osd_request *req,
 	case CEPH_OSD_OP_WRITE:
 	case CEPH_OSD_OP_ZERO:
 	case CEPH_OSD_OP_TRUNCATE:
-		if (src->op == CEPH_OSD_OP_WRITE)
-			request_data_len = src->extent.length;
 		dst->extent.offset = cpu_to_le64(src->extent.offset);
 		dst->extent.length = cpu_to_le64(src->extent.length);
 		dst->extent.truncate_size =
 			cpu_to_le64(src->extent.truncate_size);
 		dst->extent.truncate_seq =
 			cpu_to_le32(src->extent.truncate_seq);
-		osd_data = &src->extent.osd_data;
-		if (src->op == CEPH_OSD_OP_WRITE)
+		if (src->op == CEPH_OSD_OP_WRITE) {
+			osd_data = &src->extent.request_data;
 			ceph_osdc_msg_data_add(req->r_request, osd_data);
-		else
+
+			request_data_len = src->extent.length;
+		} else {
+			osd_data = &src->extent.response_data;
 			ceph_osdc_msg_data_add(req->r_reply, osd_data);
+		}
 		break;
 	case CEPH_OSD_OP_CALL:
 		dst->cls.class_len = src->cls.class_len;
@@ -2888,7 +2949,7 @@ static struct ceph_msg *get_reply(struct ceph_connection *con,
 		 * XXX page data.  Probably OK for reads, but this
 		 * XXX ought to be done more generally.
 		 */
-		osd_data = osd_req_op_extent_osd_data(req, 0);
+		osd_data = osd_req_op_extent_osd_response_data(req, 0);
 		if (osd_data->type == CEPH_OSD_DATA_TYPE_PAGES) {
 			if (osd_data->pages &&
 				unlikely(osd_data->length < data_len)) {
