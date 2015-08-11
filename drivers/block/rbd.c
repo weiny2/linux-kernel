@@ -1759,6 +1759,12 @@ static bool img_request_layered_test(struct rbd_img_request *img_request)
 	return test_bit(IMG_REQ_LAYERED, &img_request->flags) != 0;
 }
 
+static bool img_request_is_write_type_test(struct rbd_img_request *img_request)
+{
+	return img_request_write_test(img_request) ||
+	       img_request_discard_test(img_request);
+}
+
 static enum obj_operation_type
 rbd_img_request_op_type(struct rbd_img_request *img_request)
 {
@@ -2055,8 +2061,7 @@ rbd_osd_req_create_copyup(struct rbd_obj_request *obj_request)
 	rbd_assert(obj_request_img_data_test(obj_request));
 	img_request = obj_request->img_request;
 	rbd_assert(img_request);
-	rbd_assert(img_request_write_test(img_request) ||
-			img_request_discard_test(img_request));
+	rbd_assert(img_request_is_write_type_test(img_request));
 
 	if (img_request_discard_test(img_request))
 		num_osd_ops = 2;
@@ -2290,8 +2295,7 @@ static void rbd_img_request_destroy(struct kref *kref)
 		rbd_dev_parent_put(img_request->rbd_dev);
 	}
 
-	if (img_request_write_test(img_request) ||
-		img_request_discard_test(img_request))
+	if (img_request_is_write_type_test(img_request))
 		ceph_put_snap_context(img_request->snapc);
 
 	kmem_cache_free(rbd_img_request_cache, img_request);
@@ -3005,8 +3009,7 @@ static bool img_obj_request_simple(struct rbd_obj_request *obj_request)
 	rbd_dev = img_request->rbd_dev;
 
 	/* Reads */
-	if (!img_request_write_test(img_request) &&
-	    !img_request_discard_test(img_request))
+	if (!img_request_is_write_type_test(img_request))
 		return true;
 
 	/* Non-layered writes */
