@@ -113,7 +113,7 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	ud->sid = task_session_vnr(current);
 
 	/* default Portals PID and UID */
-	HFI_CTX_INIT(&ud->ctx, hi->odev->dd);
+	HFI_CTX_INIT(&ud->ctx, hi->odev->dd, hi->odev->bus_ops);
 	ud->ctx.type = HFI_CTX_TYPE_USER;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 	ud->ctx.ptl_uid = current_uid();
