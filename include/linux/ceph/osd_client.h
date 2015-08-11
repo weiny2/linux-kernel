@@ -121,6 +121,12 @@ struct ceph_osd_req_op {
 			u64 expected_object_size;
 			u64 expected_write_size;
 		} alloc_hint;
+		struct {
+			u64 offset;
+			u64 length;
+			u64 data_length;
+			struct ceph_osd_data request_data;
+		} writesame;
 	};
 };
 
@@ -264,6 +270,10 @@ extern void osd_req_op_raw_data_in_pages(struct ceph_osd_request *,
 					u32 alignment, bool pages_from_pool,
 					bool own_pages);
 
+extern void osd_req_op_writesame_init(struct ceph_osd_request *osd_req,
+					unsigned int which, u16 opcode,
+					u64 offset, u64 length,
+					u64 data_length);
 extern void osd_req_op_extent_init(struct ceph_osd_request *osd_req,
 					unsigned int which, u16 opcode,
 					u64 offset, u64 length,
@@ -292,6 +302,11 @@ extern void osd_req_op_extent_osd_data_bio(struct ceph_osd_request *,
 					struct bio *bio, size_t bio_length);
 #endif /* CONFIG_BLOCK */
 extern void osd_req_op_extent_osd_data_sg(struct ceph_osd_request *,
+					unsigned int which,
+					struct scatterlist *sgl,
+					unsigned int init_sg_offset,
+					u64 length);
+extern void osd_req_op_writesame_osd_data_sg(struct ceph_osd_request *,
 					unsigned int which,
 					struct scatterlist *sgl,
 					unsigned int init_sg_offset,
