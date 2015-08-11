@@ -224,23 +224,26 @@ bail:
 }
 
 /**
- * send_wqe() - submit a WGE to hardware Command Queue
+ * send_wqe() - submit a WGE to the hardware
  * @ibp: outgoing port
  * @wait: wait structure to use when no slots (may be NULL)
  * @wge: WGE to submit
  *
- * Submit the WGE into the CMDQ.  If a iowait structure is
- * non-NULL the packet will be queued to the list in wait.
+ * If a iowait structure is non-NULL the packet will be queued to the list
+ * in wait.
  * TODO - see WFR's sdma_send_txreq() as reference.
  *
  * Return: TBD
  */
-int send_wqe(struct opa_ib_portdata *ibp, struct iowait *wait,
-	     struct opa_ib_swqe *wqe)
+static int send_wqe(struct opa_ib_portdata *ibp, struct iowait *wait,
+		    struct opa_ib_swqe *wqe)
 {
-	/* Length of payload is wqe->length */
+	int ret;
 
-	return 0;
+	ret = opa_ib_send_wqe(ibp, wqe);
+	/* TODO - handle failure to send here in a device-agnostic way */
+
+	return ret;
 }
 
 /**
@@ -258,6 +261,7 @@ int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
 		      u32 hdrwords, struct opa_ib_sge_state *ss, u32 len)
 {
 	struct opa_ib_portdata *ibp;
+	struct opa_ib_swqe *wqe;
 	int ret = 0;
 	unsigned long flags = 0;
 
@@ -295,7 +299,16 @@ int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
 	}
 
 	/* send WGE into fabric */
-	ret = send_wqe(ibp, &qp->s_iowait, qp->s_wqe);
+	wqe = qp->s_wqe;
+	ret = send_wqe(ibp, &qp->s_iowait, wqe);
+	if (ret < 0)
+		opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);
+	/*
+	 * With PIO, caller can re-use send buffer, so mark WQE complete
+	 * TODO - will change when we change to DMA+TX_EQ
+	 */
+	else
+		opa_ib_send_complete(qp, wqe, IB_WC_SUCCESS);
 	return ret;
 }
 

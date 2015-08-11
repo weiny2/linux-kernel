@@ -61,8 +61,8 @@
  *
  * This is called from opa_ib_make_ud_req() to forward a WQE addressed
  * to the same HFI.
- * Note that the receive interrupt handler may be calling opa_ib_ud_rcv()
- * while this is being called.
+ * Note that the receive logic may be calling opa_ib_ud_rcv() while
+ * this is being called.
  */
 static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 {
@@ -332,15 +332,6 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 		}
 	}
 
-#if 1
-	/*
-	 * FXRTODO - for now, have non-loopback return FATAL
-	 * error to sender.
-	 */
-	opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);
-	goto done;
-#endif
-
 	qp->s_cur = next_cur;
 	extra_bytes = -wqe->length & 3;
 	nwords = (wqe->length + extra_bytes) >> 2;
@@ -422,6 +413,10 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 					 qp->qkey : wqe->wr.wr.ud.remote_qkey);
 	ohdr->u.ud.deth[1] = cpu_to_be32(qp->ibqp.qp_num);
 
+	/* WQE contains everything needed to perform the Send */
+	wqe->s_hdr = qp->s_hdr;
+	wqe->s_hdrwords = qp->s_hdrwords;
+	wqe->s_sl = ah_attr->sl;
 done:
 	ret = 1;
 	goto unlock;
@@ -484,7 +479,6 @@ int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey)
  *
  * This is called from opa_ib_rcv() to process an incoming UD packet
  * for the given QP.
- * Called at interrupt level.
  */
 void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 {
@@ -611,6 +605,7 @@ void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 		}
 #endif
 		/* Drop invalid MAD packets (see 13.5.3.1). */
+		/* TODO - bug?  4-bit SC versus 5-bit SC here? */
 		if (unlikely(qp->ibqp.qp_num == 1 &&
 			     (tlen > 2048 ||
 			      (be16_to_cpu(hdr->lrh[0]) >> 12) == 15)))
@@ -637,7 +632,6 @@ void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 		mgmt_pkey_idx = opa_ib_lookup_pkey_idx(ibp, pkey);
 		if (mgmt_pkey_idx < 0)
 			goto drop;
-
 	}
 
 	if (qp->ibqp.qp_num > 1 &&
@@ -723,5 +717,6 @@ void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 	return;
 
 drop:
+	dev_info(&ibp->odev->dev, "UD dropping packet\n");
 	ibp->n_pkt_drops++;
 }
