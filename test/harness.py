@@ -114,6 +114,13 @@ test_list = [
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using UC.",
     },
 
+    { "test_name" : "IbAtomicBw-Verbs",
+      "test_exe" : "IbAtomicBw.py",
+      "args" : "--nodelist %HOST[2]%",
+      "type" : "default,quick,verbs",
+      "desc" : "Run ib_atomic_bw for 5 iterations with the two RC atomic operations.",
+    },
+
     { "test_name" : "IPoIB-Verbs",
       "test_exe" : "IpoibPing.py",
       "args" : "--nodelist %HOST[2]%",
