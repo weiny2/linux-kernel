@@ -624,8 +624,7 @@ static void target_complete_failure_work(struct work_struct *work)
 {
 	struct se_cmd *cmd = container_of(work, struct se_cmd, work);
 
-	transport_generic_request_failure(cmd,
-			TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE);
+	transport_generic_request_failure(cmd, cmd->sense_reason);
 }
 
 /*
@@ -651,14 +650,15 @@ static unsigned char *transport_get_sense_buffer(struct se_cmd *cmd)
 	return cmd->sense_buffer;
 }
 
-void target_complete_cmd(struct se_cmd *cmd, u8 scsi_status)
+static void __target_complete_cmd(struct se_cmd *cmd, u8 scsi_status,
+				  sense_reason_t sense_reason)
 {
 	struct se_device *dev = cmd->se_dev;
 	int success = scsi_status == GOOD;
 	unsigned long flags;
 
 	cmd->scsi_status = scsi_status;
-
+	cmd->sense_reason = sense_reason;
 
 	spin_lock_irqsave(&cmd->t_state_lock, flags);
 	cmd->transport_state &= ~CMD_T_BUSY;
@@ -701,7 +701,21 @@ void target_complete_cmd(struct se_cmd *cmd, u8 scsi_status)
 
 	queue_work(target_completion_wq, &cmd->work);
 }
+
+void target_complete_cmd(struct se_cmd *cmd, u8 scsi_status)
+{
+	__target_complete_cmd(cmd, scsi_status, scsi_status ?
+			     TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE :
+			     TCM_NO_SENSE);
+}
 EXPORT_SYMBOL(target_complete_cmd);
+
+void target_complete_cmd_with_sense(struct se_cmd *cmd,
+				    sense_reason_t sense_reason)
+{
+	__target_complete_cmd(cmd, SAM_STAT_CHECK_CONDITION, sense_reason);
+}
+EXPORT_SYMBOL(target_complete_cmd_with_sense);
 
 void target_complete_cmd_with_length(struct se_cmd *cmd, u8 scsi_status, int length)
 {
@@ -1635,6 +1649,7 @@ void transport_generic_request_failure(struct se_cmd *cmd,
 	case TCM_LOGICAL_BLOCK_GUARD_CHECK_FAILED:
 	case TCM_LOGICAL_BLOCK_APP_TAG_CHECK_FAILED:
 	case TCM_LOGICAL_BLOCK_REF_TAG_CHECK_FAILED:
+	case TCM_MISCOMPARE_VERIFY:
 		break;
 	case TCM_OUT_OF_RESOURCES:
 		sense_reason = TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
@@ -2619,10 +2634,17 @@ void transport_err_sector_info(unsigned char *buffer, sector_t bad_sector)
 	buffer[SPC_ADD_SENSE_LEN_OFFSET] = 0xc;
 	buffer[SPC_DESC_TYPE_OFFSET] = 0; /* Information */
 	buffer[SPC_ADDITIONAL_DESC_LEN_OFFSET] = 0xa;
-	buffer[SPC_VALIDITY_OFFSET] = 0x80;
+	buffer[SPC_CMD_INFO_VALIDITY_OFFSET] = 0x80;
 
 	/* Descriptor Information: failing sector */
 	put_unaligned_be64(bad_sector, &buffer[12]);
+}
+
+static void transport_err_sense_info(unsigned char *buffer, u32 info)
+{
+	buffer[SPC_INFO_VALIDITY_OFFSET] |= 0x80;
+	/* Sense Information */
+	put_unaligned_be32(info, &buffer[3]);
 }
 
 int
@@ -2817,6 +2839,7 @@ transport_send_check_condition_and_sense(struct se_cmd *cmd,
 		/* MISCOMPARE DURING VERIFY OPERATION */
 		buffer[SPC_ASC_KEY_OFFSET] = 0x1d;
 		buffer[SPC_ASCQ_KEY_OFFSET] = 0x00;
+		transport_err_sense_info(buffer, cmd->sense_info);
 		break;
 	case TCM_LOGICAL_BLOCK_GUARD_CHECK_FAILED:
 		/* CURRENT ERROR */
