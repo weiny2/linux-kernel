@@ -733,9 +733,7 @@ static inline void drv_flush(struct ieee80211_local *local,
 		check_sdata_in_driver(sdata);
 
 	trace_drv_flush(local, queues, drop);
-	if (local->ops->flush_old)
-		local->ops->flush_old(&local->hw, queues, drop);
-	else if (local->ops->flush)
+	if (local->ops->flush)
 		local->ops->flush(&local->hw, vif, queues, drop);
 	trace_drv_return_void(local);
 }
