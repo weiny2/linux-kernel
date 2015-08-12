@@ -2705,13 +2705,6 @@ intel_dp_get_dpcd(struct intel_dp *intel_dp)
 	 */
 	intel_dp_aux_native_read_retry(intel_dp, DP_DPCD_REV, intel_dp->dpcd, 1);
 
-	/*
-	 * Sometime we just get the same incorrect byte repeated
-	 * over the entire buffer. Doing just one throw away read
-	 * initially seems to "solve" it.
-	 */
-	intel_dp_aux_native_read_retry(intel_dp, DP_DPCD_REV, intel_dp->dpcd, 1);
-
 	if (intel_dp_aux_native_read_retry(intel_dp, 0x000, intel_dp->dpcd,
 					   sizeof(intel_dp->dpcd)) == 0)
 		return false; /* aux transfer failed */
