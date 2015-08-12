@@ -4168,7 +4168,6 @@ IBM Power 842 compression accelerator
 M:	Robert Jennings <rcj@linux.vnet.ibm.com>
 S:	Supported
 F:	drivers/crypto/nx/nx-842*
-F:	include/linux/nx842.h
 F:	include/linux/sw842.h
 F:	crypto/842.c
 F:	lib/842/
