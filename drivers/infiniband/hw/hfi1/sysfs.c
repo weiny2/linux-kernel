@@ -466,13 +466,6 @@ static ssize_t show_hfi(struct device *device, struct device_attribute *attr,
 	return ret;
 }
 
-static ssize_t show_version(struct device *device,
-			    struct device_attribute *attr, char *buf)
-{
-	/* The string printed here is already newline-terminated. */
-	return scnprintf(buf, PAGE_SIZE, "%s", (char *)ib_hfi1_version);
-}
-
 static ssize_t show_boardversion(struct device *device,
 				 struct device_attribute *attr, char *buf)
 {
@@ -482,17 +475,6 @@ static ssize_t show_boardversion(struct device *device,
 
 	/* The string printed here is already newline-terminated. */
 	return scnprintf(buf, PAGE_SIZE, "%s", dd->boardversion);
-}
-
-
-static ssize_t show_localbus_info(struct device *device,
-				  struct device_attribute *attr, char *buf)
-{
-	struct hfi1_ibdev *dev =
-		container_of(device, struct hfi1_ibdev, ibdev.dev);
-	struct hfi1_devdata *dd = dd_from_dev(dev);
-
-	return scnprintf(buf, PAGE_SIZE, "%s\n", dd->lbus_info);
 }
 
 
@@ -599,25 +581,21 @@ static ssize_t show_tempsense(struct device *device,
 /* start of per-unit file structures and support code */
 static DEVICE_ATTR(hw_rev, S_IRUGO, show_rev, NULL);
 static DEVICE_ATTR(board_id, S_IRUGO, show_hfi, NULL);
-static DEVICE_ATTR(version, S_IRUGO, show_version, NULL);
 static DEVICE_ATTR(nctxts, S_IRUGO, show_nctxts, NULL);
 static DEVICE_ATTR(nfreectxts, S_IRUGO, show_nfreectxts, NULL);
 static DEVICE_ATTR(serial, S_IRUGO, show_serial, NULL);
 static DEVICE_ATTR(boardversion, S_IRUGO, show_boardversion, NULL);
 static DEVICE_ATTR(tempsense, S_IRUGO, show_tempsense, NULL);
-static DEVICE_ATTR(localbus_info, S_IRUGO, show_localbus_info, NULL);
 static DEVICE_ATTR(chip_reset, S_IWUSR, NULL, store_chip_reset);
 
 static struct device_attribute *hfi1_attributes[] = {
 	&dev_attr_hw_rev,
 	&dev_attr_board_id,
-	&dev_attr_version,
 	&dev_attr_nctxts,
 	&dev_attr_nfreectxts,
 	&dev_attr_serial,
 	&dev_attr_boardversion,
 	&dev_attr_tempsense,
-	&dev_attr_localbus_info,
 	&dev_attr_chip_reset,
 };
 
@@ -652,7 +630,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 			   "Skipping sl2sc sysfs info, (err %d) port %u\n",
 			   ret, port_num);
-		goto bail;
+		goto bail_sc2vl;
 	}
 	kobject_uevent(&ppd->sl2sc_kobj, KOBJ_ADD);
 
@@ -662,7 +640,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 			   "Skipping vl2mtu sysfs info, (err %d) port %u\n",
 			   ret, port_num);
-		goto bail;
+		goto bail_sl2sc;
 	}
 	kobject_uevent(&ppd->vl2mtu_kobj, KOBJ_ADD);
 
@@ -673,7 +651,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 		 "Skipping Congestion Control sysfs info, (err %d) port %u\n",
 		 ret, port_num);
-		goto bail;
+		goto bail_vl2mtu;
 	}
 
 	kobject_uevent(&ppd->pport_cc_kobj, KOBJ_ADD);
@@ -684,7 +662,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 		 "Skipping Congestion Control setting sysfs info, (err %d) port %u\n",
 		 ret, port_num);
-		goto bail;
+		goto bail_cc;
 	}
 
 	ret = sysfs_create_bin_file(&ppd->pport_cc_kobj,
@@ -693,9 +671,7 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 		dd_dev_err(dd,
 		 "Skipping Congestion Control table sysfs info, (err %d) port %u\n",
 		 ret, port_num);
-		sysfs_remove_bin_file(&ppd->pport_cc_kobj,
-				      &cc_setting_bin_attr);
-		goto bail;
+		goto bail_cc_entry_bin;
 	}
 
 	dd_dev_info(dd,
@@ -704,11 +680,18 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 
 	return 0;
 
-bail:
+bail_cc_entry_bin:
+	sysfs_remove_bin_file(&ppd->pport_cc_kobj,
+			      &cc_setting_bin_attr);
+bail_cc:
 	kobject_put(&ppd->pport_cc_kobj);
+bail_vl2mtu:
 	kobject_put(&ppd->vl2mtu_kobj);
+bail_sl2sc:
 	kobject_put(&ppd->sl2sc_kobj);
+bail_sc2vl:
 	kobject_put(&ppd->sc2vl_kobj);
+bail:
 	return ret;
 }
 
@@ -744,12 +727,10 @@ void hfi1_verbs_unregister_sysfs(struct hfi1_devdata *dd)
 	for (i = 0; i < dd->num_pports; i++) {
 		ppd = &dd->pport[i];
 
-		if (&ppd->pport_cc_kobj) {
-			sysfs_remove_bin_file(&ppd->pport_cc_kobj,
-					      &cc_setting_bin_attr);
-			sysfs_remove_bin_file(&ppd->pport_cc_kobj,
-					      &cc_table_bin_attr);
-		}
+		sysfs_remove_bin_file(&ppd->pport_cc_kobj,
+				      &cc_setting_bin_attr);
+		sysfs_remove_bin_file(&ppd->pport_cc_kobj,
+				      &cc_table_bin_attr);
 		kobject_put(&ppd->pport_cc_kobj);
 		kobject_put(&ppd->vl2mtu_kobj);
 		kobject_put(&ppd->sl2sc_kobj);

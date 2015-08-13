@@ -2593,7 +2593,7 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 			spin_unlock_irqrestore(&ppd->qsfp_info.qsfp_lock,
 						flags);
 			write_csr(dd,
-				(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+					dd->hfi1_id ?
 						ASIC_QSFP2_INVERT :
 						ASIC_QSFP1_INVERT,
 				qsfp_int_mgmt);
@@ -2615,7 +2615,7 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 
 			qsfp_int_mgmt &= ~(u64)QSFP_HFI0_MODPRST_N;
 			write_csr(dd,
-				(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+					dd->hfi1_id ?
 						ASIC_QSFP2_INVERT :
 						ASIC_QSFP1_INVERT,
 				qsfp_int_mgmt);
@@ -3871,7 +3871,7 @@ void handle_verify_cap(struct work_struct *work)
 	set_8051_lcb_access(dd);
 
 	ppd->neighbor_guid =
-		cpu_to_be64(read_csr(dd, DC_DC8051_STS_REMOTE_GUID));
+		read_csr(dd, DC_DC8051_STS_REMOTE_GUID);
 	ppd->neighbor_port_number = read_csr(dd, DC_DC8051_STS_REMOTE_PORT_NO) &
 					DC_DC8051_STS_REMOTE_PORT_NO_VAL_SMASK;
 	ppd->neighbor_type =
@@ -3882,7 +3882,7 @@ void handle_verify_cap(struct work_struct *work)
 		DC_DC8051_STS_LOCAL_FM_SECURITY_DISABLED_MASK;
 	dd_dev_info(dd,
 		"Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
-		be64_to_cpu(ppd->neighbor_guid), ppd->neighbor_type,
+		ppd->neighbor_guid, ppd->neighbor_type,
 		ppd->mgmt_allowed, ppd->neighbor_fm_security);
 	if (ppd->mgmt_allowed)
 		add_full_mgmt_pkey(ppd);
@@ -5480,29 +5480,26 @@ static void reset_qsfp(struct hfi1_pportdata *ppd)
 	u64 mask, qsfp_mask;
 
 	mask = (u64)QSFP_HFI0_RESET_N;
-
 	qsfp_mask = read_csr(dd,
-			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
-				ASIC_QSFP2_OE : ASIC_QSFP1_OE);
+		dd->hfi1_id ? ASIC_QSFP2_OE : ASIC_QSFP1_OE);
 	qsfp_mask |= mask;
-
 	write_csr(dd,
-			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
-				ASIC_QSFP2_OE : ASIC_QSFP1_OE, qsfp_mask);
+		dd->hfi1_id ? ASIC_QSFP2_OE : ASIC_QSFP1_OE,
+		qsfp_mask);
 
 	qsfp_mask = read_csr(dd,
-			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
-				ASIC_QSFP2_OUT : ASIC_QSFP1_OUT);
+		dd->hfi1_id ? ASIC_QSFP2_OUT : ASIC_QSFP1_OUT);
 	qsfp_mask &= ~mask;
-
 	write_csr(dd,
-			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
-				ASIC_QSFP2_OUT : ASIC_QSFP1_OUT, qsfp_mask);
+		dd->hfi1_id ? ASIC_QSFP2_OUT : ASIC_QSFP1_OUT,
+		qsfp_mask);
+
 	udelay(10);
+
 	qsfp_mask |= mask;
 	write_csr(dd,
-		(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
-				ASIC_QSFP2_OUT : ASIC_QSFP1_OUT, qsfp_mask);
+		dd->hfi1_id ? ASIC_QSFP2_OUT : ASIC_QSFP1_OUT,
+		qsfp_mask);
 }
 
 static int handle_qsfp_error_conditions(struct hfi1_pportdata *ppd,
@@ -5719,8 +5716,7 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 	u64 qsfp_mask;
 
 	if (loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB ||
-			ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR ||
-			!HFI1_CAP_IS_KSET(QSFP_ENABLED)) {
+			ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
 		ppd->driver_link_ready = 1;
 		return;
 	}
@@ -5731,7 +5727,7 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 	qsfp_mask = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
 	/* Clear current status to avoid spurious interrupts */
 	write_csr(dd,
-			(dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
+			dd->hfi1_id ?
 				ASIC_QSFP2_CLEAR :
 				ASIC_QSFP1_CLEAR,
 		qsfp_mask);
@@ -5739,16 +5735,15 @@ void init_qsfp(struct hfi1_pportdata *ppd)
 	/* Handle active low nature of INT_N and MODPRST_N pins */
 	if (qsfp_mod_present(ppd))
 		qsfp_mask &= ~(u64)QSFP_HFI0_MODPRST_N;
-
-	write_csr(dd, (dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
-		  ASIC_QSFP2_INVERT : ASIC_QSFP1_INVERT,
+	write_csr(dd,
+		  dd->hfi1_id ? ASIC_QSFP2_INVERT : ASIC_QSFP1_INVERT,
 		  qsfp_mask);
 
 	/* Allow only INT_N and MODPRST_N to trigger QSFP interrupts */
 	qsfp_mask |= (u64)QSFP_HFI0_MODPRST_N;
-	write_csr(dd, (dd->hfi1_id ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
-			ASIC_QSFP2_MASK : ASIC_QSFP1_MASK,
-			qsfp_mask);
+	write_csr(dd,
+		dd->hfi1_id ? ASIC_QSFP2_MASK : ASIC_QSFP1_MASK,
+		qsfp_mask);
 
 	if (qsfp_mod_present(ppd)) {
 		msleep(3000);
@@ -5777,11 +5772,11 @@ int bringup_serdes(struct hfi1_pportdata *ppd)
 	if (HFI1_CAP_IS_KSET(EXTENDED_PSN))
 		add_rcvctrl(dd, RCV_CTRL_RCV_EXTENDED_PSN_ENABLE_SMASK);
 
-	guid = be64_to_cpu(ppd->guid);
+	guid = ppd->guid;
 	if (!guid) {
 		if (dd->base_guid)
-			guid = be64_to_cpu(dd->base_guid) + ppd->port - 1;
-		ppd->guid = cpu_to_be64(guid);
+			guid = dd->base_guid + ppd->port - 1;
+		ppd->guid = guid;
 	}
 
 	/* the link defaults to enabled */
@@ -6209,7 +6204,7 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 
 	if (do_wait) {
 		/* it can take a while for the link to go down */
-		ret = wait_phy_linkstate(dd, PLS_OFFLINE, 5000);
+		ret = wait_phy_linkstate(dd, PLS_OFFLINE, 10000);
 		if (ret < 0)
 			return ret;
 	}
@@ -8524,8 +8519,7 @@ u64 hfi1_gpio_mod(struct hfi1_devdata *dd, u32 target, u32 data, u32 dir,
 {
 	u64 qsfp_oe, target_oe;
 
-	target_oe = (target ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
-			ASIC_QSFP2_OE : ASIC_QSFP1_OE;
+	target_oe = target ? ASIC_QSFP2_OE : ASIC_QSFP1_OE;
 	if (mask) {
 		/* We are writing register bits, so lock access */
 		dir &= mask;
@@ -8540,8 +8534,7 @@ u64 hfi1_gpio_mod(struct hfi1_devdata *dd, u32 target, u32 data, u32 dir,
 	 * in the same call, so read should call this function again
 	 * to get valid data
 	 */
-	return read_csr(dd, (target ^ HFI1_CAP_IS_KSET(SWAP_QSFP_SB)) ?
-				ASIC_QSFP2_IN : ASIC_QSFP1_IN);
+	return read_csr(dd, target ? ASIC_QSFP2_IN : ASIC_QSFP1_IN);
 }
 
 #define CLEAR_STATIC_RATE_CONTROL_SMASK(r) \
@@ -9333,8 +9326,6 @@ static void reset_cce_csrs(struct hfi1_devdata *dd)
 /* set ASIC CSRs to chip reset defaults */
 static void reset_asic_csrs(struct hfi1_devdata *dd)
 {
-	static DEFINE_MUTEX(asic_mutex);
-	static int called;
 	int i;
 
 	/*
@@ -9344,15 +9335,8 @@ static void reset_asic_csrs(struct hfi1_devdata *dd)
 	 * a known first load do the reset and blocking all others.
 	 */
 
-	/*
-	 * These CSRs should only be reset once - the first one here will
-	 * do the work.  Use a mutex so that a non-first caller waits until
-	 * the first is finished before it can proceed.
-	 */
-	mutex_lock(&asic_mutex);
-	if (called)
-		goto done;
-	called = 1;
+	if (!(dd->flags & HFI1_DO_INIT_ASIC))
+		return;
 
 	if (dd->icode != ICODE_FPGA_EMULATION) {
 		/* emulation does not have an SBus - leave these alone */
@@ -9372,7 +9356,10 @@ static void reset_asic_csrs(struct hfi1_devdata *dd)
 	for (i = 0; i < ASIC_NUM_SCRATCH; i++)
 		write_csr(dd, ASIC_CFG_SCRATCH + (8 * i), 0);
 	write_csr(dd, ASIC_CFG_MUTEX, 0);	/* this will clear it */
+
+	/* We might want to retain this state across FLR if we ever use it */
 	write_csr(dd, ASIC_CFG_DRV_STR, 0);
+
 	write_csr(dd, ASIC_CFG_THERM_POLL_EN, 0);
 	/* ASIC_STS_THERM read-only */
 	/* ASIC_CFG_RESET leave alone */
@@ -9419,9 +9406,6 @@ static void reset_asic_csrs(struct hfi1_devdata *dd)
 	/* this also writes a NOP command, clearing paging mode */
 	write_csr(dd, ASIC_EEP_ADDR_CMD, 0);
 	write_csr(dd, ASIC_EEP_DATA, 0);
-
-done:
-	mutex_unlock(&asic_mutex);
 }
 
 /* set MISC CSRs to chip reset defaults */
@@ -9833,6 +9817,7 @@ static void init_chip(struct hfi1_devdata *dd)
 			restore_pci_variables(dd);
 		}
 
+		reset_asic_csrs(dd);
 	} else {
 		dd_dev_info(dd, "Resetting CSRs with writes\n");
 		reset_cce_csrs(dd);
@@ -9843,6 +9828,7 @@ static void init_chip(struct hfi1_devdata *dd)
 	}
 	/* clear the DC reset */
 	write_csr(dd, CCE_DC_CTRL, 0);
+
 	/* Set the LED off */
 	if (is_a0(dd))
 		setextled(dd, 0);
@@ -10305,7 +10291,7 @@ void hfi1_start_cleanup(struct hfi1_devdata *dd)
 }
 
 #define HFI_BASE_GUID(dev) \
-	(be64_to_cpu((dev)->base_guid) & ~(1ULL << GUID_HFI_INDEX_SHIFT))
+	((dev)->base_guid & ~(1ULL << GUID_HFI_INDEX_SHIFT))
 
 /*
  * Certain chip functions need to be initialized only once per asic
@@ -10338,7 +10324,7 @@ static void asic_should_init(struct hfi1_devdata *dd)
 }
 
 /**
- * Allocate an initialize the device structure for the hfi.
+ * Allocate and initialize the device structure for the hfi.
  * @dev: the pci_dev for hfi1_ib device
  * @ent: pci_device_id struct for this dev
  *
@@ -10494,6 +10480,12 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	else if (dd->rcv_intr_timeout_csr == 0 && rcv_intr_timeout)
 		dd->rcv_intr_timeout_csr = 1;
 
+	/* needs to be done before we look for the peer device */
+	read_guid(dd);
+
+	/* should this device init the ASIC block? */
+	asic_should_init(dd);
+
 	/* obtain chip sizes, reset chip CSRs */
 	init_chip(dd);
 
@@ -10501,11 +10493,6 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	ret = pcie_speeds(dd);
 	if (ret)
 		goto bail_cleanup;
-
-	/* needs to be done before we look for the peer device */
-	read_guid(dd);
-
-	asic_should_init(dd);
 
 	/* read in firmware */
 	ret = hfi1_firmware_init(dd);
@@ -10598,20 +10585,12 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	/* set up LCB access - must be after set_up_interrupts() */
 	init_lcb_access(dd);
 
-	/*
-	 * GUID is now stored in big endian by the function above, swap it.
-	 *
-	 * Despite the multiple uses here there are more uses of the GUID in big
-	 * endian format, mostly in the mad layer. At some point we should
-	 * convert to host byte order and convert to network when we want to
-	 * stuff it into a packet.
-	 */
 	snprintf(dd->serial, SERIAL_MAX, "0x%08llx\n",
-		 be64_to_cpu(dd->base_guid) & 0xFFFFFF);
+		 dd->base_guid & 0xFFFFFF);
 
-	dd->oui1 = be64_to_cpu(dd->base_guid) >> 56 & 0xFF;
-	dd->oui2 = be64_to_cpu(dd->base_guid) >> 48 & 0xFF;
-	dd->oui3 = be64_to_cpu(dd->base_guid) >> 40 & 0xFF;
+	dd->oui1 = dd->base_guid >> 56 & 0xFF;
+	dd->oui2 = dd->base_guid >> 48 & 0xFF;
+	dd->oui3 = dd->base_guid >> 40 & 0xFF;
 
 	ret = load_firmware(dd); /* asymmetric with dispose_firmware() */
 	if (ret)
@@ -10729,6 +10708,7 @@ static int thermal_init(struct hfi1_devdata *dd)
 
 	acquire_hw_mutex(dd);
 	dd_dev_info(dd, "Initializing thermal sensor\n");
+
 	/* Thermal Sensor Initialization */
 	/*    Step 1: Reset the Thermal SBus Receiver */
 	ret = sbus_request_slow(dd, SBUS_THERMAL, 0x0,

@@ -136,8 +136,8 @@ void handle_linkup_change(struct hfi1_devdata *dd, u32 linkup)
 			set_up_vl15(dd, dd->vau, dd->vl15_init);
 			assign_remote_cm_au_table(dd, dd->vcu);
 			ppd->neighbor_guid =
-				cpu_to_be64(read_csr(dd,
-					DC_DC8051_STS_REMOTE_GUID));
+				read_csr(dd,
+					DC_DC8051_STS_REMOTE_GUID);
 			ppd->neighbor_type =
 				read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE) &
 					DC_DC8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
@@ -146,7 +146,7 @@ void handle_linkup_change(struct hfi1_devdata *dd, u32 linkup)
 					DC_DC8051_STS_REMOTE_PORT_NO_VAL_SMASK;
 			dd_dev_info(dd,
 				"Neighbor GUID: %llx Neighbor type %d\n",
-				be64_to_cpu(ppd->neighbor_guid),
+				ppd->neighbor_guid,
 				ppd->neighbor_type);
 		}
 

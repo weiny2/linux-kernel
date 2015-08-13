@@ -143,7 +143,7 @@ MODULE_PARM_DESC(sdma_comp_size, "Size of User SDMA completion ring. Default: 12
 /* KDETH OM multipliers and switch over point */
 #define KDETH_OM_SMALL     4
 #define KDETH_OM_LARGE     64
-#define KDETH_OM_MAX_SIZE  ((1 << (KDETH_OM_LARGE / KDETH_OM_SMALL)) - 1)
+#define KDETH_OM_MAX_SIZE  (1 << ((KDETH_OM_LARGE / KDETH_OM_SMALL) + 1))
 
 /* Last packet in the request */
 #define USER_SDMA_TXREQ_FLAGS_LAST_PKT   (1 << 0)
@@ -238,10 +238,10 @@ struct user_sdma_request {
 	unsigned iov_idx;
 	struct user_sdma_iovec iovs[MAX_VECTORS_PER_REQ];
 	/* number of elements copied to the tids array */
-	u8 n_tids;
+	u16 n_tids;
 	/* TID array values copied from the tid_iov vector */
 	u32 *tids;
-	u8 tididx;
+	u16 tididx;
 	u32 sent;
 	u64 seqnum;
 	spinlock_t list_lock;
@@ -620,10 +620,11 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	}
 
 	req->koffset = le32_to_cpu(req->hdr.kdeth.swdata[6]);
-	/* The KDETH.OM flag in the first packed (and header template) is
-	 * always 0. */
+	/* Calculate the initial TID offset based on the values of
+	   KDETH.OFFSET and KDETH.OM that are passed in. */
 	req->tidoffset = KDETH_GET(req->hdr.kdeth.ver_tid_offset, OFFSET) *
-		KDETH_OM_SMALL;
+		(KDETH_GET(req->hdr.kdeth.ver_tid_offset, OM) ?
+		 KDETH_OM_LARGE : KDETH_OM_SMALL);
 	SDMA_DBG(req, "Initial TID offset %u", req->tidoffset);
 	idx++;
 
@@ -761,20 +762,21 @@ static inline u32 compute_data_length(struct user_sdma_request *req,
 	} else if (req_opcode(req->info.ctrl) == EXPECTED) {
 		u32 tidlen = EXP_TID_GET(req->tids[req->tididx], LEN) *
 			PAGE_SIZE;
-		if (req->seqnum <= tidlen / req->info.fragsize) {
-			len = min(tidlen - req->tidoffset,
-				  (u32)req->info.fragsize);
-			if (unlikely(!len) && ++req->tididx < req->n_tids &&
-			    req->tids[req->tididx]) {
-				tidlen = EXP_TID_GET(req->tids[req->tididx],
-						     LEN) * PAGE_SIZE;
-				req->tidoffset = 0;
-				len = min_t(u32, tidlen, req->info.fragsize);
-			}
-			len = min(len, req->data_len - req->sent);
-		} else
-			len = min(req->data_len - req->sent,
-				  (u32)req->info.fragsize);
+		/* Get the data length based on the remaining space in the
+		 * TID pair. */
+		len = min(tidlen - req->tidoffset, (u32)req->info.fragsize);
+		/* If we've filled up the TID pair, move to the next one. */
+		if (unlikely(!len) && ++req->tididx < req->n_tids &&
+		    req->tids[req->tididx]) {
+			tidlen = EXP_TID_GET(req->tids[req->tididx],
+					     LEN) * PAGE_SIZE;
+			req->tidoffset = 0;
+			len = min_t(u32, tidlen, req->info.fragsize);
+		}
+		/* Since the TID pairs map entire pages, make sure that we
+		 * are not going to try to send more data that we have
+		 * remaining. */
+		len = min(len, req->data_len - req->sent);
 	} else
 		len = min(req->data_len - req->sent, (u32)req->info.fragsize);
 	SDMA_DBG(req, "Data Length = %u", len);
@@ -856,7 +858,7 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 					goto free_txreq;
 				}
 				iovec = &req->iovs[req->iov_idx];
-				BUG_ON(iovec->offset);
+				WARN_ON(iovec->offset);
 			}
 
 			/*
@@ -1127,19 +1129,21 @@ static int check_header_template(struct user_sdma_request *req,
 		u32 tidval = req->tids[req->tididx],
 			tidlen = EXP_TID_GET(tidval, LEN) * PAGE_SIZE,
 			tididx = EXP_TID_GET(tidval, IDX),
-			tidctrl = EXP_TID_GET(tidval, CTRL);
+			tidctrl = EXP_TID_GET(tidval, CTRL),
+			tidoff;
 		__le32 kval = hdr->kdeth.ver_tid_offset;
+
+		tidoff = KDETH_GET(kval, OFFSET) *
+			  (KDETH_GET(req->hdr.kdeth.ver_tid_offset, OM) ?
+			   KDETH_OM_LARGE : KDETH_OM_SMALL);
 		/*
 		 * Expected receive packets have the following
 		 * additional checks:
-		 *     - KDETH.OM is not set
 		 *     - offset is not larger than the TID size
 		 *     - TIDCtrl values match between header and TID array
 		 *     - TID indexes match between header and TID array
 		 */
-		if (KDETH_GET(req->hdr.kdeth.ver_tid_offset, OM) ||
-		    ((KDETH_GET(kval, OFFSET) * KDETH_OM_SMALL) +
-		     datalen > tidlen) ||
+		if ((tidoff + datalen > tidlen) ||
 		    KDETH_GET(kval, TIDCTRL) != tidctrl ||
 		    KDETH_GET(kval, TID) != tididx)
 			return -EINVAL;
@@ -1214,17 +1218,6 @@ static int set_txreq_header(struct user_sdma_request *req,
 		ret = check_header_template(req, hdr, lrhlen, datalen);
 		if (ret)
 			return ret;
-		if (req_opcode(req->info.ctrl) == EXPECTED) {
-			u32 tidlen = EXP_TID_GET(req->tids[req->tididx], LEN) *
-						 PAGE_SIZE;
-			/*
-			 * If the length of the tid is larger than 128K,
-			 * use the large offset multipliers. This needs to be
-			 * checked for every TIDPair.
-			 */
-			req->omfactor = tidlen >= KDETH_OM_MAX_SIZE ?
-				KDETH_OM_LARGE : KDETH_OM_SMALL;
-		}
 		goto done;
 
 	}
@@ -1249,8 +1242,6 @@ static int set_txreq_header(struct user_sdma_request *req,
 		 */
 		if ((req->tidoffset) == (EXP_TID_GET(tidval, LEN) *
 					 PAGE_SIZE)) {
-			u32 tidlen;
-
 			req->tidoffset = 0;
 			/* Since we don't copy all the TIDs, all at once,
 			 * we have to check again. */
@@ -1259,10 +1250,9 @@ static int set_txreq_header(struct user_sdma_request *req,
 				return -EINVAL;
 			}
 			tidval = req->tids[req->tididx];
-			tidlen = EXP_TID_GET(tidval, LEN) * PAGE_SIZE;
-			req->omfactor = tidlen >= KDETH_OM_MAX_SIZE ?
-				KDETH_OM_LARGE : KDETH_OM_SMALL;
 		}
+		req->omfactor = EXP_TID_GET(tidval, LEN) * PAGE_SIZE >=
+			KDETH_OM_MAX_SIZE ? KDETH_OM_LARGE : KDETH_OM_SMALL;
 		/* Set KDETH.TIDCtrl based on value for this TID. */
 		KDETH_SET(hdr->kdeth.ver_tid_offset, TIDCTRL,
 			  EXP_TID_GET(tidval, CTRL));
@@ -1276,10 +1266,13 @@ static int set_txreq_header(struct user_sdma_request *req,
 		 * Set the KDETH.OFFSET and KDETH.OM based on size of
 		 * transfer.
 		 */
+		SDMA_DBG(req, "TID offset %ubytes %uunits om%u",
+			 req->tidoffset, req->tidoffset / req->omfactor,
+			 !!(req->omfactor - KDETH_OM_SMALL));
 		KDETH_SET(hdr->kdeth.ver_tid_offset, OFFSET,
 			  req->tidoffset / req->omfactor);
 		KDETH_SET(hdr->kdeth.ver_tid_offset, OM,
-			  ((req->omfactor - KDETH_OM_SMALL) ? 1 : 0));
+			  !!(req->omfactor - KDETH_OM_SMALL));
 	}
 done:
 	trace_hfi1_sdma_user_header(pq->dd, pq->ctxt, pq->subctxt,

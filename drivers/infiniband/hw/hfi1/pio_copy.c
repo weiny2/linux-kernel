@@ -204,7 +204,6 @@ static inline void read_low_bytes(struct pio_buf *pbuf, const void *from,
 	} else {
 		/* align our pointer */
 		off = (unsigned long)from & 0x7;
-		BUG_ON(nbytes+off > 8);
 		from = (void *)((unsigned long)from & ~0x7l);
 		pbuf->carry.val64 = ((*(u64 *)from)
 				<< zshift(nbytes + off))/* zero upper bytes */
@@ -227,8 +226,6 @@ static inline void read_extra_bytes(struct pio_buf *pbuf,
 {
 	unsigned long off = (unsigned long)from & 0x7;
 	unsigned int room, xbytes;
-
-	BUG_ON(pbuf->carry_bytes + nbytes > 8);
 
 	/* align our pointer */
 	from = (void *)((unsigned long)from & ~0x7l);
@@ -263,8 +260,6 @@ static inline void read_extra_bytes(struct pio_buf *pbuf,
 static inline void zero_extra_bytes(struct pio_buf *pbuf, unsigned int zbytes)
 {
 	unsigned int remaining;
-
-	BUG_ON(pbuf->carry_bytes < zbytes);
 
 	if (zbytes == 0)	/* nothing to do */
 		return;
@@ -383,7 +378,6 @@ static inline void read_low_bytes(struct pio_buf *pbuf, const void *from,
 static inline void read_extra_bytes(struct pio_buf *pbuf,
 					const void *from, unsigned int nbytes)
 {
-	BUG_ON(pbuf->carry_bytes + nbytes > 8);
 	jcopy(&pbuf->carry.val8[pbuf->carry_bytes], from, nbytes);
 	pbuf->carry_bytes += nbytes;
 }
@@ -399,7 +393,6 @@ static inline void read_extra_bytes(struct pio_buf *pbuf,
  */
 static inline void zero_extra_bytes(struct pio_buf *pbuf, unsigned int zbytes)
 {
-	BUG_ON(pbuf->carry_bytes < zbytes);
 	pbuf->carry_bytes -= zbytes;
 }
 

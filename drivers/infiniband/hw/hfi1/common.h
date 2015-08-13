@@ -131,8 +131,7 @@
  * user contexts, the set can be further filtered by using the
  * HFI1_CAP_RESERVED_MASK bits.
  */
-#define HFI1_CAP_WRITABLE_MASK   (HFI1_CAP_SWAP_QSFP_SB |		\
-				 HFI1_CAP_SDMA_AHG |			\
+#define HFI1_CAP_WRITABLE_MASK   (HFI1_CAP_SDMA_AHG |			\
 				 HFI1_CAP_HDRSUPP |			\
 				 HFI1_CAP_MULTI_PKT_EGR |		\
 				 HFI1_CAP_NODROP_RHQ_FULL |		\
@@ -145,11 +144,9 @@
  * set in the user bitmask.
  */
 #define HFI1_CAP_RESERVED_MASK   ((HFI1_CAP_SDMA |			\
-				  HFI1_CAP_SWAP_QSFP_SB |		\
 				  HFI1_CAP_USE_SDMA_HEAD |		\
 				  HFI1_CAP_EXTENDED_PSN |		\
 				  HFI1_CAP_PRINT_UNIMPL |		\
-				  HFI1_CAP_QSFP_ENABLED |		\
 				  HFI1_CAP_NO_INTEGRITY |		\
 				  HFI1_CAP_PKEY_CHECK) <<		\
 				 HFI1_CAP_USER_SHIFT)
@@ -165,7 +162,6 @@
 				 HFI1_CAP_SDMA |			\
 				 HFI1_CAP_PRINT_UNIMPL |		\
 				 HFI1_CAP_STATIC_RATE_CTRL |		\
-				 HFI1_CAP_QSFP_ENABLED |		\
 				 HFI1_CAP_PKEY_CHECK |			\
 				 HFI1_CAP_MULTI_PKT_EGR |		\
 				 HFI1_CAP_EXTENDED_PSN |		\
@@ -208,7 +204,7 @@
  * to the driver itself, not the software interfaces it supports.
  */
 #ifndef HFI1_DRIVER_VERSION_BASE
-#define HFI1_DRIVER_VERSION_BASE "0.9-238"
+#define HFI1_DRIVER_VERSION_BASE "0.9-265"
 #endif
 
 /* create the final driver version string */
@@ -351,9 +347,11 @@ struct hfi1_message_header {
 #define HFI1_MSN_MASK 0xFFFFFF
 #define HFI1_QPN_MASK 0xFFFFFF
 #define HFI1_FECN_SHIFT 31
-#define HFI1_FECN_MASK 0x1
+#define HFI1_FECN_MASK 1
+#define HFI1_FECN_SMASK (1 << HFI1_FECN_SHIFT)
 #define HFI1_BECN_SHIFT 30
-#define HFI1_BECN_MASK 0x1
+#define HFI1_BECN_MASK 1
+#define HFI1_BECN_SMASK (1 << HFI1_BECN_SHIFT)
 #define HFI1_MULTICAST_LID_BASE 0xC000
 
 static inline __u64 rhf_to_cpu(const __le32 *rbuf)

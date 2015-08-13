@@ -202,7 +202,7 @@ static void ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 			len = length;
 		if (len > sge->sge_length)
 			len = sge->sge_length;
-		BUG_ON(len == 0);
+		WARN_ON_ONCE(len == 0);
 		hfi1_copy_sge(&qp->r_sge, sge->vaddr, len, 1);
 		sge->vaddr += len;
 		sge->length -= len;
@@ -640,9 +640,9 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
  */
 void hfi1_ud_rcv(struct hfi1_packet *packet)
 {
-	struct hfi1_other_headers *ohdr;
+	struct hfi1_other_headers *ohdr = packet->ohdr;
 	int opcode;
-	u32 hdrsize;
+	u32 hdrsize = packet->hlen;
 	u32 pad;
 	struct ib_wc wc;
 	u32 qkey;
@@ -655,33 +655,20 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
 	struct hfi1_qp *qp = packet->qp;
-
-	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
-	int sc4_bit = (!!(rcv_flags & HFI1_SC4_BIT)) << 4;
+	bool has_grh = rcv_flags & HFI1_HAS_GRH;
+	bool sc4_bit = has_sc4_bit(packet);
 	u8 sc;
-	int is_becn, is_fecn, is_mcast;
+	u32 bth1;
+	int is_mcast;
 	struct ib_grh *grh = NULL;
 
-	/* Check for GRH */
-	if (!has_grh) {
-		ohdr = &hdr->u.oth;
-		hdrsize = 8 + 12 + 8;   /* LRH + BTH + DETH */
-	} else {
-		ohdr = &hdr->u.l.oth;
-		hdrsize = 8 + 40 + 12 + 8; /* LRH + GRH + BTH + DETH */
-		grh = &hdr->u.l.grh;
-	}
 	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
 	src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & HFI1_QPN_MASK;
 	dlid = be16_to_cpu(hdr->lrh[1]);
 	is_mcast = (dlid > HFI1_MULTICAST_LID_BASE) &&
 			(dlid != HFI1_PERMISSIVE_LID);
-	is_becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
-		& HFI1_BECN_MASK;
-	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
-		& HFI1_FECN_MASK;
-
-	if (is_becn) {
+	bth1 = be32_to_cpu(ohdr->bth[1]);
+	if (unlikely(bth1 & HFI1_BECN_SMASK)) {
 		/*
 		 * In pre-B0 h/w the CNP_OPCODE is handled via an
 		 * error path (errata 291394).
@@ -706,7 +693,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 
 	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 
-	if (!is_mcast && (opcode != IB_OPCODE_CNP) && is_fecn) {
+	if (!is_mcast && (opcode != IB_OPCODE_CNP) && bth1 & HFI1_FECN_SMASK) {
 		u16 slid = be16_to_cpu(hdr->lrh[3]);
 		u8 sc5;
 

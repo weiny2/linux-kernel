@@ -1284,9 +1284,6 @@ clear:
 
 int hfi1_firmware_init(struct hfi1_devdata *dd)
 {
-	/* we do not expect more than 2 HFIs */
-	BUG_ON(dd->hfi1_id >= 2);
-
 	/* only RTL can use these */
 	if (dd->icode != ICODE_RTL_SILICON) {
 		fw_fabric_serdes_load = 0;
@@ -1617,7 +1614,11 @@ done:
  */
 void read_guid(struct hfi1_devdata *dd)
 {
-	dd->base_guid = cpu_to_be64(read_csr(dd, DC_DC8051_CFG_LOCAL_GUID));
+	/* Take the DC out of reset to get a valid GUID value */
+	write_csr(dd, CCE_DC_CTRL, 0);
+	(void) read_csr(dd, CCE_DC_CTRL);
+
+	dd->base_guid = read_csr(dd, DC_DC8051_CFG_LOCAL_GUID);
 	dd_dev_info(dd, "GUID %llx",
-		(unsigned long long)be64_to_cpu(dd->base_guid));
+		(unsigned long long)dd->base_guid);
 }

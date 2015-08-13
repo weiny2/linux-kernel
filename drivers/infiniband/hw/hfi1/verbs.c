@@ -56,6 +56,7 @@
 #include <linux/rculist.h>
 #include <linux/mm.h>
 #include <linux/random.h>
+#include <linux/vmalloc.h>
 
 #include "hfi.h"
 #include "common.h"
@@ -283,7 +284,7 @@ void hfi1_copy_sge(
 			len = length;
 		if (len > sge->sge_length)
 			len = sge->sge_length;
-		BUG_ON(len == 0);
+		WARN_ON_ONCE(len == 0);
 		memcpy(sge->vaddr, data, len);
 		sge->vaddr += len;
 		sge->length -= len;
@@ -325,7 +326,7 @@ void hfi1_skip_sge(struct hfi1_sge_state *ss, u32 length, int release)
 			len = length;
 		if (len > sge->sge_length)
 			len = sge->sge_length;
-		BUG_ON(len == 0);
+		WARN_ON_ONCE(len == 0);
 		sge->vaddr += len;
 		sge->length -= len;
 		sge->sge_length -= len;
@@ -568,17 +569,15 @@ bail:
  */
 static inline int qp_ok(int opcode, struct hfi1_packet *packet)
 {
-	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
+	struct hfi1_ibport *ibp;
 
-	if (!(ib_hfi1_state_ops[packet->qp->state] & HFI1_PROCESS_RECV_OK)) {
-		ibp->n_pkt_drops++;
-		return 0;
-	}
-
+	if (!(ib_hfi1_state_ops[packet->qp->state] & HFI1_PROCESS_RECV_OK))
+		goto dropit;
 	if (((opcode & OPCODE_QP_MASK) == packet->qp->allowed_ops) ||
 	    (opcode == IB_OPCODE_CNP))
 		return 1;
-
+dropit:
+	ibp = &packet->rcd->ppd->ibport_data;
 	ibp->n_pkt_drops++;
 	return 0;
 }
@@ -599,44 +598,38 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	u32 tlen = packet->tlen;
 	struct hfi1_pportdata *ppd = rcd->ppd;
 	struct hfi1_ibport *ibp = &ppd->ibport_data;
-	struct hfi1_other_headers *ohdr;
 	u32 qp_num;
 	int lnh;
 	u8 opcode;
 	u16 lid;
 
-	/* 24 == LRH+BTH+CRC */
-	if (unlikely(tlen < 24))
-		goto drop;
-
-	/* Check for a valid destination LID (see ch. 7.11.1). */
-	lid = be16_to_cpu(hdr->lrh[1]);
-
 	/* Check for GRH */
 	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
 	if (lnh == HFI1_LRH_BTH)
-		ohdr = &hdr->u.oth;
+		packet->ohdr = &hdr->u.oth;
 	else if (lnh == HFI1_LRH_GRH) {
 		u32 vtf;
 
-		ohdr = &hdr->u.l.oth;
+		packet->ohdr = &hdr->u.l.oth;
 		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
 			goto drop;
 		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
 		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
 			goto drop;
+		packet->rcv_flags |= HFI1_HAS_GRH;
 	} else
 		goto drop;
 
 	trace_input_ibhdr(rcd->dd, hdr);
 
-	opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0x7f;
+	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
 	inc_opstats(tlen, &rcd->opstats->stats[opcode]);
 
 	/* Get the destination QP number. */
-	qp_num = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
-	if ((lid >= HFI1_MULTICAST_LID_BASE) &&
-	    (lid != HFI1_PERMISSIVE_LID)) {
+	qp_num = be32_to_cpu(packet->ohdr->bth[1]) & HFI1_QPN_MASK;
+	lid = be16_to_cpu(hdr->lrh[1]);
+	if (unlikely((lid >= HFI1_MULTICAST_LID_BASE) &&
+	    (lid != HFI1_PERMISSIVE_LID))) {
 		struct hfi1_mcast *mcast;
 		struct hfi1_mcast_qp *p;
 
@@ -645,9 +638,6 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		mcast = hfi1_mcast_find(ibp, &hdr->u.l.grh.dgid);
 		if (mcast == NULL)
 			goto drop;
-		packet->rcv_flags |= HFI1_HAS_GRH;
-		if (rhf_dc_info(packet->rhf))
-			packet->rcv_flags |= HFI1_SC4_BIT;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
 			packet->qp = p->qp;
 			spin_lock(&packet->qp->r_lock);
@@ -668,11 +658,6 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 			rcu_read_unlock();
 			goto drop;
 		}
-
-		if (lnh == HFI1_LRH_GRH)
-			packet->rcv_flags |= HFI1_HAS_GRH;
-		if (rhf_dc_info(packet->rhf))
-			packet->rcv_flags |= HFI1_SC4_BIT;
 		spin_lock(&packet->qp->r_lock);
 		if (likely((qp_ok(opcode, packet))))
 			opcode_handler_tbl[opcode](packet);
@@ -754,8 +739,9 @@ static noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
 		qp->s_flags &= ~HFI1_S_BUSY;
 		write_sequnlock(&dev->iowait_lock);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
-		tx = ERR_PTR(-EBUSY);
+		return ERR_PTR(-EBUSY);
 	}
+	tx->qp = qp;
 	return tx;
 }
 
@@ -765,11 +751,10 @@ static inline struct verbs_txreq *get_txreq(struct hfi1_ibdev *dev,
 	struct verbs_txreq *tx;
 
 	tx = kmem_cache_alloc(dev->verbs_txreq_cache, GFP_ATOMIC);
-	if (!tx)
+	if (unlikely(!tx))
 		/* call slow path to get the lock */
-		tx =  __get_txreq(dev, qp);
-	if (tx)
-		tx->qp = qp;
+		return __get_txreq(dev, qp);
+	tx->qp = qp;
 	return tx;
 }
 
@@ -898,7 +883,7 @@ static int build_verbs_ulp_payload(
 			len = length;
 		if (len > ss->sge.sge_length)
 			len = ss->sge.sge_length;
-		BUG_ON(len == 0);
+		WARN_ON_ONCE(len == 0);
 		ret = sdma_txadd_kvaddr(
 			sde->dd,
 			&tx->txreq,
@@ -1568,7 +1553,7 @@ static int query_gid(struct ib_device *ibdev, u8 port,
 
 		gid->global.subnet_prefix = ibp->gid_prefix;
 		if (index == 0)
-			gid->global.interface_id = ppd->guid;
+			gid->global.interface_id = cpu_to_be64(ppd->guid);
 		else if (index < HFI1_GUIDS_PER_PORT)
 			gid->global.interface_id = ibp->guids[index - 1];
 		else
@@ -1922,9 +1907,15 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	 */
 	spin_lock_init(&dev->lk_table.lock);
 	dev->lk_table.max = 1 << hfi1_lkey_table_size;
+	/* ensure generation is at least 4 bits (keys.c) */
+	if (hfi1_lkey_table_size > MAX_LKEY_TABLE_BITS) {
+		dd_dev_warn(dd, "lkey bits %u too large, reduced to %u\n",
+			      hfi1_lkey_table_size, MAX_LKEY_TABLE_BITS);
+		hfi1_lkey_table_size = MAX_LKEY_TABLE_BITS;
+	}
 	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
 	dev->lk_table.table = (struct hfi1_mregion __rcu **)
-		__get_free_pages(GFP_KERNEL, get_order(lk_tab_size));
+		vmalloc(lk_tab_size);
 	if (dev->lk_table.table == NULL) {
 		ret = -ENOMEM;
 		goto err_lk;
@@ -1958,11 +1949,11 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	 * device types in the system, we can't be sure this is unique.
 	 */
 	if (!ib_hfi1_sys_image_guid)
-		ib_hfi1_sys_image_guid = ppd->guid;
+		ib_hfi1_sys_image_guid = cpu_to_be64(ppd->guid);
 	lcpysz = strlcpy(ibdev->name, class_name(), lcpysz);
 	strlcpy(ibdev->name + lcpysz, "_%d", IB_DEVICE_NAME_MAX - lcpysz);
 	ibdev->owner = THIS_MODULE;
-	ibdev->node_guid = ppd->guid;
+	ibdev->node_guid = cpu_to_be64(ppd->guid);
 	ibdev->uverbs_abi_ver = HFI1_UVERBS_ABI_VERSION;
 	ibdev->uverbs_cmd_mask =
 		(1ull << IB_USER_VERBS_CMD_GET_CONTEXT)         |
@@ -2070,7 +2061,7 @@ err_agents:
 err_reg:
 err_verbs_txreq:
 	kmem_cache_destroy(dev->verbs_txreq_cache);
-	free_pages((unsigned long) dev->lk_table.table, get_order(lk_tab_size));
+	vfree(dev->lk_table.table);
 err_lk:
 	hfi1_qp_exit(dev);
 err_qp_init:
@@ -2083,7 +2074,6 @@ void hfi1_unregister_ib_device(struct hfi1_devdata *dd)
 {
 	struct hfi1_ibdev *dev = &dd->verbs_dev;
 	struct ib_device *ibdev = &dev->ibdev;
-	unsigned lk_tab_size;
 
 	hfi1_verbs_unregister_sysfs(dd);
 
@@ -2101,9 +2091,7 @@ void hfi1_unregister_ib_device(struct hfi1_devdata *dd)
 	hfi1_qp_exit(dev);
 	del_timer_sync(&dev->mem_timer);
 	kmem_cache_destroy(dev->verbs_txreq_cache);
-	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
-	free_pages((unsigned long) dev->lk_table.table,
-		   get_order(lk_tab_size));
+	vfree(dev->lk_table.table);
 }
 
 /*

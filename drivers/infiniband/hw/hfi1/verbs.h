@@ -138,7 +138,6 @@ struct hfi1_packet;
 /* flags passed by hfi1_ib_rcv() */
 enum {
 	HFI1_HAS_GRH = (1 << 0),
-	HFI1_SC4_BIT = (1 << 1), /* indicates the DC set the SC[4] bit */
 };
 
 struct ib_reth {
@@ -450,6 +449,7 @@ struct hfi1_qp {
 	u32 s_ahgpsn;           /* set to the psn in the copy of the header */
 
 	u8 state;               /* QP state */
+	u8 allowed_ops;		/* high order bits of allowed opcodes */
 	u8 qp_access_flags;
 	u8 alt_timeout;         /* Alternate path timeout for this QP */
 	u8 timeout;             /* Timeout for this QP */
@@ -467,7 +467,6 @@ struct hfi1_qp {
 	u8 s_draining;
 
 	/* start of read/write fields */
-
 	atomic_t refcount ____cacheline_aligned_in_smp;
 	wait_queue_head_t wait;
 
@@ -529,7 +528,6 @@ struct hfi1_qp {
 	u8 s_rnr_retry;         /* requester RNR retry counter */
 	u8 s_num_rd_atomic;     /* number of RDMA read/atomic pending */
 	u8 s_tail_ack_queue;    /* index into s_ack_queue[] */
-	u8 allowed_ops;		/* high order bits of allowed opcodes */
 
 	struct hfi1_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
@@ -643,6 +641,8 @@ static inline struct hfi1_rwqe *get_rwqe_ptr(struct hfi1_rq *rq, unsigned n)
 		  rq->max_sge * sizeof(struct ib_sge)) * n);
 }
 
+#define MAX_LKEY_TABLE_BITS 23
+
 struct hfi1_lkey_table {
 	spinlock_t lock; /* protect changes in this struct */
 	u32 next;               /* next unused index (speeds search) */
@@ -657,7 +657,7 @@ struct hfi1_opcode_stats {
 };
 
 struct hfi1_opcode_stats_perctx {
-	struct hfi1_opcode_stats stats[128];
+	struct hfi1_opcode_stats stats[256];
 };
 
 static inline void inc_opstats(
@@ -1071,8 +1071,6 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 
 u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
 		  struct ib_global_route *grh, u32 hwords, u32 nwords);
-
-void clear_ahg(struct hfi1_qp *qp);
 
 void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 			  u32 bth0, u32 bth2, int middle);

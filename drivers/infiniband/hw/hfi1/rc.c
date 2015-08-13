@@ -1440,8 +1440,6 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 	u64 val;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK))
-		goto ack_done;
 
 	/* Ignore invalid responses. */
 	if (cmp_psn(psn, qp->s_next_psn) >= 0)
@@ -1489,7 +1487,6 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 		if (!do_rc_ack(qp, aeth, psn, opcode, val, rcd) ||
 		    opcode != OP(RDMA_READ_RESPONSE_FIRST))
 			goto ack_done;
-		hdrsize += 4;
 		wqe = get_swqe_ptr(qp, qp->s_acked);
 		if (unlikely(wqe->wr.opcode != IB_WR_RDMA_READ))
 			goto ack_op_err;
@@ -1546,10 +1543,9 @@ read_middle:
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		/*
 		 * Check that the data size is >= 0 && <= pmtu.
-		 * Remember to account for the AETH header (4) and
-		 * ICRC (4).
+		 * Remember to account for ICRC (4).
 		 */
-		if (unlikely(tlen < (hdrsize + pad + 8)))
+		if (unlikely(tlen < (hdrsize + pad + 4)))
 			goto ack_len_err;
 		/*
 		 * If this is a response to a resent RDMA read, we
@@ -1571,13 +1567,12 @@ read_middle:
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		/*
 		 * Check that the data size is >= 1 && <= pmtu.
-		 * Remember to account for the AETH header (4) and
-		 * ICRC (4).
+		 * Remember to account for ICRC (4).
 		 */
-		if (unlikely(tlen <= (hdrsize + pad + 8)))
+		if (unlikely(tlen <= (hdrsize + pad + 4)))
 			goto ack_len_err;
 read_last:
-		tlen -= hdrsize + pad + 8;
+		tlen -= hdrsize + pad + 4;
 		if (unlikely(tlen != qp->s_rdma_read_len))
 			goto ack_len_err;
 		aeth = be32_to_cpu(ohdr->u.aeth);
@@ -1624,7 +1619,7 @@ bail:
  * Return 1 if no more processing is needed; otherwise return 0 to
  * schedule a response to be sent.
  */
-static int rc_rcv_error(struct hfi1_other_headers *ohdr, void *data,
+static noinline int rc_rcv_error(struct hfi1_other_headers *ohdr, void *data,
 			struct hfi1_qp *qp, u32 opcode, u32 psn, int diff,
 			struct hfi1_ctxtdata *rcd)
 {
@@ -1941,48 +1936,39 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	struct hfi1_qp *qp = packet->qp;
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-	struct hfi1_other_headers *ohdr;
+	struct hfi1_other_headers *ohdr = packet->ohdr;
 	u32 bth0, opcode;
-	u32 hdrsize;
+	u32 hdrsize = packet->hlen;
 	u32 psn;
 	u32 pad;
-	u8 sl;
 	struct ib_wc wc;
 	u32 pmtu = qp->pmtu;
 	int diff;
 	struct ib_reth *reth;
 	unsigned long flags;
-	int has_grh = rcv_flags & HFI1_HAS_GRH;
-	int ret, is_becn, is_fecn;
-
-	/* Check for GRH */
-	if (!has_grh) {
-		ohdr = &hdr->u.oth;
-		hdrsize = 8 + 12;       /* LRH + BTH */
-	} else {
-		ohdr = &hdr->u.l.oth;
-		hdrsize = 8 + 40 + 12;  /* LRH + GRH + BTH */
-	}
-
-	sl = qp->remote_ah_attr.sl;
+	u32 bth1;
+	int ret, is_fecn = 0;
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
-	if (hfi1_ruc_check_hdr(ibp, hdr, has_grh, qp, bth0))
+	if (hfi1_ruc_check_hdr(ibp, hdr, rcv_flags & HFI1_HAS_GRH, qp, bth0))
 		return;
 
-	is_becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) &
-			HFI1_BECN_MASK;
-	if (is_becn) {
-		u16 rlid = qp->remote_ah_attr.dlid;
-		u32 lqpn, rqpn;
+	bth1 = be32_to_cpu(ohdr->bth[1]);
+	if (unlikely(bth1 & (HFI1_BECN_SMASK | HFI1_FECN_SMASK))) {
+		if (bth1 & HFI1_BECN_SMASK) {
+			u16 rlid = qp->remote_ah_attr.dlid;
+			u32 lqpn, rqpn;
 
-		lqpn = qp->ibqp.qp_num;
-		rqpn = qp->remote_qpn;
-		process_becn(ppd, sl, rlid, lqpn, rqpn, IB_CC_SVCTYPE_RC);
+			lqpn = qp->ibqp.qp_num;
+			rqpn = qp->remote_qpn;
+			process_becn(
+				ppd,
+				qp->remote_ah_attr.sl,
+				rlid, lqpn, rqpn,
+				IB_CC_SVCTYPE_RC);
+		}
+		is_fecn = bth1 & HFI1_FECN_SMASK;
 	}
-
-	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) &
-			HFI1_FECN_MASK;
 
 	psn = be32_to_cpu(ohdr->bth[2]);
 	opcode = bth0 >> 24;
@@ -2044,17 +2030,8 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 		break;
 	}
 
-	if (qp->state == IB_QPS_RTR && !(qp->r_flags & HFI1_R_COMM_EST)) {
-		qp->r_flags |= HFI1_R_COMM_EST;
-		if (qp->ibqp.event_handler) {
-			struct ib_event ev;
-
-			ev.device = qp->ibqp.device;
-			ev.element.qp = &qp->ibqp;
-			ev.event = IB_EVENT_COMM_EST;
-			qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
-		}
-	}
+	if (qp->state == IB_QPS_RTR && !(qp->r_flags & HFI1_R_COMM_EST))
+		qp_comm_est(qp);
 
 	/* OK, process the packet. */
 	switch (opcode) {
@@ -2101,7 +2078,6 @@ send_middle:
 	case OP(SEND_LAST_WITH_IMMEDIATE):
 send_last_imm:
 		wc.ex.imm_data = ohdr->u.imm_data;
-		hdrsize += 4;
 		wc.wc_flags = IB_WC_WITH_IMM;
 		goto send_last;
 	case OP(SEND_LAST):
@@ -2165,7 +2141,6 @@ send_last:
 			goto nack_inv;
 		/* consume RWQE */
 		reth = &ohdr->u.rc.reth;
-		hdrsize += sizeof(*reth);
 		qp->r_len = be32_to_cpu(reth->length);
 		qp->r_rcv_len = 0;
 		qp->r_sge.sg_list = NULL;
@@ -2197,7 +2172,6 @@ send_last:
 		if (!ret)
 			goto rnr_nak;
 		wc.ex.imm_data = ohdr->u.rc.imm_data;
-		hdrsize += 4;
 		wc.wc_flags = IB_WC_WITH_IMM;
 		goto send_last;
 
