@@ -101,8 +101,7 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	ni->sys_guid = opa_ib_sys_guid;
 	ni->node_guid = ibd->node_guid;
 	ni->port_guid = ibp->guid;
-	/* FXRTODO: Fill this in after implmenting Pkeys */
-	ni->partition_cap = OPA_IB_PORT_NUM_PKEYS;
+	ni->partition_cap = cpu_to_be16(ibp->pkey_tlen);
 	ni->local_port_num = port;
 	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
 	ni->device_id = cpu_to_be16(odev->id.device);
@@ -299,8 +298,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ni->system_image_guid = opa_ib_sys_guid;
 	ni->node_guid = ibd->node_guid;
 	ni->port_guid = ibp->guid;
-	/* FXRTODO: Fill this in after implmenting Pkeys */
-	ni->partition_cap = OPA_IB_PORT_NUM_PKEYS;
+	ni->partition_cap = cpu_to_be16(ibp->pkey_tlen);
 	ni->local_port_num = port;
 	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
 	ni->device_id = cpu_to_be16(odev->id.device);
