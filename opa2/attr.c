@@ -784,7 +784,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 			hfi_cap_to_port_ltp(ppd->port_crc_mode_enabled) <<
 					HFI_LTP_CRC_ENABLED_SHIFT;
 		crc_lcb_mode = hfi_port_ltp_to_lcb(dd, crc_enabled);
-		hfi_set_crc_mode(dd, crc_lcb_mode);
+		hfi_set_crc_mode(dd, port, crc_lcb_mode);
 	}
 
 	ls_new = pi->port_states.portphysstate_portstate &

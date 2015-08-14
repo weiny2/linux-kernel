@@ -60,10 +60,12 @@
 #include <linux/bitops.h>
 #include <rdma/fxr/fxr_top_defs.h>
 #include <rdma/fxr/fxr_fast_path_defs.h>
-#include <rdma/fxr/fxr_tx_ci_csrs.h>
-#include <rdma/fxr/fxr_rx_ci_csrs.h>
+#include <rdma/fxr/fxr_tx_ci_cic_csrs.h>
+#include <rdma/fxr/fxr_tx_ci_cid_csrs.h>
+#include <rdma/fxr/fxr_rx_ci_cic_csrs.h>
+#include <rdma/fxr/fxr_rx_ci_cid_csrs.h>
 #include <rdma/fxr/fxr_rx_et_defs.h>
-#include <rdma/fxr/fxr_rx_eq_csrs.h>
+#include <rdma/fxr/fxr_rx_et_csrs.h>
 #include <rdma/fxr/fxr_rx_hiarb_defs.h>
 #include <rdma/fxr/fxr_rx_hiarb_csrs.h>
 #include <rdma/fxr/fxr_rx_hp_defs.h>
@@ -74,6 +76,7 @@
 #include <rdma/fxr/fxr_fc_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs.h>
+#include <rdma/fxr/fxr_tx_otr_msg_top_csrs_defs.h>
 #include <rdma/fxr/fxr_pcim_defs.h>
 #include "opa_hfi.h"
 #include <rdma/opa_core_ib.h>
@@ -103,6 +106,18 @@ static u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 static void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
 	BUG_ON(dd->kregbase[0] == NULL);
+	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
+}
+
+static void write_fc_csr(const struct hfi_devdata *dd, u8 port,
+			 u32 offset, u64 value)
+{
+	if (port == 1)
+		offset += FXR_FZC_LCB0_CSRS;
+	else if (port == 2)
+		offset += FXR_FZC_LCB1_CSRS;
+	else dd_dev_warn(dd, "invalid port");
+
 	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
 }
 
@@ -155,8 +170,12 @@ static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, int mtu)
 	for (i = 0; i < 8; i++)
 		reg |= (val << (i * 4));
 	write_csr(dd, FXR_TXOTR_PKT_CFG_RFS, reg);
-	write_csr(dd, FXR_TXOTR_PKT_CFG_MTU_PT0, reg);
-	write_csr(dd, FXR_TXOTR_PKT_CFG_MTU_PT1, reg);
+#if 0
+	/* Error seen when writing to these registers */
+	/* TODO: These are not implemented in Simics yet */
+	write_csr(dd, FXR_TXOTR_MSG_CFG_MTU_PT0, reg);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_MTU_PT1, reg);
+#endif
 }
 
 static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
@@ -465,17 +484,17 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
 void hfi_sl_to_sc_mc_tc(struct hfi_pportdata *ppd, u8 *sc, u8 *mc, u8 *tc)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u64 reg[4];
+	u64 reg[2];
 	u32 reg_addr;
 	int i, j, k;
 	int nregs = ARRAY_SIZE(reg);
 
 	switch (ppd_to_pnum(ppd)) {
 	case 1:
-		reg_addr = FXR_TXCI_CFG_SL0_TO_TC;
+		reg_addr = FXR_TXCID_CFG_SL0_TO_TC;
 		break;
 	case 2:
-		reg_addr = FXR_TXCI_CFG_SL4_TO_TC;
+		reg_addr = FXR_TXCID_CFG_SL2_TO_TC;
 		break;
 	default:
 		return;
@@ -485,10 +504,8 @@ void hfi_sl_to_sc_mc_tc(struct hfi_pportdata *ppd, u8 *sc, u8 *mc, u8 *tc)
 		reg[i] = read_csr(dd, reg_addr + i * 8);
 
 	for (i = 0, j = 0; i < nregs; i++) {
-		for (k = 0; k < 64; k += 8, j++) {
-			if (sc)
-				hfi_set_bits(&reg[i], sc[j], HFI_SL_TO_SC_MASK,
-						k + HFI_SL_TO_SC_SHIFT);
+		for (k = 0; k < 64; k += 4, j++) {
+			/* FXRTODO: Need to set SL to SC */
 			if (mc)
 				hfi_set_bits(&reg[i], mc[j], HFI_SL_TO_MC_MASK,
 						k + HFI_SL_TO_MC_SHIFT);
@@ -919,9 +936,9 @@ u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp)
 	return lcb_crc;
 }
 
-void hfi_set_crc_mode(struct hfi_devdata *dd, u16 crc_lcb_mode)
+void hfi_set_crc_mode(struct hfi_devdata *dd, u8 port, u16 crc_lcb_mode)
 {
-	write_csr(dd, FC_LCB_CFG_CRC_MODE,
+	write_fc_csr(dd, port, FC_LCB_CFG_CRC_MODE,
 		(u64)crc_lcb_mode << FC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 }
 
@@ -1026,7 +1043,7 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		crc_val = HFI_LCB_CRC_14B;
 		ppd->port_ltp_crc_mode |= hfi_lcb_to_port_ltp(dd, crc_val) <<
 					HFI_LTP_CRC_ACTIVE_SHIFT;
-		hfi_set_crc_mode(dd, crc_val);
+		hfi_set_crc_mode(dd, port, crc_val);
 
 		/*
 		 * Set the default MTU only for VL 15
@@ -1284,7 +1301,7 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	me_le_uh_cache_tag.val = -1;
 	me_le_uh_cache_tag.pid = 0;
 	me_le_uh_cache_access.field.mask_address = me_le_uh_cache_tag.val;
-	write_csr(dd, 0x1410000, me_le_uh_cache_access.val);
+	write_csr(dd, 0x1408000, me_le_uh_cache_access.val);
 
 	/* TODO - above incomplete, deferred processing to wait for .ack bit */
 
@@ -1317,21 +1334,27 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base)
 {
 	u32 head_offset;
-	RXCI_CFG_HEAD_UPDATE_ADDR_t cq_head = {.val = 0};
-	TXCI_CFG_RESET_t tx_cq_reset = {.val = 0};
-	RXCI_CFG_CQ_RESET_t rx_cq_reset = {.val = 0};
+	RXCID_CFG_HEAD_UPDATE_ADDR_t cq_head = {.val = 0};
+	TXCIC_CFG_DRAIN_RESET_t tx_cq_reset = {.val = 0};
+	RXCIC_CFG_CQ_DRAIN_RESET_t rx_cq_reset = {.val = 0};
 
-	head_offset = FXR_RXCI_CFG_HEAD_UPDATE_ADDR + (cq_idx * 8);
+	head_offset = FXR_RXCID_CFG_HEAD_UPDATE_ADDR + (cq_idx * 8);
 
 	/* disable CQ head before reset, as no assigned PASID */
 	write_csr(dd, head_offset, 0);
 
 	/* reset CQ state, as CQ head starts at 0 */
-	tx_cq_reset.field.reset_cq = cq_idx;
-	rx_cq_reset.field.reset_cq = cq_idx;
-	write_csr(dd, FXR_TXCI_CFG_RESET, tx_cq_reset.val);
-	write_csr(dd, FXR_RXCI_CFG_CQ_RESET, rx_cq_reset.val);
-	/* TODO - reset needs async processing to wait for complete */
+	tx_cq_reset.field.drain_cq = cq_idx;
+	tx_cq_reset.field.reset = 1;
+	rx_cq_reset.field.drain_cq = cq_idx;
+	rx_cq_reset.field.reset = 1;
+
+	write_csr(dd, FXR_TXCIC_CFG_DRAIN_RESET, tx_cq_reset.val);
+	write_csr(dd, FXR_RXCIC_CFG_CQ_DRAIN_RESET, rx_cq_reset.val);
+#if 1 /* TODO: should be __SIMICS__ instead of 1 */
+	/* 'reset to zero' is not visible for a few cycles in Simics */
+	mdelay(1);
+#endif
 
 	/* set CQ head, should be set after CQ reset */
 	cq_head.field.valid = 1;
@@ -1347,16 +1370,20 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
  */
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
 {
-	TXCI_CFG_RESET_t tx_cq_reset = {.val = 0};
-	RXCI_CFG_CQ_RESET_t rx_cq_reset = {.val = 0};
+	TXCIC_CFG_DRAIN_RESET_t tx_cq_reset = {.val = 0};
+	RXCIC_CFG_CQ_DRAIN_RESET_t rx_cq_reset = {.val = 0};
 
 	/* reset CQ state, as CQ head starts at 0 */
-	tx_cq_reset.field.reset_cq = cq_idx;
-	rx_cq_reset.field.reset_cq = cq_idx;
-	write_csr(dd, FXR_TXCI_CFG_RESET, tx_cq_reset.val);
-	write_csr(dd, FXR_RXCI_CFG_CQ_RESET, rx_cq_reset.val);
+	tx_cq_reset.field.drain_cq = cq_idx;
+	tx_cq_reset.field.reset = 1;
+	rx_cq_reset.field.drain_cq = cq_idx;
+	rx_cq_reset.field.reset = 1;
+
+	write_csr(dd, FXR_TXCIC_CFG_DRAIN_RESET, tx_cq_reset.val);
+	write_csr(dd, FXR_RXCIC_CFG_CQ_DRAIN_RESET, rx_cq_reset.val);
 #if 1 /* TODO: should be __SIMICS__ instead of 1 */
-	mdelay(1); /* 'reset to zero' is not visible for a few cycles in Simics */
+	/* 'reset to zero' is not visible for a few cycles in Simics */
+	mdelay(1);
 #endif
 }
 
@@ -1366,10 +1393,10 @@ void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 	struct hfi_devdata *dd = ctx->devdata;
 	int i;
 	u32 offset;
-	TXCI_CFG_AUTHENTICATION_CSR_t cq_auth = {.val = 0};
+	TXCID_CFG_AUTHENTICATION_CSR_t cq_auth = {.val = 0};
 
 	/* write AUTH tuples */
-	offset = FXR_TXCI_CFG_AUTHENTICATION_CSR + (cq_idx * HFI_NUM_AUTH_TUPLES * 8);
+	offset = FXR_TXCID_CFG_AUTHENTICATION_CSR + (cq_idx * HFI_NUM_AUTH_TUPLES * 8);
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
 		if (auth_table) {
 			cq_auth.field.USER_ID = auth_table[i].uid;
@@ -1392,8 +1419,8 @@ hfi_update_dlid_relocation_table(struct hfi_ctx *ctx,
 				 struct hfi_dlid_assign_args *dlid_assign)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	TXCI_CFG_DLID_RT_t *p =
-		(TXCI_CFG_DLID_RT_t *)dlid_assign->dlid_entries_ptr;
+	TXCID_CFG_DLID_RT_t *p =
+		(TXCID_CFG_DLID_RT_t *)dlid_assign->dlid_entries_ptr;
 	u32 offset;
 
 	if (dlid_assign->dlid_base >= DLID_TABLE_SIZE)
@@ -1410,7 +1437,7 @@ hfi_update_dlid_relocation_table(struct hfi_ctx *ctx,
 		if (p->field.RPLC_MATCH != 0)
 			return -EINVAL;
 
-		write_csr(dd, FXR_TXCI_CFG_DLID_RT + offset, p->val);
+		write_csr(dd, FXR_TXCID_CFG_DLID_RT + offset, p->val);
 	}
 	return 0;
 }
@@ -1430,10 +1457,10 @@ hfi_reset_dlid_relocation_table(struct hfi_ctx *ctx, u32 dlid_base, u32 count)
 	if (dlid_base + count > DLID_TABLE_SIZE)
 		return -EINVAL;
 
-	for (offset = dlid_base * sizeof(TXCI_CFG_DLID_RT_t);
-		offset < (dlid_base + count) * sizeof(TXCI_CFG_DLID_RT_t);
-		offset += sizeof(TXCI_CFG_DLID_RT_t))
-		write_csr(dd, FXR_TXCI_CFG_DLID_RT + offset, 0);
+	for (offset = dlid_base * sizeof(TXCID_CFG_DLID_RT_t);
+		offset < (dlid_base + count) * sizeof(TXCID_CFG_DLID_RT_t);
+		offset += sizeof(TXCID_CFG_DLID_RT_t))
+		write_csr(dd, FXR_TXCID_CFG_DLID_RT + offset, 0);
 	return 0;
 }
 
@@ -1446,8 +1473,8 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx,
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	u32 offset;
-	TXCI_CFG_CSR_t tx_cq_config = {.val = 0};
-	RXCI_CFG_CNTRL_t rx_cq_config = {.val = 0};
+	TXCID_CFG_CSR_t tx_cq_config = {.val = 0};
+	RXCID_CFG_CNTRL_t rx_cq_config = {.val = 0};
 
 	hfi_cq_config_tuples(ctx, cq_idx, auth_table);
 
@@ -1458,14 +1485,14 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx,
 	tx_cq_config.field.dlid_base = ctx->dlid_base;
 	tx_cq_config.field.phys_dlid = ctx->allow_phys_dlid;
 	tx_cq_config.field.sl_enable = ctx->sl_mask;
-	offset = FXR_TXCI_CFG_CSR + (cq_idx * 8);
+	offset = FXR_TXCID_CFG_CSR + (cq_idx * 8);
 	write_csr(dd, offset, tx_cq_config.val);
 
 	/* set RX CQ config, enable */
 	rx_cq_config.field.enable = 1;
 	rx_cq_config.field.pid = ctx->pid;
 	tx_cq_config.field.priv_level = user_priv;
-	offset = FXR_RXCI_CFG_CNTRL + (cq_idx * 8);
+	offset = FXR_RXCID_CFG_CNTRL + (cq_idx * 8);
 	write_csr(dd, offset, rx_cq_config.val);
 }
 
