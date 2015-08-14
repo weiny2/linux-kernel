@@ -89,6 +89,7 @@ void fill_forward_info(void *forward_buff_page, int verify_ret)
 	memset(forward_buff_page, 0, PAGE_SIZE);
 	info = (struct forward_info *)forward_buff_page;
 	info->sig_verify_ret = verify_ret;
+	info->sig_enforce = sigenforce;
 
 	if (hibernation_keys && !hibernation_keys->hkey_status) {
 		info->hibernation_keys = *hibernation_keys;
@@ -106,9 +107,23 @@ void restore_sig_forward_info(void)
 		return;
 	}
 
-	if (forward_buff->sig_verify_ret)
-		pr_warn("PM: Signature verifying failed: %d\n",
+	sigenforce = forward_buff->sig_enforce;
+	if (sigenforce)
+		pr_info("PM: Enforce hibernate signature verifying\n");
+
+	if (forward_buff->sig_verify_ret) {
+		pr_warn("PM: Hibernate signature verifying failed: %d\n",
 			forward_buff->sig_verify_ret);
+
+		/* taint kernel */
+		if (!sigenforce) {
+			pr_warn("PM: System restored from unsafe snapshot - "
+				"tainting kernel\n");
+			add_taint(TAINT_UNSAFE_HIBERNATE, LOCKDEP_STILL_OK);
+			pr_info("%s\n", print_tainted());
+		}
+	} else
+		pr_info("PM: Signature verifying pass\n");
 
 	if (hibernation_keys) {
 		memset(hibernation_keys, 0, PAGE_SIZE);

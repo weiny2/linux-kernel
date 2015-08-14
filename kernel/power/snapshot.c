@@ -1487,7 +1487,11 @@ error_digest:
 forward_ret:
 	if (ret)
 		pr_warn("PM: Signature verifying failed: %d\n", ret);
-	snapshot_fill_sig_forward_info(ret);
+	/* forward check result when verifying pass or not enforce verifying */
+	if (!ret || !sigenforce) {
+		snapshot_fill_sig_forward_info(ret);
+		ret = 0;
+	}
 	return ret;
 }
 

@@ -42,6 +42,11 @@ static char resume_file[256] = CONFIG_PM_STD_PARTITION;
 dev_t swsusp_resume_device;
 sector_t swsusp_resume_block;
 __visible int in_suspend __nosavedata;
+#ifdef CONFIG_HIBERNATE_VERIFICATION_FORCE
+int sigenforce = 1;
+#else
+int sigenforce;
+#endif
 
 enum {
 	HIBERNATION_INVALID,
@@ -1110,6 +1115,8 @@ static int __init hibernate_setup(char *str)
 		noresume = 1;
 	else if (!strncmp(str, "nocompress", 10))
 		nocompress = 1;
+	else if (!strncmp(str, "sigenforce", 10))
+		sigenforce = 1;
 	return 1;
 }
 

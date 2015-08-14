@@ -79,6 +79,14 @@ config HIBERNATE_VERIFICATION
 	  relies on UEFI secure boot environment, EFI stub generates HMAC
 	  key for hibernate verification.
 
+config HIBERNATE_VERIFICATION_FORCE
+	bool "Require hibernate snapshot image to be validly signed"
+	depends on HIBERNATE_VERIFICATION
+	help
+	  Reject hibernate resuming from unsigned snapshot image or signed
+	  snapshot image for which we don't have a key. Without this, such
+	  snapshot image will simply taint the kernel when resuming.
+
 config ARCH_SAVE_PAGE_KEYS
 	bool
 
