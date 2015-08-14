@@ -945,4 +945,6 @@ static inline int efi_runtime_map_copy(void *buf, size_t bufsz)
 
 #endif
 
+void efi_printk(efi_system_table_t *sys_table_arg, char *str);
+
 #endif /* _LINUX_EFI_H */
