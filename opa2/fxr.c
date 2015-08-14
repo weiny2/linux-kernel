@@ -653,11 +653,22 @@ void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
 
 u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd)
 {
+	u32 pstate;
+
 	/*
 	 * FXRTODO: To be implemented as part of LNI
-	 * for now return as disabled
+	 * read from CSR. For now fake it with
+	 * equivalent linkstate set earlier
 	 */
-	return IB_PORTPHYSSTATE_DISABLED;
+	switch(ppd->lstate) {
+	case IB_PORT_DOWN:
+		pstate =  IB_PORTPHYSSTATE_DISABLED;
+		break;
+	default:
+		pstate = IB_PORTPHYSSTATE_LINKUP;
+	}
+
+	return pstate;
 }
 
 void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
@@ -673,7 +684,36 @@ void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
  */
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 {
-	/* FXRTODO: To be implemented as part of LNI */
+	/*
+	 * FXRTODO: To be implemented as part of LNI
+	 * for now this simple state machine logic
+	 * should work fine
+	 */
+	switch (state) {
+	case HLS_DN_DISABLE:
+	case HLS_DN_DOWNDEF:
+		ppd->lstate = IB_PORT_DOWN;
+		break;
+	case HLS_DN_POLL:
+		/*
+		 * FXRTODO: Fake the transition from
+		 * POLL to INIT here by directly setting
+		 * the link state to INIT until we
+		 * have LNI in place.
+		 */
+	case HLS_UP_INIT:
+		ppd->lstate = IB_PORT_INIT;
+		break;
+	case HLS_UP_ARMED:
+		ppd->lstate = IB_PORT_ARMED;
+		break;
+	case HLS_UP_ACTIVE:
+		ppd->lstate = IB_PORT_ACTIVE;
+		break;
+	default:
+		ppd->lstate = IB_PORT_INIT;
+	}
+
 	return -EINVAL;
 }
 
@@ -960,6 +1000,11 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
 		ppd->lstate = IB_PORT_DOWN;
 		mutex_init(&ppd->hls_lock);
+		/*
+		 * FXRTODO: Until LNI is implemented. Let this
+		 * be IB_PORT_INIT
+		 */
+		ppd->lstate = IB_PORT_INIT;
 
 		/*
 		 * FXRTODO: The below 4 variables
