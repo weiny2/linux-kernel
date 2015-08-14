@@ -59,13 +59,14 @@
 #ifdef CONFIG_DEBUG_FS
 static struct dentry *hfi_dbg_root;
 
-#define DEBUGFS_SEQ_FILE(name) \
+#define DEBUGFS_SEQ_FILE_OPS(name) \
 static const struct seq_operations _##name##_seq_ops = { \
 	.start = _##name##_seq_start, \
 	.next  = _##name##_seq_next, \
 	.stop  = _##name##_seq_stop, \
 	.show  = _##name##_seq_show \
-}; \
+}
+#define DEBUGFS_SEQ_FILE_OPEN(name) \
 static int _##name##_open(struct inode *inode, struct file *s) \
 { \
 	struct seq_file *seq; \
@@ -76,7 +77,9 @@ static int _##name##_open(struct inode *inode, struct file *s) \
 	seq = s->private_data; \
 	seq->private = inode->i_private; \
 	return 0; \
-} \
+}
+
+#define DEBUGFS_FILE_OPS(name) \
 static const struct file_operations _##name##_file_ops = { \
 	.owner   = THIS_MODULE, \
 	.open    = _##name##_open, \
@@ -85,10 +88,10 @@ static const struct file_operations _##name##_file_ops = { \
 	.release = seq_release \
 }
 
-#define DEBUGFS_FILE_CREATE(name, parent, data, ops) \
+#define DEBUGFS_FILE_CREATE(name, parent, data, ops, mode)	\
 do { \
 	struct dentry *ent; \
-	ent = debugfs_create_file(name , 0400, parent, \
+	ent = debugfs_create_file(name, mode, parent, \
 		data, ops); \
 	if (!ent) \
 		pr_warn("create of %s failed\n", name); \
@@ -96,7 +99,7 @@ do { \
 
 
 #define DEBUGFS_SEQ_FILE_CREATE(name, parent, data) \
-	DEBUGFS_FILE_CREATE(#name, parent, data, &_##name##_file_ops)
+	DEBUGFS_FILE_CREATE(#name, parent, data, &_##name##_file_ops, S_IRUGO)
 #endif
 
 void hfi_dbg_init(struct hfi_devdata *dd)
