@@ -12,6 +12,9 @@
 #include "misc.h"
 #include "../string.h"
 
+#include <generated/compile.h>
+#include <generated/utsrelease.h>
+
 /* WARNING!!
  * This code is compiled with -fPIC and it is relocated dynamically
  * at run time, but no relocation processing is performed.
@@ -415,3 +418,54 @@ asmlinkage void decompress_kernel(void *rmode, memptr heap,
 	debug_putstr("done.\nBooting the kernel.\n");
 	return;
 }
+
+#if CONFIG_HIBERNATE_VERIFICATION || CONFIG_RANDOMIZE_BASE
+#define I8254_PORT_CONTROL     0x43
+#define I8254_PORT_COUNTER0    0x40
+#define I8254_CMD_READBACK     0xC0
+#define I8254_SELECT_COUNTER0  0x02
+#define I8254_STATUS_NOTREADY  0x40
+u16 read_i8254(void)
+{
+       u16 status, timer;
+
+       do {
+               outb(I8254_PORT_CONTROL,
+                    I8254_CMD_READBACK | I8254_SELECT_COUNTER0);
+               status = inb(I8254_PORT_COUNTER0);
+               timer  = inb(I8254_PORT_COUNTER0);
+               timer |= inb(I8254_PORT_COUNTER0) << 8;
+       } while (status & I8254_STATUS_NOTREADY);
+
+       return timer;
+}
+
+static unsigned long rotate_xor(unsigned long hash, const void *area,
+				size_t size)
+{
+	size_t i;
+	unsigned long *ptr = (unsigned long *)area;
+
+	for (i = 0; i < size / sizeof(hash); i++) {
+		/* Rotate by odd number of bits and XOR. */
+		hash = (hash << ((sizeof(hash) * 8) - 7)) | (hash >> 7);
+		hash ^= ptr[i];
+	}
+
+	return hash;
+}
+
+static const char build_str[] = UTS_RELEASE " (" LINUX_COMPILE_BY "@"
+		LINUX_COMPILE_HOST ") (" LINUX_COMPILER ") " UTS_VERSION;
+
+/* Attempt to create a simple but unpredictable starting entropy. */
+unsigned long get_random_boot(struct boot_params *boot_params)
+{
+	unsigned long hash = 0;
+
+	hash = rotate_xor(hash, build_str, sizeof(build_str));
+	hash = rotate_xor(hash, boot_params, sizeof(*boot_params));
+
+	return hash;
+}
+#endif /* CONFIG_HIBERNATE_VERIFICATION || CONFIG_RANDOMIZE_BASE */

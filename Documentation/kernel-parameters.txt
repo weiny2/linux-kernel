@@ -2904,6 +2904,11 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 		noresume	Don't check if there's a hibernation image
 				present during boot.
 		nocompress	Don't compress/decompress hibernation images.
+		sigenforce      When CONFIG_HIBERNATE_VERIFICATION is set, this
+				menas that snapshot image without (valid)
+				signature will fail to restore. Note that if
+				HIBERNATE_VERIFICATION_FORCE is set, that is
+				always true, so this option does nothing.
 
 	retain_initrd	[RAM] Keep initrd memory after extraction
 
