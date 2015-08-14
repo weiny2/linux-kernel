@@ -47,6 +47,21 @@ int get_hibernation_key(u8 **hkey)
 	return hibernation_keys->hkey_status;
 }
 
+
+bool swsusp_page_is_keys(struct page *page)
+{
+	bool ret = false;
+
+	if (!hibernation_keys || hibernation_keys->hkey_status)
+		return ret;
+
+	ret = (page_to_pfn(page) == page_to_pfn(virt_to_page(hibernation_keys)));
+	if (ret)
+		pr_info("PM: Avoid snapshot the page of hibernation key.\n");
+
+	return ret;
+}
+
 static int __init init_hibernation_keys(void)
 {
 	struct hibernation_keys *keys;
