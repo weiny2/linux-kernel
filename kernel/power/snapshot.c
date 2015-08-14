@@ -1299,6 +1299,14 @@ static unsigned int nr_copy_pages;
  */
 static u8 signature[HIBERNATION_DIGEST_SIZE];
 
+/*
+ * Keep the pfn of forwarding information buffer from resume target.
+ * Writing hibernation keys to this buffer in snapshot image before restoring.
+ */
+unsigned long forward_buff_pfn;
+
+void *forward_buff;
+
 /* Buffer point array for collecting address of page buffers */
 void **h_buf;
 
@@ -1401,13 +1409,24 @@ error_key:
 	return ret;
 }
 
+static void snapshot_fill_sig_forward_info(int verify_ret)
+{
+	if (!forward_buff_pfn || !forward_buff) {
+		pr_err("PM: Did not find forward buffer\n");
+		return;
+	}
+
+	/* Fill hibernation keys to snapshot in memory for next round */
+	fill_forward_info(forward_buff, verify_ret);
+}
+
 int snapshot_image_verify(void)
 {
 	struct crypto_shash *tfm;
 	struct shash_desc *desc;
 	u8 *key, *digest;
 	size_t digest_size, desc_size;
-	int ret, i;
+	int i, ret = 0;
 
 	if (!h_buf)
 		return 0;
@@ -1468,6 +1487,7 @@ error_digest:
 forward_ret:
 	if (ret)
 		pr_warn("PM: Signature verifying failed: %d\n", ret);
+	snapshot_fill_sig_forward_info(ret);
 	return ret;
 }
 
@@ -2141,6 +2161,7 @@ static int init_header(struct swsusp_info *info)
 	info->pages = snapshot_get_image_size();
 	info->size = info->pages;
 	info->size <<= PAGE_SHIFT;
+	info->forward_buff_pfn = get_forward_buff_pfn();
 	memcpy(info->signature, signature, HIBERNATION_DIGEST_SIZE);
 	return init_header_complete(info);
 }
@@ -2304,6 +2325,7 @@ load_header(struct swsusp_info *info)
 	if (!error) {
 		nr_copy_pages = info->image_pages;
 		nr_meta_pages = info->pages - info->image_pages - 1;
+		forward_buff_pfn = info->forward_buff_pfn;
 		memset(signature, 0, HIBERNATION_DIGEST_SIZE);
 		memcpy(signature, info->signature, HIBERNATION_DIGEST_SIZE);
 	}
@@ -2774,6 +2796,9 @@ int snapshot_write_next(struct snapshot_handle *handle)
 			handle->sync_read = 0;
 		if (h_buf)
 			*(h_buf + (handle->cur - nr_meta_pages - 1)) = handle->buffer;
+		/* Keep the buffer of hibernation keys in snapshot */
+		if (forward_buff_pfn && pfn == forward_buff_pfn)
+			forward_buff = handle->buffer;
 	}
 	handle->cur++;
 	return PAGE_SIZE;

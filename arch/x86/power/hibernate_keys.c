@@ -19,6 +19,15 @@ static u64 keys_phys_addr;
 /* A page used to keep hibernation keys */
 static struct hibernation_keys *hibernation_keys;
 
+/* Forward information and keys from boot kernel to image kernel */
+struct forward_info {
+	bool            sig_enforce;
+	int             sig_verify_ret;
+	struct hibernation_keys hibernation_keys;
+};
+
+static struct forward_info *forward_buff;
+
 void __init parse_hibernation_keys(u64 phys_addr, u32 data_len)
 {
 	struct setup_data *hibernation_setup_data;
@@ -62,6 +71,55 @@ bool swsusp_page_is_keys(struct page *page)
 	return ret;
 }
 
+unsigned long get_forward_buff_pfn(void)
+{
+	if (!forward_buff)
+		return 0;
+
+	return page_to_pfn(virt_to_page(forward_buff));
+}
+
+void fill_forward_info(void *forward_buff_page, int verify_ret)
+{
+	struct forward_info *info;
+
+	if (!forward_buff_page)
+		return;
+
+	memset(forward_buff_page, 0, PAGE_SIZE);
+	info = (struct forward_info *)forward_buff_page;
+	info->sig_verify_ret = verify_ret;
+
+	if (hibernation_keys && !hibernation_keys->hkey_status) {
+		info->hibernation_keys = *hibernation_keys;
+		memset(hibernation_keys, 0, PAGE_SIZE);
+	} else
+		pr_info("PM: Fill hibernation keys failed\n");
+
+	pr_info("PM: Filled sign information to forward buffer\n");
+}
+
+void restore_sig_forward_info(void)
+{
+	if (!forward_buff) {
+		pr_warn("PM: Did not allocate forward buffer\n");
+		return;
+	}
+
+	if (forward_buff->sig_verify_ret)
+		pr_warn("PM: Signature verifying failed: %d\n",
+			forward_buff->sig_verify_ret);
+
+	if (hibernation_keys) {
+		memset(hibernation_keys, 0, PAGE_SIZE);
+		*hibernation_keys = forward_buff->hibernation_keys;
+		pr_info("PM: Restored hibernation keys\n");
+	}
+
+	/* clean forward information buffer for next round */
+	memset(forward_buff, 0, PAGE_SIZE);
+}
+
 static int __init init_hibernation_keys(void)
 {
 	struct hibernation_keys *keys;
@@ -76,6 +134,11 @@ static int __init init_hibernation_keys(void)
 	hibernation_keys = (struct hibernation_keys *)get_zeroed_page(GFP_KERNEL);
 	if (hibernation_keys) {
 		*hibernation_keys = *keys;
+		forward_buff = (struct forward_info *)get_zeroed_page(GFP_KERNEL);
+		if (!forward_buff) {
+			pr_err("PM: Allocate forward buffer failed\n");
+			ret = -ENOMEM;
+		}
 	} else {
 		pr_err("PM: Allocate hibernation keys page failed\n");
 		ret = -ENOMEM;

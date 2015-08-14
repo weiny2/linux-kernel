@@ -243,6 +243,7 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		if (!data->frozen || data->ready)
 			break;
 		pm_restore_gfp_mask();
+		restore_sig_forward_info();
 		free_basic_memory_bitmaps();
 		data->free_bitmaps = false;
 		thaw_processes();
