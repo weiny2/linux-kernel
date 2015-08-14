@@ -302,6 +302,11 @@ struct platform_hibernation_ops {
 };
 
 #ifdef CONFIG_HIBERNATION
+
+/* HMAC Algorithm of Hibernate Signature */
+#define HIBERNATION_HMAC	"hmac(sha1)"
+#define HIBERNATION_DIGEST_SIZE	20
+
 /* kernel/power/snapshot.c */
 extern void __register_nosave_region(unsigned long b, unsigned long e, int km);
 static inline void __init register_nosave_region(unsigned long b, unsigned long e)
