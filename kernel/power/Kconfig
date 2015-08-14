@@ -71,6 +71,7 @@ config HIBERNATE_VERIFICATION
 	depends on HIBERNATION
 	depends on EFI_STUB
 	depends on X86
+	select EFI_HIBERNATION_KEYS
 	select CRYPTO_HMAC
 	select CRYPTO_SHA1
 	help

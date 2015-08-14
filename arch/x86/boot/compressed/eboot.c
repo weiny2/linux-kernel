@@ -844,10 +844,12 @@ static void setup_hibernation_keys(struct boot_params *params)
 {
 	unsigned long key_size;
 	unsigned long attributes;
+	unsigned long ignore;
 	struct setup_data *setup_data, *hibernation_setup_data;
 	struct hibernation_keys *keys;
+	bool regen_key = false;
 	unsigned long size = 0;
-	efi_status_t status;
+	efi_status_t status, reg_status;
 
 	/* Allocate setup_data to carry keys */
 	size = sizeof(struct setup_data) + sizeof(struct hibernation_keys);
@@ -877,12 +879,18 @@ static void setup_hibernation_keys(struct boot_params *params)
 			goto clean_fail;
 	}
 
-	if (status != EFI_SUCCESS) {
-		efi_printk(sys_table, "Failed to get existing hibernation key\n");
+	reg_status = efi_call_phys5(sys_table->runtime->get_variable,
+				    HIBERNATION_KEY_REGEN_FLAG,
+				    &EFI_HIBERNATION_GUID, &attributes, &ignore,
+				    &regen_key);
+	if ((status != EFI_SUCCESS) ||
+	   (reg_status == EFI_SUCCESS && regen_key)) {
+		efi_printk(sys_table, "Regenerating hibernation key\n");
 
 		efi_get_random_key(sys_table, params, keys->hibernation_key,
 				   HIBERNATION_DIGEST_SIZE);
 
+		/* Set new hibernation key to bootservice non-volatile variable */
 		status = efi_call_phys5(sys_table->runtime->set_variable,
 					HIBERNATION_KEY, &EFI_HIBERNATION_GUID,
 					HIBERNATION_KEY_ATTRIBUTE,
@@ -890,6 +898,15 @@ static void setup_hibernation_keys(struct boot_params *params)
 					keys->hibernation_key);
 		if (status != EFI_SUCCESS)
 			efi_printk(sys_table, "Failed to set hibernation key\n");
+
+		efi_call_phys5(sys_table->runtime->get_variable,
+				HIBERNATION_KEY, &EFI_HIBERNATION_GUID,
+				&attributes, &key_size, keys->hibernation_key);
+
+		/* Clean key regenerate flag */
+		efi_call_phys5(sys_table->runtime->set_variable,
+				HIBERNATION_KEY_REGEN_FLAG,
+				&EFI_HIBERNATION_GUID, 0, 0, NULL);
 	}
 
 clean_fail:

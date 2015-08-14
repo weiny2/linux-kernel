@@ -645,6 +645,8 @@ int hibernate(void)
 {
 	int error;
 
+	set_hibernation_key_regen_flag = false;
+
 	if (secure_modules()) {
 		return -EPERM;
 	}

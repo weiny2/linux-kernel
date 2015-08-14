@@ -165,6 +165,8 @@ static int __init init_hibernation_keys(void)
 	memblock_free(keys_phys_addr, sizeof(struct hibernation_keys));
 	keys_phys_addr = 0;
 
+	set_hibernation_key_regen_flag = false;
+
 	return ret;
 }
 
