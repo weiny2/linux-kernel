@@ -17,6 +17,9 @@ void create_hibernation_key_regen_flag(void)
 	struct efivar_entry *entry = NULL;
 	int err = 0;
 
+	if (!efi_enabled(EFI_RUNTIME_SERVICES))
+		return;
+
 	if (!set_hibernation_key_regen_flag)
 		return;
 

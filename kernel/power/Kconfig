@@ -78,7 +78,8 @@ config HIBERNATE_VERIFICATION
 	  This option provides support for generating and verifying the
 	  signature of memory snapshot image by HMAC-SHA1. Current mechanism
 	  relies on UEFI secure boot environment, EFI stub generates HMAC
-	  key for hibernate verification.
+	  key for hibernate verification. So, the verification logic will be
+	  bypassed on legacy BIOS.
 
 config HIBERNATE_VERIFICATION_FORCE
 	bool "Require hibernate snapshot image to be validly signed"
