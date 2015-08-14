@@ -144,7 +144,7 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	pi->vl.cap = ppd->vls_supported;
 	/* VL Arbitration table doesn't exist for FXR */
 
-	pi->mtucap = (u8)HFI_DEFAULT_MAX_MTU;
+	pi->mtucap = opa_mtu_to_enum(HFI_DEFAULT_MAX_MTU);
 	pi->port_ltp_crc_mode = cpu_to_be16(ppd->port_ltp_crc_mode);
 	pi->port_states.portphysstate_portstate =
 		(hfi_ibphys_portstate(ppd) << PHYSPORTSTATE_SHIFT) | lstate;
