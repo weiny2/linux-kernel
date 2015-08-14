@@ -54,6 +54,7 @@
 #include <linux/interrupt.h>
 #include <linux/log2.h>
 #include <linux/sched.h>
+#include <linux/delay.h>
 #include <rdma/opa_core.h>
 #include <rdma/hfi_eq.h>
 #include "opa_hfi.h"
@@ -448,7 +449,7 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	/* set EQ descriptor in host memory */
 	eq_desc.val[1] = 0; /* clear head/tail */
 	eq_desc.order = order;
-	eq_desc.start = (eq_assign->base >> 6);
+	eq_desc.start = (eq_assign->base >> 12);
 	eq_desc.ni = eq_assign->ni;
 	eq_desc.irq = msix_idx;
 	eq_desc.i = (eq_assign->mode & OPA_EV_MODE_BLOCKING);
@@ -471,6 +472,8 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		idr_remove(&ctx->eq_used, eq_idx);
 		goto idr_end;
 	}
+	/* FXRTODO: Ensure the command above has completed by polling EQ 0 */
+	mdelay(1);
 
 	 /* return index to user */
 	eq_assign->ev_idx = eq_idx;
@@ -577,6 +580,8 @@ static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx, u64 user_data)
 		/* TODO - revisit how to handle waiting for CQ slots */
 		goto idr_end;
 	}
+	/* FXRTODO: Ensure the command above has completed by polling EQ 0 */
+	mdelay(1);
 
 	eq_desc_base[eq_idx].val[0] = 0; /* clear valid */
 

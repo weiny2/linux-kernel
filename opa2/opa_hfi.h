@@ -138,12 +138,10 @@ enum {
 #define HFI_PKEY_MEMBER_TYPE(pkey)	(((pkey) >> HFI_PKEY_MEMBER_SHIFT) & \
 					HFI_PKEY_MEMBER_MASK)
 
-#define HFI_SL_TO_SC_SHIFT	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_SC_SHIFT
-#define HFI_SL_TO_SC_MASK	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_SC_MASK
-#define HFI_SL_TO_MC_SHIFT	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_MC_SHIFT
-#define HFI_SL_TO_MC_MASK	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_MC_MASK
-#define HFI_SL_TO_TC_SHIFT	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_TC_SHIFT
-#define HFI_SL_TO_TC_MASK	FXR_TXCI_CFG_SL0_TO_TC_SL0_P0_TC_MASK
+#define HFI_SL_TO_MC_SHIFT	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_MC_SHIFT
+#define HFI_SL_TO_MC_MASK	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_MC_MASK
+#define HFI_SL_TO_TC_SHIFT	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_SHIFT
+#define HFI_SL_TO_TC_MASK	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK
 
 /*
  * HFI or Host Link States
@@ -594,7 +592,7 @@ int hfi_set_mtu(struct hfi_pportdata *ppd);
 u16 hfi_port_ltp_to_cap(u16 port_ltp);
 u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp);
 u16 hfi_cap_to_port_ltp(u16 cap);
-void hfi_set_crc_mode(struct hfi_devdata *dd, u16 crc_lcb_mode);
+void hfi_set_crc_mode(struct hfi_devdata *dd, u8 port, u16 crc_lcb_mode);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
