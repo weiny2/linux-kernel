@@ -1069,6 +1069,12 @@ static int pin_vector_pages(struct user_sdma_request *req,
 	/* If called by the kernel thread, use the user's mm */
 	if (current->flags & PF_KTHREAD)
 		use_mm(req->user_proc->mm);
+	/*
+	 * We should be calling hfi1_acquire_user_pages() so we can keep
+	 * the number of pinned pages up-to-date. However, we can't do
+	 * that because we can't use hfi1_release_user_pages() (see
+	 * comment in unpin_vector_pages()).
+	 */
 	pinned = get_user_pages_fast(
 		(unsigned long)iovec->iov.iov_base,
 		iovec->npages, 0, iovec->pages);
@@ -1098,6 +1104,13 @@ static void unpin_vector_pages(struct user_sdma_iovec *iovec)
 			  iovec->offset, iovec->iov.iov_len);
 		return;
 	}
+	/*
+	 * We should be calling hfi1_release_user_pages() so we can keep
+	 * the number of pinned pages up-to-date. However, this function
+	 * can be called in IRQ context and this will cause a deadlock
+	 * because hfi1_release_user_pages() takes the mm semaphore,
+	 * (which sleeps).
+	 */
 	for (i = 0; i < iovec->npages; i++)
 		if (iovec->pages[i])
 			put_page(iovec->pages[i]);
