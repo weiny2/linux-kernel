@@ -270,6 +270,10 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 			error = -EPERM;
 			break;
 		}
+		if (snapshot_image_verify()) {
+			error = -EPERM;
+			break;
+		}
 		error = hibernation_restore(data->platform_support);
 		break;
 

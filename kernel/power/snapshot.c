@@ -34,6 +34,8 @@
 #include <asm/tlbflush.h>
 #include <asm/io.h>
 
+#include <crypto/hash.h>
+
 #include "power.h"
 
 static int swsusp_page_is_free(struct page *);
@@ -1283,7 +1285,214 @@ static inline void copy_data_page(unsigned long dst_pfn, unsigned long src_pfn)
 }
 #endif /* CONFIG_HIGHMEM */
 
-static void
+/* Total number of image pages */
+static unsigned int nr_copy_pages;
+
+/*
+ * Signature of snapshot
+ */
+static u8 signature[HIBERNATION_DIGEST_SIZE];
+
+/* Buffer point array for collecting address of page buffers */
+void **h_buf;
+
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+static int
+__copy_data_pages(struct memory_bitmap *copy_bm, struct memory_bitmap *orig_bm)
+{
+	unsigned long pfn, dst_pfn;
+	struct page *d_page;
+	void *hash_buffer = NULL;
+	struct crypto_shash *tfm = NULL;
+	struct shash_desc *desc = NULL;
+	u8 *key = NULL, *digest = NULL;
+	size_t digest_size, desc_size;
+	int key_err = 0, ret = 0;
+
+	key_err = get_hibernation_key(&key);
+	if (key_err)
+		goto copy_pages;
+
+	tfm = crypto_alloc_shash(HIBERNATION_HMAC, 0, 0);
+	if (IS_ERR(tfm)) {
+		pr_err("PM: Allocate HMAC failed: %ld\n", PTR_ERR(tfm));
+		return PTR_ERR(tfm);
+	}
+
+	ret = crypto_shash_setkey(tfm, key, HIBERNATION_DIGEST_SIZE);
+	if (ret) {
+		pr_err("PM: Set HMAC key failed\n");
+		goto error_setkey;
+	}
+
+	desc_size = crypto_shash_descsize(tfm) + sizeof(*desc);
+	digest_size = crypto_shash_digestsize(tfm);
+	digest = kzalloc(digest_size + desc_size, GFP_KERNEL);
+	if (!digest) {
+		pr_err("PM: Allocate digest failed\n");
+		ret = -ENOMEM;
+		goto error_digest;
+	}
+
+	desc = (void *) digest + digest_size;
+	desc->tfm = tfm;
+	desc->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
+	ret = crypto_shash_init(desc);
+	if (ret < 0)
+		goto error_shash;
+
+copy_pages:
+	memory_bm_position_reset(orig_bm);
+	memory_bm_position_reset(copy_bm);
+	for (;;) {
+		pfn = memory_bm_next_pfn(orig_bm);
+		if (unlikely(pfn == BM_END_OF_MAP))
+			break;
+		dst_pfn = memory_bm_next_pfn(copy_bm);
+		copy_data_page(dst_pfn, pfn);
+
+		/* Generate digest */
+		d_page = pfn_to_page(dst_pfn);
+		if (PageHighMem(d_page)) {
+			void *kaddr = kmap_atomic(d_page);
+
+			copy_page(buffer, kaddr);
+			kunmap_atomic(kaddr);
+			hash_buffer = buffer;
+		} else {
+			hash_buffer = page_address(d_page);
+		}
+
+		if (key_err)
+			continue;
+
+		ret = crypto_shash_update(desc, hash_buffer, PAGE_SIZE);
+		if (ret)
+			goto error_shash;
+	}
+
+	if (key_err)
+		goto error_key;
+
+	ret = crypto_shash_final(desc, digest);
+	if (ret)
+		goto error_shash;
+
+	memset(signature, 0, HIBERNATION_DIGEST_SIZE);
+	memcpy(signature, digest, HIBERNATION_DIGEST_SIZE);
+
+	kfree(digest);
+	crypto_free_shash(tfm);
+
+	return 0;
+
+error_shash:
+	kfree(digest);
+error_setkey:
+error_digest:
+	crypto_free_shash(tfm);
+error_key:
+	return ret;
+}
+
+int snapshot_image_verify(void)
+{
+	struct crypto_shash *tfm;
+	struct shash_desc *desc;
+	u8 *key, *digest;
+	size_t digest_size, desc_size;
+	int ret, i;
+
+	if (!h_buf)
+		return 0;
+
+	ret = get_hibernation_key(&key);
+	if (ret)
+		goto forward_ret;
+
+	tfm = crypto_alloc_shash(HIBERNATION_HMAC, 0, 0);
+	if (IS_ERR(tfm)) {
+		pr_err("PM: Allocate HMAC failed: %ld\n", PTR_ERR(tfm));
+		return PTR_ERR(tfm);
+	}
+
+	ret = crypto_shash_setkey(tfm, key, HIBERNATION_DIGEST_SIZE);
+	if (ret) {
+		pr_err("PM: Set HMAC key failed\n");
+		goto error_setkey;
+	}
+
+	desc_size = crypto_shash_descsize(tfm) + sizeof(*desc);
+	digest_size = crypto_shash_digestsize(tfm);
+	digest = kzalloc(digest_size + desc_size, GFP_KERNEL);
+	if (!digest) {
+		pr_err("PM: Allocate digest failed\n");
+		ret = -ENOMEM;
+		goto error_digest;
+	}
+	desc = (void *) digest + digest_size;
+	desc->tfm = tfm;
+	desc->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
+
+	ret = crypto_shash_init(desc);
+	if (ret < 0)
+		goto error_shash;
+
+	for (i = 0; i < nr_copy_pages; i++) {
+		ret = crypto_shash_update(desc, *(h_buf + i), PAGE_SIZE);
+		if (ret)
+			goto error_shash;
+	}
+
+	ret = crypto_shash_final(desc, digest);
+	if (ret)
+		goto error_shash;
+
+	pr_debug("PM: Signature %*phN\n", HIBERNATION_DIGEST_SIZE, signature);
+	pr_debug("PM: Digest %*phN\n", (int) digest_size, digest);
+	if (memcmp(signature, digest, HIBERNATION_DIGEST_SIZE))
+		ret = -EKEYREJECTED;
+
+error_shash:
+	kfree(h_buf);
+	kfree(digest);
+error_setkey:
+error_digest:
+	crypto_free_shash(tfm);
+forward_ret:
+	if (ret)
+		pr_warn("PM: Signature verifying failed: %d\n", ret);
+	return ret;
+}
+
+static void alloc_h_buf(void)
+{
+	h_buf = kmalloc(sizeof(void *) * nr_copy_pages, GFP_KERNEL);
+	if (!h_buf)
+		pr_err("PM: Allocate buffer point array failed\n");
+}
+#else
+static int
+__copy_data_pages(struct memory_bitmap *copy_bm, struct memory_bitmap *orig_bm)
+{
+	unsigned long pfn;
+
+	memory_bm_position_reset(orig_bm);
+	memory_bm_position_reset(copy_bm);
+	for (;;) {
+		pfn = memory_bm_next_pfn(orig_bm);
+		if (unlikely(pfn == BM_END_OF_MAP))
+			break;
+		copy_data_page(memory_bm_next_pfn(copy_bm), pfn);
+	}
+
+	return 0;
+}
+
+static inline void alloc_h_buf(void) {}
+#endif /* CONFIG_HIBERNATE_VERIFICATION */
+
+static int
 copy_data_pages(struct memory_bitmap *copy_bm, struct memory_bitmap *orig_bm)
 {
 	struct zone *zone;
@@ -1298,18 +1507,10 @@ copy_data_pages(struct memory_bitmap *copy_bm, struct memory_bitmap *orig_bm)
 			if (page_is_saveable(zone, pfn))
 				memory_bm_set_bit(orig_bm, pfn);
 	}
-	memory_bm_position_reset(orig_bm);
-	memory_bm_position_reset(copy_bm);
-	for(;;) {
-		pfn = memory_bm_next_pfn(orig_bm);
-		if (unlikely(pfn == BM_END_OF_MAP))
-			break;
-		copy_data_page(memory_bm_next_pfn(copy_bm), pfn);
-	}
+
+	return __copy_data_pages(copy_bm, orig_bm);
 }
 
-/* Total number of image pages */
-static unsigned int nr_copy_pages;
 /* Number of pages needed for saving the original pfns of the image pages */
 static unsigned int nr_meta_pages;
 /*
@@ -1852,6 +2053,7 @@ swsusp_alloc(struct memory_bitmap *orig_bm, struct memory_bitmap *copy_bm,
 asmlinkage int swsusp_save(void)
 {
 	unsigned int nr_pages, nr_highmem;
+	int ret;
 
 	printk(KERN_INFO "PM: Creating hibernation image:\n");
 
@@ -1874,7 +2076,11 @@ asmlinkage int swsusp_save(void)
 	 * Kill them.
 	 */
 	drain_local_pages(NULL);
-	copy_data_pages(&copy_bm, &orig_bm);
+	ret = copy_data_pages(&copy_bm, &orig_bm);
+	if (ret) {
+		pr_err("PM: Copy data pages failed\n");
+		return ret;
+	}
 
 	/*
 	 * End of critical section. From now on, we can write to memory,
@@ -1929,6 +2135,7 @@ static int init_header(struct swsusp_info *info)
 	info->pages = snapshot_get_image_size();
 	info->size = info->pages;
 	info->size <<= PAGE_SHIFT;
+	memcpy(info->signature, signature, HIBERNATION_DIGEST_SIZE);
 	return init_header_complete(info);
 }
 
@@ -2091,6 +2298,8 @@ load_header(struct swsusp_info *info)
 	if (!error) {
 		nr_copy_pages = info->image_pages;
 		nr_meta_pages = info->pages - info->image_pages - 1;
+		memset(signature, 0, HIBERNATION_DIGEST_SIZE);
+		memcpy(signature, info->signature, HIBERNATION_DIGEST_SIZE);
 	}
 	return error;
 }
@@ -2431,7 +2640,8 @@ prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm)
  *	set for its caller to write to.
  */
 
-static void *get_buffer(struct memory_bitmap *bm, struct chain_allocator *ca)
+static void *get_buffer(struct memory_bitmap *bm, struct chain_allocator *ca,
+		unsigned long *_pfn)
 {
 	struct pbe *pbe;
 	struct page *page;
@@ -2439,6 +2649,9 @@ static void *get_buffer(struct memory_bitmap *bm, struct chain_allocator *ca)
 
 	if (pfn == BM_END_OF_MAP)
 		return ERR_PTR(-EFAULT);
+
+	if (_pfn)
+		*_pfn = pfn;
 
 	page = pfn_to_page(pfn);
 	if (PageHighMem(page))
@@ -2486,6 +2699,7 @@ static void *get_buffer(struct memory_bitmap *bm, struct chain_allocator *ca)
 int snapshot_write_next(struct snapshot_handle *handle)
 {
 	static struct chain_allocator ca;
+	unsigned long pfn;
 	int error = 0;
 
 	/* Check if we have already loaded the entire image */
@@ -2507,6 +2721,12 @@ int snapshot_write_next(struct snapshot_handle *handle)
 		error = load_header(buffer);
 		if (error)
 			return error;
+
+		/* Allocate buffer point array for generating
+		 * digest to compare with signature.
+		 * h_buf will freed in snapshot_image_verify().
+		 */
+		alloc_h_buf();
 
 		error = memory_bm_create(&copy_bm, GFP_ATOMIC, PG_ANY);
 		if (error)
@@ -2530,20 +2750,24 @@ int snapshot_write_next(struct snapshot_handle *handle)
 			chain_init(&ca, GFP_ATOMIC, PG_SAFE);
 			memory_bm_position_reset(&orig_bm);
 			restore_pblist = NULL;
-			handle->buffer = get_buffer(&orig_bm, &ca);
+			handle->buffer = get_buffer(&orig_bm, &ca, &pfn);
 			handle->sync_read = 0;
 			if (IS_ERR(handle->buffer))
 				return PTR_ERR(handle->buffer);
+			if (h_buf)
+				*h_buf = handle->buffer;
 		}
 	} else {
 		copy_last_highmem_page();
 		/* Restore page key for data page (s390 only). */
 		page_key_write(handle->buffer);
-		handle->buffer = get_buffer(&orig_bm, &ca);
+		handle->buffer = get_buffer(&orig_bm, &ca, &pfn);
 		if (IS_ERR(handle->buffer))
 			return PTR_ERR(handle->buffer);
 		if (handle->buffer != buffer)
 			handle->sync_read = 0;
+		if (h_buf)
+			*(h_buf + (handle->cur - nr_meta_pages - 1)) = handle->buffer;
 	}
 	handle->cur++;
 	return PAGE_SIZE;

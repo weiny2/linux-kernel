@@ -140,6 +140,11 @@ extern int snapshot_read_next(struct snapshot_handle *handle);
 extern int snapshot_write_next(struct snapshot_handle *handle);
 extern void snapshot_write_finalize(struct snapshot_handle *handle);
 extern int snapshot_image_loaded(struct snapshot_handle *handle);
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+extern int snapshot_image_verify(void);
+#else
+static inline int snapshot_image_verify(void) { return 0; }
+#endif
 
 /* If unset, the snapshot device cannot be open. */
 extern atomic_t snapshot_device_available;
