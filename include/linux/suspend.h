@@ -303,6 +303,9 @@ struct platform_hibernation_ops {
 
 #ifdef CONFIG_HIBERNATION
 
+#define EFI_HIBERNATION_GUID \
+	EFI_GUID(0xfe141863, 0xc070, 0x478e, 0xb8, 0xa3, 0x87, 0x8a, 0x5d, 0xc9, 0xef, 0x21)
+
 /* HMAC Algorithm of Hibernate Signature */
 #define HIBERNATION_HMAC	"hmac(sha1)"
 #define HIBERNATION_DIGEST_SIZE	20

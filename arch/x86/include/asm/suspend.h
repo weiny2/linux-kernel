@@ -3,3 +3,12 @@
 #else
 # include <asm/suspend_64.h>
 #endif
+
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+#include <linux/suspend.h>
+
+struct hibernation_keys {
+	unsigned long hkey_status;
+	u8 hibernation_key[HIBERNATION_DIGEST_SIZE];
+};
+#endif
