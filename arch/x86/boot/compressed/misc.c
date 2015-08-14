@@ -419,7 +419,7 @@ asmlinkage void decompress_kernel(void *rmode, memptr heap,
 	return;
 }
 
-#if CONFIG_RANDOMIZE_BASE
+#if CONFIG_HIBERNATE_VERIFICATION || CONFIG_RANDOMIZE_BASE
 #define I8254_PORT_CONTROL     0x43
 #define I8254_PORT_COUNTER0    0x40
 #define I8254_CMD_READBACK     0xC0
@@ -468,4 +468,4 @@ unsigned long get_random_boot(struct boot_params *boot_params)
 
 	return hash;
 }
-#endif /* CONFIG_RANDOMIZE_BASE */
+#endif /* CONFIG_HIBERNATE_VERIFICATION || CONFIG_RANDOMIZE_BASE */
