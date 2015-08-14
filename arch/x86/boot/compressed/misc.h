@@ -58,4 +58,9 @@ static inline void console_init(void)
 
 #endif
 
+#if CONFIG_RANDOMIZE_BASE
+extern u16 read_i8254(void);
+extern unsigned long get_random_boot(struct boot_params *boot_params);
+#endif
+
 #endif
