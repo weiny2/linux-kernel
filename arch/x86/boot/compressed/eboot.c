@@ -844,19 +844,22 @@ static void setup_hibernation_keys(struct boot_params *params)
 {
 	unsigned long key_size;
 	unsigned long attributes;
+	struct setup_data *setup_data, *hibernation_setup_data;
 	struct hibernation_keys *keys;
+	unsigned long size = 0;
 	efi_status_t status;
 
 	/* Allocate setup_data to carry keys */
+	size = sizeof(struct setup_data) + sizeof(struct hibernation_keys);
 	status = efi_call_phys3(sys_table->boottime->allocate_pool,
-				EFI_LOADER_DATA, sizeof(struct hibernation_keys),
-				&keys);
+				EFI_LOADER_DATA, size, &hibernation_setup_data);
 	if (status != EFI_SUCCESS) {
 		efi_printk(sys_table, "Failed to alloc mem for hibernation keys\n");
 		return;
 	}
 
-	memset(keys, 0, sizeof(struct hibernation_keys));
+	memset(hibernation_setup_data, 0, size);
+	keys = (struct hibernation_keys *) hibernation_setup_data->data;
 
 	status = efi_call_phys5(sys_table->runtime->get_variable,
 				HIBERNATION_KEY, &EFI_HIBERNATION_GUID,
@@ -870,7 +873,8 @@ static void setup_hibernation_keys(struct boot_params *params)
 		if (status == EFI_SUCCESS) {
 			efi_printk(sys_table, "Cleaned existing hibernation key\n");
 			status = EFI_NOT_FOUND;
-		}
+		} else
+			goto clean_fail;
 	}
 
 	if (status != EFI_SUCCESS) {
@@ -887,6 +891,21 @@ static void setup_hibernation_keys(struct boot_params *params)
 		if (status != EFI_SUCCESS)
 			efi_printk(sys_table, "Failed to set hibernation key\n");
 	}
+
+clean_fail:
+	hibernation_setup_data->type = SETUP_HIBERNATION_KEYS;
+	hibernation_setup_data->len = sizeof(struct hibernation_keys);
+	hibernation_setup_data->next = 0;
+	keys->hkey_status = efi_status_to_err(status);
+
+	setup_data = (struct setup_data *)params->hdr.setup_data;
+	while (setup_data && setup_data->next)
+		setup_data = (struct setup_data *)setup_data->next;
+
+	if (setup_data)
+		setup_data->next = (unsigned long)hibernation_setup_data;
+	else
+		params->hdr.setup_data = (unsigned long)hibernation_setup_data;
 }
 #else
 static void setup_hibernation_keys(struct boot_params *params) {}

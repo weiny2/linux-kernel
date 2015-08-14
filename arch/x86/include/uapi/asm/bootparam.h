@@ -7,6 +7,7 @@
 #define SETUP_DTB			2
 #define SETUP_PCI			3
 #define SETUP_EFI			4
+#define SETUP_HIBERNATION_KEYS		5
 
 /* ram_size flags */
 #define RAMDISK_IMAGE_START_MASK	0x07FF
