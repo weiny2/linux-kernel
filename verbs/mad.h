@@ -138,6 +138,13 @@ struct ib_mad_notice_attr {
 	} details;
 };
 
+struct opa_aggregate {
+	__be16 attr_id;
+	__be16 err_reqlength;	/* 1 bit, 8 res, 7 bit */
+	__be32 attr_mod;
+	u8 data[0];
+};
+
 /*
  * Generic trap/notice types
  */

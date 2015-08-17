@@ -617,8 +617,8 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	 * From here on all attributes that are handled in SMA-HFI but cached in
 	 * SMA-IB are updated by calling get portinfo.
 	 */
-	ret = subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev, port,
-					resp_len);
+	ret = subn_get_opa_sma(IB_SMP_ATTR_PORT_INFO, smp, am, data, ibdev,
+				port, resp_len);
 
 	if (ret == IB_MAD_RESULT_FAILURE)
 		goto err;
@@ -701,8 +701,8 @@ static int __subn_set_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
 
 	end_block = start_block + n_blocks_sent;
 
-	ret = subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev, port,
-					resp_len);
+	ret = subn_get_opa_sma(IB_SMP_ATTR_PKEY_TABLE, smp, am, data, ibdev,
+				port, resp_len);
 
 	if (ret == IB_MAD_RESULT_FAILURE)
 		goto err;
@@ -733,8 +733,8 @@ static int __subn_set_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
 	int ret, i;
 	u8 *p;
 
-	ret = subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev, port,
-					resp_len);
+	ret = subn_get_opa_sma(OPA_ATTRIB_ID_SL_TO_SC_MAP, smp, am, data, ibdev,
+				port, resp_len);
 
 	if (ret == IB_MAD_RESULT_FAILURE)
 		goto err;
@@ -756,8 +756,8 @@ static int __subn_set_opa_sc_to_sl(struct opa_smp *smp, u32 am, u8 *data,
 	int ret, i;
 	u8 *p;
 
-	ret = subn_get_opa_sma(smp->attr_id, smp, am, data, ibdev, port,
-					resp_len);
+	ret = subn_get_opa_sma(OPA_ATTRIB_ID_SC_TO_SL_MAP, smp, am, data, ibdev,
+				port, resp_len);
 
 	if (ret == IB_MAD_RESULT_FAILURE)
 		goto err;
@@ -957,6 +957,69 @@ static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 	return ret;
 }
 
+static int subn_opa_aggregate(struct opa_smp *smp,
+				  struct ib_device *ibdev, u8 port,
+				  u32 *resp_len)
+{
+	int i;
+	u32 num_attr = OPA_AM_NATTR(be32_to_cpu(smp->attr_mod));
+	u8 *next_smp = opa_get_smp_data(smp);
+	u8 method = smp->method;
+
+	if (num_attr < OPA_MIN_AGGR_ATTR || num_attr > OPA_MAX_AGGR_ATTR) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		return reply((struct ib_mad_hdr *)smp);
+	}
+
+	for (i = 0; i < num_attr; i++) {
+		struct opa_aggregate *agg;
+		size_t agg_data_len;
+		size_t agg_size;
+		u32 am;
+
+		agg = (struct opa_aggregate *)next_smp;
+		agg_data_len =
+			OPA_AGGR_REQ_LEN(be16_to_cpu(agg->err_reqlength));
+		agg_data_len *= OPA_AGGR_REQ_BYTES_PER_UNIT;
+		agg_size = sizeof(*agg) + agg_data_len;
+		am = be32_to_cpu(agg->attr_mod);
+
+		*resp_len += agg_size;
+
+		if (next_smp + agg_size > ((u8 *)smp) + sizeof(*smp)) {
+			smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			return reply((struct ib_mad_hdr *)smp);
+		}
+
+		switch (method) {
+		case IB_MGMT_METHOD_GET:
+			/* zero the payload for this segment */
+			memset(next_smp + sizeof(*agg), 0, agg_data_len);
+			subn_get_opa_sma(agg->attr_id, smp, am, agg->data,
+					ibdev, port, NULL);
+			break;
+		case IB_MGMT_METHOD_SET:
+			subn_set_opa_sma(agg->attr_id, smp, am, agg->data,
+					ibdev, port, NULL);
+			break;
+		default:
+			smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD);
+			return reply((struct ib_mad_hdr *)smp);
+		}
+
+		if (smp->status & ~IB_SMP_DIRECTION) {
+			agg->err_reqlength |= OPA_AGGR_ERROR;
+			return reply((struct ib_mad_hdr *)smp);
+		}
+		next_smp += agg_size;
+	}
+
+	return reply((struct ib_mad_hdr *)smp);
+}
+
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 			    u8 port, struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad,
@@ -1007,12 +1070,8 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 					       ibdev, port, resp_len);
 			goto bail;
 		case OPA_ATTRIB_ID_AGGREGATE:
-
-	/* FXRTODO: Implement subn_get_opa_aggregate */
-#if 0
-			ret = subn_get_opa_aggregate(smp, ibdev, port,
+			ret = subn_opa_aggregate(smp, ibdev, port,
 						     resp_len);
-#endif
 			goto bail;
 		}
 	case IB_MGMT_METHOD_SET:
@@ -1023,11 +1082,8 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 					       ibdev, port, resp_len);
 			goto bail;
 		case OPA_ATTRIB_ID_AGGREGATE:
-	/* FXRTODO: Implement subn_set_opa_aggregate */
-#if 0
-			ret = subn_set_opa_aggregate(smp, ibdev, port,
+			ret = subn_opa_aggregate(smp, ibdev, port,
 						     resp_len);
-#endif
 			goto bail;
 		}
 		goto bail;
