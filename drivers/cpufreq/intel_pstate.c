@@ -59,6 +59,7 @@ struct sample {
 	u64 aperf;
 	u64 mperf;
 	int freq;
+	ktime_t time;
 };
 
 struct pstate_data {
@@ -99,6 +100,7 @@ struct cpudata {
 
 	int min_pstate_count;
 
+	ktime_t last_sample_time;
 	u64	prev_aperf;
 	u64	prev_mperf;
 	int	sample_ptr;
@@ -610,6 +612,8 @@ static inline void intel_pstate_sample(struct cpudata *cpu)
 	rdmsrl(MSR_IA32_APERF, aperf);
 	rdmsrl(MSR_IA32_MPERF, mperf);
 	cpu->sample_ptr = (cpu->sample_ptr + 1) % SAMPLE_COUNT;
+	cpu->last_sample_time = cpu->samples[cpu->sample_ptr].time;
+	cpu->samples[cpu->sample_ptr].time = ktime_get();
 	cpu->samples[cpu->sample_ptr].aperf = aperf;
 	cpu->samples[cpu->sample_ptr].mperf = mperf;
 	cpu->samples[cpu->sample_ptr].aperf -= cpu->prev_aperf;
@@ -632,12 +636,25 @@ static inline void intel_pstate_set_sample_time(struct cpudata *cpu)
 
 static inline int32_t intel_pstate_get_scaled_busy(struct cpudata *cpu)
 {
-	int32_t core_busy, max_pstate, current_pstate;
+	int32_t core_busy, max_pstate, current_pstate, sample_ratio;
+	u32 duration_us;
+	u32 sample_time;
 
 	core_busy = cpu->samples[cpu->sample_ptr].core_pct_busy;
 	max_pstate = int_tofp(cpu->pstate.max_pstate);
 	current_pstate = int_tofp(cpu->pstate.current_pstate);
-	return mul_fp(core_busy, div_fp(max_pstate, current_pstate));
+ 	core_busy = mul_fp(core_busy, div_fp(max_pstate, current_pstate));
+
+	sample_time = (pid_params.sample_rate_ms  * USEC_PER_MSEC);
+	duration_us = (u32) ktime_us_delta(cpu->samples[cpu->sample_ptr].time,
+					cpu->last_sample_time);
+	if (duration_us > sample_time * 3) {
+		sample_ratio = div_fp(int_tofp(sample_time),
+				int_tofp(duration_us));
+		core_busy = mul_fp(core_busy, sample_ratio);
+	}
+
+ 	return core_busy;
 }
 
 static inline void intel_pstate_adjust_busy_pstate(struct cpudata *cpu)
