@@ -38,13 +38,13 @@
 NAME := opa2_hfi
 
 # The desired version number comes from the most recent tag starting with "v"
-VERSION := $(shell if [ -d .git ] ; then  git describe --tags --abbrev=0 --match='v*' | sed -e 's/^v//' -e 's/-/_/'; else echo "version" ; fi)
+VERSION := $(shell if [ -e .git ] ; then  git describe --tags --abbrev=0 --match='v*' | sed -e 's/^v//' -e 's/-/_/'; else echo "version" ; fi)
 ifeq (,$(VERSION))
 VERSION := 0
 endif
 # The desired release number comes the git describe following the version which
 # is the number of commits since the version tag was planted suffixed by the g<commitid>
-RELEASE := $(shell if [ -d .git ] ; then git describe --tags --long --match='v*' | sed -e 's/v[0-9.]*-\([0-9]*\)/\1/' | sed 's/-g.*$$//'; else echo "release" ; fi)
+RELEASE := $(shell if [ -e .git ] ; then git describe --tags --long --match='v*' | sed -e 's/v[0-9.]*-\([0-9]*\)/\1/' | sed 's/-g.*$$//'; else echo "release" ; fi)
 ifeq (,$(RELEASE))
 RELEASE := 0
 endif
@@ -58,14 +58,16 @@ EXCLUDES := --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp
 BUILD_KERNEL ?= $(shell uname -r)
 KVER := $(BUILD_KERNEL)
 KBUILD ?= /lib/modules/$(KVER)/build
+NOSTDINC_FLAGS += -I$(KBUILD)/include-ifs-kernel
+KBUILD_EXTRA_SYMBOLS := $(KBUILD)/include-ifs-kernel/Module.symvers
 PWD := $(shell pwd)
 VERBOSE := 0
 
 driver: headers
-	make -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION)
+	make -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION) NOSTDINC_FLAGS="$(NOSTDINC_FLAGS)" KBUILD_EXTRA_SYMBOLS="$(KBUILD_EXTRA_SYMBOLS)"
 
 headers:
-	@if [ -d .git ]; then \
+	@if [ -e .git ]; then \
 		git submodule update --init opa-headers.git; \
 		git submodule status; \
 	fi
@@ -83,7 +85,7 @@ specfile: $(NAME).spec.in
 		-e 's/@RELEASE@/'${RELEASE}'/g' \
 		-e 's/@NAME@/'${NAME}'/g' $(NAME).spec.in > $(NAME).spec
 ifneq (,$(BASEVERSION))
-	if [ -d .git ]; then \
+	if [ -e .git ]; then \
 		echo '%changelog' >> $(NAME).spec; \
 		git log --no-merges v$(BASEVERSION)..HEAD --format="* %cd <%ae>%n- %s%n" \
 		| sed 's/-[0-9][0-9][0-9][0-9] //' \
@@ -110,7 +112,7 @@ install:
 	install opa2_vnic/opa2_vnic_hfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install opa2_vnic/opa_vnic/opa_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
-	depmod -a
+	depmod -a $(KVER)
 
 rpm: dist
 	rpmbuild --define 'require_kver $(KVER)' -ta $(NAME)-$(VERSION).tgz
