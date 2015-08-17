@@ -63,6 +63,16 @@
 #define OPA_LIM_MGMT_PKEY_IDX		1
 #define OPA_PKEY_TABLE_BLK_COUNT	OPA_PARTITION_TABLE_BLK_SIZE
 
+/* OPA SMA aggregate */
+#define OPA_MAX_AGGR_ATTR		117
+#define OPA_MIN_AGGR_ATTR		1
+#define OPA_AGGR_REQ_LEN_SHIFT		0
+#define OPA_AGGR_REQ_LEN_MASK		0x7f
+#define OPA_AGGR_REQ_LEN(req)		(((req) >> OPA_AGGR_REQ_LEN_SHIFT) & \
+					OPA_AGGR_REQ_LEN_MASK)
+#define OPA_AGGR_REQ_BYTES_PER_UNIT	8
+#define OPA_AGGR_ERROR			cpu_to_be16(0x8000)
+
 /* OPA SMA attribute IDs */
 #define OPA_ATTRIB_ID_CONGESTION_INFO		cpu_to_be16(0x008b)
 #define OPA_ATTRIB_ID_HFI_CONGESTION_LOG	cpu_to_be16(0x008f)
@@ -101,6 +111,11 @@
 #define IS_VALID_LID_SIZE(lid) (!((lid) & (OPA_INVALID_LID_MASK)))
 #define INVALID_MTU	0xffff
 #define INVALID_MTU_ENC	0xff
+
+#define OPA_AM_NATTR_SHIFT	0
+#define OPA_AM_NATTR_MASK	0xff
+#define OPA_AM_NATTR(am)	(((am) >> OPA_AM_NATTR_SHIFT) & \
+					OPA_AM_NATTR_MASK)
 
 /*
  * Convert MTU sizes to 4bit number format
