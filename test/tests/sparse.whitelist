@@ -1,3 +1,2 @@
-      4 file_ops.c: warning: Variable length array is used.
       1 ./trace.h: error: too long token expansion
       1 user_sdma.c: warning: dubious: !x & y
