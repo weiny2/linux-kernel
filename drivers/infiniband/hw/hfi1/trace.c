@@ -48,7 +48,6 @@
  *
  */
 #define CREATE_TRACE_POINTS
-#define HFI1_TRACE_DO_NOT_CREATE_INLINES
 #include "trace.h"
 
 u8 ibhdr_exhdr_len(struct hfi1_ib_header *hdr)
@@ -208,4 +207,16 @@ const char *print_u64_array(
 	return ret;
 }
 
-#undef HFI1_TRACE_DO_NOT_CREATE_INLINES
+__hfi1_trace_fn(PKT);
+__hfi1_trace_fn(PROC);
+__hfi1_trace_fn(SDMA);
+__hfi1_trace_fn(LINKVERB);
+__hfi1_trace_fn(DEBUG);
+__hfi1_trace_fn(SNOOP);
+__hfi1_trace_fn(CNTR);
+__hfi1_trace_fn(PIO);
+__hfi1_trace_fn(DC8051);
+__hfi1_trace_fn(FIRMWARE);
+__hfi1_trace_fn(RCVCTRL);
+__hfi1_trace_fn(TID);
+
