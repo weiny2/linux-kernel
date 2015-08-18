@@ -18,6 +18,7 @@ echo "" > mail.tmp
 echo "Logs: " >> mail.tmp
 echo $mpi_log >> mail.tmp
 echo $ipostl_log >> mail.tmp
+echo $verbs_log >> mail.tmp
 stdout=$logdir/`ls perf.*.log`
 echo "StdOut: $stdout" >> mail.tmp
 echo "" >> mail.tmp
