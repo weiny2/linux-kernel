@@ -94,21 +94,6 @@ MODULE_PARM_DESC(force_loopback, "Force FXR into loopback");
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
 
-static u64 read_csr(const struct hfi_devdata *dd, u32 offset)
-{
-	u64 val;
-
-	BUG_ON(dd->kregbase[0] == NULL);
-	val = readq(dd->kregbase[0] + offset);
-	return le64_to_cpu(val);
-}
-
-static void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
-{
-	BUG_ON(dd->kregbase[0] == NULL);
-	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
-}
-
 static void write_fc_csr(const struct hfi_devdata *dd, u8 port,
 			 u32 offset, u64 value)
 {

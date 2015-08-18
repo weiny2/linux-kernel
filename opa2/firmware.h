@@ -49,55 +49,10 @@
  *
  * Intel(R) Omni-Path Gen2 HFI PCIe Driver
  */
+#ifndef _HFI_FIRMWARE_H
+#define _HFI_FIRMWARE_H
 
-#ifndef _HFI_DEBUGFS_H
-#define _HFI_DEBUGFS_H
+void hfi_firmware_dbg_init(struct hfi_devdata *dd);
+void hfi_firmware_dbg_exit(struct hfi_devdata *dd);
 
-#define DEBUGFS_SEQ_FILE_OPS(name) \
-static const struct seq_operations _##name##_seq_ops = { \
-	.start = _##name##_seq_start, \
-	.next  = _##name##_seq_next, \
-	.stop  = _##name##_seq_stop, \
-	.show  = _##name##_seq_show \
-}
-#define DEBUGFS_SEQ_FILE_OPEN(name) \
-static int _##name##_open(struct inode *inode, struct file *s) \
-{ \
-	struct seq_file *seq; \
-	int ret; \
-	ret =  seq_open(s, &_##name##_seq_ops); \
-	if (ret) \
-		return ret; \
-	seq = s->private_data; \
-	seq->private = inode->i_private; \
-	return 0; \
-}
-
-#define DEBUGFS_FILE_OPS(name) \
-static const struct file_operations _##name##_file_ops = { \
-	.owner   = THIS_MODULE, \
-	.open    = _##name##_open, \
-	.read    = seq_read, \
-	.llseek  = seq_lseek, \
-	.release = seq_release \
-}
-
-#define DEBUGFS_FILE_CREATE(name, parent, data, ops, mode)	\
-do { \
-	struct dentry *ent; \
-	ent = debugfs_create_file(name, mode, parent, \
-		data, ops); \
-	if (!ent) \
-		pr_warn("create of %s failed\n", name); \
-} while (0)
-
-
-#define DEBUGFS_SEQ_FILE_CREATE(name, parent, data) \
-	DEBUGFS_FILE_CREATE(#name, parent, data, &_##name##_file_ops, S_IRUGO)
-
-extern struct dentry *hfi_dbg_root;
-
-void hfi_dbg_init(struct hfi_devdata *dd);
-void hfi_dbg_exit(struct hfi_devdata *dd);
-
-#endif	/* _HFI_DEBUGFS_H */
+#endif	/* _HFI_FIRMWARE_H */

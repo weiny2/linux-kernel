@@ -136,7 +136,7 @@ static void hfi_pci_remove(struct pci_dev *pdev)
 {
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 
-	hfi_dbg_exit();
+	hfi_dbg_exit(dd);
 	hfi_pci_dd_free(dd);
 	hfi_pci_cleanup(pdev);
 }

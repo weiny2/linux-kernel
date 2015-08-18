@@ -414,6 +414,9 @@ struct hfi_pportdata {
 	struct ib_vl_weight_elem vl_arb_high[HFI_VL_ARB_TABLE_SIZE];
 	struct ib_vl_weight_elem vl_arb_prempt_ele[HFI_VL_ARB_TABLE_SIZE];
 	struct ib_vl_weight_elem vl_arb_prempt_mat[HFI_VL_ARB_TABLE_SIZE];
+#ifdef CONFIG_DEBUG_FS
+	struct dentry *hfi_port_dbg;
+#endif
 };
 
 /* device data struct contains only per-HFI info. */
@@ -486,6 +489,12 @@ struct hfi_devdata {
 
 	/* Mutex lock synchronizing E2E operations */
 	struct mutex e2e_lock;
+#ifdef CONFIG_DEBUG_FS
+	/* per HFI debugfs */
+	struct dentry *hfi_dev_dbg;
+	/* per HFI symlinks to above */
+	struct dentry *hfi_dev_link;
+#endif
 };
 
 /* return the driver's idea of the logical OPA port state */
@@ -650,5 +659,20 @@ void hfi_set_crc_mode(struct hfi_devdata *dd, u8 port, u16 crc_lcb_mode);
 /* printk wrappers (pr_warn, etc) can also be used for general debugging. */
 #undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
+static inline u64 read_csr(const struct hfi_devdata *dd, u32 offset)
+{
+	u64 val;
+
+	BUG_ON(dd->kregbase[0] == NULL);
+	val = readq(dd->kregbase[0] + offset);
+	return le64_to_cpu(val);
+}
+
+static inline void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
+{
+	BUG_ON(dd->kregbase[0] == NULL);
+	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
+}
 
 #endif
