@@ -28,7 +28,6 @@
 #include <linux/syscore_ops.h>
 #include <linux/ctype.h>
 #include <linux/genhd.h>
-#include <linux/efi.h>
 #include <linux/module.h>
 
 #include "power.h"
@@ -648,7 +647,11 @@ int hibernate(void)
 	set_hibernation_key_regen_flag = false;
 
 	if (secure_modules()) {
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+		sigenforce = 1;
+#else
 		return -EPERM;
+#endif
 	}
 
 	lock_system_sleep();
@@ -744,8 +747,16 @@ static int software_resume(void)
 	/*
 	 * If the user said "noresume".. bail out early.
 	 */
-	if (noresume || secure_modules())
+	if (noresume)
 		return 0;
+
+	if (secure_modules()) {
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+               sigenforce = 1;
+#else
+               return 0;
+#endif
+	}
 
 	/*
 	 * name_to_dev_t() below takes a sysfs buffer mutex when sysfs
@@ -910,11 +921,6 @@ static ssize_t disk_show(struct kobject *kobj, struct kobj_attribute *attr,
 	int i;
 	char *start = buf;
 
-	if (efi_enabled(EFI_SECURE_BOOT)) {
-		buf += sprintf(buf, "[%s]\n", "disabled");
-		return buf-start;
-	}
-
 	for (i = HIBERNATION_FIRST; i <= HIBERNATION_MAX; i++) {
 		if (!hibernation_modes[i])
 			continue;
@@ -949,8 +955,13 @@ static ssize_t disk_store(struct kobject *kobj, struct kobj_attribute *attr,
 	char *p;
 	int mode = HIBERNATION_INVALID;
 
-	if (secure_modules())
+	if (secure_modules()) {
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+		sigenforce = 1;
+#else
 		return -EPERM;
+#endif
+	}
 
 	p = memchr(buf, '\n', n);
 	len = p ? p - buf : n;
