@@ -296,11 +296,55 @@ static int __subn_get_hfi_sc_to_vlnt(struct hfi_devdata *dd,
 	return IB_MAD_RESULT_FAILURE;
 }
 
+/*
+ * FXRTODO: This attribute will not be supported in FXR.
+ * This will need to be reported as unsupported attribute in
+ * the SMPs status field. Refer STL-2109
+ */
 static int __subn_get_hfi_vl_arb(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	u32 num_ports = OPA_AM_NPORT(am);
+	u8 section = (am & 0x00ff0000) >> 16;
+	u8 *p = data;
+	int size = 256;
+	int table_size =
+		HFI_VL_ARB_TABLE_SIZE * sizeof(struct ib_vl_weight_elem);
+
+	if (num_ports != 1)
+		goto err;
+
+	switch (section) {
+	case OPA_VLARB_LOW_ELEMENTS:
+		memcpy(p, ppd->vl_arb_low, table_size);
+		break;
+	case OPA_VLARB_HIGH_ELEMENTS:
+		memcpy(p, ppd->vl_arb_high, table_size);
+		break;
+	case OPA_VLARB_PREEMPT_ELEMENTS:
+		memcpy(p, ppd->vl_arb_prempt_ele, table_size);
+		break;
+	case OPA_VLARB_PREEMPT_MATRIX:
+		memcpy(p, ppd->vl_arb_prempt_mat, table_size);
+		break;
+	default:
+		pr_warn("OPA SubnGet(VL Arb) AM Invalid : 0x%x\n",
+			be32_to_cpu(smp->attr_mod));
+		goto err;
+	}
+
+	if (resp_len)
+		*resp_len += size;
+
+	goto done;
+err:
+	smp->status |=
+		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+done:
+	return hfi_reply(ibh);
 }
 
 static int __subn_get_hfi_led_info(struct hfi_devdata *dd, struct opa_smp *smp,
@@ -1028,11 +1072,55 @@ static int __subn_set_hfi_bct(struct hfi_devdata *dd, struct opa_smp *smp,
 	return IB_MAD_RESULT_FAILURE;
 }
 
+/*
+ * FXRTODO: This attribute will not be supported in FXR.
+ * This will need to be reported as unsupported attribute in
+ * the SMPs status field. Refer STL-2109
+ */
 static int __subn_set_hfi_vl_arb(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	u32 num_ports = OPA_AM_NPORT(am);
+	int table_size =
+		HFI_VL_ARB_TABLE_SIZE * sizeof(struct ib_vl_weight_elem);
+	u8 section = (am & 0x00ff0000) >> 16;
+	u8 *p = data;
+
+	if (num_ports != 1)
+		goto err;
+
+	switch (section) {
+	case OPA_VLARB_LOW_ELEMENTS:
+		memcpy(ppd->vl_arb_low, p, table_size);
+		break;
+	case OPA_VLARB_HIGH_ELEMENTS:
+		memcpy(ppd->vl_arb_high, p, table_size);
+		break;
+	/* neither OPA_VLARB_PREEMPT_ELEMENTS, or OPA_VLARB_PREEMPT_MATRIX
+	 * can be changed from the default values */
+	case OPA_VLARB_PREEMPT_ELEMENTS:
+		/* FALLTHROUGH */
+	case OPA_VLARB_PREEMPT_MATRIX:
+		smp->status |=
+		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB);
+		*sma_status = OPA_SMA_FAIL_WITH_DATA;
+		break;
+	default:
+		pr_warn("OPA SubnSet(VL Arb) AM Invalid : 0x%x\n",
+			be32_to_cpu(smp->attr_mod));
+		goto err;
+		break;
+	}
+
+	goto done;
+err:
+	smp->status |=
+		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+done:
+	return hfi_reply(ibh);
 }
 
 static int __subn_set_hfi_cong_setting(struct hfi_devdata *dd,
