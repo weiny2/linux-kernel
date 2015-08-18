@@ -436,7 +436,8 @@ struct hfi1_qp {
 	struct hfi1_swqe *s_wq;  /* send work queue */
 	struct hfi1_mmap_info *ip;
 	struct ahg_ib_header *s_hdr;     /* next packet header to send */
-	u8 s_sc;			/* SC[0..4] for next packet */
+	/* sc for UC/RC QPs - based on ah for UD */
+	u8 s_sc;
 	unsigned long timeout_jiffies;  /* computed from timeout */
 
 	enum ib_mtu path_mtu;
@@ -841,7 +842,6 @@ static inline int hfi1_send_ok(struct hfi1_qp *qp)
 /*
  * This must be called with s_lock held.
  */
-void hfi1_schedule_send(struct hfi1_qp *qp);
 void hfi1_bad_pqkey(struct hfi1_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 		    u32 qp1, u32 qp2, __be16 lid1, __be16 lid2);
 void hfi1_cap_mask_chg(struct hfi1_ibport *ibp);
@@ -1064,8 +1064,6 @@ void hfi1_update_mmap_info(struct hfi1_ibdev *dev, struct hfi1_mmap_info *ip,
 int hfi1_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
 
 int hfi1_get_rwqe(struct hfi1_qp *qp, int wr_id_only);
-
-void hfi1_migrate_qp(struct hfi1_qp *qp);
 
 int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		       int has_grh, struct hfi1_qp *qp, u32 bth0);

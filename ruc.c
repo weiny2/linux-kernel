@@ -241,26 +241,6 @@ bail:
 	return ret;
 }
 
-/*
- * Switch to alternate path.
- * The QP s_lock should be held and interrupts disabled.
- */
-void hfi1_migrate_qp(struct hfi1_qp *qp)
-{
-	struct ib_event ev;
-
-	qp->s_mig_state = IB_MIG_MIGRATED;
-	qp->remote_ah_attr = qp->alt_ah_attr;
-	qp->port_num = qp->alt_ah_attr.port_num;
-	qp->s_pkey_index = qp->s_alt_pkey_index;
-	qp->s_flags |= HFI1_S_AHG_CLEAR;
-
-	ev.device = qp->ibqp.device;
-	ev.element.qp = &qp->ibqp;
-	ev.event = IB_EVENT_PATH_MIG;
-	qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
-}
-
 static __be64 get_sguid(struct hfi1_ibport *ibp, unsigned index)
 {
 	if (!index) {
@@ -715,8 +695,6 @@ static inline void build_ahg(struct hfi1_qp *qp, u32 npsn)
 	if (!(qp->s_flags & HFI1_S_AHG_VALID)) {
 		/* first middle that needs copy  */
 		if (qp->s_ahgidx < 0) {
-			if (!qp->s_sde)
-				qp->s_sde = qp_to_sdma_engine(qp, qp->s_sc);
 			qp->s_ahgidx = sdma_ahg_alloc(qp->s_sde);
 		}
 		if (qp->s_ahgidx >= 0) {
@@ -761,7 +739,6 @@ void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 	u16 lrh0;
 	u32 nwords;
 	u32 extra_bytes;
-	u8 sc5;
 	u32 bth1;
 
 	/* Construct the header. */
@@ -775,9 +752,7 @@ void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 		lrh0 = HFI1_LRH_GRH;
 		middle = 0;
 	}
-	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
-	qp->s_sc = sc5;
+	lrh0 |= (qp->s_sc & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
 	/*
 	 * reset s_hdr/AHG fields
 	 *

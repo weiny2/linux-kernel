@@ -159,6 +159,8 @@ static inline struct hfi1_ucontext *to_iucontext(struct ib_ucontext
 	return container_of(ibucontext, struct hfi1_ucontext, ibucontext);
 }
 
+static inline void _hfi1_schedule_send(struct hfi1_qp *qp);
+
 /*
  * Translate ib_wr_opcode into ib_wc_opcode.
  */
@@ -494,10 +496,10 @@ static int post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		}
 		nreq++;
 	}
+	spin_unlock_irqrestore(&qp->s_lock, flags);
 bail:
 	if (nreq && !call_send)
-		hfi1_schedule_send(qp);
-	spin_unlock_irqrestore(&qp->s_lock, flags);
+		_hfi1_schedule_send(qp);
 	if (nreq && call_send)
 		hfi1_do_send(&qp->s_iowait.iowork);
 	return err;
@@ -993,7 +995,6 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 	struct verbs_txreq *tx;
 	struct sdma_txreq *stx;
 	u64 pbc_flags = 0;
-	struct sdma_engine *sde;
 	u8 sc5 = qp->s_sc;
 	int ret;
 
@@ -1014,12 +1015,7 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 	if (IS_ERR(tx))
 		goto bail_tx;
 
-	if (!qp->s_hdr->sde) {
-		tx->sde = sde = qp_to_sdma_engine(qp, sc5);
-		if (!sde)
-			goto bail_no_sde;
-	} else
-		tx->sde = sde = qp->s_hdr->sde;
+	tx->sde = qp->s_sde;
 
 	if (likely(pbc == 0)) {
 		u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
@@ -1034,17 +1030,15 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
 	if (qp->s_rdma_mr)
 		qp->s_rdma_mr = NULL;
 	tx->hdr_dwords = hdrwords + 2;
-	ret = build_verbs_tx_desc(sde, ss, len, tx, ahdr, pbc);
+	ret = build_verbs_tx_desc(tx->sde, ss, len, tx, ahdr, pbc);
 	if (unlikely(ret))
 		goto bail_build;
 	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &ahdr->ibh);
-	ret =  sdma_send_txreq(sde, &qp->s_iowait, &tx->txreq);
+	ret =  sdma_send_txreq(tx->sde, &qp->s_iowait, &tx->txreq);
 	if (unlikely(ret == -ECOMM))
 		goto bail_ecomm;
 	return ret;
 
-bail_no_sde:
-	hfi1_put_txreq(tx);
 bail_ecomm:
 	/* The current one got "sent" */
 	return 0;
@@ -2093,20 +2087,6 @@ void hfi1_unregister_ib_device(struct hfi1_devdata *dd)
 	del_timer_sync(&dev->mem_timer);
 	kmem_cache_destroy(dev->verbs_txreq_cache);
 	vfree(dev->lk_table.table);
-}
-
-/*
- * This must be called with s_lock held.
- */
-void hfi1_schedule_send(struct hfi1_qp *qp)
-{
-	if (hfi1_send_ok(qp)) {
-		struct hfi1_ibport *ibp =
-			to_iport(qp->ibqp.device, qp->port_num);
-		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-
-		iowait_schedule(&qp->s_iowait, ppd->hfi1_wq);
-	}
 }
 
 void hfi1_cnp_rcv(struct hfi1_packet *packet)
