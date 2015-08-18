@@ -50,8 +50,9 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/device.h>
+#include "hfi.h"
 
-int hfi1_acquire_user_pages(unsigned long vaddr, int npages, bool writable,
+int hfi1_acquire_user_pages(unsigned long vaddr, size_t npages, bool writable,
 			    struct page **pages)
 {
 	unsigned long pinned, lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;

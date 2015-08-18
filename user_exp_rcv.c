@@ -127,6 +127,7 @@ static void clear_tid_node(struct hfi1_filedata *, u16, struct mmu_rb_node *);
 static inline u32 rcventry2tidinfo(u32 rcventry)
 {
 	u32 pair = rcventry & ~0x1;
+
 	return EXP_TID_SET(IDX, pair >> 1) |
 		EXP_TID_SET(CTRL, 1 << (rcventry - pair));
 }
@@ -168,7 +169,7 @@ static inline void tid_group_move(struct tid_group *group,
 	tid_group_add_tail(group, s2);
 }
 
-struct mmu_notifier_ops mn_opts = {
+static struct mmu_notifier_ops mn_opts = {
 	.invalidate_page = mmu_notifier_page,
 	.invalidate_range_start = mmu_notifier_range_start,
 };
@@ -201,6 +202,7 @@ int hfi1_user_exp_rcv_init(struct file *fp)
 		for (i = 0; i < uctxt->expected_count /
 			     dd->rcv_entries.group_size; i++) {
 			struct tid_group *grp;
+
 			grp = kzalloc(sizeof(*grp), GFP_KERNEL);
 			if (!grp) {
 				/*
@@ -223,8 +225,6 @@ int hfi1_user_exp_rcv_init(struct file *fp)
 		fd->invalid_tids = kzalloc(uctxt->expected_count *
 					   sizeof(u32), GFP_KERNEL);
 		if (!fd->invalid_tids) {
-			dd_dev_info(dd,
-				    "Failed to allocate invalidation array\n");
 			ret = -ENOMEM;
 			goto done;
 		} else {
@@ -409,10 +409,9 @@ int hfi1_user_exp_rcv_setup(struct file *fp, struct hfi1_tid_info *tinfo)
 		goto bail;
 	}
 
-	pagesets = kzalloc(sizeof(*pagesets) * uctxt->expected_count,
+	pagesets = kcalloc(uctxt->expected_count, sizeof(*pagesets),
 			   GFP_KERNEL);
 	if (!pagesets) {
-		dd_dev_err(dd, "Failed to allocate pageset array!\n");
 		ret = -ENOMEM;
 		goto bail;
 	}
@@ -427,9 +426,8 @@ int hfi1_user_exp_rcv_setup(struct file *fp, struct hfi1_tid_info *tinfo)
 	}
 
 	/* Allocate the array of struct page pointers needed for pinning */
-	pages = kzalloc(sizeof(*pages) * npages, GFP_KERNEL);
+	pages = kcalloc(npages, sizeof(*pages), GFP_KERNEL);
 	if (!pages) {
-		dd_dev_err(dd, "Unable to allocate page memory!\n");
 		ret = -ENOMEM;
 		goto bail;
 	}
@@ -472,10 +470,8 @@ int hfi1_user_exp_rcv_setup(struct file *fp, struct hfi1_tid_info *tinfo)
 		goto bail;
 
 	ngroups = pageset_count / dd->rcv_entries.group_size;
-	tidlist = kzalloc(sizeof(*tidlist) * pageset_count,
-			 GFP_KERNEL);
+	tidlist = kcalloc(pageset_count, sizeof(*tidlist), GFP_KERNEL);
 	if (!tidlist) {
-		dd_dev_err(dd, "Failed to allocate tidlist array\n");
 		ret = -ENOMEM;
 		goto nomem;
 	}
@@ -584,6 +580,7 @@ nomem:
 			 * everything done so far so we don't leak resources. */
 			tinfo->tidlist = (unsigned long)&tidlist;
 			hfi1_user_exp_rcv_clear(fp, tinfo);
+			tinfo->tidlist = 0;
 			ret = -EFAULT;
 			goto bail;
 		}
@@ -611,7 +608,7 @@ int hfi1_user_exp_rcv_clear(struct file *fp, struct hfi1_tid_info *tinfo)
 	u32 *tidinfo;
 	unsigned tididx;
 
-	tidinfo = kzalloc(sizeof(*tidinfo) * tinfo->tidcnt, GFP_KERNEL);
+	tidinfo = kcalloc(tinfo->tidcnt, sizeof(*tidinfo), GFP_KERNEL);
 	if (!tidinfo)
 		return -ENOMEM;
 
@@ -660,7 +657,7 @@ int hfi1_user_exp_rcv_invalid(struct file *fp, struct hfi1_tid_info *tinfo)
 	 * for a long time.
 	 * Copy the data to a local buffer so we can release the lock.
 	 */
-	array = kzalloc(sizeof(*array) * uctxt->expected_count, GFP_KERNEL);
+	array = kcalloc(uctxt->expected_count, sizeof(*array), GFP_KERNEL);
 	if (!array) {
 		ret = -EFAULT;
 		goto done;
@@ -727,6 +724,7 @@ static u32 find_phys_blocks(struct page **pages, unsigned npages,
 			while (pagecount) {
 				int maxpages = pagecount;
 				u32 bufsize = pagecount * PAGE_SIZE;
+
 				if (bufsize > MAX_EXPECTED_BUFFER)
 					maxpages =
 						MAX_EXPECTED_BUFFER >>
@@ -836,10 +834,8 @@ static int set_rcvarray_entry(struct file *fp, unsigned long vaddr,
 	 */
 	node = kzalloc(sizeof(*node) + (sizeof(struct page *) * npages),
 		       GFP_KERNEL);
-	if (!node) {
-		dd_dev_err(dd, "Failed to allocate memory for RB node\n");
+	if (!node)
 		return -ENOMEM;
-	}
 
 	phys = pci_map_single(dd->pcidev,
 			      __va(page_to_phys(pages[0])),
@@ -847,6 +843,7 @@ static int set_rcvarray_entry(struct file *fp, unsigned long vaddr,
 	if (dma_mapping_error(&dd->pcidev->dev, phys)) {
 		dd_dev_err(dd, "Failed to DMA map Exp Rcv pages 0x%llx\n",
 			   phys);
+		kfree(node);
 		return -EFAULT;
 	}
 
@@ -1097,6 +1094,7 @@ static struct mmu_rb_node *mmu_rb_search_by_addr(struct rb_root *root,
 		 * guaranteed to have non-overlapping buffers in the tree.
 		 */
 		int result = mmu_addr_cmp(mnode, addr, PAGE_SIZE);
+
 		if (result < 0)
 			node = node->rb_left;
 		else if (result > 0)
@@ -1131,6 +1129,7 @@ static int mmu_rb_insert_by_entry(struct rb_root *root,
 		struct mmu_rb_node *this =
 			container_of(*new, struct mmu_rb_node, rbnode);
 		int result = mmu_entry_cmp(this, node->rcventry);
+
 		parent = *new;
 		if (result < 0)
 			new = &((*new)->rb_left);
@@ -1154,6 +1153,7 @@ static int mmu_rb_insert_by_addr(struct rb_root *root, struct mmu_rb_node *node)
 		struct mmu_rb_node *this =
 			container_of(*new, struct mmu_rb_node, rbnode);
 		int result = mmu_addr_cmp(this, node->virt, node->len);
+
 		parent = *new;
 		if (result < 0)
 			new = &((*new)->rb_left);
