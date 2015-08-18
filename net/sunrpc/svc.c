@@ -963,9 +963,7 @@ int svc_register(const struct svc_serv *serv, struct net *net,
 			error = __svc_register(net, progp->pg_name, progp->pg_prog,
 						i, family, proto, port);
 
-			if (vers->vs_vers == 4 && vers->vs_nproc == 2 &&
-			    !vers->vs_hidden) {
-				/* must be NFSv4, act as though  (vers->vs_rpcb_optnl) */
+			if (vers->vs_rpcb_optnl) {
 				error = 0;
 				continue;
 			}
