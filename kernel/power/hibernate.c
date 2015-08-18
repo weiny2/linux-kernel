@@ -28,6 +28,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/ctype.h>
 #include <linux/genhd.h>
+#include <linux/module.h>
 
 #include "power.h"
 
@@ -645,6 +646,14 @@ int hibernate(void)
 
 	set_hibernation_key_regen_flag = false;
 
+	if (secure_modules()) {
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+		sigenforce = 1;
+#else
+		return -EPERM;
+#endif
+	}
+
 	lock_system_sleep();
 	/* The snapshot device should not be opened while we're running */
 	if (!atomic_add_unless(&snapshot_device_available, -1, 0)) {
@@ -740,6 +749,14 @@ static int software_resume(void)
 	 */
 	if (noresume)
 		return 0;
+
+	if (secure_modules()) {
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+               sigenforce = 1;
+#else
+               return 0;
+#endif
+	}
 
 	/*
 	 * name_to_dev_t() below takes a sysfs buffer mutex when sysfs
@@ -937,6 +954,14 @@ static ssize_t disk_store(struct kobject *kobj, struct kobj_attribute *attr,
 	int len;
 	char *p;
 	int mode = HIBERNATION_INVALID;
+
+	if (secure_modules()) {
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+		sigenforce = 1;
+#else
+		return -EPERM;
+#endif
+	}
 
 	p = memchr(buf, '\n', n);
 	len = p ? p - buf : n;
