@@ -18,14 +18,14 @@ config HFI1_VERBS_31BIT_PSN
 	---help---
 	Setting this enables 31 BIT PSN
 	For verbs RC/UC
-config CONFIG_SDMA_VERBOSITY
+config SDMA_VERBOSITY
 	bool "Config SDMA Verbosity"
 	depends on INFINIBAND_HFI1
 	default n
 	---help---
 	This is a configuration flag to enable verbose
 	SDMA debug
-config CONFIG_PRESCAN_RXQ
+config PRESCAN_RXQ
 	bool "Enable prescanning of the RX queue for ECNs"
 	depends on INFINIBAND_HFI1
 	default n
