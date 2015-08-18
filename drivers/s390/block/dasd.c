@@ -1886,6 +1886,28 @@ static void __dasd_device_check_expire(struct dasd_device *device)
 }
 
 /*
+ * return 1 when device is not eligible for IO because it is
+ * - set offline (DASD_FLAG_OFFLINE)
+ * - stopped (device->stopped)
+ *
+ * exception:
+ * The device is stopped but the request is needed to get it
+ * operational again.
+ * So the CQR is a path verification request (DASD_CQR_VERIFY_PATH)
+ * and only the disconnected or unresumed stop bit is set
+ * (DASD_STOPPED_DC_WAIT | DASD_UNRESUMED_PM)
+ */
+static int __dasd_device_is_unusable(struct dasd_device *device,
+				     struct dasd_ccw_req *cqr)
+{
+	return test_bit(DASD_FLAG_OFFLINE, &device->flags) ||
+		(device->stopped &&
+		 !(!(device->stopped &
+		     ~(DASD_STOPPED_DC_WAIT | DASD_UNRESUMED_PM)) &&
+		   test_bit(DASD_CQR_VERIFY_PATH, &cqr->flags)));
+}
+
+/*
  * Take a look at the first request on the ccw queue and check
  * if it needs to be started.
  */
@@ -1899,13 +1921,8 @@ static void __dasd_device_start_head(struct dasd_device *device)
 	cqr = list_entry(device->ccw_queue.next, struct dasd_ccw_req, devlist);
 	if (cqr->status != DASD_CQR_QUEUED)
 		return;
-	/* when device is stopped, return request to previous layer
-	 * exception: only the disconnect or unresumed bits are set and the
-	 * cqr is a path verification request
-	 */
-	if (device->stopped &&
-	    !(!(device->stopped & ~(DASD_STOPPED_DC_WAIT | DASD_UNRESUMED_PM))
-	      && test_bit(DASD_CQR_VERIFY_PATH, &cqr->flags))) {
+	/* if device is not usable return request to upper layer */
+	if (__dasd_device_is_unusable(device, cqr)) {
 		cqr->intrc = -EAGAIN;
 		cqr->status = DASD_CQR_CLEARED;
 		dasd_schedule_device_bh(device);
