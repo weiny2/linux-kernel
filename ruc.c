@@ -694,9 +694,8 @@ static inline void build_ahg(struct hfi1_qp *qp, u32 npsn)
 		clear_ahg(qp);
 	if (!(qp->s_flags & HFI1_S_AHG_VALID)) {
 		/* first middle that needs copy  */
-		if (qp->s_ahgidx < 0) {
+		if (qp->s_ahgidx < 0)
 			qp->s_ahgidx = sdma_ahg_alloc(qp->s_sde);
-		}
 		if (qp->s_ahgidx >= 0) {
 			qp->s_ahgpsn = npsn;
 			qp->s_hdr->tx_flags |= SDMA_TXREQ_F_AHG_COPY;
