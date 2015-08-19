@@ -152,7 +152,7 @@ void hfi_firmware_dbg_init(struct hfi_devdata *dd)
 	}
 	/* create files for each port */
 	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++) {
-		snprintf(name, sizeof(name), "port%d", unit);
+		snprintf(name, sizeof(name), "port%d", j);
 		ppd->hfi_port_dbg = debugfs_create_dir(name, dd->hfi_dev_dbg);
 		for (i = 0; i < ARRAY_SIZE(firmware_ops); i++) {
 			DEBUGFS_FILE_CREATE(firmware_ops[i].name,
