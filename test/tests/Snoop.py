@@ -318,11 +318,29 @@ def run_ib_send_lat_2():
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
 
+    #verify ib_send_lat has started
+    max_attempts = 10
+    attempts = 1
+    test_failed = 0
+    while attempts <= max_attempts:
+
+        cmd = "/usr/bin/ps -ef | /usr/bin/grep ib_send_lat | /usr/bin/grep -v grep"
+        status = host2.send_ssh(cmd, 0, run_as_root=True)
+
+        if status == 1:
+            time.sleep(5)
+            attempts += 1
+            continue
+        else:
+           break
+
+    if attempts > max_attempts:
+        RegLib.test_fail("ib_send_lat failed to start")
+
+
     # IbSendLat will not finish this is by design so give it 15 seconds
     # before killing it off. That is more than enough time even on simics.
-    RegLib.test_log(0, "Sleeping 15 seconds for packets to move")
-    time.sleep(5)
-    RegLib.test_log(0, "...10 more")
+    RegLib.test_log(0, "Sleeping 10 seconds for packets to move")
     time.sleep(5)
     RegLib.test_log(0, "...5 more")
     time.sleep(5)

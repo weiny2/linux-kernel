@@ -22,10 +22,10 @@ def kill_pcap(host1, host2):
     cmd = "killall -2 PcapLocal.py"
     ret = host1.send_ssh(cmd, False, run_as_root=True)
     if ret:
-        RegLib.test_log(0, "WARNING: Coudld not stop PcapLocal")
+        RegLib.test_log(0, "WARNING: Could not stop PcapLocal")
     ret = host2.send_ssh(cmd, False, run_as_root=True)
     if ret:
-        RegLib.test_log(0, "WARNING: Coudld not stop PcapLocal")
+        RegLib.test_log(0, "WARNING: Could not stop PcapLocal")
 
 def is_sm_active(host, sm):
     cmd = "/sbin/service %s status" % sm
@@ -78,6 +78,27 @@ def main():
     
     RegLib.test_log(0, "Waiting 5 seconds for Pcap procs to get started")
     time.sleep(5)
+
+    #verify PcapLocal.py has started
+    max_attempts = 10
+    attempts = 1
+    test_failed = 0
+    while attempts <= max_attempts:
+
+        cmd = "/usr/bin/ps -ef | /usr/bin/grep /tmp/snoop_integ.log | /usr/bin/grep -v grep"
+        status = host2.send_ssh(cmd, 0, run_as_root=True)
+
+        if status == 1:
+            time.sleep(5)
+            attempts += 1
+            continue
+        else:
+           break
+
+    if attempts > max_attempts:
+        RegLib.test_fail("PcapLocal.py failed to start")
+
+
     ret = opafm_host.send_ssh("/opt/opafm/bin/fm_cmd smForceSweep", False, run_as_root=True)
     if ret:
         kill_pcap(host1, host2)
