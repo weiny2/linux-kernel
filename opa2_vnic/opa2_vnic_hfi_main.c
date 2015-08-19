@@ -65,12 +65,22 @@
 
 static int opa_netdev_probe(struct opa_core_device *odev);
 static void opa_netdev_remove(struct opa_core_device *odev);
+static void opa_netdev_event_notify(struct opa_core_device *odev,
+				    enum opa_core_event event, u8 port);
 
 static struct opa_core_client opa_vnic_clnt = {
 	.name = KBUILD_MODNAME,
 	.add = opa_netdev_probe,
-	.remove = opa_netdev_remove
+	.remove = opa_netdev_remove,
+	.event_notify = opa_netdev_event_notify
 };
+
+static void opa_netdev_event_notify(struct opa_core_device *odev,
+				    enum opa_core_event event, u8 port)
+{
+	/* FXRTODO: Add event handling */
+	dev_info(&odev->dev, "%s port %d event %d\n", __func__, port, event);
+}
 
 /*
  * struct opa_netdev - OPA2 net device specific fields

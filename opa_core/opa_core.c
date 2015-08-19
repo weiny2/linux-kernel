@@ -55,8 +55,23 @@
 #include <linux/idr.h>
 #include <rdma/opa_core.h>
 
-/* Unique numbering for opa_core devices. */
-static DEFINE_IDA(opa_core_index_ida);
+/* Unique numbering for opa_core devices */
+static struct ida opa_core_index_ida;
+
+/* Unique numbering for opa_core clients */
+static struct idr opa_core_client_idr;
+
+/**
+ * struct opa_core_notify - Fields for an OPA core client notification
+ * @odev: opa core device
+ * @event: hardware event
+ * @port: port number of the port which generated this event
+ */
+struct opa_core_notify {
+	struct opa_core_device *odev;
+	enum opa_core_event event;
+	u8 port;
+};
 
 static inline struct opa_core_device *dev_to_opa_core(struct device *dev)
 {
@@ -104,8 +119,20 @@ static int opa_add_dev(struct device *dev, struct subsys_interface *si)
 	struct opa_core_client *client =
 		container_of(si, struct opa_core_client, si);
 	struct opa_core_device *odev = dev_to_opa_core(dev);
+	int ret;
 
-	return client->add(odev);
+	ret = client->add(odev);
+	if (ret < 0)
+		goto add_fail;
+	ret = idr_alloc(&opa_core_client_idr, client, 0, 0, GFP_KERNEL);
+	if (ret < 0)
+		goto idr_fail;
+	client->id_num = ret;
+	return ret;
+idr_fail:
+	client->remove(odev);
+add_fail:
+	return ret;
 }
 
 static int opa_remove_dev(struct device *dev, struct subsys_interface *si)
@@ -114,6 +141,7 @@ static int opa_remove_dev(struct device *dev, struct subsys_interface *si)
 		container_of(si, struct opa_core_client, si);
 	struct opa_core_device *odev = dev_to_opa_core(dev);
 
+	idr_remove(&opa_core_client_idr, client->id_num);
 	client->remove(odev);
 	return 0;
 }
@@ -131,6 +159,26 @@ static struct bus_type opa_core = {
 	.dev_groups = opa_core_dev_groups,
 	.uevent = opa_core_uevent,
 };
+
+static int _opa_core_notify_clients(int id, void *p, void *data)
+{
+	struct opa_core_client *client = p;
+	struct opa_core_notify *notify = data;
+
+	if (client->event_notify)
+		client->event_notify(notify->odev, notify->event, notify->port);
+	return 0;
+}
+
+void opa_core_notify_clients(struct opa_core_device *odev,
+			     enum opa_core_event event, u8 port)
+{
+	struct opa_core_notify notify = {.odev = odev, .event = event,
+					 .port = port};
+
+	idr_for_each(&opa_core_client_idr, _opa_core_notify_clients, &notify);
+}
+EXPORT_SYMBOL(opa_core_notify_clients);
 
 int opa_core_client_register(struct opa_core_client *client)
 {
@@ -216,12 +264,15 @@ EXPORT_SYMBOL(opa_core_unregister_device);
 
 static int __init opa_core_init(void)
 {
+	ida_init(&opa_core_index_ida);
+	idr_init(&opa_core_client_idr);
 	return bus_register(&opa_core);
 }
 
 static void __exit opa_core_exit(void)
 {
 	bus_unregister(&opa_core);
+	idr_destroy(&opa_core_client_idr);
 	ida_destroy(&opa_core_index_ida);
 }
 core_initcall(opa_core_init);
