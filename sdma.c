@@ -788,8 +788,9 @@ struct sdma_engine *sdma_select_engine_vl(
 	rval = e->sde[selector & e->mask];
 	rcu_read_unlock();
 
+	rval =  !rval ? &dd->per_sdma[0] : rval;
 	trace_hfi1_sdma_engine_select(dd, selector, vl, rval->this_idx);
-	return !rval ? &dd->per_sdma[0] : rval;
+	return rval;
 }
 
 /**
