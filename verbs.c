@@ -496,8 +496,8 @@ static int post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		}
 		nreq++;
 	}
-	spin_unlock_irqrestore(&qp->s_lock, flags);
 bail:
+	spin_unlock_irqrestore(&qp->s_lock, flags);
 	if (nreq && !call_send)
 		_hfi1_schedule_send(qp);
 	if (nreq && call_send)
