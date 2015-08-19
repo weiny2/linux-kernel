@@ -65,12 +65,22 @@
 
 static int opa_ib_add(struct opa_core_device *odev);
 static void opa_ib_remove(struct opa_core_device *odev);
+static void opa_ib_event_notify(struct opa_core_device *odev,
+				enum opa_core_event event, u8 port);
 
 static struct opa_core_client opa_ib_driver = {
 	.name = KBUILD_MODNAME,
 	.add = opa_ib_add,
 	.remove = opa_ib_remove,
+	.event_notify = opa_ib_event_notify
 };
+
+static void opa_ib_event_notify(struct opa_core_device *odev,
+				enum opa_core_event event, u8 port)
+{
+	/* FXRTODO: Add event handling */
+	dev_info(&odev->dev, "%s port %d event %d\n", __func__, port, event);
+}
 
 /* TODO - placeholders */
 __be64 opa_ib_sys_guid;

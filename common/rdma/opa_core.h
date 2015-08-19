@@ -203,6 +203,18 @@ enum mmap_token_types {
 };
 
 /**
+ * enum opa_core_event - events opa_core clients are notified about
+ * @OPA_LINK_STATE_CHANGE: there has been a change in the link state
+ * @OPA_MTU_CHANGE: there has been a change in the MTU
+ * @OPA_PKEY_CHANGE: there has been a change in the partition keys
+ */
+enum opa_core_event {
+	OPA_LINK_STATE_CHANGE,
+	OPA_MTU_CHANGE,
+	OPA_PKEY_CHANGE
+};
+
+/**
  * struct opa_ctx_assign - Used with opa_core_ops.ctx_assign operation
  * @pid: Requested Portals PID or -1 for driver assignment
  * @flags: Reserved for choosing alternate PID allocation behavior
@@ -413,20 +425,43 @@ opa_core_register_device(struct device *dev, struct opa_core_device_id *id,
 void opa_core_unregister_device(struct opa_core_device *odev);
 
 /**
+ * opa_core_notify_clients - Notify clients about a hardware event
+ * @odev: opa core device
+ * @event: hardware event
+ * @port: port number of the port which generated this event
+ *
+ * Upon receipt of an event, a client should query the changes via
+ * the (*get_port_desc) hardware operation. Clients are allowed to
+ * sleep or block in these notifications so opa_core_notify_clients
+ * should not be called from an atomic context.
+ * Return: none
+ */
+void opa_core_notify_clients(struct opa_core_device *odev,
+			     enum opa_core_event event, u8 port);
+
+/**
  * struct opa_core_client - representation of an opa_core client
  *
  * @name: OPA client name
  * @add: the function to call when a device is discovered
  * @remove: the function to call when a device is removed
+ * @event_notify: the function to call to notify the client
+ *		  about hardware events. Clients are allowed
+ *		  to sleep or block in these notifications.
  * @si: subsystem interface (private to opa_core)
  * @id: ID allocator (private to opa_core)
+ * @id_num: Identifier for this client (private to opa_core)
  */
 struct opa_core_client {
 	const char *name;
 	int (*add)(struct opa_core_device *odev);
 	void (*remove)(struct opa_core_device *odev);
+	void (*event_notify)(struct opa_core_device *odev,
+			     enum opa_core_event event,
+			     u8 port);
 	struct subsys_interface si;
 	struct idr id;
+	int id_num;
 };
 
 /**

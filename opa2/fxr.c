@@ -628,6 +628,8 @@ int hfi_set_mtu(struct hfi_pportdata *ppd)
 
 err:
 #endif
+	opa_core_notify_clients(ppd->dd->bus_dev,
+				OPA_MTU_CHANGE, ppd->pnum);
 	mutex_unlock(&ppd->hls_lock);
 
 	return ret;
@@ -690,6 +692,8 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 	case HLS_DN_DISABLE:
 	case HLS_DN_DOWNDEF:
 		ppd->lstate = IB_PORT_DOWN;
+		opa_core_notify_clients(ppd->dd->bus_dev,
+					OPA_LINK_STATE_CHANGE, ppd->pnum);
 		break;
 	case HLS_DN_POLL:
 		/*
@@ -706,6 +710,8 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		break;
 	case HLS_UP_ACTIVE:
 		ppd->lstate = IB_PORT_ACTIVE;
+		opa_core_notify_clients(ppd->dd->bus_dev,
+					OPA_LINK_STATE_CHANGE, ppd->pnum);
 		break;
 	default:
 		ppd->lstate = IB_PORT_INIT;

@@ -59,12 +59,22 @@
 
 static int hfi_misc_add(struct opa_core_device *odev);
 static void hfi_misc_remove(struct opa_core_device *odev);
+static void hfi_event_notify(struct opa_core_device *odev,
+			     enum opa_core_event event, u8 port);
 
 static struct opa_core_client hfi_misc = {
 	.name = KBUILD_MODNAME,
 	.add = hfi_misc_add,
 	.remove = hfi_misc_remove,
+	.event_notify = hfi_event_notify
 };
+
+static void hfi_event_notify(struct opa_core_device *odev,
+			     enum opa_core_event event, u8 port)
+{
+	/* FXRTODO: Add event handling */
+	dev_info(&odev->dev, "%s port %d event %d\n", __func__, port, event);
+}
 
 /*
  * Device initialization, called by OPA core when a OPA device is discovered
