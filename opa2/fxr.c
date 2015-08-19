@@ -110,6 +110,16 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 {
 	RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM_t flt = {.val = 0};
 	RXE2E_CFG_VALID_TC_SLID_t tc_slid = {.val = 0};
+	u32 offset = 0;
+
+	/* lowest entries in the CAM have the highest priority */
+	flt.field.valid = 1;
+	flt.field.l2 = HDR_EXT;
+	flt.field.l2_mask = 0;
+	flt.field.l4_mask = ~0;
+	flt.field.opcode_mask = ~0;
+	flt.field.cnt_m1 = 3;
+	write_csr(dd, FXR_RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM + offset, flt.val);
 
 	flt.field.valid = 1;
 	flt.field.l4 = PTL_RTS;
@@ -117,10 +127,12 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 	flt.field.l4_mask = 0;
 	flt.field.opcode_mask = ~0;
 	flt.field.cnt_m1 = 2;
-	write_csr(dd, FXR_RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM, flt.val);
+	offset += 8;
+	write_csr(dd, FXR_RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM + offset, flt.val);
 
 	flt.field.l4 = PTL_REND_EVENT;
-	write_csr(dd, FXR_RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM + 8, flt.val);
+	offset += 8;
+	write_csr(dd, FXR_RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM + offset, flt.val);
 
 	tc_slid.field.max_slid_p0 = HFI_MAX_LID_SUPP;
 	tc_slid.field.tc_valid_p0 = 0xf;
