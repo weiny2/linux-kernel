@@ -80,6 +80,7 @@
 #include <rdma/fxr/fxr_pcim_defs.h>
 #include "opa_hfi.h"
 #include <rdma/opa_core_ib.h>
+#include "link.h"
 
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
@@ -677,50 +678,6 @@ void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 }
 
 /*
- * Change the physical and/or logical link state.
- *
- * Returns 0 on success, -errno on failure.
- */
-int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
-{
-	/*
-	 * FXRTODO: To be implemented as part of LNI
-	 * for now this simple state machine logic
-	 * should work fine
-	 */
-	switch (state) {
-	case HLS_DN_DISABLE:
-	case HLS_DN_DOWNDEF:
-		ppd->lstate = IB_PORT_DOWN;
-		opa_core_notify_clients(ppd->dd->bus_dev,
-					OPA_LINK_STATE_CHANGE, ppd->pnum);
-		break;
-	case HLS_DN_POLL:
-		/*
-		 * FXRTODO: Fake the transition from
-		 * POLL to INIT here by directly setting
-		 * the link state to INIT until we
-		 * have LNI in place.
-		 */
-	case HLS_UP_INIT:
-		ppd->lstate = IB_PORT_INIT;
-		break;
-	case HLS_UP_ARMED:
-		ppd->lstate = IB_PORT_ARMED;
-		break;
-	case HLS_UP_ACTIVE:
-		ppd->lstate = IB_PORT_ACTIVE;
-		opa_core_notify_clients(ppd->dd->bus_dev,
-					OPA_LINK_STATE_CHANGE, ppd->pnum);
-		break;
-	default:
-		ppd->lstate = IB_PORT_INIT;
-	}
-
-	return -EINVAL;
-}
-
-/*
  * Send an idle SMA message.
  *
  * Returns 0 on success, -EINVAL on error
@@ -778,6 +735,19 @@ static irqreturn_t irq_eq_handler(int irq, void *dev_id)
 }
 
 /*
+ * hfi_pport_down - shutdown ports
+ */
+void hfi_pport_down(struct hfi_devdata *dd)
+{
+	u8 port;
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+		hfi_set_link_state(ppd, HLS_DN_OFFLINE);
+	}
+}
+
+/*
  * Do HFI chip-specific and PCIe cleanup. Free dd memory.
  * This is called in error cleanup from hfi_pci_dd_init().
  * Some state may be unset, so must use caution and test if
@@ -800,6 +770,8 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 		hfi_cq_unmap(&dd->priv_tx_cq, &dd->priv_rx_cq);
 		hfi_ctxt_cleanup(&dd->priv_ctx);
 	}
+
+	hfi_pport_down(dd);
 
 	hfi_iommu_root_clear_context(dd);
 
@@ -1003,11 +975,7 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
 		ppd->lstate = IB_PORT_DOWN;
 		mutex_init(&ppd->hls_lock);
-		/*
-		 * FXRTODO: Until LNI is implemented. Let this
-		 * be IB_PORT_INIT
-		 */
-		ppd->lstate = IB_PORT_INIT;
+		hfi_start_link(ppd);
 
 		/*
 		 * FXRTODO: The below 4 variables

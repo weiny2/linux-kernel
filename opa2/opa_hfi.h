@@ -369,7 +369,11 @@ struct hfi_pportdata {
 	u32 lid;
 	u32 sm_lid;
 	struct hfi_ptcdata ptc[HFI_MAX_TC];
+	/* host link state which keeps both Physical Port and Logical Link
+	   state by having HLS_* */
 	struct mutex hls_lock;
+	u32 host_link_state;
+
 	u32 lstate;
 	u32 ibmtu;
 	u32 port_error_action;
