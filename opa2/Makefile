@@ -9,6 +9,7 @@ obj-m += opa2_hfi.o
 opa2_hfi-y :=
 opa2_hfi-y += debugfs.o
 opa2_hfi-y += firmware.o
+opa2_hfi-y += link.o
 opa2_hfi-y += init.o
 opa2_hfi-y += fxr.o
 opa2_hfi-y += intr.o
