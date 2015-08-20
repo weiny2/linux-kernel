@@ -73,6 +73,10 @@
 #include <rdma/fxr/fxr_rx_e2e_csrs.h>
 #include <rdma/fxr/fxr_rx_e2e_defs.h>
 #include <rdma/fxr/fxr_lm_csrs.h>
+#include <rdma/fxr/fxr_lm_tp_csrs.h>
+#include <rdma/fxr/fxr_lm_fpc_csrs.h>
+#include <rdma/fxr/fxr_linkmux_tp_defs.h>
+#include <rdma/fxr/fxr_linkmux_fpc_defs.h>
 #include <rdma/fxr/fxr_fc_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs.h>
@@ -102,9 +106,49 @@ static void write_fc_csr(const struct hfi_devdata *dd, u8 port,
 		offset += FXR_FZC_LCB0_CSRS;
 	else if (port == 2)
 		offset += FXR_FZC_LCB1_CSRS;
-	else dd_dev_warn(dd, "invalid port");
+	else
+		dd_dev_warn(dd, "invalid port");
 
-	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
+	write_csr(dd, offset, value);
+}
+
+static void write_lm_fpc_csr(const struct hfi_devdata *dd, u8 port,
+			     u32 offset, u64 value)
+{
+	if (port == 1)
+		offset += FXR_LM_FPC0_CSRS;
+	else if (port == 2)
+		offset += FXR_LM_FPC0_CSRS;
+	else
+		dd_dev_warn(dd, "invalid port");
+
+	write_csr(dd, offset, value);
+}
+
+static void write_lm_tp_csr(const struct hfi_devdata *dd, u8 port,
+			    u32 offset, u64 value)
+{
+	if (port == 1)
+		offset += FXR_LM_TP0_CSRS;
+	else if (port == 2)
+		offset += FXR_LM_TP1_CSRS;
+	else
+		dd_dev_warn(dd, "invalid port");
+
+	write_csr(dd, offset, value);
+}
+
+static u64 read_lm_tp_csr(const struct hfi_devdata *dd, u8 port,
+			  u32 offset)
+{
+	if (port == 1)
+		offset += FXR_LM_TP0_CSRS;
+	else if (port == 2)
+		offset += FXR_LM_TP1_CSRS;
+	else
+		dd_dev_warn(dd, "invalid port");
+
+	return read_csr(dd, offset);
 }
 
 static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
@@ -376,7 +420,18 @@ static void hfi_enable_pkey_checks(struct hfi_pportdata *ppd)
 	struct hfi_devdata *dd = ppd->dd;
 	LM_CONFIG_PORT0_t lmp0;
 	LM_CONFIG_PORT1_t lmp1;
+	TP_CFG_MISC_CTRL_t misc;
 
+	misc.val = read_lm_tp_csr(dd, ppd_to_pnum(ppd), FXR_TP_CFG_MISC_CTRL);
+	if (misc.field.disable_pkey_chk) {
+		misc.field.disable_pkey_chk = 0;
+		write_lm_tp_csr(dd, ppd_to_pnum(ppd),
+				FXR_TP_CFG_MISC_CTRL, lmp0.val);
+	}
+	/*
+	 * FXRTODO: Writes to TP_CFG_PKEY_CHECK_CTRL are required
+	 * for 10B and 8B packets
+	 */
 	switch (ppd_to_pnum(ppd)) {
 	case 1:
 		lmp0.val = read_csr(dd, FXR_LM_CONFIG_PORT0);
@@ -405,52 +460,25 @@ static void hfi_enable_pkey_checks(struct hfi_pportdata *ppd)
 static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	LM_PKEY_ARRAY_PORT0_t lpa0;
-	LM_PKEY_ARRAY_PORT1_t lpa1;
-	u32 lpa_offset;
+	TP_CFG_PKEY_TABLE_t tx_pkey;
+	FPC_CFG_PKEY_TABLE_t rx_pkey;
 	int i;
 
-	switch (ppd_to_pnum(ppd)) {
-	case 1:
-		for (i = 0; i < HFI_MAX_PKEYS; i++) {
-			u16 pkey = ppd->pkeys[i];
+	for (i = 0; i < HFI_MAX_PKEYS; i += 4) {
+		tx_pkey.field.entry0 = ppd->pkeys[i];
+		tx_pkey.field.entry1 = ppd->pkeys[i + 1];
+		tx_pkey.field.entry2 = ppd->pkeys[i + 2];
+		tx_pkey.field.entry3 = ppd->pkeys[i + 3];
 
-			lpa_offset = FXR_LM_PKEY_ARRAY_PORT0 + (0x08 * i);
-
-			/*
-			 * FXRTODO: Need clarification on this. HAS is
-			 * not clear. Right now it is assumed that if
-			 * number of 1s in CAM is * even, then set
-			 * PARITY bit.
-			 */
-			lpa0.field.PARITY = !hfi_parity(HFI_PKEY_CAM(pkey));
-			lpa0.field.MEMBER_TYPE = HFI_PKEY_MEMBER_TYPE(pkey);
-			lpa0.field.CAM_ENTRY = HFI_PKEY_CAM(pkey);
-			write_csr(dd, lpa_offset, lpa0.val);
-		}
-		break;
-	case 2:
-		for (i = 0; i < HFI_MAX_PKEYS; i++) {
-			u16 pkey = ppd->pkeys[i];
-
-			lpa_offset = FXR_LM_PKEY_ARRAY_PORT1 + (0x08 * i);
-
-			/*
-			 * FXRTODO: Need clarification on this. HAS is
-			 * not clear. Right now it is assumed that if
-			 * number of 1s in CAM is * even, then set
-			 * PARITY bit.
-			 */
-			lpa1.field.PARITY = !hfi_parity(HFI_PKEY_CAM(pkey));
-			lpa1.field.MEMBER_TYPE = HFI_PKEY_MEMBER_TYPE(pkey);
-			lpa1.field.CAM_ENTRY = HFI_PKEY_CAM(pkey);
-			write_csr(dd, lpa_offset, lpa1.val);
-		}
-		break;
-	default:
-		return;
+		rx_pkey.field.entry0 = ppd->pkeys[i];
+		rx_pkey.field.entry1 = ppd->pkeys[i + 1];
+		rx_pkey.field.entry2 = ppd->pkeys[i + 2];
+		rx_pkey.field.entry3 = ppd->pkeys[i + 3];
+		write_lm_tp_csr(dd, ppd_to_pnum(ppd),
+				FXR_TP_CFG_PKEY_TABLE, tx_pkey.val);
+		write_lm_fpc_csr(dd, ppd_to_pnum(ppd),
+				 FXR_FPC_CFG_PKEY_TABLE, rx_pkey.val);
 	}
-
 	hfi_enable_pkey_checks(ppd);
 }
 
