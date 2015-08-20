@@ -51,6 +51,7 @@
 #include <linux/cdev.h>
 #include <linux/io.h>
 #include <linux/aio.h>
+#include <linux/vmalloc.h>
 
 #include "hfi.h"
 #include "pio.h"
