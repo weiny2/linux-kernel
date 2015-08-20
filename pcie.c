@@ -903,6 +903,73 @@ static void arm_gasket_logic(struct hfi1_devdata *dd)
 	read_csr(dd, ASIC_PCIE_SD_HOST_CMD);
 }
 
+/* CcePcieCtrl long name helper */
+#define PC(field) (CCE_PCIE_CTRL_##field)
+
+ /*
+  * Write xmt_margin for full-swing (WFR-B) or half-swing (WFR-C).
+  */
+static void write_xmt_margin(struct hfi1_devdata *dd, const char *fname)
+{
+	u64 pcie_ctrl;
+	u64 xmt_margin;
+	u64 xmt_margin_oe;
+	u64 lane_delay;
+	u64 lane_bundle;
+
+	pcie_ctrl = read_csr(dd, CCE_PCIE_CTRL);
+
+	/*
+	 * For Discrete, use full-swing.
+	 *  - PCIe TX defaults to full-swing.
+	 *    Leave this register as default.
+	 * For Integrated, use half-swing
+	 *  - Copy xmt_margin and xmt_margin_oe
+	 *    from Gen1/Gen2 to Gen3.
+	 */
+	if (dd->pcidev->device == PCI_DEVICE_ID_INTEL1) { /* integrated */
+		/* extract initial fields */
+		xmt_margin = (pcie_ctrl >> PC(XMT_MARGIN_GEN1_GEN2_SHIFT))
+			    & PC(XMT_MARGIN_GEN1_GEN2_MASK);
+		xmt_margin_oe =
+			(pcie_ctrl
+			  >> PC(XMT_MARGIN_GEN1_GEN2_OVERWRITE_ENABLE_SHIFT))
+			& PC(XMT_MARGIN_GEN1_GEN2_OVERWRITE_ENABLE_MASK);
+		lane_delay = (pcie_ctrl >> PC(PCIE_LANE_DELAY_SHIFT))
+			    & PC(PCIE_LANE_DELAY_MASK);
+		lane_bundle = (pcie_ctrl >> PC(PCIE_LANE_BUNDLE_SHIFT))
+			    & PC(PCIE_LANE_BUNDLE_MASK);
+
+		/*
+		 * For A0, EFUSE values are not set.  Override with the
+		 * correct values.
+		 */
+		if (is_a0(dd)) {
+			/* xmt_margin and OverwiteEnabel should be the
+			 * same for Gen1/Gen2 and Gen3 */
+			xmt_margin                = 0x5;
+			xmt_margin_oe = 0x1;
+			lane_delay                = 0xF; /* Delay 240ns. */
+			lane_bundle               = 0x0; /* Set to 1 lane. */
+		}
+
+		/* overwrite existing values */
+		pcie_ctrl = (xmt_margin << PC(XMT_MARGIN_GEN1_GEN2_SHIFT))
+			| (xmt_margin_oe <<
+				PC(XMT_MARGIN_GEN1_GEN2_OVERWRITE_ENABLE_SHIFT))
+			| (xmt_margin << PC(XMT_MARGIN_SHIFT))
+			| (xmt_margin_oe <<
+				PC(XMT_MARGIN_OVERWRITE_ENABLE_SHIFT))
+			| (lane_delay << PC(PCIE_LANE_DELAY_SHIFT))
+			| (lane_bundle << PC(PCIE_LANE_BUNDLE_SHIFT));
+
+		write_csr(dd, CCE_PCIE_CTRL, pcie_ctrl);
+	}
+
+	dd_dev_info(dd, "%s: program XMT margin, CcePcieCtrl 0x%llx\n",
+		fname, pcie_ctrl);
+}
+
 /*
  * Do all the steps needed to transition the PCIe link to Gen3 speed.
  */
@@ -1111,11 +1178,8 @@ retry:
 
 	/*
 	 * step 5d: program XMT margin
-	 * Right now, leave the default alone.  To change, do a
-	 * read-modify-write of:
-	 *	CcePcieCtrl.XmtMargin
-	 *	CcePcieCtrl.XmitMarginOverwriteEnable
 	 */
+	write_xmt_margin(dd, __func__);
 
 	/* step 5e: disable active state power management (ASPM) */
 	dd_dev_info(dd, "%s: clearing ASPM\n", __func__);
