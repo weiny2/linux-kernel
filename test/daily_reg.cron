@@ -13,11 +13,18 @@ ipostl_client=$run_host
 
 hostfile="${host1}_${host2}.hosts"
 perf_git="/nfs/sc/disks/fabric_work/ddalessa/perf_analysis/perfromance_team-fab_perf"
-verbs_dir="/nfs_scratch/driver_perf/Verbs/verbs-perf-check-r1.0"
+verbs_dir="/nfs_scratch/driver_perf/Verbs/verbs-perf-check-r1.1"
 turbo="noturbo"
 WFRMPI="/usr/mpi/gcc/openmpi-1.8.5-hfi"
 datestamp=`date "+%m-%d-%y"`
 logdir="/nfs/sc/disks/fabric_mirror/scratch/wfr_reg_test/daily_logs/RHEL7"
+
+# Verbs Perf Settings
+MPIVARS="/nfs/sc/disks/fabric_files/tools/intel/impi/5.1.0.038/impi/5.1.0.079/intel64/bin/mpivars.sh"
+VERBS_LDLIB="/nfs/sc/disks/fabric_files/tools/intel/impi/5.1.0.038/impi/5.1.0.079/intel64/lib/:/usr/lib64"
+COMPILEVARS="/nfs/sc/disks/fabric_files/tools/intel/composerxe/bin/compilervars.sh intel64"
+MPI_INCLUDE="/nfs/sc/disks/fabric_files/tools/intel/impi/5.1.0.038/impi/5.1.0.079/intel64/include"
+WENV="/nfs/sc/disks/fabric_files/tools/intel/impi/5.1.0.038/impi/5.1.0.079/intel64/include"
 
 get_uptime () {
 	host=$1
@@ -135,8 +142,9 @@ function do_verbs_perf()
 	load_ipoib
 
 	echo "Starting verbs perf"
-	ssh -t $run_host "cd $verbs_dir &&
-	 	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/nfs/sc/disks/fabric_files/tools/intel/impi/5.0.3.048/intel64/lib/:/usr/lib64 \
+	ssh -t $run_host "source $MPIVARS && source $COMPILEVARS && alias wenv=$WENV && cd $verbs_dir && \
+	 	LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$VERBS_LDLIB \
+		INCLUDE=$INCLUDE:$MPI_INCLUDE \
 		WFRBUILDS=/nfs_scratch/perfromance_team-fab_perf/wfr-sys/wfr-builds/rh7.0/floor \
 		WFRDRIVER=$WFRBUILDS/driver/hfi1.ko \
 		WFRMPI=$WFRBUILDS/mpi/openmpi-1.8.2 \
