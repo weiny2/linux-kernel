@@ -270,7 +270,6 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 	struct hfi1_pportdata *ppd;
 	struct hfi1_ibport *ibp;
 	struct hfi1_swqe *wqe;
-	unsigned long flags;
 	u32 nwords;
 	u32 extra_bytes;
 	u32 bth0;
@@ -280,13 +279,12 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 	int next_cur;
 	u8 sc5;
 
-	spin_lock_irqsave(&qp->s_lock, flags);
-
 	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_NEXT_SEND_OK)) {
 		if (!(ib_hfi1_state_ops[qp->state] & HFI1_FLUSH_SEND))
 			goto bail;
 		/* We are in the error state, flush the work request. */
-		if (qp->s_last == qp->s_head)
+		smp_read_barrier_depends(); /* see post_one_send */
+		if (qp->s_last == ACCESS_ONCE(qp->s_head))
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
 		if (atomic_read(&qp->s_iowait.sdma_busy)) {
@@ -298,7 +296,9 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 		goto done;
 	}
 
-	if (qp->s_cur == qp->s_head)
+	/* see post_one_send() */
+	smp_read_barrier_depends();
+	if (qp->s_cur == ACCESS_ONCE(qp->s_head))
 		goto bail;
 
 	wqe = get_swqe_ptr(qp, qp->s_cur);
@@ -316,6 +316,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 		if (unlikely(!loopback && (lid == ppd->lid ||
 		    (lid == HFI1_PERMISSIVE_LID &&
 		     qp->ibqp.qp_type == IB_QPT_GSI)))) {
+			unsigned long flags = 0;
 			/*
 			 * If DMAs are in progress, we can't generate
 			 * a completion for the loopback packet since
@@ -407,7 +408,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 		bth0 |= hfi1_get_pkey(ibp, qp->s_pkey_index);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
-	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
+	ohdr->bth[2] = cpu_to_be32(mask_psn(wqe->psn));
 	/*
 	 * Qkeys with the high order bit set mean use the
 	 * qkey from the QP context instead of the WR (see 10.2.5).
@@ -423,12 +424,11 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 
 done:
 	ret = 1;
-	goto unlock;
+	goto out;
 
 bail:
 	qp->s_flags &= ~HFI1_S_BUSY;
-unlock:
-	spin_unlock_irqrestore(&qp->s_lock, flags);
+out:
 	return ret;
 }
 
