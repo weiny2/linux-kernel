@@ -57,6 +57,7 @@
 #include <linux/mm.h>
 #include <linux/random.h>
 #include <linux/vmalloc.h>
+#include <linux/log2.h>
 
 #include "hfi.h"
 #include "common.h"
@@ -64,6 +65,7 @@
 #include "trace.h"
 #include "qp.h"
 #include "sdma.h"
+#include "verbs.h"
 
 unsigned int hfi1_lkey_table_size = 16;
 module_param_named(lkey_table_size, hfi1_lkey_table_size, uint,
@@ -369,17 +371,11 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	int acc;
 	struct hfi1_lkey_table *rkt;
 	struct hfi1_pd *pd;
-	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
-	struct hfi1_pportdata *ppd;
-	struct hfi1_ibport *ibp;
+	u8 log_pmtu;
 
 	/* IB spec says that num_sge == 0 is OK. */
 	if (unlikely(wr->num_sge > qp->s_max_sge))
 		return -EINVAL;
-
-	ppd = &dd->pport[qp->port_num - 1];
-	ibp = &ppd->ibport_data;
-
 	/*
 	 * Don't allow RDMA reads or atomic operations on UC or
 	 * undefined operations.
@@ -409,11 +405,16 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	else if (wr->opcode >= IB_WR_RDMA_READ && !qp->s_max_rd_atomic)
 		return -EINVAL;
 
+	/* check for avail */
+	if (unlikely(!qp->s_avail)) {
+		qp->s_avail = qp_get_savail(qp);
+		if (!qp->s_avail)
+			return -ENOMEM;
+	}
+	qp->s_avail--;
 	next = qp->s_head + 1;
 	if (next >= qp->s_size)
 		next = 0;
-	if (next == qp->s_last)
-		return -ENOMEM;
 
 	rkt = &to_idev(qp->ibqp.device)->lk_table;
 	pd = to_ipd(qp->ibqp.pd);
@@ -443,12 +444,21 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	    qp->ibqp.qp_type == IB_QPT_RC) {
 		if (wqe->length > 0x80000000U)
 			goto bail_inval_free;
+		log_pmtu = qp->log_pmtu;
 	} else {
 		struct hfi1_ah *ah = to_iah(wr->wr.ud.ah);
 
+		log_pmtu = ah->log_pmtu;
+		if (wqe->length > (1 << ah->log_pmtu))
+			goto bail_inval_free;
+		log_pmtu = ah->log_pmtu;
 		atomic_inc(&ah->refcount);
 	}
 	wqe->ssn = qp->s_ssn++;
+	wqe->psn = qp->s_next_psn;
+	wqe->lpsn = wqe->psn + ((wqe->length - 1) >> log_pmtu);
+	qp->s_next_psn = wqe->lpsn + 1;
+	smp_wmb(); /* see request builders */
 	qp->s_head = next;
 
 	return 0;
@@ -480,16 +490,16 @@ static int post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 	unsigned long flags;
 	unsigned nreq = 0;
 
-	spin_lock_irqsave(&qp->s_lock, flags);
+	spin_lock_irqsave(&qp->s_hlock, flags);
 
 	/* Check that state is OK to post send. */
 	if (unlikely(!(ib_hfi1_state_ops[qp->state] & HFI1_POST_SEND_OK))) {
-		spin_unlock_irqrestore(&qp->s_lock, flags);
+		spin_unlock_irqrestore(&qp->s_hlock, flags);
 		return -EINVAL;
 	}
 
 	/* sq empty and not list -> call send */
-	call_send = qp->s_head == qp->s_last && !wr->next;
+	call_send = qp->s_head == ACCESS_ONCE(qp->s_last) && !wr->next;
 
 	for (; wr; wr = wr->next) {
 		err = post_one_send(qp, wr);
@@ -500,7 +510,7 @@ static int post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		nreq++;
 	}
 bail:
-	spin_unlock_irqrestore(&qp->s_lock, flags);
+	spin_unlock_irqrestore(&qp->s_hlock, flags);
 	if (nreq && !call_send)
 		_hfi1_schedule_send(qp);
 	if (nreq && call_send)
@@ -1676,7 +1686,11 @@ static struct ib_ah *create_ah(struct ib_pd *pd,
 	struct hfi1_ah *ah;
 	struct ib_ah *ret;
 	struct hfi1_ibdev *dev = to_idev(pd->device);
+	struct hfi1_ibport *ibp;
+	struct hfi1_pportdata *ppd;
+	struct hfi1_devdata *dd;
 	unsigned long flags;
+	u8 sc5;
 
 	if (hfi1_check_ah(pd->device, ah_attr)) {
 		ret = ERR_PTR(-EINVAL);
@@ -1703,6 +1717,13 @@ static struct ib_ah *create_ah(struct ib_pd *pd,
 	/* ib_create_ah() will initialize ah->ibah. */
 	ah->attr = *ah_attr;
 	atomic_set(&ah->refcount, 0);
+	ibp = to_iport(pd->device, ah_attr->port_num);
+	ppd = ppd_from_ibp(ibp);
+	sc5 = ibp->sl_to_sc[ah_attr->sl];
+	dd = dd_from_ppd(ppd);
+	ah->vl = sc_to_vlt(dd, sc5);
+	if (ah->vl < num_vls || ah->vl == 15)
+		ah->log_pmtu = ilog2(dd->vld[ah->vl].mtu);
 
 	ret = &ah->ibah;
 

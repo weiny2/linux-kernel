@@ -54,6 +54,7 @@
 #include "qp.h"
 #include "sdma.h"
 #include "trace.h"
+#include "verbs.h"
 
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_RC_##x
@@ -270,20 +271,18 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 	u32 bth2;
 	u32 pmtu = qp->pmtu;
 	char newreq;
-	unsigned long flags;
 	int ret = 0;
 	int middle = 0;
 	int delta;
-
-	ohdr = &qp->s_hdr->ibh.u.oth;
-	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = &qp->s_hdr->ibh.u.l.oth;
 
 	/*
 	 * The lock is needed to synchronize between the sending tasklet,
 	 * the receive interrupt handler, and timeout re-sends.
 	 */
-	spin_lock_irqsave(&qp->s_lock, flags);
+
+	ohdr = &qp->s_hdr->ibh.u.oth;
+	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
+		ohdr = &qp->s_hdr->ibh.u.l.oth;
 
 	/* Sending responses has higher priority over sending requests. */
 	if ((qp->s_flags & HFI1_S_RESP_PENDING) &&
@@ -294,7 +293,8 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		if (!(ib_hfi1_state_ops[qp->state] & HFI1_FLUSH_SEND))
 			goto bail;
 		/* We are in the error state, flush the work request. */
-		if (qp->s_last == qp->s_head)
+		smp_read_barrier_depends(); /* see post_one_send() */
+		if (qp->s_last == ACCESS_ONCE(qp->s_head))
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
 		if (atomic_read(&qp->s_iowait.sdma_busy)) {
@@ -337,7 +337,8 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		newreq = 0;
 		if (qp->s_cur == qp->s_tail) {
 			/* Check if send work queue is empty. */
-			if (qp->s_tail == qp->s_head) {
+			smp_read_barrier_depends(); /* see post_one_send */
+			if (qp->s_tail == ACCESS_ONCE(qp->s_head)) {
 				clear_ahg(qp);
 				goto bail;
 			}
@@ -350,8 +351,8 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 				qp->s_flags |= HFI1_S_WAIT_FENCE;
 				goto bail;
 			}
-			wqe->psn = qp->s_next_psn;
 			newreq = 1;
+			qp->s_psn = wqe->psn;
 		}
 		/*
 		 * Note that we have to be careful not to modify the
@@ -370,9 +371,7 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 				qp->s_flags |= HFI1_S_WAIT_SSN_CREDIT;
 				goto bail;
 			}
-			wqe->lpsn = wqe->psn;
 			if (len > pmtu) {
-				wqe->lpsn += (len - 1) / pmtu;
 				qp->s_state = OP(SEND_FIRST);
 				len = pmtu;
 				break;
@@ -409,9 +408,7 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 				cpu_to_be32(wqe->wr.wr.rdma.rkey);
 			ohdr->u.rc.reth.length = cpu_to_be32(len);
 			hwords += sizeof(struct ib_reth) / sizeof(u32);
-			wqe->lpsn = wqe->psn;
 			if (len > pmtu) {
-				wqe->lpsn += (len - 1) / pmtu;
 				qp->s_state = OP(RDMA_WRITE_FIRST);
 				len = pmtu;
 				break;
@@ -446,13 +443,6 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 				qp->s_num_rd_atomic++;
 				if (!(qp->s_flags & HFI1_S_UNLIMITED_CREDIT))
 					qp->s_lsn++;
-				/*
-				 * Adjust s_next_psn to count the
-				 * expected number of responses.
-				 */
-				if (len > pmtu)
-					qp->s_next_psn += (len - 1) / pmtu;
-				wqe->lpsn = qp->s_next_psn++;
 			}
 			ohdr->u.rc.reth.vaddr =
 				cpu_to_be64(wqe->wr.wr.rdma.remote_addr);
@@ -483,7 +473,6 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 				qp->s_num_rd_atomic++;
 				if (!(qp->s_flags & HFI1_S_UNLIMITED_CREDIT))
 					qp->s_lsn++;
-				wqe->lpsn = wqe->psn;
 			}
 			if (wqe->wr.opcode == IB_WR_ATOMIC_CMP_AND_SWP) {
 				qp->s_state = OP(COMPARE_SWAP);
@@ -526,11 +515,8 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		}
 		if (wqe->wr.opcode == IB_WR_RDMA_READ)
 			qp->s_psn = wqe->lpsn + 1;
-		else {
+		else
 			qp->s_psn++;
-			if (cmp_psn(qp->s_psn, qp->s_next_psn) > 0)
-				qp->s_next_psn = qp->s_psn;
-		}
 		break;
 
 	case OP(RDMA_READ_RESPONSE_FIRST):
@@ -550,8 +536,6 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		/* FALLTHROUGH */
 	case OP(SEND_MIDDLE):
 		bth2 = mask_psn(qp->s_psn++);
-		if (cmp_psn(qp->s_psn, qp->s_next_psn) > 0)
-			qp->s_next_psn = qp->s_psn;
 		ss = &qp->s_sge;
 		len = qp->s_len;
 		if (len > pmtu) {
@@ -592,8 +576,6 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		/* FALLTHROUGH */
 	case OP(RDMA_WRITE_MIDDLE):
 		bth2 = mask_psn(qp->s_psn++);
-		if (cmp_psn(qp->s_psn, qp->s_next_psn) > 0)
-			qp->s_next_psn = qp->s_psn;
 		ss = &qp->s_sge;
 		len = qp->s_len;
 		if (len > pmtu) {
@@ -665,13 +647,13 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		middle);
 done:
 	ret = 1;
-	goto unlock;
+	goto out;
 
 bail:
 	qp->s_flags &= ~HFI1_S_BUSY;
-unlock:
-	spin_unlock_irqrestore(&qp->s_lock, flags);
+out:
 	return ret;
+
 }
 
 /**
@@ -1100,6 +1082,7 @@ static struct hfi1_swqe *do_rc_completion(struct hfi1_qp *qp,
 		}
 		if (++qp->s_last >= qp->s_size)
 			qp->s_last = 0;
+		smp_wmb(); /* see post_one_send() */
 	} else {
 		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 
@@ -1446,7 +1429,8 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 	trace_hfi1_rc_ack(qp, psn);
 
 	/* Ignore invalid responses. */
-	if (cmp_psn(psn, qp->s_next_psn) >= 0)
+	smp_read_barrier_depends(); /* see post_one_send */
+	if (cmp_psn(psn, ACCESS_ONCE(qp->s_next_psn)) >= 0)
 		goto ack_done;
 
 	/* Ignore duplicate responses. */

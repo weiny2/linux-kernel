@@ -283,4 +283,26 @@ static inline void hfi1_schedule_send(struct hfi1_qp *qp)
 
 void hfi1_migrate_qp(struct hfi1_qp *qp);
 
+/**
+ * qp_get_savail - return number of avail send entries
+ *
+ * @qp - the qp
+ *
+ * This assumes the s_hlock is held but the s_last
+ * is uncontrolled.
+ */
+static inline u32 qp_get_savail(struct hfi1_qp *qp)
+{
+	u32 slast;
+	u32 ret;
+
+	smp_read_barrier_depends(); /* see rc.c */
+	slast = ACCESS_ONCE(qp->s_last);
+	ret =
+		qp->s_size -
+		((((s32)qp->s_head - (s32)slast) << 1) >> 1)
+		- 1;
+	return ret;
+}
+
 #endif /* _QP_H */

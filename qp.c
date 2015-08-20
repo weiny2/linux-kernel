@@ -425,6 +425,7 @@ static void clear_mr_refs(struct hfi1_qp *qp, int clr_sends)
 				atomic_dec(&to_iah(wqe->wr.wr.ud.ah)->refcount);
 			if (++qp->s_last >= qp->s_size)
 				qp->s_last = 0;
+			smp_wmb(); /* see qp_get_savail() */
 		}
 		if (qp->s_rdma_mr) {
 			hfi1_put_mr(qp->s_rdma_mr);
@@ -494,7 +495,7 @@ int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 	}
 
 	/* Schedule the sending tasklet to drain the send work queue. */
-	if (qp->s_last != qp->s_head)
+	if (qp->s_last != ACCESS_ONCE(qp->s_head))
 		hfi1_schedule_send(qp);
 
 	clear_mr_refs(qp, 0);
@@ -620,6 +621,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	struct hfi1_devdata *dd = dd_from_dev(dev);
 
 	spin_lock_irq(&qp->r_lock);
+	spin_lock(&qp->s_hlock);
 	spin_lock(&qp->s_lock);
 
 	cur_state = attr_mask & IB_QP_CUR_STATE ?
@@ -735,6 +737,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			flush_iowait(qp);
 			qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_ANY_WAIT);
 			spin_unlock(&qp->s_lock);
+			spin_unlock(&qp->s_hlock);
 			spin_unlock_irq(&qp->r_lock);
 			/* Stop the sending work queue and retry timer */
 			cancel_work_sync(&qp->s_iowait.iowork);
@@ -744,6 +747,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			remove_qp(dev, qp);
 			wait_event(qp->wait, !atomic_read(&qp->refcount));
 			spin_lock_irq(&qp->r_lock);
+			spin_lock(&qp->s_hlock);
 			spin_lock(&qp->s_lock);
 			clear_mr_refs(qp, 1);
 			clear_ahg(qp);
@@ -843,6 +847,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 		qp->path_mtu = pmtu;
 		qp->pmtu = mtu;
+		qp->log_pmtu = ilog2(qp->pmtu);
 	}
 
 	if (attr_mask & IB_QP_RETRY_CNT) {
@@ -875,6 +880,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		qp->s_max_rd_atomic = attr->max_rd_atomic;
 
 	spin_unlock(&qp->s_lock);
+	spin_unlock(&qp->s_hlock);
 	spin_unlock_irq(&qp->r_lock);
 
 	if (cur_state == IB_QPS_RESET && new_state == IB_QPS_INIT)
@@ -897,6 +903,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 inval:
 	spin_unlock(&qp->s_lock);
+	spin_unlock(&qp->s_hlock);
 	spin_unlock_irq(&qp->r_lock);
 	ret = -EINVAL;
 
@@ -1125,6 +1132,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		 * except for qp->ibqp.qp_num.
 		 */
 		spin_lock_init(&qp->r_lock);
+		spin_lock_init(&qp->s_hlock);
 		spin_lock_init(&qp->s_lock);
 		spin_lock_init(&qp->r_rq.lock);
 		atomic_set(&qp->refcount, 0);
@@ -1135,6 +1143,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		qp->state = IB_QPS_RESET;
 		qp->s_wq = swq;
 		qp->s_size = init_attr->cap.max_send_wr + 1;
+		qp->s_avail = init_attr->cap.max_send_wr;
 		qp->s_max_sge = init_attr->cap.max_send_sge;
 		if (init_attr->sq_sig_type == IB_SIGNAL_REQ_WR)
 			qp->s_flags = HFI1_S_SIGNAL_REQ_WR;
@@ -1268,12 +1277,14 @@ int hfi1_destroy_qp(struct ib_qp *ibqp)
 
 	/* Make sure HW and driver activity is stopped. */
 	spin_lock_irq(&qp->r_lock);
+	spin_lock(&qp->s_hlock);
 	spin_lock(&qp->s_lock);
 	if (qp->state != IB_QPS_RESET) {
 		qp->state = IB_QPS_RESET;
 		flush_iowait(qp);
 		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_ANY_WAIT);
 		spin_unlock(&qp->s_lock);
+		spin_unlock(&qp->s_hlock);
 		spin_unlock_irq(&qp->r_lock);
 		cancel_work_sync(&qp->s_iowait.iowork);
 		del_timer_sync(&qp->s_timer);
@@ -1282,11 +1293,13 @@ int hfi1_destroy_qp(struct ib_qp *ibqp)
 		remove_qp(dev, qp);
 		wait_event(qp->wait, !atomic_read(&qp->refcount));
 		spin_lock_irq(&qp->r_lock);
+		spin_lock(&qp->s_hlock);
 		spin_lock(&qp->s_lock);
 		clear_mr_refs(qp, 1);
 		clear_ahg(qp);
 	}
 	spin_unlock(&qp->s_lock);
+	spin_unlock(&qp->s_hlock);
 	spin_unlock_irq(&qp->r_lock);
 
 	/* all user's cleaned up, mark it available */
@@ -1655,7 +1668,7 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 	sde = qp_to_sdma_engine(qp, qp->s_sc);
 	wqe = get_swqe_ptr(qp, qp->s_last);
 	seq_printf(s,
-		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u) QP%u LID %x SL %u MTU %d %u %u %u SDE %p,%u\n",
+		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%u LID %x SL %u MTU %u %u %u %u SDE %p,%u\n",
 		   iter->n,
 		   qp_idle(qp) ? "I" : "B",
 		   qp->ibqp.qp_num,
@@ -1675,12 +1688,13 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   qp->s_sending_psn, qp->s_sending_hpsn,
 		   qp->s_last, qp->s_acked, qp->s_cur,
 		   qp->s_tail, qp->s_head, qp->s_size,
+		   qp->s_avail,
 		   qp->remote_qpn,
 		   qp->remote_ah_attr.dlid,
 		   qp->remote_ah_attr.sl,
 		   qp->pmtu,
+		   qp->s_retry,
 		   qp->s_retry_cnt,
-		   qp->timeout,
 		   qp->s_rnr_retry_cnt,
 		   sde,
 		   sde ? sde->this_idx : 0);
