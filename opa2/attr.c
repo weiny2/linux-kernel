@@ -365,8 +365,25 @@ static int __subn_get_hfi_cable_info(struct hfi_devdata *dd,
 static int __subn_get_hfi_bct(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct buffer_control *p = (struct buffer_control *) data;
+	u32 num_ports = OPA_AM_NPORT(am);
+	int size = sizeof(*p);
+
+	if (num_ports != 1) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+		return hfi_reply(ibh);
+	}
+
+	memcpy(p, &ppd->bct, size);
+
+	if (resp_len)
+		*resp_len += size;
+
+	return hfi_reply(ibh);
 }
 
 static int __subn_get_hfi_cong_info(struct hfi_devdata *dd, struct opa_smp *smp,
@@ -1068,8 +1085,20 @@ static int __subn_set_hfi_psi(struct hfi_devdata *dd, struct opa_smp *smp,
 static int __subn_set_hfi_bct(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct buffer_control *p = (struct buffer_control *) data;
+	u32 num_ports = OPA_AM_NPORT(am);
+
+	if (num_ports != 1) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+		return hfi_reply(ibh);
+	}
+
+	memcpy(p, &ppd->bct, sizeof(*p));
+	return hfi_reply(ibh);
 }
 
 /*
