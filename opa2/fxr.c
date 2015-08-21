@@ -118,7 +118,7 @@ static void write_lm_fpc_csr(const struct hfi_devdata *dd, u8 port,
 	if (port == 1)
 		offset += FXR_LM_FPC0_CSRS;
 	else if (port == 2)
-		offset += FXR_LM_FPC0_CSRS;
+		offset += FXR_LM_FPC1_CSRS;
 	else
 		dd_dev_warn(dd, "invalid port");
 
