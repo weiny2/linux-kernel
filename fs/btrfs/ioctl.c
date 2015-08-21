@@ -3170,6 +3170,8 @@ static int btrfs_clone(struct inode *src, struct inode *inode,
 	key.offset = off;
 
 	while (1) {
+		u64 next_key_min_offset = key.offset + 1;
+
 		/*
 		 * note the key will change type as we walk through the
 		 * tree.
@@ -3250,7 +3252,7 @@ process_slot:
 			} else if (key.offset >= off + len) {
 				break;
 			}
-
+			next_key_min_offset = key.offset + datal;
 			size = btrfs_item_size_nr(leaf, slot);
 			read_extent_buffer(leaf, buf,
 					   btrfs_item_ptr_offset(leaf, slot),
@@ -3389,6 +3391,20 @@ process_slot:
 				u64 trim = 0;
 				u64 aligned_end = 0;
 
+				/*
+				 * Don't copy an inline extent into an offset
+				 * greater than zero. Having an inline extent
+				 * at such an offset results in chaos as btrfs
+				 * isn't prepared for such cases. Just skip
+				 * this case for the same reasons as commented
+				 * at btrfs_ioctl_clone().
+				 */
+				if (last_dest_end > 0) {
+					ret = -EOPNOTSUPP;
+					btrfs_end_transaction(trans, root);
+					goto out;
+				}
+
 				if (off > key.offset) {
 					skip = off - key.offset;
 					new_key.offset += skip;
@@ -3466,7 +3482,7 @@ process_slot:
 				break;
 		}
 		btrfs_release_path(path);
-		key.offset++;
+		key.offset = next_key_min_offset;
 	}
 	ret = 0;
 
