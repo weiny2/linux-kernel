@@ -241,26 +241,6 @@ bail:
 	return ret;
 }
 
-/*
- * Switch to alternate path.
- * The QP s_lock should be held and interrupts disabled.
- */
-void hfi1_migrate_qp(struct hfi1_qp *qp)
-{
-	struct ib_event ev;
-
-	qp->s_mig_state = IB_MIG_MIGRATED;
-	qp->remote_ah_attr = qp->alt_ah_attr;
-	qp->port_num = qp->alt_ah_attr.port_num;
-	qp->s_pkey_index = qp->s_alt_pkey_index;
-	qp->s_flags |= HFI1_S_AHG_CLEAR;
-
-	ev.device = qp->ibqp.device;
-	ev.element.qp = &qp->ibqp;
-	ev.event = IB_EVENT_PATH_MIG;
-	qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
-}
-
 static __be64 get_sguid(struct hfi1_ibport *ibp, unsigned index)
 {
 	if (!index) {
@@ -405,7 +385,8 @@ static void ruc_loopback(struct hfi1_qp *sqp)
 	sqp->s_flags |= HFI1_S_BUSY;
 
 again:
-	if (sqp->s_last == sqp->s_head)
+	smp_read_barrier_depends(); /* see post_one_send() */
+	if (sqp->s_last == ACCESS_ONCE(sqp->s_head))
 		goto clr_busy;
 	wqe = get_swqe_ptr(sqp, sqp->s_last);
 
@@ -660,6 +641,7 @@ unlock:
 	spin_unlock_irqrestore(&sqp->s_lock, flags);
 done:
 	rcu_read_unlock();
+	return;
 }
 
 /**
@@ -714,11 +696,8 @@ static inline void build_ahg(struct hfi1_qp *qp, u32 npsn)
 		clear_ahg(qp);
 	if (!(qp->s_flags & HFI1_S_AHG_VALID)) {
 		/* first middle that needs copy  */
-		if (qp->s_ahgidx < 0) {
-			if (!qp->s_sde)
-				qp->s_sde = qp_to_sdma_engine(qp, qp->s_sc);
+		if (qp->s_ahgidx < 0)
 			qp->s_ahgidx = sdma_ahg_alloc(qp->s_sde);
-		}
 		if (qp->s_ahgidx >= 0) {
 			qp->s_ahgpsn = npsn;
 			qp->s_hdr->tx_flags |= SDMA_TXREQ_F_AHG_COPY;
@@ -761,7 +740,6 @@ void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 	u16 lrh0;
 	u32 nwords;
 	u32 extra_bytes;
-	u8 sc5;
 	u32 bth1;
 
 	/* Construct the header. */
@@ -775,9 +753,7 @@ void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 		lrh0 = HFI1_LRH_GRH;
 		middle = 0;
 	}
-	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
-	qp->s_sc = sc5;
+	lrh0 |= (qp->s_sc & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
 	/*
 	 * reset s_hdr/AHG fields
 	 *
@@ -866,30 +842,33 @@ void hfi1_do_send(struct work_struct *work)
 
 	qp->s_flags |= HFI1_S_BUSY;
 
-	spin_unlock_irqrestore(&qp->s_lock, flags);
 
 	timeout = jiffies + SEND_RESCHED_TIMEOUT;
 	do {
 		/* Check for a constructed packet to be sent. */
 		if (qp->s_hdrwords != 0) {
+			spin_unlock_irqrestore(&qp->s_lock, flags);
 			/*
 			 * If the packet cannot be sent now, return and
 			 * the send tasklet will be woken up later.
 			 */
 			if (hfi1_verbs_send(qp, qp->s_hdr, qp->s_hdrwords,
 					    qp->s_cur_sge, qp->s_cur_size))
-				break;
+				return;
 			/* Record that s_hdr is empty. */
 			qp->s_hdrwords = 0;
+			/* allow other tasks to run */
+			if (unlikely(time_after(jiffies, timeout))) {
+				cond_resched();
+				ppd->dd->verbs_dev.n_send_schedule++;
+				timeout = jiffies + SEND_RESCHED_TIMEOUT;
+			}
+			spin_lock_irqsave(&qp->s_lock, flags);
 		}
 
-		/* allow other tasks to run */
-		if (unlikely(time_after(jiffies, timeout))) {
-			cond_resched();
-			ppd->dd->verbs_dev.n_send_schedule++;
-			timeout = jiffies + SEND_RESCHED_TIMEOUT;
-		}
 	} while (make_req(qp));
+
+	spin_unlock_irqrestore(&qp->s_lock, flags);
 }
 
 /*
@@ -936,6 +915,7 @@ void hfi1_send_complete(struct hfi1_qp *qp, struct hfi1_swqe *wqe,
 	if (++last >= qp->s_size)
 		last = 0;
 	qp->s_last = last;
+	smp_wmb(); /* see qp_get_savail() */
 	if (qp->s_acked == old_last)
 		qp->s_acked = last;
 	if (qp->s_cur == old_last)
