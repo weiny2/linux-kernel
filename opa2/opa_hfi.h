@@ -58,6 +58,9 @@
 #include <rdma/hfi_cmd.h>
 #include <rdma/opa_core.h>
 #include <rdma/fxr/fxr_linkmux_defs.h>
+#include <rdma/fxr/fxr_linkmux_tp_defs.h>
+#include <rdma/fxr/fxr_linkmux_fpc_defs.h>
+#include <rdma/fxr/fxr_linkmux_cm_defs.h>
 
 extern unsigned int hfi_max_mtu;
 #define DRIVER_NAME		KBUILD_MODNAME
@@ -143,6 +146,11 @@ enum {
 #define HFI_SL_TO_TC_SHIFT	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_SHIFT
 #define HFI_SL_TO_TC_MASK	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK
 
+#define HFI_SC_VLNT_MASK		FXR_FPC_CFG_SC_VL_TABLE_15_0_ENTRY0_MASK
+/* Any lane between 8 and 14 is illegal. Randomly chosen one from that list */
+#define HFI_ILLEGAL_VL			12
+
+#define HFI_SC_VLT_MASK			FXR_TP_CFG_SC_TO_VLT_MAP_ENTRY0_MASK
 /*
  * HFI or Host Link States
  *
@@ -197,6 +205,8 @@ enum {
 	HFI_IB_CFG_VL_HIGH_LIMIT,	/* Change VL high limit */
 	HFI_IB_CFG_SL_TO_SC,		/* Change SLtoSC mapping */
 	HFI_IB_CFG_SC_TO_SL,		/* Change SCtoSL mapping */
+	HFI_IB_CFG_SC_TO_VLT,		/* Change SCtoVL mapping */
+	HFI_IB_CFG_SC_TO_VLNT,		/* Change Neighbor's SCtoVL mapping */
 };
 
 /* verify capability fabric CRC size bits */
@@ -368,6 +378,8 @@ struct ib_vl_weight_elem {
  *	(information received via LNI)
  * @sl_to_sc: service level to service class mapping table
  * @sc_to_sl: service class to service level mapping table
+ * @sc_to_vlt: service class to (TX) virtual lane table
+ * @sc_to_vlnt: service class to (RX) neighbor virtual lane table
  * @bct: buffer control table
  *@local_link_down_reason: Reason why this port transitioned to link down
  *@local_link_down_reason: Reason why the neighboring port transitioned to
@@ -418,6 +430,8 @@ struct hfi_pportdata {
 	u8 mgmt_allowed;
 	u8 sl_to_sc[OPA_MAX_SLS];
 	u8 sc_to_sl[OPA_MAX_SCS];
+	u8 sc_to_vlt[OPA_MAX_SCS];
+	u8 sc_to_vlnt[OPA_MAX_SCS];
 	struct hfi_link_down_reason local_link_down_reason;
 	struct hfi_link_down_reason neigh_link_down_reason;
 	struct buffer_control bct;
@@ -641,7 +655,7 @@ int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message);
 u8 hfi_porttype(struct hfi_pportdata *ppd);
 u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which);
-int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val);
+int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data);
 int hfi_set_mtu(struct hfi_pportdata *ppd);
 u16 hfi_port_ltp_to_cap(u16 port_ltp);
 u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp);

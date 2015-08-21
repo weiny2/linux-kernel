@@ -285,6 +285,7 @@ struct hfi_dlid_assign_args;
  * @num_vls_supported: Number of VL supported
  * @sl_to_sc: service level to service class mapping table
  * @sl_to_sc: service class to service level mapping table
+ * @sc_to_vl: service class to virtual lane mapping table
  * @vl_mtu: Array of per VL MTU
  */
 struct opa_pport_desc {
@@ -296,6 +297,7 @@ struct opa_pport_desc {
 	u8 num_vls_supported;
 	u8 sl_to_sc[OPA_MAX_SLS];
 	u8 sc_to_sl[OPA_MAX_SCS];
+	u8 sc_to_vl[OPA_MAX_SCS];
 	u16 vl_mtu[OPA_MAX_VLS];
 };
 

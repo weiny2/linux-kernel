@@ -374,16 +374,20 @@ static int __subn_get_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	/* This is implemented in SMA-HFI*/
+	return reply(ibh);
 }
 
 static int __subn_get_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	/* This is implemented in SMA-HFI*/
+	return reply(ibh);
 }
 
 static int __subn_get_opa_vl_arb(struct opa_smp *smp, u32 am, u8 *data,
@@ -779,16 +783,26 @@ static int __subn_set_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					       u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	int ret;
+
+	ret = subn_get_opa_sma(OPA_ATTRIB_ID_SC_TO_VLT_MAP, smp, am, data,
+				ibdev, port, resp_len);
+
+	if (ret == IB_MAD_RESULT_FAILURE)
+		goto err;
+
+	memcpy(ibp->sc_to_vl, data, sizeof(ibp->sc_to_vl));
+err:
+	return ret;
 }
 
 static int __subn_set_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					       u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	return subn_get_opa_sma(OPA_ATTRIB_ID_SC_TO_VLNT_MAP, smp, am, data,
+				ibdev, port, resp_len);
 }
 
 static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,

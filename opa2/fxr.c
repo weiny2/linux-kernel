@@ -138,6 +138,19 @@ static void write_lm_tp_csr(const struct hfi_devdata *dd, u8 port,
 	write_csr(dd, offset, value);
 }
 
+static void write_lm_cm_csr(const struct hfi_devdata *dd, u8 port,
+			    u32 offset, u64 value)
+{
+	if (port == 1)
+		offset += FXR_LM_CM0_CSRS;
+	else if (port == 2)
+		offset += FXR_LM_CM1_CSRS;
+	else
+		dd_dev_warn(dd, "invalid port");
+
+	write_csr(dd, offset, value);
+}
+
 static u64 read_lm_tp_csr(const struct hfi_devdata *dd, u8 port,
 			  u32 offset)
 {
@@ -488,6 +501,63 @@ u8 hfi_porttype(struct hfi_pportdata *ppd)
 	return HFI_PORT_TYPE_STANDARD;
 }
 
+static void hfi_set_sc_to_vlt(struct hfi_pportdata *ppd, u8 *t)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 reg_val = 0;
+	int i, j, sc_num;
+
+	/*
+	 * change mappings to VL15 to HFI_ILLEGAL_VL (except
+	 * for SC15, which must map to VL15). If we don't remap things this
+	 * way it is possible for VL15 counters to increment when we try to
+	 * send on a SC which is mapped to an invalid VL.
+	 */
+	for (i = 0; i < OPA_MAX_SCS; i++) {
+		if (i == 15)
+			continue;
+		if ((t[i] & 0x1f) == 0xf)
+			t[i] = HFI_ILLEGAL_VL;
+	}
+
+	/* 2 registers, 16 entries per register, 4 bit per entry */
+	for (i = 0, sc_num = 0; i < 2; i++) {
+		for (j = 0, reg_val = 0; j < 16; j++, sc_num++)
+			reg_val |= (t[sc_num] & HFI_SC_VLT_MASK)
+					 << (j * 4);
+		write_lm_tp_csr(dd, ppd->pnum, FXR_TP_CFG_SC_TO_VLT_MAP +
+							i * 8, reg_val);
+	}
+
+	/*
+	 * FXRTODO: Cached table will not only be
+	 * read by get_sma but also by verbs layer post
+	 * initialization. So this needs to be protected
+	 * by lock. If we use get_port_desc, then all
+	 * the tables reported by that call needs to hold
+	 * a lock. Design decision pending.
+	 */
+	  memcpy(ppd->sc_to_vlt, t, OPA_MAX_SCS);
+}
+
+static void hfi_set_sc_to_vlnt(struct hfi_pportdata *ppd, u8 *t)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	int i;
+	u64 *t64 = (u64 *)t;
+
+	/*
+	 * 4 registers, 8 entries per register, 5 bit per entry
+	 * FXRTODO: This register's bit fields might change in the
+	 * next simics release.
+	 */
+	for (i = 0; i < 4; i++)
+		write_lm_cm_csr(dd, ppd->pnum, FXR_TP_CFG_CM_SC_TO_VLT_MAP +
+							i * 8, *t64++);
+
+	memcpy(ppd->sc_to_vlnt, t, OPA_MAX_SCS);
+}
+
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -550,7 +620,7 @@ static void hfi_sc_to_sl(struct hfi_pportdata *ppd)
 	/* FXRTODO: Register not yet defined in HAS. STL-1703 */
 }
 
-int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val)
+int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	int ret = 0;
@@ -593,6 +663,12 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val)
 		break;
 	case HFI_IB_CFG_SC_TO_SL:
 		hfi_sc_to_sl(ppd);
+		break;
+	case HFI_IB_CFG_SC_TO_VLT:
+		hfi_set_sc_to_vlt(ppd, data);
+		break;
+	case HFI_IB_CFG_SC_TO_VLNT:
+		hfi_set_sc_to_vlnt(ppd, data);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
@@ -648,7 +724,7 @@ int hfi_set_mtu(struct hfi_pportdata *ppd)
 	}
 #endif
 
-	hfi_set_ib_cfg(ppd, HFI_IB_CFG_MTU, 0);
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_MTU, 0, NULL);
 
 	/* FXRTODO: Fix the MTU change dependency for FXR */
 #if 0
@@ -841,6 +917,8 @@ static void hfi_port_desc(struct opa_core_device *odev,
 		pdesc->sl_to_sc[i] = ppd->sl_to_sc[i];
 	for (i = 0; i < ARRAY_SIZE(ppd->sc_to_sl); i++)
 		pdesc->sc_to_sl[i] = ppd->sc_to_sl[i];
+	for (i = 0; i < ARRAY_SIZE(ppd->sc_to_vlt); i++)
+		pdesc->sc_to_vl[i] = ppd->sc_to_vlt[i];
 }
 
 static void hfi_device_desc(struct opa_core_device *odev,
@@ -985,6 +1063,24 @@ void hfi_set_crc_mode(struct hfi_devdata *dd, u8 port, u16 crc_lcb_mode)
 		(u64)crc_lcb_mode << FZC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 }
 
+void hfi_init_sc_to_vlt(struct hfi_pportdata *ppd)
+{
+	u8 vlt[OPA_MAX_SCS];
+	int i;
+
+	memset(vlt, 0, sizeof(vlt));
+	/*
+	 * SC 0-7 -> VL 0-7 (respectively)
+	 * SC 15  -> VL 15
+	 * otherwise
+	 *        -> VL 0
+	 */
+	for (i = 0; i < HFI_NUM_DATA_VLS; i++)
+		vlt[i] = i;
+	vlt[15] = 15;
+	hfi_set_sc_to_vlt(ppd, vlt);
+}
+
 /*
  * hfi_pport_init - initialize per port
  * data structs
@@ -1100,7 +1196,9 @@ void hfi_pport_init(struct hfi_devdata *dd)
 			ppd->sl_to_sc[i] = i;
 		for (i = 0; i < ARRAY_SIZE(ppd->sc_to_sl); i++)
 			ppd->sc_to_sl[i] = i;
-		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0);
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0, NULL);
+
+		hfi_init_sc_to_vlt(ppd);
 		hfi_ptc_init(ppd);
 	}
 }
