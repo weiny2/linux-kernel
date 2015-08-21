@@ -256,6 +256,17 @@ enum {
 #define OPA_VLARB_PREEMPT_ELEMENTS	2
 #define OPA_VLARB_PREEMPT_MATRIX	3
 
+struct vl_limit {
+	__be16 dedicated;
+	__be16 shared;
+};
+
+struct buffer_control {
+	__be16 reserved;
+	__be16 overall_shared_limit;
+	struct vl_limit vl[OPA_MAX_VLS];
+};
+
 struct hfi_link_down_reason {
 	/*
 	 * SMA-facing value.  Should be set from .latest when
@@ -357,6 +368,7 @@ struct ib_vl_weight_elem {
  *	(information received via LNI)
  * @sl_to_sc: service level to service class mapping table
  * @sc_to_sl: service class to service level mapping table
+ * @bct: buffer control table
  *@local_link_down_reason: Reason why this port transitioned to link down
  *@local_link_down_reason: Reason why the neighboring port transitioned to
  *	link down
@@ -408,6 +420,7 @@ struct hfi_pportdata {
 	u8 sc_to_sl[OPA_MAX_SCS];
 	struct hfi_link_down_reason local_link_down_reason;
 	struct hfi_link_down_reason neigh_link_down_reason;
+	struct buffer_control bct;
 	u8 remote_link_down_reason;
 
 	/*
