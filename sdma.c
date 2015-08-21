@@ -383,16 +383,17 @@ static void sdma_flush(struct sdma_engine *sde)
 {
 	struct sdma_txreq *txp, *txp_next;
 	LIST_HEAD(flushlist);
+	unsigned long flags;
 
 	/* flush from head to tail */
 	sdma_flush_descq(sde);
-	spin_lock(&sde->flushlist_lock);
+	spin_lock_irqsave(&sde->flushlist_lock, flags);
 	/* copy flush list */
 	list_for_each_entry_safe(txp, txp_next, &sde->flushlist, list) {
 		list_del_init(&txp->list);
 		list_add_tail(&txp->list, &flushlist);
 	}
-	spin_unlock(&sde->flushlist_lock);
+	spin_unlock_irqrestore(&sde->flushlist_lock, flags);
 	/* flush from flush list */
 	list_for_each_entry_safe(txp, txp_next, &flushlist, list) {
 		int drained = 0;
@@ -775,18 +776,19 @@ struct sdma_engine *sdma_select_engine_vl(
 	struct sdma_engine *rval;
 
 	if (WARN_ON(vl > 8))
-		return NULL;
+		return &dd->per_sdma[0];
 
 	rcu_read_lock();
 	m = rcu_dereference(dd->sdma_map);
 	if (unlikely(!m)) {
 		rcu_read_unlock();
-		return NULL;
+		return &dd->per_sdma[0];
 	}
 	e = m->map[vl & m->mask];
 	rval = e->sde[selector & e->mask];
 	rcu_read_unlock();
 
+	rval =  !rval ? &dd->per_sdma[0] : rval;
 	trace_hfi1_sdma_engine_select(dd, selector, vl, rval->this_idx);
 	return rval;
 }
@@ -1875,7 +1877,7 @@ static void dump_sdma_state(struct sdma_engine *sde)
 }
 
 #define SDE_FMT \
-	"SDE %u STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx TXT %u TXH %u DT %u DH %u FLNE %d DQF %u SLC 0x%llx\n"
+	"SDE %u CPU %d STE %s C 0x%llx S 0x%016llx E 0x%llx T(HW) 0x%llx T(SW) 0x%x H(HW) 0x%llx H(SW) 0x%x H(D) 0x%llx DM 0x%llx GL 0x%llx R 0x%llx LIS 0x%llx AHGI 0x%llx TXT %u TXH %u DT %u DH %u FLNE %d DQF %u SLC 0x%llx\n"
 /**
  * sdma_seqfile_dump_sde() - debugfs dump of sde
  * @s: seq file
@@ -1895,6 +1897,7 @@ void sdma_seqfile_dump_sde(struct seq_file *s, struct sdma_engine *sde)
 	head = sde->descq_head & sde->sdma_mask;
 	tail = ACCESS_ONCE(sde->descq_tail) & sde->sdma_mask;
 	seq_printf(s, SDE_FMT, sde->this_idx,
+		sde->cpu,
 		sdma_state_name(sde->state.current_state),
 		(unsigned long long)read_sde_csr(sde, SD(CTRL)),
 		(unsigned long long)read_sde_csr(sde, SD(STATUS)),
