@@ -7119,8 +7119,6 @@ static void btrfs_endio_direct_write(struct bio *bio, int err)
 	struct bio *dio_bio;
 	int ret;
 
-	if (err)
-		goto out_done;
 again:
 	ret = btrfs_dec_test_first_ordered_pending(inode, &ordered,
 						   &ordered_offset,
@@ -7143,7 +7141,6 @@ out_test:
 		ordered = NULL;
 		goto again;
 	}
-out_done:
 	dio_bio = dip->dio_bio;
 
 	kfree(dip);
@@ -7276,10 +7273,8 @@ static int btrfs_submit_direct_hook(int rw, struct btrfs_dio_private *dip,
 	map_length = orig_bio->bi_size;
 	ret = btrfs_map_block(root->fs_info, rw, start_sector << 9,
 			      &map_length, NULL, 0);
-	if (ret) {
-		bio_put(orig_bio);
+	if (ret)
 		return -EIO;
-	}
 
 	if (map_length >= orig_bio->bi_size) {
 		bio = orig_bio;
@@ -7296,6 +7291,7 @@ static int btrfs_submit_direct_hook(int rw, struct btrfs_dio_private *dip,
 	bio = btrfs_dio_bio_alloc(orig_bio->bi_bdev, start_sector, GFP_NOFS);
 	if (!bio)
 		return -ENOMEM;
+
 	bio->bi_private = dip;
 	bio->bi_end_io = btrfs_end_dio_bio;
 	atomic_inc(&dip->pending_bios);
@@ -7373,8 +7369,8 @@ static void btrfs_submit_direct(int rw, struct bio *dio_bio,
 				struct inode *inode, loff_t file_offset)
 {
 	struct btrfs_root *root = BTRFS_I(inode)->root;
-	struct btrfs_dio_private *dip;
-	struct bio *io_bio;
+	struct btrfs_dio_private *dip = NULL;
+	struct bio *io_bio = NULL;
 	int skip_sum;
 	int sum_len;
 	int write = rw & REQ_WRITE;
@@ -7400,7 +7396,7 @@ static void btrfs_submit_direct(int rw, struct bio *dio_bio,
 	dip = kmalloc(sizeof(*dip) + sum_len, GFP_NOFS);
 	if (!dip) {
 		ret = -ENOMEM;
-		goto free_io_bio;
+		goto free_ordered;
 	}
 
 	dip->private = dio_bio->bi_private;
@@ -7423,25 +7419,54 @@ static void btrfs_submit_direct(int rw, struct bio *dio_bio,
 	if (!ret)
 		return;
 
-free_io_bio:
-	bio_put(io_bio);
-
 free_ordered:
 	/*
-	 * If this is a write, we need to clean up the reserved space and kill
-	 * the ordered extent.
+	 * If we arrived here it means either we failed to submit the dip
+	 * or we either failed to clone the dio_bio or failed to allocate the
+	 * dip. If we cloned the dio_bio and allocated the dip, we can just
+	 * call bio_endio against our io_bio so that we get proper resource
+	 * cleanup if we fail to submit the dip, otherwise, we must do the
+	 * same as btrfs_endio_direct_[write|read] because we can't call these
+	 * callbacks - they require an allocated dip and a clone of dio_bio.
 	 */
-	if (write) {
-		struct btrfs_ordered_extent *ordered;
-		ordered = btrfs_lookup_ordered_extent(inode, file_offset);
-		if (!test_bit(BTRFS_ORDERED_PREALLOC, &ordered->flags) &&
-		    !test_bit(BTRFS_ORDERED_NOCOW, &ordered->flags))
-			btrfs_free_reserved_extent(root, ordered->start,
-						   ordered->disk_len, 1);
-		btrfs_put_ordered_extent(ordered);
-		btrfs_put_ordered_extent(ordered);
+	if (io_bio && dip) {
+		bio_endio(io_bio, ret);
+		/*
+		 * The end io callbacks free our dip, do the final put on io_bio
+		 * and all the cleanup and final put for dio_bio (through
+		 * dio_end_io()).
+		 */
+		io_bio = NULL;
+		dip = NULL;
+	} else {
+		if (write) {
+			struct btrfs_ordered_extent *ordered;
+
+			ordered = btrfs_lookup_ordered_extent(inode,
+							      file_offset);
+			set_bit(BTRFS_ORDERED_IOERR, &ordered->flags);
+			/*
+			 * Decrements our ref on the ordered extent and removes
+			 * the ordered extent from the inode's ordered tree,
+			 * doing all the proper resource cleanup such as for the
+			 * reserved space and waking up any waiters for this
+			 * ordered extent (through btrfs_remove_ordered_extent).
+			 */
+			btrfs_finish_ordered_io(ordered);
+		} else {
+			unlock_extent(&BTRFS_I(inode)->io_tree, file_offset,
+			      file_offset + dio_bio->bi_size - 1);
+		}
+		clear_bit(BIO_UPTODATE, &dio_bio->bi_flags);
+		/*
+		 * Releases and cleans up our dio_bio, no need to bio_put()
+		 * nor bio_endio()/bio_io_error() against dio_bio.
+		 */
+		dio_end_io(dio_bio, ret);
 	}
-	bio_endio(dio_bio, ret);
+	if (io_bio)
+		bio_put(io_bio);
+	kfree(dip);
 }
 
 static ssize_t check_direct_IO(struct btrfs_root *root, int rw, struct kiocb *iocb,
