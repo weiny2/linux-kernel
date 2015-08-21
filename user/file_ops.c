@@ -374,6 +374,9 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		/* TODO - we might want software threshold for blocking EQs? */
 		ret = ops->ev_wait_single(&ud->ctx, 0, eq_wait_single.eq_idx,
 					  eq_wait_single.timeout);
+		/* TODO - support restart? */
+		if (ret == -ERESTARTSYS)
+			ret = -EINTR;
 		break;
 	case HFI_CMD_DLID_ASSIGN:
 		/* must be called after JOB_SETUP and match total LIDs */

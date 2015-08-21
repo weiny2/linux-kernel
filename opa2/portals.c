@@ -646,10 +646,9 @@ idr_end:
 		dd_dev_dbg(ctx->devdata, "wait_event returned %d\n", ret);
 		if (ret == 0)	/* timeout */
 			ret = -EAGAIN;
-		else if (ret < 0)  /* interrupt, TODO - restartable? */
-			ret = (timeout > 0) ? -EINTR : -ERESTARTSYS;
-		else		/* success */
+		else if (ret != -ERESTARTSYS)  /* success! */
 			ret = 0;
+		/* else interrupt, return -ERESTARTSYS */
 	}
 
 	return ret;
