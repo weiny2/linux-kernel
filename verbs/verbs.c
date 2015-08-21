@@ -471,14 +471,8 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 		ibp->sl_to_sc[i] = pdesc.sl_to_sc[i];
 	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_sl); i++)
 		ibp->sc_to_sl[i] = pdesc.sc_to_sl[i];
-	/*
-	 * FXRTODO: quick hack at initial SC to VL tables.
-	 * Likely this needs to be retrieved from opa2_hfi.
-	 */
 	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_vl); i++)
-		ibp->sc_to_vl[i] = i % ibp->max_vls;
-	/* management SC15 always uses VL15 */
-	ibp->sc_to_vl[15] = 15;
+		ibp->sc_to_vl[i] = pdesc.sc_to_vl[i];
 
 	ibp->ctx = &ibd->ctx;
 	spin_lock_init(&ibp->cmdq_tx_lock);
