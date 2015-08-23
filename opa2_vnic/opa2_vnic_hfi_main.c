@@ -52,6 +52,7 @@
 #include <linux/etherdevice.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/utsname.h>
 #include <rdma/opa_core.h>
 #include <rdma/hfi_tx.h>
 #include <rdma/hfi_rx.h>
@@ -59,9 +60,13 @@
 #include <rdma/hfi_ct.h>
 #include <rdma/hfi_eq.h>
 #include <rdma/hfi_pt.h>
+#include <rdma/hfi_me.h>
 #include <linux/opa_vnic.h>
 
-#include "opa2_vnic_hfi.h"
+/* TODO: Remove this module param later, EM will provide this info */
+uint num_veswports = 2;
+module_param(num_veswports, uint, S_IRUGO);
+MODULE_PARM_DESC(num_veswports, "number of vESWPorts");
 
 static int opa_netdev_probe(struct opa_core_device *odev);
 static void opa_netdev_remove(struct opa_core_device *odev);
@@ -82,25 +87,98 @@ static void opa_netdev_event_notify(struct opa_core_device *odev,
 	dev_info(&odev->dev, "%s port %d event %d\n", __func__, port, event);
 }
 
+#define OPA2_NET_ME_COUNT 256
+#define OPA2_NET_UNEX_COUNT 512
+#define OPA2_NET_TIMEOUT_MS 100
+#define OPA2_NET_RX_POLL_MS 1
+#define OPA2_NET_PT 20
+#define OPA2_NET_NUM_RX_BUFS 128
+/* FXRTODO: Obtain MTU from vdev once supported */
+#define OPA2_NET_DEFAULT_MTU 2048
+
 /*
- * struct opa_netdev - OPA2 net device specific fields
+ * struct opa_veswport - OPA2 virtual ethernet switch port specific fields
  *
- * @ctx - HFI context
- * @cq_idx - command queue index
- * @tx - TX command queue
- * @rx - RX command queue
+ * @ctx: HFI context
+ * @cq_idx: command queue index
+ * @tx: TX command queue
+ * @rx: RX command queue
+ * @skb: Array of socket buffers
+ * @me_handle: Array of ME handles
+ * @ct_tx: Counting TX event
+ * @ct_rx: Counting RX event
+ * @eq_tx: TX event handle
+ * @eq_rx: RX event handle
+ * @ni: portals network interface
+ * @eq_alloc_tx: Event queue alloc args for TX
+ * @eq_alloc_rx: Event queue alloc args for RX
+ * @num_tx: Number of packets transmitted
+ * @num_rx: Number of packets received
+ * @dlid: destination LID
+ * @rx_dwork: receive delayed work
+ * @vdev: back pointer to opa vnic device
+ * @npdev: back pointer to opa net device port
+ * @odev: back pointer to opa core device
+ * @vport_num: virtual ethernet switch port id
+ * @init: true if veswport is initialized
  */
-struct opa_netdev {
+struct opa_veswport {
 	struct hfi_ctx		ctx;
 	u16			cq_idx;
 	struct hfi_cq		tx;
 	struct hfi_cq		rx;
+	struct sk_buff		*skb[OPA2_NET_NUM_RX_BUFS];
+	hfi_me_handle_t		me_handle[OPA2_NET_ME_COUNT];
+	hfi_ct_handle_t		ct_tx;
+	hfi_ct_handle_t		ct_rx;
+	hfi_eq_handle_t		eq_tx;
+	hfi_eq_handle_t		eq_rx;
+	hfi_ni_t		ni;
+	struct opa_ev_assign	eq_alloc_tx;
+	struct opa_ev_assign	eq_alloc_rx;
+	int			num_tx;
+	int			num_rx;
+	int			dlid;
+	struct delayed_work	rx_dwork;
+	struct opa_vnic_device	*vdev;
+	struct opa_netdev_port	*npdev;
+	struct opa_core_device	*odev;
+	u8			vport_num;
+	bool			init;
 };
 
-#define OPA2_NET_ME_COUNT 256
-#define OPA2_NET_UNEX_COUNT 512
-#define OPA2_TX_TIMEOUT_MS 100
+/*
+ * struct opa_netdev_port - Per physical port net device fields
+ *
+ * @odev: OPA core device
+ * @ndev: OPA2 net device
+ * @vport: Array of virtual ethernet switch ports
+ * @num_vport: Number of virtual ethernet switch ports
+ * @port_num: Port id number
+ * @init: true if port is initialized
+ */
+struct opa_netdev_port {
+	struct opa_core_device	*odev;
+	struct opa_netdev	*ndev;
+	struct opa_veswport	*vport;
+	int			num_vports;
+	u8			port_num;
+	bool			init;
+};
 
+/*
+ * struct opa_netdev - OPA2 net device specific fields
+ * @odev: OPA core device
+ * @pport: Array of physical port specific fields
+ * @num_pport: number of physical ports
+ */
+struct opa_netdev {
+	struct opa_core_device	*odev;
+	struct opa_netdev_port	*pport;
+	int			num_ports;
+};
+
+static
 int hfi_tx_write(struct hfi_cq *tx, struct hfi_ctx *ctx,
 		 hfi_ni_t ni, void *start, hfi_size_t length,
 		 hfi_process_t target_id, uint32_t pt_index,
@@ -186,37 +264,374 @@ static void _hfi_eq_release(struct opa_ev_assign *eq_alloc)
 	kfree((void *)eq_alloc->base);
 }
 
-int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev, struct sk_buff *skb)
+/* Append a single socket buffer */
+static int opa2_vnic_append_skb(struct opa_veswport *dev, int idx)
 {
-	return 0;
+	struct hfi_ctx *ctx = &dev->ctx;
+	struct hfi_cq *rx = &dev->rx;
+	hfi_match_bits_t match_bits = 0x0;
+	hfi_match_bits_t ignore_bits = 0;
+	hfi_me_options_t me_options = (PTL_OP_PUT | PTL_USE_ONCE |
+				       PTL_EVENT_LINK_DISABLE |
+				       PTL_EVENT_UNLINK_DISABLE |
+				       PTL_ME_NO_TRUNCATE |
+				       PTL_EVENT_CT_COMM);
+	hfi_size_t min_free = 0;
+	hfi_rx_cq_command_t rx_cmd;
+	hfi_process_t match_id;
+	int n_slots;
+
+	match_id.phys.slid = dev->dlid;
+	match_id.phys.ipid = ctx->pid;
+	n_slots = hfi_format_rx_append(ctx, dev->ni,
+				       dev->skb[idx]->data,
+				       OPA2_NET_DEFAULT_MTU,
+				       OPA2_NET_PT,
+				       match_id, 0x0,
+				       match_bits, ignore_bits,
+				       me_options, dev->ct_rx,
+				       PTL_PRIORITY_LIST, min_free,
+				       idx, dev->me_handle[idx], &rx_cmd);
+
+	return hfi_rx_command(rx, (uint64_t *)&rx_cmd, n_slots);
 }
 
-struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
+/*
+ * Transmit an SKB and wait for the transmission to complete by
+ * polling on the TX counting event
+ */
+static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
+				 struct sk_buff *skb)
 {
-	return NULL;
+	struct opa_veswport *dev = vdev->hfi_priv;
+	struct opa_core_device *odev = dev->odev;
+	struct hfi_ctx *ctx = &dev->ctx;
+	struct hfi_cq *tx = &dev->tx;
+	int rc;
+	hfi_process_t target_id;
+	hfi_hdr_data_t hdr_data = 0x1;
+	hfi_ack_req_t ack_req = PTL_NO_ACK_REQ;
+	/*
+	 * TX send events are disabled but we still allocate an EQ TX
+	 * in case it is required for figuring out failure reasons
+	 * for debug purposes
+	 */
+	hfi_md_options_t md_options = PTL_MD_EVENT_SEND_DISABLE |
+					PTL_MD_EVENT_CT_SEND;
+	hfi_tx_handle_t tx_handle = 0xc;
+	hfi_size_t remote_offset = 0;
+
+	/* FXRTODO: DLID, PTE and PID are hard coded for now */
+	target_id.phys.slid = dev->dlid;
+	target_id.phys.ipid = ctx->pid;
+
+	/*
+	 * FXRTODO: Transmit EoSTL packets via Portals 16B instead
+	 * of using the STLEEP command formats for now
+	 */
+	rc = hfi_tx_write(tx, ctx, dev->ni, skb->data,
+			  skb->len,
+			  target_id,
+			  OPA2_NET_PT, 0xdead, 0,
+			  hdr_data, ack_req, md_options,
+			  dev->eq_tx,
+			  dev->ct_tx,
+			  remote_offset,
+			  tx_handle);
+	if (rc < 0)
+		goto err1;
+
+	/* Wait for TX command 1 to complete */
+	rc = hfi_ct_wait_timed(ctx, dev->ct_tx, dev->num_tx + 1,
+			       OPA2_NET_TIMEOUT_MS, NULL);
+	if (rc < 0)
+		dev_err(&odev->dev, "TX CT event 1 failure, %d\n", rc);
+	else
+		dev->num_tx++;
+	dev_dbg(&odev->dev, "%s %d vport %d port %d num_tx %d skb->len %d\n",
+		__func__, __LINE__, dev->vport_num,
+		dev->npdev->port_num, dev->num_tx, skb->len);
+err1:
+	return rc;
 }
 
-int opa2_vnic_hfi_open(struct opa_vnic_device *vdev, opa_vnic_hfi_evt_cb_fn cb)
+/*
+ * Receive a packet notification by querying the RX event queue and
+ * update the length of the packet received in the SKB. A new SKB is
+ * allocated and appended to the free list.
+ */
+static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
 {
+	struct opa_veswport *dev = vdev->hfi_priv;
+	struct opa_core_device *odev = dev->odev;
+	struct hfi_ctx *ctx = &dev->ctx;
+	struct hfi_cq *rx = &dev->rx;
+	u64 *eq_entry;
+	int rc, idx;
+	struct sk_buff *skb;
+	union target_EQEntry *rx_event;
+	struct {
+		int64_t start:TARGET_EQENTRY_START_WIDTH;
+	} eqd_tmp;
+	s64 start_va;
+
+	rc = hfi_eq_get(ctx, rx, dev->eq_rx, (void **)&eq_entry);
+	if (!eq_entry)
+		return NULL;
+	rx_event = (union target_EQEntry *)eq_entry;
+	eqd_tmp.start = rx_event->start;
+	start_va = eqd_tmp.start;
+
+	idx = rx_event->user_ptr;
+	skb = dev->skb[idx];
+
+	/* FXRTODO: use rlength or mlenth? */
+	if (skb)
+		skb_put(skb, rx_event->mlength);
+
+	dev->skb[idx] = netdev_alloc_skb(vdev->netdev, OPA2_NET_DEFAULT_MTU);
+	if (dev->skb[idx])
+		/* FXRTODO: What if the append fails? */
+		opa2_vnic_append_skb(dev, idx);
+	else
+		dev_err(&odev->dev, "Couldn't allocate skb\n");
+	return skb;
+}
+
+/*
+ * Poll for RX packets by querying the RX counting event and
+ * notify the OPA netdev layer if a packet is ready to be received
+ * FXRTODO: Convert to interrupt based notifications instead of polling
+ */
+static void opa2_vnic_rx_work(struct work_struct *work)
+{
+	struct opa_veswport *dev = container_of(work, struct opa_veswport,
+						rx_dwork.work);
+	struct opa_vnic_device *vdev = dev->vdev;
+	struct opa_core_device *odev = dev->odev;
+	struct hfi_ctx *ctx = &dev->ctx;
+	int rc;
+
+	rc = hfi_ct_get_success(ctx, dev->ct_rx);
+	if (rc >= dev->num_rx + 1) {
+		dev->num_rx = rc;
+		vdev->vnic_cb(vdev->netdev, OPA_VNIC_HFI_EVT_RX);
+		dev_dbg(&odev->dev, "RX CT success %d\n", dev->num_rx);
+	}
+	if (vdev->vnic_cb)
+		schedule_delayed_work(&dev->rx_dwork,
+				      msecs_to_jiffies(OPA2_NET_RX_POLL_MS));
+}
+
+/*
+ * Free any RX buffers previously allocated.
+ * FXRTODO: Unlink if appended to the LE list
+ */
+static void opa2_free_skbs(struct opa_veswport *dev)
+{
+	int i = 0;
+
+	for (i = 0; i < OPA2_NET_NUM_RX_BUFS; i++) {
+		if (dev->skb[i]) {
+			dev_kfree_skb_any(dev->skb[i]);
+			dev->skb[i] = NULL;
+		}
+	}
+}
+
+static int opa2_alloc_skbs(struct opa_veswport *dev)
+{
+	int i, rc = 0;
+	struct hfi_ctx *ctx = &dev->ctx;
+	struct opa_vnic_device *vdev = dev->vdev;
+
+	/* Create RX buffers and append them */
+	for (i = 0; i < OPA2_NET_NUM_RX_BUFS; i++) {
+		dev->skb[i] = netdev_alloc_skb(vdev->netdev,
+					       OPA2_NET_DEFAULT_MTU);
+		if (!dev->skb[i]) {
+			rc = -ENOMEM;
+			goto err1;
+		}
+
+		rc = hfi_me_alloc(ctx, &dev->me_handle[i], 0);
+		if (rc)
+			goto err1;
+
+		rc = opa2_vnic_append_skb(dev, i);
+		if (rc)
+			goto err1;
+	}
+	return rc;
+err1:
+	opa2_free_skbs(dev);
+	return rc;
+}
+
+static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
+			      opa_vnic_hfi_evt_cb_fn cb)
+{
+	struct opa_veswport *dev = vdev->hfi_priv;
+	int rc;
+
+	rc = opa2_alloc_skbs(dev);
+	if (rc)
+		goto err;
 	vdev->vnic_cb = cb;
-	return 0;
+	INIT_DELAYED_WORK(&dev->rx_dwork, opa2_vnic_rx_work);
+	/* Kick the RX worker thread to start polling for packets */
+	schedule_delayed_work(&dev->rx_dwork, msecs_to_jiffies(0));
+err:
+	return rc;
 }
 
-void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
+static void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
 {
+	struct opa_veswport *dev = vdev->hfi_priv;
+
 	vdev->vnic_cb = NULL;
+	cancel_delayed_work(&dev->rx_dwork);
+	flush_delayed_work(&dev->rx_dwork);
+	opa2_free_skbs(dev);
 }
 
-int opa2_vnic_hfi_init(struct opa_vnic_device *vdev)
+/*
+ * Various initialization tasks for TX/RX data paths. These include:
+ * a) Setting up E2E connections
+ * b) Allocating CT events for TX & RX
+ * c) Allocating EQs for TX & RX
+ * d) Allocating a PTE
+ * e) Allocating ME handles
+ */
+static int opa2_init_tx_rx(struct opa_veswport *dev)
 {
+	struct opa_core_ops *ops = dev->odev->bus_ops;
+	struct opa_core_device *odev = dev->odev;
+	struct hfi_ctx *ctx = &dev->ctx;
+	struct hfi_cq *rx = &dev->rx;
+	int rc;
+	u32 pt_idx;
+	hfi_ct_alloc_args_t ct_alloc = {0};
+	hfi_pt_alloc_args_t pt_alloc = {0};
+	struct opa_pport_desc pdesc;
+	struct opa_e2e_ctrl e2e;
+	u64 *eq_entry;
+
+	ops->get_port_desc(odev, &pdesc, dev->npdev->port_num);
+
+	/*
+	 * FXRTODO: DLID is hard coded for now but needs to be determined
+	 * programmatically from the MAC address or the globally administered
+	 * MAD address table eventually
+	 */
+	if (!strcmp(utsname()->nodename, "viper0"))
+		dev->dlid = dev->npdev->port_num == 1 ? 3 : 4;
+	else
+		dev->dlid = dev->npdev->port_num == 1 ? 1 : 2;
+
+	/*
+	 * FXRTODO: E2E messages do not have to be set up for EoSTL traffic
+	 * eventually but it is required for now since we are using Portals
+	 * 16B packets instead of 10B/16B STLEEP packets.
+	 */
+	e2e.slid = pdesc.lid;
+	e2e.dlid = dev->dlid;
+	e2e.sl = 0;
+
+	rc = ops->e2e_ctrl(ctx, &e2e);
+	if (rc)
+		return rc;
+	e2e.slid = pdesc.lid;
+	e2e.dlid = pdesc.lid;
+	e2e.sl = 0;
+
+	rc = ops->e2e_ctrl(ctx, &e2e);
+	if (rc)
+		return rc;
+
+	/* FXRTODOD: NI is hard coded for now */
+	dev->ni = PTL_NONMATCHING_PHYSICAL;
+	ct_alloc.ni = dev->ni;
+	rc = hfi_ct_alloc(ctx, &ct_alloc, &dev->ct_tx);
+	if (rc < 0)
+		goto err1;
+	ct_alloc.ni = dev->ni;
+	rc = hfi_ct_alloc(ctx, &ct_alloc, &dev->ct_rx);
+	if (rc < 0)
+		goto err2;
+	dev->eq_alloc_tx.ni = dev->ni;
+	dev->eq_alloc_tx.user_data = 0xdeadbeef;
+	dev->eq_alloc_tx.size = 64;
+	rc = _hfi_eq_alloc(odev, ctx, &dev->eq_alloc_tx, &dev->eq_tx);
+	if (rc)
+		goto err3;
+	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
+	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_NET_TIMEOUT_MS,
+			       (void **)&eq_entry);
+	if (eq_entry) {
+		union initiator_EQEntry *tx_event =
+			(union initiator_EQEntry *)eq_entry;
+
+		dev_info(&odev->dev, "TX EQ success kind %d ptr 0x%llx\n",
+			 tx_event->event_kind, tx_event->user_ptr);
+	} else {
+		dev_info(&odev->dev, "TX EQ failure rc %d\n", rc);
+	}
+	dev->eq_alloc_rx.ni = dev->ni;
+	dev->eq_alloc_rx.user_data = 0xdeadbeef;
+	dev->eq_alloc_rx.size = 64;
+	rc = _hfi_eq_alloc(odev, ctx, &dev->eq_alloc_rx, &dev->eq_rx);
+	if (rc)
+		goto err4;
+	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
+	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_NET_TIMEOUT_MS,
+			       (void **)&eq_entry);
+	if (eq_entry) {
+		union initiator_EQEntry *tx_event =
+			(union initiator_EQEntry *)eq_entry;
+
+		dev_info(&odev->dev, "RX EQ success kind %d ptr 0x%llx\n",
+			 tx_event->event_kind, tx_event->user_ptr);
+	} else {
+		dev_info(&odev->dev, "RX EQ failure rc %d\n", rc);
+	}
+	pt_alloc.ni = dev->ni;
+	pt_alloc.pt_idx = OPA2_NET_PT;
+	pt_alloc.eq_handle = dev->eq_rx;
+	rc = hfi_pt_alloc(ctx, rx, &pt_alloc, &pt_idx);
+	if (rc < 0)
+		goto err5;
+
+	dev_dbg(&odev->dev, "%s success\n", __func__);
 	return 0;
+err5:
+	_hfi_eq_release(&dev->eq_alloc_rx);
+err4:
+	_hfi_eq_release(&dev->eq_alloc_tx);
+err3:
+	hfi_ct_free(ctx, dev->ct_rx, 0);
+err2:
+	hfi_ct_free(ctx, dev->ct_tx, 0);
+err1:
+	dev_err(&odev->dev, "%s err %d\n", __func__, rc);
+	return rc;
 }
 
-void opa2_vnic_hfi_deinit(struct opa_vnic_device *vdev) { }
-
-static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
+static void opa2_uninit_tx_rx(struct opa_veswport *dev)
 {
-	struct opa_core_ops *ops = odev->bus_ops;
+	struct hfi_ctx *ctx = &dev->ctx;
+
+	hfi_pt_free(ctx, &dev->rx, dev->ni, OPA2_NET_PT, 0);
+	_hfi_eq_release(&dev->eq_alloc_tx);
+	_hfi_eq_release(&dev->eq_alloc_rx);
+	hfi_ct_free(ctx, dev->ct_tx, 0);
+	hfi_ct_free(ctx, dev->ct_rx, 0);
+}
+
+static int opa2_xfer_test(struct opa_veswport *dev)
+{
+	struct opa_core_ops *ops = dev->odev->bus_ops;
+	struct opa_core_device *odev = dev->odev;
 	struct hfi_ctx *ctx = &dev->ctx;
 	struct hfi_cq *tx = &dev->tx;
 	struct hfi_cq *rx = &dev->rx;
@@ -243,12 +658,12 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	hfi_ct_alloc_args_t ct_alloc = {0};
 	hfi_pt_alloc_args_t pt_alloc = {0};
 	hfi_pt_fast_alloc_args_t pt_falloc = {0};
+	struct opa_ev_assign eq_alloc_tx = {0}, eq_alloc_rx = {0};
 	hfi_size_t min_free = 2048;
 	hfi_user_ptr_t user_ptr = 0xc0de;
 	hfi_me_handle_t me_handle = 0xc;
 	struct opa_pport_desc pdesc;
 	struct opa_e2e_ctrl e2e;
-	struct opa_ev_assign eq_alloc_tx = {0}, eq_alloc_rx = {0};
 	u64 *eq_entry;
 
 	ops->get_port_desc(odev, &pdesc, 1);
@@ -296,14 +711,14 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	if (rc < 0)
 		goto err3;
 
-	eq_alloc_tx.ni = ni;
-	eq_alloc_tx.user_data = 0xdeadbeef;
-	eq_alloc_tx.size = 64;
-	rc = _hfi_eq_alloc(odev, ctx, &eq_alloc_tx, &eq_tx);
+	dev->eq_alloc_tx.ni = ni;
+	dev->eq_alloc_tx.user_data = 0xdeadbeef;
+	dev->eq_alloc_tx.size = 64;
+	rc = _hfi_eq_alloc(odev, ctx, &dev->eq_alloc_tx, &eq_tx);
 	if (rc)
 		goto err4;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_TX_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
@@ -314,23 +729,23 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	} else {
 		dev_info(&odev->dev, "TX EQ failure rc %d\n", rc);
 	}
-	eq_alloc_rx.ni = ni;
-	eq_alloc_rx.user_data = 0xdeadbeef;
-	eq_alloc_rx.size = 64;
-	rc = _hfi_eq_alloc(odev, ctx, &eq_alloc_rx, &eq_rx);
+	dev->eq_alloc_rx.ni = ni;
+	dev->eq_alloc_rx.user_data = 0xdeadbeef;
+	dev->eq_alloc_rx.size = 64;
+	rc = _hfi_eq_alloc(odev, ctx, &dev->eq_alloc_rx, &eq_rx);
 	if (rc)
 		goto err4;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_TX_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
 
-		dev_info(&odev->dev, "TX EQ success kind %d ptr 0x%llx\n",
+		dev_info(&odev->dev, "RX EQ success kind %d ptr 0x%llx\n",
 			 tx_event->event_kind, tx_event->user_ptr);
 	} else {
-		dev_info(&odev->dev, "TX EQ failure rc %d\n", rc);
+		dev_info(&odev->dev, "RX EQ failure rc %d\n", rc);
 	}
 
 	pt_falloc.ni = PTL_NONMATCHING_PHYSICAL;
@@ -381,7 +796,7 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 		goto err5;
 
 	/* Wait for TX command 1 to complete */
-	rc = hfi_ct_wait_timed(ctx, ct_tx, 1, OPA2_TX_TIMEOUT_MS, NULL);
+	rc = hfi_ct_wait_timed(ctx, ct_tx, 1, OPA2_NET_TIMEOUT_MS, NULL);
 	if (rc < 0) {
 		dev_info(&odev->dev, "TX CT event 1 failure, %d\n", rc);
 		goto err5;
@@ -389,7 +804,7 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 		dev_info(&odev->dev, "TX CT event 1 success\n");
 	}
 
-	rc = hfi_eq_wait_timed(ctx, rx, eq_tx, OPA2_TX_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, rx, eq_tx, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
@@ -415,7 +830,7 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 		goto err5;
 
 	/* Block for an EQ interrupt */
-	rc = hfi_eq_wait_irq(ctx, rx, eq_tx, OPA2_TX_TIMEOUT_MS,
+	rc = hfi_eq_wait_irq(ctx, rx, eq_tx, OPA2_NET_TIMEOUT_MS,
 			     (void **)&eq_entry);
 	if (rc < 0) {
 		dev_info(&odev->dev, "TX EQ 2 intr fail rc %d\n", rc);
@@ -434,14 +849,14 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	}
 
 	/* Wait to receive from peer */
-	rc = hfi_ct_wait_timed(ctx, ct_rx, 1, OPA2_TX_TIMEOUT_MS, NULL);
+	rc = hfi_ct_wait_timed(ctx, ct_rx, 1, OPA2_NET_TIMEOUT_MS, NULL);
 	if (rc < 0) {
 		dev_info(&odev->dev, "RX CT failure, %d\n", rc);
 		goto err5;
 	} else {
 		dev_info(&odev->dev, "RX CT success\n");
 	}
-	rc = hfi_eq_wait_timed(ctx, rx, eq_rx, OPA2_TX_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, rx, eq_rx, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union target_EQEntry *rx_event =
@@ -452,7 +867,7 @@ static int opa2_xfer_test(struct opa_core_device *odev, struct opa_netdev *dev)
 	} else {
 		dev_info(&odev->dev, "RX EQ 1 failure, %d\n", rc);
 	}
-	rc = hfi_eq_wait_timed(ctx, rx, eq_rx, OPA2_TX_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, rx, eq_rx, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union target_EQEntry *rx_event =
@@ -495,14 +910,16 @@ err0:
 	return rc;
 }
 
-int opa2_vnic_hfi_setup(struct opa_core_device *odev)
+static int opa2_vnic_hfi_init(struct opa_vnic_device *vdev)
 {
-	struct opa_netdev *dev = opa_core_get_priv_data(&opa_vnic_clnt, odev);
+	struct opa_veswport *dev = vdev->hfi_priv;
 	struct hfi_ctx *ctx = &dev->ctx;
-	struct opa_ctx_assign ctx_assign = {0};
+	struct opa_core_device *odev = dev->odev;
 	struct opa_core_ops *ops = odev->bus_ops;
+	struct opa_ctx_assign ctx_assign = {0};
 	int rc;
 
+	dev->vdev = vdev;
 	HFI_CTX_INIT_BYPASS(ctx, odev->dd, odev->bus_ops);
 	ctx_assign.pid = HFI_PID_ANY;
 	ctx_assign.le_me_count = OPA2_NET_ME_COUNT;
@@ -519,7 +936,11 @@ int opa2_vnic_hfi_setup(struct opa_core_device *odev)
 	if (rc)
 		goto err1;
 
-	rc = opa2_xfer_test(odev, dev);
+	rc = opa2_xfer_test(dev);
+	if (rc)
+		goto err2;
+
+	rc = opa2_init_tx_rx(dev);
 	if (rc)
 		goto err2;
 	return 0;
@@ -532,55 +953,183 @@ err:
 	return rc;
 }
 
-void opa2_vnic_hfi_cleanup(struct opa_core_device *odev)
+static void opa2_vnic_hfi_deinit(struct opa_vnic_device *vdev)
 {
-	struct opa_netdev *dev = opa_core_get_priv_data(&opa_vnic_clnt, odev);
+	struct opa_veswport *dev = vdev->hfi_priv;
 	struct hfi_ctx *ctx = &dev->ctx;
+	struct opa_core_device *odev = dev->odev;
 	struct opa_core_ops *ops = odev->bus_ops;
 
+	opa2_uninit_tx_rx(dev);
 	ops->cq_unmap(&dev->tx, &dev->rx);
 	ops->cq_release(ctx, dev->cq_idx);
 	odev->bus_ops->ctx_release(ctx);
 }
 
+static struct opa_vnic_hfi_ops vnic_ops = {
+	.hfi_init = opa2_vnic_hfi_init,
+	.hfi_deinit = opa2_vnic_hfi_deinit,
+	.hfi_open = opa2_vnic_hfi_open,
+	.hfi_close = opa2_vnic_hfi_close,
+	.hfi_put_skb = opa2_vnic_hfi_put_skb,
+	.hfi_get_skb = opa2_vnic_hfi_get_skb
+};
+
+/* Remove virtual ethernet switch port device */
+static void opa2_vnic_hfi_remove_vport(struct opa_veswport *dev)
+{
+	opa_vnic_device_unregister(dev->vdev);
+}
+
+/* Add virtual ethernet switch port device */
+static int opa2_vnic_hfi_add_vport(struct opa_veswport *dev)
+{
+	struct opa_core_device *odev = dev->odev;
+	int rc = 0;
+
+	dev->vdev = opa_vnic_device_register(dev->vport_num, dev, &vnic_ops);
+	if (IS_ERR(dev->vdev)) {
+		rc = PTR_ERR(dev->vdev);
+		dev_info(&odev->dev, "error adding vport %d\n", rc);
+	}
+	return rc;
+}
+
+/* Per virtual ethernet switch port cleanup */
+void opa_netdev_uninit_vport(struct opa_netdev_port *npdev)
+{
+	int i;
+
+	for (i = 0; i < npdev->num_vports; i++) {
+		struct opa_veswport *dev = &npdev->vport[i];
+
+		if (dev->init)
+			opa2_vnic_hfi_remove_vport(dev);
+	}
+	kfree(npdev->vport);
+}
+
+/* Per virtual ethernet switch port initialization */
+static int opa_netdev_init_vport(struct opa_netdev_port *npdev)
+{
+	int i, rc = 0;
+	struct opa_core_device *odev = npdev->odev;
+
+	npdev->num_vports = num_veswports;
+	npdev->vport = kcalloc(npdev->num_vports, sizeof(*npdev->vport),
+			       GFP_KERNEL);
+	if (!npdev->vport)
+		return -ENOMEM;
+
+	for (i = 0; i < npdev->num_vports; i++) {
+		struct opa_veswport *dev = &npdev->vport[i];
+
+		dev->vport_num = (odev->index * npdev->num_vports *
+					npdev->ndev->num_ports) +
+				((npdev->port_num - 1) * npdev->num_vports) + i;
+		dev->odev = npdev->odev;
+		dev->npdev = npdev;
+		rc = opa2_vnic_hfi_add_vport(dev);
+		if (rc)
+			goto err;
+		dev->init = true;
+	}
+	return rc;
+err:
+	opa_netdev_uninit_vport(npdev);
+	dev_err(&odev->dev, "%s rc %d\n", __func__, rc);
+	return rc;
+}
+
+/* Per physical port cleanup */
+static void opa_netdev_uninit_port(struct opa_netdev *ndev)
+{
+	int i;
+
+	for (i = 0; i < ndev->num_ports; i++) {
+		struct opa_netdev_port *port = &ndev->pport[i];
+
+		if (port->init)
+			opa_netdev_uninit_vport(port);
+	}
+	kfree(ndev->pport);
+}
+
+/* Per physical port initialization */
+static int opa_netdev_init_port(struct opa_netdev *ndev)
+{
+	struct opa_core_device *odev = ndev->odev;
+	struct opa_dev_desc desc;
+	int i, rc = 0;
+
+	odev->bus_ops->get_device_desc(odev, &desc);
+#if 0
+	/*
+	 * FXRTODO: Only one port supported since the TX write
+	 * commands do not allow specifying the outgoing port
+	 */
+	ndev->num_ports = desc.num_pports;
+#else
+	ndev->num_ports = 1;
+#endif
+	ndev->pport = kcalloc(ndev->num_ports, sizeof(*ndev->pport),
+			      GFP_KERNEL);
+	if (!ndev->pport)
+		return -ENOMEM;
+
+	for (i = 0; i < ndev->num_ports; i++) {
+		struct opa_netdev_port *port = &ndev->pport[i];
+
+		port->port_num = i + 1;
+		port->odev = odev;
+		port->ndev = ndev;
+		rc = opa_netdev_init_vport(port);
+		if (rc)
+			goto err;
+		port->init = true;
+	}
+	return rc;
+err:
+	opa_netdev_uninit_port(ndev);
+	dev_err(&odev->dev, "%s rc %d\n", __func__, rc);
+	return rc;
+}
+
+/* per OPA core device probe routine */
 static int opa_netdev_probe(struct opa_core_device *odev)
 {
 	struct opa_netdev *dev;
 	int rc;
 
 	dev = kzalloc(sizeof(struct opa_netdev), GFP_KERNEL);
+	if (!dev)
+		return -ENOMEM;
+
 	rc = opa_core_set_priv_data(&opa_vnic_clnt, odev, dev);
 	if (rc)
 		goto priv_err;
 
-	rc = opa2_vnic_hfi_setup(odev);
+	dev->odev = odev;
+	rc = opa_netdev_init_port(dev);
 	if (rc)
-		goto vnic_err;
-
-	rc = opa2_vnic_hfi_add_vports(odev);
-	if (rc)
-		goto vport_err;
-
-	return 0;
-
-vport_err:
-	opa2_vnic_hfi_cleanup(odev);
-vnic_err:
+		goto port_err;
+	return rc;
+port_err:
 	opa_core_clear_priv_data(&opa_vnic_clnt, odev);
 priv_err:
-	dev_err(&odev->dev, "error initializing vnic client %d\n", rc);
 	kfree(dev);
+	dev_err(&odev->dev, "%s rc %d\n", __func__, rc);
 	return rc;
 }
 
+/* per OPA core device remove routine */
 static void opa_netdev_remove(struct opa_core_device *odev)
 {
 	struct opa_netdev *dev = opa_core_get_priv_data(&opa_vnic_clnt, odev);
 
 	if (!dev)
 		return;
-	opa2_vnic_hfi_remove_vports(odev);
-	opa2_vnic_hfi_cleanup(odev);
+	opa_netdev_uninit_port(dev);
 	opa_core_clear_priv_data(&opa_vnic_clnt, odev);
 	kfree(dev);
 }
