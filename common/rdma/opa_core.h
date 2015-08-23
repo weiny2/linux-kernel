@@ -76,6 +76,7 @@ struct opa_ib_qp;
  * @ptl_state_base: Pointer to Portals state in host memory
  * @le_me_addr: Pointer to head of ME/LE descriptor buffer
  * @ptl_state_size: Size of the total Portals state memory
+ * @le_me_count: Number of ME/LE entries
  * @le_me_size: Size of ME/LE buffer
  * @unexpected_size: Size of unexpected header buffer
  * @trig_op_size: Size of triggered ops buffer
@@ -115,6 +116,7 @@ struct hfi_ctx {
 	void	*ptl_state_base;
 	void    *le_me_addr;
 	u32	ptl_state_size;
+	u32	le_me_count;
 	u32	le_me_size;
 	u32	unexpected_size;
 	u32	trig_op_size;

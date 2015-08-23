@@ -838,6 +838,20 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	ctx->ptl_state_size = psb_size;
 	ctx->le_me_addr = (void *)(ctx->ptl_state_base + le_me_off);
 	ctx->le_me_size = le_me_size;
+	ctx->le_me_count = ctx_assign->le_me_count;
+	/* Initialize ME/LE pool used by hfi_me_alloc/free */
+	ctx->le_me_free_index = 0;
+	if (ctx->le_me_count) {
+		ctx->le_me_free_list = vzalloc(sizeof(uint16_t) *
+					       (ctx->le_me_count - 1));
+		if (!ctx->le_me_free_list)
+			goto err_vmalloc;
+
+		for (i = 0; i < ctx->le_me_count - 1; i++)
+			/* Entry 0 is reserved, so start from 1. */
+			ctx->le_me_free_list[i] = i + 1;
+	}
+
 	ctx->unexpected_size = unexp_size;
 	ctx->trig_op_size = trig_op_size;
 	idr_init(&ctx->ct_used);
@@ -1014,6 +1028,11 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 
 	/* release per CT and EQ resources */
 	hfi_cteq_cleanup(ctx);
+
+	if (ctx->le_me_free_list) {
+		vfree(ctx->le_me_free_list);
+		ctx->le_me_free_list = NULL;
+	}
 
 	if (ctx->ptl_state_base) {
 		vfree(ctx->ptl_state_base);

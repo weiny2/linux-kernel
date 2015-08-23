@@ -70,6 +70,7 @@ static netdev_tx_t opa_netdev_start_xmit(struct sk_buff *skb,
 {
 	struct opa_vnic_adapter *adapter = netdev_priv(netdev);
 	struct opa_vnic_device *vdev = adapter->vdev;
+	int rc;
 
 	/* TODO: Use the TX command queue to send this skb */
 	v_dbg("xmit: skb len %d\n", skb->len);
@@ -79,8 +80,13 @@ static netdev_tx_t opa_netdev_start_xmit(struct sk_buff *skb,
 #endif
 	opa_vnic_encap_skb(adapter, skb);
 
-	vdev->bus_ops->hfi_put_skb(vdev, skb);
-
+	rc = vdev->bus_ops->hfi_put_skb(vdev, skb);
+	if (!rc) {
+		netdev->stats.tx_packets++;
+		netdev->stats.tx_bytes += skb->len;
+	} else {
+		netdev->stats.tx_dropped++;
+	}
 	dev_kfree_skb_any(skb);
 	return NETDEV_TX_OK;
 }
@@ -108,6 +114,8 @@ static void vnic_handle_rx(struct opa_vnic_adapter *adapter,
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 		skb->protocol = eth_type_trans(skb, vdev->netdev);
 
+		adapter->netdev->stats.rx_packets++;
+		adapter->netdev->stats.rx_bytes += skb->len;
 		napi_gro_receive(&adapter->napi, skb);
 		(*work_done)++;
 	}
