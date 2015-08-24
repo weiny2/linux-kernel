@@ -451,7 +451,7 @@ static DEFINE_PER_CPU(unsigned long, nmi_cr2);
 static DEFINE_PER_CPU(int, update_debug_stack);
 #endif
 
-dotraplinkage notrace void
+dotraplinkage notrace __kprobes void
 do_nmi(struct pt_regs *regs, long error_code)
 {
 	if (this_cpu_read(nmi_state) != NMI_NOT_RUNNING) {
@@ -462,6 +462,19 @@ do_nmi(struct pt_regs *regs, long error_code)
 	this_cpu_write(nmi_cr2, read_cr2());
 nmi_restart:
 
+#ifdef CONFIG_X86_64
+	/*
+	 * If we interrupted a breakpoint, it is possible that
+	 * the nmi handler will have breakpoints too. We need to
+	 * change the IDT such that breakpoints that happen here
+	 * continue to use the NMI stack.
+	 */
+	if (unlikely(is_debug_stack(regs->sp))) {
+		debug_stack_set_zero();
+		this_cpu_write(update_debug_stack, 1);
+	}
+#endif
+
 	nmi_enter();
 
 	inc_irq_stat(__nmi_count);
@@ -470,6 +483,13 @@ nmi_restart:
 		default_do_nmi(regs);
 
 	nmi_exit();
+
+#ifdef CONFIG_X86_64
+	if (unlikely(this_cpu_read(update_debug_stack))) {
+		debug_stack_reset();
+		this_cpu_write(update_debug_stack, 0);
+	}
+#endif
 
 	if (unlikely(this_cpu_read(nmi_cr2) != read_cr2()))
 		write_cr2(this_cpu_read(nmi_cr2));
