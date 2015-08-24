@@ -418,6 +418,7 @@ static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
 	int sl;
 	u16 ccti, ccti_timer, ccti_min;
 	struct cc_state *cc_state;
+	unsigned long flags;
 
 	cca_timer = container_of(t, struct cca_timer, hrtimer);
 	ppd = cca_timer->ppd;
@@ -441,7 +442,7 @@ static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
 	ccti_min = cc_state->cong_setting.entries[sl].ccti_min;
 	ccti_timer = cc_state->cong_setting.entries[sl].ccti_timer;
 
-	spin_lock(&ppd->cca_timer_lock);
+	spin_lock_irqsave(&ppd->cca_timer_lock, flags);
 
 	ccti = cca_timer->ccti;
 
@@ -450,7 +451,7 @@ static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
 		set_link_ipg(ppd);
 	}
 
-	spin_unlock(&ppd->cca_timer_lock);
+	spin_unlock_irqrestore(&ppd->cca_timer_lock, flags);
 
 	rcu_read_unlock();
 
@@ -605,20 +606,19 @@ static int create_workqueues(struct hfi1_devdata *dd)
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		if (!ppd->hfi1_wq) {
-			char wq_name[8]; /* 3 + 2 + 1 + 1 + 1 */
-
-			snprintf(wq_name, sizeof(wq_name), "hfi%d_%d",
-				 dd->unit, pidx);
 			ppd->hfi1_wq =
-				create_singlethread_workqueue(wq_name);
+				alloc_workqueue(
+				    "hfi%d_%d",
+				    WQ_SYSFS | WQ_HIGHPRI | WQ_CPU_INTENSIVE,
+				    dd->num_sdma,
+				    dd->unit, pidx);
 			if (!ppd->hfi1_wq)
 				goto wq_error;
 		}
 	}
 	return 0;
 wq_error:
-	pr_err("create_singlethread_workqueue failed for port %d\n",
-		pidx + 1);
+	pr_err("alloc_workqueue failed for port %d\n", pidx + 1);
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		if (ppd->hfi1_wq) {

@@ -244,6 +244,8 @@ struct hfi1_ah {
 	struct ib_ah ibah;
 	struct ib_ah_attr attr;
 	atomic_t refcount;
+	u8 vl;
+	u8 log_pmtu;
 };
 
 /*
@@ -436,18 +438,20 @@ struct hfi1_qp {
 	struct hfi1_swqe *s_wq;  /* send work queue */
 	struct hfi1_mmap_info *ip;
 	struct ahg_ib_header *s_hdr;     /* next packet header to send */
-	u8 s_sc;			/* SC[0..4] for next packet */
+	/* sc for UC/RC QPs - based on ah for UD */
+	u8 s_sc;
 	unsigned long timeout_jiffies;  /* computed from timeout */
 
 	enum ib_mtu path_mtu;
 	int srate_mbps;		/* s_srate (below) converted to Mbit/s */
 	u32 remote_qpn;
-	u32 pmtu;		/* decoded from path_mtu */
 	u32 qkey;               /* QKEY for this QP (for UD or RD) */
 	u32 s_size;             /* send work queue size */
 	u32 s_rnr_timeout;      /* number of milliseconds for RNR timeout */
 	u32 s_ahgpsn;           /* set to the psn in the copy of the header */
 
+	u16 pmtu;		/* decoded from path_mtu */
+	u8 log_pmtu;		/* shift for pmtu */
 	u8 state;               /* QP state */
 	u8 allowed_ops;		/* high order bits of allowed opcodes */
 	u8 qp_access_flags;
@@ -493,6 +497,13 @@ struct hfi1_qp {
 	struct hfi1_sge_state r_sge;     /* current receive data */
 	struct hfi1_rq r_rq;             /* receive work queue */
 
+	/* post send line */
+	spinlock_t s_hlock ____cacheline_aligned_in_smp;
+	u32 s_head;             /* new entries added here */
+	u32 s_next_psn;         /* PSN for next request */
+	u32 s_avail;		/* number of entries avail */
+	u32 s_ssn;              /* SSN of tail entry */
+
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
 	struct hfi1_sge_state *s_cur_sge;
 	u32 s_flags;
@@ -503,19 +514,16 @@ struct hfi1_qp {
 	u32 s_cur_size;         /* size of send packet in bytes */
 	u32 s_len;              /* total length of s_sge */
 	u32 s_rdma_read_len;    /* total length of s_rdma_read_sge */
-	u32 s_next_psn;         /* PSN for next request */
 	u32 s_last_psn;         /* last response PSN processed */
 	u32 s_sending_psn;      /* lowest PSN that is being sent */
 	u32 s_sending_hpsn;     /* highest PSN that is being sent */
 	u32 s_psn;              /* current packet sequence number */
 	u32 s_ack_rdma_psn;     /* PSN for sending RDMA read responses */
 	u32 s_ack_psn;          /* PSN for acking sends and RDMA writes */
-	u32 s_head;             /* new entries added here */
 	u32 s_tail;             /* next entry to process */
 	u32 s_cur;              /* current work queue entry */
 	u32 s_acked;            /* last un-ACK'ed entry */
 	u32 s_last;             /* last completed entry */
-	u32 s_ssn;              /* SSN of tail entry */
 	u32 s_lsn;              /* limit sequence number (credit) */
 	u16 s_hdrwords;         /* size of s_hdr in 32 bit words */
 	u16 s_rdma_ack_cnt;
@@ -841,7 +849,6 @@ static inline int hfi1_send_ok(struct hfi1_qp *qp)
 /*
  * This must be called with s_lock held.
  */
-void hfi1_schedule_send(struct hfi1_qp *qp);
 void hfi1_bad_pqkey(struct hfi1_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 		    u32 qp1, u32 qp2, __be16 lid1, __be16 lid2);
 void hfi1_cap_mask_chg(struct hfi1_ibport *ibp);
@@ -1064,8 +1071,6 @@ void hfi1_update_mmap_info(struct hfi1_ibdev *dev, struct hfi1_mmap_info *ip,
 int hfi1_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
 
 int hfi1_get_rwqe(struct hfi1_qp *qp, int wr_id_only);
-
-void hfi1_migrate_qp(struct hfi1_qp *qp);
 
 int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		       int has_grh, struct hfi1_qp *qp, u32 bth0);
