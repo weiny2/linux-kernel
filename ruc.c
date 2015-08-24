@@ -641,7 +641,6 @@ unlock:
 	spin_unlock_irqrestore(&sqp->s_lock, flags);
 done:
 	rcu_read_unlock();
-	return;
 }
 
 /**
