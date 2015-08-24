@@ -13,7 +13,7 @@ ipostl_client=$run_host
 
 hostfile="${host1}_${host2}.hosts"
 perf_git="/nfs/sc/disks/fabric_work/ddalessa/perf_analysis/perfromance_team-fab_perf"
-verbs_dir="/nfs_scratch/driver_perf/Verbs/verbs-perf-check-r1.1"
+verbs_dir="/nfs_scratch/driver_perf/Verbs/verbs-perf-check-r1.0"
 turbo="noturbo"
 WFRMPI="/usr/mpi/gcc/openmpi-1.8.5-hfi"
 datestamp=`date "+%m-%d-%y"`
