@@ -425,7 +425,7 @@ static void uas_data_cmplt(struct urb *urb)
 	}
 
 	if (urb->status) {
-		if (urb->status != -ECONNRESET && urb->status != -ENOENT) {
+		if (urb->status != -ENOENT && urb->status != -ECONNRESET) {
 			uas_log_cmd_state(cmnd, __func__);
 			scmd_printk(KERN_ERR, cmnd,
 				"data cmplt err %d stream %d\n",
