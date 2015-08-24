@@ -62,6 +62,7 @@ struct uas_dev_info {
 	spinlock_t lock;
 	struct work_struct work;
 	struct list_head inflight_list;
+	struct list_head dead_list;
 };
 
 enum {
