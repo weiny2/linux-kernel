@@ -981,8 +981,8 @@ u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp)
 
 void hfi_set_crc_mode(struct hfi_devdata *dd, u8 port, u16 crc_lcb_mode)
 {
-	write_fc_csr(dd, port, FC_LCB_CFG_CRC_MODE,
-		(u64)crc_lcb_mode << FC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
+	write_fc_csr(dd, port, FZC_LCB_CFG_CRC_MODE,
+		(u64)crc_lcb_mode << FZC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 }
 
 /*
