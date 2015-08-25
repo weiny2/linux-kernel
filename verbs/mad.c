@@ -321,11 +321,26 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	if (!(ibp->mkey != smp->mkey && ibp->mkeyprot == 1))
 		pi->mkey = ibp->mkey;
 
+	pi->subnet_prefix = ibp->gid_prefix;
+	pi->ib_cap_mask = cpu_to_be32(ibp->port_cap_flags);
 	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
 	pi->mkeyprotect_lmc = ibp->mkeyprot << MKEY_SHIFT;
 	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
+
+	/*
+	 * FXRTODO: pkey check in FXR is offloaded to HW. This will
+	 * have to be read from a CSR. Ref JIRA STL-2298
+	 */
+	pi->pkey_violations = cpu_to_be16(ibp->pkey_violations);
+	pi->qkey_violations = cpu_to_be16(ibp->qkey_violations);
+	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
+	pi->port_link_mode  = cpu_to_be16(OPA_PORT_LINK_MODE_OPA << 10 |
+					  OPA_PORT_LINK_MODE_OPA << 5 |
+					  OPA_PORT_LINK_MODE_OPA);
 	pi->sm_trap_qp = cpu_to_be32(ibp->sm_trap_qp);
 	pi->sa_qp = cpu_to_be32(ibp->sa_qp);
+	pi->local_port_num = port;
+
 	if (resp_len)
 		*resp_len += sizeof(struct opa_port_info);
 
@@ -611,6 +626,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	event.device = ibdev;
 	event.element.port_num = port;
 
+	ibp->gid_prefix = pi->subnet_prefix;
 	ibp->mkey = pi->mkey;
 	ibp->mkey_lease_period = be16_to_cpu(pi->mkey_lease_period);
 	ibp->mkeyprot = (pi->mkeyprotect_lmc & OPA_PI_MASK_MKEY_PROT_BIT)
@@ -620,6 +636,15 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (pi->mkey_violations == 0)
 		ibp->mkey_violations = 0;
+
+	if (pi->pkey_violations == 0)
+		ibp->pkey_violations = 0;
+
+	if (pi->qkey_violations == 0)
+		ibp->qkey_violations = 0;
+
+	ibp->subnet_timeout =
+		pi->clientrereg_subnettimeout & OPA_PI_MASK_SUBNET_TIMEOUT;
 
 	/*
 	 * From here on all attributes that are handled in SMA-HFI but cached in
