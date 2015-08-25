@@ -339,6 +339,7 @@ static void pci_intx_for_msi(struct pci_dev *dev, int enable)
 void pci_restore_msi_state(struct pci_dev *dev)
 {
 	int rc = -ENOSYS;
+	u16 control = 0;
 
 	if (!dev->msi_enabled && !dev->msix_enabled)
 		return;
@@ -346,8 +347,13 @@ void pci_restore_msi_state(struct pci_dev *dev)
 	pci_intx_for_msi(dev, 0);
 	if (dev->msi_enabled)
 		msi_set_enable(dev, 0);
-	if (dev->msix_enabled)
-		msix_set_enable(dev, 0);
+	if (dev->msix_enabled) {
+		pci_read_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS,
+				     &control);
+		control |= PCI_MSIX_FLAGS_ENABLE | PCI_MSIX_FLAGS_MASKALL;
+		pci_write_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS,
+				      control);
+	}
 
 	if (pci_seg_supported) {
 		struct physdev_pci_device restore = {
@@ -371,6 +377,12 @@ void pci_restore_msi_state(struct pci_dev *dev)
 	}
 #endif
 	WARN(rc && rc != -ENOSYS, "restore_msi -> %d\n", rc);
+
+	if (dev->msix_enabled) {
+	 	control &= ~PCI_MSIX_FLAGS_MASKALL;
+ 		pci_write_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS,
+				      control);
+	}
 }
 EXPORT_SYMBOL_GPL(pci_restore_msi_state);
 
