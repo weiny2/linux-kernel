@@ -190,6 +190,36 @@ static int opa_ib_query_device(struct ib_device *ibdev,
 	return 0;
 }
 
+static int opa_ib_modify_port(struct ib_device *ibdev, u8 port,
+		       int port_modify_mask, struct ib_port_modify *props)
+{
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	int ret = 0;
+
+	ibp->port_cap_flags |= props->set_port_cap_mask;
+	ibp->port_cap_flags &= ~props->clr_port_cap_mask;
+	if (props->set_port_cap_mask || props->clr_port_cap_mask) {
+		/* FXRTODO: yet to be implemented ref STL-2194 */
+#if 0
+		hfi1_cap_mask_chg(ibp);
+#endif
+	}
+	if (port_modify_mask & IB_PORT_SHUTDOWN) {
+		/*
+		 * FXRTODO: Need to support setting link states
+		 * from verbs layer
+		 */
+#if 0
+		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_UNKNOWN, 0,
+		  OPA_LINKDOWN_REASON_UNKNOWN);
+		ret = set_link_state(ppd, HLS_DN_DOWNDEF);
+#endif
+	}
+	if (port_modify_mask & IB_PORT_RESET_QKEY_CNTR)
+		ibp->qkey_violations = 0;
+	return ret;
+}
+
 static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 			     struct ib_port_attr *props)
 {
@@ -370,9 +400,9 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	ibdev->alloc_ucontext = opa_ib_alloc_ucontext;
 	ibdev->dealloc_ucontext = opa_ib_dealloc_ucontext;
 	ibdev->dma_device = ibd->parent_dev;
+	ibdev->modify_port = opa_ib_modify_port;
 #if 0
 	ibdev->modify_device = opa_ib_modify_device;
-	ibdev->modify_port = opa_ib_modify_port;
 	ibdev->create_srq = opa_ib_create_srq;
 	ibdev->modify_srq = opa_ib_modify_srq;
 	ibdev->query_srq = opa_ib_query_srq;
