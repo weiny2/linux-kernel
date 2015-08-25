@@ -66,7 +66,6 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 {
 	struct hfi1_other_headers *ohdr;
 	struct hfi1_swqe *wqe;
-	unsigned long flags;
 	u32 hwords = 5;
 	u32 bth0 = 0;
 	u32 len;
@@ -74,13 +73,12 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 	int ret = 0;
 	int middle = 0;
 
-	spin_lock_irqsave(&qp->s_lock, flags);
-
 	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_SEND_OK)) {
 		if (!(ib_hfi1_state_ops[qp->state] & HFI1_FLUSH_SEND))
 			goto bail;
 		/* We are in the error state, flush the work request. */
-		if (qp->s_last == qp->s_head)
+		smp_read_barrier_depends(); /* see post_one_send() */
+		if (qp->s_last == ACCESS_ONCE(qp->s_head))
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
 		if (atomic_read(&qp->s_iowait.sdma_busy)) {
@@ -106,15 +104,15 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 		    HFI1_PROCESS_NEXT_SEND_OK))
 			goto bail;
 		/* Check if send work queue is empty. */
-		if (qp->s_cur == qp->s_head) {
+		smp_read_barrier_depends(); /* see post_one_send() */
+		if (qp->s_cur == ACCESS_ONCE(qp->s_head)) {
 			clear_ahg(qp);
 			goto bail;
 		}
 		/*
 		 * Start a new request.
 		 */
-		wqe->psn = qp->s_next_psn;
-		qp->s_psn = qp->s_next_psn;
+		qp->s_psn = wqe->psn;
 		qp->s_sge.sge = wqe->sg_list[0];
 		qp->s_sge.sg_list = wqe->sg_list + 1;
 		qp->s_sge.num_sge = wqe->wr.num_sge;
@@ -238,12 +236,11 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 			     mask_psn(qp->s_next_psn++), middle);
 done:
 	ret = 1;
-	goto unlock;
+	goto out;
 
 bail:
 	qp->s_flags &= ~HFI1_S_BUSY;
-unlock:
-	spin_unlock_irqrestore(&qp->s_lock, flags);
+out:
 	return ret;
 }
 
