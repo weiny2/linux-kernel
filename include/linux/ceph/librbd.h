@@ -168,5 +168,7 @@ extern int rbd_img_request_fill(struct rbd_img_request *img_request,
 				enum obj_request_type type, void *data_desc);
 extern int rbd_img_request_submit(struct rbd_img_request *img_request);
 extern void rbd_img_request_put(struct rbd_img_request *img_request);
+extern int rbd_dev_setxattr(struct rbd_device *rbd_dev, char *key, void *val,
+			    int val_len);
 
 #endif

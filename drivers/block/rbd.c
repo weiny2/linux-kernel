@@ -1888,6 +1888,7 @@ static void rbd_osd_req_callback(struct ceph_osd_request *osd_req,
 		break;
 	case CEPH_OSD_OP_NOTIFY_ACK:
 	case CEPH_OSD_OP_WATCH:
+	case CEPH_OSD_OP_SETXATTR:
 		rbd_osd_trivial_callback(obj_request);
 		break;
 	default:
@@ -4300,6 +4301,53 @@ static void rbd_dev_destroy(struct rbd_device *rbd_dev)
 	rbd_spec_put(rbd_dev->spec);
 	kfree(rbd_dev);
 }
+
+int rbd_dev_setxattr(struct rbd_device *rbd_dev, char *key, void *val,
+		     int val_len)
+{
+	struct ceph_osd_client *osdc = &rbd_dev->rbd_client->client->osdc;
+	struct rbd_obj_request *obj_request;
+	int ret;
+
+	obj_request = rbd_obj_request_create(rbd_dev->header_name, 0, 0,
+					     OBJ_REQUEST_NODATA);
+	if (!obj_request)
+		return -ENOMEM;
+
+	obj_request->osd_req = rbd_osd_req_create(rbd_dev, OBJ_OP_WRITE, 1,
+						  obj_request);
+	if (!obj_request->osd_req) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = osd_req_op_xattr_init(obj_request->osd_req, 0, CEPH_OSD_OP_SETXATTR,
+				    key, val, val_len, 0, 0);
+	if (ret)
+		goto out;
+
+	rbd_osd_req_format_write(obj_request);
+
+	ret = rbd_obj_request_submit(osdc, obj_request);
+	if (ret)
+		goto out;
+
+	ret = rbd_obj_request_wait(obj_request);
+	if (ret)
+		goto out;
+
+	ret = obj_request->result;
+	if (ret) {
+		goto out;
+	}
+
+	ret = 0;
+out:
+	rbd_obj_request_put(obj_request);
+
+	return ret;
+}
+EXPORT_SYMBOL(rbd_dev_setxattr);
 
 /*
  * Get the size and object order for an image snapshot, or if
