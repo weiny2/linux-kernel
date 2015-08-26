@@ -113,6 +113,8 @@ static int atomic_dec_return_safe(atomic_t *v)
 
 #define RBD_FEATURES_SUPPORTED	(RBD_FEATURES_ALL)
 
+#define RBD_MAX_XATTR_STR_LEN  128
+
 /*
  * An rbd image specification.
  *
@@ -4164,6 +4166,36 @@ static ssize_t rbd_image_refresh(struct device *dev,
 	return size;
 }
 
+/*
+ * TODO: remove me or move to debugfs for final merge.
+ */
+static ssize_t rbd_setxattr_set(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct rbd_device *rbd_dev = dev_to_rbd_dev(dev);
+	char key[RBD_MAX_XATTR_STR_LEN];
+	char val[RBD_MAX_XATTR_STR_LEN];
+	int ret;
+
+	ret = sscanf(buf, "%" __stringify(RBD_MAX_XATTR_STR_LEN) "s %"
+		     __stringify(RBD_MAX_XATTR_STR_LEN) "s\n", key, val);
+	if (ret != 2) {
+		rbd_warn(rbd_dev, "Invalid number of params. Got %d", ret);
+		return -EINVAL;
+	} else if (!strlen(key) || !strlen(val)) {
+		rbd_warn(rbd_dev, "missing param");
+		return -EINVAL;
+	}
+
+	/* +1 to store null term */
+	ret = rbd_dev_setxattr(rbd_dev, key, val, strlen(val) + 1);
+	if (ret)
+		return ret;
+	else
+		return size;
+}
+
 static DEVICE_ATTR(size, S_IRUGO, rbd_size_show, NULL);
 static DEVICE_ATTR(features, S_IRUGO, rbd_features_show, NULL);
 static DEVICE_ATTR(major, S_IRUGO, rbd_major_show, NULL);
@@ -4176,6 +4208,7 @@ static DEVICE_ATTR(image_id, S_IRUGO, rbd_image_id_show, NULL);
 static DEVICE_ATTR(refresh, S_IWUSR, NULL, rbd_image_refresh);
 static DEVICE_ATTR(current_snap, S_IRUGO, rbd_snap_show, NULL);
 static DEVICE_ATTR(parent, S_IRUGO, rbd_parent_show, NULL);
+static DEVICE_ATTR(setxattr, S_IWUSR, NULL, rbd_setxattr_set);
 
 static struct attribute *rbd_attrs[] = {
 	&dev_attr_size.attr,
@@ -4190,6 +4223,7 @@ static struct attribute *rbd_attrs[] = {
 	&dev_attr_current_snap.attr,
 	&dev_attr_parent.attr,
 	&dev_attr_refresh.attr,
+	&dev_attr_setxattr.attr,
 	NULL
 };
 
