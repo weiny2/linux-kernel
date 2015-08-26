@@ -3279,8 +3279,9 @@ out:
 	return ret;
 }
 
-static void rbd_watch_cb(u64 ver, u64 notify_id, u8 opcode, void *data,
-			 void *payload, int payload_len)
+static void rbd_watch_cb(u64 ver, u64 notify_id, u8 opcode, s32 return_code,
+			 u64 notifier_gid, void *data, void *payload,
+			 u32 payload_len)
 {
 	struct rbd_device *rbd_dev = (struct rbd_device *)data;
 	int ret;
