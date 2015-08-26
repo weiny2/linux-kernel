@@ -4228,6 +4228,43 @@ static ssize_t rbd_cmpsetxattr_set(struct device *dev,
 		return size;
 }
 
+static ssize_t rbd_getxattr_set(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct rbd_device *rbd_dev = dev_to_rbd_dev(dev);
+	char key[RBD_MAX_XATTR_STR_LEN];
+	char *val = NULL;
+	int val_len = 0;
+	int ret;
+
+	ret = sscanf(buf, "%" __stringify(RBD_MAX_XATTR_STR_LEN) "s\n", key);
+	if (ret != 1) {
+		rbd_warn(rbd_dev, "Invalid number of params. Got %d", ret);
+		return -EINVAL;
+	} else if (!strlen(key)) {
+		rbd_warn(rbd_dev, "missing param");
+		return -EINVAL;
+	}
+
+	ret = rbd_dev_getxattr(rbd_dev, key, RBD_MAX_XATTR_STR_LEN,
+			       (void **)&val, &val_len);
+	if (ret)
+		return ret;
+
+	if (!val_len)
+		return size;
+
+	if (val[val_len - 1] == '\0') {
+		rbd_warn(rbd_dev, "%s: %s", key, val);
+	} else {
+		rbd_warn(rbd_dev, "%s: %*ph", key, val_len, val);
+	}
+	kfree(val);
+
+	return size;
+}
+
 static DEVICE_ATTR(size, S_IRUGO, rbd_size_show, NULL);
 static DEVICE_ATTR(features, S_IRUGO, rbd_features_show, NULL);
 static DEVICE_ATTR(major, S_IRUGO, rbd_major_show, NULL);
@@ -4242,6 +4279,7 @@ static DEVICE_ATTR(current_snap, S_IRUGO, rbd_snap_show, NULL);
 static DEVICE_ATTR(parent, S_IRUGO, rbd_parent_show, NULL);
 static DEVICE_ATTR(setxattr, S_IWUSR, NULL, rbd_setxattr_set);
 static DEVICE_ATTR(cmpsetxattr, S_IWUSR, NULL, rbd_cmpsetxattr_set);
+static DEVICE_ATTR(getxattr, S_IWUSR, NULL, rbd_getxattr_set);
 
 static struct attribute *rbd_attrs[] = {
 	&dev_attr_size.attr,
@@ -4258,6 +4296,7 @@ static struct attribute *rbd_attrs[] = {
 	&dev_attr_refresh.attr,
 	&dev_attr_setxattr.attr,
 	&dev_attr_cmpsetxattr.attr,
+	&dev_attr_getxattr.attr,
 	NULL
 };
 
