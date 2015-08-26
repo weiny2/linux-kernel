@@ -173,5 +173,7 @@ extern int rbd_dev_setxattr(struct rbd_device *rbd_dev, char *key, void *val,
 extern int rbd_dev_cmpsetxattr(struct rbd_device *rbd_dev, char *key,
 			       void *oldval, int oldval_len, void *newval,
 			       int newval_len);
+extern int rbd_dev_getxattr(struct rbd_device *rbd_dev, char *key, int max_val_len,
+			    void **_val, int *val_len);
 
 #endif
