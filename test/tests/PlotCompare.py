@@ -31,6 +31,10 @@ def main():
                       help="Scale for X-axis. Valid values are: log2, log10, <None>")
     parser.add_option("--yscale", dest="yscale",
                       help="Scale for Y-axis. Valid values are: log2, log10, <None>")
+    parser.add_option("--xrange", dest="xrange",
+                      help="Set x range in the format of min:max"),
+    parser.add_option("--yrange", dest="yrange",
+                      help="Set y range in the format of min:max"),
     parser.add_option("--xlabel", dest="xlabel",
                       help="Label for X axis, default matches --x of the first file")
     parser.add_option("--ylabel", dest="ylabel",
@@ -107,6 +111,14 @@ def main():
 
     if options.yscale == "log10":
         pl.semilogy(basey=10)
+
+    if options.xrange:
+        (min, max) = options.xrange.split(":")
+        pl.xlim(int(min),int(max))
+
+    if options.yrange:
+        (min, max) = options.yrange.split(":")
+        pl.ylim(int(min),int(max))
 
     # build the title
     title_str = ""
