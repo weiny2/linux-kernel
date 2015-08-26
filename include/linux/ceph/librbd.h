@@ -170,5 +170,8 @@ extern int rbd_img_request_submit(struct rbd_img_request *img_request);
 extern void rbd_img_request_put(struct rbd_img_request *img_request);
 extern int rbd_dev_setxattr(struct rbd_device *rbd_dev, char *key, void *val,
 			    int val_len);
+extern int rbd_dev_cmpsetxattr(struct rbd_device *rbd_dev, char *key,
+			       void *oldval, int oldval_len, void *newval,
+			       int newval_len);
 
 #endif
