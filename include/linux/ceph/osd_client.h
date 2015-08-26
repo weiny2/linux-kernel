@@ -211,7 +211,8 @@ struct ceph_osd_event {
 			void (*errcb)(void *, u64, int);
 		} watch;
 		struct {
-			struct ceph_msg_data *notify_data;
+			struct page **notify_data;
+			size_t notify_data_len;
 			struct completion complete;
 		} notify;
 	};
