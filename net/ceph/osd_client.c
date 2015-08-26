@@ -365,6 +365,18 @@ void osd_req_op_notify_request_data_pagelist(
 }
 EXPORT_SYMBOL(osd_req_op_notify_request_data_pagelist);
 
+void osd_req_op_xattr_response_data_pages(struct ceph_osd_request *osd_req,
+			unsigned int which, struct page **pages, u64 length,
+			u32 alignment, bool pages_from_pool, bool own_pages)
+{
+	struct ceph_osd_data *osd_data;
+
+	osd_data = osd_req_op_data(osd_req, which, xattr, response_data);
+	ceph_osd_data_pages_init(osd_data, pages, length, alignment,
+				pages_from_pool, own_pages);
+}
+EXPORT_SYMBOL(osd_req_op_xattr_response_data_pages);
+
 static u64 ceph_osd_data_length(struct ceph_osd_data *osd_data)
 {
 	switch (osd_data->type) {
@@ -431,7 +443,9 @@ static void osd_req_op_data_release(struct ceph_osd_request *osd_req,
 		break;
 	case CEPH_OSD_OP_SETXATTR:
 	case CEPH_OSD_OP_CMPXATTR:
-		ceph_osd_data_release(&op->xattr.osd_data);
+	case CEPH_OSD_OP_GETXATTR:
+		ceph_osd_data_release(&op->xattr.request_data);
+		ceph_osd_data_release(&op->xattr.response_data);
 		break;
 	default:
 		break;
@@ -706,31 +720,44 @@ int osd_req_op_xattr_init(struct ceph_osd_request *osd_req, unsigned int which,
 			  size_t size, u8 cmp_op, u8 cmp_mode)
 {
 	struct ceph_osd_req_op *op = _osd_req_op_init(osd_req, which, opcode);
-	struct ceph_pagelist *pagelist;
+	struct ceph_pagelist *req_pagelist;
 	size_t payload_len;
+	int ret;
 
-	BUG_ON(opcode != CEPH_OSD_OP_SETXATTR && opcode != CEPH_OSD_OP_CMPXATTR);
+	BUG_ON(opcode != CEPH_OSD_OP_SETXATTR
+		&& opcode != CEPH_OSD_OP_CMPXATTR
+		&& opcode != CEPH_OSD_OP_GETXATTR);
 
-	pagelist = kmalloc(sizeof(*pagelist), GFP_NOFS);
-	if (!pagelist)
+	req_pagelist = kmalloc(sizeof(*req_pagelist), GFP_NOFS);
+	if (!req_pagelist)
 		return -ENOMEM;
 
-	ceph_pagelist_init(pagelist);
+	ceph_pagelist_init(req_pagelist);
 
 	payload_len = strlen(name);
 	op->xattr.name_len = payload_len;
-	ceph_pagelist_append(pagelist, name, payload_len);
+	ret = ceph_pagelist_append(req_pagelist, name, payload_len);
+	if (ret) {
+		goto err_reqpl_free;
+	}
 
-	op->xattr.value_len = size;
-	ceph_pagelist_append(pagelist, value, size);
-	payload_len += size;
+	if (value) {
+		op->xattr.value_len = size;
+		ceph_pagelist_append(req_pagelist, value, size);
+		payload_len += size;
+	}
 
 	op->xattr.cmp_op = cmp_op;
 	op->xattr.cmp_mode = cmp_mode;
 
-	ceph_osd_data_pagelist_init(&op->xattr.osd_data, pagelist);
+	ceph_osd_data_pagelist_init(&op->xattr.request_data, req_pagelist);
 	op->payload_len = payload_len;
+
 	return 0;
+
+err_reqpl_free:
+	ceph_pagelist_release(req_pagelist);
+	return ret;
 }
 EXPORT_SYMBOL(osd_req_op_xattr_init);
 
@@ -921,13 +948,16 @@ static u64 osd_req_encode_op(struct ceph_osd_request *req,
 		break;
 	case CEPH_OSD_OP_SETXATTR:
 	case CEPH_OSD_OP_CMPXATTR:
+	case CEPH_OSD_OP_GETXATTR:
 		dst->xattr.name_len = cpu_to_le32(src->xattr.name_len);
 		dst->xattr.value_len = cpu_to_le32(src->xattr.value_len);
 		dst->xattr.cmp_op = src->xattr.cmp_op;
 		dst->xattr.cmp_mode = src->xattr.cmp_mode;
-		osd_data = &src->xattr.osd_data;
+		osd_data = &src->xattr.request_data;
 		ceph_osdc_msg_data_add(req->r_request, osd_data);
 		request_data_len = osd_data->pagelist->length;
+		osd_data = &src->xattr.response_data;
+		ceph_osdc_msg_data_add(req->r_reply, osd_data);
 		break;
 	case CEPH_OSD_OP_CREATE:
 	case CEPH_OSD_OP_DELETE:
