@@ -57,12 +57,6 @@ struct page {
 		union {
 			pgoff_t index;		/* Our offset within mapping. */
 			void *freelist;		/* slub/slob first free object */
-#ifdef __GENKSYMS__
-			bool pfmemalloc;	/* pfmemalloc has been removed
-						 * and users are supposed to use
-						 * page_is_pfmemalloc(page) instead
-						 */
-#endif
 		};
 
 		union {
