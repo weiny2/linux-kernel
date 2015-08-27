@@ -38,10 +38,11 @@ bool bvec_mergeable(struct request_queue *q, struct bio_vec *lastbv,
 
 
 static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
-					     struct bio *bio)
+					     struct bio *bio,
+					     bool no_sg_merge)
 {
 	struct bio_vec *bv, *bvprv = NULL;
-	int i, no_sg_merge;
+	int i;
 	unsigned int seg_size, nr_phys_segs;
 	struct bio *fbio, *bbio;
 
@@ -51,7 +52,6 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 	fbio = bio;
 	seg_size = 0;
 	nr_phys_segs = 0;
-	no_sg_merge = test_bit(QUEUE_FLAG_NO_SG_MERGE, &q->queue_flags);
 	for_each_bio(bio) {
 		bio_for_each_segment(bv, bio, i) {
 			/*
@@ -86,18 +86,23 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 
 void blk_recalc_rq_segments(struct request *rq)
 {
-	rq->nr_phys_segments = __blk_recalc_rq_segments(rq->q, rq->bio);
+	bool no_sg_merge = !!test_bit(QUEUE_FLAG_NO_SG_MERGE,
+				      &rq->q->queue_flags);
+
+	rq->nr_phys_segments = __blk_recalc_rq_segments(rq->q, rq->bio,
+							no_sg_merge);
 }
 
 void blk_recount_segments(struct request_queue *q, struct bio *bio)
 {
-	if (test_bit(QUEUE_FLAG_NO_SG_MERGE, &q->queue_flags))
+	if (test_bit(QUEUE_FLAG_NO_SG_MERGE, &q->queue_flags) &&
+	    bio->bi_vcnt < queue_max_segments(q))
 		bio->bi_phys_segments = bio->bi_vcnt;
 	else {
 		struct bio *nxt = bio->bi_next;
 
 		bio->bi_next = NULL;
-		bio->bi_phys_segments = __blk_recalc_rq_segments(q, bio);
+		bio->bi_phys_segments = __blk_recalc_rq_segments(q, bio, false);
 		bio->bi_next = nxt;
 	}
 
