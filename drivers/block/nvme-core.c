@@ -87,6 +87,7 @@ static struct notifier_block nvme_nb;
 static struct class *nvme_class;
 
 static void nvme_reset_failed_dev(struct work_struct *ws);
+static int nvme_reset(struct nvme_dev *dev);
 
 struct async_cmd_info {
 	struct kthread_work work;
@@ -2867,6 +2868,9 @@ static long nvme_dev_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 		return nvme_user_cmd(dev, (void __user *)arg, false);
 	case NVME_IOCTL_IO_CMD:
 		return nvme_user_cmd(dev, (void __user *)arg, true);
+	case NVME_IOCTL_RESET:
+		dev_warn(&dev->pci_dev->dev, "resetting controller\n");
+		return nvme_reset(dev);
 	default:
 		return -ENOTTY;
 	}
@@ -2989,6 +2993,41 @@ static void nvme_reset_workfn(struct work_struct *work)
 	dev->reset_workfn(work);
 }
 
+static int nvme_reset(struct nvme_dev *dev)
+{
+	int ret = -EBUSY;
+
+	spin_lock(&dev_list_lock);
+	if (!work_pending(&dev->reset_work)) {
+		dev->reset_workfn = nvme_reset_failed_dev;
+		queue_work(nvme_workq, &dev->reset_work);
+		ret = 0;
+	}
+	spin_unlock(&dev_list_lock);
+
+	if (!ret) {
+		flush_work(&dev->reset_work);
+		return 0;
+	}
+
+	return ret;
+}
+
+static ssize_t nvme_sysfs_reset(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	struct nvme_dev *ndev = dev_get_drvdata(dev);
+	int ret;
+
+	ret = nvme_reset(ndev);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+static DEVICE_ATTR(reset_controller, S_IWUSR, NULL, nvme_sysfs_reset);
+
 static void nvme_async_probe(struct work_struct *work);
 static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
@@ -3034,12 +3073,20 @@ static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto release_pools;
 	}
 	get_device(dev->device);
+	dev_set_drvdata(dev->device, dev);
+
+	result = device_create_file(dev->device, &dev_attr_reset_controller);
+	if (result)
+		goto put_dev;
 
 	INIT_LIST_HEAD(&dev->node);
 	INIT_WORK(&dev->probe_work, nvme_async_probe);
 	schedule_work(&dev->probe_work);
 	return 0;
 
+ put_dev:
+	device_destroy(nvme_class, MKDEV(nvme_char_major, dev->instance));
+	put_device(dev->device);
  release_pools:
 	nvme_release_prp_pools(dev);
  release:
@@ -3070,10 +3117,12 @@ static void nvme_async_probe(struct work_struct *work)
 
 	return;
  reset:
+	spin_lock(&dev_list_lock);
 	if (!work_busy(&dev->reset_work)) {
 		dev->reset_workfn = nvme_reset_failed_dev;
 		queue_work(nvme_workq, &dev->reset_work);
 	}
+	spin_unlock(&dev_list_lock);
 }
 
 static void nvme_shutdown(struct pci_dev *pdev)
@@ -3094,6 +3143,7 @@ static void nvme_remove(struct pci_dev *pdev)
 	flush_work(&dev->probe_work);
 	flush_work(&dev->reset_work);
 	flush_work(&dev->cpu_work);
+	device_remove_file(dev->device, &dev_attr_reset_controller);
 	nvme_dev_shutdown(dev);
 	nvme_free_queues(dev, 0);
 	nvme_dev_remove(dev);
