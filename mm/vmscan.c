@@ -1092,9 +1092,10 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 		 */
 		__clear_page_locked(page);
 
+free_it:
 		/* See release_pages on why this clear may be necessary */
 		__ClearPageWaiters(page);
-free_it:
+
 		nr_reclaimed++;
 
 		/*
