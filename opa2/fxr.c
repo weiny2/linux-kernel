@@ -226,6 +226,7 @@ static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, int mtu)
 {
 	int i;
 	u64 reg = 0;
+
 	u64 val = hfi_mtu_to_mc_tc_shift(dd, mtu);
 
 	for (i = 0; i < 8; i++)
@@ -255,6 +256,16 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 
 static void init_csrs(struct hfi_devdata *dd)
 {
+	RXHP_CFG_NPTL_CTL_t nptl_ctl = {.val = 0};
+	RXHP_CFG_NPTL_BTH_QP_t kdeth_qp = {.val = 0};
+
+	/* enable non-portals */
+	nptl_ctl.field.RcvQPMapEnable = 1;
+	nptl_ctl.field.RcvBypassEnable = 1;
+	write_csr(dd, FXR_RXHP_CFG_NPTL_CTL, nptl_ctl.val);
+	kdeth_qp.field.KDETH_QP = 0x80; /* Gen1 default */
+	write_csr(dd, FXR_RXHP_CFG_NPTL_BTH_QP, kdeth_qp.val);
+
 	if (force_loopback) {
 		LM_CONFIG_t lm_config = {.val = 0};
 
@@ -1751,4 +1762,42 @@ int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr, ssize
 	}
 
 	return ret;
+}
+
+void hfi_ctxt_set_bypass(struct hfi_ctx *ctx)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	u8 csr_pid;
+
+	/* Get the 'Gen1 context' number from FXR PID */
+	csr_pid = ctx->pid - HFI_PID_BYPASS_BASE;
+
+	spin_lock(&dd->ptl_lock);
+	if (ctx->mode & HFI_CTX_MODE_BYPASS_10B) {
+		/* TODO - don't unconditionally claim bypass_pid */
+		write_csr(dd, FXR_RXHP_CFG_NPTL_BYPASS, csr_pid);
+		dd->bypass_pid = ctx->pid;
+	}
+
+	if (ctx->mode & HFI_CTX_MODE_BYPASS_9B) {
+		u64 val;
+		u32 csr_idx, off;
+
+		/* TODO - revisit this when adding general QP support */
+
+		if (ctx->qpn_map_idx == 0) {
+			write_csr(dd, FXR_RXHP_CFG_NPTL_VL15, csr_pid);
+			dd->vl15_pid = ctx->pid;
+		}
+
+		/* Read appropriate QP_MAP_TABLE CSR and update */
+		off = ((ctx->qpn_map_idx) / 8) * 8;
+		val = read_csr(dd, FXR_RXHP_CFG_NPTL_QP_MAP_TABLE + off);
+		/* set just the sub-field in this CSR for this QPN */
+		csr_idx = ctx->qpn_map_idx % 8;
+		val &= ~(0xFFuLL << (csr_idx * 8));
+		val |= csr_pid << (csr_idx * 8);
+		write_csr(dd, FXR_RXHP_CFG_NPTL_QP_MAP_TABLE + off, val);
+	}
+	spin_unlock(&dd->ptl_lock);
 }

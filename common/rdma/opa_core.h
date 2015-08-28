@@ -70,6 +70,7 @@ struct opa_ib_qp;
  * @devdata: HFI device specific data, private to the hardware driver
  * @ops: OPA_CORE device operations
  * @type: kernel or user context
+ * @qpn_map_idx: if a Verbs context, index into QPN->PID table
  * @mode: Describes if PIDs or LIDs are virtualized or not
  * @pid: Assigned Portals Process ID
  * @ptl_uid: Assigned Protection Domain ID
@@ -113,6 +114,7 @@ struct hfi_ctx {
 	struct hfi_devdata *devdata;
 	struct opa_core_ops *ops;
 	u8	type;
+	u8	qpn_map_idx;
 	u16	mode;
 	u16	pid;
 	u32	ptl_uid;
@@ -157,7 +159,9 @@ struct hfi_ctx {
 #define HFI_CTX_TYPE_USER	2
 
 /* TODO - move this to opa-headers */
-#define HFI_CTX_MODE_BYPASS	0x100
+#define HFI_CTX_MODE_BYPASS_9B  0x100
+#define HFI_CTX_MODE_BYPASS_10B 0x200
+#define HFI_CTX_MODE_BYPASS     0x300 /* mask */
 
 #define HFI_CTX_INIT(ctx, dd, bus_ops)		\
 	do {					\
@@ -172,12 +176,6 @@ struct hfi_ctx {
 		(ctx)->pid_count = 0;		\
 		/* 0 reserved for kernel clients */ \
 		(ctx)->ptl_uid = 0;		\
-	} while (0)
-
-#define HFI_CTX_INIT_BYPASS(ctx, dd, ops)	\
-	do {					\
-		HFI_CTX_INIT((ctx), (dd), (ops));   \
-		(ctx)->mode |= HFI_CTX_MODE_BYPASS; \
 	} while (0)
 
 /**

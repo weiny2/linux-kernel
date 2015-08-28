@@ -481,6 +481,8 @@ struct hfi_devdata {
 	/* Device Portals State */
 	struct idr ptl_user;
 	unsigned long ptl_map[HFI_NUM_PIDS / BITS_PER_LONG];
+	u16 vl15_pid;
+	u16 bypass_pid;
 	spinlock_t ptl_lock;
 	struct hfi_ctx priv_ctx;
 	struct hfi_cq priv_tx_cq;
@@ -587,6 +589,7 @@ int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count);
 void hfi_ctxt_unreserve(struct hfi_ctx *ctx);
 int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int token, u16 ctxt, void **addr,
 		     ssize_t *len);
+void hfi_ctxt_set_bypass(struct hfi_ctx *ctx);
 int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e_ctrl);
 void hfi_e2e_destroy(struct hfi_devdata *dd);
 
