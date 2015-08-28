@@ -297,7 +297,8 @@ static void ixgbe_remove_adapter(struct ixgbe_hw *hw)
 		return;
 	hw->hw_addr = NULL;
 	e_dev_err("Adapter removed\n");
-	ixgbe_service_event_schedule(adapter);
+	if (test_bit(__IXGBE_SERVICE_INITED, &adapter->state))
+		ixgbe_service_event_schedule(adapter);
 }
 
 void ixgbe_check_remove(struct ixgbe_hw *hw, u32 reg)
@@ -8025,6 +8026,10 @@ static int ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* EEPROM */
 	memcpy(&hw->eeprom.ops, ii->eeprom_ops, sizeof(hw->eeprom.ops));
 	eec = IXGBE_READ_REG(hw, IXGBE_EEC);
+	if (ixgbe_removed(hw->hw_addr)) {
+		err = -EIO;
+		goto err_ioremap;
+	}
 	/* If EEPROM is valid (bit 8 = 1), use default otherwise use bit bang */
 	if (!(eec & (1 << 8)))
 		hw->eeprom.ops.read = &ixgbe_read_eeprom_bit_bang_generic;
@@ -8187,7 +8192,12 @@ skip_sriov:
 	setup_timer(&adapter->service_timer, &ixgbe_service_timer,
 		    (unsigned long) adapter);
 
+	if (ixgbe_removed(hw->hw_addr)) {
+		err = -EIO;
+		goto err_sw_init;
+	}
 	INIT_WORK(&adapter->service_task, ixgbe_service_task);
+	set_bit(__IXGBE_SERVICE_INITED, &adapter->state);
 	clear_bit(__IXGBE_SERVICE_SCHED, &adapter->state);
 
 	err = ixgbe_init_interrupt_scheme(adapter);
@@ -8496,6 +8506,9 @@ static pci_ers_result_t ixgbe_io_error_detected(struct pci_dev *pdev,
 
 skip_bad_vf_detection:
 #endif /* CONFIG_PCI_IOV */
+	if (!test_bit(__IXGBE_SERVICE_INITED, &adapter->state))
+		return PCI_ERS_RESULT_DISCONNECT;
+
 	rtnl_lock();
 	netif_device_detach(netdev);
 
