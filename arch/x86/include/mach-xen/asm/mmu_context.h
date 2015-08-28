@@ -41,21 +41,10 @@ struct ldt_struct {
 
 static inline void load_mm_ldt(struct mm_struct *mm)
 {
-	int ldt_size;
-	void *ldt;
+	struct ldt_struct *ldt;
 
 	/* lockless_dereference synchronizes with smp_store_release */
-	ldt_size = mm->context.size;
 	ldt = lockless_dereference(mm->context.ldt);
-
-	/*
-	 * Prevent races between two threads sharing an address space, one doing
-	 * load_mm_ldt() in switch_mm() and the other updating context.ldt and
-	 * context.size. X86 is strongly ordered but the compiler might do some
-	 * reordering, thus use an smp_rmb() at the end which evaluates to a
-	 * compiler barrier except on PPRO where an actual LFENCE is generated.
-	 */
-	smp_rmb();
 
 	/*
 	 * Any change to mm->context.ldt is followed by an IPI to all
@@ -72,7 +61,7 @@ static inline void load_mm_ldt(struct mm_struct *mm)
 	 */
 
 	if (unlikely(ldt))
-		set_ldt(ldt, ldt_size);
+		set_ldt(ldt->entries, ldt->size);
 	else
 		clear_LDT();
 
@@ -172,16 +161,13 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 		/* Load the LDT, if the LDT is different: */
 		if (unlikely(prev->context.ldt != next->context.ldt)) {
 			/* load_mm_ldt(next) */
-			unsigned int ldt_size;
-			void *ldt;
+			struct ldt_struct *ldt;
 
 			/* lockless_dereference synchronizes with smp_store_release */
-			ldt_size = next->context.size;
 			ldt = lockless_dereference(next->context.ldt);
-			smp_rmb();
 			op->cmd = MMUEXT_SET_LDT;
-			op->arg1.linear_addr = (unsigned long)ldt;
-			op->arg2.nr_ents     = ldt_size;
+			op->arg1.linear_addr = (unsigned long)ldt->entries;
+			op->arg2.nr_ents     = ldt->size;
 			op++;
 		}
 

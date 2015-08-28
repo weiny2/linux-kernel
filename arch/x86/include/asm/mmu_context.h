@@ -36,21 +36,10 @@ struct ldt_struct {
 
 static inline void load_mm_ldt(struct mm_struct *mm)
 {
-	int ldt_size;
-	void *ldt;
+	struct ldt_struct *ldt;
 
 	/* lockless_dereference synchronizes with smp_store_release */
-	ldt_size = mm->context.size;
 	ldt = lockless_dereference(mm->context.ldt);
-
-	/*
-	 * Prevent races between two threads sharing an address space, one doing
-	 * load_mm_ldt() in switch_mm() and the other updating context.ldt and
-	 * context.size. X86 is strongly ordered but the compiler might do some
-	 * reordering, thus use an smp_rmb() at the end which evaluates to a
-	 * compiler barrier except on PPRO where an actual LFENCE is generated.
-	 */
-	smp_rmb();
 
 	/*
 	 * Any change to mm->context.ldt is followed by an IPI to all
@@ -67,7 +56,7 @@ static inline void load_mm_ldt(struct mm_struct *mm)
 	 */
 
 	if (unlikely(ldt))
-		set_ldt(ldt, ldt_size);
+		set_ldt(ldt->entries, ldt->size);
 	else
 		clear_LDT();
 
@@ -75,7 +64,7 @@ static inline void load_mm_ldt(struct mm_struct *mm)
 }
 
 /*
-* Used for LDT copy/destruction.
+ * Used for LDT copy/destruction.
  */
 int init_new_context(struct task_struct *tsk, struct mm_struct *mm);
 void destroy_context(struct mm_struct *mm);

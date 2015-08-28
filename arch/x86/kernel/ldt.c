@@ -21,16 +21,19 @@
 #include <asm/mmu_context.h>
 #include <asm/syscalls.h>
 
+/* context.lock is held for us, so we don't need any locking. */
 static void flush_ldt(void *current_mm)
 {
-	if (current->active_mm == current_mm) {
-		/* context.lock is held for us, so we don't need any locking. */
-		mm_context_t *pc = &current->active_mm->context;
-		set_ldt(pc->ldt, pc->size);
-	}
+	mm_context_t *pc;
+
+	if (current->active_mm != current_mm)
+		return;
+
+	pc = &current->active_mm->context;
+	set_ldt(pc->ldt->entries, pc->ldt->size);
 }
 
-/* The caller must call finalize_ldt_struct on the result. */
+/* The caller must call finalize_ldt_struct on the result. LDT starts zeroed. */
 static struct ldt_struct *alloc_ldt_struct(int size)
 {
 	struct ldt_struct *new_ldt;
@@ -46,10 +49,17 @@ static struct ldt_struct *alloc_ldt_struct(int size)
 	BUILD_BUG_ON(LDT_ENTRY_SIZE != sizeof(struct desc_struct));
 	alloc_size = size * LDT_ENTRY_SIZE;
 
+	/*
+	 * Xen is very picky: it requires a page-aligned LDT that has no
+	 * trailing nonzero bytes in any page that contains LDT descriptors.
+	 * Keep it simple: zero the whole allocation and never allocate less
+	 * than PAGE_SIZE.
+	 */
 	if (alloc_size > PAGE_SIZE)
-		new_ldt->entries = vmalloc(alloc_size);
+		new_ldt->entries = vzalloc(alloc_size);
 	else
-		new_ldt->entries = (void *)__get_free_page(GFP_KERNEL);
+		new_ldt->entries = kzalloc(PAGE_SIZE, GFP_KERNEL);
+
 	if (!new_ldt->entries) {
 		kfree(new_ldt);
 		return NULL;
@@ -65,39 +75,28 @@ static void finalize_ldt_struct(struct ldt_struct *ldt)
 	paravirt_alloc_ldt(ldt->entries, ldt->size);
 }
 
+/* context.lock is held */
 static void install_ldt(struct mm_struct *current_mm,
 			struct ldt_struct *ldt)
 {
-	/* context.lock is held */
-	preempt_disable();
-
 	/* Synchronizes with lockless_dereference in load_mm_ldt. */
-	current_mm->context.size = ldt->size;
-	smp_store_release(&current_mm->context.ldt, ldt->entries);
+	smp_store_release(&current_mm->context.ldt, ldt);
 
-	/* Activate for this CPU. */
-	flush_ldt(current->mm);
-
-#ifdef CONFIG_SMP
-	/* Synchronize with other CPUs. */
-	if (!cpumask_equal(mm_cpumask(current_mm),
-			   cpumask_of(smp_processor_id())))
-		smp_call_function(flush_ldt, current_mm, 1);
-#endif
-	preempt_enable();
+	/* Activate the LDT for all CPUs using current_mm. */
+	on_each_cpu_mask(mm_cpumask(current_mm), flush_ldt, current_mm, true);
 }
 
-static void free_ldt_struct(void *ldt, int ldt_size)
+static void free_ldt_struct(struct ldt_struct *ldt)
 {
-	if (unlikely(ldt)) {
-		int alloc_size = ldt_size * LDT_ENTRY_SIZE;
+	if (likely(!ldt))
+		return;
 
-		paravirt_free_ldt(ldt, ldt_size);
-		if (alloc_size > PAGE_SIZE)
-			vfree(ldt);
-		else
-			put_page(virt_to_page(ldt));
-	}
+	paravirt_free_ldt(ldt->entries, ldt->size);
+	if (ldt->size * LDT_ENTRY_SIZE > PAGE_SIZE)
+		vfree(ldt->entries);
+	else
+		kfree(ldt->entries);
+	kfree(ldt);
 }
 
 /*
@@ -118,28 +117,22 @@ int init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 	}
 
 	mutex_lock(&old_mm->context.lock);
-	if (!old_mm->context.ldt)
+	if (!old_mm->context.ldt) {
+		mm->context.ldt = NULL;
 		goto out_unlock;
+	}
 
-
-	new_ldt = alloc_ldt_struct(old_mm->context.size);
+	new_ldt = alloc_ldt_struct(old_mm->context.ldt->size);
 	if (!new_ldt) {
 		retval = -ENOMEM;
 		goto out_unlock;
 	}
 
-	memcpy(new_ldt->entries, old_mm->context.ldt, new_ldt->size * LDT_ENTRY_SIZE);
+	memcpy(new_ldt->entries, old_mm->context.ldt->entries,
+	       new_ldt->size * LDT_ENTRY_SIZE);
 	finalize_ldt_struct(new_ldt);
 
-	mm->context.ldt  = new_ldt->entries;
-	mm->context.size = new_ldt->size;
-
-	/*
-	 * This is different from upstream - we use new_ldt only up to here and
-	 * and copy its contents into mm->context members.
-	 * Free it here.
-	 */
-	kfree(new_ldt);
+	mm->context.ldt = new_ldt;
 
 out_unlock:
 	mutex_unlock(&old_mm->context.lock);
@@ -153,7 +146,7 @@ out_unlock:
  */
 void destroy_context(struct mm_struct *mm)
 {
-	free_ldt_struct(mm->context.ldt, mm->context.size);
+	free_ldt_struct(mm->context.ldt);
 	mm->context.ldt = NULL;
 }
 
@@ -173,18 +166,18 @@ static int read_ldt(void __user *ptr, unsigned long bytecount)
 	if (bytecount > LDT_ENTRY_SIZE * LDT_ENTRIES)
 		bytecount = LDT_ENTRY_SIZE * LDT_ENTRIES;
 
-	size = mm->context.size * LDT_ENTRY_SIZE;
+	size = mm->context.ldt->size * LDT_ENTRY_SIZE;
 	if (size > bytecount)
 		size = bytecount;
 
-	if (copy_to_user(ptr, mm->context.ldt, size)) {
+	if (copy_to_user(ptr, mm->context.ldt->entries, size)) {
 		retval = -EFAULT;
 		goto out_unlock;
 	}
 
 	if (size != bytecount) {
 		/* Zero-fill the rest and pretend we read bytecount bytes. */
-		if (clear_user(ptr + size, bytecount - size) != 0) {
+		if (clear_user(ptr + size, bytecount - size)) {
 			retval = -EFAULT;
 			goto out_unlock;
 		}
@@ -218,8 +211,7 @@ static int write_ldt(void __user *ptr, unsigned long bytecount, int oldmode)
 	int error;
 	struct user_desc ldt_info;
 	int oldsize, newsize;
-	struct ldt_struct *new_ldt;
-	void *old_ldt;
+	struct ldt_struct *new_ldt, *old_ldt;
 
 	error = -EINVAL;
 	if (bytecount != sizeof(ldt_info))
@@ -238,7 +230,7 @@ static int write_ldt(void __user *ptr, unsigned long bytecount, int oldmode)
 			goto out;
 	}
 
-	if ((oldmode && ldt_info.base_addr == 0 && ldt_info.limit == 0) ||
+	if ((oldmode && !ldt_info.base_addr && !ldt_info.limit) ||
 	    LDT_empty(&ldt_info)) {
 		/* The user wants to clear the entry. */
 		memset(&ldt, 0, sizeof(ldt));
@@ -256,7 +248,7 @@ static int write_ldt(void __user *ptr, unsigned long bytecount, int oldmode)
 	mutex_lock(&mm->context.lock);
 
 	old_ldt = mm->context.ldt;
-	oldsize = old_ldt ? mm->context.size : 0;
+	oldsize = old_ldt ? old_ldt->size : 0;
 	newsize = max((int)(ldt_info.entry_number + 1), oldsize);
 
 	error = -ENOMEM;
@@ -265,22 +257,12 @@ static int write_ldt(void __user *ptr, unsigned long bytecount, int oldmode)
 		goto out_unlock;
 
 	if (old_ldt)
-		memcpy(new_ldt->entries, old_ldt, oldsize * LDT_ENTRY_SIZE);
-
-	memset(new_ldt->entries + oldsize * LDT_ENTRY_SIZE, 0,
-	       (newsize - oldsize) * LDT_ENTRY_SIZE);
-
+		memcpy(new_ldt->entries, old_ldt->entries, oldsize * LDT_ENTRY_SIZE);
 	new_ldt->entries[ldt_info.entry_number] = ldt;
 	finalize_ldt_struct(new_ldt);
 
 	install_ldt(mm, new_ldt);
-	free_ldt_struct(old_ldt, oldsize);
-
-	/*
-	 * Container new_ldt is not needed anymore, free it.
-	 */
-	kfree(new_ldt);
-
+	free_ldt_struct(old_ldt);
 	error = 0;
 
 out_unlock:

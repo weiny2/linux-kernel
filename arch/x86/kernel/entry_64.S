@@ -1045,6 +1045,8 @@ retint_restore_args:	/* return to kernel space */
 	TRACE_IRQS_IRETQ
 restore_args:
 	RESTORE_ARGS 1,8,1
+
+irq_return:
 	INTERRUPT_RETURN
 
 ENTRY(native_iret)
@@ -1576,11 +1578,11 @@ paranoid_swapgs:
 	TRACE_IRQS_IRETQ 0
 	SWAPGS_UNSAFE_STACK
 	RESTORE_ALL 8
-	INTERRUPT_RETURN
+	jmp irq_return
 paranoid_restore:
 	TRACE_IRQS_IRETQ_DEBUG 0
 	RESTORE_ALL 8
-	INTERRUPT_RETURN
+	jmp irq_return
 paranoid_userspace:
 	GET_THREAD_INFO(%rcx)
 	movl TI_flags(%rcx),%ebx
@@ -1696,7 +1698,19 @@ ENTRY(error_exit)
 	CFI_ENDPROC
 END(error_exit)
 
-/* Runs on exception stack */
+/*
+ * Test if a given stack is an NMI stack or not.
+ */
+	.macro test_in_nmi reg stack nmi_ret normal_ret
+	cmpq %\reg, \stack
+	ja \normal_ret
+	subq $EXCEPTION_STKSZ, %\reg
+	cmpq %\reg, \stack
+	jb \normal_ret
+	jmp \nmi_ret
+	.endm
+
+	/* runs on exception stack */
 ENTRY(nmi)
 	INTR_FRAME
 	PARAVIRT_ADJUST_EXCEPTION_FRAME
@@ -1796,22 +1810,8 @@ ENTRY(nmi)
 	 */
 	SWAPGS
 
-	/*
-	 * Open-code the entire return process for compatibility with varying
-	 * register layouts across different kernel versions.
-	 */
 	addq	$6*8, %rsp	/* skip bx, bp, and r12-r15 */
-	popq	%r11		/* pt_regs->r11 */
-	popq	%r10		/* pt_regs->r10 */
-	popq	%r9		/* pt_regs->r9 */
-	popq	%r8		/* pt_regs->r8 */
-	popq	%rax		/* pt_regs->ax */
-	popq	%rcx		/* pt_regs->cx */
-	popq	%rdx		/* pt_regs->dx */
-	popq	%rsi		/* pt_regs->si */
-	popq	%rdi		/* pt_regs->di */
-	addq	$8, %rsp	/* skip orig_ax */
-	INTERRUPT_RETURN
+	jmp	restore_args
 
 .Lnmi_from_kernel:
 	/*
@@ -1828,17 +1828,8 @@ ENTRY(nmi)
 	 * We check the variable because the first NMI could be in a
 	 * breakpoint routine using a breakpoint stack.
 	 */
-	lea	6*8(%rsp), %rdx
-	/* Compare the NMI stack (rdx) with the stack we came from (4*8(%rsp)) */
-	cmpq	%rdx, 4*8(%rsp)
-	/* If the stack pointer is above the NMI stack, this is a normal NMI */
-	ja	first_nmi
-	subq	$EXCEPTION_STKSZ, %rdx
-	cmpq	%rdx, 4*8(%rsp)
-	/* If it is below the NMI stack, it is a normal NMI */
-	jb	first_nmi
-	/* Ah, it is within the NMI stack, treat it as nested */
-
+	lea 6*8(%rsp), %rdx
+	test_in_nmi rdx, 4*8(%rsp), nested_nmi, first_nmi
 	CFI_REMEMBER_STATE
 
 nested_nmi:
@@ -1995,7 +1986,7 @@ nmi_restore:
 
 	/* Clear the NMI executing stack variable */
 	movq $0, 5*8(%rsp)
-	INTERRUPT_RETURN
+	jmp irq_return
 	CFI_ENDPROC
 END(nmi)
 
