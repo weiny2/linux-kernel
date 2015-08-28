@@ -62,6 +62,7 @@
 #include <rdma/fxr/fxr_linkmux_fpc_defs.h>
 #include <rdma/fxr/fxr_linkmux_cm_defs.h>
 
+extern uint opafm_disable;
 extern unsigned int hfi_max_mtu;
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME
