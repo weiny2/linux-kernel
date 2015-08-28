@@ -105,6 +105,8 @@ struct opa_ib_qp;
  * @eq_base: EQ 0 base for each NI
  * @le_me_free_list: List of free ME/LE handles
  * @le_me_free_index: Index of first free handle
+ * @pt_free_list: List of free PT entries (per NI)
+ * @pt_free_index: Index of first free PT entry (per NI)
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
@@ -145,6 +147,8 @@ struct hfi_ctx {
 	void	*eq_base[HFI_NUM_NIS];
 	hfi_me_handle_t *le_me_free_list;
 	uint32_t	le_me_free_index;
+	uint8_t		pt_free_list[HFI_NUM_NIS][HFI_NUM_PT_ENTRIES];
+	uint32_t	pt_free_index[HFI_NUM_NIS];
 };
 
 #define HFI_CTX_TYPE_KERNEL	1

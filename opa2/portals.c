@@ -841,7 +841,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	ctx->le_me_count = ctx_assign->le_me_count;
 	/* Initialize ME/LE pool used by hfi_me_alloc/free */
 	ctx->le_me_free_index = 0;
-	if (ctx->le_me_count) {
+	if (ctx->le_me_count && ctx->type == HFI_CTX_TYPE_KERNEL) {
 		ctx->le_me_free_list = vzalloc(sizeof(uint16_t) *
 					       (ctx->le_me_count - 1));
 		if (!ctx->le_me_free_list)
@@ -898,6 +898,18 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 			ret = _hfi_eq_assign(ctx);
 		/* no EQs assigned yet, so above cannot yield error */
 		BUG_ON(ret != 0);
+
+		/* Initialize PT pool used by hfi_pt_(fast_)alloc/free */
+		for (ni = 0; ni < HFI_NUM_NIS; ni++) {
+			ctx->pt_free_index[ni] = 0;
+			/*
+			 * Place high valued entries so they are allocated
+			 * first by HFI_PT_ANY.
+			 */
+			for (i = 0; i < HFI_NUM_PT_ENTRIES; i++)
+				ctx->pt_free_list[ni][i] =
+					HFI_NUM_PT_ENTRIES - i - 1;
+		}
 	}
 
 	/* Initialize the Unexpected Free List */
