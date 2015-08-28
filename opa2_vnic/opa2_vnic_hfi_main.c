@@ -928,7 +928,8 @@ static int opa2_vnic_hfi_init(struct opa_vnic_device *vdev)
 	int rc;
 
 	dev->vdev = vdev;
-	HFI_CTX_INIT_BYPASS(ctx, odev->dd, odev->bus_ops);
+	HFI_CTX_INIT(ctx, odev->dd, odev->bus_ops);
+	ctx->mode |= HFI_CTX_MODE_BYPASS_10B;
 	ctx_assign.pid = HFI_PID_ANY;
 	ctx_assign.le_me_count = OPA2_NET_ME_COUNT;
 	ctx_assign.unexpected_count = OPA2_NET_UNEX_COUNT;

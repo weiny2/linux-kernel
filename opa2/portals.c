@@ -914,6 +914,9 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 				ctx->pt_free_list[ni][i] =
 					HFI_NUM_PT_ENTRIES - i - 1;
 		}
+
+		if (ctx->pid >= HFI_PID_BYPASS_BASE)
+			hfi_ctxt_set_bypass(ctx);
 	}
 
 	/* Initialize the Unexpected Free List */
