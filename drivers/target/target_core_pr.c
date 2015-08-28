@@ -298,28 +298,17 @@ out:
  * This function is called by those initiator ports who are *NOT*
  * the active PR reservation holder when a reservation is present.
  */
-static int core_scsi3_pr_seq_non_holder(
-	struct se_cmd *cmd,
-	u32 pr_reg_type)
+int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
+				 char *dbg_nexus, bool registered_nexus)
 {
 	unsigned char *cdb = cmd->t_task_cdb;
-	struct se_dev_entry *se_deve;
-	struct se_session *se_sess = cmd->se_sess;
-	int other_cdb = 0, ignore_reg;
-	int registered_nexus = 0, ret = 1; /* Conflict by default */
+	int other_cdb = 0;
+	int ret = 1; /* Conflict by default */
 	int all_reg = 0, reg_only = 0; /* ALL_REG, REG_ONLY */
 	int we = 0; /* Write Exclusive */
 	int legacy = 0; /* Act like a legacy device and return
 			 * RESERVATION CONFLICT on some CDBs */
 
-	se_deve = se_sess->se_node_acl->device_list[cmd->orig_fe_lun];
-	/*
-	 * Determine if the registration should be ignored due to
-	 * non-matching ISIDs in target_scsi3_pr_reservation_check().
-	 */
-	ignore_reg = (pr_reg_type & 0x80000000);
-	if (ignore_reg)
-		pr_reg_type &= ~0x80000000;
 
 	switch (pr_reg_type) {
 	case PR_TYPE_WRITE_EXCLUSIVE:
@@ -329,8 +318,6 @@ static int core_scsi3_pr_seq_non_holder(
 		 * Some commands are only allowed for the persistent reservation
 		 * holder.
 		 */
-		if ((se_deve->def_pr_registered) && !(ignore_reg))
-			registered_nexus = 1;
 		break;
 	case PR_TYPE_WRITE_EXCLUSIVE_REGONLY:
 		we = 1;
@@ -339,8 +326,6 @@ static int core_scsi3_pr_seq_non_holder(
 		 * Some commands are only allowed for registered I_T Nexuses.
 		 */
 		reg_only = 1;
-		if ((se_deve->def_pr_registered) && !(ignore_reg))
-			registered_nexus = 1;
 		break;
 	case PR_TYPE_WRITE_EXCLUSIVE_ALLREG:
 		we = 1;
@@ -349,8 +334,6 @@ static int core_scsi3_pr_seq_non_holder(
 		 * Each registered I_T Nexus is a reservation holder.
 		 */
 		all_reg = 1;
-		if ((se_deve->def_pr_registered) && !(ignore_reg))
-			registered_nexus = 1;
 		break;
 	default:
 		return -EINVAL;
@@ -492,7 +475,7 @@ static int core_scsi3_pr_seq_non_holder(
 			pr_debug("%s Conflict for unregistered nexus"
 				" %s CDB: 0x%02x to %s reservation\n",
 				transport_dump_cmd_direction(cmd),
-				se_sess->se_node_acl->initiatorname, cdb[0],
+				dbg_nexus, cdb[0],
 				core_scsi3_pr_dump_type(pr_reg_type));
 			return 1;
 		} else {
@@ -544,18 +527,22 @@ static int core_scsi3_pr_seq_non_holder(
 	pr_debug("%s Conflict for %sregistered nexus %s CDB: 0x%2x"
 		" for %s reservation\n", transport_dump_cmd_direction(cmd),
 		(registered_nexus) ? "" : "un",
-		se_sess->se_node_acl->initiatorname, cdb[0],
+		dbg_nexus, cdb[0],
 		core_scsi3_pr_dump_type(pr_reg_type));
 
 	return 1; /* Conflict by default */
 }
+EXPORT_SYMBOL(core_scsi3_pr_seq_non_holder);
 
 static sense_reason_t
 target_scsi3_pr_reservation_check(struct se_cmd *cmd)
 {
 	struct se_device *dev = cmd->se_dev;
+	struct se_dev_entry *se_deve;
 	struct se_session *sess = cmd->se_sess;
 	u32 pr_reg_type;
+	bool registered_nexus;
+	int ignore_reg;
 
 	if (!dev->dev_pr_res_holder)
 		return 0;
@@ -576,7 +563,23 @@ target_scsi3_pr_reservation_check(struct se_cmd *cmd)
 	return 0;
 
 check_nonholder:
-	if (core_scsi3_pr_seq_non_holder(cmd, pr_reg_type))
+	/*
+	 * Determine if the registration should be ignored due to
+	 * non-matching ISIDs in target_scsi3_pr_reservation_check().
+	 */
+	ignore_reg = (pr_reg_type & 0x80000000);
+	if (ignore_reg)
+		pr_reg_type &= ~0x80000000;
+
+	se_deve = sess->se_node_acl->device_list[cmd->orig_fe_lun];
+	if ((se_deve->def_pr_registered) && !(ignore_reg))
+		registered_nexus = true;
+	else
+		registered_nexus = false;
+
+	if (core_scsi3_pr_seq_non_holder(cmd, pr_reg_type,
+					 sess->se_node_acl->initiatorname,
+					 registered_nexus));
 		return TCM_RESERVATION_CONFLICT;
 	return 0;
 }
