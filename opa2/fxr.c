@@ -96,6 +96,12 @@ static uint force_loopback;
 module_param(force_loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(force_loopback, "Force FXR into loopback");
 
+/* FXRTODO: Remove this once we have opafm working with B2B setup */
+uint opafm_disable = 1;
+module_param_named(opafm_disable, opafm_disable, uint, S_IRUGO);
+MODULE_PARM_DESC(opafm_disable, "0 - driver needs opafm to work, \
+			        1 - driver works without opafm");
+
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
 
@@ -273,8 +279,10 @@ static void init_csrs(struct hfi_devdata *dd)
 		 * TODO: Delete this hack once the LID is received via MADs
 		 */
 		if (!strcmp(utsname()->nodename, "viper0")) {
-			dd->pport[0].lid = 1;
-			dd->pport[1].lid = 2;
+			if (opafm_disable) {
+				dd->pport[0].lid = 1;
+				dd->pport[1].lid = 2;
+			}
 			/*
 			 * FXRTODO: read nodeguid from MNH Register
 			 * 8051_CFG_LOCAL_GUID. This register is
@@ -292,8 +300,10 @@ static void init_csrs(struct hfi_devdata *dd)
 			dd->pport[1].neighbor_guid = cpu_to_be64(NODE_GUID + 1);
 		}
 		if (!strcmp(utsname()->nodename, "viper1")) {
-			dd->pport[0].lid = 3;
-			dd->pport[1].lid = 4;
+			if (opafm_disable) {
+				dd->pport[0].lid = 3;
+				dd->pport[1].lid = 4;
+			}
 			/*
 			 * FXRTODO: read nodeguid from MNH Register
 			 * 8051_CFG_LOCAL_GUID. This register is
@@ -311,12 +321,16 @@ static void init_csrs(struct hfi_devdata *dd)
 			dd->pport[0].neighbor_guid = cpu_to_be64(NODE_GUID);
 			dd->pport[1].neighbor_guid = cpu_to_be64(NODE_GUID);
 		}
-		lmp0.field.DLID = dd->pport[0].lid;
-		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
-		write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0, dd->pport[0].lid);
-		lmp1.field.DLID = dd->pport[1].lid;
-		write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
-		write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1, dd->pport[1].lid);
+		if (opafm_disable) {
+			lmp0.field.DLID = dd->pport[0].lid;
+			write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
+			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0,
+							dd->pport[0].lid);
+			lmp1.field.DLID = dd->pport[1].lid;
+			write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
+			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1,
+							dd->pport[1].lid);
+		}
 	}
 	hfi_init_rx_e2e_csrs(dd);
 	hfi_init_tx_otr_csrs(dd);
