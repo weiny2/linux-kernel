@@ -150,6 +150,7 @@ static inline u16 opa_enum_to_mtu(u8 emtu)
 static inline u8 opa_mtu_to_enum(u16 mtu)
 {
 	switch (mtu) {
+	case   	 0: return OPA_MTU_0;
 	case   256: return IB_MTU_256;
 	case   512: return IB_MTU_512;
 	case  1024: return IB_MTU_1024;
