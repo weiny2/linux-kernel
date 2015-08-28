@@ -4673,7 +4673,7 @@ static int ixgbe_non_sfp_link_config(struct ixgbe_hw *hw)
 {
 	u32 speed;
 	bool autoneg, link_up = false;
-	u32 ret = IXGBE_ERR_LINK_SETUP;
+	int ret = IXGBE_ERR_LINK_SETUP;
 
 	if (hw->mac.ops.check_link)
 		ret = hw->mac.ops.check_link(hw, &speed, &link_up, false);
