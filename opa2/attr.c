@@ -872,8 +872,9 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	}
 
 	crc_enabled = be16_to_cpu(pi->port_ltp_crc_mode);
+	crc_enabled = HFI_LTP_CRC_ENABLED(crc_enabled);
 
-	if (HFI_LTP_CRC_ENABLED(crc_enabled)) {
+	if (crc_enabled) {
 		u16 crc_lcb_mode;
 
 		ppd->port_crc_mode_enabled = hfi_port_ltp_to_cap(crc_enabled);
