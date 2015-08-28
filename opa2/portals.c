@@ -503,6 +503,7 @@ int _hfi_eq_assign(struct hfi_ctx *ctx)
 		if (ret)
 			return ret;
 		ctx->eq_base[ni] = (void *)eq_assign.base;
+		ctx->eq_zero[ni] = eq_assign.ev_idx;
 		eq_head_array = ctx->eq_head_addr;
 		/* Reset the EQ SW head */
 		eq_head_addr = &eq_head_array[ni];

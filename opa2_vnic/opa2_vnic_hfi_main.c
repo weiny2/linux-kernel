@@ -566,7 +566,7 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 	if (rc)
 		goto err3;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
@@ -574,6 +574,7 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 
 		dev_info(&odev->dev, "TX EQ success kind %d ptr 0x%llx\n",
 			 tx_event->event_kind, tx_event->user_ptr);
+		hfi_eq_advance(ctx, rx, 0x0, eq_entry);
 	} else {
 		dev_info(&odev->dev, "TX EQ failure rc %d\n", rc);
 	}
@@ -584,7 +585,7 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 	if (rc)
 		goto err4;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
@@ -592,6 +593,7 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 
 		dev_info(&odev->dev, "RX EQ success kind %d ptr 0x%llx\n",
 			 tx_event->event_kind, tx_event->user_ptr);
+		hfi_eq_advance(ctx, rx, 0x0, eq_entry);
 	} else {
 		dev_info(&odev->dev, "RX EQ failure rc %d\n", rc);
 	}
@@ -718,7 +720,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 	if (rc)
 		goto err4;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
@@ -726,6 +728,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 
 		dev_info(&odev->dev, "TX EQ success kind %d ptr 0x%llx\n",
 			 tx_event->event_kind, tx_event->user_ptr);
+		hfi_eq_advance(ctx, rx, 0x0, eq_entry);
 	} else {
 		dev_info(&odev->dev, "TX EQ failure rc %d\n", rc);
 	}
@@ -736,7 +739,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 	if (rc)
 		goto err4;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	rc = hfi_eq_wait_timed(ctx, rx, 0x0, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
@@ -744,6 +747,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 
 		dev_info(&odev->dev, "RX EQ success kind %d ptr 0x%llx\n",
 			 tx_event->event_kind, tx_event->user_ptr);
+		hfi_eq_advance(ctx, rx, 0x0, eq_entry);
 	} else {
 		dev_info(&odev->dev, "RX EQ failure rc %d\n", rc);
 	}
@@ -804,7 +808,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 		dev_info(&odev->dev, "TX CT event 1 success\n");
 	}
 
-	rc = hfi_eq_wait_timed(ctx, rx, eq_tx, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, eq_tx, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
@@ -812,6 +816,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 
 		dev_info(&odev->dev, "TX EQ 1 success kind %d ptr 0x%llx\n",
 			 tx_event->event_kind, tx_event->user_ptr);
+		hfi_eq_advance(ctx, rx, eq_tx, eq_entry);
 	} else {
 		dev_info(&odev->dev, "TX EQ 1 failure rc %d\n", rc);
 	}
@@ -830,7 +835,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 		goto err5;
 
 	/* Block for an EQ interrupt */
-	rc = hfi_eq_wait_irq(ctx, rx, eq_tx, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_irq(ctx, eq_tx, OPA2_NET_TIMEOUT_MS,
 			     (void **)&eq_entry);
 	if (rc < 0) {
 		dev_info(&odev->dev, "TX EQ 2 intr fail rc %d\n", rc);
@@ -844,6 +849,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 
 		dev_info(&odev->dev, "TX EQ 2 success kind %d ptr 0x%llx\n",
 			 tx_event->event_kind, tx_event->user_ptr);
+		hfi_eq_advance(ctx, rx, eq_tx, eq_entry);
 	} else {
 		dev_info(&odev->dev, "TX EQ 2 failure rc %d\n", rc);
 	}
@@ -856,7 +862,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 	} else {
 		dev_info(&odev->dev, "RX CT success\n");
 	}
-	rc = hfi_eq_wait_timed(ctx, rx, eq_rx, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, eq_rx, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union target_EQEntry *rx_event =
@@ -864,10 +870,11 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 
 		dev_info(&odev->dev, "RX EQ 1 success kind %d ptr 0x%llx\n",
 			 rx_event->event_kind, rx_event->user_ptr);
+		hfi_eq_advance(ctx, rx, eq_rx, eq_entry);
 	} else {
 		dev_info(&odev->dev, "RX EQ 1 failure, %d\n", rc);
 	}
-	rc = hfi_eq_wait_timed(ctx, rx, eq_rx, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, eq_rx, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
 	if (eq_entry) {
 		union target_EQEntry *rx_event =
@@ -875,6 +882,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 
 		dev_info(&odev->dev, "RX EQ 2 success kind %d ptr 0x%llx\n",
 			 rx_event->event_kind, rx_event->user_ptr);
+		hfi_eq_advance(ctx, rx, eq_rx, eq_entry);
 	} else {
 		dev_info(&odev->dev, "RX EQ 1 failure, %d\n", rc);
 	}

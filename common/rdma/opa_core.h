@@ -102,6 +102,7 @@ struct opa_ib_qp;
  * @eq_head_addr: Pointer to the event queue head pointers table
  * @eq_head_size: Size of the event queue head pointers table
  * @status_reg: Status Registers (SR) in each NI
+ * @eq_zero: EQ 0 handles
  * @eq_base: EQ 0 base for each NI
  * @le_me_free_list: List of free ME/LE handles
  * @le_me_free_index: Index of first free handle
@@ -144,6 +145,7 @@ struct hfi_ctx {
 	void	*eq_head_addr;
 	ssize_t	eq_head_size;
 	u64	status_reg[HFI_NUM_NIS * HFI_NUM_CT_RESERVED];
+	u16	eq_zero[HFI_NUM_NIS];
 	void	*eq_base[HFI_NUM_NIS];
 	hfi_me_handle_t *le_me_free_list;
 	uint32_t	le_me_free_index;
