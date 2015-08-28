@@ -27,7 +27,12 @@ struct nvme_id_power_state {
 	__u8			read_lat;
 	__u8			write_tput;
 	__u8			write_lat;
-	__u8			rsvd16[16];
+	__le16			idle_power;
+	__u8			idle_scale;
+	__u8			rsvd19;
+	__le16			active_power;
+	__u8			active_work_scale;
+	__u8			rsvd23[9];
 };
 
 enum {
@@ -45,7 +50,9 @@ struct nvme_id_ctrl {
 	__u8			ieee[3];
 	__u8			mic;
 	__u8			mdts;
-	__u8			rsvd78[178];
+	__u16			cntlid;
+	__u32			ver;
+	__u8			rsvd84[172];
 	__le16			oacs;
 	__u8			acl;
 	__u8			aerl;
@@ -53,7 +60,11 @@ struct nvme_id_ctrl {
 	__u8			lpa;
 	__u8			elpe;
 	__u8			npss;
-	__u8			rsvd264[248];
+	__u8			avscc;
+	__u8			apsta;
+	__le16			wctemp;
+	__le16			cctemp;
+	__u8			rsvd270[242];
 	__u8			sqes;
 	__u8			cqes;
 	__u8			rsvd514[2];
@@ -64,7 +75,12 @@ struct nvme_id_ctrl {
 	__u8			vwc;
 	__le16			awun;
 	__le16			awupf;
-	__u8			rsvd530[1518];
+	__u8			nvscc;
+	__u8			rsvd531;
+	__le16			acwu;
+	__u8			rsvd534[2];
+	__le32			sgls;
+	__u8			rsvd540[1508];
 	struct nvme_id_power_state	psd[32];
 	__u8			vs[1024];
 };
@@ -137,7 +153,10 @@ struct nvme_smart_log {
 	__u8			unsafe_shutdowns[16];
 	__u8			media_errors[16];
 	__u8			num_err_log_entries[16];
-	__u8			rsvd192[320];
+	__le32			warning_temp_time;
+	__le32			critical_comp_time;
+	__le16			temp_sensor[8];
+	__u8			rsvd216[296];
 };
 
 enum {
@@ -544,5 +563,6 @@ struct nvme_passthru_cmd {
 #define NVME_IOCTL_ADMIN_CMD	_IOWR('N', 0x41, struct nvme_admin_cmd)
 #define NVME_IOCTL_SUBMIT_IO	_IOW('N', 0x42, struct nvme_user_io)
 #define NVME_IOCTL_IO_CMD	_IOWR('N', 0x43, struct nvme_passthru_cmd)
+#define NVME_IOCTL_RESET	_IO('N', 0x44)
 
 #endif /* _UAPI_LINUX_NVME_H */
