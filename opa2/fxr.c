@@ -1120,6 +1120,9 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		 */
 		ppd->neighbor_port_number = port;
 
+		/* FXRTODO: handled as part of SMA idle message. Ref STL-2306 */
+		ppd->neighbor_normal = 1;
+
 		/*
 		 * Since OPA uses management pkey there is no
 		 * need to initialize entry 0 with default application
