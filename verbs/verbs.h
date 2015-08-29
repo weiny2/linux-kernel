@@ -102,6 +102,7 @@ extern unsigned int opa_ib_max_qps;
 extern unsigned int opa_ib_max_sges;
 extern struct ib_dma_mapping_ops opa_ib_dma_mapping_ops;
 
+struct ib_l4_headers;
 struct opa_ib_header;
 struct opa_ib_packet;
 
@@ -696,10 +697,13 @@ void opa_ib_update_mmap_info(struct opa_ib_data *ibd,
 			     struct opa_ib_mmap_info *ip,
 			     u32 size, void *obj);
 int opa_ib_get_rwqe(struct opa_ib_qp *qp, int wr_id_only);
+void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
+			    u32 bth0, u32 bth2);
 void opa_ib_do_send(struct work_struct *work);
 void opa_ib_schedule_send(struct opa_ib_qp *qp);
 void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
 			  enum ib_wc_status status);
+int opa_ib_make_uc_req(struct opa_ib_qp *qp);
 int opa_ib_make_ud_req(struct opa_ib_qp *qp);
 void opa_ib_copy_sge(struct opa_ib_sge_state *ss, void *data, u32 length,
 		     int release);
