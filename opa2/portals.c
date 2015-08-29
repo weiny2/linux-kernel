@@ -472,8 +472,6 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		idr_remove(&ctx->eq_used, eq_idx);
 		goto idr_end;
 	}
-	/* FXRTODO: Ensure the command above has completed by polling EQ 0 */
-	mdelay(1);
 
 	 /* return index to user */
 	eq_assign->ev_idx = eq_idx;
@@ -490,6 +488,7 @@ int _hfi_eq_assign(struct hfi_ctx *ctx)
 	struct opa_ev_assign eq_assign = {0};
 	int ni, ret;
 	u32 *eq_head_array, *eq_head_addr;
+	u64 *eq_entry;
 
 	for (ni = 0; ni < HFI_NUM_NIS; ni++) {
 		eq_assign.ni = ni;
@@ -508,6 +507,11 @@ int _hfi_eq_assign(struct hfi_ctx *ctx)
 		/* Reset the EQ SW head */
 		eq_head_addr = &eq_head_array[ni];
 		*eq_head_addr = 0;
+		/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
+		hfi_eq_wait(ctx, 0x0, (void **)&eq_entry);
+		if (eq_entry)
+			hfi_eq_advance(ctx, &ctx->devdata->priv_rx_cq,
+				       0x0, eq_entry);
 	}
 	return 0;
 }
