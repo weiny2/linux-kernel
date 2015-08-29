@@ -540,8 +540,16 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 	if (cur_state == IB_QPS_RESET && new_state == IB_QPS_INIT) {
 		ret = insert_qp(ibd, qp, udata != NULL);
-		if (ret < 0)
+		if (ret < 0) {
+			/* revert QP back to RESET on error */
+			spin_lock_irq(&qp->r_lock);
+			spin_lock(&qp->s_lock);
+			qp->state = cur_state;
+			spin_unlock(&qp->s_lock);
+			spin_unlock_irq(&qp->r_lock);
+			reset_qp(qp, ibqp->qp_type);
 			goto bail;
+		}
 	}
 
 	if (lastwqe) {
@@ -682,8 +690,8 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 		}
 		break;
 	case IB_QPT_UD:
-		break;
 	case IB_QPT_UC:
+		break;
 	case IB_QPT_RC:
 		/* TODO - Not supported yet */
 		ret = ERR_PTR(-ENOSYS);

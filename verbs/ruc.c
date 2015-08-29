@@ -51,6 +51,7 @@
  */
 
 #include "verbs.h"
+#include "packet.h"
 
 /*
  * Translate ib_wr_opcode into ib_wc_opcode.
@@ -223,6 +224,51 @@ bail:
 	return ret;
 }
 
+void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
+			    u32 bth0, u32 bth2)
+{
+	struct opa_ib_portdata *ibp;
+	u16 lrh0;
+	u32 nwords;
+	u32 extra_bytes;
+	u8 sc5;
+	u32 bth1;
+
+	/* Construct the header. */
+	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+	extra_bytes = -qp->s_cur_size & 3;
+	nwords = (qp->s_cur_size + extra_bytes) >> 2;
+	lrh0 = HFI1_LRH_BTH;
+	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
+		qp->s_hdrwords += opa_ib_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
+					       &qp->remote_ah_attr.grh,
+					       qp->s_hdrwords, nwords);
+		lrh0 = HFI1_LRH_GRH;
+	}
+	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
+	qp->s_sc = sc5;
+	if (qp->s_mig_state == IB_MIG_MIGRATED)
+		bth0 |= IB_BTH_MIG_REQ;
+	qp->s_hdr->ibh.lrh[0] = cpu_to_be16(lrh0);
+	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
+	qp->s_hdr->ibh.lrh[2] =
+		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
+	qp->s_hdr->ibh.lrh[3] = cpu_to_be16(ibp->lid |
+				       qp->remote_ah_attr.src_path_bits);
+	bth0 |= opa_ib_get_pkey(ibp, qp->s_pkey_index);
+	bth0 |= extra_bytes << 20;
+	ohdr->bth[0] = cpu_to_be32(bth0);
+	bth1 = qp->remote_qpn;
+	if (qp->s_flags & HFI1_S_ECN) {
+		qp->s_flags &= ~HFI1_S_ECN;
+		/* we recently received a FECN, so return a BECN */
+		bth1 |= (HFI1_BECN_MASK << HFI1_BECN_SHIFT);
+	}
+	ohdr->bth[1] = cpu_to_be32(bth1);
+	ohdr->bth[2] = cpu_to_be32(bth2);
+}
+
 /**
  * send_wqe() - submit a WGE to the hardware
  * @ibp: outgoing port
@@ -324,15 +370,17 @@ void opa_ib_do_send(struct work_struct *work)
 {
 	struct iowait *wait = container_of(work, struct iowait, iowork);
 	struct opa_ib_qp *qp = container_of(wait, struct opa_ib_qp, s_iowait);
-
 	int (*make_req)(struct opa_ib_qp *qp);
 	unsigned long flags;
 
-	/* FXRTODO - ignore RC/UC for now */
-	if (qp->ibqp.qp_type == IB_QPT_RC ||
-	    qp->ibqp.qp_type == IB_QPT_UC)
-		return;
-	make_req = opa_ib_make_ud_req;
+	/* FXRTODO - WFR performs RC/UC loopback here */
+
+	if (qp->ibqp.qp_type == IB_QPT_RC)
+		return; /* TODO - no RC support yet */
+	else if (qp->ibqp.qp_type == IB_QPT_UC)
+		make_req = opa_ib_make_uc_req;
+	else
+		make_req = opa_ib_make_ud_req;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	/* Return if we are already busy processing a work request. */
