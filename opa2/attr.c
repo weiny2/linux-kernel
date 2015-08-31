@@ -55,6 +55,12 @@
 #include "attr.h"
 #include <rdma/opa_core_ib.h>
 
+static inline void hfi_invalid_attr(struct opa_smp *smp)
+{
+	smp->status |=
+		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+}
+
 static int hfi_reply(struct ib_mad_hdr *ibh)
 {
 	/*
@@ -80,8 +86,7 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	u8 mtu;
 
 	if (num_ports != 1) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 		return hfi_reply(ibh);
 	}
@@ -218,8 +223,7 @@ static int __subn_get_hfi_pkeytable(struct hfi_devdata *dd, struct opa_smp *smp,
 			start_block, n_blocks_req);
 		pr_warn(" avail 0x%x; blk/smp 0x%lx\n", HFI_PKEY_BLOCKS_AVAIL,
 			OPA_NUM_PKEY_BLOCKS_PER_SMP);
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 		return hfi_reply(ibh);
 	}
@@ -245,8 +249,7 @@ static int __subn_get_hfi_sl_to_sc(struct hfi_devdata *dd, struct opa_smp *smp,
 	u8 *p = (u8 *)data;
 
 	if (am) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 		return hfi_reply(ibh);
 	}
@@ -270,8 +273,7 @@ static int __subn_get_hfi_sc_to_sl(struct hfi_devdata *dd, struct opa_smp *smp,
 	u8 *p = (u8 *)data;
 
 	if (am) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 		return hfi_reply(ibh);
 	}
@@ -298,8 +300,7 @@ static int __subn_get_hfi_sc_to_vlt(struct hfi_devdata *dd,
 	size_t size = sizeof(ppd->sc_to_vlt);
 
 	if (n_blocks != 1) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 		return hfi_reply(ibh);
 	}
@@ -324,8 +325,7 @@ static int __subn_get_hfi_sc_to_vlnt(struct hfi_devdata *dd,
 	size_t size = sizeof(ppd->sc_to_vlnt);
 
 	if (n_blocks != 1) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 		return hfi_reply(ibh);
 	}
@@ -382,8 +382,7 @@ static int __subn_get_hfi_vl_arb(struct hfi_devdata *dd, struct opa_smp *smp,
 
 	goto done;
 err:
-	smp->status |=
-		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	hfi_invalid_attr(smp);
 	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 done:
 	return hfi_reply(ibh);
@@ -414,8 +413,7 @@ static int __subn_get_hfi_bct(struct hfi_devdata *dd, struct opa_smp *smp,
 	int size = sizeof(*p);
 
 	if (num_ports != 1) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 		return hfi_reply(ibh);
 	}
@@ -566,8 +564,7 @@ static int set_port_states(struct hfi_devdata *dd, struct hfi_pportdata *ppd,
 	if (pstate && !(lstate == IB_PORT_DOWN || lstate == IB_PORT_NOP)) {
 		pr_warn("SubnSet(OPA_PortInfo) port state invalid; port phys\
 				state 0x%x link state 0x%x\n", pstate, lstate);
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 	}
 
 	/*
@@ -596,8 +593,7 @@ static int set_port_states(struct hfi_devdata *dd, struct hfi_pportdata *ppd,
 		default:
 			pr_warn("SubnSet(OPA_PortInfo) invalid Physical state 0x%x\n",
 				lstate);
-			smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			hfi_invalid_attr(smp);
 			goto done;
 		}
 
@@ -627,14 +623,12 @@ static int set_port_states(struct hfi_devdata *dd, struct hfi_pportdata *ppd,
 		} else {
 			pr_warn("SubnSet(OPA_PortInfo) Cannot move to Active \
 						with NeighborNormal 0\n");
-			smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			hfi_invalid_attr(smp);
 		}
 		break;
 	default:
 		pr_warn("SubnSet(OPA_PortInfo) invalid state 0x%x\n", lstate);
-		smp->status |=
-		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 	}
 done:
 	return 0;
@@ -672,8 +666,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	u8 vls, lmc, smsl;
 
 	if (num_ports != 1) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 		return hfi_reply(ibh);
 	}
@@ -692,8 +685,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	if (!IS_VALID_LID_SIZE(lid)) {
 		pr_warn("OPA_PortInfo lid out of range: %X ", lid);
 		pr_warn("(> 16b LIDs not supported)\n");
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_DATA;
 		return hfi_reply(ibh);
 	}
@@ -702,8 +694,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	if (!IS_VALID_LID_SIZE(smlid)) {
 		pr_warn("OPA_PortInfo SM lid out of range: %X ", smlid);
 		pr_warn("(> 16b LIDs not supported)\n");
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_DATA;
 		return hfi_reply(ibh);
 	}
@@ -723,8 +714,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		else if ((lwe & ~ppd->link_width_supported) == 0)
 			hfi_set_link_width_enabled(ppd, lwe);
 		else
-			smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			hfi_invalid_attr(smp);
 	}
 	lwe = be16_to_cpu(pi->link_width_downgrade.enabled);
 	/* LWD.E is always applied - 0 means "disabled" */
@@ -739,8 +729,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 			call_link_downgrade_policy = 1;
 		}
 	} else {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 	}
 
 	lse = be16_to_cpu(pi->link_speed.enabled);
@@ -748,8 +737,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		if (lse & be16_to_cpu(pi->link_speed.supported))
 			hfi_set_link_speed_enabled(ppd, lse);
 		else
-			smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			hfi_invalid_attr(smp);
 	}
 	smsl = pi->smsl & OPA_PI_MASK_SMSL;
 	lmc = pi->mkeyprotect_lmc & OPA_PI_MASK_LMC;
@@ -762,8 +750,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		 * FXRTODO: HFI_MULTICAST_LID_BASE valid for 9B only.
 		 * modify this check for 16B
 		 */
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		pr_warn("SubnSet(OPA_PortInfo) lid invalid 0x%x\n", lid);
 	} else if (ppd->lid != lid ||
 		 ppd->lmc != lmc) {
@@ -789,8 +776,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	 */
 	if ((smlid == 0 && ls_old > IB_PORT_INIT) ||
 	     smlid >= HFI_MULTICAST_LID_BASE) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		pr_warn("SubnSet(OPA_PortInfo) smlid invalid 0x%x\n", smlid);
 	} else if (smlid != ppd->sm_lid || smsl != ppd->smsl) {
 		if (smlid != ppd->sm_lid)
@@ -821,8 +807,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		mtu = opa_pi_to_mtu(pi, i);
 
 		if (mtu == INVALID_MTU) {
-			smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			hfi_invalid_attr(smp);
 			/* use the existing mtu */
 			continue;
 		}
@@ -842,8 +827,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	 */
 	mtu = opa_enum_to_mtu(pi->neigh_mtu.pvlx_to_mtu[15 / 2] & 0xF);
 	if (mtu < HFI_MIN_VL_15_MTU || mtu == INVALID_MTU) {
-			smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			hfi_invalid_attr(smp);
 			/* use the existing VL15 MTU */
 	} else {
 		if (dd->vl_mtu[15] != mtu) {
@@ -864,8 +848,7 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		if (vls > ppd->vls_supported) {
 			pr_warn("SubnSet(OPA_PortInfo) VL's supported invalid %d\n",
 				pi->operational_vls);
-			smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			hfi_invalid_attr(smp);
 		} else
 			(void)hfi_set_ib_cfg(ppd, HFI_IB_CFG_OP_VLS,
 						vls, NULL);
@@ -959,12 +942,11 @@ static int __subn_set_hfi_pkeytable(struct hfi_devdata *dd, struct opa_smp *smp,
 
 	if (n_blocks_sent == 0 || end_block > HFI_PKEY_BLOCKS_AVAIL ||
 		n_blocks_sent > OPA_NUM_PKEY_BLOCKS_PER_SMP) {
-		pr_warn("OPA Get PKey AM Invalid : s 0x%x; req 0x%x; ",
+		pr_warn("OPA Set PKey AM Invalid : s 0x%x; req 0x%x; ",
 			start_block, n_blocks_sent);
 		pr_warn(" avail 0x%x; blk/smp 0x%lx\n", HFI_PKEY_BLOCKS_AVAIL,
 			OPA_NUM_PKEY_BLOCKS_PER_SMP);
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 		return hfi_reply(ibh);
 	}
@@ -1000,8 +982,7 @@ static int __subn_set_hfi_pkeytable(struct hfi_devdata *dd, struct opa_smp *smp,
 			 * pkey table. Donot allow that.
 			 */
 			pr_warn("Update does not contain mgmt pkey\n");
-			smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+			hfi_invalid_attr(smp);
 			*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 			return hfi_reply(ibh);
 		}
@@ -1058,8 +1039,7 @@ static int __subn_set_hfi_sl_to_sc(struct hfi_devdata *dd, struct opa_smp *smp,
 	goto done;
 
 err:
-	smp->status |=
-		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	hfi_invalid_attr(smp);
 	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 done:
 	return hfi_reply(ibh);
@@ -1096,8 +1076,7 @@ static int __subn_set_hfi_sc_to_sl(struct hfi_devdata *dd, struct opa_smp *smp,
 	goto done;
 
 err:
-	smp->status |=
-		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	hfi_invalid_attr(smp);
 	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 done:
 	return hfi_reply(ibh);
@@ -1135,8 +1114,7 @@ static int __subn_set_hfi_sc_to_vlt(struct hfi_devdata *dd, struct opa_smp *smp,
 
 	goto done;
 err:
-	smp->status |=
-		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	hfi_invalid_attr(smp);
 	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 done:
 	return hfi_reply(ibh);
@@ -1173,8 +1151,7 @@ static int __subn_set_hfi_sc_to_vlnt(struct hfi_devdata *dd,
 	goto done;
 
 err:
-	smp->status |=
-		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	hfi_invalid_attr(smp);
 	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 done:
 	return hfi_reply(ibh);
@@ -1196,8 +1173,7 @@ static int __subn_set_hfi_bct(struct hfi_devdata *dd, struct opa_smp *smp,
 	u32 num_ports = OPA_AM_NPORT(am);
 
 	if (num_ports != 1) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		hfi_invalid_attr(smp);
 		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 		return hfi_reply(ibh);
 	}
@@ -1250,8 +1226,7 @@ static int __subn_set_hfi_vl_arb(struct hfi_devdata *dd, struct opa_smp *smp,
 
 	goto done;
 err:
-	smp->status |=
-		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+	hfi_invalid_attr(smp);
 	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
 done:
 	return hfi_reply(ibh);
