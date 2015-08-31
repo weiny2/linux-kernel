@@ -83,8 +83,8 @@ for viper in ${viper0} ${viper1}; do
     # start opa2_hfi daemon
     ${ssh_cmd} "service --skip-redirect opa2_hfi restart"
     if [ ! $? ]; then
-	echo fail on starting opa2_hfi.
-	exit 15
+	echo fail on re-starting opa2_hfi.
+	exit 16
     fi
 done
 
