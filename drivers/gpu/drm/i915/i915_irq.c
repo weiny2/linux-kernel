@@ -991,11 +991,11 @@ static inline void intel_hpd_irq_handler(struct drm_device *dev,
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	int i;
 	bool storm_detected = false;
+	unsigned long irqflags;
 
 	if (!hotplug_trigger)
 		return;
-
-	spin_lock(&dev_priv->irq_lock);
+	spin_lock_irqsave(&dev_priv->irq_lock, irqflags);
 	for (i = 1; i < HPD_NUM_PINS; i++) {
 
 		WARN(((hpd[i] & hotplug_trigger) &&
@@ -1027,7 +1027,7 @@ static inline void intel_hpd_irq_handler(struct drm_device *dev,
 
 	if (storm_detected)
 		dev_priv->display.hpd_irq_setup(dev);
-	spin_unlock(&dev_priv->irq_lock);
+	spin_unlock_irqrestore(&dev_priv->irq_lock, irqflags);
 
 	/*
 	 * Our hotplug handler can grab modeset locks (by calling down into the
