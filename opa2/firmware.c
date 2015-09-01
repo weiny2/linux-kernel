@@ -53,8 +53,10 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/kernel.h>
+#include <linux/delay.h>
 #include "opa_hfi.h"
 #include "debugfs.h"
+#include "link.h"
 #include "rdma/fxr/dc_8051_csrs_defs.h"
 #include "rdma/fxr/dcc_csrs_defs.h"
 
@@ -64,11 +66,11 @@
 static ssize_t _##name##_read(struct file *file, char __user *buf,\
 			      size_t count, loff_t *ppos)\
 { \
-	struct hfi_devdata *dd;\
+	struct hfi_pportdata *ppd;\
 	ssize_t ret = 0;\
 	u64 state;\
-	dd = private2dd(file);\
-	state = read_csr(dd, address);\
+	ppd = private2ppd(file);\
+	state = read_8051_csr(ppd, address);\
 	ret =  simple_read_from_buffer(buf, count, ppos, &state,\
 					sizeof(state));\
 	return ret;\
@@ -78,15 +80,15 @@ static ssize_t _##name##_read(struct file *file, char __user *buf,\
 static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
 			   size_t count, loff_t *ppos)\
 { \
-	struct hfi_devdata *dd;\
+	struct hfi_pportdata *ppd;\
 	int ret = 0;\
 	u64 port_config;\
 	rcu_read_lock();\
-	dd = private2dd(file);\
+	ppd = private2ppd(file);\
 	ret = kstrtou64_from_user(ubuf, count, 0, &port_config);\
 	if (ret < 0)\
 		goto _return;\
-	write_csr(dd, address, port_config);\
+	write_8051_csr(ppd, address, port_config);\
 	ret = count;\
  _return:\
 	rcu_read_unlock();\
@@ -96,6 +98,7 @@ static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
 static const char *hfi_class_name = "hfi";
 
 #define private2dd(file) (file_inode(file)->i_private)
+#define private2ppd(file) (file_inode(file)->i_private)
 
 FIRMWARE_READ(8051_state, CRK8051_STS_CUR_STATE)
 FIRMWARE_READ(8051_access, CRK8051_CFG_CSR_ACCESS_SEL)
@@ -152,12 +155,12 @@ void hfi_firmware_dbg_init(struct hfi_devdata *dd)
 	}
 	/* create files for each port */
 	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++) {
-		snprintf(name, sizeof(name), "port%d", j);
+		snprintf(name, sizeof(name), "port%d", ppd->pnum);
 		ppd->hfi_port_dbg = debugfs_create_dir(name, dd->hfi_dev_dbg);
 		for (i = 0; i < ARRAY_SIZE(firmware_ops); i++) {
 			DEBUGFS_FILE_CREATE(firmware_ops[i].name,
 				ppd->hfi_port_dbg,
-				dd,
+				ppd,
 				&firmware_ops[i].ops,
 				firmware_ops[i].ops.write == NULL ?
 					S_IRUGO : S_IRUGO|S_IWUSR);
@@ -171,3 +174,36 @@ void hfi_firmware_dbg_exit(struct hfi_devdata *dd)
 	/* debugfs_remove_recursive() in debugfs.c frees dd->hfi_dev_dbg */
 }
 #endif
+
+/* return the 8051 firmware state */
+static inline u32 get_firmware_state(const struct hfi_pportdata *ppd)
+{
+	u64 reg = read_8051_csr(ppd, CRK8051_STS_CUR_STATE);
+
+	return (reg >> CRK8051_STS_CUR_STATE_FIRMWARE_SHIFT)
+				& CRK8051_STS_CUR_STATE_FIRMWARE_MASK;
+}
+
+/*
+ * Wait until the firmware is up and ready to take host requests.
+ * Return 0 on success, -ETIMEDOUT on timeout.
+ */
+int hfi_wait_firmware_ready(const struct hfi_pportdata *ppd, u32 mstimeout)
+{
+	unsigned long timeout;
+
+#if 0
+	/* in the simulator, the fake 8051 is always ready */
+	if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
+		return 0;
+#endif
+
+	timeout = msecs_to_jiffies(mstimeout) + jiffies;
+	while (1) {
+		if (get_firmware_state(ppd) == 0xa0)	/* ready */
+			return 0;
+		if (time_after(jiffies, timeout))	/* timed out */
+			return -ETIMEDOUT;
+		usleep_range(1950, 2050); /* sleep 2ms-ish */
+	}
+}

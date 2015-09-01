@@ -446,6 +446,13 @@ struct hfi_pportdata {
 	struct ib_vl_weight_elem vl_arb_high[HFI_VL_ARB_TABLE_SIZE];
 	struct ib_vl_weight_elem vl_arb_prempt_ele[HFI_VL_ARB_TABLE_SIZE];
 	struct ib_vl_weight_elem vl_arb_prempt_mat[HFI_VL_ARB_TABLE_SIZE];
+
+#if 0 /* WFR legacy */
+	/* for exclusive access to 8051 */
+	spinlock_t crk8051_lock;
+#endif
+	int crk8051_timed_out;	/* remember if the 8051 timed out */
+
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *hfi_port_dbg;
 #endif

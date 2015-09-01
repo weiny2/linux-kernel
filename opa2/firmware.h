@@ -54,5 +54,6 @@
 
 void hfi_firmware_dbg_init(struct hfi_devdata *dd);
 void hfi_firmware_dbg_exit(struct hfi_devdata *dd);
+int hfi_wait_firmware_ready(const struct hfi_pportdata *ppd, u32 mstimeout);
 
 #endif	/* _HFI_FIRMWARE_H */
