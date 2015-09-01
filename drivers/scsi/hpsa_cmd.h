@@ -408,7 +408,7 @@ struct CommandList {
 	long			   cmdindex;
 	struct completion *waiting;
 	struct work_struct work;
-	void   *scsi_cmd;
+	struct scsi_cmnd *scsi_cmd;
 
 	/*
 	 * For commands using either of the two "ioaccel" paths to
