@@ -95,17 +95,17 @@ res=$?
 if [ ! ${res} ]; then
     echo fail on harness.
 fi
-for viper in ${viper0} ${viper1}; do
-    ssh_cmd="ssh -p${viper} root@localhost"
-
-    echo dmesg on viper with port ${viper} start
-    ${ssh_cmd} "dmesg -c"
-    echo dmesg on viper with port ${viper} end
-done
 
 if [ ${ByJenkins} == yes ] ; then
-    # stop simics
-    killall simics-common
+	for viper in ${viper0} ${viper1}; do
+		ssh_cmd="ssh -p${viper} root@localhost"
+
+		echo dmesg on viper with port ${viper} start
+		${ssh_cmd} "dmesg -c"
+		echo dmesg on viper with port ${viper} end
+	done
+	# stop simics
+	killall simics-common
 fi
 
 exit $res
