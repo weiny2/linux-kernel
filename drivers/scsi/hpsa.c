@@ -403,7 +403,8 @@ static ssize_t host_show_commands_outstanding(struct device *dev,
 	struct Scsi_Host *shost = class_to_shost(dev);
 	struct ctlr_info *h = shost_to_hba(shost);
 
-	return snprintf(buf, 20, "%d\n", h->commands_outstanding);
+	return snprintf(buf, 20, "%d\n",
+			atomic_read(&h->commands_outstanding));
 }
 
 static ssize_t host_show_transport_mode(struct device *dev,
@@ -709,7 +710,6 @@ static inline u32 next_command(struct ctlr_info *h, u8 q)
 {
 	u32 a;
 	struct reply_pool *rq = &h->reply_queue[q];
-	unsigned long flags;
 
 	if (h->transMethod & CFGTBL_Trans_io_accel1)
 		return h->access.command_completed(h, q);
@@ -720,9 +720,7 @@ static inline u32 next_command(struct ctlr_info *h, u8 q)
 	if ((rq->head[rq->current_entry] & 1) == rq->wraparound) {
 		a = rq->head[rq->current_entry];
 		rq->current_entry++;
-		spin_lock_irqsave(&h->lock, flags);
-		h->commands_outstanding--;
-		spin_unlock_irqrestore(&h->lock, flags);
+		atomic_dec(&h->commands_outstanding);
 	} else {
 		a = FIFO_EMPTY;
 	}
@@ -5476,16 +5474,9 @@ static void start_io(struct ctlr_info *h)
 		/* Put job onto the completed Q */
 		addQ(&h->cmpQ, c);
 
-		/* Must increment commands_outstanding before unlocking
-		 * and submitting to avoid race checking for fifo full
-		 * condition.
-		 */
-		h->commands_outstanding++;
-		if (h->commands_outstanding > h->max_outstanding)
-			h->max_outstanding = h->commands_outstanding;
-
-		/* Tell the controller execute command */
+		atomic_inc(&h->commands_outstanding);
 		spin_unlock_irqrestore(&h->lock, flags);
+		/* Tell the controller execute command */
 		h->access.submit_command(h, c);
 		spin_lock_irqsave(&h->lock, flags);
 	}
@@ -5523,6 +5514,7 @@ static inline void finish_cmd(struct CommandList *c)
 	unsigned long flags;
 	int io_may_be_stalled = 0;
 	struct ctlr_info *h = c->h;
+	int count;
 
 	spin_lock_irqsave(&h->lock, flags);
 	removeQ(c);
@@ -5543,11 +5535,10 @@ static inline void finish_cmd(struct CommandList *c)
 	 * want to get in a cycle where we call start_io every time
 	 * through here.
 	 */
-	if (unlikely(h->fifo_recently_full) &&
-		h->commands_outstanding < 5)
-		io_may_be_stalled = 1;
-
+	count = atomic_read(&h->commands_outstanding);
 	spin_unlock_irqrestore(&h->lock, flags);
+	if (unlikely(h->fifo_recently_full) && count < 5)
+		io_may_be_stalled = 1;
 
 	dial_up_lockup_detection_on_fw_flash_complete(c->h, c);
 	if (likely(c->cmd_type == CMD_IOACCEL1 || c->cmd_type == CMD_SCSI
