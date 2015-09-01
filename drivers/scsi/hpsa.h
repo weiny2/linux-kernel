@@ -133,6 +133,7 @@ struct ctlr_info {
 	int	interrupts_enabled;
 	int	major;
 	int 	max_commands;
+	int last_allocation;
 	atomic_t commands_outstanding;
 	int 	max_outstanding; /* Debug */
 	int	usage_count;  /* number of opens all all minor devices */

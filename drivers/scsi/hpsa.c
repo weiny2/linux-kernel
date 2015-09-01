@@ -4674,9 +4674,10 @@ static struct CommandList *cmd_alloc(struct ctlr_info *h)
 	union u64bit temp64;
 	dma_addr_t cmd_dma_handle, err_dma_handle;
 	int refcount;
-	unsigned long offset = 0;
+	unsigned long offset;
 
-	/* There is some *extremely* small but non-zero chance that that
+	/*
+	 * There is some *extremely* small but non-zero chance that that
 	 * multiple threads could get in here, and one thread could
 	 * be scanning through the list of bits looking for a free
 	 * one, but the free ones are always behind him, and other
@@ -4688,6 +4689,7 @@ static struct CommandList *cmd_alloc(struct ctlr_info *h)
 	 */
 
 	for (;;) {
+	offset = h->last_allocation; /* benignly racy */
 		i = find_next_zero_bit(h->cmd_pool_bits, h->nr_cmds, offset);
 		if (unlikely(i == h->nr_cmds)) {
 			offset = 0;
@@ -4704,6 +4706,7 @@ static struct CommandList *cmd_alloc(struct ctlr_info *h)
 			h->cmd_pool_bits + (i / BITS_PER_LONG));
 		break; /* it's ours now. */
 	}
+	h->last_allocation = i; /* benignly racy */
 
 	/* Zero out all of commandlist except the last field, refcount */
 	memset(c, 0, offsetof(struct CommandList, refcount));
