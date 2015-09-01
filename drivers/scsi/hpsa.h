@@ -371,10 +371,7 @@ static void SA5_submit_command_ioaccel2(struct ctlr_info *h,
 {
 	dev_dbg(&h->pdev->dev, "Sending %x, tag = %llx\n", c->busaddr,
 		c->Header.tag);
-	if (c->cmd_type == CMD_IOACCEL2)
-		writel(c->busaddr, h->vaddr + IOACCEL2_INBOUND_POSTQ_32);
-	else
-		writel(c->busaddr, h->vaddr + SA5_REQUEST_PORT_OFFSET);
+	writel(c->busaddr, h->vaddr + SA5_REQUEST_PORT_OFFSET);
 	(void) readl(h->vaddr + SA5_SCRATCHPAD_OFFSET);
 }
 
