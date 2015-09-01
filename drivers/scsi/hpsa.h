@@ -32,7 +32,6 @@ struct access_method {
 	void (*submit_command)(struct ctlr_info *h,
 		struct CommandList *c);
 	void (*set_intr_mask)(struct ctlr_info *h, unsigned long val);
-	unsigned long (*fifo_full)(struct ctlr_info *h);
 	bool (*intr_pending)(struct ctlr_info *h);
 	unsigned long (*command_completed)(struct ctlr_info *h, u8 q);
 };
@@ -135,8 +134,6 @@ struct ctlr_info {
 	char hba_mode_enabled;
 
 	/* queue and queue Info */
-	struct list_head reqQ;
-	struct list_head cmpQ;
 	unsigned int Qdepth;
 	unsigned int maxSG;
 	spinlock_t lock;
@@ -201,7 +198,6 @@ struct ctlr_info {
 	u32 __percpu lockup_detected;
 	struct delayed_work monitor_ctlr_work;
 	int remove_in_progress;
-	u32 fifo_recently_full;
 	/* Address of h->q[x] is passed to intr handler to know which queue */
 	u8 q[MAX_REPLY_QUEUES];
 	u32 TMFSupportFlags; /* cache what task mgmt funcs are supported. */
@@ -433,14 +429,6 @@ static unsigned long SA5_performant_completed(struct ctlr_info *h, u8 q)
 }
 
 /*
- *  Returns true if fifo is full.
- *
- */
-static unsigned long SA5_fifo_full(struct ctlr_info *h)
-{
-	return atomic_read(&h->commands_outstanding) >= h->max_commands;
-}
-/*
  *   returns value read from hardware.
  *     returns FIFO_EMPTY if there is nothing to read
  */
@@ -533,7 +521,6 @@ static unsigned long SA5_ioaccel_mode1_completed(struct ctlr_info *h, u8 q)
 static struct access_method SA5_access = {
 	SA5_submit_command,
 	SA5_intr_mask,
-	SA5_fifo_full,
 	SA5_intr_pending,
 	SA5_completed,
 };
@@ -541,7 +528,6 @@ static struct access_method SA5_access = {
 static struct access_method SA5_ioaccel_mode1_access = {
 	SA5_submit_command,
 	SA5_performant_intr_mask,
-	SA5_fifo_full,
 	SA5_ioaccel_mode1_intr_pending,
 	SA5_ioaccel_mode1_completed,
 };
@@ -549,7 +535,6 @@ static struct access_method SA5_ioaccel_mode1_access = {
 static struct access_method SA5_ioaccel_mode2_access = {
 	SA5_submit_command_ioaccel2,
 	SA5_performant_intr_mask,
-	SA5_fifo_full,
 	SA5_performant_intr_pending,
 	SA5_performant_completed,
 };
@@ -557,7 +542,6 @@ static struct access_method SA5_ioaccel_mode2_access = {
 static struct access_method SA5_performant_access = {
 	SA5_submit_command,
 	SA5_performant_intr_mask,
-	SA5_fifo_full,
 	SA5_performant_intr_pending,
 	SA5_performant_completed,
 };
