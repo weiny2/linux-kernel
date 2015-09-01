@@ -6516,6 +6516,23 @@ static void hpsa_free_cmd_pool(struct ctlr_info *h)
 			h->ioaccel_cmd_pool, h->ioaccel_cmd_pool_dhandle);
 }
 
+/* clear affinity hints and free MSI-X, MSI, or legacy INTx vectors */
+static void hpsa_free_irqs(struct ctlr_info *h)
+{
+	int i;
+
+	if (!h->msix_vector || h->intr_mode != PERF_MODE_INT) {
+		/* Single reply queue, only one irq to free */
+		i = h->intr_mode;
+		free_irq(h->intr[i], &h->q[i]);
+		return;
+	}
+
+	for (i = 0; i < h->msix_vector; i++)
+		free_irq(h->intr[i], &h->q[i]);
+
+}
+
 static int hpsa_request_irq(struct ctlr_info *h,
 	irqreturn_t (*msixhandler)(int, void *),
 	irqreturn_t (*intxhandler)(int, void *))
@@ -6579,24 +6596,9 @@ static int hpsa_kdump_soft_reset(struct ctlr_info *h)
 	return 0;
 }
 
-static void free_irqs(struct ctlr_info *h)
-{
-	int i;
-
-	if (!h->msix_vector || h->intr_mode != PERF_MODE_INT) {
-		/* Single reply queue, only one irq to free */
-		i = h->intr_mode;
-		free_irq(h->intr[i], &h->q[i]);
-		return;
-	}
-
-	for (i = 0; i < h->msix_vector; i++)
-		free_irq(h->intr[i], &h->q[i]);
-}
-
 static void hpsa_free_irqs_and_disable_msix(struct ctlr_info *h)
 {
-	free_irqs(h);
+	hpsa_free_irqs(h);
 #ifdef CONFIG_PCI_MSI
 	if (h->msix_vector) {
 		if (h->pdev->msix_enabled)
@@ -6915,7 +6917,7 @@ reinit_after_soft_reset:
 		spin_lock_irqsave(&h->lock, flags);
 		h->access.set_intr_mask(h, HPSA_INTR_OFF);
 		spin_unlock_irqrestore(&h->lock, flags);
-		free_irqs(h);
+		hpsa_free_irqs(h);
 		rc = hpsa_request_irq(h, hpsa_msix_discard_completions,
 					hpsa_intx_discard_completions);
 		if (rc) {
@@ -6975,7 +6977,7 @@ reinit_after_soft_reset:
 clean4:
 	hpsa_free_sg_chain_blocks(h);
 	hpsa_free_cmd_pool(h);
-	free_irqs(h);
+	hpsa_free_irqs(h);
 clean2:
 clean1:
 	kfree(h);
