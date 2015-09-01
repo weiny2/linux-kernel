@@ -105,19 +105,6 @@ MODULE_PARM_DESC(opafm_disable, "0 - driver needs opafm to work, \
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
 
-static void write_fc_csr(const struct hfi_pportdata *ppd,
-			 u32 offset, u64 value)
-{
-	if (ppd->pnum == 1)
-		offset += FXR_FZC_LCB0_CSRS;
-	else if (ppd->pnum == 2)
-		offset += FXR_FZC_LCB1_CSRS;
-	else
-		dd_dev_warn(ppd->dd, "invalid port");
-
-	write_csr(ppd->dd, offset, value);
-}
-
 static void write_lm_fpc_csr(const struct hfi_pportdata *ppd,
 			     u32 offset, u64 value)
 {
@@ -1078,7 +1065,7 @@ u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp)
 
 void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode)
 {
-	write_fc_csr(ppd, FZC_LCB_CFG_CRC_MODE,
+	write_fzc_csr(ppd, FZC_LCB_CFG_CRC_MODE,
 		(u64)crc_lcb_mode << FZC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 }
 
@@ -1118,7 +1105,17 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
 		ppd->lstate = IB_PORT_DOWN;
 		mutex_init(&ppd->hls_lock);
+		/* initializa Manner Hill - mnh */
+#if 0 /* WFR legacy */
+		spin_lock_init(&ppd->crk8051_lock);
+#endif
+		ppd->crk8051_timed_out = 0;
+		hfi_8051_reset(ppd);
 		hfi_start_link(ppd);
+		if (opafm_disable) {
+			hfi_set_link_state(ppd, HLS_UP_ARMED);
+			hfi_set_link_state(ppd, HLS_UP_ACTIVE);
+		}
 
 		/*
 		 * FXRTODO: The below 4 variables
@@ -1297,7 +1294,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	ret = hfi_iommu_root_set_context(dd);
 	if (ret)
 		goto err_post_alloc;
-
 
 	/* per port init */
 	dd->num_pports = HFI_NUM_PPORTS;
