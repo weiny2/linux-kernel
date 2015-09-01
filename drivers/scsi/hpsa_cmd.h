@@ -389,7 +389,6 @@ struct ctlr_info; /* defined in hpsa.h */
  * bit 1-3: to device, indicates block fetch table entry for
  *          reducing DMA in fetching commands from host memory.
  */
-
 #define COMMANDLIST_ALIGNMENT 128
 struct CommandList {
 	struct CommandListHeader Header;
@@ -403,6 +402,7 @@ struct CommandList {
 	int			   cmd_type;
 	long			   cmdindex;
 	struct completion *waiting;
+	struct work_struct work;
 	void   *scsi_cmd;
 } __aligned(COMMANDLIST_ALIGNMENT);
 
