@@ -4,8 +4,8 @@
 
 yum6=/nfs/ph/proj/ftp/wfr_yum/next
 yum7=/nfs/ph/proj/ftp/wfr_yum7/next
-ifs_root=/nfs/ph/proj/stlbuilds/Integration/GA10_0_0_990/OPENIB_INSTALL
-ifs_base="$ifs_root/10_0_0_990_"
+ifs_root=/nfs/ph/proj/stlbuilds/Integration/GA10_0_0_991/OPENIB_INSTALL
+ifs_base="$ifs_root/10_0_0_991_"
 ifs_priv="/nfs/site/disks/ph_home_disk001/ddalessa/work/IFS/scratch"
 cur_dir=$PWD
 
@@ -48,7 +48,7 @@ echo "10 Latest Integration Builds:"
 ls $ifs_root | awk 'BEGIN { FS = "_"} ; {print $5}' | sort -n | tail -n 10
 
 echo "Latest Available DST Build:"
-dst_build=`ls /nfs/ph/proj/stlbuilds/System_Test | grep OPENIB_INSTALL_10_0_0_990_* | awk 'BEGIN { FS = "_"} ; {print $7}' | sort -n | tail -n 1`
+dst_build=`ls /nfs/ph/proj/stlbuilds/System_Test | grep OPENIB_INSTALL_10_0_0_991_* | awk 'BEGIN { FS = "_"} ; {print $7}' | sort -n | tail -n 1`
 echo "$dst_build"
 
 echo "Press ENTER to accept $dst_build or specify build #"
@@ -72,13 +72,13 @@ fi
 
 #copy tarballs
 echo "Copying tarballs"
-cp $ifs_build/X86_64_RHEL6/IntelOPA-IFS.RHEL6-x86_64.10.0.0.990.$build_num.tgz $ifs_priv
+cp $ifs_build/X86_64_RHEL6/IntelOPA-IFS.RHEL6-x86_64.10.0.0.991.$build_num.tgz $ifs_priv
 if [ $? -ne 0 ]; then
 	echo "Could not copy RHEL 6 tarball"
 	exit 1
 fi
 
-cp $ifs_build/X86_64_RHEL7/IntelOPA-IFS.RHEL7-x86_64.10.0.0.990.$build_num.tgz $ifs_priv
+cp $ifs_build/X86_64_RHEL7/IntelOPA-IFS.RHEL7-x86_64.10.0.0.991.$build_num.tgz $ifs_priv
 if [ $? -ne 0 ]; then
 	echo "Could not copy RHEL 7 tarball"
 	exit 1
@@ -93,75 +93,75 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Extracting tarballs"
-tar xzf $ifs_priv/IntelOPA-IFS.RHEL6-x86_64.10.0.0.990.$build_num.tgz
+tar xzf $ifs_priv/IntelOPA-IFS.RHEL6-x86_64.10.0.0.991.$build_num.tgz
 if [ $? -ne 0 ]; then
 	echo "Could not extract RHEL 6 tarball"
 	cd $cur_dir
 	exit 1
 fi
 
-tar xzf $ifs_priv/IntelOPA-IFS.RHEL7-x86_64.10.0.0.990.$build_num.tgz 
+tar xzf $ifs_priv/IntelOPA-IFS.RHEL7-x86_64.10.0.0.991.$build_num.tgz 
 if [ $? -ne 0 ]; then
 	echo "Could not extract RHEL 7 tarball"
 	cd $cur_dir
 	exit 1
 fi
 
-exclude="--exclude=hfi-* --exclude=hfi1-diagtools-sw-* --exclude=hfi1-psm-* --exclude=hfi1-debuginfo-* --exclude=hfi1-devel-* --exclude=hfi1-0.7-*"
+exclude="--exclude=hfi1-devel-* --exclude=hfi1-0.7-* --exclude=hfi-* --exclude=hfi1-debuginfo-* --exclude=hfi1-0.9-*"
 
 echo "Checking for RHEL 6 updates"
 echo "---------------------------"
 echo "OFED"
-rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.990.$build_num/IntelOPA-OFED.RHEL6-x86_64.10.0.0.990.*/RPMS/redhat-ES6/ $yum6
+rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.991.$build_num/IntelOPA-OFED.RHEL6-x86_64.10.0.0.991.*/RPMS/redhat-ES6/ $yum6
 echo "FM"
-rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.990.$build_num/IntelOPA-FM.RHEL6-x86_64.10.0.0.990.*/RPMS/x86_64/ $yum6
+rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.991.$build_num/IntelOPA-FM.RHEL6-x86_64.10.0.0.991.*/RPMS/x86_64/ $yum6
 echo "FF"
-rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.990.$build_num/IntelOPA-Tools-FF.RHEL6-x86_64.10.0.0.990.*/RPMS/x86_64/ $yum6
+rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.991.$build_num/IntelOPA-Tools-FF.RHEL6-x86_64.10.0.0.991.*/RPMS/x86_64/ $yum6
 
 echo "Checking for RHEL 7 updates"
 echo "---------------------------"
 echo "OFED"
-rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.990.$build_num/IntelOPA-OFED_DELTA.RHEL7-x86_64.10.0.0.990.*/RPMS/redhat-ES7/ $yum7
+rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.991.$build_num/IntelOPA-OFED_DELTA.RHEL7-x86_64.10.0.0.991.*/RPMS/redhat-ES7/ $yum7
 echo "FM"
-rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.990.$build_num/IntelOPA-FM.RHEL7-x86_64.10.0.0.990.*/RPMS/x86_64/ $yum7
+rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.991.$build_num/IntelOPA-FM.RHEL7-x86_64.10.0.0.991.*/RPMS/x86_64/ $yum7
 echo "FF"
-rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.990.$build_num/IntelOPA-Tools-FF.RHEL7-x86_64.10.0.0.990.*/RPMS/x86_64/ $yum7
+rsync -avh -n --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.991.$build_num/IntelOPA-Tools-FF.RHEL7-x86_64.10.0.0.991.*/RPMS/x86_64/ $yum7
 
 echo "Press ENTER to update the repos or Ctrl+C to bail"
 read resp
 echo "Applying updates"
 
-rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.990.$build_num/IntelOPA-OFED.RHEL6-x86_64.10.0.0.990.*/RPMS/redhat-ES6/ $yum6
+rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.991.$build_num/IntelOPA-OFED.RHEL6-x86_64.10.0.0.991.*/RPMS/redhat-ES6/ $yum6
 if [ $? -ne 0 ]; then
 	echo "Could not apply RHEL 6 - OFED"
 	exit 1
 fi
 
-rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.990.$build_num/IntelOPA-FM.RHEL6-x86_64.10.0.0.990.*/RPMS/x86_64/ $yum6
+rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.991.$build_num/IntelOPA-FM.RHEL6-x86_64.10.0.0.991.*/RPMS/x86_64/ $yum6
 if [ $? -ne 0 ]; then
 	echo "Could not apply RHEL 6 - FM"
 	exit 1
 fi
 
-rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.990.$build_num/IntelOPA-Tools-FF.RHEL6-x86_64.10.0.0.990.*/RPMS/x86_64/ $yum6
+rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL6-x86_64.10.0.0.991.$build_num/IntelOPA-Tools-FF.RHEL6-x86_64.10.0.0.991.*/RPMS/x86_64/ $yum6
 if [ $? -ne 0 ]; then
 	echo "Could not apply RHEL 6 - FF"
 	exit 1
 fi
 
-rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.990.$build_num/IntelOPA-OFED_DELTA.RHEL7-x86_64.10.0.0.990.*/RPMS/redhat-ES7/ $yum7
+rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.991.$build_num/IntelOPA-OFED_DELTA.RHEL7-x86_64.10.0.0.991.*/RPMS/redhat-ES7/ $yum7
 if [ $? -ne 0 ]; then
 	echo "Could not apply RHEL 7 - OFED"
 	exit 1
 fi
 
-rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.990.$build_num/IntelOPA-FM.RHEL7-x86_64.10.0.0.990.*/RPMS/x86_64/ $yum7
+rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.991.$build_num/IntelOPA-FM.RHEL7-x86_64.10.0.0.991.*/RPMS/x86_64/ $yum7
 if [ $? -ne 0 ]; then
 	echo "Could not apply RHEL 7 - FM"
 	exit 1
 fi
 
-rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.990.$build_num/IntelOPA-Tools-FF.RHEL7-x86_64.10.0.0.990.*/RPMS/x86_64/ $yum7
+rsync -avh --ignore-existing $exclude IntelOPA-IFS.RHEL7-x86_64.10.0.0.991.$build_num/IntelOPA-Tools-FF.RHEL7-x86_64.10.0.0.991.*/RPMS/x86_64/ $yum7
 if [ $? -ne 0 ]; then
 	echo "Could not apply RHEL 7 - FF"
 	exit 1
