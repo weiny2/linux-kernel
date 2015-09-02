@@ -664,7 +664,7 @@ int hfi_set_mtu(struct hfi_pportdata *ppd);
 u16 hfi_port_ltp_to_cap(u16 port_ltp);
 u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp);
 u16 hfi_cap_to_port_ltp(u16 cap);
-void hfi_set_crc_mode(struct hfi_devdata *dd, u8 port, u16 crc_lcb_mode);
+void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
