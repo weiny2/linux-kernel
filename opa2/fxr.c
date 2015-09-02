@@ -105,69 +105,69 @@ MODULE_PARM_DESC(opafm_disable, "0 - driver needs opafm to work, \
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
 
-static void write_fc_csr(const struct hfi_devdata *dd, u8 port,
+static void write_fc_csr(const struct hfi_pportdata *ppd,
 			 u32 offset, u64 value)
 {
-	if (port == 1)
+	if (ppd->pnum == 1)
 		offset += FXR_FZC_LCB0_CSRS;
-	else if (port == 2)
+	else if (ppd->pnum == 2)
 		offset += FXR_FZC_LCB1_CSRS;
 	else
-		dd_dev_warn(dd, "invalid port");
+		dd_dev_warn(ppd->dd, "invalid port");
 
-	write_csr(dd, offset, value);
+	write_csr(ppd->dd, offset, value);
 }
 
-static void write_lm_fpc_csr(const struct hfi_devdata *dd, u8 port,
+static void write_lm_fpc_csr(const struct hfi_pportdata *ppd,
 			     u32 offset, u64 value)
 {
-	if (port == 1)
+	if (ppd->pnum == 1)
 		offset += FXR_LM_FPC0_CSRS;
-	else if (port == 2)
+	else if (ppd->pnum == 2)
 		offset += FXR_LM_FPC1_CSRS;
 	else
-		dd_dev_warn(dd, "invalid port");
+		dd_dev_warn(ppd->dd, "invalid port");
 
-	write_csr(dd, offset, value);
+	write_csr(ppd->dd, offset, value);
 }
 
-static void write_lm_tp_csr(const struct hfi_devdata *dd, u8 port,
+static void write_lm_tp_csr(const struct hfi_pportdata *ppd,
 			    u32 offset, u64 value)
 {
-	if (port == 1)
+	if (ppd->pnum == 1)
 		offset += FXR_LM_TP0_CSRS;
-	else if (port == 2)
+	else if (ppd->pnum == 2)
 		offset += FXR_LM_TP1_CSRS;
 	else
-		dd_dev_warn(dd, "invalid port");
+		dd_dev_warn(ppd->dd, "invalid port");
 
-	write_csr(dd, offset, value);
+	write_csr(ppd->dd, offset, value);
 }
 
-static void write_lm_cm_csr(const struct hfi_devdata *dd, u8 port,
+static void write_lm_cm_csr(const struct hfi_pportdata *ppd,
 			    u32 offset, u64 value)
 {
-	if (port == 1)
+	if (ppd->pnum == 1)
 		offset += FXR_LM_CM0_CSRS;
-	else if (port == 2)
+	else if (ppd->pnum == 2)
 		offset += FXR_LM_CM1_CSRS;
 	else
-		dd_dev_warn(dd, "invalid port");
+		dd_dev_warn(ppd->dd, "invalid port");
 
-	write_csr(dd, offset, value);
+	write_csr(ppd->dd, offset, value);
 }
 
-static u64 read_lm_tp_csr(const struct hfi_devdata *dd, u8 port,
+static u64 read_lm_tp_csr(const struct hfi_pportdata *ppd,
 			  u32 offset)
 {
-	if (port == 1)
+	if (ppd->pnum == 1)
 		offset += FXR_LM_TP0_CSRS;
-	else if (port == 2)
+	else if (ppd->pnum == 2)
 		offset += FXR_LM_TP1_CSRS;
 	else
-		dd_dev_warn(dd, "invalid port");
+		dd_dev_warn(ppd->dd, "invalid ppd->pnum");
 
-	return read_csr(dd, offset);
+	return read_csr(ppd->dd, offset);
 }
 
 static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
@@ -460,11 +460,10 @@ static void hfi_enable_pkey_checks(struct hfi_pportdata *ppd)
 	LM_CONFIG_PORT1_t lmp1;
 	TP_CFG_MISC_CTRL_t misc;
 
-	misc.val = read_lm_tp_csr(dd, ppd_to_pnum(ppd), FXR_TP_CFG_MISC_CTRL);
+	misc.val = read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
 	if (misc.field.disable_pkey_chk) {
 		misc.field.disable_pkey_chk = 0;
-		write_lm_tp_csr(dd, ppd_to_pnum(ppd),
-				FXR_TP_CFG_MISC_CTRL, lmp0.val);
+		write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, lmp0.val);
 	}
 	/*
 	 * FXRTODO: Writes to TP_CFG_PKEY_CHECK_CTRL are required
@@ -497,7 +496,6 @@ static void hfi_enable_pkey_checks(struct hfi_pportdata *ppd)
  */
 static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 {
-	struct hfi_devdata *dd = ppd->dd;
 	TP_CFG_PKEY_TABLE_t tx_pkey;
 	FPC_CFG_PKEY_TABLE_t rx_pkey;
 	int i;
@@ -512,10 +510,8 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 		rx_pkey.field.entry1 = ppd->pkeys[i + 1];
 		rx_pkey.field.entry2 = ppd->pkeys[i + 2];
 		rx_pkey.field.entry3 = ppd->pkeys[i + 3];
-		write_lm_tp_csr(dd, ppd_to_pnum(ppd),
-				FXR_TP_CFG_PKEY_TABLE, tx_pkey.val);
-		write_lm_fpc_csr(dd, ppd_to_pnum(ppd),
-				 FXR_FPC_CFG_PKEY_TABLE, rx_pkey.val);
+		write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_TABLE, tx_pkey.val);
+		write_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_TABLE, rx_pkey.val);
 	}
 	hfi_enable_pkey_checks(ppd);
 }
@@ -528,7 +524,6 @@ u8 hfi_porttype(struct hfi_pportdata *ppd)
 
 static void hfi_set_sc_to_vlt(struct hfi_pportdata *ppd, u8 *t)
 {
-	struct hfi_devdata *dd = ppd->dd;
 	u64 reg_val = 0;
 	int i, j, sc_num;
 
@@ -550,8 +545,8 @@ static void hfi_set_sc_to_vlt(struct hfi_pportdata *ppd, u8 *t)
 		for (j = 0, reg_val = 0; j < 16; j++, sc_num++)
 			reg_val |= (t[sc_num] & HFI_SC_VLT_MASK)
 					 << (j * 4);
-		write_lm_tp_csr(dd, ppd->pnum, FXR_TP_CFG_SC_TO_VLT_MAP +
-							i * 8, reg_val);
+		write_lm_tp_csr(ppd, FXR_TP_CFG_SC_TO_VLT_MAP +
+					i * 8, reg_val);
 	}
 
 	/*
@@ -567,7 +562,6 @@ static void hfi_set_sc_to_vlt(struct hfi_pportdata *ppd, u8 *t)
 
 static void hfi_set_sc_to_vlnt(struct hfi_pportdata *ppd, u8 *t)
 {
-	struct hfi_devdata *dd = ppd->dd;
 	int i;
 	u64 *t64 = (u64 *)t;
 
@@ -577,7 +571,7 @@ static void hfi_set_sc_to_vlnt(struct hfi_pportdata *ppd, u8 *t)
 	 * next simics release.
 	 */
 	for (i = 0; i < 4; i++)
-		write_lm_cm_csr(dd, ppd->pnum, FXR_TP_CFG_CM_SC_TO_VLT_MAP +
+		write_lm_cm_csr(ppd, FXR_TP_CFG_CM_SC_TO_VLT_MAP +
 							i * 8, *t64++);
 
 	memcpy(ppd->sc_to_vlnt, t, OPA_MAX_SCS);
@@ -1082,9 +1076,9 @@ u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp)
 	return lcb_crc;
 }
 
-void hfi_set_crc_mode(struct hfi_devdata *dd, u8 port, u16 crc_lcb_mode)
+void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode)
 {
-	write_fc_csr(dd, port, FZC_LCB_CFG_CRC_MODE,
+	write_fc_csr(ppd, FZC_LCB_CFG_CRC_MODE,
 		(u64)crc_lcb_mode << FZC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 }
 
@@ -1211,7 +1205,7 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		crc_val = HFI_LCB_CRC_14B;
 		ppd->port_ltp_crc_mode |= hfi_lcb_to_port_ltp(dd, crc_val) <<
 					HFI_LTP_CRC_ACTIVE_SHIFT;
-		hfi_set_crc_mode(dd, port, crc_val);
+		hfi_set_crc_mode(ppd, crc_val);
 
 		/*
 		 * Set the default MTU only for VL 15
