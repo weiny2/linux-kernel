@@ -1697,14 +1697,10 @@ static int megasas_slave_alloc(struct scsi_device *sdev)
 			sdev->id;
 		if (instance->pd_list[pd_index].driveState ==
 					MR_PD_STATE_SYSTEM) {
-			goto scan_target;
+			return 0;
 		}
 		return -ENXIO;
 	}
-scan_target:
-	sdev->tagged_supported = 1;
-	scsi_activate_tcq(sdev, sdev->queue_depth);
-
 	return 0;
 }
 
