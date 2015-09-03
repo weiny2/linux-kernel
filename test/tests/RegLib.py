@@ -334,7 +334,7 @@ class HostInfo:
         if run_as_root == True:
             cmdline = "ssh -l root " + self.dns_name + " "
         else:
-            cmdline = "ssh " + self.dns_name + " "
+            cmdline = "ssh -t " + self.dns_name + " "
 
         cmdline = cmdline + " -p " + self.port
         cmdline = cmdline + " " + opts + " " + cmd;
@@ -504,6 +504,10 @@ class TestInfo:
                           metavar="PATH",
                           default="/bin")
 
+        parser.add_option("--perfdir", dest="perf_dir",
+                          help = "Retain perfomance data in this parent directory",
+                          metavar="PATH")
+
         parser.add_option("--mpiverbs", action="store_true", dest="mpiverbs",
                           help="Run MPI over verbs instead of the default PSM")
 
@@ -629,6 +633,8 @@ class TestInfo:
             self.kbuild_dir= os.path.abspath(options.kbuild)
             if not os.path.exists(self.kbuild_dir):
                 test_fail("kbuild is not a valid path")
+
+        self.perf_dir = options.perf_dir
 
         # Optional PSM libs
         if options.psm_lib:
@@ -811,4 +817,7 @@ class TestInfo:
 
     def get_perf_path(self):
         return self.perf_path
+
+    def get_perf_dir(self):
+        return self.perf_dir
 

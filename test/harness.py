@@ -59,7 +59,7 @@ test_list = [
     { "test_name" : "ModuleLoad",
       "test_exe" : "LoadModule.py",
       "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
-      "type" : "default,",
+      "type" : "default,perf",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
 
@@ -320,6 +320,13 @@ test_list = [
       "args" : "--nodelist %HOST[2]% --mpiverbs --np %NP%",
       "type" : "mpiverbs",
       "desc" : "Run the Intel MPI Test Suite"
+    },
+
+    { "test_name" : "Perf-Regression",
+      "test_exe" : "PerfReg.py",
+      "args" : "--nodelist %HOST[2]%",
+      "type" : "perf",
+      "desc" : "Run the required performance regression tests"
     },
 
 ]
