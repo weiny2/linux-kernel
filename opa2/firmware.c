@@ -109,6 +109,17 @@ FIRMWARE_READ(8051_cmd1, CRK8051_CFG_HOST_CMD_1)
 FIRMWARE_READ(port_config, CRK_CFG_PORT_CONFIG)
 FIRMWARE_WRITE(port_config, CRK_CFG_PORT_CONFIG)
 
+#define HOST_STATE_READ(name) \
+static ssize_t name##_read(struct file *file, char __user *buf,\
+			      size_t count, loff_t *ppos)\
+{\
+	struct hfi_pportdata *ppd = private2ppd(file);\
+	return (ssize_t)simple_read_from_buffer(buf, count, ppos, &ppd->name, \
+		sizeof(ppd->host_link_state));\
+}
+HOST_STATE_READ(host_link_state)
+HOST_STATE_READ(lstate)
+
 struct firmware_info {
 	char *name;
 	const struct file_operations ops;
@@ -130,6 +141,8 @@ static const struct firmware_info firmware_ops[] = {
 	DEBUGFS_OPS("8051_cmd0", _8051_cmd0_read, _8051_cmd0_write),
 	DEBUGFS_OPS("8051_cmd1", _8051_cmd1_read, NULL),
 	DEBUGFS_OPS("port_config", _port_config_read, _port_config_write),
+	DEBUGFS_OPS("host_link_state", host_link_state_read, NULL),
+	DEBUGFS_OPS("lstate", lstate_read, NULL),
 };
 
 void hfi_firmware_dbg_init(struct hfi_devdata *dd)
