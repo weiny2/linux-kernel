@@ -161,13 +161,18 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 		/* Load the LDT, if the LDT is different: */
 		if (unlikely(prev->context.ldt != next->context.ldt)) {
 			/* load_mm_ldt(next) */
-			struct ldt_struct *ldt;
+			const struct ldt_struct *ldt;
 
 			/* lockless_dereference synchronizes with smp_store_release */
 			ldt = lockless_dereference(next->context.ldt);
 			op->cmd = MMUEXT_SET_LDT;
-			op->arg1.linear_addr = (unsigned long)ldt->entries;
-			op->arg2.nr_ents     = ldt->size;
+			if (unlikely(ldt)) {
+				op->arg1.linear_addr = (long)ldt->entries;
+				op->arg2.nr_ents     = ldt->size;
+			} else {
+				op->arg1.linear_addr = 0;
+				op->arg2.nr_ents     = 0;
+			}
 			op++;
 		}
 
