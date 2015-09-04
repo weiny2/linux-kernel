@@ -375,7 +375,7 @@ static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
 	} eqd_tmp;
 	s64 start_va;
 
-	rc = hfi_eq_get(ctx, rx, dev->eq_rx, (void **)&eq_entry);
+	rc = hfi_eq_peek(ctx, dev->eq_rx, (void **)&eq_entry);
 	if (!eq_entry)
 		return NULL;
 	rx_event = (union target_EQEntry *)eq_entry;
@@ -388,6 +388,8 @@ static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
 	/* FXRTODO: use rlength or mlenth? */
 	if (skb)
 		skb_put(skb, rx_event->mlength);
+
+	hfi_eq_advance(ctx, rx, dev->eq_rx, eq_entry);
 
 	dev->skb[idx] = netdev_alloc_skb(vdev->netdev, OPA2_NET_DEFAULT_MTU);
 	if (dev->skb[idx])
