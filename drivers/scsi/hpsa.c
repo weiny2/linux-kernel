@@ -5612,8 +5612,8 @@ static struct CommandList *cmd_alloc(struct ctlr_info *h)
 	 * infrequently as to be indistinguishable from never.
 	 */
 
+	offset = h->last_allocation; /* benignly racy */
 	for (;;) {
-		offset = h->last_allocation; /* benignly racy */
 		i = find_next_zero_bit(h->cmd_pool_bits, h->nr_cmds, offset);
 		if (unlikely(i == h->nr_cmds)) {
 			offset = 0;
