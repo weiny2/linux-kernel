@@ -105,7 +105,7 @@ u64 read_8051_csr(const struct hfi_pportdata *ppd, u32 offset)
 	case 1:
 		break; /* nothing to do */
 	case 2:
-		offset += FXR_MNH_S1_8051_CSRS - FXR_MNH_S0_SNUP_CSRS;
+		offset += FXR_MNH_S1_8051_CSRS - FXR_MNH_S0_8051_CSRS;
 		break;
 	default:
 		dd_dev_warn(ppd->dd, "invalid port"); break;
@@ -122,7 +122,7 @@ void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset,	u64 value)
 	case 1:
 		break; /* nothing to do */
 	case 2:
-		offset += FXR_MNH_S1_8051_CSRS - FXR_MNH_S0_SNUP_CSRS;
+		offset += FXR_MNH_S1_8051_CSRS - FXR_MNH_S0_8051_CSRS;
 		break;
 	default:
 		dd_dev_warn(ppd->dd, "invalid port"); break;
