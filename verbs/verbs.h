@@ -193,6 +193,7 @@ struct opa_ib_swqe {
 	struct opa_ib_dma_header *s_hdr; /* next packet header to send */
 	u16 s_hdrwords; 	         /* size of s_hdr in 32 bit words */
 	u8 s_sl;
+	struct hfi_ctx *s_ctx;           /* associated send context */
 
 	struct ib_sge sg_list[0];
 };
@@ -379,6 +380,8 @@ struct opa_ib_qp {
 
 	struct ib_sge r_sg_list[0] /* verified SGEs */
 		____cacheline_aligned_in_smp;
+
+	struct hfi_ctx *s_ctx;	/* QP's send context */
 };
 
 /*
@@ -551,7 +554,10 @@ struct opa_ib_data {
 	int assigned_node_id;
 	struct opa_ib_portdata *pport;
 
-	struct ida qpn_table;
+	struct ida qpn_even_table;
+	struct ida qpn_odd_table;
+	struct idr qp_ptr;
+	unsigned long reserved_qps;
 	spinlock_t qpt_lock;
 	struct opa_ib_lkey_table lk_table;
 	struct list_head pending_mmaps;
@@ -600,15 +606,17 @@ static inline struct opa_ib_portdata *to_opa_ibportdata(struct ib_device *ibdev,
 
 /*
  * Return the QP with the given QPN
+ * The caller must hold the rcu_read_lock(), and keep the lock until
+ * the returned qp is no longer in use.
+ * TODO - revisit if IDR is really best for a fast lookup_qpn.
  */
 static inline struct opa_ib_qp *opa_ib_lookup_qpn(struct opa_ib_portdata *ibp,
 						  u32 qpn) __must_hold(RCU)
 {
-	struct opa_ib_qp *qp = NULL;
-
 	if (unlikely(qpn <= 1))
-		qp = rcu_dereference(ibp->qp[qpn]);
-	return qp;
+		return rcu_dereference(ibp->qp[qpn]);
+	else
+		return idr_find(&ibp->ibd->qp_ptr, qpn);
 }
 
 /*
@@ -710,4 +718,6 @@ int opa_ib_ctx_init(struct opa_ib_data *ibd);
 void opa_ib_ctx_uninit(struct opa_ib_data *ibd);
 int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp);
 void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp);
+int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp, bool is_user);
+void opa_ib_ctx_release_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp);
 #endif

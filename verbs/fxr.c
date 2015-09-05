@@ -52,6 +52,7 @@
 
 #include "verbs.h"
 #include "packet.h"
+#include <rdma/opa_core_ib.h>
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_eq.h>
 #include <rdma/hfi_pt.h>
@@ -141,7 +142,7 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 
 	/* send the WQE via PIO path */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
-	ret = hfi_tx_cmd_bypass_pio(&ibp->cmdq_tx, ibp->ctx,
+	ret = hfi_tx_cmd_bypass_pio(&ibp->cmdq_tx, wqe->s_ctx,
 				    wqe->s_hdr, 8 + (wqe->s_hdrwords << 2),
 				    (void *)wqe->sg_list[0].addr,
 				    wqe->length, ibp->port_num,
@@ -337,6 +338,8 @@ int opa_ib_ctx_init(struct opa_ib_data *ibd)
 	HFI_CTX_INIT(&ibd->ctx, odev->dd, odev->bus_ops);
 	ibd->ctx.mode |= HFI_CTX_MODE_BYPASS_9B;
 	ibd->ctx.qpn_map_idx = 0; /* this context is for QPN 0 and 1 */
+	/* TODO - for now map all QPNs to this receive context */
+	ibd->ctx.qpn_map_count = OPA_QPN_MAP_MAX;
 	ctx_assign.pid = HFI_PID_ANY;
 	ctx_assign.le_me_count = OPA_IB_EAGER_COUNT;
 	return odev->bus_ops->ctx_assign(&ibd->ctx, &ctx_assign);
@@ -403,4 +406,19 @@ void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp)
 	ops->cq_unmap(&ibp->cmdq_tx, &ibp->cmdq_rx);
 	ops->cq_release(ibp->ctx, cq_idx);
 	ibp->ctx = NULL;
+}
+
+int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp,
+			 bool is_user)
+{
+	/* TODO - not ready to enable user-space QPs */
+	if (is_user)
+		return -ENOSYS;
+	qp->s_ctx = &ibd->ctx;
+	return 0;
+}
+
+void opa_ib_ctx_release_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
+{
+	qp->s_ctx = NULL;
 }

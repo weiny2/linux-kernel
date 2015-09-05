@@ -417,6 +417,7 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 	wqe->s_hdr = qp->s_hdr;
 	wqe->s_hdrwords = qp->s_hdrwords;
 	wqe->s_sl = ah_attr->sl;
+	wqe->s_ctx = qp->s_ctx;
 done:
 	ret = 1;
 	goto unlock;

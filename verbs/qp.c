@@ -55,6 +55,8 @@
 #include "packet.h"
 #include <rdma/opa_core_ib.h>
 
+static void remove_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp);
+
 /*
  * Allocate the next available QPN or
  * zero/one for QP type IB_QPT_SMI/IB_QPT_GSI.
@@ -62,22 +64,35 @@
 static int alloc_qpn(struct opa_ib_data *ibd,
 		     enum ib_qp_type type, u8 port)
 {
-	u32 idx, qpn;
 	int ret;
 
 	if (type == IB_QPT_SMI || type == IB_QPT_GSI) {
-		/*
-		 * FXRTODO - revisit if IDA is still good choice,
-		 *  	     with multi-port QP 0 and 1, index != QPN
-		 */
-		qpn = (type == IB_QPT_GSI);
-		idx = qpn + 2 * (port - 1);
-		ret = ida_simple_get(&ibd->qpn_table, idx, idx + 1, GFP_KERNEL);
-		if (ret >= 0)
-			ret = qpn;  /* return QPN, not IDA index */
+		unsigned long n;
+
+		ret = type == IB_QPT_GSI;
+		n = 1 << (ret + 2 * (port - 1));
+		spin_lock(&ibd->qpt_lock);
+		if (test_bit(n, &ibd->reserved_qps))
+			ret = -EINVAL;
+		else
+			set_bit(n, &ibd->reserved_qps);
+		spin_unlock(&ibd->qpt_lock);
 	} else {
-		/* FXRTODO */
-		ret = -ENOSYS;
+		/*
+		 * QPN[8..1] is used to spread QPNs across HW receive contexts,
+		 * so allocate even QPNs first.
+		 */
+		ret = ida_simple_get(&ibd->qpn_even_table, 1,
+				     OPA_QPN_VERBS_MAX/2, GFP_KERNEL);
+		if (ret > 0)
+			ret = ret << 1;
+		else {
+			ret = ida_simple_get(&ibd->qpn_odd_table, 1,
+					     OPA_QPN_VERBS_MAX/2, GFP_KERNEL);
+			if (ret > 0)
+				ret = (ret << 1) + 1;
+		}
+		/* returned value is QPN or error */
 	}
 
 	return ret;
@@ -85,13 +100,21 @@ static int alloc_qpn(struct opa_ib_data *ibd,
 
 static void free_qpn(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
 {
-	u32 idx, qpn = qp->ibqp.qp_num;
+	u8 ib_port = qp->port_num;
+	u32 qpn = qp->ibqp.qp_num;
 
 	if (qpn > 1) {
-		/* FXRTODO */
+		struct ida *qpn_table = (qpn % 2) ? &ibd->qpn_odd_table :
+						    &ibd->qpn_even_table;
+		ida_simple_remove(qpn_table, qpn >> 1);
 	} else {
-		idx = qpn + 2 * (qp->port_num - 1);
-		ida_simple_remove(&ibd->qpn_table, idx);
+		unsigned n;
+
+		n = 1 << (qpn + 2 * (ib_port - 1));
+		spin_lock(&ibd->qpt_lock);
+		if (test_bit(n, &ibd->reserved_qps))
+			clear_bit(n, &ibd->reserved_qps);
+		spin_unlock(&ibd->qpt_lock);
 	}
 }
 
@@ -99,19 +122,44 @@ static void free_qpn(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
  * Put the QP into the hash table.
  * The hash table holds a reference to the QP.
  */
-static void insert_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
+static int insert_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp, bool is_user)
 {
 	struct opa_ib_portdata *ibp;
+	int ret = 0;
 	unsigned long flags;
+	u32 qpn = qp->ibqp.qp_num;
 
 	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
 
 	atomic_inc(&qp->refcount);
+	idr_preload(GFP_KERNEL);
 	spin_lock_irqsave(&ibd->qpt_lock, flags);
-	if (qp->ibqp.qp_num <= 1)
-		rcu_assign_pointer(ibp->qp[qp->ibqp.qp_num], qp);
-	/* FXRTODO - else use hash table for QPs > 1 */
+	if (qpn <= 1) {
+		rcu_assign_pointer(ibp->qp[qpn], qp);
+	} else {
+		ret = idr_alloc(&ibd->qp_ptr, qp, qpn, qpn+1, GFP_NOWAIT);
+		if (ret >= 0) {
+			BUG_ON(ret != qpn); /* temporary sanity check */
+			ret = 0; /* return success */
+		}
+	}
 	spin_unlock_irqrestore(&ibd->qpt_lock, flags);
+	idr_preload_end();
+
+	if (ret < 0)
+		goto bail;
+
+	/* Associate QP with Send Context */
+	ret = opa_ib_ctx_assign_qp(ibd, qp, is_user);
+	if (ret < 0)
+		goto bail_ctx;
+
+	return 0;
+
+bail_ctx:
+	remove_qp(ibd, qp);
+bail:
+	return ret;
 }
 
 /*
@@ -123,9 +171,13 @@ static void remove_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
 	struct opa_ib_portdata *ibp;
 	unsigned long flags;
 	int removed = 1;
+	u32 qpn = qp->ibqp.qp_num;
+
+	/* Remove association with Send Context */
+	opa_ib_ctx_release_qp(ibd, qp);
 
 	spin_lock_irqsave(&ibd->qpt_lock, flags);
-	if (qp->ibqp.qp_num <= 1) {
+	if (qpn <= 1) {
 		ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
 
 		if (rcu_dereference_protected(ibp->qp[0],
@@ -134,8 +186,9 @@ static void remove_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
 		else if (rcu_dereference_protected(ibp->qp[1],
 			 lockdep_is_held(&ibd->qpt_lock)) == qp)
 			RCU_INIT_POINTER(ibp->qp[1], NULL);
+	} else {
+		idr_remove(&ibd->qp_ptr, qpn);
 	}
-	/* FXRTODO - QPs > 1 */
 	spin_unlock_irqrestore(&ibd->qpt_lock, flags);
 
 	if (removed) {
@@ -485,8 +538,11 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	spin_unlock(&qp->s_lock);
 	spin_unlock_irq(&qp->r_lock);
 
-	if (cur_state == IB_QPS_RESET && new_state == IB_QPS_INIT)
-		insert_qp(ibd, qp);
+	if (cur_state == IB_QPS_RESET && new_state == IB_QPS_INIT) {
+		ret = insert_qp(ibd, qp, udata != NULL);
+		if (ret < 0)
+			goto bail;
+	}
 
 	if (lastwqe) {
 		ev.device = qp->ibqp.device;
@@ -625,9 +681,10 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 			goto bail;
 		}
 		break;
+	case IB_QPT_UD:
+		break;
 	case IB_QPT_UC:
 	case IB_QPT_RC:
-	case IB_QPT_UD:
 		/* TODO - Not supported yet */
 		ret = ERR_PTR(-ENOSYS);
 		goto bail;

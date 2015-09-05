@@ -546,7 +546,13 @@ static int opa_ib_add(struct opa_core_device *odev)
 	ibd->parent_dev = odev->dev.parent;
 	ibd->odev = odev;
 
-	ida_init(&ibd->qpn_table);
+	/*
+	 * Note, ida_simple_get usage restricts itself to QPNs not
+	 * reserved for KDETH (PSM).
+	 */
+	ida_init(&ibd->qpn_even_table);
+	ida_init(&ibd->qpn_odd_table);
+	idr_init(&ibd->qp_ptr);
 	spin_lock_init(&ibd->qpt_lock);
 	INIT_LIST_HEAD(&ibd->pending_mmaps);
 	spin_lock_init(&ibd->pending_lock);
@@ -615,7 +621,10 @@ static void opa_ib_remove(struct opa_core_device *odev)
 		opa_ib_uninit_port(&ibd->pport[i]);
 	opa_ib_ctx_uninit(ibd);
 	opa_ib_cq_exit(ibd);
-	ida_destroy(&ibd->qpn_table);
+	/* TODO - verify empty IDR? */
+	idr_destroy(&ibd->qp_ptr);
+	ida_destroy(&ibd->qpn_even_table);
+	ida_destroy(&ibd->qpn_odd_table);
 	kfree(ibd);
 	opa_core_clear_priv_data(&opa_ib_driver, odev);
 }
