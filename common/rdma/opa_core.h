@@ -71,6 +71,7 @@ struct opa_ib_qp;
  * @ops: OPA_CORE device operations
  * @type: kernel or user context
  * @qpn_map_idx: if a Verbs context, index into QPN->PID table
+ * @qpn_map_count: if a Verbs context, count of mapped QPNs
  * @mode: Describes if PIDs or LIDs are virtualized or not
  * @pid: Assigned Portals Process ID
  * @ptl_uid: Assigned Protection Domain ID
@@ -115,6 +116,7 @@ struct hfi_ctx {
 	struct opa_core_ops *ops;
 	u8	type;
 	u8	qpn_map_idx;
+	u16	qpn_map_count;
 	u16	mode;
 	u16	pid;
 	u32	ptl_uid;

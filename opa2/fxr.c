@@ -250,7 +250,7 @@ static void init_csrs(struct hfi_devdata *dd)
 	nptl_ctl.field.RcvQPMapEnable = 1;
 	nptl_ctl.field.RcvBypassEnable = 1;
 	write_csr(dd, FXR_RXHP_CFG_NPTL_CTL, nptl_ctl.val);
-	kdeth_qp.field.KDETH_QP = 0x80; /* Gen1 default */
+	kdeth_qp.field.KDETH_QP = (OPA_QPN_KDETH_BASE >> 16);
 	write_csr(dd, FXR_RXHP_CFG_NPTL_BTH_QP, kdeth_qp.val);
 
 	if (force_loopback) {
@@ -1742,37 +1742,41 @@ int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr, ssize
 void hfi_ctxt_set_bypass(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	u8 csr_pid;
+	u8 rx_ctx;
 
 	/* Get the 'Gen1 context' number from FXR PID */
-	csr_pid = ctx->pid - HFI_PID_BYPASS_BASE;
+	rx_ctx = ctx->pid - HFI_PID_BYPASS_BASE;
 
 	spin_lock(&dd->ptl_lock);
 	if (ctx->mode & HFI_CTX_MODE_BYPASS_10B) {
 		/* TODO - don't unconditionally claim bypass_pid */
-		write_csr(dd, FXR_RXHP_CFG_NPTL_BYPASS, csr_pid);
+		write_csr(dd, FXR_RXHP_CFG_NPTL_BYPASS, rx_ctx);
 		dd->bypass_pid = ctx->pid;
 	}
 
 	if (ctx->mode & HFI_CTX_MODE_BYPASS_9B) {
 		u64 val;
 		u32 csr_idx, off;
+		int i, count;
 
-		/* TODO - revisit this when adding general QP support */
+		/* TODO - revisit when adding multiple receive context support */
 
 		if (ctx->qpn_map_idx == 0) {
-			write_csr(dd, FXR_RXHP_CFG_NPTL_VL15, csr_pid);
+			write_csr(dd, FXR_RXHP_CFG_NPTL_VL15, rx_ctx);
 			dd->vl15_pid = ctx->pid;
 		}
 
-		/* Read appropriate QP_MAP_TABLE CSR and update */
-		off = ((ctx->qpn_map_idx) / 8) * 8;
-		val = read_csr(dd, FXR_RXHP_CFG_NPTL_QP_MAP_TABLE + off);
-		/* set just the sub-field in this CSR for this QPN */
-		csr_idx = ctx->qpn_map_idx % 8;
-		val &= ~(0xFFuLL << (csr_idx * 8));
-		val |= csr_pid << (csr_idx * 8);
-		write_csr(dd, FXR_RXHP_CFG_NPTL_QP_MAP_TABLE + off, val);
+		/* for each QPN_MAP entry, read appropriate CSR and update */
+		count = min_t(int, ctx->qpn_map_count, OPA_QPN_MAP_MAX);
+		for (i = ctx->qpn_map_idx; i < count; i++) {
+			off = (i / 8) * 8;
+			val = read_csr(dd, FXR_RXHP_CFG_NPTL_QP_MAP_TABLE + off);
+			/* set just the 8-bit sub-field in this CSR for this QPN */
+			csr_idx = i % 8;
+			val &= ~(0xFFuLL << (csr_idx * 8));
+			val |= rx_ctx << (csr_idx * 8);
+			write_csr(dd, FXR_RXHP_CFG_NPTL_QP_MAP_TABLE + off, val);
+		}
 	}
 	spin_unlock(&dd->ptl_lock);
 }
