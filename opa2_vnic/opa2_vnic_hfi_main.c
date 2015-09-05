@@ -53,6 +53,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/utsname.h>
+#include <linux/kthread.h>
 #include <rdma/opa_core.h>
 #include <rdma/hfi_tx.h>
 #include <rdma/hfi_rx.h>
@@ -106,16 +107,14 @@ static void opa_netdev_event_notify(struct opa_core_device *odev,
  * @skb: Array of socket buffers
  * @me_handle: Array of ME handles
  * @ct_tx: Counting TX event
- * @ct_rx: Counting RX event
  * @eq_tx: TX event handle
  * @eq_rx: RX event handle
  * @ni: portals network interface
  * @eq_alloc_tx: Event queue alloc args for TX
  * @eq_alloc_rx: Event queue alloc args for RX
  * @num_tx: Number of packets transmitted
- * @num_rx: Number of packets received
  * @dlid: destination LID
- * @rx_dwork: receive delayed work
+ * @rx_thread: kernel thread for receive work
  * @vdev: back pointer to opa vnic device
  * @npdev: back pointer to opa net device port
  * @odev: back pointer to opa core device
@@ -130,16 +129,14 @@ struct opa_veswport {
 	struct sk_buff		*skb[OPA2_NET_NUM_RX_BUFS];
 	hfi_me_handle_t		me_handle[OPA2_NET_ME_COUNT];
 	hfi_ct_handle_t		ct_tx;
-	hfi_ct_handle_t		ct_rx;
 	hfi_eq_handle_t		eq_tx;
 	hfi_eq_handle_t		eq_rx;
 	hfi_ni_t		ni;
 	struct opa_ev_assign	eq_alloc_tx;
 	struct opa_ev_assign	eq_alloc_rx;
 	int			num_tx;
-	int			num_rx;
 	int			dlid;
-	struct delayed_work	rx_dwork;
+	struct task_struct	*rx_thread;
 	struct opa_vnic_device	*vdev;
 	struct opa_netdev_port	*npdev;
 	struct opa_core_device	*odev;
@@ -289,7 +286,7 @@ static int opa2_vnic_append_skb(struct opa_veswport *dev, int idx)
 				       OPA2_NET_PT,
 				       match_id, 0x0,
 				       match_bits, ignore_bits,
-				       me_options, dev->ct_rx,
+				       me_options, HFI_CT_NONE,
 				       PTL_PRIORITY_LIST, min_free,
 				       idx, dev->me_handle[idx], &rx_cmd);
 
@@ -400,29 +397,50 @@ static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
 	return skb;
 }
 
-/*
- * Poll for RX packets by querying the RX counting event and
- * notify the OPA netdev layer if a packet is ready to be received
- * FXRTODO: Convert to interrupt based notifications instead of polling
- */
-static void opa2_vnic_rx_work(struct work_struct *work)
+/* Block for an RX interrupt */
+static int opa2_vnic_rx_wait(struct opa_veswport *dev, u64 **rhf_entry)
 {
-	struct opa_veswport *dev = container_of(work, struct opa_veswport,
-						rx_dwork.work);
+	int rc;
+	struct hfi_ctx *ctx = &dev->ctx;
+
+	rc = hfi_eq_wait_irq(ctx, dev->eq_rx, -1, (void **)rhf_entry);
+	if (rc == -EAGAIN || rc == -ERESTARTSYS)
+		/* timeout or wait interrupted, not abnormal */
+		rc = 0;
+	else if (rc == HFI_EQ_DROPPED)
+		/* driver bug with EQ sizing or IRQ logic */
+		rc = -EIO;
+	return rc;
+}
+
+/* Kernel thread to notify the netdev layer about received packets */
+static int opa2_vnic_rx_work(void *data)
+{
+	struct opa_veswport *dev = data;
 	struct opa_vnic_device *vdev = dev->vdev;
 	struct opa_core_device *odev = dev->odev;
-	struct hfi_ctx *ctx = &dev->ctx;
+	u64 *rhf_entry;
 	int rc;
 
-	rc = hfi_ct_get_success(ctx, dev->ct_rx);
-	if (rc >= dev->num_rx + 1) {
-		dev->num_rx = rc;
-		vdev->vnic_cb(vdev->netdev, OPA_VNIC_HFI_EVT_RX);
-		dev_dbg(&odev->dev, "RX CT success %d\n", dev->num_rx);
+	allow_signal(SIGINT);
+
+	/*
+	 * FXRTODO: Ideally we need a callback from the ISR instead of
+	 * a kthread for RX events.
+	 */
+	while (!kthread_should_stop()) {
+		rhf_entry = NULL;
+		rc = opa2_vnic_rx_wait(dev, &rhf_entry);
+		if (rc < 0) {
+			dev_warn(&odev->dev, "RX EQ failure, %d\n", rc);
+			/* TODO - handle this */
+			continue;
+		}
+
+		if (rhf_entry)
+			vdev->vnic_cb(vdev->netdev, OPA_VNIC_HFI_EVT_RX);
 	}
-	if (vdev->vnic_cb)
-		schedule_delayed_work(&dev->rx_dwork,
-				      msecs_to_jiffies(OPA2_NET_RX_POLL_MS));
+	return 0;
 }
 
 /*
@@ -441,6 +459,7 @@ static void opa2_free_skbs(struct opa_veswport *dev)
 	}
 }
 
+/* Allocate and append RX buffers */
 static int opa2_alloc_skbs(struct opa_veswport *dev)
 {
 	int i, rc = 0;
@@ -470,6 +489,40 @@ err1:
 	return rc;
 }
 
+
+/* Initialize and wake up the receive thread */
+static int opa2_rx_thread_init(struct opa_veswport *dev)
+{
+	struct opa_vnic_device *vdev = dev->vdev;
+	struct opa_core_device *odev = dev->odev;
+	int rc = 0;
+
+	dev->rx_thread = kthread_run(opa2_vnic_rx_work, dev,
+				     "opa_vnic_rx%d", vdev->id);
+	if (IS_ERR(dev->rx_thread)) {
+		rc = PTR_ERR(dev->rx_thread);
+		dev_err(&odev->dev, "kthread_run failed %d\n", rc);
+	}
+	return rc;
+}
+
+/* Interrupt and stop the receive thread */
+static void opa2_rx_thread_uninit(struct opa_veswport *dev)
+{
+	struct opa_core_device *odev = dev->odev;
+	int rc;
+
+	if (!IS_ERR_OR_NULL(dev->rx_thread)) {
+		rc = send_sig(SIGINT, dev->rx_thread, 0);
+		if (rc) {
+			dev_err(&odev->dev, "send_sig failed %d\n", rc);
+			return;
+		}
+		kthread_stop(dev->rx_thread);
+		dev->rx_thread = NULL;
+	}
+}
+
 static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 			      opa_vnic_hfi_evt_cb_fn cb)
 {
@@ -479,11 +532,15 @@ static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 	rc = opa2_alloc_skbs(dev);
 	if (rc)
 		goto err;
+	rc = opa2_rx_thread_init(dev);
+	if (rc)
+		goto skb_err;
+
 	vdev->vnic_cb = cb;
-	INIT_DELAYED_WORK(&dev->rx_dwork, opa2_vnic_rx_work);
-	/* Kick the RX worker thread to start polling for packets */
-	schedule_delayed_work(&dev->rx_dwork, msecs_to_jiffies(0));
 err:
+	return rc;
+skb_err:
+	opa2_free_skbs(dev);
 	return rc;
 }
 
@@ -491,10 +548,9 @@ static void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
 
-	vdev->vnic_cb = NULL;
-	cancel_delayed_work(&dev->rx_dwork);
-	flush_delayed_work(&dev->rx_dwork);
+	opa2_rx_thread_uninit(dev);
 	opa2_free_skbs(dev);
+	vdev->vnic_cb = NULL;
 }
 
 /*
@@ -558,15 +614,12 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 	if (rc < 0)
 		goto err1;
 	ct_alloc.ni = dev->ni;
-	rc = hfi_ct_alloc(ctx, &ct_alloc, &dev->ct_rx);
-	if (rc < 0)
-		goto err2;
 	dev->eq_alloc_tx.ni = dev->ni;
 	dev->eq_alloc_tx.user_data = 0xdeadbeef;
 	dev->eq_alloc_tx.size = 64;
 	rc = _hfi_eq_alloc(odev, ctx, &dev->eq_alloc_tx, &dev->eq_tx);
 	if (rc)
-		goto err3;
+		goto err2;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	rc = hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
@@ -585,7 +638,7 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 	dev->eq_alloc_rx.size = 64;
 	rc = _hfi_eq_alloc(odev, ctx, &dev->eq_alloc_rx, &dev->eq_rx);
 	if (rc)
-		goto err4;
+		goto err3;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	rc = hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS,
 			       (void **)&eq_entry);
@@ -604,16 +657,14 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 	pt_alloc.eq_handle = dev->eq_rx;
 	rc = hfi_pt_alloc(ctx, rx, &pt_alloc, &pt_idx);
 	if (rc < 0)
-		goto err5;
+		goto err4;
 
 	dev_dbg(&odev->dev, "%s success\n", __func__);
 	return 0;
-err5:
-	_hfi_eq_release(&dev->eq_alloc_rx);
 err4:
-	_hfi_eq_release(&dev->eq_alloc_tx);
+	_hfi_eq_release(&dev->eq_alloc_rx);
 err3:
-	hfi_ct_free(ctx, dev->ct_rx, 0);
+	_hfi_eq_release(&dev->eq_alloc_tx);
 err2:
 	hfi_ct_free(ctx, dev->ct_tx, 0);
 err1:
@@ -629,7 +680,6 @@ static void opa2_uninit_tx_rx(struct opa_veswport *dev)
 	_hfi_eq_release(&dev->eq_alloc_tx);
 	_hfi_eq_release(&dev->eq_alloc_rx);
 	hfi_ct_free(ctx, dev->ct_tx, 0);
-	hfi_ct_free(ctx, dev->ct_rx, 0);
 }
 
 static int opa2_xfer_test(struct opa_veswport *dev)
