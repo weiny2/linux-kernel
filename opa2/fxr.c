@@ -276,48 +276,38 @@ static void init_csrs(struct hfi_devdata *dd)
 		 * support in Simics.
 		 * TODO: Delete this hack once the LID is received via MADs
 		 */
-		if (!strcmp(utsname()->nodename, "viper0")) {
-			if (opafm_disable) {
-				dd->pport[0].lid = 1;
-				dd->pport[1].lid = 2;
-			}
-			/*
-			 * FXRTODO: read nodeguid from MNH Register
-			 * 8051_CFG_LOCAL_GUID. This register is
-			 * yet to be implemented in Simics.
-			 */
-			dd->nguid = cpu_to_be64(NODE_GUID);
+		if (!strncmp(utsname()->nodename, "viper", 5)) {
+			const char *hostname = utsname()->nodename;
+			int node = 0, rc;
 
-			/*
-			 * FXRTODO: Read this from DC_DC8051_STS_REMOTE_GUID
-			 * equivalent in MNH
-			 *
-			 * Move this code to 8051 INTR handler
-			 */
-			dd->pport[0].neighbor_guid = cpu_to_be64(NODE_GUID + 1);
-			dd->pport[1].neighbor_guid = cpu_to_be64(NODE_GUID + 1);
-		}
-		if (!strcmp(utsname()->nodename, "viper1")) {
+			/* Extract the node id from the host name */
+			hostname += 5;
+			rc = kstrtoint(hostname, 0, &node);
+			if (rc)
+				dd_dev_info(dd, "kstrtoint fail %d\n", rc);
 			if (opafm_disable) {
-				dd->pport[0].lid = 3;
-				dd->pport[1].lid = 4;
+				dd->pport[0].lid = (node * 2) + 1;
+				dd->pport[1].lid = (node * 2) + 2;
 			}
+			dd_dev_info(dd, "viper%d port0 lid %d port1 lid %d\n",
+				    node, dd->pport[0].lid, dd->pport[1].lid);
 			/*
 			 * FXRTODO: read nodeguid from MNH Register
 			 * 8051_CFG_LOCAL_GUID. This register is
 			 * yet to be implemented in Simics. Temporarily
 			 * keeping node guid unique
 			 */
-			dd->nguid = cpu_to_be64(NODE_GUID + 1);
+			dd->nguid = cpu_to_be64(NODE_GUID + node);
 
 			/*
 			 * FXRTODO: Read this from DC_DC8051_STS_REMOTE_GUID
-			 * equivalent in MNH
+			 * equivalent in MNH. The neighbor guid is set to a
+			 * random value for now.
 			 *
 			 * Move this code to 8051 INTR handler
 			 */
-			dd->pport[0].neighbor_guid = cpu_to_be64(NODE_GUID);
-			dd->pport[1].neighbor_guid = cpu_to_be64(NODE_GUID);
+			dd->pport[0].neighbor_guid = dd->nguid + 0x1000,
+			dd->pport[1].neighbor_guid = dd->nguid + 0x1000;
 		}
 		if (opafm_disable) {
 			lmp0.field.DLID = dd->pport[0].lid;
