@@ -635,7 +635,7 @@ static void __init memblock_x86_reserve_range_setup_data(void)
 # define CRASH_KERNEL_ADDR_HIGH_MAX	MAXMEM
 #endif
 
-static void __init reserve_crashkernel_low(void)
+static int __init reserve_crashkernel_low(void)
 {
 #ifdef CONFIG_X86_64
 	const unsigned long long alignment = 16<<20;	/* 16M */
@@ -665,7 +665,7 @@ static void __init reserve_crashkernel_low(void)
 	} else {
 		/* passed with crashkernel=0,low ? */
 		if (!low_size)
-			return;
+			return 0;
 	}
 
 	low_base = memblock_find_in_range(low_size, (1ULL<<32),
@@ -675,7 +675,7 @@ static void __init reserve_crashkernel_low(void)
 		if (!auto_set)
 			pr_info("crashkernel low reservation failed - No suitable area found.\n");
 
-		return;
+		return -EINVAL;
 	}
 
 	memblock_reserve(low_base, low_size);
@@ -687,6 +687,7 @@ static void __init reserve_crashkernel_low(void)
 	crashk_low_res.end   = low_base + low_size - 1;
 	insert_resource(&iomem_resource, &crashk_low_res);
 #endif
+	return 0;
 }
 
 static void __init reserve_crashkernel(void)
@@ -736,6 +737,10 @@ static void __init reserve_crashkernel(void)
 			return;
 		}
 	}
+
+	if (crash_base >= (1ULL<<32) && reserve_crashkernel_low())
+		return;
+
 	memblock_reserve(crash_base, crash_size);
 
 	printk(KERN_INFO "Reserving %ldMB of memory at %ldMB "
@@ -747,9 +752,6 @@ static void __init reserve_crashkernel(void)
 	crashk_res.start = crash_base;
 	crashk_res.end   = crash_base + crash_size - 1;
 	insert_resource(&iomem_resource, &crashk_res);
-
-	if (crash_base >= (1ULL<<32))
-		reserve_crashkernel_low();
 }
 #else
 static void __init reserve_crashkernel(void)

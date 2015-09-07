@@ -252,5 +252,6 @@ static inline void crash_kexec(struct pt_regs *regs) {
 #endif
 }
 static inline int kexec_should_crash(struct task_struct *p) { return 0; }
+#define kexec_in_progress false
 #endif /* CONFIG_KEXEC */
 #endif /* LINUX_KEXEC_H */

@@ -623,11 +623,11 @@ enum {
 	 AZX_DCAPS_I915_POWERWELL)
 
 #define AZX_DCAPS_INTEL_BRASWELL \
-	(AZX_DCAPS_INTEL_PCH | AZX_DCAPS_I915_POWERWELL)
+	(AZX_DCAPS_INTEL_PCH | 0 /*AZX_DCAPS_I915_POWERWELL*/)
 
 #define AZX_DCAPS_INTEL_SKYLAKE \
 	(AZX_DCAPS_INTEL_PCH | AZX_DCAPS_SEPARATE_STREAM_TAG |\
-	 AZX_DCAPS_I915_POWERWELL)
+	 0 /*AZX_DCAPS_I915_POWERWELL*/)
 
 /* quirks for ATI SB / AMD Hudson */
 #define AZX_DCAPS_PRESET_ATI_SB \
@@ -654,6 +654,11 @@ enum {
 #else
 #define use_vga_switcheroo(chip)	0
 #endif
+
+#define CONTROLLER_IN_GPU(pci) (((pci)->device == 0x0a0c) || \
+                                       ((pci)->device == 0x0c0c) || \
+                                       ((pci)->device == 0x0d0c) || \
+                                       ((pci)->device == 0x160c))
 
 static char *driver_short_names[] = {
 	[AZX_DRIVER_ICH] = "HDA Intel",
@@ -3985,6 +3990,13 @@ static int azx_probe_continue(struct azx *chip)
 #ifdef CONFIG_SND_HDA_I915
 		err = hda_i915_init();
 		if (err < 0) {
+			/* if the controller is bound only with HDMI/DP
+			 * (for HSW and BDW), we need to abort the probe;
+			 * for other chips, still continue probing as other
+			 * codecs can be on the same link.
+			 */
+			if (!CONTROLLER_IN_GPU(pci))
+				goto skip_i915;
 			snd_printk(KERN_ERR SFX "Error request power-well from i915\n");
 			goto out_free;
 		}
@@ -3996,6 +4008,9 @@ static int azx_probe_continue(struct azx *chip)
 #endif
 	}
 
+#ifdef CONFIG_SND_HDA_I915
+ skip_i915:
+#endif
 	err = azx_first_init(chip);
 	if (err < 0)
 		goto out_free;
