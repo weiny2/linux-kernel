@@ -4702,7 +4702,12 @@ out:
 }
 EXPORT_SYMBOL(il_mac_change_interface);
 
+#ifdef __GENKSYMS__
 void il_mac_flush(struct ieee80211_hw *hw, u32 queues, bool drop)
+#else
+void il_mac_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+		  u32 queues, bool drop)
+#endif
 {
 	struct il_priv *il = hw->priv;
 	unsigned long timeout = jiffies + msecs_to_jiffies(500);

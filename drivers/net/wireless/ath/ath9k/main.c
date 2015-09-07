@@ -194,11 +194,13 @@ static bool ath_prepare_reset(struct ath_softc *sc)
 
 	ath9k_hw_disable_interrupts(ah);
 
-	if (!ath_drain_all_txq(sc))
-		ret = false;
-
-	if (!ath_stoprecv(sc))
-		ret = false;
+	if (AR_SREV_9300_20_OR_LATER(ah)) {
+		ret &= ath_stoprecv(sc);
+		ret &= ath_drain_all_txq(sc);
+	} else {
+		ret &= ath_drain_all_txq(sc);
+		ret &= ath_stoprecv(sc);
+	}
 
 	return ret;
 }
@@ -1777,7 +1779,8 @@ static void ath9k_set_coverage_class(struct ieee80211_hw *hw, u8 coverage_class)
 	mutex_unlock(&sc->mutex);
 }
 
-static void ath9k_flush(struct ieee80211_hw *hw, u32 queues, bool drop)
+static void ath9k_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			u32 queues, bool drop)
 {
 	struct ath_softc *sc = hw->priv;
 	struct ath_hw *ah = sc->sc_ah;

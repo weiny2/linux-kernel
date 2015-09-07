@@ -1651,6 +1651,11 @@ static int mga_vga_mode_valid(struct drm_connector *connector,
 		return MODE_BANDWIDTH;
 	}
 
+	if ((mode->hdisplay % 8) != 0 || (mode->hsync_start % 8) != 0 ||
+	    (mode->hsync_end % 8) != 0 || (mode->htotal % 8) != 0) {
+		return MODE_H_ILLEGAL;
+	}
+
 	if (mode->hdisplay > 2048 || mode->hsync_start > 4096 ||
 	    mode->hsync_end > 4096 || mode->htotal > 4096 ||
 	    mode->vdisplay > 2048 * lace ||
