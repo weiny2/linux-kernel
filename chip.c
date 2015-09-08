@@ -122,6 +122,7 @@ struct flag_table {
 #define SEC_SPC_FREEZE		0x8	/* per-HFI only */
 
 #define MIN_KERNEL_KCTXTS         2
+#define FIRST_KERNEL_KCTXT        1
 #define NUM_MAP_REGS             32
 
 /* Bit offset into the GUID which carries HFI id information */
@@ -9178,7 +9179,14 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 	 * - Context 1 - default context
 	 */
 	if (n_krcvqs)
-		num_kernel_contexts = n_krcvqs + MIN_KERNEL_KCTXTS;
+		/*
+		 * Don't count context 0 in n_krcvqs since
+		 * is isn't used for normal verbs traffic.
+		 *
+		 * krcvqs will reflect number of kernel
+		 * receive contexts above 0.
+		 */
+		num_kernel_contexts = n_krcvqs + MIN_KERNEL_KCTXTS - 1;
 	else
 		num_kernel_contexts = num_online_nodes();
 	num_kernel_contexts =
@@ -10030,16 +10038,6 @@ static void init_qpmap_table(struct hfi1_devdata *dd,
 	u64 ctxt = first_ctxt;
 
 	for (i = 0; i < 256;) {
-		/*
-		 * Do not assign control context, unless that is the only
-		 * available context.
-		 */
-		if ((ctxt == HFI1_CTRL_CTXT) && (first_ctxt != last_ctxt)) {
-			ctxt++;
-			if (ctxt > last_ctxt)
-				ctxt = first_ctxt;
-			continue;
-		}
 		reg |= ctxt << (8 * (i % 8));
 		i++;
 		ctxt++;
@@ -10152,17 +10150,13 @@ static void init_qos(struct hfi1_devdata *dd, u32 first_ctxt)
 	/* Enable RSM */
 	add_rcvctrl(dd, RCV_CTRL_RCV_RSM_ENABLE_SMASK);
 	kfree(rsmmap);
-	/* map everything else to minimum allocated kernel contexts */
-	init_qpmap_table(dd, 0,
-		 min_t(u8, (dd->n_krcv_queues - 1), (MIN_KERNEL_KCTXTS - 1)));
+	/* map everything else to first context */
+	init_qpmap_table(dd, FIRST_KERNEL_KCTXT, MIN_KERNEL_KCTXTS - 1);
 	dd->qos_shift = n + 1;
 	return;
 bail:
 	dd->qos_shift = 1;
-	init_qpmap_table(
-		dd,
-		dd->n_krcv_queues > MIN_KERNEL_KCTXTS ? MIN_KERNEL_KCTXTS : 0,
-		dd->n_krcv_queues - 1);
+	init_qpmap_table(dd, FIRST_KERNEL_KCTXT, dd->n_krcv_queues - 1);
 }
 
 static void init_rxe(struct hfi1_devdata *dd)

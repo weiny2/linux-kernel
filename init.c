@@ -89,7 +89,7 @@ MODULE_PARM_DESC(
 u8 krcvqs[RXE_NUM_DATA_VL];
 int krcvqsset;
 module_param_array(krcvqs, byte, &krcvqsset, S_IRUGO);
-MODULE_PARM_DESC(krcvqs, "Array of the number of kernel receive queues by VL");
+MODULE_PARM_DESC(krcvqs, "Array of the number of non-control kernel receive queues by VL");
 
 /* computed based on above array */
 unsigned n_krcvqs;
