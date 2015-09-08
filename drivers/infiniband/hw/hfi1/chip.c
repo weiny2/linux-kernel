@@ -235,6 +235,7 @@ struct flag_table {
 /* all CceStatus sub-block RXE pause bits */
 #define ALL_RXE_PAUSE CCE_STATUS_RXE_PAUSED_SMASK
 
+
 /*
  * CCE Error flags.
  */
@@ -1295,12 +1296,52 @@ static u64 dev_access_u32_csr(const struct cntr_entry *entry,
 			    void *context, int vl, int mode, u64 data)
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+	u64 csr = entry->csr;
 
-	if (vl != CNTR_INVALID_VL)
-		return 0;
-	return read_write_csr(dd, entry->csr, mode, data);
+	if (entry->flags & CNTR_SDMA) {
+		if (vl == CNTR_INVALID_VL)
+			return 0;
+			csr += 0x100 * vl;
+	} else {
+		if (vl != CNTR_INVALID_VL)
+			return 0;
+	}
+	return read_write_csr(dd, csr, mode, data);
 }
 
+static u64 access_sde_err_cnt(const struct cntr_entry *entry,
+			void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+	struct sdma_engine *sde = &dd->per_sdma[vl];
+
+	return sde->err_cnt;
+}
+
+static u64 access_sde_int_cnt(const struct cntr_entry *entry,
+			void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+	struct sdma_engine *sde = &dd->per_sdma[vl];
+
+	return sde->sdma_int_cnt;
+}
+static u64 access_sde_idle_int_cnt(const struct cntr_entry *entry,
+			void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+	struct sdma_engine *sde = &dd->per_sdma[vl];
+
+	return sde->idle_int_cnt;
+}
+static u64 access_sde_progress_int_cnt(const struct cntr_entry *entry,
+			void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+	struct sdma_engine *sde = &dd->per_sdma[vl];
+
+	return sde->progress_int_cnt;
+}
 static u64 dev_access_u64_csr(const struct cntr_entry *entry, void *context,
 			    int vl, int mode, u64 data)
 {
@@ -1317,7 +1358,6 @@ static u64 dev_access_u64_csr(const struct cntr_entry *entry, void *context,
 		if (vl != CNTR_INVALID_VL)
 			return 0;
 	}
-
 	val = read_write_csr(dd, csr, mode, data);
 	return val;
 }
@@ -1729,6 +1769,21 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 			    access_sw_kmem_wait),
 [C_SW_SEND_SCHED] = CNTR_ELEM("SendSched", 0, 0, CNTR_NORMAL,
 			    access_sw_send_schedule),
+[C_SDMA_DESC_FETCHED_CNT] = CNTR_ELEM("SDEDscFdCn",
+				SEND_DMA_DESC_FETCHED_CNT, 0, CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
+				dev_access_u32_csr),
+[C_SDMA_INT_CNT] = CNTR_ELEM("SDMAInt", 0, 0,
+				CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
+				access_sde_int_cnt),
+[C_SDMA_ERR_CNT] = CNTR_ELEM("SDMAErrCt", 0, 0,
+				CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
+				access_sde_err_cnt),
+[C_SDMA_IDLE_INT_CNT] = CNTR_ELEM("SDMAIdInt", 0, 0,
+					CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
+					access_sde_idle_int_cnt),
+[C_SDMA_PROGRESS_INT_CNT] = CNTR_ELEM("SDMAPrIntCn", 0, 0,
+					CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
+					access_sde_progress_int_cnt)
 };
 
 static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
@@ -2531,6 +2586,7 @@ static void handle_sdma_eng_err(struct hfi1_devdata *dd,
 	dd_dev_err(sde->dd, "CONFIG SDMA(%u) source: %u status 0x%llx\n",
 		   sde->this_idx, source, (unsigned long long)status);
 #endif
+	sde->err_cnt++;
 	sdma_engine_error(sde, status);
 }
 
@@ -7871,13 +7927,26 @@ u32 hfi1_read_cntrs(struct hfi1_devdata *dd, loff_t pos, char **namep,
 						val = entry->rw_cntr(entry,
 								  dd, j,
 								  CNTR_MODE_R,
-								  0);
+									0);
 						hfi1_cdbg(
 						   CNTR,
 						   "\t\tRead 0x%llx for %d\n",
 						   val, j);
 						dd->cntrs[entry->offset + j] =
 									    val;
+					}
+				} else if (entry->flags & CNTR_SDMA) {
+					hfi1_cdbg(CNTR,
+					"\t Per SDMA Engine\n");
+					for (j = 0; j < TXE_NUM_SDMA_ENGINES;
+						j++) {
+						val = entry->rw_cntr(entry, dd,
+							j, CNTR_MODE_R, 0);
+						hfi1_cdbg(CNTR,
+						"\t\tRead 0x%llx for %d\n", val,
+								j);
+						dd->cntrs[entry->offset + j] =
+									val;
 					}
 				} else {
 					val = entry->rw_cntr(entry, dd,
@@ -8283,6 +8352,19 @@ static int init_cntrs(struct hfi1_devdata *dd)
 				dd->ndevcntrs++;
 				index++;
 			}
+		} else if (dev_cntrs[i].flags & CNTR_SDMA) {
+			hfi1_dbg_early("\tProcessing per SDE counters\n");
+			dev_cntrs[i].offset = index;
+			for (j = 0; j < TXE_NUM_SDMA_ENGINES; j++) {
+				memset(name, '\0', C_MAX_NAME);
+				snprintf(name, C_MAX_NAME, "%s%d",
+					dev_cntrs[i].name, j);
+				sz += strlen(name);
+				sz++;
+				hfi1_dbg_early("\t\t%s\n", name);
+				dd->ndevcntrs++;
+				index++;
+			}
 		} else {
 			/* +1 for newline  */
 			sz += strlen(dev_cntrs[i].name) + 1;
@@ -8324,6 +8406,17 @@ static int init_cntrs(struct hfi1_devdata *dd)
 					p += strlen(name);
 					*p++ = '\n';
 				}
+			} else if (dev_cntrs[i].flags & CNTR_SDMA) {
+					for (j = 0; j < TXE_NUM_SDMA_ENGINES;
+						j++) {
+						memset(name, '\0', C_MAX_NAME);
+						snprintf(name, C_MAX_NAME,
+							"%s%d",
+							dev_cntrs[i].name, j);
+						memcpy(p, name, strlen(name));
+						p += strlen(name);
+						*p++ = '\n';
+					}
 			} else {
 				memcpy(p, dev_cntrs[i].name,
 				       strlen(dev_cntrs[i].name));
@@ -8771,9 +8864,8 @@ static void clean_up_interrupts(struct hfi1_devdata *dd)
 
 		for (i = 0; i < dd->num_msix_entries; i++, me++) {
 			if (me->arg == NULL) /* => no irq, no affinity */
-				break;
-			irq_set_affinity_hint(dd->msix_entries[i].msix.vector,
-					NULL);
+				continue;
+			hfi1_put_irq_affinity(dd, &dd->msix_entries[i]);
 			free_irq(me->msix.vector, me->arg);
 		}
 	} else {
@@ -8866,67 +8958,16 @@ static int request_intx_irq(struct hfi1_devdata *dd)
 
 static int request_msix_irqs(struct hfi1_devdata *dd)
 {
-	const struct cpumask *local_mask;
-	cpumask_var_t def, rcv;
-	bool def_ret, rcv_ret;
 	int first_general, last_general;
 	int first_sdma, last_sdma;
 	int first_rx, last_rx;
-	int first_cpu, curr_cpu;
-	int rcv_cpu, sdma_cpu;
-	int i, ret = 0, possible;
-	int ht;
+	int i, ret = 0;
 
 	/* calculate the ranges we are going to use */
 	first_general = 0;
 	first_sdma = last_general = first_general + 1;
 	first_rx = last_sdma = first_sdma + dd->num_sdma;
 	last_rx = first_rx + dd->n_krcv_queues;
-
-	/*
-	 * Interrupt affinity.
-	 *
-	 * non-rcv avail gets a default mask that
-	 * starts as possible cpus with threads reset
-	 * and each rcv avail reset.
-	 *
-	 * rcv avail gets node relative 1 wrapping back
-	 * to the node relative 1 as necessary.
-	 *
-	 */
-	local_mask = cpumask_of_pcibus(dd->pcidev->bus);
-	/* if first cpu is invalid, use NUMA 0 */
-	if (cpumask_first(local_mask) >= nr_cpu_ids)
-		local_mask = topology_core_cpumask(0);
-
-	def_ret = zalloc_cpumask_var(&def, GFP_KERNEL);
-	rcv_ret = zalloc_cpumask_var(&rcv, GFP_KERNEL);
-	if (!def_ret || !rcv_ret)
-		goto bail;
-	/* use local mask as default */
-	cpumask_copy(def, local_mask);
-	possible = cpumask_weight(def);
-	/* disarm threads from default */
-	ht = cpumask_weight(cpu_sibling_mask(cpumask_first(local_mask)));
-	for (i = possible/ht; i < possible; i++)
-		cpumask_clear_cpu(i, def);
-	/* def now has full cores on chosen node*/
-	first_cpu = cpumask_first(def);
-	if (nr_cpu_ids >= first_cpu)
-		first_cpu++;
-	curr_cpu = first_cpu;
-
-	/* One context is reserved as control context */
-	for (i = first_cpu; i < dd->n_krcv_queues + first_cpu - 1; i++) {
-		cpumask_clear_cpu(curr_cpu, def);
-		cpumask_set_cpu(curr_cpu, rcv);
-		curr_cpu = cpumask_next(curr_cpu, def);
-		if (curr_cpu >= nr_cpu_ids)
-			break;
-	}
-	/* def mask has non-rcv, rcv has recv mask */
-	rcv_cpu = cpumask_first(rcv);
-	sdma_cpu = cpumask_first(def);
 
 	/*
 	 * Sanity check - the code expects all SDMA chip source
@@ -8953,6 +8994,7 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 			snprintf(me->name, sizeof(me->name),
 				DRIVER_NAME"_%d", dd->unit);
 			err_info = "general";
+			me->type = IRQ_GENERAL;
 		} else if (first_sdma <= i && i < last_sdma) {
 			idx = i - first_sdma;
 			sde = &dd->per_sdma[idx];
@@ -8962,6 +9004,7 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 				DRIVER_NAME"_%d sdma%d", dd->unit, idx);
 			err_info = "sdma";
 			remap_sdma_interrupts(dd, idx, i);
+			me->type = IRQ_SDMA;
 		} else if (first_rx <= i && i < last_rx) {
 			idx = i - first_rx;
 			rcd = dd->rcd[idx];
@@ -8982,6 +9025,7 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 				DRIVER_NAME"_%d kctxt%d", dd->unit, idx);
 			err_info = "receive context";
 			remap_receive_available_interrupt(dd, idx, i);
+			me->type = IRQ_RCVCTXT;
 		} else {
 			/* not in our expected range - complain, then
 			   ignore it */
@@ -9009,52 +9053,13 @@ static int request_msix_irqs(struct hfi1_devdata *dd)
 		 */
 		me->arg = arg;
 
-		if (!zalloc_cpumask_var(
-			&dd->msix_entries[i].mask,
-			GFP_KERNEL))
-			goto bail;
-		if (handler == sdma_interrupt) {
-			dd_dev_info(dd, "sdma engine %d cpu %d\n",
-				sde->this_idx, sdma_cpu);
-			sde->cpu = sdma_cpu;
-			cpumask_set_cpu(sdma_cpu, dd->msix_entries[i].mask);
-			sdma_cpu = cpumask_next(sdma_cpu, def);
-			if (sdma_cpu >= nr_cpu_ids)
-				sdma_cpu = cpumask_first(def);
-		} else if (handler == receive_context_interrupt) {
-			dd_dev_info(dd, "rcv ctxt %d cpu %d\n", rcd->ctxt,
-				    (rcd->ctxt == HFI1_CTRL_CTXT) ?
-					    cpumask_first(def) : rcv_cpu);
-			if (rcd->ctxt == HFI1_CTRL_CTXT) {
-				/* map to first default */
-				cpumask_set_cpu(cpumask_first(def),
-						dd->msix_entries[i].mask);
-			} else {
-				cpumask_set_cpu(rcv_cpu,
-						dd->msix_entries[i].mask);
-				rcv_cpu = cpumask_next(rcv_cpu, rcv);
-				if (rcv_cpu >= nr_cpu_ids)
-					rcv_cpu = cpumask_first(rcv);
-			}
-		} else {
-			/* otherwise first def */
-			dd_dev_info(dd, "%s cpu %d\n",
-				err_info, cpumask_first(def));
-			cpumask_set_cpu(
-				cpumask_first(def), dd->msix_entries[i].mask);
-		}
-		irq_set_affinity_hint(
-			dd->msix_entries[i].msix.vector,
-			dd->msix_entries[i].mask);
+		ret = hfi1_get_irq_affinity(dd, me);
+		if (ret)
+			dd_dev_err(dd,
+				   "unable to pin IRQ %d\n", ret);
 	}
 
-out:
-	free_cpumask_var(def);
-	free_cpumask_var(rcv);
 	return ret;
-bail:
-	ret = -ENOMEM;
-	goto  out;
 }
 
 /*
@@ -10654,6 +10659,10 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	init_other(dd);
 	/* set up KDETH QP prefix in both RX and TX CSRs */
 	init_kdeth_qp(dd);
+
+	ret = hfi1_dev_affinity_init(dd);
+	if (ret)
+		goto bail_cleanup;
 
 	/* send contexts must be set up before receive contexts */
 	ret = init_send_contexts(dd);

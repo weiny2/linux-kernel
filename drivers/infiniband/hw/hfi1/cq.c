@@ -524,11 +524,11 @@ int hfi1_cq_init(struct hfi1_devdata *dd)
 	task = kthread_create_on_node(
 		kthread_worker_fn,
 		dd->worker,
-		dd->assigned_node_id,
+		dd->node,
 		"hfi1_cq%d", dd->unit);
 	if (IS_ERR(task))
 		goto task_fail;
-	cpu = cpumask_first(cpumask_of_node(dd->assigned_node_id));
+	cpu = cpumask_first(cpumask_of_node(dd->node));
 	kthread_bind(task, cpu);
 	wake_up_process(task);
 out:

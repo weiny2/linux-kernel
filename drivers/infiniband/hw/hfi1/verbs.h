@@ -438,6 +438,7 @@ struct hfi1_qp {
 	struct hfi1_swqe *s_wq;  /* send work queue */
 	struct hfi1_mmap_info *ip;
 	struct ahg_ib_header *s_hdr;     /* next packet header to send */
+	struct sdma_engine *s_sde; /* current sde */
 	/* sc for UC/RC QPs - based on ah for UD */
 	u8 s_sc;
 	unsigned long timeout_jiffies;  /* computed from timeout */
@@ -510,7 +511,6 @@ struct hfi1_qp {
 	struct hfi1_swqe *s_wqe;
 	struct hfi1_sge_state s_sge;     /* current send request data */
 	struct hfi1_mregion *s_rdma_mr;
-	struct sdma_engine *s_sde; /* current sde */
 	u32 s_cur_size;         /* size of send packet in bytes */
 	u32 s_len;              /* total length of s_sge */
 	u32 s_rdma_read_len;    /* total length of s_rdma_read_sge */
@@ -544,6 +544,16 @@ struct hfi1_qp {
 
 	struct hfi1_sge r_sg_list[0] /* verified SGEs */
 		____cacheline_aligned_in_smp;
+};
+
+/*
+ * This structure is used to hold commonly lookedup and computed values during
+ * the send engine progress.
+ */
+struct hfi1_pkt_state {
+	struct hfi1_ibdev *dev;
+	struct hfi1_ibport *ibp;
+	struct hfi1_pportdata *ppd;
 };
 
 /*
@@ -927,8 +937,7 @@ int hfi1_mcast_tree_empty(struct hfi1_ibport *ibp);
 struct verbs_txreq;
 void hfi1_put_txreq(struct verbs_txreq *tx);
 
-int hfi1_verbs_send(struct hfi1_qp *qp, struct ahg_ib_header *ahdr,
-		    u32 hdrwords, struct hfi1_sge_state *ss, u32 len);
+int hfi1_verbs_send(struct hfi1_qp *qp, struct hfi1_pkt_state *ps);
 
 void hfi1_copy_sge(struct hfi1_sge_state *ss, void *data, u32 length,
 		   int release);
@@ -1102,13 +1111,11 @@ void hfi1_ib_rcv(struct hfi1_packet *packet);
 
 unsigned hfi1_get_npkeys(struct hfi1_devdata *);
 
-int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct ahg_ib_header *hdr,
-			u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
-			u32 plen, u32 dwords, u64 pbc);
+int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
+			u64 pbc);
 
-int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct ahg_ib_header *hdr,
-			u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
-			u32 plen, u32 dwords, u64 pbc);
+int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
+			u64 pbc);
 
 struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5);
 
