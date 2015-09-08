@@ -1049,13 +1049,15 @@ int sdma_init(struct hfi1_devdata *dd, u8 port)
 		num_engines, descq_cnt);
 
 	/* alloc memory for array of send engines */
-	dd->per_sdma = kcalloc(num_engines, sizeof(*dd->per_sdma), GFP_KERNEL);
+	dd->per_sdma = kzalloc_node(num_engines * sizeof(*dd->per_sdma),
+				    GFP_KERNEL, dd->node);
 	if (!dd->per_sdma)
 		return -ENOMEM;
 
 	idle_cnt = ns_to_cclock(dd, idle_cnt);
 	if (!sdma_desct_intr)
 		sdma_desct_intr = descq_cnt / 2;
+
 	/* Allocate memory for SendDMA descriptor FIFOs */
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
 		sde = &dd->per_sdma[this_idx];
@@ -1066,8 +1068,6 @@ int sdma_init(struct hfi1_devdata *dd, u8 port)
 		sde->desc_avail = sdma_descq_freecnt(sde);
 		sde->sdma_shift = ilog2(descq_cnt);
 		sde->sdma_mask = (1 << sde->sdma_shift) - 1;
-		sde->descq_full_count = 0;
-
 		/* Create a mask for all 3 chip interrupt sources */
 		sde->imask = (u64)1 << (0*TXE_NUM_SDMA_ENGINES + this_idx)
 			| (u64)1 << (1*TXE_NUM_SDMA_ENGINES + this_idx)
@@ -1078,6 +1078,9 @@ int sdma_init(struct hfi1_devdata *dd, u8 port)
 		/* Create a mask specifically for sdma_progress */
 		sde->progress_mask =
 			(u64)1 << (TXE_NUM_SDMA_ENGINES + this_idx);
+		sde->int_mask =
+			(u64)1 << (0*TXE_NUM_SDMA_ENGINES + this_idx);
+
 		spin_lock_init(&sde->tail_lock);
 		seqlock_init(&sde->head_lock);
 		spin_lock_init(&sde->senddmactrl_lock);
@@ -1559,6 +1562,12 @@ void sdma_engine_interrupt(struct sdma_engine *sde, u64 status)
 	trace_hfi1_sdma_engine_interrupt(sde, status);
 	write_seqlock(&sde->head_lock);
 	sdma_set_desc_cnt(sde, sdma_desct_intr);
+	if (status & sde->idle_mask)
+		sde->idle_int_cnt++;
+	else if (status & sde->progress_mask)
+		sde->progress_int_cnt++;
+	else if (status & sde->int_mask)
+		sde->sdma_int_cnt++;
 	sdma_make_progress(sde, status);
 	write_sequnlock(&sde->head_lock);
 }
@@ -1787,7 +1796,7 @@ void sdma_dumpstate(struct sdma_engine *sde)
 	sdma_dumpstate_helper(SD(ENG_ERR_MASK));
 
 	for (i = 0; i < CCE_NUM_INT_CSRS; ++i) {
-		sdma_dumpstate_helper2(CCE_INT_STATUS));
+		sdma_dumpstate_helper2(CCE_INT_STATUS);
 		sdma_dumpstate_helper2(CCE_INT_MASK);
 		sdma_dumpstate_helper2(CCE_INT_BLOCKED);
 	}
@@ -1795,7 +1804,7 @@ void sdma_dumpstate(struct sdma_engine *sde)
 	sdma_dumpstate_helper(SD(TAIL));
 	sdma_dumpstate_helper(SD(HEAD));
 	sdma_dumpstate_helper(SD(PRIORITY_THLD));
-	sdma_dumpstate_helper(SD(IDLE_CNT);
+	sdma_dumpstate_helper(SD(IDLE_CNT));
 	sdma_dumpstate_helper(SD(RELOAD_CNT));
 	sdma_dumpstate_helper(SD(DESC_CNT));
 	sdma_dumpstate_helper(SD(DESC_FETCHED_CNT));

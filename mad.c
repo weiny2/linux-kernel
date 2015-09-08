@@ -84,7 +84,7 @@ static void send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
 {
 	struct ib_mad_send_buf *send_buf;
 	struct ib_mad_agent *agent;
-	struct ib_smp *smp;
+	struct opa_smp *smp;
 	int ret;
 	unsigned long flags;
 	unsigned long timeout;
@@ -117,15 +117,15 @@ static void send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
 		return;
 
 	smp = send_buf->mad;
-	smp->base_version = IB_MGMT_BASE_VERSION;
+	smp->base_version = JUMBO_MGMT_BASE_VERSION;
 	smp->mgmt_class = IB_MGMT_CLASS_SUBN_LID_ROUTED;
-	smp->class_version = 1;
+	smp->class_version = OPA_SMI_CLASS_VERSION;
 	smp->method = IB_MGMT_METHOD_TRAP;
 	ibp->tid++;
 	smp->tid = cpu_to_be64(ibp->tid);
 	smp->attr_id = IB_SMP_ATTR_NOTICE;
 	/* o14-1: smp->mkey = 0; */
-	memcpy(smp->data, data, len);
+	memcpy(smp->route.lid.data, data, len);
 
 	spin_lock_irqsave(&ibp->lock, flags);
 	if (!ibp->sm_ah) {
@@ -1717,9 +1717,9 @@ static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	psi->port_states.portphysstate_portstate =
 		(hfi1_ibphys_portstate(ppd) << 4) | (lstate & 0xf);
 	psi->link_width_downgrade_tx_active =
-	  ppd->link_width_downgrade_tx_active;
+	  cpu_to_be16(ppd->link_width_downgrade_tx_active);
 	psi->link_width_downgrade_rx_active =
-	  ppd->link_width_downgrade_rx_active;
+	  cpu_to_be16(ppd->link_width_downgrade_rx_active);
 	if (resp_len)
 		*resp_len += sizeof(struct opa_port_state_info);
 

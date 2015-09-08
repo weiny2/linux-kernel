@@ -127,16 +127,12 @@ int hfi1_create_ctxts(struct hfi1_devdata *dd)
 {
 	unsigned i;
 	int ret;
-	int local_node_id = pcibus_to_node(dd->pcidev->bus);
 
 	/* Control context has to be always 0 */
 	BUILD_BUG_ON(HFI1_CTRL_CTXT != 0);
 
-	if (local_node_id < 0)
-		local_node_id = numa_node_id();
-	dd->assigned_node_id = local_node_id;
-
-	dd->rcd = kcalloc(dd->num_rcv_contexts, sizeof(*dd->rcd), GFP_KERNEL);
+	dd->rcd = kzalloc_node(dd->num_rcv_contexts * sizeof(*dd->rcd),
+			       GFP_KERNEL, dd->node);
 	if (!dd->rcd) {
 		dd_dev_err(dd,
 			"Unable to allocate receive context array, failing\n");
@@ -149,7 +145,7 @@ int hfi1_create_ctxts(struct hfi1_devdata *dd)
 		struct hfi1_ctxtdata *rcd;
 
 		ppd = dd->pport + (i % dd->num_pports);
-		rcd = hfi1_create_ctxtdata(ppd, i);
+		rcd = hfi1_create_ctxtdata(ppd, i, dd->node);
 		if (!rcd) {
 			dd_dev_err(dd,
 				"Unable to allocate kernel receive context, failing\n");
@@ -203,7 +199,8 @@ bail:
 /*
  * Common code for user and kernel context setup.
  */
-struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
+struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt,
+	int numa)
 {
 	struct hfi1_devdata *dd = ppd->dd;
 	struct hfi1_ctxtdata *rcd;
@@ -226,7 +223,7 @@ struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt)
 		rcd->cnt = 1;
 		rcd->ctxt = ctxt;
 		dd->rcd[ctxt] = rcd;
-		rcd->numa_id = numa_node_id();
+		rcd->numa_id = numa;
 		rcd->rcv_array_groups = dd->rcv_entries.ngroups;
 
 		mutex_init(&rcd->exp_lock);
@@ -973,6 +970,7 @@ void hfi1_free_devdata(struct hfi1_devdata *dd)
 	rcu_barrier(); /* wait for rcu callbacks to complete */
 	free_percpu(dd->int_counter);
 	free_percpu(dd->rcv_limit);
+	hfi1_dev_affinity_free(dd);
 	ib_dealloc_device(&dd->verbs_dev.ibdev);
 }
 
@@ -998,9 +996,6 @@ struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	dd->pport = (struct hfi1_pportdata *)(dd + 1);
 
 	INIT_LIST_HEAD(&dd->list);
-	dd->node = dev_to_node(&pdev->dev);
-	if (dd->node < 0)
-		dd->node = 0;
 	idr_preload(GFP_KERNEL);
 	spin_lock_irqsave(&hfi1_devs_lock, flags);
 
@@ -1469,6 +1464,7 @@ int hfi1_create_rcvhdrq(struct hfi1_devdata *dd, struct hfi1_ctxtdata *rcd)
 {
 	unsigned amt;
 	u64 reg;
+	int numa;
 
 	if (!rcd->rcvhdrq) {
 		dma_addr_t phys_hdrqtail;
@@ -1483,10 +1479,19 @@ int hfi1_create_rcvhdrq(struct hfi1_devdata *dd, struct hfi1_ctxtdata *rcd)
 
 		gfp_flags = (rcd->ctxt >= dd->first_user_ctxt) ?
 			GFP_USER : GFP_KERNEL;
+
+		/* Kernel ctxts always default to device-local NUMA */
+		if (MEM_AFF_DEV_NUMA(RCVHDRQ) ||
+		    rcd->ctxt < dd->first_user_ctxt)
+			numa = dd->node;
+		else
+			numa = rcd->numa_id;
+
+		set_dev_node(&dd->pcidev->dev, numa);
 		rcd->rcvhdrq = dma_zalloc_coherent(
 			&dd->pcidev->dev, amt, &rcd->rcvhdrq_phys,
 			gfp_flags | __GFP_COMP);
-
+		set_dev_node(&dd->pcidev->dev, dd->node);
 		if (!rcd->rcvhdrq) {
 			dd_dev_err(dd,
 				"attempt to allocate %d bytes for ctxt %u rcvhdrq failed\n",
@@ -1494,17 +1499,17 @@ int hfi1_create_rcvhdrq(struct hfi1_devdata *dd, struct hfi1_ctxtdata *rcd)
 			goto bail;
 		}
 
-		/* Event mask is per device now and is in hfi1_devdata */
-		/*if (rcd->ctxt >= dd->first_user_ctxt) {
-			rcd->user_event_mask = vmalloc_user(PAGE_SIZE);
-			if (!rcd->user_event_mask)
-				goto bail_free_hdrq;
-				}*/
-
 		if (HFI1_CAP_KGET_MASK(rcd->flags, DMA_RTAIL)) {
+			if (MEM_AFF_DEV_NUMA(RCVHDRTAIL))
+				numa = dd->node;
+			else
+				numa = rcd->numa_id;
+
+			set_dev_node(&dd->pcidev->dev, numa);
 			rcd->rcvhdrtail_kvaddr = dma_zalloc_coherent(
 				&dd->pcidev->dev, PAGE_SIZE, &phys_hdrqtail,
 				gfp_flags);
+			set_dev_node(&dd->pcidev->dev, dd->node);
 			if (!rcd->rcvhdrtail_kvaddr)
 				goto bail_free;
 			rcd->rcvhdrqtailaddr_phys = phys_hdrqtail;
@@ -1559,7 +1564,7 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 	u32 max_entries, egrtop, alloced_bytes = 0, idx = 0;
 	gfp_t gfp_flags;
 	u16 order;
-	int ret = 0;
+	int ret = 0, numa;
 	u16 round_mtu = roundup_pow_of_two(hfi1_max_mtu);
 
 	/*
@@ -1594,13 +1599,21 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 		rcd->egrbufs.rcvtid_size = max((unsigned long)round_mtu,
 			rounddown_pow_of_two(rcd->egrbufs.size / 8));
 
+	/* Kernel ctxts always default to device-local NUMA */
+	if (MEM_AFF_DEV_NUMA(EAGERBUF) || rcd->ctxt <= dd->first_user_ctxt)
+		numa = dd->node;
+	else
+		numa = rcd->numa_id;
+
 	while (alloced_bytes < rcd->egrbufs.size &&
 	       rcd->egrbufs.alloced < rcd->egrbufs.count) {
+		set_dev_node(&dd->pcidev->dev, numa);
 		rcd->egrbufs.buffers[idx].addr =
 			dma_zalloc_coherent(&dd->pcidev->dev,
 					    rcd->egrbufs.rcvtid_size,
 					    &rcd->egrbufs.buffers[idx].phys,
 					    gfp_flags);
+		set_dev_node(&dd->pcidev->dev, dd->node);
 		if (rcd->egrbufs.buffers[idx].addr) {
 			rcd->egrbufs.buffers[idx].len =
 				rcd->egrbufs.rcvtid_size;

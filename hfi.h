@@ -76,6 +76,7 @@
 #include "mad.h"
 #include "qsfp.h"
 #include "platform_config.h"
+#include "affinity.h"
 
 /* bumped 1 from s/w major version of TrueScale */
 #define HFI1_CHIP_VERS_MAJ 3U
@@ -476,10 +477,11 @@ struct hfi1_sge_state;
 #define CNTR_DISABLED		0x2 /* Disable this counter */
 #define CNTR_32BIT		0x4 /* Simulate 64 bits for this counter */
 #define CNTR_VL			0x8 /* Per VL counter */
+#define CNTR_SDMA		0x10
 #define CNTR_INVALID_VL		-1  /* Specifies invalid VL */
+
 #define CNTR_MODE_W		0x0
 #define CNTR_MODE_R		0x1
-
 /* VLs Supported/Operational */
 #define HFI1_MIN_VLS_SUPPORTED 1
 #define HFI1_MAX_VLS_SUPPORTED 8
@@ -498,6 +500,7 @@ static inline void incr_cntr32(u32 *cntr)
 
 #define MAX_NAME_SIZE 64
 struct hfi1_msix_entry {
+	enum irq_type type;
 	struct msix_entry msix;
 	void *arg;
 	char name[MAX_NAME_SIZE];
@@ -1054,12 +1057,10 @@ struct hfi1_devdata {
 	 * Handlers for outgoing data so that snoop/capture does not
 	 * have to have its hooks in the send path
 	 */
-	int (*process_pio_send)(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
-				u32 hdrwords, struct hfi1_sge_state *ss,
-				u32 len, u32 plen, u32 dwords, u64 pbc);
-	int (*process_dma_send)(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
-				u32 hdrwords, struct hfi1_sge_state *ss,
-				u32 len, u32 plen, u32 dwords, u64 pbc);
+	int (*process_pio_send)(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
+				u64 pbc);
+	int (*process_dma_send)(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
+				u64 pbc);
 	void (*pio_inline_send)(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 				u64 pbc, const void *from, size_t count);
 
@@ -1071,12 +1072,12 @@ struct hfi1_devdata {
 	struct timer_list rcverr_timer;
 	u32 rcv_ovfl_cnt;
 
-	int assigned_node_id;
 	wait_queue_head_t event_queue;
 
 	/* Save the enabled LCB error bits */
 	u64 lcb_err_en;
 	u8 dc_shutdown;
+	struct hfi1_affinity *affinity;
 };
 
 /* 8051 firmware version helper */
@@ -1139,7 +1140,7 @@ void handle_user_interrupt(struct hfi1_ctxtdata *rcd);
 int hfi1_create_rcvhdrq(struct hfi1_devdata *, struct hfi1_ctxtdata *);
 int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *);
 int hfi1_create_ctxts(struct hfi1_devdata *dd);
-struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *, u32);
+struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *, u32, int);
 void hfi1_init_pportdata(struct pci_dev *, struct hfi1_pportdata *,
 			 struct hfi1_devdata *, u8, u8);
 void hfi1_free_ctxtdata(struct hfi1_devdata *, struct hfi1_ctxtdata *);
@@ -1428,12 +1429,10 @@ void reset_link_credits(struct hfi1_devdata *dd);
 void assign_remote_cm_au_table(struct hfi1_devdata *dd, u8 vcu);
 
 int snoop_recv_handler(struct hfi1_packet *packet);
-int snoop_send_dma_handler(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
-			   u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
-			   u32 plen, u32 dwords, u64 pbc);
-int snoop_send_pio_handler(struct hfi1_qp *qp, struct ahg_ib_header *ibhdr,
-			   u32 hdrwords, struct hfi1_sge_state *ss, u32 len,
-			   u32 plen, u32 dwords, u64 pbc);
+int snoop_send_dma_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
+			   u64 pbc);
+int snoop_send_pio_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
+			  u64 pbc);
 void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 			   u64 pbc, const void *from, size_t count);
 
