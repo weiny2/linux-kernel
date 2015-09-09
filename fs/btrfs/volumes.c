@@ -1031,6 +1031,7 @@ static int contains_pending_extent(struct btrfs_trans_handle *trans,
 	struct extent_map *em;
 	struct list_head *search_list = &trans->transaction->pending_chunks;
 	int ret = 0;
+	u64 physical_start = *start;
 
 again:
 	list_for_each_entry(em, search_list, list) {
@@ -1039,15 +1040,31 @@ again:
 
 		map = (struct map_lookup *)em->bdev;
 		for (i = 0; i < map->num_stripes; i++) {
+			u64 end;
+
 			if (map->stripes[i].dev != device)
 				continue;
-			if (map->stripes[i].physical >= *start + len ||
+			if (map->stripes[i].physical >= physical_start + len ||
 			    map->stripes[i].physical + em->orig_block_len <=
-			    *start)
+			    physical_start)
 				continue;
-			*start = map->stripes[i].physical +
-				em->orig_block_len;
-			ret = 1;
+			/*
+			 * Make sure that while processing the pinned list we do
+			 * not override our *start with a lower value, because
+			 * we can have pinned chunks that fall within this
+			 * device hole and that have lower physical addresses
+			 * than the pending chunks we processed before. If we
+			 * do not take this special care we can end up getting
+			 * 2 pending chunks that start at the same physical
+			 * device offsets because the end offset of a pinned
+			 * chunk can be equal to the start offset of some
+			 * pending chunk.
+			 */
+			end = map->stripes[i].physical + em->orig_block_len;
+			if (end > *start) {
+				*start = end;
+				ret = 1;
+			}
 		}
 	}
 	if (search_list == &trans->transaction->pending_chunks) {
@@ -1166,8 +1183,14 @@ again:
 			 */
 			if (contains_pending_extent(trans, device,
 						    &search_start,
-						    hole_size))
-				hole_size = 0;
+						    hole_size)) {
+				if (key.offset >= search_start) {
+					hole_size = key.offset - search_start;
+				} else {
+					WARN_ON_ONCE(1);
+					hole_size = 0;
+				}
+			}
 
 			if (hole_size > max_hole_size) {
 				max_hole_start = search_start;
@@ -2571,6 +2594,20 @@ static int btrfs_relocate_chunk(struct btrfs_root *root,
 	root = root->fs_info->chunk_root;
 	extent_root = root->fs_info->extent_root;
 
+	/*
+	 * Prevent races with automatic removal of unused block groups.
+	 * After we relocate and before we remove the chunk with offset
+	 * chunk_offset, automatic removal of the block group can kick in,
+	 * resulting in a failure when calling btrfs_remove_chunk() below.
+	 *
+	 * Make sure to acquire this mutex before doing a tree search (dev
+	 * or chunk trees) to find chunks. Otherwise the cleaner kthread might
+	 * call btrfs_remove_chunk() (through btrfs_delete_unused_bgs()) after
+	 * we release the path used to search the chunk/dev tree and before
+	 * the current task acquires this mutex and calls us.
+	 */
+	ASSERT(mutex_is_locked(&root->fs_info->delete_unused_bgs_mutex));
+
 	ret = btrfs_can_relocate(extent_root, chunk_offset);
 	if (ret)
 		return -ENOSPC;
@@ -2620,13 +2657,18 @@ again:
 	key.type = BTRFS_CHUNK_ITEM_KEY;
 
 	while (1) {
+		mutex_lock(&root->fs_info->delete_unused_bgs_mutex);
 		ret = btrfs_search_slot(NULL, chunk_root, &key, path, 0, 0);
-		if (ret < 0)
+		if (ret < 0) {
+			mutex_unlock(&root->fs_info->delete_unused_bgs_mutex);
 			goto error;
+		}
 		BUG_ON(ret == 0); /* Corruption */
 
 		ret = btrfs_previous_item(chunk_root, path, key.objectid,
 					  key.type);
+		if (ret)
+			mutex_unlock(&root->fs_info->delete_unused_bgs_mutex);
 		if (ret < 0)
 			goto error;
 		if (ret > 0)
@@ -2649,6 +2691,7 @@ again:
 			else if (ret)
 				BUG();
 		}
+		mutex_unlock(&root->fs_info->delete_unused_bgs_mutex);
 
 		if (found_key.offset == 0)
 			break;
@@ -3086,9 +3129,12 @@ again:
 			goto error;
 		}
 
+		mutex_lock(&fs_info->delete_unused_bgs_mutex);
 		ret = btrfs_search_slot(NULL, chunk_root, &key, path, 0, 0);
-		if (ret < 0)
+		if (ret < 0) {
+			mutex_unlock(&fs_info->delete_unused_bgs_mutex);
 			goto error;
+		}
 
 		/*
 		 * this shouldn't happen, it means the last relocate
@@ -3100,6 +3146,7 @@ again:
 		ret = btrfs_previous_item(chunk_root, path, 0,
 					  BTRFS_CHUNK_ITEM_KEY);
 		if (ret) {
+			mutex_unlock(&fs_info->delete_unused_bgs_mutex);
 			ret = 0;
 			break;
 		}
@@ -3108,8 +3155,10 @@ again:
 		slot = path->slots[0];
 		btrfs_item_key_to_cpu(leaf, &found_key, slot);
 
-		if (found_key.objectid != key.objectid)
+		if (found_key.objectid != key.objectid) {
+			mutex_unlock(&fs_info->delete_unused_bgs_mutex);
 			break;
+		}
 
 		chunk = btrfs_item_ptr(leaf, slot, struct btrfs_chunk);
 
@@ -3122,10 +3171,13 @@ again:
 		ret = should_balance_chunk(chunk_root, leaf, chunk,
 					   found_key.offset);
 		btrfs_release_path(path);
-		if (!ret)
+		if (!ret) {
+			mutex_unlock(&fs_info->delete_unused_bgs_mutex);
 			goto loop;
+		}
 
 		if (counting) {
+			mutex_unlock(&fs_info->delete_unused_bgs_mutex);
 			spin_lock(&fs_info->balance_lock);
 			bctl->stat.expected++;
 			spin_unlock(&fs_info->balance_lock);
@@ -3136,6 +3188,7 @@ again:
 					   chunk_root->root_key.objectid,
 					   found_key.objectid,
 					   found_key.offset);
+		mutex_unlock(&fs_info->delete_unused_bgs_mutex);
 		if (ret && ret != -ENOSPC)
 			goto error;
 		if (ret == -ENOSPC) {
@@ -3878,11 +3931,16 @@ again:
 	key.type = BTRFS_DEV_EXTENT_KEY;
 
 	do {
+		mutex_lock(&root->fs_info->delete_unused_bgs_mutex);
 		ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
-		if (ret < 0)
+		if (ret < 0) {
+			mutex_unlock(&root->fs_info->delete_unused_bgs_mutex);
 			goto done;
+		}
 
 		ret = btrfs_previous_item(root, path, 0, key.type);
+		if (ret)
+			mutex_unlock(&root->fs_info->delete_unused_bgs_mutex);
 		if (ret < 0)
 			goto done;
 		if (ret) {
@@ -3896,6 +3954,7 @@ again:
 		btrfs_item_key_to_cpu(l, &key, path->slots[0]);
 
 		if (key.objectid != device->devid) {
+			mutex_unlock(&root->fs_info->delete_unused_bgs_mutex);
 			btrfs_release_path(path);
 			break;
 		}
@@ -3904,6 +3963,7 @@ again:
 		length = btrfs_dev_extent_length(l, dev_extent);
 
 		if (key.offset + length <= new_size) {
+			mutex_unlock(&root->fs_info->delete_unused_bgs_mutex);
 			btrfs_release_path(path);
 			break;
 		}
@@ -3915,6 +3975,7 @@ again:
 
 		ret = btrfs_relocate_chunk(root, chunk_tree, chunk_objectid,
 					   chunk_offset);
+		mutex_unlock(&root->fs_info->delete_unused_bgs_mutex);
 		if (ret && ret != -ENOSPC)
 			goto done;
 		if (ret == -ENOSPC)

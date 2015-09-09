@@ -339,6 +339,14 @@ static ssize_t fcopy_write(struct file *file, const char __user *buf,
 		fcopy_transaction.state = HVUTIL_USERSPACE_RECV;
 		fcopy_respond_to_host(response);
 		fcopy_transaction.state = HVUTIL_READY;
+		/*
+		 * Make the new state visible to hv_fcopy_onchannelcallback.
+		 * If an interrupt happens before: the other thread
+		 * sets the context, this thread picks it up.
+		 * If an interrupt happpens after: the other threads
+		 * sees the new state and processes its context.
+		 */
+		mb();
 		hv_poll_channel(fcopy_transaction.fcopy_context,
 				hv_fcopy_onchannelcallback);
 	}

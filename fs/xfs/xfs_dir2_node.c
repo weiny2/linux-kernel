@@ -2178,6 +2178,7 @@ xfs_dir2_node_replace(
 	int			error;		/* error return value */
 	int			i;		/* btree level */
 	xfs_ino_t		inum;		/* new inode number */
+	int			ftype;		/* new file type */
 	xfs_dir2_leaf_t		*leaf;		/* leaf structure */
 	xfs_dir2_leaf_entry_t	*lep;		/* leaf entry being changed */
 	int			rval;		/* internal return value */
@@ -2193,7 +2194,12 @@ xfs_dir2_node_replace(
 	state->mp = args->dp->i_mount;
 	state->blocksize = state->mp->m_dirblksize;
 	state->node_ents = state->mp->m_dir_node_ents;
+	/*
+	 * We have to save new inode number and ftype since
+	 * xfs_da3_node_lookup_int() is going to overwrite them
+	 */
 	inum = args->inumber;
+	ftype = args->filetype;
 	/*
 	 * Lookup the entry to change in the btree.
 	 */
@@ -2230,7 +2236,7 @@ xfs_dir2_node_replace(
 		 * Fill in the new inode number and log the entry.
 		 */
 		dep->inumber = cpu_to_be64(inum);
-		xfs_dir3_dirent_put_ftype(state->mp, dep, args->filetype);
+		xfs_dir3_dirent_put_ftype(state->mp, dep, ftype);
 		xfs_dir2_data_log_entry(args->trans, state->extrablk.bp, dep);
 		rval = 0;
 	}

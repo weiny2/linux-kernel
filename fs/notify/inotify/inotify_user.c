@@ -227,14 +227,13 @@ static ssize_t inotify_read(struct file *file, char __user *buf,
 	struct fsnotify_event *kevent;
 	char __user *start;
 	int ret;
+	bool sleep;
 	DEFINE_WAIT(wait);
 
 	start = buf;
 	group = file->private_data;
 
 	while (1) {
-		prepare_to_wait(&group->notification_waitq, &wait, TASK_INTERRUPTIBLE);
-
 		mutex_lock(&group->notification_mutex);
 		kevent = get_one_event(group, count);
 		mutex_unlock(&group->notification_mutex);
@@ -264,10 +263,15 @@ static ssize_t inotify_read(struct file *file, char __user *buf,
 		if (start != buf)
 			break;
 
-		schedule();
+		prepare_to_wait(&group->notification_waitq, &wait, TASK_INTERRUPTIBLE);
+		mutex_lock(&group->notification_mutex);
+		sleep = fsnotify_notify_queue_is_empty(group);
+		mutex_unlock(&group->notification_mutex);
+		if (sleep)
+			schedule();
+		finish_wait(&group->notification_waitq, &wait);
 	}
 
-	finish_wait(&group->notification_waitq, &wait);
 	if (start != buf && ret != -EFAULT)
 		ret = buf - start;
 	return ret;

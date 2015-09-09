@@ -1027,23 +1027,11 @@ generic_file_splice_write(struct pipe_inode_info *pipe, struct file *out,
 
 	splice_from_pipe_begin(&sd);
 	do {
-		size_t tmp_count = sd.total_len;
-		loff_t tmp_pos = sd.pos;
-
 		ret = splice_from_pipe_next(pipe, &sd);
 		if (ret <= 0)
 			break;
 
 		mutex_lock_nested(&inode->i_mutex, I_MUTEX_CHILD);
-		ret = generic_write_checks(out, &tmp_pos, &tmp_count,
-					   S_ISBLK(inode->i_mode));
-		if (ret < 0 || tmp_count == 0) {
-			mutex_unlock(&inode->i_mutex);
-			break;
-		}
-		sd.total_len = tmp_count;
-		WARN_ON(sd.pos != tmp_pos);
-
 		ret = file_remove_suid(out);
 		if (!ret) {
 			ret = file_update_time(out);

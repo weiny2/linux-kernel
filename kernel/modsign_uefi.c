@@ -145,7 +145,7 @@ static int __init load_uefi_certs(void)
 	unsigned long dbsize = 0, dbxsize = 0, moksize = 0, mokxsize = 0;
 	int ignore_db, rc = 0;
 
-	if (!efi_enabled(EFI_BOOT))
+	if (!efi_enabled(EFI_RUNTIME_SERVICES))
 		return 0;
 
 	/* See if the user has setup Ignore DB mode */

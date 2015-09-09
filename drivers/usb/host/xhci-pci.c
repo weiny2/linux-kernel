@@ -234,9 +234,6 @@ static int xhci_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 			HCC_MAX_PSA(xhci->hcc_params) >= 4)
 		hcd->shared_hcd->can_do_streams = 1;
 
-	/* USB-2 and USB-3 roothubs initialized, allow runtime pm suspend */
-	pm_runtime_put_noidle(&dev->dev);
-
 	return 0;
 
 put_usb3_hcd:

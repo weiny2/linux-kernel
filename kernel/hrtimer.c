@@ -1297,6 +1297,9 @@ static void __run_hrtimer(struct hrtimer *timer, ktime_t *now)
 
 #ifdef CONFIG_HIGH_RES_TIMERS
 
+extern enum hrtimer_restart tick_sched_timer(struct hrtimer *timer);
+static DEFINE_PER_CPU(unsigned, softirq_ticks);
+
 /*
  * High resolution timer interrupt
  * Called with interrupts disabled
@@ -1305,7 +1308,7 @@ void hrtimer_interrupt(struct clock_event_device *dev)
 {
 	struct hrtimer_cpu_base *cpu_base = &__get_cpu_var(hrtimer_bases);
 	ktime_t expires_next, now, entry_time, delta;
-	int i, retries = 0;
+	int i, retries = 0, want_interrupt = 0;
 
 	BUG_ON(!cpu_base->hres_active);
 	cpu_base->nr_events++;
@@ -1365,6 +1368,23 @@ retry:
 				break;
 			}
 
+			/*
+			 * Workaround for userspace timer interrupt DoS.
+			 *
+			 * RCU and irq work depend upon the timer interrupt, which
+			 * futex_wait() et al CAN endlessly prevent by flooding us
+			 * with events in the past, thus we continually reprogram,
+			 * which in Xen WILL stall us, and MAY on some bare metal.
+			 * Ensure that the interrupt fires at least once per second.
+			 */
+			if (timer->function == tick_sched_timer) {
+				if (likely(in_irq()))
+					__this_cpu_write(softirq_ticks, 0);
+				else if (__this_cpu_inc_return(softirq_ticks) >= HZ-1) {
+					want_interrupt = 1;
+					break;
+				}
+			}
 			__run_hrtimer(timer, &basenow);
 		}
 	}
@@ -1377,7 +1397,7 @@ retry:
 	raw_spin_unlock(&cpu_base->lock);
 
 	/* Reprogramming necessary ? */
-	if (expires_next.tv64 == KTIME_MAX ||
+	if (expires_next.tv64 == KTIME_MAX || want_interrupt ||
 	    !tick_program_event(expires_next, 0)) {
 		cpu_base->hang_detected = 0;
 		return;

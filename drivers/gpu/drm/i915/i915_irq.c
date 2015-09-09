@@ -36,7 +36,7 @@
 #include "i915_trace.h"
 #include "intel_drv.h"
 
-static const u32 hpd_ibx[] = {
+static const u32 hpd_ibx[HPD_NUM_PINS] = {
 	[HPD_CRT] = SDE_CRT_HOTPLUG,
 	[HPD_SDVO_B] = SDE_SDVOB_HOTPLUG,
 	[HPD_PORT_B] = SDE_PORTB_HOTPLUG,
@@ -44,7 +44,7 @@ static const u32 hpd_ibx[] = {
 	[HPD_PORT_D] = SDE_PORTD_HOTPLUG
 };
 
-static const u32 hpd_cpt[] = {
+static const u32 hpd_cpt[HPD_NUM_PINS] = {
 	[HPD_CRT] = SDE_CRT_HOTPLUG_CPT,
 	[HPD_SDVO_B] = SDE_SDVOB_HOTPLUG_CPT,
 	[HPD_PORT_B] = SDE_PORTB_HOTPLUG_CPT,
@@ -52,7 +52,7 @@ static const u32 hpd_cpt[] = {
 	[HPD_PORT_D] = SDE_PORTD_HOTPLUG_CPT
 };
 
-static const u32 hpd_mask_i915[] = {
+static const u32 hpd_mask_i915[HPD_NUM_PINS] = {
 	[HPD_CRT] = CRT_HOTPLUG_INT_EN,
 	[HPD_SDVO_B] = SDVOB_HOTPLUG_INT_EN,
 	[HPD_SDVO_C] = SDVOC_HOTPLUG_INT_EN,
@@ -61,7 +61,7 @@ static const u32 hpd_mask_i915[] = {
 	[HPD_PORT_D] = PORTD_HOTPLUG_INT_EN
 };
 
-static const u32 hpd_status_gen4[] = {
+static const u32 hpd_status_gen4[HPD_NUM_PINS] = {
 	[HPD_CRT] = CRT_HOTPLUG_INT_STATUS,
 	[HPD_SDVO_B] = SDVOB_HOTPLUG_INT_STATUS_G4X,
 	[HPD_SDVO_C] = SDVOC_HOTPLUG_INT_STATUS_G4X,
@@ -70,7 +70,7 @@ static const u32 hpd_status_gen4[] = {
 	[HPD_PORT_D] = PORTD_HOTPLUG_INT_STATUS
 };
 
-static const u32 hpd_status_i915[] = { /* i915 and valleyview are the same */
+static const u32 hpd_status_i915[HPD_NUM_PINS] = { /* i915 and valleyview are the same */
 	[HPD_CRT] = CRT_HOTPLUG_INT_STATUS,
 	[HPD_SDVO_B] = SDVOB_HOTPLUG_INT_STATUS_I915,
 	[HPD_SDVO_C] = SDVOC_HOTPLUG_INT_STATUS_I915,
@@ -699,10 +699,6 @@ static void i915_hotplug_work_func(struct work_struct *work)
 	bool changed = false;
 	u32 hpd_event_bits;
 
-	/* HPD irq before everything is fully set up. */
-	if (!dev_priv->enable_hotplug_processing)
-		return;
-
 	mutex_lock(&mode_config->mutex);
 	DRM_DEBUG_KMS("running encoder hotplug functions\n");
 
@@ -739,6 +735,12 @@ static void i915_hotplug_work_func(struct work_struct *work)
 	}
 
 	spin_unlock_irqrestore(&dev_priv->irq_lock, irqflags);
+
+	/* HPD irq before everything is fully set up. */
+	if (!dev_priv->enable_hotplug_processing) {
+		mutex_unlock(&mode_config->mutex);
+		return;
+	}
 
 	list_for_each_entry(connector, &mode_config->connector_list, head) {
 		intel_connector = to_intel_connector(connector);
@@ -984,16 +986,16 @@ static void snb_gt_irq_handler(struct drm_device *dev,
 
 static inline void intel_hpd_irq_handler(struct drm_device *dev,
 					 u32 hotplug_trigger,
-					 const u32 *hpd)
+					 const u32 hpd[HPD_NUM_PINS])
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	int i;
 	bool storm_detected = false;
+	unsigned long irqflags;
 
 	if (!hotplug_trigger)
 		return;
-
-	spin_lock(&dev_priv->irq_lock);
+	spin_lock_irqsave(&dev_priv->irq_lock, irqflags);
 	for (i = 1; i < HPD_NUM_PINS; i++) {
 
 		WARN(((hpd[i] & hotplug_trigger) &&
@@ -1025,7 +1027,7 @@ static inline void intel_hpd_irq_handler(struct drm_device *dev,
 
 	if (storm_detected)
 		dev_priv->display.hpd_irq_setup(dev);
-	spin_unlock(&dev_priv->irq_lock);
+	spin_unlock_irqrestore(&dev_priv->irq_lock, irqflags);
 
 	/*
 	 * Our hotplug handler can grab modeset locks (by calling down into the
@@ -1131,8 +1133,9 @@ static irqreturn_t valleyview_irq_handler(int irq, void *arg)
 			u32 hotplug_status = I915_READ(PORT_HOTPLUG_STAT);
 			u32 hotplug_trigger = hotplug_status & HOTPLUG_INT_STATUS_I915;
 
-			DRM_DEBUG_DRIVER("hotplug event received, stat 0x%08x\n",
-					 hotplug_status);
+			if (hotplug_trigger)
+				DRM_DEBUG_DRIVER("hotplug event received, stat 0x%08x\n",
+						 hotplug_status);
 
 			intel_hpd_irq_handler(dev, hotplug_trigger, hpd_status_i915);
 
@@ -2724,8 +2727,9 @@ static irqreturn_t i915_irq_handler(int irq, void *arg)
 			u32 hotplug_status = I915_READ(PORT_HOTPLUG_STAT);
 			u32 hotplug_trigger = hotplug_status & HOTPLUG_INT_STATUS_I915;
 
-			DRM_DEBUG_DRIVER("hotplug event received, stat 0x%08x\n",
-				  hotplug_status);
+			if (hotplug_trigger)
+				DRM_DEBUG_DRIVER("hotplug event received, stat 0x%08x\n",
+						 hotplug_status);
 
 			intel_hpd_irq_handler(dev, hotplug_trigger, hpd_status_i915);
 
@@ -2968,9 +2972,9 @@ static irqreturn_t i965_irq_handler(int irq, void *arg)
 			u32 hotplug_trigger = hotplug_status & (IS_G4X(dev) ?
 								  HOTPLUG_INT_STATUS_G4X :
 								  HOTPLUG_INT_STATUS_I915);
-
-			DRM_DEBUG_DRIVER("hotplug event received, stat 0x%08x\n",
-				  hotplug_status);
+			if (hotplug_trigger)
+				DRM_DEBUG_DRIVER("hotplug event received, stat 0x%08x\n",
+						 hotplug_status);
 
 			intel_hpd_irq_handler(dev, hotplug_trigger,
 					      IS_G4X(dev) ? hpd_status_gen4 : hpd_status_i915);
