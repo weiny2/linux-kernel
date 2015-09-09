@@ -86,9 +86,9 @@ module_param_named(num_rcv_contexts, num_rcv_contexts, uint, S_IRUGO);
 MODULE_PARM_DESC(
 	num_rcv_contexts, "Set max number of user receive contexts to use");
 
-u8 krcvqs[RXE_NUM_DATA_VL];
+uint krcvqs[RXE_NUM_DATA_VL];
 int krcvqsset;
-module_param_array(krcvqs, byte, &krcvqsset, S_IRUGO);
+module_param_array(krcvqs, uint, &krcvqsset, S_IRUGO);
 MODULE_PARM_DESC(krcvqs, "Array of the number of non-control kernel receive queues by VL");
 
 /* computed based on above array */

@@ -1650,7 +1650,7 @@ extern unsigned int hfi1_cu;
 extern unsigned int user_credit_return_threshold;
 extern uint num_rcv_contexts;
 extern unsigned n_krcvqs;
-extern u8 krcvqs[];
+extern uint krcvqs[];
 extern int krcvqsset;
 extern uint kdeth_qp;
 extern uint loopback;
