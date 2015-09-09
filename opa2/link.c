@@ -845,6 +845,17 @@ void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup)
 	}
 }
 
+void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
+			  u8 neigh_reason, u8 rem_reason)
+{
+	if (ppd->local_link_down_reason.latest == 0 &&
+	    ppd->neigh_link_down_reason.latest == 0) {
+		ppd->local_link_down_reason.latest = lcl_reason;
+		ppd->neigh_link_down_reason.latest = neigh_reason;
+		ppd->remote_link_down_reason = rem_reason;
+	}
+}
+
 /*
 	reset 8051
  */
