@@ -678,6 +678,12 @@ int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
 int opa_ib_rkey_ok(struct opa_ib_qp *qp, struct ib_sge *sge,
 		   u32 len, u64 vaddr, u32 rkey, int acc);
 struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc);
+struct ib_mr *opa_ib_reg_phys_mr(struct ib_pd *pd,
+				 struct ib_phys_buf *buffer_list,
+				 int num_phys_buf, int acc, u64 *iova_start);
+struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
+				 u64 virt_addr, int mr_access_flags,
+				 struct ib_udata *udata);
 int opa_ib_dereg_mr(struct ib_mr *ibmr);
 int opa_ib_fast_reg_mr(struct opa_ib_qp *qp, struct ib_send_wr *wr);
 void opa_ib_release_mmap_info(struct kref *ref);

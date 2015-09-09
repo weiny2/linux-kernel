@@ -79,6 +79,60 @@ struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc)
 }
 
 /**
+ * opa_ib_reg_phys_mr - register a physical memory region
+ * @pd: protection domain for this memory region
+ * @buffer_list: pointer to the list of physical buffers to register
+ * @num_phys_buf: the number of physical buffers to register
+ * @iova_start: the starting address passed over IB which maps to this MR
+ *
+ * Return: the memory region on success, otherwise returns an errno.
+ */
+struct ib_mr *opa_ib_reg_phys_mr(struct ib_pd *pd,
+				 struct ib_phys_buf *buffer_list,
+				 int num_phys_buf, int acc, u64 *iova_start)
+{
+	struct opa_ib_mr *mr = NULL;
+	struct ib_mr *ret;
+
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
+	if (!mr)
+		return ERR_PTR(-ENOMEM);
+	/* TODO lkey */
+
+	ret = &mr->ibmr;
+	return ret;
+}
+
+/**
+ * opa_ib_reg_user_mr - register a userspace memory region
+ * @pd: protection domain for this memory region
+ * @start: starting userspace address
+ * @length: length of region to register
+ * @mr_access_flags: access flags for this memory region
+ * @udata: unused by the driver
+ *
+ * Return: the memory region on success, otherwise returns an errno.
+ */
+struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
+				 u64 virt_addr, int mr_access_flags,
+				 struct ib_udata *udata)
+{
+	struct opa_ib_mr *mr = NULL;
+	struct ib_mr *ret;
+
+	if (length == 0)
+		return ERR_PTR(-EINVAL);
+
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
+	if (!mr)
+		return ERR_PTR(-ENOMEM);
+	/* TODO lkey */
+
+	ret = &mr->ibmr;
+	return ret;
+}
+
+/**
  * opa_ib_dereg_mr - unregister and free a memory region
  * @ibmr: the memory region to free
  *

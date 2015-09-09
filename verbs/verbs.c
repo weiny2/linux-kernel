@@ -393,6 +393,8 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	ibdev->poll_cq = opa_ib_poll_cq;
 	ibdev->req_notify_cq = opa_ib_req_notify_cq;
 	ibdev->get_dma_mr = opa_ib_get_dma_mr;
+	ibdev->reg_phys_mr = opa_ib_reg_phys_mr;
+	ibdev->reg_user_mr = opa_ib_reg_user_mr;
 	ibdev->dereg_mr = opa_ib_dereg_mr;
 	ibdev->process_mad = opa_ib_process_mad;
 	ibdev->alloc_ucontext = opa_ib_alloc_ucontext;
@@ -406,8 +408,6 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	ibdev->query_srq = opa_ib_query_srq;
 	ibdev->destroy_srq = opa_ib_destroy_srq;
 	ibdev->post_srq_recv = opa_ib_post_srq_receive;
-	ibdev->reg_phys_mr = opa_ib_reg_phys_mr;
-	ibdev->reg_user_mr = opa_ib_reg_user_mr;
 	ibdev->alloc_fast_reg_mr = opa_ib_alloc_fast_reg_mr;
 	ibdev->alloc_fast_reg_page_list = opa_ib_alloc_fast_reg_page_list;
 	ibdev->free_fast_reg_page_list = opa_ib_free_fast_reg_page_list;
