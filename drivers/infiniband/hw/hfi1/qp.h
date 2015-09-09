@@ -265,7 +265,7 @@ static inline void _hfi1_schedule_send(struct hfi1_qp *qp)
 	iowait_schedule(&qp->s_iowait, ppd->hfi1_wq,
 		qp->s_sde ?
 			qp->s_sde->cpu :
-			cpumask_first(cpumask_of_node(dd->assigned_node_id)));
+			cpumask_first(cpumask_of_node(dd->node)));
 }
 
 /**
