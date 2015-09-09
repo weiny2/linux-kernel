@@ -771,12 +771,6 @@ u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd)
 	return pstate;
 }
 
-void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
-			  u8 neigh_reason, u8 rem_reason)
-{
-	/* FXRTODO: To be implemented as part of LNI */
-}
-
 /*
  * Send an idle SMA message.
  *

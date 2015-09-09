@@ -116,6 +116,8 @@ u64 read_fzc_csr(const struct hfi_pportdata *ppd, u32 offset);
 void write_fzc_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
 u64 read_8051_csr(const struct hfi_pportdata *ppd, u32 offset);
 void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
+void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
+			  u8 neigh_reason, u8 rem_reason);
 void hfi_8051_reset(const struct hfi_pportdata *ppd);
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
 int hfi_start_link(struct hfi_pportdata *ppd);
