@@ -1302,7 +1302,7 @@ static u64 dev_access_u32_csr(const struct cntr_entry *entry,
 	if (entry->flags & CNTR_SDMA) {
 		if (vl == CNTR_INVALID_VL)
 			return 0;
-			csr += 0x100 * vl;
+		csr += 0x100 * vl;
 	} else {
 		if (vl != CNTR_INVALID_VL)
 			return 0;
@@ -1771,8 +1771,9 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 [C_SW_SEND_SCHED] = CNTR_ELEM("SendSched", 0, 0, CNTR_NORMAL,
 			    access_sw_send_schedule),
 [C_SDMA_DESC_FETCHED_CNT] = CNTR_ELEM("SDEDscFdCn",
-				SEND_DMA_DESC_FETCHED_CNT, 0, CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
-				dev_access_u32_csr),
+					SEND_DMA_DESC_FETCHED_CNT, 0,
+					CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
+					dev_access_u32_csr),
 [C_SDMA_INT_CNT] = CNTR_ELEM("SDMAInt", 0, 0,
 				CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
 				access_sde_int_cnt),
