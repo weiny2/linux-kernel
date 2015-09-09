@@ -12,6 +12,7 @@ rpm_test=0
 quick_test=1
 default_test=1
 mgmt_test=1
+perf_test=1
 snoop_test=1
 
 # Simics specific
@@ -299,7 +300,13 @@ function do_lopri_tests {
 	if [ $mgmt_test -eq 1 ]; then
 		run_cmd ./harness.py --type mgmt $std_args
 	else
-		echo "Skipping mgmt tetss"
+		echo "Skipping mgmt tests"
+	fi
+
+	if [ $perf_test -eq 1 ]; then
+		run_cmd ./harness.py --type perf $std_args
+	else
+		echo "Skipping perf tests"
 	fi
 
 	run_cmd_fatal cd $test_dir

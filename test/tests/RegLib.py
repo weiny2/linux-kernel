@@ -292,7 +292,7 @@ class HostInfo:
             time.sleep(timeout)
         return False #if we get to here it is an error
 
-    def send_ssh(self, cmd, buffered=1, timeout=0, run_as_root=False):
+    def send_ssh(self, cmd, buffered=1, timeout=0, run_as_root=False, use_tty=False):
         """ Send an SSH command. We may need to add a timeout mechanism
             buffered mode will save output and return it. Non buffered mode
             will display the output on the screen and only return a status.
@@ -333,8 +333,10 @@ class HostInfo:
         cmdline = ""
         if run_as_root == True:
             cmdline = "ssh -l root " + self.dns_name + " "
-        else:
+        elif use_tty == True:
             cmdline = "ssh -t " + self.dns_name + " "
+        else:
+            cmdline = "ssh " + self.dns_name + " "
 
         cmdline = cmdline + " -p " + self.port
         cmdline = cmdline + " " + opts + " " + cmd;

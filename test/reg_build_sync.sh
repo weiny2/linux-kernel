@@ -3,15 +3,19 @@
 # Update git repos and do builds. Then update yum repos in KoP
 # We no longer build PSM and DIAGs from repo, get them from IFS build
 
+cobbler="10.228.211.254"
+
 vers=`cat /etc/redhat-release`
 if [[ $vers = "Red Hat Enterprise Linux Server release 7.0 (Maipo)" ]]; then
 	RHEL=7
 	driver=/nfs/sc/disks/fabric_work/$USER/wfr/weekly-reg/wfr-driver7
 	yum_dir=/nfs/site/proj/ftp/wfr_yum7/next
+	repo_name="wfr-next-rhel7"
 elif [[ $vers = "Red Hat Enterprise Linux Server release 6.3 (Santiago)" ]] ; then
 	RHEL=6
 	driver=/nfs/sc/disks/fabric_work/$USER/wfr/weekly-reg/wfr-driver
 	yum_dir=/nfs/site/proj/ftp/wfr_yum/next
+	repo_name="wfr-next"
 else
 	echo "Could not determine RHEL version"
 	exit 1
@@ -24,6 +28,7 @@ yum_repo="$yum_server:$yum_dir"
 cur_dir=$PWD
 
 echo "Checking for yum updates for ifs-kernel-devel"
+sudo yum clean all
 sudo yum update ifs-kernel-updates-devel
 
 rm -f /nfs/sc/disks/fabric_work/$USER/rpmbuild/RPMS/x86_64/hfi1*0.9*
@@ -72,4 +77,12 @@ cd $cur_dir
 
 echo "Versions Updated:"
 echo "Driver: $driver_drop"
+
+# Now run reposync
+echo "Running repo sync for $repo_name on $cobbler"
+ssh -t $cobbler "sudo cobbler reposync --only=$repo_name"
+if [ $? -ne 0 ]; then
+	echo "Could not sync $repo"
+	exit 1
+fi
 

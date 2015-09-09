@@ -52,7 +52,7 @@ def test_mpi(host1, host2, temp_dir, perf_test_dir):
     # chance is very slim and not really even worth dealing with
     today = date.today()
     output_dir="OUTPUT-%s" % today.strftime("%m-%d-%y")
-    (ret) = host1.send_ssh(mpi_cmd, buffered=0)
+    (ret) = host1.send_ssh(mpi_cmd, buffered=0, use_tty=True)
     if ret:
         RegLib.test_fail("MPI test failed, bailing and leaving logs")
 
@@ -114,7 +114,7 @@ def test_ipostl(host1, host2, temp_dir, perf_test_dir):
     test_cmd = "cd %s && ./run-ipostl.sh %s %s %s %s" % (ipostl_dir, host2.get_name(), host2_ib, host1_ib, log_dir)
 
     RegLib.test_log(0, "Running IPoSTL test with %s" % test_cmd)
-    (ret) = host1.send_ssh(test_cmd, buffered=0)
+    (ret) = host1.send_ssh(test_cmd, buffered=0, use_tty=True)
     if (ret):
         RegLib.test_fail("IPoSTL test failed!")
 
@@ -139,7 +139,7 @@ def test_verbs(host1, host2, temp_dir, perf_test_dir):
     test_cmd = "cd %s && ./run-Verbs-LZ-1QP-Tests.sh %s %s" % (verbs_test_dir, host2_ib, log_dir)
 
     RegLib.test_log(0, "Running verbs test with  %s" % test_cmd)
-    (ret) = host1.send_ssh(test_cmd, buffered = 0)
+    (ret) = host1.send_ssh(test_cmd, buffered = 0, use_tty=True)
     if (ret):
         RegLib.test_fail("Verbs Test failed to run")
 
