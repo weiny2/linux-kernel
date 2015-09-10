@@ -96,7 +96,9 @@ typedef struct netif_st {
 	struct timer_list tx_queue_timeout;
 
 	/* Statistics */
-	unsigned long nr_copied_skbs;
+	unsigned long nr_copied_rx_skbs;
+	unsigned long nr_copied_tx_skbs;
+	unsigned long nr_coalesced_skbs;
 	unsigned long rx_gso_csum_fixups;
 
 	/* Miscellaneous private stuff. */
@@ -233,8 +235,8 @@ typedef unsigned int pending_ring_idx_t;
 struct netbk_rx_meta {
 	skb_frag_t frag;
 	u16 id;
-	u8 copy:2;
-	u8 tail:1;
+	u8 copy;
+	u8 tail;
 };
 
 struct netbk_tx_pending_inuse {
@@ -283,7 +285,14 @@ struct xen_netbk {
 		unsigned int alloc_index;
 		struct multicall_entry mcl[NET_RX_RING_SIZE+3];
 		struct mmu_update mmu[NET_RX_RING_SIZE];
-		struct gnttab_copy grant_copy_op[2 * NET_RX_RING_SIZE];
+		/*
+		 * An skb may have a maximal number of frags but still be
+		 * small in overall size. Thus the worst case number of copy
+		 * operations is one more (for the head) than MAX_SKB_FRAGS
+		 * per ring slot.
+		 */
+		struct gnttab_copy grant_copy_op[(MAX_SKB_FRAGS + 1) *
+						 NET_RX_RING_SIZE];
 		struct gnttab_transfer grant_trans_op;
 		struct netbk_rx_meta meta[NET_RX_RING_SIZE];
 		unsigned long mfn_list[MAX_MFN_ALLOC];

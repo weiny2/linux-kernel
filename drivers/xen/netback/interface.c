@@ -148,7 +148,9 @@ static const struct netif_stat {
 	char name[ETH_GSTRING_LEN];
 	u16 offset;
 } netbk_stats[] = {
-	{ "copied_skbs", offsetof(netif_t, nr_copied_skbs) / sizeof(long) },
+	{ "copied_rx_skbs", offsetof(netif_t, nr_copied_rx_skbs) / sizeof(long) },
+	{ "copied_tx_skbs", offsetof(netif_t, nr_copied_tx_skbs) / sizeof(long) },
+	{ "coalesced_skbs", offsetof(netif_t, nr_coalesced_skbs) / sizeof(long) },
 	{ "rx_gso_csum_fixups", offsetof(netif_t, rx_gso_csum_fixups) / sizeof(long) },
 };
 
