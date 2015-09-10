@@ -1311,37 +1311,41 @@ static u64 dev_access_u32_csr(const struct cntr_entry *entry,
 }
 
 static u64 access_sde_err_cnt(const struct cntr_entry *entry,
-			void *context, int vl, int mode, u64 data)
+			void *context, int idx, int mode, u64 data)
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
-	struct sdma_engine *sde = &dd->per_sdma[vl];
 
-	return sde->err_cnt;
+	if (dd->per_sdma && idx < dd->num_sdma)
+		return dd->per_sdma[idx].err_cnt;
+	return 0;
 }
 
 static u64 access_sde_int_cnt(const struct cntr_entry *entry,
-			void *context, int vl, int mode, u64 data)
+			void *context, int idx, int mode, u64 data)
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
-	struct sdma_engine *sde = &dd->per_sdma[vl];
 
-	return sde->sdma_int_cnt;
+	if (dd->per_sdma && idx < dd->num_sdma)
+		return dd->per_sdma[idx].sdma_int_cnt;
+	return 0;
 }
 static u64 access_sde_idle_int_cnt(const struct cntr_entry *entry,
-			void *context, int vl, int mode, u64 data)
+			void *context, int idx, int mode, u64 data)
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
-	struct sdma_engine *sde = &dd->per_sdma[vl];
 
-	return sde->idle_int_cnt;
+	if (dd->per_sdma && idx < dd->num_sdma)
+		return dd->per_sdma[idx].idle_int_cnt;
+	return 0;
 }
 static u64 access_sde_progress_int_cnt(const struct cntr_entry *entry,
-			void *context, int vl, int mode, u64 data)
+			void *context, int idx, int mode, u64 data)
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
-	struct sdma_engine *sde = &dd->per_sdma[vl];
 
-	return sde->progress_int_cnt;
+	if (dd->per_sdma && idx < dd->num_sdma)
+		return dd->per_sdma[idx].progress_int_cnt;
+	return 0;
 }
 static u64 dev_access_u64_csr(const struct cntr_entry *entry, void *context,
 			    int vl, int mode, u64 data)
@@ -7940,7 +7944,7 @@ u32 hfi1_read_cntrs(struct hfi1_devdata *dd, loff_t pos, char **namep,
 				} else if (entry->flags & CNTR_SDMA) {
 					hfi1_cdbg(CNTR,
 					"\t Per SDMA Engine\n");
-					for (j = 0; j < TXE_NUM_SDMA_ENGINES;
+					for (j = 0; j < dd->chip_sdma_engines;
 						j++) {
 						val = entry->rw_cntr(entry, dd,
 							j, CNTR_MODE_R, 0);
@@ -8355,9 +8359,11 @@ static int init_cntrs(struct hfi1_devdata *dd)
 				index++;
 			}
 		} else if (dev_cntrs[i].flags & CNTR_SDMA) {
-			hfi1_dbg_early("\tProcessing per SDE counters\n");
+			hfi1_dbg_early(
+				"\tProcessing per SDE counters chip engines %u\n",
+				dd->chip_sdma_engines);
 			dev_cntrs[i].offset = index;
-			for (j = 0; j < TXE_NUM_SDMA_ENGINES; j++) {
+			for (j = 0; j < dd->chip_sdma_engines; j++) {
 				memset(name, '\0', C_MAX_NAME);
 				snprintf(name, C_MAX_NAME, "%s%d",
 					dev_cntrs[i].name, j);
