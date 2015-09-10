@@ -1094,6 +1094,7 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		spin_lock_init(&ppd->crk8051_lock);
 #endif
 		ppd->crk8051_timed_out = 0;
+		ppd->host_link_state = HLS_DN_OFFLINE;
 		hfi_8051_reset(ppd);
 		hfi_start_link(ppd);
 		if (opafm_disable) {
