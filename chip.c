@@ -122,6 +122,7 @@ struct flag_table {
 #define SEC_SPC_FREEZE		0x8	/* per-HFI only */
 
 #define MIN_KERNEL_KCTXTS         2
+#define FIRST_KERNEL_KCTXT        1
 #define NUM_MAP_REGS             32
 
 /* Bit offset into the GUID which carries HFI id information */
@@ -1301,7 +1302,7 @@ static u64 dev_access_u32_csr(const struct cntr_entry *entry,
 	if (entry->flags & CNTR_SDMA) {
 		if (vl == CNTR_INVALID_VL)
 			return 0;
-			csr += 0x100 * vl;
+		csr += 0x100 * vl;
 	} else {
 		if (vl != CNTR_INVALID_VL)
 			return 0;
@@ -1310,37 +1311,41 @@ static u64 dev_access_u32_csr(const struct cntr_entry *entry,
 }
 
 static u64 access_sde_err_cnt(const struct cntr_entry *entry,
-			void *context, int vl, int mode, u64 data)
+			void *context, int idx, int mode, u64 data)
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
-	struct sdma_engine *sde = &dd->per_sdma[vl];
 
-	return sde->err_cnt;
+	if (dd->per_sdma && idx < dd->num_sdma)
+		return dd->per_sdma[idx].err_cnt;
+	return 0;
 }
 
 static u64 access_sde_int_cnt(const struct cntr_entry *entry,
-			void *context, int vl, int mode, u64 data)
+			void *context, int idx, int mode, u64 data)
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
-	struct sdma_engine *sde = &dd->per_sdma[vl];
 
-	return sde->sdma_int_cnt;
+	if (dd->per_sdma && idx < dd->num_sdma)
+		return dd->per_sdma[idx].sdma_int_cnt;
+	return 0;
 }
 static u64 access_sde_idle_int_cnt(const struct cntr_entry *entry,
-			void *context, int vl, int mode, u64 data)
+			void *context, int idx, int mode, u64 data)
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
-	struct sdma_engine *sde = &dd->per_sdma[vl];
 
-	return sde->idle_int_cnt;
+	if (dd->per_sdma && idx < dd->num_sdma)
+		return dd->per_sdma[idx].idle_int_cnt;
+	return 0;
 }
 static u64 access_sde_progress_int_cnt(const struct cntr_entry *entry,
-			void *context, int vl, int mode, u64 data)
+			void *context, int idx, int mode, u64 data)
 {
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
-	struct sdma_engine *sde = &dd->per_sdma[vl];
 
-	return sde->progress_int_cnt;
+	if (dd->per_sdma && idx < dd->num_sdma)
+		return dd->per_sdma[idx].progress_int_cnt;
+	return 0;
 }
 static u64 dev_access_u64_csr(const struct cntr_entry *entry, void *context,
 			    int vl, int mode, u64 data)
@@ -1770,8 +1775,9 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 [C_SW_SEND_SCHED] = CNTR_ELEM("SendSched", 0, 0, CNTR_NORMAL,
 			    access_sw_send_schedule),
 [C_SDMA_DESC_FETCHED_CNT] = CNTR_ELEM("SDEDscFdCn",
-				SEND_DMA_DESC_FETCHED_CNT, 0, CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
-				dev_access_u32_csr),
+					SEND_DMA_DESC_FETCHED_CNT, 0,
+					CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
+					dev_access_u32_csr),
 [C_SDMA_INT_CNT] = CNTR_ELEM("SDMAInt", 0, 0,
 				CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
 				access_sde_int_cnt),
@@ -7938,7 +7944,7 @@ u32 hfi1_read_cntrs(struct hfi1_devdata *dd, loff_t pos, char **namep,
 				} else if (entry->flags & CNTR_SDMA) {
 					hfi1_cdbg(CNTR,
 					"\t Per SDMA Engine\n");
-					for (j = 0; j < TXE_NUM_SDMA_ENGINES;
+					for (j = 0; j < dd->chip_sdma_engines;
 						j++) {
 						val = entry->rw_cntr(entry, dd,
 							j, CNTR_MODE_R, 0);
@@ -8353,9 +8359,11 @@ static int init_cntrs(struct hfi1_devdata *dd)
 				index++;
 			}
 		} else if (dev_cntrs[i].flags & CNTR_SDMA) {
-			hfi1_dbg_early("\tProcessing per SDE counters\n");
+			hfi1_dbg_early(
+				"\tProcessing per SDE counters chip engines %u\n",
+				dd->chip_sdma_engines);
 			dev_cntrs[i].offset = index;
-			for (j = 0; j < TXE_NUM_SDMA_ENGINES; j++) {
+			for (j = 0; j < dd->chip_sdma_engines; j++) {
 				memset(name, '\0', C_MAX_NAME);
 				snprintf(name, C_MAX_NAME, "%s%d",
 					dev_cntrs[i].name, j);
@@ -9178,7 +9186,14 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 	 * - Context 1 - default context
 	 */
 	if (n_krcvqs)
-		num_kernel_contexts = n_krcvqs + MIN_KERNEL_KCTXTS;
+		/*
+		 * Don't count context 0 in n_krcvqs since
+		 * is isn't used for normal verbs traffic.
+		 *
+		 * krcvqs will reflect number of kernel
+		 * receive contexts above 0.
+		 */
+		num_kernel_contexts = n_krcvqs + MIN_KERNEL_KCTXTS - 1;
 	else
 		num_kernel_contexts = num_online_nodes();
 	num_kernel_contexts =
@@ -10030,16 +10045,6 @@ static void init_qpmap_table(struct hfi1_devdata *dd,
 	u64 ctxt = first_ctxt;
 
 	for (i = 0; i < 256;) {
-		/*
-		 * Do not assign control context, unless that is the only
-		 * available context.
-		 */
-		if ((ctxt == HFI1_CTRL_CTXT) && (first_ctxt != last_ctxt)) {
-			ctxt++;
-			if (ctxt > last_ctxt)
-				ctxt = first_ctxt;
-			continue;
-		}
 		reg |= ctxt << (8 * (i % 8));
 		i++;
 		ctxt++;
@@ -10152,17 +10157,13 @@ static void init_qos(struct hfi1_devdata *dd, u32 first_ctxt)
 	/* Enable RSM */
 	add_rcvctrl(dd, RCV_CTRL_RCV_RSM_ENABLE_SMASK);
 	kfree(rsmmap);
-	/* map everything else to minimum allocated kernel contexts */
-	init_qpmap_table(dd, 0,
-		 min_t(u8, (dd->n_krcv_queues - 1), (MIN_KERNEL_KCTXTS - 1)));
+	/* map everything else to first context */
+	init_qpmap_table(dd, FIRST_KERNEL_KCTXT, MIN_KERNEL_KCTXTS - 1);
 	dd->qos_shift = n + 1;
 	return;
 bail:
 	dd->qos_shift = 1;
-	init_qpmap_table(
-		dd,
-		dd->n_krcv_queues > MIN_KERNEL_KCTXTS ? MIN_KERNEL_KCTXTS : 0,
-		dd->n_krcv_queues - 1);
+	init_qpmap_table(dd, FIRST_KERNEL_KCTXT, dd->n_krcv_queues - 1);
 }
 
 static void init_rxe(struct hfi1_devdata *dd)
