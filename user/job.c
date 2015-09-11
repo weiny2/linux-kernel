@@ -88,9 +88,12 @@ void hfi_job_init(struct hfi_userdata *ud)
 			ud->ctx.auth_mask = job_info->ctx.auth_mask;
 			memcpy(ud->ctx.auth_uid, job_info->ctx.auth_uid,
 			       sizeof(ud->ctx.auth_uid));
-			pr_info("joined PID group [%u - %u] tag (%u)\n",
+			/* replace default UID (used for TPID_CAM if PIDs virtualized) */
+			if (ud->ctx.auth_mask & 0x1)
+				ud->ctx.ptl_uid = ud->ctx.auth_uid[0];
+			pr_info("joined PID group [%u - %u] tag (%u) UID %d\n",
 				ud->ctx.pid_base, ud->ctx.pid_base + ud->ctx.pid_count - 1,
-				job_info->sid);
+				job_info->sid, ud->ctx.ptl_uid);
 		} else {
 			pr_info("skipped PID group [%u - %u] tag (%u,%u) != (%u,%u)\n",
 				ud->ctx.pid_base, ud->ctx.pid_base + ud->ctx.pid_count - 1,
@@ -129,7 +132,19 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 
 	BUG_ON(!capable(CAP_SYS_ADMIN));
 
-	ret = ops->ctx_reserve(&ud->ctx, &pid_base, count, pid_align);
+	/*
+	 * Store Authentication PTL_UIDs from resource manager, set here
+	 * before reserving PIDs
+	 */
+	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
+		if (job_setup->auth_uid[i]) {
+			ud->ctx.auth_mask |= (1 << i);
+			ud->ctx.auth_uid[i] = job_setup->auth_uid[i];
+		}
+	}
+
+	ret = ops->ctx_reserve(&ud->ctx, &pid_base, count, pid_align,
+			       job_setup->pid_mode);
 	if (ret)
 		return ret;
 	ud->ctx.pid_base = pid_base;
@@ -143,13 +158,6 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 	ud->ctx.pid_total = job_setup->pid_total;
 	ud->ctx.lid_offset = job_setup->lid_offset;
 	ud->ctx.lid_count = job_setup->lid_count;
-
-	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
-		if (job_setup->auth_uid[i]) {
-			ud->ctx.auth_mask |= (1 << i);
-			ud->ctx.auth_uid[i] = job_setup->auth_uid[i];
-		}
-	}
 
 	/* insert into job_list (active job state) */
 	ud->job_res_mode = job_setup->res_mode;

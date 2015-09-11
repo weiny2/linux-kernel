@@ -91,8 +91,6 @@
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
 
-#define DLID_TABLE_SIZE (64 * 1024) /* 64k */
-
 /* TODO: delete module parameter when possible */
 static uint force_loopback;
 module_param(force_loopback, uint, S_IRUGO);
@@ -1156,6 +1154,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 
 	idr_destroy(&dd->cq_pair);
 	idr_destroy(&dd->ptl_user);
+	idr_destroy(&dd->ptl_tpid);
 	rcu_barrier(); /* wait for rcu callbacks to complete */
 
 	pci_set_drvdata(dd->pcidev, NULL);
@@ -1550,6 +1549,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* For Portals PID and CQ assignments */
 	idr_init(&dd->ptl_user);
 	spin_lock_init(&dd->ptl_lock);
+	idr_init(&dd->ptl_tpid);
 	idr_init(&dd->cq_pair);
 	spin_lock_init(&dd->cq_lock);
 	spin_lock_init(&dd->priv_tx_cq_lock);
@@ -1877,6 +1877,22 @@ void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 	}
 }
 
+void hfi_tpid_enable(struct hfi_devdata *dd, u8 idx, u16 base, u32 ptl_uid)
+{
+	RXHP_CFG_VTPID_CAM_t tpid;
+
+	tpid.val = 0;
+	tpid.field.valid = 1;
+	tpid.field.uid = ptl_uid;
+	tpid.field.tpid_base = base;
+	write_csr(dd, FXR_RXHP_CFG_VTPID_CAM + (8 * idx), tpid.val);
+}
+
+void hfi_tpid_disable(struct hfi_devdata *dd, u8 idx)
+{
+	write_csr(dd, FXR_RXHP_CFG_VTPID_CAM + (8 * idx), 0);
+}
+
 /*
   update DLID relocation table
   assume granularity = 1 for now
@@ -1890,9 +1906,9 @@ hfi_update_dlid_relocation_table(struct hfi_ctx *ctx,
 		(TXCID_CFG_DLID_RT_t *)dlid_assign->dlid_entries_ptr;
 	u32 offset;
 
-	if (dlid_assign->dlid_base >= DLID_TABLE_SIZE)
+	if (dlid_assign->dlid_base >= HFI_DLID_TABLE_SIZE)
 		return -EINVAL;
-	if (dlid_assign->dlid_base + dlid_assign->count > DLID_TABLE_SIZE)
+	if (dlid_assign->dlid_base + dlid_assign->count > HFI_DLID_TABLE_SIZE)
 		return -EINVAL;
 
 	for (offset = dlid_assign->dlid_base * sizeof(*p);
@@ -1919,9 +1935,9 @@ hfi_reset_dlid_relocation_table(struct hfi_ctx *ctx, u32 dlid_base, u32 count)
 	struct hfi_devdata *dd = ctx->devdata;
 	u32 offset;
 
-	if (dlid_base >= DLID_TABLE_SIZE)
+	if (dlid_base >= HFI_DLID_TABLE_SIZE)
 		return -EINVAL;
-	if (dlid_base + count > DLID_TABLE_SIZE)
+	if (dlid_base + count > HFI_DLID_TABLE_SIZE)
 		return -EINVAL;
 
 	for (offset = dlid_base * sizeof(TXCID_CFG_DLID_RT_t);

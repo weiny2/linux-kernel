@@ -96,6 +96,8 @@ enum {
 #define HFI_MAX_VLS		32
 #define HFI_PID_SYSTEM		0
 #define HFI_PID_BYPASS_BASE	0xF00
+#define HFI_TPID_ENTRIES	16
+#define HFI_DLID_TABLE_SIZE		(64 * 1024)
 
 /* FXRTODO: based on 16bit (9B) LID */
 #define HFI_MULTICAST_LID_BASE	0xC000
@@ -595,6 +597,7 @@ struct hfi_devdata {
 
 	/* Device Portals State */
 	struct idr ptl_user;
+	struct idr ptl_tpid;
 	unsigned long ptl_map[HFI_NUM_PIDS / BITS_PER_LONG];
 	u16 vl15_pid;
 	u16 bypass_pid;
@@ -723,6 +726,8 @@ void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid);
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
 void hfi_eq_cache_invalidate(struct hfi_devdata *dd, u16 ptl_pid);
+void hfi_tpid_enable(struct hfi_devdata *dd, u8 idx, u16 base, u32 ptl_uid);
+void hfi_tpid_disable(struct hfi_devdata *dd, u8 idx);
 
 /* OPA core functions */
 int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx);
@@ -741,7 +746,8 @@ int hfi_cteq_wait_single(struct hfi_ctx *ctx, u16 eq_mode, u16 ev_idx,
 			 long timeout);
 int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
 void hfi_ctxt_cleanup(struct hfi_ctx *ctx);
-int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align);
+int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
+		     u16 mode);
 int hfi_get_hw_limits(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl);
 void hfi_ctxt_unreserve(struct hfi_ctx *ctx);
 int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int token, u16 ctxt, void **addr,
