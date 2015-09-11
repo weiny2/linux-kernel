@@ -437,11 +437,11 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 						ud->ctx.pid, ud->ctx.unexpected_size);
 		ctxt_attach.trig_op_token = HFI_MMAP_PSB_TOKEN(TOK_TRIG_OP,
 						ud->ctx.pid, ud->ctx.trig_op_size);
-
 		ctxt_attach.pid = ud->ctx.pid;
 		ctxt_attach.pid_base = ud->ctx.pid_base;
 		ctxt_attach.pid_count = ud->ctx.pid_count;
 		ctxt_attach.pid_mode = ud->ctx.mode;
+		ctxt_attach.uid = ud->ctx.ptl_uid;
 		break;
 	case HFI_CMD_CTXT_DETACH:
 		/* release our assigned PID */

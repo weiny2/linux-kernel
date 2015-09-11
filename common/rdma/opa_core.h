@@ -84,6 +84,7 @@ struct opa_ib_qp;
  * @le_me_size: Size of ME/LE buffer
  * @unexpected_size: Size of unexpected header buffer
  * @trig_op_size: Size of triggered ops buffer
+ * @tpid_idx: Index into virtual target PID CAM
  * @allow_phys_dlid: Physical LIDs allowed in commands (vs virtual LIDs)
  * @auth_mask: Mask of enabled Protection Domains in @auth_uid
  * @auth_uid: Table of allowed Protection Domains for Command Queues
@@ -130,6 +131,7 @@ struct hfi_ctx {
 	u32	le_me_size;
 	u32	unexpected_size;
 	u32	trig_op_size;
+	u8	tpid_idx;
 	u8	allow_phys_dlid;
 	u8	auth_mask;
 	u32	auth_uid[HFI_NUM_AUTH_TUPLES];
@@ -373,7 +375,8 @@ struct opa_core_ops {
 	int (*ctx_assign)(struct hfi_ctx *ctx,
 			  struct opa_ctx_assign *ctx_assign);
 	void (*ctx_release)(struct hfi_ctx *ctx);
-	int (*ctx_reserve)(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align);
+	int (*ctx_reserve)(struct hfi_ctx *ctx, u16 *base, u16 count,
+			   u16 align, u16 mode);
 	void (*ctx_unreserve)(struct hfi_ctx *ctx);
 	int (*ctx_addr)(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr,
 			ssize_t *len);

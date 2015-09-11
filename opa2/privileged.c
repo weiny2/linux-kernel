@@ -242,6 +242,19 @@ int hfi_dlid_assign(struct hfi_ctx *ctx,
 	if (ctx->dlid_base != HFI_LID_NONE)
 		return -EPERM;
 
+	/*
+	 * if HFI_LID_ANY, select partition of DLID table based on TPID index
+	 * TODO - this is maybe temporary for simics testing
+	 */
+	if (dlid_assign->dlid_base == HFI_LID_ANY) {
+		u32 lid_part_size = HFI_DLID_TABLE_SIZE / HFI_TPID_ENTRIES;
+
+		if (!(ctx->mode & HFI_CTX_MODE_PID_VIRTUALIZED) ||
+		    dlid_assign->count > lid_part_size)
+			return -EINVAL;
+		dlid_assign->dlid_base = ctx->tpid_idx * lid_part_size;
+	}
+
 	/* write DLID relocation table */
 	ret = hfi_update_dlid_relocation_table(ctx, dlid_assign);
 	if (ret < 0)

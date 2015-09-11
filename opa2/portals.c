@@ -839,7 +839,7 @@ static void hfi_cteq_cleanup(struct hfi_ctx *ctx)
 }
 
 /*
- * Reserves contiguous PIDs. Note, also used for orphan reservation which
+ * Reserves contiguous PIDs. Note, also used for singleton reservation which
  * do not touch ctx->[pid_base, pid_count].
  */
 static int __hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count,
@@ -882,7 +882,53 @@ static int __hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count,
 	return 0;
 }
 
-int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align)
+static int hfi_ctxt_set_virtual_pid_range(struct hfi_ctx *ctx)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	uint32_t ptl_uid;
+	int tpid_idx;
+
+	/* Find if we have available TPID_CAM entry */
+	idr_preload(GFP_KERNEL);
+	spin_lock(&dd->ptl_lock);
+	tpid_idx = idr_alloc(&dd->ptl_tpid, ctx, 0, HFI_TPID_ENTRIES, GFP_NOWAIT);
+	spin_unlock(&dd->ptl_lock);
+	idr_preload_end();
+
+	if (tpid_idx < 0)
+		return -EBUSY;
+
+	/*
+	 * For TPID_CAM.UID, use first value from resource manager (if set).
+	 * This value is inherited during open() and returned to the user as
+	 * their default UID.
+	 */
+	ptl_uid = (ctx->auth_mask & 0x1) ? ctx->auth_uid[0] : ctx->ptl_uid;
+
+	/* program TPID_CAM for our reserved PID range */
+	hfi_tpid_enable(dd, tpid_idx, ctx->pid_base, ptl_uid);
+	ctx->tpid_idx = tpid_idx;
+	ctx->mode |= HFI_CTX_MODE_PID_VIRTUALIZED;
+	return 0;
+}
+
+static void hfi_ctxt_unset_virtual_pid_range(struct hfi_ctx *ctx)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+
+	if (!(ctx->mode & HFI_CTX_MODE_PID_VIRTUALIZED))
+		return;
+
+	hfi_tpid_disable(dd, ctx->tpid_idx);
+
+	spin_lock(&dd->ptl_lock);
+	idr_remove(&dd->ptl_tpid, ctx->tpid_idx);
+	spin_unlock(&dd->ptl_lock);
+	ctx->mode &= ~HFI_CTX_MODE_PID_VIRTUALIZED;
+}
+
+int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
+		     u16 mode)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	u16 offset;
@@ -904,6 +950,14 @@ int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align)
 		ctx->pid_base = *base;
 		ctx->pid_count = count;
 	}
+
+	if (mode & HFI_CTX_MODE_PID_VIRTUALIZED) {
+		ret = hfi_ctxt_set_virtual_pid_range(ctx);
+		if (ret) {
+			hfi_ctxt_unreserve(ctx);
+		}
+	}
+
 	return ret;
 }
 
@@ -920,6 +974,9 @@ static void __hfi_ctxt_unreserve(struct hfi_devdata *dd, u16 base, u16 count)
 void hfi_ctxt_unreserve(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
+
+	if (ctx->mode & HFI_CTX_MODE_PID_VIRTUALIZED)
+		hfi_ctxt_unset_virtual_pid_range(ctx);
 
 	__hfi_ctxt_unreserve(dd, ctx->pid_base, ctx->pid_count);
 	ctx->pid_base = -1;
@@ -1121,7 +1178,7 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 		ret = __hfi_ctxt_reserve(dd, &ptl_pid, 1, 0, offset);
 		if (ret)
 			return ret;
-		dd_dev_info(dd, "acquired PID orphan [%u]\n", ptl_pid);
+		dd_dev_info(dd, "acquired PID singleton [%u]\n", ptl_pid);
 
 		start = ptl_pid;
 		end = ptl_pid + 1;
@@ -1207,7 +1264,7 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 	}
 
 	if (ctx->pid_count == 0) {
-		dd_dev_info(dd, "release PID orphan [%u]\n", ptl_pid);
+		dd_dev_info(dd, "release PID singleton [%u]\n", ptl_pid);
 		__hfi_ctxt_unreserve(dd, ptl_pid, 1);
 	}
 
