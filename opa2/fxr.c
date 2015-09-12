@@ -920,6 +920,23 @@ static void hfi_device_desc(struct opa_core_device *odev,
 	desc->num_pports = dd->num_pports;
 	desc->nguid = dd->nguid;
 	desc->numa_node = dd->node;
+	desc->ibdev = dd->ibdev;
+}
+
+/* Save the registered IB device and notify OPA core clients */
+void hfi_set_ibdev(struct opa_core_device *odev, struct ib_device *ibdev)
+{
+	struct hfi_devdata *dd = odev->dd;
+
+	dd->ibdev = ibdev;
+}
+
+/* Clear the registered IB device and notify OPA core clients */
+void hfi_clear_ibdev(struct opa_core_device *odev)
+{
+	struct hfi_devdata *dd = odev->dd;
+
+	dd->ibdev = NULL;
 }
 
 static struct opa_core_ops opa_core_ops = {
@@ -943,6 +960,8 @@ static struct opa_core_ops opa_core_ops = {
 	.get_port_desc = hfi_port_desc,
 	.get_sma = hfi_get_sma,
 	.set_sma = hfi_set_sma,
+	.set_ibdev = hfi_set_ibdev,
+	.clear_ibdev = hfi_clear_ibdev
 };
 
 /*
