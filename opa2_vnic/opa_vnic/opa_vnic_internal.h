@@ -102,6 +102,9 @@ void opa_vnic_decap_skb(struct opa_vnic_adapter *adapter, struct sk_buff *skb);
 
 void opa_vnic_set_ethtool_ops(struct net_device *ndev);
 
+int opa_vnic_vema_init(void);
+void opa_vnic_vema_deinit(void);
+
 void opa_vnic_dbg_vport_init(struct opa_vnic_adapter *adapter);
 void opa_vnic_dbg_vport_exit(struct opa_vnic_adapter *adapter);
 void opa_vnic_dbg_init(void);
