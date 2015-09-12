@@ -116,9 +116,9 @@ static void opa_netdev_event_notify(struct opa_core_device *odev,
  * @dlid: destination LID
  * @rx_thread: kernel thread for receive work
  * @vdev: back pointer to opa vnic device
- * @npdev: back pointer to opa net device port
  * @odev: back pointer to opa core device
  * @vport_num: virtual ethernet switch port id
+ * @port_num: physical port number
  * @init: true if veswport is initialized
  */
 struct opa_veswport {
@@ -138,27 +138,8 @@ struct opa_veswport {
 	int			dlid;
 	struct task_struct	*rx_thread;
 	struct opa_vnic_device	*vdev;
-	struct opa_netdev_port	*npdev;
 	struct opa_core_device	*odev;
 	u8			vport_num;
-	bool			init;
-};
-
-/*
- * struct opa_netdev_port - Per physical port net device fields
- *
- * @odev: OPA core device
- * @ndev: OPA2 net device
- * @vport: Array of virtual ethernet switch ports
- * @num_vport: Number of virtual ethernet switch ports
- * @port_num: Port id number
- * @init: true if port is initialized
- */
-struct opa_netdev_port {
-	struct opa_core_device	*odev;
-	struct opa_netdev	*ndev;
-	struct opa_veswport	*vport;
-	int			num_vports;
 	u8			port_num;
 	bool			init;
 };
@@ -166,13 +147,13 @@ struct opa_netdev_port {
 /*
  * struct opa_netdev - OPA2 net device specific fields
  * @odev: OPA core device
- * @pport: Array of physical port specific fields
  * @num_pport: number of physical ports
+ * @vnic_ctrl_dev: VNIC control device for device instantiation
  */
 struct opa_netdev {
 	struct opa_core_device	*odev;
-	struct opa_netdev_port	*pport;
 	int			num_ports;
+	struct opa_vnic_ctrl_device *vnic_ctrl_dev;
 };
 
 static
@@ -347,7 +328,7 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 		dev->num_tx++;
 	dev_dbg(&odev->dev, "%s %d vport %d port %d num_tx %d skb->len %d\n",
 		__func__, __LINE__, dev->vport_num,
-		dev->npdev->port_num, dev->num_tx, skb->len);
+		dev->port_num, dev->num_tx, skb->len);
 err1:
 	return rc;
 }
@@ -575,7 +556,7 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 	struct opa_e2e_ctrl e2e;
 	u64 *eq_entry;
 
-	ops->get_port_desc(odev, &pdesc, dev->npdev->port_num);
+	ops->get_port_desc(odev, &pdesc, dev->port_num);
 
 	/*
 	 * FXRTODO: DLID is hard coded for now but needs to be determined
@@ -583,9 +564,9 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 	 * MAD address table eventually
 	 */
 	if (!strcmp(utsname()->nodename, "viper0"))
-		dev->dlid = dev->npdev->port_num == 1 ? 3 : 4;
+		dev->dlid = dev->port_num == 1 ? 3 : 4;
 	else
-		dev->dlid = dev->npdev->port_num == 1 ? 1 : 2;
+		dev->dlid = dev->port_num == 1 ? 1 : 2;
 
 	/*
 	 * FXRTODO: E2E messages do not have to be set up for EoSTL traffic
@@ -1036,92 +1017,71 @@ static struct opa_vnic_hfi_ops vnic_ops = {
 	.hfi_get_skb = opa2_vnic_hfi_get_skb
 };
 
-/* Remove virtual ethernet switch port device */
-static void opa2_vnic_hfi_remove_vport(struct opa_veswport *dev)
+/* opa_vnic_hfi_add_vport - add vport device on vnic bus */
+static int opa_vnic_hfi_add_vport(struct opa_vnic_ctrl_device *cdev,
+				  u8 port_num, u8 vport_num)
 {
-	opa_vnic_device_unregister(dev->vdev);
-}
+	int rc;
+	struct opa_netdev *ndev = cdev->hfi_priv;
+	struct opa_veswport *vport;
+	struct opa_vnic_device *vdev;
 
-/* Add virtual ethernet switch port device */
-static int opa2_vnic_hfi_add_vport(struct opa_veswport *dev)
-{
-	struct opa_core_device *odev = dev->odev;
-	int rc = 0;
+	if (!port_num || port_num > ndev->num_ports)
+		return -EINVAL;
 
-	dev->vdev = opa_vnic_device_register(dev->vport_num, dev, &vnic_ops);
-	if (IS_ERR(dev->vdev)) {
-		rc = PTR_ERR(dev->vdev);
-		dev_info(&odev->dev, "error adding vport %d\n", rc);
-	}
-	return rc;
-}
-
-/* Per virtual ethernet switch port cleanup */
-void opa_netdev_uninit_vport(struct opa_netdev_port *npdev)
-{
-	int i;
-
-	for (i = 0; i < npdev->num_vports; i++) {
-		struct opa_veswport *dev = &npdev->vport[i];
-
-		if (dev->init)
-			opa2_vnic_hfi_remove_vport(dev);
-	}
-	kfree(npdev->vport);
-}
-
-/* Per virtual ethernet switch port initialization */
-static int opa_netdev_init_vport(struct opa_netdev_port *npdev)
-{
-	int i, rc = 0;
-	struct opa_core_device *odev = npdev->odev;
-
-	npdev->num_vports = num_veswports;
-	npdev->vport = kcalloc(npdev->num_vports, sizeof(*npdev->vport),
-			       GFP_KERNEL);
-	if (!npdev->vport)
+	vport = kzalloc(sizeof(*vport), GFP_KERNEL);
+	if (!vport)
 		return -ENOMEM;
+	vport->port_num = port_num;
+	vport->vport_num = vport_num;
+	vport->odev = ndev->odev;
 
-	for (i = 0; i < npdev->num_vports; i++) {
-		struct opa_veswport *dev = &npdev->vport[i];
-
-		dev->vport_num = (odev->index * npdev->num_vports *
-					npdev->ndev->num_ports) +
-				((npdev->port_num - 1) * npdev->num_vports) + i;
-		dev->odev = npdev->odev;
-		dev->npdev = npdev;
-		rc = opa2_vnic_hfi_add_vport(dev);
-		if (rc)
-			goto err;
-		dev->init = true;
+	vdev = opa_vnic_device_register(cdev, port_num, vport_num,
+					vport, &vnic_ops);
+	if (IS_ERR(vdev)) {
+		rc = PTR_ERR(vdev);
+		dev_err(&ndev->odev->dev, "error adding vport %d\n", rc);
+		goto reg_err;
 	}
-	return rc;
-err:
-	opa_netdev_uninit_vport(npdev);
-	dev_err(&odev->dev, "%s rc %d\n", __func__, rc);
+#if 0
+	/* FXRTODO: Figure out how to get LID and MTU */
+	vdev->lid = rcd->ppd->lid;
+	vdev->opa_mtu = rcd->egrbufs.rcvtid_size;
+#endif
+	return 0;
+reg_err:
+	kfree(vport);
 	return rc;
 }
 
-/* Per physical port cleanup */
-static void opa_netdev_uninit_port(struct opa_netdev *ndev)
+/* opa_vnic_hfi_rem_vport - remove vport device from vnic bus */
+static void opa_vnic_hfi_rem_vport(struct opa_vnic_ctrl_device *cdev,
+				   u8 port_num, u8 vport_num)
 {
-	int i;
+	struct opa_vnic_device *vdev;
+	struct opa_veswport *vport;
 
-	for (i = 0; i < ndev->num_ports; i++) {
-		struct opa_netdev_port *port = &ndev->pport[i];
-
-		if (port->init)
-			opa_netdev_uninit_vport(port);
+	vdev = opa_vnic_get_dev(cdev, port_num, vport_num);
+	if (vdev) {
+		vport = vdev->hfi_priv;
+		opa_vnic_device_unregister(vdev);
+		kfree(vport);
 	}
-	kfree(ndev->pport);
 }
 
-/* Per physical port initialization */
-static int opa_netdev_init_port(struct opa_netdev *ndev)
+/* vnic control operations */
+static struct opa_vnic_ctrl_ops vnic_ctrl_ops = {
+	.add_vport = opa_vnic_hfi_add_vport,
+	.rem_vport = opa_vnic_hfi_rem_vport
+};
+
+/* opa_vnic_hfi_add_ctrl_port - Add vnic control port device */
+int opa_vnic_hfi_add_ctrl_port(struct opa_netdev *ndev)
 {
+	struct opa_vnic_ctrl_device *cdev;
+	int rc;
 	struct opa_core_device *odev = ndev->odev;
 	struct opa_dev_desc desc;
-	int i, rc = 0;
 
 	odev->bus_ops->get_device_desc(odev, &desc);
 #if 0
@@ -1133,52 +1093,47 @@ static int opa_netdev_init_port(struct opa_netdev *ndev)
 #else
 	ndev->num_ports = 1;
 #endif
-	ndev->pport = kcalloc(ndev->num_ports, sizeof(*ndev->pport),
-			      GFP_KERNEL);
-	if (!ndev->pport)
-		return -ENOMEM;
-
-	for (i = 0; i < ndev->num_ports; i++) {
-		struct opa_netdev_port *port = &ndev->pport[i];
-
-		port->port_num = i + 1;
-		port->odev = odev;
-		port->ndev = ndev;
-		rc = opa_netdev_init_vport(port);
-		if (rc)
-			goto err;
-		port->init = true;
+	cdev = opa_vnic_ctrl_device_register(desc.ibdev, ndev->num_ports,
+					     ndev, &vnic_ctrl_ops);
+	if (IS_ERR(cdev)) {
+		rc = PTR_ERR(cdev);
+		dev_err(&odev->dev, "error adding vnic control port %d\n", rc);
+		return rc;
 	}
-	return rc;
-err:
-	opa_netdev_uninit_port(ndev);
-	dev_err(&odev->dev, "%s rc %d\n", __func__, rc);
-	return rc;
+
+	ndev->vnic_ctrl_dev = cdev;
+	return 0;
+}
+
+/* opa_vnic_hfi_rem_ctrl_port - remove vnic control port device */
+void opa_vnic_hfi_rem_ctrl_port(struct opa_netdev *ndev)
+{
+	opa_vnic_ctrl_device_unregister(ndev->vnic_ctrl_dev);
 }
 
 /* per OPA core device probe routine */
 static int opa_netdev_probe(struct opa_core_device *odev)
 {
-	struct opa_netdev *dev;
+	struct opa_netdev *ndev;
 	int rc;
 
-	dev = kzalloc(sizeof(struct opa_netdev), GFP_KERNEL);
-	if (!dev)
+	ndev = kzalloc(sizeof(*ndev), GFP_KERNEL);
+	if (!ndev)
 		return -ENOMEM;
 
-	rc = opa_core_set_priv_data(&opa_vnic_clnt, odev, dev);
+	rc = opa_core_set_priv_data(&opa_vnic_clnt, odev, ndev);
 	if (rc)
 		goto priv_err;
 
-	dev->odev = odev;
-	rc = opa_netdev_init_port(dev);
+	ndev->odev = odev;
+	rc = opa_vnic_hfi_add_ctrl_port(ndev);
 	if (rc)
 		goto port_err;
 	return rc;
 port_err:
 	opa_core_clear_priv_data(&opa_vnic_clnt, odev);
 priv_err:
-	kfree(dev);
+	kfree(ndev);
 	dev_err(&odev->dev, "%s rc %d\n", __func__, rc);
 	return rc;
 }
@@ -1186,13 +1141,13 @@ priv_err:
 /* per OPA core device remove routine */
 static void opa_netdev_remove(struct opa_core_device *odev)
 {
-	struct opa_netdev *dev = opa_core_get_priv_data(&opa_vnic_clnt, odev);
+	struct opa_netdev *ndev = opa_core_get_priv_data(&opa_vnic_clnt, odev);
 
-	if (!dev)
+	if (!ndev)
 		return;
-	opa_netdev_uninit_port(dev);
+	opa_vnic_hfi_rem_ctrl_port(ndev);
 	opa_core_clear_priv_data(&opa_vnic_clnt, odev);
-	kfree(dev);
+	kfree(ndev);
 }
 
 static int __init opa_netdev_init_module(void)

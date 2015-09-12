@@ -314,12 +314,14 @@ struct opa_pport_desc {
  * @num_pports: Number of physical ports
  * @nguid: node GUID, unique per node
  * @numa_node: numa node of device
+ * @ibdev: registered IB device
  */
 struct opa_dev_desc {
 	u8 oui[3];
 	u8 num_pports;
 	__be64 nguid;
 	int numa_node;
+	struct ib_device *ibdev;
 };
 
 /**
@@ -344,6 +346,9 @@ struct opa_dev_desc {
  * @get_port_desc: get port specific HW details
  * @get_sma: get method for opa sma to get HW related attributes
  * @set_sma: set method for opa sma to set HW related attributes
+ * @set_ibdev: stash registered ibdev pointer so that it can be used by OPA
+ *	core clients for registering MAD clients as an example.
+ * @clear_ibdev: clear registered ibdev pointer setup via set_ibdev
  */
 struct opa_core_ops {
 	int (*ctx_assign)(struct hfi_ctx *ctx,
@@ -380,6 +385,9 @@ struct opa_core_ops {
 	int (*set_sma)(struct opa_core_device *odev, u16 attr_id,
 		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len,
 		u8 *sma_status);
+	void (*set_ibdev)(struct opa_core_device *odev,
+			  struct ib_device *ibdev);
+	void (*clear_ibdev)(struct opa_core_device *odev);
 };
 
 /**

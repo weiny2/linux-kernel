@@ -530,6 +530,10 @@ struct hfi_devdata {
 
 	/* Mutex lock synchronizing E2E operations */
 	struct mutex e2e_lock;
+
+	/* registered IB device pointer */
+	struct ib_device *ibdev;
+
 #ifdef CONFIG_DEBUG_FS
 	/* per HFI debugfs */
 	struct dentry *hfi_dev_dbg;

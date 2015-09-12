@@ -591,6 +591,7 @@ static int opa_ib_add(struct opa_core_device *odev)
 	ret = opa_ib_register_device(ibd, opa_ib_driver.name);
 	if (ret)
 		goto ib_reg_err;
+	ops->set_ibdev(odev, &ibd->ibdev);
 	return ret;
 ib_reg_err:
 	opa_core_clear_priv_data(&opa_ib_driver, odev);
@@ -616,6 +617,7 @@ static void opa_ib_remove(struct opa_core_device *odev)
 	ibd = opa_core_get_priv_data(&opa_ib_driver, odev);
 	if (!ibd)
 		return;
+	odev->bus_ops->clear_ibdev(odev);
 	opa_ib_unregister_device(ibd);
 	for (i = 0; i < ibd->num_pports; i++)
 		opa_ib_uninit_port(&ibd->pport[i]);
