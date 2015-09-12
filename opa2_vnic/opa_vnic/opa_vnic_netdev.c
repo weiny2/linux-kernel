@@ -81,12 +81,14 @@ static netdev_tx_t opa_netdev_start_xmit(struct sk_buff *skb,
 	opa_vnic_encap_skb(adapter, skb);
 
 	rc = vdev->bus_ops->hfi_put_skb(vdev, skb);
+	/* TODO: Need to handle stats properly */
 	if (!rc) {
 		netdev->stats.tx_packets++;
 		netdev->stats.tx_bytes += skb->len;
 	} else {
 		netdev->stats.tx_dropped++;
 	}
+
 	dev_kfree_skb_any(skb);
 	return NETDEV_TX_OK;
 }
@@ -114,8 +116,10 @@ static void vnic_handle_rx(struct opa_vnic_adapter *adapter,
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 		skb->protocol = eth_type_trans(skb, vdev->netdev);
 
+		/* TODO: Need to handle stats properly */
 		adapter->netdev->stats.rx_packets++;
 		adapter->netdev->stats.rx_bytes += skb->len;
+
 		napi_gro_receive(&adapter->napi, skb);
 		(*work_done)++;
 	}
@@ -239,6 +243,7 @@ static int opa_vnic_drv_probe(struct device *dev)
 	netdev->features = NETIF_F_HIGHDMA;
 	netdev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
 	netdev->hw_features = netdev->features;
+	netdev->vlan_features = NETIF_F_HIGHDMA;
 	netdev->watchdog_timeo = msecs_to_jiffies(OPA_TX_TIMEOUT_MS);
 	random_ether_addr(netdev->perm_addr);
 	memcpy(netdev->dev_addr, netdev->perm_addr, netdev->addr_len);
@@ -293,10 +298,13 @@ static int opa_vnic_drv_remove(struct device *dev)
 /* Omni-Path Virtual Network Driver */
 /* TODO: probably have bus implement driver routines */
 static struct opa_vnic_driver opa_vnic_drv = {
-	.driver = {
-		.name   = opa_vnic_driver_name,
-		.probe  = opa_vnic_drv_probe,
-		.remove = opa_vnic_drv_remove
+	.drvwrap = {
+		.type = OPA_VNIC_DRV,
+		.driver = {
+			.name   = opa_vnic_driver_name,
+			.probe  = opa_vnic_drv_probe,
+			.remove = opa_vnic_drv_remove
+		}
 	}
 };
 
@@ -307,11 +315,23 @@ static int __init opa_vnic_init_module(void)
 
 	pr_info("Intel(R) Omni-Path Virtual Network Driver - %s\n",
 		opa_vnic_driver_version);
-	opa_vnic_dbg_init();
-	rc = opa_vnic_driver_register(&opa_vnic_drv);
-	if (rc)
-		pr_err("Driver register failed %d\n", rc);
 
+	opa_vnic_dbg_init();
+	rc = opa_vnic_vema_init();
+	if (rc)
+		goto vema_fail;
+
+	rc = opa_vnic_driver_register(&opa_vnic_drv);
+	if (rc) {
+		pr_err("VNIC driver register failed %d\n", rc);
+		goto vnic_fail;
+	}
+
+	return 0;
+vnic_fail:
+	opa_vnic_vema_deinit();
+vema_fail:
+	opa_vnic_dbg_exit();
 	return rc;
 }
 module_init(opa_vnic_init_module);
@@ -320,6 +340,7 @@ module_init(opa_vnic_init_module);
 static void __exit opa_vnic_exit_module(void)
 {
 	opa_vnic_driver_unregister(&opa_vnic_drv);
+	opa_vnic_vema_deinit();
 	opa_vnic_dbg_exit();
 }
 module_exit(opa_vnic_exit_module);

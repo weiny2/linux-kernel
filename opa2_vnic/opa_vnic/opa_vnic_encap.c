@@ -54,25 +54,27 @@
 #include <linux/ethtool.h>
 #include <linux/module.h>
 #include <linux/if_ether.h>
+#include <linux/if_vlan.h>
 #include <linux/opa_vnic.h>
 
 #include "opa_vnic_internal.h"
 
 /**
  * struct opa_bypass10_pkt - opa bypass10 (10B) packet format
- * @slid: source lid
- * @length: length of packet
- * @b: BECN
- * @dlid: destination lid
- * @sc: service class
- * @rc: route control
- * @f: FECN
- * @l2: L2 type (1=10B, 2=16B)
- * @lt: link transfer field
- * @l4: L4 type
- * @pkey: partition key
- * @entropy: entropy
- * @l4_hdr: L4 header
+ * @slid : source lid
+ * @length : length of packet
+ * @b : BCEN
+ * @dlid : destination lid
+ * @sc : service class
+ * @rc : route control
+ * @f : FCEN
+ * @l2 : L2 type (1=10B, 2=16B)
+ * @lt : link transfer field
+ * @l4 : L4 type
+ * @pkey : partition key
+ * @entropy : entropy
+ * @l4_hdr : L4 header
+ * @payload : payload
  */
 union opa_bypass10_pkt {
 	struct {
@@ -97,16 +99,50 @@ union opa_bypass10_pkt {
 	uint32_t dw[3];
 };
 
+#define OPA_VNIC_ICRC_LEN   4
+#define OPA_VNIC_TAIL_LEN   1
+#define OPA_VNIC_ICRC_TAIL_LEN  (OPA_VNIC_ICRC_LEN + OPA_VNIC_TAIL_LEN)
+
 #define OPA_VNIC_IS_DMAC_MCAST(mac_hdr)  ((mac_hdr)->h_dest[0] & 0x01)
 #define OPA_VNIC_IS_DMAC_LOCAL(mac_hdr)  ((mac_hdr)->h_dest[0] & 0x02)
 
+#define OPA_VNIC_VLAN_PCP(vlan_tci)  \
+			(((vlan_tci) & VLAN_PRIO_MASK) >> VLAN_PRIO_SHIFT)
+
 /* TODO: add 16B support; 10B dlid has 20 bits */
 #define OPA_VNIC_DLID_MASK 0xfffff
+#define OPA_VNIC_SC_MASK 0x1f
+
+/* opa_vnic_get_sc - return the service class */
+static u8 opa_vnic_get_sc(struct opa_veswport_info *info,
+			  struct sk_buff *skb)
+{
+	struct ethhdr *mac_hdr = (struct ethhdr *)skb_mac_header(skb);
+	u16 vlan_tci;
+	u8 sc;
+
+	if (!__vlan_get_tag(skb, &vlan_tci)) {
+		u8 pcp = OPA_VNIC_VLAN_PCP(vlan_tci);
+
+		if (OPA_VNIC_IS_DMAC_MCAST(mac_hdr))
+			sc = info->vport.pcp_to_sc_mc[pcp];
+		else
+			sc = info->vport.pcp_to_sc_uc[pcp];
+	} else {
+		if (OPA_VNIC_IS_DMAC_MCAST(mac_hdr))
+			sc = info->vport.non_vlan_sc_mc;
+		else
+			sc = info->vport.non_vlan_sc_uc;
+	}
+
+	return sc & OPA_VNIC_SC_MASK;
+}
 
 /* opa_vnic_get_dlid - return the dlid */
 static uint32_t opa_vnic_get_dlid(struct opa_veswport_info *info,
-				  struct ethhdr *mac_hdr)
+				  struct sk_buff *skb)
 {
+	struct ethhdr *mac_hdr = (struct ethhdr *)skb_mac_header(skb);
 	uint32_t dlid;
 
 	if (OPA_VNIC_IS_DMAC_MCAST(mac_hdr)) {
@@ -114,9 +150,9 @@ static uint32_t opa_vnic_get_dlid(struct opa_veswport_info *info,
 		dlid = info->vesw.u_mcast_dlid;
 	} else if (OPA_VNIC_IS_DMAC_LOCAL(mac_hdr)) {
 		/* locally administered mac address */
-		dlid = ((uint32_t)mac_hdr->h_dest[3] << 16) |
+		dlid = ((uint32_t)mac_hdr->h_dest[5] << 16) |
 		       ((uint32_t)mac_hdr->h_dest[4] << 8)  |
-		       mac_hdr->h_dest[5];
+		       mac_hdr->h_dest[3];
 	} else {
 		/* globally administered mac address */
 		/* TODO: use dlid miss rule for now, fix later */
@@ -128,17 +164,18 @@ static uint32_t opa_vnic_get_dlid(struct opa_veswport_info *info,
 
 /* opa_vnic_populate_hdr - populate opa header */
 static void opa_vnic_populate_hdr(struct opa_veswport_info *info, void *opa_hdr,
-				  struct ethhdr *mac_hdr, u32 len, u32 lid)
+				  struct sk_buff *skb, u32 len, u32 lid)
 {
 	union opa_bypass10_pkt *hdr = opa_hdr;
 
 	/* TODO: minimum header parms for now, update later */
 	hdr->slid = lid;
-	hdr->dlid = opa_vnic_get_dlid(info, mac_hdr);
+	hdr->dlid = opa_vnic_get_dlid(info, skb);
 
+	BUG_ON(len & 0x7);
 	hdr->length = len >> 3;
-	if (len & 0x7)
-		hdr->length += 1;
+
+	hdr->sc = opa_vnic_get_sc(info, skb);
 
 	/* TODO: only 10B is supported now, add 16B support later */
 	hdr->l2 = 1;
@@ -153,21 +190,21 @@ void opa_vnic_encap_skb(struct opa_vnic_adapter *adapter, struct sk_buff *skb)
 	unsigned int pad_len;
 	struct opa_vnic_device *vdev = adapter->vdev;
 	struct opa_veswport_info *info = &adapter->info;
-	struct ethhdr *mac_hdr = (struct ethhdr *)skb_mac_header(skb);
+	void *opa_hdr;
 
-	skb_push(skb, OPA_VNIC_HDR_LEN);
-	memset(skb->data, 0, OPA_VNIC_HDR_LEN);
+	opa_hdr = skb->data - OPA_VNIC_HDR_LEN;
+	memset(opa_hdr, 0, OPA_VNIC_HDR_LEN);
 
-	/* padding for 8 bytes size alignment and additional 8 bytes for ICRC */
-	/* TODO: Only do required minimum padding */
-	pad_len = skb->len & 0x7;
+	/* padding for 8 bytes size alignment */
+	pad_len = (skb->len + OPA_VNIC_HDR_LEN + OPA_VNIC_ICRC_TAIL_LEN) & 0x7;
 	if (pad_len)
 		pad_len = 8 - pad_len;
 
-	pad_len += 8;
+	pad_len += OPA_VNIC_ICRC_TAIL_LEN;
 
-	opa_vnic_populate_hdr(info, skb->data, mac_hdr,
-			      skb->len + pad_len, vdev->lid);
+	opa_vnic_populate_hdr(info, opa_hdr, skb,
+		      skb->len + OPA_VNIC_HDR_LEN + pad_len, vdev->lid);
+	skb_push(skb, OPA_VNIC_HDR_LEN);
 }
 
 /* opa_vnic_decap_skb - decap skb packet */

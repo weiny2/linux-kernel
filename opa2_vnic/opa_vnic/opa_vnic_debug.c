@@ -64,7 +64,14 @@ enum {
 	OPA_VNIC_DBG_MODE,
 	OPA_VNIC_DBG_UC_DLID,
 	OPA_VNIC_DBG_MC_DLID,
-	OPA_VNIC_DBG_SC,
+	OPA_VNIC_DBG_SC_UC,
+	OPA_VNIC_DBG_SC_MC,
+	OPA_VNIC_DBG_PCP_SC_UC,
+	OPA_VNIC_DBG_PCP_SC_MC,
+	OPA_VNIC_DBG_VL_UC,
+	OPA_VNIC_DBG_VL_MC,
+	OPA_VNIC_DBG_PCP_VL_UC,
+	OPA_VNIC_DBG_PCP_VL_MC,
 	OPA_VNIC_DBG_ENCAP_FORMAT,
 	OPA_VNIC_DBG_NUM_ATTR,
 };
@@ -146,6 +153,8 @@ static int _vport_state_seq_show(struct seq_file *s, void *v)
 	struct opa_veswport_info *info = &adapter->info;
 	loff_t *spos = v;
 	int stat, sz;
+	char *str;
+	u8 *val;
 
 	if (v == SEQ_START_TOKEN)
 		return 0;
@@ -171,6 +180,50 @@ static int _vport_state_seq_show(struct seq_file *s, void *v)
 	case OPA_VNIC_DBG_ENCAP_FORMAT:
 		sz = seq_printf(s, "encap_format (0=10B, 1=16B): %d\n",
 			info->vesw.encap_format);
+		break;
+	case OPA_VNIC_DBG_SC_UC:
+		sz = seq_printf(s, "non_vlan_sc_uc (non-vlan ucast sc): %d\n",
+			info->vport.non_vlan_sc_uc);
+		break;
+	case OPA_VNIC_DBG_SC_MC:
+		sz = seq_printf(s, "non_vlan_sc_mc (non-vlan mcast sc): %d\n",
+			info->vport.non_vlan_sc_mc);
+		break;
+	case OPA_VNIC_DBG_PCP_SC_UC:
+		val = info->vport.pcp_to_sc_uc;
+		str = "pcp_to_sc_uc (vlan ucast sc): %d %d %d %d %d %d %d %d\n";
+		sz = seq_printf(s, str,
+				val[0], val[1], val[2], val[3],
+				val[4], val[5], val[6], val[7]);
+		break;
+	case OPA_VNIC_DBG_PCP_SC_MC:
+		val = info->vport.pcp_to_sc_mc;
+		str = "pcp_to_sc_mc (vlan mcast sc): %d %d %d %d %d %d %d %d\n";
+		sz = seq_printf(s, str,
+				val[0], val[1], val[2], val[3],
+				val[4], val[5], val[6], val[7]);
+		break;
+	case OPA_VNIC_DBG_VL_UC:
+		sz = seq_printf(s, "non_vlan_vl_uc (non-vlan ucast vl): %d\n",
+			info->vport.non_vlan_vl_uc);
+		break;
+	case OPA_VNIC_DBG_VL_MC:
+		sz = seq_printf(s, "non_vlan_vl_mc (non-vlan mcast vl): %d\n",
+			info->vport.non_vlan_vl_mc);
+		break;
+	case OPA_VNIC_DBG_PCP_VL_UC:
+		val = info->vport.pcp_to_vl_uc;
+		str = "pcp_to_vl_uc (vlan ucast vl): %d %d %d %d %d %d %d %d\n";
+		sz = seq_printf(s, str,
+				val[0], val[1], val[2], val[3],
+				val[4], val[5], val[6], val[7]);
+		break;
+	case OPA_VNIC_DBG_PCP_VL_MC:
+		val = info->vport.pcp_to_vl_mc;
+		str = "pcp_to_vl_mc (vlan mcast vl): %d %d %d %d %d %d %d %d\n";
+		sz = seq_printf(s, str,
+				val[0], val[1], val[2], val[3],
+				val[4], val[5], val[6], val[7]);
 		break;
 	default:
 		return SEQ_SKIP;
@@ -205,9 +258,13 @@ static ssize_t _vport_state_write(struct file *file, const char __user *buf,
 	debug_buf[len] = '\0';
 	/* TODO: range check the values */
 	if (strncmp(debug_buf, "vesw_id", 7) == 0) {
+		struct opa_vnic_device   *vdev = adapter->vdev;
+
 		cnt = sscanf(&debug_buf[7], "%d", &value);
-		if (cnt == 1)
+		if (cnt == 1) {
 			info->vesw.vesw_id = value;
+			vdev->vesw_id = value;
+		}
 	} else if (strncmp(debug_buf, "pkey", 4) == 0) {
 		cnt = sscanf(&debug_buf[4], "%d", &value);
 		if (cnt == 1)
@@ -224,6 +281,32 @@ static ssize_t _vport_state_write(struct file *file, const char __user *buf,
 		cnt = sscanf(&debug_buf[12], "%d", &value);
 		if (cnt == 1)
 			info->vesw.encap_format = value;
+	} else if (strncmp(debug_buf, "non_vlan_sc_uc", 14) == 0) {
+		cnt = sscanf(&debug_buf[14], "%d", &value);
+		if (cnt == 1)
+			info->vport.non_vlan_sc_uc = value;
+	} else if (strncmp(debug_buf, "non_vlan_sc_mc", 14) == 0) {
+		cnt = sscanf(&debug_buf[14], "%d", &value);
+		if (cnt == 1)
+			info->vport.non_vlan_sc_mc = value;
+	} else if (strncmp(debug_buf, "pcp_to_sc_uc", 12) == 0) {
+		int i, sc[8];
+
+		cnt = sscanf(&debug_buf[12], "%d %d %d %d %d %d %d %d",
+			     &sc[0], &sc[1], &sc[2], &sc[3],
+			     &sc[4], &sc[5], &sc[6], &sc[7]);
+		if (cnt == 8)
+			for (i = 0; i < 8; i++)
+				info->vport.pcp_to_sc_uc[i] = sc[i];
+	} else if (strncmp(debug_buf, "pcp_to_sc_mc", 12) == 0) {
+		int i, sc[8];
+
+		cnt = sscanf(&debug_buf[12], "%d %d %d %d %d %d %d %d",
+			     &sc[0], &sc[1], &sc[2], &sc[3],
+			     &sc[4], &sc[5], &sc[6], &sc[7]);
+		if (cnt == 8)
+			for (i = 0; i < 8; i++)
+				info->vport.pcp_to_sc_mc[i] = sc[i];
 	}
 
 	return count;
@@ -248,6 +331,9 @@ void opa_vnic_dbg_vport_init(struct opa_vnic_adapter *adapter)
 	}
 
 	DEBUGFS_SEQ_FILE_CREATE(vport_state, adapter->dentry, adapter);
+
+	debugfs_create_u32("lid", (S_IRUGO | S_IWUSR),
+			   adapter->dentry, &vdev->lid);
 }
 
 void opa_vnic_dbg_vport_exit(struct opa_vnic_adapter *adapter)
@@ -260,7 +346,6 @@ void opa_vnic_dbg_init(void)
 	opa_vnic_dbg_root = debugfs_create_dir(opa_vnic_driver_name, NULL);
 	if (IS_ERR(opa_vnic_dbg_root))
 		opa_vnic_dbg_root = NULL;
-
 	if (!opa_vnic_dbg_root)
 		pr_warn("init of opa vnic debugfs failed\n");
 }
