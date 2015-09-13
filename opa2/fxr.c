@@ -821,8 +821,12 @@ static irqreturn_t irq_eq_handler(int irq, void *dev_id)
 	hfi_ack_interrupt(me);
 	/* wake head waiter for each EQ using this IRQ */
 	read_lock(&me->irq_wait_lock);
-	list_for_each_entry(eq, &me->irq_wait_head, irq_wait_chain)
-		wake_up_interruptible(&(eq->wq));
+	list_for_each_entry(eq, &me->irq_wait_head, irq_wait_chain) {
+		if (eq->isr_cb)
+			eq->isr_cb(eq->cookie);
+		else
+			wake_up_interruptible(&(eq->wq));
+	}
 	read_unlock(&me->irq_wait_lock);
 
 	return IRQ_HANDLED;

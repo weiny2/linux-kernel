@@ -358,6 +358,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		ev_assign.size = (1 << eq_assign.order);
 		/* TODO - we might want software threshold for blocking EQs? */
 		ev_assign.threshold = 0;
+		ev_assign.isr_cb = NULL;
 		if (!access_ok(VERIFY_WRITE, (void *)ev_assign.base,
 			       ev_assign.size * HFI_EQ_ENTRY_SIZE)) {
 			ret = -EFAULT;

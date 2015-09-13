@@ -444,6 +444,8 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		write_lock_irqsave(&me->irq_wait_lock, flags);
 		list_add(&eq->irq_wait_chain, &me->irq_wait_head);
 		write_unlock_irqrestore(&me->irq_wait_lock, flags);
+		eq->isr_cb = eq_assign->isr_cb;
+		eq->cookie = eq_assign->cookie;
 	}
 
 	/* set EQ descriptor in host memory */

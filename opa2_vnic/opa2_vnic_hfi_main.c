@@ -390,50 +390,20 @@ static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
 	return skb;
 }
 
-/* Block for an RX interrupt */
-static int opa2_vnic_rx_wait(struct opa_veswport *dev, u64 **rhf_entry)
-{
-	int rc;
-	struct hfi_ctx *ctx = &dev->ctx;
-
-	rc = hfi_eq_wait_irq(ctx, dev->eq_rx, -1, (void **)rhf_entry);
-	if (rc == -EAGAIN || rc == -ERESTARTSYS)
-		/* timeout or wait interrupted, not abnormal */
-		rc = 0;
-	else if (rc == HFI_EQ_DROPPED)
-		/* driver bug with EQ sizing or IRQ logic */
-		rc = -EIO;
-	return rc;
-}
-
-/* Kernel thread to notify the netdev layer about received packets */
-static int opa2_vnic_rx_work(void *data)
+/* RX ISR callback */
+/* FXRTODO: Need an efficient way to enable/disable interrupt notifications */
+static void opa2_vnic_rx_isr_cb(void *data)
 {
 	struct opa_veswport *dev = data;
 	struct opa_vnic_device *vdev = dev->vdev;
-	struct opa_core_device *odev = dev->odev;
-	u64 *rhf_entry;
-	int rc;
+	struct hfi_ctx *ctx = &dev->ctx;
+	u64 *eq_entry;
 
-	allow_signal(SIGINT);
-
-	/*
-	 * FXRTODO: Ideally we need a callback from the ISR instead of
-	 * a kthread for RX events.
-	 */
-	while (!kthread_should_stop()) {
-		rhf_entry = NULL;
-		rc = opa2_vnic_rx_wait(dev, &rhf_entry);
-		if (rc < 0) {
-			dev_warn(&odev->dev, "RX EQ failure, %d\n", rc);
-			/* TODO - handle this */
-			continue;
-		}
-
-		if (rhf_entry)
+	if (vdev->vnic_cb) {
+		hfi_eq_peek(ctx, dev->eq_rx, (void **)&eq_entry);
+		if (eq_entry)
 			vdev->vnic_cb(vdev->netdev, OPA_VNIC_HFI_EVT_RX);
 	}
-	return 0;
 }
 
 /*
@@ -480,70 +450,6 @@ static int opa2_alloc_skbs(struct opa_veswport *dev)
 err1:
 	opa2_free_skbs(dev);
 	return rc;
-}
-
-
-/* Initialize and wake up the receive thread */
-static int opa2_rx_thread_init(struct opa_veswport *dev)
-{
-	struct opa_vnic_device *vdev = dev->vdev;
-	struct opa_core_device *odev = dev->odev;
-	int rc = 0;
-
-	dev->rx_thread = kthread_run(opa2_vnic_rx_work, dev,
-				     "opa_vnic_rx%d", vdev->id);
-	if (IS_ERR(dev->rx_thread)) {
-		rc = PTR_ERR(dev->rx_thread);
-		dev_err(&odev->dev, "kthread_run failed %d\n", rc);
-	}
-	return rc;
-}
-
-/* Interrupt and stop the receive thread */
-static void opa2_rx_thread_uninit(struct opa_veswport *dev)
-{
-	struct opa_core_device *odev = dev->odev;
-	int rc;
-
-	if (!IS_ERR_OR_NULL(dev->rx_thread)) {
-		rc = send_sig(SIGINT, dev->rx_thread, 0);
-		if (rc) {
-			dev_err(&odev->dev, "send_sig failed %d\n", rc);
-			return;
-		}
-		kthread_stop(dev->rx_thread);
-		dev->rx_thread = NULL;
-	}
-}
-
-static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
-			      opa_vnic_hfi_evt_cb_fn cb)
-{
-	struct opa_veswport *dev = vdev->hfi_priv;
-	int rc;
-
-	rc = opa2_alloc_skbs(dev);
-	if (rc)
-		goto err;
-	rc = opa2_rx_thread_init(dev);
-	if (rc)
-		goto skb_err;
-
-	vdev->vnic_cb = cb;
-err:
-	return rc;
-skb_err:
-	opa2_free_skbs(dev);
-	return rc;
-}
-
-static void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
-{
-	struct opa_veswport *dev = vdev->hfi_priv;
-
-	opa2_rx_thread_uninit(dev);
-	opa2_free_skbs(dev);
-	vdev->vnic_cb = NULL;
 }
 
 /*
@@ -629,6 +535,8 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 	dev->eq_alloc_rx.ni = dev->ni;
 	dev->eq_alloc_rx.user_data = 0xdeadbeef;
 	dev->eq_alloc_rx.size = 64;
+	dev->eq_alloc_rx.isr_cb = opa2_vnic_rx_isr_cb;
+	dev->eq_alloc_rx.cookie = dev;
 	rc = _hfi_eq_alloc(odev, ctx, &dev->eq_alloc_rx, &dev->eq_rx);
 	if (rc)
 		goto err3;
@@ -673,6 +581,37 @@ static void opa2_uninit_tx_rx(struct opa_veswport *dev)
 	_hfi_eq_release(&dev->eq_alloc_tx);
 	_hfi_eq_release(&dev->eq_alloc_rx);
 	hfi_ct_free(ctx, dev->ct_tx, 0);
+}
+
+static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
+			      opa_vnic_hfi_evt_cb_fn cb)
+{
+	struct opa_veswport *dev = vdev->hfi_priv;
+	int rc;
+
+	rc = opa2_init_tx_rx(dev);
+	if (rc)
+		goto err;
+	rc = opa2_alloc_skbs(dev);
+	if (rc)
+		goto err1;
+	vdev->vnic_cb = cb;
+	return 0;
+err1:
+	opa2_uninit_tx_rx(dev);
+	vdev->vnic_cb = NULL;
+err:
+	return rc;
+}
+
+static void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
+{
+	struct opa_veswport *dev = vdev->hfi_priv;
+
+	vdev->vnic_cb = NULL;
+	/* FXRTODO: Unlink if appended to the LE list */
+	opa2_free_skbs(dev);
+	opa2_uninit_tx_rx(dev);
 }
 
 static int opa2_xfer_test(struct opa_veswport *dev)
@@ -996,9 +935,6 @@ static int opa2_vnic_hfi_init(struct opa_vnic_device *vdev)
 	if (rc)
 		goto err2;
 
-	rc = opa2_init_tx_rx(dev);
-	if (rc)
-		goto err2;
 	return 0;
 err2:
 	ops->cq_unmap(&dev->tx, &dev->rx);
@@ -1016,7 +952,6 @@ static void opa2_vnic_hfi_deinit(struct opa_vnic_device *vdev)
 	struct opa_core_device *odev = dev->odev;
 	struct opa_core_ops *ops = odev->bus_ops;
 
-	opa2_uninit_tx_rx(dev);
 	ops->cq_unmap(&dev->tx, &dev->rx);
 	ops->cq_release(ctx, dev->cq_idx);
 	odev->bus_ops->ctx_release(ctx);

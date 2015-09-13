@@ -248,6 +248,11 @@ struct opa_ctx_assign {
  * @size: Size specified as number of events
  * @threshold: Num events before blocking EV wakes user
  * @ev_idx: Returns index of EV resource
+ * @isr_cb: callback function invoked upon receipt of an interrupt. Clients
+ *		cannot perform tasks which are not suitable for an atomic
+ *		context in the isr_cb. Clients should not use the
+ *		ev_wait_single OPA core operation if they provide an isr_cb.
+ * @cookie: cookie to be provided as an argument to isr_cb
  */
 struct opa_ev_assign {
 	u16 ni;
@@ -257,6 +262,8 @@ struct opa_ev_assign {
 	u64 size;
 	u64 threshold;
 	u16 ev_idx;
+	void (*isr_cb)(void *cookie);
+	void *cookie;
 };
 
 /**

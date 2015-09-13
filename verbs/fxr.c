@@ -80,6 +80,7 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 		return -ENOMEM;
 	eq_alloc->mode = OPA_EV_MODE_BLOCKING;
 	eq_alloc->user_data = (u64)&done;
+	eq_alloc->isr_cb = NULL;
 	rc = ctx->ops->ev_assign(ctx, eq_alloc);
 	if (rc < 0) {
 		vfree((void *)eq_alloc->base);
