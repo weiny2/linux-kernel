@@ -159,7 +159,10 @@ struct opa_netdev {
 static
 int hfi_tx_write(struct hfi_cq *tx, struct hfi_ctx *ctx,
 		 hfi_ni_t ni, void *start, hfi_size_t length,
-		 hfi_process_t target_id, uint32_t pt_index,
+		 hfi_process_t target_id, hfi_port_t port,
+		 uint32_t pt_index, hfi_rc_t rc, hfi_service_level_t sl,
+		 hfi_becn_t becn, hfi_pkey_t pkey,
+		 hfi_slid_low_t slid_low, hfi_auth_idx_t auth_idx,
 		 hfi_user_ptr_t user_ptr,
 		 hfi_match_bits_t match_bits, hfi_hdr_data_t hdr_data,
 		 hfi_ack_req_t ack_req, hfi_md_options_t md_options,
@@ -167,48 +170,56 @@ int hfi_tx_write(struct hfi_cq *tx, struct hfi_ctx *ctx,
 		 hfi_size_t remote_offset, hfi_tx_handle_t tx_handle)
 {
 	union hfi_tx_cq_command cmd;
-	int cmd_slots, rc;
+	int cmd_slots, ret;
 
-        if (hdr_data || HFI_MATCHING_NI(ni))
-                /* Must use the longer TX command format */
-                cmd_slots = hfi_format_put_match(ctx, ni,
-                                                 start, length,
-                                                 target_id, pt_index,
-                                                 user_ptr, match_bits, hdr_data,
-                                                 ack_req, md_options,
-                                                 eq_handle, ct_handle,
-                                                 remote_offset,
-                                                 tx_handle, &cmd);
-        else
-                /* Can use the shorter TX command format */
-                cmd_slots = hfi_format_put(ctx, ni,
-                                           start, length,
-                                           target_id, pt_index,
-                                           user_ptr,
-                                           ack_req, md_options,
-                                           eq_handle, ct_handle,
-                                           remote_offset,
-                                           tx_handle, &cmd);
+	if (hdr_data || HFI_MATCHING_NI(ni))
+		/* Must use the longer TX command format */
+		cmd_slots = hfi_format_put_match(ctx, ni,
+						 start, length,
+						 target_id, port,
+						 pt_index, rc, sl,
+						 becn, pkey,
+						 slid_low, auth_idx,
+						 user_ptr, match_bits, hdr_data,
+						 ack_req, md_options,
+						 eq_handle, ct_handle,
+						 remote_offset,
+						 tx_handle, &cmd);
+	else
+		/* Can use the shorter TX command format */
+		cmd_slots = hfi_format_put(ctx, ni,
+					   start, length,
+					   target_id, port,
+					   pt_index, rc, sl,
+					   becn, pkey,
+					   slid_low, auth_idx,
+					   user_ptr,
+					   ack_req, md_options,
+					   eq_handle, ct_handle,
+					   remote_offset,
+					   tx_handle, &cmd);
 
 	do {
-                if (length <= HFI_TX_MAX_BUFFERED) {
-                        rc = hfi_tx_cmd_put_buff_match(tx, cmd.command,
-                                        cmd_slots);
-                } else if (length <= HFI_TX_MAX_PIO) {
-                        if (hdr_data || HFI_MATCHING_NI(ni)) {
-                                rc = hfi_tx_cmd_put_pio_match(tx, cmd.command,
-                                                start, length, cmd_slots);
-                        } else {
-                                rc = hfi_tx_cmd_put_pio(tx, cmd.command,
-                                                start, length, cmd_slots);
-                        }
-                } else {
-                        rc = hfi_tx_cmd_put_dma_match(tx, cmd.command,
-                                        cmd_slots);
-                }
-	} while (rc == -EAGAIN);
+		if (length <= HFI_TX_MAX_BUFFERED) {
+			ret = hfi_tx_cmd_put_buff_match(tx, cmd.command,
+						       cmd_slots);
+		} else if (length <= HFI_TX_MAX_PIO) {
+			if (hdr_data || HFI_MATCHING_NI(ni)) {
+				ret = hfi_tx_cmd_put_pio_match(tx, cmd.command,
+							       start, length,
+							       cmd_slots);
+			} else {
+				ret = hfi_tx_cmd_put_pio(tx, cmd.command,
+							 start, length,
+							 cmd_slots);
+			}
+		} else {
+			ret = hfi_tx_cmd_put_dma_match(tx, cmd.command,
+						       cmd_slots);
+		}
+	} while (ret == -EAGAIN);
 
-	return rc;
+	return ret;
 }
 
 static int _hfi_eq_alloc(struct opa_core_device *odev,
@@ -310,7 +321,8 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	rc = hfi_tx_write(tx, ctx, dev->ni, skb->data,
 			  skb->len,
 			  target_id,
-			  OPA2_NET_PT, 0xdead, 0,
+			  dev->port_num - 1, OPA2_NET_PT, 0, 0, 0, 0, 0, 0,
+			  0xdead, 0,
 			  hdr_data, ack_req, md_options,
 			  dev->eq_tx,
 			  dev->ct_tx,
@@ -823,7 +835,8 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 	rc = hfi_tx_write(tx, ctx, ni, tx_base,
 			  PAYLOAD_SIZE,
 			  target_id,
-			  HFI_TEST_PT, 0xdead, 0,
+			  0, HFI_TEST_PT, 0, 0, 0, 0, 0, 0,
+			  0xdead, 0,
 			  hdr_data, ack_req, md_options,
 			  eq_tx,
 			  ct_tx,
@@ -858,7 +871,8 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 	rc = hfi_tx_write(tx, ctx, ni, tx_base,
 			  PAYLOAD_SIZE,
 			  target_id,
-			  HFI_TEST_PT + 1, 0xbeef, 0,
+			  0, HFI_TEST_PT + 1, 0, 0, 0, 0, 0, 0,
+			  0xbeef, 0,
 			  hdr_data, ack_req, md_options,
 			  eq_tx,
 			  ct_tx,
@@ -1084,15 +1098,8 @@ int opa_vnic_hfi_add_ctrl_port(struct opa_netdev *ndev)
 	struct opa_dev_desc desc;
 
 	odev->bus_ops->get_device_desc(odev, &desc);
-#if 0
-	/*
-	 * FXRTODO: Only one port supported since the TX write
-	 * commands do not allow specifying the outgoing port
-	 */
 	ndev->num_ports = desc.num_pports;
-#else
-	ndev->num_ports = 1;
-#endif
+
 	cdev = opa_vnic_ctrl_device_register(desc.ibdev, ndev->num_ports,
 					     ndev, &vnic_ctrl_ops);
 	if (IS_ERR(cdev)) {
