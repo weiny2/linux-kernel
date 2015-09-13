@@ -301,6 +301,8 @@ struct hfi_event_queue {
 	struct list_head irq_wait_chain;
 	wait_queue_head_t wq;
 	u32 irq_vector;
+	void (*isr_cb)(void *cookie);
+	void *cookie;
 };
 
 /*
