@@ -113,13 +113,10 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 		goto err;
 
 	_hfi_format_base_put_flit0(ctx, ni, &command->flit0, cmd,
-				   E2E_CTRL, cmd_length, target_id, 0, 0,
+				   E2E_CTRL, cmd_length, target_id, port, 0,
+				   RC_IN_ORDER_0, tc, 0, 0, 0, 0, 0,
 				   FXR_TRUE, ack_req, md_options, PTL_EQ_NONE,
 				   ct_tx, 0, 0);
-	command->flit0.a.sh = 0;
-	command->flit0.a.sl = tc;
-	command->flit0.a.rc = RC_IN_ORDER_0;
-	command->flit0.a.pt = port;
 
 	command->flit1.e.max_dist = 27; /* TODO: Why? */
 
