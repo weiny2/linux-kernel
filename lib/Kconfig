@@ -520,7 +520,10 @@ config SG_SPLIT
 #
 
 config ARCH_HAS_SG_CHAIN
-	def_bool n
+	bool
+
+config ARCH_HAS_MEMREMAP
+	bool
 
 config ARCH_HAS_PMEM_API
 	bool

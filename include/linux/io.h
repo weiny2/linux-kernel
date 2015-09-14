@@ -153,5 +153,6 @@ enum {
 
 void *memremap(resource_size_t offset, size_t size, unsigned long flags);
 void memunmap(void *addr);
+void *arch_memremap(resource_size_t offset, size_t size, unsigned long flags);
 
 #endif /* _LINUX_IO_H */

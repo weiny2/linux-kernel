@@ -40,6 +40,8 @@ ioremap_nocache        |    --    |    UC-     |       UC-        |
                        |          |            |                  |
 ioremap_wc             |    --    |    --      |       WC         |
                        |          |            |                  |
+memremap(MEMREMAP_WB)  |    WB    |    WB      |       WB         |
+                       |          |            |                  |
 ioremap_wt             |    --    |    --      |       WT         |
                        |          |            |                  |
 set_memory_uc          |    UC-   |    --      |       --         |

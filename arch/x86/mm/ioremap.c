@@ -317,6 +317,23 @@ void __iomem *ioremap_cache(resource_size_t phys_addr, unsigned long size)
 }
 EXPORT_SYMBOL(ioremap_cache);
 
+void *arch_memremap(resource_size_t phys_addr, size_t size,
+		unsigned long flags)
+{
+	int prot;
+
+	if (flags & MEMREMAP_WB)
+		prot = _PAGE_CACHE_MODE_WB;
+	else if (flags & MEMREMAP_WT)
+		prot = _PAGE_CACHE_MODE_WT;
+	else
+		return NULL;
+
+	return (void __force *) __ioremap_caller(phys_addr, size, prot,
+			__builtin_return_address(0));
+}
+EXPORT_SYMBOL(arch_memremap);
+
 void __iomem *ioremap_prot(resource_size_t phys_addr, unsigned long size,
 				unsigned long prot_val)
 {
