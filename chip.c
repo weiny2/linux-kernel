@@ -9181,7 +9181,7 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 
 	/*
 	 * Kernel contexts: (to be fixed later):
-	 * - min or 2 or 1 context/numa
+	 * - min or 2 or 1 context/numa (excluding control context)
 	 * - Context 0 - control context (VL15/multicast/error)
 	 * - Context 1 - default context
 	 */
@@ -9195,7 +9195,7 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 		 */
 		num_kernel_contexts = n_krcvqs + MIN_KERNEL_KCTXTS - 1;
 	else
-		num_kernel_contexts = num_online_nodes();
+		num_kernel_contexts = num_online_nodes() + 1;
 	num_kernel_contexts =
 		max_t(int, MIN_KERNEL_KCTXTS, num_kernel_contexts);
 	/*
