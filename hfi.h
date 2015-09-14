@@ -1078,6 +1078,10 @@ struct hfi1_devdata {
 	u64 lcb_err_en;
 	u8 dc_shutdown;
 	struct hfi1_affinity *affinity;
+
+	/* receive context tail dummy address */
+	volatile __le64 *rcvhdrtail_dummy_kvaddr;
+	dma_addr_t rcvhdrtail_dummy_physaddr;
 };
 
 /* 8051 firmware version helper */
