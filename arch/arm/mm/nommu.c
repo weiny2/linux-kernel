@@ -373,6 +373,16 @@ void __iomem *ioremap_cache(resource_size_t res_cookie, size_t size)
 }
 EXPORT_SYMBOL(ioremap_cache);
 
+void *arch_memremap(resource_size_t res_cookie, size_t size, unsigned long flags)
+{
+	if ((flags & MEMREMAP_WB) == 0)
+		return NULL;
+
+	return (void __force *) __arm_ioremap_caller(res_cookie, size,
+			MT_DEVICE_CACHED, __builtin_return_address(0));
+}
+EXPORT_SYMBOL(arch_memremap);
+
 void __iomem *ioremap_wc(resource_size_t res_cookie, size_t size)
 {
 	return __arm_ioremap_caller(res_cookie, size, MT_DEVICE_WC,

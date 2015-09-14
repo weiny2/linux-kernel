@@ -356,6 +356,7 @@ static inline void memcpy_toio(volatile void __iomem *to, const void *from,
  * ioremap()		Device		n/a		n/a
  * ioremap_nocache()	Device		n/a		n/a
  * ioremap_cache()	Normal		Writeback	Read allocate
+ * memremap(WB)		Normal		Writeback	Read allocate
  * ioremap_wc()		Normal		Non-cacheable	n/a
  * ioremap_wt()		Normal		Non-cacheable	n/a
  *

@@ -104,6 +104,16 @@ void __iomem *ioremap_cache(phys_addr_t phys_addr, size_t size)
 }
 EXPORT_SYMBOL(ioremap_cache);
 
+void *arch_memremap(phys_addr_t phys_addr, size_t size, unsigned long flags)
+{
+	if ((flags & MEMREMAP_WB) == 0)
+		return NULL;
+
+	return (void __force *) __ioremap_caller(phys_addr, size,
+			__pgprot(PROT_NORMAL), __builtin_return_address(0));
+}
+EXPORT_SYMBOL(arch_memremap);
+
 /*
  * Must be called after early_fixmap_init
  */
