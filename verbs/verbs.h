@@ -100,6 +100,7 @@ extern unsigned int opa_ib_max_cqs;
 extern unsigned int opa_ib_max_qp_wrs;
 extern unsigned int opa_ib_max_qps;
 extern unsigned int opa_ib_max_sges;
+extern unsigned int opa_ib_lkey_table_size;
 extern struct ib_dma_mapping_ops opa_ib_dma_mapping_ops;
 
 struct ib_l4_headers;
@@ -163,14 +164,15 @@ struct opa_ib_cq {
 
 struct opa_ib_mr {
 	struct ib_mr ibmr;
+	struct ib_pd *pd;
+	u32 lkey;
 };
 
 struct opa_ib_lkey_table {
 	spinlock_t lock;        /* protect changes in this struct */
-	u32 next;               /* next unused index (speeds search) */
 	u32 gen;                /* generation count */
 	u32 max;                /* size of the table */
-	//struct opa_ib_mregion __rcu **table;
+	struct idr table;
 };
 
 /*
