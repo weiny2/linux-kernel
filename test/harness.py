@@ -135,6 +135,13 @@ test_list = [
       "desc" : "Run ib_send_bw for 16 iterations using sizes up to 2^23 using RC.",
     },
 
+    { "test_name" : "IbSendBwRC-badSL",
+      "test_exe" : "IbSendBwRC-badSL.py",
+      "args" : "--nodelist %HOST[2]%",
+      "type" : "default,verbs",
+      "desc" : "Run ib_send_bw with bad SL values to ensure they fail to modify_qp",
+    },
+
     { "test_name" : "IPoIB-Qperf",
       "test_exe" : "IpoibQperf.py",
       "args" : "--nodelist %HOST[2]%",
