@@ -241,6 +241,17 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 	hfi_init_tx_otr_mtu(dd, IB_MTU_4096);
 }
 
+static void hfi_init_tx_cid_csrs(const struct hfi_devdata *dd)
+{
+	TXCID_CFG_MAD_TO_TC_t reg;
+
+	/* Set up the traffic and message class for VL15 */
+	reg.val = read_csr(dd, FXR_TXCID_CFG_MAD_TO_TC);
+	reg.field.tc = HFI_VL15_TC;
+	reg.field.mc = HFI_VL15_MC;
+	write_csr(dd, FXR_TXCID_CFG_MAD_TO_TC, reg.val);
+}
+
 static void init_csrs(struct hfi_devdata *dd)
 {
 	RXHP_CFG_NPTL_CTL_t nptl_ctl = {.val = 0};
@@ -322,6 +333,7 @@ static void init_csrs(struct hfi_devdata *dd)
 	}
 	hfi_init_rx_e2e_csrs(dd);
 	hfi_init_tx_otr_csrs(dd);
+	hfi_init_tx_cid_csrs(dd);
 }
 
 static int hfi_psn_init(const struct hfi_devdata *dd)
@@ -572,8 +584,7 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
 	return val;
 }
 
-/* FXRTODO: MC/TC -> SL see STL-1700 */
-void hfi_sl_to_sc_mc_tc(struct hfi_pportdata *ppd, u8 *sc, u8 *mc, u8 *tc)
+static void hfi_init_sl_to_mc_tc(struct hfi_pportdata *ppd, u8 *mc, u8 *tc)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg[2];
@@ -597,7 +608,6 @@ void hfi_sl_to_sc_mc_tc(struct hfi_pportdata *ppd, u8 *sc, u8 *mc, u8 *tc)
 
 	for (i = 0, j = 0; i < nregs; i++) {
 		for (k = 0; k < 64; k += 4, j++) {
-			/* FXRTODO: Need to set SL to SC */
 			if (mc)
 				hfi_set_bits(&reg[i], mc[j], HFI_SL_TO_MC_MASK,
 						k + HFI_SL_TO_MC_SHIFT);
@@ -655,7 +665,10 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 			hfi_set_pkey_table(ppd);
 		break;
 	case HFI_IB_CFG_SL_TO_SC:
-		hfi_sl_to_sc_mc_tc(ppd, ppd->sl_to_sc, NULL, NULL);
+#if 0
+		/* FXRTODO: Implement SL -> SC */
+		hfi_sl_to_sc(ppd, ppd->sl_to_sc);
+#endif
 		break;
 	case HFI_IB_CFG_SC_TO_SL:
 		hfi_sc_to_sl(ppd);
@@ -1223,6 +1236,17 @@ void hfi_pport_init(struct hfi_devdata *dd)
 			ppd->sl_to_sc[i] = i;
 		for (i = 0; i < ARRAY_SIZE(ppd->sc_to_sl); i++)
 			ppd->sc_to_sl[i] = i;
+		/*
+		 * FXRTODO: FXR Simics model has the tx_sl_to_mc and
+		 * tx_sl_to_tc mapping hard coded based on the formulas
+		 * below which are being used in the driver as well
+		 * till such time that we have a better solution.
+		 */
+		for (i = 0; i < ARRAY_SIZE(ppd->tx_sl_to_mc); i++)
+			ppd->tx_sl_to_mc[i] = (i & 0x4) >> 2;
+		for (i = 0; i < ARRAY_SIZE(ppd->tx_sl_to_tc); i++)
+			ppd->tx_sl_to_tc[i] = i % 4;
+		hfi_init_sl_to_mc_tc(ppd, ppd->tx_sl_to_mc, ppd->tx_sl_to_tc);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0, NULL);
 
 		hfi_init_sc_to_vlt(ppd);

@@ -152,6 +152,11 @@ enum {
 #define HFI_ILLEGAL_VL			12
 
 #define HFI_SC_VLT_MASK			FXR_TP_CFG_SC_TO_VLT_MAP_ENTRY0_MASK
+
+/* Message class and traffic class for VL15 packets */
+#define HFI_VL15_MC			0
+#define HFI_VL15_TC			3
+
 /*
  * HFI or Host Link States
  *
@@ -383,6 +388,8 @@ struct ib_vl_weight_elem {
  * @sc_to_sl: service class to service level mapping table
  * @sc_to_vlt: service class to (TX) virtual lane table
  * @sc_to_vlnt: service class to (RX) neighbor virtual lane table
+ * @tx_sl_to_mc: Transmit service level to message class mapping
+ * @tx_sl_to_tc: Transmit service level to traffic class mapping
  * @bct: buffer control table
  *@local_link_down_reason: Reason why this port transitioned to link down
  *@local_link_down_reason: Reason why the neighboring port transitioned to
@@ -435,6 +442,8 @@ struct hfi_pportdata {
 	u8 sc_to_sl[OPA_MAX_SCS];
 	u8 sc_to_vlt[OPA_MAX_SCS];
 	u8 sc_to_vlnt[OPA_MAX_SCS];
+	u8 tx_sl_to_mc[OPA_MAX_SLS];
+	u8 tx_sl_to_tc[OPA_MAX_SLS];
 	struct hfi_link_down_reason local_link_down_reason;
 	struct hfi_link_down_reason neigh_link_down_reason;
 	struct buffer_control bct;
