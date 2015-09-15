@@ -564,6 +564,15 @@ static int opa_ib_add(struct opa_core_device *odev)
 	spin_lock_init(&ibd->n_qps_lock);
 	spin_lock_init(&ibd->n_srqs_lock);
 
+	/*
+	 * The top opa_ib_lkey_table_size bits are used to index the
+	 * table.  The lower 8 bits can be owned by the user (copied from
+	 * the LKEY).  The remaining bits act as a generation number or tag.
+	 */
+	spin_lock_init(&ibd->lk_table.lock);
+	ibd->lk_table.max = 1 << opa_ib_lkey_table_size;
+	idr_init(&ibd->lk_table.table);
+
 	ret = opa_ib_cq_init(ibd);
 	if (ret)
 		goto cq_init_err;
@@ -623,6 +632,7 @@ static void opa_ib_remove(struct opa_core_device *odev)
 		opa_ib_uninit_port(&ibd->pport[i]);
 	opa_ib_ctx_uninit(ibd);
 	opa_ib_cq_exit(ibd);
+	idr_destroy(&ibd->lk_table.table);
 	/* TODO - verify empty IDR? */
 	idr_destroy(&ibd->qp_ptr);
 	ida_destroy(&ibd->qpn_even_table);

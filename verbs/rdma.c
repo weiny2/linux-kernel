@@ -303,12 +303,17 @@ int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr)
 {
 	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
+	struct opa_ib_portdata *ibp;
 	int err = 0;
 	int scheduled = 0;
 
 	for (; wr; wr = wr->next) {
 		err = post_one_send(qp, wr, &scheduled);
 		if (err) {
+			ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+			dev_err(&ibp->odev->dev, "QP[%d]: post_send err %d\n",
+				qp->ibqp.qp_num, err);
+
 			*bad_wr = wr;
 			goto bail;
 		}

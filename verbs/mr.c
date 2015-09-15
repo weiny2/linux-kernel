@@ -52,6 +52,9 @@
 
 #include "verbs.h"
 
+static int opa_ib_alloc_lkey(struct opa_ib_mr *mr, int dma_region);
+static void opa_ib_free_lkey(struct opa_ib_mr *mr);
+
 /**
  * opa_ib_get_dma_mr - get a DMA memory region
  * @pd: protection domain for this memory region
@@ -73,6 +76,8 @@ struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc)
 	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
+	mr->pd = pd;
+	mr->lkey = 0; /* DMA regions use restricted LKEY */
 
 	ret = &mr->ibmr;
 	return ret;
@@ -93,13 +98,25 @@ struct ib_mr *opa_ib_reg_phys_mr(struct ib_pd *pd,
 {
 	struct opa_ib_mr *mr = NULL;
 	struct ib_mr *ret;
+	int rval;
 
 	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
-	/* TODO lkey */
+	mr->pd = pd;
+
+	rval = opa_ib_alloc_lkey(mr, 0);
+	if (rval) {
+		ret = ERR_PTR(rval);
+		goto bail;
+	}
+	mr->ibmr.lkey = mr->lkey;
+	mr->ibmr.rkey = mr->lkey;
 
 	ret = &mr->ibmr;
+	return ret;
+bail:
+	kfree(mr);
 	return ret;
 }
 
@@ -119,6 +136,7 @@ struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 {
 	struct opa_ib_mr *mr = NULL;
 	struct ib_mr *ret;
+	int rval;
 
 	if (length == 0)
 		return ERR_PTR(-EINVAL);
@@ -126,9 +144,20 @@ struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
-	/* TODO lkey */
+	mr->pd = pd;
+
+	rval = opa_ib_alloc_lkey(mr, 0);
+	if (rval) {
+		ret = ERR_PTR(rval);
+		goto bail;
+	}
+	mr->ibmr.lkey = mr->lkey;
+	mr->ibmr.rkey = mr->lkey;
 
 	ret = &mr->ibmr;
+	return ret;
+bail:
+	kfree(mr);
 	return ret;
 }
 
@@ -145,9 +174,85 @@ int opa_ib_dereg_mr(struct ib_mr *ibmr)
 {
 	struct opa_ib_mr *mr = to_opa_ibmr(ibmr);
 
+	opa_ib_free_lkey(mr);
 	kfree(mr);
 	return 0;
 }
+
+/**
+ * opa_ib_alloc_lkey - allocate an lkey
+ * @mr: memory region that this lkey protects
+ * @dma_region: 0->normal key, 1->restricted DMA key
+ *
+ * TODO: Increments mr reference count as required.
+ * Sets the lkey field mr for non-dma regions.
+ *
+ * Return: 0 if successful, otherwise returns -errno.
+ */
+static int opa_ib_alloc_lkey(struct opa_ib_mr *mr, int dma_region)
+{
+	unsigned long flags;
+	u32 r;
+	int ret = 0;
+	struct opa_ib_data *ibd = to_opa_ibdata(mr->pd->device);
+	struct opa_ib_lkey_table *rkt = &ibd->lk_table;
+
+	/* special case for dma_mr lkey == 0 */
+	/* FXRTODO - revisit WFR logic here */
+	if (dma_region)
+		return 0;
+
+	idr_preload(GFP_KERNEL);
+	spin_lock_irqsave(&rkt->lock, flags);
+	/* Find the next available LKEY */
+	ret = idr_alloc_cyclic(&rkt->table, mr, 0, rkt->max, GFP_NOWAIT);
+	if (ret < 0)
+		goto idr_err;
+	r = ret;
+	ret = 0;
+
+	/*
+	 * Make sure lkey is never zero which is reserved to indicate an
+	 * unrestricted LKEY.
+	 */
+	rkt->gen++;
+	mr->lkey = (r << (32 - opa_ib_lkey_table_size)) |
+		((((1 << (24 - opa_ib_lkey_table_size)) - 1) & rkt->gen)
+		 << 8);
+	if (mr->lkey == 0) {
+		mr->lkey |= 1 << 8;
+		rkt->gen++;
+	}
+
+idr_err:
+	spin_unlock_irqrestore(&rkt->lock, flags);
+	idr_preload_end();
+	return ret;
+}
+
+/**
+ * opa_ib_free_lkey - free an lkey
+ * @mr: mr to free from tables
+ */
+static void opa_ib_free_lkey(struct opa_ib_mr *mr)
+{
+	unsigned long flags;
+	u32 lkey = mr->lkey;
+	u32 r;
+	struct opa_ib_data *ibd = to_opa_ibdata(mr->pd->device);
+	struct opa_ib_lkey_table *rkt = &ibd->lk_table;
+
+	if (lkey == 0)
+		return;
+
+	spin_lock_irqsave(&rkt->lock, flags);
+	r = lkey >> (32 - opa_ib_lkey_table_size);
+	idr_remove(&rkt->table, r);
+	spin_unlock_irqrestore(&rkt->lock, flags);
+
+	synchronize_rcu();
+}
+
 
 /**
  * opa_ib_lkey_ok - check IB SGE for validity and initialize
@@ -165,6 +270,9 @@ int opa_ib_dereg_mr(struct ib_mr *ibmr)
 int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
 		   struct ib_sge *isge, struct ib_sge *sge, int acc)
 {
+	struct opa_ib_mr *mr;
+	u32 r;
+
 	/*
 	 * We use LKEY == zero for kernel virtual addresses
 	 * (see opa_ib_get_dma_mr and dma.c).
@@ -180,10 +288,17 @@ int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
 		isge->length = sge->length;
 		goto ok;
 	}
-	/* FXRTODO - WFR lkey != 0 */
-	/* FXRTODO - WFR multi-segment stuff */
-	goto bail;
 
+	r = sge->lkey >> (32 - opa_ib_lkey_table_size);
+	mr = idr_find(&rkt->table, r);
+	if (unlikely(!mr || mr->lkey != sge->lkey || mr->pd != &pd->ibpd))
+		goto bail;
+	/* FXRTODO - WFR MR (len,access) checks */
+	/* FXRTODO - MR reference count */
+	rcu_read_unlock();
+
+	isge->addr = sge->addr;
+	isge->length = sge->length;
 ok:
 	return 1;
 bail:
