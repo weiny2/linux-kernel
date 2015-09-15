@@ -1007,6 +1007,7 @@ int ib_init_ah_from_path(struct ib_device *device, u8 port_num,
 	int ret;
 	u16 gid_index;
 	int use_roce;
+	int opa_force_grh;
 	struct net_device *ndev = NULL;
 
 	memset(ah_attr, 0, sizeof *ah_attr);
@@ -1075,7 +1076,10 @@ int ib_init_ah_from_path(struct ib_device *device, u8 port_num,
 		}
 	}
 
-	if (rec->hop_limit > 0 || use_roce) {
+	opa_force_grh = (rdma_cap_opa_ah(device, port_num) &&
+		     rec->hop_limit >= 1);
+
+	if (rec->hop_limit > 0 || use_roce || opa_force_grh) {
 		ah_attr->ah_flags = IB_AH_GRH;
 		ah_attr->grh.dgid = rec->dgid;
 
