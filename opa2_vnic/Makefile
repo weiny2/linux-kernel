@@ -4,10 +4,10 @@
 #
 ccflags-y += -I $(src)/../common
 ccflags-y += -I $(src)/../common/uapi
-ccflags-y += -I $(src)/Include
+ccflags-y += -I $(src)/vnic.git/Include
 obj-m = opa2_vnic_hfi.o
 
 opa2_vnic_hfi-y = opa2_vnic_hfi_main.o
 
-obj-m += opa_vnic_bus/
-obj-m += opa_vnic/
+obj-m += vnic.git/opa_vnic_bus/
+obj-m += vnic.git/opa_vnic/

@@ -63,12 +63,18 @@ KBUILD_EXTRA_SYMBOLS := $(KBUILD)/include-ifs-kernel/Module.symvers
 PWD := $(shell pwd)
 VERBOSE := 0
 
-driver: headers
+driver: headers vnic
 	make -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION) NOSTDINC_FLAGS="$(NOSTDINC_FLAGS)" KBUILD_EXTRA_SYMBOLS="$(KBUILD_EXTRA_SYMBOLS)"
 
 headers:
 	@if [ -e .git ]; then \
 		git submodule update --init opa-headers.git; \
+		git submodule status; \
+	fi
+
+vnic:
+	@if [ -e .git ]; then \
+		git submodule update --init opa2_vnic/vnic.git; \
 		git submodule status; \
 	fi
 
@@ -108,9 +114,9 @@ install:
 	install opa_core/opa_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install user/opa2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install verbs/opa2_ib.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install opa2_vnic/opa_vnic_bus/opa_vnic_bus.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install opa2_vnic/vnic.git/opa_vnic_bus/opa_vnic_bus.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install opa2_vnic/vnic.git/opa_vnic/opa_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install opa2_vnic/opa2_vnic_hfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install opa2_vnic/opa_vnic/opa_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
 	depmod -a $(KVER)
 
