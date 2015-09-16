@@ -2670,11 +2670,13 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 				qsfp_int_mgmt);
 
 			if ((ppd->offline_disabled_reason >
-			  HFI1_ODR_MASK(OPA_LINKDOWN_REASON_LOCAL_MEDIA_NOT_INSTALLED)) ||
+			  HFI1_ODR_MASK(
+			  OPA_LINKDOWN_REASON_LOCAL_MEDIA_NOT_INSTALLED)) ||
 			  (ppd->offline_disabled_reason ==
 			  HFI1_ODR_MASK(OPA_LINKDOWN_REASON_NONE)))
 				ppd->offline_disabled_reason =
-				HFI1_ODR_MASK(OPA_LINKDOWN_REASON_LOCAL_MEDIA_NOT_INSTALLED);
+				HFI1_ODR_MASK(
+				OPA_LINKDOWN_REASON_LOCAL_MEDIA_NOT_INSTALLED);
 
 			if (ppd->host_link_state == HLS_DN_POLL) {
 				/*
