@@ -416,6 +416,14 @@ for test in tests_to_run:
                         run_it = 0
                         WARN(curr_name + " : " + "SKIPPED!")
                         break
+
+            if run_it:
+                if curr_name == "Perf-Regression":
+                    if simics == True:
+                        run_it = 0
+                        WARN(curr_name + " : " + "SKIPPED!")
+                        break
+
         if run_it:
             # Now we need to replace the variables in the curr_args with the
             # right values
