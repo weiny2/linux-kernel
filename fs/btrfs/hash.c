@@ -23,6 +23,8 @@ int __init btrfs_hash_init(void)
 	if (IS_ERR(tfm))
 		return PTR_ERR(tfm);
 
+	printk("BTRFS: using %s for crc32c\n",
+	       crypto_tfm_alg_driver_name(crypto_shash_tfm(tfm)));
 	return 0;
 }
 
