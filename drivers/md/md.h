@@ -221,6 +221,8 @@ extern int rdev_clear_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
 				int is_new);
 extern void md_ack_all_badblocks(struct badblocks *bb);
 
+struct md_cluster_info;
+
 struct mddev {
 	void				*private;
 	struct md_personality		*pers;
@@ -439,6 +441,7 @@ struct mddev {
 		unsigned long		daemon_sleep; /* how many jiffies between updates? */
 		unsigned long		max_write_behind; /* write-behind mode */
 		int			external;
+		int			nodes; /* Maximum number of nodes in the cluster */
 	} bitmap_info;
 
 	atomic_t 			max_corr_read_errors; /* max read retries */
@@ -457,6 +460,7 @@ struct mddev {
 	struct work_struct flush_work;
 	struct work_struct event_work;	/* used by dm to report failure event */
 	void (*sync_super)(struct mddev *mddev, struct md_rdev *rdev);
+	struct md_cluster_info		*cluster_info;
 };
 
 
@@ -656,4 +660,8 @@ static inline int mddev_check_plugged(struct mddev *mddev)
 				   sizeof(struct blk_plug_cb));
 }
 extern struct md_cluster_operations *md_cluster_ops;
+static inline int mddev_is_clustered(struct mddev *mddev)
+{
+	return mddev->cluster_info && mddev->bitmap_info.nodes > 1;
+}
 #endif /* _MD_MD_H */
