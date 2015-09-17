@@ -252,7 +252,7 @@ u32 opa_ib_make_grh(struct opa_ib_portdata *ibp, struct ib_grh *hdr,
 #define RHF_EGR_INDEX_SMASK (RHF_EGR_INDEX_MASK << RHF_EGR_INDEX_SHIFT)
 
 #define RHF_EGR_OFFSET_SHIFT	24
-#define RHF_EGR_OFFSET_MASK	0xfffull
+#define RHF_EGR_OFFSET_MASK	0xffffull
 #define RHF_EGR_OFFSET_SMASK (RHF_EGR_OFFSET_MASK << RHF_EGR_OFFSET_SHIFT)
 
 #define RHF_PORT_SHIFT		41
