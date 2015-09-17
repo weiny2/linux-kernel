@@ -69,6 +69,7 @@ static DEFINE_SPINLOCK(pers_lock);
 
 static void md_print_devices(void);
 struct md_cluster_operations *md_cluster_ops;
+EXPORT_SYMBOL(md_cluster_ops);
 struct module *md_cluster_mod;
 EXPORT_SYMBOL(md_cluster_mod);
 
