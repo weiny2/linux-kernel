@@ -722,8 +722,11 @@ static bool tcm_rbd_get_write_cache(struct se_device *dev)
 #define TCM_RBD_PR_INFO_XATTR_FIELD_VER		0
 #define TCM_RBD_PR_INFO_XATTR_FIELD_SEQ		1
 #define TCM_RBD_PR_INFO_XATTR_FIELD_GEN		2
-#define TCM_RBD_PR_INFO_XATTR_FIELD_NUM_REGS	3
-#define TCM_RBD_PR_INFO_XATTR_FIELD_REGS_START	4
+#define TCM_RBD_PR_INFO_XATTR_FIELD_SCSI3_RSV	3
+#define TCM_RBD_PR_INFO_XATTR_FIELD_NUM_REGS	4
+#define TCM_RBD_PR_INFO_XATTR_FIELD_REGS_START	5
+
+#define TCM_RBD_PR_INFO_XATTR_VAL_SCSI3_RSV_ABSENT	"No SPC-3 Reservation holder"
 
 /* don't allow encoded PR info to exceed 8K */
 #define TCM_RBD_PR_INFO_XATTR_MAX_SIZE 8192
@@ -742,6 +745,21 @@ static bool tcm_rbd_get_write_cache(struct se_device *dev)
  * string for storage within an RBD object xattr. String based storage allows
  * us to use xattr compare and write operations for atomic PR info updates.
  */
+struct tcm_rbd_pr_rsv {
+	u64 key;		/* registered key */
+	/*
+	 * I-T nexus for reservation. Separate to reg, so that all_tg_pt flag
+	 * can be supported in future.
+	 */
+	char it_nexus[TCM_RBD_PR_IT_NEXUS_MAXLEN];
+	int type;		/* PR_TYPE_... */
+	/* scope is always PR_SCOPE_LU_SCOPE */
+};
+#define TCM_RBD_PR_INFO_XATTR_ENCODED_PR_RSV_MAXLEN		\
+	((sizeof("0x") + sizeof(u64) * 2) + sizeof(" ") +	\
+	 TCM_RBD_PR_IT_NEXUS_MAXLEN + sizeof(" ") +		\
+	 (sizeof("0x") + sizeof(u64) * 2) + sizeof("\n"))
+
 struct tcm_rbd_pr_reg {
 	struct list_head regs_node;
 	u64 key;		/* registered key */
@@ -756,6 +774,7 @@ struct tcm_rbd_pr_info {
 	u32 vers;		/* on disk format version number */
 	u32 seq; 		/* sequence number bumped every xattr write */
 	u32 gen; 		/* PR generation number */
+	struct tcm_rbd_pr_rsv *rsv;	/* SCSI3 reservation if any */
 	u32 num_regs;		/* number of registrations */
 	struct list_head regs;	/* list of registrations */
 };
@@ -763,6 +782,7 @@ struct tcm_rbd_pr_info {
 	((sizeof("0x") + sizeof(u32) * 2) + sizeof("\n") +		\
 	 (sizeof("0x") + sizeof(u32) * 2) + sizeof("\n") +		\
 	 (sizeof("0x") + sizeof(u32) * 2) + sizeof("\n") +		\
+	 TCM_RBD_PR_INFO_XATTR_ENCODED_PR_RSV_MAXLEN +	 		\
 	 (sizeof("0x") + sizeof(u32) * 2) + sizeof("\n") +		\
 	 (TCM_RBD_PR_INFO_XATTR_ENCODED_PR_REG_MAXLEN * _num_regs) +	\
 	 sizeof("\0"))
@@ -803,10 +823,62 @@ tcm_rbd_pr_info_free(struct tcm_rbd_pr_info *pr_info)
 	struct tcm_rbd_pr_reg *reg;
 	struct tcm_rbd_pr_reg *reg_n;
 
+	kfree(pr_info->rsv);
 	list_for_each_entry_safe(reg, reg_n, &pr_info->regs, regs_node) {
 		kfree(reg);
 	}
 	kfree(pr_info);
+}
+
+static bool
+tcm_rbd_is_rsv_holder(struct tcm_rbd_pr_rsv *rsv, struct tcm_rbd_pr_reg *reg,
+		      bool *rsv_is_all_reg)
+{
+	BUG_ON(!rsv);
+	BUG_ON(!reg);
+	if ((rsv->type == PR_TYPE_WRITE_EXCLUSIVE_ALLREG)
+			|| (rsv->type == PR_TYPE_EXCLUSIVE_ACCESS_ALLREG)) {
+		/* any registeration is a reservation holder */
+		if (rsv_is_all_reg)
+			*rsv_is_all_reg = true;
+		return true;
+	}
+	if (rsv_is_all_reg)
+		*rsv_is_all_reg = false;
+
+	if ((rsv->key == reg->key)
+	 && !strncmp(rsv->it_nexus, reg->it_nexus, ARRAY_SIZE(rsv->it_nexus))) {
+		return true;
+	}
+
+	return false;
+}
+
+static int
+tcm_rbd_pr_info_rsv_set(struct tcm_rbd_pr_info *pr_info, u64 key, char *nexus,
+			int type)
+{
+	struct tcm_rbd_pr_rsv *rsv;
+
+	if (pr_info->rsv != NULL) {
+		pr_err("rsv_set called with existing reservation\n");
+		return -EINVAL;
+	}
+
+	rsv = kmalloc(sizeof(*rsv), GFP_KERNEL);
+	if (!rsv) {
+		return -ENOMEM;
+	}
+
+	rsv->key = key;
+	strlcpy(rsv->it_nexus, nexus, ARRAY_SIZE(rsv->it_nexus));
+	rsv->type = type;
+
+	pr_info->rsv = rsv;
+
+	dout("pr_info rsv set: 0x%llx %s %d\n", key, nexus, type);
+
+	return 0;
 }
 
 static int
@@ -928,6 +1000,39 @@ tcm_rbd_pr_info_num_regs_decode(char *str, u32 *num_regs)
 }
 
 static int
+tcm_rbd_pr_info_rsv_decode(char *str, struct tcm_rbd_pr_rsv **_rsv)
+{
+	struct tcm_rbd_pr_rsv *rsv;
+	int rc;
+
+	BUG_ON(!_rsv);
+	if (!strncmp(str, TCM_RBD_PR_INFO_XATTR_VAL_SCSI3_RSV_ABSENT,
+		    sizeof(TCM_RBD_PR_INFO_XATTR_VAL_SCSI3_RSV_ABSENT))) {
+		/* no reservation. Ensure pr_info->rsv is NULL */
+		rsv = NULL;
+	} else {
+		rsv = kzalloc(sizeof(*rsv), GFP_KERNEL);
+		if (!rsv) {
+			return -ENOMEM;
+		}
+
+		/* reservation key, I-T nexus, and type with space separators */
+		rc = sscanf(str, "0x%016llx %"
+			    __stringify(TCM_RBD_PR_IT_NEXUS_MAXLEN)
+			    "s 0x%08x", &rsv->key, rsv->it_nexus, &rsv->type);
+		if (rc != 3) {
+			pr_err("failed to parse PR rsv: %s\n", str);
+			kfree(rsv);
+			return -EINVAL;
+		}
+	}
+
+	dout("processed pr_info rsv: %s\n", str);
+	*_rsv = rsv;
+	return 0;
+}
+
+static int
 tcm_rbd_pr_info_reg_decode(char *str, struct tcm_rbd_pr_reg **_reg)
 {
 	struct tcm_rbd_pr_reg *reg;
@@ -1008,6 +1113,11 @@ tcm_rbd_pr_info_decode(char *pr_xattr,
 			if (rc < 0) {
 				goto err_info_free;
 			}
+		} else if (field == TCM_RBD_PR_INFO_XATTR_FIELD_SCSI3_RSV) {
+			rc = tcm_rbd_pr_info_rsv_decode(str, &pr_info->rsv);
+			if (rc < 0) {
+				goto err_info_free;
+			}
 		} else if (field == TCM_RBD_PR_INFO_XATTR_FIELD_NUM_REGS) {
 			rc = tcm_rbd_pr_info_num_regs_decode(str,
 							    &pr_info->num_regs);
@@ -1062,6 +1172,28 @@ tcm_rbd_pr_info_vers_seq_gen_encode(char *buf, size_t buf_remain, u32 vers,
 		      vers, seq, gen);
 	if ((rc < 0) || (rc >= buf_remain)) {
 		pr_err("failed to encode PR vers, seq and gen\n");
+		return -EINVAL;
+	}
+
+	return rc;
+}
+
+static int
+tcm_rbd_pr_info_rsv_encode(char *buf, size_t buf_remain,
+			   struct tcm_rbd_pr_rsv *rsv)
+{
+	int rc;
+
+	if (!rsv) {
+		/* no reservation */
+		rc = snprintf(buf, buf_remain, "%s\n",
+			      TCM_RBD_PR_INFO_XATTR_VAL_SCSI3_RSV_ABSENT);
+	} else {
+		rc = snprintf(buf, buf_remain, "0x%016llx %s 0x%08x\n",
+			      rsv->key, rsv->it_nexus, rsv->type);
+	}
+	if ((rc < 0) || (rc >= buf_remain)) {
+		pr_err("failed to encode PR reservation\n");
 		return -EINVAL;
 	}
 
@@ -1133,6 +1265,15 @@ tcm_rbd_pr_info_encode(struct tcm_rbd_pr_info *pr_info,
 	rc = tcm_rbd_pr_info_vers_seq_gen_encode(p, buf_remain, pr_info->vers,
 						 pr_info->seq, pr_info->gen);
 	if (rc < 0) {
+		rc = -EINVAL;
+		goto err_xattr_free;
+	}
+
+	p += rc;
+	buf_remain -= rc;
+
+	rc = tcm_rbd_pr_info_rsv_encode(p, buf_remain, pr_info->rsv);
+	 if (rc < 0) {
 		rc = -EINVAL;
 		goto err_xattr_free;
 	}
@@ -1504,6 +1645,11 @@ tcm_rbd_execute_pr_register(struct se_cmd *cmd, u64 old_key,
 	sense_reason_t ret;
 	int retries = 0;
 
+	if (!cmd->se_sess || !cmd->se_lun) {
+		pr_err("SPC-3 PR: se_sess || struct se_lun is NULL!\n");
+		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+	}
+
 	if (!aptpl) {
 		/*
 		 * Currently unsupported by block layer API (hch):
@@ -1547,7 +1693,7 @@ retry:
 	/* check for an existing registration */
 	existing_reg = NULL;
 	list_for_each_entry(reg, &pr_info->regs, regs_node) {
-		if (!strcmp(reg->it_nexus, nexus_buf)) {
+		if (!strncmp(reg->it_nexus, nexus_buf, ARRAY_SIZE(nexus_buf))) {
 			dout("found existing PR reg for %s\n", nexus_buf);
 			existing_reg = reg;
 			break;
@@ -1619,10 +1765,129 @@ err_out:
 	return ret;
 }
 
+static sense_reason_t
+tcm_rbd_execute_pr_reserve(struct se_cmd *cmd, int type, u64 key)
+{
+	struct se_device *dev = cmd->se_dev;
+	struct tcm_rbd_dev *tcm_rbd_dev = TCM_RBD_DEV(dev);
+	char nexus_buf[TCM_RBD_PR_IT_NEXUS_MAXLEN];
+	struct tcm_rbd_pr_info *pr_info;
+	struct tcm_rbd_pr_reg *reg;
+	struct tcm_rbd_pr_reg *existing_reg;
+	char *pr_xattr;
+	int pr_xattr_len;
+	int rc;
+	sense_reason_t ret;
+	int retries = 0;
+
+	if (!cmd->se_sess || !cmd->se_lun) {
+		pr_err("SPC-3 PR: se_sess || struct se_lun is NULL!\n");
+		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+	}
+
+	rc = tcm_rbd_gen_it_nexus(cmd->se_sess, nexus_buf,
+				  ARRAY_SIZE(nexus_buf));
+	if (rc < 0)
+		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+
+retry:
+	pr_info = NULL;
+	pr_xattr = NULL;
+	pr_xattr_len = 0;
+	rc = tcm_rbd_pr_info_get(tcm_rbd_dev, &pr_info, &pr_xattr,
+				 &pr_xattr_len);
+	if (rc < 0) {
+		/* existing registration required for reservation */
+		pr_err("failed to obtain PR info\n");
+		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+	}
+
+	/* check for an existing registration */
+	existing_reg = NULL;
+	list_for_each_entry(reg, &pr_info->regs, regs_node) {
+		if (!strncmp(reg->it_nexus, nexus_buf, ARRAY_SIZE(nexus_buf))) {
+			dout("found existing PR reg for %s\n", nexus_buf);
+			existing_reg = reg;
+			break;
+		}
+	}
+
+	if (!existing_reg) {
+		pr_err("SPC-3 PR: Unable to locate registration for RESERVE\n");
+		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+	}
+
+	if (key != existing_reg->key) {
+		pr_err("SPC-3 PR RESERVE: Received res_key: 0x%016Lx"
+			" does not match existing SA REGISTER res_key:"
+			" 0x%016Lx\n", key, existing_reg->key);
+		ret = TCM_RESERVATION_CONFLICT;
+		goto err_info_free;
+	}
+
+	if (pr_info->rsv) {
+		if (!tcm_rbd_is_rsv_holder(pr_info->rsv, existing_reg, NULL)) {
+			pr_err("SPC-3 PR: Attempted RESERVE from %s while"
+			       " reservation already held by %s, returning"
+			       " RESERVATION_CONFLICT\n",
+			       nexus_buf, pr_info->rsv->it_nexus);
+			ret = TCM_RESERVATION_CONFLICT;
+			goto err_info_free;
+		}
+
+		if (pr_info->rsv->type != type) {
+			/* scope already checked */
+			pr_err("SPC-3 PR: Attempted RESERVE from %s trying to "
+			       "change TYPE, returning RESERVATION_CONFLICT\n",
+			       existing_reg->it_nexus);
+			ret = TCM_RESERVATION_CONFLICT;
+			goto err_info_free;
+		}
+
+		dout("reserve matches existing reservation, nothing to do\n");
+		goto done;
+	}
+
+	/* new reservation */
+	rc = tcm_rbd_pr_info_rsv_set(pr_info, key, nexus_buf, type);
+	if (rc < 0) {
+		pr_err("failed to set PR info reservation\n");
+		ret = TCM_OUT_OF_RESOURCES;
+		goto err_info_free;
+	}
+
+	rc = tcm_rbd_pr_info_replace(tcm_rbd_dev, pr_xattr, pr_xattr_len,
+				     pr_info);
+	if (rc == -ECANCELED) {
+		pr_warn("atomic PR info update failed due to parallel "
+			"change, expected(%d) %s. Retrying...\n",
+			pr_xattr_len, pr_xattr);
+		retries++;
+		if (retries <= TCM_RBD_PR_REG_MAX_RETRIES) {
+			tcm_rbd_pr_info_free(pr_info);
+			kfree(pr_xattr);
+			goto retry;
+		}
+	}
+	if (rc < 0) {
+		pr_err("atomic PR info update failed: %d\n", rc);
+		ret = TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+		goto err_info_free;
+	}
+
+done:
+	ret = TCM_NO_SENSE;
+err_info_free:
+	tcm_rbd_pr_info_free(pr_info);
+	kfree(pr_xattr);
+	return ret;
+}
+
 static struct target_pr_ops tcm_rbd_pr_ops = {
 	.pr_read_keys		= tcm_rbd_execute_pr_read_keys,
 
 	.pr_register		= tcm_rbd_execute_pr_register,
+	.pr_reserve		= tcm_rbd_execute_pr_reserve,
 };
 
 static struct se_subsystem_api tcm_rbd_ops = {
