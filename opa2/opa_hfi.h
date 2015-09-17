@@ -147,6 +147,10 @@ enum {
 #define HFI_SL_TO_TC_SHIFT	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_SHIFT
 #define HFI_SL_TO_TC_MASK	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK
 
+/* FXRTODO: Use masks and shifts from LM header files when available */
+#define HFI_SL_TO_SC_SHIFT	0x0
+#define HFI_SL_TO_SC_MASK	0x1f
+
 #define HFI_SC_VLNT_MASK		FXR_FPC_CFG_SC_VL_TABLE_15_0_ENTRY0_MASK
 /* Any lane between 8 and 14 is illegal. Randomly chosen one from that list */
 #define HFI_ILLEGAL_VL			12
