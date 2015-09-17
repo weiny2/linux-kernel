@@ -2292,11 +2292,12 @@ static void export_rdev(struct md_rdev * rdev)
 	kobject_put(&rdev->kobj);
 }
 
-static void kick_rdev_from_array(struct md_rdev * rdev)
+void md_kick_rdev_from_array(struct md_rdev *rdev)
 {
 	unbind_rdev_from_array(rdev);
 	export_rdev(rdev);
 }
+EXPORT_SYMBOL_GPL(md_kick_rdev_from_array);
 
 static void export_array(struct mddev *mddev)
 {
@@ -2307,7 +2308,7 @@ static void export_array(struct mddev *mddev)
 			MD_BUG();
 			continue;
 		}
-		kick_rdev_from_array(rdev);
+		md_kick_rdev_from_array(rdev);
 	}
 	if (!list_empty(&mddev->disks))
 		MD_BUG();
@@ -2754,7 +2755,7 @@ state_store(struct md_rdev *rdev, const char *buf, size_t len)
 			struct mddev *mddev = rdev->mddev;
 			if (mddev_is_clustered(mddev))
 				md_cluster_ops->metadata_update_start(mddev);
-			kick_rdev_from_array(rdev);
+			md_kick_rdev_from_array(rdev);
 			if (mddev->pers) {
 				set_bit(MD_CHANGE_DEVS, &mddev->flags);
 				md_wakeup_thread(mddev->thread);
@@ -3424,7 +3425,7 @@ static void analyze_sbs(struct mddev * mddev)
 				"md: fatal superblock inconsistency in %s"
 				" -- removing from array\n", 
 				bdevname(rdev->bdev,b));
-			kick_rdev_from_array(rdev);
+			md_kick_rdev_from_array(rdev);
 		}
 
 
@@ -3440,7 +3441,7 @@ static void analyze_sbs(struct mddev * mddev)
 			       "md: %s: %s: only %d devices permitted\n",
 			       mdname(mddev), bdevname(rdev->bdev, b),
 			       mddev->max_disks);
-			kick_rdev_from_array(rdev);
+			md_kick_rdev_from_array(rdev);
 			continue;
 		}
 		if (rdev != freshest) {
@@ -3449,7 +3450,7 @@ static void analyze_sbs(struct mddev * mddev)
 				printk(KERN_WARNING "md: kicking non-fresh %s"
 					" from array!\n",
 					bdevname(rdev->bdev,b));
-				kick_rdev_from_array(rdev);
+				md_kick_rdev_from_array(rdev);
 				continue;
 			}
 			/* No device should have a Candidate flag
@@ -3458,7 +3459,7 @@ static void analyze_sbs(struct mddev * mddev)
 			if (test_bit(Candidate, &rdev->flags)) {
 				pr_info("md: kicking Cluster Candidate %s from array!\n",
 					bdevname(rdev->bdev, b));
-				kick_rdev_from_array(rdev);
+				md_kick_rdev_from_array(rdev);
 			}
 		}
 		if (mddev->level == LEVEL_MULTIPATH) {
@@ -6122,7 +6123,7 @@ static int hot_remove_disk(struct mddev * mddev, dev_t dev)
 	if (rdev->raid_disk >= 0)
 		goto busy;
 
-	kick_rdev_from_array(rdev);
+	md_kick_rdev_from_array(rdev);
 	set_bit(MD_CHANGE_DEVS, &mddev->flags);
 	if (mddev->thread)
 		md_wakeup_thread(mddev->thread);
