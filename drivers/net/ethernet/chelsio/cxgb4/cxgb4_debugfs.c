@@ -1108,18 +1108,21 @@ static int mps_tcam_show(struct seq_file *seq, void *v)
 		if (cls_lo & REPLICATE_F) {
 			struct fw_ldst_cmd ldst_cmd;
 			int ret;
+			struct fw_ldst_mps_rplc mps_rplc;
+			u32 ldst_addrspc;
 
 			memset(&ldst_cmd, 0, sizeof(ldst_cmd));
+			ldst_addrspc =
+				FW_LDST_CMD_ADDRSPACE_V(FW_LDST_ADDRSPC_MPS);
 			ldst_cmd.op_to_addrspace =
 				htonl(FW_CMD_OP_V(FW_LDST_CMD) |
 				      FW_CMD_REQUEST_F |
 				      FW_CMD_READ_F |
-				      FW_LDST_CMD_ADDRSPACE_V(
-					      FW_LDST_ADDRSPC_MPS));
+				      ldst_addrspc);
 			ldst_cmd.cycles_to_len16 = htonl(FW_LEN16(ldst_cmd));
-			ldst_cmd.u.mps.fid_ctl =
+			ldst_cmd.u.mps.rplc.fid_idx =
 				htons(FW_LDST_CMD_FID_V(FW_LDST_MPS_RPLC) |
-				      FW_LDST_CMD_CTL_V(idx));
+				      FW_LDST_CMD_IDX_V(idx));
 			ret = t4_wr_mbox(adap, adap->mbox, &ldst_cmd,
 					 sizeof(ldst_cmd), &ldst_cmd);
 			if (ret)
@@ -1127,10 +1130,11 @@ static int mps_tcam_show(struct seq_file *seq, void *v)
 					 "replication map for idx %d: %d\n",
 					 idx, -ret);
 			else {
-				rplc[0] = ntohl(ldst_cmd.u.mps.rplc31_0);
-				rplc[1] = ntohl(ldst_cmd.u.mps.rplc63_32);
-				rplc[2] = ntohl(ldst_cmd.u.mps.rplc95_64);
-				rplc[3] = ntohl(ldst_cmd.u.mps.rplc127_96);
+				mps_rplc = ldst_cmd.u.mps.rplc;
+				rplc[0] = ntohl(mps_rplc.rplc31_0);
+				rplc[1] = ntohl(mps_rplc.rplc63_32);
+				rplc[2] = ntohl(mps_rplc.rplc95_64);
+				rplc[3] = ntohl(mps_rplc.rplc127_96);
 			}
 		}
 
