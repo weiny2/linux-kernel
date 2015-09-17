@@ -23,6 +23,7 @@
 #include <linux/timer.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
+#include "md-cluster.h"
 
 #define MaxSector (~(sector_t)0)
 
@@ -188,6 +189,10 @@ enum flag_bits {
 				 * so it is save to remove without
 				 * another call.
 				 */
+	Candidate,		/* For clustered environments only:
+				 * This device is seen locally but not
+				 * by the whole cluster
+				 */
 };
 
 #define BB_LEN_MASK	(0x00000000000001FFULL)
@@ -219,6 +224,8 @@ extern int rdev_set_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
 extern int rdev_clear_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
 				int is_new);
 extern void md_ack_all_badblocks(struct badblocks *bb);
+
+struct md_cluster_info;
 
 struct mddev {
 	void				*private;
@@ -438,6 +445,8 @@ struct mddev {
 		unsigned long		daemon_sleep; /* how many jiffies between updates? */
 		unsigned long		max_write_behind; /* write-behind mode */
 		int			external;
+		int			nodes; /* Maximum number of nodes in the cluster */
+		char                    cluster_name[64]; /* Name of the cluster */
 	} bitmap_info;
 
 	atomic_t 			max_corr_read_errors; /* max read retries */
@@ -456,6 +465,7 @@ struct mddev {
 	struct work_struct flush_work;
 	struct work_struct event_work;	/* used by dm to report failure event */
 	void (*sync_super)(struct mddev *mddev, struct md_rdev *rdev);
+	struct md_cluster_info		*cluster_info;
 };
 
 
@@ -587,6 +597,11 @@ static inline void safe_put_page(struct page *p)
 
 extern int register_md_personality(struct md_personality *p);
 extern int unregister_md_personality(struct md_personality *p);
+extern int register_md_cluster_operations(struct md_cluster_operations *ops,
+		struct module *module);
+extern int unregister_md_cluster_operations(void);
+extern int md_setup_cluster(struct mddev *mddev, int nodes);
+extern void md_cluster_stop(struct mddev *mddev);
 extern struct md_thread *md_register_thread(
 	void (*run)(struct md_thread *thread),
 	struct mddev *mddev,
@@ -644,9 +659,18 @@ static inline void rdev_dec_pending(struct md_rdev *rdev, struct mddev *mddev)
 }
 
 extern void md_unplug(struct blk_plug_cb *cb, bool from_schedule);
+extern void md_reload_sb(struct mddev *mddev);
+extern void md_update_sb(struct mddev *mddev, int force);
+extern void md_kick_rdev_from_array(struct mddev *mddev, struct md_rdev * rdev);
+struct md_rdev *md_find_rdev_nr_rcu(struct mddev *mddev, int nr);
 static inline int mddev_check_plugged(struct mddev *mddev)
 {
 	return !!blk_check_plugged(md_unplug, mddev,
 				   sizeof(struct blk_plug_cb));
+}
+extern struct md_cluster_operations *md_cluster_ops;
+static inline int mddev_is_clustered(struct mddev *mddev)
+{
+	return mddev->cluster_info && mddev->bitmap_info.nodes > 1;
 }
 #endif /* _MD_MD_H */

@@ -89,6 +89,8 @@ static void r1bio_pool_free(void *r1_bio, void *data)
 #define RESYNC_PAGES ((RESYNC_BLOCK_SIZE + PAGE_SIZE-1) / PAGE_SIZE)
 #define RESYNC_WINDOW (RESYNC_BLOCK_SIZE * RESYNC_DEPTH)
 #define RESYNC_WINDOW_SECTORS (RESYNC_WINDOW >> 9)
+#define CLUSTER_RESYNC_WINDOW (16 * RESYNC_WINDOW)
+#define CLUSTER_RESYNC_WINDOW_SECTORS (CLUSTER_RESYNC_WINDOW >> 9)
 #define NEXT_NORMALIO_DISTANCE (3 * RESYNC_WINDOW_SECTORS)
 
 static void * r1buf_pool_alloc(gfp_t gfp_flags, void *data)
@@ -560,8 +562,11 @@ static int read_balance(struct r1conf *conf, struct r1bio *r1_bio, int *max_sect
 	choose_next_idle = 0;
 	clear_bit(R1BIO_FailFast, &r1_bio->state);
 
-	if (conf->mddev->recovery_cp < MaxSector &&
-	    (this_sector + sectors >= conf->next_resync))
+	if ((conf->mddev->recovery_cp < MaxSector &&
+	    (this_sector + sectors >= conf->next_resync)) ||
+	    (mddev_is_clustered(conf->mddev) &&
+	    md_cluster_ops->area_resyncing(conf->mddev, READ, this_sector,
+		    this_sector + sectors)))
 		choose_first = 1;
 	else
 		choose_first = 0;
@@ -1063,8 +1068,11 @@ static void make_request(struct mddev *mddev, struct bio * bio)
 	md_write_start(mddev, bio); /* wait on superblock update early */
 
 	if (bio_data_dir(bio) == WRITE &&
-	    bio_end_sector(bio) > mddev->suspend_lo &&
-	    bio->bi_sector < mddev->suspend_hi) {
+	    ((bio_end_sector(bio) > mddev->suspend_lo &&
+	    bio->bi_sector < mddev->suspend_hi) ||
+	    (mddev_is_clustered(mddev) &&
+	     md_cluster_ops->area_resyncing(mddev, WRITE,
+			bio->bi_sector, bio_end_sector(bio))))) {
 		/* As the suspend_* range is controlled by
 		 * userspace, we want an interruptible
 		 * wait.
@@ -1075,7 +1083,10 @@ static void make_request(struct mddev *mddev, struct bio * bio)
 			prepare_to_wait(&conf->wait_barrier,
 					&w, TASK_INTERRUPTIBLE);
 			if (bio_end_sector(bio) <= mddev->suspend_lo ||
-			    bio->bi_sector >= mddev->suspend_hi)
+			    bio->bi_sector >= mddev->suspend_hi ||
+			    (mddev_is_clustered(mddev) &&
+			     !md_cluster_ops->area_resyncing(mddev, WRITE,
+				     bio->bi_sector, bio_end_sector(bio))))
 				break;
 			schedule();
 		}
@@ -1512,6 +1523,7 @@ static int raid1_spare_active(struct mddev *mddev)
 		struct md_rdev *rdev = conf->mirrors[i].rdev;
 		struct md_rdev *repl = conf->mirrors[conf->raid_disks + i].rdev;
 		if (repl
+		    && !test_bit(Candidate, &repl->flags)
 		    && repl->recovery_offset == MaxSector
 		    && !test_bit(Faulty, &repl->flags)
 		    && !test_and_set_bit(In_sync, &repl->flags)) {
@@ -2474,6 +2486,13 @@ static sector_t sync_request(struct mddev *mddev, sector_t sector_nr, int *skipp
 
 		bitmap_close_sync(mddev->bitmap);
 		close_sync(conf);
+
+		if (mddev_is_clustered(mddev)) {
+			conf->cluster_sync_low = 0;
+			conf->cluster_sync_high = 0;
+			/* Send zeros to mark end of resync */
+			md_cluster_ops->resync_finish(mddev);
+		}
 		return 0;
 	}
 
@@ -2501,7 +2520,12 @@ static sector_t sync_request(struct mddev *mddev, sector_t sector_nr, int *skipp
 	if (!go_faster && conf->nr_waiting)
 		msleep_interruptible(1000);
 
-	bitmap_cond_end_sync(mddev->bitmap, sector_nr);
+	/* we are incrementing sector_nr below. To be safe, we check against
+	 * sector_nr + two times RESYNC_SECTORS
+	 */
+
+	bitmap_cond_end_sync(mddev->bitmap, sector_nr,
+		mddev_is_clustered(mddev) && (sector_nr + 2 * RESYNC_SECTORS > conf->cluster_sync_high));
 	r1_bio = mempool_alloc(conf->r1buf_pool, GFP_NOIO);
 	raise_barrier(conf);
 
@@ -2694,6 +2718,16 @@ static sector_t sync_request(struct mddev *mddev, sector_t sector_nr, int *skipp
 	} while (r1_bio->bios[disk]->bi_vcnt < RESYNC_PAGES);
  bio_full:
 	r1_bio->sectors = nr_sectors;
+
+	if (mddev_is_clustered(mddev) &&
+			conf->cluster_sync_high < sector_nr + nr_sectors) {
+		conf->cluster_sync_low = mddev->curr_resync_completed;
+		conf->cluster_sync_high = conf->cluster_sync_low + CLUSTER_RESYNC_WINDOW_SECTORS;
+		/* Send resync message */
+		md_cluster_ops->resync_info_update(mddev,
+				conf->cluster_sync_low,
+				conf->cluster_sync_high);
+	}
 
 	/* For a user-requested sync, we read all readable devices and do a
 	 * compare
