@@ -767,6 +767,60 @@ do {									\
 } while (0);
 
 /*
+ * STANDARD and VPD page 0x80 T10 Vendor Identification
+ */
+static ssize_t target_core_dev_wwn_show_attr_vendor_id(
+	struct t10_wwn *t10_wwn,
+	char *page)
+{
+	return sprintf(page, "T10 Vendor Identification: %"
+		       __stringify(INQUIRY_VENDOR_IDENTIFIER_LEN) "s\n",
+		       &t10_wwn->vendor[0]);
+}
+
+static ssize_t target_core_dev_wwn_store_attr_vendor_id(
+	struct t10_wwn *t10_wwn,
+	const char *page,
+	size_t count)
+{
+	struct se_device *dev = t10_wwn->t10_dev;
+	unsigned char buf[INQUIRY_VENDOR_IDENTIFIER_LEN];
+
+	if (strlen(page) >= INQUIRY_VENDOR_IDENTIFIER_LEN) {
+		pr_err("Emulated T10 Vendor Identification exceeds"
+			" INQUIRY_VENDOR_IDENTIFIER_LEN: %d\n",
+			INQUIRY_VENDOR_IDENTIFIER_LEN);
+		return -EOVERFLOW;
+	}
+	/*
+	 * Check to see if any active $FABRIC_MOD exports exist.  If they
+	 * do exist, fail here as changing this information on the fly
+	 * (underneath the initiator side OS dependent multipath code)
+	 * could cause negative effects.
+	 */
+	if (dev->export_count) {
+		pr_err("Unable to set T10 Vendor Identification while"
+			" active %d $FABRIC_MOD exports exist\n",
+			dev->export_count);
+		return -EINVAL;
+	}
+
+	/* Assume ASCII encoding. Strip any newline added from userspace */
+	memset(buf, 0, INQUIRY_VENDOR_IDENTIFIER_LEN);
+	snprintf(buf, INQUIRY_VENDOR_IDENTIFIER_LEN, "%s", page);
+	strncpy(dev->t10_wwn.vendor, strstrip(buf),
+		INQUIRY_VENDOR_IDENTIFIER_LEN);
+
+	pr_debug("Target_Core_ConfigFS: Set emulated T10 Vendor Identification:"
+		 " %" __stringify(INQUIRY_VENDOR_IDENTIFIER_LEN) "s\n",
+		 dev->t10_wwn.vendor);
+
+	return count;
+}
+
+SE_DEV_WWN_ATTR(vendor_id, S_IRUGO | S_IWUSR);
+
+/*
  * VPD page 0x80 Unit serial
  */
 static ssize_t target_core_dev_wwn_show_attr_vpd_unit_serial(
@@ -967,6 +1021,7 @@ SE_DEV_WWN_ATTR(vpd_assoc_scsi_target_device, S_IRUGO | S_IWUSR);
 CONFIGFS_EATTR_OPS(target_core_dev_wwn, t10_wwn, t10_wwn_group);
 
 static struct configfs_attribute *target_core_dev_wwn_attrs[] = {
+	&target_core_dev_wwn_vendor_id.attr,
 	&target_core_dev_wwn_vpd_unit_serial.attr,
 	&target_core_dev_wwn_vpd_protocol_identifier.attr,
 	&target_core_dev_wwn_vpd_assoc_logical_unit.attr,

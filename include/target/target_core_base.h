@@ -59,6 +59,7 @@
 #define INQUIRY_VPD_SERIAL_LEN			254
 /* Used by transport_get_inquiry_vpd_device_ident() */
 #define INQUIRY_VPD_DEVICE_IDENTIFIER_LEN	254
+#define INQUIRY_VENDOR_IDENTIFIER_LEN		8
 
 /* Attempts before moving from SHORT to LONG */
 #define PYX_TRANSPORT_WINDOW_CLOSED_THRESHOLD	3
@@ -353,7 +354,7 @@ struct t10_vpd {
 };
 
 struct t10_wwn {
-	char vendor[8];
+	char vendor[INQUIRY_VENDOR_IDENTIFIER_LEN];
 	char model[16];
 	char revision[4];
 	char unit_serial[INQUIRY_VPD_SERIAL_LEN];
