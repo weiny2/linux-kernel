@@ -131,14 +131,14 @@ static struct dlm_lock_resource *lockres_init(struct mddev *mddev,
 	res->name = kzalloc(namelen + 1, GFP_KERNEL);
 	if (!res->name) {
 		pr_err("md-cluster: Unable to allocate resource name for resource %s\n", name);
-		goto out_err;
+		goto out_err_name;
 	}
 	strlcpy(res->name, name, namelen + 1);
 	if (with_lvb) {
 		res->lksb.sb_lvbptr = kzalloc(LVB_SIZE, GFP_KERNEL);
 		if (!res->lksb.sb_lvbptr) {
 			pr_err("md-cluster: Unable to allocate LVB for resource %s\n", name);
-			goto out_err;
+			goto out_err_lvb;
 		}
 		res->flags = DLM_LKF_VALBLK;
 	}
@@ -159,7 +159,9 @@ static struct dlm_lock_resource *lockres_init(struct mddev *mddev,
 	return res;
 out_err:
 	kfree(res->lksb.sb_lvbptr);
+out_err_lvb:
 	kfree(res->name);
+out_err_name:
 	kfree(res);
 	return NULL;
 }
