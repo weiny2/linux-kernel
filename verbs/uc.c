@@ -513,9 +513,11 @@ rdma_first:
 				goto drop;
 			qp->r_sge.num_sge = 1;
 		} else {
+			qp->r_sge.sge.mr = NULL;
 			qp->r_sge.num_sge = 0;
-			qp->r_sge.sge.addr = 0;
+			qp->r_sge.sge.vaddr = 0;
 			qp->r_sge.sge.length = 0;
+			qp->r_sge.sge.sge_length = 0;
 		}
 		if (opcode == OP(RDMA_WRITE_ONLY))
 			goto rdma_last;

@@ -129,17 +129,23 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 	 * TODO - add PIO-IOVEC support when available in opa-headers
 	 */
 	for (i = 0; i < wqe->s_sge->num_sge; i++) {
+		/* TODO only support kernel virtual addresses for now */
+		if ((u64)wqe->sg_list[i].vaddr < PAGE_OFFSET)
+			return -EFAULT;
+
 		if (i > 0 &&
-		    ((wqe->sg_list[i-1].addr + wqe->sg_list[i-1].length) != wqe->sg_list[i].addr)) {
+		    ((wqe->sg_list[i-1].vaddr + wqe->sg_list[i-1].length) !=
+		     wqe->sg_list[i].vaddr)) {
 			dev_err(&ibp->odev->dev,
-				"PT %d: PIO-IOVEC not implemented!\n", ibp->port_num);
+				"PT %d: PIO-IOVEC not implemented!\n",
+				ibp->port_num);
 			return -EIO;
 		}
 	}
 
 	dev_dbg(&ibp->odev->dev, "PT %d: Send hdr %p data %p %d\n",
-		 ibp->port_num, wqe->s_hdr,
-                 (void *)wqe->sg_list[0].addr, wqe->length);
+		ibp->port_num, wqe->s_hdr,
+		wqe->sg_list[0].vaddr, wqe->length);
 
 	/*
 	 * FXRTODO: Mapping sl to sc15 is invalid.
@@ -156,7 +162,7 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
 	ret = hfi_tx_cmd_bypass_pio(&ibp->cmdq_tx, wqe->s_ctx,
 				    wqe->s_hdr, 8 + (wqe->s_hdrwords << 2),
-				    (void *)wqe->sg_list[0].addr,
+				    wqe->sg_list[0].vaddr,
 				    wqe->length, ibp->port_num,
 				    15,
 				    KDETH_9B_PIO);
@@ -423,9 +429,6 @@ void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp)
 int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp,
 			 bool is_user)
 {
-	/* TODO - not ready to enable user-space QPs */
-	if (is_user)
-		return -ENOSYS;
 	qp->s_ctx = &ibd->ctx;
 	return 0;
 }

@@ -110,26 +110,39 @@ static const opcode_handler opcode_handler_tbl[256] = {
 void opa_ib_copy_sge(struct opa_ib_sge_state *ss, void *data, u32 length,
 		     int release)
 {
-	struct ib_sge *sge = &ss->sge;
+	struct hfi2_sge *sge = &ss->sge;
 
 	while (length) {
 		u32 len = sge->length;
 
 		if (len > length)
 			len = length;
+		if (len > sge->sge_length)
+			len = sge->sge_length;
 		BUG_ON(len == 0);
 		if (data) {
-			memcpy((void *)sge->addr, data, len);
+			memcpy(sge->vaddr, data, len);
 			data += len;
 		}
-		sge->addr += len;
+		sge->vaddr += len;
 		sge->length -= len;
-		if (sge->length == 0) {
-			/* FXRTODO - WFR has hfi1_put_mr() here */
+		sge->sge_length -= len;
+		if (sge->sge_length == 0) {
+			if (release)
+				hfi2_put_mr(sge->mr);
 			if (--ss->num_sge)
 				*sge = *ss->sg_list++;
+		} else if (sge->length == 0 && sge->mr->lkey) {
+			if (++sge->n >= HFI2_SEGSZ) {
+				if (++sge->m >= sge->mr->mapsz)
+					break;
+				sge->n = 0;
+			}
+			sge->vaddr =
+				sge->mr->map[sge->m]->segs[sge->n].vaddr;
+			sge->length =
+				sge->mr->map[sge->m]->segs[sge->n].length;
 		}
-		/* FXRTODO - WFR has multi-segment stuff here */
 		length -= len;
 	}
 }
@@ -265,7 +278,11 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 	goto bail;
 
 bail_inval_free:
-	/* FXRTODO - WFR has hfi1_put_mr() loop here */
+	while (j) {
+		struct hfi2_sge *sge = &wqe->sg_list[--j];
+
+		hfi2_put_mr(sge->mr);
+	}
 bail_inval:
 	ret = -EINVAL;
 bail:
