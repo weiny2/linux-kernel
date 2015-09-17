@@ -1693,6 +1693,14 @@ tcm_rbd_execute_pr_report_capabilities(struct se_cmd *cmd, unsigned char *buf,
 	return TCM_NO_SENSE;
 }
 
+static sense_reason_t
+tcm_rbd_execute_pr_read_full_status(struct se_cmd *cmd, unsigned char *buf,
+				    u32 buf_len)
+{
+	pr_err("READ FULL STATUS not supported by RBD backend\n");
+	return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+}
+
 /* handle PR registration for a currently unregistered I_T nexus */
 static sense_reason_t
 tcm_rbd_execute_pr_register_new(struct tcm_rbd_pr_info *pr_info, u64 old_key,
@@ -2480,6 +2488,7 @@ static struct target_pr_ops tcm_rbd_pr_ops = {
 	.pr_read_keys		= tcm_rbd_execute_pr_read_keys,
 	.pr_read_reservation	= tcm_rbd_execute_pr_read_reservation,
 	.pr_report_capabilities	= tcm_rbd_execute_pr_report_capabilities,
+	.pr_read_full_status	= tcm_rbd_execute_pr_read_full_status,
 
 	.pr_register		= tcm_rbd_execute_pr_register,
 	.pr_reserve		= tcm_rbd_execute_pr_reserve,
