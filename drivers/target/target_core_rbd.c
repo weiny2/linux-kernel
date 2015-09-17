@@ -2985,10 +2985,73 @@ out_info_free:
 	return ret;
 }
 
+static sense_reason_t
+tcm_rbd_execute_pr_reset(struct se_device *dev)
+{
+	struct tcm_rbd_dev *tcm_rbd_dev = TCM_RBD_DEV(dev);
+	struct tcm_rbd_pr_info *pr_info;
+	char *pr_xattr;
+	int pr_xattr_len;
+	int rc;
+	sense_reason_t ret;
+	int retries = 0;
+
+retry:
+	pr_info = NULL;
+	pr_xattr = NULL;
+	pr_xattr_len = 0;
+	rc = tcm_rbd_pr_info_get(tcm_rbd_dev, &pr_info, &pr_xattr,
+				 &pr_xattr_len);
+	if ((rc == -ENODATA) && (retries == 0)) {
+		dout("PR info not present for reset\n");
+		return TCM_NO_SENSE;
+	}
+	if (rc < 0) {
+		pr_err("failed to obtain PR info\n");
+		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+	}
+
+	if (!pr_info->scsi2_rsv) {
+		dout("no SCSI2 reservation to clear for reset");
+		goto done;
+	}
+
+	tcm_rbd_pr_info_scsi2_rsv_clear(pr_info);
+
+	rc = tcm_rbd_pr_info_replace(tcm_rbd_dev, pr_xattr, pr_xattr_len,
+				     pr_info);
+	if (rc == -ECANCELED) {
+		pr_warn("atomic PR info update failed due to parallel "
+			"change, expected(%d) %s. Retrying...\n",
+			pr_xattr_len, pr_xattr);
+		retries++;
+		if (retries <= TCM_RBD_PR_REG_MAX_RETRIES) {
+			tcm_rbd_pr_info_free(pr_info);
+			kfree(pr_xattr);
+			goto retry;
+		}
+	}
+	if (rc < 0) {
+		pr_err("atomic PR info update failed: %d\n", rc);
+		ret = TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+		goto err_info_free;
+	}
+
+	dout("cleared SCSI2 reservation on reset\n");
+
+done:
+	ret = TCM_NO_SENSE;
+err_info_free:
+	tcm_rbd_pr_info_free(pr_info);
+	kfree(pr_xattr);
+	return ret;
+}
+
 static struct target_pr_ops tcm_rbd_pr_ops = {
 	.check_conflict		= tcm_rbd_execute_pr_check_conflict,
 	.scsi2_reserve		= tcm_rbd_execute_pr_scsi2_reserve,
 	.scsi2_release		= tcm_rbd_execute_pr_scsi2_release,
+	.reset			= tcm_rbd_execute_pr_reset,
 
 	.pr_read_keys		= tcm_rbd_execute_pr_read_keys,
 	.pr_read_reservation	= tcm_rbd_execute_pr_read_reservation,
