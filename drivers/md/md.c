@@ -2755,8 +2755,10 @@ state_store(struct md_rdev *rdev, const char *buf, size_t len)
 		else {
 			struct mddev *mddev = rdev->mddev;
 			if (mddev_is_clustered(mddev))
-				md_cluster_ops->metadata_update_start(mddev);
+				md_cluster_ops->remove_disk(mddev, rdev);
 			md_kick_rdev_from_array(rdev);
+			if (mddev_is_clustered(mddev))
+				md_cluster_ops->metadata_update_start(mddev);
 			if (mddev->pers) {
 				set_bit(MD_CHANGE_DEVS, &mddev->flags);
 				md_wakeup_thread(mddev->thread);
@@ -6123,6 +6125,9 @@ static int hot_remove_disk(struct mddev * mddev, dev_t dev)
 
 	if (rdev->raid_disk >= 0)
 		goto busy;
+
+	if (mddev_is_clustered(mddev))
+		md_cluster_ops->remove_disk(mddev, rdev);
 
 	md_kick_rdev_from_array(rdev);
 	set_bit(MD_CHANGE_DEVS, &mddev->flags);
