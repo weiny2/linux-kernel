@@ -2429,6 +2429,14 @@ err_info_free:
 	return ret;
 }
 
+static sense_reason_t
+tcm_rbd_execute_pr_register_and_move(struct se_cmd *cmd, u64 old_key,
+				     u64 new_key, bool aptpl, int unreg)
+{
+	pr_err("REGISTER AND MOVE not supported by RBD backend\n");
+	return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+}
+
 static struct target_pr_ops tcm_rbd_pr_ops = {
 	.pr_read_keys		= tcm_rbd_execute_pr_read_keys,
 	.pr_read_reservation	= tcm_rbd_execute_pr_read_reservation,
@@ -2438,6 +2446,7 @@ static struct target_pr_ops tcm_rbd_pr_ops = {
 	.pr_release		= tcm_rbd_execute_pr_release,
 	.pr_clear		= tcm_rbd_execute_pr_clear,
 	.pr_preempt		= tcm_rbd_execute_pr_preempt,
+	.pr_register_and_move	= tcm_rbd_execute_pr_register_and_move,
 };
 
 static struct se_subsystem_api tcm_rbd_ops = {
