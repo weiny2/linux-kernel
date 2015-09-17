@@ -5,6 +5,43 @@
 #define TRANSPORT_PLUGIN_VHBA_PDEV		2
 #define TRANSPORT_PLUGIN_VHBA_VDEV		3
 
+enum target_pr_check_type {
+	/* check for *any* SCSI2 reservations, including own */
+	TARGET_PR_CHECK_SCSI2_ANY,
+	/* check for conflicting SCSI2 or SCSI3 reservation */
+	TARGET_PR_CHECK_SCSI2_SCSI3,
+};
+
+struct target_pr_ops {
+	sense_reason_t (*check_conflict)(struct se_cmd *cmd,
+					 enum target_pr_check_type);
+	sense_reason_t (*scsi2_reserve)(struct se_cmd *cmd);
+	sense_reason_t (*scsi2_release)(struct se_cmd *cmd);
+	sense_reason_t (*reset)(struct se_device *dev);
+	/* persistent reservation (out) API attempts to mirror block layer */
+	sense_reason_t (*pr_register)(struct se_cmd *cmd, u64 old_key,
+				      u64 new_key, bool aptpl, bool all_tg_pt,
+				      bool spec_i_pt, bool ignore_existing);
+	sense_reason_t (*pr_reserve)(struct se_cmd *cmd, int type, u64 key);
+	sense_reason_t (*pr_release)(struct se_cmd *cmd, int type, u64 key);
+	sense_reason_t (*pr_clear)(struct se_cmd *cmd, u64 key);
+	sense_reason_t (*pr_preempt)(struct se_cmd *cmd, u64 old_key,
+				     u64 new_key, int type, bool abort);
+	sense_reason_t (*pr_register_and_move)(struct se_cmd *cmd, u64 old_key,
+					       u64 new_key, bool aptpl,
+					       int unreg);
+	/* persistent reservation (in) API not proposed for block layer yet */
+	sense_reason_t (*pr_read_keys)(struct se_cmd *cmd, unsigned char *buf,
+				       u32 buf_len);
+	sense_reason_t (*pr_read_reservation)(struct se_cmd *cmd,
+					      unsigned char *buf, u32 buf_len);
+	sense_reason_t (*pr_report_capabilities)(struct se_cmd *cmd,
+						 unsigned char *buf,
+						 u32 buf_len);
+	sense_reason_t (*pr_read_full_status)(struct se_cmd *cmd,
+					      unsigned char *buf, u32 buf_len);
+};
+
 struct se_subsystem_api {
 	struct list_head sub_api_list;
 
@@ -44,6 +81,9 @@ struct se_subsystem_api {
 	int (*init_prot)(struct se_device *);
 	int (*format_prot)(struct se_device *);
 	void (*free_prot)(struct se_device *);
+
+	/* backend reservation hooks */
+	struct target_pr_ops *pr_ops;
 };
 
 struct sbc_ops {
