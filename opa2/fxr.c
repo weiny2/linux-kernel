@@ -588,23 +588,26 @@ static void hfi_init_sl_to_mc_tc(struct hfi_pportdata *ppd, u8 *mc, u8 *tc)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg[2];
-	u32 reg_addr;
+	u32 tx_reg_addr, rx_reg_addr;
 	int i, j, k;
 	int nregs = ARRAY_SIZE(reg);
 
 	switch (ppd_to_pnum(ppd)) {
 	case 1:
-		reg_addr = FXR_TXCID_CFG_SL0_TO_TC;
+		tx_reg_addr = FXR_TXCID_CFG_SL0_TO_TC;
+		rx_reg_addr = FXR_RXCID_CFG_SL0_TO_TC;
 		break;
 	case 2:
-		reg_addr = FXR_TXCID_CFG_SL2_TO_TC;
+		tx_reg_addr = FXR_TXCID_CFG_SL2_TO_TC;
+		rx_reg_addr = FXR_RXCID_CFG_SL2_TO_TC;
 		break;
 	default:
 		return;
 	}
 
+	/* Read from the TX and update both TX/RX mappings */
 	for (i = 0; i < nregs; i++)
-		reg[i] = read_csr(dd, reg_addr + i * 8);
+		reg[i] = read_csr(dd, tx_reg_addr + i * 8);
 
 	for (i = 0, j = 0; i < nregs; i++) {
 		for (k = 0; k < 64; k += 4, j++) {
@@ -617,6 +620,48 @@ static void hfi_init_sl_to_mc_tc(struct hfi_pportdata *ppd, u8 *mc, u8 *tc)
 		}
 	}
 
+	/* TX & RX SL -> TC/MC mappings should be identical */
+	for (i = 0; i < nregs; i++) {
+		write_csr(dd, tx_reg_addr + i * 8, reg[i]);
+		write_csr(dd, rx_reg_addr + i * 8, reg[i]);
+	}
+}
+
+static void hfi_sl_to_sc(struct hfi_pportdata *ppd, u8 *sl_to_sc)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 reg[4];
+	u32 reg_addr;
+	int i, j, k;
+	int nregs = ARRAY_SIZE(reg);
+
+	if (!sl_to_sc) {
+		dd_dev_warn(dd, "No sl_to_sc mapping");
+		return;
+	}
+
+	switch (ppd_to_pnum(ppd)) {
+	case 1:
+		/* FXRTODO: Use FXR_LM_CFG_PORT0_SL2SC0 when available */
+		reg_addr = FXR_LM_CSRS +
+				FXR_LM_CSRS_LM_CFG_PORT0_SL2SC0_MMOFFSET;
+		break;
+	case 2:
+		/* FXRTODO: Use FXR_LM_CFG_PORT1_SL2SC0 when available */
+		reg_addr = FXR_LM_CSRS +
+				FXR_LM_CSRS_LM_CFG_PORT1_SL2SC0_MMOFFSET;
+		break;
+	default:
+		return;
+	}
+
+	for (i = 0; i < nregs; i++)
+		reg[i] = read_csr(dd, reg_addr + i * 8);
+
+	for (i = 0, j = 0; i < nregs; i++)
+		for (k = 0; k < 64; k += 8, j++)
+			hfi_set_bits(&reg[i], sl_to_sc[j], HFI_SL_TO_SC_MASK,
+				     k + HFI_SL_TO_SC_SHIFT);
 	for (i = 0; i < nregs; i++)
 		write_csr(dd, reg_addr + i * 8, reg[i]);
 }
@@ -665,10 +710,7 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 			hfi_set_pkey_table(ppd);
 		break;
 	case HFI_IB_CFG_SL_TO_SC:
-#if 0
-		/* FXRTODO: Implement SL -> SC */
 		hfi_sl_to_sc(ppd, ppd->sl_to_sc);
-#endif
 		break;
 	case HFI_IB_CFG_SC_TO_SL:
 		hfi_sc_to_sl(ppd);
