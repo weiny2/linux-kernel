@@ -483,7 +483,7 @@ static int bitmap_new_disk_sb(struct bitmap *bitmap)
 	bitmap_super_t *sb;
 	unsigned long chunksize, daemon_sleep, write_behind;
 
-	bitmap->storage.sb_page = alloc_page(GFP_KERNEL);
+	bitmap->storage.sb_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
 	if (bitmap->storage.sb_page == NULL)
 		return -ENOMEM;
 	bitmap->storage.sb_page->index = 0;
@@ -530,6 +530,7 @@ static int bitmap_new_disk_sb(struct bitmap *bitmap)
 	sb->state = cpu_to_le32(bitmap->flags);
 	bitmap->events_cleared = bitmap->mddev->events;
 	sb->events_cleared = cpu_to_le64(bitmap->mddev->events);
+	bitmap->mddev->bitmap_info.nodes = 0;
 
 	kunmap_atomic(sb);
 
