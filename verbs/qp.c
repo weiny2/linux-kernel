@@ -253,7 +253,48 @@ static void reset_qp(struct opa_ib_qp *qp, enum ib_qp_type type)
 
 static void clear_mr_refs(struct opa_ib_qp *qp, int clr_sends)
 {
-	/* FXRTODO MR support */
+	unsigned n;
+
+	if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
+		opa_ib_put_ss(&qp->s_rdma_read_sge);
+
+	opa_ib_put_ss(&qp->r_sge);
+
+	if (clr_sends) {
+		while (qp->s_last != qp->s_head) {
+			struct opa_ib_swqe *wqe = get_swqe_ptr(qp, qp->s_last);
+			unsigned i;
+
+			for (i = 0; i < wqe->wr.num_sge; i++) {
+				struct hfi2_sge *sge = &wqe->sg_list[i];
+
+				hfi2_put_mr(sge->mr);
+			}
+			if (qp->ibqp.qp_type == IB_QPT_UD ||
+			    qp->ibqp.qp_type == IB_QPT_SMI ||
+			    qp->ibqp.qp_type == IB_QPT_GSI)
+				atomic_dec(&to_opa_ibah(wqe->wr.wr.ud.ah)->refcount);
+			if (++qp->s_last >= qp->s_size)
+				qp->s_last = 0;
+		}
+		if (qp->s_rdma_mr) {
+			hfi2_put_mr(qp->s_rdma_mr);
+			qp->s_rdma_mr = NULL;
+		}
+	}
+
+	if (qp->ibqp.qp_type != IB_QPT_RC)
+		return;
+
+	for (n = 0; n < ARRAY_SIZE(qp->s_ack_queue); n++) {
+		struct opa_ib_ack_entry *e = &qp->s_ack_queue[n];
+
+		if (e->opcode == IB_OPCODE_RC_RDMA_READ_REQUEST &&
+		    e->rdma_sge.mr) {
+			hfi2_put_mr(e->rdma_sge.mr);
+			e->rdma_sge.mr = NULL;
+		}
+	}
 }
 
 static void flush_tx_list(struct opa_ib_qp *qp)
@@ -702,8 +743,7 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 		goto bail;
 	}
 
-	/* FXRTODO - hfi1_sge -> ib_sge */
-	sz = sizeof(struct ib_sge) *
+	sz = sizeof(struct hfi2_sge) *
 		init_attr->cap.max_send_sge +
 		sizeof(struct opa_ib_swqe);
 	swq = vmalloc((init_attr->cap.max_send_wr + 1) * sz);
@@ -739,7 +779,7 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 	else {
 		qp->r_rq.size = init_attr->cap.max_recv_wr + 1;
 		qp->r_rq.max_sge = init_attr->cap.max_recv_sge;
-		sz = (sizeof(struct ib_sge) * qp->r_rq.max_sge) +
+		sz = (sizeof(struct hfi2_sge) * qp->r_rq.max_sge) +
 		     sizeof(struct opa_ib_rwqe);
 		qp->r_rq.wq = vmalloc_user(sizeof(struct opa_ib_rwq) +
 					   qp->r_rq.size * sz);

@@ -78,7 +78,7 @@ static inline int send_ok(struct opa_ib_qp *qp)
 }
 
 /*
- * Validate a RWQE and fill in the SGE state.
+ * Validate a RWQE and fill in the receive SGE state.
  * Return 1 if OK.
  */
 static int init_sge(struct opa_ib_qp *qp, struct opa_ib_rwqe *wqe)
@@ -110,8 +110,11 @@ static int init_sge(struct opa_ib_qp *qp, struct opa_ib_rwqe *wqe)
 	goto bail;
 
 bad_lkey:
-	/* FXRTODO - WFR has hfi1_put_mr() loop here */
+	while (j) {
+		struct hfi2_sge *sge = --j ? &ss->sg_list[j - 1] : &ss->sge;
 
+		hfi2_put_mr(sge->mr);
+	}
 	ss->num_sge = 0;
 	memset(&wc, 0, sizeof(wc));
 	wc.wr_id = wqe->wr_id;
@@ -415,12 +418,16 @@ void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
 			  enum ib_wc_status status)
 {
 	u32 old_last, last;
+	unsigned i;
 
 	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_OR_FLUSH_SEND))
 		return;
 
-	/* FXRTODO - WFR has hfi1_put_mr() loop here */
+	for (i = 0; i < wqe->wr.num_sge; i++) {
+		struct hfi2_sge *sge = &wqe->sg_list[i];
 
+		hfi2_put_mr(sge->mr);
+	}
 	if (qp->ibqp.qp_type == IB_QPT_UD ||
 	    qp->ibqp.qp_type == IB_QPT_SMI ||
 	    qp->ibqp.qp_type == IB_QPT_GSI)

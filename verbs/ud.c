@@ -72,7 +72,7 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 	struct ib_ah_attr *ah_attr;
 	unsigned long flags;
 	struct opa_ib_sge_state ssge;
-	struct ib_sge *sge;
+	struct hfi2_sge *sge;
 	struct ib_wc wc;
 	u32 length;
 	enum ib_qp_type sqptype, dqptype;
@@ -206,13 +206,27 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 
 		if (len > length)
 			len = length;
+		if (len > sge->sge_length)
+			len = sge->sge_length;
 		BUG_ON(len == 0);
-		opa_ib_copy_sge(&qp->r_sge, (void *)sge->addr, len, 1);
-		sge->addr += len;
+		opa_ib_copy_sge(&qp->r_sge, sge->vaddr, len, 1);
+		sge->vaddr += len;
 		sge->length -= len;
-		if ((sge->length == 0) && (--ssge.num_sge))
-			*sge = *ssge.sg_list++;
-		/* FXRTODO - WFR has multi-segment stuff here */
+		sge->sge_length -= len;
+		if (sge->sge_length == 0) {
+			if (--ssge.num_sge)
+				*sge = *ssge.sg_list++;
+		} else if (sge->length == 0 && sge->mr->lkey) {
+			if (++sge->n >= HFI2_SEGSZ) {
+				if (++sge->m >= sge->mr->mapsz)
+					break;
+				sge->n = 0;
+			}
+			sge->vaddr =
+				sge->mr->map[sge->m]->segs[sge->n].vaddr;
+			sge->length =
+				sge->mr->map[sge->m]->segs[sge->n].length;
+		}
 		length -= len;
 	}
 	opa_ib_put_ss(&qp->r_sge);

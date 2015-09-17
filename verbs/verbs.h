@@ -162,17 +162,74 @@ struct opa_ib_cq {
 	struct opa_ib_mmap_info *ip;
 };
 
-struct opa_ib_mr {
-	struct ib_mr ibmr;
-	struct ib_pd *pd;
-	u32 lkey;
-};
-
 struct opa_ib_lkey_table {
 	spinlock_t lock;        /* protect changes in this struct */
 	u32 gen;                /* generation count */
 	u32 max;                /* size of the table */
 	struct idr table;
+};
+
+/*
+ * A segment is a linear region of low physical memory.
+ * Used by the verbs layer.
+ */
+struct hfi2_seg {
+	void *vaddr;
+	size_t length;
+};
+
+/* The number of hfi2_segs that fit in a page. */
+#define HFI2_SEGSZ     (PAGE_SIZE / sizeof(struct hfi2_seg))
+
+struct hfi2_segarray {
+	struct hfi2_seg segs[HFI2_SEGSZ];
+};
+
+struct hfi2_mregion {
+	struct ib_pd *pd;       /* shares refcnt of ibmr.pd */
+	u64 user_base;          /* User's address for this region */
+	u64 iova;               /* IB start address of this region */
+	size_t length;
+	u32 lkey;
+	u32 offset;             /* offset (bytes) to start of region */
+	int access_flags;
+	u32 max_segs;           /* number of hfi1_segs in all the arrays */
+	u32 mapsz;              /* size of the map array */
+	u8  page_shift;         /* 0 - non unform/non powerof2 sizes */
+	u8  lkey_published;     /* in global table */
+	struct completion comp; /* complete when refcount goes to zero */
+	atomic_t refcount;
+	struct hfi2_segarray *map[0];    /* the segments */
+};
+
+struct opa_ib_mr {
+	struct ib_mr ibmr;
+	struct ib_umem *umem;
+	struct hfi2_mregion mr;  /* must be last */
+};
+
+static inline void hfi2_get_mr(struct hfi2_mregion *mr)
+{
+	atomic_inc(&mr->refcount);
+}
+
+static inline void hfi2_put_mr(struct hfi2_mregion *mr)
+{
+	if (unlikely(atomic_dec_and_test(&mr->refcount)))
+		complete(&mr->comp);
+}
+
+/*
+ * These keep track of the copy progress within a memory region.
+ * Used by the verbs layer.
+ */
+struct hfi2_sge {
+	struct hfi2_mregion *mr;
+	void *vaddr;            /* kernel virtual address of segment */
+	u32 sge_length;         /* length of the SGE */
+	u32 length;             /* remaining length of the segment */
+	u16 m;                  /* current index: mr->map[m] */
+	u16 n;                  /* current index: mr->map[m]->segs[n] */
 };
 
 /*
@@ -198,7 +255,7 @@ struct opa_ib_swqe {
 	u8 s_sl;
 	struct hfi_ctx *s_ctx;           /* associated send context */
 
-	struct ib_sge sg_list[0];
+	struct hfi2_sge sg_list[0];
 };
 
 /*
@@ -243,17 +300,19 @@ struct opa_ib_srq {
 };
 
 struct opa_ib_sge_state {
-	struct ib_sge *sg_list;	/* next SGE to be used if any */
-	struct ib_sge sge;	/* progress state for the current SGE */
+	struct hfi2_sge *sg_list;  /* next SGE to be used if any */
+	struct hfi2_sge sge;	   /* progress state for the current SGE */
 	u32 total_len;
 	u8 num_sge;
 };
 
 static inline void opa_ib_put_ss(struct opa_ib_sge_state *ss)
 {
-	while (ss->num_sge)
+	while (ss->num_sge) {
+		hfi2_put_mr(ss->sge.mr);
 		if (--ss->num_sge)
 			ss->sge = *ss->sg_list++;
+	}
 }
 
 /*
@@ -266,7 +325,7 @@ struct opa_ib_ack_entry {
 	u32 psn;
 	u32 lpsn;
 	union {
-		struct ib_sge rdma_sge;
+		struct hfi2_sge rdma_sge;
 		u64 atomic_data;
 	};
 };
@@ -344,9 +403,7 @@ struct opa_ib_qp {
 	u32 s_flags;
 	struct opa_ib_swqe *s_wqe;
 	struct opa_ib_sge_state s_sge;     /* current send request data */
-#if 0
-	struct opa_ib_mregion *s_rdma_mr;
-#endif
+	struct hfi2_mregion *s_rdma_mr;
 	u32 s_cur_size;         /* size of send packet in bytes */
 	u32 s_len;              /* total length of s_sge */
 	u32 s_rdma_read_len;    /* total length of s_rdma_read_sge */
@@ -381,7 +438,7 @@ struct opa_ib_qp {
 	struct timer_list s_timer;
 	struct iowait s_iowait;
 
-	struct ib_sge r_sg_list[0] /* verified SGEs */
+	struct hfi2_sge r_sg_list[0] /* verified SGEs */
 		____cacheline_aligned_in_smp;
 
 	struct hfi_ctx *s_ctx;	/* QP's send context */
@@ -474,7 +531,7 @@ static inline struct opa_ib_swqe *get_swqe_ptr(struct opa_ib_qp *qp,
 	return (struct opa_ib_swqe *)((char *)qp->s_wq +
 				     (sizeof(struct opa_ib_swqe) +
 				      qp->s_max_sge *
-				      sizeof(struct ib_sge)) * n);
+				      sizeof(struct hfi2_sge)) * n);
 }
 
 /*
@@ -563,6 +620,7 @@ struct opa_ib_data {
 	unsigned long reserved_qps;
 	spinlock_t qpt_lock;
 	struct opa_ib_lkey_table lk_table;
+	struct hfi2_mregion __rcu *dma_mr;
 	struct list_head pending_mmaps;
 	spinlock_t pending_lock;
 	u32 mmap_offset;
@@ -677,8 +735,8 @@ void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
 int opa_ib_rcv_wait(void *data);
 int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey);
 int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
-		   struct ib_sge *isge, struct ib_sge *sge, int acc);
-int opa_ib_rkey_ok(struct opa_ib_qp *qp, struct ib_sge *sge,
+		   struct hfi2_sge *isge, struct ib_sge *sge, int acc);
+int opa_ib_rkey_ok(struct opa_ib_qp *qp, struct hfi2_sge *sge,
 		   u32 len, u64 vaddr, u32 rkey, int acc);
 struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc);
 struct ib_mr *opa_ib_reg_phys_mr(struct ib_pd *pd,
