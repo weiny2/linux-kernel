@@ -1774,7 +1774,7 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 			    access_sw_kmem_wait),
 [C_SW_SEND_SCHED] = CNTR_ELEM("SendSched", 0, 0, CNTR_NORMAL,
 			    access_sw_send_schedule),
-[C_SDMA_DESC_FETCHED_CNT] = CNTR_ELEM("SDEDscFdCn",
+[C_SDMA_DESC_FETCHED_CNT] = CNTR_ELEM("SDMADscFd",
 					SEND_DMA_DESC_FETCHED_CNT, 0,
 					CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
 					dev_access_u32_csr),
@@ -1787,7 +1787,7 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 [C_SDMA_IDLE_INT_CNT] = CNTR_ELEM("SDMAIdInt", 0, 0,
 					CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
 					access_sde_idle_int_cnt),
-[C_SDMA_PROGRESS_INT_CNT] = CNTR_ELEM("SDMAPrIntCn", 0, 0,
+[C_SDMA_PROGRESS_INT_CNT] = CNTR_ELEM("SDMAPrInt", 0, 0,
 					CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
 					access_sde_progress_int_cnt)
 };
