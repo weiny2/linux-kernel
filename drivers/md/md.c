@@ -53,6 +53,7 @@
 #include <linux/slab.h>
 #include "md.h"
 #include "bitmap.h"
+#include "md-cluster.h"
 
 #ifndef MODULE
 static void autostart_arrays(int part);
@@ -67,6 +68,9 @@ static LIST_HEAD(pers_list);
 static DEFINE_SPINLOCK(pers_lock);
 
 static void md_print_devices(void);
+struct md_cluster_operations *md_cluster_ops;
+struct module *md_cluster_mod;
+EXPORT_SYMBOL(md_cluster_mod);
 
 static DECLARE_WAIT_QUEUE_HEAD(resync_wait);
 static struct workqueue_struct *md_wq;
@@ -7361,9 +7365,56 @@ int unregister_md_personality(struct md_personality *p)
 	return 0;
 }
 
+int register_md_cluster_operations(struct md_cluster_operations *ops, struct module *module)
+{
+	if (md_cluster_ops != NULL)
+		return -EALREADY;
+	spin_lock(&pers_lock);
+	md_cluster_ops = ops;
+	md_cluster_mod = module;
+	spin_unlock(&pers_lock);
+	return 0;
+}
+EXPORT_SYMBOL(register_md_cluster_operations);
+
+int unregister_md_cluster_operations(void)
+{
+	spin_lock(&pers_lock);
+	md_cluster_ops = NULL;
+	spin_unlock(&pers_lock);
+	return 0;
+}
+EXPORT_SYMBOL(unregister_md_cluster_operations);
+
+int md_setup_cluster(struct mddev *mddev, int nodes)
+{
+	int err;
+
+	err = request_module("md-cluster");
+	if (err) {
+		pr_err("md-cluster module not found.\n");
+		return err;
+	}
+
+	spin_lock(&pers_lock);
+	if (!md_cluster_ops || !try_module_get(md_cluster_mod)) {
+		spin_unlock(&pers_lock);
+		return -ENOENT;
+	}
+	spin_unlock(&pers_lock);
+
+	return md_cluster_ops->join(mddev);
+}
+
+void md_cluster_stop(struct mddev *mddev)
+{
+	md_cluster_ops->leave(mddev);
+	module_put(md_cluster_mod);
+}
+
 static int is_mddev_idle(struct mddev *mddev, int init)
 {
-	struct md_rdev * rdev;
+	struct md_rdev *rdev;
 	int idle;
 	int curr_events;
 
