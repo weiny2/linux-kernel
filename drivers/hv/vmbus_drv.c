@@ -1193,13 +1193,14 @@ static void __exit vmbus_exit(void)
 	tasklet_kill(&msg_dpc);
 	vmbus_free_channels();
 	if (ms_hyperv.features & HV_FEATURE_GUEST_CRASH_MSR_AVAILABLE) {
+		unregister_die_notifier(&hyperv_die_block);
 		atomic_notifier_chain_unregister(&panic_notifier_list,
 						 &hyperv_panic_block);
 	}
 	bus_unregister(&hv_bus);
 	hv_cleanup();
 	for_each_online_cpu(cpu) {
-		unregister_die_notifier(&hyperv_die_block);
+		tasklet_kill(hv_context.event_dpc[cpu]);
 		smp_call_function_single(cpu, hv_synic_cleanup, NULL, 1);
 	}
 	hv_synic_free();
