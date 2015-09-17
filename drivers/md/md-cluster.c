@@ -368,11 +368,13 @@ static void __remove_suspend_info(struct md_cluster_info *cinfo, int slot)
 		}
 }
 
-static void remove_suspend_info(struct md_cluster_info *cinfo, int slot)
+static void remove_suspend_info(struct mddev *mddev, int slot)
 {
+	struct md_cluster_info *cinfo = mddev->cluster_info;
 	spin_lock_irq(&cinfo->suspend_lock);
 	__remove_suspend_info(cinfo, slot);
 	spin_unlock_irq(&cinfo->suspend_lock);
+	mddev->pers->quiesce(mddev, 2);
 }
 
 
@@ -383,7 +385,7 @@ static void process_suspend_info(struct mddev *mddev,
 	struct suspend_info *s;
 
 	if (!hi) {
-		remove_suspend_info(cinfo, slot);
+		remove_suspend_info(mddev, slot);
 		return;
 	}
 	s = kzalloc(sizeof(struct suspend_info), GFP_KERNEL);
@@ -399,6 +401,7 @@ static void process_suspend_info(struct mddev *mddev,
 	__remove_suspend_info(cinfo, slot);
 	list_add(&s->list, &cinfo->suspend_list);
 	spin_unlock_irq(&cinfo->suspend_lock);
+	mddev->pers->quiesce(mddev, 2);
 }
 
 static void process_add_new_disk(struct mddev *mddev, struct cluster_msg *cmsg)
