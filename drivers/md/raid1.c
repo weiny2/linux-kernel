@@ -563,7 +563,7 @@ static int read_balance(struct r1conf *conf, struct r1bio *r1_bio, int *max_sect
 	if ((conf->mddev->recovery_cp < MaxSector &&
 	    (this_sector + sectors >= conf->next_resync)) ||
 	    (mddev_is_clustered(conf->mddev) &&
-	    md_cluster_ops->area_resyncing(conf->mddev, this_sector,
+	    md_cluster_ops->area_resyncing(conf->mddev, READ, this_sector,
 		    this_sector + sectors)))
 		choose_first = 1;
 	else
@@ -1069,7 +1069,8 @@ static void make_request(struct mddev *mddev, struct bio * bio)
 	    ((bio_end_sector(bio) > mddev->suspend_lo &&
 	    bio->bi_sector < mddev->suspend_hi) ||
 	    (mddev_is_clustered(mddev) &&
-	     md_cluster_ops->area_resyncing(mddev, bio->bi_sector, bio_end_sector(bio))))) {
+	     md_cluster_ops->area_resyncing(mddev, WRITE,
+			bio->bi_sector, bio_end_sector(bio))))) {
 		/* As the suspend_* range is controlled by
 		 * userspace, we want an interruptible
 		 * wait.
@@ -1082,7 +1083,7 @@ static void make_request(struct mddev *mddev, struct bio * bio)
 			if (bio_end_sector(bio) <= mddev->suspend_lo ||
 			    bio->bi_sector >= mddev->suspend_hi ||
 			    (mddev_is_clustered(mddev) &&
-			     !md_cluster_ops->area_resyncing(mddev,
+			     !md_cluster_ops->area_resyncing(mddev, WRITE,
 				     bio->bi_sector, bio_end_sector(bio))))
 				break;
 			schedule();
