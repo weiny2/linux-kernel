@@ -1647,9 +1647,6 @@ static void sdma_sendctrl(struct sdma_engine *sde, unsigned op)
 
 	spin_unlock_irqrestore(&sde->senddmactrl_lock, flags);
 
-#ifdef CONFIG_SDMA_VERBOSITY
-	sdma_dumpstate(sde);
-#endif
 }
 
 static void sdma_setlengen(struct sdma_engine *sde)
@@ -1786,7 +1783,6 @@ static void init_sdma_regs(
 void sdma_dumpstate(struct sdma_engine *sde)
 {
 	u64 csr;
-	unsigned i;
 
 	sdma_dumpstate_helper(SD(CTRL));
 	sdma_dumpstate_helper(SD(STATUS));
@@ -1794,13 +1790,6 @@ void sdma_dumpstate(struct sdma_engine *sde)
 	sdma_dumpstate_helper0(SD(ERR_MASK));
 	sdma_dumpstate_helper(SD(ENG_ERR_STATUS));
 	sdma_dumpstate_helper(SD(ENG_ERR_MASK));
-
-	for (i = 0; i < CCE_NUM_INT_CSRS; ++i) {
-		sdma_dumpstate_helper2(CCE_INT_STATUS);
-		sdma_dumpstate_helper2(CCE_INT_MASK);
-		sdma_dumpstate_helper2(CCE_INT_BLOCKED);
-	}
-
 	sdma_dumpstate_helper(SD(TAIL));
 	sdma_dumpstate_helper(SD(HEAD));
 	sdma_dumpstate_helper(SD(PRIORITY_THLD));
