@@ -655,6 +655,7 @@ static inline void rdev_dec_pending(struct md_rdev *rdev, struct mddev *mddev)
 }
 
 extern void md_unplug(struct blk_plug_cb *cb, bool from_schedule);
+extern void md_reload_sb(struct mddev *mddev);
 static inline int mddev_check_plugged(struct mddev *mddev)
 {
 	return !!blk_check_plugged(md_unplug, mddev,
