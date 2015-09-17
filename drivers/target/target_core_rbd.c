@@ -1654,6 +1654,45 @@ out:
 	return TCM_NO_SENSE;
 }
 
+static sense_reason_t
+tcm_rbd_execute_pr_report_capabilities(struct se_cmd *cmd, unsigned char *buf,
+				       u32 buf_len)
+{
+	u16 add_len = 8; /* Hardcoded to 8. */
+
+	BUG_ON(buf_len < 6);
+
+	buf[0] = ((add_len >> 8) & 0xff);
+	buf[1] = (add_len & 0xff);
+	buf[2] |= 0x10; /* CRH: Compatible Reservation Handling bit. */
+	/* SIP_C=0 and ATP_C=0: no support for all_tg_pt/spec_i_pt */
+	buf[2] |= 0x01; /* PTPL_C: Persistence across Target Power Loss bit */
+	/*
+	 * We are filling in the PERSISTENT RESERVATION TYPE MASK below, so
+	 * set the TMV: Task Mask Valid bit.
+	 */
+	buf[3] |= 0x80;
+	/*
+	 * Change ALLOW COMMANDS to 0x20 or 0x40 later from Table 166
+	 */
+	buf[3] |= 0x10; /* ALLOW COMMANDS field 001b */
+	/*
+	 * PTPL_A: Persistence across Target Power Loss Active bit
+	 */
+	buf[3] |= 0x01;
+	/*
+	 * Setup the PERSISTENT RESERVATION TYPE MASK from Table 167
+	 */
+	buf[4] |= 0x80; /* PR_TYPE_EXCLUSIVE_ACCESS_ALLREG */
+	buf[4] |= 0x40; /* PR_TYPE_EXCLUSIVE_ACCESS_REGONLY */
+	buf[4] |= 0x20; /* PR_TYPE_WRITE_EXCLUSIVE_REGONLY */
+	buf[4] |= 0x08; /* PR_TYPE_EXCLUSIVE_ACCESS */
+	buf[4] |= 0x02; /* PR_TYPE_WRITE_EXCLUSIVE */
+	buf[5] |= 0x01; /* PR_TYPE_EXCLUSIVE_ACCESS_ALLREG */
+
+	return TCM_NO_SENSE;
+}
+
 /* handle PR registration for a currently unregistered I_T nexus */
 static sense_reason_t
 tcm_rbd_execute_pr_register_new(struct tcm_rbd_pr_info *pr_info, u64 old_key,
@@ -2440,6 +2479,7 @@ tcm_rbd_execute_pr_register_and_move(struct se_cmd *cmd, u64 old_key,
 static struct target_pr_ops tcm_rbd_pr_ops = {
 	.pr_read_keys		= tcm_rbd_execute_pr_read_keys,
 	.pr_read_reservation	= tcm_rbd_execute_pr_read_reservation,
+	.pr_report_capabilities	= tcm_rbd_execute_pr_report_capabilities,
 
 	.pr_register		= tcm_rbd_execute_pr_register,
 	.pr_reserve		= tcm_rbd_execute_pr_reserve,
