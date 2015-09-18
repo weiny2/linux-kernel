@@ -35,11 +35,12 @@
  */
 #define TRANSPORT_SENSE_BUFFER			SCSI_SENSE_BUFFERSIZE
 /* Used by transport_send_check_condition_and_sense() */
+#define SPC_INFO_VALIDITY_OFFSET		0
 #define SPC_SENSE_KEY_OFFSET			2
 #define SPC_ADD_SENSE_LEN_OFFSET		7
 #define SPC_DESC_TYPE_OFFSET			8
 #define SPC_ADDITIONAL_DESC_LEN_OFFSET		9
-#define SPC_VALIDITY_OFFSET			10
+#define SPC_CMD_INFO_VALIDITY_OFFSET		10
 #define SPC_ASC_KEY_OFFSET			12
 #define SPC_ASCQ_KEY_OFFSET			13
 #define TRANSPORT_IQN_LEN			224
@@ -58,6 +59,7 @@
 #define INQUIRY_VPD_SERIAL_LEN			254
 /* Used by transport_get_inquiry_vpd_device_ident() */
 #define INQUIRY_VPD_DEVICE_IDENTIFIER_LEN	254
+#define INQUIRY_VENDOR_IDENTIFIER_LEN		8
 
 /* Attempts before moving from SHORT to LONG */
 #define PYX_TRANSPORT_WINDOW_CLOSED_THRESHOLD	3
@@ -352,7 +354,7 @@ struct t10_vpd {
 };
 
 struct t10_wwn {
-	char vendor[8];
+	char vendor[INQUIRY_VENDOR_IDENTIFIER_LEN];
 	char model[16];
 	char revision[4];
 	char unit_serial[INQUIRY_VPD_SERIAL_LEN];
@@ -475,6 +477,8 @@ struct se_dif_v1_tuple {
 };
 
 struct se_cmd {
+	sense_reason_t		sense_reason;
+	u32			sense_info;
 	/* SAM response code being sent to initiator */
 	u8			scsi_status;
 	u8			scsi_asc;

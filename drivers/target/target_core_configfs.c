@@ -767,6 +767,60 @@ do {									\
 } while (0);
 
 /*
+ * STANDARD and VPD page 0x80 T10 Vendor Identification
+ */
+static ssize_t target_core_dev_wwn_show_attr_vendor_id(
+	struct t10_wwn *t10_wwn,
+	char *page)
+{
+	return sprintf(page, "T10 Vendor Identification: %"
+		       __stringify(INQUIRY_VENDOR_IDENTIFIER_LEN) "s\n",
+		       &t10_wwn->vendor[0]);
+}
+
+static ssize_t target_core_dev_wwn_store_attr_vendor_id(
+	struct t10_wwn *t10_wwn,
+	const char *page,
+	size_t count)
+{
+	struct se_device *dev = t10_wwn->t10_dev;
+	unsigned char buf[INQUIRY_VENDOR_IDENTIFIER_LEN];
+
+	if (strlen(page) >= INQUIRY_VENDOR_IDENTIFIER_LEN) {
+		pr_err("Emulated T10 Vendor Identification exceeds"
+			" INQUIRY_VENDOR_IDENTIFIER_LEN: %d\n",
+			INQUIRY_VENDOR_IDENTIFIER_LEN);
+		return -EOVERFLOW;
+	}
+	/*
+	 * Check to see if any active $FABRIC_MOD exports exist.  If they
+	 * do exist, fail here as changing this information on the fly
+	 * (underneath the initiator side OS dependent multipath code)
+	 * could cause negative effects.
+	 */
+	if (dev->export_count) {
+		pr_err("Unable to set T10 Vendor Identification while"
+			" active %d $FABRIC_MOD exports exist\n",
+			dev->export_count);
+		return -EINVAL;
+	}
+
+	/* Assume ASCII encoding. Strip any newline added from userspace */
+	memset(buf, 0, INQUIRY_VENDOR_IDENTIFIER_LEN);
+	snprintf(buf, INQUIRY_VENDOR_IDENTIFIER_LEN, "%s", page);
+	strncpy(dev->t10_wwn.vendor, strstrip(buf),
+		INQUIRY_VENDOR_IDENTIFIER_LEN);
+
+	pr_debug("Target_Core_ConfigFS: Set emulated T10 Vendor Identification:"
+		 " %" __stringify(INQUIRY_VENDOR_IDENTIFIER_LEN) "s\n",
+		 dev->t10_wwn.vendor);
+
+	return count;
+}
+
+SE_DEV_WWN_ATTR(vendor_id, S_IRUGO | S_IWUSR);
+
+/*
  * VPD page 0x80 Unit serial
  */
 static ssize_t target_core_dev_wwn_show_attr_vpd_unit_serial(
@@ -967,6 +1021,7 @@ SE_DEV_WWN_ATTR(vpd_assoc_scsi_target_device, S_IRUGO | S_IWUSR);
 CONFIGFS_EATTR_OPS(target_core_dev_wwn, t10_wwn, t10_wwn_group);
 
 static struct configfs_attribute *target_core_dev_wwn_attrs[] = {
+	&target_core_dev_wwn_vendor_id.attr,
 	&target_core_dev_wwn_vpd_unit_serial.attr,
 	&target_core_dev_wwn_vpd_protocol_identifier.attr,
 	&target_core_dev_wwn_vpd_assoc_logical_unit.attr,
@@ -1269,8 +1324,8 @@ static ssize_t target_core_dev_pr_store_attr_res_aptpl_metadata(
 	u64 sa_res_key = 0;
 	u32 mapped_lun = 0, target_lun = 0;
 	int ret = -1, res_holder = 0, all_tg_pt = 0, arg, token;
-	u16 port_rpti = 0, tpgt = 0;
-	u8 type = 0, scope;
+	u16 tpgt = 0;
+	u8 type = 0;
 
 	if (dev->transport->transport_type == TRANSPORT_PLUGIN_PHBA_PDEV)
 		return 0;
@@ -1347,23 +1402,32 @@ static ssize_t target_core_dev_pr_store_attr_res_aptpl_metadata(
 		 * PR APTPL Metadata for Reservation
 		 */
 		case Opt_res_holder:
-			match_int(args, &arg);
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			res_holder = arg;
 			break;
 		case Opt_res_type:
-			match_int(args, &arg);
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			type = (u8)arg;
 			break;
 		case Opt_res_scope:
-			match_int(args, &arg);
-			scope = (u8)arg;
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			break;
 		case Opt_res_all_tg_pt:
-			match_int(args, &arg);
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			all_tg_pt = (int)arg;
 			break;
 		case Opt_mapped_lun:
-			match_int(args, &arg);
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			mapped_lun = (u32)arg;
 			break;
 		/*
@@ -1391,15 +1455,20 @@ static ssize_t target_core_dev_pr_store_attr_res_aptpl_metadata(
 			}
 			break;
 		case Opt_tpgt:
-			match_int(args, &arg);
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			tpgt = (u16)arg;
 			break;
 		case Opt_port_rtpi:
-			match_int(args, &arg);
-			port_rpti = (u16)arg;
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			break;
 		case Opt_target_lun:
-			match_int(args, &arg);
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			target_lun = (u32)arg;
 			break;
 		default:

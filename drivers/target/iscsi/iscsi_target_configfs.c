@@ -1057,6 +1057,11 @@ TPG_ATTR(default_erl, S_IRUGO | S_IWUSR);
  */
 DEF_TPG_ATTRIB(t10_pi);
 TPG_ATTR(t10_pi, S_IRUGO | S_IWUSR);
+/*
+ * Define iscsi_tpg_attrib_s_tpg_enabled_sendtargets
+ */
+DEF_TPG_ATTRIB(tpg_enabled_sendtargets);
+TPG_ATTR(tpg_enabled_sendtargets, S_IRUGO | S_IWUSR);
 
 static struct configfs_attribute *lio_target_tpg_attrib_attrs[] = {
 	&iscsi_tpg_attrib_authentication.attr,
@@ -1070,6 +1075,7 @@ static struct configfs_attribute *lio_target_tpg_attrib_attrs[] = {
 	&iscsi_tpg_attrib_demo_mode_discovery.attr,
 	&iscsi_tpg_attrib_default_erl.attr,
 	&iscsi_tpg_attrib_t10_pi.attr,
+	&iscsi_tpg_attrib_tpg_enabled_sendtargets.attr,
 	NULL,
 };
 

@@ -60,6 +60,9 @@
 #define TA_CACHE_CORE_NPS		0
 /* T10 protection information disabled by default */
 #define TA_DEFAULT_T10_PI		0
+/* TPG status needs to be enabled to return sendtargets discovery endpoint info */
+#define TA_DEFAULT_TPG_ENABLED_SENDTARGETS 1
+
 
 #define ISCSI_IOV_DATA_BUFFER		5
 
@@ -773,6 +776,7 @@ struct iscsi_tpg_attrib {
 	u32			demo_mode_discovery;
 	u32			default_erl;
 	u8			t10_pi;
+	u32                     tpg_enabled_sendtargets;
 	struct iscsi_portal_group *tpg;
 };
 
