@@ -442,7 +442,7 @@ static void hfi_set_send_length(struct hfi_pportdata *ppd)
 	/*FXRTODO: HW related code to change MTU */
 }
 
-static void hfi_enable_pkey_checks(struct hfi_pportdata *ppd)
+static void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	LM_CONFIG_PORT0_t lmp0;
@@ -450,10 +450,8 @@ static void hfi_enable_pkey_checks(struct hfi_pportdata *ppd)
 	TP_CFG_MISC_CTRL_t misc;
 
 	misc.val = read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
-	if (misc.field.disable_pkey_chk) {
-		misc.field.disable_pkey_chk = 0;
-		write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
-	}
+	misc.field.disable_pkey_chk = !enable;
+	write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
 	/*
 	 * FXRTODO: Writes to TP_CFG_PKEY_CHECK_CTRL are required
 	 * for 10B and 8B packets
@@ -461,17 +459,13 @@ static void hfi_enable_pkey_checks(struct hfi_pportdata *ppd)
 	switch (ppd_to_pnum(ppd)) {
 	case 1:
 		lmp0.val = read_csr(dd, FXR_LM_CONFIG_PORT0);
-		if (!lmp0.field.ENABLE_PKEY) {
-			lmp0.field.ENABLE_PKEY = 1;
-			write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
-		}
+		lmp0.field.ENABLE_PKEY = enable;
+		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
 		break;
 	case 2:
 		lmp1.val = read_csr(dd, FXR_LM_CONFIG_PORT1);
-		if (!lmp1.field.ENABLE_PKEY) {
-			lmp1.field.ENABLE_PKEY = 1;
-			write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
-		}
+		lmp1.field.ENABLE_PKEY = enable;
+		write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
 		break;
 	default:
 		return;
@@ -502,7 +496,12 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 		write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_TABLE, tx_pkey.val);
 		write_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_TABLE, rx_pkey.val);
 	}
-	hfi_enable_pkey_checks(ppd);
+
+	/*
+	 * FXRTODO: Enabling Pkey check results in packet drop. Need to
+	 * debug this. Disable pkey check for now.
+	 */
+	hfi_cfg_pkey_check(ppd, 0);
 }
 
 u8 hfi_porttype(struct hfi_pportdata *ppd)
@@ -1213,9 +1212,8 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		 * FXRTODO: Disabling for now since we are not yet
 		 * PKEY ready
 		 */
-#if 0
-		(void)hfi_set_ib_cfg(ppd, HFI_IB_CFG_PKEYS, 0);
-#endif
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_PKEYS, 0, NULL);
+
 		ppd->vls_supported = HFI_NUM_DATA_VLS;
 
 		ppd->link_width_supported =
