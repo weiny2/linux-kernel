@@ -119,7 +119,7 @@ enum {
 /* Number of Data VLs supported */
 #define HFI_NUM_DATA_VLS	8
 /* Number of PKey entries in the HW */
-#define HFI_MAX_PKEYS		LM_PKEY_ARRAY_SIZE
+#define HFI_MAX_PKEYS		64
 
 /* In accordance with stl vol 1 section 4.1 */
 #define PGUID_MASK		(~(0x3UL << 32))
@@ -147,9 +147,8 @@ enum {
 #define HFI_SL_TO_TC_SHIFT	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_SHIFT
 #define HFI_SL_TO_TC_MASK	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK
 
-/* FXRTODO: Use masks and shifts from LM header files when available */
-#define HFI_SL_TO_SC_SHIFT	0x0
-#define HFI_SL_TO_SC_MASK	0x1f
+#define HFI_SL_TO_SC_SHIFT	FXR_LM_CFG_PORT0_SC2SL0_SC0_TO_SL_SHIFT
+#define HFI_SL_TO_SC_MASK	FXR_LM_CFG_PORT0_SC2SL0_SC0_TO_SL_MASK
 
 #define HFI_SC_VLNT_MASK		FXR_FPC_CFG_SC_VL_TABLE_15_0_ENTRY0_MASK
 /* Any lane between 8 and 14 is illegal. Randomly chosen one from that list */
@@ -543,9 +542,17 @@ struct hfi_devdata {
 	/* Lock to synchronize access to rx_priv_cq */
 	spinlock_t priv_rx_cq_lock;
 
+	/* Thread to handle PID 0 EQ 0 tasks */
+	struct task_struct *eq_zero_thread;
+
 	/* Mutex lock synchronizing E2E operations */
 	struct mutex e2e_lock;
 
+	/* E2E EQ handle for initiator events */
+	u16 e2e_eq;
+
+	/* E2E EQ base */
+	void *e2e_eq_base;
 	/* registered IB device pointer */
 	struct ib_device *ibdev;
 
@@ -571,16 +578,19 @@ void hfi_pci_dd_free(struct hfi_devdata *dd);
 int hfi_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
 		    struct hfi_msix_entry *entry);
 void hfi_disable_msix(struct hfi_devdata * dd);
-int setup_interrupts(struct hfi_devdata *dd, int total, int minw);
-void cleanup_interrupts(struct hfi_devdata *dd);
+int hfi_setup_interrupts(struct hfi_devdata *dd, int total, int minw);
+void hfi_cleanup_interrupts(struct hfi_devdata *dd);
+void hfi_disable_interrupts(struct hfi_devdata *dd);
 
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
 int hfi_user_cleanup(struct hfi_ctx *ud);
 
 /* HFI specific functions */
 int hfi_cq_assign_privileged(struct hfi_ctx *ctx, u16 *cq_idx);
-int hfi_eq_assign_privileged(struct hfi_ctx *ctx);
-void __hfi_eq_release(struct hfi_ctx *ctx);
+int hfi_eq_zero_assign_privileged(struct hfi_ctx *ctx);
+void hfi_eq_zero_release(struct hfi_ctx *ctx);
+int hfi_e2e_eq_assign(struct hfi_ctx *ctx);
+void hfi_e2e_eq_release(struct hfi_ctx *ctx);
 void hfi_cq_cleanup(struct hfi_ctx *ctx);
 void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx,
 		   struct hfi_auth_tuple *auth_table, bool user_priv);

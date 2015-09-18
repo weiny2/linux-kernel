@@ -55,33 +55,8 @@
 #include <rdma/hfi_tx.h>
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_ct.h>
+#include <rdma/hfi_eq.h>
 #include "opa_hfi.h"
-
-/* Poll on a counting event to return success, failure or time out */
-static int
-__hfi_ct_wait(struct hfi_ctx *ctx, hfi_ct_handle_t ct_h,
-	      unsigned long threshold, unsigned long timeout_ms,
-	      unsigned long *ct_val)
-{
-	unsigned long val;
-	unsigned long exit_jiffies = jiffies + msecs_to_jiffies(timeout_ms);
-
-	while (1) {
-		if (hfi_ct_get_failure(ctx, ct_h))
-			return -EFAULT;
-		val = hfi_ct_get_success(ctx, ct_h);
-		if (val >= threshold)
-			break;
-		if (time_after(jiffies, exit_jiffies))
-			return -ETIME;
-		schedule();
-	}
-
-	if (ct_val)
-		*ct_val = val;
-
-	return 0;
-}
 
 /* Format an E2E control message, transmit it and wait for an acknowledgment */
 static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
@@ -96,9 +71,8 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 	hfi_process_t target_id;
 	hfi_ack_req_t ack_req = PTL_CT_ACK_REQ;
 	hfi_md_options_t md_options = PTL_MD_EVENT_CT_ACK;
-	hfi_ct_handle_t ct_tx;
-	hfi_ct_alloc_args_t ct_alloc = {0};
 	hfi_ni_t ni = PTL_NONMATCHING_PHYSICAL;
+	u64 *eq_entry;
 	unsigned long flags;
 	int rc;
 
@@ -107,16 +81,12 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 	target_id.phys.ipid = dd->priv_ctx.pid;
 	cmd.ptl_opcode_low = op;
 	cmd.ttype = BUFFERED;
-	ct_alloc.ni = ni;
-	rc = hfi_ct_alloc(ctx, &ct_alloc, &ct_tx);
-	if (rc < 0)
-		goto err;
 
 	_hfi_format_base_put_flit0(ctx, ni, &command->flit0, cmd,
 				   E2E_CTRL, cmd_length, target_id, port, 0,
 				   RC_IN_ORDER_0, tc, 0, 0, 0, 0, 0,
-				   FXR_TRUE, ack_req, md_options, PTL_EQ_NONE,
-				   ct_tx, 0, 0);
+				   FXR_TRUE, ack_req, md_options, dd->e2e_eq,
+				   PTL_CT_NONE, 0, 0);
 
 	command->flit1.e.max_dist = 27; /* TODO: Why? */
 
@@ -128,19 +98,31 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 					 cmd_slots);
 	} while (rc == -EAGAIN);
 	spin_unlock_irqrestore(&dd->priv_tx_cq_lock, flags);
+	/* PTL_SINGLE_DESTROY does not initiate events at the initiator */
+	if (op != PTL_SINGLE_CONNECT)
+		goto done;
+	/* Check on EQ 0 NI 0 for a PTL_EVENT_INITIATOR_CONNECT event */
+	hfi_eq_wait_timed(ctx, dd->e2e_eq, HFI_TX_TIMEOUT_MS,
+			  (void **)&eq_entry);
+	if (eq_entry) {
+		union initiator_EQEntry *txe =
+			(union initiator_EQEntry *)eq_entry;
 
-	/* Wait for an acknowledgment */
-	rc = __hfi_ct_wait(ctx, ct_tx, 1, HFI_TX_TIMEOUT_MS, NULL);
-	if (rc < 0) {
-		/* TODO: Should failure and timeout be handled the same */
-		dd_dev_err(dd, "e2e op %d slid %d dlid %d tc %d port %d fail rc %d\n",
-			   op, slid, dlid, tc, port, rc);
-		goto err;
+		if (txe->event_kind == PTL_EVENT_INITIATOR_CONNECT) {
+			dd_dev_info(dd, "E2E EQ success kind %d\n",
+				    txe->event_kind);
+			hfi_eq_advance(ctx, &dd->priv_rx_cq,
+				       dd->e2e_eq, eq_entry);
+		} else {
+			rc = -EIO;
+			dd_dev_err(dd, "Invalid E2E event %d\n",
+				   txe->event_kind);
+		}
 	} else {
-		dd_dev_info(dd, "e2e op %d slid %d dlid %d tc %d port %d success\n",
-			    op, slid, dlid, tc, port);
+		rc = -EIO;
+		dd_dev_err(dd, "E2E EQ failure rc %d\n", rc);
 	}
-err:
+done:
 	return rc;
 }
 
