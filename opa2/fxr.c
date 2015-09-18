@@ -452,7 +452,7 @@ static void hfi_enable_pkey_checks(struct hfi_pportdata *ppd)
 	misc.val = read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
 	if (misc.field.disable_pkey_chk) {
 		misc.field.disable_pkey_chk = 0;
-		write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, lmp0.val);
+		write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
 	}
 	/*
 	 * FXRTODO: Writes to TP_CFG_PKEY_CHECK_CTRL are required
