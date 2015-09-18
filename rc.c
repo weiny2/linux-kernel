@@ -59,8 +59,6 @@
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_RC_##x
 
-static void rc_timeout(unsigned long arg);
-
 static u32 restart_sge(struct hfi1_sge_state *ss, struct hfi1_swqe *wqe,
 		       u32 psn, u32 pmtu)
 {
@@ -73,15 +71,6 @@ static u32 restart_sge(struct hfi1_sge_state *ss, struct hfi1_swqe *wqe,
 	ss->total_len = wqe->length;
 	hfi1_skip_sge(ss, len, 0);
 	return wqe->length - len;
-}
-
-static void start_timer(struct hfi1_qp *qp)
-{
-	qp->s_flags |= HFI1_S_TIMER;
-	qp->s_timer.function = rc_timeout;
-	/* 4.096 usec. * (1 << qp->timeout) */
-	qp->s_timer.expires = jiffies + qp->timeout_jiffies;
-	add_timer(&qp->s_timer);
 }
 
 /**
@@ -896,7 +885,7 @@ static void restart_rc(struct hfi1_qp *qp, u32 psn, int wait)
 /*
  * This is called from s_timer for missing responses.
  */
-static void rc_timeout(unsigned long arg)
+void hfi1_rc_timeout(unsigned long arg)
 {
 	struct hfi1_qp *qp = (struct hfi1_qp *)arg;
 	struct hfi1_ibport *ibp;
@@ -907,8 +896,7 @@ static void rc_timeout(unsigned long arg)
 	if (qp->s_flags & HFI1_S_TIMER) {
 		ibp = to_iport(qp->ibqp.device, qp->port_num);
 		ibp->n_rc_timeouts++;
-		qp->s_flags &= ~HFI1_S_TIMER;
-		del_timer(&qp->s_timer);
+		stop_retry_timer(qp);
 		trace_hfi1_rc_timeout(qp, qp->s_last_psn + 1);
 		restart_rc(qp, qp->s_last_psn + 1, 1);
 		hfi1_schedule_send(qp);
@@ -926,11 +914,8 @@ void hfi1_rc_rnr_retry(unsigned long arg)
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-	if (qp->s_flags & HFI1_S_WAIT_RNR) {
-		qp->s_flags &= ~HFI1_S_WAIT_RNR;
-		del_timer(&qp->s_timer);
+	if (stop_rnr_timer(qp))
 		hfi1_schedule_send(qp);
-	}
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 }
 
@@ -1000,7 +985,7 @@ void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr)
 	    !(qp->s_flags &
 		(HFI1_S_TIMER | HFI1_S_WAIT_RNR | HFI1_S_WAIT_PSN)) &&
 		(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK))
-		start_timer(qp);
+		add_retry_timer(qp);
 
 	while (qp->s_last != qp->s_acked) {
 		wqe = get_swqe_ptr(qp, qp->s_last);
@@ -1149,12 +1134,9 @@ static int do_rc_ack(struct hfi1_qp *qp, u32 aeth, u32 psn, int opcode,
 	int ret = 0;
 	u32 ack_psn;
 	int diff;
+	unsigned long to;
 
-	/* Remove QP from retry timer */
-	if (qp->s_flags & (HFI1_S_TIMER | HFI1_S_WAIT_RNR)) {
-		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_WAIT_RNR);
-		del_timer(&qp->s_timer);
-	}
+	stop_rc_timers(qp);
 
 	/*
 	 * Note that NAKs implicitly ACK outstanding SEND and RDMA write
@@ -1251,7 +1233,7 @@ static int do_rc_ack(struct hfi1_qp *qp, u32 aeth, u32 psn, int opcode,
 			 * We are expecting more ACKs so
 			 * reset the re-transmit timer.
 			 */
-			start_timer(qp);
+			add_retry_timer(qp);
 			/*
 			 * We can stop re-sending the earlier packets and
 			 * continue with the next packet the receiver wants.
@@ -1294,12 +1276,10 @@ static int do_rc_ack(struct hfi1_qp *qp, u32 aeth, u32 psn, int opcode,
 		reset_psn(qp, psn);
 
 		qp->s_flags &= ~(HFI1_S_WAIT_SSN_CREDIT | HFI1_S_WAIT_ACK);
-		qp->s_flags |= HFI1_S_WAIT_RNR;
-		qp->s_timer.function = hfi1_rc_rnr_retry;
-		qp->s_timer.expires = jiffies + usecs_to_jiffies(
+		to =
 			ib_hfi1_rnr_table[(aeth >> HFI1_AETH_CREDIT_SHIFT) &
-					   HFI1_AETH_CREDIT_MASK]);
-		add_timer(&qp->s_timer);
+					   HFI1_AETH_CREDIT_MASK];
+		add_rnr_timer(qp, to);
 		goto bail;
 
 	case 3:         /* NAK */
@@ -1369,10 +1349,7 @@ static void rdma_seq_err(struct hfi1_qp *qp, struct hfi1_ibport *ibp, u32 psn,
 	struct hfi1_swqe *wqe;
 
 	/* Remove QP from retry timer */
-	if (qp->s_flags & (HFI1_S_TIMER | HFI1_S_WAIT_RNR)) {
-		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_WAIT_RNR);
-		del_timer(&qp->s_timer);
-	}
+	stop_rc_timers(qp);
 
 	wqe = get_swqe_ptr(qp, qp->s_acked);
 
@@ -1503,8 +1480,7 @@ read_middle:
 		 * We got a response so update the timeout.
 		 * 4.096 usec. * (1 << qp->timeout)
 		 */
-		qp->s_flags |= HFI1_S_TIMER;
-		mod_timer(&qp->s_timer, jiffies + qp->timeout_jiffies);
+		mod_retry_timer(qp);
 		if (qp->s_flags & HFI1_S_WAIT_ACK) {
 			qp->s_flags &= ~HFI1_S_WAIT_ACK;
 			hfi1_schedule_send(qp);

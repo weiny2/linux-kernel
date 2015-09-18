@@ -468,10 +468,7 @@ int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 
 	qp->state = IB_QPS_ERR;
 
-	if (qp->s_flags & (HFI1_S_TIMER | HFI1_S_WAIT_RNR)) {
-		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_WAIT_RNR);
-		del_timer(&qp->s_timer);
-	}
+	stop_rc_timers(qp);
 
 	if (qp->s_flags & HFI1_S_ANY_WAIT_SEND)
 		qp->s_flags &= ~HFI1_S_ANY_WAIT_SEND;
@@ -743,13 +740,14 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		if (qp->state != IB_QPS_RESET) {
 			qp->state = IB_QPS_RESET;
 			flush_iowait(qp);
-			qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_ANY_WAIT);
+			/* kill off pending timers */
+			stop_rc_timers(qp);
 			spin_unlock(&qp->s_lock);
 			spin_unlock(&qp->s_hlock);
 			spin_unlock_irq(&qp->r_lock);
-			/* Stop the sending work queue and retry timer */
+			/* insure any timer has completed */
+			del_timers_sync(qp);
 			cancel_work_sync(&qp->s_iowait.iowork);
-			del_timer_sync(&qp->s_timer);
 			iowait_sdma_drain(&qp->s_iowait);
 			flush_tx_list(qp);
 			remove_qp(dev, qp);
@@ -1299,12 +1297,14 @@ int hfi1_destroy_qp(struct ib_qp *ibqp)
 	if (qp->state != IB_QPS_RESET) {
 		qp->state = IB_QPS_RESET;
 		flush_iowait(qp);
-		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_ANY_WAIT);
+		/* kill off pending timers */
+		stop_rc_timers(qp);
 		spin_unlock(&qp->s_lock);
 		spin_unlock(&qp->s_hlock);
 		spin_unlock_irq(&qp->r_lock);
 		cancel_work_sync(&qp->s_iowait.iowork);
-		del_timer_sync(&qp->s_timer);
+		/* insure any timer has completed */
+		del_timers_sync(qp);
 		iowait_sdma_drain(&qp->s_iowait);
 		flush_tx_list(qp);
 		remove_qp(dev, qp);

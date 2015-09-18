@@ -964,6 +964,8 @@ struct ib_ah *hfi1_create_qp0_ah(struct hfi1_ibport *ibp, u16 dlid);
 
 void hfi1_rc_rnr_retry(unsigned long arg);
 
+void hfi1_rc_timeout(unsigned long arg);
+
 void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr);
 
 void hfi1_rc_error(struct hfi1_qp *qp, enum ib_wc_status err);
