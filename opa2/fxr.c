@@ -641,14 +641,10 @@ static void hfi_sl_to_sc(struct hfi_pportdata *ppd, u8 *sl_to_sc)
 
 	switch (ppd_to_pnum(ppd)) {
 	case 1:
-		/* FXRTODO: Use FXR_LM_CFG_PORT0_SL2SC0 when available */
-		reg_addr = FXR_LM_CSRS +
-				FXR_LM_CSRS_LM_CFG_PORT0_SL2SC0_MMOFFSET;
+		reg_addr = FXR_LM_CFG_PORT0_SC2SL0;
 		break;
 	case 2:
-		/* FXRTODO: Use FXR_LM_CFG_PORT1_SL2SC0 when available */
-		reg_addr = FXR_LM_CSRS +
-				FXR_LM_CSRS_LM_CFG_PORT1_SL2SC0_MMOFFSET;
+		reg_addr = FXR_LM_CFG_PORT1_SC2SL0;
 		break;
 	default:
 		return;
@@ -914,14 +910,16 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 
 	hfi_e2e_destroy(dd);
 
-	cleanup_interrupts(dd);
+	hfi_disable_interrupts(dd);
 
 	/* release system context and any privileged CQs */
 	if (dd->priv_ctx.devdata) {
-		__hfi_eq_release(&dd->priv_ctx);
+		hfi_e2e_eq_release(&dd->priv_ctx);
+		hfi_eq_zero_release(&dd->priv_ctx);
 		hfi_cq_unmap(&dd->priv_tx_cq, &dd->priv_rx_cq);
 		hfi_ctxt_cleanup(&dd->priv_ctx);
 	}
+	hfi_cleanup_interrupts(dd);
 
 	hfi_pport_down(dd);
 
@@ -1407,14 +1405,9 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
-	/* assign one EQ for privileged events */
-	ret = hfi_eq_assign_privileged(ctx);
-	if (ret)
-		goto err_post_alloc;
-
 	/* enable MSI-X */
 	/* TODO - just ask for 64 IRQs for now */
-	ret = setup_interrupts(dd, /* HFI_NUM_INTERRUPTS */ 64, 0);
+	ret = hfi_setup_interrupts(dd, /* HFI_NUM_INTERRUPTS */ 64, 0);
 	if (ret)
 		goto err_post_alloc;
 
@@ -1446,6 +1439,16 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	atomic_set(&dd->msix_eq_next, 0);
 	/* TODO - remove or change to debug later */
 	dd_dev_info(dd, "%d IRQs assigned to EQs\n", i);
+
+	/* assign one EQ for privileged events */
+	ret = hfi_eq_zero_assign_privileged(ctx);
+	if (ret)
+		goto err_post_alloc;
+
+	/* assign EQs for initiator E2E initiator events */
+	ret = hfi_e2e_eq_assign(ctx);
+	if (ret)
+		goto err_post_alloc;
 
 	bus_id.vendor = ent->vendor;
 	bus_id.device = ent->device;

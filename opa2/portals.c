@@ -55,6 +55,7 @@
 #include <linux/log2.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
+#include <linux/kthread.h>
 #include <rdma/opa_core.h>
 #include <rdma/hfi_eq.h>
 #include "opa_hfi.h"
@@ -485,7 +486,68 @@ idr_end:
 	return ret;
 }
 
-int _hfi_eq_assign(struct hfi_ctx *ctx)
+/* Block for an EQ zero event interrupt */
+static int hfi_eq_zero_event_wait(struct hfi_ctx *ctx, void **eq_entry)
+{
+	int rc;
+
+	rc = hfi_eq_wait_irq(ctx, 0, -1, (void **)eq_entry);
+	if (rc == -EAGAIN || rc == -ERESTARTSYS)
+		/* timeout or wait interrupted, not abnormal */
+		rc = 0;
+	else if (rc == HFI_EQ_DROPPED)
+		/* driver bug with EQ sizing or IRQ logic */
+		rc = -EIO;
+	return rc;
+}
+
+/* kernel thread handling EQ0 events for the system PID */
+static int hfi_eq_zero_thread(void *data)
+{
+	struct hfi_ctx *ctx = data;
+	struct hfi_devdata *dd = ctx->devdata;
+	void *eq_entry;
+	union target_EQEntry *rxe;
+	int rc;
+
+	allow_signal(SIGINT);
+
+	while (!kthread_should_stop()) {
+		eq_entry = NULL;
+		rc = hfi_eq_zero_event_wait(ctx, &eq_entry);
+		if (rc < 0) {
+			/* TODO - handle this */
+			dd_dev_warn(dd, "EQ failure, %d\n", rc);
+			continue;
+		}
+		if (!eq_entry)
+			continue;
+
+		rxe = eq_entry;
+		switch (rxe->event_kind) {
+		case PTL_EVENT_TARGET_CONNECT:
+		case PTL_EVENT_DISCONNECT:
+			/* FXRTODO: Handle E2E connection/destroy messages */
+			hfi_eq_advance(ctx, &dd->priv_rx_cq,
+					0x0, eq_entry);
+			dd_dev_info(dd, "%s ev %d pt %d lid %lld uptr 0x%llx\n",
+					__func__, rxe->event_kind, rxe->pt,
+					(u64)rxe->initiator_id,
+					(u64)rxe->user_ptr);
+			break;
+		case PTL_CMD_COMPLETE:
+			/* These events are handled synchronously */
+			break;
+		default:
+			dd_dev_err(dd, "%s unexpected event %d port %d\n",
+				   __func__, rxe->event_kind, rxe->pt);
+			break;
+		}
+	}
+	return 0;
+}
+
+int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 {
 	struct opa_ev_assign eq_assign = {0};
 	int ni, ret;
@@ -501,6 +563,14 @@ int _hfi_eq_assign(struct hfi_ctx *ctx)
 					      GFP_KERNEL);
 		if (!eq_assign.base)
 			return -ENOMEM;
+		if ((ctx->pid == HFI_PID_SYSTEM) && !ni)
+			/*
+			 * system PID EQ 0 needs to handle
+			 * E2E connect/destroy events
+			 */
+			eq_assign.mode = OPA_EV_MODE_BLOCKING;
+		else
+			eq_assign.mode = 0x0;
 		ret = hfi_eq_assign(ctx, &eq_assign);
 		if (ret)
 			return ret;
@@ -519,13 +589,58 @@ int _hfi_eq_assign(struct hfi_ctx *ctx)
 	return 0;
 }
 
-int hfi_eq_assign_privileged(struct hfi_ctx *ctx)
+int hfi_eq_zero_assign_privileged(struct hfi_ctx *ctx)
 {
+	int rc;
+	struct hfi_devdata *dd = ctx->devdata;
+
 	/* verify system PID */
 	if (ctx->pid != HFI_PID_SYSTEM)
 		return -EPERM;
 
-	return _hfi_eq_assign(ctx);
+	rc = hfi_eq_zero_assign(ctx);
+	if (rc)
+		return rc;
+
+	dd->eq_zero_thread = kthread_run(hfi_eq_zero_thread, ctx,
+					 "hfi_eq_zero%d", dd->unit);
+	if (IS_ERR(dd->eq_zero_thread))
+		rc = PTR_ERR(dd->eq_zero_thread);
+
+	return rc;
+}
+
+int hfi_e2e_eq_assign(struct hfi_ctx *ctx)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	struct opa_ev_assign eq_assign = {0};
+	int ret;
+	u32 *eq_head_array, *eq_head_addr;
+	u64 *eq_entry;
+
+	eq_assign.ni = PTL_NONMATCHING_PHYSICAL;
+	eq_assign.size = 64;
+	/* TODO: Need to ensure alignment */
+	eq_assign.base = (u64)kzalloc(eq_assign.size *
+				      HFI_EQ_ENTRY_SIZE,
+				      GFP_KERNEL);
+	if (!eq_assign.base)
+		return -ENOMEM;
+	ret = hfi_eq_assign(ctx, &eq_assign);
+	if (ret)
+		return ret;
+	dd->e2e_eq_base = (void *)eq_assign.base;
+	dd->e2e_eq = eq_assign.ev_idx;
+	eq_head_array = ctx->eq_head_addr;
+	/* Reset the EQ SW head */
+	eq_head_addr = &eq_head_array[eq_assign.ev_idx];
+	*eq_head_addr = 0;
+	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
+	hfi_eq_wait(ctx, 0x0, (void **)&eq_entry);
+	if (eq_entry)
+		hfi_eq_advance(ctx, &ctx->devdata->priv_rx_cq,
+			       0x0, eq_entry);
+	return 0;
 }
 
 /*
@@ -599,16 +714,37 @@ idr_end:
 	return ret;
 }
 
-void __hfi_eq_release(struct hfi_ctx *ctx)
+void hfi_eq_zero_release(struct hfi_ctx *ctx)
 {
-	int ni;
+	int ni, rc;
+	struct hfi_devdata *dd = ctx->devdata;
 
+	if (!IS_ERR_OR_NULL(dd->eq_zero_thread)) {
+		rc = send_sig(SIGINT, dd->eq_zero_thread, 0);
+		if (rc) {
+			dd_dev_err(dd, "send_sig failed %d\n", rc);
+			return;
+		}
+		kthread_stop(dd->eq_zero_thread);
+		dd->eq_zero_thread = NULL;
+	}
 	for (ni = 0; ni < HFI_NUM_NIS; ni++) {
 		if (ctx->eq_base[ni]) {
 			hfi_eq_release(ctx, ni * HFI_NUM_EVENT_HANDLES, 0);
 			kfree(ctx->eq_base[ni]);
 			ctx->eq_base[ni] = NULL;
 		}
+	}
+}
+
+void hfi_e2e_eq_release(struct hfi_ctx *ctx)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+
+	if (dd->e2e_eq_base) {
+		hfi_eq_release(ctx, dd->e2e_eq, 0x0);
+		kfree(dd->e2e_eq_base);
+		dd->e2e_eq_base = NULL;
 	}
 }
 
@@ -901,7 +1037,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		BUG_ON(ret != 0);
 		/* EQ0 for system PID is assigned after the RX CQ is enabled */
 		if (HFI_PID_SYSTEM != ctx->pid)
-			ret = _hfi_eq_assign(ctx);
+			ret = hfi_eq_zero_assign(ctx);
 		/* no EQs assigned yet, so above cannot yield error */
 		BUG_ON(ret != 0);
 
@@ -1039,7 +1175,7 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 
 	/* release EQ 0 in each NI */
-	__hfi_eq_release(ctx);
+	hfi_eq_zero_release(ctx);
 
 	/* first release any assigned CQs */
 	hfi_cq_cleanup(ctx);

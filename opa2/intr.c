@@ -53,7 +53,7 @@
 #include <linux/interrupt.h>
 #include "opa_hfi.h"
 
-void cleanup_interrupts(struct hfi_devdata *dd)
+void hfi_disable_interrupts(struct hfi_devdata *dd)
 {
 	int i;
 
@@ -72,14 +72,17 @@ void cleanup_interrupts(struct hfi_devdata *dd)
 
 		/* turn off interrupts */
 		hfi_disable_msix(dd);
-
-		kfree(dd->msix_entries);
 	}
+}
+
+void hfi_cleanup_interrupts(struct hfi_devdata *dd)
+{
+	kfree(dd->msix_entries);
 	dd->msix_entries = NULL;
 	dd->num_msix_entries = 0;
 }
 
-int setup_interrupts(struct hfi_devdata *dd, int total, int minw)
+int hfi_setup_interrupts(struct hfi_devdata *dd, int total, int minw)
 {
 	struct hfi_msix_entry *entries;
 	u32 request;
@@ -122,6 +125,7 @@ int setup_interrupts(struct hfi_devdata *dd, int total, int minw)
 
 	return 0;
 fail:
-	cleanup_interrupts(dd);
+	hfi_disable_interrupts(dd);
+	hfi_cleanup_interrupts(dd);
 	return ret;
 }
