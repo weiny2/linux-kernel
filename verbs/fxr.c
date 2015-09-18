@@ -141,13 +141,24 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 		 ibp->port_num, wqe->s_hdr,
                  (void *)wqe->sg_list[0].addr, wqe->length);
 
+	/*
+	 * FXRTODO: Mapping sl to sc15 is invalid.
+	 * According to latest discussion, there will
+	 * be bit to flip or different command if the packet
+	 * is MAD. Until that is fixed hardcode sl as 15 so that
+	 * the packet(s) take SC15->VL15 path. Only MAD packet
+	 * will be supported with this hack
+	 *
+	 * Ref STL-2662
+	 */
+
 	/* send the WQE via PIO path */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
 	ret = hfi_tx_cmd_bypass_pio(&ibp->cmdq_tx, wqe->s_ctx,
 				    wqe->s_hdr, 8 + (wqe->s_hdrwords << 2),
 				    (void *)wqe->sg_list[0].addr,
 				    wqe->length, ibp->port_num,
-				    0, /* TODO pass 0 for SL until SL->MCTC working */
+				    15,
 				    KDETH_9B_PIO);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 	if (ret < 0)
