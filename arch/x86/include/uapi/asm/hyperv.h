@@ -28,6 +28,9 @@
 /* Partition Reference Counter (HV_X64_MSR_TIME_REF_COUNT) available*/
 #define HV_X64_MSR_TIME_REF_COUNT_AVAILABLE	(1 << 1)
 
+/* A partition's reference time stamp counter (TSC) page */
+#define HV_X64_MSR_REFERENCE_TSC		0x40000021
+
 /*
  * There is a single feature flag that signifies the presence of the MSR
  * that can be used to retrieve both the local APIC Timer frequency as
@@ -209,6 +212,9 @@
 #define HV_X64_MSR_APIC_ASSIST_PAGE_ADDRESS_MASK	\
 		(~((1ull << HV_X64_MSR_APIC_ASSIST_PAGE_ADDRESS_SHIFT) - 1))
 
+#define HV_X64_MSR_TSC_REFERENCE_ENABLE		0x00000001
+#define HV_X64_MSR_TSC_REFERENCE_ADDRESS_SHIFT	12
+
 #define HV_PROCESSOR_POWER_STATE_C0		0
 #define HV_PROCESSOR_POWER_STATE_C1		1
 #define HV_PROCESSOR_POWER_STATE_C2		2
@@ -222,5 +228,12 @@
 #define HV_STATUS_INSUFFICIENT_MEMORY		11
 #define HV_STATUS_INVALID_CONNECTION_ID		18
 #define HV_STATUS_INSUFFICIENT_BUFFERS		19
+
+typedef struct _HV_REFERENCE_TSC_PAGE {
+	__u32 tsc_sequence;
+	__u32 res1;
+	__u64 tsc_scale;
+	__s64 tsc_offset;
+} HV_REFERENCE_TSC_PAGE, *PHV_REFERENCE_TSC_PAGE;
 
 #endif
