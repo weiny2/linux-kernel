@@ -1109,7 +1109,14 @@ static inline pte_t pfn_t_pte(pfn_t pfn, pgprot_t pgprot)
 }
 #endif
 
-#ifdef __HAVE_ARCH_PTE_DEVICE
+#ifdef pfn_pmd
+static inline pmd_t pfn_t_pmd(pfn_t pfn, pgprot_t pgprot)
+{
+	return pfn_pmd(pfn_t_to_pfn(pfn), pgprot);
+}
+#endif
+
+#ifdef __HAVE_ARCH_PTE_DEVMAP
 static inline bool pfn_t_has_dev_pagemap(pfn_t pfn)
 {
 	const unsigned long flags = PFN_DEV|PFN_MAP;
@@ -1122,6 +1129,7 @@ static inline bool pfn_t_has_dev_pagemap(pfn_t pfn)
 	return false;
 }
 pte_t pte_mkdevmap(pte_t pte);
+pmd_t pmd_mkdevmap(pmd_t pmd);
 #endif
 
 /*
@@ -1885,6 +1893,14 @@ static inline void pgtable_pmd_page_dtor(struct page *page) {}
 
 #define pmd_huge_pte(mm, pmd) ((mm)->pmd_huge_pte)
 
+#endif
+
+#ifndef pmd_devmap
+#define pmd_devmap(x) (0)
+#endif
+
+#ifndef pte_devmap
+#define pte_devmap(x) (0)
 #endif
 
 static inline spinlock_t *pmd_lock(struct mm_struct *mm, pmd_t *pmd)
