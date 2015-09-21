@@ -522,19 +522,6 @@ static inline void get_huge_page_tail(struct page *page)
 
 extern bool __get_page_tail(struct page *page);
 
-static inline void get_page(struct page *page)
-{
-	if (unlikely(PageTail(page)))
-		if (likely(__get_page_tail(page)))
-			return;
-	/*
-	 * Getting a normal page or the head of a compound page
-	 * requires to already have an elevated page->_count.
-	 */
-	VM_BUG_ON_PAGE(atomic_read(&page->_count) <= 0, page);
-	atomic_inc(&page->_count);
-}
-
 static inline struct page *virt_to_head_page(const void *x)
 {
 	struct page *page = virt_to_page(x);
@@ -800,12 +787,22 @@ struct dev_pagemap {
 };
 
 #ifdef CONFIG_ZONE_DEVICE
+static inline bool is_zone_device_page(const struct page *page)
+{
+	return page_zonenum(page) == ZONE_DEVICE;
+}
+
 struct dev_pagemap *__get_dev_pagemap(resource_size_t phys);
 void devm_memunmap_pages(struct device *dev, void *addr);
 void *devm_memremap_pages(struct device *dev, struct resource *res,
 		struct percpu_ref *ref, struct vmem_altmap *altmap);
 struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start);
 #else
+static inline bool is_zone_device_page(const struct page *page)
+{
+	return false;
+}
+
 static inline struct dev_pagemap *__get_dev_pagemap(resource_size_t phys)
 {
 	return NULL;
@@ -862,6 +859,23 @@ static inline void put_dev_pagemap(struct dev_pagemap *pgmap)
 {
 	if (pgmap)
 		percpu_ref_put(pgmap->ref);
+}
+
+static inline void get_page(struct page *page)
+{
+	if (unlikely(PageTail(page)))
+		if (likely(__get_page_tail(page)))
+			return;
+
+	if (is_zone_device_page(page))
+		percpu_ref_get(page->pgmap->ref);
+
+	/*
+	 * Getting a normal page or the head of a compound page
+	 * requires to already have an elevated page->_count.
+	 */
+	VM_BUG_ON_PAGE(atomic_read(&page->_count) <= 0, page);
+	atomic_inc(&page->_count);
 }
 
 #if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)

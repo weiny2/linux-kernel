@@ -4229,7 +4229,23 @@ retry:
 	 */
 	if (!pmd_huge(*pmd))
 		goto out;
-	if (pmd_present(*pmd)) {
+	if (pmd_present(*pmd) && pmd_devmap(*pmd)) {
+		unsigned long pfn = pmd_pfn(*pmd);
+		struct dev_pagemap *pgmap;
+
+		/*
+		 * device mapped pages can only be returned if the
+		 * caller will manage the page reference count.
+		 */
+		if (!(flags & FOLL_GET))
+			goto out;
+		pgmap = get_dev_pagemap(pfn, NULL);
+		if (!pgmap)
+			goto out;
+		page = pfn_to_page(pfn);
+		get_page(page);
+		put_dev_pagemap(pgmap);
+	} else if (pmd_present(*pmd)) {
 		page = pmd_page(*pmd) + ((address & ~PMD_MASK) >> PAGE_SHIFT);
 		if (flags & FOLL_GET)
 			get_page(page);

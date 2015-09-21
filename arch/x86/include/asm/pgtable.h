@@ -461,7 +461,7 @@ static inline int pte_present(pte_t a)
 #define pte_devmap pte_devmap
 static inline int pte_devmap(pte_t a)
 {
-	return pte_flags(a) & _PAGE_DEVMAP;
+	return (pte_flags(a) & _PAGE_DEVMAP) == _PAGE_DEVMAP;
 }
 
 #define pte_accessible pte_accessible
