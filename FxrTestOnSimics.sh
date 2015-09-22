@@ -76,17 +76,19 @@ for viper in ${viper0} ${viper1}; do
     fi
 done
 
+# FXRTODO: Disable VNIC related tests until the tests are fixed to work
+# with opafm
 # Restart Simics a second time so that LIDs get assigned
-for viper in ${viper0} ${viper1}; do
-    ssh_cmd="ssh -p${viper} root@localhost"
-
-    # start opa2_hfi daemon
-    ${ssh_cmd} "service --skip-redirect opa2_hfi restart"
-    if [ ! $? ]; then
-	echo fail on re-starting opa2_hfi.
-	exit 16
-    fi
-done
+#for viper in ${viper0} ${viper1}; do
+#    ssh_cmd="ssh -p${viper} root@localhost"
+#
+#    # start opa2_hfi daemon
+#    ${ssh_cmd} "service --skip-redirect opa2_hfi restart"
+#    if [ ! $? ]; then
+#	echo fail on re-starting opa2_hfi.
+#	exit 16
+#    fi
+#done
 
 # run quick test.
 cd opa-headers.git/test
