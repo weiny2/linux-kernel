@@ -97,7 +97,7 @@ module_param(force_loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(force_loopback, "Force FXR into loopback");
 
 /* FXRTODO: Remove this once we have opafm working with B2B setup */
-uint opafm_disable = 1;
+uint opafm_disable = 0;
 module_param_named(opafm_disable, opafm_disable, uint, S_IRUGO);
 MODULE_PARM_DESC(opafm_disable, "0 - driver needs opafm to work, \
 			        1 - driver works without opafm");
