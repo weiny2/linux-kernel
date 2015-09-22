@@ -40,6 +40,8 @@ ${fxr}/simics/workspace/bin/simics --version
 ls -l ${fxr}/simics/FxrRhel7.craff
 ls -l ${fxr}/simics/SynopsisInstructionSetSimulator
 
+ssh -p${viper0} root@localhost "service --skip-redirect opafm stop"
+
 for viper in ${viper0} ${viper1}; do
     ssh_cmd="ssh -p${viper} root@localhost"
     scp_cmd="scp -P${viper}"
@@ -75,6 +77,8 @@ for viper in ${viper0} ${viper1}; do
 	exit 15
     fi
 done
+
+ssh -p${viper0} root@localhost "service --skip-redirect opafm start"
 
 # FXRTODO: Disable VNIC related tests until the tests are fixed to work
 # with opafm
