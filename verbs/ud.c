@@ -89,7 +89,7 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 		return;
 	}
 
-	dev_info(&ibdev->dev,
+	dev_dbg(&ibdev->dev,
 		 "exercising UD loopback path, to/from lid %d\n", ibp->lid);
 
 	sqptype = sqp->ibqp.qp_type == IB_QPT_GSI ?
