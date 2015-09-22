@@ -67,6 +67,8 @@
 
 /* QSFP is paged at 256 bytes */
 #define QSFP_PAGESIZE 256
+/* Reads/writes cannot cross 128 byte boundaries */
+#define QSFP_RW_BOUNDARY 128
 
 /* Defined fields that Intel requires of qualified cables */
 /* Byte 0 is Identifier, not checked */
