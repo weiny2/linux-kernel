@@ -482,9 +482,9 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 	 * MAD address table eventually
 	 */
 	if (!strcmp(utsname()->nodename, "viper0"))
-		dev->dlid = dev->port_num == 1 ? 3 : 4;
+		dev->dlid = 2;
 	else
-		dev->dlid = dev->port_num == 1 ? 1 : 2;
+		dev->dlid = 1;
 
 	/*
 	 * FXRTODO: E2E messages do not have to be set up for EoSTL traffic
