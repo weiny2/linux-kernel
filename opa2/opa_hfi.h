@@ -698,7 +698,7 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which);
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data);
 int hfi_set_mtu(struct hfi_pportdata *ppd);
 u16 hfi_port_ltp_to_cap(u16 port_ltp);
-u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp);
+u16 hfi_port_cap_to_lcb(struct hfi_devdata *dd, u16 crc_mask);
 u16 hfi_cap_to_port_ltp(u16 cap);
 void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode);
 /*

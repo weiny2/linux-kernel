@@ -1096,30 +1096,22 @@ static u16 hfi_lcb_to_port_ltp(struct hfi_devdata *dd, u16 lcb_crc)
 }
 
 /*
- * Convert a OPA Port LTP mask to a single FC LCB CRC mode
+ * Convert a OPA Port cap mask to a single FC LCB CRC mode
  */
-u16 hfi_port_ltp_to_lcb(struct hfi_devdata *dd, u16 port_ltp)
+u16 hfi_port_cap_to_lcb(struct hfi_devdata *dd, u16 crc_mask)
 {
-	u16 lcb_crc = 0;
+	u16 crc_val;
 
-	switch (port_ltp) {
-	case OPA_PORT_LTP_CRC_MODE_PER_LANE:
-		lcb_crc = HFI_LCB_CRC_12B_16B_PER_LANE;
-		break;
-	case OPA_PORT_LTP_CRC_MODE_48:
-		lcb_crc = HFI_LCB_CRC_48B;
-		break;
-	case OPA_PORT_LTP_CRC_MODE_14:
-		lcb_crc = HFI_LCB_CRC_14B;
-		break;
-	case OPA_PORT_LTP_CRC_MODE_16:
-		lcb_crc = HFI_LCB_CRC_16B;
-		break;
-	default:
-		dd_dev_warn(dd, "Invalid ltp crc. Driver might be in bad state");
-	}
+	if (crc_mask & HFI_CAP_CRC_14B)
+		crc_val = HFI_LCB_CRC_14B;
+	else if (crc_mask & HFI_CAP_CRC_48B)
+		crc_val = HFI_LCB_CRC_48B;
+	else if (crc_mask & HFI_CAP_CRC_12B_16B_PER_LANE)
+		crc_val = HFI_LCB_CRC_12B_16B_PER_LANE;
+	else
+		crc_val = HFI_LCB_CRC_16B;
 
-	return lcb_crc;
+	return crc_val;
 }
 
 void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode)
