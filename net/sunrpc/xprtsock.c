@@ -899,7 +899,8 @@ static void xs_close(struct rpc_xprt *xprt)
 
 	dprintk("RPC:       xs_close xprt %p\n", xprt);
 
-	cancel_delayed_work_sync(&transport->connect_worker);
+	if (cancel_delayed_work_sync(&transport->connect_worker))
+		xprt_clear_connecting(xprt);
 
 	xs_reset_transport(transport);
 	xprt->reestablish_timeout = 0;
