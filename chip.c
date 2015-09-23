@@ -1774,7 +1774,7 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 			    access_sw_kmem_wait),
 [C_SW_SEND_SCHED] = CNTR_ELEM("SendSched", 0, 0, CNTR_NORMAL,
 			    access_sw_send_schedule),
-[C_SDMA_DESC_FETCHED_CNT] = CNTR_ELEM("SDEDscFdCn",
+[C_SDMA_DESC_FETCHED_CNT] = CNTR_ELEM("SDMADscFd",
 					SEND_DMA_DESC_FETCHED_CNT, 0,
 					CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
 					dev_access_u32_csr),
@@ -1787,7 +1787,7 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 [C_SDMA_IDLE_INT_CNT] = CNTR_ELEM("SDMAIdInt", 0, 0,
 					CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
 					access_sde_idle_int_cnt),
-[C_SDMA_PROGRESS_INT_CNT] = CNTR_ELEM("SDMAPrIntCn", 0, 0,
+[C_SDMA_PROGRESS_INT_CNT] = CNTR_ELEM("SDMAPrInt", 0, 0,
 					CNTR_NORMAL|CNTR_32BIT|CNTR_SDMA,
 					access_sde_progress_int_cnt)
 };
@@ -2668,6 +2668,14 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 						ASIC_QSFP2_INVERT :
 						ASIC_QSFP1_INVERT,
 				qsfp_int_mgmt);
+
+			if ((ppd->offline_disabled_reason >
+			  HFI1_ODR_MASK(OPA_LINKDOWN_REASON_LOCAL_MEDIA_NOT_INSTALLED)) ||
+			  (ppd->offline_disabled_reason ==
+			  HFI1_ODR_MASK(OPA_LINKDOWN_REASON_NONE)))
+				ppd->offline_disabled_reason =
+				HFI1_ODR_MASK(OPA_LINKDOWN_REASON_LOCAL_MEDIA_NOT_INSTALLED);
+
 			if (ppd->host_link_state == HLS_DN_POLL) {
 				/*
 				 * The link is still in POLL. This means
@@ -6353,9 +6361,10 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 				ret);
 			return -EINVAL;
 		}
-		if (ppd->offline_disabled_reason == OPA_LINKDOWN_REASON_NONE)
+		if (ppd->offline_disabled_reason ==
+				HFI1_ODR_MASK(OPA_LINKDOWN_REASON_NONE))
 			ppd->offline_disabled_reason =
-			OPA_LINKDOWN_REASON_TRANSIENT;
+			HFI1_ODR_MASK(OPA_LINKDOWN_REASON_TRANSIENT);
 	}
 
 	if (do_wait) {
@@ -6708,7 +6717,8 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 				ret = -EINVAL;
 			}
 		}
-		ppd->offline_disabled_reason = OPA_LINKDOWN_REASON_NONE;
+		ppd->offline_disabled_reason =
+			HFI1_ODR_MASK(OPA_LINKDOWN_REASON_NONE);
 		/*
 		 * If an error occurred above, go back to offline.  The
 		 * caller may reschedule another attempt.
@@ -7816,6 +7826,17 @@ void hfi1_rcvctrl(struct hfi1_devdata *dd, unsigned int op, int ctxt)
 	}
 	if (op & HFI1_RCVCTRL_CTXT_DIS) {
 		write_csr(dd, RCV_VL15, 0);
+		/*
+		 * When receive context is being disabled turn on tail
+		 * update with a dummy tail address and then disable
+		 * receive context.
+		 */
+		if (dd->rcvhdrtail_dummy_physaddr) {
+			write_kctxt_csr(dd, ctxt, RCV_HDR_TAIL_ADDR,
+					dd->rcvhdrtail_dummy_physaddr);
+			rcvctrl |= RCV_CTXT_CTRL_TAIL_UPD_SMASK;
+		}
+
 		rcvctrl &= ~RCV_CTXT_CTRL_ENABLE_SMASK;
 	}
 	if (op & HFI1_RCVCTRL_INTRAVAIL_ENB)
@@ -7885,10 +7906,11 @@ void hfi1_rcvctrl(struct hfi1_devdata *dd, unsigned int op, int ctxt)
 	if (op & (HFI1_RCVCTRL_TAILUPD_DIS | HFI1_RCVCTRL_CTXT_DIS))
 		/*
 		 * If the context has been disabled and the Tail Update has
-		 * been cleared, clear the RCV_HDR_TAIL_ADDR CSR so
-		 * it doesn't contain an address that is invalid.
+		 * been cleared, set the RCV_HDR_TAIL_ADDR CSR to dummy address
+		 * so it doesn't contain an address that is invalid.
 		 */
-		write_kctxt_csr(dd, ctxt, RCV_HDR_TAIL_ADDR, 0);
+		write_kctxt_csr(dd, ctxt, RCV_HDR_TAIL_ADDR,
+				dd->rcvhdrtail_dummy_physaddr);
 }
 
 u32 hfi1_read_cntrs(struct hfi1_devdata *dd, loff_t pos, char **namep,
@@ -9181,7 +9203,7 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 
 	/*
 	 * Kernel contexts: (to be fixed later):
-	 * - min or 2 or 1 context/numa
+	 * - min or 2 or 1 context/numa (excluding control context)
 	 * - Context 0 - control context (VL15/multicast/error)
 	 * - Context 1 - default context
 	 */
@@ -9195,7 +9217,7 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 		 */
 		num_kernel_contexts = n_krcvqs + MIN_KERNEL_KCTXTS - 1;
 	else
-		num_kernel_contexts = num_online_nodes();
+		num_kernel_contexts = num_online_nodes() + 1;
 	num_kernel_contexts =
 		max_t(int, MIN_KERNEL_KCTXTS, num_kernel_contexts);
 	/*
