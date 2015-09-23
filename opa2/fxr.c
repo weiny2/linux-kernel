@@ -688,6 +688,10 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 		write_csr(ppd->dd, SEND_HIGH_PRIORITY_LIMIT, reg);
 #endif
 		break;
+	case HFI_IB_CFG_LWID_DG_ENB:
+		ppd->link_width_downgrade_enabled =
+			val & ppd->link_width_downgrade_supported;
+		break;
 	case HFI_IB_CFG_OP_VLS:
 		if (ppd->vls_operational != val) {
 			ppd->vls_operational = val;
