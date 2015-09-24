@@ -54,6 +54,7 @@
 #include <linux/device.h>
 #include <linux/idr.h>
 #include <linux/gfp.h>
+#include <rdma/ib_verbs.h>
 #include <rdma/hfi_types.h>
 #include <rdma/opa_smi.h>
 
@@ -270,11 +271,13 @@ struct opa_ev_assign {
  * struct opa_e2e_ctrl - Used with opa_core_ops.e2e_ctrl operation
  * @slid: source LID
  * @dlid: destination LID
+ * @port_num: initiator port_num (starts from 1)
  * @sl: service level
  */
 struct opa_e2e_ctrl {
 	u32 slid;
 	u32 dlid;
+	u8 port_num;
 	u8 sl;
 };
 
@@ -300,6 +303,7 @@ struct hfi_dlid_assign_args;
  * @sl_to_sc: service class to service level mapping table
  * @sc_to_vl: service class to virtual lane mapping table
  * @vl_mtu: Array of per VL MTU
+ * @lstate: logical link state
  */
 struct opa_pport_desc {
 	__be64 pguid;
@@ -312,6 +316,7 @@ struct opa_pport_desc {
 	u8 sc_to_sl[OPA_MAX_SCS];
 	u8 sc_to_vl[OPA_MAX_SCS];
 	u16 vl_mtu[OPA_MAX_VLS];
+	u32 lstate;
 };
 
 /**

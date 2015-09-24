@@ -150,6 +150,7 @@ static int hfi_e2e_conn(struct hfi_userdata *ud,
 		e2e_ctrl.slid = e2e_conn.slid;
 		e2e_ctrl.dlid = e2e_conn.dlid;
 		e2e_ctrl.sl = e2e_conn.sl;
+		e2e_ctrl.port_num = e2e_conn.port_num;
 		/* Initiate the E2E connection */
 		e2e_conn.conn_status = ops->e2e_ctrl(&ud->ctx, &e2e_ctrl);
 		/* Inform user space about the connection status */

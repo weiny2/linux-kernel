@@ -81,13 +81,6 @@ static struct opa_core_client opa_vnic_clnt = {
 	.event_notify = opa_netdev_event_notify
 };
 
-static void opa_netdev_event_notify(struct opa_core_device *odev,
-				    enum opa_core_event event, u8 port)
-{
-	/* FXRTODO: Add event handling */
-	dev_info(&odev->dev, "%s port %d event %d\n", __func__, port, event);
-}
-
 #define OPA2_NET_ME_COUNT 256
 #define OPA2_NET_UNEX_COUNT 512
 #define OPA2_NET_TIMEOUT_MS 100
@@ -149,11 +142,13 @@ struct opa_veswport {
  * @odev: OPA core device
  * @num_pport: number of physical ports
  * @vnic_ctrl_dev: VNIC control device for device instantiation
+ * @ctrl_lock: Lock to synchronize setup and teardown of the ctrl device
  */
 struct opa_netdev {
 	struct opa_core_device	*odev;
 	int			num_ports;
 	struct opa_vnic_ctrl_device *vnic_ctrl_dev;
+	struct mutex		ctrl_lock;
 };
 
 static
@@ -493,6 +488,7 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 	 */
 	e2e.slid = pdesc.lid;
 	e2e.dlid = dev->dlid;
+	e2e.port_num = dev->port_num;
 	e2e.sl = 0;
 
 	rc = ops->e2e_ctrl(ctx, &e2e);
@@ -500,6 +496,7 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 		return rc;
 	e2e.slid = pdesc.lid;
 	e2e.dlid = pdesc.lid;
+	e2e.port_num = dev->port_num;
 	e2e.sl = 0;
 
 	rc = ops->e2e_ctrl(ctx, &e2e);
@@ -656,6 +653,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 
 	e2e.slid = pdesc.lid;
 	e2e.dlid = pdesc.lid;
+	e2e.port_num = dev->port_num;
 	e2e.sl = 0;
 
 	rc = ops->e2e_ctrl(ctx, &e2e);
@@ -1032,6 +1030,10 @@ int opa_vnic_hfi_add_ctrl_port(struct opa_netdev *ndev)
 	struct opa_core_device *odev = ndev->odev;
 	struct opa_dev_desc desc;
 
+	/* Return success if control device is already added */
+	if (ndev->vnic_ctrl_dev)
+		return 0;
+
 	odev->bus_ops->get_device_desc(odev, &desc);
 	ndev->num_ports = desc.num_pports;
 
@@ -1050,7 +1052,60 @@ int opa_vnic_hfi_add_ctrl_port(struct opa_netdev *ndev)
 /* opa_vnic_hfi_rem_ctrl_port - remove vnic control port device */
 void opa_vnic_hfi_rem_ctrl_port(struct opa_netdev *ndev)
 {
-	opa_vnic_ctrl_device_unregister(ndev->vnic_ctrl_dev);
+	if (ndev->vnic_ctrl_dev) {
+		opa_vnic_ctrl_device_unregister(ndev->vnic_ctrl_dev);
+		ndev->vnic_ctrl_dev = NULL;
+	}
+}
+
+/* Handle link state changes */
+static void opa_netdev_link_handling(struct opa_netdev *ndev)
+{
+	struct opa_core_device *odev = ndev->odev;
+	struct opa_core_ops *ops = odev->bus_ops;
+	struct opa_dev_desc desc;
+	struct opa_pport_desc pdesc;
+	int i, active = 0, offline = 0, rc;
+
+	odev->bus_ops->get_device_desc(odev, &desc);
+	for (i = 0; i < desc.num_pports; i++) {
+		ops->get_port_desc(odev, &pdesc, i + 1);
+		if (pdesc.lstate == IB_PORT_ACTIVE)
+			active++;
+		if (pdesc.lstate == IB_PORT_DOWN)
+			offline++;
+	}
+	mutex_lock(&ndev->ctrl_lock);
+	/* Add the VNIC control device if both the ports are active */
+	if (active == desc.num_pports) {
+		rc = opa_vnic_hfi_add_ctrl_port(ndev);
+		if (rc)
+			dev_err(&odev->dev, "add_ctrl_dev rc %d\n", rc);
+		goto unlock;
+	}
+	/* Remove the VNIC control device if both ports are offline */
+	if (offline == desc.num_pports)
+		opa_vnic_hfi_rem_ctrl_port(ndev);
+unlock:
+	mutex_unlock(&ndev->ctrl_lock);
+}
+
+/* Handle event notifications from the OPA core */
+static void opa_netdev_event_notify(struct opa_core_device *odev,
+				    enum opa_core_event event, u8 port)
+{
+	struct opa_netdev *ndev = opa_core_get_priv_data(&opa_vnic_clnt, odev);
+
+	if (!ndev)
+		return;
+	dev_info(&odev->dev, "%s port %d event %d\n", __func__, port, event);
+	switch (event) {
+	case OPA_LINK_STATE_CHANGE:
+		opa_netdev_link_handling(ndev);
+		break;
+	default:
+		break;
+	};
 }
 
 /* per OPA core device probe routine */
@@ -1068,12 +1123,9 @@ static int opa_netdev_probe(struct opa_core_device *odev)
 		goto priv_err;
 
 	ndev->odev = odev;
-	rc = opa_vnic_hfi_add_ctrl_port(ndev);
-	if (rc)
-		goto port_err;
+	mutex_init(&ndev->ctrl_lock);
+	opa_netdev_link_handling(ndev);
 	return rc;
-port_err:
-	opa_core_clear_priv_data(&opa_vnic_clnt, odev);
 priv_err:
 	kfree(ndev);
 	dev_err(&odev->dev, "%s rc %d\n", __func__, rc);

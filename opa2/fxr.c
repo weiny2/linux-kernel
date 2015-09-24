@@ -909,6 +909,12 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 {
 	int i;
 
+	/*
+	 * shutdown ports to notify OPA core clients.
+	 * FXRTODO: Check error handling if hfi_pci_dd_init fails early
+	 */
+	hfi_pport_down(dd);
+
 	if (dd->bus_dev)
 		opa_core_unregister_device(dd->bus_dev);
 
@@ -924,8 +930,6 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 		hfi_ctxt_cleanup(&dd->priv_ctx);
 	}
 	hfi_cleanup_interrupts(dd);
-
-	hfi_pport_down(dd);
 
 	hfi_iommu_root_clear_context(dd);
 
@@ -969,6 +973,7 @@ static void hfi_port_desc(struct opa_core_device *odev,
 		pdesc->sc_to_sl[i] = ppd->sc_to_sl[i];
 	for (i = 0; i < ARRAY_SIZE(ppd->sc_to_vlt); i++)
 		pdesc->sc_to_vl[i] = ppd->sc_to_vlt[i];
+	pdesc->lstate = ppd->lstate;
 }
 
 static void hfi_device_desc(struct opa_core_device *odev,

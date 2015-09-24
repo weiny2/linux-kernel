@@ -109,8 +109,14 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 			(union initiator_EQEntry *)eq_entry;
 
 		if (txe->event_kind == PTL_EVENT_INITIATOR_CONNECT) {
-			dd_dev_info(dd, "E2E EQ success kind %d\n",
-				    txe->event_kind);
+			if (txe->fail_type) {
+				dd_dev_info(dd, "E2E EQ fail kind %d ft %d\n",
+					    txe->event_kind, txe->fail_type);
+				rc = -EIO;
+			} else {
+				dd_dev_info(dd, "E2E EQ success kind %d\n",
+					    txe->event_kind);
+			}
 			hfi_eq_advance(ctx, &dd->priv_rx_cq,
 				       dd->e2e_eq, eq_entry);
 		} else {
@@ -130,15 +136,11 @@ int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	struct hfi_ptcdata *ptc;
-	u8 port, tc;
+	u8 tc;
 	struct ida *cache;
 	int ret;
 
-	if (e2e->slid == dd->pport[0].lid)
-		port = 0;
-	else if (e2e->slid == dd->pport[1].lid)
-		port = 1;
-	else
+	if (e2e->port_num > dd->num_pports)
 		return -EINVAL;
 
 	if (e2e->dlid >= HFI_MAX_LID_SUPP)
@@ -151,7 +153,7 @@ int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 	 */
 	tc = e2e->sl % HFI_MAX_TC;
 
-	ptc = &dd->pport[port].ptc[tc];
+	ptc = &dd->pport[e2e->port_num - 1].ptc[tc];
 	cache = &ptc->e2e_state_cache;
 
 	mutex_lock(&dd->e2e_lock);
@@ -170,7 +172,7 @@ int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 		goto unlock;
 	/* Initiate an E2E connection if one did not exist */
 	ret = hfi_put_e2e_ctrl(dd, e2e->slid, e2e->dlid,
-			       tc, port, PTL_SINGLE_CONNECT);
+			       tc, e2e->port_num - 1, PTL_SINGLE_CONNECT);
 	if (ret < 0)
 		/* remove the entry from the cache upon failure */
 		ida_remove(cache, e2e->dlid);
