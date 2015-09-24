@@ -639,7 +639,11 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			goto inval;
 		if (hfi1_check_ah(qp->ibqp.device, &attr->ah_attr))
 			goto inval;
+
 		sc = ah_to_sc(ibqp->device, &attr->ah_attr);
+		if (sc == 0xf)
+			goto inval;
+
 		if (!qp_to_sdma_engine(qp, sc) &&
 				dd->flags & HFI1_HAS_SEND_DMA)
 			goto inval;
@@ -654,7 +658,11 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			goto inval;
 		if (attr->alt_pkey_index >= hfi1_get_npkeys(dd))
 			goto inval;
+
 		sc = ah_to_sc(ibqp->device, &attr->alt_ah_attr);
+		if (sc == 0xf)
+			goto inval;
+
 		if (!qp_to_sdma_engine(qp, sc) &&
 				dd->flags & HFI1_HAS_SEND_DMA)
 			goto inval;

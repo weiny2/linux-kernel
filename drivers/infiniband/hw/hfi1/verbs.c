@@ -447,6 +447,12 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 		log_pmtu = qp->log_pmtu;
 	} else {
 		struct hfi1_ah *ah = to_iah(wr->wr.ud.ah);
+		struct hfi1_ibport *ibp;
+
+		ibp = to_iport(pd->ibpd.device, ah->attr.port_num);
+		if (ibp->sl_to_sc[ah->attr.sl] == 0xf
+		    && qp->ibqp.qp_type != IB_QPT_SMI)
+			goto bail_inval_free;
 
 		log_pmtu = ah->log_pmtu;
 		if (wqe->length > (1 << ah->log_pmtu))
