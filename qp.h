@@ -367,7 +367,7 @@ static inline int stop_retry_timer(struct hfi1_qp *qp)
 }
 
 /**
- * stop_rnr_timer - mod an rnr timer
+ * stop_rnr_timer - stop an rnr timer
  * @qp - the QP
  *
  * stop an rnr timer and return if the timer
@@ -380,7 +380,6 @@ static inline int stop_rnr_timer(struct hfi1_qp *qp)
 	/* Remove QP from rnr timer */
 	if (qp->s_flags & HFI1_S_WAIT_RNR) {
 		qp->s_flags &= ~HFI1_S_WAIT_RNR;
-		rval = del_timer(&qp->s_timer);
 		rval = del_timer(&qp->s_rnr_timer);
 	}
 	return rval;
