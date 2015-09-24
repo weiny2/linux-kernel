@@ -906,7 +906,7 @@ void hfi1_rc_timeout(unsigned long arg)
 }
 
 /*
- * This is called from s_timer for RNR timeouts.
+ * This is called from rnr_timer for RNR timeouts.
  */
 void hfi1_rc_rnr_retry(unsigned long arg)
 {

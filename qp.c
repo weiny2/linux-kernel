@@ -747,6 +747,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			spin_unlock_irq(&qp->r_lock);
 			/* insure any timer has completed */
 			del_timers_sync(qp);
+			/* Stop the sending work queue */
 			cancel_work_sync(&qp->s_iowait.iowork);
 			iowait_sdma_drain(&qp->s_iowait);
 			flush_tx_list(qp);
@@ -1156,6 +1157,10 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		init_waitqueue_head(&qp->wait);
 		init_timer(&qp->s_timer);
 		qp->s_timer.data = (unsigned long)qp;
+		qp->s_timer.function = hfi1_rc_timeout;
+		init_timer(&qp->s_rnr_timer);
+		qp->s_rnr_timer.data = (unsigned long)qp;
+		qp->s_rnr_timer.function = hfi1_rc_rnr_retry;
 		INIT_LIST_HEAD(&qp->rspwait);
 		qp->state = IB_QPS_RESET;
 		qp->s_wq = swq;
@@ -1302,6 +1307,9 @@ int hfi1_destroy_qp(struct ib_qp *ibqp)
 		spin_unlock(&qp->s_lock);
 		spin_unlock(&qp->s_hlock);
 		spin_unlock_irq(&qp->r_lock);
+		/* insure any timer has completed */
+		del_timers_sync(qp);
+		/* Stop the sending work queue */
 		cancel_work_sync(&qp->s_iowait.iowork);
 		/* insure any timer has completed */
 		del_timers_sync(qp);

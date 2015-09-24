@@ -314,7 +314,6 @@ static inline u32 qp_get_savail(struct hfi1_qp *qp)
 static inline void add_retry_timer(struct hfi1_qp *qp)
 {
 	qp->s_flags |= HFI1_S_TIMER;
-	qp->s_timer.function = hfi1_rc_timeout;
 	/* 4.096 usec. * (1 << qp->timeout) */
 	qp->s_timer.expires = jiffies + qp->timeout_jiffies;
 	add_timer(&qp->s_timer);
@@ -329,9 +328,8 @@ static inline void add_retry_timer(struct hfi1_qp *qp)
 static inline void add_rnr_timer(struct hfi1_qp *qp, unsigned long to)
 {
 	qp->s_flags |= HFI1_S_WAIT_RNR;
-	qp->s_timer.function = hfi1_rc_rnr_retry;
-	qp->s_timer.expires = jiffies + usecs_to_jiffies(to);
-	add_timer(&qp->s_timer);
+	qp->s_rnr_timer.expires = jiffies + usecs_to_jiffies(to);
+	add_timer(&qp->s_rnr_timer);
 }
 
 /**
@@ -369,21 +367,6 @@ static inline int stop_retry_timer(struct hfi1_qp *qp)
 }
 
 /**
- * stop_rc_timers - mod a retry timer
- * @qp - the QP
- *
- * stop any pending timers
- */
-static inline void stop_rc_timers(struct hfi1_qp *qp)
-{
-	/* Remove QP from all timers */
-	if (qp->s_flags & (HFI1_S_TIMER | HFI1_S_WAIT_RNR)) {
-		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_WAIT_RNR);
-		del_timer(&qp->s_timer);
-	}
-}
-
-/**
  * stop_rnr_timer - mod an rnr timer
  * @qp - the QP
  *
@@ -398,8 +381,25 @@ static inline int stop_rnr_timer(struct hfi1_qp *qp)
 	if (qp->s_flags & HFI1_S_WAIT_RNR) {
 		qp->s_flags &= ~HFI1_S_WAIT_RNR;
 		rval = del_timer(&qp->s_timer);
+		rval = del_timer(&qp->s_rnr_timer);
 	}
 	return rval;
+}
+
+/**
+ * stop_rc_timers - mod a retry timer
+ * @qp - the QP
+ *
+ * stop any pending timers
+ */
+static inline void stop_rc_timers(struct hfi1_qp *qp)
+{
+	/* Remove QP from all timers */
+	if (qp->s_flags & (HFI1_S_TIMER | HFI1_S_WAIT_RNR)) {
+		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_WAIT_RNR);
+		del_timer(&qp->s_timer);
+		del_timer(&qp->s_rnr_timer);
+	}
 }
 
 /**
@@ -409,6 +409,7 @@ static inline int stop_rnr_timer(struct hfi1_qp *qp)
 static inline void del_timers_sync(struct hfi1_qp *qp)
 {
 	del_timer_sync(&qp->s_timer);
+	del_timer_sync(&qp->s_rnr_timer);
 }
 
 #endif /* _QP_H */

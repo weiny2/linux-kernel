@@ -539,6 +539,7 @@ struct hfi1_qp {
 
 	struct hfi1_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
+	struct timer_list s_rnr_timer;
 
 	struct iowait s_iowait;
 
