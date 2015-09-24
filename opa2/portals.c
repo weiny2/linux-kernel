@@ -719,7 +719,8 @@ void hfi_eq_zero_release(struct hfi_ctx *ctx)
 	int ni, rc;
 	struct hfi_devdata *dd = ctx->devdata;
 
-	if (!IS_ERR_OR_NULL(dd->eq_zero_thread)) {
+	if (ctx == &dd->priv_ctx &&
+	    !IS_ERR_OR_NULL(dd->eq_zero_thread)) {
 		rc = send_sig(SIGINT, dd->eq_zero_thread, 0);
 		if (rc) {
 			dd_dev_err(dd, "send_sig failed %d\n", rc);
