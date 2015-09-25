@@ -106,11 +106,40 @@
 #define HCMD_SUCCESS 0x2
 #define HCMD_ONGOING 0xff
 
+/* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.HOST_MSG - host message flags */
+#define HOST_REQ_DONE	   (1 << 0)
+#define BC_PWR_MGM_MSG	   (1 << 1)
+#define BC_SMA_MSG		   (1 << 2)
+#define BC_BCC_UNKOWN_MSG	   (1 << 3)
+#define BC_IDLE_UNKNOWN_MSG	   (1 << 4)
+#define EXT_DEVICE_CFG_REQ	   (1 << 5)
+#define VERIFY_CAP_FRAME	   (1 << 6)
+#define LINKUP_ACHIEVED	   (1 << 7)
+#define LINK_GOING_DOWN	   (1 << 8)
+#define LINK_WIDTH_DOWNGRADED  (1 << 9)
+
+/* 8051 general register Field IDs */
+#define HOST_INT_MSG_MASK		0x03
+
+/* Lane ID for general configuration registers */
+#define GENERAL_CONFIG 4
+
+/* LOAD_DATA 8051 command shifts and fields */
+#define LOAD_DATA_FIELD_ID_SHIFT 40
+#define LOAD_DATA_FIELD_ID_MASK 0xfull
+#define LOAD_DATA_LANE_ID_SHIFT 32
+#define LOAD_DATA_LANE_ID_MASK 0xfull
+#define LOAD_DATA_DATA_SHIFT  0x0
+#define LOAD_DATA_DATA_MASK   0xffffffffull
+
 /* timeouts */
 #define TIMEOUT_8051_START 5000         /* 8051 start timeout, in ms */
 #define CRK8051_COMMAND_TIMEOUT 20000	/* 8051 command timeout, in ms */
 
-extern bool quick_linkup; /* skip VarifyCap and Config* state. */
+/* interrupt vector number */
+#define HFI2_MNH_ERROR 256
+#define HFI2_FZC0_ERROR 257
+#define HFI2_FZC1_ERROR 258
 
 u64 read_fzc_csr(const struct hfi_pportdata *ppd, u32 offset);
 void write_fzc_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
@@ -118,7 +147,14 @@ u64 read_8051_csr(const struct hfi_pportdata *ppd, u32 offset);
 void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
 void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 			  u8 neigh_reason, u8 rem_reason);
+int hfi2_wait_logical_linkstate(struct hfi_pportdata *ppd, u32 state,
+								  int msecs);
+int hfi2_cfg_link_intr_vector(struct hfi_devdata *dd);
+int hfi2_enable_8051_intr(struct hfi_pportdata *ppd);
+int hfi2_disable_8051_intr(struct hfi_pportdata *ppd);
 void hfi_8051_reset(const struct hfi_pportdata *ppd);
+void hfi2_pport_link_uninit(struct hfi_devdata *dd);
+int hfi2_pport_link_init(struct hfi_devdata *dd);
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
 int hfi_start_link(struct hfi_pportdata *ppd);
 

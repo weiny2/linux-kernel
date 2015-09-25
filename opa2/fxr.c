@@ -836,7 +836,7 @@ int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message)
 	return -EINVAL;
 }
 
-static void hfi_ack_interrupt(struct hfi_msix_entry *me)
+void hfi_ack_interrupt(struct hfi_msix_entry *me)
 {
 	struct hfi_devdata *dd = me->dd;
 	/*
@@ -891,12 +891,7 @@ static irqreturn_t irq_eq_handler(int irq, void *dev_id)
  */
 void hfi_pport_down(struct hfi_devdata *dd)
 {
-	u8 port;
-
-	for (port = 1; port <= dd->num_pports; port++) {
-		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
-		hfi_set_link_state(ppd, HLS_DN_OFFLINE);
-	}
+	hfi2_pport_link_uninit(dd);
 }
 
 /*
@@ -1151,7 +1146,7 @@ void hfi_init_sc_to_vlt(struct hfi_pportdata *ppd)
  * hfi_pport_init - initialize per port
  * data structs
  */
-void hfi_pport_init(struct hfi_devdata *dd)
+int hfi_pport_init(struct hfi_devdata *dd)
 {
 	struct hfi_pportdata *ppd;
 	int i;
@@ -1172,11 +1167,6 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		ppd->crk8051_timed_out = 0;
 		ppd->host_link_state = HLS_DN_OFFLINE;
 		hfi_8051_reset(ppd);
-		hfi_start_link(ppd);
-		if (opafm_disable) {
-			hfi_set_link_state(ppd, HLS_UP_ARMED);
-			hfi_set_link_state(ppd, HLS_UP_ACTIVE);
-		}
 
 		/*
 		 * FXRTODO: The below 4 variables
@@ -1291,6 +1281,8 @@ void hfi_pport_init(struct hfi_devdata *dd)
 		hfi_init_sc_to_vlt(ppd);
 		hfi_ptc_init(ppd);
 	}
+
+	return hfi2_pport_link_init(dd);
 }
 
 /**
@@ -1366,9 +1358,18 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
+	/* enable MSI-X */
+	ret = hfi_setup_interrupts(dd, HFI_NUM_INTERRUPTS, 0);
+	if (ret)
+		goto err_post_alloc;
+	hfi_ack_all_interrupts(dd);
+
 	/* per port init */
 	dd->num_pports = HFI_NUM_PPORTS;
-	hfi_pport_init(dd);
+	ret = hfi_pport_init(dd);
+	if (ret)
+		goto err_post_alloc;
+
 	dd->oui[0] = be64_to_cpu(dd->nguid) >> 56 & 0xFF;
 	dd->oui[1] = be64_to_cpu(dd->nguid) >> 48 & 0xFF;
 	dd->oui[2] = be64_to_cpu(dd->nguid) >> 40 & 0xFF;
@@ -1405,14 +1406,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	ret = hfi_cq_map(ctx, priv_cq_idx, &dd->priv_tx_cq, &dd->priv_rx_cq);
 	if (ret)
 		goto err_post_alloc;
-
-	/* enable MSI-X */
-	/* TODO - just ask for 64 IRQs for now */
-	ret = hfi_setup_interrupts(dd, /* HFI_NUM_INTERRUPTS */ 64, 0);
-	if (ret)
-		goto err_post_alloc;
-
-	hfi_ack_all_interrupts(dd);
 
 	/* configure IRQs for EQ groups */
 	n_irqs = min_t(int, dd->num_msix_entries, HFI_NUM_EQ_INTERRUPTS);

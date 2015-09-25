@@ -58,11 +58,17 @@
 #include <rdma/fxr/fxr_fc_defs.h>
 #include <rdma/fxr/fxr_top_defs.h>
 #include <rdma/fxr/dc_8051_csrs_defs.h>
+#include <linux/interrupt.h>
 #include "opa_hfi.h"
 #include "link.h"
 #include "firmware.h"
 
-bool quick_linkup = true; /* skip LNI. */
+#define WAIT_TILL_8051_LINKUP 1000
+
+static bool quick_linkup = false; /* skip VerifyCap and Config* state. */
+
+static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup);
+static u32 read_physical_state(const struct hfi_pportdata *ppd);
 
 /*
  * read FZC registers
@@ -116,7 +122,7 @@ u64 read_8051_csr(const struct hfi_pportdata *ppd, u32 offset)
 /*
  * write 8051/MNH registers
  */
-void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset,	u64 value)
+void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
 {
 	switch (ppd->pnum) {
 	case 1:
@@ -151,6 +157,17 @@ static const char *link_state_name(u32 state)
 
 	name = n < ARRAY_SIZE(names) ? names[n] : NULL;
 	return name ? name : "unknown";
+}
+
+/*
+ * Set the LCB selector - allow host access.  The DCC selector always
+ * points to the host.
+ */
+static inline void set_host_lcb_access(struct hfi_pportdata *ppd)
+{
+	write_8051_csr(ppd, CRK8051_CFG_CSR_ACCESS_SEL,
+				CRK8051_CFG_CSR_ACCESS_SEL_DCC_SMASK
+				| CRK8051_CFG_CSR_ACCESS_SEL_LCB_SMASK);
 }
 
 /*
@@ -212,6 +229,54 @@ static void mnh_start(const struct hfi_pportdata *ppd)
 	dd->dc_shutdown = 0;
 done:
 	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
+#endif
+}
+
+/*
+ * Handle a link up interrupt from the MNH/8051.
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+static void handle_link_up(struct work_struct *work)
+{
+	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
+								link_up_work);
+	struct hfi_devdata *dd = ppd->dd;
+	u32 _8051_port = read_physical_state(ppd);
+
+	if (ppd->host_link_state & HLS_UP) {
+		dd_dev_info(dd, "port%d False interrupt on %s(): %s(%d) 0x%x",
+			ppd->pnum,  __func__,
+			link_state_name(ppd->host_link_state),
+			ilog2(ppd->host_link_state), _8051_port);
+		return;
+	}
+	hfi_set_link_state(ppd, HLS_UP_INIT);
+
+#if 0 /* WFR legacy */
+	/* cache the read of DC_LCB_STS_ROUND_TRIP_LTP_CNT */
+	read_ltp_rtt(ppd->dd);
+	/*
+	 * OPA specifies that certain counters are cleared on a transition
+	 * to link up, so do that.
+	 */
+	clear_linkup_counters(ppd->dd);
+	/*
+	 * And (re)set link up default values.
+	 */
+	set_linkup_defaults(ppd);
+
+	/* enforce link speed enabled */
+	if ((ppd->link_speed_active & ppd->link_speed_enabled) == 0) {
+		/* oops - current speed is not enabled, bounce */
+		dd_dev_err(ppd->dd,
+			"Link speed active 0x%x is outside enabled 0x%x, downing link\n",
+			ppd->link_speed_active, ppd->link_speed_enabled);
+		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_SPEED_POLICY, 0,
+			OPA_LINKDOWN_REASON_SPEED_POLICY);
+		set_link_state(ppd, HLS_DN_OFFLINE);
+		start_link(ppd);
+	}
 #endif
 }
 
@@ -352,6 +417,24 @@ static int set_physical_link_state(struct hfi_pportdata *ppd, u64 state)
 	return do_8051_command(ppd, HCMD_CHANGE_PHY_STATE, state, NULL);
 }
 
+static int load_8051_config(struct hfi_pportdata *ppd, u8 field_id,
+			    u8 lane_id, u32 config_data)
+{
+	u64 data;
+	int ret;
+
+	data = (u64)field_id << LOAD_DATA_FIELD_ID_SHIFT
+		| (u64)lane_id << LOAD_DATA_LANE_ID_SHIFT
+		| (u64)config_data << LOAD_DATA_DATA_SHIFT;
+	ret = do_8051_command(ppd, HCMD_LOAD_CONFIG_DATA, data, NULL);
+	if (ret != HCMD_SUCCESS) {
+		dd_dev_err(ppd->dd,
+			"load 8051 config: field id %d, lane %d, err %d\n",
+			(int)field_id, (int)lane_id, ret);
+	}
+	return ret;
+}
+
 /*
  * Initialize the LCB then do a quick link up.  This may or may not be
  * in loopback.
@@ -447,6 +530,15 @@ static int do_quick_linkup(struct hfi_pportdata *ppd)
 	return 0; /* success */
 }
 
+static u32 read_physical_state(const struct hfi_pportdata *ppd)
+{
+	u64 reg;
+
+	reg = read_8051_csr(ppd, CRK8051_STS_CUR_STATE);
+	return (reg >> CRK8051_STS_CUR_STATE_PORT_SHIFT)
+				& CRK8051_STS_CUR_STATE_PORT_MASK;
+}
+
 static u32 read_logical_state(const struct hfi_pportdata *ppd)
 {
 	u64 reg;
@@ -454,6 +546,28 @@ static u32 read_logical_state(const struct hfi_pportdata *ppd)
 	reg = read_fzc_csr(ppd, FZC_LCB_CFG_PORT);
 	return (reg >> FZC_LCB_CFG_PORT_LINK_STATE_SHIFT)
 				& FZC_LCB_CFG_PORT_LINK_STATE_MASK;
+}
+
+static int wait_phy_linkstate(struct hfi_pportdata *ppd, u32 state, u32 msecs)
+{
+	unsigned long timeout;
+	u32 curr_state;
+
+	timeout = jiffies + msecs_to_jiffies(msecs);
+	while (1) {
+		curr_state = read_physical_state(ppd);
+		if (curr_state == state)
+			break;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(ppd->dd,
+				"timeout waiting for phy link state 0x%x, current state is 0x%x\n",
+				state, curr_state);
+			return -ETIMEDOUT;
+		}
+		usleep_range(1950, 2050); /* sleep 2ms-ish */
+	}
+
+	return 0;
 }
 
 /*
@@ -466,18 +580,19 @@ static u32 read_logical_state(const struct hfi_pportdata *ppd)
  */
 static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 {
-#if 0 /* WFR legacy */
-	struct hfi1_devdata *dd = ppd->dd;
+	struct hfi_devdata *dd = ppd->dd;
 	u32 pstate, previous_state;
-	u32 last_local_state;
-	u32 last_remote_state;
-	int ret;
 	int do_transition;
 	int do_wait;
+	int ret;
+#if 0 /* WFR legacy */
+	u32 last_local_state;
+	u32 last_remote_state;
+#endif
 
 	previous_state = ppd->host_link_state;
 	ppd->host_link_state = HLS_GOING_OFFLINE;
-	pstate = read_physical_state(dd);
+	pstate = read_physical_state(ppd);
 	if (pstate == PLS_OFFLINE) {
 		do_transition = 0;	/* in right state */
 		do_wait = 0;		/* ...no need to wait */
@@ -499,27 +614,29 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 				ret);
 			return -EINVAL;
 		}
+#if 0 /* WFR legacy */
 		if (ppd->offline_disabled_reason == OPA_LINKDOWN_REASON_NONE)
 			ppd->offline_disabled_reason =
 			OPA_LINKDOWN_REASON_TRANSIENT;
+#endif
 	}
 
 	if (do_wait) {
 		/* it can take a while for the link to go down */
-		ret = wait_phy_linkstate(dd, PLS_OFFLINE, 10000);
+		ret = wait_phy_linkstate(ppd, PLS_OFFLINE, 10000);
 		if (ret < 0)
 			return ret;
 	}
 
 	/* make sure the logical state is also down */
-	wait_logical_linkstate(ppd, IB_PORT_DOWN, 1000);
+	hfi2_wait_logical_linkstate(ppd, IB_PORT_DOWN, 1000);
 
 	/*
 	 * Now in charge of LCB - must be after the physical state is
 	 * offline.quiet and before host_link_state is changed.
 	 */
-	set_host_lcb_access(dd);
-	write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
+	set_host_lcb_access(ppd);
+	write_fzc_csr(ppd, FZC_LCB_ERR_FRC, ~0ull); /* watch LCB errors */
 	ppd->host_link_state = HLS_LINK_COOLDOWN; /* LCB access allowed */
 
 	/*
@@ -530,7 +647,7 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 	 * when that is completed.  The largest of the quiet timeouts
 	 * is 2.5s, so wait that long and then a bit more.
 	 */
-	ret = hfi_wait_firmware_ready(dd, 3000);
+	ret = hfi_wait_firmware_ready(ppd, 3000);
 	if (ret) {
 		dd_dev_err(dd,
 			"After going offline, timed out waiting for the 8051 to become ready to accept host requests\n");
@@ -546,6 +663,7 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 	 *	- notify others if we were previously in a linkup state
 	 */
 	ppd->host_link_state = HLS_DN_OFFLINE;
+#if 0 /* WFR legacy */
 	if (previous_state & HLS_UP) {
 		/* went down while link was up */
 		handle_linkup_change(ppd, 0);
@@ -664,8 +782,9 @@ static u32 chip_to_opa_lstate(struct hfi_devdata *dd, u32 chip_lstate)
 	}
 }
 
+#if 0
 /* return the OPA port logical state name */
-const char *opa_lstate_name(u32 lstate)
+static const char *opa_lstate_name(u32 lstate)
 {
 	static const char * const port_logical_names[] = {
 		"PORT_NOP",
@@ -679,19 +798,23 @@ const char *opa_lstate_name(u32 lstate)
 		return port_logical_names[lstate];
 	return "unknown";
 }
+#endif
 
 /*
  * Read the hardware link state and set the driver's cached value of it.
  * Return the (new) current value.
  */
-u32 get_logical_state(struct hfi_pportdata *ppd)
+static u32 get_logical_state(struct hfi_pportdata *ppd)
 {
 	u32 new_state;
 
 	new_state = chip_to_opa_lstate(ppd->dd, read_logical_state(ppd));
 	if (new_state != ppd->lstate) {
-		dd_dev_info(ppd->dd, "logical state changed to %s (0x%x)\n",
+#if 0
+		dd_dev_info(ppd->dd, "logical link state: %s(%d) -> %s(%d)\n",
+			opa_lstate_name(ppd->lstate), ppd->lstate,
 			opa_lstate_name(new_state), new_state);
+#endif
 		ppd->lstate = new_state;
 	}
 #if 0 /* WFR legacy */
@@ -723,7 +846,7 @@ u32 get_logical_state(struct hfi_pportdata *ppd)
 }
 
 /**
- * wait_logical_linkstate - wait for an IB link state change to occur
+ * hfi2_wait_logical_linkstate - wait for an IB link state change to occur
  * @ppd: port device
  * @state: the state to wait for
  * @msecs: the number of milliseconds to wait
@@ -732,7 +855,7 @@ u32 get_logical_state(struct hfi_pportdata *ppd)
  * For now, take the easy polling route.
  * Returns 0 if state reached, otherwise -ETIMEDOUT.
  */
-static int wait_logical_linkstate(struct hfi_pportdata *ppd, u32 state,
+int hfi2_wait_logical_linkstate(struct hfi_pportdata *ppd, u32 state,
 				  int msecs)
 {
 	unsigned long timeout;
@@ -761,7 +884,7 @@ static inline void add_rcvctrl(struct hfi_devdata *dd, u64 add)
  * Handle a linkup or link down notification.
  * This is called outside an interrupt.
  */
-void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup)
+static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup)
 {
 	enum ib_event_type ev;
 
@@ -857,12 +980,398 @@ void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 }
 
 /*
+ * Handle a verify capabilities interrupt from MNH/8051.
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+static void handle_verify_cap(struct work_struct *work)
+{
+	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
+								link_vc_work);
+	struct hfi_devdata *dd = ppd->dd;
+	u32 _8051_port = read_physical_state(ppd);
+
+	if (_8051_port != PLS_CONFIGPHY_VERIFYCAP) {
+		dd_dev_info(dd, "port%d False interrupt on %s(): 0x%x. Ignore.",
+			ppd->pnum, __func__, _8051_port);
+		return;
+	}
+	hfi_set_link_state(ppd, HLS_VERIFY_CAP);
+#if 0 /* WFR legacy */
+	lcb_shutdown(dd, 0);
+	adjust_lcb_for_fpga_serdes(dd);
+
+	/*
+	 * These are now valid:
+	 *	remote VerifyCap fields in the general LNI config
+	 *	CSR DC8051_STS_REMOTE_GUID
+	 *	CSR DC8051_STS_REMOTE_NODE_TYPE
+	 *	CSR DC8051_STS_REMOTE_FM_SECURITY
+	 *	CSR DC8051_STS_REMOTE_PORT_NO
+	 */
+
+	read_vc_remote_phy(dd, &power_management, &continious);
+	read_vc_remote_fabric(
+		dd,
+		&vau,
+		&z,
+		&vcu,
+		&vl15buf,
+		&partner_supported_crc);
+	read_vc_remote_link_width(dd, &remote_tx_rate, &link_widths);
+	read_remote_device_id(dd, &device_id, &device_rev);
+	/*
+	 * And the 'MgmtAllowed' information, which is exchanged during
+	 * LNI, is also be available at this point.
+	 */
+	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
+	/* print the active widths */
+	get_link_widths(dd, &active_tx, &active_rx);
+	dd_dev_info(dd,
+		"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
+		(int)power_management, (int)continious);
+	dd_dev_info(dd,
+		"Peer Fabric: vAU %d, Z %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
+		(int)vau,
+		(int)z,
+		(int)vcu,
+		(int)vl15buf,
+		(int)partner_supported_crc);
+	dd_dev_info(dd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
+		(u32)remote_tx_rate, (u32)link_widths);
+	dd_dev_info(dd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
+		(u32)device_id, (u32)device_rev);
+	/*
+	 * The peer vAU value just read is the peer receiver value.  HFI does
+	 * not support a transmit vAU of 0 (AU == 8).  We advertised that
+	 * with Z=1 in the fabric capabilities sent to the peer.  The peer
+	 * will see our Z=1, and, if it advertised a vAU of 0, will move its
+	 * receive to vAU of 1 (AU == 16).  Do the same here.  We do not care
+	 * about the peer Z value - our sent vAU is 3 (hardwired) and is not
+	 * subject to the Z value exception.
+	 */
+	if (vau == 0)
+		vau = 1;
+	set_up_vl15(dd, vau, vl15buf);
+
+	/* set up the LCB CRC mode */
+	crc_mask = ppd->port_crc_mode_enabled & partner_supported_crc;
+
+	/* order is important: use the lowest bit in common */
+	if (crc_mask & CAP_CRC_14B)
+		crc_val = LCB_CRC_14B;
+	else if (crc_mask & CAP_CRC_48B)
+		crc_val = LCB_CRC_48B;
+	else if (crc_mask & CAP_CRC_12B_16B_PER_LANE)
+		crc_val = LCB_CRC_12B_16B_PER_LANE;
+	else
+		crc_val = LCB_CRC_16B;
+
+	dd_dev_info(dd, "Final LCB CRC mode: %d\n", (int)crc_val);
+	write_csr(dd, DC_LCB_CFG_CRC_MODE,
+		  (u64)crc_val << DC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
+
+	/* set (14b only) or clear sideband credit */
+	reg = read_csr(dd, SEND_CM_CTRL);
+	if (crc_val == LCB_CRC_14B && crc_14b_sideband) {
+		write_csr(dd, SEND_CM_CTRL,
+			reg | SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
+	} else {
+		write_csr(dd, SEND_CM_CTRL,
+			reg & ~SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
+	}
+
+	ppd->link_speed_active = 0;	/* invalid value */
+	if (dd->dc8051_ver < dc8051_ver(0, 20)) {
+		/* remote_tx_rate: 0 = 12.5G, 1 = 25G */
+		switch (remote_tx_rate) {
+		case 0:
+			ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
+			break;
+		case 1:
+			ppd->link_speed_active = OPA_LINK_SPEED_25G;
+			break;
+		}
+	} else {
+		/* actual rate is highest bit of the ANDed rates */
+		u8 rate = remote_tx_rate & ppd->local_tx_rate;
+
+		if (rate & 2)
+			ppd->link_speed_active = OPA_LINK_SPEED_25G;
+		else if (rate & 1)
+			ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
+	}
+	if (ppd->link_speed_active == 0) {
+		dd_dev_err(dd, "%s: unexpected remote tx rate %d, using 25Gb\n",
+			__func__, (int)remote_tx_rate);
+		ppd->link_speed_active = OPA_LINK_SPEED_25G;
+	}
+
+	/*
+	 * Cache the values of the supported, enabled, and active
+	 * LTP CRC modes to return in 'portinfo' queries. But the bit
+	 * flags that are returned in the portinfo query differ from
+	 * what's in the link_crc_mask, crc_sizes, and crc_val
+	 * variables. Convert these here.
+	 */
+	ppd->port_ltp_crc_mode = cap_to_port_ltp(link_crc_mask) << 8;
+		/* supported crc modes */
+	ppd->port_ltp_crc_mode |=
+		cap_to_port_ltp(ppd->port_crc_mode_enabled) << 4;
+		/* enabled crc modes */
+	ppd->port_ltp_crc_mode |= lcb_to_port_ltp(crc_val);
+		/* active crc mode */
+
+	/* set up the remote credit return table */
+	assign_remote_cm_au_table(dd, vcu);
+
+	/*
+	 * The LCB is reset on entry to handle_verify_cap(), so this must
+	 * be applied on every link up.
+	 *
+	 * Adjust LCB error kill enable to kill the link if
+	 * these RBUF errors are seen:
+	 *	REPLAY_BUF_MBE_SMASK
+	 *	FLIT_INPUT_BUF_MBE_SMASK
+	 */
+	if (is_a0(dd)) {			/* fixed in B0 */
+		reg = read_csr(dd, DC_LCB_CFG_LINK_KILL_EN);
+		reg |= DC_LCB_CFG_LINK_KILL_EN_REPLAY_BUF_MBE_SMASK
+			| DC_LCB_CFG_LINK_KILL_EN_FLIT_INPUT_BUF_MBE_SMASK;
+		write_csr(dd, DC_LCB_CFG_LINK_KILL_EN, reg);
+	}
+
+	/* pull LCB fifos out of reset - all fifo clocks must be stable */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
+
+	/* give 8051 access to the LCB CSRs */
+	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
+	set_8051_lcb_access(dd);
+
+	ppd->neighbor_guid =
+		read_csr(dd, DC_DC8051_STS_REMOTE_GUID);
+	ppd->neighbor_port_number = read_csr(dd, DC_DC8051_STS_REMOTE_PORT_NO) &
+					DC_DC8051_STS_REMOTE_PORT_NO_VAL_SMASK;
+	ppd->neighbor_type =
+		read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE) &
+		DC_DC8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
+	ppd->neighbor_fm_security =
+		read_csr(dd, DC_DC8051_STS_REMOTE_FM_SECURITY) &
+		DC_DC8051_STS_LOCAL_FM_SECURITY_DISABLED_MASK;
+	dd_dev_info(dd,
+		"Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
+		ppd->neighbor_guid, ppd->neighbor_type,
+		ppd->mgmt_allowed, ppd->neighbor_fm_security);
+	if (ppd->mgmt_allowed)
+		add_full_mgmt_pkey(ppd);
+#endif
+
+	/* tell the 8051 to go to LinkUp */
+	hfi_set_link_state(ppd, HLS_GOING_UP);
+}
+
+static irqreturn_t irq_mnh_handler(int irq, void *dev_id)
+{
+	struct hfi_msix_entry *me = dev_id;
+	struct hfi_devdata *dd = me->dd;
+	struct hfi_pportdata *ppd;
+	u64 reg;
+	u8 port;
+
+	hfi_ack_interrupt(me);
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		ppd = to_hfi_ppd(dd, port);
+		reg = read_8051_csr(ppd, CRK8051_DBG_ERR_INFO_SET_BY_8051);
+		reg >>= CRK8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SHIFT;
+		if (reg & VERIFY_CAP_FRAME)
+			queue_work(ppd->hfi_wq, &ppd->link_vc_work);
+		if (reg & LINKUP_ACHIEVED)
+			queue_work(ppd->hfi_wq, &ppd->link_up_work);
+		/* TODO: take care other interrupts */
+
+		if (reg & CRK8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SMASK) {
+			reg = read_8051_csr(ppd, CRK8051_ERR_CLR);
+			write_8051_csr(ppd, CRK8051_ERR_CLR,
+				reg | CRK8051_ERR_CLR_SET_BY_8051_SMASK);
+		}
+	}
+
+	return IRQ_HANDLED;
+}
+
+/*
+ * configure IRQs for MNH
+*/
+int hfi2_cfg_link_intr_vector(struct hfi_devdata *dd)
+{
+	struct hfi_msix_entry *me = &dd->msix_entries[HFI2_MNH_ERROR];
+	int ret;
+
+	if (me->arg != NULL) {
+		dd_dev_err(dd, "MSIX entry is already configured: %d\n",
+			HFI2_MNH_ERROR);
+		ret = -EINVAL;
+		goto _return;
+	}
+	INIT_LIST_HEAD(&me->irq_wait_head);
+	rwlock_init(&me->irq_wait_lock);
+	me->dd = dd;
+	me->intr_src = HFI2_MNH_ERROR;
+
+	dd_dev_dbg(dd, "request for IRQ %d:%d\n", HFI2_MNH_ERROR, me->msix.vector);
+	ret = request_irq(me->msix.vector, irq_mnh_handler, 0,
+		"hfi_irq_mnh", me);
+	if (ret) {
+		dd_dev_err(dd, "IRQ[%d] request failed %d\n", HFI2_MNH_ERROR, ret);
+		goto _return;
+	}
+	me->arg = me;	/* mark as in use */
+ _return:
+	return ret;
+}
+
+/*
+ * Enable interrupots from MNH/8051 by configuring its registers
+*/
+int hfi2_enable_8051_intr(struct hfi_pportdata *ppd)
+{
+	int ret;
+	u64 reg;
+
+	/* disable 8051 command complete interrupt and enable all others */
+	ret = load_8051_config(ppd, HOST_INT_MSG_MASK, GENERAL_CONFIG,
+		(BC_PWR_MGM_MSG | BC_SMA_MSG | BC_BCC_UNKOWN_MSG |
+		 BC_IDLE_UNKNOWN_MSG | EXT_DEVICE_CFG_REQ | VERIFY_CAP_FRAME |
+		 LINKUP_ACHIEVED | LINK_GOING_DOWN | LINK_WIDTH_DOWNGRADED) << 8);
+	ret = ret != HCMD_SUCCESS ? -EINVAL: 0;
+	if (ret)
+		goto _return;
+
+	/* enable 8051 interrupt */
+	reg = read_8051_csr(ppd, CRK8051_ERR_EN);
+	write_8051_csr(ppd, CRK8051_ERR_EN, reg |
+		CRK8051_ERR_EN_SET_BY_8051_SMASK);
+	reg = read_8051_csr(ppd, CRK8051_ERR_CLR);
+	write_8051_csr(ppd,
+		CRK8051_ERR_CLR, reg | CRK8051_ERR_CLR_SET_BY_8051_SMASK);
+ _return:
+	return ret;
+}
+
+/*
+ * Disable interrupots from MNH/8051 by configuring its registers
+*/
+int hfi2_disable_8051_intr(struct hfi_pportdata *ppd)
+{
+	int ret;
+	u64 reg;
+
+	/* disable all interrupt from 8051 */
+	ret = load_8051_config(ppd, HOST_INT_MSG_MASK, GENERAL_CONFIG,
+		0x0000 << 8);
+	ret = ret != HCMD_SUCCESS ? -EINVAL: 0;
+	if (ret)
+		goto _return;
+
+	/* disable 8051 interrupt */
+	reg = read_8051_csr(ppd, CRK8051_ERR_EN);
+	write_8051_csr(ppd, CRK8051_ERR_EN, reg &
+		~CRK8051_ERR_EN_SET_BY_8051_SMASK);
+ _return:
+	return ret;
+}
+
+/*
 	reset 8051
  */
 void hfi_8051_reset(const struct hfi_pportdata *ppd)
 {
 	write_8051_csr(ppd, CRK8051_CFG_RST, 0x1ull);
 	write_8051_csr(ppd, CRK8051_CFG_RST, 0x0ull);
+}
+
+/*
+	un-initilize ports
+ */
+void hfi2_pport_link_uninit(struct hfi_devdata *dd)
+{
+	u8 port;
+	struct hfi_pportdata *ppd;
+	int ret;
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		ppd = to_hfi_ppd(dd, port);
+		hfi_set_link_state(ppd, HLS_DN_OFFLINE);
+		ret = hfi2_disable_8051_intr(ppd);
+		if (ret)
+			dd_dev_err(dd, "can't disable MNH/8051 interrupt: %d\n",
+			ret);
+		if (ppd->hfi_wq) {
+			destroy_workqueue(ppd->hfi_wq);
+			ppd->hfi_wq = NULL;
+		}
+	}
+}
+
+/*
+	initilize ports
+ */
+int hfi2_pport_link_init(struct hfi_devdata *dd)
+{
+	int ret;
+	u8 port;
+	struct hfi_pportdata *ppd;
+
+	ret = hfi2_cfg_link_intr_vector(dd);
+	if (ret) {
+		dd_dev_err(dd, "Can't configure interrupt vector of MNH/8051: %d\n",
+			ret);
+		goto _return;
+	}
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		ppd = to_hfi_ppd(dd, port);
+		/* configure workqueues */
+		INIT_WORK(&ppd->link_vc_work, handle_verify_cap);
+		INIT_WORK(&ppd->link_up_work, handle_link_up);
+		/* TODO: adjust 0 for max_active */
+		ppd->hfi_wq = alloc_workqueue("hfi2_%d_%d",
+			WQ_SYSFS | WQ_HIGHPRI | WQ_CPU_INTENSIVE, 0, dd->unit, port);
+		if (!ppd->hfi_wq) {
+			dd_dev_err(dd, "Can't allocate workqueue\n");
+			ret = -ENOMEM;
+			goto _return;
+		}
+
+		 /* configure interrupt registers of MNH/8051 */
+		ret = hfi2_enable_8051_intr(ppd);
+		if (ret) {
+			dd_dev_err(dd, "Can't configure interrupt registers of MNH/8051: %d\n", ret);
+			goto _return;
+		}
+	}
+	/*
+	 * The following code has to be separated from above "for" loop because
+	 * hfi_start_link(ppd) induces VerifyCap interrupt and its interrupt
+	 * service routine,irq_mnh_handler() scans both ports.
+	 */
+	for (port = 1; port <= dd->num_pports; port++) {
+		ppd = to_hfi_ppd(dd, port);
+		hfi_start_link(ppd);
+		if (opafm_disable) {
+			ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_INIT,
+				WAIT_TILL_8051_LINKUP);
+			if (ret) {
+				dd_dev_err(dd, "Logical link state doesn't become INIT\n");
+				goto _return;
+			}
+			hfi_set_link_state(ppd, HLS_UP_ARMED);
+			hfi_set_link_state(ppd, HLS_UP_ACTIVE);
+		}
+	}
+ _return:
+	return ret;
 }
 
 /*
@@ -877,7 +1386,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 
 	mutex_lock(&ppd->hls_lock);
 
-	dd_dev_info(dd, "%p: %s(%d) -> %s(%d)\n", ppd,
+	dd_dev_info(dd, "port%d %s(%d) -> %s(%d)\n", ppd->pnum,
 		link_state_name(ppd->host_link_state), ilog2(ppd->host_link_state),
 		link_state_name(state), ilog2(state));
 
@@ -965,10 +1474,24 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		ppd->host_link_state = HLS_DN_POLL;
 
 		/*
-		   fxr_simics_4_8_33 implements quick_linkup which does not have
-		 * VerifyCap state
+		   fxr_simics_4_8_35 implements both quick_linkup and full linkup
 		 */
-		ret = do_quick_linkup(ppd);
+		if (quick_linkup) {
+			ret = do_quick_linkup(ppd);
+#if 1 /* new on FXR */
+			ppd->host_link_state = HLS_UP_INIT;
+			ppd->lstate = IB_PORT_INIT;
+#endif
+		} else {
+			ret1 = set_physical_link_state(ppd, PLS_POLLING);
+			if (ret1 != HCMD_SUCCESS) {
+				dd_dev_err(dd,
+					"Failed to transition to Polling link state, return 0x%x\n",
+					ret1);
+				ret = -EINVAL;
+			}
+		}
+
 #if 0 /* where OPA_LINKDOWN_REASON_NONE is defined? */
 		ppd->offline_disabled_reason = OPA_LINKDOWN_REASON_NONE;
 #endif
@@ -979,10 +1502,6 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		 */
 		if (ret)
 			goto_offline(ppd, 0);
-#if 1 /* new on FXR */
-		ppd->host_link_state = HLS_UP_INIT;
-		ppd->lstate = IB_PORT_INIT;
-#endif
 		break;
 	case HLS_UP_INIT:
 		if (ppd->host_link_state == HLS_DN_POLL && quick_linkup) {
@@ -999,7 +1518,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		}
 
 		ppd->host_link_state = HLS_UP_INIT;
-		ret = wait_logical_linkstate(ppd, IB_PORT_INIT, 1000);
+		ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_INIT, 1000);
 		if (ret) {
 			/* logical state didn't change, stay at going_up */
 			ppd->host_link_state = HLS_GOING_UP;
@@ -1022,7 +1541,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		ppd->host_link_state = HLS_UP_ARMED;
 		set_logical_state(ppd, LSTATE_ARMED);
 
-		ret = wait_logical_linkstate(ppd, IB_PORT_ARMED, 1000);
+		ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_ARMED, 1000);
 		if (ret) {
 			/* logical state didn't change, stay at init */
 			ppd->host_link_state = HLS_UP_INIT;
@@ -1047,7 +1566,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 
 		ppd->host_link_state = HLS_UP_ACTIVE;
 		set_logical_state(ppd, LSTATE_ACTIVE);
-		ret = wait_logical_linkstate(ppd, IB_PORT_ACTIVE, 1000);
+		ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_ACTIVE, 1000);
 		if (ret) {
 			/* logical state didn't change, stay at armed */
 			ppd->host_link_state = HLS_UP_ARMED;
@@ -1070,7 +1589,24 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		opa_core_notify_clients(ppd->dd->bus_dev,
 					OPA_LINK_STATE_CHANGE, ppd->pnum);
 		break;
-
+	case HLS_VERIFY_CAP:
+		if (ppd->host_link_state != HLS_DN_POLL)
+			goto unexpected;
+		ppd->host_link_state = HLS_VERIFY_CAP;
+		break;
+	case HLS_GOING_UP:
+		if (ppd->host_link_state != HLS_VERIFY_CAP)
+			goto unexpected;
+		ret1 = set_physical_link_state(ppd, PLS_LINKUP);
+		if (ret1 != HCMD_SUCCESS) {
+			dd_dev_err(dd,
+				"Failed to transition to link up state, return 0x%x\n",
+				ret1);
+			ret = -EINVAL;
+			break;
+		}
+		ppd->host_link_state = HLS_GOING_UP;
+		break;
 	case HLS_GOING_OFFLINE:		/* transient within goto_offline() */
 	case HLS_LINK_COOLDOWN:		/* transient within goto_offline() */
 	default:
@@ -1082,8 +1618,8 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 	goto _return;
 
 unexpected:
-	dd_dev_err(dd, "%s: unexpected state transition from %s to %s\n",
-		__func__, link_state_name(ppd->host_link_state),
+	dd_dev_err(dd, "port%d %s: unexpected state transition from %s to %s\n",
+		ppd->pnum, __func__, link_state_name(ppd->host_link_state),
 		link_state_name(state));
 	ret = -EINVAL;
 
