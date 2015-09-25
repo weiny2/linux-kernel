@@ -470,12 +470,19 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	wmb();  /* barrier before writing Valid */
 	eq_desc_base[eq_idx].val[0] = eq_desc.val[0];
 
-	/*
-	 * For EQ0, avoid submitting an RX command. Submitting an RX command
-	 * generates a PTL_CMD_COMPLETE event on EQ0 which might not be
-	 * configured to be ready in time to handle the event.
-	 */
-	if (eq_idx) {
+	if (!eq_idx) {
+		/*
+		 * For EQ0, invalidate the EQD cache after writing the EQD to
+		 * memory instead of submitting an RX command. Submitting an
+		 * RX command generates a PTL_CMD_COMPLETE event on EQ0 which
+		 * might not be configured to be ready in time. The
+		 * invalidation is done after the write in case traffic comes
+		 * from the remote end (e.g. PSN connect traffic on PID 0)
+		 * between the invalidation and the write to memory which
+		 * could result in the cache being filled with bad data.
+		 */
+		hfi_eq_cache_invalidate(dd, ctx->pid);
+	} else {
 		spin_lock_irqsave(&dd->priv_rx_cq_lock, sflags);
 		/* issue write to privileged CQ to complete */
 		ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx,
