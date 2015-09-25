@@ -1414,12 +1414,8 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		ret = goto_offline(ppd, ppd->remote_link_down_reason);
 		if (!ret)
 			ppd->remote_link_down_reason = 0;
-#if 1 /* new on FXR */
-		ppd->host_link_state = HLS_DN_DOWNDEF;
-		ppd->lstate = IB_PORT_DOWN;
 		opa_core_notify_clients(ppd->dd->bus_dev,
 					OPA_LINK_STATE_CHANGE, ppd->pnum);
-#endif
 		break;
 	case HLS_DN_DISABLE:
 		/* allow any state to transition to disabled */
