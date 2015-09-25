@@ -110,6 +110,9 @@ enum {
 /* TX timeout for E2E control messages */
 #define HFI_TX_TIMEOUT_MS	100
 
+/* TX timeout for EQ assignment */
+#define HFI_EQ_TIMEOUT_MS	1000
+
 /* use this MTU size if none other is given */
 #define HFI_DEFAULT_ACTIVE_MTU 10240
 /* use this MTU size as the default maximum */
@@ -603,6 +606,7 @@ int hfi_reset_dlid_relocation_table(struct hfi_ctx *ctx, u32 dlid_base,
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid);
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
+void hfi_eq_cache_invalidate(struct hfi_devdata *dd, u16 ptl_pid);
 
 /* OPA core functions */
 int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx);
