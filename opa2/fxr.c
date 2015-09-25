@@ -1464,9 +1464,29 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	return dd;
 
 err_post_alloc:
+	dd_dev_err(dd, "%s %d FAILED ret %d\n", __func__, __LINE__, ret);
 	hfi_pci_dd_free(dd);
 
 	return ERR_PTR(ret);
+}
+
+void hfi_eq_cache_invalidate(struct hfi_devdata *dd, u16 ptl_pid)
+{
+	RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_t eq_cache_access = {.val = 0};
+	union eq_cache_addr eq_cache_tag;
+
+	eq_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
+	eq_cache_tag.val = 0;
+	eq_cache_tag.pid = ptl_pid;
+	eq_cache_access.field.address = eq_cache_tag.val;
+	eq_cache_tag.val = -1;
+	eq_cache_tag.pid = 0;
+	eq_cache_access.field.mask_address = eq_cache_tag.val;
+	write_csr(dd, FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL,
+		  eq_cache_access.val);
+
+	/* TODO - above incomplete, deferred processing to wait for .ack bit */
+	mdelay(10);
 }
 
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
@@ -1474,7 +1494,6 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	RX_HIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
 	RX_HIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
 	RXHP_CFG_PTE_CACHE_ACCESS_CTL_t pte_cache_access = {.val = 0};
-	RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_t eq_cache_access = {.val = 0};
 	RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t trig_op_cache_access = {.val = 0};
 	/*
 	 * FXRTODO: Use trig op for me_le/uh_cache_access for now since
@@ -1482,7 +1501,6 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	 */
 	RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t me_le_uh_cache_access = {.val = 0};
 	union pte_cache_addr pte_cache_tag;
-	union eq_cache_addr eq_cache_tag;
 	union trig_op_cache_addr trig_op_cache_tag;
 	/* Fake Simics structure for LE/ME/UH cache invalidation */
 	union me_le_uh_cache_addr {
@@ -1509,15 +1527,7 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	write_csr(dd, FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL, pte_cache_access.val);
 
 	/* invalidate cached host memory in HFI for EQ Descs by PID */
-	eq_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
-	eq_cache_tag.val = 0;
-	eq_cache_tag.pid = ptl_pid;
-	eq_cache_access.field.address = eq_cache_tag.val;
-	eq_cache_tag.val = -1;
-	eq_cache_tag.pid = 0;
-	eq_cache_access.field.mask_address = eq_cache_tag.val;
-	write_csr(dd, FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL,
-		  eq_cache_access.val);
+	hfi_eq_cache_invalidate(dd, ptl_pid);
 
 	/* invalidate cached host memory in HFI for Triggered Ops by PID */
 	trig_op_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
@@ -1541,6 +1551,7 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	write_csr(dd, 0x1408000, me_le_uh_cache_access.val);
 
 	/* TODO - above incomplete, deferred processing to wait for .ack bit */
+	mdelay(10);
 
 	/* TODO - write fake simics CSR to flush mini-TLB (AT interface TBD) */
 	write_csr(dd, FXR_RX_HIARB_CSRS + 0x20000, 1);
