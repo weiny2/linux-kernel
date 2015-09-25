@@ -478,6 +478,7 @@ struct hfi_pportdata {
 	struct workqueue_struct *hfi_wq;
 	struct work_struct link_vc_work; /* for VerifyCap -> GoingUp/ConfigLT */
 	struct work_struct link_up_work; /* for GoingUp/ConfigLT -> LinkUp/Init */
+	struct work_struct link_down_work; /* for LinkUp -> LinkDown */
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *hfi_port_dbg;

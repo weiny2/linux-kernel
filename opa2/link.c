@@ -280,6 +280,50 @@ static void handle_link_up(struct work_struct *work)
 #endif
 }
 
+/*
+ * Handle a link down interrupt from the MNH/8051.
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+static void handle_link_down(struct work_struct *work)
+{
+	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
+			link_down_work);
+	dd_dev_info(ppd->dd, "%s() %d:", __func__, __LINE__);
+#if 0
+	u8 lcl_reason, neigh_reason = 0;
+#endif
+
+	/* go offline first, then deal with reasons */
+	hfi_set_link_state(ppd, HLS_DN_OFFLINE);
+
+#if 0
+	lcl_reason = 0;
+	read_planned_down_reason_code(ppd->dd, &neigh_reason);
+
+	/*
+	 * If no reason, assume peer-initiated but missed
+	 * LinkGoingDown idle flits.
+	 */
+	if (neigh_reason == 0)
+		lcl_reason = OPA_LINKDOWN_REASON_NEIGHBOR_UNKNOWN;
+
+	set_link_down_reason(ppd, lcl_reason, neigh_reason, 0);
+
+	reset_neighbor_info(ppd);
+
+	/* disable the port */
+	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
+
+	/* If there is no cable attached, turn the DC off. Otherwise,
+	 * start the link bring up. */
+	if (!qsfp_mod_present(ppd))
+		dc_shutdown(ppd->dd);
+	else
+		start_link(ppd);
+#endif
+}
+
 static void set_logical_state(struct hfi_pportdata *ppd, u32 chip_lstate)
 {
 	u64 reg;
@@ -1188,6 +1232,8 @@ static irqreturn_t irq_mnh_handler(int irq, void *dev_id)
 			queue_work(ppd->hfi_wq, &ppd->link_vc_work);
 		if (reg & LINKUP_ACHIEVED)
 			queue_work(ppd->hfi_wq, &ppd->link_up_work);
+		if (reg & LINK_GOING_DOWN)
+			queue_work(ppd->hfi_wq, &ppd->link_down_work);
 		/* TODO: take care other interrupts */
 
 		if (reg & CRK8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SMASK) {
@@ -1335,6 +1381,7 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 		/* configure workqueues */
 		INIT_WORK(&ppd->link_vc_work, handle_verify_cap);
 		INIT_WORK(&ppd->link_up_work, handle_link_up);
+		INIT_WORK(&ppd->link_down_work, handle_link_down);
 		/* TODO: adjust 0 for max_active */
 		ppd->hfi_wq = alloc_workqueue("hfi2_%d_%d",
 			WQ_SYSFS | WQ_HIGHPRI | WQ_CPU_INTENSIVE, 0, dd->unit, port);
