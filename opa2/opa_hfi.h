@@ -470,6 +470,15 @@ struct hfi_pportdata {
 #endif
 	int crk8051_timed_out;	/* remember if the 8051 timed out */
 
+	/*
+		workqueue which connects the upper half interrupt handler,
+		irq_mnh_handler() and bottom half interrupt handlers which are
+		queued by each work_struct.
+	 */
+	struct workqueue_struct *hfi_wq;
+	struct work_struct link_vc_work; /* for VerifyCap -> GoingUp/ConfigLT */
+	struct work_struct link_up_work; /* for GoingUp/ConfigLT -> LinkUp/Init */
+
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *hfi_port_dbg;
 #endif
@@ -696,6 +705,7 @@ void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
 						int refresh_widths);
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
 int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message);
+void hfi_ack_interrupt(struct hfi_msix_entry *me);
 u8 hfi_porttype(struct hfi_pportdata *ppd);
 u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which);
