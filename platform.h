@@ -201,7 +201,7 @@ enum platform_config_qsfp_power_class_encoding {
 };
 
 /*=====================================================
- *  Port table encodings
+ *  Port table encodings, see also opa_port_info.h
  *==================================================== */
 enum platform_config_port_type_encoding {
 	PORT_TYPE_UNKNOWN,
