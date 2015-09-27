@@ -21,6 +21,7 @@
  */
 #define LIST_POISON1  ((void *) 0x100 + POISON_POINTER_DELTA)
 #define LIST_POISON2  ((void *) 0x200 + POISON_POINTER_DELTA)
+#define LIST_POISON3  ((void *) 0x300 + POISON_POINTER_DELTA)
 
 /********** include/linux/timer.h **********/
 /*

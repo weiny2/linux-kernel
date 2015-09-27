@@ -114,6 +114,20 @@ extern void list_del(struct list_head *entry);
 #endif
 
 /**
+ * list_del_poison - poison an entry to always assert on list_add
+ * @entry: the element to delete and poison
+ *
+ * Note: the assertion on list_add() only occurs when CONFIG_DEBUG_LIST=y,
+ * otherwise this is identical to list_del()
+ */
+static inline void list_del_poison(struct list_head *entry)
+{
+	__list_del(entry->prev, entry->next);
+	entry->next = LIST_POISON3;
+	entry->prev = LIST_POISON3;
+}
+
+/**
  * list_replace - replace old entry by new one
  * @old : the element to be replaced
  * @new : the new element to insert
