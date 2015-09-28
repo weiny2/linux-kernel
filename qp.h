@@ -411,4 +411,15 @@ static inline void del_timers_sync(struct hfi1_qp *qp)
 	del_timer_sync(&qp->s_rnr_timer);
 }
 
+/**
+ * hfi1_error_port_qps - put a port's RC/UC qps into error state
+ * @ibp: the ibport.
+ * @sl: the service level.
+ *
+ * This function places all RC/UC qps with a given service level into error
+ * state. It is generally called to force upper lay apps to abandon stale qps
+ * after an sl->sc mapping change.
+ */
+void hfi1_error_port_qps(struct hfi1_ibport *ibp, u8 sl);
+
 #endif /* _QP_H */

@@ -1761,3 +1761,48 @@ void hfi1_migrate_qp(struct hfi1_qp *qp)
 	ev.event = IB_EVENT_PATH_MIG;
 	qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
 }
+
+void hfi1_error_port_qps(struct hfi1_ibport *ibp, u8 sl)
+{
+	struct hfi1_qp *qp = NULL;
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+	struct hfi1_ibdev *dev = &ppd->dd->verbs_dev;
+	int n;
+	unsigned long flags;
+	int lastwqe;
+	struct ib_event ev;
+
+	rcu_read_lock();
+
+	/* Deal only with RC/UC qps that use the given SL. */
+	for (n = 0; n < dev->qp_dev->qp_table_size; n++) {
+		for (qp = rcu_dereference(dev->qp_dev->qp_table[n]); qp;
+			qp = rcu_dereference(qp->next)) {
+			if (qp->port_num == ppd->port &&
+			    (qp->ibqp.qp_type == IB_QPT_UC ||
+			     qp->ibqp.qp_type == IB_QPT_RC) &&
+			    qp->remote_ah_attr.sl == sl &&
+			    (ib_hfi1_state_ops[qp->state] &
+			     HFI1_POST_SEND_OK)) {
+				spin_lock_irqsave(&qp->r_lock, flags);
+				spin_lock(&qp->s_hlock);
+				spin_lock(&qp->s_lock);
+				lastwqe = hfi1_error_qp(qp,
+							IB_WC_WR_FLUSH_ERR);
+				spin_unlock(&qp->s_lock);
+				spin_unlock(&qp->s_hlock);
+				spin_unlock_irqrestore(&qp->r_lock, flags);
+				if (lastwqe) {
+					ev.device = qp->ibqp.device;
+					ev.element.qp = &qp->ibqp;
+					ev.event =
+						IB_EVENT_QP_LAST_WQE_REACHED;
+					qp->ibqp.event_handler(&ev,
+						qp->ibqp.qp_context);
+				}
+			}
+		}
+	}
+
+	rcu_read_unlock();
+}
