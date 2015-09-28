@@ -61,6 +61,7 @@
 #include <rdma/fxr/fxr_linkmux_tp_defs.h>
 #include <rdma/fxr/fxr_linkmux_fpc_defs.h>
 #include <rdma/fxr/fxr_linkmux_cm_defs.h>
+#include "attr.h"
 
 extern uint opafm_disable;
 extern unsigned int hfi_max_mtu;
@@ -86,6 +87,7 @@ enum {
 	/* 6 - 15 are reserved */
 };
 
+#define HFI_IB_CC_TABLE_CAP_DEFAULT 31
 #define HFI_NUM_BARS		2
 #define HFI_NUM_PPORTS		2
 #define HFI_MAX_VLS		32
@@ -401,6 +403,14 @@ struct ib_vl_weight_elem {
  *@local_link_down_reason: Reason why the neighboring port transitioned to
  *	link down
  *@remote_link_down_reason: Value to be sent to link peer on LinkDown
+ *@ccti_entries: List of congestion control table entries
+ *@total_cct_entry: Total number of congestion control table entries
+ *@cc_sl_control_map: Congestion control Map (Mask)
+ *@cc_max_table_entries: CA's max number of 64 entry units in the
+ * congestion control table
+ *@cc_state_lock: lock for cc_state
+ *@cc_state: Congestion control state
+ *@congestion_entries: Congestion control entries
  */
 struct hfi_pportdata {
 	struct hfi_devdata *dd;
@@ -413,7 +423,6 @@ struct hfi_pportdata {
 	   state by having HLS_* */
 	struct mutex hls_lock;
 	u32 host_link_state;
-
 	u32 lstate;
 	u32 ibmtu;
 	u32 port_error_action;
@@ -455,6 +464,15 @@ struct hfi_pportdata {
 	struct buffer_control bct;
 	u8 remote_link_down_reason;
 
+	/* Congestion control */
+	struct ib_cc_table_entry_shadow ccti_entries[HFI_CC_TABLE_SHADOW_MAX];
+	u16 total_cct_entry;
+	u32 cc_sl_control_map;
+	u8 cc_max_table_entries;
+	spinlock_t cc_state_lock ____cacheline_aligned_in_smp;
+	struct cc_state __rcu *cc_state;
+	struct opa_congestion_setting_entry_shadow
+		congestion_entries[OPA_MAX_SLS];
 	/*
 	 * FXRTODO: VL ARB is absent for FXR. Remove these
 	 * once we have STL2 specific opafm
@@ -577,6 +595,15 @@ struct hfi_devdata {
 #endif
 };
 
+/*
+ * Readers of cc_state must call get_cc_state() under rcu_read_lock().
+ * Writers of cc_state must call get_cc_state() under cc_state_lock.
+ */
+static inline struct cc_state *hfi_get_cc_state(struct hfi_pportdata *ppd)
+{
+	return rcu_dereference(ppd->cc_state);
+}
+
 /* return the driver's idea of the logical OPA port state */
 static inline u32 hfi_driver_lstate(struct hfi_pportdata *ppd)
 {
@@ -597,6 +624,7 @@ void hfi_disable_interrupts(struct hfi_devdata *dd);
 
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
 int hfi_user_cleanup(struct hfi_ctx *ud);
+void hfi_cc_state_reclaim(struct rcu_head *rcu);
 
 /* HFI specific functions */
 int hfi_cq_assign_privileged(struct hfi_ctx *ctx, u16 *cq_idx);

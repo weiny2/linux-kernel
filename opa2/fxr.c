@@ -887,11 +887,34 @@ static irqreturn_t irq_eq_handler(int irq, void *dev_id)
 }
 
 /*
+ * hfi_pport_uninit - uninitialize per port
+ * data structs
+ */
+void hfi_pport_uninit(struct hfi_devdata *dd)
+{
+	u8 port;
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		struct cc_state *cc_state;
+		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+
+		spin_lock(&ppd->cc_state_lock);
+		cc_state = hfi_get_cc_state(ppd);
+		rcu_assign_pointer(ppd->cc_state, NULL);
+		spin_unlock(&ppd->cc_state_lock);
+
+		if (cc_state)
+			call_rcu(&cc_state->rcu, hfi_cc_state_reclaim);
+	}
+}
+
+/*
  * hfi_pport_down - shutdown ports
  */
 void hfi_pport_down(struct hfi_devdata *dd)
 {
 	hfi2_pport_link_uninit(dd);
+	hfi_pport_uninit(dd);
 }
 
 /*
@@ -941,6 +964,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 
 	idr_destroy(&dd->cq_pair);
 	idr_destroy(&dd->ptl_user);
+	rcu_barrier(); /* wait for rcu callbacks to complete */
 
 	pci_set_drvdata(dd->pcidev, NULL);
 	kfree(dd);
@@ -1149,7 +1173,7 @@ void hfi_init_sc_to_vlt(struct hfi_pportdata *ppd)
 int hfi_pport_init(struct hfi_devdata *dd)
 {
 	struct hfi_pportdata *ppd;
-	int i;
+	int i, size;
 	u8 port;
 	u16 crc_val;
 
@@ -1166,6 +1190,8 @@ int hfi_pport_init(struct hfi_devdata *dd)
 #endif
 		ppd->crk8051_timed_out = 0;
 		ppd->host_link_state = HLS_DN_OFFLINE;
+
+		ppd->cc_max_table_entries = HFI_IB_CC_TABLE_CAP_DEFAULT;
 
 		/*
 		 * FXRTODO: The below 4 variables
@@ -1279,6 +1305,13 @@ int hfi_pport_init(struct hfi_devdata *dd)
 
 		hfi_init_sc_to_vlt(ppd);
 		hfi_ptc_init(ppd);
+
+		size = sizeof(struct cc_state);
+		RCU_INIT_POINTER(ppd->cc_state, kzalloc(size, GFP_KERNEL));
+		if (!rcu_dereference(ppd->cc_state)) {
+			dd_dev_err(dd, "Congestion Control Agent"\
+					" disabled for port %d\n", port);
+		}
 	}
 
 	return hfi2_pport_link_init(dd);

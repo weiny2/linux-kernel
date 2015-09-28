@@ -445,8 +445,10 @@ static int __subn_get_opa_cong_info(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	/* This is implemented in SMA-HFI*/
+	return reply(ibh);
 }
 
 static int __subn_get_opa_hfi_cong_log(struct opa_smp *smp, u32 am, u8 *data,
@@ -461,16 +463,20 @@ static int __subn_get_opa_cong_setting(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	/* This is implemented in SMA-HFI*/
+	return reply(ibh);
 }
 
 static int __subn_get_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	/* This is implemented in SMA-HFI*/
+	return reply(ibh);
 }
 
 static int __subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
@@ -858,16 +864,16 @@ static int __subn_set_opa_cong_setting(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 						u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	return subn_get_opa_sma(OPA_ATTRIB_ID_HFI_CONGESTION_SETTING, smp, am,
+			data, ibdev, port, resp_len);
 }
 
 static int __subn_set_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					      u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	return subn_get_opa_sma(OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE, smp, am,
+			data, ibdev, port, resp_len);
 }
 
 static int __subn_set_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
