@@ -967,17 +967,6 @@ void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
 	 */
 }
 
-/*
- * Send an idle SMA message.
- *
- * Returns 0 on success, -EINVAL on error
- */
-int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message)
-{
-	/* FXRTODO: To be implemented as part of MNH/FC commands */
-	return -EINVAL;
-}
-
 void hfi_ack_interrupt(struct hfi_msix_entry *me)
 {
 	struct hfi_devdata *dd = me->dd;
@@ -1357,9 +1346,6 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		 * viper0-port2 <-> viper1-port2
 		 */
 		ppd->neighbor_port_number = port;
-
-		/* FXRTODO: handled as part of SMA idle message. Ref STL-2306 */
-		ppd->neighbor_normal = 1;
 
 		/*
 		 * Since OPA uses management pkey there is no

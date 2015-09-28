@@ -517,6 +517,9 @@ struct hfi_pportdata {
 	struct work_struct link_vc_work; /* for VerifyCap -> GoingUp/ConfigLT */
 	struct work_struct link_up_work; /* for GoingUp/ConfigLT -> LinkUp/Init */
 	struct work_struct link_down_work; /* for LinkUp -> LinkDown */
+	/* for the interrupt caused by "Receive a back channel msg using LCB idle
+	   protocol HOST Type SMA" */
+	struct work_struct sma_message_work;
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *hfi_port_dbg;
@@ -760,10 +763,8 @@ void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
 						int refresh_widths);
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
-int hfi_send_idle_sma(struct hfi_devdata *dd, u64 message);
 void hfi_ack_interrupt(struct hfi_msix_entry *me);
 u8 hfi_porttype(struct hfi_pportdata *ppd);
-u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which);
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data);
 int hfi_set_mtu(struct hfi_pportdata *ppd);
