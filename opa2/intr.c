@@ -111,11 +111,13 @@ int hfi_setup_interrupts(struct hfi_devdata *dd, int total, int minw)
 		ret = -ENXIO;
 		goto fail;
 	} else if (request != total) {
-		/* using MSI-X, with reduced interrupts */
+		/* FXRTODO: handle using MSI-X, with reduced interrupts */
 		dd->num_msix_entries = request;
 		dd->msix_entries = entries;
-		dd_dev_err(dd, "reduced MSI-X interrupts, %u < %u\n",
+		dd_dev_err(dd, "reduced MSI-X interrupts, %u < %u err\n",
 			   request, total);
+		ret = -ENXIO;
+		goto fail;
 	} else {
 		/* using MSI-X */
 		dd->num_msix_entries = request;
