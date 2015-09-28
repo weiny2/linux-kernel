@@ -120,9 +120,9 @@ struct hfi1_packet;
 
 #define HFI1_VENDOR_IPG		cpu_to_be16(0xFFA0)
 
-#define IB_BTH_REQ_ACK		(1 << 31)
-#define IB_BTH_SOLICITED	(1 << 23)
-#define IB_BTH_MIG_REQ		(1 << 22)
+#define IB_BTH_REQ_ACK		BIT(31)
+#define IB_BTH_SOLICITED	BIT(23)
+#define IB_BTH_MIG_REQ		BIT(22)
 
 #define IB_GRH_VERSION		6
 #define IB_GRH_VERSION_MASK	0xF
@@ -489,6 +489,7 @@ struct hfi1_qp {
 	u32 r_psn;              /* expected rcv packet sequence number */
 	u32 r_msn;              /* message sequence number */
 
+	u8 r_adefered;         /* number of acks defered */
 	u8 r_state;             /* opcode of last packet received */
 	u8 r_flags;
 	u8 r_head_ack_queue;    /* index into s_ack_queue[] */
@@ -539,6 +540,7 @@ struct hfi1_qp {
 
 	struct hfi1_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
+	struct timer_list s_rnr_timer;
 
 	struct iowait s_iowait;
 
@@ -565,11 +567,13 @@ struct hfi1_pkt_state {
 /*
  * Bit definitions for r_flags.
  */
-#define HFI1_R_REUSE_SGE 0x01
-#define HFI1_R_RDMAR_SEQ 0x02
-#define HFI1_R_RSP_NAK   0x04
-#define HFI1_R_RSP_SEND  0x08
-#define HFI1_R_COMM_EST  0x10
+#define HFI1_R_REUSE_SGE       0x01
+#define HFI1_R_RDMAR_SEQ       0x02
+/* defer ack until end of interrupt session */
+#define HFI1_R_RSP_DEFERED_ACK 0x04
+/* relay ack to send engine */
+#define HFI1_R_RSP_SEND        0x08
+#define HFI1_R_COMM_EST        0x10
 
 /*
  * Bit definitions for s_flags.
@@ -963,6 +967,8 @@ int hfi1_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 struct ib_ah *hfi1_create_qp0_ah(struct hfi1_ibport *ibp, u16 dlid);
 
 void hfi1_rc_rnr_retry(unsigned long arg);
+
+void hfi1_rc_timeout(unsigned long arg);
 
 void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr);
 
