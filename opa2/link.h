@@ -118,6 +118,18 @@
 #define LINK_GOING_DOWN	   (1 << 8)
 #define LINK_WIDTH_DOWNGRADED  (1 << 9)
 
+/* idle flit message types */
+#define IDLE_PHYSICAL_LINK_MGMT 0x1
+#define IDLE_CRU		    0x2
+#define IDLE_SMA		    0x3
+#define IDLE_POWER_MGMT	    0x4
+
+/* idle flit message send fields (both send and read) */
+#define IDLE_PAYLOAD_MASK 0xffffffffffull /* 40 bits */
+#define IDLE_PAYLOAD_SHIFT 8
+#define IDLE_MSG_TYPE_MASK 0xf
+#define IDLE_MSG_TYPE_SHIFT 0
+
 /* 8051 general register Field IDs */
 #define HOST_INT_MSG_MASK		0x03
 
@@ -145,10 +157,12 @@ u64 read_fzc_csr(const struct hfi_pportdata *ppd, u32 offset);
 void write_fzc_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
 u64 read_8051_csr(const struct hfi_pportdata *ppd, u32 offset);
 void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
+u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
 void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 			  u8 neigh_reason, u8 rem_reason);
 int hfi2_wait_logical_linkstate(struct hfi_pportdata *ppd, u32 state,
 								  int msecs);
+int hfi_send_idle_sma(struct hfi_pportdata *ppd, u64 message);
 int hfi2_cfg_link_intr_vector(struct hfi_devdata *dd);
 int hfi2_enable_8051_intr(struct hfi_pportdata *ppd);
 int hfi2_disable_8051_intr(struct hfi_pportdata *ppd);

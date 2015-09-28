@@ -54,6 +54,7 @@
 #include <rdma/ib_mad.h>
 #include "attr.h"
 #include <rdma/opa_core_ib.h>
+#include "link.h"
 
 static inline void hfi_invalid_attr(struct opa_smp *smp)
 {
@@ -708,13 +709,13 @@ static int set_port_states(struct hfi_devdata *dd, struct hfi_pportdata *ppd,
 	case IB_PORT_ARMED:
 		ret = hfi_set_link_state(ppd, HLS_UP_ARMED);
 		if ((ret == 0) && (suppress_idle_sma == 0))
-			hfi_send_idle_sma(dd, SMA_IDLE_ARM);
+			hfi_send_idle_sma(ppd, SMA_IDLE_ARM);
 		break;
 	case IB_PORT_ACTIVE:
 		if (ppd->neighbor_normal) {
 			ret = hfi_set_link_state(ppd, HLS_UP_ACTIVE);
 			if (ret == 0)
-				hfi_send_idle_sma(dd, SMA_IDLE_ACTIVE);
+				hfi_send_idle_sma(ppd, SMA_IDLE_ACTIVE);
 		} else {
 			pr_warn("SubnSet(OPA_PortInfo) Cannot move to Active \
 						with NeighborNormal 0\n");

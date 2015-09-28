@@ -542,6 +542,75 @@ static int load_8051_config(struct hfi_pportdata *ppd, u8 field_id,
 	return ret;
 }
 
+ /*
+ * Read an idle LCB message.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+static int read_idle_message(struct hfi_pportdata *ppd, u64 type, u64 *data_out)
+{
+	int ret;
+
+	ret = do_8051_command(ppd, HCMD_READ_LCB_IDLE_MSG,
+		type, data_out);
+	if (ret != HCMD_SUCCESS) {
+		dd_dev_err(ppd->dd, "read idle message: type %d, err %d\n",
+			(u32)type, ret);
+		return -EINVAL;
+	}
+	dd_dev_info(ppd->dd, "%s: read idle message 0x%llx\n", __func__,
+		*data_out);
+	/* return only the payload as we already know the type */
+	*data_out >>= IDLE_PAYLOAD_SHIFT;
+	return 0;
+}
+
+/*
+ * Read an idle SMA message.  To be done in response to a notification from
+ * the 8051.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+static int read_idle_sma(struct hfi_pportdata *ppd, u64 *data)
+{
+	return read_idle_message(ppd,
+			(u64)IDLE_SMA << IDLE_MSG_TYPE_SHIFT, data);
+}
+
+/*
+ * Send an idle LCB message.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+static int send_idle_message(struct hfi_pportdata *ppd, u64 data)
+{
+	int ret;
+
+	dd_dev_info(ppd->dd, "%s: sending idle message 0x%llx\n", __func__, data);
+	ret = do_8051_command(ppd, HCMD_SEND_LCB_IDLE_MSG, data, NULL);
+	if (ret != HCMD_SUCCESS) {
+		dd_dev_err(ppd->dd, "send idle message: data 0x%llx, err %d\n",
+			data, ret);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+/*
+ * Send an idle SMA message.
+ *
+ * Returns 0 on success, -EINVAL on error
+ */
+int hfi_send_idle_sma(struct hfi_pportdata *ppd, u64 message)
+{
+	u64 data;
+
+	dd_dev_info(ppd->dd, "%s: sending idle sma 0x%llx\n", __func__, message);
+	data = ((message & IDLE_PAYLOAD_MASK) << IDLE_PAYLOAD_SHIFT)
+		| ((u64)IDLE_SMA << IDLE_MSG_TYPE_SHIFT);
+	return send_idle_message(ppd, data);
+}
+
 /*
  * Initialize the LCB then do a quick link up.  This may or may not be
  * in loopback.
@@ -978,6 +1047,65 @@ int hfi2_wait_logical_linkstate(struct hfi_pportdata *ppd, u32 state,
 	return -ETIMEDOUT;
 }
 
+/*
+ * Handle a SMA idle message
+ *
+ * This is a work-queue function outside of the interrupt.
+ */
+static void handle_sma_message(struct work_struct *work)
+{
+	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
+							sma_message_work);
+	struct hfi_devdata *dd = ppd->dd;
+	u64 msg;
+	int ret;
+
+	dd_dev_info(dd, "%s() is called", __func__);
+	/* msg is bytes 1-4 of the 40-bit idle message - the command code
+	   is stripped off */
+	ret = read_idle_sma(ppd, &msg);
+	if (ret)
+		return;
+	dd_dev_info(dd, "%s: SMA message 0x%llx\n", __func__, msg);
+	/*
+	 * React to the SMA message.  Byte[1] (0 for us) is the command.
+	 */
+	switch (msg & 0xff) {
+	case SMA_IDLE_ARM:
+		/*
+		 * See OPAv1 table 9-14 - HFI and External Switch Ports Key
+		 * State Transitions
+		 *
+		 * Only expected in INIT or ARMED, discard otherwise.
+		 */
+		if (ppd->host_link_state & (HLS_UP_INIT | HLS_UP_ARMED))
+			ppd->neighbor_normal = 1;
+		break;
+	case SMA_IDLE_ACTIVE:
+		/*
+		 * See OPAv1 table 9-14 - HFI and External Switch Ports Key
+		 * State Transitions
+		 *
+		 * Can activate the node.  Discard otherwise.
+		 */
+		if (ppd->host_link_state == HLS_UP_ARMED
+					&& ppd->is_active_optimize_enabled) {
+			ppd->neighbor_normal = 1;
+			ret = hfi_set_link_state(ppd, HLS_UP_ACTIVE);
+			if (ret)
+				dd_dev_err(dd,
+					"%s: received Active SMA idle message, couldn't set link to Active\n",
+					__func__);
+		}
+		break;
+	default:
+		dd_dev_err(dd,
+			"%s: received unexpected SMA idle message 0x%llx\n",
+			__func__, msg);
+		break;
+	}
+}
+
 static inline void add_rcvctrl(struct hfi_devdata *dd, u64 add)
 {
 #if 0 /* WFR legacy */
@@ -1295,6 +1423,8 @@ static irqreturn_t irq_mnh_handler(int irq, void *dev_id)
 			queue_work(ppd->hfi_wq, &ppd->link_up_work);
 		if (reg & LINK_GOING_DOWN)
 			queue_work(ppd->hfi_wq, &ppd->link_down_work);
+		if (reg & BC_SMA_MSG)
+			queue_work(ppd->hfi_wq, &ppd->sma_message_work);
 		/* TODO: take care other interrupts */
 
 		if (reg & CRK_CRK8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SMASK) {
@@ -1450,6 +1580,7 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 		INIT_WORK(&ppd->link_vc_work, handle_verify_cap);
 		INIT_WORK(&ppd->link_up_work, handle_link_up);
 		INIT_WORK(&ppd->link_down_work, handle_link_down);
+		INIT_WORK(&ppd->sma_message_work, handle_sma_message);
 		/* TODO: adjust 0 for max_active */
 		ppd->hfi_wq = alloc_workqueue("hfi2_%d_%d",
 			WQ_SYSFS | WQ_HIGHPRI | WQ_CPU_INTENSIVE, 0, dd->unit, port);
@@ -1660,15 +1791,6 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 				"%s: logical state did not change to ARMED\n",
 				__func__);
 		}
-		/*
-		 * The simulator does not currently implement SMA messages,
-		 * so neighbor_normal is not set.  Set it here when we first
-		 * move to Armed.
-		 */
-#if 0 /* WFR legacy */
-		if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
-#endif
-			ppd->neighbor_normal = 1;
 		ppd->lstate = IB_PORT_ARMED;
 		break;
 	case HLS_UP_ACTIVE:
