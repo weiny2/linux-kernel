@@ -757,9 +757,11 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 			refresh_qsfp_cache(ppd, &ppd->qsfp_info);
 
 			if (ppd->qsfp_info.cache_valid) {
-				tune_qsfp(ppd, &tx_preset_index,
+				ret = tune_qsfp(ppd, &tx_preset_index,
 					  &rx_preset_index, &tuning_method,
 					  &total_atten);
+				if (ret)
+					goto bail;
 			} else {
 				dd_dev_info(dd,
 					    "%s: Reading QSFP memory failed\n",
