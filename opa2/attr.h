@@ -53,6 +53,7 @@
 #ifndef _ATTR_H
 #define _ATTR_H
 
+#define OPA_CONG_LOG_ELEMS	96
 #define PHYSPORTSTATE_SHIFT	4
 #define NNORMAL_SHIFT		4
 #define SM_CONFIG_SHIFT		5
@@ -62,4 +63,75 @@
 #define HFI_LINK_WIDTH_RESET_OLD 0x0fff
 #define HFI_LINK_WIDTH_RESET 0xffff
 
+#define HFI_IB_CC_TABLE_CAP_DEFAULT	31
+#define HFI_IB_CCT_ENTRIES		64
+#define HFI_CC_TABLE_SHADOW_MAX \
+	(HFI_IB_CC_TABLE_CAP_DEFAULT * HFI_IB_CCT_ENTRIES)
+
+/* port control flags */
+#define HFI_IB_CC_CCS_PC_SL_BASED 0x01
+
+struct opa_congestion_info_attr {
+	__be16 congestion_info;
+	u8 control_table_cap;	/* Multiple of 64 entry unit CCTs */
+	u8 congestion_log_length;
+} __packed;
+
+struct opa_congestion_setting_entry {
+	u8 ccti_increase;
+	u8 reserved;
+	__be16 ccti_timer;
+	u8 trigger_threshold;
+	u8 ccti_min; /* min CCTI for cc table */
+} __packed;
+
+struct opa_congestion_setting_entry_shadow {
+	u8 ccti_increase;
+	u8 reserved;
+	u16 ccti_timer;
+	u8 trigger_threshold;
+	u8 ccti_min; /* min CCTI for cc table */
+} __packed;
+
+struct ib_cc_table_entry_shadow {
+	u16 entry; /* shift:2, multiplier:14 */
+};
+
+struct ib_cc_table_entry {
+	__be16 entry; /* shift:2, multiplier:14 */
+};
+
+struct ib_cc_table_attr {
+	__be16 ccti_limit; /* max CCTI for cc table */
+	struct ib_cc_table_entry ccti_entries[HFI_IB_CCT_ENTRIES];
+} __packed;
+
+struct cc_table_shadow {
+	u16 ccti_limit; /* max CCTI for cc table */
+	struct ib_cc_table_entry_shadow entries[HFI_CC_TABLE_SHADOW_MAX];
+} __packed;
+
+struct opa_congestion_setting_attr {
+	__be32 control_map;
+	__be16 port_control;
+	struct opa_congestion_setting_entry entries[OPA_MAX_SLS];
+} __packed;
+
+struct opa_congestion_setting_attr_shadow {
+	u32 control_map;
+	u16 port_control;
+	struct opa_congestion_setting_entry_shadow entries[OPA_MAX_SLS];
+} __packed;
+
+/*
+ * struct cc_state combines the (active) per-port congestion control
+ * table, and the (active) per-SL congestion settings. cc_state data
+ * may need to be read in code paths that we want to be fast, so it
+ * is an RCU protected structure.
+ */
+struct cc_state {
+	struct rcu_head rcu;
+	struct cc_table_shadow cct;
+	struct opa_congestion_setting_attr_shadow cong_setting;
+};
 #endif	/* _ATTR_H */

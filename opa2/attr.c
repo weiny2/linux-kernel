@@ -429,8 +429,19 @@ static int __subn_get_hfi_bct(struct hfi_devdata *dd, struct opa_smp *smp,
 static int __subn_get_hfi_cong_info(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct opa_congestion_info_attr *p =
+		(struct opa_congestion_info_attr *)data;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+
+	p->congestion_info = 0;
+	p->control_table_cap = ppd->cc_max_table_entries;
+	p->congestion_log_length = OPA_CONG_LOG_ELEMS;
+
+	if (resp_len)
+		*resp_len += sizeof(*p);
+
+	return hfi_reply(ibh);
 }
 
 static int __subn_get_hfi_hfi_cong_log(struct hfi_devdata *dd,
@@ -441,20 +452,104 @@ static int __subn_get_hfi_hfi_cong_log(struct hfi_devdata *dd,
 	return IB_MAD_RESULT_FAILURE;
 }
 
+void hfi_cc_state_reclaim(struct rcu_head *rcu)
+{
+	struct cc_state *cc_state = container_of(rcu, struct cc_state, rcu);
+
+	kfree(cc_state);
+}
+
 static int __subn_get_hfi_cong_setting(struct hfi_devdata *dd,
 		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len,
 							u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	int i;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct opa_congestion_setting_attr *p =
+		(struct opa_congestion_setting_attr *) data;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct opa_congestion_setting_entry_shadow *entries;
+	struct cc_state *cc_state;
+
+	rcu_read_lock();
+
+	cc_state = hfi_get_cc_state(ppd);
+
+	if (cc_state == NULL) {
+		rcu_read_unlock();
+		/* FXRTODO: Should error attribute be set */
+		return hfi_reply(ibh);
+	}
+
+	entries = cc_state->cong_setting.entries;
+	p->port_control = cpu_to_be16(cc_state->cong_setting.port_control);
+	p->control_map = cpu_to_be32(cc_state->cong_setting.control_map);
+	for (i = 0; i < OPA_MAX_SLS; i++) {
+		p->entries[i].ccti_increase = entries[i].ccti_increase;
+		p->entries[i].ccti_timer = cpu_to_be16(entries[i].ccti_timer);
+		p->entries[i].trigger_threshold =
+			entries[i].trigger_threshold;
+		p->entries[i].ccti_min = entries[i].ccti_min;
+	}
+
+	rcu_read_unlock();
+
+	if (resp_len)
+		*resp_len += sizeof(*p);
+
+	return hfi_reply(ibh);
 }
 
 static int __subn_get_hfi_cc_table(struct hfi_devdata *dd, struct opa_smp *smp,
 				u32 am, u8 *data, u8 port, u32 *resp_len,
 							u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct ib_cc_table_attr *cc_table_attr =
+		(struct ib_cc_table_attr *) data;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	u32 start_block = OPA_AM_START_BLK(am);
+	u32 n_blocks = OPA_AM_NBLK(am);
+	struct ib_cc_table_entry_shadow *entries;
+	int i, j;
+	u32 sentry, eentry;
+	struct cc_state *cc_state;
+
+	/* sanity check n_blocks, start_block */
+	if (n_blocks == 0 ||
+	    start_block + n_blocks > ppd->cc_max_table_entries) {
+		hfi_invalid_attr(smp);
+		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+		return hfi_reply(ibh);
+	}
+
+	rcu_read_lock();
+
+	cc_state = hfi_get_cc_state(ppd);
+
+	if (cc_state == NULL) {
+		rcu_read_unlock();
+		return hfi_reply(ibh);
+	}
+
+	sentry = start_block * HFI_IB_CCT_ENTRIES;
+	eentry = sentry + (HFI_IB_CCT_ENTRIES * n_blocks);
+
+	cc_table_attr->ccti_limit = cpu_to_be16(cc_state->cct.ccti_limit);
+
+	entries = cc_state->cct.entries;
+
+	/* return n_blocks, though the last block may not be full */
+	for (j = 0, i = sentry; i < eentry; j++, i++)
+		cc_table_attr->ccti_entries[j].entry =
+			cpu_to_be16(entries[i].entry);
+
+	rcu_read_unlock();
+
+	if (resp_len)
+		*resp_len += sizeof(u16)*(HFI_IB_CCT_ENTRIES * n_blocks + 1);
+
+	return hfi_reply(ibh);
 }
 
 int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
@@ -1237,15 +1332,102 @@ static int __subn_set_hfi_cong_setting(struct hfi_devdata *dd,
 		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len,
 								u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct opa_congestion_setting_attr *p =
+		(struct opa_congestion_setting_attr *) data;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct opa_congestion_setting_entry_shadow *entries;
+	int i;
+
+	ppd->cc_sl_control_map = be32_to_cpu(p->control_map);
+
+	entries = ppd->congestion_entries;
+	for (i = 0; i < OPA_MAX_SLS; i++) {
+		entries[i].ccti_increase = p->entries[i].ccti_increase;
+		entries[i].ccti_timer = be16_to_cpu(p->entries[i].ccti_timer);
+		entries[i].trigger_threshold =
+			p->entries[i].trigger_threshold;
+		entries[i].ccti_min = p->entries[i].ccti_min;
+	}
+
+	return hfi_reply(ibh);
 }
 
 static int __subn_set_hfi_cc_table(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct ib_cc_table_attr *p = (struct ib_cc_table_attr *) data;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	u32 start_block = OPA_AM_START_BLK(am);
+	u32 n_blocks = OPA_AM_NBLK(am);
+	struct ib_cc_table_entry_shadow *entries;
+	int i, j;
+	u32 sentry, eentry;
+	u16 ccti_limit;
+	struct cc_state *old_cc_state, *new_cc_state;
+
+	/* sanity check n_blocks, start_block */
+	if (n_blocks == 0 ||
+	    start_block + n_blocks > ppd->cc_max_table_entries) {
+		hfi_invalid_attr(smp);
+		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+		goto done;
+	}
+
+	sentry = start_block * HFI_IB_CCT_ENTRIES;
+	eentry = sentry + ((n_blocks - 1) * HFI_IB_CCT_ENTRIES) +
+		 (be16_to_cpu(p->ccti_limit)) % HFI_IB_CCT_ENTRIES + 1;
+
+	/* sanity check ccti_limit */
+	ccti_limit = be16_to_cpu(p->ccti_limit);
+	if (ccti_limit + 1 > eentry) {
+		hfi_invalid_attr(smp);
+		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+		goto done;
+	}
+
+	new_cc_state = kzalloc(sizeof(*new_cc_state), GFP_KERNEL);
+	if (new_cc_state == NULL)
+		goto done;
+
+	spin_lock(&ppd->cc_state_lock);
+
+	old_cc_state = hfi_get_cc_state(ppd);
+
+	if (old_cc_state == NULL) {
+		spin_unlock(&ppd->cc_state_lock);
+		kfree(new_cc_state);
+		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+		goto done;
+	}
+
+	*new_cc_state = *old_cc_state;
+
+	new_cc_state->cct.ccti_limit = ccti_limit;
+
+	entries = ppd->ccti_entries;
+	ppd->total_cct_entry = ccti_limit + 1;
+
+	for (j = 0, i = sentry; i < eentry; j++, i++)
+		entries[i].entry = be16_to_cpu(p->ccti_entries[j].entry);
+
+	memcpy(new_cc_state->cct.entries, entries,
+	       eentry * sizeof(struct ib_cc_table_entry));
+
+	new_cc_state->cong_setting.port_control = HFI_IB_CC_CCS_PC_SL_BASED;
+	new_cc_state->cong_setting.control_map = ppd->cc_sl_control_map;
+	memcpy(new_cc_state->cong_setting.entries, ppd->congestion_entries,
+	       OPA_MAX_SLS * sizeof(struct opa_congestion_setting_entry));
+
+	rcu_assign_pointer(ppd->cc_state, new_cc_state);
+
+	spin_unlock(&ppd->cc_state_lock);
+
+	call_rcu(&old_cc_state->rcu, hfi_cc_state_reclaim);
+
+done:
+	return hfi_reply(ibh);
 }
 
 static int __subn_set_hfi_led_info(struct hfi_devdata *dd, struct opa_smp *smp,
