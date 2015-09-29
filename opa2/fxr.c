@@ -1190,6 +1190,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 #endif
 		ppd->crk8051_timed_out = 0;
 		ppd->host_link_state = HLS_DN_OFFLINE;
+		hfi_8051_reset(ppd);
 
 		ppd->cc_max_table_entries = HFI_IB_CC_TABLE_CAP_DEFAULT;
 
