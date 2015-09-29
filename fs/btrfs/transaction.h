@@ -59,6 +59,8 @@ struct btrfs_transaction {
 	struct list_head pending_chunks;
 	struct list_head pending_ordered;
 	struct list_head switch_commits;
+	struct list_head dropped_roots;
+	spinlock_t dropped_roots_lock;
 	struct btrfs_delayed_ref_root delayed_refs;
 	int aborted;
 };
@@ -192,4 +194,6 @@ int btrfs_wait_marked_extents(struct btrfs_root *root,
 int btrfs_transaction_blocked(struct btrfs_fs_info *info);
 int btrfs_transaction_in_commit(struct btrfs_fs_info *info);
 void btrfs_put_transaction(struct btrfs_transaction *transaction);
+void btrfs_add_dropped_root(struct btrfs_trans_handle *trans,
+			    struct btrfs_root *root);
 #endif
