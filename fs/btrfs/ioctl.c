@@ -932,8 +932,6 @@ static int find_new_extents(struct btrfs_root *root,
 	min_key.type = BTRFS_EXTENT_DATA_KEY;
 	min_key.offset = *off;
 
-	path->keep_locks = 1;
-
 	while (1) {
 		ret = btrfs_search_forward(root, &min_key, path, newer_than);
 		if (ret != 0)
@@ -2014,8 +2012,6 @@ static noinline int search_ioctl(struct inode *inode,
 	key.objectid = sk->min_objectid;
 	key.type = sk->min_type;
 	key.offset = sk->min_offset;
-
-	path->keep_locks = 1;
 
 	while (1) {
 		ret = btrfs_search_forward(root, &key, path, sk->min_transid);
