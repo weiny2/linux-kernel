@@ -944,7 +944,7 @@ static void write_xmt_margin(struct hfi1_devdata *dd, const char *fname)
 		 * For A0, EFUSE values are not set.  Override with the
 		 * correct values.
 		 */
-		if (is_a0(dd)) {
+		if (is_ax(dd)) {
 			/* xmt_margin and OverwiteEnabel should be the
 			 * same for Gen1/Gen2 and Gen3 */
 			xmt_margin                = 0x5;
@@ -1021,7 +1021,7 @@ int do_pcie_gen3_transition(struct hfi1_devdata *dd)
 	/*
 	 * A0 needs an additional SBR
 	 */
-	if (is_a0(dd))
+	if (is_ax(dd))
 		nsbr++;
 
 	/*
@@ -1294,7 +1294,7 @@ retry:
 	write_csr(dd, CCE_DC_CTRL, 0);
 
 	/* Set the LED off */
-	if (is_a0(dd))
+	if (is_ax(dd))
 		setextled(dd, 0);
 
 	/* check for any per-lane errors */
