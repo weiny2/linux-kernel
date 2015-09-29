@@ -366,6 +366,7 @@ static void ruc_loopback(struct hfi1_qp *sqp)
 	enum ib_wc_status send_status;
 	int release;
 	int ret;
+	unsigned long to;
 
 	rcu_read_lock();
 
@@ -593,11 +594,8 @@ rnr_nak:
 	spin_lock_irqsave(&sqp->s_lock, flags);
 	if (!(ib_hfi1_state_ops[sqp->state] & HFI1_PROCESS_RECV_OK))
 		goto clr_busy;
-	sqp->s_flags |= HFI1_S_WAIT_RNR;
-	sqp->s_timer.function = hfi1_rc_rnr_retry;
-	sqp->s_timer.expires = jiffies +
-		usecs_to_jiffies(ib_hfi1_rnr_table[qp->r_min_rnr_timer]);
-	add_timer(&sqp->s_timer);
+	to = usecs_to_jiffies(ib_hfi1_rnr_table[qp->r_min_rnr_timer]);
+	add_rnr_timer(sqp, to);
 	goto clr_busy;
 
 op_err:
