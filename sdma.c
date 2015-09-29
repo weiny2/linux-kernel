@@ -65,7 +65,8 @@
 #include "trace.h"
 
 /* must be a power of 2 >= 64 <= 32768 */
-#define SDMA_DESCQ_CNT 1024
+#define SDMA_DESCQ_CNT 2048
+#define SDMA_DESC_INTR 64
 #define INVALID_TAIL 0xffff
 
 static uint sdma_descq_cnt = SDMA_DESCQ_CNT;
@@ -80,7 +81,7 @@ uint mod_num_sdma;
 module_param_named(num_sdma, mod_num_sdma, uint, S_IRUGO);
 MODULE_PARM_DESC(num_sdma, "Set max number SDMA engines to use");
 
-static uint sdma_desct_intr;
+static uint sdma_desct_intr = SDMA_DESC_INTR;
 module_param_named(desct_intr, sdma_desct_intr, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(desct_intr, "Number of SDMA descriptor before interrupt");
 
@@ -1061,7 +1062,7 @@ int sdma_init(struct hfi1_devdata *dd, u8 port)
 
 	idle_cnt = ns_to_cclock(dd, idle_cnt);
 	if (!sdma_desct_intr)
-		sdma_desct_intr = descq_cnt / 2;
+		sdma_desct_intr = SDMA_DESC_INTR;
 
 	/* Allocate memory for SendDMA descriptor FIFOs */
 	for (this_idx = 0; this_idx < num_engines; ++this_idx) {
