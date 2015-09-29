@@ -422,7 +422,7 @@ static noinline void caching_thread(struct btrfs_work *work)
 again:
 	mutex_lock(&caching_ctl->mutex);
 	/* need to make sure the commit_root doesn't disappear */
-	down_read(&fs_info->extent_commit_sem);
+	down_read(&fs_info->commit_root_sem);
 
 next:
 	ret = btrfs_search_slot(NULL, extent_root, &key, path, 0, 0);
@@ -446,10 +446,10 @@ next:
 				break;
 
 			if (need_resched() ||
-			    rwsem_is_contended(&fs_info->extent_commit_sem)) {
+			    rwsem_is_contended(&fs_info->commit_root_sem)) {
 				caching_ctl->progress = last;
 				btrfs_release_path(path);
-				up_read(&fs_info->extent_commit_sem);
+				up_read(&fs_info->commit_root_sem);
 				mutex_unlock(&caching_ctl->mutex);
 				cond_resched();
 				goto again;
@@ -516,7 +516,7 @@ next:
 
 err:
 	btrfs_free_path(path);
-	up_read(&fs_info->extent_commit_sem);
+	up_read(&fs_info->commit_root_sem);
 
 	free_excluded_extents(extent_root, block_group);
 
@@ -638,10 +638,10 @@ static int cache_block_group(struct btrfs_block_group_cache *cache,
 		return 0;
 	}
 
-	down_write(&fs_info->extent_commit_sem);
+	down_write(&fs_info->commit_root_sem);
 	atomic_inc(&caching_ctl->count);
 	list_add_tail(&caching_ctl->list, &fs_info->caching_block_groups);
-	up_write(&fs_info->extent_commit_sem);
+	up_write(&fs_info->commit_root_sem);
 
 	btrfs_get_block_group(cache);
 
@@ -5516,7 +5516,7 @@ void btrfs_prepare_extent_commit(struct btrfs_trans_handle *trans,
 	struct btrfs_caching_control *caching_ctl;
 	struct btrfs_block_group_cache *cache;
 
-	down_write(&fs_info->extent_commit_sem);
+	down_write(&fs_info->commit_root_sem);
 
 	list_for_each_entry_safe(caching_ctl, next,
 				 &fs_info->caching_block_groups, list) {
@@ -5535,7 +5535,7 @@ void btrfs_prepare_extent_commit(struct btrfs_trans_handle *trans,
 	else
 		fs_info->pinned_extents = &fs_info->freed_extents[0];
 
-	up_write(&fs_info->extent_commit_sem);
+	up_write(&fs_info->commit_root_sem);
 
 	update_global_block_rsv(fs_info);
 }
@@ -8701,14 +8701,14 @@ int btrfs_free_block_groups(struct btrfs_fs_info *info)
 	struct btrfs_caching_control *caching_ctl;
 	struct rb_node *n;
 
-	down_write(&info->extent_commit_sem);
+	down_write(&info->commit_root_sem);
 	while (!list_empty(&info->caching_block_groups)) {
 		caching_ctl = list_entry(info->caching_block_groups.next,
 					 struct btrfs_caching_control, list);
 		list_del(&caching_ctl->list);
 		put_caching_control(caching_ctl);
 	}
-	up_write(&info->extent_commit_sem);
+	up_write(&info->commit_root_sem);
 
 	spin_lock(&info->unused_bgs_lock);
 	while (!list_empty(&info->unused_bgs)) {
@@ -9306,7 +9306,7 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 	if (block_group->cached == BTRFS_CACHE_STARTED)
 		wait_block_group_cache_done(block_group);
 	if (block_group->has_caching_ctl) {
-		down_write(&root->fs_info->extent_commit_sem);
+		down_write(&root->fs_info->commit_root_sem);
 		if (!caching_ctl) {
 			struct btrfs_caching_control *ctl;
 
@@ -9320,7 +9320,7 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 		}
 		if (caching_ctl)
 			list_del_init(&caching_ctl->list);
-		up_write(&root->fs_info->extent_commit_sem);
+		up_write(&root->fs_info->commit_root_sem);
 		if (caching_ctl) {
 			/* Once for the caching bgs list and once for us. */
 			put_caching_control(caching_ctl);
