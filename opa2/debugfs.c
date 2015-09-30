@@ -59,12 +59,83 @@
 
 #ifdef CONFIG_DEBUG_FS
 struct dentry *hfi_dbg_root;
+static const char *hfi_class_name = "hfi";
+
+static int hfi_qos_show(struct seq_file *s, void *unused)
+{
+	struct hfi_pportdata *ppd = s->private;
+	int i = 0;
+
+	seq_printf(s, "QoS mappings for port number %d\n", ppd->pnum);
+	for (i = 0; i < OPA_MAX_SCS; i++) {
+		seq_printf(s,
+			   "sl2sc[%2d] %2d sc2sl[%2d] %2d sc_to_vlt[%2d] %2d ",
+			   i, ppd->sl_to_sc[i],
+			   i, ppd->sc_to_sl[i],
+			   i, ppd->sc_to_vlt[i]);
+		seq_printf(s,
+			   "sc2vlnt[%2d] %2d sl2mc[%2d] %d sl2tc[%2d] %2lld\n",
+			   i, ppd->sc_to_vlnt[i],
+			   i, ppd->sl_to_mctc[i] >> 2,
+			   i, ppd->sl_to_mctc[i] &
+			   FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK);
+	}
+	for (i = 0; i < ppd->num_ptl_slp; i++)
+		seq_printf(s, "ptl_sl_pair %d sl1 %d sl2 %d\n",
+			   i, ppd->ptl_slp[i][0], ppd->ptl_slp[i][1]);
+
+	return 0;
+}
+
+static int hfi_qos_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, hfi_qos_show, inode->i_private);
+}
+
+static int hfi_qos_release(struct inode *inode, struct file *file)
+{
+	return single_release(inode, file);
+}
+
+static const struct file_operations hfi_qos_ops = {
+	.owner   = THIS_MODULE,
+	.open    = hfi_qos_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = hfi_qos_release
+};
 
 void hfi_dbg_init(struct hfi_devdata *dd)
 {
+	char name[32], link[10];
+	struct hfi_pportdata *ppd;
+	int unit = dd->unit, j;
+
 	hfi_dbg_root = debugfs_create_dir(DRIVER_NAME, NULL);
 	if (!hfi_dbg_root)
 		pr_warn("can't create %s\n", DRIVER_NAME);
+	snprintf(name, sizeof(name), "%s%d", hfi_class_name, unit);
+	snprintf(link, sizeof(link), "%d", unit);
+	dd->hfi_dev_dbg = debugfs_create_dir(name, hfi_dbg_root);
+	if (!dd->hfi_dev_dbg) {
+		pr_warn("can't create debugfs directory: %s %p\n", name,
+			dd->hfi_dev_dbg);
+		return;
+	}
+	dd->hfi_dev_link =
+		debugfs_create_symlink(link, hfi_dbg_root, name);
+	if (!dd->hfi_dev_link) {
+		pr_warn("can't create symlink: %s\n", name);
+		return;
+	}
+
+	/* create files for each port */
+	for (j = 0, ppd = dd->pport; j < dd->num_pports; ppd++, j++) {
+		snprintf(name, sizeof(name), "port%d", ppd->pnum);
+		ppd->hfi_port_dbg = debugfs_create_dir(name, dd->hfi_dev_dbg);
+		debugfs_create_file("qos", 0444, ppd->hfi_port_dbg,
+				    ppd, &hfi_qos_ops);
+	}
 	hfi_firmware_dbg_init(dd);
 }
 

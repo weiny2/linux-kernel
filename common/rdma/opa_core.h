@@ -363,6 +363,7 @@ struct opa_dev_desc {
  * @set_ibdev: stash registered ibdev pointer so that it can be used by OPA
  *	core clients for registering MAD clients as an example.
  * @clear_ibdev: clear registered ibdev pointer setup via set_ibdev
+ * @check_ptl_slp: check SL pair being used for portals traffic
  */
 struct opa_core_ops {
 	int (*ctx_assign)(struct hfi_ctx *ctx,
@@ -402,6 +403,7 @@ struct opa_core_ops {
 	void (*set_ibdev)(struct opa_core_device *odev,
 			  struct ib_device *ibdev);
 	void (*clear_ibdev)(struct opa_core_device *odev);
+	int (*check_ptl_slp)(struct hfi_ctx *ctx, struct hfi_sl_pair *slp);
 };
 
 /**

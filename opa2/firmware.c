@@ -95,8 +95,6 @@ static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
 	return ret;\
 }
 
-static const char *hfi_class_name = "hfi";
-
 #define private2dd(file) (file_inode(file)->i_private)
 #define private2ppd(file) (file_inode(file)->i_private)
 
@@ -144,29 +142,11 @@ static const struct firmware_info firmware_ops[] = {
 
 void hfi_firmware_dbg_init(struct hfi_devdata *dd)
 {
-	char name[32], link[10];
 	struct hfi_pportdata *ppd;
-	int unit = dd->unit;
 	int i, j;
 
-	snprintf(name, sizeof(name), "%s%d", hfi_class_name, unit);
-	snprintf(link, sizeof(link), "%d", unit);
-	dd->hfi_dev_dbg = debugfs_create_dir(name, hfi_dbg_root);
-	if (!dd->hfi_dev_dbg) {
-		pr_warn("can't create debugfs directory: %s %p\n", name,
-			dd->hfi_dev_dbg);
-		return;
-	}
-	dd->hfi_dev_link =
-		debugfs_create_symlink(link, hfi_dbg_root, name);
-	if (!dd->hfi_dev_link) {
-		pr_warn("can't create symlink: %s\n", name);
-		return;
-	}
 	/* create files for each port */
 	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++) {
-		snprintf(name, sizeof(name), "port%d", ppd->pnum);
-		ppd->hfi_port_dbg = debugfs_create_dir(name, dd->hfi_dev_dbg);
 		for (i = 0; i < ARRAY_SIZE(firmware_ops); i++) {
 			DEBUGFS_FILE_CREATE(firmware_ops[i].name,
 				ppd->hfi_port_dbg,

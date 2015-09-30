@@ -583,13 +583,90 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
 	return val;
 }
 
-static void hfi_init_sl_to_mc_tc(struct hfi_pportdata *ppd, u8 *mc, u8 *tc)
+/*
+ * Returns true if the SL is used for portals traffic. If it is a portals
+ * SL then the response SL is also returned in resp_sl.
+ */
+static bool hfi_is_portals_sl(struct hfi_pportdata *ppd, u8 sl, u8 *resp_sl)
+{
+	int i, j;
+
+	for (i = 0; i < ppd->num_ptl_slp; i++) {
+		for (j = 0; j < HFI_MAX_MC; j++) {
+			if (ppd->ptl_slp[i][j] == sl) {
+				if (resp_sl)
+					*resp_sl = ppd->ptl_slp[i][1];
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+/*
+ * Check portals SL pairs against the driver list of SL pairs from FM
+ * Returns 0 for success and -EINVAL for failure
+ */
+static int hfi_check_ptl_slp(struct hfi_ctx *ctx, struct hfi_sl_pair *slp)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	struct hfi_pportdata *ppd;
+	int i;
+
+	if (slp->port <= 0 || slp->port > dd->num_pports)
+		return -EINVAL;
+
+	ppd = to_hfi_ppd(dd, slp->port);
+	for (i = 0; i < ppd->num_ptl_slp; i++) {
+		u8 sl1 = ppd->ptl_slp[i][0];
+		u8 sl2 = ppd->ptl_slp[i][1];
+
+		if (slp->sl1 == sl1 && slp->sl2 == sl2)
+			return 0;
+	}
+	return -EINVAL;
+}
+
+/* Service level to message class and traffic class mapping */
+static void hfi_sl_to_mctc(struct hfi_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg[2];
 	u32 tx_reg_addr, rx_reg_addr;
-	int i, j, k;
+	int i, j, k, tc = 0;
 	int nregs = ARRAY_SIZE(reg);
+
+	/* set up SL to MCTC for portals traffic */
+	for (i = 0; i < ppd->num_ptl_slp; i++) {
+		u8 sl1 = ppd->ptl_slp[i][0];
+		u8 sl2 = ppd->ptl_slp[i][1];
+
+		/* Request SL on TC MC 0 */
+		ppd->sl_to_mctc[sl1] = tc;
+		/* Response SL on TC MC 1 */
+		ppd->sl_to_mctc[sl2] = tc | (1 << 2);
+
+		/* Round robin through available TCs. Locking? */
+		tc = (tc + 1) % HFI_MAX_TC;
+		if (tc == HFI_VL15_TC)
+			tc = (tc + 1) % HFI_MAX_TC;
+	}
+
+	/* set up SL to MCTC for non portals traffic */
+	for (i = 0; i < ARRAY_SIZE(ppd->sl_to_mctc); i++) {
+		if (hfi_is_portals_sl(ppd, i, NULL))
+			continue;
+		/*
+		 * FXRTODO: FXR Simics model has the sl_to_mctc mapping hard
+		 * coded based on the formulas below which are being used in
+		 * the driver as well till such time that we have a better
+		 * solution.
+		 */
+		tc = (i % HFI_MAX_TC);
+		/* Use TC 0 for any TC clashing with the HFI_VL15_TC */
+		tc = tc == HFI_VL15_TC ? 0 : tc;
+		ppd->sl_to_mctc[i] = (i & 0x4) | tc;
+	}
 
 	switch (ppd_to_pnum(ppd)) {
 	case 1:
@@ -608,17 +685,12 @@ static void hfi_init_sl_to_mc_tc(struct hfi_pportdata *ppd, u8 *mc, u8 *tc)
 	for (i = 0; i < nregs; i++)
 		reg[i] = read_csr(dd, tx_reg_addr + i * 8);
 
-	for (i = 0, j = 0; i < nregs; i++) {
-		for (k = 0; k < 64; k += 4, j++) {
-			if (mc)
-				hfi_set_bits(&reg[i], mc[j], HFI_SL_TO_MC_MASK,
-						k + HFI_SL_TO_MC_SHIFT);
-			if (tc)
-				hfi_set_bits(&reg[i], tc[j], HFI_SL_TO_TC_MASK,
-						k + HFI_SL_TO_TC_SHIFT);
-		}
-	}
+	for (i = 0, j = 0; i < nregs; i++)
+		for (k = 0; k < 64; k += 4, j++)
+			hfi_set_bits(&reg[i], ppd->sl_to_mctc[j],
+				     HFI_SL_TO_TC_MC_MASK, k);
 
+	/* FXRTODO: Can these be changed on the fly while apps are running */
 	/* TX & RX SL -> TC/MC mappings should be identical */
 	for (i = 0; i < nregs; i++) {
 		write_csr(dd, tx_reg_addr + i * 8, reg[i]);
@@ -626,9 +698,47 @@ static void hfi_init_sl_to_mc_tc(struct hfi_pportdata *ppd, u8 *mc, u8 *tc)
 	}
 }
 
-static void hfi_sl_to_sc(struct hfi_pportdata *ppd, u8 *sl_to_sc)
+/* Service channel to message class and traffic class mapping */
+static void hfi_sc_to_mctc(struct hfi_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
+	u64 reg[2];
+	u32 reg_addr;
+	int i, j, k;
+	int nregs = ARRAY_SIZE(reg);
+
+	switch (ppd_to_pnum(ppd)) {
+	case 1:
+		reg_addr = FXR_LM_CFG_PORT0_SC2MCTC0;
+		break;
+	case 2:
+		reg_addr = FXR_LM_CFG_PORT1_SC2MCTC0;
+		break;
+	default:
+		return;
+	}
+
+	for (i = 0; i < nregs; i++)
+		reg[i] = read_csr(dd, reg_addr + i * 8);
+
+	/*
+	 * In order to obtain the SC -> MCTC map, obtain the SC to SL map
+	 * and then find the SL -> MCTC mapping
+	 */
+	for (i = 0, j = 0; i < nregs; i++)
+		for (k = 0; k < 64; k += 4, j++)
+			hfi_set_bits(&reg[i], ppd->sl_to_mctc[ppd->sc_to_sl[j]],
+				     HFI_SC_TO_TC_MC_MASK, k);
+
+	for (i = 0; i < nregs; i++)
+		write_csr(dd, reg_addr + i * 8, reg[i]);
+}
+
+/* Service level to service channel mapping */
+static void hfi_sl_to_sc(struct hfi_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u8 *sl_to_sc = ppd->sl_to_sc;
 	u64 reg[4];
 	u32 reg_addr;
 	int i, j, k;
@@ -636,6 +746,46 @@ static void hfi_sl_to_sc(struct hfi_pportdata *ppd, u8 *sl_to_sc)
 
 	if (!sl_to_sc) {
 		dd_dev_warn(dd, "No sl_to_sc mapping");
+		return;
+	}
+
+	switch (ppd_to_pnum(ppd)) {
+	case 1:
+		reg_addr = FXR_LM_CFG_PORT0_SL2SC0;
+		break;
+	case 2:
+		reg_addr = FXR_LM_CFG_PORT1_SL2SC0;
+		break;
+	default:
+		return;
+	}
+
+	for (i = 0; i < nregs; i++)
+		reg[i] = read_csr(dd, reg_addr + i * 8);
+
+	for (i = 0, j = 0; i < nregs; i++) {
+		for (k = 0; k < 64; k += 8, j++) {
+			hfi_set_bits(&reg[i], sl_to_sc[j],
+				     HFI_SC_TO_SL_MASK, k);
+		}
+	}
+
+	for (i = 0; i < nregs; i++)
+		write_csr(dd, reg_addr + i * 8, reg[i]);
+}
+
+/* Service channel to service level mapping */
+static void hfi_sc_to_sl(struct hfi_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u8 *sc_to_sl = ppd->sc_to_sl, resp_sl = 0, sl;
+	u64 reg[4];
+	u32 reg_addr;
+	int i, j, k;
+	int nregs = ARRAY_SIZE(reg);
+
+	if (!sc_to_sl) {
+		dd_dev_warn(dd, "No sc_to_sl mapping");
 		return;
 	}
 
@@ -653,17 +803,27 @@ static void hfi_sl_to_sc(struct hfi_pportdata *ppd, u8 *sl_to_sc)
 	for (i = 0; i < nregs; i++)
 		reg[i] = read_csr(dd, reg_addr + i * 8);
 
-	for (i = 0, j = 0; i < nregs; i++)
-		for (k = 0; k < 64; k += 8, j++)
-			hfi_set_bits(&reg[i], sl_to_sc[j], HFI_SL_TO_SC_MASK,
-				     k + HFI_SL_TO_SC_SHIFT);
+	/*
+	 * Received packets are mapped through the Link Mux using
+	 * SC*_TO_SL registers to obtain the outgoing SL based on the incoming
+	 * SC. These replace the SC in the packet for Gen2 transport packets
+	 * only. The way to determine how this table should be programmed is by
+	 * looking up the SC -> request SL mapping provided by the FM for
+	 * requests and then finding out the response SL based on the SL->TC/MC
+	 * mapping
+	 */
+	for (i = 0, j = 0; i < nregs; i++) {
+		for (k = 0; k < 64; k += 8, j++) {
+			if (hfi_is_portals_sl(ppd, j, &resp_sl))
+				sl = resp_sl;
+			else
+				sl = sc_to_sl[j];
+			hfi_set_bits(&reg[i], resp_sl, HFI_SC_TO_SL_MASK, k);
+		}
+	}
+
 	for (i = 0; i < nregs; i++)
 		write_csr(dd, reg_addr + i * 8, reg[i]);
-}
-
-static void hfi_sc_to_sl(struct hfi_pportdata *ppd)
-{
-	/* FXRTODO: Register not yet defined in HAS. STL-1703 */
 }
 
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
@@ -709,10 +869,12 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 			hfi_set_pkey_table(ppd);
 		break;
 	case HFI_IB_CFG_SL_TO_SC:
-		hfi_sl_to_sc(ppd, ppd->sl_to_sc);
+		hfi_sl_to_sc(ppd);
+		hfi_sc_to_mctc(ppd);
 		break;
 	case HFI_IB_CFG_SC_TO_SL:
 		hfi_sc_to_sl(ppd);
+		hfi_sc_to_mctc(ppd);
 		break;
 	case HFI_IB_CFG_SC_TO_VLT:
 		hfi_set_sc_to_vlt(ppd, data);
@@ -1026,7 +1188,8 @@ static struct opa_core_ops opa_core_ops = {
 	.get_sma = hfi_get_sma,
 	.set_sma = hfi_set_sma,
 	.set_ibdev = hfi_set_ibdev,
-	.clear_ibdev = hfi_clear_ibdev
+	.clear_ibdev = hfi_clear_ibdev,
+	.check_ptl_slp = hfi_check_ptl_slp
 };
 
 /*
@@ -1154,7 +1317,7 @@ void hfi_init_sc_to_vlt(struct hfi_pportdata *ppd)
 int hfi_pport_init(struct hfi_devdata *dd)
 {
 	struct hfi_pportdata *ppd;
-	int i, size;
+	int i, j, size;
 	u8 port;
 	u16 crc_val;
 
@@ -1273,17 +1436,18 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		for (i = 0; i < ARRAY_SIZE(ppd->sc_to_sl); i++)
 			ppd->sc_to_sl[i] = i;
 		/*
-		 * FXRTODO: FXR Simics model has the tx_sl_to_mc and
-		 * tx_sl_to_tc mapping hard coded based on the formulas
-		 * below which are being used in the driver as well
-		 * till such time that we have a better solution.
+		 * FXRTODO: Hard code the number of SL pairs for portals till
+		 * we receive these values from the FM
 		 */
-		for (i = 0; i < ARRAY_SIZE(ppd->tx_sl_to_mc); i++)
-			ppd->tx_sl_to_mc[i] = (i & 0x4) >> 2;
-		for (i = 0; i < ARRAY_SIZE(ppd->tx_sl_to_tc); i++)
-			ppd->tx_sl_to_tc[i] = i % 4;
-		hfi_init_sl_to_mc_tc(ppd, ppd->tx_sl_to_mc, ppd->tx_sl_to_tc);
+		ppd->num_ptl_slp = HFI_NUM_PTL_SLP;
+		for (i = 0, j = HFI_PTL_SL_START;
+			i < ppd->num_ptl_slp; i++, j += 2) {
+			ppd->ptl_slp[i][0] = j;
+			ppd->ptl_slp[i][1] = j + 1;
+		}
+		hfi_sl_to_mctc(ppd);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0, NULL);
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_SL, 0, NULL);
 
 		hfi_init_sc_to_vlt(ppd);
 		hfi_ptc_init(ppd);
