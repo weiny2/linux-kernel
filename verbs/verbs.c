@@ -73,12 +73,6 @@ static struct opa_core_client opa_ib_driver = {
 	.event_notify = opa_ib_event_notify
 };
 
-static void opa_ib_event_notify(struct opa_core_device *odev,
-				enum opa_core_event event, u8 port)
-{
-	/* FXRTODO: Add event handling */
-	dev_info(&odev->dev, "%s port %d event %d\n", __func__, port, event);
-}
 
 /* TODO - placeholders */
 __be64 opa_ib_sys_guid;
@@ -234,14 +228,8 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	props->lmc = ibp->lmc;
 	props->sm_lid = ibp->sm_lid;
 	props->sm_sl = ibp->smsl;
-#if 0
-	//props->state = dd->f_iblink_state(ppd);
-	//props->phys_state = dd->f_ibphys_portstate(ppd);
-#else
-	/* FXRTODO: Implement linkup */
-	props->state = IB_PORT_ACTIVE;
-	props->phys_state = IB_PORTPHYSSTATE_POLLING;
-#endif
+	props->state = ibp->lstate;
+	props->phys_state = ibp->pstate;
 	props->port_cap_flags = ibp->port_cap_flags;
 	props->gid_tbl_len = 1;
 	props->max_msg_sz = OPA_IB_MAX_MSG_SZ;
@@ -329,6 +317,43 @@ static int opa_ib_dealloc_ucontext(struct ib_ucontext *context)
 {
 	kfree(to_opa_ucontext(context));
 	return 0;
+}
+
+static void opa_ib_link_handling(struct opa_ib_data *ibd)
+{
+	struct opa_core_device *odev = ibd->odev;
+	struct opa_core_ops *ops = odev->bus_ops;
+	struct opa_pport_desc pdesc;
+	struct ib_device *ibdev = &ibd->ibdev;
+	int port;
+
+	for (port = 1; port <= ibd->num_pports; port++) {
+		struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+
+		ops->get_port_desc(odev, &pdesc, port);
+		ibp->lstate = pdesc.lstate;
+		ibp->pstate = pdesc.pstate;
+	}
+}
+
+static void opa_ib_event_notify(struct opa_core_device *odev,
+				enum opa_core_event event, u8 port)
+{
+	struct opa_ib_data *ibd = opa_core_get_priv_data(&opa_ib_driver, odev);
+
+	if (!ibd) {
+		dev_err(&odev->dev,
+		"%s port %d event %d unhandled\n", __func__, port, event);
+		return;
+	}
+
+	switch (event) {
+	case OPA_LINK_STATE_CHANGE:
+		opa_ib_link_handling(ibd);
+		break;
+	default:
+		break;
+	};
 }
 
 static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)

@@ -559,7 +559,6 @@ struct opa_ib_portdata {
 	u64 n_pkt_drops;
 	u64 n_vl15_dropped;
 
-	u32 lstate;
 	u32 port_cap_flags;
 	u32 sm_trap_qp;
 	u32 sa_qp;
@@ -591,6 +590,11 @@ struct opa_ib_portdata {
 	u8 sc_to_sl[OPA_MAX_SCS];
 	u8 sc_to_vl[OPA_MAX_SCS];
 	u32 vl_mtu[OPA_MAX_VLS];
+
+	/* link state */
+	u8 lstate;
+	/* Physical port state */
+	u8 pstate;
 
 	struct hfi_ctx *ctx;
 	struct hfi_cq cmdq_tx;
