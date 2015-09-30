@@ -384,26 +384,39 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	if (wr->opcode == IB_WR_FAST_REG_MR) {
 		if (hfi1_fast_reg_mr(qp, wr))
 			return -EINVAL;
-	} else if (qp->ibqp.qp_type == IB_QPT_UC) {
-		if ((unsigned) wr->opcode >= IB_WR_RDMA_READ)
-			return -EINVAL;
-	} else if (qp->ibqp.qp_type != IB_QPT_RC) {
-		/* Check IB_QPT_SMI, IB_QPT_GSI, IB_QPT_UD opcode */
-		if (wr->opcode != IB_WR_SEND &&
-		    wr->opcode != IB_WR_SEND_WITH_IMM)
-			return -EINVAL;
-		/* Check UD destination address PD */
-		if (qp->ibqp.pd != wr->wr.ud.ah->pd)
-			return -EINVAL;
-	} else if ((unsigned) wr->opcode > IB_WR_ATOMIC_FETCH_AND_ADD)
-		return -EINVAL;
-	else if (wr->opcode >= IB_WR_ATOMIC_CMP_AND_SWP &&
-		   (wr->num_sge == 0 ||
-		    wr->sg_list[0].length < sizeof(u64) ||
-		    wr->sg_list[0].addr & (sizeof(u64) - 1)))
-		return -EINVAL;
-	else if (wr->opcode >= IB_WR_RDMA_READ && !qp->s_max_rd_atomic)
-		return -EINVAL;
+	} else {
+		if (qp->ibqp.qp_type == IB_QPT_UC) {
+			if ((unsigned)wr->opcode >= IB_WR_RDMA_READ)
+				return -EINVAL;
+		} else {
+			if (qp->ibqp.qp_type != IB_QPT_RC) {
+				/*
+				 * Check IB_QPT_SMI, IB_QPT_GSI,
+				 * IB_QPT_UD opcode
+				 */
+				if (wr->opcode != IB_WR_SEND &&
+				    wr->opcode != IB_WR_SEND_WITH_IMM)
+					return -EINVAL;
+				/* Check UD destination address PD */
+				if (qp->ibqp.pd != wr->wr.ud.ah->pd)
+					return -EINVAL;
+			} else {
+				if ((unsigned)wr->opcode >
+				    IB_WR_ATOMIC_FETCH_AND_ADD)
+					return -EINVAL;
+
+				if (wr->opcode >= IB_WR_ATOMIC_CMP_AND_SWP &&
+				    (wr->num_sge == 0 ||
+				     wr->sg_list[0].length < sizeof(u64) ||
+				     wr->sg_list[0].addr & (sizeof(u64) - 1)))
+					return -EINVAL;
+
+				if (wr->opcode >= IB_WR_RDMA_READ &&
+				    !qp->s_max_rd_atomic)
+					return -EINVAL;
+			}
+		}
+	}
 
 	/* check for avail */
 	if (unlikely(!qp->s_avail)) {
@@ -450,8 +463,8 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 		struct hfi1_ibport *ibp;
 
 		ibp = to_iport(pd->ibpd.device, ah->attr.port_num);
-		if (ibp->sl_to_sc[ah->attr.sl] == 0xf
-		    && qp->ibqp.qp_type != IB_QPT_SMI)
+		if (ibp->sl_to_sc[ah->attr.sl] == 0xf &&
+		    qp->ibqp.qp_type != IB_QPT_SMI)
 			goto bail_inval_free;
 
 		log_pmtu = ah->log_pmtu;
@@ -552,7 +565,7 @@ static int post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 		u32 next;
 		int i;
 
-		if ((unsigned) wr->num_sge > qp->r_rq.max_sge) {
+		if ((unsigned)wr->num_sge > qp->r_rq.max_sge) {
 			*bad_wr = wr;
 			ret = -EINVAL;
 			goto bail;
@@ -603,7 +616,6 @@ dropit:
 	return 0;
 }
 
-
 /**
  * hfi1_ib_rcv - process an incoming packet
  * @packet: data packet information
@@ -627,9 +639,10 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 
 	/* Check for GRH */
 	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
-	if (lnh == HFI1_LRH_BTH)
+	if (lnh == HFI1_LRH_BTH) {
 		packet->ohdr = &hdr->u.oth;
-	else if (lnh == HFI1_LRH_GRH) {
+	} else {
+		if (lnh == HFI1_LRH_GRH) {
 		u32 vtf;
 
 		packet->ohdr = &hdr->u.l.oth;
@@ -639,9 +652,10 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
 			goto drop;
 		packet->rcv_flags |= HFI1_HAS_GRH;
-	} else
+	} else {
 		goto drop;
-
+	  }
+	}
 	trace_input_ibhdr(rcd->dd, hdr);
 
 	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
@@ -651,14 +665,14 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	qp_num = be32_to_cpu(packet->ohdr->bth[1]) & HFI1_QPN_MASK;
 	lid = be16_to_cpu(hdr->lrh[1]);
 	if (unlikely((lid >= HFI1_MULTICAST_LID_BASE) &&
-	    (lid != HFI1_PERMISSIVE_LID))) {
+		     (lid != HFI1_PERMISSIVE_LID))) {
 		struct hfi1_mcast *mcast;
 		struct hfi1_mcast_qp *p;
 
 		if (lnh != HFI1_LRH_GRH)
 			goto drop;
 		mcast = hfi1_mcast_find(ibp, &hdr->u.l.grh.dgid);
-		if (mcast == NULL)
+		if (!mcast)
 			goto drop;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
 			packet->qp = p->qp;
@@ -832,13 +846,15 @@ static void verbs_sdma_complete(
 	struct hfi1_qp *qp = tx->qp;
 
 	spin_lock(&qp->s_lock);
-	if (tx->wqe)
+	if (tx->wqe) {
 		hfi1_send_complete(qp, tx->wqe, IB_WC_SUCCESS);
-	else if (qp->ibqp.qp_type == IB_QPT_RC) {
-		struct hfi1_ib_header *hdr;
+	} else {
+		if (qp->ibqp.qp_type == IB_QPT_RC) {
+			struct hfi1_ib_header *hdr;
 
-		hdr = &tx->phdr.hdr;
-		hfi1_rc_send_complete(qp, hdr);
+			hdr = &tx->phdr.hdr;
+			hfi1_rc_send_complete(qp, hdr);
+		}
 	}
 	if (drained) {
 		/*
@@ -1157,7 +1173,7 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 		pbc = create_pbc(ppd, pbc_flags, qp->srate_mbps, vl, plen);
 	}
 	pbuf = sc_buffer_alloc(sc, plen, NULL, NULL);
-	if (unlikely(pbuf == NULL)) {
+	if (unlikely(!pbuf)) {
 		if (ppd->host_link_state != HLS_UP_ACTIVE) {
 			/*
 			 * If we have filled the PIO buffers to capacity and are
@@ -1185,7 +1201,7 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 		pio_copy(ppd->dd, pbuf, pbc, hdr, hdrwords);
 	} else {
 		if (ss) {
-			seg_pio_copy_start(pbuf, pbc, hdr, hdrwords*4);
+			seg_pio_copy_start(pbuf, pbc, hdr, hdrwords * 4);
 			while (len) {
 				void *addr = ss->sge.vaddr;
 				u32 slen = ss->sge.length;
@@ -1219,6 +1235,7 @@ pio_bail:
 	}
 	return 0;
 }
+
 /*
  * egress_pkey_matches_entry - return 1 if the pkey matches ent (ent
  * being an entry from the ingress partition key table), return 0
@@ -1273,14 +1290,14 @@ static inline int egress_pkey_check(struct hfi1_pportdata *ppd,
 	if ((sc5 == 0xf) && ((pkey & PKEY_LOW_15_MASK) != PKEY_LOW_15_MASK))
 		goto bad;
 
-
 	/* Is the pkey = 0x0, or 0x8000? */
 	if ((pkey & PKEY_LOW_15_MASK) == 0)
 		goto bad;
 
 	/* The most likely matching pkey has index qp->s_pkey_index */
 	if (unlikely(!egress_pkey_matches_entry(pkey,
-					ppd->pkeys[qp->s_pkey_index]))) {
+						ppd->pkeys
+						[qp->s_pkey_index]))) {
 		/* no match - try the entire table */
 		for (; i < MAX_PKEY_VALUES; i++) {
 			if (egress_pkey_matches_entry(pkey, ppd->pkeys[i]))
@@ -1539,7 +1556,7 @@ static int modify_port(struct ib_device *ibdev, u8 port,
 		hfi1_cap_mask_chg(ibp);
 	if (port_modify_mask & IB_PORT_SHUTDOWN) {
 		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_UNKNOWN, 0,
-		  OPA_LINKDOWN_REASON_UNKNOWN);
+				     OPA_LINKDOWN_REASON_UNKNOWN);
 		ret = set_link_state(ppd, HLS_DN_DOWNDEF);
 	}
 	if (port_modify_mask & IB_PORT_RESET_QKEY_CNTR)
@@ -1553,9 +1570,9 @@ static int query_gid(struct ib_device *ibdev, u8 port,
 	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
 	int ret = 0;
 
-	if (!port || port > dd->num_pports)
+	if (!port || port > dd->num_pports) {
 		ret = -EINVAL;
-	else {
+	} else {
 		struct hfi1_ibport *ibp = to_iport(ibdev, port);
 		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 
@@ -1604,7 +1621,7 @@ static struct ib_pd *alloc_pd(struct ib_device *ibdev,
 	spin_unlock(&dev->n_pds_lock);
 
 	/* ib_alloc_pd() will initialize pd->ibpd. */
-	pd->user = udata != NULL;
+	pd->user = !!udata;
 
 	ret = &pd->ibpd;
 
@@ -1905,7 +1922,6 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	if (ret)
 		goto err_qp_init;
 
-
 	for (i = 0; i < dd->num_pports; i++)
 		init_ibport(ppd + i);
 
@@ -1918,7 +1934,7 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	spin_lock_init(&dev->n_mcast_grps_lock);
 	init_timer(&dev->mem_timer);
 	dev->mem_timer.function = mem_timer;
-	dev->mem_timer.data = (unsigned long) dev;
+	dev->mem_timer.data = (unsigned long)dev;
 
 	/*
 	 * The top hfi1_lkey_table_size bits are used to index the
@@ -1930,13 +1946,13 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	/* ensure generation is at least 4 bits (keys.c) */
 	if (hfi1_lkey_table_size > MAX_LKEY_TABLE_BITS) {
 		dd_dev_warn(dd, "lkey bits %u too large, reduced to %u\n",
-			      hfi1_lkey_table_size, MAX_LKEY_TABLE_BITS);
+			    hfi1_lkey_table_size, MAX_LKEY_TABLE_BITS);
 		hfi1_lkey_table_size = MAX_LKEY_TABLE_BITS;
 	}
 	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
 	dev->lk_table.table = (struct hfi1_mregion __rcu **)
 		vmalloc_node(lk_tab_size, dd->node);
-	if (dev->lk_table.table == NULL) {
+	if (!dev->lk_table.table) {
 		ret = -ENOMEM;
 		goto err_lk;
 	}

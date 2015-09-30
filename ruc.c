@@ -282,8 +282,10 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 			if (!gid_ok(&hdr->u.l.grh.dgid, ibp->gid_prefix, guid))
 				goto err;
 			if (!gid_ok(&hdr->u.l.grh.sgid,
-			    qp->alt_ah_attr.grh.dgid.global.subnet_prefix,
-			    qp->alt_ah_attr.grh.dgid.global.interface_id))
+				    qp->
+				    alt_ah_attr.grh.dgid.global.subnet_prefix,
+				    qp->
+				    alt_ah_attr.grh.dgid.global.interface_id))
 				goto err;
 		}
 		if (unlikely(rcv_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
@@ -314,8 +316,10 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 			if (!gid_ok(&hdr->u.l.grh.dgid, ibp->gid_prefix, guid))
 				goto err;
 			if (!gid_ok(&hdr->u.l.grh.sgid,
-			    qp->remote_ah_attr.grh.dgid.global.subnet_prefix,
-			    qp->remote_ah_attr.grh.dgid.global.interface_id))
+				    qp->remote_ah_attr.grh.
+					dgid.global.subnet_prefix,
+				    qp->remote_ah_attr.grh.
+					dgid.global.interface_id))
 				goto err;
 		}
 		if (unlikely(rcv_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
@@ -499,12 +503,12 @@ again:
 					   IB_ACCESS_REMOTE_ATOMIC)))
 			goto acc_err;
 		/* Perform atomic OP and save result. */
-		maddr = (atomic64_t *) qp->r_sge.sge.vaddr;
+		maddr = (atomic64_t *)qp->r_sge.sge.vaddr;
 		sdata = wqe->wr.wr.atomic.compare_add;
-		*(u64 *) sqp->s_sge.sge.vaddr =
+		*(u64 *)sqp->s_sge.sge.vaddr =
 			(wqe->wr.opcode == IB_WR_ATOMIC_FETCH_AND_ADD) ?
-			(u64) atomic64_add_return(sdata, maddr) - sdata :
-			(u64) cmpxchg((u64 *) qp->r_sge.sge.vaddr,
+			(u64)atomic64_add_return(sdata, maddr) - sdata :
+			(u64)cmpxchg((u64 *)qp->r_sge.sge.vaddr,
 				      sdata, wqe->wr.wr.atomic.swap);
 		hfi1_put_mr(qp->r_sge.sge.mr);
 		qp->r_sge.num_sge = 0;
@@ -842,7 +846,6 @@ void hfi1_do_send(struct work_struct *work)
 	}
 
 	qp->s_flags |= HFI1_S_BUSY;
-
 
 	timeout = jiffies + SEND_RESCHED_TIMEOUT;
 	do {

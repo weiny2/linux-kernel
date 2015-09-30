@@ -122,8 +122,9 @@ int hfi1_pcie_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 			goto bail;
 		}
 		ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
-	} else
+	} else {
 		ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(64));
+	}
 	if (ret) {
 		hfi1_early_err(&pdev->dev,
 			       "Unable to set DMA consistent mask: %d\n", ret);
@@ -222,10 +223,10 @@ int hfi1_pcie_ddinit(struct hfi1_devdata *dd, struct pci_dev *pdev,
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_DEVCTL, &dd->pcie_devctl);
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKCTL, &dd->pcie_lnkctl);
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_DEVCTL2,
-							&dd->pcie_devctl2);
+				  &dd->pcie_devctl2);
 	pci_read_config_dword(dd->pcidev, PCI_CFG_MSIX0, &dd->pci_msix0);
 	pci_read_config_dword(dd->pcidev, PCIE_CFG_SPCIE1,
-							&dd->pci_lnkctl3);
+			      &dd->pci_lnkctl3);
 	pci_read_config_dword(dd->pcidev, PCIE_CFG_TPH2, &dd->pci_tph2);
 
 	return 0;
@@ -238,7 +239,7 @@ int hfi1_pcie_ddinit(struct hfi1_devdata *dd, struct pci_dev *pdev,
  */
 void hfi1_pcie_ddcleanup(struct hfi1_devdata *dd)
 {
-	u64 __iomem *base = (void __iomem *) dd->kregbase;
+	u64 __iomem *base = (void __iomem *)dd->kregbase;
 
 	dd->flags &= ~HFI1_PRESENT;
 	dd->kregbase = NULL;
@@ -276,7 +277,7 @@ void hfi1_pcie_flr(struct hfi1_devdata *dd)
 
 clear:
 	pcie_capability_set_word(dd->pcidev, PCI_EXP_DEVCTL,
-						PCI_EXP_DEVCTL_BCR_FLR);
+				 PCI_EXP_DEVCTL_BCR_FLR);
 	/* PCIe spec requires the function to be back within 100ms */
 	msleep(100);
 }
@@ -290,9 +291,11 @@ static void msix_setup(struct hfi1_devdata *dd, int pos, u32 *msixcnt,
 	struct msix_entry *msix_entry;
 	int i;
 
-	/* We can't pass hfi1_msix_entry array to msix_setup
+	/*
+	 * We can't pass hfi1_msix_entry array to msix_setup
 	 * so use a dummy msix_entry array and copy the allocated
-	 * irq back to the hfi1_msix_entry array. */
+	 * irq back to the hfi1_msix_entry array.
+	 */
 	msix_entry = kcalloc(*msixcnt, sizeof(*msix_entry), GFP_KERNEL);
 	if (!msix_entry) {
 		ret = -ENOMEM;
@@ -313,8 +316,8 @@ static void msix_setup(struct hfi1_devdata *dd, int pos, u32 *msixcnt,
 do_intx:
 	if (ret) {
 		dd_dev_err(dd,
-			"pci_enable_msix %d vectors failed: %d, falling back to INTx\n",
-			tabsize, ret);
+			   "pci_enable_msix %d vectors failed: %d, falling back to INTx\n",
+			   tabsize, ret);
 		tabsize = 0;
 	}
 	for (i = 0; i < tabsize; i++)
@@ -324,7 +327,6 @@ do_intx:
 
 	if (ret)
 		hfi1_enable_intx(dd->pcidev);
-
 }
 
 /* return the PCIe link speed from the given link status */
@@ -384,8 +386,8 @@ int pcie_speeds(struct hfi1_devdata *dd)
 	pcie_capability_read_dword(dd->pcidev, PCI_EXP_LNKCAP, &linkcap);
 	if ((linkcap & PCI_EXP_LNKCAP_SLS) != GEN3_SPEED_VECTOR) {
 		dd_dev_info(dd,
-			"This HFI is not Gen3 capable, max speed 0x%x, need 0x3\n",
-			linkcap & PCI_EXP_LNKCAP_SLS);
+			    "This HFI is not Gen3 capable, max speed 0x%x, need 0x3\n",
+			    linkcap & PCI_EXP_LNKCAP_SLS);
 		dd->link_gen3_capable = 0;
 	}
 
@@ -450,18 +452,18 @@ void restore_pci_variables(struct hfi1_devdata *dd)
 {
 	pci_write_config_word(dd->pcidev, PCI_COMMAND, dd->pci_command);
 	pci_write_config_dword(dd->pcidev,
-				PCI_BASE_ADDRESS_0, dd->pcibar0);
+			       PCI_BASE_ADDRESS_0, dd->pcibar0);
 	pci_write_config_dword(dd->pcidev,
-				PCI_BASE_ADDRESS_1, dd->pcibar1);
+			       PCI_BASE_ADDRESS_1, dd->pcibar1);
 	pci_write_config_dword(dd->pcidev,
-				PCI_ROM_ADDRESS, dd->pci_rom);
+			       PCI_ROM_ADDRESS, dd->pci_rom);
 	pcie_capability_write_word(dd->pcidev, PCI_EXP_DEVCTL, dd->pcie_devctl);
 	pcie_capability_write_word(dd->pcidev, PCI_EXP_LNKCTL, dd->pcie_lnkctl);
 	pcie_capability_write_word(dd->pcidev, PCI_EXP_DEVCTL2,
-							dd->pcie_devctl2);
+				   dd->pcie_devctl2);
 	pci_write_config_dword(dd->pcidev, PCI_CFG_MSIX0, dd->pci_msix0);
 	pci_write_config_dword(dd->pcidev, PCIE_CFG_SPCIE1,
-							dd->pci_lnkctl3);
+			       dd->pci_lnkctl3);
 	pci_write_config_dword(dd->pcidev, PCIE_CFG_TPH2, dd->pci_tph2);
 }
 
@@ -571,6 +573,7 @@ static void tune_pcie_caps(struct hfi1_devdata *dd)
 		pcie_capability_write_word(dd->pcidev, PCI_EXP_DEVCTL, ectl);
 	}
 }
+
 /* End of PCIe capability tuning */
 
 /*
@@ -785,21 +788,22 @@ static int load_eq_table(struct hfi1_devdata *dd, const u8 eq[11][3], u8 fs,
 		c0 = fs - (eq[i][PREC] / div) - (eq[i][POST] / div);
 		c_plus1 = eq[i][POST] / div;
 		pci_write_config_dword(pdev, PCIE_CFG_REG_PL102,
-			eq_value(c_minus1, c0, c_plus1));
+				       eq_value(c_minus1, c0, c_plus1));
 		/* check if these coefficients violate EQ rules */
 		pci_read_config_dword(dd->pcidev, PCIE_CFG_REG_PL105,
-								&violation);
+				      &violation);
 		if (violation
 		    & PCIE_CFG_REG_PL105_GEN3_EQ_VIOLATE_COEF_RULES_SMASK){
 			if (hit_error == 0) {
 				dd_dev_err(dd,
-					"Gen3 EQ Table Coefficient rule violations\n");
+					   "Gen3 EQ Table Coefficient rule violations\n");
 				dd_dev_err(dd, "         prec   attn   post\n");
 			}
 			dd_dev_err(dd, "   p%02d:   %02x     %02x     %02x\n",
-				i, (u32)eq[i][0], (u32)eq[i][1], (u32)eq[i][2]);
+				   i, (u32)eq[i][0], (u32)eq[i][1],
+				   (u32)eq[i][2]);
 			dd_dev_err(dd, "            %02x     %02x     %02x\n",
-				(u32)c_minus1, (u32)c0, (u32)c_plus1);
+				   (u32)c_minus1, (u32)c0, (u32)c_plus1);
 			hit_error = 1;
 		}
 	}
@@ -854,8 +858,8 @@ static int trigger_sbr(struct hfi1_devdata *dd)
 	list_for_each_entry(pdev, &dev->bus->devices, bus_list)
 		if (pdev != dev) {
 			dd_dev_err(dd,
-				"%s: another device is on the same bus\n",
-				__func__);
+				   "%s: another device is on the same bus\n",
+				   __func__);
 			return -ENOTTY;
 		}
 
@@ -879,8 +883,8 @@ static void write_gasket_interrupt(struct hfi1_devdata *dd, int index,
 				   u16 code, u16 data)
 {
 	write_csr(dd, ASIC_PCIE_SD_INTRPT_LIST + (index * 8),
-	    (((u64)code << ASIC_PCIE_SD_INTRPT_LIST_INTRPT_CODE_SHIFT)
-	    |((u64)data << ASIC_PCIE_SD_INTRPT_LIST_INTRPT_DATA_SHIFT)));
+		  (((u64)code << ASIC_PCIE_SD_INTRPT_LIST_INTRPT_CODE_SHIFT) |
+		   ((u64)data << ASIC_PCIE_SD_INTRPT_LIST_INTRPT_DATA_SHIFT)));
 }
 
 /*
@@ -945,10 +949,12 @@ static void write_xmt_margin(struct hfi1_devdata *dd, const char *fname)
 		 * correct values.
 		 */
 		if (is_ax(dd)) {
-			/* xmt_margin and OverwiteEnabel should be the
-			 * same for Gen1/Gen2 and Gen3 */
+			/*
+			 * xmt_margin and OverwiteEnabel should be the
+			 * same for Gen1/Gen2 and Gen3
+			 */
 			xmt_margin                = 0x5;
-			xmt_margin_oe = 0x1;
+			xmt_margin_oe		  = 0x1;
 			lane_delay                = 0xF; /* Delay 240ns. */
 			lane_bundle               = 0x0; /* Set to 1 lane. */
 		}
@@ -967,7 +973,7 @@ static void write_xmt_margin(struct hfi1_devdata *dd, const char *fname)
 	}
 
 	dd_dev_info(dd, "%s: program XMT margin, CcePcieCtrl 0x%llx\n",
-		fname, pcie_ctrl);
+		    fname, pcie_ctrl);
 }
 
 /*
@@ -1012,8 +1018,8 @@ int do_pcie_gen3_transition(struct hfi1_devdata *dd)
 	/* if already at target speed, done (unless forced) */
 	if (dd->lbus_speed == target_speed) {
 		dd_dev_info(dd, "%s: PCIe already at gen%d, %s\n", __func__,
-			pcie_target,
-			pcie_force ? "re-doing anyway" : "skipping");
+			    pcie_target,
+			    pcie_force ? "re-doing anyway" : "skipping");
 		if (!pcie_force)
 			return 0;
 	}
@@ -1120,8 +1126,10 @@ retry:
 		default_pset = DEFAULT_MCP_PSET;
 	}
 	pci_write_config_dword(dd->pcidev, PCIE_CFG_REG_PL101,
-		(fs << PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SHIFT)
-		| (lf << PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_SHIFT));
+			       (fs <<
+				PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_FS_SHIFT) |
+			       (lf <<
+				PCIE_CFG_REG_PL101_GEN3_EQ_LOCAL_LF_SHIFT));
 	ret = load_eq_table(dd, eq, fs, div);
 	if (ret)
 		goto done;
@@ -1135,13 +1143,13 @@ retry:
 		pcie_pset = default_pset;
 	if (pcie_pset > 10) {	/* valid range is 0-10, inclusive */
 		dd_dev_err(dd, "%s: Invalid Eq Pset %u, setting to %d\n",
-			__func__, pcie_pset, default_pset);
+			   __func__, pcie_pset, default_pset);
 		pcie_pset = default_pset;
 	}
 	dd_dev_info(dd, "%s: using EQ Pset %u\n", __func__, pcie_pset);
 	pci_write_config_dword(dd->pcidev, PCIE_CFG_REG_PL106,
-		((1 << pcie_pset)
-			<< PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT)
+			       ((1 << pcie_pset) <<
+				PCIE_CFG_REG_PL106_GEN3_EQ_PSET_REQ_VEC_SHIFT)
 		| PCIE_CFG_REG_PL106_GEN3_EQ_EVAL2MS_DISABLE_SMASK
 		| PCIE_CFG_REG_PL106_GEN3_EQ_PHASE23_EXIT_MODE_SMASK);
 
@@ -1197,13 +1205,13 @@ retry:
 	parent = dd->pcidev->bus->self;
 	pcie_capability_read_word(parent, PCI_EXP_LNKCTL2, &lnkctl2);
 	dd_dev_info(dd, "%s: ..old link control2: 0x%x\n", __func__,
-		(u32)lnkctl2);
+		    (u32)lnkctl2);
 	/* only write to parent if target is not as high as ours */
 	if ((lnkctl2 & LNKCTL2_TARGET_LINK_SPEED_MASK) < target_vector) {
 		lnkctl2 &= ~LNKCTL2_TARGET_LINK_SPEED_MASK;
 		lnkctl2 |= target_vector;
 		dd_dev_info(dd, "%s: ..new link control2: 0x%x\n", __func__,
-			(u32)lnkctl2);
+			    (u32)lnkctl2);
 		pcie_capability_write_word(parent, PCI_EXP_LNKCTL2, lnkctl2);
 	} else {
 		dd_dev_info(dd, "%s: ..target speed is OK\n", __func__);
@@ -1212,17 +1220,17 @@ retry:
 	dd_dev_info(dd, "%s: setting target link speed\n", __func__);
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKCTL2, &lnkctl2);
 	dd_dev_info(dd, "%s: ..old link control2: 0x%x\n", __func__,
-		(u32)lnkctl2);
+		    (u32)lnkctl2);
 	lnkctl2 &= ~LNKCTL2_TARGET_LINK_SPEED_MASK;
 	lnkctl2 |= target_vector;
 	dd_dev_info(dd, "%s: ..new link control2: 0x%x\n", __func__,
-		(u32)lnkctl2);
+		    (u32)lnkctl2);
 	pcie_capability_write_word(dd->pcidev, PCI_EXP_LNKCTL2, lnkctl2);
 
 	/* step 5h: arm gasket logic */
 	/* hold DC in reset across the SBR */
 	write_csr(dd, CCE_DC_CTRL, CCE_DC_CTRL_DC_RESET_SMASK);
-	(void) read_csr(dd, CCE_DC_CTRL); /* DC reset hold */
+	(void)read_csr(dd, CCE_DC_CTRL); /* DC reset hold */
 	/* save firmware control across the SBR */
 	fw_ctrl = read_csr(dd, MISC_CFG_FW_CTRL);
 
@@ -1253,8 +1261,8 @@ retry:
 	ret = pci_read_config_word(dd->pcidev, PCI_VENDOR_ID, &vendor);
 	if (ret) {
 		dd_dev_info(dd,
-			"%s: read of VendorID failed after SBR, err %d\n",
-			__func__, ret);
+			    "%s: read of VendorID failed after SBR, err %d\n",
+			    __func__, ret);
 		return_error = 1;
 		goto done;
 	}
@@ -1306,8 +1314,8 @@ retry:
 			& ASIC_PCIE_SD_HOST_STATUS_FW_DNLD_STS_MASK;
 	if ((status & (1 << dd->hfi1_id)) == 0) {
 		dd_dev_err(dd,
-			"%s: gasket status 0x%x, expecting 0x%x\n",
-			__func__, status, 1 << dd->hfi1_id);
+			   "%s: gasket status 0x%x, expecting 0x%x\n",
+			   __func__, status, 1 << dd->hfi1_id);
 		ret = -EIO;
 		goto done;
 	}
@@ -1324,13 +1332,13 @@ retry:
 	/* update our link information cache */
 	update_lbus_info(dd);
 	dd_dev_info(dd, "%s: new speed and width: %s\n", __func__,
-		dd->lbus_info);
+		    dd->lbus_info);
 
 	if (dd->lbus_speed != target_speed) { /* not target */
 		/* maybe retry */
 		do_retry = retry_count < pcie_retry;
 		dd_dev_err(dd, "PCIe link speed did not switch to Gen%d%s\n",
-			pcie_target, do_retry ? ", retrying" : "");
+			   pcie_target, do_retry ? ", retrying" : "");
 		retry_count++;
 		if (do_retry) {
 			msleep(100); /* allow time to settle */

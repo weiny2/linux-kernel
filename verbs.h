@@ -62,7 +62,6 @@
 #include <rdma/ib_pack.h>
 #include <rdma/ib_user_verbs.h>
 
-
 struct hfi1_ctxtdata;
 struct hfi1_pportdata;
 struct hfi1_devdata;
@@ -475,7 +474,6 @@ struct hfi1_qp {
 	atomic_t refcount ____cacheline_aligned_in_smp;
 	wait_queue_head_t wait;
 
-
 	struct hfi1_ack_entry s_ack_queue[HFI1_MAX_RDMA_ATOMIC + 1]
 		____cacheline_aligned_in_smp;
 	struct hfi1_sge_state s_rdma_read_sge;
@@ -658,7 +656,7 @@ static inline struct hfi1_swqe *get_swqe_ptr(struct hfi1_qp *qp,
 static inline struct hfi1_rwqe *get_rwqe_ptr(struct hfi1_rq *rq, unsigned n)
 {
 	return (struct hfi1_rwqe *)
-		((char *) rq->wq->wq +
+		((char *)rq->wq->wq +
 		 (sizeof(struct hfi1_rwqe) +
 		  rq->max_sge * sizeof(struct ib_sge)) * n);
 }
@@ -748,7 +746,6 @@ struct hfi1_ibport {
 	u8 sl_to_sc[32];
 	u8 sc_to_sl[32];
 };
-
 
 struct hfi1_qp_ibdev;
 struct hfi1_ibdev {
@@ -902,7 +899,7 @@ void hfi1_free_agents(struct hfi1_ibdev *dev);
  */
 static inline int cmp_msn(u32 a, u32 b)
 {
-	return (((int) a) - ((int) b)) << 8;
+	return (((int)a) - ((int)b)) << 8;
 }
 
 /*
@@ -911,7 +908,7 @@ static inline int cmp_msn(u32 a, u32 b)
  */
 static inline int cmp_psn(u32 a, u32 b)
 {
-	return (((int) a) - ((int) b)) << PSN_SHIFT;
+	return (((int)a) - ((int)b)) << PSN_SHIFT;
 }
 
 /*

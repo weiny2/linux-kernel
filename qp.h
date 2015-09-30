@@ -54,7 +54,7 @@
 #include "verbs.h"
 #include "sdma.h"
 
-#define QPN_MAX                 (1 << 24)
+#define QPN_MAX                 BIT(24)
 #define QPNMAP_ENTRIES          (QPN_MAX / PAGE_SIZE / BITS_PER_BYTE)
 
 /*
@@ -81,6 +81,7 @@ struct hfi1_qp_ibdev {
 	u32 qp_table_size;
 	u32 qp_table_bits;
 	struct hfi1_qp __rcu **qp_table;
+	/* protect qpn table */
 	spinlock_t qpt_lock;
 	struct hfi1_qpn_table qpn_table;
 };
@@ -99,7 +100,7 @@ static inline u32 qpn_hash(struct hfi1_qp_ibdev *dev, u32 qpn)
  * the returned qp is no longer in use.
  */
 static inline struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp,
-				u32 qpn) __must_hold(RCU)
+					      u32 qpn) __must_hold(RCU)
 {
 	struct hfi1_qp *qp = NULL;
 
@@ -263,7 +264,7 @@ static inline void _hfi1_schedule_send(struct hfi1_qp *qp)
 	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 
 	iowait_schedule(&qp->s_iowait, ppd->hfi1_wq,
-		qp->s_sde ?
+			qp->s_sde ?
 			qp->s_sde->cpu :
 			cpumask_first(cpumask_of_node(dd->node)));
 }

@@ -101,8 +101,9 @@ void pio_send_control(struct hfi1_devdata *dd, int op)
 	/* Fall through */
 	case PSC_DATA_VL_ENABLE:
 		/* Disallow sending on VLs not enabled */
-		mask = (((~0ull)<<num_vls) & SEND_CTRL_UNSUPPORTED_VL_MASK)<<
-				SEND_CTRL_UNSUPPORTED_VL_SHIFT;
+		mask = (((~0ull) << num_vls) &
+			SEND_CTRL_UNSUPPORTED_VL_MASK) <<
+			SEND_CTRL_UNSUPPORTED_VL_SHIFT;
 		reg = (reg & ~SEND_CTRL_UNSUPPORTED_VL_SMASK) | mask;
 		break;
 	case PSC_GLOBAL_DISABLE:
@@ -130,7 +131,7 @@ void pio_send_control(struct hfi1_devdata *dd, int op)
 	if (write) {
 		write_csr(dd, SEND_CTRL, reg);
 		if (flush)
-			(void) read_csr(dd, SEND_CTRL); /* flush write */
+			(void)read_csr(dd, SEND_CTRL); /* flush write */
 	}
 
 	spin_unlock_irqrestore(&dd->sendctrl_lock, flags);
@@ -178,7 +179,8 @@ static struct mem_pool_config sc_mem_pool_config[NUM_SC_POOLS] = {
 /* memory pool information, used when calculating final sizes */
 struct mem_pool_info {
 	int centipercent;	/* 100th of 1% of memory to use, -1 if blocks
-				   already set */
+				 * already set
+				 */
 	int count;		/* count of contexts in the pool */
 	int blocks;		/* block size of the pool */
 	int size;		/* context size, in blocks */
@@ -510,7 +512,7 @@ static void sc_hw_free(struct hfi1_devdata *dd, u32 sw_index, u32 hw_context)
 	sci = &dd->send_contexts[sw_index];
 	if (!sci->allocated) {
 		dd_dev_err(dd, "%s: sw_index %u not allocated? hw_context %u\n",
-			__func__, sw_index, hw_context);
+			   __func__, sw_index, hw_context);
 	}
 	sci->allocated = 0;
 	dd->hw_to_sw[hw_context] = INVALID_SCI;
@@ -626,7 +628,7 @@ void sc_set_cr_threshold(struct send_context *sc, u32 new_threshold)
 				& SC(CREDIT_CTRL_THRESHOLD_MASK))
 			   << SC(CREDIT_CTRL_THRESHOLD_SHIFT));
 		write_kctxt_csr(sc->dd, sc->hw_context,
-			SC(CREDIT_CTRL), sc->credit_ctrl);
+				SC(CREDIT_CTRL), sc->credit_ctrl);
 
 		/* force a credit return on change to avoid a possible stall */
 		force_return = 1;
@@ -683,7 +685,7 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 	if (dd->flags & HFI1_FROZEN)
 		return NULL;
 
-	sc = kzalloc_node(sizeof(struct send_context), GFP_KERNEL, numa);
+	sc = kzalloc_node(sizeof(*sc), GFP_KERNEL, numa);
 	if (!sc) {
 		dd_dev_err(dd, "Cannot allocate send context structure\n");
 		return NULL;
@@ -739,9 +741,9 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 
 	/* set the default partition key */
 	write_kctxt_csr(dd, hw_context, SC(CHECK_PARTITION_KEY),
-		(DEFAULT_PKEY &
+			(DEFAULT_PKEY &
 			SC(CHECK_PARTITION_KEY_VALUE_MASK))
-		    << SC(CHECK_PARTITION_KEY_VALUE_SHIFT));
+			<< SC(CHECK_PARTITION_KEY_VALUE_SHIFT));
 
 	/* per context type checks */
 	if (type == SC_USER) {
@@ -754,8 +756,8 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 
 	/* set the send context check opcode mask and value */
 	write_kctxt_csr(dd, hw_context, SC(CHECK_OPCODE),
-		((u64)opmask << SC(CHECK_OPCODE_MASK_SHIFT)) |
-		((u64)opval << SC(CHECK_OPCODE_VALUE_SHIFT)));
+			((u64)opmask << SC(CHECK_OPCODE_MASK_SHIFT)) |
+			((u64)opval << SC(CHECK_OPCODE_VALUE_SHIFT)));
 
 	/* set up credit return */
 	reg = pa & SC(CREDIT_RETURN_ADDR_ADDRESS_SMASK);
@@ -773,7 +775,7 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 		thresh = sc_percent_to_threshold(sc, 50);
 	} else if (type == SC_USER) {
 		thresh = sc_percent_to_threshold(sc,
-				user_credit_return_threshold);
+						 user_credit_return_threshold);
 	} else { /* kernel */
 		thresh = sc_mtu_to_threshold(sc, hfi1_max_mtu, hdrqentsize);
 	}
@@ -814,14 +816,14 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 				sc->sr_size, GFP_KERNEL, numa);
 		if (!sc->sr) {
 			dd_dev_err(dd,
-				"Cannot allocate send context shadow ring structure\n");
+				   "Cannot allocate send context shadow ring structure\n");
 			sc_free(sc);
 			return NULL;
 		}
 	}
 
 	dd_dev_info(dd,
-		"Send context %u(%u) %s group %u credits %u credit_ctrl 0x%llx threshold %u\n",
+		    "Send context %u(%u) %s group %u credits %u credit_ctrl 0x%llx threshold %u\n",
 		sw_index,
 		hw_context,
 		sc_type_name(type),
@@ -947,11 +949,11 @@ static void sc_wait_for_packet_egress(struct send_context *sc, int pause)
 		if (loop > 500) {
 			/* timed out - bounce the link */
 			dd_dev_err(dd,
-				"%s: context %u(%u) timeout waiting for packets to egress, remaining count %u, bouncing link\n",
+				   "%s: context %u(%u) timeout waiting for packets to egress, remaining count %u, bouncing link\n",
 				__func__, sc->sw_index,
 				sc->hw_context, (u32)reg);
 			queue_work(dd->pport->hfi1_wq,
-				&dd->pport->link_bounce_work);
+				   &dd->pport->link_bounce_work);
 			break;
 		}
 		loop++;
@@ -997,7 +999,7 @@ int sc_restart(struct send_context *sc)
 		return -EINVAL;
 
 	dd_dev_info(dd, "restarting send context %u(%u)\n", sc->sw_index,
-		sc->hw_context);
+		    sc->hw_context);
 
 	/*
 	 * Step 1: Wait for the context to actually halt.
@@ -1012,7 +1014,7 @@ int sc_restart(struct send_context *sc)
 			break;
 		if (loop > 100) {
 			dd_dev_err(dd, "%s: context %u(%u) not halting, skipping\n",
-				__func__, sc->sw_index, sc->hw_context);
+				   __func__, sc->sw_index, sc->hw_context);
 			return -ETIME;
 		}
 		loop++;
@@ -1038,7 +1040,7 @@ int sc_restart(struct send_context *sc)
 				break;
 			if (loop > 100) {
 				dd_dev_err(dd,
-					"%s: context %u(%u) timeout waiting for PIO buffers to zero, remaining %d\n",
+					   "%s: context %u(%u) timeout waiting for PIO buffers to zero, remaining %d\n",
 					__func__, sc->sw_index,
 					sc->hw_context, count);
 			}
@@ -1153,18 +1155,18 @@ void pio_reset_all(struct hfi1_devdata *dd)
 	if (ret == -EIO) {
 		/* clear the error */
 		write_csr(dd, SEND_PIO_ERR_CLEAR,
-			SEND_PIO_ERR_CLEAR_PIO_INIT_SM_IN_ERR_SMASK);
+			  SEND_PIO_ERR_CLEAR_PIO_INIT_SM_IN_ERR_SMASK);
 	}
 
 	/* reset init all */
 	write_csr(dd, SEND_PIO_INIT_CTXT,
-			SEND_PIO_INIT_CTXT_PIO_ALL_CTXT_INIT_SMASK);
+		  SEND_PIO_INIT_CTXT_PIO_ALL_CTXT_INIT_SMASK);
 	udelay(2);
 	ret = pio_init_wait_progress(dd);
 	if (ret < 0) {
 		dd_dev_err(dd,
-			"PIO send context init %s while initializing all PIO blocks\n",
-			ret == -ETIMEDOUT ? "is stuck" : "had an error");
+			   "PIO send context init %s while initializing all PIO blocks\n",
+			   ret == -ETIMEDOUT ? "is stuck" : "had an error");
 	}
 }
 
@@ -1212,7 +1214,7 @@ int sc_enable(struct send_context *sc)
 	reg = read_kctxt_csr(dd, sc->hw_context, SC(ERR_STATUS));
 	if (reg)
 		write_kctxt_csr(dd, sc->hw_context, SC(ERR_CLEAR),
-			reg);
+				reg);
 
 	/*
 	 * The HW PIO initialization engine can handle only one init
@@ -1270,7 +1272,7 @@ void sc_return_credits(struct send_context *sc)
 
 	/* a 0->1 transition schedules a credit return */
 	write_kctxt_csr(sc->dd, sc->hw_context, SC(CREDIT_FORCE),
-		SC(CREDIT_FORCE_FORCE_RETURN_SMASK));
+			SC(CREDIT_FORCE_FORCE_RETURN_SMASK));
 	/*
 	 * Ensure that the write is flushed and the credit return is
 	 * scheduled. We care more about the 0 -> 1 transition.
@@ -1296,7 +1298,7 @@ void sc_drop(struct send_context *sc)
 		return;
 
 	dd_dev_info(sc->dd, "%s: context %u(%u) - not implemented\n",
-			__func__, sc->sw_index, sc->hw_context);
+		    __func__, sc->sw_index, sc->hw_context);
 }
 
 /*
@@ -1321,7 +1323,7 @@ void sc_stop(struct send_context *sc, int flag)
 	wake_up(&sc->halt_wait);
 }
 
-#define BLOCK_DWORDS (PIO_BLOCK_SIZE/sizeof(u32))
+#define BLOCK_DWORDS (PIO_BLOCK_SIZE / sizeof(u32))
 #define dwords_to_blocks(x) DIV_ROUND_UP(x, BLOCK_DWORDS)
 
 /*
@@ -1404,8 +1406,10 @@ retry:
 	next = head + 1;
 	if (next >= sc->sr_size)
 		next = 0;
-	/* update the head - must be last! - the releaser can look at fields
-	   in pbuf once we move the head */
+	/*
+	 * update the head - must be last! - the releaser can look at fields
+	 * in pbuf once we move the head
+	 */
 	smp_wmb();
 	sc->sr_head = next;
 	spin_unlock_irqrestore(&sc->alloc_lock, flags);
@@ -1443,7 +1447,7 @@ void sc_add_credit_return_intr(struct send_context *sc)
 	if (sc->credit_intr_count == 0) {
 		sc->credit_ctrl |= SC(CREDIT_CTRL_CREDIT_INTR_SMASK);
 		write_kctxt_csr(sc->dd, sc->hw_context,
-			SC(CREDIT_CTRL), sc->credit_ctrl);
+				SC(CREDIT_CTRL), sc->credit_ctrl);
 	}
 	sc->credit_intr_count++;
 	spin_unlock_irqrestore(&sc->credit_ctrl_lock, flags);
@@ -1465,7 +1469,7 @@ void sc_del_credit_return_intr(struct send_context *sc)
 	if (sc->credit_intr_count == 0) {
 		sc->credit_ctrl &= ~SC(CREDIT_CTRL_CREDIT_INTR_SMASK);
 		write_kctxt_csr(sc->dd, sc->hw_context,
-			SC(CREDIT_CTRL), sc->credit_ctrl);
+				SC(CREDIT_CTRL), sc->credit_ctrl);
 	}
 	spin_unlock_irqrestore(&sc->credit_ctrl_lock, flags);
 }
@@ -1632,7 +1636,7 @@ void sc_group_release_update(struct hfi1_devdata *dd, u32 hw_context)
 	sw_index = dd->hw_to_sw[hw_context];
 	if (unlikely(sw_index >= dd->num_send_contexts)) {
 		dd_dev_err(dd, "%s: invalid hw (%u) to sw (%u) mapping\n",
-			__func__, hw_context, sw_index);
+			   __func__, hw_context, sw_index);
 		goto done;
 	}
 	sc = dd->send_contexts[sw_index].sc;
@@ -1645,8 +1649,8 @@ void sc_group_release_update(struct hfi1_devdata *dd, u32 hw_context)
 		sw_index = dd->hw_to_sw[gc];
 		if (unlikely(sw_index >= dd->num_send_contexts)) {
 			dd_dev_err(dd,
-				"%s: invalid hw (%u) to sw (%u) mapping\n",
-				__func__, hw_context, sw_index);
+				   "%s: invalid hw (%u) to sw (%u) mapping\n",
+				   __func__, hw_context, sw_index);
 			continue;
 		}
 		sc_release_update(dd->send_contexts[sw_index].sc);
@@ -1658,7 +1662,7 @@ done:
 int init_pervl_scs(struct hfi1_devdata *dd)
 {
 	int i;
-	u64 mask, all_vl_mask = (u64) 0x80ff; /* VLs 0-7, 15 */
+	u64 mask, all_vl_mask = (u64)0x80ff; /* VLs 0-7, 15 */
 	u32 ctxt;
 
 	dd->vld[15].sc = sc_alloc(dd, SC_KERNEL,
@@ -1740,11 +1744,11 @@ int init_credit_return(struct hfi1_devdata *dd)
 					bytes,
 					&dd->cr_base[i].pa,
 					GFP_KERNEL);
-		if (dd->cr_base[i].va == NULL) {
+		if (!dd->cr_base[i].va) {
 			set_dev_node(&dd->pcidev->dev, dd->node);
 			dd_dev_err(dd,
-				"Unable to allocate credit return DMA range for NUMA %d\n",
-				i);
+				   "Unable to allocate credit return DMA range for NUMA %d\n",
+				   i);
 			ret = -ENOMEM;
 			goto done;
 		}
@@ -1768,10 +1772,10 @@ void free_credit_return(struct hfi1_devdata *dd)
 	for (i = 0; i < num_numa; i++) {
 		if (dd->cr_base[i].va) {
 			dma_free_coherent(&dd->pcidev->dev,
-				TXE_NUM_CONTEXTS
-					* sizeof(struct credit_return),
-				dd->cr_base[i].va,
-				dd->cr_base[i].pa);
+					  TXE_NUM_CONTEXTS
+					  * sizeof(struct credit_return),
+					  dd->cr_base[i].va,
+					  dd->cr_base[i].pa);
 		}
 	}
 	kfree(dd->cr_base);

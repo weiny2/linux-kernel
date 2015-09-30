@@ -12,6 +12,6 @@ for i in \
     $(git log origin/master..$(git symbolic-ref HEAD) --pretty=format:'%H' ); do
 	echo Checking patch $i
 	patch=$(git format-patch -1 $i)
-	$kernel_build/scripts/checkpatch.pl --no-tree $patch
+	$kernel_build/scripts/checkpatch.pl --strict --no-tree $patch
 	rm -f $patch
 done

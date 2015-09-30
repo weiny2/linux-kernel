@@ -162,9 +162,9 @@ static void ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 	/*
 	 * Get the next work request entry to find where to put the data.
 	 */
-	if (qp->r_flags & HFI1_R_REUSE_SGE)
+	if (qp->r_flags & HFI1_R_REUSE_SGE) {
 		qp->r_flags &= ~HFI1_R_REUSE_SGE;
-	else {
+	} else {
 		int ret;
 
 		ret = hfi1_get_rwqe(qp, 0);
@@ -189,8 +189,9 @@ static void ud_loopback(struct hfi1_qp *sqp, struct hfi1_swqe *swqe)
 		hfi1_copy_sge(&qp->r_sge, &ah_attr->grh,
 			      sizeof(struct ib_grh), 1);
 		wc.wc_flags |= IB_WC_GRH;
-	} else
+	} else {
 		hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
+	}
 	ssge.sg_list = swqe->sg_list + 1;
 	ssge.sge = *swqe->sg_list;
 	ssge.num_sge = swqe->wr.num_sge;
@@ -314,8 +315,9 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 	    ah_attr->dlid == HFI1_PERMISSIVE_LID) {
 		lid = ah_attr->dlid & ~((1 << ppd->lmc) - 1);
 		if (unlikely(!loopback && (lid == ppd->lid ||
-		    (lid == HFI1_PERMISSIVE_LID &&
-		     qp->ibqp.qp_type == IB_QPT_GSI)))) {
+					   (lid == HFI1_PERMISSIVE_LID &&
+					    qp->ibqp.qp_type ==
+					    IB_QPT_GSI)))) {
 			unsigned long flags = 0;
 			/*
 			 * If DMAs are in progress, we can't generate
@@ -373,8 +375,9 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 		qp->s_hdrwords++;
 		ohdr->u.ud.imm_data = wqe->wr.ex.imm_data;
 		bth0 = IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE << 24;
-	} else
+	} else {
 		bth0 = IB_OPCODE_UD_SEND_ONLY << 24;
+	}
 	sc5 = ibp->sl_to_sc[ah_attr->sl];
 	lrh0 |= (ah_attr->sl & 0xf) << 4;
 	if (qp->ibqp.qp_type == IB_QPT_SMI) {
@@ -389,15 +392,16 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */
 	qp->s_hdr->ibh.lrh[2] =
 		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	if (ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE))
+	if (ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE)) {
 		qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
-	else {
+	} else {
 		lid = ppd->lid;
 		if (lid) {
 			lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
 			qp->s_hdr->ibh.lrh[3] = cpu_to_be16(lid);
-		} else
+		} else {
 			qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
+		}
 	}
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 		bth0 |= IB_BTH_SOLICITED;
@@ -625,7 +629,6 @@ static int opa_smp_check(struct hfi1_ibport *ibp, u16 pkey, u8 sc5,
 	return 0;
 }
 
-
 /**
  * hfi1_ud_rcv - receive an incoming UD packet
  * @ibp: the port the packet came in on
@@ -750,7 +753,6 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 			mgmt_pkey_idx = hfi1_lookup_pkey_idx(ibp, pkey);
 			if (mgmt_pkey_idx < 0)
 				goto drop;
-
 		}
 		if (unlikely(qkey != qp->qkey)) {
 			hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
@@ -787,7 +789,6 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		mgmt_pkey_idx = hfi1_lookup_pkey_idx(ibp, pkey);
 		if (mgmt_pkey_idx < 0)
 			goto drop;
-
 	}
 
 	if (qp->ibqp.qp_num > 1 &&
@@ -795,11 +796,14 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		wc.ex.imm_data = ohdr->u.ud.imm_data;
 		wc.wc_flags = IB_WC_WITH_IMM;
 		tlen -= sizeof(u32);
-	} else if (opcode == IB_OPCODE_UD_SEND_ONLY) {
-		wc.ex.imm_data = 0;
-		wc.wc_flags = 0;
-	} else
-		goto drop;
+	} else {
+		if (opcode == IB_OPCODE_UD_SEND_ONLY) {
+			wc.ex.imm_data = 0;
+			wc.wc_flags = 0;
+		} else {
+			goto drop;
+		}
+	}
 
 	/*
 	 * A GRH is expected to precede the data even if not
@@ -810,9 +814,9 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	/*
 	 * Get the next work request entry to find where to put the data.
 	 */
-	if (qp->r_flags & HFI1_R_REUSE_SGE)
+	if (qp->r_flags & HFI1_R_REUSE_SGE) {
 		qp->r_flags &= ~HFI1_R_REUSE_SGE;
-	else {
+	} else {
 		int ret;
 
 		ret = hfi1_get_rwqe(qp, 0);
@@ -835,8 +839,9 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		hfi1_copy_sge(&qp->r_sge, &hdr->u.l.grh,
 			      sizeof(struct ib_grh), 1);
 		wc.wc_flags |= IB_WC_GRH;
-	} else
+	} else {
 		hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
+	}
 	hfi1_copy_sge(&qp->r_sge, data, wc.byte_len - sizeof(struct ib_grh), 1);
 	hfi1_put_ss(&qp->r_sge);
 	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
@@ -861,8 +866,9 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 			}
 		}
 		wc.pkey_index = (unsigned)mgmt_pkey_idx;
-	} else
+	} else {
 		wc.pkey_index = 0;
+	}
 
 	wc.slid = be16_to_cpu(hdr->lrh[3]);
 	sc = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;

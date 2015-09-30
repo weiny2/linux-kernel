@@ -22,7 +22,7 @@ lerr=""
 lm=""
 for f in $filelist
 do
-	$topdir/scripts/checkpatch.pl --no-tree -F $f | egrep '^ERROR|^WARNING' | sort | sed "s/^/$f /"
+	$topdir/scripts/checkpatch.pl --strict --no-tree -F $f | egrep '^ERROR|^WARNING|^CHECK' | sort | sed "s/^/$f /"
 done | while read fn err m
 do
 	count=$(( $count + 1 ))

@@ -69,7 +69,7 @@ fi
 
 if [ $checkpatch -eq 1 ];then
 	cd $wfr_src
-	scripts/checkpatch.pl -F --no-tree *.[ch] | scripts/build_checkpatch_whitelist.sh > checkpatch.current
+	scripts/checkpatch.pl -F --no-tree --strict *.[ch] | scripts/build_checkpatch_whitelist.sh > checkpatch.current
 	if ! diff -c test/tests/checkpatch.whitelist checkpatch.current; then
 		echo "Failed checkpatch whitelist comparison"
 	else

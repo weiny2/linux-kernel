@@ -75,7 +75,7 @@ int hfi1_post_srq_receive(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
 		u32 next;
 		int i;
 
-		if ((unsigned) wr->num_sge > srq->rq.max_sge) {
+		if ((unsigned)wr->num_sge > srq->rq.max_sge) {
 			*bad_wr = wr;
 			ret = -EINVAL;
 			goto bail;
@@ -178,8 +178,9 @@ struct ib_srq *hfi1_create_srq(struct ib_pd *ibpd,
 			ret = ERR_PTR(err);
 			goto bail_ip;
 		}
-	} else
+	} else {
 		srq->ip = NULL;
+	}
 
 	/*
 	 * ib_create_srq() will initialize srq->ibsrq.
@@ -265,7 +266,7 @@ int hfi1_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 			if (ret)
 				goto bail_free;
 			udata->outbuf =
-				(void __user *) (unsigned long) offset_addr;
+				(void __user *)(unsigned long)offset_addr;
 			ret = ib_copy_to_udata(udata, &offset,
 					       sizeof(offset));
 			if (ret)

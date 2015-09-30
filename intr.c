@@ -131,13 +131,13 @@ void handle_linkup_change(struct hfi1_devdata *dd, u32 linkup)
 		 * NOTE: This uses this device's vAU, vCU, and vl15_init for
 		 * the remote values.  Both sides must be using the values.
 		 */
-		if (quick_linkup
-			    || dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
+		if (quick_linkup ||
+		    dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
 			set_up_vl15(dd, dd->vau, dd->vl15_init);
 			assign_remote_cm_au_table(dd, dd->vcu);
 			ppd->neighbor_guid =
 				read_csr(dd,
-					DC_DC8051_STS_REMOTE_GUID);
+					 DC_DC8051_STS_REMOTE_GUID);
 			ppd->neighbor_type =
 				read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE) &
 					DC_DC8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
@@ -145,9 +145,9 @@ void handle_linkup_change(struct hfi1_devdata *dd, u32 linkup)
 				read_csr(dd, DC_DC8051_STS_REMOTE_PORT_NO) &
 					DC_DC8051_STS_REMOTE_PORT_NO_VAL_SMASK;
 			dd_dev_info(dd,
-				"Neighbor GUID: %llx Neighbor type %d\n",
-				ppd->neighbor_guid,
-				ppd->neighbor_type);
+				    "Neighbor GUID: %llx Neighbor type %d\n",
+				    ppd->neighbor_guid,
+				    ppd->neighbor_type);
 		}
 
 		/* physical link went up */
@@ -166,7 +166,7 @@ void handle_linkup_change(struct hfi1_devdata *dd, u32 linkup)
 		reset_link_credits(dd);
 
 		/* freeze after a link down to guarantee a clean egress */
-		start_freeze_handling(ppd, FREEZE_SELF|FREEZE_LINK_DOWN);
+		start_freeze_handling(ppd, FREEZE_SELF | FREEZE_LINK_DOWN);
 
 		ev = IB_EVENT_PORT_ERR;
 

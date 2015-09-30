@@ -66,6 +66,7 @@ struct hfi1_affinity {
 	struct cpu_mask_set def_intr;
 	struct cpu_mask_set rcv_intr;
 	struct cpu_mask_set proc;
+	/* spin lock to protect affinity struct */
 	spinlock_t lock;
 };
 
@@ -139,7 +140,7 @@ int hfi1_dev_affinity_init(struct hfi1_devdata *dd)
 	possible = cpumask_weight(info->def_intr.mask);
 	/* don't use threads when assigning affinity */
 	ht = cpumask_weight(cpu_sibling_mask(cpumask_first(local_mask)));
-	for (i = possible/ht; i < possible; i++)
+	for (i = possible / ht; i < possible; i++)
 		cpumask_clear_cpu(i, info->def_intr.mask);
 	/* reset weight */
 	possible = cpumask_weight(info->def_intr.mask);
@@ -230,8 +231,9 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 		if (rcd->ctxt == HFI1_CTRL_CTXT) {
 			set = &dd->affinity->def_intr;
 			cpu = cpumask_first(dd->affinity->def_intr.mask);
-		} else
+		} else {
 			set = &dd->affinity->rcv_intr;
+		}
 		scnprintf(extra, 64, "ctxt %u", rcd->ctxt);
 		break;
 	default:
@@ -240,12 +242,16 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 	}
 
 	spin_lock(&dd->affinity->lock);
-	/* The Control receive context should be placed on a particular CPU,
-	 * which is set above. Everything else finds its CPU here. */
+	/*
+	 * The Control receive context should be placed on a particular CPU,
+	 * which is set above. Everything else finds its CPU here.
+	 */
 	if (cpu == -1) {
 		if (cpumask_equal(set->mask, set->used)) {
-			/* We've used up all the CPUs, bump up the generation
-			 * and reset the 'used' map */
+			/*
+			 * We've used up all the CPUs, bump up the generation
+			 * and reset the 'used' map
+			 */
 			set->gen++;
 			cpumask_clear(set->used);
 		}
@@ -311,14 +317,18 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 	struct cpu_mask_set *set = &dd->affinity->proc;
 	char buf[1024];
 
-	/* check whether process/context affinity has already
-	 * been set */
+	/*
+	 * check whether process/context affinity has already
+	 * been set
+	 */
 	if (cpumask_weight(proc_mask) == 1) {
 		cpulist_scnprintf(buf, 1024, proc_mask);
 		hfi1_cdbg(PROC, "PID %u %s affinity set to CPU %s",
 			  current->pid, current->comm, buf);
-		/* Mark the pre-set CPU as used. This is atomic so we don't
-		 * need the lock */
+		/*
+		 * Mark the pre-set CPU as used. This is atomic so we don't
+		 * need the lock
+		 */
 		cpu = cpumask_first(proc_mask);
 		cpumask_set_cpu(cpu, set->used);
 		goto done;
@@ -329,8 +339,10 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 		goto done;
 	}
 
-	/* The process does not have a preset CPU affinity so find one to
-	 * recommend. We prefer CPUs on the same NUMA as the device. */
+	/*
+	 * The process does not have a preset CPU affinity so find one to
+	 * recommend. We prefer CPUs on the same NUMA as the device.
+	 */
 
 	ret = zalloc_cpumask_var(&diff, GFP_KERNEL);
 	if (!ret)
@@ -343,8 +355,10 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 		goto free;
 
 	spin_lock(&dd->affinity->lock);
-	/* If we've used all available CPUs, clear the mask and start
-	 * overloading. */
+	/*
+	 * If we've used all available CPUs, clear the mask and start
+	 * overloading.
+	 */
 	if (cpumask_equal(set->mask, set->used)) {
 		set->gen++;
 		cpumask_clear(set->used);
@@ -360,8 +374,10 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 	cpulist_scnprintf(buf, 1024, intrs);
 	hfi1_cdbg(PROC, "CPUs used by interrupts: %s", buf);
 
-	/* If we don't have a NUMA node requested, preference is towards
-	 * device NUMA node */
+	/*
+	 * If we don't have a NUMA node requested, preference is towards
+	 * device NUMA node
+	 */
 	if (node == -1)
 		node = dd->node;
 	node_mask = cpumask_of_node(node);
@@ -378,14 +394,18 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 	cpulist_scnprintf(buf, 1024, mask);
 	hfi1_cdbg(PROC, "available cpus on NUMA %s", buf);
 
-	/* At first, we don't want to place processes on the same
-	 * CPUs as interrupt handlers. */
+	/*
+	 * At first, we don't want to place processes on the same
+	 * CPUs as interrupt handlers.
+	 */
 	cpumask_andnot(diff, mask, intrs);
 	if (!cpumask_empty(diff))
 		cpumask_copy(mask, diff);
 
-	/* if we don't have a cpu on the preferred NUMA, get
-	 * the list of the remaining available CPUs */
+	/*
+	 * if we don't have a cpu on the preferred NUMA, get
+	 * the list of the remaining available CPUs
+	 */
 	if (cpumask_empty(mask)) {
 		cpumask_andnot(diff, set->mask, set->used);
 		cpumask_andnot(mask, diff, node_mask);

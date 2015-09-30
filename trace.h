@@ -73,16 +73,16 @@ __print_symbolic(etype,                         \
 #define TRACE_SYSTEM hfi1_rx
 
 TRACE_EVENT(hfi1_rcvhdr,
-	TP_PROTO(struct hfi1_devdata *dd,
-		 u64 eflags,
-		 u32 ctxt,
-		 u32 etype,
-		 u32 hlen,
-		 u32 tlen,
-		 u32 updegr,
-		 u32 etail),
-	TP_ARGS(dd, ctxt, eflags, etype, hlen, tlen, updegr, etail),
-	TP_STRUCT__entry(
+	    TP_PROTO(struct hfi1_devdata *dd,
+		     u64 eflags,
+		     u32 ctxt,
+		     u32 etype,
+		     u32 hlen,
+		     u32 tlen,
+		     u32 updegr,
+		     u32 etail),
+	    TP_ARGS(dd, ctxt, eflags, etype, hlen, tlen, updegr, etail),
+	    TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
 		__field(u64, eflags)
 		__field(u32, ctxt)
@@ -91,8 +91,8 @@ TRACE_EVENT(hfi1_rcvhdr,
 		__field(u32, tlen)
 		__field(u32, updegr)
 		__field(u32, etail)
-	),
-	TP_fast_assign(
+	    ),
+	    TP_fast_assign(
 		DD_DEV_ASSIGN(dd);
 		__entry->eflags = eflags;
 		__entry->ctxt = ctxt;
@@ -101,8 +101,8 @@ TRACE_EVENT(hfi1_rcvhdr,
 		__entry->tlen = tlen;
 		__entry->updegr = updegr;
 		__entry->etail = etail;
-	),
-	TP_printk(
+	    ),
+	    TP_printk(
 "[%s] ctxt %d eflags 0x%llx etype %d,%s hlen %d tlen %d updegr %d etail %d",
 		__get_str(dev),
 		__entry->ctxt,
@@ -112,19 +112,19 @@ TRACE_EVENT(hfi1_rcvhdr,
 		__entry->tlen,
 		__entry->updegr,
 		__entry->etail
-	)
+	    )
 );
 
 TRACE_EVENT(hfi1_receive_interrupt,
-	TP_PROTO(struct hfi1_devdata *dd, u32 ctxt),
-	TP_ARGS(dd, ctxt),
-	TP_STRUCT__entry(
+	    TP_PROTO(struct hfi1_devdata *dd, u32 ctxt),
+	    TP_ARGS(dd, ctxt),
+	    TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
 		__field(u32, ctxt)
 		__field(u8, slow_path)
 		__field(u8, dma_rtail)
-	),
-	TP_fast_assign(
+	    ),
+	    TP_fast_assign(
 		DD_DEV_ASSIGN(dd);
 		__entry->ctxt = ctxt;
 		if (dd->rcd[ctxt]->do_interrupt ==
@@ -140,8 +140,8 @@ TRACE_EVENT(hfi1_receive_interrupt,
 			__entry->dma_rtail = 0;
 			__entry->slow_path = 0;
 		}
-	),
-	TP_printk(
+	    ),
+	    TP_printk(
 		"[%s] ctxt %d SlowPath: %d DmaRtail: %d",
 		__get_str(dev),
 		__entry->ctxt,
@@ -278,78 +278,78 @@ TRACE_EVENT(hfi1_mmu_invalidate,
 #define TRACE_SYSTEM hfi1_tx
 
 TRACE_EVENT(hfi1_piofree,
-	TP_PROTO(struct send_context *sc, int extra),
-	TP_ARGS(sc, extra),
-	TP_STRUCT__entry(
+	    TP_PROTO(struct send_context *sc, int extra),
+	    TP_ARGS(sc, extra),
+	    TP_STRUCT__entry(
 		DD_DEV_ENTRY(sc->dd)
 		__field(u32, sw_index)
 		__field(u32, hw_context)
 		__field(int, extra)
-	),
-	TP_fast_assign(
+	    ),
+	    TP_fast_assign(
 		DD_DEV_ASSIGN(sc->dd);
 		__entry->sw_index = sc->sw_index;
 		__entry->hw_context = sc->hw_context;
 		__entry->extra = extra;
-	),
-	TP_printk(
+	    ),
+	    TP_printk(
 		"[%s] ctxt %u(%u) extra %d",
 		__get_str(dev),
 		__entry->sw_index,
 		__entry->hw_context,
 		__entry->extra
-	)
+	    )
 );
 
 TRACE_EVENT(hfi1_wantpiointr,
-	TP_PROTO(struct send_context *sc, u32 needint, u64 credit_ctrl),
-	TP_ARGS(sc, needint, credit_ctrl),
-	TP_STRUCT__entry(
+	    TP_PROTO(struct send_context *sc, u32 needint, u64 credit_ctrl),
+	    TP_ARGS(sc, needint, credit_ctrl),
+	    TP_STRUCT__entry(
 		DD_DEV_ENTRY(sc->dd)
 		__field(u32, sw_index)
 		__field(u32, hw_context)
 		__field(u32, needint)
 		__field(u64, credit_ctrl)
-	),
-	TP_fast_assign(
+	    ),
+	    TP_fast_assign(
 		DD_DEV_ASSIGN(sc->dd);
 		__entry->sw_index = sc->sw_index;
 		__entry->hw_context = sc->hw_context;
 		__entry->needint = needint;
 		__entry->credit_ctrl = credit_ctrl;
-	),
-	TP_printk(
+	    ),
+	    TP_printk(
 		"[%s] ctxt %u(%u) on %d credit_ctrl 0x%llx",
 		__get_str(dev),
 		__entry->sw_index,
 		__entry->hw_context,
 		__entry->needint,
 		(unsigned long long)__entry->credit_ctrl
-	)
+	    )
 );
 
 DECLARE_EVENT_CLASS(hfi1_qpsleepwakeup_template,
-	TP_PROTO(struct hfi1_qp *qp, u32 flags),
-	TP_ARGS(qp, flags),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
-		__field(u32, qpn)
-		__field(u32, flags)
-		__field(u32, s_flags)
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(dd_from_ibdev(qp->ibqp.device))
-		__entry->flags = flags;
-		__entry->qpn = qp->ibqp.qp_num;
-		__entry->s_flags = qp->s_flags;
-	),
-	TP_printk(
-		"[%s] qpn 0x%x flags 0x%x s_flags 0x%x",
-		__get_str(dev),
-		__entry->qpn,
-		__entry->flags,
-		__entry->s_flags
-	)
+		    TP_PROTO(struct hfi1_qp *qp, u32 flags),
+		    TP_ARGS(qp, flags),
+		    TP_STRUCT__entry(
+			DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
+			__field(u32, qpn)
+			__field(u32, flags)
+			__field(u32, s_flags)
+		    ),
+		    TP_fast_assign(
+			DD_DEV_ASSIGN(dd_from_ibdev(qp->ibqp.device))
+			__entry->flags = flags;
+			__entry->qpn = qp->ibqp.qp_num;
+			__entry->s_flags = qp->s_flags;
+		    ),
+		    TP_printk(
+			"[%s] qpn 0x%x flags 0x%x s_flags 0x%x",
+			__get_str(dev),
+			__entry->qpn,
+			__entry->flags,
+			__entry->s_flags
+		    )
 );
 
 DEFINE_EVENT(hfi1_qpsleepwakeup_template, hfi1_qpwakeup,
@@ -363,33 +363,33 @@ DEFINE_EVENT(hfi1_qpsleepwakeup_template, hfi1_qpsleep,
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_qphash
 DECLARE_EVENT_CLASS(hfi1_qphash_template,
-	TP_PROTO(struct hfi1_qp *qp, u32 bucket),
-	TP_ARGS(qp, bucket),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
-		__field(u32, qpn)
-		__field(u32, bucket)
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(dd_from_ibdev(qp->ibqp.device))
-		__entry->qpn = qp->ibqp.qp_num;
-		__entry->bucket = bucket;
-	),
-	TP_printk(
-		"[%s] qpn 0x%x bucket %u",
-		__get_str(dev),
-		__entry->qpn,
-		__entry->bucket
-	)
+		    TP_PROTO(struct hfi1_qp *qp, u32 bucket),
+		    TP_ARGS(qp, bucket),
+		    TP_STRUCT__entry(
+			DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
+			__field(u32, qpn)
+			__field(u32, bucket)
+		    ),
+		    TP_fast_assign(
+			DD_DEV_ASSIGN(dd_from_ibdev(qp->ibqp.device))
+			__entry->qpn = qp->ibqp.qp_num;
+			__entry->bucket = bucket;
+		    ),
+		    TP_printk(
+			"[%s] qpn 0x%x bucket %u",
+			__get_str(dev),
+			__entry->qpn,
+			__entry->bucket
+		    )
 );
 
 DEFINE_EVENT(hfi1_qphash_template, hfi1_qpinsert,
-	TP_PROTO(struct hfi1_qp *qp, u32 bucket),
-	TP_ARGS(qp, bucket));
+	     TP_PROTO(struct hfi1_qp *qp, u32 bucket),
+	     TP_ARGS(qp, bucket));
 
 DEFINE_EVENT(hfi1_qphash_template, hfi1_qpremove,
-	TP_PROTO(struct hfi1_qp *qp, u32 bucket),
-	TP_ARGS(qp, bucket));
+	     TP_PROTO(struct hfi1_qp *qp, u32 bucket),
+	     TP_ARGS(qp, bucket));
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_ibhdrs
@@ -407,7 +407,6 @@ const char *parse_sdma_flags(
 	u64 desc0, u64 desc1);
 
 #define __parse_sdma_flags(desc0, desc1) parse_sdma_flags(p, desc0, desc1)
-
 
 #define lrh_name(lrh) { HFI1_##lrh, #lrh }
 #define show_lnh(lrh)                    \
@@ -454,7 +453,6 @@ __print_symbolic(opcode,                                   \
 	ib_opcode_name(UD_SEND_ONLY),                      \
 	ib_opcode_name(UD_SEND_ONLY_WITH_IMMEDIATE))
 
-
 #define LRH_PRN "vl %d lver %d sl %d lnh %d,%s dlid %.4x len %d slid %.4x"
 #define BTH_PRN \
 	"op 0x%.2x,%s se %d m %d pad %d tver %d pkey 0x%.4x " \
@@ -462,117 +460,115 @@ __print_symbolic(opcode,                                   \
 #define EHDR_PRN "%s"
 
 DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
-	TP_PROTO(struct hfi1_devdata *dd,
-		 struct hfi1_ib_header *hdr),
-	TP_ARGS(dd, hdr),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(dd)
-		/* LRH */
-		__field(u8, vl)
-		__field(u8, lver)
-		__field(u8, sl)
-		__field(u8, lnh)
-		__field(u16, dlid)
-		__field(u16, len)
-		__field(u16, slid)
-		/* BTH */
-		__field(u8, opcode)
-		__field(u8, se)
-		__field(u8, m)
-		__field(u8, pad)
-		__field(u8, tver)
-		__field(u16, pkey)
-		__field(u8, f)
-		__field(u8, b)
-		__field(u32, qpn)
-		__field(u8, a)
-		__field(u32, psn)
-		/* extended headers */
-		__dynamic_array(u8, ehdrs, ibhdr_exhdr_len(hdr))
-	),
-	TP_fast_assign(
-		struct hfi1_other_headers *ohdr;
-
-		DD_DEV_ASSIGN(dd);
-		/* LRH */
-		__entry->vl =
-			(u8)(be16_to_cpu(hdr->lrh[0]) >> 12);
-		__entry->lver =
-			(u8)(be16_to_cpu(hdr->lrh[0]) >> 8) & 0xf;
-		__entry->sl =
-			(u8)(be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
-		__entry->lnh =
-			(u8)(be16_to_cpu(hdr->lrh[0]) & 3);
-		__entry->dlid =
-			be16_to_cpu(hdr->lrh[1]);
-		/* allow for larger len */
-		__entry->len =
-			be16_to_cpu(hdr->lrh[2]);
-		__entry->slid =
-			be16_to_cpu(hdr->lrh[3]);
-		/* BTH */
-		if (__entry->lnh == HFI1_LRH_BTH)
-			ohdr = &hdr->u.oth;
-		else
-			ohdr = &hdr->u.l.oth;
-		__entry->opcode =
-			(be32_to_cpu(ohdr->bth[0]) >> 24) & 0xff;
-		__entry->se =
-			(be32_to_cpu(ohdr->bth[0]) >> 23) & 1;
-		__entry->m =
-			 (be32_to_cpu(ohdr->bth[0]) >> 22) & 1;
-		__entry->pad =
-			(be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
-		__entry->tver =
-			(be32_to_cpu(ohdr->bth[0]) >> 16) & 0xf;
-		__entry->pkey =
-			be32_to_cpu(ohdr->bth[0]) & 0xffff;
-		__entry->f =
-			(be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
-			& HFI1_FECN_MASK;
-		__entry->b =
-			(be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
-			& HFI1_BECN_MASK;
-		__entry->qpn =
-			be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
-		__entry->a =
-			(be32_to_cpu(ohdr->bth[2]) >> 31) & 1;
-		/* allow for larger PSN */
-		__entry->psn =
-			be32_to_cpu(ohdr->bth[2]) & 0x7fffffff;
-		/* extended headers */
-		 memcpy(
-			__get_dynamic_array(ehdrs),
-			&ohdr->u,
-			ibhdr_exhdr_len(hdr));
-	),
-	TP_printk("[%s] " LRH_PRN " " BTH_PRN " " EHDR_PRN,
-		__get_str(dev),
-		/* LRH */
-		__entry->vl,
-		__entry->lver,
-		__entry->sl,
-		__entry->lnh, show_lnh(__entry->lnh),
-		__entry->dlid,
-		__entry->len,
-		__entry->slid,
-		/* BTH */
-		__entry->opcode, show_ib_opcode(__entry->opcode),
-		__entry->se,
-		__entry->m,
-		__entry->pad,
-		__entry->tver,
-		__entry->pkey,
-		__entry->f,
-		__entry->b,
-		__entry->qpn,
-		__entry->a,
-		__entry->psn,
-		/* extended headers */
-		__parse_ib_ehdrs(
-			__entry->opcode,
-			(void *)__get_dynamic_array(ehdrs))
-	)
+		    TP_PROTO(struct hfi1_devdata *dd,
+			     struct hfi1_ib_header *hdr),
+		    TP_ARGS(dd, hdr),
+		    TP_STRUCT__entry(
+			DD_DEV_ENTRY(dd)
+			/* LRH */
+			__field(u8, vl)
+			__field(u8, lver)
+			__field(u8, sl)
+			__field(u8, lnh)
+			__field(u16, dlid)
+			__field(u16, len)
+			__field(u16, slid)
+			/* BTH */
+			__field(u8, opcode)
+			__field(u8, se)
+			__field(u8, m)
+			__field(u8, pad)
+			__field(u8, tver)
+			__field(u16, pkey)
+			__field(u8, f)
+			__field(u8, b)
+			__field(u32, qpn)
+			__field(u8, a)
+			__field(u32, psn)
+			/* extended headers */
+			__dynamic_array(u8, ehdrs, ibhdr_exhdr_len(hdr))
+		    ),
+		    TP_fast_assign(struct hfi1_other_headers *ohdr;
+				   DD_DEV_ASSIGN(dd);
+				   /* LRH */
+				   __entry->vl =
+				   (u8)(be16_to_cpu(hdr->lrh[0]) >> 12);
+				   __entry->lver =
+				   (u8)(be16_to_cpu(hdr->lrh[0]) >> 8) & 0xf;
+				   __entry->sl =
+				   (u8)(be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
+				   __entry->lnh =
+				   (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
+				   __entry->dlid =
+				   be16_to_cpu(hdr->lrh[1]);
+				   /* allow for larger len */
+				   __entry->len =
+				   be16_to_cpu(hdr->lrh[2]);
+				   __entry->slid =
+				   be16_to_cpu(hdr->lrh[3]);
+				   /* BTH */
+				   if (__entry->lnh == HFI1_LRH_BTH)
+					ohdr = &hdr->u.oth;
+				   else
+					ohdr = &hdr->u.l.oth;
+				   __entry->opcode =
+				   (be32_to_cpu(ohdr->bth[0]) >> 24) & 0xff;
+				   __entry->se =
+				   (be32_to_cpu(ohdr->bth[0]) >> 23) & 1;
+				   __entry->m =
+				   (be32_to_cpu(ohdr->bth[0]) >> 22) & 1;
+				   __entry->pad =
+				   (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+				   __entry->tver =
+				   (be32_to_cpu(ohdr->bth[0]) >> 16) & 0xf;
+				   __entry->pkey =
+				   be32_to_cpu(ohdr->bth[0]) & 0xffff;
+				   __entry->f =
+				   (be32_to_cpu(ohdr->bth[1]) >>
+						HFI1_FECN_SHIFT)
+				    & HFI1_FECN_MASK;
+				   __entry->b =
+				   (be32_to_cpu(ohdr->bth[1]) >>
+						HFI1_BECN_SHIFT)
+				    & HFI1_BECN_MASK;
+				   __entry->qpn =
+				   be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
+				   __entry->a =
+				   (be32_to_cpu(ohdr->bth[2]) >> 31) & 1;
+				   /* allow for larger PSN */
+				   __entry->psn =
+				   be32_to_cpu(ohdr->bth[2]) & 0x7fffffff;
+				   /* extended headers */
+				   memcpy(__get_dynamic_array(ehdrs), &ohdr->u,
+					  ibhdr_exhdr_len(hdr));
+		    ),
+		    TP_printk("[%s] " LRH_PRN " " BTH_PRN " " EHDR_PRN,
+			      __get_str(dev),
+			      /* LRH */
+			      __entry->vl,
+			      __entry->lver,
+			      __entry->sl,
+			      __entry->lnh, show_lnh(__entry->lnh),
+			      __entry->dlid,
+			      __entry->len,
+			      __entry->slid,
+			      /* BTH */
+			      __entry->opcode, show_ib_opcode(__entry->opcode),
+			      __entry->se,
+			      __entry->m,
+			      __entry->pad,
+			      __entry->tver,
+			      __entry->pkey,
+			      __entry->f,
+			      __entry->b,
+			      __entry->qpn,
+			      __entry->a,
+			      __entry->psn,
+			      /* extended headers */
+			      __parse_ib_ehdrs(
+				__entry->opcode,
+				(void *)__get_dynamic_array(ehdrs))
+		    )
 );
 
 DEFINE_EVENT(hfi1_ibhdr_template, input_ibhdr,
@@ -590,15 +586,14 @@ DEFINE_EVENT(hfi1_ibhdr_template, output_ibhdr,
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_snoop
 
-
 TRACE_EVENT(snoop_capture,
-	TP_PROTO(struct hfi1_devdata *dd,
-		 int hdr_len,
-		 struct hfi1_ib_header *hdr,
-		 int data_len,
-		 void *data),
-	TP_ARGS(dd, hdr_len, hdr, data_len, data),
-	TP_STRUCT__entry(
+	    TP_PROTO(struct hfi1_devdata *dd,
+		     int hdr_len,
+		     struct hfi1_ib_header *hdr,
+		     int data_len,
+		     void *data),
+	    TP_ARGS(dd, hdr_len, hdr, data_len, data),
+	    TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
 		__field(u16, slid)
 		__field(u16, dlid)
@@ -611,8 +606,8 @@ TRACE_EVENT(snoop_capture,
 		__field(u8, lnh)
 		__dynamic_array(u8, raw_hdr, hdr_len)
 		__dynamic_array(u8, raw_pkt, data_len)
-	),
-	TP_fast_assign(
+	    ),
+	    TP_fast_assign(
 		struct hfi1_other_headers *ohdr;
 
 		__entry->lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
@@ -631,19 +626,19 @@ TRACE_EVENT(snoop_capture,
 		__entry->data_len = data_len;
 		memcpy(__get_dynamic_array(raw_hdr), hdr, hdr_len);
 		memcpy(__get_dynamic_array(raw_pkt), data, data_len);
-	),
-	TP_printk("[%s] " SNOOP_PRN,
-		__get_str(dev),
-		__entry->slid,
-		__entry->dlid,
-		__entry->qpn,
-		__entry->opcode,
-		show_ib_opcode(__entry->opcode),
-		__entry->sl,
-		__entry->pkey,
-		__entry->hdr_len,
-		__entry->data_len
-	)
+	    ),
+	    TP_printk("[%s] " SNOOP_PRN,
+		      __get_str(dev),
+		      __entry->slid,
+		      __entry->dlid,
+		      __entry->qpn,
+		      __entry->opcode,
+		     show_ib_opcode(__entry->opcode),
+		     __entry->sl,
+		     __entry->pkey,
+		     __entry->hdr_len,
+		     __entry->data_len
+	    )
 );
 
 #undef TRACE_SYSTEM
@@ -742,51 +737,47 @@ TRACE_EVENT(hfi1_ctxt_info,
 	)
 
 DECLARE_EVENT_CLASS(hfi1_bct_template,
-	TP_PROTO(struct hfi1_devdata *dd, struct buffer_control *bc),
-	TP_ARGS(dd, bc),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(dd)
-		__dynamic_array(u8, bct, sizeof(*bc))
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(dd);
-		memcpy(
-			__get_dynamic_array(bct),
-			bc,
-			sizeof(*bc));
-	),
-	TP_printk(BCT_FORMAT,
-		BCT(overall_shared_limit),
+		    TP_PROTO(struct hfi1_devdata *dd,
+			     struct buffer_control *bc),
+		    TP_ARGS(dd, bc),
+		    TP_STRUCT__entry(DD_DEV_ENTRY(dd)
+				     __dynamic_array(u8, bct, sizeof(*bc))
+		    ),
+		    TP_fast_assign(DD_DEV_ASSIGN(dd);
+				   memcpy(__get_dynamic_array(bct), bc,
+					  sizeof(*bc));
+		    ),
+		    TP_printk(BCT_FORMAT,
+			      BCT(overall_shared_limit),
 
-		BCT(vl[0].dedicated),
-		BCT(vl[0].shared),
+			      BCT(vl[0].dedicated),
+			      BCT(vl[0].shared),
 
-		BCT(vl[1].dedicated),
-		BCT(vl[1].shared),
+			      BCT(vl[1].dedicated),
+			      BCT(vl[1].shared),
 
-		BCT(vl[2].dedicated),
-		BCT(vl[2].shared),
+			      BCT(vl[2].dedicated),
+			      BCT(vl[2].shared),
 
-		BCT(vl[3].dedicated),
-		BCT(vl[3].shared),
+			      BCT(vl[3].dedicated),
+			      BCT(vl[3].shared),
 
-		BCT(vl[4].dedicated),
-		BCT(vl[4].shared),
+			      BCT(vl[4].dedicated),
+			      BCT(vl[4].shared),
 
-		BCT(vl[5].dedicated),
-		BCT(vl[5].shared),
+			      BCT(vl[5].dedicated),
+			      BCT(vl[5].shared),
 
-		BCT(vl[6].dedicated),
-		BCT(vl[6].shared),
+			      BCT(vl[6].dedicated),
+			      BCT(vl[6].shared),
 
-		BCT(vl[7].dedicated),
-		BCT(vl[7].shared),
+			      BCT(vl[7].dedicated),
+			      BCT(vl[7].shared),
 
-		BCT(vl[15].dedicated),
-		BCT(vl[15].shared)
-	)
+			      BCT(vl[15].dedicated),
+			      BCT(vl[15].shared)
+		    )
 );
-
 
 DEFINE_EVENT(hfi1_bct_template, bct_set,
 	     TP_PROTO(struct hfi1_devdata *dd, struct buffer_control *bc),
@@ -800,189 +791,168 @@ DEFINE_EVENT(hfi1_bct_template, bct_get,
 #define TRACE_SYSTEM hfi1_sdma
 
 TRACE_EVENT(hfi1_sdma_descriptor,
-	TP_PROTO(
-		struct sdma_engine *sde,
-		u64 desc0,
-		u64 desc1,
-		u16 e,
-		void *descp),
-	TP_ARGS(sde, desc0, desc1, e, descp),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(sde->dd)
-		__field(void *, descp)
-		__field(u64, desc0)
-		__field(u64, desc1)
-		__field(u16, e)
-		__field(u8, idx)
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(sde->dd);
-		__entry->desc0 = desc0;
-		__entry->desc1 = desc1;
-		__entry->idx = sde->this_idx;
-		__entry->descp = descp;
-		__entry->e = e;
-	),
-	TP_printk(
-		"[%s] SDE(%u) flags:%s addr:0x%016llx gen:%u len:%u d0:%016llx d1:%016llx to %p,%u",
-		__get_str(dev),
-		__entry->idx,
-		__parse_sdma_flags(__entry->desc0, __entry->desc1),
-		(__entry->desc0 >> SDMA_DESC0_PHY_ADDR_SHIFT)
-			& SDMA_DESC0_PHY_ADDR_MASK,
-		(u8)((__entry->desc1 >> SDMA_DESC1_GENERATION_SHIFT)
-			& SDMA_DESC1_GENERATION_MASK),
-		(u16)((__entry->desc0 >> SDMA_DESC0_BYTE_COUNT_SHIFT)
-			& SDMA_DESC0_BYTE_COUNT_MASK),
-		__entry->desc0,
-		__entry->desc1,
-		__entry->descp,
-		__entry->e
-	)
+	    TP_PROTO(struct sdma_engine *sde,
+		     u64 desc0,
+		     u64 desc1,
+		     u16 e,
+		     void *descp),
+	    TP_ARGS(sde, desc0, desc1, e, descp),
+	    TP_STRUCT__entry(DD_DEV_ENTRY(sde->dd)
+			     __field(void *, descp)
+			     __field(u64, desc0)
+			     __field(u64, desc1)
+			     __field(u16, e)
+			     __field(u8, idx)
+	    ),
+	    TP_fast_assign(DD_DEV_ASSIGN(sde->dd);
+			   __entry->desc0 = desc0;
+			   __entry->desc1 = desc1;
+			   __entry->idx = sde->this_idx;
+			   __entry->descp = descp;
+			   __entry->e = e;
+	    ),
+	    TP_printk(
+		      "[%s] SDE(%u) flags:%s addr:0x%016llx gen:%u len:%u d0:%016llx d1:%016llx to %p,%u",
+		      __get_str(dev),
+		      __entry->idx,
+		      __parse_sdma_flags(__entry->desc0, __entry->desc1),
+		      (__entry->desc0 >> SDMA_DESC0_PHY_ADDR_SHIFT)
+		      & SDMA_DESC0_PHY_ADDR_MASK,
+		      (u8)((__entry->desc1 >> SDMA_DESC1_GENERATION_SHIFT)
+		      & SDMA_DESC1_GENERATION_MASK),
+		      (u16)((__entry->desc0 >> SDMA_DESC0_BYTE_COUNT_SHIFT)
+		      & SDMA_DESC0_BYTE_COUNT_MASK),
+		      __entry->desc0,
+		      __entry->desc1,
+		      __entry->descp,
+		      __entry->e
+	    )
 );
 
 TRACE_EVENT(hfi1_sdma_engine_select,
-	TP_PROTO(struct hfi1_devdata *dd, u32 sel, u8 vl, u8 idx),
-	TP_ARGS(dd, sel, vl, idx),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(dd)
-		__field(u32, sel)
-		__field(u8, vl)
-		__field(u8, idx)
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(dd);
-		__entry->sel = sel;
-		__entry->vl = vl;
-		__entry->idx = idx;
-	),
-	TP_printk(
-		"[%s] selecting SDE %u sel 0x%x vl %u",
-		__get_str(dev),
-		__entry->idx,
-		__entry->sel,
-		__entry->vl
-	)
+	    TP_PROTO(struct hfi1_devdata *dd, u32 sel, u8 vl, u8 idx),
+	    TP_ARGS(dd, sel, vl, idx),
+	    TP_STRUCT__entry(DD_DEV_ENTRY(dd)
+			     __field(u32, sel)
+			     __field(u8, vl)
+			     __field(u8, idx)
+	    ),
+	    TP_fast_assign(DD_DEV_ASSIGN(dd);
+			   __entry->sel = sel;
+			   __entry->vl = vl;
+			   __entry->idx = idx;
+	    ),
+	    TP_printk("[%s] selecting SDE %u sel 0x%x vl %u",
+		      __get_str(dev),
+		      __entry->idx,
+		      __entry->sel,
+		      __entry->vl
+	    )
 );
 
 DECLARE_EVENT_CLASS(hfi1_sdma_engine_class,
-	TP_PROTO(
-		struct sdma_engine *sde,
-		u64 status
-	),
-	TP_ARGS(sde, status),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(sde->dd)
-		__field(u64, status)
-		__field(u8, idx)
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(sde->dd);
-		__entry->status = status;
-		__entry->idx = sde->this_idx;
-	),
-	TP_printk(
-		"[%s] SDE(%u) status %llx",
-		__get_str(dev),
-		__entry->idx,
-		(unsigned long long)__entry->status
-	)
+		    TP_PROTO(struct sdma_engine *sde,
+			     u64 status
+		    ),
+		    TP_ARGS(sde, status),
+		    TP_STRUCT__entry(DD_DEV_ENTRY(sde->dd)
+				     __field(u64, status)
+				     __field(u8, idx)
+		    ),
+		    TP_fast_assign(DD_DEV_ASSIGN(sde->dd);
+				   __entry->status = status;
+				   __entry->idx = sde->this_idx;
+		    ),
+		    TP_printk("[%s] SDE(%u) status %llx",
+			      __get_str(dev),
+			      __entry->idx,
+			      (unsigned long long)__entry->status
+		    )
 );
 
 DEFINE_EVENT(hfi1_sdma_engine_class, hfi1_sdma_engine_interrupt,
-	TP_PROTO(
-		struct sdma_engine *sde,
-		u64 status
-	),
-	TP_ARGS(sde, status)
+	     TP_PROTO(struct sdma_engine *sde,
+		      u64 status
+	     ),
+	     TP_ARGS(sde, status)
 );
 
 DEFINE_EVENT(hfi1_sdma_engine_class, hfi1_sdma_engine_progress,
-	TP_PROTO(
-		struct sdma_engine *sde,
-		u64 status
-	),
-	TP_ARGS(sde, status)
+	     TP_PROTO(struct sdma_engine *sde,
+		      u64 status
+	     ),
+	     TP_ARGS(sde, status)
 );
 
 DECLARE_EVENT_CLASS(hfi1_sdma_ahg_ad,
-	TP_PROTO(
-		struct sdma_engine *sde,
-		int aidx
-	),
-	TP_ARGS(sde, aidx),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(sde->dd)
-		__field(int, aidx)
-		__field(u8, idx)
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(sde->dd);
-		__entry->idx = sde->this_idx;
-		__entry->aidx = aidx;
-	),
-	TP_printk(
-		"[%s] SDE(%u) aidx %d",
-		__get_str(dev),
-		__entry->idx,
-		__entry->aidx
-	)
+		    TP_PROTO(struct sdma_engine *sde,
+			     int aidx
+		    ),
+		    TP_ARGS(sde, aidx),
+		    TP_STRUCT__entry(DD_DEV_ENTRY(sde->dd)
+				     __field(int, aidx)
+				     __field(u8, idx)
+		    ),
+		    TP_fast_assign(DD_DEV_ASSIGN(sde->dd);
+				   __entry->idx = sde->this_idx;
+				   __entry->aidx = aidx;
+		    ),
+		    TP_printk("[%s] SDE(%u) aidx %d",
+			      __get_str(dev),
+			      __entry->idx,
+			      __entry->aidx
+		    )
 );
 
 DEFINE_EVENT(hfi1_sdma_ahg_ad, hfi1_ahg_allocate,
-	     TP_PROTO(
-		struct sdma_engine *sde,
-		int aidx
+	     TP_PROTO(struct sdma_engine *sde,
+		      int aidx
 	     ),
 	     TP_ARGS(sde, aidx));
 
 DEFINE_EVENT(hfi1_sdma_ahg_ad, hfi1_ahg_deallocate,
-	     TP_PROTO(
-		struct sdma_engine *sde,
-		int aidx
+	     TP_PROTO(struct sdma_engine *sde,
+		      int aidx
 	     ),
 	     TP_ARGS(sde, aidx));
 
 #ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
 TRACE_EVENT(hfi1_sdma_progress,
-	TP_PROTO(
-		struct sdma_engine *sde,
-		u16 hwhead,
-		u16 swhead,
-		struct sdma_txreq *txp
-	),
-	TP_ARGS(sde, hwhead, swhead, txp),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(sde->dd)
-		__field(u64, sn)
-		__field(u16, hwhead)
-		__field(u16, swhead)
-		__field(u16, txnext)
-		__field(u16, tx_tail)
-		__field(u16, tx_head)
-		__field(u8, idx)
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(sde->dd);
-		__entry->hwhead = hwhead;
-		__entry->swhead = swhead;
-		__entry->tx_tail = sde->tx_tail;
-		__entry->tx_head = sde->tx_head;
-		__entry->txnext = txp ? txp->next_descq_idx : ~0;
-		__entry->idx = sde->this_idx;
-		__entry->sn = txp ? txp->sn : ~0;
-	),
-	TP_printk(
-		"[%s] SDE(%u) sn %llu hwhead %u swhead %u next_descq_idx %u tx_head %u tx_tail %u",
-		__get_str(dev),
-		__entry->idx,
-		__entry->sn,
-		__entry->hwhead,
-		__entry->swhead,
-		__entry->txnext,
-		__entry->tx_head,
-		__entry->tx_tail
-	)
+	    TP_PROTO(struct sdma_engine *sde,
+		     u16 hwhead,
+		     u16 swhead,
+		     struct sdma_txreq *txp
+	    ),
+	    TP_ARGS(sde, hwhead, swhead, txp),
+	    TP_STRUCT__entry(DD_DEV_ENTRY(sde->dd)
+			     __field(u64, sn)
+			     __field(u16, hwhead)
+			     __field(u16, swhead)
+			     __field(u16, txnext)
+			     __field(u16, tx_tail)
+			     __field(u16, tx_head)
+			     __field(u8, idx)
+	    ),
+	    TP_fast_assign(DD_DEV_ASSIGN(sde->dd);
+			   __entry->hwhead = hwhead;
+			   __entry->swhead = swhead;
+			   __entry->tx_tail = sde->tx_tail;
+			   __entry->tx_head = sde->tx_head;
+			   __entry->txnext = txp ? txp->next_descq_idx : ~0;
+			   __entry->idx = sde->this_idx;
+			   __entry->sn = txp ? txp->sn : ~0;
+	    ),
+	    TP_printk(
+		      "[%s] SDE(%u) sn %llu hwhead %u swhead %u next_descq_idx %u tx_head %u tx_tail %u",
+		      __get_str(dev),
+		      __entry->idx,
+		      __entry->sn,
+		      __entry->hwhead,
+		      __entry->swhead,
+		      __entry->txnext,
+		      __entry->tx_head,
+		      __entry->tx_tail
+	    )
 );
 #else
 TRACE_EVENT(hfi1_sdma_progress,
@@ -1025,27 +995,23 @@ TRACE_EVENT(hfi1_sdma_progress,
 #endif
 
 DECLARE_EVENT_CLASS(hfi1_sdma_sn,
-	TP_PROTO(
-		struct sdma_engine *sde,
-		u64 sn
-	),
-	TP_ARGS(sde, sn),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(sde->dd)
-		__field(u64, sn)
-		__field(u8, idx)
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(sde->dd);
-		__entry->sn = sn;
-		__entry->idx = sde->this_idx;
-	),
-	TP_printk(
-		"[%s] SDE(%u) sn %llu",
-		__get_str(dev),
-		__entry->idx,
-		__entry->sn
-	)
+		    TP_PROTO(struct sdma_engine *sde,
+			     u64 sn
+		    ),
+		    TP_ARGS(sde, sn),
+		    TP_STRUCT__entry(DD_DEV_ENTRY(sde->dd)
+				     __field(u64, sn)
+				     __field(u8, idx)
+		    ),
+		    TP_fast_assign(DD_DEV_ASSIGN(sde->dd);
+				   __entry->sn = sn;
+				   __entry->idx = sde->this_idx;
+		    ),
+		    TP_printk("[%s] SDE(%u) sn %llu",
+			      __get_str(dev),
+			      __entry->idx,
+			      __entry->sn
+		    )
 );
 
 DEFINE_EVENT(hfi1_sdma_sn, hfi1_sdma_out_sn,
@@ -1261,69 +1227,66 @@ TRACE_EVENT(hfi1_sdma_user_header_ahg,
 	);
 
 TRACE_EVENT(hfi1_sdma_state,
-	TP_PROTO(
-		struct sdma_engine *sde,
-		const char *cstate,
-		const char *nstate
-	),
-	TP_ARGS(sde, cstate, nstate),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(sde->dd)
-		__string(curstate, cstate)
-		__string(newstate, nstate)
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(sde->dd);
-		__assign_str(curstate, cstate);
-		__assign_str(newstate, nstate);
-	),
-	TP_printk("[%s] current state %s new state %s",
-		__get_str(dev),
-		__get_str(curstate),
-		__get_str(newstate)
-	)
+	    TP_PROTO(struct sdma_engine *sde,
+		     const char *cstate,
+		     const char *nstate
+	    ),
+	    TP_ARGS(sde, cstate, nstate),
+	    TP_STRUCT__entry(DD_DEV_ENTRY(sde->dd)
+			     __string(curstate, cstate)
+			     __string(newstate, nstate)
+	    ),
+	    TP_fast_assign(DD_DEV_ASSIGN(sde->dd);
+			   __assign_str(curstate, cstate);
+			   __assign_str(newstate, nstate);
+	    ),
+	    TP_printk("[%s] current state %s new state %s",
+		      __get_str(dev),
+		      __get_str(curstate),
+		      __get_str(newstate)
+	    )
 );
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_rc
 
 DECLARE_EVENT_CLASS(hfi1_rc_template,
-	TP_PROTO(struct hfi1_qp *qp, u32 psn),
-	TP_ARGS(qp, psn),
-	TP_STRUCT__entry(
-		DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
-		__field(u32, qpn)
-		__field(u32, s_flags)
-		__field(u32, psn)
-		__field(u32, s_psn)
-		__field(u32, s_next_psn)
-		__field(u32, s_sending_psn)
-		__field(u32, s_sending_hpsn)
-		__field(u32, r_psn)
-	),
-	TP_fast_assign(
-		DD_DEV_ASSIGN(dd_from_ibdev(qp->ibqp.device))
-		__entry->qpn = qp->ibqp.qp_num;
-		__entry->s_flags = qp->s_flags;
-		__entry->psn = psn;
-		__entry->s_psn = qp->s_psn;
-		__entry->s_next_psn = qp->s_next_psn;
-		__entry->s_sending_psn = qp->s_sending_psn;
-		__entry->s_sending_hpsn = qp->s_sending_hpsn;
-		__entry->r_psn = qp->r_psn;
-	),
-	TP_printk(
-		"[%s] qpn 0x%x s_flags 0x%x psn 0x%x s_psn 0x%x s_next_psn 0x%x s_sending_psn 0x%x sending_hpsn 0x%x r_psn 0x%x",
-		__get_str(dev),
-		__entry->qpn,
-		__entry->s_flags,
-		__entry->psn,
-		__entry->s_psn,
-		__entry->s_next_psn,
-		__entry->s_sending_psn,
-		__entry->s_sending_hpsn,
-		__entry->r_psn
-	)
+		    TP_PROTO(struct hfi1_qp *qp, u32 psn),
+		    TP_ARGS(qp, psn),
+		    TP_STRUCT__entry(
+			DD_DEV_ENTRY(dd_from_ibdev(qp->ibqp.device))
+			__field(u32, qpn)
+			__field(u32, s_flags)
+			__field(u32, psn)
+			__field(u32, s_psn)
+			__field(u32, s_next_psn)
+			__field(u32, s_sending_psn)
+			__field(u32, s_sending_hpsn)
+			__field(u32, r_psn)
+		    ),
+		    TP_fast_assign(
+			DD_DEV_ASSIGN(dd_from_ibdev(qp->ibqp.device))
+			__entry->qpn = qp->ibqp.qp_num;
+			__entry->s_flags = qp->s_flags;
+			__entry->psn = psn;
+			__entry->s_psn = qp->s_psn;
+			__entry->s_next_psn = qp->s_next_psn;
+			__entry->s_sending_psn = qp->s_sending_psn;
+			__entry->s_sending_hpsn = qp->s_sending_hpsn;
+			__entry->r_psn = qp->r_psn;
+		    ),
+		    TP_printk(
+			"[%s] qpn 0x%x s_flags 0x%x psn 0x%x s_psn 0x%x s_next_psn 0x%x s_sending_psn 0x%x sending_hpsn 0x%x r_psn 0x%x",
+			__get_str(dev),
+			__entry->qpn,
+			__entry->s_flags,
+			__entry->psn,
+			__entry->s_psn,
+			__entry->s_next_psn,
+			__entry->s_sending_psn,
+			__entry->s_sending_hpsn,
+			__entry->r_psn
+		    )
 );
 
 DEFINE_EVENT(hfi1_rc_template, hfi1_rc_sendcomplete,
@@ -1350,21 +1313,21 @@ DEFINE_EVENT(hfi1_rc_template, hfi1_rc_rcv_error,
 #define TRACE_SYSTEM hfi1_misc
 
 TRACE_EVENT(hfi1_interrupt,
-	TP_PROTO(struct hfi1_devdata *dd, const struct is_table *is_entry,
-		 int src),
-	TP_ARGS(dd, is_entry, src),
-	TP_STRUCT__entry(
+	    TP_PROTO(struct hfi1_devdata *dd, const struct is_table *is_entry,
+		     int src),
+	    TP_ARGS(dd, is_entry, src),
+	    TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
 		__array(char, buf, 64)
 		__field(int, src)
-	),
-	TP_fast_assign(
+	    ),
+	    TP_fast_assign(
 		DD_DEV_ASSIGN(dd)
 		is_entry->is_name(__entry->buf, 64, src - is_entry->start);
 		__entry->src = src;
-	),
-	TP_printk("[%s] source: %s [%d]", __get_str(dev), __entry->buf,
-		  __entry->src)
+	    ),
+	    TP_printk("[%s] source: %s [%d]", __get_str(dev), __entry->buf,
+		      __entry->src)
 );
 
 /*
@@ -1379,21 +1342,21 @@ TRACE_EVENT(hfi1_interrupt,
 #define MAX_MSG_LEN 512
 
 DECLARE_EVENT_CLASS(hfi1_trace_template,
-	TP_PROTO(const char *function, struct va_format *vaf),
-	TP_ARGS(function, vaf),
-	TP_STRUCT__entry(
-		__string(function, function)
-		__dynamic_array(char, msg, MAX_MSG_LEN)
-	),
-	TP_fast_assign(
-		__assign_str(function, function);
-		WARN_ON_ONCE(vsnprintf(__get_dynamic_array(msg),
-		     MAX_MSG_LEN, vaf->fmt,
-		     *vaf->va) >= MAX_MSG_LEN);
-	),
-	TP_printk("(%s) %s",
-		  __get_str(function),
-		  __get_str(msg))
+		    TP_PROTO(const char *function, struct va_format *vaf),
+		    TP_ARGS(function, vaf),
+		    TP_STRUCT__entry(
+			__string(function, function)
+			__dynamic_array(char, msg, MAX_MSG_LEN)
+		    ),
+		    TP_fast_assign(
+			__assign_str(function, function);
+			WARN_ON_ONCE(vsnprintf(__get_dynamic_array(msg),
+					       MAX_MSG_LEN, vaf->fmt,
+					       *vaf->va) >= MAX_MSG_LEN);
+		    ),
+		    TP_printk("(%s) %s",
+			      __get_str(function),
+			      __get_str(msg))
 );
 
 /*

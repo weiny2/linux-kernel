@@ -60,8 +60,8 @@
 #include "trace.h"
 #include "sdma.h"
 
-#define BITS_PER_PAGE           (PAGE_SIZE*BITS_PER_BYTE)
-#define BITS_PER_PAGE_MASK      (BITS_PER_PAGE-1)
+#define BITS_PER_PAGE           (PAGE_SIZE * BITS_PER_BYTE)
+#define BITS_PER_PAGE_MASK      (BITS_PER_PAGE - 1)
 
 static unsigned int hfi1_qp_table_size = 256;
 module_param_named(qp_table_size, hfi1_qp_table_size, uint, S_IRUGO);
@@ -264,7 +264,8 @@ static void remove_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 	spin_lock_irqsave(&dev->qp_dev->qpt_lock, flags);
 
 	if (rcu_dereference_protected(ibp->qp[0],
-			lockdep_is_held(&dev->qp_dev->qpt_lock)) == qp) {
+				      lockdep_is_held
+				      (&dev->qp_dev->qpt_lock)) == qp) {
 		RCU_INIT_POINTER(ibp->qp[0], NULL);
 	} else if (rcu_dereference_protected(ibp->qp[1],
 			lockdep_is_held(&dev->qp_dev->qpt_lock)) == qp) {
@@ -276,13 +277,14 @@ static void remove_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 		removed = 0;
 		qpp = &dev->qp_dev->qp_table[n];
 		for (; (q = rcu_dereference_protected(*qpp,
-				lockdep_is_held(&dev->qp_dev->qpt_lock)))
-					!= NULL;
-				qpp = &q->next)
+						      lockdep_is_held
+						      (&dev->qp_dev->qpt_lock)))
+		     != NULL; qpp = &q->next)
 			if (q == qp) {
 				RCU_INIT_POINTER(*qpp,
-				 rcu_dereference_protected(qp->next,
-				 lockdep_is_held(&dev->qp_dev->qpt_lock)));
+						 rcu_dereference_protected
+						 (qp->next, lockdep_is_held
+						 (&dev->qp_dev->qpt_lock)));
 				removed = 1;
 				trace_hfi1_qpremove(qp, n);
 				break;
@@ -329,11 +331,14 @@ static unsigned free_all_qps(struct hfi1_devdata *dd)
 	spin_lock_irqsave(&dev->qp_dev->qpt_lock, flags);
 	for (n = 0; n < dev->qp_dev->qp_table_size; n++) {
 		qp = rcu_dereference_protected(dev->qp_dev->qp_table[n],
-			lockdep_is_held(&dev->qp_dev->qpt_lock));
+					       lockdep_is_held
+					       (&dev->qp_dev->qpt_lock));
 		RCU_INIT_POINTER(dev->qp_dev->qp_table[n], NULL);
 
-		for (; qp; qp = rcu_dereference_protected(qp->next,
-				lockdep_is_held(&dev->qp_dev->qpt_lock)))
+		for (; qp;
+		     qp = rcu_dereference_protected(qp->next,
+						    lockdep_is_held
+						    (&dev->qp_dev->qpt_lock)))
 			qp_inuse++;
 	}
 	spin_unlock_irqrestore(&dev->qp_dev->qpt_lock, flags);
@@ -533,8 +538,10 @@ int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 		wq->tail = tail;
 
 		spin_unlock(&qp->r_rq.lock);
-	} else if (qp->ibqp.event_handler)
+	} else {
+		if (qp->ibqp.event_handler)
 		ret = 1;
+	}
 
 bail:
 	return ret;
@@ -595,7 +602,6 @@ static inline int verbs_mtu_enum_to_int(struct ib_device *dev, enum ib_mtu mtu)
 	return ib_mtu_enum_to_int(mtu);
 }
 
-
 /**
  * hfi1_modify_qp - modify the attributes of a queue pair
  * @ibqp: the queue pair who's attributes we're modifying
@@ -643,7 +649,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			goto inval;
 
 		if (!qp_to_sdma_engine(qp, sc) &&
-				dd->flags & HFI1_HAS_SEND_DMA)
+		    dd->flags & HFI1_HAS_SEND_DMA)
 			goto inval;
 	}
 
@@ -662,7 +668,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			goto inval;
 
 		if (!qp_to_sdma_engine(qp, sc) &&
-				dd->flags & HFI1_HAS_SEND_DMA)
+		    dd->flags & HFI1_HAS_SEND_DMA)
 			goto inval;
 	}
 
@@ -728,8 +734,9 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 				goto inval;
 			if (qp->s_mig_state == IB_MIG_ARMED)
 				mig = 1;
-		} else
+		} else {
 			goto inval;
+		}
 	}
 
 	if (attr_mask & IB_QP_MAX_DEST_RD_ATOMIC)
@@ -1018,12 +1025,13 @@ __be32 hfi1_compute_aeth(struct hfi1_qp *qp)
 			x = (min + max) / 2;
 			if (credit_table[x] == credits)
 				break;
-			if (credit_table[x] > credits)
+			if (credit_table[x] > credits) {
 				max = x;
-			else if (min == x)
-				break;
-			else
+			} else {
+				if (min == x)
+					break;
 				min = x;
+			}
 		}
 		aeth |= x << HFI1_AETH_CREDIT_SHIFT;
 	}
@@ -1095,7 +1103,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 			sizeof(struct hfi1_swqe);
 		swq = vmalloc_node((init_attr->cap.max_send_wr + 1) * sz,
 				   dd->node);
-		if (swq == NULL) {
+		if (!swq) {
 			ret = ERR_PTR(-ENOMEM);
 			goto bail;
 		}
@@ -1125,9 +1133,9 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		qp->timeout_jiffies =
 			usecs_to_jiffies((4096UL * (1UL << qp->timeout)) /
 				1000UL);
-		if (init_attr->srq)
+		if (init_attr->srq) {
 			sz = 0;
-		else {
+		} else {
 			qp->r_rq.size = init_attr->cap.max_recv_wr + 1;
 			qp->r_rq.max_sge = init_attr->cap.max_recv_sge;
 			sz = (sizeof(struct ib_sge) * qp->r_rq.max_sge) +
@@ -1216,7 +1224,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 				goto bail_ip;
 			}
 
-			err = ib_copy_to_udata(udata, &(qp->ip->offset),
+			err = ib_copy_to_udata(udata, &qp->ip->offset,
 					       sizeof(qp->ip->offset));
 			if (err) {
 				ret = ERR_PTR(err);
@@ -1366,7 +1374,7 @@ static int init_qpn_table(struct hfi1_devdata *dd, struct hfi1_qpn_table *qpt)
 	offset = qpn & BITS_PER_PAGE_MASK;
 	map = &qpt->map[qpt->nmaps];
 	dd_dev_info(dd, "Reserving QPNs for KDETH window from 0x%x to 0x%x\n",
-		qpn, qpn + 65535);
+		    qpn, qpn + 65535);
 	for (i = 0; i < 65536; i++) {
 		if (!map->page) {
 			get_map_page(qpt, map);
@@ -1396,7 +1404,7 @@ static void free_qpn_table(struct hfi1_qpn_table *qpt)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(qpt->map); i++)
-		free_page((unsigned long) qpt->map[i].page);
+		free_page((unsigned long)qpt->map[i].page);
 }
 
 /**
@@ -1468,7 +1476,6 @@ static int iowait_sleep(
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) {
-
 		/*
 		 * If we couldn't queue the DMA request, save the info
 		 * and try again later rather than destroying the

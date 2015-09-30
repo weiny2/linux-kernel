@@ -158,7 +158,7 @@ fail:
  * Returns 0 on success, -errno on failure.
  */
 int read_hfi1_efi_var(struct hfi1_devdata *dd, const char *kind,
-				unsigned long *size, void **return_data)
+		      unsigned long *size, void **return_data)
 {
 	char name[64];
 
@@ -169,7 +169,7 @@ int read_hfi1_efi_var(struct hfi1_devdata *dd, const char *kind,
 		 PCI_SLOT(dd->pcidev->devfn),
 		 PCI_FUNC(dd->pcidev->devfn),
 		 kind);
-	name[sizeof(name)-1] = 0; /* make sure the string is terminated */
+	name[sizeof(name) - 1] = 0; /* make sure the string is terminated */
 
 	return read_efi_var(name, size, return_data);
 }

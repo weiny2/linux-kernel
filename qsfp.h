@@ -59,11 +59,11 @@
  * Below are masks for QSFP pins.  Pins are the same for HFI0 and HFI1.
  * _N means asserted low
  */
-#define QSFP_HFI0_I2CCLK    (1 << 0)
-#define QSFP_HFI0_I2CDAT    (1 << 1)
-#define QSFP_HFI0_RESET_N   (1 << 2)
-#define QSFP_HFI0_INT_N	    (1 << 3)
-#define QSFP_HFI0_MODPRST_N (1 << 4)
+#define QSFP_HFI0_I2CCLK    BIT(0)
+#define QSFP_HFI0_I2CDAT    BIT(1)
+#define QSFP_HFI0_RESET_N   BIT(2)
+#define QSFP_HFI0_INT_N	    BIT(3)
+#define QSFP_HFI0_MODPRST_N BIT(4)
 
 /* QSFP is paged at 256 bytes */
 #define QSFP_PAGESIZE 256
@@ -135,9 +135,11 @@ extern const char *const hfi1_qsfp_devtech[16];
  */
 #define QSFP_ATTEN_OFFS 186
 #define QSFP_ATTEN_LEN 2
-/* Bytes 188,189 are Wavelength tolerance, if optical
+/*
+ * Bytes 188,189 are Wavelength tolerance, if optical
  * If copper, they are attenuation in dB:
- * Byte 188 is at 12.5 Gb/s, Byte 189 at 25 Gb/s */
+ * Byte 188 is at 12.5 Gb/s, Byte 189 at 25 Gb/s
+ */
 #define QSFP_CU_ATTEN_7G_OFFS 188
 #define QSFP_CU_ATTEN_12G_OFFS 189
 /* Byte 190 is Max Case Temp. Not Intel req'd */
@@ -206,7 +208,8 @@ struct qsfp_data {
 	/* Helps to find our way */
 	struct hfi1_pportdata *ppd;
 	struct work_struct qsfp_work;
-	u8 cache[QSFP_MAX_NUM_PAGES*128];
+	u8 cache[QSFP_MAX_NUM_PAGES * 128];
+	/* protect qsfp data */
 	spinlock_t qsfp_lock;
 	u8 check_interrupt_flags;
 	u8 reset_needed;

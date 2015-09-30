@@ -135,7 +135,7 @@ int hfi1_create_ctxts(struct hfi1_devdata *dd)
 			       GFP_KERNEL, dd->node);
 	if (!dd->rcd) {
 		dd_dev_err(dd,
-			"Unable to allocate receive context array, failing\n");
+			   "Unable to allocate receive context array, failing\n");
 		goto nomem;
 	}
 
@@ -148,7 +148,7 @@ int hfi1_create_ctxts(struct hfi1_devdata *dd)
 		rcd = hfi1_create_ctxtdata(ppd, i, dd->node);
 		if (!rcd) {
 			dd_dev_err(dd,
-				"Unable to allocate kernel receive context, failing\n");
+				   "Unable to allocate kernel receive context, failing\n");
 			goto nomem;
 		}
 		/*
@@ -169,7 +169,7 @@ int hfi1_create_ctxts(struct hfi1_devdata *dd)
 		rcd->sc = sc_alloc(dd, SC_ACK, rcd->rcvhdrqentsize, dd->node);
 		if (!rcd->sc) {
 			dd_dev_err(dd,
-				"Unable to allocate kernel send context, failing\n");
+				   "Unable to allocate kernel send context, failing\n");
 			dd->rcd[rcd->ctxt] = NULL;
 			hfi1_free_ctxtdata(dd, rcd);
 			goto nomem;
@@ -200,7 +200,7 @@ bail:
  * Common code for user and kernel context setup.
  */
 struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt,
-	int numa)
+					   int numa)
 {
 	struct hfi1_devdata *dd = ppd->dd;
 	struct hfi1_ctxtdata *rcd;
@@ -259,7 +259,7 @@ struct hfi1_ctxtdata *hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, u32 ctxt,
 		/* Validate and initialize Rcv Hdr Q variables */
 		if (rcvhdrcnt % HDRQ_INCREMENT) {
 			dd_dev_err(dd,
-				   "ctxt%u: header queue count %d must be divisible by %d\n",
+				   "ctxt%u: header queue count %d must be divisible by %lu\n",
 				   rcd->ctxt, rcvhdrcnt, HDRQ_INCREMENT);
 			goto bail;
 		}
@@ -380,7 +380,7 @@ void set_link_ipg(struct hfi1_pportdata *ppd)
 
 	cc_state = get_cc_state(ppd);
 
-	if (cc_state == NULL)
+	if (!cc_state)
 		/*
 		 * This should _never_ happen - rcu_read_lock() is held,
 		 * and set_link_ipg() should not be called if cc_state
@@ -432,7 +432,7 @@ static enum hrtimer_restart cca_timer_fn(struct hrtimer *t)
 
 	cc_state = get_cc_state(ppd);
 
-	if (cc_state == NULL) {
+	if (!cc_state) {
 		rcu_read_unlock();
 		return HRTIMER_NORESTART;
 	}
@@ -733,7 +733,7 @@ int hfi1_init(struct hfi1_devdata *dd, int reinit)
 			lastfail = hfi1_setup_eagerbufs(rcd);
 		if (lastfail)
 			dd_dev_err(dd,
-				"failed to allocate kernel ctxt's rcvhdrq and/or egr bufs\n");
+				   "failed to allocate kernel ctxt's rcvhdrq and/or egr bufs\n");
 	}
 	if (lastfail)
 		ret = lastfail;
@@ -784,12 +784,13 @@ done:
 			ppd = dd->pport + pidx;
 
 			/* start the serdes - must be after interrupts are
-			   enabled so we are notified when the link goes up */
+			 * enabled so we are notified when the link goes up
+			 */
 			lastfail = bringup_serdes(ppd);
 			if (lastfail)
 				dd_dev_info(dd,
-					"Failed to bring up port %u\n",
-					ppd->port);
+					    "Failed to bring up port %u\n",
+					    ppd->port);
 
 			/*
 			 * Set status even if port serdes is not initialized
@@ -1165,8 +1166,10 @@ static int __init hfi1_mod_init(void)
 		user_credit_return_threshold = 100;
 
 	compute_krcvqs();
-	/* sanitize receive interrupt count, time must wait until after
-	   the hardware type is known */
+	/*
+	 * sanitize receive interrupt count, time must wait until after
+	 * the hardware type is known
+	 */
 	if (rcv_intr_count > RCV_HDR_HEAD_COUNTER_MASK)
 		rcv_intr_count = RCV_HDR_HEAD_COUNTER_MASK;
 	/* reject invalid combinations */
@@ -1510,7 +1513,7 @@ int hfi1_create_rcvhdrq(struct hfi1_devdata *dd, struct hfi1_ctxtdata *rcd)
 		set_dev_node(&dd->pcidev->dev, dd->node);
 		if (!rcd->rcvhdrq) {
 			dd_dev_err(dd,
-				"attempt to allocate %d bytes for ctxt %u rcvhdrq failed\n",
+				   "attempt to allocate %d bytes for ctxt %u rcvhdrq failed\n",
 				amt, rcd->ctxt);
 			goto bail;
 		}
@@ -1552,8 +1555,8 @@ int hfi1_create_rcvhdrq(struct hfi1_devdata *dd, struct hfi1_ctxtdata *rcd)
 	write_kctxt_csr(dd, rcd->ctxt, RCV_HDR_SIZE, reg);
 
 	/*
-	 * Program dummy tail address for every recieve context
-	 * before enabling any recieve context
+	 * Program dummy tail address for every receive context
+	 * before enabling any receive context
 	 */
 	write_kctxt_csr(dd, rcd->ctxt, RCV_HDR_TAIL_ADDR,
 			dd->rcvhdrtail_dummy_physaddr);
@@ -1562,7 +1565,7 @@ int hfi1_create_rcvhdrq(struct hfi1_devdata *dd, struct hfi1_ctxtdata *rcd)
 
 bail_free:
 	dd_dev_err(dd,
-		"attempt to allocate 1 page for ctxt %u rcvhdrqtailaddr failed\n",
+		   "attempt to allocate 1 page for ctxt %u rcvhdrqtailaddr failed\n",
 		rcd->ctxt);
 	vfree(rcd->user_event_mask);
 	rcd->user_event_mask = NULL;
@@ -1661,7 +1664,7 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 			if (rcd->egrbufs.rcvtid_size == round_mtu ||
 			    !HFI1_CAP_KGET_MASK(rcd->flags, MULTI_PKT_EGR)) {
 				dd_dev_err(dd, "ctxt%u: Failed to allocate eager buffers\n",
-					rcd->ctxt);
+					   rcd->ctxt);
 				goto bail_rcvegrbuf_phys;
 			}
 
@@ -1696,8 +1699,9 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 				     rcd->egrbufs.buffers[j].len)) {
 					j++;
 					offset = 0;
-				} else
+				} else {
 					offset += new_size;
+				}
 			}
 			rcd->egrbufs.rcvtid_size = new_size;
 		}
@@ -1706,7 +1710,7 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 	rcd->egrbufs.size = alloced_bytes;
 
 	dd_dev_info(dd, "ctxt%u: Alloced %u rcv tid entries @ %uKB, total %zuKB\n",
-		rcd->ctxt, rcd->egrbufs.alloced, rcd->egrbufs.rcvtid_size,
+		    rcd->ctxt, rcd->egrbufs.alloced, rcd->egrbufs.rcvtid_size,
 		rcd->egrbufs.size);
 
 	/*
@@ -1741,14 +1745,14 @@ int hfi1_setup_eagerbufs(struct hfi1_ctxtdata *rcd)
 
 	for (idx = 0; idx < rcd->egrbufs.alloced; idx++) {
 		hfi1_put_tid(dd, rcd->eager_base + idx, PT_EAGER,
-			      rcd->egrbufs.rcvtids[idx].phys, order);
+			     rcd->egrbufs.rcvtids[idx].phys, order);
 		cond_resched();
 	}
 	goto bail;
 
 bail_rcvegrbuf_phys:
 	for (idx = 0; idx < rcd->egrbufs.alloced &&
-		     rcd->egrbufs.buffers[idx].addr;
+	     rcd->egrbufs.buffers[idx].addr;
 	     idx++) {
 		dma_free_coherent(&dd->pcidev->dev,
 				  rcd->egrbufs.buffers[idx].len,

@@ -83,8 +83,10 @@ static int qual_power(struct hfi1_pportdata *ppd)
 	else if (cable_power_class > 4 && cable_power_class > (power_class_max))
 		ppd->offline_disabled_reason =
 			HFI1_ODR_MASK(OPA_LINKDOWN_REASON_POWER_POLICY);
-	/* cable_power_class will never have value 4 as this simply
-	 * means the high power settings are unused */
+	/*
+	 * cable_power_class will never have value 4 as this simply
+	 * means the high power settings are unused
+	 */
 
 	if (ppd->offline_disabled_reason ==
 			HFI1_ODR_MASK(OPA_LINKDOWN_REASON_POWER_POLICY)) {
@@ -104,13 +106,13 @@ static int qual_bitrate(struct hfi1_pportdata *ppd)
 
 	if ((lss & OPA_LINK_SPEED_25G) && (lse & OPA_LINK_SPEED_25G) &&
 	    cache[QSFP_NOM_BIT_RATE_250_OFFS] < 0x64)
-			ppd->offline_disabled_reason =
-			   HFI1_ODR_MASK(OPA_LINKDOWN_REASON_LINKSPEED_POLICY);
+		ppd->offline_disabled_reason =
+		HFI1_ODR_MASK(OPA_LINKDOWN_REASON_LINKSPEED_POLICY);
 
 	if ((lss & OPA_LINK_SPEED_12_5G) && (lse & OPA_LINK_SPEED_12_5G) &&
 	    cache[QSFP_NOM_BIT_RATE_100_OFFS] < 0x7D)
-			ppd->offline_disabled_reason =
-			   HFI1_ODR_MASK(OPA_LINKDOWN_REASON_LINKSPEED_POLICY);
+		ppd->offline_disabled_reason =
+		HFI1_ODR_MASK(OPA_LINKDOWN_REASON_LINKSPEED_POLICY);
 
 	if (ppd->offline_disabled_reason ==
 			HFI1_ODR_MASK(OPA_LINKDOWN_REASON_LINKSPEED_POLICY)) {
@@ -758,8 +760,9 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 
 			if (ppd->qsfp_info.cache_valid) {
 				ret = tune_qsfp(ppd, &tx_preset_index,
-					  &rx_preset_index, &tuning_method,
-					  &total_atten);
+						&rx_preset_index,
+						&tuning_method,
+						&total_atten);
 				if (ret)
 					goto bail;
 			} else {

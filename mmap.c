@@ -121,7 +121,7 @@ int hfi1_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	list_for_each_entry_safe(ip, pp, &dev->pending_mmaps,
 				 pending_mmaps) {
 		/* Only the creator is allowed to mmap the object */
-		if (context != ip->context || (__u64) offset != ip->offset)
+		if (context != ip->context || (__u64)offset != ip->offset)
 			continue;
 		/* Don't allow a mmap larger than the object. */
 		if (size > ip->size)

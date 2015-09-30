@@ -300,6 +300,7 @@ struct hfi1_ctxtdata {
 	 */
 	struct task_struct *progress;
 	struct list_head sdma_queues;
+	/* protect sdma queues */
 	spinlock_t sdma_qlock;
 
 	/*
@@ -352,6 +353,7 @@ struct hfi1_snoop_data {
 	int mode_flag;
 	struct cdev cdev;
 	struct device *class_dev;
+	/* protect snoop data */
 	spinlock_t snoop_lock;
 	struct list_head queue;
 	wait_queue_head_t waitq;
@@ -413,17 +415,17 @@ struct hfi1_sge_state;
 #define __HLS_GOING_OFFLINE_BP  9
 #define __HLS_LINK_COOLDOWN_BP 10
 
-#define HLS_UP_INIT	  (1 << __HLS_UP_INIT_BP)
-#define HLS_UP_ARMED	  (1 << __HLS_UP_ARMED_BP)
-#define HLS_UP_ACTIVE	  (1 << __HLS_UP_ACTIVE_BP)
-#define HLS_DN_DOWNDEF	  (1 << __HLS_DN_DOWNDEF_BP) /* link down default */
-#define HLS_DN_POLL	  (1 << __HLS_DN_POLL_BP)
-#define HLS_DN_DISABLE	  (1 << __HLS_DN_DISABLE_BP)
-#define HLS_DN_OFFLINE	  (1 << __HLS_DN_OFFLINE_BP)
-#define HLS_VERIFY_CAP	  (1 << __HLS_VERIFY_CAP_BP)
-#define HLS_GOING_UP	  (1 << __HLS_GOING_UP_BP)
-#define HLS_GOING_OFFLINE (1 << __HLS_GOING_OFFLINE_BP)
-#define HLS_LINK_COOLDOWN (1 << __HLS_LINK_COOLDOWN_BP)
+#define HLS_UP_INIT	  BIT(__HLS_UP_INIT_BP)
+#define HLS_UP_ARMED	  BIT(__HLS_UP_ARMED_BP)
+#define HLS_UP_ACTIVE	  BIT(__HLS_UP_ACTIVE_BP)
+#define HLS_DN_DOWNDEF	  BIT(__HLS_DN_DOWNDEF_BP) /* link down default */
+#define HLS_DN_POLL	  BIT(__HLS_DN_POLL_BP)
+#define HLS_DN_DISABLE	  BIT(__HLS_DN_DISABLE_BP)
+#define HLS_DN_OFFLINE	  BIT(__HLS_DN_OFFLINE_BP)
+#define HLS_VERIFY_CAP	  BIT(__HLS_VERIFY_CAP_BP)
+#define HLS_GOING_UP	  BIT(__HLS_GOING_UP_BP)
+#define HLS_GOING_OFFLINE BIT(__HLS_GOING_OFFLINE_BP)
+#define HLS_LINK_COOLDOWN BIT(__HLS_LINK_COOLDOWN_BP)
 
 #define HLS_UP (HLS_UP_INIT | HLS_UP_ARMED | HLS_UP_ACTIVE)
 
@@ -533,6 +535,7 @@ enum {
 };
 
 struct vl_arb_cache {
+	/* protect vl arb cache */
 	spinlock_t lock;
 	struct ib_vl_weight_elem table[VL_ARB_TABLE_SIZE];
 };
@@ -681,10 +684,12 @@ struct hfi1_pportdata {
 	/* CA's max number of 64 entry units in the congestion control table */
 	u8 cc_max_table_entries;
 
-	/* begin congestion log related entries
-	 * cc_log_lock protects all congestion log related data */
+	/*
+	 * begin congestion log related entries
+	 * cc_log_lock protects all congestion log related data
+	 */
 	spinlock_t cc_log_lock ____cacheline_aligned_in_smp;
-	u8 threshold_cong_event_map[OPA_MAX_SLS/8];
+	u8 threshold_cong_event_map[OPA_MAX_SLS / 8];
 	u16 threshold_event_counter;
 	struct opa_hfi1_cong_log_event_internal cc_events[OPA_CONG_LOG_ELEMS];
 	int cc_log_idx; /* index for logging events */
@@ -830,7 +835,6 @@ struct hfi1_devdata {
 	/* SPC freeze waitqueue and variable */
 	wait_queue_head_t		  sdma_unfreeze_wq;
 	atomic_t			  sdma_unfreeze_count;
-
 
 	/* hfi1_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)
@@ -1109,9 +1113,11 @@ struct hfi1_filedata {
 	struct rb_root tid_rb_root;
 	u32 tid_limit;
 	u32 tid_used;
+	/* protect rb tree */
 	spinlock_t rb_lock;
 	u32 *invalid_tids;
 	u32 invalid_tid_idx;
+	/* protect invalid tid info */
 	spinlock_t invalid_lock;
 	int (*mmu_rb_insert)(struct rb_root *, struct mmu_rb_node *);
 };
@@ -1415,6 +1421,7 @@ static inline int valid_ib_mtu(unsigned int mtu)
 		mtu == 1024 || mtu == 2048 ||
 		mtu == 4096;
 }
+
 static inline int valid_opa_max_mtu(unsigned int mtu)
 {
 	return mtu >= 2048 &&
@@ -1439,7 +1446,7 @@ int snoop_recv_handler(struct hfi1_packet *packet);
 int snoop_send_dma_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 			   u64 pbc);
 int snoop_send_pio_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
-			  u64 pbc);
+			   u64 pbc);
 void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 			   u64 pbc, const void *from, size_t count);
 
@@ -1510,7 +1517,6 @@ static inline struct cc_state *get_cc_state(struct hfi1_pportdata *ppd)
 
 /* IB dword length mask in PBC (lower 11 bits); same for all chips */
 #define HFI1_PBC_LENGTH_MASK                     ((1 << 11) - 1)
-
 
 /* ctxt_flag bit offsets */
 		/* context has been setup */
@@ -1583,7 +1589,7 @@ void hfi1_release_user_pages(struct page **, size_t, bool);
 
 static inline void clear_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 {
-	*((u64 *) rcd->rcvhdrtail_kvaddr) = 0ULL;
+	*((u64 *)rcd->rcvhdrtail_kvaddr) = 0ULL;
 }
 
 static inline u32 get_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
@@ -1592,7 +1598,7 @@ static inline u32 get_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 	 * volatile because it's a DMA target from the chip, routine is
 	 * inlined, and don't want register caching or reordering.
 	 */
-	return (u32) le64_to_cpu(*rcd->rcvhdrtail_kvaddr);
+	return (u32)le64_to_cpu(*rcd->rcvhdrtail_kvaddr);
 }
 
 /*
@@ -1625,8 +1631,9 @@ void restore_pci_variables(struct hfi1_devdata *dd);
 int do_pcie_gen3_transition(struct hfi1_devdata *dd);
 int parse_platform_config(struct hfi1_devdata *dd);
 int get_platform_config_field(struct hfi1_devdata *dd,
-			enum platform_config_table_type_encoding table_type,
-			int table_index, int field_index, u32 *data, u32 len);
+			      enum platform_config_table_type_encoding
+			      table_type, int table_index, int field_index,
+			      u32 *data, u32 len);
 
 const char *get_unit_name(int unit);
 
