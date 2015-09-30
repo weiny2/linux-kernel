@@ -72,6 +72,11 @@ extern unsigned int hfi_max_mtu;
 #define DRIVER_CLASS_NAME	DRIVER_NAME
 
 enum {
+	SHARED_CREDITS,
+	DEDICATED_CREDITS
+};
+
+enum {
 	/* Port type is undefined */
 	HFI_PORT_TYPE_UNKNOWN = 0,
 	/* port is not currently usable, CableInfo not available */
@@ -121,6 +126,7 @@ enum {
 
 /* TX timeout for EQ assignment */
 #define HFI_EQ_TIMEOUT_MS	1000
+#define HFI_VL_STATUS_CLEAR_TIMEOUT	5000	/* per-VL status clear, in ms */
 
 /* use this MTU size if none other is given */
 #define HFI_DEFAULT_ACTIVE_MTU	10240
@@ -129,7 +135,7 @@ enum {
 /* The largest MAD packet size. */
 #define HFI_MIN_VL_15_MTU	2048
 /* Number of Data VLs supported */
-#define HFI_NUM_DATA_VLS	8
+#define HFI_NUM_DATA_VLS	9
 /* Number of PKey entries in the HW */
 #define HFI_MAX_PKEYS		64
 
@@ -179,6 +185,21 @@ enum {
 /* Message class and traffic class for VL15 packets */
 #define HFI_VL15_MC			0
 #define HFI_VL15_TC			3
+
+#define hfi_vl_to_idx(vl)		(((vl) < HFI_NUM_DATA_VLS) ? \
+				 (vl) : HFI_NUM_DATA_VLS)
+#define hfi_idx_to_vl(idx)		(((idx) == HFI_NUM_DATA_VLS) ? \
+				 15 : (idx))
+#define hfi_valid_vl(idx)	((idx) < HFI_NUM_DATA_VLS || (idx) == 15)
+#define HFI_NUM_USABLE_VLS 16	/* look at VL15 and less */
+/*
+ * Virtual Allocation Unit, defined as AU = 8*2^vAU, 64 bytes, AU is fixed
+ * at 64 bytes for all generation one devices
+ */
+#define HFI_CM_VAU 3
+#define HFI_CM_CU  1
+/* HFI link credit count, AKA receive buffer depth (RBUF_DEPTH) */
+#define HFI_CM_GLOBAL_CREDITS BUFF_CREDIT_LIMIT
 
 /*
  * FXRTODO: Get rid of hard coded number of SL pairs and SL start once the FM
@@ -305,7 +326,7 @@ enum {
  * FXRTODO: VL ARB is absent for FXR. Remove these
  * once we have STL2 specific opafm
  */
-#define HFI_VL_ARB_TABLE_SIZE 		16
+#define HFI_VL_ARB_TABLE_SIZE		16
 #define OPA_VLARB_LOW_ELEMENTS		0
 #define OPA_VLARB_HIGH_ELEMENTS		1
 #define OPA_VLARB_PREEMPT_ELEMENTS	2
@@ -461,6 +482,10 @@ struct ib_vl_weight_elem {
  *@link_down_work: for LinkUp -> LinkDown
  *@sma_message_work: for the interrupt caused by "Receive a back channel msg
  *		using LCB idle protocol HOST Type SMA"
+ *@vau: Virtual allocation unit for this port
+ *@vcu: Virtual return credit unit for this port
+ *@link_credits: link credits of this device
+ *@vl15_init: Initial vl15 credits to use
  */
 struct hfi_pportdata {
 	struct hfi_devdata *dd;
@@ -528,6 +553,13 @@ struct hfi_pportdata {
 	struct cc_state __rcu *cc_state;
 	struct opa_congestion_setting_entry_shadow
 		congestion_entries[OPA_MAX_SLS];
+
+	/* Credit Mgmt/Buffer control */
+	u8 vau;
+	u8 vcu;
+	u16 link_credits;
+	u16 vl15_init;
+
 	/*
 	 * FXRTODO: VL ARB is absent for FXR. Remove these
 	 * once we have STL2 specific opafm
@@ -828,6 +860,10 @@ u16 hfi_port_cap_to_lcb(struct hfi_devdata *dd, u16 crc_mask);
 u16 hfi_cap_to_port_ltp(u16 cap);
 void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode);
 bool hfi_is_portals_req_sl(struct hfi_pportdata *ppd, u8 sl);
+void hfi_get_buffer_control(struct hfi_pportdata *ppd,
+			    struct buffer_control *bc, u16 *overall_limit);
+int hfi_set_buffer_control(struct hfi_pportdata *ppd,
+			   struct buffer_control *new_bc);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
