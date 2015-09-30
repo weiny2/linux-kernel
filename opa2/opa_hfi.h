@@ -98,6 +98,8 @@ enum {
 #define HFI_MULTICAST_LID_BASE	0xC000
 /* Maximum number of traffic classes supported */
 #define HFI_MAX_TC		4
+/* Maximum number of message classes supported */
+#define HFI_MAX_MC		2
 
 /* Maximum number of unicast LIDs supported */
 #define HFI_MAX_LID_SUPP	(0xBFFF)
@@ -147,13 +149,15 @@ enum {
 #define HFI_PKEY_MEMBER_TYPE(pkey)	(((pkey) >> HFI_PKEY_MEMBER_SHIFT) & \
 					HFI_PKEY_MEMBER_MASK)
 
-#define HFI_SL_TO_MC_SHIFT	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_MC_SHIFT
-#define HFI_SL_TO_MC_MASK	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_MC_MASK
-#define HFI_SL_TO_TC_SHIFT	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_SHIFT
-#define HFI_SL_TO_TC_MASK	FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK
+#define HFI_SC_TO_TC_MC_MASK	FXR_LM_CFG_PORT1_SC2MCTC0_SC0_TO_MCTC_MASK
 
-#define HFI_SL_TO_SC_SHIFT	FXR_LM_CFG_PORT0_SC2SL0_SC0_TO_SL_SHIFT
-#define HFI_SL_TO_SC_MASK	FXR_LM_CFG_PORT0_SC2SL0_SC0_TO_SL_MASK
+#define HFI_SL_TO_TC_MC_MASK	(FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK | \
+			(FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_MC_MASK << \
+			FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_MC_SHIFT))
+
+#define HFI_SL_TO_SC_MASK	FXR_LM_CFG_PORT0_SL2SC0_SL0_TO_SC_MASK
+
+#define HFI_SC_TO_SL_MASK	FXR_LM_CFG_PORT0_SC2SL0_SC0_TO_SL_MASK
 
 #define HFI_SC_VLNT_MASK		FXR_FPC_CFG_SC_VL_TABLE_15_0_ENTRY0_MASK
 /* Any lane between 8 and 14 is illegal. Randomly chosen one from that list */
@@ -164,6 +168,20 @@ enum {
 /* Message class and traffic class for VL15 packets */
 #define HFI_VL15_MC			0
 #define HFI_VL15_TC			3
+
+/*
+ * FXRTODO: Get rid of hard coded number of SL pairs and SL start once the FM
+ * provides it
+ */
+/* Number of SL pairs used by Portals */
+#define HFI_NUM_PTL_SLP 4
+
+/*
+ * Starting SL for Portals traffic. The following pairs are reserved for
+ * portals. [24, 25], [26, 27], [28, 29], [30, 31]
+ *
+ */
+#define HFI_PTL_SL_START 24
 
 /*
  * HFI or Host Link States
@@ -396,8 +414,9 @@ struct ib_vl_weight_elem {
  * @sc_to_sl: service class to service level mapping table
  * @sc_to_vlt: service class to (TX) virtual lane table
  * @sc_to_vlnt: service class to (RX) neighbor virtual lane table
- * @tx_sl_to_mc: Transmit service level to message class mapping
- * @tx_sl_to_tc: Transmit service level to traffic class mapping
+ * @sl_to_mctc: service level to traffic class & message class mapping
+ * @ptl_slp: SL pairs reserved for portals
+ * @num_ptl_slp: number of SL pairs reserved for portals
  * @bct: buffer control table
  *@local_link_down_reason: Reason why this port transitioned to link down
  *@local_link_down_reason: Reason why the neighboring port transitioned to
@@ -457,8 +476,9 @@ struct hfi_pportdata {
 	u8 sc_to_sl[OPA_MAX_SCS];
 	u8 sc_to_vlt[OPA_MAX_SCS];
 	u8 sc_to_vlnt[OPA_MAX_SCS];
-	u8 tx_sl_to_mc[OPA_MAX_SLS];
-	u8 tx_sl_to_tc[OPA_MAX_SLS];
+	u8 sl_to_mctc[OPA_MAX_SLS];
+	u8 ptl_slp[OPA_MAX_SLS / 2][HFI_MAX_MC];
+	u8 num_ptl_slp;
 	struct hfi_link_down_reason local_link_down_reason;
 	struct hfi_link_down_reason neigh_link_down_reason;
 	struct buffer_control bct;
