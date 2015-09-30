@@ -8445,36 +8445,29 @@ static int init_cntrs(struct hfi1_devdata *dd)
 	for (p = dd->cntrnames, i = 0; i < DEV_CNTR_LAST; i++) {
 		if (dev_cntrs[i].flags & CNTR_DISABLED) {
 			/* Nothing */
-		} else {
-			if (dev_cntrs[i].flags & CNTR_VL) {
-				for (j = 0; j < C_VL_COUNT; j++) {
-					memset(name, '\0', C_MAX_NAME);
-					snprintf(name, C_MAX_NAME, "%s%d",
-						 dev_cntrs[i].name,
-						 vl_from_idx(j));
-					memcpy(p, name, strlen(name));
-					p += strlen(name);
-					*p++ = '\n';
-				}
-			} else {
-				if (dev_cntrs[i].flags & CNTR_SDMA) {
-					for (j = 0; j < dd->chip_sdma_engines;
-						j++) {
-						memset(name, '\0', C_MAX_NAME);
-						snprintf(name, C_MAX_NAME,
-							 "%s%d",
-							 dev_cntrs[i].name, j);
-						memcpy(p, name, strlen(name));
-						p += strlen(name);
-						*p++ = '\n';
-					}
-				} else {
-					memcpy(p, dev_cntrs[i].name,
-					       strlen(dev_cntrs[i].name));
-					p += strlen(dev_cntrs[i].name);
-					*p++ = '\n';
-				}
+		} else if (dev_cntrs[i].flags & CNTR_VL) {
+			for (j = 0; j < C_VL_COUNT; j++) {
+				memset(name, '\0', C_MAX_NAME);
+				snprintf(name, C_MAX_NAME, "%s%d",
+					 dev_cntrs[i].name,
+					 vl_from_idx(j));
+				memcpy(p, name, strlen(name));
+				p += strlen(name);
+				*p++ = '\n';
 			}
+		} else if (dev_cntrs[i].flags & CNTR_SDMA) {
+			for (j = 0; j < dd->chip_sdma_engines; j++) {
+				memset(name, '\0', C_MAX_NAME);
+				snprintf(name, C_MAX_NAME, "%s%d",
+					 dev_cntrs[i].name, j);
+				memcpy(p, name, strlen(name));
+				p += strlen(name);
+				*p++ = '\n';
+			}
+		} else {
+			memcpy(p, dev_cntrs[i].name, strlen(dev_cntrs[i].name));
+			p += strlen(dev_cntrs[i].name);
+			*p++ = '\n';
 		}
 	}
 
