@@ -84,7 +84,8 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	u32 num_ports = OPA_AM_NPORT(am);
 	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
 	u32 lstate;
-	u8 mtu;
+	u32 buffer_units;
+	u8 mtu, credit_rate;
 
 	if (num_ports != 1) {
 		hfi_invalid_attr(smp);
@@ -192,6 +193,20 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		(ppd->mgmt_allowed ? OPA_PI_MASK_NEIGH_MGMT_ALLOWED : 0) |
 		(ppd->neighbor_fm_security ?
 			OPA_PI_MASK_NEIGH_FW_AUTH_BYPASS : 0);
+
+	/* HFIs shall always return VL15 credits to their
+	 * neighbor in a timely manner, without any credit return pacing.
+	 */
+	credit_rate = 0;
+	buffer_units  = (ppd->vau) & OPA_PI_MASK_BUF_UNIT_BUF_ALLOC;
+	buffer_units |= (ppd->vcu << 3) & OPA_PI_MASK_BUF_UNIT_CREDIT_ACK;
+	buffer_units |= (credit_rate << 6) &
+				OPA_PI_MASK_BUF_UNIT_VL15_CREDIT_RATE;
+	buffer_units |= (ppd->vl15_init << 11) & OPA_PI_MASK_BUF_UNIT_VL15_INIT;
+	pi->buffer_units = cpu_to_be32(buffer_units);
+	pi->opa_cap_mask = cpu_to_be16(OPA_CAP_MASK3_IsSharedSpaceSupported);
+	/* buffer info for FM */
+	pi->overall_buffer_space = cpu_to_be16(ppd->link_credits);
 
 	return hfi_reply(ibh);
 }
@@ -444,7 +459,7 @@ static int __subn_get_hfi_bct(struct hfi_devdata *dd, struct opa_smp *smp,
 		return hfi_reply(ibh);
 	}
 
-	memcpy(p, &ppd->bct, size);
+	hfi_get_buffer_control(ppd, p, NULL);
 
 	if (resp_len)
 		*resp_len += size;
@@ -1337,13 +1352,17 @@ static int __subn_set_hfi_bct(struct hfi_devdata *dd, struct opa_smp *smp,
 	struct buffer_control *p = (struct buffer_control *) data;
 	u32 num_ports = OPA_AM_NPORT(am);
 
-	if (num_ports != 1) {
-		hfi_invalid_attr(smp);
-		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
-		return hfi_reply(ibh);
-	}
+	if (num_ports != 1)
+		goto fail;
 
-	memcpy(p, &ppd->bct, sizeof(*p));
+	if (hfi_set_buffer_control(ppd, p) < 0)
+		goto fail;
+
+	goto done;
+fail:
+	hfi_invalid_attr(smp);
+	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+done:
 	return hfi_reply(ibh);
 }
 

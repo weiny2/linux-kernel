@@ -75,6 +75,7 @@
 #include <rdma/fxr/fxr_rx_e2e_defs.h>
 #include <rdma/fxr/fxr_lm_csrs.h>
 #include <rdma/fxr/fxr_lm_tp_csrs.h>
+#include <rdma/fxr/fxr_lm_cm_csrs.h>
 #include <rdma/fxr/fxr_lm_fpc_csrs.h>
 #include <rdma/fxr/fxr_linkmux_tp_defs.h>
 #include <rdma/fxr/fxr_linkmux_fpc_defs.h>
@@ -151,6 +152,19 @@ static u64 read_lm_tp_csr(const struct hfi_pportdata *ppd,
 		offset += FXR_LM_TP0_CSRS;
 	else if (ppd->pnum == 2)
 		offset += FXR_LM_TP1_CSRS;
+	else
+		dd_dev_warn(ppd->dd, "invalid ppd->pnum");
+
+	return read_csr(ppd->dd, offset);
+}
+
+static u64 read_lm_cm_csr(const struct hfi_pportdata *ppd,
+			  u32 offset)
+{
+	if (ppd->pnum == 1)
+		offset += FXR_LM_CM0_CSRS;
+	else if (ppd->pnum == 2)
+		offset += FXR_LM_CM1_CSRS;
 	else
 		dd_dev_warn(ppd->dd, "invalid ppd->pnum");
 
@@ -571,6 +585,390 @@ static void hfi_set_sc_to_vlt(struct hfi_pportdata *ppd, u8 *t)
 	 * a lock. Design decision pending.
 	 */
 	  memcpy(ppd->sc_to_vlt, t, OPA_MAX_SCS);
+}
+
+/* convert a vCU to a CU */
+static u32 hfi_vcu_to_cu(u8 vcu)
+{
+	return 1 << vcu;
+}
+
+/* convert a vAU to an AU */
+static inline u32 hfi_vau_to_au(u8 vau)
+{
+	return 8 * (1 << vau);
+}
+
+/* convert a CU to a vCU */
+static inline u8 hfi_cu_to_vcu(u32 cu)
+{
+	return ilog2(cu);
+}
+
+/*
+ * Fill out the given AU table using the given CU.  A CU is defined in terms
+ * AUs.  The table is a an encoding: given the index, how many AUs does that
+ * represent?
+ */
+static void hfi_assign_cm_au_table(struct hfi_pportdata *ppd, u32 cu,
+				   u32 offset)
+{
+	TP_CFG_CM_REMOTE_CRDT_RETURN_TBL0_t reg0;
+	TP_CFG_CM_REMOTE_CRDT_RETURN_TBL1_t reg1;
+
+	reg0.field.Entry0 = 0ull;
+	reg0.field.Entry1 = 1ull;
+	reg0.field.Entry2 = 2ull * cu;
+	reg0.field.Entry3 = 4ull * cu;
+	reg1.field.Entry4 = 8ull * cu;
+	reg1.field.Entry5 = 16ull * cu;
+	reg1.field.Entry6 = 32ull * cu;
+	reg1.field.Entry7 = 64ull * cu;
+
+	write_lm_cm_csr(ppd, offset, reg0.val);
+	write_lm_cm_csr(ppd, offset + 0x08, reg1.val);
+}
+
+void hfi_assign_local_cm_au_table(struct hfi_pportdata *ppd, u8 vcu)
+{
+	hfi_assign_cm_au_table(ppd, hfi_vcu_to_cu(vcu),
+			       FXR_TP_CFG_CM_REMOTE_CRDT_RETURN_TBL0);
+}
+
+void hfi_assign_remote_cm_au_table(struct hfi_pportdata *ppd, u8 vcu)
+{
+	hfi_assign_cm_au_table(ppd, hfi_vcu_to_cu(vcu),
+			       FXR_TP_CFG_CM_LOCAL_CRDT_RETURN_TBL0);
+}
+
+static u16 hfi_get_dedicated_crdt(struct hfi_pportdata *ppd, int vl_idx)
+{
+	TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT_t reg;
+	u32 addr = FXR_TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT + 8 * vl_idx;
+
+	reg.val = read_lm_cm_csr(ppd, addr);
+	return reg.field.Dedicated;
+}
+
+static u16 hfi_get_shared_crdt(struct hfi_pportdata *ppd, int vl_idx)
+{
+	TP_CFG_CM_SHARED_VL_CRDT_LIMIT_t reg;
+	u32 addr = FXR_TP_CFG_CM_SHARED_VL_CRDT_LIMIT + 8 * vl_idx;
+
+	reg.val = read_lm_cm_csr(ppd, addr);
+	return reg.field.Shared;
+}
+
+/*
+ * Read the current credit merge limits.
+ */
+void hfi_get_buffer_control(struct hfi_pportdata *ppd,
+			    struct buffer_control *bc, u16 *overall_limit)
+{
+	TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT_t reg;
+	int i;
+
+	/* not all entries are filled in */
+	memset(bc, 0, sizeof(*bc));
+
+	/* Reg offset 0-9 corresponds to VL0-8 & VL15 */
+	for (i = 0; i <= HFI_NUM_DATA_VLS; i++) {
+		int vl_num = hfi_idx_to_vl(i);
+		struct vl_limit *vll = &bc->vl[vl_num];
+
+		vll->dedicated = cpu_to_be16(hfi_get_dedicated_crdt(ppd, i));
+		vll->shared = cpu_to_be16(hfi_get_shared_crdt(ppd, i));
+	}
+
+	reg.val = read_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
+	bc->overall_shared_limit = reg.field.Shared;
+	if (overall_limit)
+		*overall_limit = reg.field.Total_Credit_Limit;
+}
+
+static void hfi_nonzero_msg(struct hfi_devdata *dd, int idx, const char *what,
+			    u16 limit)
+{
+	if (limit != 0)
+		dd_dev_info(dd, "Invalid %s limit %d on VL %d, ignoring\n",
+			    what, (int)limit, idx);
+}
+
+static void hfi_set_vau(struct hfi_pportdata *ppd, u8 vau)
+{
+	TP_CFG_CM_CRDT_SEND_t reg;
+
+	reg.val = read_lm_cm_csr(ppd, FXR_TP_CFG_CM_CRDT_SEND);
+	reg.field.AU = vau;
+	write_lm_cm_csr(ppd, FXR_TP_CFG_CM_CRDT_SEND, reg.val);
+}
+
+static void hfi_set_global_shared(struct hfi_pportdata *ppd, u16 limit)
+{
+	TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT_t reg;
+
+	reg.val = read_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
+	reg.field.Shared = limit;
+	write_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT, reg.val);
+}
+
+static void hfi_set_global_limit(struct hfi_pportdata *ppd, u16 limit)
+{
+	TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT_t reg;
+
+	reg.val = read_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
+	reg.field.Total_Credit_Limit = limit;
+	write_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT, reg.val);
+}
+
+static void hfi_set_vl_dedicated(struct hfi_pportdata *ppd, int vl, u16 limit)
+{
+	TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT_t reg;
+	u32 addr = FXR_TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT + (8 * hfi_vl_to_idx(vl));
+
+	reg.val = read_lm_cm_csr(ppd, addr);
+	reg.field.Dedicated = limit;
+	write_lm_cm_csr(ppd, addr, reg.val);
+}
+
+static void hfi_set_vl_shared(struct hfi_pportdata *ppd, int vl, u16 limit)
+{
+	TP_CFG_CM_SHARED_VL_CRDT_LIMIT_t reg;
+	u32 addr = FXR_TP_CFG_CM_SHARED_VL_CRDT_LIMIT + (8 * hfi_vl_to_idx(vl));
+
+	reg.val = read_lm_cm_csr(ppd, addr);
+	reg.field.Shared = limit;
+	write_lm_cm_csr(ppd, addr, reg.val);
+}
+
+/*
+ * Set up initial VL15 credits of the remote.  Assumes the rest of
+ * the CM credit registers are zero from a previous global or credit reset .
+ */
+void hfi_set_up_vl15(struct hfi_pportdata *ppd, u8 vau, u16 vl15buf)
+{
+	/* leave shared count at zero for both global and VL15 */
+	hfi_set_global_shared(ppd, 0);
+	hfi_set_global_limit(ppd, vl15buf);
+	hfi_set_vau(ppd, vau);
+	hfi_set_vl_dedicated(ppd, 15, vl15buf);
+
+	/* FXRTODO: Implement snoop mode ? */
+#if 0
+
+	/* We may need some credits for another VL when sending packets
+	 * with the snoop interface. Dividing it down the middle for VL15
+	 * and VL0 should suffice.
+	 */
+	if (unlikely(dd->hfi1_snoop.mode_flag == HFI1_PORT_SNOOP_MODE)) {
+		write_csr(dd, SEND_CM_CREDIT_VL15, (u64)(vl15buf >> 1)
+		    << SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT);
+		write_csr(dd, SEND_CM_CREDIT_VL, (u64)(vl15buf >> 1)
+		    << SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT);
+	} else {
+		write_csr(dd, SEND_CM_CREDIT_VL15, (u64)vl15buf
+			<< SEND_CM_CREDIT_VL15_DEDICATED_LIMIT_VL_SHIFT);
+	}
+#endif
+}
+
+/* spin until the given per-VL status mask bits clear */
+static void hfi_wait_for_vl_status_clear(struct hfi_pportdata *ppd, u64 mask,
+					 const char *which)
+{
+	unsigned long timeout;
+	u64 reg;
+
+	timeout = jiffies + msecs_to_jiffies(HFI_VL_STATUS_CLEAR_TIMEOUT);
+	while (1) {
+		reg = read_lm_cm_csr(ppd, FXR_TP_CFG_CM_CRDT_SEND) & mask;
+
+		if (reg == 0)
+			return;	/* success */
+		if (time_after(jiffies, timeout))
+			break;		/* timed out */
+		udelay(1);
+	}
+
+	ppd_dev_err(ppd, "%s credit change status not clearing after %dms, mask 0x%llx, not clear 0x%llx\n"
+		   , which, HFI_VL_STATUS_CLEAR_TIMEOUT, mask, reg);
+	/*
+	 * If this occurs, it is likely there was a credit loss on the link.
+	 * The only recovery from that is a link bounce.
+	 */
+	ppd_dev_err(ppd, "Continuing anyway.  A credit loss may occur. Suggest a link bounce\n");
+}
+
+/*
+ * The number of credits on the VLs may be changed while everything
+ * is "live", but the following algorithm must be followed due to
+ * how the hardware is actually implemented.  In particular,
+ * Return_Credit_Status[] is the only correct status check.
+ *
+ * if (reducing Global_Shared_Credit_Limit or any shared limit changing)
+ *     set Global_Shared_Credit_Limit = 0
+ *     use_all_vl = 1
+ * mask0 = all VLs that are changing either dedicated or shared limits
+ * set Shared_Limit[mask0] = 0
+ * spin until Return_Credit_Status[use_all_vl ? all VL : mask0] == 0
+ * if (changing any dedicated limit)
+ *     mask1 = all VLs that are lowering dedicated limits
+ *     lower Dedicated_Limit[mask1]
+ *     spin until Return_Credit_Status[mask1] == 0
+ *     raise Dedicated_Limits
+ * raise Shared_Limits
+ * raise Global_Shared_Credit_Limit
+ *
+ * lower = if the new limit is lower, set the limit to the new value
+ * raise = if the new limit is higher than the current value (may be changed
+ *	earlier in the algorithm), set the new limit to the new value
+ */
+int hfi_set_buffer_control(struct hfi_pportdata *ppd,
+			   struct buffer_control *new_bc)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	u64 changing_mask, ld_mask, stat_mask;
+	int change_count;
+	int i, use_all_mask;
+	struct buffer_control cur_bc;
+	u8 changing[OPA_MAX_VLS];
+	u8 lowering_dedicated[OPA_MAX_VLS];
+	u16 cur_total;
+	u32 new_total = 0;
+	const u64 all_mask =
+		FXR_TP_CFG_CM_CRDT_SEND_RETURN_CREDIT_STATUS_MASK <<
+		FXR_TP_CFG_CM_CRDT_SEND_RETURN_CREDIT_STATUS_SHIFT;
+
+	/* find the new total credits, do sanity check on unused VLs */
+	for (i = 0; i < OPA_MAX_VLS; i++) {
+		if (hfi_valid_vl(i)) {
+			new_total += be16_to_cpu(new_bc->vl[i].dedicated);
+			continue;
+		}
+		hfi_nonzero_msg(dd, i, "dedicated",
+				be16_to_cpu(new_bc->vl[i].dedicated));
+		hfi_nonzero_msg(dd, i, "shared",
+				be16_to_cpu(new_bc->vl[i].shared));
+		new_bc->vl[i].dedicated = 0;
+		new_bc->vl[i].shared = 0;
+	}
+	new_total += be16_to_cpu(new_bc->overall_shared_limit);
+
+	/* fetch the current values */
+	hfi_get_buffer_control(ppd, &cur_bc, &cur_total);
+
+	/*
+	 * Create the masks we will use.
+	 */
+	memset(changing, 0, sizeof(changing));
+	memset(lowering_dedicated, 0, sizeof(lowering_dedicated));
+	/*
+	 * Assumes that the individual VL bits are adjacent and in
+	 * increasing order
+	 */
+	stat_mask = 1 << FXR_TP_CFG_CM_CRDT_SEND_RETURN_CREDIT_STATUS_SHIFT;
+	changing_mask = 0;
+	ld_mask = 0;
+	change_count = 0;
+	for (i = 0; i < HFI_NUM_USABLE_VLS; i++, stat_mask <<= 1) {
+		if (!hfi_valid_vl(i))
+			continue;
+		if (new_bc->vl[i].dedicated != cur_bc.vl[i].dedicated ||
+		    new_bc->vl[i].shared != cur_bc.vl[i].shared) {
+			changing[i] = 1;
+			changing_mask |= stat_mask;
+			change_count++;
+		}
+		if (be16_to_cpu(new_bc->vl[i].dedicated) <
+		    be16_to_cpu(cur_bc.vl[i].dedicated)) {
+			lowering_dedicated[i] = 1;
+			ld_mask |= stat_mask;
+		}
+	}
+
+	/* bracket the credit change with a total adjustment */
+	if (new_total > cur_total)
+		hfi_set_global_limit(ppd, new_total);
+
+	/*
+	 * Start the credit change algorithm.
+	 */
+	use_all_mask = 0;
+	if ((be16_to_cpu(new_bc->overall_shared_limit) <
+	    be16_to_cpu(cur_bc.overall_shared_limit))) {
+		hfi_set_global_shared(ppd, 0);
+		cur_bc.overall_shared_limit = 0;
+		use_all_mask = 1;
+	}
+
+	for (i = 0; i < HFI_NUM_USABLE_VLS; i++) {
+		if (!hfi_valid_vl(i))
+			continue;
+
+		if (changing[i]) {
+			hfi_set_vl_shared(ppd, i, 0);
+			cur_bc.vl[i].shared = 0;
+		}
+	}
+
+	hfi_wait_for_vl_status_clear(ppd, use_all_mask ? all_mask :
+				     changing_mask, "shared");
+
+	if (change_count > 0) {
+		for (i = 0; i < HFI_NUM_USABLE_VLS; i++) {
+			if (!hfi_valid_vl(i))
+				continue;
+
+			if (lowering_dedicated[i]) {
+				u16 dvl = be16_to_cpu(new_bc->vl[i].dedicated);
+
+				hfi_set_vl_dedicated(ppd, i, dvl);
+				cur_bc.vl[i].dedicated =
+						new_bc->vl[i].dedicated;
+			}
+		}
+
+		hfi_wait_for_vl_status_clear(ppd, ld_mask, "dedicated");
+
+		/* now raise all dedicated that are going up */
+		for (i = 0; i < HFI_NUM_USABLE_VLS; i++) {
+			if (!hfi_valid_vl(i))
+				continue;
+
+			if (be16_to_cpu(new_bc->vl[i].dedicated) >
+			    be16_to_cpu(cur_bc.vl[i].dedicated)) {
+				u16 dvl = be16_to_cpu(new_bc->vl[i].dedicated);
+
+				hfi_set_vl_dedicated(ppd, i, dvl);
+			}
+		}
+	}
+
+	/* next raise all shared that are going up */
+	for (i = 0; i < HFI_NUM_USABLE_VLS; i++) {
+		if (!hfi_valid_vl(i))
+			continue;
+
+		if (be16_to_cpu(new_bc->vl[i].shared) >
+		    be16_to_cpu(cur_bc.vl[i].shared)) {
+			u16 svl = be16_to_cpu(new_bc->vl[i].shared);
+
+			hfi_set_vl_shared(ppd, i, svl);
+		}
+	}
+
+	/* finally raise the global shared */
+	if (be16_to_cpu(new_bc->overall_shared_limit) >
+	    be16_to_cpu(cur_bc.overall_shared_limit)) {
+		u16 ovl = be16_to_cpu(new_bc->overall_shared_limit);
+
+		hfi_set_global_shared(ppd, ovl);
+	}
+
+	/* bracket the credit change with a total adjustment */
+	if (new_total < cur_total)
+		hfi_set_global_limit(ppd, new_total);
+	return 0;
 }
 
 static void hfi_set_sc_to_vlnt(struct hfi_pportdata *ppd, u8 *t)
@@ -1381,6 +1779,30 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		ppd->host_link_state = HLS_DN_OFFLINE;
 
 		ppd->cc_max_table_entries = HFI_IB_CC_TABLE_CAP_DEFAULT;
+
+		/* Initialize credit management variables */
+		/* assign link credit variables */
+		ppd->vau = HFI_CM_VAU;
+		ppd->link_credits = BUFF_CREDIT_LIMIT;
+		ppd->vcu = hfi_cu_to_vcu(HFI_CM_CU);
+		/* enough room for 8 MAD packets plus header - 17K */
+		ppd->vl15_init = (8 * (HFI_MIN_VL_15_MTU + 128)) /
+					hfi_vau_to_au(ppd->vau);
+		if (ppd->vl15_init > ppd->link_credits)
+			ppd->vl15_init = ppd->link_credits;
+
+		hfi_assign_local_cm_au_table(ppd, ppd->vcu);
+
+		/* FXRTODO: This should be called from handle_verify cap */
+		hfi_assign_remote_cm_au_table(ppd, ppd->vcu);
+
+		/*
+		 * FXRTODO: Current port's CM must be initialized
+		 * with values of the neighbor ports RXBUF attributes
+		 * since LNI is WIP, set this up with local CMs values
+		 * since for B2B these values will be symmetric.
+		 */
+		hfi_set_up_vl15(ppd, ppd->vau, ppd->vl15_init);
 
 		/*
 		 * FXRTODO: The below 4 variables
