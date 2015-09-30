@@ -60,6 +60,7 @@
 #include <rdma/fxr/dc_8051_csrs_defs.h>
 #include <linux/interrupt.h>
 #include "opa_hfi.h"
+#include <rdma/opa_core_ib.h>
 #include "link.h"
 #include "firmware.h"
 
@@ -157,6 +158,69 @@ static const char *link_state_name(u32 state)
 
 	name = n < ARRAY_SIZE(names) ? names[n] : NULL;
 	return name ? name : "unknown";
+}
+
+/* return the OPA port physical state name */
+static const char *opa_pstate_name(u32 pstate)
+{
+	static const char * const port_physical_names[] = {
+		"PHYS_NOP",
+		"reserved1",
+		"PHYS_POLL",
+		"PHYS_DISABLED",
+		"PHYS_TRAINING",
+		"PHYS_LINKUP",
+		"PHYS_LINK_ERR_RECOVER",
+		"PHYS_PHY_TEST",
+		"reserved8",
+		"PHYS_OFFLINE",
+		"PHYS_GANGED",
+		"PHYS_TEST",
+	};
+	if (pstate < ARRAY_SIZE(port_physical_names))
+		return port_physical_names[pstate];
+	return "unknown";
+}
+
+u32 hfi_to_opa_pstate(struct hfi_devdata *dd, u32 hfi_pstate)
+{
+	/* look at the HFI meta-states only */
+	switch (hfi_pstate & 0xf0) {
+	case PLS_DISABLED:
+		return IB_PORTPHYSSTATE_DISABLED;
+	case PLS_OFFLINE:
+		return OPA_PORTPHYSSTATE_OFFLINE;
+	case PLS_POLLING:
+		return IB_PORTPHYSSTATE_POLLING;
+	case PLS_CONFIGPHY:
+		return IB_PORTPHYSSTATE_TRAINING;
+	case PLS_LINKUP:
+		return IB_PORTPHYSSTATE_LINKUP;
+	case PLS_PHYTEST:
+		return IB_PORTPHYSSTATE_PHY_TEST;
+	default:
+		dd_dev_err(dd, "Unexpected chip physical state of 0x%x\n",
+			hfi_pstate);
+		return IB_PORTPHYSSTATE_DISABLED;
+	}
+}
+
+u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd)
+{
+	static u32 remembered_state = 0xff;
+	u32 pstate;
+	u32 ib_pstate;
+
+	pstate = read_physical_state(ppd);
+	ib_pstate = hfi_to_opa_pstate(ppd->dd, pstate);
+	if (remembered_state != ib_pstate) {
+		dd_dev_info(ppd->dd,
+			"%s: physical state changed to %s (0x%x), phy 0x%x\n",
+			__func__, opa_pstate_name(ib_pstate), ib_pstate,
+			pstate);
+		remembered_state = ib_pstate;
+	}
+	return ib_pstate;
 }
 
 /*

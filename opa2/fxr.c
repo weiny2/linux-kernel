@@ -805,26 +805,6 @@ void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
 	 */
 }
 
-u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd)
-{
-	u32 pstate;
-
-	/*
-	 * FXRTODO: To be implemented as part of LNI
-	 * read from CSR. For now fake it with
-	 * equivalent linkstate set earlier
-	 */
-	switch(ppd->lstate) {
-	case IB_PORT_DOWN:
-		pstate =  IB_PORTPHYSSTATE_DISABLED;
-		break;
-	default:
-		pstate = IB_PORTPHYSSTATE_LINKUP;
-	}
-
-	return pstate;
-}
-
 /*
  * Send an idle SMA message.
  *
@@ -993,6 +973,7 @@ static void hfi_port_desc(struct opa_core_device *odev,
 	for (i = 0; i < ARRAY_SIZE(ppd->sc_to_vlt); i++)
 		pdesc->sc_to_vl[i] = ppd->sc_to_vlt[i];
 	pdesc->lstate = ppd->lstate;
+	pdesc->pstate = hfi_ibphys_portstate(ppd);
 }
 
 static void hfi_device_desc(struct opa_core_device *odev,

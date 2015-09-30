@@ -218,9 +218,10 @@ enum opa_port_phys_state {
 	IB_PORTPHYSSTATE_TRAINING = 4,
 	IB_PORTPHYSSTATE_LINKUP = 5,
 	IB_PORTPHYSSTATE_LINK_ERROR_RECOVERY = 6,
-	/* 7-8 is reserved */
+	IB_PORTPHYSSTATE_PHY_TEST = 7,
+	/* 8 is reserved */
 	OPA_PORTPHYSSTATE_OFFLINE = 9,
-	/* 10 is reserved */
+	OPA_PORTPHYSSTATE_GANGED = 10,
 	OPA_PORTPHYSSTATE_TEST = 11,
 	OPA_PORTPHYSSTATE_MAX = 11,
 	/* values 12-15 are reserved/ignored */
