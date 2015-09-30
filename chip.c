@@ -8462,7 +8462,7 @@ static int init_cntrs(struct hfi1_devdata *dd)
 				}
 			} else {
 				if (dev_cntrs[i].flags & CNTR_SDMA) {
-					for (j = 0; j < TXE_NUM_SDMA_ENGINES;
+					for (j = 0; j < dd->chip_sdma_engines;
 						j++) {
 						memset(name, '\0', C_MAX_NAME);
 						snprintf(name, C_MAX_NAME,
