@@ -304,6 +304,7 @@ struct hfi_dlid_assign_args;
  * @sc_to_vl: service class to virtual lane mapping table
  * @vl_mtu: Array of per VL MTU
  * @lstate: logical link state
+ * @pstate: Physical port state
  */
 struct opa_pport_desc {
 	__be64 pguid;
@@ -316,7 +317,8 @@ struct opa_pport_desc {
 	u8 sc_to_sl[OPA_MAX_SCS];
 	u8 sc_to_vl[OPA_MAX_SCS];
 	u16 vl_mtu[OPA_MAX_VLS];
-	u32 lstate;
+	u8 lstate;
+	u8 pstate;
 };
 
 /**
