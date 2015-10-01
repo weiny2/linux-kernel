@@ -5912,6 +5912,8 @@ static void init_qsfp_int(struct hfi1_devdata *dd)
 	/* Clear current status to avoid spurious interrupts */
 	write_csr(dd, dd->hfi1_id ? ASIC_QSFP2_CLEAR : ASIC_QSFP1_CLEAR,
 		  qsfp_mask);
+	write_csr(dd, dd->hfi1_id ? ASIC_QSFP2_MASK : ASIC_QSFP1_MASK,
+		  qsfp_mask);
 
 	set_qsfp_int_n(ppd, 0);
 
