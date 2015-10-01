@@ -106,11 +106,11 @@ MODULE_PARM_DESC(mem_affinity,
  */
 int hfi1_dev_affinity_init(struct hfi1_devdata *dd)
 {
-	int ret = 0;
+	int ret = -ENOMEM;
 	int node = pcibus_to_node(dd->pcidev->bus);
 	struct hfi1_affinity *info;
 	const struct cpumask *local_mask;
-	int first_cpu, curr_cpu, possible, i, ht;
+	int curr_cpu, possible, i, ht;
 
 	if (node < 0)
 		node = numa_node_id();
@@ -137,25 +137,53 @@ int hfi1_dev_affinity_init(struct hfi1_devdata *dd)
 		local_mask = topology_core_cpumask(0);
 	/* use local mask as default */
 	cpumask_copy(info->def_intr.mask, local_mask);
+	/*
+	 * Remove HT cores from the default mask.  Do this in two steps below.
+	 */
 	possible = cpumask_weight(info->def_intr.mask);
-	/* don't use threads when assigning affinity */
-	ht = cpumask_weight(cpu_sibling_mask(cpumask_first(local_mask)));
-	for (i = possible / ht; i < possible; i++)
-		cpumask_clear_cpu(i, info->def_intr.mask);
-	/* reset weight */
-	possible = cpumask_weight(info->def_intr.mask);
-	first_cpu = cpumask_first(info->def_intr.mask);
-	if (nr_cpu_ids >= first_cpu)
-		first_cpu++;
-	curr_cpu = first_cpu;
-
-	/* One context is reserved as control context */
-	for (i = first_cpu; i < dd->n_krcv_queues + first_cpu - 1; i++) {
-		cpumask_clear_cpu(curr_cpu, info->def_intr.mask);
-		cpumask_set_cpu(curr_cpu, info->rcv_intr.mask);
+	ht = cpumask_weight(cpu_sibling_mask(
+					cpumask_first(info->def_intr.mask)));
+	/*
+	 * Step 1.  Skip over the first N HT siblings and use them as the
+	 * "real" cores.  Assumes that HT cores are not enumerated in
+	 * succession (except in the single core case).
+	 */
+	curr_cpu = cpumask_first(info->def_intr.mask);
+	for (i = 0; i < possible / ht; i++)
 		curr_cpu = cpumask_next(curr_cpu, info->def_intr.mask);
-		if (curr_cpu >= nr_cpu_ids)
-			break;
+	/*
+	 * Step 2.  Remove the remaining HT siblings.  Use cpumask_next() to
+	 * skip any gaps.
+	 */
+	for (; i < possible; i++) {
+		cpumask_clear_cpu(curr_cpu, info->def_intr.mask);
+		curr_cpu = cpumask_next(curr_cpu, info->def_intr.mask);
+	}
+
+	/* fill in the receive list */
+	possible = cpumask_weight(info->def_intr.mask);
+	curr_cpu = cpumask_first(info->def_intr.mask);
+	if (possible == 1) {
+		/* only one CPU, everyone will use it */
+		cpumask_set_cpu(curr_cpu, info->rcv_intr.mask);
+	} else {
+		/*
+		 * Retain the first CPU in the default list for the control
+		 * context.
+		 */
+		curr_cpu = cpumask_next(curr_cpu, info->def_intr.mask);
+
+		/*
+		 * Remove the remaining kernel receive queues from
+		 * the default list and add them to the receive list.
+		 */
+		for (i = 0; i < dd->n_krcv_queues - 1; i++) {
+			cpumask_clear_cpu(curr_cpu, info->def_intr.mask);
+			cpumask_set_cpu(curr_cpu, info->rcv_intr.mask);
+			curr_cpu = cpumask_next(curr_cpu, info->def_intr.mask);
+			if (curr_cpu >= nr_cpu_ids)
+				break;
+		}
 	}
 
 	cpumask_copy(info->proc.mask, cpu_online_mask);
@@ -204,7 +232,7 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 {
 	int ret = 0;
 	cpumask_var_t diff;
-	struct cpu_mask_set *set;
+	struct cpu_mask_set *set = NULL;
 	struct sdma_engine *sde = NULL;
 	struct hfi1_ctxtdata *rcd = NULL;
 	char extra[64];
@@ -223,13 +251,14 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 	case IRQ_SDMA:
 		sde = (struct sdma_engine *)msix->arg;
 		scnprintf(extra, 64, "engine %u", sde->this_idx);
+		/* fall through */
 	case IRQ_GENERAL:
 		set = &dd->affinity->def_intr;
 		break;
 	case IRQ_RCVCTXT:
 		rcd = (struct hfi1_ctxtdata *)msix->arg;
 		if (rcd->ctxt == HFI1_CTRL_CTXT) {
-			set = &dd->affinity->def_intr;
+			/* no need to assign set */
 			cpu = cpumask_first(dd->affinity->def_intr.mask);
 		} else {
 			set = &dd->affinity->rcv_intr;
@@ -241,12 +270,13 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 		return -EINVAL;
 	}
 
-	spin_lock(&dd->affinity->lock);
 	/*
-	 * The Control receive context should be placed on a particular CPU,
-	 * which is set above. Everything else finds its CPU here.
+	 * The control receive context is placed on a particular CPU, which
+	 * is set above.  Skip accounting for it.  Everything else finds its
+	 * CPU here.
 	 */
 	if (cpu == -1) {
+		spin_lock(&dd->affinity->lock);
 		if (cpumask_equal(set->mask, set->used)) {
 			/*
 			 * We've used up all the CPUs, bump up the generation
@@ -257,9 +287,9 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 		}
 		cpumask_andnot(diff, set->mask, set->used);
 		cpu = cpumask_first(diff);
+		cpumask_set_cpu(cpu, set->used);
+		spin_unlock(&dd->affinity->lock);
 	}
-	cpumask_set_cpu(cpu, set->used);
-	spin_unlock(&dd->affinity->lock);
 
 	switch (msix->type) {
 	case IRQ_SDMA:
@@ -284,7 +314,8 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 void hfi1_put_irq_affinity(struct hfi1_devdata *dd,
 			   struct hfi1_msix_entry *msix)
 {
-	struct cpu_mask_set *set;
+	struct cpu_mask_set *set = NULL;
+	struct hfi1_ctxtdata *rcd;
 
 	switch (msix->type) {
 	case IRQ_SDMA:
@@ -292,17 +323,24 @@ void hfi1_put_irq_affinity(struct hfi1_devdata *dd,
 		set = &dd->affinity->def_intr;
 		break;
 	case IRQ_RCVCTXT:
-		set = &dd->affinity->rcv_intr;
+		rcd = (struct hfi1_ctxtdata *)msix->arg;
+		/* only do accounting for non control contexts */
+		if (rcd->ctxt != HFI1_CTRL_CTXT)
+			set = &dd->affinity->rcv_intr;
 		break;
 	default:
 		return;
 	}
 
-	spin_lock(&dd->affinity->lock);
-	cpumask_andnot(set->used, set->used, msix->mask);
-	if (cpumask_empty(set->used) && set->gen)
-		set->gen--;
-	spin_unlock(&dd->affinity->lock);
+	if (set) {
+		spin_lock(&dd->affinity->lock);
+		cpumask_andnot(set->used, set->used, msix->mask);
+		if (cpumask_empty(set->used) && set->gen) {
+			set->gen--;
+			cpumask_copy(set->used, set->mask);
+		}
+		spin_unlock(&dd->affinity->lock);
+	}
 
 	irq_set_affinity_hint(msix->msix.vector, NULL);
 	cpumask_clear(msix->mask);
@@ -414,7 +452,10 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 	hfi1_cdbg(PROC, "possible CPUs for process %s", buf);
 
 	cpu = cpumask_first(mask);
-	cpumask_set_cpu(cpu, set->used);
+	if (cpu >= nr_cpu_ids) /* empty */
+		cpu = -1;
+	else
+		cpumask_set_cpu(cpu, set->used);
 	spin_unlock(&dd->affinity->lock);
 
 free:
@@ -429,10 +470,14 @@ void hfi1_put_proc_affinity(struct hfi1_devdata *dd, int cpu)
 {
 	struct cpu_mask_set *set = &dd->affinity->proc;
 
+	if (cpu < 0)
+		return;
 	spin_lock(&dd->affinity->lock);
 	cpumask_clear_cpu(cpu, set->used);
-	if (cpumask_empty(set->used) && set->gen)
+	if (cpumask_empty(set->used) && set->gen) {
 		set->gen--;
+		cpumask_copy(set->used, set->mask);
+	}
 	spin_unlock(&dd->affinity->lock);
 }
 
