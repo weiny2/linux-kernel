@@ -57,7 +57,7 @@
 #include "opa_hfi.h"
 #include "debugfs.h"
 #include "link.h"
-#include "rdma/fxr/dc_8051_csrs_defs.h"
+#include "rdma/fxr/mnh_8051_defs.h"
 #include "rdma/fxr/dcc_csrs_defs.h"
 
 #ifdef CONFIG_DEBUG_FS
@@ -100,12 +100,10 @@ static const char *hfi_class_name = "hfi";
 #define private2dd(file) (file_inode(file)->i_private)
 #define private2ppd(file) (file_inode(file)->i_private)
 
-FIRMWARE_READ(8051_state, CRK8051_STS_CUR_STATE)
-FIRMWARE_READ(8051_access, CRK8051_CFG_CSR_ACCESS_SEL)
-FIRMWARE_WRITE(8051_access, CRK8051_CFG_CSR_ACCESS_SEL)
-FIRMWARE_READ(8051_cmd0, CRK8051_CFG_HOST_CMD_0)
-FIRMWARE_WRITE(8051_cmd0, CRK8051_CFG_HOST_CMD_0)
-FIRMWARE_READ(8051_cmd1, CRK8051_CFG_HOST_CMD_1)
+FIRMWARE_READ(8051_state, CRK_CRK8051_STS_CUR_STATE)
+FIRMWARE_READ(8051_cmd0, CRK_CRK8051_CFG_HOST_CMD_0)
+FIRMWARE_WRITE(8051_cmd0, CRK_CRK8051_CFG_HOST_CMD_0)
+FIRMWARE_READ(8051_cmd1, CRK_CRK8051_CFG_HOST_CMD_1)
 FIRMWARE_READ(port_config, CRK_CFG_PORT_CONFIG)
 FIRMWARE_WRITE(port_config, CRK_CFG_PORT_CONFIG)
 
@@ -137,7 +135,6 @@ struct firmware_info {
 
 static const struct firmware_info firmware_ops[] = {
 	DEBUGFS_OPS("8051_state", _8051_state_read, NULL),
-	DEBUGFS_OPS("8051_access", _8051_access_read, _8051_access_write),
 	DEBUGFS_OPS("8051_cmd0", _8051_cmd0_read, _8051_cmd0_write),
 	DEBUGFS_OPS("8051_cmd1", _8051_cmd1_read, NULL),
 	DEBUGFS_OPS("port_config", _port_config_read, _port_config_write),
@@ -191,10 +188,10 @@ void hfi_firmware_dbg_exit(struct hfi_devdata *dd)
 /* return the 8051 firmware state */
 static inline u32 get_firmware_state(const struct hfi_pportdata *ppd)
 {
-	u64 reg = read_8051_csr(ppd, CRK8051_STS_CUR_STATE);
+	u64 reg = read_8051_csr(ppd, CRK_CRK8051_STS_CUR_STATE);
 
-	return (reg >> CRK8051_STS_CUR_STATE_FIRMWARE_SHIFT)
-				& CRK8051_STS_CUR_STATE_FIRMWARE_MASK;
+	return (reg >> CRK_CRK8051_STS_CUR_STATE_FIRMWARE_SHIFT)
+				& CRK_CRK8051_STS_CUR_STATE_FIRMWARE_MASK;
 }
 
 /*
