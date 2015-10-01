@@ -70,19 +70,7 @@ for viper in ${viper0} ${viper1}; do
 	echo fail on the installation of rpm files.
 	exit 14
     fi
-    # start opa2_hfi daemon
-    ${ssh_cmd} "service --skip-redirect opa2_hfi start"
-    if [ ! $? ]; then
-	echo fail on starting opa2_hfi.
-	exit 15
-    fi
 done
-
-ssh -p${viper0} root@localhost "service --skip-redirect opafm start"
-
-# sleep for 20 seconds after the FM has started before running
-# harness to ensure that both ports are active
-sleep 20
 
 # run quick test.
 cd opa-headers.git/test
