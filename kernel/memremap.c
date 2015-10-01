@@ -10,6 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  */
+#include <linux/rculist.h>
 #include <linux/device.h>
 #include <linux/types.h>
 #include <linux/io.h>
@@ -138,16 +139,50 @@ void devm_memunmap(struct device *dev, void *addr)
 EXPORT_SYMBOL(devm_memunmap);
 
 #ifdef CONFIG_ZONE_DEVICE
+static LIST_HEAD(ranges);
+static DEFINE_SPINLOCK(range_lock);
+
 struct page_map {
 	struct resource res;
+	struct dev_pagemap pgmap;
+	struct list_head list;
 };
+
+static void add_page_map(struct page_map *page_map)
+{
+	spin_lock(&range_lock);
+	list_add_rcu(&page_map->list, &ranges);
+	spin_unlock(&range_lock);
+}
+
+static void del_page_map(struct page_map *page_map)
+{
+	spin_lock(&range_lock);
+	list_del_rcu(&page_map->list);
+	spin_unlock(&range_lock);
+}
 
 static void devm_memremap_pages_release(struct device *dev, void *res)
 {
 	struct page_map *page_map = res;
 
+	del_page_map(page_map);
+
 	/* pages are dead and unused, undo the arch mapping */
 	arch_remove_memory(page_map->res.start, resource_size(&page_map->res));
+}
+
+/* assumes rcu_read_lock() held at entry */
+struct dev_pagemap *__get_dev_pagemap(resource_size_t phys)
+{
+	struct page_map *page_map;
+
+	WARN_ON_ONCE(!rcu_read_lock_held());
+
+	list_for_each_entry_rcu(page_map, &ranges, list)
+		if (phys >= page_map->res.start && phys <= page_map->res.end)
+			return &page_map->pgmap;
+	return NULL;
 }
 
 void *devm_memremap_pages(struct device *dev, struct resource *res)
@@ -173,12 +208,17 @@ void *devm_memremap_pages(struct device *dev, struct resource *res)
 
 	memcpy(&page_map->res, res, sizeof(*res));
 
+	page_map->pgmap.dev = dev;
+	INIT_LIST_HEAD(&page_map->list);
+	add_page_map(page_map);
+
 	nid = dev_to_node(dev);
 	if (nid < 0)
 		nid = numa_mem_id();
 
 	error = arch_add_memory(nid, res->start, resource_size(res), true);
 	if (error) {
+		del_page_map(page_map);
 		devres_free(page_map);
 		return ERR_PTR(error);
 	}

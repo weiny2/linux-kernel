@@ -717,6 +717,24 @@ static inline enum zone_type page_zonenum(const struct page *page)
 	return (page->flags >> ZONES_PGSHIFT) & ZONES_MASK;
 }
 
+/**
+ * struct dev_pagemap - metadata for ZONE_DEVICE mappings
+ * @dev: host device of the mapping for debug
+ */
+struct dev_pagemap {
+	/* TODO: vmem_altmap and percpu_ref count */
+	struct device *dev;
+};
+
+#ifdef CONFIG_ZONE_DEVICE
+struct dev_pagemap *__get_dev_pagemap(resource_size_t phys);
+#else
+static inline struct dev_pagemap *get_dev_pagemap(resource_size_t phys)
+{
+	return NULL;
+}
+#endif
+
 #if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)
 #define SECTION_IN_PAGE_FLAGS
 #endif
