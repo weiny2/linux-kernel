@@ -1254,7 +1254,6 @@ void handle_eflags(struct hfi1_packet *packet)
 			   packet->rhf & RHF_VCRC_ERR ? "vcrc " : "",
 			   packet->rhf & RHF_ICRC_ERR ? "icrc " : "",
 			   rte);
-
 }
 
 /*
