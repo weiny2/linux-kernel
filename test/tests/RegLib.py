@@ -440,15 +440,19 @@ class TestInfo:
         host = self.get_host_record(0)
         if host.file_exists("/usr/mpi/gcc/openmpi-1.8.5/bin/mpirun"):
             self.mpiverbs_path = "/usr/mpi/gcc/openmpi-1.8.5"
-	elif host.file_exists("/usr/mpi/gcc/openmpi-1.8.2a1/bin/mpirun"):
+        elif host.file_exists("/usr/mpi/gcc/openmpi-1.8.2a1/bin/mpirun"):
             self.mpiverbs_path = "/usr/mpi/gcc/openmpi-1.8.2a1"
+        elif host.file_exists("/usr/mpi/gcc/openmpi-1.10.0/bin/mpirun"):
+            self.mpiverbs_path = "/usr/mpi/gcc/openmpi-1.10.0"
         else:
             test_log(0, "could not find verbs MPI path")
 
         if host.file_exists("/usr/mpi/gcc/openmpi-1.8.5-hfi/bin/mpirun"):
             self.mpipsm_path = "/usr/mpi/gcc/openmpi-1.8.5-hfi"
-	elif host.file_exists("/usr/mpi/gcc/openmpi-1.8.2a1-hfi/bin/mpirun"):
+        elif host.file_exists("/usr/mpi/gcc/openmpi-1.8.2a1-hfi/bin/mpirun"):
             self.mpipsm_path = "/usr/mpi/gcc/openmpi-1.8.2a1-hfi"
+        elif host.file_exists("/usr/mpi/gcc/openmpi-1.10.0-hfi/bin/mpirun"):
+            self.mpipsm_path = "/usr/mpi/gcc/openmpi-1.10.0-hfi"
         else:
             test_log(0, "could not find PSM MPI path")
 

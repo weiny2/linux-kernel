@@ -47,10 +47,10 @@ def main():
     benchmark = ""
     if base_dir == "":
         if test_info.is_mpiverbs():
-            base_dir = test_info.mpiverbs_path + "/tests"
+            base_dir = "/opt/hpcc"
             benchmark = "hpcc_wfr_verbs"
         else:
-            base_dir = test_info.mpipsm_path + "/tests"
+            base_dir = "/opt/hpcc-hfi"
             benchmark = "hpcc_wfr_psm"
 
     benchmark = base_dir + "/" + benchmark

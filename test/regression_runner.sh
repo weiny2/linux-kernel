@@ -29,14 +29,14 @@ simics_host1="viper0"
 simics_host2="viper1"
 simics_args="--nodelist \"viper0,viper1\""
 
-# FPGA specific
-ssh_fpga_host1="ssh root@$host1"
-ssh_fpga_host2="ssh root@$host2"
-fpga_host1="$host1"
-fpga_host2="$host2"
-scp_fpga_host1="scp root@$host1:"
-scp_fpga_host2="scp root@$host2:"
-fpga_args="--nodelist \"$host1,$host2\""
+# Non simics specific
+ssh_hw_host1="ssh root@$host1"
+ssh_hw_host2="ssh root@$host2"
+hw_host1="$host1"
+hw_host2="$host2"
+scp_hw_host1="scp root@$host1:"
+scp_hw_host2="scp root@$host2:"
+hw_args="--nodelist \"$host1,$host2\""
 
 #------------------------
 # Internal test variables
@@ -104,8 +104,8 @@ function dump_config {
 
 	if [[ $mode == "simics" ]]; then
 		dump_simics_config
-	elif [[ $mode == "fpga" ]]; then
-		dump_fpga_config
+	elif [[ $mode == "hw" ]]; then
+		dump_hw_config
 	else
 		echo "Unsupported mode"
 		exit 1
@@ -115,14 +115,14 @@ function dump_config {
 	echo "Host 1 software versions":
 	run_cmd_fatal $host1_ssh "rpm -qa | grep hfi1-psm"
 	run_cmd_fatal $host1_ssh "rpm -qa | grep hfi1-diagtools"
-	run_cmd_fatal $host1_ssh "rpm -qa | grep openmpi | grep \"2a1\|1.8.5\""
+	run_cmd_fatal $host1_ssh "rpm -qa | grep openmpi | grep \"2a1\|1.8.5|1.10.0\""
 
 	echo ""
 
 	echo "Host 2 software versions":
 	run_cmd_fatal $host2_ssh "rpm -qa | grep hfi1-psm"
 	run_cmd_fatal $host2_ssh "rpm -qa | grep hfi1-diagtools"
-	run_cmd_fatal $host2_ssh "rpm -qa | grep openmpi | grep \"2a1\|1.8.5\""
+	run_cmd_fatal $host2_ssh "rpm -qa | grep openmpi | grep \"2a1\|1.8.5|1.10.0\""
 
 	echo ""
 
@@ -150,15 +150,15 @@ function dump_modparms {
 	echo ""
 }
 
-function dump_fpga_config {
+function dump_hw_config {
 	echo ""
 	echo "-------------"
-	echo "FPGA settings"
+	echo "hw settings"
 	echo "-------------"
-	echo -e "\tFPGA host 1 SSH = $ssh_fpga_host1"
-	echo -e "\tFPGA host 2 SSH = $ssh_fpga_host2"
-	echo -e "\tFPGA host 1 SCP = $scp_fpga_host1"
-	echo -e "\tFPGA host 2 SCP = $scp_fpga_host2"
+	echo -e "\thw host 1 SSH = $ssh_hw_host1"
+	echo -e "\thw host 2 SSH = $ssh_hw_host2"
+	echo -e "\thw host 1 SCP = $scp_hw_host1"
+	echo -e "\thw host 2 SCP = $scp_hw_host2"
 }
 
 function dump_simics_config {
@@ -190,8 +190,8 @@ function do_mode_specific_pretest {
 	echo "--------------------------------"
 	if [[ $mode == "simics" ]]; then
 		do_simics_pretest
-	elif [[ $mode == "fpga" ]]; then
-		do_fpga_pretest
+	elif [[ $mode == "hw" ]]; then
+		do_hw_pretest
 	else
 		echo "Unsupported mode"
 		exit 1
@@ -205,8 +205,8 @@ function do_mode_specific_posttest {
 	echo "---------------------------------"
 	if [[ $mode == "simics" ]]; then
 		do_simics_posttest
-	elif [[ $mode == "fpga" ]]; then
-		do_fpga_posttest
+	elif [[ $mode == "hw" ]]; then
+		do_hw_posttest
 	else
 		echo "Unsupported mode"
 		exit 1
@@ -230,16 +230,16 @@ function do_simics_pretest {
 	run_cmd_fatal "$host2_ssh \"date --set '$cur_date'\""
 }
 
-function do_fpga_pretest {
-	echo "Doing fpga pretest"
+function do_hw_pretest {
+	echo "Doing hw pretest"
 
-	host1_ssh=$ssh_fpga_host1
-	host2_ssh=$ssh_fpga_host2
-	host1_scp=$scp_fpga_host1
-	host2_scp=$scp_fpga_host2
-	host1=$fpga_host1
-	host2=$fpga_host2
-	std_args=$fpga_args
+	host1_ssh=$ssh_hw_host1
+	host2_ssh=$ssh_hw_host2
+	host1_scp=$scp_hw_host1
+	host2_scp=$scp_hw_host2
+	host1=$hw_host1
+	host2=$hw_host2
+	std_args=$hw_args
 }
 
 function do_simics_posttest {
@@ -256,8 +256,8 @@ function do_simics_posttest {
 	run_cmd cp $simics_console $logdir/
 }
 
-function do_fpga_posttest {
-	echo "FPGA - Nothing to do post test."
+function do_hw_posttest {
+	echo "hw - Nothing to do post test."
 }
 
 function do_hipri_tests {
@@ -318,10 +318,10 @@ function do_lopri_tests {
 
 if [[ $mode == "simics" ]]; then
 	echo "Running in simics mode"
-elif [[ $mode == "fpga" ]]; then
-	echo "Running in FPGA mode"
+elif [[ $mode == "hw" ]]; then
+	echo "Running in hw mode"
 else
-	echo "Must pass 'simics' or 'fpga' as the mode"
+	echo "Must pass 'simics' or 'hw' as the mode"
 	exit 0
 fi
 
