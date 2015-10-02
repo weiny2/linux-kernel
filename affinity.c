@@ -57,8 +57,8 @@
 #include "trace.h"
 
 struct cpu_mask_set {
-	cpumask_var_t mask;
-	cpumask_var_t used;
+	struct cpumask mask;
+	struct cpumask used;
 	uint gen;
 };
 
@@ -136,57 +136,57 @@ int hfi1_dev_affinity_init(struct hfi1_devdata *dd)
 	if (cpumask_first(local_mask) >= nr_cpu_ids)
 		local_mask = topology_core_cpumask(0);
 	/* use local mask as default */
-	cpumask_copy(info->def_intr.mask, local_mask);
+	cpumask_copy(&info->def_intr.mask, local_mask);
 	/*
 	 * Remove HT cores from the default mask.  Do this in two steps below.
 	 */
-	possible = cpumask_weight(info->def_intr.mask);
+	possible = cpumask_weight(&info->def_intr.mask);
 	ht = cpumask_weight(cpu_sibling_mask(
-					cpumask_first(info->def_intr.mask)));
+					cpumask_first(&info->def_intr.mask)));
 	/*
 	 * Step 1.  Skip over the first N HT siblings and use them as the
 	 * "real" cores.  Assumes that HT cores are not enumerated in
 	 * succession (except in the single core case).
 	 */
-	curr_cpu = cpumask_first(info->def_intr.mask);
+	curr_cpu = cpumask_first(&info->def_intr.mask);
 	for (i = 0; i < possible / ht; i++)
-		curr_cpu = cpumask_next(curr_cpu, info->def_intr.mask);
+		curr_cpu = cpumask_next(curr_cpu, &info->def_intr.mask);
 	/*
 	 * Step 2.  Remove the remaining HT siblings.  Use cpumask_next() to
 	 * skip any gaps.
 	 */
 	for (; i < possible; i++) {
-		cpumask_clear_cpu(curr_cpu, info->def_intr.mask);
-		curr_cpu = cpumask_next(curr_cpu, info->def_intr.mask);
+		cpumask_clear_cpu(curr_cpu, &info->def_intr.mask);
+		curr_cpu = cpumask_next(curr_cpu, &info->def_intr.mask);
 	}
 
 	/* fill in the receive list */
-	possible = cpumask_weight(info->def_intr.mask);
-	curr_cpu = cpumask_first(info->def_intr.mask);
+	possible = cpumask_weight(&info->def_intr.mask);
+	curr_cpu = cpumask_first(&info->def_intr.mask);
 	if (possible == 1) {
 		/* only one CPU, everyone will use it */
-		cpumask_set_cpu(curr_cpu, info->rcv_intr.mask);
+		cpumask_set_cpu(curr_cpu, &info->rcv_intr.mask);
 	} else {
 		/*
 		 * Retain the first CPU in the default list for the control
 		 * context.
 		 */
-		curr_cpu = cpumask_next(curr_cpu, info->def_intr.mask);
+		curr_cpu = cpumask_next(curr_cpu, &info->def_intr.mask);
 
 		/*
 		 * Remove the remaining kernel receive queues from
 		 * the default list and add them to the receive list.
 		 */
 		for (i = 0; i < dd->n_krcv_queues - 1; i++) {
-			cpumask_clear_cpu(curr_cpu, info->def_intr.mask);
-			cpumask_set_cpu(curr_cpu, info->rcv_intr.mask);
-			curr_cpu = cpumask_next(curr_cpu, info->def_intr.mask);
+			cpumask_clear_cpu(curr_cpu, &info->def_intr.mask);
+			cpumask_set_cpu(curr_cpu, &info->rcv_intr.mask);
+			curr_cpu = cpumask_next(curr_cpu, &info->def_intr.mask);
 			if (curr_cpu >= nr_cpu_ids)
 				break;
 		}
 	}
 
-	cpumask_copy(info->proc.mask, cpu_online_mask);
+	cpumask_copy(&info->proc.mask, cpu_online_mask);
 	dd->affinity = info;
 	ret = 0;
 	goto done;
@@ -214,23 +214,19 @@ void hfi1_dev_affinity_free(struct hfi1_devdata *dd)
 
 static inline int alloc_cpu_mask_set(struct cpu_mask_set *set)
 {
-	int i, j;
-
-	i = zalloc_cpumask_var(&set->mask, GFP_KERNEL);
-	j = zalloc_cpumask_var(&set->used, GFP_KERNEL);
+	cpumask_clear(&set->mask);
+	cpumask_clear(&set->used);
 	set->gen = 0;
-	return i && j;
+	return 1;
 }
 
 static inline void free_cpu_mask_set(struct cpu_mask_set *set)
 {
-	free_cpumask_var(set->mask);
-	free_cpumask_var(set->used);
 }
 
 int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 {
-	int ret = 0;
+	int ret;
 	cpumask_var_t diff;
 	struct cpu_mask_set *set = NULL;
 	struct sdma_engine *sde = NULL;
@@ -239,9 +235,7 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 	int cpu = -1;
 
 	extra[0] = '\0';
-	ret = zalloc_cpumask_var(&msix->mask, GFP_KERNEL);
-	if (!ret)
-		return -ENOMEM;
+	cpumask_clear(&msix->mask);
 
 	ret = zalloc_cpumask_var(&diff, GFP_KERNEL);
 	if (!ret)
@@ -259,7 +253,7 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 		rcd = (struct hfi1_ctxtdata *)msix->arg;
 		if (rcd->ctxt == HFI1_CTRL_CTXT) {
 			/* no need to assign set */
-			cpu = cpumask_first(dd->affinity->def_intr.mask);
+			cpu = cpumask_first(&dd->affinity->def_intr.mask);
 		} else {
 			set = &dd->affinity->rcv_intr;
 		}
@@ -277,17 +271,17 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 	 */
 	if (cpu == -1) {
 		spin_lock(&dd->affinity->lock);
-		if (cpumask_equal(set->mask, set->used)) {
+		if (cpumask_equal(&set->mask, &set->used)) {
 			/*
 			 * We've used up all the CPUs, bump up the generation
 			 * and reset the 'used' map
 			 */
 			set->gen++;
-			cpumask_clear(set->used);
+			cpumask_clear(&set->used);
 		}
-		cpumask_andnot(diff, set->mask, set->used);
+		cpumask_andnot(diff, &set->mask, &set->used);
 		cpu = cpumask_first(diff);
-		cpumask_set_cpu(cpu, set->used);
+		cpumask_set_cpu(cpu, &set->used);
 		spin_unlock(&dd->affinity->lock);
 	}
 
@@ -301,11 +295,11 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 		break;
 	}
 
-	cpumask_set_cpu(cpu, msix->mask);
+	cpumask_set_cpu(cpu, &msix->mask);
 	dd_dev_info(dd, "IRQ vector: %u, type %s %s -> cpu: %d\n",
 		    msix->msix.vector, irq_type_names[msix->type],
 		    extra, cpu);
-	irq_set_affinity_hint(msix->msix.vector, msix->mask);
+	irq_set_affinity_hint(msix->msix.vector, &msix->mask);
 
 	free_cpumask_var(diff);
 	return 0;
@@ -334,16 +328,16 @@ void hfi1_put_irq_affinity(struct hfi1_devdata *dd,
 
 	if (set) {
 		spin_lock(&dd->affinity->lock);
-		cpumask_andnot(set->used, set->used, msix->mask);
-		if (cpumask_empty(set->used) && set->gen) {
+		cpumask_andnot(&set->used, &set->used, &msix->mask);
+		if (cpumask_empty(&set->used) && set->gen) {
 			set->gen--;
-			cpumask_copy(set->used, set->mask);
+			cpumask_copy(&set->used, &set->mask);
 		}
 		spin_unlock(&dd->affinity->lock);
 	}
 
 	irq_set_affinity_hint(msix->msix.vector, NULL);
-	cpumask_clear(msix->mask);
+	cpumask_clear(&msix->mask);
 }
 
 int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
@@ -368,9 +362,9 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 		 * need the lock
 		 */
 		cpu = cpumask_first(proc_mask);
-		cpumask_set_cpu(cpu, set->used);
+		cpumask_set_cpu(cpu, &set->used);
 		goto done;
-	} else if (cpumask_weight(proc_mask) < cpumask_weight(set->mask)) {
+	} else if (cpumask_weight(proc_mask) < cpumask_weight(&set->mask)) {
 		cpulist_scnprintf(buf, 1024, proc_mask);
 		hfi1_cdbg(PROC, "PID %u %s affinity set to CPU set(s) %s",
 			  current->pid, current->comm, buf);
@@ -397,18 +391,18 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 	 * If we've used all available CPUs, clear the mask and start
 	 * overloading.
 	 */
-	if (cpumask_equal(set->mask, set->used)) {
+	if (cpumask_equal(&set->mask, &set->used)) {
 		set->gen++;
-		cpumask_clear(set->used);
+		cpumask_clear(&set->used);
 	}
 
 	/* CPUs used by interrupt handlers */
 	cpumask_copy(intrs, (dd->affinity->def_intr.gen ?
-			     dd->affinity->def_intr.mask :
-			     dd->affinity->def_intr.used));
+			     &dd->affinity->def_intr.mask :
+			     &dd->affinity->def_intr.used));
 	cpumask_or(intrs, intrs, (dd->affinity->rcv_intr.gen ?
-				  dd->affinity->rcv_intr.mask :
-				  dd->affinity->rcv_intr.used));
+				  &dd->affinity->rcv_intr.mask :
+				  &dd->affinity->rcv_intr.used));
 	cpulist_scnprintf(buf, 1024, intrs);
 	hfi1_cdbg(PROC, "CPUs used by interrupts: %s", buf);
 
@@ -423,7 +417,7 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 	hfi1_cdbg(PROC, "device on NUMA %u, CPUs %s", node, buf);
 
 	/* diff will hold all unused cpus */
-	cpumask_andnot(diff, set->mask, set->used);
+	cpumask_andnot(diff, &set->mask, &set->used);
 	cpulist_scnprintf(buf, 1024, diff);
 	hfi1_cdbg(PROC, "unused CPUs (all) %s", buf);
 
@@ -445,7 +439,7 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 	 * the list of the remaining available CPUs
 	 */
 	if (cpumask_empty(mask)) {
-		cpumask_andnot(diff, set->mask, set->used);
+		cpumask_andnot(diff, &set->mask, &set->used);
 		cpumask_andnot(mask, diff, node_mask);
 	}
 	cpulist_scnprintf(buf, 1024, mask);
@@ -455,7 +449,7 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 	if (cpu >= nr_cpu_ids) /* empty */
 		cpu = -1;
 	else
-		cpumask_set_cpu(cpu, set->used);
+		cpumask_set_cpu(cpu, &set->used);
 	spin_unlock(&dd->affinity->lock);
 
 free:
@@ -473,10 +467,10 @@ void hfi1_put_proc_affinity(struct hfi1_devdata *dd, int cpu)
 	if (cpu < 0)
 		return;
 	spin_lock(&dd->affinity->lock);
-	cpumask_clear_cpu(cpu, set->used);
-	if (cpumask_empty(set->used) && set->gen) {
+	cpumask_clear_cpu(cpu, &set->used);
+	if (cpumask_empty(&set->used) && set->gen) {
 		set->gen--;
-		cpumask_copy(set->used, set->mask);
+		cpumask_copy(&set->used, &set->mask);
 	}
 	spin_unlock(&dd->affinity->lock);
 }

@@ -508,7 +508,7 @@ struct hfi1_msix_entry {
 	struct msix_entry msix;
 	void *arg;
 	char name[MAX_NAME_SIZE];
-	cpumask_var_t mask;
+	cpumask_t mask;
 };
 
 /* per-SL CCA information */

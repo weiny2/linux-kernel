@@ -8910,8 +8910,6 @@ static void clean_up_interrupts(struct hfi1_devdata *dd)
 	}
 
 	/* clean structures */
-	for (i = 0; i < dd->num_msix_entries; i++)
-		free_cpumask_var(dd->msix_entries[i].mask);
 	kfree(dd->msix_entries);
 	dd->msix_entries = NULL;
 	dd->num_msix_entries = 0;
