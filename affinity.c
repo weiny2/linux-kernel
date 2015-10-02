@@ -70,8 +70,7 @@ struct hfi1_affinity {
 	spinlock_t lock;
 };
 
-static inline int alloc_cpu_mask_set(struct cpu_mask_set *);
-static inline void free_cpu_mask_set(struct cpu_mask_set *);
+static inline void init_cpu_mask_set(struct cpu_mask_set *);
 
 /* Name of IRQ types, indexed by enum irq_type */
 static const char * const irq_type_names[] = {
@@ -106,7 +105,6 @@ MODULE_PARM_DESC(mem_affinity,
  */
 int hfi1_dev_affinity_init(struct hfi1_devdata *dd)
 {
-	int ret = -ENOMEM;
 	int node = pcibus_to_node(dd->pcidev->bus);
 	struct hfi1_affinity *info;
 	const struct cpumask *local_mask;
@@ -118,19 +116,12 @@ int hfi1_dev_affinity_init(struct hfi1_devdata *dd)
 
 	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
-		goto done;
+		return -ENOMEM;
 	spin_lock_init(&info->lock);
 
-	ret = alloc_cpu_mask_set(&info->def_intr);
-	if (!ret)
-		goto bail_info;
-	ret = alloc_cpu_mask_set(&info->rcv_intr);
-	if (!ret)
-		goto bail_def;
-
-	ret = alloc_cpu_mask_set(&info->proc);
-	if (!ret)
-		goto bail_rcv;
+	init_cpu_mask_set(&info->def_intr);
+	init_cpu_mask_set(&info->rcv_intr);
+	init_cpu_mask_set(&info->proc);
 
 	local_mask = cpumask_of_node(dd->node);
 	if (cpumask_first(local_mask) >= nr_cpu_ids)
@@ -188,40 +179,19 @@ int hfi1_dev_affinity_init(struct hfi1_devdata *dd)
 
 	cpumask_copy(&info->proc.mask, cpu_online_mask);
 	dd->affinity = info;
-	ret = 0;
-	goto done;
-
-bail_rcv:
-	free_cpu_mask_set(&info->rcv_intr);
-bail_def:
-	free_cpu_mask_set(&info->def_intr);
-bail_info:
-	kfree(info);
-	ret = -ENOMEM;
-done:
-	return ret;
+	return 0;
 }
 
 void hfi1_dev_affinity_free(struct hfi1_devdata *dd)
 {
-	if (dd->affinity) {
-		free_cpu_mask_set(&dd->affinity->proc);
-		free_cpu_mask_set(&dd->affinity->rcv_intr);
-		free_cpu_mask_set(&dd->affinity->def_intr);
-	}
 	kfree(dd->affinity);
 }
 
-static inline int alloc_cpu_mask_set(struct cpu_mask_set *set)
+static void init_cpu_mask_set(struct cpu_mask_set *set)
 {
 	cpumask_clear(&set->mask);
 	cpumask_clear(&set->used);
 	set->gen = 0;
-	return 1;
-}
-
-static inline void free_cpu_mask_set(struct cpu_mask_set *set)
-{
 }
 
 int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
