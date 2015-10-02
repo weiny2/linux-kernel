@@ -331,8 +331,8 @@ int refresh_qsfp_cache(struct hfi1_pportdata *ppd, struct qsfp_data *cp)
 	ret = qsfp_read(ppd, target, 0, cache, 256);
 	if (ret != 256) {
 		dd_dev_info(ppd->dd,
-			"%s: Page 0 read failed, expected 256, got %d\n",
-			__func__, ret);
+			    "%s: Page 0 read failed, expected 256, got %d\n",
+			    __func__, ret);
 		goto bail;
 	}
 
