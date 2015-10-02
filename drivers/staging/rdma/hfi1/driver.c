@@ -83,6 +83,12 @@ unsigned int hfi1_cu = 1;
 module_param_named(cu, hfi1_cu, uint, S_IRUGO);
 MODULE_PARM_DESC(cu, "Credit return units");
 
+static unsigned int prescan_rx_queue;
+module_param_named(prescan_rxq, prescan_rx_queue, uint,
+		   S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(prescan_rxq,
+		 "Used to toggle rx prescan. Set to 1 to enable prescan");
+
 unsigned long hfi1_cap_mask = HFI1_CAP_MASK_DEFAULT;
 static int hfi1_caps_set(const char *, const struct kernel_param *);
 static int hfi1_caps_get(char *, const struct kernel_param *);
@@ -434,11 +440,6 @@ static inline void init_packet(struct hfi1_ctxtdata *rcd,
 	packet->rcv_flags = 0;
 }
 
-#ifndef CONFIG_PRESCAN_RXQ
-static void prescan_rxq(struct hfi1_packet *packet) {}
-#else /* !CONFIG_PRESCAN_RXQ */
-static int prescan_receive_queue;
-
 static void process_ecn(struct hfi1_qp *qp, struct hfi1_ib_header *hdr,
 			struct hfi1_other_headers *ohdr,
 			u64 rhf, u32 bth1, struct ib_grh *grh)
@@ -562,14 +563,18 @@ static inline void update_ps_mdata(struct ps_mdata *mdata,
  * containing Excplicit Congestion Notifications (FECNs, or BECNs).
  * When an ECN is found, process the Congestion Notification, and toggle
  * it off.
+ * This is declared as a macro to allow quick checking of the module param and
+ * avoid the overhead of a function call if not enabled.
  */
-static void prescan_rxq(struct hfi1_packet *packet)
+#define prescan_rxq(packet) \
+	do { \
+		if (prescan_rx_queue) \
+			__prescan_rxq(packet); \
+	} while (0)
+static void __prescan_rxq(struct hfi1_packet *packet)
 {
 	struct hfi1_ctxtdata *rcd = packet->rcd;
 	struct ps_mdata mdata;
-
-	if (!prescan_receive_queue)
-		return;
 
 	init_ps_mdata(&mdata, packet);
 
@@ -659,7 +664,6 @@ static inline int skip_rcv_packet(struct hfi1_packet *packet, int thread)
 
 	return ret;
 }
-#endif /* CONFIG_PRESCAN_RXQ */
 
 static inline int process_rcv_packet(struct hfi1_packet *packet, int thread)
 {
