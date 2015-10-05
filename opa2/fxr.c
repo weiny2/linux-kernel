@@ -1189,7 +1189,8 @@ static struct opa_core_ops opa_core_ops = {
 	.set_sma = hfi_set_sma,
 	.set_ibdev = hfi_set_ibdev,
 	.clear_ibdev = hfi_clear_ibdev,
-	.check_ptl_slp = hfi_check_ptl_slp
+	.check_ptl_slp = hfi_check_ptl_slp,
+	.get_hw_limits = hfi_get_hw_limits,
 };
 
 /*

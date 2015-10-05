@@ -126,6 +126,8 @@ static int __hfi_cq_assign(struct hfi_ctx *ctx, u16 *cq_idx)
 				       GFP_NOWAIT);
 	else
 		ret = idr_alloc(&dd->cq_pair, ctx, 0, HFI_CQ_COUNT, GFP_NOWAIT);
+	if (ret >= 0)
+		dd->cq_pair_num_assigned++;
 	spin_unlock_irqrestore(&dd->cq_lock, flags);
 	idr_preload_end();
 	if (ret < 0)
@@ -222,6 +224,7 @@ int hfi_cq_release(struct hfi_ctx *ctx, u16 cq_idx)
 		hfi_cq_disable(dd, cq_idx);
 		idr_remove(&dd->cq_pair, cq_idx);
 		ctx->cq_pair_num_assigned--;
+		dd->cq_pair_num_assigned--;
 		/* TODO - remove any CQ head mappings */
 	}
 	spin_unlock_irqrestore(&dd->cq_lock, flags);
@@ -241,6 +244,8 @@ void hfi_cq_cleanup(struct hfi_ctx *ctx)
 		if (cq_ctx == ctx) {
 			hfi_cq_disable(dd, i);
 			idr_remove(&dd->cq_pair, i);
+			ctx->cq_pair_num_assigned--;
+			dd->cq_pair_num_assigned--;
 		}
 	}
 	ctx->cq_pair_num_assigned = 0;
@@ -1164,6 +1169,8 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 	idr_preload(GFP_KERNEL);
 	spin_lock_irqsave(&dd->ptl_lock, flags);
 	ret = idr_alloc(&dd->ptl_user, ctx, start, end, GFP_NOWAIT);
+	if (ret >= 0)
+		dd->pid_num_assigned++;
 	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 	idr_preload_end();
 
@@ -1191,6 +1198,7 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 	hfi_pcb_reset(dd, ptl_pid);
 	hfi_iommu_clear_pasid(dd, ptl_pid);
 	idr_remove(&dd->ptl_user, ptl_pid);
+	dd->pid_num_assigned--;
 	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 	dd_dev_info(dd, "Portals PID %u released\n", ptl_pid);
 }
@@ -1243,4 +1251,21 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 
 	/* clear last */
 	ctx->pid = HFI_PID_NONE;
+}
+
+/* returns number of hardware resources available to clients */
+int hfi_get_hw_limits(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+
+	hwl->num_pids_avail = HFI_NUM_PIDS - dd->pid_num_assigned;
+	hwl->num_cq_pairs_avail = HFI_CQ_COUNT - dd->cq_pair_num_assigned;
+
+	/* FXRTODO: Tune limits per system config and enforce them */
+	hwl->num_pids_limit = hwl->num_pids_avail;
+	hwl->num_cq_pairs_limit = hwl->num_cq_pairs_avail;
+	hwl->le_me_count_limit = HFI_LE_ME_MAX_COUNT;
+	hwl->unexpected_count_limit = HFI_UNEXP_MAX_COUNT;
+	hwl->trig_op_count_limit = HFI_TRIG_OP_MAX_COUNT;
+	return 0;
 }

@@ -364,6 +364,7 @@ struct opa_dev_desc {
  *	core clients for registering MAD clients as an example.
  * @clear_ibdev: clear registered ibdev pointer setup via set_ibdev
  * @check_ptl_slp: check SL pair being used for portals traffic
+ * @get_hw_limits: obtain HW specific resource limits
  */
 struct opa_core_ops {
 	int (*ctx_assign)(struct hfi_ctx *ctx,
@@ -404,6 +405,7 @@ struct opa_core_ops {
 			  struct ib_device *ibdev);
 	void (*clear_ibdev)(struct opa_core_device *odev);
 	int (*check_ptl_slp)(struct hfi_ctx *ctx, struct hfi_sl_pair *slp);
+	int (*get_hw_limits)(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl);
 };
 
 /**
