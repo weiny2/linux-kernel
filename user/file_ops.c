@@ -188,6 +188,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_mpin_args mpin;
 	struct hfi_munpin_args munpin;
 	struct hfi_sl_pair slp;
+	struct hfi_hw_limit hwl;
 	struct opa_ctx_assign ctx_assign;
 	struct opa_ev_assign ev_assign;
 	int need_admin = 0;
@@ -288,6 +289,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_CHECK_SL_PAIR:
 		copy_in = sizeof(slp);
 		copy_ptr = &slp;
+		break;
+	case HFI_CMD_GET_HW_LIMITS:
+		copy_out = sizeof(hwl);
+		copy_ptr = &hwl;
 		break;
 	default:
 		ret = -EINVAL;
@@ -453,6 +458,9 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_CHECK_SL_PAIR:
 		ret = ops->check_ptl_slp(&ud->ctx, &slp);
+		break;
+	case HFI_CMD_GET_HW_LIMITS:
+		ret = ops->get_hw_limits(&ud->ctx, &hwl);
 		break;
 	default:
 		ret = -EINVAL;
