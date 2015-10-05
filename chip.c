@@ -4697,7 +4697,7 @@ static inline void clear_recv_intr(struct hfi1_ctxtdata *rcd)
 }
 
 /* force the receive interrupt */
-static inline void force_recv_intr(struct hfi1_ctxtdata *rcd)
+void force_recv_intr(struct hfi1_ctxtdata *rcd)
 {
 	write_csr(rcd->dd, CCE_INT_FORCE + (8 * rcd->ireg), rcd->imask);
 }
@@ -4796,7 +4796,7 @@ u32 read_physical_state(struct hfi1_devdata *dd)
 				& DC_DC8051_STS_CUR_STATE_PORT_MASK;
 }
 
-static u32 read_logical_state(struct hfi1_devdata *dd)
+u32 read_logical_state(struct hfi1_devdata *dd)
 {
 	u64 reg;
 
@@ -6714,6 +6714,7 @@ int set_link_state(struct hfi1_pportdata *ppd, u32 state)
 				ppd->link_enabled = 1;
 		}
 
+		set_all_slowpath(ppd->dd);
 		ret = set_local_link_attributes(ppd);
 		if (ret)
 			break;
