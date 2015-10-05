@@ -85,7 +85,8 @@ static u32 restart_sge(struct hfi1_sge_state *ss, struct hfi1_swqe *wqe,
  * Note the QP s_lock must be held.
  */
 static int make_rc_ack(struct hfi1_ibdev *dev, struct hfi1_qp *qp,
-		       struct hfi1_other_headers *ohdr, u32 pmtu)
+		       struct hfi1_other_headers *ohdr, u32 pmtu,
+		       struct hfi1_pkt_state *ps)
 {
 	struct hfi1_ack_entry *e;
 	u32 hwords;
@@ -225,7 +226,7 @@ normal:
 	qp->s_rdma_ack_cnt++;
 	qp->s_hdrwords = hwords;
 	qp->s_cur_size = len;
-	hfi1_make_ruc_header(qp, ohdr, bth0, bth2, middle);
+	hfi1_make_ruc_header(qp, ohdr, bth0, bth2, middle, ps);
 	return 1;
 
 bail:
@@ -247,7 +248,7 @@ bail:
  *
  * Return 1 if constructed; otherwise, return 0.
  */
-int hfi1_make_rc_req(struct hfi1_qp *qp)
+int hfi1_make_rc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 {
 	struct hfi1_ibdev *dev = to_idev(qp->ibqp.device);
 	struct hfi1_other_headers *ohdr;
@@ -260,7 +261,6 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 	u32 bth2;
 	u32 pmtu = qp->pmtu;
 	char newreq;
-	int ret = 0;
 	int middle = 0;
 	int delta;
 
@@ -269,14 +269,18 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 	 * the receive interrupt handler, and timeout re-sends.
 	 */
 
-	ohdr = &qp->s_hdr->ibh.u.oth;
+	ps->s_txreq = get_txreq(ps->dev, qp);
+	if (IS_ERR(ps->s_txreq))
+		goto bail_no_tx;
+
+	ohdr = &ps->s_txreq->phdr.hdr.u.oth;
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = &qp->s_hdr->ibh.u.l.oth;
+		ohdr = &ps->s_txreq->phdr.hdr.u.l.oth;
 
 	/* Sending responses has higher priority over sending requests. */
 	if ((qp->s_flags & HFI1_S_RESP_PENDING) &&
-	    make_rc_ack(dev, qp, ohdr, pmtu))
-		goto done;
+	    make_rc_ack(dev, qp, ohdr, pmtu, ps))
+		return 1;
 
 	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_SEND_OK)) {
 		if (!(ib_hfi1_state_ops[qp->state] & HFI1_FLUSH_SEND))
@@ -295,7 +299,7 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		hfi1_send_complete(qp, wqe, qp->s_last != qp->s_acked ?
 			IB_WC_SUCCESS : IB_WC_WR_FLUSH_ERR);
 		/* will get called again */
-		goto done;
+		goto done_free_tx;
 	}
 
 	if (qp->s_flags & (HFI1_S_WAIT_RNR | HFI1_S_WAIT_ACK))
@@ -633,15 +637,20 @@ int hfi1_make_rc_req(struct hfi1_qp *qp)
 		ohdr,
 		bth0 | (qp->s_state << 24),
 		bth2,
-		middle);
-done:
-	ret = 1;
-	goto out;
+		middle,
+		ps);
+	return 1;
+
+done_free_tx:
+	hfi1_put_txreq(ps->s_txreq);
+	return 1;
 
 bail:
+	hfi1_put_txreq(ps->s_txreq);
+
+bail_no_tx:
 	qp->s_flags &= ~HFI1_S_BUSY;
-out:
-	return ret;
+	return 0;
 }
 
 /**

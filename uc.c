@@ -62,7 +62,7 @@
  *
  * Return 1 if constructed; otherwise, return 0.
  */
-int hfi1_make_uc_req(struct hfi1_qp *qp)
+int hfi1_make_uc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 {
 	struct hfi1_other_headers *ohdr;
 	struct hfi1_swqe *wqe;
@@ -70,8 +70,11 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 	u32 bth0 = 0;
 	u32 len;
 	u32 pmtu = qp->pmtu;
-	int ret = 0;
 	int middle = 0;
+
+	ps->s_txreq = get_txreq(ps->dev, qp);
+	if (IS_ERR(ps->s_txreq))
+		goto bail_no_tx;
 
 	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_SEND_OK)) {
 		if (!(ib_hfi1_state_ops[qp->state] & HFI1_FLUSH_SEND))
@@ -88,12 +91,12 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 		clear_ahg(qp);
 		wqe = get_swqe_ptr(qp, qp->s_last);
 		hfi1_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
-		goto done;
+		goto done_free_tx;
 	}
 
-	ohdr = &qp->s_hdr->ibh.u.oth;
+	ohdr = &ps->s_txreq->phdr.hdr.u.oth;
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = &qp->s_hdr->ibh.u.l.oth;
+		ohdr = &ps->s_txreq->phdr.hdr.u.l.oth;
 
 	/* Get the next send request. */
 	wqe = get_swqe_ptr(qp, qp->s_cur);
@@ -232,15 +235,19 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
 	hfi1_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
-			     mask_psn(qp->s_next_psn++), middle);
-done:
-	ret = 1;
-	goto out;
+			     mask_psn(qp->s_next_psn++), middle, ps);
+	return 1;
+
+done_free_tx:
+	hfi1_put_txreq(ps->s_txreq);
+	return 1;
 
 bail:
+	hfi1_put_txreq(ps->s_txreq);
+
+bail_no_tx:
 	qp->s_flags &= ~HFI1_S_BUSY;
-out:
-	return ret;
+	return 0;
 }
 
 /**

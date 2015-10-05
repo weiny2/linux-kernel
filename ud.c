@@ -264,7 +264,7 @@ drop:
  *
  * Return 1 if constructed; otherwise, return 0.
  */
-int hfi1_make_ud_req(struct hfi1_qp *qp)
+int hfi1_make_ud_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 {
 	struct hfi1_other_headers *ohdr;
 	struct ib_ah_attr *ah_attr;
@@ -276,9 +276,12 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 	u32 bth0;
 	u16 lrh0;
 	u16 lid;
-	int ret = 0;
 	int next_cur;
 	u8 sc5;
+
+	ps->s_txreq = get_txreq(ps->dev, qp);
+	if (IS_ERR(ps->s_txreq))
+		goto bail_no_tx;
 
 	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_NEXT_SEND_OK)) {
 		if (!(ib_hfi1_state_ops[qp->state] & HFI1_FLUSH_SEND))
@@ -294,7 +297,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 		}
 		wqe = get_swqe_ptr(qp, qp->s_last);
 		hfi1_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
-		goto done;
+		goto done_free_tx;
 	}
 
 	/* see post_one_send() */
@@ -335,7 +338,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 			ud_loopback(qp, wqe);
 			spin_lock_irqsave(&qp->s_lock, flags);
 			hfi1_send_complete(qp, wqe, IB_WC_SUCCESS);
-			goto done;
+			goto done_free_tx;
 		}
 	}
 
@@ -357,11 +360,12 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		/* Header size in 32-bit words. */
-		qp->s_hdrwords += hfi1_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
-					       &ah_attr->grh,
-					       qp->s_hdrwords, nwords);
+		qp->s_hdrwords += hfi1_make_grh(ibp,
+						&ps->s_txreq->phdr.hdr.u.l.grh,
+						&ah_attr->grh,
+						qp->s_hdrwords, nwords);
 		lrh0 = HFI1_LRH_GRH;
-		ohdr = &qp->s_hdr->ibh.u.l.oth;
+		ohdr = &ps->s_txreq->phdr.hdr.u.l.oth;
 		/*
 		 * Don't worry about sending to locally attached multicast
 		 * QPs.  It is unspecified by the spec. what happens.
@@ -369,7 +373,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 	} else {
 		/* Header size in 32-bit words. */
 		lrh0 = HFI1_LRH_BTH;
-		ohdr = &qp->s_hdr->ibh.u.oth;
+		ohdr = &ps->s_txreq->phdr.hdr.u.oth;
 	}
 	if (wqe->wr.opcode == IB_WR_SEND_WITH_IMM) {
 		qp->s_hdrwords++;
@@ -388,19 +392,19 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 		qp->s_sc = sc5;
 	}
 	qp->s_sde = qp_to_sdma_engine(qp, qp->s_sc);
-	qp->s_hdr->ibh.lrh[0] = cpu_to_be16(lrh0);
-	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */
-	qp->s_hdr->ibh.lrh[2] =
+	ps->s_txreq->phdr.hdr.lrh[0] = cpu_to_be16(lrh0);
+	ps->s_txreq->phdr.hdr.lrh[1] = cpu_to_be16(ah_attr->dlid);
+	ps->s_txreq->phdr.hdr.lrh[2] =
 		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
 	if (ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE)) {
-		qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
+		ps->s_txreq->phdr.hdr.lrh[3] = IB_LID_PERMISSIVE;
 	} else {
 		lid = ppd->lid;
 		if (lid) {
 			lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
-			qp->s_hdr->ibh.lrh[3] = cpu_to_be16(lid);
+			ps->s_txreq->phdr.hdr.lrh[3] = cpu_to_be16(lid);
 		} else {
-			qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
+			ps->s_txreq->phdr.hdr.lrh[3] = IB_LID_PERMISSIVE;
 		}
 	}
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
@@ -425,15 +429,18 @@ int hfi1_make_ud_req(struct hfi1_qp *qp)
 	qp->s_hdr->ahgidx = 0;
 	qp->s_hdr->tx_flags = 0;
 	qp->s_hdr->sde = NULL;
+	return 1;
 
-done:
-	ret = 1;
-	goto out;
+done_free_tx:
+	hfi1_put_txreq(ps->s_txreq);
+	return 1;
 
 bail:
+	hfi1_put_txreq(ps->s_txreq);
+
+bail_no_tx:
 	qp->s_flags &= ~HFI1_S_BUSY;
-out:
-	return ret;
+	return 0;
 }
 
 /*
