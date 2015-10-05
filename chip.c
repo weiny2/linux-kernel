@@ -5671,8 +5671,11 @@ static void wait_for_qsfp_init(struct hfi1_pportdata *ppd)
 	while (1) {
 		mask = read_csr(dd, dd->hfi1_id ?
 				ASIC_QSFP2_IN : ASIC_QSFP1_IN);
-		if (!(mask & QSFP_HFI0_INT_N))
+		if (!(mask & QSFP_HFI0_INT_N)) {
+			write_csr(dd, dd->hfi1_id ? ASIC_QSFP2_CLEAR :
+				  ASIC_QSFP1_CLEAR, QSFP_HFI0_INT_N);
 			break;
+		}
 		if (time_after(jiffies, timeout)) {
 			dd_dev_info(dd, "%s: No IntN detected, reset complete\n",
 				    __func__);
