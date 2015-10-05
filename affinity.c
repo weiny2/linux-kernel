@@ -70,8 +70,6 @@ struct hfi1_affinity {
 	spinlock_t lock;
 };
 
-static inline void init_cpu_mask_set(struct cpu_mask_set *);
-
 /* Name of IRQ types, indexed by enum irq_type */
 static const char * const irq_type_names[] = {
 	"SDMA",
@@ -91,6 +89,13 @@ uint mem_affinity;
 module_param(mem_affinity, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(mem_affinity,
 		 "Bitmask for memory affinity control: 0 - device, 1 - process");
+
+static inline void init_cpu_mask_set(struct cpu_mask_set *set)
+{
+	cpumask_clear(&set->mask);
+	cpumask_clear(&set->used);
+	set->gen = 0;
+}
 
 /*
  * Interrupt affinity.
@@ -185,13 +190,6 @@ int hfi1_dev_affinity_init(struct hfi1_devdata *dd)
 void hfi1_dev_affinity_free(struct hfi1_devdata *dd)
 {
 	kfree(dd->affinity);
-}
-
-static void init_cpu_mask_set(struct cpu_mask_set *set)
-{
-	cpumask_clear(&set->mask);
-	cpumask_clear(&set->used);
-	set->gen = 0;
 }
 
 int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
