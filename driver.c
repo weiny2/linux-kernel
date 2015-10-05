@@ -1041,6 +1041,8 @@ void receive_interrupt_work(struct work_struct *work)
 	struct hfi1_devdata *dd = ppd->dd;
 	int i;
 
+	/* Received non-SC15 packet implies neighbor_normal */
+	ppd->neighbor_normal = 1;
 	set_link_state(ppd, HLS_UP_ACTIVE);
 
 	/*
