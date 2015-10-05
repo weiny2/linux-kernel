@@ -2971,11 +2971,6 @@ _scsih_tm_tr_send(struct MPT3SAS_ADAPTER *ioc, u16 handle)
 			"setting delete flag: handle(0x%04x), sas_addr(0x%016llx)\n",
 			ioc->name, handle,
 		    (unsigned long long)sas_address));
-		_scsih_ublock_io_device(ioc, handle);
-		sas_target_priv_data->handle = MPT3SAS_INVALID_DEVICE_HANDLE;
-	}
-
-	smid = mpt3sas_base_get_smid_hpr(ioc, ioc->tm_tr_cb_idx);
 		if (sas_device->enclosure_handle != 0)
 			dewtprintk(ioc, pr_info(MPT3SAS_FMT
 			 "setting delete flag:enclosure logical id(0x%016llx),"
@@ -2988,6 +2983,11 @@ _scsih_tm_tr_send(struct MPT3SAS_ADAPTER *ioc, u16 handle)
 			 " connector name( %s)\n", ioc->name,
 			  sas_device->enclosure_level,
 			  sas_device->connector_name));
+		_scsih_ublock_io_device(ioc, handle);
+		sas_target_priv_data->handle = MPT3SAS_INVALID_DEVICE_HANDLE;
+	}
+
+	smid = mpt3sas_base_get_smid_hpr(ioc, ioc->tm_tr_cb_idx);
 	if (!smid) {
 		delayed_tr = kzalloc(sizeof(*delayed_tr), GFP_ATOMIC);
 		if (!delayed_tr)
