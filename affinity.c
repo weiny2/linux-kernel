@@ -196,7 +196,7 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 {
 	int ret;
 	cpumask_var_t diff;
-	struct cpu_mask_set *set = NULL;
+	struct cpu_mask_set *set;
 	struct sdma_engine *sde = NULL;
 	struct hfi1_ctxtdata *rcd = NULL;
 	char extra[64];
@@ -220,8 +220,8 @@ int hfi1_get_irq_affinity(struct hfi1_devdata *dd, struct hfi1_msix_entry *msix)
 	case IRQ_RCVCTXT:
 		rcd = (struct hfi1_ctxtdata *)msix->arg;
 		if (rcd->ctxt == HFI1_CTRL_CTXT) {
-			/* no need to assign set */
-			cpu = cpumask_first(&dd->affinity->def_intr.mask);
+			set = &dd->affinity->def_intr;
+			cpu = cpumask_first(&set->mask);
 		} else {
 			set = &dd->affinity->rcv_intr;
 		}
@@ -346,13 +346,13 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 
 	ret = zalloc_cpumask_var(&diff, GFP_KERNEL);
 	if (!ret)
-		goto free;
+		goto done;
 	ret = zalloc_cpumask_var(&mask, GFP_KERNEL);
 	if (!ret)
-		goto free;
+		goto free_diff;
 	ret = zalloc_cpumask_var(&intrs, GFP_KERNEL);
 	if (!ret)
-		goto free;
+		goto free_mask;
 
 	spin_lock(&dd->affinity->lock);
 	/*
@@ -420,10 +420,11 @@ int hfi1_get_proc_affinity(struct hfi1_devdata *dd, int node)
 		cpumask_set_cpu(cpu, &set->used);
 	spin_unlock(&dd->affinity->lock);
 
-free:
-	free_cpumask_var(diff);
-	free_cpumask_var(mask);
 	free_cpumask_var(intrs);
+free_mask:
+	free_cpumask_var(mask);
+free_diff:
+	free_cpumask_var(diff);
 done:
 	return cpu;
 }
