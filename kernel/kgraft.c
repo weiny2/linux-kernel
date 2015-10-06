@@ -274,16 +274,29 @@ static void kgr_send_fake_signal(void)
 
 	read_lock(&tasklist_lock);
 	for_each_process_thread(p, t) {
-		/*
-		 * send fake signal to all non-kthread tasks which are still
-		 * not migrated. kthreads should be migrated now.
-		 */
-		if ((t->flags & PF_KTHREAD) || !kgr_task_in_progress(t))
+		if (!kgr_task_in_progress(t))
 			continue;
 
-		spin_lock_irq(&t->sighand->siglock);
-		signal_wake_up(t, 0);
-		spin_unlock_irq(&t->sighand->siglock);
+		/*
+		 * There is a small race here. We could see TIF_KGR_IN_PROGRESS
+		 * set and decide to wake up a kthread or send a fake signal.
+		 * Meanwhile the thread could migrate itself and the action
+		 * would be meaningless.  It is not serious though.
+		 */
+		if (t->flags & PF_KTHREAD) {
+			/*
+			 * Wake up a kthread which still has not been migrated.
+			 */
+			wake_up_process(t);
+		} else {
+			/*
+			 * Send fake signal to all non-kthread tasks which are
+			 * still not migrated.
+			 */
+			spin_lock_irq(&t->sighand->siglock);
+			signal_wake_up(t, 0);
+			spin_unlock_irq(&t->sighand->siglock);
+		}
 	}
 	read_unlock(&tasklist_lock);
 }
