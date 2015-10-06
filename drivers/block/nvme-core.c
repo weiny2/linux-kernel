@@ -2962,7 +2962,8 @@ static int nvme_dev_resume(struct nvme_dev *dev)
 		dev->reset_workfn = nvme_remove_disks;
 		queue_work(nvme_workq, &dev->reset_work);
 		spin_unlock(&dev_list_lock);
-	}
+	} else
+		nvme_dev_add(dev);
 	return 0;
 }
 
