@@ -949,13 +949,13 @@ int handle_receive_interrupt(struct hfi1_ctxtdata *rcd, int thread)
 				  &rcd->ppd->linkstate_active_work;
 				struct hfi1_message_header *hdr =
 				  hfi1_get_msgheader(packet.rcd->dd,
-				  packet.rhf_addr);
+						     packet.rhf_addr);
 				if (hdr2sc(hdr, packet.rhf) != 0xf) {
 					int hwstate = read_logical_state(dd);
 
 					if (hwstate != LSTATE_ACTIVE) {
 						dd_dev_info(dd, "Unexpected link state %d\n",
-							hwstate);
+							    hwstate);
 					} else {
 						queue_work(
 						  rcd->ppd->hfi1_wq, lsaw);
