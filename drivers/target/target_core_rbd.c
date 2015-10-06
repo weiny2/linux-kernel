@@ -1792,6 +1792,7 @@ tcm_rbd_execute_pr_read_reservation(struct se_cmd *cmd, unsigned char *buf,
 	}
 
 out:
+	tcm_rbd_pr_info_free(pr_info);
 	return TCM_NO_SENSE;
 }
 
@@ -2986,7 +2987,7 @@ tcm_rbd_execute_pr_check_conflict(struct se_cmd *cmd,
 
 	ret = TCM_NO_SENSE;
 out_info_free:
-	kfree(pr_info);
+	tcm_rbd_pr_info_free(pr_info);
 	return ret;
 }
 
