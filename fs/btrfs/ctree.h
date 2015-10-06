@@ -1466,7 +1466,7 @@ struct btrfs_fs_info {
 	 */
 	struct mutex ordered_extent_flush_mutex;
 
-	struct rw_semaphore extent_commit_sem;
+	struct rw_semaphore commit_root_sem;
 
 	struct rw_semaphore cleanup_work_sem;
 
@@ -1673,7 +1673,7 @@ struct btrfs_fs_info {
 	/* list of dirty qgroups to be written at next commit */
 	struct list_head dirty_qgroups;
 
-	/* used by btrfs_qgroup_record_ref for an efficient tree traversal */
+	/* used by qgroup for an efficient tree traversal */
 	u64 qgroup_seq;
 
 	/* qgroup rescan items */
@@ -1774,7 +1774,6 @@ struct btrfs_root {
 	struct btrfs_block_rsv *block_rsv;
 
 	/* free ino cache stuff */
-	struct mutex fs_commit_mutex;
 	struct btrfs_free_space_ctl *free_ino_ctl;
 	enum btrfs_caching_type cached;
 	spinlock_t cache_lock;

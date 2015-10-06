@@ -58,6 +58,9 @@ struct btrfs_transaction {
 	struct list_head ordered_operations;
 	struct list_head pending_chunks;
 	struct list_head pending_ordered;
+	struct list_head switch_commits;
+	struct list_head dropped_roots;
+	spinlock_t dropped_roots_lock;
 	struct btrfs_delayed_ref_root delayed_refs;
 	int aborted;
 };
@@ -134,6 +137,29 @@ static inline void btrfs_set_inode_last_trans(struct btrfs_trans_handle *trans,
 	spin_unlock(&BTRFS_I(inode)->lock);
 }
 
+/*
+ * Make qgroup codes to skip given qgroupid, means the old/new_roots for
+ * qgroup won't contain the qgroupid in it.
+ */
+static inline void btrfs_set_skip_qgroup(struct btrfs_trans_handle *trans,
+					 u64 qgroupid)
+{
+	struct btrfs_delayed_ref_root *delayed_refs;
+
+	delayed_refs = &trans->transaction->delayed_refs;
+	WARN_ON(delayed_refs->qgroup_to_skip);
+	delayed_refs->qgroup_to_skip = qgroupid;
+}
+
+static inline void btrfs_clear_skip_qgroup(struct btrfs_trans_handle *trans)
+{
+	struct btrfs_delayed_ref_root *delayed_refs;
+
+	delayed_refs = &trans->transaction->delayed_refs;
+	WARN_ON(!delayed_refs->qgroup_to_skip);
+	delayed_refs->qgroup_to_skip = 0;
+}
+
 int btrfs_end_transaction(struct btrfs_trans_handle *trans,
 			  struct btrfs_root *root);
 struct btrfs_trans_handle *btrfs_start_transaction(struct btrfs_root *root,
@@ -170,4 +196,6 @@ int btrfs_wait_marked_extents(struct btrfs_root *root,
 int btrfs_transaction_blocked(struct btrfs_fs_info *info);
 int btrfs_transaction_in_commit(struct btrfs_fs_info *info);
 void btrfs_put_transaction(struct btrfs_transaction *transaction);
+void btrfs_add_dropped_root(struct btrfs_trans_handle *trans,
+			    struct btrfs_root *root);
 #endif

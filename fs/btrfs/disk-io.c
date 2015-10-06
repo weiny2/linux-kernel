@@ -1566,7 +1566,6 @@ int btrfs_init_fs_root(struct btrfs_root *root)
 	root->subv_writers = writers;
 
 	btrfs_init_free_ino_ctl(root);
-	mutex_init(&root->fs_commit_mutex);
 	spin_lock_init(&root->cache_lock);
 	init_waitqueue_head(&root->cache_wait);
 
@@ -2390,7 +2389,7 @@ int open_ctree(struct super_block *sb,
 	mutex_init(&fs_info->transaction_kthread_mutex);
 	mutex_init(&fs_info->cleaner_mutex);
 	mutex_init(&fs_info->volume_mutex);
-	init_rwsem(&fs_info->extent_commit_sem);
+	init_rwsem(&fs_info->commit_root_sem);
 	init_rwsem(&fs_info->cleanup_work_sem);
 	init_rwsem(&fs_info->subvol_sem);
 	sema_init(&fs_info->uuid_tree_rescan_sem, 1);
@@ -4007,6 +4006,7 @@ static int btrfs_destroy_delayed_refs(struct btrfs_transaction *trans,
 
 	while ((node = rb_first(&delayed_refs->href_root)) != NULL) {
 		struct btrfs_delayed_ref_head *head;
+		struct btrfs_delayed_ref_node *tmp;
 		bool pin_bytes = false;
 
 		head = rb_entry(node, struct btrfs_delayed_ref_head,
@@ -4022,11 +4022,10 @@ static int btrfs_destroy_delayed_refs(struct btrfs_transaction *trans,
 			continue;
 		}
 		spin_lock(&head->lock);
-		while ((node = rb_first(&head->ref_root)) != NULL) {
-			ref = rb_entry(node, struct btrfs_delayed_ref_node,
-				       rb_node);
+		list_for_each_entry_safe_reverse(ref, tmp, &head->ref_list,
+						 list) {
 			ref->in_tree = 0;
-			rb_erase(&ref->rb_node, &head->ref_root);
+			list_del(&ref->list);
 			atomic_dec(&delayed_refs->num_entries);
 			btrfs_put_delayed_ref(ref);
 		}
