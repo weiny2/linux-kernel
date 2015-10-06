@@ -13,6 +13,7 @@ struct tcm_rbd_dev {
 
 	struct scatterlist *cmp_and_write_sg;
 	struct page **cmp_and_write_pages;
+	u32 cmp_and_write_page_count;
 
 	unsigned char bd_udev_path[SE_UDEV_PATH_LEN];
 	u32 bd_flags;
