@@ -391,10 +391,9 @@ static bool intel_crt_detect_hotplug(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	u32 hotplug_en, stat;
+	u32 stat;
 	bool ret = false;
 	int i, tries = 0;
-	unsigned long irqflags;
 
 	if (HAS_PCH_SPLIT(dev))
 		return intel_ironlake_crt_detect_hotplug(connector);
@@ -414,10 +413,9 @@ static bool intel_crt_detect_hotplug(struct drm_connector *connector)
 
 	for (i = 0; i < tries ; i++) {
 		/* turn on the FORCE_DETECT */
-		spin_lock_irqsave(&dev_priv->irq_lock, irqflags);
-		hotplug_en = I915_READ(PORT_HOTPLUG_EN);
-		I915_WRITE(PORT_HOTPLUG_EN, hotplug_en | CRT_HOTPLUG_FORCE_DETECT);
-		spin_unlock_irqrestore(&dev_priv->irq_lock, irqflags);
+		i915_hotplug_interrupt_update(dev_priv,
+					      CRT_HOTPLUG_FORCE_DETECT,
+					      CRT_HOTPLUG_FORCE_DETECT);
 		/* wait for FORCE_DETECT to go off */
 		if (wait_for((I915_READ(PORT_HOTPLUG_EN) &
 			      CRT_HOTPLUG_FORCE_DETECT) == 0,
@@ -432,13 +430,7 @@ static bool intel_crt_detect_hotplug(struct drm_connector *connector)
 	/* clear the interrupt we just generated, if any */
 	I915_WRITE(PORT_HOTPLUG_STAT, CRT_HOTPLUG_INT_STATUS);
 
-	/* and put the bits back */
-	spin_lock_irqsave(&dev_priv->irq_lock, irqflags);
-	hotplug_en = I915_READ(PORT_HOTPLUG_EN);
-	hotplug_en &= ~CRT_HOTPLUG_FORCE_DETECT;
-	I915_WRITE(PORT_HOTPLUG_EN, hotplug_en);
-	spin_unlock_irqrestore(&dev_priv->irq_lock, irqflags);
-	POSTING_READ(PORT_HOTPLUG_EN);
+	i915_hotplug_interrupt_update(dev_priv, CRT_HOTPLUG_FORCE_DETECT, 0);
 
 	return ret;
 }

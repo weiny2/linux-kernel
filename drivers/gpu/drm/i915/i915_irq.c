@@ -80,6 +80,44 @@ static const u32 hpd_status_i915[HPD_NUM_PINS] = { /* i915 and valleyview are th
 };
 
 /* For display hotplug interrupt */
+static inline void
+i915_hotplug_interrupt_update_locked(struct drm_i915_private *dev_priv,
+				     uint32_t mask,
+				     uint32_t bits)
+{
+	uint32_t val;
+
+	assert_spin_locked(&dev_priv->irq_lock);
+	WARN_ON(bits & ~mask);
+
+	val = I915_READ(PORT_HOTPLUG_EN);
+	val &= ~mask;
+	val |= bits;
+	I915_WRITE(PORT_HOTPLUG_EN, val);
+}
+
+/**
+ * i915_hotplug_interrupt_update - update hotplug interrupt enable
+ * @dev_priv: driver private
+ * @mask: bits to update
+ * @bits: bits to enable
+ * NOTE: the HPD enable bits are modified both inside and outside
+ * of an interrupt context. To avoid that read-modify-write cycles
+ * interfer, these bits are protected by a spinlock. Since this
+ * function is usually not called from a context where the lock is
+ * held already, this function acquires the lock itself. A non-locking
+ * version is also available.
+ */
+void i915_hotplug_interrupt_update(struct drm_i915_private *dev_priv,
+				   uint32_t mask,
+				   uint32_t bits)
+{
+	spin_lock_irq(&dev_priv->irq_lock);
+	i915_hotplug_interrupt_update_locked(dev_priv, mask, bits);
+	spin_unlock_irq(&dev_priv->irq_lock);
+}
+
+/* For display hotplug interrupt */
 static void
 ironlake_enable_display_irq(drm_i915_private_t *dev_priv, u32 mask)
 {
@@ -2164,7 +2202,7 @@ static void valleyview_irq_preinstall(struct drm_device *dev)
 
 	I915_WRITE(DPINVGTT, 0xff);
 
-	I915_WRITE(PORT_HOTPLUG_EN, 0);
+	i915_hotplug_interrupt_update(dev_priv, 0xFFFFFFFF, 0);
 	I915_WRITE(PORT_HOTPLUG_STAT, I915_READ(PORT_HOTPLUG_STAT));
 	for_each_pipe(pipe)
 		I915_WRITE(PIPESTAT(pipe), 0xffff);
@@ -2342,7 +2380,7 @@ static int valleyview_irq_postinstall(struct drm_device *dev)
 		I915_DISPLAY_PIPE_A_VBLANK_INTERRUPT |
 		I915_DISPLAY_PIPE_B_VBLANK_INTERRUPT;
 
-	I915_WRITE(PORT_HOTPLUG_EN, 0);
+	i915_hotplug_interrupt_update(dev_priv, 0xFFFFFFFF, 0);
 	POSTING_READ(PORT_HOTPLUG_EN);
 
 	I915_WRITE(VLV_IMR, dev_priv->irq_mask);
@@ -2390,7 +2428,7 @@ static void valleyview_irq_uninstall(struct drm_device *dev)
 		I915_WRITE(PIPESTAT(pipe), 0xffff);
 
 	I915_WRITE(HWSTAM, 0xffffffff);
-	I915_WRITE(PORT_HOTPLUG_EN, 0);
+	i915_hotplug_interrupt_update(dev_priv, 0xFFFFFFFF, 0);
 	I915_WRITE(PORT_HOTPLUG_STAT, I915_READ(PORT_HOTPLUG_STAT));
 	for_each_pipe(pipe)
 		I915_WRITE(PIPESTAT(pipe), 0xffff);
@@ -2591,7 +2629,7 @@ static void i915_irq_preinstall(struct drm_device * dev)
 	atomic_set(&dev_priv->irq_received, 0);
 
 	if (I915_HAS_HOTPLUG(dev)) {
-		I915_WRITE(PORT_HOTPLUG_EN, 0);
+		i915_hotplug_interrupt_update(dev_priv, 0xFFFFFFFF, 0);
 		I915_WRITE(PORT_HOTPLUG_STAT, I915_READ(PORT_HOTPLUG_STAT));
 	}
 
@@ -2627,7 +2665,7 @@ static int i915_irq_postinstall(struct drm_device *dev)
 		I915_USER_INTERRUPT;
 
 	if (I915_HAS_HOTPLUG(dev)) {
-		I915_WRITE(PORT_HOTPLUG_EN, 0);
+		i915_hotplug_interrupt_update(dev_priv, 0xffffffff, 0);
 		POSTING_READ(PORT_HOTPLUG_EN);
 
 		/* Enable in IER... */
@@ -2791,7 +2829,7 @@ static void i915_irq_uninstall(struct drm_device * dev)
 	del_timer_sync(&dev_priv->hotplug_reenable_timer);
 
 	if (I915_HAS_HOTPLUG(dev)) {
-		I915_WRITE(PORT_HOTPLUG_EN, 0);
+		i915_hotplug_interrupt_update(dev_priv, 0xFFFFFFFF, 0);
 		I915_WRITE(PORT_HOTPLUG_STAT, I915_READ(PORT_HOTPLUG_STAT));
 	}
 
@@ -2814,7 +2852,7 @@ static void i965_irq_preinstall(struct drm_device * dev)
 
 	atomic_set(&dev_priv->irq_received, 0);
 
-	I915_WRITE(PORT_HOTPLUG_EN, 0);
+	i915_hotplug_interrupt_update(dev_priv, 0xFFFFFFFF, 0);
 	I915_WRITE(PORT_HOTPLUG_STAT, I915_READ(PORT_HOTPLUG_STAT));
 
 	I915_WRITE(HWSTAM, 0xeffe);
@@ -2874,7 +2912,7 @@ static int i965_irq_postinstall(struct drm_device *dev)
 	I915_WRITE(IER, enable_mask);
 	POSTING_READ(IER);
 
-	I915_WRITE(PORT_HOTPLUG_EN, 0);
+	i915_hotplug_interrupt_update(dev_priv, 0xffffffff, 0);
 	POSTING_READ(PORT_HOTPLUG_EN);
 
 	i915_enable_asle_pipestat(dev);
@@ -2887,13 +2925,11 @@ static void i915_hpd_irq_setup(struct drm_device *dev)
 	drm_i915_private_t *dev_priv = (drm_i915_private_t *) dev->dev_private;
 	struct drm_mode_config *mode_config = &dev->mode_config;
 	struct intel_encoder *intel_encoder;
-	u32 hotplug_en;
+	u32 hotplug_en = 0;
 
 	assert_spin_locked(&dev_priv->irq_lock);
 
 	if (I915_HAS_HOTPLUG(dev)) {
-		hotplug_en = I915_READ(PORT_HOTPLUG_EN);
-		hotplug_en &= ~HOTPLUG_INT_EN_MASK;
 		/* Note HDMI and DP share hotplug bits */
 		/* enable bits are the same for all generations */
 		list_for_each_entry(intel_encoder, &mode_config->encoder_list, base.head)
@@ -2905,11 +2941,11 @@ static void i915_hpd_irq_setup(struct drm_device *dev)
 		*/
 		if (IS_G4X(dev))
 			hotplug_en |= CRT_HOTPLUG_ACTIVATION_PERIOD_64;
-		hotplug_en &= ~CRT_HOTPLUG_VOLTAGE_COMPARE_MASK;
 		hotplug_en |= CRT_HOTPLUG_VOLTAGE_COMPARE_50;
 
 		/* Ignore TV since it's buggy */
-		I915_WRITE(PORT_HOTPLUG_EN, hotplug_en);
+		i915_hotplug_interrupt_update_locked(dev_priv, HOTPLUG_INT_EN_MASK |
+					             CRT_HOTPLUG_VOLTAGE_COMPARE_MASK, hotplug_en);
 	}
 }
 
@@ -3040,7 +3076,7 @@ static void i965_irq_uninstall(struct drm_device * dev)
 
 	del_timer_sync(&dev_priv->hotplug_reenable_timer);
 
-	I915_WRITE(PORT_HOTPLUG_EN, 0);
+	i915_hotplug_interrupt_update(dev_priv, 0xFFFFFFFF, 0);
 	I915_WRITE(PORT_HOTPLUG_STAT, I915_READ(PORT_HOTPLUG_STAT));
 
 	I915_WRITE(HWSTAM, 0xffffffff);
