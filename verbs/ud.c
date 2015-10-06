@@ -89,8 +89,8 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 		return;
 	}
 
-	dev_dbg(&ibdev->dev,
-		 "exercising UD loopback path, to/from lid %d\n", ibp->lid);
+	dev_dbg(ibp->dev,
+		"exercising UD loopback path, to/from lid %d\n", ibp->lid);
 
 	sqptype = sqp->ibqp.qp_type == IB_QPT_GSI ?
 			IB_QPT_UD : sqp->ibqp.qp_type;
@@ -730,6 +730,6 @@ void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 	return;
 
 drop:
-	dev_info(&ibp->odev->dev, "UD dropping packet\n");
+	dev_info(ibp->dev, "UD dropping packet\n");
 	ibp->n_pkt_drops++;
 }

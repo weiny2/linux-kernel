@@ -549,6 +549,7 @@ static inline struct opa_ib_rwqe *get_rwqe_ptr(struct opa_ib_rq *rq, unsigned n)
 struct opa_ib_portdata {
 	struct opa_core_device *odev;
 	struct opa_ib_data *ibd;
+	struct device *dev; /* from IB's ib_device */
 	struct opa_ib_qp __rcu *qp[2];
 	/* non-zero when timer is set */
 	unsigned long mkey_lease_timeout;

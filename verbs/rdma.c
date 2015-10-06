@@ -320,17 +320,16 @@ int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr)
 {
 	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
-	struct opa_ib_portdata *ibp;
 	int err = 0;
 	int scheduled = 0;
 
 	for (; wr; wr = wr->next) {
 		err = post_one_send(qp, wr, &scheduled);
 		if (err) {
-			ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
-			dev_err(&ibp->odev->dev, "QP[%d]: post_send err %d\n",
-				qp->ibqp.qp_num, err);
+			struct ib_device *ibdev = qp->ibqp.device;
 
+			dev_err(&ibdev->dev, "QP[%d]: post_send err %d\n",
+				qp->ibqp.qp_num, err);
 			*bad_wr = wr;
 			goto bail;
 		}
@@ -473,7 +472,7 @@ static void opa_ib_rcv(struct opa_ib_packet *packet)
 
 	/* Get the destination QP number. */
 	qp_num = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
-	dev_dbg(&ibp->odev->dev, "PT %d: IB packet for QPN %d\n",
+	dev_dbg(ibp->dev, "PT %d: IB packet for QPN %d\n",
 		ibp->port_num, qp_num);
 
 #if 0 /* FXRTODO - mcast */
@@ -561,7 +560,7 @@ static void process_rcv_packet(struct opa_ib_portdata *ibp, u64 *rhf_entry,
 		packet->ebuf = opa_ib_rcv_get_ebuf(ibp, idx, off);
 
 	packet->port = rhf_port(rhf);
-	dev_dbg(&ibp->odev->dev,
+	dev_dbg(ibp->dev,
 		"PT %d: RX type 0x%x hlen %d tlen %d egr %d %d ebuf %p\n",
 		packet->port, packet->etype, packet->hlen, packet->tlen,
 		idx, off, packet->ebuf);
@@ -584,13 +583,13 @@ int opa_ib_rcv_wait(void *data)
 	int rc;
 	u64 *rhf_entry;
 
-	dev_info(&ibp->odev->dev, "RX kthread %d starting\n", ibp->port_num);
+	dev_info(ibp->dev, "RX kthread %d starting\n", ibp->port_num);
 	allow_signal(SIGINT);
 	while (!kthread_should_stop()) {
 		rhf_entry = NULL;
 		rc = _opa_ib_rcv_wait(ibp, &rhf_entry);
 		if (rc < 0) {
-			dev_warn(&ibp->odev->dev, "RX EQ failure, %d\n", rc);
+			dev_warn(ibp->dev, "RX EQ failure, %d\n", rc);
 			/* TODO - handle this */
 			continue;
 		}
@@ -601,7 +600,7 @@ int opa_ib_rcv_wait(void *data)
 			if (pkt.etype == RHF_RCV_TYPE_IB)
 				opa_ib_rcv(&pkt);
 			else
-				dev_warn(&ibp->odev->dev,
+				dev_warn(ibp->dev,
 					 "PT %d: Unexpected packet! 0x%x\n",
 					 pkt.port, pkt.etype);
 
@@ -610,7 +609,7 @@ int opa_ib_rcv_wait(void *data)
 		}
 	}
 
-	dev_info(&ibp->odev->dev, "RX kthread %d stopping\n",
+	dev_info(ibp->dev, "RX kthread %d stopping\n",
 		 ibp->port_num);
 	return 0;
 }

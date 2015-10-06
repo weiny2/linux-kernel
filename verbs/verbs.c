@@ -488,6 +488,7 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	ops->get_port_desc(odev, &pdesc, pidx + 1);
 
 	ibp->ibd = ibd;
+	ibp->dev = &ibd->ibdev.dev; /* for dev_info, etc. */
 	ibp->odev = odev;
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->guid = pdesc.pguid;
