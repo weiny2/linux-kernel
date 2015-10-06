@@ -70,6 +70,7 @@ static bool quick_linkup = false; /* skip VerifyCap and Config* state. */
 
 static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup);
 static u32 read_physical_state(const struct hfi_pportdata *ppd);
+static int set_physical_link_state(struct hfi_pportdata *ppd, u64 state);
 
 /*
  * read FZC registers
@@ -299,7 +300,8 @@ static void handle_link_up(struct work_struct *work)
 	struct hfi_devdata *dd = ppd->dd;
 	u32 _8051_port = read_physical_state(ppd);
 
-	if (ppd->host_link_state & HLS_UP) {
+	/* transit to Init only from Going_Up. */
+	if (ppd->host_link_state != HLS_GOING_UP) {
 		dd_dev_info(dd, "port%d False interrupt on %s(): %s(%d) 0x%x",
 			ppd->pnum,  __func__,
 			link_state_name(ppd->host_link_state),
@@ -336,7 +338,8 @@ static void handle_link_up(struct work_struct *work)
 }
 
 /*
- * Handle a link down interrupt from the MNH/8051.
+ * Handle a link down interrupt from the MNH/8051 which transit
+ * READY_TO_QUIET_LT -> QUIET.
  *
  * This is a work-queue function outside of the interrupt.
  */
@@ -344,15 +347,20 @@ static void handle_link_down(struct work_struct *work)
 {
 	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
 			link_down_work);
-	dd_dev_info(ppd->dd, "%s() %d:", __func__, __LINE__);
-#if 0
+#if 0 /* WFR legacy */
 	u8 lcl_reason, neigh_reason = 0;
 #endif
+	int ret;
 
-	/* go offline first, then deal with reasons */
-	hfi_set_link_state(ppd, HLS_DN_OFFLINE);
+	if (read_physical_state(ppd) == PLS_OFFLINE_READY_TO_QUIET_LT) {
+		ret = set_physical_link_state(ppd, PLS_OFFLINE_QUIET);
+		ret = ret != HCMD_SUCCESS ? -EINVAL: 0;
+		if (ret)
+			dd_dev_err(ppd->dd, "%s(): can't set physical port state to 0x%x",
+				__func__, PLS_OFFLINE_QUIET);
+	}
 
-#if 0
+#if 0 /* WFR legacy */
 	lcl_reason = 0;
 	read_planned_down_reason_code(ppd->dd, &neigh_reason);
 
@@ -1399,9 +1407,16 @@ void hfi2_pport_link_uninit(struct hfi_devdata *dd)
 	struct hfi_pportdata *ppd;
 	int ret;
 
+	/*
+	 * Make both port1 and 2 to Offline state then disable both ports'
+	 * interrupt. Otherwise irq_mnh_handle() produces spurious interrupt.
+	 */
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
 		hfi_set_link_state(ppd, HLS_DN_OFFLINE);
+	}
+	for (port = 1; port <= dd->num_pports; port++) {
+		ppd = to_hfi_ppd(dd, port);
 		ret = hfi2_disable_8051_intr(ppd);
 		if (ret)
 			dd_dev_err(dd, "can't disable MNH/8051 interrupt: %d\n",
