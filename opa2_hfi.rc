@@ -55,7 +55,7 @@ status ()
 {
         local RC=0
 
-        if [ "`lsmod | grep opa | wc -l`" = "8" ]; then
+        if [ "`lsmod | grep opa | wc -l`" = "9" ]; then
                 echo "OPA modules loaded"
         else
                 echo "OPA modules not loaded"
