@@ -699,9 +699,8 @@ static int obtain_firmware(struct hfi1_devdata *dd)
 		platform_config = NULL;
 		err = request_firmware(&platform_config, platform_config_name,
 				       &dd->pcidev->dev);
-		if (err) {
+		if (err)
 			platform_config = NULL;
-		}
 	}
 
 done:
