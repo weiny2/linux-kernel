@@ -136,14 +136,14 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 		if (i > 0 &&
 		    ((wqe->sg_list[i-1].vaddr + wqe->sg_list[i-1].length) !=
 		     wqe->sg_list[i].vaddr)) {
-			dev_err(&ibp->odev->dev,
+			dev_err(ibp->dev,
 				"PT %d: PIO-IOVEC not implemented!\n",
 				ibp->port_num);
 			return -EIO;
 		}
 	}
 
-	dev_dbg(&ibp->odev->dev, "PT %d: Send hdr %p data %p %d\n",
+	dev_dbg(ibp->dev, "PT %d: Send hdr %p data %p %d\n",
 		ibp->port_num, wqe->s_hdr,
 		wqe->sg_list[0].vaddr, wqe->length);
 
@@ -168,7 +168,7 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 				    KDETH_9B_PIO);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 	if (ret < 0)
-		dev_err(&ibp->odev->dev, "PT %d: TX CQ is full!\n", ibp->port_num);
+		dev_err(ibp->dev, "PT %d: TX CQ is full!\n", ibp->port_num);
 	return ret;
 }
 
@@ -179,7 +179,7 @@ void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset)
 
 	/* TODO - this needs to be optimized to limit PT_UPDATEs */
 	if (idx != ibp->rcv_egr_last_idx) {
-		dev_dbg(&ibp->odev->dev, "PT %d: EAGER_HEAD UPDATE %d -> %d\n",
+		dev_dbg(ibp->dev, "PT %d: EAGER_HEAD UPDATE %d -> %d\n",
 			 ibp->port_num, ibp->rcv_egr_last_idx, idx);
 
 		/* Tell HW we are finished reading previous eager buffer */

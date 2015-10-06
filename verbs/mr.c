@@ -319,9 +319,9 @@ int opa_ib_dereg_mr(struct ib_mr *ibmr)
 	timeout = wait_for_completion_timeout(&mr->mr.comp,
 		5 * HZ);
 	if (!timeout) {
-		struct opa_ib_data *ibd = to_opa_ibdata(mr->mr.pd->device);
+		struct ib_device *ibdev = mr->mr.pd->device;
 
-		dev_err(&ibd->odev->dev,
+		dev_err(&ibdev->dev,
 			"opa_ib_dereg_mr timeout mr %p pd %p refcount %u\n",
 			mr, mr->mr.pd, atomic_read(&mr->mr.refcount));
 		hfi2_get_mr(&mr->mr);
