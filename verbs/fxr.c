@@ -94,7 +94,7 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 	*eq_base = (void *)eq_alloc->base;
 
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait(ctx, 0x0, (void **)&eq_entry);
+	hfi_eq_wait(ctx, 0x0, &eq_entry);
 	if (eq_entry)
 		hfi_eq_advance(ctx, cq, 0x0, eq_entry);
 err:
@@ -109,7 +109,7 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
 
 	ctx->ops->ev_release(ctx, 0, eq, (u64)&done);
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait(ctx, 0x0, (void **)&eq_entry);
+	hfi_eq_wait(ctx, 0x0, &eq_entry);
 	if (eq_entry)
 		hfi_eq_advance(ctx, cq, 0x0, eq_entry);
 
@@ -202,7 +202,7 @@ int _opa_ib_rcv_wait(struct opa_ib_portdata *ibp, u64 **rhf_entry)
 	int rc;
 
 	rc = hfi_eq_wait_irq(ibp->ctx, ibp->rcv_eq, -1,
-			     (void **)rhf_entry);
+			     rhf_entry);
 	if (rc == -EAGAIN || rc == -ERESTARTSYS) {
 		/* timeout or wait interrupted, not abnormal */
 		rc = 0;
@@ -295,7 +295,7 @@ int opa_ib_rcv_init(struct opa_ib_portdata *ibp)
 			goto kthread_err;
 
 		/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-		hfi_eq_wait(ibp->ctx, 0x0, (void **)&eq_entry);
+		hfi_eq_wait(ibp->ctx, 0x0, &eq_entry);
 		if (eq_entry)
 			hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, 0x0, eq_entry);
 	}

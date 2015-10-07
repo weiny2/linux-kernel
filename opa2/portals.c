@@ -516,11 +516,11 @@ idr_end:
 }
 
 /* Block for an EQ zero event interrupt */
-static int hfi_eq_zero_event_wait(struct hfi_ctx *ctx, void **eq_entry)
+static int hfi_eq_zero_event_wait(struct hfi_ctx *ctx, u64 **eq_entry)
 {
 	int rc;
 
-	rc = hfi_eq_wait_irq(ctx, 0, -1, (void **)eq_entry);
+	rc = hfi_eq_wait_irq(ctx, 0, -1, eq_entry);
 	if (rc == -EAGAIN || rc == -ERESTARTSYS)
 		/* timeout or wait interrupted, not abnormal */
 		rc = 0;
@@ -535,7 +535,7 @@ static int hfi_eq_zero_thread(void *data)
 {
 	struct hfi_ctx *ctx = data;
 	struct hfi_devdata *dd = ctx->devdata;
-	void *eq_entry;
+	u64 *eq_entry;
 	union target_EQEntry *rxe;
 	int rc;
 
@@ -552,7 +552,7 @@ static int hfi_eq_zero_thread(void *data)
 		if (!eq_entry)
 			continue;
 
-		rxe = eq_entry;
+		rxe = (union target_EQEntry *)eq_entry;
 		switch (rxe->event_kind) {
 		case PTL_EVENT_TARGET_CONNECT:
 		case PTL_EVENT_DISCONNECT:
@@ -615,7 +615,7 @@ int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 			continue;
 		/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 		ret = hfi_eq_wait_timed(ctx, 0x0, HFI_EQ_TIMEOUT_MS,
-					(void **)&eq_entry);
+					&eq_entry);
 		if (ret < 0) {
 			dd_dev_err(dd, "%s %d ret %d ni %d pid %d\n",
 				   __func__, __LINE__, ret, ni, ctx->pid);
@@ -680,7 +680,7 @@ int hfi_e2e_eq_assign(struct hfi_ctx *ctx)
 	eq_head_addr = &eq_head_array[eq_assign.ev_idx];
 	*eq_head_addr = 0;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait(ctx, 0x0, (void **)&eq_entry);
+	hfi_eq_wait(ctx, 0x0, &eq_entry);
 	if (eq_entry)
 		hfi_eq_advance(ctx, &ctx->devdata->priv_rx_cq,
 			       0x0, eq_entry);
@@ -796,7 +796,7 @@ void hfi_e2e_eq_release(struct hfi_ctx *ctx)
 /* Returns true if there is a valid pending event and false otherwise */
 static bool __hfi_eq_wait_condition(struct hfi_ctx *ctx, u16 eq_idx)
 {
-	void *entry;
+	u64 *entry;
 	int ret = hfi_eq_peek(ctx, eq_idx, &entry);
 
 	if (ret >= 0 && ret != HFI_EQ_EMPTY)

@@ -362,7 +362,7 @@ static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
 	} eqd_tmp;
 	s64 start_va;
 
-	rc = hfi_eq_peek(ctx, dev->eq_rx, (void **)&eq_entry);
+	rc = hfi_eq_peek(ctx, dev->eq_rx, &eq_entry);
 	if (!eq_entry)
 		return NULL;
 	rx_event = (union target_EQEntry *)eq_entry;
@@ -394,7 +394,7 @@ static int opa2_vnic_hfi_get_read_avail(struct opa_vnic_device *vdev)
 	struct hfi_ctx *ctx = &dev->ctx;
 	u64 *eq_entry;
 
-	hfi_eq_peek(ctx, dev->eq_rx, (void **)&eq_entry);
+	hfi_eq_peek(ctx, dev->eq_rx, &eq_entry);
 	if (eq_entry)
 		return 1;
 
@@ -411,7 +411,7 @@ static void opa2_vnic_rx_isr_cb(void *data)
 	u64 *eq_entry;
 
 	if (dev->vnic_cb) {
-		hfi_eq_peek(ctx, dev->eq_rx, (void **)&eq_entry);
+		hfi_eq_peek(ctx, dev->eq_rx, &eq_entry);
 		if (eq_entry)
 			dev->vnic_cb(vdev, OPA_VNIC_HFI_EVT_RX);
 	}
@@ -534,7 +534,7 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 		goto err2;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	rc = hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS,
-			       (void **)&eq_entry);
+			       &eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
@@ -555,7 +555,7 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 		goto err3;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	rc = hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS,
-			       (void **)&eq_entry);
+			       &eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
@@ -719,7 +719,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 		goto err4;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	rc = hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS,
-			       (void **)&eq_entry);
+			       &eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
@@ -738,7 +738,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 		goto err4;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	rc = hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS,
-			       (void **)&eq_entry);
+			       &eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
@@ -808,7 +808,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 	}
 
 	rc = hfi_eq_wait_timed(ctx, eq_tx, OPA2_NET_TIMEOUT_MS,
-			       (void **)&eq_entry);
+			       &eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *tx_event =
 			(union initiator_EQEntry *)eq_entry;
@@ -836,7 +836,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 
 	/* Block for an EQ interrupt */
 	rc = hfi_eq_wait_irq(ctx, eq_tx, OPA2_NET_TIMEOUT_MS,
-			     (void **)&eq_entry);
+			     &eq_entry);
 	if (rc < 0) {
 		dev_info(&odev->dev, "TX EQ 2 intr fail rc %d\n", rc);
 		goto err5;
@@ -863,7 +863,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 		dev_info(&odev->dev, "RX CT success\n");
 	}
 	rc = hfi_eq_wait_timed(ctx, eq_rx, OPA2_NET_TIMEOUT_MS,
-			       (void **)&eq_entry);
+			       &eq_entry);
 	if (eq_entry) {
 		union target_EQEntry *rx_event =
 			(union target_EQEntry *)eq_entry;
@@ -875,7 +875,7 @@ static int opa2_xfer_test(struct opa_veswport *dev)
 		dev_info(&odev->dev, "RX EQ 1 failure, %d\n", rc);
 	}
 	rc = hfi_eq_wait_timed(ctx, eq_rx, OPA2_NET_TIMEOUT_MS,
-			       (void **)&eq_entry);
+			       &eq_entry);
 	if (eq_entry) {
 		union target_EQEntry *rx_event =
 			(union target_EQEntry *)eq_entry;
