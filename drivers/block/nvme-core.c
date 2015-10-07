@@ -2966,6 +2966,18 @@ static int nvme_dev_resume(struct nvme_dev *dev)
 	return 0;
 }
 
+static void nvme_dead_ctrl(struct nvme_dev *dev)
+{
+	dev_err(&dev->pci_dev->dev, "Device failed to resume\n");
+	kref_get(&dev->kref);
+	if (IS_ERR(kthread_run(nvme_remove_dead_ctrl, dev, "nvme%d",
+					dev->instance))) {
+		dev_err(&dev->pci_dev->dev,
+			"Failed to start controller remove task\n");
+		kref_put(&dev->kref, nvme_free_dev);
+	}
+}
+
 static void nvme_dev_reset(struct nvme_dev *dev)
 {
 	nvme_dev_shutdown(dev);
@@ -3104,23 +3116,19 @@ static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 static void nvme_async_probe(struct work_struct *work)
 {
 	struct nvme_dev *dev = container_of(work, struct nvme_dev, probe_work);
-	int result;
+	int ret = nvme_dev_resume(dev);
 
-	result = nvme_dev_start(dev);
-	if (result)
-		goto reset;
+	if (!ret)
+		return;
 
-	if (dev->online_queues > 1)
-		result = nvme_dev_add(dev);
-	if (result)
-		goto reset;
-
-	return;
- reset:
 	spin_lock(&dev_list_lock);
 	if (!work_busy(&dev->reset_work)) {
-		dev->reset_workfn = nvme_reset_failed_dev;
-		queue_work(nvme_workq, &dev->reset_work);
+		if (ret == -ENODEV)
+			nvme_dead_ctrl(dev);
+		else {
+			dev->reset_workfn = nvme_reset_failed_dev;
+			queue_work(nvme_workq, &dev->reset_work);
+		}
 	}
 	spin_unlock(&dev_list_lock);
 }

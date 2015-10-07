@@ -47,6 +47,12 @@ static const struct qlcnic_stats qlcnic_gstrings_stats[] = {
 	{"lro_pkts", QLC_SIZEOF(stats.lro_pkts), QLC_OFF(stats.lro_pkts)},
 	{"lrobytes", QLC_SIZEOF(stats.lrobytes), QLC_OFF(stats.lrobytes)},
 	{"lso_frames", QLC_SIZEOF(stats.lso_frames), QLC_OFF(stats.lso_frames)},
+	{"encap_lso_frames", QLC_SIZEOF(stats.encap_lso_frames),
+	 QLC_OFF(stats.encap_lso_frames)},
+	{"encap_tx_csummed", QLC_SIZEOF(stats.encap_tx_csummed),
+	 QLC_OFF(stats.encap_tx_csummed)},
+	{"encap_rx_csummed", QLC_SIZEOF(stats.encap_rx_csummed),
+	 QLC_OFF(stats.encap_rx_csummed)},
 	{"skb_alloc_failure", QLC_SIZEOF(stats.skb_alloc_failure),
 	 QLC_OFF(stats.skb_alloc_failure)},
 	{"mac_filter_limit_overrun", QLC_SIZEOF(stats.mac_filter_limit_overrun),
@@ -720,6 +726,11 @@ static int qlcnic_set_channels(struct net_device *dev,
 	struct qlcnic_adapter *adapter = netdev_priv(dev);
 	int err;
 
+	if (!(adapter->flags & QLCNIC_MSIX_ENABLED)) {
+		netdev_err(dev, "No RSS/TSS support in non MSI-X mode\n");
+		return -EINVAL;
+	}
+
 	if (channel->other_count || channel->combined_count)
 		return -EINVAL;
 
@@ -728,7 +739,7 @@ static int qlcnic_set_channels(struct net_device *dev,
 	if (err)
 		return err;
 
-	if (channel->rx_count) {
+	if (adapter->drv_sds_rings != channel->rx_count) {
 		err = qlcnic_validate_rings(adapter, channel->rx_count,
 					    QLCNIC_RX_QUEUE);
 		if (err) {
@@ -739,7 +750,7 @@ static int qlcnic_set_channels(struct net_device *dev,
 		adapter->drv_rss_rings = channel->rx_count;
 	}
 
-	if (channel->tx_count) {
+	if (adapter->drv_tx_rings != channel->tx_count) {
 		err = qlcnic_validate_rings(adapter, channel->tx_count,
 					    QLCNIC_TX_QUEUE);
 		if (err) {
@@ -1279,17 +1290,25 @@ static u64 *qlcnic_fill_stats(u64 *data, void *stats, int type)
 
 void qlcnic_update_stats(struct qlcnic_adapter *adapter)
 {
+	struct qlcnic_tx_queue_stats tx_stats;
 	struct qlcnic_host_tx_ring *tx_ring;
 	int ring;
 
+	memset(&tx_stats, 0, sizeof(tx_stats));
 	for (ring = 0; ring < adapter->drv_tx_rings; ring++) {
 		tx_ring = &adapter->tx_ring[ring];
-		adapter->stats.xmit_on += tx_ring->tx_stats.xmit_on;
-		adapter->stats.xmit_off += tx_ring->tx_stats.xmit_off;
-		adapter->stats.xmitcalled += tx_ring->tx_stats.xmit_called;
-		adapter->stats.xmitfinished += tx_ring->tx_stats.xmit_finished;
-		adapter->stats.txbytes += tx_ring->tx_stats.tx_bytes;
+		tx_stats.xmit_on += tx_ring->tx_stats.xmit_on;
+		tx_stats.xmit_off += tx_ring->tx_stats.xmit_off;
+		tx_stats.xmit_called += tx_ring->tx_stats.xmit_called;
+		tx_stats.xmit_finished += tx_ring->tx_stats.xmit_finished;
+		tx_stats.tx_bytes += tx_ring->tx_stats.tx_bytes;
 	}
+
+	adapter->stats.xmit_on = tx_stats.xmit_on;
+	adapter->stats.xmit_off = tx_stats.xmit_off;
+	adapter->stats.xmitcalled = tx_stats.xmit_called;
+	adapter->stats.xmitfinished = tx_stats.xmit_finished;
+	adapter->stats.txbytes = tx_stats.tx_bytes;
 }
 
 static u64 *qlcnic_fill_tx_queue_stats(u64 *data, void *stats)
@@ -1314,21 +1333,21 @@ static void qlcnic_get_ethtool_stats(struct net_device *dev,
 	struct qlcnic_host_tx_ring *tx_ring;
 	struct qlcnic_esw_statistics port_stats;
 	struct qlcnic_mac_statistics mac_stats;
-	int index, ret, length, size, tx_size, ring;
+	int index, ret, length, size, ring;
 	char *p;
 
-	tx_size = adapter->drv_tx_rings * QLCNIC_TX_STATS_LEN;
+	memset(data, 0, stats->n_stats * sizeof(u64));
 
-	memset(data, 0, tx_size * sizeof(u64));
 	for (ring = 0, index = 0; ring < adapter->drv_tx_rings; ring++) {
-		if (test_bit(__QLCNIC_DEV_UP, &adapter->state)) {
+		if (adapter->is_up == QLCNIC_ADAPTER_UP_MAGIC) {
 			tx_ring = &adapter->tx_ring[ring];
 			data = qlcnic_fill_tx_queue_stats(data, tx_ring);
 			qlcnic_update_stats(adapter);
+		} else {
+			data += QLCNIC_TX_STATS_LEN;
 		}
 	}
 
-	memset(data, 0, stats->n_stats * sizeof(u64));
 	length = QLCNIC_STATS_LEN;
 	for (index = 0; index < length; index++) {
 		p = (char *)adapter + qlcnic_gstrings_stats[index].stat_offset;
