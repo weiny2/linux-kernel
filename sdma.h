@@ -307,6 +307,7 @@ struct hw_sdma_desc {
 	/* private:  don't use directly */
 	__le64 qw[2];
 };
+
 /**
  * struct sdma_engine - Data pertaining to each SDMA engine.
  * @dd: a back-pointer to the device data
