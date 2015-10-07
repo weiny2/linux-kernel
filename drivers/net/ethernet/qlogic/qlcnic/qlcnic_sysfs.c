@@ -5,12 +5,11 @@
  * See LICENSE.qlcnic for copyright and licensing details.
  */
 
-#include <linux/slab.h>
-#include <linux/interrupt.h>
-
 #include "qlcnic.h"
 #include "qlcnic_hw.h"
 
+#include <linux/slab.h>
+#include <linux/interrupt.h>
 #include <linux/swab.h>
 #include <linux/dma-mapping.h>
 #include <net/ip.h>
