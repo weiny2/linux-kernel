@@ -432,6 +432,10 @@ static void tcm_rbd_cmp_and_write_callback(struct rbd_img_request *img_request)
 	}
 	kfree(tcm_rbd_dev->cmp_and_write_sg);
 	tcm_rbd_dev->cmp_and_write_sg = NULL;
+	ceph_release_page_vector(tcm_rbd_dev->cmp_and_write_pages,
+				 tcm_rbd_dev->cmp_and_write_page_count);
+	tcm_rbd_dev->cmp_and_write_pages = NULL;
+	tcm_rbd_dev->cmp_and_write_page_count = 0;
 	up(&dev->caw_sem);
 
 	if (sense_reason != TCM_NO_SENSE) {
@@ -487,6 +491,7 @@ static sense_reason_t tcm_rbd_execute_cmp_and_write(struct se_cmd *cmd)
 	if (IS_ERR(pages))
 		goto free_write_sg;
 	tcm_rbd_dev->cmp_and_write_pages = pages;
+	tcm_rbd_dev->cmp_and_write_page_count = page_count;
 
 	ret = rbd_img_cmp_and_write_request_fill(img_request, cmd->t_data_sg,
 						 len,
@@ -1787,6 +1792,7 @@ tcm_rbd_execute_pr_read_reservation(struct se_cmd *cmd, unsigned char *buf,
 	}
 
 out:
+	tcm_rbd_pr_info_free(pr_info);
 	return TCM_NO_SENSE;
 }
 
@@ -2981,7 +2987,7 @@ tcm_rbd_execute_pr_check_conflict(struct se_cmd *cmd,
 
 	ret = TCM_NO_SENSE;
 out_info_free:
-	kfree(pr_info);
+	tcm_rbd_pr_info_free(pr_info);
 	return ret;
 }
 
