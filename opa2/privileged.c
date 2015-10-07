@@ -103,7 +103,7 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 		goto done;
 	/* Check on EQ 0 NI 0 for a PTL_EVENT_INITIATOR_CONNECT event */
 	hfi_eq_wait_timed(ctx, dd->e2e_eq, HFI_TX_TIMEOUT_MS,
-			  (void **)&eq_entry);
+			  &eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *txe =
 			(union initiator_EQEntry *)eq_entry;
