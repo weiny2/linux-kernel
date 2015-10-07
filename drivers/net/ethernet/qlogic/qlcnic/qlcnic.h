@@ -1325,10 +1325,6 @@ struct qlcnic_eswitch {
 #define QLCNIC_SWITCH_PORT_MIRRORING	BIT_4
 };
 
-
-/* Return codes for Error handling */
-#define QL_STATUS_INVALID_PARAM	-1
-
 #define MAX_BW			100	/* % of link speed */
 #define MAX_VLAN_ID		4095
 #define MIN_VLAN_ID		2
