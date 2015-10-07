@@ -651,6 +651,9 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		if (!qp_to_sdma_engine(qp, sc) &&
 		    dd->flags & HFI1_HAS_SEND_DMA)
 			goto inval;
+
+		if (!qp_to_send_context(qp, sc))
+			goto inval;
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
@@ -669,6 +672,9 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 		if (!qp_to_sdma_engine(qp, sc) &&
 		    dd->flags & HFI1_HAS_SEND_DMA)
+			goto inval;
+
+		if (!qp_to_send_context(qp, sc))
 			goto inval;
 	}
 
@@ -825,6 +831,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		qp->srate_mbps = ib_rate_to_mbps(qp->s_srate);
 		qp->s_sc = ah_to_sc(ibqp->device, &qp->remote_ah_attr);
 		qp->s_sde = qp_to_sdma_engine(qp, qp->s_sc);
+		qp->s_sendcontext = qp_to_send_context(qp, qp->s_sc);
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
@@ -841,6 +848,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			qp->s_flags |= HFI1_S_AHG_CLEAR;
 			qp->s_sc = ah_to_sc(ibqp->device, &qp->remote_ah_attr);
 			qp->s_sde = qp_to_sdma_engine(qp, qp->s_sc);
+			qp->s_sendcontext = qp_to_send_context(qp, qp->s_sc);
 		}
 	}
 
@@ -1698,11 +1706,13 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 	struct hfi1_swqe *wqe;
 	struct hfi1_qp *qp = iter->qp;
 	struct sdma_engine *sde;
+	struct send_context *send_context;
 
 	sde = qp_to_sdma_engine(qp, qp->s_sc);
+	send_context = qp_to_send_context(qp, qp->s_sc);
 	wqe = get_swqe_ptr(qp, qp->s_last);
 	seq_printf(s,
-		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%u LID %x SL %u MTU %u %u %u %u SDE %p,%u\n",
+		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%u LID %x SL %u MTU %u %u %u %u SDE %p,%u SC %p\n",
 		   iter->n,
 		   qp_idle(qp) ? "I" : "B",
 		   qp->ibqp.qp_num,
@@ -1731,7 +1741,8 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   qp->s_retry_cnt,
 		   qp->s_rnr_retry_cnt,
 		   sde,
-		   sde ? sde->this_idx : 0);
+		   sde ? sde->this_idx : 0,
+		   send_context);
 }
 
 void qp_comm_est(struct hfi1_qp *qp)

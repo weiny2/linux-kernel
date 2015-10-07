@@ -500,6 +500,7 @@ struct hfi1_qp {
 	struct hfi1_mmap_info *ip;
 	struct ahg_ib_header *s_hdr;     /* next packet header to send */
 	struct sdma_engine *s_sde; /* current sde */
+	struct send_context *s_sendcontext; /* current send context */
 	/* sc for UC/RC QPs - based on ah for UD */
 	u8 s_sc;
 	unsigned long timeout_jiffies;  /* computed from timeout */
