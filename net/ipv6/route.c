@@ -253,8 +253,7 @@ static const struct rt6_info ip6_blk_hole_entry_template = {
 /* allocate dst with ip6_dst_ops */
 static inline struct rt6_info *ip6_dst_alloc(struct net *net,
 					     struct net_device *dev,
-					     int flags,
-					     struct fib6_table *table)
+					     int flags)
 {
 	struct rt6_info *rt = dst_alloc(&net->ipv6.ip6_dst_ops, dev,
 					0, DST_OBSOLETE_FORCE_CHK, flags);
@@ -1349,7 +1348,7 @@ struct dst_entry *icmp6_dst_alloc(struct net_device *dev,
 	if (unlikely(!idev))
 		return ERR_PTR(-ENODEV);
 
-	rt = ip6_dst_alloc(net, dev, 0, NULL);
+	rt = ip6_dst_alloc(net, dev, 0);
 	if (unlikely(!rt)) {
 		in6_dev_put(idev);
 		dst = ERR_PTR(-ENOMEM);
@@ -1536,7 +1535,8 @@ int ip6_route_add(struct fib6_config *cfg)
 	if (!table)
 		goto out;
 
-	rt = ip6_dst_alloc(net, NULL, (cfg->fc_flags & RTF_ADDRCONF) ? 0 : DST_NOCOUNT, table);
+	rt = ip6_dst_alloc(net, NULL,
+			   (cfg->fc_flags & RTF_ADDRCONF) ? 0 : DST_NOCOUNT);
 
 	if (!rt) {
 		err = -ENOMEM;
@@ -1922,8 +1922,7 @@ static struct rt6_info *ip6_rt_copy(struct rt6_info *ort,
 	if (ort->rt6i_flags & RTF_CACHE)
 		ort = (struct rt6_info *)ort->dst.from;
 
-	rt = ip6_dst_alloc(net, ort->dst.dev, 0,
-			   ort->rt6i_table);
+	rt = ip6_dst_alloc(net, ort->dst.dev, 0);
 
 	if (rt) {
 		rt->dst.input = ort->dst.input;
@@ -2203,7 +2202,7 @@ struct rt6_info *addrconf_dst_alloc(struct inet6_dev *idev,
 {
 	struct net *net = dev_net(idev->dev);
 	struct rt6_info *rt = ip6_dst_alloc(net, net->loopback_dev,
-					    DST_NOCOUNT, NULL);
+					    DST_NOCOUNT);
 	if (!rt)
 		return ERR_PTR(-ENOMEM);
 
