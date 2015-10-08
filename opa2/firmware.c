@@ -58,7 +58,7 @@
 #include "debugfs.h"
 #include "link.h"
 #include "rdma/fxr/mnh_8051_defs.h"
-#include "rdma/fxr/dcc_csrs_defs.h"
+#include "rdma/fxr/fxr_fc_defs.h"
 
 #ifdef CONFIG_DEBUG_FS
 
@@ -82,13 +82,13 @@ static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
 { \
 	struct hfi_pportdata *ppd;\
 	int ret = 0;\
-	u64 port_config;\
+	u64 reg;\
 	rcu_read_lock();\
 	ppd = private2ppd(file);\
-	ret = kstrtou64_from_user(ubuf, count, 0, &port_config);\
+	ret = kstrtou64_from_user(ubuf, count, 0, &reg);\
 	if (ret < 0)\
 		goto _return;\
-	write_8051_csr(ppd, address, port_config);\
+	write_8051_csr(ppd, address, reg);\
 	ret = count;\
  _return:\
 	rcu_read_unlock();\
@@ -102,8 +102,8 @@ FIRMWARE_READ(8051_state, CRK_CRK8051_STS_CUR_STATE)
 FIRMWARE_READ(8051_cmd0, CRK_CRK8051_CFG_HOST_CMD_0)
 FIRMWARE_WRITE(8051_cmd0, CRK_CRK8051_CFG_HOST_CMD_0)
 FIRMWARE_READ(8051_cmd1, CRK_CRK8051_CFG_HOST_CMD_1)
-FIRMWARE_READ(port_config, CRK_CFG_PORT_CONFIG)
-FIRMWARE_WRITE(port_config, CRK_CFG_PORT_CONFIG)
+FIRMWARE_READ(logical_link, FZC_LCB_CFG_PORT)
+FIRMWARE_WRITE(logical_link, FZC_LCB_CFG_PORT)
 
 #define HOST_STATE_READ(name) \
 static ssize_t name##_read(struct file *file, char __user *buf,\
@@ -135,7 +135,7 @@ static const struct firmware_info firmware_ops[] = {
 	DEBUGFS_OPS("8051_state", _8051_state_read, NULL),
 	DEBUGFS_OPS("8051_cmd0", _8051_cmd0_read, _8051_cmd0_write),
 	DEBUGFS_OPS("8051_cmd1", _8051_cmd1_read, NULL),
-	DEBUGFS_OPS("port_config", _port_config_read, _port_config_write),
+	DEBUGFS_OPS("logical_link", _logical_link_read, _logical_link_write),
 	DEBUGFS_OPS("host_link_state", host_link_state_read, NULL),
 	DEBUGFS_OPS("lstate", lstate_read, NULL),
 };
