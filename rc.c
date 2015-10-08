@@ -927,8 +927,8 @@ void hfi1_rc_rnr_retry(unsigned long arg)
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-	if (stop_rnr_timer(qp))
-		hfi1_schedule_send(qp);
+	stop_rnr_timer(qp);
+	hfi1_schedule_send(qp);
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 }
 
