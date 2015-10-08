@@ -1008,7 +1008,7 @@ static int nvme_submit_sync_cmd(struct nvme_dev *dev, int q_idx,
 						struct nvme_command *cmd,
 						u32 *result, unsigned timeout)
 {
-	int cmdid;
+	int cmdid, ret;
 	struct sync_cmd_info cmdinfo;
 	struct nvme_queue *nvmeq;
 
@@ -1027,7 +1027,12 @@ static int nvme_submit_sync_cmd(struct nvme_dev *dev, int q_idx,
 	cmd->common.command_id = cmdid;
 
 	set_current_state(TASK_UNINTERRUPTIBLE);
-	nvme_submit_cmd(nvmeq, cmd);
+	ret = nvme_submit_cmd(nvmeq, cmd);
+	unlock_nvmeq(nvmeq);
+	if (ret) {
+		free_cmdid(nvmeq, cmdid, NULL);
+		return ret;
+	}
 	schedule();
 
 	if (result)
