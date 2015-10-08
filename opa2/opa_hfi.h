@@ -165,6 +165,8 @@ enum {
 
 #define HFI_SC_VLT_MASK			FXR_TP_CFG_SC_TO_VLT_MAP_ENTRY0_MASK
 
+#define HFI_SC_VLR_MASK			FXR_FPC_CFG_SC_VL_TABLE_15_0_ENTRY0_MASK
+
 /* Message class and traffic class for VL15 packets */
 #define HFI_VL15_MC			0
 #define HFI_VL15_TC			3
@@ -237,7 +239,8 @@ enum {
 	HFI_IB_CFG_VL_HIGH_LIMIT,	/* Change VL high limit */
 	HFI_IB_CFG_SL_TO_SC,		/* Change SLtoSC mapping */
 	HFI_IB_CFG_SC_TO_SL,		/* Change SCtoSL mapping */
-	HFI_IB_CFG_SC_TO_VLT,		/* Change SCtoVL mapping */
+	HFI_IB_CFG_SC_TO_VLR,		/* Change SCtoVLr mapping */
+	HFI_IB_CFG_SC_TO_VLT,		/* Change SCtoVLt mapping */
 	HFI_IB_CFG_SC_TO_VLNT,		/* Change Neighbor's SCtoVL mapping */
 };
 
@@ -412,6 +415,7 @@ struct ib_vl_weight_elem {
  *	(information received via LNI)
  * @sl_to_sc: service level to service class mapping table
  * @sc_to_sl: service class to service level mapping table
+ * @sc_to_vlr: service class to (RX) virtual lane table
  * @sc_to_vlt: service class to (TX) virtual lane table
  * @sc_to_vlnt: service class to (RX) neighbor virtual lane table
  * @sl_to_mctc: service level to traffic class & message class mapping
@@ -474,6 +478,7 @@ struct hfi_pportdata {
 	u8 mgmt_allowed;
 	u8 sl_to_sc[OPA_MAX_SLS];
 	u8 sc_to_sl[OPA_MAX_SCS];
+	u8 sc_to_vlr[OPA_MAX_SCS];
 	u8 sc_to_vlt[OPA_MAX_SCS];
 	u8 sc_to_vlnt[OPA_MAX_SCS];
 	u8 sl_to_mctc[OPA_MAX_SLS];

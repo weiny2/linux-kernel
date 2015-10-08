@@ -510,6 +510,44 @@ u8 hfi_porttype(struct hfi_pportdata *ppd)
 	return HFI_PORT_TYPE_STANDARD;
 }
 
+static void hfi_set_sc_to_vlr(struct hfi_pportdata *ppd, u8 *t)
+{
+	u64 reg_val = 0;
+	int i, j, sc_num;
+
+	/*
+	 * change mappings to VL15 to HFI_ILLEGAL_VL (except
+	 * for SC15, which must map to VL15). If we don't remap things this
+	 * way it is possible for VL15 counters to increment when we try to
+	 * send on a SC which is mapped to an invalid VL.
+	 */
+	for (i = 0; i < OPA_MAX_SCS; i++) {
+		if (i == 15)
+			continue;
+		if ((t[i] & 0x1f) == 0xf)
+			t[i] = HFI_ILLEGAL_VL;
+	}
+
+	/* 2 registers, 16 entries per register, 4 bit per entry */
+	for (i = 0, sc_num = 0; i < 2; i++) {
+		for (j = 0, reg_val = 0; j < 16; j++, sc_num++)
+			reg_val |= (t[sc_num] & HFI_SC_VLR_MASK)
+					 << (j * 4);
+		write_lm_fpc_csr(ppd, FXR_FPC_CFG_SC_VL_TABLE_15_0 +
+				 i * 8, reg_val);
+	}
+
+	/*
+	 * FXRTODO: Cached table will not only be
+	 * read by get_sma but also by verbs layer post
+	 * initialization. So this needs to be protected
+	 * by lock. If we use get_port_desc, then all
+	 * the tables reported by that call needs to hold
+	 * a lock. Design decision pending.
+	 */
+	  memcpy(ppd->sc_to_vlr, t, OPA_MAX_SCS);
+}
+
 static void hfi_set_sc_to_vlt(struct hfi_pportdata *ppd, u8 *t)
 {
 	u64 reg_val = 0;
@@ -876,11 +914,21 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 		hfi_sc_to_sl(ppd);
 		hfi_sc_to_mctc(ppd);
 		break;
+	case HFI_IB_CFG_SC_TO_VLR:
+		hfi_set_sc_to_vlr(ppd, data);
+		break;
 	case HFI_IB_CFG_SC_TO_VLT:
 		hfi_set_sc_to_vlt(ppd, data);
 		break;
 	case HFI_IB_CFG_SC_TO_VLNT:
 		hfi_set_sc_to_vlnt(ppd, data);
+		/*
+		 * FXRTODO: Use SC2VLNT to update SC2VLR since the FM is not
+		 * sending across the attribute for SC2VLR yet. The local VLT
+		 * should match the remote VLR. The local VLNT matches the
+		 * remote VLT. So the local VLR should match the local VLNT.
+		 */
+		hfi_set_sc_to_vlr(ppd, data);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
