@@ -2322,9 +2322,7 @@ asmlinkage void smp_irq_move_cleanup_interrupt(void)
 {
 	unsigned vector, me;
 
-	ack_APIC_irq();
-	irq_enter();
-	exit_idle();
+	entering_ack_irq();
 
 	me = smp_processor_id();
 	for (vector = FIRST_EXTERNAL_VECTOR; vector < NR_VECTORS; vector++) {
@@ -2374,7 +2372,7 @@ unlock:
 		raw_spin_unlock(&desc->lock);
 	}
 
-	irq_exit();
+	exiting_irq();
 }
 
 static void __irq_complete_move(struct irq_cfg *cfg, unsigned vector)

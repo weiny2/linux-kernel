@@ -379,9 +379,6 @@ unsigned long __init_refok init_memory_mapping(unsigned long start,
 
 	add_pfn_range_mapped(start >> PAGE_SHIFT, ret >> PAGE_SHIFT);
 
-	if (!start)
-		xen_finish_init_mapping();
-
 	return ret >> PAGE_SHIFT;
 }
 
@@ -580,6 +577,7 @@ void __init init_mem_mapping(void)
 		/* can we preseve max_low_pfn ?*/
 		max_low_pfn = max_pfn;
 	}
+	xen_finish_init_mapping();
 #else
 	early_ioremap_page_table_range_init();
 #endif
