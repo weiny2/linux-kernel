@@ -340,6 +340,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->sm_trap_qp = cpu_to_be32(ibp->sm_trap_qp);
 	pi->sa_qp = cpu_to_be32(ibp->sa_qp);
 	pi->local_port_num = port;
+	pi->opa_cap_mask = cpu_to_be16(OPA_CAP_MASK3_IsVLrSupported);
 
 	if (resp_len)
 		*resp_len += sizeof(struct opa_port_info);
@@ -378,6 +379,16 @@ static int __subn_get_opa_sl_to_sc(struct opa_smp *smp, u32 am, u8 *data,
 static int __subn_get_opa_sc_to_sl(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
+{
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	/* This is implemented in SMA-HFI*/
+	return reply(ibh);
+}
+
+static int __subn_get_opa_sc_to_vlr(struct opa_smp *smp, u32 am, u8 *data,
+				    struct ib_device *ibdev, u8 port,
+				    u32 *resp_len)
 {
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 
@@ -520,6 +531,10 @@ static int __subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 	case OPA_ATTRIB_ID_SC_TO_SL_MAP:
 		ret = __subn_get_opa_sc_to_sl(smp, am, data, ibdev, port,
 					      resp_len);
+		break;
+	case OPA_ATTRIB_ID_SC_TO_VLR_MAP:
+		ret = __subn_get_opa_sc_to_vlr(smp, am, data, ibdev, port,
+					       resp_len);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_VLT_MAP:
 		ret = __subn_get_opa_sc_to_vlt(smp, am, data, ibdev, port,
@@ -810,6 +825,14 @@ err:
 	return ret;
 }
 
+static int __subn_set_opa_sc_to_vlr(struct opa_smp *smp, u32 am, u8 *data,
+				    struct ib_device *ibdev, u8 port,
+				    u32 *resp_len)
+{
+	return subn_get_opa_sma(OPA_ATTRIB_ID_SC_TO_VLR_MAP, smp, am, data,
+				ibdev, port, resp_len);
+}
+
 static int __subn_set_opa_sc_to_vlt(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					       u32 *resp_len)
@@ -906,6 +929,10 @@ static int __subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 	case OPA_ATTRIB_ID_SC_TO_SL_MAP:
 		ret = __subn_set_opa_sc_to_sl(smp, am, data, ibdev, port,
 					      resp_len);
+		break;
+	case OPA_ATTRIB_ID_SC_TO_VLR_MAP:
+		ret = __subn_set_opa_sc_to_vlr(smp, am, data, ibdev, port,
+					       resp_len);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_VLT_MAP:
 		ret = __subn_set_opa_sc_to_vlt(smp, am, data, ibdev, port,

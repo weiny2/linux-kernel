@@ -288,6 +288,31 @@ static int __subn_get_hfi_sc_to_sl(struct hfi_devdata *dd, struct opa_smp *smp,
 	return hfi_reply(ibh);
 }
 
+static int __subn_get_hfi_sc_to_vlr(struct hfi_devdata *dd,
+				    struct opa_smp *smp, u32 am,
+				    u8 *data, u8 port, u32 *resp_len,
+				    u8 *sma_status)
+{
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	u32 n_blocks = OPA_AM_NBLK(am);
+	u8 *p = (void *)data;
+	size_t size = sizeof(ppd->sc_to_vlr);
+
+	if (n_blocks != 1) {
+		hfi_invalid_attr(smp);
+		*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+		return hfi_reply(ibh);
+	}
+
+	memcpy(p, ppd->sc_to_vlr, size);
+
+	if (resp_len)
+		*resp_len += size;
+
+	return hfi_reply(ibh);
+}
+
 static int __subn_get_hfi_sc_to_vlt(struct hfi_devdata *dd,
 					struct opa_smp *smp, u32 am,
 					u8 *data, u8 port, u32 *resp_len,
@@ -588,6 +613,10 @@ int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 	case OPA_ATTRIB_ID_SC_TO_SL_MAP:
 		ret = __subn_get_hfi_sc_to_sl(odev->dd, smp, am, data, port,
 					      resp_len, sma_status);
+		break;
+	case OPA_ATTRIB_ID_SC_TO_VLR_MAP:
+		ret = __subn_get_hfi_sc_to_vlr(odev->dd, smp, am, data, port,
+					       resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_VLT_MAP:
 		ret = __subn_get_hfi_sc_to_vlt(odev->dd, smp, am, data, port,
@@ -1179,6 +1208,45 @@ done:
 	return hfi_reply(ibh);
 }
 
+static int __subn_set_hfi_sc_to_vlr(struct hfi_devdata *dd, struct opa_smp *smp,
+				    u32 am, u8 *data, u8 port, u32 *resp_len,
+				    u8 *sma_status)
+{
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	u32 n_blocks = OPA_AM_NBLK(am);
+	int async_update = OPA_AM_ASYNC(am);
+	u8 *p = (void *)data;
+	int i, lstate, map_changed = 0;
+	int sc_len = ARRAY_SIZE(ppd->sc_to_vlr);
+
+	if (n_blocks != 1 || async_update)
+		goto err;
+
+	lstate = hfi_driver_lstate(ppd);
+
+	if (!async_update &&
+	    (lstate == IB_PORT_ARMED || lstate == IB_PORT_ACTIVE))
+		goto err;
+
+	for (i = 0; i < sc_len; i++) {
+		if (p[i] >= OPA_MAX_VLS)
+			goto err;
+		if (ppd->sc_to_vlr[i] != p[i])
+			map_changed = 1;
+	}
+
+	if (map_changed)
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_VLR, 0, p);
+
+	goto done;
+err:
+	hfi_invalid_attr(smp);
+	*sma_status = OPA_SMA_FAIL_WITH_NO_DATA;
+done:
+	return hfi_reply(ibh);
+}
+
 static int __subn_set_hfi_sc_to_vlt(struct hfi_devdata *dd, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
@@ -1460,6 +1528,10 @@ int hfi_set_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 	case OPA_ATTRIB_ID_SC_TO_SL_MAP:
 		ret = __subn_set_hfi_sc_to_sl(odev->dd, smp, am, data, port,
 					      resp_len, sma_status);
+		break;
+	case OPA_ATTRIB_ID_SC_TO_VLR_MAP:
+		ret = __subn_set_hfi_sc_to_vlr(odev->dd, smp, am, data, port,
+					       resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_VLT_MAP:
 		ret = __subn_set_hfi_sc_to_vlt(odev->dd, smp, am, data, port,
