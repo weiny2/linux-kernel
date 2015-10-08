@@ -62,7 +62,7 @@
 
 #ifdef CONFIG_DEBUG_FS
 
-#define FIRMWARE_READ(name, address) \
+#define FIRMWARE_READ(name, subsystem, address) \
 static ssize_t _##name##_read(struct file *file, char __user *buf,\
 			      size_t count, loff_t *ppos)\
 { \
@@ -70,13 +70,13 @@ static ssize_t _##name##_read(struct file *file, char __user *buf,\
 	ssize_t ret = 0;\
 	u64 state;\
 	ppd = private2ppd(file);\
-	state = read_8051_csr(ppd, address);\
+	state = read_##subsystem##_csr(ppd, address);\
 	ret =  simple_read_from_buffer(buf, count, ppos, &state,\
 					sizeof(state));\
 	return ret;\
 }
 
-#define FIRMWARE_WRITE(name, address) \
+#define FIRMWARE_WRITE(name, subsystem, address) \
 static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
 			   size_t count, loff_t *ppos)\
 { \
@@ -88,7 +88,7 @@ static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
 	ret = kstrtou64_from_user(ubuf, count, 0, &reg);\
 	if (ret < 0)\
 		goto _return;\
-	write_8051_csr(ppd, address, reg);\
+	write_##subsystem##_csr(ppd, address, reg);\
 	ret = count;\
  _return:\
 	rcu_read_unlock();\
@@ -98,12 +98,12 @@ static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
 #define private2dd(file) (file_inode(file)->i_private)
 #define private2ppd(file) (file_inode(file)->i_private)
 
-FIRMWARE_READ(8051_state, CRK_CRK8051_STS_CUR_STATE)
-FIRMWARE_READ(8051_cmd0, CRK_CRK8051_CFG_HOST_CMD_0)
-FIRMWARE_WRITE(8051_cmd0, CRK_CRK8051_CFG_HOST_CMD_0)
-FIRMWARE_READ(8051_cmd1, CRK_CRK8051_CFG_HOST_CMD_1)
-FIRMWARE_READ(logical_link, FZC_LCB_CFG_PORT)
-FIRMWARE_WRITE(logical_link, FZC_LCB_CFG_PORT)
+FIRMWARE_READ(8051_state, 8051, CRK_CRK8051_STS_CUR_STATE)
+FIRMWARE_READ(8051_cmd0, 8051, CRK_CRK8051_CFG_HOST_CMD_0)
+FIRMWARE_WRITE(8051_cmd0, 8051, CRK_CRK8051_CFG_HOST_CMD_0)
+FIRMWARE_READ(8051_cmd1, 8051, CRK_CRK8051_CFG_HOST_CMD_1)
+FIRMWARE_READ(logical_link, fzc, FZC_LCB_CFG_PORT)
+FIRMWARE_WRITE(logical_link, fzc, FZC_LCB_CFG_PORT)
 
 #define HOST_STATE_READ(name) \
 static ssize_t name##_read(struct file *file, char __user *buf,\
