@@ -421,10 +421,10 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	/* check for avail */
 	if (unlikely(!qp->s_avail)) {
 		qp->s_avail = qp_get_savail(qp);
+		WARN_ON(qp->s_avail > (qp->s_size - 1));
 		if (!qp->s_avail)
 			return -ENOMEM;
 	}
-	qp->s_avail--;
 	next = qp->s_head + 1;
 	if (next >= qp->s_size)
 		next = 0;
@@ -478,6 +478,7 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	wqe->lpsn = wqe->psn + ((wqe->length - 1) >> log_pmtu);
 	qp->s_next_psn = wqe->lpsn + 1;
 	smp_wmb(); /* see request builders */
+	qp->s_avail--;
 	qp->s_head = next;
 
 	return 0;

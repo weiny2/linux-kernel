@@ -299,11 +299,11 @@ static inline u32 qp_get_savail(struct hfi1_qp *qp)
 
 	smp_read_barrier_depends(); /* see rc.c */
 	slast = ACCESS_ONCE(qp->s_last);
-	ret =
-		qp->s_size -
-		((((s32)qp->s_head - (s32)slast) << 1) >> 1)
-		- 1;
-	return ret;
+	if (qp->s_head >= slast)
+		ret = qp->s_size - (qp->s_head - slast);
+	else
+		ret = slast - qp->s_head;
+	return ret - 1;
 }
 
 /**
