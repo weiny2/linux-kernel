@@ -1766,10 +1766,7 @@ static int nvme_submit_io(struct nvme_ns *ns, struct nvme_user_io __user *uio)
 	c.rw.prp1 = cpu_to_le64(sg_dma_address(iod->sg));
 	c.rw.prp2 = cpu_to_le64(iod->first_dma);
 
-	if (length != (io.nblocks + 1) << ns->lba_shift)
-		status = -ENOMEM;
-	else
-		status = nvme_submit_io_cmd(dev, &c, NULL);
+	status = nvme_submit_io_cmd(dev, &c, NULL);
 
 	if (meta_len) {
 		if (status == NVME_SC_SUCCESS && !(io.opcode & 1)) {
