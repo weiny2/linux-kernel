@@ -100,6 +100,13 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	struct hfi_userdata *ud;
 	struct hfi_info *hi = container_of(fp->private_data,
 					   struct hfi_info, user_miscdev);
+	int ret;
+
+	/* hold the device so it cannot be removed until user calls close() */
+	/* TODO - may be a race here, see STL-3033, also see ib_uverbs_open. */
+	ret = opa_core_device_get(hi->odev);
+	if (ret)
+		return ret;
 
 	ud = kzalloc(sizeof(struct hfi_userdata), GFP_KERNEL);
 	if (!ud)
@@ -107,6 +114,7 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	fp->private_data = ud;
 
 	/* store HFI HW device pointers */
+	ud->odev = hi->odev;
 	ud->bus_ops = hi->odev->bus_ops;
 
 	ud->pid = task_pid_nr(current);
@@ -608,7 +616,7 @@ done:
 	return ret;
 }
 
-int hfi_user_cleanup(struct hfi_userdata *ud)
+static int hfi_user_cleanup(struct hfi_userdata *ud)
 {
 	struct opa_core_ops *ops = ud->bus_ops;
 
@@ -629,6 +637,7 @@ static int hfi_close(struct inode *inode, struct file *fp)
 
 	fp->private_data = NULL;
 	hfi_user_cleanup(ud);
+	opa_core_device_put(ud->odev);
 	kfree(ud);
 	return 0;
 }

@@ -63,6 +63,7 @@
 
 /* Private data for file operations, created at open(). */
 struct hfi_userdata {
+	struct opa_core_device *odev;
 	struct opa_core_ops *bus_ops;
 	pid_t pid;
 	pid_t sid;

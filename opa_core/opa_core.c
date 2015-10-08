@@ -227,11 +227,12 @@ opa_core_register_device(struct device *dev, struct opa_core_device_id *bus_id,
 		ret, bus_id->vendor, bus_id->device);
 
 	odev->index = ret;
-	/* TODO - should set name, id, bus, bus_id */
+	odev->dev.id = ret;
 	dev_set_name(&odev->dev, "opa_core%u", odev->index);
 	odev->dev.bus = &opa_core;
 	odev->dev.parent = dev;
 	odev->dev.release = opa_core_release_device;
+	odev->owner = dev->driver->owner;
 	odev->id = *bus_id;
 	odev->dd = dd;
 	odev->bus_ops = bus_ops;
