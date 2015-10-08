@@ -652,7 +652,6 @@ void hfi_cleanup_interrupts(struct hfi_devdata *dd);
 void hfi_disable_interrupts(struct hfi_devdata *dd);
 
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
-int hfi_user_cleanup(struct hfi_ctx *ud);
 void hfi_cc_state_reclaim(struct rcu_head *rcu);
 
 /* HFI specific functions */

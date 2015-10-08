@@ -54,6 +54,7 @@
 #include <linux/device.h>
 #include <linux/idr.h>
 #include <linux/gfp.h>
+#include <linux/module.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/hfi_types.h>
 #include <rdma/opa_smi.h>
@@ -425,6 +426,7 @@ struct opa_core_device_id {
  * @bus_ops: the hardware ops supported by this device.
  * @id: the device type identification (used to match it with a driver).
  * @dev: underlying device.
+ * @module: underlying device driver module.
  * @index: unique position on the opa_core bus
  * @kregbase: start VA for OPA hw csrs
  * @kregend: end VA for OPA hw csrs
@@ -434,6 +436,7 @@ struct opa_core_device {
 	struct opa_core_ops *bus_ops;
 	struct opa_core_device_id id;
 	struct device dev;
+	struct module *owner;
 	int index;
 	u8 __iomem *kregbase;
 	u8 __iomem *kregend;
@@ -561,5 +564,36 @@ static inline void opa_core_clear_priv_data(struct opa_core_client *client,
 					    struct opa_core_device *odev)
 {
 	return idr_remove(&client->id, odev->index);
+}
+
+/**
+ * opa_core_device_get - Hold the opa_core_device to prevent removal
+ * @odev: OPA core device
+ *
+ * The intent is to allow a client to prevent client->remove() callback
+ * while the device is in active use which the remove() callback cannot
+ * teardown.
+ * Caller is responsible to ensure not called after remove() callback as
+ * the opa_core_device is no longer accessible at that point.
+ *
+ * Return: 0 on success or appropriate error
+ */
+static inline int opa_core_device_get(struct opa_core_device *odev)
+{
+	return try_module_get(odev->owner) ? 0 : -ENODEV;
+}
+
+/**
+ * opa_core_device_put - Release the opa_core_device
+ * @odev: OPA core device
+ *
+ * Caller is responsible to ensure not called after remove() callback as
+ * the opa_core_device is no longer accessible at that point.
+ *
+ * Return: none
+ */
+static inline void opa_core_device_put(struct opa_core_device *odev)
+{
+	module_put(odev->owner);
 }
 #endif /* _OPA_CORE_H_ */

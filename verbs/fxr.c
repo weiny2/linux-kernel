@@ -429,6 +429,13 @@ void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp)
 int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp,
 			 bool is_user)
 {
+	int ret;
+
+	/* hold the device so it cannot be removed while QP is active */
+	ret = opa_core_device_get(ibd->odev);
+	if (ret)
+		return ret;
+
 	qp->s_ctx = &ibd->ctx;
 	return 0;
 }
@@ -436,4 +443,5 @@ int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp,
 void opa_ib_ctx_release_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
 {
 	qp->s_ctx = NULL;
+	opa_core_device_put(ibd->odev);
 }

@@ -61,14 +61,22 @@ static int ui_open(struct inode *inode, struct file *filp)
 {
 	struct hfi_info *hi = container_of(filp->private_data,
 					   struct hfi_info, ui_miscdev);
+	int ret;
 
+	/* hold the device so it cannot be removed until user calls close() */
+	/* TODO - may be a race here, see STL-3033, also see ib_uverbs_open. */
+	ret = opa_core_device_get(hi->odev);
+	if (ret)
+		return ret;
 	filp->private_data = hi->odev; /* for other methods */
 	return 0;
 }
 
 static int ui_release(struct inode *inode, struct file *filp)
 {
-	/* nothing to do */
+	struct opa_core_device *odev = filp->private_data;
+
+	opa_core_device_put(odev);
 	return 0;
 }
 
