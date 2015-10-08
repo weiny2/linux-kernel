@@ -1367,7 +1367,7 @@ static void nvme_disable_queue(struct nvme_dev *dev, int qid)
 }
 
 static struct nvme_queue *nvme_alloc_queue(struct nvme_dev *dev, int qid,
-							int depth, int vector)
+							int depth)
 {
 	struct device *dmadev = &dev->pci_dev->dev;
 	unsigned extra = nvme_queue_extra(depth);
@@ -1401,7 +1401,6 @@ static struct nvme_queue *nvme_alloc_queue(struct nvme_dev *dev, int qid,
 	INIT_LIST_HEAD(&nvmeq->iod_bio);
 	nvmeq->q_db = &dev->dbs[qid * 2 * dev->db_stride];
 	nvmeq->q_depth = depth;
-	nvmeq->cq_vector = vector;
 	nvmeq->qid = qid;
 	nvmeq->q_suspended = 1;
 	dev->queue_count++;
@@ -1455,6 +1454,7 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid)
 	struct nvme_dev *dev = nvmeq->dev;
 	int result;
 
+	nvmeq->cq_vector = qid % dev->vec_count;
 	result = adapter_alloc_cq(dev, qid, nvmeq);
 	if (result < 0)
 		return result;
@@ -1579,7 +1579,7 @@ static int nvme_configure_admin_queue(struct nvme_dev *dev)
 
 	nvmeq = raw_nvmeq(dev, 0);
 	if (!nvmeq) {
-		nvmeq = nvme_alloc_queue(dev, 0, 256, 0);
+		nvmeq = nvme_alloc_queue(dev, 0, 256);
 		if (!nvmeq)
 			return -ENOMEM;
 	}
@@ -2192,7 +2192,7 @@ static void nvme_create_io_queues(struct nvme_dev *dev)
 
 	max = min(dev->max_qid, num_online_cpus());
 	for (i = dev->queue_count; i <= max; i++)
-		if (!nvme_alloc_queue(dev, i, dev->q_depth, i - 1))
+		if (!nvme_alloc_queue(dev, i, dev->q_depth))
 			break;
 
 	max = min(dev->queue_count - 1, num_online_cpus());
@@ -2368,11 +2368,18 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
 	if (!pdev->irq)
 		pci_disable_msix(pdev);
 
-	for (i = 0; i < nr_io_queues; i++)
+	/*
+	 * If we enable msix early due to not intx, disable it again before
+	 * setting up the full range we need.
+	 */
+	if (!pdev->irq)
+		pci_disable_msix(pdev);
+
+	for (i = 0; i <= nr_io_queues; i++)
 		dev->entry[i].entry = i;
-	vecs = pci_enable_msix_range(pdev, dev->entry, 1, nr_io_queues);
+	vecs = pci_enable_msix_range(pdev, dev->entry, 1, nr_io_queues + 1);
 	if (vecs < 0) {
-		vecs = pci_enable_msi_range(pdev, 1, min(nr_io_queues, 32));
+		vecs = pci_enable_msi_range(pdev, 1, min(nr_io_queues + 1, 32));
 		if (vecs < 0) {
 			vecs = 1;
 		} else {
@@ -2387,7 +2394,7 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
 	 * path to scale better, even if the receive path is limited by the
 	 * number of interrupts.
 	 */
-	nr_io_queues = vecs;
+	dev->vec_count = vecs;
 	dev->max_qid = nr_io_queues;
 
 	result = queue_request_irq(dev, adminq, adminq->irqname);
@@ -3050,8 +3057,8 @@ static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
-	dev->entry = kcalloc(num_possible_cpus(), sizeof(*dev->entry),
-								GFP_KERNEL);
+	dev->entry = kzalloc((num_possible_cpus() + 1) * sizeof(*dev->entry),
+							GFP_KERNEL);
 	if (!dev->entry)
 		goto free;
 	dev->queues = kcalloc(num_possible_cpus() + 1, sizeof(void *),
