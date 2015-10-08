@@ -120,12 +120,14 @@ struct rt6_info {
 	struct rt6key			rt6i_src;
 	struct rt6key			rt6i_prefsrc;
 	u32				rt6i_metric;
+#ifndef __GENKSYMS__
+	u32				rt6i_pmtu;
+#endif
 
 	struct inet6_dev		*rt6i_idev;
 	unsigned long			_rt6i_peer;
 
 	u32				rt6i_genid;
-
 	/* more non-fragment space at head required */
 	unsigned short			rt6i_nfheader_len;
 
@@ -190,15 +192,6 @@ static inline void rt6_update_expires(struct rt6_info *rt0, int timeout)
 
 	dst_set_expires(&rt0->dst, timeout);
 	rt0->rt6i_flags |= RTF_EXPIRES;
-}
-
-static inline void rt6_set_from(struct rt6_info *rt, struct rt6_info *from)
-{
-	struct dst_entry *new = (struct dst_entry *) from;
-
-	rt->rt6i_flags &= ~RTF_EXPIRES;
-	dst_hold(new);
-	rt->dst.from = new;
 }
 
 static inline void ip6_rt_put(struct rt6_info *rt)

@@ -1838,6 +1838,12 @@ int __init fib6_init(void)
 {
 	int ret = -ENOMEM;
 
+	/* check kABI correctness of bsc#947321 changes */
+	BUILD_BUG_ON(offsetof(struct rt6_info, rt6i_idev) !=
+		     offsetof(struct rt6_info, rt6i_metric) +
+		     sizeof(((struct rt6_info *)NULL)->rt6i_metric) +
+		     sizeof(((struct rt6_info *)NULL)->rt6i_pmtu));
+
 	fib6_node_kmem = kmem_cache_create("fib6_nodes",
 					   sizeof(struct fib6_node),
 					   0, SLAB_HWCACHE_ALIGN,
