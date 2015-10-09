@@ -2400,17 +2400,11 @@ static int iommu_domain_identity_map(struct dmar_domain *domain,
 				  DMA_PTE_READ|DMA_PTE_WRITE);
 }
 
-static int iommu_prepare_identity_map(struct device *dev,
-				      unsigned long long start,
-				      unsigned long long end)
+static int domain_prepare_identity_map(struct device *dev,
+				       struct dmar_domain *domain,
+				       unsigned long long start,
+				       unsigned long long end)
 {
-	struct dmar_domain *domain;
-	int ret;
-
-	domain = get_domain_for_dev(dev, DEFAULT_DOMAIN_ADDRESS_WIDTH);
-	if (!domain)
-		return -ENOMEM;
-
 	/* For _hardware_ passthrough, don't bother. But for software
 	   passthrough, we do it anyway -- it may indicate a memory
 	   range which is reserved in E820, so which didn't get set
@@ -2430,8 +2424,7 @@ static int iommu_prepare_identity_map(struct device *dev,
 			dmi_get_system_info(DMI_BIOS_VENDOR),
 			dmi_get_system_info(DMI_BIOS_VERSION),
 		     dmi_get_system_info(DMI_PRODUCT_VERSION));
-		ret = -EIO;
-		goto error;
+		return -EIO;
 	}
 
 	if (end >> agaw_to_width(domain->agaw)) {
@@ -2441,11 +2434,24 @@ static int iommu_prepare_identity_map(struct device *dev,
 		     dmi_get_system_info(DMI_BIOS_VENDOR),
 		     dmi_get_system_info(DMI_BIOS_VERSION),
 		     dmi_get_system_info(DMI_PRODUCT_VERSION));
-		ret = -EIO;
-		goto error;
+		return -EIO;
 	}
 
-	ret = iommu_domain_identity_map(domain, start, end);
+	return iommu_domain_identity_map(domain, start, end);
+}
+
+static int iommu_prepare_identity_map(struct device *dev,
+				      unsigned long long start,
+				      unsigned long long end)
+{
+	struct dmar_domain *domain;
+	int ret;
+
+	domain = get_domain_for_dev(dev, DEFAULT_DOMAIN_ADDRESS_WIDTH);
+	if (!domain)
+		return -ENOMEM;
+
+	ret = domain_prepare_identity_map(dev, domain, start, end);
 	if (ret)
 		goto error;
 
@@ -2456,8 +2462,9 @@ static int iommu_prepare_identity_map(struct device *dev,
 
 	return 0;
 
- error:
+error:
 	domain_exit(domain);
+
 	return ret;
 }
 
@@ -3210,8 +3217,10 @@ static struct iova *intel_alloc_iova(struct device *dev,
 
 static struct dmar_domain *__get_valid_domain_for_dev(struct device *dev)
 {
+	struct dmar_rmrr_unit *rmrr;
 	struct dmar_domain *domain;
-	int ret;
+	struct device *i_dev;
+	int i, ret;
 
 	domain = get_domain_for_dev(dev, DEFAULT_DOMAIN_ADDRESS_WIDTH);
 	if (!domain) {
@@ -3229,6 +3238,23 @@ static struct dmar_domain *__get_valid_domain_for_dev(struct device *dev)
 			return NULL;
 		}
 	}
+
+	/* We have a new domain - setup possible RMRRs for the device */
+	rcu_read_lock();
+	for_each_rmrr_units(rmrr) {
+		for_each_active_dev_scope(rmrr->devices, rmrr->devices_cnt,
+					  i, i_dev) {
+			if (i_dev != dev)
+				continue;
+
+			ret = domain_prepare_identity_map(dev, domain,
+							  rmrr->base_address,
+							  rmrr->end_address);
+			if (ret)
+				dev_err(dev, "Mapping reserved region failed\n");
+		}
+	}
+	rcu_read_unlock();
 
 	return domain;
 }
