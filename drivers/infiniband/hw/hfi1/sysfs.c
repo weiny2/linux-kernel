@@ -53,7 +53,6 @@
 #include "mad.h"
 #include "trace.h"
 
-
 /*
  * Start of per-port congestion control structures and support code
  */
@@ -62,8 +61,8 @@
  * Congestion control table size followed by table entries
  */
 static ssize_t read_cc_table_bin(struct file *filp, struct kobject *kobj,
-		struct bin_attribute *bin_attr,
-		char *buf, loff_t pos, size_t count)
+				 struct bin_attribute *bin_attr,
+				 char *buf, loff_t pos, size_t count)
 {
 	int ret;
 	struct hfi1_pportdata *ppd =
@@ -84,7 +83,7 @@ static ssize_t read_cc_table_bin(struct file *filp, struct kobject *kobj,
 
 	rcu_read_lock();
 	cc_state = get_cc_state(ppd);
-	if (cc_state == NULL) {
+	if (!cc_state) {
 		rcu_read_unlock();
 		return -EINVAL;
 	}
@@ -115,8 +114,8 @@ static struct bin_attribute cc_table_bin_attr = {
  * trigger threshold and the minimum injection rate delay.
  */
 static ssize_t read_cc_setting_bin(struct file *filp, struct kobject *kobj,
-		struct bin_attribute *bin_attr,
-		char *buf, loff_t pos, size_t count)
+				   struct bin_attribute *bin_attr,
+				   char *buf, loff_t pos, size_t count)
 {
 	int ret;
 	struct hfi1_pportdata *ppd =
@@ -135,7 +134,7 @@ static ssize_t read_cc_setting_bin(struct file *filp, struct kobject *kobj,
 
 	rcu_read_lock();
 	cc_state = get_cc_state(ppd);
-	if (cc_state == NULL) {
+	if (!cc_state) {
 		rcu_read_unlock();
 		return -EINVAL;
 	}
@@ -195,7 +194,6 @@ HFI1_SC2VL_ATTR(28);
 HFI1_SC2VL_ATTR(29);
 HFI1_SC2VL_ATTR(30);
 HFI1_SC2VL_ATTR(31);
-
 
 static struct attribute *sc2vl_default_attributes[] = {
 	&hfi1_sc2vl_attr_0.attr,
@@ -301,7 +299,6 @@ HFI1_SL2SC_ATTR(28);
 HFI1_SL2SC_ATTR(29);
 HFI1_SL2SC_ATTR(30);
 HFI1_SL2SC_ATTR(31);
-
 
 static struct attribute *sl2sc_default_attributes[] = {
 	&hfi1_sl2sc_attr_0.attr,
@@ -435,7 +432,6 @@ static struct kobj_type hfi1_vl2mtu_ktype = {
 	.default_attrs = vl2mtu_default_attributes
 };
 
-
 /* end of per-port file structures and support code */
 
 /*
@@ -477,7 +473,6 @@ static ssize_t show_boardversion(struct device *device,
 	return scnprintf(buf, PAGE_SIZE, "%s", dd->boardversion);
 }
 
-
 static ssize_t show_nctxts(struct device *device,
 			   struct device_attribute *attr, char *buf)
 {
@@ -497,7 +492,7 @@ static ssize_t show_nctxts(struct device *device,
 }
 
 static ssize_t show_nfreectxts(struct device *device,
-			   struct device_attribute *attr, char *buf)
+			       struct device_attribute *attr, char *buf)
 {
 	struct hfi1_ibdev *dev =
 		container_of(device, struct hfi1_ibdev, ibdev.dev);
@@ -515,7 +510,6 @@ static ssize_t show_serial(struct device *device,
 	struct hfi1_devdata *dd = dd_from_dev(dev);
 
 	return scnprintf(buf, PAGE_SIZE, "%s", dd->serial);
-
 }
 
 static ssize_t store_chip_reset(struct device *device,
@@ -608,8 +602,8 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 
 	if (!port_num || port_num > dd->num_pports) {
 		dd_dev_err(dd,
-			"Skipping infiniband class with invalid port %u\n",
-			port_num);
+			   "Skipping infiniband class with invalid port %u\n",
+			   port_num);
 		return -ENODEV;
 	}
 	ppd = &dd->pport[port_num - 1];
@@ -644,39 +638,38 @@ int hfi1_create_port_files(struct ib_device *ibdev, u8 port_num,
 	}
 	kobject_uevent(&ppd->vl2mtu_kobj, KOBJ_ADD);
 
-
 	ret = kobject_init_and_add(&ppd->pport_cc_kobj, &port_cc_ktype,
 				   kobj, "CCMgtA");
 	if (ret) {
 		dd_dev_err(dd,
-		 "Skipping Congestion Control sysfs info, (err %d) port %u\n",
-		 ret, port_num);
+			   "Skipping Congestion Control sysfs info, (err %d) port %u\n",
+			   ret, port_num);
 		goto bail_vl2mtu;
 	}
 
 	kobject_uevent(&ppd->pport_cc_kobj, KOBJ_ADD);
 
 	ret = sysfs_create_bin_file(&ppd->pport_cc_kobj,
-				&cc_setting_bin_attr);
+				    &cc_setting_bin_attr);
 	if (ret) {
 		dd_dev_err(dd,
-		 "Skipping Congestion Control setting sysfs info, (err %d) port %u\n",
-		 ret, port_num);
+			   "Skipping Congestion Control setting sysfs info, (err %d) port %u\n",
+			   ret, port_num);
 		goto bail_cc;
 	}
 
 	ret = sysfs_create_bin_file(&ppd->pport_cc_kobj,
-				&cc_table_bin_attr);
+				    &cc_table_bin_attr);
 	if (ret) {
 		dd_dev_err(dd,
-		 "Skipping Congestion Control table sysfs info, (err %d) port %u\n",
-		 ret, port_num);
+			   "Skipping Congestion Control table sysfs info, (err %d) port %u\n",
+			   ret, port_num);
 		goto bail_cc_entry_bin;
 	}
 
 	dd_dev_info(dd,
-		"IB%u: Congestion Control Agent enabled for port %d\n",
-		dd->unit, port_num);
+		    "IB%u: Congestion Control Agent enabled for port %d\n",
+		    dd->unit, port_num);
 
 	return 0;
 

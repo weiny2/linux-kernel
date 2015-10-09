@@ -88,7 +88,6 @@ struct tid_pageset {
 	u16 count;
 };
 
-
 #define EXP_TID_SET_EMPTY(set) (set.count == 0 && list_empty(&set.list))
 
 #define num_user_pages(vaddr, len)					\
@@ -270,8 +269,9 @@ int hfi1_user_exp_rcv_init(struct file *fp)
 		remainder = uctxt->expected_count % uctxt->subctxt_cnt;
 		if (remainder && subctxt_fp(fp) < remainder)
 			fd->tid_limit++;
-	} else
+	} else {
 		fd->tid_limit = uctxt->expected_count;
+	}
 done:
 	return ret;
 }
@@ -330,7 +330,8 @@ int hfi1_user_exp_rcv_free(struct hfi1_filedata *fd)
 static inline void rcv_array_wc_fill(struct hfi1_devdata *dd, u32 index)
 {
 	/* Doing the WC fill writes only makes sense if the device is
-	 * present and the RcvArray has been mapped as WC memory. */
+	 * present and the RcvArray has been mapped as WC memory.
+	 */
 	if ((dd->flags & HFI1_PRESENT) && dd->rcvarray_wc)
 		writeq(0, dd->rcvarray_wc + (index * 8));
 }
@@ -447,7 +448,7 @@ int hfi1_user_exp_rcv_setup(struct file *fp, struct hfi1_tid_info *tinfo)
 		if (pinned != -EDQUOT)
 			dd_dev_err(dd,
 				   "Failed to lock addr %p, %u pages: errno %d\n",
-				   (void *) vaddr, npages, pinned);
+				   (void *)vaddr, npages, pinned);
 		ret = pinned;
 		goto bail;
 	}
@@ -478,11 +479,15 @@ int hfi1_user_exp_rcv_setup(struct file *fp, struct hfi1_tid_info *tinfo)
 
 	tididx = 0;
 
-	/* From this point on, we are going to be using shared (between master
-	 * and subcontexts) context resources. We need to take the lock. */
+	/*
+	 * From this point on, we are going to be using shared (between master
+	 * and subcontexts) context resources. We need to take the lock.
+	 */
 	mutex_lock(&uctxt->exp_lock);
-	/* The first step is to program the RcvArray entries which are complete
-	 * groups. */
+	/*
+	 * The first step is to program the RcvArray entries which are complete
+	 * groups.
+	 */
 	while (ngroups && uctxt->tid_group_list.count) {
 		struct tid_group *grp =
 			tid_group_pop(&uctxt->tid_group_list);
@@ -576,8 +581,10 @@ nomem:
 
 		if (copy_to_user((void __user *)(unsigned long)tinfo->tidlist,
 				 tidlist, sizeof(tidlist[0]) * tididx)) {
-			/* On failure to copy to the user level, we need to undo
-			 * everything done so far so we don't leak resources. */
+			/*
+			 * On failure to copy to the user level, we need to undo
+			 * everything done so far so we don't leak resources.
+			 */
 			tinfo->tidlist = (unsigned long)&tidlist;
 			hfi1_user_exp_rcv_clear(fp, tinfo);
 			tinfo->tidlist = 0;
@@ -671,11 +678,14 @@ int hfi1_user_exp_rcv_invalid(struct file *fp, struct hfi1_tid_info *tinfo)
 		       fd->invalid_tid_idx);
 		tinfo->tidcnt = fd->invalid_tid_idx;
 		fd->invalid_tid_idx = 0;
-		/* Reset the user flag while still holding the lock.
-		 * Otherwise, PSM can miss events. */
+		/*
+		 * Reset the user flag while still holding the lock.
+		 * Otherwise, PSM can miss events.
+		 */
 		clear_bit(_HFI1_EVENT_TID_MMU_NOTIFY_BIT, ev);
-	} else
+	} else {
 		tinfo->tidcnt = 0;
+	}
 	spin_unlock(&fp_to_fd(fp)->invalid_lock);
 
 	if (tinfo->tidcnt) {
@@ -706,8 +716,10 @@ static u32 find_phys_blocks(struct page **pages, unsigned npages,
 	for (pageidx = 0, pagecount = 1, i = 1; i <= npages; i++) {
 		this_pfn = i < npages ? page_to_pfn(pages[i]) : 0;
 
-		/* If the pfn's are not sequential, pages are not physically
-		 * contiguous. */
+		/*
+		 * If the pfn's are not sequential, pages are not physically
+		 * contiguous.
+		 */
 		if (this_pfn != ++pfn) {
 			/*
 			 * At this point we have to loop over the set of
@@ -743,8 +755,9 @@ static u32 find_phys_blocks(struct page **pages, unsigned npages,
 			pageidx = i;
 			pagecount = 1;
 			pfn = this_pfn;
-		} else
+		} else {
 			pagecount++;
+		}
 	}
 	return setcount;
 }
@@ -785,7 +798,8 @@ static int program_rcvarray(struct file *fp, unsigned long vaddr,
 		 */
 		if (useidx >= grp->size)
 			break;
-		else if (grp->map & (1 << useidx)) {
+
+		if (grp->map & (1 << useidx)) {
 			rcv_array_wc_fill(dd, grp->base + useidx);
 			useidx++;
 			continue;
@@ -921,8 +935,10 @@ static void clear_tid_node(struct hfi1_filedata *fd, u16 subctxt,
 				 node->dma_addr);
 
 	hfi1_put_tid(dd, node->rcventry, PT_INVALID, 0, 0);
-	/* Make sure device has seen the write before we unpin the
-	 * pages */
+	/*
+	 * Make sure device has seen the write before we unpin the
+	 * pages
+	 */
 	flush_wc();
 
 	pci_unmap_single(dd->pcidev, node->dma_addr, node->len,
@@ -1002,9 +1018,11 @@ static void mmu_notifier_mem_invalidate(struct mmu_notifier *mn,
 		node = mmu_rb_search_by_addr(root, addr);
 
 		if (!node) {
-			/* Didn't find a node at this address. However, the
+			/*
+			 * Didn't find a node at this address. However, the
 			 * range could be bigger than what we have registered
-			 * so we have to keep looking. */
+			 * so we have to keep looking.
+			 */
 			addr += PAGE_SIZE;
 			continue;
 		}
@@ -1123,7 +1141,7 @@ static inline struct mmu_rb_node *mmu_rb_search_by_entry(struct rb_root *root,
 static int mmu_rb_insert_by_entry(struct rb_root *root,
 				  struct mmu_rb_node *node)
 {
-	struct rb_node **new = &(root->rb_node), *parent = NULL;
+	struct rb_node **new = &root->rb_node, *parent = NULL;
 
 	while (*new) {
 		struct mmu_rb_node *this =
@@ -1146,7 +1164,7 @@ static int mmu_rb_insert_by_entry(struct rb_root *root,
 
 static int mmu_rb_insert_by_addr(struct rb_root *root, struct mmu_rb_node *node)
 {
-	struct rb_node **new = &(root->rb_node), *parent = NULL;
+	struct rb_node **new = &root->rb_node, *parent = NULL;
 
 	/* Figure out where to put new node */
 	while (*new) {

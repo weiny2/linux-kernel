@@ -163,7 +163,6 @@ enum mmap_types {
 #define dbg(fmt, ...)				\
 	pr_info(fmt, ##__VA_ARGS__)
 
-
 static inline int is_valid_mmap(u64 token)
 {
 	return (HFI1_MMAP_TOKEN_GET(MAGIC, token) == HFI1_MMAP_MAGIC);
@@ -391,8 +390,10 @@ static ssize_t hfi1_file_write(struct file *fp, const char __user *data,
 				break;
 			}
 			if (dd->flags & HFI1_FORCED_FREEZE) {
-				/* Don't allow context reset if we are into
-				 * forced freeze */
+				/*
+				 * Don't allow context reset if we are into
+				 * forced freeze
+				 */
 				ret = -ENODEV;
 				break;
 			}
@@ -400,8 +401,9 @@ static ssize_t hfi1_file_write(struct file *fp, const char __user *data,
 			ret = sc_enable(sc);
 			hfi1_rcvctrl(dd, HFI1_RCVCTRL_CTXT_ENB,
 				     uctxt->ctxt);
-		} else
+		} else {
 			ret = sc_restart(sc);
+		}
 		if (!ret)
 			sc_return_credits(sc);
 		break;
@@ -679,9 +681,9 @@ static int hfi1_file_mmap(struct file *fp, struct vm_area_struct *vma)
 	}
 
 	vma->vm_flags = flags;
-	dd_dev_info(dd,
-		    "%s: %u:%u type:%u io/vf:%d/%d, addr:0x%llx, len:%lu(%lu), flags:0x%lx\n",
-		    __func__, ctxt, subctxt, type, mapio, vmf, memaddr, memlen,
+	hfi1_cdbg(PROC,
+		  "%u:%u type:%u io/vf:%d/%d, addr:0x%llx, len:%lu(%lu), flags:0x%lx\n",
+		    ctxt, subctxt, type, mapio, vmf, memaddr, memlen,
 		    vma->vm_end - vma->vm_start, vma->vm_flags);
 	pfn = (unsigned long)(memaddr >> PAGE_SHIFT);
 	if (vmf) {
@@ -873,6 +875,14 @@ done:
 	return ret;
 }
 
+/* return true if the device available for general use */
+static int usable_device(struct hfi1_devdata *dd)
+{
+	struct hfi1_pportdata *ppd = dd->pport;
+
+	return driver_lstate(ppd) == IB_PORT_ACTIVE;
+}
+
 static int get_user_context(struct file *fp, struct hfi1_user_info *uinfo,
 			    int devno, unsigned alg)
 {
@@ -902,7 +912,11 @@ static int get_user_context(struct file *fp, struct hfi1_user_info *uinfo,
 
 			for (dev = 0; dev < devmax; dev++) {
 				pdd = hfi1_lookup(dev);
-				if (pdd && pdd->freectxts &&
+				if (!pdd)
+					continue;
+				if (!usable_device(pdd))
+					continue;
+				if (pdd->freectxts &&
 				    pdd->freectxts > free) {
 					dd = pdd;
 					free = pdd->freectxts;
@@ -911,7 +925,11 @@ static int get_user_context(struct file *fp, struct hfi1_user_info *uinfo,
 		} else {
 			for (dev = 0; dev < devmax; dev++) {
 				pdd = hfi1_lookup(dev);
-				if (pdd && pdd->freectxts) {
+				if (!pdd)
+					continue;
+				if (!usable_device(pdd))
+					continue;
+				if (pdd->freectxts) {
 					dd = pdd;
 					break;
 				}
@@ -935,7 +953,6 @@ static int find_shared_ctxt(struct file *fp,
 	for (ndev = 0; ndev < devmax; ndev++) {
 		struct hfi1_devdata *dd = hfi1_lookup(ndev);
 
-		/* device portion of usable() */
 		if (!(dd && (dd->flags & HFI1_PRESENT) && dd->kregbase))
 			continue;
 		for (i = dd->first_user_ctxt; i < dd->num_rcv_contexts; i++) {
@@ -1023,8 +1040,8 @@ static int allocate_ctxt(struct file *fp, struct hfi1_devdata *dd,
 	if (!uctxt->sc)
 		return -ENOMEM;
 
-	dbg("allocated send context %u(%u)\n", uctxt->sc->sw_index,
-		uctxt->sc->hw_context);
+	hfi1_cdbg(PROC, "allocated send context %u(%u)\n", uctxt->sc->sw_index,
+		  uctxt->sc->hw_context);
 	ret = sc_enable(uctxt->sc);
 	if (ret)
 		return ret;
@@ -1130,8 +1147,9 @@ static int user_init(struct file *fp)
 	 */
 	if (subctxt_fp(fp)) {
 		ret = wait_event_interruptible(uctxt->wait,
-			!test_bit(HFI1_CTXT_MASTER_UNINIT,
-			&uctxt->event_flags));
+					       !test_bit(
+					       HFI1_CTXT_MASTER_UNINIT,
+					       &uctxt->event_flags));
 		goto expected;
 	}
 
@@ -1242,7 +1260,6 @@ static int setup_ctxt(struct file *fp)
 	 * is not requested or by the master process.
 	 */
 	if (!uctxt->subctxt_cnt || !subctxt_fp(fp)) {
-
 		ret = hfi1_init_ctxt(uctxt->sc);
 		if (ret)
 			goto done;
@@ -1381,8 +1398,9 @@ static unsigned int poll_next(struct file *fp,
 		set_bit(HFI1_CTXT_WAITING_RCV, &uctxt->event_flags);
 		hfi1_rcvctrl(dd, HFI1_RCVCTRL_INTRAVAIL_ENB, uctxt->ctxt);
 		pollflag = 0;
-	} else
+	} else {
 		pollflag = POLLIN | POLLRDNORM;
+	}
 	spin_unlock_irq(&dd->uctxt_lock);
 
 	return pollflag;
@@ -1460,8 +1478,9 @@ static int manage_rcvq(struct hfi1_ctxtdata *uctxt, unsigned subctxt,
 		if (uctxt->rcvhdrtail_kvaddr)
 			clear_rcvhdrtail(uctxt);
 		rcvctrl_op = HFI1_RCVCTRL_CTXT_ENB;
-	} else
+	} else {
 		rcvctrl_op = HFI1_RCVCTRL_CTXT_DIS;
+	}
 	hfi1_rcvctrl(dd, rcvctrl_op, uctxt->ctxt);
 	/* always; new head should be equal to new tail; see above */
 bail:
@@ -1493,7 +1512,6 @@ static int user_event_ack(struct hfi1_ctxtdata *uctxt, int subctxt,
 	}
 	return 0;
 }
-
 
 static int set_ctxt_pkey(struct hfi1_ctxtdata *uctxt, unsigned subctxt,
 			 u16 pkey)
@@ -1563,10 +1581,9 @@ static loff_t ui_lseek(struct file *filp, loff_t offset, int whence)
 	return filp->f_pos;
 }
 
-
 /* NOTE: assumes unsigned long is 8 bytes */
 static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
-			loff_t *f_pos)
+		       loff_t *f_pos)
 {
 	struct hfi1_devdata *dd = filp->private_data;
 	void __iomem *base = dd->kregbase;
@@ -1602,12 +1619,12 @@ static ssize_t ui_read(struct file *filp, char __user *buf, size_t count,
 		 * them.  These registers are defined as having a read value
 		 * of 0.
 		 */
-		else if (csr_off == ASIC_GPIO_CLEAR
-				|| csr_off == ASIC_GPIO_FORCE
-				|| csr_off == ASIC_QSFP1_CLEAR
-				|| csr_off == ASIC_QSFP1_FORCE
-				|| csr_off == ASIC_QSFP2_CLEAR
-				|| csr_off == ASIC_QSFP2_FORCE)
+		else if (csr_off == ASIC_GPIO_CLEAR ||
+			 csr_off == ASIC_GPIO_FORCE ||
+			 csr_off == ASIC_QSFP1_CLEAR ||
+			 csr_off == ASIC_QSFP1_FORCE ||
+			 csr_off == ASIC_QSFP2_CLEAR ||
+			 csr_off == ASIC_QSFP2_FORCE)
 			data = 0;
 		else if (csr_off >= barlen) {
 			/*
@@ -1689,6 +1706,7 @@ static const struct file_operations ui_file_ops = {
 	.open = ui_open,
 	.release = ui_release,
 };
+
 #define UI_OFFSET 192	/* device minor offset for UI devices */
 static int create_ui = 1;
 

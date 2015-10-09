@@ -119,9 +119,9 @@ static void scl_out(struct hfi1_devdata *dd, u32 target, u8 bit)
 	 * Allow for slow slaves by simple
 	 * delay for falling edge, sampling on rise.
 	 */
-	if (!bit)
+	if (!bit) {
 		udelay(2);
-	else {
+	} else {
 		int rise_usec;
 
 		for (rise_usec = SCL_WAIT_USEC; rise_usec > 0; rise_usec -= 2) {
@@ -131,7 +131,7 @@ static void scl_out(struct hfi1_devdata *dd, u32 target, u8 bit)
 		}
 		if (rise_usec <= 0)
 			dd_dev_err(dd, "SCL interface stuck low > %d uSec\n",
-				    SCL_WAIT_USEC);
+				   SCL_WAIT_USEC);
 	}
 	i2c_wait_for_writes(dd, target);
 }
@@ -320,7 +320,7 @@ int hfi1_twsi_reset(struct hfi1_devdata *dd, u32 target)
 		pins = hfi1_gpio_mod(dd, target, 0, 0, 0);
 		if ((pins & mask) != mask)
 			dd_dev_err(dd, "GPIO pins not at rest: %d\n",
-				    pins & mask);
+				   pins & mask);
 		/* Drop SDA to issue START */
 		udelay(1); /* Guarantee .6 uSec setup */
 		sda_out(dd, target, 0);
@@ -401,8 +401,8 @@ int hfi1_twsi_blk_rd(struct hfi1_devdata *dd, u32 target, int dev, int addr,
 
 		if (ret) {
 			dd_dev_err(dd,
-				"Failed to write interface read addr %02X\n",
-				addr);
+				   "Failed to write interface read addr %02X\n",
+				   addr);
 			ret = 1;
 			goto bail;
 		}
@@ -468,8 +468,8 @@ int hfi1_twsi_blk_wr(struct hfi1_devdata *dd, u32 target, int dev, int addr,
 			ret = twsi_wr(dd, target, addr, 0);
 			if (ret) {
 				dd_dev_err(dd,
-					"Failed to write interface write addr %02X\n",
-					addr);
+					   "Failed to write interface write addr %02X\n",
+					   addr);
 				goto failed_write;
 			}
 		}
