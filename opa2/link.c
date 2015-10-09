@@ -54,7 +54,6 @@
  */
 
 #include <linux/delay.h>
-#include <rdma/fxr/dcc_csrs_defs.h>
 #include <rdma/fxr/fxr_fc_defs.h>
 #include <rdma/fxr/fxr_top_defs.h>
 #include <rdma/fxr/mnh_8051_defs.h>
@@ -276,8 +275,8 @@ static void mnh_start(const struct hfi_pportdata *ppd)
 		dd_dev_err(dd, "%s: timeout starting 8051 firmware\n",
 			__func__);
 	}
-	/* Take away reset for LCB and RX FPE (set in lcb_shutdown). */
-	write_csr(dd, CRK_CFG_RESET, 0x10);
+	/* turn on the LCB (turn off in lcb_shutdown). */
+	write_fzc_csr(ppd, FZC_LCB_CFG_RUN, FZC_LCB_CFG_RUN_EN_MASK);
 #if 0 /* WFR legacy */
 	/* lcb_shutdown() with abort=1 does not restore these */
 	write_csr(dd, DC_LCB_ERR_EN, dd->lcb_err_en);
