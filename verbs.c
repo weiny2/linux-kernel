@@ -384,34 +384,47 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	if (wr->opcode == IB_WR_FAST_REG_MR) {
 		if (hfi1_fast_reg_mr(qp, wr))
 			return -EINVAL;
-	} else if (qp->ibqp.qp_type == IB_QPT_UC) {
-		if ((unsigned) wr->opcode >= IB_WR_RDMA_READ)
-			return -EINVAL;
-	} else if (qp->ibqp.qp_type != IB_QPT_RC) {
-		/* Check IB_QPT_SMI, IB_QPT_GSI, IB_QPT_UD opcode */
-		if (wr->opcode != IB_WR_SEND &&
-		    wr->opcode != IB_WR_SEND_WITH_IMM)
-			return -EINVAL;
-		/* Check UD destination address PD */
-		if (qp->ibqp.pd != wr->wr.ud.ah->pd)
-			return -EINVAL;
-	} else if ((unsigned) wr->opcode > IB_WR_ATOMIC_FETCH_AND_ADD)
-		return -EINVAL;
-	else if (wr->opcode >= IB_WR_ATOMIC_CMP_AND_SWP &&
-		   (wr->num_sge == 0 ||
-		    wr->sg_list[0].length < sizeof(u64) ||
-		    wr->sg_list[0].addr & (sizeof(u64) - 1)))
-		return -EINVAL;
-	else if (wr->opcode >= IB_WR_RDMA_READ && !qp->s_max_rd_atomic)
-		return -EINVAL;
+	} else {
+		if (qp->ibqp.qp_type == IB_QPT_UC) {
+			if ((unsigned)wr->opcode >= IB_WR_RDMA_READ)
+				return -EINVAL;
+		} else {
+			if (qp->ibqp.qp_type != IB_QPT_RC) {
+				/*
+				 * Check IB_QPT_SMI, IB_QPT_GSI,
+				 * IB_QPT_UD opcode
+				 */
+				if (wr->opcode != IB_WR_SEND &&
+				    wr->opcode != IB_WR_SEND_WITH_IMM)
+					return -EINVAL;
+				/* Check UD destination address PD */
+				if (qp->ibqp.pd != wr->wr.ud.ah->pd)
+					return -EINVAL;
+			} else {
+				if ((unsigned)wr->opcode >
+				    IB_WR_ATOMIC_FETCH_AND_ADD)
+					return -EINVAL;
+
+				if (wr->opcode >= IB_WR_ATOMIC_CMP_AND_SWP &&
+				    (wr->num_sge == 0 ||
+				     wr->sg_list[0].length < sizeof(u64) ||
+				     wr->sg_list[0].addr & (sizeof(u64) - 1)))
+					return -EINVAL;
+
+				if (wr->opcode >= IB_WR_RDMA_READ &&
+				    !qp->s_max_rd_atomic)
+					return -EINVAL;
+			}
+		}
+	}
 
 	/* check for avail */
 	if (unlikely(!qp->s_avail)) {
 		qp->s_avail = qp_get_savail(qp);
+		WARN_ON(qp->s_avail > (qp->s_size - 1));
 		if (!qp->s_avail)
 			return -ENOMEM;
 	}
-	qp->s_avail--;
 	next = qp->s_head + 1;
 	if (next >= qp->s_size)
 		next = 0;
@@ -450,8 +463,8 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 		struct hfi1_ibport *ibp;
 
 		ibp = to_iport(pd->ibpd.device, ah->attr.port_num);
-		if (ibp->sl_to_sc[ah->attr.sl] == 0xf
-		    && qp->ibqp.qp_type != IB_QPT_SMI)
+		if (ibp->sl_to_sc[ah->attr.sl] == 0xf &&
+		    qp->ibqp.qp_type != IB_QPT_SMI)
 			goto bail_inval_free;
 
 		log_pmtu = ah->log_pmtu;
@@ -465,6 +478,7 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	wqe->lpsn = wqe->psn + ((wqe->length - 1) >> log_pmtu);
 	qp->s_next_psn = wqe->lpsn + 1;
 	smp_wmb(); /* see request builders */
+	qp->s_avail--;
 	qp->s_head = next;
 
 	return 0;
@@ -552,7 +566,7 @@ static int post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 		u32 next;
 		int i;
 
-		if ((unsigned) wr->num_sge > qp->r_rq.max_sge) {
+		if ((unsigned)wr->num_sge > qp->r_rq.max_sge) {
 			*bad_wr = wr;
 			ret = -EINVAL;
 			goto bail;
@@ -603,7 +617,6 @@ dropit:
 	return 0;
 }
 
-
 /**
  * hfi1_ib_rcv - process an incoming packet
  * @packet: data packet information
@@ -627,9 +640,10 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 
 	/* Check for GRH */
 	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
-	if (lnh == HFI1_LRH_BTH)
+	if (lnh == HFI1_LRH_BTH) {
 		packet->ohdr = &hdr->u.oth;
-	else if (lnh == HFI1_LRH_GRH) {
+	} else {
+		if (lnh == HFI1_LRH_GRH) {
 		u32 vtf;
 
 		packet->ohdr = &hdr->u.l.oth;
@@ -639,9 +653,10 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
 			goto drop;
 		packet->rcv_flags |= HFI1_HAS_GRH;
-	} else
+	} else {
 		goto drop;
-
+	  }
+	}
 	trace_input_ibhdr(rcd->dd, hdr);
 
 	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
@@ -651,14 +666,14 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	qp_num = be32_to_cpu(packet->ohdr->bth[1]) & HFI1_QPN_MASK;
 	lid = be16_to_cpu(hdr->lrh[1]);
 	if (unlikely((lid >= HFI1_MULTICAST_LID_BASE) &&
-	    (lid != HFI1_PERMISSIVE_LID))) {
+		     (lid != HFI1_PERMISSIVE_LID))) {
 		struct hfi1_mcast *mcast;
 		struct hfi1_mcast_qp *p;
 
 		if (lnh != HFI1_LRH_GRH)
 			goto drop;
 		mcast = hfi1_mcast_find(ibp, &hdr->u.l.grh.dgid);
-		if (mcast == NULL)
+		if (!mcast)
 			goto drop;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
 			packet->qp = p->qp;
@@ -740,46 +755,6 @@ void update_sge(struct hfi1_sge_state *ss, u32 length)
 	}
 }
 
-static noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
-						struct hfi1_qp *qp)
-{
-	struct verbs_txreq *tx;
-	unsigned long flags;
-
-	tx = kmem_cache_alloc(dev->verbs_txreq_cache, GFP_ATOMIC);
-	if (!tx) {
-		spin_lock_irqsave(&qp->s_lock, flags);
-		write_seqlock(&dev->iowait_lock);
-		if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK &&
-		    list_empty(&qp->s_iowait.list)) {
-			dev->n_txwait++;
-			qp->s_flags |= HFI1_S_WAIT_TX;
-			list_add_tail(&qp->s_iowait.list, &dev->txwait);
-			trace_hfi1_qpsleep(qp, HFI1_S_WAIT_TX);
-			atomic_inc(&qp->refcount);
-		}
-		qp->s_flags &= ~HFI1_S_BUSY;
-		write_sequnlock(&dev->iowait_lock);
-		spin_unlock_irqrestore(&qp->s_lock, flags);
-		return ERR_PTR(-EBUSY);
-	}
-	tx->qp = qp;
-	return tx;
-}
-
-static inline struct verbs_txreq *get_txreq(struct hfi1_ibdev *dev,
-					    struct hfi1_qp *qp)
-{
-	struct verbs_txreq *tx;
-
-	tx = kmem_cache_alloc(dev->verbs_txreq_cache, GFP_ATOMIC);
-	if (unlikely(!tx))
-		/* call slow path to get the lock */
-		return __get_txreq(dev, qp);
-	tx->qp = qp;
-	return tx;
-}
-
 void hfi1_put_txreq(struct verbs_txreq *tx)
 {
 	struct hfi1_ibdev *dev;
@@ -794,6 +769,7 @@ void hfi1_put_txreq(struct verbs_txreq *tx)
 		hfi1_put_mr(tx->mr);
 		tx->mr = NULL;
 	}
+
 	sdma_txclean(dd_from_dev(dev), &tx->txreq);
 
 	/* Free verbs_txreq and return to slab cache */
@@ -827,18 +803,23 @@ static void verbs_sdma_complete(
 	int status,
 	int drained)
 {
-	struct verbs_txreq *tx =
-		container_of(cookie, struct verbs_txreq, txreq);
-	struct hfi1_qp *qp = tx->qp;
+	struct verbs_txreq *tx;
+	struct hfi1_qp *qp;
+
+	tx = container_of(cookie, struct verbs_txreq, txreq);
+
+	qp = tx->qp;
 
 	spin_lock(&qp->s_lock);
-	if (tx->wqe)
+	if (tx->wqe) {
 		hfi1_send_complete(qp, tx->wqe, IB_WC_SUCCESS);
-	else if (qp->ibqp.qp_type == IB_QPT_RC) {
-		struct hfi1_ib_header *hdr;
+	} else {
+		if (qp->ibqp.qp_type == IB_QPT_RC) {
+			struct hfi1_ib_header *hdr;
 
-		hdr = &tx->phdr.hdr;
-		hfi1_rc_send_complete(qp, hdr);
+			hdr = &tx->phdr.hdr;
+			hfi1_rc_send_complete(qp, hdr);
+		}
 	}
 	if (drained) {
 		/*
@@ -853,7 +834,6 @@ static void verbs_sdma_complete(
 		}
 	}
 	spin_unlock(&qp->s_lock);
-
 	hfi1_put_txreq(tx);
 }
 
@@ -931,8 +911,7 @@ bail_txadd:
  * NOTE: DMA mapping is held in the tx until completed in the ring or
  *       the tx desc is freed without having been submitted to the ring
  *
- * This routine insures the following all the helper routine
- * calls succeed.
+ * This routine ensures all the helper routine calls succeed.
  */
 /* New API */
 static int build_verbs_tx_desc(
@@ -944,10 +923,9 @@ static int build_verbs_tx_desc(
 	u64 pbc)
 {
 	int ret = 0;
-	struct hfi1_pio_header *phdr;
+	struct hfi1_pio_header *phdr = &tx->phdr;
 	u16 hdrbytes = tx->hdr_dwords << 2;
 
-	phdr = &tx->phdr;
 	if (!ahdr->ahgcount) {
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
@@ -961,29 +939,14 @@ static int build_verbs_tx_desc(
 		if (ret)
 			goto bail_txadd;
 		phdr->pbc = cpu_to_le64(pbc);
-		memcpy(&phdr->hdr, &ahdr->ibh, hdrbytes - sizeof(phdr->pbc));
-		/* add the header */
 		ret = sdma_txadd_kvaddr(
 			sde->dd,
 			&tx->txreq,
-			&tx->phdr,
-			tx->hdr_dwords << 2);
+			phdr,
+			hdrbytes);
 		if (ret)
 			goto bail_txadd;
 	} else {
-		struct hfi1_other_headers *sohdr = &ahdr->ibh.u.oth;
-		struct hfi1_other_headers *dohdr = &phdr->hdr.u.oth;
-
-		/* needed in rc_send_complete() */
-		phdr->hdr.lrh[0] = ahdr->ibh.lrh[0];
-		if ((be16_to_cpu(phdr->hdr.lrh[0]) & 3) == HFI1_LRH_GRH) {
-			sohdr = &ahdr->ibh.u.l.oth;
-			dohdr = &phdr->hdr.u.l.oth;
-		}
-		/* opcode */
-		dohdr->bth[0] = sohdr->bth[0];
-		/* PSN/ACK  */
-		dohdr->bth[2] = sohdr->bth[2];
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
 			ahdr->tx_flags,
@@ -1019,6 +982,7 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 	u64 pbc_flags = 0;
 	u8 sc5 = qp->s_sc;
 	int ret;
+	struct hfi1_ibdev *tdev;
 
 	if (!list_empty(&qp->s_iowait.tx_head)) {
 		stx = list_first_entry(
@@ -1033,7 +997,10 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 		return ret;
 	}
 
-	tx = get_txreq(dev, qp);
+	tx = ps->s_txreq;
+
+	tdev = to_idev(qp->ibqp.device);
+
 	if (IS_ERR(tx))
 		goto bail_tx;
 
@@ -1055,7 +1022,8 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 	ret = build_verbs_tx_desc(tx->sde, ss, len, tx, ahdr, pbc);
 	if (unlikely(ret))
 		goto bail_build;
-	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &ahdr->ibh);
+	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
+			   &ps->s_txreq->phdr.hdr);
 	ret =  sdma_send_txreq(tx->sde, &qp->s_iowait, &tx->txreq);
 	if (unlikely(ret == -ECOMM))
 		goto bail_ecomm;
@@ -1129,27 +1097,29 @@ struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5)
 int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 			u64 pbc)
 {
-	struct ahg_ib_header *ahdr = qp->s_hdr;
 	u32 hdrwords = qp->s_hdrwords;
 	struct hfi1_sge_state *ss = qp->s_cur_sge;
 	u32 len = qp->s_cur_size;
 	u32 dwords = (len + 3) >> 2;
 	u32 plen = hdrwords + dwords + 2; /* includes pbc */
 	struct hfi1_pportdata *ppd = ps->ppd;
-	u32 *hdr = (u32 *)&ahdr->ibh;
+	u32 *hdr = (u32 *)&ps->s_txreq->phdr.hdr;
 	u64 pbc_flags = 0;
 	u32 sc5;
 	unsigned long flags = 0;
 	struct send_context *sc;
 	struct pio_buf *pbuf;
 	int wc_status = IB_WC_SUCCESS;
+	int ret = 0;
 
 	/* vl15 special case taken care of in ud.c */
 	sc5 = qp->s_sc;
 	sc = qp_to_send_context(qp, sc5);
 
-	if (!sc)
-		return -EINVAL;
+	if (!sc) {
+		ret = -EINVAL;
+		goto bail;
+	}
 	if (likely(pbc == 0)) {
 		u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
 		/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
@@ -1157,7 +1127,7 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 		pbc = create_pbc(ppd, pbc_flags, qp->srate_mbps, vl, plen);
 	}
 	pbuf = sc_buffer_alloc(sc, plen, NULL, NULL);
-	if (unlikely(pbuf == NULL)) {
+	if (unlikely(!pbuf)) {
 		if (ppd->host_link_state != HLS_UP_ACTIVE) {
 			/*
 			 * If we have filled the PIO buffers to capacity and are
@@ -1177,7 +1147,8 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 			 * so lets continue to queue the request.
 			 */
 			hfi1_cdbg(PIO, "alloc failed. state active, queuing");
-			return no_bufs_available(qp, sc);
+			ret = no_bufs_available(qp, sc);
+			goto bail;
 		}
 	}
 
@@ -1185,7 +1156,7 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 		pio_copy(ppd->dd, pbuf, pbc, hdr, hdrwords);
 	} else {
 		if (ss) {
-			seg_pio_copy_start(pbuf, pbc, hdr, hdrwords*4);
+			seg_pio_copy_start(pbuf, pbc, hdr, hdrwords * 4);
 			while (len) {
 				void *addr = ss->sge.vaddr;
 				u32 slen = ss->sge.length;
@@ -1200,7 +1171,8 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 		}
 	}
 
-	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &ahdr->ibh);
+	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
+			   &ps->s_txreq->phdr.hdr);
 
 	if (qp->s_rdma_mr) {
 		hfi1_put_mr(qp->s_rdma_mr);
@@ -1214,11 +1186,17 @@ pio_bail:
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	} else if (qp->ibqp.qp_type == IB_QPT_RC) {
 		spin_lock_irqsave(&qp->s_lock, flags);
-		hfi1_rc_send_complete(qp, &ahdr->ibh);
+		hfi1_rc_send_complete(qp, &ps->s_txreq->phdr.hdr);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	}
-	return 0;
+
+	ret = 0;
+
+bail:
+	hfi1_put_txreq(ps->s_txreq);
+	return ret;
 }
+
 /*
  * egress_pkey_matches_entry - return 1 if the pkey matches ent (ent
  * being an entry from the ingress partition key table), return 0
@@ -1273,14 +1251,14 @@ static inline int egress_pkey_check(struct hfi1_pportdata *ppd,
 	if ((sc5 == 0xf) && ((pkey & PKEY_LOW_15_MASK) != PKEY_LOW_15_MASK))
 		goto bad;
 
-
 	/* Is the pkey = 0x0, or 0x8000? */
 	if ((pkey & PKEY_LOW_15_MASK) == 0)
 		goto bad;
 
 	/* The most likely matching pkey has index qp->s_pkey_index */
 	if (unlikely(!egress_pkey_matches_entry(pkey,
-					ppd->pkeys[qp->s_pkey_index]))) {
+						ppd->pkeys
+						[qp->s_pkey_index]))) {
 		/* no match - try the entire table */
 		for (; i < MAX_PKEY_VALUES; i++) {
 			if (egress_pkey_matches_entry(pkey, ppd->pkeys[i]))
@@ -1313,7 +1291,6 @@ bad:
 int hfi1_verbs_send(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 {
 	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
-	struct ahg_ib_header *ahdr = qp->s_hdr;
 	int ret;
 	int pio = 0;
 	unsigned long flags = 0;
@@ -1327,7 +1304,7 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 	    !(dd->flags & HFI1_HAS_SEND_DMA))
 		pio = 1;
 
-	ret = egress_pkey_check(dd->pport, &ahdr->ibh, qp);
+	ret = egress_pkey_check(dd->pport, &ps->s_txreq->phdr.hdr, qp);
 	if (unlikely(ret)) {
 		/*
 		 * The value we are returning here does not get propagated to
@@ -1539,7 +1516,7 @@ static int modify_port(struct ib_device *ibdev, u8 port,
 		hfi1_cap_mask_chg(ibp);
 	if (port_modify_mask & IB_PORT_SHUTDOWN) {
 		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_UNKNOWN, 0,
-		  OPA_LINKDOWN_REASON_UNKNOWN);
+				     OPA_LINKDOWN_REASON_UNKNOWN);
 		ret = set_link_state(ppd, HLS_DN_DOWNDEF);
 	}
 	if (port_modify_mask & IB_PORT_RESET_QKEY_CNTR)
@@ -1553,9 +1530,9 @@ static int query_gid(struct ib_device *ibdev, u8 port,
 	struct hfi1_devdata *dd = dd_from_ibdev(ibdev);
 	int ret = 0;
 
-	if (!port || port > dd->num_pports)
+	if (!port || port > dd->num_pports) {
 		ret = -EINVAL;
-	else {
+	} else {
 		struct hfi1_ibport *ibp = to_iport(ibdev, port);
 		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 
@@ -1604,7 +1581,7 @@ static struct ib_pd *alloc_pd(struct ib_device *ibdev,
 	spin_unlock(&dev->n_pds_lock);
 
 	/* ib_alloc_pd() will initialize pd->ibpd. */
-	pd->user = udata != NULL;
+	pd->user = !!udata;
 
 	ret = &pd->ibpd;
 
@@ -1905,7 +1882,6 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	if (ret)
 		goto err_qp_init;
 
-
 	for (i = 0; i < dd->num_pports; i++)
 		init_ibport(ppd + i);
 
@@ -1918,7 +1894,7 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	spin_lock_init(&dev->n_mcast_grps_lock);
 	init_timer(&dev->mem_timer);
 	dev->mem_timer.function = mem_timer;
-	dev->mem_timer.data = (unsigned long) dev;
+	dev->mem_timer.data = (unsigned long)dev;
 
 	/*
 	 * The top hfi1_lkey_table_size bits are used to index the
@@ -1930,13 +1906,13 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	/* ensure generation is at least 4 bits (keys.c) */
 	if (hfi1_lkey_table_size > MAX_LKEY_TABLE_BITS) {
 		dd_dev_warn(dd, "lkey bits %u too large, reduced to %u\n",
-			      hfi1_lkey_table_size, MAX_LKEY_TABLE_BITS);
+			    hfi1_lkey_table_size, MAX_LKEY_TABLE_BITS);
 		hfi1_lkey_table_size = MAX_LKEY_TABLE_BITS;
 	}
 	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
 	dev->lk_table.table = (struct hfi1_mregion __rcu **)
 		vmalloc_node(lk_tab_size, dd->node);
-	if (dev->lk_table.table == NULL) {
+	if (!dev->lk_table.table) {
 		ret = -ENOMEM;
 		goto err_lk;
 	}

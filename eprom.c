@@ -99,7 +99,7 @@
 
 /* sleep length while waiting for controller */
 #define WAIT_SLEEP_US 100	/* must be larger than 5 (see usage) */
-#define COUNT_DELAY_SEC(n) ((n) * (1000000/WAIT_SLEEP_US))
+#define COUNT_DELAY_SEC(n) ((n) * (1000000 / WAIT_SLEEP_US))
 
 /* GPIO pins */
 #define EPROM_WP_N (1ull << 14)	/* EPROM write line */
@@ -118,10 +118,10 @@ static void write_enable(struct hfi1_devdata *dd)
 {
 	/* raise signal */
 	write_csr(dd, ASIC_GPIO_OUT,
-		read_csr(dd, ASIC_GPIO_OUT) | EPROM_WP_N);
+		  read_csr(dd, ASIC_GPIO_OUT) | EPROM_WP_N);
 	/* raise enable */
 	write_csr(dd, ASIC_GPIO_OE,
-		read_csr(dd, ASIC_GPIO_OE) | EPROM_WP_N);
+		  read_csr(dd, ASIC_GPIO_OE) | EPROM_WP_N);
 }
 
 /*
@@ -131,10 +131,10 @@ static void write_disable(struct hfi1_devdata *dd)
 {
 	/* lower signal */
 	write_csr(dd, ASIC_GPIO_OUT,
-		read_csr(dd, ASIC_GPIO_OUT) & ~EPROM_WP_N);
+		  read_csr(dd, ASIC_GPIO_OUT) & ~EPROM_WP_N);
 	/* lower enable */
 	write_csr(dd, ASIC_GPIO_OE,
-		read_csr(dd, ASIC_GPIO_OE) & ~EPROM_WP_N);
+		  read_csr(dd, ASIC_GPIO_OE) & ~EPROM_WP_N);
 }
 
 /*
@@ -212,8 +212,8 @@ static int erase_range(struct hfi1_devdata *dd, u32 start, u32 len)
 	/* check the end points for the minimum erase */
 	if ((start & MASK_4KB) || (end & MASK_4KB)) {
 		dd_dev_err(dd,
-			"%s: non-aligned range (0x%x,0x%x) for a 4KB erase\n",
-			__func__, start, end);
+			   "%s: non-aligned range (0x%x,0x%x) for a 4KB erase\n",
+			   __func__, start, end);
 		return -EINVAL;
 	}
 
@@ -224,16 +224,16 @@ static int erase_range(struct hfi1_devdata *dd, u32 start, u32 len)
 		/* check in order of largest to smallest */
 		if (((start & MASK_64KB) == 0) && (start + SIZE_64KB <= end)) {
 			write_csr(dd, ASIC_EEP_ADDR_CMD,
-					CMD_SECTOR_ERASE_64KB(start));
+				  CMD_SECTOR_ERASE_64KB(start));
 			start += SIZE_64KB;
-		} else if (((start & MASK_32KB) == 0)
-						&& (start + SIZE_32KB <= end)) {
+		} else if (((start & MASK_32KB) == 0) &&
+			   (start + SIZE_32KB <= end)) {
 			write_csr(dd, ASIC_EEP_ADDR_CMD,
-					CMD_SECTOR_ERASE_32KB(start));
+				  CMD_SECTOR_ERASE_32KB(start));
 			start += SIZE_32KB;
 		} else {	/* 4KB will work */
 			write_csr(dd, ASIC_EEP_ADDR_CMD,
-					CMD_SECTOR_ERASE_4KB(start));
+				  CMD_SECTOR_ERASE_4KB(start));
 			start += SIZE_4KB;
 		}
 		ret = wait_for_not_busy(dd);
@@ -256,7 +256,7 @@ static void read_page(struct hfi1_devdata *dd, u32 offset, u32 *result)
 	int i;
 
 	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_READ_DATA(offset));
-	for (i = 0; i < EP_PAGE_SIZE/sizeof(u32); i++)
+	for (i = 0; i < EP_PAGE_SIZE / sizeof(u32); i++)
 		result[i] = (u32)read_csr(dd, ASIC_EEP_DATA);
 	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_NOP); /* close open page */
 }
@@ -267,7 +267,7 @@ static void read_page(struct hfi1_devdata *dd, u32 offset, u32 *result)
 static int read_length(struct hfi1_devdata *dd, u32 start, u32 len, u64 addr)
 {
 	u32 offset;
-	u32 buffer[EP_PAGE_SIZE/sizeof(u32)];
+	u32 buffer[EP_PAGE_SIZE / sizeof(u32)];
 	int ret = 0;
 
 	/* reject anything not on an EPROM page boundary */
@@ -277,7 +277,7 @@ static int read_length(struct hfi1_devdata *dd, u32 start, u32 len, u64 addr)
 	for (offset = 0; offset < len; offset += EP_PAGE_SIZE) {
 		read_page(dd, start + offset, buffer);
 		if (copy_to_user((void __user *)(addr + offset),
-						buffer, EP_PAGE_SIZE)) {
+				 buffer, EP_PAGE_SIZE)) {
 			ret = -EFAULT;
 			goto done;
 		}
@@ -298,7 +298,7 @@ static int write_page(struct hfi1_devdata *dd, u32 offset, u32 *data)
 	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_WRITE_ENABLE);
 	write_csr(dd, ASIC_EEP_DATA, data[0]);
 	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_PAGE_PROGRAM(offset));
-	for (i = 1; i < EP_PAGE_SIZE/sizeof(u32); i++)
+	for (i = 1; i < EP_PAGE_SIZE / sizeof(u32); i++)
 		write_csr(dd, ASIC_EEP_DATA, data[i]);
 	/* will close the open page */
 	return wait_for_not_busy(dd);
@@ -310,7 +310,7 @@ static int write_page(struct hfi1_devdata *dd, u32 offset, u32 *data)
 static int write_length(struct hfi1_devdata *dd, u32 start, u32 len, u64 addr)
 {
 	u32 offset;
-	u32 buffer[EP_PAGE_SIZE/sizeof(u32)];
+	u32 buffer[EP_PAGE_SIZE / sizeof(u32)];
 	int ret = 0;
 
 	/* reject anything not on an EPROM page boundary */
@@ -321,7 +321,7 @@ static int write_length(struct hfi1_devdata *dd, u32 start, u32 len, u64 addr)
 
 	for (offset = 0; offset < len; offset += EP_PAGE_SIZE) {
 		if (copy_from_user(buffer, (void __user *)(addr + offset),
-						EP_PAGE_SIZE)) {
+				   EP_PAGE_SIZE)) {
 			ret = -EFAULT;
 			goto done;
 		}
@@ -384,13 +384,13 @@ int handle_eprom_command(const struct hfi1_cmd *cmd)
 	ret = acquire_hw_mutex(dd);
 	if (ret) {
 		dd_dev_err(dd,
-			"%s: unable to acquire hw mutex, no EPROM support\n",
-			__func__);
+			   "%s: unable to acquire hw mutex, no EPROM support\n",
+			   __func__);
 		goto done_asic;
 	}
 
 	dd_dev_info(dd, "%s: cmd: type %d, len 0x%x, addr 0x%016llx\n",
-		__func__, cmd->type, cmd->len, cmd->addr);
+		    __func__, cmd->type, cmd->len, cmd->addr);
 
 	switch (cmd->type) {
 	case HFI1_CMD_EP_INFO:
@@ -401,7 +401,7 @@ int handle_eprom_command(const struct hfi1_cmd *cmd)
 		dev_id = read_device_id(dd);
 		/* addr points to a u32 user buffer */
 		if (copy_to_user((void __user *)cmd->addr, &dev_id,
-								sizeof(u32)))
+				 sizeof(u32)))
 			ret = -EFAULT;
 		break;
 
@@ -429,7 +429,7 @@ int handle_eprom_command(const struct hfi1_cmd *cmd)
 
 	default:
 		dd_dev_err(dd, "%s: unexpected command %d\n",
-			__func__, cmd->type);
+			   __func__, cmd->type);
 		ret = -EINVAL;
 		break;
 	}
@@ -465,8 +465,8 @@ int eprom_init(struct hfi1_devdata *dd)
 	ret = acquire_hw_mutex(dd);
 	if (ret) {
 		dd_dev_err(dd,
-			"%s: unable to acquire hw mutex, no EPROM support\n",
-			__func__);
+			   "%s: unable to acquire hw mutex, no EPROM support\n",
+			   __func__);
 		goto done_asic;
 	}
 
@@ -474,10 +474,10 @@ int eprom_init(struct hfi1_devdata *dd)
 
 	/* set reset */
 	write_csr(dd, ASIC_EEP_CTL_STAT,
-					ASIC_EEP_CTL_STAT_EP_RESET_SMASK);
+		  ASIC_EEP_CTL_STAT_EP_RESET_SMASK);
 	/* clear reset, set speed */
 	write_csr(dd, ASIC_EEP_CTL_STAT,
-			EP_SPEED_FULL << ASIC_EEP_CTL_STAT_RATE_SPI_SHIFT);
+		  EP_SPEED_FULL << ASIC_EEP_CTL_STAT_RATE_SPI_SHIFT);
 
 	/* wake the device with command "release powerdown NoID" */
 	write_csr(dd, ASIC_EEP_ADDR_CMD, CMD_RELEASE_POWERDOWN_NOID);
