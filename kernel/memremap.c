@@ -146,6 +146,7 @@ struct page_map {
 	struct resource res;
 	struct dev_pagemap pgmap;
 	struct list_head list;
+	struct vmem_altmap altmap;
 };
 
 static void add_page_map(struct page_map *page_map)
@@ -162,14 +163,17 @@ static void del_page_map(struct page_map *page_map)
 	spin_unlock(&range_lock);
 }
 
-static void devm_memremap_pages_release(struct device *dev, void *res)
+static void devm_memremap_pages_release(struct device *dev, void *data)
 {
-	struct page_map *page_map = res;
-
-	del_page_map(page_map);
+	struct page_map *page_map = data;
+	struct resource *res = &page_map->res;
+	struct dev_pagemap *pgmap = &page_map->pgmap;
 
 	/* pages are dead and unused, undo the arch mapping */
-	arch_remove_memory(page_map->res.start, resource_size(&page_map->res));
+	arch_remove_memory(res->start, resource_size(res));
+	dev_WARN_ONCE(dev, pgmap->altmap && pgmap->altmap->alloc,
+			"%s: failed to free all reserved pages\n", __func__);
+	del_page_map(page_map);
 }
 
 /* assumes rcu_read_lock() held at entry */
@@ -185,10 +189,22 @@ struct dev_pagemap *__get_dev_pagemap(resource_size_t phys)
 	return NULL;
 }
 
-void *devm_memremap_pages(struct device *dev, struct resource *res)
+/**
+ * devm_memremap_pages - remap and provide memmap backing for the given resource
+ * @dev: hosting device for @res
+ * @res: "host memory" address range
+ * @altmap: optional descriptor for allocating the memmap from @res
+ *
+ * Note, the expectation is that @res is a host memory range that could
+ * feasibly be treated as a "System RAM" range, i.e. not a device mmio
+ * range, but this is not enforced.
+ */
+void *devm_memremap_pages(struct device *dev, struct resource *res,
+		struct vmem_altmap *altmap)
 {
 	int is_ram = region_intersects(res->start, resource_size(res),
 			"System RAM");
+	struct dev_pagemap *pgmap;
 	struct page_map *page_map;
 	int error, nid;
 
@@ -205,10 +221,15 @@ void *devm_memremap_pages(struct device *dev, struct resource *res)
 			sizeof(*page_map), GFP_KERNEL, dev_to_node(dev));
 	if (!page_map)
 		return ERR_PTR(-ENOMEM);
+	pgmap = &page_map->pgmap;
 
 	memcpy(&page_map->res, res, sizeof(*res));
-
-	page_map->pgmap.dev = dev;
+	if (altmap) {
+		memcpy(&page_map->altmap, altmap, sizeof(*altmap));
+		pgmap->altmap = &page_map->altmap;
+	}
+	pgmap->dev = dev;
+	pgmap->res = &page_map->res;
 	INIT_LIST_HEAD(&page_map->list);
 	add_page_map(page_map);
 
@@ -227,4 +248,36 @@ void *devm_memremap_pages(struct device *dev, struct resource *res)
 	return __va(res->start);
 }
 EXPORT_SYMBOL(devm_memremap_pages);
+
+/*
+ * Uncoditionally retrieve a dev_pagemap associated with the given physical
+ * address, this is only for use in the arch_{add|remove}_memory() for setting
+ * up and tearing down the memmap.
+ */
+static struct dev_pagemap *lookup_dev_pagemap(resource_size_t phys)
+{
+	struct dev_pagemap *pgmap;
+
+	rcu_read_lock();
+	pgmap = __get_dev_pagemap(phys);
+	rcu_read_unlock();
+	return pgmap;
+}
+
+struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start)
+{
+	/*
+	 * 'memmap_start' is the virtual address for the first "struct
+	 * page" in this range of the vmemmap array.  In the case of
+	 * CONFIG_SPARSE_VMEMMAP a page_to_pfn conversion is simple
+	 * pointer arithmetic, so we can perform this to_vmem_altmap()
+	 * conversion without concern for the initialization state of
+	 * the struct page fields.
+	 */
+	struct page *page = (struct page *) memmap_start;
+	struct dev_pagemap *pgmap;
+
+	pgmap = lookup_dev_pagemap(__pfn_to_phys(page_to_pfn(page)));
+	return pgmap ? pgmap->altmap : NULL;
+}
 #endif /* CONFIG_ZONE_DEVICE */

@@ -151,7 +151,8 @@ static struct pmem_device *pmem_alloc(struct device *dev,
 	}
 
 	if (pmem_should_map_pages(dev))
-		pmem->virt_addr = (void __pmem *) devm_memremap_pages(dev, res);
+		pmem->virt_addr = (void __pmem *) devm_memremap_pages(dev, res,
+				NULL);
 	else
 		pmem->virt_addr = (void __pmem *) devm_memremap(dev,
 				pmem->phys_addr, pmem->size,
@@ -362,7 +363,8 @@ static int nvdimm_namespace_attach_pfn(struct nd_namespace_common *ndns)
 	/* establish pfn range for lookup, and switch to direct map */
 	pmem = dev_get_drvdata(dev);
 	devm_memunmap(dev, (void __force *) pmem->virt_addr);
-	pmem->virt_addr = (void __pmem *) devm_memremap_pages(dev, &nsio->res);
+	pmem->virt_addr = (void __pmem *) devm_memremap_pages(dev, &nsio->res,
+			NULL);
 	if (IS_ERR(pmem->virt_addr)) {
 		rc = PTR_ERR(pmem->virt_addr);
 		goto err;
