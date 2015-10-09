@@ -79,11 +79,12 @@ void hfi1_cq_enter(struct hfi1_cq *cq, struct ib_wc *entry, int solicited)
 	 */
 	wc = cq->queue;
 	head = wc->head;
-	if (head >= (unsigned) cq->ibcq.cqe) {
+	if (head >= (unsigned)cq->ibcq.cqe) {
 		head = cq->ibcq.cqe;
 		next = 0;
-	} else
+	} else {
 		next = head + 1;
+	}
 	if (unlikely(next == wc->tail)) {
 		spin_unlock_irqrestore(&cq->lock, flags);
 		if (cq->ibcq.event_handler) {
@@ -114,8 +115,9 @@ void hfi1_cq_enter(struct hfi1_cq *cq, struct ib_wc *entry, int solicited)
 		wc->uqueue[head].port_num = entry->port_num;
 		/* Make sure entry is written before the head index. */
 		smp_wmb();
-	} else
+	} else {
 		wc->kqueue[head] = *entry;
+	}
 	wc->head = next;
 
 	if (cq->notify == IB_CQ_NEXT_COMP ||
@@ -167,8 +169,8 @@ int hfi1_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
 
 	wc = cq->queue;
 	tail = wc->tail;
-	if (tail > (u32) cq->ibcq.cqe)
-		tail = (u32) cq->ibcq.cqe;
+	if (tail > (u32)cq->ibcq.cqe)
+		tail = (u32)cq->ibcq.cqe;
 	for (npolled = 0; npolled < num_entries; ++npolled, ++entry) {
 		if (tail == wc->head)
 			break;
@@ -287,8 +289,9 @@ struct ib_cq *hfi1_create_cq(struct ib_device *ibdev, int entries,
 			ret = ERR_PTR(err);
 			goto bail_ip;
 		}
-	} else
+	} else {
 		cq->ip = NULL;
+	}
 
 	spin_lock(&dev->n_cqs_lock);
 	if (dev->n_cqs_allocated == hfi1_max_cqs) {
@@ -444,11 +447,11 @@ int hfi1_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 	 */
 	old_wc = cq->queue;
 	head = old_wc->head;
-	if (head > (u32) cq->ibcq.cqe)
-		head = (u32) cq->ibcq.cqe;
+	if (head > (u32)cq->ibcq.cqe)
+		head = (u32)cq->ibcq.cqe;
 	tail = old_wc->tail;
-	if (tail > (u32) cq->ibcq.cqe)
-		tail = (u32) cq->ibcq.cqe;
+	if (tail > (u32)cq->ibcq.cqe)
+		tail = (u32)cq->ibcq.cqe;
 	if (head < tail)
 		n = cq->ibcq.cqe + 1 + head - tail;
 	else
@@ -462,7 +465,7 @@ int hfi1_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 			wc->uqueue[n] = old_wc->uqueue[tail];
 		else
 			wc->kqueue[n] = old_wc->kqueue[tail];
-		if (tail == (u32) cq->ibcq.cqe)
+		if (tail == (u32)cq->ibcq.cqe)
 			tail = 0;
 		else
 			tail++;

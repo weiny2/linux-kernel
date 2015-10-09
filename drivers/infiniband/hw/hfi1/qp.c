@@ -60,8 +60,8 @@
 #include "trace.h"
 #include "sdma.h"
 
-#define BITS_PER_PAGE           (PAGE_SIZE*BITS_PER_BYTE)
-#define BITS_PER_PAGE_MASK      (BITS_PER_PAGE-1)
+#define BITS_PER_PAGE           (PAGE_SIZE * BITS_PER_BYTE)
+#define BITS_PER_PAGE_MASK      (BITS_PER_PAGE - 1)
 
 static unsigned int hfi1_qp_table_size = 256;
 module_param_named(qp_table_size, hfi1_qp_table_size, uint, S_IRUGO);
@@ -264,7 +264,8 @@ static void remove_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 	spin_lock_irqsave(&dev->qp_dev->qpt_lock, flags);
 
 	if (rcu_dereference_protected(ibp->qp[0],
-			lockdep_is_held(&dev->qp_dev->qpt_lock)) == qp) {
+				      lockdep_is_held
+				      (&dev->qp_dev->qpt_lock)) == qp) {
 		RCU_INIT_POINTER(ibp->qp[0], NULL);
 	} else if (rcu_dereference_protected(ibp->qp[1],
 			lockdep_is_held(&dev->qp_dev->qpt_lock)) == qp) {
@@ -276,13 +277,14 @@ static void remove_qp(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 		removed = 0;
 		qpp = &dev->qp_dev->qp_table[n];
 		for (; (q = rcu_dereference_protected(*qpp,
-				lockdep_is_held(&dev->qp_dev->qpt_lock)))
-					!= NULL;
-				qpp = &q->next)
+						      lockdep_is_held
+						      (&dev->qp_dev->qpt_lock)))
+		     != NULL; qpp = &q->next)
 			if (q == qp) {
 				RCU_INIT_POINTER(*qpp,
-				 rcu_dereference_protected(qp->next,
-				 lockdep_is_held(&dev->qp_dev->qpt_lock)));
+						 rcu_dereference_protected
+						 (qp->next, lockdep_is_held
+						 (&dev->qp_dev->qpt_lock)));
 				removed = 1;
 				trace_hfi1_qpremove(qp, n);
 				break;
@@ -329,11 +331,14 @@ static unsigned free_all_qps(struct hfi1_devdata *dd)
 	spin_lock_irqsave(&dev->qp_dev->qpt_lock, flags);
 	for (n = 0; n < dev->qp_dev->qp_table_size; n++) {
 		qp = rcu_dereference_protected(dev->qp_dev->qp_table[n],
-			lockdep_is_held(&dev->qp_dev->qpt_lock));
+					       lockdep_is_held
+					       (&dev->qp_dev->qpt_lock));
 		RCU_INIT_POINTER(dev->qp_dev->qp_table[n], NULL);
 
-		for (; qp; qp = rcu_dereference_protected(qp->next,
-				lockdep_is_held(&dev->qp_dev->qpt_lock)))
+		for (; qp;
+		     qp = rcu_dereference_protected(qp->next,
+						    lockdep_is_held
+						    (&dev->qp_dev->qpt_lock)))
 			qp_inuse++;
 	}
 	spin_unlock_irqrestore(&dev->qp_dev->qpt_lock, flags);
@@ -533,8 +538,10 @@ int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 		wq->tail = tail;
 
 		spin_unlock(&qp->r_rq.lock);
-	} else if (qp->ibqp.event_handler)
+	} else {
+		if (qp->ibqp.event_handler)
 		ret = 1;
+	}
 
 bail:
 	return ret;
@@ -595,7 +602,6 @@ static inline int verbs_mtu_enum_to_int(struct ib_device *dev, enum ib_mtu mtu)
 	return ib_mtu_enum_to_int(mtu);
 }
 
-
 /**
  * hfi1_modify_qp - modify the attributes of a queue pair
  * @ibqp: the queue pair who's attributes we're modifying
@@ -643,7 +649,10 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			goto inval;
 
 		if (!qp_to_sdma_engine(qp, sc) &&
-				dd->flags & HFI1_HAS_SEND_DMA)
+		    dd->flags & HFI1_HAS_SEND_DMA)
+			goto inval;
+
+		if (!qp_to_send_context(qp, sc))
 			goto inval;
 	}
 
@@ -662,7 +671,10 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			goto inval;
 
 		if (!qp_to_sdma_engine(qp, sc) &&
-				dd->flags & HFI1_HAS_SEND_DMA)
+		    dd->flags & HFI1_HAS_SEND_DMA)
+			goto inval;
+
+		if (!qp_to_send_context(qp, sc))
 			goto inval;
 	}
 
@@ -728,8 +740,9 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 				goto inval;
 			if (qp->s_mig_state == IB_MIG_ARMED)
 				mig = 1;
-		} else
+		} else {
 			goto inval;
+		}
 	}
 
 	if (attr_mask & IB_QP_MAX_DEST_RD_ATOMIC)
@@ -818,6 +831,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		qp->srate_mbps = ib_rate_to_mbps(qp->s_srate);
 		qp->s_sc = ah_to_sc(ibqp->device, &qp->remote_ah_attr);
 		qp->s_sde = qp_to_sdma_engine(qp, qp->s_sc);
+		qp->s_sendcontext = qp_to_send_context(qp, qp->s_sc);
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
@@ -834,6 +848,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			qp->s_flags |= HFI1_S_AHG_CLEAR;
 			qp->s_sc = ah_to_sc(ibqp->device, &qp->remote_ah_attr);
 			qp->s_sde = qp_to_sdma_engine(qp, qp->s_sc);
+			qp->s_sendcontext = qp_to_send_context(qp, qp->s_sc);
 		}
 	}
 
@@ -1018,12 +1033,13 @@ __be32 hfi1_compute_aeth(struct hfi1_qp *qp)
 			x = (min + max) / 2;
 			if (credit_table[x] == credits)
 				break;
-			if (credit_table[x] > credits)
+			if (credit_table[x] > credits) {
 				max = x;
-			else if (min == x)
-				break;
-			else
+			} else {
+				if (min == x)
+					break;
 				min = x;
+			}
 		}
 		aeth |= x << HFI1_AETH_CREDIT_SHIFT;
 	}
@@ -1095,7 +1111,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 			sizeof(struct hfi1_swqe);
 		swq = vmalloc_node((init_attr->cap.max_send_wr + 1) * sz,
 				   dd->node);
-		if (swq == NULL) {
+		if (!swq) {
 			ret = ERR_PTR(-ENOMEM);
 			goto bail;
 		}
@@ -1125,9 +1141,9 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 		qp->timeout_jiffies =
 			usecs_to_jiffies((4096UL * (1UL << qp->timeout)) /
 				1000UL);
-		if (init_attr->srq)
+		if (init_attr->srq) {
 			sz = 0;
-		else {
+		} else {
 			qp->r_rq.size = init_attr->cap.max_recv_wr + 1;
 			qp->r_rq.max_sge = init_attr->cap.max_recv_sge;
 			sz = (sizeof(struct ib_sge) * qp->r_rq.max_sge) +
@@ -1216,7 +1232,7 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 				goto bail_ip;
 			}
 
-			err = ib_copy_to_udata(udata, &(qp->ip->offset),
+			err = ib_copy_to_udata(udata, &qp->ip->offset,
 					       sizeof(qp->ip->offset));
 			if (err) {
 				ret = ERR_PTR(err);
@@ -1366,7 +1382,7 @@ static int init_qpn_table(struct hfi1_devdata *dd, struct hfi1_qpn_table *qpt)
 	offset = qpn & BITS_PER_PAGE_MASK;
 	map = &qpt->map[qpt->nmaps];
 	dd_dev_info(dd, "Reserving QPNs for KDETH window from 0x%x to 0x%x\n",
-		qpn, qpn + 65535);
+		    qpn, qpn + 65535);
 	for (i = 0; i < 65536; i++) {
 		if (!map->page) {
 			get_map_page(qpt, map);
@@ -1396,7 +1412,7 @@ static void free_qpn_table(struct hfi1_qpn_table *qpt)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(qpt->map); i++)
-		free_page((unsigned long) qpt->map[i].page);
+		free_page((unsigned long)qpt->map[i].page);
 }
 
 /**
@@ -1468,7 +1484,6 @@ static int iowait_sleep(
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) {
-
 		/*
 		 * If we couldn't queue the DMA request, save the info
 		 * and try again later rather than destroying the
@@ -1691,11 +1706,13 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 	struct hfi1_swqe *wqe;
 	struct hfi1_qp *qp = iter->qp;
 	struct sdma_engine *sde;
+	struct send_context *send_context;
 
 	sde = qp_to_sdma_engine(qp, qp->s_sc);
+	send_context = qp_to_send_context(qp, qp->s_sc);
 	wqe = get_swqe_ptr(qp, qp->s_last);
 	seq_printf(s,
-		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%u LID %x SL %u MTU %u %u %u %u SDE %p,%u\n",
+		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%u LID %x SL %u MTU %u %u %u %u SDE %p,%u SC %p\n",
 		   iter->n,
 		   qp_idle(qp) ? "I" : "B",
 		   qp->ibqp.qp_num,
@@ -1724,7 +1741,8 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   qp->s_retry_cnt,
 		   qp->s_rnr_retry_cnt,
 		   sde,
-		   sde ? sde->this_idx : 0);
+		   sde ? sde->this_idx : 0,
+		   send_context);
 }
 
 void qp_comm_est(struct hfi1_qp *qp)
@@ -1760,4 +1778,49 @@ void hfi1_migrate_qp(struct hfi1_qp *qp)
 	ev.element.qp = &qp->ibqp;
 	ev.event = IB_EVENT_PATH_MIG;
 	qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
+}
+
+void hfi1_error_port_qps(struct hfi1_ibport *ibp, u8 sl)
+{
+	struct hfi1_qp *qp = NULL;
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+	struct hfi1_ibdev *dev = &ppd->dd->verbs_dev;
+	int n;
+	unsigned long flags;
+	int lastwqe;
+	struct ib_event ev;
+
+	rcu_read_lock();
+
+	/* Deal only with RC/UC qps that use the given SL. */
+	for (n = 0; n < dev->qp_dev->qp_table_size; n++) {
+		for (qp = rcu_dereference(dev->qp_dev->qp_table[n]); qp;
+			qp = rcu_dereference(qp->next)) {
+			if (qp->port_num == ppd->port &&
+			    (qp->ibqp.qp_type == IB_QPT_UC ||
+			     qp->ibqp.qp_type == IB_QPT_RC) &&
+			    qp->remote_ah_attr.sl == sl &&
+			    (ib_hfi1_state_ops[qp->state] &
+			     HFI1_POST_SEND_OK)) {
+				spin_lock_irqsave(&qp->r_lock, flags);
+				spin_lock(&qp->s_hlock);
+				spin_lock(&qp->s_lock);
+				lastwqe = hfi1_error_qp(qp,
+							IB_WC_WR_FLUSH_ERR);
+				spin_unlock(&qp->s_lock);
+				spin_unlock(&qp->s_hlock);
+				spin_unlock_irqrestore(&qp->r_lock, flags);
+				if (lastwqe) {
+					ev.device = qp->ibqp.device;
+					ev.element.qp = &qp->ibqp;
+					ev.event =
+						IB_EVENT_QP_LAST_WQE_REACHED;
+					qp->ibqp.event_handler(&ev,
+						qp->ibqp.qp_context);
+				}
+			}
+		}
+	}
+
+	rcu_read_unlock();
 }

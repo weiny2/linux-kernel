@@ -89,14 +89,20 @@ struct hfi1_msix_entry;
 int hfi1_dev_affinity_init(struct hfi1_devdata *);
 /* Free driver affinity data */
 void hfi1_dev_affinity_free(struct hfi1_devdata *);
-/* Set IRQ affinity to a CPU. The function will determine the
- * CPU and set the affinity to it. */
+/*
+ * Set IRQ affinity to a CPU. The function will determine the
+ * CPU and set the affinity to it.
+ */
 int hfi1_get_irq_affinity(struct hfi1_devdata *, struct hfi1_msix_entry *);
-/* Remove the IRQ's CPU affinity. This function also updates
- * any internal CPU tracking data */
+/*
+ * Remove the IRQ's CPU affinity. This function also updates
+ * any internal CPU tracking data
+ */
 void hfi1_put_irq_affinity(struct hfi1_devdata *, struct hfi1_msix_entry *);
-/* Determine a CPU affinity for a user process, if the process does not
- * have an affinity set yet. */
+/*
+ * Determine a CPU affinity for a user process, if the process does not
+ * have an affinity set yet.
+ */
 int hfi1_get_proc_affinity(struct hfi1_devdata *, int);
 /* Release a CPU used by a user process. */
 void hfi1_put_proc_affinity(struct hfi1_devdata *, int);

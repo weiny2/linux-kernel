@@ -62,7 +62,7 @@
  *
  * Return 1 if constructed; otherwise, return 0.
  */
-int hfi1_make_uc_req(struct hfi1_qp *qp)
+int hfi1_make_uc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 {
 	struct hfi1_other_headers *ohdr;
 	struct hfi1_swqe *wqe;
@@ -70,8 +70,11 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 	u32 bth0 = 0;
 	u32 len;
 	u32 pmtu = qp->pmtu;
-	int ret = 0;
 	int middle = 0;
+
+	ps->s_txreq = get_txreq(ps->dev, qp);
+	if (IS_ERR(ps->s_txreq))
+		goto bail_no_tx;
 
 	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_SEND_OK)) {
 		if (!(ib_hfi1_state_ops[qp->state] & HFI1_FLUSH_SEND))
@@ -88,12 +91,12 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 		clear_ahg(qp);
 		wqe = get_swqe_ptr(qp, qp->s_last);
 		hfi1_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
-		goto done;
+		goto done_free_tx;
 	}
 
-	ohdr = &qp->s_hdr->ibh.u.oth;
+	ohdr = &ps->s_txreq->phdr.hdr.u.oth;
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = &qp->s_hdr->ibh.u.l.oth;
+		ohdr = &ps->s_txreq->phdr.hdr.u.l.oth;
 
 	/* Get the next send request. */
 	wqe = get_swqe_ptr(qp, qp->s_cur);
@@ -127,11 +130,10 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 				len = pmtu;
 				break;
 			}
-			if (wqe->wr.opcode == IB_WR_SEND)
+			if (wqe->wr.opcode == IB_WR_SEND) {
 				qp->s_state = OP(SEND_ONLY);
-			else {
-				qp->s_state =
-					OP(SEND_ONLY_WITH_IMMEDIATE);
+			} else {
+				qp->s_state = OP(SEND_ONLY_WITH_IMMEDIATE);
 				/* Immediate data comes after the BTH */
 				ohdr->u.imm_data = wqe->wr.ex.imm_data;
 				hwords += 1;
@@ -156,9 +158,9 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 				len = pmtu;
 				break;
 			}
-			if (wqe->wr.opcode == IB_WR_RDMA_WRITE)
+			if (wqe->wr.opcode == IB_WR_RDMA_WRITE) {
 				qp->s_state = OP(RDMA_WRITE_ONLY);
-			else {
+			} else {
 				qp->s_state =
 					OP(RDMA_WRITE_ONLY_WITH_IMMEDIATE);
 				/* Immediate data comes after the RETH */
@@ -187,9 +189,9 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 			middle = HFI1_CAP_IS_KSET(SDMA_AHG);
 			break;
 		}
-		if (wqe->wr.opcode == IB_WR_SEND)
+		if (wqe->wr.opcode == IB_WR_SEND) {
 			qp->s_state = OP(SEND_LAST);
-		else {
+		} else {
 			qp->s_state = OP(SEND_LAST_WITH_IMMEDIATE);
 			/* Immediate data comes after the BTH */
 			ohdr->u.imm_data = wqe->wr.ex.imm_data;
@@ -212,9 +214,9 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 			middle = HFI1_CAP_IS_KSET(SDMA_AHG);
 			break;
 		}
-		if (wqe->wr.opcode == IB_WR_RDMA_WRITE)
+		if (wqe->wr.opcode == IB_WR_RDMA_WRITE) {
 			qp->s_state = OP(RDMA_WRITE_LAST);
-		else {
+		} else {
 			qp->s_state =
 				OP(RDMA_WRITE_LAST_WITH_IMMEDIATE);
 			/* Immediate data comes after the BTH */
@@ -233,15 +235,19 @@ int hfi1_make_uc_req(struct hfi1_qp *qp)
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
 	hfi1_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
-			     mask_psn(qp->s_next_psn++), middle);
-done:
-	ret = 1;
-	goto out;
+			     mask_psn(qp->s_next_psn++), middle, ps);
+	return 1;
+
+done_free_tx:
+	hfi1_put_txreq(ps->s_txreq);
+	return 1;
 
 bail:
+	hfi1_put_txreq(ps->s_txreq);
+
+bail_no_tx:
 	qp->s_flags &= ~HFI1_S_BUSY;
-out:
-	return ret;
+	return 0;
 }
 
 /**
@@ -296,7 +302,7 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 			sl = ibp->sc_to_sl[sc5];
 
 			process_becn(ppd, sl, rlid, lqpn, rqpn,
-					IB_CC_SVCTYPE_UC);
+				     IB_CC_SVCTYPE_UC);
 		}
 
 		if (bth1 & HFI1_FECN_SMASK) {
@@ -331,8 +337,9 @@ inv:
 		    qp->r_state == OP(SEND_MIDDLE)) {
 			set_bit(HFI1_R_REWIND_SGE, &qp->r_aflags);
 			qp->r_sge.num_sge = 0;
-		} else
+		} else {
 			hfi1_put_ss(&qp->r_sge);
+		}
 		qp->r_state = OP(SEND_LAST);
 		switch (opcode) {
 		case OP(SEND_FIRST):
@@ -388,9 +395,9 @@ inv:
 	case OP(SEND_ONLY):
 	case OP(SEND_ONLY_WITH_IMMEDIATE):
 send_first:
-		if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
+		if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags)) {
 			qp->r_sge = qp->s_rdma_read_sge;
-		else {
+		} else {
 			ret = hfi1_get_rwqe(qp, 0);
 			if (ret < 0)
 				goto op_err;
@@ -501,9 +508,9 @@ rdma_first:
 			qp->r_sge.sge.length = 0;
 			qp->r_sge.sge.sge_length = 0;
 		}
-		if (opcode == OP(RDMA_WRITE_ONLY))
+		if (opcode == OP(RDMA_WRITE_ONLY)) {
 			goto rdma_last;
-		else if (opcode == OP(RDMA_WRITE_ONLY_WITH_IMMEDIATE)) {
+		} else if (opcode == OP(RDMA_WRITE_ONLY_WITH_IMMEDIATE)) {
 			wc.ex.imm_data = ohdr->u.rc.imm_data;
 			goto rdma_last_imm;
 		}
@@ -533,9 +540,9 @@ rdma_last_imm:
 		tlen -= (hdrsize + pad + 4);
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
-		if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
+		if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags)) {
 			hfi1_put_ss(&qp->s_rdma_read_sge);
-		else {
+		} else {
 			ret = hfi1_get_rwqe(qp, 1);
 			if (ret < 0)
 				goto op_err;
@@ -581,6 +588,4 @@ drop:
 
 op_err:
 	hfi1_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
-	return;
-
 }

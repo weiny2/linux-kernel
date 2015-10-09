@@ -79,8 +79,10 @@
 #define PIO_CMASK 0x7ff	/* counter mask for free and fill counters */
 #define MAX_EAGER_ENTRIES    2048	/* max receive eager entries */
 #define MAX_TID_PAIR_ENTRIES 1024	/* max receive expected pairs */
-/* Virtual? Allocation Unit, defined as AU = 8*2^vAU, 64 bytes, AU is fixed
-   at 64 bytes for all generation one devices */
+/*
+ * Virtual? Allocation Unit, defined as AU = 8*2^vAU, 64 bytes, AU is fixed
+ * at 64 bytes
+ */
 #define CM_VAU 3
 /* HFI link credit count, AKA receive buffer depth (RBUF_DEPTH) */
 #define CM_GLOBAL_CREDITS 0x940
@@ -96,10 +98,10 @@
 #define PBC_INTR		(1ull << 31)
 #define PBC_DC_INFO_SHIFT	(30)
 #define PBC_DC_INFO		(1ull << PBC_DC_INFO_SHIFT)
-#define PBC_TEST_EBP	(1ull << 29)
+#define PBC_TEST_EBP		(1ull << 29)
 #define PBC_PACKET_BYPASS	(1ull << 28)
 #define PBC_CREDIT_RETURN	(1ull << 25)
-#define PBC_INSERT_BYPASS_ICRC (1ull << 24)
+#define PBC_INSERT_BYPASS_ICRC	(1ull << 24)
 #define PBC_TEST_BAD_ICRC	(1ull << 23)
 #define PBC_FECN		(1ull << 22)
 
@@ -212,7 +214,7 @@
 #define PLS_CONFIGPHY_DEBOUCE		   0x40
 #define PLS_CONFIGPHY_ESTCOMM		   0x41
 #define PLS_CONFIGPHY_ESTCOMM_TXRX_HUNT	   0x42
-#define PLS_CONFIGPHY_ESTcOMM_LOCAL_COMPLETE   0x43
+#define PLS_CONFIGPHY_ESTCOMM_LOCAL_COMPLETE   0x43
 #define PLS_CONFIGPHY_OPTEQ			   0x44
 #define PLS_CONFIGPHY_OPTEQ_OPTIMIZING	   0x44
 #define PLS_CONFIGPHY_OPTEQ_LOCAL_COMPLETE	   0x45
@@ -241,18 +243,18 @@
 #define HCMD_SUCCESS 2
 
 /* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.ERROR - error flags */
-#define SPICO_ROM_FAILED		    (1 <<  0)
-#define UNKNOWN_FRAME		    (1 <<  1)
-#define TARGET_BER_NOT_MET		    (1 <<  2)
-#define FAILED_SERDES_INTERNAL_LOOPBACK (1 <<  3)
-#define FAILED_SERDES_INIT		    (1 <<  4)
-#define FAILED_LNI_POLLING		    (1 <<  5)
-#define FAILED_LNI_DEBOUNCE		    (1 <<  6)
-#define FAILED_LNI_ESTBCOMM		    (1 <<  7)
-#define FAILED_LNI_OPTEQ		    (1 <<  8)
-#define FAILED_LNI_VERIFY_CAP1	    (1 <<  9)
-#define FAILED_LNI_VERIFY_CAP2	    (1 << 10)
-#define FAILED_LNI_CONFIGLT		    (1 << 11)
+#define SPICO_ROM_FAILED		BIT(0)
+#define UNKNOWN_FRAME			BIT(1)
+#define TARGET_BER_NOT_MET		BIT(2)
+#define FAILED_SERDES_INTERNAL_LOOPBACK	BIT(3)
+#define FAILED_SERDES_INIT		BIT(4)
+#define FAILED_LNI_POLLING		BIT(5)
+#define FAILED_LNI_DEBOUNCE		BIT(6)
+#define FAILED_LNI_ESTBCOMM		BIT(7)
+#define FAILED_LNI_OPTEQ		BIT(8)
+#define FAILED_LNI_VERIFY_CAP1		BIT(9)
+#define FAILED_LNI_VERIFY_CAP2		BIT(10)
+#define FAILED_LNI_CONFIGLT		BIT(11)
 
 #define FAILED_LNI (FAILED_LNI_POLLING | FAILED_LNI_DEBOUNCE \
 			| FAILED_LNI_ESTBCOMM | FAILED_LNI_OPTEQ \
@@ -261,16 +263,16 @@
 			| FAILED_LNI_CONFIGLT)
 
 /* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.HOST_MSG - host message flags */
-#define HOST_REQ_DONE	   (1 << 0)
-#define BC_PWR_MGM_MSG	   (1 << 1)
-#define BC_SMA_MSG		   (1 << 2)
-#define BC_BCC_UNKOWN_MSG	   (1 << 3)
-#define BC_IDLE_UNKNOWN_MSG	   (1 << 4)
-#define EXT_DEVICE_CFG_REQ	   (1 << 5)
-#define VERIFY_CAP_FRAME	   (1 << 6)
-#define LINKUP_ACHIEVED	   (1 << 7)
-#define LINK_GOING_DOWN	   (1 << 8)
-#define LINK_WIDTH_DOWNGRADED  (1 << 9)
+#define HOST_REQ_DONE		BIT(0)
+#define BC_PWR_MGM_MSG		BIT(1)
+#define BC_SMA_MSG		BIT(2)
+#define BC_BCC_UNKNOWN_MSG	BIT(3)
+#define BC_IDLE_UNKNOWN_MSG	BIT(4)
+#define EXT_DEVICE_CFG_REQ	BIT(5)
+#define VERIFY_CAP_FRAME	BIT(6)
+#define LINKUP_ACHIEVED		BIT(7)
+#define LINK_GOING_DOWN		BIT(8)
+#define LINK_WIDTH_DOWNGRADED	BIT(9)
 
 /* DC_DC8051_CFG_EXT_DEV_1.REQ_TYPE - 8051 host requests */
 #define HREQ_LOAD_CONFIG	0x01
@@ -334,14 +336,14 @@
  * the CSR fields hold multiples of this value.
  */
 #define RCV_SHIFT 3
-#define RCV_INCREMENT (1 << RCV_SHIFT)
+#define RCV_INCREMENT BIT(RCV_SHIFT)
 
 /*
  * Receive header queue entry increment - the CSR holds multiples of
  * this value.
  */
 #define HDRQ_SIZE_SHIFT 5
-#define HDRQ_INCREMENT (1 << HDRQ_SIZE_SHIFT)
+#define HDRQ_INCREMENT BIT(HDRQ_SIZE_SHIFT)
 
 /*
  * Freeze handling flags
@@ -370,6 +372,9 @@
 #define NUM_LANE_FIELDS    0x8
 
 /* 8051 general register Field IDs */
+#define LINK_OPTIMIZATION_SETTINGS   0x00
+#define LINK_TUNING_PARAMETERS	     0x02
+#define DC_HOST_COMM_SETTINGS	     0x03
 #define TX_SETTINGS		     0x06
 #define VERIFY_CAP_LOCAL_PHY	     0x07
 #define VERIFY_CAP_LOCAL_FABRIC	     0x08
@@ -510,8 +515,10 @@ enum {
 #define LCB_CRC_48B			0x2	/* 48b CRC */
 #define LCB_CRC_12B_16B_PER_LANE	0x3	/* 12b-16b per lane CRC */
 
-/* the following enum is (almost) a copy/paste of the definition
- * in the OPA spec, section 20.2.2.6.8 (PortInfo) */
+/*
+ * the following enum is (almost) a copy/paste of the definition
+ * in the OPA spec, section 20.2.2.6.8 (PortInfo)
+ */
 enum {
 	PORT_LTP_CRC_MODE_NONE = 0,
 	PORT_LTP_CRC_MODE_14 = 1, /* 14-bit LTP CRC mode (optional) */
@@ -646,10 +653,13 @@ void handle_link_down(struct work_struct *work);
 void handle_link_downgrade(struct work_struct *work);
 void handle_link_bounce(struct work_struct *work);
 void handle_sma_message(struct work_struct *work);
+void reset_qsfp(struct hfi1_pportdata *ppd);
+void qsfp_event(struct work_struct *work);
 void start_freeze_handling(struct hfi1_pportdata *ppd, int flags);
 int send_idle_sma(struct hfi1_devdata *dd, u64 message);
+int load_8051_config(struct hfi1_devdata *, u8, u8, u32);
+int read_8051_config(struct hfi1_devdata *, u8, u8, u32 *);
 int start_link(struct hfi1_pportdata *ppd);
-void init_qsfp(struct hfi1_pportdata *ppd);
 int bringup_serdes(struct hfi1_pportdata *ppd);
 void set_intr_state(struct hfi1_devdata *dd, u32 enable);
 void apply_link_downgrade_policy(struct hfi1_pportdata *ppd,
@@ -689,6 +699,8 @@ u64 read_dev_cntr(struct hfi1_devdata *dd, int index, int vl);
 u64 write_dev_cntr(struct hfi1_devdata *dd, int index, int vl, u64 data);
 u64 read_port_cntr(struct hfi1_pportdata *ppd, int index, int vl);
 u64 write_port_cntr(struct hfi1_pportdata *ppd, int index, int vl, u64 data);
+u32 read_logical_state(struct hfi1_devdata *dd);
+void force_recv_intr(struct hfi1_ctxtdata *rcd);
 
 /* Per VL indexes */
 enum {

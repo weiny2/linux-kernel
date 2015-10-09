@@ -145,9 +145,9 @@ void hfi1_free_lkey(struct hfi1_mregion *mr)
 	spin_lock_irqsave(&rkt->lock, flags);
 	if (!mr->lkey_published)
 		goto out;
-	if (lkey == 0)
+	if (lkey == 0) {
 		RCU_INIT_POINTER(dev->dma_mr, NULL);
-	else {
+	} else {
 		r = lkey >> (32 - hfi1_lkey_table_size);
 		RCU_INIT_POINTER(rkt->table[r], NULL);
 	}
@@ -200,7 +200,7 @@ int hfi1_lkey_ok(struct hfi1_lkey_table *rkt, struct hfi1_pd *pd,
 		rcu_read_unlock();
 
 		isge->mr = mr;
-		isge->vaddr = (void *) sge->addr;
+		isge->vaddr = (void *)sge->addr;
 		isge->length = sge->length;
 		isge->sge_length = sge->length;
 		isge->m = 0;
@@ -223,10 +223,10 @@ int hfi1_lkey_ok(struct hfi1_lkey_table *rkt, struct hfi1_pd *pd,
 	off += mr->offset;
 	if (mr->page_shift) {
 		/*
-		page sizes are uniform power of 2 so no loop is necessary
-		entries_spanned_by_off is the number of times the loop below
-		would have executed.
-		*/
+		 * page sizes are uniform power of 2 so no loop is necessary
+		 * entries_spanned_by_off is the number of times the loop below
+		 * would have executed.
+		 */
 		size_t entries_spanned_by_off;
 
 		entries_spanned_by_off = off >> mr->page_shift;
@@ -297,7 +297,7 @@ int hfi1_rkey_ok(struct hfi1_qp *qp, struct hfi1_sge *sge,
 		rcu_read_unlock();
 
 		sge->mr = mr;
-		sge->vaddr = (void *) vaddr;
+		sge->vaddr = (void *)vaddr;
 		sge->length = len;
 		sge->sge_length = len;
 		sge->m = 0;
@@ -320,10 +320,10 @@ int hfi1_rkey_ok(struct hfi1_qp *qp, struct hfi1_sge *sge,
 	off += mr->offset;
 	if (mr->page_shift) {
 		/*
-		page sizes are uniform power of 2 so no loop is necessary
-		entries_spanned_by_off is the number of times the loop below
-		would have executed.
-		*/
+		 * page sizes are uniform power of 2 so no loop is necessary
+		 * entries_spanned_by_off is the number of times the loop below
+		 * would have executed.
+		 */
 		size_t entries_spanned_by_off;
 
 		entries_spanned_by_off = off >> mr->page_shift;
@@ -377,7 +377,7 @@ int hfi1_fast_reg_mr(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	mr = rcu_dereference_protected(
 		rkt->table[(rkey >> (32 - hfi1_lkey_table_size))],
 		lockdep_is_held(&rkt->lock));
-	if (unlikely(mr == NULL || qp->ibqp.pd != mr->pd))
+	if (unlikely(!mr || qp->ibqp.pd != mr->pd))
 		goto bail;
 
 	if (wr->wr.fast_reg.page_list_len > mr->max_segs)
@@ -396,7 +396,7 @@ int hfi1_fast_reg_mr(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	m = 0;
 	n = 0;
 	for (i = 0; i < wr->wr.fast_reg.page_list_len; i++) {
-		mr->map[m]->segs[n].vaddr = (void *) page_list[i];
+		mr->map[m]->segs[n].vaddr = (void *)page_list[i];
 		mr->map[m]->segs[n].length = ps;
 		if (++n == HFI1_SEGSZ) {
 			m++;

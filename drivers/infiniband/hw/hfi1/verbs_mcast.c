@@ -140,11 +140,11 @@ struct hfi1_mcast *hfi1_mcast_find(struct hfi1_ibport *ibp, union ib_gid *mgid)
 
 		ret = memcmp(mgid->raw, mcast->mgid.raw,
 			     sizeof(union ib_gid));
-		if (ret < 0)
+		if (ret < 0) {
 			n = n->rb_left;
-		else if (ret > 0)
+		} else if (ret > 0) {
 			n = n->rb_right;
-		else {
+		} else {
 			atomic_inc(&mcast->refcount);
 			spin_unlock_irqrestore(&ibp->lock, flags);
 			goto bail;
@@ -258,12 +258,12 @@ int hfi1_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 	 * spin locks and it will most likely be needed.
 	 */
 	mcast = mcast_alloc(gid);
-	if (mcast == NULL) {
+	if (!mcast) {
 		ret = -ENOMEM;
 		goto bail;
 	}
 	mqp = mcast_qp_alloc(qp);
-	if (mqp == NULL) {
+	if (!mqp) {
 		mcast_free(mcast);
 		ret = -ENOMEM;
 		goto bail;
@@ -318,7 +318,7 @@ int hfi1_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 	/* Find the GID in the mcast table. */
 	n = ibp->mcast_tree.rb_node;
 	while (1) {
-		if (n == NULL) {
+		if (!n) {
 			spin_unlock_irq(&ibp->lock);
 			ret = -EINVAL;
 			goto bail;
@@ -381,5 +381,5 @@ bail:
 
 int hfi1_mcast_tree_empty(struct hfi1_ibport *ibp)
 {
-	return ibp->mcast_tree.rb_node == NULL;
+	return !ibp->mcast_tree.rb_node;
 }

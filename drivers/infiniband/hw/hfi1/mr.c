@@ -102,7 +102,6 @@ static void deinit_mregion(struct hfi1_mregion *mr)
 		kfree(mr->map[--i]);
 }
 
-
 /**
  * hfi1_get_dma_mr - get a DMA memory region
  * @pd: protection domain for this memory region
@@ -134,7 +133,6 @@ struct ib_mr *hfi1_get_dma_mr(struct ib_pd *pd, int acc)
 		ret = ERR_PTR(rval);
 		goto bail;
 	}
-
 
 	rval = hfi1_alloc_lkey(&mr->mr, 1);
 	if (rval) {
@@ -219,7 +217,7 @@ struct ib_mr *hfi1_reg_phys_mr(struct ib_pd *pd,
 	m = 0;
 	n = 0;
 	for (i = 0; i < num_phys_buf; i++) {
-		mr->mr.map[m]->segs[n].vaddr = (void *) buffer_list[i].addr;
+		mr->mr.map[m]->segs[n].vaddr = (void *)buffer_list[i].addr;
 		mr->mr.map[m]->segs[n].length = buffer_list[i].size;
 		mr->mr.length += buffer_list[i].size;
 		n++;
@@ -263,7 +261,7 @@ struct ib_mr *hfi1_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 	umem = ib_umem_get(pd->uobject->context, start, length,
 			   mr_access_flags, 0);
 	if (IS_ERR(umem))
-		return (void *) umem;
+		return (void *)umem;
 
 	n = 0;
 	list_for_each_entry(chunk, &umem->chunk_list, list)
@@ -330,7 +328,7 @@ int hfi1_dereg_mr(struct ib_mr *ibmr)
 
 	hfi1_put_mr(&mr->mr); /* will set completion if last */
 	timeout = wait_for_completion_timeout(&mr->mr.comp,
-		5 * HZ);
+					      5 * HZ);
 	if (!timeout) {
 		dd_dev_err(
 			dd_from_ibdev(mr->mr.pd->device),
@@ -487,7 +485,7 @@ int hfi1_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
 	m = 0;
 	n = 0;
 	for (i = 0; i < list_len; i++) {
-		fmr->mr.map[m]->segs[n].vaddr = (void *) page_list[i];
+		fmr->mr.map[m]->segs[n].vaddr = (void *)page_list[i];
 		fmr->mr.map[m]->segs[n].length = ps;
 		if (++n == HFI1_SEGSZ) {
 			m++;
@@ -539,7 +537,7 @@ int hfi1_dealloc_fmr(struct ib_fmr *ibfmr)
 	hfi1_free_lkey(&fmr->mr);
 	hfi1_put_mr(&fmr->mr); /* will set completion if last */
 	timeout = wait_for_completion_timeout(&fmr->mr.comp,
-		5 * HZ);
+					      5 * HZ);
 	if (!timeout) {
 		hfi1_get_mr(&fmr->mr);
 		ret = -EBUSY;

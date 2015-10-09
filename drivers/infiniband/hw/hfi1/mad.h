@@ -52,7 +52,8 @@
 
 #include <rdma/ib_pma.h>
 #define USE_PI_LED_ENABLE	1 /* use led enabled bit in struct
-				   * opa_port_states, if available */
+				   * opa_port_states, if available
+				   */
 #include <rdma/opa_smi.h>
 #include <rdma/opa_port_info.h>
 #ifndef PI_LED_ENABLE_SUP
@@ -176,14 +177,14 @@ struct ib_mad_notice_attr {
 /*
  * Repress trap/notice flags
  */
-#define IB_NOTICE_REPRESS_LLI_THRESH	(1 << 0)
-#define IB_NOTICE_REPRESS_EBO_THRESH	(1 << 1)
-#define IB_NOTICE_REPRESS_FLOW_UPDATE	(1 << 2)
-#define IB_NOTICE_REPRESS_CAP_MASK_CHG	(1 << 3)
-#define IB_NOTICE_REPRESS_SYS_GUID_CHG	(1 << 4)
-#define IB_NOTICE_REPRESS_BAD_MKEY	(1 << 5)
-#define IB_NOTICE_REPRESS_BAD_PKEY	(1 << 6)
-#define IB_NOTICE_REPRESS_BAD_QKEY	(1 << 7)
+#define IB_NOTICE_REPRESS_LLI_THRESH	BIT(0)
+#define IB_NOTICE_REPRESS_EBO_THRESH	BIT(1)
+#define IB_NOTICE_REPRESS_FLOW_UPDATE	BIT(2)
+#define IB_NOTICE_REPRESS_CAP_MASK_CHG	BIT(3)
+#define IB_NOTICE_REPRESS_SYS_GUID_CHG	BIT(4)
+#define IB_NOTICE_REPRESS_BAD_MKEY	BIT(5)
+#define IB_NOTICE_REPRESS_BAD_PKEY	BIT(6)
+#define IB_NOTICE_REPRESS_BAD_QKEY	BIT(7)
 
 /*
  * Generic trap/notice other local changes flags (trap 144).
@@ -273,7 +274,6 @@ struct ib_pma_portcounters_cong {
 #define IB_CC_SVCTYPE_RD 0x2
 #define IB_CC_SVCTYPE_UD 0x3
 
-
 /*
  * There should be an equivalent IB #define for the following, but
  * I cannot find it.
@@ -305,7 +305,7 @@ struct opa_hfi1_cong_log {
 	u8 congestion_flags;
 	__be16 threshold_event_counter;
 	__be32 current_time_stamp;
-	u8 threshold_cong_event_map[OPA_MAX_SLS/8];
+	u8 threshold_cong_event_map[OPA_MAX_SLS / 8];
 	struct opa_hfi1_cong_log_event events[OPA_CONG_LOG_ELEMS];
 } __packed;
 
