@@ -240,6 +240,7 @@ static void apply_eq_settings(struct hfi1_pportdata *ppd,
 	u8 tx_eq = 0, rx_eq = 0, *cache = ppd->qsfp_info.cache;
 	int ret = 0;
 
+	/* Disable adaptive TX EQ if present */
 	if (cache[QSFP_EQ_INFO_OFFS] & 0x8) {
 		tx_eq = cache[(128 * 3) + 241];
 		tx_eq &= 0xF0;

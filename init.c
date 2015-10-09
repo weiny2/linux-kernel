@@ -65,6 +65,7 @@
 #include "sdma.h"
 #include "debugfs.h"
 #include "verbs.h"
+#include "aspm.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
@@ -187,6 +188,12 @@ int hfi1_create_ctxts(struct hfi1_devdata *dd)
 			goto bail;
 		}
 	}
+
+	/*
+	 * Initialize aspm, to be done after gen3 transition and setting up
+	 * contexts and before enabling interrupts
+	 */
+	aspm_init(dd);
 
 	return 0;
 nomem:
@@ -496,6 +503,7 @@ void hfi1_init_pportdata(struct pci_dev *pdev, struct hfi1_pportdata *ppd,
 	INIT_WORK(&ppd->link_vc_work, handle_verify_cap);
 	INIT_WORK(&ppd->link_up_work, handle_link_up);
 	INIT_WORK(&ppd->link_down_work, handle_link_down);
+	INIT_WORK(&ppd->dc_host_req_work, handle_8051_request);
 	INIT_WORK(&ppd->freeze_work, handle_freeze);
 	INIT_WORK(&ppd->link_downgrade_work, handle_link_downgrade);
 	INIT_WORK(&ppd->sma_message_work, handle_sma_message);

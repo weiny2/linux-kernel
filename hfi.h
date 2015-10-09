@@ -105,6 +105,20 @@ extern unsigned long hfi1_cap_mask;
 #define HFI1_ODR_MASK(rsn) ((rsn) & OPA_PI_MASK_OFFLINE_REASON)
 
 /*
+ * Driver context will store software counters for each of the events
+ * associated with these status registers
+ */
+#define NUM_CCE_ERR_STATUS_COUNTERS 41
+#define NUM_RCV_ERR_STATUS_COUNTERS 64
+#define NUM_MISC_ERR_STATUS_COUNTERS 13
+#define NUM_SEND_PIO_ERR_STATUS_COUNTERS 36
+#define NUM_SEND_DMA_ERR_STATUS_COUNTERS 4
+#define NUM_SEND_EGRESS_ERR_STATUS_COUNTERS 64
+#define NUM_SEND_ERR_STATUS_COUNTERS 3
+#define NUM_SEND_CTXT_ERR_STATUS_COUNTERS 5
+#define NUM_SEND_DMA_ENG_ERR_STATUS_COUNTERS 24
+
+/*
  * Control context is always 0 and handles the error packets.
  * It also handles the VL15 and multicast packets.
  */
@@ -302,6 +316,21 @@ struct hfi1_ctxtdata {
 	struct list_head sdma_queues;
 	/* protect sdma queues */
 	spinlock_t sdma_qlock;
+
+	/* Is ASPM interrupt supported for this context */
+	bool aspm_intr_supported;
+	/* ASPM state (enabled/disabled) for this context */
+	bool aspm_enabled;
+	/* Timer for re-enabling ASPM if interrupt activity quietens down */
+	struct timer_list aspm_timer;
+	/* Lock to serialize between intr, timer intr and user threads */
+	spinlock_t aspm_lock;
+	/* Is ASPM processing enabled for this context (in intr context) */
+	bool aspm_intr_enable;
+	/* Last interrupt timestamp */
+	ktime_t aspm_ts_last_intr;
+	/* Last timestamp at which we scheduled a timer for this context */
+	ktime_t aspm_ts_timer_sched;
 
 	/*
 	 * The interrupt handler for a particular receive context can vary
@@ -581,6 +610,7 @@ struct hfi1_pportdata {
 	struct work_struct link_vc_work;
 	struct work_struct link_up_work;
 	struct work_struct link_down_work;
+	struct work_struct dc_host_req_work;
 	struct work_struct sma_message_work;
 	struct work_struct freeze_work;
 	struct work_struct link_downgrade_work;
@@ -880,6 +910,8 @@ struct hfi1_devdata {
 	 * number of ctxts available for PSM open
 	 */
 	u32 freectxts;
+	/* total number of available user/PSM contexts */
+	u32 num_user_contexts;
 	/* base receive interrupt timeout, in CSR units */
 	u32 rcv_intr_timeout_csr;
 
@@ -1057,6 +1089,26 @@ struct hfi1_devdata {
 	atomic_t drop_packet;
 	u8 do_drop;
 
+	/*
+	 * Software counters for the status bits defined by the
+	 * associated error status registers
+	 */
+	u64 cce_err_status_cnt[NUM_CCE_ERR_STATUS_COUNTERS];
+	u64 rcv_err_status_cnt[NUM_RCV_ERR_STATUS_COUNTERS];
+	u64 misc_err_status_cnt[NUM_MISC_ERR_STATUS_COUNTERS];
+	u64 send_pio_err_status_cnt[NUM_SEND_PIO_ERR_STATUS_COUNTERS];
+	u64 send_dma_err_status_cnt[NUM_SEND_DMA_ERR_STATUS_COUNTERS];
+	u64 send_egress_err_status_cnt[NUM_SEND_EGRESS_ERR_STATUS_COUNTERS];
+	u64 send_err_status_cnt[NUM_SEND_ERR_STATUS_COUNTERS];
+
+	/* Software counter that spans all contexts */
+	u64 sw_ctxt_err_status_cnt[NUM_SEND_CTXT_ERR_STATUS_COUNTERS];
+	/* Software counter that spans all DMA engines */
+	u64 sw_send_dma_eng_err_status_cnt[
+		NUM_SEND_DMA_ENG_ERR_STATUS_COUNTERS];
+	/* Software counter that aggregates all cce_err_status errors */
+	u64 sw_cce_err_status_aggregate;
+
 	/* receive interrupt functions */
 	rhf_rcv_function_ptr *rhf_rcv_function_map;
 	rhf_rcv_function_ptr normal_rhf_rcv_functions[8];
@@ -1090,6 +1142,13 @@ struct hfi1_devdata {
 	/* receive context tail dummy address */
 	volatile __le64 *rcvhdrtail_dummy_kvaddr;
 	dma_addr_t rcvhdrtail_dummy_physaddr;
+
+	bool aspm_supported;	/* Does HW support ASPM */
+	bool aspm_enabled;	/* ASPM state: enabled/disabled */
+	/* Serialize ASPM enable/disable between multiple verbs contexts */
+	spinlock_t aspm_lock;
+	/* Number of verbs contexts which have disabled ASPM */
+	atomic_t aspm_disabled_cnt;
 };
 
 /* 8051 firmware version helper */
