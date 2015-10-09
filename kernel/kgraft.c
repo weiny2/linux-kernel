@@ -337,16 +337,13 @@ void kgr_unmark_processes(void)
 	read_unlock(&tasklist_lock);
 }
 
-static void kgr_handle_processes(void)
+static void kgr_mark_processes(void)
 {
 	struct task_struct *p, *t;
 
 	read_lock(&tasklist_lock);
-	for_each_process_thread(p, t) {
-		/* skip tasks wandering in userspace as already migrated */
-		if (kgr_needs_lazy_migration(t))
-			kgr_mark_task_in_progress(t);
-	}
+	for_each_process_thread(p, t)
+		kgr_mark_task_in_progress(t);
 	read_unlock(&tasklist_lock);
 }
 
@@ -945,7 +942,7 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	}
 
 	set_bit(0, kgr_immutable);
-	wmb(); /* set_bit before kgr_handle_processes */
+	wmb(); /* set_bit before kgr_mark_processes */
 
 	/*
 	 * Set kgr_patch before it can be used in kgr_patching_failed if
@@ -983,8 +980,8 @@ int kgr_modify_kernel(struct kgr_patch *patch, bool revert)
 	mutex_unlock(&kgr_in_progress_lock);
 
 	kgr_handle_irqs();
-	kgr_handle_processes();
-	wmb(); /* clear_bit after kgr_handle_processes */
+	kgr_mark_processes();
+	wmb(); /* clear_bit after kgr_mark_processes */
 	clear_bit(0, kgr_immutable);
 	/*
 	 * There is no need to have an explicit barrier here. wake_up_process()
