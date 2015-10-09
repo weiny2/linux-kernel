@@ -1573,7 +1573,8 @@ static void ib_sa_add_one(struct ib_device *device)
 		sa_dev->port[i].notice_agent =
 			ib_register_mad_agent(device, i + s, IB_QPT_GSI,
 					      &reg_req, 0, notice_resp_handler,
-					      notice_handler, &sa_dev->port[i]);
+					      notice_handler, &sa_dev->port[i],
+					      0);
 
 		if (IS_ERR(sa_dev->port[i].notice_agent))
 			goto err;
