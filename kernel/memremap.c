@@ -163,6 +163,28 @@ static void del_page_map(struct page_map *page_map)
 	spin_unlock(&range_lock);
 }
 
+static unsigned long pfn_first(struct dev_pagemap *pgmap)
+{
+	struct vmem_altmap *altmap = pgmap->altmap;
+	const struct resource *res = pgmap->res;
+	unsigned long pfn;
+
+	pfn = res->start >> PAGE_SHIFT;
+	if (altmap)
+		pfn += vmem_altmap_offset(altmap);
+	return pfn;
+}
+
+static unsigned long pfn_end(struct dev_pagemap *pgmap)
+{
+	const struct resource *res = pgmap->res;
+
+	return (res->start + resource_size(res)) >> PAGE_SHIFT;
+}
+
+#define for_each_device_pfn(pfn, pgmap) \
+	for (pfn = pfn_first(pgmap); pfn < pfn_end(pgmap); pfn++)
+
 static void devm_memremap_pages_release(struct device *dev, void *data)
 {
 	struct page_map *page_map = data;
@@ -193,19 +215,25 @@ struct dev_pagemap *__get_dev_pagemap(resource_size_t phys)
  * devm_memremap_pages - remap and provide memmap backing for the given resource
  * @dev: hosting device for @res
  * @res: "host memory" address range
+ * @ref: a live per-cpu reference count
  * @altmap: optional descriptor for allocating the memmap from @res
  *
- * Note, the expectation is that @res is a host memory range that could
- * feasibly be treated as a "System RAM" range, i.e. not a device mmio
- * range, but this is not enforced.
+ * Notes:
+ * 1/ @ref must be 'live' on entry and 'dead' before devm_memunmap_pages() time
+ *    (or devm release event).
+ *
+ * 2/ @res is expected to be a host memory range that could feasibly be
+ *    treated as a "System RAM" range, i.e. not a device mmio range, but
+ *    this is not enforced.
  */
 void *devm_memremap_pages(struct device *dev, struct resource *res,
-		struct vmem_altmap *altmap)
+		struct percpu_ref *ref, struct vmem_altmap *altmap)
 {
 	int is_ram = region_intersects(res->start, resource_size(res),
 			"System RAM");
 	struct dev_pagemap *pgmap;
 	struct page_map *page_map;
+	unsigned long pfn;
 	int error, nid;
 
 	if (is_ram == REGION_MIXED) {
@@ -216,6 +244,9 @@ void *devm_memremap_pages(struct device *dev, struct resource *res,
 
 	if (is_ram == REGION_INTERSECTS)
 		return __va(res->start);
+
+	if (!ref)
+		return ERR_PTR(-EINVAL);
 
 	page_map = devres_alloc_node(devm_memremap_pages_release,
 			sizeof(*page_map), GFP_KERNEL, dev_to_node(dev));
@@ -229,6 +260,7 @@ void *devm_memremap_pages(struct device *dev, struct resource *res,
 		pgmap->altmap = &page_map->altmap;
 	}
 	pgmap->dev = dev;
+	pgmap->ref = ref;
 	pgmap->res = &page_map->res;
 	INIT_LIST_HEAD(&page_map->list);
 	add_page_map(page_map);
@@ -244,6 +276,12 @@ void *devm_memremap_pages(struct device *dev, struct resource *res,
 		return ERR_PTR(error);
 	}
 
+	for_each_device_pfn(pfn, pgmap) {
+		struct page *page = pfn_to_page(pfn);
+
+		list_del_poison(&page->lru);
+		page->pgmap = pgmap;
+	}
 	devres_add(dev, page_map);
 	return __va(res->start);
 }
