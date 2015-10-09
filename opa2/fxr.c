@@ -58,6 +58,7 @@
 #include <linux/delay.h>
 #endif
 #include <linux/bitops.h>
+#include <linux/vmalloc.h>
 #include <rdma/fxr/fxr_top_defs.h>
 #include <rdma/fxr/fxr_fast_path_defs.h>
 #include <rdma/fxr/fxr_tx_ci_cic_csrs.h>

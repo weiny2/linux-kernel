@@ -56,6 +56,7 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
+#include <linux/vmalloc.h>
 #include <rdma/opa_core.h>
 #include <rdma/hfi_eq.h>
 #include "opa_hfi.h"

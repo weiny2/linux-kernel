@@ -56,6 +56,8 @@
 #include <linux/idr.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
+#include <linux/version.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_user_verbs.h>
 #include <rdma/opa_smi.h>
@@ -727,9 +729,16 @@ int opa_ib_cq_init(struct opa_ib_data *ibd);
 void opa_ib_cq_exit(struct opa_ib_data *ibd);
 void opa_ib_cq_enter(struct opa_ib_cq *cq, struct ib_wc *entry, int solicited);
 int opa_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev,
+			       const struct ib_cq_init_attr *attr,
+			       struct ib_ucontext *context,
+			       struct ib_udata *udata);
+#else
 struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev, int entries,
 			       int comp_vector, struct ib_ucontext *context,
 			       struct ib_udata *udata);
+#endif
 int opa_ib_destroy_cq(struct ib_cq *ibcq);
 int opa_ib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags);
 int opa_ib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
@@ -777,9 +786,17 @@ int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr);
 int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 			struct ib_recv_wr **bad_wr);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-			struct ib_wc *in_wc, struct ib_grh *in_grh,
-			struct ib_mad *in_mad, struct ib_mad *out_mad);
+		       const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+		       const struct ib_mad_hdr *in_mad, size_t in_mad_size,
+		       struct ib_mad_hdr *out_mad, size_t *out_mad_size,
+		       u16 *out_mad_pkey_index);
+#else
+int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+		       struct ib_wc *in_wc, struct ib_grh *in_grh,
+		       struct ib_mad *in_mad, struct ib_mad *out_mad);
+#endif
 
 /* Device specific */
 int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe);

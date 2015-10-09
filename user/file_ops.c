@@ -55,6 +55,7 @@
 #include <linux/module.h>
 #include <linux/pagemap.h>
 #include <linux/sched.h>
+#include <linux/vmalloc.h>
 #include <linux/version.h>
 #include "device.h"
 #include "opa_user.h"
@@ -70,8 +71,6 @@ MODULE_PARM_DESC(psb_rw, "PSB mmaps allow RW");
 static int hfi_open(struct inode *, struct file *);
 static int hfi_close(struct inode *, struct file *);
 static ssize_t hfi_write(struct file *, const char __user *, size_t, loff_t *);
-static ssize_t hfi_aio_write(struct kiocb *, const struct iovec *,
-			     unsigned long, loff_t);
 static int hfi_mmap(struct file *, struct vm_area_struct *);
 static u64 kvirt_to_phys(void *, int*);
 static int vma_fault(struct vm_area_struct *, struct vm_fault *);
@@ -79,7 +78,6 @@ static int vma_fault(struct vm_area_struct *, struct vm_fault *);
 static const struct file_operations hfi_file_ops = {
 	.owner = THIS_MODULE,
 	.write = hfi_write,
-	.aio_write = hfi_aio_write,
 	.open = hfi_open,
 	.release = hfi_close,
 	.mmap = hfi_mmap,
@@ -485,12 +483,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 
 err_cmd:
 	return ret;
-}
-
-static ssize_t hfi_aio_write(struct kiocb *kiocb, const struct iovec *iovec,
-		     unsigned long dim, loff_t offset)
-{
-	return -ENOSYS;
 }
 
 static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)

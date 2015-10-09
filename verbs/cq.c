@@ -231,15 +231,25 @@ static void send_complete(struct kthread_work *work)
  * Return: a pointer to the completion queue on success, otherwise
  * returns an errno.
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev,
+			       const struct ib_cq_init_attr *attr,
+			       struct ib_ucontext *context,
+			       struct ib_udata *udata)
+#else
 struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev, int entries,
 			       int comp_vector, struct ib_ucontext *context,
 			       struct ib_udata *udata)
+#endif
 {
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
 	struct opa_ib_cq *cq;
 	struct opa_ib_cq_wc *wc;
 	struct ib_cq *ret;
 	u32 sz;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+	unsigned int entries = attr->cqe;
+#endif
 
 	if (entries < 1 || entries > opa_ib_max_cqes) {
 		ret = ERR_PTR(-EINVAL);

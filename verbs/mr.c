@@ -238,8 +238,14 @@ struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 {
 	struct opa_ib_mr *mr;
 	struct ib_umem *umem;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
 	struct ib_umem_chunk *chunk;
-	int n, m, i;
+	int i;
+#else
+	int entry;
+	struct scatterlist *sg;
+#endif
+	int n, m;
 	struct ib_mr *ret;
 
 	if (length == 0) {
@@ -251,11 +257,13 @@ struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 			   mr_access_flags, 0);
 	if (IS_ERR(umem))
 		return (void *)umem;
-
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
 	n = 0;
 	list_for_each_entry(chunk, &umem->chunk_list, list)
 		n += chunk->nents;
-
+#else
+	n = umem->nmap;
+#endif
 	mr = alloc_mr(n, pd);
 	if (IS_ERR(mr)) {
 		ret = (struct ib_mr *)mr;
@@ -266,7 +274,11 @@ struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 	mr->mr.user_base = start;
 	mr->mr.iova = virt_addr;
 	mr->mr.length = length;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
 	mr->mr.offset = umem->offset;
+#else
+	mr->mr.offset = ib_umem_offset(umem);
+#endif
 	mr->mr.access_flags = mr_access_flags;
 	mr->umem = umem;
 
@@ -274,6 +286,7 @@ struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 		mr->mr.page_shift = ilog2(umem->page_size);
 	m = 0;
 	n = 0;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
 	list_for_each_entry(chunk, &umem->chunk_list, list) {
 		for (i = 0; i < chunk->nents; i++) {
 			void *vaddr;
@@ -292,6 +305,24 @@ struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 			}
 		}
 	}
+#else
+	for_each_sg(umem->sg_head.sgl, sg, umem->nmap, entry) {
+		void *vaddr;
+
+		vaddr = page_address(sg_page(sg));
+		if (!vaddr) {
+			ret = ERR_PTR(-EINVAL);
+			goto bail;
+		}
+		mr->mr.map[m]->segs[n].vaddr = vaddr;
+		mr->mr.map[m]->segs[n].length = umem->page_size;
+		n++;
+		if (n == HFI2_SEGSZ) {
+			m++;
+			n = 0;
+		}
+	}
+#endif
 	ret = &mr->ibmr;
 
 bail:

@@ -55,6 +55,8 @@
 
 #include <linux/pci.h>
 #include <linux/slab.h>
+#include <linux/version.h>
+#include <rdma/ib_smi.h>
 #include <rdma/hfi_cmd.h>
 #include <rdma/opa_core.h>
 #include <rdma/fxr/fxr_linkmux_defs.h>
@@ -353,6 +355,7 @@ struct hfi_ptcdata {
 	u32 max_e2e_dlid;
 };
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
 /*
  * FXRTODO: VL ARB is absent for FXR. Remove these
  * once we have STL2 specific opafm
@@ -361,6 +364,7 @@ struct ib_vl_weight_elem {
 	u8      vl;     /* Only low 4 bits, upper 4 bits reserved */
 	u8      weight;
 };
+#endif
 
 /*
  * hfi_pportdata - HFI port specific information
