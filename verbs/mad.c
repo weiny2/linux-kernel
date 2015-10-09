@@ -92,8 +92,11 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
 		return reply(ibh);
 	}
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+	ni->base_version = OPA_MGMT_BASE_VERSION;
+#else
 	ni->base_version = JUMBO_MGMT_BASE_VERSION;
+#endif
 	ni->class_version = OPA_SMI_CLASS_VERSION;
 	ni->node_type = 1;     /* channel adapter */
 	ni->num_ports = ibd->num_pports;
@@ -201,7 +204,7 @@ static int check_mkey(struct opa_ib_portdata *ibp, struct ib_mad_hdr *mad,
 }
 
 static int process_subn(struct ib_device *ibdev, int mad_flags,
-			u8 port, struct ib_mad *in_mad,
+			u8 port, const struct ib_mad *in_mad,
 			struct ib_mad *out_mad)
 {
 	struct ib_smp *smp = (struct ib_smp *)out_mad;
@@ -290,7 +293,11 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 		return reply(ibh);
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+	ni->base_version = OPA_MGMT_BASE_VERSION;
+#else
 	ni->base_version = JUMBO_MGMT_BASE_VERSION;
+#endif
 	ni->class_version = OPA_SMI_CLASS_VERSION;
 	ni->node_type = 1;     /* channel adapter */
 	ni->num_ports = ibd->num_pports;
@@ -1097,8 +1104,13 @@ static int subn_opa_aggregate(struct opa_smp *smp,
 }
 
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
-			    u8 port, struct jumbo_mad *in_mad,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+			    u8 port, const struct opa_mad *in_mad,
+			    struct opa_mad *out_mad,
+#else
+			    u8 port, const struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad,
+#endif
 			    u32 *resp_len)
 {
 	struct opa_smp *smp = (struct opa_smp *)out_mad;
@@ -1184,6 +1196,104 @@ bail:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+static int process_opa_mad(struct ib_device *ibdev, int mad_flags,
+			   u8 port, const struct ib_wc *in_wc,
+			   const struct ib_grh *in_grh,
+			   const struct opa_mad *in_mad,
+			   struct opa_mad *out_mad, size_t *out_mad_size,
+			   u16 *out_mad_pkey_index)
+{
+	int ret = IB_MAD_RESULT_FAILURE;
+	u32 resp_len = 0;
+	int pkey_idx;
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+
+	pkey_idx = opa_ib_lookup_pkey_idx(ibp, OPA_LIM_MGMT_PKEY);
+	if (pkey_idx < 0) {
+		pr_warn("failed to find limited mgmt pkey, defaulting 0x%x\n",
+			opa_ib_get_pkey(ibp, 1));
+		pkey_idx = 1;
+	}
+	*out_mad_pkey_index = (u16)pkey_idx;
+
+	switch (in_mad->mad_hdr.mgmt_class) {
+	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
+	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
+		ret = process_subn_stl(ibdev, mad_flags, port, in_mad,
+				       out_mad, &resp_len);
+		goto bail;
+	case IB_MGMT_CLASS_PERF_MGMT:
+		/* FXRTODO: Implement process_perf_stl */
+#if 0
+		ret = process_perf_stl(ibdev, port, in_mad, out_mad,
+				       &resp_len);
+#endif
+		goto bail;
+
+	default:
+		ret = IB_MAD_RESULT_SUCCESS;
+	}
+
+bail:
+	if (ret & IB_MAD_RESULT_REPLY)
+		*out_mad_size = round_up(resp_len, 8);
+	else if (ret & IB_MAD_RESULT_SUCCESS)
+		*out_mad_size = in_wc->byte_len - sizeof(struct ib_grh);
+
+	return ret;
+}
+
+static int process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+			  const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+			  const struct ib_mad *in_mad, struct ib_mad *out_mad)
+{
+	int ret;
+
+	switch (in_mad->mad_hdr.mgmt_class) {
+	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
+	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
+		ret = process_subn(ibdev, mad_flags,
+				   port, in_mad, out_mad);
+		goto bail;
+	default:
+		ret = IB_MAD_RESULT_SUCCESS;
+	}
+
+bail:
+	return ret;
+}
+
+int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+		       const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+		       const struct ib_mad_hdr *in_mad, size_t in_mad_size,
+		       struct ib_mad_hdr *out_mad, size_t *out_mad_size,
+		       u16 *out_mad_pkey_index)
+{
+	switch (in_mad->base_version) {
+	case OPA_MGMT_BASE_VERSION:
+		if (unlikely(in_mad_size != sizeof(struct opa_mad))) {
+			dev_err(ibdev->dma_device, "invalid in_mad_size\n");
+			return IB_MAD_RESULT_FAILURE;
+		}
+		return process_opa_mad(ibdev, mad_flags, port,
+				       in_wc, in_grh,
+				       (struct opa_mad *)in_mad,
+				       (struct opa_mad *)out_mad,
+				       out_mad_size,
+				       out_mad_pkey_index);
+	case IB_MGMT_BASE_VERSION:
+		return process_ib_mad(ibdev, mad_flags, port,
+				      in_wc, in_grh,
+				      (const struct ib_mad *)in_mad,
+				      (struct ib_mad *)out_mad);
+	default:
+		break;
+	}
+
+	return IB_MAD_RESULT_FAILURE;
+}
+#else
 static int process_stl_mad(struct ib_device *ibdev, int mad_flags,
 			       u8 port, struct ib_wc *in_wc,
 			       struct ib_grh *in_grh,
@@ -1273,3 +1383,4 @@ int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 
 	return IB_MAD_RESULT_FAILURE;
 }
+#endif

@@ -52,6 +52,7 @@
 
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/version.h>
 #include <linux/idr.h>
 #include <rdma/opa_core.h>
 
@@ -135,7 +136,12 @@ add_fail:
 	return ret;
 }
 
-static int opa_remove_dev(struct device *dev, struct subsys_interface *si)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
+static int
+#else
+static void
+#endif
+opa_remove_dev(struct device *dev, struct subsys_interface *si)
 {
 	struct opa_core_client *client =
 		container_of(si, struct opa_core_client, si);
@@ -143,7 +149,9 @@ static int opa_remove_dev(struct device *dev, struct subsys_interface *si)
 
 	idr_remove(&opa_core_client_idr, client->id_num);
 	client->remove(odev);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
 	return 0;
+#endif
 }
 
 static int opa_core_uevent(struct device *d, struct kobj_uevent_env *env)

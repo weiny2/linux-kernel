@@ -56,6 +56,8 @@
 #include <linux/module.h>
 #include <linux/utsname.h>
 #include <linux/pci.h>
+#include <linux/version.h>
+#include <linux/delay.h>
 #include "mad.h"
 #include "verbs.h"
 #include <rdma/opa_core_ib.h>
@@ -124,7 +126,11 @@ const int ib_qp_state_ops[IB_QPS_ERR + 1] = {
 };
 
 static int opa_ib_query_device(struct ib_device *ibdev,
-			       struct ib_device_attr *props)
+			       struct ib_device_attr *props
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+			       ,struct ib_udata *uhw
+#endif
+			       )
 {
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
 	struct opa_ib_portdata *ibp1 = to_opa_ibportdata(ibdev, 1);
@@ -136,8 +142,11 @@ static int opa_ib_query_device(struct ib_device *ibdev,
 	props->device_cap_flags = IB_DEVICE_BAD_PKEY_CNTR |
 		IB_DEVICE_BAD_QKEY_CNTR | IB_DEVICE_SHUTDOWN_PORT |
 		IB_DEVICE_SYS_IMAGE_GUID | IB_DEVICE_RC_RNR_NAK_GEN |
-		IB_DEVICE_PORT_ACTIVE_EVENT | IB_DEVICE_SRQ_RESIZE |
-		IB_DEVICE_JUMBO_MAD_SUPPORT;
+		IB_DEVICE_PORT_ACTIVE_EVENT | IB_DEVICE_SRQ_RESIZE
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+		| IB_DEVICE_JUMBO_MAD_SUPPORT
+#endif
+		;
 
 	props->page_size_cap = PAGE_SIZE;
 #if 0
@@ -255,6 +264,28 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 
 	return 0;
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+static int port_immutable(struct ib_device *ibdev, u8 port_num,
+			  struct ib_port_immutable *immutable)
+{
+	struct ib_port_attr attr;
+	int err;
+
+	err = opa_ib_query_port(ibdev, port_num, &attr);
+	if (err)
+		return err;
+
+	memset(immutable, 0, sizeof(*immutable));
+
+	immutable->pkey_tbl_len = attr.pkey_tbl_len;
+	immutable->gid_tbl_len = attr.gid_tbl_len;
+	immutable->core_cap_flags = RDMA_CORE_PORT_INTEL_OPA;
+	immutable->max_mad_size = OPA_MGMT_MAD_SIZE;
+
+	return 0;
+}
+#endif
 
 static int opa_ib_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 			  u16 *pkey)
@@ -445,6 +476,9 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 #endif
 	ibdev->mmap = opa_ib_mmap;
 	ibdev->dma_ops = &opa_ib_dma_mapping_ops;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+	ibdev->get_port_immutable = port_immutable;
+#endif
 
 	ret = ib_register_device(ibdev, NULL); //opa_ib_create_port_files);
 	if (ret)
@@ -560,7 +594,8 @@ static int opa_ib_add(struct opa_core_device *odev)
 
 	ops->get_device_desc(odev, &desc);
 	num_ports = desc.num_pports;
-	ibd = kzalloc(sizeof(*ibd) + sizeof(*ibp) * num_ports, GFP_KERNEL);
+	ibd = (struct opa_ib_data *)ib_alloc_device(sizeof(*ibd) +
+						    sizeof(*ibp) * num_ports);
 	if (!ibd) {
 		ret = -ENOMEM;
 		goto exit;
@@ -640,7 +675,7 @@ port_err:
 ctx_err:
 	opa_ib_cq_exit(ibd);
 cq_init_err:
-	kfree(ibd);
+	ib_dealloc_device(&ibd->ibdev);
 exit:
 	dev_err(&odev->dev, "%s error rc %d\n", __func__, ret);
 	return ret;
@@ -665,7 +700,7 @@ static void opa_ib_remove(struct opa_core_device *odev)
 	idr_destroy(&ibd->qp_ptr);
 	ida_destroy(&ibd->qpn_even_table);
 	ida_destroy(&ibd->qpn_odd_table);
-	kfree(ibd);
+	ib_dealloc_device(&ibd->ibdev);
 	opa_core_clear_priv_data(&opa_ib_driver, odev);
 }
 

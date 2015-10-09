@@ -59,6 +59,7 @@
 
 #define MKEY_SHIFT		6
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
 struct ib_node_info {
 	u8 base_version;
 	u8 class_version;
@@ -137,6 +138,7 @@ struct ib_mad_notice_attr {
 
 	} details;
 };
+#endif
 
 struct opa_aggregate {
 	__be16 attr_id;

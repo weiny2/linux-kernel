@@ -337,7 +337,11 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	new_state = attr_mask & IB_QP_STATE ? attr->qp_state : cur_state;
 
 	if (!ib_modify_qp_is_ok(cur_state, new_state, ibqp->qp_type,
-				attr_mask))
+				attr_mask
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+				, IB_LINK_LAYER_UNSPECIFIED
+#endif
+				))
 		goto inval;
 
 	if (attr_mask & IB_QP_AV) {
