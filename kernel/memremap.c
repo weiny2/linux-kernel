@@ -13,6 +13,7 @@
 #include <linux/rculist.h>
 #include <linux/device.h>
 #include <linux/types.h>
+#include <linux/fs.h>
 #include <linux/io.h>
 #include <linux/mm.h>
 #include <linux/memory_hotplug.h>
@@ -187,9 +188,38 @@ static unsigned long pfn_end(struct dev_pagemap *pgmap)
 
 static void devm_memremap_pages_release(struct device *dev, void *data)
 {
+	unsigned long pfn;
 	struct page_map *page_map = data;
 	struct resource *res = &page_map->res;
+	struct address_space *mapping_prev = NULL;
 	struct dev_pagemap *pgmap = &page_map->pgmap;
+
+	if (percpu_ref_tryget_live(pgmap->ref)) {
+		dev_WARN(dev, "%s: page mapping is still live!\n", __func__);
+		percpu_ref_put(pgmap->ref);
+	}
+
+	/* flush in-flight dax_map_atomic() operations */
+	synchronize_rcu();
+
+	for_each_device_pfn(pfn, pgmap) {
+		struct page *page = pfn_to_page(pfn);
+		struct address_space *mapping = page->mapping;
+		struct inode *inode = mapping ? mapping->host : NULL;
+
+		dev_WARN_ONCE(dev, atomic_read(&page->_count) < 1,
+				"%s: ZONE_DEVICE page was freed!\n", __func__);
+
+		if (!mapping || !inode || mapping == mapping_prev) {
+			dev_WARN_ONCE(dev, atomic_read(&page->_count) > 1,
+					"%s: unexpected elevated page count pfn: %lx\n",
+					__func__, pfn);
+			continue;
+		}
+
+		truncate_pagecache(inode, 0);
+		mapping_prev = mapping;
+	}
 
 	/* pages are dead and unused, undo the arch mapping */
 	arch_remove_memory(res->start, resource_size(res));
@@ -286,6 +316,24 @@ void *devm_memremap_pages(struct device *dev, struct resource *res,
 	return __va(res->start);
 }
 EXPORT_SYMBOL(devm_memremap_pages);
+
+static int page_map_match(struct device *dev, void *res, void *match_data)
+{
+	struct page_map *page_map = res;
+	resource_size_t phys = *(resource_size_t *) match_data;
+
+	return page_map->res.start == phys;
+}
+
+void devm_memunmap_pages(struct device *dev, void *addr)
+{
+	resource_size_t start = __pa(addr);
+
+	if (devres_release(dev, devm_memremap_pages_release, page_map_match,
+				&start) != 0)
+		dev_WARN(dev, "failed to find page map to release\n");
+}
+EXPORT_SYMBOL(devm_memunmap_pages);
 
 /*
  * Uncoditionally retrieve a dev_pagemap associated with the given physical

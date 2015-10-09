@@ -46,6 +46,7 @@ static void __pmem *__dax_map_atomic(struct block_device *bdev, sector_t sector,
 		blk_queue_exit(q);
 		return (void __pmem *) ERR_PTR(rc);
 	}
+	rcu_read_lock();
 	return addr;
 }
 
@@ -62,6 +63,7 @@ static void dax_unmap_atomic(struct block_device *bdev, void __pmem *addr)
 	if (IS_ERR(addr))
 		return;
 	blk_queue_exit(bdev->bd_queue);
+	rcu_read_unlock();
 }
 
 /*

@@ -801,6 +801,7 @@ struct dev_pagemap {
 
 #ifdef CONFIG_ZONE_DEVICE
 struct dev_pagemap *__get_dev_pagemap(resource_size_t phys);
+void devm_memunmap_pages(struct device *dev, void *addr);
 void *devm_memremap_pages(struct device *dev, struct resource *res,
 		struct percpu_ref *ref, struct vmem_altmap *altmap);
 struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start);
@@ -808,6 +809,10 @@ struct vmem_altmap *to_vmem_altmap(unsigned long memmap_start);
 static inline struct dev_pagemap *__get_dev_pagemap(resource_size_t phys)
 {
 	return NULL;
+}
+
+static inline void devm_memunmap_pages(struct device *dev, void *addr)
+{
 }
 
 static inline void *devm_memremap_pages(struct device *dev, struct resource *res,
