@@ -1,3 +1,0 @@
-DEBUG_FS	Makefile, debugfs.c, debugfs.h, hfi.h, verbs.h
-NEED_SG_DMA_LENGTH	dma.c
-X86_64	Kconfig
