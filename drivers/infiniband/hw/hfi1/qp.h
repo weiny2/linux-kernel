@@ -54,7 +54,7 @@
 #include "verbs.h"
 #include "sdma.h"
 
-#define QPN_MAX                 (1 << 24)
+#define QPN_MAX                 BIT(24)
 #define QPNMAP_ENTRIES          (QPN_MAX / PAGE_SIZE / BITS_PER_BYTE)
 
 /*
@@ -81,6 +81,7 @@ struct hfi1_qp_ibdev {
 	u32 qp_table_size;
 	u32 qp_table_bits;
 	struct hfi1_qp __rcu **qp_table;
+	/* protect qpn table */
 	spinlock_t qpt_lock;
 	struct hfi1_qpn_table qpn_table;
 };
@@ -99,7 +100,7 @@ static inline u32 qpn_hash(struct hfi1_qp_ibdev *dev, u32 qpn)
  * the returned qp is no longer in use.
  */
 static inline struct hfi1_qp *hfi1_lookup_qpn(struct hfi1_ibport *ibp,
-				u32 qpn) __must_hold(RCU)
+					      u32 qpn) __must_hold(RCU)
 {
 	struct hfi1_qp *qp = NULL;
 
@@ -263,7 +264,7 @@ static inline void _hfi1_schedule_send(struct hfi1_qp *qp)
 	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 
 	iowait_schedule(&qp->s_iowait, ppd->hfi1_wq,
-		qp->s_sde ?
+			qp->s_sde ?
 			qp->s_sde->cpu :
 			cpumask_first(cpumask_of_node(dd->node)));
 }
@@ -298,11 +299,11 @@ static inline u32 qp_get_savail(struct hfi1_qp *qp)
 
 	smp_read_barrier_depends(); /* see rc.c */
 	slast = ACCESS_ONCE(qp->s_last);
-	ret =
-		qp->s_size -
-		((((s32)qp->s_head - (s32)slast) << 1) >> 1)
-		- 1;
-	return ret;
+	if (qp->s_head >= slast)
+		ret = qp->s_size - (qp->s_head - slast);
+	else
+		ret = slast - qp->s_head;
+	return ret - 1;
 }
 
 /**
@@ -410,5 +411,16 @@ static inline void del_timers_sync(struct hfi1_qp *qp)
 	del_timer_sync(&qp->s_timer);
 	del_timer_sync(&qp->s_rnr_timer);
 }
+
+/**
+ * hfi1_error_port_qps - put a port's RC/UC qps into error state
+ * @ibp: the ibport.
+ * @sl: the service level.
+ *
+ * This function places all RC/UC qps with a given service level into error
+ * state. It is generally called to force upper lay apps to abandon stale qps
+ * after an sl->sc mapping change.
+ */
+void hfi1_error_port_qps(struct hfi1_ibport *ibp, u8 sl);
 
 #endif /* _QP_H */

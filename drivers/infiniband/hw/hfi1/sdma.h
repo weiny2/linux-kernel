@@ -59,13 +59,10 @@
 #include "hfi.h"
 #include "verbs.h"
 
-/* increased for AHG */
-#define NUM_DESC 6
 /* Hardware limit */
 #define MAX_DESC 64
 /* Hardware limit for SDMA packet size */
 #define MAX_SDMA_PKT_SIZE ((16 * 1024) - 1)
-
 
 #define SDMA_TXREQ_S_OK        0
 #define SDMA_TXREQ_S_SENDERROR 1
@@ -109,53 +106,53 @@
 /*
  * Bits defined in the send DMA descriptor.
  */
-#define SDMA_DESC0_FIRST_DESC_FLAG      (1ULL<<63)
-#define SDMA_DESC0_LAST_DESC_FLAG       (1ULL<<62)
+#define SDMA_DESC0_FIRST_DESC_FLAG      (1ULL << 63)
+#define SDMA_DESC0_LAST_DESC_FLAG       (1ULL << 62)
 #define SDMA_DESC0_BYTE_COUNT_SHIFT     48
 #define SDMA_DESC0_BYTE_COUNT_WIDTH     14
 #define SDMA_DESC0_BYTE_COUNT_MASK \
-	((1ULL<<SDMA_DESC0_BYTE_COUNT_WIDTH)-1ULL)
+	((1ULL << SDMA_DESC0_BYTE_COUNT_WIDTH) - 1ULL)
 #define SDMA_DESC0_BYTE_COUNT_SMASK \
-	(SDMA_DESC0_BYTE_COUNT_MASK<<SDMA_DESC0_BYTE_COUNT_SHIFT)
+	(SDMA_DESC0_BYTE_COUNT_MASK << SDMA_DESC0_BYTE_COUNT_SHIFT)
 #define SDMA_DESC0_PHY_ADDR_SHIFT       0
 #define SDMA_DESC0_PHY_ADDR_WIDTH       48
 #define SDMA_DESC0_PHY_ADDR_MASK \
-	((1ULL<<SDMA_DESC0_PHY_ADDR_WIDTH)-1ULL)
+	((1ULL << SDMA_DESC0_PHY_ADDR_WIDTH) - 1ULL)
 #define SDMA_DESC0_PHY_ADDR_SMASK \
-	(SDMA_DESC0_PHY_ADDR_MASK<<SDMA_DESC0_PHY_ADDR_SHIFT)
+	(SDMA_DESC0_PHY_ADDR_MASK << SDMA_DESC0_PHY_ADDR_SHIFT)
 
 #define SDMA_DESC1_HEADER_UPDATE1_SHIFT 32
 #define SDMA_DESC1_HEADER_UPDATE1_WIDTH 32
 #define SDMA_DESC1_HEADER_UPDATE1_MASK \
-	((1ULL<<SDMA_DESC1_HEADER_UPDATE1_WIDTH)-1ULL)
+	((1ULL << SDMA_DESC1_HEADER_UPDATE1_WIDTH) - 1ULL)
 #define SDMA_DESC1_HEADER_UPDATE1_SMASK \
-	(SDMA_DESC1_HEADER_UPDATE1_MASK<<SDMA_DESC1_HEADER_UPDATE1_SHIFT)
+	(SDMA_DESC1_HEADER_UPDATE1_MASK << SDMA_DESC1_HEADER_UPDATE1_SHIFT)
 #define SDMA_DESC1_HEADER_MODE_SHIFT    13
 #define SDMA_DESC1_HEADER_MODE_WIDTH    3
 #define SDMA_DESC1_HEADER_MODE_MASK \
-	((1ULL<<SDMA_DESC1_HEADER_MODE_WIDTH)-1ULL)
+	((1ULL << SDMA_DESC1_HEADER_MODE_WIDTH) - 1ULL)
 #define SDMA_DESC1_HEADER_MODE_SMASK \
-	(SDMA_DESC1_HEADER_MODE_MASK<<SDMA_DESC1_HEADER_MODE_SHIFT)
+	(SDMA_DESC1_HEADER_MODE_MASK << SDMA_DESC1_HEADER_MODE_SHIFT)
 #define SDMA_DESC1_HEADER_INDEX_SHIFT   8
 #define SDMA_DESC1_HEADER_INDEX_WIDTH   5
 #define SDMA_DESC1_HEADER_INDEX_MASK \
-	((1ULL<<SDMA_DESC1_HEADER_INDEX_WIDTH)-1ULL)
+	((1ULL << SDMA_DESC1_HEADER_INDEX_WIDTH) - 1ULL)
 #define SDMA_DESC1_HEADER_INDEX_SMASK \
-	(SDMA_DESC1_HEADER_INDEX_MASK<<SDMA_DESC1_HEADER_INDEX_SHIFT)
+	(SDMA_DESC1_HEADER_INDEX_MASK << SDMA_DESC1_HEADER_INDEX_SHIFT)
 #define SDMA_DESC1_HEADER_DWS_SHIFT     4
 #define SDMA_DESC1_HEADER_DWS_WIDTH     4
 #define SDMA_DESC1_HEADER_DWS_MASK \
-	((1ULL<<SDMA_DESC1_HEADER_DWS_WIDTH)-1ULL)
+	((1ULL << SDMA_DESC1_HEADER_DWS_WIDTH) - 1ULL)
 #define SDMA_DESC1_HEADER_DWS_SMASK \
-	(SDMA_DESC1_HEADER_DWS_MASK<<SDMA_DESC1_HEADER_DWS_SHIFT)
+	(SDMA_DESC1_HEADER_DWS_MASK << SDMA_DESC1_HEADER_DWS_SHIFT)
 #define SDMA_DESC1_GENERATION_SHIFT     2
 #define SDMA_DESC1_GENERATION_WIDTH     2
 #define SDMA_DESC1_GENERATION_MASK \
-	((1ULL<<SDMA_DESC1_GENERATION_WIDTH)-1ULL)
+	((1ULL << SDMA_DESC1_GENERATION_WIDTH) - 1ULL)
 #define SDMA_DESC1_GENERATION_SMASK \
-	(SDMA_DESC1_GENERATION_MASK<<SDMA_DESC1_GENERATION_SHIFT)
-#define SDMA_DESC1_INT_REQ_FLAG         (1ULL<<1)
-#define SDMA_DESC1_HEAD_TO_HOST_FLAG    (1ULL<<0)
+	(SDMA_DESC1_GENERATION_MASK << SDMA_DESC1_GENERATION_SHIFT)
+#define SDMA_DESC1_INT_REQ_FLAG         (1ULL << 1)
+#define SDMA_DESC1_HEAD_TO_HOST_FLAG    (1ULL << 0)
 
 enum sdma_states {
 	sdma_state_s00_hw_down,
@@ -311,83 +308,6 @@ struct hw_sdma_desc {
 	__le64 qw[2];
 };
 
-/*
- * struct sdma_desc - canonical fragment descriptor
- *
- * This is the descriptor carried in the tx request
- * corresponding to each fragment.
- *
- */
-struct sdma_desc {
-	/* private:  don't use directly */
-	u64 qw[2];
-};
-
-struct sdma_txreq;
-typedef void (*callback_t)(struct sdma_txreq *, int, int);
-
-/**
- * struct sdma_txreq - the sdma_txreq structure (one per packet)
- * @list: for use by user and by queuing for wait
- *
- * This is the representation of a packet which consists of some
- * number of fragments.   Storage is provided to within the structure.
- * for all fragments.
- *
- * The storage for the descriptors are automatically extended as needed
- * when the currently allocation is exceeded.
- *
- * The user (Verbs or PSM) may overload this structure with fields
- * specific to their use by putting this struct first in their struct.
- * The method of allocation of the overloaded structure is user dependent
- *
- * The list is the only public field in the structure.
- *
- */
-
-struct sdma_txreq {
-	struct list_head list;
-	/* private: */
-	struct sdma_desc *descp;
-	/* private: */
-	void *coalesce_buf;
-	/* private: */
-	u16 coalesce_idx;
-	/* private: */
-	struct iowait *wait;
-	/* private: */
-	callback_t                  complete;
-#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
-	u64 sn;
-#endif
-	/* private: - used in coalesce/pad processing */
-	u16                         packet_len;
-	/* private: - down-counted to trigger last */
-	u16                         tlen;
-	/* private: flags */
-	u16                         flags;
-	/* private: */
-	u16                         num_desc;
-	/* private: */
-	u16                         desc_limit;
-	/* private: */
-	u16                         next_descq_idx;
-	/* private: */
-	struct sdma_desc descs[NUM_DESC];
-};
-
-struct verbs_txreq {
-	struct hfi1_pio_header	phdr;
-	struct sdma_txreq       txreq;
-	struct hfi1_qp           *qp;
-	struct hfi1_swqe         *wqe;
-	struct hfi1_mregion	*mr;
-	struct hfi1_sge_state    *ss;
-	struct sdma_engine     *sde;
-	u16                     hdr_dwords;
-	u16                     hdr_inx;
-};
-
 /**
  * struct sdma_engine - Data pertaining to each SDMA engine.
  * @dd: a back-pointer to the device data
@@ -490,11 +410,11 @@ struct sdma_engine {
 	u32                   progress_check_head;
 	/* private: */
 	struct work_struct flush_worker;
+	/* protect flush list */
 	spinlock_t flushlist_lock;
 	/* private: */
 	struct list_head flushlist;
 };
-
 
 int sdma_init(struct hfi1_devdata *dd, u8 port);
 void sdma_start(struct hfi1_devdata *dd);
@@ -541,7 +461,6 @@ static inline int __sdma_running(struct sdma_engine *engine)
 	return engine->state.current_state == sdma_state_s99_running;
 }
 
-
 /**
  * sdma_running() - state suitability test
  * @engine: sdma engine
@@ -570,7 +489,6 @@ void _sdma_txreq_ahgadd(
 	u8 ahg_entry,
 	u32 *ahg,
 	u8 ahg_hlen);
-
 
 /**
  * sdma_txinit_ahg() - initialize an sdma_txreq struct with AHG
@@ -646,7 +564,8 @@ static inline int sdma_txinit_ahg(
 	tx->complete = cb;
 	tx->coalesce_buf = NULL;
 	tx->wait = NULL;
-	tx->tlen = tx->packet_len = tlen;
+	tx->tlen = tlen;
+	tx->packet_len = tlen;
 	tx->descs[0].qw[0] = SDMA_DESC0_FIRST_DESC_FLAG;
 	tx->descs[0].qw[1] = 0;
 	if (flags & SDMA_TXREQ_F_AHG_COPY)
@@ -759,7 +678,7 @@ static inline void _sdma_close_tx(struct hfi1_devdata *dd,
 		dd->default_desc1;
 	if (tx->flags & SDMA_TXREQ_F_URGENT)
 		tx->descp[tx->num_desc].qw[1] |=
-			(SDMA_DESC1_HEAD_TO_HOST_FLAG|
+			(SDMA_DESC1_HEAD_TO_HOST_FLAG |
 			 SDMA_DESC1_INT_REQ_FLAG);
 }
 

@@ -59,9 +59,9 @@
 #include <linux/workqueue.h>
 #include <linux/kthread.h>
 #include <linux/completion.h>
+#include <linux/slab.h>
 #include <rdma/ib_pack.h>
 #include <rdma/ib_user_verbs.h>
-
 
 struct hfi1_ctxtdata;
 struct hfi1_pportdata;
@@ -206,13 +206,6 @@ struct hfi1_pio_header {
 	__le64 pbc;
 	struct hfi1_ib_header hdr;
 } __packed;
-
-/*
- * used for force cacheline alignment for AHG
- */
-struct tx_pio_header {
-	struct hfi1_pio_header phdr;
-} ____cacheline_aligned;
 
 /*
  * There is one struct hfi1_mcast for each multicast GID.
@@ -421,6 +414,74 @@ struct hfi1_ack_entry {
 	};
 };
 
+/* increased for AHG */
+#define NUM_DESC 6
+
+/*
+ * struct sdma_desc - canonical fragment descriptor
+ *
+ * This is the descriptor carried in the tx request
+ * corresponding to each fragment.
+ *
+ */
+struct sdma_desc {
+	/* private:  don't use directly */
+	u64 qw[2];
+};
+
+/**
+ * struct sdma_txreq - the sdma_txreq structure (one per packet)
+ * @list: for use by user and by queuing for wait
+ *
+ * This is the representation of a packet which consists of some
+ * number of fragments.   Storage is provided to within the structure.
+ * for all fragments.
+ *
+ * The storage for the descriptors are automatically extended as needed
+ * when the currently allocation is exceeded.
+ *
+ * The user (Verbs or PSM) may overload this structure with fields
+ * specific to their use by putting this struct first in their struct.
+ * The method of allocation of the overloaded structure is user dependent
+ *
+ * The list is the only public field in the structure.
+ *
+ */
+
+struct sdma_txreq;
+typedef void (*callback_t)(struct sdma_txreq *, int, int);
+
+struct sdma_txreq {
+	struct list_head list;
+	/* private: */
+	struct sdma_desc *descp;
+	/* private: */
+	void *coalesce_buf;
+	/* private: */
+	u16 coalesce_idx;
+	/* private: */
+	struct iowait *wait;
+	/* private: */
+	callback_t                  complete;
+#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
+	u64 sn;
+#endif
+	/* private: - used in coalesce/pad processing */
+	u16                         packet_len;
+	/* private: - down-counted to trigger last */
+	u16                         tlen;
+	/* private: flags */
+	u16                         flags;
+	/* private: */
+	u16                         num_desc;
+	/* private: */
+	u16                         desc_limit;
+	/* private: */
+	u16                         next_descq_idx;
+	/* private: */
+	struct sdma_desc descs[NUM_DESC];
+};
+
 /*
  * Variables prefixed with s_ are for the requester (sender).
  * Variables prefixed with r_ are for the responder (receiver).
@@ -439,6 +500,7 @@ struct hfi1_qp {
 	struct hfi1_mmap_info *ip;
 	struct ahg_ib_header *s_hdr;     /* next packet header to send */
 	struct sdma_engine *s_sde; /* current sde */
+	struct send_context *s_sendcontext; /* current send context */
 	/* sc for UC/RC QPs - based on ah for UD */
 	u8 s_sc;
 	unsigned long timeout_jiffies;  /* computed from timeout */
@@ -474,7 +536,6 @@ struct hfi1_qp {
 	/* start of read/write fields */
 	atomic_t refcount ____cacheline_aligned_in_smp;
 	wait_queue_head_t wait;
-
 
 	struct hfi1_ack_entry s_ack_queue[HFI1_MAX_RDMA_ATOMIC + 1]
 		____cacheline_aligned_in_smp;
@@ -556,6 +617,7 @@ struct hfi1_pkt_state {
 	struct hfi1_ibdev *dev;
 	struct hfi1_ibport *ibp;
 	struct hfi1_pportdata *ppd;
+	struct verbs_txreq *s_txreq;
 };
 
 /*
@@ -637,7 +699,6 @@ struct hfi1_pkt_state {
 #define HFI1_S_ANY_WAIT (HFI1_S_ANY_WAIT_IO | HFI1_S_ANY_WAIT_SEND)
 
 #define HFI1_PSN_CREDIT  16
-
 /*
  * Since struct hfi1_swqe is not a fixed size, we can't simply index into
  * struct hfi1_qp.s_wq.  This function does the array index computation.
@@ -658,7 +719,7 @@ static inline struct hfi1_swqe *get_swqe_ptr(struct hfi1_qp *qp,
 static inline struct hfi1_rwqe *get_rwqe_ptr(struct hfi1_rq *rq, unsigned n)
 {
 	return (struct hfi1_rwqe *)
-		((char *) rq->wq->wq +
+		((char *)rq->wq->wq +
 		 (sizeof(struct hfi1_rwqe) +
 		  rq->max_sge * sizeof(struct ib_sge)) * n);
 }
@@ -748,7 +809,6 @@ struct hfi1_ibport {
 	u8 sl_to_sc[32];
 	u8 sc_to_sl[32];
 };
-
 
 struct hfi1_qp_ibdev;
 struct hfi1_ibdev {
@@ -902,7 +962,7 @@ void hfi1_free_agents(struct hfi1_ibdev *dev);
  */
 static inline int cmp_msn(u32 a, u32 b)
 {
-	return (((int) a) - ((int) b)) << 8;
+	return (((int)a) - ((int)b)) << 8;
 }
 
 /*
@@ -911,7 +971,7 @@ static inline int cmp_msn(u32 a, u32 b)
  */
 static inline int cmp_psn(u32 a, u32 b)
 {
-	return (((int) a) - ((int) b)) << PSN_SHIFT;
+	return (((int)a) - ((int)b)) << PSN_SHIFT;
 }
 
 /*
@@ -1094,7 +1154,8 @@ u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
 		  struct ib_global_route *grh, u32 hwords, u32 nwords);
 
 void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
-			  u32 bth0, u32 bth2, int middle);
+			  u32 bth0, u32 bth2, int middle,
+			  struct hfi1_pkt_state *ps);
 
 void hfi1_do_send(struct work_struct *work);
 
@@ -1103,11 +1164,11 @@ void hfi1_send_complete(struct hfi1_qp *qp, struct hfi1_swqe *wqe,
 
 void hfi1_send_rc_ack(struct hfi1_ctxtdata *, struct hfi1_qp *qp, int is_fecn);
 
-int hfi1_make_rc_req(struct hfi1_qp *qp);
+int hfi1_make_rc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps);
 
-int hfi1_make_uc_req(struct hfi1_qp *qp);
+int hfi1_make_uc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps);
 
-int hfi1_make_ud_req(struct hfi1_qp *qp);
+int hfi1_make_ud_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps);
 
 int hfi1_register_ib_device(struct hfi1_devdata *);
 
@@ -1158,5 +1219,34 @@ extern unsigned int hfi1_max_srq_wrs;
 extern const u32 ib_hfi1_rnr_table[];
 
 extern struct ib_dma_mapping_ops hfi1_dma_mapping_ops;
+
+struct verbs_txreq {
+	struct hfi1_pio_header	phdr;
+	struct sdma_txreq       txreq;
+	struct hfi1_qp           *qp;
+	struct hfi1_swqe         *wqe;
+	struct hfi1_mregion	*mr;
+	struct hfi1_sge_state    *ss;
+	struct sdma_engine     *sde;
+	u16                     hdr_dwords;
+	u16                     hdr_inx;
+};
+
+noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
+						struct hfi1_qp *qp);
+
+static inline struct verbs_txreq *get_txreq(struct hfi1_ibdev *dev,
+					    struct hfi1_qp *qp)
+{
+	struct verbs_txreq *tx;
+
+	tx = kmem_cache_alloc(dev->verbs_txreq_cache, GFP_ATOMIC);
+	if (unlikely(!tx))
+		/* call slow path to get the lock */
+		return __get_txreq(dev, qp);
+	tx->qp = qp;
+
+	return tx;
+}
 
 #endif                          /* HFI1_VERBS_H */
