@@ -712,7 +712,7 @@ int hfi_cteq_wait_single(struct hfi_ctx *ctx, u16 eq_mode, u16 ev_idx,
 			 long timeout);
 int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
 void hfi_ctxt_cleanup(struct hfi_ctx *ctx);
-int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count);
+int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align);
 int hfi_get_hw_limits(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl);
 void hfi_ctxt_unreserve(struct hfi_ctx *ctx);
 int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int token, u16 ctxt, void **addr,

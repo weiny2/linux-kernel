@@ -83,8 +83,8 @@ void hfi_job_init(struct hfi_userdata *ud)
 			ud->ctx.lid_count = job_info->ctx.lid_count;
 			ud->ctx.pid_base = job_info->ctx.pid_base;
 			ud->ctx.pid_count = job_info->ctx.pid_count;
+			ud->ctx.pid_total = job_info->ctx.pid_total;
 			ud->ctx.mode = job_info->ctx.mode;
-			ud->ctx.sl_mask = job_info->ctx.sl_mask;
 			ud->ctx.auth_mask = job_info->ctx.auth_mask;
 			memcpy(ud->ctx.auth_uid, job_info->ctx.auth_uid,
 			       sizeof(ud->ctx.auth_uid));
@@ -101,13 +101,14 @@ void hfi_job_init(struct hfi_userdata *ud)
 	up_read(&hfi_job_sem);
 }
 
-int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info)
+int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info *job_info)
 {
 	job_info->dlid_base = ud->ctx.dlid_base;
 	job_info->lid_offset = ud->ctx.lid_offset;
 	job_info->lid_count = ud->ctx.lid_count;
 	job_info->pid_base = ud->ctx.pid_base;
 	job_info->pid_count = ud->ctx.pid_count;
+	job_info->pid_total = ud->ctx.pid_total;
 	job_info->pid_mode = ud->ctx.mode;
 	job_info->sl_mask = ud->ctx.sl_mask;
 	memcpy(job_info->auth_uid, ud->ctx.auth_uid, sizeof(ud->ctx.auth_uid));
@@ -118,25 +119,30 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 {
 	/* job_id, pid_base, count */
 	int i, ret;
-	u16 pid_base, count;
+	u16 pid_align, pid_base, count;
 	struct opa_core_ops *ops = ud->bus_ops;
 
+	pid_align = job_setup->pid_align;
 	pid_base = job_setup->pid_base;
 	count = job_setup->pid_count;
 	ret = 0;
 
 	BUG_ON(!capable(CAP_SYS_ADMIN));
 
-	ret = ops->ctx_reserve(&ud->ctx, &pid_base, count);
+	ret = ops->ctx_reserve(&ud->ctx, &pid_base, count, pid_align);
 	if (ret)
 		return ret;
 	ud->ctx.pid_base = pid_base;
 	ud->ctx.pid_count = count;
 
-	/* store other resource manager parameters */
+	/*
+	 * Store other resource manager parameters
+	 * These are to assist the application in computing hfi_process_t
+	 * for target endpoints when LIDs and PIDs are virtualized.
+	 */
+	ud->ctx.pid_total = job_setup->pid_total;
 	ud->ctx.lid_offset = job_setup->lid_offset;
 	ud->ctx.lid_count = job_setup->lid_count;
-	ud->ctx.sl_mask = job_setup->sl_mask;
 
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
 		if (job_setup->auth_uid[i]) {

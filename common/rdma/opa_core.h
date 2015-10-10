@@ -93,6 +93,7 @@ struct opa_ib_qp;
  * @sl_mask: Mask of allowed service levels for this context
  * @pid_base: Base of contiguous assigned PIDs on this LID
  * @pid_count: Number of PIDs assigned on this LID
+ * @pid_total: Number of PIDs across all LIDs of the application
  * @cq_pair_num_assigned: Counter of assigned Command Queues
  * @ct_used: IDR table of allocated Event Counters (CTs)
  * @eq_used: IDR table of allocated Events Queues
@@ -138,6 +139,7 @@ struct hfi_ctx {
 	u32	sl_mask;
 	u16	pid_base;
 	u16	pid_count;
+	u64	pid_total;
 	u16	cq_pair_num_assigned;
 	struct idr ct_used;
 	struct idr eq_used;
@@ -371,7 +373,7 @@ struct opa_core_ops {
 	int (*ctx_assign)(struct hfi_ctx *ctx,
 			  struct opa_ctx_assign *ctx_assign);
 	void (*ctx_release)(struct hfi_ctx *ctx);
-	int (*ctx_reserve)(struct hfi_ctx *ctx, u16 *base, u16 count);
+	int (*ctx_reserve)(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align);
 	void (*ctx_unreserve)(struct hfi_ctx *ctx);
 	int (*ctx_addr)(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr,
 			ssize_t *len);
