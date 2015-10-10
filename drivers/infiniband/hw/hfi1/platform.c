@@ -47,7 +47,47 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+
 #include "hfi.h"
+#include "efivar.h"
+
+void get_platform_config(struct hfi1_devdata *dd)
+{
+	int ret = 0;
+	unsigned long size = 0;
+	u8 *temp_platform_config = NULL;
+
+	ret = read_hfi1_efi_var(dd, "configuration", &size,
+				(void **)&temp_platform_config);
+	if (ret) {
+		dd_dev_info(dd, "%s: Failed to get platform config var\n",
+			    __func__);
+		/* fall back to request firmware */
+		platform_config_load = 1;
+		goto bail;
+	}
+
+	dd->platform_config.data = temp_platform_config;
+	dd->platform_config.size = size;
+
+bail:
+	/* exit */;
+}
+
+void free_platform_config(struct hfi1_devdata *dd)
+{
+	if (!platform_config_load) {
+		/*
+		 * was loaded from EFI, release memory
+		 * allocated by read_efi_var
+		 */
+		kfree(dd->platform_config.data);
+	}
+	/*
+	 * else do nothing, dispose_firmware will release
+	 * struct firmware platform_config on driver exit
+	 */
+}
 
 int set_qsfp_tx(struct hfi1_pportdata *ppd, int on)
 {
@@ -240,6 +280,7 @@ static void apply_eq_settings(struct hfi1_pportdata *ppd,
 	u8 tx_eq = 0, rx_eq = 0, *cache = ppd->qsfp_info.cache;
 	int ret = 0;
 
+	/* Disable adaptive TX EQ if present */
 	if (cache[QSFP_EQ_INFO_OFFS] & 0x8) {
 		tx_eq = cache[(128 * 3) + 241];
 		tx_eq &= 0xF0;
@@ -540,6 +581,8 @@ static int apply_tunings(
 			"%s: Applying TX settings to lane 3 failed\n",
 			__func__);
 bail:
+	if (ret == HCMD_SUCCESS)
+		ret = 0;
 	return ret;
 }
 
@@ -700,11 +743,12 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 
 	/* the link defaults to enabled */
 	ppd->link_enabled = 1;
+	/* the driver defaults to not ready for the link to go up */
+	ppd->driver_link_ready = 0;
 	ppd->offline_disabled_reason = HFI1_ODR_MASK(OPA_LINKDOWN_REASON_NONE);
 
 	if (loopback == LOOPBACK_SERDES || loopback == LOOPBACK_LCB ||
-	    ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR ||
-	    !dd->pcfg_cache.cache_valid) {
+	    ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
 		ppd->driver_link_ready = 1;
 		return 0;
 	}
@@ -763,6 +807,12 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 						&rx_preset_index,
 						&tuning_method,
 						&total_atten);
+
+				/*
+				 * We may have modified the QSFP memory, so
+				 * update the cache to reflect the changes
+				 */
+				refresh_qsfp_cache(ppd, &ppd->qsfp_info);
 				if (ret)
 					goto bail;
 			} else {
@@ -778,7 +828,7 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 		break;
 	default:
 		dd_dev_info(ppd->dd, "%s: Unknown port type\n", __func__);
-		break;
+		goto bail;
 	}
 	if (ppd->offline_disabled_reason ==
 			HFI1_ODR_MASK(OPA_LINKDOWN_REASON_NONE))
@@ -786,10 +836,8 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 				    total_atten,
 				    ppd->qsfp_info.limiting_active);
 
-	if (ppd->port_type == PORT_TYPE_QSFP)
-		refresh_qsfp_cache(ppd, &ppd->qsfp_info);
-
-	ppd->driver_link_ready = 1;
+	if (!ret)
+		ppd->driver_link_ready = 1;
 
 	return 0;
 bail:
