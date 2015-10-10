@@ -1766,6 +1766,12 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 						      &ps->s_txreq->phdr.hdr);
 				spin_unlock_irqrestore(&qp->s_lock, flags);
 			}
+
+			/*
+			 * If snoop is dropping the packet we need to put the
+			 * txreq back because no one else will.
+			 */
+			hfi1_put_txreq(ps->s_txreq);
 			return 0;
 		}
 		break;
