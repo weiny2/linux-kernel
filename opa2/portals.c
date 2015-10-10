@@ -887,30 +887,30 @@ static void hfi_cteq_cleanup(struct hfi_ctx *ctx)
  * do not touch ctx->[pid_base, pid_count].
  */
 static int __hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count,
-			      u16 offset)
+			      u16 align, u16 offset)
 {
-	u16 start, size, align, n;
+	u16 start, size, n;
 	int ret = 0;
-	unsigned long flags;
+	unsigned long flags, align_mask = 0;
+
+	if (align) {
+		if (!is_power_of_2(align))
+			return -EINVAL;
+		align_mask = align - 1;
+	}
 
 	if (IS_PID_ANY(*base)) {
 		start = offset;
-		/*
-		 * user-space expectation is that multi-pid reservations
-		 * have an even PID as the base of reservation
-		 */
-		align = (count > 1) ? 1 : 0;
 	} else {
 		/* honor request for base PID */
 		start = offset + *base;
-		align = 0;
 	}
 	/* last PID not usable as an RX context */
 	size = HFI_NUM_PIDS - 1;
 
 	spin_lock_irqsave(&dd->ptl_lock, flags);
 	n = bitmap_find_next_zero_area(dd->ptl_map, size,
-				       start, count, align);
+				       start, count, align_mask);
 	if (n >= size)
 		ret = -EBUSY;
 	if (!IS_PID_ANY(*base) && n != start)
@@ -926,7 +926,7 @@ static int __hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count,
 	return 0;
 }
 
-int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count)
+int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	u16 offset;
@@ -943,7 +943,7 @@ int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count)
 	offset = (ctx->mode & HFI_CTX_MODE_BYPASS) ?
 		 HFI_PID_BYPASS_BASE : 0;
 
-	ret = __hfi_ctxt_reserve(dd, base, count, offset);
+	ret = __hfi_ctxt_reserve(dd, base, count, align, offset);
 	if (!ret) {
 		ctx->pid_base = *base;
 		ctx->pid_count = count;
@@ -1162,7 +1162,7 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 			return -EINVAL;
 
 		/* No reservation, so must find unreserved PID first */
-		ret = __hfi_ctxt_reserve(dd, &ptl_pid, 1, offset);
+		ret = __hfi_ctxt_reserve(dd, &ptl_pid, 1, 0, offset);
 		if (ret)
 			return ret;
 		dd_dev_info(dd, "acquired PID orphan [%u]\n", ptl_pid);

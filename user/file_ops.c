@@ -189,7 +189,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_eq_wait_single_args eq_wait_single;
 	struct hfi_dlid_assign_args dlid_assign;
 	struct hfi_ctxt_attach_args ctxt_attach;
-	struct hfi_job_info_args job_info;
+	struct hfi_job_info job_info;
 	struct hfi_job_setup_args job_setup;
 	struct hfi_mpin_args mpin;
 	struct hfi_munpin_args munpin;

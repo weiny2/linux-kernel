@@ -76,7 +76,7 @@ struct hfi_userdata {
 };
 
 void hfi_job_init(struct hfi_userdata *ud);
-int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info_args *job_info);
+int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info *job_info);
 int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup);
 void hfi_job_free(struct hfi_userdata *ud);
 int hfi_mpin(struct hfi_userdata *ud, struct hfi_mpin_args *mpin);
