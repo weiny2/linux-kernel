@@ -150,6 +150,11 @@ enum platform_config_variable_settings_table_fields {
 	VARIABLE_SETTINGS_TABLE_MAX
 };
 
+struct platform_config {
+	size_t size;
+	const u8 *data;
+};
+
 struct platform_config_data {
 	u32 *table;
 	u32 *table_metadata;
@@ -287,6 +292,10 @@ enum platform_config_local_max_timeout_encoding {
 	LOCAL_MAX_TIMEOUT_1000_S
 };
 
+/* platform.c */
+void get_platform_config(struct hfi1_devdata *dd);
+void free_platform_config(struct hfi1_devdata *dd);
 int set_qsfp_tx(struct hfi1_pportdata *ppd, int on);
 int tune_serdes(struct hfi1_pportdata *ppd);
+
 #endif			/*__PLATFORM_H*/
