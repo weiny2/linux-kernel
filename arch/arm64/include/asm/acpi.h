@@ -29,17 +29,6 @@
 
 /* Basic configuration for ACPI */
 #ifdef	CONFIG_ACPI
-/* ACPI table mapping after acpi_gbl_permanent_mmap is set */
-static inline void __iomem *acpi_os_ioremap(acpi_physical_address phys,
-					    acpi_size size)
-{
-	if (!page_is_ram(phys >> PAGE_SHIFT))
-		return ioremap(phys, size);
-
-	return ioremap_cache(phys, size);
-}
-#define acpi_os_ioremap acpi_os_ioremap
-
 typedef u64 phys_cpuid_t;
 #define PHYS_CPUID_INVALID INVALID_HWID
 

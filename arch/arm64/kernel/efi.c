@@ -26,6 +26,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/io.h>
 
 #include <asm/cacheflush.h>
 #include <asm/efi.h>
@@ -291,8 +292,8 @@ static int __init arm64_enable_runtime_services(void)
 	pr_info("Remapping and enabling EFI services.\n");
 
 	mapsize = memmap.map_end - memmap.map;
-	memmap.map = (__force void *)ioremap_cache((phys_addr_t)memmap.phys_map,
-						   mapsize);
+	memmap.map = memremap((phys_addr_t) memmap.phys_map, mapsize,
+			MEMREMAP_WB);
 	if (!memmap.map) {
 		pr_err("Failed to remap EFI memory map\n");
 		return -1;
@@ -300,8 +301,8 @@ static int __init arm64_enable_runtime_services(void)
 	memmap.map_end = memmap.map + mapsize;
 	efi.memmap = &memmap;
 
-	efi.systab = (__force void *)ioremap_cache(efi_system_table,
-						   sizeof(efi_system_table_t));
+	efi.systab = memremap(efi_system_table, sizeof(efi_system_table_t),
+			MEMREMAP_WB);
 	if (!efi.systab) {
 		pr_err("Failed to remap EFI System Table\n");
 		return -1;

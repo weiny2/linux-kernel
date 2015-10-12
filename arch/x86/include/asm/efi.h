@@ -54,7 +54,8 @@ extern unsigned long asmlinkage efi_call_phys(void *, ...);
 	kernel_fpu_end();						\
 })
 
-#define efi_ioremap(addr, size, type, attr)	ioremap_cache(addr, size)
+#define efi_ioremap(addr, size, type, attr)				\
+	memremap(addr, size, MEMREMAP_WB)
 
 #else /* !CONFIG_X86_32 */
 

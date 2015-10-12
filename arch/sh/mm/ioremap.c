@@ -86,6 +86,15 @@ __ioremap_caller(phys_addr_t phys_addr, unsigned long size,
 }
 EXPORT_SYMBOL(__ioremap_caller);
 
+void *arch_memremap(resource_size_t offset, size_t size, unsigned long flags)
+{
+	if ((flags & MEMREMAP_WB) == 0)
+		return NULL;
+
+	return (void __force *) __ioremap_mode(offset, size, PAGE_KERNEL);
+}
+EXPORT_SYMBOL(arch_memremap);
+
 /*
  * Simple checks for non-translatable mappings.
  */

@@ -48,19 +48,7 @@ static inline void __iomem *ioremap_nocache(unsigned long offset,
 		BUG();
 }
 
-static inline void __iomem *ioremap_cache(unsigned long offset,
-		unsigned long size)
-{
-	if (offset >= XCHAL_KIO_PADDR
-	    && offset - XCHAL_KIO_PADDR < XCHAL_KIO_SIZE)
-		return (void*)(offset-XCHAL_KIO_PADDR+XCHAL_KIO_CACHED_VADDR);
-	else
-		BUG();
-}
-#define ioremap_cache ioremap_cache
-
 #define ioremap_wc ioremap_nocache
-#define ioremap_wt ioremap_nocache
 
 static inline void __iomem *ioremap(unsigned long offset, unsigned long size)
 {

@@ -253,7 +253,7 @@ struct psb_intel_opregion {
 	struct opregion_swsci *swsci;
 	struct opregion_asle *asle;
 	void *vbt;
-	u32 __iomem *lid_state;
+	u32 *lid_state;
 	struct work_struct asle_work;
 };
 

@@ -32,15 +32,15 @@ API                    |    RAM   |  ACPI,...  |  Reserved/Holes  |
                        |          |            |                  |
 ioremap                |    --    |    UC-     |       UC-        |
                        |          |            |                  |
-ioremap_cache          |    --    |    WB      |       WB         |
-                       |          |            |                  |
 ioremap_uc             |    --    |    UC      |       UC         |
                        |          |            |                  |
 ioremap_nocache        |    --    |    UC-     |       UC-        |
                        |          |            |                  |
 ioremap_wc             |    --    |    --      |       WC         |
                        |          |            |                  |
-ioremap_wt             |    --    |    --      |       WT         |
+memremap(MEMREMAP_WB)  |    WB    |    WB      |       WB         |
+                       |          |            |                  |
+memremap(MEMREMAP_WT)  |    --    |    --      |       WT         |
                        |          |            |                  |
 set_memory_uc          |    UC-   |    --      |       --         |
  set_memory_wb         |          |            |                  |

@@ -84,25 +84,19 @@ void __iounmap(volatile void __iomem *io_addr)
 {
 	unsigned long addr = (unsigned long)io_addr & PAGE_MASK;
 
-	/*
-	 * We could get an address outside vmalloc range in case
-	 * of ioremap_cache() reusing a RAM mapping.
-	 */
-	if (VMALLOC_START <= addr && addr < VMALLOC_END)
-		vunmap((void *)addr);
+	vunmap((void *)addr);
 }
 EXPORT_SYMBOL(__iounmap);
 
-void __iomem *ioremap_cache(phys_addr_t phys_addr, size_t size)
+void *arch_memremap(phys_addr_t phys_addr, size_t size, unsigned long flags)
 {
-	/* For normal memory we already have a cacheable mapping. */
-	if (pfn_valid(__phys_to_pfn(phys_addr)))
-		return (void __iomem *)__phys_to_virt(phys_addr);
+	if ((flags & MEMREMAP_WB) == 0)
+		return NULL;
 
-	return __ioremap_caller(phys_addr, size, __pgprot(PROT_NORMAL),
-				__builtin_return_address(0));
+	return (void __force *) __ioremap_caller(phys_addr, size,
+			__pgprot(PROT_NORMAL), __builtin_return_address(0));
 }
-EXPORT_SYMBOL(ioremap_cache);
+EXPORT_SYMBOL(arch_memremap);
 
 /*
  * Must be called after early_fixmap_init

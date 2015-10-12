@@ -73,7 +73,7 @@ static struct acpi_table_erst *erst_tab;
 static struct erst_erange {
 	u64 base;
 	u64 size;
-	void __iomem *vaddr;
+	void *vaddr;
 	u32 attr;
 } erst_erange;
 
@@ -1181,8 +1181,8 @@ static int __init erst_init(void)
 		goto err_unmap_reg;
 	}
 	rc = -ENOMEM;
-	erst_erange.vaddr = ioremap_cache(erst_erange.base,
-					  erst_erange.size);
+	erst_erange.vaddr = memremap(erst_erange.base, erst_erange.size,
+			MEMREMAP_WB);
 	if (!erst_erange.vaddr)
 		goto err_release_erange;
 

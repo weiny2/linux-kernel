@@ -55,12 +55,12 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
 
 #include <asm/setup.h>
 #include <linux/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
-#include <asm/io.h>
 
 #include <asm/atarihw.h>
 #include <asm/atariints.h>
@@ -3185,7 +3185,8 @@ int __init atafb_init(void)
 		/* Map the video memory (physical address given) to somewhere
 		 * in the kernel address space.
 		 */
-		external_screen_base = ioremap_wt(external_addr, external_len);
+		external_screen_base = memremap(external_addr, external_len,
+				MEMREMAP_WT);
 		if (external_vgaiobase)
 			external_vgaiobase =
 			  (unsigned long)ioremap(external_vgaiobase, 0x10000);

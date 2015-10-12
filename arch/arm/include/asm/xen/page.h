@@ -103,8 +103,8 @@ static inline bool set_phys_to_machine(unsigned long pfn, unsigned long mfn)
 	return __set_phys_to_machine(pfn, mfn);
 }
 
-#define xen_remap(cookie, size) ioremap_cache((cookie), (size))
-#define xen_unmap(cookie) iounmap((cookie))
+#define xen_remap(cookie, size) memremap((cookie), (size), MEMREMAP_WB)
+#define xen_unmap(cookie) memunmap((cookie))
 
 bool xen_arch_need_swiotlb(struct device *dev,
 			   unsigned long pfn,

@@ -14,12 +14,12 @@
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/io.h>
 
 #include <asm/setup.h>
 #include <asm/segment.h>
 #include <asm/page.h>
 #include <asm/pgalloc.h>
-#include <asm/io.h>
 
 #undef DEBUG
 
@@ -222,6 +222,21 @@ void __iomem *__ioremap(unsigned long physaddr, unsigned long size, int cachefla
 	return (void __iomem *)retaddr;
 }
 EXPORT_SYMBOL(__ioremap);
+
+void *arch_memremap(resource_size_t offset, size_t size, unsigned long flags)
+{
+	int mode;
+
+	if (flags & MEMREMAP_WB)
+		mode = IOMAP_FULL_CACHING;
+	else if (flags & MEMREMAP_WT)
+		mode = IOMAP_WRITETHROUGH;
+	else
+		return NULL;
+
+	return (void __force *) __ioremap(offset, size, mode);
+}
+EXPORT_SYMBOL(arch_memremap);
 
 /*
  * Unmap an ioremap()ed region again

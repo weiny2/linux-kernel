@@ -123,14 +123,12 @@ err_unreserve:
 void vmw_cursor_update_position(struct vmw_private *dev_priv,
 				bool show, int x, int y)
 {
-	u32 __iomem *fifo_mem = dev_priv->mmio_virt;
-	uint32_t count;
+	u32 *fifo_mem = dev_priv->mmio_virt;
 
-	iowrite32(show ? 1 : 0, fifo_mem + SVGA_FIFO_CURSOR_ON);
-	iowrite32(x, fifo_mem + SVGA_FIFO_CURSOR_X);
-	iowrite32(y, fifo_mem + SVGA_FIFO_CURSOR_Y);
-	count = ioread32(fifo_mem + SVGA_FIFO_CURSOR_COUNT);
-	iowrite32(++count, fifo_mem + SVGA_FIFO_CURSOR_COUNT);
+	*(fifo_mem + SVGA_FIFO_CURSOR_ON) = show ? 1 : 0;
+	*(fifo_mem + SVGA_FIFO_CURSOR_X) = x;
+	*(fifo_mem + SVGA_FIFO_CURSOR_Y) = y;
+	*(fifo_mem + SVGA_FIFO_CURSOR_COUNT) += 1;
 }
 
 int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
@@ -1155,7 +1153,7 @@ int vmw_kms_write_svga(struct vmw_private *vmw_priv,
 	if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
 		vmw_write(vmw_priv, SVGA_REG_PITCHLOCK, pitch);
 	else if (vmw_fifo_have_pitchlock(vmw_priv))
-		iowrite32(pitch, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
+		*(vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK) = pitch;
 	vmw_write(vmw_priv, SVGA_REG_WIDTH, width);
 	vmw_write(vmw_priv, SVGA_REG_HEIGHT, height);
 	vmw_write(vmw_priv, SVGA_REG_BITS_PER_PIXEL, bpp);
@@ -1181,8 +1179,8 @@ int vmw_kms_save_vga(struct vmw_private *vmw_priv)
 		vmw_priv->vga_pitchlock =
 		  vmw_read(vmw_priv, SVGA_REG_PITCHLOCK);
 	else if (vmw_fifo_have_pitchlock(vmw_priv))
-		vmw_priv->vga_pitchlock = ioread32(vmw_priv->mmio_virt +
-						   SVGA_FIFO_PITCHLOCK);
+		vmw_priv->vga_pitchlock = *(vmw_priv->mmio_virt +
+					    SVGA_FIFO_PITCHLOCK);
 
 	if (!(vmw_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY))
 		return 0;
@@ -1230,8 +1228,8 @@ int vmw_kms_restore_vga(struct vmw_private *vmw_priv)
 		vmw_write(vmw_priv, SVGA_REG_PITCHLOCK,
 			  vmw_priv->vga_pitchlock);
 	else if (vmw_fifo_have_pitchlock(vmw_priv))
-		iowrite32(vmw_priv->vga_pitchlock,
-			  vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
+		*(vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK) =
+			vmw_priv->vga_pitchlock;
 
 	if (!(vmw_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY))
 		return 0;

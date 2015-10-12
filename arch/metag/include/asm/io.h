@@ -154,14 +154,8 @@ extern void __iounmap(void __iomem *addr);
 #define ioremap_nocache(offset, size)           \
 	__ioremap((offset), (size), 0)
 
-#define ioremap_cached(offset, size)            \
-	__ioremap((offset), (size), _PAGE_CACHEABLE)
-
 #define ioremap_wc(offset, size)                \
 	__ioremap((offset), (size), _PAGE_WR_COMBINE)
-
-#define ioremap_wt(offset, size)                \
-	__ioremap((offset), (size), 0)
 
 #define iounmap(addr)                           \
 	__iounmap(addr)

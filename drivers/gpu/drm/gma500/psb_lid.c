@@ -28,14 +28,14 @@ static void psb_lid_timer_func(unsigned long data)
 	struct drm_psb_private * dev_priv = (struct drm_psb_private *)data;
 	struct drm_device *dev = (struct drm_device *)dev_priv->dev;
 	struct timer_list *lid_timer = &dev_priv->lid_timer;
+	u32 *lid_state = dev_priv->opregion.lid_state;
 	unsigned long irq_flags;
-	u32 __iomem *lid_state = dev_priv->opregion.lid_state;
 	u32 pp_status;
 
-	if (readl(lid_state) == dev_priv->lid_last_state)
+	if (*lid_state == dev_priv->lid_last_state)
 		goto lid_timer_schedule;
 
-	if ((readl(lid_state)) & 0x01) {
+	if ((*lid_state) & 0x01) {
 		/*lid state is open*/
 		REG_WRITE(PP_CONTROL, REG_READ(PP_CONTROL) | POWER_TARGET_ON);
 		do {
@@ -58,7 +58,7 @@ static void psb_lid_timer_func(unsigned long data)
 			pp_status = REG_READ(PP_STATUS);
 		} while ((pp_status & PP_ON) == 0);
 	}
-	dev_priv->lid_last_state =  readl(lid_state);
+	dev_priv->lid_last_state =  *lid_state;
 
 lid_timer_schedule:
 	spin_lock_irqsave(&dev_priv->lid_lock, irq_flags);
