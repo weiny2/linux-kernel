@@ -285,6 +285,7 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 	int ret = 0;
 	int next_cur;
 	u8 sc5;
+	bool use_sc15 = false;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
@@ -389,6 +390,7 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 	if (qp->ibqp.qp_type == IB_QPT_SMI) {
 		lrh0 |= 0xF000; /* Set VL (see ch. 13.5.3.1) */
 		qp->s_sc = 0xf;
+		use_sc15 = true;
 	} else {
 		lrh0 |= (sc5 & 0xf) << 12;
 		qp->s_sc = sc5;
@@ -426,11 +428,14 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 	ohdr->u.ud.deth[1] = cpu_to_be32(qp->ibqp.qp_num);
 
 	/* TODO for now, WQE contains everything needed to perform the Send */
+	wqe->s_qp = qp;
 	wqe->s_sge = &qp->s_sge;
 	wqe->s_hdr = qp->s_hdr;
 	wqe->s_hdrwords = qp->s_hdrwords;
-	wqe->s_sl = ah_attr->sl;
 	wqe->s_ctx = qp->s_ctx;
+	wqe->lnh = lrh0 & 0x3;
+	wqe->sl = ah_attr->sl;
+	wqe->use_sc15 = use_sc15;
 	/*
 	 * UD packets are not fragmented, set to max MTU as send_wqe()
 	 * is transport agnostic.

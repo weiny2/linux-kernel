@@ -67,6 +67,7 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 	struct ib_l4_headers *ohdr;
 	struct opa_ib_swqe *wqe;
 	unsigned long flags;
+	u16 lrh0;
 	u32 hwords = 5;
 	u32 bth0 = 0;
 	u32 len;
@@ -230,14 +231,17 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
 	opa_ib_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
-			       mask_psn(qp->s_next_psn++));
+			       mask_psn(qp->s_next_psn++), &lrh0);
 
 	/* TODO for now, WQE contains everything needed to perform the Send */
+	wqe->s_qp = qp;
 	wqe->s_sge = &qp->s_sge;
 	wqe->s_hdr = qp->s_hdr;
 	wqe->s_hdrwords = qp->s_hdrwords;
-	wqe->s_sl = qp->remote_ah_attr.sl;
 	wqe->s_ctx = qp->s_ctx;
+	wqe->lnh = lrh0 & 0x3; /* next header (BTH or GRH) */
+	wqe->sl = qp->remote_ah_attr.sl;
+	wqe->use_sc15 = false;
 	wqe->pmtu = pmtu;
 done:
 	ret = 1;

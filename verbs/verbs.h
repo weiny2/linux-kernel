@@ -252,11 +252,15 @@ struct opa_ib_swqe {
 	 */
 	struct list_head pending_list;
 	struct opa_ib_sge_state	*s_sge;
+	struct opa_ib_qp *s_qp;
 	struct opa_ib_dma_header *s_hdr; /* next packet header to send */
+	struct hfi_ctx *s_ctx;           /* associated send context */
 	u16 s_hdrwords; 	         /* size of s_hdr in 32 bit words */
 	u16 pmtu;
-	u8 s_sl;
-	struct hfi_ctx *s_ctx;           /* associated send context */
+	u8 lnh;
+	u8 sl;
+	bool use_sc15;
+	void *s_iov;
 
 	struct hfi2_sge sg_list[0];
 };
@@ -608,8 +612,10 @@ struct opa_ib_portdata {
 	struct task_struct *rcv_task;
 	uint16_t rcv_eq;
 	uint16_t rcv_egr_last_idx;
+	uint16_t send_eq;
 	void *rcv_eq_base;
 	void *rcv_egr_base;
+	void *send_eq_base;
 };
 
 struct opa_ib_data {
@@ -773,7 +779,7 @@ void opa_ib_update_mmap_info(struct opa_ib_data *ibd,
 			     u32 size, void *obj);
 int opa_ib_get_rwqe(struct opa_ib_qp *qp, int wr_id_only);
 void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
-			    u32 bth0, u32 bth2);
+			    u32 bth0, u32 bth2, u16 *lrh0);
 void opa_ib_do_send(struct work_struct *work);
 void opa_ib_schedule_send(struct opa_ib_qp *qp);
 void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
@@ -800,7 +806,9 @@ int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 #endif
 
 /* Device specific */
-int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe);
+int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe);
+int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
+		    struct opa_ib_swqe *wqe);
 void opa_ib_rcv_start(struct opa_ib_portdata *ibp);
 void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset);
 void opa_ib_rcv_advance(struct opa_ib_portdata *ibp, u64 *rhf_entry);
