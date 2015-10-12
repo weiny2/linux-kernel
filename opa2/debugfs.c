@@ -56,6 +56,9 @@
 #include "opa_hfi.h"
 #include "debugfs.h"
 #include "firmware.h"
+#include "link.h"
+#include "rdma/fxr/mnh_8051_defs.h"
+#include "rdma/fxr/fxr_fc_defs.h"
 
 #ifdef CONFIG_DEBUG_FS
 struct dentry *hfi_dbg_root;
@@ -105,15 +108,67 @@ static const struct file_operations hfi_qos_ops = {
 	.release = hfi_qos_release
 };
 
+
+void hfi_qos_dbg_init(struct hfi_devdata *dd)
+{
+	struct hfi_pportdata *ppd;
+	int j;
+
+	/* create qos file for each port */
+	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++)
+		debugfs_create_file("qos", 0444, ppd->hfi_port_dbg,
+				    ppd, &hfi_qos_ops);
+}
+
+/* link negotiation and initialization */
+FIRMWARE_READ(8051_state, 8051, CRK_CRK8051_STS_CUR_STATE)
+FIRMWARE_READ(8051_cmd0, 8051, CRK_CRK8051_CFG_HOST_CMD_0)
+FIRMWARE_WRITE(8051_cmd0, 8051, CRK_CRK8051_CFG_HOST_CMD_0)
+FIRMWARE_READ(8051_cmd1, 8051, CRK_CRK8051_CFG_HOST_CMD_1)
+FIRMWARE_READ(logical_link, fzc, FZC_LCB_CFG_PORT)
+FIRMWARE_WRITE(logical_link, fzc, FZC_LCB_CFG_PORT)
+HOST_STATE_READ(host_link_state)
+HOST_STATE_READ(lstate)
+
+static const struct firmware_info firmware_ops[] = {
+	DEBUGFS_OPS("8051_state", _8051_state_read, NULL),
+	DEBUGFS_OPS("8051_cmd0", _8051_cmd0_read, _8051_cmd0_write),
+	DEBUGFS_OPS("8051_cmd1", _8051_cmd1_read, NULL),
+	DEBUGFS_OPS("logical_link", _logical_link_read, _logical_link_write),
+	DEBUGFS_OPS("host_link_state", host_link_state_read, NULL),
+	DEBUGFS_OPS("lstate", lstate_read, NULL),
+};
+
+void hfi_firmware_dbg_init(struct hfi_devdata *dd)
+{
+	struct hfi_pportdata *ppd;
+	int i, j;
+
+	/* create files for each port */
+	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++) {
+		for (i = 0; i < ARRAY_SIZE(firmware_ops); i++) {
+			DEBUGFS_FILE_CREATE(firmware_ops[i].name,
+				ppd->hfi_port_dbg,
+				ppd,
+				&firmware_ops[i].ops,
+				firmware_ops[i].ops.write == NULL ?
+					S_IRUGO : S_IRUGO|S_IWUSR);
+		}
+	}
+}
+
 void hfi_dbg_init(struct hfi_devdata *dd)
 {
-	char name[32], link[10];
 	struct hfi_pportdata *ppd;
+	char name[32], link[10];
 	int unit = dd->unit, j;
 
+	/* create /sys/kernel/debug/opa2_hfi */
 	hfi_dbg_root = debugfs_create_dir(DRIVER_NAME, NULL);
 	if (!hfi_dbg_root)
 		pr_warn("can't create %s\n", DRIVER_NAME);
+
+	/* create /sys/kernel/debug/opa2_hfi/hfiN and .../N */
 	snprintf(name, sizeof(name), "%s%d", hfi_class_name, unit);
 	snprintf(link, sizeof(link), "%d", unit);
 	dd->hfi_dev_dbg = debugfs_create_dir(name, hfi_dbg_root);
@@ -129,20 +184,20 @@ void hfi_dbg_init(struct hfi_devdata *dd)
 		return;
 	}
 
-	/* create files for each port */
+	/* create a directory for each port */
 	for (j = 0, ppd = dd->pport; j < dd->num_pports; ppd++, j++) {
 		snprintf(name, sizeof(name), "port%d", ppd->pnum);
 		ppd->hfi_port_dbg = debugfs_create_dir(name, dd->hfi_dev_dbg);
-		debugfs_create_file("qos", 0444, ppd->hfi_port_dbg,
-				    ppd, &hfi_qos_ops);
 	}
+
+	hfi_qos_dbg_init(dd);
 	hfi_firmware_dbg_init(dd);
 }
 
 void hfi_dbg_exit(struct hfi_devdata *dd)
 {
-	hfi_firmware_dbg_exit(dd);
 	debugfs_remove_recursive(hfi_dbg_root);
+	dd->hfi_dev_dbg = NULL;
 	hfi_dbg_root = NULL;
 }
 #else

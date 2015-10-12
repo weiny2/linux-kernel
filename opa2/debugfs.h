@@ -53,6 +53,8 @@
 #ifndef _HFI_DEBUGFS_H
 #define _HFI_DEBUGFS_H
 
+#include <linux/debugfs.h>
+
 #define DEBUGFS_SEQ_FILE_OPS(name) \
 static const struct seq_operations _##name##_seq_ops = { \
 	.start = _##name##_seq_start, \
@@ -94,6 +96,66 @@ do { \
 
 #define DEBUGFS_SEQ_FILE_CREATE(name, parent, data) \
 	DEBUGFS_FILE_CREATE(#name, parent, data, &_##name##_file_ops, S_IRUGO)
+
+#define FIRMWARE_READ(name, subsystem, address) \
+static ssize_t _##name##_read(struct file *file, char __user *buf,\
+			      size_t count, loff_t *ppos)\
+{ \
+	struct hfi_pportdata *ppd;\
+	ssize_t ret = 0;\
+	u64 state;\
+	ppd = private2ppd(file);\
+	state = read_##subsystem##_csr(ppd, address);\
+	ret =  simple_read_from_buffer(buf, count, ppos, &state,\
+					sizeof(state));\
+	return ret;\
+}
+
+#define FIRMWARE_WRITE(name, subsystem, address) \
+static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
+			   size_t count, loff_t *ppos)\
+{ \
+	struct hfi_pportdata *ppd;\
+	int ret = 0;\
+	u64 reg;\
+	rcu_read_lock();\
+	ppd = private2ppd(file);\
+	ret = kstrtou64_from_user(ubuf, count, 0, &reg);\
+	if (ret < 0)\
+		goto _return;\
+	write_##subsystem##_csr(ppd, address, reg);\
+	ret = count;\
+ _return:\
+	rcu_read_unlock();\
+	return ret;\
+}
+
+#define private2dd(file) (file_inode(file)->i_private)
+#define private2ppd(file) (file_inode(file)->i_private)
+
+#define HOST_STATE_READ(name) \
+static ssize_t name##_read(struct file *file, char __user *buf,\
+			      size_t count, loff_t *ppos)\
+{\
+	struct hfi_pportdata *ppd = private2ppd(file);\
+	return (ssize_t)simple_read_from_buffer(buf, count, ppos, &ppd->name, \
+		sizeof(ppd->host_link_state));\
+}
+
+struct firmware_info {
+	char *name;
+	const struct file_operations ops;
+};
+
+#define DEBUGFS_OPS(nm, readroutine, writeroutine)	\
+{ \
+	.name = nm, \
+	.ops = { \
+		.read = readroutine, \
+		.write = writeroutine, \
+		.llseek = generic_file_llseek, \
+	}, \
+}
 
 extern struct dentry *hfi_dbg_root;
 
