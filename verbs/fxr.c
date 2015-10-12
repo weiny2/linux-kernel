@@ -68,6 +68,7 @@
 
 /* TODO - delete and make common for all kernel clients */
 static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
+			 spinlock_t *cq_lock,
 			 struct opa_ev_assign *eq_alloc,
 			 uint16_t *eq, void **eq_base)
 {
@@ -80,7 +81,6 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 		return -ENOMEM;
 	eq_alloc->mode = OPA_EV_MODE_BLOCKING;
 	eq_alloc->user_data = (u64)&done;
-	eq_alloc->isr_cb = NULL;
 	rc = ctx->ops->ev_assign(ctx, eq_alloc);
 	if (rc < 0) {
 		vfree((void *)eq_alloc->base);
@@ -95,14 +95,20 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	hfi_eq_wait(ctx, 0x0, &eq_entry);
-	if (eq_entry)
+	if (eq_entry) {
+		unsigned long flags;
+
+		spin_lock_irqsave(cq_lock, flags);
 		hfi_eq_advance(ctx, cq, 0x0, eq_entry);
+		spin_unlock_irqrestore(cq_lock, flags);
+	}
 err:
 	return rc;
 }
 
 /* TODO - delete and make common for all kernel clients */
 static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
+			    spinlock_t *cq_lock,
 			    hfi_eq_handle_t eq, void *eq_base)
 {
 	u64 *eq_entry, done;
@@ -110,60 +116,53 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
 	ctx->ops->ev_release(ctx, 0, eq, (u64)&done);
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	hfi_eq_wait(ctx, 0x0, &eq_entry);
-	if (eq_entry)
+	if (eq_entry) {
+		unsigned long flags;
+
+		spin_lock_irqsave(cq_lock, flags);
 		hfi_eq_advance(ctx, cq, 0x0, eq_entry);
+		spin_unlock_irqrestore(cq_lock, flags);
+	}
 
 	vfree(eq_base);
 }
 
-int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
+/* TODO - keep around for now, in case this hack has value again later */
+int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp,
+			struct opa_ib_swqe *wqe)
 {
-	int i, ret;
+	int ret;
 	unsigned long flags;
 
-	/* TODO - eventually this needs to be rewritten to use MGMT_DMA */
+	if (wqe->use_sc15)
+		return -EINVAL;
 
 	if (wqe->length > wqe->pmtu) {
 		dev_err(ibp->dev,
-			"PT %d: multi-packet PIO not implemented (%d > %d)!\n",
+			"PT %d: multi-packet PIO not supported (%d > %d)!\n",
 			ibp->port_num, wqe->length, wqe->pmtu);
+		return -EINVAL;
+	}
+
+	/* low-level PIO support routines don't do IOVEC */
+	if (wqe->s_sge->num_sge > 1) {
+		dev_err(ibp->dev,
+			"PT %d: PIO-IOVEC not implemented!\n",
+			ibp->port_num);
 		return -EIO;
 	}
 
-	/*
-	 * Test if these WGEs can be coalesced into single PIO send.
-	 * If not, return an error as we cannot yet handle IOVEC sends.
-	 * TODO - add PIO-IOVEC support when available in opa-headers
-	 */
-	for (i = 0; i < wqe->s_sge->num_sge; i++) {
-		/* TODO only support kernel virtual addresses for now */
-		if ((u64)wqe->sg_list[i].vaddr < PAGE_OFFSET)
-			return -EFAULT;
-
-		if (i > 0 &&
-		    ((wqe->sg_list[i-1].vaddr + wqe->sg_list[i-1].length) !=
-		     wqe->sg_list[i].vaddr)) {
-			dev_err(ibp->dev,
-				"PT %d: PIO-IOVEC not implemented!\n",
-				ibp->port_num);
-			return -EIO;
-		}
+	/* only support kernel virtual addresses */
+	if ((u64)wqe->sg_list[0].vaddr < PAGE_OFFSET) {
+		dev_err(ibp->dev,
+			"PT %d: PIO send with UVA not supported\n",
+			ibp->port_num);
+		return -EFAULT;
 	}
 
-	dev_dbg(ibp->dev, "PT %d: Send hdr %p data %p %d\n",
+	dev_dbg(ibp->dev, "PT %d: PIO send hdr %p data %p %d\n",
 		ibp->port_num, wqe->s_hdr,
 		wqe->sg_list[0].vaddr, wqe->length);
-
-	/*
-	 * FXRTODO: Mapping sl to sc15 is invalid.
-	 * According to latest discussion, there will
-	 * be bit to flip or different command if the packet
-	 * is MAD. Until that is fixed hardcode sl as 15 so that
-	 * the packet(s) take SC15->VL15 path. Only MAD packet
-	 * will be supported with this hack
-	 *
-	 * Ref STL-2662
-	 */
 
 	/* send the WQE via PIO path */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
@@ -171,10 +170,147 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 				    wqe->s_hdr, 8 + (wqe->s_hdrwords << 2),
 				    wqe->sg_list[0].vaddr,
 				    wqe->length, ibp->port_num,
-				    15, 0, KDETH_9B_PIO);
+				    wqe->sl, 0, KDETH_9B_PIO);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 	if (ret < 0)
 		dev_err(ibp->dev, "PT %d: TX CQ is full!\n", ibp->port_num);
+
+	return ret;
+}
+
+static void opa_ib_send_event(void *data)
+{
+	struct opa_ib_portdata *ibp = data;
+	struct opa_ib_qp *qp;
+	struct opa_ib_swqe *wqe;
+	unsigned long flags;
+	union initiator_EQEntry *eq_entry = NULL;
+
+	hfi_eq_peek(ibp->ctx, ibp->send_eq, (uint64_t **)&eq_entry);
+	if (!eq_entry)
+		return;
+
+	if (eq_entry->event_kind != NON_PTL_EVENT_TX_COMPLETE) {
+		dev_warn(ibp->dev, "PT %d: unexpected EQ kind %x\n",
+			 ibp->port_num, eq_entry->event_kind);
+		goto eq_advance;
+	}
+
+	/* TODO - not sure yet if user_ptr should be WQE or QP */
+	wqe = (struct opa_ib_swqe *)eq_entry->user_ptr;
+	qp = wqe->s_qp;
+	dev_dbg(ibp->dev,
+		"PT %d: TX event %p, fail %d, for QPN %d\n",
+		ibp->port_num, eq_entry, eq_entry->fail_type, qp->ibqp.qp_num);
+	kfree(wqe->s_iov);
+	wqe->s_iov = NULL;
+	/* tell verbs if success or failure */
+	spin_lock(&qp->s_lock);
+	if (eq_entry->fail_type)
+		opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);
+	else
+		opa_ib_send_complete(qp, wqe, IB_WC_SUCCESS);
+	spin_unlock(&qp->s_lock);
+
+eq_advance:
+	spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
+	hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, ibp->send_eq,
+		       (uint64_t *)eq_entry);
+	spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
+}
+
+int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
+		    struct opa_ib_swqe *wqe)
+{
+	int s, i, ret;
+	unsigned long flags;
+	uint8_t dma_cmd;
+	union base_iovec *iov = NULL;
+	uint32_t num_iovs;
+	size_t payload_bytes = 0;
+
+	dma_cmd = (wqe->use_sc15) ? MGMT_DMA : GENERAL_DMA;
+	/* TODO - optimize for OFED_DMA here */
+
+	num_iovs = wqe->s_sge->num_sge + 1;
+	/* TODO - delete below when TX firmware supports this */
+	if (num_iovs > 4) {
+		dev_err(ibp->dev,
+			"PT %d: large IOVEC not supported in simics (%d)\n",
+			ibp->port_num, num_iovs);
+		return -EIO;
+	}
+
+	iov = kzalloc(sizeof(*iov) * num_iovs, GFP_KERNEL);
+	if (!iov)
+		return -ENOMEM;
+	wqe->s_iov = iov;
+
+	/* first entry is IB header */
+	iov[0].length = (wqe->s_hdrwords << 2);
+	iov[0].use_9b = 1;
+	iov[0].sp = 1;
+	iov[0].v = 1;
+	iov[0].start = (uint64_t)(&wqe->s_hdr->ibh);
+
+	/* write IOVEC entries */
+	for (s = 0; s < wqe->s_sge->num_sge; s++) {
+		uint32_t iov_length;
+
+		/* we only support kernel virtual addresses for now */
+		if ((u64)wqe->sg_list[s].vaddr < PAGE_OFFSET) {
+			dev_err(ibp->dev,
+				"PT %d: DMA send with UVA not supported\n",
+				ibp->port_num);
+			ret = -EFAULT;
+			goto err;
+		}
+
+		iov_length = wqe->sg_list[s].sge_length;
+		/* TODO - no multi-packet support yet, test path MTU */
+		if (payload_bytes + iov_length > wqe->pmtu) {
+			dev_err(ibp->dev,
+				"PT %d: large DMA not implemented yet, %ld > %d MTU!\n",
+				ibp->port_num,
+				payload_bytes + iov_length, wqe->pmtu);
+			ret = -EIO;
+			goto err;
+		}
+
+		i = s + 1;
+		iov[i].length = iov_length;
+		iov[i].use_9b = 1;
+		iov[i].ep = 0;
+		iov[i].sp = 0;
+		iov[i].v = 1;
+		iov[i].start = (uint64_t)wqe->sg_list[s].vaddr;
+		payload_bytes += iov_length;
+	}
+	iov[num_iovs - 1].ep = 1;
+
+	dev_dbg(ibp->dev, "PT %d: cmd %d len %d pmtu %d n_iov %d len %ld\n",
+		ibp->port_num, dma_cmd, wqe->length, wqe->pmtu, num_iovs,
+		payload_bytes);
+
+	/* send with GENERAL or MGMT DMA */
+	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
+	ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, wqe->s_ctx,
+				    (uint64_t)iov, num_iovs,
+				    (uint64_t)wqe, PTL_MD_RESERVED_IOV,
+				    ibp->send_eq, HFI_CT_NONE,
+				    ibp->port_num, wqe->sl, 0,
+				    HDR_EXT /* 9B */, dma_cmd);
+	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
+
+	if (ret < 0) {
+		dev_err(ibp->dev, "PT %d: TX CQ is full!\n", ibp->port_num);
+		goto err;
+	}
+	return 0;
+
+err:
+	kfree(iov);
+	wqe->s_iov = NULL;
 	return ret;
 }
 
@@ -221,7 +357,11 @@ int _opa_ib_rcv_wait(struct opa_ib_portdata *ibp, u64 **rhf_entry)
 
 void opa_ib_rcv_advance(struct opa_ib_portdata *ibp, u64 *rhf_entry)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
 	hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, ibp->rcv_eq, rhf_entry);
+	spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
 }
 
 void opa_ib_rcv_start(struct opa_ib_portdata *ibp)
@@ -264,11 +404,12 @@ int opa_ib_rcv_init(struct opa_ib_portdata *ibp)
 	rhq_count = total_eager_size / 128;
 
 	/* allocate Eager PT and EQ */
+	memset(&eq_alloc, 0, sizeof(eq_alloc));
 	eq_alloc.ni = HFI_NI_BYPASS;
 	eq_alloc.user_data = (unsigned long)ibp;
 	eq_alloc.size = rhq_count;
-	ret = _hfi_eq_alloc(ibp->ctx, &ibp->cmdq_rx, &eq_alloc, &ibp->rcv_eq,
-			    &ibp->rcv_eq_base);
+	ret = _hfi_eq_alloc(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
+			    &eq_alloc, &ibp->rcv_eq, &ibp->rcv_eq_base);
 	if (ret < 0)
 		goto kthread_err;
 
@@ -340,7 +481,8 @@ void opa_ib_rcv_uninit(struct opa_ib_portdata *ibp)
 	BUG_ON(ret < 0);
 
 	if (ibp->rcv_eq_base) {
-		_hfi_eq_release(ibp->ctx, &ibp->cmdq_rx, ibp->rcv_eq, ibp->rcv_eq_base);
+		_hfi_eq_release(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
+				ibp->rcv_eq, ibp->rcv_eq_base);
 		ibp->rcv_eq_base = NULL;
 	}
 	if (ibp->rcv_egr_base) {
@@ -378,14 +520,11 @@ int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp)
 {
 	struct opa_core_ops *ops = ibp->odev->bus_ops;
 	struct opa_ib_data *ibd = ibp->ibd;
+	struct opa_ev_assign eq_alloc;
 	int ret;
 	u16 cq_idx;
 
 	spin_lock_init(&ibp->cmdq_tx_lock);
-	/*
-	 * NOTE, this RX lock currently unused as this Command Queue
-	 * is used exclusively by the spawned kthread.
-	 */
 	spin_lock_init(&ibp->cmdq_rx_lock);
 
 	/*
@@ -405,14 +544,26 @@ int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp)
 	/* set Context pointer only after CMDQs allocated */
 	ibp->ctx = &(ibd->ctx);
 
+	/* Each port has send EQ for TX completions */
+	memset(&eq_alloc, 0, sizeof(eq_alloc));
+	eq_alloc.ni = HFI_NI_BYPASS;
+	eq_alloc.user_data = (unsigned long)ibp;
+	eq_alloc.size = 64;
+	eq_alloc.isr_cb = opa_ib_send_event;
+	eq_alloc.cookie = (void *)ibp;
+	ret = _hfi_eq_alloc(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
+			    &eq_alloc, &ibp->send_eq, &ibp->send_eq_base);
+	if (ret < 0)
+		goto ctx_init_err;
+
 	/* assign device specific RX resources */
 	ret = opa_ib_rcv_init(ibp);
 	if (ret)
-		goto rcv_init_err;
+		goto ctx_init_err;
 
 	return 0;
 
-rcv_init_err:
+ctx_init_err:
 	opa_ib_ctx_uninit_port(ibp);
 err:
 	return ret;
@@ -425,6 +576,12 @@ void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp)
 
 	if (!ibp->ctx)
 		return;
+
+	if (ibp->send_eq_base) {
+		_hfi_eq_release(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
+				ibp->send_eq, ibp->send_eq_base);
+		ibp->send_eq_base = NULL;
+	}
 
 	opa_ib_rcv_uninit(ibp);
 	ops->cq_unmap(&ibp->cmdq_tx, &ibp->cmdq_rx);

@@ -228,7 +228,7 @@ bail:
 }
 
 void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
-			    u32 bth0, u32 bth2)
+			    u32 bth0, u32 bth2, u16 *out_lrh0)
 {
 	struct opa_ib_portdata *ibp;
 	u16 lrh0;
@@ -270,13 +270,16 @@ void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
 	}
 	ohdr->bth[1] = cpu_to_be32(bth1);
 	ohdr->bth[2] = cpu_to_be32(bth2);
+	*out_lrh0 = lrh0;
 }
 
 /**
  * send_wqe() - submit a WGE to the hardware
  * @ibp: outgoing port
- * @wait: wait structure to use when no slots (may be NULL)
+ * @qp: the QP to send on
  * @wge: WGE to submit
+ * TODO - delete below when STL-2554 implemented
+ * @wait: wait structure to use when no slots (may be NULL)
  *
  * If a iowait structure is non-NULL the packet will be queued to the list
  * in wait.
@@ -284,13 +287,25 @@ void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
  *
  * Return: TBD
  */
-static int send_wqe(struct opa_ib_portdata *ibp, struct iowait *wait,
+static int send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 		    struct opa_ib_swqe *wqe)
 {
 	int ret;
+	bool with_pio = false;
 
-	ret = opa_ib_send_wqe(ibp, wqe);
-	/* TODO - handle failure to send here in a device-agnostic way */
+	/* TODO - PIO temporary until General DMA support for user QPs */
+	if (wqe->sg_list[0].mr->lkey != 0) {
+		with_pio = true;
+		ret = opa_ib_send_wqe_pio(ibp, wqe);
+	} else {
+		ret = opa_ib_send_wqe(ibp, qp, wqe);
+	}
+
+	if (ret < 0)
+		opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);
+	else if (with_pio)
+		opa_ib_send_complete(qp, wqe, IB_WC_SUCCESS);
+	/* else send_complete issued upon DMA completion event */
 
 	return ret;
 }
@@ -310,7 +325,6 @@ int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
 		      u32 hdrwords, struct opa_ib_sge_state *ss, u32 len)
 {
 	struct opa_ib_portdata *ibp;
-	struct opa_ib_swqe *wqe;
 	int ret = 0;
 	unsigned long flags = 0;
 
@@ -339,7 +353,8 @@ int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
 			pending_list);
 		list_del_init(&wqe->pending_list);
 		/* send queued pending WGE into fabric */
-		ret = send_wqe(ibp, &qp->s_iowait, wqe);
+		/* TODO - STL-2554 should qp->s_wqe be updated? */
+		ret = send_wqe(ibp, qp, wqe);
 		/*
 		 * TODO - why does WFR just return without enqueuing the
 		 * WQE that would have been sent below (qp->s_wqe).
@@ -348,17 +363,7 @@ int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
 	}
 
 	/* send WGE into fabric */
-	wqe = qp->s_wqe;
-	ret = send_wqe(ibp, &qp->s_iowait, wqe);
-	if (ret < 0)
-		opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);
-	/*
-	 * With PIO, caller can re-use send buffer, so mark WQE complete
-	 * TODO - will change when we change to DMA+TX_EQ
-	 */
-	else
-		opa_ib_send_complete(qp, wqe, IB_WC_SUCCESS);
-	return ret;
+	return send_wqe(ibp, qp, qp->s_wqe);
 }
 
 /**
