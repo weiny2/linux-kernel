@@ -86,9 +86,9 @@ MODULE_PARM_DESC(cu, "Credit return units");
 #ifdef CONFIG_PRESCAN_RXQ
 static unsigned int prescan_rx_queue;
 module_param_named(prescan_rxq, prescan_rx_queue, uint,
-			S_IRUGO | S_IWUSR);
+		   S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(prescan_rxq,
-		"Used to toggle rx prescan. Set to 1 to enable prescan");
+		 "Used to toggle rx prescan. Set to 1 to enable prescan");
 #endif /* CONFIG_PRESCAN_RXQ */
 
 unsigned long hfi1_cap_mask = HFI1_CAP_MASK_DEFAULT;
