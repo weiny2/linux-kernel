@@ -36,7 +36,7 @@ struct vmw_temp_set_context {
 
 bool vmw_fifo_have_3d(struct vmw_private *dev_priv)
 {
-	u32 __iomem *fifo_mem = dev_priv->mmio_virt;
+	u32 *fifo_mem = dev_priv->mmio_virt;
 	uint32_t fifo_min, hwversion;
 	const struct vmw_fifo_state *fifo = &dev_priv->fifo;
 
@@ -60,15 +60,15 @@ bool vmw_fifo_have_3d(struct vmw_private *dev_priv)
 	if (!(dev_priv->capabilities & SVGA_CAP_EXTENDED_FIFO))
 		return false;
 
-	fifo_min = ioread32(fifo_mem  + SVGA_FIFO_MIN);
+	fifo_min = *(fifo_mem  + SVGA_FIFO_MIN);
 	if (fifo_min <= SVGA_FIFO_3D_HWVERSION * sizeof(unsigned int))
 		return false;
 
-	hwversion = ioread32(fifo_mem +
-			     ((fifo->capabilities &
-			       SVGA_FIFO_CAP_3D_HWVERSION_REVISED) ?
-			      SVGA_FIFO_3D_HWVERSION_REVISED :
-			      SVGA_FIFO_3D_HWVERSION));
+	hwversion = *(fifo_mem +
+		      ((fifo->capabilities &
+			SVGA_FIFO_CAP_3D_HWVERSION_REVISED) ?
+		       SVGA_FIFO_3D_HWVERSION_REVISED :
+		       SVGA_FIFO_3D_HWVERSION));
 
 	if (hwversion == 0)
 		return false;
@@ -85,13 +85,13 @@ bool vmw_fifo_have_3d(struct vmw_private *dev_priv)
 
 bool vmw_fifo_have_pitchlock(struct vmw_private *dev_priv)
 {
-	u32 __iomem *fifo_mem = dev_priv->mmio_virt;
+	u32 *fifo_mem = dev_priv->mmio_virt;
 	uint32_t caps;
 
 	if (!(dev_priv->capabilities & SVGA_CAP_EXTENDED_FIFO))
 		return false;
 
-	caps = ioread32(fifo_mem + SVGA_FIFO_CAPABILITIES);
+	caps = *(fifo_mem + SVGA_FIFO_CAPABILITIES);
 	if (caps & SVGA_FIFO_CAP_PITCHLOCK)
 		return true;
 
@@ -100,7 +100,7 @@ bool vmw_fifo_have_pitchlock(struct vmw_private *dev_priv)
 
 int vmw_fifo_init(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 {
-	u32 __iomem *fifo_mem = dev_priv->mmio_virt;
+	u32 *fifo_mem = dev_priv->mmio_virt;
 	uint32_t max;
 	uint32_t min;
 
@@ -137,19 +137,19 @@ int vmw_fifo_init(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 	if (min < PAGE_SIZE)
 		min = PAGE_SIZE;
 
-	iowrite32(min, fifo_mem + SVGA_FIFO_MIN);
-	iowrite32(dev_priv->mmio_size, fifo_mem + SVGA_FIFO_MAX);
+	*(fifo_mem + SVGA_FIFO_MIN) = min;
+	*(fifo_mem + SVGA_FIFO_MAX) = dev_priv->mmio_size;
 	wmb();
-	iowrite32(min,  fifo_mem + SVGA_FIFO_NEXT_CMD);
-	iowrite32(min,  fifo_mem + SVGA_FIFO_STOP);
-	iowrite32(0, fifo_mem + SVGA_FIFO_BUSY);
+	*(fifo_mem + SVGA_FIFO_NEXT_CMD) = min;
+	*(fifo_mem + SVGA_FIFO_STOP) = min;
+	*(fifo_mem + SVGA_FIFO_BUSY) = 0;
 	mb();
 
 	vmw_write(dev_priv, SVGA_REG_CONFIG_DONE, 1);
 
-	max = ioread32(fifo_mem + SVGA_FIFO_MAX);
-	min = ioread32(fifo_mem  + SVGA_FIFO_MIN);
-	fifo->capabilities = ioread32(fifo_mem + SVGA_FIFO_CAPABILITIES);
+	max = *(fifo_mem + SVGA_FIFO_MAX);
+	min = *(fifo_mem  + SVGA_FIFO_MIN);
+	fifo->capabilities = *(fifo_mem + SVGA_FIFO_CAPABILITIES);
 
 	DRM_INFO("Fifo max 0x%08x min 0x%08x cap 0x%08x\n",
 		 (unsigned int) max,
@@ -157,7 +157,7 @@ int vmw_fifo_init(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 		 (unsigned int) fifo->capabilities);
 
 	atomic_set(&dev_priv->marker_seq, dev_priv->last_read_seqno);
-	iowrite32(dev_priv->last_read_seqno, fifo_mem + SVGA_FIFO_FENCE);
+	*(fifo_mem + SVGA_FIFO_FENCE) = dev_priv->last_read_seqno;
 	vmw_marker_queue_init(&fifo->marker_queue);
 
 	return 0;
@@ -165,7 +165,7 @@ int vmw_fifo_init(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 
 void vmw_fifo_ping_host(struct vmw_private *dev_priv, uint32_t reason)
 {
-	u32 __iomem *fifo_mem = dev_priv->mmio_virt;
+	u32 *fifo_mem = dev_priv->mmio_virt;
 	static DEFINE_SPINLOCK(ping_lock);
 	unsigned long irq_flags;
 
@@ -174,8 +174,8 @@ void vmw_fifo_ping_host(struct vmw_private *dev_priv, uint32_t reason)
 	 * test-and-set of the SVGA_FIFO_BUSY register.
 	 */
 	spin_lock_irqsave(&ping_lock, irq_flags);
-	if (unlikely(ioread32(fifo_mem + SVGA_FIFO_BUSY) == 0)) {
-		iowrite32(1, fifo_mem + SVGA_FIFO_BUSY);
+	if (unlikely(*(fifo_mem + SVGA_FIFO_BUSY) == 0)) {
+		*(fifo_mem + SVGA_FIFO_BUSY) = 1;
 		vmw_write(dev_priv, SVGA_REG_SYNC, reason);
 	}
 	spin_unlock_irqrestore(&ping_lock, irq_flags);
@@ -183,13 +183,13 @@ void vmw_fifo_ping_host(struct vmw_private *dev_priv, uint32_t reason)
 
 void vmw_fifo_release(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 {
-	u32 __iomem *fifo_mem = dev_priv->mmio_virt;
+	u32 *fifo_mem = dev_priv->mmio_virt;
 
 	vmw_write(dev_priv, SVGA_REG_SYNC, SVGA_SYNC_GENERIC);
 	while (vmw_read(dev_priv, SVGA_REG_BUSY) != 0)
 		;
 
-	dev_priv->last_read_seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE);
+	dev_priv->last_read_seqno = *(fifo_mem + SVGA_FIFO_FENCE);
 
 	vmw_write(dev_priv, SVGA_REG_CONFIG_DONE,
 		  dev_priv->config_done_state);
@@ -213,11 +213,11 @@ void vmw_fifo_release(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 
 static bool vmw_fifo_is_full(struct vmw_private *dev_priv, uint32_t bytes)
 {
-	u32 __iomem *fifo_mem = dev_priv->mmio_virt;
-	uint32_t max = ioread32(fifo_mem + SVGA_FIFO_MAX);
-	uint32_t next_cmd = ioread32(fifo_mem + SVGA_FIFO_NEXT_CMD);
-	uint32_t min = ioread32(fifo_mem + SVGA_FIFO_MIN);
-	uint32_t stop = ioread32(fifo_mem + SVGA_FIFO_STOP);
+	u32 *fifo_mem = dev_priv->mmio_virt;
+	uint32_t max = *(fifo_mem + SVGA_FIFO_MAX);
+	uint32_t next_cmd = *(fifo_mem + SVGA_FIFO_NEXT_CMD);
+	uint32_t min = *(fifo_mem + SVGA_FIFO_MIN);
+	uint32_t stop = *(fifo_mem + SVGA_FIFO_STOP);
 
 	return ((max - next_cmd) + (stop - min) <= bytes);
 }
@@ -321,7 +321,7 @@ static void *vmw_local_fifo_reserve(struct vmw_private *dev_priv,
 				    uint32_t bytes)
 {
 	struct vmw_fifo_state *fifo_state = &dev_priv->fifo;
-	u32 __iomem *fifo_mem = dev_priv->mmio_virt;
+	u32 *fifo_mem = dev_priv->mmio_virt;
 	uint32_t max;
 	uint32_t min;
 	uint32_t next_cmd;
@@ -329,9 +329,9 @@ static void *vmw_local_fifo_reserve(struct vmw_private *dev_priv,
 	int ret;
 
 	mutex_lock(&fifo_state->fifo_mutex);
-	max = ioread32(fifo_mem + SVGA_FIFO_MAX);
-	min = ioread32(fifo_mem + SVGA_FIFO_MIN);
-	next_cmd = ioread32(fifo_mem + SVGA_FIFO_NEXT_CMD);
+	max = *(fifo_mem + SVGA_FIFO_MAX);
+	min = *(fifo_mem + SVGA_FIFO_MIN);
+	next_cmd = *(fifo_mem + SVGA_FIFO_NEXT_CMD);
 
 	if (unlikely(bytes >= (max - min)))
 		goto out_err;
@@ -342,7 +342,7 @@ static void *vmw_local_fifo_reserve(struct vmw_private *dev_priv,
 	fifo_state->reserved_size = bytes;
 
 	while (1) {
-		uint32_t stop = ioread32(fifo_mem + SVGA_FIFO_STOP);
+		uint32_t stop = *(fifo_mem + SVGA_FIFO_STOP);
 		bool need_bounce = false;
 		bool reserve_in_place = false;
 
@@ -376,10 +376,8 @@ static void *vmw_local_fifo_reserve(struct vmw_private *dev_priv,
 				fifo_state->using_bounce_buffer = false;
 
 				if (reserveable)
-					iowrite32(bytes, fifo_mem +
-						  SVGA_FIFO_RESERVED);
-				return (void __force *) (fifo_mem +
-							 (next_cmd >> 2));
+					*(fifo_mem + SVGA_FIFO_RESERVED) = bytes;
+				return fifo_mem + (next_cmd >> 2);
 			} else {
 				need_bounce = true;
 			}
@@ -427,7 +425,7 @@ void *vmw_fifo_reserve_dx(struct vmw_private *dev_priv, uint32_t bytes,
 }
 
 static void vmw_fifo_res_copy(struct vmw_fifo_state *fifo_state,
-			      u32 __iomem *fifo_mem,
+			      u32 *fifo_mem,
 			      uint32_t next_cmd,
 			      uint32_t max, uint32_t min, uint32_t bytes)
 {
@@ -439,30 +437,28 @@ static void vmw_fifo_res_copy(struct vmw_fifo_state *fifo_state,
 	if (bytes < chunk_size)
 		chunk_size = bytes;
 
-	iowrite32(bytes, fifo_mem + SVGA_FIFO_RESERVED);
+	*(fifo_mem + SVGA_FIFO_RESERVED) = bytes;
 	mb();
-	memcpy_toio(fifo_mem + (next_cmd >> 2), buffer, chunk_size);
+	memcpy(fifo_mem + (next_cmd >> 2), buffer, chunk_size);
 	rest = bytes - chunk_size;
 	if (rest)
-		memcpy_toio(fifo_mem + (min >> 2), buffer + (chunk_size >> 2),
-			    rest);
+		memcpy(fifo_mem + (min >> 2), buffer + (chunk_size >> 2), rest);
 }
 
 static void vmw_fifo_slow_copy(struct vmw_fifo_state *fifo_state,
-			       u32 __iomem *fifo_mem,
-			       uint32_t next_cmd,
+			       u32 *fifo_mem, uint32_t next_cmd,
 			       uint32_t max, uint32_t min, uint32_t bytes)
 {
 	uint32_t *buffer = (fifo_state->dynamic_buffer != NULL) ?
 	    fifo_state->dynamic_buffer : fifo_state->static_buffer;
 
 	while (bytes > 0) {
-		iowrite32(*buffer++, fifo_mem + (next_cmd >> 2));
+		*(fifo_mem + (next_cmd >> 2)) = *buffer++;
 		next_cmd += sizeof(uint32_t);
 		if (unlikely(next_cmd == max))
 			next_cmd = min;
 		mb();
-		iowrite32(next_cmd, fifo_mem + SVGA_FIFO_NEXT_CMD);
+		*(fifo_mem + SVGA_FIFO_NEXT_CMD) = next_cmd;
 		mb();
 		bytes -= sizeof(uint32_t);
 	}
@@ -471,10 +467,10 @@ static void vmw_fifo_slow_copy(struct vmw_fifo_state *fifo_state,
 static void vmw_local_fifo_commit(struct vmw_private *dev_priv, uint32_t bytes)
 {
 	struct vmw_fifo_state *fifo_state = &dev_priv->fifo;
-	u32 __iomem *fifo_mem = dev_priv->mmio_virt;
-	uint32_t next_cmd = ioread32(fifo_mem + SVGA_FIFO_NEXT_CMD);
-	uint32_t max = ioread32(fifo_mem + SVGA_FIFO_MAX);
-	uint32_t min = ioread32(fifo_mem + SVGA_FIFO_MIN);
+	u32 *fifo_mem = dev_priv->mmio_virt;
+	uint32_t next_cmd = *(fifo_mem + SVGA_FIFO_NEXT_CMD);
+	uint32_t max = *(fifo_mem + SVGA_FIFO_MAX);
+	uint32_t min = *(fifo_mem + SVGA_FIFO_MIN);
 	bool reserveable = fifo_state->capabilities & SVGA_FIFO_CAP_RESERVE;
 
 	if (fifo_state->dx)
@@ -507,11 +503,11 @@ static void vmw_local_fifo_commit(struct vmw_private *dev_priv, uint32_t bytes)
 		if (next_cmd >= max)
 			next_cmd -= max - min;
 		mb();
-		iowrite32(next_cmd, fifo_mem + SVGA_FIFO_NEXT_CMD);
+		*(fifo_mem + SVGA_FIFO_NEXT_CMD) = next_cmd;
 	}
 
 	if (reserveable)
-		iowrite32(0, fifo_mem + SVGA_FIFO_RESERVED);
+		*(fifo_mem + SVGA_FIFO_RESERVED) = 0;
 	mb();
 	up_write(&fifo_state->rwsem);
 	vmw_fifo_ping_host(dev_priv, SVGA_SYNC_GENERIC);
