@@ -366,7 +366,7 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 		sizeof(ibdev->node_desc));
 	ibdev->node_guid = ibd->node_guid;
 	if (!opa_ib_sys_guid)
-		opa_ib_sys_guid = cpu_to_be64(ibdev->node_guid);
+		opa_ib_sys_guid = ibdev->node_guid;
 	ibdev->node_type = RDMA_NODE_IB_CA;
 	ibdev->num_comp_vectors = 1;
 	ibdev->owner = THIS_MODULE;
