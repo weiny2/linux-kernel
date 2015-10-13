@@ -532,6 +532,14 @@ static struct cpu_defaults byt_params = {
 	},
 };
 
+static struct pstate_adjust_policy adj_server_policy = {
+	.sample_rate_ms = 10,
+	.deadband = 0,
+	.setpoint = 30,
+	.p_gain_pct = 10,
+	.d_gain_pct = 0,
+	.i_gain_pct = 0,
+};
 
 static void intel_pstate_get_min_max(struct cpudata *cpu, int *min, int *max)
 {
@@ -862,6 +870,8 @@ static struct cpufreq_driver intel_pstate_driver = {
 };
 
 static int __initdata no_load;
+static int __initdata vanilla_policy;
+static int __initdata server_policy;
 
 static int intel_pstate_msrs_not_valid(void)
 {
@@ -978,6 +988,9 @@ static int __init intel_pstate_init(void)
 	int cpu, rc = 0;
 	const struct x86_cpu_id *id;
 	struct cpu_defaults *cpu_info;
+#if IS_ENABLED(CONFIG_ACPI)
+	const char *profile = NULL;
+#endif
 
 	if (no_load)
 		return -ENODEV;
@@ -1003,6 +1016,32 @@ static int __init intel_pstate_init(void)
 
 	pr_info("Intel P-state driver initializing.\n");
 
+#if IS_ENABLED(CONFIG_ACPI)
+	if (!vanilla_policy) {
+		switch (acpi_gbl_FADT.preferred_profile) {
+		case PM_WORKSTATION:
+			profile = "Workstation";
+			break;
+		case PM_ENTERPRISE_SERVER:
+			profile = "Enterprise Server";
+			break;
+		case PM_SOHO_SERVER:
+			profile = "SOHO Server";
+			break;
+		case PM_PERFORMANCE_SERVER:
+			profile = "Performance Server";
+			break;
+		default:
+			if (server_policy)
+				profile = "Server";
+		};
+
+		if (profile) {
+			pr_info("Intel P-state setting %s policy\n", profile);
+			copy_pid_params(&adj_server_policy);
+		}
+	}
+#endif
 	all_cpu_data = vzalloc(sizeof(void *) * num_possible_cpus());
 	if (!all_cpu_data)
 		return -ENOMEM;
@@ -1036,6 +1075,10 @@ static int __init intel_pstate_setup(char *str)
 
 	if (!strcmp(str, "disable"))
 		no_load = 1;
+	if (!strcmp(str, "vanilla_policy"))
+		vanilla_policy = 1;
+	if (!strcmp(str, "server_policy"))
+		server_policy = 1;
 	return 0;
 }
 early_param("intel_pstate", intel_pstate_setup);
