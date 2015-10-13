@@ -496,6 +496,8 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	ibp->max_vls = pdesc.num_vls_supported;
 	ibp->lid = pdesc.lid;
 	ibp->sm_lid = 0;
+	ibp->lstate = pdesc.lstate;
+	ibp->pstate = pdesc.pstate;
 	/*
 	 * FXRTODO: These need to be reset to their
 	 * defaults after every linkup also. Once LNI code is up
