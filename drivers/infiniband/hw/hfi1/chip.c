@@ -5456,7 +5456,7 @@ static void handle_misc_err(struct hfi1_devdata *dd, u32 unused, u64 reg)
 	int i = 0;
 
 	dd_dev_info(dd, "Misc Error: %s",
-		misc_err_status_string(buf, sizeof(buf), reg));
+		    misc_err_status_string(buf, sizeof(buf), reg));
 
 	for (i = 0; i < NUM_MISC_ERR_STATUS_COUNTERS; i++) {
 		if (reg & (1ull << i))
@@ -5594,7 +5594,7 @@ static void handle_egress_err(struct hfi1_devdata *dd, u32 unused, u64 reg)
 
 	if (reg)
 		dd_dev_info(dd, "Egress Error: %s\n",
-			egress_err_status_string(buf, sizeof(buf), reg));
+			    egress_err_status_string(buf, sizeof(buf), reg));
 
 	for (i = 0; i < NUM_SEND_EGRESS_ERR_STATUS_COUNTERS; i++) {
 		if (reg & (1ull << i))
@@ -5608,7 +5608,7 @@ static void handle_txe_err(struct hfi1_devdata *dd, u32 unused, u64 reg)
 	int i = 0;
 
 	dd_dev_info(dd, "Send Error: %s\n",
-		send_err_status_string(buf, sizeof(buf), reg));
+		    send_err_status_string(buf, sizeof(buf), reg));
 
 	for (i = 0; i < NUM_SEND_ERR_STATUS_COUNTERS; i++) {
 		if (reg & (1ull << i))
@@ -13546,8 +13546,7 @@ int hfi1_set_ctxt_jkey(struct hfi1_devdata *dd, unsigned ctxt, u16 jkey)
 		reg |= SEND_CTXT_CHECK_JOB_KEY_ALLOW_PERMISSIVE_SMASK;
 	write_kctxt_csr(dd, sctxt, SEND_CTXT_CHECK_JOB_KEY, reg);
 	/*
-	 * Enable send-side J_KEY integrity check, unless this is A0 h/w
-	 * (due to A0 erratum).
+	 * Enable send-side J_KEY integrity check, unless this is A0 h/w.
 	 */
 	if (!is_ax(dd)) {
 		reg = read_kctxt_csr(dd, sctxt, SEND_CTXT_CHECK_ENABLE);
