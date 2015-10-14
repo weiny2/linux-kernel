@@ -51,10 +51,8 @@ static efi_status_t efi_locate_rng(efi_system_table_t *sys_table,
 					NULL, &size, *rng_handle);
 	}
 
-	if (status != EFI_SUCCESS) {
-		efi_printk(sys_table, "Failed to locate EFI_RNG_PROTOCOL\n");
+	if (status != EFI_SUCCESS)
 		efi_call_phys1(sys_table->boottime->free_pool, *rng_handle);
-	}
 
 	return status;
 }
