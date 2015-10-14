@@ -439,7 +439,7 @@ static void process_remove_disk(struct mddev *mddev, struct cluster_msg *msg)
 	struct md_rdev *rdev = md_find_rdev_nr_rcu(mddev, msg->raid_slot);
 
 	if (rdev)
-		md_kick_rdev_from_array(mddev, rdev);
+		md_kick_rdev_from_array(rdev);
 	else
 		pr_warn("%s: %d Could not find disk(%d) to REMOVE\n", __func__, __LINE__, msg->raid_slot);
 }
@@ -861,7 +861,6 @@ static int resync_info_update(struct mddev *mddev, sector_t lo, sector_t hi)
 	add_resync_info(mddev, cinfo->bitmap_lockres, lo, hi);
 	/* Re-acquire the lock to refresh LVB */
 	dlm_lock_sync(cinfo->bitmap_lockres, DLM_LOCK_PW);
-
 	pr_info("%s:%d lo: %llu hi: %llu\n", __func__, __LINE__,
 			(unsigned long long)lo,
 			(unsigned long long)hi);
@@ -870,20 +869,6 @@ static int resync_info_update(struct mddev *mddev, sector_t lo, sector_t hi)
 	cmsg.low = cpu_to_le64(lo);
 	cmsg.high = cpu_to_le64(hi);
 	return sendmsg(cinfo, &cmsg);
-}
-
-static void resync_finish(struct mddev *mddev)
-{
-	struct md_cluster_info *cinfo = mddev->cluster_info;
-	struct cluster_msg cmsg;
-	int slot = cinfo->slot_number - 1;
-
-	resync_info_update(mddev, 0, 0);
-	if (test_bit(MD_RECOVERY_INTR, &mddev->recovery)) {
-		cmsg.type = cpu_to_le32(BITMAP_NEEDS_SYNC);
-		cmsg.slot = cpu_to_le32(slot);
-		sendmsg(cinfo, &cmsg);
-	}
 }
 
 static int area_resyncing(struct mddev *mddev, int direction,
@@ -1008,7 +993,6 @@ static struct md_cluster_operations cluster_ops = {
 	.leave  = leave,
 	.slot_number = slot_number,
 	.resync_info_update = resync_info_update,
-	.resync_finish = resync_finish,
 	.metadata_update_start = metadata_update_start,
 	.metadata_update_finish = metadata_update_finish,
 	.metadata_update_cancel = metadata_update_cancel,
