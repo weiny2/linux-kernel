@@ -1579,6 +1579,15 @@ static int raid1_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 		mddev->merge_check_needed = 1;
 	}
 
+	/*
+	 * find the disk ... but prefer rdev->saved_raid_disk
+	 * if possible.
+	 */
+	if (rdev->saved_raid_disk >= 0 &&
+	    rdev->saved_raid_disk >= first &&
+	    conf->mirrors[rdev->saved_raid_disk].rdev == NULL)
+		first = last = rdev->saved_raid_disk;
+
 	for (mirror = first; mirror <= last; mirror++) {
 		p = conf->mirrors+mirror;
 		if (!p->rdev) {
