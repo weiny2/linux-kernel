@@ -7750,6 +7750,7 @@ void md_do_sync(struct md_thread *thread)
 	struct md_rdev *rdev;
 	char *desc, *action = NULL;
 	struct blk_plug plug;
+	bool cluster_resync_finished = false;
 
 	/* just incase thread restarts... */
 	if (test_bit(MD_RECOVERY_DONE, &mddev->recovery))
@@ -8035,7 +8036,11 @@ void md_do_sync(struct md_thread *thread)
 	blk_finish_plug(&plug);
 	wait_event(mddev->recovery_wait, !atomic_read(&mddev->recovery_active));
 
-	/* tell personality that we are finished */
+	/* tell personality and other nodes that we are finished */
+	if (mddev_is_clustered(mddev)) {
+		md_cluster_ops->resync_finish(mddev);
+		cluster_resync_finished = true;
+	}
 	mddev->pers->sync_request(mddev, max_sectors, &skipped, 1);
 
 	if (!test_bit(MD_RECOVERY_CHECK, &mddev->recovery) &&
@@ -8072,6 +8077,11 @@ void md_do_sync(struct md_thread *thread)
 	}
  skip:
 	set_bit(MD_CHANGE_DEVS, &mddev->flags);
+
+	if (mddev_is_clustered(mddev) &&
+	    test_bit(MD_RECOVERY_INTR, &mddev->recovery) &&
+	    !cluster_resync_finished)
+		md_cluster_ops->resync_finish(mddev);
 
 	if (!test_bit(MD_RECOVERY_INTR, &mddev->recovery)) {
 		/* We completed so min/max setting can be forgotten if used. */
@@ -8313,6 +8323,13 @@ void md_check_recovery(struct mddev *mddev)
 				 */
 				bitmap_write_all(mddev->bitmap);
 			}
+			if (mddev_is_clustered(mddev)) {
+				int ret = md_cluster_ops->resync_start(mddev);
+				if (ret) {
+					mddev->sync_thread = NULL;
+					goto no_thread;
+				}
+			}
 			mddev->sync_thread = md_register_thread(md_do_sync,
 								mddev,
 								"resync");
@@ -8320,6 +8337,7 @@ void md_check_recovery(struct mddev *mddev)
 				printk(KERN_ERR "%s: could not start resync"
 					" thread...\n", 
 					mdname(mddev));
+			no_thread:
 				/* leave the spares where they are, it shouldn't hurt */
 				clear_bit(MD_RECOVERY_RUNNING, &mddev->recovery);
 				clear_bit(MD_RECOVERY_SYNC, &mddev->recovery);
