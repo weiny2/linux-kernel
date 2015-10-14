@@ -372,6 +372,7 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	struct hfi1_lkey_table *rkt;
 	struct hfi1_pd *pd;
 	u8 log_pmtu;
+	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 
 	/* IB spec says that num_sge == 0 is OK. */
 	if (unlikely(wr->num_sge > qp->s_max_sge))
@@ -421,7 +422,12 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	/* check for avail */
 	if (unlikely(!qp->s_avail)) {
 		qp->s_avail = qp_get_savail(qp);
-		WARN_ON(qp->s_avail > (qp->s_size - 1));
+		if (WARN_ON(qp->s_avail > (qp->s_size - 1)))
+			dd_dev_err(dd,
+				   "More avail entries than QP RB size.\nQP: %u, size: %u, avail: %u\nhead: %u, tail: %u, cur: %u, acked: %u, last: %u",
+				   qp->ibqp.qp_num, qp->s_size, qp->s_avail,
+				   qp->s_head, qp->s_tail, qp->s_cur,
+				   qp->s_acked, qp->s_last);
 		if (!qp->s_avail)
 			return -ENOMEM;
 	}
@@ -477,6 +483,7 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	wqe->psn = qp->s_next_psn;
 	wqe->lpsn = wqe->psn + ((wqe->length - 1) >> log_pmtu);
 	qp->s_next_psn = wqe->lpsn + 1;
+	trace_hfi1_post_one_send(qp, wqe);
 	smp_wmb(); /* see request builders */
 	qp->s_avail--;
 	qp->s_head = next;
