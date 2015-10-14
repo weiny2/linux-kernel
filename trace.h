@@ -52,6 +52,7 @@
 
 #include <linux/tracepoint.h>
 #include <linux/trace_seq.h>
+#include <rdma/ib_verbs.h>
 
 #include "hfi.h"
 #include "mad.h"
@@ -359,6 +360,69 @@ DEFINE_EVENT(hfi1_qpsleepwakeup_template, hfi1_qpwakeup,
 DEFINE_EVENT(hfi1_qpsleepwakeup_template, hfi1_qpsleep,
 	     TP_PROTO(struct hfi1_qp *qp, u32 flags),
 	     TP_ARGS(qp, flags));
+
+#define wr_opcode_name(opcode) { IB_WR_##opcode, #opcode  }
+#define show_wr_opcode(opcode)                             \
+__print_symbolic(opcode,                                   \
+	wr_opcode_name(RDMA_WRITE),                        \
+	wr_opcode_name(RDMA_WRITE_WITH_IMM),               \
+	wr_opcode_name(SEND),                              \
+	wr_opcode_name(SEND_WITH_IMM),                     \
+	wr_opcode_name(RDMA_READ),                         \
+	wr_opcode_name(ATOMIC_CMP_AND_SWP),                \
+	wr_opcode_name(ATOMIC_FETCH_AND_ADD),              \
+	wr_opcode_name(LSO),                               \
+	wr_opcode_name(SEND_WITH_INV),                     \
+	wr_opcode_name(RDMA_READ_WITH_INV),                \
+	wr_opcode_name(LOCAL_INV),                         \
+	wr_opcode_name(FAST_REG_MR),                       \
+	wr_opcode_name(MASKED_ATOMIC_CMP_AND_SWP),         \
+	wr_opcode_name(MASKED_ATOMIC_FETCH_AND_ADD),       \
+	wr_opcode_name(BIND_MW))
+
+#define POS_PRN \
+"wr_id: %llx qpn: %x, psn: 0x%x, lpsn: 0x%x, length: %u opcode: 0x%.2x,%s, size: %u, avail: %u, head: %u, last: %u"
+
+TRACE_EVENT(hfi1_post_one_send,
+	    TP_PROTO(struct hfi1_qp *qp, struct hfi1_swqe *wqe),
+	    TP_ARGS(qp, wqe),
+	    TP_STRUCT__entry(
+		    __field(u64, wr_id)
+		    __field(u32, qpn)
+		    __field(u32, psn)
+		    __field(u32, lpsn)
+		    __field(u32, length)
+		    __field(u32, opcode)
+		    __field(u32, size)
+		    __field(u32, avail)
+		    __field(u32, head)
+		    __field(u32, last)
+		    ),
+	    TP_fast_assign(
+		    __entry->wr_id = wqe->wr.wr_id;
+		    __entry->qpn = qp->ibqp.qp_num;
+		    __entry->psn = wqe->psn;
+		    __entry->lpsn = wqe->lpsn;
+		    __entry->length = wqe->length;
+		    __entry->opcode = wqe->wr.opcode;
+		    __entry->size = qp->s_size;
+		    __entry->avail = qp->s_avail;
+		    __entry->head = qp->s_head;
+		    __entry->last = qp->s_last;
+		    ),
+	    TP_printk(POS_PRN,
+		      __entry->wr_id,
+		      __entry->qpn,
+		      __entry->psn,
+		      __entry->lpsn,
+		      __entry->length,
+		      __entry->opcode, show_wr_opcode(__entry->opcode),
+		      __entry->size,
+		      __entry->avail,
+		      __entry->head,
+		      __entry->last
+		)
+);
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_qphash
