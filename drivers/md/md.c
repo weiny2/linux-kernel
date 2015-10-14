@@ -2842,15 +2842,18 @@ state_store(struct md_rdev *rdev, const char *buf, size_t len)
 			err = -EBUSY;
 		else {
 			struct mddev *mddev = rdev->mddev;
-			if (mddev_is_clustered(mddev))
-				md_cluster_ops->remove_disk(mddev, rdev);
-			md_kick_rdev_from_array(rdev);
-			if (mddev->pers) {
-				set_bit(MD_CHANGE_DEVS, &mddev->flags);
-				md_wakeup_thread(mddev->thread);
-			}
-			md_new_event(mddev);
 			err = 0;
+			if (mddev_is_clustered(mddev))
+				err = md_cluster_ops->remove_disk(mddev, rdev);
+
+			if (err == 0) {
+				md_kick_rdev_from_array(rdev);
+				if (mddev->pers) {
+					set_bit(MD_CHANGE_DEVS, &mddev->flags);
+					md_wakeup_thread(mddev->thread);
+				}
+				md_new_event(mddev);
+			}
 		}
 	} else if (cmd_match(buf, "writemostly")) {
 		set_bit(WriteMostly, &rdev->flags);
