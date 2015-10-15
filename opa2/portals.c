@@ -149,10 +149,15 @@ static int __hfi_cq_assign(struct hfi_ctx *ctx, u16 *cq_idx)
 int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx)
 {
 	int ret;
+	bool priv;
 
 	/* verify we are attached to Portals */
 	if (ctx->pid == HFI_PID_NONE)
 		return -EPERM;
+
+	/* General and OFED DMA commands require privileged CQ */
+	priv = (ctx->type == HFI_CTX_TYPE_KERNEL) &&
+	       (ctx->mode & HFI_CTX_MODE_BYPASS);
 
 	/*
 	 * some kernel clients may not need to specify UID,SRANK
@@ -166,7 +171,7 @@ int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *c
 
 	ret = __hfi_cq_assign(ctx, cq_idx);
 	if (!ret)
-		hfi_cq_config(ctx, *cq_idx, auth_table, 1);
+		hfi_cq_config(ctx, *cq_idx, auth_table, !priv);
 	return ret;
 }
 
@@ -1099,7 +1104,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 					HFI_NUM_PT_ENTRIES - i - 1;
 		}
 
-		if (ctx->pid >= HFI_PID_BYPASS_BASE)
+		if (ctx->mode & HFI_CTX_MODE_BYPASS)
 			hfi_ctxt_set_bypass(ctx);
 	}
 
