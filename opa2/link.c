@@ -1032,16 +1032,19 @@ int hfi2_wait_logical_linkstate(struct hfi_pportdata *ppd, u32 state,
 				  int msecs)
 {
 	unsigned long timeout;
+	u32 cur_state;
 
 	timeout = jiffies + msecs_to_jiffies(msecs);
 	while (1) {
-		if (get_logical_state(ppd) == state)
+		cur_state = get_logical_state(ppd);
+		if (cur_state == state)
 			return 0;
 		if (time_after(jiffies, timeout))
 			break;
 		msleep(20);
 	}
-	dd_dev_err(ppd->dd, "timeout waiting for link state 0x%x\n", state);
+	dd_dev_err(ppd->dd, "timeout waiting for link state 0x%x (0x%x)\n",
+		   state, cur_state);
 
 	return -ETIMEDOUT;
 }
