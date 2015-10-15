@@ -51,6 +51,7 @@
  */
 #ifndef _OPA_CORE_IB_H_
 #define _OPA_CORE_IB_H_
+#include <rdma/opa_smi.h>
 #include <rdma/opa_port_info.h>
 
 /*
@@ -65,8 +66,6 @@
 #define OPA_QPN_KDETH_BASE	BIT(23) /* Gen1 default */
 #define OPA_QPN_VERBS_MAX	OPA_QPN_KDETH_BASE
 #define OPA_QPN_MAP_MAX		BIT(8)	/* 8-bits to map to Recv Context */
-
-#define OPA_MAX_VLS		32
 
 #define OPA_NUM_PKEY_BLOCKS_PER_SMP 	(OPA_SMP_DR_DATA_SIZE \
 			/ (OPA_PKEY_TABLE_BLK_COUNT * sizeof(u16)))
@@ -137,8 +136,9 @@
 					OPA_AM_NATTR_MASK)
 
 /*
- * Convert MTU sizes to 4bit number format
+ * Convert 4bit number format
  * described in IB 1.3 (14.2.5.6) and OPA spec
+ * to MTU sizes in bytes
  */
 static inline u16 opa_enum_to_mtu(u8 emtu)
 {
@@ -156,9 +156,8 @@ static inline u16 opa_enum_to_mtu(u8 emtu)
 }
 
 /*
- * Convert 4bit number format
+ * Convert MTU sizes to 4bit number format
  * described in IB 1.3 (14.2.5.6) and OPA spec
- * to MTU sizes in bytes
  */
 static inline u8 opa_mtu_to_enum(u16 mtu)
 {
@@ -183,10 +182,29 @@ static inline u8 opa_mtu_to_enum_safe(u16 mtu, u8 if_bad_mtu)
 }
 
 /*
+ * Convert MTU sizes to compressed 3-bit encoding (0..7)
+ * TODO: this is FXR specific, can move to opa2 directory
+ *  when VPD is merged with PCIe driver
+ */
+static inline u8 opa_mtu_to_id(u16 mtu)
+{
+	switch (mtu) {
+	case   256: return 1;
+	case   512: return 2;
+	case  1024: return 3;
+	case  2048: return 4;
+	case  4096: return 5;
+	case  8192: return 6;
+	case 10240: return 7;
+	default: return INVALID_MTU_ENC;
+	}
+}
+
+/*
  * Helper function to read mtu field for a given VL from
  * opa_port_info
  */
-static inline int opa_pi_to_mtu(struct opa_port_info *pi, int vl_num)
+static inline u16 opa_pi_to_mtu(struct opa_port_info *pi, int vl_num)
 {
 	u8 mtu_enc;
 	u16 mtu;

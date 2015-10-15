@@ -176,7 +176,6 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 	unsigned long flags;
 	struct opa_ib_lkey_table *rkt;
 	struct opa_ib_pd *pd;
-	u8 sc5;
 	struct opa_ib_portdata *ibp;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
@@ -255,19 +254,19 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 	    qp->ibqp.qp_type == IB_QPT_RC) {
 		if (wqe->length > 0x80000000U)
 			goto bail_inval_free;
-		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 	} else {
 		struct opa_ib_ah *ah = to_opa_ibah(wr->wr.ud.ah);
-#if 0
-		/* FXRTODO - Skip MTU check till FM is enabled */
-		u8 vl;
+		u8 sc5, vl;
 
-		sc5 = ibp->sl_to_sc[ah->attr.sl];
-		vl = ibp->sc_to_vl[sc5];
+		if (qp->ibqp.qp_type == IB_QPT_SMI) {
+			vl = ibp->sc_to_vl[15];
+		} else {
+			sc5 = ibp->sl_to_sc[ah->attr.sl];
+			vl = ibp->sc_to_vl[sc5];
+		}
 		if (vl < OPA_MAX_VLS)
 			if (wqe->length > ibp->vl_mtu[vl])
 				goto bail_inval_free;
-#endif
 
 		atomic_inc(&ah->refcount);
 	}

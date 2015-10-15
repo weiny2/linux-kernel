@@ -120,11 +120,11 @@ enum {
 #define HFI_EQ_TIMEOUT_MS	1000
 
 /* use this MTU size if none other is given */
-#define HFI_DEFAULT_ACTIVE_MTU 10240
+#define HFI_DEFAULT_ACTIVE_MTU	10240
 /* use this MTU size as the default maximum */
 #define HFI_DEFAULT_MAX_MTU	10240
 /* The largest MAD packet size. */
-#define HFI_MIN_VL_15_MTU		2048
+#define HFI_MIN_VL_15_MTU	2048
 /* Number of Data VLs supported */
 #define HFI_NUM_DATA_VLS	8
 /* Number of PKey entries in the HW */
@@ -500,6 +500,7 @@ struct hfi_pportdata {
 	u8 sc_to_mctc[OPA_MAX_SCS];
 	u8 ptl_slp[OPA_MAX_SLS / 2][HFI_MAX_MC];
 	u8 num_ptl_slp;
+	u16 vl_mtu[OPA_MAX_VLS];
 	struct hfi_link_down_reason local_link_down_reason;
 	struct hfi_link_down_reason neigh_link_down_reason;
 	struct buffer_control bct;
@@ -565,8 +566,6 @@ struct hfi_devdata {
 	u8 __iomem *kregend[HFI_NUM_BARS];
 	/* physical address of chip for io_remap, etc. */
 	resource_size_t physaddr;
-	/* Per VL data. Enough for all VLs but not all elements are set/used.*/
-	u16 vl_mtu[OPA_MAX_VLS];
 
 	/* MSI-X information */
 	struct hfi_msix_entry *msix_entries;
