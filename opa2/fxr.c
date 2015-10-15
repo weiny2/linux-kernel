@@ -193,32 +193,19 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID, tc_slid.val);
 }
 
-static int hfi_mtu_to_mc_tc_shift(const struct hfi_devdata *dd, int mtu)
-{
-	switch (mtu) {
-	case 128: return 0;
-	case IB_MTU_256: return 1;
-	case IB_MTU_512: return 2;
-	case IB_MTU_1024: return 3;
-	case IB_MTU_2048: return 4;
-	case IB_MTU_4096: return 5;
-	case OPA_MTU_8192: return 6;
-	case OPA_MTU_10240: return 7;
-	default:
-		dd_dev_warn(dd, "invalid mtu");
-		return INVALID_MTU_ENC;
-	}
-}
-
-static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, int mtu)
+static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 {
 	int i;
 	u64 reg = 0;
+	u8 mtu_id = opa_mtu_to_id(mtu);
 
-	u64 val = hfi_mtu_to_mc_tc_shift(dd, mtu);
+	if (mtu_id == INVALID_MTU_ENC) {
+		dd_dev_warn(dd, "invalid mtu %d", mtu);
+		return;
+	}
 
 	for (i = 0; i < 8; i++)
-		reg |= (val << (i * 4));
+		reg |= (mtu_id << (i * 4));
 	write_csr(dd, FXR_TXOTR_PKT_CFG_RFS, reg);
 #if 0
 	/* Error seen when writing to these registers */
@@ -239,7 +226,7 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID, tc_slid.val);
 
 	/* FXRTODO: Re-initialize if FM requests different MTU? */
-	hfi_init_tx_otr_mtu(dd, IB_MTU_4096);
+	hfi_init_tx_otr_mtu(dd, 4096);
 }
 
 static void hfi_init_tx_cid_csrs(const struct hfi_devdata *dd)
@@ -1177,15 +1164,14 @@ static void hfi_port_desc(struct opa_core_device *odev,
 				struct opa_pport_desc *pdesc, u8 port_num)
 {
 	struct hfi_pportdata *ppd = to_hfi_ppd(odev->dd, port_num);
-	struct hfi_devdata *dd = odev->dd;
 	int i;
 
 	pdesc->pguid = ppd->pguid;
 	pdesc->lid = ppd->lid;
 	pdesc->num_vls_supported = ppd->vls_supported;
 	for (i = 0; i < ppd->vls_supported; i++)
-		pdesc->vl_mtu[i] = dd->vl_mtu[i];
-	pdesc->vl_mtu[15] = dd->vl_mtu[15];
+		pdesc->vl_mtu[i] = ppd->vl_mtu[i];
+	pdesc->vl_mtu[15] = ppd->vl_mtu[15];
 	pdesc->pkey_tlen = HFI_MAX_PKEYS;
 	pdesc->pkeys = ppd->pkeys;
 	pdesc->ibmaxmtu = HFI_DEFAULT_MAX_MTU;
@@ -1485,7 +1471,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		 * For rest of the data VLs, MTU of 0
 		 * is valid as per the spec
 		 */
-		dd->vl_mtu[15] = HFI_MIN_VL_15_MTU;
+		ppd->vl_mtu[15] = HFI_MIN_VL_15_MTU;
 		ppd->vls_operational = ppd->vls_supported;
 		for (i = 0; i < ARRAY_SIZE(ppd->sl_to_sc); i++)
 			ppd->sl_to_sc[i] = i;

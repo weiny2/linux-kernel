@@ -51,6 +51,7 @@
  */
 
 #include <rdma/ib_smi.h>
+#include <rdma/opa_core_ib.h>
 #include "verbs.h"
 #include "packet.h"
 
@@ -430,6 +431,11 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 	wqe->s_hdrwords = qp->s_hdrwords;
 	wqe->s_sl = ah_attr->sl;
 	wqe->s_ctx = qp->s_ctx;
+	/*
+	 * UD packets are not fragmented, set to max MTU as send_wqe()
+	 * is transport agnostic.
+	 */
+	wqe->pmtu = opa_enum_to_mtu(OPA_MTU_10240);
 done:
 	ret = 1;
 	goto unlock;

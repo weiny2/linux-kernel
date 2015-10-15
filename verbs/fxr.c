@@ -123,6 +123,13 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 
 	/* TODO - eventually this needs to be rewritten to use MGMT_DMA */
 
+	if (wqe->length > wqe->pmtu) {
+		dev_err(ibp->dev,
+			"PT %d: multi-packet PIO not implemented (%d > %d)!\n",
+			ibp->port_num, wqe->length, wqe->pmtu);
+		return -EIO;
+	}
+
 	/*
 	 * Test if these WGEs can be coalesced into single PIO send.
 	 * If not, return an error as we cannot yet handle IOVEC sends.

@@ -136,7 +136,7 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 
 	memset(pi->neigh_mtu.pvlx_to_mtu, 0, sizeof(pi->neigh_mtu.pvlx_to_mtu));
 	for (i = 0; i < ppd->vls_supported; i++) {
-		mtu = opa_mtu_to_enum_safe(dd->vl_mtu[i], OPA_MTU_10240);
+		mtu = opa_mtu_to_enum_safe(ppd->vl_mtu[i], OPA_MTU_10240);
 		if ((i % 2) == 0)
 			pi->neigh_mtu.pvlx_to_mtu[i / 2] |= (mtu << 4);
 		else
@@ -144,7 +144,7 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	}
 
 	/* don't forget VL 15 */
-	mtu = opa_mtu_to_enum(dd->vl_mtu[15]);
+	mtu = opa_mtu_to_enum(ppd->vl_mtu[15]);
 	pi->neigh_mtu.pvlx_to_mtu[15 / 2] |= mtu;
 
 	pi->vl.cap = ppd->vls_supported;
@@ -937,11 +937,11 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 			continue;
 		}
 
-		if (dd->vl_mtu[i] != mtu) {
-			dd_dev_info(dd,
+		if (ppd->vl_mtu[i] != mtu) {
+			ppd_dev_info(ppd,
 				"MTU change on vl %d from %d to %d\n",
-				i, dd->vl_mtu[i], mtu);
-			dd->vl_mtu[i] = mtu;
+				i, ppd->vl_mtu[i], mtu);
+			ppd->vl_mtu[i] = mtu;
 			call_set_mtu++;
 		}
 	}
@@ -955,11 +955,11 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 			hfi_invalid_attr(smp);
 			/* use the existing VL15 MTU */
 	} else {
-		if (dd->vl_mtu[15] != mtu) {
-			dd_dev_info(dd,
+		if (ppd->vl_mtu[15] != mtu) {
+			ppd_dev_info(ppd,
 				"MTU change on vl 15 from %d to %d\n",
-				dd->vl_mtu[15], mtu);
-			dd->vl_mtu[15] = mtu;
+				ppd->vl_mtu[15], mtu);
+			ppd->vl_mtu[15] = mtu;
 			call_set_mtu++;
 		}
 	}

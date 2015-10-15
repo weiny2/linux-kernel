@@ -238,6 +238,7 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 	wqe->s_hdrwords = qp->s_hdrwords;
 	wqe->s_sl = qp->remote_ah_attr.sl;
 	wqe->s_ctx = qp->s_ctx;
+	wqe->pmtu = pmtu;
 done:
 	ret = 1;
 	goto unlock;
@@ -270,7 +271,7 @@ void opa_ib_uc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 	u32 psn;
 	u32 pad;
 	struct ib_wc wc;
-	u32 pmtu = qp->pmtu;
+	u16 pmtu = qp->pmtu;
 	struct ib_reth *reth;
 	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
 	int is_becn, is_fecn, ret;

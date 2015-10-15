@@ -256,10 +256,10 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	 * from the Path Records to us will get the new 8k MTU.  Those that
 	 * attempt to process the MTU enum may fail in various ways.
 	 */
-	props->max_mtu = opa_mtu_to_enum_safe((valid_ib_mtu(ibp->ibmaxmtu) ?
-				      ibp->ibmaxmtu : 4096), IB_MTU_4096);
+	props->max_mtu = valid_ib_mtu(ibp->ibmaxmtu) ?
+			 opa_mtu_to_enum(ibp->ibmaxmtu) : IB_MTU_4096;
 	props->active_mtu = valid_ib_mtu(ibp->ibmtu) ?
-		opa_mtu_to_enum_safe(ibp->ibmtu, IB_MTU_2048) : props->max_mtu;
+			    opa_mtu_to_enum(ibp->ibmtu) : props->max_mtu;
 	props->subnet_timeout = ibp->subnet_timeout;
 
 	return 0;
@@ -554,8 +554,12 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	RCU_INIT_POINTER(ibp->qp[1], NULL);
 
 	/* MTU is per-VL */
-	for (i = 0; i < ibp->max_vls; i++)
+	for (i = 0; i < ibp->max_vls; i++) {
 		ibp->vl_mtu[i] = pdesc.vl_mtu[i];
+		/* ibmtu is maximum of data VL MTUs */
+		if (ibp->vl_mtu[i] > ibp->ibmtu)
+			ibp->ibmtu = ibp->vl_mtu[i];
+	}
 	ibp->vl_mtu[15] = pdesc.vl_mtu[15];
 
 	for (i = 0; i < ARRAY_SIZE(ibp->sl_to_sc); i++)

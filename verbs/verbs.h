@@ -254,6 +254,7 @@ struct opa_ib_swqe {
 	struct opa_ib_sge_state	*s_sge;
 	struct opa_ib_dma_header *s_hdr; /* next packet header to send */
 	u16 s_hdrwords; 	         /* size of s_hdr in 32 bit words */
+	u16 pmtu;
 	u8 s_sl;
 	struct hfi_ctx *s_ctx;           /* associated send context */
 
@@ -353,7 +354,7 @@ struct opa_ib_qp {
 	enum ib_mtu path_mtu;
 	int srate_mbps;		/* s_srate (below) converted to Mbit/s */
 	u32 remote_qpn;
-	u32 pmtu;		/* decoded from path_mtu */
+	u16 pmtu;		/* decoded from path_mtu */
 	u32 qkey;               /* QKEY for this QP (for UD or RD) */
 	u32 s_size;             /* send work queue size */
 	u32 s_rnr_timeout;      /* number of milliseconds for RNR timeout */
@@ -592,7 +593,7 @@ struct opa_ib_portdata {
 	u8 sl_to_sc[OPA_MAX_SLS];
 	u8 sc_to_sl[OPA_MAX_SCS];
 	u8 sc_to_vl[OPA_MAX_SCS];
-	u32 vl_mtu[OPA_MAX_VLS];
+	u16 vl_mtu[OPA_MAX_VLS];
 
 	/* link state */
 	u8 lstate;
