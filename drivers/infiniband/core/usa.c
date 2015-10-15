@@ -154,14 +154,16 @@ static int insert_id(struct usa_id *id)
 	int ret;
 
 	do {
-		ret = idr_pre_get(&usa_idr, GFP_KERNEL);
-		if (!ret)
-			break;
+		idr_preload(GFP_KERNEL);
 
 		mutex_lock(&usa_mutex);
-		ret = idr_get_new(&usa_idr, id, &id->num);
+		ret = idr_alloc(&usa_idr, id, 0, 0, GFP_NOWAIT);
+		if (ret >= 0)
+			id->num = ret;
 		mutex_unlock(&usa_mutex);
-	} while (ret == -EAGAIN);
+	} while (ret < 0);
+
+	idr_preload_end();
 
 	return ret;
 }
