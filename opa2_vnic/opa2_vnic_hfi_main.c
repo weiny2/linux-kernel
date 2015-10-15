@@ -602,17 +602,30 @@ static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 	struct opa_veswport *dev = vdev->hfi_priv;
 	int rc;
 
+
+	/*
+	 * Only get reference count for eeph device. For network device, the
+	 * linux network stack decouples ethernet interface and the driver.
+	 * Hence, no need to get reference count for network device.
+	 */
+	if (vdev->is_eeph) {
+		rc = hfi_vdev_get(vdev);
+		if (rc)
+			goto err;
+	}
 	rc = opa2_init_tx_rx(dev);
 	if (rc)
-		goto err;
+		goto err1;
 	rc = opa2_alloc_skbs(dev);
 	if (rc)
-		goto err1;
+		goto err2;
 	dev->vnic_cb = cb;
 	return 0;
-err1:
+err2:
 	opa2_uninit_tx_rx(dev);
-	dev->vnic_cb = NULL;
+err1:
+	if (vdev->is_eeph)
+		hfi_vdev_put(vdev);
 err:
 	return rc;
 }
@@ -625,6 +638,8 @@ static void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
 	/* FXRTODO: Unlink if appended to the LE list */
 	opa2_free_skbs(dev);
 	opa2_uninit_tx_rx(dev);
+	if (vdev->is_eeph)
+		hfi_vdev_put(vdev);
 }
 
 static int opa2_xfer_test(struct opa_veswport *dev)
@@ -1107,8 +1122,9 @@ int opa_vnic_hfi_add_ctrl_port(struct opa_netdev *ndev)
 	odev->bus_ops->get_device_desc(odev, &desc);
 	ndev->num_ports = desc.num_pports;
 
-	cdev = opa_vnic_ctrl_device_register(desc.ibdev, ndev->num_ports,
-					     ndev, &vnic_ctrl_ops);
+	cdev = opa_vnic_ctrl_device_register(odev->dev.parent, desc.ibdev,
+					     ndev->num_ports, ndev,
+					     &vnic_ctrl_ops);
 	if (IS_ERR(cdev)) {
 		rc = PTR_ERR(cdev);
 		dev_err(&odev->dev, "error adding vnic control port %d\n", rc);
