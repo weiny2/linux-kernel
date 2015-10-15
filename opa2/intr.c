@@ -62,9 +62,10 @@ void hfi_disable_interrupts(struct hfi_devdata *dd)
 		/* MSI-X */
 		struct hfi_msix_entry *me = dd->msix_entries;
 
+		/* loop over all IRQs, don't break early */
 		for (i = 0; i < dd->num_msix_entries; i++, me++) {
 			if (me->arg == NULL) /* => no irq, no affinity */
-				break;
+				continue;
 			irq_set_affinity_hint(dd->msix_entries[i].msix.vector,
 					NULL);
 			free_irq(me->msix.vector, me->arg);
