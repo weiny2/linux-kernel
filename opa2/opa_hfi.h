@@ -802,6 +802,22 @@ void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode);
 	dev_warn(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
 		 (dd)->unit, ##__VA_ARGS__)
 
+#define ppd_dev_err(ppd, fmt, ...) \
+	dev_err(&(ppd)->dd->pcidev->dev, DRIVER_NAME"%d_%d: " fmt,	\
+		(ppd)->dd->unit, ppd->pnum, ##__VA_ARGS__)
+
+#define ppd_dev_info(ppd, fmt, ...) \
+	dev_info(&(ppd)->dd->pcidev->dev, DRIVER_NAME"%d_%d: " fmt,	\
+		(ppd)->dd->unit, ppd->pnum, ##__VA_ARGS__)
+
+#define ppd_dev_dbg(ppd, fmt, ...) \
+	dev_dbg(&(ppd)->dd->pcidev->dev, DRIVER_NAME"%d_%d: " fmt,	\
+		(ppd)->dd->unit, ppd->pnum, ##__VA_ARGS__)
+
+#define ppd_dev_warn(ppd, fmt, ...) \
+	dev_warn(&(ppd)->dd->pcidev->dev, DRIVER_NAME"%d_%d: " fmt,	\
+		(ppd)->dd->unit, ppd->pnum, ##__VA_ARGS__)
+
 #ifndef BIT_ULL
 #define BIT_ULL(nr)             (1ULL << (nr))
 #endif

@@ -82,7 +82,7 @@ u64 read_fzc_csr(const struct hfi_pportdata *ppd, u32 offset)
 	case 2:
 		offset += FXR_FZC_LCB1_CSRS; break;
 	default:
-		dd_dev_warn(ppd->dd, "invalid port"); break;
+		ppd_dev_warn(ppd, "invalid port"); break;
 	}
 	return read_csr(ppd->dd, offset);
 }
@@ -98,7 +98,7 @@ void write_fzc_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
 	case 2:
 		offset += FXR_FZC_LCB1_CSRS; break;
 	default:
-		dd_dev_warn(ppd->dd, "invalid port"); break;
+		ppd_dev_warn(ppd, "invalid port"); break;
 	}
 	write_csr(ppd->dd, offset, value);
 }
@@ -116,7 +116,7 @@ u64 read_8051_csr(const struct hfi_pportdata *ppd, u32 offset)
 		offset += FXR_MNH_S1_8051_CSRS;
 		break;
 	default:
-		dd_dev_warn(ppd->dd, "invalid port"); break;
+		ppd_dev_warn(ppd, "invalid port"); break;
 	}
 	return read_csr(ppd->dd, offset);
 }
@@ -134,7 +134,7 @@ void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
 		offset += FXR_MNH_S1_8051_CSRS;
 		break;
 	default:
-		dd_dev_warn(ppd->dd, "invalid port"); break;
+		ppd_dev_warn(ppd, "invalid port"); break;
 	}
 	write_csr(ppd->dd, offset, value);
 }
@@ -216,7 +216,7 @@ u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd)
 	pstate = read_physical_state(ppd);
 	ib_pstate = hfi_to_opa_pstate(ppd->dd, pstate);
 	if (remembered_state != ib_pstate) {
-		dd_dev_info(ppd->dd,
+		ppd_dev_info(ppd,
 			"%s: physical state changed to %s (0x%x), phy 0x%x\n",
 			__func__, opa_pstate_name(ib_pstate), ib_pstate,
 			pstate);
@@ -258,8 +258,8 @@ static void mnh_shutdown(struct hfi_pportdata *ppd)
 static void mnh_start(const struct hfi_pportdata *ppd)
 {
 	int ret;
-	struct hfi_devdata *dd = ppd->dd;
 #if 0 /* WFR legacy */
+	struct hfi_devdata *dd = ppd->dd;
 	unsigned long flags;
 
 	spin_lock_irqsave(&dd->crk8051_lock, flags);
@@ -272,7 +272,7 @@ static void mnh_start(const struct hfi_pportdata *ppd)
 	/* Wait until 8051 is ready */
 	ret = hfi_wait_firmware_ready(ppd, TIMEOUT_8051_START);
 	if (ret) {
-		dd_dev_err(dd, "%s: timeout starting 8051 firmware\n",
+		ppd_dev_err(ppd, "%s: timeout starting 8051 firmware\n",
 			__func__);
 	}
 	/* turn on the LCB (turn off in lcb_shutdown). */
@@ -301,8 +301,8 @@ static void handle_link_up(struct work_struct *work)
 
 	/* transit to Init only from Going_Up. */
 	if (ppd->host_link_state != HLS_GOING_UP) {
-		dd_dev_info(dd, "port%d False interrupt on %s(): %s(%d) 0x%x",
-			ppd->pnum,  __func__,
+		dd_dev_info(dd, "False interrupt on %s(): %s(%d) 0x%x",
+			__func__,
 			link_state_name(ppd->host_link_state),
 			ilog2(ppd->host_link_state), _8051_port);
 		return;
@@ -325,7 +325,7 @@ static void handle_link_up(struct work_struct *work)
 	/* enforce link speed enabled */
 	if ((ppd->link_speed_active & ppd->link_speed_enabled) == 0) {
 		/* oops - current speed is not enabled, bounce */
-		dd_dev_err(ppd->dd,
+		ppd_dev_err(ppd,
 			"Link speed active 0x%x is outside enabled 0x%x, downing link\n",
 			ppd->link_speed_active, ppd->link_speed_enabled);
 		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_SPEED_POLICY, 0,
@@ -355,7 +355,7 @@ static void handle_link_down(struct work_struct *work)
 		ret = set_physical_link_state(ppd, PLS_OFFLINE_QUIET);
 		ret = ret != HCMD_SUCCESS ? -EINVAL: 0;
 		if (ret)
-			dd_dev_err(ppd->dd, "%s(): can't set physical port state to 0x%x",
+			ppd_dev_err(ppd, "%s(): can't set physical port state to 0x%x",
 				__func__, PLS_OFFLINE_QUIET);
 	}
 
@@ -411,9 +411,9 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 	unsigned long flags;
 #endif
 	unsigned long timeout;
+#if 0 /* WFR legacy */
 	struct hfi_devdata *dd = ppd->dd;
 
-#if 0 /* WFR legacy */
 	hfi1_cdbg(DC8051, "type %d, data 0x%012llx", type, in_data);
 
 	/*
@@ -441,7 +441,7 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 	 */
 	if (ppd->crk8051_timed_out) {
 		if (ppd->crk8051_timed_out > 1) {
-			dd_dev_err(dd,
+			ppd_dev_err(ppd,
 				   "Previous 8051 host command timed out, skipping command %u\n",
 				   type);
 			return_code = -ENXIO;
@@ -482,7 +482,7 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 			break;
 		if (time_after(jiffies, timeout)) {
 			ppd->crk8051_timed_out++;
-			dd_dev_err(dd, "8051 host command %u timeout\n", type);
+			ppd_dev_err(ppd, "8051 host command %u timeout\n", type);
 			if (out_data)
 				*out_data = 0;
 			return_code = -ETIMEDOUT;
@@ -534,7 +534,7 @@ static int load_8051_config(struct hfi_pportdata *ppd, u8 field_id,
 		| (u64)config_data << LOAD_DATA_DATA_SHIFT;
 	ret = do_8051_command(ppd, HCMD_LOAD_CONFIG_DATA, data, NULL);
 	if (ret != HCMD_SUCCESS) {
-		dd_dev_err(ppd->dd,
+		ppd_dev_err(ppd,
 			"load 8051 config: field id %d, lane %d, err %d\n",
 			(int)field_id, (int)lane_id, ret);
 	}
@@ -553,7 +553,7 @@ static int read_idle_message(struct hfi_pportdata *ppd, u64 type, u64 *data_out)
 	ret = do_8051_command(ppd, HCMD_READ_LCB_IDLE_MSG,
 		type, data_out);
 	if (ret != HCMD_SUCCESS) {
-		dd_dev_err(ppd->dd, "read idle message: type %d, err %d\n",
+		ppd_dev_err(ppd, "read idle message: type %d, err %d\n",
 			(u32)type, ret);
 		return -EINVAL;
 	}
@@ -588,7 +588,7 @@ static int send_idle_message(struct hfi_pportdata *ppd, u64 data)
 	dd_dev_info(ppd->dd, "%s: sending idle message 0x%llx\n", __func__, data);
 	ret = do_8051_command(ppd, HCMD_SEND_LCB_IDLE_MSG, data, NULL);
 	if (ret != HCMD_SUCCESS) {
-		dd_dev_err(ppd->dd, "send idle message: data 0x%llx, err %d\n",
+		ppd_dev_err(ppd, "send idle message: data 0x%llx, err %d\n",
 			data, ret);
 		return -EINVAL;
 	}
@@ -619,8 +619,8 @@ int hfi_send_idle_sma(struct hfi_pportdata *ppd, u64 message)
 static int do_quick_linkup(struct hfi_pportdata *ppd)
 {
 	int ret;
-	struct hfi_devdata *dd = ppd->dd;
 #if 0 /* WFR legacy */
+	struct hfi_devdata *dd = ppd->dd;
 	u64 reg;
 	unsigned long timeout;
 
@@ -652,7 +652,7 @@ static int do_quick_linkup(struct hfi_pportdata *ppd)
 			if (reg)
 				break;
 			if (time_after(jiffies, timeout)) {
-				dd_dev_err(dd,
+				ppd_dev_err(ppd,
 					"timeout waiting for LINK_TRANSFER_ACTIVE\n");
 				return -ETIMEDOUT;
 			}
@@ -671,10 +671,10 @@ static int do_quick_linkup(struct hfi_pportdata *ppd)
 		 * both sides can be started and have a chance to be
 		 * done with LCB set up before resuming.
 		 */
-		dd_dev_err(dd,
+		ppd_dev_err(ppd,
 			"Pausing for peer to be finished with LCB set up\n");
 		msleep(5000);
-		dd_dev_err(dd,
+		ppd_dev_err(ppd,
 			"Continuing with quick linkup\n");
 	}
 
@@ -688,7 +688,7 @@ static int do_quick_linkup(struct hfi_pportdata *ppd)
 	 */
 	ret = set_physical_link_state(ppd, PLS_QUICK_LINKUP);
 	if (ret != HCMD_SUCCESS) {
-		dd_dev_err(dd,
+		ppd_dev_err(ppd,
 			"%s: set physical link state to quick LinkUp failed with return %d\n",
 			__func__, ret);
 
@@ -733,7 +733,7 @@ static int wait_phy_linkstate(struct hfi_pportdata *ppd, u32 state, u32 msecs)
 		if (curr_state == state)
 			break;
 		if (time_after(jiffies, timeout)) {
-			dd_dev_err(ppd->dd,
+			ppd_dev_err(ppd,
 				"timeout waiting for phy link state 0x%x, current state is 0x%x\n",
 				state, curr_state);
 			return -ETIMEDOUT;
@@ -754,7 +754,9 @@ static int wait_phy_linkstate(struct hfi_pportdata *ppd, u32 state, u32 msecs)
  */
 static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 {
+#if 0 /* WFR legacy */
 	struct hfi_devdata *dd = ppd->dd;
+#endif
 	u32 pstate, previous_state;
 	int do_transition;
 	int do_wait;
@@ -783,7 +785,7 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 			PLS_OFFLINE | (rem_reason << 8));
 
 		if (ret != HCMD_SUCCESS) {
-			dd_dev_err(dd,
+			ppd_dev_err(ppd,
 				"Failed to transition to Offline link state, return %d\n",
 				ret);
 			return -EINVAL;
@@ -822,7 +824,7 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 	 */
 	ret = hfi_wait_firmware_ready(ppd, 3000);
 	if (ret) {
-		dd_dev_err(dd,
+		ppd_dev_err(ppd,
 			"After going offline, timed out waiting for the 8051 to become ready to accept host requests\n");
 		/* state is really offline, so make it so */
 		ppd->host_link_state = HLS_DN_OFFLINE;
@@ -846,7 +848,7 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 		/* byte 1 of last_*_state is the failure reason */
 		read_last_local_state(dd, &last_local_state);
 		read_last_remote_state(dd, &last_remote_state);
-		dd_dev_err(dd,
+		ppd_dev_err(ppd,
 			"LNI failure last states: local 0x%08x, remote 0x%08x\n",
 			last_local_state, last_remote_state);
 	}
@@ -929,7 +931,7 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 		return 0;
 
 set_local_link_attributes_fail:
-	dd_dev_err(dd,
+	ppd_dev_err(ppd,
 		"Failed to set local link attributes, return 0x%x\n",
 		ret);
 	return ret;
@@ -1043,7 +1045,7 @@ int hfi2_wait_logical_linkstate(struct hfi_pportdata *ppd, u32 state,
 			break;
 		msleep(20);
 	}
-	dd_dev_err(ppd->dd, "timeout waiting for link state 0x%x (0x%x)\n",
+	ppd_dev_err(ppd, "timeout waiting for link state 0x%x (0x%x)\n",
 		   state, cur_state);
 
 	return -ETIMEDOUT;
@@ -1058,17 +1060,14 @@ static void handle_sma_message(struct work_struct *work)
 {
 	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
 							sma_message_work);
-	struct hfi_devdata *dd = ppd->dd;
 	u64 msg;
 	int ret;
 
-	dd_dev_info(dd, "%s() is called", __func__);
 	/* msg is bytes 1-4 of the 40-bit idle message - the command code
 	   is stripped off */
 	ret = read_idle_sma(ppd, &msg);
 	if (ret)
 		return;
-	dd_dev_info(dd, "%s: SMA message 0x%llx\n", __func__, msg);
 	/*
 	 * React to the SMA message.  Byte[1] (0 for us) is the command.
 	 */
@@ -1095,13 +1094,13 @@ static void handle_sma_message(struct work_struct *work)
 			ppd->neighbor_normal = 1;
 			ret = hfi_set_link_state(ppd, HLS_UP_ACTIVE);
 			if (ret)
-				dd_dev_err(dd,
+				ppd_dev_err(ppd,
 					"%s: received Active SMA idle message, couldn't set link to Active\n",
 					__func__);
 		}
 		break;
 	default:
-		dd_dev_err(dd,
+		ppd_dev_err(ppd,
 			"%s: received unexpected SMA idle message 0x%llx\n",
 			__func__, msg);
 		break;
@@ -1223,12 +1222,14 @@ static void handle_verify_cap(struct work_struct *work)
 {
 	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
 								link_vc_work);
+#if 0 /* WFR legacy */
 	struct hfi_devdata *dd = ppd->dd;
+#endif
 	u32 _8051_port = read_physical_state(ppd);
 
 	if (_8051_port != PLS_CONFIGPHY_VERIFYCAP) {
-		dd_dev_info(dd, "port%d False interrupt on %s(): 0x%x. Ignore.",
-			ppd->pnum, __func__, _8051_port);
+		ppd_dev_info(ppd, "False interrupt on %s(): 0x%x. Ignore.",
+			__func__, _8051_port);
 		return;
 	}
 	hfi_set_link_state(ppd, HLS_VERIFY_CAP);
@@ -1262,19 +1263,19 @@ static void handle_verify_cap(struct work_struct *work)
 	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
 	/* print the active widths */
 	get_link_widths(dd, &active_tx, &active_rx);
-	dd_dev_info(dd,
+	ppd_dev_info(ppd,
 		"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
 		(int)power_management, (int)continious);
-	dd_dev_info(dd,
+	ppd_dev_info(ppd,
 		"Peer Fabric: vAU %d, Z %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
 		(int)vau,
 		(int)z,
 		(int)vcu,
 		(int)vl15buf,
 		(int)partner_supported_crc);
-	dd_dev_info(dd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
+	ppd_dev_info(ppd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
 		(u32)remote_tx_rate, (u32)link_widths);
-	dd_dev_info(dd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
+	ppd_dev_info(ppd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
 		(u32)device_id, (u32)device_rev);
 	/*
 	 * The peer vAU value just read is the peer receiver value.  HFI does
@@ -1302,7 +1303,7 @@ static void handle_verify_cap(struct work_struct *work)
 	else
 		crc_val = LCB_CRC_16B;
 
-	dd_dev_info(dd, "Final LCB CRC mode: %d\n", (int)crc_val);
+	ppd_dev_info(ppd, "Final LCB CRC mode: %d\n", (int)crc_val);
 	write_csr(dd, DC_LCB_CFG_CRC_MODE,
 		  (u64)crc_val << DC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 
@@ -1337,7 +1338,7 @@ static void handle_verify_cap(struct work_struct *work)
 			ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
 	}
 	if (ppd->link_speed_active == 0) {
-		dd_dev_err(dd, "%s: unexpected remote tx rate %d, using 25Gb\n",
+		ppd_dev_err(ppd, "%s: unexpected remote tx rate %d, using 25Gb\n",
 			__func__, (int)remote_tx_rate);
 		ppd->link_speed_active = OPA_LINK_SPEED_25G;
 	}
@@ -1393,7 +1394,7 @@ static void handle_verify_cap(struct work_struct *work)
 	ppd->neighbor_fm_security =
 		read_csr(dd, DC_DC8051_STS_REMOTE_FM_SECURITY) &
 		DC_DC8051_STS_LOCAL_FM_SECURITY_DISABLED_MASK;
-	dd_dev_info(dd,
+	ppd_dev_info(ppd,
 		"Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
 		ppd->neighbor_guid, ppd->neighbor_type,
 		ppd->mgmt_allowed, ppd->neighbor_fm_security);
@@ -1629,12 +1630,11 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
  */
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 {
-	struct hfi_devdata *dd = ppd->dd;
 	int ret1, ret = 0;
 
 	mutex_lock(&ppd->hls_lock);
 
-	dd_dev_info(dd, "port%d %s(%d) -> %s(%d)\n", ppd->pnum,
+	ppd_dev_info(ppd, "%s(%d) -> %s(%d)\n",
 		link_state_name(ppd->host_link_state), ilog2(ppd->host_link_state),
 		link_state_name(state), ilog2(state));
 
@@ -1678,7 +1678,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 
 		ret1 = set_physical_link_state(ppd, PLS_DISABLED);
 		if (ret1 != HCMD_SUCCESS) {
-			dd_dev_err(dd,
+			ppd_dev_err(ppd,
 				"Failed to transition to Disabled link state, return 0x%x\n",
 				ret1);
 			ret = -EINVAL;
@@ -1729,7 +1729,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		} else {
 			ret1 = set_physical_link_state(ppd, PLS_POLLING);
 			if (ret1 != HCMD_SUCCESS) {
-				dd_dev_err(dd,
+				ppd_dev_err(ppd,
 					"Failed to transition to Polling link state, return 0x%x\n",
 					ret1);
 				ret = -EINVAL;
@@ -1766,7 +1766,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		if (ret) {
 			/* logical state didn't change, stay at going_up */
 			ppd->host_link_state = HLS_GOING_UP;
-			dd_dev_err(dd,
+			ppd_dev_err(ppd,
 				"%s: logical state did not change to INIT\n",
 				__func__);
 		} else {
@@ -1789,7 +1789,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		if (ret) {
 			/* logical state didn't change, stay at init */
 			ppd->host_link_state = HLS_UP_INIT;
-			dd_dev_err(dd,
+			ppd_dev_err(ppd,
 				"%s: logical state did not change to ARMED\n",
 				__func__);
 		}
@@ -1805,7 +1805,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		if (ret) {
 			/* logical state didn't change, stay at armed */
 			ppd->host_link_state = HLS_UP_ARMED;
-			dd_dev_err(dd,
+			ppd_dev_err(ppd,
 				"%s: logical state did not change to ACTIVE\n",
 				__func__);
 #if 0 /* WFR legacy */
@@ -1834,7 +1834,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 			goto unexpected;
 		ret1 = set_physical_link_state(ppd, PLS_LINKUP);
 		if (ret1 != HCMD_SUCCESS) {
-			dd_dev_err(dd,
+			ppd_dev_err(ppd,
 				"Failed to transition to link up state, return 0x%x\n",
 				ret1);
 			ret = -EINVAL;
@@ -1845,7 +1845,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 	case HLS_GOING_OFFLINE:		/* transient within goto_offline() */
 	case HLS_LINK_COOLDOWN:		/* transient within goto_offline() */
 	default:
-		dd_dev_info(dd, "%s(): state: %s\n",
+		ppd_dev_info(ppd, "%s(): state: %s\n",
 			__func__, link_state_name(state));
 		ret = -EINVAL;
 	}
@@ -1853,7 +1853,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 	goto _return;
 
 unexpected:
-	dd_dev_err(dd, "port%d %s: unexpected state transition from %s to %s\n",
+	ppd_dev_err(ppd, "port%d %s: unexpected state transition from %s to %s\n",
 		ppd->pnum, __func__, link_state_name(ppd->host_link_state),
 		link_state_name(state));
 	ret = -EINVAL;
