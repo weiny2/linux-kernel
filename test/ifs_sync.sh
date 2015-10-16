@@ -2,7 +2,7 @@
 
 # This script will sync an IFS build dir to the wfr yum repositories.
 
-ifs_number="991"
+ifs_number="992"
 ifs_priv="/tmp/ifs_scratch.$USER"
 exclude="--exclude=hfi1-devel-* --exclude=hfi1-0.7-* --exclude=hfi-* --exclude=hfi1-debuginfo-* --exclude=hfi1-0.9-*"
 
@@ -144,27 +144,30 @@ else
 	exit 1
 fi
 
+echo "Build num is $build_num"
+
 #copy and extract tarballs
-extract RHEL6
+#extract RHEL6
 extract RHEL7
-extract RHEL7_1
+#extract RHEL7_1
 
 # The -n here means do a dry run so we don't do the actual rsync
-do_updates RHEL6 $yum6 redhat-ES6 OFED -n
+#do_updates RHEL6 $yum6 redhat-ES6 OFED -n
 do_updates RHEL7 $yum7 redhat-ES7 OFED_DELTA -n
-do_updates RHEL71 $yum71 redhat-ES71 OFED_DELTA -n
+#do_updates RHEL71 $yum71 redhat-ES71 OFED_DELTA -n
 
 echo "Press ENTER to update the repos or Ctrl+C to bail"
 read resp
 echo "Applying updates"
 
 # Do not include the -n here to actually do the rsync
-do_updates RHEL6 $yum6 redhat-ES6 OFED
+#do_updates RHEL6 $yum6 redhat-ES6 OFED
 do_updates RHEL7 $yum7 redhat-ES7 OFED_DELTA
-do_updates RHEL71 $yum71 redhat-ES71 OFED_DELTA
+#do_updates RHEL71 $yum71 redhat-ES71 OFED_DELTA
 
 # Run reposync on the cobbler server
-repo_sync wfr-next
+#repo_sync wfr-next
 repo_sync wfr-next-rhel7
-repo_sync wfr-next-rhel7-1
+#repo_sync wfr-next-rhel7-1
 
+exit $build_num

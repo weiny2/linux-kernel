@@ -8,12 +8,16 @@ mode=$1
 host1=$2
 host2=$3
 nobuild=$4
+perf_test=$5
 rpm_test=0
 quick_test=1
 default_test=1
 mgmt_test=1
-perf_test=1
 snoop_test=1
+
+if [[ -z $perf_test ]]; then
+	perf_test=0
+fi
 
 # Simics specific
 ssh_viper0="ssh root@localhost -p 4022 -i /nfs/site/home/$USER/.ssh/simics_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
@@ -142,6 +146,7 @@ function dump_modparms {
 	echo "Mod Parms on $host1"
 	echo "-------------------"
 	run_cmd_fatal "$host1_ssh 'for i in \$(ls /sys/module/hfi1/parameters); do echo \$i; cat /sys/module/hfi1/parameters/\$i; done'"
+
 	echo ""
 	echo "-------------------"
 	echo "Mod Parms on $host2"
