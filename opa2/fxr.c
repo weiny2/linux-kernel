@@ -599,7 +599,7 @@ static void hfi_set_sc_to_vlnt(struct hfi_pportdata *ppd, u8 *t)
 	 */
 	for (i = 0; i < 4; i++)
 		write_lm_cm_csr(ppd, FXR_TP_CFG_CM_SC_TO_VLT_MAP +
-							i * 8, *t64++);
+				i * 8, be64_to_cpu(*t64++));
 
 	memcpy(ppd->sc_to_vlnt, t, OPA_MAX_SCS);
 }
