@@ -1331,22 +1331,19 @@ void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode)
 		(u64)crc_lcb_mode << FZC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 }
 
-void hfi_init_sc_to_vlt(struct hfi_pportdata *ppd)
+void hfi_init_sc_to_vl_tables(struct hfi_pportdata *ppd)
 {
 	u8 vlt[OPA_MAX_SCS];
-	int i;
 
 	memset(vlt, 0, sizeof(vlt));
 	/*
-	 * SC 0-7 -> VL 0-7 (respectively)
-	 * SC 15  -> VL 15
-	 * otherwise
-	 *        -> VL 0
+	 * Only SC 15 -> VL 15 (SMP) will be used until a valid table
+	 * is setup by FM
 	 */
-	for (i = 0; i < HFI_NUM_DATA_VLS; i++)
-		vlt[i] = i;
 	vlt[15] = 15;
 	hfi_set_sc_to_vlt(ppd, vlt);
+	hfi_set_sc_to_vlnt(ppd, vlt);
+	hfi_set_sc_to_vlr(ppd, vlt);
 }
 
 /*
@@ -1485,7 +1482,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0, NULL);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_SL, 0, NULL);
 
-		hfi_init_sc_to_vlt(ppd);
+		hfi_init_sc_to_vl_tables(ppd);
 		hfi_ptc_init(ppd);
 
 		size = sizeof(struct cc_state);
