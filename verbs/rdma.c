@@ -177,6 +177,7 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 	struct opa_ib_lkey_table *rkt;
 	struct opa_ib_pd *pd;
 	struct opa_ib_portdata *ibp;
+	struct hfi2_sge *last_sge;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
@@ -233,6 +234,7 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 	wqe->length = 0;
 	j = 0;
 	if (wr->num_sge) {
+		last_sge = NULL;
 		acc = wr->opcode >= IB_WR_RDMA_READ ?
 			IB_ACCESS_LOCAL_WRITE : 0;
 		for (i = 0; i < wr->num_sge; i++) {
@@ -241,12 +243,27 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 
 			if (length == 0)
 				continue;
-			ok = opa_ib_lkey_ok(rkt, pd, &wqe->sg_list[j],
-					    &wr->sg_list[i], acc);
-			if (!ok)
-				goto bail_inval_free;
+
+			/* attempt to coalesce SGEs if lkey == 0 */
+			if (last_sge && wr->sg_list[i].lkey == 0 &&
+			    ((uint64_t)(last_sge->vaddr + last_sge->length) ==
+			     wr->sg_list[i].addr)) {
+				/* contiguous, so append length to last SGE */
+				last_sge->length += length;
+				last_sge->sge_length += length;
+			} else {
+				ok = opa_ib_lkey_ok(rkt, pd, &wqe->sg_list[j],
+						    &wr->sg_list[i], acc);
+				if (!ok)
+					goto bail_inval_free;
+
+				if (wr->sg_list[i].lkey == 0)
+					last_sge = &wqe->sg_list[j];
+				else
+					last_sge = NULL;
+				j++;
+			}
 			wqe->length += length;
-			j++;
 		}
 		wqe->wr.num_sge = j;
 	}
