@@ -787,35 +787,35 @@ void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode);
  * Otherwise these macros below are the preferred ones.
  */
 #define dd_dev_err(dd, fmt, ...) \
-	dev_err(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
+	dev_err(&(dd)->pcidev->dev, "%d: " fmt, \
 		(dd)->unit, ##__VA_ARGS__)
 
 #define dd_dev_info(dd, fmt, ...) \
-	dev_info(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
+	dev_info(&(dd)->pcidev->dev, "%d: " fmt, \
 		 (dd)->unit, ##__VA_ARGS__)
 
 #define dd_dev_dbg(dd, fmt, ...) \
-	dev_dbg(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
+	dev_dbg(&(dd)->pcidev->dev, "%d: " fmt, \
 		 (dd)->unit, ##__VA_ARGS__)
 
 #define dd_dev_warn(dd, fmt, ...) \
-	dev_warn(&(dd)->pcidev->dev, DRIVER_NAME"%d: " fmt, \
+	dev_warn(&(dd)->pcidev->dev, "%d: " fmt, \
 		 (dd)->unit, ##__VA_ARGS__)
 
 #define ppd_dev_err(ppd, fmt, ...) \
-	dev_err(&(ppd)->dd->pcidev->dev, DRIVER_NAME"%d_%d: " fmt,	\
+	dev_err(&(ppd)->dd->pcidev->dev, "%d/%d: " fmt,	\
 		(ppd)->dd->unit, ppd->pnum, ##__VA_ARGS__)
 
 #define ppd_dev_info(ppd, fmt, ...) \
-	dev_info(&(ppd)->dd->pcidev->dev, DRIVER_NAME"%d_%d: " fmt,	\
+	dev_info(&(ppd)->dd->pcidev->dev, "%d/%d: " fmt,	\
 		(ppd)->dd->unit, ppd->pnum, ##__VA_ARGS__)
 
 #define ppd_dev_dbg(ppd, fmt, ...) \
-	dev_dbg(&(ppd)->dd->pcidev->dev, DRIVER_NAME"%d_%d: " fmt,	\
+	dev_dbg(&(ppd)->dd->pcidev->dev, "%d/%d: " fmt,	\
 		(ppd)->dd->unit, ppd->pnum, ##__VA_ARGS__)
 
 #define ppd_dev_warn(ppd, fmt, ...) \
-	dev_warn(&(ppd)->dd->pcidev->dev, DRIVER_NAME"%d_%d: " fmt,	\
+	dev_warn(&(ppd)->dd->pcidev->dev, "%d/%d: " fmt,	\
 		(ppd)->dd->unit, ppd->pnum, ##__VA_ARGS__)
 
 #ifndef BIT_ULL
