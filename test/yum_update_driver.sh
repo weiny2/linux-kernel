@@ -12,6 +12,9 @@ if [[ $vers = "Red Hat Enterprise Linux Server release 7.0 (Maipo)" ]]; then
 	yum_dir=/nfs/site/proj/ftp/wfr_yum7/next
 	repo_name="wfr-next-rhel7"
 elif [[ $vers = "Red Hat Enterprise Linux Server release 6.3 (Santiago)" ]] ; then
+	echo "RHEL 6 is now deprecated."
+	exit 1
+
 	RHEL=6
 	driver=/nfs/sc/disks/fabric_work/$USER/wfr/weekly-reg/wfr-driver
 	yum_dir=/nfs/site/proj/ftp/wfr_yum/next
@@ -32,20 +35,6 @@ sudo yum clean all
 sudo yum update ifs-kernel-updates-devel
 
 rm -f /nfs/sc/disks/fabric_work/$USER/rpmbuild/RPMS/x86_64/hfi1*0.9*
-
-echo "Syncing Driver"
-echo "--------------"
-cd $driver
-git remote update
-if [ $? -ne 0 ]; then
-	echo "Failed to do git update"
-	exit 1
-fi
-git pull --rebase
-if [ $? -ne 0 ]; then
-	echo "Failed to pull and rebase"
-	exit 1
-fi
 
 echo "Building Driver"
 echo "---------------"
