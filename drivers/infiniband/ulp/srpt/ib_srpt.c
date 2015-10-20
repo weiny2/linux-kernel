@@ -56,7 +56,6 @@
 
 #define SRPT_ID_STRING	"Linux SRP target"
 
-#undef pr_fmt
 #define pr_fmt(fmt) DRV_NAME " " fmt
 
 MODULE_AUTHOR("Vu Pham and Bart Van Assche");
@@ -563,7 +562,7 @@ static int srpt_refresh_port(struct srpt_port *sport)
 							 &reg_req, 0,
 							 srpt_mad_send_handler,
 							 srpt_mad_recv_handler,
-							 sport, 0);
+							 sport);
 		if (IS_ERR(sport->mad_agent)) {
 			ret = PTR_ERR(sport->mad_agent);
 			sport->mad_agent = NULL;

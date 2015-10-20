@@ -391,6 +391,11 @@ typedef void (*ib_mad_recv_handler)(struct ib_mad_agent *mad_agent,
 enum {
 	IB_MAD_USER_RMPP = IB_USER_MAD_USER_RMPP,
 };
+
+#define RMPP_VERSION(x) (x & 0x0f)
+#define RMPP_FLAGS(x) ((x & 0xf0) >> 4)
+#define SET_FLAGS_RMPP(ver, flags) (ver | ((flags & 0x0f) << 4))
+
 struct ib_mad_agent {
 	struct ib_device	*device;
 	struct ib_qp		*qp;
@@ -507,8 +512,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 					   u8 rmpp_version,
 					   ib_mad_send_handler send_handler,
 					   ib_mad_recv_handler recv_handler,
-					   void *context,
-					   u32 registration_flags);
+					   void *context);
 
 enum ib_mad_snoop_flags {
 	/*IB_MAD_SNOOP_POSTED_SENDS	   = 1,*/

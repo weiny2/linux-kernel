@@ -3804,8 +3804,7 @@ static void cm_add_one(struct ib_device *ib_device)
 							0,
 							cm_send_handler,
 							cm_recv_handler,
-							port,
-							0);
+							port);
 		if (IS_ERR(port->mad_agent))
 			goto error2;
 
