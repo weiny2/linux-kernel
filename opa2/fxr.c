@@ -2086,8 +2086,17 @@ void hfi_ctxt_set_bypass(struct hfi_ctx *ctx)
 
 	spin_lock(&dd->ptl_lock);
 	if (ctx->mode & HFI_CTX_MODE_BYPASS_10B) {
-		/* TODO - don't unconditionally claim bypass_pid */
-		write_csr(dd, FXR_RXHP_CFG_NPTL_BYPASS, rx_ctx);
+		/*
+		 * FXRTODO - Unconditionally claim bypass_pid for 10B STLEEP
+		 * for now. Use RSM to distribute packets for other bypass
+		 * contexts eventually.
+		 */
+		RXHP_CFG_NPTL_BYPASS_t bypass = {.val = 0};
+
+		bypass.field.BypassContext = rx_ctx;
+		bypass.field.HdrSize = 0;
+
+		write_csr(dd, FXR_RXHP_CFG_NPTL_BYPASS, bypass.val);
 		dd->bypass_pid = ctx->pid;
 	}
 
