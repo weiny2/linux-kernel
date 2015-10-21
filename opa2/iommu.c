@@ -73,6 +73,9 @@
 #include <linux/kthread.h>
 #include <linux/types.h>
 #include <rdma/fxr/iommu_cr_top_regs.h>
+#include <rdma/fxr/fxr_top_defs.h>
+#include <rdma/fxr/fxr_at_csrs.h>
+#include <rdma/fxr/fxr_at_defs.h>
 #include <rdma/fxr/translation_structs.h>
 #include "opa_hfi.h"
 
@@ -232,6 +235,7 @@ hfi_iommu_root_clear_context(struct hfi_devdata *dd)
 void
 hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *user_mm, u16 pasid)
 {
+	AT_CFG_PASID_LUT_t lut = {.val = 0};
 	union PasidEntry_t p_entry, *p_tbl;
 	struct mm_struct *mm;
 
@@ -248,12 +252,42 @@ hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *user_mm, u16 pasid
 	p_entry.FLPTPTR = virt_to_phys(mm->pgd) >> PAGE_SHIFT;
 	p_entry.P = 1;
 	p_tbl[pasid].val = p_entry.val;
+
+	if (pasid == HFI_PID_SYSTEM) {
+		AT_CFG_USE_SYSTEM_PASID_t sys = {.val = 0};
+
+		sys.field.enable = 1;
+		sys.field.system_pasid = pasid;
+		write_csr(dd, FXR_AT_CFG_USE_SYSTEM_PASID, sys.val);
+	}
+	lut.field.enable = 1;
+	if (user_mm) {
+		lut.field.privilege_level = 1;
+		lut.field.pasid = pasid;
+	} else {
+		/* Use system PASID for the system PID and kernel clients */
+		lut.field.privilege_level = 0;
+		/* FXRTODO: All kernel clients should use system pasid 0 */
+		lut.field.pasid = pasid;
+	}
+	write_csr(dd, FXR_AT_CFG_PASID_LUT + (pasid * 8), lut.val);
 }
 
 void
 hfi_iommu_clear_pasid(struct hfi_devdata *dd, u16 pasid)
 {
 	union PasidEntry_t *p_tbl;
+	AT_CFG_PASID_LUT_t lut = {.val = 0};
+
+	lut.field.enable = 0;
+	write_csr(dd, FXR_AT_CFG_PASID_LUT + (pasid * 8), lut.val);
+
+	if (pasid == HFI_PID_SYSTEM) {
+		AT_CFG_USE_SYSTEM_PASID_t sys = {.val = 0};
+
+		sys.field.enable = 0;
+		write_csr(dd, FXR_AT_CFG_USE_SYSTEM_PASID, sys.val);
+	}
 
 	p_tbl = (union PasidEntry_t *)dd->iommu_pasid_tbl;
 	p_tbl[pasid].val = 0;
