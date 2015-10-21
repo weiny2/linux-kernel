@@ -68,7 +68,6 @@
 1 chip.c CHECK: Avoid CamelCase: <RdmaSeq>
 1 chip.c CHECK: Avoid CamelCase: <RnrNak>
 1 chip.c CHECK: Avoid CamelCase: <RxCtxEgrS>
-1 chip.c CHECK: Avoid CamelCase: <RxCtxRHQS>
 1 chip.c CHECK: Avoid CamelCase: <RxPkt>
 1 chip.c CHECK: Avoid CamelCase: <RxTidFLGMs>
 1 chip.c CHECK: Avoid CamelCase: <RxTidFLSMs>
