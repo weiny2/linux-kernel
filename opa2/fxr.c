@@ -738,9 +738,10 @@ static void hfi_sl_to_mctc(struct hfi_pportdata *ppd)
 }
 
 /* Service channel to message class and traffic class mapping */
-static void hfi_sc_to_mctc(struct hfi_pportdata *ppd)
+static void hfi_sc_to_mctc(struct hfi_pportdata *ppd, void *data)
 {
 	struct hfi_devdata *dd = ppd->dd;
+	u8 *sc_to_sl = data;
 	u64 reg[2];
 	u32 reg_addr;
 	int i, j, k;
@@ -764,10 +765,14 @@ static void hfi_sc_to_mctc(struct hfi_pportdata *ppd)
 	 * In order to obtain the SC -> MCTC map, obtain the SC to SL map
 	 * and then find the SL -> MCTC mapping
 	 */
-	for (i = 0, j = 0; i < nregs; i++)
-		for (k = 0; k < 64; k += 4, j++)
-			hfi_set_bits(&reg[i], ppd->sl_to_mctc[ppd->sc_to_sl[j]],
+	for (i = 0, j = 0; i < nregs; i++) {
+		for (k = 0; k < 64; k += 4, j++) {
+			ppd->sc_to_mctc[j] = (j == 15) ? 0x3 :
+					     ppd->sl_to_mctc[sc_to_sl[j]];
+			hfi_set_bits(&reg[i], ppd->sc_to_mctc[j],
 				     HFI_SC_TO_TC_MC_MASK, k);
+		}
+	}
 
 	for (i = 0; i < nregs; i++)
 		write_csr(dd, reg_addr + i * 8, reg[i]);
@@ -805,7 +810,7 @@ static void hfi_sl_to_sc(struct hfi_pportdata *ppd)
 	for (i = 0, j = 0; i < nregs; i++) {
 		for (k = 0; k < 64; k += 8, j++) {
 			hfi_set_bits(&reg[i], sl_to_sc[j],
-				     HFI_SC_TO_SL_MASK, k);
+				     HFI_SL_TO_SC_MASK, k);
 		}
 	}
 
@@ -814,10 +819,11 @@ static void hfi_sl_to_sc(struct hfi_pportdata *ppd)
 }
 
 /* Service channel to service level mapping */
-static void hfi_sc_to_sl(struct hfi_pportdata *ppd)
+static void hfi_sc_to_resp_sl(struct hfi_pportdata *ppd, void *data)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	u8 *sc_to_sl = ppd->sc_to_sl, resp_sl = 0, sl;
+	u8 *sc_to_sl = data;
+	u8 *sc_to_resp_sl = ppd->sc_to_resp_sl, resp_sl = 0, sl;
 	u64 reg[4];
 	u32 reg_addr;
 	int i, j, k;
@@ -853,11 +859,12 @@ static void hfi_sc_to_sl(struct hfi_pportdata *ppd)
 	 */
 	for (i = 0, j = 0; i < nregs; i++) {
 		for (k = 0; k < 64; k += 8, j++) {
-			if (hfi_is_portals_sl(ppd, j, &resp_sl))
+			if (hfi_is_portals_sl(ppd, sc_to_sl[j], &resp_sl))
 				sl = resp_sl;
 			else
 				sl = sc_to_sl[j];
-			hfi_set_bits(&reg[i], resp_sl, HFI_SC_TO_SL_MASK, k);
+			sc_to_resp_sl[j] = sl;
+			hfi_set_bits(&reg[i], sl, HFI_SC_TO_RESP_SL_MASK, k);
 		}
 	}
 
@@ -909,11 +916,12 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 		break;
 	case HFI_IB_CFG_SL_TO_SC:
 		hfi_sl_to_sc(ppd);
-		hfi_sc_to_mctc(ppd);
 		break;
-	case HFI_IB_CFG_SC_TO_SL:
-		hfi_sc_to_sl(ppd);
-		hfi_sc_to_mctc(ppd);
+	case HFI_IB_CFG_SC_TO_RESP_SL:
+		hfi_sc_to_resp_sl(ppd, data);
+		break;
+	case HFI_IB_CFG_SC_TO_MCTC:
+		hfi_sc_to_mctc(ppd, data);
 		break;
 	case HFI_IB_CFG_SC_TO_VLR:
 		hfi_set_sc_to_vlr(ppd, data);
@@ -1480,7 +1488,8 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		}
 		hfi_sl_to_mctc(ppd);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0, NULL);
-		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_SL, 0, NULL);
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_RESP_SL, 0, ppd->sc_to_sl);
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_MCTC, 0, ppd->sc_to_sl);
 
 		hfi_init_sc_to_vl_tables(ppd);
 		hfi_ptc_init(ppd);

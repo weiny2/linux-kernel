@@ -72,17 +72,24 @@ static int hfi_qos_show(struct seq_file *s, void *unused)
 	seq_printf(s, "QoS mappings for port number %d\n", ppd->pnum);
 	for (i = 0; i < OPA_MAX_SCS; i++) {
 		seq_printf(s,
-			   "sl2sc[%2d] %2d sc2sl[%2d] %2d sc_to_vlt[%2d] %2d ",
-			   i, ppd->sl_to_sc[i],
-			   i, ppd->sc_to_sl[i],
-			   i, ppd->sc_to_vlt[i]);
-		seq_printf(s,
-			   "sc2vlnt[%2d] %2d sl2mc[%2d] %d sl2tc[%2d] %2lld\n",
-			   i, ppd->sc_to_vlnt[i],
+			   "sl2mc[%2d] %2d sl2tc[%2d] %2lld sl2sc[%2d] %2d ",
 			   i, ppd->sl_to_mctc[i] >> 2,
 			   i, ppd->sl_to_mctc[i] &
-			   FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK);
+			   FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK,
+			   i, ppd->sl_to_sc[i]);
+		seq_printf(s,
+			   "sc2vlr[%2d] %2d sc2vlt[%2d] %2d sc2sl[%2d] %2d ",
+			   i, ppd->sc_to_vlr[i],
+			   i, ppd->sc_to_vlt[i],
+			   i, ppd->sc_to_sl[i]);
+		seq_printf(s,
+			   "sc2respsl[%2d] %2d sc2mc[%2d] %2d sc2tc[%2d] %2d ",
+			   i, ppd->sc_to_resp_sl[i],
+			   i, ppd->sc_to_mctc[i] >> 2,
+			   i, ppd->sc_to_mctc[i] & 0x3);
+		seq_printf(s, "sc2vlnt[%2d] %2d\n", i, ppd->sc_to_vlnt[i]);
 	}
+
 	for (i = 0; i < ppd->num_ptl_slp; i++)
 		seq_printf(s, "ptl_sl_pair %d sl1 %d sl2 %d\n",
 			   i, ppd->ptl_slp[i][0], ppd->ptl_slp[i][1]);
