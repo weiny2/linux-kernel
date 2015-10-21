@@ -391,6 +391,10 @@
 #define LINK_QUALITY_INFO            0x14
 #define REMOTE_DEVICE_ID	     0x15
 
+/* 8051 lane specific register field IDs */
+#define TX_EQ_SETTINGS		0x00
+#define CHANNEL_LOSS_SETTINGS	0x05
+
 /* Lane ID for general configuration registers */
 #define GENERAL_CONFIG 4
 
@@ -735,7 +739,6 @@ enum {
 	C_RX_TID_FULL,
 	C_RX_TID_INVALID,
 	C_RX_TID_FLGMS,
-	C_RX_CTX_RHQS,
 	C_RX_CTX_EGRS,
 	C_RCV_TID_FLSMS,
 	C_CCE_PCI_CR_ST,
