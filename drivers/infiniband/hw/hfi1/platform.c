@@ -452,6 +452,7 @@ static int apply_tunings(
 	u8 precur = 0, attn = 0, postcur = 0, external_device_config = 0;
 	u8 *cache = ppd->qsfp_info.cache;
 
+	/* Enable external device config if channel is limiting active */
 	ret = read_8051_config(ppd->dd, LINK_OPTIMIZATION_SETTINGS,
 			       GENERAL_CONFIG, &config_data);
 	config_data |= limiting_active;
@@ -463,6 +464,7 @@ static int apply_tunings(
 			"%s: Failed to set enable external device config\n",
 			__func__);
 
+	/* Pass tuning method to 8051 */
 	ret = read_8051_config(ppd->dd, LINK_TUNING_PARAMETERS, GENERAL_CONFIG,
 			       &config_data);
 	config_data |= tuning_method;
@@ -472,70 +474,65 @@ static int apply_tunings(
 		dd_dev_info(ppd->dd, "%s: Failed to set tuning method\n",
 			    __func__);
 
-	external_device_config =
-		((cache[QSFP_MOD_PWR_OFFS] & 0x4) << 3) |
-		((cache[QSFP_MOD_PWR_OFFS] & 0x8) << 2) |
-		((cache[QSFP_EQ_INFO_OFFS] & 0x2) << 1) |
-		(cache[QSFP_EQ_INFO_OFFS] & 0x4);
-	ret = read_8051_config(ppd->dd, DC_HOST_COMM_SETTINGS, GENERAL_CONFIG,
-			       &config_data);
-	config_data |= (external_device_config << 24);
-	ret = load_8051_config(ppd->dd, DC_HOST_COMM_SETTINGS, GENERAL_CONFIG,
-			       config_data);
-	if (ret != HCMD_SUCCESS)
-		dd_dev_info(
-			ppd->dd,
-			"%s: Failed to set external device config parameters\n",
-			__func__);
-
-	ret = read_8051_config(ppd->dd, TX_SETTINGS, GENERAL_CONFIG,
-			       &config_data);
-	if ((ppd->link_speed_supported & OPA_LINK_SPEED_25G) &&
-	    (ppd->link_speed_enabled & OPA_LINK_SPEED_25G))
-		config_data |= 0x02;
-	if ((ppd->link_speed_supported & OPA_LINK_SPEED_12_5G) &&
-	    (ppd->link_speed_enabled & OPA_LINK_SPEED_12_5G))
-		config_data |= 0x01;
-	ret = load_8051_config(ppd->dd, TX_SETTINGS, GENERAL_CONFIG,
-			       config_data);
-	if (ret != HCMD_SUCCESS)
-		dd_dev_info(
-			ppd->dd,
-			"%s: Failed to set external device config parameters\n",
-			__func__);
-
-	config_data = 0 | (total_atten << 8) | (total_atten);
-	ret = load_8051_config(ppd->dd, 0, 0, config_data);
+	/* Set same channel loss for both TX and RX */
+	config_data = 0 | (total_atten << 16) | (total_atten << 24);
+	ret = load_8051_config(ppd->dd, CHANNEL_LOSS_SETTINGS, 0, config_data);
 	if (ret != HCMD_SUCCESS)
 		dd_dev_info(
 			ppd->dd,
 			"%s: Failed to set channel loss for lane 0\n",
 			__func__);
 
-	ret = load_8051_config(ppd->dd, 0, 1, config_data);
+	ret = load_8051_config(ppd->dd, CHANNEL_LOSS_SETTINGS, 1, config_data);
 	if (ret != HCMD_SUCCESS)
 		dd_dev_info(
 			ppd->dd,
 			"%s: Failed to set channel loss for lane 1\n",
 			__func__);
 
-	ret = load_8051_config(ppd->dd, 0, 2, config_data);
+	ret = load_8051_config(ppd->dd, CHANNEL_LOSS_SETTINGS, 2, config_data);
 	if (ret != HCMD_SUCCESS)
 		dd_dev_info(
 			ppd->dd,
 			"%s: Failed to set channel loss for lane 2\n",
 			__func__);
 
-	ret = load_8051_config(ppd->dd, 0, 3, config_data);
+	ret = load_8051_config(ppd->dd, CHANNEL_LOSS_SETTINGS, 3, config_data);
 	if (ret != HCMD_SUCCESS)
 		dd_dev_info(
 			ppd->dd,
 			"%s: Failed to set channel loss for lane 3\n",
 			__func__);
 
-	if (tx_preset_index == OPA_INVALID_INDEX)
-		goto bail;
+	/* Inform 8051 of cable capabilities */
+	if (ppd->qsfp_info.cache_valid) {
+		external_device_config =
+			((cache[QSFP_MOD_PWR_OFFS] & 0x4) << 3) |
+			((cache[QSFP_MOD_PWR_OFFS] & 0x8) << 2) |
+			((cache[QSFP_EQ_INFO_OFFS] & 0x2) << 1) |
+			(cache[QSFP_EQ_INFO_OFFS] & 0x4);
+		ret = read_8051_config(ppd->dd, DC_HOST_COMM_SETTINGS,
+				       GENERAL_CONFIG, &config_data);
+		/* Clear, then set the external device config field */
+		config_data &= ~(0xFF << 24);
+		config_data |= (external_device_config << 24);
+		ret = load_8051_config(ppd->dd, DC_HOST_COMM_SETTINGS,
+				       GENERAL_CONFIG, config_data);
+		if (ret != HCMD_SUCCESS)
+			dd_dev_info(
+				ppd->dd,
+				"%s: Failed set ext device config params\n",
+				__func__);
+	}
 
+	if (tx_preset_index == OPA_INVALID_INDEX) {
+		if (ppd->port_type == PORT_TYPE_QSFP && limiting_active)
+			dd_dev_info(ppd->dd, "%s: Invalid Tx preset index\n",
+				    __func__);
+		goto bail;
+	}
+
+	/* Following for limiting active channels only */
 	ret = get_platform_config_field(
 		ppd->dd, PLATFORM_CONFIG_TX_PRESET_TABLE, tx_preset_index,
 		TX_PRESET_TABLE_PRECUR, &tx_preset, 4);
@@ -553,36 +550,38 @@ static int apply_tunings(
 
 	config_data = precur | (attn << 8) | (postcur << 16);
 
-	ret = load_8051_config(ppd->dd, 0, 0, config_data);
+	ret = load_8051_config(ppd->dd, TX_EQ_SETTINGS, 0, config_data);
 	if (ret != HCMD_SUCCESS)
 		dd_dev_info(
 			ppd->dd,
 			"%s: Applying TX settings to lane 0 failed\n",
 			__func__);
 
-	ret = load_8051_config(ppd->dd, 0, 1, config_data);
+	ret = load_8051_config(ppd->dd, TX_EQ_SETTINGS, 1, config_data);
 	if (ret != HCMD_SUCCESS)
 		dd_dev_info(
 			ppd->dd,
 			"%s: Applying TX settings to lane 1 failed\n",
 			__func__);
 
-	ret = load_8051_config(ppd->dd, 0, 2, config_data);
+	ret = load_8051_config(ppd->dd, TX_EQ_SETTINGS, 2, config_data);
 	if (ret != HCMD_SUCCESS)
 		dd_dev_info(
 			ppd->dd,
 			"%s: Applying TX settings to lane 2 failed\n",
 			__func__);
 
-	ret = load_8051_config(ppd->dd, 0, 3, config_data);
+	ret = load_8051_config(ppd->dd, TX_EQ_SETTINGS, 3, config_data);
 	if (ret != HCMD_SUCCESS)
 		dd_dev_info(
 			ppd->dd,
 			"%s: Applying TX settings to lane 3 failed\n",
 			__func__);
+
 bail:
 	if (ret == HCMD_SUCCESS)
 		ret = 0;
+
 	return ret;
 }
 
@@ -735,7 +734,7 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 	u32 total_atten = 0;
 	u32 cable_atten = 0, remote_atten = 0, platform_atten = 0;
 	u32 rx_preset_index, tx_preset_index;
-	u8 tuning_method = 0;
+	u8 tuning_method = 0, limiting_active = 0;
 	struct hfi1_devdata *dd = ppd->dd;
 
 	rx_preset_index = OPA_INVALID_INDEX;
@@ -756,6 +755,8 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 	ret = get_platform_config_field(ppd->dd, PLATFORM_CONFIG_PORT_TABLE, 0,
 					PORT_TABLE_PORT_TYPE, &ppd->port_type,
 					4);
+	if (ret)
+		ppd->port_type = PORT_TYPE_UNKNOWN;
 
 	switch (ppd->port_type) {
 	case PORT_TYPE_DISCONNECTED:
@@ -808,6 +809,9 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 						&tuning_method,
 						&total_atten);
 
+				limiting_active =
+						ppd->qsfp_info.limiting_active;
+
 				/*
 				 * We may have modified the QSFP memory, so
 				 * update the cache to reflect the changes
@@ -828,13 +832,19 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 		break;
 	default:
 		dd_dev_info(ppd->dd, "%s: Unknown port type\n", __func__);
-		goto bail;
+		ppd->port_type = PORT_TYPE_UNKNOWN;
+		tuning_method = 2;
+		total_atten = 0;
+		limiting_active = 0;
+		tx_preset_index = OPA_INVALID_INDEX;
+		break;
 	}
+
 	if (ppd->offline_disabled_reason ==
 			HFI1_ODR_MASK(OPA_LINKDOWN_REASON_NONE))
 		ret = apply_tunings(ppd, tx_preset_index, tuning_method,
 				    total_atten,
-				    ppd->qsfp_info.limiting_active);
+				    limiting_active);
 
 	if (!ret)
 		ppd->driver_link_ready = 1;
