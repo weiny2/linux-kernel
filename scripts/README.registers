@@ -1,0 +1,10 @@
+We no long wish to include all registers in the upstream driver. A minimal set
+of registers has been found and included in chip_registers.h. Please do not
+manually edit this file. It is auto-generated.
+
+To include a new register edit the file register_minimal_set.txt and put its
+name at the end. Then run ./refresh_register_file.sh.
+
+If the register you want to use has WFR_ at the beginning leave this in
+register_minimal_set.txt but do not include it in your code. At some point the
+same principal will apply to DC registers.

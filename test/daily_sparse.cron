@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Meant to be run by cron but can be run manually.
+cd tests
+# Check if sparse found in path
+if [ ! $(which sparse 2>/dev/null) ] ; then
+        echo "Sparse not found in path"
+        exit 1
+fi
+# Build driver with sparse flag set and redirect
+# stdout and stderr to temporary build log file
+./build.sh "" "" 1 2>&1 | tee sparse.log
+if [ $? -ne 0 ]; then
+	echo "Build failed"
+	rm sparse.log
+	exit 1
+fi
+# Count total number of warnings + errors in sparse whitelist
+count1="$(awk -F \| '{ total += $1 } END { print total }' sparse.whitelist)"
+# Count total number of warnings + errors in current build log
+count2="$(grep -v "make" sparse.log | grep -c "error\|warning" -)"
+# If the counts don't match, display and return error. Leave temporary
+# build log file in place.
+if [ $count1 -ne $count2 ]; then
+	echo "Sparse check failed!"
+	exit 1
+fi
+# If success, remove temporary build log file
+rm sparse.log

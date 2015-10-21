@@ -1,0 +1,40 @@
+The in-tree scripts here support the addition and ongoing
+maintenance of an in-tree version of the driver while continuing
+on-going development in the indepenent driver repo using our
+current process.
+
+This is supported by three scripts and a patch:
+- move-driver-in-tree.sh
+- merge-driver.sh
+- sync-driver-intree.sh
+- 0003-Build-hfi1-driver-in-tree.patch
+
+The move-driver-in-tree.sh moves the specified branch into the
+kernel.   branch needs to have been prepared for the move by
+deleting the spec file, the makefile, scripts, and other files
+not appropriate for an in-tree driver. patch file is used to
+splice the driver into the kbuild mechanism.  This script should only be
+run once per in-tree version of the driver.
+
+The merge-driver.sh script moves from a specified tag to the destination
+branch, modifying the driver version using git mechanisms.   There can
+be conflicts with this script and they are typically with modifying
+files that have been deleted in branch.  To date, the tags have been
+of the form merge-for-wfr-ifs-3.12-0.9-54 just to leave an audit trail.
+The trailing version is identical to a 'make version' output when on
+the source branch in the driver.  This tag needs to have been pushed
+prior to merge-driver.sh.
+
+sync-driver-intree.sh merges the branch from the driver repo into the
+identically named branch in the in-tree version of the driver.  This should
+follow a run of the merge-driver.sh script.
+
+All of the pushes are --dry-run, allowing for a fallback after inspection
+of repos involved.
+
+The following branches are currently in use in the driver:
+
+for-wfr-ifs-3.12 - this branch feeds the wfr-linux-devel/for-wfr-ifs-3.12 branch
+                   from the driver master branch.
+for-wfr-ifs-3.12-alpha0 - this branch feeds the wfr-linux-devel/for-wfr-ifs-3.12-alpha0 from
+                          the driver alpha0 branch

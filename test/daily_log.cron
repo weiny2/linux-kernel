@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Scrape the given test log and mail the results
+
+build=`git rev-parse --short HEAD`
+
+host1=$1
+host2=$2
+
+logfile=${host1}_${host2}.*.log
+
+function send_fail
+{
+	to="`cat failed_reg.subscribers`"
+	mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Test on ${host1}_${host2} for build $build FAILED" $to < mail.tmp
+	rm mail.tmp
+	exit 1
+}
+
+function send_pass
+{
+	to="`cat passing_reg.subscribers`"
+	mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] Test on ${host1}_${host2} for build $build SUCCESS" $to < mail.tmp
+	rm mail.tmp
+	exit 0
+}
+
+echo "Nightly regression test for build of $build" > mail.tmp
+echo "" >> mail.tmp
+echo "Log dir: /nfs/sc/disks/fabric_mirror/scratch/wfr_reg_test/daily_logs/RHEL7" >> mail.tmp
+echo "Logs: " >> mail.tmp
+ls $logfile >> mail.tmp
+echo "" >> mail.tmp
+echo "${host1}_${host2}" >> mail.tmp
+echo "-------------------------------" >> mail.tmp
+grep -A 100 "Test Summary" $logfile >> mail.tmp
+
+grep "FAIL" mail.tmp
+if [ $? -eq 0 ]; then
+	echo "Sending failure mail"
+	send_fail
+fi
+
+# there must be at least 1 passing test or the script never even ran
+grep "PASS" mail.tmp
+if [ $? -ne 0 ]; then
+	echo "Sending failure mail for non running test"
+	echo "" >> mail.tmp
+	echo "TESTS DID NOT RUN" >> mail.tmp
+	echo "" >> mail.tmp
+	send_fail
+fi
+
+echo "Sending success mail"
+send_pass
