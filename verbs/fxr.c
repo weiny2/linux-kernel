@@ -164,8 +164,7 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 				    wqe->s_hdr, 8 + (wqe->s_hdrwords << 2),
 				    wqe->sg_list[0].vaddr,
 				    wqe->length, ibp->port_num,
-				    15,
-				    KDETH_9B_PIO);
+				    15, 0, KDETH_9B_PIO);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 	if (ret < 0)
 		dev_err(ibp->dev, "PT %d: TX CQ is full!\n", ibp->port_num);
