@@ -3962,8 +3962,6 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 [C_RX_TID_FLGMS] = RXE32_DEV_CNTR_ELEM(RxTidFLGMs,
 				       RCV_TID_FLOW_GEN_MISMATCH_CNT,
 				       CNTR_NORMAL),
-[C_RX_CTX_RHQS] = RXE32_DEV_CNTR_ELEM(RxCtxRHQS, RCV_CONTEXT_RHQ_STALL,
-				      CNTR_NORMAL),
 [C_RX_CTX_EGRS] = RXE32_DEV_CNTR_ELEM(RxCtxEgrS, RCV_CONTEXT_EGR_STALL,
 				      CNTR_NORMAL),
 [C_RCV_TID_FLSMS] = RXE32_DEV_CNTR_ELEM(RxTidFLSMs,
@@ -9179,6 +9177,23 @@ static void init_qsfp_int(struct hfi1_devdata *dd)
 		  qsfp_mask);
 }
 
+/*
+ * Do a one-time initialize of the LCB block.
+ */
+static void init_lcb(struct hfi1_devdata *dd)
+{
+	/* the DC has been reset earlier in the driver load */
+
+	/* set LCB for cclk loopback on the port */
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0x01);
+	write_csr(dd, DC_LCB_CFG_LANE_WIDTH, 0x00);
+	write_csr(dd, DC_LCB_CFG_REINIT_AS_SLAVE, 0x00);
+	write_csr(dd, DC_LCB_CFG_CNT_FOR_SKIP_STALL, 0x110);
+	write_csr(dd, DC_LCB_CFG_CLK_CNTR, 0x08);
+	write_csr(dd, DC_LCB_CFG_LOOPBACK, 0x02);
+	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0x00);
+}
+
 int bringup_serdes(struct hfi1_pportdata *ppd)
 {
 	struct hfi1_devdata *dd = ppd->dd;
@@ -9197,6 +9212,9 @@ int bringup_serdes(struct hfi1_pportdata *ppd)
 
 	/* Set linkinit_reason on power up per OPA spec */
 	ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
+
+	/* one-time init of the LCB */
+	init_lcb(dd);
 
 	if (loopback) {
 		ret = init_loopback(dd);
