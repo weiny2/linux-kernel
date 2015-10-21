@@ -1185,19 +1185,19 @@ static int __subn_set_hfi_sc_to_sl(struct hfi_devdata *dd, struct opa_smp *smp,
 		goto err;
 
 	/* sl entry should be 5 bits long */
-	for (i = 0; i < sc_len; i++)
+	for (i = 0; i < sc_len; i++) {
 		if (p[i] >= OPA_MAX_SLS)
 			goto err;
-
-	for (i = 0; i < sc_len; i++) {
-		if (ppd->sc_to_sl[i] != p[i]) {
+		if (ppd->sc_to_sl[i] != p[i])
 			map_changed = 1;
-			ppd->sc_to_sl[i] = p[i];
-		}
 	}
 
-	if (map_changed)
-		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_SL, 0, NULL);
+	if (map_changed) {
+		for (i = 0; i < sc_len; i++)
+			ppd->sc_to_sl[i] = p[i];
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_RESP_SL, 0, p);
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_MCTC, 0, p);
+	}
 
 	goto done;
 

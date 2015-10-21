@@ -159,7 +159,7 @@ enum {
 
 #define HFI_SL_TO_SC_MASK	FXR_LM_CFG_PORT0_SL2SC0_SL0_TO_SC_MASK
 
-#define HFI_SC_TO_SL_MASK	FXR_LM_CFG_PORT0_SC2SL0_SC0_TO_SL_MASK
+#define HFI_SC_TO_RESP_SL_MASK	FXR_LM_CFG_PORT0_SC2SL0_SC0_TO_SL_MASK
 
 /* Any lane between 8 and 14 is illegal. Randomly chosen one from that list */
 #define HFI_ILLEGAL_VL			12
@@ -241,7 +241,8 @@ enum {
 	HFI_IB_CFG_MTU,			/* update MTU in IBC */
 	HFI_IB_CFG_VL_HIGH_LIMIT,	/* Change VL high limit */
 	HFI_IB_CFG_SL_TO_SC,		/* Change SLtoSC mapping */
-	HFI_IB_CFG_SC_TO_SL,		/* Change SCtoSL mapping */
+	HFI_IB_CFG_SC_TO_RESP_SL,	/* Change SCtoRespSL mapping */
+	HFI_IB_CFG_SC_TO_MCTC,		/* Change SCtoMCTC mapping */
 	HFI_IB_CFG_SC_TO_VLR,		/* Change SCtoVLr mapping */
 	HFI_IB_CFG_SC_TO_VLT,		/* Change SCtoVLt mapping */
 	HFI_IB_CFG_SC_TO_VLNT,		/* Change Neighbor's SCtoVL mapping */
@@ -420,10 +421,13 @@ struct ib_vl_weight_elem {
  *	(information received via LNI)
  * @sl_to_sc: service level to service class mapping table
  * @sc_to_sl: service class to service level mapping table
+ * @sc_to_resp_sl: service class to response service level mapping table
+ *	This is only used for portals traffic
  * @sc_to_vlr: service class to (RX) virtual lane table
  * @sc_to_vlt: service class to (TX) virtual lane table
  * @sc_to_vlnt: service class to (RX) neighbor virtual lane table
  * @sl_to_mctc: service level to traffic class & message class mapping
+ * @sc_to_mctc: service class to traffic class & message class mapping
  * @ptl_slp: SL pairs reserved for portals
  * @num_ptl_slp: number of SL pairs reserved for portals
  * @bct: buffer control table
@@ -483,10 +487,12 @@ struct hfi_pportdata {
 	u8 mgmt_allowed;
 	u8 sl_to_sc[OPA_MAX_SLS];
 	u8 sc_to_sl[OPA_MAX_SCS];
+	u8 sc_to_resp_sl[OPA_MAX_SCS];
 	u8 sc_to_vlr[OPA_MAX_SCS];
 	u8 sc_to_vlt[OPA_MAX_SCS];
 	u8 sc_to_vlnt[OPA_MAX_SCS];
 	u8 sl_to_mctc[OPA_MAX_SLS];
+	u8 sc_to_mctc[OPA_MAX_SCS];
 	u8 ptl_slp[OPA_MAX_SLS / 2][HFI_MAX_MC];
 	u8 num_ptl_slp;
 	struct hfi_link_down_reason local_link_down_reason;
