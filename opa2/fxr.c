@@ -589,17 +589,17 @@ static void hfi_set_sc_to_vlt(struct hfi_pportdata *ppd, u8 *t)
 
 static void hfi_set_sc_to_vlnt(struct hfi_pportdata *ppd, u8 *t)
 {
-	int i;
-	u64 *t64 = (u64 *)t;
+	int i, j, sc_num;
+	u64 reg_val;
 
-	/*
-	 * 4 registers, 8 entries per register, 5 bit per entry
-	 * FXRTODO: This register's bit fields might change in the
-	 * next simics release.
-	 */
-	for (i = 0; i < 4; i++)
+	/* 2 registers, 16 entries per register, 4 bit per entry */
+	for (i = 0, sc_num = 0; i < 2; i++) {
+		for (j = 0, reg_val = 0; j < 16; j++, sc_num++)
+			reg_val |= (t[sc_num] & HFI_SC_VLNT_MASK)
+					 << (j * 4);
 		write_lm_cm_csr(ppd, FXR_TP_CFG_CM_SC_TO_VLT_MAP +
-				i * 8, be64_to_cpu(*t64++));
+				i * 8, reg_val);
+	}
 
 	memcpy(ppd->sc_to_vlnt, t, OPA_MAX_SCS);
 }
