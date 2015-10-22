@@ -71,6 +71,7 @@
 #include "device.h"
 #include "common.h"
 #include "trace.h"
+#include "verbs_txreq.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt

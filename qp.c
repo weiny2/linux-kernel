@@ -58,7 +58,7 @@
 #include "hfi.h"
 #include "qp.h"
 #include "trace.h"
-#include "sdma.h"
+#include "verbs_txreq.h"
 
 #define BITS_PER_PAGE           (PAGE_SIZE * BITS_PER_BYTE)
 #define BITS_PER_PAGE_MASK      (BITS_PER_PAGE - 1)
@@ -433,10 +433,6 @@ static void clear_mr_refs(struct hfi1_qp *qp, int clr_sends)
 				qp->s_last = 0;
 			smp_wmb(); /* see qp_get_savail() */
 		}
-		if (qp->s_rdma_mr) {
-			hfi1_put_mr(qp->s_rdma_mr);
-			qp->s_rdma_mr = NULL;
-		}
 	}
 
 	if (qp->ibqp.qp_type != IB_QPT_RC)
@@ -490,10 +486,6 @@ int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 
 	if (!(qp->s_flags & HFI1_S_BUSY)) {
 		qp->s_hdrwords = 0;
-		if (qp->s_rdma_mr) {
-			hfi1_put_mr(qp->s_rdma_mr);
-			qp->s_rdma_mr = NULL;
-		}
 		flush_tx_list(qp);
 	}
 

@@ -54,7 +54,7 @@
 #include "qp.h"
 #include "sdma.h"
 #include "trace.h"
-#include "verbs.h"
+#include "verbs_txreq.h"
 
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_RC_##x
@@ -85,7 +85,7 @@ static u32 restart_sge(struct hfi1_sge_state *ss, struct hfi1_swqe *wqe,
  * Note the QP s_lock must be held.
  */
 static int make_rc_ack(struct hfi1_ibdev *dev, struct hfi1_qp *qp,
-		       struct hfi1_other_headers *ohdr, u32 pmtu,
+		       struct hfi1_other_headers *ohdr,
 		       struct hfi1_pkt_state *ps)
 {
 	struct hfi1_ack_entry *e;
@@ -94,6 +94,8 @@ static int make_rc_ack(struct hfi1_ibdev *dev, struct hfi1_qp *qp,
 	u32 bth0;
 	u32 bth2;
 	int middle = 0;
+	u32 pmtu = qp->pmtu;
+	struct verbs_txreq *tx = ps->s_txreq;
 
 	/* Don't send an ACK if we aren't supposed to. */
 	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK))
@@ -143,9 +145,9 @@ static int make_rc_ack(struct hfi1_ibdev *dev, struct hfi1_qp *qp,
 				goto bail;
 			}
 			/* Copy SGE state in case we need to resend */
-			qp->s_rdma_mr = e->rdma_sge.mr;
-			if (qp->s_rdma_mr)
-				hfi1_get_mr(qp->s_rdma_mr);
+			tx->mr = e->rdma_sge.mr;
+			if (tx->mr)
+				hfi1_get_mr(tx->mr);
 			qp->s_ack_rdma_sge.sge = e->rdma_sge;
 			qp->s_ack_rdma_sge.num_sge = 1;
 			qp->s_cur_sge = &qp->s_ack_rdma_sge;
@@ -182,9 +184,9 @@ static int make_rc_ack(struct hfi1_ibdev *dev, struct hfi1_qp *qp,
 		/* FALLTHROUGH */
 	case OP(RDMA_READ_RESPONSE_MIDDLE):
 		qp->s_cur_sge = &qp->s_ack_rdma_sge;
-		qp->s_rdma_mr = qp->s_ack_rdma_sge.sge.mr;
-		if (qp->s_rdma_mr)
-			hfi1_get_mr(qp->s_rdma_mr);
+		tx->mr = qp->s_ack_rdma_sge.sge.mr;
+		if (tx->mr)
+			hfi1_get_mr(tx->mr);
 		len = qp->s_ack_rdma_sge.sge.sge_length;
 		if (len > pmtu) {
 			len = pmtu;
@@ -225,6 +227,7 @@ normal:
 	}
 	qp->s_rdma_ack_cnt++;
 	qp->s_hdrwords = hwords;
+	ps->s_txreq->hdr_dwords = hwords + 2;
 	qp->s_cur_size = len;
 	hfi1_make_ruc_header(qp, ohdr, bth0, bth2, middle, ps);
 	return 1;
@@ -279,7 +282,7 @@ int hfi1_make_rc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 
 	/* Sending responses has higher priority over sending requests. */
 	if ((qp->s_flags & HFI1_S_RESP_PENDING) &&
-	    make_rc_ack(dev, qp, ohdr, pmtu, ps))
+	    make_rc_ack(dev, qp, ohdr, ps))
 		return 1;
 
 	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_SEND_OK)) {
@@ -630,6 +633,8 @@ int hfi1_make_rc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 	}
 	qp->s_len -= len;
 	qp->s_hdrwords = hwords;
+	/* pbc */
+	ps->s_txreq->hdr_dwords = hwords + 2;
 	qp->s_cur_sge = ss;
 	qp->s_cur_size = len;
 	hfi1_make_ruc_header(
@@ -650,6 +655,7 @@ bail:
 
 bail_no_tx:
 	qp->s_flags &= ~HFI1_S_BUSY;
+	ps->s_txreq = NULL;
 	return 0;
 }
 

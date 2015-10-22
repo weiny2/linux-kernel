@@ -53,6 +53,7 @@
 
 #include "hfi.h"
 #include "mad.h"
+#include "verbs_txreq.h"
 #include "qp.h"
 
 /**
@@ -348,6 +349,9 @@ int hfi1_make_ud_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 
 	/* header size in 32-bit words LRH+BTH+DETH = (8+12+8)/4. */
 	qp->s_hdrwords = 7;
+	/* pbc */
+	ps->s_txreq->hdr_dwords = qp->s_hdrwords + 2;
+	qp->s_hdrwords = 7;
 	qp->s_cur_size = wqe->length;
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_srate = ah_attr->static_rate;
@@ -391,8 +395,11 @@ int hfi1_make_ud_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 		lrh0 |= (sc5 & 0xf) << 12;
 		qp->s_sc = sc5;
 	}
+
 	qp->s_sde = qp_to_sdma_engine(qp, qp->s_sc);
+	ps->s_txreq->sde = qp->s_sde;
 	qp->s_sendcontext = qp_to_send_context(qp, qp->s_sc);
+	ps->s_txreq->psc = qp->s_sendcontext;
 	ps->s_txreq->phdr.hdr.lrh[0] = cpu_to_be16(lrh0);
 	ps->s_txreq->phdr.hdr.lrh[1] = cpu_to_be16(ah_attr->dlid);
 	ps->s_txreq->phdr.hdr.lrh[2] =
@@ -430,6 +437,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 	qp->s_hdr->ahgidx = 0;
 	qp->s_hdr->tx_flags = 0;
 	qp->s_hdr->sde = NULL;
+	ps->s_txreq->hdr_dwords = qp->s_hdrwords + 2;
 	return 1;
 
 done_free_tx:
@@ -440,6 +448,7 @@ bail:
 	hfi1_put_txreq(ps->s_txreq);
 
 bail_no_tx:
+	ps->s_txreq = NULL;
 	qp->s_flags &= ~HFI1_S_BUSY;
 	return 0;
 }

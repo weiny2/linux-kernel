@@ -67,6 +67,7 @@ struct hfi1_ctxtdata;
 struct hfi1_pportdata;
 struct hfi1_devdata;
 struct hfi1_packet;
+struct verbs_txreq;
 
 #include "iowait.h"
 
@@ -414,74 +415,6 @@ struct hfi1_ack_entry {
 	};
 };
 
-/* increased for AHG */
-#define NUM_DESC 6
-
-/*
- * struct sdma_desc - canonical fragment descriptor
- *
- * This is the descriptor carried in the tx request
- * corresponding to each fragment.
- *
- */
-struct sdma_desc {
-	/* private:  don't use directly */
-	u64 qw[2];
-};
-
-/**
- * struct sdma_txreq - the sdma_txreq structure (one per packet)
- * @list: for use by user and by queuing for wait
- *
- * This is the representation of a packet which consists of some
- * number of fragments.   Storage is provided to within the structure.
- * for all fragments.
- *
- * The storage for the descriptors are automatically extended as needed
- * when the currently allocation is exceeded.
- *
- * The user (Verbs or PSM) may overload this structure with fields
- * specific to their use by putting this struct first in their struct.
- * The method of allocation of the overloaded structure is user dependent
- *
- * The list is the only public field in the structure.
- *
- */
-
-struct sdma_txreq;
-typedef void (*callback_t)(struct sdma_txreq *, int, int);
-
-struct sdma_txreq {
-	struct list_head list;
-	/* private: */
-	struct sdma_desc *descp;
-	/* private: */
-	void *coalesce_buf;
-	/* private: */
-	u16 coalesce_idx;
-	/* private: */
-	struct iowait *wait;
-	/* private: */
-	callback_t                  complete;
-#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
-	u64 sn;
-#endif
-	/* private: - used in coalesce/pad processing */
-	u16                         packet_len;
-	/* private: - down-counted to trigger last */
-	u16                         tlen;
-	/* private: flags */
-	u16                         flags;
-	/* private: */
-	u16                         num_desc;
-	/* private: */
-	u16                         desc_limit;
-	/* private: */
-	u16                         next_descq_idx;
-	/* private: */
-	struct sdma_desc descs[NUM_DESC];
-};
-
 /*
  * Variables prefixed with s_ are for the requester (sender).
  * Variables prefixed with r_ are for the responder (receiver).
@@ -568,11 +501,10 @@ struct hfi1_qp {
 	u32 s_ssn;              /* SSN of tail entry */
 
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
-	struct hfi1_sge_state *s_cur_sge;
 	u32 s_flags;
+	struct hfi1_sge_state *s_cur_sge;
 	struct hfi1_swqe *s_wqe;
 	struct hfi1_sge_state s_sge;     /* current send request data */
-	struct hfi1_mregion *s_rdma_mr;
 	u32 s_cur_size;         /* size of send packet in bytes */
 	u32 s_len;              /* total length of s_sge */
 	u32 s_rdma_read_len;    /* total length of s_rdma_read_sge */
@@ -1219,34 +1151,5 @@ extern unsigned int hfi1_max_srq_wrs;
 extern const u32 ib_hfi1_rnr_table[];
 
 extern struct ib_dma_mapping_ops hfi1_dma_mapping_ops;
-
-struct verbs_txreq {
-	struct hfi1_pio_header	phdr;
-	struct sdma_txreq       txreq;
-	struct hfi1_qp           *qp;
-	struct hfi1_swqe         *wqe;
-	struct hfi1_mregion	*mr;
-	struct hfi1_sge_state    *ss;
-	struct sdma_engine     *sde;
-	u16                     hdr_dwords;
-	u16                     hdr_inx;
-};
-
-noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
-						struct hfi1_qp *qp);
-
-static inline struct verbs_txreq *get_txreq(struct hfi1_ibdev *dev,
-					    struct hfi1_qp *qp)
-{
-	struct verbs_txreq *tx;
-
-	tx = kmem_cache_alloc(dev->verbs_txreq_cache, GFP_ATOMIC);
-	if (unlikely(!tx))
-		/* call slow path to get the lock */
-		return __get_txreq(dev, qp);
-	tx->qp = qp;
-
-	return tx;
-}
 
 #endif                          /* HFI1_VERBS_H */
