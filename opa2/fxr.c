@@ -623,6 +623,21 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
 }
 
 /*
+ * Returns true if the SL is used for portals traffic and the SL is the
+ * req SL of the req/resp SL pairs.
+ */
+bool hfi_is_portals_req_sl(struct hfi_pportdata *ppd, u8 sl)
+{
+	int i;
+
+	for (i = 0; i < ppd->num_ptl_slp; i++)
+		if (ppd->ptl_slp[i][0] == sl)
+			return true;
+
+	return false;
+}
+
+/*
  * Returns true if the SL is used for portals traffic. If it is a portals
  * SL then the response SL is also returned in resp_sl.
  */
