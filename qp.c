@@ -74,6 +74,7 @@ static int iowait_sleep(
 	struct sdma_txreq *stx,
 	unsigned seq);
 static void iowait_wakeup(struct iowait *wait, int reason);
+static void qp_pio_drain(struct hfi1_qp *qp);
 
 static inline unsigned mk_qpn(struct hfi1_qpn_table *qpt,
 			      struct qpn_map *map, unsigned off)
@@ -756,6 +757,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			/* Stop the sending work queue */
 			cancel_work_sync(&qp->s_iowait.iowork);
 			iowait_sdma_drain(&qp->s_iowait);
+			qp_pio_drain(qp);
 			flush_tx_list(qp);
 			remove_qp(dev, qp);
 			wait_event(qp->wait, !atomic_read(&qp->refcount));
@@ -1290,6 +1292,17 @@ bail:
 	return ret;
 }
 
+static void qp_pio_drain(struct hfi1_qp *qp)
+{
+	if (!qp->s_sendcontext)
+		return;
+	while (iowait_pio_pending(&qp->s_iowait)) {
+		hfi1_sc_wantpiobuf_intr(qp->s_sendcontext, 1);
+		iowait_pio_drain(&qp->s_iowait);
+		hfi1_sc_wantpiobuf_intr(qp->s_sendcontext, 0);
+	}
+}
+
 /**
  * hfi1_destroy_qp - destroy a queue pair
  * @ibqp: the queue pair to destroy
@@ -1323,6 +1336,7 @@ int hfi1_destroy_qp(struct ib_qp *ibqp)
 		/* insure any timer has completed */
 		del_timers_sync(qp);
 		iowait_sdma_drain(&qp->s_iowait);
+		qp_pio_drain(qp);
 		flush_tx_list(qp);
 		remove_qp(dev, qp);
 		wait_event(qp->wait, !atomic_read(&qp->refcount));
@@ -1704,7 +1718,7 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 	send_context = qp_to_send_context(qp, qp->s_sc);
 	wqe = get_swqe_ptr(qp, qp->s_last);
 	seq_printf(s,
-		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%u LID %x SL %u MTU %u %u %u %u SDE %p,%u SC %p\n",
+		   "N %d %s QP%x R %u %s %u %u %u f=%x %u %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%x LID %x SL %u MTU %u %u %u %u SDE %p,%u SC %p\n",
 		   iter->n,
 		   qp_idle(qp) ? "I" : "B",
 		   qp->ibqp.qp_num,
@@ -1714,7 +1728,8 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   wqe ? wqe->wr.opcode : 0,
 		   qp->s_hdrwords,
 		   qp->s_flags,
-		   atomic_read(&qp->s_iowait.sdma_busy),
+		   iowait_sdma_pending(&qp->s_iowait),
+		   iowait_pio_pending(&qp->s_iowait),
 		   !list_empty(&qp->s_iowait.list),
 		   qp->timeout,
 		   wqe ? wqe->ssn : 0,

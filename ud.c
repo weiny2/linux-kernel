@@ -292,7 +292,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 		if (qp->s_last == ACCESS_ONCE(qp->s_head))
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
-		if (atomic_read(&qp->s_iowait.sdma_busy)) {
+		if (iowait_sdma_pending(&qp->s_iowait)) {
 			qp->s_flags |= HFI1_S_WAIT_DMA;
 			goto bail;
 		}
@@ -330,7 +330,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 			 * Instead of waiting, we could queue a
 			 * zero length descriptor so we get a callback.
 			 */
-			if (atomic_read(&qp->s_iowait.sdma_busy)) {
+			if (iowait_sdma_pending(&qp->s_iowait)) {
 				qp->s_flags |= HFI1_S_WAIT_DMA;
 				goto bail;
 			}

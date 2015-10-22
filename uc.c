@@ -56,6 +56,13 @@
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_UC_##x
 
+/* only opcode mask for adaptive pio */
+const u32 uc_only_opcode =
+	BIT(OP(SEND_ONLY) & 0x1f) |
+	BIT(OP(SEND_ONLY_WITH_IMMEDIATE & 0x1f)) |
+	BIT(OP(RDMA_WRITE_ONLY & 0x1f)) |
+	BIT(OP(RDMA_WRITE_ONLY_WITH_IMMEDIATE & 0x1f));
+
 /**
  * hfi1_make_uc_req - construct a request packet (SEND, RDMA write)
  * @qp: a pointer to the QP
@@ -84,7 +91,7 @@ int hfi1_make_uc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 		if (qp->s_last == ACCESS_ONCE(qp->s_head))
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
-		if (atomic_read(&qp->s_iowait.sdma_busy)) {
+		if (iowait_sdma_pending(&qp->s_iowait)) {
 			qp->s_flags |= HFI1_S_WAIT_DMA;
 			goto bail;
 		}
@@ -233,6 +240,7 @@ int hfi1_make_uc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 	qp->s_len -= len;
 	qp->s_hdrwords = hwords;
 	ps->s_txreq->hdr_dwords = qp->s_hdrwords + 2;
+	ps->s_txreq->sde = qp->s_sde;
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
 	hfi1_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),

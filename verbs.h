@@ -136,6 +136,10 @@ struct verbs_txreq;
 
 #define IB_DEFAULT_GID_PREFIX	cpu_to_be64(0xfe80000000000000ULL)
 
+/* IB - LRH header constants */
+#define HFI1_LRH_GRH 0x0003      /* 1. word of IB LRH - next header: GRH */
+#define HFI1_LRH_BTH 0x0002      /* 1. word of IB LRH - next header: BTH */
+
 /* flags passed by hfi1_ib_rcv() */
 enum {
 	HFI1_HAS_GRH = (1 << 0),
@@ -593,27 +597,28 @@ struct hfi1_pkt_state {
  * HFI1_S_SEND_ONE - send one packet, request ACK, then wait for ACK
  * HFI1_S_ECN - a BECN was queued to the send engine
  */
-#define HFI1_S_SIGNAL_REQ_WR	0x0001
-#define HFI1_S_BUSY		0x0002
-#define HFI1_S_TIMER		0x0004
-#define HFI1_S_RESP_PENDING	0x0008
-#define HFI1_S_ACK_PENDING	0x0010
-#define HFI1_S_WAIT_FENCE	0x0020
-#define HFI1_S_WAIT_RDMAR	0x0040
-#define HFI1_S_WAIT_RNR		0x0080
-#define HFI1_S_WAIT_SSN_CREDIT	0x0100
-#define HFI1_S_WAIT_DMA		0x0200
-#define HFI1_S_WAIT_PIO		0x0400
-#define HFI1_S_WAIT_TX		0x0800
-#define HFI1_S_WAIT_DMA_DESC	0x1000
-#define HFI1_S_WAIT_KMEM		0x2000
-#define HFI1_S_WAIT_PSN		0x4000
-#define HFI1_S_WAIT_ACK		0x8000
-#define HFI1_S_SEND_ONE		0x10000
-#define HFI1_S_UNLIMITED_CREDIT	0x20000
-#define HFI1_S_AHG_VALID		0x40000
-#define HFI1_S_AHG_CLEAR		0x80000
-#define HFI1_S_ECN		0x100000
+#define HFI1_S_SIGNAL_REQ_WR         0x0001
+#define HFI1_S_BUSY                  0x0002
+#define HFI1_S_TIMER                 0x0004
+#define HFI1_S_RESP_PENDING          0x0008
+#define HFI1_S_ACK_PENDING           0x0010
+#define HFI1_S_WAIT_FENCE            0x0020
+#define HFI1_S_WAIT_RDMAR            0x0040
+#define HFI1_S_WAIT_RNR              0x0080
+#define HFI1_S_WAIT_SSN_CREDIT       0x0100
+#define HFI1_S_WAIT_DMA              0x0200
+#define HFI1_S_WAIT_PIO              0x0400
+#define HFI1_S_WAIT_PIO_DRAIN        0x0800
+#define HFI1_S_WAIT_TX               0x1000
+#define HFI1_S_WAIT_DMA_DESC         0x2000
+#define HFI1_S_WAIT_KMEM             0x4000
+#define HFI1_S_WAIT_PSN              0x8000
+#define HFI1_S_WAIT_ACK              0x10000
+#define HFI1_S_SEND_ONE              0x20000
+#define HFI1_S_UNLIMITED_CREDIT      0x40000
+#define HFI1_S_AHG_VALID             0x80000
+#define HFI1_S_AHG_CLEAR             0x100000
+#define HFI1_S_ECN                   0x200000
 
 /*
  * Wait flags that would prevent any packet type from being sent.
@@ -766,6 +771,7 @@ struct hfi1_ibdev {
 	spinlock_t pending_lock;
 
 	u64 n_piowait;
+	u64 n_piodrain;
 	u64 n_txwait;
 	u64 n_kmem_wait;
 	u64 n_send_schedule;
@@ -1064,6 +1070,19 @@ static inline void hfi1_put_ss(struct hfi1_sge_state *ss)
 		if (--ss->num_sge)
 			ss->sge = *ss->sg_list++;
 	}
+}
+
+extern const u32 rc_only_opcode;
+extern const u32 uc_only_opcode;
+
+static inline u8 get_opcode(struct hfi1_ib_header *h)
+{
+	u16 lnh = be16_to_cpu(h->lrh[0]) & 3;
+
+	if (lnh == HFI1_LRH_BTH)
+		return be32_to_cpu(h->u.oth.bth[0]) >> 24;
+	else
+		return be32_to_cpu(h->u.l.oth.bth[0]) >> 24;
 }
 
 void hfi1_release_mmap_info(struct kref *ref);
