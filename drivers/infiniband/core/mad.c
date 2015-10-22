@@ -207,11 +207,10 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 					   u8 port_num,
 					   enum ib_qp_type qp_type,
 					   struct ib_mad_reg_req *mad_reg_req,
-					   u8 rmpp_version,
+					   u8 rmpp_flags,
 					   ib_mad_send_handler send_handler,
 					   ib_mad_recv_handler recv_handler,
-					   void *context,
-					   u32 registration_flags)
+					   void *context)
 {
 	struct ib_mad_port_private *port_priv;
 	struct ib_mad_agent *ret = ERR_PTR(-EINVAL);
@@ -224,6 +223,8 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	int ret2, qpn;
 	unsigned long flags;
 	u8 mgmt_class, vclass;
+	u8 rmpp_version = RMPP_VERSION(rmpp_flags);
+	u32 registration_flags = RMPP_FLAGS(rmpp_flags);
 
 	/* Validate parameters */
 	qpn = get_spl_qp_index(qp_type);

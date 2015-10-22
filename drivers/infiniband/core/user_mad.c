@@ -703,7 +703,7 @@ found:
 				      ureq.qpn ? IB_QPT_GSI : IB_QPT_SMI,
 				      ureq.mgmt_class ? &req : NULL,
 				      ureq.rmpp_version,
-				      send_handler, recv_handler, file, 0);
+				      send_handler, recv_handler, file);
 	if (IS_ERR(agent)) {
 		ret = PTR_ERR(agent);
 		agent = NULL;
@@ -747,6 +747,7 @@ static int ib_umad_reg_agent2(struct ib_umad_file *file, void __user *arg)
 	struct ib_mad_reg_req req;
 	struct ib_mad_agent *agent = NULL;
 	int agent_id;
+	u8 rmpp_flags;
 	int ret;
 
 	mutex_lock(&file->port->file_mutex);
@@ -815,12 +816,13 @@ found:
 			sizeof(req.method_mask));
 	}
 
+	rmpp_flags = SET_FLAGS_RMPP(ureq.rmpp_version, (u8)ureq.flags);
 	agent = ib_register_mad_agent(file->port->ib_dev, file->port->port_num,
 				      ureq.qpn ? IB_QPT_GSI : IB_QPT_SMI,
 				      ureq.mgmt_class ? &req : NULL,
-				      ureq.rmpp_version,
-				      send_handler, recv_handler, file,
-				      ureq.flags);
+				      rmpp_flags,
+				      send_handler, recv_handler, file);
+
 	if (IS_ERR(agent)) {
 		ret = PTR_ERR(agent);
 		agent = NULL;
