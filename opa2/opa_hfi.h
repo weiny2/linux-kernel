@@ -157,6 +157,9 @@ enum {
 			(FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_MC_MASK << \
 			FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_MC_SHIFT))
 
+#define HFI_GET_TC(mctc)	((mctc) & \
+				(u8)(FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK))
+
 #define HFI_SL_TO_SC_MASK	FXR_LM_CFG_PORT0_SL2SC0_SL0_TO_SC_MASK
 
 #define HFI_SC_TO_RESP_SL_MASK	FXR_LM_CFG_PORT0_SC2SL0_SC0_TO_SL_MASK
@@ -183,10 +186,10 @@ enum {
 
 /*
  * Starting SL for Portals traffic. The following pairs are reserved for
- * portals. [24, 25], [26, 27], [28, 29], [30, 31]
+ * portals. [0, 1], [2, 3], [4, 5], [6, 7]
  *
  */
-#define HFI_PTL_SL_START 24
+#define HFI_PTL_SL_START 0
 
 /*
  * HFI or Host Link States
@@ -350,11 +353,13 @@ struct hfi_event_queue {
  * @max_e2e_dlid: Maximum DLID to which an E2E connection has been
  *	established which is used to detect the DLID till which
  *	destroy messages have to be sent during driver unload
+ * @sl: request SL of the SL pairs used for E2E connection
  */
 struct hfi_ptcdata {
 	void *psn_base;
 	struct ida e2e_state_cache;
 	u32 max_e2e_dlid;
+	u8 req_sl;
 };
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
@@ -787,6 +792,7 @@ u16 hfi_port_ltp_to_cap(u16 port_ltp);
 u16 hfi_port_cap_to_lcb(struct hfi_devdata *dd, u16 crc_mask);
 u16 hfi_cap_to_port_ltp(u16 cap);
 void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode);
+bool hfi_is_portals_req_sl(struct hfi_pportdata *ppd, u8 sl);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of

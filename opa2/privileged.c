@@ -60,7 +60,7 @@
 
 /* Format an E2E control message, transmit it and wait for an acknowledgment */
 static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
-			    int tc, int port, enum ptl_op_e2e_ctrl op)
+			    int sl, int port, enum ptl_op_e2e_ctrl op)
 {
 	union hfi_tx_cq_command tx_cmd;
 	hfi_tx_e2e_control_t *command = &tx_cmd.e2e_ctrl;
@@ -84,7 +84,7 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 
 	_hfi_format_base_put_flit0(ctx, ni, &command->flit0, cmd,
 				   E2E_CTRL, cmd_length, target_id, port, 0,
-				   RC_IN_ORDER_0, tc, 0, 0, 0, 0, 0,
+				   RC_IN_ORDER_0, sl, 0, 0, 0, 0, 0,
 				   FXR_TRUE, ack_req, md_options, dd->e2e_eq,
 				   PTL_CT_NONE, 0, 0);
 
@@ -135,8 +135,10 @@ done:
 int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 {
 	struct hfi_devdata *dd = ctx->devdata;
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, e2e->port_num);
 	struct hfi_ptcdata *ptc;
 	u8 tc;
+	u8 sl = e2e->sl;
 	struct ida *cache;
 	int ret;
 
@@ -146,12 +148,10 @@ int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 	if (e2e->dlid >= HFI_MAX_LID_SUPP)
 		return -EINVAL;
 
-	/*
-	 * TODO: The SL <-> TC mapping is currently hard coded in
-	 * Simics. At some point we need to determine the mapping
-	 * from the CSR registers instead.
-	 */
-	tc = e2e->sl % HFI_MAX_TC;
+	if (!hfi_is_portals_req_sl(ppd, sl))
+		return -EINVAL;
+
+	tc = HFI_GET_TC(ppd->sl_to_mctc[sl]);
 
 	ptc = &dd->pport[e2e->port_num - 1].ptc[tc];
 	cache = &ptc->e2e_state_cache;
@@ -170,9 +170,13 @@ int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 	/* Bail out upon other IDA failures */
 	if (ret < 0)
 		goto unlock;
+
+	/* Save this sl for tearing down the E2E */
+	ptc->req_sl = sl;
+
 	/* Initiate an E2E connection if one did not exist */
 	ret = hfi_put_e2e_ctrl(dd, e2e->slid, e2e->dlid,
-			       tc, e2e->port_num - 1, PTL_SINGLE_CONNECT);
+			       sl, e2e->port_num - 1, PTL_SINGLE_CONNECT);
 	if (ret < 0)
 		/* remove the entry from the cache upon failure */
 		ida_remove(cache, e2e->dlid);
@@ -210,7 +214,7 @@ void hfi_e2e_destroy(struct hfi_devdata *dd)
 				if (-ENOSPC != ret)
 					continue;
 				hfi_put_e2e_ctrl(dd, slid, dlid,
-						 tc, port,
+						 ptc->req_sl, port,
 						 PTL_SINGLE_DESTROY);
 				/*
 				 * TODO: implement mechanism to inform the
