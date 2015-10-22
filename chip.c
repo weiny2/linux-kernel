@@ -10765,7 +10765,7 @@ int deduce_actual_op_vls(struct hfi1_pportdata *ppd)
 	struct hfi1_devdata *dd = ppd->dd;
 	u64 reg, dedicated_credits, shared_credits;
 	u8 vl_count = 0;
-	int i;
+	int i, ret;
 
 	for (i = 0; i < TXE_NUM_DATA_VL; i++) {
 		reg = read_csr(dd, SEND_CM_CREDIT_VL + (8 * i));
@@ -10779,10 +10779,15 @@ int deduce_actual_op_vls(struct hfi1_pportdata *ppd)
 			vl_count++;
 	}
 	ppd->actual_vls_operational = vl_count;
-	return sdma_map_init(dd, ppd->port - 1,
-			     vl_count ?
-			     ppd->actual_vls_operational : ppd->vls_operational,
-			     NULL);
+	ret = sdma_map_init(dd, ppd->port - 1, vl_count ?
+			    ppd->actual_vls_operational : ppd->vls_operational,
+			    NULL);
+	if (ret == 0)
+		ret = pio_map_init(dd, ppd->port - 1, vl_count ?
+				   ppd->actual_vls_operational :
+				   ppd->vls_operational,
+				   NULL);
+	return ret;
 }
 
 /*

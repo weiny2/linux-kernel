@@ -219,6 +219,7 @@ void hfi1_qp_exit(struct hfi1_ibdev *dev);
 void hfi1_qp_wakeup(struct hfi1_qp *qp, u32 flag);
 
 struct sdma_engine *qp_to_sdma_engine(struct hfi1_qp *qp, u8 sc5);
+struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5);
 
 struct qp_iter;
 
