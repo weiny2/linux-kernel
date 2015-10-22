@@ -284,7 +284,7 @@ struct user_sdma_txreq {
 
 static int user_sdma_send_pkts(struct user_sdma_request *, unsigned);
 static int num_user_pages(const struct iovec *);
-static void user_sdma_txreq_cb(struct sdma_txreq *, int, int);
+static void user_sdma_txreq_cb(struct sdma_txreq *, int, int *);
 static void user_sdma_free_request(struct user_sdma_request *);
 static int pin_vector_pages(struct user_sdma_request *,
 			    struct user_sdma_iovec *);
@@ -1405,7 +1405,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 }
 
 static void user_sdma_txreq_cb(struct sdma_txreq *txreq, int status,
-			       int drain)
+			       int *drain)
 {
 	struct user_sdma_txreq *tx =
 		container_of(txreq, struct user_sdma_txreq, txreq);

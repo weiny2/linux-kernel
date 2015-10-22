@@ -362,6 +362,33 @@ static inline void sdma_set_desc_cnt(struct sdma_engine *sde, unsigned cnt)
 	write_sde_csr(sde, SD(DESC_CNT), reg);
 }
 
+static inline void complete_tx(struct sdma_engine *sde,
+			       struct sdma_txreq *tx,
+			       int res)
+{
+	int drained = 0;
+	/* protect against complete modifying */
+	u16 flags = tx->flags;
+	struct iowait *wait = tx->wait;
+	callback_t complete = tx->complete;
+
+	/* remove from list */
+	sde->tx_ring[sde->tx_head++ & sde->sdma_mask] = NULL;
+#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
+	trace_hfi1_sdma_out_sn(sde, txp->sn);
+	if (WARN_ON_ONCE(sde->head_sn != txp->sn))
+		dd_dev_err(sde->dd, "expected %llu got %llu\n",
+			   sde->head_sn, txp->sn);
+	sde->head_sn++;
+#endif
+	sdma_txclean(sde->dd, tx);
+	if (complete)
+		(*complete)(tx, res, &drained);
+	if (wait && !(flags & SDMA_TXREQ_NO_ATOMIC_DEC))
+		if (atomic_dec_and_test(&wait->sdma_busy))
+			iowait_drain_wakeup(wait);
+}
+
 /*
  * Complete all the sdma requests with a SDMA_TXREQ_S_ABORTED status
  *
@@ -396,27 +423,8 @@ static void sdma_flush(struct sdma_engine *sde)
 	}
 	spin_unlock_irqrestore(&sde->flushlist_lock, flags);
 	/* flush from flush list */
-	list_for_each_entry_safe(txp, txp_next, &flushlist, list) {
-		int drained = 0;
-		/* protect against complete modifying */
-		struct iowait *wait = txp->wait;
-
-		list_del_init(&txp->list);
-#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
-		trace_hfi1_sdma_out_sn(sde, txp->sn);
-		if (WARN_ON_ONCE(sde->head_sn != txp->sn))
-			dd_dev_err(sde->dd, "expected %llu got %llu\n",
-				   sde->head_sn, txp->sn);
-		sde->head_sn++;
-#endif
-		sdma_txclean(sde->dd, txp);
-		if (wait)
-			drained = iowait_sdma_dec(wait);
-		if (txp->complete)
-			(*txp->complete)(txp, SDMA_TXREQ_S_ABORTED, drained);
-		if (wait && drained)
-			iowait_drain_wakeup(wait);
-	}
+	list_for_each_entry_safe(txp, txp_next, &flushlist, list)
+		complete_tx(sde, txp, SDMA_TXREQ_S_ABORTED);
 }
 
 /*
@@ -582,31 +590,8 @@ static void sdma_flush_descq(struct sdma_engine *sde)
 		head = ++sde->descq_head & sde->sdma_mask;
 		/* if now past this txp's descs, do the callback */
 		if (txp && txp->next_descq_idx == head) {
-			int drained = 0;
-			/* protect against complete modifying */
-			struct iowait *wait = txp->wait;
-
-			/* remove from list */
-			sde->tx_ring[sde->tx_head++ & sde->sdma_mask] = NULL;
-			if (wait)
-				drained = iowait_sdma_dec(wait);
-#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
-			trace_hfi1_sdma_out_sn(sde, txp->sn);
-			if (WARN_ON_ONCE(sde->head_sn != txp->sn))
-				dd_dev_err(sde->dd, "expected %llu got %llu\n",
-					   sde->head_sn, txp->sn);
-			sde->head_sn++;
-#endif
-			sdma_txclean(sde->dd, txp);
+			complete_tx(sde, txp, SDMA_TXREQ_S_ABORTED);
 			trace_hfi1_sdma_progress(sde, head, tail, txp);
-			if (txp->complete)
-				(*txp->complete)(
-					txp,
-					SDMA_TXREQ_S_ABORTED,
-					drained);
-			if (wait && drained)
-				iowait_drain_wakeup(wait);
-			/* see if there is another txp */
 			txp = get_txhead(sde);
 		}
 		progress++;
@@ -1478,7 +1463,7 @@ static void sdma_make_progress(struct sdma_engine *sde, u64 status)
 {
 	struct sdma_txreq *txp = NULL;
 	int progress = 0;
-	u16 hwhead, swhead, swtail;
+	u16 hwhead, swhead;
 	int idle_check_done = 0;
 
 	hwhead = sdma_gethead(sde);
@@ -1499,29 +1484,7 @@ retry:
 
 		/* if now past this txp's descs, do the callback */
 		if (txp && txp->next_descq_idx == swhead) {
-			int drained = 0;
-			/* protect against complete modifying */
-			struct iowait *wait = txp->wait;
-
-			/* remove from list */
-			sde->tx_ring[sde->tx_head++ & sde->sdma_mask] = NULL;
-			if (wait)
-				drained = iowait_sdma_dec(wait);
-#ifdef CONFIG_HFI1_DEBUG_SDMA_ORDER
-			trace_hfi1_sdma_out_sn(sde, txp->sn);
-			if (WARN_ON_ONCE(sde->head_sn != txp->sn))
-				dd_dev_err(sde->dd, "expected %llu got %llu\n",
-					   sde->head_sn, txp->sn);
-			sde->head_sn++;
-#endif
-			sdma_txclean(sde->dd, txp);
-			if (txp->complete)
-				(*txp->complete)(
-					txp,
-					SDMA_TXREQ_S_OK,
-					drained);
-			if (wait && drained)
-				iowait_drain_wakeup(wait);
+			complete_tx(sde, txp, SDMA_TXREQ_S_OK);
 			/* see if there is another txp */
 			txp = get_txhead(sde);
 		}
@@ -1539,6 +1502,7 @@ retry:
 	 * of sdma_make_progress(..) which is ensured by idle_check_done flag
 	 */
 	if ((status & sde->idle_mask) && !idle_check_done) {
+		u16 swtail;
 		swtail = ACCESS_ONCE(sde->descq_tail) & sde->sdma_mask;
 		if (swtail != hwhead) {
 			hwhead = (u16)read_sde_csr(sde, SD(HEAD));

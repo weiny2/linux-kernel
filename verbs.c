@@ -132,7 +132,7 @@ MODULE_PARM_DESC(piothreshold, "size used to determine sdma vs. pio");
 static void verbs_sdma_complete(
 	struct sdma_txreq *cookie,
 	int status,
-	int drained);
+	int *drained);
 
 static int pio_wait(struct hfi1_qp *qp,
 		    struct send_context *sc,
@@ -776,7 +776,7 @@ void update_sge(struct hfi1_sge_state *ss, u32 length)
 static void verbs_sdma_complete(
 	struct sdma_txreq *cookie,
 	int status,
-	int drained)
+	int *drained)
 {
 	struct verbs_txreq *tx;
 	struct hfi1_qp *qp;
@@ -796,7 +796,7 @@ static void verbs_sdma_complete(
 			hfi1_rc_send_complete(qp, hdr);
 		}
 	}
-	if (drained) {
+	if (iowait_sdma_dec(&qp->s_iowait)) {
 		/*
 		 * This happens when the send engine notes
 		 * a QP in the error state and cannot
@@ -907,7 +907,7 @@ static int build_verbs_tx_desc(
 	if (!ahdr->ahgcount) {
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
-			ahdr->tx_flags,
+			ahdr->tx_flags | SDMA_TXREQ_NO_ATOMIC_DEC,
 			hdrbytes + length,
 			ahdr->ahgidx,
 			0,
@@ -927,7 +927,7 @@ static int build_verbs_tx_desc(
 	} else {
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
-			ahdr->tx_flags,
+			ahdr->tx_flags | SDMA_TXREQ_NO_ATOMIC_DEC,
 			length,
 			ahdr->ahgidx,
 			ahdr->ahgcount,
