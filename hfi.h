@@ -648,6 +648,7 @@ struct hfi1_pportdata {
 	u16 link_speed_active;
 	u8 vls_supported;
 	u8 vls_operational;
+	u8 actual_vls_operational;
 	/* LID mask control */
 	u8 lmc;
 	/* Rx Polarity inversion (compensate for ~tx on partner) */

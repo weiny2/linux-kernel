@@ -10179,11 +10179,7 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 			if (!ppd->port)
 				ret = -EINVAL;
 			else
-				ret = sdma_map_init(
-					ppd->dd,
-					ppd->port - 1,
-					val,
-					NULL);
+				ret = deduce_actual_op_vls(ppd);
 		}
 		break;
 	/*
@@ -10758,6 +10754,35 @@ static int set_buffer_control(struct hfi1_devdata *dd,
 	if (new_total < cur_total)
 		set_global_limit(dd, new_total);
 	return 0;
+}
+
+/*
+ * Deduce the actual number of operational VLS using the number of dedicated and
+ * shared credits for each VL.
+ */
+int deduce_actual_op_vls(struct hfi1_pportdata *ppd)
+{
+	struct hfi1_devdata *dd = ppd->dd;
+	u64 reg, dedicated_credits, shared_credits;
+	u8 vl_count = 0;
+	int i;
+
+	for (i = 0; i < TXE_NUM_DATA_VL; i++) {
+		reg = read_csr(dd, SEND_CM_CREDIT_VL + (8 * i));
+		dedicated_credits =
+		(reg >> SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT) &
+		SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_MASK;
+		shared_credits =
+		(reg >> SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SHIFT) &
+		SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_MASK;
+		if (dedicated_credits > 0 || shared_credits > 0)
+			vl_count++;
+	}
+	ppd->actual_vls_operational = vl_count;
+	return sdma_map_init(dd, ppd->port - 1,
+			     vl_count ?
+			     ppd->actual_vls_operational : ppd->vls_operational,
+			     NULL);
 }
 
 /*
@@ -13851,6 +13876,7 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		}
 		ppd->vls_supported = num_vls;
 		ppd->vls_operational = ppd->vls_supported;
+		ppd->actual_vls_operational = ppd->vls_supported;
 		/* Set the default MTU. */
 		for (vl = 0; vl < num_vls; vl++)
 			dd->vld[vl].mtu = hfi1_max_mtu;
@@ -13937,6 +13963,7 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		num_vls = dd->chip_sdma_engines;
 		ppd->vls_supported = dd->chip_sdma_engines;
 		ppd->vls_operational = ppd->vls_supported;
+		ppd->actual_vls_operational = ppd->vls_supported;
 	}
 
 	/*
