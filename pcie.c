@@ -512,6 +512,16 @@ static void tune_pcie_caps(struct hfi1_devdata *dd)
 	int rc_sup, ep_sup;
 	int rc_cur, ep_cur;
 
+	/*
+	 * Turn on extended tags in DevCtl in case the BIOS has turned it off
+	 * to improve WFR SDMA bandwidth
+	 */
+	pcie_capability_read_word(dd->pcidev, PCI_EXP_DEVCTL, &ectl);
+	if (!(ectl & PCI_EXP_DEVCTL_EXT_TAG)) {
+		dd_dev_info(dd, "Enabling PCIe extended tags\n");
+		ectl |= PCI_EXP_DEVCTL_EXT_TAG;
+		pcie_capability_write_word(dd->pcidev, PCI_EXP_DEVCTL, ectl);
+	}
 	/* Find out supported and configured values for parent (root) */
 	parent = dd->pcidev->bus->self;
 	if (!pci_is_root_bus(parent->bus)) {
@@ -525,7 +535,6 @@ static void tune_pcie_caps(struct hfi1_devdata *dd)
 	pcie_capability_read_word(parent, PCI_EXP_DEVCTL, &pctl);
 	/* Find out supported and configured values for endpoint (us) */
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_DEVCAP, &ecaps);
-	pcie_capability_read_word(dd->pcidev, PCI_EXP_DEVCTL, &ectl);
 
 	/* Find max payload supported by root, endpoint */
 	rc_sup = fld2val(pcaps, PCI_EXP_DEVCAP_PAYLOAD);
