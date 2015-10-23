@@ -339,9 +339,34 @@ static int ipoib_match_gid_pkey_addr(struct ipoib_dev_priv *priv,
 	struct ipoib_dev_priv *child_priv;
 	struct net_device *net_dev = NULL;
 	int matches = 0;
+	int gid_found = 0;
+	struct ib_port_attr attr;
+	union ib_gid port_gid;
+	int i;
 
-	if (priv->pkey_index == pkey_index &&
-	    (!gid || !memcmp(gid, &priv->local_gid, sizeof(*gid)))) {
+	if (!gid) {
+		gid_found = 1;
+	} else {
+		if (memcmp(gid, &priv->local_gid, sizeof(*gid))) {
+			/* incoming gid did not match with local gid.*/
+			if (ib_query_port(priv->ca, priv->port, &attr))
+				return matches;
+			for (i = 1; i < attr.gid_tbl_len; i++) {
+				if (ib_query_gid(priv->ca,
+						 priv->port, i,
+						 &port_gid, NULL))
+					return matches;
+
+				if (!memcmp(gid, &port_gid, sizeof(*gid))) {
+					gid_found = 1;
+					break;
+				}
+			}
+		} else {
+			gid_found = 1;
+		}
+	}
+	if (priv->pkey_index == pkey_index && gid_found) {
 		if (!addr) {
 			net_dev = ipoib_get_master_net_dev(priv->dev);
 		} else {
