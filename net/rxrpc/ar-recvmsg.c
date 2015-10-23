@@ -184,8 +184,9 @@ int rxrpc_recvmsg(struct kiocb *iocb, struct socket *sock,
 			ret = skb_copy_datagram_iovec(skb, offset,
 						      msg->msg_iov, copy);
 		} else {
-			ret = skb_copy_and_csum_datagram_iovec(skb, offset,
-							       msg->msg_iov);
+			ret = skb_copy_and_csum_datagram_iovec2(skb, offset,
+								msg->msg_iov,
+								copy);
 			if (ret == -EINVAL)
 				goto csum_copy_error;
 		}
