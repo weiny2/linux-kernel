@@ -813,6 +813,13 @@ int skb_copy_and_csum_datagram_iovec(struct sk_buff *skb,
 	if (!chunk)
 		return 0;
 
+	if (!iov) {
+		if (__skb_checksum_complete(skb))
+			goto csum_error;
+		else
+			return 0;
+	}
+
 	/* Skip filled elements.
 	 * Pretty silly, look at memcpy_toiovec, though 8)
 	 */
