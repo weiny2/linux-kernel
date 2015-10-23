@@ -10178,8 +10178,6 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 			ppd->vls_operational = val;
 			if (!ppd->port)
 				ret = -EINVAL;
-			else
-				ret = deduce_actual_op_vls(ppd);
 		}
 		break;
 	/*
@@ -10591,13 +10589,15 @@ static void wait_for_vl_status_clear(struct hfi1_devdata *dd, u64 mask,
  * raise = if the new limit is higher than the current value (may be changed
  *	earlier in the algorithm), set the new limit to the new value
  */
-static int set_buffer_control(struct hfi1_devdata *dd,
+static int set_buffer_control(struct hfi1_pportdata *ppd,
 			      struct buffer_control *new_bc)
 {
+	struct hfi1_devdata *dd = ppd->dd;
 	u64 changing_mask, ld_mask, stat_mask;
 	int change_count;
 	int i, use_all_mask;
 	int this_shared_changing;
+	int vl_count = 0, ret;
 	/*
 	 * A0: add the variable any_shared_limit_changing below and in the
 	 * algorithm above.  If removing A0 support, it can be removed.
@@ -10753,41 +10753,29 @@ static int set_buffer_control(struct hfi1_devdata *dd,
 	/* bracket the credit change with a total adjustment */
 	if (new_total < cur_total)
 		set_global_limit(dd, new_total);
-	return 0;
-}
 
-/*
- * Deduce the actual number of operational VLS using the number of dedicated and
- * shared credits for each VL.
- */
-int deduce_actual_op_vls(struct hfi1_pportdata *ppd)
-{
-	struct hfi1_devdata *dd = ppd->dd;
-	u64 reg, dedicated_credits, shared_credits;
-	u8 vl_count = 0;
-	int i, ret;
-
-	for (i = 0; i < TXE_NUM_DATA_VL; i++) {
-		reg = read_csr(dd, SEND_CM_CREDIT_VL + (8 * i));
-		dedicated_credits =
-		(reg >> SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_SHIFT) &
-		SEND_CM_CREDIT_VL_DEDICATED_LIMIT_VL_MASK;
-		shared_credits =
-		(reg >> SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_SHIFT) &
-		SEND_CM_CREDIT_VL_SHARED_LIMIT_VL_MASK;
-		if (dedicated_credits > 0 || shared_credits > 0)
-			vl_count++;
+	/*
+	 * Determine the actual number of operational VLS using the number of
+	 * dedicated and shared credits for each VL.
+	 */
+	if (change_count > 0) {
+		for (i = 0; i < TXE_NUM_DATA_VL; i++)
+			if (new_bc->vl[i].dedicated > 0 ||
+			    new_bc->vl[i].shared > 0)
+				vl_count++;
+		ppd->actual_vls_operational = vl_count;
+		ret = sdma_map_init(dd, ppd->port - 1, vl_count ?
+				    ppd->actual_vls_operational :
+				    ppd->vls_operational,
+				    NULL);
+		if (ret == 0)
+			ret = pio_map_init(dd, ppd->port - 1, vl_count ?
+					   ppd->actual_vls_operational :
+					   ppd->vls_operational, NULL);
+		if (ret)
+			return ret;
 	}
-	ppd->actual_vls_operational = vl_count;
-	ret = sdma_map_init(dd, ppd->port - 1, vl_count ?
-			    ppd->actual_vls_operational : ppd->vls_operational,
-			    NULL);
-	if (ret == 0)
-		ret = pio_map_init(dd, ppd->port - 1, vl_count ?
-				   ppd->actual_vls_operational :
-				   ppd->vls_operational,
-				   NULL);
-	return ret;
+	return 0;
 }
 
 /*
@@ -10878,7 +10866,7 @@ int fm_set_table(struct hfi1_pportdata *ppd, int which, void *t)
 				     VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_BUFFER_CONTROL:
-		ret = set_buffer_control(ppd->dd, t);
+		ret = set_buffer_control(ppd, t);
 		break;
 	case FM_TBL_SC2VLNT:
 		set_sc2vlnt(ppd->dd, t);

@@ -675,7 +675,6 @@ void apply_link_downgrade_policy(struct hfi1_pportdata *ppd,
 void update_usrhead(struct hfi1_ctxtdata *, u32, u32, u32, u32, u32);
 int stop_drain_data_vls(struct hfi1_devdata *dd);
 int open_fill_data_vls(struct hfi1_devdata *dd);
-int deduce_actual_op_vls(struct hfi1_pportdata *ppd);
 u32 ns_to_cclock(struct hfi1_devdata *dd, u32 ns);
 u32 cclock_to_ns(struct hfi1_devdata *dd, u32 cclock);
 void get_linkup_link_widths(struct hfi1_pportdata *ppd);

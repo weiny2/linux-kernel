@@ -1010,8 +1010,6 @@ static int set_port_states(struct hfi1_pportdata *ppd, struct opa_smp *smp,
 			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 		break;
 	case IB_PORT_ARMED:
-		/* deduce actual operational vls */
-		deduce_actual_op_vls(ppd);
 		ret = set_link_state(ppd, HLS_UP_ARMED);
 		if ((ret == 0) && (suppress_idle_sma == 0))
 			send_idle_sma(dd, SMA_IDLE_ARM);
