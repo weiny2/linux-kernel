@@ -1503,6 +1503,7 @@ retry:
 	 */
 	if ((status & sde->idle_mask) && !idle_check_done) {
 		u16 swtail;
+
 		swtail = ACCESS_ONCE(sde->descq_tail) & sde->sdma_mask;
 		if (swtail != hwhead) {
 			hwhead = (u16)read_sde_csr(sde, SD(HEAD));
