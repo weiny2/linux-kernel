@@ -930,7 +930,7 @@ int native_cpu_up(unsigned int cpu, struct task_struct *tidle)
 	check_tsc_sync_source(cpu);
 	local_irq_restore(flags);
 
-	while (!cpu_online(cpu)) {
+	while (!cpu_online(cpu) || !cpu_active(cpu)) {
 		cpu_relax();
 		touch_nmi_watchdog();
 	}
