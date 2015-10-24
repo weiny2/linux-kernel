@@ -4197,7 +4197,7 @@ int hfi1_create_agents(struct hfi1_ibdev *dev)
 		ibp = &dd->pport[p].ibport_data;
 		agent = ib_register_mad_agent(&dev->ibdev, p + 1, IB_QPT_SMI,
 					      NULL, 0, send_handler,
-					      NULL, NULL, 0);
+					      NULL, NULL);
 		if (IS_ERR(agent)) {
 			ret = PTR_ERR(agent);
 			goto err;
