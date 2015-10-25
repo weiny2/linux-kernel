@@ -1270,17 +1270,19 @@ static inline send_routine get_send_routine(struct hfi1_qp *qp,
 		return dd->process_pio_send;
 	case IB_QPT_GSI:
 	case IB_QPT_UD:
-		if (qp->s_cur_size <= piothreshold)
+		if (piothreshold && qp->s_cur_size <= piothreshold)
 			return dd->process_pio_send;
 		break;
 	case IB_QPT_RC:
-		if (qp->s_cur_size <= min(piothreshold, qp->pmtu) &&
+		if (piothreshold &&
+		    qp->s_cur_size <= min(piothreshold, qp->pmtu) &&
 		    (BIT(get_opcode(h) & 0x1f) & rc_only_opcode) &&
 		    iowait_sdma_pending(&qp->s_iowait) == 0)
 			return dd->process_pio_send;
 		break;
 	case IB_QPT_UC:
-		if (qp->s_cur_size <= min(piothreshold, qp->pmtu) &&
+		if (piothreshold &&
+		    qp->s_cur_size <= min(piothreshold, qp->pmtu) &&
 		    (BIT(get_opcode(h) & 0x1f) & uc_only_opcode) &&
 		    iowait_sdma_pending(&qp->s_iowait) == 0)
 			return dd->process_pio_send;
