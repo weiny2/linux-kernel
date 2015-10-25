@@ -384,9 +384,12 @@ static inline void complete_tx(struct sdma_engine *sde,
 	sdma_txclean(sde->dd, tx);
 	if (complete)
 		(*complete)(tx, res, &drained);
-	if (wait && !(flags & SDMA_TXREQ_NO_ATOMIC_DEC))
-		if (atomic_dec_and_test(&wait->sdma_busy))
+	if (wait) {
+		if (!(flags & SDMA_TXREQ_NO_ATOMIC_DEC))
+			drained = iowait_sdma_dec(wait);
+		if (drained)
 			iowait_drain_wakeup(wait);
+	}
 }
 
 /*

@@ -796,7 +796,8 @@ static void verbs_sdma_complete(
 			hfi1_rc_send_complete(qp, hdr);
 		}
 	}
-	if (iowait_sdma_dec(&qp->s_iowait)) {
+	*drained = iowait_sdma_dec(&qp->s_iowait);
+	if (*drained) {
 		/*
 		 * This happens when the send engine notes
 		 * a QP in the error state and cannot
