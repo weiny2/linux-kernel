@@ -339,6 +339,13 @@ static int __resolve_indirect_ref(struct btrfs_fs_info *fs_info,
 		goto out;
 	}
 
+#ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
+	if (unlikely(test_bit(BTRFS_ROOT_DUMMY_ROOT, &root->state))) {
+		srcu_read_unlock(&fs_info->subvol_srcu, index);
+		ret = -ENOENT;
+		goto out;
+	}
+#endif
 	if (path->search_commit_root)
 		root_level = btrfs_header_level(root->commit_root);
 	else if (time_seq == (u64)-1)
