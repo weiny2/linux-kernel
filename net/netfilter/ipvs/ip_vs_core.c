@@ -47,9 +47,11 @@
 #include <linux/netfilter_ipv4.h>
 
 #ifdef CONFIG_IP_VS_IPV6
+#if !defined(__powerpc64__) || !defined(__GENKSYMS__)
 #include <net/ipv6.h>
 #include <linux/netfilter_ipv6.h>
 #include <net/ip6_route.h>
+#endif
 #endif
 
 #include <net/ip_vs.h>
