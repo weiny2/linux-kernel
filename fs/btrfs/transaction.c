@@ -123,7 +123,9 @@ static noinline void switch_commit_roots(struct btrfs_transaction *trans,
 		root = list_first_entry(&trans->dropped_roots,
 					struct btrfs_root, root_list);
 		list_del_init(&root->root_list);
+		spin_unlock(&trans->dropped_roots_lock);
 		btrfs_drop_and_free_fs_root(fs_info, root);
+		spin_lock(&trans->dropped_roots_lock);
 	}
 	spin_unlock(&trans->dropped_roots_lock);
 	up_write(&fs_info->commit_root_sem);
@@ -259,8 +261,8 @@ loop:
 	INIT_LIST_HEAD(&cur_trans->ordered_operations);
 	INIT_LIST_HEAD(&cur_trans->pending_chunks);
 	INIT_LIST_HEAD(&cur_trans->pending_ordered);
-	INIT_LIST_HEAD(&cur_trans->switch_commits);
 	INIT_LIST_HEAD(&cur_trans->dropped_roots);
+	INIT_LIST_HEAD(&cur_trans->switch_commits);
 	spin_lock_init(&cur_trans->dropped_roots_lock);
 	list_add_tail(&cur_trans->list, &fs_info->trans_list);
 	extent_io_tree_init(&cur_trans->dirty_pages,
