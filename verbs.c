@@ -488,7 +488,8 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	}
 	wqe->ssn = qp->s_ssn++;
 	wqe->psn = qp->s_next_psn;
-	wqe->lpsn = wqe->psn + ((wqe->length - 1) >> log_pmtu);
+	wqe->lpsn = wqe->psn +
+			(wqe->length ? ((wqe->length - 1) >> log_pmtu) : 0);
 	qp->s_next_psn = wqe->lpsn + 1;
 	trace_hfi1_post_one_send(qp, wqe);
 	smp_wmb(); /* see request builders */
