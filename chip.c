@@ -10760,8 +10760,8 @@ static int set_buffer_control(struct hfi1_pportdata *ppd,
 	 */
 	if (change_count > 0) {
 		for (i = 0; i < TXE_NUM_DATA_VL; i++)
-			if (new_bc->vl[i].dedicated > 0 ||
-			    new_bc->vl[i].shared > 0)
+			if (be16_to_cpu(new_bc->vl[i].dedicated) > 0 ||
+			    be16_to_cpu(new_bc->vl[i].shared) > 0)
 				vl_count++;
 		ppd->actual_vls_operational = vl_count;
 		ret = sdma_map_init(dd, ppd->port - 1, vl_count ?
