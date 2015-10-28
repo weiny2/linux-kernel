@@ -891,6 +891,12 @@ void hfi1_send_complete(struct hfi1_qp *qp, struct hfi1_swqe *wqe,
 	if (!(ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_OR_FLUSH_SEND))
 		return;
 
+	last = qp->s_last;
+	old_last = last;
+	if (++last >= qp->s_size)
+		last = 0;
+	qp->s_last = last;
+	barrier();
 	for (i = 0; i < wqe->wr.num_sge; i++) {
 		struct hfi1_sge *sge = &wqe->sg_list[i];
 
@@ -918,12 +924,6 @@ void hfi1_send_complete(struct hfi1_qp *qp, struct hfi1_swqe *wqe,
 			      status != IB_WC_SUCCESS);
 	}
 
-	last = qp->s_last;
-	old_last = last;
-	if (++last >= qp->s_size)
-		last = 0;
-	qp->s_last = last;
-	smp_wmb(); /* see qp_get_savail() */
 	if (qp->s_acked == old_last)
 		qp->s_acked = last;
 	if (qp->s_cur == old_last)
