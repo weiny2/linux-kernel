@@ -53,7 +53,7 @@
 #include "hfi.h"
 #include "mad.h"
 #include "qp.h"
-#include "sdma.h"
+#include "verbs_txreq.h"
 #include "trace.h"
 
 /*
@@ -803,33 +803,6 @@ void hfi1_make_ruc_header(struct hfi1_qp *qp, struct hfi1_other_headers *ohdr,
 /* when sending, force a reschedule every one of these periods */
 #define SEND_RESCHED_TIMEOUT (5 * HZ)  /* 5s in jiffies */
 
-noinline struct verbs_txreq *__get_txreq(struct hfi1_ibdev *dev,
-					 struct hfi1_qp *qp)
-{
-	struct verbs_txreq *tx;
-	unsigned long flags;
-
-	tx = kmem_cache_alloc(dev->verbs_txreq_cache, GFP_ATOMIC);
-	if (!tx) {
-		spin_lock_irqsave(&qp->s_lock, flags);
-		write_seqlock(&dev->iowait_lock);
-		if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK &&
-		    list_empty(&qp->s_iowait.list)) {
-			dev->n_txwait++;
-			qp->s_flags |= HFI1_S_WAIT_TX;
-			list_add_tail(&qp->s_iowait.list, &dev->txwait);
-			trace_hfi1_qpsleep(qp, HFI1_S_WAIT_TX);
-			atomic_inc(&qp->refcount);
-		}
-		qp->s_flags &= ~HFI1_S_BUSY;
-		write_sequnlock(&dev->iowait_lock);
-		spin_unlock_irqrestore(&qp->s_lock, flags);
-		return ERR_PTR(-EBUSY);
-	}
-	tx->qp = qp;
-	return tx;
-}
-
 /**
  * hfi1_do_send - perform a send on a QP
  * @work: contains a pointer to the QP
@@ -878,6 +851,8 @@ void hfi1_do_send(struct work_struct *work)
 	qp->s_flags |= HFI1_S_BUSY;
 
 	timeout = jiffies + SEND_RESCHED_TIMEOUT;
+	/* insure a pre-built packet is handled  */
+	ps.s_txreq = get_waiting_verbs_txreq(qp);
 	do {
 		/* Check for a constructed packet to be sent. */
 		if (qp->s_hdrwords != 0) {
