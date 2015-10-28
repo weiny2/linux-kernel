@@ -1461,6 +1461,17 @@ static u64 access_sw_link_up_cnt(const struct cntr_entry *entry, void *context,
 	return read_write_sw(ppd->dd, &ppd->link_up, mode, data);
 }
 
+static u64 access_sw_unknown_frame_cnt(const struct cntr_entry *entry,
+				       void *context, int vl, int mode,
+				       u64 data)
+{
+	struct hfi1_pportdata *ppd = (struct hfi1_pportdata *)context;
+
+	if (vl != CNTR_INVALID_VL)
+		return 0;
+	return read_write_sw(ppd->dd, &ppd->unknown_frame_count, mode, data);
+}
+
 static u64 access_sw_xmit_discards(const struct cntr_entry *entry,
 				   void *context, int vl, int mode, u64 data)
 {
@@ -1557,6 +1568,14 @@ static u64 access_sw_pio_wait(const struct cntr_entry *entry,
 	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
 
 	return dd->verbs_dev.n_piowait;
+}
+
+static u64 access_sw_pio_drain(const struct cntr_entry *entry,
+			       void *context, int vl, int mode, u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	return dd->verbs_dev.n_piodrain;
 }
 
 static u64 access_sw_vtx_wait(const struct cntr_entry *entry,
@@ -4103,6 +4122,8 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 			    access_sw_vtx_wait),
 [C_SW_PIO_WAIT] = CNTR_ELEM("PioWait", 0, 0, CNTR_NORMAL,
 			    access_sw_pio_wait),
+[C_SW_PIO_DRAIN] = CNTR_ELEM("PioDrain", 0, 0, CNTR_NORMAL,
+			    access_sw_pio_drain),
 [C_SW_KMEM_WAIT] = CNTR_ELEM("KmemWait", 0, 0, CNTR_NORMAL,
 			     access_sw_kmem_wait),
 [C_SW_SEND_SCHED] = CNTR_ELEM("SendSched", 0, 0, CNTR_NORMAL,
@@ -4943,6 +4964,8 @@ static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
 			     access_sw_link_dn_cnt),
 [C_SW_LINK_UP] = CNTR_ELEM("SwLinkUp", 0, 0, CNTR_SYNTH | CNTR_32BIT,
 			   access_sw_link_up_cnt),
+[C_SW_UNKNOWN_FRAME] = CNTR_ELEM("UnknownFrame", 0, 0, CNTR_NORMAL,
+				 access_sw_unknown_frame_cnt),
 [C_SW_XMIT_DSCD] = CNTR_ELEM("XmitDscd", 0, 0, CNTR_SYNTH | CNTR_32BIT,
 			     access_sw_xmit_discards),
 [C_SW_XMIT_DSCD_VL] = CNTR_ELEM("XmitDscdVl", 0, 0,
@@ -6620,7 +6643,6 @@ void handle_freeze(struct work_struct *work)
 	struct hfi1_devdata *dd = ppd->dd;
 
 	/* wait for freeze indicators on all affected blocks */
-	dd_dev_info(dd, "Entering SPC freeze\n");
 	wait_for_freeze_status(dd, 1);
 
 	/* SPC is now frozen */
@@ -6678,7 +6700,6 @@ void handle_freeze(struct work_struct *work)
 	wake_up(&dd->event_queue);
 
 	/* no longer frozen */
-	dd_dev_err(dd, "Exiting SPC freeze\n");
 }
 
 /*
@@ -6864,10 +6885,10 @@ static void add_full_mgmt_pkey(struct hfi1_pportdata *ppd)
 {
 	struct hfi1_devdata *dd = ppd->dd;
 
-	/* Sanity check - ppd->pkeys[2] should be 0 */
-	if (ppd->pkeys[2] != 0)
-		dd_dev_err(dd, "%s pkey[2] already set to 0x%x, resetting it to 0x%x\n",
-			   __func__, ppd->pkeys[2], FULL_MGMT_P_KEY);
+	/* Sanity check - ppd->pkeys[2] should be 0, or already initalized */
+	if (!((ppd->pkeys[2] == 0) || (ppd->pkeys[2] == FULL_MGMT_P_KEY)))
+		dd_dev_warn(dd, "%s pkey[2] already set to 0x%x, resetting it to 0x%x\n",
+			    __func__, ppd->pkeys[2], FULL_MGMT_P_KEY);
 	ppd->pkeys[2] = FULL_MGMT_P_KEY;
 	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_PKEYS, 0);
 }
@@ -7379,6 +7400,11 @@ static void handle_8051_interrupt(struct hfi1_devdata *dd, u32 unused, u64 reg)
 								   FAILED_LNI));
 			}
 			err &= ~(u64)FAILED_LNI;
+		}
+		/* unknown frames can happen durning LNI, just count */
+		if (err & UNKNOWN_FRAME) {
+			ppd->unknown_frame_count++;
+			err &= ~(u64)UNKNOWN_FRAME;
 		}
 		if (err) {
 			/* report remaining errors, but do not do anything */
@@ -8114,12 +8140,25 @@ int read_lcb_csr(struct hfi1_devdata *dd, u32 addr, u64 *data)
  */
 static int write_lcb_via_8051(struct hfi1_devdata *dd, u32 addr, u64 data)
 {
-	if (acquire_lcb_access(dd, 0) == 0) {
-		write_csr(dd, addr, data);
-		release_lcb_access(dd, 0);
-		return 0;
+	u32 regno;
+	int ret;
+
+	if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR ||
+	    (dd->dc8051_ver < dc8051_ver(0, 20))) {
+		if (acquire_lcb_access(dd, 0) == 0) {
+			write_csr(dd, addr, data);
+			release_lcb_access(dd, 0);
+			return 0;
+		}
+		return -EBUSY;
 	}
-	return -EBUSY;
+
+	/* register is an index of LCB registers: (offset - base) / 8 */
+	regno = (addr - DC_LCB_CFG_RUN) >> 3;
+	ret = do_8051_command(dd, HCMD_WRITE_LCB_CSR, regno, &data);
+	if (ret != HCMD_SUCCESS)
+		return -EBUSY;
+	return 0;
 }
 
 /*
@@ -8199,6 +8238,26 @@ static int do_8051_command(
 	 * If there is no timeout, then the 8051 command interface is
 	 * waiting for a command.
 	 */
+
+	/*
+	 * When writing a LCB CSR, out_data contains the full value to
+	 * to be written, while in_data contains the relative LCB
+	 * address in 7:0.  Do the work here, rather than the caller,
+	 * of distrubting the write data to where it needs to go:
+	 *
+	 * Write data
+	 *   39:00 -> in_data[47:8]
+	 *   47:40 -> DC8051_CFG_EXT_DEV_0.RETURN_CODE
+	 *   63:48 -> DC8051_CFG_EXT_DEV_0.RSP_DATA
+	 */
+	if (type == HCMD_WRITE_LCB_CSR) {
+		in_data |= ((*out_data) & 0xffffffffffull) << 8;
+		reg = ((((*out_data) >> 40) & 0xff) <<
+				DC_DC8051_CFG_EXT_DEV_0_RETURN_CODE_SHIFT)
+		      | ((((*out_data) >> 48) & 0xffff) <<
+				DC_DC8051_CFG_EXT_DEV_0_RSP_DATA_SHIFT);
+		write_csr(dd, DC_DC8051_CFG_EXT_DEV_0, reg);
+	}
 
 	/*
 	 * Do two writes: the first to stabilize the type and req_data, the
@@ -10135,12 +10194,6 @@ int hfi1_set_ib_cfg(struct hfi1_pportdata *ppd, int which, u32 val)
 			ppd->vls_operational = val;
 			if (!ppd->port)
 				ret = -EINVAL;
-			else
-				ret = sdma_map_init(
-					ppd->dd,
-					ppd->port - 1,
-					val,
-					NULL);
 		}
 		break;
 	/*
@@ -10552,13 +10605,15 @@ static void wait_for_vl_status_clear(struct hfi1_devdata *dd, u64 mask,
  * raise = if the new limit is higher than the current value (may be changed
  *	earlier in the algorithm), set the new limit to the new value
  */
-static int set_buffer_control(struct hfi1_devdata *dd,
+static int set_buffer_control(struct hfi1_pportdata *ppd,
 			      struct buffer_control *new_bc)
 {
+	struct hfi1_devdata *dd = ppd->dd;
 	u64 changing_mask, ld_mask, stat_mask;
 	int change_count;
 	int i, use_all_mask;
 	int this_shared_changing;
+	int vl_count = 0, ret;
 	/*
 	 * A0: add the variable any_shared_limit_changing below and in the
 	 * algorithm above.  If removing A0 support, it can be removed.
@@ -10714,6 +10769,28 @@ static int set_buffer_control(struct hfi1_devdata *dd,
 	/* bracket the credit change with a total adjustment */
 	if (new_total < cur_total)
 		set_global_limit(dd, new_total);
+
+	/*
+	 * Determine the actual number of operational VLS using the number of
+	 * dedicated and shared credits for each VL.
+	 */
+	if (change_count > 0) {
+		for (i = 0; i < TXE_NUM_DATA_VL; i++)
+			if (be16_to_cpu(new_bc->vl[i].dedicated) > 0 ||
+			    be16_to_cpu(new_bc->vl[i].shared) > 0)
+				vl_count++;
+		ppd->actual_vls_operational = vl_count;
+		ret = sdma_map_init(dd, ppd->port - 1, vl_count ?
+				    ppd->actual_vls_operational :
+				    ppd->vls_operational,
+				    NULL);
+		if (ret == 0)
+			ret = pio_map_init(dd, ppd->port - 1, vl_count ?
+					   ppd->actual_vls_operational :
+					   ppd->vls_operational, NULL);
+		if (ret)
+			return ret;
+	}
 	return 0;
 }
 
@@ -10805,7 +10882,7 @@ int fm_set_table(struct hfi1_pportdata *ppd, int which, void *t)
 				     VL_ARB_LOW_PRIO_TABLE_SIZE, t);
 		break;
 	case FM_TBL_BUFFER_CONTROL:
-		ret = set_buffer_control(ppd->dd, t);
+		ret = set_buffer_control(ppd, t);
 		break;
 	case FM_TBL_SC2VLNT:
 		set_sc2vlnt(ppd->dd, t);
@@ -13808,6 +13885,7 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		}
 		ppd->vls_supported = num_vls;
 		ppd->vls_operational = ppd->vls_supported;
+		ppd->actual_vls_operational = ppd->vls_supported;
 		/* Set the default MTU. */
 		for (vl = 0; vl < num_vls; vl++)
 			dd->vld[vl].mtu = hfi1_max_mtu;
@@ -13894,6 +13972,7 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		num_vls = dd->chip_sdma_engines;
 		ppd->vls_supported = dd->chip_sdma_engines;
 		ppd->vls_operational = ppd->vls_supported;
+		ppd->actual_vls_operational = ppd->vls_supported;
 	}
 
 	/*
