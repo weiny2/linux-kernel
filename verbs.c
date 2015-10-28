@@ -370,7 +370,9 @@ void hfi1_skip_sge(struct hfi1_sge_state *ss, u32 length, int release)
  * @qp: the QP to post on
  * @wr: the work request to send
  */
-static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
+static int post_one_send(struct hfi1_qp *qp,
+			 struct ib_send_wr *wr,
+			 int *call_send)
 {
 	struct hfi1_swqe *wqe;
 	u32 next;
@@ -495,7 +497,8 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	smp_wmb(); /* see request builders */
 	qp->s_avail--;
 	qp->s_head = next;
-
+	if (wqe->length <= piothreshold)
+		*call_send = 1;
 	return 0;
 
 bail_inval_free:
@@ -537,7 +540,7 @@ static int post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 	call_send = qp->s_head == ACCESS_ONCE(qp->s_last) && !wr->next;
 
 	for (; wr; wr = wr->next) {
-		err = post_one_send(qp, wr);
+		err = post_one_send(qp, wr, &call_send);
 		if (unlikely(err)) {
 			*bad_wr = wr;
 			goto bail;
@@ -546,10 +549,12 @@ static int post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 	}
 bail:
 	spin_unlock_irqrestore(&qp->s_hlock, flags);
-	if (nreq && !call_send)
-		_hfi1_schedule_send(qp);
-	if (nreq && call_send)
-		hfi1_do_send(&qp->s_iowait.iowork);
+	if (nreq) {
+		if (call_send)
+			hfi1_do_send(&qp->s_iowait.iowork);
+		else
+			_hfi1_schedule_send(qp);
+	}
 	return err;
 }
 
