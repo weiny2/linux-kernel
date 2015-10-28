@@ -648,6 +648,7 @@ struct hfi1_pportdata {
 	u16 link_speed_active;
 	u8 vls_supported;
 	u8 vls_operational;
+	u8 actual_vls_operational;
 	/* LID mask control */
 	u8 lmc;
 	/* Rx Polarity inversion (compensate for ~tx on partner) */
@@ -740,6 +741,8 @@ struct hfi1_pportdata {
 	u64 link_downed;
 	/* number of times link retrained successfully */
 	u64 link_up;
+	/* number of times a link unknown frame was reported */
+	u64 unknown_frame_count;
 	/* port_ltp_crc_mode is returned in 'portinfo' MADs */
 	u16 port_ltp_crc_mode;
 	/* port_crc_mode_enabled is the crc we support */
@@ -808,6 +811,7 @@ struct sdma_vl_map;
 #define BOARD_VERS_MAX 96 /* how long the version string can be */
 #define SERIAL_MAX 16 /* length of the serial number */
 
+typedef int (*send_routine)(struct hfi1_qp *, struct hfi1_pkt_state *, u64);
 struct hfi1_devdata {
 	struct hfi1_ibdev verbs_dev;     /* must be first */
 	struct list_head list;
@@ -837,6 +841,12 @@ struct hfi1_devdata {
 	spinlock_t sc_lock;
 	/* Per VL data. Enough for all VLs but not all elements are set/used. */
 	struct per_vl_data vld[PER_VL_SEND_CONTEXTS];
+	/* lock for pio_map */
+	spinlock_t pio_map_lock;
+	/* array of kernel send contexts */
+	struct send_context **kernel_send_context;
+	/* array of vl maps */
+	struct pio_vl_map __rcu *pio_map;
 	/* seqlock for sc2vl */
 	seqlock_t sc2vl_lock;
 	u64 sc2vl[4];
@@ -1118,10 +1128,8 @@ struct hfi1_devdata {
 	 * Handlers for outgoing data so that snoop/capture does not
 	 * have to have its hooks in the send path
 	 */
-	int (*process_pio_send)(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
-				u64 pbc);
-	int (*process_dma_send)(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
-				u64 pbc);
+	send_routine process_pio_send;
+	send_routine process_dma_send;
 	void (*pio_inline_send)(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 				u64 pbc, const void *from, size_t count);
 

@@ -330,10 +330,6 @@ struct hfi1_message_header {
 	__be16 lrh[4];
 };
 
-/* IB - LRH header constants */
-#define HFI1_LRH_GRH 0x0003      /* 1. word of IB LRH - next header: GRH */
-#define HFI1_LRH_BTH 0x0002      /* 1. word of IB LRH - next header: BTH */
-
 /* misc. */
 #define SIZE_OF_CRC 1
 

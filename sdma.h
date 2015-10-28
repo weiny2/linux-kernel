@@ -58,21 +58,12 @@
 
 #include "hfi.h"
 #include "verbs.h"
+#include "sdma_txreq.h"
 
 /* Hardware limit */
 #define MAX_DESC 64
 /* Hardware limit for SDMA packet size */
 #define MAX_SDMA_PKT_SIZE ((16 * 1024) - 1)
-
-#define SDMA_TXREQ_S_OK        0
-#define SDMA_TXREQ_S_SENDERROR 1
-#define SDMA_TXREQ_S_ABORTED   2
-#define SDMA_TXREQ_S_SHUTDOWN  3
-
-/* flags bits */
-#define SDMA_TXREQ_F_URGENT       0x0001
-#define SDMA_TXREQ_F_AHG_COPY     0x0002
-#define SDMA_TXREQ_F_USE_AHG      0x0004
 
 #define SDMA_MAP_NONE          0
 #define SDMA_MAP_SINGLE        1
@@ -550,7 +541,7 @@ static inline int sdma_txinit_ahg(
 	u8 num_ahg,
 	u32 *ahg,
 	u8 ahg_hlen,
-	void (*cb)(struct sdma_txreq *, int, int))
+	void (*cb)(struct sdma_txreq *, int, int *))
 {
 	if (tlen == 0)
 		return -ENODATA;
@@ -614,7 +605,7 @@ static inline int sdma_txinit(
 	struct sdma_txreq *tx,
 	u16 flags,
 	u16 tlen,
-	void (*cb)(struct sdma_txreq *, int, int))
+	void (*cb)(struct sdma_txreq *, int, int *))
 {
 	return sdma_txinit_ahg(tx, flags, tlen, 0, 0, NULL, 0, cb);
 }
