@@ -58,7 +58,7 @@
 #include "hfi.h"
 #include "qp.h"
 #include "trace.h"
-#include "sdma.h"
+#include "verbs_txreq.h"
 
 #define BITS_PER_PAGE           (PAGE_SIZE * BITS_PER_BYTE)
 #define BITS_PER_PAGE_MASK      (BITS_PER_PAGE - 1)
@@ -74,6 +74,7 @@ static int iowait_sleep(
 	struct sdma_txreq *stx,
 	unsigned seq);
 static void iowait_wakeup(struct iowait *wait, int reason);
+static void qp_pio_drain(struct hfi1_qp *qp);
 
 static inline unsigned mk_qpn(struct hfi1_qpn_table *qpt,
 			      struct qpn_map *map, unsigned off)
@@ -433,10 +434,6 @@ static void clear_mr_refs(struct hfi1_qp *qp, int clr_sends)
 				qp->s_last = 0;
 			smp_wmb(); /* see qp_get_savail() */
 		}
-		if (qp->s_rdma_mr) {
-			hfi1_put_mr(qp->s_rdma_mr);
-			qp->s_rdma_mr = NULL;
-		}
 	}
 
 	if (qp->ibqp.qp_type != IB_QPT_RC)
@@ -490,10 +487,6 @@ int hfi1_error_qp(struct hfi1_qp *qp, enum ib_wc_status err)
 
 	if (!(qp->s_flags & HFI1_S_BUSY)) {
 		qp->s_hdrwords = 0;
-		if (qp->s_rdma_mr) {
-			hfi1_put_mr(qp->s_rdma_mr);
-			qp->s_rdma_mr = NULL;
-		}
 		flush_tx_list(qp);
 	}
 
@@ -764,6 +757,7 @@ int hfi1_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			/* Stop the sending work queue */
 			cancel_work_sync(&qp->s_iowait.iowork);
 			iowait_sdma_drain(&qp->s_iowait);
+			qp_pio_drain(qp);
 			flush_tx_list(qp);
 			remove_qp(dev, qp);
 			wait_event(qp->wait, !atomic_read(&qp->refcount));
@@ -1298,6 +1292,17 @@ bail:
 	return ret;
 }
 
+static void qp_pio_drain(struct hfi1_qp *qp)
+{
+	if (!qp->s_sendcontext)
+		return;
+	while (iowait_pio_pending(&qp->s_iowait)) {
+		hfi1_sc_wantpiobuf_intr(qp->s_sendcontext, 1);
+		iowait_pio_drain(&qp->s_iowait);
+		hfi1_sc_wantpiobuf_intr(qp->s_sendcontext, 0);
+	}
+}
+
 /**
  * hfi1_destroy_qp - destroy a queue pair
  * @ibqp: the queue pair to destroy
@@ -1331,6 +1336,7 @@ int hfi1_destroy_qp(struct ib_qp *ibqp)
 		/* insure any timer has completed */
 		del_timers_sync(qp);
 		iowait_sdma_drain(&qp->s_iowait);
+		qp_pio_drain(qp);
 		flush_tx_list(qp);
 		remove_qp(dev, qp);
 		wait_event(qp->wait, !atomic_read(&qp->refcount));
@@ -1608,6 +1614,30 @@ struct sdma_engine *qp_to_sdma_engine(struct hfi1_qp *qp, u8 sc5)
 	return sde;
 }
 
+/*
+ * qp_to_send_context - map a qp to a send context
+ * @qp: the QP
+ * @sc5: the 5 bit sc
+ *
+ * Return:
+ * A send context for the qp
+ */
+struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5)
+{
+	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+
+	switch (qp->ibqp.qp_type) {
+	case IB_QPT_SMI:
+		/* SMA packets to VL15 */
+		return dd->vld[15].sc;
+	default:
+		break;
+	}
+
+	return pio_select_send_context_sc(dd, qp->ibqp.qp_num >> dd->qos_shift,
+					  sc5);
+}
+
 struct qp_iter {
 	struct hfi1_ibdev *dev;
 	struct hfi1_qp *qp;
@@ -1712,7 +1742,7 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 	send_context = qp_to_send_context(qp, qp->s_sc);
 	wqe = get_swqe_ptr(qp, qp->s_last);
 	seq_printf(s,
-		   "N %d %s QP%u R %u %s %u %u %u f=%x %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%u LID %x SL %u MTU %u %u %u %u SDE %p,%u SC %p\n",
+		   "N %d %s QP%x R %u %s %u %u %u f=%x %u %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%x LID %x SL %u MTU %u %u %u %u SDE %p,%u SC %p,%u\n",
 		   iter->n,
 		   qp_idle(qp) ? "I" : "B",
 		   qp->ibqp.qp_num,
@@ -1722,7 +1752,8 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   wqe ? wqe->wr.opcode : 0,
 		   qp->s_hdrwords,
 		   qp->s_flags,
-		   atomic_read(&qp->s_iowait.sdma_busy),
+		   iowait_sdma_pending(&qp->s_iowait),
+		   iowait_pio_pending(&qp->s_iowait),
 		   !list_empty(&qp->s_iowait.list),
 		   qp->timeout,
 		   wqe ? wqe->ssn : 0,
@@ -1742,7 +1773,8 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   qp->s_rnr_retry_cnt,
 		   sde,
 		   sde ? sde->this_idx : 0,
-		   send_context);
+		   send_context,
+		   send_context ? send_context->sw_index : 0);
 }
 
 void qp_comm_est(struct hfi1_qp *qp)

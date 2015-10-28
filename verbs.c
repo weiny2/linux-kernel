@@ -64,8 +64,7 @@
 #include "device.h"
 #include "trace.h"
 #include "qp.h"
-#include "sdma.h"
-#include "verbs.h"
+#include "verbs_txreq.h"
 
 unsigned int hfi1_lkey_table_size = 16;
 module_param_named(lkey_table_size, hfi1_lkey_table_size, uint,
@@ -126,10 +125,19 @@ unsigned int hfi1_max_srq_wrs = 0x1FFFF;
 module_param_named(max_srq_wrs, hfi1_max_srq_wrs, uint, S_IRUGO);
 MODULE_PARM_DESC(max_srq_wrs, "Maximum number of SRQ WRs support");
 
+static unsigned short piothreshold;
+module_param(piothreshold, ushort, S_IRUGO);
+MODULE_PARM_DESC(piothreshold, "size used to determine sdma vs. pio");
+
 static void verbs_sdma_complete(
 	struct sdma_txreq *cookie,
 	int status,
-	int drained);
+	int *drained);
+
+static int pio_wait(struct hfi1_qp *qp,
+		    struct send_context *sc,
+		    struct hfi1_pkt_state *ps,
+		    u32 flag);
 
 /* Length of buffer to create verbs txreq cache name */
 #define TXREQ_LEN 24
@@ -473,7 +481,6 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 		    qp->ibqp.qp_type != IB_QPT_SMI)
 			goto bail_inval_free;
 
-		log_pmtu = ah->log_pmtu;
 		if (wqe->length > (1 << ah->log_pmtu))
 			goto bail_inval_free;
 		log_pmtu = ah->log_pmtu;
@@ -481,7 +488,8 @@ static int post_one_send(struct hfi1_qp *qp, struct ib_send_wr *wr)
 	}
 	wqe->ssn = qp->s_ssn++;
 	wqe->psn = qp->s_next_psn;
-	wqe->lpsn = wqe->psn + ((wqe->length - 1) >> log_pmtu);
+	wqe->lpsn = wqe->psn +
+			(wqe->length ? ((wqe->length - 1) >> log_pmtu) : 0);
 	qp->s_next_psn = wqe->lpsn + 1;
 	trace_hfi1_post_one_send(qp, wqe);
 	smp_wmb(); /* see request builders */
@@ -762,45 +770,6 @@ void update_sge(struct hfi1_sge_state *ss, u32 length)
 	}
 }
 
-void hfi1_put_txreq(struct verbs_txreq *tx)
-{
-	struct hfi1_ibdev *dev;
-	struct hfi1_qp *qp;
-	unsigned long flags;
-	unsigned int seq;
-
-	qp = tx->qp;
-	dev = to_idev(qp->ibqp.device);
-
-	if (tx->mr) {
-		hfi1_put_mr(tx->mr);
-		tx->mr = NULL;
-	}
-
-	sdma_txclean(dd_from_dev(dev), &tx->txreq);
-
-	/* Free verbs_txreq and return to slab cache */
-	kmem_cache_free(dev->verbs_txreq_cache, tx);
-
-	do {
-		seq = read_seqbegin(&dev->iowait_lock);
-		if (!list_empty(&dev->txwait)) {
-			struct iowait *wait;
-
-			write_seqlock_irqsave(&dev->iowait_lock, flags);
-			/* Wake up first QP wanting a free struct */
-			wait = list_first_entry(&dev->txwait, struct iowait,
-						list);
-			qp = container_of(wait, struct hfi1_qp, s_iowait);
-			list_del_init(&qp->s_iowait.list);
-			/* refcount held until actual wake up */
-			write_sequnlock_irqrestore(&dev->iowait_lock, flags);
-			hfi1_qp_wakeup(qp, HFI1_S_WAIT_TX);
-			break;
-		}
-	} while (read_seqretry(&dev->iowait_lock, seq));
-}
-
 /*
  * This is called with progress side lock held.
  */
@@ -808,7 +777,7 @@ void hfi1_put_txreq(struct verbs_txreq *tx)
 static void verbs_sdma_complete(
 	struct sdma_txreq *cookie,
 	int status,
-	int drained)
+	int *drained)
 {
 	struct verbs_txreq *tx;
 	struct hfi1_qp *qp;
@@ -828,7 +797,8 @@ static void verbs_sdma_complete(
 			hfi1_rc_send_complete(qp, hdr);
 		}
 	}
-	if (drained) {
+	*drained = iowait_sdma_dec(&qp->s_iowait);
+	if (*drained) {
 		/*
 		 * This happens when the send engine notes
 		 * a QP in the error state and cannot
@@ -844,7 +814,9 @@ static void verbs_sdma_complete(
 	hfi1_put_txreq(tx);
 }
 
-static int wait_kmem(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
+static int wait_kmem(struct hfi1_ibdev *dev,
+		     struct hfi1_qp *qp,
+		     struct hfi1_pkt_state *ps)
 {
 	unsigned long flags;
 	int ret = 0;
@@ -852,6 +824,7 @@ static int wait_kmem(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) {
 		write_seqlock(&dev->iowait_lock);
+		list_add_tail(&ps->s_txreq->txreq.list, &qp->s_iowait.tx_head);
 		if (list_empty(&qp->s_iowait.list)) {
 			if (list_empty(&dev->memwait))
 				mod_timer(&dev->mem_timer, jiffies + 1);
@@ -874,7 +847,7 @@ static int wait_kmem(struct hfi1_ibdev *dev, struct hfi1_qp *qp)
  *
  * Add failures will revert the sge cursor
  */
-static int build_verbs_ulp_payload(
+static noinline int build_verbs_ulp_payload(
 	struct sdma_engine *sde,
 	struct hfi1_sge_state *ss,
 	u32 length,
@@ -936,7 +909,7 @@ static int build_verbs_tx_desc(
 	if (!ahdr->ahgcount) {
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
-			ahdr->tx_flags,
+			ahdr->tx_flags | SDMA_TXREQ_NO_ATOMIC_DEC,
 			hdrbytes + length,
 			ahdr->ahgidx,
 			0,
@@ -956,7 +929,7 @@ static int build_verbs_tx_desc(
 	} else {
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
-			ahdr->tx_flags,
+			ahdr->tx_flags | SDMA_TXREQ_NO_ATOMIC_DEC,
 			length,
 			ahdr->ahgidx,
 			ahdr->ahgcount,
@@ -985,50 +958,29 @@ int hfi1_verbs_send_dma(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 	struct hfi1_ibdev *dev = ps->dev;
 	struct hfi1_pportdata *ppd = ps->ppd;
 	struct verbs_txreq *tx;
-	struct sdma_txreq *stx;
 	u64 pbc_flags = 0;
 	u8 sc5 = qp->s_sc;
 	int ret;
-	struct hfi1_ibdev *tdev;
-
-	if (!list_empty(&qp->s_iowait.tx_head)) {
-		stx = list_first_entry(
-			&qp->s_iowait.tx_head,
-			struct sdma_txreq,
-			list);
-		list_del_init(&stx->list);
-		tx = container_of(stx, struct verbs_txreq, txreq);
-		ret = sdma_send_txreq(tx->sde, &qp->s_iowait, stx);
-		if (unlikely(ret == -ECOMM))
-			goto bail_ecomm;
-		return ret;
-	}
 
 	tx = ps->s_txreq;
+	if (!sdma_txreq_built(&tx->txreq)) {
+		if (likely(pbc == 0)) {
+			u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
+			/* No vl15 here */
+			/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
+			pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
 
-	tdev = to_idev(qp->ibqp.device);
-
-	if (IS_ERR(tx))
-		goto bail_tx;
-
-	tx->sde = qp->s_sde;
-
-	if (likely(pbc == 0)) {
-		u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
-		/* No vl15 here */
-		/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
-		pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
-
-		pbc = create_pbc(ppd, pbc_flags, qp->srate_mbps, vl, plen);
+			pbc = create_pbc(ppd,
+					 pbc_flags,
+					 qp->srate_mbps,
+					 vl,
+					 plen);
+		}
+		tx->wqe = qp->s_wqe;
+		ret = build_verbs_tx_desc(tx->sde, ss, len, tx, ahdr, pbc);
+		if (unlikely(ret))
+			goto bail_build;
 	}
-	tx->wqe = qp->s_wqe;
-	tx->mr = qp->s_rdma_mr;
-	if (qp->s_rdma_mr)
-		qp->s_rdma_mr = NULL;
-	tx->hdr_dwords = hdrwords + 2;
-	ret = build_verbs_tx_desc(tx->sde, ss, len, tx, ahdr, pbc);
-	if (unlikely(ret))
-		goto bail_build;
 	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
 			   &ps->s_txreq->phdr.hdr);
 	ret =  sdma_send_txreq(tx->sde, &qp->s_iowait, &tx->txreq);
@@ -1042,16 +994,17 @@ bail_ecomm:
 bail_build:
 	/* kmalloc or mapping fail */
 	hfi1_put_txreq(tx);
-	return wait_kmem(dev, qp);
-bail_tx:
-	return PTR_ERR(tx);
+	return wait_kmem(dev, qp, ps);
 }
 
 /*
  * If we are now in the error state, return zero to flush the
  * send work request.
  */
-static int no_bufs_available(struct hfi1_qp *qp, struct send_context *sc)
+static int pio_wait(struct hfi1_qp *qp,
+		    struct send_context *sc,
+		    struct hfi1_pkt_state *ps,
+		    u32 flag)
 {
 	struct hfi1_devdata *dd = sc->dd;
 	struct hfi1_ibdev *dev = &dd->verbs_dev;
@@ -1066,16 +1019,20 @@ static int no_bufs_available(struct hfi1_qp *qp, struct send_context *sc)
 	 */
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (ib_hfi1_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) {
+		struct sdma_txreq *stx = get_sdma_txreq(ps->s_txreq);
+
 		write_seqlock(&dev->iowait_lock);
+		list_add_tail(&stx->list, &qp->s_iowait.tx_head);
 		if (list_empty(&qp->s_iowait.list)) {
 			struct hfi1_ibdev *dev = &dd->verbs_dev;
 			int was_empty;
 
-			dev->n_piowait++;
-			qp->s_flags |= HFI1_S_WAIT_PIO;
+			dev->n_piowait += !!(flag & HFI1_S_WAIT_PIO);
+			dev->n_piodrain += !!(flag & HFI1_S_WAIT_PIO_DRAIN);
+			qp->s_flags |= flag;
 			was_empty = list_empty(&sc->piowait);
 			list_add_tail(&qp->s_iowait.list, &sc->piowait);
-			trace_hfi1_qpsleep(qp, HFI1_S_WAIT_PIO);
+			trace_hfi1_qpsleep(qp, flag);
 			atomic_inc(&qp->refcount);
 			/* counting: only call wantpiobuf_intr if first user */
 			if (was_empty)
@@ -1089,16 +1046,12 @@ static int no_bufs_available(struct hfi1_qp *qp, struct send_context *sc)
 	return ret;
 }
 
-struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5)
+static void verbs_pio_complete(void *arg, int code)
 {
-	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
-	struct hfi1_pportdata *ppd = dd->pport + (qp->port_num - 1);
-	u8 vl;
+	struct hfi1_qp *qp = (struct hfi1_qp *)arg;
 
-	vl = sc_to_vlt(dd, sc5);
-	if (vl >= ppd->vls_supported && vl != 15)
-		return NULL;
-	return dd->vld[vl].sc;
+	if (iowait_pio_dec(&qp->s_iowait))
+		iowait_drain_wakeup(&qp->s_iowait);
 }
 
 int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
@@ -1110,31 +1063,44 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 	u32 dwords = (len + 3) >> 2;
 	u32 plen = hdrwords + dwords + 2; /* includes pbc */
 	struct hfi1_pportdata *ppd = ps->ppd;
-	u32 *hdr = (u32 *)&ps->s_txreq->phdr.hdr;
+	u32 *hdr;
 	u64 pbc_flags = 0;
-	u32 sc5;
+	u8 sc5;
 	unsigned long flags = 0;
 	struct send_context *sc;
 	struct pio_buf *pbuf;
 	int wc_status = IB_WC_SUCCESS;
 	int ret = 0;
+	pio_release_cb cb = NULL;
+
+	/* only RC/UC use complete */
+	switch (qp->ibqp.qp_type) {
+	case IB_QPT_RC:
+	case IB_QPT_UC:
+		cb = verbs_pio_complete;
+		break;
+	default:
+		break;
+	}
+
+	hdr = (u32 *)&ps->s_txreq->phdr.hdr;
 
 	/* vl15 special case taken care of in ud.c */
 	sc5 = qp->s_sc;
-	sc = qp_to_send_context(qp, sc5);
+	sc = ps->s_txreq->psc;
 
-	if (!sc) {
-		ret = -EINVAL;
-		goto bail;
-	}
 	if (likely(pbc == 0)) {
-		u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
+		u8 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
 		/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
 		pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
 		pbc = create_pbc(ppd, pbc_flags, qp->srate_mbps, vl, plen);
 	}
-	pbuf = sc_buffer_alloc(sc, plen, NULL, NULL);
+	if (cb)
+		iowait_pio_inc(&qp->s_iowait);
+	pbuf = sc_buffer_alloc(sc, plen, cb, qp);
 	if (unlikely(!pbuf)) {
+		if (cb)
+			iowait_pio_dec(&qp->s_iowait);
 		if (ppd->host_link_state != HLS_UP_ACTIVE) {
 			/*
 			 * If we have filled the PIO buffers to capacity and are
@@ -1154,8 +1120,12 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 			 * so lets continue to queue the request.
 			 */
 			hfi1_cdbg(PIO, "alloc failed. state active, queuing");
-			ret = no_bufs_available(qp, sc);
-			goto bail;
+			ret = pio_wait(qp, sc, ps, HFI1_S_WAIT_PIO);
+			if (!ret)
+				/* txreq not queued - free */
+				goto bail;
+			/* tx consumed in wait */
+			return ret;
 		}
 	}
 
@@ -1180,11 +1150,6 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 
 	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
 			   &ps->s_txreq->phdr.hdr);
-
-	if (qp->s_rdma_mr) {
-		hfi1_put_mr(qp->s_rdma_mr);
-		qp->s_rdma_mr = NULL;
-	}
 
 pio_bail:
 	if (qp->s_wqe) {
@@ -1289,6 +1254,47 @@ bad:
 }
 
 /**
+ * get_send_routine - choose an egress routine
+ *
+ * Choose an egress routine based on QP type
+ * and size
+ */
+static inline send_routine get_send_routine(struct hfi1_qp *qp,
+					    struct hfi1_ib_header *h)
+{
+	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+
+	if (unlikely(!(dd->flags & HFI1_HAS_SEND_DMA)))
+		return dd->process_pio_send;
+	switch (qp->ibqp.qp_type) {
+	case IB_QPT_SMI:
+		return dd->process_pio_send;
+	case IB_QPT_GSI:
+	case IB_QPT_UD:
+		if (piothreshold && qp->s_cur_size <= piothreshold)
+			return dd->process_pio_send;
+		break;
+	case IB_QPT_RC:
+		if (piothreshold &&
+		    qp->s_cur_size <= min(piothreshold, qp->pmtu) &&
+		    (BIT(get_opcode(h) & 0x1f) & rc_only_opcode) &&
+		    iowait_sdma_pending(&qp->s_iowait) == 0)
+			return dd->process_pio_send;
+		break;
+	case IB_QPT_UC:
+		if (piothreshold &&
+		    qp->s_cur_size <= min(piothreshold, qp->pmtu) &&
+		    (BIT(get_opcode(h) & 0x1f) & uc_only_opcode) &&
+		    iowait_sdma_pending(&qp->s_iowait) == 0)
+			return dd->process_pio_send;
+		break;
+	default:
+		break;
+	}
+	return dd->process_dma_send;
+}
+
+/**
  * hfi1_verbs_send - send a packet
  * @qp: the QP to send on
  *
@@ -1298,19 +1304,10 @@ bad:
 int hfi1_verbs_send(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 {
 	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	send_routine sr;
 	int ret;
-	int pio = 0;
-	unsigned long flags = 0;
 
-	/*
-	 * VL15 packets (IB_QPT_SMI) will always use PIO, so we
-	 * can defer SDMA restart until link goes ACTIVE without
-	 * worrying about just how we got there.
-	 */
-	if ((qp->ibqp.qp_type == IB_QPT_SMI) ||
-	    !(dd->flags & HFI1_HAS_SEND_DMA))
-		pio = 1;
-
+	sr = get_send_routine(qp, &ps->s_txreq->phdr.hdr);
 	ret = egress_pkey_check(dd->pport, &ps->s_txreq->phdr.hdr, qp);
 	if (unlikely(ret)) {
 		/*
@@ -1321,7 +1318,9 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 		 * mechanism for handling the errors. So for SDMA we can just
 		 * return.
 		 */
-		if (pio) {
+		if (sr == dd->process_pio_send) {
+			unsigned long flags;
+
 			hfi1_cdbg(PIO, "%s() Failed. Completing with err",
 				  __func__);
 			spin_lock_irqsave(&qp->s_lock, flags);
@@ -1330,20 +1329,7 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 		}
 		return -EINVAL;
 	}
-
-	if (pio) {
-		ret = dd->process_pio_send(qp, ps, 0);
-	} else {
-#ifdef CONFIG_SDMA_VERBOSITY
-		dd_dev_err(dd, "CONFIG SDMA %s:%d %s()\n",
-			   slashstrip(__FILE__), __LINE__, __func__);
-		dd_dev_err(dd, "SDMA hdrwords = %u, len = %u\n", qp->s_hdrwords,
-			   qp->s_cur_size);
-#endif
-		ret = dd->process_dma_send(qp, ps, 0);
-	}
-
-	return ret;
+	return sr(qp, ps, 0);
 }
 
 static int query_device(struct ib_device *ibdev,
@@ -1862,13 +1848,6 @@ static void init_ibport(struct hfi1_pportdata *ppd)
 	RCU_INIT_POINTER(ibp->qp[1], NULL);
 }
 
-static void verbs_txreq_kmem_cache_ctor(void *obj)
-{
-	struct verbs_txreq *tx = (struct verbs_txreq *)obj;
-
-	memset(tx, 0, sizeof(*tx));
-}
-
 /**
  * hfi1_register_ib_device - register our device with the infiniband core
  * @dd: the device data structure
@@ -1882,8 +1861,6 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	unsigned i, lk_tab_size;
 	int ret;
 	size_t lcpysz = IB_DEVICE_NAME_MAX;
-	u16 descq_cnt;
-	char buf[TXREQ_LEN];
 
 	ret = hfi1_qp_init(dev);
 	if (ret)
@@ -1934,18 +1911,9 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	INIT_LIST_HEAD(&dev->txwait);
 	INIT_LIST_HEAD(&dev->memwait);
 
-	descq_cnt = sdma_get_descq_cnt();
-
-	snprintf(buf, sizeof(buf), "hfi1_%u_vtxreq_cache", dd->unit);
-	/* SLAB_HWCACHE_ALIGN for AHG */
-	dev->verbs_txreq_cache = kmem_cache_create(buf,
-						   sizeof(struct verbs_txreq),
-						   0, SLAB_HWCACHE_ALIGN,
-						   verbs_txreq_kmem_cache_ctor);
-	if (!dev->verbs_txreq_cache) {
-		ret = -ENOMEM;
+	ret = verbs_txreq_init(dev);
+	if (ret)
 		goto err_verbs_txreq;
-	}
 
 	/*
 	 * The system image GUID is supposed to be the same for all
@@ -2064,7 +2032,7 @@ err_agents:
 	ib_unregister_device(ibdev);
 err_reg:
 err_verbs_txreq:
-	kmem_cache_destroy(dev->verbs_txreq_cache);
+	verbs_txreq_exit(dev);
 	vfree(dev->lk_table.table);
 err_lk:
 	hfi1_qp_exit(dev);
@@ -2094,7 +2062,7 @@ void hfi1_unregister_ib_device(struct hfi1_devdata *dd)
 
 	hfi1_qp_exit(dev);
 	del_timer_sync(&dev->mem_timer);
-	kmem_cache_destroy(dev->verbs_txreq_cache);
+	verbs_txreq_exit(dev);
 	vfree(dev->lk_table.table);
 }
 
