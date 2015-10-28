@@ -205,7 +205,7 @@
  * to the driver itself, not the software interfaces it supports.
  */
 #ifndef HFI1_DRIVER_VERSION_BASE
-#define HFI1_DRIVER_VERSION_BASE "0.10-8"
+#define HFI1_DRIVER_VERSION_BASE "0.10-41"
 #endif
 
 /* create the final driver version string */
@@ -329,10 +329,6 @@ struct diag_pkt {
 struct hfi1_message_header {
 	__be16 lrh[4];
 };
-
-/* IB - LRH header constants */
-#define HFI1_LRH_GRH 0x0003      /* 1. word of IB LRH - next header: GRH */
-#define HFI1_LRH_BTH 0x0002      /* 1. word of IB LRH - next header: BTH */
 
 /* misc. */
 #define SIZE_OF_CRC 1
