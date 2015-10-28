@@ -86,7 +86,8 @@ static int read_efi_var(const char *name, unsigned long *size,
 		void *data;
 		int i;
 
-		uni_name = kzalloc(strlen(name) + 1, GFP_KERNEL);
+		uni_name = kzalloc(sizeof(efi_char16_t) * (strlen(name) + 1),
+				   GFP_KERNEL);
 		temp_buffer = kzalloc(EFI_DATA_SIZE, GFP_KERNEL);
 		data = NULL;
 
