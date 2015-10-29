@@ -86,6 +86,7 @@
 #include "opa_hfi.h"
 #include <rdma/opa_core_ib.h>
 #include "link.h"
+#include "firmware.h"
 
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
@@ -1103,6 +1104,7 @@ void hfi_pport_uninit(struct hfi_devdata *dd)
  */
 void hfi_pport_down(struct hfi_devdata *dd)
 {
+	hfi2_dispose_firmware(dd);
 	hfi2_pport_link_uninit(dd);
 	hfi_pport_uninit(dd);
 }
@@ -1365,6 +1367,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 	int i, j, size;
 	u8 port;
 	u16 crc_val;
+	int ret;
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
@@ -1373,13 +1376,10 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
 		ppd->lstate = IB_PORT_DOWN;
 		mutex_init(&ppd->hls_lock);
-		/* initializa Manner Hill - mnh */
-#if 0 /* WFR legacy */
+		/* initialize Manor Hill - mnh/8051 */
 		spin_lock_init(&ppd->crk8051_lock);
-#endif
 		ppd->crk8051_timed_out = 0;
 		ppd->host_link_state = HLS_DN_OFFLINE;
-		hfi_8051_reset(ppd);
 
 		ppd->cc_max_table_entries = HFI_IB_CC_TABLE_CAP_DEFAULT;
 
@@ -1503,6 +1503,11 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		}
 	}
 
+	ret = hfi2_load_firmware(dd);
+	if (ret) {
+		dd_dev_err(dd, "can't load firmware on 8051s");
+		return ret;
+	}
 	return hfi2_pport_link_init(dd);
 }
 
