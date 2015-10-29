@@ -460,15 +460,6 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		eq->cookie = eq_assign->cookie;
 	}
 
-	/*
-	 * For EQ0, invalidate the EQD cache and write the EQ to memory
-	 * instead of submitting an RX command. Submitting an RX command
-	 * generates a PTL_CMD_COMPLETE event on EQ0 which might not be
-	 * configured to be ready in time to handle the event.
-	 */
-	if (!eq_idx)
-		hfi_eq_cache_invalidate(dd, ctx->pid);
-
 	/* set EQ descriptor in host memory */
 	eq_desc.val[1] = 0; /* clear head/tail */
 	eq_desc.order = order;
@@ -481,34 +472,20 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	wmb();  /* barrier before writing Valid */
 	eq_desc_base[eq_idx].val[0] = eq_desc.val[0];
 
-	if (!eq_idx) {
+	spin_lock_irqsave(&dd->priv_rx_cq_lock, sflags);
+	/* issue write to privileged CQ to complete */
+	ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx,
+				      &eq_desc,
+				      eq_assign->user_data);
+	spin_unlock_irqrestore(&dd->priv_rx_cq_lock, sflags);
+	if (ret < 0) {
 		/*
-		 * For EQ0, invalidate the EQD cache after writing the EQD to
-		 * memory instead of submitting an RX command. Submitting an
-		 * RX command generates a PTL_CMD_COMPLETE event on EQ0 which
-		 * might not be configured to be ready in time. The
-		 * invalidation is done after the write in case traffic comes
-		 * from the remote end (e.g. PSN connect traffic on PID 0)
-		 * between the invalidation and the write to memory which
-		 * could result in the cache being filled with bad data.
+		 * TODO - handle waiting for CQ slots,
+		 * (deferred processing to wait for CQ slots?)
 		 */
-		hfi_eq_cache_invalidate(dd, ctx->pid);
-	} else {
-		spin_lock_irqsave(&dd->priv_rx_cq_lock, sflags);
-		/* issue write to privileged CQ to complete */
-		ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx,
-					      &eq_desc,
-					      eq_assign->user_data);
-		spin_unlock_irqrestore(&dd->priv_rx_cq_lock, sflags);
-		if (ret < 0) {
-			/*
-			 * TODO - handle waiting for CQ slots,
-			 * (deferred processing to wait for CQ slots?)
-			 */
-			eq_desc_base[eq_idx].val[0] = 0; /* clear valid */
-			idr_remove(&ctx->eq_used, eq_idx);
-			goto idr_end;
-		}
+		eq_desc_base[eq_idx].val[0] = 0; /* clear valid */
+		idr_remove(&ctx->eq_used, eq_idx);
+		goto idr_end;
 	}
 
 	 /* return index to user */
@@ -584,11 +561,9 @@ static int hfi_eq_zero_thread(void *data)
 
 int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 {
-	struct hfi_devdata *dd = ctx->devdata;
 	struct opa_ev_assign eq_assign = {0};
 	int ni, ret;
 	u32 *eq_head_array, *eq_head_addr;
-	u64 *eq_entry;
 
 	for (ni = 0; ni < HFI_NUM_NIS; ni++) {
 		eq_assign.ni = ni;
@@ -616,25 +591,6 @@ int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 		/* Reset the EQ SW head */
 		eq_head_addr = &eq_head_array[ni];
 		*eq_head_addr = 0;
-		/* EQ 0 does not generate an event */
-		if (!eq_assign.ev_idx)
-			continue;
-		/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-		ret = hfi_eq_wait_timed(ctx, 0x0, HFI_EQ_TIMEOUT_MS,
-					&eq_entry);
-		if (ret < 0) {
-			dd_dev_err(dd, "%s %d ret %d ni %d pid %d\n",
-				   __func__, __LINE__, ret, ni, ctx->pid);
-			return ret;
-		}
-		if (ret == HFI_EQ_DROPPED || ret == HFI_EQ_EMPTY) {
-			dd_dev_err(dd, "%s %d ret %d ni %d pid %d\n",
-				   __func__, __LINE__, ret, ni, ctx->pid);
-			ret = -EIO;
-			return ret;
-		}
-		hfi_eq_advance(ctx, &ctx->devdata->priv_rx_cq,
-			       0x0, eq_entry);
 	}
 	return 0;
 }
