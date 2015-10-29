@@ -133,6 +133,32 @@
 /* 8051 general register Field IDs */
 #define HOST_INT_MSG_MASK		0x03
 
+/*
+ * 8051 firmware registers
+ */
+#define NUM_GENERAL_FIELDS 0x17
+#define NUM_LANE_FIELDS    0x8
+
+/* 8051 general register Field IDs */
+#define LINK_OPTIMIZATION_SETTINGS   0x00
+#define LINK_TUNING_PARAMETERS	     0x02
+#define DC_HOST_COMM_SETTINGS	     0x03
+#define TX_SETTINGS		     0x06
+#define VERIFY_CAP_LOCAL_PHY	     0x07
+#define VERIFY_CAP_LOCAL_FABRIC	     0x08
+#define VERIFY_CAP_LOCAL_LINK_WIDTH  0x09
+#define LOCAL_DEVICE_ID		     0x0a
+#define LOCAL_LNI_INFO		     0x0c
+#define REMOTE_LNI_INFO              0x0d
+#define MISC_STATUS		     0x0e
+#define VERIFY_CAP_REMOTE_PHY	     0x0f
+#define VERIFY_CAP_REMOTE_FABRIC     0x10
+#define VERIFY_CAP_REMOTE_LINK_WIDTH 0x11
+#define LAST_LOCAL_STATE_COMPLETE    0x12
+#define LAST_REMOTE_STATE_COMPLETE   0x13
+#define LINK_QUALITY_INFO            0x14
+#define REMOTE_DEVICE_ID	     0x15
+
 /* Lane ID for general configuration registers */
 #define GENERAL_CONFIG 4
 
@@ -143,6 +169,12 @@
 #define LOAD_DATA_LANE_ID_MASK 0xfull
 #define LOAD_DATA_DATA_SHIFT  0x0
 #define LOAD_DATA_DATA_MASK   0xffffffffull
+
+/* misc status version fields */
+#define STS_FM_VERSION_A_SHIFT 16
+#define STS_FM_VERSION_A_MASK  0xff
+#define STS_FM_VERSION_B_SHIFT 24
+#define STS_FM_VERSION_B_MASK  0xff
 
 /* timeouts */
 #define TIMEOUT_8051_START 5000         /* 8051 start timeout, in ms */
@@ -166,7 +198,6 @@ int hfi_send_idle_sma(struct hfi_pportdata *ppd, u64 message);
 int hfi2_cfg_link_intr_vector(struct hfi_devdata *dd);
 int hfi2_enable_8051_intr(struct hfi_pportdata *ppd);
 int hfi2_disable_8051_intr(struct hfi_pportdata *ppd);
-void hfi_8051_reset(const struct hfi_pportdata *ppd);
 void hfi2_pport_link_uninit(struct hfi_devdata *dd);
 int hfi2_pport_link_init(struct hfi_devdata *dd);
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);

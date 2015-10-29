@@ -1500,7 +1500,7 @@ int hfi2_enable_8051_intr(struct hfi_pportdata *ppd)
 }
 
 /*
- * Disable interrupots from MNH/8051 by configuring its registers
+ * Disable interrupts from MNH/8051 by configuring its registers
 */
 int hfi2_disable_8051_intr(struct hfi_pportdata *ppd)
 {
@@ -1523,16 +1523,7 @@ int hfi2_disable_8051_intr(struct hfi_pportdata *ppd)
 }
 
 /*
-	reset 8051
- */
-void hfi_8051_reset(const struct hfi_pportdata *ppd)
-{
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, 0x1ull);
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, 0x0ull);
-}
-
-/*
-	un-initilize ports
+	un-initialize ports
  */
 void hfi2_pport_link_uninit(struct hfi_devdata *dd)
 {
@@ -1562,7 +1553,7 @@ void hfi2_pport_link_uninit(struct hfi_devdata *dd)
 }
 
 /*
-	initilize ports
+	initialize ports
  */
 int hfi2_pport_link_init(struct hfi_devdata *dd)
 {

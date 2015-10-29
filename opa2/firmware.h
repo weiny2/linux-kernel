@@ -52,8 +52,71 @@
 #ifndef _HFI_FIRMWARE_H
 #define _HFI_FIRMWARE_H
 
+/*
+ * FW_EMPTY: no firmware is downloaded
+ * FW_TRY: We tried the original and it failed. Move to the alternate names.
+ * 			i.e. tried DEFAULT_FW_8051_NAME_FPGA and fail. So that move to
+ * 			ALT_FW_8051_NAME_ASIC.
+ * FW_FINAL: all firmwares are downloaded
+ * FW_ERR: can't obtain a firmware file.
+ */
+enum fw_state {FW_EMPTY, FW_TRY, FW_FINAL, FW_ERR};
+
+/*
+ * Firmware security header.
+ */
+struct css_header {
+	u32 module_type;
+	u32 header_len;
+	u32 header_version;
+	u32 module_id;
+	u32 module_vendor;
+	u32 date;		/* BCD yyyymmdd */
+	u32 size;		/* in DWORDs */
+	u32 key_size;		/* in DWORDs */
+	u32 modulus_size;	/* in DWORDs */
+	u32 exponent_size;	/* in DWORDs */
+	u32 reserved[22];
+};
+
+#define KEY_SIZE      256
+#define MU_SIZE		8
+#define EXPONENT_SIZE	4
+
+struct augmented_firmware_file {
+	struct css_header css_header;
+	u8 modulus[KEY_SIZE];
+	u8 exponent[EXPONENT_SIZE];
+	u8 signature[KEY_SIZE];
+	u8 r2[KEY_SIZE];
+	u8 mu[MU_SIZE];
+	u8 firmware[];
+};
+
+struct firmware_details {
+	/* Linux core piece */
+	const struct firmware *fw;
+
+	struct css_header *css_header;
+	u8 *firmware_ptr;		/* pointer to binary data */
+	u32 firmware_len;		/* length in bytes */
+	u8 *modulus;			/* pointer to the modulus */
+	u8 *exponent;			/* pointer to the exponent */
+	u8 *signature;			/* pointer to the signature */
+	u8 *r2;				/* pointer to r2 */
+	u8 *mu;				/* pointer to mu */
+	struct augmented_firmware_file dummy_header;
+};
+
+/* 8051 firmware version helper */
+#define crk8051_ver(a, b) ((a) << 8 | (b))
+
+struct hfi_pportdata;
+
 void hfi_firmware_dbg_init(struct hfi_devdata *dd);
 void hfi_firmware_dbg_exit(struct hfi_devdata *dd);
+void hfi2_dispose_firmware(struct hfi_devdata *dd);
 int hfi_wait_firmware_ready(const struct hfi_pportdata *ppd, u32 mstimeout);
+int hfi2_load_firmware(struct hfi_devdata *dd);
 
 #endif	/* _HFI_FIRMWARE_H */

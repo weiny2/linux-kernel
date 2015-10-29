@@ -64,6 +64,7 @@
 #include <rdma/fxr/fxr_linkmux_fpc_defs.h>
 #include <rdma/fxr/fxr_linkmux_cm_defs.h>
 #include "attr.h"
+#include "firmware.h"
 
 extern uint opafm_disable;
 extern unsigned int hfi_max_mtu;
@@ -448,6 +449,16 @@ struct ib_vl_weight_elem {
  *@cc_state_lock: lock for cc_state
  *@cc_state: Congestion control state
  *@congestion_entries: Congestion control entries
+ *@crk8051_lock: for exclusive access to 8051
+ *@crk8051_timed_out: remember if the 8051 timed out
+ *@hfi_wq: workqueue which connects the upper half interrupt handler,
+ *		irq_mnh_handler() and bottom half interrupt handlers which are
+ *		queued by each work_struct.
+ *@link_vc_work: for VerifyCap -> GoingUp/ConfigLT
+ *@link_up_work: for GoingUp/ConfigLT -> LinkUp/Init
+ *@link_down_work: for LinkUp -> LinkDown
+ *@sma_message_work: for the interrupt caused by "Receive a back channel msg
+ *		using LCB idle protocol HOST Type SMA"
  */
 struct hfi_pportdata {
 	struct hfi_devdata *dd;
@@ -524,10 +535,8 @@ struct hfi_pportdata {
 	struct ib_vl_weight_elem vl_arb_prempt_ele[HFI_VL_ARB_TABLE_SIZE];
 	struct ib_vl_weight_elem vl_arb_prempt_mat[HFI_VL_ARB_TABLE_SIZE];
 
-#if 0 /* WFR legacy */
 	/* for exclusive access to 8051 */
 	spinlock_t crk8051_lock;
-#endif
 	int crk8051_timed_out;	/* remember if the 8051 timed out */
 
 	/*
@@ -548,7 +557,18 @@ struct hfi_pportdata {
 #endif
 };
 
-/* device data struct contains only per-HFI info. */
+/*
+ * device data struct contains only per-HFI info.
+ *
+ *@fw_mutex: The mutex protects fw_state, fw_err, and all of the
+ * 		firmware_details variables.
+ *@fw_state: keep firmware status, FW_EMPTY, FW_TRY, FW_FINAL, FW_ERR
+ *@fw_err: keep firmware loading error code.
+ *@fw_8051_name: Firmware file names get set in firmware_init()
+ *@fw_8051_load: indicate whether 8051 firmware should be loaded
+ *@fw_8051: 8051 firmware loaded in memory
+ *@crk8051_ver: 8051 firmware version
+ */
 struct hfi_devdata {
 	/* pci access data structure */
 	struct pci_dev *pcidev;
@@ -635,6 +655,16 @@ struct hfi_devdata {
 
 	/* number of command queues in use */
 	u16 cq_pair_num_assigned;
+
+	/* for firmware download */
+	struct mutex fw_mutex;
+	enum fw_state fw_state;
+	int fw_err;
+	/* Firmware file names get set in firmware_init() */
+	char *fw_8051_name;
+	bool fw_8051_load;
+	struct firmware_details fw_8051;
+	u16 crk8051_ver; /* 8051 firmware version */
 
 #ifdef CONFIG_DEBUG_FS
 	/* per HFI debugfs */
