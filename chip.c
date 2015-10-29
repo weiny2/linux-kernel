@@ -5626,6 +5626,10 @@ int engine_to_vl(struct hfi1_devdata *dd, int engine)
 	struct sdma_vl_map *m;
 	int vl;
 
+	/* range check */
+	if (engine < 0 || engine >= TXE_NUM_SDMA_ENGINES)
+		return -1;
+
 	rcu_read_lock();
 	m = rcu_dereference(dd->sdma_map);
 	vl = m->engine_to_vl[engine];
