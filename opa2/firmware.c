@@ -656,6 +656,7 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 {
 	struct hfi_devdata *dd = ppd->dd;
 	unsigned long timeout;
+	u64 reg;
 	u32 status;
 	int ret = 0;
 
@@ -736,6 +737,19 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 		}
 
 		msleep(20);
+	}
+
+	/*
+	 * Arrive here on success or failure.
+	 * Print failure details if any.
+	 */
+	if (ret) {
+		reg = read_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_STS_FW);
+		if (reg & MNH_MISC_STS_FW_FW_AUTH_FAILED_SMASK)
+			ppd_dev_err(ppd, "%s firmware authorization failed\n",
+				who);
+		if (reg & MNH_MISC_STS_FW_KEY_MISMATCH_SMASK)
+			ppd_dev_err(ppd, "%s firmware key mismatch\n", who);
 	}
 
 	return ret;
