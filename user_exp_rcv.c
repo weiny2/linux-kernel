@@ -440,15 +440,6 @@ int hfi1_user_exp_rcv_setup(struct file *fp, struct hfi1_tid_info *tinfo)
 	 */
 	pinned = hfi1_acquire_user_pages(vaddr, npages, true, pages);
 	if (pinned <= 0) {
-		/*
-		 * -EDQUOT has a special meaning (we can't lock any more
-		 * pages), which user space knows how to deal with. We
-		 * don't need an error message.
-		 */
-		if (pinned != -EDQUOT)
-			dd_dev_err(dd,
-				   "Failed to lock addr %p, %u pages: errno %d\n",
-				   (void *)vaddr, npages, pinned);
 		ret = pinned;
 		goto bail;
 	}
