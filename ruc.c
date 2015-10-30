@@ -868,7 +868,7 @@ void hfi1_do_send(struct work_struct *work)
 			/* allow other tasks to run */
 			if (unlikely(time_after(jiffies, timeout))) {
 				cond_resched();
-				ps.ppd->dd->verbs_dev.n_send_schedule++;
+				this_cpu_inc(*ps.ppd->dd->send_schedule);
 				timeout = jiffies + SEND_RESCHED_TIMEOUT;
 			}
 			spin_lock_irqsave(&qp->s_lock, flags);
