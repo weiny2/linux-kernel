@@ -705,13 +705,9 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 	 */
 	timeout = msecs_to_jiffies(RSA_ENGINE_TIMEOUT) + jiffies;
 	while (1) {
-		status = (read_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_CFG_FW_CTRL)
+		status = (read_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_STS_FW)
 			   & MNH_MISC_STS_FW_RSA_STATUS_SMASK)
 			     >> MNH_MISC_STS_FW_RSA_STATUS_SHIFT;
-
-#if 1 /* will fix by STL-3430 */
-		if (status == RSA_STATUS_IDLE || status == RSA_STATUS_DONE) {
-#else
 		if (status == RSA_STATUS_IDLE) {
 			/* should not happen */
 			ppd_dev_err(ppd, "%s firmware security bad idle state\n",
@@ -719,7 +715,6 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 			ret = -EINVAL;
 			break;
 		} else if (status == RSA_STATUS_DONE) {
-#endif
 			/* finished successfully */
 			break;
 		} else if (status == RSA_STATUS_FAILED) {
