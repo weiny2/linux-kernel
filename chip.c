@@ -5621,7 +5621,7 @@ static inline int disallowed_pkt_engine(int posn)
  * Translate an SDMA engine to a VL.  Return -1 if the tranlation cannot
  * be done.
  */
-int engine_to_vl(struct hfi1_devdata *dd, int engine)
+static int engine_to_vl(struct hfi1_devdata *dd, int engine)
 {
 	struct sdma_vl_map *m;
 	int vl;
@@ -5642,7 +5642,7 @@ int engine_to_vl(struct hfi1_devdata *dd, int engine)
  * Translate the send context (sofware index) into a VL.  Return -1 if the
  * translation cannot be done.
  */
-int sc_to_vl(struct hfi1_devdata *dd, int sw_index)
+static int sc_to_vl(struct hfi1_devdata *dd, int sw_index)
 {
 	struct send_context_info *sci;
 	struct send_context *sc;
