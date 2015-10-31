@@ -999,16 +999,14 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		 * Other are invalid.
 		 */
 		return -EINVAL;
+	} else if (cmd == HFI1_SNOOP_IOCSETLINKSTATE) {
+		/* We do not support the old setlink state */
+		return -EINVAL;
 	}
 
 	spin_lock_irqsave(&dd->hfi1_snoop.snoop_lock, flags);
 
 	switch (cmd) {
-	case HFI1_SNOOP_IOCSETLINKSTATE:
-		snoop_dbg("HFI1_SNOOP_IOCSETLINKSTATE is not valid");
-		ret = -EINVAL;
-		break;
-
 	case HFI1_SNOOP_IOCSETLINKSTATE_EXTRA:
 		memset(&link_info, 0, sizeof(link_info));
 
