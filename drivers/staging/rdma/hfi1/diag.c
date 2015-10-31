@@ -1008,8 +1008,6 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		/* We do not support the old setlink state */
 		return -EINVAL;
 
-	spin_lock_irqsave(&dd->hfi1_snoop.snoop_lock, flags);
-
 	switch (cmd) {
 	case HFI1_SNOOP_IOCSETLINKSTATE_EXTRA:
 		memset(&link_info, 0, sizeof(link_info));
@@ -1125,11 +1123,14 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	case HFI1_SNOOP_IOCCLEARQUEUE:
 		snoop_dbg("Clearing snoop queue");
+		spin_lock_irqsave(&dd->hfi1_snoop.snoop_lock, flags);
 		drain_snoop_list(&dd->hfi1_snoop.queue);
+		spin_unlock_irqrestore(&dd->hfi1_snoop.snoop_lock, flags);
 		break;
 
 	case HFI1_SNOOP_IOCCLEARFILTER:
 		snoop_dbg("Clearing filter");
+		spin_lock_irqsave(&dd->hfi1_snoop.snoop_lock, flags);
 		if (dd->hfi1_snoop.filter_callback) {
 			/* Drain packets first */
 			drain_snoop_list(&dd->hfi1_snoop.queue);
@@ -1137,6 +1138,7 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		}
 		kfree(dd->hfi1_snoop.filter_value);
 		dd->hfi1_snoop.filter_value = NULL;
+		spin_unlock_irqrestore(&dd->hfi1_snoop.snoop_lock, flags);
 		break;
 
 	case HFI1_SNOOP_IOCSETFILTER:
@@ -1173,13 +1175,14 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			break;
 		}
 		/* Drain packets first */
+		spin_lock_irqsave(&dd->hfi1_snoop.snoop_lock, flags);
 		drain_snoop_list(&dd->hfi1_snoop.queue);
 		dd->hfi1_snoop.filter_callback =
 			hfi1_filters[filter_cmd.opcode].filter;
 		/* just in case we see back to back sets */
 		kfree(dd->hfi1_snoop.filter_value);
 		dd->hfi1_snoop.filter_value = filter_value;
-
+		spin_unlock_irqrestore(&dd->hfi1_snoop.snoop_lock, flags);
 		break;
 	case HFI1_SNOOP_IOCGETVERSION:
 		value = SNOOP_CAPTURE_VERSION;
@@ -1203,7 +1206,6 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		break;
 	}
 
-	spin_unlock_irqrestore(&dd->hfi1_snoop.snoop_lock, flags);
 	return ret;
 }
 
