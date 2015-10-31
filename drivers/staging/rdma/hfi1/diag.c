@@ -1011,20 +1011,16 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&link_info,
 				   (struct hfi1_link_info __user *)arg,
 				   sizeof(link_info)))
-			ret = -EFAULT;
+			return -EFAULT;
 
 		value = link_info.port_state;
 		index = link_info.port_number;
-		if (index > dd->num_pports - 1) {
-			ret = -EINVAL;
-			break;
-		}
+		if (index > dd->num_pports - 1)
+			return -EINVAL;
 
 		ppd = &dd->pport[index];
-		if (!ppd) {
-			ret = -EINVAL;
-			break;
-		}
+		if (!ppd)
+			return -EINVAL;
 
 		/* What we want to transition to */
 		phys_state = (value >> 4) & 0xF;
@@ -1048,8 +1044,7 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				dev_state = HLS_DN_DISABLE;
 				break;
 			default:
-				ret = -EINVAL;
-				goto done;
+				return -EINVAL;
 			}
 			ret = set_link_state(ppd, dev_state);
 			break;
@@ -1064,8 +1059,7 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				send_idle_sma(dd, SMA_IDLE_ACTIVE);
 			break;
 		default:
-			ret = -EINVAL;
-			break;
+			return -EINVAL;
 		}
 
 		if (ret)
@@ -1078,7 +1072,7 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			if (copy_from_user(&link_info,
 					   (struct hfi1_link_info __user *)arg,
 					   sizeof(link_info)))
-				ret = -EFAULT;
+				return -EFAULT;
 			index = link_info.port_number;
 		} else {
 			ret = __get_user(index, (int __user *)arg);
@@ -1086,16 +1080,13 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				break;
 		}
 
-		if (index > dd->num_pports - 1) {
-			ret = -EINVAL;
-			break;
-		}
+		if (index > dd->num_pports - 1)
+			return -EINVAL;
 
 		ppd = &dd->pport[index];
-		if (!ppd) {
-			ret = -EINVAL;
-			break;
-		}
+		if (!ppd)
+			return -EINVAL;
+
 		value = hfi1_ibphys_portstate(ppd);
 		value <<= 4;
 		value |= driver_lstate(ppd);
@@ -1112,7 +1103,7 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 						ppd->link_width_active;
 			if (copy_to_user((struct hfi1_link_info __user *)arg,
 					 &link_info, sizeof(link_info)))
-				ret = -EFAULT;
+				return -EFAULT;
 		} else {
 			ret = __put_user(value, (int __user *)arg);
 		}
@@ -1143,14 +1134,12 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		/* just copy command structure */
 		argp = (unsigned long *)arg;
 		if (copy_from_user(&filter_cmd, (void __user *)argp,
-				   sizeof(filter_cmd))) {
-			ret = -EFAULT;
-			break;
-		}
+				   sizeof(filter_cmd)))
+			return -EFAULT;
+
 		if (filter_cmd.opcode >= HFI1_MAX_FILTERS) {
 			pr_alert("Invalid opcode in request\n");
-			ret = -EINVAL;
-			break;
+			return -EINVAL;
 		}
 
 		snoop_dbg("Opcode %d Len %d Ptr %p",
@@ -1159,17 +1148,15 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 		filter_value = kcalloc(filter_cmd.length, sizeof(u8),
 				       GFP_KERNEL);
-		if (!filter_value) {
-			ret = -ENOMEM;
-			break;
-		}
+		if (!filter_value)
+			return -ENOMEM;
+
 		/* copy remaining data from userspace */
 		if (copy_from_user((u8 *)filter_value,
 				   (void __user *)filter_cmd.value_ptr,
 				   filter_cmd.length)) {
 			kfree(filter_value);
-			ret = -EFAULT;
-			break;
+			return -EFAULT;
 		}
 		/* Drain packets first */
 		spin_lock_irqsave(&dd->hfi1_snoop.snoop_lock, flags);
@@ -1199,10 +1186,9 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			snoop_flags |= SNOOP_USE_METADATA;
 		break;
 	default:
-		ret = -ENOTTY;
-		break;
+		return -ENOTTY;
 	}
-done:
+
 	return ret;
 }
 
