@@ -1053,7 +1053,6 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				break;
 			default:
 				ret = -EINVAL;
-				goto done;
 			}
 			ret = set_link_state(ppd, dev_state);
 			break;
@@ -1201,7 +1200,7 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		ret = -ENOTTY;
 		break;
 	}
-done:
+
 	spin_unlock_irqrestore(&dd->hfi1_snoop.snoop_lock, flags);
 	return ret;
 }
