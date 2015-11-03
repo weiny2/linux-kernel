@@ -1110,11 +1110,21 @@ loop_set_status(struct loop_device *lo, const struct loop_info64 *info)
 	if (err)
 		return err;
 
-	if (info->lo_flags & LO_FLAGS_BLOCKSIZE)
+	if (info->lo_flags & LO_FLAGS_BLOCKSIZE) {
 		lo->lo_flags |= LO_FLAGS_BLOCKSIZE;
+		if ((info->lo_init[0] != 512) &&
+		    (info->lo_init[0] != 1024) &&
+		    (info->lo_init[0] != 2048) &&
+		    (info->lo_init[0] != 4096))
+			return -EINVAL;
+		if (info->lo_init[0] > lo->lo_blocksize)
+			return -EINVAL;
+		lo->lo_logical_blocksize = info->lo_init[0];
+	}
 
 	if (lo->lo_offset != info->lo_offset ||
-	    lo->lo_sizelimit != info->lo_sizelimit)
+	    lo->lo_sizelimit != info->lo_sizelimit ||
+	    lo->lo_flags & LO_FLAGS_BLOCKSIZE)
 		if (figure_loop_size(lo, info->lo_offset, info->lo_sizelimit))
 			return -EFBIG;
 
