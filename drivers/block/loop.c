@@ -365,7 +365,7 @@ lo_direct_splice_actor(struct pipe_inode_info *pipe, struct splice_desc *sd)
 
 static ssize_t
 do_lo_receive(struct loop_device *lo,
-	      struct bio_vec *bvec, int bsize, loff_t pos)
+	      struct bio_vec *bvec, loff_t pos)
 {
 	struct lo_read_data cookie;
 	struct splice_desc sd;
@@ -375,7 +375,7 @@ do_lo_receive(struct loop_device *lo,
 	cookie.lo = lo;
 	cookie.page = bvec->bv_page;
 	cookie.offset = bvec->bv_offset;
-	cookie.bsize = bsize;
+	cookie.bsize = lo->lo_blocksize;
 
 	sd.len = 0;
 	sd.total_len = bvec->bv_len;
@@ -390,14 +390,14 @@ do_lo_receive(struct loop_device *lo,
 }
 
 static int
-lo_receive(struct loop_device *lo, struct bio *bio, int bsize, loff_t pos)
+lo_receive(struct loop_device *lo, struct bio *bio, loff_t pos)
 {
 	struct bio_vec *bvec;
 	ssize_t s;
 	int i;
 
 	bio_for_each_segment(bvec, bio, i) {
-		s = do_lo_receive(lo, bvec, bsize, pos);
+		s = do_lo_receive(lo, bvec, pos);
 		if (s < 0)
 			return s;
 
@@ -459,7 +459,7 @@ static int do_bio_filebacked(struct loop_device *lo, struct bio *bio)
 				ret = -EIO;
 		}
 	} else
-		ret = lo_receive(lo, bio, lo->lo_blocksize, pos);
+		ret = lo_receive(lo, bio, pos);
 
 out:
 	return ret;
