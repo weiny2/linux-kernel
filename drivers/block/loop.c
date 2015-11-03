@@ -199,8 +199,11 @@ figure_loop_size(struct loop_device *lo, loff_t offset, loff_t sizelimit)
 		lo->lo_offset = offset;
 	if (lo->lo_sizelimit != sizelimit)
 		lo->lo_sizelimit = sizelimit;
-	if (lo->lo_flags & LO_FLAGS_BLOCKSIZE)
+	if (lo->lo_flags & LO_FLAGS_BLOCKSIZE) {
 		blk_queue_physical_block_size(lo->lo_queue, lo->lo_blocksize);
+		blk_queue_logical_block_size(lo->lo_queue,
+					     lo->lo_logical_blocksize);
+	}
 	set_capacity(lo->lo_disk, x);
 	bd_set_size(bdev, (loff_t)get_capacity(bdev->bd_disk) << 9);
 	/* let user-space know about the new size */
@@ -798,6 +801,7 @@ static void loop_config_discard(struct loop_device *lo)
 	struct file *file = lo->lo_backing_file;
 	struct inode *inode = file->f_mapping->host;
 	struct request_queue *q = lo->lo_queue;
+	int lo_bits = blksize_bits(lo->lo_logical_blocksize);
 
 	/*
 	 * We use punch hole to reclaim the free space used by the
@@ -817,7 +821,7 @@ static void loop_config_discard(struct loop_device *lo)
 
 	q->limits.discard_granularity = inode->i_sb->s_blocksize;
 	q->limits.discard_alignment = 0;
-	q->limits.max_discard_sectors = UINT_MAX >> 9;
+	q->limits.max_discard_sectors = UINT_MAX >> lo_bits;
 	q->limits.discard_zeroes_data = 1;
 	queue_flag_set_unlocked(QUEUE_FLAG_DISCARD, q);
 }
@@ -885,6 +889,7 @@ static int loop_set_fd(struct loop_device *lo, fmode_t mode,
 	set_device_ro(bdev, (lo_flags & LO_FLAGS_READ_ONLY) != 0);
 
 	lo->lo_blocksize = lo_blocksize;
+	lo->lo_logical_blocksize = 512;
 	lo->lo_device = bdev;
 	lo->lo_flags |= lo_flags;
 	lo->lo_backing_file = file;
@@ -900,8 +905,11 @@ static int loop_set_fd(struct loop_device *lo, fmode_t mode,
 	if (!(lo_flags & LO_FLAGS_READ_ONLY) && file->f_op->fsync)
 		blk_queue_flush(lo->lo_queue, REQ_FLUSH);
 
-	if (lo->lo_flags & LO_FLAGS_BLOCKSIZE)
+	if (lo->lo_flags & LO_FLAGS_BLOCKSIZE) {
 		blk_queue_physical_block_size(lo->lo_queue, lo->lo_blocksize);
+		blk_queue_logical_block_size(lo->lo_queue,
+					     lo->lo_logical_blocksize);
+	}
 	set_capacity(lo->lo_disk, size);
 	bd_set_size(bdev, size << 9);
 	loop_sysfs_init(lo);
