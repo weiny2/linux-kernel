@@ -293,10 +293,6 @@ static int send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 	int ret;
 	bool with_pio = false;
 
-#if 1 /* temporary until 4.8.56 issue understood */
-	with_pio = true;
-	ret = opa_ib_send_wqe_pio(ibp, wqe);
-#else
 	/* TODO - PIO temporary until General DMA support for user QPs */
 	if (wqe->sg_list[0].mr->lkey != 0) {
 		with_pio = true;
@@ -304,7 +300,6 @@ static int send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 	} else {
 		ret = opa_ib_send_wqe(ibp, qp, wqe);
 	}
-#endif
 
 	if (ret < 0)
 		opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);

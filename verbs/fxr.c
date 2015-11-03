@@ -134,13 +134,8 @@ int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp,
 	int ret;
 	unsigned long flags;
 
-#if 1 /* temporary until 4.8.56 issue understood */
-	if (wqe->use_sc15)
-		wqe->sl = 15;
-#else
 	if (wqe->use_sc15)
 		return -EINVAL;
-#endif
 
 	if (wqe->length > wqe->pmtu) {
 		dev_err(ibp->dev,
