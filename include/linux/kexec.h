@@ -7,13 +7,17 @@
 #include <xen/interface/kexec.h>
 #endif
 
+#if defined(CONFIG_KEXEC) || defined(CONFIG_XEN_PRIVILEGED_GUEST)
+
 #ifdef CONFIG_KEXEC
 #include <linux/list.h>
 #include <linux/linkage.h>
 #include <linux/compat.h>
 #include <linux/ioport.h>
 #include <linux/elfcore.h>
+#endif
 #include <linux/elf.h>
+#ifdef CONFIG_KEXEC
 #include <linux/module.h>
 #include <asm/kexec.h>
 
@@ -51,6 +55,8 @@
 #define KEXEC_CRASH_MEM_ALIGN PAGE_SIZE
 #endif
 
+#endif /* CONFIG_KEXEC */
+
 #define KEXEC_NOTE_HEAD_BYTES ALIGN(sizeof(struct elf_note), 4)
 #define KEXEC_CORE_NOTE_NAME "CORE"
 #define KEXEC_CORE_NOTE_NAME_BYTES ALIGN(sizeof(KEXEC_CORE_NOTE_NAME), 4)
@@ -65,6 +71,8 @@
 			    KEXEC_CORE_NOTE_NAME_BYTES +		\
 			    KEXEC_CORE_NOTE_DESC_BYTES )
 #endif
+
+#ifdef CONFIG_KEXEC
 
 #ifndef KEXEC_ARCH_HAS_PAGE_MACROS
 #define kexec_page_to_pfn(page)  page_to_pfn(page)
@@ -252,6 +260,7 @@ void crash_save_cpu(struct pt_regs *regs, int cpu);
 void crash_save_vmcoreinfo(void);
 void crash_map_reserved_pages(void);
 void crash_unmap_reserved_pages(void);
+#endif /* CONFIG_KEXEC */
 void arch_crash_save_vmcoreinfo(void);
 __printf(1, 2)
 void vmcoreinfo_append_str(const char *fmt, ...);
@@ -279,6 +288,8 @@ unsigned long paddr_vmcoreinfo_note(void);
 #define VMCOREINFO_CONFIG(name) \
 	vmcoreinfo_append_str("CONFIG_%s=y\n", #name)
 
+#ifdef CONFIG_KEXEC
+
 extern struct kimage *kexec_image;
 extern struct kimage *kexec_crash_image;
 extern int kexec_load_disabled;
@@ -298,6 +309,8 @@ extern int kexec_load_disabled;
 #define KEXEC_FILE_FLAGS	(KEXEC_FILE_UNLOAD | KEXEC_FILE_ON_CRASH | \
 				 KEXEC_FILE_NO_INITRAMFS)
 
+#endif /* CONFIG_KEXEC */
+
 #define VMCOREINFO_BYTES           (4096)
 #define VMCOREINFO_NOTE_NAME       "VMCOREINFO"
 #define VMCOREINFO_NOTE_NAME_BYTES ALIGN(sizeof(VMCOREINFO_NOTE_NAME), 4)
@@ -311,16 +324,21 @@ extern int kexec_load_disabled;
 					 PAGE_SIZE)
 #endif
 
+#ifdef CONFIG_KEXEC
+
 /* Location of a reserved region to hold the crash kernel.
  */
 extern struct resource crashk_res;
 extern struct resource crashk_low_res;
 typedef u32 note_buf_t[KEXEC_NOTE_BYTES/4];
 extern note_buf_t __percpu *crash_notes;
+#endif /* CONFIG_KEXEC */
 extern u32 vmcoreinfo_note[VMCOREINFO_NOTE_SIZE/4];
 extern size_t vmcoreinfo_size;
 extern size_t vmcoreinfo_max_size;
+#endif /* CONFIG_KEXEC || CONFIG_XEN_PRIVILEGED_GUEST */
 
+#ifdef CONFIG_KEXEC
 /* flag to track if kexec reboot is in progress */
 extern bool kexec_in_progress;
 

@@ -45,10 +45,14 @@
 #include <crypto/hash.h>
 #include <crypto/sha.h>
 
+#ifdef CONFIG_KEXEC
+
 #ifndef CONFIG_XEN
 /* Per cpu memory for storing cpu states in case of system crash. */
 note_buf_t __percpu *crash_notes;
 #endif
+
+#endif /* CONFIG_KEXEC */
 
 /* vmcoreinfo stuff */
 static unsigned char vmcoreinfo_data[VMCOREINFO_BYTES];
@@ -59,6 +63,8 @@ __page_aligned_bss
 vmcoreinfo_note[VMCOREINFO_NOTE_SIZE/4];
 size_t vmcoreinfo_size;
 size_t vmcoreinfo_max_size = sizeof(vmcoreinfo_data);
+
+#ifdef CONFIG_KEXEC
 
 /* Flag to indicate we are going to kexec a new kernel */
 bool kexec_in_progress = false;
@@ -1624,6 +1630,8 @@ unlock:
 }
 #endif /* !CONFIG_XEN */
 
+#endif /* CONFIG_KEXEC */
+
 static u32 *append_elf_note(u32 *buf, char *name, unsigned type, void *data,
 			    size_t data_len)
 {
@@ -1651,6 +1659,8 @@ static void final_note(u32 *buf)
 	note.n_type   = 0;
 	memcpy(buf, &note, sizeof(note));
 }
+
+#ifdef CONFIG_KEXEC
 
 #ifndef CONFIG_XEN
 void crash_save_cpu(struct pt_regs *regs, int cpu)
@@ -1971,6 +1981,8 @@ int __init parse_crashkernel_low(char *cmdline,
 }
 #endif
 
+#endif /* CONFIG_KEXEC */
+
 static void update_vmcoreinfo_note(void)
 {
 	u32 *buf = vmcoreinfo_note;
@@ -2103,6 +2115,8 @@ static int __init crash_save_vmcoreinfo_init(void)
 }
 
 subsys_initcall(crash_save_vmcoreinfo_init);
+
+#ifdef CONFIG_KEXEC
 
 #ifdef CONFIG_KEXEC_FILE
 static int __kexec_add_segment(struct kimage *image, char *buf,
@@ -2871,3 +2885,5 @@ int kernel_kexec(void)
 	mutex_unlock(&kexec_mutex);
 	return error;
 }
+
+#endif /* CONFIG_KEXEC */

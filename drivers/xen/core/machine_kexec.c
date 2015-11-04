@@ -12,6 +12,8 @@
 #include <linux/bootmem.h>
 #include <xen/pcpu.h>
 
+#ifdef CONFIG_KEXEC
+
 extern void machine_kexec_setup_load_arg(xen_kexec_image_t *xki, 
 					 struct kimage *image);
 extern int machine_kexec_setup_resources(struct resource *hypervisor,
@@ -374,6 +376,8 @@ void __noreturn machine_kexec(struct kimage *image)
 	panic("KEXEC_CMD_kexec hypercall should not return\n");
 }
 
+#endif /* CONFIG_KEXEC */
+
 #ifdef CONFIG_X86
 unsigned long paddr_vmcoreinfo_note(void)
 {
@@ -381,6 +385,7 @@ unsigned long paddr_vmcoreinfo_note(void)
 }
 #endif
 
+#ifdef CONFIG_KEXEC
 void machine_shutdown(void)
 {
 	/* do nothing */
@@ -391,6 +396,7 @@ void machine_crash_shutdown(struct pt_regs *regs)
 	/* The kernel is broken so disable interrupts */
 	local_irq_disable();
 }
+#endif /* CONFIG_KEXEC */
 
 /*
  * Local variables:
