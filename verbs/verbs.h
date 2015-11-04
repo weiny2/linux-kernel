@@ -836,7 +836,6 @@ struct opa_mcast *
 opa_mcast_find(struct opa_ib_portdata *ibp, union ib_gid *mgid);
 
 /* Device specific */
-int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe);
 int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 		    struct opa_ib_swqe *wqe);
 void opa_ib_rcv_start(struct opa_ib_portdata *ibp);

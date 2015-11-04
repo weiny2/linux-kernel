@@ -130,11 +130,88 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
 	vfree(eq_base);
 }
 
-/* TODO - keep around for now, in case this hack has value again later */
-int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp,
-			struct opa_ib_swqe *wqe)
+/*
+ * compute how many IOVECs we need at most for sending
+ *
+ * TODO may need to determine packet boundaries depending on how auto-header
+ * optimization is implemented in upper layers (need add'l header IOVECs)
+ */
+static int qp_max_iovs(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
+		       int *out_niovs)
 {
-	int ret, ndelays = 0;
+	int niovs;
+	size_t off, segsz, payload_bytes;
+	struct hfi2_sge *sge;
+
+	niovs = 1; /* one IOV for header */
+
+	/* step through SGEs to send in this packet */
+	sge = &qp->s_sge.sge;
+	for (payload_bytes = 0;
+	     payload_bytes < qp->s_cur_size;
+	     payload_bytes += sge->sge_length, sge++) {
+
+		/* we only support kernel virtual addresses for now */
+		if ((u64)sge->vaddr < PAGE_OFFSET) {
+			dev_err(ibp->dev,
+				"PT %d: DMA send with UVA not supported\n",
+				ibp->port_num);
+			return -EFAULT;
+		}
+
+		if (sge->mr->mapsz) {
+			segsz = 1 << sge->mr->page_shift;
+			/* TODO - store sge->offset to remove this */
+			off = sge->mr->map[sge->m]->segs[sge->n].length - sge->length;
+			niovs += ((off + sge->sge_length + segsz - 1) / segsz);
+		} else {
+			niovs++;
+		}
+	}
+
+	/* TODO - delete below when TX firmware supports this */
+	if (niovs > 4) {
+		dev_err(ibp->dev,
+			"PT %d: large IOVEC not supported in simics (%d)\n",
+			ibp->port_num, niovs);
+		return -EIO;
+	}
+
+	*out_niovs = niovs;
+	return 0;
+}
+
+/*
+ * update QP state that is tracking progress within the SG list to note
+ * that length bytes have been sent
+ */
+static void qp_update_sge(struct opa_ib_qp *qp, u32 length)
+{
+	struct opa_ib_sge_state *ss = qp->s_cur_sge;
+	struct hfi2_sge *sge = &ss->sge;
+
+	sge->vaddr += length;
+	sge->length -= length;
+	sge->sge_length -= length;
+	if (sge->sge_length == 0) {
+		if (--ss->num_sge)
+			*sge = *ss->sg_list++;
+	} else if (sge->length == 0 && sge->mr->lkey) {
+		if (++sge->n >= HFI2_SEGSZ) {
+			if (++sge->m >= sge->mr->mapsz)
+				return;
+			sge->n = 0;
+		}
+		sge->vaddr = sge->mr->map[sge->m]->segs[sge->n].vaddr;
+		sge->length = sge->mr->map[sge->m]->segs[sge->n].length;
+	}
+}
+
+/* TODO - keep around for now, in case this hack has value again during bring-up */
+static int __attribute__ ((unused))
+send_wqe_pio(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
+{
+	int ret;
 	unsigned long flags;
 
 	if (wqe->use_sc15)
@@ -167,7 +244,6 @@ int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp,
 		ibp->port_num, wqe->s_hdr,
 		wqe->sg_list[0].vaddr, wqe->length);
 
-_tx_cmd:
 	/* send the WQE via PIO path */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
 	ret = hfi_tx_cmd_bypass_pio(&ibp->cmdq_tx, wqe->s_ctx,
@@ -177,22 +253,7 @@ _tx_cmd:
 				    wqe->sl, 0, KDETH_9B_PIO);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 
-	if (ret == -EAGAIN) {
-		/* FXRTODO - remove delay via deferred send WQE logic */
-		if (ndelays >= OPA_IB_CQ_FULL_RETRIES) {
-			dev_warn(ibp->dev,
-				 "PT %d: TX CQ still full after %d retries!\n",
-				 ibp->port_num, ndelays);
-		} else {
-			ndelays++;
-			mdelay(OPA_IB_CQ_FULL_DELAY_MS);
-			goto _tx_cmd;
-		}
-	} else if (!ret && ndelays) {
-		dev_info(ibp->dev, "PT %d: full TX CQ required %d retries\n",
-			 ibp->port_num, ndelays);
-	}
-
+	/* caller must handle retransmit due to no slots (-EAGAIN) */
 	return ret;
 }
 
@@ -244,28 +305,33 @@ eq_advance:
 int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 		    struct opa_ib_swqe *wqe)
 {
-	int s, i, ret, ndelays = 0;
+	int i, ret, ndelays = 0;
 	unsigned long flags;
 	uint8_t dma_cmd;
 	union base_iovec *iov = NULL;
-	uint32_t num_iovs;
-	size_t payload_bytes = 0;
+	uint32_t num_iovs, total_length;
+	struct hfi2_sge *sge;
+	size_t payload_bytes;
 
 	dma_cmd = (wqe->use_sc15) ? MGMT_DMA : GENERAL_DMA;
 	/* TODO - optimize for OFED_DMA here */
 
-	num_iovs = wqe->s_sge->num_sge + 1;
-	/* TODO - delete below when TX firmware supports this */
-	if (num_iovs > 4) {
-		dev_err(ibp->dev,
-			"PT %d: large IOVEC not supported in simics (%d)\n",
-			ibp->port_num, num_iovs);
-		return -EIO;
-	}
+	ret = qp_max_iovs(ibp, qp, &num_iovs);
+	if (ret)
+		return ret;
 
 	iov = kzalloc(sizeof(*iov) * num_iovs, GFP_ATOMIC);
 	if (!iov)
 		return -ENOMEM;
+
+	/* TODO - to be removed */
+	if (wqe->s_iov) {
+		dev_err(ibp->dev,
+			"PT %d: multi-packet DMA not implemented yet\n",
+			ibp->port_num);
+		ret = -EIO;
+		goto err;
+	}
 	wqe->s_iov = iov;
 
 	/* first entry is IB header */
@@ -276,43 +342,65 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 	iov[0].start = (uint64_t)(&wqe->s_hdr->ibh);
 
 	/* write IOVEC entries */
-	for (s = 0; s < wqe->s_sge->num_sge; s++) {
+	total_length = qp->s_cur_size;
+	payload_bytes = 0;
+	for (i = 1; total_length && i < num_iovs; i++) {
 		uint32_t iov_length;
 
-		/* we only support kernel virtual addresses for now */
-		if ((u64)wqe->sg_list[s].vaddr < PAGE_OFFSET) {
-			dev_err(ibp->dev,
-				"PT %d: DMA send with UVA not supported\n",
-				ibp->port_num);
-			ret = -EFAULT;
-			goto err;
-		}
+		/* get current SGE, qp_update_sge() advances */
+		sge = &qp->s_sge.sge;
 
-		iov_length = wqe->sg_list[s].sge_length;
-		/* TODO - no multi-packet support yet, test path MTU */
-		if (payload_bytes + iov_length > wqe->pmtu) {
+		/* use length from next MR segment */
+		iov_length = sge->length;
+		/* the SGE can describe less than the MR segment */
+		if (iov_length > sge->sge_length)
+			iov_length = sge->sge_length;
+		/* TODO SGE can be larger than total_length? */
+		if (iov_length > total_length)
+			iov_length = total_length;
+
+		/*
+		 * If payload is now larger than MTU, start new packet;
+		 * caller doesn't do this currently, but test for it
+		 * TODO - may need if auto-header optimization
+		 */
+		if (payload_bytes + iov_length > wqe->pmtu && i > 1) {
 			dev_err(ibp->dev,
-				"PT %d: large DMA not implemented yet, %ld > %d MTU!\n",
+				"PT %d: large DMA not implemented, %ld > %d MTU!\n",
 				ibp->port_num,
 				payload_bytes + iov_length, wqe->pmtu);
 			ret = -EIO;
 			goto err;
 		}
 
-		i = s + 1;
 		iov[i].length = iov_length;
 		iov[i].use_9b = 1;
 		iov[i].ep = 0;
 		iov[i].sp = 0;
 		iov[i].v = 1;
-		iov[i].start = (uint64_t)wqe->sg_list[s].vaddr;
+		iov[i].start = (uint64_t)sge->vaddr;
 		payload_bytes += iov_length;
+		total_length -= iov_length;
+
+		/* update internal state in QP tracking SG_list progress */
+		qp_update_sge(qp, iov_length);
 	}
+
+	if (total_length) {
+		dev_err(ibp->dev,
+			"PT %d: TX error, %d bytes unsent after %d iovs\n",
+			ibp->port_num, total_length, num_iovs);
+		ret = -EIO;
+		goto err;
+	}
+
+	/* adjust iovs actually used, earlier calculation can be larger */
+	num_iovs = i;
 	iov[num_iovs - 1].ep = 1;
 
-	dev_dbg(ibp->dev, "PT %d: cmd %d len %d pmtu %d n_iov %d len %ld\n",
-		ibp->port_num, dma_cmd, wqe->length, wqe->pmtu, num_iovs,
-		payload_bytes);
+	dev_dbg(ibp->dev, "PT %d: cmd %d len %d/%d pmtu %d n_iov %d sent %ld\n",
+		ibp->port_num, dma_cmd, qp->s_cur_size, wqe->length, wqe->pmtu,
+		num_iovs, payload_bytes);
 
 _tx_cmd:
 	/* send with GENERAL or MGMT DMA */
@@ -591,7 +679,8 @@ int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp)
 	memset(&eq_alloc, 0, sizeof(eq_alloc));
 	eq_alloc.ni = HFI_NI_BYPASS;
 	eq_alloc.user_data = (unsigned long)ibp;
-	eq_alloc.size = 64;
+	/* TODO - set EQ size equal to CmdQ slots (DMA commands) for now */
+	eq_alloc.size = HFI_CQ_TX_ENTRIES;
 	eq_alloc.isr_cb = opa_ib_send_event;
 	eq_alloc.cookie = (void *)ibp;
 	ret = _hfi_eq_alloc(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
