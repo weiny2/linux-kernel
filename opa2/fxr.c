@@ -114,7 +114,7 @@ static void write_lm_fpc_csr(const struct hfi_pportdata *ppd,
 	else if (ppd->pnum == 2)
 		offset += FXR_LM_FPC1_CSRS;
 	else
-		dd_dev_warn(ppd->dd, "invalid port");
+		ppd_dev_warn(ppd, "invalid port");
 
 	write_csr(ppd->dd, offset, value);
 }
@@ -127,7 +127,7 @@ static void write_lm_tp_csr(const struct hfi_pportdata *ppd,
 	else if (ppd->pnum == 2)
 		offset += FXR_LM_TP1_CSRS;
 	else
-		dd_dev_warn(ppd->dd, "invalid port");
+		ppd_dev_warn(ppd, "invalid port");
 
 	write_csr(ppd->dd, offset, value);
 }
@@ -140,7 +140,7 @@ static void write_lm_cm_csr(const struct hfi_pportdata *ppd,
 	else if (ppd->pnum == 2)
 		offset += FXR_LM_CM1_CSRS;
 	else
-		dd_dev_warn(ppd->dd, "invalid port");
+		ppd_dev_warn(ppd, "invalid port");
 
 	write_csr(ppd->dd, offset, value);
 }
@@ -153,7 +153,7 @@ static u64 read_lm_tp_csr(const struct hfi_pportdata *ppd,
 	else if (ppd->pnum == 2)
 		offset += FXR_LM_TP1_CSRS;
 	else
-		dd_dev_warn(ppd->dd, "invalid ppd->pnum");
+		ppd_dev_warn(ppd, "invalid ppd->pnum");
 
 	return read_csr(ppd->dd, offset);
 }
@@ -166,7 +166,7 @@ static u64 read_lm_cm_csr(const struct hfi_pportdata *ppd,
 	else if (ppd->pnum == 2)
 		offset += FXR_LM_CM1_CSRS;
 	else
-		dd_dev_warn(ppd->dd, "invalid ppd->pnum");
+		ppd_dev_warn(ppd, "invalid ppd->pnum");
 
 	return read_csr(ppd->dd, offset);
 }
@@ -1188,7 +1188,7 @@ static void hfi_sl_to_sc(struct hfi_pportdata *ppd)
 	int nregs = ARRAY_SIZE(reg);
 
 	if (!sl_to_sc) {
-		dd_dev_warn(dd, "No sl_to_sc mapping");
+		ppd_dev_warn(ppd, "No sl_to_sc mapping");
 		return;
 	}
 
@@ -1229,7 +1229,7 @@ static void hfi_sc_to_resp_sl(struct hfi_pportdata *ppd, void *data)
 	int nregs = ARRAY_SIZE(reg);
 
 	if (!sc_to_sl) {
-		dd_dev_warn(dd, "No sc_to_sl mapping");
+		ppd_dev_warn(ppd, "No sc_to_sl mapping");
 		return;
 	}
 
