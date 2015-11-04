@@ -326,6 +326,9 @@ static ssize_t hfi1_file_write(struct file *fp, const char __user *data,
 		break;
 	case HFI1_CMD_TID_FREE:
 		ret = hfi1_user_exp_rcv_clear(fp, &tinfo);
+		if (ret)
+			break;
+
 		addr = (unsigned long)cmd.addr +
 			offsetof(struct hfi1_tid_info, tidcnt);
 		if (copy_to_user((void __user *)addr, &tinfo.tidcnt,
