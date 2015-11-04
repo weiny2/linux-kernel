@@ -122,6 +122,7 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 		switch (wqe->wr.opcode) {
 		case IB_WR_SEND:
 		case IB_WR_SEND_WITH_IMM:
+			qp->s_wqe = wqe;
 			if (len > pmtu) {
 				qp->s_state = OP(SEND_FIRST);
 				len = pmtu;
@@ -138,7 +139,6 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 			}
 			if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 				bth0 |= IB_BTH_SOLICITED;
-			qp->s_wqe = wqe;
 			if (++qp->s_cur >= qp->s_size)
 				qp->s_cur = 0;
 			break;
@@ -151,6 +151,7 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 				cpu_to_be32(wqe->wr.wr.rdma.rkey);
 			ohdr->u.rc.reth.length = cpu_to_be32(len);
 			hwords += sizeof(struct ib_reth) / 4;
+			qp->s_wqe = wqe;
 			if (len > pmtu) {
 				qp->s_state = OP(RDMA_WRITE_FIRST);
 				len = pmtu;
@@ -167,7 +168,6 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 				if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 					bth0 |= IB_BTH_SOLICITED;
 			}
-			qp->s_wqe = wqe;
 			if (++qp->s_cur >= qp->s_size)
 				qp->s_cur = 0;
 			break;
@@ -181,6 +181,7 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 		qp->s_state = OP(SEND_MIDDLE);
 		/* FALLTHROUGH */
 	case OP(SEND_MIDDLE):
+		qp->s_wqe = wqe;
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
@@ -196,7 +197,6 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 		}
 		if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 			bth0 |= IB_BTH_SOLICITED;
-		qp->s_wqe = wqe;
 		if (++qp->s_cur >= qp->s_size)
 			qp->s_cur = 0;
 		break;
@@ -205,6 +205,7 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 		qp->s_state = OP(RDMA_WRITE_MIDDLE);
 		/* FALLTHROUGH */
 	case OP(RDMA_WRITE_MIDDLE):
+		qp->s_wqe = wqe;
 		len = qp->s_len;
 		if (len > pmtu) {
 			len = pmtu;
@@ -221,7 +222,6 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 			if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 				bth0 |= IB_BTH_SOLICITED;
 		}
-		qp->s_wqe = wqe;
 		if (++qp->s_cur >= qp->s_size)
 			qp->s_cur = 0;
 		break;
