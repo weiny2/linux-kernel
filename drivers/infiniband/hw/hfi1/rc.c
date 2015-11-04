@@ -1021,10 +1021,17 @@ void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr)
 		add_retry_timer(qp);
 
 	while (qp->s_last != qp->s_acked) {
+		u32 s_last;
+
 		wqe = get_swqe_ptr(qp, qp->s_last);
 		if (cmp_psn(wqe->lpsn, qp->s_sending_psn) >= 0 &&
 		    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) <= 0)
 			break;
+		s_last = qp->s_last;
+		if (++s_last >= qp->s_size)
+			s_last = 0;
+		qp->s_last = s_last;
+		barrier();
 		for (i = 0; i < wqe->wr.num_sge; i++) {
 			struct hfi1_sge *sge = &wqe->sg_list[i];
 
@@ -1041,8 +1048,6 @@ void hfi1_rc_send_complete(struct hfi1_qp *qp, struct hfi1_ib_header *hdr)
 			wc.qp = &qp->ibqp;
 			hfi1_cq_enter(to_icq(qp->ibqp.send_cq), &wc, 0);
 		}
-		if (++qp->s_last >= qp->s_size)
-			qp->s_last = 0;
 	}
 	/*
 	 * If we were waiting for sends to complete before re-sending,
@@ -1082,11 +1087,18 @@ static struct hfi1_swqe *do_rc_completion(struct hfi1_qp *qp,
 	 */
 	if (cmp_psn(wqe->lpsn, qp->s_sending_psn) < 0 ||
 	    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
+		u32 s_last;
+
 		for (i = 0; i < wqe->wr.num_sge; i++) {
 			struct hfi1_sge *sge = &wqe->sg_list[i];
 
 			hfi1_put_mr(sge->mr);
 		}
+		s_last = qp->s_last;
+		if (++s_last >= qp->s_size)
+			s_last = 0;
+		qp->s_last = s_last;
+		barrier();
 		/* Post a send completion queue entry if requested. */
 		if (!(qp->s_flags & HFI1_S_SIGNAL_REQ_WR) ||
 		    (wqe->wr.send_flags & IB_SEND_SIGNALED)) {
@@ -1098,9 +1110,6 @@ static struct hfi1_swqe *do_rc_completion(struct hfi1_qp *qp,
 			wc.qp = &qp->ibqp;
 			hfi1_cq_enter(to_icq(qp->ibqp.send_cq), &wc, 0);
 		}
-		if (++qp->s_last >= qp->s_size)
-			qp->s_last = 0;
-		smp_wmb(); /* see post_one_send() */
 	} else {
 		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 
