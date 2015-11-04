@@ -733,8 +733,9 @@ struct hfi1_pportdata {
 	u64 *cntrs;
 	/* port relative synthetic counter buffer */
 	u64 *scntrs;
-	/* we synthesize port_xmit_discards from several egress errors */
+	/* port_xmit_discards are synthesized from different egress errors */
 	u64 port_xmit_discards;
+	u64 port_xmit_discards_vl[C_VL_COUNT];
 	u64 port_xmit_constraint_errors;
 	u64 port_rcv_constraint_errors;
 	/* count of 'link_err' interrupts from DC */
@@ -908,10 +909,11 @@ struct hfi1_devdata {
 	/* reset value */
 	u64 z_int_counter;
 	u64 z_rcv_limit;
+	u64 z_send_schedule;
 	/* percpu int_counter */
 	u64 __percpu *int_counter;
 	u64 __percpu *rcv_limit;
-
+	u64 __percpu *send_schedule;
 	/* number of receive contexts in use by the driver */
 	u32 num_rcv_contexts;
 	/* number of pio send contexts in use by the driver */
@@ -1902,6 +1904,7 @@ static inline void hfi1_reset_cpu_counters(struct hfi1_devdata *dd)
 
 	dd->z_int_counter = get_all_cpu_total(dd->int_counter);
 	dd->z_rcv_limit = get_all_cpu_total(dd->rcv_limit);
+	dd->z_send_schedule = get_all_cpu_total(dd->send_schedule);
 
 	ppd = (struct hfi1_pportdata *)(dd + 1);
 	for (i = 0; i < dd->num_pports; i++, ppd++) {
