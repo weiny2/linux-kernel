@@ -290,7 +290,15 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	iov.val[0] = 0x0;
 	iov.val[1] = 0x0;
 	iov.start = (u64)skb->data;
-	iov.length = skb->len;
+	if (vdev->is_eeph) {
+		unsigned char *pad_info = NULL;
+
+		pad_info = skb->data + skb->len - 1;
+		iov.length = skb->len - OPA_VNIC_ICRC_TAIL_LEN -
+				(*pad_info & 0x3f);
+	} else {
+		iov.length = skb->len;
+	}
 	iov.ep = 1;
 	iov.sp = 1;
 	iov.v = 1;
@@ -301,8 +309,7 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 				   dev->eq_tx, HFI_CT_NONE,
 				   dev->port_num - 1,
 				   0x0, dev->slid, HDR_10B,
-				   vdev->is_eeph ?
-				   GENERAL_DMA_NOCRC : GENERAL_DMA);
+				   GENERAL_DMA);
 	spin_unlock_irqrestore(&ndev->tx_lock, sflags);
 	/* FXRTODO: need error handling due to CQ full i.e. no slots */
 	if (rc < 0) {
