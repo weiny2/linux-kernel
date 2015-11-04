@@ -663,6 +663,24 @@ void set_pio_integrity(struct send_context *sc)
 	write_kctxt_csr(dd, hw_context, SC(CHECK_ENABLE), reg);
 }
 
+static u32 get_buffers_allocated(struct send_context *sc)
+{
+	int cpu;
+	u32 ret = 0;
+
+	for_each_possible_cpu(cpu)
+		ret += *per_cpu_ptr(sc->buffers_allocated, cpu);
+	return ret;
+}
+
+static void reset_buffers_allocated(struct send_context *sc)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		(*per_cpu_ptr(sc->buffers_allocated, cpu)) = 0;
+}
+
 /*
  * Allocate a NUMA relative send context structure of the given type along
  * with a HW context.
@@ -671,7 +689,7 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 			      uint hdrqentsize, int numa)
 {
 	struct send_context_info *sci;
-	struct send_context *sc;
+	struct send_context *sc = NULL;
 	dma_addr_t pa;
 	unsigned long flags;
 	u64 reg;
@@ -690,11 +708,20 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 		dd_dev_err(dd, "Cannot allocate send context structure\n");
 		return NULL;
 	}
+	sc->buffers_allocated = alloc_percpu(u32);
+	if (!sc->buffers_allocated) {
+		kfree(sc);
+		dd_dev_err(dd,
+			   "Cannot allocate buffers_allocated per cpu counters\n"
+			  );
+		return NULL;
+	}
 
 	spin_lock_irqsave(&dd->sc_lock, flags);
 	ret = sc_hw_alloc(dd, type, &sw_index, &hw_context);
 	if (ret) {
 		spin_unlock_irqrestore(&dd->sc_lock, flags);
+		free_percpu(sc->buffers_allocated);
 		kfree(sc);
 		return NULL;
 	}
@@ -710,7 +737,6 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 	spin_lock_init(&sc->credit_ctrl_lock);
 	INIT_LIST_HEAD(&sc->piowait);
 	INIT_WORK(&sc->halt_work, sc_halted);
-	atomic_set(&sc->buffers_allocated, 0);
 	init_waitqueue_head(&sc->halt_wait);
 
 	/* grouping is always single context for now */
@@ -872,6 +898,7 @@ void sc_free(struct send_context *sc)
 	spin_unlock_irqrestore(&dd->sc_lock, flags);
 
 	kfree(sc->sr);
+	free_percpu(sc->buffers_allocated);
 	kfree(sc);
 }
 
@@ -1035,7 +1062,7 @@ int sc_restart(struct send_context *sc)
 		/* kernel context */
 		loop = 0;
 		while (1) {
-			count = atomic_read(&sc->buffers_allocated);
+			count = get_buffers_allocated(sc);
 			if (count == 0)
 				break;
 			if (loop > 100) {
@@ -1203,7 +1230,8 @@ int sc_enable(struct send_context *sc)
 	sc->sr_head = 0;
 	sc->sr_tail = 0;
 	sc->flags = 0;
-	atomic_set(&sc->buffers_allocated, 0);
+	/* the alloc lock insures no fast patch allocation */
+	reset_buffers_allocated(sc);
 
 	/*
 	 * Clear all per-context errors.  Some of these will be set when
@@ -1379,7 +1407,8 @@ retry:
 
 	/* there is enough room */
 
-	atomic_inc(&sc->buffers_allocated);
+	preempt_disable();
+	this_cpu_inc(*sc->buffers_allocated);
 
 	/* read this once */
 	head = sc->sr_head;

@@ -69,6 +69,9 @@
 #define QSFP_PAGESIZE 256
 /* Reads/writes cannot cross 128 byte boundaries */
 #define QSFP_RW_BOUNDARY 128
+/* number of bytes in i2c offset for QSFP devices */
+#define __QSFP_OFFSET_SIZE 1				/* num address bytes */
+#define QSFP_OFFSET_SIZE (__QSFP_OFFSET_SIZE << 8)	/* shifted value */
 
 /* Defined fields that Intel requires of qualified cables */
 /* Byte 0 is Identifier, not checked */
