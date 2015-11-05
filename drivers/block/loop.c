@@ -199,6 +199,11 @@ figure_loop_size(struct loop_device *lo, loff_t offset, loff_t sizelimit)
 		lo->lo_offset = offset;
 	if (lo->lo_sizelimit != sizelimit)
 		lo->lo_sizelimit = sizelimit;
+	if (lo->lo_flags & LO_FLAGS_BLOCKSIZE) {
+		blk_queue_physical_block_size(lo->lo_queue, lo->lo_blocksize);
+		blk_queue_logical_block_size(lo->lo_queue,
+					     lo->lo_logical_blocksize);
+	}
 	set_capacity(lo->lo_disk, x);
 	bd_set_size(bdev, (loff_t)get_capacity(bdev->bd_disk) << 9);
 	/* let user-space know about the new size */
@@ -365,7 +370,7 @@ lo_direct_splice_actor(struct pipe_inode_info *pipe, struct splice_desc *sd)
 
 static ssize_t
 do_lo_receive(struct loop_device *lo,
-	      struct bio_vec *bvec, int bsize, loff_t pos)
+	      struct bio_vec *bvec, loff_t pos)
 {
 	struct lo_read_data cookie;
 	struct splice_desc sd;
@@ -375,7 +380,7 @@ do_lo_receive(struct loop_device *lo,
 	cookie.lo = lo;
 	cookie.page = bvec->bv_page;
 	cookie.offset = bvec->bv_offset;
-	cookie.bsize = bsize;
+	cookie.bsize = lo->lo_blocksize;
 
 	sd.len = 0;
 	sd.total_len = bvec->bv_len;
@@ -390,14 +395,14 @@ do_lo_receive(struct loop_device *lo,
 }
 
 static int
-lo_receive(struct loop_device *lo, struct bio *bio, int bsize, loff_t pos)
+lo_receive(struct loop_device *lo, struct bio *bio, loff_t pos)
 {
 	struct bio_vec *bvec;
 	ssize_t s;
 	int i;
 
 	bio_for_each_segment(bvec, bio, i) {
-		s = do_lo_receive(lo, bvec, bsize, pos);
+		s = do_lo_receive(lo, bvec, pos);
 		if (s < 0)
 			return s;
 
@@ -459,7 +464,7 @@ static int do_bio_filebacked(struct loop_device *lo, struct bio *bio)
 				ret = -EIO;
 		}
 	} else
-		ret = lo_receive(lo, bio, lo->lo_blocksize, pos);
+		ret = lo_receive(lo, bio, pos);
 
 out:
 	return ret;
@@ -796,6 +801,7 @@ static void loop_config_discard(struct loop_device *lo)
 	struct file *file = lo->lo_backing_file;
 	struct inode *inode = file->f_mapping->host;
 	struct request_queue *q = lo->lo_queue;
+	int lo_bits = blksize_bits(lo->lo_logical_blocksize);
 
 	/*
 	 * We use punch hole to reclaim the free space used by the
@@ -815,7 +821,7 @@ static void loop_config_discard(struct loop_device *lo)
 
 	q->limits.discard_granularity = inode->i_sb->s_blocksize;
 	q->limits.discard_alignment = 0;
-	q->limits.max_discard_sectors = UINT_MAX >> 9;
+	q->limits.max_discard_sectors = UINT_MAX >> lo_bits;
 	q->limits.discard_zeroes_data = 1;
 	queue_flag_set_unlocked(QUEUE_FLAG_DISCARD, q);
 }
@@ -883,8 +889,9 @@ static int loop_set_fd(struct loop_device *lo, fmode_t mode,
 	set_device_ro(bdev, (lo_flags & LO_FLAGS_READ_ONLY) != 0);
 
 	lo->lo_blocksize = lo_blocksize;
+	lo->lo_logical_blocksize = 512;
 	lo->lo_device = bdev;
-	lo->lo_flags = lo_flags;
+	lo->lo_flags |= lo_flags;
 	lo->lo_backing_file = file;
 	lo->transfer = transfer_none;
 	lo->ioctl = NULL;
@@ -898,6 +905,11 @@ static int loop_set_fd(struct loop_device *lo, fmode_t mode,
 	if (!(lo_flags & LO_FLAGS_READ_ONLY) && file->f_op->fsync)
 		blk_queue_flush(lo->lo_queue, REQ_FLUSH);
 
+	if (lo->lo_flags & LO_FLAGS_BLOCKSIZE) {
+		blk_queue_physical_block_size(lo->lo_queue, lo->lo_blocksize);
+		blk_queue_logical_block_size(lo->lo_queue,
+					     lo->lo_logical_blocksize);
+	}
 	set_capacity(lo->lo_disk, size);
 	bd_set_size(bdev, size << 9);
 	loop_sysfs_init(lo);
@@ -1098,8 +1110,21 @@ loop_set_status(struct loop_device *lo, const struct loop_info64 *info)
 	if (err)
 		return err;
 
+	if (info->lo_flags & LO_FLAGS_BLOCKSIZE) {
+		lo->lo_flags |= LO_FLAGS_BLOCKSIZE;
+		if ((info->lo_init[0] != 512) &&
+		    (info->lo_init[0] != 1024) &&
+		    (info->lo_init[0] != 2048) &&
+		    (info->lo_init[0] != 4096))
+			return -EINVAL;
+		if (info->lo_init[0] > lo->lo_blocksize)
+			return -EINVAL;
+		lo->lo_logical_blocksize = info->lo_init[0];
+	}
+
 	if (lo->lo_offset != info->lo_offset ||
-	    lo->lo_sizelimit != info->lo_sizelimit)
+	    lo->lo_sizelimit != info->lo_sizelimit ||
+	    lo->lo_flags & LO_FLAGS_BLOCKSIZE)
 		if (figure_loop_size(lo, info->lo_offset, info->lo_sizelimit))
 			return -EFBIG;
 
@@ -1277,7 +1302,7 @@ loop_get_status64(struct loop_device *lo, struct loop_info64 __user *arg) {
 	return err;
 }
 
-static int loop_set_capacity(struct loop_device *lo, struct block_device *bdev)
+static int loop_set_capacity(struct loop_device *lo)
 {
 	if (unlikely(lo->lo_state != Lo_bound))
 		return -ENXIO;
@@ -1326,7 +1351,7 @@ static int lo_ioctl(struct block_device *bdev, fmode_t mode,
 	case LOOP_SET_CAPACITY:
 		err = -EPERM;
 		if ((mode & FMODE_WRITE) || capable(CAP_SYS_ADMIN))
-			err = loop_set_capacity(lo, bdev);
+			err = loop_set_capacity(lo);
 		break;
 	default:
 		err = lo->ioctl ? lo->ioctl(lo, cmd, arg) : -EINVAL;
