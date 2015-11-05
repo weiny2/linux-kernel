@@ -69,7 +69,7 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid);
 
 /*
  * TODO - PID_ANY changed to 4095, as FXR PID is 12-bits.
- *        For temporary compatiblity with unit tests, also catch -1.
+ *        For temporary compatibility with unit tests, also catch -1.
  */
 #define IS_PID_ANY(x)	(x == HFI_PID_ANY || x == (u16)-1)
 
@@ -86,7 +86,8 @@ static int hfi_cq_validate_tuples(struct hfi_ctx *ctx,
 
 		/* user may request to let driver select UID */
 		if (auth_uid == HFI_UID_ANY || auth_uid == 0)
-			auth_uid = auth_table[i].uid = ctx->ptl_uid;
+			auth_table[i].uid = ctx->ptl_uid;
+			auth_uid = ctx->ptl_uid;
 
 		/* if job_launcher didn't set UIDs, this must match default */
 		if (ctx->auth_mask == 0) {
@@ -146,7 +147,8 @@ static int __hfi_cq_assign(struct hfi_ctx *ctx, u16 *cq_idx)
 	return 0;
 }
 
-int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx)
+int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table,
+		  u16 *cq_idx)
 {
 	int ret;
 	bool priv;
@@ -189,7 +191,8 @@ int hfi_cq_assign_privileged(struct hfi_ctx *ctx, u16 *cq_idx)
 	return ret;
 }
 
-int hfi_cq_update(struct hfi_ctx *ctx, u16 cq_idx, struct hfi_auth_tuple *auth_table)
+int hfi_cq_update(struct hfi_ctx *ctx, u16 cq_idx,
+		  struct hfi_auth_tuple *auth_table)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	struct hfi_ctx *cq_ctx;
@@ -322,8 +325,9 @@ void hfi_cq_unmap(struct hfi_cq *tx, struct hfi_cq *rx)
 
 static int hfi_ct_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign)
 {
-	union ptl_ct_event *ct_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_CT_OFFSET);
-	union ptl_ct_event ct_desc = {.val = {0}};
+	union ptl_ct_event *ct_desc_base = (void *)(ctx->ptl_state_base
+						    + HFI_PSB_CT_OFFSET);
+	union ptl_ct_event ct_desc = {.val = {0} };
 	u16 ct_base;
 	int ct_idx;
 	int num_cts = HFI_NUM_CT_ENTRIES;
@@ -338,7 +342,8 @@ static int hfi_ct_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign)
 
 	idr_preload(GFP_KERNEL);
 	spin_lock(&ctx->cteq_lock);
-	ct_idx = idr_alloc(&ctx->ct_used, ctx, ct_base, ct_base + num_cts, GFP_NOWAIT);
+	ct_idx = idr_alloc(&ctx->ct_used, ctx, ct_base, ct_base + num_cts,
+			   GFP_NOWAIT);
 	if (ct_idx < 0) {
 		/* all EQs are assigned */
 		ret = ct_idx;
@@ -372,7 +377,8 @@ idr_end:
 
 static int hfi_ct_release(struct hfi_ctx *ctx, u16 ct_idx)
 {
-	union ptl_ct_event *ct_desc_base = (void *)(ctx->ptl_state_base + HFI_PSB_CT_OFFSET);
+	union ptl_ct_event *ct_desc_base = (void *)(ctx->ptl_state_base
+						    + HFI_PSB_CT_OFFSET);
 	void *ct_present;
 	int ret = 0;
 
