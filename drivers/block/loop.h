@@ -47,7 +47,6 @@ struct loop_device {
 	struct file *	lo_backing_file;
 	struct block_device *lo_device;
 	unsigned	lo_blocksize;
-	unsigned	lo_logical_blocksize;
 	void		*key_data; 
 
 	gfp_t		old_gfp_mask;
@@ -64,6 +63,9 @@ struct loop_device {
 
 	struct request_queue	*lo_queue;
 	struct gendisk		*lo_disk;
+#ifndef __GENKSYMS__
+	unsigned	lo_logical_blocksize;
+#endif
 };
 
 /* Support for loadable transfer modules */
