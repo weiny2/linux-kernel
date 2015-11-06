@@ -1103,6 +1103,70 @@ static int subn_opa_aggregate(struct opa_smp *smp,
 	return reply((struct ib_mad_hdr *)smp);
 }
 
+/*
+ * hfi_is_local_mad() returns 1 if 'mad' is sent from, and destined to the
+ * local node, 0 otherwise.
+ */
+static int hfi_is_local_mad(struct opa_ib_portdata *ibp, const struct opa_mad *mad,
+			    const struct ib_wc *in_wc)
+{
+	const struct opa_smp *smp = (const struct opa_smp *)mad;
+
+	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
+		return (smp->hop_cnt == 0 &&
+			smp->route.dr.dr_slid == OPA_LID_PERMISSIVE &&
+			smp->route.dr.dr_dlid == OPA_LID_PERMISSIVE);
+	}
+
+	return (in_wc->slid == ibp->lid);
+}
+
+/*
+ * opa_local_smp_check() should only be called on MADs for which
+ * hfi_is_local_mad() returns true. It applies the SMP checks that are
+ * specific to SMPs which are sent from, and destined to this node.
+ * opa_local_smp_check() returns 0 if the SMP passes its checks, 1
+ * otherwise.
+ *
+ * SMPs which arrive from other nodes are instead checked by
+ * opa_smp_check().
+ */
+static int opa_local_smp_check(struct opa_ib_portdata *ibp,
+			       const struct ib_wc *in_wc)
+{
+	u16 pkey;
+
+	if (in_wc->pkey_index >= ibp->pkey_tlen)
+		return 1;
+
+	pkey = ibp->pkeys[in_wc->pkey_index];
+	/*
+	 * We need to do the "node-local" checks specified in OPAv1,
+	 * rev 0.90, section 9.10.26, which are:
+	 *   - pkey is 0x7fff, or 0xffff
+	 *   - Source QPN == 0 || Destination QPN == 0
+	 *   - the MAD header's management class is either
+	 *     IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE or
+	 *     IB_MGMT_CLASS_SUBN_LID_ROUTED
+	 *   - SLID != 0
+	 *
+	 * However, we know (and so don't need to check again) that,
+	 * for local SMPs, the MAD stack passes MADs with:
+	 *   - Source QPN of 0
+	 *   - MAD mgmt_class is IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE
+	 *   - SLID is either: OPA_LID_PERMISSIVE (0xFFFFFFFF), or
+	 *     our own port's lid
+	 *
+	 */
+	if (pkey == OPA_LIM_MGMT_PKEY || pkey == OPA_FULL_MGMT_PKEY)
+		return 0;
+	/* FXRTODO: Implement as part of PMA, Refer STL-3620 */
+#if 0
+	ingress_pkey_table_fail(ppd, pkey, slid);
+#endif
+	return 1;
+}
+
 static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 			    u8 port, const struct opa_mad *in_mad,
@@ -1220,6 +1284,11 @@ static int process_opa_mad(struct ib_device *ibdev, int mad_flags,
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
 	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
+		if (hfi_is_local_mad(ibp, in_mad, in_wc)) {
+			ret = opa_local_smp_check(ibp, in_wc);
+			if (ret)
+				return IB_MAD_RESULT_FAILURE;
+		}
 		ret = process_subn_stl(ibdev, mad_flags, port, in_mad,
 				       out_mad, &resp_len);
 		goto bail;
