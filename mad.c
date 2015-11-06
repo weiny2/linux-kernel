@@ -3781,8 +3781,8 @@ void clear_linkup_counters(struct hfi1_devdata *dd)
  * is_local_mad() returns 1 if 'mad' is sent from, and destined to the
  * local node, 0 otherwise.
  */
-static int is_local_mad(struct hfi1_ibport *ibp, struct jumbo_mad *mad,
-			struct ib_wc *in_wc)
+static int is_local_mad(struct hfi1_ibport *ibp, const struct jumbo_mad *mad,
+			const struct ib_wc *in_wc)
 {
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	struct opa_smp *smp = (struct opa_smp *)mad;
@@ -3806,7 +3806,8 @@ static int is_local_mad(struct hfi1_ibport *ibp, struct jumbo_mad *mad,
  * SMPs which arrive from other nodes are instead checked by
  * opa_smp_check().
  */
-static int opa_local_smp_check(struct hfi1_ibport *ibp, struct ib_wc *in_wc)
+static int opa_local_smp_check(struct hfi1_ibport *ibp,
+			       const struct ib_wc *in_wc)
 {
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	u16 slid = in_wc->slid;
@@ -3841,7 +3842,7 @@ static int opa_local_smp_check(struct hfi1_ibport *ibp, struct ib_wc *in_wc)
 }
 
 static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
-			    u8 port, struct jumbo_mad *in_mad,
+			    u8 port, const struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad,
 			    u32 *resp_len)
 {
@@ -3936,7 +3937,7 @@ bail:
 }
 
 static int process_subn(struct ib_device *ibdev, int mad_flags,
-			u8 port, struct ib_mad *in_mad,
+			u8 port, const struct ib_mad *in_mad,
 			struct ib_mad *out_mad)
 {
 	struct ib_smp *smp = (struct ib_smp *)out_mad;
@@ -3995,7 +3996,7 @@ bail:
 }
 
 static int process_perf_opa(struct ib_device *ibdev, u8 port,
-			    struct jumbo_mad *in_mad,
+			    const struct jumbo_mad *in_mad,
 			    struct jumbo_mad *out_mad, u32 *resp_len)
 {
 	struct opa_pma_mad *pmp = (struct opa_pma_mad *)out_mad;
@@ -4074,15 +4075,16 @@ bail:
 }
 
 static int hfi1_process_opa_mad(struct ib_device *ibdev, int mad_flags,
-				u8 port, struct ib_wc *in_wc,
-				struct ib_grh *in_grh,
-				struct jumbo_mad *in_mad,
+				u8 port, const struct ib_wc *in_wc,
+				const struct ib_grh *in_grh,
+				const struct jumbo_mad *in_mad,
 				struct jumbo_mad *out_mad)
 {
 	int ret;
 	int pkey_idx;
 	u32 resp_len = 0;
 	struct hfi1_ibport *ibp = to_iport(ibdev, port);
+	struct ib_wc *in_out_wc = (struct ib_wc *)in_wc;
 
 	pkey_idx = hfi1_lookup_pkey_idx(ibp, LIM_MGMT_P_KEY);
 	if (pkey_idx < 0) {
@@ -4090,7 +4092,7 @@ static int hfi1_process_opa_mad(struct ib_device *ibdev, int mad_flags,
 			hfi1_get_pkey(ibp, 1));
 		pkey_idx = 1;
 	}
-	in_wc->pkey_index = (u16)pkey_idx;
+	in_out_wc->pkey_index = (u16)pkey_idx;
 
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
@@ -4114,16 +4116,18 @@ static int hfi1_process_opa_mad(struct ib_device *ibdev, int mad_flags,
 
 bail:
 	if (ret & IB_MAD_RESULT_REPLY)
-		in_wc->byte_len = round_up(resp_len, 8);
+		in_out_wc->byte_len = round_up(resp_len, 8);
 	else if (ret & IB_MAD_RESULT_SUCCESS)
-		in_wc->byte_len -= sizeof(struct ib_grh);
+		in_out_wc->byte_len -= sizeof(struct ib_grh);
 
 	return ret;
 }
 
 static int hfi1_process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-			       struct ib_wc *in_wc, struct ib_grh *in_grh,
-			       struct ib_mad *in_mad, struct ib_mad *out_mad)
+			       const struct ib_wc *in_wc,
+			       const struct ib_grh *in_grh,
+			       const struct ib_mad *in_mad,
+			       struct ib_mad *out_mad)
 {
 	int ret;
 
@@ -4160,8 +4164,8 @@ bail:
  * This is called by the ib_mad module.
  */
 int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-		     struct ib_wc *in_wc, struct ib_grh *in_grh,
-		     struct ib_mad *in_mad, struct ib_mad *out_mad)
+		     const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+		     const struct ib_mad *in_mad, struct ib_mad *out_mad)
 {
 	switch (in_mad->mad_hdr.base_version) {
 	case JUMBO_MGMT_BASE_VERSION:
