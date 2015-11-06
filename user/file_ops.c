@@ -74,6 +74,7 @@ static ssize_t hfi_write(struct file *, const char __user *, size_t, loff_t *);
 static int hfi_mmap(struct file *, struct vm_area_struct *);
 static u64 kvirt_to_phys(void *, int*);
 static int vma_fault(struct vm_area_struct *, struct vm_fault *);
+static void vma_munmap(struct vm_area_struct *vma);
 
 static const struct file_operations hfi_file_ops = {
 	.owner = THIS_MODULE,
@@ -86,7 +87,107 @@ static const struct file_operations hfi_file_ops = {
 
 static struct vm_operations_struct vm_ops = {
 	.fault = vma_fault,
+	.close = vma_munmap,
 };
+
+/*
+ * Locate vma in the vma_list, zap it and remove it.
+ */
+static void vma_munmap(struct vm_area_struct *vma)
+{
+	struct list_head *pos, *temp;
+	struct hfi_vma *v;
+	struct hfi_userdata *ud = vma->vm_private_data;
+	struct vm_area_struct *vv;
+
+	BUG_ON(!ud);		/* FXRTODO Remove it before upstreaming. */
+
+	spin_lock(&ud->vma_lock);
+	list_for_each_safe(pos, temp, &ud->vma_head) {
+		v = list_entry(pos, struct hfi_vma, vma_list);
+		vv = v->vma;
+		if (vv == vma) {
+			zap_vma_ptes(vv, vv->vm_start,
+				     vv->vm_end - vv->vm_start);
+			list_del(pos);
+			kfree(v);
+			vma->vm_private_data = NULL;
+			break;
+		}
+	}
+	spin_unlock(&ud->vma_lock);
+}
+
+/*
+ * Zap each element in the vma_list and remove it.
+ */
+static void hfi_zap_vma_list(struct hfi_userdata *ud, uint16_t cq_idx)
+{
+	struct list_head *pos, *temp;
+	struct hfi_vma *v;
+	struct vm_area_struct *vv;
+
+	spin_lock(&ud->vma_lock);
+	list_for_each_safe(pos, temp, &ud->vma_head) {
+		v = list_entry(pos, struct hfi_vma, vma_list);
+		if (cq_idx == v->cq_idx) {
+			vv = v->vma;
+			zap_vma_ptes(vv, vv->vm_start,
+				     vv->vm_end - vv->vm_start);
+			list_del(pos);
+			kfree(v);
+		}
+	}
+	spin_unlock(&ud->vma_lock);
+}
+
+/*
+ * Build the vma_list so that zap_vma_ptes may be called later on the list.
+ */
+static int hfi_vma_list_add(struct hfi_userdata *ud,
+			    struct vm_area_struct *vma,
+			    uint16_t cq_idx)
+{
+	struct hfi_vma *v;
+
+	v = kmalloc(sizeof(*v), GFP_KERNEL);
+
+	if (!v)
+		return -ENOMEM;
+
+	spin_lock(&ud->vma_lock);
+	list_add(&v->vma_list, &ud->vma_head);
+	v->vma = vma;
+	v->cq_idx = cq_idx;
+	vma->vm_private_data = ud;
+	spin_unlock(&ud->vma_lock);
+	return 0;
+}
+
+/*
+ * Remove vma from the vma_list without calling zap_vma_ptes.
+ */
+static void hfi_vma_list_remove(struct hfi_userdata *ud,
+				struct vm_area_struct *vma,
+				uint16_t cq_idx)
+{
+	struct list_head *pos, *temp;
+	struct hfi_vma *v;
+	struct vm_area_struct *vv;
+
+	spin_lock(&ud->vma_lock);
+	list_for_each_safe(pos, temp, &ud->vma_head) {
+		v = list_entry(pos, struct hfi_vma, vma_list);
+		vv = v->vma;
+		if (vv == vma && cq_idx == v->cq_idx) {
+			list_del(pos);
+			kfree(v);
+			vma->vm_private_data = NULL;
+			break;
+		}
+	}
+	spin_unlock(&ud->vma_lock);
+}
 
 static inline int is_valid_mmap(u64 token)
 {
@@ -110,6 +211,10 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	if (!ud)
 		return -ENOMEM;
 	fp->private_data = ud;
+
+	/* Setup list to zap vmas on release */
+	INIT_LIST_HEAD(&ud->vma_head);
+	spin_lock_init(&ud->vma_lock);
 
 	/* store HFI HW device pointers */
 	ud->odev = hi->odev;
@@ -354,6 +459,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		ret = ops->cq_update(&ud->ctx, cq_update.cq_idx, cq_update.auth_table);
 		break;
 	case HFI_CMD_CQ_RELEASE:
+		hfi_zap_vma_list(ud, cq_release.cq_idx);
 		ret = ops->cq_release(&ud->ctx, cq_release.cq_idx);
 		break;
 	case HFI_CMD_CT_ASSIGN:
@@ -497,6 +603,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	int ret = 0;
 	u16 ctxt;
 	struct opa_core_ops *ops;
+	bool add_to_vma_list = false;
 
 	ud = fp->private_data;
 	BUG_ON(!ud || !ud->bus_ops);
@@ -527,6 +634,12 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	case TOK_CQ_RX:
 		mapio = 1;
 	case TOK_CQ_HEAD:
+		/* Save vma for later zapping */
+		add_to_vma_list = true;
+		ret = hfi_vma_list_add(ud, vma, ctxt);
+		if (ret)
+			return ret;
+
 		if (ctxt >= HFI_CQ_COUNT) {
 			ret = -EINVAL;
 			goto done;
@@ -604,7 +717,11 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		ret = remap_pfn_range(vma, vma->vm_start, pfn, memlen,
 				      vma->vm_page_prot);
 	}
-done:
+
+	/* Something failed above -- remove vma from zap list */
+	if (ret && add_to_vma_list)
+		hfi_vma_list_remove(ud, vma, ctxt);
+ done:
 	return ret;
 }
 
