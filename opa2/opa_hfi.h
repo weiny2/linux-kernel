@@ -105,8 +105,11 @@ enum {
 #define HFI_MAX_VLS		32
 #define HFI_PID_SYSTEM		0
 #define HFI_PID_BYPASS_BASE	0xF00
+#define HFI_NUM_BYPASS_PIDS	160
+/* last PID not usable as an RX context (0xFFF reserved as match any PID) */
+#define HFI_NUM_USABLE_PIDS	(HFI_NUM_PIDS - 1)
 #define HFI_TPID_ENTRIES	16
-#define HFI_DLID_TABLE_SIZE		(64 * 1024)
+#define HFI_DLID_TABLE_SIZE	(64 * 1024)
 
 /* FXRTODO: based on 16bit (9B) LID */
 #define HFI_MULTICAST_LID_BASE	0xC000
