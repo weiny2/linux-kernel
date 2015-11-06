@@ -159,6 +159,10 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	pi->port_mode = cpu_to_be16(
 				ppd->is_active_optimize_enabled ?
 					OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE : 0);
+	if (ppd->part_enforce & HFI_PART_ENFORCE_IN)
+		pi->partenforce_filterraw |= OPA_PI_MASK_PARTITION_ENFORCE_IN;
+	if (ppd->part_enforce & HFI_PART_ENFORCE_OUT)
+		pi->partenforce_filterraw |= OPA_PI_MASK_PARTITION_ENFORCE_OUT;
 	/*
 	 * FXRTODO:
 	 * 1. STL2 spec says that the enabled field is
@@ -904,6 +908,23 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		ppd->lid = lid;
 		ppd->lmc = lmc;
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_LIDLMC, 0, NULL);
+	}
+
+	/* enable/disable SW pkey checking as per FM control */
+	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_IN) {
+		ppd->part_enforce |= HFI_PART_ENFORCE_IN;
+		hfi_cfg_in_pkey_check(ppd, 1);
+	} else {
+		ppd->part_enforce &= ~HFI_PART_ENFORCE_IN;
+		hfi_cfg_in_pkey_check(ppd, 0);
+	}
+
+	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_OUT) {
+		ppd->part_enforce |= HFI_PART_ENFORCE_OUT;
+		hfi_cfg_out_pkey_check(ppd, 1);
+	} else {
+		ppd->part_enforce &= ~HFI_PART_ENFORCE_OUT;
+		hfi_cfg_out_pkey_check(ppd, 0);
 	}
 
 	/*

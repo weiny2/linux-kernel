@@ -443,20 +443,21 @@ static void hfi_set_send_length(struct hfi_pportdata *ppd)
 	/*FXRTODO: HW related code to change MTU */
 }
 
-static void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
+void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 {
-	struct hfi_devdata *dd = ppd->dd;
-	LM_CONFIG_PORT0_t lmp0;
-	LM_CONFIG_PORT1_t lmp1;
 	TP_CFG_MISC_CTRL_t misc;
 
 	misc.val = read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
 	misc.field.disable_pkey_chk = !enable;
 	write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
-	/*
-	 * FXRTODO: Writes to TP_CFG_PKEY_CHECK_CTRL are required
-	 * for 10B and 8B packets
-	 */
+}
+
+void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	LM_CONFIG_PORT0_t lmp0;
+	LM_CONFIG_PORT1_t lmp1;
+
 	switch (ppd_to_pnum(ppd)) {
 	case 1:
 		lmp0.val = read_csr(dd, FXR_LM_CONFIG_PORT0);
@@ -471,6 +472,16 @@ static void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 	default:
 		return;
 	}
+}
+
+static void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
+{
+	/*
+	 * FXRTODO: Writes to TP_CFG_PKEY_CHECK_CTRL are required
+	 * for 10B and 8B packets
+	 */
+	hfi_cfg_out_pkey_check(ppd, enable);
+	hfi_cfg_in_pkey_check(ppd, enable);
 }
 
 /*
