@@ -95,6 +95,10 @@ enum {
 	/* 6 - 15 are reserved */
 };
 
+/* partition enforcement flags */
+#define HFI_PART_ENFORCE_IN	BIT(0)
+#define HFI_PART_ENFORCE_OUT	BIT(1)
+
 #define HFI_IB_CC_TABLE_CAP_DEFAULT 31
 #define HFI_NUM_BARS		2
 #define HFI_NUM_PPORTS		2
@@ -448,6 +452,7 @@ struct ib_vl_weight_elem {
  *	messages
  * @mgmt_allowed: Indicates if neighbor is allowing this node to be a mgmt node
  *	(information received via LNI)
+ * @part_enforce: Partition enforcement flags
  * @sl_to_sc: service level to service class mapping table
  * @sc_to_sl: service class to service level mapping table
  * @sc_to_resp_sl: service class to response service level mapping table
@@ -528,6 +533,7 @@ struct hfi_pportdata {
 	u8 offline_disabled_reason;
 	u8 is_active_optimize_enabled;
 	u8 mgmt_allowed;
+	u8 part_enforce;
 	u8 sl_to_sc[OPA_MAX_SLS];
 	u8 sc_to_sl[OPA_MAX_SCS];
 	u8 sc_to_resp_sl[OPA_MAX_SCS];
@@ -864,6 +870,8 @@ void hfi_get_buffer_control(struct hfi_pportdata *ppd,
 			    struct buffer_control *bc, u16 *overall_limit);
 int hfi_set_buffer_control(struct hfi_pportdata *ppd,
 			   struct buffer_control *new_bc);
+void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable);
+void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
