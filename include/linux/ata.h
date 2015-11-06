@@ -94,6 +94,8 @@ enum {
 	ATA_ID_SECTOR_SIZE	= 106,
 	ATA_ID_WWN		= 108,
 	ATA_ID_LOGICAL_SECTOR_SIZE	= 117,	/* and 118 */
+	ATA_ID_COMMAND_SET_3	= 119,
+	ATA_ID_COMMAND_SET_4	= 120,
 	ATA_ID_LAST_LUN		= 126,
 	ATA_ID_DLF		= 128,
 	ATA_ID_CSFO		= 129,
@@ -177,7 +179,7 @@ enum {
 	ATA_DSC			= (1 << 4),	/* drive seek complete */
 	ATA_DRQ			= (1 << 3),	/* data request i/o */
 	ATA_CORR		= (1 << 2),	/* corrected data error */
-	ATA_IDX			= (1 << 1),	/* index */
+	ATA_SENSE		= (1 << 1),	/* sense code available */
 	ATA_ERR			= (1 << 0),	/* have an error */
 	ATA_SRST		= (1 << 2),	/* software reset */
 	ATA_ICRC		= (1 << 7),	/* interface CRC error */
@@ -219,6 +221,7 @@ enum {
 	ATA_CMD_IDLE		= 0xE3, /* place in idle power mode */
 	ATA_CMD_EDD		= 0x90,	/* execute device diagnostic */
 	ATA_CMD_DOWNLOAD_MICRO  = 0x92,
+	ATA_CMD_DOWNLOAD_MICRO_DMA = 0x93,
 	ATA_CMD_NOP		= 0x00,
 	ATA_CMD_FLUSH		= 0xE7,
 	ATA_CMD_FLUSH_EXT	= 0xEA,
@@ -268,12 +271,15 @@ enum {
 	ATA_CMD_WRITE_LOG_EXT	= 0x3F,
 	ATA_CMD_READ_LOG_DMA_EXT = 0x47,
 	ATA_CMD_WRITE_LOG_DMA_EXT = 0x57,
+	ATA_CMD_TRUSTED_NONDATA	= 0x5B,
 	ATA_CMD_TRUSTED_RCV	= 0x5C,
 	ATA_CMD_TRUSTED_RCV_DMA = 0x5D,
 	ATA_CMD_TRUSTED_SND	= 0x5E,
 	ATA_CMD_TRUSTED_SND_DMA = 0x5F,
 	ATA_CMD_PMP_READ	= 0xE4,
+	ATA_CMD_PMP_READ_DMA	= 0xE9,
 	ATA_CMD_PMP_WRITE	= 0xE8,
+	ATA_CMD_PMP_WRITE_DMA	= 0xEB,
 	ATA_CMD_CONF_OVERLAY	= 0xB1,
 	ATA_CMD_SEC_SET_PASS	= 0xF1,
 	ATA_CMD_SEC_UNLOCK	= 0xF2,
@@ -292,6 +298,11 @@ enum {
 	ATA_CMD_CFA_TRANS_SECT	= 0x87,
 	ATA_CMD_CFA_ERASE	= 0xC0,
 	ATA_CMD_CFA_WRITE_MULT_NE = 0xCD,
+	ATA_CMD_REQ_SENSE_DATA  = 0x0B,
+	ATA_CMD_SANITIZE_DEVICE = 0xB4,
+	ATA_CMD_ZAC_MGMT_IN	= 0x4A,
+	ATA_CMD_ZAC_MGMT_OUT	= 0x9F,
+
 	/* marked obsolete in the ATA/ATAPI-7 spec */
 	ATA_CMD_RESTORE		= 0x10,
 
@@ -299,11 +310,21 @@ enum {
 	ATA_SUBCMD_FPDMA_SEND_DSM            = 0x00,
 	ATA_SUBCMD_FPDMA_SEND_WR_LOG_DMA_EXT = 0x02,
 
+	/* Subcmds for ATA_CMD_ZAC_MGMT_IN */
+	ATA_SUBCMD_ZAC_MGMT_IN_REPORT_ZONES = 0x00,
+
+	/* Subcmds for ATA_CMD_ZAC_MGMT_OUT */
+	ATA_SUBCMD_ZAC_MGMT_OUT_CLOSE_ZONE = 0x01,
+	ATA_SUBCMD_ZAC_MGMT_OUT_FINISH_ZONE = 0x02,
+	ATA_SUBCMD_ZAC_MGMT_OUT_OPEN_ZONE = 0x03,
+	ATA_SUBCMD_ZAC_MGMT_OUT_RESET_WRITE_POINTER = 0x04,
+
 	/* READ_LOG_EXT pages */
 	ATA_LOG_SATA_NCQ	= 0x10,
 	ATA_LOG_NCQ_SEND_RECV	  = 0x13,
 	ATA_LOG_SATA_ID_DEV_DATA  = 0x30,
 	ATA_LOG_SATA_SETTINGS	  = 0x08,
+	ATA_LOG_ZONED_INFORMATION = 0x09,
 	ATA_LOG_DEVSLP_OFFSET	  = 0x30,
 	ATA_LOG_DEVSLP_SIZE	  = 0x08,
 	ATA_LOG_DEVSLP_MDAT	  = 0x00,
@@ -374,6 +395,8 @@ enum {
 	SATA_AN			= 0x05,	/* Asynchronous Notification */
 	SATA_SSP		= 0x06,	/* Software Settings Preservation */
 	SATA_DEVSLP		= 0x09,	/* Device Sleep */
+
+	SETFEATURE_SENSE_DATA = 0xC3, /* Sense Data Reporting feature */
 
 	/* feature values for SET_MAX */
 	ATA_SET_MAX_ADDR	= 0x00,
@@ -518,6 +541,8 @@ struct ata_bmdma_prd {
 #define ata_id_cdb_intr(id)	(((id)[ATA_ID_CONFIG] & 0x60) == 0x20)
 #define ata_id_has_da(id)	((id)[ATA_ID_SATA_CAPABILITY_2] & (1 << 4))
 #define ata_id_has_devslp(id)	((id)[ATA_ID_FEATURE_SUPP] & (1 << 8))
+#define ata_id_has_ncq_autosense(id) \
+				((id)[ATA_ID_FEATURE_SUPP] & (1 << 7))
 
 static inline bool ata_id_has_hipm(const u16 *id)
 {
@@ -689,6 +714,27 @@ static inline bool ata_id_wcache_enabled(const u16 *id)
 	return id[ATA_ID_CFS_ENABLE_1] & (1 << 5);
 }
 
+static inline bool ata_id_has_read_log_dma_ext(const u16 *id)
+{
+	if (!(id[ATA_ID_CFS_ENABLE_2] & (1 << 15)))
+		return false;
+	return id[ATA_ID_COMMAND_SET_3] & (1 << 3);
+}
+
+static inline bool ata_id_has_sense_reporting(const u16 *id)
+{
+	if (!(id[ATA_ID_CFS_ENABLE_2] & (1 << 15)))
+		return false;
+	return id[ATA_ID_COMMAND_SET_3] & (1 << 6);
+}
+
+static inline bool ata_id_sense_reporting_enabled(const u16 *id)
+{
+	if (!(id[ATA_ID_CFS_ENABLE_2] & (1 << 15)))
+		return false;
+	return id[ATA_ID_COMMAND_SET_4] & (1 << 6);
+}
+
 /**
  *	ata_id_major_version	-	get ATA level of drive
  *	@id: Identify data
@@ -842,6 +888,11 @@ static inline bool ata_id_is_cfa(const u16 *id)
 static inline bool ata_id_is_ssd(const u16 *id)
 {
 	return id[ATA_ID_ROT_SPEED] == 0x01;
+}
+
+static inline u8 ata_id_zoned_cap(const u16 *id)
+{
+	return (id[ATA_ID_ADDITIONAL_SUPP] & 0x3);
 }
 
 static inline bool ata_id_pio_need_iordy(const u16 *id, const u8 pio)

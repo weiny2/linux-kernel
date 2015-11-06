@@ -472,8 +472,6 @@ __kvm_hyp_code_start:
 	mrs	x3, cntv_ctl_el0
 	and	x3, x3, #3
 	str	w3, [x0, #VCPU_TIMER_CNTV_CTL]
-	bic	x3, x3, #1		// Clear Enable
-	msr	cntv_ctl_el0, x3
 
 	isb
 
@@ -481,6 +479,9 @@ __kvm_hyp_code_start:
 	str	x3, [x0, #VCPU_TIMER_CNTV_CVAL]
 
 1:
+	// Disable the virtual timer
+	msr	cntv_ctl_el0, xzr
+
 	// Allow physical timer/counter access for the host
 	mrs	x2, cnthctl_el2
 	orr	x2, x2, #3
@@ -616,10 +617,17 @@ ENTRY(__kvm_tlb_flush_vmid_ipa)
 	 * Instead, we invalidate Stage-2 for this IPA, and the
 	 * whole of Stage-1. Weep...
 	 */
+	lsr	x1, x1, #12
 	tlbi	ipas2e1is, x1
-	dsb	sy
+	/*
+	 * We have to ensure completion of the invalidation at Stage-2,
+	 * since a table walk on another CPU could refill a TLB with a
+	 * complete (S1 + S2) walk based on the old Stage-2 mapping if
+	 * the Stage-1 invalidation happened first.
+	 */
+	dsb	ish
 	tlbi	vmalle1is
-	dsb	sy
+	dsb	ish
 	isb
 
 	msr	vttbr_el2, xzr
@@ -630,7 +638,7 @@ ENTRY(__kvm_flush_vm_context)
 	dsb	ishst
 	tlbi	alle1is
 	ic	ialluis
-	dsb	sy
+	dsb	ish
 	ret
 ENDPROC(__kvm_flush_vm_context)
 
@@ -681,6 +689,24 @@ __hyp_panic_str:
 
 	.align	2
 
+/*
+ * u64 kvm_call_hyp(void *hypfn, ...);
+ *
+ * This is not really a variadic function in the classic C-way and care must
+ * be taken when calling this to ensure parameters are passed in registers
+ * only, since the stack will change between the caller and the callee.
+ *
+ * Call the function with the first argument containing a pointer to the
+ * function you wish to call in Hyp mode, and subsequent arguments will be
+ * passed as x0, x1, and x2 (a maximum of 3 arguments in addition to the
+ * function pointer can be passed).  The function being called must be mapped
+ * in Hyp mode (see init_hyp_mode in arch/arm/kvm/arm.c).  Return values are
+ * passed in r0 and r1.
+ *
+ * A function pointer with a value of 0 has a special meaning, and is
+ * used to implement __hyp_get_vectors in the same way as in
+ * arch/arm64/kernel/hyp_stub.S.
+ */
 ENTRY(kvm_call_hyp)
 	hvc	#0
 	ret
@@ -724,7 +750,12 @@ el1_sync:					// Guest trapped into EL2
 	pop	x2, x3
 	pop	x0, x1
 
-	push	lr, xzr
+	/* Check for __hyp_get_vectors */
+	cbnz	x0, 1f
+	mrs	x0, vbar_el2
+	b	2f
+
+1:	push	lr, xzr
 
 	/*
 	 * Compute the function address in EL2, and shuffle the parameters.
@@ -737,7 +768,7 @@ el1_sync:					// Guest trapped into EL2
 	blr	lr
 
 	pop	lr, xzr
-	eret
+2:	eret
 
 el1_trap:
 	/*
@@ -788,7 +819,7 @@ el1_trap:
 	mrs	x2, far_el2
 
 2:	mrs	x0, tpidr_el2
-	str	x1, [x0, #VCPU_ESR_EL2]
+	str	w1, [x0, #VCPU_ESR_EL2]
 	str	x2, [x0, #VCPU_FAR_EL2]
 	str	x3, [x0, #VCPU_HPFAR_EL2]
 

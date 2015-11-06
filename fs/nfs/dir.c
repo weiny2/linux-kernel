@@ -546,7 +546,7 @@ int nfs_readdir_page_filler(nfs_readdir_descriptor_t *desc, struct nfs_entry *en
 
 		count++;
 
-		if (desc->plus != 0)
+		if (desc->plus != 0 && entry->fh->size > 0)
 			nfs_prime_dcache(desc->file->f_path.dentry, entry);
 
 		status = nfs_readdir_add_to_array(entry, page);

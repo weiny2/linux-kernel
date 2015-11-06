@@ -28,7 +28,6 @@
 #include <asm/synch.h>
 #include <asm/ppc-opcode.h>
 
-
 #ifdef CONFIG_PPC64
 /* use 0x800000yy when locked, where yy == CPU number */
 #ifdef __BIG_ENDIAN__
@@ -52,6 +51,7 @@
 #define CLEAR_IO_SYNC
 #define SYNC_IO
 #endif
+
 static inline int arch_spin_is_locked(arch_spinlock_t *lock)
 {
 	smp_mb();

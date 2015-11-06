@@ -93,12 +93,16 @@
 #define INTEL_OUTPUT_HDMI 6
 #define INTEL_OUTPUT_DISPLAYPORT 7
 #define INTEL_OUTPUT_EDP 8
-#define INTEL_OUTPUT_UNKNOWN 9
+#define INTEL_OUTPUT_DSI 9
+#define INTEL_OUTPUT_UNKNOWN 10
 
 #define INTEL_DVO_CHIP_NONE 0
 #define INTEL_DVO_CHIP_LVDS 1
 #define INTEL_DVO_CHIP_TMDS 2
 #define INTEL_DVO_CHIP_TVOUT 4
+
+#define INTEL_DSI_COMMAND_MODE	0
+#define INTEL_DSI_VIDEO_MODE	1
 
 struct intel_framebuffer {
 	struct drm_framebuffer base;
@@ -209,6 +213,8 @@ struct intel_crtc_config {
 	unsigned long quirks;
 
 	struct drm_display_mode requested_mode;
+	/* Actual pipe timings ie. what we program into the pipe timing
+	 * registers. adjusted_mode.clock is the pipe pixel clock. */
 	struct drm_display_mode adjusted_mode;
 	/* Whether to set up the PCH/FDI. Note that we never allow sharing
 	 * between pch encoders and cpu encoders. */
@@ -263,7 +269,8 @@ struct intel_crtc_config {
 
 	/*
 	 * Frequence the dpll for the port should run at. Differs from the
-	 * adjusted dotclock e.g. for DP or 12bpc hdmi mode.
+	 * adjusted dotclock e.g. for DP or 12bpc hdmi mode. This is also
+	 * already multiplied by pixel_multiplier.
 	 */
 	int port_clock;
 
@@ -523,6 +530,7 @@ extern void intel_mark_fb_busy(struct drm_i915_gem_object *obj,
 			       struct intel_ring_buffer *ring);
 extern void intel_mark_idle(struct drm_device *dev);
 extern void intel_lvds_init(struct drm_device *dev);
+extern bool intel_dsi_init(struct drm_device *dev);
 extern bool intel_is_dual_link_lvds(struct drm_device *dev);
 extern void intel_dp_init(struct drm_device *dev, int output_reg,
 			  enum port port);
@@ -537,7 +545,7 @@ extern void intel_dp_encoder_destroy(struct drm_encoder *encoder);
 extern void intel_dp_check_link_status(struct intel_dp *intel_dp);
 extern bool intel_dp_compute_config(struct intel_encoder *encoder,
 				    struct intel_crtc_config *pipe_config);
-extern bool intel_dpd_is_edp(struct drm_device *dev);
+extern bool intel_dp_is_edp(struct drm_device *dev, enum port port);
 extern void ironlake_edp_backlight_on(struct intel_dp *intel_dp);
 extern void ironlake_edp_backlight_off(struct intel_dp *intel_dp);
 extern void ironlake_edp_panel_on(struct intel_dp *intel_dp);
@@ -561,12 +569,11 @@ extern void intel_pch_panel_fitting(struct intel_crtc *crtc,
 extern void intel_gmch_panel_fitting(struct intel_crtc *crtc,
 				     struct intel_crtc_config *pipe_config,
 				     int fitting_mode);
-extern void intel_panel_set_backlight(struct drm_device *dev,
-				      u32 level, u32 max);
+extern void intel_panel_set_backlight(struct intel_connector *connector, u32 level,
+			       u32 max);
 extern int intel_panel_setup_backlight(struct drm_connector *connector);
-extern void intel_panel_enable_backlight(struct drm_device *dev,
-					 enum pipe pipe);
-extern void intel_panel_disable_backlight(struct drm_device *dev);
+extern void intel_panel_enable_backlight(struct intel_connector *connector);
+extern void intel_panel_disable_backlight(struct intel_connector *connector);
 extern void intel_panel_destroy_backlight(struct drm_device *dev);
 extern enum drm_connector_status intel_panel_detect(struct drm_device *dev);
 
@@ -626,6 +633,7 @@ extern struct drm_encoder *intel_best_encoder(struct drm_connector *connector);
 
 extern struct drm_display_mode *intel_crtc_mode_get(struct drm_device *dev,
 						    struct drm_crtc *crtc);
+enum pipe intel_get_pipe_from_connector(struct intel_connector *connector);
 int intel_get_pipe_from_crtc_id(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
 extern enum transcoder
@@ -796,5 +804,11 @@ extern void hsw_pc8_disable_interrupts(struct drm_device *dev);
 extern void hsw_pc8_restore_interrupts(struct drm_device *dev);
 extern void intel_aux_display_runtime_get(struct drm_i915_private *dev_priv);
 extern void intel_aux_display_runtime_put(struct drm_i915_private *dev_priv);
+extern void intel_dp_get_m_n(struct intel_crtc *crtc,
+			     struct intel_crtc_config *pipe_config);
+extern int intel_dotclock_calculate(int link_freq,
+				    const struct intel_link_m_n *m_n);
+extern void ironlake_check_encoder_dotclock(const struct intel_crtc_config *pipe_config,
+					    int dotclock);
 
 #endif /* __INTEL_DRV_H__ */

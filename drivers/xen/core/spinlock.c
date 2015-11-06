@@ -157,7 +157,7 @@ static unsigned int ticket_drop(struct spinning *spinning,
 	if (cmpxchg(&spinning->ticket, ticket, -1) != ticket)
 		return -1;
 	lock->owner = cpu;
-	__add(&lock->tickets.head, 1, UNLOCK_LOCK_PREFIX);
+	__add(&lock->tickets.head, TICKET_LOCK_INC, UNLOCK_LOCK_PREFIX);
 	ticket = (__ticket_t)(ticket + 1);
 	return ticket != lock->tickets.tail ? ticket : -1;
 }
@@ -165,7 +165,8 @@ static unsigned int ticket_drop(struct spinning *spinning,
 static unsigned int ticket_get(arch_spinlock_t *lock, struct spinning *prev)
 {
 	struct __raw_tickets token = xadd(&lock->tickets,
-				 	  (struct __raw_tickets){ .tail = 1 });
+					  (struct __raw_tickets)
+					  { .tail = TICKET_LOCK_INC });
 
 	return token.head == token.tail ? token.tail
 					: spin_adjust(prev, lock, token.tail);
@@ -297,11 +298,9 @@ unsigned int xen_spin_wait(arch_spinlock_t *lock, struct __raw_tickets *ptok,
 		}
 
 #if CONFIG_XEN_SPINLOCK_ACQUIRE_NESTING
-		if (upcall_mask > flags) {
-			spinning.irq_count = __this_cpu_read(_irq_count);
-			smp_wmb();
-			arch_local_irq_restore(flags);
-		}
+		spinning.irq_count = __this_cpu_read(_irq_count);
+		smp_wmb();
+		arch_local_irq_restore(flags);
 #endif
 
 		if (!test_evtchn(__this_cpu_read(poll_evtchn)) &&

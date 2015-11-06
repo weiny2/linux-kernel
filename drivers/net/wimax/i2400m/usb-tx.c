@@ -195,10 +195,10 @@ int i2400mu_txd(void *_i2400mu)
 		d_printf(2, dev, "TX: waiting for messages\n");
 		tx_msg = NULL;
 		wait_event_interruptible(
-			i2400mu->tx_wq,
+			i2400mu->tx_wq, ({ kgr_task_safe(current);
 			(kthread_should_stop()	/* check this first! */
-			 || (tx_msg = i2400m_tx_msg_get(i2400m, &tx_msg_size)))
-			);
+			 || (tx_msg = i2400m_tx_msg_get(i2400m, &tx_msg_size)));
+			}));
 		if (kthread_should_stop())
 			break;
 		WARN_ON(tx_msg == NULL);	/* should not happen...*/

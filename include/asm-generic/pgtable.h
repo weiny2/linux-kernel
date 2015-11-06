@@ -642,163 +642,23 @@ static inline int pmd_trans_unstable(pmd_t *pmd)
 #endif
 }
 
-#ifdef CONFIG_NUMA_BALANCING
-#ifdef CONFIG_ARCH_USES_NUMA_PROT_NONE
+#ifndef CONFIG_NUMA_BALANCING
 /*
- * _PAGE_NUMA works identical to _PAGE_PROTNONE (it's actually the
- * same bit too). It's set only when _PAGE_PRESET is not set and it's
- * never set if _PAGE_PRESENT is set.
- *
- * pte/pmd_present() returns true if pte/pmd_numa returns true. Page
- * fault triggers on those regions if pte/pmd_numa returns true
- * (because _PAGE_PRESENT is not set).
+ * Technically a PTE can be PROTNONE even when not doing NUMA balancing but
+ * the only case the kernel cares is for NUMA balancing and is only ever set
+ * when the VMA is accessible. For PROT_NONE VMAs, the PTEs are not marked
+ * _PAGE_PROTNONE so by by default, implement the helper as "always no". It
+ * is the responsibility of the caller to distinguish between PROT_NONE
+ * protections and NUMA hinting fault protections.
  */
-#ifndef pte_numa
-static inline int pte_numa(pte_t pte)
-{
-	return (pte_flags(pte) &
-		(_PAGE_NUMA|_PAGE_PRESENT)) == _PAGE_NUMA;
-}
-#endif
-
-#ifndef pmd_numa
-static inline int pmd_numa(pmd_t pmd)
-{
-	return (pmd_flags(pmd) &
-		(_PAGE_NUMA|_PAGE_PRESENT)) == _PAGE_NUMA;
-}
-#endif
-
-/*
- * pte/pmd_mknuma sets the _PAGE_ACCESSED bitflag automatically
- * because they're called by the NUMA hinting minor page fault. If we
- * wouldn't set the _PAGE_ACCESSED bitflag here, the TLB miss handler
- * would be forced to set it later while filling the TLB after we
- * return to userland. That would trigger a second write to memory
- * that we optimize away by setting _PAGE_ACCESSED here.
- */
-#ifndef pte_mknonnuma
-static inline pte_t pte_mknonnuma(pte_t pte)
-{
-	pteval_t val = pte_val(pte);
-
-	val &= ~_PAGE_NUMA;
-	val |= (_PAGE_PRESENT|_PAGE_ACCESSED);
-	return __pte(val);
-}
-#endif
-
-#ifndef pmd_mknonnuma
-static inline pmd_t pmd_mknonnuma(pmd_t pmd)
-{
-	pmdval_t val = pmd_val(pmd);
-
-	val &= ~_PAGE_NUMA;
-	val |= (_PAGE_PRESENT|_PAGE_ACCESSED);
-
-	return __pmd(val);
-}
-#endif
-
-#ifndef pte_mknuma
-static inline pte_t pte_mknuma(pte_t pte)
-{
-	pteval_t val = pte_val(pte);
-
-	val &= ~_PAGE_PRESENT;
-	val |= _PAGE_NUMA;
-
-	return __pte(val);
-}
-#endif
-
-#ifndef ptep_set_numa
-static inline void ptep_set_numa(struct mm_struct *mm, unsigned long addr,
-				 pte_t *ptep)
-{
-	pte_t ptent = *ptep;
-
-	ptent = pte_mknuma(ptent);
-	set_pte_at(mm, addr, ptep, ptent);
-	return;
-}
-#endif
-
-#ifndef pmd_mknuma
-static inline pmd_t pmd_mknuma(pmd_t pmd)
-{
-	pmdval_t val = pmd_val(pmd);
-
-	val &= ~_PAGE_PRESENT;
-	val |= _PAGE_NUMA;
-
-	return __pmd(val);
-}
-#endif
-
-#ifndef pmdp_set_numa
-static inline void pmdp_set_numa(struct mm_struct *mm, unsigned long addr,
-				 pmd_t *pmdp)
-{
-	pmd_t pmd = *pmdp;
-
-	pmd = pmd_mknuma(pmd);
-	set_pmd_at(mm, addr, pmdp, pmd);
-	return;
-}
-#endif
-#else
-extern int pte_numa(pte_t pte);
-extern int pmd_numa(pmd_t pmd);
-extern pte_t pte_mknonnuma(pte_t pte);
-extern pmd_t pmd_mknonnuma(pmd_t pmd);
-extern pte_t pte_mknuma(pte_t pte);
-extern pmd_t pmd_mknuma(pmd_t pmd);
-extern void ptep_set_numa(struct mm_struct *mm, unsigned long addr, pte_t *ptep);
-extern void pmdp_set_numa(struct mm_struct *mm, unsigned long addr, pmd_t *pmdp);
-#endif /* CONFIG_ARCH_USES_NUMA_PROT_NONE */
-#else
-static inline int pmd_numa(pmd_t pmd)
+static inline int pte_protnone(pte_t pte)
 {
 	return 0;
 }
 
-static inline int pte_numa(pte_t pte)
+static inline int pmd_protnone(pmd_t pmd)
 {
 	return 0;
-}
-
-static inline pte_t pte_mknonnuma(pte_t pte)
-{
-	return pte;
-}
-
-static inline pmd_t pmd_mknonnuma(pmd_t pmd)
-{
-	return pmd;
-}
-
-static inline pte_t pte_mknuma(pte_t pte)
-{
-	return pte;
-}
-
-static inline void ptep_set_numa(struct mm_struct *mm, unsigned long addr,
-				 pte_t *ptep)
-{
-	return;
-}
-
-
-static inline pmd_t pmd_mknuma(pmd_t pmd)
-{
-	return pmd;
-}
-
-static inline void pmdp_set_numa(struct mm_struct *mm, unsigned long addr,
-				 pmd_t *pmdp)
-{
-	return ;
 }
 #endif /* CONFIG_NUMA_BALANCING */
 

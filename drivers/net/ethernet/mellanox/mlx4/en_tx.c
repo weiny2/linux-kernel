@@ -325,7 +325,7 @@ static u32 mlx4_en_free_tx_desc(struct mlx4_en_priv *priv,
 			}
 		}
 	}
-	dev_kfree_skb(skb);
+	dev_kfree_skb_any(skb);
 	return tx_info->nr_txbb;
 }
 
@@ -388,7 +388,7 @@ static int mlx4_en_process_tx_cq(struct net_device *dev,
 		return 0;
 
 	index = cons_index & size_mask;
-	cqe = &buf[(index << factor) + factor];
+	cqe = mlx4_en_get_cqe(buf, index, priv->cqe_size) + factor;
 	ring_index = ring->cons & size_mask;
 	stamp_index = ring_index;
 
@@ -436,7 +436,7 @@ static int mlx4_en_process_tx_cq(struct net_device *dev,
 
 		++cons_index;
 		index = cons_index & size_mask;
-		cqe = &buf[(index << factor) + factor];
+		cqe = mlx4_en_get_cqe(buf, index, priv->cqe_size) + factor;
 	}
 
 
@@ -810,8 +810,11 @@ netdev_tx_t mlx4_en_xmit(struct sk_buff *skb, struct net_device *dev)
 	tx_desc->ctrl.fence_size = (real_size / 16) & 0x3f;
 	tx_desc->ctrl.srcrb_flags = priv->ctrl_flags;
 	if (likely(skb->ip_summed == CHECKSUM_PARTIAL)) {
-		tx_desc->ctrl.srcrb_flags |= cpu_to_be32(MLX4_WQE_CTRL_IP_CSUM |
-							 MLX4_WQE_CTRL_TCP_UDP_CSUM);
+		if (!skb->encapsulation)
+			tx_desc->ctrl.srcrb_flags |= cpu_to_be32(MLX4_WQE_CTRL_IP_CSUM |
+								 MLX4_WQE_CTRL_TCP_UDP_CSUM);
+		else
+			tx_desc->ctrl.srcrb_flags |= cpu_to_be32(MLX4_WQE_CTRL_IP_CSUM);
 		ring->tx_csum++;
 	}
 

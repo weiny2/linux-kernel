@@ -1020,7 +1020,7 @@ int move_freepages(struct zone *zone,
 	 * Remove at a later date when no bug reports exist related to
 	 * grouping pages by mobility
 	 */
-	BUG_ON(page_zone(start_page) != page_zone(end_page));
+	VM_BUG_ON(page_zone(start_page) != page_zone(end_page));
 #endif
 
 	for (page = start_page; page <= end_page;) {
@@ -1287,7 +1287,31 @@ void drain_zone_pages(struct zone *zone, struct per_cpu_pages *pcp)
 #endif
 
 /*
- * Drain pages of the indicated processor.
+ * Drain pcplists of the indicated processor and zone.
+ *
+ * The processor must either be the current processor and the
+ * thread pinned to the current processor or a processor that
+ * is not online.
+ */
+static void drain_pages_zone(unsigned int cpu, struct zone *zone)
+{
+	unsigned long flags;
+	struct per_cpu_pageset *pset;
+	struct per_cpu_pages *pcp;
+
+	local_irq_save(flags);
+	pset = per_cpu_ptr(zone->pageset, cpu);
+
+	pcp = &pset->pcp;
+	if (pcp->count) {
+		free_pcppages_bulk(zone, pcp->count, pcp);
+		pcp->count = 0;
+	}
+	local_irq_restore(flags);
+}
+
+/*
+ * Drain pcplists of all zones on the indicated processor.
  *
  * The processor must either be the current processor and the
  * thread pinned to the current processor or a processor that
@@ -1295,35 +1319,33 @@ void drain_zone_pages(struct zone *zone, struct per_cpu_pages *pcp)
  */
 static void drain_pages(unsigned int cpu)
 {
-	unsigned long flags;
 	struct zone *zone;
 
 	for_each_populated_zone(zone) {
-		struct per_cpu_pageset *pset;
-		struct per_cpu_pages *pcp;
-
-		local_irq_save(flags);
-		pset = per_cpu_ptr(zone->pageset, cpu);
-
-		pcp = &pset->pcp;
-		if (pcp->count) {
-			free_pcppages_bulk(zone, pcp->count, pcp);
-			pcp->count = 0;
-		}
-		local_irq_restore(flags);
+		drain_pages_zone(cpu, zone);
 	}
 }
 
 /*
  * Spill all of this CPU's per-cpu pages back into the buddy allocator.
+ *
+ * The CPU has to be pinned. When zone parameter is non-NULL, spill just
+ * the single zone's pages.
  */
-void drain_local_pages(void *arg)
+void drain_local_pages(struct zone *zone)
 {
-	drain_pages(smp_processor_id());
+	int cpu = smp_processor_id();
+
+	if (zone)
+		drain_pages_zone(cpu, zone);
+	else
+		drain_pages(cpu);
 }
 
 /*
  * Spill all the per-cpu pages from all CPUs back into the buddy allocator.
+ *
+ * When zone parameter is non-NULL, spill just the single zone's pages.
  *
  * Note that this code is protected against sending an IPI to an offline
  * CPU but does not guarantee sending an IPI to newly hotplugged CPUs:
@@ -1331,11 +1353,9 @@ void drain_local_pages(void *arg)
  * nothing keeps CPUs from showing up after we populated the cpumask and
  * before the call to on_each_cpu_mask().
  */
-void drain_all_pages(void)
+void drain_all_pages(struct zone *zone)
 {
 	int cpu;
-	struct per_cpu_pageset *pcp;
-	struct zone *zone;
 
 	/*
 	 * Allocate in the BSS so we wont require allocation in
@@ -1350,20 +1370,31 @@ void drain_all_pages(void)
 	 * disables preemption as part of its processing
 	 */
 	for_each_online_cpu(cpu) {
+		struct per_cpu_pageset *pcp;
+		struct zone *z;
 		bool has_pcps = false;
-		for_each_populated_zone(zone) {
+
+		if (zone) {
 			pcp = per_cpu_ptr(zone->pageset, cpu);
-			if (pcp->pcp.count) {
+			if (pcp->pcp.count)
 				has_pcps = true;
-				break;
+		} else {
+			for_each_populated_zone(z) {
+				pcp = per_cpu_ptr(z->pageset, cpu);
+				if (pcp->pcp.count) {
+					has_pcps = true;
+					break;
+				}
 			}
 		}
+
 		if (has_pcps)
 			cpumask_set_cpu(cpu, &cpus_with_pcps);
 		else
 			cpumask_clear_cpu(cpu, &cpus_with_pcps);
 	}
-	on_each_cpu_mask(&cpus_with_pcps, drain_local_pages, NULL, 1);
+	on_each_cpu_mask(&cpus_with_pcps, (smp_call_func_t) drain_local_pages,
+								zone, 1);
 }
 
 #ifdef CONFIG_HIBERNATION
@@ -1622,7 +1653,7 @@ again:
 	}
 
 	__mod_zone_page_state(zone, NR_ALLOC_BATCH, -(1 << order));
-	if (zone_page_state(zone, NR_ALLOC_BATCH) == 0 &&
+	if (atomic_long_read(&zone->vm_stat[NR_ALLOC_BATCH]) <= 0 &&
 	    !zone_is_fair_depleted(zone))
 		zone_set_flag(zone, ZONE_FAIR_DEPLETED);
 
@@ -1973,7 +2004,7 @@ zonelist_scan:
 
 	/*
 	 * Scan zonelist, looking for a zone with enough free.
-	 * See also __cpuset_node_allowed_softwall() comment in kernel/cpuset.c.
+	 * See also __cpuset_node_allowed() comment in kernel/cpuset.c.
 	 */
 	for_each_zone_zonelist_nodemask(zone, z, zonelist,
 						high_zoneidx, nodemask) {
@@ -1984,7 +2015,7 @@ zonelist_scan:
 				continue;
 		if (cpusets_enabled() &&
 			(alloc_flags & ALLOC_CPUSET) &&
-			!cpuset_zone_allowed_softwall(zone, gfp_mask))
+			!cpuset_zone_allowed(zone, gfp_mask))
 				continue;
 		/*
 		 * Distribute pages in proportion to the individual
@@ -2106,13 +2137,16 @@ this_zone_full:
 
 	if (page) {
 		/*
-		 * page->pfmemalloc is set when ALLOC_NO_WATERMARKS was
+		 * page is set pfmemalloc when ALLOC_NO_WATERMARKS was
 		 * necessary to allocate the page. The expectation is
 		 * that the caller is taking steps that will free more
 		 * memory. The caller should avoid the page being used
 		 * for !PFMEMALLOC purposes.
 		 */
-		page->pfmemalloc = !!(alloc_flags & ALLOC_NO_WATERMARKS);
+		if (alloc_flags & ALLOC_NO_WATERMARKS)
+			set_page_pfmemalloc(page);
+		else
+			clear_page_pfmemalloc(page);
 		return page;
 	}
 
@@ -2270,6 +2304,14 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 	}
 
 	/*
+	 * PM-freezer should be notified that there might be an OOM killer on
+	 * its way to kill and wake somebody up. This is too early and we might
+	 * end up not killing anything but false positives are acceptable.
+	 * See freeze_processes.
+	 */
+	note_oom_kill();
+
+	/*
 	 * Go through the zonelist yet one more time, keep very high watermark
 	 * here, this is only to catch a parallel oom killing, we must fail if
 	 * we're still under heavy pressure.
@@ -2313,57 +2355,58 @@ __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 	struct zonelist *zonelist, enum zone_type high_zoneidx,
 	nodemask_t *nodemask, int alloc_flags, struct zone *preferred_zone,
 	int classzone_idx, int migratetype, enum migrate_mode mode,
-	bool *contended_compaction, bool *deferred_compaction,
-	unsigned long *did_some_progress)
+	int *contended_compaction, bool *deferred_compaction)
 {
+	unsigned long compact_result;
+	struct page *page;
+
 	if (!order)
 		return NULL;
 
-	if (compaction_deferred(preferred_zone, order)) {
-		*deferred_compaction = true;
-		return NULL;
-	}
-
 	current->flags |= PF_MEMALLOC;
-	*did_some_progress = try_to_compact_pages(zonelist, order, gfp_mask,
+	compact_result = try_to_compact_pages(zonelist, order, gfp_mask,
 						nodemask, mode,
-						contended_compaction);
+						contended_compaction,
+						alloc_flags, classzone_idx);
 	current->flags &= ~PF_MEMALLOC;
 
-	if (*did_some_progress != COMPACT_SKIPPED) {
-		struct page *page;
-
-		/* Page migration frees to the PCP lists but we want merging */
-		drain_pages(get_cpu());
-		put_cpu();
-
-		page = get_page_from_freelist(gfp_mask, nodemask,
-				order, zonelist, high_zoneidx,
-				alloc_flags & ~ALLOC_NO_WATERMARKS,
-				preferred_zone, classzone_idx, migratetype);
-		if (page) {
-			preferred_zone->compact_blockskip_flush = false;
-			compaction_defer_reset(preferred_zone, order, true);
-			count_vm_event(COMPACTSUCCESS);
-			return page;
-		}
-
-		/*
-		 * It's bad if compaction run occurs and fails.
-		 * The most likely reason is that pages exist,
-		 * but not enough to satisfy watermarks.
-		 */
-		count_vm_event(COMPACTFAIL);
-
-		/*
-		 * As async compaction considers a subset of pageblocks, only
-		 * defer if the failure was a sync compaction failure.
-		 */
-		if (mode != MIGRATE_ASYNC)
-			defer_compaction(preferred_zone, order);
-
-		cond_resched();
+	switch (compact_result) {
+	case COMPACT_DEFERRED:
+		*deferred_compaction = true;
+		/* fall-through */
+	case COMPACT_SKIPPED:
+		return NULL;
+	default:
+		break;
 	}
+
+	/*
+	 * At least in one zone compaction wasn't deferred or skipped, so let's
+	 * count a compaction stall
+	 */
+	count_vm_event(COMPACTSTALL);
+
+	page = get_page_from_freelist(gfp_mask, nodemask,
+			order, zonelist, high_zoneidx,
+			alloc_flags & ~ALLOC_NO_WATERMARKS,
+			preferred_zone, classzone_idx, migratetype);
+
+	if (page) {
+		struct zone *zone = page_zone(page);
+
+		zone->compact_blockskip_flush = false;
+		compaction_defer_reset(zone, order, true);
+		count_vm_event(COMPACTSUCCESS);
+		return page;
+	}
+
+	/*
+	 * It's bad if compaction run occurs and fails. The most likely reason
+	 * is that pages exist, but not enough to satisfy watermarks.
+	 */
+	count_vm_event(COMPACTFAIL);
+
+	cond_resched();
 
 	return NULL;
 }
@@ -2372,9 +2415,8 @@ static inline struct page *
 __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 	struct zonelist *zonelist, enum zone_type high_zoneidx,
 	nodemask_t *nodemask, int alloc_flags, struct zone *preferred_zone,
-	int classzone_idx, int migratetype,
-	enum migrate_mode mode, bool *contended_compaction,
-	bool *deferred_compaction, unsigned long *did_some_progress)
+	int classzone_idx, int migratetype, enum migrate_mode mode,
+	int *contended_compaction, bool *deferred_compaction)
 {
 	return NULL;
 }
@@ -2439,7 +2481,7 @@ retry:
 	 * pages are pinned on the per-cpu lists. Drain them and try again
 	 */
 	if (!page && !drained) {
-		drain_all_pages();
+		drain_all_pages(NULL);
 		drained = true;
 		goto retry;
 	}
@@ -2474,12 +2516,14 @@ __alloc_pages_high_priority(gfp_t gfp_mask, unsigned int order,
 static void wake_all_kswapds(unsigned int order,
 			     struct zonelist *zonelist,
 			     enum zone_type high_zoneidx,
-			     struct zone *preferred_zone)
+			     struct zone *preferred_zone,
+			     nodemask_t *nodemask)
 {
 	struct zoneref *z;
 	struct zone *zone;
 
-	for_each_zone_zonelist(zone, z, zonelist, high_zoneidx)
+	for_each_zone_zonelist_nodemask(zone, z, zonelist,
+						high_zoneidx, nodemask)
 		wakeup_kswapd(zone, order, zone_idx(preferred_zone));
 }
 
@@ -2509,7 +2553,7 @@ gfp_to_alloc_flags(gfp_t gfp_mask)
 			alloc_flags |= ALLOC_HARDER;
 		/*
 		 * Ignore cpuset mems for GFP_ATOMIC rather than fail, see the
-		 * comment for __cpuset_node_allowed_softwall().
+		 * comment for __cpuset_node_allowed().
 		 */
 		alloc_flags &= ~ALLOC_CPUSET;
 	} else if (unlikely(rt_task(current)) && !in_interrupt())
@@ -2526,7 +2570,7 @@ gfp_to_alloc_flags(gfp_t gfp_mask)
 			alloc_flags |= ALLOC_NO_WATERMARKS;
 	}
 #ifdef CONFIG_CMA
-	if (allocflags_to_migratetype(gfp_mask) == MIGRATE_MOVABLE)
+	if (gfpflags_to_migratetype(gfp_mask) == MIGRATE_MOVABLE)
 		alloc_flags |= ALLOC_CMA;
 #endif
 	return alloc_flags;
@@ -2550,7 +2594,7 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	unsigned long did_some_progress;
 	enum migrate_mode migration_mode = MIGRATE_ASYNC;
 	bool deferred_compaction = false;
-	bool contended_compaction = false;
+	int contended_compaction = COMPACT_CONTENDED_NONE;
 
 	/*
 	 * In the slowpath, we sanity check order to avoid ever trying to
@@ -2577,7 +2621,8 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 
 restart:
 	if (!(gfp_mask & __GFP_NO_KSWAPD))
-		wake_all_kswapds(order, zonelist, high_zoneidx, preferred_zone);
+		wake_all_kswapds(order, zonelist, high_zoneidx,
+				preferred_zone, nodemask);
 
 	/*
 	 * OK, we're below the kswapd watermark and have kicked background
@@ -2651,21 +2696,49 @@ rebalance:
 					preferred_zone,
 					classzone_idx, migratetype,
 					migration_mode, &contended_compaction,
-					&deferred_compaction,
-					&did_some_progress);
+					&deferred_compaction);
 	if (page)
 		goto got_pg;
-	migration_mode = MIGRATE_SYNC_LIGHT;
+
+	/* Checks for THP-specific high-order allocations */
+	if ((gfp_mask & GFP_TRANSHUGE) == GFP_TRANSHUGE) {
+		/*
+		 * If compaction is deferred for high-order allocations, it is
+		 * because sync compaction recently failed. If this is the case
+		 * and the caller requested a THP allocation, we do not want
+		 * to heavily disrupt the system, so we fail the allocation
+		 * instead of entering direct reclaim.
+		 */
+		if (deferred_compaction)
+			goto nopage;
+
+		/*
+		 * In all zones where compaction was attempted (and not
+		 * deferred or skipped), lock contention has been detected.
+		 * For THP allocation we do not want to disrupt the others
+		 * so we fallback to base pages instead.
+		 */
+		if (contended_compaction == COMPACT_CONTENDED_LOCK)
+			goto nopage;
+
+		/*
+		 * If compaction was aborted due to need_resched(), we do not
+		 * want to further increase allocation latency, unless it is
+		 * khugepaged trying to collapse.
+		 */
+		if (contended_compaction == COMPACT_CONTENDED_SCHED
+			&& !(current->flags & PF_KTHREAD))
+			goto nopage;
+	}
 
 	/*
-	 * If compaction is deferred for high-order allocations, it is because
-	 * sync compaction recently failed. In this is the case and the caller
-	 * requested a movable allocation that does not heavily disrupt the
-	 * system then fail the allocation instead of entering direct reclaim.
+	 * It can become very expensive to allocate transparent hugepages at
+	 * fault, so use asynchronous memory compaction for THP unless it is
+	 * khugepaged trying to collapse.
 	 */
-	if ((deferred_compaction || contended_compaction) &&
-						(gfp_mask & __GFP_NO_KSWAPD))
-		goto nopage;
+	if ((gfp_mask & GFP_TRANSHUGE) != GFP_TRANSHUGE ||
+						(current->flags & PF_KTHREAD))
+		migration_mode = MIGRATE_SYNC_LIGHT;
 
 	/* Try direct reclaim and then allocating */
 	page = __alloc_pages_direct_reclaim(gfp_mask, order,
@@ -2736,8 +2809,7 @@ rebalance:
 					preferred_zone,
 					classzone_idx, migratetype,
 					migration_mode, &contended_compaction,
-					&deferred_compaction,
-					&did_some_progress);
+					&deferred_compaction);
 		if (page)
 			goto got_pg;
 	}
@@ -2763,7 +2835,7 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 	struct zone *preferred_zone;
 	struct zoneref *preferred_zoneref;
 	struct page *page = NULL;
-	int migratetype = allocflags_to_migratetype(gfp_mask);
+	int migratetype = gfpflags_to_migratetype(gfp_mask);
 	unsigned int cpuset_mems_cookie;
 	int alloc_flags = ALLOC_WMARK_LOW|ALLOC_CPUSET|ALLOC_FAIR;
 	struct mem_cgroup *memcg = NULL;
@@ -2793,6 +2865,9 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 	if (!memcg_kmem_newpage_charge(gfp_mask, &memcg, order))
 		return NULL;
 
+	if (IS_ENABLED(CONFIG_CMA) && migratetype == MIGRATE_MOVABLE)
+		alloc_flags |= ALLOC_CMA;
+
 retry_cpuset:
 	cpuset_mems_cookie = read_mems_allowed_begin();
 
@@ -2804,10 +2879,6 @@ retry_cpuset:
 		goto out;
 	classzone_idx = zonelist_zone_idx(preferred_zoneref);
 
-#ifdef CONFIG_CMA
-	if (allocflags_to_migratetype(gfp_mask) == MIGRATE_MOVABLE)
-		alloc_flags |= ALLOC_CMA;
-#endif
 	/* First allocation attempt */
 	page = get_page_from_freelist(gfp_mask|__GFP_HARDWALL, nodemask, order,
 			zonelist, high_zoneidx, alloc_flags,
@@ -3575,68 +3646,30 @@ static void build_zonelists_in_zone_order(pg_data_t *pgdat, int nr_nodes)
 	zonelist->_zonerefs[pos].zone_idx = 0;
 }
 
+#if defined(CONFIG_64BIT)
+/*
+ * Devices that require DMA32/DMA are relatively rare and do not justify a
+ * penalty to every machine in case the specialised case applies. Default
+ * to Node-ordering on 64-bit NUMA machines
+ */
 static int default_zonelist_order(void)
 {
-	int nid, zone_type;
-	unsigned long low_kmem_size, total_size;
-	struct zone *z;
-	int average_size;
-	/*
-	 * ZONE_DMA and ZONE_DMA32 can be very small area in the system.
-	 * If they are really small and used heavily, the system can fall
-	 * into OOM very easily.
-	 * This function detect ZONE_DMA/DMA32 size and configures zone order.
-	 */
-	/* Is there ZONE_NORMAL ? (ex. ppc has only DMA zone..) */
-	low_kmem_size = 0;
-	total_size = 0;
-	for_each_online_node(nid) {
-		for (zone_type = 0; zone_type < MAX_NR_ZONES; zone_type++) {
-			z = &NODE_DATA(nid)->node_zones[zone_type];
-			if (populated_zone(z)) {
-				if (zone_type < ZONE_NORMAL)
-					low_kmem_size += z->managed_pages;
-				total_size += z->managed_pages;
-			} else if (zone_type == ZONE_NORMAL) {
-				/*
-				 * If any node has only lowmem, then node order
-				 * is preferred to allow kernel allocations
-				 * locally; otherwise, they can easily infringe
-				 * on other nodes when there is an abundance of
-				 * lowmem available to allocate from.
-				 */
-				return ZONELIST_ORDER_NODE;
-			}
-		}
-	}
-	if (!low_kmem_size ||  /* there are no DMA area. */
-	    low_kmem_size > total_size/2) /* DMA/DMA32 is big. */
-		return ZONELIST_ORDER_NODE;
-	/*
-	 * look into each node's config.
-	 * If there is a node whose DMA/DMA32 memory is very big area on
-	 * local memory, NODE_ORDER may be suitable.
-	 */
-	average_size = total_size /
-				(nodes_weight(node_states[N_MEMORY]) + 1);
-	for_each_online_node(nid) {
-		low_kmem_size = 0;
-		total_size = 0;
-		for (zone_type = 0; zone_type < MAX_NR_ZONES; zone_type++) {
-			z = &NODE_DATA(nid)->node_zones[zone_type];
-			if (populated_zone(z)) {
-				if (zone_type < ZONE_NORMAL)
-					low_kmem_size += z->present_pages;
-				total_size += z->present_pages;
-			}
-		}
-		if (low_kmem_size &&
-		    total_size > average_size && /* ignore small node */
-		    low_kmem_size > total_size * 70/100)
-			return ZONELIST_ORDER_NODE;
-	}
+	return ZONELIST_ORDER_NODE;
+}
+#else
+/*
+ * On 32-bit, the Normal zone needs to be preserved for allocations accessible
+ * by the kernel. If processes running on node 0 deplete the low memory zone
+ * then reclaim will occur more frequency increasing stalls and potentially
+ * be easier to OOM if a large percentage of the zone is under writeback or
+ * dirty. The problem is significantly worse if CONFIG_HIGHPTE is not set.
+ * Hence, default to zone ordering on 32-bit.
+ */
+static int default_zonelist_order(void)
+{
 	return ZONELIST_ORDER_ZONE;
 }
+#endif /* CONFIG_64BIT */
 
 static void set_zonelist_order(void)
 {
@@ -5726,9 +5759,8 @@ static void __setup_per_zone_wmarks(void)
 		zone->watermark[WMARK_HIGH] = min_wmark_pages(zone) + (tmp >> 1);
 
 		__mod_zone_page_state(zone, NR_ALLOC_BATCH,
-				      high_wmark_pages(zone) -
-				      low_wmark_pages(zone) -
-				      zone_page_state(zone, NR_ALLOC_BATCH));
+			high_wmark_pages(zone) - low_wmark_pages(zone) -
+			atomic_long_read(&zone->vm_stat[NR_ALLOC_BATCH]));
 
 		setup_zone_migrate_reserve(zone);
 		spin_unlock_irqrestore(&zone->lock, flags);
@@ -6316,8 +6348,7 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 
 		if (list_empty(&cc->migratepages)) {
 			cc->nr_migratepages = 0;
-			pfn = isolate_migratepages_range(cc->zone, cc,
-							 pfn, end, true);
+			pfn = isolate_migratepages_range(cc, pfn, end);
 			if (!pfn) {
 				ret = -EINTR;
 				break;
@@ -6333,7 +6364,7 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 		cc->nr_migratepages -= nr_reclaimed;
 
 		ret = migrate_pages(&cc->migratepages, alloc_migrate_target,
-				    NULL, 0, MIGRATE_SYNC, MR_CMA);
+				    NULL, 0, cc->mode, MR_CMA);
 	}
 	if (ret < 0) {
 		putback_movable_pages(&cc->migratepages);
@@ -6429,7 +6460,7 @@ int alloc_contig_range(unsigned long start, unsigned long end,
 	 */
 
 	lru_add_drain_all();
-	drain_all_pages();
+	drain_all_pages(cc.zone);
 
 	order = 0;
 	outer_start = start;

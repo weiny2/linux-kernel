@@ -8,6 +8,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/moduleparam.h>
 #include <asm/cmpxchg.h>
 #include "net_driver.h"
 #include "nic.h"
@@ -52,25 +53,34 @@ static void efx_mcdi_timeout_async(unsigned long context);
 static int efx_mcdi_drv_attach(struct efx_nic *efx, bool driver_operating,
 			       bool *was_attached_out);
 static bool efx_mcdi_poll_once(struct efx_nic *efx);
+static void efx_mcdi_abandon(struct efx_nic *efx);
 
-static inline struct efx_mcdi_iface *efx_mcdi(struct efx_nic *efx)
-{
-	EFX_BUG_ON_PARANOID(!efx->mcdi);
-	return &efx->mcdi->iface;
-}
+#ifdef CONFIG_SFC_MCDI_LOGGING
+static bool mcdi_logging_default;
+module_param(mcdi_logging_default, bool, 0644);
+MODULE_PARM_DESC(mcdi_logging_default,
+		 "Enable MCDI logging on newly-probed functions");
+#endif
 
 int efx_mcdi_init(struct efx_nic *efx)
 {
 	struct efx_mcdi_iface *mcdi;
 	bool already_attached;
-	int rc;
+	int rc = -ENOMEM;
 
 	efx->mcdi = kzalloc(sizeof(*efx->mcdi), GFP_KERNEL);
 	if (!efx->mcdi)
-		return -ENOMEM;
+		goto fail;
 
 	mcdi = efx_mcdi(efx);
 	mcdi->efx = efx;
+#ifdef CONFIG_SFC_MCDI_LOGGING
+	/* consuming code assumes buffer is page-sized */
+	mcdi->logging_buffer = (char *)__get_free_page(GFP_KERNEL);
+	if (!mcdi->logging_buffer)
+		goto fail1;
+	mcdi->logging_enabled = mcdi_logging_default;
+#endif
 	init_waitqueue_head(&mcdi->wq);
 	spin_lock_init(&mcdi->iface_lock);
 	mcdi->state = MCDI_STATE_QUIESCENT;
@@ -86,7 +96,7 @@ int efx_mcdi_init(struct efx_nic *efx)
 	/* Recover from a failed assertion before probing */
 	rc = efx_mcdi_handle_assertion(efx);
 	if (rc)
-		return rc;
+		goto fail2;
 
 	/* Let the MC (and BMC, if this is a LOM) know that the driver
 	 * is loaded. We should do this before we reset the NIC.
@@ -95,7 +105,7 @@ int efx_mcdi_init(struct efx_nic *efx)
 	if (rc) {
 		netif_err(efx, probe, efx->net_dev,
 			  "Unable to register driver with MCPU\n");
-		return rc;
+		goto fail2;
 	}
 	if (already_attached)
 		/* Not a fatal error */
@@ -107,6 +117,15 @@ int efx_mcdi_init(struct efx_nic *efx)
 		efx->primary = efx;
 
 	return 0;
+fail2:
+#ifdef CONFIG_SFC_MCDI_LOGGING
+	free_page((unsigned long)mcdi->logging_buffer);
+fail1:
+#endif
+	kfree(efx->mcdi);
+	efx->mcdi = NULL;
+fail:
+	return rc;
 }
 
 void efx_mcdi_fini(struct efx_nic *efx)
@@ -119,6 +138,10 @@ void efx_mcdi_fini(struct efx_nic *efx)
 	/* Relinquish the device (back to the BMC, if this is a LOM) */
 	efx_mcdi_drv_attach(efx, false, NULL);
 
+#ifdef CONFIG_SFC_MCDI_LOGGING
+	free_page((unsigned long)efx->mcdi->iface.logging_buffer);
+#endif
+
 	kfree(efx->mcdi);
 }
 
@@ -126,6 +149,9 @@ static void efx_mcdi_send_request(struct efx_nic *efx, unsigned cmd,
 				  const efx_dword_t *inbuf, size_t inlen)
 {
 	struct efx_mcdi_iface *mcdi = efx_mcdi(efx);
+#ifdef CONFIG_SFC_MCDI_LOGGING
+	char *buf = mcdi->logging_buffer; /* page-sized */
+#endif
 	efx_dword_t hdr[2];
 	size_t hdr_len;
 	u32 xflags, seqno;
@@ -170,6 +196,31 @@ static void efx_mcdi_send_request(struct efx_nic *efx, unsigned cmd,
 		hdr_len = 8;
 	}
 
+#ifdef CONFIG_SFC_MCDI_LOGGING
+	if (mcdi->logging_enabled && !WARN_ON_ONCE(!buf)) {
+		int bytes = 0;
+		int i;
+		/* Lengths should always be a whole number of dwords, so scream
+		 * if they're not.
+		 */
+		WARN_ON_ONCE(hdr_len % 4);
+		WARN_ON_ONCE(inlen % 4);
+
+		/* We own the logging buffer, as only one MCDI can be in
+		 * progress on a NIC at any one time.  So no need for locking.
+		 */
+		for (i = 0; i < hdr_len / 4 && bytes < PAGE_SIZE; i++)
+			bytes += snprintf(buf + bytes, PAGE_SIZE - bytes,
+					  " %08x", le32_to_cpu(hdr[i].u32[0]));
+
+		for (i = 0; i < inlen / 4 && bytes < PAGE_SIZE; i++)
+			bytes += snprintf(buf + bytes, PAGE_SIZE - bytes,
+					  " %08x", le32_to_cpu(inbuf[i].u32[0]));
+
+		netif_info(efx, hw, efx->net_dev, "MCDI RPC REQ:%s\n", buf);
+	}
+#endif
+
 	efx->type->mcdi_request(efx, hdr, hdr_len, inbuf, inlen);
 
 	mcdi->new_epoch = false;
@@ -211,6 +262,9 @@ static void efx_mcdi_read_response_header(struct efx_nic *efx)
 {
 	struct efx_mcdi_iface *mcdi = efx_mcdi(efx);
 	unsigned int respseq, respcmd, error;
+#ifdef CONFIG_SFC_MCDI_LOGGING
+	char *buf = mcdi->logging_buffer; /* page-sized */
+#endif
 	efx_dword_t hdr;
 
 	efx->type->mcdi_read_response(efx, &hdr, 0, 4);
@@ -227,6 +281,39 @@ static void efx_mcdi_read_response_header(struct efx_nic *efx)
 		mcdi->resp_data_len =
 			EFX_DWORD_FIELD(hdr, MC_CMD_V2_EXTN_IN_ACTUAL_LEN);
 	}
+
+#ifdef CONFIG_SFC_MCDI_LOGGING
+	if (mcdi->logging_enabled && !WARN_ON_ONCE(!buf)) {
+		size_t hdr_len, data_len;
+		int bytes = 0;
+		int i;
+
+		WARN_ON_ONCE(mcdi->resp_hdr_len % 4);
+		hdr_len = mcdi->resp_hdr_len / 4;
+		/* MCDI_DECLARE_BUF ensures that underlying buffer is padded
+		 * to dword size, and the MCDI buffer is always dword size
+		 */
+		data_len = DIV_ROUND_UP(mcdi->resp_data_len, 4);
+
+		/* We own the logging buffer, as only one MCDI can be in
+		 * progress on a NIC at any one time.  So no need for locking.
+		 */
+		for (i = 0; i < hdr_len && bytes < PAGE_SIZE; i++) {
+			efx->type->mcdi_read_response(efx, &hdr, (i * 4), 4);
+			bytes += snprintf(buf + bytes, PAGE_SIZE - bytes,
+					  " %08x", le32_to_cpu(hdr.u32[0]));
+		}
+
+		for (i = 0; i < data_len && bytes < PAGE_SIZE; i++) {
+			efx->type->mcdi_read_response(efx, &hdr,
+					mcdi->resp_hdr_len + (i * 4), 4);
+			bytes += snprintf(buf + bytes, PAGE_SIZE - bytes,
+					  " %08x", le32_to_cpu(hdr.u32[0]));
+		}
+
+		netif_info(efx, hw, efx->net_dev, "MCDI RPC RESP:%s\n", buf);
+	}
+#endif
 
 	if (error && mcdi->resp_data_len == 0) {
 		netif_err(efx, hw, efx->net_dev, "MC rebooted\n");
@@ -411,7 +498,7 @@ static bool efx_mcdi_complete_async(struct efx_mcdi_iface *mcdi, bool timeout)
 	struct efx_mcdi_async_param *async;
 	size_t hdr_len, data_len, err_len;
 	efx_dword_t *outbuf;
-	MCDI_DECLARE_BUF_OUT_OR_ERR(errbuf, 0);
+	MCDI_DECLARE_BUF_ERR(errbuf);
 	int rc;
 
 	if (cmpxchg(&mcdi->state,
@@ -539,7 +626,7 @@ static int _efx_mcdi_rpc_finish(struct efx_nic *efx, unsigned cmd, size_t inlen,
 				size_t *outlen_actual, bool quiet)
 {
 	struct efx_mcdi_iface *mcdi = efx_mcdi(efx);
-	MCDI_DECLARE_BUF_OUT_OR_ERR(errbuf, 0);
+	MCDI_DECLARE_BUF_ERR(errbuf);
 	int rc;
 
 	if (mcdi->mode == MCDI_MODE_POLL)
@@ -557,6 +644,8 @@ static int _efx_mcdi_rpc_finish(struct efx_nic *efx, unsigned cmd, size_t inlen,
 				  "MCDI request was completed without an event\n");
 			rc = 0;
 		}
+
+		efx_mcdi_abandon(efx);
 
 		/* Close the race with efx_mcdi_ev_cpl() executing just too late
 		 * and completing a request we've just cancelled, by ensuring
@@ -670,6 +759,9 @@ int efx_mcdi_rpc_start(struct efx_nic *efx, unsigned cmd,
 		return rc;
 
 	if (efx->mc_bist_for_other_fn)
+		return -ENETDOWN;
+
+	if (mcdi->mode == MCDI_MODE_FAIL)
 		return -ENETDOWN;
 
 	efx_mcdi_acquire_sync(mcdi);
@@ -812,7 +904,11 @@ void efx_mcdi_mode_poll(struct efx_nic *efx)
 		return;
 
 	mcdi = efx_mcdi(efx);
-	if (mcdi->mode == MCDI_MODE_POLL)
+	/* If already in polling mode, nothing to do.
+	 * If in fail-fast state, don't switch to polled completion.
+	 * FLR recovery will do that later.
+	 */
+	if (mcdi->mode == MCDI_MODE_POLL || mcdi->mode == MCDI_MODE_FAIL)
 		return;
 
 	/* We can switch from event completion to polled completion, because
@@ -841,8 +937,8 @@ void efx_mcdi_flush_async(struct efx_nic *efx)
 
 	mcdi = efx_mcdi(efx);
 
-	/* We must be in polling mode so no more requests can be queued */
-	BUG_ON(mcdi->mode != MCDI_MODE_POLL);
+	/* We must be in poll or fail mode so no more requests can be queued */
+	BUG_ON(mcdi->mode == MCDI_MODE_EVENTS);
 
 	del_timer_sync(&mcdi->async_timer);
 
@@ -875,8 +971,11 @@ void efx_mcdi_mode_event(struct efx_nic *efx)
 		return;
 
 	mcdi = efx_mcdi(efx);
-
-	if (mcdi->mode == MCDI_MODE_EVENTS)
+	/* If already in event completion mode, nothing to do.
+	 * If in fail-fast state, don't switch to event completion.  FLR
+	 * recovery will do that later.
+	 */
+	if (mcdi->mode == MCDI_MODE_EVENTS || mcdi->mode == MCDI_MODE_FAIL)
 		return;
 
 	/* We can't switch from polled to event completion in the middle of a
@@ -966,6 +1065,19 @@ static void efx_mcdi_ev_bist(struct efx_nic *efx)
 	spin_unlock(&mcdi->iface_lock);
 }
 
+/* MCDI timeouts seen, so make all MCDI calls fail-fast and issue an FLR to try
+ * to recover.
+ */
+static void efx_mcdi_abandon(struct efx_nic *efx)
+{
+	struct efx_mcdi_iface *mcdi = efx_mcdi(efx);
+
+	if (xchg(&mcdi->mode, MCDI_MODE_FAIL) == MCDI_MODE_FAIL)
+		return; /* it had already been done */
+	netif_dbg(efx, hw, efx->net_dev, "MCDI is timing out; trying to recover\n");
+	efx_schedule_reset(efx, RESET_TYPE_MCDI_TIMEOUT);
+}
+
 /* Called from  falcon_process_eventq for MCDI events */
 void efx_mcdi_process_event(struct efx_channel *channel,
 			    efx_qword_t *event)
@@ -1015,7 +1127,9 @@ void efx_mcdi_process_event(struct efx_channel *channel,
 		/* MAC stats are gather lazily.  We can ignore this. */
 		break;
 	case MCDI_EVENT_CODE_FLR:
-		efx_sriov_flr(efx, MCDI_EVENT_FIELD(*event, FLR_VF));
+		if (efx->type->sriov_flr)
+			efx->type->sriov_flr(efx,
+					     MCDI_EVENT_FIELD(*event, FLR_VF));
 		break;
 	case MCDI_EVENT_CODE_PTP_RX:
 	case MCDI_EVENT_CODE_PTP_FAULT:
@@ -1061,9 +1175,7 @@ void efx_mcdi_process_event(struct efx_channel *channel,
 
 void efx_mcdi_print_fwver(struct efx_nic *efx, char *buf, size_t len)
 {
-	MCDI_DECLARE_BUF(outbuf,
-			 max(MC_CMD_GET_VERSION_OUT_LEN,
-			     MC_CMD_GET_CAPABILITIES_OUT_LEN));
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_VERSION_OUT_LEN);
 	size_t outlength;
 	const __le16 *ver_words;
 	size_t offset;
@@ -1088,19 +1200,11 @@ void efx_mcdi_print_fwver(struct efx_nic *efx, char *buf, size_t len)
 	 * single version.  Report which variants are running.
 	 */
 	if (efx_nic_rev(efx) >= EFX_REV_HUNT_A0) {
-		BUILD_BUG_ON(MC_CMD_GET_CAPABILITIES_IN_LEN != 0);
-		rc = efx_mcdi_rpc(efx, MC_CMD_GET_CAPABILITIES, NULL, 0,
-				  outbuf, sizeof(outbuf), &outlength);
-		if (rc || outlength < MC_CMD_GET_CAPABILITIES_OUT_LEN)
-			offset += snprintf(
-				buf + offset, len - offset, " rx? tx?");
-		else
-			offset += snprintf(
-				buf + offset, len - offset, " rx%x tx%x",
-				MCDI_WORD(outbuf,
-					  GET_CAPABILITIES_OUT_RX_DPCPU_FW_ID),
-				MCDI_WORD(outbuf,
-					  GET_CAPABILITIES_OUT_TX_DPCPU_FW_ID));
+		struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+		offset += snprintf(buf + offset, len - offset, " rx%x tx%x",
+				   nic_data->rx_dpcpu_fw_id,
+				   nic_data->tx_dpcpu_fw_id);
 
 		/* It's theoretically possible for the string to exceed 31
 		 * characters, though in practice the first three version
@@ -1130,10 +1234,26 @@ static int efx_mcdi_drv_attach(struct efx_nic *efx, bool driver_operating,
 	MCDI_SET_DWORD(inbuf, DRV_ATTACH_IN_UPDATE, 1);
 	MCDI_SET_DWORD(inbuf, DRV_ATTACH_IN_FIRMWARE_ID, MC_CMD_FW_LOW_LATENCY);
 
-	rc = efx_mcdi_rpc(efx, MC_CMD_DRV_ATTACH, inbuf, sizeof(inbuf),
-			  outbuf, sizeof(outbuf), &outlen);
-	if (rc)
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_DRV_ATTACH, inbuf, sizeof(inbuf),
+				outbuf, sizeof(outbuf), &outlen);
+	/* If we're not the primary PF, trying to ATTACH with a FIRMWARE_ID
+	 * specified will fail with EPERM, and we have to tell the MC we don't
+	 * care what firmware we get.
+	 */
+	if (rc == -EPERM) {
+		netif_dbg(efx, probe, efx->net_dev,
+			  "efx_mcdi_drv_attach with fw-variant setting failed EPERM, trying without it\n");
+		MCDI_SET_DWORD(inbuf, DRV_ATTACH_IN_FIRMWARE_ID,
+			       MC_CMD_FW_DONT_CARE);
+		rc = efx_mcdi_rpc_quiet(efx, MC_CMD_DRV_ATTACH, inbuf,
+					sizeof(inbuf), outbuf, sizeof(outbuf),
+					&outlen);
+	}
+	if (rc) {
+		efx_mcdi_display_error(efx, MC_CMD_DRV_ATTACH, sizeof(inbuf),
+				       outbuf, outlen, rc);
 		goto fail;
+	}
 	if (outlen < MC_CMD_DRV_ATTACH_OUT_LEN) {
 		rc = -EIO;
 		goto fail;
@@ -1158,16 +1278,6 @@ static int efx_mcdi_drv_attach(struct efx_nic *efx, bool driver_operating,
 	 * and are completely trusted by firmware.  Abort probing
 	 * if that's not true for this function.
 	 */
-	if (driver_operating &&
-	    (efx->mcdi->fn_flags &
-	     (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_LINKCTRL |
-	      1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_TRUSTED)) !=
-	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_LINKCTRL |
-	     1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_TRUSTED)) {
-		netif_err(efx, probe, efx->net_dev,
-			  "This driver version only supports one function per port\n");
-		return -ENODEV;
-	}
 
 	if (was_attached != NULL)
 		*was_attached = MCDI_DWORD(outbuf, DRV_ATTACH_OUT_OLD_STATE);
@@ -1187,6 +1297,9 @@ int efx_mcdi_get_board_cfg(struct efx_nic *efx, u8 *mac_address,
 	int rc;
 
 	BUILD_BUG_ON(MC_CMD_GET_BOARD_CFG_IN_LEN != 0);
+	/* we need __aligned(2) for ether_addr_copy */
+	BUILD_BUG_ON(MC_CMD_GET_BOARD_CFG_OUT_MAC_ADDR_BASE_PORT0_OFST & 1);
+	BUILD_BUG_ON(MC_CMD_GET_BOARD_CFG_OUT_MAC_ADDR_BASE_PORT1_OFST & 1);
 
 	rc = efx_mcdi_rpc(efx, MC_CMD_GET_BOARD_CFG, NULL, 0,
 			  outbuf, sizeof(outbuf), &outlen);
@@ -1199,11 +1312,10 @@ int efx_mcdi_get_board_cfg(struct efx_nic *efx, u8 *mac_address,
 	}
 
 	if (mac_address)
-		memcpy(mac_address,
-		       port_num ?
-		       MCDI_PTR(outbuf, GET_BOARD_CFG_OUT_MAC_ADDR_BASE_PORT1) :
-		       MCDI_PTR(outbuf, GET_BOARD_CFG_OUT_MAC_ADDR_BASE_PORT0),
-		       ETH_ALEN);
+		ether_addr_copy(mac_address,
+				port_num ?
+				MCDI_PTR(outbuf, GET_BOARD_CFG_OUT_MAC_ADDR_BASE_PORT1) :
+				MCDI_PTR(outbuf, GET_BOARD_CFG_OUT_MAC_ADDR_BASE_PORT0));
 	if (fw_subtype_list) {
 		for (i = 0;
 		     i < MCDI_VAR_ARRAY_LEN(outlen,
@@ -1363,10 +1475,13 @@ fail1:
 	return rc;
 }
 
+/* Returns 1 if an assertion was read, 0 if no assertion had fired,
+ * negative on error.
+ */
 static int efx_mcdi_read_assertion(struct efx_nic *efx)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_ASSERTS_IN_LEN);
-	MCDI_DECLARE_BUF_OUT_OR_ERR(outbuf, MC_CMD_GET_ASSERTS_OUT_LEN);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_ASSERTS_OUT_LEN);
 	unsigned int flags, index;
 	const char *reason;
 	size_t outlen;
@@ -1384,6 +1499,8 @@ static int efx_mcdi_read_assertion(struct efx_nic *efx)
 		rc = efx_mcdi_rpc_quiet(efx, MC_CMD_GET_ASSERTS,
 					inbuf, MC_CMD_GET_ASSERTS_IN_LEN,
 					outbuf, sizeof(outbuf), &outlen);
+		if (rc == -EPERM)
+			return 0;
 	} while ((rc == -EINTR || rc == -EIO) && retry-- > 0);
 
 	if (rc) {
@@ -1421,24 +1538,31 @@ static int efx_mcdi_read_assertion(struct efx_nic *efx)
 			  MCDI_ARRAY_DWORD(outbuf, GET_ASSERTS_OUT_GP_REGS_OFFS,
 					   index));
 
-	return 0;
+	return 1;
 }
 
-static void efx_mcdi_exit_assertion(struct efx_nic *efx)
+static int efx_mcdi_exit_assertion(struct efx_nic *efx)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_REBOOT_IN_LEN);
+	int rc;
 
 	/* If the MC is running debug firmware, it might now be
 	 * waiting for a debugger to attach, but we just want it to
 	 * reboot.  We set a flag that makes the command a no-op if it
-	 * has already done so.  We don't know what return code to
-	 * expect (0 or -EIO), so ignore it.
+	 * has already done so.
+	 * The MCDI will thus return either 0 or -EIO.
 	 */
 	BUILD_BUG_ON(MC_CMD_REBOOT_OUT_LEN != 0);
 	MCDI_SET_DWORD(inbuf, REBOOT_IN_FLAGS,
 		       MC_CMD_REBOOT_FLAGS_AFTER_ASSERTION);
-	(void) efx_mcdi_rpc(efx, MC_CMD_REBOOT, inbuf, MC_CMD_REBOOT_IN_LEN,
-			    NULL, 0, NULL);
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_REBOOT, inbuf, MC_CMD_REBOOT_IN_LEN,
+				NULL, 0, NULL);
+	if (rc == -EIO)
+		rc = 0;
+	if (rc)
+		efx_mcdi_display_error(efx, MC_CMD_REBOOT, MC_CMD_REBOOT_IN_LEN,
+				       NULL, 0, rc);
+	return rc;
 }
 
 int efx_mcdi_handle_assertion(struct efx_nic *efx)
@@ -1446,12 +1570,10 @@ int efx_mcdi_handle_assertion(struct efx_nic *efx)
 	int rc;
 
 	rc = efx_mcdi_read_assertion(efx);
-	if (rc)
+	if (rc <= 0)
 		return rc;
 
-	efx_mcdi_exit_assertion(efx);
-
-	return 0;
+	return efx_mcdi_exit_assertion(efx);
 }
 
 void efx_mcdi_set_id_led(struct efx_nic *efx, enum efx_led_mode mode)
@@ -1510,12 +1632,27 @@ int efx_mcdi_reset(struct efx_nic *efx, enum reset_type method)
 {
 	int rc;
 
+	/* If MCDI is down, we can't handle_assertion */
+	if (method == RESET_TYPE_MCDI_TIMEOUT) {
+		rc = pci_reset_function(efx->pci_dev);
+		if (rc)
+			return rc;
+		/* Re-enable polled MCDI completion */
+		if (efx->mcdi) {
+			struct efx_mcdi_iface *mcdi = efx_mcdi(efx);
+			mcdi->mode = MCDI_MODE_POLL;
+		}
+		return 0;
+	}
+
 	/* Recover from a failed assertion pre-reset */
 	rc = efx_mcdi_handle_assertion(efx);
 	if (rc)
 		return rc;
 
-	if (method == RESET_TYPE_WORLD)
+	if (method == RESET_TYPE_DATAPATH)
+		return 0;
+	else if (method == RESET_TYPE_WORLD)
 		return efx_mcdi_reset_mc(efx);
 	else
 		return efx_mcdi_reset_func(efx);
@@ -1532,7 +1669,7 @@ static int efx_mcdi_wol_filter_set(struct efx_nic *efx, u32 type,
 	MCDI_SET_DWORD(inbuf, WOL_FILTER_SET_IN_WOL_TYPE, type);
 	MCDI_SET_DWORD(inbuf, WOL_FILTER_SET_IN_FILTER_MODE,
 		       MC_CMD_FILTER_MODE_SIMPLE);
-	memcpy(MCDI_PTR(inbuf, WOL_FILTER_SET_IN_MAGIC_MAC), mac, ETH_ALEN);
+	ether_addr_copy(MCDI_PTR(inbuf, WOL_FILTER_SET_IN_MAGIC_MAC), mac);
 
 	rc = efx_mcdi_rpc(efx, MC_CMD_WOL_FILTER_SET, inbuf, sizeof(inbuf),
 			  outbuf, sizeof(outbuf), &outlen);
@@ -1651,6 +1788,36 @@ int efx_mcdi_set_workaround(struct efx_nic *efx, u32 type, bool enabled)
 	MCDI_SET_DWORD(inbuf, WORKAROUND_IN_ENABLED, enabled);
 	return efx_mcdi_rpc(efx, MC_CMD_WORKAROUND, inbuf, sizeof(inbuf),
 			    NULL, 0, NULL);
+}
+
+int efx_mcdi_get_workarounds(struct efx_nic *efx, unsigned int *impl_out,
+			     unsigned int *enabled_out)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_WORKAROUNDS_OUT_LEN);
+	size_t outlen;
+	int rc;
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_GET_WORKAROUNDS, NULL, 0,
+			  outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		goto fail;
+
+	if (outlen < MC_CMD_GET_WORKAROUNDS_OUT_LEN) {
+		rc = -EIO;
+		goto fail;
+	}
+
+	if (impl_out)
+		*impl_out = MCDI_DWORD(outbuf, GET_WORKAROUNDS_OUT_IMPLEMENTED);
+
+	if (enabled_out)
+		*enabled_out = MCDI_DWORD(outbuf, GET_WORKAROUNDS_OUT_ENABLED);
+
+	return 0;
+
+fail:
+	netif_err(efx, hw, efx->net_dev, "%s: failed rc=%d\n", __func__, rc);
+	return rc;
 }
 
 #ifdef CONFIG_SFC_MTD

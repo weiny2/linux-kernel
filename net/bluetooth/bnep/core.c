@@ -459,6 +459,7 @@ static int bnep_session(void *arg)
 	init_waitqueue_entry(&wait, current);
 	add_wait_queue(sk_sleep(sk), &wait);
 	while (1) {
+		kgr_task_safe(current);
 		set_current_state(TASK_INTERRUPTIBLE);
 
 		if (atomic_read(&s->terminate))

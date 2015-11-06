@@ -1986,7 +1986,9 @@ static void free_module(struct module *mod)
 
 	/* We leave it in list to prevent duplicate loads, but make sure
 	 * that noone uses it while it's being deconstructed. */
+	mutex_lock(&module_mutex);
 	mod->state = MODULE_STATE_UNFORMED;
+	mutex_unlock(&module_mutex);
 
 	/* Remove dynamic debug info */
 	ddebug_remove_module(mod->name);
@@ -3151,21 +3153,6 @@ static int do_init_module(struct module *mod)
 	 */
 	current->flags &= ~PF_USED_ASYNC;
 
-	blocking_notifier_call_chain(&module_notify_list,
-			MODULE_STATE_COMING, mod);
-
-	/* Set RO and NX regions for core */
-	set_section_ro_nx(mod->module_core,
-				mod->core_text_size,
-				mod->core_ro_size,
-				mod->core_size);
-
-	/* Set RO and NX regions for init */
-	set_section_ro_nx(mod->module_init,
-				mod->init_text_size,
-				mod->init_ro_size,
-				mod->init_size);
-
 	do_mod_ctors(mod);
 	/* Start the module */
 	if (mod->init != NULL)
@@ -3298,9 +3285,26 @@ static int complete_formation(struct module *mod, struct load_info *info)
 	/* This relies on module_mutex for list integrity. */
 	module_bug_finalize(info->hdr, info->sechdrs, mod);
 
+	/* Set RO and NX regions for core */
+	set_section_ro_nx(mod->module_core,
+				mod->core_text_size,
+				mod->core_ro_size,
+				mod->core_size);
+
+	/* Set RO and NX regions for init */
+	set_section_ro_nx(mod->module_init,
+				mod->init_text_size,
+				mod->init_ro_size,
+				mod->init_size);
+
 	/* Mark state as coming so strong_try_module_get() ignores us,
 	 * but kallsyms etc. can see us. */
 	mod->state = MODULE_STATE_COMING;
+	mutex_unlock(&module_mutex);
+
+	blocking_notifier_call_chain(&module_notify_list,
+				     MODULE_STATE_COMING, mod);
+	return 0;
 
 out:
 	mutex_unlock(&module_mutex);
@@ -3418,7 +3422,9 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	 * to kallsyms but before the module init is called. Then the
 	 * changes can be applied immediately.
 	 */
-	kgr_module_init(mod);
+	err = kgr_module_init(mod);
+	if (err)
+		goto bug_cleanup;
 #endif
 
 	/* Module is ready to execute: parsing args may do that. */
@@ -3463,6 +3469,11 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	mutex_lock(&module_mutex);
 	module_bug_cleanup(mod);
 	mutex_unlock(&module_mutex);
+
+	/* we can't deallocate the module until we clear memory protection */
+	unset_module_init_ro_nx(mod);
+	unset_module_core_ro_nx(mod);
+
  ddebug_cleanup:
 	dynamic_debug_remove(info->debug);
 	synchronize_sched();

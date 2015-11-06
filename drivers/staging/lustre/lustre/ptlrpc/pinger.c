@@ -345,9 +345,10 @@ static int ptlrpc_pinger_main(void *arg)
 						time_to_next_wake,
 						cfs_time_seconds(1)),
 					  NULL, NULL);
-			l_wait_event(thread->t_ctl_waitq,
+			l_wait_event(thread->t_ctl_waitq, ({
+				     kgr_task_safe(current);
 				     thread_is_stopping(thread) ||
-				     thread_is_event(thread),
+				     thread_is_event(thread); }),
 				     &lwi);
 			if (thread_test_and_clear_flags(thread, SVC_STOPPING)) {
 				break;
@@ -650,8 +651,9 @@ static int ping_evictor_main(void *arg)
 	CDEBUG(D_HA, "Starting Ping Evictor\n");
 	pet_state = PET_READY;
 	while (1) {
-		l_wait_event(pet_waitq, (!list_empty(&pet_list)) ||
-			     (pet_state == PET_TERMINATE), &lwi);
+		l_wait_event(pet_waitq, ({ kgr_task_safe(current);
+			     (!list_empty(&pet_list)) ||
+			     (pet_state == PET_TERMINATE); }), &lwi);
 
 		/* loop until all obd's will be removed */
 		if ((pet_state == PET_TERMINATE) && list_empty(&pet_list))

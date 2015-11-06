@@ -1074,6 +1074,7 @@ static int kgdbdbgp_reader_thread(void *ptr)
 	int ret;
 
 	while (readl(&ehci_debug->control) & DBGP_ENABLED) {
+		kgr_task_safe(current);
 		kgdbdbgp_loop_cnt = 1;
 		ret = kgdbdbgp_read_char();
 		kgdbdbgp_loop_cnt = DBGP_LOOPS;

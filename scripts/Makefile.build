@@ -131,7 +131,7 @@ endif
 ifeq ($(CONFIG_XEN),y)
 Makefile.xen := $(if $(KBUILD_EXTMOD),$(KBUILD_EXTMOD),$(objtree)/scripts)/Makefile.xen
 $(Makefile.xen): $(srctree)/scripts/Makefile.xen.awk $(srctree)/scripts/Makefile.build
-	@echo '  Updating $@'
+	@$(kecho) '  GEN     $@'
 	$(if $(shell echo a | $(AWK) '{ print gensub(/a/, "AA", "g"); }'),\
         ,$(error 'Your awk program does not define gensub.  Use gawk or another awk with gensub'))
 	@$(AWK) -f $< $(filter-out $<,$^) >$@
@@ -301,8 +301,9 @@ sub_cmd_record_mcount = set -e ; perl $(srctree)/scripts/recordmcount.pl "$(ARCH
 	"$(if $(part-of-module),1,0)" "$(@)";
 recordmcount_source := $(srctree)/scripts/recordmcount.pl
 endif
-cmd_record_mcount = 						\
-	if [ "$(findstring -pg,$(_c_flags))" = "-pg" ]; then	\
+cmd_record_mcount =						\
+	if [ "$(findstring $(CC_FLAGS_FTRACE),$(_c_flags))" =	\
+	     "$(CC_FLAGS_FTRACE)" ]; then			\
 		$(sub_cmd_record_mcount)			\
 	fi;
 endif

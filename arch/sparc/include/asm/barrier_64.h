@@ -38,6 +38,9 @@ do {	__asm__ __volatile__("ba,pt	%%xcc, 1f\n\t" \
 #define wmb()	__asm__ __volatile__("":::"memory")
 
 #define read_barrier_depends()		do { } while(0)
+#define dma_rmb()	rmb()
+#define dma_wmb()	wmb()
+
 #define set_mb(__var, __value) \
 	do { __var = __value; membar_safe("#StoreLoad"); } while(0)
 

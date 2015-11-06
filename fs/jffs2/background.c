@@ -87,6 +87,7 @@ static int jffs2_garbage_collect_thread(void *_c)
 
 	set_freezable();
 	for (;;) {
+		kgr_task_safe(current);
 		allow_signal(SIGHUP);
 	again:
 		spin_lock(&c->erase_completion_lock);

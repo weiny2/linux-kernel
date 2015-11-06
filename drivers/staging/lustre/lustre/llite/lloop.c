@@ -426,7 +426,8 @@ static int loop_thread(void *data)
 	up(&lo->lo_sem);
 
 	for (;;) {
-		wait_event(lo->lo_bh_wait, loop_active(lo));
+		wait_event(lo->lo_bh_wait, ({ kgr_task_safe(current);
+					loop_active(lo); }));
 		if (!atomic_read(&lo->lo_pending)) {
 			int exiting = 0;
 			spin_lock_irq(&lo->lo_lock);

@@ -915,6 +915,7 @@ xfs_qm_scall_getquota(
 		}
 	}
 #endif
+	dst->d_bcount = BBTOB(dst->d_bcount);
 out_put:
 	xfs_qm_dqput(dqp);
 	return error;

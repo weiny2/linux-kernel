@@ -1,7 +1,7 @@
 /*******************************************************************
  * This file is part of the Emulex Linux Device Driver for         *
  * Fibre Channel Host Bus Adapters.                                *
- * Copyright (C) 2007-2014 Emulex.  All rights reserved.           *
+ * Copyright (C) 2007-2015 Emulex.  All rights reserved.           *
  * EMULEX and SLI are trademarks of Emulex.                        *
  * www.emulex.com                                                  *
  *                                                                 *
@@ -269,7 +269,7 @@ static int
 lpfc_debugfs_hbqinfo_data(struct lpfc_hba *phba, char *buf, int size)
 {
 	int len = 0;
-	int cnt, i, j, found, posted, low;
+	int i, j, found, posted, low;
 	uint32_t phys, raw_index, getidx;
 	struct lpfc_hbq_init *hip;
 	struct hbq_s *hbqs;
@@ -279,7 +279,7 @@ lpfc_debugfs_hbqinfo_data(struct lpfc_hba *phba, char *buf, int size)
 
 	if (phba->sli_rev != 3)
 		return 0;
-	cnt = LPFC_HBQINFO_SIZE;
+
 	spin_lock_irq(&phba->hbalock);
 
 	/* toggle between multiple hbqs, if any */

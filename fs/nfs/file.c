@@ -36,6 +36,7 @@
 #include "internal.h"
 #include "iostat.h"
 #include "fscache.h"
+#include "pnfs.h"
 
 #include "nfstrace.h"
 
@@ -181,7 +182,7 @@ nfs_file_read(struct kiocb *iocb, const struct iovec *iov,
 	struct inode * inode = dentry->d_inode;
 	ssize_t result;
 
-	if (iocb->ki_filp->f_flags & O_DIRECT)
+	if (kiocb_is_direct(iocb))
 		return nfs_file_direct_read(iocb, iov, nr_segs, pos, true);
 
 	dprintk("NFS: read(%s/%s, %lu@%lu)\n",
@@ -344,6 +345,12 @@ static int nfs_want_read_modify_write(struct file *file, struct page *page,
 	unsigned int pglen = nfs_page_length(page);
 	unsigned int offset = pos & (PAGE_CACHE_SIZE - 1);
 	unsigned int end = offset + len;
+
+	if (pnfs_ld_read_whole_page(file->f_mapping->host)) {
+		if (!PageUptodate(page))
+			return 1;
+		return 0;
+	}
 
 	if ((file->f_mode & FMODE_READ) &&	/* open for read? */
 	    !PageUptodate(page) &&		/* Uptodate? */
@@ -669,7 +676,7 @@ ssize_t nfs_file_write(struct kiocb *iocb, const struct iovec *iov,
 	if (result)
 		return result;
 
-	if (iocb->ki_filp->f_flags & O_DIRECT)
+	if (kiocb_is_direct(iocb))
 		return nfs_file_direct_write(iocb, iov, nr_segs, pos, true);
 
 	dprintk("NFS: write(%s/%s, %lu@%Ld)\n",
@@ -682,7 +689,7 @@ ssize_t nfs_file_write(struct kiocb *iocb, const struct iovec *iov,
 	/*
 	 * O_APPEND implies that we must revalidate the file length.
 	 */
-	if (iocb->ki_filp->f_flags & O_APPEND) {
+	if (kiocb_is_append(iocb)) {
 		result = nfs_revalidate_file_size(inode, iocb->ki_filp);
 		if (result)
 			goto out;

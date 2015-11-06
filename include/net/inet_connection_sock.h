@@ -62,6 +62,7 @@ struct inet_connection_sock_af_ops {
 	void	    (*addr2sockaddr)(struct sock *sk, struct sockaddr *);
 	int	    (*bind_conflict)(const struct sock *sk,
 				     const struct inet_bind_bucket *tb, bool relax);
+	void	    (*mtu_reduced)(struct sock *sk);
 };
 
 /** inet_connection_sock - INET connection oriented sock
@@ -97,7 +98,8 @@ struct inet_connection_sock {
 	const struct tcp_congestion_ops *icsk_ca_ops;
 	const struct inet_connection_sock_af_ops *icsk_af_ops;
 	unsigned int		  (*icsk_sync_mss)(struct sock *sk, u32 pmtu);
-	__u8			  icsk_ca_state;
+	__u8			  icsk_ca_state:7,
+				  icsk_ca_dst_locked:1;
 	__u8			  icsk_retransmits;
 	__u8			  icsk_pending;
 	__u8			  icsk_backoff;

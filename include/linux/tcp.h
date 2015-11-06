@@ -134,7 +134,7 @@ struct tcp_sock {
 	/* inet_connection_sock has to be the first member of tcp_sock */
 	struct inet_connection_sock	inet_conn;
 	u16	tcp_header_len;	/* Bytes of tcp header to send		*/
-	u16	xmit_size_goal_segs; /* Goal for segmenting output packets */
+	u16	gso_segs;	/* Max number of segs per GSO packet	*/
 
 /*
  *	Header prediction flags
@@ -201,10 +201,10 @@ struct tcp_sock {
 	u32	tlp_high_seq;	/* snd_nxt at the time of TLP retransmit. */
 
 /* RTT measurement */
-	u32	srtt;		/* smoothed round trip time << 3	*/
-	u32	mdev;		/* medium deviation			*/
-	u32	mdev_max;	/* maximal mdev for the last rtt period	*/
-	u32	rttvar;		/* smoothed mdev_max			*/
+	u32	srtt_us;	/* smoothed round trip time << 3 in usecs */
+	u32	mdev_us;	/* medium deviation			*/
+	u32	mdev_max_us;	/* maximal mdev for the last rtt period	*/
+	u32	rttvar_us;	/* smoothed mdev_max			*/
 	u32	rtt_seq;	/* sequence number to update rttvar	*/
 
 	u32	packets_out;	/* Packets which are "in flight"	*/
@@ -242,7 +242,6 @@ struct tcp_sock {
 	u32	lost_out;	/* Lost packets			*/
 	u32	sacked_out;	/* SACK'd packets			*/
 	u32	fackets_out;	/* FACK'd packets			*/
-	u32	tso_deferred;
 
 	/* from STCP, retrans queue hinting */
 	struct sk_buff* lost_skb_hint;

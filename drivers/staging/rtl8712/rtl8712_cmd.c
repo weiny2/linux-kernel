@@ -330,6 +330,7 @@ int r8712_cmd_thread(void *context)
 
 	thread_enter(padapter);
 	while (1) {
+		kgr_task_safe(current);
 		if ((_down_sema(&(pcmdpriv->cmd_queue_sema))) == _FAIL)
 			break;
 		if ((padapter->bDriverStopped == true) ||

@@ -220,6 +220,7 @@ static int __btrfs_add_ordered_extent(struct inode *inode, u64 file_offset,
 	INIT_LIST_HEAD(&entry->work_list);
 	init_completion(&entry->completion);
 	INIT_LIST_HEAD(&entry->log_list);
+	INIT_LIST_HEAD(&entry->trans_list);
 
 	trace_btrfs_ordered_extent_add(inode, entry);
 
@@ -431,19 +432,29 @@ out:
 
 /* Needs to either be called under a log transaction or the log_mutex */
 void btrfs_get_logged_extents(struct inode *inode,
-			      struct list_head *logged_list)
+			      struct list_head *logged_list,
+			      const loff_t start,
+			      const loff_t end)
 {
 	struct btrfs_ordered_inode_tree *tree;
 	struct btrfs_ordered_extent *ordered;
 	struct rb_node *n;
+	struct rb_node *prev;
 
 	tree = &BTRFS_I(inode)->ordered_tree;
 	spin_lock_irq(&tree->lock);
-	for (n = rb_first(&tree->tree); n; n = rb_next(n)) {
+	n = __tree_search(&tree->tree, end, &prev);
+	if (!n)
+		n = prev;
+	for (; n; n = rb_prev(n)) {
 		ordered = rb_entry(n, struct btrfs_ordered_extent, rb_node);
-		if (!list_empty(&ordered->log_list))
+		if (ordered->file_offset > end)
 			continue;
-		list_add_tail(&ordered->log_list, logged_list);
+		if (entry_end(ordered) <= start)
+			break;
+		if (test_and_set_bit(BTRFS_ORDERED_LOGGED, &ordered->flags))
+			continue;
+		list_add(&ordered->log_list, logged_list);
 		atomic_inc(&ordered->refs);
 	}
 	spin_unlock_irq(&tree->lock);
@@ -472,7 +483,8 @@ void btrfs_submit_logged_extents(struct list_head *logged_list,
 	spin_unlock_irq(&log->log_extents_lock[index]);
 }
 
-void btrfs_wait_logged_extents(struct btrfs_root *log, u64 transid)
+void btrfs_wait_logged_extents(struct btrfs_trans_handle *trans,
+			       struct btrfs_root *log, u64 transid)
 {
 	struct btrfs_ordered_extent *ordered;
 	int index = transid % 2;
@@ -484,9 +496,20 @@ void btrfs_wait_logged_extents(struct btrfs_root *log, u64 transid)
 					   log_list);
 		list_del_init(&ordered->log_list);
 		spin_unlock_irq(&log->log_extents_lock[index]);
+
+		if (!test_bit(BTRFS_ORDERED_IO_DONE, &ordered->flags) &&
+		    !test_bit(BTRFS_ORDERED_DIRECT, &ordered->flags)) {
+			struct inode *inode = ordered->inode;
+			u64 start = ordered->file_offset;
+			u64 end = ordered->file_offset + ordered->len - 1;
+
+			WARN_ON(!inode);
+			filemap_fdatawrite_range(inode->i_mapping, start, end);
+		}
 		wait_event(ordered->wait, test_bit(BTRFS_ORDERED_IO_DONE,
 						   &ordered->flags));
-		btrfs_put_ordered_extent(ordered);
+
+		list_add_tail(&ordered->trans_list, &trans->ordered);
 		spin_lock_irq(&log->log_extents_lock[index]);
 	}
 	spin_unlock_irq(&log->log_extents_lock[index]);
@@ -522,6 +545,10 @@ void btrfs_put_ordered_extent(struct btrfs_ordered_extent *entry)
 	trace_btrfs_ordered_extent_put(entry->inode, entry);
 
 	if (atomic_dec_and_test(&entry->refs)) {
+		ASSERT(list_empty(&entry->log_list));
+		ASSERT(list_empty(&entry->trans_list));
+		ASSERT(list_empty(&entry->root_extent_list));
+		ASSERT(RB_EMPTY_NODE(&entry->rb_node));
 		if (entry->inode)
 			btrfs_add_delayed_iput(entry->inode);
 		while (!list_empty(&entry->list)) {
@@ -549,6 +576,7 @@ void btrfs_remove_ordered_extent(struct inode *inode,
 	spin_lock_irq(&tree->lock);
 	node = &entry->rb_node;
 	rb_erase(node, &tree->tree);
+	RB_CLEAR_NODE(node);
 	if (tree->last == node)
 		tree->last = NULL;
 	set_bit(BTRFS_ORDERED_COMPLETE, &entry->flags);
@@ -799,30 +827,10 @@ int btrfs_wait_ordered_range(struct inode *inode, u64 start, u64 len)
 	/* start IO across the range first to instantiate any delalloc
 	 * extents
 	 */
-	ret = filemap_fdatawrite_range(inode->i_mapping, start, orig_end);
+	ret = btrfs_fdatawrite_range(inode, start, orig_end);
 	if (ret)
 		return ret;
-	/*
-	 * So with compression we will find and lock a dirty page and clear the
-	 * first one as dirty, setup an async extent, and immediately return
-	 * with the entire range locked but with nobody actually marked with
-	 * writeback.  So we can't just filemap_write_and_wait_range() and
-	 * expect it to work since it will just kick off a thread to do the
-	 * actual work.  So we need to call filemap_fdatawrite_range _again_
-	 * since it will wait on the page lock, which won't be unlocked until
-	 * after the pages have been marked as writeback and so we're good to go
-	 * from there.  We have to do this otherwise we'll miss the ordered
-	 * extents and that results in badness.  Please Josef, do not think you
-	 * know better and pull this out at some point in the future, it is
-	 * right and you are wrong.
-	 */
-	if (test_bit(BTRFS_INODE_HAS_ASYNC_EXTENT,
-		     &BTRFS_I(inode)->runtime_flags)) {
-		ret = filemap_fdatawrite_range(inode->i_mapping, start,
-					       orig_end);
-		if (ret)
-			return ret;
-	}
+
 	ret = filemap_fdatawait_range(inode->i_mapping, start, orig_end);
 	if (ret)
 		return ret;

@@ -131,6 +131,8 @@ static int lirc_thread(void *irctl)
 		ir->d.name, ir->d.minor);
 
 	do {
+		kgr_task_safe(current);
+
 		if (ir->open) {
 			if (ir->jiffies_to_wait) {
 				set_current_state(TASK_INTERRUPTIBLE);
@@ -144,6 +146,7 @@ static int lirc_thread(void *irctl)
 			set_current_state(TASK_INTERRUPTIBLE);
 			schedule();
 		}
+
 	} while (!kthread_should_stop());
 
 	dev_dbg(ir->d.dev, LOGHEAD "poll thread ended\n",

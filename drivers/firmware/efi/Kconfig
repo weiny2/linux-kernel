@@ -39,6 +39,10 @@ config EFI_VARS_PSTORE_DEFAULT_DISABLE
 config UEFI_CPER
 	def_bool n
 
+config EFI_HIBERNATION_KEYS
+	bool
+	select EFI_VARS
+
 config EFI_RUNTIME_MAP
 	bool "Export efi runtime maps to sysfs"
 	depends on X86 && EFI && KEXEC && !XEN

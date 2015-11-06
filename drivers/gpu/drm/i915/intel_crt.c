@@ -107,7 +107,17 @@ static unsigned int intel_crt_get_flags(struct intel_encoder *encoder)
 static void intel_crt_get_config(struct intel_encoder *encoder,
 				 struct intel_crtc_config *pipe_config)
 {
+	struct drm_device *dev = encoder->base.dev;
+	int dotclock;
+
 	pipe_config->adjusted_mode.flags |= intel_crt_get_flags(encoder);
+
+	dotclock = pipe_config->port_clock;
+
+	if (HAS_PCH_SPLIT(dev))
+		ironlake_check_encoder_dotclock(pipe_config, dotclock);
+
+	pipe_config->adjusted_mode.clock = dotclock;
 }
 
 static void hsw_crt_get_config(struct intel_encoder *encoder,
@@ -264,7 +274,7 @@ static void intel_crt_mode_set(struct intel_encoder *encoder)
 	struct drm_display_mode *adjusted_mode = &crtc->config.adjusted_mode;
 	u32 adpa;
 
-	if (HAS_PCH_SPLIT(dev))
+	if (INTEL_INFO(dev)->gen >= 5)
 		adpa = ADPA_HOTPLUG_BITS;
 	else
 		adpa = 0;
@@ -366,9 +376,6 @@ static bool valleyview_crt_detect_hotplug(struct drm_connector *connector)
 
 	DRM_DEBUG_KMS("valleyview hotplug adpa=0x%x, result %d\n", adpa, ret);
 
-	/* FIXME: debug force function and remove */
-	ret = true;
-
 	return ret;
 }
 
@@ -384,7 +391,7 @@ static bool intel_crt_detect_hotplug(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	u32 hotplug_en, orig, stat;
+	u32 stat;
 	bool ret = false;
 	int i, tries = 0;
 
@@ -403,12 +410,12 @@ static bool intel_crt_detect_hotplug(struct drm_connector *connector)
 		tries = 2;
 	else
 		tries = 1;
-	hotplug_en = orig = I915_READ(PORT_HOTPLUG_EN);
-	hotplug_en |= CRT_HOTPLUG_FORCE_DETECT;
 
 	for (i = 0; i < tries ; i++) {
 		/* turn on the FORCE_DETECT */
-		I915_WRITE(PORT_HOTPLUG_EN, hotplug_en);
+		i915_hotplug_interrupt_update(dev_priv,
+					      CRT_HOTPLUG_FORCE_DETECT,
+					      CRT_HOTPLUG_FORCE_DETECT);
 		/* wait for FORCE_DETECT to go off */
 		if (wait_for((I915_READ(PORT_HOTPLUG_EN) &
 			      CRT_HOTPLUG_FORCE_DETECT) == 0,
@@ -423,8 +430,7 @@ static bool intel_crt_detect_hotplug(struct drm_connector *connector)
 	/* clear the interrupt we just generated, if any */
 	I915_WRITE(PORT_HOTPLUG_STAT, CRT_HOTPLUG_INT_STATUS);
 
-	/* and put the bits back */
-	I915_WRITE(PORT_HOTPLUG_EN, orig);
+	i915_hotplug_interrupt_update(dev_priv, CRT_HOTPLUG_FORCE_DETECT, 0);
 
 	return ret;
 }
@@ -743,7 +749,7 @@ static const struct drm_encoder_funcs intel_crt_enc_funcs = {
 	.destroy = intel_encoder_destroy,
 };
 
-static int __init intel_no_crt_dmi_callback(const struct dmi_system_id *id)
+static int intel_no_crt_dmi_callback(const struct dmi_system_id *id)
 {
 	DRM_INFO("Skipping CRT initialization for %s\n", id->ident);
 	return 1;

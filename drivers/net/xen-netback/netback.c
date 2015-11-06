@@ -1641,10 +1641,11 @@ int xenvif_kthread(void *data)
 	struct xenvif *vif = data;
 
 	while (!kthread_should_stop()) {
-		wait_event_interruptible(vif->wq,
+		wait_event_interruptible(vif->wq, ({
+					 kgr_task_safe(current);
 					 rx_work_todo(vif) ||
 					 vif->disabled ||
-					 kthread_should_stop());
+					 kthread_should_stop(); }));
 
 		/* This frontend is found to be rogue, disable it in
 		 * kthread context. Currently this is only set when

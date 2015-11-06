@@ -26,6 +26,7 @@
 #include <linux/blkdev.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
+#include <asm/unaligned.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -132,6 +133,7 @@ scmd_eh_abort_handler(struct work_struct *work)
 		rtn = scsi_try_to_abort_cmd(sdev->host->hostt, scmd);
 		if (rtn == SUCCESS) {
 			scmd->result |= DID_TIME_OUT << 16;
+			scmd->host_scribble = NULL;
 			if (scsi_host_eh_past_deadline(sdev->host)) {
 				SCSI_LOG_ERROR_RECOVERY(3,
 					scmd_printk(KERN_INFO, scmd,
@@ -464,14 +466,6 @@ static int scsi_check_sense(struct scsi_cmnd *scmd)
 	if (! scsi_command_normalize_sense(scmd, &sshdr))
 		return FAILED;	/* no valid sense data */
 
-	if (scmd->cmnd[0] == TEST_UNIT_READY && scmd->scsi_done != scsi_eh_done)
-		/*
-		 * nasty: for mid-layer issued TURs, we need to return the
-		 * actual sense data without any recovery attempt.  For eh
-		 * issued ones, we need to try to recover and interpret
-		 */
-		return SUCCESS;
-
 	scsi_report_sense(sdev, &sshdr);
 
 	if (scsi_sense_is_deferred(&sshdr))
@@ -486,6 +480,14 @@ static int scsi_check_sense(struct scsi_cmnd *scmd)
 			return rc;
 		/* handler does not care. Drop down to default handling */
 	}
+
+	if (scmd->cmnd[0] == TEST_UNIT_READY && scmd->scsi_done != scsi_eh_done)
+		/*
+		 * nasty: for mid-layer issued TURs, we need to return the
+		 * actual sense data without any recovery attempt.  For eh
+		 * issued ones, we need to try to recover and interpret
+		 */
+		return SUCCESS;
 
 	/*
 	 * Previous logic looked for FILEMARK, EOM or ILI which are
@@ -1047,7 +1049,7 @@ retry:
 		}
 		/* signal not to enter either branch of the if () below */
 		timeleft = 0;
-		rtn = NEEDS_RETRY;
+		rtn = FAILED;
 	} else {
 		timeleft = wait_for_completion_timeout(&done, timeout);
 		rtn = SUCCESS;
@@ -1088,7 +1090,7 @@ retry:
 			rtn = FAILED;
 			break;
 		}
-	} else if (!rtn) {
+	} else if (rtn != FAILED) {
 		scsi_abort_eh_cmnd(scmd);
 		rtn = FAILED;
 	}
@@ -2024,8 +2026,10 @@ static void scsi_restart_operations(struct Scsi_Host *shost)
 	 * is no point trying to lock the door of an off-line device.
 	 */
 	shost_for_each_device(sdev, shost) {
-		if (scsi_device_online(sdev) && sdev->locked)
+		if (scsi_device_online(sdev) && sdev->was_reset && sdev->locked) {
 			scsi_eh_lock_door(sdev);
+			sdev->was_reset = 0;
+		}
 	}
 
 	/*
@@ -2188,10 +2192,13 @@ int scsi_error_handler(void *data)
 	 * We never actually get interrupted because kthread_run
 	 * disables signal delivery for the created thread.
 	 */
-	while (!kthread_should_stop()) {
+	while (true) {
 		kgr_task_safe(current);
 
 		set_current_state(TASK_INTERRUPTIBLE);
+		if (kthread_should_stop())
+			break;
+
 		if ((shost->host_failed == 0 && shost->host_eh_scheduled == 0) ||
 		    shost->host_failed != shost->host_busy) {
 			SCSI_LOG_ERROR_RECOVERY(1,
@@ -2589,16 +2596,50 @@ void scsi_build_sense_buffer(int desc, u8 *buf, u8 key, u8 asc, u8 ascq)
 {
 	if (desc) {
 		buf[0] = 0x72;	/* descriptor, current */
-		buf[1] = key;
+		buf[1] = key & 0x0f;
 		buf[2] = asc;
 		buf[3] = ascq;
 		buf[7] = 0;
 	} else {
 		buf[0] = 0x70;	/* fixed, current */
-		buf[2] = key;
+		buf[2] = key & 0x0f;
 		buf[7] = 0xa;
 		buf[12] = asc;
 		buf[13] = ascq;
 	}
 }
 EXPORT_SYMBOL(scsi_build_sense_buffer);
+
+/**
+ * scsi_set_sense_information - set the information field in a
+ *		formatted sense data buffer
+ * @buf:	Where to build sense data
+ * @info:	64-bit information value to be set
+ *
+ **/
+void scsi_set_sense_information(u8 *buf, u64 info)
+{
+	if ((buf[0] & 0x7f) == 0x72) {
+		u8 *ucp, len;
+
+		len = buf[7];
+		ucp = (char *)scsi_sense_desc_find(buf, len + 8, 0);
+		if (!ucp) {
+			buf[7] = len + 0xa;
+			ucp = buf + 8 + len;
+		}
+		ucp[0] = 0;
+		ucp[1] = 0xa;
+		ucp[2] = 0x80; /* Valid bit */
+		ucp[3] = 0;
+		put_unaligned_be64(info, &ucp[4]);
+	} else if ((buf[0] & 0x7f) == 0x70) {
+		buf[0] |= 0x80;
+		/*
+		 * Fixed format sense reserves only 32 bits for the
+		 * 'information' field
+		 */
+		put_unaligned_be32((u32)info, &buf[3]);
+	}
+}
+EXPORT_SYMBOL(scsi_set_sense_information);

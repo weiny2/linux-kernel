@@ -28,7 +28,6 @@
 #include <linux/syscore_ops.h>
 #include <linux/ctype.h>
 #include <linux/genhd.h>
-#include <linux/efi.h>
 #include <linux/module.h>
 
 #include "power.h"
@@ -42,6 +41,11 @@ static char resume_file[256] = CONFIG_PM_STD_PARTITION;
 dev_t swsusp_resume_device;
 sector_t swsusp_resume_block;
 __visible int in_suspend __nosavedata;
+#ifdef CONFIG_HIBERNATE_VERIFICATION_FORCE
+int sigenforce = 1;
+#else
+int sigenforce;
+#endif
 
 enum {
 	HIBERNATION_INVALID,
@@ -493,8 +497,14 @@ int hibernation_restore(int platform_mode)
 	error = dpm_suspend_start(PMSG_QUIESCE);
 	if (!error) {
 		error = resume_target_kernel(platform_mode);
-		dpm_resume_end(PMSG_RECOVER);
+		/*
+		 * The above should either succeed and jump to the new kernel,
+		 * or return with an error. Otherwise things are just
+		 * undefined, so let's be paranoid.
+		 */
+		BUG_ON(!error);
 	}
+	dpm_resume_end(PMSG_RECOVER);
 	pm_restore_gfp_mask();
 	ftrace_start();
 	resume_console();
@@ -634,8 +644,14 @@ int hibernate(void)
 {
 	int error;
 
+	set_hibernation_key_regen_flag = false;
+
 	if (secure_modules()) {
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+		sigenforce = 1;
+#else
 		return -EPERM;
+#endif
 	}
 
 	lock_system_sleep();
@@ -687,6 +703,7 @@ int hibernate(void)
 		pm_restore_gfp_mask();
 	} else {
 		pr_debug("PM: Image restored successfully.\n");
+		restore_sig_forward_info();
 	}
 
  Free_bitmaps:
@@ -730,8 +747,16 @@ static int software_resume(void)
 	/*
 	 * If the user said "noresume".. bail out early.
 	 */
-	if (noresume || secure_modules())
+	if (noresume)
 		return 0;
+
+	if (secure_modules()) {
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+               sigenforce = 1;
+#else
+               return 0;
+#endif
+	}
 
 	/*
 	 * name_to_dev_t() below takes a sysfs buffer mutex when sysfs
@@ -896,11 +921,6 @@ static ssize_t disk_show(struct kobject *kobj, struct kobj_attribute *attr,
 	int i;
 	char *start = buf;
 
-	if (efi_enabled(EFI_SECURE_BOOT)) {
-		buf += sprintf(buf, "[%s]\n", "disabled");
-		return buf-start;
-	}
-
 	for (i = HIBERNATION_FIRST; i <= HIBERNATION_MAX; i++) {
 		if (!hibernation_modes[i])
 			continue;
@@ -935,8 +955,13 @@ static ssize_t disk_store(struct kobject *kobj, struct kobj_attribute *attr,
 	char *p;
 	int mode = HIBERNATION_INVALID;
 
-	if (secure_modules())
+	if (secure_modules()) {
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+		sigenforce = 1;
+#else
 		return -EPERM;
+#endif
+	}
 
 	p = memchr(buf, '\n', n);
 	len = p ? p - buf : n;
@@ -1103,6 +1128,8 @@ static int __init hibernate_setup(char *str)
 		noresume = 1;
 	else if (!strncmp(str, "nocompress", 10))
 		nocompress = 1;
+	else if (!strncmp(str, "sigenforce", 10))
+		sigenforce = 1;
 	return 1;
 }
 

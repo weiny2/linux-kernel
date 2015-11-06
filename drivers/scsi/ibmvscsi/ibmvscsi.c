@@ -2232,8 +2232,9 @@ static int ibmvscsi_work(void *data)
 	set_user_nice(current, -20);
 
 	while (1) {
-		rc = wait_event_interruptible(hostdata->work_wait_q,
-					      ibmvscsi_work_to_do(hostdata));
+		rc = wait_event_interruptible(hostdata->work_wait_q, ({
+					      kgr_task_safe(current);
+					      ibmvscsi_work_to_do(hostdata); }));
 
 		BUG_ON(rc);
 

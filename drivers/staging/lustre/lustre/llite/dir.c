@@ -1501,7 +1501,7 @@ out_rmdir:
 			struct lov_user_mds_data *lmdp;
 			lstat_t st = { 0 };
 
-			st.st_dev     = inode->i_sb->s_dev;
+			st.st_dev     = inode_get_dev(inode);
 			st.st_mode    = body->mode;
 			st.st_nlink   = body->nlink;
 			st.st_uid     = body->uid;

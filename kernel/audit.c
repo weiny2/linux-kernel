@@ -585,9 +585,19 @@ static int audit_netlink_ok(struct sk_buff *skb, u16 msg_type)
 	int err = 0;
 
 	/* Only support the initial namespaces for now. */
+	/*
+	 * We return ECONNREFUSED because it tricks userspace into thinking
+	 * that audit was not configured into the kernel.  Lots of users
+	 * configure their PAM stack (because that's what the distro does)
+	 * to reject login if unable to send messages to audit.  If we return
+	 * ECONNREFUSED the PAM stack thinks the kernel does not have audit
+	 * configured in and will let login proceed.  If we return EPERM
+	 * userspace will reject all logins.  This should be removed when we
+	 * support non init namespaces!!
+	 */
 	if ((current_user_ns() != &init_user_ns) ||
 	    (task_active_pid_ns(current) != &init_pid_ns))
-		return -EPERM;
+		return -ECONNREFUSED;
 
 	switch (msg_type) {
 	case AUDIT_LIST:
@@ -1523,7 +1533,7 @@ void audit_log_cap(struct audit_buffer *ab, char *prefix, kernel_cap_t *cap)
 	audit_log_format(ab, " %s=", prefix);
 	CAP_FOR_EACH_U32(i) {
 		audit_log_format(ab, "%08x",
-				 cap->cap[(_KERNEL_CAPABILITY_U32S-1) - i]);
+				 cap->cap[CAP_LAST_U32 - i]);
 	}
 }
 
@@ -1574,7 +1584,7 @@ void audit_copy_inode(struct audit_names *name, const struct dentry *dentry,
 		      const struct inode *inode)
 {
 	name->ino   = inode->i_ino;
-	name->dev   = inode->i_sb->s_dev;
+	name->dev   = inode_get_dev(inode);
 	name->mode  = inode->i_mode;
 	name->uid   = inode->i_uid;
 	name->gid   = inode->i_gid;

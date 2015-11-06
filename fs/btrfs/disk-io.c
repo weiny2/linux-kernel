@@ -597,7 +597,7 @@ static int btree_readpage_end_io_hook(struct btrfs_io_bio *io_bio,
 		goto err;
 
 	eb->read_mirror = mirror;
-	if (test_bit(EXTENT_BUFFER_IOERR, &eb->bflags)) {
+	if (test_bit(EXTENT_BUFFER_READ_ERR, &eb->bflags)) {
 		ret = -EIO;
 		goto err;
 	}
@@ -670,7 +670,7 @@ static int btree_io_failed_hook(struct page *page, int failed_mirror)
 	struct btrfs_root *root = BTRFS_I(page->mapping->host)->root;
 
 	eb = (struct extent_buffer *)page->private;
-	set_bit(EXTENT_BUFFER_IOERR, &eb->bflags);
+	set_bit(EXTENT_BUFFER_READ_ERR, &eb->bflags);
 	eb->read_mirror = failed_mirror;
 	atomic_dec(&eb->io_pages);
 	if (test_and_clear_bit(EXTENT_BUFFER_READAHEAD, &eb->bflags))
@@ -1566,7 +1566,6 @@ int btrfs_init_fs_root(struct btrfs_root *root)
 	root->subv_writers = writers;
 
 	btrfs_init_free_ino_ctl(root);
-	mutex_init(&root->fs_commit_mutex);
 	spin_lock_init(&root->cache_lock);
 	init_waitqueue_head(&root->cache_wait);
 
@@ -1747,6 +1746,7 @@ static int cleaner_kthread(void *arg)
 {
 	struct btrfs_root *root = arg;
 	int again;
+	struct btrfs_trans_handle *trans;
 
 	do {
 		again = 0;
@@ -1776,6 +1776,16 @@ static int cleaner_kthread(void *arg)
 		 * needn't do anything special here.
 		 */
 		btrfs_run_defrag_inodes(root->fs_info);
+
+		/*
+		 * Acquires fs_info->delete_unused_bgs_mutex to avoid racing
+		 * with relocation (btrfs_relocate_chunk) and relocation
+		 * acquires fs_info->cleaner_mutex (btrfs_relocate_block_group)
+		 * after acquiring fs_info->delete_unused_bgs_mutex. So we
+		 * can't hold, nor need to, fs_info->cleaner_mutex when deleting
+		 * unused block groups.
+		 */
+		btrfs_delete_unused_bgs(root->fs_info);
 sleep:
 		if (!try_to_freeze() && !again) {
 			set_current_state(TASK_INTERRUPTIBLE);
@@ -1784,6 +1794,34 @@ sleep:
 			__set_current_state(TASK_RUNNING);
 		}
 	} while (!kthread_should_stop());
+
+	/*
+	 * Transaction kthread is stopped before us and wakes us up.
+	 * However we might have started a new transaction and COWed some
+	 * tree blocks when deleting unused block groups for example. So
+	 * make sure we commit the transaction we started to have a clean
+	 * shutdown when evicting the btree inode - if it has dirty pages
+	 * when we do the final iput() on it, eviction will trigger a
+	 * writeback for it which will fail with null pointer dereferences
+	 * since work queues and other resources were already released and
+	 * destroyed by the time the iput/eviction/writeback is made.
+	 */
+	trans = btrfs_attach_transaction(root);
+	if (IS_ERR(trans)) {
+		if (PTR_ERR(trans) != -ENOENT)
+			btrfs_err(root->fs_info,
+				  "cleaner transaction attach returned %ld",
+				  PTR_ERR(trans));
+	} else {
+		int ret;
+
+		ret = btrfs_commit_transaction(trans, root);
+		if (ret)
+			btrfs_err(root->fs_info,
+				  "cleaner open transaction commit returned %d",
+				  ret);
+	}
+
 	return 0;
 }
 
@@ -2227,6 +2265,9 @@ int open_ctree(struct super_block *sb,
 	spin_lock_init(&fs_info->super_lock);
 	spin_lock_init(&fs_info->qgroup_op_lock);
 	spin_lock_init(&fs_info->buffer_lock);
+	spin_lock_init(&fs_info->unused_bgs_lock);
+	mutex_init(&fs_info->unused_bg_unpin_mutex);
+	mutex_init(&fs_info->delete_unused_bgs_mutex);
 	rwlock_init(&fs_info->tree_mod_log_lock);
 	mutex_init(&fs_info->reloc_mutex);
 	mutex_init(&fs_info->delalloc_root_mutex);
@@ -2236,6 +2277,7 @@ int open_ctree(struct super_block *sb,
 	INIT_LIST_HEAD(&fs_info->dirty_cowonly_roots);
 	INIT_LIST_HEAD(&fs_info->space_info);
 	INIT_LIST_HEAD(&fs_info->tree_mod_seq_list);
+	INIT_LIST_HEAD(&fs_info->unused_bgs);
 	btrfs_mapping_init(&fs_info->mapping_tree);
 	btrfs_init_block_rsv(&fs_info->global_block_rsv,
 			     BTRFS_BLOCK_RSV_GLOBAL);
@@ -2254,7 +2296,7 @@ int open_ctree(struct super_block *sb,
 	atomic_set(&fs_info->qgroup_op_seq, 0);
 	atomic64_set(&fs_info->tree_mod_seq, 0);
 	fs_info->sb = sb;
-	fs_info->max_inline = 8192 * 1024;
+	fs_info->max_inline = BTRFS_DEFAULT_MAX_INLINE;
 	fs_info->metadata_ratio = 0;
 	fs_info->defrag_inodes = RB_ROOT;
 	fs_info->free_chunk_space = 0;
@@ -2347,7 +2389,7 @@ int open_ctree(struct super_block *sb,
 	mutex_init(&fs_info->transaction_kthread_mutex);
 	mutex_init(&fs_info->cleaner_mutex);
 	mutex_init(&fs_info->volume_mutex);
-	init_rwsem(&fs_info->extent_commit_sem);
+	init_rwsem(&fs_info->commit_root_sem);
 	init_rwsem(&fs_info->cleanup_work_sem);
 	init_rwsem(&fs_info->subvol_sem);
 	sema_init(&fs_info->uuid_tree_rescan_sem, 1);
@@ -2375,6 +2417,8 @@ int open_ctree(struct super_block *sb,
 	init_waitqueue_head(&fs_info->transaction_wait);
 	init_waitqueue_head(&fs_info->transaction_blocked_wait);
 	init_waitqueue_head(&fs_info->async_submit_wait);
+
+	INIT_LIST_HEAD(&fs_info->pinned_chunks);
 
 	ret = btrfs_alloc_stripe_hash_table(fs_info);
 	if (ret) {
@@ -2434,7 +2478,7 @@ int open_ctree(struct super_block *sb,
 		set_bit(BTRFS_FS_STATE_ERROR, &fs_info->fs_state);
 
 	if (btrfs_super_flags(disk_super) & BTRFS_SUPER_FLAG_SEEDING) {
-		if (!allow_unsupported) {
+		if (!btrfs_allow_unsupported) {
 			printk(KERN_WARNING "btrfs: seeding mode is not supported, load module with allow_unsupported=1\n");
 			ret = -EOPNOTSUPP;
 			goto fail_alloc;
@@ -2524,7 +2568,7 @@ int open_ctree(struct super_block *sb,
 		goto fail_alloc;
 	}
 	if (features & BTRFS_FEATURE_INCOMPAT_RAID56) {
-		if (!allow_unsupported) {
+		if (!btrfs_allow_unsupported) {
 			printk(KERN_WARNING "btrfs: RAID56 is supported read-only, load module with allow_unsupported=1\n");
 			sb->s_flags |= MS_RDONLY;
 		}
@@ -3017,6 +3061,8 @@ retry_root_backup:
 	} else {
 		fs_info->update_uuid_tree_gen = 1;
 	}
+
+	fs_info->open = 1;
 
 	return 0;
 
@@ -3724,6 +3770,7 @@ int close_ctree(struct btrfs_root *root)
 	invalidate_inode_pages2(fs_info->btree_inode->i_mapping);
 	btrfs_stop_all_workers(fs_info);
 
+	fs_info->open = 0;
 	free_root_pointers(fs_info, 1);
 
 	iput(fs_info->btree_inode);
@@ -3744,8 +3791,19 @@ int close_ctree(struct btrfs_root *root)
 
 	btrfs_free_stripe_hash_table(fs_info);
 
-	btrfs_free_block_rsv(root, root->orphan_block_rsv);
+	__btrfs_free_block_rsv(root->orphan_block_rsv);
 	root->orphan_block_rsv = NULL;
+
+	lock_chunks(root);
+	while (!list_empty(&fs_info->pinned_chunks)) {
+		struct extent_map *em;
+
+		em = list_first_entry(&fs_info->pinned_chunks,
+				      struct extent_map, list);
+		list_del_init(&em->list);
+		free_extent_map(em);
+	}
+	unlock_chunks(root);
 
 	return 0;
 }
@@ -3948,6 +4006,7 @@ static int btrfs_destroy_delayed_refs(struct btrfs_transaction *trans,
 
 	while ((node = rb_first(&delayed_refs->href_root)) != NULL) {
 		struct btrfs_delayed_ref_head *head;
+		struct btrfs_delayed_ref_node *tmp;
 		bool pin_bytes = false;
 
 		head = rb_entry(node, struct btrfs_delayed_ref_head,
@@ -3963,11 +4022,10 @@ static int btrfs_destroy_delayed_refs(struct btrfs_transaction *trans,
 			continue;
 		}
 		spin_lock(&head->lock);
-		while ((node = rb_first(&head->ref_root)) != NULL) {
-			ref = rb_entry(node, struct btrfs_delayed_ref_node,
-				       rb_node);
+		list_for_each_entry_safe_reverse(ref, tmp, &head->ref_list,
+						 list) {
 			ref->in_tree = 0;
-			rb_erase(&ref->rb_node, &head->ref_root);
+			list_del(&ref->list);
 			atomic_dec(&delayed_refs->num_entries);
 			btrfs_put_delayed_ref(ref);
 		}
@@ -4100,12 +4158,6 @@ again:
 		if (ret)
 			break;
 
-		/* opt_discard */
-		if (btrfs_test_opt(root, DISCARD))
-			ret = btrfs_error_discard_extent(root, start,
-							 end + 1 - start,
-							 NULL);
-
 		clear_extent_dirty(unpin, start, end, GFP_NOFS);
 		btrfs_error_unpin_extent_range(root, start, end);
 		cond_resched();
@@ -4123,6 +4175,25 @@ again:
 	return 0;
 }
 
+static void btrfs_free_pending_ordered(struct btrfs_transaction *cur_trans,
+				       struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_ordered_extent *ordered;
+
+	spin_lock(&fs_info->trans_lock);
+	while (!list_empty(&cur_trans->pending_ordered)) {
+		ordered = list_first_entry(&cur_trans->pending_ordered,
+					   struct btrfs_ordered_extent,
+					   trans_list);
+		list_del_init(&ordered->trans_list);
+		spin_unlock(&fs_info->trans_lock);
+
+		btrfs_put_ordered_extent(ordered);
+		spin_lock(&fs_info->trans_lock);
+	}
+	spin_unlock(&fs_info->trans_lock);
+}
+
 void btrfs_cleanup_one_transaction(struct btrfs_transaction *cur_trans,
 				   struct btrfs_root *root)
 {
@@ -4136,6 +4207,7 @@ void btrfs_cleanup_one_transaction(struct btrfs_transaction *cur_trans,
 	cur_trans->state = TRANS_STATE_UNBLOCKED;
 	wake_up(&root->fs_info->transaction_wait);
 
+	btrfs_free_pending_ordered(cur_trans, root->fs_info);
 	btrfs_destroy_delayed_inodes(root);
 	btrfs_assert_delayed_root_empty(root);
 

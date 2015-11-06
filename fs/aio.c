@@ -82,6 +82,11 @@ struct kioctx_cpu {
 	unsigned		reqs_available;
 };
 
+struct ctx_rq_wait {
+	struct completion comp;
+	atomic_t count;
+};
+
 struct kioctx {
 	struct percpu_ref	users;
 	atomic_t		dead;
@@ -120,7 +125,7 @@ struct kioctx {
 	/*
 	 * signals when all in-flight requests are done
 	 */
-	struct completion *requests_done;
+	struct ctx_rq_wait	*rq_wait;
 
 #ifdef CONFIG_EPOLL
 	/* poll integration */
@@ -152,6 +157,7 @@ struct kioctx {
 
 	struct {
 		unsigned	tail;
+		unsigned	completed_events;
 		spinlock_t	completion_lock;
 	} ____cacheline_aligned_in_smp;
 
@@ -175,6 +181,15 @@ static struct vfsmount *aio_mnt;
 static const struct file_operations aio_ring_fops;
 static const struct address_space_operations aio_ctx_aops;
 
+/* Backing dev info for aio fs.
+ * -no dirty page accounting or writeback happens
+ */
+static struct backing_dev_info aio_fs_backing_dev_info = {
+	.name           = "aiofs",
+	.state          = 0,
+	.capabilities   = BDI_CAP_NO_ACCT_AND_WRITEBACK | BDI_CAP_MAP_COPY,
+};
+
 static struct file *aio_private_file(struct kioctx *ctx, loff_t nr_pages)
 {
 	struct qstr this = QSTR_INIT("[aio]", 5);
@@ -186,6 +201,7 @@ static struct file *aio_private_file(struct kioctx *ctx, loff_t nr_pages)
 
 	inode->i_mapping->a_ops = &aio_ctx_aops;
 	inode->i_mapping->private_data = ctx;
+	inode->i_mapping->backing_dev_info = &aio_fs_backing_dev_info;
 	inode->i_size = PAGE_SIZE * nr_pages;
 
 	path.dentry = d_alloc_pseudo(aio_mnt->mnt_sb, &this);
@@ -230,6 +246,9 @@ static int __init aio_setup(void)
 	aio_mnt = kern_mount(&aio_fs);
 	if (IS_ERR(aio_mnt))
 		panic("Failed to create aio fs mount.");
+
+	if (bdi_init(&aio_fs_backing_dev_info))
+		panic("Failed to init aio fs backing dev info.");
 
 	kiocb_cachep = KMEM_CACHE(kiocb, SLAB_HWCACHE_ALIGN|SLAB_PANIC);
 	kioctx_cachep = KMEM_CACHE(kioctx,SLAB_HWCACHE_ALIGN|SLAB_PANIC);
@@ -291,11 +310,6 @@ static int aio_ring_mmap(struct file *file, struct vm_area_struct *vma)
 static const struct file_operations aio_ring_fops = {
 	.mmap = aio_ring_mmap,
 };
-
-static int aio_set_page_dirty(struct page *page)
-{
-	return 0;
-}
 
 #if IS_ENABLED(CONFIG_MIGRATION)
 static int aio_migratepage(struct address_space *mapping, struct page *new,
@@ -368,7 +382,7 @@ out:
 #endif
 
 static const struct address_space_operations aio_ctx_aops = {
-	.set_page_dirty = aio_set_page_dirty,
+	.set_page_dirty = __set_page_dirty_no_writeback,
 #if IS_ENABLED(CONFIG_MIGRATION)
 	.migratepage	= aio_migratepage,
 #endif
@@ -423,7 +437,6 @@ static int aio_setup_ring(struct kioctx *ctx)
 		pr_debug("pid(%d) page[%d]->count=%d\n",
 			 current->pid, i, page_count(page));
 		SetPageUptodate(page);
-		SetPageDirty(page);
 		unlock_page(page);
 
 		ctx->ring_pages[i] = page;
@@ -474,7 +487,7 @@ static int aio_setup_ring(struct kioctx *ctx)
 
 void kiocb_set_cancel_fn(struct kiocb *req, kiocb_cancel_fn *cancel)
 {
-	struct kioctx *ctx = req->ki_ctx;
+	struct kioctx *ctx = kiocb_ctx(req);
 	unsigned long flags;
 
 	spin_lock_irqsave(&ctx->ctx_lock, flags);
@@ -525,8 +538,8 @@ static void free_ioctx_reqs(struct percpu_ref *ref)
 	struct kioctx *ctx = container_of(ref, struct kioctx, reqs);
 
 	/* At this point we know that there are no any in-flight requests */
-	if (ctx->requests_done)
-		complete(ctx->requests_done);
+	if (ctx->rq_wait && atomic_dec_and_test(&ctx->rq_wait->count))
+		complete(&ctx->rq_wait->comp);
 
 	INIT_WORK(&ctx->free_work, free_ioctx);
 	schedule_work(&ctx->free_work);
@@ -722,6 +735,9 @@ static struct kioctx *ioctx_alloc(unsigned nr_events)
 err_cleanup:
 	aio_nr_sub(ctx->max_reqs);
 err_ctx:
+	atomic_set(&ctx->dead, 1);
+	if (ctx->mmap_size)
+		vm_munmap(ctx->mmap_base, ctx->mmap_size);
 	aio_free_ring(ctx);
 err:
 	mutex_unlock(&ctx->ring_lock);
@@ -739,7 +755,7 @@ err:
  *	the rapid destruction of the kioctx.
  */
 static void kill_ioctx(struct mm_struct *mm, struct kioctx *ctx,
-		struct completion *requests_done)
+		      struct ctx_rq_wait *wait)
 {
 	if (!atomic_xchg(&ctx->dead, 1)) {
 		struct kioctx_table *table;
@@ -777,11 +793,11 @@ static void kill_ioctx(struct mm_struct *mm, struct kioctx *ctx,
 		if (ctx->mmap_size)
 			vm_munmap(ctx->mmap_base, ctx->mmap_size);
 
-		ctx->requests_done = requests_done;
+		ctx->rq_wait = wait;
 		percpu_ref_kill(&ctx->users);
 	} else {
-		if (requests_done)
-			complete(requests_done);
+		if (wait && atomic_dec_and_test(&wait->count))
+			complete(&wait->comp);
 	}
 }
 
@@ -790,9 +806,9 @@ static void kill_ioctx(struct mm_struct *mm, struct kioctx *ctx,
  */
 ssize_t wait_on_sync_kiocb(struct kiocb *req)
 {
-	while (!req->ki_ctx) {
+	while (!kiocb_ctx(req)) {
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		if (req->ki_ctx)
+		if (kiocb_ctx(req))
 			break;
 		io_schedule();
 	}
@@ -811,40 +827,44 @@ EXPORT_SYMBOL(wait_on_sync_kiocb);
  */
 void exit_aio(struct mm_struct *mm)
 {
-	struct kioctx_table *table;
-	struct kioctx *ctx;
-	unsigned i = 0;
+	struct kioctx_table *table = rcu_dereference_raw(mm->ioctx_table);
+	struct ctx_rq_wait wait;
+	int i, skipped;
 
-	while (1) {
-		rcu_read_lock();
-		table = rcu_dereference(mm->ioctx_table);
+	if (!table)
+		return;
 
-		do {
-			if (!table || i >= table->nr) {
-				rcu_read_unlock();
-				rcu_assign_pointer(mm->ioctx_table, NULL);
-				if (table)
-					kfree(table);
-				return;
-			}
+	atomic_set(&wait.count, table->nr);
+	init_completion(&wait.comp);
 
-			ctx = table->table[i++];
-		} while (!ctx);
+	skipped = 0;
+	for (i = 0; i < table->nr; ++i) {
+		struct kioctx *ctx = table->table[i];
 
-		rcu_read_unlock();
+		if (!ctx) {
+			skipped++;
+			continue;
+		}
 
 		/*
-		 * We don't need to bother with munmap() here -
-		 * exit_mmap(mm) is coming and it'll unmap everything.
-		 * Since aio_free_ring() uses non-zero ->mmap_size
-		 * as indicator that it needs to unmap the area,
-		 * just set it to 0; aio_free_ring() is the only
-		 * place that uses ->mmap_size, so it's safe.
+		 * We don't need to bother with munmap() here - exit_mmap(mm)
+		 * is coming and it'll unmap everything. And we simply can't,
+		 * this is not necessarily our ->mm.
+		 * Since kill_ioctx() uses non-zero ->mmap_size as indicator
+		 * that it needs to unmap the area, just set it to 0.
 		 */
 		ctx->mmap_size = 0;
 
-		kill_ioctx(mm, ctx, NULL);
+		kill_ioctx(mm, ctx, &wait);
 	}
+
+	if (!atomic_sub_and_test(skipped, &wait.count)) {
+		/* Wait until all IO for the context are done. */
+		wait_for_completion(&wait.comp);
+	}
+
+	RCU_INIT_POINTER(mm->ioctx_table, NULL);
+	kfree(table);
 }
 
 static void put_reqs_available(struct kioctx *ctx, unsigned nr)
@@ -900,6 +920,68 @@ out:
 	return ret;
 }
 
+/* refill_reqs_available
+ *	Updates the reqs_available reference counts used for tracking the
+ *	number of free slots in the completion ring.  This can be called
+ *	from aio_complete() (to optimistically update reqs_available) or
+ *	from aio_get_req() (the we're out of events case).  It must be
+ *	called holding ctx->completion_lock.
+ */
+static void refill_reqs_available(struct kioctx *ctx, unsigned head,
+                                  unsigned tail)
+{
+	unsigned events_in_ring, completed;
+
+	/* Clamp head since userland can write to it. */
+	head %= ctx->nr_events;
+	if (head <= tail)
+		events_in_ring = tail - head;
+	else
+		events_in_ring = ctx->nr_events - (head - tail);
+
+	completed = ctx->completed_events;
+	if (events_in_ring < completed)
+		completed -= events_in_ring;
+	else
+		completed = 0;
+
+	if (!completed)
+		return;
+
+	ctx->completed_events -= completed;
+	put_reqs_available(ctx, completed);
+}
+
+/* user_refill_reqs_available
+ *	Called to refill reqs_available when aio_get_req() encounters an
+ *	out of space in the completion ring.
+ */
+static void user_refill_reqs_available(struct kioctx *ctx)
+{
+	spin_lock_irq(&ctx->completion_lock);
+	if (ctx->completed_events) {
+		struct aio_ring *ring;
+		unsigned head;
+
+		/* Access of ring->head may race with aio_read_events_ring()
+		 * here, but that's okay since whether we read the old version
+		 * or the new version, and either will be valid.  The important
+		 * part is that head cannot pass tail since we prevent
+		 * aio_complete() from updating tail by holding
+		 * ctx->completion_lock.  Even if head is invalid, the check
+		 * against ctx->completed_events below will make sure we do the
+		 * safe/right thing.
+		 */
+		ring = kmap_atomic(ctx->ring_pages[0]);
+		head = ring->head;
+		kunmap_atomic(ring);
+
+		refill_reqs_available(ctx, head, ctx->tail);
+	}
+
+	spin_unlock_irq(&ctx->completion_lock);
+}
+
 /* aio_get_req
  *	Allocate a slot for an aio request.
  * Returns NULL if no requests are free.
@@ -908,8 +990,11 @@ static inline struct kiocb *aio_get_req(struct kioctx *ctx)
 {
 	struct kiocb *req;
 
-	if (!get_reqs_available(ctx))
-		return NULL;
+	if (!get_reqs_available(ctx)) {
+		user_refill_reqs_available(ctx);
+		if (!get_reqs_available(ctx))
+			return NULL;
+	}
 
 	req = kmem_cache_alloc(kiocb_cachep, GFP_KERNEL|__GFP_ZERO);
 	if (unlikely(!req))
@@ -917,7 +1002,7 @@ static inline struct kiocb *aio_get_req(struct kioctx *ctx)
 
 	percpu_ref_get(&ctx->reqs);
 
-	req->ki_ctx = ctx;
+	req->ki_ctx = (unsigned long)ctx;
 	return req;
 out_put:
 	put_reqs_available(ctx, 1);
@@ -965,11 +1050,11 @@ out:
  */
 void aio_complete(struct kiocb *iocb, long res, long res2)
 {
-	struct kioctx	*ctx = iocb->ki_ctx;
+	struct kioctx	*ctx = kiocb_ctx(iocb);
 	struct aio_ring	*ring;
 	struct io_event	*ev_page, *event;
+	unsigned tail, pos, head;
 	unsigned long	flags;
-	unsigned tail, pos;
 
 	/*
 	 * Special case handling for sync iocbs:
@@ -981,7 +1066,7 @@ void aio_complete(struct kiocb *iocb, long res, long res2)
 	if (is_sync_kiocb(iocb)) {
 		iocb->ki_user_data = res;
 		smp_wmb();
-		iocb->ki_ctx = ERR_PTR(-EXDEV);
+		iocb->ki_ctx = -EXDEV;
 		wake_up_process(iocb->ki_obj.tsk);
 		return;
 	}
@@ -1030,10 +1115,14 @@ void aio_complete(struct kiocb *iocb, long res, long res2)
 	ctx->tail = tail;
 
 	ring = kmap_atomic(ctx->ring_pages[0]);
+	head = ring->head;
 	ring->tail = tail;
 	kunmap_atomic(ring);
 	flush_dcache_page(ctx->ring_pages[0]);
 
+	ctx->completed_events++;
+	if (ctx->completed_events > 1)
+		refill_reqs_available(ctx, head, tail);
 	spin_unlock_irqrestore(&ctx->completion_lock, flags);
 
 	pr_debug("added to ring %p at [%u]\n", iocb, tail);
@@ -1048,7 +1137,6 @@ void aio_complete(struct kiocb *iocb, long res, long res2)
 
 	/* everything turned out well, dispose of the aiocb. */
 	kiocb_free(iocb);
-	put_reqs_available(ctx, 1);
 
 	/*
 	 * We have to order our ring_info tail store above and test
@@ -1091,6 +1179,12 @@ static long aio_read_events_ring(struct kioctx *ctx,
 	head = ring->head;
 	tail = ring->tail;
 	kunmap_atomic(ring);
+
+	/*
+	 * Ensure that once we've read the current tail pointer, that
+	 * we also see the events that were stored up to the tail.
+	 */
+	smp_rmb();
 
 	pr_debug("h%u t%u m%u\n", head, tail, ctx->nr_events);
 
@@ -1344,21 +1438,23 @@ SYSCALL_DEFINE1(io_destroy, aio_context_t, ctx)
 {
 	struct kioctx *ioctx = lookup_ioctx(ctx);
 	if (likely(NULL != ioctx)) {
-		struct completion requests_done =
-			COMPLETION_INITIALIZER_ONSTACK(requests_done);
+		struct ctx_rq_wait wait;
+
+		init_completion(&wait.comp);
+		atomic_set(&wait.count, 1);
 
 		/* Pass requests_done to kill_ioctx() where it can be set
 		 * in a thread-safe way. If we try to set it here then we have
 		 * a race condition if two io_destroy() called simultaneously.
 		 */
-		kill_ioctx(current->mm, ioctx, &requests_done);
+		kill_ioctx(current->mm, ioctx, &wait);
 		percpu_ref_put(&ioctx->users);
 
 		/* Wait until all IO for the context are done. Otherwise kernel
 		 * keep using user-space buffers even if user thinks the context
 		 * is destroyed.
 		 */
-		wait_for_completion(&requests_done);
+		wait_for_completion(&wait.comp);
 
 		return 0;
 	}
@@ -1548,6 +1644,7 @@ static int io_submit_one(struct kioctx *ctx, struct iocb __user *user_iocb,
 		ret = -EBADF;
 		goto out_put_req;
 	}
+	req->ki_ctx |= iocb_flags(req->ki_filp);
 
 	if (iocb->aio_flags & IOCB_FLAG_RESFD) {
 		/*

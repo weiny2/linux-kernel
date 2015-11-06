@@ -72,6 +72,7 @@
 #define   I915_GC_RENDER_CLOCK_166_MHZ	(0 << 0)
 #define   I915_GC_RENDER_CLOCK_200_MHZ	(1 << 0)
 #define   I915_GC_RENDER_CLOCK_333_MHZ	(4 << 0)
+#define GCDGMBUS 0xcc
 #define LBB	0xf4
 
 /* Graphics reset regs */
@@ -289,16 +290,20 @@
 #define GFX_OP_DESTBUFFER_INFO	 ((0x3<<29)|(0x1d<<24)|(0x8e<<16)|1)
 #define GFX_OP_DRAWRECT_INFO     ((0x3<<29)|(0x1d<<24)|(0x80<<16)|(0x3))
 #define GFX_OP_DRAWRECT_INFO_I965  ((0x7900<<16)|0x2)
-#define SRC_COPY_BLT_CMD                ((2<<29)|(0x43<<22)|4)
+
+#define COLOR_BLT_CMD			(2<<29 | 0x40<<22 | (5-2))
+#define SRC_COPY_BLT_CMD		((2<<29)|(0x43<<22)|4)
 #define XY_SRC_COPY_BLT_CMD		((2<<29)|(0x53<<22)|6)
 #define XY_MONO_SRC_COPY_IMM_BLT	((2<<29)|(0x71<<22)|5)
-#define XY_SRC_COPY_BLT_WRITE_ALPHA	(1<<21)
-#define XY_SRC_COPY_BLT_WRITE_RGB	(1<<20)
+#define   BLT_WRITE_A			(2<<20)
+#define   BLT_WRITE_RGB			(1<<20)
+#define   BLT_WRITE_RGBA		(BLT_WRITE_RGB | BLT_WRITE_A)
 #define   BLT_DEPTH_8			(0<<24)
 #define   BLT_DEPTH_16_565		(1<<24)
 #define   BLT_DEPTH_16_1555		(2<<24)
 #define   BLT_DEPTH_32			(3<<24)
-#define   BLT_ROP_GXCOPY		(0xcc<<16)
+#define   BLT_ROP_SRC_COPY		(0xcc<<16)
+#define   BLT_ROP_COLOR_COPY		(0xf0<<16)
 #define XY_SRC_COPY_BLT_SRC_TILED	(1<<15) /* 965+ only */
 #define XY_SRC_COPY_BLT_DST_TILED	(1<<11) /* 965+ only */
 #define CMD_OP_DISPLAYBUFFER_INFO ((0x0<<29)|(0x14<<23)|2)
@@ -309,6 +314,7 @@
 #define   PIPE_CONTROL_GLOBAL_GTT_IVB			(1<<24) /* gen7+ */
 #define   PIPE_CONTROL_CS_STALL				(1<<20)
 #define   PIPE_CONTROL_TLB_INVALIDATE			(1<<18)
+#define   PIPE_CONTROL_MEDIA_STATE_CLEAR		(1<<16)
 #define   PIPE_CONTROL_QW_WRITE				(1<<14)
 #define   PIPE_CONTROL_DEPTH_STALL			(1<<13)
 #define   PIPE_CONTROL_WRITE_FLUSH			(1<<12)
@@ -346,11 +352,24 @@
 #define   IOSF_PORT_PUNIT			0x4
 #define   IOSF_PORT_NC				0x11
 #define   IOSF_PORT_DPIO			0x12
+#define   IOSF_PORT_GPIO_NC			0x13
+#define   IOSF_PORT_CCK				0x14
+#define   IOSF_PORT_CCU				0xA9
+#define   IOSF_PORT_GPS_CORE			0x48
 #define VLV_IOSF_DATA				(VLV_DISPLAY_BASE + 0x2104)
 #define VLV_IOSF_ADDR				(VLV_DISPLAY_BASE + 0x2108)
 
 #define PUNIT_OPCODE_REG_READ			6
 #define PUNIT_OPCODE_REG_WRITE			7
+
+#define PUNIT_REG_PWRGT_CTRL			0x60
+#define PUNIT_REG_PWRGT_STATUS			0x61
+#define	  PUNIT_CLK_GATE			1
+#define	  PUNIT_PWR_RESET			2
+#define	  PUNIT_PWR_GATE			3
+#define	  RENDER_PWRGT				(PUNIT_PWR_GATE << 0)
+#define	  MEDIA_PWRGT				(PUNIT_PWR_GATE << 2)
+#define	  DISP2D_PWRGT				(PUNIT_PWR_GATE << 6)
 
 #define PUNIT_REG_GPU_LFM			0xd3
 #define PUNIT_REG_GPU_FREQ_REQ			0xd4
@@ -372,6 +391,38 @@
 #define   FB_FMAX_VMIN_FREQ_LO_SHIFT		27
 #define   FB_FMAX_VMIN_FREQ_LO_MASK		0xf8000000
 
+/* vlv2 north clock has */
+#define CCK_REG_DSI_PLL_FUSE			0x44
+#define CCK_REG_DSI_PLL_CONTROL			0x48
+#define  DSI_PLL_VCO_EN				(1 << 31)
+#define  DSI_PLL_LDO_GATE			(1 << 30)
+#define  DSI_PLL_P1_POST_DIV_SHIFT		17
+#define  DSI_PLL_P1_POST_DIV_MASK		(0x1ff << 17)
+#define  DSI_PLL_P2_MUX_DSI0_DIV2		(1 << 13)
+#define  DSI_PLL_P3_MUX_DSI1_DIV2		(1 << 12)
+#define  DSI_PLL_MUX_MASK			(3 << 9)
+#define  DSI_PLL_MUX_DSI0_DSIPLL		(0 << 10)
+#define  DSI_PLL_MUX_DSI0_CCK			(1 << 10)
+#define  DSI_PLL_MUX_DSI1_DSIPLL		(0 << 9)
+#define  DSI_PLL_MUX_DSI1_CCK			(1 << 9)
+#define  DSI_PLL_CLK_GATE_MASK			(0xf << 5)
+#define  DSI_PLL_CLK_GATE_DSI0_DSIPLL		(1 << 8)
+#define  DSI_PLL_CLK_GATE_DSI1_DSIPLL		(1 << 7)
+#define  DSI_PLL_CLK_GATE_DSI0_CCK		(1 << 6)
+#define  DSI_PLL_CLK_GATE_DSI1_CCK		(1 << 5)
+#define  DSI_PLL_LOCK				(1 << 0)
+#define CCK_REG_DSI_PLL_DIVIDER			0x4c
+#define  DSI_PLL_LFSR				(1 << 31)
+#define  DSI_PLL_FRACTION_EN			(1 << 30)
+#define  DSI_PLL_FRAC_COUNTER_SHIFT		27
+#define  DSI_PLL_FRAC_COUNTER_MASK		(7 << 27)
+#define  DSI_PLL_USYNC_CNT_SHIFT		18
+#define  DSI_PLL_USYNC_CNT_MASK			(0x1ff << 18)
+#define  DSI_PLL_N1_DIV_SHIFT			16
+#define  DSI_PLL_N1_DIV_MASK			(3 << 16)
+#define  DSI_PLL_M1_DIV_SHIFT			0
+#define  DSI_PLL_M1_DIV_MASK			(0x1ff << 0)
+
 /*
  * DPIO - a special bus for various display related registers to hide behind
  *
@@ -387,11 +438,11 @@
 #define  DPIO_MODSEL1			(1<<3) /* if ref clk b == 27 */
 #define  DPIO_MODSEL0			(1<<2) /* if ref clk a == 27 */
 #define  DPIO_SFR_BYPASS		(1<<1)
-#define  DPIO_RESET			(1<<0)
+#define  DPIO_CMNRST			(1<<0)
 
 #define _DPIO_TX3_SWING_CTL4_A		0x690
 #define _DPIO_TX3_SWING_CTL4_B		0x2a90
-#define DPIO_TX3_SWING_CTL4(pipe) _PIPE(pipe, _DPIO_TX_SWING_CTL4_A, \
+#define DPIO_TX3_SWING_CTL4(pipe) _PIPE(pipe, _DPIO_TX3_SWING_CTL4_A, \
 					_DPIO_TX3_SWING_CTL4_B)
 
 /*
@@ -1104,6 +1155,7 @@
 #define   GMBUS_CYCLE_INDEX	(2<<25)
 #define   GMBUS_CYCLE_STOP	(4<<25)
 #define   GMBUS_BYTE_COUNT_SHIFT 16
+#define   GMBUS_BYTE_COUNT_MAX   256U
 #define   GMBUS_SLAVE_INDEX_SHIFT 8
 #define   GMBUS_SLAVE_ADDR_SHIFT 1
 #define   GMBUS_SLAVE_READ	(1<<0)
@@ -1756,6 +1808,9 @@
  */
 #define HSW_CXT_TOTAL_SIZE		(17 * PAGE_SIZE)
 
+#define VLV_CLK_CTL2			0x101104
+#define   CLK_CTL2_CZCOUNT_30NS_SHIFT	28
+
 /*
  * Overlay regs
  */
@@ -2041,6 +2096,7 @@
 
 /* Gen 4 SDVO/HDMI bits: */
 #define   SDVO_COLOR_FORMAT_8bpc		(0 << 26)
+#define   SDVO_COLOR_FORMAT_MASK		(7 << 26)
 #define   SDVO_ENCODING_SDVO			(0 << 10)
 #define   SDVO_ENCODING_HDMI			(2 << 10)
 #define   HDMI_MODE_SELECT_HDMI			(1 << 9) /* HDMI only */
@@ -2244,6 +2300,21 @@
 #define		PFIT_HORIZ_SCALE_MASK_965	0x00001fff
 
 #define PFIT_AUTO_RATIOS (dev_priv->info->display_mmio_offset + 0x61238)
+
+#define _VLV_BLC_PWM_CTL2_A (dev_priv->info->display_mmio_offset + 0x61250)
+#define _VLV_BLC_PWM_CTL2_B (dev_priv->info->display_mmio_offset + 0x61350)
+#define VLV_BLC_PWM_CTL2(pipe) _PIPE(pipe, _VLV_BLC_PWM_CTL2_A, \
+				     _VLV_BLC_PWM_CTL2_B)
+
+#define _VLV_BLC_PWM_CTL_A (dev_priv->info->display_mmio_offset + 0x61254)
+#define _VLV_BLC_PWM_CTL_B (dev_priv->info->display_mmio_offset + 0x61354)
+#define VLV_BLC_PWM_CTL(pipe) _PIPE(pipe, _VLV_BLC_PWM_CTL_A, \
+				    _VLV_BLC_PWM_CTL_B)
+
+#define _VLV_BLC_HIST_CTL_A (dev_priv->info->display_mmio_offset + 0x61260)
+#define _VLV_BLC_HIST_CTL_B (dev_priv->info->display_mmio_offset + 0x61360)
+#define VLV_BLC_HIST_CTL(pipe) _PIPE(pipe, _VLV_BLC_HIST_CTL_A, \
+				     _VLV_BLC_HIST_CTL_B)
 
 /* Backlight control */
 #define BLC_PWM_CTL2	(dev_priv->info->display_mmio_offset + 0x61250) /* 965+ only */
@@ -2993,6 +3064,7 @@
 #define   PIPECONF_DISABLE	0
 #define   PIPECONF_DOUBLE_WIDE	(1<<30)
 #define   I965_PIPECONF_ACTIVE	(1<<30)
+#define   PIPECONF_DSI_PLL_LOCKED	(1<<29) /* vlv & pipe A only */
 #define   PIPECONF_FRAME_START_DELAY_MASK (3<<27)
 #define   PIPECONF_SINGLE_WIDE	0
 #define   PIPECONF_PIPE_UNLOCKED 0
@@ -3288,17 +3360,17 @@
  *  } while (high1 != high2);
  *  frame = (high1 << 8) | low1;
  */
-#define _PIPEAFRAMEHIGH          (dev_priv->info->display_mmio_offset + 0x70040)
+#define _PIPEAFRAMEHIGH          0x70040
 #define   PIPE_FRAME_HIGH_MASK    0x0000ffff
 #define   PIPE_FRAME_HIGH_SHIFT   0
-#define _PIPEAFRAMEPIXEL         (dev_priv->info->display_mmio_offset + 0x70044)
+#define _PIPEAFRAMEPIXEL         0x70044
 #define   PIPE_FRAME_LOW_MASK     0xff000000
 #define   PIPE_FRAME_LOW_SHIFT    24
 #define   PIPE_PIXEL_MASK         0x00ffffff
 #define   PIPE_PIXEL_SHIFT        0
 /* GM45+ just has to be different */
-#define _PIPEA_FRMCOUNT_GM45	0x70040
-#define _PIPEA_FLIPCOUNT_GM45	0x70044
+#define _PIPEA_FRMCOUNT_GM45	(dev_priv->info->display_mmio_offset + 0x70040)
+#define _PIPEA_FLIPCOUNT_GM45	(dev_priv->info->display_mmio_offset + 0x70044)
 #define PIPE_FRMCOUNT_GM45(pipe) _PIPE(pipe, _PIPEA_FRMCOUNT_GM45, _PIPEB_FRMCOUNT_GM45)
 
 /* Cursor A & B regs */
@@ -3429,10 +3501,10 @@
 #define _PIPEBDSL		(dev_priv->info->display_mmio_offset + 0x71000)
 #define _PIPEBCONF		(dev_priv->info->display_mmio_offset + 0x71008)
 #define _PIPEBSTAT		(dev_priv->info->display_mmio_offset + 0x71024)
-#define _PIPEBFRAMEHIGH		(dev_priv->info->display_mmio_offset + 0x71040)
-#define _PIPEBFRAMEPIXEL	(dev_priv->info->display_mmio_offset + 0x71044)
-#define _PIPEB_FRMCOUNT_GM45	0x71040
-#define _PIPEB_FLIPCOUNT_GM45	0x71044
+#define _PIPEBFRAMEHIGH		0x71040
+#define _PIPEBFRAMEPIXEL	0x71044
+#define _PIPEB_FRMCOUNT_GM45	(dev_priv->info->display_mmio_offset + 0x71040)
+#define _PIPEB_FLIPCOUNT_GM45	(dev_priv->info->display_mmio_offset + 0x71044)
 
 
 /* Display B control */
@@ -4423,6 +4495,8 @@
 #define PIPEA_PP_STATUS         (VLV_DISPLAY_BASE + 0x61200)
 #define PIPEA_PP_CONTROL        (VLV_DISPLAY_BASE + 0x61204)
 #define PIPEA_PP_ON_DELAYS      (VLV_DISPLAY_BASE + 0x61208)
+#define  PANEL_PORT_SELECT_DPB_VLV	(1 << 30)
+#define  PANEL_PORT_SELECT_DPC_VLV	(2 << 30)
 #define PIPEA_PP_OFF_DELAYS     (VLV_DISPLAY_BASE + 0x6120c)
 #define PIPEA_PP_DIVISOR        (VLV_DISPLAY_BASE + 0x61210)
 
@@ -4454,7 +4528,6 @@
 #define  PANEL_PORT_SELECT_MASK	(3 << 30)
 #define  PANEL_PORT_SELECT_LVDS	(0 << 30)
 #define  PANEL_PORT_SELECT_DPA	(1 << 30)
-#define  EDP_PANEL		(1 << 30)
 #define  PANEL_PORT_SELECT_DPC	(2 << 30)
 #define  PANEL_PORT_SELECT_DPD	(3 << 30)
 #define  PANEL_POWER_UP_DELAY_MASK	(0x1fff0000)
@@ -4463,11 +4536,6 @@
 #define  PANEL_LIGHT_ON_DELAY_SHIFT	0
 
 #define PCH_PP_OFF_DELAYS	0xc720c
-#define  PANEL_POWER_PORT_SELECT_MASK	(0x3 << 30)
-#define  PANEL_POWER_PORT_LVDS		(0 << 30)
-#define  PANEL_POWER_PORT_DP_A		(1 << 30)
-#define  PANEL_POWER_PORT_DP_C		(2 << 30)
-#define  PANEL_POWER_PORT_DP_D		(3 << 30)
 #define  PANEL_POWER_DOWN_DELAY_MASK	(0x1fff0000)
 #define  PANEL_POWER_DOWN_DELAY_SHIFT	16
 #define  PANEL_LIGHT_OFF_DELAY_MASK	(0x1fff)
@@ -4690,6 +4758,10 @@
 						 GEN6_PM_RP_DOWN_TIMEOUT)
 
 #define GEN6_GT_GFX_RC6_LOCKED			0x138104
+#define VLV_COUNTER_CONTROL			0x138104
+#define   VLV_COUNT_RANGE_HIGH			(1<<15)
+#define   VLV_MEDIA_RC6_COUNT_EN		(1<<1)
+#define   VLV_RENDER_RC6_COUNT_EN		(1<<0)
 #define GEN6_GT_GFX_RC6				0x138108
 #define GEN6_GT_GFX_RC6p			0x13810C
 #define GEN6_GT_GFX_RC6pp			0x138110
@@ -4788,6 +4860,18 @@
 					CPT_AUD_CNTL_ST_B)
 #define CPT_AUD_CNTRL_ST2		0xE50C0
 
+#define VLV_HDMIW_HDMIEDID_A		(VLV_DISPLAY_BASE + 0x62050)
+#define VLV_HDMIW_HDMIEDID_B		(VLV_DISPLAY_BASE + 0x62150)
+#define VLV_HDMIW_HDMIEDID(pipe) _PIPE(pipe, \
+					VLV_HDMIW_HDMIEDID_A, \
+					VLV_HDMIW_HDMIEDID_B)
+#define VLV_AUD_CNTL_ST_A		(VLV_DISPLAY_BASE + 0x620B4)
+#define VLV_AUD_CNTL_ST_B		(VLV_DISPLAY_BASE + 0x621B4)
+#define VLV_AUD_CNTL_ST(pipe) _PIPE(pipe, \
+					VLV_AUD_CNTL_ST_A, \
+					VLV_AUD_CNTL_ST_B)
+#define VLV_AUD_CNTL_ST2		(VLV_DISPLAY_BASE + 0x620C0)
+
 /* These are the 4 32-bit write offset registers for each stream
  * output buffer.  It determines the offset from the
  * 3DSTATE_SO_BUFFERs that the next streamed vertex output goes to.
@@ -4804,6 +4888,12 @@
 #define CPT_AUD_CFG(pipe) _PIPE(pipe, \
 					CPT_AUD_CONFIG_A, \
 					CPT_AUD_CONFIG_B)
+#define VLV_AUD_CONFIG_A		(VLV_DISPLAY_BASE + 0x62000)
+#define VLV_AUD_CONFIG_B		(VLV_DISPLAY_BASE + 0x62100)
+#define VLV_AUD_CFG(pipe) _PIPE(pipe, \
+					VLV_AUD_CONFIG_A, \
+					VLV_AUD_CONFIG_B)
+
 #define   AUD_CONFIG_N_VALUE_INDEX		(1 << 29)
 #define   AUD_CONFIG_N_PROG_ENABLE		(1 << 28)
 #define   AUD_CONFIG_UPPER_N_SHIFT		20
@@ -5134,5 +5224,415 @@
 #define PIPE_CSC_POSTOFF_HI(pipe) _PIPE(pipe, _PIPE_A_CSC_POSTOFF_HI, _PIPE_B_CSC_POSTOFF_HI)
 #define PIPE_CSC_POSTOFF_ME(pipe) _PIPE(pipe, _PIPE_A_CSC_POSTOFF_ME, _PIPE_B_CSC_POSTOFF_ME)
 #define PIPE_CSC_POSTOFF_LO(pipe) _PIPE(pipe, _PIPE_A_CSC_POSTOFF_LO, _PIPE_B_CSC_POSTOFF_LO)
+
+/* VLV MIPI registers */
+
+#define _MIPIA_PORT_CTRL			(VLV_DISPLAY_BASE + 0x61190)
+#define _MIPIB_PORT_CTRL			(VLV_DISPLAY_BASE + 0x61700)
+#define MIPI_PORT_CTRL(pipe)		_PIPE(pipe, _MIPIA_PORT_CTRL, _MIPIB_PORT_CTRL)
+#define  DPI_ENABLE					(1 << 31) /* A + B */
+#define  MIPIA_MIPI4DPHY_DELAY_COUNT_SHIFT		27
+#define  MIPIA_MIPI4DPHY_DELAY_COUNT_MASK		(0xf << 27)
+#define  DUAL_LINK_MODE_MASK				(1 << 26)
+#define  DUAL_LINK_MODE_FRONT_BACK			(0 << 26)
+#define  DUAL_LINK_MODE_PIXEL_ALTERNATIVE		(1 << 26)
+#define  DITHERING_ENABLE				(1 << 25) /* A + B */
+#define  FLOPPED_HSTX					(1 << 23)
+#define  DE_INVERT					(1 << 19) /* XXX */
+#define  MIPIA_FLISDSI_DELAY_COUNT_SHIFT		18
+#define  MIPIA_FLISDSI_DELAY_COUNT_MASK			(0xf << 18)
+#define  AFE_LATCHOUT					(1 << 17)
+#define  LP_OUTPUT_HOLD					(1 << 16)
+#define  MIPIB_FLISDSI_DELAY_COUNT_HIGH_SHIFT		15
+#define  MIPIB_FLISDSI_DELAY_COUNT_HIGH_MASK		(1 << 15)
+#define  MIPIB_MIPI4DPHY_DELAY_COUNT_SHIFT		11
+#define  MIPIB_MIPI4DPHY_DELAY_COUNT_MASK		(0xf << 11)
+#define  CSB_SHIFT					9
+#define  CSB_MASK					(3 << 9)
+#define  CSB_20MHZ					(0 << 9)
+#define  CSB_10MHZ					(1 << 9)
+#define  CSB_40MHZ					(2 << 9)
+#define  BANDGAP_MASK					(1 << 8)
+#define  BANDGAP_PNW_CIRCUIT				(0 << 8)
+#define  BANDGAP_LNC_CIRCUIT				(1 << 8)
+#define  MIPIB_FLISDSI_DELAY_COUNT_LOW_SHIFT		5
+#define  MIPIB_FLISDSI_DELAY_COUNT_LOW_MASK		(7 << 5)
+#define  TEARING_EFFECT_DELAY				(1 << 4) /* A + B */
+#define  TEARING_EFFECT_SHIFT				2 /* A + B */
+#define  TEARING_EFFECT_MASK				(3 << 2)
+#define  TEARING_EFFECT_OFF				(0 << 2)
+#define  TEARING_EFFECT_DSI				(1 << 2)
+#define  TEARING_EFFECT_GPIO				(2 << 2)
+#define  LANE_CONFIGURATION_SHIFT			0
+#define  LANE_CONFIGURATION_MASK			(3 << 0)
+#define  LANE_CONFIGURATION_4LANE			(0 << 0)
+#define  LANE_CONFIGURATION_DUAL_LINK_A			(1 << 0)
+#define  LANE_CONFIGURATION_DUAL_LINK_B			(2 << 0)
+
+#define _MIPIA_TEARING_CTRL			(VLV_DISPLAY_BASE + 0x61194)
+#define _MIPIB_TEARING_CTRL			(VLV_DISPLAY_BASE + 0x61704)
+#define MIPI_TEARING_CTRL(pipe)		_PIPE(pipe, _MIPIA_TEARING_CTRL, _MIPIB_TEARING_CTRL)
+#define  TEARING_EFFECT_DELAY_SHIFT			0
+#define  TEARING_EFFECT_DELAY_MASK			(0xffff << 0)
+
+/* XXX: all bits reserved */
+#define _MIPIA_AUTOPWG				(VLV_DISPLAY_BASE + 0x611a0)
+
+/* MIPI DSI Controller and D-PHY registers */
+
+#define _MIPIA_DEVICE_READY			(VLV_DISPLAY_BASE + 0xb000)
+#define _MIPIB_DEVICE_READY			(VLV_DISPLAY_BASE + 0xb800)
+#define MIPI_DEVICE_READY(pipe)		_PIPE(pipe, _MIPIA_DEVICE_READY, _MIPIB_DEVICE_READY)
+#define  BUS_POSSESSION					(1 << 3) /* set to give bus to receiver */
+#define  ULPS_STATE_MASK				(3 << 1)
+#define  ULPS_STATE_ENTER				(2 << 1)
+#define  ULPS_STATE_EXIT				(1 << 1)
+#define  ULPS_STATE_NORMAL_OPERATION			(0 << 1)
+#define  DEVICE_READY					(1 << 0)
+
+#define _MIPIA_INTR_STAT			(VLV_DISPLAY_BASE + 0xb004)
+#define _MIPIB_INTR_STAT			(VLV_DISPLAY_BASE + 0xb804)
+#define MIPI_INTR_STAT(pipe)		_PIPE(pipe, _MIPIA_INTR_STAT, _MIPIB_INTR_STAT)
+#define _MIPIA_INTR_EN				(VLV_DISPLAY_BASE + 0xb008)
+#define _MIPIB_INTR_EN				(VLV_DISPLAY_BASE + 0xb808)
+#define MIPI_INTR_EN(pipe)		_PIPE(pipe, _MIPIA_INTR_EN, _MIPIB_INTR_EN)
+#define  TEARING_EFFECT					(1 << 31)
+#define  SPL_PKT_SENT_INTERRUPT				(1 << 30)
+#define  GEN_READ_DATA_AVAIL				(1 << 29)
+#define  LP_GENERIC_WR_FIFO_FULL			(1 << 28)
+#define  HS_GENERIC_WR_FIFO_FULL			(1 << 27)
+#define  RX_PROT_VIOLATION				(1 << 26)
+#define  RX_INVALID_TX_LENGTH				(1 << 25)
+#define  ACK_WITH_NO_ERROR				(1 << 24)
+#define  TURN_AROUND_ACK_TIMEOUT			(1 << 23)
+#define  LP_RX_TIMEOUT					(1 << 22)
+#define  HS_TX_TIMEOUT					(1 << 21)
+#define  DPI_FIFO_UNDERRUN				(1 << 20)
+#define  LOW_CONTENTION					(1 << 19)
+#define  HIGH_CONTENTION				(1 << 18)
+#define  TXDSI_VC_ID_INVALID				(1 << 17)
+#define  TXDSI_DATA_TYPE_NOT_RECOGNISED			(1 << 16)
+#define  TXCHECKSUM_ERROR				(1 << 15)
+#define  TXECC_MULTIBIT_ERROR				(1 << 14)
+#define  TXECC_SINGLE_BIT_ERROR				(1 << 13)
+#define  TXFALSE_CONTROL_ERROR				(1 << 12)
+#define  RXDSI_VC_ID_INVALID				(1 << 11)
+#define  RXDSI_DATA_TYPE_NOT_REGOGNISED			(1 << 10)
+#define  RXCHECKSUM_ERROR				(1 << 9)
+#define  RXECC_MULTIBIT_ERROR				(1 << 8)
+#define  RXECC_SINGLE_BIT_ERROR				(1 << 7)
+#define  RXFALSE_CONTROL_ERROR				(1 << 6)
+#define  RXHS_RECEIVE_TIMEOUT_ERROR			(1 << 5)
+#define  RX_LP_TX_SYNC_ERROR				(1 << 4)
+#define  RXEXCAPE_MODE_ENTRY_ERROR			(1 << 3)
+#define  RXEOT_SYNC_ERROR				(1 << 2)
+#define  RXSOT_SYNC_ERROR				(1 << 1)
+#define  RXSOT_ERROR					(1 << 0)
+
+#define _MIPIA_DSI_FUNC_PRG			(VLV_DISPLAY_BASE + 0xb00c)
+#define _MIPIB_DSI_FUNC_PRG			(VLV_DISPLAY_BASE + 0xb80c)
+#define MIPI_DSI_FUNC_PRG(pipe)		_PIPE(pipe, _MIPIA_DSI_FUNC_PRG, _MIPIB_DSI_FUNC_PRG)
+#define  CMD_MODE_DATA_WIDTH_MASK			(7 << 13)
+#define  CMD_MODE_NOT_SUPPORTED				(0 << 13)
+#define  CMD_MODE_DATA_WIDTH_16_BIT			(1 << 13)
+#define  CMD_MODE_DATA_WIDTH_9_BIT			(2 << 13)
+#define  CMD_MODE_DATA_WIDTH_8_BIT			(3 << 13)
+#define  CMD_MODE_DATA_WIDTH_OPTION1			(4 << 13)
+#define  CMD_MODE_DATA_WIDTH_OPTION2			(5 << 13)
+#define  VID_MODE_FORMAT_MASK				(0xf << 7)
+#define  VID_MODE_NOT_SUPPORTED				(0 << 7)
+#define  VID_MODE_FORMAT_RGB565				(1 << 7)
+#define  VID_MODE_FORMAT_RGB666				(2 << 7)
+#define  VID_MODE_FORMAT_RGB666_LOOSE			(3 << 7)
+#define  VID_MODE_FORMAT_RGB888				(4 << 7)
+#define  CMD_MODE_CHANNEL_NUMBER_SHIFT			5
+#define  CMD_MODE_CHANNEL_NUMBER_MASK			(3 << 5)
+#define  VID_MODE_CHANNEL_NUMBER_SHIFT			3
+#define  VID_MODE_CHANNEL_NUMBER_MASK			(3 << 3)
+#define  DATA_LANES_PRG_REG_SHIFT			0
+#define  DATA_LANES_PRG_REG_MASK			(7 << 0)
+
+#define _MIPIA_HS_TX_TIMEOUT			(VLV_DISPLAY_BASE + 0xb010)
+#define _MIPIB_HS_TX_TIMEOUT			(VLV_DISPLAY_BASE + 0xb810)
+#define MIPI_HS_TX_TIMEOUT(pipe)	_PIPE(pipe, _MIPIA_HS_TX_TIMEOUT, _MIPIB_HS_TX_TIMEOUT)
+#define  HIGH_SPEED_TX_TIMEOUT_COUNTER_MASK		0xffffff
+
+#define _MIPIA_LP_RX_TIMEOUT			(VLV_DISPLAY_BASE + 0xb014)
+#define _MIPIB_LP_RX_TIMEOUT			(VLV_DISPLAY_BASE + 0xb814)
+#define MIPI_LP_RX_TIMEOUT(pipe)	_PIPE(pipe, _MIPIA_LP_RX_TIMEOUT, _MIPIB_LP_RX_TIMEOUT)
+#define  LOW_POWER_RX_TIMEOUT_COUNTER_MASK		0xffffff
+
+#define _MIPIA_TURN_AROUND_TIMEOUT		(VLV_DISPLAY_BASE + 0xb018)
+#define _MIPIB_TURN_AROUND_TIMEOUT		(VLV_DISPLAY_BASE + 0xb818)
+#define MIPI_TURN_AROUND_TIMEOUT(pipe)	_PIPE(pipe, _MIPIA_TURN_AROUND_TIMEOUT, _MIPIB_TURN_AROUND_TIMEOUT)
+#define  TURN_AROUND_TIMEOUT_MASK			0x3f
+
+#define _MIPIA_DEVICE_RESET_TIMER		(VLV_DISPLAY_BASE + 0xb01c)
+#define _MIPIB_DEVICE_RESET_TIMER		(VLV_DISPLAY_BASE + 0xb81c)
+#define MIPI_DEVICE_RESET_TIMER(pipe)	_PIPE(pipe, _MIPIA_DEVICE_RESET_TIMER, _MIPIB_DEVICE_RESET_TIMER)
+#define  DEVICE_RESET_TIMER_MASK			0xffff
+
+#define _MIPIA_DPI_RESOLUTION			(VLV_DISPLAY_BASE + 0xb020)
+#define _MIPIB_DPI_RESOLUTION			(VLV_DISPLAY_BASE + 0xb820)
+#define MIPI_DPI_RESOLUTION(pipe)	_PIPE(pipe, _MIPIA_DPI_RESOLUTION, _MIPIB_DPI_RESOLUTION)
+#define  VERTICAL_ADDRESS_SHIFT				16
+#define  VERTICAL_ADDRESS_MASK				(0xffff << 16)
+#define  HORIZONTAL_ADDRESS_SHIFT			0
+#define  HORIZONTAL_ADDRESS_MASK			0xffff
+
+#define _MIPIA_DBI_FIFO_THROTTLE		(VLV_DISPLAY_BASE + 0xb024)
+#define _MIPIB_DBI_FIFO_THROTTLE		(VLV_DISPLAY_BASE + 0xb824)
+#define MIPI_DBI_FIFO_THROTTLE(pipe)	_PIPE(pipe, _MIPIA_DBI_FIFO_THROTTLE, _MIPIB_DBI_FIFO_THROTTLE)
+#define  DBI_FIFO_EMPTY_HALF				(0 << 0)
+#define  DBI_FIFO_EMPTY_QUARTER				(1 << 0)
+#define  DBI_FIFO_EMPTY_7_LOCATIONS			(2 << 0)
+
+/* regs below are bits 15:0 */
+#define _MIPIA_HSYNC_PADDING_COUNT		(VLV_DISPLAY_BASE + 0xb028)
+#define _MIPIB_HSYNC_PADDING_COUNT		(VLV_DISPLAY_BASE + 0xb828)
+#define MIPI_HSYNC_PADDING_COUNT(pipe)	_PIPE(pipe, _MIPIA_HSYNC_PADDING_COUNT, _MIPIB_HSYNC_PADDING_COUNT)
+
+#define _MIPIA_HBP_COUNT			(VLV_DISPLAY_BASE + 0xb02c)
+#define _MIPIB_HBP_COUNT			(VLV_DISPLAY_BASE + 0xb82c)
+#define MIPI_HBP_COUNT(pipe)		_PIPE(pipe, _MIPIA_HBP_COUNT, _MIPIB_HBP_COUNT)
+
+#define _MIPIA_HFP_COUNT			(VLV_DISPLAY_BASE + 0xb030)
+#define _MIPIB_HFP_COUNT			(VLV_DISPLAY_BASE + 0xb830)
+#define MIPI_HFP_COUNT(pipe)		_PIPE(pipe, _MIPIA_HFP_COUNT, _MIPIB_HFP_COUNT)
+
+#define _MIPIA_HACTIVE_AREA_COUNT		(VLV_DISPLAY_BASE + 0xb034)
+#define _MIPIB_HACTIVE_AREA_COUNT		(VLV_DISPLAY_BASE + 0xb834)
+#define MIPI_HACTIVE_AREA_COUNT(pipe)	_PIPE(pipe, _MIPIA_HACTIVE_AREA_COUNT, _MIPIB_HACTIVE_AREA_COUNT)
+
+#define _MIPIA_VSYNC_PADDING_COUNT		(VLV_DISPLAY_BASE + 0xb038)
+#define _MIPIB_VSYNC_PADDING_COUNT		(VLV_DISPLAY_BASE + 0xb838)
+#define MIPI_VSYNC_PADDING_COUNT(pipe)	_PIPE(pipe, _MIPIA_VSYNC_PADDING_COUNT, _MIPIB_VSYNC_PADDING_COUNT)
+
+#define _MIPIA_VBP_COUNT			(VLV_DISPLAY_BASE + 0xb03c)
+#define _MIPIB_VBP_COUNT			(VLV_DISPLAY_BASE + 0xb83c)
+#define MIPI_VBP_COUNT(pipe)		_PIPE(pipe, _MIPIA_VBP_COUNT, _MIPIB_VBP_COUNT)
+
+#define _MIPIA_VFP_COUNT			(VLV_DISPLAY_BASE + 0xb040)
+#define _MIPIB_VFP_COUNT			(VLV_DISPLAY_BASE + 0xb840)
+#define MIPI_VFP_COUNT(pipe)		_PIPE(pipe, _MIPIA_VFP_COUNT, _MIPIB_VFP_COUNT)
+
+#define _MIPIA_HIGH_LOW_SWITCH_COUNT		(VLV_DISPLAY_BASE + 0xb044)
+#define _MIPIB_HIGH_LOW_SWITCH_COUNT		(VLV_DISPLAY_BASE + 0xb844)
+#define MIPI_HIGH_LOW_SWITCH_COUNT(pipe)	_PIPE(pipe, _MIPIA_HIGH_LOW_SWITCH_COUNT, _MIPIB_HIGH_LOW_SWITCH_COUNT)
+/* regs above are bits 15:0 */
+
+#define _MIPIA_DPI_CONTROL			(VLV_DISPLAY_BASE + 0xb048)
+#define _MIPIB_DPI_CONTROL			(VLV_DISPLAY_BASE + 0xb848)
+#define MIPI_DPI_CONTROL(pipe)		_PIPE(pipe, _MIPIA_DPI_CONTROL, _MIPIB_DPI_CONTROL)
+#define  DPI_LP_MODE					(1 << 6)
+#define  BACKLIGHT_OFF					(1 << 5)
+#define  BACKLIGHT_ON					(1 << 4)
+#define  COLOR_MODE_OFF					(1 << 3)
+#define  COLOR_MODE_ON					(1 << 2)
+#define  TURN_ON					(1 << 1)
+#define  SHUTDOWN					(1 << 0)
+
+#define _MIPIA_DPI_DATA				(VLV_DISPLAY_BASE + 0xb04c)
+#define _MIPIB_DPI_DATA				(VLV_DISPLAY_BASE + 0xb84c)
+#define MIPI_DPI_DATA(pipe)		_PIPE(pipe, _MIPIA_DPI_DATA, _MIPIB_DPI_DATA)
+#define  COMMAND_BYTE_SHIFT				0
+#define  COMMAND_BYTE_MASK				(0x3f << 0)
+
+#define _MIPIA_INIT_COUNT			(VLV_DISPLAY_BASE + 0xb050)
+#define _MIPIB_INIT_COUNT			(VLV_DISPLAY_BASE + 0xb850)
+#define MIPI_INIT_COUNT(pipe)		_PIPE(pipe, _MIPIA_INIT_COUNT, _MIPIB_INIT_COUNT)
+#define  MASTER_INIT_TIMER_SHIFT			0
+#define  MASTER_INIT_TIMER_MASK				(0xffff << 0)
+
+#define _MIPIA_MAX_RETURN_PKT_SIZE		(VLV_DISPLAY_BASE + 0xb054)
+#define _MIPIB_MAX_RETURN_PKT_SIZE		(VLV_DISPLAY_BASE + 0xb854)
+#define MIPI_MAX_RETURN_PKT_SIZE(pipe)	_PIPE(pipe, _MIPIA_MAX_RETURN_PKT_SIZE, _MIPIB_MAX_RETURN_PKT_SIZE)
+#define  MAX_RETURN_PKT_SIZE_SHIFT			0
+#define  MAX_RETURN_PKT_SIZE_MASK			(0x3ff << 0)
+
+#define _MIPIA_VIDEO_MODE_FORMAT		(VLV_DISPLAY_BASE + 0xb058)
+#define _MIPIB_VIDEO_MODE_FORMAT		(VLV_DISPLAY_BASE + 0xb858)
+#define MIPI_VIDEO_MODE_FORMAT(pipe)	_PIPE(pipe, _MIPIA_VIDEO_MODE_FORMAT, _MIPIB_VIDEO_MODE_FORMAT)
+#define  RANDOM_DPI_DISPLAY_RESOLUTION			(1 << 4)
+#define  DISABLE_VIDEO_BTA				(1 << 3)
+#define  IP_TG_CONFIG					(1 << 2)
+#define  VIDEO_MODE_NON_BURST_WITH_SYNC_PULSE		(1 << 0)
+#define  VIDEO_MODE_NON_BURST_WITH_SYNC_EVENTS		(2 << 0)
+#define  VIDEO_MODE_BURST				(3 << 0)
+
+#define _MIPIA_EOT_DISABLE			(VLV_DISPLAY_BASE + 0xb05c)
+#define _MIPIB_EOT_DISABLE			(VLV_DISPLAY_BASE + 0xb85c)
+#define MIPI_EOT_DISABLE(pipe)		_PIPE(pipe, _MIPIA_EOT_DISABLE, _MIPIB_EOT_DISABLE)
+#define  LP_RX_TIMEOUT_ERROR_RECOVERY_DISABLE		(1 << 7)
+#define  HS_RX_TIMEOUT_ERROR_RECOVERY_DISABLE		(1 << 6)
+#define  LOW_CONTENTION_RECOVERY_DISABLE		(1 << 5)
+#define  HIGH_CONTENTION_RECOVERY_DISABLE		(1 << 4)
+#define  TXDSI_TYPE_NOT_RECOGNISED_ERROR_RECOVERY_DISABLE (1 << 3)
+#define  TXECC_MULTIBIT_ERROR_RECOVERY_DISABLE		(1 << 2)
+#define  CLOCKSTOP					(1 << 1)
+#define  EOT_DISABLE					(1 << 0)
+
+#define _MIPIA_LP_BYTECLK			(VLV_DISPLAY_BASE + 0xb060)
+#define _MIPIB_LP_BYTECLK			(VLV_DISPLAY_BASE + 0xb860)
+#define MIPI_LP_BYTECLK(pipe)		_PIPE(pipe, _MIPIA_LP_BYTECLK, _MIPIB_LP_BYTECLK)
+#define  LP_BYTECLK_SHIFT				0
+#define  LP_BYTECLK_MASK				(0xffff << 0)
+
+/* bits 31:0 */
+#define _MIPIA_LP_GEN_DATA			(VLV_DISPLAY_BASE + 0xb064)
+#define _MIPIB_LP_GEN_DATA			(VLV_DISPLAY_BASE + 0xb864)
+#define MIPI_LP_GEN_DATA(pipe)		_PIPE(pipe, _MIPIA_LP_GEN_DATA, _MIPIB_LP_GEN_DATA)
+
+/* bits 31:0 */
+#define _MIPIA_HS_GEN_DATA			(VLV_DISPLAY_BASE + 0xb068)
+#define _MIPIB_HS_GEN_DATA			(VLV_DISPLAY_BASE + 0xb868)
+#define MIPI_HS_GEN_DATA(pipe)		_PIPE(pipe, _MIPIA_HS_GEN_DATA, _MIPIB_HS_GEN_DATA)
+
+#define _MIPIA_LP_GEN_CTRL			(VLV_DISPLAY_BASE + 0xb06c)
+#define _MIPIB_LP_GEN_CTRL			(VLV_DISPLAY_BASE + 0xb86c)
+#define MIPI_LP_GEN_CTRL(pipe)		_PIPE(pipe, _MIPIA_LP_GEN_CTRL, _MIPIB_LP_GEN_CTRL)
+#define _MIPIA_HS_GEN_CTRL			(VLV_DISPLAY_BASE + 0xb070)
+#define _MIPIB_HS_GEN_CTRL			(VLV_DISPLAY_BASE + 0xb870)
+#define MIPI_HS_GEN_CTRL(pipe)		_PIPE(pipe, _MIPIA_HS_GEN_CTRL, _MIPIB_HS_GEN_CTRL)
+#define  LONG_PACKET_WORD_COUNT_SHIFT			8
+#define  LONG_PACKET_WORD_COUNT_MASK			(0xffff << 8)
+#define  SHORT_PACKET_PARAM_SHIFT			8
+#define  SHORT_PACKET_PARAM_MASK			(0xffff << 8)
+#define  VIRTUAL_CHANNEL_SHIFT				6
+#define  VIRTUAL_CHANNEL_MASK				(3 << 6)
+#define  DATA_TYPE_SHIFT				0
+#define  DATA_TYPE_MASK					(3f << 0)
+/* data type values, see include/video/mipi_display.h */
+
+#define _MIPIA_GEN_FIFO_STAT			(VLV_DISPLAY_BASE + 0xb074)
+#define _MIPIB_GEN_FIFO_STAT			(VLV_DISPLAY_BASE + 0xb874)
+#define MIPI_GEN_FIFO_STAT(pipe)	_PIPE(pipe, _MIPIA_GEN_FIFO_STAT, _MIPIB_GEN_FIFO_STAT)
+#define  DPI_FIFO_EMPTY					(1 << 28)
+#define  DBI_FIFO_EMPTY					(1 << 27)
+#define  LP_CTRL_FIFO_EMPTY				(1 << 26)
+#define  LP_CTRL_FIFO_HALF_EMPTY			(1 << 25)
+#define  LP_CTRL_FIFO_FULL				(1 << 24)
+#define  HS_CTRL_FIFO_EMPTY				(1 << 18)
+#define  HS_CTRL_FIFO_HALF_EMPTY			(1 << 17)
+#define  HS_CTRL_FIFO_FULL				(1 << 16)
+#define  LP_DATA_FIFO_EMPTY				(1 << 10)
+#define  LP_DATA_FIFO_HALF_EMPTY			(1 << 9)
+#define  LP_DATA_FIFO_FULL				(1 << 8)
+#define  HS_DATA_FIFO_EMPTY				(1 << 2)
+#define  HS_DATA_FIFO_HALF_EMPTY			(1 << 1)
+#define  HS_DATA_FIFO_FULL				(1 << 0)
+
+#define _MIPIA_HS_LS_DBI_ENABLE			(VLV_DISPLAY_BASE + 0xb078)
+#define _MIPIB_HS_LS_DBI_ENABLE			(VLV_DISPLAY_BASE + 0xb878)
+#define MIPI_HS_LP_DBI_ENABLE(pipe)	_PIPE(pipe, _MIPIA_HS_LS_DBI_ENABLE, _MIPIB_HS_LS_DBI_ENABLE)
+#define  DBI_HS_LP_MODE_MASK				(1 << 0)
+#define  DBI_LP_MODE					(1 << 0)
+#define  DBI_HS_MODE					(0 << 0)
+
+#define _MIPIA_DPHY_PARAM			(VLV_DISPLAY_BASE + 0xb080)
+#define _MIPIB_DPHY_PARAM			(VLV_DISPLAY_BASE + 0xb880)
+#define MIPI_DPHY_PARAM(pipe)		_PIPE(pipe, _MIPIA_DPHY_PARAM, _MIPIB_DPHY_PARAM)
+#define  EXIT_ZERO_COUNT_SHIFT				24
+#define  EXIT_ZERO_COUNT_MASK				(0x3f << 24)
+#define  TRAIL_COUNT_SHIFT				16
+#define  TRAIL_COUNT_MASK				(0x1f << 16)
+#define  CLK_ZERO_COUNT_SHIFT				8
+#define  CLK_ZERO_COUNT_MASK				(0xff << 8)
+#define  PREPARE_COUNT_SHIFT				0
+#define  PREPARE_COUNT_MASK				(0x3f << 0)
+
+/* bits 31:0 */
+#define _MIPIA_DBI_BW_CTRL			(VLV_DISPLAY_BASE + 0xb084)
+#define _MIPIB_DBI_BW_CTRL			(VLV_DISPLAY_BASE + 0xb884)
+#define MIPI_DBI_BW_CTRL(pipe)		_PIPE(pipe, _MIPIA_DBI_BW_CTRL, _MIPIB_DBI_BW_CTRL)
+
+#define _MIPIA_CLK_LANE_SWITCH_TIME_CNT		(VLV_DISPLAY_BASE + 0xb088)
+#define _MIPIB_CLK_LANE_SWITCH_TIME_CNT		(VLV_DISPLAY_BASE + 0xb888)
+#define MIPI_CLK_LANE_SWITCH_TIME_CNT(pipe)	_PIPE(pipe, _MIPIA_CLK_LANE_SWITCH_TIME_CNT, _MIPIB_CLK_LANE_SWITCH_TIME_CNT)
+#define  LP_HS_SSW_CNT_SHIFT				16
+#define  LP_HS_SSW_CNT_MASK				(0xffff << 16)
+#define  HS_LP_PWR_SW_CNT_SHIFT				0
+#define  HS_LP_PWR_SW_CNT_MASK				(0xffff << 0)
+
+#define _MIPIA_STOP_STATE_STALL			(VLV_DISPLAY_BASE + 0xb08c)
+#define _MIPIB_STOP_STATE_STALL			(VLV_DISPLAY_BASE + 0xb88c)
+#define MIPI_STOP_STATE_STALL(pipe)	_PIPE(pipe, _MIPIA_STOP_STATE_STALL, _MIPIB_STOP_STATE_STALL)
+#define  STOP_STATE_STALL_COUNTER_SHIFT			0
+#define  STOP_STATE_STALL_COUNTER_MASK			(0xff << 0)
+
+#define _MIPIA_INTR_STAT_REG_1			(VLV_DISPLAY_BASE + 0xb090)
+#define _MIPIB_INTR_STAT_REG_1			(VLV_DISPLAY_BASE + 0xb890)
+#define MIPI_INTR_STAT_REG_1(pipe)	_PIPE(pipe, _MIPIA_INTR_STAT_REG_1, _MIPIB_INTR_STAT_REG_1)
+#define _MIPIA_INTR_EN_REG_1			(VLV_DISPLAY_BASE + 0xb094)
+#define _MIPIB_INTR_EN_REG_1			(VLV_DISPLAY_BASE + 0xb894)
+#define MIPI_INTR_EN_REG_1(pipe)	_PIPE(pipe, _MIPIA_INTR_EN_REG_1, _MIPIB_INTR_EN_REG_1)
+#define  RX_CONTENTION_DETECTED				(1 << 0)
+
+/* XXX: only pipe A ?!? */
+#define MIPIA_DBI_TYPEC_CTRL			(VLV_DISPLAY_BASE + 0xb100)
+#define  DBI_TYPEC_ENABLE				(1 << 31)
+#define  DBI_TYPEC_WIP					(1 << 30)
+#define  DBI_TYPEC_OPTION_SHIFT				28
+#define  DBI_TYPEC_OPTION_MASK				(3 << 28)
+#define  DBI_TYPEC_FREQ_SHIFT				24
+#define  DBI_TYPEC_FREQ_MASK				(0xf << 24)
+#define  DBI_TYPEC_OVERRIDE				(1 << 8)
+#define  DBI_TYPEC_OVERRIDE_COUNTER_SHIFT		0
+#define  DBI_TYPEC_OVERRIDE_COUNTER_MASK		(0xff << 0)
+
+
+/* MIPI adapter registers */
+
+#define _MIPIA_CTRL				(VLV_DISPLAY_BASE + 0xb104)
+#define _MIPIB_CTRL				(VLV_DISPLAY_BASE + 0xb904)
+#define MIPI_CTRL(pipe)			_PIPE(pipe, _MIPIA_CTRL, _MIPIB_CTRL)
+#define  ESCAPE_CLOCK_DIVIDER_SHIFT			5 /* A only */
+#define  ESCAPE_CLOCK_DIVIDER_MASK			(3 << 5)
+#define  ESCAPE_CLOCK_DIVIDER_1				(0 << 5)
+#define  ESCAPE_CLOCK_DIVIDER_2				(1 << 5)
+#define  ESCAPE_CLOCK_DIVIDER_4				(2 << 5)
+#define  READ_REQUEST_PRIORITY_SHIFT			3
+#define  READ_REQUEST_PRIORITY_MASK			(3 << 3)
+#define  READ_REQUEST_PRIORITY_LOW			(0 << 3)
+#define  READ_REQUEST_PRIORITY_HIGH			(3 << 3)
+#define  RGB_FLIP_TO_BGR				(1 << 2)
+
+#define _MIPIA_DATA_ADDRESS			(VLV_DISPLAY_BASE + 0xb108)
+#define _MIPIB_DATA_ADDRESS			(VLV_DISPLAY_BASE + 0xb908)
+#define MIPI_DATA_ADDRESS(pipe)		_PIPE(pipe, _MIPIA_DATA_ADDRESS, _MIPIB_DATA_ADDRESS)
+#define  DATA_MEM_ADDRESS_SHIFT				5
+#define  DATA_MEM_ADDRESS_MASK				(0x7ffffff << 5)
+#define  DATA_VALID					(1 << 0)
+
+#define _MIPIA_DATA_LENGTH			(VLV_DISPLAY_BASE + 0xb10c)
+#define _MIPIB_DATA_LENGTH			(VLV_DISPLAY_BASE + 0xb90c)
+#define MIPI_DATA_LENGTH(pipe)		_PIPE(pipe, _MIPIA_DATA_LENGTH, _MIPIB_DATA_LENGTH)
+#define  DATA_LENGTH_SHIFT				0
+#define  DATA_LENGTH_MASK				(0xfffff << 0)
+
+#define _MIPIA_COMMAND_ADDRESS			(VLV_DISPLAY_BASE + 0xb110)
+#define _MIPIB_COMMAND_ADDRESS			(VLV_DISPLAY_BASE + 0xb910)
+#define MIPI_COMMAND_ADDRESS(pipe)	_PIPE(pipe, _MIPIA_COMMAND_ADDRESS, _MIPIB_COMMAND_ADDRESS)
+#define  COMMAND_MEM_ADDRESS_SHIFT			5
+#define  COMMAND_MEM_ADDRESS_MASK			(0x7ffffff << 5)
+#define  AUTO_PWG_ENABLE				(1 << 2)
+#define  MEMORY_WRITE_DATA_FROM_PIPE_RENDERING		(1 << 1)
+#define  COMMAND_VALID					(1 << 0)
+
+#define _MIPIA_COMMAND_LENGTH			(VLV_DISPLAY_BASE + 0xb114)
+#define _MIPIB_COMMAND_LENGTH			(VLV_DISPLAY_BASE + 0xb914)
+#define MIPI_COMMAND_LENGTH(pipe)	_PIPE(pipe, _MIPIA_COMMAND_LENGTH, _MIPIB_COMMAND_LENGTH)
+#define  COMMAND_LENGTH_SHIFT(n)			(8 * (n)) /* n: 0...3 */
+#define  COMMAND_LENGTH_MASK(n)				(0xff << (8 * (n)))
+
+#define _MIPIA_READ_DATA_RETURN0		(VLV_DISPLAY_BASE + 0xb118)
+#define _MIPIB_READ_DATA_RETURN0		(VLV_DISPLAY_BASE + 0xb918)
+#define MIPI_READ_DATA_RETURN(pipe, n) \
+	(_PIPE(pipe, _MIPIA_READ_DATA_RETURN0, _MIPIB_READ_DATA_RETURN0) + 4 * (n)) /* n: 0...7 */
+
+#define _MIPIA_READ_DATA_VALID			(VLV_DISPLAY_BASE + 0xb138)
+#define _MIPIB_READ_DATA_VALID			(VLV_DISPLAY_BASE + 0xb938)
+#define MIPI_READ_DATA_VALID(pipe)	_PIPE(pipe, _MIPIA_READ_DATA_VALID, _MIPIB_READ_DATA_VALID)
+#define  READ_DATA_VALID(n)				(1 << (n))
 
 #endif /* _I915_REG_H_ */

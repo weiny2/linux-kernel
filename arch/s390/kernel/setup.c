@@ -40,7 +40,6 @@
 #include <linux/ctype.h>
 #include <linux/reboot.h>
 #include <linux/topology.h>
-#include <linux/ftrace.h>
 #include <linux/kexec.h>
 #include <linux/crash_dump.h>
 #include <linux/memory.h>
@@ -341,6 +340,9 @@ static void __init setup_lowcore(void)
 		__ctl_set_bit(14, 29);
 	}
 #else
+	if (MACHINE_HAS_VX)
+		lc->vector_save_area_addr =
+			(unsigned long) &lc->vector_save_area;
 	lc->vdso_per_cpu_data = (unsigned long) &lc->paste[0];
 #endif
 	lc->sync_enter_timer = S390_lowcore.sync_enter_timer;
@@ -351,8 +353,6 @@ static void __init setup_lowcore(void)
 	lc->steal_timer = S390_lowcore.steal_timer;
 	lc->last_update_timer = S390_lowcore.last_update_timer;
 	lc->last_update_clock = S390_lowcore.last_update_clock;
-	lc->ftrace_func = S390_lowcore.ftrace_func;
-	lc->ftrace_regs_func = S390_lowcore.ftrace_regs_func;
 
 	restart_stack = __alloc_bootmem(ASYNC_SIZE, ASYNC_SIZE, 0);
 	restart_stack += ASYNC_SIZE;
@@ -373,6 +373,10 @@ static void __init setup_lowcore(void)
 	mem_assign_absolute(S390_lowcore.restart_data, lc->restart_data);
 	mem_assign_absolute(S390_lowcore.restart_source, lc->restart_source);
 	mem_assign_absolute(S390_lowcore.restart_psw, lc->restart_psw);
+
+#ifdef CONFIG_SMP
+	lc->spinlock_lockval = arch_spin_lockval(0);
+#endif
 
 	set_prefix((u32)(unsigned long) lc);
 	lowcore_ptr[0] = lc;
@@ -457,8 +461,9 @@ static void __init setup_memory_end(void)
 
 
 #ifdef CONFIG_ZFCPDUMP
-	if (ipl_info.type == IPL_TYPE_FCP_DUMP && !OLDMEM_BASE) {
-		memory_end = ZFCPDUMP_HSA_SIZE;
+	if (ipl_info.type == IPL_TYPE_FCP_DUMP &&
+	    !OLDMEM_BASE && sclp_get_hsa_size()) {
+		memory_end = sclp_get_hsa_size();
 		memory_end_set = 1;
 	}
 #endif
@@ -572,7 +577,7 @@ static unsigned long __init find_crash_base(unsigned long crash_size,
 		crash_base = (chunk->addr + chunk->size) - crash_size;
 		if (crash_base < crash_size)
 			continue;
-		if (crash_base < ZFCPDUMP_HSA_SIZE_MAX)
+		if (crash_base < sclp_get_hsa_size())
 			continue;
 		if (crash_base < (unsigned long) INITRD_START + INITRD_SIZE)
 			continue;
@@ -911,6 +916,12 @@ static void __init setup_hwcaps(void)
 	 */
 	if (test_facility(50) && test_facility(73))
 		elf_hwcap |= HWCAP_S390_TE;
+
+	/*
+	 * Vector extension HWCAP_S390_VXRS is bit 11.
+	 */
+	if (test_facility(129))
+		elf_hwcap |= HWCAP_S390_VXRS;
 #endif
 
 	get_cpu_id(&cpu_id);
@@ -947,6 +958,9 @@ static void __init setup_hwcaps(void)
 	case 0x2827:
 	case 0x2828:
 		strcpy(elf_platform, "zEC12");
+		break;
+	case 0x2964:
+		strcpy(elf_platform, "z13");
 		break;
 	}
 }

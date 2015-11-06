@@ -68,6 +68,7 @@
 /* State machine flags */
 #define ALUA_PG_RUN_RTPG		0x10
 #define ALUA_PG_RUN_STPG		0x20
+#define ALUA_PG_RUNNING			0x40
 
 
 static LIST_HEAD(port_group_list);
@@ -77,12 +78,10 @@ static struct workqueue_struct *kmpath_aluad;
 struct alua_port_group {
 	struct kref		kref;
 	struct list_head	node;
-	unsigned char		target_id[256];
-	unsigned char		target_id_str[256];
-	int			target_id_size;
+	unsigned char		device_id[256];
+	unsigned char		device_id_str[256];
+	int			device_id_size;
 	int			group_id;
-	int			lun;
-	int			lugrp;
 	int			tpgs;
 	int			state;
 	int			pref;
@@ -120,7 +119,7 @@ struct alua_queue_data {
 static char print_alua_state(int);
 static int alua_check_sense(struct scsi_device *, struct scsi_sense_hdr *);
 static void alua_rtpg_work(struct work_struct *work);
-static void alua_check(struct scsi_device *sdev);
+static void alua_check(struct scsi_device *sdev, bool force);
 
 static inline struct alua_dh_data *get_alua_data(struct scsi_device *sdev)
 {
@@ -304,12 +303,12 @@ static int alua_check_tpgs(struct scsi_device *sdev, struct alua_dh_data *h)
 			    ALUA_DH_NAME);
 		return SCSI_DH_DEV_UNSUPP;
 	}
-	if (sdev->type == TYPE_RAID ||
-	    sdev->type == TYPE_ENCLOSURE ||
-	    sdev->type == 0x1F) {
+	if (sdev->type != TYPE_DISK &&
+	    sdev->type != TYPE_RBC &&
+	    sdev->type != TYPE_OSD) {
 		h->tpgs = TPGS_MODE_NONE;
 		sdev_printk(KERN_INFO, sdev,
-			    "%s: disable for enclosure devices\n",
+			    "%s: disable for non-disk devices\n",
 			    ALUA_DH_NAME);
 		return SCSI_DH_DEV_UNSUPP;
 	}
@@ -355,10 +354,10 @@ static int alua_check_tpgs(struct scsi_device *sdev, struct alua_dh_data *h)
  */
 static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 {
-	char target_id_str[256], *target_id = NULL;
-	int target_id_size;
-	int group_id = -1, lun = sdev->lun, lugrp = 0;
 	unsigned char *d;
+	int group_id = -1;
+	char device_id_str[256], *device_id = NULL;
+	int device_id_size, device_id_type = 0;
 	struct alua_port_group *tmp_pg, *pg = NULL;
 
 	if (!sdev->vpd_pg83)
@@ -366,52 +365,71 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 
 	/*
 	 * Look for the correct descriptor.
+	 * Order of preference for lun descriptor:
+	 * - SCSI name string
+	 * - NAA IEEE Registered Extended
+	 * - EUI-64 based 16-byte
+	 * - EUI-64 based 12-byte
+	 * - NAA IEEE Registered
+	 * - NAA IEEE Extended
+	 * as longer descriptors reduce the likelyhood
+	 * of identification clashes.
 	 */
-	memset(target_id_str, 0, 256);
-	target_id_size = 0;
+	memset(device_id_str, 0, 256);
+	device_id_size = 0;
 	d = sdev->vpd_pg83 + 4;
 	while (d < sdev->vpd_pg83 + sdev->vpd_pg83_len) {
 		switch (d[1] & 0xf) {
 		case 0x2:
 			/* EUI-64 */
-			if ((d[1] & 0x30) == 0x20) {
-				target_id_size = d[3];
-				target_id = d + 4;
-				switch (target_id_size) {
+			if ((d[1] & 0x30) == 0x00) {
+				if (device_id_size > d[3])
+					break;
+				/* Prefer NAA IEEE Registered Extended */
+				if (device_id_type == 0x3 &&
+				    device_id_size == d[3])
+					break;
+				device_id_size = d[3];
+				device_id = d + 4;
+				device_id_type = d[1] & 0xf;
+				switch (device_id_size) {
 				case 8:
-					sprintf(target_id_str,
+					sprintf(device_id_str,
 						"eui.%8phN", d + 4);
 					break;
 				case 12:
-					sprintf(target_id_str,
+					sprintf(device_id_str,
 						"eui.%12phN", d + 4);
 					break;
 				case 16:
-					sprintf(target_id_str,
+					sprintf(device_id_str,
 						"eui.%16phN", d + 4);
 					break;
 				default:
-					target_id_size = 0;
+					device_id_size = 0;
 					break;
 				}
 			}
 			break;
 		case 0x3:
 			/* NAA */
-			if ((d[1] & 0x30) == 0x20) {
-				target_id_size = d[3];
-				target_id = d + 4;
-				switch (target_id_size) {
+			if ((d[1] & 0x30) == 0x00) {
+				if (device_id_size > d[3])
+					break;
+				device_id_size = d[3];
+				device_id = d + 4;
+				device_id_type = d[1] & 0xf;
+				switch (device_id_size) {
 				case 8:
-					sprintf(target_id_str,
+					sprintf(device_id_str,
 						"naa.%8phN", d + 4);
 					break;
 				case 16:
-					sprintf(target_id_str,
+					sprintf(device_id_str,
 						"naa.%16phN", d + 4);
 					break;
 				default:
-					target_id_size = 0;
+					device_id_size = 0;
 					break;
 				}
 			}
@@ -423,22 +441,19 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 			/* Target port group */
 			group_id = (d[6] << 8) + d[7];
 			break;
-		case 0x6:
-			/* Logical unit group */
-			lugrp = (d[2] << 8) + d[3];
-			/* -1 indicates valid LUN group */
-			lun = -1;
-			break;
 		case 0x8:
 			/* SCSI name string */
-			if ((d[1] & 0x30) == 0x20) {
+			if ((d[1] & 0x30) == 0x00) {
 				/* SCSI name */
-				target_id_size = d[3];
-				target_id = d + 4;
-				strncpy(target_id_str, d + 4, 256);
-				if (target_id_size > 255)
-					target_id_size = 255;
-				target_id_str[target_id_size] = '\0';
+				if (device_id_size > d[3])
+					break;
+				device_id_size = d[3];
+				device_id = d + 4;
+				device_id_type = d[1] & 0xf;
+				strncpy(device_id_str, d + 4, 256);
+				if (device_id_size > 255)
+					device_id_size = 255;
+				device_id_str[device_id_size] = '\0';
 			}
 			break;
 		default:
@@ -446,7 +461,6 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 		}
 		d += d[3] + 4;
 	}
-
 	if (group_id == -1) {
 		/*
 		 * Internal error; TPGS supported but required
@@ -459,47 +473,20 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 		h->tpgs = TPGS_MODE_NONE;
 		return SCSI_DH_DEV_UNSUPP;
 	}
-	if (!target_id_size) {
-		/* Check for EMC Clariion extended inquiry */
-		if (!strncmp(sdev->vendor, "DGC     ", 8) &&
-		    sdev->inquiry_len > 160) {
-			target_id_size = sdev->inquiry[160];
-			target_id = sdev->inquiry + 161;
-			strcpy(target_id_str, "emc.");
-			memcpy(target_id_str + 4, target_id, target_id_size);
-		}
-		/* Check for HP EVA extended inquiry */
-		if (!strncmp(sdev->vendor, "HP      ", 8) &&
-		    !strncmp(sdev->model, "HSV", 3) &&
-		    sdev->inquiry_len > 170) {
-			target_id_size = 16;
-			target_id = sdev->inquiry + 154;
-			strcpy(target_id_str, "naa.");
-			memcpy(target_id_str + 4, target_id, target_id_size);
-		}
-	}
 
 	spin_lock(&port_group_lock);
-	pg = NULL;
-	if (target_id_size) {
+	if (device_id_size) {
 		sdev_printk(KERN_INFO, sdev,
-			    "%s: target %s port group %02x "
+			    "%s: device %s port group %02x "
 			    "rel port %02x\n", ALUA_DH_NAME,
-			    target_id_str, group_id, h->rel_port);
+			    device_id_str, group_id, h->rel_port);
 		list_for_each_entry(tmp_pg, &port_group_list, node) {
 			if (tmp_pg->group_id != group_id)
 				continue;
-			if (tmp_pg->target_id_size != target_id_size)
+			if (tmp_pg->device_id_size != device_id_size)
 				continue;
-			if (lun != -1) {
-				if (tmp_pg->lun != lun)
-					continue;
-			} else {
-				if (tmp_pg->lugrp != lugrp)
-					continue;
-			}
-			if (memcmp(tmp_pg->target_id, target_id,
-				   target_id_size))
+			if (memcmp(tmp_pg->device_id, device_id,
+				   device_id_size))
 				continue;
 			pg = tmp_pg;
 			break;
@@ -527,17 +514,15 @@ static int alua_check_vpd(struct scsi_device *sdev, struct alua_dh_data *h)
 		spin_unlock(&port_group_lock);
 		return SCSI_DH_DEV_TEMP_BUSY;
 	}
-	if (target_id_size) {
-		memcpy(pg->target_id, target_id, target_id_size);
-		strncpy(pg->target_id_str, target_id_str, 256);
+	if (device_id_size) {
+		memcpy(pg->device_id, device_id, device_id_size);
+		strncpy(pg->device_id_str, device_id_str, 256);
 	} else {
-		memset(pg->target_id, 0, 256);
-		pg->target_id_str[0] = '\0';
+		memset(pg->device_id, 0, 256);
+		pg->device_id_str[0] = '\0';
 	}
-	pg->target_id_size = target_id_size;
+	pg->device_id_size = device_id_size;
 	pg->group_id = group_id;
-	pg->lun = lun;
-	pg->lugrp = lugrp;
 	pg->buff = pg->inq;
 	pg->bufflen = ALUA_INQUIRY_SIZE;
 	pg->tpgs = h->tpgs;
@@ -580,7 +565,7 @@ static char print_alua_state(int state)
 }
 
 static int alua_check_sense(struct scsi_device *sdev,
-			    struct scsi_sense_hdr *sense_hdr)
+			     struct scsi_sense_hdr *sense_hdr)
 {
 	switch (sense_hdr->sense_key) {
 	case NOT_READY:
@@ -589,36 +574,34 @@ static int alua_check_sense(struct scsi_device *sdev,
 			 * LUN Not Accessible - ALUA state transition
 			 * Kickoff worker to update internal state.
 			 */
-			alua_check(sdev);
-			return ADD_TO_MLQUEUE;
+			alua_check(sdev, false);
+			return NEEDS_RETRY;
 		}
 		break;
 	case UNIT_ATTENTION:
-		if (sense_hdr->asc == 0x29 && sense_hdr->ascq == 0x00)
+		if (sense_hdr->asc == 0x29 && sense_hdr->ascq == 0x00) {
 			/*
-			 * Power On, Reset, or Bus Device Reset, just retry.
+			 * Power On, Reset, or Bus Device Reset.
+			 * Might have obscured a state transition,
+			 * so schedule a recheck.
 			 */
+			alua_check(sdev, true);
 			return ADD_TO_MLQUEUE;
-		if (sense_hdr->asc == 0x29 && sense_hdr->ascq == 0x04)
-			/*
-			 * Device internal reset
-			 */
-			return ADD_TO_MLQUEUE;
-		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x01)
-			/*
-			 * Mode parameter changed
-			 */
-			return ADD_TO_MLQUEUE;
-		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x06)
+		}
+		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x06) {
 			/*
 			 * ALUA state changed
 			 */
+			alua_check(sdev, true);
 			return ADD_TO_MLQUEUE;
-		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x07)
+		}
+		if (sense_hdr->asc == 0x2a && sense_hdr->ascq == 0x07) {
 			/*
 			 * Implicit ALUA state transition failed
 			 */
+			alua_check(sdev, true);
 			return ADD_TO_MLQUEUE;
+		}
 		break;
 	}
 
@@ -642,6 +625,8 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 	unsigned err, retval;
 	unsigned int tpg_desc_tbl_off;
 	unsigned char orig_transition_tmo;
+	struct alua_port_group *tmp_pg;
+	unsigned long flags;
 
 	if (!pg->expiry) {
 		if (!pg->transition_tmo)
@@ -682,7 +667,6 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 			goto retry;
 		}
 
-		err = alua_check_sense(sdev, &sense_hdr);
 		if (sense_hdr.sense_key == UNIT_ATTENTION)
 			err = ADD_TO_MLQUEUE;
 		if (err == ADD_TO_MLQUEUE &&
@@ -729,8 +713,8 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 
 	if (orig_transition_tmo != pg->transition_tmo) {
 		sdev_printk(KERN_INFO, sdev,
-		       "%s: target %s transition timeout set to %d seconds\n",
-		       ALUA_DH_NAME, pg->target_id_str, pg->transition_tmo);
+			"%s: device %s transition timeout set to %d seconds\n",
+			ALUA_DH_NAME, pg->device_id_str, pg->transition_tmo);
 		pg->expiry = jiffies + pg->transition_tmo * HZ;
 	}
 
@@ -739,23 +723,39 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 	else
 		tpg_desc_tbl_off = 4;
 
+	spin_lock_irqsave(&port_group_lock, flags);
 	for (k = tpg_desc_tbl_off, ucp = pg->buff + tpg_desc_tbl_off;
 	     k < len;
 	     k += off, ucp += off) {
 
-		if (pg->group_id == (ucp[2] << 8) + ucp[3]) {
-			pg->state = ucp[0] & 0x0f;
-			pg->pref = ucp[0] >> 7;
-			valid_states = ucp[1];
+		list_for_each_entry(tmp_pg, &port_group_list, node) {
+			u16 group_id = ((u16)ucp[2] << 8) | (u16)ucp[3];
+			if (tmp_pg->group_id != group_id)
+				continue;
+			if (tmp_pg->device_id_size != pg->device_id_size)
+				continue;
+			if (memcmp(tmp_pg->device_id, pg->device_id,
+				   tmp_pg->device_id_size))
+				continue;
+			tmp_pg->state = ucp[0] & 0x0f;
+			tmp_pg->pref = ucp[0] >> 7;
+			sdev_printk(KERN_INFO, sdev,
+				    "%s: device %s port group %02x "
+				    "state %c %s\n", ALUA_DH_NAME,
+				    tmp_pg->device_id_str, tmp_pg->group_id,
+				    print_alua_state(tmp_pg->state),
+				    tmp_pg->pref ?
+				    "preferred" : "non-preferred");
+			if (tmp_pg == pg)
+				valid_states = ucp[1];
 		}
 		off = 8 + (ucp[7] * 4);
 	}
+	spin_unlock_irqrestore(&port_group_lock, flags);
 
 	sdev_printk(KERN_INFO, sdev,
-		    "%s: target %s port group %02x state %c %s "
-		    "supports %c%c%c%c%c%c%c\n", ALUA_DH_NAME,
-		    pg->target_id_str, pg->group_id,
-		    print_alua_state(pg->state),
+		    "%s: port group %02x state %c %s supports %c%c%c%c%c%c%c\n",
+		    ALUA_DH_NAME, pg->group_id, print_alua_state(pg->state),
 		    pg->pref ? "preferred" : "non-preferred",
 		    valid_states&TPGS_SUPPORT_TRANSITION?'T':'t',
 		    valid_states&TPGS_SUPPORT_OFFLINE?'O':'o',
@@ -769,7 +769,7 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 	case TPGS_STATE_TRANSITIONING:
 		if (time_before(jiffies, pg->expiry)) {
 			/* State transition, retry */
-			pg->interval += 2;
+			pg->interval = 2;
 			err = SCSI_DH_RETRY;
 		} else {
 			/* Transitioning time exceeded, set port to standby */
@@ -844,7 +844,6 @@ static unsigned alua_stpg(struct scsi_device *sdev, struct alua_port_group *pg)
 			/* Retry RTPG */
 			return err;
 		}
-		err = alua_check_sense(sdev, &sense_hdr);
 		sdev_printk(KERN_INFO, sdev, "%s: stpg failed, ",
 			    ALUA_DH_NAME);
 		scsi_show_sense_hdr(&sense_hdr);
@@ -860,22 +859,32 @@ static void alua_rtpg_work(struct work_struct *work)
 {
 	struct alua_port_group *pg =
 		container_of(work, struct alua_port_group, rtpg_work.work);
-	struct scsi_device *sdev = pg->rtpg_sdev;
+	struct scsi_device *sdev;
 	LIST_HEAD(qdata_list);
 	int err = SCSI_DH_OK;
 	struct alua_queue_data *qdata, *tmp;
 	unsigned long flags;
 
 	spin_lock_irqsave(&pg->rtpg_lock, flags);
+	sdev = pg->rtpg_sdev;
+	if (!sdev) {
+		WARN_ON(pg->flags & ALUA_PG_RUN_RTPG ||
+			pg->flags & ALUA_PG_RUN_STPG);
+		spin_unlock_irqrestore(&pg->rtpg_lock, flags);
+		return;
+	}
+	pg->flags |= ALUA_PG_RUNNING;
 	if (pg->flags & ALUA_PG_RUN_RTPG) {
 		spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 		err = alua_rtpg(sdev, pg);
+		spin_lock_irqsave(&pg->rtpg_lock, flags);
 		if (err == SCSI_DH_RETRY) {
+			pg->flags &= ~ALUA_PG_RUNNING;
+			spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 			queue_delayed_work(kmpath_aluad, &pg->rtpg_work,
 					   pg->interval * HZ);
 			return;
 		}
-		spin_lock_irqsave(&pg->rtpg_lock, flags);
 		pg->flags &= ~ALUA_PG_RUN_RTPG;
 		if (err != SCSI_DH_OK)
 			pg->flags &= ~ALUA_PG_RUN_STPG;
@@ -888,6 +897,7 @@ static void alua_rtpg_work(struct work_struct *work)
 		if (err == SCSI_DH_RETRY) {
 			pg->flags |= ALUA_PG_RUN_RTPG;
 			pg->interval = 0;
+			pg->flags &= ~ALUA_PG_RUNNING;
 			spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 			queue_delayed_work(kmpath_aluad, &pg->rtpg_work,
 				msecs_to_jiffies(ALUA_RTPG_DELAY_MSECS));
@@ -905,13 +915,16 @@ static void alua_rtpg_work(struct work_struct *work)
 			qdata->callback_fn(qdata->callback_data, err);
 		kfree(qdata);
 	}
+	spin_lock_irqsave(&pg->rtpg_lock, flags);
+	pg->flags &= ~ALUA_PG_RUNNING;
+	spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 	kref_put(&pg->kref, release_port_group);
 	scsi_device_put(sdev);
 }
 
 static void alua_rtpg_queue(struct alua_port_group *pg,
 			    struct scsi_device *sdev,
-			    struct alua_queue_data *qdata)
+			    struct alua_queue_data *qdata, bool force)
 {
 	int start_queue = 0;
 	unsigned long flags;
@@ -932,12 +945,15 @@ static void alua_rtpg_queue(struct alua_port_group *pg,
 		pg->rtpg_sdev = sdev;
 		scsi_device_get(sdev);
 		start_queue = 1;
-	}
+	} else if (!(pg->flags & ALUA_PG_RUNNING) && force)
+		start_queue = 1;
+
 	spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 
 	if (start_queue)
-		queue_delayed_work(kmpath_aluad, &pg->rtpg_work,
+		mod_delayed_work(kmpath_aluad, &pg->rtpg_work,
 				   msecs_to_jiffies(ALUA_RTPG_DELAY_MSECS));
+
 	kref_put(&pg->kref, release_port_group);
 }
 
@@ -970,7 +986,7 @@ static int alua_initialize(struct scsi_device *sdev, struct alua_dh_data *h)
 	complete(&h->init_complete);
 	if (pg) {
 		pg->expiry = 0;
-		alua_rtpg_queue(pg, sdev, NULL);
+		alua_rtpg_queue(pg, sdev, NULL, true);
 		kref_put(&pg->kref, release_port_group);
 	}
 	return h->error;
@@ -1017,7 +1033,7 @@ static int alua_set_params(struct scsi_device *sdev, const char *params)
 	if (optimize)
 		pg->flags |= ALUA_OPTIMIZE_STPG;
 	else
-		pg->flags |= ~ALUA_OPTIMIZE_STPG;
+		pg->flags &= ~ALUA_OPTIMIZE_STPG;
 
 	spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 	return result;
@@ -1085,7 +1101,7 @@ static int alua_activate(struct scsi_device *sdev,
 		spin_unlock_irqrestore(&pg->rtpg_lock, flags);
 	}
 
-	alua_rtpg_queue(pg, sdev, qdata);
+	alua_rtpg_queue(pg, sdev, qdata, true);
 	kref_put(&pg->kref, release_port_group);
 	return 0;
 }
@@ -1096,7 +1112,7 @@ static int alua_activate(struct scsi_device *sdev,
  *
  * Check the device status
  */
-static void alua_check(struct scsi_device *sdev)
+static void alua_check(struct scsi_device *sdev, bool force)
 {
 	struct alua_dh_data *h = get_alua_data(sdev);
 	struct alua_port_group *pg;
@@ -1109,7 +1125,7 @@ static void alua_check(struct scsi_device *sdev)
 	if (pg) {
 		kref_get(&pg->kref);
 		rcu_read_unlock();
-		alua_rtpg_queue(pg, sdev, NULL);
+		alua_rtpg_queue(pg, sdev, NULL, force);
 		kref_put(&pg->kref, release_port_group);
 	} else
 		rcu_read_unlock();

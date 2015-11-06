@@ -891,6 +891,8 @@ static void ip_vs_proc_conn(struct net *net, struct ip_vs_conn_param *param,
 			IP_VS_DBG(2, "BACKUP, add new conn. failed\n");
 			return;
 		}
+		if (!(flags & IP_VS_CONN_F_TEMPLATE))
+			kfree(param->pe_data);
 	}
 
 	if (opt)
@@ -1164,6 +1166,7 @@ static inline int ip_vs_proc_sync_conn(struct net *net, __u8 *p, __u8 *msg_end)
 				(opt_flags & IPVS_OPT_F_SEQ_DATA ? &opt : NULL)
 				);
 #endif
+	ip_vs_pe_put(param.pe);
 	return 0;
 	/* Error exit */
 out:
@@ -1629,6 +1632,7 @@ static int sync_thread_master(void *data)
 		ipvs->master_mcast_ifn, ipvs->master_syncid, tinfo->id);
 
 	for (;;) {
+		kgr_task_safe(current);
 		sb = next_sync_buff(ipvs, ms);
 		if (unlikely(kthread_should_stop()))
 			break;
@@ -1639,9 +1643,10 @@ static int sync_thread_master(void *data)
 		while (ip_vs_send_sync_msg(tinfo->sock, sb->mesg) < 0) {
 			int ret = 0;
 
-			__wait_event_interruptible(*sk_sleep(sk),
+			__wait_event_interruptible(*sk_sleep(sk), ({
+						   kgr_task_safe(current);
 						   sock_writeable(sk) ||
-						   kthread_should_stop(),
+						   kthread_should_stop(); }),
 						   ret);
 			if (unlikely(kthread_should_stop()))
 				goto done;
@@ -1683,9 +1688,10 @@ static int sync_thread_backup(void *data)
 		ipvs->backup_mcast_ifn, ipvs->backup_syncid, tinfo->id);
 
 	while (!kthread_should_stop()) {
-		wait_event_interruptible(*sk_sleep(tinfo->sock->sk),
+		wait_event_interruptible(*sk_sleep(tinfo->sock->sk), ({
+			 kgr_task_safe(current);
 			 !skb_queue_empty(&tinfo->sock->sk->sk_receive_queue)
-			 || kthread_should_stop());
+			 || kthread_should_stop(); }));
 
 		/* do we have data now? */
 		while (!skb_queue_empty(&(tinfo->sock->sk->sk_receive_queue))) {

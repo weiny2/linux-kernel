@@ -32,6 +32,7 @@
 #include <linux/hrtimer.h>
 #include <linux/dma-mapping.h>
 #include <linux/netdev_features.h>
+#include <linux/sched.h>
 #include <net/flow_keys.h>
 
 /* Don't change this without changing skb_csum_unnecessary! */
@@ -109,6 +110,7 @@
 struct net_device;
 struct scatterlist;
 struct pipe_inode_info;
+struct napi_struct;
 
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 struct nf_conntrack {
@@ -337,11 +339,62 @@ typedef unsigned int sk_buff_data_t;
 typedef unsigned char *sk_buff_data_t;
 #endif
 
+/**
+ * struct skb_mstamp - multi resolution time stamps
+ * @stamp_us: timestamp in us resolution
+ * @stamp_jiffies: timestamp in jiffies
+ */
+struct skb_mstamp {
+	union {
+		u64		v64;
+		struct {
+			u32	stamp_us;
+			u32	stamp_jiffies;
+		};
+	};
+};
+
+/**
+ * skb_mstamp_get - get current timestamp
+ * @cl: place to store timestamps
+ */
+static inline void skb_mstamp_get(struct skb_mstamp *cl)
+{
+	u64 val = local_clock();
+
+	do_div(val, NSEC_PER_USEC);
+	cl->stamp_us = (u32)val;
+	cl->stamp_jiffies = (u32)jiffies;
+}
+
+/**
+ * skb_mstamp_delta - compute the difference in usec between two skb_mstamp
+ * @t1: pointer to newest sample
+ * @t0: pointer to oldest sample
+ */
+static inline u32 skb_mstamp_us_delta(const struct skb_mstamp *t1,
+				      const struct skb_mstamp *t0)
+{
+	s32 delta_us = t1->stamp_us - t0->stamp_us;
+	u32 delta_jiffies = t1->stamp_jiffies - t0->stamp_jiffies;
+
+	/* If delta_us is negative, this might be because interval is too big,
+	 * or local_clock() drift is too big : fallback using jiffies.
+	 */
+	if (delta_us <= 0 ||
+	    delta_jiffies >= (INT_MAX / (USEC_PER_SEC / HZ)))
+
+		delta_us = jiffies_to_usecs(delta_jiffies);
+
+	return delta_us;
+}
+
+
 /** 
  *	struct sk_buff - socket buffer
  *	@next: Next buffer in list
  *	@prev: Previous buffer in list
- *	@tstamp: Time we arrived
+ *	@tstamp: Time we arrived/left
  *	@sk: Socket we are owned by
  *	@dev: Device we arrived on/are leaving by
  *	@cb: Control buffer. Free for use by every layer. Put private vars here
@@ -410,7 +463,10 @@ struct sk_buff {
 	struct sk_buff		*next;
 	struct sk_buff		*prev;
 
-	ktime_t			tstamp;
+	union {
+		ktime_t		tstamp;
+		struct skb_mstamp skb_mstamp;
+	};
 
 	struct sock		*sk;
 	struct net_device	*dev;
@@ -536,6 +592,7 @@ struct sk_buff {
 
 #define SKB_ALLOC_FCLONE	0x01
 #define SKB_ALLOC_RX		0x02
+#define SKB_ALLOC_NAPI		0x04
 
 /* Returns true if the skb was allocated from PFMEMALLOC reserves */
 static inline bool skb_pfmemalloc(const struct sk_buff *skb)
@@ -642,6 +699,7 @@ extern bool skb_try_coalesce(struct sk_buff *to, struct sk_buff *from,
 
 extern struct sk_buff *__alloc_skb(unsigned int size,
 				   gfp_t priority, int flags, int node);
+struct sk_buff *__build_skb(void *data, unsigned int frag_size);
 extern struct sk_buff *build_skb(void *data, unsigned int frag_size);
 static inline struct sk_buff *alloc_skb(unsigned int size,
 					gfp_t priority)
@@ -1387,20 +1445,16 @@ static inline void __skb_fill_page_desc(struct sk_buff *skb, int i,
 	skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
 
 	/*
-	 * Propagate page->pfmemalloc to the skb if we can. The problem is
-	 * that not all callers have unique ownership of the page. If
-	 * pfmemalloc is set, we check the mapping as a mapping implies
-	 * page->index is set (index and pfmemalloc share space).
-	 * If it's a valid mapping, we cannot use page->pfmemalloc but we
-	 * do not lose pfmemalloc information as the pages would not be
-	 * allocated using __GFP_MEMALLOC.
+	 * Propagate page pfmemalloc to the skb if we can. The problem is
+	 * that not all callers have unique ownership of the page but rely
+	 * on page_is_pfmemalloc doing the right thing(tm).
 	 */
 	frag->page.p		  = page;
 	frag->page_offset	  = off;
 	skb_frag_size_set(frag, size);
 
 	page = compound_head(page);
-	if (page->pfmemalloc && !page->mapping)
+	if (page_is_pfmemalloc(page))
 		skb->pfmemalloc	= true;
 }
 
@@ -1962,6 +2016,63 @@ static inline struct sk_buff *netdev_alloc_skb_ip_align(struct net_device *dev,
 	return __netdev_alloc_skb_ip_align(dev, length, GFP_ATOMIC);
 }
 
+void *napi_alloc_frag(unsigned int fragsz);
+struct sk_buff *__napi_alloc_skb(struct napi_struct *napi,
+				 unsigned int length, gfp_t gfp_mask);
+static inline struct sk_buff *napi_alloc_skb(struct napi_struct *napi,
+					     unsigned int length)
+{
+	return __napi_alloc_skb(napi, length, GFP_ATOMIC);
+}
+
+/**
+ * __dev_alloc_pages - allocate page for network Rx
+ * @gfp_mask: allocation priority. Set __GFP_NOMEMALLOC if not for network Rx
+ * @order: size of the allocation
+ *
+ * Allocate a new page.
+ *
+ * %NULL is returned if there is no free memory.
+*/
+static inline struct page *__dev_alloc_pages(gfp_t gfp_mask,
+					     unsigned int order)
+{
+	/* This piece of code contains several assumptions.
+	 * 1.  This is for device Rx, therefor a cold page is preferred.
+	 * 2.  The expectation is the user wants a compound page.
+	 * 3.  If requesting a order 0 page it will not be compound
+	 *     due to the check to see if order has a value in prep_new_page
+	 * 4.  __GFP_MEMALLOC is ignored if __GFP_NOMEMALLOC is set due to
+	 *     code in gfp_to_alloc_flags that should be enforcing this.
+	 */
+	gfp_mask |= __GFP_COLD | __GFP_COMP | __GFP_MEMALLOC;
+
+	return alloc_pages_node(NUMA_NO_NODE, gfp_mask, order);
+}
+
+static inline struct page *dev_alloc_pages(unsigned int order)
+{
+	return __dev_alloc_pages(GFP_ATOMIC, order);
+}
+
+/**
+ * __dev_alloc_page - allocate a page for network Rx
+ * @gfp_mask: allocation priority. Set __GFP_NOMEMALLOC if not for network Rx
+ *
+ * Allocate a new page.
+ *
+ * %NULL is returned if there is no free memory.
+ */
+static inline struct page *__dev_alloc_page(gfp_t gfp_mask)
+{
+	return __dev_alloc_pages(gfp_mask, 0);
+}
+
+static inline struct page *dev_alloc_page(void)
+{
+	return __dev_alloc_page(GFP_ATOMIC);
+}
+
 /**
  *	__skb_alloc_pages - allocate pages for ps-rx on a skb and preserve pfmemalloc data
  *	@gfp_mask: alloc_pages_node mask. Set __GFP_NOMEMALLOC if not for network packet RX
@@ -1984,7 +2095,7 @@ static inline struct page *__skb_alloc_pages(gfp_t gfp_mask,
 		gfp_mask |= __GFP_MEMALLOC;
 
 	page = alloc_pages_node(NUMA_NO_NODE, gfp_mask, order);
-	if (skb && page && page->pfmemalloc)
+	if (skb && page && page_is_pfmemalloc(page))
 		skb->pfmemalloc = true;
 
 	return page;
@@ -2013,7 +2124,7 @@ static inline struct page *__skb_alloc_page(gfp_t gfp_mask,
 static inline void skb_propagate_pfmemalloc(struct page *page,
 					     struct sk_buff *skb)
 {
-	if (page && page->pfmemalloc)
+	if (page && page_is_pfmemalloc(page))
 		skb->pfmemalloc = true;
 }
 
@@ -2224,13 +2335,35 @@ static inline int skb_cow_head(struct sk_buff *skb, unsigned int headroom)
  *	is untouched. Otherwise it is extended. Returns zero on
  *	success. The skb is freed on error.
  */
- 
 static inline int skb_padto(struct sk_buff *skb, unsigned int len)
 {
 	unsigned int size = skb->len;
 	if (likely(size >= len))
 		return 0;
 	return skb_pad(skb, len - size);
+}
+
+/**
+ *	skb_put_padto - increase size and pad an skbuff up to a minimal size
+ *	@skb: buffer to pad
+ *	@len: minimal length
+ *
+ *	Pads up a buffer to ensure the trailing bytes exist and are
+ *	blanked. If the buffer already contains sufficient data it
+ *	is untouched. Otherwise it is extended. Returns zero on
+ *	success. The skb is freed on error.
+ */
+static inline int skb_put_padto(struct sk_buff *skb, unsigned int len)
+{
+	unsigned int size = skb->len;
+
+	if (unlikely(size < len)) {
+		len -= size;
+		if (skb_pad(skb, len))
+			return -ENOMEM;
+		__skb_put(skb, len);
+	}
+	return 0;
 }
 
 static inline int skb_add_data(struct sk_buff *skb,
@@ -2455,19 +2588,26 @@ extern struct sk_buff *skb_segment(struct sk_buff *skb,
 				   netdev_features_t features);
 
 unsigned int skb_gso_transport_seglen(const struct sk_buff *skb);
+struct sk_buff *skb_vlan_untag(struct sk_buff *skb);
+
+static inline void *__skb_header_pointer(const struct sk_buff *skb, int offset,
+					 int len, void *data, int hlen, void *buffer)
+{
+	if (hlen - offset >= len)
+		return data + offset;
+
+	if (!skb ||
+	    skb_copy_bits(skb, offset, buffer, len) < 0)
+		return NULL;
+
+	return buffer;
+}
 
 static inline void *skb_header_pointer(const struct sk_buff *skb, int offset,
 				       int len, void *buffer)
 {
-	int hlen = skb_headlen(skb);
-
-	if (hlen - offset >= len)
-		return skb->data + offset;
-
-	if (skb_copy_bits(skb, offset, buffer, len) < 0)
-		return NULL;
-
-	return buffer;
+	return __skb_header_pointer(skb, offset, len, skb->data,
+				    skb_headlen(skb), buffer);
 }
 
 static inline void skb_copy_from_linear_data(const struct sk_buff *skb,
@@ -2543,6 +2683,7 @@ static inline ktime_t net_invalid_timestamp(void)
 }
 
 extern void skb_timestamping_init(void);
+struct sk_buff *skb_clone_sk(struct sk_buff *skb);
 
 #ifdef CONFIG_NETWORK_PHY_TIMESTAMPING
 
@@ -2769,7 +2910,7 @@ static inline bool skb_rx_queue_recorded(const struct sk_buff *skb)
 }
 
 extern u16 __skb_tx_hash(const struct net_device *dev,
-			 const struct sk_buff *skb,
+			 struct sk_buff *skb,
 			 unsigned int num_tx_queues);
 
 #ifdef CONFIG_XFRM
@@ -2868,7 +3009,9 @@ static inline void skb_checksum_none_assert(const struct sk_buff *skb)
 
 bool skb_partial_csum_set(struct sk_buff *skb, u16 start, u16 off);
 
-u32 __skb_get_poff(const struct sk_buff *skb);
+u32 skb_get_poff(const struct sk_buff *skb);
+u32 __skb_get_poff(const struct sk_buff *skb, void *data,
+		   const struct flow_keys *keys, int hlen);
 
 /**
  * skb_head_is_locked - Determine if the skb->head is locked down

@@ -103,7 +103,8 @@ MODULE_PARM_DESC(enable_64b_cqe_eqe,
 
 #define HCA_GLOBAL_CAP_MASK            0
 
-#define PF_CONTEXT_BEHAVIOUR_MASK	MLX4_FUNC_CAP_64B_EQE_CQE
+#define PF_CONTEXT_BEHAVIOUR_MASK	(MLX4_FUNC_CAP_64B_EQE_CQE | \
+					 MLX4_FUNC_CAP_EQE_CQE_STRIDE)
 
 static char mlx4_version[] =
 	DRV_NAME ": Mellanox ConnectX core driver v"
@@ -182,6 +183,40 @@ static void mlx4_set_port_mask(struct mlx4_dev *dev)
 
 	for (i = 1; i <= dev->caps.num_ports; ++i)
 		dev->caps.port_mask[i] = dev->caps.port_type[i];
+}
+
+static void mlx4_enable_cqe_eqe_stride(struct mlx4_dev *dev)
+{
+	struct mlx4_caps *dev_cap = &dev->caps;
+
+	/* FW not supporting or cancelled by user */
+	if (!(dev_cap->flags2 & MLX4_DEV_CAP_FLAG2_EQE_STRIDE) ||
+	    !(dev_cap->flags2 & MLX4_DEV_CAP_FLAG2_CQE_STRIDE))
+		return;
+
+	/* Must have 64B CQE_EQE enabled by FW to use bigger stride
+	 * When FW has NCSI it may decide not to report 64B CQE/EQEs
+	 */
+	if (!(dev_cap->flags & MLX4_DEV_CAP_FLAG_64B_EQE) ||
+	    !(dev_cap->flags & MLX4_DEV_CAP_FLAG_64B_CQE)) {
+		dev_cap->flags2 &= ~MLX4_DEV_CAP_FLAG2_CQE_STRIDE;
+		dev_cap->flags2 &= ~MLX4_DEV_CAP_FLAG2_EQE_STRIDE;
+		return;
+	}
+
+	if (cache_line_size() == 128 || cache_line_size() == 256) {
+		mlx4_dbg(dev, "Enabling CQE stride cacheLine supported\n");
+		/* Changing the real data inside CQE size to 32B */
+		dev_cap->flags &= ~MLX4_DEV_CAP_FLAG_64B_CQE;
+		dev_cap->flags &= ~MLX4_DEV_CAP_FLAG_64B_EQE;
+
+		if (mlx4_is_master(dev))
+			dev_cap->function_caps |= MLX4_FUNC_CAP_EQE_CQE_STRIDE;
+	} else {
+		mlx4_dbg(dev, "Disabling CQE stride cacheLine unsupported\n");
+		dev_cap->flags2 &= ~MLX4_DEV_CAP_FLAG2_CQE_STRIDE;
+		dev_cap->flags2 &= ~MLX4_DEV_CAP_FLAG2_EQE_STRIDE;
+	}
 }
 
 static int mlx4_dev_cap(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap)
@@ -378,12 +413,23 @@ static int mlx4_dev_cap(struct mlx4_dev *dev, struct mlx4_dev_cap *dev_cap)
 			dev->caps.flags &= ~MLX4_DEV_CAP_FLAG_64B_CQE;
 			dev->caps.flags &= ~MLX4_DEV_CAP_FLAG_64B_EQE;
 		}
+
+		if (dev_cap->flags2 &
+		    (MLX4_DEV_CAP_FLAG2_CQE_STRIDE |
+		     MLX4_DEV_CAP_FLAG2_EQE_STRIDE)) {
+			mlx4_warn(dev, "Disabling EQE/CQE stride per user request\n");
+			dev_cap->flags2 &= ~MLX4_DEV_CAP_FLAG2_CQE_STRIDE;
+			dev_cap->flags2 &= ~MLX4_DEV_CAP_FLAG2_EQE_STRIDE;
+		}
 	}
 
 	if ((dev->caps.flags &
 	    (MLX4_DEV_CAP_FLAG_64B_CQE | MLX4_DEV_CAP_FLAG_64B_EQE)) &&
 	    mlx4_is_master(dev))
 		dev->caps.function_caps |= MLX4_FUNC_CAP_64B_EQE_CQE;
+
+	if (!mlx4_is_slave(dev))
+		mlx4_enable_cqe_eqe_stride(dev);
 
 	return 0;
 }
@@ -710,9 +756,20 @@ static int mlx4_slave_cap(struct mlx4_dev *dev)
 
 	if (hca_param.dev_cap_enabled & MLX4_DEV_CAP_64B_CQE_ENABLED) {
 		dev->caps.cqe_size   = 64;
-		dev->caps.userspace_caps |= MLX4_USER_DEV_CAP_64B_CQE;
+		dev->caps.userspace_caps |= MLX4_USER_DEV_CAP_LARGE_CQE;
 	} else {
 		dev->caps.cqe_size   = 32;
+	}
+
+	if (hca_param.dev_cap_enabled & MLX4_DEV_CAP_EQE_STRIDE_ENABLED) {
+		dev->caps.eqe_size = hca_param.eqe_size;
+		dev->caps.eqe_factor = 0;
+	}
+
+	if (hca_param.dev_cap_enabled & MLX4_DEV_CAP_CQE_STRIDE_ENABLED) {
+		dev->caps.cqe_size = hca_param.cqe_size;
+		/* User still need to know when CQE > 32B */
+		dev->caps.userspace_caps |= MLX4_USER_DEV_CAP_LARGE_CQE;
 	}
 
 	dev->caps.flags2 &= ~MLX4_DEV_CAP_FLAG2_TS;
@@ -2272,13 +2329,8 @@ static int __mlx4_init_one(struct pci_dev *pdev, int pci_dev_data)
 	/* Allow large DMA segments, up to the firmware limit of 1 GB */
 	dma_set_max_seg_size(&pdev->dev, 1024 * 1024 * 1024);
 
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (!priv) {
-		err = -ENOMEM;
-		goto err_release_regions;
-	}
-
-	dev       = &priv->dev;
+	dev       = pci_get_drvdata(pdev);
+	priv      = mlx4_priv(dev);
 	dev->pdev = pdev;
 	INIT_LIST_HEAD(&priv->ctx_list);
 	spin_lock_init(&priv->ctx_lock);
@@ -2462,8 +2514,7 @@ slave_start:
 	mlx4_sense_init(dev);
 	mlx4_start_sense(dev);
 
-	priv->pci_dev_data = pci_dev_data;
-	pci_set_drvdata(pdev, dev);
+	priv->removed = 0;
 
 	if (mlx4_is_master(dev) && dev->num_vfs)
 		atomic_dec(&pf_loading);
@@ -2535,85 +2586,109 @@ err_disable_pdev:
 
 static int mlx4_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 {
+	struct mlx4_priv *priv;
+	struct mlx4_dev *dev;
+
 	printk_once(KERN_INFO "%s", mlx4_version);
 
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	dev       = &priv->dev;
+	pci_set_drvdata(pdev, dev);
+	priv->pci_dev_data = id->driver_data;
+
 	return __mlx4_init_one(pdev, id->driver_data);
+}
+
+static void __mlx4_remove_one(struct pci_dev *pdev)
+{
+	struct mlx4_dev  *dev  = pci_get_drvdata(pdev);
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	int               pci_dev_data;
+	int p;
+
+	if (priv->removed)
+		return;
+
+	pci_dev_data = priv->pci_dev_data;
+
+	/* in SRIOV it is not allowed to unload the pf's
+	 * driver while there are alive vf's */
+	if (mlx4_is_master(dev) && mlx4_how_many_lives_vf(dev))
+		pr_warn("Removing PF when there are assigned VF's !!!\n");
+	mlx4_stop_sense(dev);
+	mlx4_unregister_device(dev);
+
+	for (p = 1; p <= dev->caps.num_ports; p++) {
+		mlx4_cleanup_port_info(&priv->port[p]);
+		mlx4_CLOSE_PORT(dev, p);
+	}
+
+	if (mlx4_is_master(dev))
+		mlx4_free_resource_tracker(dev,
+					   RES_TR_FREE_SLAVES_ONLY);
+
+	mlx4_cleanup_counters_table(dev);
+	mlx4_cleanup_qp_table(dev);
+	mlx4_cleanup_srq_table(dev);
+	mlx4_cleanup_cq_table(dev);
+	mlx4_cmd_use_polling(dev);
+	mlx4_cleanup_eq_table(dev);
+	mlx4_cleanup_mcg_table(dev);
+	mlx4_cleanup_mr_table(dev);
+	mlx4_cleanup_xrcd_table(dev);
+	mlx4_cleanup_pd_table(dev);
+
+	if (mlx4_is_master(dev))
+		mlx4_free_resource_tracker(dev,
+					   RES_TR_FREE_STRUCTS_ONLY);
+
+	iounmap(priv->kar);
+	mlx4_uar_free(dev, &priv->driver_uar);
+	mlx4_cleanup_uar_table(dev);
+	if (!mlx4_is_slave(dev))
+		mlx4_clear_steering(dev);
+	mlx4_free_eq_table(dev);
+	if (mlx4_is_master(dev))
+		mlx4_multi_func_cleanup(dev);
+	mlx4_close_hca(dev);
+	if (mlx4_is_slave(dev))
+		mlx4_multi_func_cleanup(dev);
+	mlx4_cmd_cleanup(dev);
+
+	if (dev->flags & MLX4_FLAG_MSI_X)
+		pci_disable_msix(pdev);
+	if (dev->flags & MLX4_FLAG_SRIOV) {
+		mlx4_warn(dev, "Disabling SR-IOV\n");
+		pci_disable_sriov(pdev);
+		dev->num_vfs = 0;
+	}
+
+	if (!mlx4_is_slave(dev))
+		mlx4_free_ownership(dev);
+
+	kfree(dev->caps.qp0_tunnel);
+	kfree(dev->caps.qp0_proxy);
+	kfree(dev->caps.qp1_tunnel);
+	kfree(dev->caps.qp1_proxy);
+
+	pci_release_regions(pdev);
+	pci_disable_device(pdev);
+	memset(priv, 0, sizeof(*priv));
+	priv->pci_dev_data = pci_dev_data;
+	priv->removed = 1;
 }
 
 static void mlx4_remove_one(struct pci_dev *pdev)
 {
 	struct mlx4_dev  *dev  = pci_get_drvdata(pdev);
 	struct mlx4_priv *priv = mlx4_priv(dev);
-	int p;
 
-	if (dev) {
-		/* in SRIOV it is not allowed to unload the pf's
-		 * driver while there are alive vf's */
-		if (mlx4_is_master(dev)) {
-			if (mlx4_how_many_lives_vf(dev))
-				pr_warn("Removing PF when there are assigned VF's !!!\n");
-		}
-		mlx4_stop_sense(dev);
-		mlx4_unregister_device(dev);
-
-		for (p = 1; p <= dev->caps.num_ports; p++) {
-			mlx4_cleanup_port_info(&priv->port[p]);
-			mlx4_CLOSE_PORT(dev, p);
-		}
-
-		if (mlx4_is_master(dev))
-			mlx4_free_resource_tracker(dev,
-						   RES_TR_FREE_SLAVES_ONLY);
-
-		mlx4_cleanup_counters_table(dev);
-		mlx4_cleanup_qp_table(dev);
-		mlx4_cleanup_srq_table(dev);
-		mlx4_cleanup_cq_table(dev);
-		mlx4_cmd_use_polling(dev);
-		mlx4_cleanup_eq_table(dev);
-		mlx4_cleanup_mcg_table(dev);
-		mlx4_cleanup_mr_table(dev);
-		mlx4_cleanup_xrcd_table(dev);
-		mlx4_cleanup_pd_table(dev);
-
-		if (mlx4_is_master(dev))
-			mlx4_free_resource_tracker(dev,
-						   RES_TR_FREE_STRUCTS_ONLY);
-
-		iounmap(priv->kar);
-		mlx4_uar_free(dev, &priv->driver_uar);
-		mlx4_cleanup_uar_table(dev);
-		if (!mlx4_is_slave(dev))
-			mlx4_clear_steering(dev);
-		mlx4_free_eq_table(dev);
-		if (mlx4_is_master(dev))
-			mlx4_multi_func_cleanup(dev);
-		mlx4_close_hca(dev);
-		if (mlx4_is_slave(dev))
-			mlx4_multi_func_cleanup(dev);
-		mlx4_cmd_cleanup(dev);
-
-		if (dev->flags & MLX4_FLAG_MSI_X)
-			pci_disable_msix(pdev);
-		if (dev->flags & MLX4_FLAG_SRIOV) {
-			mlx4_warn(dev, "Disabling SR-IOV\n");
-			pci_disable_sriov(pdev);
-		dev->num_vfs = 0;
-		}
-
-		if (!mlx4_is_slave(dev))
-			mlx4_free_ownership(dev);
-
-		kfree(dev->caps.qp0_tunnel);
-		kfree(dev->caps.qp0_proxy);
-		kfree(dev->caps.qp1_tunnel);
-		kfree(dev->caps.qp1_proxy);
-
-		kfree(priv);
-		pci_release_regions(pdev);
-		pci_disable_device(pdev);
-		pci_set_drvdata(pdev, NULL);
-	}
+	__mlx4_remove_one(pdev);
+	kfree(priv);
+	pci_set_drvdata(pdev, NULL);
 }
 
 int mlx4_restart_one(struct pci_dev *pdev)
@@ -2623,7 +2698,7 @@ int mlx4_restart_one(struct pci_dev *pdev)
 	int		  pci_dev_data;
 
 	pci_dev_data = priv->pci_dev_data;
-	mlx4_remove_one(pdev);
+	__mlx4_remove_one(pdev);
 	return __mlx4_init_one(pdev, pci_dev_data);
 }
 
@@ -2678,7 +2753,7 @@ MODULE_DEVICE_TABLE(pci, mlx4_pci_table);
 static pci_ers_result_t mlx4_pci_err_detected(struct pci_dev *pdev,
 					      pci_channel_state_t state)
 {
-	mlx4_remove_one(pdev);
+	__mlx4_remove_one(pdev);
 
 	return state == pci_channel_io_perm_failure ?
 		PCI_ERS_RESULT_DISCONNECT : PCI_ERS_RESULT_NEED_RESET;
@@ -2686,7 +2761,11 @@ static pci_ers_result_t mlx4_pci_err_detected(struct pci_dev *pdev,
 
 static pci_ers_result_t mlx4_pci_slot_reset(struct pci_dev *pdev)
 {
-	int ret = __mlx4_init_one(pdev, 0);
+	struct mlx4_dev	 *dev  = pci_get_drvdata(pdev);
+	struct mlx4_priv *priv = mlx4_priv(dev);
+	int               ret;
+
+	ret = __mlx4_init_one(pdev, priv->pci_dev_data);
 
 	return ret ? PCI_ERS_RESULT_DISCONNECT : PCI_ERS_RESULT_RECOVERED;
 }

@@ -601,7 +601,7 @@ EXPORT_SYMBOL(bio_get_nr_vecs);
 
 static int __bio_add_page(struct request_queue *q, struct bio *bio, struct page
 			  *page, unsigned int len, unsigned int offset,
-			  unsigned short max_sectors)
+			  unsigned int max_sectors)
 {
 	struct bio_vec *bvec;
 
@@ -759,7 +759,13 @@ int bio_add_page(struct bio *bio, struct page *page, unsigned int len,
 		 unsigned int offset)
 {
 	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
-	return __bio_add_page(q, bio, page, len, offset, queue_max_sectors(q));
+	unsigned int max_sectors;
+
+	max_sectors = blk_max_size_offset(q, bio->bi_sector);
+	if ((max_sectors < (len >> 9)) && !bio->bi_size)
+		max_sectors = len >> 9;
+
+	return __bio_add_page(q, bio, page, len, offset, max_sectors);
 }
 EXPORT_SYMBOL(bio_add_page);
 

@@ -551,9 +551,10 @@ static int loop_thread(void *data)
 
 	while (!kthread_should_stop() || !bio_list_empty(&lo->lo_bio_list)) {
 
-		wait_event_interruptible(lo->lo_event,
+		wait_event_interruptible(lo->lo_event, ({
+				kgr_task_safe(current);
 				!bio_list_empty(&lo->lo_bio_list) ||
-				kthread_should_stop());
+				kthread_should_stop(); }));
 
 		if (bio_list_empty(&lo->lo_bio_list))
 			continue;

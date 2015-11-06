@@ -175,9 +175,10 @@ static int capa_thread_main(void *unused)
 	wake_up(&ll_capa_thread.t_ctl_waitq);
 
 	while (1) {
-		l_wait_event(ll_capa_thread.t_ctl_waitq,
+		l_wait_event(ll_capa_thread.t_ctl_waitq, ({
+			     kgr_task_safe(current);
 			     !thread_is_running(&ll_capa_thread) ||
-			     have_expired_capa(),
+			     have_expired_capa(); }),
 			     &lwi);
 
 		if (!thread_is_running(&ll_capa_thread))

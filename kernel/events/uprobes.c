@@ -133,6 +133,11 @@ static int __replace_page(struct vm_area_struct *vma, unsigned long addr,
 	/* For mmu_notifiers */
 	const unsigned long mmun_start = addr;
 	const unsigned long mmun_end   = addr + PAGE_SIZE;
+	struct mem_cgroup *memcg;
+
+	err = mem_cgroup_try_charge(kpage, vma->vm_mm, GFP_KERNEL, &memcg);
+	if (err)
+		return err;
 
 	/* For try_to_free_swap() and munlock_vma_page() below */
 	lock_page(page);
@@ -145,6 +150,8 @@ static int __replace_page(struct vm_area_struct *vma, unsigned long addr,
 
 	get_page(kpage);
 	page_add_new_anon_rmap(kpage, vma, addr);
+	mem_cgroup_commit_charge(kpage, memcg, false);
+	lru_cache_add_active_or_unevictable(kpage, vma);
 
 	if (!PageAnon(page)) {
 		dec_mm_counter(mm, MM_FILEPAGES);
@@ -166,6 +173,7 @@ static int __replace_page(struct vm_area_struct *vma, unsigned long addr,
 
 	err = 0;
  unlock:
+	mem_cgroup_cancel_charge(kpage, memcg);
 	mmu_notifier_invalidate_range_end(mm, mmun_start, mmun_end);
 	unlock_page(page);
 	return err;
@@ -246,18 +254,13 @@ static int verify_opcode(struct page *page, unsigned long vaddr, uprobe_opcode_t
  * supported by that architecture then we need to modify is_trap_at_addr and
  * write_opcode accordingly. This would never be a problem for archs that
  * have fixed length instructions.
- */
-
-/*
+ *
  * write_opcode - write the opcode at a given virtual address.
  * @mm: the probed process address space.
  * @vaddr: the virtual address to store the opcode.
  * @opcode: opcode to be written at @vaddr.
  *
- * Called with mm->mmap_sem held (for read and with a reference to
- * mm).
- *
- * For mm @mm, write the opcode at @vaddr.
+ * Called with mm->mmap_sem held for write.
  * Return 0 (success) or a negative errno.
  */
 static int write_opcode(struct mm_struct *mm, unsigned long vaddr,
@@ -277,23 +280,20 @@ retry:
 	if (ret <= 0)
 		goto put_old;
 
+	ret = anon_vma_prepare(vma);
+	if (ret)
+		goto put_old;
+
 	ret = -ENOMEM;
 	new_page = alloc_page_vma(GFP_HIGHUSER_MOVABLE, vma, vaddr);
 	if (!new_page)
 		goto put_old;
 
 	__SetPageUptodate(new_page);
-
 	copy_highpage(new_page, old_page);
 	copy_to_page(new_page, vaddr, &opcode, UPROBE_SWBP_INSN_SIZE);
 
-	ret = anon_vma_prepare(vma);
-	if (ret)
-		goto put_new;
-
 	ret = __replace_page(vma, vaddr, old_page, new_page);
-
-put_new:
 	page_cache_release(new_page);
 put_old:
 	put_page(old_page);
@@ -1511,7 +1511,6 @@ bool uprobe_deny_signal(void)
 		if (__fatal_signal_pending(t) || arch_uprobe_xol_was_trapped(t)) {
 			utask->state = UTASK_SSTEP_TRAPPED;
 			set_tsk_thread_flag(t, TIF_UPROBE);
-			set_tsk_thread_flag(t, TIF_NOTIFY_RESUME);
 		}
 	}
 

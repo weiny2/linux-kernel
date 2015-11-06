@@ -289,7 +289,7 @@ static int setup_ring(struct xenbus_device *dev, struct tpm_private *priv)
 		goto abort_transaction;
 	}
 
-	rv = xenbus_printf(xbt, dev->nodename, "feature-protocol-v2", "1");
+	rv = xenbus_write(xbt, dev->nodename, "feature-protocol-v2", "1");
 	if (rv) {
 		message = "writing feature-protocol-v2";
 		goto abort_transaction;

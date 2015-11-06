@@ -1165,6 +1165,7 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 	i8042.notimeout	[HW] Ignore timeout condition signalled by controller
 	i8042.reset	[HW] Reset the controller during init and cleanup
 	i8042.unlock	[HW] Unlock (ignore) the keylock
+	i8042.kbdreset  [HW] Reset device connected to KBD port
 
 	i810=		[HW,DRM]
 
@@ -2304,6 +2305,9 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 			timeout < 0: reboot immediately
 			Format: <timeout>
 
+	panic_on_warn	panic() instead of WARN().  Useful to cause kdump
+			on a WARN().
+
 	parkbd.port=	[HW] Parallel port number the keyboard adapter is
 			connected to, default is 0.
 			Format: <parport#>
@@ -2900,6 +2904,11 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 		noresume	Don't check if there's a hibernation image
 				present during boot.
 		nocompress	Don't compress/decompress hibernation images.
+		sigenforce      When CONFIG_HIBERNATE_VERIFICATION is set, this
+				menas that snapshot image without (valid)
+				signature will fail to restore. Note that if
+				HIBERNATE_VERIFICATION_FORCE is set, that is
+				always true, so this option does nothing.
 
 	retain_initrd	[RAM] Keep initrd memory after extraction
 
@@ -3229,6 +3238,12 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 			e.g. base its process migration decisions on it.
 			Default is on.
 
+	topology_updates= [KNL, PPC, NUMA]
+			Format: {off}
+			Specify if the kernel should ignore (off)
+			topology updates sent by the hypervisor to this
+			LPAR.
+
 	tp720=		[HW,PS2]
 
 	tpm_suspend_pcr=[HW,TPM]
@@ -3389,6 +3404,10 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 					READ_DISC_INFO command);
 				e = NO_READ_CAPACITY_16 (don't use
 					READ_CAPACITY_16 command);
+				f = NO_REPORT_OPCODES (don't use report opcodes
+					command, uas only);
+				g = MAX_SECTORS_240 (don't transfer more than
+					240 sectors at a time, uas only);
 				h = CAPACITY_HEURISTICS (decrease the
 					reported device capacity by one
 					sector if the number is odd);
@@ -3408,6 +3427,8 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 					bogus residue values);
 				s = SINGLE_LUN (the device has only one
 					Logical Unit);
+				t = NO_ATA_1X (don't allow ATA(12) and ATA(16)
+					commands, uas only);
 				w = NO_WP_DETECT (don't test whether the
 					medium is write-protected).
 			Example: quirks=0419:aaf5:rl,0421:0433:rc

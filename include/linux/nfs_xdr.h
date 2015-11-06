@@ -252,17 +252,6 @@ struct nfs4_layoutget {
 	gfp_t gfp_flags;
 };
 
-struct nfs4_getdevicelist_args {
-	struct nfs4_sequence_args seq_args;
-	const struct nfs_fh *fh;
-	u32 layoutclass;
-};
-
-struct nfs4_getdevicelist_res {
-	struct nfs4_sequence_res seq_res;
-	struct pnfs_devicelist *devlist;
-};
-
 struct nfs4_getdeviceinfo_args {
 	struct nfs4_sequence_args seq_args;
 	struct pnfs_device *pdev;
@@ -279,6 +268,9 @@ struct nfs4_layoutcommit_args {
 	__u64 lastbytewritten;
 	struct inode *inode;
 	const u32 *bitmask;
+	size_t layoutupdate_len;
+	struct page *layoutupdate_page;
+	struct page **layoutupdate_pages;
 };
 
 struct nfs4_layoutcommit_res {
@@ -1138,7 +1130,7 @@ struct nfs41_state_protection {
 	struct nfs4_op_map allow;
 };
 
-#define NFS4_EXCHANGE_ID_LEN	(48)
+#define NFS4_EXCHANGE_ID_LEN	(127)
 struct nfs41_exchange_id_args {
 	struct nfs_client		*client;
 	nfs4_verifier			*verifier;
@@ -1230,10 +1222,21 @@ struct nfs41_free_stateid_res {
 	unsigned int			status;
 };
 
+static inline void
+nfs_free_pnfs_ds_cinfo(struct pnfs_ds_commit_info *cinfo)
+{
+	kfree(cinfo->buckets);
+}
+
 #else
 
 struct pnfs_ds_commit_info {
 };
+
+static inline void
+nfs_free_pnfs_ds_cinfo(struct pnfs_ds_commit_info *cinfo)
+{
+}
 
 #endif /* CONFIG_NFS_V4_1 */
 

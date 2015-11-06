@@ -496,44 +496,7 @@ u32 ip_idents_reserve(u32 hash, int segs)
 }
 EXPORT_SYMBOL(ip_idents_reserve);
 
-static inline int inet_getid(struct inet_peer *p, int more)
-{
-	more++;
-	inet_peer_refcheck(p);
-	return atomic_add_return(more, &p->ip_id_count) - more;
-}
-
-static void ip_select_fb_ident(struct iphdr *iph)
-{
-	static DEFINE_SPINLOCK(ip_fb_id_lock);
-	static u32 ip_fallback_id;
-	u32 salt;
-
-	spin_lock_bh(&ip_fb_id_lock);
-	salt = secure_ip_id((__force __be32)ip_fallback_id ^ iph->daddr);
-	iph->id = htons(salt & 0xFFFF);
-	ip_fallback_id = salt;
-	spin_unlock_bh(&ip_fb_id_lock);
-
-}
-
-void __ip_select_ident(struct iphdr *iph, struct dst_entry *dst, int more)
-{
-	struct net *net = dev_net(dst->dev);
-	struct inet_peer *peer;
-
-	peer = inet_getpeer_v4(net->ipv4.peers, iph->daddr, 1);
-	if (peer) {
-		iph->id = htons(inet_getid(peer, more));
-		inet_putpeer(peer);
-		return;
-	}
-
-	ip_select_fb_ident(iph);
-}
-EXPORT_SYMBOL(__ip_select_ident);
-
-void __ip_select_ident_new(struct iphdr *iph, int segs)
+void __ip_select_ident(struct iphdr *iph, int segs)
 {
 	static u32 ip_idents_hashrnd __read_mostly;
 	static bool hashrnd_initialized = false;
@@ -551,7 +514,7 @@ void __ip_select_ident_new(struct iphdr *iph, int segs)
 	id = ip_idents_reserve(hash, segs);
 	iph->id = htons(id);
 }
-EXPORT_SYMBOL(__ip_select_ident_new);
+EXPORT_SYMBOL(__ip_select_ident);
 
 static void __build_flow_key(struct flowi4 *fl4, const struct sock *sk,
 			     const struct iphdr *iph,
@@ -958,6 +921,10 @@ static int ip_error(struct sk_buff *skb)
 	bool send;
 	int code;
 
+	/* IP on this device is disabled. */
+	if (!in_dev)
+		goto out;
+
 	net = dev_net(rt->dst.dev);
 	if (!IN_DEV_FORWARD(in_dev)) {
 		switch (rt->dst.error) {
@@ -1188,7 +1155,7 @@ static void ipv4_link_failure(struct sk_buff *skb)
 		dst_set_expires(&rt->dst, 0);
 }
 
-static int ip_rt_bug(struct sk_buff *skb)
+static int ip_rt_bug(struct sock *sk, struct sk_buff *skb)
 {
 	pr_debug("%s: %pI4 -> %pI4, %s\n",
 		 __func__, &ip_hdr(skb)->saddr, &ip_hdr(skb)->daddr,
@@ -1598,11 +1565,10 @@ static int __mkroute_input(struct sk_buff *skb,
 
 	do_cache = res->fi && !itag;
 	if (out_dev == in_dev && err && IN_DEV_TX_REDIRECTS(out_dev) &&
+	    skb->protocol == htons(ETH_P_IP) &&
 	    (IN_DEV_SHARED_MEDIA(out_dev) ||
-	     inet_addr_onlink(out_dev, saddr, FIB_RES_GW(*res)))) {
-		flags |= RTCF_DOREDIRECT;
-		do_cache = false;
-	}
+	     inet_addr_onlink(out_dev, saddr, FIB_RES_GW(*res))))
+		IPCB(skb)->flags |= IPSKB_DOREDIRECT;
 
 	if (skb->protocol != htons(ETH_P_IP)) {
 		/* Not IP (i.e. ARP). Do not create route, if it is
@@ -2272,7 +2238,7 @@ struct dst_entry *ipv4_blackhole_route(struct net *net, struct dst_entry *dst_or
 
 		new->__use = 1;
 		new->input = dst_discard;
-		new->output = dst_discard;
+		new->output = dst_discard_sk;
 
 		new->dev = ort->dst.dev;
 		if (new->dev)
@@ -2307,9 +2273,9 @@ struct rtable *ip_route_output_flow(struct net *net, struct flowi4 *flp4,
 		return rt;
 
 	if (flp4->flowi4_proto)
-		rt = (struct rtable *) xfrm_lookup(net, &rt->dst,
-						   flowi4_to_flowi(flp4),
-						   sk, 0);
+		rt = (struct rtable *)xfrm_lookup_route(net, &rt->dst,
+							flowi4_to_flowi(flp4),
+							sk, 0);
 
 	return rt;
 }
@@ -2344,6 +2310,8 @@ static int rt_fill_info(struct net *net,  __be32 dst, __be32 src,
 	r->rtm_flags	= (rt->rt_flags & ~0xFFFF) | RTM_F_CLONED;
 	if (rt->rt_flags & RTCF_NOTIFY)
 		r->rtm_flags |= RTM_F_NOTIFY;
+	if (IPCB(skb)->flags & IPSKB_DOREDIRECT)
+		r->rtm_flags |= RTCF_DOREDIRECT;
 
 	if (nla_put_be32(skb, RTA_DST, dst))
 		goto nla_put_failure;

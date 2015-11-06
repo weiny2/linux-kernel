@@ -225,20 +225,25 @@ static void kvm_shared_msr_cpu_online(void)
 		shared_msr_update(i, shared_msrs_global.msrs[i]);
 }
 
-void kvm_set_shared_msr(unsigned slot, u64 value, u64 mask)
+int kvm_set_shared_msr(unsigned slot, u64 value, u64 mask)
 {
 	unsigned int cpu = smp_processor_id();
 	struct kvm_shared_msrs *smsr = per_cpu_ptr(shared_msrs, cpu);
+	int err;
 
 	if (((value ^ smsr->values[slot].curr) & mask) == 0)
-		return;
+		return 0;
 	smsr->values[slot].curr = value;
-	wrmsrl(shared_msrs_global.msrs[slot], value);
+	err = wrmsrl_safe(shared_msrs_global.msrs[slot], value);
+	if (err)
+		return 1;
+
 	if (!smsr->registered) {
 		smsr->urn.on_user_return = kvm_on_user_return;
 		user_return_notifier_register(&smsr->urn);
 		smsr->registered = true;
 	}
+	return 0;
 }
 EXPORT_SYMBOL_GPL(kvm_set_shared_msr);
 
@@ -622,8 +627,9 @@ EXPORT_SYMBOL_GPL(kvm_set_xcr);
 int kvm_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 {
 	unsigned long old_cr4 = kvm_read_cr4(vcpu);
-	unsigned long pdptr_bits = X86_CR4_PGE | X86_CR4_PSE |
-				   X86_CR4_PAE | X86_CR4_SMEP;
+	unsigned long pdptr_bits = X86_CR4_PGE | X86_CR4_PSE | X86_CR4_PAE |
+				   X86_CR4_SMEP | X86_CR4_SMAP;
+
 	if (cr4 & CR4_RESERVED_BITS)
 		return 1;
 
@@ -631,6 +637,9 @@ int kvm_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 		return 1;
 
 	if (!guest_cpuid_has_smep(vcpu) && (cr4 & X86_CR4_SMEP))
+		return 1;
+
+	if (!guest_cpuid_has_smap(vcpu) && (cr4 & X86_CR4_SMAP))
 		return 1;
 
 	if (!guest_cpuid_has_fsgsbase(vcpu) && (cr4 & X86_CR4_FSGSBASE))
@@ -842,11 +851,12 @@ EXPORT_SYMBOL_GPL(kvm_rdpmc);
  * kvm-specific. Those are put in the beginning of the list.
  */
 
-#define KVM_SAVE_MSRS_BEGIN	10
+#define KVM_SAVE_MSRS_BEGIN	12
 static u32 msrs_to_save[] = {
 	MSR_KVM_SYSTEM_TIME, MSR_KVM_WALL_CLOCK,
 	MSR_KVM_SYSTEM_TIME_NEW, MSR_KVM_WALL_CLOCK_NEW,
 	HV_X64_MSR_GUEST_OS_ID, HV_X64_MSR_HYPERCALL,
+	HV_X64_MSR_TIME_REF_COUNT, HV_X64_MSR_REFERENCE_TSC,
 	HV_X64_MSR_APIC_ASSIST_PAGE, MSR_KVM_ASYNC_PF_EN, MSR_KVM_STEAL_TIME,
 	MSR_KVM_PV_EOI_EN,
 	MSR_IA32_SYSENTER_CS, MSR_IA32_SYSENTER_ESP, MSR_IA32_SYSENTER_EIP,
@@ -922,7 +932,6 @@ void kvm_enable_efer_bits(u64 mask)
 }
 EXPORT_SYMBOL_GPL(kvm_enable_efer_bits);
 
-
 /*
  * Writes msr value into into the appropriate "register".
  * Returns 0 on success, non-0 otherwise.
@@ -930,8 +939,34 @@ EXPORT_SYMBOL_GPL(kvm_enable_efer_bits);
  */
 int kvm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 {
+	switch (msr->index) {
+	case MSR_FS_BASE:
+	case MSR_GS_BASE:
+	case MSR_KERNEL_GS_BASE:
+	case MSR_CSTAR:
+	case MSR_LSTAR:
+		if (is_noncanonical_address(msr->data))
+			return 1;
+		break;
+	case MSR_IA32_SYSENTER_EIP:
+	case MSR_IA32_SYSENTER_ESP:
+		/*
+		 * IA32_SYSENTER_ESP and IA32_SYSENTER_EIP cause #GP if
+		 * non-canonical address is written on Intel but not on
+		 * AMD (which ignores the top 32-bits, because it does
+		 * not implement 64-bit SYSENTER).
+		 *
+		 * 64-bit code should hence be able to write a non-canonical
+		 * value on AMD.  Making the address canonical ensures that
+		 * vmentry does not fail on Intel after writing a non-canonical
+		 * value, and that something deterministic happens if the guest
+		 * invokes 64-bit SYSENTER.
+		 */
+		msr->data = get_canonical(msr->data);
+	}
 	return kvm_x86_ops->set_msr(vcpu, msr);
 }
+EXPORT_SYMBOL_GPL(kvm_set_msr);
 
 /*
  * Adapt set_msr() to msr_io()'s calling convention
@@ -1153,21 +1188,22 @@ void kvm_track_tsc_matching(struct kvm_vcpu *vcpu)
 {
 #ifdef CONFIG_X86_64
 	bool vcpus_matched;
-	bool do_request = false;
 	struct kvm_arch *ka = &vcpu->kvm->arch;
 	struct pvclock_gtod_data *gtod = &pvclock_gtod_data;
 
 	vcpus_matched = (ka->nr_vcpus_matched_tsc + 1 ==
 			 atomic_read(&vcpu->kvm->online_vcpus));
 
-	if (vcpus_matched && gtod->clock.vclock_mode == VCLOCK_TSC)
-		if (!ka->use_master_clock)
-			do_request = 1;
-
-	if (!vcpus_matched && ka->use_master_clock)
-			do_request = 1;
-
-	if (do_request)
+	/*
+	 * Once the masterclock is enabled, always perform request in
+	 * order to update it.
+	 *
+	 * In order to enable masterclock, the host clocksource must be TSC
+	 * and the vcpus need to have matched TSCs.  When that happens,
+	 * perform request to enable masterclock.
+	 */
+	if (ka->use_master_clock ||
+	    (gtod->clock.vclock_mode == VCLOCK_TSC && vcpus_matched))
 		kvm_make_request(KVM_REQ_MASTERCLOCK_UPDATE, vcpu);
 
 	trace_kvm_track_tsc(vcpu->vcpu_id, ka->nr_vcpus_matched_tsc,
@@ -1689,7 +1725,7 @@ static bool valid_mtrr_type(unsigned t)
 	return t < 8 && (1 << t) & 0x73; /* 0, 1, 4, 5, 6 */
 }
 
-static bool mtrr_valid(struct kvm_vcpu *vcpu, u32 msr, u64 data)
+bool kvm_mtrr_valid(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 {
 	int i;
 
@@ -1715,12 +1751,13 @@ static bool mtrr_valid(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 	/* variable MTRRs */
 	return valid_mtrr_type(data & 0xff);
 }
+EXPORT_SYMBOL_GPL(kvm_mtrr_valid);
 
 static int set_msr_mtrr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 {
 	u64 *p = (u64 *)&vcpu->arch.mtrr_state.fixed_ranges;
 
-	if (!mtrr_valid(vcpu, msr, data))
+	if (!kvm_mtrr_valid(vcpu, msr, data))
 		return 1;
 
 	if (msr == MSR_MTRRdefType) {
@@ -1831,6 +1868,8 @@ static bool kvm_hv_msr_partition_wide(u32 msr)
 	switch (msr) {
 	case HV_X64_MSR_GUEST_OS_ID:
 	case HV_X64_MSR_HYPERCALL:
+	case HV_X64_MSR_REFERENCE_TSC:
+	case HV_X64_MSR_TIME_REF_COUNT:
 		r = true;
 		break;
 	}
@@ -1870,6 +1909,20 @@ static int set_msr_hyperv_pw(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 		if (__copy_to_user((void __user *)addr, instructions, 4))
 			return 1;
 		kvm->arch.hv_hypercall = data;
+		break;
+	}
+	case HV_X64_MSR_REFERENCE_TSC: {
+		u64 gfn;
+		HV_REFERENCE_TSC_PAGE tsc_ref;
+		memset(&tsc_ref, 0, sizeof(tsc_ref));
+		kvm->arch.hv_tsc_page = data;
+		if (!(data & HV_X64_MSR_TSC_REFERENCE_ENABLE))
+			break;
+		gfn = data >> HV_X64_MSR_TSC_REFERENCE_ADDRESS_SHIFT;
+		if (kvm_write_guest(kvm, data,
+			&tsc_ref, sizeof(tsc_ref)))
+			return 1;
+		mark_page_dirty(kvm, gfn);
 		break;
 	}
 	default:
@@ -2297,6 +2350,14 @@ static int get_msr_hyperv_pw(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata)
 	case HV_X64_MSR_HYPERCALL:
 		data = kvm->arch.hv_hypercall;
 		break;
+	case HV_X64_MSR_TIME_REF_COUNT: {
+		data =
+		     div_u64(get_kernel_ns() + kvm->arch.kvmclock_offset, 100);
+		break;
+	}
+	case HV_X64_MSR_REFERENCE_TSC:
+		data = kvm->arch.hv_tsc_page;
+		break;
 	default:
 		vcpu_unimpl(vcpu, "Hyper-V unhandled rdmsr: 0x%x\n", msr);
 		return 1;
@@ -2610,6 +2671,7 @@ int kvm_dev_ioctl_check_extension(long ext)
 #ifdef CONFIG_KVM_DEVICE_ASSIGNMENT
 	case KVM_CAP_ASSIGN_DEV_IRQ:
 	case KVM_CAP_PCI_2_3:
+	case KVM_CAP_HYPERV_TIME:
 #endif
 		r = 1;
 		break;
@@ -4092,7 +4154,8 @@ static int vcpu_mmio_gva_to_gpa(struct kvm_vcpu *vcpu, unsigned long gva,
 		| (write ? PFERR_WRITE_MASK : 0);
 
 	if (vcpu_match_mmio_gva(vcpu, gva)
-	    && !permission_fault(vcpu->arch.walk_mmu, vcpu->arch.access, access)) {
+	    && !permission_fault(vcpu, vcpu->arch.walk_mmu,
+				 vcpu->arch.access, access)) {
 		*gpa = vcpu->arch.mmio_gfn << PAGE_SHIFT |
 					(gva & (PAGE_SIZE - 1));
 		trace_vcpu_match_mmio(gva, *gpa, write, false);
@@ -4866,7 +4929,7 @@ static int handle_emulation_failure(struct kvm_vcpu *vcpu)
 
 	++vcpu->stat.insn_emulation_fail;
 	trace_kvm_emulate_insn_failed(vcpu);
-	if (!is_guest_mode(vcpu)) {
+	if (!is_guest_mode(vcpu) && kvm_x86_ops->get_cpl(vcpu) == 0) {
 		vcpu->run->exit_reason = KVM_EXIT_INTERNAL_ERROR;
 		vcpu->run->internal.suberror = KVM_INTERNAL_ERROR_EMULATION;
 		vcpu->run->internal.ndata = 0;

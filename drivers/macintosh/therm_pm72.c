@@ -1870,6 +1870,8 @@ static int main_control_loop(void *x)
 		elapsed = jiffies - start;
 		if (elapsed < HZ)
 			schedule_timeout_interruptible(HZ - elapsed);
+
+		kgr_task_safe(current);
 	}
 
  out:

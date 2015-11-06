@@ -54,38 +54,21 @@ struct mem_cgroup_reclaim_cookie {
 };
 
 #ifdef CONFIG_MEMCG
-/*
- * All "charge" functions with gfp_mask should use GFP_KERNEL or
- * (gfp_mask & GFP_RECLAIM_MASK). In current implementatin, memcg doesn't
- * alloc memory but reclaims memory from all available zones. So, "where I want
- * memory from" bits of gfp_mask has no meaning. So any bits of that field is
- * available but adding a rule is better. charge functions' gfp_mask should
- * be set to GFP_KERNEL or gfp_mask & GFP_RECLAIM_MASK for avoiding ambiguous
- * codes.
- * (Of course, if memcg does memory allocation in future, GFP_KERNEL is sane.)
- */
+bool mem_cgroup_low(struct mem_cgroup *root, struct mem_cgroup *memcg);
 
-extern int mem_cgroup_newpage_charge(struct page *page, struct mm_struct *mm,
-				gfp_t gfp_mask);
-/* for swap handling */
-extern int mem_cgroup_try_charge_swapin(struct mm_struct *mm,
-		struct page *page, gfp_t mask, struct mem_cgroup **memcgp);
-extern void mem_cgroup_commit_charge_swapin(struct page *page,
-					struct mem_cgroup *memcg);
-extern void mem_cgroup_cancel_charge_swapin(struct mem_cgroup *memcg);
+int mem_cgroup_try_charge(struct page *page, struct mm_struct *mm,
+			  gfp_t gfp_mask, struct mem_cgroup **memcgp);
+void mem_cgroup_commit_charge(struct page *page, struct mem_cgroup *memcg,
+			      bool lrucare);
+void mem_cgroup_cancel_charge(struct page *page, struct mem_cgroup *memcg);
+void mem_cgroup_uncharge(struct page *page);
+void mem_cgroup_uncharge_list(struct list_head *page_list);
 
-extern int mem_cgroup_cache_charge(struct page *page, struct mm_struct *mm,
-					gfp_t gfp_mask);
+void mem_cgroup_migrate(struct page *oldpage, struct page *newpage,
+			bool lrucare);
 
 struct lruvec *mem_cgroup_zone_lruvec(struct zone *, struct mem_cgroup *);
 struct lruvec *mem_cgroup_page_lruvec(struct page *, struct zone *);
-
-/* For coalescing uncharge for reducing memcg' overhead*/
-extern void mem_cgroup_uncharge_start(void);
-extern void mem_cgroup_uncharge_end(void);
-
-extern void mem_cgroup_uncharge_page(struct page *page);
-extern void mem_cgroup_uncharge_cache_page(struct page *page);
 
 bool __mem_cgroup_same_or_subtree(const struct mem_cgroup *root_memcg,
 				  struct mem_cgroup *memcg);
@@ -94,7 +77,6 @@ bool task_in_mem_cgroup(struct task_struct *task,
 
 extern struct mem_cgroup *try_get_mem_cgroup_from_page(struct page *page);
 extern struct mem_cgroup *mem_cgroup_from_task(struct task_struct *p);
-extern struct mem_cgroup *try_get_mem_cgroup_from_mm(struct mm_struct *mm);
 
 extern struct mem_cgroup *parent_mem_cgroup(struct mem_cgroup *memcg);
 extern struct mem_cgroup *mem_cgroup_from_css(struct cgroup_subsys_state *css);
@@ -114,12 +96,6 @@ bool mm_match_cgroup(const struct mm_struct *mm, const struct mem_cgroup *memcg)
 
 extern struct cgroup_subsys_state *mem_cgroup_css(struct mem_cgroup *memcg);
 
-extern void
-mem_cgroup_prepare_migration(struct page *page, struct page *newpage,
-			     struct mem_cgroup **memcgp);
-extern void mem_cgroup_end_migration(struct mem_cgroup *memcg,
-	struct page *oldpage, struct page *newpage, bool migration_ok);
-
 struct mem_cgroup *mem_cgroup_iter(struct mem_cgroup *,
 				   struct mem_cgroup *,
 				   struct mem_cgroup_reclaim_cookie *);
@@ -134,8 +110,6 @@ unsigned long mem_cgroup_get_lru_size(struct lruvec *lruvec, enum lru_list);
 void mem_cgroup_update_lru_size(struct lruvec *, enum lru_list, int);
 extern void mem_cgroup_print_oom_info(struct mem_cgroup *memcg,
 					struct task_struct *p);
-extern void mem_cgroup_replace_page_cache(struct page *oldpage,
-					struct page *newpage);
 
 static inline void mem_cgroup_oom_enable(void)
 {
@@ -167,48 +141,23 @@ static inline bool mem_cgroup_disabled(void)
 	return false;
 }
 
-void __mem_cgroup_begin_update_page_stat(struct page *page, bool *locked,
-					 unsigned long *flags);
+struct mem_cgroup *mem_cgroup_begin_page_stat(struct page *page, bool *locked,
+					      unsigned long *flags);
+void mem_cgroup_end_page_stat(struct mem_cgroup *memcg, bool locked,
+			      unsigned long flags);
+void mem_cgroup_update_page_stat(struct mem_cgroup *memcg,
+				 enum mem_cgroup_stat_index idx, int val);
 
-extern atomic_t memcg_moving;
-
-static inline void mem_cgroup_begin_update_page_stat(struct page *page,
-					bool *locked, unsigned long *flags)
-{
-	if (mem_cgroup_disabled())
-		return;
-	rcu_read_lock();
-	*locked = false;
-	if (atomic_read(&memcg_moving))
-		__mem_cgroup_begin_update_page_stat(page, locked, flags);
-}
-
-void __mem_cgroup_end_update_page_stat(struct page *page,
-				unsigned long *flags);
-static inline void mem_cgroup_end_update_page_stat(struct page *page,
-					bool *locked, unsigned long *flags)
-{
-	if (mem_cgroup_disabled())
-		return;
-	if (*locked)
-		__mem_cgroup_end_update_page_stat(page, flags);
-	rcu_read_unlock();
-}
-
-void mem_cgroup_update_page_stat(struct page *page,
-				 enum mem_cgroup_stat_index idx,
-				 int val);
-
-static inline void mem_cgroup_inc_page_stat(struct page *page,
+static inline void mem_cgroup_inc_page_stat(struct mem_cgroup *memcg,
 					    enum mem_cgroup_stat_index idx)
 {
-	mem_cgroup_update_page_stat(page, idx, 1);
+	mem_cgroup_update_page_stat(memcg, idx, 1);
 }
 
-static inline void mem_cgroup_dec_page_stat(struct page *page,
+static inline void mem_cgroup_dec_page_stat(struct mem_cgroup *memcg,
 					    enum mem_cgroup_stat_index idx)
 {
-	mem_cgroup_update_page_stat(page, idx, -1);
+	mem_cgroup_update_page_stat(memcg, idx, -1);
 }
 
 unsigned long mem_cgroup_soft_limit_reclaim(struct zone *zone, int order,
@@ -234,46 +183,42 @@ void mem_cgroup_print_bad_page(struct page *page);
 #else /* CONFIG_MEMCG */
 struct mem_cgroup;
 
-static inline int mem_cgroup_newpage_charge(struct page *page,
-					struct mm_struct *mm, gfp_t gfp_mask)
+static inline bool mem_cgroup_low(struct mem_cgroup *root,
+				  struct mem_cgroup *memcg)
 {
+	return false;
+}
+
+static inline int mem_cgroup_try_charge(struct page *page, struct mm_struct *mm,
+					gfp_t gfp_mask,
+					struct mem_cgroup **memcgp)
+{
+	*memcgp = NULL;
 	return 0;
 }
 
-static inline int mem_cgroup_cache_charge(struct page *page,
-					struct mm_struct *mm, gfp_t gfp_mask)
-{
-	return 0;
-}
-
-static inline int mem_cgroup_try_charge_swapin(struct mm_struct *mm,
-		struct page *page, gfp_t gfp_mask, struct mem_cgroup **memcgp)
-{
-	return 0;
-}
-
-static inline void mem_cgroup_commit_charge_swapin(struct page *page,
-					  struct mem_cgroup *memcg)
+static inline void mem_cgroup_commit_charge(struct page *page,
+					    struct mem_cgroup *memcg,
+					    bool lrucare)
 {
 }
 
-static inline void mem_cgroup_cancel_charge_swapin(struct mem_cgroup *memcg)
+static inline void mem_cgroup_cancel_charge(struct page *page,
+					    struct mem_cgroup *memcg)
 {
 }
 
-static inline void mem_cgroup_uncharge_start(void)
+static inline void mem_cgroup_uncharge(struct page *page)
 {
 }
 
-static inline void mem_cgroup_uncharge_end(void)
+static inline void mem_cgroup_uncharge_list(struct list_head *page_list)
 {
 }
 
-static inline void mem_cgroup_uncharge_page(struct page *page)
-{
-}
-
-static inline void mem_cgroup_uncharge_cache_page(struct page *page)
+static inline void mem_cgroup_migrate(struct page *oldpage,
+				      struct page *newpage,
+				      bool lrucare)
 {
 }
 
@@ -294,11 +239,6 @@ static inline struct mem_cgroup *try_get_mem_cgroup_from_page(struct page *page)
 	return NULL;
 }
 
-static inline struct mem_cgroup *try_get_mem_cgroup_from_mm(struct mm_struct *mm)
-{
-	return NULL;
-}
-
 static inline bool mm_match_cgroup(struct mm_struct *mm,
 		struct mem_cgroup *memcg)
 {
@@ -315,17 +255,6 @@ static inline struct cgroup_subsys_state
 		*mem_cgroup_css(struct mem_cgroup *memcg)
 {
 	return NULL;
-}
-
-static inline void
-mem_cgroup_prepare_migration(struct page *page, struct page *newpage,
-			     struct mem_cgroup **memcgp)
-{
-}
-
-static inline void mem_cgroup_end_migration(struct mem_cgroup *memcg,
-		struct page *oldpage, struct page *newpage, bool migration_ok)
-{
 }
 
 static inline struct mem_cgroup *
@@ -369,13 +298,14 @@ mem_cgroup_print_oom_info(struct mem_cgroup *memcg, struct task_struct *p)
 {
 }
 
-static inline void mem_cgroup_begin_update_page_stat(struct page *page,
+static inline struct mem_cgroup *mem_cgroup_begin_page_stat(struct page *page,
 					bool *locked, unsigned long *flags)
 {
+	return NULL;
 }
 
-static inline void mem_cgroup_end_update_page_stat(struct page *page,
-					bool *locked, unsigned long *flags)
+static inline void mem_cgroup_end_page_stat(struct mem_cgroup *memcg,
+					bool locked, unsigned long flags)
 {
 }
 
@@ -397,12 +327,12 @@ static inline bool mem_cgroup_oom_synchronize(bool wait)
 	return false;
 }
 
-static inline void mem_cgroup_inc_page_stat(struct page *page,
+static inline void mem_cgroup_inc_page_stat(struct mem_cgroup *memcg,
 					    enum mem_cgroup_stat_index idx)
 {
 }
 
-static inline void mem_cgroup_dec_page_stat(struct page *page,
+static inline void mem_cgroup_dec_page_stat(struct mem_cgroup *memcg,
 					    enum mem_cgroup_stat_index idx)
 {
 }
@@ -421,10 +351,6 @@ static inline void mem_cgroup_split_huge_fixup(struct page *head)
 
 static inline
 void mem_cgroup_count_vm_event(struct mm_struct *mm, enum vm_event_item idx)
-{
-}
-static inline void mem_cgroup_replace_page_cache(struct page *oldpage,
-				struct page *newpage)
 {
 }
 #endif /* CONFIG_MEMCG */
@@ -532,9 +458,8 @@ memcg_kmem_newpage_charge(gfp_t gfp, struct mem_cgroup **memcg, int order)
 	/*
 	 * __GFP_NOFAIL allocations will move on even if charging is not
 	 * possible. Therefore we don't even try, and have this allocation
-	 * unaccounted. We could in theory charge it with
-	 * res_counter_charge_nofail, but we hope those allocations are rare,
-	 * and won't be worth the trouble.
+	 * unaccounted. We could in theory charge it forcibly, but we hope
+	 * those allocations are rare, and won't be worth the trouble.
 	 */
 	if (!(gfp & __GFP_KMEMCG) || (gfp & __GFP_NOFAIL))
 		return true;

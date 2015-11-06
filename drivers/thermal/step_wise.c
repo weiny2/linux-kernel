@@ -75,7 +75,7 @@ static unsigned long get_target_state(struct thermal_instance *instance,
 			next_target = instance->upper;
 		break;
 	case THERMAL_TREND_DROPPING:
-		if (cur_state == instance->lower) {
+		if (cur_state <= instance->lower) {
 			if (!throttle)
 				next_target = THERMAL_NO_TARGET;
 		} else {
@@ -139,9 +139,6 @@ static void thermal_zone_trip_update(struct thermal_zone_device *tz, int trip)
 
 		old_target = instance->target;
 		instance->target = get_target_state(instance, trend, throttle);
-
-		if (old_target == instance->target)
-			continue;
 
 		/* Activate a passive thermal instance */
 		if (old_target == THERMAL_NO_TARGET &&

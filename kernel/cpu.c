@@ -146,6 +146,7 @@ void cpu_hotplug_disable(void)
 	cpu_hotplug_disabled = 1;
 	cpu_maps_update_done();
 }
+EXPORT_SYMBOL_GPL(cpu_hotplug_disable);
 
 void cpu_hotplug_enable(void)
 {
@@ -153,7 +154,7 @@ void cpu_hotplug_enable(void)
 	cpu_hotplug_disabled = 0;
 	cpu_maps_update_done();
 }
-
+EXPORT_SYMBOL_GPL(cpu_hotplug_enable);
 #endif	/* CONFIG_HOTPLUG_CPU */
 
 /* Need to know about CPUs going up/down? */

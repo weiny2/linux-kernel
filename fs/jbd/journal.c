@@ -212,6 +212,7 @@ loop:
 			spin_lock(&journal->j_state_lock);
 		}
 		finish_wait(&journal->j_wait_commit, &wait);
+		kgr_task_safe(current);
 	}
 
 	jbd_debug(1, "kjournald wakes\n");

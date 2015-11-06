@@ -74,6 +74,11 @@ struct fib6_node {
 #define FIB6_SUBTREE(fn)	((fn)->subtree)
 #endif
 
+struct mx6_config {
+	const u32 *mx;
+	DECLARE_BITMAP(mx_valid, RTAX_MAX);
+};
+
 /*
  *	routing information
  *
@@ -117,45 +122,15 @@ struct rt6_info {
 	u32				rt6i_metric;
 
 	struct inet6_dev		*rt6i_idev;
-	unsigned long			_rt6i_peer;
 
 	u32				rt6i_genid;
 
+	u32				rt6i_pmtu;
 	/* more non-fragment space at head required */
 	unsigned short			rt6i_nfheader_len;
 
 	u8				rt6i_protocol;
 };
-
-static inline struct inet_peer *rt6_peer_ptr(struct rt6_info *rt)
-{
-	return inetpeer_ptr(rt->_rt6i_peer);
-}
-
-static inline bool rt6_has_peer(struct rt6_info *rt)
-{
-	return inetpeer_ptr_is_peer(rt->_rt6i_peer);
-}
-
-static inline void __rt6_set_peer(struct rt6_info *rt, struct inet_peer *peer)
-{
-	__inetpeer_ptr_set_peer(&rt->_rt6i_peer, peer);
-}
-
-static inline bool rt6_set_peer(struct rt6_info *rt, struct inet_peer *peer)
-{
-	return inetpeer_ptr_set_peer(&rt->_rt6i_peer, peer);
-}
-
-static inline void rt6_init_peer(struct rt6_info *rt, struct inet_peer_base *base)
-{
-	inetpeer_init_ptr(&rt->_rt6i_peer, base);
-}
-
-static inline void rt6_transfer_peer(struct rt6_info *rt, struct rt6_info *ort)
-{
-	inetpeer_transfer_peer(&rt->_rt6i_peer, &ort->_rt6i_peer);
-}
 
 static inline struct inet6_dev *ip6_dst_idev(struct dst_entry *dst)
 {
@@ -185,15 +160,6 @@ static inline void rt6_update_expires(struct rt6_info *rt0, int timeout)
 
 	dst_set_expires(&rt0->dst, timeout);
 	rt0->rt6i_flags |= RTF_EXPIRES;
-}
-
-static inline void rt6_set_from(struct rt6_info *rt, struct rt6_info *from)
-{
-	struct dst_entry *new = (struct dst_entry *) from;
-
-	rt->rt6i_flags &= ~RTF_EXPIRES;
-	dst_hold(new);
-	rt->dst.from = new;
 }
 
 static inline void ip6_rt_put(struct rt6_info *rt)
@@ -290,12 +256,8 @@ extern void			fib6_clean_all(struct net *net,
 					       int (*func)(struct rt6_info *, void *arg),
 					       int prune, void *arg);
 
-extern int			fib6_add(struct fib6_node *root,
-					 struct rt6_info *rt,
-					 struct nl_info *info,
-					 struct nlattr *mx,
-					 int mx_len);
-
+int fib6_add(struct fib6_node *root, struct rt6_info *rt,
+	     struct nl_info *info, struct mx6_config *mxc);
 extern int			fib6_del(struct rt6_info *rt,
 					 struct nl_info *info);
 

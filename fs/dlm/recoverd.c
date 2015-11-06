@@ -288,6 +288,7 @@ static int dlm_recoverd(void *arg)
 	wake_up(&ls->ls_recover_lock_wait);
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (!test_bit(LSFL_RECOVER_WORK, &ls->ls_flags) &&
 		    !test_bit(LSFL_RECOVER_DOWN, &ls->ls_flags))

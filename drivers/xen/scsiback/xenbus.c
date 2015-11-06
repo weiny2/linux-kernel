@@ -45,23 +45,11 @@ struct backend_info
 };
 
 
-static int __vscsiif_name(struct backend_info *be, char *buf)
-{
-	struct xenbus_device *dev = be->dev;
-	unsigned int domid, id;
-
-	sscanf(dev->nodename, "backend/vscsi/%u/%u", &domid, &id);
-	snprintf(buf, TASK_COMM_LEN, "vscsi.%u.%u", be->info->domid, id);
-
-	return 0;
-}
-
 static int scsiback_map(struct backend_info *be)
 {
 	struct xenbus_device *dev = be->dev;
-	unsigned int ring_ref, evtchn;
+	unsigned int ring_ref, evtchn, dom, id;
 	int err;
-	char name[TASK_COMM_LEN];
 
 	err = xenbus_gather(XBT_NIL, dev->otherend,
 			"ring-ref", "%u", &ring_ref,
@@ -75,13 +63,16 @@ static int scsiback_map(struct backend_info *be)
 	if (err)
 		return err;
 
-	err = __vscsiif_name(be, name);
-	if (err) {
-		xenbus_dev_error(dev, err, "get scsiback dev name");
+	err = sscanf(be->dev->nodename, "backend/vscsi/%u/%u", &dom, &id);
+	if (err != 2) {
+		if (err >= 0)
+			err = -EILSEQ;
+		xenbus_dev_error(dev, err, "get scsiback devid");
 		return err;
 	}
 
-	be->info->kthread = kthread_run(scsiback_schedule, be->info, name);
+	be->info->kthread = kthread_run(scsiback_schedule, be->info,
+					"vscsi.%d.%u", be->info->domid, id);
 	if (IS_ERR(be->info->kthread)) {
 		err = PTR_ERR(be->info->kthread);
 		be->info->kthread = NULL;
@@ -165,35 +156,48 @@ static void scsiback_do_lun_hotplug(struct backend_info *be, int op)
 
 		switch (op) {
 		case VSCSIBACK_OP_ADD_OR_DEL_LUN:
-			if (device_state == XenbusStateInitialising) {
+			switch (device_state) {
+			case XenbusStateInitialising:
+			case XenbusStateConnected:
 				sdev = scsiback_get_scsi_device(&phy);
-				if (!sdev)
-					xenbus_printf(XBT_NIL, dev->nodename, state_str, 
-							    "%d", XenbusStateClosed);
-				else {
-					err = scsiback_add_translation_entry(be->info, sdev, &vir);
-					if (!err) {
-						if (xenbus_printf(XBT_NIL, dev->nodename, state_str, 
-								    "%d", XenbusStateInitialised)) {
-							pr_err("scsiback: xenbus_printf error %s\n",
-							       state_str);
-							scsiback_del_translation_entry(be->info, &vir);
-						}
-					} else {
-						scsi_device_put(sdev);
-						xenbus_printf(XBT_NIL, dev->nodename, state_str, 
-								    "%d", XenbusStateClosed);
-					}
+				if (!sdev) {
+					xenbus_printf(XBT_NIL, dev->nodename,
+						      state_str,
+						      "%d", XenbusStateClosed);
+					break;
 				}
-			}
+				if (scsiback_add_translation_entry(be->info,
+								sdev, &vir)) {
+					scsi_device_put(sdev);
+					if (device_state == XenbusStateConnected)
+						break;
+					xenbus_printf(XBT_NIL, dev->nodename,
+						      state_str,
+						      "%d", XenbusStateClosed);
+					break;
+				}
+				if (!xenbus_printf(XBT_NIL, dev->nodename,
+						  state_str, "%d",
+						  XenbusStateInitialised))
+					break;
+				pr_err("scsiback: xenbus_printf error %s\n",
+				       state_str);
+				scsiback_del_translation_entry(be->info, &vir);
+				break;
 
-			if (device_state == XenbusStateClosing) {
-				if (!scsiback_del_translation_entry(be->info, &vir)) {
-					if (xenbus_printf(XBT_NIL, dev->nodename, state_str, 
-							    "%d", XenbusStateClosed))
-						pr_err("scsiback: xenbus_printf error %s\n",
-						       state_str);
-				}
+			case XenbusStateClosing:
+				if (scsiback_del_translation_entry(be->info,
+								   &vir))
+					break;
+				if (xenbus_printf(XBT_NIL, dev->nodename,
+						  state_str, "%d",
+						  XenbusStateClosed))
+					pr_err("scsiback: xenbus_printf error %s\n",
+					       state_str);
+				break;
+
+			default:
+				break;
 			}
 			break;
 

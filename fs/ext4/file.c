@@ -100,7 +100,7 @@ ext4_file_dio_write(struct kiocb *iocb, const struct iovec *iov,
 	struct blk_plug plug;
 	int unaligned_aio = 0;
 	ssize_t ret;
-	int overwrite = 0;
+	int *overwrite = iocb->private;
 	size_t length = iov_length(iov, nr_segs);
 
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS) &&
@@ -117,8 +117,6 @@ ext4_file_dio_write(struct kiocb *iocb, const struct iovec *iov,
 
 	mutex_lock(&inode->i_mutex);
 	blk_start_plug(&plug);
-
-	iocb->private = &overwrite;
 
 	/* check whether we do a DIO overwrite or not */
 	if (ext4_should_dioread_nolock(inode) && !unaligned_aio &&
@@ -143,7 +141,7 @@ ext4_file_dio_write(struct kiocb *iocb, const struct iovec *iov,
 		 * So we should check these two conditions.
 		 */
 		if (err == len && (map.m_flags & EXT4_MAP_MAPPED))
-			overwrite = 1;
+			*overwrite = 1;
 	}
 
 	ret = __generic_file_aio_write(iocb, iov, nr_segs, &iocb->ki_pos);
@@ -152,7 +150,7 @@ ext4_file_dio_write(struct kiocb *iocb, const struct iovec *iov,
 	if (ret > 0) {
 		ssize_t err;
 
-		err = generic_write_sync(file, pos, ret);
+		err = generic_write_sync(file, iocb->ki_pos - ret, ret);
 		if (err < 0 && ret > 0)
 			ret = err;
 	}
@@ -170,6 +168,7 @@ ext4_file_write(struct kiocb *iocb, const struct iovec *iov,
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
 	ssize_t ret;
+	int overwrite = 0;
 
 	/*
 	 * If we have encountered a bitmap-format file, the size limit
@@ -190,7 +189,8 @@ ext4_file_write(struct kiocb *iocb, const struct iovec *iov,
 		}
 	}
 
-	if (unlikely(iocb->ki_filp->f_flags & O_DIRECT))
+	iocb->private = &overwrite;
+	if (unlikely(kiocb_is_direct(iocb)))
 		ret = ext4_file_dio_write(iocb, iov, nr_segs, pos);
 	else
 		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);

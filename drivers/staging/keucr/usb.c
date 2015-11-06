@@ -503,8 +503,9 @@ static int usb_stor_scan_thread(void *__us)
 	set_freezable();
 	/* Wait for the timeout to expire or for a disconnect */
 	if (delay_use > 0) {
-		wait_event_freezable_timeout(us->delay_wait,
-				test_bit(US_FLIDX_DONT_SCAN, &us->dflags),
+		wait_event_freezable_timeout(us->delay_wait, ({
+				kgr_task_safe(current);
+				test_bit(US_FLIDX_DONT_SCAN, &us->dflags); }),
 				delay_use * HZ);
 	}
 

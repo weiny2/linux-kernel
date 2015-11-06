@@ -89,6 +89,15 @@ static inline u64 cyclecounter_cyc2ns(const struct cyclecounter *cc,
 }
 
 /**
+ * timecounter_adjtime - Shifts the time of the clock.
+ * @delta:	Desired change in nanoseconds.
+ */
+static inline void timecounter_adjtime(struct timecounter *tc, s64 delta)
+{
+	tc->nsec += delta;
+}
+
+/**
  * timecounter_init - initialize a time counter
  * @tc:			Pointer to time counter which is to be initialized/reset
  * @cc:			A cycle counter, ready to be used.
@@ -291,7 +300,7 @@ extern struct clocksource* clocksource_get_next(void);
 extern void clocksource_change_rating(struct clocksource *cs, int rating);
 extern void clocksource_suspend(void);
 extern void clocksource_resume(void);
-extern struct clocksource * __init __weak clocksource_default_clock(void);
+extern struct clocksource * __init clocksource_default_clock(void);
 extern void clocksource_mark_unstable(struct clocksource *cs);
 
 extern void

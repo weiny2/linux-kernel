@@ -18,6 +18,7 @@
 #include <linux/freezer.h>
 #include <linux/ptrace.h>
 #include <linux/uaccess.h>
+#include <linux/hardirq.h>
 #include <trace/events/sched.h>
 
 static DEFINE_SPINLOCK(kthread_create_lock);
@@ -234,6 +235,8 @@ static struct sched_param fifo_param, normal_param;
 
 static inline void kthread_set_sched_params(struct task_struct *kthread)
 {
+	if (in_interrupt())
+		return;
 	if (!fifo_param.sched_priority) {
 		sched_setscheduler_nocheck(kthread, SCHED_NORMAL, &normal_param);
 		return;
@@ -243,6 +246,8 @@ static inline void kthread_set_sched_params(struct task_struct *kthread)
 
 static inline void kthread_clr_sched_params(struct task_struct *kthread)
 {
+	if (in_interrupt())
+		return;
 	if (!fifo_param.sched_priority || kthread->policy != SCHED_FIFO)
 		return;
 	sched_setscheduler_nocheck(kthread, SCHED_NORMAL, &normal_param);

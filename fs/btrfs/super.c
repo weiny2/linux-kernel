@@ -68,6 +68,8 @@
 static const struct super_operations btrfs_super_ops;
 static struct file_system_type btrfs_fs_type;
 
+static int btrfs_remount(struct super_block *sb, int *flags, char *data);
+
 static const char *btrfs_decode_error(int errno)
 {
 	char *errstr = "unknown";
@@ -261,7 +263,7 @@ void __btrfs_abort_transaction(struct btrfs_trans_handle *trans,
 	trans->aborted = errno;
 	/* Nothing used. The other threads that have joined this
 	 * transaction may be able to continue. */
-	if (!trans->blocks_used) {
+	if (!trans->blocks_used && list_empty(&trans->new_bgs)) {
 		const char *errstr;
 
 		errstr = btrfs_decode_error(errno);
@@ -492,11 +494,6 @@ int btrfs_parse_options(struct btrfs_root *root, char *options)
 			/* Fallthrough */
 		case Opt_compress:
 		case Opt_compress_type:
-			if (!allow_unsupported) {
-				printk(KERN_WARNING "btrfs: compression is not supported, load module with allow_unsupported=1\n");
-				ret = -EOPNOTSUPP;
-				break;
-			}
 			compress = true;
 			if (token == Opt_compress ||
 			    token == Opt_compress_force ||
@@ -661,7 +658,7 @@ int btrfs_parse_options(struct btrfs_root *root, char *options)
 					     "disabling disk space caching");
 			break;
 		case Opt_inode_cache:
-			if (!allow_unsupported) {
+			if (!btrfs_allow_unsupported) {
 				printk(KERN_WARNING "btrfs: inode_cache is not supported, load module with allow_unsupported=1\n");
 				ret = -EOPNOTSUPP;
 				break;
@@ -687,7 +684,7 @@ int btrfs_parse_options(struct btrfs_root *root, char *options)
 			btrfs_clear_opt(info->mount_opt, ENOSPC_DEBUG);
 			break;
 		case Opt_defrag:
-			if (!allow_unsupported) {
+			if (!btrfs_allow_unsupported) {
 				printk(KERN_WARNING "btrfs: autodefrag is not supported, load module with allow_unsupported=1\n");
 				ret = -EOPNOTSUPP;
 				break;
@@ -870,34 +867,152 @@ out:
 	return error;
 }
 
-static struct dentry *get_default_root(struct super_block *sb,
-				       u64 subvol_objectid)
+static char *get_subvol_name_from_objectid(struct btrfs_fs_info *fs_info,
+					   u64 subvol_objectid)
 {
-	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 	struct btrfs_root *root = fs_info->tree_root;
-	struct btrfs_root *new_root;
+	struct btrfs_root *fs_root;
+	struct btrfs_root_ref *root_ref;
+	struct btrfs_inode_ref *inode_ref;
+	struct btrfs_key key;
+	struct btrfs_path *path = NULL;
+	char *name = NULL, *ptr;
+	u64 dirid;
+	int len;
+	int ret;
+
+	path = btrfs_alloc_path();
+	if (!path) {
+		ret = -ENOMEM;
+		goto err;
+	}
+	path->leave_spinning = 1;
+
+	name = kmalloc(PATH_MAX, GFP_NOFS);
+	if (!name) {
+		ret = -ENOMEM;
+		goto err;
+	}
+	ptr = name + PATH_MAX - 1;
+	ptr[0] = '\0';
+
+	/*
+	 * Walk up the subvolume trees in the tree of tree roots by root
+	 * backrefs until we hit the top-level subvolume.
+	 */
+	while (subvol_objectid != BTRFS_FS_TREE_OBJECTID) {
+		key.objectid = subvol_objectid;
+		key.type = BTRFS_ROOT_BACKREF_KEY;
+		key.offset = (u64)-1;
+
+		ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
+		if (ret < 0) {
+			goto err;
+		} else if (ret > 0) {
+			ret = btrfs_previous_item(root, path, subvol_objectid,
+						  BTRFS_ROOT_BACKREF_KEY);
+			if (ret < 0) {
+				goto err;
+			} else if (ret > 0) {
+				ret = -ENOENT;
+				goto err;
+			}
+		}
+
+		btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
+		subvol_objectid = key.offset;
+
+		root_ref = btrfs_item_ptr(path->nodes[0], path->slots[0],
+					  struct btrfs_root_ref);
+		len = btrfs_root_ref_name_len(path->nodes[0], root_ref);
+		ptr -= len + 1;
+		if (ptr < name) {
+			ret = -ENAMETOOLONG;
+			goto err;
+		}
+		read_extent_buffer(path->nodes[0], ptr + 1,
+				   (unsigned long)(root_ref + 1), len);
+		ptr[0] = '/';
+		dirid = btrfs_root_ref_dirid(path->nodes[0], root_ref);
+		btrfs_release_path(path);
+
+		key.objectid = subvol_objectid;
+		key.type = BTRFS_ROOT_ITEM_KEY;
+		key.offset = (u64)-1;
+		fs_root = btrfs_read_fs_root_no_name(fs_info, &key);
+		if (IS_ERR(fs_root)) {
+			ret = PTR_ERR(fs_root);
+			goto err;
+		}
+
+		/*
+		 * Walk up the filesystem tree by inode refs until we hit the
+		 * root directory.
+		 */
+		while (dirid != BTRFS_FIRST_FREE_OBJECTID) {
+			key.objectid = dirid;
+			key.type = BTRFS_INODE_REF_KEY;
+			key.offset = (u64)-1;
+
+			ret = btrfs_search_slot(NULL, fs_root, &key, path, 0, 0);
+			if (ret < 0) {
+				goto err;
+			} else if (ret > 0) {
+				ret = btrfs_previous_item(fs_root, path, dirid,
+							  BTRFS_INODE_REF_KEY);
+				if (ret < 0) {
+					goto err;
+				} else if (ret > 0) {
+					ret = -ENOENT;
+					goto err;
+				}
+			}
+
+			btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
+			dirid = key.offset;
+
+			inode_ref = btrfs_item_ptr(path->nodes[0],
+						   path->slots[0],
+						   struct btrfs_inode_ref);
+			len = btrfs_inode_ref_name_len(path->nodes[0],
+						       inode_ref);
+			ptr -= len + 1;
+			if (ptr < name) {
+				ret = -ENAMETOOLONG;
+				goto err;
+			}
+			read_extent_buffer(path->nodes[0], ptr + 1,
+					   (unsigned long)(inode_ref + 1), len);
+			ptr[0] = '/';
+			btrfs_release_path(path);
+		}
+       }
+	btrfs_free_path(path);
+	if (ptr == name + PATH_MAX - 1) {
+		name[0] = '/';
+		name[1] = '\0';
+	} else {
+		memmove(name, ptr, name + PATH_MAX - ptr);
+	}
+	return name;
+
+err:
+	btrfs_free_path(path);
+	kfree(name);
+	return ERR_PTR(ret);
+}
+
+static int get_default_subvol_objectid(struct btrfs_fs_info *fs_info, u64 *objectid)
+{
+	struct btrfs_root *root = fs_info->tree_root;
 	struct btrfs_dir_item *di;
 	struct btrfs_path *path;
 	struct btrfs_key location;
-	struct inode *inode;
-	struct dentry *dentry;
 	u64 dir_id;
-	int new = 0;
-
-	/*
-	 * We have a specific subvol we want to mount, just setup location and
-	 * go look up the root.
-	 */
-	if (subvol_objectid) {
-		location.objectid = subvol_objectid;
-		location.type = BTRFS_ROOT_ITEM_KEY;
-		location.offset = (u64)-1;
-		goto find_root;
-	}
 
 	path = btrfs_alloc_path();
 	if (!path)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 	path->leave_spinning = 1;
 
 	/*
@@ -909,55 +1024,24 @@ static struct dentry *get_default_root(struct super_block *sb,
 	di = btrfs_lookup_dir_item(NULL, root, path, dir_id, "default", 7, 0);
 	if (IS_ERR(di)) {
 		btrfs_free_path(path);
-		return ERR_CAST(di);
+		return PTR_ERR(di);
 	}
 	if (!di) {
 		/*
 		 * Ok the default dir item isn't there.  This is weird since
 		 * it's always been there, but don't freak out, just try and
-		 * mount to root most subvolume.
+		 * mount the top-level subvolume.
 		 */
 		btrfs_free_path(path);
-		dir_id = BTRFS_FIRST_FREE_OBJECTID;
-		new_root = fs_info->fs_root;
-		goto setup_root;
+		*objectid = BTRFS_FS_TREE_OBJECTID;
+		return 0;
 	}
 
 	btrfs_dir_item_key_to_cpu(path->nodes[0], di, &location);
 	btrfs_free_path(path);
 
-find_root:
-	new_root = btrfs_read_fs_root_no_name(fs_info, &location);
-	if (IS_ERR(new_root))
-		return ERR_CAST(new_root);
-
-	dir_id = btrfs_root_dirid(&new_root->root_item);
-setup_root:
-	location.objectid = dir_id;
-	location.type = BTRFS_INODE_ITEM_KEY;
-	location.offset = 0;
-
-	inode = btrfs_iget(sb, &location, new_root, &new);
-	if (IS_ERR(inode))
-		return ERR_CAST(inode);
-
-	/*
-	 * If we're just mounting the root most subvol put the inode and return
-	 * a reference to the dentry.  We will have already gotten a reference
-	 * to the inode in btrfs_fill_super so we're good to go.
-	 */
-	if (!new && sb->s_root->d_inode == inode) {
-		iput(inode);
-		return dget(sb->s_root);
-	}
-
-	dentry = d_obtain_alias(inode);
-	if (!IS_ERR(dentry)) {
-		spin_lock(&dentry->d_lock);
-		dentry->d_flags &= ~DCACHE_DISCONNECTED;
-		spin_unlock(&dentry->d_lock);
-	}
-	return dentry;
+	*objectid = location.objectid;
+	return 0;
 }
 
 static int btrfs_fill_super(struct super_block *sb,
@@ -1050,7 +1134,7 @@ static int btrfs_show_options(struct seq_file *seq, struct dentry *dentry)
 		seq_puts(seq, ",nodatacow");
 	if (btrfs_test_opt(root, NOBARRIER))
 		seq_puts(seq, ",nobarrier");
-	if (info->max_inline != 8192 * 1024)
+	if (info->max_inline != BTRFS_DEFAULT_MAX_INLINE)
 		seq_printf(seq, ",max_inline=%llu", info->max_inline);
 	if (info->alloc_start != 0)
 		seq_printf(seq, ",alloc_start=%llu", info->alloc_start);
@@ -1117,6 +1201,10 @@ static int btrfs_show_options(struct seq_file *seq, struct dentry *dentry)
 		seq_puts(seq, ",fatal_errors=panic");
 	if (info->commit_interval != BTRFS_DEFAULT_COMMIT_INTERVAL)
 		seq_printf(seq, ",commit=%d", info->commit_interval);
+	seq_printf(seq, ",subvolid=%llu",
+		  BTRFS_I(dentry->d_inode)->root->root_key.objectid);
+	seq_puts(seq, ",subvol=");
+	seq_dentry(seq, dentry, " \t\n\\");
 	return 0;
 }
 
@@ -1146,84 +1234,147 @@ static inline int is_subvolume_inode(struct inode *inode)
 	return 0;
 }
 
+/* TODO: proper backport */
+static char *__strchrnul(const char *s, int c)
+{
+        while (*s && *s != (char)c)
+                s++;
+        return (char *)s;
+}
 /*
- * This will strip out the subvol=%s argument for an argument string and add
- * subvolid=0 to make sure we get the actual tree root for path walking to the
- * subvol we want.
+ * This will add subvolid=0 to the argument string while removing any subvol=
+ * and subvolid= arguments to make sure we get the top-level root for path
+ * walking to the subvol we want.
  */
 static char *setup_root_args(char *args)
 {
-	unsigned len = strlen(args) + 2 + 1;
-	char *src, *dst, *buf;
+	char *buf, *dst, *sep;
 
-	/*
-	 * We need the same args as before, but with this substitution:
-	 * s!subvol=[^,]+!subvolid=0!
-	 *
-	 * Since the replacement string is up to 2 bytes longer than the
-	 * original, allocate strlen(args) + 2 + 1 bytes.
-	 */
+	if (!args)
+		return kstrdup("subvolid=0", GFP_NOFS);
 
-	src = strstr(args, "subvol=");
-	/* This shouldn't happen, but just in case.. */
-	if (!src)
-		return NULL;
-
-	buf = dst = kmalloc(len, GFP_NOFS);
+	/* The worst case is that we add ",subvolid=0" to the end. */
+	buf = dst = kmalloc(strlen(args) + strlen(",subvolid=0") + 1, GFP_NOFS);
 	if (!buf)
 		return NULL;
 
-	/*
-	 * If the subvol= arg is not at the start of the string,
-	 * copy whatever precedes it into buf.
-	 */
-	if (src != args) {
-		*src++ = '\0';
-		strcpy(buf, args);
-		dst += strlen(args);
+	while (1) {
+		sep = __strchrnul(args, ',');
+		if (!strstarts(args, "subvol=") &&
+		    !strstarts(args, "subvolid=")) {
+			memcpy(dst, args, sep - args);
+			dst += sep - args;
+			*dst++ = ',';
+		}
+		if (*sep)
+			args = sep + 1;
+		else
+			break;
 	}
-
 	strcpy(dst, "subvolid=0");
-	dst += strlen("subvolid=0");
-
-	/*
-	 * If there is a "," after the original subvol=... string,
-	 * copy that suffix into our buffer.  Otherwise, we're done.
-	 */
-	src = strchr(src, ',');
-	if (src)
-		strcpy(dst, src);
 
 	return buf;
 }
 
-static struct dentry *mount_subvol(const char *subvol_name, int flags,
-				   const char *device_name, char *data)
+static struct dentry *mount_subvol(const char *subvol_name, u64 subvol_objectid,
+				   int flags, const char *device_name,
+				   char *data)
 {
 	struct dentry *root;
-	struct vfsmount *mnt;
+	struct vfsmount *mnt = NULL;
 	char *newargs;
+	int ret;
 
 	newargs = setup_root_args(data);
-	if (!newargs)
-		return ERR_PTR(-ENOMEM);
-	mnt = vfs_kern_mount(&btrfs_fs_type, flags, device_name,
-			     newargs);
-	kfree(newargs);
-	if (IS_ERR(mnt))
-		return ERR_CAST(mnt);
-
-	root = mount_subtree(mnt, subvol_name);
-
-	if (!IS_ERR(root) && !is_subvolume_inode(root->d_inode)) {
-		struct super_block *s = root->d_sb;
-		dput(root);
-		root = ERR_PTR(-EINVAL);
-		deactivate_locked_super(s);
-		printk(KERN_ERR "BTRFS: '%s' is not a valid subvolume\n",
-				subvol_name);
+	if (!newargs) {
+		root = ERR_PTR(-ENOMEM);
+		goto out;
 	}
 
+	mnt = vfs_kern_mount(&btrfs_fs_type, flags, device_name, newargs);
+	if (PTR_ERR_OR_ZERO(mnt) == -EBUSY) {
+		if (flags & MS_RDONLY) {
+			mnt = vfs_kern_mount(&btrfs_fs_type, flags & ~MS_RDONLY,
+					     device_name, newargs);
+		} else {
+			mnt = vfs_kern_mount(&btrfs_fs_type, flags | MS_RDONLY,
+					     device_name, newargs);
+			if (IS_ERR(mnt)) {
+				root = ERR_CAST(mnt);
+				mnt = NULL;
+				goto out;
+			}
+
+			down_write(&mnt->mnt_sb->s_umount);
+			ret = btrfs_remount(mnt->mnt_sb, &flags, NULL);
+			up_write(&mnt->mnt_sb->s_umount);
+			if (ret < 0) {
+				root = ERR_PTR(ret);
+				goto out;
+			}
+		}
+	}
+	if (IS_ERR(mnt)) {
+		root = ERR_CAST(mnt);
+		mnt = NULL;
+		goto out;
+	}
+
+	if (!subvol_name) {
+		if (!subvol_objectid) {
+			ret = get_default_subvol_objectid(btrfs_sb(mnt->mnt_sb),
+							  &subvol_objectid);
+			if (ret) {
+				root = ERR_PTR(ret);
+				goto out;
+			}
+		}
+		subvol_name = get_subvol_name_from_objectid(btrfs_sb(mnt->mnt_sb),
+							    subvol_objectid);
+		if (IS_ERR(subvol_name)) {
+			root = ERR_CAST(subvol_name);
+			subvol_name = NULL;
+			goto out;
+		}
+
+	}
+
+	root = mount_subtree(mnt, subvol_name);
+	/* mount_subtree() drops our reference on the vfsmount. */
+	mnt = NULL;
+
+	if (!IS_ERR(root)) {
+		struct super_block *s = root->d_sb;
+		struct inode *root_inode = root->d_inode;
+		u64 root_objectid = BTRFS_I(root_inode)->root->root_key.objectid;
+
+		ret = 0;
+		if (!is_subvolume_inode(root_inode)) {
+			printk(KERN_ERR "BTRFS: '%s' is not a valid subvolume\n",
+ 				subvol_name);
+			ret = -EINVAL;
+		}
+		if (subvol_objectid && root_objectid != subvol_objectid) {
+			/*
+			 * This will also catch a race condition where a
+			 * subvolume which was passed by ID is renamed and
+			 * another subvolume is renamed over the old location.
+			 */
+			printk(KERN_ERR "BTRFS: subvol '%s' does not match subvolid %llu\n",
+				subvol_name, subvol_objectid);
+			ret = -EINVAL;
+		}
+		if (ret) {
+			dput(root);
+			root = ERR_PTR(ret);
+			deactivate_locked_super(s);
+		}
+	}
+
+out:
+	mntput(mnt);
+	kfree(newargs);
+	kfree(subvol_name);
 	return root;
 }
 
@@ -1238,7 +1389,6 @@ static struct dentry *btrfs_mount(struct file_system_type *fs_type, int flags,
 {
 	struct block_device *bdev = NULL;
 	struct super_block *s;
-	struct dentry *root;
 	struct btrfs_fs_devices *fs_devices = NULL;
 	struct btrfs_fs_info *fs_info = NULL;
 	fmode_t mode = FMODE_READ;
@@ -1257,10 +1407,10 @@ static struct dentry *btrfs_mount(struct file_system_type *fs_type, int flags,
 		return ERR_PTR(error);
 	}
 
-	if (subvol_name) {
-		root = mount_subvol(subvol_name, flags, device_name, data);
-		kfree(subvol_name);
-		return root;
+	if (subvol_name || subvol_objectid != BTRFS_FS_TREE_OBJECTID) {
+		/* mount_subvol() will free subvol_name. */
+		return mount_subvol(subvol_name, subvol_objectid, flags,
+				    device_name, data);
 	}
 
 	error = btrfs_scan_one_device(device_name, mode, fs_type, &fs_devices);
@@ -1317,16 +1467,18 @@ static struct dentry *btrfs_mount(struct file_system_type *fs_type, int flags,
 					 flags & MS_SILENT ? 1 : 0);
 	}
 
-	root = !error ? get_default_root(s, subvol_objectid) : ERR_PTR(error);
-	if (IS_ERR(root))
+	if (error) {
 		deactivate_locked_super(s);
+		goto error;
+	}
 
-	return root;
+	return dget(s->s_root);
 
 error_close_devices:
 	btrfs_close_devices(fs_devices);
 error_fs_info:
 	free_fs_info(fs_info);
+error:
 	return ERR_PTR(error);
 }
 
@@ -1470,7 +1622,7 @@ static int btrfs_remount(struct super_block *sb, int *flags, char *data)
 		}
 		if ((btrfs_super_incompat_flags(fs_info->super_copy)
 					& BTRFS_FEATURE_INCOMPAT_RAID56)
-				&& !allow_unsupported) {
+				&& !btrfs_allow_unsupported) {
 			printk(KERN_WARNING "btrfs: cannot remount RW, RAID56 is supported read-only, load module with allow_unsupported=1\n");
 			ret = -EINVAL;
 			goto restore;
@@ -1756,7 +1908,7 @@ static int btrfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_bfree -= block_rsv->size >> bits;
 	spin_unlock(&block_rsv->lock);
 
-	buf->f_bavail = total_free_data;
+	buf->f_bavail = div_u64(total_free_data, factor);
 	ret = btrfs_calc_avail_data_space(fs_info->tree_root, &total_free_data);
 	if (ret) {
 		mutex_unlock(&fs_info->chunk_mutex);
@@ -1888,6 +2040,11 @@ static int btrfs_show_devname(struct seq_file *m, struct dentry *root)
 	return 0;
 }
 
+static dev_t btrfs_get_inode_dev(const struct inode *inode)
+{
+	return BTRFS_I(inode)->root->sbdev.anon_dev;
+}
+
 static const struct super_operations btrfs_super_ops = {
 	.drop_inode	= btrfs_drop_inode,
 	.evict_inode	= btrfs_evict_inode,
@@ -1902,6 +2059,7 @@ static const struct super_operations btrfs_super_ops = {
 	.remount_fs	= btrfs_remount,
 	.freeze_fs	= btrfs_freeze,
 	.unfreeze_fs	= btrfs_unfreeze,
+	.get_inode_dev	= btrfs_get_inode_dev,
 };
 
 static const struct file_operations btrfs_ctl_fops = {
@@ -2029,7 +2187,7 @@ static int __init init_btrfs_fs(void)
 	btrfs_print_info();
 
 #ifdef CONFIG_SUSE_KERNEL_SUPPORTED
-	if (allow_unsupported) {
+	if (btrfs_allow_unsupported) {
 		add_taint(TAINT_NO_SUPPORT, LOCKDEP_STILL_OK);
 		printk(KERN_INFO "btrfs: allow_unsupported=1 taints kernel\n");
 	}
@@ -2090,9 +2248,9 @@ static void __exit exit_btrfs_fs(void)
 }
 
 #ifdef CONFIG_SUSE_KERNEL_SUPPORTED
-bool allow_unsupported = false;
+bool btrfs_allow_unsupported = false;
 #else
-bool allow_unsupported = true;
+bool btrfs_allow_unsupported = true;
 #endif
 
 static int btrfs_set_allow_unsupported(const char *buffer, const struct kernel_param *kp)
@@ -2108,13 +2266,13 @@ static int btrfs_set_allow_unsupported(const char *buffer, const struct kernel_p
 		return ret;
 
 #ifdef CONFIG_SUSE_KERNEL_SUPPORTED
-	if (allow_unsupported && !newval) {
+	if (btrfs_allow_unsupported && !newval) {
 		printk(KERN_INFO "btrfs: disallowing unsupported features, kernel remains tainted\n");
-		allow_unsupported = false;
-	} else if (!allow_unsupported && newval) {
+		btrfs_allow_unsupported = false;
+	} else if (!btrfs_allow_unsupported && newval) {
 		printk(KERN_INFO "btrfs: allowing unsupported features, kernel tainted\n");
 		add_taint(TAINT_NO_SUPPORT, LOCKDEP_STILL_OK);
-		allow_unsupported = true;
+		btrfs_allow_unsupported = true;
 	}
 #endif
 	return 0;
@@ -2126,7 +2284,7 @@ static struct kernel_param_ops btrfs_allow_unsupported_param_ops = {
 };
 
 module_param_cb(allow_unsupported, &btrfs_allow_unsupported_param_ops,
-		&allow_unsupported, 0644);
+		&btrfs_allow_unsupported, 0644);
 MODULE_PARM_DESC(allow_unsupported, "Allow using features that are out of supported scope");
 
 late_initcall(init_btrfs_fs);

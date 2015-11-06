@@ -612,6 +612,8 @@ static int dmatest_func(void *data)
 
 		total_tests++;
 
+		kgr_task_safe(current);
+
 		/* honor alignment restrictions */
 		if (thread->type == DMA_MEMCPY)
 			align = dev->copy_align;
@@ -721,7 +723,9 @@ static int dmatest_func(void *data)
 		}
 		dma_async_issue_pending(chan);
 
-		wait_event_freezable_timeout(done_wait, done.done,
+		wait_event_freezable_timeout(done_wait, ({
+					     kgr_task_safe(current);
+					     done.done; }),
 					     msecs_to_jiffies(params->timeout));
 
 		status = dma_async_is_tx_complete(chan, cookie, NULL, NULL);

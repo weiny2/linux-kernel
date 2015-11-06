@@ -28,7 +28,7 @@ static void efi_char16_printk(efi_system_table_t *sys_table_arg,
 	efi_call_phys2(out->output_string, out, str);
 }
 
-static void efi_printk(efi_system_table_t *sys_table_arg, char *str)
+void efi_printk(efi_system_table_t *sys_table_arg, char *str)
 {
 	char *s8;
 

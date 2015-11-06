@@ -447,6 +447,14 @@ config NODES_SHIFT
 	default "4"
 	depends on NEED_MULTIPLE_NODES
 
+config USE_PERCPU_NUMA_NODE_ID
+	def_bool y
+	depends on NUMA
+
+config HAVE_MEMORYLESS_NODES
+	def_bool y
+	depends on NUMA
+
 config ARCH_SELECT_MEMORY_MODEL
 	def_bool y
 	depends on PPC64
@@ -585,6 +593,10 @@ config PPC_SUBPAGE_PROT
 	  This option adds support for a system call to allow user programs
 	  to set access permissions (read/write, readonly, or no access)
 	  on the 4k subpages of each 64k page.
+
+config PPC_COPRO_BASE
+	bool
+	default n
 
 config SCHED_SMT
 	bool "SMT (Hyperthreading) scheduler support"

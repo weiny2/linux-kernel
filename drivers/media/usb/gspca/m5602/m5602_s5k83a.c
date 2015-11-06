@@ -178,6 +178,8 @@ static int rotation_thread_function(void *data)
 
 	set_current_state(TASK_INTERRUPTIBLE);
 	while (!schedule_timeout(100)) {
+		kgr_task_safe(current);
+
 		if (mutex_lock_interruptible(&sd->gspca_dev.usb_lock))
 			break;
 

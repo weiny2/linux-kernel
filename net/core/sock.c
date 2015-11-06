@@ -1657,6 +1657,12 @@ void sock_rfree(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(sock_rfree);
 
+void sock_efree(struct sk_buff *skb)
+{
+	sock_put(skb->sk);
+}
+EXPORT_SYMBOL(sock_efree);
+
 void sock_edemux(struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
@@ -1907,8 +1913,10 @@ bool sk_page_frag_refill(struct sock *sk, struct page_frag *pfrag)
 	do {
 		gfp_t gfp = sk->sk_allocation;
 
-		if (order)
+		if (order) {
 			gfp |= __GFP_COMP | __GFP_NOWARN | __GFP_NORETRY;
+			gfp &= ~__GFP_WAIT;
+		}
 		pfrag->page = alloc_pages(gfp, order);
 		if (likely(pfrag->page)) {
 			pfrag->offset = 0;

@@ -2245,8 +2245,8 @@ static ssize_t ocfs2_file_aio_write(struct kiocb *iocb,
 	if (iocb->ki_nbytes == 0)
 		return 0;
 
-	appending = file->f_flags & O_APPEND ? 1 : 0;
-	direct_io = file->f_flags & O_DIRECT ? 1 : 0;
+	appending = kiocb_is_append(iocb) ? 1 : 0;
+	direct_io = kiocb_is_direct(iocb) ? 1 : 0;
 
 	mutex_lock(&inode->i_mutex);
 
@@ -2346,7 +2346,7 @@ relock:
 		goto out_dio;
 
 	count = ocount;
-	ret = generic_write_checks(file, ppos, &count,
+	ret = generic_write_checks2(iocb, ppos, &count,
 				   S_ISBLK(inode->i_mode));
 	if (ret)
 		goto out_dio;
@@ -2367,28 +2367,32 @@ relock:
 
 out_dio:
 	/* buffered aio wouldn't have proper lock coverage today */
-	BUG_ON(ret == -EIOCBQUEUED && !(file->f_flags & O_DIRECT));
+	BUG_ON(ret == -EIOCBQUEUED && !kiocb_is_direct(iocb));
+
+	if (unlikely(written <= 0))
+		goto no_sync;
 
 	if (((file->f_flags & O_DSYNC) && !direct_io) || IS_SYNC(inode) ||
 	    ((file->f_flags & O_DIRECT) && !direct_io)) {
-		ret = filemap_fdatawrite_range(file->f_mapping, *ppos,
-					       *ppos + count - 1);
+		ret = filemap_fdatawrite_range(file->f_mapping,
+					       iocb->ki_pos - written,
+					       iocb->ki_pos - 1);
 		if (ret < 0)
 			written = ret;
 
-		if (!ret && ((old_size != i_size_read(inode)) ||
-			     (old_clusters != OCFS2_I(inode)->ip_clusters) ||
-			     has_refcount)) {
+		if (!ret) {
 			ret = jbd2_journal_force_commit(osb->journal->j_journal);
 			if (ret < 0)
 				written = ret;
 		}
 
 		if (!ret)
-			ret = filemap_fdatawait_range(file->f_mapping, *ppos,
-						      *ppos + count - 1);
+			ret = filemap_fdatawait_range(file->f_mapping,
+						      iocb->ki_pos - written,
+						      iocb->ki_pos - 1);
 	}
 
+no_sync:
 	/*
 	 * deep in g_f_a_w_n()->ocfs2_direct_IO we pass in a ocfs2_dio_end_io
 	 * function pointer which is called when o_direct io completes so that
@@ -2450,9 +2454,7 @@ static ssize_t ocfs2_file_splice_write(struct pipe_inode_info *pipe,
 	struct address_space *mapping = out->f_mapping;
 	struct inode *inode = mapping->host;
 	struct splice_desc sd = {
-		.total_len = len,
 		.flags = flags,
-		.pos = *ppos,
 		.u.file = out,
 	};
 
@@ -2461,6 +2463,12 @@ static ssize_t ocfs2_file_splice_write(struct pipe_inode_info *pipe,
 			(unsigned long long)OCFS2_I(inode)->ip_blkno,
 			out->f_path.dentry->d_name.len,
 			out->f_path.dentry->d_name.name, len);
+
+	ret = generic_write_checks(out, ppos, &len, 0);
+	if (ret)
+		return ret;
+	sd.total_len = len;
+	sd.pos = *ppos;
 
 	pipe_lock(pipe);
 
@@ -2559,7 +2567,7 @@ static ssize_t ocfs2_file_aio_read(struct kiocb *iocb,
 	 * buffered reads protect themselves in ->readpage().  O_DIRECT reads
 	 * need locks to protect pending reads from racing with truncate.
 	 */
-	if (filp->f_flags & O_DIRECT) {
+	if (kiocb_is_direct(iocb)) {
 		have_alloc_sem = 1;
 		ocfs2_iocb_set_sem_locked(iocb);
 
@@ -2593,7 +2601,7 @@ static ssize_t ocfs2_file_aio_read(struct kiocb *iocb,
 	trace_generic_file_aio_read_ret(ret);
 
 	/* buffered aio wouldn't have proper lock coverage today */
-	BUG_ON(ret == -EIOCBQUEUED && !(filp->f_flags & O_DIRECT));
+	BUG_ON(ret == -EIOCBQUEUED && !kiocb_is_direct(iocb));
 
 	/* see ocfs2_file_aio_write */
 	if (ret == -EIOCBQUEUED || !ocfs2_iocb_is_rw_locked(iocb)) {

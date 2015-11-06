@@ -31,6 +31,7 @@
 #include <linux/crypto.h>
 #include <linux/cryptohash.h>
 #include <linux/kref.h>
+#include <linux/ktime.h>
 
 #include <net/inet_connection_sock.h>
 #include <net/inet_timewait_sock.h>
@@ -454,10 +455,12 @@ extern const u8 *tcp_parse_md5sig_option(const struct tcphdr *th);
  */
 
 extern void tcp_v4_send_check(struct sock *sk, struct sk_buff *skb);
+void tcp_v4_mtu_reduced(struct sock *sk);
 extern int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb);
 extern struct sock * tcp_create_openreq_child(struct sock *sk,
 					      struct request_sock *req,
 					      struct sk_buff *skb);
+void tcp_ca_openreq_child(struct sock *sk, const struct dst_entry *dst);
 extern struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 					  struct request_sock *req,
 					  struct dst_entry *dst);
@@ -482,7 +485,6 @@ extern int __cookie_v4_check(const struct iphdr *iph, const struct tcphdr *th,
 extern struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb, 
 				    struct ip_options *opt);
 #ifdef CONFIG_SYN_COOKIES
-#include <linux/ktime.h>
 
 /* Syncookies use a monotonic timer which increments every 60 seconds.
  * This counter is used both as a hash input and partially encoded into
@@ -626,7 +628,7 @@ static inline void tcp_bound_rto(const struct sock *sk)
 
 static inline u32 __tcp_set_rto(const struct tcp_sock *tp)
 {
-	return (tp->srtt >> 3) + tp->rttvar;
+	return usecs_to_jiffies((tp->srtt_us >> 3) + tp->rttvar_us);
 }
 
 extern void tcp_set_rto(struct sock *sk);
@@ -665,6 +667,16 @@ static inline u32 tcp_rto_min(struct sock *sk)
 	return rto_min;
 }
 
+static inline u32 tcp_rto_min_us(struct sock *sk)
+{
+	return jiffies_to_usecs(tcp_rto_min(sk));
+}
+
+static inline bool tcp_ca_dst_locked(const struct dst_entry *dst)
+{
+	return dst_metric_locked(dst, RTAX_CC_ALGO);
+}
+
 /* Compute the actual receive window we are currently advertising.
  * Rcv_nxt can be after the window if our peer push more data
  * than the offered window.
@@ -694,6 +706,12 @@ void tcp_send_window_probe(struct sock *sk);
  */
 #define tcp_time_stamp		((__u32)(jiffies))
 
+static inline u32 tcp_skb_timestamp(const struct sk_buff *skb)
+{
+	return skb->skb_mstamp.stamp_jiffies;
+}
+
+
 #define tcp_flag_byte(th) (((u_int8_t *)th)[13])
 
 #define TCPHDR_FIN 0x01
@@ -720,7 +738,7 @@ struct tcp_skb_cb {
 	} header;	/* For incoming frames		*/
 	__u32		seq;		/* Starting sequence number	*/
 	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
-	__u32		when;		/* used to compute rtt's	*/
+	__u32		tcp_tw_isn;	/* isn chosen by tcp_timewait_state_process() */
 	__u8		tcp_flags;	/* TCP header flags. (tcp[13])	*/
 
 	__u8		sacked;		/* State flags for SACK/FACK.	*/
@@ -728,8 +746,10 @@ struct tcp_skb_cb {
 #define TCPCB_SACKED_RETRANS	0x02	/* SKB retransmitted		*/
 #define TCPCB_LOST		0x04	/* SKB is lost			*/
 #define TCPCB_TAGBITS		0x07	/* All tag bits			*/
+#define TCPCB_REPAIRED		0x10	/* SKB repaired (no skb_mstamp)	*/
 #define TCPCB_EVER_RETRANS	0x80	/* Ever retransmitted frame	*/
-#define TCPCB_RETRANS		(TCPCB_SACKED_RETRANS|TCPCB_EVER_RETRANS)
+#define TCPCB_RETRANS		(TCPCB_SACKED_RETRANS|TCPCB_EVER_RETRANS| \
+				TCPCB_REPAIRED)
 
 	__u8		ip_dsfield;	/* IPv4 tos or IPv6 dsfield	*/
 	/* 1 byte hole */
@@ -786,12 +806,14 @@ enum tcp_ca_event {
 #define TCP_CA_MAX	128
 #define TCP_CA_BUF_MAX	(TCP_CA_NAME_MAX*TCP_CA_MAX)
 
+#define TCP_CA_UNSPEC	0
+
 #define TCP_CONG_NON_RESTRICTED 0x1
-#define TCP_CONG_RTT_STAMP	0x2
 
 struct tcp_congestion_ops {
 	struct list_head	list;
-	unsigned long flags;
+	u32 key;
+	u32 flags;
 
 	/* initialize private data (optional) */
 	void (*init)(struct sock *sk);
@@ -822,6 +844,7 @@ struct tcp_congestion_ops {
 extern int tcp_register_congestion_control(struct tcp_congestion_ops *type);
 extern void tcp_unregister_congestion_control(struct tcp_congestion_ops *type);
 
+void tcp_assign_congestion_control(struct sock *sk);
 extern void tcp_init_congestion_control(struct sock *sk);
 extern void tcp_cleanup_congestion_control(struct sock *sk);
 extern int tcp_set_default_congestion_control(const char *name);
@@ -833,11 +856,21 @@ extern int tcp_set_congestion_control(struct sock *sk, const char *name);
 extern void tcp_slow_start(struct tcp_sock *tp);
 extern void tcp_cong_avoid_ai(struct tcp_sock *tp, u32 w);
 
-extern struct tcp_congestion_ops tcp_init_congestion_ops;
 extern u32 tcp_reno_ssthresh(struct sock *sk);
 extern void tcp_reno_cong_avoid(struct sock *sk, u32 ack, u32 in_flight);
 extern u32 tcp_reno_min_cwnd(const struct sock *sk);
 extern struct tcp_congestion_ops tcp_reno;
+
+struct tcp_congestion_ops *tcp_ca_find_key(u32 key);
+u32 tcp_ca_get_key_by_name(const char *name);
+#ifdef CONFIG_INET
+char *tcp_ca_get_name_by_key(u32 key, char *buffer);
+#else
+static inline char *tcp_ca_get_name_by_key(u32 key, char *buffer)
+{
+	return NULL;
+}
+#endif
 
 static inline void tcp_set_ca_state(struct sock *sk, const u8 ca_state)
 {

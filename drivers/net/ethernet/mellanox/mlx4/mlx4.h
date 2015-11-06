@@ -282,6 +282,9 @@ struct mlx4_icm_table {
 #define MLX4_MPT_STATUS_SW		0xF0
 #define MLX4_MPT_STATUS_HW		0x00
 
+#define MLX4_CQE_SIZE_MASK_STRIDE	0x3
+#define MLX4_EQE_SIZE_MASK_STRIDE	0x30
+
 /*
  * Must be packed because mtt_seg is 64 bits but only aligned to 32 bits.
  */
@@ -796,6 +799,7 @@ struct mlx4_priv {
 	spinlock_t		ctx_lock;
 
 	int			pci_dev_data;
+	int                     removed;
 
 	struct list_head        pgdir_list;
 	struct mutex            pgdir_mutex;

@@ -15,8 +15,6 @@
 #ifndef _LINUX_HUGETLB_CGROUP_H
 #define _LINUX_HUGETLB_CGROUP_H
 
-#include <linux/res_counter.h>
-
 struct hugetlb_cgroup;
 /*
  * Minimum page order trackable by hugetlb cgroup.

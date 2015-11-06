@@ -28,6 +28,7 @@
 #include <asm/unaligned.h>
 
 #ifdef __KERNEL__
+u32 eth_get_headlen(void *data, unsigned int max_len);
 extern __be16		eth_type_trans(struct sk_buff *skb, struct net_device *dev);
 extern const struct header_ops eth_header_ops;
 
@@ -199,6 +200,28 @@ static inline void eth_hw_addr_random(struct net_device *dev)
 }
 
 /**
+ * ether_addr_copy - Copy an Ethernet address
+ * @dst: Pointer to a six-byte array Ethernet address destination
+ * @src: Pointer to a six-byte array Ethernet address source
+ *
+ * Please note: dst & src must both be aligned to u16.
+ */
+static inline void ether_addr_copy(u8 *dst, const u8 *src)
+{
+#if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
+	*(u32 *)dst = *(const u32 *)src;
+	*(u16 *)(dst + 4) = *(const u16 *)(src + 4);
+#else
+	u16 *a = (u16 *)dst;
+	const u16 *b = (const u16 *)src;
+
+	a[0] = b[0];
+	a[1] = b[1];
+	a[2] = b[2];
+#endif
+}
+
+/**
  * eth_hw_addr_inherit - Copy dev_addr from another net_device
  * @dst: pointer to net_device to copy dev_addr to
  * @src: pointer to net_device to copy dev_addr from
@@ -210,7 +233,7 @@ static inline void eth_hw_addr_inherit(struct net_device *dst,
 				       struct net_device *src)
 {
 	dst->addr_assign_type = src->addr_assign_type;
-	memcpy(dst->dev_addr, src->dev_addr, ETH_ALEN);
+	ether_addr_copy(dst->dev_addr, src->dev_addr);
 }
 
 /**
@@ -364,6 +387,18 @@ static inline unsigned long compare_ether_header(const void *a, const void *b)
 	return (*(u16 *)a ^ *(u16 *)b) | (a32[0] ^ b32[0]) |
 	       (a32[1] ^ b32[1]) | (a32[2] ^ b32[2]);
 #endif
+}
+
+/**
+ * eth_skb_pad - Pad buffer to mininum number of octets for Ethernet frame
+ * @skb: Buffer to pad
+ *
+ * An Ethernet frame should have a minimum size of 60 bytes.  This function
+ * takes short frames and pads them with zeros up to the 60 byte limit.
+ */
+static inline int eth_skb_pad(struct sk_buff *skb)
+{
+	return skb_put_padto(skb, ETH_ZLEN);
 }
 
 #endif	/* _LINUX_ETHERDEVICE_H */

@@ -1329,6 +1329,7 @@ kthread(void *vp)
 	set_user_nice(current, -10);
 	complete(&k->rendez);	/* tell spawner we're running */
 	do {
+		kgr_task_safe(current);
 		spin_lock_irq(k->lock);
 		more = k->fn(k->id);
 		if (!more) {

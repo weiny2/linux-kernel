@@ -62,6 +62,7 @@
 #include <linux/scatterlist.h>
 #include <linux/errqueue.h>
 #include <linux/prefetch.h>
+#include <linux/if_vlan.h>
 
 #include <net/protocol.h>
 #include <net/dst.h>
@@ -276,13 +277,14 @@ nodata:
 EXPORT_SYMBOL(__alloc_skb);
 
 /**
- * build_skb - build a network buffer
+ * __build_skb - build a network buffer
  * @data: data buffer provided by caller
- * @frag_size: size of fragment, or 0 if head was kmalloced
+ * @frag_size: size of data, or 0 if head was kmalloced
  *
  * Allocate a new &sk_buff. Caller provides space holding head and
  * skb_shared_info. @data must have been allocated by kmalloc() only if
- * @frag_size is 0, otherwise data should come from the page allocator.
+ * @frag_size is 0, otherwise data should come from the page allocator
+ *  or vmalloc()
  * The return is the new skb buffer.
  * On a failure the return is %NULL, and @data is not freed.
  * Notes :
@@ -293,7 +295,7 @@ EXPORT_SYMBOL(__alloc_skb);
  *  before giving packet to stack.
  *  RX rings only contains data buffers, not full skbs.
  */
-struct sk_buff *build_skb(void *data, unsigned int frag_size)
+struct sk_buff *__build_skb(void *data, unsigned int frag_size)
 {
 	struct skb_shared_info *shinfo;
 	struct sk_buff *skb;
@@ -307,7 +309,6 @@ struct sk_buff *build_skb(void *data, unsigned int frag_size)
 
 	memset(skb, 0, offsetof(struct sk_buff, tail));
 	skb->truesize = SKB_TRUESIZE(size);
-	skb->head_frag = frag_size != 0;
 	atomic_set(&skb->users, 1);
 	skb->head = data;
 	skb->data = data;
@@ -324,6 +325,23 @@ struct sk_buff *build_skb(void *data, unsigned int frag_size)
 
 	return skb;
 }
+
+/* build_skb() is wrapper over __build_skb(), that specifically
+ * takes care of skb->head and skb->pfmemalloc
+ * This means that if @frag_size is not zero, then @data must be backed
+ * by a page fragment, not kmalloc() or vmalloc()
+ */
+struct sk_buff *build_skb(void *data, unsigned int frag_size)
+{
+	struct sk_buff *skb = __build_skb(data, frag_size);
+
+	if (skb && frag_size) {
+		skb->head_frag = 1;
+		if (page_is_pfmemalloc(virt_to_head_page(data)))
+			skb->pfmemalloc = 1;
+	}
+	return skb;
+}
 EXPORT_SYMBOL(build_skb);
 
 struct netdev_alloc_cache {
@@ -332,50 +350,92 @@ struct netdev_alloc_cache {
 	 * containing page->_count every time we allocate a fragment.
 	 */
 	unsigned int		pagecnt_bias;
+	bool pfmemalloc;
 };
 static DEFINE_PER_CPU(struct netdev_alloc_cache, netdev_alloc_cache);
+static DEFINE_PER_CPU(struct netdev_alloc_cache, napi_alloc_cache);
+
+static struct page *__page_frag_refill(struct netdev_alloc_cache *nc,
+				       gfp_t gfp_mask)
+{
+	const unsigned int order = NETDEV_FRAG_PAGE_MAX_ORDER;
+	struct page *page = NULL;
+	gfp_t gfp = gfp_mask;
+
+	if (order) {
+		gfp_mask |= __GFP_COMP | __GFP_NOWARN | __GFP_NORETRY |
+			    __GFP_NOMEMALLOC;
+		gfp_mask &= ~__GFP_WAIT;
+		page = alloc_pages_node(NUMA_NO_NODE, gfp_mask, order);
+		nc->frag.size = PAGE_SIZE << (page ? order : 0);
+	}
+
+	if (unlikely(!page))
+		page = alloc_pages_node(NUMA_NO_NODE, gfp, 0);
+
+	nc->frag.page = page;
+
+	return page;
+}
+
+static void *__alloc_page_frag(struct netdev_alloc_cache *nc,
+			       unsigned int fragsz, gfp_t gfp_mask)
+{
+	struct page *page = nc->frag.page;
+	unsigned int size;
+	int offset;
+
+	if (unlikely(!page)) {
+refill:
+		page = __page_frag_refill(nc, gfp_mask);
+		if (!page)
+			return NULL;
+
+		/* if size can vary use frag.size else just use PAGE_SIZE */
+		size = NETDEV_FRAG_PAGE_MAX_ORDER ? nc->frag.size : PAGE_SIZE;
+
+		/* Even if we own the page, we do not use atomic_set().
+		 * This would break get_page_unless_zero() users.
+		 */
+		atomic_add(size - 1, &page->_count);
+
+		/* reset page count bias and offset to start of new frag */
+		nc->pfmemalloc = page_is_pfmemalloc(page);
+		nc->pagecnt_bias = size;
+		nc->frag.offset = size;
+	}
+
+	offset = nc->frag.offset - fragsz;
+	if (unlikely(offset < 0)) {
+		if (!atomic_sub_and_test(nc->pagecnt_bias, &page->_count))
+			goto refill;
+
+		/* if size can vary use frag.size else just use PAGE_SIZE */
+		size = NETDEV_FRAG_PAGE_MAX_ORDER ? nc->frag.size : PAGE_SIZE;
+
+		/* OK, page count is 0, we can safely set it */
+		atomic_set(&page->_count, size);
+
+		/* reset page count bias and offset to start of new frag */
+		nc->pagecnt_bias = size;
+		offset = size - fragsz;
+	}
+
+	nc->pagecnt_bias--;
+	nc->frag.offset = offset;
+
+	return page_address(page) + offset;
+}
 
 static void *__netdev_alloc_frag(unsigned int fragsz, gfp_t gfp_mask)
 {
 	struct netdev_alloc_cache *nc;
-	void *data = NULL;
-	int order;
 	unsigned long flags;
+	void *data;
 
 	local_irq_save(flags);
-	nc = &__get_cpu_var(netdev_alloc_cache);
-	if (unlikely(!nc->frag.page)) {
-refill:
-		for (order = NETDEV_FRAG_PAGE_MAX_ORDER; ;) {
-			gfp_t gfp = gfp_mask;
-
-			if (order)
-				gfp |= __GFP_COMP | __GFP_NOWARN;
-			nc->frag.page = alloc_pages(gfp, order);
-			if (likely(nc->frag.page))
-				break;
-			if (--order < 0)
-				goto end;
-		}
-		nc->frag.size = PAGE_SIZE << order;
-recycle:
-		atomic_set(&nc->frag.page->_count, NETDEV_PAGECNT_MAX_BIAS);
-		nc->pagecnt_bias = NETDEV_PAGECNT_MAX_BIAS;
-		nc->frag.offset = 0;
-	}
-
-	if (nc->frag.offset + fragsz > nc->frag.size) {
-		/* avoid unnecessary locked operations if possible */
-		if ((atomic_read(&nc->frag.page->_count) == nc->pagecnt_bias) ||
-		    atomic_sub_and_test(nc->pagecnt_bias, &nc->frag.page->_count))
-			goto recycle;
-		goto refill;
-	}
-
-	data = page_address(nc->frag.page) + nc->frag.offset;
-	nc->frag.offset += fragsz;
-	nc->pagecnt_bias--;
-end:
+	nc = this_cpu_ptr(&netdev_alloc_cache);
+	data = __alloc_page_frag(nc, fragsz, gfp_mask);
 	local_irq_restore(flags);
 	return data;
 }
@@ -393,6 +453,19 @@ void *netdev_alloc_frag(unsigned int fragsz)
 }
 EXPORT_SYMBOL(netdev_alloc_frag);
 
+static void *__napi_alloc_frag(unsigned int fragsz, gfp_t gfp_mask)
+{
+	struct netdev_alloc_cache *nc = this_cpu_ptr(&napi_alloc_cache);
+
+	return __alloc_page_frag(nc, fragsz, gfp_mask);
+}
+
+void *napi_alloc_frag(unsigned int fragsz)
+{
+	return __napi_alloc_frag(fragsz, GFP_ATOMIC | __GFP_COLD);
+}
+EXPORT_SYMBOL(napi_alloc_frag);
+
 /**
  *	__netdev_alloc_skb - allocate an skbuff for rx on a specific device
  *	@dev: network device to receive on
@@ -400,43 +473,127 @@ EXPORT_SYMBOL(netdev_alloc_frag);
  *	@gfp_mask: get_free_pages mask, passed to alloc_skb
  *
  *	Allocate a new &sk_buff and assign it a usage count of one. The
- *	buffer has unspecified headroom built in. Users should allocate
+ *	buffer has NET_SKB_PAD headroom built in. Users should allocate
  *	the headroom they think they need without accounting for the
  *	built in space. The built in space is used for optimisations.
  *
  *	%NULL is returned if there is no free memory.
  */
-struct sk_buff *__netdev_alloc_skb(struct net_device *dev,
-				   unsigned int length, gfp_t gfp_mask)
+struct sk_buff *__netdev_alloc_skb(struct net_device *dev, unsigned int len,
+				   gfp_t gfp_mask)
 {
-	struct sk_buff *skb = NULL;
-	unsigned int fragsz = SKB_DATA_ALIGN(length + NET_SKB_PAD) +
-			      SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	struct netdev_alloc_cache *nc;
+	unsigned long flags;
+	struct sk_buff *skb;
+	bool pfmemalloc;
+	void *data;
 
-	if (fragsz <= PAGE_SIZE && !(gfp_mask & (__GFP_WAIT | GFP_DMA))) {
-		void *data;
+	len += NET_SKB_PAD;
 
-		if (sk_memalloc_socks())
-			gfp_mask |= __GFP_MEMALLOC;
-
-		data = __netdev_alloc_frag(fragsz, gfp_mask);
-
-		if (likely(data)) {
-			skb = build_skb(data, fragsz);
-			if (unlikely(!skb))
-				put_page(virt_to_head_page(data));
-		}
-	} else {
-		skb = __alloc_skb(length + NET_SKB_PAD, gfp_mask,
-				  SKB_ALLOC_RX, NUMA_NO_NODE);
+	if ((len > SKB_WITH_OVERHEAD(PAGE_SIZE)) ||
+	    (gfp_mask & (__GFP_WAIT | GFP_DMA))) {
+		skb = __alloc_skb(len, gfp_mask, SKB_ALLOC_RX, NUMA_NO_NODE);
+		if (!skb)
+			goto skb_fail;
+		goto skb_success;
 	}
-	if (likely(skb)) {
-		skb_reserve(skb, NET_SKB_PAD);
-		skb->dev = dev;
+
+	len += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	len = SKB_DATA_ALIGN(len);
+
+	if (sk_memalloc_socks())
+		gfp_mask |= __GFP_MEMALLOC;
+
+	local_irq_save(flags);
+
+	nc = this_cpu_ptr(&netdev_alloc_cache);
+	data = __alloc_page_frag(nc, len, gfp_mask);
+	pfmemalloc = nc->pfmemalloc;
+
+	local_irq_restore(flags);
+
+	if (unlikely(!data))
+		return NULL;
+
+	skb = __build_skb(data, len);
+	if (unlikely(!skb)) {
+		put_page(virt_to_head_page(data));
+		return NULL;
 	}
+
+	/* use OR instead of assignment to avoid clearing of bits in mask */
+	if (pfmemalloc)
+		skb->pfmemalloc = 1;
+	skb->head_frag = 1;
+
+skb_success:
+	skb_reserve(skb, NET_SKB_PAD);
+	skb->dev = dev;
+
+skb_fail:
 	return skb;
 }
 EXPORT_SYMBOL(__netdev_alloc_skb);
+
+/**
+ *	__napi_alloc_skb - allocate skbuff for rx in a specific NAPI instance
+ *	@napi: napi instance this buffer was allocated for
+ *	@length: length to allocate
+ *	@gfp_mask: get_free_pages mask, passed to alloc_skb and alloc_pages
+ *
+ *	Allocate a new sk_buff for use in NAPI receive.  This buffer will
+ *	attempt to allocate the head from a special reserved region used
+ *	only for NAPI Rx allocation.  By doing this we can save several
+ *	CPU cycles by avoiding having to disable and re-enable IRQs.
+ *
+ *	%NULL is returned if there is no free memory.
+ */
+struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
+				 gfp_t gfp_mask)
+{
+	struct netdev_alloc_cache *nc = this_cpu_ptr(&napi_alloc_cache);
+	struct sk_buff *skb;
+	void *data;
+
+	len += NET_SKB_PAD + NET_IP_ALIGN;
+
+	if ((len > SKB_WITH_OVERHEAD(PAGE_SIZE)) ||
+	    (gfp_mask & (__GFP_WAIT | GFP_DMA))) {
+		skb = __alloc_skb(len, gfp_mask, SKB_ALLOC_RX, NUMA_NO_NODE);
+		if (!skb)
+			goto skb_fail;
+		goto skb_success;
+	}
+
+	len += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	len = SKB_DATA_ALIGN(len);
+
+	if (sk_memalloc_socks())
+		gfp_mask |= __GFP_MEMALLOC;
+
+	data = __alloc_page_frag(nc, len, gfp_mask);
+	if (unlikely(!data))
+		return NULL;
+
+	skb = __build_skb(data, len);
+	if (unlikely(!skb)) {
+		put_page(virt_to_head_page(data));
+		return NULL;
+	}
+
+	/* use OR instead of assignment to avoid clearing of bits in mask */
+	if (nc->pfmemalloc)
+		skb->pfmemalloc = 1;
+	skb->head_frag = 1;
+
+skb_success:
+	skb_reserve(skb, NET_SKB_PAD + NET_IP_ALIGN);
+	skb->dev = napi->dev;
+
+skb_fail:
+	return skb;
+}
+EXPORT_SYMBOL(__napi_alloc_skb);
 
 void skb_add_rx_frag(struct sk_buff *skb, int i, struct page *page, int off,
 		     int size, unsigned int truesize)
@@ -3303,6 +3460,27 @@ int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(sock_queue_err_skb);
 
+struct sk_buff *skb_clone_sk(struct sk_buff *skb)
+{
+	struct sock *sk = skb->sk;
+	struct sk_buff *clone;
+
+	if (!sk || !atomic_inc_not_zero(&sk->sk_refcnt))
+		return NULL;
+
+	clone = skb_clone(skb, GFP_ATOMIC);
+	if (!clone) {
+		sock_put(sk);
+		return NULL;
+	}
+
+	clone->sk = sk;
+	clone->destructor = sock_efree;
+
+	return clone;
+}
+EXPORT_SYMBOL(skb_clone_sk);
+
 void skb_tstamp_tx(struct sk_buff *orig_skb,
 		struct skb_shared_hwtstamps *hwtstamps)
 {
@@ -3510,6 +3688,7 @@ void skb_scrub_packet(struct sk_buff *skb, bool xnet)
 	skb->local_df = 0;
 	skb_dst_drop(skb);
 	skb->mark = 0;
+	skb_init_secmark(skb);
 	secpath_reset(skb);
 	nf_reset(skb);
 	nf_reset_trace(skb);
@@ -3540,3 +3719,55 @@ unsigned int skb_gso_transport_seglen(const struct sk_buff *skb)
 	return shinfo->gso_size;
 }
 EXPORT_SYMBOL_GPL(skb_gso_transport_seglen);
+
+static struct sk_buff *skb_reorder_vlan_header(struct sk_buff *skb)
+{
+	if (skb_cow(skb, skb_headroom(skb)) < 0) {
+		kfree_skb(skb);
+		return NULL;
+	}
+
+	memmove(skb->data - ETH_HLEN, skb->data - VLAN_ETH_HLEN, 2 * ETH_ALEN);
+	skb->mac_header += VLAN_HLEN;
+	return skb;
+}
+
+struct sk_buff *skb_vlan_untag(struct sk_buff *skb)
+{
+	struct vlan_hdr *vhdr;
+	u16 vlan_tci;
+
+	if (unlikely(vlan_tx_tag_present(skb))) {
+		/* vlan_tci is already set-up so leave this for another time */
+		return skb;
+	}
+
+	skb = skb_share_check(skb, GFP_ATOMIC);
+	if (unlikely(!skb))
+		goto err_free;
+
+	if (unlikely(!pskb_may_pull(skb, VLAN_HLEN)))
+		goto err_free;
+
+	vhdr = (struct vlan_hdr *)skb->data;
+	vlan_tci = ntohs(vhdr->h_vlan_TCI);
+	__vlan_hwaccel_put_tag(skb, skb->protocol, vlan_tci);
+
+	skb_pull_rcsum(skb, VLAN_HLEN);
+	vlan_set_encap_proto(skb, vhdr);
+
+	skb = skb_reorder_vlan_header(skb);
+	if (unlikely(!skb))
+		goto err_free;
+
+	skb_reset_network_header(skb);
+	skb_reset_transport_header(skb);
+	skb_reset_mac_len(skb);
+
+	return skb;
+
+err_free:
+	kfree_skb(skb);
+	return NULL;
+}
+EXPORT_SYMBOL(skb_vlan_untag);

@@ -620,7 +620,16 @@ fd_execute_rw(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 	struct fd_prot fd_prot;
 	sense_reason_t rc;
 	int ret = 0;
-
+	/*
+	 * We are currently limited by the number of iovecs (2048) per
+	 * single vfs_[writev,readv] call.
+	 */
+	if (cmd->data_length > FD_MAX_BYTES) {
+		pr_err("FILEIO: Not able to process I/O of %u bytes due to"
+		       "FD_MAX_BYTES: %u iovec count limitiation\n",
+			cmd->data_length, FD_MAX_BYTES);
+		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+	}
 	/*
 	 * Call vectorized fileio functions to map struct scatterlist
 	 * physical memory addresses to struct iovec virtual memory.
@@ -762,7 +771,9 @@ static ssize_t fd_set_configfs_dev_params(struct se_device *dev,
 			fd_dev->fbd_flags |= FBDF_HAS_SIZE;
 			break;
 		case Opt_fd_buffered_io:
-			match_int(args, &arg);
+			ret = match_int(args, &arg);
+			if (ret)
+				goto out;
 			if (arg != 1) {
 				pr_err("bogus fd_buffered_io=%d value\n", arg);
 				ret = -EINVAL;

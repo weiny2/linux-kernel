@@ -36,7 +36,7 @@ enum {
 
 static int pte_testbit(pte_t pte)
 {
-	return pte_flags(pte) & _PAGE_UNUSED1;
+	return pte_flags(pte) & _PAGE_SOFTW1;
 }
 
 struct split_state {
@@ -236,6 +236,7 @@ static int do_pageattr_test(void *__unused)
 {
 	while (!kthread_should_stop()) {
 		schedule_timeout_interruptible(HZ*30);
+		kgr_task_safe(current);
 		if (pageattr_test() < 0)
 			break;
 		if (print)

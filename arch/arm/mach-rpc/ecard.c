@@ -274,7 +274,8 @@ ecard_task(void * unused)
 	while (1) {
 		struct ecard_request *req;
 
-		wait_event_interruptible(ecard_wait, ecard_req != NULL);
+		wait_event_interruptible(ecard_wait, ({ kgr_task_safe(current);
+					ecard_req != NULL; }));
 
 		req = xchg(&ecard_req, NULL);
 		if (req != NULL) {

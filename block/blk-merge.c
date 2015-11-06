@@ -38,7 +38,8 @@ bool bvec_mergeable(struct request_queue *q, struct bio_vec *lastbv,
 
 
 static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
-					     struct bio *bio)
+					     struct bio *bio,
+					     bool no_sg_merge)
 {
 	struct bio_vec *bv, *bvprv = NULL;
 	int i;
@@ -53,7 +54,12 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 	nr_phys_segs = 0;
 	for_each_bio(bio) {
 		bio_for_each_segment(bv, bio, i) {
-			if (bvprv && bvec_mergeable(q, bvprv, bv, seg_size)) {
+			/*
+			 * If SG merging is disabled, each bio vector is
+			 * a segment
+			 */
+			if (!no_sg_merge &&
+			    bvprv && bvec_mergeable(q, bvprv, bv, seg_size)) {
 				seg_size += bv->bv_len;
 				bvprv = bv;
 				continue;
@@ -80,16 +86,34 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 
 void blk_recalc_rq_segments(struct request *rq)
 {
-	rq->nr_phys_segments = __blk_recalc_rq_segments(rq->q, rq->bio);
+	bool no_sg_merge = !!test_bit(QUEUE_FLAG_NO_SG_MERGE,
+				      &rq->q->queue_flags);
+
+	rq->nr_phys_segments = __blk_recalc_rq_segments(rq->q, rq->bio,
+							no_sg_merge);
 }
 
 void blk_recount_segments(struct request_queue *q, struct bio *bio)
 {
-	struct bio *nxt = bio->bi_next;
+	unsigned short seg_cnt;
 
-	bio->bi_next = NULL;
-	bio->bi_phys_segments = __blk_recalc_rq_segments(q, bio);
-	bio->bi_next = nxt;
+	/* estimate segment number by bi_vcnt for non-cloned bio */
+	if (bio_flagged(bio, BIO_CLONED))
+		seg_cnt = bio_segments(bio);
+	else
+		seg_cnt = bio->bi_vcnt;
+
+	if (test_bit(QUEUE_FLAG_NO_SG_MERGE, &q->queue_flags) &&
+			(seg_cnt < queue_max_segments(q)))
+		bio->bi_phys_segments = seg_cnt;
+	else {
+		struct bio *nxt = bio->bi_next;
+
+		bio->bi_next = NULL;
+		bio->bi_phys_segments = __blk_recalc_rq_segments(q, bio, false);
+		bio->bi_next = nxt;
+	}
+
 	bio->bi_flags |= (1 << BIO_SEG_VALID);
 }
 EXPORT_SYMBOL(blk_recount_segments);

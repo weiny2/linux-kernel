@@ -214,6 +214,22 @@ static void i915_save_display(struct drm_device *dev)
 		dev_priv->regfile.saveBLC_CPU_PWM_CTL2 = I915_READ(BLC_PWM_CPU_CTL2);
 		if (HAS_PCH_IBX(dev) || HAS_PCH_CPT(dev))
 			dev_priv->regfile.saveLVDS = I915_READ(PCH_LVDS);
+	} else if (IS_VALLEYVIEW(dev)) {
+		dev_priv->regfile.savePP_CONTROL = I915_READ(PP_CONTROL);
+		dev_priv->regfile.savePFIT_PGM_RATIOS = I915_READ(PFIT_PGM_RATIOS);
+
+		dev_priv->regfile.saveBLC_PWM_CTL =
+			I915_READ(VLV_BLC_PWM_CTL(PIPE_A));
+		dev_priv->regfile.saveBLC_HIST_CTL =
+			I915_READ(VLV_BLC_HIST_CTL(PIPE_A));
+		dev_priv->regfile.saveBLC_PWM_CTL2 =
+			I915_READ(VLV_BLC_PWM_CTL2(PIPE_A));
+		dev_priv->regfile.saveBLC_PWM_CTL_B =
+			I915_READ(VLV_BLC_PWM_CTL(PIPE_B));
+		dev_priv->regfile.saveBLC_HIST_CTL_B =
+			I915_READ(VLV_BLC_HIST_CTL(PIPE_B));
+		dev_priv->regfile.saveBLC_PWM_CTL2_B =
+			I915_READ(VLV_BLC_PWM_CTL2(PIPE_B));
 	} else {
 		dev_priv->regfile.savePP_CONTROL = I915_READ(PP_CONTROL);
 		dev_priv->regfile.savePFIT_PGM_RATIOS = I915_READ(PFIT_PGM_RATIOS);
@@ -302,6 +318,19 @@ static void i915_restore_display(struct drm_device *dev)
 		I915_WRITE(PCH_PP_CONTROL, dev_priv->regfile.savePP_CONTROL);
 		I915_WRITE(RSTDBYCTL,
 			   dev_priv->regfile.saveMCHBAR_RENDER_STANDBY);
+	} else if (IS_VALLEYVIEW(dev)) {
+		I915_WRITE(VLV_BLC_PWM_CTL(PIPE_A),
+			   dev_priv->regfile.saveBLC_PWM_CTL);
+		I915_WRITE(VLV_BLC_HIST_CTL(PIPE_A),
+			   dev_priv->regfile.saveBLC_HIST_CTL);
+		I915_WRITE(VLV_BLC_PWM_CTL2(PIPE_A),
+			   dev_priv->regfile.saveBLC_PWM_CTL2);
+		I915_WRITE(VLV_BLC_PWM_CTL(PIPE_B),
+			   dev_priv->regfile.saveBLC_PWM_CTL);
+		I915_WRITE(VLV_BLC_HIST_CTL(PIPE_B),
+			   dev_priv->regfile.saveBLC_HIST_CTL);
+		I915_WRITE(VLV_BLC_PWM_CTL2(PIPE_B),
+			   dev_priv->regfile.saveBLC_PWM_CTL2);
 	} else {
 		I915_WRITE(PFIT_PGM_RATIOS, dev_priv->regfile.savePFIT_PGM_RATIOS);
 		I915_WRITE(BLC_PWM_CTL, dev_priv->regfile.saveBLC_PWM_CTL);
@@ -366,6 +395,10 @@ int i915_save_state(struct drm_device *dev)
 
 	intel_disable_gt_powersave(dev);
 
+	if (IS_GEN4(dev))
+		pci_read_config_word(dev->pdev, GCDGMBUS,
+				     &dev_priv->regfile.saveGCDGMBUS);
+
 	/* Cache mode state */
 	dev_priv->regfile.saveCACHE_MODE_0 = I915_READ(CACHE_MODE_0);
 
@@ -412,6 +445,10 @@ int i915_restore_state(struct drm_device *dev)
 			I915_WRITE(IMR, dev_priv->regfile.saveIMR);
 		}
 	}
+
+	if (IS_GEN4(dev))
+		pci_read_config_word(dev->pdev, GCDGMBUS,
+				     &dev_priv->regfile.saveGCDGMBUS);
 
 	/* Cache mode state */
 	I915_WRITE(CACHE_MODE_0, dev_priv->regfile.saveCACHE_MODE_0 | 0xffff0000);

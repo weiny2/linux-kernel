@@ -1156,7 +1156,7 @@ static int __init kvm_s390_init(void)
 	}
 	memcpy(vfacilities, S390_lowcore.stfle_fac_list, 16);
 	vfacilities[0] &= 0xff82fff3f47c0000UL;
-	vfacilities[1] &= 0x001c000000000000UL;
+	vfacilities[1] &= 0x0010000000000000UL;
 	return 0;
 }
 

@@ -1155,6 +1155,7 @@ static int genwqe_card_thread(void *data)
 	struct genwqe_dev *cd = (struct genwqe_dev *)data;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 
 		genwqe_check_ddcb_queue(cd, &cd->queue);
 

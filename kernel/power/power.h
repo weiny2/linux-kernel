@@ -3,6 +3,7 @@
 #include <linux/utsname.h>
 #include <linux/freezer.h>
 
+#ifdef CONFIG_HIBERNATION
 struct swsusp_info {
 	struct new_utsname	uts;
 	u32			version_code;
@@ -11,9 +12,23 @@ struct swsusp_info {
 	unsigned long		image_pages;
 	unsigned long		pages;
 	unsigned long		size;
+	unsigned long           forward_buff_pfn;
+	u8                      signature[HIBERNATION_DIGEST_SIZE];
 } __attribute__((aligned(PAGE_SIZE)));
 
-#ifdef CONFIG_HIBERNATION
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+/* arch/x86/power/hibernate_keys.c */
+extern int get_hibernation_key(u8 **hkey);
+extern bool swsusp_page_is_keys(struct page *page);
+extern unsigned long get_forward_buff_pfn(void);
+extern void fill_forward_info(void *forward_buff_page, int verify_ret);
+extern void restore_sig_forward_info(void);
+#else
+static inline bool swsusp_page_is_keys(struct page *page) { return false; }
+static inline unsigned long get_forward_buff_pfn(void) { return 0; }
+static inline void restore_sig_forward_info(void) {}
+#endif
+
 /* kernel/power/snapshot.c */
 extern void __init hibernate_reserved_size_init(void);
 extern void __init hibernate_image_size_init(void);
@@ -134,6 +149,11 @@ extern int snapshot_read_next(struct snapshot_handle *handle);
 extern int snapshot_write_next(struct snapshot_handle *handle);
 extern void snapshot_write_finalize(struct snapshot_handle *handle);
 extern int snapshot_image_loaded(struct snapshot_handle *handle);
+#ifdef CONFIG_HIBERNATE_VERIFICATION
+extern int snapshot_image_verify(void);
+#else
+static inline int snapshot_image_verify(void) { return 0; }
+#endif
 
 /* If unset, the snapshot device cannot be open. */
 extern atomic_t snapshot_device_available;
@@ -175,17 +195,20 @@ extern void swsusp_show_speed(struct timeval *, struct timeval *,
 				unsigned int, char *);
 
 #ifdef CONFIG_SUSPEND
-/* kernel/power/suspend.c */
-extern const char *const pm_states[];
+struct pm_sleep_state {
+	const char *label;
+	suspend_state_t state;
+};
 
-extern bool valid_state(suspend_state_t state);
+/* kernel/power/suspend.c */
+extern struct pm_sleep_state pm_states[];
+
 extern int suspend_devices_and_enter(suspend_state_t state);
 #else /* !CONFIG_SUSPEND */
 static inline int suspend_devices_and_enter(suspend_state_t state)
 {
 	return -ENOSYS;
 }
-static inline bool valid_state(suspend_state_t state) { return false; }
 #endif /* !CONFIG_SUSPEND */
 
 #ifdef CONFIG_PM_TEST_SUSPEND

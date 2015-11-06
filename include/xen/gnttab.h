@@ -185,7 +185,7 @@ gnttab_set_replace_op(struct gnttab_unmap_and_replace *unmap, maddr_t addr,
 		(__HCarg_p)->status = GNTST_bad_page;				\
 	}									\
 	if ((__HCarg_p)->status != GNTST_okay)					\
-		pr_err("%s: %s gnt status %x\n", 				\
+		pr_err("%s: %s gnt status %x\n",				\
 			__func__, current->comm, (__HCarg_p)->status);		\
 }
 
@@ -204,7 +204,7 @@ gnttab_set_replace_op(struct gnttab_unmap_and_replace *unmap, maddr_t addr,
 		(__HCarg_p)->status = GNTST_bad_page;				\
 	}									\
 	if ((__HCarg_p)->status != GNTST_okay)					\
-		pr_err("%s: %s gnt status %x\n", 				\
+		pr_err("%s: %s gnt status %x\n",				\
 			__func__, current->comm, (__HCarg_p)->status);		\
 }
 

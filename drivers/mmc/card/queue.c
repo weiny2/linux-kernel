@@ -37,7 +37,7 @@ static int mmc_prep_request(struct request_queue *q, struct request *req)
 		return BLKPREP_KILL;
 	}
 
-	if (mq && mmc_card_removed(mq->card))
+	if (mq && (mmc_card_removed(mq->card) || mmc_access_rpmb(mq)))
 		return BLKPREP_KILL;
 
 	req->cmd_flags |= REQ_DONTPREP;
@@ -95,6 +95,7 @@ static int mmc_queue_thread(void *d)
 			}
 			up(&mq->thread_sem);
 			schedule();
+			kgr_task_safe(current);
 			down(&mq->thread_sem);
 		}
 	} while (1);

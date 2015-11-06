@@ -201,7 +201,10 @@ struct bdb_general_features {
 #define DEVICE_PORT_DVOB	0x01
 #define DEVICE_PORT_DVOC	0x02
 
-struct child_device_config {
+/* We used to keep this struct but without any version control. We should avoid
+ * using it in the future, but it should be safe to keep using it in the old
+ * code. */
+struct old_child_dev_config {
 	u16 handle;
 	u16 device_type;
 	u8  device_id[10]; /* ascii string */
@@ -222,6 +225,32 @@ struct child_device_config {
 	u16 extended_type;
 	u8  dvo_function;
 } __attribute__((packed));
+
+/* This one contains field offsets that are known to be common for all BDB
+ * versions. Notice that the meaning of the contents contents may still change,
+ * but at least the offsets are consistent. */
+struct common_child_dev_config {
+	u16 handle;
+	u16 device_type;
+	u8 not_common1[12];
+	u8 dvo_port;
+	u8 not_common2[2];
+	u8 ddc_pin;
+	u16 edid_ptr;
+} __attribute__((packed));
+
+/* This field changes depending on the BDB version, so the most reliable way to
+ * read it is by checking the BDB version and reading the raw pointer. */
+union child_device_config {
+	/* This one is safe to be used anywhere, but the code should still check
+	 * the BDB version. */
+	u8 raw[33];
+	/* This one should only be kept for legacy code. */
+	struct old_child_dev_config old;
+	/* This one should also be safe to use anywhere, even without version
+	 * checks. */
+	struct common_child_dev_config common;
+};
 
 struct bdb_general_definitions {
 	/* DDC GPIO */
@@ -248,7 +277,7 @@ struct bdb_general_definitions {
 	 * number = (block_size - sizeof(bdb_general_definitions))/
 	 *	     sizeof(child_device_config);
 	 */
-	struct child_device_config devices[0];
+	union child_device_config devices[0];
 } __attribute__((packed));
 
 struct bdb_lvds_options {
@@ -608,6 +637,40 @@ int intel_parse_bios(struct drm_device *dev);
 #define	 DEVICE_TYPE_DP		0x68C6
 #define	 DEVICE_TYPE_eDP	0x78C6
 
+#define  DEVICE_TYPE_CLASS_EXTENSION	(1 << 15)
+#define  DEVICE_TYPE_POWER_MANAGEMENT	(1 << 14)
+#define  DEVICE_TYPE_HOTPLUG_SIGNALING	(1 << 13)
+#define  DEVICE_TYPE_INTERNAL_CONNECTOR	(1 << 12)
+#define  DEVICE_TYPE_NOT_HDMI_OUTPUT	(1 << 11)
+#define  DEVICE_TYPE_MIPI_OUTPUT	(1 << 10)
+#define  DEVICE_TYPE_COMPOSITE_OUTPUT	(1 << 9)
+#define  DEVICE_TYPE_DUAL_CHANNEL	(1 << 8)
+#define  DEVICE_TYPE_HIGH_SPEED_LINK	(1 << 6)
+#define  DEVICE_TYPE_LVDS_SINGALING	(1 << 5)
+#define  DEVICE_TYPE_TMDS_DVI_SIGNALING	(1 << 4)
+#define  DEVICE_TYPE_VIDEO_SIGNALING	(1 << 3)
+#define  DEVICE_TYPE_DISPLAYPORT_OUTPUT	(1 << 2)
+#define  DEVICE_TYPE_DIGITAL_OUTPUT	(1 << 1)
+#define  DEVICE_TYPE_ANALOG_OUTPUT	(1 << 0)
+
+/*
+ * Bits we care about when checking for DEVICE_TYPE_eDP
+ * Depending on the system, the other bits may or may not
+ * be set for eDP outputs.
+ */
+#define DEVICE_TYPE_eDP_BITS \
+	(DEVICE_TYPE_INTERNAL_CONNECTOR | \
+	 DEVICE_TYPE_NOT_HDMI_OUTPUT | \
+	 DEVICE_TYPE_MIPI_OUTPUT | \
+	 DEVICE_TYPE_COMPOSITE_OUTPUT | \
+	 DEVICE_TYPE_DUAL_CHANNEL | \
+	 DEVICE_TYPE_LVDS_SINGALING | \
+	 DEVICE_TYPE_TMDS_DVI_SIGNALING | \
+	 DEVICE_TYPE_VIDEO_SIGNALING | \
+	 DEVICE_TYPE_DISPLAYPORT_OUTPUT | \
+	 DEVICE_TYPE_DIGITAL_OUTPUT | \
+	 DEVICE_TYPE_ANALOG_OUTPUT)
+
 /* define the DVO port for HDMI output type */
 #define		DVO_B		1
 #define		DVO_C		2
@@ -617,5 +680,18 @@ int intel_parse_bios(struct drm_device *dev);
 #define		PORT_IDPB	7
 #define		PORT_IDPC	8
 #define		PORT_IDPD	9
+
+/* Possible values for the "DVO Port" field for versions >= 155: */
+#define DVO_PORT_HDMIA	0
+#define DVO_PORT_HDMIB	1
+#define DVO_PORT_HDMIC	2
+#define DVO_PORT_HDMID	3
+#define DVO_PORT_LVDS	4
+#define DVO_PORT_TV	5
+#define DVO_PORT_CRT	6
+#define DVO_PORT_DPB	7
+#define DVO_PORT_DPC	8
+#define DVO_PORT_DPD	9
+#define DVO_PORT_DPA	10
 
 #endif /* _I830_BIOS_H_ */

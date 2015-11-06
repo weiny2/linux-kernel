@@ -191,8 +191,7 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 	unsigned vector = ~regs->orig_ax;
 	unsigned irq;
 
-	irq_enter();
-	exit_idle();
+	entering_irq();
 
 	irq = __this_cpu_read(vector_irq[vector]);
 
@@ -204,7 +203,7 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 				__func__, smp_processor_id(), vector, irq);
 	}
 
-	irq_exit();
+	exiting_irq();
 
 	set_irq_regs(old_regs);
 	return 1;
@@ -239,16 +238,9 @@ __visible void smp_kvm_posted_intr_ipi(struct pt_regs *regs)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
-	ack_APIC_irq();
-
-	irq_enter();
-
-	exit_idle();
-
+	entering_ack_irq();
 	inc_irq_stat(kvm_posted_intr_ipis);
-
-	irq_exit();
-
+	exiting_irq();
 	set_irq_regs(old_regs);
 }
 #endif
@@ -297,6 +289,9 @@ int check_irq_vectors_for_cpu_disable(void)
 		irq = __this_cpu_read(vector_irq[vector]);
 		if (irq >= 0) {
 			desc = irq_to_desc(irq);
+			if (!desc)
+				continue;
+
 			data = irq_desc_get_irq_data(desc);
 			cpumask_copy(&affinity_new, data->affinity);
 			cpu_clear(this_cpu, affinity_new);

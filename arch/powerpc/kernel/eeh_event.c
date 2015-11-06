@@ -55,6 +55,8 @@ static int eeh_event_handler(void * dummy)
 	struct eeh_pe *pe;
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
+
 		if (down_interruptible(&eeh_eventlist_sem))
 			break;
 

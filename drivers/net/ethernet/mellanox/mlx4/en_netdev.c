@@ -1583,8 +1583,15 @@ int mlx4_en_start_port(struct net_device *dev)
 			en_err(priv, "Failed activating Rx CQ\n");
 			goto cq_err;
 		}
-		for (j = 0; j < cq->size; j++)
-			cq->buf[j].owner_sr_opcode = MLX4_CQE_OWNER_MASK;
+
+		for (j = 0; j < cq->size; j++) {
+			struct mlx4_cqe *cqe = NULL;
+
+			cqe = mlx4_en_get_cqe(cq->buf, j, priv->cqe_size) +
+			      priv->cqe_factor;
+			cqe->owner_sr_opcode = MLX4_CQE_OWNER_MASK;
+		}
+
 		err = mlx4_en_set_cq_moder(priv, cq);
 		if (err) {
 			en_err(priv, "Failed setting cq moderation parameters");
@@ -2348,6 +2355,7 @@ int mlx4_en_init_netdev(struct mlx4_en_dev *mdev, int port,
 
 	SET_NETDEV_DEV(dev, &mdev->dev->pdev->dev);
 	dev->dev_id =  port - 1;
+	dev->dev_port = port - 1;
 
 	/*
 	 * Initialize driver private data
@@ -2381,6 +2389,7 @@ int mlx4_en_init_netdev(struct mlx4_en_dev *mdev, int port,
 	}
 	priv->rx_ring_num = prof->rx_ring_num;
 	priv->cqe_factor = (mdev->dev->caps.cqe_size == 64) ? 1 : 0;
+	priv->cqe_size = mdev->dev->caps.cqe_size;
 	priv->mac_index = -1;
 	priv->msg_enable = MLX4_EN_MSG_LEVEL;
 	spin_lock_init(&priv->stats_lock);
@@ -2497,13 +2506,6 @@ int mlx4_en_init_netdev(struct mlx4_en_dev *mdev, int port,
 	netif_carrier_off(dev);
 	mlx4_en_set_default_moderation(priv);
 
-	err = register_netdev(dev);
-	if (err) {
-		en_err(priv, "Netdev registration failed for port %d\n", port);
-		goto out;
-	}
-	priv->registered = 1;
-
 	en_warn(priv, "Using %d TX rings\n", prof->tx_ring_num);
 	en_warn(priv, "Using %d RX rings\n", prof->rx_ring_num);
 
@@ -2542,6 +2544,14 @@ int mlx4_en_init_netdev(struct mlx4_en_dev *mdev, int port,
 	if (mdev->dev->caps.flags2 & MLX4_DEV_CAP_FLAG2_TS)
 		queue_delayed_work(mdev->workqueue, &priv->service_task,
 				   SERVICE_TASK_DELAY);
+
+	err = register_netdev(dev);
+	if (err) {
+		en_err(priv, "Netdev registration failed for port %d\n", port);
+		goto out;
+	}
+
+	priv->registered = 1;
 
 	return 0;
 

@@ -99,6 +99,7 @@
 #define GET_VCPU_INFO		PER_CPU(vcpu_info, __REG_si)
 #define __DISABLE_INTERRUPTS	movb $1,PER_CPU_VAR(vcpu_info+evtchn_upcall_mask)
 #define __ENABLE_INTERRUPTS	movb $0,PER_CPU_VAR(vcpu_info+evtchn_upcall_mask)
+#define __SAVE_INTERRUPTS(reg)	movzb PER_CPU_VAR(vcpu_info+evtchn_upcall_mask),%reg
 #define __TEST_PENDING		cmpb $0,PER_CPU_VAR(vcpu_info+evtchn_upcall_pending+0)
 #define DISABLE_INTERRUPTS(clb)	__DISABLE_INTERRUPTS
 #define ENABLE_INTERRUPTS(clb)	__ENABLE_INTERRUPTS
@@ -120,7 +121,8 @@
 
 #define __DISABLE_INTERRUPTS	movb $1,evtchn_upcall_mask(__REG_si)
 #define __ENABLE_INTERRUPTS	movb $0,evtchn_upcall_mask(__REG_si)
-#define __TEST_PENDING		testb $0xFF,evtchn_upcall_pending(__REG_si)
+#define __SAVE_INTERRUPTS(reg)	movzb evtchn_upcall_mask(__REG_si),%reg
+#define __TEST_PENDING		cmpb $0,evtchn_upcall_pending(__REG_si)
 #define DISABLE_INTERRUPTS(clb)	GET_VCPU_INFO				; \
 				__DISABLE_INTERRUPTS
 #define ENABLE_INTERRUPTS(clb)	GET_VCPU_INFO				; \
@@ -135,14 +137,14 @@
 #define INTERRUPT_RETURN		iret
 #define ENABLE_INTERRUPTS_SYSEXIT					  \
 	movb $0,evtchn_upcall_mask(%esi) /* __ENABLE_INTERRUPTS */	; \
-sysexit_scrit:	/**** START OF SYSEXIT CRITICAL REGION ****/		; \
+.Lsysexit_scrit: /**** START OF SYSEXIT CRITICAL REGION ****/		; \
 	cmpb $0,evtchn_upcall_pending(%esi) /* __TEST_PENDING */	; \
 	jnz  14f	/* process more events if necessary... */	; \
 	movl PT_ESI(%esp), %esi						; \
 	sysexit								; \
 14:	movb $1,evtchn_upcall_mask(%esi) /* __DISABLE_INTERRUPTS */	; \
+.Lsysexit_ecrit: /**** END OF SYSEXIT CRITICAL REGION ****/		; \
 	TRACE_IRQS_OFF							; \
-sysexit_ecrit:	/**** END OF SYSEXIT CRITICAL REGION ****/		; \
 	mov  $__KERNEL_PERCPU, %ecx					; \
 	push %esp							; \
 	mov  %ecx, %fs							; \

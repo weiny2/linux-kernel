@@ -1,5 +1,5 @@
 /*
- * kernel/mutex.c
+ * kernel/locking/mutex.c
  *
  * Mutexes: blocking mutual exclusion locks
  *
@@ -89,7 +89,7 @@ __mutex_lock_slowpath(atomic_t *lock_count);
  * The mutex must later on be released by the same task that
  * acquired it. Recursive locking is not allowed. The task
  * may not exit without first unlocking the mutex. Also, kernel
- * memory where the mutex resides mutex must not be freed with
+ * memory where the mutex resides must not be freed with
  * the mutex still locked. The mutex must first be initialized
  * (or statically defined) before it can be locked. memset()-ing
  * the mutex to 0 is not allowed.
@@ -184,7 +184,8 @@ static inline int mutex_can_spin_on_owner(struct mutex *lock)
 	rcu_read_lock();
 	owner = ACCESS_ONCE(lock->owner);
 	if (owner)
-		retval = owner->on_cpu;
+		retval = owner->on_cpu &&
+			 arch_cpu_is_running(task_thread_info(owner)->cpu);
 	rcu_read_unlock();
 	/*
 	 * if lock->owner is not set, the mutex owner may have just acquired
@@ -532,6 +533,8 @@ slowpath:
 		schedule_preempt_disabled();
 		spin_lock_mutex(&lock->wait_lock, flags);
 	}
+	__set_task_state(task, TASK_RUNNING);
+
 	mutex_remove_waiter(lock, &waiter, current_thread_info());
 	/* set it to 0 if there are no waiters left: */
 	if (likely(list_empty(&lock->wait_list)))

@@ -41,6 +41,10 @@ struct ceph_connection_operations {
 	struct ceph_msg * (*alloc_msg) (struct ceph_connection *con,
 					struct ceph_msg_header *hdr,
 					int *skip);
+	int (*sign_message) (struct ceph_connection *con, struct ceph_msg *msg);
+
+	int (*check_message_signature) (struct ceph_connection *con,
+					struct ceph_msg *msg);
 };
 
 /* use format string %s%d */
@@ -52,6 +56,7 @@ struct ceph_messenger {
 
 	atomic_t stopping;
 	bool nocrc;
+	bool tcp_nodelay;
 
 	/*
 	 * the global_seq counts connections i (attempt to) initiate
@@ -60,8 +65,8 @@ struct ceph_messenger {
 	u32 global_seq;
 	spinlock_t global_seq_lock;
 
-	u32 supported_features;
-	u32 required_features;
+	u64 supported_features;
+	u64 required_features;
 };
 
 enum ceph_msg_data_type {
@@ -71,6 +76,7 @@ enum ceph_msg_data_type {
 #ifdef CONFIG_BLOCK
 	CEPH_MSG_DATA_BIO,	/* data source/destination is a bio list */
 #endif /* CONFIG_BLOCK */
+	CEPH_MSG_DATA_SG,	/* data source/destination is a scatterlist */
 };
 
 static __inline__ bool ceph_msg_data_type_valid(enum ceph_msg_data_type type)
@@ -82,6 +88,7 @@ static __inline__ bool ceph_msg_data_type_valid(enum ceph_msg_data_type type)
 #ifdef CONFIG_BLOCK
 	case CEPH_MSG_DATA_BIO:
 #endif /* CONFIG_BLOCK */
+	case CEPH_MSG_DATA_SG:
 		return true;
 	default:
 		return false;
@@ -104,6 +111,11 @@ struct ceph_msg_data {
 			unsigned int	alignment;	/* first page */
 		};
 		struct ceph_pagelist	*pagelist;
+		struct {
+			struct scatterlist *sgl;
+			unsigned int	sgl_init_offset;
+			u64		sgl_length;
+		};
 	};
 };
 
@@ -132,6 +144,10 @@ struct ceph_msg_data_cursor {
 			struct page	*page;		/* page from list */
 			size_t		offset;		/* bytes from list */
 		};
+		struct {
+			struct scatterlist	*sg;		/* curr sg */
+			unsigned int		sg_consumed;
+		};
 	};
 };
 
@@ -142,7 +158,10 @@ struct ceph_msg_data_cursor {
  */
 struct ceph_msg {
 	struct ceph_msg_header hdr;	/* header */
-	struct ceph_msg_footer footer;	/* footer */
+	union {
+		struct ceph_msg_footer footer;		/* footer */
+		struct ceph_msg_footer_old old_footer;	/* old format footer */
+	};
 	struct kvec front;              /* unaligned blobs of message */
 	struct ceph_buffer *middle;
 
@@ -154,7 +173,6 @@ struct ceph_msg {
 	struct list_head list_head;	/* links for connection lists */
 
 	struct kref kref;
-	bool front_is_vmalloc;
 	bool more_to_follow;
 	bool needs_out_seq;
 	int front_alloc_len;
@@ -192,7 +210,7 @@ struct ceph_connection {
 
 	struct ceph_entity_name peer_name; /* peer name */
 
-	unsigned peer_features;
+	u64 peer_features;
 	u32 connect_seq;      /* identify the most recent connection
 				 attempt for this connection, client */
 	u32 peer_global_seq;  /* peer's global seq for this connection */
@@ -256,9 +274,10 @@ extern void ceph_msgr_flush(void);
 
 extern void ceph_messenger_init(struct ceph_messenger *msgr,
 			struct ceph_entity_addr *myaddr,
-			u32 supported_features,
-			u32 required_features,
-			bool nocrc);
+			u64 supported_features,
+			u64 required_features,
+			bool nocrc,
+			bool tcp_nodelay);
 
 extern void ceph_con_init(struct ceph_connection *con, void *private,
 			const struct ceph_connection_operations *ops,
@@ -283,22 +302,14 @@ extern void ceph_msg_data_add_pagelist(struct ceph_msg *msg,
 extern void ceph_msg_data_add_bio(struct ceph_msg *msg, struct bio *bio,
 				size_t length);
 #endif /* CONFIG_BLOCK */
+extern void ceph_msg_data_add_sg(struct ceph_msg *msg, struct scatterlist *sgl,
+				 unsigned int sgl_init_offset, u64 length);
 
 extern struct ceph_msg *ceph_msg_new(int type, int front_len, gfp_t flags,
 				     bool can_fail);
-extern void ceph_msg_kfree(struct ceph_msg *m);
 
-
-static inline struct ceph_msg *ceph_msg_get(struct ceph_msg *msg)
-{
-	kref_get(&msg->kref);
-	return msg;
-}
-extern void ceph_msg_last_put(struct kref *kref);
-static inline void ceph_msg_put(struct ceph_msg *msg)
-{
-	kref_put(&msg->kref, ceph_msg_last_put);
-}
+extern struct ceph_msg *ceph_msg_get(struct ceph_msg *msg);
+extern void ceph_msg_put(struct ceph_msg *msg);
 
 extern void ceph_msg_dump(struct ceph_msg *msg);
 

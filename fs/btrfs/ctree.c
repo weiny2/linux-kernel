@@ -2788,8 +2788,6 @@ again:
 			if (!should_cow_block(trans, root, b))
 				goto cow_done;
 
-			btrfs_set_path_blocking(p);
-
 			/*
 			 * must have write locks on this node and the
 			 * parent
@@ -2803,6 +2801,7 @@ again:
 				goto again;
 			}
 
+			btrfs_set_path_blocking(p);
 			err = btrfs_cow_block(trans, root, b,
 					      p->nodes[level + 1],
 					      p->slots[level + 1], &b);
@@ -2944,7 +2943,7 @@ done:
 	 */
 	if (!p->leave_spinning)
 		btrfs_set_path_blocking(p);
-	if (ret < 0)
+	if (ret < 0 && !p->skip_release_on_error)
 		btrfs_release_path(p);
 	return ret;
 }
@@ -4374,13 +4373,15 @@ static noinline int setup_leaf_for_split(struct btrfs_trans_handle *trans,
 	path->search_for_split = 1;
 	ret = btrfs_search_slot(trans, root, &key, path, 0, 1);
 	path->search_for_split = 0;
+	if (ret > 0)
+		ret = -EAGAIN;
 	if (ret < 0)
 		goto err;
 
 	ret = -EAGAIN;
 	leaf = path->nodes[0];
-	/* if our item isn't there or got smaller, return now */
-	if (ret > 0 || item_size != btrfs_item_size_nr(leaf, path->slots[0]))
+	/* if our item isn't there, return now */
+	if (item_size != btrfs_item_size_nr(leaf, path->slots[0]))
 		goto err;
 
 	/* the leaf has  changed, it now has room.  return now */
@@ -4734,6 +4735,12 @@ void setup_items_for_insert(struct btrfs_root *root, struct btrfs_path *path,
 	int slot;
 	struct btrfs_map_token token;
 
+	if (path->slots[0] == 0) {
+		btrfs_cpu_key_to_disk(&disk_key, cpu_key);
+		fixup_low_keys(root, path, &disk_key, 1);
+	}
+	btrfs_unlock_up_safe(path, 1);
+
 	btrfs_init_map_token(&token);
 
 	leaf = path->nodes[0];
@@ -4794,12 +4801,6 @@ void setup_items_for_insert(struct btrfs_root *root, struct btrfs_path *path,
 	}
 
 	btrfs_set_header_nritems(leaf, nritems + nr);
-
-	if (slot == 0) {
-		btrfs_cpu_key_to_disk(&disk_key, cpu_key);
-		fixup_low_keys(root, path, &disk_key, 1);
-	}
-	btrfs_unlock_up_safe(path, 1);
 	btrfs_mark_buffer_dirty(leaf);
 
 	if (btrfs_leaf_free_space(root, leaf) < 0) {
@@ -5093,7 +5094,17 @@ int btrfs_prev_leaf(struct btrfs_root *root, struct btrfs_path *path)
 		return ret;
 	btrfs_item_key(path->nodes[0], &found_key, 0);
 	ret = comp_keys(&found_key, &key);
-	if (ret < 0)
+	/*
+	 * We might have had an item with the previous key in the tree right
+	 * before we released our path. And after we released our path, that
+	 * item might have been pushed to the first slot (0) of the leaf we
+	 * were holding due to a tree balance. Alternatively, an item with the
+	 * previous key can exist as the only element of a leaf (big fat item).
+	 * Therefore account for these 2 cases, so that our callers (like
+	 * btrfs_previous_item) don't miss an existing item with a key matching
+	 * the previous key we computed above.
+	 */
+	if (ret <= 0)
 		return 0;
 	return 1;
 }
@@ -5131,8 +5142,9 @@ int btrfs_search_forward(struct btrfs_root *root, struct btrfs_key *min_key,
 	u32 nritems;
 	int level;
 	int ret = 1;
+	int keep_locks = path->keep_locks;
 
-	WARN_ON(!path->keep_locks);
+	path->keep_locks = 1;
 again:
 	cur = btrfs_read_lock_root_node(root);
 	level = btrfs_header_level(cur);
@@ -5196,7 +5208,6 @@ find_next_key:
 		path->slots[level] = slot;
 		if (level == path->lowest_level) {
 			ret = 0;
-			unlock_up(path, level, 1, 0, NULL);
 			goto out;
 		}
 		btrfs_set_path_blocking(path);
@@ -5211,9 +5222,12 @@ find_next_key:
 		btrfs_clear_path_blocking(path, NULL, 0);
 	}
 out:
-	if (ret == 0)
+	path->keep_locks = keep_locks;
+	if (ret == 0) {
+		btrfs_unlock_up_safe(path, path->lowest_level + 1);
+		btrfs_set_path_blocking(path);
 		memcpy(min_key, &found_key, sizeof(found_key));
-	btrfs_set_path_blocking(path);
+	}
 	return ret;
 }
 
@@ -5332,7 +5346,6 @@ int btrfs_compare_trees(struct btrfs_root *left_root,
 {
 	int ret;
 	int cmp;
-	struct btrfs_trans_handle *trans = NULL;
 	struct btrfs_path *left_path = NULL;
 	struct btrfs_path *right_path = NULL;
 	struct btrfs_key left_key;
@@ -5350,9 +5363,6 @@ int btrfs_compare_trees(struct btrfs_root *left_root,
 	u64 right_blockptr;
 	u64 left_gen;
 	u64 right_gen;
-	u64 left_start_ctransid;
-	u64 right_start_ctransid;
-	u64 ctransid;
 
 	left_path = btrfs_alloc_path();
 	if (!left_path) {
@@ -5375,21 +5385,6 @@ int btrfs_compare_trees(struct btrfs_root *left_root,
 	left_path->skip_locking = 1;
 	right_path->search_commit_root = 1;
 	right_path->skip_locking = 1;
-
-	spin_lock(&left_root->root_item_lock);
-	left_start_ctransid = btrfs_root_ctransid(&left_root->root_item);
-	spin_unlock(&left_root->root_item_lock);
-
-	spin_lock(&right_root->root_item_lock);
-	right_start_ctransid = btrfs_root_ctransid(&right_root->root_item);
-	spin_unlock(&right_root->root_item_lock);
-
-	trans = btrfs_join_transaction(left_root);
-	if (IS_ERR(trans)) {
-		ret = PTR_ERR(trans);
-		trans = NULL;
-		goto out;
-	}
 
 	/*
 	 * Strategy: Go to the first items of both trees. Then do
@@ -5454,67 +5449,6 @@ int btrfs_compare_trees(struct btrfs_root *left_root,
 	advance_left = advance_right = 0;
 
 	while (1) {
-		/*
-		 * We need to make sure the transaction does not get committed
-		 * while we do anything on commit roots. This means, we need to
-		 * join and leave transactions for every item that we process.
-		 */
-		if (trans && btrfs_should_end_transaction(trans, left_root)) {
-			btrfs_release_path(left_path);
-			btrfs_release_path(right_path);
-
-			ret = btrfs_end_transaction(trans, left_root);
-			trans = NULL;
-			if (ret < 0)
-				goto out;
-		}
-		/* now rejoin the transaction */
-		if (!trans) {
-			trans = btrfs_join_transaction(left_root);
-			if (IS_ERR(trans)) {
-				ret = PTR_ERR(trans);
-				trans = NULL;
-				goto out;
-			}
-
-			spin_lock(&left_root->root_item_lock);
-			ctransid = btrfs_root_ctransid(&left_root->root_item);
-			spin_unlock(&left_root->root_item_lock);
-			if (ctransid != left_start_ctransid)
-				left_start_ctransid = 0;
-
-			spin_lock(&right_root->root_item_lock);
-			ctransid = btrfs_root_ctransid(&right_root->root_item);
-			spin_unlock(&right_root->root_item_lock);
-			if (ctransid != right_start_ctransid)
-				right_start_ctransid = 0;
-
-			if (!left_start_ctransid || !right_start_ctransid) {
-				WARN(1, KERN_WARNING
-					"BTRFS: btrfs_compare_tree detected "
-					"a change in one of the trees while "
-					"iterating. This is probably a "
-					"bug.\n");
-				ret = -EIO;
-				goto out;
-			}
-
-			/*
-			 * the commit root may have changed, so start again
-			 * where we stopped
-			 */
-			left_path->lowest_level = left_level;
-			right_path->lowest_level = right_level;
-			ret = btrfs_search_slot(NULL, left_root,
-					&left_key, left_path, 0, 0);
-			if (ret < 0)
-				goto out;
-			ret = btrfs_search_slot(NULL, right_root,
-					&right_key, right_path, 0, 0);
-			if (ret < 0)
-				goto out;
-		}
-
 		if (advance_left && !left_end_reached) {
 			ret = tree_advance(left_root, left_path, &left_level,
 					left_root_level,
@@ -5644,14 +5578,6 @@ out:
 	btrfs_free_path(left_path);
 	btrfs_free_path(right_path);
 	kfree(tmp_buf);
-
-	if (trans) {
-		if (!ret)
-			ret = btrfs_end_transaction(trans, left_root);
-		else
-			btrfs_end_transaction(trans, left_root);
-	}
-
 	return ret;
 }
 

@@ -484,7 +484,8 @@ static int mgc_requeue_thread(void *data)
 		to = MGC_TIMEOUT_MIN_SECONDS * HZ;
 		to += rand * HZ / 100; /* rand is centi-seconds */
 		lwi = LWI_TIMEOUT(to, NULL, NULL);
-		l_wait_event(rq_waitq, rq_state & RQ_STOP, &lwi);
+		l_wait_event(rq_waitq, ({ kgr_task_safe(current);
+					rq_state & RQ_STOP; }), &lwi);
 
 		/*
 		 * iterate & processing through the list. for each cld, process
@@ -531,7 +532,8 @@ static int mgc_requeue_thread(void *data)
 
 		/* Wait a bit to see if anyone else needs a requeue */
 		lwi = (struct l_wait_info) { 0 };
-		l_wait_event(rq_waitq, rq_state & (RQ_NOW | RQ_STOP),
+		l_wait_event(rq_waitq, ({ kgr_task_safe(current);
+					rq_state & (RQ_NOW | RQ_STOP); }),
 			     &lwi);
 		spin_lock(&config_list_lock);
 	}

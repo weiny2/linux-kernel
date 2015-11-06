@@ -1136,6 +1136,7 @@ static int o2hb_thread(void *data)
 
 	while (!kthread_should_stop() &&
 	       !reg->hr_unclean_stop && !reg->hr_aborted_start) {
+		kgr_task_safe(current);
 		/* We track the time spent inside
 		 * o2hb_do_disk_heartbeat so that we avoid more than
 		 * hr_timeout_ms between disk writes. On busy systems

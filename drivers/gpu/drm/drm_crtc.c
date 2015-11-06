@@ -202,6 +202,7 @@ static struct drm_conn_prop_enum_list drm_connector_enum_list[] =
 	{ DRM_MODE_CONNECTOR_TV, "TV" },
 	{ DRM_MODE_CONNECTOR_eDP, "eDP" },
 	{ DRM_MODE_CONNECTOR_VIRTUAL, "Virtual" },
+	{ DRM_MODE_CONNECTOR_DSI, "DSI" },
 };
 
 static const struct drm_prop_enum_list drm_encoder_enum_list[] =
@@ -211,6 +212,7 @@ static const struct drm_prop_enum_list drm_encoder_enum_list[] =
 	{ DRM_MODE_ENCODER_LVDS, "LVDS" },
 	{ DRM_MODE_ENCODER_TVDAC, "TV" },
 	{ DRM_MODE_ENCODER_VIRTUAL, "Virtual" },
+	{ DRM_MODE_ENCODER_DSI, "DSI" },
 };
 
 void drm_connector_ida_init(void)
@@ -2071,8 +2073,11 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EINVAL;
 
-	/* For some reason crtc x/y offsets are signed internally. */
-	if (crtc_req->x > INT_MAX || crtc_req->y > INT_MAX)
+	/*
+	 * Universal plane src offsets are only 16.16, prevent havoc for
+	 * drivers using universal plane code internally.
+	 */
+	if (crtc_req->x & 0xffff0000 || crtc_req->y & 0xffff0000)
 		return -ERANGE;
 
 	drm_modeset_lock_all(dev);

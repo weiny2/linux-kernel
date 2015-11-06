@@ -72,7 +72,7 @@ extern u16 __read_mostly tlb_lli_4m[NR_INFO];
 extern u16 __read_mostly tlb_lld_4k[NR_INFO];
 extern u16 __read_mostly tlb_lld_2m[NR_INFO];
 extern u16 __read_mostly tlb_lld_4m[NR_INFO];
-extern s8  __read_mostly tlb_flushall_shift;
+extern u16 __read_mostly tlb_lld_1g[NR_INFO];
 
 /*
  *  CPU type and hardware bug flags. Kept separately for each CPU.
@@ -454,9 +454,7 @@ struct thread_struct {
 	unsigned short		fsindex;
 	unsigned short		gsindex;
 #endif
-#ifdef CONFIG_X86_32
 	unsigned long		ip;
-#endif
 #ifdef CONFIG_X86_64
 	unsigned long		fs;
 #endif

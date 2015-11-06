@@ -357,6 +357,7 @@ static int add_to_buf(struct IR *ir)
 	 * data and we have space
 	 */
 	do {
+		kgr_task_safe(current);
 		if (kthread_should_stop()) {
 			ret = -ENODATA;
 			break;
@@ -476,6 +477,7 @@ static int lirc_thread(void *arg)
 	dprintk("poll thread started\n");
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		set_current_state(TASK_INTERRUPTIBLE);
 
 		/* if device not opened, we can sleep half a second */

@@ -1808,6 +1808,17 @@ static struct amd64_family_type amd64_family_types[] = {
 			.read_dct_pci_cfg	= f10_read_dct_pci_cfg,
 		}
 	},
+	[F16_M30H_CPUS] = {
+		.ctl_name = "F16h_M30h",
+		.f1_id = PCI_DEVICE_ID_AMD_16H_M30H_NB_F1,
+		.f3_id = PCI_DEVICE_ID_AMD_16H_M30H_NB_F3,
+		.ops = {
+			.early_channel_count	= f1x_early_channel_count,
+			.map_sysaddr_to_csrow	= f1x_map_sysaddr_to_csrow,
+			.dbam_to_cs		= f16_dbam_to_chip_select,
+			.read_dct_pci_cfg	= f10_read_dct_pci_cfg,
+		}
+	},
 };
 
 /*
@@ -2045,7 +2056,13 @@ static inline void __amd64_decode_bus_error(struct mem_ctl_info *mci,
 
 void amd64_decode_bus_error(int node_id, struct mce *m)
 {
-	__amd64_decode_bus_error(mcis[node_id], m);
+	struct mem_ctl_info *mci;
+
+	mci = edac_mc_find(node_id);
+	if (!mci)
+		return;
+
+	__amd64_decode_bus_error(mci, m);
 }
 
 /*
@@ -2592,6 +2609,11 @@ static struct amd64_family_type *amd64_per_family_init(struct amd64_pvt *pvt)
 		break;
 
 	case 0x16:
+		if (pvt->model == 0x30) {
+			fam_type = &amd64_family_types[F16_M30H_CPUS];
+			pvt->ops = &amd64_family_types[F16_M30H_CPUS].ops;
+			break;
+		}
 		fam_type		= &amd64_family_types[F16_CPUS];
 		pvt->ops		= &amd64_family_types[F16_CPUS].ops;
 		break;
@@ -2839,6 +2861,14 @@ static DEFINE_PCI_DEVICE_TABLE(amd64_pci_table) = {
 	{
 		.vendor		= PCI_VENDOR_ID_AMD,
 		.device		= PCI_DEVICE_ID_AMD_16H_NB_F2,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= PCI_ANY_ID,
+		.class		= 0,
+		.class_mask	= 0,
+	},
+	{
+		.vendor		= PCI_VENDOR_ID_AMD,
+		.device		= PCI_DEVICE_ID_AMD_16H_M30H_NB_F2,
 		.subvendor	= PCI_ANY_ID,
 		.subdevice	= PCI_ANY_ID,
 		.class		= 0,

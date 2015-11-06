@@ -972,9 +972,10 @@ static int ll_agl_thread(void *arg)
 	wake_up(&thread->t_ctl_waitq);
 
 	while (1) {
-		l_wait_event(thread->t_ctl_waitq,
+		l_wait_event(thread->t_ctl_waitq, ({
+			     kgr_task_safe(current);
 			     !agl_list_empty(sai) ||
-			     !thread_is_running(thread),
+			     !thread_is_running(thread); }),
 			     &lwi);
 
 		if (!thread_is_running(thread))
@@ -1187,10 +1188,11 @@ do_it:
 			 */
 			ll_release_page(page, 0);
 			while (1) {
-				l_wait_event(thread->t_ctl_waitq,
+				l_wait_event(thread->t_ctl_waitq, ({
+					     kgr_task_safe(current);
 					     !sa_received_empty(sai) ||
 					     sai->sai_sent == sai->sai_replied||
-					     !thread_is_running(thread),
+					     !thread_is_running(thread); }),
 					     &lwi);
 
 				while (!sa_received_empty(sai))

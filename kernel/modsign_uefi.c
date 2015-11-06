@@ -17,11 +17,11 @@ struct efi_hash_type {
 };
 
 static const struct efi_hash_type efi_hash_types[] = {
-	{PKEY_HASH_SHA256, EFI_CERT_SHA256_GUID, "sha256", 32},
-	{PKEY_HASH_SHA1, EFI_CERT_SHA1_GUID, "sha1", 20},
-	{PKEY_HASH_SHA512, EFI_CERT_SHA512_GUID, "sha512", 64},
-	{PKEY_HASH_SHA224, EFI_CERT_SHA224_GUID, "sha224", 28},
-	{PKEY_HASH_SHA384, EFI_CERT_SHA384_GUID, "sha384", 48},
+	{HASH_ALGO_SHA256, EFI_CERT_SHA256_GUID, "sha256", 32},
+	{HASH_ALGO_SHA1, EFI_CERT_SHA1_GUID, "sha1", 20},
+	{HASH_ALGO_SHA512, EFI_CERT_SHA512_GUID, "sha512", 64},
+	{HASH_ALGO_SHA224, EFI_CERT_SHA224_GUID, "sha224", 28},
+	{HASH_ALGO_SHA384, EFI_CERT_SHA384_GUID, "sha384", 48},
 	{PKEY_HASH__LAST}
 };
 
@@ -145,8 +145,7 @@ static int __init load_uefi_certs(void)
 	unsigned long dbsize = 0, dbxsize = 0, moksize = 0, mokxsize = 0;
 	int ignore_db, rc = 0;
 
-	/* Check if SB is enabled and just return if not */
-	if (!efi_enabled(EFI_SECURE_BOOT))
+	if (!efi_enabled(EFI_RUNTIME_SERVICES))
 		return 0;
 
 	/* See if the user has setup Ignore DB mode */
@@ -167,16 +166,6 @@ static int __init load_uefi_certs(void)
 		}
 	}
 
-	mok = get_cert_list(L"MokListRT", &mok_var, &moksize);
-	if (!mok) {
-		pr_info("MODSIGN: Couldn't get UEFI MokListRT\n");
-	} else {
-		rc = parse_efi_signature_list(mok, moksize, system_trusted_keyring);
-		if (rc)
-			pr_err("Couldn't parse MokListRT signatures: %d\n", rc);
-		kfree(mok);
-	}
-
 	dbx = get_cert_list(L"dbx", &secure_var, &dbxsize);
 	if (!dbx) {
 		pr_info("MODSIGN: Couldn't get UEFI dbx list\n");
@@ -186,6 +175,20 @@ static int __init load_uefi_certs(void)
 		if (rc)
 			pr_err("Couldn't parse dbx signatures: %d\n", rc);
 		kfree(dbx);
+	}
+
+	/* Check if SB is enabled and just return if not */
+	if (!efi_enabled(EFI_SECURE_BOOT))
+		return 0;
+
+	mok = get_cert_list(L"MokListRT", &mok_var, &moksize);
+	if (!mok) {
+		pr_info("MODSIGN: Couldn't get UEFI MokListRT\n");
+	} else {
+		rc = parse_efi_signature_list(mok, moksize, system_trusted_keyring);
+		if (rc)
+			pr_err("Couldn't parse MokListRT signatures: %d\n", rc);
+		kfree(mok);
 	}
 
 	mokx = get_cert_list(L"MokListXRT", &mok_var, &mokxsize);

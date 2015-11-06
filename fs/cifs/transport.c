@@ -431,13 +431,20 @@ static int allocate_mid(struct cifs_ses *ses, struct smb_hdr *in_buf,
 		return -EAGAIN;
 	}
 
-	if (ses->status != CifsGood) {
-		/* check if SMB session is bad because we are setting it up */
+	if (ses->status == CifsNew) {
 		if ((in_buf->Command != SMB_COM_SESSION_SETUP_ANDX) &&
 			(in_buf->Command != SMB_COM_NEGOTIATE))
 			return -EAGAIN;
 		/* else ok - we are setting up session */
 	}
+
+	if (ses->status == CifsExiting) {
+		/* check if SMB session is bad because we are setting it up */
+		if (in_buf->Command != SMB_COM_LOGOFF_ANDX)
+			return -EAGAIN;
+		/* else ok - we are shutting down session */
+	}
+
 	*ppmidQ = AllocMidQEntry(in_buf, ses->server);
 	if (*ppmidQ == NULL)
 		return -ENOMEM;
@@ -452,8 +459,9 @@ wait_for_response(struct TCP_Server_Info *server, struct mid_q_entry *midQ)
 {
 	int error;
 
-	error = wait_event_freezekillable_unsafe(server->response_q,
-				    midQ->mid_state != MID_REQUEST_SUBMITTED);
+	error = wait_event_freezekillable_unsafe(server->response_q, ({
+				    kgr_task_safe(current);
+				    midQ->mid_state != MID_REQUEST_SUBMITTED; }));
 	if (error < 0)
 		return -ERESTARTSYS;
 

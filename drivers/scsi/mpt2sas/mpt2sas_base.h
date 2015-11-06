@@ -4,7 +4,8 @@
  *
  * This code is based on drivers/scsi/mpt2sas/mpt2_base.h
  * Copyright (C) 2007-2014  LSI Corporation
- *  (mailto:DL-MPTFusionLinux@lsi.com)
+ * Copyright (C) 20013-2014 Avago Technologies
+ *  (mailto: MPT-FusionLinux.pdl@avagotech.com)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -67,10 +68,10 @@
 
 /* driver versioning info */
 #define MPT2SAS_DRIVER_NAME		"mpt2sas"
-#define MPT2SAS_AUTHOR	"LSI Corporation <DL-MPTFusionLinux@lsi.com>"
+#define MPT2SAS_AUTHOR "Avago Technologies <MPT-FusionLinux.pdl@avagotech.com>"
 #define MPT2SAS_DESCRIPTION	"LSI MPT Fusion SAS 2.0 Device Driver"
-#define MPT2SAS_DRIVER_VERSION		"18.100.00.00"
-#define MPT2SAS_MAJOR_VERSION		18
+#define MPT2SAS_DRIVER_VERSION		"20.100.00.00"
+#define MPT2SAS_MAJOR_VERSION		20
 #define MPT2SAS_MINOR_VERSION		100
 #define MPT2SAS_BUILD_VERSION		00
 #define MPT2SAS_RELEASE_VERSION		00
@@ -589,6 +590,7 @@ struct adapter_reply_queue {
 	Mpi2ReplyDescriptorsUnion_t *reply_post_free;
 	char			name[MPT_NAME_LENGTH];
 	atomic_t		busy;
+	cpumask_var_t		affinity_hint;
 	struct list_head	list;
 };
 
@@ -671,6 +673,7 @@ typedef void (*MPT2SAS_FLUSH_RUNNING_CMDS)(struct MPT2SAS_ADAPTER *ioc);
  * @ir_firmware: IR firmware present
  * @bars: bitmask of BAR's that must be configured
  * @mask_interrupts: ignore interrupt
+ * @dma_mask: used to set the consistent dma mask
  * @fault_reset_work_q_name: fw fault work queue
  * @fault_reset_work_q: ""
  * @fault_reset_work: ""
@@ -727,6 +730,7 @@ typedef void (*MPT2SAS_FLUSH_RUNNING_CMDS)(struct MPT2SAS_ADAPTER *ioc);
  * @ioc_pg8: static ioc page 8
  * @iounit_pg0: static iounit page 0
  * @iounit_pg1: static iounit page 1
+ * @iounit_pg8: static iounit page 8
  * @sas_hba: sas host object
  * @sas_expander_list: expander object list
  * @sas_node_lock:
@@ -797,6 +801,7 @@ typedef void (*MPT2SAS_FLUSH_RUNNING_CMDS)(struct MPT2SAS_ADAPTER *ioc);
  * @reply_post_host_index: head index in the pool where FW completes IO
  * @delayed_tr_list: target reset link list
  * @delayed_tr_volume_list: volume target reset link list
+ * @@temp_sensors_count: flag to carry the number of temperature sensors
  */
 struct MPT2SAS_ADAPTER {
 	struct list_head list;
@@ -813,6 +818,7 @@ struct MPT2SAS_ADAPTER {
 	u8		ir_firmware;
 	int		bars;
 	u8		mask_interrupts;
+	int		dma_mask;
 
 	/* fw fault handler */
 	char		fault_reset_work_q_name[20];
@@ -850,7 +856,7 @@ struct MPT2SAS_ADAPTER {
 	u8		msix_enable;
 	u16		msix_vector_count;
 	u8		*cpu_msix_table;
-	resource_size_t	**reply_post_host_index;
+	resource_size_t	__iomem **reply_post_host_index;
 	u16		cpu_msix_table_sz;
 	u32		ioc_reset_count;
 	MPT2SAS_FLUSH_RUNNING_CMDS schedule_dead_ioc_flush_running_cmds;
@@ -894,6 +900,7 @@ struct MPT2SAS_ADAPTER {
 	Mpi2IOCPage8_t ioc_pg8;
 	Mpi2IOUnitPage0_t iounit_pg0;
 	Mpi2IOUnitPage1_t iounit_pg1;
+	Mpi2IOUnitPage8_t iounit_pg8;
 
 	struct _boot_device req_boot_device;
 	struct _boot_device req_alt_boot_device;
@@ -985,15 +992,16 @@ struct MPT2SAS_ADAPTER {
 	/* reply post queue */
 	u16 		reply_post_queue_depth;
 	struct reply_post_struct *reply_post;
+	u8		rdpq_array_capable;
+	u8		rdpq_array_enable;
+	u8		rdpq_array_enable_assigned;
 	struct dma_pool *reply_post_free_dma_pool;
 	u8		reply_queue_count;
 	struct list_head reply_queue_list;
-	u8              rdpq_array_capable;
-	u8              rdpq_array_enable;
-	u8              rdpq_array_enable_assigned;
 
 	struct list_head delayed_tr_list;
 	struct list_head delayed_tr_volume_list;
+	u8		temp_sensors_count;
 
 	/* diag buffer support */
 	u8		*diag_buffer[MPI2_DIAG_BUF_TYPE_COUNT];
@@ -1081,7 +1089,7 @@ void mpt2sas_scsih_event_callback(struct MPT2SAS_ADAPTER *ioc, u8 msix_index,
     u32 reply);
 int mpt2sas_scsih_issue_tm(struct MPT2SAS_ADAPTER *ioc, u16 handle,
 	uint channel, uint id, uint lun, u8 type, u16 smid_task,
-	ulong timeout, unsigned long serial_number, enum mutex_type m_type);
+	ulong timeout, enum mutex_type m_type);
 void mpt2sas_scsih_set_tm_flag(struct MPT2SAS_ADAPTER *ioc, u16 handle);
 void mpt2sas_scsih_clear_tm_flag(struct MPT2SAS_ADAPTER *ioc, u16 handle);
 void mpt2sas_expander_remove(struct MPT2SAS_ADAPTER *ioc, u64 sas_address);
@@ -1122,6 +1130,8 @@ int mpt2sas_config_get_iounit_pg1(struct MPT2SAS_ADAPTER *ioc, Mpi2ConfigReply_t
     *mpi_reply, Mpi2IOUnitPage1_t *config_page);
 int mpt2sas_config_set_iounit_pg1(struct MPT2SAS_ADAPTER *ioc, Mpi2ConfigReply_t
     *mpi_reply, Mpi2IOUnitPage1_t *config_page);
+int mpt2sas_config_get_iounit_pg8(struct MPT2SAS_ADAPTER *ioc,
+	Mpi2ConfigReply_t *mpi_reply, Mpi2IOUnitPage8_t *config_page);
 int mpt2sas_config_get_iounit_pg3(struct MPT2SAS_ADAPTER *ioc,
 	Mpi2ConfigReply_t *mpi_reply, Mpi2IOUnitPage3_t *config_page, u16 sz);
 int mpt2sas_config_get_sas_iounit_pg1(struct MPT2SAS_ADAPTER *ioc, Mpi2ConfigReply_t

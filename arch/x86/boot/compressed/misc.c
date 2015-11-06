@@ -10,6 +10,10 @@
  */
 
 #include "misc.h"
+#include "../string.h"
+
+#include <generated/compile.h>
+#include <generated/utsrelease.h>
 
 /* WARNING!!
  * This code is compiled with -fPIC and it is relocated dynamically
@@ -97,8 +101,14 @@
  */
 #define STATIC		static
 
-#undef memset
 #undef memcpy
+
+/*
+ * Use a normal definition of memset() from string.c. There are already
+ * included header files which expect a definition of memset() and by
+ * the time we define memset macro, it is too late.
+ */
+#undef memset
 #define memzero(s, n)	memset((s), 0, (n))
 
 
@@ -108,9 +118,6 @@ static void error(char *m);
  * This is set up by the setup-routine at boot-time
  */
 struct boot_params *real_mode;		/* Pointer to real-mode data */
-
-void *memset(void *s, int c, size_t n);
-void *memcpy(void *dest, const void *src, size_t n);
 
 #ifdef CONFIG_X86_64
 #define memptr long
@@ -221,45 +228,6 @@ void __putstr(const char *s)
 	outb(15, vidport);
 	outb(0xff & (pos >> 1), vidport+1);
 }
-
-void *memset(void *s, int c, size_t n)
-{
-	int i;
-	char *ss = s;
-
-	for (i = 0; i < n; i++)
-		ss[i] = c;
-	return s;
-}
-#ifdef CONFIG_X86_32
-void *memcpy(void *dest, const void *src, size_t n)
-{
-	int d0, d1, d2;
-	asm volatile(
-		"rep ; movsl\n\t"
-		"movl %4,%%ecx\n\t"
-		"rep ; movsb\n\t"
-		: "=&c" (d0), "=&D" (d1), "=&S" (d2)
-		: "0" (n >> 2), "g" (n & 3), "1" (dest), "2" (src)
-		: "memory");
-
-	return dest;
-}
-#else
-void *memcpy(void *dest, const void *src, size_t n)
-{
-	long d0, d1, d2;
-	asm volatile(
-		"rep ; movsq\n\t"
-		"movq %4,%%rcx\n\t"
-		"rep ; movsb\n\t"
-		: "=&c" (d0), "=&D" (d1), "=&S" (d2)
-		: "0" (n >> 3), "g" (n & 7), "1" (dest), "2" (src)
-		: "memory");
-
-	return dest;
-}
-#endif
 
 static void error(char *x)
 {
@@ -401,6 +369,8 @@ asmlinkage void decompress_kernel(void *rmode, memptr heap,
 				  unsigned char *output,
 				  unsigned long output_len)
 {
+	unsigned char *output_orig = output;
+
 	real_mode = rmode;
 
 	sanitize_boot_params(real_mode);
@@ -439,7 +409,63 @@ asmlinkage void decompress_kernel(void *rmode, memptr heap,
 	debug_putstr("\nDecompressing Linux... ");
 	decompress(input_data, input_len, NULL, NULL, output, NULL, error);
 	parse_elf(output);
-	handle_relocations(output, output_len);
+	/*
+	 * 32-bit always performs relocations. 64-bit relocations are only
+	 * needed if kASLR has chosen a different load address.
+	 */
+	if (!IS_ENABLED(CONFIG_X86_64) || output != output_orig)
+		handle_relocations(output, output_len);
 	debug_putstr("done.\nBooting the kernel.\n");
 	return;
 }
+
+#if CONFIG_HIBERNATE_VERIFICATION || CONFIG_RANDOMIZE_BASE
+#define I8254_PORT_CONTROL     0x43
+#define I8254_PORT_COUNTER0    0x40
+#define I8254_CMD_READBACK     0xC0
+#define I8254_SELECT_COUNTER0  0x02
+#define I8254_STATUS_NOTREADY  0x40
+u16 read_i8254(void)
+{
+       u16 status, timer;
+
+       do {
+               outb(I8254_PORT_CONTROL,
+                    I8254_CMD_READBACK | I8254_SELECT_COUNTER0);
+               status = inb(I8254_PORT_COUNTER0);
+               timer  = inb(I8254_PORT_COUNTER0);
+               timer |= inb(I8254_PORT_COUNTER0) << 8;
+       } while (status & I8254_STATUS_NOTREADY);
+
+       return timer;
+}
+
+static unsigned long rotate_xor(unsigned long hash, const void *area,
+				size_t size)
+{
+	size_t i;
+	unsigned long *ptr = (unsigned long *)area;
+
+	for (i = 0; i < size / sizeof(hash); i++) {
+		/* Rotate by odd number of bits and XOR. */
+		hash = (hash << ((sizeof(hash) * 8) - 7)) | (hash >> 7);
+		hash ^= ptr[i];
+	}
+
+	return hash;
+}
+
+static const char build_str[] = UTS_RELEASE " (" LINUX_COMPILE_BY "@"
+		LINUX_COMPILE_HOST ") (" LINUX_COMPILER ") " UTS_VERSION;
+
+/* Attempt to create a simple but unpredictable starting entropy. */
+unsigned long get_random_boot(struct boot_params *boot_params)
+{
+	unsigned long hash = 0;
+
+	hash = rotate_xor(hash, build_str, sizeof(build_str));
+	hash = rotate_xor(hash, boot_params, sizeof(*boot_params));
+
+	return hash;
+}
+#endif /* CONFIG_HIBERNATE_VERIFICATION || CONFIG_RANDOMIZE_BASE */

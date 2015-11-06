@@ -37,6 +37,7 @@ enum interruption_class {
 	IRQEXT_CMS,
 	IRQEXT_CMC,
 	IRQEXT_CMR,
+	IRQEXT_FTP,
 	IRQIO_CIO,
 	IRQIO_QAI,
 	IRQIO_DAS,
@@ -55,6 +56,7 @@ enum interruption_class {
 	IRQIO_VIR,
 	NMI_NMI,
 	CPU_RST,
+	IRQIO_VAI,
 	NR_ARCH_IRQS
 };
 

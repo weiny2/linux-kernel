@@ -30,6 +30,12 @@
 
 struct acpi_dmar_header;
 
+#ifdef  CONFIG_X86
+# define        DMAR_UNITS_SUPPORTED    MAX_IO_APICS
+#else
+# define        DMAR_UNITS_SUPPORTED    64
+#endif
+
 /* DMAR Flags */
 #define DMAR_INTR_REMAP		0x1
 #define DMAR_X2APIC_OPT_OUT	0x2
@@ -56,13 +62,19 @@ struct dmar_drhd_unit {
 	struct intel_iommu *iommu;
 };
 
+struct dmar_pci_path {
+	u8 bus;
+	u8 device;
+	u8 function;
+};
+
 struct dmar_pci_notify_info {
 	struct pci_dev			*dev;
 	unsigned long			event;
 	int				bus;
 	u16				seg;
 	u16				level;
-	struct acpi_dmar_pci_path	path[];
+	struct dmar_pci_path		path[];
 }  __attribute__((packed));
 
 extern struct rw_semaphore dmar_global_lock;

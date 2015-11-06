@@ -3748,6 +3748,7 @@ brcmf_sdbrcm_watchdog_thread(void *data)
 	allow_signal(SIGTERM);
 	/* Run until signal received */
 	while (1) {
+		kgr_task_safe(current);
 		if (kthread_should_stop())
 			break;
 		if (!wait_for_completion_interruptible(&bus->watchdog_wait)) {

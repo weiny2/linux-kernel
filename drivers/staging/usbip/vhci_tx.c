@@ -212,10 +212,11 @@ int vhci_tx_loop(void *data)
 		if (vhci_send_cmd_unlink(vdev) < 0)
 			break;
 
-		wait_event_interruptible(vdev->waitq_tx,
+		wait_event_interruptible(vdev->waitq_tx, ({
+					 kgr_task_safe(current);
 					 (!list_empty(&vdev->priv_tx) ||
 					  !list_empty(&vdev->unlink_tx) ||
-					  kthread_should_stop()));
+					  kthread_should_stop()); }));
 
 		usbip_dbg_vhci_tx("pending urbs ?, now wake up\n");
 	}

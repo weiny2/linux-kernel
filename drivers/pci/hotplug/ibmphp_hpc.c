@@ -831,6 +831,7 @@ static int poll_hpc(void *data)
 	debug ("%s - Entry\n", __func__);
 
 	while (!kthread_should_stop()) {
+		kgr_task_safe(current);
 		/* try to get the lock to do some kind of hardware access */
 		down (&semOperations);
 

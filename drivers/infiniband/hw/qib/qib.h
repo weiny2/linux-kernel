@@ -868,8 +868,10 @@ struct qib_devdata {
 	/* last buffer for user use */
 	u32 lastctxt_piobuf;
 
-	/* saturating counter of (non-port-specific) device interrupts */
-	u32 int_counter;
+	/* reset value */
+	u64 z_int_counter;
+	/* percpu intcounter */
+	u64 __percpu *int_counter;
 
 	/* pio bufs allocated per ctxt */
 	u32 pbufsctxt;
@@ -1080,12 +1082,6 @@ struct qib_devdata {
 	/* control high-level access to EEPROM */
 	struct mutex eep_lock;
 	uint64_t traffic_wds;
-	/* active time is kept in seconds, but logged in hours */
-	atomic_t active_time;
-	/* Below are nominal shadow of EEPROM, new since last EEPROM update */
-	uint8_t eep_st_errs[QIB_EEP_LOG_CNT];
-	uint8_t eep_st_new_errs[QIB_EEP_LOG_CNT];
-	uint16_t eep_hrs;
 	/*
 	 * masks for which bits of errs, hwerrs that cause
 	 * each of the counters to increment.
@@ -1184,7 +1180,7 @@ int qib_setup_eagerbufs(struct qib_ctxtdata *);
 void qib_set_ctxtcnt(struct qib_devdata *);
 int qib_create_ctxts(struct qib_devdata *dd);
 struct qib_ctxtdata *qib_create_ctxtdata(struct qib_pportdata *, u32, int);
-void qib_init_pportdata(struct qib_pportdata *, struct qib_devdata *, u8, u8);
+int qib_init_pportdata(struct qib_pportdata *, struct qib_devdata *, u8, u8);
 void qib_free_ctxtdata(struct qib_devdata *, struct qib_ctxtdata *);
 
 u32 qib_kreceive(struct qib_ctxtdata *, u32 *, u32 *);
@@ -1307,8 +1303,7 @@ int qib_twsi_blk_rd(struct qib_devdata *dd, int dev, int addr, void *buffer,
 int qib_twsi_blk_wr(struct qib_devdata *dd, int dev, int addr,
 		    const void *buffer, int len);
 void qib_get_eeprom_info(struct qib_devdata *);
-int qib_update_eeprom_log(struct qib_devdata *dd);
-void qib_inc_eeprom_err(struct qib_devdata *dd, u32 eidx, u32 incr);
+#define qib_inc_eeprom_err(dd, eidx, incr)
 void qib_dump_lookup_output_queue(struct qib_devdata *);
 void qib_force_pio_avail_update(struct qib_devdata *);
 void qib_clear_symerror_on_linkup(unsigned long opaque);
@@ -1449,6 +1444,10 @@ void qib_nomsi(struct qib_devdata *);
 void qib_nomsix(struct qib_devdata *);
 void qib_pcie_getcmd(struct qib_devdata *, u16 *, u8 *, u8 *);
 void qib_pcie_reenable(struct qib_devdata *, u16, u8, u8);
+/* interrupts for device */
+u64 qib_int_counter(struct qib_devdata *);
+/* interrupt for all devices */
+u64 qib_sps_ints(void);
 
 /*
  * dma_addr wrappers - all 0's invalid for hw

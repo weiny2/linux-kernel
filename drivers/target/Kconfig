@@ -31,6 +31,12 @@ config TCM_PSCSI
 	Say Y here to enable the TCM/pSCSI subsystem plugin for non-buffered
 	passthrough access to Linux/SCSI device
 
+config TCM_RBD
+	tristate "TCM/RBD Subsystem Plugin for Linux/RBD"
+	help
+	Say Y here to enable the TCM/RBD subsystem plugin for Ceph RBD
+	access.
+
 source "drivers/target/loopback/Kconfig"
 source "drivers/target/tcm_fc/Kconfig"
 source "drivers/target/iscsi/Kconfig"

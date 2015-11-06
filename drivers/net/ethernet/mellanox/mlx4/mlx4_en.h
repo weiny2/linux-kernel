@@ -394,10 +394,16 @@ struct mlx4_en_rss_map {
 	enum mlx4_qp_state indir_state;
 };
 
+enum mlx4_en_port_flag {
+	MLX4_EN_PORT_ANC = 1<<0, /* Auto-negotiation complete */
+	MLX4_EN_PORT_ANE = 1<<1, /* Auto-negotiation enabled */
+};
+
 struct mlx4_en_port_state {
 	int link_state;
 	int link_speed;
-	int transciver;
+	int transceiver;
+	u32 flags;
 };
 
 struct mlx4_en_pkt_stats {
@@ -525,6 +531,7 @@ struct mlx4_en_priv {
 	unsigned max_mtu;
 	int base_qpn;
 	int cqe_factor;
+	int cqe_size;
 
 	struct mlx4_en_rss_map rss_map;
 	__be32 ctrl_flags;
@@ -586,6 +593,11 @@ struct mlx4_mac_entry {
 	u64 reg_id;
 	struct rcu_head rcu;
 };
+
+static inline struct mlx4_cqe *mlx4_en_get_cqe(void *buf, int idx, int cqe_sz)
+{
+	return buf + idx * cqe_sz;
+}
 
 #ifdef CONFIG_NET_RX_BUSY_POLL
 static inline void mlx4_en_cq_init_lock(struct mlx4_en_cq *cq)

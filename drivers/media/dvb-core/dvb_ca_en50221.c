@@ -995,6 +995,7 @@ static int dvb_ca_en50221_thread(void *data)
 				return 0;
 		}
 		ca->wakeup = 0;
+		kgr_task_safe(current);
 
 		/* go through all the slots processing them */
 		for (slot = 0; slot < ca->slot_count; slot++) {

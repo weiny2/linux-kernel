@@ -20,6 +20,14 @@ static void *x86_swiotlb_alloc_coherent(struct device *hwdev, size_t size,
 {
 	void *vaddr;
 
+	/*
+	 * When booting a kdump kernel in high memory these allocations are very
+	 * likely to fail, as there are by default only 8MB of low memory to
+	 * allocate from. So disable the warnings from the allocator when this
+	 * happens.  SWIOTLB also implements fall-backs for failed allocations.
+	 */
+	flags |= __GFP_NOWARN;
+
 	vaddr = dma_generic_alloc_coherent(hwdev, size, dma_handle, flags,
 					   attrs);
 	if (vaddr)

@@ -14,8 +14,13 @@
 #include "net_driver.h"
 #include "filter.h"
 
-/* Solarstorm controllers use BAR 0 for I/O space and BAR 2(&3) for memory */
+/* All controllers use BAR 0 for I/O space and BAR 2(&3) for memory */
+/* All VFs use BAR 0/1 for memory */
 #define EFX_MEM_BAR 2
+#define EFX_MEM_VF_BAR 0
+
+int efx_net_open(struct net_device *net_dev);
+int efx_net_stop(struct net_device *net_dev);
 
 /* TX */
 int efx_probe_tx_queue(struct efx_tx_queue *tx_queue);
@@ -32,6 +37,7 @@ unsigned int efx_tx_max_skb_descs(struct efx_nic *efx);
 extern unsigned int efx_piobuf_size;
 
 /* RX */
+void efx_set_default_rx_indir_table(struct efx_nic *efx);
 void efx_rx_config_page_split(struct efx_nic *efx);
 int efx_probe_rx_queue(struct efx_rx_queue *rx_queue);
 void efx_remove_rx_queue(struct efx_rx_queue *rx_queue);
@@ -70,6 +76,8 @@ void efx_schedule_slow_fill(struct efx_rx_queue *rx_queue);
 				 EFX_MAX_DMAQ_SIZE / 2 : EFX_MAX_DMAQ_SIZE)
 
 /* Filters */
+
+void efx_mac_reconfigure(struct efx_nic *efx);
 
 /**
  * efx_filter_insert_filter - add or replace a filter
@@ -194,10 +202,15 @@ int efx_init_irq_moderation(struct efx_nic *efx, unsigned int tx_usecs,
 			    bool rx_may_override_tx);
 void efx_get_irq_moderation(struct efx_nic *efx, unsigned int *tx_usecs,
 			    unsigned int *rx_usecs, bool *rx_adaptive);
+void efx_stop_eventq(struct efx_channel *channel);
+void efx_start_eventq(struct efx_channel *channel);
 
 /* Dummy PHY ops for PHY drivers */
 int efx_port_dummy_op_int(struct efx_nic *efx);
 void efx_port_dummy_op_void(struct efx_nic *efx);
+
+/* Update the generic software stats in the passed stats array */
+void efx_update_sw_stats(struct efx_nic *efx, u64 *stats);
 
 /* MTD */
 #ifdef CONFIG_SFC_MTD
@@ -213,6 +226,13 @@ void efx_mtd_remove(struct efx_nic *efx);
 static inline int efx_mtd_probe(struct efx_nic *efx) { return 0; }
 static inline void efx_mtd_rename(struct efx_nic *efx) {}
 static inline void efx_mtd_remove(struct efx_nic *efx) {}
+#endif
+
+#ifdef CONFIG_SFC_SRIOV
+static inline unsigned int efx_vf_size(struct efx_nic *efx)
+{
+	return 1 << efx->vi_scale;
+}
 #endif
 
 static inline void efx_schedule_channel(struct efx_channel *channel)

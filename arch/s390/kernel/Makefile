@@ -4,8 +4,8 @@
 
 ifdef CONFIG_FUNCTION_TRACER
 # Don't trace early setup code and tracing code
-CFLAGS_REMOVE_early.o = -pg
-CFLAGS_REMOVE_ftrace.o = -pg
+CFLAGS_REMOVE_early.o = $(CC_FLAGS_FTRACE)
+CFLAGS_REMOVE_ftrace.o = $(CC_FLAGS_FTRACE)
 endif
 
 #
@@ -50,17 +50,16 @@ compat-obj-$(CONFIG_AUDIT)	+= compat_audit.o
 obj-$(CONFIG_COMPAT)		+= compat_linux.o compat_signal.o \
 					compat_wrapper.o compat_exec_domain.o \
 					$(compat-obj-y)
+obj-$(CONFIG_KGRAFT)		+= kgraft.o
 
 obj-$(CONFIG_STACKTRACE)	+= stacktrace.o
 obj-$(CONFIG_KPROBES)		+= kprobes.o
-obj-$(CONFIG_FUNCTION_TRACER)	+= $(if $(CONFIG_64BIT),mcount64.o,mcount.o)
-obj-$(CONFIG_DYNAMIC_FTRACE)	+= ftrace.o
-obj-$(CONFIG_FUNCTION_GRAPH_TRACER) += ftrace.o
-obj-$(CONFIG_FTRACE_SYSCALLS)  += ftrace.o
+obj-$(CONFIG_FUNCTION_TRACER)	+= mcount.o ftrace.o
 obj-$(CONFIG_CRASH_DUMP)	+= crash_dump.o
 
 ifdef CONFIG_64BIT
-obj-$(CONFIG_PERF_EVENTS)	+= perf_event.o perf_cpum_cf.o
+obj-$(CONFIG_PERF_EVENTS)	+= perf_event.o perf_cpum_cf.o perf_cpum_sf.o \
+						perf_cpum_cf_events.o
 obj-y				+= runtime_instr.o cache.o
 endif
 

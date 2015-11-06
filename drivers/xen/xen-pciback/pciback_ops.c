@@ -159,12 +159,15 @@ int xen_pcibk_enable_msi(struct xen_pcibk_device *pdev,
 		printk(KERN_DEBUG DRV_NAME ": %s: enable MSI\n", pci_name(dev));
 
 	status = pci_enable_msi_block(dev, nvec);
-
 	if (status) {
-		pr_warn_ratelimited("%s: error enabling MSI for guest %u: err %d\n",
-				    pci_name(dev), pdev->xdev->otherend_id,
-				    status);
-		op->value = status > 0 && status < nvec ? status : 0;
+		if (status > 0 && status < nvec)
+			op->value = status;
+		else {
+			pr_warn_ratelimited("%s: error %d enabling %u-vector MSI for Dom%u\n",
+					    pci_name(dev), status, nvec,
+					    pdev->xdev->otherend_id);
+			op->value = 0;
+		}
 		return XEN_PCI_ERR_op_failed;
 	}
 
@@ -248,18 +251,19 @@ int xen_pcibk_enable_msix(struct xen_pcibk_device *pdev,
 	if (result == 0) {
 		for (i = 0; i < op->value; i++) {
 			op->msix_entries[i].entry = entries[i].entry;
+			if (entries[i].vector) {
 #ifndef CONFIG_XEN
-			if (entries[i].vector)
 				op->msix_entries[i].vector =
 					xen_pirq_from_irq(entries[i].vector);
 #else
-			op->msix_entries[i].vector = entries[i].vector;
+				op->msix_entries[i].vector = entries[i].vector;
 #endif
 				if (unlikely(verbose_request))
 					printk(KERN_DEBUG DRV_NAME ": %s: " \
 						"MSI-X[%d]: %d\n",
 						pci_name(dev), i,
 						op->msix_entries[i].vector);
+			}
 		}
 	} else
 		pr_warn_ratelimited("%s: error enabling MSI-X for guest %u: err %d!\n",

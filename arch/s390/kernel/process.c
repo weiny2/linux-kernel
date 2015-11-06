@@ -103,6 +103,14 @@ void release_thread(struct task_struct *dead_task)
 {
 }
 
+#ifdef CONFIG_64BIT
+void arch_release_task_struct(struct task_struct *tsk)
+{
+	if (tsk->thread.vxrs)
+		kfree(tsk->thread.vxrs);
+}
+#endif
+
 int copy_thread(unsigned long clone_flags, unsigned long new_stackp,
 		unsigned long arg, struct task_struct *p)
 {
@@ -177,6 +185,7 @@ int copy_thread(unsigned long clone_flags, unsigned long new_stackp,
 	save_fp_ctl(&p->thread.fp_regs.fpc);
 	save_fp_regs(p->thread.fp_regs.fprs);
 	p->thread.fp_regs.pad = 0;
+	p->thread.vxrs = NULL;
 	/* Set a new TLS ?  */
 	if (clone_flags & CLONE_SETTLS) {
 		unsigned long tls = frame->childregs.gprs[6];
@@ -268,13 +277,3 @@ unsigned long arch_randomize_brk(struct mm_struct *mm)
 	return ret;
 }
 
-unsigned long randomize_et_dyn(unsigned long base)
-{
-	unsigned long ret = PAGE_ALIGN(base + brk_rnd());
-
-	if (!(current->flags & PF_RANDOMIZE))
-		return base;
-	if (ret < base)
-		return base;
-	return ret;
-}

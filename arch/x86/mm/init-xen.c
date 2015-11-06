@@ -18,6 +18,13 @@
 #include <asm/dma.h>		/* for MAX_DMA_PFN */
 #include <asm/microcode.h>
 
+/*
+ * We need to define the tracepoints somewhere, and tlb.c
+ * is only compied when SMP=y.
+ */
+#define CREATE_TRACE_POINTS
+#include <trace/events/tlb.h>
+
 #include "mm_internal.h"
 
 static unsigned long __initdata pgt_buf_start;
@@ -372,9 +379,6 @@ unsigned long __init_refok init_memory_mapping(unsigned long start,
 
 	add_pfn_range_mapped(start >> PAGE_SHIFT, ret >> PAGE_SHIFT);
 
-	if (!start)
-		xen_finish_init_mapping();
-
 	return ret >> PAGE_SHIFT;
 }
 
@@ -435,7 +439,7 @@ static unsigned long __init get_new_step_size(unsigned long step_size)
 	 * is 0, round_down() returns 0 for start, and that turns it
 	 * into 0x100000000ULL.
 	 */
-	return step_size << 5;
+	return step_size << (PMD_SHIFT - PAGE_SHIFT - 1);
 }
 
 /**
@@ -455,7 +459,6 @@ static void __init memory_map_top_down(unsigned long map_start,
 	unsigned long step_size;
 	unsigned long addr;
 	unsigned long mapped_ram_size = 0;
-	unsigned long new_mapped_ram_size;
 
 	/* xen has big range in reserved near end of ram, skip it at first.*/
 	addr = memblock_find_in_range(map_start, map_end, PMD_SIZE, PMD_SIZE);
@@ -480,14 +483,12 @@ static void __init memory_map_top_down(unsigned long map_start,
 				start = map_start;
 		} else
 			start = map_start;
-		new_mapped_ram_size = init_range_memory_mapping(start,
+		mapped_ram_size += init_range_memory_mapping(start,
 							last_start);
 		last_start = start;
 		min_pfn_mapped = last_start >> PAGE_SHIFT;
-		/* only increase step_size after big range get mapped */
-		if (new_mapped_ram_size > mapped_ram_size)
+		if (mapped_ram_size >= step_size)
 			step_size = get_new_step_size(step_size);
-		mapped_ram_size += new_mapped_ram_size;
 	}
 
 	if (real_end < map_end)
@@ -576,6 +577,7 @@ void __init init_mem_mapping(void)
 		/* can we preseve max_low_pfn ?*/
 		max_low_pfn = max_pfn;
 	}
+	xen_finish_init_mapping();
 #else
 	early_ioremap_page_table_range_init();
 #endif

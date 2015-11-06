@@ -92,6 +92,7 @@ static void intel_lvds_get_config(struct intel_encoder *encoder,
 	struct drm_device *dev = encoder->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 lvds_reg, tmp, flags = 0;
+	int dotclock;
 
 	if (HAS_PCH_SPLIT(dev))
 		lvds_reg = PCH_LVDS;
@@ -116,6 +117,13 @@ static void intel_lvds_get_config(struct intel_encoder *encoder,
 
 		pipe_config->gmch_pfit.control |= tmp & PANEL_8TO6_DITHER_ENABLE;
 	}
+
+	dotclock = pipe_config->port_clock;
+
+	if (HAS_PCH_SPLIT(dev_priv->dev))
+		ironlake_check_encoder_dotclock(pipe_config, dotclock);
+
+	pipe_config->adjusted_mode.clock = dotclock;
 }
 
 /* The LVDS pin pair needs to be on before the DPLLs are enabled.
@@ -198,7 +206,8 @@ static void intel_enable_lvds(struct intel_encoder *encoder)
 {
 	struct drm_device *dev = encoder->base.dev;
 	struct intel_lvds_encoder *lvds_encoder = to_lvds_encoder(&encoder->base);
-	struct intel_crtc *intel_crtc = to_intel_crtc(encoder->base.crtc);
+	struct intel_connector *intel_connector =
+		&lvds_encoder->attached_connector->base;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 ctl_reg, stat_reg;
 
@@ -217,13 +226,15 @@ static void intel_enable_lvds(struct intel_encoder *encoder)
 	if (wait_for((I915_READ(stat_reg) & PP_ON) != 0, 1000))
 		DRM_ERROR("timed out waiting for panel to power on\n");
 
-	intel_panel_enable_backlight(dev, intel_crtc->pipe);
+	intel_panel_enable_backlight(intel_connector);
 }
 
 static void intel_disable_lvds(struct intel_encoder *encoder)
 {
 	struct drm_device *dev = encoder->base.dev;
 	struct intel_lvds_encoder *lvds_encoder = to_lvds_encoder(&encoder->base);
+	struct intel_connector *intel_connector =
+		&lvds_encoder->attached_connector->base;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 ctl_reg, stat_reg;
 
@@ -235,7 +246,7 @@ static void intel_disable_lvds(struct intel_encoder *encoder)
 		stat_reg = PP_STATUS;
 	}
 
-	intel_panel_disable_backlight(dev);
+	intel_panel_disable_backlight(intel_connector);
 
 	I915_WRITE(ctl_reg, I915_READ(ctl_reg) & ~POWER_TARGET_ON);
 	if (wait_for((I915_READ(stat_reg) & PP_ON) == 0, 1000))
@@ -523,7 +534,7 @@ static const struct drm_encoder_funcs intel_lvds_enc_funcs = {
 	.destroy = intel_encoder_destroy,
 };
 
-static int __init intel_no_lvds_dmi_callback(const struct dmi_system_id *id)
+static int intel_no_lvds_dmi_callback(const struct dmi_system_id *id)
 {
 	DRM_INFO("Skipping LVDS initialization for %s\n", id->ident);
 	return 1;
@@ -802,7 +813,8 @@ static bool lvds_is_present_in_vbt(struct drm_device *dev,
 		return true;
 
 	for (i = 0; i < dev_priv->vbt.child_dev_num; i++) {
-		struct child_device_config *child = dev_priv->vbt.child_dev + i;
+		union child_device_config *uchild = dev_priv->vbt.child_dev + i;
+		struct old_child_dev_config *child = &uchild->old;
 
 		/* If the device type is not LFP, continue.
 		 * We have to check both the new identifiers as well as the
@@ -844,10 +856,26 @@ static int intel_dual_link_lvds_callback(const struct dmi_system_id *id)
 static const struct dmi_system_id intel_dual_link_lvds[] = {
 	{
 		.callback = intel_dual_link_lvds_callback,
-		.ident = "Apple MacBook Pro (Core i5/i7 Series)",
+		.ident = "Apple MacBook Pro 15\" (2010)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "MacBookPro6,2"),
+		},
+	},
+	{
+		.callback = intel_dual_link_lvds_callback,
+		.ident = "Apple MacBook Pro 15\" (2011)",
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
 			DMI_MATCH(DMI_PRODUCT_NAME, "MacBookPro8,2"),
+		},
+	},
+	{
+		.callback = intel_dual_link_lvds_callback,
+		.ident = "Apple MacBook Pro 15\" (2012)",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "MacBookPro9,1"),
 		},
 	},
 	{ }	/* terminating entry */
@@ -934,6 +962,17 @@ void intel_lvds_init(struct drm_device *dev)
 	int pipe;
 	u8 pin;
 
+	/*
+	 * Unlock registers and just leave them unlocked. Do this before
+	 * checking quirk lists to avoid bogus WARNINGs.
+	 */
+	if (HAS_PCH_SPLIT(dev)) {
+		I915_WRITE(PCH_PP_CONTROL,
+			   I915_READ(PCH_PP_CONTROL) | PANEL_UNLOCK_REGS);
+	} else {
+		I915_WRITE(PP_CONTROL,
+			   I915_READ(PP_CONTROL) | PANEL_UNLOCK_REGS);
+	}
 	if (!intel_lvds_supported(dev))
 		return;
 
@@ -1113,17 +1152,6 @@ out:
 	DRM_DEBUG_KMS("detected %s-link lvds configuration\n",
 		      lvds_encoder->is_dual_link ? "dual" : "single");
 
-	/*
-	 * Unlock registers and just
-	 * leave them unlocked
-	 */
-	if (HAS_PCH_SPLIT(dev)) {
-		I915_WRITE(PCH_PP_CONTROL,
-			   I915_READ(PCH_PP_CONTROL) | PANEL_UNLOCK_REGS);
-	} else {
-		I915_WRITE(PP_CONTROL,
-			   I915_READ(PP_CONTROL) | PANEL_UNLOCK_REGS);
-	}
 	lvds_connector->lid_notifier.notifier_call = intel_lid_notify;
 	if (acpi_lid_notifier_register(&lvds_connector->lid_notifier)) {
 		DRM_DEBUG_KMS("lid notifier registration failed\n");

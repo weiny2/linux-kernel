@@ -1290,7 +1290,7 @@ static struct platform_driver crypto4xx_driver = {
 		.of_match_table = crypto4xx_match,
 	},
 	.probe		= crypto4xx_probe,
-	.remove		= crypto4xx_remove,
+	.remove		= __exit_p(crypto4xx_remove),
 };
 
 module_platform_driver(crypto4xx_driver);

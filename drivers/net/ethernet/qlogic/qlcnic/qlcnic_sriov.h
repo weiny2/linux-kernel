@@ -8,9 +8,10 @@
 #ifndef _QLCNIC_83XX_SRIOV_H_
 #define _QLCNIC_83XX_SRIOV_H_
 
-#include "qlcnic.h"
 #include <linux/types.h>
 #include <linux/pci.h>
+
+#include "qlcnic.h"
 
 extern const u32 qlcnic_83xx_reg_tbl[];
 extern const u32 qlcnic_83xx_ext_reg_tbl[];
@@ -52,6 +53,7 @@ enum qlcnic_bc_commands {
 	QLCNIC_BC_CMD_CFG_GUEST_VLAN = 0x3,
 };
 
+#define QLCNIC_83XX_SRIOV_VF_MAX_MAC 2
 #define QLC_BC_CMD 1
 
 struct qlcnic_trans_list {
@@ -151,13 +153,14 @@ struct qlcnic_vf_info {
 	struct qlcnic_trans_list	rcv_pend;
 	struct qlcnic_adapter		*adapter;
 	struct qlcnic_vport		*vp;
-	struct mutex			vlan_list_lock;	/* Lock for VLAN list */
+	spinlock_t			vlan_list_lock;	/* Lock for VLAN list */
 };
 
 struct qlcnic_async_work_list {
 	struct list_head	list;
 	struct work_struct	work;
 	void			*ptr;
+	struct qlcnic_cmd_args	*cmd;
 };
 
 struct qlcnic_back_channel {

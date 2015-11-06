@@ -101,7 +101,7 @@ cookie echoed to closed.
 */
 
 /* SCTP conntrack state transitions */
-static const u8 sctp_conntracks[2][9][SCTP_CONNTRACK_MAX] = {
+static const u8 sctp_conntracks[2][11][SCTP_CONNTRACK_MAX] = {
 	{
 /*	ORIGINAL	*/
 /*                  sNO, sCL, sCW, sCE, sES, sSS, sSR, sSA */
@@ -113,7 +113,9 @@ static const u8 sctp_conntracks[2][9][SCTP_CONNTRACK_MAX] = {
 /* error        */ {sCL, sCL, sCW, sCE, sES, sSS, sSR, sSA},/* Can't have Stale cookie*/
 /* cookie_echo  */ {sCL, sCL, sCE, sCE, sES, sSS, sSR, sSA},/* 5.2.4 - Big TODO */
 /* cookie_ack   */ {sCL, sCL, sCW, sCE, sES, sSS, sSR, sSA},/* Can't come in orig dir */
-/* shutdown_comp*/ {sCL, sCL, sCW, sCE, sES, sSS, sSR, sCL}
+/* shutdown_comp*/ {sCL, sCL, sCW, sCE, sES, sSS, sSR, sCL},
+/* heartbeat	*/ {sES, sCL, sCW, sCE, sES, sSS, sSR, sCL},
+/* heartbeat_ack*/ {sES, sCL, sCW, sCE, sES, sSS, sSR, sCL}
 	},
 	{
 /*	REPLY	*/
@@ -126,7 +128,9 @@ static const u8 sctp_conntracks[2][9][SCTP_CONNTRACK_MAX] = {
 /* error        */ {sIV, sCL, sCW, sCL, sES, sSS, sSR, sSA},
 /* cookie_echo  */ {sIV, sCL, sCW, sCE, sES, sSS, sSR, sSA},/* Can't come in reply dir */
 /* cookie_ack   */ {sIV, sCL, sCW, sES, sES, sSS, sSR, sSA},
-/* shutdown_comp*/ {sIV, sCL, sCW, sCE, sES, sSS, sSR, sCL}
+/* shutdown_comp*/ {sIV, sCL, sCW, sCE, sES, sSS, sSR, sCL},
+/* heartbeat	*/ {sIV, sCL, sCW, sCE, sES, sSS, sSR, sCL},
+/* heartbeat_ack*/ {sIV, sCL, sCW, sCE, sES, sSS, sSR, sCL}
 	}
 };
 
@@ -278,6 +282,14 @@ static int sctp_new_state(enum ip_conntrack_dir dir,
 		pr_debug("SCTP_CID_SHUTDOWN_COMPLETE\n");
 		i = 8;
 		break;
+	case SCTP_CID_HEARTBEAT:
+		pr_debug("SCTP_CID_HEARTBEAT");
+		i = 9;
+		break;
+	case SCTP_CID_HEARTBEAT_ACK:
+		pr_debug("SCTP_CID_HEARTBEAT_ACK");
+		i = 10;
+		break;
 	default:
 		/* Other chunks like DATA, SACK, HEARTBEAT and
 		its ACK do not cause a change in state */
@@ -329,6 +341,8 @@ static int sctp_packet(struct nf_conn *ct,
 	    !test_bit(SCTP_CID_COOKIE_ECHO, map) &&
 	    !test_bit(SCTP_CID_ABORT, map) &&
 	    !test_bit(SCTP_CID_SHUTDOWN_ACK, map) &&
+	    !test_bit(SCTP_CID_HEARTBEAT, map) &&
+	    !test_bit(SCTP_CID_HEARTBEAT_ACK, map) &&
 	    sh->vtag != ct->proto.sctp.vtag[dir]) {
 		pr_debug("Verification tag check failed\n");
 		goto out;
@@ -357,6 +371,16 @@ static int sctp_packet(struct nf_conn *ct,
 			/* Sec 8.5.1 (D) */
 			if (sh->vtag != ct->proto.sctp.vtag[dir])
 				goto out_unlock;
+		} else if (sch->type == SCTP_CID_HEARTBEAT ||
+			   sch->type == SCTP_CID_HEARTBEAT_ACK) {
+			if (ct->proto.sctp.vtag[dir] == 0) {
+				pr_debug("Setting vtag %x for dir %d\n",
+					 sh->vtag, dir);
+				ct->proto.sctp.vtag[dir] = sh->vtag;
+			} else if (sh->vtag != ct->proto.sctp.vtag[dir]) {
+				pr_debug("Verification tag check failed\n");
+				goto out_unlock;
+			}
 		}
 
 		old_state = ct->proto.sctp.state;
@@ -466,6 +490,11 @@ static bool sctp_new(struct nf_conn *ct, const struct sk_buff *skb,
 				/* Sec 8.5.1 (A) */
 				return false;
 			}
+		} else if (sch->type == SCTP_CID_HEARTBEAT ||
+			   sch->type == SCTP_CID_HEARTBEAT_ACK) {
+			pr_debug("Setting vtag %x for secondary conntrack\n",
+				 sh->vtag);
+			ct->proto.sctp.vtag[IP_CT_DIR_ORIGINAL] = sh->vtag;
 		}
 		/* If it is a shutdown ack OOTB packet, we expect a return
 		   shutdown complete, otherwise an ABORT Sec 8.4 (5) and (8) */

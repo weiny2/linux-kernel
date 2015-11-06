@@ -545,6 +545,7 @@ EXPORT_SYMBOL_GPL(nfs_setattr);
  * This is a copy of the common vmtruncate, but with the locking
  * corrected to take into account the fact that NFS requires
  * inode->i_size to be updated under the inode->i_lock.
+ * Note: must be called with inode->i_lock held!
  */
 static int nfs_vmtruncate(struct inode * inode, loff_t offset)
 {
@@ -554,11 +555,11 @@ static int nfs_vmtruncate(struct inode * inode, loff_t offset)
 	if (err)
 		goto out;
 
-	spin_lock(&inode->i_lock);
 	i_size_write(inode, offset);
-	spin_unlock(&inode->i_lock);
 
+	spin_unlock(&inode->i_lock);
 	truncate_pagecache(inode, offset);
+	spin_lock(&inode->i_lock);
 out:
 	return err;
 }
@@ -571,10 +572,15 @@ out:
  * Note: we do this in the *proc.c in order to ensure that
  *       it works for things like exclusive creates too.
  */
-void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr)
+void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr,
+		struct nfs_fattr *fattr)
 {
+	/* Barrier: bump the attribute generation count. */
+	fattr->gencount = nfs_inc_attr_generation_counter();
+
+	spin_lock(&inode->i_lock);
+	NFS_I(inode)->attr_gencount = fattr->gencount;
 	if ((attr->ia_valid & (ATTR_MODE|ATTR_UID|ATTR_GID)) != 0) {
-		spin_lock(&inode->i_lock);
 		if ((attr->ia_valid & ATTR_MODE) != 0) {
 			int mode = attr->ia_mode & S_IALLUGO;
 			mode |= inode->i_mode & ~S_IALLUGO;
@@ -585,12 +591,13 @@ void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr)
 		if ((attr->ia_valid & ATTR_GID) != 0)
 			inode->i_gid = attr->ia_gid;
 		NFS_I(inode)->cache_validity |= NFS_INO_INVALID_ACCESS|NFS_INO_INVALID_ACL;
-		spin_unlock(&inode->i_lock);
 	}
 	if ((attr->ia_valid & ATTR_SIZE) != 0) {
 		nfs_inc_stats(inode, NFSIOS_SETATTRTRUNC);
 		nfs_vmtruncate(inode, attr->ia_size);
 	}
+	nfs_update_inode(inode, fattr);
+	spin_unlock(&inode->i_lock);
 }
 EXPORT_SYMBOL_GPL(nfs_setattr_update_inode);
 
@@ -617,7 +624,7 @@ int nfs_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
 {
 	struct inode *inode = dentry->d_inode;
 	int need_atime = NFS_I(inode)->cache_validity & NFS_INO_INVALID_ATIME;
-	int err;
+	int err = 0;
 
 	trace_nfs_getattr_enter(inode);
 	/* Flush out writes to the server in order to update c/mtime.  */
@@ -1355,11 +1362,27 @@ static int nfs_inode_attrs_need_update(const struct inode *inode, const struct n
 		((long)nfsi->attr_gencount - (long)nfs_read_attr_generation_counter() > 0);
 }
 
+/*
+ * Don't trust the change_attribute, mtime, ctime or size if
+ * a pnfs LAYOUTCOMMIT is outstanding
+ */
+static void nfs_inode_attrs_handle_layoutcommit(struct inode *inode,
+		struct nfs_fattr *fattr)
+{
+	if (pnfs_layoutcommit_outstanding(inode))
+		fattr->valid &= ~(NFS_ATTR_FATTR_CHANGE |
+				NFS_ATTR_FATTR_MTIME |
+				NFS_ATTR_FATTR_CTIME |
+				NFS_ATTR_FATTR_SIZE);
+}
+
 static int nfs_refresh_inode_locked(struct inode *inode, struct nfs_fattr *fattr)
 {
 	int ret;
 
 	trace_nfs_refresh_inode_enter(inode);
+
+	nfs_inode_attrs_handle_layoutcommit(inode, fattr);
 
 	if (nfs_inode_attrs_need_update(inode, fattr))
 		ret = nfs_update_inode(inode, fattr);
@@ -1592,8 +1615,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 		if (new_isize != cur_isize) {
 			/* Do we perhaps have any outstanding writes, or has
 			 * the file grown beyond our last write? */
-			if ((nfsi->npages == 0 && !test_bit(NFS_INO_LAYOUTCOMMIT, &nfsi->flags)) ||
-			     new_isize > cur_isize) {
+			if ((nfsi->npages == 0) || new_isize > cur_isize) {
 				i_size_write(inode, new_isize);
 				invalid |= NFS_INO_INVALID_ATTR|NFS_INO_INVALID_DATA;
 			}

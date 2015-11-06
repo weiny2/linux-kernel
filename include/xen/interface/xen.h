@@ -47,7 +47,7 @@ DEFINE_XEN_GUEST_HANDLE(char);
 __DEFINE_XEN_GUEST_HANDLE(uchar, unsigned char);
 DEFINE_XEN_GUEST_HANDLE(int);
 __DEFINE_XEN_GUEST_HANDLE(uint,  unsigned int);
-#if __XEN_INTERFACE_VERSION__ < 0x00040300
+#if __XEN_INTERFACE_VERSION__ < 0x00040300 && (!defined(CONFIG_PARAVIRT_XEN) || defined(HAVE_XEN_PLATFORM_COMPAT_H))
 DEFINE_XEN_GUEST_HANDLE(long);
 __DEFINE_XEN_GUEST_HANDLE(ulong, unsigned long);
 #endif
@@ -123,14 +123,14 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
  */
 
 /* New sched_op hypercall introduced in 0x00030101. */
-#if __XEN_INTERFACE_VERSION__ < 0x00030101 || (defined(CONFIG_PARAVIRT_XEN) && !defined(HAVE_XEN_PLATFORM_COMPAT_H))
+#if __XEN_INTERFACE_VERSION__ < 0x00030101 && (!defined(CONFIG_PARAVIRT_XEN) || defined(HAVE_XEN_PLATFORM_COMPAT_H))
 #define __HYPERVISOR_sched_op __HYPERVISOR_sched_op_compat
 #else
 #define __HYPERVISOR_sched_op __HYPERVISOR_sched_op_new
 #endif
 
 /* New event-channel and physdev hypercalls introduced in 0x00030202. */
-#if __XEN_INTERFACE_VERSION__ < 0x00030202
+#if __XEN_INTERFACE_VERSION__ < 0x00030202 && (!defined(CONFIG_PARAVIRT_XEN) || defined(HAVE_XEN_PLATFORM_COMPAT_H))
 #undef __HYPERVISOR_event_channel_op
 #define __HYPERVISOR_event_channel_op __HYPERVISOR_event_channel_op_compat
 #undef __HYPERVISOR_physdev_op
@@ -492,7 +492,12 @@ DEFINE_XEN_GUEST_HANDLE(mmuext_op_t);
 /* x86/PAE guests: support PDPTs above 4GB. */
 #define VMASST_TYPE_pae_extended_cr3     3
 
+/* x86/64 guests: strictly hide M2P from user mode. */
+#define VMASST_TYPE_m2p_strict           32
+
+#if __XEN_INTERFACE_VERSION__ < 0x00040600
 #define MAX_VMASST_TYPE                  3
+#endif
 
 #ifndef __ASSEMBLY__
 
@@ -548,24 +553,26 @@ DEFINE_XEN_GUEST_HANDLE(mmu_update_t);
 /*
  * ` enum neg_errnoval
  * ` HYPERVISOR_multicall(multicall_entry_t call_list[],
- * `                      unsigned int nr_calls);
+ * `                      uint32_t nr_calls);
  *
- * NB. The fields are natural register size for this architecture.
+ * NB. The fields are logically the natural register size for this
+ * architecture. In cases where xen_ulong_t is larger than this then
+ * any unused bits in the upper portion must be zero.
  */
 struct multicall_entry {
-    unsigned long op;
+    xen_ulong_t op;
 #if !defined(CONFIG_PARAVIRT_XEN) || defined(HAVE_XEN_PLATFORM_COMPAT_H)
-    unsigned long result;
+    xen_ulong_t result;
 #else
-    long result;
+    xen_long_t result;
 #endif
-    unsigned long args[6];
+    xen_ulong_t args[6];
 };
 DEFINE_GUEST_HANDLE_STRUCT(multicall_entry);
 typedef struct multicall_entry multicall_entry_t;
 DEFINE_XEN_GUEST_HANDLE(multicall_entry_t);
 
-#if __XEN_INTERFACE_VERSION__ < 0x00040400
+#if __XEN_INTERFACE_VERSION__ < 0x00040400 || (defined(CONFIG_PARAVIRT_XEN) && !defined(HAVE_XEN_PLATFORM_COMPAT_H))
 /*
  * Event channel endpoints per domain (when using the 2-level ABI):
  *  1024 if a long is 32 bits; 4096 if a long is 64 bits.

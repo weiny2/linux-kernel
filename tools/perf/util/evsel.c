@@ -162,13 +162,15 @@ void perf_evsel__init(struct perf_evsel *evsel,
 	evsel->idx	   = idx;
 	evsel->attr	   = *attr;
 	evsel->leader	   = evsel;
+	evsel->unit	   = "";
+	evsel->scale	   = 1.0;
 	INIT_LIST_HEAD(&evsel->node);
 	hists__init(&evsel->hists);
 	evsel->sample_size = __perf_evsel__sample_size(attr->sample_type);
 	perf_evsel__calc_id_pos(evsel);
 }
 
-struct perf_evsel *perf_evsel__new(struct perf_event_attr *attr, int idx)
+struct perf_evsel *perf_evsel__new_idx(struct perf_event_attr *attr, int idx)
 {
 	struct perf_evsel *evsel = zalloc(sizeof(*evsel));
 
@@ -219,7 +221,7 @@ out:
 	return format;
 }
 
-struct perf_evsel *perf_evsel__newtp(const char *sys, const char *name, int idx)
+struct perf_evsel *perf_evsel__newtp_idx(const char *sys, const char *name, int idx)
 {
 	struct perf_evsel *evsel = zalloc(sizeof(*evsel));
 

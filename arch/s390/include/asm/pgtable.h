@@ -132,6 +132,18 @@ extern unsigned long MODULES_END;
 #define MODULES_LEN	(1UL << 31)
 #endif
 
+static inline int is_module_addr(void *addr)
+{
+#ifdef CONFIG_64BIT
+	BUILD_BUG_ON(MODULES_LEN > (1UL << 31));
+	if (addr < (void *)MODULES_VADDR)
+		return 0;
+	if (addr > (void *)MODULES_END)
+		return 0;
+#endif
+	return 1;
+}
+
 /*
  * A 31 bit pagetable entry of S390 has following format:
  *  |   PFRA          |    |  OS  |
@@ -591,6 +603,17 @@ static inline int pmd_write(pmd_t pmd)
 	if (pmd_prot_none(pmd))
 		return 0;
 	return (pmd_val(pmd) & _SEGMENT_ENTRY_PROTECT) == 0;
+}
+
+/*
+ * Note that this is a stub only that is never expected to be used. At the
+ * time of writing, only task_mmu.c cared for smaps accounting and it's
+ * harmless to ignore it as an alternative to backporting
+ * 152125b7a882df36a55a8eadbea6d0edf1461ee7
+ */
+static inline int pmd_dirty(pmd_t pmd)
+{
+	return 0;
 }
 
 static inline int pmd_young(pmd_t pmd)
@@ -1637,6 +1660,10 @@ static inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 extern int vmem_add_mapping(unsigned long start, unsigned long size);
 extern int vmem_remove_mapping(unsigned long start, unsigned long size);
 extern int s390_enable_sie(void);
+
+/* s390 has a private copy of get unmapped area to deal with cache synonyms */
+#define HAVE_ARCH_UNMAPPED_AREA
+#define HAVE_ARCH_UNMAPPED_AREA_TOPDOWN
 
 /*
  * No page table caches to initialise

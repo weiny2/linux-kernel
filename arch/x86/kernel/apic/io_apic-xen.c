@@ -416,18 +416,24 @@ static struct IO_APIC_route_entry ioapic_read_entry(int apic, int pin)
 	return eu.entry;
 }
 
+#ifndef CONFIG_XEN
 /*
  * When we write a new IO APIC routing entry, we need to write the high
  * word first! If the mask bit in the low word is clear, we will enable
  * the interrupt, and we need to make sure the entry is fully populated
  * before that happens.
  */
+#else
+/* On Xen we don't need to write the high half at all. */
+#endif
 static void __ioapic_write_entry(int apic, int pin, struct IO_APIC_route_entry e)
 {
 	union entry_union eu = {{0, 0}};
 
 	eu.entry = e;
+#ifndef CONFIG_XEN
 	io_apic_write(apic, 0x11 + 2*pin, eu.w2);
+#endif
 	io_apic_write(apic, 0x10 + 2*pin, eu.w1);
 }
 
@@ -698,7 +704,7 @@ static void clear_IO_APIC (void)
 #define __add_pin_to_irq_node(cfg, node, apic, pin) 0
 #endif /* !CONFIG_XEN */
 
-#ifdef CONFIG_X86_32
+#if defined(CONFIG_X86_32) && !defined(CONFIG_XEN)
 /*
  * support for broken MP BIOSs, enables hand-redirection of PIRQ0-7 to
  * specific CPU-side IRQs.
@@ -1032,7 +1038,7 @@ static int pin_2_irq(int idx, int apic, int pin)
 			irq = gsi_top + gsi;
 	}
 
-#ifdef CONFIG_X86_32
+#if defined(CONFIG_X86_32) && !defined(CONFIG_XEN)
 	/*
 	 * PCI IRQ command line redirection. Yes, limits are hardcoded.
 	 */
@@ -2316,9 +2322,7 @@ asmlinkage void smp_irq_move_cleanup_interrupt(void)
 {
 	unsigned vector, me;
 
-	ack_APIC_irq();
-	irq_enter();
-	exit_idle();
+	entering_ack_irq();
 
 	me = smp_processor_id();
 	for (vector = FIRST_EXTERNAL_VECTOR; vector < NR_VECTORS; vector++) {
@@ -2368,7 +2372,7 @@ unlock:
 		raw_spin_unlock(&desc->lock);
 	}
 
-	irq_exit();
+	exiting_irq();
 }
 
 static void __irq_complete_move(struct irq_cfg *cfg, unsigned vector)
@@ -2490,7 +2494,6 @@ static void ack_apic_edge(struct irq_data *data)
 atomic_t irq_mis_count;
 
 #ifdef CONFIG_GENERIC_PENDING_IRQ
-#ifndef CONFIG_XEN
 static bool io_apic_level_ack_pending(struct irq_cfg *cfg)
 {
 	struct irq_pin_list *entry;
@@ -2513,7 +2516,6 @@ static bool io_apic_level_ack_pending(struct irq_cfg *cfg)
 
 	return false;
 }
-#endif
 
 static inline bool ioapic_irqd_mask(struct irq_data *data, struct irq_cfg *cfg)
 {

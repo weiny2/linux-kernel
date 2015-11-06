@@ -466,6 +466,7 @@ static int lbs_thread(void *data)
 		lbs_deb_thread("1: currenttxskb %p, dnld_sent %d\n",
 				priv->currenttxskb, priv->dnld_sent);
 
+		kgr_task_safe(current);
 		add_wait_queue(&priv->waitq, &wait);
 		set_current_state(TASK_INTERRUPTIBLE);
 		spin_lock_irq(&priv->driver_lock);

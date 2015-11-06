@@ -155,6 +155,8 @@ static void __init copy_bootdata(char *real_mode_data)
 
 asmlinkage void __init x86_64_start_kernel(char * real_mode_data)
 {
+	int rc;
+
 	/*
 	 * Build-time sanity checks on the kernel image and module
 	 * area mappings. (these are purely build-time and produce no code)
@@ -170,6 +172,9 @@ asmlinkage void __init x86_64_start_kernel(char * real_mode_data)
 	BUILD_BUG_ON(__fix_to_virt(__end_of_fixed_addresses) <= MODULES_END);
 
 	xen_start_info = (struct start_info *)real_mode_data;
+
+	rc = HYPERVISOR_vm_assist(VMASST_CMD_enable, VMASST_TYPE_m2p_strict);
+
 	xen_start_kernel();
 
 #ifndef CONFIG_XEN
@@ -180,7 +185,7 @@ asmlinkage void __init x86_64_start_kernel(char * real_mode_data)
 	clear_bss();
 
 	for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
-		set_intr_gate(i, &early_idt_handlers[i]);
+		set_intr_gate(i, &early_idt_handler_array[i]);
 	load_idt((const struct desc_ptr *)&idt_descr);
 
 	copy_bootdata(__va(real_mode_data));
@@ -199,6 +204,9 @@ asmlinkage void __init x86_64_start_kernel(char * real_mode_data)
 	/* set init_level4_pgt kernel high mapping*/
 	init_level4_pgt[511] = early_level4_pgt[511];
 #else
+	if (rc)
+		printk(KERN_WARNING "M2P strict mode unavailable (%d)\n", rc);
+
 	xen_switch_pt();
 #endif
 

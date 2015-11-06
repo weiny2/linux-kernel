@@ -147,6 +147,15 @@ struct scrub_ctx {
 	 */
 	struct btrfs_scrub_progress stat;
 	spinlock_t		stat_lock;
+
+	/*
+	 * Use a ref counter to avoid use-after-free issues. Scrub workers
+	 * decrement bios_in_flight and workers_pending and then do a wakeup
+	 * on the list_wait wait queue. We must ensure the main scrub task
+	 * doesn't free the scrub context before or while the workers are
+	 * doing the wakeup() call.
+	 */
+	atomic_t                refs;
 };
 
 struct scrub_fixup_nodatasum {
@@ -259,10 +268,12 @@ static int copy_nocow_pages(struct scrub_ctx *sctx, u64 logical, u64 len,
 static void copy_nocow_pages_worker(struct btrfs_work *work);
 static void __scrub_blocked_if_needed(struct btrfs_fs_info *fs_info);
 static void scrub_blocked_if_needed(struct btrfs_fs_info *fs_info);
+static void scrub_put_ctx(struct scrub_ctx *sctx);
 
 
 static void scrub_pending_bio_inc(struct scrub_ctx *sctx)
 {
+	atomic_inc(&sctx->refs);
 	atomic_inc(&sctx->bios_in_flight);
 }
 
@@ -270,6 +281,7 @@ static void scrub_pending_bio_dec(struct scrub_ctx *sctx)
 {
 	atomic_dec(&sctx->bios_in_flight);
 	wake_up(&sctx->list_wait);
+	scrub_put_ctx(sctx);
 }
 
 static void __scrub_blocked_if_needed(struct btrfs_fs_info *fs_info)
@@ -303,6 +315,7 @@ static void scrub_pending_trans_workers_inc(struct scrub_ctx *sctx)
 {
 	struct btrfs_fs_info *fs_info = sctx->dev_root->fs_info;
 
+	atomic_inc(&sctx->refs);
 	/*
 	 * increment scrubs_running to prevent cancel requests from
 	 * completing as long as a worker is running. we must also
@@ -345,6 +358,7 @@ static void scrub_pending_trans_workers_dec(struct scrub_ctx *sctx)
 	atomic_dec(&sctx->workers_pending);
 	wake_up(&fs_info->scrub_pause_wait);
 	wake_up(&sctx->list_wait);
+	scrub_put_ctx(sctx);
 }
 
 static void scrub_free_csums(struct scrub_ctx *sctx)
@@ -390,6 +404,12 @@ static noinline_for_stack void scrub_free_ctx(struct scrub_ctx *sctx)
 	kfree(sctx);
 }
 
+static void scrub_put_ctx(struct scrub_ctx *sctx)
+{
+	if (atomic_dec_and_test(&sctx->refs))
+		scrub_free_ctx(sctx);
+}
+
 static noinline_for_stack
 struct scrub_ctx *scrub_setup_ctx(struct btrfs_device *dev, int is_dev_replace)
 {
@@ -414,6 +434,7 @@ struct scrub_ctx *scrub_setup_ctx(struct btrfs_device *dev, int is_dev_replace)
 	sctx = kzalloc(sizeof(*sctx), GFP_NOFS);
 	if (!sctx)
 		goto nomem;
+	atomic_set(&sctx->refs, 1);
 	sctx->is_dev_replace = is_dev_replace;
 	sctx->pages_per_rd_bio = pages_per_rd_bio;
 	sctx->curr = -1;
@@ -2985,7 +3006,7 @@ int btrfs_scrub_dev(struct btrfs_fs_info *fs_info, u64 devid, u64 start,
 	scrub_workers_put(fs_info);
 	mutex_unlock(&fs_info->scrub_lock);
 
-	scrub_free_ctx(sctx);
+	scrub_put_ctx(sctx);
 
 	return ret;
 }

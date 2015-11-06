@@ -383,7 +383,7 @@ void tcp_init_sock(struct sock *sk)
 	INIT_LIST_HEAD(&tp->tsq_node);
 
 	icsk->icsk_rto = TCP_TIMEOUT_INIT;
-	tp->mdev = TCP_TIMEOUT_INIT;
+	tp->mdev_us = jiffies_to_usecs(TCP_TIMEOUT_INIT);
 
 	/* So many TCP implementations out there (incorrectly) count the
 	 * initial SYN frame in their delayed-ACK and congestion control
@@ -401,7 +401,7 @@ void tcp_init_sock(struct sock *sk)
 
 	tp->reordering = sysctl_tcp_reordering;
 	tcp_enable_early_retrans(tp);
-	icsk->icsk_ca_ops = &tcp_init_congestion_ops;
+	tcp_assign_congestion_control(sk);
 
 	tp->tsoffset = 0;
 
@@ -782,47 +782,29 @@ static unsigned int tcp_xmit_size_goal(struct sock *sk, u32 mss_now,
 				       int large_allowed)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-	u32 xmit_size_goal, old_size_goal;
+	u32 new_size_goal, size_goal, hlen;
 
-	xmit_size_goal = mss_now;
+	if (!large_allowed || !sk_can_gso(sk))
+		return mss_now;
 
-	if (large_allowed && sk_can_gso(sk)) {
-		u32 gso_size, hlen;
+	/* Maybe we should/could use sk->sk_prot->max_header here ? */
+	hlen = inet_csk(sk)->icsk_af_ops->net_header_len +
+	       inet_csk(sk)->icsk_ext_hdr_len +
+	       tp->tcp_header_len;
 
-		/* Maybe we should/could use sk->sk_prot->max_header here ? */
-		hlen = inet_csk(sk)->icsk_af_ops->net_header_len +
-		       inet_csk(sk)->icsk_ext_hdr_len +
-		       tp->tcp_header_len;
+	new_size_goal = sk->sk_gso_max_size - 1 - hlen;
+	new_size_goal = tcp_bound_to_half_wnd(tp, new_size_goal);
 
-		/* Goal is to send at least one packet per ms,
-		 * not one big TSO packet every 100 ms.
-		 * This preserves ACK clocking and is consistent
-		 * with tcp_tso_should_defer() heuristic.
-		 */
-		gso_size = sk->sk_pacing_rate / (2 * MSEC_PER_SEC);
-		gso_size = max_t(u32, gso_size,
-				 sysctl_tcp_min_tso_segs * mss_now);
-
-		xmit_size_goal = min_t(u32, gso_size,
-				       sk->sk_gso_max_size - 1 - hlen);
-
-		xmit_size_goal = tcp_bound_to_half_wnd(tp, xmit_size_goal);
-
-		/* We try hard to avoid divides here */
-		old_size_goal = tp->xmit_size_goal_segs * mss_now;
-
-		if (likely(old_size_goal <= xmit_size_goal &&
-			   old_size_goal + mss_now > xmit_size_goal)) {
-			xmit_size_goal = old_size_goal;
-		} else {
-			tp->xmit_size_goal_segs =
-				min_t(u16, xmit_size_goal / mss_now,
-				      sk->sk_gso_max_segs);
-			xmit_size_goal = tp->xmit_size_goal_segs * mss_now;
-		}
+	/* We try hard to avoid divides here */
+	size_goal = tp->gso_segs * mss_now;
+	if (unlikely(new_size_goal < size_goal ||
+		     new_size_goal >= size_goal + mss_now)) {
+		tp->gso_segs = min_t(u16, new_size_goal / mss_now,
+				     sk->sk_gso_max_segs);
+		size_goal = tp->gso_segs * mss_now;
 	}
 
-	return max(xmit_size_goal, mss_now);
+	return max(size_goal, mss_now);
 }
 
 static int tcp_send_mss(struct sock *sk, int *size_goal, int flags)
@@ -1131,13 +1113,6 @@ new_segment:
 					goto wait_for_memory;
 
 				/*
-				 * All packets are restored as if they have
-				 * already been sent.
-				 */
-				if (tp->repair)
-					TCP_SKB_CB(skb)->when = tcp_time_stamp;
-
-				/*
 				 * Check whether we can use HW checksum.
 				 */
 				if (sk->sk_route_caps & NETIF_F_ALL_CSUM)
@@ -1146,6 +1121,13 @@ new_segment:
 				skb_entail(sk, skb);
 				copy = size_goal;
 				max = size_goal;
+
+				/* All packets are restored as if they have
+				 * already been sent. skb_mstamp isn't set to
+				 * avoid wrong rtt estimation.
+				 */
+				if (tp->repair)
+					TCP_SKB_CB(skb)->sacked |= TCPCB_REPAIRED;
 			}
 
 			/* Try to append data to the end of skb. */
@@ -2297,7 +2279,7 @@ int tcp_disconnect(struct sock *sk, int flags)
 
 	sk->sk_shutdown = 0;
 	sock_reset_flag(sk, SOCK_DONE);
-	tp->srtt = 0;
+	tp->srtt_us = 0;
 	if ((tp->write_seq += tp->max_window + 2) == 0)
 		tp->write_seq = 1;
 	icsk->icsk_backoff = 0;
@@ -2741,8 +2723,8 @@ void tcp_get_info(const struct sock *sk, struct tcp_info *info)
 
 	info->tcpi_pmtu = icsk->icsk_pmtu_cookie;
 	info->tcpi_rcv_ssthresh = tp->rcv_ssthresh;
-	info->tcpi_rtt = jiffies_to_usecs(tp->srtt)>>3;
-	info->tcpi_rttvar = jiffies_to_usecs(tp->mdev)>>2;
+	info->tcpi_rtt = tp->srtt_us >> 3;
+	info->tcpi_rttvar = tp->mdev_us >> 2;
 	info->tcpi_snd_ssthresh = tp->snd_ssthresh;
 	info->tcpi_snd_cwnd = tp->snd_cwnd;
 	info->tcpi_advmss = tp->advmss;
@@ -2909,61 +2891,42 @@ EXPORT_SYMBOL(compat_tcp_getsockopt);
 #endif
 
 #ifdef CONFIG_TCP_MD5SIG
-static struct tcp_md5sig_pool __percpu *tcp_md5sig_pool __read_mostly;
+static DEFINE_PER_CPU(struct tcp_md5sig_pool, tcp_md5sig_pool);
 static DEFINE_MUTEX(tcp_md5sig_mutex);
-
-static void __tcp_free_md5sig_pool(struct tcp_md5sig_pool __percpu *pool)
-{
-	int cpu;
-
-	for_each_possible_cpu(cpu) {
-		struct tcp_md5sig_pool *p = per_cpu_ptr(pool, cpu);
-
-		if (p->md5_desc.tfm)
-			crypto_free_hash(p->md5_desc.tfm);
-	}
-	free_percpu(pool);
-}
+static bool tcp_md5sig_pool_populated = false;
 
 static void __tcp_alloc_md5sig_pool(void)
 {
 	int cpu;
-	struct tcp_md5sig_pool __percpu *pool;
-
-	pool = alloc_percpu(struct tcp_md5sig_pool);
-	if (!pool)
-		return;
 
 	for_each_possible_cpu(cpu) {
-		struct crypto_hash *hash;
+		if (!per_cpu(tcp_md5sig_pool, cpu).md5_desc.tfm) {
+			struct crypto_hash *hash;
 
-		hash = crypto_alloc_hash("md5", 0, CRYPTO_ALG_ASYNC);
-		if (IS_ERR_OR_NULL(hash))
-			goto out_free;
-
-		per_cpu_ptr(pool, cpu)->md5_desc.tfm = hash;
+			hash = crypto_alloc_hash("md5", 0, CRYPTO_ALG_ASYNC);
+			if (IS_ERR_OR_NULL(hash))
+				return;
+			per_cpu(tcp_md5sig_pool, cpu).md5_desc.tfm = hash;
+		}
 	}
-	/* before setting tcp_md5sig_pool, we must commit all writes
-	 * to memory. See ACCESS_ONCE() in tcp_get_md5sig_pool()
+	/* before setting tcp_md5sig_pool_populated, we must commit all writes
+	 * to memory. See smp_rmb() in tcp_get_md5sig_pool()
 	 */
 	smp_wmb();
-	tcp_md5sig_pool = pool;
-	return;
-out_free:
-	__tcp_free_md5sig_pool(pool);
+	tcp_md5sig_pool_populated = true;
 }
 
 bool tcp_alloc_md5sig_pool(void)
 {
-	if (unlikely(!tcp_md5sig_pool)) {
+	if (unlikely(!tcp_md5sig_pool_populated)) {
 		mutex_lock(&tcp_md5sig_mutex);
 
-		if (!tcp_md5sig_pool)
+		if (!tcp_md5sig_pool_populated)
 			__tcp_alloc_md5sig_pool();
 
 		mutex_unlock(&tcp_md5sig_mutex);
 	}
-	return tcp_md5sig_pool != NULL;
+	return tcp_md5sig_pool_populated;
 }
 EXPORT_SYMBOL(tcp_alloc_md5sig_pool);
 
@@ -2977,13 +2940,13 @@ EXPORT_SYMBOL(tcp_alloc_md5sig_pool);
  */
 struct tcp_md5sig_pool *tcp_get_md5sig_pool(void)
 {
-	struct tcp_md5sig_pool __percpu *p;
-
 	local_bh_disable();
-	p = ACCESS_ONCE(tcp_md5sig_pool);
-	if (p)
-		return __this_cpu_ptr(p);
 
+	if (tcp_md5sig_pool_populated) {
+		/* coupled with smp_wmb() in __tcp_alloc_md5sig_pool() */
+		smp_rmb();
+		return this_cpu_ptr(&tcp_md5sig_pool);
+	}
 	local_bh_enable();
 	return NULL;
 }
@@ -3181,8 +3144,6 @@ void __init tcp_init(void)
 		tcp_hashinfo.ehash_mask + 1, tcp_hashinfo.bhash_size);
 
 	tcp_metrics_init();
-
-	tcp_register_congestion_control(&tcp_reno);
-
+	BUG_ON(tcp_register_congestion_control(&tcp_reno) != 0);
 	tcp_tasklet_init();
 }

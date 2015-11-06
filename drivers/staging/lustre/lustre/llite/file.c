@@ -2601,7 +2601,7 @@ int ll_getattr_it(struct vfsmount *mnt, struct dentry *de,
 	if (res)
 		return res;
 
-	stat->dev = inode->i_sb->s_dev;
+	stat->dev = inode_get_dev(inode);
 	if (ll_need_32bit_api(sbi))
 		stat->ino = cl_fid_build_ino(&lli->lli_fid, 1);
 	else

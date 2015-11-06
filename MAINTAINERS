@@ -1822,7 +1822,7 @@ F:	drivers/net/ethernet/broadcom/bnx2.*
 F:	drivers/net/ethernet/broadcom/bnx2_*
 
 BROADCOM BNX2X 10 GIGABIT ETHERNET DRIVER
-M:	Eilon Greenstein <eilong@broadcom.com>
+M:	Ariel Elior <ariel.elior@qlogic.com>
 L:	netdev@vger.kernel.org
 S:	Supported
 F:	drivers/net/ethernet/broadcom/bnx2x/
@@ -2188,6 +2188,13 @@ L:	linux-scsi@vger.kernel.org
 S:	Supported
 F:	drivers/scsi/fnic/
 
+CISCO SCSI HBA DRIVER
+M:	Narsimhulu Musini <nmusini@cisco.com>
+M:	Sesidhar Baddela <sebaddel@cisco.com>
+L:	linux-scsi@vger.kernel.org
+S:	Supported
+F:	drivers/scsi/snic/
+
 CMPC ACPI DRIVER
 M:	Thadeu Lima de Souza Cascardo <cascardo@holoscopio.com>
 M:	Daniel Oliveira Nascimento <don@syst.com.br>
@@ -2493,6 +2500,18 @@ L:	netdev@vger.kernel.org
 W:	http://www.chelsio.com
 S:	Supported
 F:	drivers/net/ethernet/chelsio/cxgb4vf/
+
+CXL (IBM Coherent Accelerator Processor Interface CAPI) DRIVER
+M:	Ian Munsie <imunsie@au1.ibm.com>
+M:	Michael Neuling <mikey@neuling.org>
+L:	linuxppc-dev@lists.ozlabs.org
+S:	Supported
+F:	drivers/misc/cxl/
+F:	include/misc/cxl.h
+F:	include/uapi/misc/cxl.h
+F:	Documentation/powerpc/cxl.txt
+F:	Documentation/powerpc/cxl.txt
+F:	Documentation/ABI/testing/sysfs-class-cxl
 
 STMMAC ETHERNET DRIVER
 M:	Giuseppe Cavallaro <peppe.cavallaro@st.com>
@@ -4148,8 +4167,10 @@ F:	drivers/crypto/nx/
 IBM Power 842 compression accelerator
 M:	Robert Jennings <rcj@linux.vnet.ibm.com>
 S:	Supported
-F:	drivers/crypto/nx/nx-842.c
-F:	include/linux/nx842.h
+F:	drivers/crypto/nx/nx-842*
+F:	include/linux/sw842.h
+F:	crypto/842.c
+F:	lib/842/
 
 IBM Power Linux RAID adapter
 M:	Brian King <brking@us.ibm.com>
@@ -4490,6 +4511,13 @@ S:	Supported
 F:	include/uapi/linux/mei.h
 F:	drivers/misc/mei/*
 F:	Documentation/misc-devices/mei/*
+
+INTEL PMC IPC DRIVER
+M:	Zha Qipeng<qipeng.zha@intel.com>
+L:	platform-driver-x86@vger.kernel.org
+S:	Maintained
+F:	drivers/platform/x86/intel_pmc_ipc.c
+F:	arch/x86/include/asm/intel_pmc_ipc.h
 
 IOC3 ETHERNET DRIVER
 M:	Ralf Baechle <ralf@linux-mips.org>
@@ -5464,10 +5492,13 @@ W:	http://linuxtv.org
 S:	Odd Fixes
 F:	drivers/media/parport/pms*
 
-MEGARAID SCSI DRIVERS
-M:	Neela Syam Kolli <megaraidlinux@lsi.com>
+MEGARAID SCSI/SAS DRIVERS
+M:	Kashyap Desai <kashyap.desai@avagotech.com>
+M:	Sumit Saxena <sumit.saxena@avagotech.com>
+M:	Uday Lingala <uday.lingala@avagotech.com>
+L:	megaraidlinux.pdl@avagotech.com
 L:	linux-scsi@vger.kernel.org
-W:	http://megaraid.lsilogic.com
+W:	http://www.lsi.com
 S:	Maintained
 F:	Documentation/scsi/megaraid.txt
 F:	drivers/scsi/megaraid.*
@@ -6260,11 +6291,12 @@ F:	drivers/scsi/osd/
 F:	include/scsi/osd_*
 F:	fs/exofs/
 
-OVERLAYFS FILESYSTEM
+OVERLAY FILESYSTEM
 M:	Miklos Szeredi <miklos@szeredi.hu>
-L:	linux-fsdevel@vger.kernel.org
+L:	linux-unionfs@vger.kernel.org
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/mszeredi/vfs.git
 S:	Supported
-F:	fs/overlayfs/*
+F:	fs/overlayfs/
 F:	Documentation/filesystems/overlayfs.txt
 
 P54 WIRELESS DRIVER
@@ -6794,6 +6826,12 @@ PXA RTC DRIVER
 M:	Robert Jarzmik <robert.jarzmik@free.fr>
 L:	rtc-linux@googlegroups.com
 S:	Maintained
+
+QAT DRIVER
+M:      Tadeusz Struk <tadeusz.struk@intel.com>
+L:      qat-linux@intel.com
+S:      Supported
+F:      drivers/crypto/qat/
 
 QIB DRIVER
 M:	Mike Marciniszyn <infinipath@intel.com>

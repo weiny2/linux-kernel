@@ -1981,6 +1981,7 @@ static void cik_tiling_mode_table_init(struct radeon_device *rdev)
 				gb_tile_moden = 0;
 				break;
 			}
+			rdev->config.cik.macrotile_mode_array[reg_offset] = gb_tile_moden;
 			WREG32(GB_MACROTILE_MODE0 + (reg_offset * 4), gb_tile_moden);
 		}
 	} else if (num_pipe_configs == 4) {
@@ -2327,6 +2328,7 @@ static void cik_tiling_mode_table_init(struct radeon_device *rdev)
 				gb_tile_moden = 0;
 				break;
 			}
+			rdev->config.cik.macrotile_mode_array[reg_offset] = gb_tile_moden;
 			WREG32(GB_MACROTILE_MODE0 + (reg_offset * 4), gb_tile_moden);
 		}
 	} else if (num_pipe_configs == 2) {
@@ -2544,6 +2546,7 @@ static void cik_tiling_mode_table_init(struct radeon_device *rdev)
 				gb_tile_moden = 0;
 				break;
 			}
+			rdev->config.cik.macrotile_mode_array[reg_offset] = gb_tile_moden;
 			WREG32(GB_MACROTILE_MODE0 + (reg_offset * 4), gb_tile_moden);
 		}
 	} else
@@ -3027,7 +3030,21 @@ void cik_fence_gfx_ring_emit(struct radeon_device *rdev,
 	struct radeon_ring *ring = &rdev->ring[fence->ring];
 	u64 addr = rdev->fence_drv[fence->ring].gpu_addr;
 
-	/* EVENT_WRITE_EOP - flush caches, send int */
+	/* Workaround for cache flush problems. First send a dummy EOP
+	 * event down the pipe with seq one below.
+	 */
+	radeon_ring_write(ring, PACKET3(PACKET3_EVENT_WRITE_EOP, 4));
+	radeon_ring_write(ring, (EOP_TCL1_ACTION_EN |
+				 EOP_TC_ACTION_EN |
+				 EVENT_TYPE(CACHE_FLUSH_AND_INV_TS_EVENT) |
+				 EVENT_INDEX(5)));
+	radeon_ring_write(ring, addr & 0xfffffffc);
+	radeon_ring_write(ring, (upper_32_bits(addr) & 0xffff) |
+				DATA_SEL(1) | INT_SEL(0));
+	radeon_ring_write(ring, fence->seq - 1);
+	radeon_ring_write(ring, 0);
+
+	/* Then send the real EOP event down the pipe. */
 	radeon_ring_write(ring, PACKET3(PACKET3_EVENT_WRITE_EOP, 4));
 	radeon_ring_write(ring, (EOP_TCL1_ACTION_EN |
 				 EOP_TC_ACTION_EN |
@@ -3343,8 +3360,8 @@ static int cik_cp_gfx_start(struct radeon_device *rdev)
 	/* init the CE partitions.  CE only used for gfx on CIK */
 	radeon_ring_write(ring, PACKET3(PACKET3_SET_BASE, 2));
 	radeon_ring_write(ring, PACKET3_BASE_INDEX(CE_PARTITION_BASE));
-	radeon_ring_write(ring, 0xc000);
-	radeon_ring_write(ring, 0xc000);
+	radeon_ring_write(ring, 0x8000);
+	radeon_ring_write(ring, 0x8000);
 
 	/* setup clear context state */
 	radeon_ring_write(ring, PACKET3(PACKET3_PREAMBLE_CNTL, 0));
@@ -3536,6 +3553,31 @@ void cik_compute_set_wptr(struct radeon_device *rdev,
 	WDOORBELL32(ring->doorbell_offset, ring->wptr);
 }
 
+static void cik_compute_stop(struct radeon_device *rdev,
+			     struct radeon_ring *ring)
+{
+	u32 j, tmp;
+
+	cik_srbm_select(rdev, ring->me, ring->pipe, ring->queue, 0);
+	/* Disable wptr polling. */
+	tmp = RREG32(CP_PQ_WPTR_POLL_CNTL);
+	tmp &= ~WPTR_POLL_EN;
+	WREG32(CP_PQ_WPTR_POLL_CNTL, tmp);
+	/* Disable HQD. */
+	if (RREG32(CP_HQD_ACTIVE) & 1) {
+		WREG32(CP_HQD_DEQUEUE_REQUEST, 1);
+		for (j = 0; j < rdev->usec_timeout; j++) {
+			if (!(RREG32(CP_HQD_ACTIVE) & 1))
+				break;
+			udelay(1);
+		}
+		WREG32(CP_HQD_DEQUEUE_REQUEST, 0);
+		WREG32(CP_HQD_PQ_RPTR, 0);
+		WREG32(CP_HQD_PQ_WPTR, 0);
+	}
+	cik_srbm_select(rdev, 0, 0, 0, 0);
+}
+
 /**
  * cik_cp_compute_enable - enable/disable the compute CP MEs
  *
@@ -3549,6 +3591,15 @@ static void cik_cp_compute_enable(struct radeon_device *rdev, bool enable)
 	if (enable)
 		WREG32(CP_MEC_CNTL, 0);
 	else {
+		/*
+		 * To make hibernation reliable we need to clear compute ring
+		 * configuration before halting the compute ring.
+		 */
+		mutex_lock(&rdev->srbm_mutex);
+		cik_compute_stop(rdev,&rdev->ring[CAYMAN_RING_TYPE_CP1_INDEX]);
+		cik_compute_stop(rdev,&rdev->ring[CAYMAN_RING_TYPE_CP2_INDEX]);
+		mutex_unlock(&rdev->srbm_mutex);
+
 		WREG32(CP_MEC_CNTL, (MEC_ME1_HALT | MEC_ME2_HALT));
 		rdev->ring[CAYMAN_RING_TYPE_CP1_INDEX].ready = false;
 		rdev->ring[CAYMAN_RING_TYPE_CP2_INDEX].ready = false;
@@ -3794,7 +3845,7 @@ struct bonaire_mqd
  */
 static int cik_cp_compute_resume(struct radeon_device *rdev)
 {
-	int r, i, idx;
+	int r, i, j, idx;
 	u32 tmp;
 	bool use_doorbell = true;
 	u64 hqd_gpu_addr;
@@ -3917,7 +3968,7 @@ static int cik_cp_compute_resume(struct radeon_device *rdev)
 		mqd->queue_state.cp_hqd_pq_wptr= 0;
 		if (RREG32(CP_HQD_ACTIVE) & 1) {
 			WREG32(CP_HQD_DEQUEUE_REQUEST, 1);
-			for (i = 0; i < rdev->usec_timeout; i++) {
+			for (j = 0; j < rdev->usec_timeout; j++) {
 				if (!(RREG32(CP_HQD_ACTIVE) & 1))
 					break;
 				udelay(1);
@@ -4591,7 +4642,7 @@ static int cik_pcie_gart_enable(struct radeon_device *rdev)
 	 */
 	/* set vm size, must be a multiple of 4 */
 	WREG32(VM_CONTEXT1_PAGE_TABLE_START_ADDR, 0);
-	WREG32(VM_CONTEXT1_PAGE_TABLE_END_ADDR, rdev->vm_manager.max_pfn);
+	WREG32(VM_CONTEXT1_PAGE_TABLE_END_ADDR, rdev->vm_manager.max_pfn - 1);
 	for (i = 1; i < 16; i++) {
 		if (i < 8)
 			WREG32(VM_CONTEXT0_PAGE_TABLE_BASE_ADDR + (i << 2),
@@ -4799,12 +4850,13 @@ static void cik_vm_decode_fault(struct radeon_device *rdev,
 void cik_vm_flush(struct radeon_device *rdev, int ridx, struct radeon_vm *vm)
 {
 	struct radeon_ring *ring = &rdev->ring[ridx];
+	int usepfp = (ridx == RADEON_RING_TYPE_GFX_INDEX);
 
 	if (vm == NULL)
 		return;
 
 	radeon_ring_write(ring, PACKET3(PACKET3_WRITE_DATA, 3));
-	radeon_ring_write(ring, (WRITE_DATA_ENGINE_SEL(0) |
+	radeon_ring_write(ring, (WRITE_DATA_ENGINE_SEL(usepfp) |
 				 WRITE_DATA_DST_SEL(0)));
 	if (vm->id < 8) {
 		radeon_ring_write(ring,
@@ -4863,7 +4915,7 @@ void cik_vm_flush(struct radeon_device *rdev, int ridx, struct radeon_vm *vm)
 	radeon_ring_write(ring, 1 << vm->id);
 
 	/* compute doesn't have PFP */
-	if (ridx == RADEON_RING_TYPE_GFX_INDEX) {
+	if (usepfp) {
 		/* sync PFP to ME, otherwise we might get invalid PFP reads */
 		radeon_ring_write(ring, PACKET3(PACKET3_PFP_SYNC_ME, 0));
 		radeon_ring_write(ring, 0x0);
@@ -5196,6 +5248,7 @@ static void cik_enable_mgcg(struct radeon_device *rdev, bool enable)
 		}
 
 		orig = data = RREG32(RLC_CGTT_MGCG_OVERRIDE);
+		data |= 0x00000001;
 		data &= 0xfffffffd;
 		if (orig != data)
 			WREG32(RLC_CGTT_MGCG_OVERRIDE, data);
@@ -5227,7 +5280,7 @@ static void cik_enable_mgcg(struct radeon_device *rdev, bool enable)
 		}
 	} else {
 		orig = data = RREG32(RLC_CGTT_MGCG_OVERRIDE);
-		data |= 0x00000002;
+		data |= 0x00000003;
 		if (orig != data)
 			WREG32(RLC_CGTT_MGCG_OVERRIDE, data);
 
@@ -6120,7 +6173,6 @@ int cik_irq_set(struct radeon_device *rdev)
 	u32 hpd1, hpd2, hpd3, hpd4, hpd5, hpd6;
 	u32 grbm_int_cntl = 0;
 	u32 dma_cntl, dma_cntl1;
-	u32 thermal_int;
 
 	if (!rdev->irq.installed) {
 		WARN(1, "Can't enable IRQ/MSI because no handler is installed\n");
@@ -6156,13 +6208,6 @@ int cik_irq_set(struct radeon_device *rdev)
 	cp_m2p1 = RREG32(CP_ME2_PIPE1_INT_CNTL) & ~TIME_STAMP_INT_ENABLE;
 	cp_m2p2 = RREG32(CP_ME2_PIPE2_INT_CNTL) & ~TIME_STAMP_INT_ENABLE;
 	cp_m2p3 = RREG32(CP_ME2_PIPE3_INT_CNTL) & ~TIME_STAMP_INT_ENABLE;
-
-	if (rdev->flags & RADEON_IS_IGP)
-		thermal_int = RREG32_SMC(CG_THERMAL_INT_CTRL) &
-			~(THERM_INTH_MASK | THERM_INTL_MASK);
-	else
-		thermal_int = RREG32_SMC(CG_THERMAL_INT) &
-			~(THERM_INT_MASK_HIGH | THERM_INT_MASK_LOW);
 
 	/* enable CP interrupts on all rings */
 	if (atomic_read(&rdev->irq.ring_int[RADEON_RING_TYPE_GFX_INDEX])) {
@@ -6321,14 +6366,6 @@ int cik_irq_set(struct radeon_device *rdev)
 		hpd6 |= DC_HPDx_INT_EN;
 	}
 
-	if (rdev->irq.dpm_thermal) {
-		DRM_DEBUG("dpm thermal\n");
-		if (rdev->flags & RADEON_IS_IGP)
-			thermal_int |= THERM_INTH_MASK | THERM_INTL_MASK;
-		else
-			thermal_int |= THERM_INT_MASK_HIGH | THERM_INT_MASK_LOW;
-	}
-
 	WREG32(CP_INT_CNTL_RING0, cp_int_cntl);
 
 	WREG32(SDMA0_CNTL + SDMA0_REGISTER_OFFSET, dma_cntl);
@@ -6382,10 +6419,8 @@ int cik_irq_set(struct radeon_device *rdev)
 	WREG32(DC_HPD5_INT_CONTROL, hpd5);
 	WREG32(DC_HPD6_INT_CONTROL, hpd6);
 
-	if (rdev->flags & RADEON_IS_IGP)
-		WREG32_SMC(CG_THERMAL_INT_CTRL, thermal_int);
-	else
-		WREG32_SMC(CG_THERMAL_INT, thermal_int);
+	/* posting read */
+	RREG32(SRBM_STATUS);
 
 	return 0;
 }
@@ -8125,6 +8160,9 @@ void dce8_bandwidth_update(struct radeon_device *rdev)
 	struct drm_display_mode *mode = NULL;
 	u32 num_heads = 0, lb_size;
 	int i;
+
+	if (!rdev->mode_info.mode_config_initialized)
+		return;
 
 	radeon_update_display_priority(rdev);
 

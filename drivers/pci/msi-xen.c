@@ -235,11 +235,13 @@ static u64 find_table_base(struct pci_dev *dev)
 	u32 reg;
 	unsigned long flags;
 
- 	pci_read_config_dword(dev, dev->msix_cap + PCI_MSIX_TABLE, &reg);
+	pci_read_config_dword(dev, dev->msix_cap + PCI_MSIX_TABLE, &reg);
 	bar = reg & PCI_MSIX_FLAGS_BIRMASK;
 
 	flags = pci_resource_flags(dev, bar);
-	if (flags & (IORESOURCE_DISABLED | IORESOURCE_UNSET | IORESOURCE_BUSY))
+	if (!flags ||
+	     (flags & (IORESOURCE_DISABLED | IORESOURCE_UNSET |
+		       IORESOURCE_BUSY)))
 		return 0;
 
 	return pci_resource_start(dev, bar);
@@ -337,6 +339,7 @@ static void pci_intx_for_msi(struct pci_dev *dev, int enable)
 void pci_restore_msi_state(struct pci_dev *dev)
 {
 	int rc = -ENOSYS;
+	u16 control = 0;
 
 	if (!dev->msi_enabled && !dev->msix_enabled)
 		return;
@@ -344,8 +347,13 @@ void pci_restore_msi_state(struct pci_dev *dev)
 	pci_intx_for_msi(dev, 0);
 	if (dev->msi_enabled)
 		msi_set_enable(dev, 0);
-	if (dev->msix_enabled)
-		msix_set_enable(dev, 0);
+	if (dev->msix_enabled) {
+		pci_read_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS,
+				     &control);
+		control |= PCI_MSIX_FLAGS_ENABLE | PCI_MSIX_FLAGS_MASKALL;
+		pci_write_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS,
+				      control);
+	}
 
 	if (pci_seg_supported) {
 		struct physdev_pci_device restore = {
@@ -369,6 +377,12 @@ void pci_restore_msi_state(struct pci_dev *dev)
 	}
 #endif
 	WARN(rc && rc != -ENOSYS, "restore_msi -> %d\n", rc);
+
+	if (dev->msix_enabled) {
+	 	control &= ~PCI_MSIX_FLAGS_MASKALL;
+ 		pci_write_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS,
+				      control);
+	}
 }
 EXPORT_SYMBOL_GPL(pci_restore_msi_state);
 
@@ -523,11 +537,8 @@ static int msi_capability_init(struct pci_dev *dev, int nvec)
 {
 	struct msi_dev_list *dev_entry = get_msi_dev_pirq_list(dev);
 	int pirq;
-	u16 control;
 
 	msi_set_enable(dev, 0);	/* Disable MSI during set up */
-
-	pci_read_config_word(dev, dev->msi_cap + PCI_MSI_FLAGS, &control);
 
 	pirq = msi_map_vector(dev, nvec, 0, dev_entry->owner);
 	if (pirq < 0)
@@ -1031,18 +1042,94 @@ void pci_msi_init_pci_dev(struct pci_dev *dev)
 	/* Disable the msi hardware to avoid screaming interrupts
 	 * during boot.  This is the power on reset default so
 	 * usually this should be a noop.
-	 * But on a Xen host don't do this for IOMMUs which the hypervisor
-	 * is in control of (and hence has already enabled on purpose).
+	 * But on a Xen host don't do this for
+	 * - IOMMUs which the hypervisor is in control of (and hence has
+	 *   already enabled on purpose),
+	 * - unprivileged domains.
 	 */
 	if (is_initial_xendomain()
 	    && (dev->class >> 8) == PCI_CLASS_SYSTEM_IOMMU
 	    && dev->vendor == PCI_VENDOR_ID_AMD)
 		return;
 	dev->msi_cap = pci_find_capability(dev, PCI_CAP_ID_MSI);
-	if (dev->msi_cap)
+	if (dev->msi_cap && is_initial_xendomain())
 		msi_set_enable(dev, 0);
 
 	dev->msix_cap = pci_find_capability(dev, PCI_CAP_ID_MSIX);
-	if (dev->msix_cap)
+	if (dev->msix_cap && is_initial_xendomain())
 		msix_set_enable(dev, 0);
 }
+
+/**
+ * pci_enable_msi_range - configure device's MSI capability structure
+ * @dev: device to configure
+ * @minvec: minimal number of interrupts to configure
+ * @maxvec: maximum number of interrupts to configure
+ *
+ * This function tries to allocate a maximum possible number of interrupts in a
+ * range between @minvec and @maxvec. It returns a negative errno if an error
+ * occurs. If it succeeds, it returns the actual number of interrupts allocated
+ * and updates the @dev's irq member to the lowest new interrupt number;
+ * the other interrupt numbers allocated to this device are consecutive.
+ **/
+int pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec)
+{
+	int nvec = maxvec;
+	int rc;
+
+	if (maxvec < minvec)
+		return -ERANGE;
+
+	do {
+		rc = pci_enable_msi_block(dev, nvec);
+		if (rc < 0) {
+			return rc;
+		} else if (rc > 0) {
+			if (rc < minvec)
+				return -ENOSPC;
+			nvec = rc;
+		}
+	} while (rc);
+
+	return nvec;
+}
+EXPORT_SYMBOL(pci_enable_msi_range);
+
+/**
+ * pci_enable_msix_range - configure device's MSI-X capability structure
+ * @dev: pointer to the pci_dev data structure of MSI-X device function
+ * @entries: pointer to an array of MSI-X entries
+ * @minvec: minimum number of MSI-X irqs requested
+ * @maxvec: maximum number of MSI-X irqs requested
+ *
+ * Setup the MSI-X capability structure of device function with a maximum
+ * possible number of interrupts in the range between @minvec and @maxvec
+ * upon its software driver call to request for MSI-X mode enabled on its
+ * hardware device function. It returns a negative errno if an error occurs.
+ * If it succeeds, it returns the actual number of interrupts allocated and
+ * indicates the successful configuration of MSI-X capability structure
+ * with new allocated MSI-X interrupts.
+ **/
+int pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
+			       int minvec, int maxvec)
+{
+	int nvec = maxvec;
+	int rc;
+
+	if (maxvec < minvec)
+		return -ERANGE;
+
+	do {
+		rc = pci_enable_msix(dev, entries, nvec);
+		if (rc < 0) {
+			return rc;
+		} else if (rc > 0) {
+			if (rc < minvec)
+				return -ENOSPC;
+			nvec = rc;
+		}
+	} while (rc);
+
+	return nvec;
+}
+EXPORT_SYMBOL(pci_enable_msix_range);

@@ -24,6 +24,7 @@
 #include <linux/types.h>
 #include <crypto/sha.h>
 #include <asm/byteorder.h>
+#include <asm/unaligned.h>
 
 static inline u32 Ch(u32 x, u32 y, u32 z)
 {
@@ -42,7 +43,7 @@ static inline u32 Maj(u32 x, u32 y, u32 z)
 
 static inline void LOAD_OP(int I, u32 *W, const u8 *input)
 {
-	W[I] = __be32_to_cpu( ((__be32*)(input))[I] );
+	W[I] = get_unaligned_be32((__u32 *)input + I);
 }
 
 static inline void BLEND_OP(int I, u32 *W)
@@ -384,5 +385,7 @@ module_exit(sha256_generic_mod_fini);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("SHA-224 and SHA-256 Secure Hash Algorithm");
 
-MODULE_ALIAS("sha224");
-MODULE_ALIAS("sha256");
+MODULE_ALIAS_CRYPTO("sha224");
+MODULE_ALIAS_CRYPTO("sha224-generic");
+MODULE_ALIAS_CRYPTO("sha256");
+MODULE_ALIAS_CRYPTO("sha256-generic");

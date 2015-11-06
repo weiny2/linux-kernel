@@ -183,6 +183,21 @@ out:
 	return psdev;
 }
 
+#if defined(CONFIG_XEN) && defined(CONFIG_PCI_MSI)
+static int xen_pcibk_get_owner(struct pci_dev *dev)
+{
+	struct pcistub_device *psdev;
+
+	psdev = pcistub_device_find(pci_domain_nr(dev->bus), dev->bus->number,
+			PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
+
+	if (!psdev || !psdev->pdev)
+		return -1;
+
+	return psdev->pdev->xdev->otherend_id;
+}
+#endif
+
 static struct pci_dev *pcistub_device_get_pci_dev(struct xen_pcibk_device *pdev,
 						  struct pcistub_device *psdev)
 {
@@ -1387,21 +1402,6 @@ static ssize_t permissive_show(struct device_driver *drv, char *buf)
 static DRIVER_ATTR(permissive, S_IRUSR | S_IWUSR, permissive_show,
 		   permissive_add);
 
-#if defined(CONFIG_XEN) && defined(CONFIG_PCI_MSI)
-static int xen_pcibk_get_owner(struct pci_dev *dev)
-{
-	struct pcistub_device *psdev;
-
-	psdev = pcistub_device_find(pci_domain_nr(dev->bus), dev->bus->number,
-			PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
-
-	if (!psdev || !psdev->pdev)
-		return -1;
-
-	return psdev->pdev->xdev->otherend_id;
-}
-#endif
-
 static void pcistub_exit(void)
 {
 	driver_remove_file(&xen_pcibk_pci_driver.driver, &driver_attr_new_slot);
@@ -1540,6 +1540,45 @@ parse_error:
 fs_initcall(pcistub_init);
 #endif
 
+#ifdef CONFIG_PCI_IOV
+static int pci_stub_notifier(struct notifier_block *nb,
+			     unsigned long action, void *data)
+{
+	struct device *dev = data;
+	const struct pci_dev *pdev = to_pci_dev(dev);
+
+	switch (action) {
+	case BUS_NOTIFY_UNBIND_DRIVER:
+		if (!pdev->is_physfn)
+			break;
+		for (;;) {
+			struct pcistub_device *psdev;
+			unsigned long flags;
+			bool found = false;
+
+			spin_lock_irqsave(&pcistub_devices_lock, flags);
+			list_for_each_entry(psdev, &pcistub_devices, dev_list)
+				if (!psdev->pdev && psdev->dev != pdev
+				    && pci_physfn(psdev->dev) == pdev) {
+					found = true;
+					break;
+				}
+			spin_unlock_irqrestore(&pcistub_devices_lock, flags);
+			if (!found)
+				break;
+			device_release_driver(&psdev->dev->dev);
+		}
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block pci_stub_nb = {
+	.notifier_call = pci_stub_notifier,
+};
+#endif
+
 static int __init xen_pcibk_init(void)
 {
 	int err;
@@ -1561,12 +1600,19 @@ static int __init xen_pcibk_init(void)
 	err = xen_pcibk_xenbus_register();
 	if (err)
 		pcistub_exit();
+#ifdef CONFIG_PCI_IOV
+	else
+		bus_register_notifier(&pci_bus_type, &pci_stub_nb);
+#endif
 
 	return err;
 }
 
 static void __exit xen_pcibk_cleanup(void)
 {
+#ifdef CONFIG_PCI_IOV
+	bus_unregister_notifier(&pci_bus_type, &pci_stub_nb);
+#endif
 	xen_pcibk_xenbus_unregister();
 	pcistub_exit();
 }

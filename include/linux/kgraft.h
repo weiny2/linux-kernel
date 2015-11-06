@@ -28,7 +28,7 @@
 
 #include <asm/kgraft.h>
 
-#define KGR_TIMEOUT 30
+#define KGR_TIMEOUT 2
 
 struct kgr_patch;
 
@@ -59,7 +59,6 @@ struct kgr_patch_fun {
 		KGR_PATCH_REVERTED,
 
 		KGR_PATCH_SKIPPED,
-		KGR_PATCH_APPLIED_NON_FINALIZED,
 	} state;
 
 	unsigned long loc_name;
@@ -68,8 +67,6 @@ struct kgr_patch_fun {
 
 	struct ftrace_ops ftrace_ops_slow;
 	struct ftrace_ops ftrace_ops_fast;
-
-	unsigned long suse_kabi_padding[4];
 };
 
 /**
@@ -78,12 +75,10 @@ struct kgr_patch_fun {
  * @kobj: object representing the sysfs entry
  * @list: member in patches list
  * @finish: waiting till it is safe to remove the module with the patch
- * @irq_use_new: per-cpu array to remember kGraft state for interrupts
  * @refs: how many patches need to be reverted before this one
  * @name: name of the patch (to appear in sysfs)
  * @owner: module to refcount on patching
  * @replace_all: revert everything applied before and apply this one instead
- * @immediate: avoid the lazy-switching mechanism and flip the switch ASAP
  * @patches: array of @kgr_patch_fun structures
  */
 struct kgr_patch {
@@ -91,17 +86,7 @@ struct kgr_patch {
 	struct kobject kobj;
 	struct list_head list;
 	struct completion finish;
-	bool __percpu *irq_use_new;
 	unsigned int refs;
-#ifdef __GENKSYMS__
-	unsigned long suse_kabi_padding[8];
-#else
-	union {
-		bool immediate;
-		unsigned long krtek; /* just for alignment and sizing */
-	};
-	unsigned long suse_kabi_padding[7];
-#endif
 
 	/* a patch shall set these */
 	const char *name;
@@ -121,12 +106,14 @@ struct kgr_patch {
 #define KGR_PATCH_END				{ }
 
 extern bool kgr_in_progress;
+extern bool kgr_force_load_module;
 
 extern int kgr_patch_kernel(struct kgr_patch *);
 extern void kgr_patch_remove(struct kgr_patch *);
 
-extern int kgr_modify_kernel(struct kgr_patch *patch, bool revert, bool force);
-extern void kgr_module_init(const struct module *mod);
+extern void kgr_unmark_processes(void);
+extern int kgr_modify_kernel(struct kgr_patch *patch, bool revert);
+extern int kgr_module_init(const struct module *mod);
 extern int kgr_patch_dir_add(struct kgr_patch *patch);
 extern void kgr_patch_dir_del(struct kgr_patch *patch);
 extern int kgr_add_files(void);
@@ -135,11 +122,6 @@ extern void kgr_remove_files(void);
 static inline void kgr_mark_task_in_progress(struct task_struct *p)
 {
 	set_tsk_thread_flag(p, TIF_KGR_IN_PROGRESS);
-}
-
-static inline bool kgr_task_in_progress(struct task_struct *p)
-{
-	return test_tsk_thread_flag(p, TIF_KGR_IN_PROGRESS);
 }
 
 #endif /* IS_ENABLED(CONFIG_KGRAFT) */

@@ -255,15 +255,6 @@ static inline unsigned short drbg_sec_strength(drbg_flag_t flags)
  * function. Thus, the function implicitly knows the size of the
  * buffer.
  *
- * The FIPS test can be called in an endless loop until it returns
- * true. Although the code looks like a potential for a deadlock, it
- * is not the case, because returning a false cannot mathematically
- * occur (except once when a reseed took place and the updated state
- * would is now set up such that the generation of new value returns
- * an identical one -- this is most unlikely and would happen only once).
- * Thus, if this function repeatedly returns false and thus would cause
- * a deadlock, the integrity of the entire kernel is lost.
- *
  * @drbg DRBG handle
  * @buf output buffer of random data to be checked
  *
@@ -290,6 +281,8 @@ static bool drbg_fips_continuous_test(struct drbg_state *drbg,
 		return false;
 	}
 	ret = memcmp(drbg->prev, buf, drbg_blocklen(drbg));
+	if (!ret)
+		panic("DRBG continuous self test failed\n");
 	memcpy(drbg->prev, buf, drbg_blocklen(drbg));
 	/* the test shall pass when the two compared values are not equal */
 	return ret != 0;
@@ -1329,7 +1322,7 @@ static void drbg_restore_shadow(struct drbg_state *drbg,
  *	  as defined in SP800-90A. The additional input is mixed into
  *	  the state in addition to the pulled entropy.
  *
- * return: generated number of bytes
+ * return: 0 when all bytes are generated; < 0 in case of an error
  */
 static int drbg_generate(struct drbg_state *drbg,
 			 unsigned char *buf, unsigned int buflen,
@@ -1470,6 +1463,11 @@ static int drbg_generate(struct drbg_state *drbg,
 	}
 #endif
 
+	/*
+	 * All operations were successful, return 0 as mandated by
+	 * the kernel crypto API interface.
+	 */
+	len = 0;
 err:
 	if (shadow->d_ops->crypto_fini)
 		shadow->d_ops->crypto_fini(shadow);

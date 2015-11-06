@@ -1711,8 +1711,8 @@ static int obd_zombie_impexp_thread(void *unused)
 	while (!test_bit(OBD_ZOMBIE_STOP, &obd_zombie_flags)) {
 		struct l_wait_info lwi = { 0 };
 
-		l_wait_event(obd_zombie_waitq,
-			     !obd_zombie_impexp_check(NULL), &lwi);
+		l_wait_event(obd_zombie_waitq, ({ kgr_task_safe(current);
+			     !obd_zombie_impexp_check(NULL); }), &lwi);
 		obd_zombie_impexp_cull();
 
 		/*

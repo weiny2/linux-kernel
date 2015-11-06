@@ -22,6 +22,7 @@ int speakup_thread(void *data)
 	while (1) {
 		DEFINE_WAIT(wait);
 		while (1) {
+			kgr_task_safe(current);
 			spin_lock_irqsave(&speakup_info.spinlock, flags);
 			our_sound = spk_unprocessed_sound;
 			spk_unprocessed_sound.active = 0;

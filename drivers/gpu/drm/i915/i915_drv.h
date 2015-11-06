@@ -54,6 +54,7 @@
 #define DRIVER_DATE		"20080730"
 
 enum pipe {
+	INVALID_PIPE = -1,
 	PIPE_A = 0,
 	PIPE_B,
 	PIPE_C,
@@ -368,7 +369,6 @@ struct drm_i915_display_funcs {
 	 * fills out the pipe-config with the hw state. */
 	bool (*get_pipe_config)(struct intel_crtc *,
 				struct intel_crtc_config *);
-	void (*get_clock)(struct intel_crtc *, struct intel_crtc_config *);
 	int (*crtc_mode_set)(struct drm_crtc *crtc,
 			     int x, int y,
 			     struct drm_framebuffer *old_fb);
@@ -705,6 +705,9 @@ struct i915_suspend_saved_registers {
 	u32 saveBLC_HIST_CTL;
 	u32 saveBLC_PWM_CTL;
 	u32 saveBLC_PWM_CTL2;
+	u32 saveBLC_HIST_CTL_B;
+	u32 saveBLC_PWM_CTL_B;
+	u32 saveBLC_PWM_CTL2_B;
 	u32 saveBLC_CPU_PWM_CTL;
 	u32 saveBLC_CPU_PWM_CTL2;
 	u32 saveFPB0;
@@ -817,6 +820,7 @@ struct i915_suspend_saved_registers {
 	u32 savePIPEB_LINK_N1;
 	u32 saveMCHBAR_RENDER_STANDBY;
 	u32 savePCH_PORT_HOTPLUG;
+	u16 saveGCDGMBUS;
 };
 
 struct intel_gen6_power_mgmt {
@@ -1036,6 +1040,14 @@ enum modeset_restore {
 	MODESET_SUSPENDED,
 };
 
+struct ddi_vbt_port_info {
+	uint8_t hdmi_level_shift;
+
+	uint8_t supports_dvi:1;
+	uint8_t supports_hdmi:1;
+	uint8_t supports_dp:1;
+};
+
 struct intel_vbt_data {
 	struct drm_display_mode *lfp_lvds_vbt_mode; /* if any */
 	struct drm_display_mode *sdvo_lvds_vbt_mode; /* if any */
@@ -1064,7 +1076,9 @@ struct intel_vbt_data {
 	int crt_ddc_pin;
 
 	int child_dev_num;
-	struct child_device_config *child_dev;
+	union child_device_config *child_dev;
+
+	struct ddi_vbt_port_info ddi_port_info[I915_MAX_PORTS];
 };
 
 enum intel_ddb_partitioning {
@@ -1755,6 +1769,9 @@ extern void i915_update_gfx_val(struct drm_i915_private *dev_priv);
 extern void intel_console_resume(struct work_struct *work);
 
 /* i915_irq.c */
+void i915_hotplug_interrupt_update(struct drm_i915_private *dev_priv,
+				   uint32_t mask,
+				   uint32_t bits);
 void i915_queue_hangcheck(struct drm_device *dev);
 void i915_handle_error(struct drm_device *dev, bool wedged);
 
@@ -2262,8 +2279,16 @@ int sandybridge_pcode_write(struct drm_i915_private *dev_priv, u8 mbox, u32 val)
 u32 vlv_punit_read(struct drm_i915_private *dev_priv, u8 addr);
 void vlv_punit_write(struct drm_i915_private *dev_priv, u8 addr, u32 val);
 u32 vlv_nc_read(struct drm_i915_private *dev_priv, u8 addr);
-u32 vlv_dpio_read(struct drm_i915_private *dev_priv, int reg);
-void vlv_dpio_write(struct drm_i915_private *dev_priv, int reg, u32 val);
+u32 vlv_gpio_nc_read(struct drm_i915_private *dev_priv, u32 reg);
+void vlv_gpio_nc_write(struct drm_i915_private *dev_priv, u32 reg, u32 val);
+u32 vlv_cck_read(struct drm_i915_private *dev_priv, u32 reg);
+void vlv_cck_write(struct drm_i915_private *dev_priv, u32 reg, u32 val);
+u32 vlv_ccu_read(struct drm_i915_private *dev_priv, u32 reg);
+void vlv_ccu_write(struct drm_i915_private *dev_priv, u32 reg, u32 val);
+u32 vlv_gps_core_read(struct drm_i915_private *dev_priv, u32 reg);
+void vlv_gps_core_write(struct drm_i915_private *dev_priv, u32 reg, u32 val);
+u32 vlv_dpio_read(struct drm_i915_private *dev_priv, enum pipe pipe, int reg);
+void vlv_dpio_write(struct drm_i915_private *dev_priv, enum pipe pipe, int reg, u32 val);
 u32 intel_sbi_read(struct drm_i915_private *dev_priv, u16 reg,
 		   enum intel_sbi_destination destination);
 void intel_sbi_write(struct drm_i915_private *dev_priv, u16 reg, u32 value,

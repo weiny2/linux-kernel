@@ -55,7 +55,7 @@ static int caching_kthread(void *data)
 	key.type = BTRFS_INODE_ITEM_KEY;
 again:
 	/* need to make sure the commit_root doesn't disappear */
-	mutex_lock(&root->fs_commit_mutex);
+	down_read(&fs_info->commit_root_sem);
 
 	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
 	if (ret < 0)
@@ -88,7 +88,7 @@ again:
 				btrfs_item_key_to_cpu(leaf, &key, 0);
 				btrfs_release_path(path);
 				root->cache_progress = last;
-				mutex_unlock(&root->fs_commit_mutex);
+				up_read(&fs_info->commit_root_sem);
 				schedule_timeout(1);
 				goto again;
 			} else
@@ -127,7 +127,7 @@ next:
 	btrfs_unpin_free_ino(root);
 out:
 	wake_up(&root->cache_wait);
-	mutex_unlock(&root->fs_commit_mutex);
+	up_read(&fs_info->commit_root_sem);
 
 	btrfs_free_path(path);
 
@@ -223,11 +223,11 @@ again:
 		 * or the caching work is done.
 		 */
 
-		mutex_lock(&root->fs_commit_mutex);
+		down_write(&root->fs_info->commit_root_sem);
 		spin_lock(&root->cache_lock);
 		if (root->cached == BTRFS_CACHE_FINISHED) {
 			spin_unlock(&root->cache_lock);
-			mutex_unlock(&root->fs_commit_mutex);
+			up_write(&root->fs_info->commit_root_sem);
 			goto again;
 		}
 		spin_unlock(&root->cache_lock);
@@ -240,7 +240,7 @@ again:
 		else
 			__btrfs_add_free_space(pinned, objectid, 1);
 
-		mutex_unlock(&root->fs_commit_mutex);
+		up_write(&root->fs_info->commit_root_sem);
 	}
 }
 
@@ -250,7 +250,7 @@ again:
  * and others will just be dropped, because the commit root we were
  * searching has changed.
  *
- * Must be called with root->fs_commit_mutex held
+ * Must be called with root->fs_info->commit_root_sem held
  */
 void btrfs_unpin_free_ino(struct btrfs_root *root)
 {
@@ -281,7 +281,7 @@ void btrfs_unpin_free_ino(struct btrfs_root *root)
 		__btrfs_add_free_space(ctl, info->offset, count);
 free:
 		rb_erase(&info->offset_index, rbroot);
-		kfree(info);
+		kmem_cache_free(btrfs_free_space_cachep, info);
 	}
 }
 
@@ -374,6 +374,8 @@ void btrfs_init_free_ino_ctl(struct btrfs_root *root)
 	ctl->start = 0;
 	ctl->private = NULL;
 	ctl->op = &free_ino_op;
+	INIT_LIST_HEAD(&ctl->trimming_ranges);
+	mutex_init(&ctl->cache_writeout_mutex);
 
 	/*
 	 * Initially we allow to use 16K of ram to cache chunks of

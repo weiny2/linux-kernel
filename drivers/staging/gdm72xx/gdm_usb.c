@@ -740,6 +740,7 @@ static int k_mode_thread(void *arg)
 	int ret;
 
 	while (!k_mode_stop) {
+		kgr_task_safe(current);
 
 		spin_lock_irqsave(&k_lock, flags2);
 		while (!list_empty(&k_list)) {

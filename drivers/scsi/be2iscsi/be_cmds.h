@@ -71,6 +71,7 @@ struct be_mcc_wrb {
 #define BEISCSI_FW_MBX_TIMEOUT	100
 
 /* MBOX Command VER */
+#define MBX_CMD_VER1	0x01
 #define MBX_CMD_VER2	0x02
 
 struct be_mcc_compl {
@@ -103,7 +104,7 @@ struct be_mcc_compl {
 
 /********** MCC door bell ************/
 #define DB_MCCQ_OFFSET 0x140
-#define DB_MCCQ_RING_ID_MASK 0x7FF		/* bits 0 - 10 */
+#define DB_MCCQ_RING_ID_MASK 0xFFFF		/* bits 0 - 15 */
 /* Number of entries posted */
 #define DB_MCCQ_NUM_POSTED_SHIFT 16		/* bits 16 - 29 */
 
@@ -279,6 +280,12 @@ struct be_cmd_resp_eq_create {
 	u16 rsvd0;		/* sword */
 } __packed;
 
+struct be_set_eqd {
+	u32 eq_id;
+	u32 phase;
+	u32 delay_multiplier;
+} __packed;
+
 struct mgmt_chap_format {
 	u32 flags;
 	u8  intr_chap_name[256];
@@ -295,6 +302,17 @@ struct mgmt_auth_method_format {
 	u8	auth_method_type;
 	u8	padding[3];
 	struct	mgmt_chap_format chap;
+} __packed;
+
+struct be_cmd_req_logout_fw_sess {
+	struct be_cmd_req_hdr hdr;	/* dw[4] */
+	uint32_t session_handle;
+} __packed;
+
+struct be_cmd_resp_logout_fw_sess {
+	struct be_cmd_resp_hdr hdr;	/* dw[4] */
+#define BEISCSI_MGMT_SESSION_CLOSE 0x20
+	uint32_t session_status;
 } __packed;
 
 struct mgmt_conn_login_options {
@@ -630,7 +648,7 @@ struct be_cmd_req_modify_eq_delay {
 		__le32 eq_id;
 		__le32 phase;
 		__le32 delay_multiplier;
-	} delay[8];
+	} delay[MAX_CPUS];
 } __packed;
 
 /******************** Get MAC ADDR *******************/
@@ -716,8 +734,11 @@ unsigned int be_cmd_get_port_speed(struct beiscsi_hba *phba);
 
 void free_mcc_tag(struct be_ctrl_info *ctrl, unsigned int tag);
 
+int be_cmd_modify_eq_delay(struct beiscsi_hba *phba, struct be_set_eqd *,
+			    int num);
 int beiscsi_mccq_compl(struct beiscsi_hba *phba,
-			uint32_t tag, struct be_mcc_wrb **wrb, void *cmd_va);
+			uint32_t tag, struct be_mcc_wrb **wrb,
+			struct be_dma_mem *mbx_cmd_mem);
 /*ISCSI Functuions */
 int be_cmd_fw_initialize(struct be_ctrl_info *ctrl);
 int be_cmd_fw_uninit(struct be_ctrl_info *ctrl);
@@ -1012,6 +1033,26 @@ struct tcp_connect_and_offload_in {
 	u8 rsvd0[3];
 } __packed;
 
+struct tcp_connect_and_offload_in_v1 {
+	struct be_cmd_req_hdr hdr;
+	struct ip_addr_format ip_address;
+	u16 tcp_port;
+	u16 cid;
+	u16 cq_id;
+	u16 defq_id;
+	struct phys_addr dataout_template_pa;
+	u16 hdr_ring_id;
+	u16 data_ring_id;
+	u8 do_offload;
+	u8 ifd_state;
+	u8 rsvd0[2];
+	u16 tcp_window_size;
+	u8 tcp_window_scale_count;
+	u8 rsvd1;
+	u32 tcp_mss:24;
+	u8 rsvd2;
+} __packed;
+
 struct tcp_connect_and_offload_out {
 	struct be_cmd_resp_hdr hdr;
 	u32 connection_handle;
@@ -1025,8 +1066,8 @@ struct be_mcc_wrb_context {
 	int *users_final_status;
 } __packed;
 
-#define DB_DEF_PDU_RING_ID_MASK		0x3FF	/* bits 0 - 9 */
-#define DB_DEF_PDU_CQPROC_MASK		0x3FFF	/* bits 0 - 9 */
+#define DB_DEF_PDU_RING_ID_MASK	0x3FFF	/* bits 0 - 13 */
+#define DB_DEF_PDU_CQPROC_MASK		0x3FFF	/* bits 16 - 29 */
 #define DB_DEF_PDU_REARM_SHIFT		14
 #define DB_DEF_PDU_EVENT_SHIFT		15
 #define DB_DEF_PDU_CQPROC_SHIFT		16
@@ -1106,6 +1147,7 @@ struct be_cmd_get_all_if_id_req {
 #define OPCODE_ISCSI_INI_CFG_GET_HBA_NAME	6
 #define OPCODE_ISCSI_INI_CFG_SET_HBA_NAME	7
 #define OPCODE_ISCSI_INI_SESSION_GET_A_SESSION  14
+#define OPCODE_ISCSI_INI_SESSION_LOGOUT_TARGET	 24
 #define OPCODE_ISCSI_INI_DRIVER_REOPEN_ALL_SESSIONS 36
 #define OPCODE_ISCSI_INI_DRIVER_OFFLOAD_SESSION 41
 #define OPCODE_ISCSI_INI_DRIVER_INVALIDATE_CONNECTION 42
@@ -1325,4 +1367,5 @@ void be_wrb_hdr_prepare(struct be_mcc_wrb *wrb, int payload_len,
 void be_cmd_hdr_prepare(struct be_cmd_req_hdr *req_hdr,
 			u8 subsystem, u8 opcode, int cmd_len);
 
+void be2iscsi_fail_session(struct iscsi_cls_session *cls_session);
 #endif /* !BEISCSI_CMDS_H */

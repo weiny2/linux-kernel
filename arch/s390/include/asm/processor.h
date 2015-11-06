@@ -90,6 +90,7 @@ struct thread_struct {
 	int ri_signum;
 #ifdef CONFIG_64BIT
 	unsigned char trap_tdb[256];	/* Transaction abort diagnose block */
+	__vector128 *vxrs;		/* Vector register save area */
 #endif
 };
 
@@ -189,12 +190,7 @@ static inline unsigned short stap(void)
 /*
  * Give up the time slice of the virtual PU.
  */
-static inline void cpu_relax(void)
-{
-	if (MACHINE_HAS_DIAG44)
-		asm volatile("diag 0,0,68");
-	barrier();
-}
+void cpu_relax(void);
 
 #define arch_mutex_cpu_relax()  barrier()
 

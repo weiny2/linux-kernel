@@ -307,11 +307,20 @@ static int usb_stor_control_thread(void * __us)
 	struct Scsi_Host *host = us_to_host(us);
 
 	for (;;) {
+		long to;
+
 		usb_stor_dbg(us, "*** thread sleeping\n");
-		if (wait_for_completion_interruptible(&us->cmnd_ready))
+		to = wait_for_completion_interruptible_timeout(&us->cmnd_ready,
+				HZ * 3);
+		if (to < 0)
 			break;
 
 		usb_stor_dbg(us, "*** thread awakened\n");
+
+		if (!to) {
+			kgr_task_safe(current);
+			continue;
+		}
 
 		/* lock the device pointers */
 		mutex_lock(&(us->dev_mutex));
@@ -477,7 +486,9 @@ void usb_stor_adjust_quirks(struct usb_device *udev, unsigned long *fflags)
 			US_FL_CAPACITY_OK | US_FL_IGNORE_RESIDUE |
 			US_FL_SINGLE_LUN | US_FL_NO_WP_DETECT |
 			US_FL_NO_READ_DISC_INFO | US_FL_NO_READ_CAPACITY_16 |
-			US_FL_INITIAL_READ10 | US_FL_WRITE_CACHE);
+			US_FL_INITIAL_READ10 | US_FL_WRITE_CACHE |
+			US_FL_NO_ATA_1X | US_FL_NO_REPORT_OPCODES |
+			US_FL_MAX_SECTORS_240);
 
 	p = quirks;
 	while (*p) {
@@ -515,6 +526,12 @@ void usb_stor_adjust_quirks(struct usb_device *udev, unsigned long *fflags)
 		case 'e':
 			f |= US_FL_NO_READ_CAPACITY_16;
 			break;
+		case 'f':
+			f |= US_FL_NO_REPORT_OPCODES;
+			break;
+		case 'g':
+			f |= US_FL_MAX_SECTORS_240;
+			break;
 		case 'h':
 			f |= US_FL_CAPACITY_HEURISTICS;
 			break;
@@ -541,6 +558,9 @@ void usb_stor_adjust_quirks(struct usb_device *udev, unsigned long *fflags)
 			break;
 		case 's':
 			f |= US_FL_SINGLE_LUN;
+			break;
+		case 't':
+			f |= US_FL_NO_ATA_1X;
 			break;
 		case 'u':
 			f |= US_FL_IGNORE_UAS;
@@ -879,6 +899,12 @@ static void usb_stor_scan_dwork(struct work_struct *work)
 	if (us->protocol == USB_PR_BULK && !(us->fflags & US_FL_SINGLE_LUN)) {
 		mutex_lock(&us->dev_mutex);
 		us->max_lun = usb_stor_Bulk_max_lun(us);
+		/*
+		 * Allow proper scanning of devices that present more than 8 LUNs
+		 * While not affecting other devices that may need the previous behavior
+		 */
+		if (us->max_lun >= 8)
+			us_to_host(us)->max_lun = us->max_lun+1;
 		mutex_unlock(&us->dev_mutex);
 	}
 	scsi_scan_host(us_to_host(us));

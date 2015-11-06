@@ -395,6 +395,7 @@ typedef enum rx_handler_result rx_handler_result_t;
 typedef rx_handler_result_t rx_handler_func_t(struct sk_buff **pskb);
 
 extern void __napi_schedule(struct napi_struct *n);
+void __napi_schedule_irqoff(struct napi_struct *n);
 
 static inline bool napi_disable_pending(struct napi_struct *n)
 {
@@ -427,6 +428,18 @@ static inline void napi_schedule(struct napi_struct *n)
 {
 	if (napi_schedule_prep(n))
 		__napi_schedule(n);
+}
+
+/**
+ *	napi_schedule_irqoff - schedule NAPI poll
+ *	@n: napi context
+ *
+ * Variant of napi_schedule(), assuming hard irqs are masked.
+ */
+static inline void napi_schedule_irqoff(struct napi_struct *n)
+{
+	if (napi_schedule_prep(n))
+		__napi_schedule_irqoff(n);
 }
 
 /* Try to reschedule poll. Called by dev->poll() after napi_complete().  */
@@ -1265,6 +1278,10 @@ struct net_device {
 						 * that share the same link
 						 * layer address
 						 */
+	unsigned short          dev_port;	/* Used to differentiate
+						 * devices that share the same
+						 * function
+						 */
 	spinlock_t		addr_list_lock;
 	struct netdev_hw_addr_list	uc;	/* Unicast mac addresses */
 	struct netdev_hw_addr_list	mc;	/* Multicast mac addresses */
@@ -1456,8 +1473,6 @@ struct net_device {
 
 	/* group the device belongs to */
 	int group;
-
-	struct pm_qos_request	pm_qos_req;
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)
 
@@ -1634,7 +1649,10 @@ struct napi_gro_cb {
 	int data_offset;
 
 	/* This is non-zero if the packet cannot be merged with the new skb. */
-	int flush;
+	u16	flush;
+
+	/* Save the IP ID here and check when we get to the transport layer */
+	u16	flush_id;
 
 	/* Number of segments aggregated. */
 	u16	count;
@@ -1651,7 +1669,13 @@ struct napi_gro_cb {
 	unsigned long age;
 
 	/* Used in ipv6_gro_receive() */
-	int	proto;
+	u16	proto;
+
+	/* Used in udp_gro_receive */
+	u16	udp_mark;
+
+	/* used to support CHECKSUM_COMPLETE for tunneling protocols */
+	__wsum	csum;
 
 	/* used in skb_gro_receive() slow path */
 	struct sk_buff *last;
@@ -1678,13 +1702,32 @@ struct offload_callbacks {
 	int			(*gso_send_check)(struct sk_buff *skb);
 	struct sk_buff		**(*gro_receive)(struct sk_buff **head,
 					       struct sk_buff *skb);
-	int			(*gro_complete)(struct sk_buff *skb);
+	int			(*gro_complete)(struct sk_buff *skb, int nhoff);
 };
 
 struct packet_offload {
 	__be16			 type;	/* This is really htons(ether_type). */
 	struct offload_callbacks callbacks;
 	struct list_head	 list;
+};
+
+#define netdev_alloc_pcpu_stats(type)				\
+({								\
+	typeof(type) __percpu *pcpu_stats = alloc_percpu(type); \
+	if (pcpu_stats)	{					\
+		int __cpu;					\
+		for_each_possible_cpu(__cpu) {			\
+			typeof(type) *stat;			\
+			stat = per_cpu_ptr(pcpu_stats, __cpu);	\
+			u64_stats_init(&stat->syncp);		\
+		}						\
+	}							\
+	pcpu_stats;						\
+})
+
+struct udp_offload {
+	__be16			 port;
+	struct offload_callbacks callbacks;
 };
 
 #include <linux/notifier.h>
@@ -1887,15 +1930,18 @@ static inline void *skb_gro_header_slow(struct sk_buff *skb, unsigned int hlen,
 	return skb->data + offset;
 }
 
-static inline void *skb_gro_mac_header(struct sk_buff *skb)
-{
-	return NAPI_GRO_CB(skb)->frag0 ?: skb_mac_header(skb);
-}
-
 static inline void *skb_gro_network_header(struct sk_buff *skb)
 {
 	return (NAPI_GRO_CB(skb)->frag0 ?: skb->data) +
 	       skb_network_offset(skb);
+}
+
+static inline void skb_gro_postpull_rcsum(struct sk_buff *skb,
+					const void *start, unsigned int len)
+{
+	if (skb->ip_summed == CHECKSUM_COMPLETE)
+		NAPI_GRO_CB(skb)->csum = csum_sub(NAPI_GRO_CB(skb)->csum,
+						  csum_partial(start, len, 0));
 }
 
 static inline int dev_hard_header(struct sk_buff *skb, struct net_device *dev,
@@ -2337,7 +2383,7 @@ static inline int netif_set_xps_queue(struct net_device *dev,
  * as a distribution range limit for the returned value.
  */
 static inline u16 skb_tx_hash(const struct net_device *dev,
-			      const struct sk_buff *skb)
+			      struct sk_buff *skb)
 {
 	return __skb_tx_hash(dev, skb, dev->real_num_tx_queues);
 }
@@ -2387,17 +2433,52 @@ static inline int netif_copy_real_num_queues(struct net_device *to_dev,
 #define DEFAULT_MAX_NUM_RSS_QUEUES	(8)
 extern int netif_get_num_default_rss_queues(void);
 
-/* Use this variant when it is known for sure that it
- * is executing from hardware interrupt context or with hardware interrupts
- * disabled.
- */
-extern void dev_kfree_skb_irq(struct sk_buff *skb);
+enum skb_free_reason {
+	SKB_REASON_CONSUMED,
+	SKB_REASON_DROPPED,
+};
 
-/* Use this variant in places where it could be invoked
- * from either hardware interrupt or other context, with hardware interrupts
- * either disabled or enabled.
+void __dev_kfree_skb_irq(struct sk_buff *skb, enum skb_free_reason reason);
+void __dev_kfree_skb_any(struct sk_buff *skb, enum skb_free_reason reason);
+
+/*
+ * It is not allowed to call kfree_skb() or consume_skb() from hardware
+ * interrupt context or with hardware interrupts being disabled.
+ * (in_irq() || irqs_disabled())
+ *
+ * We provide four helpers that can be used in following contexts :
+ *
+ * dev_kfree_skb_irq(skb) when caller drops a packet from irq context,
+ *  replacing kfree_skb(skb)
+ *
+ * dev_consume_skb_irq(skb) when caller consumes a packet from irq context.
+ *  Typically used in place of consume_skb(skb) in TX completion path
+ *
+ * dev_kfree_skb_any(skb) when caller doesn't know its current irq context,
+ *  replacing kfree_skb(skb)
+ *
+ * dev_consume_skb_any(skb) when caller doesn't know its current irq context,
+ *  and consumed a packet. Used in place of consume_skb(skb)
  */
-extern void dev_kfree_skb_any(struct sk_buff *skb);
+static inline void dev_kfree_skb_irq(struct sk_buff *skb)
+{
+	__dev_kfree_skb_irq(skb, SKB_REASON_DROPPED);
+}
+
+static inline void dev_consume_skb_irq(struct sk_buff *skb)
+{
+	__dev_kfree_skb_irq(skb, SKB_REASON_CONSUMED);
+}
+
+static inline void dev_kfree_skb_any(struct sk_buff *skb)
+{
+	__dev_kfree_skb_any(skb, SKB_REASON_DROPPED);
+}
+
+static inline void dev_consume_skb_any(struct sk_buff *skb)
+{
+	__dev_kfree_skb_any(skb, SKB_REASON_CONSUMED);
+}
 
 extern int		netif_rx(struct sk_buff *skb);
 extern int		netif_rx_ni(struct sk_buff *skb);
@@ -2407,6 +2488,8 @@ extern gro_result_t	napi_gro_receive(struct napi_struct *napi,
 extern void		napi_gro_flush(struct napi_struct *napi, bool flush_old);
 extern struct sk_buff *	napi_get_frags(struct napi_struct *napi);
 extern gro_result_t	napi_gro_frags(struct napi_struct *napi);
+struct packet_offload *gro_find_receive_by_type(__be16 type);
+struct packet_offload *gro_find_complete_by_type(__be16 type);
 
 static inline void napi_free_frags(struct napi_struct *napi)
 {
@@ -2810,6 +2893,15 @@ extern int __hw_addr_sync(struct netdev_hw_addr_list *to_list,
 extern void __hw_addr_unsync(struct netdev_hw_addr_list *to_list,
 			     struct netdev_hw_addr_list *from_list,
 			     int addr_len);
+int __hw_addr_sync_dev(struct netdev_hw_addr_list *list,
+		       struct net_device *dev,
+		       int (*sync)(struct net_device *, const unsigned char *),
+		       int (*unsync)(struct net_device *,
+				     const unsigned char *));
+void __hw_addr_unsync_dev(struct netdev_hw_addr_list *list,
+			  struct net_device *dev,
+			  int (*unsync)(struct net_device *,
+					const unsigned char *));
 extern void __hw_addr_flush(struct netdev_hw_addr_list *list);
 extern void __hw_addr_init(struct netdev_hw_addr_list *list);
 
@@ -2837,6 +2929,38 @@ extern void dev_uc_unsync(struct net_device *to, struct net_device *from);
 extern void dev_uc_flush(struct net_device *dev);
 extern void dev_uc_init(struct net_device *dev);
 
+/**
+ *  __dev_uc_sync - Synchonize device's unicast list
+ *  @dev:  device to sync
+ *  @sync: function to call if address should be added
+ *  @unsync: function to call if address should be removed
+ *
+ *  Add newly added addresses to the interface, and release
+ *  addresses that have been deleted.
+ **/
+static inline int __dev_uc_sync(struct net_device *dev,
+				int (*sync)(struct net_device *,
+					    const unsigned char *),
+				int (*unsync)(struct net_device *,
+					      const unsigned char *))
+{
+	return __hw_addr_sync_dev(&dev->uc, dev, sync, unsync);
+}
+
+/**
+ *  __dev_uc_unsync - Remove synchonized addresses from device
+ *  @dev:  device to sync
+ *  @unsync: function to call if address should be removed
+ *
+ *  Remove all addresses that were added to the device by dev_uc_sync().
+ **/
+static inline void __dev_uc_unsync(struct net_device *dev,
+				   int (*unsync)(struct net_device *,
+						 const unsigned char *))
+{
+	__hw_addr_unsync_dev(&dev->uc, dev, unsync);
+}
+
 /* Functions used for multicast addresses handling */
 extern int dev_mc_add(struct net_device *dev, const unsigned char *addr);
 extern int dev_mc_add_global(struct net_device *dev, const unsigned char *addr);
@@ -2848,6 +2972,38 @@ extern int dev_mc_sync_multiple(struct net_device *to, struct net_device *from);
 extern void dev_mc_unsync(struct net_device *to, struct net_device *from);
 extern void dev_mc_flush(struct net_device *dev);
 extern void dev_mc_init(struct net_device *dev);
+
+/**
+ *  __dev_mc_sync - Synchonize device's multicast list
+ *  @dev:  device to sync
+ *  @sync: function to call if address should be added
+ *  @unsync: function to call if address should be removed
+ *
+ *  Add newly added addresses to the interface, and release
+ *  addresses that have been deleted.
+ **/
+static inline int __dev_mc_sync(struct net_device *dev,
+				int (*sync)(struct net_device *,
+					    const unsigned char *),
+				int (*unsync)(struct net_device *,
+					      const unsigned char *))
+{
+	return __hw_addr_sync_dev(&dev->mc, dev, sync, unsync);
+}
+
+/**
+ *  __dev_mc_unsync - Remove synchonized addresses from device
+ *  @dev:  device to sync
+ *  @unsync: function to call if address should be removed
+ *
+ *  Remove all addresses that were added to the device by dev_mc_sync().
+ **/
+static inline void __dev_mc_unsync(struct net_device *dev,
+				   int (*unsync)(struct net_device *,
+						 const unsigned char *))
+{
+	__hw_addr_unsync_dev(&dev->mc, dev, unsync);
+}
 
 /* Functions used for secondary unicast and multicast support */
 extern void		dev_set_rx_mode(struct net_device *dev);
@@ -2899,6 +3055,14 @@ extern void *netdev_lower_get_next_private_rcu(struct net_device *dev,
 	     priv; \
 	     priv = netdev_lower_get_next_private_rcu(dev, &(iter)))
 
+void *netdev_lower_get_next(struct net_device *dev,
+			    struct list_head **iter);
+#define netdev_for_each_lower_dev(dev, ldev, iter) \
+	for (iter = &(dev)->adj_list.lower, \
+	     ldev = netdev_lower_get_next(dev, &(iter)); \
+	     ldev; \
+	     ldev = netdev_lower_get_next(dev, &(iter)))
+
 extern void *netdev_adjacent_get_private(struct list_head *adj_list);
 void *netdev_lower_get_first_private_rcu(struct net_device *dev);
 extern struct net_device *netdev_master_upper_dev_get(struct net_device *dev);
@@ -2912,8 +3076,17 @@ extern int netdev_master_upper_dev_link_private(struct net_device *dev,
 						void *private);
 extern void netdev_upper_dev_unlink(struct net_device *dev,
 				    struct net_device *upper_dev);
+void netdev_adjacent_rename_links(struct net_device *dev, char *oldname);
 extern void *netdev_lower_dev_get_private(struct net_device *dev,
 					  struct net_device *lower_dev);
+
+/* RSS keys are 40 or 52 bytes long */
+#define NETDEV_RSS_KEY_LEN 52
+extern u8 netdev_rss_key[NETDEV_RSS_KEY_LEN];
+void netdev_rss_key_fill(void *buffer, size_t len);
+
+int dev_get_nest_level(struct net_device *dev,
+		       bool (*type_check)(struct net_device *dev));
 extern int skb_checksum_help(struct sk_buff *skb);
 extern struct sk_buff *__skb_gso_segment(struct sk_buff *skb,
 	netdev_features_t features, bool tx_path);

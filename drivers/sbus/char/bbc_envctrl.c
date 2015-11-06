@@ -425,6 +425,7 @@ static int kenvctrld(void *__unused)
 		struct bbc_cpu_temperature *tp;
 		struct bbc_fan_control *fp;
 
+		kgr_task_safe(current);
 		msleep_interruptible(POLL_INTERVAL);
 		if (kthread_should_stop())
 			break;

@@ -511,6 +511,7 @@ event_thread(void *data)
 		dbg("event thread sleeping");
 		set_current_state(TASK_INTERRUPTIBLE);
 		schedule();
+		kgr_task_safe(current);
 		if (kthread_should_stop())
 			break;
 		do {
@@ -542,6 +543,7 @@ poll_thread(void *data)
 	int rc;
 
 	while (1) {
+		kgr_task_safe(current);
 		if (kthread_should_stop() || signal_pending(current))
 			break;
 		if (controller->ops->query_enum()) {

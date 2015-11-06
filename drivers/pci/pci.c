@@ -79,7 +79,7 @@ unsigned long pci_cardbus_mem_size = DEFAULT_CARDBUS_MEM_SIZE;
 unsigned long pci_hotplug_io_size  = DEFAULT_HOTPLUG_IO_SIZE;
 unsigned long pci_hotplug_mem_size = DEFAULT_HOTPLUG_MEM_SIZE;
 
-enum pcie_bus_config_types pcie_bus_config = PCIE_BUS_TUNE_OFF;
+enum pcie_bus_config_types pcie_bus_config = PCIE_BUS_DEFAULT;
 
 /*
  * The default CLS is used if arch didn't set CLS explicitly and not
@@ -3994,6 +3994,7 @@ int pcie_get_mps(struct pci_dev *dev)
 
 	return 128 << ((ctl & PCI_EXP_DEVCTL_PAYLOAD) >> 5);
 }
+EXPORT_SYMBOL(pcie_get_mps);
 
 /**
  * pcie_set_mps - set PCI Express maximum payload size
@@ -4018,6 +4019,7 @@ int pcie_set_mps(struct pci_dev *dev, int mps)
 	return pcie_capability_clear_and_set_word(dev, PCI_EXP_DEVCTL,
 						  PCI_EXP_DEVCTL_PAYLOAD, v);
 }
+EXPORT_SYMBOL(pcie_set_mps);
 
 /**
  * pcie_get_minimum_link - determine minimum link settings of a PCI device

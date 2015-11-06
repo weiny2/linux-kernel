@@ -100,6 +100,7 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/dma-mapping.h>
+#include <linux/usb.h>
 
 #include "musb_core.h"
 
@@ -478,7 +479,7 @@ static irqreturn_t musb_stage0_irq(struct musb *musb, u8 int_usb,
 						(USB_PORT_STAT_C_SUSPEND << 16)
 						| MUSB_PORT_STAT_RESUME;
 				musb->rh_timer = jiffies
-						+ msecs_to_jiffies(20);
+					+ msecs_to_jiffies(USB_RESUME_TIMEOUT);
 
 				musb->xceiv->state = OTG_STATE_A_HOST;
 				musb->is_active = 1;
@@ -1843,15 +1844,17 @@ musb_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
 		goto fail0;
 	}
 
-	pm_runtime_use_autosuspend(musb->controller);
-	pm_runtime_set_autosuspend_delay(musb->controller, 200);
-	pm_runtime_enable(musb->controller);
-
 	spin_lock_init(&musb->lock);
 	musb->board_set_power = plat->set_power;
 	musb->min_power = plat->min_power;
 	musb->ops = plat->platform_ops;
 	musb->port_mode = plat->mode;
+
+	/* We need musb_read/write functions initialized for PM */
+	pm_runtime_use_autosuspend(musb->controller);
+	pm_runtime_set_autosuspend_delay(musb->controller, 200);
+	pm_runtime_irq_safe(musb->controller);
+	pm_runtime_enable(musb->controller);
 
 	/* The musb_platform_init() call:
 	 *   - adjusts musb->mregs

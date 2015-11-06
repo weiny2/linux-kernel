@@ -1437,7 +1437,9 @@ static int mac80211_hwsim_ampdu_action(struct ieee80211_hw *hw,
 	return 0;
 }
 
-static void mac80211_hwsim_flush(struct ieee80211_hw *hw, u32 queues, bool drop)
+static void mac80211_hwsim_flush(struct ieee80211_hw *hw,
+				 struct ieee80211_vif *vif,
+				 u32 queues, bool drop)
 {
 	/* Not implemented, queues only on kernel side */
 }
@@ -2261,7 +2263,7 @@ static int __init init_mac80211_hwsim(void)
 			printk(KERN_DEBUG
 			       "mac80211_hwsim: device_bind_driver failed (%d)\n",
 			       err);
-			goto failed_hw;
+			goto failed_bind;
 		}
 
 		skb_queue_head_init(&data->pending);
@@ -2563,6 +2565,8 @@ failed_mon:
 	return err;
 
 failed_hw:
+	device_release_driver(data->dev);
+failed_bind:
 	device_unregister(data->dev);
 failed_drvdata:
 	ieee80211_free_hw(hw);

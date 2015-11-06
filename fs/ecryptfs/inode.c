@@ -641,7 +641,7 @@ ecryptfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	}
 	rc = vfs_rename(lower_old_dir_dentry->d_inode, lower_old_dentry,
 			lower_new_dir_dentry->d_inode, lower_new_dentry,
-			NULL);
+			NULL, 0);
 	if (rc)
 		goto out_lock;
 	if (target_inode)
@@ -1052,7 +1052,7 @@ ecryptfs_setxattr(struct dentry *dentry, const char *name, const void *value,
 	}
 
 	rc = vfs_setxattr(lower_dentry, name, value, size, flags);
-	if (!rc)
+	if (!rc && dentry->d_inode)
 		fsstack_copy_attr_all(dentry->d_inode, lower_dentry->d_inode);
 out:
 	return rc;

@@ -376,6 +376,14 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 					GFP_KERNEL, cpu_to_node(cpu));
 		zalloc_cpumask_var_node(&per_cpu(cpu_core_map, cpu),
 					GFP_KERNEL, cpu_to_node(cpu));
+		/*
+		 * numa_node_id() works after this.
+		 */
+		if (cpu_present(cpu)) {
+			set_cpu_numa_node(cpu, numa_cpu_lookup_table[cpu]);
+			set_cpu_numa_mem(cpu,
+				local_memory_node(numa_cpu_lookup_table[cpu]));
+		}
 	}
 
 	cpumask_set_cpu(boot_cpuid, cpu_sibling_mask(boot_cpuid));
@@ -396,6 +404,7 @@ void smp_prepare_boot_cpu(void)
 #ifdef CONFIG_PPC64
 	paca[boot_cpuid].__current = current;
 #endif
+	set_numa_node(numa_cpu_lookup_table[boot_cpuid]);
 	current_set[boot_cpuid] = task_thread_info(current);
 }
 
@@ -550,8 +559,8 @@ int __cpu_up(unsigned int cpu, struct task_struct *tidle)
 	if (smp_ops->give_timebase)
 		smp_ops->give_timebase();
 
-	/* Wait until cpu puts itself in the online map */
-	while (!cpu_online(cpu))
+	/* Wait until cpu puts itself in the online & active maps */
+	while (!cpu_online(cpu) || !cpu_active(cpu))
 		cpu_relax();
 
 	return 0;
@@ -727,6 +736,9 @@ void start_secondary(void *unused)
 	}
 	traverse_core_siblings(cpu, true);
 
+	set_numa_node(numa_cpu_lookup_table[cpu]);
+	set_numa_mem(local_memory_node(numa_cpu_lookup_table[cpu]));
+
 	smp_wmb();
 	notify_cpu_starting(cpu);
 	set_cpu_online(cpu, true);
@@ -742,6 +754,28 @@ int setup_profiling_timer(unsigned int multiplier)
 {
 	return 0;
 }
+
+#ifdef CONFIG_SCHED_SMT
+/* cpumask of CPUs with asymetric SMT dependancy */
+static int powerpc_smt_flags(void)
+{
+	int flags = SD_SHARE_CPUPOWER | SD_SHARE_PKG_RESOURCES;
+
+	if (cpu_has_feature(CPU_FTR_ASYM_SMT)) {
+		printk_once(KERN_INFO "Enabling Asymmetric SMT scheduling\n");
+		flags |= SD_ASYM_PACKING;
+	}
+	return flags;
+}
+#endif
+
+static struct sched_domain_topology_level powerpc_topology[] = {
+#ifdef CONFIG_SCHED_SMT
+	{ cpu_smt_mask, powerpc_smt_flags, SD_INIT_NAME(SMT) },
+#endif
+	{ cpu_cpu_mask, SD_INIT_NAME(DIE) },
+	{ NULL, },
+};
 
 void __init smp_cpus_done(unsigned int max_cpus)
 {
@@ -767,15 +801,8 @@ void __init smp_cpus_done(unsigned int max_cpus)
 
 	dump_numa_cpu_topology();
 
-}
+	set_sched_topology(powerpc_topology);
 
-int arch_sd_sibling_asym_packing(void)
-{
-	if (cpu_has_feature(CPU_FTR_ASYM_SMT)) {
-		printk_once(KERN_INFO "Enabling Asymmetric SMT scheduling\n");
-		return SD_ASYM_PACKING;
-	}
-	return 0;
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -809,18 +836,6 @@ void __cpu_die(unsigned int cpu)
 {
 	if (smp_ops->cpu_die)
 		smp_ops->cpu_die(cpu);
-}
-
-static DEFINE_MUTEX(powerpc_cpu_hotplug_driver_mutex);
-
-void cpu_hotplug_driver_lock()
-{
-	mutex_lock(&powerpc_cpu_hotplug_driver_mutex);
-}
-
-void cpu_hotplug_driver_unlock()
-{
-	mutex_unlock(&powerpc_cpu_hotplug_driver_mutex);
 }
 
 void cpu_die(void)

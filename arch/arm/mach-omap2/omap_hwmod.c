@@ -2179,6 +2179,8 @@ static int _enable(struct omap_hwmod *oh)
 			 oh->mux->pads_dynamic))) {
 		omap_hwmod_mux(oh->mux, _HWMOD_STATE_ENABLED);
 		_reconfigure_io_chain();
+	} else if (oh->flags & HWMOD_FORCE_MSTANDBY) {
+		_reconfigure_io_chain();
 	}
 
 	_add_initiator_dep(oh, mpu_oh);
@@ -2284,6 +2286,8 @@ static int _idle(struct omap_hwmod *oh)
 	/* Mux pins for device idle if populated */
 	if (oh->mux && oh->mux->pads_dynamic) {
 		omap_hwmod_mux(oh->mux, _HWMOD_STATE_IDLE);
+		_reconfigure_io_chain();
+	} else if (oh->flags & HWMOD_FORCE_MSTANDBY) {
 		_reconfigure_io_chain();
 	}
 
@@ -2398,6 +2402,9 @@ static struct device_node *of_dev_hwmod_lookup(struct device_node *np,
  * registers.  This address is needed early so the OCP registers that
  * are part of the device's address space can be ioremapped properly.
  *
+ * If SYSC access is not needed, the registers will not be remapped
+ * and non-availability of MPU access is not treated as an error.
+ *
  * Returns 0 on success, -EINVAL if an invalid hwmod is passed, and
  * -ENXIO on absent or invalid register target address space.
  */
@@ -2412,6 +2419,11 @@ static int __init _init_mpu_rt_base(struct omap_hwmod *oh, void *data)
 
 	_save_mpu_port_index(oh);
 
+	/* if we don't need sysc access we don't need to ioremap */
+	if (!oh->class->sysc)
+		return 0;
+
+	/* we can't continue without MPU PORT if we need sysc access */
 	if (oh->_int_flags & _HWMOD_NO_MPU_PORT)
 		return -ENXIO;
 
@@ -2421,8 +2433,10 @@ static int __init _init_mpu_rt_base(struct omap_hwmod *oh, void *data)
 			 oh->name);
 
 		/* Extract the IO space from device tree blob */
-		if (!of_have_populated_dt())
+		if (!of_have_populated_dt()) {
+			pr_err("omap_hwmod: %s: no dt node\n", oh->name);
 			return -ENXIO;
+		}
 
 		np = of_dev_hwmod_lookup(of_find_node_by_name(NULL, "ocp"), oh);
 		if (np)
@@ -2463,13 +2477,11 @@ static int __init _init(struct omap_hwmod *oh, void *data)
 	if (oh->_state != _HWMOD_STATE_REGISTERED)
 		return 0;
 
-	if (oh->class->sysc) {
-		r = _init_mpu_rt_base(oh, NULL);
-		if (r < 0) {
-			WARN(1, "omap_hwmod: %s: doesn't have mpu register target base\n",
-			     oh->name);
-			return 0;
-		}
+	r = _init_mpu_rt_base(oh, NULL);
+	if (r < 0) {
+		WARN(1, "omap_hwmod: %s: doesn't have mpu register target base\n",
+		     oh->name);
+		return 0;
 	}
 
 	r = _init_clocks(oh, NULL);

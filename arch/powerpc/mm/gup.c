@@ -39,7 +39,7 @@ static noinline int gup_pte_range(pmd_t pmd, unsigned long addr,
 		/*
 		 * Similar to the PMD case, NUMA hinting must take slow path
 		 */
-		if (pte_numa(pte))
+		if (pte_protnone(pte))
 			return 0;
 
 		if ((pte_val(pte) & mask) != result)
@@ -85,7 +85,7 @@ static int gup_pmd_range(pud_t pud, unsigned long addr, unsigned long end,
 			 * slowpath for accounting purposes and so that they
 			 * can be serialised against THP migration.
 			 */
-			if (pmd_numa(pmd))
+			if (pmd_protnone(pmd))
 				return 0;
 
 			if (!gup_hugepte((pte_t *)pmdp, PMD_SIZE, addr, next,

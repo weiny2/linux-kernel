@@ -647,6 +647,7 @@ static int khvcsd(void *unused)
 	__set_current_state(TASK_RUNNING);
 
 	do {
+		kgr_task_safe(current);
 		hvcs_todo_mask = 0;
 		hvcs_kicked = 0;
 		wmb();

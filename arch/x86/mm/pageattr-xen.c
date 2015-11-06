@@ -95,12 +95,12 @@ static inline void split_page_count(int level) { }
 
 static inline unsigned long highmap_start_pfn(void)
 {
-	return __pa_symbol(_text) >> PAGE_SHIFT;
+	return PFN_DOWN(__pa_symbol(_text));
 }
 
 static inline unsigned long highmap_end_pfn(void)
 {
-	return __pa_symbol(roundup(_brk_end, PMD_SIZE)) >> PAGE_SHIFT;
+	return PFN_UP(__pa_symbol(_brk_end));
 }
 
 #endif
@@ -409,7 +409,7 @@ phys_addr_t slow_virt_to_phys(void *__virt_addr)
 	psize = page_level_size(level);
 	pmask = page_level_mask(level);
 	offset = virt_addr & ~pmask;
-	phys_addr = pte_pfn(*pte) << PAGE_SHIFT;
+	phys_addr = (phys_addr_t)pte_pfn(*pte) << PAGE_SHIFT;
 	return (phys_addr | offset);
 }
 EXPORT_SYMBOL_GPL(slow_virt_to_phys);
@@ -1985,14 +1985,18 @@ static void __make_page_readonly(unsigned long va)
 {
 	pte_t *pte;
 	unsigned int level;
+	int rc;
 
 	pte = lookup_address(va, &level);
 	BUG_ON(!pte || level != PG_LEVEL_4K);
-	if (HYPERVISOR_update_va_mapping(va, pte_wrprotect(*pte), 0))
-		BUG();
-	if (in_secondary_range(va)) {
+	rc = HYPERVISOR_update_va_mapping(va, pte_wrprotect(*pte), 0);
+	if (!in_secondary_range(va))
+		BUG_ON(rc);
+	else {
 		unsigned long pfn = pte_pfn(*pte);
 
+		if (rc) /* fallback */
+			xen_l1_entry_update(pte, pte_wrprotect(*pte));
 #ifdef CONFIG_HIGHMEM
 		if (pfn >= highstart_pfn)
 			kmap_flush_unused(); /* flush stale writable kmaps */
@@ -2006,14 +2010,18 @@ static void __make_page_writable(unsigned long va)
 {
 	pte_t *pte;
 	unsigned int level;
+	int rc;
 
 	pte = lookup_address(va, &level);
 	BUG_ON(!pte || level != PG_LEVEL_4K);
-	if (HYPERVISOR_update_va_mapping(va, pte_mkwrite(*pte), UVMF_INVLPG))
-		BUG();
-	if (in_secondary_range(va)) {
+	rc = HYPERVISOR_update_va_mapping(va, pte_mkwrite(*pte), UVMF_INVLPG);
+	if (!in_secondary_range(va))
+		BUG_ON(rc);
+	else {
 		unsigned long pfn = pte_pfn(*pte);
 
+		if (rc) /* fallback */
+			xen_l1_entry_update(pte, pte_mkwrite(*pte));
 #ifdef CONFIG_HIGHMEM
 		if (pfn < highstart_pfn)
 #endif

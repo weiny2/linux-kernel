@@ -1451,6 +1451,7 @@ static void apm_mainloop(void)
 	set_current_state(TASK_INTERRUPTIBLE);
 	for (;;) {
 		schedule_timeout(APM_CHECK_TIMEOUT);
+		kgr_task_safe(current);
 		if (kthread_should_stop())
 			break;
 		/*

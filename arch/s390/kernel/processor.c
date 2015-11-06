@@ -18,6 +18,14 @@
 
 static DEFINE_PER_CPU(struct cpuid, cpu_id);
 
+void notrace cpu_relax(void)
+{
+	if (!smp_cpu_mtid && MACHINE_HAS_DIAG44)
+		asm volatile("diag 0,0,0x44");
+	barrier();
+}
+EXPORT_SYMBOL(cpu_relax);
+
 /*
  * cpu_init - initializes state that is per-CPU.
  */
@@ -41,7 +49,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 {
 	static const char *hwcap_str[] = {
 		"esan3", "zarch", "stfle", "msa", "ldisp", "eimm", "dfp",
-		"edat", "etf3eh", "highgprs", "te"
+		"edat", "etf3eh", "highgprs", "te", "vx"
 	};
 	unsigned long n = (unsigned long) v - 1;
 	int i;

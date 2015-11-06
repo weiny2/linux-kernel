@@ -108,7 +108,9 @@ static const char * const mem_types[] = {
 	[MEM_RDDR2] = "Registered-DDR2",
 	[MEM_XDR] = "XDR",
 	[MEM_DDR3] = "Unbuffered-DDR3",
-	[MEM_RDDR3] = "Registered-DDR3"
+	[MEM_RDDR3] = "Registered-DDR3",
+	[MEM_DDR4] = "Unbuffered-DDR4",
+	[MEM_RDDR4] = "Registered-DDR4"
 };
 
 static const char * const dev_types[] = {
@@ -911,7 +913,7 @@ int __init edac_debugfs_init(void)
 	return 0;
 }
 
-void __exit edac_debugfs_exit(void)
+void edac_debugfs_exit(void)
 {
 	debugfs_remove(edac_debugfs);
 }
@@ -1165,7 +1167,7 @@ int __init edac_mc_sysfs_init(void)
 	return err;
 }
 
-void __exit edac_mc_sysfs_exit(void)
+void edac_mc_sysfs_exit(void)
 {
 	device_unregister(mci_pdev);
 	edac_put_sysfs_subsys();

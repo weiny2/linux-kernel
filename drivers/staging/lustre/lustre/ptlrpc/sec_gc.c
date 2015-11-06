@@ -200,9 +200,10 @@ again:
 		sec_process_ctx_list();
 
 		lwi = LWI_TIMEOUT(SEC_GC_INTERVAL * HZ, NULL, NULL);
-		l_wait_event(thread->t_ctl_waitq,
+		l_wait_event(thread->t_ctl_waitq, ({
+			     kgr_task_safe(current);
 			     thread_is_stopping(thread) ||
-			     thread_is_signal(thread),
+			     thread_is_signal(thread); }),
 			     &lwi);
 
 		if (thread_test_and_clear_flags(thread, SVC_STOPPING))

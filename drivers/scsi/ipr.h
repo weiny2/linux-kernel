@@ -39,8 +39,8 @@
 /*
  * Literals
  */
-#define IPR_DRIVER_VERSION "2.6.0"
-#define IPR_DRIVER_DATE "(November 16, 2012)"
+#define IPR_DRIVER_VERSION "2.6.2"
+#define IPR_DRIVER_DATE "(June 11, 2015)"
 
 /*
  * IPR_MAX_CMD_PER_LUN: This defines the maximum number of outstanding
@@ -130,6 +130,7 @@
 #define IPR_IOASC_HW_DEV_BUS_STATUS			0x04448500
 #define	IPR_IOASC_IOASC_MASK			0xFFFFFF00
 #define	IPR_IOASC_SCSI_STATUS_MASK		0x000000FF
+#define IPR_IOASC_HW_CMD_FAILED			0x046E0000
 #define IPR_IOASC_IR_INVALID_REQ_TYPE_OR_PKT	0x05240000
 #define IPR_IOASC_IR_RESOURCE_HANDLE		0x05250000
 #define IPR_IOASC_IR_NO_CMDS_TO_2ND_IOA		0x05258100
@@ -137,6 +138,7 @@
 #define IPR_IOASC_BUS_WAS_RESET			0x06290000
 #define IPR_IOASC_BUS_WAS_RESET_BY_OTHER		0x06298000
 #define IPR_IOASC_ABORTED_CMD_TERM_BY_HOST	0x0B5A0000
+#define IPR_IOASC_IR_NON_OPTIMIZED		0x05258200
 
 #define IPR_FIRST_DRIVER_IOASC			0x10000000
 #define IPR_IOASC_IOA_WAS_RESET			0x10000001
@@ -197,6 +199,8 @@
 /*
  * Adapter Commands
  */
+#define IPR_CANCEL_REQUEST				0xC0
+#define	IPR_CANCEL_64BIT_IOARCB			0x01
 #define IPR_QUERY_RSRC_STATE				0xC2
 #define IPR_RESET_DEVICE				0xC3
 #define	IPR_RESET_TYPE_SELECT				0x80
@@ -223,6 +227,7 @@
 #define IPR_ABBREV_SHUTDOWN_TIMEOUT		(10 * HZ)
 #define IPR_DUAL_IOA_ABBR_SHUTDOWN_TO	(2 * 60 * HZ)
 #define IPR_DEVICE_RESET_TIMEOUT		(ipr_fastfail ? 10 * HZ : 30 * HZ)
+#define IPR_CANCEL_TIMEOUT			(ipr_fastfail ? 10 * HZ : 30 * HZ)
 #define IPR_CANCEL_ALL_TIMEOUT		(ipr_fastfail ? 10 * HZ : 30 * HZ)
 #define IPR_ABORT_TASK_TIMEOUT		(ipr_fastfail ? 10 * HZ : 30 * HZ)
 #define IPR_INTERNAL_TIMEOUT			(ipr_fastfail ? 10 * HZ : 30 * HZ)
@@ -269,7 +274,7 @@
 #define IPR_RUNTIME_RESET				0x40000000
 
 #define IPR_IPL_INIT_MIN_STAGE_TIME			5
-#define IPR_IPL_INIT_DEFAULT_STAGE_TIME                 15
+#define IPR_IPL_INIT_DEFAULT_STAGE_TIME                 30
 #define IPR_IPL_INIT_STAGE_UNKNOWN			0x0
 #define IPR_IPL_INIT_STAGE_TRANSOP			0xB0000000
 #define IPR_IPL_INIT_STAGE_MASK				0xff000000
@@ -519,6 +524,7 @@ struct ipr_cmd_pkt {
 #define IPR_RQTYPE_IOACMD		0x01
 #define IPR_RQTYPE_HCAM			0x02
 #define IPR_RQTYPE_ATA_PASSTHRU	0x04
+#define IPR_RQTYPE_PIPE			0x05
 
 	u8 reserved2;
 
@@ -1001,13 +1007,13 @@ struct ipr_hostrcb_type_24_error {
 struct ipr_hostrcb_type_07_error {
 	u8 failure_reason[64];
 	struct ipr_vpd vpd;
-	u32 data[222];
+	__be32 data[222];
 }__attribute__((packed, aligned (4)));
 
 struct ipr_hostrcb_type_17_error {
 	u8 failure_reason[64];
 	struct ipr_ext_vpd vpd;
-	u32 data[476];
+	__be32 data[476];
 }__attribute__((packed, aligned (4)));
 
 struct ipr_hostrcb_config_element {
@@ -1272,6 +1278,7 @@ struct ipr_resource_entry {
 	u8 del_from_ml:1;
 	u8 resetting_device:1;
 	u8 reset_occurred:1;
+	u8 raw_mode:1;
 
 	u32 bus;		/* AKA channel */
 	u32 target;		/* AKA id */
@@ -1284,18 +1291,17 @@ struct ipr_resource_entry {
 	(((res)->bus << 24) | ((res)->target << 8) | (res)->lun)
 
 	u8 ata_class;
-
-	u8 flags;
-	__be16 res_flags;
-
 	u8 type;
+
+	u16 flags;
+	u16 res_flags;
 
 	u8 qmodel;
 	struct ipr_std_inq_data std_inq_data;
 
 	__be32 res_handle;
 	__be64 dev_id;
-	__be64 lun_wwn;
+	u64 lun_wwn;
 	struct scsi_lun dev_lun;
 	u8 res_path[8];
 
@@ -1403,7 +1409,8 @@ enum ipr_shutdown_type {
 	IPR_SHUTDOWN_NORMAL = 0x00,
 	IPR_SHUTDOWN_PREPARE_FOR_NORMAL = 0x40,
 	IPR_SHUTDOWN_ABBREV = 0x80,
-	IPR_SHUTDOWN_NONE = 0x100
+	IPR_SHUTDOWN_NONE = 0x100,
+	IPR_SHUTDOWN_QUIESCE = 0x101,
 };
 
 struct ipr_trace_entry {
@@ -1480,6 +1487,7 @@ struct ipr_ioa_cfg {
 
 #define IPR_NUM_TRACE_INDEX_BITS	8
 #define IPR_NUM_TRACE_ENTRIES		(1 << IPR_NUM_TRACE_INDEX_BITS)
+#define IPR_TRACE_INDEX_MASK		(IPR_NUM_TRACE_ENTRIES - 1)
 #define IPR_TRACE_SIZE	(sizeof(struct ipr_trace_entry) * IPR_NUM_TRACE_ENTRIES)
 	char trace_start[8];
 #define IPR_TRACE_START_LABEL			"trace"
@@ -1537,6 +1545,7 @@ struct ipr_ioa_cfg {
 	u8 saved_mode_page_len;
 
 	struct work_struct work_q;
+	struct workqueue_struct *reset_work_q;
 
 	wait_queue_head_t reset_wait_q;
 	wait_queue_head_t msi_wait_q;
@@ -1548,7 +1557,7 @@ struct ipr_ioa_cfg {
 	struct ipr_misc_cbs *vpd_cbs;
 	dma_addr_t vpd_cbs_dma;
 
-	struct pci_pool *ipr_cmd_pool;
+	struct dma_pool *ipr_cmd_pool;
 
 	struct ipr_cmnd *reset_cmd;
 	int (*reset) (struct ipr_cmnd *);
@@ -1588,6 +1597,7 @@ struct ipr_cmnd {
 	struct ata_queued_cmd *qc;
 	struct completion completion;
 	struct timer_list timer;
+	struct work_struct work;
 	void (*fast_done) (struct ipr_cmnd *);
 	void (*done) (struct ipr_cmnd *);
 	int (*job_step) (struct ipr_cmnd *);
@@ -1607,6 +1617,7 @@ struct ipr_cmnd {
 		struct scsi_device *sdev;
 	} u;
 
+	struct completion *eh_comp;
 	struct ipr_hrr_queue *hrrq;
 	struct ipr_ioa_cfg *ioa_cfg;
 };

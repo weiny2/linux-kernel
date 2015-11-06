@@ -573,11 +573,14 @@ ENTRY(ret_from_fork)
 	testl $3, CS-ARGOFFSET(%rsp)		# from kernel_thread?
 	jz   1f
 
-	testl $_TIF_IA32, TI_flags(%rcx)	# 32-bit compat task needs IRET
-	jnz  int_ret_from_sys_call
-
-	RESTORE_TOP_OF_STACK %rdi, -ARGOFFSET
-	jmp ret_from_sys_call			# go to the SYSRET fastpath
+	/*
+	 * By the time we get here, we have no idea whether our pt_regs,
+	 * ti flags, and ti status came from the 64-bit SYSCALL fast path,
+	 * the slow path, or one of the ia32entry paths.
+	 * Use int_ret_from_sys_call to return, since it can safely handle
+	 * all of the above.
+	 */
+	jmp  int_ret_from_sys_call
 
 1:
 	/* Need to set the proper %ss (not NULL) for ring 3 iretq */
@@ -669,9 +672,6 @@ sysret_check:
 	/* Handle reschedules */
 	/* edx:	work, edi: workmask */
 sysret_careful:
-#if IS_ENABLED(CONFIG_KGRAFT)
-	andl $~_TIF_KGR_IN_PROGRESS,TI_flags+THREAD_INFO(%rsp,RIP-ARGOFFSET)
-#endif
 	bt $TIF_NEED_RESCHED,%edx
 	jnc sysret_signal
 	TRACE_IRQS_ON
@@ -735,9 +735,6 @@ sysret_audit:
 
 	/* Do syscall tracing */
 tracesys:
-#if IS_ENABLED(CONFIG_KGRAFT)
-	andl $~_TIF_KGR_IN_PROGRESS,TI_flags+THREAD_INFO(%rsp,RIP-ARGOFFSET)
-#endif
 #ifdef CONFIG_AUDITSYSCALL
 	testl $(_TIF_WORK_SYSCALL_ENTRY & ~_TIF_SYSCALL_AUDIT),TI_flags+THREAD_INFO(%rsp,RIP-ARGOFFSET)
 	jz auditsys
@@ -788,9 +785,6 @@ GLOBAL(int_with_check)
 	/* First do a reschedule test. */
 	/* edx:	work, edi: workmask */
 int_careful:
-#if IS_ENABLED(CONFIG_KGRAFT)
-	andl $~_TIF_KGR_IN_PROGRESS,TI_flags(%rcx)
-#endif
 	bt $TIF_NEED_RESCHED,%edx
 	jnc  int_very_careful
 	TRACE_IRQS_ON
@@ -1010,37 +1004,6 @@ ENTRY(retint_kernel)
 	CFI_ENDPROC
 END(retint_check)
 
-	/*
-	 * If IRET takes a fault on the espfix stack, then we
-	 * end up promoting it to a doublefault.  In that case,
-	 * modify the stack to make it look like we just entered
-	 * the #GP handler from user space, similar to bad_iret.
-	 */
-#ifdef CONFIG_X86_ESPFIX64
-	ALIGN
-__do_double_fault:
-	XCPT_FRAME 1 RDI+8
-	movq RSP(%rdi),%rax		/* Trap on the espfix stack? */
-	sarq $PGDIR_SHIFT,%rax
-	cmpl $ESPFIX_PGD_ENTRY,%eax
-	jne do_double_fault		/* No, just deliver the fault */
-	cmpl $__KERNEL_CS,CS(%rdi)
-	jne do_double_fault
-	movq RIP(%rdi),%rax
-	cmpq $native_irq_return_iret,%rax
-	jne do_double_fault		/* This shouldn't happen... */
-	movq PER_CPU_VAR(kernel_stack),%rax
-	subq $(6*8-KERNEL_STACK_OFFSET),%rax	/* Reset to original stack */
-	movq %rax,RSP(%rdi)
-	movq $0,(%rax)			/* Missing (lost) #GP error code */
-	movq $general_protection,RIP(%rdi)
-	retq
-	CFI_ENDPROC
-END(__do_double_fault)
-#else
-# define __do_double_fault do_double_fault
-#endif
-
 /*
  * Exception entry points.
  */
@@ -1137,7 +1100,7 @@ ENTRY(do_hypervisor_callback)   # do_hypervisor_callback(struct *pt_regs)
 	jnz  error_exit
 	bt   $TIF_NEED_RESCHED,TI_flags(%rdx)
 	jnc  error_exit
-	bt   $9,EFLAGS-ARGOFFSET(%rsp)
+	bt   $9,EFLAGS(%rsp)
 	jnc  error_exit
 	movb $0,PER_CPU_VAR(privcmd_hcall)
 	call preempt_schedule_irq
@@ -1153,20 +1116,20 @@ restore_all_enable_events:
 	TRACE_IRQS_ON
 	__ENABLE_INTERRUPTS
 
-scrit:	/**** START OF CRITICAL REGION ****/
+.Lscrit: /**** START OF CRITICAL REGION ****/
 	__TEST_PENDING
 	CFI_REMEMBER_STATE
 	jnz  14f			# process more events if necessary...
-        RESTORE_ARGS 1,8,1
+	RESTORE_ARGS 1,8,1
         HYPERVISOR_IRET 0
         
 	CFI_RESTORE_STATE
 14:	__DISABLE_INTERRUPTS
+.Lecrit: /**** END OF CRITICAL REGION ****/
 	SAVE_REST
         movq %rsp,%rdi                  # set the argument again
 	jmp  11b
 	CFI_ENDPROC
-ecrit:  /**** END OF CRITICAL REGION ****/
 # At this point, unlike on x86-32, we don't do the fixup to simplify the 
 # code and the stack frame is more complex on x86-64.
 # When the kernel is interrupted in the critical section, the kernel 
@@ -1406,17 +1369,16 @@ error_sti:
 #ifndef CONFIG_XEN
 /*
  * There are two places in the kernel that can potentially fault with
- * usergs. Handle them here. The exception handlers after iret run with
- * kernel gs again, so don't set the user space flag. B stepping K8s
- * sometimes report an truncated RIP for IRET exceptions returning to
- * compat mode. Check for these here too.
+ * usergs. Handle them here.  B stepping K8s sometimes report a
+ * truncated RIP for IRET exceptions returning to compat mode. Check
+ * for these here too.
  */
 error_kernelspace:
 	CFI_REL_OFFSET rcx, RCX+8
 	incl %ebx
 	leaq native_irq_return_iret(%rip),%rcx
 	cmpq %rcx,RIP+8(%rsp)
-	je error_swapgs
+	je error_bad_iret
 	movl %ecx,%eax	/* zero extend */
 	cmpq %rax,RIP+8(%rsp)
 	je bstep_iret
@@ -1427,7 +1389,15 @@ error_kernelspace:
 bstep_iret:
 	/* Fix truncated RIP */
 	movq %rcx,RIP+8(%rsp)
-	jmp error_swapgs
+	/* fall through */
+
+error_bad_iret:
+	SWAPGS
+	mov %rsp,%rdi
+	call fixup_bad_iret
+	mov %rax,%rsp
+	decl %ebx	/* Return to usergs */
+	jmp error_sti
 #endif
 	CFI_ENDPROC
 END(error_entry)

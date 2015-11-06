@@ -1410,6 +1410,8 @@ static int kmemleak_scan_thread(void *arg)
 	while (!kthread_should_stop()) {
 		signed long timeout = jiffies_scan_wait;
 
+		kgr_task_safe(current);
+
 		mutex_lock(&scan_mutex);
 		kmemleak_scan();
 		mutex_unlock(&scan_mutex);

@@ -46,15 +46,13 @@ struct zpci_ccdf_avail {
 static void __zpci_event_error(struct zpci_ccdf_err *ccdf)
 {
 	struct zpci_dev *zdev = get_zdev_by_fid(ccdf->fid);
+	struct pci_dev *pdev = zdev ? zdev->pdev : NULL;
 
 	zpci_err("error CCDF:\n");
 	zpci_err_hex(ccdf, sizeof(*ccdf));
 
-	if (!zdev)
-		return;
-
 	pr_err("%s: Event 0x%x reports an error for PCI function 0x%x\n",
-	       pci_name(zdev->pdev), ccdf->pec, ccdf->fid);
+	       pdev ? pci_name(pdev) : "n/a", ccdf->pec, ccdf->fid);
 }
 
 void zpci_event_error(void *data)
@@ -75,8 +73,14 @@ static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 	zpci_err_hex(ccdf, sizeof(*ccdf));
 
 	switch (ccdf->pec) {
-	case 0x0301: /* Standby -> Configured */
-		if (!zdev || zdev->state == ZPCI_FN_STATE_CONFIGURED)
+	case 0x0301: /* Reserved|Standby -> Configured */
+		if (!zdev) {
+			ret = clp_add_pci_device(ccdf->fid, ccdf->fh, 0);
+			if (ret)
+				break;
+			zdev = get_zdev_by_fid(ccdf->fid);
+		}
+		if (!zdev || zdev->state != ZPCI_FN_STATE_STANDBY)
 			break;
 		zdev->state = ZPCI_FN_STATE_CONFIGURED;
 		zdev->fh = ccdf->fh;
@@ -86,7 +90,8 @@ static void __zpci_event_availability(struct zpci_ccdf_avail *ccdf)
 		pci_rescan_bus(zdev->bus);
 		break;
 	case 0x0302: /* Reserved -> Standby */
-		clp_add_pci_device(ccdf->fid, ccdf->fh, 0);
+		if (!zdev)
+			clp_add_pci_device(ccdf->fid, ccdf->fh, 0);
 		break;
 	case 0x0303: /* Deconfiguration requested */
 		if (pdev)

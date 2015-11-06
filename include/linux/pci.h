@@ -170,6 +170,8 @@ enum pci_dev_flags {
 	PCI_DEV_FLAGS_NO_D3 = (__force pci_dev_flags_t) 2,
 	/* Provide indication device is assigned by a Virtual Machine Manager */
 	PCI_DEV_FLAGS_ASSIGNED = (__force pci_dev_flags_t) 4,
+	/* Get VPD from function 0 VPD */
+	PCI_DEV_FLAGS_VPD_REF_F0 = (__force pci_dev_flags_t) (1 << 8),
 };
 
 enum pci_irq_reroute_variant {
@@ -323,6 +325,7 @@ struct pci_dev {
 	unsigned int	is_added:1;
 	unsigned int	is_busmaster:1; /* device is busmaster */
 	unsigned int	no_msi:1;	/* device may not use msi */
+	unsigned int	no_64bit_msi:1; /* device may only use 32-bit MSIs */
 	unsigned int	block_cfg_access:1;	/* config space access is blocked */
 	unsigned int	broken_parity_status:1;	/* Device generates false positive parity */
 	unsigned int	irq_reroute_variant:2;	/* device needs IRQ rerouting variant */
@@ -703,10 +706,11 @@ struct pci_driver {
 void pcie_bus_configure_settings(struct pci_bus *bus);
 
 enum pcie_bus_config_types {
-	PCIE_BUS_TUNE_OFF,
-	PCIE_BUS_SAFE,
-	PCIE_BUS_PERFORMANCE,
-	PCIE_BUS_PEER2PEER,
+	PCIE_BUS_TUNE_OFF,	/* don't touch MPS at all */
+	PCIE_BUS_DEFAULT,	/* ensure MPS matches upstream bridge */
+	PCIE_BUS_SAFE,		/* use largest MPS boot-time devices support */
+	PCIE_BUS_PERFORMANCE,	/* use MPS and MRRS for best performance */
+	PCIE_BUS_PEER2PEER,	/* set MPS = 128 for all devices */
 };
 
 extern enum pcie_bus_config_types pcie_bus_config;
@@ -1199,6 +1203,17 @@ static inline int pci_msi_enabled(void)
 {
 	return 0;
 }
+
+static inline int pci_enable_msi_range(struct pci_dev *dev, int minvec,
+				       int maxvec)
+{
+	return -ENOSYS;
+}
+static inline int pci_enable_msix_range(struct pci_dev *dev,
+		      struct msix_entry *entries, int minvec, int maxvec)
+{
+	return -ENOSYS;
+}
 #else
 int pci_enable_msi_block(struct pci_dev *dev, unsigned int nvec);
 int pci_enable_msi_block_auto(struct pci_dev *dev, unsigned int *maxvec);
@@ -1211,6 +1226,9 @@ void pci_disable_msix(struct pci_dev *dev);
 void msi_remove_pci_irq_vectors(struct pci_dev *dev);
 void pci_restore_msi_state(struct pci_dev *dev);
 int pci_msi_enabled(void);
+int pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec);
+int pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
+			  int minvec, int maxvec);
 #ifdef CONFIG_XEN
 int register_msi_get_owner(int (*func)(struct pci_dev *dev));
 int unregister_msi_get_owner(int (*func)(struct pci_dev *dev));

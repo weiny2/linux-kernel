@@ -110,7 +110,9 @@
 #include <asm/alternative.h>
 #include <asm/prom.h>
 
-#ifdef CONFIG_XEN
+#ifndef CONFIG_XEN
+#include <asm/suspend.h>
+#else
 #include <asm/hypervisor.h>
 #include <xen/interface/kexec.h>
 #include <xen/interface/memory.h>
@@ -122,7 +124,8 @@
 
 static int xen_panic_event(struct notifier_block *, unsigned long, void *);
 static struct notifier_block xen_panic_block = {
-	xen_panic_event, NULL, 0 /* try to go last */
+	.notifier_call = xen_panic_event,
+	.priority = INT_MIN /* try to go last */
 };
 
 unsigned long *phys_to_machine_mapping;
@@ -538,11 +541,25 @@ static void __init reserve_initrd(void)
 }
 #endif /* CONFIG_BLK_DEV_INITRD */
 
+#ifndef CONFIG_XEN
+static void __init remove_setup_data(u64 pa_prev, u64 pa_next)
+{
+	struct setup_data *data;
+
+	if (pa_prev) {
+		data = early_memremap(pa_prev, sizeof(*data));
+		data->next = pa_next;
+		early_iounmap(data, sizeof(*data));
+	} else
+		boot_params.hdr.setup_data = pa_next;
+}
+#endif
+
 static void __init parse_setup_data(void)
 {
 #ifndef CONFIG_XEN
 	struct setup_data *data;
-	u64 pa_data, pa_next;
+	u64 pa_data, pa_next, pa_prev = 0;
 
 	pa_data = boot_params.hdr.setup_data;
 	while (pa_data) {
@@ -566,9 +583,14 @@ static void __init parse_setup_data(void)
 		case SETUP_EFI:
 			parse_efi_setup(pa_data, data_len);
 			break;
+		case SETUP_HIBERNATION_KEYS:
+			parse_hibernation_keys(pa_data, data_len);
+			remove_setup_data(pa_prev, pa_next);
+			break;
 		default:
 			break;
 		}
+		pa_prev = pa_data;
 		pa_data = pa_next;
 	}
 #endif
@@ -635,7 +657,7 @@ static void __init memblock_x86_reserve_range_setup_data(void)
 # define CRASH_KERNEL_ADDR_HIGH_MAX	MAXMEM
 #endif
 
-static void __init reserve_crashkernel_low(void)
+static int __init reserve_crashkernel_low(void)
 {
 #ifdef CONFIG_X86_64
 	const unsigned long long alignment = 16<<20;	/* 16M */
@@ -656,13 +678,16 @@ static void __init reserve_crashkernel_low(void)
 		 *	swiotlb overflow buffer: now is hardcoded to 32k.
 		 *		We round it to 8M for other buffers that
 		 *		may need to stay low too.
+		 *		Also make sure we allocate enough extra memory
+		 *		low memory so that we don't run out of DMA
+		 *		buffers for 32bit devices.
 		 */
-		low_size = swiotlb_size_or_default() + (8UL<<20);
+		low_size = max(swiotlb_size_or_default() + (8UL<<20), 256UL<<20);
 		auto_set = true;
 	} else {
 		/* passed with crashkernel=0,low ? */
 		if (!low_size)
-			return;
+			return 0;
 	}
 
 	low_base = memblock_find_in_range(low_size, (1ULL<<32),
@@ -672,7 +697,7 @@ static void __init reserve_crashkernel_low(void)
 		if (!auto_set)
 			pr_info("crashkernel low reservation failed - No suitable area found.\n");
 
-		return;
+		return -EINVAL;
 	}
 
 	memblock_reserve(low_base, low_size);
@@ -684,6 +709,7 @@ static void __init reserve_crashkernel_low(void)
 	crashk_low_res.end   = low_base + low_size - 1;
 	insert_resource(&iomem_resource, &crashk_low_res);
 #endif
+	return 0;
 }
 
 static void __init reserve_crashkernel(void)
@@ -733,6 +759,10 @@ static void __init reserve_crashkernel(void)
 			return;
 		}
 	}
+
+	if (crash_base >= (1ULL<<32) && reserve_crashkernel_low())
+		return;
+
 	memblock_reserve(crash_base, crash_size);
 
 	printk(KERN_INFO "Reserving %ldMB of memory at %ldMB "
@@ -744,9 +774,6 @@ static void __init reserve_crashkernel(void)
 	crashk_res.start = crash_base;
 	crashk_res.end   = crash_base + crash_size - 1;
 	insert_resource(&iomem_resource, &crashk_res);
-
-	if (crash_base >= (1ULL<<32))
-		reserve_crashkernel_low();
 }
 #else
 static void __init reserve_crashkernel(void)
@@ -1080,7 +1107,7 @@ void __init setup_arch(char **cmdline_p)
 	*/
 	ROOT_DEV = MKDEV(UNNAMED_MAJOR,0);
 #else
- 	ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
+	ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
 #endif
 	if (is_initial_xendomain()) {
 		const struct dom0_vga_console_info *info =
@@ -1491,7 +1518,7 @@ void __init setup_arch(char **cmdline_p)
 							  & PAGE_MASK),
 						     PAGE_SIZE);
 				}
-			} while (pud_index(va));
+			} while (pud_index(va) | pmd_index(va));
 			ClearPagePinned(virt_to_page(pud_page));
 			make_page_writable(pud_page,
 					   XENFEAT_writable_page_tables);
@@ -1500,7 +1527,7 @@ void __init setup_arch(char **cmdline_p)
 		} else if (!WARN_ON(xen_start_info->mfn_list
 				    < __START_KERNEL_map))
 #endif
-			free_bootmem(__pa(xen_start_info->mfn_list),
+			free_bootmem(__pa_symbol(xen_start_info->mfn_list),
 				     PFN_PHYS(PFN_UP(xen_start_info->nr_pages *
 						     sizeof(unsigned long))));
 

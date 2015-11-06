@@ -4,7 +4,8 @@
  *
  * This code is based on drivers/scsi/mpt3sas/mpt3sas_base.h
  * Copyright (C) 2012-2014  LSI Corporation
- *  (mailto:DL-MPTFusionLinux@lsi.com)
+ * Copyright (C) 2013-2014 Avago Technologies
+ *  (mailto: MPT-FusionLinux.pdl@avagotech.com)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -68,10 +69,10 @@
 
 /* driver versioning info */
 #define MPT3SAS_DRIVER_NAME		"mpt3sas"
-#define MPT3SAS_AUTHOR	"LSI Corporation <DL-MPTFusionLinux@lsi.com>"
+#define MPT3SAS_AUTHOR "Avago Technologies <MPT-FusionLinux.pdl@avagotech.com>"
 #define MPT3SAS_DESCRIPTION	"LSI MPT Fusion SAS 3.0 Device Driver"
-#define MPT3SAS_DRIVER_VERSION		"04.100.00.00"
-#define MPT3SAS_MAJOR_VERSION		4
+#define MPT3SAS_DRIVER_VERSION		"09.100.00.00"
+#define MPT3SAS_MAJOR_VERSION		9
 #define MPT3SAS_MINOR_VERSION		100
 #define MPT3SAS_BUILD_VERSION		0
 #define MPT3SAS_RELEASE_VERSION	00
@@ -151,12 +152,49 @@
 #define MPT3SAS_INTEL_RS3UC080_SSDID    0x3524
 
 /*
+ * Dell HBA branding
+ */
+#define MPT3SAS_DELL_12G_HBA_BRANDING       \
+	"Dell 12Gbps HBA"
+
+/*
+ * Dell HBA SSDIDs
+ */
+#define MPT3SAS_DELL_12G_HBA_SSDID	0x1F46
+
+/*
+ * Cisco HBA branding
+ */
+#define MPT3SAS_CISCO_12G_8E_HBA_BRANDING		\
+		"Cisco 9300-8E 12G SAS HBA"
+#define MPT3SAS_CISCO_12G_8I_HBA_BRANDING		\
+		"Cisco 9300-8i 12G SAS HBA"
+#define MPT3SAS_CISCO_12G_AVILA_HBA_BRANDING	\
+		"Cisco 12G Modular SAS Pass through Controller"
+#define MPT3SAS_CISCO_12G_COLUSA_MEZZANINE_HBA_BRANDING		\
+		"UCS C3X60 12G SAS Pass through Controller"
+/*
+ * Cisco HBA SSSDIDs
+ */
+#define MPT3SAS_CISCO_12G_8E_HBA_SSDID  0x14C
+#define MPT3SAS_CISCO_12G_8I_HBA_SSDID  0x154
+#define MPT3SAS_CISCO_12G_AVILA_HBA_SSDID  0x155
+#define MPT3SAS_CISCO_12G_COLUSA_MEZZANINE_HBA_SSDID  0x156
+
+/*
  * status bits for ioc->diag_buffer_status
  */
 #define MPT3_DIAG_BUFFER_IS_REGISTERED	(0x01)
 #define MPT3_DIAG_BUFFER_IS_RELEASED	(0x02)
 #define MPT3_DIAG_BUFFER_IS_DIAG_RESET	(0x04)
 
+/*
+ * Combined Reply Queue constants,
+ * There are twelve Supplemental Reply Post Host Index Registers
+ * and each register is at offset 0x10 bytes from the previous one.
+ */
+#define MPT3_SUP_REPLY_POST_HOST_INDEX_REG_COUNT 12
+#define MPT3_SUP_REPLY_POST_HOST_INDEX_REG_OFFSET (0x10)
 
 /* OEM Identifiers */
 #define MFG10_OEM_ID_INVALID                   (0x00000000)
@@ -171,6 +209,8 @@
 #define MFG10_GF0_R10_DISPLAY                  (0x00000004)
 #define MFG10_GF0_SSD_DATA_SCRUB_DISABLE       (0x00000008)
 #define MFG10_GF0_SINGLE_DRIVE_R0              (0x00000010)
+
+#define VIRTUAL_IO_FAILED_RETRY			(0x32010081)
 
 /* OEM Specific Flags will come from OEM specific header files */
 struct Mpi2ManufacturingPage10_t {
@@ -293,7 +333,8 @@ struct _internal_cmd {
  * @responding: used in _scsih_sas_device_mark_responding
  * @fast_path: fast path feature enable bit
  * @pfa_led_on: flag for PFA LED status
- *
+ * @pend_sas_rphy_add: flag to check if device is in sas_rphy_add()
+ *	addition routine.
  */
 struct _sas_device {
 	struct list_head list;
@@ -314,6 +355,9 @@ struct _sas_device {
 	u8	responding;
 	u8	fast_path;
 	u8	pfa_led_on;
+	u8	pend_sas_rphy_add;
+	u8	enclosure_level;
+	u8	connector_name[4];
 };
 
 /**
@@ -506,6 +550,7 @@ struct adapter_reply_queue {
 	Mpi2ReplyDescriptorsUnion_t *reply_post_free;
 	char			name[MPT_NAME_LENGTH];
 	atomic_t		busy;
+	cpumask_var_t		affinity_hint;
 	struct list_head	list;
 };
 
@@ -570,10 +615,9 @@ struct mpt3sas_port_facts {
 };
 
 struct reply_post_struct {
-	Mpi2ReplyDescriptorsUnion_t     *reply_post_free;
-	dma_addr_t                      reply_post_free_dma;
+	Mpi2ReplyDescriptorsUnion_t	*reply_post_free;
+	dma_addr_t			reply_post_free_dma;
 };
-
 
 /**
  * enum mutex_type - task management mutex type
@@ -603,6 +647,7 @@ typedef void (*MPT3SAS_FLUSH_RUNNING_CMDS)(struct MPT3SAS_ADAPTER *ioc);
  * @ir_firmware: IR firmware present
  * @bars: bitmask of BAR's that must be configured
  * @mask_interrupts: ignore interrupt
+ * @dma_mask: used to set the consistent dma mask
  * @fault_reset_work_q_name: fw fault work queue
  * @fault_reset_work_q: ""
  * @fault_reset_work: ""
@@ -659,6 +704,7 @@ typedef void (*MPT3SAS_FLUSH_RUNNING_CMDS)(struct MPT3SAS_ADAPTER *ioc);
  * @ioc_pg8: static ioc page 8
  * @iounit_pg0: static iounit page 0
  * @iounit_pg1: static iounit page 1
+ * @iounit_pg8: static iounit page 8
  * @sas_hba: sas host object
  * @sas_expander_list: expander object list
  * @sas_node_lock:
@@ -721,13 +767,15 @@ typedef void (*MPT3SAS_FLUSH_RUNNING_CMDS)(struct MPT3SAS_ADAPTER *ioc);
  * @reply_post_struct: struct for reply_post_free physical & virt address
  * @rdpq_array_capable: FW supports multiple reply queue addresses in ioc_init
  * @rdpq_array_enable: rdpq_array support is enabled in the driver
- * @rdpq_array_enable_assigned:this ensures that rdpq_array_enable flag
+ * @rdpq_array_enable_assigned: this ensures that rdpq_array_enable flag
  *				is assigned only ones
  * @reply_queue_count: number of reply queue's
  * @reply_queue_list: link list contaning the reply queue info
- * @reply_post_host_index: head index in the pool where FW completes IO
+ * @msix96_vector: 96 MSI-X vector support
+ * @replyPostRegisterIndex: index of next position in Reply Desc Post Queue
  * @delayed_tr_list: target reset link list
  * @delayed_tr_volume_list: volume target reset link list
+ * @@temp_sensors_count: flag to carry the number of temperature sensors
  */
 struct MPT3SAS_ADAPTER {
 	struct list_head list;
@@ -744,6 +792,7 @@ struct MPT3SAS_ADAPTER {
 	u8		ir_firmware;
 	int		bars;
 	u8		mask_interrupts;
+	int		dma_mask;
 
 	/* fw fault handler */
 	char		fault_reset_work_q_name[20];
@@ -809,7 +858,6 @@ struct MPT3SAS_ADAPTER {
 	MPT_BUILD_SG_SCMD build_sg_scmd;
 	MPT_BUILD_SG    build_sg;
 	MPT_BUILD_ZERO_LEN_SGE build_zero_len_sge;
-	u8              mpi25;
 	u16             sge_size_ieee;
 
 	/* function ptr for MPI sg elements only */
@@ -834,6 +882,7 @@ struct MPT3SAS_ADAPTER {
 	Mpi2IOCPage8_t ioc_pg8;
 	Mpi2IOUnitPage0_t iounit_pg0;
 	Mpi2IOUnitPage1_t iounit_pg1;
+	Mpi2IOUnitPage8_t iounit_pg8;
 
 	struct _boot_device req_boot_device;
 	struct _boot_device req_alt_boot_device;
@@ -925,15 +974,20 @@ struct MPT3SAS_ADAPTER {
 	/* reply post queue */
 	u16		reply_post_queue_depth;
 	struct reply_post_struct *reply_post;
+	u8		rdpq_array_capable;
+	u8		rdpq_array_enable;
+	u8		rdpq_array_enable_assigned;
 	struct dma_pool *reply_post_free_dma_pool;
 	u8		reply_queue_count;
 	struct list_head reply_queue_list;
-	u8              rdpq_array_capable;
-	u8              rdpq_array_enable;
-	u8              rdpq_array_enable_assigned;
+
+	u8		msix96_vector;
+	/* reply post register index */
+	resource_size_t	**replyPostRegisterIndex;
 
 	struct list_head delayed_tr_list;
 	struct list_head delayed_tr_volume_list;
+	u8		temp_sensors_count;
 
 	/* diag buffer support */
 	u8		*diag_buffer[MPI2_DIAG_BUF_TYPE_COUNT];
@@ -1026,7 +1080,7 @@ void mpt3sas_scsih_reset_handler(struct MPT3SAS_ADAPTER *ioc, int reset_phase);
 
 int mpt3sas_scsih_issue_tm(struct MPT3SAS_ADAPTER *ioc, u16 handle,
 	uint channel, uint id, uint lun, u8 type, u16 smid_task,
-	ulong timeout, unsigned long serial_number,  enum mutex_type m_type);
+	ulong timeout, enum mutex_type m_type);
 void mpt3sas_scsih_set_tm_flag(struct MPT3SAS_ADAPTER *ioc, u16 handle);
 void mpt3sas_scsih_clear_tm_flag(struct MPT3SAS_ADAPTER *ioc, u16 handle);
 void mpt3sas_expander_remove(struct MPT3SAS_ADAPTER *ioc, u64 sas_address);
@@ -1082,6 +1136,8 @@ int mpt3sas_config_get_iounit_pg1(struct MPT3SAS_ADAPTER *ioc, Mpi2ConfigReply_t
 	*mpi_reply, Mpi2IOUnitPage1_t *config_page);
 int mpt3sas_config_set_iounit_pg1(struct MPT3SAS_ADAPTER *ioc, Mpi2ConfigReply_t
 	*mpi_reply, Mpi2IOUnitPage1_t *config_page);
+int mpt3sas_config_get_iounit_pg8(struct MPT3SAS_ADAPTER *ioc, Mpi2ConfigReply_t
+	*mpi_reply, Mpi2IOUnitPage8_t *config_page);
 int mpt3sas_config_get_sas_iounit_pg1(struct MPT3SAS_ADAPTER *ioc,
 	Mpi2ConfigReply_t *mpi_reply, Mpi2SasIOUnitPage1_t *config_page,
 	u16 sz);

@@ -181,6 +181,7 @@ enum {
 	ATA_DFLAG_DA		= (1 << 26), /* device supports Device Attention */
 	ATA_DFLAG_DEVSLP	= (1 << 27), /* device supports Device Sleep */
 	ATA_DFLAG_ACPI_DISABLED = (1 << 28), /* ACPI for the device is disabled */
+	ATA_DFLAG_ZAC		= (1 << 29), /* ZAC device */
 
 	ATA_DEV_UNKNOWN		= 0,	/* unknown device */
 	ATA_DEV_ATA		= 1,	/* ATA device */
@@ -191,7 +192,8 @@ enum {
 	ATA_DEV_PMP_UNSUP	= 6,	/* SATA port multiplier (unsupported) */
 	ATA_DEV_SEMB		= 7,	/* SEMB */
 	ATA_DEV_SEMB_UNSUP	= 8,	/* SEMB (unsupported) */
-	ATA_DEV_NONE		= 9,	/* no device */
+	ATA_DEV_ZAC		= 9,	/* ZAC device */
+	ATA_DEV_NONE		= 10,	/* no device */
 
 	/* struct ata_link flags */
 	ATA_LFLAG_NO_HRST	= (1 << 1), /* avoid hardreset */
@@ -204,6 +206,7 @@ enum {
 	ATA_LFLAG_SW_ACTIVITY	= (1 << 7), /* keep activity stats */
 	ATA_LFLAG_NO_LPM	= (1 << 8), /* disable LPM on this link */
 	ATA_LFLAG_RST_ONCE	= (1 << 9), /* limit recovery to one reset */
+	ATA_LFLAG_CHANGED	= (1 << 10), /* LPM state changed on this link */
 
 	/* struct ata_port flags */
 	ATA_FLAG_SLAVE_POSS	= (1 << 0), /* host supports slave dev */
@@ -306,6 +309,12 @@ enum {
 	 * doing SRST.
 	 */
 	ATA_TMOUT_PMP_SRST_WAIT	= 5000,
+
+	/* When the LPM policy is set to ATA_LPM_MAX_POWER, there might
+	 * be a spurious PHY event, so ignore the first PHY event that
+	 * occurs within 10s after the policy change.
+	 */
+	ATA_TMOUT_SPURIOUS_PHY	= 10000,
 
 	/* ATA bus states */
 	BUS_UNKNOWN		= 0,
@@ -421,6 +430,7 @@ enum {
 	ATA_HORKAGE_NO_NCQ_TRIM	= (1 << 19),	/* don't use queued TRIM */
 	ATA_HORKAGE_NOLPM	= (1 << 20),	/* don't use LPM */
 	ATA_HORKAGE_WD_BROKEN_LPM = (1 << 21),	/* some WDs have broken LPM */
+	ATA_HORKAGE_NOTRIM = (1 << 24),		/* don't use TRIM */
 
 	 /* DMA mask for user DMA control: User visible values; DO NOT
 	    renumber */
@@ -712,6 +722,12 @@ struct ata_device {
 	/* NCQ send and receive log subcommand support */
 	u8			ncq_send_recv_cmds[ATA_LOG_NCQ_SEND_RECV_SIZE];
 
+	/* ZAC zone configuration */
+	u32			zac_zoned_cap;
+	u32			zac_zones_optimal_open;
+	u32			zac_zones_optimal_nonseq;
+	u32			zac_zones_max_open;
+
 	/* error history */
 	int			spdn_cnt;
 	/* ering is CLEAR_END, read comment above CLEAR_END */
@@ -785,6 +801,8 @@ struct ata_link {
 	struct ata_eh_context	eh_context;
 
 	struct ata_device	device[ATA_MAX_DEVICES];
+
+	unsigned long		last_lpm_change; /* when last LPM change happened */
 };
 #define ATA_LINK_CLEAR_BEGIN		offsetof(struct ata_link, active_tag)
 #define ATA_LINK_CLEAR_END		offsetof(struct ata_link, device[0])
@@ -1201,6 +1219,7 @@ extern struct ata_device *ata_dev_pair(struct ata_device *adev);
 extern int ata_do_set_mode(struct ata_link *link, struct ata_device **r_failed_dev);
 extern void ata_scsi_port_error_handler(struct Scsi_Host *host, struct ata_port *ap);
 extern void ata_scsi_cmd_error_handler(struct Scsi_Host *host, struct ata_port *ap, struct list_head *eh_q);
+extern bool sata_lpm_ignore_phy_events(struct ata_link *link);
 
 extern int ata_cable_40wire(struct ata_port *ap);
 extern int ata_cable_80wire(struct ata_port *ap);
@@ -1494,7 +1513,8 @@ static inline unsigned int ata_tag_internal(unsigned int tag)
 static inline unsigned int ata_class_enabled(unsigned int class)
 {
 	return class == ATA_DEV_ATA || class == ATA_DEV_ATAPI ||
-		class == ATA_DEV_PMP || class == ATA_DEV_SEMB;
+		class == ATA_DEV_PMP || class == ATA_DEV_SEMB ||
+		class == ATA_DEV_ZAC;
 }
 
 static inline unsigned int ata_class_disabled(unsigned int class)

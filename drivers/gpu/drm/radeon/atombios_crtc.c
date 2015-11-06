@@ -332,8 +332,10 @@ atombios_set_crtc_dtd_timing(struct drm_crtc *crtc,
 		misc |= ATOM_COMPOSITESYNC;
 	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
 		misc |= ATOM_INTERLACE;
-	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
+	if (mode->flags & DRM_MODE_FLAG_DBLCLK)
 		misc |= ATOM_DOUBLE_CLOCK_MODE;
+	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
+		misc |= ATOM_H_REPLICATIONBY2 | ATOM_V_REPLICATIONBY2;
 
 	args.susModeMiscInfo.usAccess = cpu_to_le16(misc);
 	args.ucCRTC = radeon_crtc->crtc_id;
@@ -376,8 +378,10 @@ static void atombios_crtc_set_timing(struct drm_crtc *crtc,
 		misc |= ATOM_COMPOSITESYNC;
 	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
 		misc |= ATOM_INTERLACE;
-	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
+	if (mode->flags & DRM_MODE_FLAG_DBLCLK)
 		misc |= ATOM_DOUBLE_CLOCK_MODE;
+	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
+		misc |= ATOM_H_REPLICATIONBY2 | ATOM_V_REPLICATIONBY2;
 
 	args.susModeMiscInfo.usAccess = cpu_to_le16(misc);
 	args.ucCRTC = radeon_crtc->crtc_id;
@@ -1170,31 +1174,54 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 	}
 
 	if (tiling_flags & RADEON_TILING_MACRO) {
-		if (rdev->family >= CHIP_BONAIRE)
-			tmp = rdev->config.cik.tile_config;
-		else if (rdev->family >= CHIP_TAHITI)
-			tmp = rdev->config.si.tile_config;
-		else if (rdev->family >= CHIP_CAYMAN)
-			tmp = rdev->config.cayman.tile_config;
-		else
-			tmp = rdev->config.evergreen.tile_config;
+		evergreen_tiling_fields(tiling_flags, &bankw, &bankh, &mtaspect, &tile_split);
 
-		switch ((tmp & 0xf0) >> 4) {
-		case 0: /* 4 banks */
-			fb_format |= EVERGREEN_GRPH_NUM_BANKS(EVERGREEN_ADDR_SURF_4_BANK);
-			break;
-		case 1: /* 8 banks */
-		default:
-			fb_format |= EVERGREEN_GRPH_NUM_BANKS(EVERGREEN_ADDR_SURF_8_BANK);
-			break;
-		case 2: /* 16 banks */
-			fb_format |= EVERGREEN_GRPH_NUM_BANKS(EVERGREEN_ADDR_SURF_16_BANK);
-			break;
+		/* Set NUM_BANKS. */
+		if (rdev->family >= CHIP_TAHITI) {
+			unsigned tileb, index, num_banks, tile_split_bytes;
+
+			/* Calculate the macrotile mode index. */
+			tile_split_bytes = 64 << tile_split;
+			tileb = 8 * 8 * target_fb->bits_per_pixel / 8;
+			tileb = min(tile_split_bytes, tileb);
+
+			for (index = 0; tileb > 64; index++) {
+				tileb >>= 1;
+			}
+
+			if (index >= 16) {
+				DRM_ERROR("Wrong screen bpp (%u) or tile split (%u)\n",
+					  target_fb->bits_per_pixel, tile_split);
+				return -EINVAL;
+			}
+
+			if (rdev->family >= CHIP_BONAIRE)
+				num_banks = (rdev->config.cik.macrotile_mode_array[index] >> 6) & 0x3;
+			else
+				num_banks = (rdev->config.si.tile_mode_array[index] >> 20) & 0x3;
+			fb_format |= EVERGREEN_GRPH_NUM_BANKS(num_banks);
+		} else {
+			/* NI and older. */
+			if (rdev->family >= CHIP_CAYMAN)
+				tmp = rdev->config.cayman.tile_config;
+			else
+				tmp = rdev->config.evergreen.tile_config;
+
+			switch ((tmp & 0xf0) >> 4) {
+			case 0: /* 4 banks */
+				fb_format |= EVERGREEN_GRPH_NUM_BANKS(EVERGREEN_ADDR_SURF_4_BANK);
+				break;
+			case 1: /* 8 banks */
+			default:
+				fb_format |= EVERGREEN_GRPH_NUM_BANKS(EVERGREEN_ADDR_SURF_8_BANK);
+				break;
+			case 2: /* 16 banks */
+				fb_format |= EVERGREEN_GRPH_NUM_BANKS(EVERGREEN_ADDR_SURF_16_BANK);
+				break;
+			}
 		}
 
 		fb_format |= EVERGREEN_GRPH_ARRAY_MODE(EVERGREEN_GRPH_ARRAY_2D_TILED_THIN1);
-
-		evergreen_tiling_fields(tiling_flags, &bankw, &bankh, &mtaspect, &tile_split);
 		fb_format |= EVERGREEN_GRPH_TILE_SPLIT(tile_split);
 		fb_format |= EVERGREEN_GRPH_BANK_WIDTH(bankw);
 		fb_format |= EVERGREEN_GRPH_BANK_HEIGHT(bankh);
@@ -1278,6 +1305,9 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 	       (x << 16) | y);
 	viewport_w = crtc->mode.hdisplay;
 	viewport_h = (crtc->mode.vdisplay + 1) & ~1;
+	if ((rdev->family >= CHIP_BONAIRE) &&
+	    (crtc->mode.flags & DRM_MODE_FLAG_INTERLACE))
+		viewport_h *= 2;
 	WREG32(EVERGREEN_VIEWPORT_SIZE + radeon_crtc->crtc_offset,
 	       (viewport_w << 16) | viewport_h);
 

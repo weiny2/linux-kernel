@@ -476,8 +476,6 @@ static int raid0_run(struct mddev *mddev)
 	dump_zones(mddev);
 
 	ret = md_integrity_register(mddev);
-	if (ret)
-		raid0_stop(mddev);
 
 	return ret;
 }

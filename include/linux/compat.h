@@ -318,7 +318,7 @@ asmlinkage long compat_sys_semctl(int semid, int semnum, int cmd, int arg);
 asmlinkage long compat_sys_msgsnd(int msqid, compat_uptr_t msgp,
 		compat_ssize_t msgsz, int msgflg);
 asmlinkage long compat_sys_msgrcv(int msqid, compat_uptr_t msgp,
-		compat_ssize_t msgsz, long msgtyp, int msgflg);
+		compat_ssize_t msgsz, compat_long_t msgtyp, int msgflg);
 long compat_sys_msgctl(int first, int second, void __user *uptr);
 long compat_sys_shmctl(int first, int second, void __user *uptr);
 long compat_sys_semtimedop(int semid, struct sembuf __user *tsems,
@@ -621,10 +621,10 @@ asmlinkage long compat_sys_futex(u32 __user *uaddr, int op, u32 val,
 		u32 val3);
 asmlinkage long compat_sys_getsockopt(int fd, int level, int optname,
 				      char __user *optval, int __user *optlen);
-asmlinkage long compat_sys_kexec_load(unsigned long entry,
-				      unsigned long nr_segments,
+asmlinkage long compat_sys_kexec_load(compat_ulong_t entry,
+				      compat_ulong_t nr_segments,
 				      struct compat_kexec_segment __user *,
-				      unsigned long flags);
+				      compat_ulong_t flags);
 asmlinkage long compat_sys_mq_getsetattr(mqd_t mqdes,
 			const struct compat_mq_attr __user *u_mqstat,
 			struct compat_mq_attr __user *u_omqstat);

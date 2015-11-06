@@ -74,8 +74,7 @@ static int ext4_extent_block_csum_verify(struct inode *inode,
 {
 	struct ext4_extent_tail *et;
 
-	if (!EXT4_HAS_RO_COMPAT_FEATURE(inode->i_sb,
-		EXT4_FEATURE_RO_COMPAT_METADATA_CSUM))
+	if (!ext4_has_metadata_csum(inode->i_sb))
 		return 1;
 
 	et = find_ext4_extent_tail(eh);
@@ -89,8 +88,7 @@ static void ext4_extent_block_csum_set(struct inode *inode,
 {
 	struct ext4_extent_tail *et;
 
-	if (!EXT4_HAS_RO_COMPAT_FEATURE(inode->i_sb,
-		EXT4_FEATURE_RO_COMPAT_METADATA_CSUM))
+	if (!ext4_has_metadata_csum(inode->i_sb))
 		return;
 
 	et = find_ext4_extent_tail(eh);
@@ -363,7 +361,7 @@ static int ext4_valid_extent(struct inode *inode, struct ext4_extent *ext)
 	ext4_lblk_t lblock = le32_to_cpu(ext->ee_block);
 	ext4_lblk_t last = lblock + len - 1;
 
-	if (lblock > last)
+	if (len == 0 || lblock > last)
 		return 0;
 	return ext4_data_block_valid(EXT4_SB(inode->i_sb), block, len);
 }
@@ -2301,16 +2299,16 @@ ext4_ext_put_gap_in_cache(struct inode *inode, struct ext4_ext_path *path,
 				ext4_lblk_t block)
 {
 	int depth = ext_depth(inode);
-	unsigned long len = 0;
-	ext4_lblk_t lblock = 0;
+	ext4_lblk_t len;
+	ext4_lblk_t lblock;
 	struct ext4_extent *ex;
+	struct extent_status es;
 
 	ex = path[depth].p_ext;
 	if (ex == NULL) {
-		/*
-		 * there is no extent yet, so gap is [0;-] and we
-		 * don't cache it
-		 */
+		/* there is no extent yet, so gap is [0;-] */
+		lblock = 0;
+		len = EXT_MAX_BLOCKS;
 		ext_debug("cache gap(whole file):");
 	} else if (block < le32_to_cpu(ex->ee_block)) {
 		lblock = block;
@@ -2319,9 +2317,6 @@ ext4_ext_put_gap_in_cache(struct inode *inode, struct ext4_ext_path *path,
 				block,
 				le32_to_cpu(ex->ee_block),
 				 ext4_ext_get_actual_len(ex));
-		if (!ext4_find_delalloc_range(inode, lblock, lblock + len - 1))
-			ext4_es_insert_extent(inode, lblock, len, ~0,
-					      EXTENT_STATUS_HOLE);
 	} else if (block >= le32_to_cpu(ex->ee_block)
 			+ ext4_ext_get_actual_len(ex)) {
 		ext4_lblk_t next;
@@ -2335,14 +2330,19 @@ ext4_ext_put_gap_in_cache(struct inode *inode, struct ext4_ext_path *path,
 				block);
 		BUG_ON(next == lblock);
 		len = next - lblock;
-		if (!ext4_find_delalloc_range(inode, lblock, lblock + len - 1))
-			ext4_es_insert_extent(inode, lblock, len, ~0,
-					      EXTENT_STATUS_HOLE);
 	} else {
 		BUG();
 	}
 
-	ext_debug(" -> %u:%lu\n", lblock, len);
+	ext4_es_find_delayed_extent_range(inode, lblock, lblock + len - 1, &es);
+	if (es.es_len) {
+		/* There's delayed extent containing lblock? */
+		if (es.es_lblk <= lblock)
+			return;
+		len = min(es.es_lblk - lblock, len);
+	}
+	ext_debug(" -> %u:%u\n", lblock, len);
+	ext4_es_insert_extent(inode, lblock, len, ~0, EXTENT_STATUS_HOLE);
 }
 
 /*
@@ -4192,6 +4192,7 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 	ext4_io_end_t *io = ext4_inode_aio(inode);
 	ext4_lblk_t cluster_offset;
 	int set_unwritten = 0;
+	bool map_from_cluster = false;
 
 	ext_debug("blocks %u/%u requested for inode %lu\n",
 		  map->m_lblk, map->m_len, inode->i_ino);
@@ -4257,10 +4258,6 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 		}
 	}
 
-	if ((sbi->s_cluster_ratio > 1) &&
-	    ext4_find_delalloc_cluster(inode, map->m_lblk))
-		map->m_flags |= EXT4_MAP_FROM_CLUSTER;
-
 	/*
 	 * requested block isn't allocated yet;
 	 * we couldn't try to create block if create flag is zero
@@ -4270,15 +4267,13 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 		 * put just found gap into cache to speed up
 		 * subsequent requests
 		 */
-		if ((flags & EXT4_GET_BLOCKS_NO_PUT_HOLE) == 0)
-			ext4_ext_put_gap_in_cache(inode, path, map->m_lblk);
+		ext4_ext_put_gap_in_cache(inode, path, map->m_lblk);
 		goto out2;
 	}
 
 	/*
 	 * Okay, we need to do block allocation.
 	 */
-	map->m_flags &= ~EXT4_MAP_FROM_CLUSTER;
 	newex.ee_block = cpu_to_le32(map->m_lblk);
 	cluster_offset = EXT4_LBLK_COFF(sbi, map->m_lblk);
 
@@ -4290,7 +4285,7 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 	    get_implied_cluster_alloc(inode->i_sb, map, ex, path)) {
 		ar.len = allocated = map->m_len;
 		newblock = map->m_pblk;
-		map->m_flags |= EXT4_MAP_FROM_CLUSTER;
+		map_from_cluster = true;
 		goto got_allocated_blocks;
 	}
 
@@ -4311,7 +4306,7 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 	    get_implied_cluster_alloc(inode->i_sb, map, ex2, path)) {
 		ar.len = allocated = map->m_len;
 		newblock = map->m_pblk;
-		map->m_flags |= EXT4_MAP_FROM_CLUSTER;
+		map_from_cluster = true;
 		goto got_allocated_blocks;
 	}
 
@@ -4437,7 +4432,7 @@ got_allocated_blocks:
 		 */
 		reserved_clusters = get_reserved_cluster_alloc(inode,
 						map->m_lblk, allocated);
-		if (map->m_flags & EXT4_MAP_FROM_CLUSTER) {
+		if (map_from_cluster) {
 			if (reserved_clusters) {
 				/*
 				 * We have clusters reserved for this range.
@@ -4537,7 +4532,6 @@ out2:
 out3:
 	trace_ext4_ext_map_blocks_exit(inode, flags, map,
 				       err ? err : allocated);
-	ext4_es_lru_add(inode);
 	return err ? err : allocated;
 }
 
@@ -4636,12 +4630,6 @@ long ext4_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 	if (ret)
 		return ret;
 
-	/*
-	 * currently supporting (pre)allocate mode for extent-based
-	 * files _only_
-	 */
-	if (!(ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)))
-		return -EOPNOTSUPP;
 
 	trace_ext4_fallocate_enter(inode, offset, len, mode);
 	map.m_lblk = offset >> blkbits;
@@ -4656,6 +4644,16 @@ long ext4_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 	 */
 	credits = ext4_chunk_trans_blocks(inode, max_blocks);
 	mutex_lock(&inode->i_mutex);
+
+	/*
+	 * currently supporting (pre)allocate mode for extent-based
+	 * files _only_
+	 */
+	if (!(ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))) {
+		ret = -EOPNOTSUPP;
+		goto out;
+	}
+
 	ret = inode_newsize_ok(inode, (len + offset));
 	if (ret) {
 		mutex_unlock(&inode->i_mutex);
@@ -4716,6 +4714,7 @@ retry:
 		ret = 0;
 		goto retry;
 	}
+out:
 	mutex_unlock(&inode->i_mutex);
 	trace_ext4_fallocate_exit(inode, offset, max_blocks,
 				ret > 0 ? ret2 : ret);
@@ -4927,6 +4926,5 @@ int ext4_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		error = ext4_fill_fiemap_extents(inode, start_blk,
 						 len_blks, fieinfo);
 	}
-	ext4_es_lru_add(inode);
 	return error;
 }

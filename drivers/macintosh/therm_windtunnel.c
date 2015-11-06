@@ -279,6 +279,8 @@ static int control_loop(void *dummy)
 	mutex_unlock(&x.lock);
 
 	for (;;) {
+		kgr_task_safe(current);
+
 		msleep_interruptible(8000);
 		if (kthread_should_stop())
 			break;

@@ -54,8 +54,8 @@
 #include <linux/security.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/page_counter.h>
 #include <linux/memcontrol.h>
-#include <linux/res_counter.h>
 #include <linux/static_key.h>
 #include <linux/aio.h>
 #include <linux/sched.h>
@@ -264,6 +264,7 @@ struct cg_proto;
   *	@sk_rcvtimeo: %SO_RCVTIMEO setting
   *	@sk_sndtimeo: %SO_SNDTIMEO setting
   *	@sk_rxhash: flow hash received from netif layer
+  *	@sk_txhash: computed flow hash for use on transmit
   *	@sk_filter: socket filtering instructions
   *	@sk_protinfo: private area, net family specific, when not using slab
   *	@sk_timer: sock cleanup timer
@@ -328,6 +329,7 @@ struct sock {
 #ifdef CONFIG_RPS
 	__u32			sk_rxhash;
 #endif
+	__u32			sk_txhash;
 #ifdef CONFIG_NET_RX_BUSY_POLL
 	unsigned int		sk_napi_id;
 	unsigned int		sk_ll_usec;
@@ -939,7 +941,6 @@ struct proto {
 						struct sk_buff *skb);
 
 	void		(*release_cb)(struct sock *sk);
-	void		(*mtu_reduced)(struct sock *sk);
 
 	/* Keeping track of sk's, looking them up, and port selection methods. */
 	void			(*hash)(struct sock *sk);
@@ -1020,7 +1021,7 @@ enum cg_proto_flags {
 
 struct cg_proto {
 	void			(*enter_memory_pressure)(struct sock *sk);
-	struct res_counter	*memory_allocated;	/* Current allocated memory. */
+	struct page_counter	memory_allocated;	/* Current allocated memory. */
 	struct percpu_counter	*sockets_allocated;	/* Current number of sockets. */
 	int			*memory_pressure;
 	long			*sysctl_mem;
@@ -1173,34 +1174,26 @@ static inline void memcg_memory_allocated_add(struct cg_proto *prot,
 					      unsigned long amt,
 					      int *parent_status)
 {
-	struct res_counter *fail;
-	int ret;
+	page_counter_charge(&prot->memory_allocated, amt);
 
-	ret = res_counter_charge_nofail(prot->memory_allocated,
-					amt << PAGE_SHIFT, &fail);
-	if (ret < 0)
+	if (page_counter_read(&prot->memory_allocated) >
+	    prot->memory_allocated.limit)
 		*parent_status = OVER_LIMIT;
 }
 
 static inline void memcg_memory_allocated_sub(struct cg_proto *prot,
 					      unsigned long amt)
 {
-	res_counter_uncharge(prot->memory_allocated, amt << PAGE_SHIFT);
-}
-
-static inline u64 memcg_memory_allocated_read(struct cg_proto *prot)
-{
-	u64 ret;
-	ret = res_counter_read_u64(prot->memory_allocated, RES_USAGE);
-	return ret >> PAGE_SHIFT;
+	page_counter_uncharge(&prot->memory_allocated, amt);
 }
 
 static inline long
 sk_memory_allocated(const struct sock *sk)
 {
 	struct proto *prot = sk->sk_prot;
+
 	if (mem_cgroup_sockets_enabled && sk->sk_cgrp)
-		return memcg_memory_allocated_read(sk->sk_cgrp);
+		return page_counter_read(&sk->sk_cgrp->memory_allocated);
 
 	return atomic_long_read(prot->memory_allocated);
 }
@@ -1214,7 +1207,7 @@ sk_memory_allocated_add(struct sock *sk, int amt, int *parent_status)
 		memcg_memory_allocated_add(sk->sk_cgrp, amt, parent_status);
 		/* update the root cgroup regardless */
 		atomic_long_add_return(amt, prot->memory_allocated);
-		return memcg_memory_allocated_read(sk->sk_cgrp);
+		return page_counter_read(&sk->sk_cgrp->memory_allocated);
 	}
 
 	return atomic_long_add_return(amt, prot->memory_allocated);
@@ -1535,6 +1528,7 @@ extern struct sk_buff		*sock_rmalloc(struct sock *sk,
 extern void			sock_wfree(struct sk_buff *skb);
 extern void			skb_orphan_partial(struct sk_buff *skb);
 extern void			sock_rfree(struct sk_buff *skb);
+void				sock_efree(struct sk_buff *skb);
 extern void			sock_edemux(struct sk_buff *skb);
 
 extern int			sock_setsockopt(struct socket *sock, int level,
@@ -1793,7 +1787,7 @@ sk_dst_set(struct sock *sk, struct dst_entry *dst)
 	struct dst_entry *old_dst;
 
 	sk_tx_queue_clear(sk);
-	old_dst = xchg(&sk->sk_dst_cache, dst);
+	old_dst = xchg((__force struct dst_entry **)&sk->sk_dst_cache, dst);
 	dst_release(old_dst);
 }
 
@@ -2000,6 +1994,14 @@ static inline void sock_poll_wait(struct file *filp,
 	}
 }
 
+static inline void skb_set_hash_from_sk(struct sk_buff *skb, struct sock *sk)
+{
+	if (sk->sk_txhash) {
+		skb->l4_rxhash = 1;
+		skb->rxhash = sk->sk_txhash;
+	}
+}
+
 /*
  *	Queue a received datagram if it will fit. Stream and sequenced
  *	protocols can't normally use this as they need to fit buffers in
@@ -2014,6 +2016,7 @@ static inline void skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
 	skb_orphan(skb);
 	skb->sk = sk;
 	skb->destructor = sock_wfree;
+	skb_set_hash_from_sk(skb, sk);
 	/*
 	 * We used to take a refcount on sk, but following operation
 	 * is enough to guarantee sk_free() wont free this sock until

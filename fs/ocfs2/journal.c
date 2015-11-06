@@ -1981,10 +1981,12 @@ struct ocfs2_orphan_filldir_priv {
 	struct ocfs2_super	*osb;
 };
 
-static int ocfs2_orphan_filldir(void *priv, const char *name, int name_len,
-				loff_t pos, u64 ino, unsigned type)
+static int ocfs2_orphan_filldir(struct dir_context *ctx, const char *name,
+				int name_len, loff_t pos, u64 ino,
+				unsigned type)
 {
-	struct ocfs2_orphan_filldir_priv *p = priv;
+	struct ocfs2_orphan_filldir_priv *p =
+		container_of(ctx, struct ocfs2_orphan_filldir_priv, ctx);
 	struct inode *iter;
 
 	if (name_len == 1 && !strncmp(".", name, 1))
@@ -2180,9 +2182,10 @@ static int ocfs2_commit_thread(void *arg)
 	while (!(kthread_should_stop() &&
 		 atomic_read(&journal->j_num_trans) == 0)) {
 
-		wait_event_interruptible(osb->checkpoint_event,
+		wait_event_interruptible(osb->checkpoint_event, ({
+					 kgr_task_safe(current);
 					 atomic_read(&journal->j_num_trans)
-					 || kthread_should_stop());
+					 || kthread_should_stop(); }));
 
 		status = ocfs2_commit_cache(osb);
 		if (status < 0)

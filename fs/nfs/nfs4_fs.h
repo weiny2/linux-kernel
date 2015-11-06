@@ -213,7 +213,7 @@ int nfs_atomic_open(struct inode *, struct dentry *, struct file *,
 extern struct file_system_type nfs4_fs_type;
 
 /* nfs4namespace.c */
-struct rpc_clnt *nfs4_create_sec_client(struct rpc_clnt *, struct inode *, struct qstr *);
+struct rpc_clnt *nfs4_negotiate_security(struct rpc_clnt *, struct inode *, struct qstr *);
 struct vfsmount *nfs4_submount(struct nfs_server *, struct dentry *,
 			       struct nfs_fh *, struct nfs_fattr *);
 
@@ -474,6 +474,16 @@ static inline void nfs4_stateid_copy(nfs4_stateid *dst, const nfs4_stateid *src)
 static inline bool nfs4_stateid_match(const nfs4_stateid *dst, const nfs4_stateid *src)
 {
 	return memcmp(dst, src, sizeof(*dst)) == 0;
+}
+
+static inline bool nfs4_stateid_match_other(const nfs4_stateid *dst, const nfs4_stateid *src)
+{
+	return memcmp(dst->other, src->other, NFS4_STATEID_OTHER_SIZE) == 0;
+}
+
+static inline bool nfs4_stateid_is_newer(const nfs4_stateid *s1, const nfs4_stateid *s2)
+{
+	return (s32)(be32_to_cpu(s1->seqid) - be32_to_cpu(s2->seqid)) > 0;
 }
 
 static inline bool nfs4_valid_open_stateid(const struct nfs4_state *state)

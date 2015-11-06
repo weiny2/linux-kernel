@@ -503,6 +503,9 @@ dm_create_session(
 	unsigned long		lc;		/* lock cookie */
 
 	len = strnlen_user(info, DM_SESSION_INFO_LEN-1);
+	/* must check length from strnlen_user since v3.4-7800-ga08c535 */
+	if (len > DM_SESSION_INFO_LEN)
+		len = DM_SESSION_INFO_LEN;
 	if (copy_from_user(sessinfo, info, len))
 		return(-EFAULT);
 	lc = mutex_spinlock(&dm_session_lock);

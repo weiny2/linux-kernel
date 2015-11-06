@@ -102,7 +102,7 @@ static void show_faulting_vma(unsigned long address, char *buf)
 			struct path *path = &file->f_path;
 			nm = d_path(path, buf, PAGE_SIZE - 1);
 			inode = file_inode(vma->vm_file);
-			dev = inode->i_sb->s_dev;
+			dev = inode_get_dev(inode);
 			ino = inode->i_ino;
 		}
 		pr_info("    @off 0x%lx in [%s]\n"

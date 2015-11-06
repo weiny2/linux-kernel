@@ -97,7 +97,7 @@ static ssize_t revert_store(struct kobject *kobj,
 
 	kgr_taint_kernel(p);
 
-	ret = kgr_modify_kernel(p, true, false);
+	ret = kgr_modify_kernel(p, true);
 
 	return ret < 0 ? ret : count;
 }
@@ -171,10 +171,49 @@ static ssize_t in_progress_show(struct kobject *kobj,
 	return snprintf(buf, PAGE_SIZE, "%d\n", kgr_in_progress);
 }
 
-static struct kobj_attribute kgr_attr_in_progress = __ATTR_RO(in_progress);
+static ssize_t in_progress_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	if (count == 0 || buf[0] != '0')
+		return -EINVAL;
+
+	kgr_unmark_processes();
+	WARN(1, "kgr: all processes marked as migrated on admin's request\n");
+
+	return count;
+}
+
+static ssize_t force_load_module_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", kgr_force_load_module);
+}
+
+static ssize_t force_load_module_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 10, &val);
+	if (ret)
+		return -EINVAL;
+
+	if (val != 1 && val != 0)
+		return -EINVAL;
+
+	kgr_force_load_module = val;
+
+	return count;
+}
+
+static struct kobj_attribute kgr_attr_in_progress = __ATTR_RW(in_progress);
+static struct kobj_attribute kgr_attr_force_load_module =
+		__ATTR_RW(force_load_module);
 
 static struct attribute *kgr_sysfs_entries[] = {
 	&kgr_attr_in_progress.attr,
+	&kgr_attr_force_load_module.attr,
 	NULL
 };
 
@@ -188,7 +227,7 @@ int kgr_add_files(void)
 
 	kgr_sysfs_dir = kobject_create_and_add("kgraft", kernel_kobj);
 	if (!kgr_sysfs_dir) {
-		pr_err("kgr: cannot create kfraft directory in sysfs!\n");
+		pr_err("kgr: cannot create kgraft directory in sysfs!\n");
 		return -EIO;
 	}
 

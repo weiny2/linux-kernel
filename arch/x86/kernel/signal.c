@@ -673,6 +673,11 @@ handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 		 * handler too.
 		 */
 		regs->flags &= ~(X86_EFLAGS_DF|X86_EFLAGS_RF|X86_EFLAGS_TF);
+		/*
+		 * Ensure the signal handler starts with the new fpu state.
+		 */
+		if (used_math())
+			drop_init_fpu(current);
 	}
 	signal_setup_done(failed, ksig, test_thread_flag(TIF_SINGLESTEP));
 }
@@ -741,6 +746,11 @@ do_notify_resume(struct pt_regs *regs, void *unused, __u32 thread_info_flags)
 
 	if (thread_info_flags & _TIF_UPROBE)
 		uprobe_notify_resume(regs);
+
+#if IS_ENABLED(CONFIG_KGRAFT)
+	if (thread_info_flags & _TIF_KGR_IN_PROGRESS)
+		kgr_task_safe(current);
+#endif
 
 	/* deal with pending signal delivery */
 	if (thread_info_flags & _TIF_SIGPENDING)

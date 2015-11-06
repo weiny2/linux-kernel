@@ -845,8 +845,9 @@ static int ldlm_bl_thread_main(void *arg)
 
 		if (blwi == NULL) {
 			atomic_dec(&blp->blp_busy_threads);
-			l_wait_event_exclusive(blp->blp_waitq,
-					 (blwi = ldlm_bl_get_work(blp)) != NULL,
+			l_wait_event_exclusive(blp->blp_waitq, ({
+					 kgr_task_safe(current);
+					 (blwi = ldlm_bl_get_work(blp)) != NULL; }),
 					 &lwi);
 			busy = atomic_inc_return(&blp->blp_busy_threads);
 		} else {

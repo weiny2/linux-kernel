@@ -183,10 +183,9 @@ static int do_one_async_hash_op(struct ahash_request *req,
 				int ret)
 {
 	if (ret == -EINPROGRESS || ret == -EBUSY) {
-		ret = wait_for_completion_interruptible(&tr->completion);
-		if (!ret)
-			ret = tr->err;
+		wait_for_completion(&tr->completion);
 		INIT_COMPLETION(tr->completion);
+		ret = tr->err;
 	}
 	return ret;
 }
@@ -340,12 +339,11 @@ static int __test_hash(struct crypto_ahash *tfm, struct hash_testvec *template,
 				break;
 			case -EINPROGRESS:
 			case -EBUSY:
-				ret = wait_for_completion_interruptible(
-					&tresult.completion);
-				if (!ret && !(ret = tresult.err)) {
-					INIT_COMPLETION(tresult.completion);
+				wait_for_completion(&tresult.completion);
+				INIT_COMPLETION(tresult.completion);
+				ret = tresult.err;
+				if (!ret)
 					break;
-				}
 				/* fall through */
 			default:
 				printk(KERN_ERR "alg: hash: digest failed "
@@ -547,12 +545,11 @@ static int __test_aead(struct crypto_aead *tfm, int enc,
 				break;
 			case -EINPROGRESS:
 			case -EBUSY:
-				ret = wait_for_completion_interruptible(
-					&result.completion);
-				if (!ret && !(ret = result.err)) {
-					INIT_COMPLETION(result.completion);
+				wait_for_completion(&result.completion);
+				INIT_COMPLETION(result.completion);
+				ret = result.err;
+				if (!ret)
 					break;
-				}
 			case -EBADMSG:
 				if (template[i].novrfy)
 					/* verification failure was expected */
@@ -701,12 +698,11 @@ static int __test_aead(struct crypto_aead *tfm, int enc,
 				break;
 			case -EINPROGRESS:
 			case -EBUSY:
-				ret = wait_for_completion_interruptible(
-					&result.completion);
-				if (!ret && !(ret = result.err)) {
-					INIT_COMPLETION(result.completion);
+				wait_for_completion(&result.completion);
+				INIT_COMPLETION(result.completion);
+				ret = result.err;
+				if (!ret)
 					break;
-				}
 			case -EBADMSG:
 				if (template[i].novrfy)
 					/* verification failure was expected */
@@ -987,12 +983,11 @@ static int __test_skcipher(struct crypto_ablkcipher *tfm, int enc,
 				break;
 			case -EINPROGRESS:
 			case -EBUSY:
-				ret = wait_for_completion_interruptible(
-					&result.completion);
-				if (!ret && !((ret = result.err))) {
-					INIT_COMPLETION(result.completion);
+				wait_for_completion(&result.completion);
+				INIT_COMPLETION(result.completion);
+				ret = result.err;
+				if (!ret)
 					break;
-				}
 				/* fall through */
 			default:
 				pr_err("alg: skcipher%s: %s failed on test %d for %s: ret=%d\n",
@@ -1090,12 +1085,11 @@ static int __test_skcipher(struct crypto_ablkcipher *tfm, int enc,
 				break;
 			case -EINPROGRESS:
 			case -EBUSY:
-				ret = wait_for_completion_interruptible(
-					&result.completion);
-				if (!ret && !((ret = result.err))) {
-					INIT_COMPLETION(result.completion);
+				wait_for_completion(&result.completion);
+				INIT_COMPLETION(result.completion);
+				ret = result.err;
+				if (!ret)
 					break;
-				}
 				/* fall through */
 			default:
 				pr_err("alg: skcipher%s: %s failed on chunk test %d for %s: ret=%d\n",
@@ -1473,11 +1467,11 @@ static int test_cprng(struct crypto_rng *tfm, struct cprng_testvec *template,
 		for (j = 0; j < template[i].loops; j++) {
 			err = crypto_rng_get_bytes(tfm, result,
 						   template[i].rlen);
-			if (err != template[i].rlen) {
+			if (err < 0) {
 				printk(KERN_ERR "alg: cprng: Failed to obtain "
 				       "the correct amount of random data for "
-				       "%s (requested %d, got %d)\n", algo,
-				       template[i].rlen, err);
+				       "%s (requested %d)\n", algo,
+				       template[i].rlen);
 				goto out;
 			}
 		}
@@ -1760,7 +1754,7 @@ static int drbg_cavs_test(struct drbg_testvec *test, int pr,
 		ret = crypto_drbg_get_bytes_addtl(drng,
 			buf, test->expectedlen, &addtl);
 	}
-	if (ret <= 0) {
+	if (ret < 0) {
 		printk(KERN_ERR "alg: drbg: could not obtain random data for"
 		       "driver %s\n", driver);
 		goto outbuf;
@@ -1775,7 +1769,7 @@ static int drbg_cavs_test(struct drbg_testvec *test, int pr,
 		ret = crypto_drbg_get_bytes_addtl(drng,
 			buf, test->expectedlen, &addtl);
 	}
-	if (ret <= 0) {
+	if (ret < 0) {
 		printk(KERN_ERR "alg: drbg: could not obtain random data for"
 		       "driver %s\n", driver);
 		goto outbuf;
@@ -1897,6 +1891,10 @@ static const struct alg_test_desc alg_test_descs[] = {
 	}, {
 		.alg = "__driver-ecb-twofish-avx",
 		.test = alg_test_null,
+	}, {
+		.alg = "__driver-gcm-aes-aesni",
+		.test = alg_test_null,
+		.fips_allowed = 1,
 	}, {
 		.alg = "__ghash-pclmulqdqni",
 		.test = alg_test_null,
@@ -2117,6 +2115,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 	}, {
 		.alg = "cmac(aes)",
 		.test = alg_test_hash,
+		.fips_allowed = 1,
 		.suite = {
 			.hash = {
 				.vecs = aes_cmac128_tv_template,
@@ -2126,6 +2125,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 	}, {
 		.alg = "cmac(des3_ede)",
 		.test = alg_test_hash,
+		.fips_allowed = 1,
 		.suite = {
 			.hash = {
 				.vecs = des3_ede_cmac64_tv_template,
@@ -3080,6 +3080,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 	}, {
 		.alg = "rfc4106(gcm(aes))",
 		.test = alg_test_aead,
+		.fips_allowed = 1,
 		.suite = {
 			.aead = {
 				.enc = {

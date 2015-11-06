@@ -31,8 +31,10 @@
 #include <linux/security.h>
 #include <linux/cpuset.h>
 #include <linux/hardirq.h> /* for BUG_ON(!in_atomic()) only */
+#include <linux/hugetlb.h>
 #include <linux/memcontrol.h>
 #include <linux/cleancache.h>
+#include <linux/hugetlb.h>
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS
@@ -131,7 +133,10 @@ void __delete_from_page_cache(struct page *page)
 	page->mapping = NULL;
 	/* Leave page->index set: truncation lookup relies upon it */
 	mapping->nrpages--;
-	__dec_zone_page_state(page, NR_FILE_PAGES);
+
+	/* hugetlb pages do not participate in page cache accounting. */
+	if (!PageHuge(page))
+		__dec_zone_page_state(page, NR_FILE_PAGES);
 	if (PageSwapBacked(page))
 		__dec_zone_page_state(page, NR_SHMEM);
 	BUG_ON(page_mapped(page));
@@ -168,7 +173,6 @@ void delete_from_page_cache(struct page *page)
 	spin_lock_irq(&mapping->tree_lock);
 	__delete_from_page_cache(page);
 	spin_unlock_irq(&mapping->tree_lock);
-	mem_cgroup_uncharge_cache_page(page);
 
 	if (freepage)
 		freepage(page);
@@ -432,12 +436,16 @@ int replace_page_cache_page(struct page *old, struct page *new, gfp_t gfp_mask)
 		error = radix_tree_insert(&mapping->page_tree, offset, new);
 		BUG_ON(error);
 		mapping->nrpages++;
-		__inc_zone_page_state(new, NR_FILE_PAGES);
+
+		/*
+		 * hugetlb pages do not participate in page cache accounting.
+		 */
+		if (!PageHuge(new))
+			__inc_zone_page_state(new, NR_FILE_PAGES);
 		if (PageSwapBacked(new))
 			__inc_zone_page_state(new, NR_SHMEM);
 		spin_unlock_irq(&mapping->tree_lock);
-		/* mem_cgroup codes must not be called under tree_lock */
-		mem_cgroup_replace_page_cache(old, new);
+		mem_cgroup_migrate(old, new, true);
 		radix_tree_preload_end();
 		if (freepage)
 			freepage(old);
@@ -484,19 +492,24 @@ static int page_cache_tree_insert(struct address_space *mapping,
 int add_to_page_cache_locked(struct page *page, struct address_space *mapping,
 		pgoff_t offset, gfp_t gfp_mask)
 {
+	int huge = PageHuge(page);
+	struct mem_cgroup *memcg;
 	int error;
 
 	VM_BUG_ON(!PageLocked(page));
 	VM_BUG_ON(PageSwapBacked(page));
 
-	error = mem_cgroup_cache_charge(page, current->mm,
-					gfp_mask & GFP_RECLAIM_MASK);
-	if (error)
-		return error;
+	if (!huge) {
+		error = mem_cgroup_try_charge(page, current->mm,
+					      gfp_mask, &memcg);
+		if (error)
+			return error;
+	}
 
 	error = radix_tree_maybe_preload(gfp_mask & ~__GFP_HIGHMEM);
 	if (error) {
-		mem_cgroup_uncharge_cache_page(page);
+		if (!huge)
+			mem_cgroup_cancel_charge(page, memcg);
 		return error;
 	}
 
@@ -509,15 +522,21 @@ int add_to_page_cache_locked(struct page *page, struct address_space *mapping,
 	radix_tree_preload_end();
 	if (unlikely(error))
 		goto err_insert;
-	__inc_zone_page_state(page, NR_FILE_PAGES);
+
+	/* hugetlb pages do not participate in page cache accounting. */
+	if (!PageHuge(page))
+		__inc_zone_page_state(page, NR_FILE_PAGES);
 	spin_unlock_irq(&mapping->tree_lock);
+	if (!huge)
+		mem_cgroup_commit_charge(page, memcg, false);
 	trace_mm_filemap_add_to_page_cache(page);
 	return 0;
 err_insert:
 	page->mapping = NULL;
 	/* Leave page->index set: truncation relies upon it */
 	spin_unlock_irq(&mapping->tree_lock);
-	mem_cgroup_uncharge_cache_page(page);
+	if (!huge)
+		mem_cgroup_cancel_charge(page, memcg);
 	page_cache_release(page);
 	return error;
 }
@@ -920,7 +939,7 @@ EXPORT_SYMBOL(find_lock_entry);
  * @mapping: the address_space to search
  * @offset: the page index
  * @fgp_flags: PCG flags
- * @gfp_mask: gfp mask to use if a page is to be allocated
+ * @gfp_mask: gfp mask to use for the page cache data page allocation
  *
  * Looks up the page cache slot at @mapping & @offset.
  *
@@ -939,7 +958,7 @@ EXPORT_SYMBOL(find_lock_entry);
  * If there is a page cache page, it is returned with an increased refcount.
  */
 struct page *pagecache_get_page(struct address_space *mapping, pgoff_t offset,
-	int fgp_flags, gfp_t cache_gfp_mask, gfp_t radix_gfp_mask)
+	int fgp_flags, gfp_t gfp_mask)
 {
 	struct page *page;
 
@@ -976,13 +995,11 @@ no_page:
 	if (!page && (fgp_flags & FGP_CREAT)) {
 		int err;
 		if ((fgp_flags & FGP_WRITE) && mapping_cap_account_dirty(mapping))
-			cache_gfp_mask |= __GFP_WRITE;
-		if (fgp_flags & FGP_NOFS) {
-			cache_gfp_mask &= ~__GFP_FS;
-			radix_gfp_mask &= ~__GFP_FS;
-		}
+			gfp_mask |= __GFP_WRITE;
+		if (fgp_flags & FGP_NOFS)
+			gfp_mask &= ~__GFP_FS;
 
-		page = __page_cache_alloc(cache_gfp_mask);
+		page = __page_cache_alloc(gfp_mask);
 		if (!page)
 			return NULL;
 
@@ -993,7 +1010,8 @@ no_page:
 		if (fgp_flags & FGP_ACCESSED)
 			init_page_accessed(page);
 
-		err = add_to_page_cache_lru(page, mapping, offset, radix_gfp_mask);
+		err = add_to_page_cache_lru(page, mapping, offset,
+				gfp_mask & GFP_RECLAIM_MASK);
 		if (unlikely(err)) {
 			page_cache_release(page);
 			page = NULL;
@@ -1648,7 +1666,7 @@ generic_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 		return retval;
 
 	/* coalesce the iovecs and go direct-to-BIO for O_DIRECT */
-	if (filp->f_flags & O_DIRECT) {
+	if (kiocb_is_direct(iocb)) {
 		loff_t size;
 		struct address_space *mapping;
 		struct inode *inode;
@@ -2305,7 +2323,8 @@ EXPORT_SYMBOL(iov_iter_single_seg_count);
  * Returns appropriate error code that caller should return or
  * zero in case that write should be allowed.
  */
-inline int generic_write_checks(struct file *file, loff_t *pos, size_t *count, int isblk)
+int __generic_write_checks(struct kiocb *iocb, struct file *file,
+			   loff_t *pos, size_t *count, int isblk)
 {
 	struct inode *inode = file->f_mapping->host;
 	unsigned long limit = rlimit(RLIMIT_FSIZE);
@@ -2315,7 +2334,8 @@ inline int generic_write_checks(struct file *file, loff_t *pos, size_t *count, i
 
 	if (!isblk) {
 		/* FIXME: this is for backwards compatibility with 2.4 */
-		if (file->f_flags & O_APPEND)
+		if ((iocb && kiocb_is_append(iocb)) ||
+		    (!iocb && (file->f_flags & O_APPEND)))
                         *pos = i_size_read(inode);
 
 		if (limit != RLIM_INFINITY) {
@@ -2377,6 +2397,18 @@ inline int generic_write_checks(struct file *file, loff_t *pos, size_t *count, i
 #endif
 	}
 	return 0;
+}
+
+int generic_write_checks2(struct kiocb *iocb, loff_t *pos, size_t *count,
+			  int isblk)
+{
+	return __generic_write_checks(iocb, iocb->ki_filp, pos, count, isblk);
+}
+EXPORT_SYMBOL(generic_write_checks2);
+
+int generic_write_checks(struct file *file, loff_t *pos, size_t *count, int isblk)
+{
+	return __generic_write_checks(NULL, file, pos, count, isblk);
 }
 EXPORT_SYMBOL(generic_write_checks);
 
@@ -2485,8 +2517,7 @@ struct page *grab_cache_page_write_begin(struct address_space *mapping,
 		fgp_flags |= FGP_NOFS;
 
 	page = pagecache_get_page(mapping, index, fgp_flags,
-			mapping_gfp_mask(mapping),
-			GFP_KERNEL);
+			mapping_gfp_mask(mapping));
 	if (page)
 		wait_for_stable_page(page);
 
@@ -2646,7 +2677,7 @@ ssize_t __generic_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	current->backing_dev_info = mapping->backing_dev_info;
 	written = 0;
 
-	err = generic_write_checks(file, &pos, &count, S_ISBLK(inode->i_mode));
+	err = generic_write_checks2(iocb, &pos, &count, S_ISBLK(inode->i_mode));
 	if (err)
 		goto out;
 
@@ -2662,7 +2693,7 @@ ssize_t __generic_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		goto out;
 
 	/* coalesce the iovecs and go direct-to-BIO for O_DIRECT */
-	if (unlikely(file->f_flags & O_DIRECT)) {
+	if (unlikely(kiocb_is_direct(iocb))) {
 		loff_t endbyte;
 		ssize_t written_buffered;
 
@@ -2746,8 +2777,8 @@ ssize_t generic_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	if (ret > 0) {
 		ssize_t err;
 
-		err = generic_write_sync(file, pos, ret);
-		if (err < 0 && ret > 0)
+		err = generic_write_sync(file, iocb->ki_pos - ret, ret);
+		if (err < 0)
 			ret = err;
 	}
 	return ret;

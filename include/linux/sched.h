@@ -105,8 +105,7 @@ extern int nr_processes(void);
 extern unsigned long nr_running(void);
 extern unsigned long nr_iowait(void);
 extern unsigned long nr_iowait_cpu(int cpu);
-extern unsigned long this_cpu_load(void);
-
+extern void get_iowait_load(unsigned long *nr_waiters, unsigned long *load);
 
 extern void calc_global_load(unsigned long ticks);
 extern void update_cpu_load_nohz(void);
@@ -558,6 +557,7 @@ struct signal_struct {
 	 * Live threads maintain their own counters and add to these
 	 * in __exit_signal, except for the group leader.
 	 */
+	seqlock_t stats_lock;
 	cputime_t utime, stime, cutime, cstime;
 	cputime_t gtime;
 	cputime_t cgtime;
@@ -785,7 +785,26 @@ enum cpu_idle_type {
 #define SD_OVERLAP		0x2000	/* sched_domains of this level overlap */
 #define SD_NUMA			0x4000	/* cross-node balancing */
 
-extern int __weak arch_sd_sibiling_asym_packing(void);
+#ifdef CONFIG_SCHED_SMT
+static inline int cpu_smt_flags(void)
+{
+	return SD_SHARE_CPUPOWER | SD_SHARE_PKG_RESOURCES;
+}
+#endif
+
+#ifdef CONFIG_SCHED_MC
+static inline int cpu_core_flags(void)
+{
+	return SD_SHARE_PKG_RESOURCES;
+}
+#endif
+
+#ifdef CONFIG_NUMA
+static inline int cpu_numa_flags(void)
+{
+	return SD_NUMA;
+}
+#endif
 
 struct sched_domain_attr {
 	int relax_domain_level;
@@ -894,6 +913,38 @@ cpumask_var_t *alloc_sched_domains(unsigned int ndoms);
 void free_sched_domains(cpumask_var_t doms[], unsigned int ndoms);
 
 bool cpus_share_cache(int this_cpu, int that_cpu);
+
+typedef const struct cpumask *(*sched_domain_mask_f)(int cpu);
+typedef int (*sched_domain_flags_f)(void);
+
+#define SDTL_OVERLAP	0x01
+
+struct sd_data {
+	struct sched_domain **__percpu sd;
+	struct sched_group **__percpu sg;
+	struct sched_group_power **__percpu sgp;
+};
+
+struct sched_domain_topology_level {
+	sched_domain_mask_f mask;
+	sched_domain_flags_f sd_flags;
+	int		    flags;
+	int		    numa_level;
+	struct sd_data      data;
+#ifdef CONFIG_SCHED_DEBUG
+	char                *name;
+#endif
+};
+
+extern struct sched_domain_topology_level *sched_domain_topology;
+
+extern void set_sched_topology(struct sched_domain_topology_level *tl);
+
+#ifdef CONFIG_SCHED_DEBUG
+# define SD_INIT_NAME(type)		.name = #type
+#else
+# define SD_INIT_NAME(type)
+#endif
 
 #else /* CONFIG_SMP */
 
@@ -1036,6 +1087,25 @@ enum perf_event_task_context {
 	perf_hw_context = 0,
 	perf_sw_context,
 	perf_nr_task_contexts,
+};
+
+/* Track pages that require TLB flushes */
+struct tlbflush_unmap_batch {
+	/*
+	 * Each bit set is a CPU that potentially has a TLB entry for one of
+	 * the PFNs being flushed. See set_tlb_ubc_flush_pending().
+	 */
+	struct cpumask cpumask;
+
+	/* True if any bit in cpumask is set */
+	bool flush_required;
+
+	/*
+	 * If true then the PTE was dirty when unmapped. The entry must be
+	 * flushed before IO is initiated or a stale TLB entry potentially
+	 * allows an update without redirtying the page.
+	 */
+	bool writable;
 };
 
 struct task_struct {
@@ -1368,37 +1438,36 @@ struct task_struct {
 	struct numa_group *numa_group;
 
 	/*
-	 * Exponential decaying average of faults on a per-node basis.
-	 * Scheduling placement decisions are made based on the these counts.
-	 * The values remain static for the duration of a PTE scan
+	 * numa_faults is an array split into four regions:
+	 * faults_memory, faults_cpu, faults_memory_buffer, faults_cpu_buffer
+	 * in this precise order.
+	 *
+	 * faults_memory: Exponential decaying average of faults on a per-node
+	 * basis. Scheduling placement decisions are made based on these
+	 * counts. The values remain static for the duration of a PTE scan.
+	 * faults_cpu: Track the nodes the process was running on when a NUMA
+	 * hinting fault was incurred.
+	 * faults_memory_buffer and faults_cpu_buffer: Record faults per node
+	 * during the current scan window. When the scan completes, the counts
+	 * in faults_memory and faults_cpu decay and these values are copied.
 	 */
-	unsigned long *numa_faults_memory;
+	unsigned long *numa_faults;
 	unsigned long total_numa_faults;
 
 	/*
-	 * numa_faults_buffer records faults per node during the current
-	 * scan window. When the scan completes, the counts in
-	 * numa_faults_memory decay and these values are copied.
-	 */
-	unsigned long *numa_faults_buffer_memory;
-
-	/*
-	 * Track the nodes the process was running on when a NUMA hinting
-	 * fault was incurred.
-	 */
-	unsigned long *numa_faults_cpu;
-	unsigned long *numa_faults_buffer_cpu;
-
-	/*
 	 * numa_faults_locality tracks if faults recorded during the last
-	 * scan window were remote/local. The task scan period is adapted
-	 * based on the locality of the faults with different weights
-	 * depending on whether they were shared or private faults
+	 * scan window were remote/local or failed to migrate. The task scan
+	 * period is adapted based on the locality of the faults with different
+	 * weights depending on whether they were shared or private faults
 	 */
-	unsigned long numa_faults_locality[2];
+	unsigned long numa_faults_locality[3];
 
 	unsigned long numa_pages_migrated;
 #endif /* CONFIG_NUMA_BALANCING */
+
+#ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+	struct tlbflush_unmap_batch tlb_ubc;
+#endif
 
 	struct rcu_head rcu;
 
@@ -1456,12 +1525,6 @@ struct task_struct {
 	unsigned long trace_recursion;
 #endif /* CONFIG_TRACING */
 #ifdef CONFIG_MEMCG /* memcg uses this to do batch job */
-	struct memcg_batch_info {
-		int do_batch;	/* incremented when batch uncharge started */
-		struct mem_cgroup *memcg; /* target memcg of uncharge */
-		unsigned long nr_pages;	/* uncharged usage */
-		unsigned long memsw_nr_pages; /* uncharged mem+swap usage */
-	} memcg_batch;
 	unsigned int memcg_kmem_skip_account;
 	struct memcg_oom_info {
 		struct mem_cgroup *memcg;
@@ -1488,6 +1551,7 @@ struct task_struct {
 #define TNF_NO_GROUP	0x02
 #define TNF_SHARED	0x04
 #define TNF_FAULT_LOCAL	0x08
+#define TNF_MIGRATE_FAIL 0x10
 
 #ifdef CONFIG_NUMA_BALANCING
 extern void task_numa_fault(int last_node, int node, int pages, int flags);
@@ -1742,7 +1806,6 @@ extern void thread_group_cputime_adjusted(struct task_struct *p, cputime_t *ut, 
 #define PF_SPREAD_SLAB	0x02000000	/* Spread some slab caches over cpuset */
 #define PF_NO_SETAFFINITY 0x04000000	/* Userland is not allowed to meddle with cpus_allowed */
 #define PF_MCE_EARLY    0x08000000      /* Early kill for mce process policy */
-#define PF_MEMPOLICY	0x10000000	/* Non-default NUMA mempolicy */
 #define PF_MUTEX_TESTER	0x20000000	/* Thread belongs to the rt mutex tester */
 #define PF_FREEZER_SKIP	0x40000000	/* Freezer should not count it as freezable */
 #define PF_SUSPEND_TASK 0x80000000      /* this thread called freeze_processes and should not be frozen */
@@ -1772,11 +1835,13 @@ extern void thread_group_cputime_adjusted(struct task_struct *p, cputime_t *ut, 
 #define tsk_used_math(p) ((p)->flags & PF_USED_MATH)
 #define used_math() tsk_used_math(current)
 
-/* __GFP_IO isn't allowed if PF_MEMALLOC_NOIO is set in current->flags */
+/* __GFP_IO isn't allowed if PF_MEMALLOC_NOIO is set in current->flags
+ * __GFP_FS is also cleared as it implies __GFP_IO.
+ */
 static inline gfp_t memalloc_noio_flags(gfp_t flags)
 {
 	if (unlikely(current->flags & PF_MEMALLOC_NOIO))
-		flags &= ~__GFP_IO;
+		flags &= ~(__GFP_IO | __GFP_FS);
 	return flags;
 }
 
@@ -1904,6 +1969,7 @@ extern unsigned long long notrace sched_clock(void);
  */
 extern u64 cpu_clock(int cpu);
 extern u64 local_clock(void);
+extern u64 running_clock(void);
 extern u64 sched_clock_cpu(int cpu);
 
 
@@ -2821,8 +2887,17 @@ static inline void kgr_task_safe(struct task_struct *p)
 {
 	clear_tsk_thread_flag(p, TIF_KGR_IN_PROGRESS);
 }
+
+static inline bool kgr_task_in_progress(struct task_struct *p)
+{
+	return test_tsk_thread_flag(p, TIF_KGR_IN_PROGRESS);
+}
 #else
 static inline void kgr_task_safe(struct task_struct *p) { }
+static inline bool kgr_task_in_progress(struct task_struct *p)
+{
+	return false;
+}
 #endif /* IS_ENABLED(CONFIG_KGRAFT) */
 
 static inline unsigned long task_rlimit(const struct task_struct *tsk,
