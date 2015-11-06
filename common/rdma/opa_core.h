@@ -166,10 +166,10 @@ struct hfi_ctx {
 #define HFI_CTX_TYPE_KERNEL	1
 #define HFI_CTX_TYPE_USER	2
 
-/* TODO - move this to opa-headers */
-#define HFI_CTX_MODE_BYPASS_9B  0x100
-#define HFI_CTX_MODE_BYPASS_10B 0x200
-#define HFI_CTX_MODE_BYPASS     0x300 /* mask */
+#define HFI_CTX_MODE_BYPASS_9B    0x100
+#define HFI_CTX_MODE_BYPASS_10B   0x200
+#define HFI_CTX_MODE_BYPASS_16B   0x400
+#define HFI_CTX_MODE_BYPASS_MASK  0x700
 
 #define HFI_CTX_INIT(ctx, dd, bus_ops)		\
 	do {					\

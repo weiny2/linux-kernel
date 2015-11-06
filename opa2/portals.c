@@ -160,7 +160,7 @@ int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table,
 
 	/* General and OFED DMA commands require privileged CQ */
 	priv = (ctx->type == HFI_CTX_TYPE_KERNEL) &&
-	       (ctx->mode & HFI_CTX_MODE_BYPASS);
+	       (ctx->mode & HFI_CTX_MODE_BYPASS_MASK);
 
 	/*
 	 * some kernel clients may not need to specify UID,SRANK
@@ -850,11 +850,14 @@ static void hfi_cteq_cleanup(struct hfi_ctx *ctx)
  * do not touch ctx->[pid_base, pid_count].
  */
 static int __hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count,
-			      u16 align, u16 offset)
+			      u16 align, u16 offset, u16 size)
 {
-	u16 start, size, n;
+	u16 start, n;
 	int ret = 0;
 	unsigned long flags, align_mask = 0;
+
+	if (size > HFI_NUM_USABLE_PIDS)
+		return -EINVAL;
 
 	if (align) {
 		if (!is_power_of_2(align))
@@ -868,8 +871,6 @@ static int __hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count,
 		/* honor request for base PID */
 		start = offset + *base;
 	}
-	/* last PID not usable as an RX context */
-	size = HFI_NUM_PIDS - 1;
 
 	spin_lock_irqsave(&dd->ptl_lock, flags);
 	n = bitmap_find_next_zero_area(dd->ptl_map, size,
@@ -938,7 +939,7 @@ int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
 		     u16 mode)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	u16 offset;
+	u16 offset = 0, size = HFI_NUM_USABLE_PIDS;
 	int ret;
 
 	/* only one PID reservation */
@@ -949,10 +950,12 @@ int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
 	 * TODO: not sure if this is correct, depends on how we
 	 * document interface for PSM to reserve block of PIDs.
 	 */
-	offset = (ctx->mode & HFI_CTX_MODE_BYPASS) ?
-		 HFI_PID_BYPASS_BASE : 0;
+	if (ctx->mode & HFI_CTX_MODE_BYPASS_MASK) {
+		offset = HFI_PID_BYPASS_BASE;
+		size = offset + HFI_NUM_BYPASS_PIDS;
+	}
 
-	ret = __hfi_ctxt_reserve(dd, base, count, align, offset);
+	ret = __hfi_ctxt_reserve(dd, base, count, align, offset, size);
 	if (!ret) {
 		ctx->pid_base = *base;
 		ctx->pid_count = count;
@@ -1018,6 +1021,10 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	/* only one Portals PID allowed */
 	if (ctx->pid != HFI_PID_NONE)
 		return -EPERM;
+
+	/* if requested (by PSM), allocate PID from BYPASS range */
+	if (ctx_assign->flags & HFI_CTX_MODE_USE_BYPASS)
+		ctx->mode |= (HFI_CTX_MODE_USE_BYPASS | HFI_CTX_MODE_BYPASS_9B);
 
 	ptl_pid = ctx_assign->pid;
 	ret = hfi_pid_alloc(ctx, &ptl_pid);
@@ -1124,7 +1131,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 					HFI_NUM_PT_ENTRIES - i - 1;
 		}
 
-		if (ctx->mode & HFI_CTX_MODE_BYPASS)
+		if (ctx->mode & HFI_CTX_MODE_BYPASS_MASK)
 			hfi_ctxt_set_bypass(ctx);
 	}
 
@@ -1168,8 +1175,12 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 			end = ctx->pid_base + ptl_pid + 1;
 		}
 	} else {
-		u16 offset = (ctx->mode & HFI_CTX_MODE_BYPASS) ?
-			     HFI_PID_BYPASS_BASE : 0;
+		u16 offset = 0, size = HFI_NUM_USABLE_PIDS;
+
+		if (ctx->mode & HFI_CTX_MODE_BYPASS_MASK) {
+			offset = HFI_PID_BYPASS_BASE;
+			size = offset + HFI_NUM_BYPASS_PIDS;
+		}
 
 		/*
 		 * Here PID is user-specified, there was not a job launcher
@@ -1178,13 +1189,14 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 		 * specific PID.
 		 */
 		if (!IS_PID_ANY(ptl_pid) &&
-		    (ptl_pid >= HFI_NUM_PIDS))
+		    (offset + ptl_pid >= size))
 			return -EINVAL;
 
 		/* No reservation, so must find unreserved PID first */
-		ret = __hfi_ctxt_reserve(dd, &ptl_pid, 1, 0, offset);
+		ret = __hfi_ctxt_reserve(dd, &ptl_pid, 1, 0, offset, size);
 		if (ret)
 			return ret;
+
 		dd_dev_info(dd, "acquired PID singleton [%u]\n", ptl_pid);
 
 		start = ptl_pid;
@@ -1284,7 +1296,7 @@ int hfi_get_hw_limits(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 
-	hwl->num_pids_avail = HFI_NUM_PIDS - dd->pid_num_assigned;
+	hwl->num_pids_avail = HFI_NUM_USABLE_PIDS - dd->pid_num_assigned;
 	hwl->num_cq_pairs_avail = HFI_CQ_COUNT - dd->cq_pair_num_assigned;
 
 	/* FXRTODO: Tune limits per system config and enforce them */
