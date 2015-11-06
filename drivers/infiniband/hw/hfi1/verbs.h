@@ -774,7 +774,6 @@ struct hfi1_ibdev {
 	u64 n_piodrain;
 	u64 n_txwait;
 	u64 n_kmem_wait;
-	u64 n_send_schedule;
 
 	u32 n_pds_allocated;    /* number of PDs allocated for device */
 	spinlock_t n_pds_lock;
@@ -867,8 +866,8 @@ void hfi1_cap_mask_chg(struct hfi1_ibport *ibp);
 void hfi1_sys_guid_chg(struct hfi1_ibport *ibp);
 void hfi1_node_desc_chg(struct hfi1_ibport *ibp);
 int hfi1_process_mad(struct ib_device *ibdev, int mad_flags, u8 port_num,
-		     struct ib_wc *in_wc, struct ib_grh *in_grh,
-		     struct ib_mad *in_mad, struct ib_mad *out_mad);
+		     const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+		     const struct ib_mad *in_mad, struct ib_mad *out_mad);
 int hfi1_create_agents(struct hfi1_ibdev *dev);
 void hfi1_free_agents(struct hfi1_ibdev *dev);
 
