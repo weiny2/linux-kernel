@@ -61,6 +61,13 @@
 #define HFI_MMAP_PSB_TOKEN(type, ptl_ctxt, size)  \
 	HFI_MMAP_TOKEN((type), ptl_ctxt, 0, size)
 
+/* List of vma pointers to zap on release */
+struct hfi_vma {
+	struct vm_area_struct *vma;
+	u16 cq_idx;
+	struct list_head vma_list;
+};
+
 /* Private data for file operations, created at open(). */
 struct hfi_userdata {
 	struct opa_core_device *odev;
@@ -73,6 +80,10 @@ struct hfi_userdata {
 	struct list_head job_list;
 	struct list_head mpin_head;
 	spinlock_t mpin_lock;
+	/* List of vma's to zap on release */
+	struct list_head vma_head;
+	/* Lock for updating vma_head listt */
+	spinlock_t vma_lock;
 };
 
 void hfi_job_init(struct hfi_userdata *ud);
