@@ -482,9 +482,9 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 {
 	TP_CFG_PKEY_TABLE_t tx_pkey;
 	FPC_CFG_PKEY_TABLE_t rx_pkey;
-	int i;
+	int i, j;
 
-	for (i = 0; i < HFI_MAX_PKEYS; i += 4) {
+	for (i = 0, j = 0; i < HFI_MAX_PKEYS; i += 4, j++) {
 		tx_pkey.field.entry0 = ppd->pkeys[i];
 		tx_pkey.field.entry1 = ppd->pkeys[i + 1];
 		tx_pkey.field.entry2 = ppd->pkeys[i + 2];
@@ -494,8 +494,10 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 		rx_pkey.field.entry1 = ppd->pkeys[i + 1];
 		rx_pkey.field.entry2 = ppd->pkeys[i + 2];
 		rx_pkey.field.entry3 = ppd->pkeys[i + 3];
-		write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_TABLE, tx_pkey.val);
-		write_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_TABLE, rx_pkey.val);
+		write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_TABLE + 0x08 * j,
+				tx_pkey.val);
+		write_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_TABLE + 0x08 * j,
+				 rx_pkey.val);
 	}
 
 	/*
