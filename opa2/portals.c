@@ -85,9 +85,10 @@ static int hfi_cq_validate_tuples(struct hfi_ctx *ctx,
 		auth_uid = auth_table[i].uid;
 
 		/* user may request to let driver select UID */
-		if (auth_uid == HFI_UID_ANY || auth_uid == 0)
+		if (auth_uid == HFI_UID_ANY || auth_uid == 0) {
 			auth_table[i].uid = ctx->ptl_uid;
 			auth_uid = ctx->ptl_uid;
+		}
 
 		/* if job_launcher didn't set UIDs, this must match default */
 		if (ctx->auth_mask == 0) {
