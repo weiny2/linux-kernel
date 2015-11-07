@@ -2136,18 +2136,14 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	RX_HIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
 	RXHP_CFG_PTE_CACHE_ACCESS_CTL_t pte_cache_access = {.val = 0};
 	RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t trig_op_cache_access = {.val = 0};
-	/*
-	 * FXRTODO: Use trig op for me_le/uh_cache_access for now since
-	 * HAS does not have these definitions yet
-	 */
-	RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t me_le_uh_cache_access = {.val = 0};
+	RXHP_CFG_PSC_CACHE_ACCESS_CTL_t me_le_uh_cache_access = {.val = 0};
 	union pte_cache_addr pte_cache_tag;
 	union trig_op_cache_addr trig_op_cache_tag;
-	/* Fake Simics structure for LE/ME/UH cache invalidation */
+	/* TODO temporary structure for LE/ME/UH cache invalidation */
 	union me_le_uh_cache_addr {
 		struct {
-			uint64_t pid	: 12; /* [11:0] Target Process Id */
-			uint64_t me_le	: 1; /* [12:12] ME/LE */
+			uint64_t me_le	: 1;  /* [0:0] ME/LE */
+			uint64_t pid	: 12; /* [12:1] Target Process Id */
 			uint64_t handle	: 16; /* [28:13] Handle */
 		};
 		uint64_t val;
@@ -2189,7 +2185,7 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	me_le_uh_cache_tag.val = -1;
 	me_le_uh_cache_tag.pid = 0;
 	me_le_uh_cache_access.field.mask_address = me_le_uh_cache_tag.val;
-	write_csr(dd, 0x1408000, me_le_uh_cache_access.val);
+	write_csr(dd, FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL, me_le_uh_cache_access.val);
 
 	/* TODO - above incomplete, deferred processing to wait for .ack bit */
 	mdelay(10);
