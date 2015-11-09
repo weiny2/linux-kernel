@@ -19,5 +19,6 @@ opa2_ib-y += rc.o
 opa2_ib-y += ruc.o
 opa2_ib-y += uc.o
 opa2_ib-y += ud.o
+opa2_ib-y += verbs_mcast.o
 opa2_ib-y += verbs.o
 opa2_ib-y += fxr.o
