@@ -103,6 +103,8 @@ extern unsigned int opa_ib_max_qp_wrs;
 extern unsigned int opa_ib_max_qps;
 extern unsigned int opa_ib_max_sges;
 extern unsigned int opa_ib_lkey_table_size;
+extern unsigned int opa_ib_max_mcast_grps;
+extern unsigned int opa_ib_max_mcast_qp_attached;
 extern struct ib_dma_mapping_ops opa_ib_dma_mapping_ops;
 
 struct ib_l4_headers;
@@ -553,6 +555,25 @@ static inline struct opa_ib_rwqe *get_rwqe_ptr(struct opa_ib_rq *rq, unsigned n)
 		  rq->max_sge * sizeof(struct ib_sge)) * n);
 }
 
+/*
+ * There is one struct opa_mcast for each multicast GID.
+ * All attached QPs are then stored as a list of
+ * struct opa_mcast_qp.
+ */
+struct opa_mcast_qp {
+	struct list_head list;
+	struct opa_ib_qp *qp;
+};
+
+struct opa_mcast {
+	struct rb_node rb_node;
+	union ib_gid mgid;
+	struct list_head qp_list;
+	wait_queue_head_t wait;
+	atomic_t refcount;
+	int n_attached;
+};
+
 struct opa_ib_portdata {
 	struct opa_core_device *odev;
 	struct opa_ib_data *ibd;
@@ -609,6 +630,9 @@ struct opa_ib_portdata {
 	struct hfi_cq cmdq_rx;
 	spinlock_t cmdq_tx_lock;
 	spinlock_t cmdq_rx_lock;
+	/* protect changes in this struct */
+	spinlock_t lock;
+	struct rb_root mcast_tree;
 	struct task_struct *rcv_task;
 	uint16_t rcv_eq;
 	uint16_t rcv_egr_last_idx;
@@ -649,6 +673,8 @@ struct opa_ib_data {
 	spinlock_t n_qps_lock;
 	u32 n_srqs_allocated;
 	spinlock_t n_srqs_lock;
+	u32 n_mcast_grps_allocated; /* number of mcast groups allocated */
+	spinlock_t n_mcast_grps_lock;
 
 	/* per device cq worker */
 	struct kthread_worker *worker;
@@ -804,6 +830,8 @@ int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		       struct ib_wc *in_wc, struct ib_grh *in_grh,
 		       struct ib_mad *in_mad, struct ib_mad *out_mad);
 #endif
+int opa_ib_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
+int opa_ib_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 
 /* Device specific */
 int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe);

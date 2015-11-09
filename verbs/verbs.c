@@ -471,9 +471,9 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	ibdev->map_phys_fmr = opa_ib_map_phys_fmr;
 	ibdev->unmap_fmr = opa_ib_unmap_fmr;
 	ibdev->dealloc_fmr = opa_ib_dealloc_fmr;
+#endif
 	ibdev->attach_mcast = opa_ib_multicast_attach;
 	ibdev->detach_mcast = opa_ib_multicast_detach;
-#endif
 	ibdev->mmap = opa_ib_mmap;
 	ibdev->dma_ops = &opa_ib_dma_mapping_ops;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
@@ -569,6 +569,7 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_vl); i++)
 		ibp->sc_to_vl[i] = pdesc.sc_to_vl[i];
 
+	spin_lock_init(&ibp->lock);
 	ret = opa_ib_ctx_init_port(ibp);
 	if (ret < 0)
 		goto ctx_init_err;
@@ -630,6 +631,7 @@ static int opa_ib_add(struct opa_core_device *odev)
 	spin_lock_init(&ibd->n_cqs_lock);
 	spin_lock_init(&ibd->n_qps_lock);
 	spin_lock_init(&ibd->n_srqs_lock);
+	spin_lock_init(&ibd->n_mcast_grps_lock);
 
 	/*
 	 * The top opa_ib_lkey_table_size bits are used to index the
