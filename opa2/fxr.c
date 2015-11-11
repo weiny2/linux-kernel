@@ -1796,7 +1796,8 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		/* Initialize credit management variables */
 		/* assign link credit variables */
 		ppd->vau = HFI_CM_VAU;
-		ppd->link_credits = BUFF_CREDIT_LIMIT;
+		ppd->link_credits = HFI_RCV_BUFFER_SIZE /
+				   hfi_vau_to_au(ppd->vau);
 		ppd->vcu = hfi_cu_to_vcu(HFI_CM_CU);
 		/* enough room for 8 MAD packets plus header - 17K */
 		ppd->vl15_init = (8 * (HFI_MIN_VL_15_MTU + 128)) /

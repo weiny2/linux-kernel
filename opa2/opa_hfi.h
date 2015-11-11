@@ -202,8 +202,12 @@ enum {
  */
 #define HFI_CM_VAU 3
 #define HFI_CM_CU  1
-/* HFI link credit count, AKA receive buffer depth (RBUF_DEPTH) */
-#define HFI_CM_GLOBAL_CREDITS BUFF_CREDIT_LIMIT
+/* in Bytes
+ * FXRTODO: Until we have a register to read this value from
+ * or a constant defined in the headers generated from CSR
+ * use this harcoded value.
+ */
+#define HFI_RCV_BUFFER_SIZE		(128 * 1024)
 
 /*
  * FXRTODO: Get rid of hard coded number of SL pairs and SL start once the FM
