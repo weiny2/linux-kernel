@@ -188,8 +188,6 @@ static int __subn_get_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	pi->port_error_action = cpu_to_be32(ppd->port_error_action);
 	/* 32.768 usec. response time (guessing). Magic number ported from WFR*/
 	pi->resptimevalue = 3;
-	/* FXRTODO: Needs verification. Will be done as part of JIRA STL-617 */
-	pi->overall_buffer_space = cpu_to_be16(BUFF_CREDIT_LIMIT);
 	pi->neigh_node_guid = ppd->neighbor_guid;
 	pi->neigh_port_num = ppd->neighbor_port_number;
 	pi->port_neigh_mode =
