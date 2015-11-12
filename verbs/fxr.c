@@ -50,6 +50,7 @@
  * Intel(R) OPA Gen2 IB Driver
  */
 
+#include <linux/delay.h>
 #include "verbs.h"
 #include "packet.h"
 #include <rdma/opa_core_ib.h>
@@ -59,6 +60,8 @@
 #include <rdma/hfi_rx.h>
 #include <rdma/hfi_tx.h>
 
+#define OPA_IB_CQ_FULL_RETRIES		10
+#define OPA_IB_CQ_FULL_DELAY_MS		1
 #define OPA_IB_EAGER_COUNT		8 /* minimum Eager entries */
 #define OPA_IB_EAGER_COUNT_ORDER	1 /* log2 of above - 2 */
 #define OPA_IB_EAGER_SIZE		(PAGE_SIZE * 4)
@@ -131,7 +134,7 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
 int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp,
 			struct opa_ib_swqe *wqe)
 {
-	int ret;
+	int ret, ndelays = 0;
 	unsigned long flags;
 
 	if (wqe->use_sc15)
@@ -164,6 +167,7 @@ int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp,
 		ibp->port_num, wqe->s_hdr,
 		wqe->sg_list[0].vaddr, wqe->length);
 
+_tx_cmd:
 	/* send the WQE via PIO path */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
 	ret = hfi_tx_cmd_bypass_pio(&ibp->cmdq_tx, wqe->s_ctx,
@@ -172,8 +176,22 @@ int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp,
 				    wqe->length, ibp->port_num,
 				    wqe->sl, 0, KDETH_9B_PIO);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
-	if (ret < 0)
-		dev_err(ibp->dev, "PT %d: TX CQ is full!\n", ibp->port_num);
+
+	if (ret == -EAGAIN) {
+		/* FXRTODO - remove delay via deferred send WQE logic */
+		if (ndelays >= OPA_IB_CQ_FULL_RETRIES) {
+			dev_warn(ibp->dev,
+				 "PT %d: TX CQ still full after %d retries!\n",
+				 ibp->port_num, ndelays);
+		} else {
+			ndelays++;
+			mdelay(OPA_IB_CQ_FULL_DELAY_MS);
+			goto _tx_cmd;
+		}
+	} else if (!ret && ndelays) {
+		dev_info(ibp->dev, "PT %d: full TX CQ required %d retries\n",
+			 ibp->port_num, ndelays);
+	}
 
 	return ret;
 }
@@ -222,7 +240,7 @@ eq_advance:
 int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 		    struct opa_ib_swqe *wqe)
 {
-	int s, i, ret;
+	int s, i, ret, ndelays = 0;
 	unsigned long flags;
 	uint8_t dma_cmd;
 	union base_iovec *iov = NULL;
@@ -292,6 +310,7 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 		ibp->port_num, dma_cmd, wqe->length, wqe->pmtu, num_iovs,
 		payload_bytes);
 
+_tx_cmd:
 	/* send with GENERAL or MGMT DMA */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
 	ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, wqe->s_ctx,
@@ -302,12 +321,26 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 				    HDR_EXT /* 9B */, dma_cmd);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 
-	if (ret < 0) {
-		dev_err(ibp->dev, "PT %d: TX CQ is full!\n", ibp->port_num);
+	if (ret == -EAGAIN) {
+		/* FXRTODO - remove delay via deferred send WQE logic */
+		if (ndelays >= OPA_IB_CQ_FULL_RETRIES) {
+			dev_warn(ibp->dev,
+				 "PT %d: TX CQ still full after %d retries!\n",
+				 ibp->port_num, ndelays);
+			goto err;
+		} else {
+			ndelays++;
+			mdelay(OPA_IB_CQ_FULL_DELAY_MS);
+			goto _tx_cmd;
+		}
+	} else if (ret < 0) {
 		goto err;
+	} else if (ndelays) {
+		dev_info(ibp->dev, "PT %d: full TX CQ required %d retries\n",
+			 ibp->port_num, ndelays);
 	}
-	return 0;
 
+	return 0;
 err:
 	kfree(iov);
 	wqe->s_iov = NULL;
