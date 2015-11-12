@@ -599,7 +599,7 @@ rnr_nak:
 	spin_lock_irqsave(&sqp->s_lock, flags);
 	if (!(ib_hfi1_state_ops[sqp->state] & HFI1_PROCESS_RECV_OK))
 		goto clr_busy;
-	to = usecs_to_jiffies(ib_hfi1_rnr_table[qp->r_min_rnr_timer]);
+	to = ib_hfi1_rnr_table[qp->r_min_rnr_timer];
 	add_rnr_timer(sqp, to);
 	goto clr_busy;
 
