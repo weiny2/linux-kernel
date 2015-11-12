@@ -9328,6 +9328,10 @@ static void init_qsfp_int(struct hfi1_devdata *dd)
  */
 static void init_lcb(struct hfi1_devdata *dd)
 {
+	/* simulator does not correctly handle LCB cclk loopback, skip */
+	if (dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
+		return;
+
 	/* the DC has been reset earlier in the driver load */
 
 	/* set LCB for cclk loopback on the port */
@@ -9825,9 +9829,10 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 	 * depending on how the link went down.  The 8051 firmware
 	 * will observe the needed wait time and only move to ready
 	 * when that is completed.  The largest of the quiet timeouts
-	 * is 2.5s, so wait that long and then a bit more.
+	 * is 6s, so wait that long and then at least 0.5s more for
+	 * other transitions, and another 0.5s for a buffer.
 	 */
-	ret = wait_fm_ready(dd, 3000);
+	ret = wait_fm_ready(dd, 7000);
 	if (ret) {
 		dd_dev_err(dd,
 			   "After going offline, timed out waiting for the 8051 to become ready to accept host requests\n");
@@ -10740,8 +10745,7 @@ static int set_buffer_control(struct hfi1_pportdata *ppd,
 		new_bc->vl[i].shared = 0;
 	}
 	new_total += be16_to_cpu(new_bc->overall_shared_limit);
-	if (new_total > (u32)dd->link_credits)
-		return -EINVAL;
+
 	/* fetch the current values */
 	get_buffer_control(dd, &cur_bc, &cur_total);
 
