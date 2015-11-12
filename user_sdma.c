@@ -696,6 +696,7 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		if (sent != -EBUSY) {
 			ret = sent;
 			req->status = ret;
+			set_comp_state(req, ERROR, req->status);
 			goto done;
 		} else {
 			sent = 0;
