@@ -102,7 +102,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 
 	if (qp->ibqp.qp_num > 1) {
 		u16 pkey;
-		u16 slid;
+		u32 slid;
 		u8 sc5 = ibp->sl_to_sc[ah_attr->sl];
 
 		pkey = hfi1_get_pkey(ibp, sqp->s_pkey_index);
@@ -129,7 +129,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 		qkey = (int)swqe->ud_wr.remote_qkey < 0 ?
 			sqp->qkey : swqe->ud_wr.remote_qkey;
 		if (unlikely(qkey != qp->qkey)) {
-			u16 lid;
+			u32 lid;
 
 			lid = ppd->lid | (ah_attr->src_path_bits &
 					  ((1 << ppd->lmc) - 1));
@@ -241,7 +241,8 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	} else {
 		wc.pkey_index = 0;
 	}
-	wc.slid = ppd->lid | (ah_attr->src_path_bits & ((1 << ppd->lmc) - 1));
+	wc.slid = (u16)ppd->lid | (ah_attr->src_path_bits &
+				   ((1 << ppd->lmc) - 1));
 	/* Check for loopback when the port lid is not set */
 	if (wc.slid == 0 && sqp->ibqp.qp_type == IB_QPT_GSI)
 		wc.slid = be16_to_cpu(IB_LID_PERMISSIVE);
@@ -321,7 +322,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	    ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE)) {
 		lid = ah_attr->dlid & ~((1 << ppd->lmc) - 1);
 		if (unlikely(!loopback &&
-			     (lid == ppd->lid ||
+			     (lid == (u16)ppd->lid ||
 			      (lid == be16_to_cpu(IB_LID_PERMISSIVE) &&
 			      qp->ibqp.qp_type == IB_QPT_GSI)))) {
 			unsigned long flags;
@@ -406,7 +407,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	if (ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE)) {
 		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = IB_LID_PERMISSIVE;
 	} else {
-		lid = ppd->lid;
+		lid = (u16)ppd->lid;
 		if (lid) {
 			lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
 			ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = cpu_to_be16(lid);

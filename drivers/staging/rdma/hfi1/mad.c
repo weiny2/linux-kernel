@@ -1056,8 +1056,8 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	struct hfi1_ibport *ibp;
 	u8 clientrereg;
 	unsigned long flags;
-	u32 smlid, opa_lid; /* tmp vars to hold LID values */
-	u16 lid;
+	u32 smlid; /* tmp vars to hold LID values */
+	u32 lid;
 	u8 ls_old, ls_new, ps_new;
 	u8 vls;
 	u8 msl;
@@ -1073,14 +1073,12 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		return reply((struct ib_mad_hdr *)smp);
 	}
 
-	opa_lid = be32_to_cpu(pi->lid);
-	if (opa_lid & 0xFFFF0000) {
-		pr_warn("OPA_PortInfo lid out of range: %X\n", opa_lid);
+	lid = be32_to_cpu(pi->lid);
+	if (lid & 0xFF000000) {
+		pr_warn("OPA_PortInfo lid out of range: %X\n", lid);
 		smp->status |= IB_SMP_INVALID_FIELD;
 		goto get_only;
 	}
-
-	lid = (u16)(opa_lid & 0x0000FFFF);
 
 	smlid = be32_to_cpu(pi->sm_lid);
 	if (smlid & 0xFFFF0000) {
@@ -3937,7 +3935,7 @@ static int is_local_mad(struct hfi1_ibport *ibp, const struct opa_mad *mad,
 			smp->route.dr.dr_dlid == OPA_LID_PERMISSIVE);
 	}
 
-	return (in_wc->slid == ppd->lid);
+	return (in_wc->slid == (u16)ppd->lid);
 }
 
 /*

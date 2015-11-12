@@ -1361,7 +1361,7 @@ static int query_port(struct rvt_dev_info *rdi, u8 port_num,
 	struct hfi1_ibdev *verbs_dev = dev_from_rdi(rdi);
 	struct hfi1_devdata *dd = dd_from_dev(verbs_dev);
 	struct hfi1_pportdata *ppd = &dd->pport[port_num - 1];
-	u16 lid = ppd->lid;
+	u16 lid = (u16)ppd->lid;
 
 	props->lid = lid ? lid : 0;
 	props->lmc = ppd->lmc;
