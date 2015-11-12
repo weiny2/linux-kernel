@@ -60,6 +60,7 @@
 #include <linux/delay.h>
 #include <linux/crc32.h>
 #include <linux/sched.h>
+#include <linux/kernel.h>
 #include "opa_hfi.h"
 #include "debugfs.h"
 #include "link.h"
@@ -67,6 +68,7 @@
 #include "rdma/fxr/fxr_fc_defs.h"
 #include "firmware.h"
 #include "rdma/fxr/mnh_misc_defs.h"
+#include "rdma/fxr/fxr_rx_hp_defs.h"
 
 /*
  * Make it easy to toggle firmware file name and if it gets loaded by
@@ -113,6 +115,9 @@ struct firmware_file {
 
 /* 8051 memory access timeout, in us */
 #define CRK8051_ACCESS_TIMEOUT 100 /* us */
+
+/* hdrpe authentication timeout */
+#define HDRPE_TIMEOUT 1000 /* 10ms = 1000 * udelay(10) */
 
 /* forwards */
 static void dispose_one_firmware(struct firmware_details *fdet);
@@ -963,6 +968,45 @@ static int firmware_init(struct hfi_devdata *dd)
 }
 
 /*
+ * Authenticate HDRPE
+ * See "Receive HP Processing Engine Configuration"
+ * of FXR HAS 0.65 or later
+ */
+static int
+authenticate_hdrpe(struct hfi_devdata *dd)
+{
+	int timeout;
+	u64 reg;
+
+	/* start authentication */
+	write_csr(dd, FXR_RXHP_CFG_HDR_PE,
+		FXR_RXHP_CFG_HDR_PE_START_AUTHENTICATION_SMASK);
+
+	/* wait until finish authentication */
+	for (timeout = 0; timeout++ < HDRPE_TIMEOUT; ) {
+		reg = read_csr(dd, FXR_RXHP_CFG_HDR_PE);
+		if (reg & FXR_RXHP_CFG_HDR_PE_AUTHENTICATION_COMPLETE_SMASK)
+			break;
+		udelay(10);
+	}
+	if (timeout >= HDRPE_TIMEOUT) {
+		dd_dev_err(dd, "authenticate hdrpe timed out: 0x%llx",
+			reg);
+		return -ENXIO;
+	}
+	if (!(reg & FXR_RXHP_CFG_HDR_PE_AUTHENTICATION_SUCCESS_SMASK)) {
+		dd_dev_err(dd, "authenticate hdrpe fail: 0x%llx",
+			reg);
+		return -ENXIO;
+	}
+	/* enable PE */
+	write_csr(dd, FXR_RXHP_CFG_HDR_PE,
+		FXR_RXHP_CFG_HDR_PE_PE_ENABLE_SMASK);
+
+	return 0;
+}
+
+/*
  */
 int hfi2_load_firmware(struct hfi_devdata *dd)
 {
@@ -992,6 +1036,12 @@ int hfi2_load_firmware(struct hfi_devdata *dd)
 	dd_dev_info(dd, "8051 firmware version %d.%d\n",
 		    (int)ver_b, (int)ver_a);
 	dd->crk8051_ver = crk8051_ver(ver_b, ver_a);
+
+	ret = authenticate_hdrpe(dd);
+	if (ret) {
+		dd_dev_err(dd, "can't authenticate hdrpe");
+		return ret;
+	}
 
 	return 0;
 }
