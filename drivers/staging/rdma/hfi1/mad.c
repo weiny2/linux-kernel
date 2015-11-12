@@ -1121,6 +1121,11 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		hfi1_set_lid(ppd, lid, pi->mkeyprotect_lmc & OPA_PI_MASK_LMC);
 		event.event = IB_EVENT_LID_CHANGE;
 		ib_dispatch_event(&event);
+
+		/* Manufacture GID from LID to support extended addresses */
+		ibp->guids[0] = OPA_MAKE_GID(lid);
+		event.event = IB_EVENT_GID_CHANGE;
+		ib_dispatch_event(&event);
 	}
 
 	msl = pi->smsl & OPA_PI_MASK_SMSL;

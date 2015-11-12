@@ -49,6 +49,9 @@
 #include <net/ipv6.h>
 #include <net/net_namespace.h>
 
+#define	OPA_STL_OUI		(0x00066AULL)
+#define OPA_MAKE_GID(x)		(cpu_to_be64(OPA_STL_OUI << 40 | (x)))
+
 struct rdma_addr_client {
 	atomic_t refcount;
 	struct completion comp;

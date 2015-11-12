@@ -54,6 +54,7 @@
 				   */
 #include <rdma/opa_smi.h>
 #include <rdma/opa_port_info.h>
+#include <rdma/ib_addr.h>
 #ifndef PI_LED_ENABLE_SUP
 #define PI_LED_ENABLE_SUP 0
 #endif
