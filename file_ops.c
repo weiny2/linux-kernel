@@ -760,8 +760,7 @@ static int hfi1_file_close(struct inode *inode, struct file *fp)
 	flush_wc();
 
 	/* drain user sdma queue */
-	if (fdata->pq)
-		hfi1_user_sdma_free_queues(fdata);
+	hfi1_user_sdma_free_queues(fdata);
 
 	/* release the cpu */
 	hfi1_put_proc_affinity(dd, fdata->rec_cpu_num);

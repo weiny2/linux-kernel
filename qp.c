@@ -1243,6 +1243,18 @@ struct ib_qp *hfi1_create_qp(struct ib_pd *ibpd,
 	}
 
 	dev->n_qps_allocated++;
+	/*
+	 * maintain a busy_jiffies variable that will be added to the timeout
+	 * period in mod_retry_timer and add_retry_timer. This busy jiffies
+	 * is scaled by the number of rc qps created for the device. this is
+	 * done to reduce the no of timeouts occurring when is a large no. of
+	 * qps. busy_jiffies is increased by 20 for every 100 qps created.
+	 * (dev->n_rc_qps / 100) * 20
+	 */
+	if (init_attr->qp_type == IB_QPT_RC) {
+		dev->n_rc_qps++;
+		dev->busy_jiffies = dev->n_rc_qps / 5;
+	}
 	spin_unlock(&dev->n_qps_lock);
 
 	if (qp->ip) {
@@ -1354,6 +1366,10 @@ int hfi1_destroy_qp(struct ib_qp *ibqp)
 	free_qpn(&dev->qp_dev->qpn_table, qp->ibqp.qp_num);
 	spin_lock(&dev->n_qps_lock);
 	dev->n_qps_allocated--;
+	if (qp->ibqp.qp_type == IB_QPT_RC) {
+		dev->n_rc_qps--;
+		dev->busy_jiffies = dev->n_rc_qps / 5;
+	}
 	spin_unlock(&dev->n_qps_lock);
 
 	if (qp->ip)
@@ -1742,7 +1758,7 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 	send_context = qp_to_send_context(qp, qp->s_sc);
 	wqe = get_swqe_ptr(qp, qp->s_last);
 	seq_printf(s,
-		   "N %d %s QP%x R %u %s %u %u %u f=%x %u %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%x LID %x SL %u MTU %u %u %u %u SDE %p,%u SC %p,%u\n",
+		   "N %d %s QP%x R %u %s %u %u %u f=%x %u %u %u %u %u %u PSN %x %x %x %x %x (%u %u %u %u %u %u %u) QP%x LID %x SL %u MTU %u %u %u %u SDE %p,%u SC %p,%u CQ %u %u\n",
 		   iter->n,
 		   qp_idle(qp) ? "I" : "B",
 		   qp->ibqp.qp_num,
@@ -1774,7 +1790,9 @@ void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
 		   sde,
 		   sde ? sde->this_idx : 0,
 		   send_context,
-		   send_context ? send_context->sw_index : 0);
+		   send_context ? send_context->sw_index : 0,
+		   to_icq(qp->ibqp.send_cq)->queue->head,
+		   to_icq(qp->ibqp.send_cq)->queue->tail);
 }
 
 void qp_comm_est(struct hfi1_qp *qp)
