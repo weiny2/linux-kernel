@@ -350,6 +350,7 @@ err:
 void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset)
 {
 	int ret;
+	unsigned long flags;
 	size_t buf_offset;
 
 	/* TODO - this needs to be optimized to limit PT_UPDATEs */
@@ -358,7 +359,9 @@ void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset)
 			 ibp->port_num, ibp->rcv_egr_last_idx, idx);
 
 		/* Tell HW we are finished reading previous eager buffer */
+		spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
 		ret = hfi_pt_update_eager(ibp->ctx, &ibp->cmdq_rx, idx);
+		spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
 		/* TODO - handle error  */
 		BUG_ON(ret < 0);
 		ibp->rcv_egr_last_idx = idx;
@@ -500,6 +503,7 @@ kthread_err:
 void opa_ib_rcv_uninit(struct opa_ib_portdata *ibp)
 {
 	int ret;
+	unsigned long flags;
 
 	if (ibp->port_num != 0)
 		return;
@@ -508,8 +512,10 @@ void opa_ib_rcv_uninit(struct opa_ib_portdata *ibp)
 	opa_ib_rcv_stop(ibp);
 
 	/* disable PT so EQ buffer and RX buffers can be released */
+	spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
 	ret = hfi_pt_disable(ibp->ctx, &ibp->cmdq_rx, HFI_NI_BYPASS,
 			     HFI_PT_BYPASS_EAGER);
+	spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
 	/* TODO - handle error  */
 	BUG_ON(ret < 0);
 
