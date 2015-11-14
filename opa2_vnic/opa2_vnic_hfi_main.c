@@ -553,7 +553,9 @@ static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 	struct opa_netdev *ndev = dev->ndev;
 	int rc;
 
-	dev->vdev = vdev;
+	if (!cb)
+		return -EINVAL;
+
 	/*
 	 * Only get reference count for eeph device. For network device, the
 	 * linux network stack decouples ethernet interface and the driver.
@@ -568,9 +570,13 @@ static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 		}
 		ndev->eeph_dev = vdev;
 	} else {
+		/* ensure virtual eth switch id is valid */
+		if (!vdev->vesw_id)
+			return -EINVAL;
+
 		rc = idr_alloc(&ndev->vesw_idr[dev->port_num - 1],
-			       vdev, dev->vport_num,
-			       dev->vport_num + 1, GFP_NOWAIT);
+			       vdev, vdev->vesw_id,
+			       vdev->vesw_id + 1, GFP_NOWAIT);
 		if (rc < 0) {
 			dev_err(&ndev->odev->dev, "%s %d rc %d vesw %d "
 				"port_num %d vport_num %d\n",
@@ -585,6 +591,7 @@ static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 			__func__, __LINE__, rc);
 		goto err1;
 	}
+	dev->vdev = vdev;
 	rcu_assign_pointer(dev->vnic_cb, cb);
 	synchronize_rcu();
 	return 0;
