@@ -1474,6 +1474,9 @@ static int hfi1_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 	struct hfi1_pportdata *ppd;
 	struct hfi1_devdata *dd;
 	u8 sc5;
+	
+	if (hfi1_retrieve_lid(ah_attr) == 0)
+		return -EINVAL;
 
 	/* test the mapping for validity */
 	ibp = to_iport(ibdev, ah_attr->port_num);

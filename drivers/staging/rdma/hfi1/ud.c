@@ -247,7 +247,8 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	if (wc.slid == 0 && sqp->ibqp.qp_type == IB_QPT_GSI)
 		wc.slid = be16_to_cpu(IB_LID_PERMISSIVE);
 	wc.sl = ah_attr->sl;
-	wc.dlid_path_bits = ah_attr->dlid & ((1 << ppd->lmc) - 1);
+	wc.dlid_path_bits = hfi1_retrieve_lid(ah_attr) &
+				((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
 	rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc,
@@ -279,7 +280,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	u32 extra_bytes;
 	u32 bth0;
 	u16 lrh0;
-	u16 lid;
+	u32 lid;
 	int next_cur;
 	u8 sc5;
 
@@ -320,7 +321,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
 	if (ah_attr->dlid < be16_to_cpu(IB_MULTICAST_LID_BASE) ||
 	    ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE)) {
-		lid = ah_attr->dlid & ~((1 << ppd->lmc) - 1);
+		lid = hfi1_retrieve_lid(ah_attr) & ~((1 << ppd->lmc) - 1);
 		if (unlikely(!loopback &&
 			     (lid == (u16)ppd->lid ||
 			      (lid == be16_to_cpu(IB_LID_PERMISSIVE) &&

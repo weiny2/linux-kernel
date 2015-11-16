@@ -1949,4 +1949,26 @@ static inline u32 hfi1_get_lid_from_gid(union ib_gid *gid)
 	/* Caller should ensure gid is of type opa gid */
 	return be64_to_cpu(gid->global.interface_id) & 0xFFFFFFFF;
 }
+
+/**
+ * hfi1_retrieve_lid - Get lid in the GID.
+ *
+ * Extended LIDs are stored in the GID if the STL
+ * device supports extended addresses. This function
+ * retirieves the 32 bit lid.
+ *
+ * If GRH is not specified or if an IB GID is specified
+ * in the GRH, the function simply returns the 16 bit lid.
+ */
+static inline u32 hfi1_retrieve_lid(struct ib_ah_attr *ah_attr)
+{
+	union ib_gid *dgid;
+
+	if ((ah_attr->ah_flags & IB_AH_GRH)) {
+		dgid = &ah_attr->grh.dgid;
+		if (ib_is_opa_gid(dgid))
+			return hfi1_get_lid_from_gid(dgid);
+	}
+	return ah_attr->dlid;
+}
 #endif                          /* _HFI1_KERNEL_H */

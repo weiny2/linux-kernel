@@ -841,9 +841,10 @@ void hfi1_do_send(struct rvt_qp *qp)
 
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_RC:
-		if (!loopback && ((qp->remote_ah_attr.dlid & ~((1 << ps.ppd->lmc
-								) - 1)) ==
-				 ps.ppd->lid)) {
+		if (!loopback && ((hfi1_retrieve_lid(&qp->remote_ah_attr)
+						     & ~((1 << ps.ppd->lmc)
+							- 1)) ==
+				  ps.ppd->lid)) {
 			ruc_loopback(qp);
 			return;
 		}
@@ -851,9 +852,10 @@ void hfi1_do_send(struct rvt_qp *qp)
 		timeout_int = (qp->timeout_jiffies);
 		break;
 	case IB_QPT_UC:
-		if (!loopback && ((qp->remote_ah_attr.dlid & ~((1 << ps.ppd->lmc
-								) - 1)) ==
-				 ps.ppd->lid)) {
+		if (!loopback && ((hfi1_retrieve_lid(&qp->remote_ah_attr)
+						     & ~((1 << ps.ppd->lmc)
+							- 1)) ==
+				  ps.ppd->lid)) {
 			ruc_loopback(qp);
 			return;
 		}
