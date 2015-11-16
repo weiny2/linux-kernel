@@ -1868,17 +1868,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		 * opa_port_info.h
 		 */
 		ppd->link_speed_supported = OPA_LINK_SPEED_25G;
-		ppd->link_speed_enabled = dd->pport->link_speed_supported;
-		ppd->link_speed_active = OPA_LINK_SPEED_25G;
-
-		/*
-		 * FXRTODO: These 3 variables are to be initialized during LNI.
-		 * Move this to LNI code and initialize appropriately once
-		 * the code is implemented.
-		 */
-		ppd->link_width_active = OPA_LINK_WIDTH_4X;
-		ppd->link_width_downgrade_tx_active = ppd->link_width_active;
-		ppd->link_width_downgrade_rx_active = ppd->link_width_active;
+		ppd->link_speed_enabled = ppd->link_speed_supported;
 
 		ppd->port_crc_mode_enabled = HFI_SUPPORTED_CRCS;
 		/* initialize supported LTP CRC mode */

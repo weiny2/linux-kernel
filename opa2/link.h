@@ -170,6 +170,27 @@
 #define LOAD_DATA_DATA_SHIFT  0x0
 #define LOAD_DATA_DATA_MASK   0xffffffffull
 
+/* verify capability local link width fields */
+#define LINK_WIDTH_SHIFT 0		/* also for remote link width */
+#define LOCAL_LINK_WIDTH_MASK 0xffff
+#define REMOTE_LINK_WIDTH_MASK 0xff
+#define LOCAL_FLAG_BITS_SHIFT 16
+#define LOCAL_FLAG_BITS_MASK 0xff
+#define MISC_CONFIG_BITS_SHIFT 24
+#define MISC_CONFIG_BITS_MASK 0xff
+
+/* verify capability remote link width fields */
+#define REMOTE_TX_RATE_SHIFT 16
+#define REMOTE_TX_RATE_MASK 0xff
+
+/* New on FXR, not defined in 4.3 kernel */
+#define OPA_LINK_SPEED_32G 3 /* 32.2265625 32Gbps */
+
+/* FXR link speed bit */
+#define HFI2_LINK_SPEED_32G 0x04 /* 32.2265625 32Gbps */
+#define HFI2_LINK_SPEED_25G 0x02 /* 25.7815 25Gbps */
+#define HFI2_LINK_SPEED_12_5G 0x01 /* 12.5Gbps */
+
 /* misc status version fields */
 #define STS_FM_VERSION_A_SHIFT 16
 #define STS_FM_VERSION_A_MASK  0xff

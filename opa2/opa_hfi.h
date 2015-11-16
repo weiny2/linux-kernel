@@ -457,6 +457,7 @@ struct ib_vl_weight_elem {
  * @is_active_optimize_enabled: if enabled, then LinkArmed -> LinkActive state
  *	change propogates this event to neighboring port via SMA Idle Flit
  *	messages
+ * @local_tx_rate: rate given to 8051 firmware
  * @mgmt_allowed: Indicates if neighbor is allowing this node to be a mgmt node
  *	(information received via LNI)
  * @part_enforce: Partition enforcement flags
@@ -539,6 +540,7 @@ struct hfi_pportdata {
 	u8 is_sm_config_started;
 	u8 offline_disabled_reason;
 	u8 is_active_optimize_enabled;
+	u8 local_tx_rate;
 	u8 mgmt_allowed;
 	u8 part_enforce;
 	u8 sl_to_sc[OPA_MAX_SLS];
