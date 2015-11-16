@@ -70,6 +70,7 @@ static bool quick_linkup = false; /* skip VerifyCap and Config* state. */
 static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup);
 static u32 read_physical_state(const struct hfi_pportdata *ppd);
 static int set_physical_link_state(struct hfi_pportdata *ppd, u64 state);
+static void get_linkup_link_widths(struct hfi_pportdata *ppd);
 
 /*
  * read FZC registers
@@ -541,6 +542,45 @@ static int load_8051_config(struct hfi_pportdata *ppd, u8 field_id,
 	return ret;
 }
 
+static void read_vc_local_link_width(struct hfi_pportdata *ppd, u8 *misc_bits,
+				     u8 *flag_bits, u16 *link_widths)
+{
+	u32 frame;
+
+	hfi2_read_8051_config(ppd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
+			 &frame);
+	*misc_bits = (frame >> MISC_CONFIG_BITS_SHIFT) & MISC_CONFIG_BITS_MASK;
+	*flag_bits = (frame >> LOCAL_FLAG_BITS_SHIFT) & LOCAL_FLAG_BITS_MASK;
+	*link_widths = (frame >> LINK_WIDTH_SHIFT) & LOCAL_LINK_WIDTH_MASK;
+}
+
+static int write_vc_local_link_width(struct hfi_pportdata *ppd,
+				     u8 misc_bits,
+				     u8 flag_bits,
+				     u16 link_widths)
+{
+	u32 frame;
+
+	frame = (u32)misc_bits << MISC_CONFIG_BITS_SHIFT
+		| (u32)flag_bits << LOCAL_FLAG_BITS_SHIFT
+		| (u32)link_widths << LINK_WIDTH_SHIFT;
+	return load_8051_config(ppd, VERIFY_CAP_LOCAL_LINK_WIDTH, GENERAL_CONFIG,
+		     frame);
+}
+
+static void read_vc_remote_link_width(struct hfi_pportdata *ppd,
+				      u8 *remote_tx_rate,
+				      u16 *link_widths)
+{
+	u32 frame;
+
+	hfi2_read_8051_config(ppd, VERIFY_CAP_REMOTE_LINK_WIDTH, GENERAL_CONFIG,
+			 &frame);
+	*remote_tx_rate = (frame >> REMOTE_TX_RATE_SHIFT)
+				& REMOTE_TX_RATE_MASK;
+	*link_widths = (frame >> LINK_WIDTH_SHIFT) & REMOTE_LINK_WIDTH_MASK;
+}
+
  /*
  * Read an idle LCB message.
  *
@@ -852,14 +892,42 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 			"LNI failure last states: local 0x%08x, remote 0x%08x\n",
 			last_local_state, last_remote_state);
 	}
+#endif
 
 	/* the active link width (downgrade) is 0 on link down */
 	ppd->link_width_active = 0;
 	ppd->link_width_downgrade_tx_active = 0;
 	ppd->link_width_downgrade_rx_active = 0;
+#if 0 /* WFR legacy */
 	ppd->current_egress_rate = 0;
 #endif
 	return 0;
+}
+
+/*
+ * Translate from the OPA_LINK_WIDTH handed to us by the FM to bits
+ * used in the Verify Capability link width attribute.
+ */
+static u16 opa_to_vc_link_widths(u16 opa_widths)
+{
+	int i;
+	u16 result = 0;
+
+	static const struct link_bits {
+		u16 from;
+		u16 to;
+	} opa_link_xlate[] = {
+		{ OPA_LINK_WIDTH_1X, 1 << (1 - 1)  },
+		{ OPA_LINK_WIDTH_2X, 1 << (2 - 1)  },
+		{ OPA_LINK_WIDTH_3X, 1 << (3 - 1)  },
+		{ OPA_LINK_WIDTH_4X, 1 << (4 - 1)  },
+	};
+
+	for (i = 0; i < ARRAY_SIZE(opa_link_xlate); i++) {
+		if (opa_widths & opa_link_xlate[i].from)
+			result |= opa_link_xlate[i].to;
+	}
+	return result;
 }
 
 /*
@@ -867,15 +935,15 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
  */
 static int set_local_link_attributes(struct hfi_pportdata *ppd)
 {
-#if 1
-	return 0;
-#else /* WFR legacy */
+#if 0 /* WFR legacy */
 	struct hfi1_devdata *dd = ppd->dd;
 	u8 enable_lane_tx;
 	u8 tx_polarity_inversion;
 	u8 rx_polarity_inversion;
+#endif
 	int ret;
 
+#if 0 /* WFR legacy */
 	/* reset our fabric serdes to clear any lingering problems */
 	fabric_serdes_reset(dd);
 
@@ -884,22 +952,25 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 		&rx_polarity_inversion, &ppd->local_tx_rate);
 	if (ret)
 		goto set_local_link_attributes_fail;
+#endif
 
-	if (dd->dc8051_ver < dc8051_ver(0, 20)) {
-		/* set the tx rate to the fastest enabled */
-		if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
-			ppd->local_tx_rate = 1;
-		else
-			ppd->local_tx_rate = 0;
-	} else {
-		/* set the tx rate to all enabled */
-		ppd->local_tx_rate = 0;
-		if (ppd->link_speed_enabled & OPA_LINK_SPEED_25G)
-			ppd->local_tx_rate |= 2;
-		if (ppd->link_speed_enabled & OPA_LINK_SPEED_12_5G)
-			ppd->local_tx_rate |= 1;
+	/* set the tx rate to all enabled */
+	ppd->local_tx_rate = 0;
+	switch (ppd->link_speed_enabled) {
+	case OPA_LINK_SPEED_32G: /* fall through */
+		ppd->local_tx_rate |= HFI2_LINK_SPEED_32G;
+	case OPA_LINK_SPEED_25G: /* fall through */
+		ppd->local_tx_rate |= HFI2_LINK_SPEED_25G;
+	case OPA_LINK_SPEED_12_5G:
+		ppd->local_tx_rate |= HFI2_LINK_SPEED_12_5G;
+		break;
+	default:
+		ppd_dev_err(ppd, "invalid link_speed_enabled: %d",
+			ppd->link_speed_enabled);
+		return -EINVAL;
 	}
 
+#if 0 /* WFR legacy */
 	enable_lane_tx = 0xF; /* enable all four lanes */
 	ret = write_tx_settings(dd, enable_lane_tx, tx_polarity_inversion,
 		     rx_polarity_inversion, ppd->local_tx_rate);
@@ -919,15 +990,22 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 				    ppd->port_crc_mode_enabled);
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
+#endif
 
-	ret = write_vc_local_link_width(dd, 0, 0,
+	/*
+	 * write desired link width policy.
+	 * See "Initial Link Width Policy Configuration" of MNH HAS.
+	 */
+	ret = write_vc_local_link_width(ppd, 0, 0,
 		     opa_to_vc_link_widths(ppd->link_width_enabled));
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
+#if 0 /* WFR legacy */
 	/* let peer know who we are */
 	ret = write_local_device_id(dd, dd->pcidev->device, dd->minrev);
 	if (ret == HCMD_SUCCESS)
+#endif
 		return 0;
 
 set_local_link_attributes_fail:
@@ -935,7 +1013,6 @@ set_local_link_attributes_fail:
 		"Failed to set local link attributes, return 0x%x\n",
 		ret);
 	return ret;
-#endif
 }
 
 static u32 chip_to_opa_lstate(struct hfi_devdata *dd, u32 chip_lstate)
@@ -1167,14 +1244,17 @@ static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup)
 				ppd->neighbor_type);
 		}
 
-#if 0 /* WFR legacy */
 		/* physical link went up */
+#if 0 /* WFR legacy */
 		ppd->linkup = 1;
+#endif
 		ppd->offline_disabled_reason = OPA_LINKDOWN_REASON_NONE;
 
-		/* link widths are not available until the link is fully up */
+		/*
+		 * update link_width_* after firmware updated.
+		 * See "Link Width Refinement During LNI" of MNH HAS.
+		 */
 		get_linkup_link_widths(ppd);
-#endif
 
 	} else {
 #if 0 /* WFR legacy */
@@ -1214,6 +1294,89 @@ void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 }
 
 /*
+ * Convert the given link width to the OPA link width bitmask.
+ */
+static u16 link_width_to_bits(struct hfi_pportdata *ppd, u16 width)
+{
+	switch (width) {
+	case 0:
+		/*
+		 * quick linkup do not set the width.
+		 * Just set it to 4x without complaint.
+		 */
+		if (quick_linkup)
+			return OPA_LINK_WIDTH_4X;
+		return 0; /* no lanes up */
+	case 1: return OPA_LINK_WIDTH_1X;
+	case 2: return OPA_LINK_WIDTH_2X;
+	case 3: return OPA_LINK_WIDTH_3X;
+	default:
+		ppd_dev_info(ppd, "%s: invalid width %d, using 4\n",
+			    __func__, width);
+		/* fall through */
+	case 4: return OPA_LINK_WIDTH_4X;
+	}
+}
+
+/*
+ * Read verify_cap_local_fm_link_width[1] to obtain the link widths.
+ * Valid after the end of VerifyCap and during LinkUp.  Does not change
+ * after link up.  I.e. look elsewhere for downgrade information.
+ *
+ * Bits are:
+ *	+ bits [7:4] contain the number of active transmitters
+ *	+ bits [3:0] contain the number of active receivers
+ * These are numbers 1 through 4 and can be different values if the
+ * link is asymmetric.
+ *
+ * verify_cap_local_fm_link_width[0] retains its original value.
+ */
+static void get_linkup_widths(struct hfi_pportdata *ppd, u16 *tx_width,
+			      u16 *rx_width)
+{
+	u16 widths, tx, rx;
+	u8 misc_bits, local_flags;
+#if 0 /* WFR legacy */
+	u16 active_tx, active_rx;
+#endif
+
+	read_vc_local_link_width(ppd, &misc_bits, &local_flags, &widths);
+	tx = widths >> 12;
+	rx = (widths >> 8) & 0xf;
+
+	*tx_width = link_width_to_bits(ppd, tx);
+	*rx_width = link_width_to_bits(ppd, rx);
+}
+
+/*
+ * Set ppd->link_width_active and ppd->link_width_downgrade_active using
+ * hardware information when the link first comes up.
+ *
+ * The link width is not available until after VerifyCap.AllFramesReceived
+ * (the trigger for handle_verify_cap), so this is outside that routine
+ * and should be called when the 8051 signals linkup.
+ */
+void get_linkup_link_widths(struct hfi_pportdata *ppd)
+{
+	u16 tx_width, rx_width;
+
+	/* get end-of-LNI link widths */
+	get_linkup_widths(ppd, &tx_width, &rx_width);
+
+	/* use tx_width as the link is supposed to be symmetric on link up */
+	ppd->link_width_active = tx_width;
+	/* link width downgrade active (LWD.A) starts out matching LW.A */
+	ppd->link_width_downgrade_tx_active = ppd->link_width_active;
+	ppd->link_width_downgrade_rx_active = ppd->link_width_active;
+	/* per OPA spec, on link up LWD.E resets to LWD.S */
+	ppd->link_width_downgrade_enabled = ppd->link_width_downgrade_supported;
+#if 0 /* WFR legacy */
+	/* cache the active egress rate (units {10^6 bits/sec]) */
+	ppd->current_egress_rate = active_egress_rate(ppd);
+#endif
+}
+
+/*
  * Handle a verify capabilities interrupt from MNH/8051.
  *
  * This is a work-queue function outside of the interrupt.
@@ -1225,6 +1388,9 @@ static void handle_verify_cap(struct work_struct *work)
 #if 0 /* WFR legacy */
 	struct hfi_devdata *dd = ppd->dd;
 #endif
+	u16 link_widths;
+	u8 remote_max_rate;
+	u8 rate;
 	u32 _8051_port = read_physical_state(ppd);
 
 	if (_8051_port != PLS_CONFIGPHY_VERIFYCAP) {
@@ -1254,7 +1420,9 @@ static void handle_verify_cap(struct work_struct *work)
 		&vcu,
 		&vl15buf,
 		&partner_supported_crc);
-	read_vc_remote_link_width(dd, &remote_tx_rate, &link_widths);
+#endif
+	read_vc_remote_link_width(ppd, &remote_max_rate, &link_widths);
+#if 0 /* WFR legacy */
 	read_remote_device_id(dd, &device_id, &device_rev);
 	/*
 	 * And the 'MgmtAllowed' information, which is exchanged during
@@ -1273,8 +1441,10 @@ static void handle_verify_cap(struct work_struct *work)
 		(int)vcu,
 		(int)vl15buf,
 		(int)partner_supported_crc);
+#endif
 	ppd_dev_info(ppd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
-		(u32)remote_tx_rate, (u32)link_widths);
+		(u32)remote_max_rate, (u32)link_widths);
+#if 0 /* WFR legacy */
 	ppd_dev_info(ppd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
 		(u32)device_id, (u32)device_rev);
 	/*
@@ -1316,33 +1486,38 @@ static void handle_verify_cap(struct work_struct *work)
 		write_csr(dd, SEND_CM_CTRL,
 			reg & ~SEND_CM_CTRL_FORCE_CREDIT_MODE_SMASK);
 	}
+#endif
 
 	ppd->link_speed_active = 0;	/* invalid value */
-	if (dd->dc8051_ver < dc8051_ver(0, 20)) {
-		/* remote_tx_rate: 0 = 12.5G, 1 = 25G */
-		switch (remote_tx_rate) {
-		case 0:
-			ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
-			break;
-		case 1:
-			ppd->link_speed_active = OPA_LINK_SPEED_25G;
-			break;
-		}
-	} else {
-		/* actual rate is highest bit of the ANDed rates */
-		u8 rate = remote_tx_rate & ppd->local_tx_rate;
-
-		if (rate & 2)
-			ppd->link_speed_active = OPA_LINK_SPEED_25G;
-		else if (rate & 1)
-			ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
+	/* actual rate is highest bit of the ANDed rates */
+	rate = 0;
+	switch (remote_max_rate) {
+	case 0: /* 32G */
+		rate |= HFI2_LINK_SPEED_32G; /* fall through */
+	case 1: /* 25G */
+		rate |= HFI2_LINK_SPEED_25G | HFI2_LINK_SPEED_12_5G;
+		break;
+	default:
+		ppd_dev_err(ppd, "invalid remote max rate %d, set up to 32G",
+			remote_max_rate);
+		rate = HFI2_LINK_SPEED_32G | HFI2_LINK_SPEED_25G |
+			HFI2_LINK_SPEED_12_5G; break;
+		break;
 	}
-	if (ppd->link_speed_active == 0) {
-		ppd_dev_err(ppd, "%s: unexpected remote tx rate %d, using 25Gb\n",
-			__func__, (int)remote_tx_rate);
+	rate &= ppd->local_tx_rate;
+	if (rate & HFI2_LINK_SPEED_32G) {
+		ppd->link_speed_active = OPA_LINK_SPEED_32G;
+	} else if (rate & HFI2_LINK_SPEED_25G) {
 		ppd->link_speed_active = OPA_LINK_SPEED_25G;
+	} else if (rate & HFI2_LINK_SPEED_12_5G) {
+		ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
+	} else {
+		ppd_dev_err(ppd, "no common speed with remote: 0x%x, set up 32Gb\n",
+			rate);
+		ppd->link_speed_active = OPA_LINK_SPEED_32G;
 	}
 
+#if 0 /* WFR legacy */
 	/*
 	 * Cache the values of the supported, enabled, and active
 	 * LTP CRC modes to return in 'portinfo' queries. But the bit
