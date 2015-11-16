@@ -136,7 +136,8 @@ FIRMWARE_READ(logical_link, fzc, FZC_LCB_CFG_PORT)
 FIRMWARE_WRITE(logical_link, fzc, FZC_LCB_CFG_PORT)
 HOST_STATE_READ(host_link_state)
 HOST_STATE_READ(lstate)
-
+LINK_WIDTH_READ(local, VERIFY_CAP_LOCAL_LINK_WIDTH)
+LINK_WIDTH_READ(remote, VERIFY_CAP_REMOTE_LINK_WIDTH)
 static const struct firmware_info firmware_ops[] = {
 	DEBUGFS_OPS("8051_state", _8051_state_read, NULL),
 	DEBUGFS_OPS("8051_cmd0", _8051_cmd0_read, _8051_cmd0_write),
@@ -144,6 +145,8 @@ static const struct firmware_info firmware_ops[] = {
 	DEBUGFS_OPS("logical_link", _logical_link_read, _logical_link_write),
 	DEBUGFS_OPS("host_link_state", host_link_state_read, NULL),
 	DEBUGFS_OPS("lstate", lstate_read, NULL),
+	DEBUGFS_OPS("local_link_width", local_link_width_show, NULL),
+	DEBUGFS_OPS("remote_link_width", remote_link_width_show, NULL),
 };
 
 void hfi_firmware_dbg_init(struct hfi_devdata *dd)

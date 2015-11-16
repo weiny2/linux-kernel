@@ -810,7 +810,7 @@ int hfi_wait_firmware_ready(const struct hfi_pportdata *ppd, u32 mstimeout)
  * set the result, even on error.
  * Return 0 on success, -errno on failure
  */
-static int read_8051_config(struct hfi_pportdata *ppd, u8 field_id, u8 lane_id,
+int hfi2_read_8051_config(struct hfi_pportdata *ppd, u8 field_id, u8 lane_id,
 		     u32 *result)
 {
 	u64 big_data;
@@ -847,7 +847,7 @@ static void read_misc_status(struct hfi_pportdata *ppd, u8 *ver_a, u8 *ver_b)
 {
 	u32 frame;
 
-	read_8051_config(ppd, MISC_STATUS, GENERAL_CONFIG, &frame);
+	hfi2_read_8051_config(ppd, MISC_STATUS, GENERAL_CONFIG, &frame);
 	*ver_a = (frame >> STS_FM_VERSION_A_SHIFT) & STS_FM_VERSION_A_MASK;
 	*ver_b = (frame >> STS_FM_VERSION_B_SHIFT) & STS_FM_VERSION_B_MASK;
 }
