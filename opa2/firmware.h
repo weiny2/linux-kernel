@@ -115,6 +115,8 @@ struct hfi_pportdata;
 
 void hfi_firmware_dbg_init(struct hfi_devdata *dd);
 void hfi_firmware_dbg_exit(struct hfi_devdata *dd);
+int hfi2_read_8051_config(struct hfi_pportdata *ppd, u8 field_id, u8 lane_id,
+	u32 *result);
 void hfi2_dispose_firmware(struct hfi_devdata *dd);
 int hfi_wait_firmware_ready(const struct hfi_pportdata *ppd, u32 mstimeout);
 int hfi2_load_firmware(struct hfi_devdata *dd);

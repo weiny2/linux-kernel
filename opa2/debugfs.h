@@ -142,6 +142,21 @@ static ssize_t name##_read(struct file *file, char __user *buf,\
 		sizeof(ppd->host_link_state));\
 }
 
+#define LINK_WIDTH_READ(name, register) \
+static ssize_t name##_link_width_show(struct file *file, char __user *buf, \
+		      size_t count, loff_t *ppos) \
+{ \
+	struct hfi_pportdata *ppd = private2ppd(file);\
+	ssize_t ret;\
+	u32 frame;\
+\
+	hfi2_read_8051_config(ppd, register, GENERAL_CONFIG, \
+			 &frame); \
+	ret =  simple_read_from_buffer(buf, count, ppos, &frame, \
+					sizeof(frame)); \
+	return ret; \
+}
+
 struct firmware_info {
 	char *name;
 	const struct file_operations ops;
