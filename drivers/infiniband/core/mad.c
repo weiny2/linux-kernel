@@ -41,6 +41,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <rdma/ib_cache.h>
+#include <rdma/ib_addr.h>
 
 #include "mad_priv.h"
 #include "mad_rmpp.h"
@@ -735,6 +736,92 @@ static size_t mad_priv_dma_size(const struct ib_mad_private *mp)
 	return sizeof(struct ib_grh) + mp->mad_size;
 }
 
+static int verify_mad_ah(struct ib_mad_agent_private *mad_agent_priv,
+			 struct ib_mad_send_wr_private *mad_send_wr)
+{
+	struct ib_device *ib_dev = mad_agent_priv->qp_info->port_priv->device;
+	u8 port = mad_agent_priv->qp_info->port_priv->port_num;
+	struct ib_smp *smp = mad_send_wr->send_buf.mad;
+	struct opa_smp *opa_smp = (struct opa_smp *)smp;
+	u32 opa_drslid = be32_to_cpu(opa_smp->route.dr.dr_slid);
+	u32 opa_drdlid = be32_to_cpu(opa_smp->route.dr.dr_dlid);
+
+	bool dr_slid_is_permissive = (OPA_LID_PERMISSIVE ==
+				 opa_smp->route.dr.dr_slid);
+	bool dr_dlid_is_permissive = (OPA_LID_PERMISSIVE ==
+				 opa_smp->route.dr.dr_dlid);
+	bool drslid_is_ib_ucast = !(opa_drslid & 0xFFFFC000);
+	bool drdlid_is_ib_ucast = !(opa_drdlid & 0xFFFFC000);
+	bool drslid_is_ext = !drslid_is_ib_ucast && !dr_slid_is_permissive;
+	bool drdlid_is_ext = !drdlid_is_ib_ucast && !dr_dlid_is_permissive;
+	bool grh_present = false;
+	struct ib_ah_attr attr;
+	union ib_gid sgid;
+	int ret = 0;
+
+	if (!(rdma_cap_opa_ah(ib_dev, port) &&
+	      rdma_cap_opa_mad(ib_dev, port)))
+		return 0;
+
+	ret = ib_query_ah(mad_send_wr->send_buf.ah, &attr);
+	if (ret)
+		goto out;
+	grh_present = (attr.ah_flags & IB_AH_GRH);
+	if (grh_present) {
+		ret = ib_query_gid(ib_dev, port, attr.grh.sgid_index, &sgid, NULL);
+		if (ret)
+			goto out;
+	}
+
+	if (smp->class_version == OPA_SMP_CLASS_VERSION) {
+		/**
+		 * Conditions when GRH info should not be specified
+		 * 1. both dr_slid and dr_dlid are permissve (Pure DR)
+		 * 2. both dr_slid and dr_dlid are less than 0xc000.
+		 *
+		 * Conditions when GRH info should be specified
+		 * 1. dr_dlid is not permissive and above 0xbfff
+		 * OR
+		 * 2. dr_slid is not permissive and above 0xbfff
+		 */
+		if (grh_present) {
+			if ((dr_slid_is_permissive &&
+			     dr_dlid_is_permissive) ||
+			     (drslid_is_ib_ucast && drdlid_is_ib_ucast)) {
+				if (ib_is_opa_gid(&attr.grh.dgid) &&
+				    ib_is_opa_gid(&sgid)) {
+					ret = -EINVAL;
+					goto out;
+				}
+			}
+			if (drslid_is_ext && !ib_is_opa_gid(&sgid)) {
+				ret = -EINVAL;
+				goto out;
+			}
+			if (drdlid_is_ext &&
+			    !ib_is_opa_gid(&attr.grh.dgid)) {
+				ret = -EINVAL;
+				goto out;
+			}
+		} else { /* There is no GRH */
+			if (drslid_is_ext || drdlid_is_ext) {
+				ret = -EINVAL;
+				goto out;
+			}
+		}
+	} else {
+		if (grh_present) {
+			if (ib_is_opa_gid(&attr.grh.dgid) &&
+			    ib_is_opa_gid(&sgid)) {
+				ret = -EINVAL;
+				goto out;
+			}
+		}
+	}
+out:
+	return ret;
+}
+
 /*
  * Return 0 if SMP is to be sent
  * Return 1 if SMP was consumed locally (whether or not solicited)
@@ -773,6 +860,12 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 	 * If we are at the start of the LID routed part, don't update the
 	 * hop_ptr or hop_cnt.  See section 14.2.2, Vol 1 IB spec.
 	 */
+	ret = verify_mad_ah(mad_agent_priv, mad_send_wr);
+	if (ret) {
+		dev_err(&device->dev,
+			"Error verifying MAD format\n");
+		goto out;
+	}
 	if (opa && smp->class_version == OPA_SMP_CLASS_VERSION) {
 		u32 opa_drslid;
 
@@ -787,13 +880,6 @@ static int handle_outgoing_dr_smp(struct ib_mad_agent_private *mad_agent_priv,
 			goto out;
 		}
 		opa_drslid = be32_to_cpu(opa_smp->route.dr.dr_slid);
-		if (opa_drslid != be32_to_cpu(OPA_LID_PERMISSIVE) &&
-		    opa_drslid & 0xffff0000) {
-			ret = -EINVAL;
-			dev_err(&device->dev, "OPA Invalid dr_slid 0x%x\n",
-			       opa_drslid);
-			goto out;
-		}
 		drslid = (u16)(opa_drslid & 0x0000ffff);
 
 		/* Check to post send on QP or process locally */
