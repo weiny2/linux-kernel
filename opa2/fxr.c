@@ -1116,7 +1116,12 @@ static void hfi_sl_to_mctc(struct hfi_pportdata *ppd)
 		tc = (i % HFI_MAX_TC);
 		/* Use TC 0 for any TC clashing with the HFI_VL15_TC */
 		tc = tc == HFI_VL15_TC ? 0 : tc;
-		ppd->sl_to_mctc[i] = (i & 0x4) | tc;
+		/*
+		 * Always use MC0 for non-portals. Transmitting non-portals on
+		 * MC1 is allowed but we cannot receive anything but portals
+		 * on MC1 because of the way the control pipeline is plumbed.
+		 */
+		ppd->sl_to_mctc[i] = tc;
 	}
 
 	switch (ppd_to_pnum(ppd)) {

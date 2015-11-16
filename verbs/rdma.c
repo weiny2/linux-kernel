@@ -477,6 +477,7 @@ static void opa_ib_rcv(struct opa_ib_packet *packet)
 		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
 		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
 			goto drop;
+		packet->rcv_flags |= HFI1_HAS_GRH;
 	} else
 		goto drop;
 
@@ -490,36 +491,33 @@ static void opa_ib_rcv(struct opa_ib_packet *packet)
 	qp_num = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
 	dev_dbg(ibp->dev, "PT %d: IB packet for QPN %d\n",
 		ibp->port_num, qp_num);
+	if (rhf_sc4(packet->rhf))
+		packet->rcv_flags |= HFI1_SC4_BIT;
 
-#if 0 /* FXRTODO - mcast */
 	if ((lid >= HFI1_MULTICAST_LID_BASE) &&
 	    (lid != HFI1_PERMISSIVE_LID)) {
-		struct qib_mcast *mcast;
-		struct qib_mcast_qp *p;
+		struct opa_mcast *mcast;
+		struct opa_mcast_qp *p;
 
 		if (lnh != HFI1_LRH_GRH)
 			goto drop;
-		mcast = opa_ib_mcast_find(ibp, &hdr->u.l.grh.dgid);
+		mcast = opa_mcast_find(ibp, &hdr->u.l.grh.dgid);
 		if (mcast == NULL)
 			goto drop;
-		packet->rcv_flags |= HFI1_HAS_GRH;
-		if (rhf_dc_info(packet->rhf))
-			packet->rcv_flags |= HFI1_SC4_BIT;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
+			qp = p->qp;
 			spin_lock(&qp->r_lock);
 			if (likely((is_qp_ok(ibp, qp, opcode))))
 				opcode_handler_tbl[opcode](qp, packet);
 			spin_unlock(&qp->r_lock);
 		}
 		/*
-		 * Notify multicast_detach() if it is waiting for us
+		 * Notify hfi1_multicast_detach() if it is waiting for us
 		 * to finish.
 		 */
 		if (atomic_dec_return(&mcast->refcount) <= 1)
 			wake_up(&mcast->wait);
-	} else
-#endif
-	{
+	} else {
 		rcu_read_lock();
 		qp = opa_ib_lookup_qpn(ibp, qp_num);
 		if (!qp) {
@@ -529,8 +527,6 @@ static void opa_ib_rcv(struct opa_ib_packet *packet)
 
 		if (lnh == HFI1_LRH_GRH)
 			packet->rcv_flags |= HFI1_HAS_GRH;
-		if (rhf_sc4(packet->rhf))
-			packet->rcv_flags |= HFI1_SC4_BIT;
 
 		spin_lock(&qp->r_lock);
 		if (likely((is_qp_ok(ibp, qp, opcode))))
@@ -563,6 +559,7 @@ static void process_rcv_packet(struct opa_ib_portdata *ibp, u64 *rhf_entry,
 	u64 rhf = *rhf_entry;
 
 	packet->rcv_flags = 0;
+	packet->rhf = rhf;
 	packet->hdr = rhf_get_hdr(packet, rhf_entry);
 	packet->hlen = rhf_hdr_len(rhf);  /* in bytes */
 	packet->tlen = rhf_pkt_len(rhf);  /* in bytes */
