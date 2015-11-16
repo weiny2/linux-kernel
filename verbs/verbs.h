@@ -832,6 +832,8 @@ int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 #endif
 int opa_ib_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 int opa_ib_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
+struct opa_mcast *
+opa_mcast_find(struct opa_ib_portdata *ibp, union ib_gid *mgid);
 
 /* Device specific */
 int opa_ib_send_wqe_pio(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe);

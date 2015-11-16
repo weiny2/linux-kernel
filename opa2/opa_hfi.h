@@ -217,11 +217,11 @@ enum {
  * provides it
  */
 /* Number of SL pairs used by Portals */
-#define HFI_NUM_PTL_SLP 4
+#define HFI_NUM_PTL_SLP 2
 
 /*
  * Starting SL for Portals traffic. The following pairs are reserved for
- * portals. [0, 1], [2, 3], [4, 5], [6, 7]
+ * portals. [0, 1], [2, 3]
  *
  */
 #define HFI_PTL_SL_START 0
