@@ -263,7 +263,7 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 		return -EIO;
 	}
 
-	iov = kzalloc(sizeof(*iov) * num_iovs, GFP_KERNEL);
+	iov = kzalloc(sizeof(*iov) * num_iovs, GFP_ATOMIC);
 	if (!iov)
 		return -ENOMEM;
 	wqe->s_iov = iov;
