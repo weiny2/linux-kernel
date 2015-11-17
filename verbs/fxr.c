@@ -202,8 +202,10 @@ static void opa_ib_send_event(void *data)
 	struct opa_ib_qp *qp;
 	struct opa_ib_swqe *wqe;
 	unsigned long flags;
-	union initiator_EQEntry *eq_entry = NULL;
+	union initiator_EQEntry *eq_entry;
 
+next_event:
+	eq_entry = NULL;
 	hfi_eq_peek(ibp->ctx, ibp->send_eq, (uint64_t **)&eq_entry);
 	if (!eq_entry)
 		return;
@@ -235,6 +237,8 @@ eq_advance:
 	hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, ibp->send_eq,
 		       (uint64_t *)eq_entry);
 	spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
+
+	goto next_event;
 }
 
 int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
