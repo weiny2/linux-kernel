@@ -291,20 +291,10 @@ static int send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 		    struct opa_ib_swqe *wqe)
 {
 	int ret;
-	bool with_pio = false;
 
-	/* TODO - PIO temporary until General DMA support for user QPs */
-	if (wqe->sg_list[0].mr->lkey != 0) {
-		with_pio = true;
-		ret = opa_ib_send_wqe_pio(ibp, wqe);
-	} else {
-		ret = opa_ib_send_wqe(ibp, qp, wqe);
-	}
-
+	ret = opa_ib_send_wqe(ibp, qp, wqe);
 	if (ret < 0)
 		opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);
-	else if (with_pio)
-		opa_ib_send_complete(qp, wqe, IB_WC_SUCCESS);
 	/* else send_complete issued upon DMA completion event */
 
 	return ret;
