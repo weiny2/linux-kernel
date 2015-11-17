@@ -92,7 +92,6 @@
 1 chip.c CHECK: usleep_range is preferred over udelay; see Documentation/timers/timers-howto.txt
 1 chip.c WARNING: Possible unnecessary 'out of memory' message
 8 chip.h CHECK: Prefer using the BIT_ULL macro
-1 efivar.c WARNING: ENOSYS means 'invalid syscall nr' and nothing else
 1 eprom.c CHECK: Prefer using the BIT_ULL macro
 1 eprom.c WARNING: ENOSYS means 'invalid syscall nr' and nothing else
 1 file_ops.c CHECK: Prefer kzalloc(sizeof(*fp->private_data)...) over kzalloc(sizeof(struct hfi1_filedata)...)

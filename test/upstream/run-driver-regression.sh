@@ -1,9 +1,9 @@
 #!/bin/sh
 
-test_repo=`dirname $0`
-pushd $test_repo
-test_repo=`pwd`
-popd
+driver_repo=`dirname $0`
+pushd $driver_repo > /dev/null
+driver_repo=`pwd`/../..
+popd > /dev/null
 
 if [ "$1" == "" ]; then
 	echo "usage: $0 <nodelist>"
@@ -12,33 +12,21 @@ fi
 
 nodelist=$1
 kern_ver=`uname -r`
-driver_repo=$test_repo/..
 dts=`date +%Y-%m-%d-%H%M`
-output_file="$kern_ver-$dts.output"
+output_file="$driver_repo/test/upstream/$kern_ver-$dts.output"
 
 echo "Testing installed kernel version : $kern_ver"
-echo "     test repo : $test_repo"
-echo "     with driver repo : $driver_repo"
+echo "     test repo : $driver_repo"
 echo "     nodelist : $nodelist"
 
-pushd $driver_repo
-
-if [ -f hfi1.ko ]; then
-	rm -f hfi1.ko
-fi
-ln -s /lib/modules/$kern_ver/kernel/drivers/staging/rdma/hfi1/hfi1.ko
-
-pushd $driver_repo/test
-
-./harness.py --nodelist=$nodelist --type=quick | tee $test_repo/$output_file
-
-popd
-popd
+pushd $driver_repo/test > /dev/null
+./harness.py --nodelist=$nodelist --type=upstream | tee $output_file
+popd > /dev/null
 
 echo "Testing installed kernel version : $kern_ver"
-echo "     with driver repo : $driver_repo"
+echo "     test repo : $driver_repo"
 echo "     nodelist : $nodelist"
-echo "     output : $test_repo/$output_file"
+echo "     output : $output_file"
 
 exit 0
 
