@@ -11811,6 +11811,8 @@ static int init_cntrs(struct hfi1_devdata *dd)
 	char *p;
 	char name[C_MAX_NAME];
 	struct hfi1_pportdata *ppd;
+	const char *bit_type_32 = ",32";
+	const int bit_type_32_sz = strlen(bit_type_32);
 
 	/* set up the stats timer; the add_timer is done at the end */
 	init_timer(&dd->synth_stats_timer);
@@ -11841,6 +11843,9 @@ static int init_cntrs(struct hfi1_devdata *dd)
 					 dev_cntrs[i].name,
 					 vl_from_idx(j));
 				sz += strlen(name);
+				/* Add ",32" for 32-bit counters */
+				if (dev_cntrs[i].flags & CNTR_32BIT)
+					sz += bit_type_32_sz;
 				sz++;
 				hfi1_dbg_early("\t\t%s\n", name);
 				dd->ndevcntrs++;
@@ -11855,13 +11860,19 @@ static int init_cntrs(struct hfi1_devdata *dd)
 				snprintf(name, C_MAX_NAME, "%s%d",
 					 dev_cntrs[i].name, j);
 				sz += strlen(name);
+				/* Add ",32" for 32-bit counters */
+				if (dev_cntrs[i].flags & CNTR_32BIT)
+					sz += bit_type_32_sz;
 				sz++;
 				hfi1_dbg_early("\t\t%s\n", name);
 				dd->ndevcntrs++;
 			}
 		} else {
-			/* +1 for newline  */
+			/* +1 for newline. */
 			sz += strlen(dev_cntrs[i].name) + 1;
+			/* Add ",32" for 32-bit counters */
+			if (dev_cntrs[i].flags & CNTR_32BIT)
+				sz += bit_type_32_sz;
 			dev_cntrs[i].offset = dd->ndevcntrs;
 			dd->ndevcntrs++;
 			hfi1_dbg_early("\tAdding %s\n", dev_cntrs[i].name);
@@ -11895,6 +11906,13 @@ static int init_cntrs(struct hfi1_devdata *dd)
 					 vl_from_idx(j));
 				memcpy(p, name, strlen(name));
 				p += strlen(name);
+
+				/* Counter is 32 bits */
+				if (dev_cntrs[i].flags & CNTR_32BIT) {
+					memcpy(p, bit_type_32, bit_type_32_sz);
+					p += bit_type_32_sz;
+				}
+
 				*p++ = '\n';
 			}
 		} else if (dev_cntrs[i].flags & CNTR_SDMA) {
@@ -11904,11 +11922,25 @@ static int init_cntrs(struct hfi1_devdata *dd)
 					 dev_cntrs[i].name, j);
 				memcpy(p, name, strlen(name));
 				p += strlen(name);
+
+				/* Counter is 32 bits */
+				if (dev_cntrs[i].flags & CNTR_32BIT) {
+					memcpy(p, bit_type_32, bit_type_32_sz);
+					p += bit_type_32_sz;
+				}
+
 				*p++ = '\n';
 			}
 		} else {
 			memcpy(p, dev_cntrs[i].name, strlen(dev_cntrs[i].name));
 			p += strlen(dev_cntrs[i].name);
+
+			/* Counter is 32 bits */
+			if (dev_cntrs[i].flags & CNTR_32BIT) {
+				memcpy(p, bit_type_32, bit_type_32_sz);
+				p += bit_type_32_sz;
+			}
+
 			*p++ = '\n';
 		}
 	}
@@ -11947,13 +11979,19 @@ static int init_cntrs(struct hfi1_devdata *dd)
 					 port_cntrs[i].name,
 					 vl_from_idx(j));
 				sz += strlen(name);
+				/* Add ",32" for 32-bit counters */
+				if (port_cntrs[i].flags & CNTR_32BIT)
+					sz += bit_type_32_sz;
 				sz++;
 				hfi1_dbg_early("\t\t%s\n", name);
 				dd->nportcntrs++;
 			}
 		} else {
-			/* +1 for newline  */
+			/* +1 for newline */
 			sz += strlen(port_cntrs[i].name) + 1;
+			/* Add ",32" for 32-bit counters */
+			if (port_cntrs[i].flags & CNTR_32BIT)
+				sz += bit_type_32_sz;
 			port_cntrs[i].offset = dd->nportcntrs;
 			dd->nportcntrs++;
 			hfi1_dbg_early("\tAdding %s\n", port_cntrs[i].name);
@@ -11979,12 +12017,26 @@ static int init_cntrs(struct hfi1_devdata *dd)
 					 vl_from_idx(j));
 				memcpy(p, name, strlen(name));
 				p += strlen(name);
+
+				/* Counter is 32 bits */
+				if (port_cntrs[i].flags & CNTR_32BIT) {
+					memcpy(p, bit_type_32, bit_type_32_sz);
+					p += bit_type_32_sz;
+				}
+
 				*p++ = '\n';
 			}
 		} else {
 			memcpy(p, port_cntrs[i].name,
 			       strlen(port_cntrs[i].name));
 			p += strlen(port_cntrs[i].name);
+
+			/* Counter is 32 bits */
+			if (port_cntrs[i].flags & CNTR_32BIT) {
+				memcpy(p, bit_type_32, bit_type_32_sz);
+				p += bit_type_32_sz;
+			}
+
 			*p++ = '\n';
 		}
 	}
@@ -12633,7 +12685,6 @@ fail:
 static int set_up_context_variables(struct hfi1_devdata *dd)
 {
 	int num_kernel_contexts;
-	int num_user_contexts;
 	int total_contexts;
 	int ret;
 	unsigned ngroups;
@@ -12670,12 +12721,10 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 	}
 	/*
 	 * User contexts: (to be fixed later)
-	 *	- set to num_rcv_contexts if non-zero
-	 *	- default to 1 user context per CPU
+	 *	- default to 1 user context per CPU if num_user_contexts is
+	 *	  negative
 	 */
-	if (num_rcv_contexts)
-		num_user_contexts = num_rcv_contexts;
-	else
+	if (num_user_contexts < 0)
 		num_user_contexts = num_online_cpus();
 
 	total_contexts = num_kernel_contexts + num_user_contexts;
