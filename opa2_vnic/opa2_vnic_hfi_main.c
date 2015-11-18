@@ -285,7 +285,7 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	u64 *eq_entry = NULL;
 	union base_iovec iov;
 	unsigned long sflags;
-	int rc;
+	int rc, ms_delay = 0;
 
 	iov.val[0] = 0x0;
 	iov.val[1] = 0x0;
@@ -303,6 +303,7 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	iov.sp = 1;
 	iov.v = 1;
 
+retry:
 	spin_lock_irqsave(&ndev->tx_lock, sflags);
 	rc = hfi_tx_cmd_bypass_dma(tx, ctx, (u64)&iov, 1, 0xdead,
 				   PTL_MD_RESERVED_IOV,
@@ -311,10 +312,15 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 				   0x0, dev->slid, HDR_10B,
 				   GENERAL_DMA);
 	spin_unlock_irqrestore(&ndev->tx_lock, sflags);
-	/* FXRTODO: need error handling due to CQ full i.e. no slots */
 	if (rc < 0) {
-		dev_err(&odev->dev, "%s rc %d\n", __func__, rc);
-		goto err1;
+		mdelay(1);
+		if (ms_delay++ > OPA2_NET_TIMEOUT_MS) {
+			rc = -ETIME;
+			dev_err(&odev->dev, "%s %d rc %d\n",
+				__func__, __LINE__, rc);
+			goto err1;
+		}
+		goto retry;
 	}
 
 	/* FXRTODO: need to wait for completion asynchronously */
@@ -337,6 +343,8 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 		dev_err(&odev->dev, "TX CT event 1 failure, %d\n", rc);
 	}
 err1:
+	if (rc)
+		vdev->hfi_stats.tx_logic_errors++;
 	return rc;
 }
 
@@ -372,6 +380,7 @@ static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
 		spin_lock_irqsave(&ndev->rx_lock, sflags);
 		hfi_eq_advance(ctx, &ndev->rx, ndev->eq_rx, eq_entry);
 		spin_unlock_irqrestore(&ndev->rx_lock, sflags);
+		vdev->hfi_stats.rx_logic_errors++;
 		return NULL;
 	}
 	buf = ndev->buf[idx];
@@ -383,8 +392,7 @@ static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
 	}
 	skb = netdev_alloc_skb(vdev->netdev, len);
 	if (!skb) {
-		dev_err(&odev->dev, "%s %d netdev_alloc_skb failed\n",
-			__func__, __LINE__);
+		vdev->hfi_stats.rx_missed_errors++;
 		goto alloc_fail;
 	}
 	memcpy(skb->data, buf, len);
