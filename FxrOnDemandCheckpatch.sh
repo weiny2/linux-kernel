@@ -11,7 +11,7 @@ set -x
 
 debug=false
 
-KERNELRELEASE=4.3.0-rc4
+KERNELRELEASE=4.3.0
 CHECKPATCH_COMMAND=/lib/modules/${KERNELRELEASE}/build/scripts/checkpatch.pl
 CHECKPATCH_OPTIONS="--patch --no-tree --terse --no-signoff --strict"
 
