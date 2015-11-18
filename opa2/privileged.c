@@ -73,6 +73,7 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 	hfi_md_options_t md_options = PTL_MD_EVENT_CT_ACK;
 	hfi_ni_t ni = PTL_NONMATCHING_PHYSICAL;
 	u64 *eq_entry;
+	u16 pkey;
 	unsigned long flags;
 	int rc;
 
@@ -82,9 +83,14 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 	cmd.ptl_opcode_low = op;
 	cmd.ttype = BUFFERED;
 
+	/*
+	 * FXRTODO: using pkey of 0x2 for portals.
+	 * This is configured in opafm.xml
+	 */
+	pkey = 0x2;
 	_hfi_format_base_put_flit0(ctx, ni, &command->flit0, cmd,
 				   E2E_CTRL, cmd_length, target_id, port, 0,
-				   RC_IN_ORDER_0, sl, 0, 0, 0, 0, 0,
+				   RC_IN_ORDER_0, sl, 0, pkey, 0, 0, 0,
 				   FXR_TRUE, ack_req, md_options, dd->e2e_eq,
 				   PTL_CT_NONE, 0, 0);
 

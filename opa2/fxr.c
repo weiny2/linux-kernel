@@ -105,6 +105,11 @@ MODULE_PARM_DESC(opafm_disable, "0 - driver needs opafm to work, \
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
 
+int neigh_is_hfi(struct hfi_pportdata *ppd)
+{
+	return (ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) == 0;
+}
+
 static void write_lm_fpc_csr(const struct hfi_pportdata *ppd,
 			     u32 offset, u64 value)
 {
@@ -475,12 +480,47 @@ void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 	}
 }
 
+void hfi_set_implicit_pkeys(struct hfi_pportdata *ppd,
+			    u16 *pkey_8b, u16 *pkey_10b)
+{
+	TP_CFG_PKEY_CHECK_CTRL_t reg;
+	struct hfi_devdata *dd = ppd->dd;
+	LM_CONFIG_PORT0_t lmp0;
+	LM_CONFIG_PORT1_t lmp1;
+
+	/* Egress */
+	reg.val = read_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL);
+	if (pkey_8b)
+		reg.field.pkey_8b = *pkey_8b;
+	if (pkey_10b)
+		reg.field.pkey_10b = *pkey_10b;
+	write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL, reg.val);
+
+	/* Ingress */
+	switch (ppd_to_pnum(ppd)) {
+	case 1:
+		lmp0.val = read_csr(dd, FXR_LM_CONFIG_PORT0);
+		if (pkey_8b)
+			lmp0.field.IMPLICIT_PKEY_8B = *pkey_8b;
+		if (pkey_10b)
+			lmp0.field.IMPLICIT_PKEY_10B = *pkey_10b;
+		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
+		break;
+	case 2:
+		lmp1.val = read_csr(dd, FXR_LM_CONFIG_PORT1);
+		if (pkey_8b)
+			lmp1.field.IMPLICIT_PKEY_8B = *pkey_8b;
+		if (pkey_10b)
+			lmp1.field.IMPLICIT_PKEY_10B = *pkey_10b;
+		write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
+		break;
+	default:
+		return;
+	}
+}
+
 static void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 {
-	/*
-	 * FXRTODO: Writes to TP_CFG_PKEY_CHECK_CTRL are required
-	 * for 10B and 8B packets
-	 */
 	hfi_cfg_out_pkey_check(ppd, enable);
 	hfi_cfg_in_pkey_check(ppd, enable);
 }
@@ -495,6 +535,7 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 	TP_CFG_PKEY_TABLE_t tx_pkey;
 	FPC_CFG_PKEY_TABLE_t rx_pkey;
 	int i, j;
+	u16 pkey_8b, pkey_10b;
 
 	for (i = 0, j = 0; i < HFI_MAX_PKEYS; i += 4, j++) {
 		tx_pkey.field.entry0 = ppd->pkeys[i];
@@ -513,10 +554,20 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 	}
 
 	/*
-	 * FXRTODO: Enabling Pkey check results in packet drop. Need to
-	 * debug this. Disable pkey check for now.
+	 * FXRTODO: 8B and 10B implicit pkeys are to obtained from FM.
+	 * Until that is implemented use a pkey of 0x8002 for 8B
+	 * which is currently only used by portals traffic.
+	 * Correspondingly opafm.xml will have 0x8002
+	 * programmed.
+	 *
+	 * For 10B use the upper 12bits as 0x800. Make sure that opafm.xml
+	 * uses a PKEY in the range of 0x0 - 0xF for 10B
 	 */
-	hfi_cfg_pkey_check(ppd, 0);
+	pkey_8b = 0x8002;
+	pkey_10b = 0x800;
+	hfi_set_implicit_pkeys(ppd, &pkey_8b, &pkey_10b);
+
+	hfi_cfg_pkey_check(ppd, 1);
 }
 
 u8 hfi_porttype(struct hfi_pportdata *ppd)
@@ -1831,6 +1882,14 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		 * viper0-port2 <-> viper1-port2
 		 */
 		ppd->neighbor_port_number = port;
+
+		/*
+		 * FXRTODO: Once we have verify_cap implemented
+		 * then move this code there
+		 */
+		if (neigh_is_hfi(ppd))
+			ppd->part_enforce =
+				HFI_PART_ENFORCE_IN | HFI_PART_ENFORCE_OUT;
 
 		/*
 		 * Since OPA uses management pkey there is no

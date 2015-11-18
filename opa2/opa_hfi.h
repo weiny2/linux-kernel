@@ -895,6 +895,7 @@ void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable);
 void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable);
 void hfi_set_up_vl15(struct hfi_pportdata *ppd, u8 vau, u16 vl15buf);
 void hfi_assign_remote_cm_au_table(struct hfi_pportdata *ppd, u8 vcu);
+int neigh_is_hfi(struct hfi_pportdata *ppd);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
