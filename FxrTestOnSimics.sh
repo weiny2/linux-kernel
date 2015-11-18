@@ -72,9 +72,9 @@ for viper in ${viper0} ${viper1}; do
     fi
 done
 
-# run quick test.
+# run default tests
 cd opa-headers.git/test
-./harness.py --nodelist=viper0,viper1 --type=quick
+./harness.py --nodelist=viper0,viper1 --type=default
 res=$?
 if [ ! ${res} ]; then
     echo fail on harness.
