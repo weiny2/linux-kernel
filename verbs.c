@@ -992,8 +992,6 @@ bail_ecomm:
 	/* The current one got "sent" */
 	return 0;
 bail_build:
-	/* kmalloc or mapping fail */
-	hfi1_put_txreq(tx);
 	return wait_kmem(dev, qp, ps);
 }
 
