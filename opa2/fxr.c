@@ -1812,17 +1812,6 @@ int hfi_pport_init(struct hfi_devdata *dd)
 
 		hfi_assign_local_cm_au_table(ppd, ppd->vcu);
 
-		/* FXRTODO: This should be called from handle_verify cap */
-		hfi_assign_remote_cm_au_table(ppd, ppd->vcu);
-
-		/*
-		 * FXRTODO: Current port's CM must be initialized
-		 * with values of the neighbor ports RXBUF attributes
-		 * since LNI is WIP, set this up with local CMs values
-		 * since for B2B these values will be symmetric.
-		 */
-		hfi_set_up_vl15(ppd, ppd->vau, ppd->vl15_init);
-
 		/*
 		 * FXRTODO: The below 4 variables
 		 * are set during 8051 interrupt handler

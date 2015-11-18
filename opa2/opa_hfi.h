@@ -199,6 +199,18 @@ enum {
 				 15 : (idx))
 #define hfi_valid_vl(idx)	((idx) < HFI_NUM_DATA_VLS || (idx) == 15)
 #define HFI_NUM_USABLE_VLS 16	/* look at VL15 and less */
+
+/* verify capability fabric fields */
+#define HFI_VAU_SHIFT	0
+#define HFI_VAU_MASK	0x0007
+#define HFI_Z_SHIFT		3
+#define HFI_Z_MASK		0x0001
+#define HFI_VCU_SHIFT	4
+#define HFI_VCU_MASK	0x0007
+#define HFI_VL15BUF_SHIFT	8
+#define HFI_VL15BUF_MASK	0x0fff
+#define HFI_CRC_SIZES_SHIFT 20
+#define HFI_CRC_SIZES_MASK	0x7
 /*
  * Virtual Allocation Unit, defined as AU = 8*2^vAU, 64 bytes, AU is fixed
  * at 64 bytes for all generation one devices
@@ -881,6 +893,8 @@ int hfi_set_buffer_control(struct hfi_pportdata *ppd,
 			   struct buffer_control *new_bc);
 void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable);
 void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable);
+void hfi_set_up_vl15(struct hfi_pportdata *ppd, u8 vau, u16 vl15buf);
+void hfi_assign_remote_cm_au_table(struct hfi_pportdata *ppd, u8 vcu);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
