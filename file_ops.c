@@ -861,6 +861,8 @@ static int assign_ctxt(struct file *fp, struct hfi1_user_info *uinfo)
 		struct hfi1_filedata *fd = fp_to_fd(fp);
 
 		ret = find_shared_ctxt(fp, uinfo);
+		if (ret < 0)
+			goto done;
 		if (ret)
 			fd->rec_cpu_num = hfi1_get_proc_affinity(
 				fd->uctxt->dd, fd->uctxt->numa_id);
