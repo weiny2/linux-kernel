@@ -914,16 +914,28 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 		ppd->part_enforce |= HFI_PART_ENFORCE_IN;
 		hfi_cfg_in_pkey_check(ppd, 1);
 	} else {
-		ppd->part_enforce &= ~HFI_PART_ENFORCE_IN;
-		hfi_cfg_in_pkey_check(ppd, 0);
+		/*
+		 * FXRTODO: Ignore FM value if neighbhor is HFI. Currently
+		 * FM always sends 0. Design discussion still pending
+		 */
+		if (!neigh_is_hfi(ppd)) {
+			ppd->part_enforce &= ~HFI_PART_ENFORCE_IN;
+			hfi_cfg_in_pkey_check(ppd, 0);
+		}
 	}
 
 	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_OUT) {
 		ppd->part_enforce |= HFI_PART_ENFORCE_OUT;
 		hfi_cfg_out_pkey_check(ppd, 1);
 	} else {
-		ppd->part_enforce &= ~HFI_PART_ENFORCE_OUT;
-		hfi_cfg_out_pkey_check(ppd, 0);
+		/*
+		 * FXRTODO: Ignore FM value if neighbhor is HFI. Currently
+		 * FM always sends 0. Design discussion still pending
+		 */
+		if (!neigh_is_hfi(ppd)) {
+			ppd->part_enforce &= ~HFI_PART_ENFORCE_OUT;
+			hfi_cfg_out_pkey_check(ppd, 0);
+		}
 	}
 
 	/*
