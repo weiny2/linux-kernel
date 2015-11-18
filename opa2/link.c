@@ -71,7 +71,8 @@ static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup);
 static u32 read_physical_state(const struct hfi_pportdata *ppd);
 static int set_physical_link_state(struct hfi_pportdata *ppd, u64 state);
 static void get_linkup_link_widths(struct hfi_pportdata *ppd);
-
+static int load_8051_config(struct hfi_pportdata *ppd, u8 field_id,
+			    u8 lane_id, u32 config_data);
 /*
  * read FZC registers
  */
@@ -138,6 +139,34 @@ void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
 		ppd_dev_warn(ppd, "invalid port"); break;
 	}
 	write_csr(ppd->dd, offset, value);
+}
+
+static void read_vc_remote_fabric(struct hfi_pportdata *ppd, u8 *vau, u8 *z,
+				  u8 *vcu, u16 *vl15buf, u8 *crc_sizes)
+{
+	u32 frame;
+
+	hfi2_read_8051_config(ppd, VERIFY_CAP_REMOTE_FABRIC,
+			      GENERAL_CONFIG, &frame);
+	*vau = (frame >> HFI_VAU_SHIFT) & HFI_VAU_MASK;
+	*z = (frame >> HFI_Z_SHIFT) & HFI_Z_MASK;
+	*vcu = (frame >> HFI_VCU_SHIFT) & HFI_VCU_MASK;
+	*vl15buf = (frame >> HFI_VL15BUF_SHIFT) & HFI_VL15BUF_MASK;
+	*crc_sizes = (frame >> HFI_CRC_SIZES_SHIFT) & HFI_CRC_SIZES_MASK;
+}
+
+static int write_vc_local_fabric(struct hfi_pportdata *ppd, u8 vau, u8 z,
+				 u8 vcu, u16 vl15buf, u8 crc_sizes)
+{
+	u32 frame;
+
+	frame = (u32)vau << HFI_VAU_SHIFT
+		| (u32)z << HFI_Z_SHIFT
+		| (u32)vcu << HFI_VCU_SHIFT
+		| (u32)vl15buf << HFI_VL15BUF_SHIFT
+		| (u32)crc_sizes << HFI_CRC_SIZES_SHIFT;
+	return load_8051_config(ppd, VERIFY_CAP_LOCAL_FABRIC,
+				GENERAL_CONFIG, frame);
 }
 
 /* return the link state name */
@@ -984,13 +1013,12 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 				     1 /* continuous updates */);
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
-
+#endif
 	/* z=1 in the next call: AU of 0 is not supported by the hardware */
-	ret = write_vc_local_fabric(dd, dd->vau, 1, dd->vcu, dd->vl15_init,
+	ret = write_vc_local_fabric(ppd, ppd->vau, 1, ppd->vcu, ppd->vl15_init,
 				    ppd->port_crc_mode_enabled);
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
-#endif
 
 	/*
 	 * write desired link width policy.
@@ -1385,6 +1413,11 @@ static void handle_verify_cap(struct work_struct *work)
 {
 	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
 								link_vc_work);
+	u8 vcu;
+	u8 vau;
+	u8 z;
+	u16 vl15buf;
+	u8 partner_supported_crc;
 #if 0 /* WFR legacy */
 	struct hfi_devdata *dd = ppd->dd;
 #endif
@@ -1413,14 +1446,15 @@ static void handle_verify_cap(struct work_struct *work)
 	 */
 
 	read_vc_remote_phy(dd, &power_management, &continious);
+#endif
 	read_vc_remote_fabric(
-		dd,
+		ppd,
 		&vau,
 		&z,
 		&vcu,
 		&vl15buf,
 		&partner_supported_crc);
-#endif
+
 	read_vc_remote_link_width(ppd, &remote_max_rate, &link_widths);
 #if 0 /* WFR legacy */
 	read_remote_device_id(dd, &device_id, &device_rev);
@@ -1434,6 +1468,7 @@ static void handle_verify_cap(struct work_struct *work)
 	ppd_dev_info(ppd,
 		"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
 		(int)power_management, (int)continious);
+#endif
 	ppd_dev_info(ppd,
 		"Peer Fabric: vAU %d, Z %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
 		(int)vau,
@@ -1441,12 +1476,13 @@ static void handle_verify_cap(struct work_struct *work)
 		(int)vcu,
 		(int)vl15buf,
 		(int)partner_supported_crc);
-#endif
+
 	ppd_dev_info(ppd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
 		(u32)remote_max_rate, (u32)link_widths);
 #if 0 /* WFR legacy */
 	ppd_dev_info(ppd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
 		(u32)device_id, (u32)device_rev);
+#endif
 	/*
 	 * The peer vAU value just read is the peer receiver value.  HFI does
 	 * not support a transmit vAU of 0 (AU == 8).  We advertised that
@@ -1458,7 +1494,9 @@ static void handle_verify_cap(struct work_struct *work)
 	 */
 	if (vau == 0)
 		vau = 1;
-	set_up_vl15(dd, vau, vl15buf);
+	hfi_set_up_vl15(ppd, vau, vl15buf);
+
+#if 0
 
 	/* set up the LCB CRC mode */
 	crc_mask = ppd->port_crc_mode_enabled & partner_supported_crc;
@@ -1532,10 +1570,12 @@ static void handle_verify_cap(struct work_struct *work)
 		/* enabled crc modes */
 	ppd->port_ltp_crc_mode |= lcb_to_port_ltp(crc_val);
 		/* active crc mode */
+#endif
 
 	/* set up the remote credit return table */
-	assign_remote_cm_au_table(dd, vcu);
+	hfi_assign_remote_cm_au_table(ppd, vcu);
 
+#if 0
 	/*
 	 * The LCB is reset on entry to handle_verify_cap(), so this must
 	 * be applied on every link up.
