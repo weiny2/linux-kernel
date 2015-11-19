@@ -242,6 +242,7 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 	wqe->lnh = lrh0 & 0x3; /* next header (BTH or GRH) */
 	wqe->sl = qp->remote_ah_attr.sl;
 	wqe->use_sc15 = false;
+	wqe->pkt_errors = 0;
 	wqe->pmtu = pmtu;
 done:
 	ret = 1;
@@ -600,6 +601,7 @@ rewind:
 	set_bit(HFI1_R_REWIND_SGE, &qp->r_aflags);
 	qp->r_sge.num_sge = 0;
 drop:
+	dev_info(ibp->dev, "UC dropping packet\n");
 	ibp->n_pkt_drops++;
 	return;
 

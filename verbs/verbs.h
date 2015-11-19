@@ -262,7 +262,7 @@ struct opa_ib_swqe {
 	u8 lnh;
 	u8 sl;
 	bool use_sc15;
-	void *s_iov;
+	u32 pkt_errors;
 
 	struct hfi2_sge sg_list[0];
 };
