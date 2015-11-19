@@ -1,18 +1,42 @@
 #!/bin/sh
 set -x
 
+myname=`basename $0 .sh`
+
 fxr=/mnt/fabric/fxr
 viper0=4022
 viper1=5022
 export LD_LIBRARY_PATH=${fxr}/simics/SynopsisInstructionSetSimulator/lib
 export SNPSLMD_LICENSE_FILE="26586@synopsys03p.elic.intel.com"
 export LM_PROJECT=”FDO”
+LOCK_DIR=/run/lock
+LOCK_FILE=${LOCK_DIR}/${myname}.lock
+LOCK_TIMEOUT=900 # 900 = 60 * 15 = 15min
 
 # Am I invoked by Jenkins?
 ByJenkins=no
 [ `id -un` == root ] && pwd | grep --quiet jenkins && ByJenkins=yes
 
 if [ ${ByJenkins} == yes ] ; then
+	umask 022
+	# Only one Simics instance is allowed because no way to access individual
+	# Simics. Remember, ports are 4022 and 5022.
+	#
+	# There is a gap between done and touch. So that this is not a perfect
+	# mutual exclusion, but practically works.
+	#
+	# Wait until Simics dies
+	declare -i iterate=0
+	while [ -e ${LOCK_FILE} ]; do
+		iterate=$((iterate + 1))
+		if [ ${iterate} -gt ${LOCK_TIMEOUT} ]; then
+			echo Simics is running: ${LOCK_TIMEOUT}
+			exit 15
+		fi
+		sleep 1
+	done
+	touch ${LOCK_FILE}
+
     # make sure no simics process running
     killall simics-common
 
@@ -90,6 +114,8 @@ if [ ${ByJenkins} == yes ] ; then
 	done
 	# stop simics
 	killall simics-common
+
+	rm -f ${LOCK_FILE}
 fi
 
 exit $res
