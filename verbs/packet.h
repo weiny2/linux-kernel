@@ -174,6 +174,14 @@ struct opa_ib_packet {
 	u32 rcv_flags;
 };
 
+/* Store IOVEC array information for General DMA command */
+struct hfi2_wqe_iov {
+	struct opa_ib_swqe *wqe;
+	struct opa_ib_header ib_hdr;
+	u32 remaining_bytes;
+	union base_iovec iov[0];
+};
+
 /* where best to put this opcode? */
 #define CNP_OPCODE 0x80
 

@@ -262,6 +262,7 @@ static void opa_ib_send_event(void *data)
 	struct opa_ib_portdata *ibp = data;
 	struct opa_ib_qp *qp;
 	struct opa_ib_swqe *wqe;
+	struct hfi2_wqe_iov *wqe_iov;
 	unsigned long flags;
 	union initiator_EQEntry *eq_entry;
 
@@ -277,21 +278,27 @@ next_event:
 		goto eq_advance;
 	}
 
-	/* TODO - not sure yet if user_ptr should be WQE or QP */
-	wqe = (struct opa_ib_swqe *)eq_entry->user_ptr;
+	wqe_iov = (struct hfi2_wqe_iov *)eq_entry->user_ptr;
+	wqe = wqe_iov->wqe;
 	qp = wqe->s_qp;
 	dev_dbg(ibp->dev,
-		"PT %d: TX event %p, fail %d, for QPN %d\n",
-		ibp->port_num, eq_entry, eq_entry->fail_type, qp->ibqp.qp_num);
-	kfree(wqe->s_iov);
-	wqe->s_iov = NULL;
-	/* tell verbs if success or failure */
-	spin_lock(&qp->s_lock);
+		"PT %d: TX event %p, fail %d, for QPN %d, remain %d\n",
+		ibp->port_num, eq_entry, eq_entry->fail_type,
+		qp->ibqp.qp_num, wqe_iov->remaining_bytes);
+
 	if (eq_entry->fail_type)
-		opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);
-	else
-		opa_ib_send_complete(qp, wqe, IB_WC_SUCCESS);
-	spin_unlock(&qp->s_lock);
+		wqe->pkt_errors++;
+
+	/* if final packet, tell verbs if success or failure */
+	if (!wqe_iov->remaining_bytes) {
+		spin_lock(&qp->s_lock);
+		if (wqe->pkt_errors)
+			opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);
+		else
+			opa_ib_send_complete(qp, wqe, IB_WC_SUCCESS);
+		spin_unlock(&qp->s_lock);
+	}
+	kfree(wqe_iov);
 
 eq_advance:
 	spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
@@ -309,6 +316,7 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 	unsigned long flags;
 	uint8_t dma_cmd;
 	union base_iovec *iov = NULL;
+	struct hfi2_wqe_iov *wqe_iov = NULL;
 	uint32_t num_iovs, total_length;
 	struct hfi2_sge *sge;
 	size_t payload_bytes;
@@ -320,26 +328,27 @@ int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 	if (ret)
 		return ret;
 
-	iov = kzalloc(sizeof(*iov) * num_iovs, GFP_ATOMIC);
-	if (!iov)
+	wqe_iov = kzalloc(sizeof(*wqe_iov) + sizeof(*iov) * num_iovs,
+			  GFP_ATOMIC);
+	if (!wqe_iov)
 		return -ENOMEM;
 
-	/* TODO - to be removed */
-	if (wqe->s_iov) {
-		dev_err(ibp->dev,
-			"PT %d: multi-packet DMA not implemented yet\n",
-			ibp->port_num);
-		ret = -EIO;
-		goto err;
-	}
-	wqe->s_iov = iov;
+	wqe_iov->wqe = wqe;
+	wqe_iov->remaining_bytes = qp->s_len;
+	iov = wqe_iov->iov;
 
 	/* first entry is IB header */
 	iov[0].length = (wqe->s_hdrwords << 2);
 	iov[0].use_9b = 1;
 	iov[0].sp = 1;
 	iov[0].v = 1;
-	iov[0].start = (uint64_t)(&wqe->s_hdr->ibh);
+	/*
+	 * store a copy of the IB header as MIDDLE and LAST packets modify it,
+	 * and we'd like to maintain asyncronous send and send_complete
+	 * TODO - can be removed by refactoring where upper layer builds header
+	 */
+	memcpy(&wqe_iov->ib_hdr, &wqe->s_hdr->ibh, iov[0].length);
+	iov[0].start = (uint64_t)(&wqe_iov->ib_hdr);
 
 	/* write IOVEC entries */
 	total_length = qp->s_cur_size;
@@ -407,7 +416,7 @@ _tx_cmd:
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
 	ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, wqe->s_ctx,
 				    (uint64_t)iov, num_iovs,
-				    (uint64_t)wqe, PTL_MD_RESERVED_IOV,
+				    (uint64_t)wqe_iov, PTL_MD_RESERVED_IOV,
 				    ibp->send_eq, HFI_CT_NONE,
 				    ibp->port_num, wqe->sl, 0,
 				    HDR_EXT /* 9B */, dma_cmd);
@@ -434,8 +443,7 @@ _tx_cmd:
 
 	return 0;
 err:
-	kfree(iov);
-	wqe->s_iov = NULL;
+	kfree(wqe_iov);
 	return ret;
 }
 
