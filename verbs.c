@@ -1098,7 +1098,7 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 	pbuf = sc_buffer_alloc(sc, plen, cb, qp);
 	if (unlikely(!pbuf)) {
 		if (cb)
-			iowait_pio_dec(&qp->s_iowait);
+			verbs_pio_complete(qp, 0);
 		if (ppd->host_link_state != HLS_UP_ACTIVE) {
 			/*
 			 * If we have filled the PIO buffers to capacity and are
