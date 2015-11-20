@@ -626,7 +626,7 @@ static int read_idle_message(struct hfi_pportdata *ppd, u64 type, u64 *data_out)
 			(u32)type, ret);
 		return -EINVAL;
 	}
-	dd_dev_info(ppd->dd, "%s: read idle message 0x%llx\n", __func__,
+	ppd_dev_info(ppd, "%s: read idle message 0x%llx\n", __func__,
 		*data_out);
 	/* return only the payload as we already know the type */
 	*data_out >>= IDLE_PAYLOAD_SHIFT;
@@ -654,7 +654,7 @@ static int send_idle_message(struct hfi_pportdata *ppd, u64 data)
 {
 	int ret;
 
-	dd_dev_info(ppd->dd, "%s: sending idle message 0x%llx\n", __func__, data);
+	ppd_dev_info(ppd, "%s: sending idle message 0x%llx\n", __func__, data);
 	ret = do_8051_command(ppd, HCMD_SEND_LCB_IDLE_MSG, data, NULL);
 	if (ret != HCMD_SUCCESS) {
 		ppd_dev_err(ppd, "send idle message: data 0x%llx, err %d\n",
@@ -673,7 +673,7 @@ int hfi_send_idle_sma(struct hfi_pportdata *ppd, u64 message)
 {
 	u64 data;
 
-	dd_dev_info(ppd->dd, "%s: sending idle sma 0x%llx\n", __func__, message);
+	ppd_dev_info(ppd, "%s: sending idle sma 0x%llx\n", __func__, message);
 	data = ((message & IDLE_PAYLOAD_MASK) << IDLE_PAYLOAD_SHIFT)
 		| ((u64)IDLE_SMA << IDLE_MSG_TYPE_SHIFT);
 	return send_idle_message(ppd, data);
