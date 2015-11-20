@@ -139,7 +139,7 @@ static ssize_t name##_read(struct file *file, char __user *buf,\
 {\
 	struct hfi_pportdata *ppd = private2ppd(file);\
 	return (ssize_t)simple_read_from_buffer(buf, count, ppos, &ppd->name, \
-		sizeof(ppd->host_link_state));\
+		sizeof(ppd->name));\
 }
 
 #define LINK_WIDTH_READ(name, register) \
