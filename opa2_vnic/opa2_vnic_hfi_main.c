@@ -112,8 +112,6 @@ static struct opa_core_client opa_vnic_clnt = {
  * @port_num: physical port number
  * @init: true if veswport is initialized
  * @vnic_cb: vnic callback function
- * @eq_alloc_tx_base: buffer for TX EQ descriptors
- * @eq_tx: TX event handle
  */
 struct opa_veswport {
 	int			slid;
@@ -124,8 +122,6 @@ struct opa_veswport {
 	u8			port_num;
 	bool			init;
 	opa_vnic_hfi_evt_cb_fn	__rcu vnic_cb;
-	void			*eq_alloc_tx_base;
-	hfi_eq_handle_t		eq_tx;
 };
 
 /*
@@ -143,8 +139,10 @@ struct opa_veswport {
  * @tx: TX command queue
  * @rx: RX command queue
  * @buf: Array of receive buffers
- * @eq_rx: RX event handle
  * @ni: portals network interface
+ * @eq_tx: TX event handle
+ * @eq_alloc_tx_base: buffer for TX EQ descriptors
+ * @eq_rx: RX event handle
  * @eq_alloc_rx_base: buffer for RX EQ descriptors
  * @vesw_idr: IDR for looking up vesw information
  */
@@ -163,8 +161,10 @@ struct opa_netdev {
 	struct hfi_cq			tx;
 	struct hfi_cq			rx;
 	void				*buf[OPA2_NET_NUM_RX_BUFS];
-	hfi_eq_handle_t			eq_rx;
 	hfi_ni_t			ni;
+	hfi_eq_handle_t			eq_tx;
+	void				*eq_alloc_tx_base;
+	hfi_eq_handle_t			eq_rx;
 	void				*eq_alloc_rx_base;
 	struct idr			vesw_idr[OPA2_MAX_NUM_PORTS];
 };
@@ -303,15 +303,14 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	iov.sp = 1;
 	iov.v = 1;
 
-retry:
 	spin_lock_irqsave(&ndev->tx_lock, sflags);
+retry:
 	rc = hfi_tx_cmd_bypass_dma(tx, ctx, (u64)&iov, 1, 0xdead,
 				   PTL_MD_RESERVED_IOV,
-				   dev->eq_tx, HFI_CT_NONE,
+				   ndev->eq_tx, HFI_CT_NONE,
 				   dev->port_num - 1,
 				   0x0, dev->slid, HDR_10B,
 				   GENERAL_DMA);
-	spin_unlock_irqrestore(&ndev->tx_lock, sflags);
 	if (rc < 0) {
 		mdelay(1);
 		if (ms_delay++ > OPA2_NET_TIMEOUT_MS) {
@@ -324,7 +323,7 @@ retry:
 	}
 
 	/* FXRTODO: need to wait for completion asynchronously */
-	rc = hfi_eq_wait_timed(ctx, dev->eq_tx, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, ndev->eq_tx, OPA2_NET_TIMEOUT_MS,
 			       &eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *txe =
@@ -332,7 +331,7 @@ retry:
 		int flit_len = ((*(u32 *)skb->data) >> 20) << 3;
 
 		spin_lock_irqsave(&ndev->rx_lock, sflags);
-		hfi_eq_advance(ctx, rx, dev->eq_tx, eq_entry);
+		hfi_eq_advance(ctx, rx, ndev->eq_tx, eq_entry);
 		spin_unlock_irqrestore(&ndev->rx_lock, sflags);
 		rc = 0;
 		dev_dbg(&odev->dev,
@@ -343,6 +342,7 @@ retry:
 		dev_err(&odev->dev, "TX CT event 1 failure, %d\n", rc);
 	}
 err1:
+	spin_unlock_irqrestore(&ndev->tx_lock, sflags);
 	if (rc)
 		vdev->hfi_stats.tx_logic_errors++;
 	return rc;
@@ -520,38 +520,16 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 {
 	struct opa_core_ops *ops = dev->odev->bus_ops;
 	struct opa_core_device *odev = dev->odev;
-	struct opa_netdev *ndev = dev->ndev;
-	struct hfi_ctx *ctx = &ndev->ctx;
-	struct hfi_cq *rx = &ndev->rx;
 	struct opa_pport_desc pdesc;
-	struct opa_ev_assign eq_alloc_tx = {0};
-	int rc;
 
 	ops->get_port_desc(odev, &pdesc, dev->port_num);
 	dev->slid = pdesc.lid;
 
-	eq_alloc_tx.ni = ndev->ni;
-	eq_alloc_tx.user_data = 0xdeadbeef;
-	/* FXRTODO: What is the right EQ size? */
-	eq_alloc_tx.size = 64;
-	rc = _hfi_eq_alloc(ctx, rx, &ndev->rx_lock, &eq_alloc_tx,
-			   &dev->eq_tx, &dev->eq_alloc_tx_base);
-	if (rc)
-		dev_err(&odev->dev, "%s rc %d\n", __func__, rc);
-	return rc;
+	return 0;
 }
 
 static void opa2_uninit_tx_rx(struct opa_veswport *dev)
 {
-	struct opa_netdev *ndev = dev->ndev;
-	struct hfi_ctx *ctx = &ndev->ctx;
-	struct hfi_cq *rx = &ndev->rx;
-
-	if (dev->eq_alloc_tx_base) {
-		_hfi_eq_release(ctx, rx, &ndev->rx_lock,
-				dev->eq_tx, dev->eq_alloc_tx_base);
-		dev->eq_alloc_tx_base = NULL;
-	}
 }
 
 static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
@@ -640,6 +618,7 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev)
 	struct opa_core_ops *ops = odev->bus_ops;
 	struct opa_ctx_assign ctx_assign = {0};
 	struct opa_ev_assign eq_alloc_rx = {0};
+	struct opa_ev_assign eq_alloc_tx = {0};
 	hfi_pt_alloc_eager_args_t pt_alloc = {0};
 	int rc;
 
@@ -665,6 +644,16 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev)
 		goto err1;
 	ndev->ni = HFI_NI_BYPASS;
 
+	/* FXRTODO: What is the right EQ size? */
+	/* TX EQ can be allocated per netdev */
+	eq_alloc_tx.ni = ndev->ni;
+	eq_alloc_tx.user_data = 0xdeadbeef;
+	eq_alloc_tx.size = 64;
+	eq_alloc_tx.cookie = ndev;
+	rc = _hfi_eq_alloc(ctx, rx, &ndev->rx_lock, &eq_alloc_tx,
+			   &ndev->eq_tx, &ndev->eq_alloc_tx_base);
+	if (rc)
+		goto err2;
 	eq_alloc_rx.ni = ndev->ni;
 	eq_alloc_rx.user_data = 0xdeadbeef;
 	/* FXRTODO: What is the right EQ size? */
@@ -674,23 +663,27 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev)
 	rc = _hfi_eq_alloc(ctx, rx, &ndev->rx_lock, &eq_alloc_rx,
 			   &ndev->eq_rx, &ndev->eq_alloc_rx_base);
 	if (rc)
-		goto err2;
+		goto err3;
 	pt_alloc.eager_order = ilog2(OPA2_NET_NUM_RX_BUFS) - 2;
 	pt_alloc.eq_handle = ndev->eq_rx;
 	rc = hfi_pt_alloc_eager(ctx, rx, &pt_alloc);
 	if (rc < 0)
-		goto err3;
+		goto err4;
 	rc = opa2_alloc_rx_bufs(ndev);
 	if (rc < 0)
-		goto err4;
+		goto err5;
 
 	return 0;
-err4:
+err5:
 	hfi_pt_disable(ctx, &ndev->rx, ndev->ni, HFI_PT_BYPASS_EAGER);
-err3:
+err4:
 	_hfi_eq_release(ctx, rx, &ndev->rx_lock,
 			ndev->eq_rx, ndev->eq_alloc_rx_base);
 	ndev->eq_alloc_rx_base = NULL;
+err3:
+	_hfi_eq_release(ctx, rx, &ndev->rx_lock,
+			ndev->eq_tx, ndev->eq_alloc_tx_base);
+	ndev->eq_alloc_tx_base = NULL;
 err2:
 	ops->cq_unmap(&ndev->tx, &ndev->rx);
 err1:
