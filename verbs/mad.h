@@ -54,10 +54,78 @@
 
 #include <rdma/opa_smi.h>
 #include <rdma/ib_mad.h>
+#include <rdma/ib_pma.h>
 #include <rdma/opa_port_info.h>
 #include <rdma/opa_core_ib.h>
 
 #define MKEY_SHIFT		6
+
+struct opa_pma_mad {
+	struct ib_mad_hdr mad_hdr;
+	u8 data[2024];
+} __packed;
+
+struct opa_port_status_req {
+	__u8 port_num;
+	__u8 reserved[3];
+	__be32 vl_select_mask;
+};
+
+struct opa_port_status_rsp {
+	__u8 port_num;
+	__u8 reserved[3];
+	__be32  vl_select_mask;
+
+	/* Data counters */
+	__be64 port_xmit_data;
+	__be64 port_rcv_data;
+	__be64 port_xmit_pkts;
+	__be64 port_rcv_pkts;
+	__be64 port_multicast_xmit_pkts;
+	__be64 port_multicast_rcv_pkts;
+	__be64 port_xmit_wait;
+	__be64 sw_port_congestion;
+	__be64 port_rcv_fecn;
+	__be64 port_rcv_becn;
+	__be64 port_xmit_time_cong;
+	__be64 port_xmit_wasted_bw;
+	__be64 port_xmit_wait_data;
+	__be64 port_rcv_bubble;
+	__be64 port_mark_fecn;
+	/* Error counters */
+	__be64 port_rcv_constraint_errors;
+	__be64 port_rcv_switch_relay_errors;
+	__be64 port_xmit_discards;
+	__be64 port_xmit_constraint_errors;
+	__be64 port_rcv_remote_physical_errors;
+	__be64 local_link_integrity_errors;
+	__be64 port_rcv_errors;
+	__be64 excessive_buffer_overruns;
+	__be64 fm_config_errors;
+	__be32 link_error_recovery;
+	__be32 link_downed;
+	u8 uncorrectable_errors;
+
+	u8 link_quality_indicator; /* 5res, 3bit */
+	u8 res2[6];
+	struct _vls_pctrs {
+		/* per-VL Data counters */
+		__be64 port_vl_xmit_data;
+		__be64 port_vl_rcv_data;
+		__be64 port_vl_xmit_pkts;
+		__be64 port_vl_rcv_pkts;
+		__be64 port_vl_xmit_wait;
+		__be64 sw_port_vl_congestion;
+		__be64 port_vl_rcv_fecn;
+		__be64 port_vl_rcv_becn;
+		__be64 port_xmit_time_cong;
+		__be64 port_vl_xmit_wasted_bw;
+		__be64 port_vl_xmit_wait_data;
+		__be64 port_vl_rcv_bubble;
+		__be64 port_vl_mark_fecn;
+		__be64 port_vl_xmit_discards;
+	} vls[0]; /* real array size defined by # bits set in vl_select_mask */
+};
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
 struct ib_node_info {

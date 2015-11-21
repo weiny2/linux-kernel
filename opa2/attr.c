@@ -442,8 +442,16 @@ static int __subn_get_hfi_cable_info(struct hfi_devdata *dd,
 		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len,
 							u8 *sma_status)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	u32 len = OPA_AM_CI_LEN(am);
+
+	/* FXRTODO: Implement as part of QSFP STL-3910 */
+	memset(data, 0, len);
+
+	if (resp_len)
+		*resp_len += len;
+
+	return hfi_reply(ibh);
 }
 
 static int __subn_get_hfi_bct(struct hfi_devdata *dd, struct opa_smp *smp,
