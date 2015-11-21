@@ -91,6 +91,13 @@
 #define OPA_ATTRIB_ID_HFI_CONGESTION_SETTING	cpu_to_be16(0x0090)
 #define OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE	cpu_to_be16(0x0091)
 
+/* OPA PMA attribute IDs */
+#define OPA_PM_ATTRIB_ID_PORT_STATUS		cpu_to_be16(0x0040)
+#define OPA_PM_ATTRIB_ID_CLEAR_PORT_STATUS	cpu_to_be16(0x0041)
+#define OPA_PM_ATTRIB_ID_DATA_PORT_COUNTERS	cpu_to_be16(0x0042)
+#define OPA_PM_ATTRIB_ID_ERROR_PORT_COUNTERS	cpu_to_be16(0x0043)
+#define OPA_PM_ATTRIB_ID_ERROR_INFO		cpu_to_be16(0x0044)
+
 /* attribute modifier macros */
 #define OPA_AM_NPORT_SHIFT	24
 #define OPA_AM_NPORT_MASK	0xff
@@ -134,6 +141,18 @@
 #define OPA_AM_NATTR_MASK	0xff
 #define OPA_AM_NATTR(am)	(((am) >> OPA_AM_NATTR_SHIFT) & \
 					OPA_AM_NATTR_MASK)
+
+#define OPA_AM_CI_ADDR_SHIFT	19
+#define OPA_AM_CI_ADDR_MASK	0xfff
+#define OPA_AM_CI_ADDR_SMASK	(OPA_AM_CI_ADDR_MASK << OPA_CI_ADDR_SHIFT)
+#define OPA_AM_CI_ADDR(am)	(((am) >> OPA_AM_CI_ADDR_SHIFT) & \
+					OPA_AM_CI_ADDR_MASK)
+
+#define OPA_AM_CI_LEN_SHIFT	13
+#define OPA_AM_CI_LEN_MASK	0x3f
+#define OPA_AM_CI_LEN_SMASK	(OPA_AM_CI_LEN_MASK << OPA_CI_LEN_SHIFT)
+#define OPA_AM_CI_LEN(am)	(((am) >> OPA_AM_CI_LEN_SHIFT) & \
+					OPA_AM_CI_LEN_MASK)
 
 /*
  * Convert 4bit number format

@@ -445,8 +445,10 @@ static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	/* This is implemented in SMA-HFI*/
+	return reply(ibh);
 }
 
 static int __subn_get_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
@@ -1260,6 +1262,153 @@ bail:
 	return ret;
 }
 
+static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
+				     struct ib_device *ibdev, u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
+				  struct ib_device *ibdev,
+				  u8 port, u32 *resp_len)
+{
+	struct opa_port_status_req *req =
+		(struct opa_port_status_req *)pmp->data;
+	u32 vl_select_mask = be32_to_cpu(req->vl_select_mask);
+	size_t response_data_size;
+	u8 num_vls = hweight32(vl_select_mask);
+
+	response_data_size = sizeof(struct opa_port_status_rsp) +
+				num_vls * sizeof(struct _vls_pctrs);
+
+	if (resp_len)
+		*resp_len += response_data_size;
+
+	return reply((struct ib_mad_hdr *)pmp);
+}
+
+static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
+				    struct ib_device *ibdev, u8 port,
+				    u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
+				  struct ib_device *ibdev, u8 port,
+				  u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
+				 struct ib_device *ibdev, u8 port,
+				 u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
+				  struct ib_device *ibdev, u8 port,
+				  u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
+				 struct ib_device *ibdev, u8 port,
+				 u32 *resp_len)
+{
+	/* FXRTODO: to be implemented */
+	return IB_MAD_RESULT_FAILURE;
+}
+
+static int process_perf_opa(struct ib_device *ibdev, u8 port,
+			    const struct opa_mad *in_mad,
+			    struct opa_mad *out_mad, u32 *resp_len)
+{
+	struct opa_pma_mad *pmp = (struct opa_pma_mad *)out_mad;
+	int ret;
+	__be16 st = cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB);
+
+	*out_mad = *in_mad;
+
+	if (pmp->mad_hdr.class_version != OPA_SMI_CLASS_VERSION) {
+		pmp->mad_hdr.status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_BAD_VERSION);
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	*resp_len = sizeof(pmp->mad_hdr);
+
+	switch (pmp->mad_hdr.method) {
+	case IB_MGMT_METHOD_GET:
+		switch (pmp->mad_hdr.attr_id) {
+		case IB_PMA_CLASS_PORT_INFO:
+			ret = pma_get_opa_classportinfo(pmp, ibdev, resp_len);
+			goto bail;
+		case OPA_PM_ATTRIB_ID_PORT_STATUS:
+			ret = pma_get_opa_portstatus(pmp, ibdev, port,
+						     resp_len);
+			goto bail;
+		case OPA_PM_ATTRIB_ID_DATA_PORT_COUNTERS:
+			ret = pma_get_opa_datacounters(pmp, ibdev, port,
+						       resp_len);
+			goto bail;
+		case OPA_PM_ATTRIB_ID_ERROR_PORT_COUNTERS:
+			ret = pma_get_opa_porterrors(pmp, ibdev, port,
+						     resp_len);
+			goto bail;
+		case OPA_PM_ATTRIB_ID_ERROR_INFO:
+			ret = pma_get_opa_errorinfo(pmp, ibdev, port,
+						    resp_len);
+			goto bail;
+		default:
+			pmp->mad_hdr.status |= st;
+			ret = reply((struct ib_mad_hdr *)pmp);
+			goto bail;
+		}
+
+	case IB_MGMT_METHOD_SET:
+		switch (pmp->mad_hdr.attr_id) {
+		case OPA_PM_ATTRIB_ID_CLEAR_PORT_STATUS:
+			ret = pma_set_opa_portstatus(pmp, ibdev, port,
+						     resp_len);
+			goto bail;
+		case OPA_PM_ATTRIB_ID_ERROR_INFO:
+			ret = pma_set_opa_errorinfo(pmp, ibdev, port,
+						    resp_len);
+			goto bail;
+		default:
+			pmp->mad_hdr.status |= st;
+			ret = reply((struct ib_mad_hdr *)pmp);
+			goto bail;
+		}
+
+	case IB_MGMT_METHOD_TRAP:
+	case IB_MGMT_METHOD_GET_RESP:
+		/*
+		 * The ib_mad module will call us to process responses
+		 * before checking for other consumers.
+		 * Just tell the caller to process it normally.
+		 */
+		ret = IB_MAD_RESULT_SUCCESS;
+		goto bail;
+
+	default:
+		pmp->mad_hdr.status |= st;
+		ret = reply((struct ib_mad_hdr *)pmp);
+	}
+
+bail:
+	return ret;
+}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 static int process_opa_mad(struct ib_device *ibdev, int mad_flags,
 			   u8 port, const struct ib_wc *in_wc,
@@ -1293,11 +1442,8 @@ static int process_opa_mad(struct ib_device *ibdev, int mad_flags,
 				       out_mad, &resp_len);
 		goto bail;
 	case IB_MGMT_CLASS_PERF_MGMT:
-		/* FXRTODO: Implement process_perf_stl */
-#if 0
-		ret = process_perf_stl(ibdev, port, in_mad, out_mad,
+		ret = process_perf_opa(ibdev, port, in_mad, out_mad,
 				       &resp_len);
-#endif
 		goto bail;
 
 	default:
