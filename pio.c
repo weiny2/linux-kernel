@@ -1642,10 +1642,9 @@ void sc_release_update(struct send_context *sc)
 		if (tail >= sc->sr_size)
 			tail = 0;
 	}
-	sc->free = free;
-	smp_wmb();
-	/* update tail, in case we moved it */
 	sc->sr_tail = tail;
+	smp_wmb();
+	sc->free = free;
 	spin_unlock_irqrestore(&sc->release_lock, flags);
 	sc_piobufavail(sc);
 }
