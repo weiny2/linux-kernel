@@ -530,9 +530,9 @@ static ssize_t diagpkt_send(struct diag_pkt *dp)
 		 * NOTE: PRC_FILL_ERR is at best informational and cannot
 		 * be depended on.
 		 */
-		if (!ret && (((wait->code & PRC_STATUS_ERR)
-				|| (wait->code & PRC_FILL_ERR)
-				|| (wait->code & PRC_SC_DISABLE))))
+		if (!ret && (((wait->code & PRC_STATUS_ERR) ||
+			      (wait->code & PRC_FILL_ERR) ||
+			      (wait->code & PRC_SC_DISABLE))))
 			ret = -EIO;
 
 		put_diagpkt_wait(wait);	/* finished with the structure */
