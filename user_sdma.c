@@ -355,6 +355,7 @@ static void sdma_kmem_cache_ctor(void *obj)
 
 int hfi1_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 {
+	struct hfi1_filedata *fd;
 	int ret = 0;
 	unsigned memsize;
 	char buf[64];
@@ -368,6 +369,8 @@ int hfi1_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 		goto done;
 	}
 
+	fd = fp->private_data;
+
 	if (!hfi1_sdma_comp_ring_size) {
 		ret = -EINVAL;
 		goto done;
@@ -379,7 +382,7 @@ int hfi1_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 	if (!pq) {
 		dd_dev_err(dd,
 			   "[%u:%u] Failed to allocate SDMA request struct\n",
-			   uctxt->ctxt, subctxt_fp(fp));
+			   uctxt->ctxt, fd->subctxt);
 		goto pq_nomem;
 	}
 	memsize = sizeof(*pq->reqs) * hfi1_sdma_comp_ring_size;
@@ -387,13 +390,13 @@ int hfi1_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 	if (!pq->reqs) {
 		dd_dev_err(dd,
 			   "[%u:%u] Failed to allocate SDMA request queue (%u)\n",
-			   uctxt->ctxt, subctxt_fp(fp), memsize);
+			   uctxt->ctxt, fd->subctxt, memsize);
 		goto pq_reqs_nomem;
 	}
 	INIT_LIST_HEAD(&pq->list);
 	pq->dd = dd;
 	pq->ctxt = uctxt->ctxt;
-	pq->subctxt = subctxt_fp(fp);
+	pq->subctxt = fd->subctxt;
 	pq->n_max_reqs = hfi1_sdma_comp_ring_size;
 	pq->state = SDMA_PKT_Q_INACTIVE;
 	atomic_set(&pq->n_reqs, 0);
@@ -403,7 +406,7 @@ int hfi1_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 		    activate_packet_queue);
 	pq->reqidx = 0;
 	snprintf(buf, 64, "txreq-kmem-cache-%u-%u-%u", dd->unit, uctxt->ctxt,
-		 subctxt_fp(fp));
+		 fd->subctxt);
 	pq->txreq_cache = kmem_cache_create(buf,
 			       sizeof(struct user_sdma_txreq),
 					    L1_CACHE_BYTES,
@@ -414,12 +417,12 @@ int hfi1_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 			   uctxt->ctxt);
 		goto pq_txreq_nomem;
 	}
-	user_sdma_pkt_fp(fp) = pq;
+	fd->pq = pq;
 	cq = kzalloc(sizeof(*cq), GFP_KERNEL);
 	if (!cq) {
 		dd_dev_err(dd,
 			   "[%u:%u] Failed to allocate SDMA completion queue\n",
-			   uctxt->ctxt, subctxt_fp(fp));
+			   uctxt->ctxt, fd->subctxt);
 		goto cq_nomem;
 	}
 
@@ -429,11 +432,11 @@ int hfi1_user_sdma_alloc_queues(struct hfi1_ctxtdata *uctxt, struct file *fp)
 	if (!cq->comps) {
 		dd_dev_err(dd,
 			   "[%u:%u] Failed to allocate SDMA completion queue entries\n",
-		      uctxt->ctxt, subctxt_fp(fp));
+		      uctxt->ctxt, fd->subctxt);
 		goto cq_comps_nomem;
 	}
 	cq->nentries = hfi1_sdma_comp_ring_size;
-	user_sdma_comp_fp(fp) = cq;
+	fd->cq = cq;
 
 	spin_lock_irqsave(&uctxt->sdma_qlock, flags);
 	list_add(&pq->list, &uctxt->sdma_queues);
@@ -448,7 +451,7 @@ pq_txreq_nomem:
 	kfree(pq->reqs);
 pq_reqs_nomem:
 	kfree(pq);
-	user_sdma_pkt_fp(fp) = NULL;
+	fd->pq = NULL;
 pq_nomem:
 	ret = -ENOMEM;
 done:
@@ -492,9 +495,10 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 				   unsigned long dim, unsigned long *count)
 {
 	int ret = 0, i = 0, sent;
-	struct hfi1_ctxtdata *uctxt = ctxt_fp(fp);
-	struct hfi1_user_sdma_pkt_q *pq = user_sdma_pkt_fp(fp);
-	struct hfi1_user_sdma_comp_q *cq = user_sdma_comp_fp(fp);
+	struct hfi1_filedata *fd = fp->private_data;
+	struct hfi1_ctxtdata *uctxt = fd->uctxt;
+	struct hfi1_user_sdma_pkt_q *pq = fd->pq;
+	struct hfi1_user_sdma_comp_q *cq = fd->cq;
 	struct hfi1_devdata *dd = pq->dd;
 	unsigned long idx = 0;
 	u8 pcount = initial_pkt_count;
@@ -506,7 +510,7 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		hfi1_cdbg(
 		   SDMA,
 		   "[%u:%u:%u] First vector not big enough for header %lu/%lu",
-		   dd->unit, uctxt->ctxt, subctxt_fp(fp),
+		   dd->unit, uctxt->ctxt, fd->subctxt,
 		   iovec[idx].iov_len, sizeof(info) + sizeof(req->hdr));
 		ret = -EINVAL;
 		goto done;
@@ -514,15 +518,15 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	ret = copy_from_user(&info, iovec[idx].iov_base, sizeof(info));
 	if (ret) {
 		hfi1_cdbg(SDMA, "[%u:%u:%u] Failed to copy info QW (%d)",
-			  dd->unit, uctxt->ctxt, subctxt_fp(fp), ret);
+			  dd->unit, uctxt->ctxt, fd->subctxt, ret);
 		ret = -EFAULT;
 		goto done;
 	}
-	trace_hfi1_sdma_user_reqinfo(dd, uctxt->ctxt, subctxt_fp(fp),
+	trace_hfi1_sdma_user_reqinfo(dd, uctxt->ctxt, fd->subctxt,
 				     (u16 *)&info);
 	if (cq->comps[info.comp_idx].status == QUEUED) {
 		hfi1_cdbg(SDMA, "[%u:%u:%u] Entry %u is in QUEUED state",
-			  dd->unit, uctxt->ctxt, subctxt_fp(fp),
+			  dd->unit, uctxt->ctxt, fd->subctxt,
 			  info.comp_idx);
 		ret = -EBADSLT;
 		goto done;
@@ -530,7 +534,7 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	if (!info.fragsize) {
 		hfi1_cdbg(SDMA,
 			  "[%u:%u:%u:%u] Request does not specify fragsize",
-			  dd->unit, uctxt->ctxt, subctxt_fp(fp), info.comp_idx);
+			  dd->unit, uctxt->ctxt, fd->subctxt, info.comp_idx);
 		ret = -EINVAL;
 		goto done;
 	}
@@ -539,7 +543,7 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	 * "allocate" the request entry.
 	 */
 	hfi1_cdbg(SDMA, "[%u:%u:%u] Using req/comp entry %u\n", dd->unit,
-		  uctxt->ctxt, subctxt_fp(fp), info.comp_idx);
+		  uctxt->ctxt, fd->subctxt, info.comp_idx);
 	req = pq->reqs + info.comp_idx;
 	memset(req, 0, sizeof(*req));
 	/* Mark the request as IN_USE before we start filling it in. */
@@ -672,7 +676,7 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 
 	/* Have to select the engine */
 	req->sde = sdma_select_engine_vl(dd,
-					 (u32)(uctxt->ctxt + subctxt_fp(fp)),
+					 (u32)(uctxt->ctxt + fd->subctxt),
 					 vl);
 	if (!req->sde || !sdma_running(req->sde)) {
 		ret = -ECOMM;
@@ -696,6 +700,7 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		if (sent != -EBUSY) {
 			ret = sent;
 			req->status = ret;
+			set_comp_state(req, ERROR, req->status);
 			goto done;
 		} else {
 			sent = 0;
