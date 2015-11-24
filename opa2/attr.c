@@ -683,15 +683,8 @@ int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 		ret = __subn_get_hfi_cc_table(odev->dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
-#if 0
-	/* FXRTODO: figure out if this code is valid for fxr */
 	case IB_SMP_ATTR_SM_INFO:
-		if (ibp->port_cap_flags & IB_PORT_SM_DISABLED)
-			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
-		if (ibp->port_cap_flags & IB_PORT_SM)
-			return IB_MAD_RESULT_SUCCESS;
-		/* FALLTHROUGH */
-#endif
+		return IB_MAD_RESULT_SUCCESS;
 	default:
 		smp->status |=
 		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB);

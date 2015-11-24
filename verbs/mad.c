@@ -505,9 +505,7 @@ static int __subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 {
 	int ret;
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
-#if 0
-	struct qib_ibport *ibp = to_iport(ibdev, port);
-#endif
+	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 	/*
 	 * FXRTODO: Only get node info supported in MAD methods.
 	 * Others yet to be implemented.
@@ -585,15 +583,12 @@ static int __subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		ret = __subn_get_opa_cc_table(smp, am, data, ibdev, port,
 					      resp_len);
 		break;
-#if 0
-	/* FXRTODO: figure out if this code is valid for fxr */
 	case IB_SMP_ATTR_SM_INFO:
 		if (ibp->port_cap_flags & IB_PORT_SM_DISABLED)
 			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 		if (ibp->port_cap_flags & IB_PORT_SM)
 			return IB_MAD_RESULT_SUCCESS;
 		/* FALLTHROUGH */
-#endif
 	default:
 		smp->status |=
 		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB);
