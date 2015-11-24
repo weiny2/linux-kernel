@@ -291,6 +291,7 @@ static void init_csrs(struct hfi_devdata *dd)
 		if (!strncmp(utsname()->nodename, "viper", 5)) {
 			const char *hostname = utsname()->nodename;
 			int node = 0, rc;
+			u64 nnguid;
 
 			/* Extract the node id from the host name */
 			hostname += 5;
@@ -318,8 +319,9 @@ static void init_csrs(struct hfi_devdata *dd)
 			 *
 			 * Move this code to 8051 INTR handler
 			 */
-			dd->pport[0].neighbor_guid = dd->nguid + 0x1000,
-			dd->pport[1].neighbor_guid = dd->nguid + 0x1000;
+			nnguid = cpu_to_be64(NODE_GUID + (node ? 0:1));
+			dd->pport[0].neighbor_guid = nnguid;
+			dd->pport[1].neighbor_guid = nnguid;
 		}
 		if (opafm_disable) {
 			lmp0.field.DLID = dd->pport[0].lid;
