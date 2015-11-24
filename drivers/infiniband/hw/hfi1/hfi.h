@@ -1193,16 +1193,6 @@ struct hfi1_filedata {
 	int (*mmu_rb_insert)(struct rb_root *, struct mmu_rb_node *);
 };
 
-/* for use in system calls, where we want to know device type, etc. */
-#define fp_to_fd(fp) ((struct hfi1_filedata *)(fp)->private_data)
-#define ctxt_fp(fp) (fp_to_fd((fp))->uctxt)
-#define subctxt_fp(fp) (fp_to_fd((fp))->subctxt)
-#define tidcursor_fp(fp) (fp_to_fd((fp))->tidcursor)
-#define user_sdma_pkt_fp(fp) (fp_to_fd((fp))->pq)
-#define user_sdma_comp_fp(fp) (fp_to_fd((fp))->cq)
-#define notifier_fp(fp) (fp_to_fd((fp))->mn)
-#define rb_fp(fp) (fp_to_fd((fp))->tid_rb_root)
-
 extern struct list_head hfi1_dev_list;
 extern spinlock_t hfi1_devs_lock;
 struct hfi1_devdata *hfi1_lookup(int unit);
