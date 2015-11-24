@@ -1029,23 +1029,8 @@ static int __subn_set_hfi_portinfo(struct hfi_devdata *dd, struct opa_smp *smp,
 	crc_enabled = be16_to_cpu(pi->port_ltp_crc_mode);
 	crc_enabled = HFI_LTP_CRC_ENABLED(crc_enabled);
 
-	if (crc_enabled) {
-		u16 crc_lcb_mode;
-
+	if (crc_enabled)
 		ppd->port_crc_mode_enabled = hfi_port_ltp_to_cap(crc_enabled);
-
-		/*
-		 * FXRTODO: Setting of CRC mode should be done as part of
-		 * LNI. See handle_verify_cap code in WFR. Until then
-		 * change the crc mode here.
-		 */
-		ppd->port_ltp_crc_mode |=
-			hfi_cap_to_port_ltp(ppd->port_crc_mode_enabled) <<
-					HFI_LTP_CRC_ENABLED_SHIFT;
-
-		crc_lcb_mode = hfi_port_cap_to_lcb(dd, ppd->port_ltp_crc_mode);
-		hfi_set_crc_mode(ppd, crc_lcb_mode);
-	}
 
 	ls_new = pi->port_states.portphysstate_portstate &
 			OPA_PI_MASK_PORT_STATE;

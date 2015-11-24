@@ -570,6 +570,23 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 	hfi_cfg_pkey_check(ppd, 1);
 }
 
+/*
+ * Our neighbor has indicated that we are allowed to act as a fabric
+ * manager, so place the full management partition key in the second
+ * (0-based) pkey array position. Note that we should already have the
+ * limited management partition key in array element 1, and also that the
+ * port is not yet up when add_full_mgmt_pkey() is invoked.
+ */
+void hfi_add_full_mgmt_pkey(struct hfi_pportdata *ppd)
+{
+	/* Sanity check - ppd->pkeys[2] should be 0 */
+	if (ppd->pkeys[2] != 0)
+		ppd_dev_err(ppd, "%s pkey[2] already set to 0x%x, resetting it to 0x%x\n",
+			    __func__, ppd->pkeys[2], OPA_FULL_MGMT_PKEY);
+	ppd->pkeys[2] = OPA_FULL_MGMT_PKEY;
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_PKEYS, 0, NULL);
+}
+
 u8 hfi_porttype(struct hfi_pportdata *ppd)
 {
 	/* FXRTODO: QSFP logic goes here to decide port type */
@@ -1723,92 +1740,6 @@ void hfi_ptc_init(struct hfi_pportdata *ppd)
 	}
 }
 
-/*
- * Mask conversion: Capability exchange to Port LTP.  The capability
- * exchange has an implicit 16b CRC that is mandatory.
- */
-u16 hfi_cap_to_port_ltp(u16 cap)
-{
-	/* this mode is mandatory */
-	u16 port_ltp = OPA_PORT_LTP_CRC_MODE_16;
-
-	if (cap & HFI_CAP_CRC_14B)
-		port_ltp |= OPA_PORT_LTP_CRC_MODE_14;
-	if (cap & HFI_CAP_CRC_48B)
-		port_ltp |= OPA_PORT_LTP_CRC_MODE_48;
-	if (cap & HFI_CAP_CRC_12B_16B_PER_LANE)
-		port_ltp |= OPA_PORT_LTP_CRC_MODE_PER_LANE;
-
-	return port_ltp;
-}
-
-/* Convert an OPA Port LTP mask to capability mask */
-u16 hfi_port_ltp_to_cap(u16 port_ltp)
-{
-	u16 cap_mask = 0;
-
-	if (port_ltp & OPA_PORT_LTP_CRC_MODE_14)
-		cap_mask |= HFI_CAP_CRC_14B;
-	if (port_ltp & OPA_PORT_LTP_CRC_MODE_48)
-		cap_mask |= HFI_CAP_CRC_48B;
-	if (port_ltp & OPA_PORT_LTP_CRC_MODE_PER_LANE)
-		cap_mask |= HFI_CAP_CRC_12B_16B_PER_LANE;
-
-	return cap_mask;
-}
-
-/*
- * Convert a single FC LCB CRC mode to an OPA Port LTP mask.
- */
-static u16 hfi_lcb_to_port_ltp(struct hfi_devdata *dd, u16 lcb_crc)
-{
-	u16 port_ltp = 0;
-
-	switch (lcb_crc) {
-	case HFI_LCB_CRC_12B_16B_PER_LANE:
-		port_ltp = OPA_PORT_LTP_CRC_MODE_PER_LANE;
-		break;
-	case HFI_LCB_CRC_48B:
-		port_ltp = OPA_PORT_LTP_CRC_MODE_48;
-		break;
-	case HFI_LCB_CRC_14B:
-		port_ltp = OPA_PORT_LTP_CRC_MODE_14;
-		break;
-	case HFI_LCB_CRC_16B:
-		port_ltp = OPA_PORT_LTP_CRC_MODE_16;
-		break;
-	default:
-		dd_dev_warn(dd, "Invalid lcb crc. Driver might be in bad state");
-	}
-
-	return port_ltp;
-}
-
-/*
- * Convert a OPA Port cap mask to a single FC LCB CRC mode
- */
-u16 hfi_port_cap_to_lcb(struct hfi_devdata *dd, u16 crc_mask)
-{
-	u16 crc_val;
-
-	if (crc_mask & HFI_CAP_CRC_14B)
-		crc_val = HFI_LCB_CRC_14B;
-	else if (crc_mask & HFI_CAP_CRC_48B)
-		crc_val = HFI_LCB_CRC_48B;
-	else if (crc_mask & HFI_CAP_CRC_12B_16B_PER_LANE)
-		crc_val = HFI_LCB_CRC_12B_16B_PER_LANE;
-	else
-		crc_val = HFI_LCB_CRC_16B;
-
-	return crc_val;
-}
-
-void hfi_set_crc_mode(struct hfi_pportdata *ppd, u16 crc_lcb_mode)
-{
-	write_fzc_csr(ppd, FZC_LCB_CFG_CRC_MODE,
-		(u64)crc_lcb_mode << FZC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
-}
-
 void hfi_init_sc_to_vl_tables(struct hfi_pportdata *ppd)
 {
 	u8 vlt[OPA_MAX_SCS];
@@ -1833,7 +1764,6 @@ int hfi_pport_init(struct hfi_devdata *dd)
 	struct hfi_pportdata *ppd;
 	int i, j, size;
 	u8 port;
-	u16 crc_val;
 	int ret;
 
 	for (port = 1; port <= dd->num_pports; port++) {
@@ -1863,33 +1793,6 @@ int hfi_pport_init(struct hfi_devdata *dd)
 			ppd->vl15_init = ppd->link_credits;
 
 		hfi_assign_local_cm_au_table(ppd, ppd->vcu);
-
-		/*
-		 * FXRTODO: The below 4 variables
-		 * are set during 8051 interrupt handler
-		 * and are read from appropriate 8051
-		 * registers. Move this code to 8051 INTR handler.
-		 */
-		ppd->mgmt_allowed = 0x1;
-		/* WFR ref reg: DC_DC8051_STS_REMOTE_NODE_TYPE */
-		ppd->neighbor_type = 0;
-		/* WFR ref reg: DC_DC8051_STS_REMOTE_FM_SECURITY */
-		ppd->neighbor_fm_security = 0;
-		/*
-		 * WFR ref reg: DC_DC8051_STS_REMOTE_PORT_NO
-		 * Current value reflects simics B2B setup :
-		 * viper0-port1 <-> viper1-port1
-		 * viper0-port2 <-> viper1-port2
-		 */
-		ppd->neighbor_port_number = port;
-
-		/*
-		 * FXRTODO: Once we have verify_cap implemented
-		 * then move this code there
-		 */
-		if (neigh_is_hfi(ppd))
-			ppd->part_enforce =
-				HFI_PART_ENFORCE_IN | HFI_PART_ENFORCE_OUT;
 
 		/*
 		 * Since OPA uses management pkey there is no
@@ -1931,19 +1834,6 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		/* initialize enabled LTP CRC mode */
 		ppd->port_ltp_crc_mode |= hfi_cap_to_port_ltp(HFI_SUPPORTED_CRCS) <<
 					HFI_LTP_CRC_ENABLED_SHIFT;
-
-		/*
-		 * FXRTODO: These need to be moved to LNI code.
-		 * Each port needs to negotiate on the CRC
-		 * that is to be used with the neighboring port.
-		 *
-		 * crc_val is obtained during LNI process
-		 * from the neighbor port.
-		 */
-		crc_val = HFI_LCB_CRC_14B;
-		ppd->port_ltp_crc_mode |= hfi_lcb_to_port_ltp(dd, crc_val) <<
-					HFI_LTP_CRC_ACTIVE_SHIFT;
-		hfi_set_crc_mode(ppd, crc_val);
 
 		/*
 		 * Set the default MTU only for VL 15
