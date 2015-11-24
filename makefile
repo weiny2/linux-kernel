@@ -41,7 +41,7 @@ VERSION = $(shell if [ -e .git ] ; then  git describe --tags --abbrev=0 --match=
 # is the number of commits since the version tag was planted suffixed by the g<commitid>
 RELEASE = $(shell if [ -e .git ] ; then git describe --tags --long --match='v*' | sed -e 's/v[0-9.]*-\([0-9]*\)/\1/' | sed 's/-g.*$$//'; else echo "release" ; fi)
 
-EXCLUDES = --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp' --exclude='series' --exclude='*.orig' --exclude=hfi.spec.in
+EXCLUDES = --exclude-vcs --exclude-backups --exclude='include' --exclude='test' --exclude='scripts' --exclude='*.patch' --exclude='*.swp' --exclude='series' --exclude='*.orig' --exclude=hfi.spec.in --exclude=makesrpm.sh
 
 NAME = hfi1
 
