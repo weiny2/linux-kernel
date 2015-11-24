@@ -141,6 +141,35 @@ void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
 	write_csr(ppd->dd, offset, value);
 }
 
+static void read_mgmt_allowed(struct hfi_pportdata *ppd, u8 *mgmt_allowed)
+{
+	u32 frame;
+
+	hfi2_read_8051_config(ppd, REMOTE_LNI_INFO, GENERAL_CONFIG, &frame);
+	*mgmt_allowed = (frame >> MGMT_ALLOWED_SHIFT) & MGMT_ALLOWED_MASK;
+}
+
+static int write_local_device_id(struct hfi_pportdata *ppd, u16 device_id,
+				 u8 device_rev)
+{
+	u32 frame;
+
+	frame = ((u32)device_id << LOCAL_DEVICE_ID_SHIFT)
+		| ((u32)device_rev << LOCAL_DEVICE_REV_SHIFT);
+	return load_8051_config(ppd, LOCAL_DEVICE_ID, GENERAL_CONFIG, frame);
+}
+
+static void read_remote_device_id(struct hfi_pportdata *ppd, u16 *device_id,
+				  u8 *device_rev)
+{
+	u32 frame;
+
+	hfi2_read_8051_config(ppd, REMOTE_DEVICE_ID, GENERAL_CONFIG, &frame);
+	*device_id = (frame >> REMOTE_DEVICE_ID_SHIFT) & REMOTE_DEVICE_ID_MASK;
+	*device_rev = (frame >> REMOTE_DEVICE_REV_SHIFT)
+			& REMOTE_DEVICE_REV_MASK;
+}
+
 static void read_vc_remote_fabric(struct hfi_pportdata *ppd, u8 *vau, u8 *z,
 				  u8 *vcu, u16 *vl15buf, u8 *crc_sizes)
 {
@@ -167,6 +196,67 @@ static int write_vc_local_fabric(struct hfi_pportdata *ppd, u8 vau, u8 z,
 		| (u32)crc_sizes << HFI_CRC_SIZES_SHIFT;
 	return load_8051_config(ppd, VERIFY_CAP_LOCAL_FABRIC,
 				GENERAL_CONFIG, frame);
+}
+
+/*
+ * Mask conversion: Capability exchange to Port LTP.  The capability
+ * exchange has an implicit 16b CRC that is mandatory.
+ */
+u16 hfi_cap_to_port_ltp(u16 cap)
+{
+	/* this mode is mandatory */
+	u16 port_ltp = OPA_PORT_LTP_CRC_MODE_16;
+
+	if (cap & HFI_CAP_CRC_14B)
+		port_ltp |= OPA_PORT_LTP_CRC_MODE_14;
+	if (cap & HFI_CAP_CRC_48B)
+		port_ltp |= OPA_PORT_LTP_CRC_MODE_48;
+	if (cap & HFI_CAP_CRC_12B_16B_PER_LANE)
+		port_ltp |= OPA_PORT_LTP_CRC_MODE_PER_LANE;
+
+	return port_ltp;
+}
+
+/* Convert an OPA Port LTP mask to capability mask */
+u16 hfi_port_ltp_to_cap(u16 port_ltp)
+{
+	u16 cap_mask = 0;
+
+	if (port_ltp & OPA_PORT_LTP_CRC_MODE_14)
+		cap_mask |= HFI_CAP_CRC_14B;
+	if (port_ltp & OPA_PORT_LTP_CRC_MODE_48)
+		cap_mask |= HFI_CAP_CRC_48B;
+	if (port_ltp & OPA_PORT_LTP_CRC_MODE_PER_LANE)
+		cap_mask |= HFI_CAP_CRC_12B_16B_PER_LANE;
+
+	return cap_mask;
+}
+
+/*
+ * Convert a single FC LCB CRC mode to an OPA Port LTP mask.
+ */
+static u16 hfi_lcb_to_port_ltp(struct hfi_pportdata *ppd, u16 lcb_crc)
+{
+	u16 port_ltp = 0;
+
+	switch (lcb_crc) {
+	case HFI_LCB_CRC_12B_16B_PER_LANE:
+		port_ltp = OPA_PORT_LTP_CRC_MODE_PER_LANE;
+		break;
+	case HFI_LCB_CRC_48B:
+		port_ltp = OPA_PORT_LTP_CRC_MODE_48;
+		break;
+	case HFI_LCB_CRC_14B:
+		port_ltp = OPA_PORT_LTP_CRC_MODE_14;
+		break;
+	case HFI_LCB_CRC_16B:
+		port_ltp = OPA_PORT_LTP_CRC_MODE_16;
+		break;
+	default:
+		ppd_dev_warn(ppd, "Invalid lcb crc. Driver might be in bad state");
+	}
+
+	return port_ltp;
 }
 
 /* return the link state name */
@@ -964,8 +1054,8 @@ static u16 opa_to_vc_link_widths(u16 opa_widths)
  */
 static int set_local_link_attributes(struct hfi_pportdata *ppd)
 {
+	struct hfi_devdata *dd = ppd->dd;
 #if 0 /* WFR legacy */
-	struct hfi1_devdata *dd = ppd->dd;
 	u8 enable_lane_tx;
 	u8 tx_polarity_inversion;
 	u8 rx_polarity_inversion;
@@ -1014,6 +1104,9 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 #endif
+	write_8051_csr(ppd, CRK_CRK8051_CFG_LOCAL_PORT_NO,
+		       ppd->pnum & CRK_CRK8051_CFG_LOCAL_PORT_NO_VAL_MASK);
+
 	/* z=1 in the next call: AU of 0 is not supported by the hardware */
 	ret = write_vc_local_fabric(ppd, ppd->vau, 1, ppd->vcu, ppd->vl15_init,
 				    ppd->port_crc_mode_enabled);
@@ -1029,11 +1122,9 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
-#if 0 /* WFR legacy */
 	/* let peer know who we are */
-	ret = write_local_device_id(dd, dd->pcidev->device, dd->minrev);
+	ret = write_local_device_id(ppd, dd->pcidev->device, dd->minrev);
 	if (ret == HCMD_SUCCESS)
-#endif
 		return 0;
 
 set_local_link_attributes_fail:
@@ -1219,6 +1310,21 @@ static inline void add_rcvctrl(struct hfi_devdata *dd, u64 add)
 #endif
 }
 
+static void handle_quick_linkup(struct hfi_pportdata *ppd)
+{
+	ppd->neighbor_guid = read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_GUID);
+	ppd->neighbor_type =
+		read_8051_csr(ppd,
+			      CRK_CRK8051_STS_REMOTE_NODE_TYPE) &
+			      CRK_CRK8051_STS_REMOTE_NODE_TYPE_VAL_SMASK;
+	ppd->neighbor_port_number =
+		read_8051_csr(ppd,
+			      CRK_CRK8051_STS_REMOTE_PORT_NO) &
+			      CRK_CRK8051_STS_REMOTE_PORT_NO_VAL_SMASK;
+	dd_dev_info(ppd->dd, "Neighbor GUID: %llx Neighbor type %d\n",
+		    ppd->neighbor_guid, ppd->neighbor_type);
+}
+
 /*
  * Handle a linkup or link down notification.
  * This is called outside an interrupt.
@@ -1255,21 +1361,7 @@ static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup)
 			set_up_vl15(dd, dd->vau, dd->vl15_init);
 			assign_remote_cm_au_table(dd, dd->vcu);
 #endif
-			ppd->neighbor_guid =
-				read_8051_csr(ppd,
-					CRK_CRK8051_STS_REMOTE_GUID);
-			ppd->neighbor_type =
-				read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_NODE_TYPE) &
-					CRK_CRK8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
-#if 0 /* WFR legacy */
-			ppd->neighbor_port_number =
-				read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_PORT_NO) &
-					CRK_CRK8051_STS_REMOTE_PORT_NO_VAL_SMASK;
-#endif
-			dd_dev_info(ppd->dd,
-				"Neighbor GUID: %llx Neighbor type %d\n",
-				ppd->neighbor_guid,
-				ppd->neighbor_type);
+			handle_quick_linkup(ppd);
 		}
 
 		/* physical link went up */
@@ -1417,6 +1509,10 @@ static void handle_verify_cap(struct work_struct *work)
 	u8 vau;
 	u8 z;
 	u16 vl15buf;
+	u16 device_id;
+	u16 crc_mask;
+	u16 crc_val;
+	u8 device_rev;
 	u8 partner_supported_crc;
 #if 0 /* WFR legacy */
 	struct hfi_devdata *dd = ppd->dd;
@@ -1456,13 +1552,14 @@ static void handle_verify_cap(struct work_struct *work)
 		&partner_supported_crc);
 
 	read_vc_remote_link_width(ppd, &remote_max_rate, &link_widths);
-#if 0 /* WFR legacy */
-	read_remote_device_id(dd, &device_id, &device_rev);
+	read_remote_device_id(ppd, &device_id, &device_rev);
+
 	/*
 	 * And the 'MgmtAllowed' information, which is exchanged during
 	 * LNI, is also be available at this point.
 	 */
-	read_mgmt_allowed(dd, &ppd->mgmt_allowed);
+	read_mgmt_allowed(ppd, &ppd->mgmt_allowed);
+#if 0
 	/* print the active widths */
 	get_link_widths(dd, &active_tx, &active_rx);
 	ppd_dev_info(ppd,
@@ -1479,10 +1576,8 @@ static void handle_verify_cap(struct work_struct *work)
 
 	ppd_dev_info(ppd, "Peer Link Width: tx rate 0x%x, widths 0x%x\n",
 		(u32)remote_max_rate, (u32)link_widths);
-#if 0 /* WFR legacy */
 	ppd_dev_info(ppd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
 		(u32)device_id, (u32)device_rev);
-#endif
 	/*
 	 * The peer vAU value just read is the peer receiver value.  HFI does
 	 * not support a transmit vAU of 0 (AU == 8).  We advertised that
@@ -1496,25 +1591,23 @@ static void handle_verify_cap(struct work_struct *work)
 		vau = 1;
 	hfi_set_up_vl15(ppd, vau, vl15buf);
 
-#if 0
-
 	/* set up the LCB CRC mode */
 	crc_mask = ppd->port_crc_mode_enabled & partner_supported_crc;
 
 	/* order is important: use the lowest bit in common */
-	if (crc_mask & CAP_CRC_14B)
-		crc_val = LCB_CRC_14B;
-	else if (crc_mask & CAP_CRC_48B)
-		crc_val = LCB_CRC_48B;
-	else if (crc_mask & CAP_CRC_12B_16B_PER_LANE)
-		crc_val = LCB_CRC_12B_16B_PER_LANE;
+	if (crc_mask & HFI_CAP_CRC_14B)
+		crc_val = HFI_LCB_CRC_14B;
+	else if (crc_mask & HFI_CAP_CRC_48B)
+		crc_val = HFI_LCB_CRC_48B;
+	else if (crc_mask & HFI_CAP_CRC_12B_16B_PER_LANE)
+		crc_val = HFI_LCB_CRC_12B_16B_PER_LANE;
 	else
-		crc_val = LCB_CRC_16B;
+		crc_val = HFI_LCB_CRC_16B;
 
 	ppd_dev_info(ppd, "Final LCB CRC mode: %d\n", (int)crc_val);
-	write_csr(dd, DC_LCB_CFG_CRC_MODE,
-		  (u64)crc_val << DC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
-
+	write_fzc_csr(ppd, FZC_LCB_CFG_CRC_MODE,
+		      (u64)crc_val << FZC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
+#if 0
 	/* set (14b only) or clear sideband credit */
 	reg = read_csr(dd, SEND_CM_CTRL);
 	if (crc_val == LCB_CRC_14B && crc_14b_sideband) {
@@ -1555,7 +1648,6 @@ static void handle_verify_cap(struct work_struct *work)
 		ppd->link_speed_active = OPA_LINK_SPEED_32G;
 	}
 
-#if 0 /* WFR legacy */
 	/*
 	 * Cache the values of the supported, enabled, and active
 	 * LTP CRC modes to return in 'portinfo' queries. But the bit
@@ -1563,14 +1655,15 @@ static void handle_verify_cap(struct work_struct *work)
 	 * what's in the link_crc_mask, crc_sizes, and crc_val
 	 * variables. Convert these here.
 	 */
-	ppd->port_ltp_crc_mode = cap_to_port_ltp(link_crc_mask) << 8;
+	ppd->port_ltp_crc_mode = hfi_lcb_to_port_ltp(ppd, HFI_SUPPORTED_CRCS) <<
+			HFI_LTP_CRC_SUPPORTED_SHIFT;
 		/* supported crc modes */
 	ppd->port_ltp_crc_mode |=
-		cap_to_port_ltp(ppd->port_crc_mode_enabled) << 4;
+		hfi_lcb_to_port_ltp(ppd, ppd->port_crc_mode_enabled) <<
+		HFI_LTP_CRC_ENABLED_SHIFT;
 		/* enabled crc modes */
-	ppd->port_ltp_crc_mode |= lcb_to_port_ltp(crc_val);
+	ppd->port_ltp_crc_mode |= hfi_lcb_to_port_ltp(ppd, crc_val);
 		/* active crc mode */
-#endif
 
 	/* set up the remote credit return table */
 	hfi_assign_remote_cm_au_table(ppd, vcu);
@@ -1601,21 +1694,24 @@ static void handle_verify_cap(struct work_struct *work)
 
 	ppd->neighbor_guid =
 		read_csr(dd, DC_DC8051_STS_REMOTE_GUID);
-	ppd->neighbor_port_number = read_csr(dd, DC_DC8051_STS_REMOTE_PORT_NO) &
-					DC_DC8051_STS_REMOTE_PORT_NO_VAL_SMASK;
+#endif
+	ppd->neighbor_port_number =
+		read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_PORT_NO) &
+				CRK_CRK8051_STS_REMOTE_PORT_NO_VAL_SMASK;
 	ppd->neighbor_type =
-		read_csr(dd, DC_DC8051_STS_REMOTE_NODE_TYPE) &
-		DC_DC8051_STS_REMOTE_NODE_TYPE_VAL_MASK;
+		read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_NODE_TYPE) &
+			      CRK_CRK8051_STS_REMOTE_NODE_TYPE_VAL_SMASK;
 	ppd->neighbor_fm_security =
-		read_csr(dd, DC_DC8051_STS_REMOTE_FM_SECURITY) &
-		DC_DC8051_STS_LOCAL_FM_SECURITY_DISABLED_MASK;
+		read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_FM_SECURITY) &
+		CRK_CRK8051_STS_REMOTE_FM_SECURITY_DISABLED_SMASK;
+#if 0
 	ppd_dev_info(ppd,
 		"Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
 		ppd->neighbor_guid, ppd->neighbor_type,
 		ppd->mgmt_allowed, ppd->neighbor_fm_security);
-	if (ppd->mgmt_allowed)
-		add_full_mgmt_pkey(ppd);
 #endif
+	if (ppd->mgmt_allowed)
+		hfi_add_full_mgmt_pkey(ppd);
 
 	/* tell the 8051 to go to LinkUp */
 	hfi_set_link_state(ppd, HLS_GOING_UP);

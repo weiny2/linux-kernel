@@ -179,9 +179,25 @@
 #define MISC_CONFIG_BITS_SHIFT 24
 #define MISC_CONFIG_BITS_MASK 0xff
 
+/* LOCAL_DEVICE_ID fields */
+#define LOCAL_DEVICE_REV_SHIFT 0
+#define LOCAL_DEVICE_REV_MASK 0xff
+#define LOCAL_DEVICE_ID_SHIFT 8
+#define LOCAL_DEVICE_ID_MASK 0xffff
+
+/* REMOTE_DEVICE_ID fields */
+#define REMOTE_DEVICE_REV_SHIFT 0
+#define REMOTE_DEVICE_REV_MASK 0xff
+#define REMOTE_DEVICE_ID_SHIFT 8
+#define REMOTE_DEVICE_ID_MASK 0xffff
+
 /* verify capability remote link width fields */
 #define REMOTE_TX_RATE_SHIFT 16
 #define REMOTE_TX_RATE_MASK 0xff
+
+/* mask, shift for reading 'mgmt_enabled' value from REMOTE_LNI_INFO field */
+#define MGMT_ALLOWED_SHIFT 23
+#define MGMT_ALLOWED_MASK 0x1
 
 /* New on FXR, not defined in 4.3 kernel */
 #define OPA_LINK_SPEED_32G 3 /* 32.2265625 32Gbps */
@@ -223,5 +239,7 @@ void hfi2_pport_link_uninit(struct hfi_devdata *dd);
 int hfi2_pport_link_init(struct hfi_devdata *dd);
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
 int hfi_start_link(struct hfi_pportdata *ppd);
+u16 hfi_cap_to_port_ltp(u16 cap);
+u16 hfi_port_ltp_to_cap(u16 port_ltp);
 
 #endif /* _LINK_H */

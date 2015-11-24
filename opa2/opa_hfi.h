@@ -728,6 +728,8 @@ struct hfi_devdata {
 	struct firmware_details fw_8051;
 	u16 crk8051_ver; /* 8051 firmware version */
 
+	/* chip minor rev, from CceRevision */
+	u8 minrev;
 #ifdef CONFIG_DEBUG_FS
 	/* per HFI debugfs */
 	struct dentry *hfi_dev_dbg;
@@ -896,6 +898,7 @@ void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable);
 void hfi_set_up_vl15(struct hfi_pportdata *ppd, u8 vau, u16 vl15buf);
 void hfi_assign_remote_cm_au_table(struct hfi_pportdata *ppd, u8 vcu);
 int neigh_is_hfi(struct hfi_pportdata *ppd);
+void hfi_add_full_mgmt_pkey(struct hfi_pportdata *ppd);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
