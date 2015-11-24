@@ -1306,12 +1306,19 @@ bail:
 
 static void qp_pio_drain(struct hfi1_qp *qp)
 {
+	struct hfi1_ibdev *dev;
+
 	if (!qp->s_sendcontext)
 		return;
+	dev = to_idev(qp->ibqp.device);
 	while (iowait_pio_pending(&qp->s_iowait)) {
+		write_seqlock_irq(&dev->iowait_lock);
 		hfi1_sc_wantpiobuf_intr(qp->s_sendcontext, 1);
+		write_sequnlock_irq(&dev->iowait_lock);
 		iowait_pio_drain(&qp->s_iowait);
+		write_seqlock_irq(&dev->iowait_lock);
 		hfi1_sc_wantpiobuf_intr(qp->s_sendcontext, 0);
+		write_sequnlock_irq(&dev->iowait_lock);
 	}
 }
 
