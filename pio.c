@@ -1643,6 +1643,7 @@ void sc_release_update(struct send_context *sc)
 			tail = 0;
 	}
 	sc->sr_tail = tail;
+	/* make sure tail is updated before free */
 	smp_wmb();
 	sc->free = free;
 	spin_unlock_irqrestore(&sc->release_lock, flags);
