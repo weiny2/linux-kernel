@@ -291,7 +291,7 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		}
 		if (unlikely(rcv_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
 					    sc5, be16_to_cpu(hdr->lrh[3])))) {
-			hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
+			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY,
 				       (u16)bth0,
 				       (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
 				       0, qp->ibqp.qp_num,
@@ -325,7 +325,7 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 		}
 		if (unlikely(rcv_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
 					    sc5, be16_to_cpu(hdr->lrh[3])))) {
-			hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
+			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY,
 				       (u16)bth0,
 				       (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
 				       0, qp->ibqp.qp_num,
