@@ -100,7 +100,7 @@ ifneq (,$(BASEVERSION))
 	fi
 endif
 
-dist: distclean specfile headers
+dist: distclean specfile headers vnic
 	rm -rf /tmp/$(NAME)-$(VERSION)
 	mkdir -p /tmp/$(NAME)-$(VERSION)
 	cp -r . /tmp/$(NAME)-$(VERSION)
