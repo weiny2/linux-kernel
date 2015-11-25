@@ -78,7 +78,7 @@ vnic:
 		git submodule status; \
 	fi
 
-clean:
+clean: headers vnic
 	make -C $(KBUILD) M=${PWD} clean
 
 distclean: clean
