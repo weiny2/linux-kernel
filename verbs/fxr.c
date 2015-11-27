@@ -62,9 +62,9 @@
 
 #define OPA_IB_CQ_FULL_RETRIES		10
 #define OPA_IB_CQ_FULL_DELAY_MS		1
-#define OPA_IB_EAGER_COUNT		8 /* minimum Eager entries */
-#define OPA_IB_EAGER_COUNT_ORDER	1 /* log2 of above - 2 */
-#define OPA_IB_EAGER_SIZE		(PAGE_SIZE * 4)
+#define OPA_IB_EAGER_COUNT		512 /* minimum Eager entries */
+#define OPA_IB_EAGER_COUNT_ORDER	7 /* log2 of above - 2 */
+#define OPA_IB_EAGER_SIZE		(PAGE_SIZE * 16)
 #define OPA_IB_EAGER_MIN_FREE		2048
 /* TODO - still experimenting with 64B alignment (PTL_MAY_ALIGN) */
 #define OPA_IB_EAGER_PT_FLAGS		PTL_MANAGE_LOCAL
@@ -440,8 +440,8 @@ int opa_ib_rcv_init(struct opa_ib_portdata *ibp)
 		return 0;
 
 	total_eager_size = OPA_IB_EAGER_COUNT * OPA_IB_EAGER_SIZE;
-	/* TODO - for now, size the RHQ as one event per 128 B of eager buffer */
-	rhq_count = total_eager_size / 128;
+	/* TODO - for now, size the RHQ as one event per 64 B of eager buffer */
+	rhq_count = total_eager_size / 64;
 
 	/* allocate Eager PT and EQ */
 	memset(&eq_alloc, 0, sizeof(eq_alloc));
