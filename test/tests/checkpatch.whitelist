@@ -96,7 +96,7 @@
 1 eprom.c WARNING: ENOSYS means 'invalid syscall nr' and nothing else
 1 file_ops.c CHECK: Prefer kzalloc(sizeof(*fp->private_data)...) over kzalloc(sizeof(struct hfi1_filedata)...)
 2 hfi.h CHECK: 'ment' may be misspelled - perhaps 'meant'?
-3 hfi.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt
+2 hfi.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt
 1 init.c CHECK: usleep_range is preferred over udelay; see Documentation/timers/timers-howto.txt
 2 init.c WARNING: Possible unnecessary 'out of memory' message
 1 mad.c CHECK: Avoid CamelCase: <OPA_CAP_MASK3_IsSharedSpaceSupported>
