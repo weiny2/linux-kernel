@@ -82,7 +82,6 @@
 #include <rdma/fxr/fxr_fc_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs.h>
-#include <rdma/fxr/fxr_tx_otr_msg_top_csrs_defs.h>
 #include <rdma/fxr/fxr_pcim_defs.h>
 #include "opa_hfi.h"
 #include <rdma/opa_core_ib.h>
