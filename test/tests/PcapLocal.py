@@ -80,7 +80,7 @@ def signal_handler(signal, frame):
 
 def main():
 
-    IB_PACKET_SIZE = 5000 #iba_pcap.h = 4208 but not big enough for 4K MTU
+    STL_PACKET_SIZE = 16*1024 #Max packet size should not be greater than 16K
     SET_FILTER_IOCTL = 7044
     CLEAR_FILTER_IOCTL = 7043
 
@@ -153,7 +153,7 @@ def main():
     # Go collect some packets
     RegLib.test_log(0, "Waiting for a packet")
     while True:
-        packet = os.read(fd, IB_PACKET_SIZE)
+        packet = os.read(fd, STL_PACKET_SIZE)
         bytes = bytearray(packet)
         print_packet(bytes)
         if dump:
