@@ -62,10 +62,9 @@
 
 #define OPA_IB_CQ_FULL_RETRIES		10
 #define OPA_IB_CQ_FULL_DELAY_MS		1
-#define OPA_IB_EAGER_COUNT		512 /* minimum Eager entries */
-#define OPA_IB_EAGER_COUNT_ORDER	7 /* log2 of above - 2 */
-#define OPA_IB_EAGER_SIZE		(PAGE_SIZE * 16)
-#define OPA_IB_EAGER_MIN_FREE		2048
+#define OPA_IB_EAGER_COUNT		2048 /* minimum Eager entries */
+#define OPA_IB_EAGER_COUNT_ORDER	9 /* log2 of above - 2 */
+#define OPA_IB_EAGER_SIZE		(PAGE_SIZE * 8)
 /* TODO - still experimenting with 64B alignment (PTL_MAY_ALIGN) */
 #define OPA_IB_EAGER_PT_FLAGS		PTL_MANAGE_LOCAL
 
@@ -456,7 +455,7 @@ void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset)
 	/* TODO - this needs to be optimized to limit PT_UPDATEs */
 	if (idx != ibp->rcv_egr_last_idx) {
 		dev_dbg(ibp->dev, "PT %d: EAGER_HEAD UPDATE %d -> %d\n",
-			 ibp->port_num, ibp->rcv_egr_last_idx, idx);
+			ibp->port_num, ibp->rcv_egr_last_idx, idx);
 
 		/* Tell HW we are finished reading previous eager buffer */
 		spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
@@ -571,7 +570,8 @@ int opa_ib_rcv_init(struct opa_ib_portdata *ibp)
 					       ibp->ctx->ptl_uid,
 					       OPA_IB_EAGER_PT_FLAGS | PTL_OP_PUT,
 					       HFI_CT_NONE,
-					       OPA_IB_EAGER_MIN_FREE, (unsigned long)&done,
+					       ibp->ibmaxmtu, /* minfree is max MTU */
+					       (unsigned long)&done,
 					       i, &rx_cmd);
 		ret = hfi_rx_command(&ibp->cmdq_rx, (uint64_t *)&rx_cmd, n_slots);
 		if (ret < 0)
