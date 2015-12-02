@@ -3924,10 +3924,11 @@ void clear_linkup_counters(struct hfi1_devdata *dd)
  * local node, 0 otherwise.
  */
 static int is_local_mad(struct hfi1_ibport *ibp, const struct opa_mad *mad,
-			const struct ib_wc *in_wc)
+			const struct ib_wc *in_wc, const struct ib_grh *in_grh)
 {
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	const struct opa_smp *smp = (const struct opa_smp *)mad;
+	union ib_gid gid;
 
 	if (smp->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
 		return (smp->hop_cnt == 0 &&
@@ -3935,6 +3936,11 @@ static int is_local_mad(struct hfi1_ibport *ibp, const struct opa_mad *mad,
 			smp->route.dr.dr_dlid == OPA_LID_PERMISSIVE);
 	}
 
+	if (in_grh) {
+		gid = in_grh->sgid;
+		if (ib_is_opa_gid(&gid))
+			return (hfi1_get_lid_from_gid(&gid) == ppd->lid);
+	}
 	return (in_wc->slid == (u16)ppd->lid);
 }
 
@@ -4305,7 +4311,7 @@ static int hfi1_process_opa_mad(struct ib_device *ibdev, int mad_flags,
 	switch (in_mad->mad_hdr.mgmt_class) {
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
 	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
-		if (is_local_mad(ibp, in_mad, in_wc)) {
+		if (is_local_mad(ibp, in_mad, in_wc, in_grh)) {
 			ret = opa_local_smp_check(ibp, in_wc);
 			if (ret)
 				return IB_MAD_RESULT_FAILURE;

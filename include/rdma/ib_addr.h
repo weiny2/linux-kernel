@@ -331,4 +331,17 @@ static inline struct net_device *rdma_vlan_dev_real_dev(const struct net_device 
 		vlan_dev_real_dev(dev) : NULL;
 }
 
+/**
+ * ib_is_opa_gid: Returns true if the top 24 bits of the gid
+ * contains the OPA_STL_OUI identifier. This identifies that
+ * the provided gid is a special purpose GID meant to carry
+ * extended LID information.
+ *
+ * @gid: The Global identifier
+ */
+static inline bool ib_is_opa_gid(union ib_gid *gid)
+{
+	return ((be64_to_cpu(gid->global.interface_id) >> 40) ==
+		OPA_STL_OUI);
+}
 #endif /* IB_ADDR_H */

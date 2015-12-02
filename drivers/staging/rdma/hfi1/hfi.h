@@ -1943,4 +1943,10 @@ static inline u32 qsfp_resource(struct hfi1_devdata *dd)
 
 int hfi1_tempsense_rd(struct hfi1_devdata *dd, struct hfi1_temp *temp);
 
+
+static inline u32 hfi1_get_lid_from_gid(union ib_gid *gid)
+{
+	/* Caller should ensure gid is of type opa gid */
+	return be64_to_cpu(gid->global.interface_id) & 0xFFFFFFFF;
+}
 #endif                          /* _HFI1_KERNEL_H */
