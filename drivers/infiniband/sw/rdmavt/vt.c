@@ -232,6 +232,12 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	CDR(rdi, destroy_qp);
 	CDR(rdi, query_qp);
 
+	/* Address Handle */
+	CDR(rdi, create_ah);
+	CDR(rdi, destroy_ah);
+	CDR(rdi, modify_ah);
+	CDR(rdi, query_ah);
+
 	/* DMA Operations */
 	rdi->ibdev.dma_ops =
 		rdi->ibdev.dma_ops ? : &rvt_default_dma_mapping_ops;
