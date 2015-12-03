@@ -1182,6 +1182,7 @@ struct hfi1_filedata {
 	int rec_cpu_num;
 	struct mmu_notifier mn;
 	struct rb_root tid_rb_root;
+	struct mmu_rb_node **entry_to_rb;
 	u32 tid_limit;
 	u32 tid_used;
 	/* protect rb tree */
@@ -1190,7 +1191,10 @@ struct hfi1_filedata {
 	u32 invalid_tid_idx;
 	/* protect invalid tid info */
 	spinlock_t invalid_lock;
-	int (*mmu_rb_insert)(struct rb_root *, struct mmu_rb_node *);
+	int (*mmu_rb_insert)(struct hfi1_filedata *, struct rb_root *,
+			     struct mmu_rb_node *);
+	void (*mmu_rb_remove)(struct hfi1_filedata *, struct rb_root *,
+			      struct mmu_rb_node *);
 };
 
 extern struct list_head hfi1_dev_list;
