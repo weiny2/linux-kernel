@@ -65,8 +65,7 @@
 #define OPA_IB_EAGER_COUNT		2048 /* minimum Eager entries */
 #define OPA_IB_EAGER_COUNT_ORDER	9 /* log2 of above - 2 */
 #define OPA_IB_EAGER_SIZE		(PAGE_SIZE * 8)
-/* TODO - still experimenting with 64B alignment (PTL_MAY_ALIGN) */
-#define OPA_IB_EAGER_PT_FLAGS		PTL_MANAGE_LOCAL
+#define OPA_IB_EAGER_PT_FLAGS		(PTL_MAY_ALIGN | PTL_MANAGE_LOCAL)
 
 /* TODO - delete and make common for all kernel clients */
 static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
@@ -450,7 +449,6 @@ void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset)
 {
 	int ret;
 	unsigned long flags;
-	size_t buf_offset;
 
 	/* TODO - this needs to be optimized to limit PT_UPDATEs */
 	if (idx != ibp->rcv_egr_last_idx) {
@@ -466,12 +464,7 @@ void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset)
 		ibp->rcv_egr_last_idx = idx;
 	}
 
-	/* offset calculation differs based on use of 64B alignment */
-	if (OPA_IB_EAGER_PT_FLAGS & PTL_MAY_ALIGN)
-		buf_offset = (idx * OPA_IB_EAGER_SIZE) + (offset << 6);
-	else
-		buf_offset = (idx * OPA_IB_EAGER_SIZE) + offset;
-	return ibp->rcv_egr_base + buf_offset;
+	return ibp->rcv_egr_base + (idx * OPA_IB_EAGER_SIZE) + offset;
 }
 
 int _opa_ib_rcv_wait(struct opa_ib_portdata *ibp, u64 **rhf_entry)
@@ -535,7 +528,10 @@ int opa_ib_rcv_init(struct opa_ib_portdata *ibp)
 		return 0;
 
 	total_eager_size = OPA_IB_EAGER_COUNT * OPA_IB_EAGER_SIZE;
-	/* TODO - for now, size the RHQ as one event per 64 B of eager buffer */
+	/*
+	 * size the RHQ as one event per 64 B of eager buffer; this prevents
+	 * RHQ overflow since payload consumes minimum of 64 B with MAY_ALIGN
+	 */
 	rhq_count = total_eager_size / 64;
 
 	/* allocate Eager PT and EQ */
