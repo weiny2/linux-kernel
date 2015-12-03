@@ -394,6 +394,7 @@ struct rvt_driver_params {
 	 * Anything driver specific that is not covered by props
 	 * For instance special module parameters. Goes here.
 	 */
+	unsigned int lkey_table_size;
 };
 
 /*
@@ -419,6 +420,8 @@ struct rvt_pd {
 };
 
 struct rvt_dev_info {
+	struct ib_device ibdev; /* Keep this first. Nothing above here */
+
 	/*
 	 * Prior to calling for registration the driver will be responsible for
 	 * allocating space for this structure. The driver will also need to
@@ -429,7 +432,6 @@ struct rvt_dev_info {
 	 * The driver will also be
 	 * responsible for filling in certain members of dparms.props
 	 */
-	struct ib_device ibdev;
 
 	/* Driver specific properties */
 	struct rvt_driver_params dparms;
@@ -459,7 +461,22 @@ static inline struct rvt_dev_info *ib_to_rvt(struct ib_device *ibdev)
 	return  container_of(ibdev, struct rvt_dev_info, ibdev);
 }
 
+static inline void rvt_put_mr(struct rvt_mregion *mr)
+{
+	if (unlikely(atomic_dec_and_test(&mr->refcount)))
+		complete(&mr->comp);
+}
+
+static inline void rvt_get_mr(struct rvt_mregion *mr)
+{
+	atomic_inc(&mr->refcount);
+}
+
 int rvt_register_device(struct rvt_dev_info *rvd);
 void rvt_unregister_device(struct rvt_dev_info *rvd);
+int rvt_rkey_ok(struct rvt_qp *qp, struct rvt_sge *sge,
+		u32 len, u64 vaddr, u32 rkey, int acc);
+int rvt_lkey_ok(struct rvt_lkey_table *rkt, struct rvt_pd *pd,
+		struct rvt_sge *isge, struct ib_sge *sge, int acc);
 
 #endif          /* DEF_RDMA_VT_H */
