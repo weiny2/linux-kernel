@@ -258,6 +258,7 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	CDR(rdi, map_phys_fmr);
 	CDR(rdi, unmap_fmr);
 	CDR(rdi, dealloc_fmr);
+	CDR(rdi, mmap);
 
 	/* DMA Operations */
 	rdi->ibdev.dma_ops =
