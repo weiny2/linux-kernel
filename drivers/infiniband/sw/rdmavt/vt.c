@@ -238,6 +238,12 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	CDR(rdi, modify_ah);
 	CDR(rdi, query_ah);
 
+	/* Shared Receive Queue */
+	CDR(rdi, create_srq);
+	CDR(rdi, modify_srq);
+	CDR(rdi, destroy_srq);
+	CDR(rdi, query_srq);
+
 	/* Mem Region */
 	CDR(rdi, get_dma_mr);
 	CDR(rdi, reg_phys_mr);
