@@ -330,9 +330,9 @@ retry:
 			(union initiator_EQEntry *)eq_entry;
 		int flit_len = ((*(u32 *)skb->data) >> 20) << 3;
 
-		spin_lock_irqsave(&ndev->rx_lock, sflags);
+		spin_lock(&ndev->rx_lock);
 		hfi_eq_advance(ctx, rx, ndev->eq_tx, eq_entry);
-		spin_unlock_irqrestore(&ndev->rx_lock, sflags);
+		spin_unlock(&ndev->rx_lock);
 		rc = 0;
 		dev_dbg(&odev->dev,
 			"TX kind %d skb->len %4d flit_len %4d vpnum %d port %d\n",
