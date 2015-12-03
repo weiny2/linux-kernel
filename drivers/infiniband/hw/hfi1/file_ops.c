@@ -859,7 +859,7 @@ static int assign_ctxt(struct file *fp, struct hfi1_user_info *uinfo)
 
 		ret = find_shared_ctxt(fp, uinfo);
 		if (ret < 0)
-			goto done;
+			goto done_unlock;
 		if (ret)
 			fd->rec_cpu_num = hfi1_get_proc_affinity(
 				fd->uctxt->dd, fd->uctxt->numa_id);
@@ -873,6 +873,7 @@ static int assign_ctxt(struct file *fp, struct hfi1_user_info *uinfo)
 		i_minor = iminor(file_inode(fp)) - HFI1_USER_MINOR_BASE;
 		ret = get_user_context(fp, uinfo, i_minor - 1, alg);
 	}
+done_unlock:
 	mutex_unlock(&hfi1_mutex);
 done:
 	return ret;
