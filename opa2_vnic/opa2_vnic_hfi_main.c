@@ -78,7 +78,7 @@ static struct opa_core_client opa_vnic_clnt = {
 #define OPA2_MAX_NUM_PORTS 2
 #define OPA2_NET_TIMEOUT_MS 100
 #define OPA2_NET_RX_POLL_MS 1
-#define OPA2_NET_NUM_RX_BUFS 128
+#define OPA2_NET_NUM_RX_BUFS 2048
 /* FXRTODO: Obtain MTU from vdev once supported */
 #define OPA2_NET_DEFAULT_MTU 8192
 
@@ -644,11 +644,10 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev)
 		goto err1;
 	ndev->ni = HFI_NI_BYPASS;
 
-	/* FXRTODO: What is the right EQ size? */
 	/* TX EQ can be allocated per netdev */
 	eq_alloc_tx.ni = ndev->ni;
 	eq_alloc_tx.user_data = 0xdeadbeef;
-	eq_alloc_tx.size = 64;
+	eq_alloc_tx.size = OPA2_NET_NUM_RX_BUFS;
 	eq_alloc_tx.cookie = ndev;
 	rc = _hfi_eq_alloc(ctx, rx, &ndev->rx_lock, &eq_alloc_tx,
 			   &ndev->eq_tx, &ndev->eq_alloc_tx_base);
@@ -656,8 +655,7 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev)
 		goto err2;
 	eq_alloc_rx.ni = ndev->ni;
 	eq_alloc_rx.user_data = 0xdeadbeef;
-	/* FXRTODO: What is the right EQ size? */
-	eq_alloc_rx.size = 64;
+	eq_alloc_rx.size = OPA2_NET_NUM_RX_BUFS;
 	eq_alloc_rx.isr_cb = opa2_vnic_rx_isr_cb;
 	eq_alloc_rx.cookie = ndev;
 	rc = _hfi_eq_alloc(ctx, rx, &ndev->rx_lock, &eq_alloc_rx,
