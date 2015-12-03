@@ -229,7 +229,21 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	    (!rdi->driver_f.get_card_name) ||
 	    (!rdi->driver_f.get_pci_dev) ||
 	    (!rdi->driver_f.check_ah)) {
+		pr_err("Driver not supporting req func\n");
 		return -EINVAL;
+	}
+
+	if (!rdi->dparms.nports) {
+		rvt_pr_err(rdi, "Driver says it has no ports.\n");
+		return -EINVAL;
+	}
+
+	rdi->ports = kcalloc(rdi->dparms.nports,
+			     sizeof(struct rvt_ibport **),
+			     GFP_KERNEL);
+	if (!rdi->ports) {
+		rvt_pr_err(rdi, "Could not allocate port mem.\n");
+		return -ENOMEM;
 	}
 
 	/* Once we get past here we can use the rvt_pr macros */
@@ -246,6 +260,11 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	CDR(rdi, get_port_immutable);
 
 	/* Queue Pairs */
+	ret = rvt_driver_qp_init(rdi);
+	if (ret) {
+		pr_err("Error in driver QP init.\n");
+		return -EINVAL;
+	}
 	CDR(rdi, create_qp);
 	CDR(rdi, modify_qp);
 	CDR(rdi, destroy_qp);
@@ -306,19 +325,6 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	spin_lock_init(&rdi->n_pds_lock);
 	rdi->n_pds_allocated = 0;
 
-	if (rdi->dparms.nports) {
-		rdi->ports = kcalloc(rdi->dparms.nports,
-				     sizeof(struct rvt_ibport **),
-				     GFP_KERNEL);
-		if (!rdi->ports) {
-			rvt_pr_err(rdi, "Could not allocate port mem.\n");
-			ret = -ENOMEM;
-			goto bail_mr;
-		}
-	} else {
-		rvt_pr_warn(rdi, "Driver says it has no ports.\n");
-	}
-
 	/* We are now good to announce we exist */
 	ret =  ib_register_device(&rdi->ibdev, rdi->driver_f.port_callback);
 	if (ret) {
@@ -333,6 +339,8 @@ bail_mr:
 	rvt_mr_exit(rdi);
 
 bail_no_mr:
+	rvt_qp_exit(rdi);
+
 	return ret;
 }
 EXPORT_SYMBOL(rvt_register_device);
