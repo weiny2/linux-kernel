@@ -1,5 +1,5 @@
-#ifndef DEF_RDMAVT_H
-#define DEF_RDMAVT_H
+#ifndef DEF_RDMAVTPD_H
+#define DEF_RDMAVTPD_H
 
 /*
  *
@@ -52,7 +52,10 @@
  */
 
 #include <rdma/rdma_vt.h>
-#include "dma.h"
-#include "pd.h"
 
-#endif          /* DEF_RDMAVT_H */
+struct ib_pd *rvt_alloc_pd(struct ib_device *ibdev,
+			   struct ib_ucontext *context,
+			   struct ib_udata *udata);
+int rvt_dealloc_pd(struct ib_pd *ibpd);
+
+#endif          /* DEF_RDMAVTPD_H */

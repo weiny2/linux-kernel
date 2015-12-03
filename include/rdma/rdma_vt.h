@@ -57,15 +57,41 @@
  */
 
 #include "ib_verbs.h"
+
+/*
+ * Things that are driver specific, module parameters in hfi1 and qib
+ */
+struct rvt_driver_params {
+	int max_pds;
+};
+
+/* Protection domain */
+struct rvt_pd {
+	struct ib_pd ibpd;
+	int user;               /* non-zero if created from user space */
+};
+
 struct rvt_dev_info {
 	struct ib_device ibdev;
+
+	/* Driver specific */
+	struct rvt_driver_params dparms;
 	int (*port_callback)(struct ib_device *, u8, struct kobject *);
 
-	/*
-	 * TODO:
-	 *	need to reflect module parameters that may vary by dev
-	 */
+	/* Internal use */
+	int n_pds_allocated;
+	spinlock_t n_pds_lock; /* Protect pd allocated count */
 };
+
+static inline struct rvt_pd *ibpd_to_rvtpd(struct ib_pd *ibpd)
+{
+	return container_of(ibpd, struct rvt_pd, ibpd);
+}
+
+static inline struct rvt_dev_info *ib_to_rvt(struct ib_device *ibdev)
+{
+	return  container_of(ibdev, struct rvt_dev_info, ibdev);
+}
 
 int rvt_register_device(struct rvt_dev_info *rvd);
 void rvt_unregister_device(struct rvt_dev_info *rvd);
