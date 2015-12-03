@@ -244,6 +244,10 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	CDR(rdi, destroy_srq);
 	CDR(rdi, query_srq);
 
+	/* Multicast */
+	CDR(rdi, attach_mcast);
+	CDR(rdi, detach_mcast);
+
 	/* Mem Region */
 	CDR(rdi, get_dma_mr);
 	CDR(rdi, reg_phys_mr);

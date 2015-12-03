@@ -1,5 +1,5 @@
-#ifndef DEF_RDMAVT_H
-#define DEF_RDMAVT_H
+#ifndef DEF_RVTMCAST_H
+#define DEF_RVTMCAST_H
 
 /*
  *
@@ -52,12 +52,8 @@
  */
 
 #include <rdma/rdma_vt.h>
-#include "dma.h"
-#include "pd.h"
-#include "qp.h"
-#include "ah.h"
-#include "mr.h"
-#include "srq.h"
-#include "mcast.h"
 
-#endif          /* DEF_RDMAVT_H */
+int rvt_attach_mcast(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
+int rvt_detach_mcast(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
+
+#endif          /* DEF_RVTMCAST_H */
