@@ -272,7 +272,7 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	/* Mem Region */
 	ret = rvt_driver_mr_init(rdi);
 	if (ret) {
-		rvt_pr_err(rdi, "Error in driver MR init.\n");
+		pr_err("Error in driver MR init.\n");
 		goto bail_no_mr;
 	}
 	CDR(rdi, get_dma_mr);
