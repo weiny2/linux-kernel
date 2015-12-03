@@ -226,6 +226,12 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	CDR(rdi, alloc_ucontext);
 	CDR(rdi, dealloc_ucontext);
 
+	/* Queue Pairs */
+	CDR(rdi, create_qp);
+	CDR(rdi, modify_qp);
+	CDR(rdi, destroy_qp);
+	CDR(rdi, query_qp);
+
 	/* DMA Operations */
 	rdi->ibdev.dma_ops =
 		rdi->ibdev.dma_ops ? : &rvt_default_dma_mapping_ops;
