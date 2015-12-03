@@ -204,6 +204,12 @@ static int rvt_dealloc_ucontext(struct ib_ucontext *context)
 	return -EINVAL;
 }
 
+static int rvt_get_port_immutable(struct ib_device *ibdev, u8 port_num,
+				  struct ib_port_immutable *immutable)
+{
+	return -EINVAL;
+}
+
 /*
  * Check driver override. If driver passes a value use it, otherwise we use our
  * own value.
@@ -225,6 +231,7 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	CDR(rdi, query_gid);
 	CDR(rdi, alloc_ucontext);
 	CDR(rdi, dealloc_ucontext);
+	CDR(rdi, get_port_immutable);
 
 	/* Queue Pairs */
 	CDR(rdi, create_qp);
