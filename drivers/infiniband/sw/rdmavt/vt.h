@@ -52,6 +52,7 @@
  */
 
 #include <rdma/rdma_vt.h>
+#include <linux/pci.h>
 #include "dma.h"
 #include "pd.h"
 #include "qp.h"
@@ -61,5 +62,32 @@
 #include "mcast.h"
 #include "mmap.h"
 #include "cq.h"
+
+#define rvt_pr_info(rdi, fmt, ...) \
+	__rvt_pr_info(rdi->driver_f.get_pci_dev(rdi), \
+		      rdi->driver_f.get_card_name(rdi), \
+		      fmt, \
+		      ##__VA_ARGS__)
+
+#define rvt_pr_warn(rdi, fmt, ...) \
+	__rvt_pr_warn(rdi->driver_f.get_pci_dev(rdi), \
+		      rdi->driver_f.get_card_name(rdi), \
+		      fmt, \
+		      ##__VA_ARGS__)
+
+#define rvt_pr_err(rdi, fmt, ...) \
+	__rvt_pr_err(rdi->driver_f.get_pci_dev(rdi), \
+		     rdi->driver_f.get_card_name(rdi), \
+		     fmt, \
+		     ##__VA_ARGS__)
+
+#define __rvt_pr_info(pdev, name, fmt, ...) \
+	dev_info(&pdev->dev, "%s: " fmt, name, ##__VA_ARGS__)
+
+#define __rvt_pr_warn(pdev, name, fmt, ...) \
+	dev_warn(&pdev->dev, "%s: " fmt, name, ##__VA_ARGS__)
+
+#define __rvt_pr_err(pdev, name, fmt, ...) \
+	dev_err(&pdev->dev, "%s: " fmt, name, ##__VA_ARGS__)
 
 #endif          /* DEF_RDMAVT_H */
