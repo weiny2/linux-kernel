@@ -238,6 +238,9 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	CDR(rdi, modify_qp);
 	CDR(rdi, destroy_qp);
 	CDR(rdi, query_qp);
+	CDR(rdi, post_send);
+	CDR(rdi, post_recv);
+	CDR(rdi, post_srq_recv);
 
 	/* Address Handle */
 	CDR(rdi, create_ah);
