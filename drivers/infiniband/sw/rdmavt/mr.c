@@ -474,6 +474,7 @@ int rvt_dereg_mr(struct ib_mr *ibmr)
 	int ret = 0;
 	unsigned long timeout;
 
+	kfree(mr->pages);
 	rvt_free_lkey(&mr->mr);
 
 	rvt_put_mr(&mr->mr); /* will set completion if last */
@@ -515,7 +516,38 @@ struct ib_mr *rvt_alloc_mr(struct ib_pd *pd,
 	if (IS_ERR(mr))
 		return (struct ib_mr *)mr;
 
+	mr->pages = kcalloc(max_num_sg, sizeof(u64), GFP_KERNEL);
+	if (!mr->pages)
+		goto err;
+
 	return &mr->ibmr;
+
+err:
+	rvt_dereg_mr(&mr->ibmr);
+	return ERR_PTR(-ENOMEM);
+}
+
+static int rvt_set_page(struct ib_mr *ibmr, u64 addr)
+{
+	struct rvt_mr *mr = to_imr(ibmr);
+
+	if (unlikely(mr->npages == mr->mr.max_segs))
+		return -ENOMEM;
+
+	mr->pages[mr->npages++] = addr;
+
+	return 0;
+}
+
+int rvt_map_mr_sg(struct ib_mr *ibmr,
+		  struct scatterlist *sg,
+		  int sg_nents)
+{
+	struct rvt_mr *mr = to_imr(ibmr);
+
+	mr->npages = 0;
+
+	return ib_sg_to_pages(ibmr, sg, sg_nents, rvt_set_page);
 }
 
 /**
@@ -867,3 +899,62 @@ bail:
 	return 0;
 }
 EXPORT_SYMBOL(rvt_rkey_ok);
+
+/*
+ * Initialize the memory region specified by the work request.
+ * This is only called in the post send.
+ */
+int rvt_reg_mr(struct rvt_qp *qp, struct ib_reg_wr *wr)
+{
+	struct rvt_dev_info *rdi = ib_to_rvt(qp->ibqp.device);
+	struct rvt_lkey_table *rkt = &rdi->lk_table;
+	struct rvt_pd *pd = ibpd_to_rvtpd(qp->ibqp.pd);
+	struct rvt_mr *mr = to_imr(wr->mr);
+	struct rvt_mregion *mrg;
+	u32 key = wr->key;
+	unsigned i, n, m;
+	int ret = -EINVAL;
+	unsigned long flags;
+	u64 *page_list;
+	size_t ps;
+
+	spin_lock_irqsave(&rkt->lock, flags);
+	if (pd->user || key == 0)
+		goto bail;
+
+	mrg = rcu_dereference_protected(
+		rkt->table[(key >> (32 - rdi->dparms.lkey_table_size))],
+		lockdep_is_held(&rkt->lock));
+	if (unlikely(!mrg || qp->ibqp.pd != mrg->pd))
+		goto bail;
+
+	if (mr->npages > mrg->max_segs)
+		goto bail;
+
+	ps = mr->ibmr.page_size;
+	if (mr->ibmr.length > ps * mr->npages)
+		goto bail;
+
+	mrg->user_base = mr->ibmr.iova;
+	mrg->iova = mr->ibmr.iova;
+	mrg->lkey = key;
+	mrg->length = mr->ibmr.length;
+	mrg->access_flags = wr->access;
+	page_list = mr->pages;
+	m = 0;
+	n = 0;
+	for (i = 0; i < mr->npages; i++) {
+		mrg->map[m]->segs[n].vaddr = (void *)page_list[i];
+		mrg->map[m]->segs[n].length = ps;
+		if (++n == RVT_SEGSZ) {
+			m++;
+			n = 0;
+		}
+	}
+
+	ret = 0;
+bail:
+	spin_unlock_irqrestore(&rkt->lock, flags);
+	return ret;
+}
+EXPORT_SYMBOL(rvt_reg_mr);

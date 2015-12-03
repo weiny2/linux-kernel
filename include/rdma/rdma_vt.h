@@ -335,5 +335,5 @@ struct rvt_mmap_info *rvt_create_mmap_info(struct rvt_dev_info *rdi,
 					   void *obj);
 void rvt_update_mmap_info(struct rvt_dev_info *rdi, struct rvt_mmap_info *ip,
 			  u32 size, void *obj);
-
+int rvt_reg_mr(struct rvt_qp *qp, struct ib_reg_wr *wr);
 #endif          /* DEF_RDMA_VT_H */

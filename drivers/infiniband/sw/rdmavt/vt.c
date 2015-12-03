@@ -306,6 +306,7 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	CDR(rdi, unmap_fmr);
 	CDR(rdi, dealloc_fmr);
 	CDR(rdi, mmap);
+	CDR(rdi, map_mr_sg);
 
 	/* Completion queues */
 	CDR(rdi, create_cq);
