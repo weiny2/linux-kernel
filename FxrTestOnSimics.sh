@@ -115,6 +115,10 @@ if [ ${ByJenkins} == yes ] ; then
 	# stop simics
 	killall simics-common
 
+	# display simics console logs
+	echo simics console logs
+	cat ${fxr}/simics/workspace/KnightsHill0.log
+
 	rm -f ${LOCK_FILE}
 fi
 
