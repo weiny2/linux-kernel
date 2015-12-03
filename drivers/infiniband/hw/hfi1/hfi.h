@@ -1151,7 +1151,7 @@ struct hfi1_devdata {
 	struct hfi1_affinity *affinity;
 
 	/* receive context tail dummy address */
-	volatile __le64 *rcvhdrtail_dummy_kvaddr;
+	__le64 *rcvhdrtail_dummy_kvaddr;
 	dma_addr_t rcvhdrtail_dummy_physaddr;
 
 	bool aspm_supported;	/* Does HW support ASPM */
