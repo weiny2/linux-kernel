@@ -137,23 +137,24 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
 static int qp_max_iovs(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 		       int *out_niovs)
 {
-	int niovs;
+	int niovs, i;
 	size_t off, segsz, payload_bytes;
 	struct hfi2_sge *sge;
+	struct opa_ib_sge_state *ss = qp->s_cur_sge;
 
 	niovs = 1; /* one IOV for header */
 
 	/* step through SGEs to send in this packet */
 	sge = &qp->s_sge.sge;
-	for (payload_bytes = 0;
-	     payload_bytes < qp->s_cur_size;
-	     payload_bytes += sge->sge_length, sge++) {
+	for (payload_bytes = 0, i = 0;
+	     (payload_bytes < qp->s_cur_size) && sge;
+	     payload_bytes += sge->sge_length, sge = ss->sg_list + i, i++) {
 
 		/* we only support kernel virtual addresses for now */
 		if ((u64)sge->vaddr < PAGE_OFFSET) {
 			dev_err(ibp->dev,
-				"PT %d: DMA send with UVA not supported\n",
-				ibp->port_num);
+				"PT %d: DMA send with UVA %p not supported\n",
+				ibp->port_num, sge->vaddr);
 			return -EFAULT;
 		}
 
