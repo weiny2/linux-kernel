@@ -419,12 +419,11 @@ static void handle_link_up(struct work_struct *work)
 {
 	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
 								link_up_work);
-	struct hfi_devdata *dd = ppd->dd;
 	u32 _8051_port = read_physical_state(ppd);
 
 	/* transit to Init only from Going_Up. */
 	if (ppd->host_link_state != HLS_GOING_UP) {
-		dd_dev_info(dd, "False interrupt on %s(): %s(%d) 0x%x",
+		ppd_dev_info(ppd, "False interrupt on %s(): %s(%d) 0x%x",
 			__func__,
 			link_state_name(ppd->host_link_state),
 			ilog2(ppd->host_link_state), _8051_port);
