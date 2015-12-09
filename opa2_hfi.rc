@@ -11,7 +11,7 @@
 # before invoking any of the client modules. Force a load order
 # and an unload order for now. Eventually the VPD should be
 # merged with the PCIe driver to avoid this hack.
-opa2_base_modules="opa2_ib opa2_hfi opa_core"
+opa2_base_modules="opa2_hfi opa_core"
 opa2_client_modules="opa_vnic opa2_vnic_hfi opa_vnic_bus opa2_user"
 
 start ()
@@ -55,7 +55,7 @@ status ()
 {
         local RC=0
 
-        if [ "`lsmod | grep opa | wc -l`" = "9" ]; then
+        if [ "`lsmod | grep opa | wc -l`" = "8" ]; then
                 echo "OPA modules loaded"
         else
                 echo "OPA modules not loaded"

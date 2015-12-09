@@ -386,7 +386,8 @@ int opa_ib_destroy_cq(struct ib_cq *ibcq)
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags)
+int opa_ib_req_notify_cq(struct ib_cq *ibcq,
+			 enum ib_cq_notify_flags notify_flags)
 {
 	struct opa_ib_cq *cq = to_opa_ibcq(ibcq);
 	unsigned long flags;
@@ -540,7 +541,8 @@ int opa_ib_cq_init(struct opa_ib_data *ibd)
 		kthread_worker_fn,
 		ibd->worker,
 		ibd->assigned_node_id,
-		"opa_ib_cq%d", ibd->odev->index);
+		"opa_ib_cq%d", ibd->dd->unit);
+
 	if (IS_ERR(task))
 		goto task_fail;
 	cpu = cpumask_first(cpumask_of_node(ibd->assigned_node_id));

@@ -66,6 +66,7 @@
 #include <rdma/fxr/fxr_linkmux_cm_defs.h>
 #include "attr.h"
 #include "firmware.h"
+#include "verbs/verbs.h"
 
 extern uint opafm_disable;
 extern unsigned int hfi_max_mtu;
@@ -314,18 +315,6 @@ enum {
 	HFI_LCB_CRC_14B = 1,	/* 14b CRC */
 	HFI_LCB_CRC_48B = 2,	/* 48b CRC */
 	HFI_LCB_CRC_12B_16B_PER_LANE = 3	/* 12b-16b per lane CRC */
-};
-
-/* the following enum is (almost) a copy/paste of the definition
- * in the OPA spec, section 20.2.2.6.8 (PortInfo) */
-enum {
-	OPA_PORT_LTP_CRC_MODE_NONE = 0,
-	OPA_PORT_LTP_CRC_MODE_14 = 1, /* 14-bit LTP CRC mode (optional) */
-	OPA_PORT_LTP_CRC_MODE_16 = 2, /* 16-bit LTP CRC mode */
-	/* 48-bit overlapping LTP CRC mode (optional) */
-	OPA_PORT_LTP_CRC_MODE_48 = 4,
-	/* 12 to 16 bit per lane LTP CRC mode (optional) */
-	OPA_PORT_LTP_CRC_MODE_PER_LANE = 8
 };
 
 #define HFI_LTP_CRC_SUPPORTED_SHIFT	8
@@ -649,6 +638,8 @@ struct hfi_devdata {
 	/* physical address of chip for io_remap, etc. */
 	resource_size_t physaddr;
 
+	struct opa_core_device_id bus_id;
+
 	/* MSI-X information */
 	struct hfi_msix_entry *msix_entries;
 	u32 num_msix_entries;
@@ -710,8 +701,9 @@ struct hfi_devdata {
 
 	/* E2E EQ base */
 	void *e2e_eq_base;
-	/* registered IB device pointer */
-	struct ib_device *ibdev;
+
+	/* registered IB device data pointer */
+	struct opa_ib_data *ibd;
 
 	/* number of portal IDs in use */
 	u16 pid_num_assigned;
@@ -870,9 +862,9 @@ static inline u8 hfi_parity(u16 val)
 	return m;
 }
 
-int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
+int hfi_get_sma(struct hfi_devdata *dd, u16 attr_id, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status);
-int hfi_set_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
+int hfi_set_sma(struct hfi_devdata *dd, u16 attr_id, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status);
 
 void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
@@ -900,6 +892,7 @@ void hfi_set_up_vl15(struct hfi_pportdata *ppd, u8 vau, u16 vl15buf);
 void hfi_assign_remote_cm_au_table(struct hfi_pportdata *ppd, u8 vcu);
 int neigh_is_hfi(struct hfi_pportdata *ppd);
 void hfi_add_full_mgmt_pkey(struct hfi_pportdata *ppd);
+const char *hfi_class_name(void);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of

@@ -81,7 +81,7 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 {
 	struct ib_node_info *ni;
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
-	struct opa_core_device *odev = ibd->odev;
+	struct hfi_devdata *dd = ibd->dd;
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 
@@ -109,8 +109,8 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	ni->partition_cap = cpu_to_be16(ibp->pkey_tlen);
 	ni->local_port_num = port;
 	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
-	ni->device_id = cpu_to_be16(odev->id.device);
-	ni->revision = cpu_to_be32(odev->id.revision);
+	ni->device_id = cpu_to_be16(dd->bus_id.device);
+	ni->revision = cpu_to_be32(dd->bus_id.revision);
 
 	return reply(ibh);
 }
@@ -283,7 +283,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	struct opa_node_info *ni;
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
-	struct opa_core_device *odev = ibd->odev;
+	struct hfi_devdata *dd = ibd->dd;
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 
 	ni = (struct opa_node_info *)data;
@@ -310,8 +310,8 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ni->partition_cap = cpu_to_be16(ibp->pkey_tlen);
 	ni->local_port_num = port;
 	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
-	ni->device_id = cpu_to_be16(odev->id.device);
-	ni->revision = cpu_to_be16(odev->id.revision);
+	ni->device_id = cpu_to_be16(dd->bus_id.device);
+	ni->revision = cpu_to_be16(dd->bus_id.revision);
 
 	if (resp_len)
 		*resp_len += sizeof(*ni);
@@ -607,15 +607,14 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 {
 	int ret;
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
-	struct opa_core_device *odev = ibd->odev;
-	struct opa_core_ops *ops = odev->bus_ops;
+	struct hfi_devdata *dd = ibd->dd;
 	u8 sma_status = OPA_SMA_SUCCESS;
 
 	/*
 	 * Let the opa*_hfi driver process the MAD attribute first. This way
 	 * any methods that are unsupported by the HW can be detected early.
 	 */
-	ret = ops->get_sma(odev, attr_id, smp, am, data, port, resp_len,
+	ret = hfi_get_sma(dd, attr_id, smp, am, data, port, resp_len,
 								&sma_status);
 
 	if (ret != IB_MAD_RESULT_FAILURE) {
@@ -997,15 +996,14 @@ static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 {
 	int ret;
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
-	struct opa_core_device *odev = ibd->odev;
-	struct opa_core_ops *ops = odev->bus_ops;
+	struct hfi_devdata *dd = ibd->dd;
 	u8 sma_status = OPA_SMA_SUCCESS;
 
 	/*
 	 * Let the opa*_hfi driver process the MAD attribute first. This way
 	 * any methods that are unsupported by the HW can be detected early.
 	 */
-	ret = ops->set_sma(odev, attr_id, smp, am, data, port, resp_len,
+	ret = hfi_set_sma(dd, attr_id, smp, am, data, port, resp_len,
 								&sma_status);
 
 	/*

@@ -605,7 +605,7 @@ static int __subn_get_hfi_cc_table(struct hfi_devdata *dd, struct opa_smp *smp,
 	return hfi_reply(ibh);
 }
 
-int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
+int hfi_get_sma(struct hfi_devdata *dd, u16 attr_id, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
 	int ret;
@@ -622,67 +622,67 @@ int hfi_get_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 		ret = hfi_reply(ibh);
 		break;
 	case IB_SMP_ATTR_PORT_INFO:
-		ret = __subn_get_hfi_portinfo(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_portinfo(dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_PORT_STATE_INFO:
-		ret = __subn_get_hfi_psi(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_psi(dd, smp, am, data, port,
 					 resp_len, sma_status);
 		break;
 	case IB_SMP_ATTR_PKEY_TABLE:
-		ret = __subn_get_hfi_pkeytable(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_pkeytable(dd, smp, am, data, port,
 					       resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SL_TO_SC_MAP:
-		ret = __subn_get_hfi_sl_to_sc(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_sl_to_sc(dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_SL_MAP:
-		ret = __subn_get_hfi_sc_to_sl(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_sc_to_sl(dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_VLR_MAP:
-		ret = __subn_get_hfi_sc_to_vlr(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_sc_to_vlr(dd, smp, am, data, port,
 					       resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_VLT_MAP:
-		ret = __subn_get_hfi_sc_to_vlt(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_sc_to_vlt(dd, smp, am, data, port,
 					       resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_VLNT_MAP:
-		ret = __subn_get_hfi_sc_to_vlnt(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_sc_to_vlnt(dd, smp, am, data, port,
 					       resp_len, sma_status);
 		break;
 	case IB_SMP_ATTR_VL_ARB_TABLE:
-		ret = __subn_get_hfi_vl_arb(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_vl_arb(dd, smp, am, data, port,
 					    resp_len, sma_status);
 		break;
 	case IB_SMP_ATTR_LED_INFO:
-		ret = __subn_get_hfi_led_info(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_led_info(dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_CABLE_INFO:
-		ret = __subn_get_hfi_cable_info(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_cable_info(dd, smp, am, data, port,
 						resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_BUFFER_CONTROL_TABLE:
-		ret = __subn_get_hfi_bct(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_bct(dd, smp, am, data, port,
 					 resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_CONGESTION_INFO:
-		ret = __subn_get_hfi_cong_info(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_cong_info(dd, smp, am, data, port,
 					       resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_HFI_CONGESTION_LOG:
-		ret = __subn_get_hfi_hfi_cong_log(odev->dd, smp, am, data,
+		ret = __subn_get_hfi_hfi_cong_log(dd, smp, am, data,
 						  port, resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_HFI_CONGESTION_SETTING:
-		ret = __subn_get_hfi_cong_setting(odev->dd, smp, am, data,
+		ret = __subn_get_hfi_cong_setting(dd, smp, am, data,
 						  port, resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
-		ret = __subn_get_hfi_cc_table(odev->dd, smp, am, data, port,
+		ret = __subn_get_hfi_cc_table(dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
 	case IB_SMP_ATTR_SM_INFO:
@@ -1544,7 +1544,7 @@ static int __subn_set_hfi_led_info(struct hfi_devdata *dd, struct opa_smp *smp,
 	return IB_MAD_RESULT_FAILURE;
 }
 
-int hfi_set_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
+int hfi_set_sma(struct hfi_devdata *dd, u16 attr_id, struct opa_smp *smp,
 		u32 am, u8 *data, u8 port, u32 *resp_len, u8 *sma_status)
 {
 	int ret;
@@ -1552,55 +1552,55 @@ int hfi_set_sma(struct opa_core_device *odev, u16 attr_id, struct opa_smp *smp,
 
 	switch (attr_id) {
 	case IB_SMP_ATTR_PORT_INFO:
-		ret = __subn_set_hfi_portinfo(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_portinfo(dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
 	case IB_SMP_ATTR_PKEY_TABLE:
-		ret = __subn_set_hfi_pkeytable(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_pkeytable(dd, smp, am, data, port,
 					       resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SL_TO_SC_MAP:
-		ret = __subn_set_hfi_sl_to_sc(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_sl_to_sc(dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_SL_MAP:
-		ret = __subn_set_hfi_sc_to_sl(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_sc_to_sl(dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_VLR_MAP:
-		ret = __subn_set_hfi_sc_to_vlr(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_sc_to_vlr(dd, smp, am, data, port,
 					       resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_VLT_MAP:
-		ret = __subn_set_hfi_sc_to_vlt(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_sc_to_vlt(dd, smp, am, data, port,
 					       resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_SC_TO_VLNT_MAP:
-		ret = __subn_set_hfi_sc_to_vlnt(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_sc_to_vlnt(dd, smp, am, data, port,
 					       resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_PORT_STATE_INFO:
-		ret = __subn_set_hfi_psi(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_psi(dd, smp, am, data, port,
 					 resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_BUFFER_CONTROL_TABLE:
-		ret = __subn_set_hfi_bct(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_bct(dd, smp, am, data, port,
 					 resp_len, sma_status);
 		break;
 	case IB_SMP_ATTR_VL_ARB_TABLE:
-		ret = __subn_set_hfi_vl_arb(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_vl_arb(dd, smp, am, data, port,
 					    resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_HFI_CONGESTION_SETTING:
-		ret = __subn_set_hfi_cong_setting(odev->dd, smp, am, data,
+		ret = __subn_set_hfi_cong_setting(dd, smp, am, data,
 						  port, resp_len, sma_status);
 		break;
 	case OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
-		ret = __subn_set_hfi_cc_table(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_cc_table(dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
 	case IB_SMP_ATTR_LED_INFO:
-		ret = __subn_set_hfi_led_info(odev->dd, smp, am, data, port,
+		ret = __subn_set_hfi_led_info(dd, smp, am, data, port,
 					      resp_len, sma_status);
 		break;
 #if 0

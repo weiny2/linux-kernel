@@ -591,7 +591,7 @@ void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 	 * and the QKEY matches (see 9.6.1.4.1 and 9.6.1.5.1).
 	 */
 	if (qp->ibqp.qp_num) {
-		//u8 sl = (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF;
+		/* u8 sl = (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF; */
 		if (unlikely(hdr->lrh[1] == IB_LID_PERMISSIVE ||
 			     hdr->lrh[3] == IB_LID_PERMISSIVE))
 			goto drop;
@@ -708,7 +708,8 @@ void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 		wc.wc_flags |= IB_WC_GRH;
 	} else
 		opa_ib_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
-	opa_ib_copy_sge(&qp->r_sge, data, wc.byte_len - sizeof(struct ib_grh), 1);
+	opa_ib_copy_sge(&qp->r_sge, data,
+			wc.byte_len - sizeof(struct ib_grh), 1);
 	opa_ib_put_ss(&qp->r_sge);
 	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		return;
