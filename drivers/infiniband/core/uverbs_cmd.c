@@ -39,6 +39,8 @@
 #include <linux/sched.h>
 
 #include <asm/uaccess.h>
+#include <rdma/opa_smi.h>
+#include <rdma/ib_addr.h>
 
 #include "uverbs.h"
 #include "core_priv.h"
@@ -490,7 +492,10 @@ ssize_t ib_uverbs_query_port(struct ib_uverbs_file *file,
 	resp.qkey_viol_cntr  = attr.qkey_viol_cntr;
 	resp.pkey_tbl_len    = attr.pkey_tbl_len;
 	resp.lid 	     = attr.lid;
-	resp.sm_lid 	     = attr.sm_lid;
+	if (rdma_cap_opa_ah(ib_dev, cmd.port_num))
+		resp.sm_lid  = OPA_TO_IB_UCAST_LID(attr.sm_lid);
+	else
+		resp.sm_lid  = (u16)attr.sm_lid;
 	resp.lmc 	     = attr.lmc;
 	resp.max_vl_num      = attr.max_vl_num;
 	resp.sm_sl 	     = attr.sm_sl;

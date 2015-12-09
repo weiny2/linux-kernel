@@ -78,6 +78,16 @@ static inline void clear_opa_smp_data(struct opa_smp *smp)
 	memset(data, 0, size);
 }
 
+static void hfi1_update_sm_ah_attr(struct hfi1_ibport *ibp, u32 lid)
+{
+	ibp->rvp.sm_ah->attr.ah_flags = IB_AH_GRH;
+	ibp->rvp.sm_ah->attr.dlid = OPA_TO_IB_UCAST_LID(lid);
+	ibp->rvp.sm_ah->attr.grh.sgid_index = OPA_GID_INDEX;
+	ibp->rvp.sm_ah->attr.grh.dgid.global.subnet_prefix =
+		ibp->rvp.gid_prefix;
+	ibp->rvp.sm_ah->attr.grh.dgid.global.interface_id = OPA_MAKE_GID(lid);
+}
+
 static void send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
 {
 	struct ib_mad_send_buf *send_buf;
@@ -137,6 +147,7 @@ static void send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
 			} else {
 				send_buf->ah = ah;
 				ibp->rvp.sm_ah = ibah_to_rvtah(ah);
+				hfi1_update_sm_ah_attr(ibp, ibp->rvp.sm_lid);
 				ret = 0;
 			}
 		} else {
@@ -1081,12 +1092,11 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	smlid = be32_to_cpu(pi->sm_lid);
-	if (smlid & 0xFFFF0000) {
+	if (smlid & 0xFF000000) {
 		pr_warn("OPA_PortInfo SM lid out of range: %X\n", smlid);
 		smp->status |= IB_SMP_INVALID_FIELD;
 		goto get_only;
 	}
-	smlid &= 0x0000FFFF;
 
 	clientrereg = (pi->clientrereg_subnettimeout &
 			OPA_PI_MASK_CLIENT_REREGISTER);
@@ -1152,7 +1162,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		spin_lock_irqsave(&ibp->rvp.lock, flags);
 		if (ibp->rvp.sm_ah) {
 			if (smlid != ibp->rvp.sm_lid)
-				ibp->rvp.sm_ah->attr.dlid = smlid;
+				hfi1_update_sm_ah_attr(ibp, smlid);
 			if (msl != ibp->rvp.sm_sl)
 				ibp->rvp.sm_ah->attr.sl = msl;
 		}

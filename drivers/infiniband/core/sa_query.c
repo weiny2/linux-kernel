@@ -49,6 +49,7 @@
 #include <net/netlink.h>
 #include <uapi/rdma/ib_user_sa.h>
 #include <rdma/ib_marshall.h>
+#include <rdma/opa_smi.h>
 #include <rdma/ib_addr.h>
 #include "sa.h"
 #include "core_priv.h"
@@ -862,6 +863,7 @@ static void update_sm_ah(struct work_struct *work)
 	struct ib_sa_sm_ah *new_ah;
 	struct ib_port_attr port_attr;
 	struct ib_ah_attr   ah_attr;
+	union ib_gid sgid;
 
 	if (ib_query_port(port->agent->device, port->port_num, &port_attr)) {
 		pr_warn("Couldn't query port\n");
@@ -882,7 +884,6 @@ static void update_sm_ah(struct work_struct *work)
 		pr_err("Couldn't find index for default PKey\n");
 
 	memset(&ah_attr, 0, sizeof ah_attr);
-	ah_attr.dlid     = port_attr.sm_lid;
 	ah_attr.sl       = port_attr.sm_sl;
 	ah_attr.port_num = port->port_num;
 	if (port_attr.grh_required) {
@@ -891,6 +892,32 @@ static void update_sm_ah(struct work_struct *work)
 		ah_attr.grh.dgid.global.interface_id = cpu_to_be64(IB_SA_WELL_KNOWN_GUID);
 	}
 
+	if (rdma_cap_opa_ah(port->agent->device, port->port_num)) {
+		u32 slid = 0;
+
+		if (ib_query_gid(port->agent->device, port->port_num,
+				 OPA_GID_INDEX, &sgid, NULL)) {
+			pr_warn("Couldn't query GID\n");
+			return;
+		}
+
+		if (ib_is_opa_gid(&sgid))
+			slid = opa_get_lid_from_gid(&sgid);
+
+		if ((port_attr.sm_lid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) ||
+		    (slid >= IB_MULTICAST_LID_BASE)) {
+			ah_attr.ah_flags = IB_AH_GRH;
+			ah_attr.dlid = OPA_TO_IB_UCAST_LID(port_attr.sm_lid);
+			ah_attr.grh.sgid_index = OPA_GID_INDEX;
+			/* Same prefix as sgid */
+			ah_attr.grh.dgid.global.subnet_prefix =
+				sgid.global.subnet_prefix;
+			ah_attr.grh.dgid.global.interface_id =
+					OPA_MAKE_GID(port_attr.sm_lid);
+		}
+	} else {
+		ah_attr.dlid     = (u16)port_attr.sm_lid;
+	}
 	new_ah->ah = ib_create_ah(port->agent->qp->pd, &ah_attr);
 	if (IS_ERR(new_ah->ah)) {
 		pr_warn("Couldn't create new SM AH\n");
