@@ -365,11 +365,6 @@ struct opa_dev_desc {
  * @e2e_ctrl: Initiate E2E control messages
  * @get_device_desc: get device (node) specific HW details
  * @get_port_desc: get port specific HW details
- * @get_sma: get method for opa sma to get HW related attributes
- * @set_sma: set method for opa sma to set HW related attributes
- * @set_ibdev: stash registered ibdev pointer so that it can be used by OPA
- *	core clients for registering MAD clients as an example.
- * @clear_ibdev: clear registered ibdev pointer setup via set_ibdev
  * @check_ptl_slp: check SL pair being used for portals traffic
  * @get_hw_limits: obtain HW specific resource limits
  */
@@ -403,15 +398,6 @@ struct opa_core_ops {
 						struct opa_dev_desc *desc);
 	void (*get_port_desc)(struct opa_core_device *odev,
 				struct opa_pport_desc *pdesc, u8 port_num);
-	int (*get_sma)(struct opa_core_device *odev, u16 attr_id,
-		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len,
-		u8 *sma_status);
-	int (*set_sma)(struct opa_core_device *odev, u16 attr_id,
-		struct opa_smp *smp, u32 am, u8 *data, u8 port, u32 *resp_len,
-		u8 *sma_status);
-	void (*set_ibdev)(struct opa_core_device *odev,
-			  struct ib_device *ibdev);
-	void (*clear_ibdev)(struct opa_core_device *odev);
 	int (*check_ptl_slp)(struct hfi_ctx *ctx, struct hfi_sl_pair *slp);
 	int (*get_hw_limits)(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl);
 };

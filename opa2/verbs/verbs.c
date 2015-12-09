@@ -62,20 +62,10 @@
 #include <linux/delay.h>
 #include "mad.h"
 #include "verbs.h"
+#include "../link.h"
 #include <rdma/opa_core_ib.h>
 
 static void opa_ib_uninit_port(struct opa_ib_portdata *ibp);
-static int opa_ib_add(struct opa_core_device *odev);
-static void opa_ib_remove(struct opa_core_device *odev);
-static void opa_ib_event_notify(struct opa_core_device *odev,
-				enum opa_core_event event, u8 port);
-
-static struct opa_core_client opa_ib_driver = {
-	.name = KBUILD_MODNAME,
-	.add = opa_ib_add,
-	.remove = opa_ib_remove,
-	.event_notify = opa_ib_event_notify
-};
 
 __be64 opa_ib_sys_guid;
 
@@ -130,12 +120,13 @@ const int ib_qp_state_ops[IB_QPS_ERR + 1] = {
 static int opa_ib_query_device(struct ib_device *ibdev,
 			       struct ib_device_attr *props
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
-			       ,struct ib_udata *uhw
+			       , struct ib_udata *uhw
 #endif
 			       )
 {
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
 	struct opa_ib_portdata *ibp1 = to_opa_ibportdata(ibdev, 1);
+	struct hfi_devdata *dd = ibd->dd;
 
 	memset(props, 0, sizeof(*props));
 
@@ -157,8 +148,8 @@ static int opa_ib_query_device(struct ib_device *ibdev,
 	props->vendor_part_id = dd->pcidev->device;
 	props->hw_ver = dd->minrev;
 #else
-	props->vendor_id = ibd->odev->id.vendor;
-	props->vendor_part_id = ibd->odev->id.device;
+	props->vendor_id = dd->bus_id.vendor;
+	props->vendor_part_id = dd->bus_id.device;
 	props->hw_ver = 0;
 #endif
 	props->sys_image_guid = opa_ib_sys_guid;
@@ -237,8 +228,8 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	props->lmc = ibp->lmc;
 	props->sm_lid = ibp->sm_lid;
 	props->sm_sl = ibp->smsl;
-	props->state = ibp->lstate;
-	props->phys_state = ibp->pstate;
+	props->state = ibp->ppd->lstate;
+	props->phys_state = hfi_ibphys_portstate(ibp->ppd);
 	props->port_cap_flags = ibp->port_cap_flags;
 	props->gid_tbl_len = 1;
 	props->max_msg_sz = OPA_IB_MAX_MSG_SZ;
@@ -350,43 +341,6 @@ static int opa_ib_dealloc_ucontext(struct ib_ucontext *context)
 	return 0;
 }
 
-static void opa_ib_link_handling(struct opa_ib_data *ibd)
-{
-	struct opa_core_device *odev = ibd->odev;
-	struct opa_core_ops *ops = odev->bus_ops;
-	struct opa_pport_desc pdesc;
-	struct ib_device *ibdev = &ibd->ibdev;
-	int port;
-
-	for (port = 1; port <= ibd->num_pports; port++) {
-		struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
-
-		ops->get_port_desc(odev, &pdesc, port);
-		ibp->lstate = pdesc.lstate;
-		ibp->pstate = pdesc.pstate;
-	}
-}
-
-static void opa_ib_event_notify(struct opa_core_device *odev,
-				enum opa_core_event event, u8 port)
-{
-	struct opa_ib_data *ibd = opa_core_get_priv_data(&opa_ib_driver, odev);
-
-	if (!ibd) {
-		dev_err(&odev->dev,
-		"%s port %d event %d unhandled\n", __func__, port, event);
-		return;
-	}
-
-	switch (event) {
-	case OPA_LINK_STATE_CHANGE:
-		opa_ib_link_handling(ibd);
-		break;
-	default:
-		break;
-	};
-}
-
 static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 {
 	struct ib_device *ibdev = &ibd->ibdev;
@@ -394,7 +348,7 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	size_t lcpysz = IB_DEVICE_NAME_MAX;
 
 	lcpysz = strlcpy(ibdev->name, name, lcpysz);
-	strlcpy(ibdev->name + lcpysz, "%d", lcpysz);
+	strlcpy(ibdev->name + lcpysz, "_%d", lcpysz);
 	strncpy(ibdev->node_desc, init_utsname()->nodename,
 		sizeof(ibdev->node_desc));
 	ibdev->node_guid = ibd->node_guid;
@@ -481,8 +435,8 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 	ibdev->get_port_immutable = port_immutable;
 #endif
-
-	ret = ib_register_device(ibdev, NULL); //opa_ib_create_port_files);
+	/* opa_ib_create_port_files); */
+	ret = ib_register_device(ibdev, NULL);
 	if (ret)
 		goto err_reg;
 
@@ -514,26 +468,22 @@ static void opa_ib_unregister_device(struct opa_ib_data *ibd)
 }
 
 static int opa_ib_init_port(struct opa_ib_data *ibd,
-			struct opa_core_device *odev, u8 pidx)
+			struct hfi_pportdata *ppd)
 {
 	int i, ret;
+	int pidx = ppd->pnum - 1;
 	struct opa_ib_portdata *ibp = &ibd->pport[pidx];
-	struct opa_pport_desc pdesc;
-	struct opa_core_ops *ops = odev->bus_ops;
-
-	ops->get_port_desc(odev, &pdesc, pidx + 1);
 
 	ibp->ibd = ibd;
 	ibp->dev = &ibd->ibdev.dev; /* for dev_info, etc. */
-	ibp->odev = odev;
+	ibp->ppd = ppd;
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
-	ibp->guid = pdesc.pguid;
-	ibp->ibmaxmtu = pdesc.ibmaxmtu;
-	ibp->max_vls = pdesc.num_vls_supported;
-	ibp->lid = pdesc.lid;
+	ibp->guid = ppd->pguid;
+	ibp->ibmaxmtu = HFI_DEFAULT_MAX_MTU;
+	ibp->max_vls = ppd->vls_supported;
+	ibp->lid = ppd->lid;
 	ibp->sm_lid = 0;
-	ibp->lstate = pdesc.lstate;
-	ibp->pstate = pdesc.pstate;
+
 	/*
 	 * FXRTODO: These need to be reset to their
 	 * defaults after every linkup also. Once LNI code is up
@@ -548,28 +498,28 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	/* Below should only set bits defined in OPA PortInfo.CapabilityMask */
 	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_CAP_MASK_NOTICE_SUP;
-	ibp->pkey_tlen = pdesc.pkey_tlen;
-	ibp->pkeys = pdesc.pkeys;
-	ibp->port_num = pidx;
+	ibp->pkey_tlen = HFI_MAX_PKEYS;
+	ibp->pkeys = ppd->pkeys;
+	ibp->port_num = ppd->pnum - 1;
 
 	RCU_INIT_POINTER(ibp->qp[0], NULL);
 	RCU_INIT_POINTER(ibp->qp[1], NULL);
 
 	/* MTU is per-VL */
 	for (i = 0; i < ibp->max_vls; i++) {
-		ibp->vl_mtu[i] = pdesc.vl_mtu[i];
+		ibp->vl_mtu[i] = ppd->vl_mtu[i];
 		/* ibmtu is maximum of data VL MTUs */
 		if (ibp->vl_mtu[i] > ibp->ibmtu)
 			ibp->ibmtu = ibp->vl_mtu[i];
 	}
-	ibp->vl_mtu[15] = pdesc.vl_mtu[15];
+	ibp->vl_mtu[15] = ppd->vl_mtu[15];
 
 	for (i = 0; i < ARRAY_SIZE(ibp->sl_to_sc); i++)
-		ibp->sl_to_sc[i] = pdesc.sl_to_sc[i];
+		ibp->sl_to_sc[i] = ppd->sl_to_sc[i];
 	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_sl); i++)
-		ibp->sc_to_sl[i] = pdesc.sc_to_sl[i];
+		ibp->sc_to_sl[i] = ppd->sc_to_sl[i];
 	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_vl); i++)
-		ibp->sc_to_vl[i] = pdesc.sc_to_vl[i];
+		ibp->sc_to_vl[i] = ppd->sc_to_vlt[i];
 
 	spin_lock_init(&ibp->lock);
 	ret = opa_ib_ctx_init_port(ibp);
@@ -590,17 +540,14 @@ static void opa_ib_uninit_port(struct opa_ib_portdata *ibp)
 	opa_ib_ctx_uninit_port(ibp);
 }
 
-static int opa_ib_add(struct opa_core_device *odev)
+int opa_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 {
 	int i, ret;
 	u8 num_ports;
 	struct opa_ib_data *ibd;
 	struct opa_ib_portdata *ibp;
-	struct opa_dev_desc desc;
-	struct opa_core_ops *ops = odev->bus_ops;
 
-	ops->get_device_desc(odev, &desc);
-	num_ports = desc.num_pports;
+	num_ports = dd->num_pports;
 	ibd = (struct opa_ib_data *)ib_alloc_device(sizeof(*ibd) +
 						    sizeof(*ibp) * num_ports);
 	if (!ibd) {
@@ -608,13 +555,14 @@ static int opa_ib_add(struct opa_core_device *odev)
 		goto exit;
 	}
 
+	dd->ibd = ibd;
+	ibd->dd = dd;
 	ibd->num_pports = num_ports;
-	ibd->node_guid = desc.nguid;
-	memcpy(ibd->oui, desc.oui, ARRAY_SIZE(ibd->oui));
-	ibd->assigned_node_id = desc.numa_node;
+	ibd->node_guid = dd->nguid;
+	memcpy(ibd->oui, dd->oui, ARRAY_SIZE(ibd->oui));
+	ibd->assigned_node_id = dd->node;
 	ibd->pport = (struct opa_ib_portdata *)(ibd + 1);
-	ibd->parent_dev = odev->dev.parent;
-	ibd->odev = odev;
+	ibd->parent_dev = &dd->pcidev->dev;
 
 	/*
 	 * Note, ida_simple_get usage restricts itself to QPNs not
@@ -649,13 +597,15 @@ static int opa_ib_add(struct opa_core_device *odev)
 		goto cq_init_err;
 
 	/* Allocate Management Context */
-	ret = opa_ib_ctx_init(ibd);
+	ret = opa_ib_ctx_init(ibd, bus_ops);
 	if (ret)
 		goto ctx_err;
 
 	/* FXRTODO: Move pkey support to opa2_hfi  */
-	for (i = 0; i < num_ports; i++) {
-		ret = opa_ib_init_port(ibd, odev, i);
+	for (i = 0; i < dd->num_pports; i++) {
+		struct hfi_pportdata *ppd = to_hfi_ppd(dd, i + 1);
+
+		ret = opa_ib_init_port(ibd, ppd);
 		if (ret) {
 			while (--i >= 0)
 				opa_ib_uninit_port(&ibd->pport[i]);
@@ -665,17 +615,11 @@ static int opa_ib_add(struct opa_core_device *odev)
 	if (ret)
 		goto port_err;
 
-	ret = opa_core_set_priv_data(&opa_ib_driver, odev, ibd);
-	if (ret)
-		goto priv_err;
-	ret = opa_ib_register_device(ibd, opa_ib_driver.name);
+	ret = opa_ib_register_device(ibd, hfi_class_name());
 	if (ret)
 		goto ib_reg_err;
-	ops->set_ibdev(odev, &ibd->ibdev);
 	return ret;
 ib_reg_err:
-	opa_core_clear_priv_data(&opa_ib_driver, odev);
-priv_err:
 	for (i = 0; i < num_ports; i++)
 		opa_ib_uninit_port(&ibd->pport[i]);
 port_err:
@@ -685,19 +629,16 @@ ctx_err:
 cq_init_err:
 	ib_dealloc_device(&ibd->ibdev);
 exit:
-	dev_err(&odev->dev, "%s error rc %d\n", __func__, ret);
+	dev_err(&dd->pcidev->dev, "%s error rc %d\n", __func__, ret);
 	return ret;
 }
 
-static void opa_ib_remove(struct opa_core_device *odev)
+void opa_ib_remove(struct hfi_devdata *dd)
 {
 	int i;
-	struct opa_ib_data *ibd;
+	struct opa_ib_data *ibd = dd->ibd;
 
-	ibd = opa_core_get_priv_data(&opa_ib_driver, odev);
-	if (!ibd)
-		return;
-	odev->bus_ops->clear_ibdev(odev);
+	dd->ibd = NULL;
 	opa_ib_unregister_device(ibd);
 	for (i = 0; i < ibd->num_pports; i++)
 		opa_ib_uninit_port(&ibd->pport[i]);
@@ -709,21 +650,4 @@ static void opa_ib_remove(struct opa_core_device *odev)
 	ida_destroy(&ibd->qpn_even_table);
 	ida_destroy(&ibd->qpn_odd_table);
 	ib_dealloc_device(&ibd->ibdev);
-	opa_core_clear_priv_data(&opa_ib_driver, odev);
 }
-
-int __init opa_ib_init(void)
-{
-	return opa_core_client_register(&opa_ib_driver);
-}
-module_init(opa_ib_init);
-
-void opa_ib_cleanup(void)
-{
-	opa_core_client_unregister(&opa_ib_driver);
-}
-module_exit(opa_ib_cleanup);
-
-MODULE_LICENSE("Dual BSD/GPL");
-MODULE_AUTHOR("Intel Corporation");
-MODULE_DESCRIPTION("Intel(R) OPA Gen2 IB Driver");

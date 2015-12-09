@@ -61,7 +61,8 @@ void opa_ib_rc_error(struct opa_ib_qp *qp, enum ib_wc_status err)
 
 	/* FXRTODO */
 	spin_lock_irqsave(&qp->s_lock, flags);
-	lastwqe = 0; //hfi1_error_qp(qp, err);
+	/* hfi1_error_qp(qp, err); */
+	lastwqe = 0;
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 
 	if (lastwqe) {

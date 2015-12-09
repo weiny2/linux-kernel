@@ -322,9 +322,12 @@ int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
 
 	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
 
-	//ret = egress_pkey_check(ibp, &hdr->ibh, qp);
+	/* ret = egress_pkey_check(ibp, &hdr->ibh, qp); */
 	if (unlikely(ret)) {
-		//hfi1_cdbg(PIO, "%s() Failed. Completing with err", __func__);
+		/*
+		 * hfi1_cdbg(PIO, "%s() Failed. Completing with err",
+		 * __func__);
+		 */
 		spin_lock_irqsave(&qp->s_lock, flags);
 		opa_ib_send_complete(qp, qp->s_wqe, IB_WC_GENERAL_ERR);
 		spin_unlock_irqrestore(&qp->s_lock, flags);

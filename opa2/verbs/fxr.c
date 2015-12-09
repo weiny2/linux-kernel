@@ -84,7 +84,7 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 		return -ENOMEM;
 	eq_alloc->mode = OPA_EV_MODE_BLOCKING;
 	eq_alloc->user_data = (u64)&done;
-	rc = ctx->ops->ev_assign(ctx, eq_alloc);
+	rc = hfi_cteq_assign(ctx, eq_alloc);
 	if (rc < 0) {
 		vfree((void *)eq_alloc->base);
 		goto err;
@@ -116,7 +116,7 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
 {
 	u64 *eq_entry, done;
 
-	ctx->ops->ev_release(ctx, 0, eq, (u64)&done);
+	hfi_cteq_release(ctx, 0, eq, (u64)&done);
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	hfi_eq_wait(ctx, 0x0, &eq_entry);
 	if (eq_entry) {
@@ -163,7 +163,8 @@ static int qp_max_iovs(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
 		if (sge->mr->mapsz) {
 			segsz = 1 << sge->mr->page_shift;
 			/* TODO - store sge->offset to remove this */
-			off = sge->mr->map[sge->m]->segs[sge->n].length - sge->length;
+			off = sge->mr->map[sge->m]->segs[sge->n].length -
+				sge->length;
 			niovs += ((off + sge->sge_length + segsz - 1) / segsz);
 		} else {
 			niovs++;
@@ -208,7 +209,10 @@ static void qp_update_sge(struct opa_ib_qp *qp, u32 length)
 	}
 }
 
-/* TODO - keep around for now, in case this hack has value again during bring-up */
+/*
+ * TODO - keep around for now, in case this hack
+ * has value again during bring-up
+ */
 static int __attribute__ ((unused))
 send_wqe_pio(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 {
@@ -585,7 +589,7 @@ int opa_ib_rcv_init(struct opa_ib_portdata *ibp)
 	/* kthread create and wait for packets! */
 	rcv_task = kthread_create_on_node(opa_ib_rcv_wait, ibp,
 					  ibp->ibd->assigned_node_id,
-					  "opa2_ib_rcv");
+					  "opa2_hfi_rcv");
 	if (IS_ERR(rcv_task)) {
 		ret = PTR_ERR(rcv_task);
 		goto kthread_err;
@@ -629,9 +633,8 @@ void opa_ib_rcv_uninit(struct opa_ib_portdata *ibp)
 	}
 }
 
-int opa_ib_ctx_init(struct opa_ib_data *ibd)
+int opa_ib_ctx_init(struct opa_ib_data *ibd, struct opa_core_ops *bus_ops)
 {
-	struct opa_core_device *odev = ibd->odev;
 	struct opa_ctx_assign ctx_assign = {0};
 
 	/*
@@ -639,24 +642,24 @@ int opa_ib_ctx_init(struct opa_ib_data *ibd)
 	 * TODO - later we will likely allocate a pool of general contexts
 	 * to choose based on QPN or SC.
 	 */
-	HFI_CTX_INIT(&ibd->ctx, odev->dd, odev->bus_ops);
+	HFI_CTX_INIT(&ibd->ctx, ibd->dd, bus_ops);
+
 	ibd->ctx.mode |= HFI_CTX_MODE_BYPASS_9B;
 	ibd->ctx.qpn_map_idx = 0; /* this context is for QPN 0 and 1 */
 	/* TODO - for now map all QPNs to this receive context */
 	ibd->ctx.qpn_map_count = OPA_QPN_MAP_MAX;
 	ctx_assign.pid = HFI_PID_ANY;
 	ctx_assign.le_me_count = OPA_IB_EAGER_COUNT;
-	return odev->bus_ops->ctx_assign(&ibd->ctx, &ctx_assign);
+	return hfi_ctxt_attach(&ibd->ctx, &ctx_assign);
 }
 
 void opa_ib_ctx_uninit(struct opa_ib_data *ibd)
 {
-	ibd->odev->bus_ops->ctx_release(&ibd->ctx);
+	hfi_ctxt_cleanup(&ibd->ctx);
 }
 
 int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp)
 {
-	struct opa_core_ops *ops = ibp->odev->bus_ops;
 	struct opa_ib_data *ibd = ibp->ibd;
 	struct opa_ev_assign eq_alloc;
 	int ret;
@@ -671,12 +674,12 @@ int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp)
 	 * TODO - later we will likely allocate a pool of general Contexts
 	 * and associated CMDQs.
 	 */
-	ret = ops->cq_assign(&ibd->ctx, NULL, &cq_idx);
+	ret = hfi_cq_assign(&ibd->ctx, NULL, &cq_idx);
 	if (ret)
 		goto err;
-	ret = ops->cq_map(&ibd->ctx, cq_idx, &ibp->cmdq_tx, &ibp->cmdq_rx);
+	ret = hfi_cq_map(&ibd->ctx, cq_idx, &ibp->cmdq_tx, &ibp->cmdq_rx);
 	if (ret) {
-		ops->cq_release(&ibd->ctx, cq_idx);
+		hfi_cq_release(&ibd->ctx, cq_idx);
 		goto err;
 	}
 	/* set Context pointer only after CMDQs allocated */
@@ -710,7 +713,6 @@ err:
 
 void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp)
 {
-	struct opa_core_ops *ops = ibp->odev->bus_ops;
 	u16 cq_idx = ibp->cmdq_tx.cq_idx;
 
 	if (!ibp->ctx)
@@ -723,21 +725,23 @@ void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp)
 	}
 
 	opa_ib_rcv_uninit(ibp);
-	ops->cq_unmap(&ibp->cmdq_tx, &ibp->cmdq_rx);
-	ops->cq_release(ibp->ctx, cq_idx);
+	hfi_cq_unmap(&ibp->cmdq_tx, &ibp->cmdq_rx);
+	hfi_cq_release(ibp->ctx, cq_idx);
 	ibp->ctx = NULL;
 }
 
 int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp,
 			 bool is_user)
 {
+	/* FXRTODO: fix me */
+#if 0
 	int ret;
 
 	/* hold the device so it cannot be removed while QP is active */
 	ret = opa_core_device_get(ibd->odev);
 	if (ret)
 		return ret;
-
+#endif
 	qp->s_ctx = &ibd->ctx;
 	return 0;
 }
@@ -745,5 +749,8 @@ int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp,
 void opa_ib_ctx_release_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
 {
 	qp->s_ctx = NULL;
+	/* FXRTODO: fix me */
+#if 0
 	opa_core_device_put(ibd->odev);
+#endif
 }

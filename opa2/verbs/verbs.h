@@ -67,6 +67,7 @@
 #include <rdma/opa_core.h>
 #include "ib_compat.h"
 #include "iowait.h"
+#include "../opa_hfi.h"
 
 /* TODO - these carried from WFR driver */
 #define OPA_IB_MAX_RDMA_ATOMIC  16
@@ -259,7 +260,7 @@ struct opa_ib_swqe {
 	struct opa_ib_qp *s_qp;
 	struct opa_ib_dma_header *s_hdr; /* next packet header to send */
 	struct hfi_ctx *s_ctx;           /* associated send context */
-	u16 s_hdrwords; 	         /* size of s_hdr in 32 bit words */
+	u16 s_hdrwords;	         /* size of s_hdr in 32 bit words */
 	u16 pmtu;
 	u8 lnh;
 	u8 sl;
@@ -580,6 +581,7 @@ struct opa_ib_portdata {
 	struct opa_core_device *odev;
 	struct opa_ib_data *ibd;
 	struct device *dev; /* from IB's ib_device */
+	struct hfi_pportdata *ppd;
 	struct opa_ib_qp __rcu *qp[2];
 	/* non-zero when timer is set */
 	unsigned long mkey_lease_timeout;
@@ -622,11 +624,6 @@ struct opa_ib_portdata {
 	u8 sc_to_vl[OPA_MAX_SCS];
 	u16 vl_mtu[OPA_MAX_VLS];
 
-	/* link state */
-	u8 lstate;
-	/* Physical port state */
-	u8 pstate;
-
 	struct hfi_ctx *ctx;
 	struct hfi_cq cmdq_tx;
 	struct hfi_cq cmdq_rx;
@@ -646,8 +643,8 @@ struct opa_ib_portdata {
 
 struct opa_ib_data {
 	struct ib_device ibdev;
-	struct opa_core_device *odev;
 	struct device *parent_dev;
+	struct hfi_devdata *dd;
 	__be64 node_guid;
 	u8 num_pports;
 	u8 oui[3];
@@ -846,10 +843,13 @@ void opa_ib_rcv_advance(struct opa_ib_portdata *ibp, u64 *rhf_entry);
 int _opa_ib_rcv_wait(struct opa_ib_portdata *ibp, u64 **rhf_entry);
 int opa_ib_rcv_init(struct opa_ib_portdata *ibp);
 void opa_ib_rcv_uninit(struct opa_ib_portdata *ibp);
-int opa_ib_ctx_init(struct opa_ib_data *ibd);
+int opa_ib_ctx_init(struct opa_ib_data *ibd, struct opa_core_ops *bus_ops);
 void opa_ib_ctx_uninit(struct opa_ib_data *ibd);
 int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp);
 void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp);
-int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp, bool is_user);
+int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd,
+			 struct opa_ib_qp *qp, bool is_user);
 void opa_ib_ctx_release_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp);
+int opa_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops);
+void opa_ib_remove(struct hfi_devdata *dd);
 #endif

@@ -64,7 +64,6 @@
 
 #ifdef CONFIG_DEBUG_FS
 struct dentry *hfi_dbg_root;
-static const char *hfi_class_name = "hfi";
 
 static int hfi_qos_show(struct seq_file *s, void *unused)
 {
@@ -181,7 +180,7 @@ void hfi_dbg_init(struct hfi_devdata *dd)
 		pr_warn("can't create %s\n", DRIVER_NAME);
 
 	/* create /sys/kernel/debug/opa2_hfi/hfiN and .../N */
-	snprintf(name, sizeof(name), "%s%d", hfi_class_name, unit);
+	snprintf(name, sizeof(name), "%s%d", hfi_class_name(), unit);
 	snprintf(link, sizeof(link), "%d", unit);
 	dd->hfi_dev_dbg = debugfs_create_dir(name, hfi_dbg_root);
 	if (!dd->hfi_dev_dbg) {

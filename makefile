@@ -113,7 +113,6 @@ install:
 	install opa2/$(NAME).ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install opa_core/opa_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install user/opa2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install verbs/opa2_ib.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install opa2_vnic/vnic.git/opa_vnic_bus/opa_vnic_bus.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install opa2_vnic/vnic.git/opa_vnic/opa_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install opa2_vnic/opa2_vnic_hfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates

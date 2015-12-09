@@ -492,8 +492,8 @@ last_imm:
 		wc.port_num = 0;
 		/* Signal completion event if the solicited bit is set. */
 		opa_ib_cq_enter(to_opa_ibcq(qp->ibqp.recv_cq), &wc,
-			        (ohdr->bth[0] &
-				 cpu_to_be32(IB_BTH_SOLICITED)) != 0);
+				(ohdr->bth[0] &
+				cpu_to_be32(IB_BTH_SOLICITED)) != 0);
 		break;
 
 	case OP(RDMA_WRITE_FIRST):

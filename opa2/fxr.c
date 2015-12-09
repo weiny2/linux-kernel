@@ -89,6 +89,7 @@
 #include <rdma/opa_core_ib.h>
 #include "link.h"
 #include "firmware.h"
+#include "verbs/verbs.h"
 
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
@@ -106,6 +107,13 @@ MODULE_PARM_DESC(opafm_disable, "0 - driver needs opafm to work, \
 
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
+
+static const char *hfi2_class_name = "hfi2";
+
+const char *hfi_class_name(void)
+{
+	return hfi2_class_name;
+}
 
 int neigh_is_hfi(struct hfi_pportdata *ppd)
 {
@@ -1610,6 +1618,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	 */
 	hfi_pport_down(dd);
 
+	opa_ib_remove(dd);
 	if (dd->bus_dev)
 		opa_core_unregister_device(dd->bus_dev);
 
@@ -1682,23 +1691,7 @@ static void hfi_device_desc(struct opa_core_device *odev,
 	desc->num_pports = dd->num_pports;
 	desc->nguid = dd->nguid;
 	desc->numa_node = dd->node;
-	desc->ibdev = dd->ibdev;
-}
-
-/* Save the registered IB device and notify OPA core clients */
-void hfi_set_ibdev(struct opa_core_device *odev, struct ib_device *ibdev)
-{
-	struct hfi_devdata *dd = odev->dd;
-
-	dd->ibdev = ibdev;
-}
-
-/* Clear the registered IB device and notify OPA core clients */
-void hfi_clear_ibdev(struct opa_core_device *odev)
-{
-	struct hfi_devdata *dd = odev->dd;
-
-	dd->ibdev = NULL;
+	desc->ibdev = &dd->ibd->ibdev;
 }
 
 static struct opa_core_ops opa_core_ops = {
@@ -1720,10 +1713,6 @@ static struct opa_core_ops opa_core_ops = {
 	.e2e_ctrl = hfi_e2e_ctrl,
 	.get_device_desc = hfi_device_desc,
 	.get_port_desc = hfi_port_desc,
-	.get_sma = hfi_get_sma,
-	.set_sma = hfi_set_sma,
-	.set_ibdev = hfi_set_ibdev,
-	.clear_ibdev = hfi_clear_ibdev,
 	.check_ptl_slp = hfi_check_ptl_slp,
 	.get_hw_limits = hfi_get_hw_limits,
 };
@@ -2045,6 +2034,11 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	bus_id.vendor = ent->vendor;
 	bus_id.device = ent->device;
 	bus_id.revision = (u32)pdev->revision;
+	memcpy(&dd->bus_id, &bus_id, sizeof(struct opa_core_device_id));
+	ret = opa_ib_add(dd, &opa_core_ops);
+	if (ret)
+		goto err_post_alloc;
+
 	/* bus agent can be probed immediately, no writing dd->bus_dev after this */
 	dd->bus_dev = opa_core_register_device(&pdev->dev, &bus_id, dd, &opa_core_ops);
 	/* All the unit management is handled by opa_core */
