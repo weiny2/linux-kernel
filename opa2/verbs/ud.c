@@ -71,6 +71,7 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 {
 	struct ib_device *ibdev;
 	struct opa_ib_portdata *ibp;
+	struct hfi_pportdata *ppd;
 	struct opa_ib_qp *qp;
 	struct ib_ah_attr *ah_attr;
 	unsigned long flags;
@@ -82,6 +83,7 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 
 	ibdev = sqp->ibqp.device;
 	ibp = to_opa_ibportdata(ibdev, sqp->port_num);
+	ppd = ibp->ppd;
 
 	rcu_read_lock();
 
@@ -93,7 +95,7 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 	}
 
 	dev_dbg(ibp->dev,
-		"exercising UD loopback path, to/from lid %d\n", ibp->lid);
+		"exercising UD loopback path, to/from lid %d\n", ppd->lid);
 
 	sqptype = sqp->ibqp.qp_type == IB_QPT_GSI ?
 			IB_QPT_UD : sqp->ibqp.qp_type;
@@ -249,12 +251,12 @@ static void ud_loopback(struct opa_ib_qp *sqp, struct opa_ib_swqe *swqe)
 	} else {
 		wc.pkey_index = 0;
 	}
-	wc.slid = ibp->lid | (ah_attr->src_path_bits & ((1 << ibp->lmc) - 1));
+	wc.slid = ppd->lid | (ah_attr->src_path_bits & ((1 << ppd->lmc) - 1));
 	/* Check for loopback when the port lid is not set */
 	if (wc.slid == 0 && sqp->ibqp.qp_type == IB_QPT_GSI)
 		wc.slid = HFI1_PERMISSIVE_LID;
 	wc.sl = ah_attr->sl;
-	wc.dlid_path_bits = ah_attr->dlid & ((1 << ibp->lmc) - 1);
+	wc.dlid_path_bits = ah_attr->dlid & ((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
 	opa_ib_cq_enter(to_opa_ibcq(qp->ibqp.recv_cq), &wc,
@@ -277,6 +279,7 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 	struct ib_l4_headers *ohdr;
 	struct ib_ah_attr *ah_attr;
 	struct opa_ib_portdata *ibp;
+	struct hfi_pportdata *ppd;
 	struct opa_ib_swqe *wqe;
 	unsigned long flags;
 	u32 nwords;
@@ -317,18 +320,19 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 
 	/* Construct the header. */
 	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+	ppd = ibp->ppd;
 	/* TODO - review wr.wr.ud.ah */
 	ah_attr = &to_opa_ibah(wqe->wr.wr.ud.ah)->attr;
 	if (ah_attr->dlid < HFI1_MULTICAST_LID_BASE ||
 	    ah_attr->dlid == HFI1_PERMISSIVE_LID) {
-		lid = ah_attr->dlid & ~((1 << ibp->lmc) - 1);
+		lid = ah_attr->dlid & ~((1 << ppd->lmc) - 1);
 		/*
 		 * FXRTODO - WFR had additional test to skip when in link
 		 * loopback, maybe to ensure datapath tested in that mode
 		 */
-		if (unlikely(lid == ibp->lid ||
+		if (unlikely(lid == ppd->lid ||
 		    (lid == HFI1_PERMISSIVE_LID &&
-		     qp->ibqp.qp_type == IB_QPT_GSI))) {
+		    qp->ibqp.qp_type == IB_QPT_GSI))) {
 			/*
 			 * If DMAs are in progress, we can't generate
 			 * a completion for the loopback packet since
@@ -387,7 +391,7 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 		bth0 = IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE << 24;
 	} else
 		bth0 = IB_OPCODE_UD_SEND_ONLY << 24;
-	sc5 = ibp->sl_to_sc[ah_attr->sl];
+	sc5 = ppd->sl_to_sc[ah_attr->sl];
 	lrh0 |= (ah_attr->sl & 0xf) << 4;
 	if (qp->ibqp.qp_type == IB_QPT_SMI) {
 		lrh0 |= 0xF000; /* Set VL (see ch. 13.5.3.1) */
@@ -404,9 +408,9 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 	if (ah_attr->dlid == IB_LID_PERMISSIVE)
 		qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
 	else {
-		lid = ibp->lid;
+		lid = ppd->lid;
 		if (lid) {
-			lid |= ah_attr->src_path_bits & ((1 << ibp->lmc) - 1);
+			lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
 			qp->s_hdr->ibh.lrh[3] = cpu_to_be16(lid);
 		} else
 			qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
@@ -467,15 +471,16 @@ unlock:
 int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey)
 {
 	unsigned i;
+	struct hfi_pportdata *ppd = ibp->ppd;
 
 	if (pkey == OPA_FULL_MGMT_PKEY || pkey == OPA_LIM_MGMT_PKEY) {
 		unsigned lim_idx = -1;
 
-		for (i = 0; i < ibp->pkey_tlen; ++i) {
+		for (i = 0; i < HFI_MAX_PKEYS; ++i) {
 			/* here we look for an exact match */
-			if (ibp->pkeys[i] == pkey)
+			if (ppd->pkeys[i] == pkey)
 				return i;
-			if (ibp->pkeys[i] == OPA_LIM_MGMT_PKEY)
+			if (ppd->pkeys[i] == OPA_LIM_MGMT_PKEY)
 				lim_idx = i;
 		}
 
@@ -489,8 +494,8 @@ int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey)
 
 	pkey &= 0x7fff; /* remove limited/full membership bit */
 
-	for (i = 0; i < ibp->pkey_tlen; ++i)
-		if ((ibp->pkeys[i] & 0x7fff) == pkey)
+	for (i = 0; i < HFI_MAX_PKEYS; ++i)
+		if ((ppd->pkeys[i] & 0x7fff) == pkey)
 			return i;
 
 	/*
@@ -519,6 +524,7 @@ void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 	u16 dlid, slid, pkey;
 	int mgmt_pkey_idx = -1;
 	struct opa_ib_portdata *ibp = packet->ibp;
+	struct hfi_pportdata *ppd = ibp->ppd;
 	struct opa_ib_header *hdr = packet->hdr;
 	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
@@ -731,13 +737,13 @@ void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 		wc.pkey_index = 0;
 
 	wc.slid = slid;
-	wc.sl = ibp->sc_to_sl[sc5];
+	wc.sl = ppd->sc_to_sl[sc5];
 
 	/*
 	 * Save the LMC lower bits if the destination LID is a unicast LID.
 	 */
 	wc.dlid_path_bits = dlid >= HFI1_MULTICAST_LID_BASE ? 0 :
-		dlid & ((1 << ibp->lmc) - 1);
+		dlid & ((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
 	opa_ib_cq_enter(to_opa_ibcq(qp->ibqp.recv_cq), &wc,

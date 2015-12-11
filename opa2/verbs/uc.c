@@ -268,6 +268,7 @@ unlock:
 void opa_ib_uc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 {
 	struct opa_ib_portdata *ibp = packet->ibp;
+	struct hfi_pportdata *ppd = ibp->ppd;
 	struct opa_ib_header *hdr = packet->hdr;
 	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
@@ -305,7 +306,7 @@ void opa_ib_uc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 		& HFI1_BECN_MASK;
 	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
 		& HFI1_FECN_MASK;
-	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+	sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
 
 #if 0
 	if (is_becn) {

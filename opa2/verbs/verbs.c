@@ -117,6 +117,13 @@ const int ib_qp_state_ops[IB_QPS_ERR + 1] = {
 	    HFI1_POST_SEND_OK | HFI1_FLUSH_SEND,
 };
 
+inline struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev)
+{
+	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+
+	return ibd->dd;
+}
+
 static int opa_ib_query_device(struct ib_device *ibdev,
 			       struct ib_device_attr *props
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
@@ -125,7 +132,6 @@ static int opa_ib_query_device(struct ib_device *ibdev,
 			       )
 {
 	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
-	struct opa_ib_portdata *ibp1 = to_opa_ibportdata(ibdev, 1);
 	struct hfi_devdata *dd = ibd->dd;
 
 	memset(props, 0, sizeof(*props));
@@ -173,7 +179,7 @@ static int opa_ib_query_device(struct ib_device *ibdev,
 	props->max_srq_sge = opa_ib_max_srq_sges;
 	/* props->local_ca_ack_delay */
 	props->atomic_cap = IB_ATOMIC_GLOB;
-	props->max_pkeys = ibp1->pkey_tlen;
+	props->max_pkeys = HFI_MAX_PKEYS;
 	props->max_mcast_grp = opa_ib_max_mcast_grps;
 	props->max_mcast_qp_attach = opa_ib_max_mcast_qp_attached;
 	props->max_total_mcast_qp_attach = props->max_mcast_qp_attach *
@@ -216,6 +222,7 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 			     struct ib_port_attr *props)
 {
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi_pportdata *ppd = ibp->ppd;
 
 	if (!ibp)
 		return -EINVAL;
@@ -224,8 +231,8 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 
 	/* TODO - first cut at port attributes */
 
-	props->lid = ibp->lid;
-	props->lmc = ibp->lmc;
+	props->lid = ppd->lid;
+	props->lmc = ppd->lmc;
 	props->sm_lid = ibp->sm_lid;
 	props->sm_sl = ibp->smsl;
 	props->state = ibp->ppd->lstate;
@@ -233,12 +240,12 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	props->port_cap_flags = ibp->port_cap_flags;
 	props->gid_tbl_len = 1;
 	props->max_msg_sz = OPA_IB_MAX_MSG_SZ;
-	props->pkey_tbl_len = ibp->pkey_tlen;
+	props->pkey_tbl_len = HFI_MAX_PKEYS;
 	props->bad_pkey_cntr = ibp->pkey_violations;
 	props->qkey_viol_cntr = ibp->qkey_violations;
-	props->active_width = (u8)opa_width_to_ib(ibp->link_width_active);
-	props->active_speed = (u8)opa_speed_to_ib(ibp->link_speed_active);
-	props->max_vl_num = ibp->max_vls;
+	props->active_width = (u8)opa_width_to_ib(ppd->link_width_active);
+	props->active_speed = (u8)opa_speed_to_ib(ppd->link_speed_active);
+	props->max_vl_num = ppd->vls_supported;
 	props->init_type_reply = 0;
 
 	/* Once we are a "first class" citizen and have added the OPA MTUs to
@@ -249,10 +256,10 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	 * from the Path Records to us will get the new 8k MTU.  Those that
 	 * attempt to process the MTU enum may fail in various ways.
 	 */
-	props->max_mtu = valid_ib_mtu(ibp->ibmaxmtu) ?
-			 opa_mtu_to_enum(ibp->ibmaxmtu) : IB_MTU_4096;
-	props->active_mtu = valid_ib_mtu(ibp->ibmtu) ?
-			    opa_mtu_to_enum(ibp->ibmtu) : props->max_mtu;
+	props->max_mtu = valid_ib_mtu(HFI_DEFAULT_MAX_MTU) ?
+			 opa_mtu_to_enum(HFI_DEFAULT_MAX_MTU) : IB_MTU_4096;
+	props->active_mtu = valid_ib_mtu(ppd->ibmtu) ?
+			    opa_mtu_to_enum(ppd->ibmtu) : props->max_mtu;
 	props->subnet_timeout = ibp->subnet_timeout;
 
 	return 0;
@@ -285,10 +292,10 @@ static int opa_ib_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 {
 	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 
-	if (!ibp || index >= ibp->pkey_tlen)
+	if (!ibp || index >= HFI_MAX_PKEYS)
 		return -EINVAL;
 
-	*pkey = ibp->pkeys[index];
+	*pkey = ibp->ppd->pkeys[index];
 	return 0;
 }
 
@@ -470,7 +477,7 @@ static void opa_ib_unregister_device(struct opa_ib_data *ibd)
 static int opa_ib_init_port(struct opa_ib_data *ibd,
 			struct hfi_pportdata *ppd)
 {
-	int i, ret;
+	int ret;
 	int pidx = ppd->pnum - 1;
 	struct opa_ib_portdata *ibp = &ibd->pport[pidx];
 
@@ -479,9 +486,6 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	ibp->ppd = ppd;
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->guid = ppd->pguid;
-	ibp->ibmaxmtu = HFI_DEFAULT_MAX_MTU;
-	ibp->max_vls = ppd->vls_supported;
-	ibp->lid = ppd->lid;
 	ibp->sm_lid = 0;
 
 	/*
@@ -492,34 +496,13 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	 */
 	ibp->sm_trap_qp = OPA_DEFAULT_SM_TRAP_QP;
 	ibp->sa_qp = OPA_DEFAULT_SA_QP;
-	ibp->link_width_active = OPA_LINK_WIDTH_4X;
-	/* FXRTODO - this should be not yet defined OPA_LINK_SPEED_32G */
-	ibp->link_speed_active = OPA_LINK_SPEED_25G;
 	/* Below should only set bits defined in OPA PortInfo.CapabilityMask */
 	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_CAP_MASK_NOTICE_SUP;
-	ibp->pkey_tlen = HFI_MAX_PKEYS;
-	ibp->pkeys = ppd->pkeys;
 	ibp->port_num = ppd->pnum - 1;
 
 	RCU_INIT_POINTER(ibp->qp[0], NULL);
 	RCU_INIT_POINTER(ibp->qp[1], NULL);
-
-	/* MTU is per-VL */
-	for (i = 0; i < ibp->max_vls; i++) {
-		ibp->vl_mtu[i] = ppd->vl_mtu[i];
-		/* ibmtu is maximum of data VL MTUs */
-		if (ibp->vl_mtu[i] > ibp->ibmtu)
-			ibp->ibmtu = ibp->vl_mtu[i];
-	}
-	ibp->vl_mtu[15] = ppd->vl_mtu[15];
-
-	for (i = 0; i < ARRAY_SIZE(ibp->sl_to_sc); i++)
-		ibp->sl_to_sc[i] = ppd->sl_to_sc[i];
-	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_sl); i++)
-		ibp->sc_to_sl[i] = ppd->sc_to_sl[i];
-	for (i = 0; i < ARRAY_SIZE(ibp->sc_to_vl); i++)
-		ibp->sc_to_vl[i] = ppd->sc_to_vlt[i];
 
 	spin_lock_init(&ibp->lock);
 	ret = opa_ib_ctx_init_port(ibp);

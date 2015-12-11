@@ -233,6 +233,7 @@ void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
 			    u32 bth0, u32 bth2, u16 *out_lrh0)
 {
 	struct opa_ib_portdata *ibp;
+	struct hfi_pportdata *ppd;
 	u16 lrh0;
 	u32 nwords;
 	u32 extra_bytes;
@@ -241,6 +242,7 @@ void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
 
 	/* Construct the header. */
 	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+	ppd = ibp->ppd;
 	extra_bytes = -qp->s_cur_size & 3;
 	nwords = (qp->s_cur_size + extra_bytes) >> 2;
 	lrh0 = HFI1_LRH_BTH;
@@ -250,7 +252,7 @@ void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
 					       qp->s_hdrwords, nwords);
 		lrh0 = HFI1_LRH_GRH;
 	}
-	sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+	sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
 	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
 	qp->s_sc = sc5;
 	if (qp->s_mig_state == IB_MIG_MIGRATED)
@@ -259,7 +261,7 @@ void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
 	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
 	qp->s_hdr->ibh.lrh[2] =
 		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	qp->s_hdr->ibh.lrh[3] = cpu_to_be16(ibp->lid |
+	qp->s_hdr->ibh.lrh[3] = cpu_to_be16(ppd->lid |
 				       qp->remote_ah_attr.src_path_bits);
 	bth0 |= opa_ib_get_pkey(ibp, qp->s_pkey_index);
 	bth0 |= extra_bytes << 20;
