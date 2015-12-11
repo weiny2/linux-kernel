@@ -26,6 +26,8 @@
 #include <asm/cacheflush.h>
 #include <asm/debugreg.h>
 
+#ifdef CONFIG_KEXEC
+
 static void set_idt(void *newidt, __u16 limit)
 {
 	struct desc_ptr curidt;
@@ -258,6 +260,8 @@ void machine_kexec(struct kimage *image)
 
 	__ftrace_enabled_restore(save_ftrace_enabled);
 }
+
+#endif /* CONFIG_KEXEC */
 
 void arch_crash_save_vmcoreinfo(void)
 {

@@ -25,6 +25,8 @@
 #include <asm/debugreg.h>
 #include <asm/kexec-bzimage64.h>
 
+#ifdef CONFIG_KEXEC
+
 #ifdef CONFIG_KEXEC_FILE
 static struct kexec_file_ops *kexec_file_loaders[] = {
 		&kexec_bzImage64_ops,
@@ -303,6 +305,8 @@ void machine_kexec(struct kimage *image)
 	__ftrace_enabled_restore(save_ftrace_enabled);
 }
 #endif
+
+#endif /* CONFIG_KEXEC */
 
 void arch_crash_save_vmcoreinfo(void)
 {

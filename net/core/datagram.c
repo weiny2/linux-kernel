@@ -792,10 +792,11 @@ __sum16 __skb_checksum_complete(struct sk_buff *skb)
 EXPORT_SYMBOL(__skb_checksum_complete);
 
 /**
- *	skb_copy_and_csum_datagram_iovec - Copy and checkum skb to user iovec.
+ *	skb_copy_and_csum_datagram_iovec2 - Copy and checkum skb to user iovec.
  *	@skb: skbuff
  *	@hlen: hardware length
  *	@iov: io vector
+ *	@len: amount of data to copy from skb to iov
  *
  *	Caller _must_ check that skb will fit to this iovec.
  *
@@ -804,11 +805,14 @@ EXPORT_SYMBOL(__skb_checksum_complete);
  *		 -EFAULT - fault during copy. Beware, in this case iovec
  *			   can be modified!
  */
-int skb_copy_and_csum_datagram_iovec(struct sk_buff *skb,
-				     int hlen, struct iovec *iov)
+int skb_copy_and_csum_datagram_iovec2(struct sk_buff *skb,
+				      int hlen, struct iovec *iov, int len)
 {
 	__wsum csum;
 	int chunk = skb->len - hlen;
+
+	if (chunk > len)
+		chunk = len;
 
 	if (!chunk)
 		return 0;
@@ -841,6 +845,13 @@ csum_error:
 	return -EINVAL;
 fault:
 	return -EFAULT;
+}
+EXPORT_SYMBOL(skb_copy_and_csum_datagram_iovec2);
+
+int skb_copy_and_csum_datagram_iovec(struct sk_buff *skb,
+				     int hlen, struct iovec *iov)
+{
+	return skb_copy_and_csum_datagram_iovec2(skb, hlen, iov, INT_MAX);
 }
 EXPORT_SYMBOL(skb_copy_and_csum_datagram_iovec);
 

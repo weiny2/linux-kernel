@@ -9,7 +9,9 @@ obj-$(CONFIG_PROC_FS)		+= xen_proc.o
 obj-$(CONFIG_HOTPLUG_CPU)	+= cpu_hotplug.o
 obj-$(CONFIG_XEN_SMPBOOT)	+= smpboot.o
 obj-$(CONFIG_SMP)		+= spinlock.o
-obj-$(CONFIG_KEXEC)		+= machine_kexec.o
+ifeq ($(findstring y,$(CONFIG_KEXEC)$(CONFIG_XEN_PRIVILEGED_GUEST)),y)
+obj-y				+= machine_kexec.o
+endif
 obj-$(CONFIG_GENERIC_CLOCKEVENTS) += clockevents.o
 obj-$(CONFIG_XEN_DOMCTL)	+= domctl.o
 CFLAGS_domctl.o			:= -D__XEN_PUBLIC_XEN_H__

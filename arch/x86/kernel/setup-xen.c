@@ -1423,7 +1423,12 @@ void __init setup_arch(char **cmdline_p)
 	xen_machine_kexec_setup_resources();
 # define kexec_enabled() (crashk_res.start < crashk_res.end)
 #else
-# define kexec_enabled() 0
+/* Need to query the hypervisor directly in this case. */
+# define kexec_enabled() ({ \
+	xen_kexec_range_t range = { .range = KEXEC_RANGE_MA_CRASH }; \
+	HYPERVISOR_kexec_op(KEXEC_CMD_kexec_get_range, &range) == 0 \
+		&& range.size; \
+})
 #endif
 	p2m_pages = max_pfn;
 	if (xen_start_info->nr_pages > max_pfn) {

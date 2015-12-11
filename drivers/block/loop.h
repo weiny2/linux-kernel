@@ -63,6 +63,9 @@ struct loop_device {
 
 	struct request_queue	*lo_queue;
 	struct gendisk		*lo_disk;
+#ifndef __GENKSYMS__
+	unsigned	lo_logical_blocksize;
+#endif
 };
 
 /* Support for loadable transfer modules */

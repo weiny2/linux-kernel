@@ -125,6 +125,10 @@ KERNEL_ATTR_RW(kexec_crash_size);
 KERNEL_ATTR_RO(kexec_crash_size);
 #endif
 
+#endif /* CONFIG_KEXEC */
+
+#if defined(CONFIG_KEXEC) || defined(CONFIG_XEN_PRIVILEGED_GUEST)
+
 static ssize_t vmcoreinfo_show(struct kobject *kobj,
 			       struct kobj_attribute *attr, char *buf)
 {
@@ -222,6 +226,8 @@ static struct attribute * kernel_attrs[] = {
 	&kexec_loaded_attr.attr,
 	&kexec_crash_loaded_attr.attr,
 	&kexec_crash_size_attr.attr,
+#endif
+#if defined(CONFIG_KEXEC) || defined(CONFIG_XEN_PRIVILEGED_GUEST)
 	&vmcoreinfo_attr.attr,
 #endif
 	&rcu_expedited_attr.attr,

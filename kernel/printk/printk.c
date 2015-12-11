@@ -1072,7 +1072,7 @@ const struct file_operations kmsg_fops = {
 	.release = devkmsg_release,
 };
 
-#ifdef CONFIG_KEXEC
+#if defined(CONFIG_KEXEC) || defined(CONFIG_XEN_PRIVILEGED_GUEST)
 /*
  * This appends the listed symbols to /proc/vmcoreinfo
  *

@@ -1579,6 +1579,15 @@ static int raid1_add_disk(struct mddev *mddev, struct md_rdev *rdev)
 		mddev->merge_check_needed = 1;
 	}
 
+	/*
+	 * find the disk ... but prefer rdev->saved_raid_disk
+	 * if possible.
+	 */
+	if (rdev->saved_raid_disk >= 0 &&
+	    rdev->saved_raid_disk >= first &&
+	    conf->mirrors[rdev->saved_raid_disk].rdev == NULL)
+		first = last = rdev->saved_raid_disk;
+
 	for (mirror = first; mirror <= last; mirror++) {
 		p = conf->mirrors+mirror;
 		if (!p->rdev) {
@@ -2405,8 +2414,8 @@ static void raid1d(struct md_thread *thread)
 		}
 		spin_unlock_irqrestore(&conf->device_lock, flags);
 		while (!list_empty(&tmp)) {
-			r1_bio = list_first_entry(&conf->bio_end_io_list,
-						  struct r1bio, retry_list);
+			r1_bio = list_first_entry(&tmp, struct r1bio,
+						  retry_list);
 			list_del(&r1_bio->retry_list);
 			raid_end_bio_io(r1_bio);
 		}
@@ -2516,8 +2525,6 @@ static sector_t sync_request(struct mddev *mddev, sector_t sector_nr, int *skipp
 		if (mddev_is_clustered(mddev)) {
 			conf->cluster_sync_low = 0;
 			conf->cluster_sync_high = 0;
-			/* Send zeros to mark end of resync */
-			md_cluster_ops->resync_finish(mddev);
 		}
 		return 0;
 	}
