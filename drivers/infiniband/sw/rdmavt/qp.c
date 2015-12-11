@@ -992,6 +992,7 @@ int rvt_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	int mig = 0;
 	int pmtu = 0; /* for gcc warning only */
 	enum rdma_link_layer link;
+	int opa_ah = 0;
 
 	link = rdma_port_get_link_layer(ibqp->device, qp->port_num);
 
@@ -1002,6 +1003,7 @@ int rvt_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	cur_state = attr_mask & IB_QP_CUR_STATE ?
 		attr->cur_qp_state : qp->state;
 	new_state = attr_mask & IB_QP_STATE ? attr->qp_state : cur_state;
+	opa_ah = rdma_cap_opa_ah(ibqp->device, qp->port_num);
 
 	if (!ib_modify_qp_is_ok(cur_state, new_state, ibqp->qp_type,
 				attr_mask, link))
@@ -1012,15 +1014,16 @@ int rvt_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		goto inval;
 
 	if (attr_mask & IB_QP_AV) {
-		if (attr->ah_attr.dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE))
+		if (!opa_ah && (attr->ah_attr.dlid >=
+		     be16_to_cpu(IB_MULTICAST_LID_BASE)))
 			goto inval;
 		if (rvt_check_ah(qp->ibqp.device, &attr->ah_attr))
 			goto inval;
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
-		if (attr->alt_ah_attr.dlid >=
-		    be16_to_cpu(IB_MULTICAST_LID_BASE))
+		if (!opa_ah && (attr->alt_ah_attr.dlid >=
+		     be16_to_cpu(IB_MULTICAST_LID_BASE)))
 			goto inval;
 		if (rvt_check_ah(qp->ibqp.device, &attr->alt_ah_attr))
 			goto inval;

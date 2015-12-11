@@ -1971,4 +1971,52 @@ static inline u32 hfi1_retrieve_lid(struct ib_ah_attr *ah_attr)
 	}
 	return ah_attr->dlid;
 }
+
+/**
+ * hfi1_check_mcast- Check if the lid contained
+ * in the address handle is a multicast LID.
+ *
+ * The LID might either reside in ah.dlid or might be
+ * in the GRH of the address handle as DGID if extended
+ * addresses are in use.
+ */
+static inline bool hfi1_check_mcast(struct ib_ah_attr *ah_attr)
+{
+	union ib_gid dgid;
+	u32 lid;
+
+	if (ah_attr->ah_flags & IB_AH_GRH) {
+		dgid = ah_attr->grh.dgid;
+		if (ib_is_opa_gid(&dgid)) {
+			lid = hfi1_get_lid_from_gid(&dgid);
+			return ((lid >= HFI1_16B_MULTICAST_LID_BASE) &&
+				(lid != HFI1_16B_PERMISSIVE_LID));
+		}
+	}
+	lid = ah_attr->dlid;
+	return ((lid >= be16_to_cpu(IB_MULTICAST_LID_BASE) &&
+		lid != IB_LID_PERMISSIVE));
+}
+
+/**
+ * hfi1_check_permissive- Check if the lid contained
+ * in the address handle is a permissive LID.
+ *
+ * The LID might either reside in ah.dlid or might be
+ * int he GRH of the address handle as DGID if extended
+ * addresses are in use.
+ */
+static inline bool hfi1_check_permissive(struct ib_ah_attr *ah_attr)
+{
+	union ib_gid dgid;
+
+	if (ah_attr->ah_flags & IB_AH_GRH) {
+		dgid = ah_attr->grh.dgid;
+		if (ib_is_opa_gid(&dgid)) {
+			return HFI1_16B_PERMISSIVE_LID ==
+				hfi1_get_lid_from_gid(&dgid);
+		}
+	}
+	return ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE);
+}
 #endif                          /* _HFI1_KERNEL_H */

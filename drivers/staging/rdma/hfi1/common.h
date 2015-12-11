@@ -348,6 +348,19 @@ struct hfi1_message_header {
 #define HFI1_BECN_SHIFT 30
 #define HFI1_BECN_MASK 1
 #define HFI1_BECN_SMASK BIT(HFI1_BECN_SHIFT)
+#define HFI1_16B_PERMISSIVE_LID 0xFFFFFF
+
+/**
+ * 0xF8 - 4 bits of multicast range and 1 bit for collective range
+ * Example: For 24 bit LID space,
+ * Multicast range: 0xF00000 to 0xF7FFFF
+ * Collective range: 0xF80000 to 0xFFFFFE
+ */
+#define HFI1_MCAST_NR 0x4 /* Number of top bits set */
+#define HFI1_COLLECTIVE_NR 0x1 /* Number of bits after MCAST_NR */
+#define HFI1_16B_MULTICAST_LID_BASE (0xFFFFFF << (24 - HFI1_MCAST_NR))
+#define HFI1_16B_COLLECTIVE_LID_BASE (0xFFFFFF << (24 -\
+				       (HFI1_MCAST_NR + HFI1_COLLECTIVE_NR)))
 
 static inline __u64 rhf_to_cpu(const __le32 *rbuf)
 {

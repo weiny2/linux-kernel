@@ -319,8 +319,8 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	ibp = to_iport(qp->ibqp.device, qp->port_num);
 	ppd = ppd_from_ibp(ibp);
 	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
-	if (ah_attr->dlid < be16_to_cpu(IB_MULTICAST_LID_BASE) ||
-	    ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE)) {
+	if ((!hfi1_check_mcast(ah_attr)) ||
+	    (hfi1_check_permissive(ah_attr))) {
 		lid = hfi1_retrieve_lid(ah_attr) & ~((1 << ppd->lmc) - 1);
 		if (unlikely(!loopback &&
 			     (lid == (u16)ppd->lid ||

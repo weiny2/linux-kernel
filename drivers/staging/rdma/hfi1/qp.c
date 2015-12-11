@@ -183,6 +183,8 @@ int hfi1_check_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 	u8 sc;
 
 	if (attr_mask & IB_QP_AV) {
+		if (hfi1_check_mcast(&attr->ah_attr))
+			return -EINVAL;
 		sc = ah_to_sc(ibqp->device, &attr->ah_attr);
 		if (sc == 0xf)
 			return -EINVAL;
@@ -196,6 +198,8 @@ int hfi1_check_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
+		if (hfi1_check_mcast(&attr->alt_ah_attr))
+			return -EINVAL;
 		sc = ah_to_sc(ibqp->device, &attr->alt_ah_attr);
 		if (sc == 0xf)
 			return -EINVAL;
