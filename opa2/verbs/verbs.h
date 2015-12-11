@@ -109,6 +109,8 @@ extern unsigned int hfi2_lkey_table_size;
 extern unsigned int hfi2_max_mcast_grps;
 extern unsigned int hfi2_max_mcast_qp_attached;
 extern struct ib_dma_mapping_ops hfi2_dma_mapping_ops;
+extern const enum ib_wc_opcode ib_hfi1_wc_opcode[];
+extern const u32 ib_hfi1_rnr_table[];
 
 struct ib_l4_headers;
 struct hfi2_ib_header;
@@ -588,9 +590,21 @@ struct hfi2_ibport {
 	__be64 gid_prefix;
 	__be64 mkey;
 	__be64 guid;
+	u64 n_rc_resends;
+	u64 n_seq_naks;
+	u64 n_rdma_seq;
+	u64 n_rnr_naks;
+	u64 n_other_naks;
 	u64 n_loop_pkts;
 	u64 n_pkt_drops;
 	u64 n_vl15_dropped;
+	u64 n_rc_timeouts;
+	u64 n_rc_dupreq;
+	u64 n_rc_seqnak;
+	/* Hot-path per CPU counters to avoid cacheline trading to update */
+	u64 __percpu *rc_acks;
+	u64 __percpu *rc_qacks;
+	u64 __percpu *rc_delayed_comp;
 
 	u32 port_cap_flags;
 	u16 mkey_lease_period;
