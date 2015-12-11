@@ -17,7 +17,6 @@ opa2_hfi-y += iommu.o
 opa2_hfi-y += pcie.o
 opa2_hfi-y += portals.o
 opa2_hfi-y += privileged.o
-opa2_hfi-y += attr.o
 opa2_hfi-y += verbs/cq.o
 opa2_hfi-y += verbs/dma.o
 opa2_hfi-y += verbs/fxr.o

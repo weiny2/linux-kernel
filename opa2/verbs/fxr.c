@@ -573,7 +573,8 @@ int opa_ib_rcv_init(struct opa_ib_portdata *ibp)
 					       ibp->ctx->ptl_uid,
 					       OPA_IB_EAGER_PT_FLAGS | PTL_OP_PUT,
 					       HFI_CT_NONE,
-					       ibp->ibmaxmtu, /* minfree is max MTU */
+						/* minfree is max MTU */
+					       HFI_DEFAULT_MAX_MTU,
 					       (unsigned long)&done,
 					       i, &rx_cmd);
 		ret = hfi_rx_command(&ibp->cmdq_rx, (uint64_t *)&rx_cmd, n_slots);

@@ -358,12 +358,12 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			goto inval;
 		if (opa_ib_check_ah(ibdev, &attr->alt_ah_attr))
 			goto inval;
-		if (attr->alt_pkey_index >= opa_ib_get_npkeys(ibd))
+		if (attr->alt_pkey_index >= HFI_MAX_PKEYS)
 			goto inval;
 	}
 
 	if (attr_mask & IB_QP_PKEY_INDEX)
-		if (attr->pkey_index >= opa_ib_get_npkeys(ibd))
+		if (attr->pkey_index >= HFI_MAX_PKEYS)
 			goto inval;
 
 	if (attr_mask & IB_QP_MIN_RNR_TIMER)
@@ -399,16 +399,18 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	 */
 	if (attr_mask & IB_QP_PATH_MTU) {
 		struct opa_ib_portdata *ibp;
+		struct hfi_pportdata *ppd;
 		u16 mtu;
 
 		ibp = to_opa_ibportdata(ibdev, qp->port_num);
+		ppd = ibp->ppd;
 
 		mtu = opa_enum_to_mtu(attr->path_mtu);
 		if (mtu == INVALID_MTU)
 			goto inval;
 
-		if (mtu > ibp->ibmtu)
-			pmtu = opa_mtu_to_enum_safe(ibp->ibmtu, IB_MTU_2048);
+		if (mtu > ppd->ibmtu)
+			pmtu = opa_mtu_to_enum_safe(ppd->ibmtu, IB_MTU_2048);
 		else
 			pmtu = attr->path_mtu;
 	}
@@ -532,21 +534,23 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 	if (attr_mask & IB_QP_PATH_MTU) {
 		struct opa_ib_portdata *ibp;
+		struct hfi_pportdata *ppd;
 		u8 sc, vl;
 		u16 mtu;
 
 		ibp = to_opa_ibportdata(ibdev, qp->port_num);
+		ppd = ibp->ppd;
 
 		/*
 		 * FXRTODO - this code was different with HFI1 driver as
 		 * SC2VL was in equivalent of opa2_hfi driver, revisit later
 		 */
-		sc = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-		vl = ibp->sc_to_vl[sc];
+		sc = ppd->sl_to_sc[qp->remote_ah_attr.sl];
+		vl = ppd->sc_to_vlt[sc];
 
 		mtu = opa_enum_to_mtu(pmtu);
-		if (vl < ibp->max_vls)
-			mtu = min_t(u16, mtu, ibp->vl_mtu[vl]);
+		if (vl < ppd->vls_supported)
+			mtu = min_t(u16, mtu, ppd->vl_mtu[vl]);
 		pmtu = opa_mtu_to_enum_safe(mtu, OPA_MTU_8192);
 
 		qp->path_mtu = pmtu;

@@ -595,34 +595,15 @@ struct opa_ib_portdata {
 	u32 port_cap_flags;
 	u32 sm_trap_qp;
 	u32 sa_qp;
-	u16 ibmtu;
-	u16 ibmaxmtu;
-	u16 link_speed_supported;
-	u16 link_speed_enabled;
-	u16 link_speed_active;
-	u16 link_width_supported;
-	u16 link_width_enabled;
-	u16 link_width_active;
 	u16 mkey_lease_period;
-	u16 pkey_tlen;
-	/* list of pkeys programmed; 0 if not set */
-	u16 *pkeys;
 	u16 pkey_violations;
 	u16 qkey_violations;
 	u16 mkey_violations;
-	u16 lid;
 	u16 sm_lid;
-	u8 lmc;
-	u8 max_vls;
 	u8 port_num;
 	u8 smsl;
 	u8 mkeyprot;
 	u8 subnet_timeout;
-	/* the first 16 entries are sl_to_vl for !STL */
-	u8 sl_to_sc[OPA_MAX_SLS];
-	u8 sc_to_sl[OPA_MAX_SCS];
-	u8 sc_to_vl[OPA_MAX_SCS];
-	u16 vl_mtu[OPA_MAX_VLS];
 
 	struct hfi_ctx *ctx;
 	struct hfi_cq cmdq_tx;
@@ -719,18 +700,8 @@ static inline struct opa_ib_qp *opa_ib_lookup_qpn(struct opa_ib_portdata *ibp,
 		return idr_find(&ibp->ibd->qp_ptr, qpn);
 }
 
-/*
- * Return the indexed PKEY from the port PKEY table.
- */
-static inline u16 opa_ib_get_npkeys(struct opa_ib_data *ibd)
-{
-	struct opa_ib_portdata *ibp1 = to_opa_ibportdata(&ibd->ibdev, 1);
-
-	return ibp1->pkey_tlen;
-}
-
 #define opa_ib_get_pkey(ibp, index) \
-	((index) >= ((ibp)->pkey_tlen) ? 0 : (ibp)->pkeys[(index)])
+	((index) >= (HFI_MAX_PKEYS) ? 0 : (ibp)->ppd->pkeys[(index)])
 
 static inline u8 valid_ib_mtu(u16 mtu)
 {
@@ -852,4 +823,5 @@ int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd,
 void opa_ib_ctx_release_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp);
 int opa_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops);
 void opa_ib_remove(struct hfi_devdata *dd);
+struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev);
 #endif

@@ -64,7 +64,7 @@
 #include <rdma/fxr/fxr_linkmux_tp_defs.h>
 #include <rdma/fxr/fxr_linkmux_fpc_defs.h>
 #include <rdma/fxr/fxr_linkmux_cm_defs.h>
-#include "attr.h"
+#include "verbs/mad.h"
 #include "firmware.h"
 #include "verbs/verbs.h"
 
@@ -418,7 +418,6 @@ struct ib_vl_weight_elem {
  * @neighbor_guid: Node guid of the neighboring port
  * @lid: LID for this port
  * @ptc: per traffic class specific fields
- * @sm_lid: LID of the SM
  * @lstate: Logical link state
  * @ibmtu: The MTU programmed for this port
  * @port_error_action: contains bit mask for various errors. The HFI
@@ -435,7 +434,6 @@ struct ib_vl_weight_elem {
  * @link_speed_active: Current active link speed
  * @port_ltp_crc_mode: Supported, enabled and active LTP CRC modes
  * @port_crc_mode_enabled: CRC mode to be enabled
- * @smsl: Service level to use for SM
  * @lmc: LID mask control
  * @pnum: port number of this port
  * @vls_supported: Virtual lane supported
@@ -507,7 +505,6 @@ struct hfi_pportdata {
 	__be64 pguid;
 	__be64 neighbor_guid;
 	u32 lid;
-	u32 sm_lid;
 	struct hfi_ptcdata ptc[HFI_MAX_TC];
 	/* host link state which keeps both Physical Port and Logical Link
 	   state by having HLS_* */
@@ -529,7 +526,6 @@ struct hfi_pportdata {
 	u16 link_speed_active;
 	u16 port_ltp_crc_mode;
 	u8 port_crc_mode_enabled;
-	u8 smsl;
 	u8 lmc;
 	u8 pnum;
 	u8 vls_supported;

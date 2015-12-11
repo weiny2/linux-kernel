@@ -179,10 +179,12 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 	struct opa_ib_lkey_table *rkt;
 	struct opa_ib_pd *pd;
 	struct opa_ib_portdata *ibp;
+	struct hfi_pportdata *ppd;
 	struct hfi2_sge *last_sge;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+	ppd = ibp->ppd;
 
 	/* Check that state is OK to post send. */
 	if (unlikely(!(ib_qp_state_ops[qp->state] & HFI1_POST_SEND_OK)))
@@ -278,13 +280,13 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 		u8 sc5, vl;
 
 		if (qp->ibqp.qp_type == IB_QPT_SMI) {
-			vl = ibp->sc_to_vl[15];
+			vl = ppd->sc_to_vlt[15];
 		} else {
-			sc5 = ibp->sl_to_sc[ah->attr.sl];
-			vl = ibp->sc_to_vl[sc5];
+			sc5 = ppd->sl_to_sc[ah->attr.sl];
+			vl = ppd->sc_to_vlt[sc5];
 		}
 		if (vl < OPA_MAX_VLS)
-			if (wqe->length > ibp->vl_mtu[vl])
+			if (wqe->length > ppd->vl_mtu[vl])
 				goto bail_inval_free;
 
 		atomic_inc(&ah->refcount);
