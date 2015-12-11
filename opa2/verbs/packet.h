@@ -203,6 +203,15 @@ struct hfi2_wqe_iov {
 #define PSN_MODIFY_MASK 0xFFFFFF
 
 /*
+ * Compare the lower 24 bits of the msn values.
+ * Returns an integer <, ==, or > than zero.
+ */
+static inline int cmp_msn(u32 a, u32 b)
+{
+	return (((int) a) - ((int) b)) << 8;
+}
+
+/*
  * Compare two PSNs
  * Returns an integer <, ==, or > than zero.
  */
@@ -217,6 +226,14 @@ static inline int cmp_psn(u32 a, u32 b)
 static inline u32 mask_psn(u32 a)
 {
 	return a & PSN_MASK;
+}
+
+/*
+ * Return delta between two PSNs
+ */
+static inline u32 delta_psn(u32 a, u32 b)
+{
+	return (((int)a - (int)b) << PSN_SHIFT) >> PSN_SHIFT;
 }
 
 /**

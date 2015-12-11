@@ -488,6 +488,16 @@ static int hfi2_init_port(struct hfi2_ibdev *ibd,
 	ibp->guid = ppd->pguid;
 	ibp->sm_lid = 0;
 
+	ibp->rc_acks = alloc_percpu(u64);
+	ibp->rc_qacks = alloc_percpu(u64);
+	ibp->rc_delayed_comp = alloc_percpu(u64);
+	if (!ibp->rc_acks || !ibp->rc_qacks ||
+	    !ibp->rc_delayed_comp) {
+		/* error path does any needed free_percpu() */
+		ret = -ENOMEM;
+		goto percpu_err;
+	}
+
 	/* Below should only set bits defined in OPA PortInfo.CapabilityMask */
 	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_CAP_MASK_NOTICE_SUP;
@@ -506,6 +516,7 @@ static int hfi2_init_port(struct hfi2_ibdev *ibd,
 	return 0;
 
 ctx_init_err:
+percpu_err:
 	hfi2_uninit_port(ibp);
 	return ret;
 }
@@ -513,6 +524,9 @@ ctx_init_err:
 static void hfi2_uninit_port(struct hfi2_ibport *ibp)
 {
 	hfi2_ctx_uninit_port(ibp);
+	free_percpu(ibp->rc_acks);
+	free_percpu(ibp->rc_qacks);
+	free_percpu(ibp->rc_delayed_comp);
 }
 
 int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
