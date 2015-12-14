@@ -68,7 +68,7 @@
 
 #define WAIT_TILL_8051_LINKUP 1000
 
-static bool quick_linkup = false; /* skip VerifyCap and Config* state. */
+bool quick_linkup; /* skip VerifyCap and Config* state. */
 
 static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup);
 static u32 read_physical_state(const struct hfi_pportdata *ppd);

@@ -95,7 +95,7 @@
 #define FXR_CACHE_CMD_INVALIDATE 0x8
 
 /* TODO: delete module parameter when possible */
-static uint force_loopback;
+uint force_loopback;
 module_param(force_loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(force_loopback, "Force FXR into loopback");
 
@@ -271,6 +271,10 @@ static void init_csrs(struct hfi_devdata *dd)
 {
 	RXHP_CFG_NPTL_CTL_t nptl_ctl = {.val = 0};
 	RXHP_CFG_NPTL_BTH_QP_t kdeth_qp = {.val = 0};
+	LM_CONFIG_PORT0_t lmp0 = {.val = 0};
+	LM_CONFIG_PORT1_t lmp1 = {.val = 0};
+	txotr_pkt_cfg_timeout_t txotr_timeout = {.val = 0};
+	LM_CONFIG_t lm_config = {.val = 0};
 
 	/* enable non-portals */
 	nptl_ctl.field.RcvQPMapEnable = 1;
@@ -280,73 +284,69 @@ static void init_csrs(struct hfi_devdata *dd)
 	write_csr(dd, FXR_RXHP_CFG_NPTL_BTH_QP, kdeth_qp.val);
 
 	if (force_loopback) {
-		LM_CONFIG_t lm_config = {.val = 0};
-
 		lm_config.field.FORCE_LOOPBACK = force_loopback;
 		write_csr(dd, FXR_LM_CONFIG, lm_config.val);
-	 } else {
-		LM_CONFIG_PORT0_t lmp0 = {.val = 0};
-		LM_CONFIG_PORT1_t lmp1 = {.val = 0};
-		txotr_pkt_cfg_timeout_t txotr_timeout = {.val = 0};
+		/* Turn on quick linkup by default for loopback */
+		quick_linkup = true;
+	}
 
-		txotr_timeout.val = read_csr(dd, FXR_TXOTR_PKT_CFG_TIMEOUT);
-		/*
-		 * Set the length of the timeout interval used to retransmit
-		 * outstanding packets to 5 seconds for Simics back to back.
-		 * TODO: Determine right value for FPGA & Silicon.
-		 */
-		txotr_timeout.field.SCALER = 0x165A0D;
-		write_csr(dd, FXR_TXOTR_PKT_CFG_TIMEOUT, txotr_timeout.val);
-		/*
-		 * Set the SLID based on the hostname to enable back to back
-		 * support in Simics.
-		 * TODO: Delete this hack once the LID is received via MADs
-		 */
-		if (!strncmp(utsname()->nodename, "viper", 5)) {
-			const char *hostname = utsname()->nodename;
-			int node = 0, rc;
-			u64 nnguid;
+	txotr_timeout.val = read_csr(dd, FXR_TXOTR_PKT_CFG_TIMEOUT);
+	/*
+	 * Set the length of the timeout interval used to retransmit
+	 * outstanding packets to 5 seconds for Simics back to back.
+	 * TODO: Determine right value for FPGA & Silicon.
+	 */
+	txotr_timeout.field.SCALER = 0x165A0D;
+	write_csr(dd, FXR_TXOTR_PKT_CFG_TIMEOUT, txotr_timeout.val);
+	/*
+	 * Set the SLID based on the hostname to enable back to back
+	 * support in Simics.
+	 * TODO: Delete this hack once the LID is received via MADs
+	 */
+	if (!strncmp(utsname()->nodename, "viper", 5)) {
+		const char *hostname = utsname()->nodename;
+		int node = 0, rc;
+		u64 nnguid;
 
-			/* Extract the node id from the host name */
-			hostname += 5;
-			rc = kstrtoint(hostname, 0, &node);
-			if (rc)
-				dd_dev_info(dd, "kstrtoint fail %d\n", rc);
-			if (opafm_disable) {
-				dd->pport[0].lid = (node * 2) + 1;
-				dd->pport[1].lid = (node * 2) + 2;
-			}
-			dd_dev_info(dd, "viper%d port0 lid %d port1 lid %d\n",
-				    node, dd->pport[0].lid, dd->pport[1].lid);
-			/*
-			 * FXRTODO: read nodeguid from MNH Register
-			 * 8051_CFG_LOCAL_GUID. This register is
-			 * yet to be implemented in Simics. Temporarily
-			 * keeping node guid unique
-			 */
-			dd->nguid = cpu_to_be64(NODE_GUID + node);
-
-			/*
-			 * FXRTODO: Read this from DC_DC8051_STS_REMOTE_GUID
-			 * equivalent in MNH. The neighbor guid is set to a
-			 * random value for now.
-			 *
-			 * Move this code to 8051 INTR handler
-			 */
-			nnguid = cpu_to_be64(NODE_GUID + (node ? 0:1));
-			dd->pport[0].neighbor_guid = nnguid;
-			dd->pport[1].neighbor_guid = nnguid;
-		}
+		/* Extract the node id from the host name */
+		hostname += 5;
+		rc = kstrtoint(hostname, 0, &node);
+		if (rc)
+			dd_dev_info(dd, "kstrtoint fail %d\n", rc);
 		if (opafm_disable) {
-			lmp0.field.DLID = dd->pport[0].lid;
-			write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
-			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0,
-							dd->pport[0].lid);
-			lmp1.field.DLID = dd->pport[1].lid;
-			write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
-			write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1,
-							dd->pport[1].lid);
+			dd->pport[0].lid = (node * 2) + 1;
+			dd->pport[1].lid = (node * 2) + 2;
 		}
+		dd_dev_info(dd, "viper%d port0 lid %d port1 lid %d\n",
+			    node, dd->pport[0].lid, dd->pport[1].lid);
+		/*
+		 * FXRTODO: read nodeguid from MNH Register
+		 * 8051_CFG_LOCAL_GUID. This register is
+		 * yet to be implemented in Simics. Temporarily
+		 * keeping node guid unique
+		 */
+		dd->nguid = cpu_to_be64(NODE_GUID + node);
+
+		/*
+		 * FXRTODO: Read this from DC_DC8051_STS_REMOTE_GUID
+		 * equivalent in MNH. The neighbor guid is set to a
+		 * random value for now.
+		 *
+		 * Move this code to 8051 INTR handler
+		 */
+		nnguid = cpu_to_be64(NODE_GUID + (node ? 0 : 1));
+		dd->pport[0].neighbor_guid = nnguid;
+		dd->pport[1].neighbor_guid = nnguid;
+	}
+	if (opafm_disable) {
+		lmp0.field.DLID = dd->pport[0].lid;
+		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
+		write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT0,
+			  dd->pport[0].lid);
+		lmp1.field.DLID = dd->pport[1].lid;
+		write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
+		write_csr(dd, FXR_TXOTR_PKT_CFG_SLID_PT1,
+			  dd->pport[1].lid);
 	}
 	hfi_init_rx_e2e_csrs(dd);
 	hfi_init_tx_otr_csrs(dd);
