@@ -1065,7 +1065,7 @@ static int set_port_states(struct hfi_devdata *dd, struct hfi_pportdata *ppd,
 			hfi_send_idle_sma(ppd, SMA_IDLE_ARM);
 		break;
 	case IB_PORT_ACTIVE:
-		if (ppd->neighbor_normal) {
+		if (quick_linkup || ppd->neighbor_normal) {
 			ret = hfi_set_link_state(ppd, HLS_UP_ACTIVE);
 			if (ret == 0)
 				hfi_send_idle_sma(ppd, SMA_IDLE_ACTIVE);

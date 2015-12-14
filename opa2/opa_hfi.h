@@ -950,4 +950,7 @@ static inline void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value
 	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
 }
 
+/* FXRTODO: Hacks for early bring up. Delete before upstreaming */
+extern bool quick_linkup;
+extern uint force_loopback;
 #endif

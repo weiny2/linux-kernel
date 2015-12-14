@@ -332,7 +332,8 @@ int opa_ib_make_ud_req(struct opa_ib_qp *qp)
 		 */
 		if (unlikely(lid == ppd->lid ||
 		    (lid == HFI1_PERMISSIVE_LID &&
-		    qp->ibqp.qp_type == IB_QPT_GSI))) {
+		    qp->ibqp.qp_type == IB_QPT_GSI) ||
+		    (force_loopback && qp->ibqp.qp_type == IB_QPT_SMI))) {
 			/*
 			 * If DMAs are in progress, we can't generate
 			 * a completion for the loopback packet since
