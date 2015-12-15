@@ -2304,25 +2304,34 @@ hfi_update_dlid_relocation_table(struct hfi_ctx *ctx,
 				 struct hfi_dlid_assign_args *dlid_assign)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	TXCID_CFG_DLID_RT_t *p =
-		(TXCID_CFG_DLID_RT_t *)dlid_assign->dlid_entries_ptr;
-	u32 offset;
+	TXCID_CFG_DLID_RT_ADDR_t dlid_addr = {.val = 0};
+	TXCID_CFG_DLID_RT_DATA_t *p =
+		(TXCID_CFG_DLID_RT_DATA_t *)dlid_assign->dlid_entries_ptr;
+	u32 index;
 
 	if (dlid_assign->dlid_base >= HFI_DLID_TABLE_SIZE)
 		return -EINVAL;
 	if (dlid_assign->dlid_base + dlid_assign->count > HFI_DLID_TABLE_SIZE)
 		return -EINVAL;
 
-	for (offset = dlid_assign->dlid_base * sizeof(*p);
-		offset < (dlid_assign->dlid_base + dlid_assign->count) * sizeof(*p);
-		p++, offset += sizeof(*p)) {
+	dlid_addr.field.Valid = 1;
+	dlid_addr.field.write = 1;
+	for (index = dlid_assign->dlid_base;
+		index < (dlid_assign->dlid_base + dlid_assign->count);
+		p++, index++) {
+
 		/* They must be 0 when granularity = 1 */
 		if (p->field.RPLC_BLK_SIZE != 0)
 			return -EINVAL;
 		if (p->field.RPLC_MATCH != 0)
 			return -EINVAL;
+		write_csr(dd, FXR_TXCID_CFG_DLID_RT_DATA, p->val);
+		/* FXRTODO - Matt implemented as index but is unsure */
+		dlid_addr.field.address = index;
+		write_csr(dd, FXR_TXCID_CFG_DLID_RT_ADDR, dlid_addr.val);
 
-		write_csr(dd, FXR_TXCID_CFG_DLID_RT + offset, p->val);
+		/* TODO wait for HW to acknowledge DLID write completed */
+		mdelay(2);
 	}
 	return 0;
 }
@@ -2335,17 +2344,25 @@ int
 hfi_reset_dlid_relocation_table(struct hfi_ctx *ctx, u32 dlid_base, u32 count)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	u32 offset;
+	TXCID_CFG_DLID_RT_ADDR_t dlid_addr = {.val = 0};
+	u32 index;
 
 	if (dlid_base >= HFI_DLID_TABLE_SIZE)
 		return -EINVAL;
 	if (dlid_base + count > HFI_DLID_TABLE_SIZE)
 		return -EINVAL;
 
-	for (offset = dlid_base * sizeof(TXCID_CFG_DLID_RT_t);
-		offset < (dlid_base + count) * sizeof(TXCID_CFG_DLID_RT_t);
-		offset += sizeof(TXCID_CFG_DLID_RT_t))
-		write_csr(dd, FXR_TXCID_CFG_DLID_RT + offset, 0);
+	dlid_addr.field.Valid = 1;
+	dlid_addr.field.write = 1;
+	for (index = dlid_base; index < (dlid_base + count); index++) {
+		write_csr(dd, FXR_TXCID_CFG_DLID_RT_DATA, 0);
+		/* FXRTODO - Matt implemented as index but is unsure */
+		dlid_addr.field.address = index;
+		write_csr(dd, FXR_TXCID_CFG_DLID_RT_ADDR, dlid_addr.val);
+
+		/* TODO wait for HW to acknowledge DLID write completed */
+		mdelay(2);
+	}
 	return 0;
 }
 

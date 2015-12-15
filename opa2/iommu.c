@@ -237,7 +237,7 @@ hfi_iommu_root_clear_context(struct hfi_devdata *dd)
 void
 hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *user_mm, u16 pasid)
 {
-	AT_CFG_PASID_LUT_t lut = {.val = 0};
+	FXR_AT_CFG_PASID_LUT_t lut = {.val = 0};
 	union PasidEntry_t p_entry, *p_tbl;
 	struct mm_struct *mm;
 
@@ -256,7 +256,7 @@ hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *user_mm, u16 pasid
 	p_tbl[pasid].val = p_entry.val;
 
 	if (pasid == HFI_PID_SYSTEM) {
-		AT_CFG_USE_SYSTEM_PASID_t sys = {.val = 0};
+		FXR_AT_CFG_USE_SYSTEM_PASID_t sys = {.val = 0};
 
 		sys.field.enable = 1;
 		sys.field.system_pasid = pasid;
@@ -279,13 +279,13 @@ void
 hfi_iommu_clear_pasid(struct hfi_devdata *dd, u16 pasid)
 {
 	union PasidEntry_t *p_tbl;
-	AT_CFG_PASID_LUT_t lut = {.val = 0};
+	FXR_AT_CFG_PASID_LUT_t lut = {.val = 0};
 
 	lut.field.enable = 0;
 	write_csr(dd, FXR_AT_CFG_PASID_LUT + (pasid * 8), lut.val);
 
 	if (pasid == HFI_PID_SYSTEM) {
-		AT_CFG_USE_SYSTEM_PASID_t sys = {.val = 0};
+		FXR_AT_CFG_USE_SYSTEM_PASID_t sys = {.val = 0};
 
 		sys.field.enable = 0;
 		write_csr(dd, FXR_AT_CFG_USE_SYSTEM_PASID, sys.val);
