@@ -1017,6 +1017,9 @@ int hfi2_load_firmware(struct hfi_devdata *dd)
 	struct hfi_pportdata *ppd;
 	u8 ver_a, ver_b;
 
+	if (no_mnh)
+		goto skip_8051;
+
 	mutex_init(&dd->fw_mutex);
 	dd->fw_state = FW_EMPTY;
 	dd->fw_8051_load = true;
@@ -1039,16 +1042,23 @@ int hfi2_load_firmware(struct hfi_devdata *dd)
 		    (int)ver_b, (int)ver_a);
 	dd->crk8051_ver = crk8051_ver(ver_b, ver_a);
 
+skip_8051:
+	if (no_pe_fw)
+		goto skip_pe_fw;
+
 	ret = authenticate_hdrpe(dd);
 	if (ret) {
 		dd_dev_err(dd, "can't authenticate hdrpe");
 		return ret;
 	}
 
+skip_pe_fw:
 	return 0;
 }
 
 void hfi2_dispose_firmware(struct hfi_devdata *dd)
 {
+	if (no_mnh)
+		return;
 	dispose_firmware(dd);
 }
