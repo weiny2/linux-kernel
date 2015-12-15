@@ -785,6 +785,7 @@ static int hfi1_file_close(struct inode *inode, struct file *fp)
 	hfi1_rcvctrl(dd, HFI1_RCVCTRL_CTXT_DIS |
 		     HFI1_RCVCTRL_TIDFLOW_DIS |
 		     HFI1_RCVCTRL_INTRAVAIL_DIS |
+		     HFI1_RCVCTRL_TAILUPD_DIS |
 		     HFI1_RCVCTRL_ONE_PKT_EGR_DIS |
 		     HFI1_RCVCTRL_NO_RHQ_DROP_DIS |
 		     HFI1_RCVCTRL_NO_EGR_DROP_DIS, uctxt->ctxt);

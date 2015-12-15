@@ -11299,7 +11299,7 @@ void hfi1_rcvctrl(struct hfi1_devdata *dd, unsigned int op, int ctxt)
 		if (dd->rcvhdrtail_dummy_physaddr) {
 			write_kctxt_csr(dd, ctxt, RCV_HDR_TAIL_ADDR,
 					dd->rcvhdrtail_dummy_physaddr);
-			rcvctrl |= RCV_CTXT_CTRL_TAIL_UPD_SMASK;
+			rcvctrl &= ~RCV_CTXT_CTRL_TAIL_UPD_SMASK;
 		}
 
 		rcvctrl &= ~RCV_CTXT_CTRL_ENABLE_SMASK;
