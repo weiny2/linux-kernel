@@ -358,7 +358,10 @@ u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd)
 	u32 pstate;
 	u32 ib_pstate;
 
-	pstate = read_physical_state(ppd);
+	if (no_mnh)
+		pstate = PLS_LINKUP;
+	else
+		pstate = read_physical_state(ppd);
 	ib_pstate = hfi_to_opa_pstate(ppd->dd, pstate);
 	if (remembered_state != ib_pstate) {
 		ppd_dev_info(ppd,
@@ -403,6 +406,10 @@ static void mnh_shutdown(struct hfi_pportdata *ppd)
 static void mnh_start(const struct hfi_pportdata *ppd)
 {
 	int ret;
+
+	if (no_mnh)
+		return;
+
 #if 0 /* WFR legacy */
 	struct hfi_devdata *dd = ppd->dd;
 	unsigned long flags;
@@ -786,6 +793,9 @@ static int send_idle_message(struct hfi_pportdata *ppd, u64 data)
 int hfi_send_idle_sma(struct hfi_pportdata *ppd, u64 message)
 {
 	u64 data;
+
+	if (no_mnh)
+		return 0;
 
 	ppd_dev_info(ppd, "%s: sending idle sma 0x%llx\n", __func__, message);
 	data = ((message & IDLE_PAYLOAD_MASK) << IDLE_PAYLOAD_SHIFT)
@@ -1896,6 +1906,9 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 	u8 port;
 	struct hfi_pportdata *ppd;
 
+	if (no_mnh)
+		return 0;
+
 	ret = hfi2_cfg_link_intr_vector(dd);
 	if (ret) {
 		dd_dev_err(dd, "Can't configure interrupt vector of MNH/8051: %d\n",
@@ -1957,6 +1970,39 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 {
 	int ret1, ret = 0;
+
+	/* FXRTODO: Hack for early bring up */
+	if (no_mnh) {
+		ppd_dev_info(ppd, "%s(%d) -> %s(%d)\n",
+			     link_state_name(ppd->host_link_state),
+			     ilog2(ppd->host_link_state),
+			     link_state_name(state), ilog2(state));
+		switch (state) {
+		case HLS_DN_DISABLE:
+		case HLS_DN_DOWNDEF:
+			ppd->lstate = IB_PORT_DOWN;
+			break;
+		case HLS_DN_POLL:
+			/*
+			 * FXRTODO: Fake the transition from
+			 * POLL to INIT here by directly setting
+			 * the link state to INIT until we
+			 * have LNI in place.
+			 */
+		case HLS_UP_INIT:
+			ppd->lstate = IB_PORT_INIT;
+			break;
+		case HLS_UP_ARMED:
+			ppd->lstate = IB_PORT_ARMED;
+			break;
+		case HLS_UP_ACTIVE:
+			ppd->lstate = IB_PORT_ACTIVE;
+			break;
+		default:
+			ppd->lstate = IB_PORT_INIT;
+		}
+		return ret;
+	}
 
 	mutex_lock(&ppd->hls_lock);
 

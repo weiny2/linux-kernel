@@ -94,16 +94,31 @@
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
 
-/* TODO: delete module parameter when possible */
-uint force_loopback;
-module_param(force_loopback, uint, S_IRUGO);
+/* TODO: delete all module parameters when possible */
+bool force_loopback;
+module_param(force_loopback, bool, S_IRUGO);
 MODULE_PARM_DESC(force_loopback, "Force FXR into loopback");
 
 /* FXRTODO: Remove this once we have opafm working with B2B setup */
-uint opafm_disable = 0;
-module_param_named(opafm_disable, opafm_disable, uint, S_IRUGO);
+bool opafm_disable;
+module_param_named(opafm_disable, opafm_disable, bool, S_IRUGO);
 MODULE_PARM_DESC(opafm_disable, "0 - driver needs opafm to work, \
-			        1 - driver works without opafm");
+		 1 - driver works without opafm");
+
+/* FXRTODO: Remove this once MNH is available on all Pre-Si setups */
+bool no_mnh;
+module_param_named(no_mnh, no_mnh, bool, S_IRUGO);
+MODULE_PARM_DESC(mnh_avail, "Set to true if MNH is not available");
+
+/* FXRTODO: Remove this once PE FW is always available */
+bool no_pe_fw;
+module_param_named(no_pe_fw, no_pe_fw, bool, S_IRUGO);
+MODULE_PARM_DESC(mnh_avail, "Set to true if PE FW is not available");
+
+/* FXRTODO: Remove this once Silicon is stable */
+bool zebu;
+module_param_named(zebu, zebu, bool, S_IRUGO);
+MODULE_PARM_DESC(mnh_avail, "Set to true if running on ZEBU");
 
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
@@ -1770,12 +1785,17 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		ppd->dd = dd;
 		ppd->pnum = port;
 		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
-		ppd->lstate = IB_PORT_DOWN;
+		if (no_mnh) {
+			ppd->lstate = IB_PORT_INIT;
+			ppd->host_link_state = HLS_UP_INIT;
+		} else {
+			ppd->lstate = IB_PORT_DOWN;
+			ppd->host_link_state = HLS_DN_OFFLINE;
+		}
 		mutex_init(&ppd->hls_lock);
 		/* initialize Manor Hill - mnh/8051 */
 		spin_lock_init(&ppd->crk8051_lock);
 		ppd->crk8051_timed_out = 0;
-		ppd->host_link_state = HLS_DN_OFFLINE;
 		ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
 		ppd->sm_trap_qp = OPA_DEFAULT_SM_TRAP_QP;
 		ppd->sa_qp = OPA_DEFAULT_SA_QP;
@@ -1909,6 +1929,12 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	u16 priv_cq_idx;
 	struct opa_ctx_assign ctx_assign = {0};
 
+	/* FXRTODO: Remove once silicon is stable */
+	if (zebu) {
+		force_loopback = true;
+		no_mnh = true;
+		no_pe_fw = true;
+	}
 	dd = hfi_alloc_devdata(pdev);
 	if (IS_ERR(dd))
 		return dd;

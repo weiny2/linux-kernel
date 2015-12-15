@@ -68,7 +68,6 @@
 #include "firmware.h"
 #include "verbs/verbs.h"
 
-extern uint opafm_disable;
 extern unsigned int hfi_max_mtu;
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME
@@ -941,11 +940,30 @@ int hfi_set_lid(struct hfi_pportdata *ppd, u32 lid, u8 lmc);
 #undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+/* FXRTODO: Hacks for early bring up. Delete before upstreaming */
+extern bool quick_linkup;
+extern bool force_loopback;
+extern bool no_mnh;
+extern bool no_pe_fw;
+extern bool opafm_disable;
+
 static inline u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
 
 	BUG_ON(dd->kregbase[0] == NULL);
+
+	/*
+	 * FXRTODO: Do not touch MNH CSRs if MNH is not available
+	 * for early bring up
+	 */
+	if (no_mnh && offset >= FXR_MNH_MISC_CSRS &&
+		offset < FXR_MNH_S1_SNDN_CSRS) {
+		dd_dev_err(dd, "%s MNH offset 0x%x\n", __func__, offset);
+		BUG_ON(1);
+		return 0;
+	}
+
 	val = readq(dd->kregbase[0] + offset);
 	return le64_to_cpu(val);
 }
@@ -953,10 +971,16 @@ static inline u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 static inline void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
 	BUG_ON(dd->kregbase[0] == NULL);
+	/*
+	 * FXRTODO: Do not touch MNH CSRs if MNH is not available
+	 * for early bring up
+	 */
+	if (no_mnh && offset >= FXR_MNH_MISC_CSRS &&
+		offset < FXR_MNH_S1_SNDN_CSRS) {
+		dd_dev_err(dd, "%s MNH offset 0x%x\n", __func__, offset);
+		BUG_ON(1);
+		return;
+	}
 	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
 }
-
-/* FXRTODO: Hacks for early bring up. Delete before upstreaming */
-extern bool quick_linkup;
-extern uint force_loopback;
 #endif
