@@ -89,7 +89,7 @@
 #define HFI1_PROCESS_OR_FLUSH_SEND \
 	(HFI1_PROCESS_SEND_OK | HFI1_FLUSH_SEND)
 
-/* flags passed by opa_ib_rcv() */
+/* flags passed by hfi2_rcv() */
 #define HFI1_HAS_GRH                     0x1
 #define HFI1_SC4_BIT                     0x2
 
@@ -97,44 +97,44 @@
 #define OPA_DEFAULT_SA_QP			0x1
 
 /* TODO - placeholders */
-extern __be64 opa_ib_sys_guid;
+extern __be64 hfi2_sys_guid;
 
 extern const int ib_qp_state_ops[];
-extern unsigned int opa_ib_max_cqes;
-extern unsigned int opa_ib_max_cqs;
-extern unsigned int opa_ib_max_qp_wrs;
-extern unsigned int opa_ib_max_qps;
-extern unsigned int opa_ib_max_sges;
-extern unsigned int opa_ib_lkey_table_size;
-extern unsigned int opa_ib_max_mcast_grps;
-extern unsigned int opa_ib_max_mcast_qp_attached;
-extern struct ib_dma_mapping_ops opa_ib_dma_mapping_ops;
+extern unsigned int hfi2_max_cqes;
+extern unsigned int hfi2_max_cqs;
+extern unsigned int hfi2_max_qp_wrs;
+extern unsigned int hfi2_max_qps;
+extern unsigned int hfi2_max_sges;
+extern unsigned int hfi2_lkey_table_size;
+extern unsigned int hfi2_max_mcast_grps;
+extern unsigned int hfi2_max_mcast_qp_attached;
+extern struct ib_dma_mapping_ops hfi2_dma_mapping_ops;
 
 struct ib_l4_headers;
-struct opa_ib_header;
-struct opa_ib_packet;
+struct hfi2_ib_header;
+struct hfi2_ib_packet;
 
-struct opa_ucontext {
+struct hfi2_ucontext {
 	struct ib_ucontext ibucontext;
 };
 
-struct opa_ib_pd {
+struct hfi2_pd {
 	struct ib_pd ibpd;
 	int is_user;
 };
 
-struct opa_ib_ah {
+struct hfi2_ah {
 	struct ib_ah ibah;
 	struct ib_ah_attr attr;
 	atomic_t refcount;
 };
 
 /*
- * This structure is used by opa_ib_mmap() to validate an offset
+ * This structure is used by hfi2_mmap() to validate an offset
  * when an mmap() request is made.  The vm_area_struct then uses
  * this as its vm_private_data.
  */
-struct opa_ib_mmap_info {
+struct hfi2_mmap_info {
 	struct list_head pending_mmaps;
 	struct ib_ucontext *context;
 	void *obj;
@@ -148,7 +148,7 @@ struct opa_ib_mmap_info {
  * and completion queue entries as a single memory allocation so
  * it can be mmap'ed into user space.
  */
-struct opa_ib_cq_wc {
+struct hfi2_cq_wc {
 	u32 head;               /* index of next entry to fill */
 	u32 tail;               /* index of next ib_poll_cq() entry */
 	union {
@@ -158,18 +158,18 @@ struct opa_ib_cq_wc {
 	};
 };
 
-struct opa_ib_cq {
+struct hfi2_cq {
 	struct ib_cq ibcq;
 	struct kthread_work comptask;
-	struct opa_ib_data *ibd;
+	struct hfi2_ibdev *ibd;
 	spinlock_t lock;	/* protect changes in this struct */
 	u8 notify;
 	u8 triggered;
-	struct opa_ib_cq_wc *queue;
-	struct opa_ib_mmap_info *ip;
+	struct hfi2_cq_wc *queue;
+	struct hfi2_mmap_info *ip;
 };
 
-struct opa_ib_lkey_table {
+struct hfi2_lkey_table {
 	spinlock_t lock;        /* protect changes in this struct */
 	u32 gen;                /* generation count */
 	u32 max;                /* size of the table */
@@ -209,7 +209,7 @@ struct hfi2_mregion {
 	struct hfi2_segarray *map[0];    /* the segments */
 };
 
-struct opa_ib_mr {
+struct hfi2_mr {
 	struct ib_mr ibmr;
 	struct ib_umem *umem;
 	struct hfi2_mregion mr;  /* must be last */
@@ -244,7 +244,7 @@ struct hfi2_sge {
  * The size of the sg_list is determined when the QP is created and stored
  * in qp->s_max_sge.
  */
-struct opa_ib_swqe {
+struct hfi2_swqe {
 	struct ib_send_wr wr;   /* don't use wr.sg_list */
 	u32 psn;                /* first packet sequence number */
 	u32 lpsn;               /* last packet sequence number */
@@ -256,9 +256,9 @@ struct opa_ib_swqe {
 	 * verbs_txreq and sdma_txreq as WFR does
 	 */
 	struct list_head pending_list;
-	struct opa_ib_sge_state	*s_sge;
-	struct opa_ib_qp *s_qp;
-	struct opa_ib_dma_header *s_hdr; /* next packet header to send */
+	struct hfi2_sge_state	*s_sge;
+	struct hfi2_qp *s_qp;
+	struct hfi2_ib_dma_header *s_hdr; /* next packet header to send */
 	struct hfi_ctx *s_ctx;           /* associated send context */
 	u16 s_hdrwords;	         /* size of s_hdr in 32 bit words */
 	u16 pmtu;
@@ -275,7 +275,7 @@ struct opa_ib_swqe {
  * The size of the sg_list is determined when the QP (or SRQ) is created
  * and stored in qp->r_rq.max_sge (or srq->rq.max_sge).
  */
-struct opa_ib_rwqe {
+struct hfi2_rwqe {
 	u64 wr_id;
 	u8 num_sge;
 	struct ib_sge sg_list[0];
@@ -289,36 +289,36 @@ struct opa_ib_rwqe {
  * just index into the array to get the N'th element;
  * use get_rwqe_ptr() instead.
  */
-struct opa_ib_rwq {
+struct hfi2_rwq {
 	u32 head;               /* new work requests posted to the head */
 	u32 tail;               /* receives pull requests from here. */
-	struct opa_ib_rwqe wq[0];
+	struct hfi2_rwqe wq[0];
 };
 
-struct opa_ib_rq {
-	struct opa_ib_rwq *wq;
+struct hfi2_rq {
+	struct hfi2_rwq *wq;
 	u32 size;               /* size of RWQE array */
 	u8 max_sge;
 	/* protect changes in this struct */
 	spinlock_t lock ____cacheline_aligned_in_smp;
 };
 
-struct opa_ib_srq {
+struct hfi2_srq {
 	struct ib_srq ibsrq;
-	struct opa_ib_rq rq;
-	struct opa_ib_mmap_info *ip;
+	struct hfi2_rq rq;
+	struct hfi2_mmap_info *ip;
 	/* send signal when number of RWQEs < limit */
 	u32 limit;
 };
 
-struct opa_ib_sge_state {
+struct hfi2_sge_state {
 	struct hfi2_sge *sg_list;  /* next SGE to be used if any */
 	struct hfi2_sge sge;	   /* progress state for the current SGE */
 	u32 total_len;
 	u8 num_sge;
 };
 
-static inline void opa_ib_put_ss(struct opa_ib_sge_state *ss)
+static inline void hfi2_put_ss(struct hfi2_sge_state *ss)
 {
 	while (ss->num_sge) {
 		hfi2_put_mr(ss->sge.mr);
@@ -331,7 +331,7 @@ static inline void opa_ib_put_ss(struct opa_ib_sge_state *ss)
  * This structure holds the information that the send tasklet needs
  * to send a RDMA read response or atomic operation.
  */
-struct opa_ib_ack_entry {
+struct hfi2_ack_entry {
 	u8 opcode;
 	u8 sent;
 	u32 psn;
@@ -350,14 +350,14 @@ struct opa_ib_ack_entry {
  * Common variables are protected by both r_rq.lock and s_lock in that order
  * which only happens in modify_qp() or changing the QP 'state'.
  */
-struct opa_ib_qp {
+struct hfi2_qp {
 	struct ib_qp ibqp;
 	/* read mostly fields above and below */
 	struct ib_ah_attr remote_ah_attr;
 	struct ib_ah_attr alt_ah_attr;
-	struct opa_ib_swqe *s_wq;  /* send work queue */
-	struct opa_ib_mmap_info *ip;
-	struct opa_ib_dma_header *s_hdr; /* next packet header to send */
+	struct hfi2_swqe *s_wq;  /* send work queue */
+	struct hfi2_mmap_info *ip;
+	struct hfi2_ib_dma_header *s_hdr; /* next packet header to send */
 	unsigned long timeout_jiffies;  /* computed from timeout */
 
 	enum ib_mtu path_mtu;
@@ -391,9 +391,9 @@ struct opa_ib_qp {
 	atomic_t refcount ____cacheline_aligned_in_smp;
 	wait_queue_head_t wait;
 
-	struct opa_ib_ack_entry s_ack_queue[OPA_IB_MAX_RDMA_ATOMIC + 1]
+	struct hfi2_ack_entry s_ack_queue[OPA_IB_MAX_RDMA_ATOMIC + 1]
 		____cacheline_aligned_in_smp;
-	struct opa_ib_sge_state s_rdma_read_sge;
+	struct hfi2_sge_state s_rdma_read_sge;
 
 	spinlock_t r_lock ____cacheline_aligned_in_smp;      /* used for APM */
 	unsigned long r_aflags;
@@ -407,14 +407,14 @@ struct opa_ib_qp {
 	u8 r_flags;
 	u8 r_head_ack_queue;    /* index into s_ack_queue[] */
 	struct list_head rspwait;	/* link for waiting to respond */
-	struct opa_ib_sge_state r_sge;	/* current receive data */
-	struct opa_ib_rq r_rq;		/* receive work queue */
+	struct hfi2_sge_state r_sge;	/* current receive data */
+	struct hfi2_rq r_rq;		/* receive work queue */
 
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
-	struct opa_ib_sge_state *s_cur_sge;
+	struct hfi2_sge_state *s_cur_sge;
 	u32 s_flags;
-	struct opa_ib_swqe *s_wqe;
-	struct opa_ib_sge_state s_sge;     /* current send request data */
+	struct hfi2_swqe *s_wqe;
+	struct hfi2_sge_state s_sge;     /* current send request data */
 	struct hfi2_mregion *s_rdma_mr;
 	u32 s_cur_size;         /* size of send packet in bytes */
 	u32 s_len;              /* total length of s_sge */
@@ -446,7 +446,7 @@ struct opa_ib_qp {
 	u8 s_tail_ack_queue;    /* index into s_ack_queue[] */
 	u8 allowed_ops;		/* high order bits of allowed opcodes */
 
-	struct opa_ib_sge_state s_ack_rdma_sge;
+	struct hfi2_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
 	struct iowait s_iowait;
 
@@ -534,41 +534,41 @@ struct opa_ib_qp {
 #define OPCODE_QP_MASK 0xE0
 
 /*
- * Since struct opa_ib_swqe is not a fixed size, we can't simply index into
- * struct opa_ib_qp.s_wq.  This function does the array index computation.
+ * Since struct hfi2_swqe is not a fixed size, we can't simply index into
+ * struct hfi2_qp.s_wq.  This function does the array index computation.
  */
-static inline struct opa_ib_swqe *get_swqe_ptr(struct opa_ib_qp *qp,
+static inline struct hfi2_swqe *get_swqe_ptr(struct hfi2_qp *qp,
 					      unsigned n)
 {
-	return (struct opa_ib_swqe *)((char *)qp->s_wq +
-				     (sizeof(struct opa_ib_swqe) +
+	return (struct hfi2_swqe *)((char *)qp->s_wq +
+				     (sizeof(struct hfi2_swqe) +
 				      qp->s_max_sge *
 				      sizeof(struct hfi2_sge)) * n);
 }
 
 /*
- * Since struct opa_ib_rwqe is not a fixed size, we can't simply index into
- * struct opa_ib_rwq.wq.  This function does the array index computation.
+ * Since struct hfi2_rwqe is not a fixed size, we can't simply index into
+ * struct hfi2_rwq.wq.  This function does the array index computation.
  */
-static inline struct opa_ib_rwqe *get_rwqe_ptr(struct opa_ib_rq *rq, unsigned n)
+static inline struct hfi2_rwqe *get_rwqe_ptr(struct hfi2_rq *rq, unsigned n)
 {
-	return (struct opa_ib_rwqe *)
+	return (struct hfi2_rwqe *)
 		((char *) rq->wq->wq +
-		 (sizeof(struct opa_ib_rwqe) +
+		 (sizeof(struct hfi2_rwqe) +
 		  rq->max_sge * sizeof(struct ib_sge)) * n);
 }
 
 /*
- * There is one struct opa_mcast for each multicast GID.
+ * There is one struct hfi2_mcast for each multicast GID.
  * All attached QPs are then stored as a list of
- * struct opa_mcast_qp.
+ * struct hfi2_mcast_qp.
  */
-struct opa_mcast_qp {
+struct hfi2_mcast_qp {
 	struct list_head list;
-	struct opa_ib_qp *qp;
+	struct hfi2_qp *qp;
 };
 
-struct opa_mcast {
+struct hfi2_mcast {
 	struct rb_node rb_node;
 	union ib_gid mgid;
 	struct list_head qp_list;
@@ -577,12 +577,12 @@ struct opa_mcast {
 	int n_attached;
 };
 
-struct opa_ib_portdata {
+struct hfi2_ibport {
 	struct opa_core_device *odev;
-	struct opa_ib_data *ibd;
+	struct hfi2_ibdev *ibd;
 	struct device *dev; /* from IB's ib_device */
 	struct hfi_pportdata *ppd;
-	struct opa_ib_qp __rcu *qp[2];
+	struct hfi2_qp __rcu *qp[2];
 	/* non-zero when timer is set */
 	unsigned long mkey_lease_timeout;
 	__be64 gid_prefix;
@@ -621,7 +621,7 @@ struct opa_ib_portdata {
 	void *send_eq_base;
 };
 
-struct opa_ib_data {
+struct hfi2_ibdev {
 	struct ib_device ibdev;
 	struct device *parent_dev;
 	struct hfi_devdata *dd;
@@ -629,14 +629,14 @@ struct opa_ib_data {
 	u8 num_pports;
 	u8 oui[3];
 	int assigned_node_id;
-	struct opa_ib_portdata *pport;
+	struct hfi2_ibport *pport;
 
 	struct ida qpn_even_table;
 	struct ida qpn_odd_table;
 	struct idr qp_ptr;
 	unsigned long reserved_qps;
 	spinlock_t qpt_lock;
-	struct opa_ib_lkey_table lk_table;
+	struct hfi2_lkey_table lk_table;
 	struct hfi2_mregion __rcu *dma_mr;
 	struct list_head pending_mmaps;
 	spinlock_t pending_lock;
@@ -661,20 +661,20 @@ struct opa_ib_data {
 	struct hfi_ctx ctx;
 };
 
-#define to_opa_ibpd(pd)	container_of((pd), struct opa_ib_pd, ibpd)
-#define to_opa_ibah(ah)	container_of((ah), struct opa_ib_ah, ibah)
-#define to_opa_ibqp(qp)	container_of((qp), struct opa_ib_qp, ibqp)
-#define to_opa_ibcq(cq)	container_of((cq), struct opa_ib_cq, ibcq)
-#define to_opa_ibmr(mr)	container_of((mr), struct opa_ib_mr, ibmr)
-#define to_opa_ibsrq(srq)	container_of((srq), struct opa_ib_srq, ibsrq)
-#define to_opa_ibdata(ibd)	container_of((ibd), struct opa_ib_data, ibdev)
-#define to_opa_ucontext(ibu)	container_of((ibu),\
-				struct opa_ucontext, ibucontext)
+#define to_hfi_pd(pd)	container_of((pd), struct hfi2_pd, ibpd)
+#define to_hfi_ah(ah)	container_of((ah), struct hfi2_ah, ibah)
+#define to_hfi_qp(qp)	container_of((qp), struct hfi2_qp, ibqp)
+#define to_hfi_cq(cq)	container_of((cq), struct hfi2_cq, ibcq)
+#define to_hfi_mr(mr)	container_of((mr), struct hfi2_mr, ibmr)
+#define to_hfi_srq(srq)	container_of((srq), struct hfi2_srq, ibsrq)
+#define to_hfi_ibd(ibd)	container_of((ibd), struct hfi2_ibdev, ibdev)
+#define to_hfi_ucontext(ibu)	container_of((ibu),\
+				struct hfi2_ucontext, ibucontext)
 
-static inline struct opa_ib_portdata *to_opa_ibportdata(struct ib_device *ibdev,
+static inline struct hfi2_ibport *to_hfi_ibp(struct ib_device *ibdev,
 							u8 port)
 {
-	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
 	unsigned pidx = port - 1; /* IB number port from 1, hdw from 0 */
 
 	if (pidx >= ibd->num_pports) {
@@ -690,7 +690,7 @@ static inline struct opa_ib_portdata *to_opa_ibportdata(struct ib_device *ibdev,
  * the returned qp is no longer in use.
  * TODO - revisit if IDR is really best for a fast lookup_qpn.
  */
-static inline struct opa_ib_qp *opa_ib_lookup_qpn(struct opa_ib_portdata *ibp,
+static inline struct hfi2_qp *hfi2_lookup_qpn(struct hfi2_ibport *ibp,
 						  u32 qpn) __must_hold(RCU)
 {
 	if (unlikely(qpn <= 1))
@@ -699,7 +699,7 @@ static inline struct opa_ib_qp *opa_ib_lookup_qpn(struct opa_ib_portdata *ibp,
 		return idr_find(&ibp->ibd->qp_ptr, qpn);
 }
 
-#define opa_ib_get_pkey(ibp, index) \
+#define hfi2_get_pkey(ibp, index) \
 	((index) >= (HFI_MAX_PKEYS) ? 0 : (ibp)->ppd->pkeys[(index)])
 
 static inline u8 valid_ib_mtu(u16 mtu)
@@ -708,113 +708,113 @@ static inline u8 valid_ib_mtu(u16 mtu)
 		mtu == 1024 || mtu == 2048 ||
 		mtu == 4096;
 }
-struct ib_pd *opa_ib_alloc_pd(struct ib_device *ibdev,
-			      struct ib_ucontext *context,
-			      struct ib_udata *udata);
-int opa_ib_dealloc_pd(struct ib_pd *ibpd);
-int opa_ib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
-struct ib_ah *opa_ib_create_ah(struct ib_pd *pd,
-			       struct ib_ah_attr *ah_attr);
-int opa_ib_destroy_ah(struct ib_ah *ibah);
-int opa_ib_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
-int opa_ib_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
-struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
-			       struct ib_qp_init_attr *init_attr,
-			       struct ib_udata *udata);
-struct opa_ib_qp *opa_ib_lookup_qpn(struct opa_ib_portdata *ibp, u32 qpn);
-int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		  int attr_mask, struct ib_udata *udata);
-int opa_ib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		    int attr_mask, struct ib_qp_init_attr *init_attr);
-int opa_ib_destroy_qp(struct ib_qp *ibqp);
-int opa_ib_cq_init(struct opa_ib_data *ibd);
-void opa_ib_cq_exit(struct opa_ib_data *ibd);
-void opa_ib_cq_enter(struct opa_ib_cq *cq, struct ib_wc *entry, int solicited);
-int opa_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry);
+struct ib_pd *hfi2_alloc_pd(struct ib_device *ibdev,
+			    struct ib_ucontext *context,
+			    struct ib_udata *udata);
+int hfi2_dealloc_pd(struct ib_pd *ibpd);
+int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
+struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
+			     struct ib_ah_attr *ah_attr);
+int hfi2_destroy_ah(struct ib_ah *ibah);
+int hfi2_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
+int hfi2_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
+struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
+			     struct ib_qp_init_attr *init_attr,
+			     struct ib_udata *udata);
+struct hfi2_qp *hfi2_lookup_qpn(struct hfi2_ibport *ibp, u32 qpn);
+int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
+		   int attr_mask, struct ib_udata *udata);
+int hfi2_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
+		  int attr_mask, struct ib_qp_init_attr *init_attr);
+int hfi2_destroy_qp(struct ib_qp *ibqp);
+int hfi2_cq_init(struct hfi2_ibdev *ibd);
+void hfi2_cq_exit(struct hfi2_ibdev *ibd);
+void hfi2_cq_enter(struct hfi2_cq *cq, struct ib_wc *entry, int solicited);
+int hfi2_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
-struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev,
-			       const struct ib_cq_init_attr *attr,
-			       struct ib_ucontext *context,
-			       struct ib_udata *udata);
+struct ib_cq *hfi2_create_cq(struct ib_device *ibdev,
+			     const struct ib_cq_init_attr *attr,
+			     struct ib_ucontext *context,
+			     struct ib_udata *udata);
 #else
-struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev, int entries,
-			       int comp_vector, struct ib_ucontext *context,
-			       struct ib_udata *udata);
+struct ib_cq *hfi2_create_cq(struct ib_device *ibdev, int entries,
+			     int comp_vector, struct ib_ucontext *context,
+			     struct ib_udata *udata);
 #endif
-int opa_ib_destroy_cq(struct ib_cq *ibcq);
-int opa_ib_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags);
-int opa_ib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
-void opa_ib_rc_error(struct opa_ib_qp *qp, enum ib_wc_status err);
-void opa_ib_rc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
-void opa_ib_uc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
-void opa_ib_ud_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
-int opa_ib_rcv_wait(void *data);
-int opa_ib_lookup_pkey_idx(struct opa_ib_portdata *ibp, u16 pkey);
-int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
-		   struct hfi2_sge *isge, struct ib_sge *sge, int acc);
-int opa_ib_rkey_ok(struct opa_ib_qp *qp, struct hfi2_sge *sge,
-		   u32 len, u64 vaddr, u32 rkey, int acc);
-struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc);
-struct ib_mr *opa_ib_reg_phys_mr(struct ib_pd *pd,
-				 struct ib_phys_buf *buffer_list,
-				 int num_phys_buf, int acc, u64 *iova_start);
-struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
-				 u64 virt_addr, int mr_access_flags,
-				 struct ib_udata *udata);
-int opa_ib_dereg_mr(struct ib_mr *ibmr);
-int opa_ib_fast_reg_mr(struct opa_ib_qp *qp, struct ib_send_wr *wr);
-void opa_ib_release_mmap_info(struct kref *ref);
-int opa_ib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
-struct opa_ib_mmap_info *opa_ib_create_mmap_info(struct opa_ib_data *ibd,
-						 u32 size,
-						 struct ib_ucontext *context,
-						 void *obj);
-void opa_ib_update_mmap_info(struct opa_ib_data *ibd,
-			     struct opa_ib_mmap_info *ip,
-			     u32 size, void *obj);
-int opa_ib_get_rwqe(struct opa_ib_qp *qp, int wr_id_only);
-void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
-			    u32 bth0, u32 bth2, u16 *lrh0);
-void opa_ib_do_send(struct work_struct *work);
-void opa_ib_schedule_send(struct opa_ib_qp *qp);
-void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
-			  enum ib_wc_status status);
-int opa_ib_make_uc_req(struct opa_ib_qp *qp);
-int opa_ib_make_ud_req(struct opa_ib_qp *qp);
-void opa_ib_copy_sge(struct opa_ib_sge_state *ss, void *data, u32 length,
-		     int release);
-void opa_ib_skip_sge(struct opa_ib_sge_state *ss, u32 length, int release);
-int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
-		     struct ib_send_wr **bad_wr);
-int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
-			struct ib_recv_wr **bad_wr);
+int hfi2_destroy_cq(struct ib_cq *ibcq);
+int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags);
+int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
+void hfi2_rc_error(struct hfi2_qp *qp, enum ib_wc_status err);
+void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
+void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
+void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
+int hfi2_rcv_wait(void *data);
+int hfi2_lookup_pkey_idx(struct hfi2_ibport *ibp, u16 pkey);
+int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct hfi2_pd *pd,
+		 struct hfi2_sge *isge, struct ib_sge *sge, int acc);
+int hfi2_rkey_ok(struct hfi2_qp *qp, struct hfi2_sge *sge,
+		 u32 len, u64 vaddr, u32 rkey, int acc);
+struct ib_mr *hfi2_get_dma_mr(struct ib_pd *pd, int acc);
+struct ib_mr *hfi2_reg_phys_mr(struct ib_pd *pd,
+			       struct ib_phys_buf *buffer_list,
+			       int num_phys_buf, int acc, u64 *iova_start);
+struct ib_mr *hfi2_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
+			       u64 virt_addr, int mr_access_flags,
+			       struct ib_udata *udata);
+int hfi2_dereg_mr(struct ib_mr *ibmr);
+int hfi2_fast_reg_mr(struct hfi2_qp *qp, struct ib_send_wr *wr);
+void hfi2_release_mmap_info(struct kref *ref);
+int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
+struct hfi2_mmap_info *hfi2_create_mmap_info(struct hfi2_ibdev *ibd,
+					     u32 size,
+					     struct ib_ucontext *context,
+					     void *obj);
+void hfi2_update_mmap_info(struct hfi2_ibdev *ibd,
+			   struct hfi2_mmap_info *ip,
+			   u32 size, void *obj);
+int hfi2_get_rwqe(struct hfi2_qp *qp, int wr_id_only);
+void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
+			  u32 bth0, u32 bth2, u16 *lrh0);
+void hfi2_do_send(struct work_struct *work);
+void hfi2_schedule_send(struct hfi2_qp *qp);
+void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
+			enum ib_wc_status status);
+int hfi2_make_uc_req(struct hfi2_qp *qp);
+int hfi2_make_ud_req(struct hfi2_qp *qp);
+void hfi2_copy_sge(struct hfi2_sge_state *ss, void *data, u32 length,
+		   int release);
+void hfi2_skip_sge(struct hfi2_sge_state *ss, u32 length, int release);
+int hfi2_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
+		   struct ib_send_wr **bad_wr);
+int hfi2_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
+		      struct ib_recv_wr **bad_wr);
 int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     const struct ib_wc *in_wc, const struct ib_grh *in_grh,
 		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,
 		     struct ib_mad_hdr *out_mad, size_t *out_mad_size,
 		     u16 *out_mad_pkey_index);
-int opa_ib_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
-int opa_ib_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
-struct opa_mcast *
-opa_mcast_find(struct opa_ib_portdata *ibp, union ib_gid *mgid);
+int hfi2_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
+int hfi2_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
+struct hfi2_mcast *
+hfi2_mcast_find(struct hfi2_ibport *ibp, union ib_gid *mgid);
 
 /* Device specific */
-int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
-		    struct opa_ib_swqe *wqe);
-void opa_ib_rcv_start(struct opa_ib_portdata *ibp);
-void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset);
-void opa_ib_rcv_advance(struct opa_ib_portdata *ibp, u64 *rhf_entry);
-int _opa_ib_rcv_wait(struct opa_ib_portdata *ibp, u64 **rhf_entry);
-int opa_ib_rcv_init(struct opa_ib_portdata *ibp);
-void opa_ib_rcv_uninit(struct opa_ib_portdata *ibp);
-int opa_ib_ctx_init(struct opa_ib_data *ibd, struct opa_core_ops *bus_ops);
-void opa_ib_ctx_uninit(struct opa_ib_data *ibd);
-int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp);
-void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp);
-int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd,
-			 struct opa_ib_qp *qp, bool is_user);
-void opa_ib_ctx_release_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp);
-int opa_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops);
-void opa_ib_remove(struct hfi_devdata *dd);
+int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+		  struct hfi2_swqe *wqe);
+void hfi2_rcv_start(struct hfi2_ibport *ibp);
+void *hfi2_rcv_get_ebuf(struct hfi2_ibport *ibp, u16 idx, u32 offset);
+void hfi2_rcv_advance(struct hfi2_ibport *ibp, u64 *rhf_entry);
+int _hfi2_rcv_wait(struct hfi2_ibport *ibp, u64 **rhf_entry);
+int hfi2_rcv_init(struct hfi2_ibport *ibp);
+void hfi2_rcv_uninit(struct hfi2_ibport *ibp);
+int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops);
+void hfi2_ctx_uninit(struct hfi2_ibdev *ibd);
+int hfi2_ctx_init_port(struct hfi2_ibport *ibp);
+void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp);
+int hfi2_ctx_assign_qp(struct hfi2_ibdev *ibd,
+		       struct hfi2_qp *qp, bool is_user);
+void hfi2_ctx_release_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp);
+int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops);
+void hfi2_ib_remove(struct hfi_devdata *dd);
 struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev);
 #endif

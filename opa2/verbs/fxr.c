@@ -136,13 +136,13 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
  * TODO may need to determine packet boundaries depending on how auto-header
  * optimization is implemented in upper layers (need add'l header IOVECs)
  */
-static int qp_max_iovs(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
+static int qp_max_iovs(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		       int *out_niovs)
 {
 	int niovs, i;
 	size_t off, segsz, payload_bytes;
 	struct hfi2_sge *sge;
-	struct opa_ib_sge_state *ss = qp->s_cur_sge;
+	struct hfi2_sge_state *ss = qp->s_cur_sge;
 
 	niovs = 1; /* one IOV for header */
 
@@ -187,9 +187,9 @@ static int qp_max_iovs(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
  * update QP state that is tracking progress within the SG list to note
  * that length bytes have been sent
  */
-static void qp_update_sge(struct opa_ib_qp *qp, u32 length)
+static void qp_update_sge(struct hfi2_qp *qp, u32 length)
 {
-	struct opa_ib_sge_state *ss = qp->s_cur_sge;
+	struct hfi2_sge_state *ss = qp->s_cur_sge;
 	struct hfi2_sge *sge = &ss->sge;
 
 	sge->vaddr += length;
@@ -214,7 +214,7 @@ static void qp_update_sge(struct opa_ib_qp *qp, u32 length)
  * has value again during bring-up
  */
 static int __attribute__ ((unused))
-send_wqe_pio(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
+send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_swqe *wqe)
 {
 	int ret;
 	unsigned long flags;
@@ -262,11 +262,11 @@ send_wqe_pio(struct opa_ib_portdata *ibp, struct opa_ib_swqe *wqe)
 	return ret;
 }
 
-static void opa_ib_send_event(void *data)
+static void hfi2_send_event(void *data)
 {
-	struct opa_ib_portdata *ibp = data;
-	struct opa_ib_qp *qp;
-	struct opa_ib_swqe *wqe;
+	struct hfi2_ibport *ibp = data;
+	struct hfi2_qp *qp;
+	struct hfi2_swqe *wqe;
 	struct hfi2_wqe_iov *wqe_iov;
 	unsigned long flags;
 	union initiator_EQEntry *eq_entry;
@@ -298,9 +298,9 @@ next_event:
 	if (!wqe_iov->remaining_bytes) {
 		spin_lock(&qp->s_lock);
 		if (wqe->pkt_errors)
-			opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);
+			hfi2_send_complete(qp, wqe, IB_WC_FATAL_ERR);
 		else
-			opa_ib_send_complete(qp, wqe, IB_WC_SUCCESS);
+			hfi2_send_complete(qp, wqe, IB_WC_SUCCESS);
 		spin_unlock(&qp->s_lock);
 	}
 	kfree(wqe_iov);
@@ -314,8 +314,8 @@ eq_advance:
 	goto next_event;
 }
 
-int opa_ib_send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
-		    struct opa_ib_swqe *wqe)
+int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+		    struct hfi2_swqe *wqe)
 {
 	int i, ret, ndelays = 0;
 	unsigned long flags;
@@ -452,7 +452,7 @@ err:
 	return ret;
 }
 
-void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset)
+void *hfi2_rcv_get_ebuf(struct hfi2_ibport *ibp, u16 idx, u32 offset)
 {
 	int ret;
 	unsigned long flags;
@@ -474,7 +474,7 @@ void *opa_ib_rcv_get_ebuf(struct opa_ib_portdata *ibp, u16 idx, u32 offset)
 	return ibp->rcv_egr_base + (idx * OPA_IB_EAGER_SIZE) + offset;
 }
 
-int _opa_ib_rcv_wait(struct opa_ib_portdata *ibp, u64 **rhf_entry)
+int _hfi2_rcv_wait(struct hfi2_ibport *ibp, u64 **rhf_entry)
 {
 	int rc;
 
@@ -490,7 +490,7 @@ int _opa_ib_rcv_wait(struct opa_ib_portdata *ibp, u64 **rhf_entry)
 	return rc;
 }
 
-void opa_ib_rcv_advance(struct opa_ib_portdata *ibp, u64 *rhf_entry)
+void hfi2_rcv_advance(struct hfi2_ibport *ibp, u64 *rhf_entry)
 {
 	unsigned long flags;
 
@@ -499,14 +499,14 @@ void opa_ib_rcv_advance(struct opa_ib_portdata *ibp, u64 *rhf_entry)
 	spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
 }
 
-void opa_ib_rcv_start(struct opa_ib_portdata *ibp)
+void hfi2_rcv_start(struct hfi2_ibport *ibp)
 {
 	/* RX events can be received after this thread becomes runable */
 	if (ibp->rcv_task)
 		wake_up_process(ibp->rcv_task);
 }
 
-static void opa_ib_rcv_stop(struct opa_ib_portdata *ibp)
+static void hfi2_rcv_stop(struct hfi2_ibport *ibp)
 {
 	if (ibp->rcv_task) {
 		/* stop the RX thread, signal it to break out of wait_event */
@@ -516,7 +516,7 @@ static void opa_ib_rcv_stop(struct opa_ib_portdata *ibp)
 	}
 }
 
-int opa_ib_rcv_init(struct opa_ib_portdata *ibp)
+int hfi2_rcv_init(struct hfi2_ibport *ibp)
 {
 	struct task_struct *rcv_task;
 	struct hfi_pt_alloc_eager_args pt_alloc;
@@ -588,7 +588,7 @@ int opa_ib_rcv_init(struct opa_ib_portdata *ibp)
 	}
 
 	/* kthread create and wait for packets! */
-	rcv_task = kthread_create_on_node(opa_ib_rcv_wait, ibp,
+	rcv_task = kthread_create_on_node(hfi2_rcv_wait, ibp,
 					  ibp->ibd->assigned_node_id,
 					  "opa2_hfi_rcv");
 	if (IS_ERR(rcv_task)) {
@@ -600,11 +600,11 @@ int opa_ib_rcv_init(struct opa_ib_portdata *ibp)
 	return 0;
 
 kthread_err:
-	opa_ib_rcv_uninit(ibp);
+	hfi2_rcv_uninit(ibp);
 	return ret;
 }
 
-void opa_ib_rcv_uninit(struct opa_ib_portdata *ibp)
+void hfi2_rcv_uninit(struct hfi2_ibport *ibp)
 {
 	int ret;
 	unsigned long flags;
@@ -613,7 +613,7 @@ void opa_ib_rcv_uninit(struct opa_ib_portdata *ibp)
 		return;
 
 	/* stop further RX processing */
-	opa_ib_rcv_stop(ibp);
+	hfi2_rcv_stop(ibp);
 
 	/* disable PT so EQ buffer and RX buffers can be released */
 	spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
@@ -634,7 +634,7 @@ void opa_ib_rcv_uninit(struct opa_ib_portdata *ibp)
 	}
 }
 
-int opa_ib_ctx_init(struct opa_ib_data *ibd, struct opa_core_ops *bus_ops)
+int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops)
 {
 	struct opa_ctx_assign ctx_assign = {0};
 
@@ -654,14 +654,14 @@ int opa_ib_ctx_init(struct opa_ib_data *ibd, struct opa_core_ops *bus_ops)
 	return hfi_ctxt_attach(&ibd->ctx, &ctx_assign);
 }
 
-void opa_ib_ctx_uninit(struct opa_ib_data *ibd)
+void hfi2_ctx_uninit(struct hfi2_ibdev *ibd)
 {
 	hfi_ctxt_cleanup(&ibd->ctx);
 }
 
-int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp)
+int hfi2_ctx_init_port(struct hfi2_ibport *ibp)
 {
-	struct opa_ib_data *ibd = ibp->ibd;
+	struct hfi2_ibdev *ibd = ibp->ibd;
 	struct opa_ev_assign eq_alloc;
 	int ret;
 	u16 cq_idx;
@@ -692,7 +692,7 @@ int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp)
 	eq_alloc.user_data = (unsigned long)ibp;
 	/* TODO - set EQ size equal to CmdQ slots (DMA commands) for now */
 	eq_alloc.size = HFI_CQ_TX_ENTRIES;
-	eq_alloc.isr_cb = opa_ib_send_event;
+	eq_alloc.isr_cb = hfi2_send_event;
 	eq_alloc.cookie = (void *)ibp;
 	ret = _hfi_eq_alloc(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
 			    &eq_alloc, &ibp->send_eq, &ibp->send_eq_base);
@@ -700,19 +700,19 @@ int opa_ib_ctx_init_port(struct opa_ib_portdata *ibp)
 		goto ctx_init_err;
 
 	/* assign device specific RX resources */
-	ret = opa_ib_rcv_init(ibp);
+	ret = hfi2_rcv_init(ibp);
 	if (ret)
 		goto ctx_init_err;
 
 	return 0;
 
 ctx_init_err:
-	opa_ib_ctx_uninit_port(ibp);
+	hfi2_ctx_uninit_port(ibp);
 err:
 	return ret;
 }
 
-void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp)
+void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp)
 {
 	u16 cq_idx = ibp->cmdq_tx.cq_idx;
 
@@ -725,13 +725,13 @@ void opa_ib_ctx_uninit_port(struct opa_ib_portdata *ibp)
 		ibp->send_eq_base = NULL;
 	}
 
-	opa_ib_rcv_uninit(ibp);
+	hfi2_rcv_uninit(ibp);
 	hfi_cq_unmap(&ibp->cmdq_tx, &ibp->cmdq_rx);
 	hfi_cq_release(ibp->ctx, cq_idx);
 	ibp->ctx = NULL;
 }
 
-int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp,
+int hfi2_ctx_assign_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp,
 			 bool is_user)
 {
 	/* FXRTODO: fix me */
@@ -747,7 +747,7 @@ int opa_ib_ctx_assign_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp,
 	return 0;
 }
 
-void opa_ib_ctx_release_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
+void hfi2_ctx_release_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp)
 {
 	qp->s_ctx = NULL;
 	/* FXRTODO: fix me */

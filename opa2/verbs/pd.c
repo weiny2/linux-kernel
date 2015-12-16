@@ -55,7 +55,7 @@
 #include "verbs.h"
 
 /**
- * opa_ib_alloc_pd - create a protection domain
+ * hfi2_alloc_pd - create a protection domain
  * @ibdev: the IB device
  * @ucontext: associated user context
  * @udata: associated user data
@@ -63,11 +63,11 @@
  * Return: a pointer to the protection domain on success, otherwise
  * returns an errno.
  */
-struct ib_pd *opa_ib_alloc_pd(struct ib_device *ibdev,
+struct ib_pd *hfi2_alloc_pd(struct ib_device *ibdev,
 			      struct ib_ucontext *context,
 			      struct ib_udata *udata)
 {
-	struct opa_ib_pd *pd;
+	struct hfi2_pd *pd;
 	struct ib_pd *ret;
 
 	pd = kzalloc(sizeof(*pd), GFP_KERNEL);
@@ -81,26 +81,26 @@ struct ib_pd *opa_ib_alloc_pd(struct ib_device *ibdev,
 }
 
 /**
- * opa_ib_dealloc_pd - destroy a protection domain
+ * hfi2_dealloc_pd - destroy a protection domain
  * @ibpd: the PD to destroy
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_dealloc_pd(struct ib_pd *ibpd)
+int hfi2_dealloc_pd(struct ib_pd *ibpd)
 {
-	struct opa_ib_pd *pd = to_opa_ibpd(ibpd);
+	struct hfi2_pd *pd = to_hfi_pd(ibpd);
 
 	kfree(pd);
 	return 0;
 }
 
-int opa_ib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
+int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 {
 	return 0;
 }
 
 /**
- * opa_ib_create_ah - create an address handle
+ * hfi2_create_ah - create an address handle
  * @pd: the protection domain
  * @ah_attr: the attributes of the AH
  *
@@ -109,13 +109,13 @@ int opa_ib_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
  * Return: a pointer to the address handle on success, otherwise
  * returns an errno.
  */
-struct ib_ah *opa_ib_create_ah(struct ib_pd *pd,
+struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
 			       struct ib_ah_attr *ah_attr)
 {
-	struct opa_ib_ah *ah;
+	struct hfi2_ah *ah;
 	struct ib_ah *ret;
 
-	if (opa_ib_check_ah(pd->device, ah_attr))
+	if (hfi2_check_ah(pd->device, ah_attr))
 		return ERR_PTR(-EINVAL);
 
 	ah = kzalloc(sizeof(*ah), GFP_ATOMIC);
@@ -130,33 +130,33 @@ struct ib_ah *opa_ib_create_ah(struct ib_pd *pd,
 }
 
 /**
- * opa_ib_destroy_ah - destroy an address handle
+ * hfi2_destroy_ah - destroy an address handle
  * @ibah: the AH to destroy
  *
  * This may be called from interrupt context.
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_destroy_ah(struct ib_ah *ibah)
+int hfi2_destroy_ah(struct ib_ah *ibah)
 {
-	struct opa_ib_ah *ah = to_opa_ibah(ibah);
+	struct hfi2_ah *ah = to_hfi_ah(ibah);
 
 	kfree(ah);
 	return 0;
 }
 
 /**
- * opa_ib_modify_ah - modify the attributes of an address handle
+ * hfi2_modify_ah - modify the attributes of an address handle
  * @ibah: the address handle who's attributes we're modifying
  * @ah_attr: the new attributes
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
+int hfi2_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
 {
-	struct opa_ib_ah *ah = to_opa_ibah(ibah);
+	struct hfi2_ah *ah = to_hfi_ah(ibah);
 
-	if (opa_ib_check_ah(ibah->device, ah_attr))
+	if (hfi2_check_ah(ibah->device, ah_attr))
 		return -EINVAL;
 
 	ah->attr = *ah_attr;
@@ -164,15 +164,15 @@ int opa_ib_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
 }
 
 /**
- * opa_ib_query_ah - query the attributes of an address handle
+ * hfi2_query_ah - query the attributes of an address handle
  * @ibah: the address handle who's attributes we want
  * @ah_attr: values returned here for AH attributes
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
+int hfi2_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
 {
-	struct opa_ib_ah *ah = to_opa_ibah(ibah);
+	struct hfi2_ah *ah = to_hfi_ah(ibah);
 
 	*ah_attr = ah->attr;
 	return 0;

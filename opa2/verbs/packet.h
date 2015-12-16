@@ -139,7 +139,7 @@ struct ib_l4_headers {
  * will be in the eager header buffer.  The remaining 12 or 16 bytes
  * are in the data buffer.
  */
-struct opa_ib_header {
+struct hfi2_ib_header {
 	__be16 lrh[4];
 	union {
 		struct {
@@ -151,9 +151,9 @@ struct opa_ib_header {
 } __packed;
 
 /* IB header prefixed with 8-bytes of OPA2-specific data */
-struct opa_ib_dma_header {
+struct hfi2_ib_dma_header {
 	uint64_t opa2_hdr_reserved;
-	struct opa_ib_header ibh;
+	struct hfi2_ib_header ibh;
 };
 
 /*
@@ -163,9 +163,9 @@ struct opa_ib_dma_header {
  * here. If it is used multiple times, then store the result of that derivation
  * in here.
  */
-struct opa_ib_packet {
+struct hfi2_ib_packet {
 	struct hfi_ctx *ctx;
-	struct opa_ib_portdata *ibp;
+	struct hfi2_ibport *ibp;
 	void *ebuf;
 	void *hdr;
 	u64 rhf;
@@ -178,8 +178,8 @@ struct opa_ib_packet {
 
 /* Store IOVEC array information for General DMA command */
 struct hfi2_wqe_iov {
-	struct opa_ib_swqe *wqe;
-	struct opa_ib_header ib_hdr;
+	struct hfi2_swqe *wqe;
+	struct hfi2_ib_header ib_hdr;
 	u32 remaining_bytes;
 	union base_iovec iov[0];
 };
@@ -220,7 +220,7 @@ static inline u32 mask_psn(u32 a)
 }
 
 /**
- * opa_ib_make_grh - construct a GRH header
+ * hfi2_make_grh - construct a GRH header
  * @ibp: a pointer to the IB port
  * @hdr: a pointer to the GRH header being constructed
  * @grh: the global route address to send to
@@ -230,7 +230,7 @@ static inline u32 mask_psn(u32 a)
  * Return the size of the header in 32 bit words.
  */
 static inline
-u32 opa_ib_make_grh(struct opa_ib_portdata *ibp, struct ib_grh *hdr,
+u32 hfi2_make_grh(struct hfi2_ibport *ibp, struct ib_grh *hdr,
 		    struct ib_global_route *grh, u32 hwords, u32 nwords)
 {
 	hdr->version_tclass_flow =
@@ -352,7 +352,7 @@ static inline u32 rhf_hdr_len(u64 rhf)
 	return ((rhf & RHF_HDR_LEN_SMASK) >> RHF_HDR_LEN_SHIFT) << 2;
 }
 
-static inline u64 *rhf_get_hdr(struct opa_ib_packet *pkt, u64 *rhf_entry)
+static inline u64 *rhf_get_hdr(struct hfi2_ib_packet *pkt, u64 *rhf_entry)
 {
 	return (rhf_entry + 1);
 }

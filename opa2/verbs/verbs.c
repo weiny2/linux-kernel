@@ -65,37 +65,37 @@
 #include "../link.h"
 #include <rdma/opa_core_ib.h>
 
-static void opa_ib_uninit_port(struct opa_ib_portdata *ibp);
+static void hfi2_uninit_port(struct hfi2_ibport *ibp);
 
-__be64 opa_ib_sys_guid;
+__be64 hfi2_sys_guid;
 
 /* TODO - to be used in various alloc routines */
 /* Maximum number of protection domains to support */
-unsigned int opa_ib_max_pds = 0xFFFF;
+unsigned int hfi2_max_pds = 0xFFFF;
 /* Maximum number of address handles to support */
-unsigned int opa_ib_max_ahs = 0xFFFF;
+unsigned int hfi2_max_ahs = 0xFFFF;
 /* Maximum number of completion queue entries to support */
-unsigned int opa_ib_max_cqes = 0x2FFFF;
+unsigned int hfi2_max_cqes = 0x2FFFF;
 /* Maximum number of completion queues to support */
-unsigned int opa_ib_max_cqs = 0x1FFFF;
+unsigned int hfi2_max_cqs = 0x1FFFF;
 /* Maximum number of QP WRs to support */
-unsigned int opa_ib_max_qp_wrs = 0x3FFF;
+unsigned int hfi2_max_qp_wrs = 0x3FFF;
 /* Maximum number of QPs to support */
-unsigned int opa_ib_max_qps = 16384;
+unsigned int hfi2_max_qps = 16384;
 /* Maximum number of SGEs to support */
-unsigned int opa_ib_max_sges = 0x60;
+unsigned int hfi2_max_sges = 0x60;
 /* Maximum number of multicast groups to support */
-unsigned int opa_ib_max_mcast_grps = 16384;
+unsigned int hfi2_max_mcast_grps = 16384;
 /* Maximum number of attached QPs to support */
-unsigned int opa_ib_max_mcast_qp_attached = 16;
+unsigned int hfi2_max_mcast_qp_attached = 16;
 /* Maximum number of SRQs to support */
-unsigned int opa_ib_max_srqs = 1024;
+unsigned int hfi2_max_srqs = 1024;
 /* Maximum number of SRQ SGEs to support */
-unsigned int opa_ib_max_srq_sges = 128;
+unsigned int hfi2_max_srq_sges = 128;
 /* Maximum number of SRQ WRs support */
-unsigned int opa_ib_max_srq_wrs = 0x1FFFF;
+unsigned int hfi2_max_srq_wrs = 0x1FFFF;
 /* LKEY table size in bits (2^n, 1 <= n <= 23) */
-unsigned int opa_ib_lkey_table_size = 16;
+unsigned int hfi2_lkey_table_size = 16;
 
 /*
  * Note that it is OK to post send work requests in the SQE and ERR
@@ -119,19 +119,19 @@ const int ib_qp_state_ops[IB_QPS_ERR + 1] = {
 
 inline struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev)
 {
-	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
 
 	return ibd->dd;
 }
 
-static int opa_ib_query_device(struct ib_device *ibdev,
+static int hfi2_query_device(struct ib_device *ibdev,
 			       struct ib_device_attr *props
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 			       , struct ib_udata *uhw
 #endif
 			       )
 {
-	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
 	struct hfi_devdata *dd = ibd->dd;
 
 	memset(props, 0, sizeof(*props));
@@ -158,40 +158,40 @@ static int opa_ib_query_device(struct ib_device *ibdev,
 	props->vendor_part_id = dd->bus_id.device;
 	props->hw_ver = 0;
 #endif
-	props->sys_image_guid = opa_ib_sys_guid;
+	props->sys_image_guid = hfi2_sys_guid;
 	props->max_mr_size = ~0ULL;
-	props->max_qp = opa_ib_max_qps;
-	props->max_qp_wr = opa_ib_max_qp_wrs;
-	props->max_sge = opa_ib_max_sges;
-	props->max_sge_rd = opa_ib_max_sges;
-	props->max_cq = opa_ib_max_cqs;
-	props->max_ah = opa_ib_max_ahs;
-	props->max_cqe = opa_ib_max_cqes;
-	props->max_mr = 1 << opa_ib_lkey_table_size;
-	props->max_fmr = 1 << opa_ib_lkey_table_size;
+	props->max_qp = hfi2_max_qps;
+	props->max_qp_wr = hfi2_max_qp_wrs;
+	props->max_sge = hfi2_max_sges;
+	props->max_sge_rd = hfi2_max_sges;
+	props->max_cq = hfi2_max_cqs;
+	props->max_ah = hfi2_max_ahs;
+	props->max_cqe = hfi2_max_cqes;
+	props->max_mr = 1 << hfi2_lkey_table_size;
+	props->max_fmr = 1 << hfi2_lkey_table_size;
 	props->max_map_per_fmr = OPA_IB_MAX_MAP_PER_FMR;
-	props->max_pd = opa_ib_max_pds;
+	props->max_pd = hfi2_max_pds;
 	props->max_qp_rd_atom = OPA_IB_MAX_RDMA_ATOMIC;
 	props->max_qp_init_rd_atom = OPA_IB_INIT_RDMA_ATOMIC;
 	/* props->max_res_rd_atom */
-	props->max_srq = opa_ib_max_srqs;
-	props->max_srq_wr = opa_ib_max_srq_wrs;
-	props->max_srq_sge = opa_ib_max_srq_sges;
+	props->max_srq = hfi2_max_srqs;
+	props->max_srq_wr = hfi2_max_srq_wrs;
+	props->max_srq_sge = hfi2_max_srq_sges;
 	/* props->local_ca_ack_delay */
 	props->atomic_cap = IB_ATOMIC_GLOB;
 	props->max_pkeys = HFI_MAX_PKEYS;
-	props->max_mcast_grp = opa_ib_max_mcast_grps;
-	props->max_mcast_qp_attach = opa_ib_max_mcast_qp_attached;
+	props->max_mcast_grp = hfi2_max_mcast_grps;
+	props->max_mcast_qp_attach = hfi2_max_mcast_qp_attached;
 	props->max_total_mcast_qp_attach = props->max_mcast_qp_attach *
 					   props->max_mcast_grp;
 
 	return 0;
 }
 
-static int opa_ib_modify_port(struct ib_device *ibdev, u8 port,
+static int hfi2_modify_port(struct ib_device *ibdev, u8 port,
 		       int port_modify_mask, struct ib_port_modify *props)
 {
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 	int ret = 0;
 
 	ibp->port_cap_flags |= props->set_port_cap_mask;
@@ -218,10 +218,10 @@ static int opa_ib_modify_port(struct ib_device *ibdev, u8 port,
 	return ret;
 }
 
-static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
+static int hfi2_query_port(struct ib_device *ibdev, u8 port,
 			     struct ib_port_attr *props)
 {
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 	struct hfi_pportdata *ppd = ibp->ppd;
 
 	if (!ibp)
@@ -272,7 +272,7 @@ static int port_immutable(struct ib_device *ibdev, u8 port_num,
 	struct ib_port_attr attr;
 	int err;
 
-	err = opa_ib_query_port(ibdev, port_num, &attr);
+	err = hfi2_query_port(ibdev, port_num, &attr);
 	if (err)
 		return err;
 
@@ -287,10 +287,10 @@ static int port_immutable(struct ib_device *ibdev, u8 port_num,
 }
 #endif
 
-static int opa_ib_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
+static int hfi2_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 			  u16 *pkey)
 {
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 
 	if (!ibp || index >= HFI_MAX_PKEYS)
 		return -EINVAL;
@@ -299,10 +299,10 @@ static int opa_ib_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 	return 0;
 }
 
-static int opa_ib_query_gid(struct ib_device *ibdev, u8 port,
+static int hfi2_query_gid(struct ib_device *ibdev, u8 port,
 			 int index, union ib_gid *gid)
 {
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 	int ret = 0;
 
 	if (!ibp || index != 0)
@@ -319,10 +319,10 @@ static int opa_ib_query_gid(struct ib_device *ibdev, u8 port,
  * @udata: not used
  */
 
-static struct ib_ucontext *opa_ib_alloc_ucontext(struct ib_device *ibdev,
+static struct ib_ucontext *hfi2_alloc_ucontext(struct ib_device *ibdev,
 						struct ib_udata *udata)
 {
-	struct opa_ucontext *context;
+	struct hfi2_ucontext *context;
 	struct ib_ucontext *ret;
 
 	context = kmalloc(sizeof(*context), GFP_KERNEL);
@@ -338,17 +338,17 @@ bail:
 }
 
 /**
- * opa_ib_dealloc_ucontext - deallocate a ucontext
+ * hfi2_dealloc_ucontext - deallocate a ucontext
  * @context: the context to deallocate
  */
 
-static int opa_ib_dealloc_ucontext(struct ib_ucontext *context)
+static int hfi2_dealloc_ucontext(struct ib_ucontext *context)
 {
-	kfree(to_opa_ucontext(context));
+	kfree(to_hfi_ucontext(context));
 	return 0;
 }
 
-static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
+static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 {
 	struct ib_device *ibdev = &ibd->ibdev;
 	int ret;
@@ -359,8 +359,8 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	strncpy(ibdev->node_desc, init_utsname()->nodename,
 		sizeof(ibdev->node_desc));
 	ibdev->node_guid = ibd->node_guid;
-	if (!opa_ib_sys_guid)
-		opa_ib_sys_guid = ibdev->node_guid;
+	if (!hfi2_sys_guid)
+		hfi2_sys_guid = ibdev->node_guid;
 	ibdev->node_type = RDMA_NODE_IB_CA;
 	ibdev->num_comp_vectors = 1;
 	ibdev->owner = THIS_MODULE;
@@ -390,76 +390,76 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 		(1ull << IB_USER_VERBS_CMD_DESTROY_QP)          |
 		(1ull << IB_USER_VERBS_CMD_POST_SEND)           |
 		(1ull << IB_USER_VERBS_CMD_POST_RECV);
-	ibdev->query_device = opa_ib_query_device;
-	ibdev->query_port = opa_ib_query_port;
-	ibdev->query_pkey = opa_ib_query_pkey;
-	ibdev->query_gid = opa_ib_query_gid;
-	ibdev->alloc_pd = opa_ib_alloc_pd;
-	ibdev->dealloc_pd = opa_ib_dealloc_pd;
-	ibdev->create_ah = opa_ib_create_ah;
-	ibdev->modify_ah = opa_ib_modify_ah;
-	ibdev->query_ah = opa_ib_query_ah;
-	ibdev->destroy_ah = opa_ib_destroy_ah;
-	ibdev->create_qp = opa_ib_create_qp;
-	ibdev->modify_qp = opa_ib_modify_qp;
-	ibdev->query_qp = opa_ib_query_qp;
-	ibdev->destroy_qp = opa_ib_destroy_qp;
-	ibdev->post_send = opa_ib_post_send;
-	ibdev->post_recv = opa_ib_post_receive;
-	ibdev->create_cq = opa_ib_create_cq;
-	ibdev->destroy_cq = opa_ib_destroy_cq;
-	ibdev->resize_cq = opa_ib_resize_cq;
-	ibdev->poll_cq = opa_ib_poll_cq;
-	ibdev->req_notify_cq = opa_ib_req_notify_cq;
-	ibdev->get_dma_mr = opa_ib_get_dma_mr;
-	ibdev->reg_phys_mr = opa_ib_reg_phys_mr;
-	ibdev->reg_user_mr = opa_ib_reg_user_mr;
-	ibdev->dereg_mr = opa_ib_dereg_mr;
+	ibdev->query_device = hfi2_query_device;
+	ibdev->query_port = hfi2_query_port;
+	ibdev->query_pkey = hfi2_query_pkey;
+	ibdev->query_gid = hfi2_query_gid;
+	ibdev->alloc_pd = hfi2_alloc_pd;
+	ibdev->dealloc_pd = hfi2_dealloc_pd;
+	ibdev->create_ah = hfi2_create_ah;
+	ibdev->modify_ah = hfi2_modify_ah;
+	ibdev->query_ah = hfi2_query_ah;
+	ibdev->destroy_ah = hfi2_destroy_ah;
+	ibdev->create_qp = hfi2_create_qp;
+	ibdev->modify_qp = hfi2_modify_qp;
+	ibdev->query_qp = hfi2_query_qp;
+	ibdev->destroy_qp = hfi2_destroy_qp;
+	ibdev->post_send = hfi2_post_send;
+	ibdev->post_recv = hfi2_post_receive;
+	ibdev->create_cq = hfi2_create_cq;
+	ibdev->destroy_cq = hfi2_destroy_cq;
+	ibdev->resize_cq = hfi2_resize_cq;
+	ibdev->poll_cq = hfi2_poll_cq;
+	ibdev->req_notify_cq = hfi2_req_notify_cq;
+	ibdev->get_dma_mr = hfi2_get_dma_mr;
+	ibdev->reg_phys_mr = hfi2_reg_phys_mr;
+	ibdev->reg_user_mr = hfi2_reg_user_mr;
+	ibdev->dereg_mr = hfi2_dereg_mr;
 	ibdev->process_mad = hfi2_process_mad;
-	ibdev->alloc_ucontext = opa_ib_alloc_ucontext;
-	ibdev->dealloc_ucontext = opa_ib_dealloc_ucontext;
+	ibdev->alloc_ucontext = hfi2_alloc_ucontext;
+	ibdev->dealloc_ucontext = hfi2_dealloc_ucontext;
 	ibdev->dma_device = ibd->parent_dev;
-	ibdev->modify_port = opa_ib_modify_port;
+	ibdev->modify_port = hfi2_modify_port;
 #if 0
-	ibdev->modify_device = opa_ib_modify_device;
-	ibdev->create_srq = opa_ib_create_srq;
-	ibdev->modify_srq = opa_ib_modify_srq;
-	ibdev->query_srq = opa_ib_query_srq;
-	ibdev->destroy_srq = opa_ib_destroy_srq;
-	ibdev->post_srq_recv = opa_ib_post_srq_receive;
-	ibdev->alloc_fast_reg_mr = opa_ib_alloc_fast_reg_mr;
-	ibdev->alloc_fast_reg_page_list = opa_ib_alloc_fast_reg_page_list;
-	ibdev->free_fast_reg_page_list = opa_ib_free_fast_reg_page_list;
-	ibdev->alloc_fmr = opa_ib_alloc_fmr;
-	ibdev->map_phys_fmr = opa_ib_map_phys_fmr;
-	ibdev->unmap_fmr = opa_ib_unmap_fmr;
-	ibdev->dealloc_fmr = opa_ib_dealloc_fmr;
+	ibdev->modify_device = hfi2_modify_device;
+	ibdev->create_srq = hfi2_create_srq;
+	ibdev->modify_srq = hfi2_modify_srq;
+	ibdev->query_srq = hfi2_query_srq;
+	ibdev->destroy_srq = hfi2_destroy_srq;
+	ibdev->post_srq_recv = hfi2_post_srq_receive;
+	ibdev->alloc_fast_reg_mr = hfi2_alloc_fast_reg_mr;
+	ibdev->alloc_fast_reg_page_list = hfi2_alloc_fast_reg_page_list;
+	ibdev->free_fast_reg_page_list = hfi2_free_fast_reg_page_list;
+	ibdev->alloc_fmr = hfi2_alloc_fmr;
+	ibdev->map_phys_fmr = hfi2_map_phys_fmr;
+	ibdev->unmap_fmr = hfi2_unmap_fmr;
+	ibdev->dealloc_fmr = hfi2_dealloc_fmr;
 #endif
-	ibdev->attach_mcast = opa_ib_multicast_attach;
-	ibdev->detach_mcast = opa_ib_multicast_detach;
-	ibdev->mmap = opa_ib_mmap;
-	ibdev->dma_ops = &opa_ib_dma_mapping_ops;
+	ibdev->attach_mcast = hfi2_multicast_attach;
+	ibdev->detach_mcast = hfi2_multicast_detach;
+	ibdev->mmap = hfi2_mmap;
+	ibdev->dma_ops = &hfi2_dma_mapping_ops;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 	ibdev->get_port_immutable = port_immutable;
 #endif
-	/* opa_ib_create_port_files); */
+	/* hfi2_create_port_files); */
 	ret = ib_register_device(ibdev, NULL);
 	if (ret)
 		goto err_reg;
 
 #if 0
-	ret = opa_ib_create_agents(dev);
+	ret = hfi2_create_agents(dev);
 	if (ret)
 		goto err_agents;
 
-	if (opa_ib_verbs_register_sysfs(dd))
+	if (hfi2_verbs_register_sysfs(dd))
 		goto err_class;
 #endif
 	goto exit;
 
 #if 0
 err_class:
-	opa_ib_free_agents(dev);
+	hfi2_free_agents(dev);
 err_agents:
 	ib_unregister_device(ibdev);
 #endif
@@ -469,17 +469,17 @@ exit:
 	return ret;
 }
 
-static void opa_ib_unregister_device(struct opa_ib_data *ibd)
+static void hfi2_unregister_device(struct hfi2_ibdev *ibd)
 {
 	ib_unregister_device(&ibd->ibdev);
 }
 
-static int opa_ib_init_port(struct opa_ib_data *ibd,
+static int hfi2_init_port(struct hfi2_ibdev *ibd,
 			struct hfi_pportdata *ppd)
 {
 	int ret;
 	int pidx = ppd->pnum - 1;
-	struct opa_ib_portdata *ibp = &ibd->pport[pidx];
+	struct hfi2_ibport *ibp = &ibd->pport[pidx];
 
 	ibp->ibd = ibd;
 	ibp->dev = &ibd->ibdev.dev; /* for dev_info, etc. */
@@ -497,33 +497,33 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	RCU_INIT_POINTER(ibp->qp[1], NULL);
 
 	spin_lock_init(&ibp->lock);
-	ret = opa_ib_ctx_init_port(ibp);
+	ret = hfi2_ctx_init_port(ibp);
 	if (ret < 0)
 		goto ctx_init_err;
 
 	/* start RX processing, call this last after no errors */
-	opa_ib_rcv_start(ibp);
+	hfi2_rcv_start(ibp);
 	return 0;
 
 ctx_init_err:
-	opa_ib_uninit_port(ibp);
+	hfi2_uninit_port(ibp);
 	return ret;
 }
 
-static void opa_ib_uninit_port(struct opa_ib_portdata *ibp)
+static void hfi2_uninit_port(struct hfi2_ibport *ibp)
 {
-	opa_ib_ctx_uninit_port(ibp);
+	hfi2_ctx_uninit_port(ibp);
 }
 
-int opa_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
+int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 {
 	int i, ret;
 	u8 num_ports;
-	struct opa_ib_data *ibd;
-	struct opa_ib_portdata *ibp;
+	struct hfi2_ibdev *ibd;
+	struct hfi2_ibport *ibp;
 
 	num_ports = dd->num_pports;
-	ibd = (struct opa_ib_data *)ib_alloc_device(sizeof(*ibd) +
+	ibd = (struct hfi2_ibdev *)ib_alloc_device(sizeof(*ibd) +
 						    sizeof(*ibp) * num_ports);
 	if (!ibd) {
 		ret = -ENOMEM;
@@ -536,7 +536,7 @@ int opa_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	ibd->node_guid = dd->nguid;
 	memcpy(ibd->oui, dd->oui, ARRAY_SIZE(ibd->oui));
 	ibd->assigned_node_id = dd->node;
-	ibd->pport = (struct opa_ib_portdata *)(ibd + 1);
+	ibd->pport = (struct hfi2_ibport *)(ibd + 1);
 	ibd->parent_dev = &dd->pcidev->dev;
 
 	/*
@@ -559,20 +559,20 @@ int opa_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	spin_lock_init(&ibd->n_mcast_grps_lock);
 
 	/*
-	 * The top opa_ib_lkey_table_size bits are used to index the
+	 * The top hfi2_lkey_table_size bits are used to index the
 	 * table.  The lower 8 bits can be owned by the user (copied from
 	 * the LKEY).  The remaining bits act as a generation number or tag.
 	 */
 	spin_lock_init(&ibd->lk_table.lock);
-	ibd->lk_table.max = 1 << opa_ib_lkey_table_size;
+	ibd->lk_table.max = 1 << hfi2_lkey_table_size;
 	idr_init(&ibd->lk_table.table);
 
-	ret = opa_ib_cq_init(ibd);
+	ret = hfi2_cq_init(ibd);
 	if (ret)
 		goto cq_init_err;
 
 	/* Allocate Management Context */
-	ret = opa_ib_ctx_init(ibd, bus_ops);
+	ret = hfi2_ctx_init(ibd, bus_ops);
 	if (ret)
 		goto ctx_err;
 
@@ -580,27 +580,27 @@ int opa_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	for (i = 0; i < dd->num_pports; i++) {
 		struct hfi_pportdata *ppd = to_hfi_ppd(dd, i + 1);
 
-		ret = opa_ib_init_port(ibd, ppd);
+		ret = hfi2_init_port(ibd, ppd);
 		if (ret) {
 			while (--i >= 0)
-				opa_ib_uninit_port(&ibd->pport[i]);
+				hfi2_uninit_port(&ibd->pport[i]);
 			break;
 		}
 	}
 	if (ret)
 		goto port_err;
 
-	ret = opa_ib_register_device(ibd, hfi_class_name());
+	ret = hfi2_register_device(ibd, hfi_class_name());
 	if (ret)
 		goto ib_reg_err;
 	return ret;
 ib_reg_err:
 	for (i = 0; i < num_ports; i++)
-		opa_ib_uninit_port(&ibd->pport[i]);
+		hfi2_uninit_port(&ibd->pport[i]);
 port_err:
-	opa_ib_ctx_uninit(ibd);
+	hfi2_ctx_uninit(ibd);
 ctx_err:
-	opa_ib_cq_exit(ibd);
+	hfi2_cq_exit(ibd);
 cq_init_err:
 	ib_dealloc_device(&ibd->ibdev);
 exit:
@@ -608,17 +608,17 @@ exit:
 	return ret;
 }
 
-void opa_ib_remove(struct hfi_devdata *dd)
+void hfi2_ib_remove(struct hfi_devdata *dd)
 {
 	int i;
-	struct opa_ib_data *ibd = dd->ibd;
+	struct hfi2_ibdev *ibd = dd->ibd;
 
 	dd->ibd = NULL;
-	opa_ib_unregister_device(ibd);
+	hfi2_unregister_device(ibd);
 	for (i = 0; i < ibd->num_pports; i++)
-		opa_ib_uninit_port(&ibd->pport[i]);
-	opa_ib_ctx_uninit(ibd);
-	opa_ib_cq_exit(ibd);
+		hfi2_uninit_port(&ibd->pport[i]);
+	hfi2_ctx_uninit(ibd);
+	hfi2_cq_exit(ibd);
 	idr_destroy(&ibd->lk_table.table);
 	/* TODO - verify empty IDR? */
 	idr_destroy(&ibd->qp_ptr);

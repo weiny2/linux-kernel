@@ -55,8 +55,8 @@
 #include <rdma/ib_umem.h>
 #include "verbs.h"
 
-static int opa_ib_alloc_lkey(struct hfi2_mregion *mr, int dma_region);
-static void opa_ib_free_lkey(struct hfi2_mregion *mr);
+static int hfi2_alloc_lkey(struct hfi2_mregion *mr, int dma_region);
+static void hfi2_free_lkey(struct hfi2_mregion *mr);
 
 static int init_mregion(struct hfi2_mregion *mr, struct ib_pd *pd,
 			int count)
@@ -96,7 +96,7 @@ static void deinit_mregion(struct hfi2_mregion *mr)
 
 
 /**
- * opa_ib_get_dma_mr - get a DMA memory region
+ * hfi2_get_dma_mr - get a DMA memory region
  * @pd: protection domain for this memory region
  * @acc: access flags
  *
@@ -105,13 +105,13 @@ static void deinit_mregion(struct hfi2_mregion *mr)
  *
  * Return: the memory region on success, otherwise returns an errno.
  */
-struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc)
+struct ib_mr *hfi2_get_dma_mr(struct ib_pd *pd, int acc)
 {
-	struct opa_ib_mr *mr = NULL;
+	struct hfi2_mr *mr = NULL;
 	struct ib_mr *ret;
 	int rval;
 
-	if (to_opa_ibpd(pd)->is_user) {
+	if (to_hfi_pd(pd)->is_user) {
 		ret = ERR_PTR(-EPERM);
 		goto bail;
 	}
@@ -128,7 +128,7 @@ struct ib_mr *opa_ib_get_dma_mr(struct ib_pd *pd, int acc)
 		goto bail;
 	}
 
-	rval = opa_ib_alloc_lkey(&mr->mr, 1);
+	rval = hfi2_alloc_lkey(&mr->mr, 1);
 	if (rval) {
 		ret = ERR_PTR(rval);
 		goto bail_mregion;
@@ -145,9 +145,9 @@ bail:
 	return ret;
 }
 
-static struct opa_ib_mr *alloc_mr(int count, struct ib_pd *pd)
+static struct hfi2_mr *alloc_mr(int count, struct ib_pd *pd)
 {
-	struct opa_ib_mr *mr;
+	struct hfi2_mr *mr;
 	int rval = -ENOMEM;
 	int m;
 
@@ -164,7 +164,7 @@ static struct opa_ib_mr *alloc_mr(int count, struct ib_pd *pd)
 	 * ib_reg_phys_mr() will initialize mr->ibmr except for
 	 * lkey and rkey.
 	 */
-	rval = opa_ib_alloc_lkey(&mr->mr, 0);
+	rval = hfi2_alloc_lkey(&mr->mr, 0);
 	if (rval)
 		goto bail_mregion;
 	mr->ibmr.lkey = mr->mr.lkey;
@@ -179,7 +179,7 @@ bail:
 }
 
 /**
- * opa_ib_reg_phys_mr - register a physical memory region
+ * hfi2_reg_phys_mr - register a physical memory region
  * @pd: protection domain for this memory region
  * @buffer_list: pointer to the list of physical buffers to register
  * @num_phys_buf: the number of physical buffers to register
@@ -187,11 +187,11 @@ bail:
  *
  * Return: the memory region on success, otherwise returns an errno.
  */
-struct ib_mr *opa_ib_reg_phys_mr(struct ib_pd *pd,
+struct ib_mr *hfi2_reg_phys_mr(struct ib_pd *pd,
 				 struct ib_phys_buf *buffer_list,
 				 int num_phys_buf, int acc, u64 *iova_start)
 {
-	struct opa_ib_mr *mr;
+	struct hfi2_mr *mr;
 	int n, m, i;
 	struct ib_mr *ret;
 
@@ -225,7 +225,7 @@ bail:
 }
 
 /**
- * opa_ib_reg_user_mr - register a userspace memory region
+ * hfi2_reg_user_mr - register a userspace memory region
  * @pd: protection domain for this memory region
  * @start: starting userspace address
  * @length: length of region to register
@@ -234,11 +234,11 @@ bail:
  *
  * Return: the memory region on success, otherwise returns an errno.
  */
-struct ib_mr *opa_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
+struct ib_mr *hfi2_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 				 u64 virt_addr, int mr_access_flags,
 				 struct ib_udata *udata)
 {
-	struct opa_ib_mr *mr;
+	struct hfi2_mr *mr;
 	struct ib_umem *umem;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
 	struct ib_umem_chunk *chunk;
@@ -332,21 +332,21 @@ bail:
 }
 
 /**
- * opa_ib_dereg_mr - unregister and free a memory region
+ * hfi2_dereg_mr - unregister and free a memory region
  * @ibmr: the memory region to free
  *
- * Note that this is called to free MRs created by opa_ib_get_dma_mr()
- * or opa_ib_reg_user_mr().
+ * Note that this is called to free MRs created by hfi2_get_dma_mr()
+ * or hfi2_reg_user_mr().
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_dereg_mr(struct ib_mr *ibmr)
+int hfi2_dereg_mr(struct ib_mr *ibmr)
 {
-	struct opa_ib_mr *mr = to_opa_ibmr(ibmr);
+	struct hfi2_mr *mr = to_hfi_mr(ibmr);
 	int ret = 0;
 	unsigned long timeout;
 
-	opa_ib_free_lkey(&mr->mr);
+	hfi2_free_lkey(&mr->mr);
 
 	hfi2_put_mr(&mr->mr); /* will set completion if last */
 	timeout = wait_for_completion_timeout(&mr->mr.comp,
@@ -355,7 +355,7 @@ int opa_ib_dereg_mr(struct ib_mr *ibmr)
 		struct ib_device *ibdev = mr->mr.pd->device;
 
 		dev_err(&ibdev->dev,
-			"opa_ib_dereg_mr timeout mr %p pd %p refcount %u\n",
+			"hfi2_dereg_mr timeout mr %p pd %p refcount %u\n",
 			mr, mr->mr.pd, atomic_read(&mr->mr.refcount));
 		hfi2_get_mr(&mr->mr);
 		ret = -EBUSY;
@@ -371,7 +371,7 @@ out:
 }
 
 /**
- * opa_ib_alloc_lkey - allocate an lkey
+ * hfi2_alloc_lkey - allocate an lkey
  * @mr: memory region that this lkey protects
  * @dma_region: 0->normal key, 1->restricted DMA key
  *
@@ -380,13 +380,13 @@ out:
  *
  * Return: 0 if successful, otherwise returns -errno.
  */
-static int opa_ib_alloc_lkey(struct hfi2_mregion *mr, int dma_region)
+static int hfi2_alloc_lkey(struct hfi2_mregion *mr, int dma_region)
 {
 	unsigned long flags;
 	u32 r;
 	int ret;
-	struct opa_ib_data *ibd = to_opa_ibdata(mr->pd->device);
-	struct opa_ib_lkey_table *rkt = &ibd->lk_table;
+	struct hfi2_ibdev *ibd = to_hfi_ibd(mr->pd->device);
+	struct hfi2_lkey_table *rkt = &ibd->lk_table;
 
 	hfi2_get_mr(mr);
 
@@ -422,8 +422,8 @@ static int opa_ib_alloc_lkey(struct hfi2_mregion *mr, int dma_region)
 	 * unrestricted LKEY.
 	 */
 	rkt->gen++;
-	mr->lkey = (r << (32 - opa_ib_lkey_table_size)) |
-		((((1 << (24 - opa_ib_lkey_table_size)) - 1) & rkt->gen)
+	mr->lkey = (r << (32 - hfi2_lkey_table_size)) |
+		((((1 << (24 - hfi2_lkey_table_size)) - 1) & rkt->gen)
 		 << 8);
 	if (mr->lkey == 0) {
 		mr->lkey |= 1 << 8;
@@ -438,16 +438,16 @@ idr_err:
 }
 
 /**
- * opa_ib_free_lkey - free an lkey
+ * hfi2_free_lkey - free an lkey
  * @mr: mr to free from tables
  */
-static void opa_ib_free_lkey(struct hfi2_mregion *mr)
+static void hfi2_free_lkey(struct hfi2_mregion *mr)
 {
 	unsigned long flags;
 	u32 lkey = mr->lkey;
 	u32 r;
-	struct opa_ib_data *ibd = to_opa_ibdata(mr->pd->device);
-	struct opa_ib_lkey_table *rkt = &ibd->lk_table;
+	struct hfi2_ibdev *ibd = to_hfi_ibd(mr->pd->device);
+	struct hfi2_lkey_table *rkt = &ibd->lk_table;
 	int freed = 0;
 
 	spin_lock_irqsave(&rkt->lock, flags);
@@ -456,7 +456,7 @@ static void opa_ib_free_lkey(struct hfi2_mregion *mr)
 	if (lkey == 0) {
 		RCU_INIT_POINTER(ibd->dma_mr, NULL);
 	} else {
-		r = lkey >> (32 - opa_ib_lkey_table_size);
+		r = lkey >> (32 - hfi2_lkey_table_size);
 		idr_remove(&rkt->table, r);
 	}
 	mr->lkey_published = 0;
@@ -470,7 +470,7 @@ out:
 }
 
 /**
- * opa_ib_lkey_ok - check IB SGE for validity and initialize
+ * hfi2_lkey_ok - check IB SGE for validity and initialize
  * @rkt: table containing lkey to check SGE against
  * @pd: protection domain
  * @isge: outgoing internal SGE
@@ -482,7 +482,7 @@ out:
  *
  * Return: 1 if valid and successful, otherwise returns 0.
  */
-int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
+int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct hfi2_pd *pd,
 		   struct hfi2_sge *isge, struct ib_sge *sge, int acc)
 {
 	struct hfi2_mregion *mr;
@@ -492,11 +492,11 @@ int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
 
 	/*
 	 * We use LKEY == zero for kernel virtual addresses
-	 * (see opa_ib_get_dma_mr and dma.c).
+	 * (see hfi2_get_dma_mr and dma.c).
 	 */
 	rcu_read_lock();
 	if (sge->lkey == 0) {
-		struct opa_ib_data *ibd = to_opa_ibdata(pd->ibpd.device);
+		struct hfi2_ibdev *ibd = to_hfi_ibd(pd->ibpd.device);
 
 		if (pd->is_user)
 			goto bail;
@@ -515,7 +515,7 @@ int opa_ib_lkey_ok(struct opa_ib_lkey_table *rkt, struct opa_ib_pd *pd,
 		goto ok;
 	}
 
-	r = sge->lkey >> (32 - opa_ib_lkey_table_size);
+	r = sge->lkey >> (32 - hfi2_lkey_table_size);
 	mr = idr_find(&rkt->table, r);
 	if (unlikely(!mr || mr->lkey != sge->lkey || mr->pd != &pd->ibpd))
 		goto bail;
@@ -573,7 +573,7 @@ bail:
 }
 
 /**
- * opa_ib_rkey_ok - check the IB virtual address, length, and RKEY
+ * hfi2_rkey_ok - check the IB virtual address, length, and RKEY
  * @qp: qp for validation
  * @sge: SGE state
  * @len: length of data
@@ -585,23 +585,23 @@ bail:
  *
  * Return: 1 if successful, otherwise 0.
  */
-int opa_ib_rkey_ok(struct opa_ib_qp *qp, struct hfi2_sge *sge,
+int hfi2_rkey_ok(struct hfi2_qp *qp, struct hfi2_sge *sge,
 		   u32 len, u64 vaddr, u32 rkey, int acc)
 {
 	struct hfi2_mregion *mr;
 	u32 r;
 	unsigned n, m;
 	size_t off;
-	struct opa_ib_data *ibd = to_opa_ibdata(qp->ibqp.device);
-	struct opa_ib_lkey_table *rkt = &ibd->lk_table;
+	struct hfi2_ibdev *ibd = to_hfi_ibd(qp->ibqp.device);
+	struct hfi2_lkey_table *rkt = &ibd->lk_table;
 
 	/*
 	 * We use RKEY == zero for kernel virtual addresses
-	 * (see opa_ib_get_dma_mr and dma.c).
+	 * (see hfi2_get_dma_mr and dma.c).
 	 */
 	rcu_read_lock();
 	if (rkey == 0) {
-		struct opa_ib_pd *pd = to_opa_ibpd(qp->ibqp.pd);
+		struct hfi2_pd *pd = to_hfi_pd(qp->ibqp.pd);
 
 		if (pd->is_user)
 			goto bail;
@@ -620,7 +620,7 @@ int opa_ib_rkey_ok(struct opa_ib_qp *qp, struct hfi2_sge *sge,
 		goto ok;
 	}
 
-	r = rkey >> (32 - opa_ib_lkey_table_size);
+	r = rkey >> (32 - hfi2_lkey_table_size);
 	mr = idr_find(&rkt->table, r);
 	if (unlikely(!mr || mr->lkey != rkey || qp->ibqp.pd != mr->pd))
 		goto bail;
@@ -673,7 +673,7 @@ bail:
 /*
  * Initialize the memory region specified by the work reqeust.
  */
-int opa_ib_fast_reg_mr(struct opa_ib_qp *qp, struct ib_send_wr *wr)
+int hfi2_fast_reg_mr(struct hfi2_qp *qp, struct ib_send_wr *wr)
 {
 	return 0;
 }

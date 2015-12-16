@@ -60,9 +60,9 @@
  * mcast_qp_alloc - alloc a struct to link a QP to mcast GID struct
  * @qp: the QP to link
  */
-static struct opa_mcast_qp *mcast_qp_alloc(struct opa_ib_qp *qp)
+static struct hfi2_mcast_qp *mcast_qp_alloc(struct hfi2_qp *qp)
 {
-	struct opa_mcast_qp *mqp;
+	struct hfi2_mcast_qp *mqp;
 
 	mqp = kmalloc(sizeof(*mqp), GFP_KERNEL);
 	if (!mqp)
@@ -75,11 +75,11 @@ bail:
 	return mqp;
 }
 
-static void mcast_qp_free(struct opa_mcast_qp *mqp)
+static void mcast_qp_free(struct hfi2_mcast_qp *mqp)
 {
-	struct opa_ib_qp *qp = mqp->qp;
+	struct hfi2_qp *qp = mqp->qp;
 
-	/* Notify opa_ib_destroy_qp() if it is waiting. */
+	/* Notify hfi2_destroy_qp() if it is waiting. */
 	if (atomic_dec_and_test(&qp->refcount))
 		wake_up(&qp->wait);
 
@@ -92,9 +92,9 @@ static void mcast_qp_free(struct opa_mcast_qp *mqp)
  *
  * A list of QPs will be attached to this structure.
  */
-static struct opa_mcast *mcast_alloc(union ib_gid *mgid)
+static struct hfi2_mcast *mcast_alloc(union ib_gid *mgid)
 {
-	struct opa_mcast *mcast;
+	struct hfi2_mcast *mcast;
 
 	mcast = kmalloc(sizeof(*mcast), GFP_KERNEL);
 	if (!mcast)
@@ -110,9 +110,9 @@ bail:
 	return mcast;
 }
 
-static void mcast_free(struct opa_mcast *mcast)
+static void mcast_free(struct hfi2_mcast *mcast)
 {
-	struct opa_mcast_qp *p, *tmp;
+	struct hfi2_mcast_qp *p, *tmp;
 
 	list_for_each_entry_safe(p, tmp, &mcast->qp_list, list)
 		mcast_qp_free(p);
@@ -121,7 +121,7 @@ static void mcast_free(struct opa_mcast *mcast)
 }
 
 /**
- * opa_mcast_find - search the global table for the given multicast GID
+ * hfi2_mcast_find - search the global table for the given multicast GID
  * @ibp: the IB port structure
  * @mgid: the multicast GID to search for
  *
@@ -129,19 +129,19 @@ static void mcast_free(struct opa_mcast *mcast)
  *
  * The caller is responsible for decrementing the reference count if found.
  */
-struct opa_mcast *
-opa_mcast_find(struct opa_ib_portdata *ibp, union ib_gid *mgid)
+struct hfi2_mcast *
+hfi2_mcast_find(struct hfi2_ibport *ibp, union ib_gid *mgid)
 {
 	struct rb_node *n;
 	unsigned long flags;
-	struct opa_mcast *mcast;
+	struct hfi2_mcast *mcast;
 
 	spin_lock_irqsave(&ibp->lock, flags);
 	n = ibp->mcast_tree.rb_node;
 	while (n) {
 		int ret;
 
-		mcast = rb_entry(n, struct opa_mcast, rb_node);
+		mcast = rb_entry(n, struct hfi2_mcast, rb_node);
 
 		ret = memcmp(mgid->raw, mcast->mgid.raw,
 			     sizeof(union ib_gid));
@@ -172,8 +172,8 @@ bail:
  * the table but the QP was added.  Return ESRCH if the QP was already
  * attached and neither structure was added.
  */
-static int mcast_add(struct opa_ib_data *dev, struct opa_ib_portdata *ibp,
-		     struct opa_mcast *mcast, struct opa_mcast_qp *mqp)
+static int mcast_add(struct hfi2_ibdev *dev, struct hfi2_ibport *ibp,
+		     struct hfi2_mcast *mcast, struct hfi2_mcast_qp *mqp)
 {
 	struct rb_node **n = &ibp->mcast_tree.rb_node;
 	struct rb_node *pn = NULL;
@@ -182,11 +182,11 @@ static int mcast_add(struct opa_ib_data *dev, struct opa_ib_portdata *ibp,
 	spin_lock_irq(&ibp->lock);
 
 	while (*n) {
-		struct opa_mcast *tmcast;
-		struct opa_mcast_qp *p;
+		struct hfi2_mcast *tmcast;
+		struct hfi2_mcast_qp *p;
 
 		pn = *n;
-		tmcast = rb_entry(pn, struct opa_mcast, rb_node);
+		tmcast = rb_entry(pn, struct hfi2_mcast, rb_node);
 
 		ret = memcmp(mcast->mgid.raw, tmcast->mgid.raw,
 			     sizeof(union ib_gid));
@@ -206,7 +206,7 @@ static int mcast_add(struct opa_ib_data *dev, struct opa_ib_portdata *ibp,
 				goto bail;
 			}
 		}
-		if (tmcast->n_attached == opa_ib_max_mcast_qp_attached) {
+		if (tmcast->n_attached == hfi2_max_mcast_qp_attached) {
 			ret = ENOMEM;
 			goto bail;
 		}
@@ -219,7 +219,7 @@ static int mcast_add(struct opa_ib_data *dev, struct opa_ib_portdata *ibp,
 	}
 
 	spin_lock(&dev->n_mcast_grps_lock);
-	if (dev->n_mcast_grps_allocated == opa_ib_max_mcast_grps) {
+	if (dev->n_mcast_grps_allocated == hfi2_max_mcast_grps) {
 		spin_unlock(&dev->n_mcast_grps_lock);
 		ret = ENOMEM;
 		goto bail;
@@ -244,14 +244,14 @@ bail:
 	return ret;
 }
 
-int opa_ib_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
+int hfi2_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 {
-	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
+	struct hfi2_qp *qp = to_hfi_qp(ibqp);
 	struct ib_device *ibdev = ibqp->device;
-	struct opa_ib_data *dev = to_opa_ibdata(ibdev);
-	struct opa_ib_portdata *ibp;
-	struct opa_mcast *mcast;
-	struct opa_mcast_qp *mqp;
+	struct hfi2_ibdev *dev = to_hfi_ibd(ibdev);
+	struct hfi2_ibport *ibp;
+	struct hfi2_mcast *mcast;
+	struct hfi2_mcast_qp *mqp;
 	int ret;
 
 	if (ibqp->qp_num <= 1 || qp->state == IB_QPS_RESET) {
@@ -274,7 +274,7 @@ int opa_ib_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 		ret = -ENOMEM;
 		goto bail;
 	}
-	ibp = to_opa_ibportdata(ibqp->device, qp->port_num);
+	ibp = to_hfi_ibp(ibqp->device, qp->port_num);
 	switch (mcast_add(dev, ibp, mcast, mqp)) {
 	case ESRCH:
 		/* Neither was used: OK to attach the same QP twice. */
@@ -303,15 +303,15 @@ bail:
 	return ret;
 }
 
-int opa_ib_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
+int hfi2_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 {
-	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
+	struct hfi2_qp *qp = to_hfi_qp(ibqp);
 	struct ib_device *ibdev = ibqp->device;
-	struct opa_ib_data *dev = to_opa_ibdata(ibdev);
-	struct opa_ib_portdata *ibp =
-		to_opa_ibportdata(ibqp->device, qp->port_num);
-	struct opa_mcast *mcast = NULL;
-	struct opa_mcast_qp *p, *tmp;
+	struct hfi2_ibdev *dev = to_hfi_ibd(ibdev);
+	struct hfi2_ibport *ibp =
+		to_hfi_ibp(ibqp->device, qp->port_num);
+	struct hfi2_mcast *mcast = NULL;
+	struct hfi2_mcast_qp *p, *tmp;
 	struct rb_node *n;
 	int last = 0;
 	int ret;
@@ -332,7 +332,7 @@ int opa_ib_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 			goto bail;
 		}
 
-		mcast = rb_entry(n, struct opa_mcast, rb_node);
+		mcast = rb_entry(n, struct hfi2_mcast, rb_node);
 		ret = memcmp(gid->raw, mcast->mgid.raw,
 			     sizeof(union ib_gid));
 		if (ret < 0)
@@ -387,7 +387,7 @@ bail:
 	return ret;
 }
 
-int opa_mcast_tree_empty(struct opa_ib_portdata *ibp)
+int hfi2_mcast_tree_empty(struct hfi2_ibport *ibp)
 {
 	return !ibp->mcast_tree.rb_node;
 }

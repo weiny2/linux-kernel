@@ -56,60 +56,60 @@
 #include "verbs.h"
 #include "packet.h"
 
-static void opa_ib_cnp_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet);
-typedef void (*opcode_handler)(struct opa_ib_qp *qp,
-			       struct opa_ib_packet *packet);
+static void hfi2_cnp_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
+typedef void (*opcode_handler)(struct hfi2_qp *qp,
+			       struct hfi2_ib_packet *packet);
 
 static const opcode_handler opcode_handler_tbl[256] = {
 	/* RC */
-	[IB_OPCODE_RC_SEND_FIRST]                     = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_SEND_MIDDLE]                    = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_SEND_LAST]                      = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE]       = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_SEND_ONLY]                      = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_SEND_ONLY_WITH_IMMEDIATE]       = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_WRITE_FIRST]               = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]              = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_WRITE_LAST]                = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_ACKNOWLEDGE]                    = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_COMPARE_SWAP]                   = &opa_ib_rc_rcv,
-	[IB_OPCODE_RC_FETCH_ADD]                      = &opa_ib_rc_rcv,
+	[IB_OPCODE_RC_SEND_FIRST]                     = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_SEND_MIDDLE]                    = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_SEND_LAST]                      = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE]       = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_SEND_ONLY]                      = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_SEND_ONLY_WITH_IMMEDIATE]       = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_FIRST]               = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]              = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST]                = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_ACKNOWLEDGE]                    = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_COMPARE_SWAP]                   = &hfi2_rc_rcv,
+	[IB_OPCODE_RC_FETCH_ADD]                      = &hfi2_rc_rcv,
 	/* UC */
-	[IB_OPCODE_UC_SEND_FIRST]                     = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_SEND_MIDDLE]                    = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_SEND_LAST]                      = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_SEND_ONLY]                      = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_RDMA_WRITE_LAST]                = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_RDMA_WRITE_ONLY]                = &opa_ib_uc_rcv,
-	[IB_OPCODE_UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = &opa_ib_uc_rcv,
+	[IB_OPCODE_UC_SEND_FIRST]                     = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_SEND_MIDDLE]                    = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_SEND_LAST]                      = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_SEND_ONLY]                      = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST]                = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY]                = &hfi2_uc_rcv,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = &hfi2_uc_rcv,
 	/* UD */
-	[IB_OPCODE_UD_SEND_ONLY]                      = &opa_ib_ud_rcv,
-	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = &opa_ib_ud_rcv,
+	[IB_OPCODE_UD_SEND_ONLY]                      = &hfi2_ud_rcv,
+	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = &hfi2_ud_rcv,
 	/* CNP */
-	[CNP_OPCODE]				      = &opa_ib_cnp_rcv
+	[CNP_OPCODE]				      = &hfi2_cnp_rcv
 };
 
 /**
- * opa_ib_copy_sge - copy data to SGE memory
+ * hfi2_copy_sge - copy data to SGE memory
  * @ss: the SGE state
  * @data: the data to copy
  * @length: the length of the data
  */
-void opa_ib_copy_sge(struct opa_ib_sge_state *ss, void *data, u32 length,
+void hfi2_copy_sge(struct hfi2_sge_state *ss, void *data, u32 length,
 		     int release)
 {
 	struct hfi2_sge *sge = &ss->sge;
@@ -150,13 +150,13 @@ void opa_ib_copy_sge(struct opa_ib_sge_state *ss, void *data, u32 length,
 }
 
 /**
- * opa_ib_skip_sge - skip over SGE memory
+ * hfi2_skip_sge - skip over SGE memory
  * @ss: the SGE state
  * @length: the number of bytes to skip
  */
-void opa_ib_skip_sge(struct opa_ib_sge_state *ss, u32 length, int release)
+void hfi2_skip_sge(struct hfi2_sge_state *ss, u32 length, int release)
 {
-	opa_ib_copy_sge(ss, NULL, length, release);
+	hfi2_copy_sge(ss, NULL, length, release);
 }
 
 /**
@@ -166,24 +166,24 @@ void opa_ib_skip_sge(struct opa_ib_sge_state *ss, u32 length, int release)
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
+static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 			 int *scheduled)
 {
-	struct opa_ib_swqe *wqe;
+	struct hfi2_swqe *wqe;
 	u32 next;
 	int i;
 	int j;
 	int acc;
 	int ret;
 	unsigned long flags;
-	struct opa_ib_lkey_table *rkt;
-	struct opa_ib_pd *pd;
-	struct opa_ib_portdata *ibp;
+	struct hfi2_lkey_table *rkt;
+	struct hfi2_pd *pd;
+	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
 	struct hfi2_sge *last_sge;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	ppd = ibp->ppd;
 
 	/* Check that state is OK to post send. */
@@ -200,7 +200,7 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 	 * Make sure buffer is large enough to hold the result for atomics.
 	 */
 	if (wr->opcode == IB_WR_FAST_REG_MR) {
-		if (opa_ib_fast_reg_mr(qp, wr))
+		if (hfi2_fast_reg_mr(qp, wr))
 			goto bail_inval;
 	} else if (qp->ibqp.qp_type == IB_QPT_UC) {
 		if ((unsigned) wr->opcode >= IB_WR_RDMA_READ)
@@ -231,8 +231,8 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 		goto bail;
 	}
 
-	rkt = &to_opa_ibdata(qp->ibqp.device)->lk_table;
-	pd = to_opa_ibpd(qp->ibqp.pd);
+	rkt = &to_hfi_ibd(qp->ibqp.device)->lk_table;
+	pd = to_hfi_pd(qp->ibqp.pd);
 	wqe = get_swqe_ptr(qp, qp->s_head);
 	wqe->wr = *wr;
 	wqe->length = 0;
@@ -256,7 +256,7 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 				last_sge->length += length;
 				last_sge->sge_length += length;
 			} else {
-				ok = opa_ib_lkey_ok(rkt, pd, &wqe->sg_list[j],
+				ok = hfi2_lkey_ok(rkt, pd, &wqe->sg_list[j],
 						    &wr->sg_list[i], acc);
 				if (!ok)
 					goto bail_inval_free;
@@ -276,7 +276,7 @@ static int post_one_send(struct opa_ib_qp *qp, struct ib_send_wr *wr,
 		if (wqe->length > 0x80000000U)
 			goto bail_inval_free;
 	} else {
-		struct opa_ib_ah *ah = to_opa_ibah(wr->wr.ud.ah);
+		struct hfi2_ah *ah = to_hfi_ah(wr->wr.ud.ah);
 		u8 sc5, vl;
 
 		if (qp->ibqp.qp_type == IB_QPT_SMI) {
@@ -317,7 +317,7 @@ bail:
 		 * so cannot do the more narrow check..
 		 */
 		if (is_iowait_sdma_busy(&qp->s_iowait)) {
-			opa_ib_schedule_send(qp);
+			hfi2_schedule_send(qp);
 			*scheduled = 1;
 		}
 	}
@@ -327,7 +327,7 @@ bail:
 }
 
 /**
- * opa_ib_post_send - post a send on a QP
+ * hfi2_post_send - post a send on a QP
  * @ibqp: the QP to post the send on
  * @wr: the list of work requests to post
  * @bad_wr: the first bad WR is put here
@@ -336,10 +336,10 @@ bail:
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
+int hfi2_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr)
 {
-	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
+	struct hfi2_qp *qp = to_hfi_qp(ibqp);
 	int err = 0;
 	int scheduled = 0;
 
@@ -357,14 +357,14 @@ int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 
 	/* Try to do the send work in the caller's context. */
 	if (!scheduled)
-		opa_ib_do_send(&qp->s_iowait.iowork);
+		hfi2_do_send(&qp->s_iowait.iowork);
 
 bail:
 	return err;
 }
 
 /**
- * opa_ib_post_receive - post a receive on a QP
+ * hfi2_post_receive - post a receive on a QP
  * @ibqp: the QP to post the receive on
  * @wr: the WR to post
  * @bad_wr: the first bad WR is put here
@@ -373,11 +373,11 @@ bail:
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
+int hfi2_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 			struct ib_recv_wr **bad_wr)
 {
-	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
-	struct opa_ib_rwq *wq = qp->r_rq.wq;
+	struct hfi2_qp *qp = to_hfi_qp(ibqp);
+	struct hfi2_rwq *wq = qp->r_rq.wq;
 	unsigned long flags;
 	int ret;
 
@@ -389,7 +389,7 @@ int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 	}
 
 	for (; wr; wr = wr->next) {
-		struct opa_ib_rwqe *wqe;
+		struct hfi2_rwqe *wqe;
 		u32 next;
 		int i;
 
@@ -429,8 +429,8 @@ bail:
 /*
  * Make sure the QP is ready and able to accept the given opcode.
  */
-static inline bool is_qp_ok(struct opa_ib_portdata *ibp,
-			    struct opa_ib_qp *qp, int opcode)
+static inline bool is_qp_ok(struct hfi2_ibport *ibp,
+			    struct hfi2_qp *qp, int opcode)
 {
 	if ((ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) &&
 	    (((opcode & OPCODE_QP_MASK) == qp->allowed_ops) ||
@@ -443,19 +443,19 @@ static inline bool is_qp_ok(struct opa_ib_portdata *ibp,
 }
 
 /**
- * opa_ib_rcv - process an incoming packet
+ * hfi2_rcv - process an incoming packet
  * @packet: data packet information
  *
  * Called from receive kthread upon processing event in RHQ.
  * packet->tlen is the length of the header + data + CRC in bytes.
  */
-static void opa_ib_rcv(struct opa_ib_packet *packet)
+static void hfi2_rcv(struct hfi2_ib_packet *packet)
 {
-	struct opa_ib_header *hdr = packet->hdr;
+	struct hfi2_ib_header *hdr = packet->hdr;
 	u32 tlen = packet->tlen;
-	struct opa_ib_portdata *ibp = packet->ibp;
+	struct hfi2_ibport *ibp = packet->ibp;
 	struct ib_l4_headers *ohdr;
-	struct opa_ib_qp *qp;
+	struct hfi2_qp *qp;
 	u32 qp_num;
 	int lnh;
 	u8 opcode;
@@ -500,12 +500,12 @@ static void opa_ib_rcv(struct opa_ib_packet *packet)
 
 	if ((lid >= HFI1_MULTICAST_LID_BASE) &&
 	    (lid != HFI1_PERMISSIVE_LID)) {
-		struct opa_mcast *mcast;
-		struct opa_mcast_qp *p;
+		struct hfi2_mcast *mcast;
+		struct hfi2_mcast_qp *p;
 
 		if (lnh != HFI1_LRH_GRH)
 			goto drop;
-		mcast = opa_mcast_find(ibp, &hdr->u.l.grh.dgid);
+		mcast = hfi2_mcast_find(ibp, &hdr->u.l.grh.dgid);
 		if (mcast == NULL)
 			goto drop;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
@@ -523,7 +523,7 @@ static void opa_ib_rcv(struct opa_ib_packet *packet)
 			wake_up(&mcast->wait);
 	} else {
 		rcu_read_lock();
-		qp = opa_ib_lookup_qpn(ibp, qp_num);
+		qp = hfi2_lookup_qpn(ibp, qp_num);
 		if (!qp) {
 			rcu_read_unlock();
 			goto drop;
@@ -544,20 +544,20 @@ drop:
 	ibp->n_pkt_drops++;
 }
 
-static void opa_ib_cnp_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
+static void hfi2_cnp_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 {
-	struct opa_ib_portdata *ibp = packet->ibp;
+	struct hfi2_ibport *ibp = packet->ibp;
 
 	if (qp->ibqp.qp_type == IB_QPT_UC)
-		opa_ib_uc_rcv(qp, packet);
+		hfi2_uc_rcv(qp, packet);
 	else if (qp->ibqp.qp_type == IB_QPT_UD)
-		opa_ib_ud_rcv(qp, packet);
+		hfi2_ud_rcv(qp, packet);
 	else
 		ibp->n_pkt_drops++;
 }
 
-static void process_rcv_packet(struct opa_ib_portdata *ibp, u64 *rhf_entry,
-			       struct opa_ib_packet *packet)
+static void process_rcv_packet(struct hfi2_ibport *ibp, u64 *rhf_entry,
+			       struct hfi2_ib_packet *packet)
 {
 	u16 idx, off;
 	u64 rhf = *rhf_entry;
@@ -574,7 +574,7 @@ static void process_rcv_packet(struct opa_ib_portdata *ibp, u64 *rhf_entry,
 	    packet->etype > RHF_RCV_TYPE_BYPASS)
 		packet->ebuf = NULL;
 	else
-		packet->ebuf = opa_ib_rcv_get_ebuf(ibp, idx, off);
+		packet->ebuf = hfi2_rcv_get_ebuf(ibp, idx, off);
 
 	packet->port = rhf_port(rhf);
 	dev_dbg(ibp->dev,
@@ -593,10 +593,10 @@ static void process_rcv_packet(struct opa_ib_portdata *ibp, u64 *rhf_entry,
  * This is the RX kthread function, created per Receive Header Queue (RHQ).
  * There may be a RHQ per port (disjoint mode) or shared between the 2 ports.
  */
-int opa_ib_rcv_wait(void *data)
+int hfi2_rcv_wait(void *data)
 {
-	struct opa_ib_portdata *ibp = data;
-	struct opa_ib_packet pkt;
+	struct hfi2_ibport *ibp = data;
+	struct hfi2_ib_packet pkt;
 	int rc;
 	u64 *rhf_entry;
 
@@ -604,7 +604,7 @@ int opa_ib_rcv_wait(void *data)
 	allow_signal(SIGINT);
 	while (!kthread_should_stop()) {
 		rhf_entry = NULL;
-		rc = _opa_ib_rcv_wait(ibp, &rhf_entry);
+		rc = _hfi2_rcv_wait(ibp, &rhf_entry);
 		if (rc < 0) {
 			dev_warn(ibp->dev, "RX EQ failure, %d\n", rc);
 			/* TODO - handle this */
@@ -612,17 +612,17 @@ int opa_ib_rcv_wait(void *data)
 		}
 
 		if (rhf_entry) {
-			/* parse packet header and call opa_ib_rcv() to handle */
+			/* parse packet header and call hfi2_rcv() to handle */
 			process_rcv_packet(ibp, rhf_entry, &pkt);
 			if (pkt.etype == RHF_RCV_TYPE_IB)
-				opa_ib_rcv(&pkt);
+				hfi2_rcv(&pkt);
 			else
 				dev_warn(ibp->dev,
 					 "PT %d: Unexpected packet! 0x%x\n",
 					 pkt.port, pkt.etype);
 
 			/* mark RHF entry as processed */
-			opa_ib_rcv_advance(ibp, rhf_entry);
+			hfi2_rcv_advance(ibp, rhf_entry);
 		}
 	}
 
