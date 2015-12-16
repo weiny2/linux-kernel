@@ -597,12 +597,6 @@ void hfi_add_full_mgmt_pkey(struct hfi_pportdata *ppd)
 	hfi_set_ib_cfg(ppd, HFI_IB_CFG_PKEYS, 0, NULL);
 }
 
-u8 hfi_porttype(struct hfi_pportdata *ppd)
-{
-	/* FXRTODO: QSFP logic goes here to decide port type */
-	return HFI_PORT_TYPE_STANDARD;
-}
-
 static void hfi_set_sc_to_vlr(struct hfi_pportdata *ppd, u8 *t)
 {
 	u64 reg_val = 0;
@@ -1444,6 +1438,20 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 	return ret;
 }
 
+int hfi_set_lid(struct hfi_pportdata *ppd, u32 lid, u8 lmc)
+{
+	struct hfi_devdata *dd = ppd->dd;
+
+	ppd->lid = lid;
+	ppd->lmc = lmc;
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_LIDLMC, 0, NULL);
+
+	ppd_dev_info(ppd, "IB%u:%u got a lid: 0x%x\n",
+		     dd->unit, ppd->pnum, lid);
+
+	return 0;
+}
+
 /*
  * set_mtu - set the MTU
  * @ppd: the per port data
@@ -1768,6 +1776,12 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		spin_lock_init(&ppd->crk8051_lock);
 		ppd->crk8051_timed_out = 0;
 		ppd->host_link_state = HLS_DN_OFFLINE;
+		ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
+		ppd->sm_trap_qp = OPA_DEFAULT_SM_TRAP_QP;
+		ppd->sa_qp = OPA_DEFAULT_SA_QP;
+
+		/* FXRTODO: Remove after QSFP code implemented */
+		ppd->port_type = HFI_PORT_TYPE_STANDARD;
 
 		ppd->cc_max_table_entries = HFI_IB_CC_TABLE_CAP_DEFAULT;
 

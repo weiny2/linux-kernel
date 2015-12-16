@@ -422,6 +422,9 @@ struct ib_vl_weight_elem {
  * @ibmtu: The MTU programmed for this port
  * @port_error_action: contains bit mask for various errors. The HFI
  *	should initiate link-bounce when the corresponding error occurs.
+ * @port_type: Type of physical port
+ * @sm_trap_qp: qp number to send trap to SM from SMA
+ * @sa_qp: SA qp number
  * @link_width_supported: Supported link width
  * @link_width_downgrade_supported: Supported link width downgrading
  * @link_speed_supported: Supported link speed
@@ -438,7 +441,6 @@ struct ib_vl_weight_elem {
  * @pnum: port number of this port
  * @vls_supported: Virtual lane supported
  * @vls_operational: Virtual lane operational
- * @vl_high_limit: Limit of high priority compenent of
  *	VL Arbitration table
  * @neighbor_type: Node type of neighboring port
  *			0 - HFI
@@ -513,6 +515,9 @@ struct hfi_pportdata {
 	u32 lstate;
 	u32 ibmtu;
 	u32 port_error_action;
+	u32 port_type;
+	u32 sm_trap_qp;
+	u32 sa_qp;
 	u16 pkeys[HFI_MAX_PKEYS];
 	u16 link_width_supported;
 	u16 link_width_downgrade_supported;
@@ -525,12 +530,12 @@ struct hfi_pportdata {
 	u16 link_width_downgrade_rx_active;
 	u16 link_speed_active;
 	u16 port_ltp_crc_mode;
+	u8 linkinit_reason;
 	u8 port_crc_mode_enabled;
 	u8 lmc;
 	u8 pnum;
 	u8 vls_supported;
 	u8 vls_operational;
-	u8 vl_high_limit;
 	u8 neighbor_type;
 	u8 neighbor_normal;
 	u8 neighbor_fm_security;
@@ -889,6 +894,7 @@ void hfi_assign_remote_cm_au_table(struct hfi_pportdata *ppd, u8 vcu);
 int neigh_is_hfi(struct hfi_pportdata *ppd);
 void hfi_add_full_mgmt_pkey(struct hfi_pportdata *ppd);
 const char *hfi_class_name(void);
+int hfi_set_lid(struct hfi_pportdata *ppd, u32 lid, u8 lmc);
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of

@@ -330,57 +330,49 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 					u32 *resp_len)
 {
-	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
-	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
-	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
-	struct opa_port_info *pi = (struct opa_port_info *)data;
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
 	int i;
+	struct hfi_devdata *dd;
+	struct hfi_pportdata *ppd;
+	struct opa_ib_portdata *ibp;
+	struct opa_port_info *pi = (struct opa_port_info *)data;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	u8 mtu;
+	u8 credit_rate;
+	u32 state;
 	u32 num_ports = OPA_AM_NPORT(am);
 	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
-	u32 lstate;
 	u32 buffer_units;
-	u8 mtu, credit_rate;
 
 	if (num_ports != 1) {
 		hfi_invalid_attr(smp);
 		return reply(ibh);
 	}
 
-	lstate = hfi_driver_lstate(ppd);
+	dd = hfi_dd_from_ibdev(ibdev);
+	/* IB numbers ports from 1, hw from 0 */
+	ppd = to_hfi_ppd(dd, port);
+	ibp = to_opa_ibportdata(ibdev, port);
 
-	if (start_of_sm_config && (lstate == IB_PORT_INIT))
-		ppd->is_sm_config_started = 1;
+	if (ppd->vls_supported / 2 > ARRAY_SIZE(pi->neigh_mtu.pvlx_to_mtu) ||
+	    ppd->vls_supported > ARRAY_SIZE(ppd->vl_mtu)) {
+		hfi_invalid_attr(smp);
+		return reply(ibh);
+	}
 
 	pi->lid = cpu_to_be32(ppd->lid);
-	pi->sm_lid = cpu_to_be32(ibp->sm_lid);
-	pi->smsl = ibp->smsl & OPA_PI_MASK_SMSL;
-	pi->mkeyprotect_lmc |= ppd->lmc;
 
 	/* Only return the mkey if the protection field allows it. */
-	if (!(ibp->mkey != smp->mkey && ibp->mkeyprot == 1))
+	if (!(smp->method == IB_MGMT_METHOD_GET &&
+	      ibp->mkey != smp->mkey &&
+	      ibp->mkeyprot == 1))
 		pi->mkey = ibp->mkey;
 
 	pi->subnet_prefix = ibp->gid_prefix;
+	pi->sm_lid = cpu_to_be32(ibp->sm_lid);
 	pi->ib_cap_mask = cpu_to_be32(ibp->port_cap_flags);
 	pi->mkey_lease_period = cpu_to_be16(ibp->mkey_lease_period);
-	pi->mkeyprotect_lmc = ibp->mkeyprot << MKEY_SHIFT;
-	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
-
-	/*
-	 * FXRTODO: pkey check in FXR is offloaded to HW. This will
-	 * have to be read from a CSR. Ref JIRA STL-2298
-	 */
-	pi->pkey_violations = cpu_to_be16(ibp->pkey_violations);
-	pi->qkey_violations = cpu_to_be16(ibp->qkey_violations);
-	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
-	pi->port_link_mode  = cpu_to_be16(OPA_PORT_LINK_MODE_OPA << 10 |
-					  OPA_PORT_LINK_MODE_OPA << 5 |
-					  OPA_PORT_LINK_MODE_OPA);
-	pi->sm_trap_qp = cpu_to_be32(ibp->sm_trap_qp);
-	pi->sa_qp = cpu_to_be32(ibp->sa_qp);
-	pi->local_port_num = port;
-	pi->opa_cap_mask = cpu_to_be16(OPA_CAP_MASK3_IsVLrSupported);
+	pi->sm_trap_qp = cpu_to_be32(ppd->sm_trap_qp);
+	pi->sa_qp = cpu_to_be32(ppd->sa_qp);
 
 	pi->link_width.enabled = cpu_to_be16(ppd->link_width_enabled);
 	pi->link_width.supported = cpu_to_be16(ppd->link_width_supported);
@@ -399,20 +391,29 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->link_speed.active = cpu_to_be16(ppd->link_speed_active);
 	pi->link_speed.enabled = cpu_to_be16(ppd->link_speed_enabled);
 
-	pi->port_phys_conf = hfi_porttype(ppd) & 0xf;
+	state = hfi_driver_lstate(ppd);
 
-	/*
-	 * FXTODO: WFR  has ledenable_offlinereason as alternative
-	 * to offline_reason. Why ?
-	 */
-	pi->port_states.offline_reason = ppd->neighbor_normal << NNORMAL_SHIFT;
-	pi->port_states.offline_reason |=
-			ppd->is_sm_config_started << SM_CONFIG_SHIFT;
-	pi->port_states.offline_reason |= ppd->offline_disabled_reason &
-				OPA_PI_MASK_OFFLINE_REASON;
+	if (start_of_sm_config && (state == IB_PORT_INIT))
+		ppd->is_sm_config_started = 1;
 
-	pi->operational_vls =
-		hfi_get_ib_cfg(ppd, HFI_IB_CFG_OP_VLS);
+	pi->port_phys_conf = (ppd->port_type & 0xf);
+
+#if PI_LED_ENABLE_SUP
+	pi->port_states.ledenable_offlinereason = ppd->neighbor_normal << 4;
+	pi->port_states.ledenable_offlinereason |=
+		ppd->is_sm_config_started << 5;
+	pi->port_states.ledenable_offlinereason |=
+		ppd->offline_disabled_reason;
+#else
+	pi->port_states.offline_reason = ppd->neighbor_normal << 4;
+	pi->port_states.offline_reason |= ppd->is_sm_config_started << 5;
+	pi->port_states.offline_reason |= ppd->offline_disabled_reason;
+#endif /* PI_LED_ENABLE_SUP */
+
+	pi->port_states.portphysstate_portstate =
+		(hfi_ibphys_portstate(ppd) << 4) | state;
+
+	pi->mkeyprotect_lmc = (ibp->mkeyprot << 6) | ppd->lmc;
 
 	memset(pi->neigh_mtu.pvlx_to_mtu, 0, sizeof(pi->neigh_mtu.pvlx_to_mtu));
 	for (i = 0; i < ppd->vls_supported; i++) {
@@ -422,26 +423,42 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		else
 			pi->neigh_mtu.pvlx_to_mtu[i / 2] |= mtu;
 	}
-
 	/* don't forget VL 15 */
 	mtu = opa_mtu_to_enum(ppd->vl_mtu[15]);
 	pi->neigh_mtu.pvlx_to_mtu[15 / 2] |= mtu;
-
-	pi->vl.cap = ppd->vls_supported;
-	/* VL Arbitration table doesn't exist for FXR */
-
-	pi->mtucap = opa_mtu_to_enum(HFI_DEFAULT_MAX_MTU);
-	pi->port_ltp_crc_mode = cpu_to_be16(ppd->port_ltp_crc_mode);
-	pi->port_states.portphysstate_portstate =
-		(hfi_ibphys_portstate(ppd) << PHYSPORTSTATE_SHIFT) | lstate;
-
-	pi->port_mode = cpu_to_be16(
-				ppd->is_active_optimize_enabled ?
-					OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE : 0);
+	pi->smsl = ibp->sm_sl & OPA_PI_MASK_SMSL;
+	pi->operational_vls = hfi_get_ib_cfg(ppd, HFI_IB_CFG_OP_VLS);
+	pi->partenforce_filterraw |=
+		(ppd->linkinit_reason & OPA_PI_MASK_LINKINIT_REASON);
 	if (ppd->part_enforce & HFI_PART_ENFORCE_IN)
 		pi->partenforce_filterraw |= OPA_PI_MASK_PARTITION_ENFORCE_IN;
 	if (ppd->part_enforce & HFI_PART_ENFORCE_OUT)
 		pi->partenforce_filterraw |= OPA_PI_MASK_PARTITION_ENFORCE_OUT;
+	pi->mkey_violations = cpu_to_be16(ibp->mkey_violations);
+	/* P_KeyViolations are counted by hardware. */
+	pi->pkey_violations = cpu_to_be16(ibp->pkey_violations);
+	pi->qkey_violations = cpu_to_be16(ibp->qkey_violations);
+
+	pi->vl.cap = ppd->vls_supported;
+	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
+	/* vlarb absent for STL2 */
+#if 0
+	pi->vl.arb_high_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_CAP);
+	pi->vl.arb_low_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_LOW_CAP);
+#endif
+
+	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
+
+	pi->port_link_mode  = cpu_to_be16(OPA_PORT_LINK_MODE_OPA << 10 |
+					  OPA_PORT_LINK_MODE_OPA << 5 |
+					  OPA_PORT_LINK_MODE_OPA);
+
+	pi->port_ltp_crc_mode = cpu_to_be16(ppd->port_ltp_crc_mode);
+
+	pi->port_mode = cpu_to_be16(
+				ppd->is_active_optimize_enabled ?
+					OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE : 0);
+
 	/*
 	 * FXRTODO:
 	 * 1. STL2 spec says that the enabled field is
@@ -462,12 +479,37 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		cpu_to_be16(OPA_PORT_PACKET_FORMAT_9B);
 	pi->port_packet_format.enabled =
 		cpu_to_be16(OPA_PORT_PACKET_FORMAT_9B);
+
+	/*
+	 * flit_control.interleave is (OPA V1, version .76):
+	 * bits		use
+	 * ----		---
+	 * 2		res
+	 * 2		DistanceSupported
+	 * 2		DistanceEnabled
+	 * 5		MaxNextLevelTxEnabled
+	 * 5		MaxNestLevelRxSupported
+	 *
+	 * HFI supports only "distance mode 1" (see OPA V1, version .76,
+	 * section 9.6.2), so set DistanceSupported, DistanceEnabled
+	 * to 0x1.
+	 */
+	pi->flit_control.interleave = cpu_to_be16(0x1400);
+
 	pi->link_down_reason = ppd->local_link_down_reason.sma;
 	pi->neigh_link_down_reason = ppd->neigh_link_down_reason.sma;
 	pi->port_error_action = cpu_to_be32(ppd->port_error_action);
-	/* 32.768 usec. response time (guessing). Magic number ported from WFR*/
+	pi->mtucap = opa_mtu_to_enum(HFI_DEFAULT_MAX_MTU);
+
+	/* 32.768 usec. response time (guessing) */
 	pi->resptimevalue = 3;
-	pi->neigh_node_guid = ppd->neighbor_guid;
+
+	pi->local_port_num = port;
+
+	/* buffer info for FM */
+	pi->overall_buffer_space = cpu_to_be16(ppd->link_credits);
+
+	pi->neigh_node_guid = cpu_to_be64(ppd->neighbor_guid);
 	pi->neigh_port_num = ppd->neighbor_port_number;
 	pi->port_neigh_mode =
 		(ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) |
@@ -475,7 +517,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		(ppd->neighbor_fm_security ?
 			OPA_PI_MASK_NEIGH_FW_AUTH_BYPASS : 0);
 
-	/* HFIs shall always return VL15 credits to their
+	/*
+	 * HFIs shall always return VL15 credits to their
 	 * neighbor in a timely manner, without any credit return pacing.
 	 */
 	credit_rate = 0;
@@ -485,9 +528,25 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				OPA_PI_MASK_BUF_UNIT_VL15_CREDIT_RATE;
 	buffer_units |= (ppd->vl15_init << 11) & OPA_PI_MASK_BUF_UNIT_VL15_INIT;
 	pi->buffer_units = cpu_to_be32(buffer_units);
+
 	pi->opa_cap_mask = cpu_to_be16(OPA_CAP_MASK3_IsSharedSpaceSupported);
-	/* buffer info for FM */
-	pi->overall_buffer_space = cpu_to_be16(ppd->link_credits);
+	/* FXRTODO: Enable this as part of STL-4298 */
+#if 0
+	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsVLrSupported);
+
+	/* FXRTODO: replay depth buffer for FXR */
+	/* HFI supports a replay buffer 128 LTPs in size */
+	pi->replay_depth.buffer = 0x80;
+	/* read the cached value of DC_LCB_STS_ROUND_TRIP_LTP_CNT */
+	read_lcb_cache(DC_LCB_STS_ROUND_TRIP_LTP_CNT, &tmp);
+
+	/* this counter is 16 bits wide, but the replay_depth.wire
+	 * variable is only 8 bits
+	 */
+	if (tmp > 0xff)
+		tmp = 0xff;
+	pi->replay_depth.wire = tmp;
+#endif
 
 	if (resp_len)
 		*resp_len += sizeof(struct opa_port_info);
@@ -1001,7 +1060,7 @@ static void hfi_set_link_speed_enabled(struct hfi_pportdata *ppd, u32 s)
 	hfi_set_ib_cfg(ppd, HFI_IB_CFG_SPD_ENB, s, NULL);
 }
 
-static int set_port_states(struct hfi_devdata *dd, struct hfi_pportdata *ppd,
+static int set_port_states(struct hfi_pportdata *ppd,
 			   struct opa_smp *smp, u32 lstate, u32 pstate,
 			   u8 suppress_idle_sma)
 {
@@ -1086,22 +1145,24 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					      u32 *resp_len)
 {
-	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
-	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
-	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
 	struct opa_port_info *pi = (struct opa_port_info *)data;
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
-	int ret, i, invalid = 0, call_set_mtu = 0;
-	int call_link_downgrade_policy = 0;
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct ib_event event;
+	struct hfi_devdata *dd;
+	struct hfi_pportdata *ppd;
+	struct opa_ib_portdata *ibp;
+	u8 clientrereg;
+	u32 smlid, opa_lid; /* tmp vars to hold LID values */
+	u16 lid;
+	u8 ls_old, ls_new, ps_new;
+	u8 vls;
+	u8 msl;
+	u8 crc_enabled;
+	u16 lse, lwe, mtu;
 	u32 num_ports = OPA_AM_NPORT(am);
 	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
-	u32 lid, smlid;
-	u16 lse, lwe, mtu;
-	u16 crc_enabled;
-	u8 ls_old, ls_new, ps_new;
-	u8 vls, lmc, smsl;
-	u8 clientrereg;
-	struct ib_event event;
+	int ret, i, invalid = 0, call_set_mtu = 0;
+	int call_link_downgrade_policy = 0;
 
 	if (num_ports != 1) {
 		hfi_invalid_attr(smp);
@@ -1118,46 +1179,142 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	 *
 	 * bail out early if the LID and SMLID are invalid
 	 */
-	lid = be32_to_cpu(pi->lid);
-	if (!IS_VALID_LID_SIZE(lid)) {
-		pr_warn("OPA_PortInfo lid out of range: %X ", lid);
+	opa_lid = be32_to_cpu(pi->lid);
+	if (opa_lid & 0xFFFF0000) {
+		pr_warn("OPA_PortInfo lid out of range: %X\n", opa_lid);
 		pr_warn("(> 16b LIDs not supported)\n");
 		hfi_invalid_attr(smp);
 		goto get_only;
 	}
 
+	lid = (u16)(opa_lid & 0x0000FFFF);
+
 	smlid = be32_to_cpu(pi->sm_lid);
-	if (!IS_VALID_LID_SIZE(smlid)) {
-		pr_warn("OPA_PortInfo SM lid out of range: %X ", smlid);
+	if (smlid & 0xFFFF0000) {
+		pr_warn("OPA_PortInfo SM lid out of range: %X\n", smlid);
 		pr_warn("(> 16b LIDs not supported)\n");
 		hfi_invalid_attr(smp);
 		goto get_only;
 	}
+	smlid &= 0x0000FFFF;
 
 	clientrereg = (pi->clientrereg_subnettimeout &
 			OPA_PI_MASK_CLIENT_REREGISTER);
+
+	dd = hfi_dd_from_ibdev(ibdev);
+	/* IB numbers ports from 1, hw from 0 */
+	ppd = to_hfi_ppd(dd, port);
+	ibp = to_opa_ibportdata(ibdev, port);
 	event.device = ibdev;
 	event.element.port_num = port;
 
-	ibp->gid_prefix = pi->subnet_prefix;
+	ls_old = hfi_driver_lstate(ppd);
+
 	ibp->mkey = pi->mkey;
+	ibp->gid_prefix = pi->subnet_prefix;
 	ibp->mkey_lease_period = be16_to_cpu(pi->mkey_lease_period);
-	ibp->mkeyprot = (pi->mkeyprotect_lmc & OPA_PI_MASK_MKEY_PROT_BIT)
-							>> MKEY_SHIFT;
-	ibp->sm_trap_qp = be32_to_cpu(pi->sm_trap_qp);
-	ibp->sa_qp = be32_to_cpu(pi->sa_qp);
 
-	if (pi->mkey_violations == 0)
-		ibp->mkey_violations = 0;
+	/* Must be a valid unicast LID address. */
+	if ((lid == 0 && ls_old > IB_PORT_INIT) ||
+	    lid >= HFI_MULTICAST_LID_BASE) {
+		/*
+		 * FXRTODO: HFI_MULTICAST_LID_BASE valid for 9B only.
+		 * modify this check for 16B
+		 */
+		hfi_invalid_attr(smp);
+		pr_warn("SubnSet(OPA_PortInfo) lid invalid 0x%x\n", lid);
+	} else if (ppd->lid != lid ||
+		 ppd->lmc != (pi->mkeyprotect_lmc & OPA_PI_MASK_LMC)) {
+		/* FXRTODO: implement uvents for FXR */
+#if 0
+		if (ppd->lid != lid)
+			hfi1_set_uevent_bits(ppd, _HFI1_EVENT_LID_CHANGE_BIT);
+		if (ppd->lmc != (pi->mkeyprotect_lmc & OPA_PI_MASK_LMC))
+			hfi1_set_uevent_bits(ppd, _HFI1_EVENT_LMC_CHANGE_BIT);
+#endif
+		hfi_set_lid(ppd, lid, pi->mkeyprotect_lmc & OPA_PI_MASK_LMC);
+		event.event = IB_EVENT_LID_CHANGE;
+		ib_dispatch_event(&event);
+	}
 
-	if (pi->pkey_violations == 0)
-		ibp->pkey_violations = 0;
+	msl = pi->smsl & OPA_PI_MASK_SMSL;
+	if (pi->partenforce_filterraw & OPA_PI_MASK_LINKINIT_REASON)
+		ppd->linkinit_reason =
+			(pi->partenforce_filterraw &
+			 OPA_PI_MASK_LINKINIT_REASON);
+	/* enable/disable SW pkey checking as per FM control */
+	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_IN) {
+		ppd->part_enforce |= HFI_PART_ENFORCE_IN;
+		hfi_cfg_in_pkey_check(ppd, 1);
+	} else {
+		/*
+		 * FXRTODO: Ignore FM value if neighbhor is HFI. Currently
+		 * FM always sends 0. Design discussion still pending
+		 */
+		if (!neigh_is_hfi(ppd)) {
+			ppd->part_enforce &= ~HFI_PART_ENFORCE_IN;
+			hfi_cfg_in_pkey_check(ppd, 0);
+		}
+	}
 
-	if (pi->qkey_violations == 0)
-		ibp->qkey_violations = 0;
+	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_OUT) {
+		ppd->part_enforce |= HFI_PART_ENFORCE_OUT;
+		hfi_cfg_out_pkey_check(ppd, 1);
+	} else {
+		/*
+		 * FXRTODO: Ignore FM value if neighbhor is HFI. Currently
+		 * FM always sends 0. Design discussion still pending
+		 */
+		if (!neigh_is_hfi(ppd)) {
+			ppd->part_enforce &= ~HFI_PART_ENFORCE_OUT;
+			hfi_cfg_out_pkey_check(ppd, 0);
+		}
+	}
 
-	ibp->subnet_timeout =
-		pi->clientrereg_subnettimeout & OPA_PI_MASK_SUBNET_TIMEOUT;
+	/* Must be a valid unicast LID address. */
+	if ((smlid == 0 && ls_old > IB_PORT_INIT) ||
+	    smlid >= HFI_MULTICAST_LID_BASE) {
+		hfi_invalid_attr(smp);
+		pr_warn("SubnSet(OPA_PortInfo) smlid invalid 0x%x\n", smlid);
+	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
+		pr_warn("SubnSet(OPA_PortInfo) smlid 0x%x\n", smlid);
+		/*
+		 * FXRTODO: These are needed for sending trap
+		 * to FM. Implement this as part of that task.
+		 * Idea on allocating sm_ah based on code review
+		 * 1. Per port static variable
+		 * 2. Allocate here when new SM lid is assigned
+		 */
+#if 0
+		spin_lock_irqsave(&ibp->lock, flags);
+		if (ibp->sm_ah) {
+			if (smlid != ibp->sm_lid)
+				ibp->sm_ah->attr.dlid = smlid;
+			if (msl != ibp->sm_sl)
+				ibp->sm_ah->attr.sl = msl;
+		}
+		spin_unlock_irqrestore(&ibp->lock, flags);
+#endif
+		if (smlid != ibp->sm_lid)
+			ibp->sm_lid = smlid;
+		if (msl != ibp->sm_sl)
+			ibp->sm_sl = msl;
+		event.event = IB_EVENT_SM_CHANGE;
+		ib_dispatch_event(&event);
+	}
+
+	if (pi->link_down_reason == 0) {
+		ppd->local_link_down_reason.sma = 0;
+		ppd->local_link_down_reason.latest = 0;
+	}
+
+	if (pi->neigh_link_down_reason == 0) {
+		ppd->neigh_link_down_reason.sma = 0;
+		ppd->neigh_link_down_reason.latest = 0;
+	}
+
+	ppd->sm_trap_qp = be32_to_cpu(pi->sm_trap_qp);
+	ppd->sa_qp = be32_to_cpu(pi->sa_qp);
 
 	/*
 	 * FXRTODO: This mask is to be read during FC/MNH error interrupts
@@ -1199,125 +1356,17 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		else
 			hfi_invalid_attr(smp);
 	}
-	smsl = pi->smsl & OPA_PI_MASK_SMSL;
-	lmc = pi->mkeyprotect_lmc & OPA_PI_MASK_LMC;
-	ls_old = hfi_driver_lstate(ppd);
 
-	/* Must be a valid unicast LID address. */
-	if ((lid == 0 && ls_old > IB_PORT_INIT) ||
-	    lid >= HFI_MULTICAST_LID_BASE) {
-		/*
-		 * FXRTODO: HFI_MULTICAST_LID_BASE valid for 9B only.
-		 * modify this check for 16B
-		 */
-		hfi_invalid_attr(smp);
-		pr_warn("SubnSet(OPA_PortInfo) lid invalid 0x%x\n", lid);
-	} else if (ppd->lid != lid ||
-		 ppd->lmc != lmc) {
-		/* FXRTODO: implement uevent update ? */
-		if (ppd->lmc !=  lmc) {
-			ppd->lmc = lmc;
-			/* FXRTODO: Figure out what these uvents are for */
-#if 0
-			hfi1_set_uevent_bits(ppd, _HFI1_EVENT_LMC_CHANGE_BIT);
-#endif
-		}
-		if (ppd->lid !=  lid) {
-			ppd->lid = lid;
-#if 0
-			hfi1_set_uevent_bits(ppd, _HFI1_EVENT_LID_CHANGE_BIT);
-#endif
-		}
-		event.event = IB_EVENT_LID_CHANGE;
-		ib_dispatch_event(&event);
-		hfi_set_ib_cfg(ppd, HFI_IB_CFG_LIDLMC, 0, NULL);
-	}
-
-	/* enable/disable SW pkey checking as per FM control */
-	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_IN) {
-		ppd->part_enforce |= HFI_PART_ENFORCE_IN;
-		hfi_cfg_in_pkey_check(ppd, 1);
-	} else {
-		/*
-		 * FXRTODO: Ignore FM value if neighbhor is HFI. Currently
-		 * FM always sends 0. Design discussion still pending
-		 */
-		if (!neigh_is_hfi(ppd)) {
-			ppd->part_enforce &= ~HFI_PART_ENFORCE_IN;
-			hfi_cfg_in_pkey_check(ppd, 0);
-		}
-	}
-
-	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_OUT) {
-		ppd->part_enforce |= HFI_PART_ENFORCE_OUT;
-		hfi_cfg_out_pkey_check(ppd, 1);
-	} else {
-		/*
-		 * FXRTODO: Ignore FM value if neighbhor is HFI. Currently
-		 * FM always sends 0. Design discussion still pending
-		 */
-		if (!neigh_is_hfi(ppd)) {
-			ppd->part_enforce &= ~HFI_PART_ENFORCE_OUT;
-			hfi_cfg_out_pkey_check(ppd, 0);
-		}
-	}
-
-	/*
-	 * SMA-HFI is handling smlid and smsl because it has a dependency
-	 * on old link state which is maintained in HFI.
-	 *
-	 * FXRTODO: modify this code when adding 16B support
-	 *
-	 * Must be a valid unicast LID address
-	 */
-	if ((smlid == 0 && ls_old > IB_PORT_INIT) ||
-	    smlid >= HFI_MULTICAST_LID_BASE) {
-		hfi_invalid_attr(smp);
-		pr_warn("SubnSet(OPA_PortInfo) smlid invalid 0x%x\n", smlid);
-	} else if (smlid != ibp->sm_lid || smsl != ibp->smsl) {
-		pr_warn("SubnSet(OPA_PortInfo) smlid 0x%x\n", smlid);
-		/*
-		 * FXRTODO: These are needed for sending trap
-		 * to FM. Implement this as part of that task.
-		 * Idea on allocating sm_ah based on code review
-		 * 1. Per port static variable
-		 * 2. Allocate here when new SM lid is assigned
-		 */
-#if 0
-		spin_lock_irqsave(&ibp->lock, flags);
-		if (ibp->sm_ah) {
-			if (smlid != ibp->sm_lid)
-				ibp->sm_ah->attr.dlid = smlid;
-			if (msl != ibp->sm_sl)
-				ibp->sm_ah->attr.sl = msl;
-		}
-		spin_unlock_irqrestore(&ibp->lock, flags);
-#endif
-		if (smlid != ibp->sm_lid)
-			ibp->sm_lid = smlid;
-		if (smsl != ibp->smsl)
-			ibp->smsl = smsl;
-		event.event = IB_EVENT_SM_CHANGE;
-		ib_dispatch_event(&event);
-	}
-
-	if (pi->link_down_reason == 0) {
-		ppd->local_link_down_reason.sma = 0;
-		ppd->local_link_down_reason.latest = 0;
-	}
-
-	if (pi->neigh_link_down_reason == 0) {
-		ppd->neigh_link_down_reason.sma = 0;
-		ppd->neigh_link_down_reason.latest = 0;
-	}
-
-	ppd->is_active_optimize_enabled =
-			!!(be16_to_cpu(pi->port_mode)
-					& OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE);
-
-	ppd->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
+	ibp->mkeyprot = (pi->mkeyprotect_lmc & OPA_PI_MASK_MKEY_PROT_BIT) >> 6;
+	ibp->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
 	hfi_set_ib_cfg(ppd, HFI_IB_CFG_VL_HIGH_LIMIT,
-		       ppd->vl_high_limit, NULL);
+		       ibp->vl_high_limit, NULL);
+
+	if (ppd->vls_supported / 2 > ARRAY_SIZE(pi->neigh_mtu.pvlx_to_mtu) ||
+	    ppd->vls_supported > ARRAY_SIZE(ppd->vl_mtu)) {
+		hfi_invalid_attr(smp);
+		return reply(ibh);
+	}
 
 	for (i = 0; i < ppd->vls_supported; i++) {
 		mtu = opa_pi_to_mtu(pi, i);
@@ -1369,9 +1418,21 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				pi->operational_vls);
 			hfi_invalid_attr(smp);
 		} else
-			(void)hfi_set_ib_cfg(ppd, HFI_IB_CFG_OP_VLS,
-						vls, NULL);
+			hfi_set_ib_cfg(ppd, HFI_IB_CFG_OP_VLS,
+				       vls, NULL);
 	}
+
+	if (pi->mkey_violations == 0)
+		ibp->mkey_violations = 0;
+
+	if (pi->pkey_violations == 0)
+		ibp->pkey_violations = 0;
+
+	if (pi->qkey_violations == 0)
+		ibp->qkey_violations = 0;
+
+	ibp->subnet_timeout =
+		pi->clientrereg_subnettimeout & OPA_PI_MASK_SUBNET_TIMEOUT;
 
 	crc_enabled = be16_to_cpu(pi->port_ltp_crc_mode);
 	crc_enabled = HFI_LTP_CRC_ENABLED(crc_enabled);
@@ -1379,10 +1440,14 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	if (crc_enabled)
 		ppd->port_crc_mode_enabled = hfi_port_ltp_to_cap(crc_enabled);
 
+	ppd->is_active_optimize_enabled =
+			!!(be16_to_cpu(pi->port_mode)
+					& OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE);
+
 	ls_new = pi->port_states.portphysstate_portstate &
 			OPA_PI_MASK_PORT_STATE;
 	ps_new = (pi->port_states.portphysstate_portstate &
-		OPA_PI_MASK_PORT_PHYSICAL_STATE) >> PHYSPORTSTATE_SHIFT;
+			OPA_PI_MASK_PORT_PHYSICAL_STATE) >> 4;
 
 	if (ls_old == IB_PORT_INIT) {
 		if (start_of_sm_config) {
@@ -1406,7 +1471,8 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	 * Changing the port physical state only makes sense if the link
 	 * is down or is being set to down.
 	 */
-	ret = set_port_states(dd, ppd, smp, ls_new, ps_new, invalid);
+
+	ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
 	if (ret)
 		return ret;
 
@@ -2130,14 +2196,9 @@ static int opa_local_smp_check(struct opa_ib_portdata *ibp,
 	return 1;
 }
 
-static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
 			    u8 port, const struct opa_mad *in_mad,
 			    struct opa_mad *out_mad,
-#else
-			    u8 port, const struct jumbo_mad *in_mad,
-			    struct jumbo_mad *out_mad,
-#endif
 			    u32 *resp_len)
 {
 	struct opa_smp *smp = (struct opa_smp *)out_mad;
@@ -2153,19 +2214,11 @@ static int process_subn_stl(struct ib_device *ibdev, int mad_flags,
 
 	am = be32_to_cpu(smp->attr_mod);
 	attr_id = smp->attr_id;
-	if (!ibp) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
-		ret = reply((struct ib_mad_hdr *)smp);
-		goto bail;
-	}
-
 	if (smp->class_version != OPA_SMI_CLASS_VERSION) {
 		smp->status |= cpu_to_be16(IB_MGMT_MAD_STATUS_BAD_VERSION);
 		ret = reply(ibh);
 		goto bail;
 	}
-
 	ret = check_mkey(ibp, (struct ib_mad_hdr *)smp, mad_flags, smp->mkey,
 			 smp->route.dr.dr_slid, smp->route.dr.return_path,
 			 smp->hop_cnt);
@@ -2370,13 +2423,12 @@ bail:
 	return ret;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
-static int process_opa_mad(struct ib_device *ibdev, int mad_flags,
-			   u8 port, const struct ib_wc *in_wc,
-			   const struct ib_grh *in_grh,
-			   const struct opa_mad *in_mad,
-			   struct opa_mad *out_mad, size_t *out_mad_size,
-			   u16 *out_mad_pkey_index)
+static int hfi2_process_opa_mad(struct ib_device *ibdev, int mad_flags,
+				u8 port, const struct ib_wc *in_wc,
+				const struct ib_grh *in_grh,
+				const struct opa_mad *in_mad,
+				struct opa_mad *out_mad, size_t *out_mad_size,
+				u16 *out_mad_pkey_index)
 {
 	int ret = IB_MAD_RESULT_FAILURE;
 	u32 resp_len = 0;
@@ -2399,7 +2451,7 @@ static int process_opa_mad(struct ib_device *ibdev, int mad_flags,
 			if (ret)
 				return IB_MAD_RESULT_FAILURE;
 		}
-		ret = process_subn_stl(ibdev, mad_flags, port, in_mad,
+		ret = process_subn_opa(ibdev, mad_flags, port, in_mad,
 				       out_mad, &resp_len);
 		goto bail;
 	case IB_MGMT_CLASS_PERF_MGMT:
@@ -2420,9 +2472,11 @@ bail:
 	return ret;
 }
 
-static int process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-			  const struct ib_wc *in_wc, const struct ib_grh *in_grh,
-			  const struct ib_mad *in_mad, struct ib_mad *out_mad)
+static int hfi2_process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+			       const struct ib_wc *in_wc,
+			       const struct ib_grh *in_grh,
+			       const struct ib_mad *in_mad,
+			       struct ib_mad *out_mad)
 {
 	int ret;
 
@@ -2440,11 +2494,11 @@ bail:
 	return ret;
 }
 
-int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-		       const struct ib_wc *in_wc, const struct ib_grh *in_grh,
-		       const struct ib_mad_hdr *in_mad, size_t in_mad_size,
-		       struct ib_mad_hdr *out_mad, size_t *out_mad_size,
-		       u16 *out_mad_pkey_index)
+int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+		     const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,
+		     struct ib_mad_hdr *out_mad, size_t *out_mad_size,
+		     u16 *out_mad_pkey_index)
 {
 	switch (in_mad->base_version) {
 	case OPA_MGMT_BASE_VERSION:
@@ -2452,14 +2506,14 @@ int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 			dev_err(ibdev->dma_device, "invalid in_mad_size\n");
 			return IB_MAD_RESULT_FAILURE;
 		}
-		return process_opa_mad(ibdev, mad_flags, port,
+		return hfi2_process_opa_mad(ibdev, mad_flags, port,
 				       in_wc, in_grh,
 				       (struct opa_mad *)in_mad,
 				       (struct opa_mad *)out_mad,
 				       out_mad_size,
 				       out_mad_pkey_index);
 	case IB_MGMT_BASE_VERSION:
-		return process_ib_mad(ibdev, mad_flags, port,
+		return hfi2_process_ib_mad(ibdev, mad_flags, port,
 				      in_wc, in_grh,
 				      (const struct ib_mad *)in_mad,
 				      (struct ib_mad *)out_mad);
@@ -2469,94 +2523,3 @@ int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 
 	return IB_MAD_RESULT_FAILURE;
 }
-#else
-static int process_stl_mad(struct ib_device *ibdev, int mad_flags,
-			       u8 port, struct ib_wc *in_wc,
-			       struct ib_grh *in_grh,
-			       struct jumbo_mad *in_mad,
-			       struct jumbo_mad *out_mad)
-{
-	int ret = IB_MAD_RESULT_FAILURE;
-	u32 resp_len = 0;
-
-	/* FXRTODO: Implement pkey check */
-#if 0
-	int pkey_idx;
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
-
-	pkey_idx = opa_ib_lookup_pkey_idx(ibp, OPA_LIM_MGMT_PKEY);
-	if (pkey_idx < 0) {
-		pr_warn("failed to find limited mgmt pkey, defaulting 0x%x\n",
-			opa_ib_get_pkey(ibp, 1));
-		pkey_idx = 1;
-	}
-	in_wc->pkey_index = (u16)pkey_idx;
-#endif
-
-	switch (in_mad->mad_hdr.mgmt_class) {
-	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
-	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
-		ret = process_subn_stl(ibdev, mad_flags, port, in_mad,
-				       out_mad, &resp_len);
-		goto bail;
-	case IB_MGMT_CLASS_PERF_MGMT:
-	/* FXRTODO: Implement process_perf_stl */
-#if 0
-		ret = process_perf_stl(ibdev, port, in_mad, out_mad,
-				       &resp_len);
-#endif
-		goto bail;
-
-	default:
-		ret = IB_MAD_RESULT_SUCCESS;
-	}
-
-bail:
-	if (ret & IB_MAD_RESULT_REPLY)
-		in_wc->byte_len = round_up(resp_len, 8);
-	else if (ret & IB_MAD_RESULT_SUCCESS)
-		in_wc->byte_len -= sizeof(struct ib_grh);
-
-	return ret;
-}
-
-static int process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-				struct ib_wc *in_wc, struct ib_grh *in_grh,
-				struct ib_mad *in_mad, struct ib_mad *out_mad)
-{
-	int ret;
-
-	switch (in_mad->mad_hdr.mgmt_class) {
-	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
-	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
-		ret = process_subn(ibdev, mad_flags,
-					port, in_mad, out_mad);
-		goto bail;
-	default:
-		ret = IB_MAD_RESULT_SUCCESS;
-	}
-
-bail:
-	return ret;
-}
-
-int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-			struct ib_wc *in_wc, struct ib_grh *in_grh,
-			struct ib_mad *in_mad, struct ib_mad *out_mad)
-{
-	switch (in_mad->mad_hdr.base_version) {
-	case JUMBO_MGMT_BASE_VERSION:
-		return process_stl_mad(ibdev, mad_flags, port,
-				in_wc, in_grh,
-				(struct jumbo_mad *)in_mad,
-				(struct jumbo_mad *)out_mad);
-	case IB_MGMT_BASE_VERSION:
-		return process_ib_mad(ibdev, mad_flags, port,
-				in_wc, in_grh, in_mad, out_mad);
-	default:
-		break;
-	}
-
-	return IB_MAD_RESULT_FAILURE;
-}
-#endif
