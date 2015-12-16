@@ -69,6 +69,44 @@ const enum ib_wc_opcode ib_hfi1_wc_opcode[] = {
 };
 
 /*
+ * Convert the AETH RNR timeout code into the number of microseconds.
+ */
+const u32 ib_hfi1_rnr_table[32] = {
+	655360,	/* 00: 655.36 */
+	10,	/* 01:    .01 */
+	20,	/* 02     .02 */
+	30,	/* 03:    .03 */
+	40,	/* 04:    .04 */
+	60,	/* 05:    .06 */
+	80,	/* 06:    .08 */
+	120,	/* 07:    .12 */
+	160,	/* 08:    .16 */
+	240,	/* 09:    .24 */
+	320,	/* 0A:    .32 */
+	480,	/* 0B:    .48 */
+	640,	/* 0C:    .64 */
+	960,	/* 0D:    .96 */
+	1280,	/* 0E:   1.28 */
+	1920,	/* 0F:   1.92 */
+	2560,	/* 10:   2.56 */
+	3840,	/* 11:   3.84 */
+	5120,	/* 12:   5.12 */
+	7680,	/* 13:   7.68 */
+	10240,	/* 14:  10.24 */
+	15360,	/* 15:  15.36 */
+	20480,	/* 16:  20.48 */
+	30720,	/* 17:  30.72 */
+	40960,	/* 18:  40.96 */
+	61440,	/* 19:  61.44 */
+	81920,	/* 1A:  81.92 */
+	122880,	/* 1B: 122.88 */
+	163840,	/* 1C: 163.84 */
+	245760,	/* 1D: 245.76 */
+	327680,	/* 1E: 327.68 */
+	491520	/* 1F: 491.52 */
+};
+
+/*
  * Send if not busy or waiting for I/O and either
  * a RC response is pending or we can process send work requests.
  */
@@ -129,7 +167,6 @@ bad_lkey:
 bail:
 	return ret;
 }
-
 
 /**
  * hfi2_get_rwqe - copy the next RWQE into the QP's RWQE
@@ -229,8 +266,27 @@ bail:
 	return ret;
 }
 
+/*
+ * Switch to alternate path.
+ * The QP s_lock should be held and interrupts disabled.
+ */
+void hfi2_migrate_qp(struct hfi2_qp *qp)
+{
+	struct ib_event ev;
+
+	qp->s_mig_state = IB_MIG_MIGRATED;
+	qp->remote_ah_attr = qp->alt_ah_attr;
+	qp->port_num = qp->alt_ah_attr.port_num;
+	qp->s_pkey_index = qp->s_alt_pkey_index;
+
+	ev.device = qp->ibqp.device;
+	ev.element.qp = &qp->ibqp;
+	ev.event = IB_EVENT_PATH_MIG;
+	qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
+}
+
 void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
-			    u32 bth0, u32 bth2, u16 *out_lrh0)
+			  u32 bth0, u32 bth2, u16 *out_lrh0)
 {
 	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
@@ -316,7 +372,7 @@ static int send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
  * and clear qp->s_flags HFI1_S_BUSY otherwise.
  */
 int hfi2_verbs_send(struct hfi2_qp *qp, struct hfi2_ib_dma_header *hdr,
-		      u32 hdrwords, struct hfi2_sge_state *ss, u32 len)
+		    u32 hdrwords, struct hfi2_sge_state *ss, u32 len)
 {
 	struct hfi2_ibport *ibp;
 	int ret = 0;
@@ -417,7 +473,7 @@ void hfi2_do_send(struct work_struct *work)
  * This should be called with s_lock held.
  */
 void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
-			  enum ib_wc_status status)
+			enum ib_wc_status status)
 {
 	u32 old_last, last;
 	unsigned i;

@@ -299,6 +299,22 @@ static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
 	}
 }
 
+/**
+ * hfi2_error_qp - put a QP into the error state
+ * @qp: the QP to put into the error state
+ * @err: the receive completion error to signal if a RWQE is active
+ *
+ * Flushes both send and receive work queues.
+ * Returns true if last WQE event should be generated.
+ * The QP r_lock and s_lock should be held and interrupts disabled.
+ * If we are already in error state, just return.
+ */
+int hfi2_error_qp(struct hfi2_qp *qp, enum ib_wc_status err)
+{
+	/* FXRTODO */
+	return 0;
+}
+
 static void flush_tx_list(struct hfi2_qp *qp)
 {
 	/* FXRTODO SDMA -> TX_CQ */
@@ -476,12 +492,7 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		break;
 
 	case IB_QPS_ERR:
-		/* FXRTODO */
-#if 0
 		lastwqe = hfi2_error_qp(qp, IB_WC_WR_FLUSH_ERR);
-#else
-		goto inval;
-#endif
 		break;
 
 	default:

@@ -727,6 +727,7 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 int hfi2_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		  int attr_mask, struct ib_qp_init_attr *init_attr);
 int hfi2_destroy_qp(struct ib_qp *ibqp);
+int hfi2_error_qp(struct hfi2_qp *qp, enum ib_wc_status err);
 int hfi2_cq_init(struct hfi2_ibdev *ibd);
 void hfi2_cq_exit(struct hfi2_ibdev *ibd);
 void hfi2_cq_enter(struct hfi2_cq *cq, struct ib_wc *entry, int solicited);
@@ -773,6 +774,7 @@ void hfi2_update_mmap_info(struct hfi2_ibdev *ibd,
 			   struct hfi2_mmap_info *ip,
 			   u32 size, void *obj);
 int hfi2_get_rwqe(struct hfi2_qp *qp, int wr_id_only);
+void hfi2_migrate_qp(struct hfi2_qp *qp);
 void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 			  u32 bth0, u32 bth2, u16 *lrh0);
 void hfi2_do_send(struct work_struct *work);
