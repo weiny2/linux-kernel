@@ -72,7 +72,7 @@ const enum ib_wc_opcode ib_hfi1_wc_opcode[] = {
  * Send if not busy or waiting for I/O and either
  * a RC response is pending or we can process send work requests.
  */
-static inline int send_ok(struct opa_ib_qp *qp)
+static inline int send_ok(struct hfi2_qp *qp)
 {
 	return !(qp->s_flags & (HFI1_S_BUSY | HFI1_S_ANY_WAIT_IO)) &&
 		(qp->s_hdrwords || (qp->s_flags & HFI1_S_RESP_PENDING) ||
@@ -83,16 +83,16 @@ static inline int send_ok(struct opa_ib_qp *qp)
  * Validate a RWQE and fill in the receive SGE state.
  * Return 1 if OK.
  */
-static int init_sge(struct opa_ib_qp *qp, struct opa_ib_rwqe *wqe)
+static int init_sge(struct hfi2_qp *qp, struct hfi2_rwqe *wqe)
 {
 	int i, j, ret;
 	struct ib_wc wc;
-	struct opa_ib_lkey_table *rkt;
-	struct opa_ib_pd *pd;
-	struct opa_ib_sge_state *ss;
+	struct hfi2_lkey_table *rkt;
+	struct hfi2_pd *pd;
+	struct hfi2_sge_state *ss;
 
-	rkt = &to_opa_ibdata(qp->ibqp.device)->lk_table;
-	pd = to_opa_ibpd(qp->ibqp.srq ? qp->ibqp.srq->pd : qp->ibqp.pd);
+	rkt = &to_hfi_ibd(qp->ibqp.device)->lk_table;
+	pd = to_hfi_pd(qp->ibqp.srq ? qp->ibqp.srq->pd : qp->ibqp.pd);
 	ss = &qp->r_sge;
 	ss->sg_list = qp->r_sg_list;
 	qp->r_len = 0;
@@ -100,7 +100,7 @@ static int init_sge(struct opa_ib_qp *qp, struct opa_ib_rwqe *wqe)
 		if (wqe->sg_list[i].length == 0)
 			continue;
 		/* Check LKEY */
-		if (!opa_ib_lkey_ok(rkt, pd, j ? &ss->sg_list[j - 1] : &ss->sge,
+		if (!hfi2_lkey_ok(rkt, pd, j ? &ss->sg_list[j - 1] : &ss->sge,
 				    &wqe->sg_list[i], IB_ACCESS_LOCAL_WRITE))
 			goto bad_lkey;
 		qp->r_len += wqe->sg_list[i].length;
@@ -124,7 +124,7 @@ bad_lkey:
 	wc.opcode = IB_WC_RECV;
 	wc.qp = &qp->ibqp;
 	/* Signal solicited completion event. */
-	opa_ib_cq_enter(to_opa_ibcq(qp->ibqp.recv_cq), &wc, 1);
+	hfi2_cq_enter(to_hfi_cq(qp->ibqp.recv_cq), &wc, 1);
 	ret = 0;
 bail:
 	return ret;
@@ -132,7 +132,7 @@ bail:
 
 
 /**
- * opa_ib_get_rwqe - copy the next RWQE into the QP's RWQE
+ * hfi2_get_rwqe - copy the next RWQE into the QP's RWQE
  * @qp: the QP
  * @wr_id_only: update qp->r_wr_id only, not qp->r_sge
  *
@@ -141,20 +141,20 @@ bail:
  * Return: -1 if there is a local error, 0 if no RWQE is available,
  * otherwise return 1.
  */
-int opa_ib_get_rwqe(struct opa_ib_qp *qp, int wr_id_only)
+int hfi2_get_rwqe(struct hfi2_qp *qp, int wr_id_only)
 {
 	unsigned long flags;
-	struct opa_ib_rq *rq;
-	struct opa_ib_rwq *wq;
-	struct opa_ib_srq *srq;
-	struct opa_ib_rwqe *wqe;
+	struct hfi2_rq *rq;
+	struct hfi2_rwq *wq;
+	struct hfi2_srq *srq;
+	struct hfi2_rwqe *wqe;
 
 	void (*handler)(struct ib_event *, void *);
 	u32 tail;
 	int ret;
 
 	if (qp->ibqp.srq) {
-		srq = to_opa_ibsrq(qp->ibqp.srq);
+		srq = to_hfi_srq(qp->ibqp.srq);
 		handler = srq->ibsrq.event_handler;
 		rq = &srq->rq;
 	} else {
@@ -229,10 +229,10 @@ bail:
 	return ret;
 }
 
-void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
+void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 			    u32 bth0, u32 bth2, u16 *out_lrh0)
 {
-	struct opa_ib_portdata *ibp;
+	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
 	u16 lrh0;
 	u32 nwords;
@@ -241,13 +241,13 @@ void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
 	u32 bth1;
 
 	/* Construct the header. */
-	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	ppd = ibp->ppd;
 	extra_bytes = -qp->s_cur_size & 3;
 	nwords = (qp->s_cur_size + extra_bytes) >> 2;
 	lrh0 = HFI1_LRH_BTH;
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
-		qp->s_hdrwords += opa_ib_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
+		qp->s_hdrwords += hfi2_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
 					       &qp->remote_ah_attr.grh,
 					       qp->s_hdrwords, nwords);
 		lrh0 = HFI1_LRH_GRH;
@@ -263,7 +263,7 @@ void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
 		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
 	qp->s_hdr->ibh.lrh[3] = cpu_to_be16(ppd->lid |
 				       qp->remote_ah_attr.src_path_bits);
-	bth0 |= opa_ib_get_pkey(ibp, qp->s_pkey_index);
+	bth0 |= hfi2_get_pkey(ibp, qp->s_pkey_index);
 	bth0 |= extra_bytes << 20;
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	bth1 = qp->remote_qpn;
@@ -291,21 +291,21 @@ void opa_ib_make_ruc_header(struct opa_ib_qp *qp, struct ib_l4_headers *ohdr,
  *
  * Return: TBD
  */
-static int send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
-		    struct opa_ib_swqe *wqe)
+static int send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+		    struct hfi2_swqe *wqe)
 {
 	int ret;
 
-	ret = opa_ib_send_wqe(ibp, qp, wqe);
+	ret = hfi2_send_wqe(ibp, qp, wqe);
 	if (ret < 0)
-		opa_ib_send_complete(qp, wqe, IB_WC_FATAL_ERR);
+		hfi2_send_complete(qp, wqe, IB_WC_FATAL_ERR);
 	/* else send_complete issued upon DMA completion event */
 
 	return ret;
 }
 
 /**
- * opa_ib_verbs_send - send a packet
+ * hfi2_verbs_send - send a packet
  * @qp: the QP to send on
  * @hdr: the packet header
  * @hdrwords: the number of 32-bit words in the header
@@ -315,14 +315,14 @@ static int send_wqe(struct opa_ib_portdata *ibp, struct opa_ib_qp *qp,
  * Return: zero if packet is sent or queued OK, non-zero
  * and clear qp->s_flags HFI1_S_BUSY otherwise.
  */
-int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
-		      u32 hdrwords, struct opa_ib_sge_state *ss, u32 len)
+int hfi2_verbs_send(struct hfi2_qp *qp, struct hfi2_ib_dma_header *hdr,
+		      u32 hdrwords, struct hfi2_sge_state *ss, u32 len)
 {
-	struct opa_ib_portdata *ibp;
+	struct hfi2_ibport *ibp;
 	int ret = 0;
 	unsigned long flags = 0;
 
-	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 
 	/* ret = egress_pkey_check(ibp, &hdr->ibh, qp); */
 	if (unlikely(ret)) {
@@ -331,7 +331,7 @@ int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
 		 * __func__);
 		 */
 		spin_lock_irqsave(&qp->s_lock, flags);
-		opa_ib_send_complete(qp, qp->s_wqe, IB_WC_GENERAL_ERR);
+		hfi2_send_complete(qp, qp->s_wqe, IB_WC_GENERAL_ERR);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 		return -EINVAL;
 	}
@@ -342,11 +342,11 @@ int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
 	 * enqueues to this list in sdma_check_progress via sleep callback.
 	 */
 	if (!list_empty(&qp->s_iowait.tx_head)) {
-		struct opa_ib_swqe *wqe;
+		struct hfi2_swqe *wqe;
 
 		wqe = list_first_entry(
 			&qp->s_iowait.tx_head,
-			struct opa_ib_swqe,
+			struct hfi2_swqe,
 			pending_list);
 		list_del_init(&wqe->pending_list);
 		/* send queued pending WGE into fabric */
@@ -364,18 +364,18 @@ int opa_ib_verbs_send(struct opa_ib_qp *qp, struct opa_ib_dma_header *hdr,
 }
 
 /**
- * opa_ib_do_send - perform a send on a QP
+ * hfi2_do_send - perform a send on a QP
  * @work: contains a pointer to the QP
  *
  * Process entries in the send work queue until credit or queue is
  * exhausted.  Only allow one CPU to send a packet per QP (tasklet).
  * Otherwise, two threads could send packets out of order.
  */
-void opa_ib_do_send(struct work_struct *work)
+void hfi2_do_send(struct work_struct *work)
 {
 	struct iowait *wait = container_of(work, struct iowait, iowork);
-	struct opa_ib_qp *qp = container_of(wait, struct opa_ib_qp, s_iowait);
-	int (*make_req)(struct opa_ib_qp *qp);
+	struct hfi2_qp *qp = container_of(wait, struct hfi2_qp, s_iowait);
+	int (*make_req)(struct hfi2_qp *qp);
 	unsigned long flags;
 
 	/* FXRTODO - WFR performs RC/UC loopback here */
@@ -383,9 +383,9 @@ void opa_ib_do_send(struct work_struct *work)
 	if (qp->ibqp.qp_type == IB_QPT_RC)
 		return; /* TODO - no RC support yet */
 	else if (qp->ibqp.qp_type == IB_QPT_UC)
-		make_req = opa_ib_make_uc_req;
+		make_req = hfi2_make_uc_req;
 	else
-		make_req = opa_ib_make_ud_req;
+		make_req = hfi2_make_ud_req;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	/* Return if we are already busy processing a work request. */
@@ -403,7 +403,7 @@ void opa_ib_do_send(struct work_struct *work)
 			 * If the packet cannot be sent now, return and
 			 * the send tasklet will be woken up later.
 			 */
-			if (opa_ib_verbs_send(qp, qp->s_hdr, qp->s_hdrwords,
+			if (hfi2_verbs_send(qp, qp->s_hdr, qp->s_hdrwords,
 					      qp->s_cur_sge, qp->s_cur_size))
 				break;
 
@@ -416,7 +416,7 @@ void opa_ib_do_send(struct work_struct *work)
 /*
  * This should be called with s_lock held.
  */
-void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
+void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 			  enum ib_wc_status status)
 {
 	u32 old_last, last;
@@ -433,7 +433,7 @@ void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
 	if (qp->ibqp.qp_type == IB_QPT_UD ||
 	    qp->ibqp.qp_type == IB_QPT_SMI ||
 	    qp->ibqp.qp_type == IB_QPT_GSI)
-		atomic_dec(&to_opa_ibah(wqe->wr.wr.ud.ah)->refcount);
+		atomic_dec(&to_hfi_ah(wqe->wr.wr.ud.ah)->refcount);
 
 	/* See ch. 11.2.4.1 and 10.7.3.1 */
 	if (!(qp->s_flags & HFI1_S_SIGNAL_REQ_WR) ||
@@ -448,7 +448,7 @@ void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
 		wc.qp = &qp->ibqp;
 		if (status == IB_WC_SUCCESS)
 			wc.byte_len = wqe->length;
-		opa_ib_cq_enter(to_opa_ibcq(qp->ibqp.send_cq), &wc,
+		hfi2_cq_enter(to_hfi_cq(qp->ibqp.send_cq), &wc,
 				status != IB_WC_SUCCESS);
 	}
 
@@ -470,14 +470,14 @@ void opa_ib_send_complete(struct opa_ib_qp *qp, struct opa_ib_swqe *wqe,
 /*
  * This must be called with s_lock held.
  */
-void opa_ib_schedule_send(struct opa_ib_qp *qp)
+void hfi2_schedule_send(struct hfi2_qp *qp)
 {
 	/* FXRTODO */
 #if 0
 	if (send_ok(qp)) {
-		struct opa_ib_portdata *ibp;
+		struct hfi2_ibport *ibp;
 
-		ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+		ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 		iowait_schedule(&qp->s_iowait, ibp->wq);
 	}
 #endif

@@ -56,14 +56,14 @@
 #include "verbs.h"
 
 /**
- * opa_ib_release_mmap_info - free mmap info structure
- * @ref: a pointer to the kref within struct opa_ib_mmap_info
+ * hfi2_release_mmap_info - free mmap info structure
+ * @ref: a pointer to the kref within struct hfi2_mmap_info
  */
-void opa_ib_release_mmap_info(struct kref *ref)
+void hfi2_release_mmap_info(struct kref *ref)
 {
-	struct opa_ib_mmap_info *ip =
-		container_of(ref, struct opa_ib_mmap_info, ref);
-	struct opa_ib_data *ibd = to_opa_ibdata(ip->context->device);
+	struct hfi2_mmap_info *ip =
+		container_of(ref, struct hfi2_mmap_info, ref);
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ip->context->device);
 
 	spin_lock_irq(&ibd->pending_lock);
 	list_del(&ip->pending_mmaps);
@@ -77,38 +77,38 @@ void opa_ib_release_mmap_info(struct kref *ref)
  * open and close keep track of how many times the CQ is mapped,
  * to avoid releasing it.
  */
-static void opa_ib_vma_open(struct vm_area_struct *vma)
+static void hfi2_vma_open(struct vm_area_struct *vma)
 {
-	struct opa_ib_mmap_info *ip = vma->vm_private_data;
+	struct hfi2_mmap_info *ip = vma->vm_private_data;
 
 	kref_get(&ip->ref);
 }
 
-static void opa_ib_vma_close(struct vm_area_struct *vma)
+static void hfi2_vma_close(struct vm_area_struct *vma)
 {
-	struct opa_ib_mmap_info *ip = vma->vm_private_data;
+	struct hfi2_mmap_info *ip = vma->vm_private_data;
 
-	kref_put(&ip->ref, opa_ib_release_mmap_info);
+	kref_put(&ip->ref, hfi2_release_mmap_info);
 }
 
-static struct vm_operations_struct opa_ib_vm_ops = {
-	.open =     opa_ib_vma_open,
-	.close =    opa_ib_vma_close,
+static struct vm_operations_struct hfi2_vm_ops = {
+	.open =     hfi2_vma_open,
+	.close =    hfi2_vma_close,
 };
 
 /**
- * opa_ib_mmap - create a new mmap region
+ * hfi2_mmap - create a new mmap region
  * @context: the IB user context of the process making the mmap() call
  * @vma: the VMA to be initialized
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
+int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 {
-	struct opa_ib_data *ibd = to_opa_ibdata(context->device);
+	struct hfi2_ibdev *ibd = to_hfi_ibd(context->device);
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
 	unsigned long size = vma->vm_end - vma->vm_start;
-	struct opa_ib_mmap_info *ip, *pp;
+	struct hfi2_mmap_info *ip, *pp;
 	int ret = -EINVAL;
 
 	/*
@@ -132,9 +132,9 @@ int opa_ib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 		ret = remap_vmalloc_range(vma, ip->obj, 0);
 		if (ret)
 			goto done;
-		vma->vm_ops = &opa_ib_vm_ops;
+		vma->vm_ops = &hfi2_vm_ops;
 		vma->vm_private_data = ip;
-		opa_ib_vma_open(vma);
+		hfi2_vma_open(vma);
 		goto done;
 	}
 	spin_unlock_irq(&ibd->pending_lock);
@@ -143,14 +143,14 @@ done:
 }
 
 /*
- * Allocate information for opa_ib_mmap
+ * Allocate information for hfi2_mmap
  */
-struct opa_ib_mmap_info *opa_ib_create_mmap_info(struct opa_ib_data *ibd,
+struct hfi2_mmap_info *hfi2_create_mmap_info(struct hfi2_ibdev *ibd,
 						 u32 size,
 						 struct ib_ucontext *context,
 						 void *obj)
 {
-	struct opa_ib_mmap_info *ip;
+	struct hfi2_mmap_info *ip;
 
 	ip = kmalloc(sizeof(*ip), GFP_KERNEL);
 	if (!ip)
@@ -175,8 +175,8 @@ bail:
 	return ip;
 }
 
-void opa_ib_update_mmap_info(struct opa_ib_data *ibd,
-			     struct opa_ib_mmap_info *ip,
+void hfi2_update_mmap_info(struct hfi2_ibdev *ibd,
+			     struct hfi2_mmap_info *ip,
 			     u32 size, void *obj)
 {
 	size = PAGE_ALIGN(size);

@@ -57,13 +57,13 @@
 #include "packet.h"
 #include <rdma/opa_core_ib.h>
 
-static void remove_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp);
+static void remove_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp);
 
 /*
  * Allocate the next available QPN or
  * zero/one for QP type IB_QPT_SMI/IB_QPT_GSI.
  */
-static int alloc_qpn(struct opa_ib_data *ibd,
+static int alloc_qpn(struct hfi2_ibdev *ibd,
 		     enum ib_qp_type type, u8 port)
 {
 	int ret;
@@ -100,7 +100,7 @@ static int alloc_qpn(struct opa_ib_data *ibd,
 	return ret;
 }
 
-static void free_qpn(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
+static void free_qpn(struct hfi2_ibdev *ibd, struct hfi2_qp *qp)
 {
 	u8 ib_port = qp->port_num;
 	u32 qpn = qp->ibqp.qp_num;
@@ -124,14 +124,14 @@ static void free_qpn(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
  * Put the QP into the hash table.
  * The hash table holds a reference to the QP.
  */
-static int insert_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp, bool is_user)
+static int insert_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp, bool is_user)
 {
-	struct opa_ib_portdata *ibp;
+	struct hfi2_ibport *ibp;
 	int ret = 0;
 	unsigned long flags;
 	u32 qpn = qp->ibqp.qp_num;
 
-	ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 
 	atomic_inc(&qp->refcount);
 	idr_preload(GFP_KERNEL);
@@ -152,7 +152,7 @@ static int insert_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp, bool is_user
 		goto bail;
 
 	/* Associate QP with Send Context */
-	ret = opa_ib_ctx_assign_qp(ibd, qp, is_user);
+	ret = hfi2_ctx_assign_qp(ibd, qp, is_user);
 	if (ret < 0)
 		goto bail_ctx;
 
@@ -168,19 +168,19 @@ bail:
  * Remove the QP from the table so it can't be found asynchronously by
  * the receive interrupt routine.
  */
-static void remove_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
+static void remove_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp)
 {
-	struct opa_ib_portdata *ibp;
+	struct hfi2_ibport *ibp;
 	unsigned long flags;
 	int removed = 1;
 	u32 qpn = qp->ibqp.qp_num;
 
 	/* Remove association with Send Context */
-	opa_ib_ctx_release_qp(ibd, qp);
+	hfi2_ctx_release_qp(ibd, qp);
 
 	spin_lock_irqsave(&ibd->qpt_lock, flags);
 	if (qpn <= 1) {
-		ibp = to_opa_ibportdata(qp->ibqp.device, qp->port_num);
+		ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 
 		if (rcu_dereference_protected(ibp->qp[0],
 		    lockdep_is_held(&ibd->qpt_lock)) == qp)
@@ -205,13 +205,13 @@ static void remove_qp(struct opa_ib_data *ibd, struct opa_ib_qp *qp)
  * @qp: the QP to reset
  * @type: the QP type
  */
-static void reset_qp(struct opa_ib_qp *qp, enum ib_qp_type type)
+static void reset_qp(struct hfi2_qp *qp, enum ib_qp_type type)
 {
 	qp->remote_qpn = 0;
 	qp->qkey = 0;
 	qp->qp_access_flags = 0;
 	/* FXRTODO - iowait SDMA -> TX_CQ */
-	iowait_init(&qp->s_iowait, 1, opa_ib_do_send);
+	iowait_init(&qp->s_iowait, 1, hfi2_do_send);
 	qp->s_flags &= HFI1_S_SIGNAL_REQ_WR;
 	qp->s_hdrwords = 0;
 	qp->s_wqe = NULL;
@@ -253,18 +253,18 @@ static void reset_qp(struct opa_ib_qp *qp, enum ib_qp_type type)
 	qp->r_sge.num_sge = 0;
 }
 
-static void clear_mr_refs(struct opa_ib_qp *qp, int clr_sends)
+static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
 {
 	unsigned n;
 
 	if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
-		opa_ib_put_ss(&qp->s_rdma_read_sge);
+		hfi2_put_ss(&qp->s_rdma_read_sge);
 
-	opa_ib_put_ss(&qp->r_sge);
+	hfi2_put_ss(&qp->r_sge);
 
 	if (clr_sends) {
 		while (qp->s_last != qp->s_head) {
-			struct opa_ib_swqe *wqe = get_swqe_ptr(qp, qp->s_last);
+			struct hfi2_swqe *wqe = get_swqe_ptr(qp, qp->s_last);
 			unsigned i;
 
 			for (i = 0; i < wqe->wr.num_sge; i++) {
@@ -275,7 +275,7 @@ static void clear_mr_refs(struct opa_ib_qp *qp, int clr_sends)
 			if (qp->ibqp.qp_type == IB_QPT_UD ||
 			    qp->ibqp.qp_type == IB_QPT_SMI ||
 			    qp->ibqp.qp_type == IB_QPT_GSI)
-				atomic_dec(&to_opa_ibah(wqe->wr.wr.ud.ah)->refcount);
+				atomic_dec(&to_hfi_ah(wqe->wr.wr.ud.ah)->refcount);
 			if (++qp->s_last >= qp->s_size)
 				qp->s_last = 0;
 		}
@@ -289,7 +289,7 @@ static void clear_mr_refs(struct opa_ib_qp *qp, int clr_sends)
 		return;
 
 	for (n = 0; n < ARRAY_SIZE(qp->s_ack_queue); n++) {
-		struct opa_ib_ack_entry *e = &qp->s_ack_queue[n];
+		struct hfi2_ack_entry *e = &qp->s_ack_queue[n];
 
 		if (e->opcode == IB_OPCODE_RC_RDMA_READ_REQUEST &&
 		    e->rdma_sge.mr) {
@@ -299,18 +299,18 @@ static void clear_mr_refs(struct opa_ib_qp *qp, int clr_sends)
 	}
 }
 
-static void flush_tx_list(struct opa_ib_qp *qp)
+static void flush_tx_list(struct hfi2_qp *qp)
 {
 	/* FXRTODO SDMA -> TX_CQ */
 }
 
-static void flush_iowait(struct opa_ib_qp *qp)
+static void flush_iowait(struct hfi2_qp *qp)
 {
 	/* FXRTODO looks to be unneeded if we avoid adding a verbs_txreq */
 }
 
 /**
- * opa_ib_modify_qp - modify the attributes of a queue pair
+ * hfi2_modify_qp - modify the attributes of a queue pair
  * @ibqp: the queue pair who's attributes we're modifying
  * @attr: the new attributes
  * @attr_mask: the mask of attributes to modify
@@ -318,12 +318,12 @@ static void flush_iowait(struct opa_ib_qp *qp)
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
+int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		     int attr_mask, struct ib_udata *udata)
 {
-	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
+	struct hfi2_qp *qp = to_hfi_qp(ibqp);
 	struct ib_device *ibdev = ibqp->device;
-	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
 	enum ib_qp_state cur_state, new_state;
 	struct ib_event ev;
 	int lastwqe = 0;
@@ -349,14 +349,14 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	if (attr_mask & IB_QP_AV) {
 		if (attr->ah_attr.dlid >= HFI1_MULTICAST_LID_BASE)
 			goto inval;
-		if (opa_ib_check_ah(ibdev, &attr->ah_attr))
+		if (hfi2_check_ah(ibdev, &attr->ah_attr))
 			goto inval;
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
 		if (attr->alt_ah_attr.dlid >= HFI1_MULTICAST_LID_BASE)
 			goto inval;
-		if (opa_ib_check_ah(ibdev, &attr->alt_ah_attr))
+		if (hfi2_check_ah(ibdev, &attr->alt_ah_attr))
 			goto inval;
 		if (attr->alt_pkey_index >= HFI_MAX_PKEYS)
 			goto inval;
@@ -398,11 +398,11 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	 * Note that the QP port has to be set in INIT and MTU in RTR.
 	 */
 	if (attr_mask & IB_QP_PATH_MTU) {
-		struct opa_ib_portdata *ibp;
+		struct hfi2_ibport *ibp;
 		struct hfi_pportdata *ppd;
 		u16 mtu;
 
-		ibp = to_opa_ibportdata(ibdev, qp->port_num);
+		ibp = to_hfi_ibp(ibdev, qp->port_num);
 		ppd = ibp->ppd;
 
 		mtu = opa_enum_to_mtu(attr->path_mtu);
@@ -478,7 +478,7 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	case IB_QPS_ERR:
 		/* FXRTODO */
 #if 0
-		lastwqe = opa_ib_error_qp(qp, IB_WC_WR_FLUSH_ERR);
+		lastwqe = hfi2_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 #else
 		goto inval;
 #endif
@@ -533,12 +533,12 @@ int opa_ib_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	}
 
 	if (attr_mask & IB_QP_PATH_MTU) {
-		struct opa_ib_portdata *ibp;
+		struct hfi2_ibport *ibp;
 		struct hfi_pportdata *ppd;
 		u8 sc, vl;
 		u16 mtu;
 
-		ibp = to_opa_ibportdata(ibdev, qp->port_num);
+		ibp = to_hfi_ibp(ibdev, qp->port_num);
 		ppd = ibp->ppd;
 
 		/*
@@ -627,7 +627,7 @@ bail:
 }
 
 /**
- * opa_ib_query_qp - query the attributes of a queue pair
+ * hfi2_query_qp - query the attributes of a queue pair
  * @ibqp: the queue pair who's attributes we want
  * @attr: requested QP attribute values returned here
  * @attr_mask: the mask of attributes to query
@@ -636,10 +636,10 @@ bail:
  * Return: 0 on success and attributes returned in @attr, otherwise
  * returns an errno.
  */
-int opa_ib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
+int hfi2_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		    int attr_mask, struct ib_qp_init_attr *init_attr)
 {
-	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
+	struct hfi2_qp *qp = to_hfi_qp(ibqp);
 
 	attr->qp_state = qp->state;
 	attr->cur_qp_state = attr->qp_state;
@@ -687,7 +687,7 @@ int opa_ib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 }
 
 /**
- * opa_ib_create_qp - create a queue pair for a device
+ * hfi2_create_qp - create a queue pair for a device
  * @ibpd: the protection domain who's device we create the queue pair for
  * @init_attr: the attributes of the queue pair
  * @udata: user data for libibverbs.so
@@ -696,20 +696,20 @@ int opa_ib_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
  *
  * Return: the queue pair on success, otherwise returns an errno.
  */
-struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
+struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 			       struct ib_qp_init_attr *init_attr,
 			       struct ib_udata *udata)
 {
-	struct opa_ib_qp *qp;
+	struct hfi2_qp *qp;
 	int err;
-	struct opa_ib_swqe *swq = NULL;
-	struct opa_ib_data *ibd = to_opa_ibdata(ibpd->device);
+	struct hfi2_swqe *swq = NULL;
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibpd->device);
 	size_t sz;
 	size_t sg_list_sz;
 	struct ib_qp *ret;
 
-	if (init_attr->cap.max_send_sge > opa_ib_max_sges ||
-	    init_attr->cap.max_send_wr > opa_ib_max_qp_wrs ||
+	if (init_attr->cap.max_send_sge > hfi2_max_sges ||
+	    init_attr->cap.max_send_wr > hfi2_max_qp_wrs ||
 	    init_attr->create_flags) {
 		ret = ERR_PTR(-EINVAL);
 		goto bail;
@@ -717,8 +717,8 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 
 	/* Check receive queue parameters if no SRQ is specified. */
 	if (!init_attr->srq) {
-		if (init_attr->cap.max_recv_sge > opa_ib_max_sges ||
-		    init_attr->cap.max_recv_wr > opa_ib_max_qp_wrs) {
+		if (init_attr->cap.max_recv_sge > hfi2_max_sges ||
+		    init_attr->cap.max_recv_wr > hfi2_max_qp_wrs) {
 			ret = ERR_PTR(-EINVAL);
 			goto bail;
 		}
@@ -755,7 +755,7 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 
 	sz = sizeof(struct hfi2_sge) *
 		init_attr->cap.max_send_sge +
-		sizeof(struct opa_ib_swqe);
+		sizeof(struct hfi2_swqe);
 	swq = vmalloc((init_attr->cap.max_send_wr + 1) * sz);
 	if (swq == NULL) {
 		ret = ERR_PTR(-ENOMEM);
@@ -764,7 +764,7 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 
 	sg_list_sz = 0;
 	if (init_attr->srq) {
-		struct opa_ib_srq *srq = to_opa_ibsrq(init_attr->srq);
+		struct hfi2_srq *srq = to_hfi_srq(init_attr->srq);
 
 		if (srq->rq.max_sge > 1)
 			sg_list_sz = sizeof(*qp->r_sg_list) *
@@ -790,8 +790,8 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 		qp->r_rq.size = init_attr->cap.max_recv_wr + 1;
 		qp->r_rq.max_sge = init_attr->cap.max_recv_sge;
 		sz = (sizeof(struct hfi2_sge) * qp->r_rq.max_sge) +
-		     sizeof(struct opa_ib_rwqe);
-		qp->r_rq.wq = vmalloc_user(sizeof(struct opa_ib_rwq) +
+		     sizeof(struct hfi2_rwqe);
+		qp->r_rq.wq = vmalloc_user(sizeof(struct hfi2_rwq) +
 					   qp->r_rq.size * sz);
 		if (!qp->r_rq.wq) {
 			ret = ERR_PTR(-ENOMEM);
@@ -832,7 +832,7 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 
 	/*
 	 * Return the address of the RWQ as the offset to mmap.
-	 * See opa_ib_mmap() for details.
+	 * See hfi2_mmap() for details.
 	 */
 	if (udata && udata->outlen >= sizeof(__u64)) {
 		if (!qp->r_rq.wq) {
@@ -845,9 +845,9 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 				goto bail_ip;
 			}
 		} else {
-			u32 s = sizeof(struct opa_ib_rwq) + qp->r_rq.size * sz;
+			u32 s = sizeof(struct hfi2_rwq) + qp->r_rq.size * sz;
 
-			qp->ip = opa_ib_create_mmap_info(ibd, s,
+			qp->ip = hfi2_create_mmap_info(ibd, s,
 						      ibpd->uobject->context,
 						      qp->r_rq.wq);
 			if (!qp->ip) {
@@ -865,7 +865,7 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 	}
 
 	spin_lock(&ibd->n_qps_lock);
-	if (ibd->n_qps_allocated == opa_ib_max_qps) {
+	if (ibd->n_qps_allocated == hfi2_max_qps) {
 		spin_unlock(&ibd->n_qps_lock);
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_ip;
@@ -908,7 +908,7 @@ struct ib_qp *opa_ib_create_qp(struct ib_pd *ibpd,
 
 bail_ip:
 	if (qp->ip)
-		kref_put(&qp->ip->ref, opa_ib_release_mmap_info);
+		kref_put(&qp->ip->ref, hfi2_release_mmap_info);
 	else
 		vfree(qp->r_rq.wq);
 	free_qpn(ibd, qp);
@@ -922,17 +922,17 @@ bail:
 }
 
 /**
- * opa_ib_destroy_qp - destroy a queue pair
+ * hfi2_destroy_qp - destroy a queue pair
  * @ibqp: the queue pair to destroy
  *
  * Note, this can be called while the QP is actively sending or receiving!
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_destroy_qp(struct ib_qp *ibqp)
+int hfi2_destroy_qp(struct ib_qp *ibqp)
 {
-	struct opa_ib_qp *qp = to_opa_ibqp(ibqp);
-	struct opa_ib_data *ibd = to_opa_ibdata(ibqp->device);
+	struct hfi2_qp *qp = to_hfi_qp(ibqp);
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibqp->device);
 
 	/* Make sure HW and driver activity is stopped. */
 	spin_lock_irq(&qp->r_lock);
@@ -963,7 +963,7 @@ int opa_ib_destroy_qp(struct ib_qp *ibqp)
 	spin_unlock(&ibd->n_qps_lock);
 
 	if (qp->ip)
-		kref_put(&qp->ip->ref, opa_ib_release_mmap_info);
+		kref_put(&qp->ip->ref, hfi2_release_mmap_info);
 	else
 		vfree(qp->r_rq.wq);
 	vfree(qp->s_wq);

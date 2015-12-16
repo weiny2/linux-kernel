@@ -54,7 +54,7 @@
 
 #include "verbs.h"
 
-void opa_ib_rc_error(struct opa_ib_qp *qp, enum ib_wc_status err)
+void hfi2_rc_error(struct hfi2_qp *qp, enum ib_wc_status err)
 {
 	unsigned long flags;
 	int lastwqe;
@@ -76,15 +76,15 @@ void opa_ib_rc_error(struct opa_ib_qp *qp, enum ib_wc_status err)
 }
 
 /**
- * opa_ib_rc_rcv - receive an incoming RC packet
+ * hfi2_rc_rcv - receive an incoming RC packet
  * @qp: the QP the packet came on
  * @packet: incoming packet information
  *
- * This is called from opa_ib_rcv() to process an incoming RC packet
+ * This is called from hfi2_rcv() to process an incoming RC packet
  * for the given QP.
  * Called at interrupt level.
  */
-void opa_ib_rc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
+void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 {
 	return;
 }

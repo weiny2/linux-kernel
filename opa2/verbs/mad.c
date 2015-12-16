@@ -87,9 +87,9 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 			     u8 port)
 {
 	struct ib_node_info *ni;
-	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
 	struct hfi_devdata *dd = ibd->dd;
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 
 	ni = (struct ib_node_info *)smp->data;
@@ -110,7 +110,7 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	ni->node_type = 1;     /* channel adapter */
 	ni->num_ports = ibd->num_pports;
 	/* This is already in network order */
-	ni->sys_guid = opa_ib_sys_guid;
+	ni->sys_guid = hfi2_sys_guid;
 	ni->node_guid = ibd->node_guid;
 	ni->port_guid = ibp->guid;
 	ni->partition_cap = cpu_to_be16(HFI_MAX_PKEYS);
@@ -125,7 +125,7 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 /*
  * Send a bad M_Key trap (ch. 14.3.9).
  */
-static void bad_mkey(struct opa_ib_portdata *ibp, struct ib_mad_hdr *mad,
+static void bad_mkey(struct hfi2_ibport *ibp, struct ib_mad_hdr *mad,
 		     __be64 mkey, __be32 dr_slid, u8 return_path[], u8 hop_cnt)
 {
 	struct ib_mad_notice_attr data;
@@ -163,7 +163,7 @@ static void bad_mkey(struct opa_ib_portdata *ibp, struct ib_mad_hdr *mad,
 #endif
 }
 
-static int check_mkey(struct opa_ib_portdata *ibp, struct ib_mad_hdr *mad,
+static int check_mkey(struct hfi2_ibport *ibp, struct ib_mad_hdr *mad,
 		      int mad_flags, __be64 mkey, __be32 dr_slid,
 		      u8 return_path[], u8 hop_cnt)
 {
@@ -217,7 +217,7 @@ static int process_subn(struct ib_device *ibdev, int mad_flags,
 			struct ib_mad *out_mad)
 {
 	struct ib_smp *smp = (struct ib_smp *)out_mad;
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 	int ret = 0;
 
 	*out_mad = *in_mad;
@@ -289,9 +289,9 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 {
 	struct opa_node_info *ni;
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
-	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
 	struct hfi_devdata *dd = ibd->dd;
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 
 	ni = (struct opa_node_info *)data;
 
@@ -311,7 +311,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ni->node_type = 1;     /* channel adapter */
 	ni->num_ports = ibd->num_pports;
 	/* This is already in network order */
-	ni->system_image_guid = opa_ib_sys_guid;
+	ni->system_image_guid = hfi2_sys_guid;
 	ni->node_guid = ibd->node_guid;
 	ni->port_guid = ibp->guid;
 	ni->partition_cap = cpu_to_be16(HFI_MAX_PKEYS);
@@ -333,7 +333,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	int i;
 	struct hfi_devdata *dd;
 	struct hfi_pportdata *ppd;
-	struct opa_ib_portdata *ibp;
+	struct hfi2_ibport *ibp;
 	struct opa_port_info *pi = (struct opa_port_info *)data;
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 	u8 mtu;
@@ -351,7 +351,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	dd = hfi_dd_from_ibdev(ibdev);
 	/* IB numbers ports from 1, hw from 0 */
 	ppd = to_hfi_ppd(dd, port);
-	ibp = to_opa_ibportdata(ibdev, port);
+	ibp = to_hfi_ibp(ibdev, port);
 
 	if (ppd->vls_supported / 2 > ARRAY_SIZE(pi->neigh_mtu.pvlx_to_mtu) ||
 	    ppd->vls_supported > ARRAY_SIZE(ppd->vl_mtu)) {
@@ -951,7 +951,7 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 {
 	int ret;
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 	/*
 	 * FXRTODO: Only get node info supported in MAD methods.
 	 * Others yet to be implemented.
@@ -1150,7 +1150,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	struct ib_event event;
 	struct hfi_devdata *dd;
 	struct hfi_pportdata *ppd;
-	struct opa_ib_portdata *ibp;
+	struct hfi2_ibport *ibp;
 	u8 clientrereg;
 	u32 smlid, opa_lid; /* tmp vars to hold LID values */
 	u16 lid;
@@ -1204,7 +1204,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	dd = hfi_dd_from_ibdev(ibdev);
 	/* IB numbers ports from 1, hw from 0 */
 	ppd = to_hfi_ppd(dd, port);
-	ibp = to_opa_ibportdata(ibdev, port);
+	ibp = to_hfi_ibp(ibdev, port);
 	event.device = ibdev;
 	event.element.port_num = port;
 
@@ -2136,7 +2136,7 @@ static int subn_opa_aggregate(struct opa_smp *smp,
  * hfi_is_local_mad() returns 1 if 'mad' is sent from, and destined to the
  * local node, 0 otherwise.
  */
-static int hfi_is_local_mad(struct opa_ib_portdata *ibp, const struct opa_mad *mad,
+static int hfi_is_local_mad(struct hfi2_ibport *ibp, const struct opa_mad *mad,
 			    const struct ib_wc *in_wc)
 {
 	const struct opa_smp *smp = (const struct opa_smp *)mad;
@@ -2160,7 +2160,7 @@ static int hfi_is_local_mad(struct opa_ib_portdata *ibp, const struct opa_mad *m
  * SMPs which arrive from other nodes are instead checked by
  * opa_smp_check().
  */
-static int opa_local_smp_check(struct opa_ib_portdata *ibp,
+static int opa_local_smp_check(struct hfi2_ibport *ibp,
 			       const struct ib_wc *in_wc)
 {
 	u16 pkey;
@@ -2203,7 +2203,7 @@ static int process_subn_opa(struct ib_device *ibdev, int mad_flags,
 {
 	struct opa_smp *smp = (struct opa_smp *)out_mad;
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 	u8 *data;
 	u32 am;
 	__be16 attr_id;
@@ -2433,12 +2433,12 @@ static int hfi2_process_opa_mad(struct ib_device *ibdev, int mad_flags,
 	int ret = IB_MAD_RESULT_FAILURE;
 	u32 resp_len = 0;
 	int pkey_idx;
-	struct opa_ib_portdata *ibp = to_opa_ibportdata(ibdev, port);
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 
-	pkey_idx = opa_ib_lookup_pkey_idx(ibp, OPA_LIM_MGMT_PKEY);
+	pkey_idx = hfi2_lookup_pkey_idx(ibp, OPA_LIM_MGMT_PKEY);
 	if (pkey_idx < 0) {
 		pr_warn("failed to find limited mgmt pkey, defaulting 0x%x\n",
-			opa_ib_get_pkey(ibp, 1));
+			hfi2_get_pkey(ibp, 1));
 		pkey_idx = 1;
 	}
 	*out_mad_pkey_index = (u16)pkey_idx;

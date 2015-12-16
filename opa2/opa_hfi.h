@@ -704,7 +704,7 @@ struct hfi_devdata {
 	void *e2e_eq_base;
 
 	/* registered IB device data pointer */
-	struct opa_ib_data *ibd;
+	struct hfi2_ibdev *ibd;
 
 	/* number of portal IDs in use */
 	u16 pid_num_assigned;

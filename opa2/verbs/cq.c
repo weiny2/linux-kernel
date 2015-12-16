@@ -61,16 +61,16 @@
 #define IB_CQ_NONE      (IB_CQ_NEXT_COMP + 1)
 
 /**
- * opa_ib_cq_enter - add a new entry to the completion queue
+ * hfi2_cq_enter - add a new entry to the completion queue
  * @cq: completion queue
  * @entry: work completion entry to add
  * @sig: true if @entry is a solicited entry
  *
  * This may be called with qp->s_lock held.
  */
-void opa_ib_cq_enter(struct opa_ib_cq *cq, struct ib_wc *entry, int solicited)
+void hfi2_cq_enter(struct hfi2_cq *cq, struct ib_wc *entry, int solicited)
 {
-	struct opa_ib_cq_wc *wc;
+	struct hfi2_cq_wc *wc;
 	unsigned long flags;
 	u32 head;
 	u32 next;
@@ -130,7 +130,7 @@ void opa_ib_cq_enter(struct opa_ib_cq *cq, struct ib_wc *entry, int solicited)
 		 * This will cause send_complete() to be called in
 		 * another thread.
 		 */
-		smp_read_barrier_depends(); /* see opa_ib_cq_exit */
+		smp_read_barrier_depends(); /* see hfi2_cq_exit */
 		worker = cq->ibd->worker;
 		if (likely(worker)) {
 			cq->notify = IB_CQ_NONE;
@@ -143,7 +143,7 @@ void opa_ib_cq_enter(struct opa_ib_cq *cq, struct ib_wc *entry, int solicited)
 }
 
 /**
- * opa_ib_poll_cq - poll for work completion entries
+ * hfi2_poll_cq - poll for work completion entries
  * @ibcq: the completion queue to poll
  * @num_entries: the maximum number of entries to return
  * @entry: pointer to array where work completions are placed
@@ -154,10 +154,10 @@ void opa_ib_cq_enter(struct opa_ib_cq *cq, struct ib_wc *entry, int solicited)
  * Return: Number of completion entries polled on success, otherwise
  * returns an errno.
  */
-int opa_ib_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
+int hfi2_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
 {
-	struct opa_ib_cq *cq = to_opa_ibcq(ibcq);
-	struct opa_ib_cq_wc *wc;
+	struct hfi2_cq *cq = to_hfi_cq(ibcq);
+	struct hfi2_cq_wc *wc;
 	unsigned long flags;
 	int npolled;
 	u32 tail;
@@ -194,7 +194,7 @@ bail:
 
 static void send_complete(struct kthread_work *work)
 {
-	struct opa_ib_cq *cq = container_of(work, struct opa_ib_cq, comptask);
+	struct hfi2_cq *cq = container_of(work, struct hfi2_cq, comptask);
 
 	/*
 	 * The completion handler will most likely rearm the notification
@@ -222,7 +222,7 @@ static void send_complete(struct kthread_work *work)
 }
 
 /**
- * opa_ib_create_cq - create a completion queue
+ * hfi2_create_cq - create a completion queue
  * @ibdev: the device this completion queue is attached to
  * @entries: the minimum size of the completion queue
  * @context: (unused)
@@ -234,26 +234,26 @@ static void send_complete(struct kthread_work *work)
  * returns an errno.
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
-struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev,
+struct ib_cq *hfi2_create_cq(struct ib_device *ibdev,
 			       const struct ib_cq_init_attr *attr,
 			       struct ib_ucontext *context,
 			       struct ib_udata *udata)
 #else
-struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev, int entries,
+struct ib_cq *hfi2_create_cq(struct ib_device *ibdev, int entries,
 			       int comp_vector, struct ib_ucontext *context,
 			       struct ib_udata *udata)
 #endif
 {
-	struct opa_ib_data *ibd = to_opa_ibdata(ibdev);
-	struct opa_ib_cq *cq;
-	struct opa_ib_cq_wc *wc;
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
+	struct hfi2_cq *cq;
+	struct hfi2_cq_wc *wc;
 	struct ib_cq *ret;
 	u32 sz;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 	unsigned int entries = attr->cqe;
 #endif
 
-	if (entries < 1 || entries > opa_ib_max_cqes) {
+	if (entries < 1 || entries > hfi2_max_cqes) {
 		ret = ERR_PTR(-EINVAL);
 		goto done;
 	}
@@ -285,12 +285,12 @@ struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev, int entries,
 
 	/*
 	 * Return the address of the WC as the offset to mmap.
-	 * See opa_ib_mmap() for details.
+	 * See hfi2_mmap() for details.
 	 */
 	if (udata && udata->outlen >= sizeof(__u64)) {
 		int err;
 
-		cq->ip = opa_ib_create_mmap_info(ibd, sz, context, wc);
+		cq->ip = hfi2_create_mmap_info(ibd, sz, context, wc);
 		if (!cq->ip) {
 			ret = ERR_PTR(-ENOMEM);
 			goto bail_wc;
@@ -306,7 +306,7 @@ struct ib_cq *opa_ib_create_cq(struct ib_device *ibdev, int entries,
 		cq->ip = NULL;
 
 	spin_lock(&ibd->n_cqs_lock);
-	if (ibd->n_cqs_allocated == opa_ib_max_cqs) {
+	if (ibd->n_cqs_allocated == hfi2_max_cqs) {
 		spin_unlock(&ibd->n_cqs_lock);
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_ip;
@@ -351,24 +351,24 @@ done:
 }
 
 /**
- * opa_ib_destroy_cq - destroy a completion queue
+ * hfi2_destroy_cq - destroy a completion queue
  * @ibcq: the completion queue to destroy.
  *
  * Called by ib_destroy_cq() in the generic verbs code.
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_destroy_cq(struct ib_cq *ibcq)
+int hfi2_destroy_cq(struct ib_cq *ibcq)
 {
-	struct opa_ib_data *ibd = to_opa_ibdata(ibcq->device);
-	struct opa_ib_cq *cq = to_opa_ibcq(ibcq);
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibcq->device);
+	struct hfi2_cq *cq = to_hfi_cq(ibcq);
 
 	flush_kthread_work(&cq->comptask);
 	spin_lock(&ibd->n_cqs_lock);
 	ibd->n_cqs_allocated--;
 	spin_unlock(&ibd->n_cqs_lock);
 	if (cq->ip)
-		kref_put(&cq->ip->ref, opa_ib_release_mmap_info);
+		kref_put(&cq->ip->ref, hfi2_release_mmap_info);
 	else
 		vfree(cq->queue);
 	kfree(cq);
@@ -377,7 +377,7 @@ int opa_ib_destroy_cq(struct ib_cq *ibcq)
 }
 
 /**
- * opa_ib_req_notify_cq - change the notification type for a completion queue
+ * hfi2_req_notify_cq - change the notification type for a completion queue
  * @ibcq: the completion queue
  * @notify_flags: the type of notification to request
  *
@@ -386,10 +386,10 @@ int opa_ib_destroy_cq(struct ib_cq *ibcq)
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_req_notify_cq(struct ib_cq *ibcq,
+int hfi2_req_notify_cq(struct ib_cq *ibcq,
 			 enum ib_cq_notify_flags notify_flags)
 {
-	struct opa_ib_cq *cq = to_opa_ibcq(ibcq);
+	struct hfi2_cq *cq = to_hfi_cq(ibcq);
 	unsigned long flags;
 	int ret = 0;
 
@@ -411,21 +411,21 @@ int opa_ib_req_notify_cq(struct ib_cq *ibcq,
 }
 
 /**
- * opa_ib_resize_cq - change the size of the CQ
+ * hfi2_resize_cq - change the size of the CQ
  * @ibcq: the completion queue
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-int opa_ib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
+int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 {
-	struct opa_ib_cq *cq = to_opa_ibcq(ibcq);
-	struct opa_ib_cq_wc *old_wc;
-	struct opa_ib_cq_wc *wc;
+	struct hfi2_cq *cq = to_hfi_cq(ibcq);
+	struct hfi2_cq_wc *old_wc;
+	struct hfi2_cq_wc *wc;
 	u32 head, tail, n;
 	int ret;
 	u32 sz;
 
-	if (cqe < 1 || cqe > opa_ib_max_cqes) {
+	if (cqe < 1 || cqe > hfi2_max_cqes) {
 		ret = -EINVAL;
 		goto bail;
 	}
@@ -492,14 +492,14 @@ int opa_ib_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 	vfree(old_wc);
 
 	if (cq->ip) {
-		struct opa_ib_data *ibd = to_opa_ibdata(ibcq->device);
-		struct opa_ib_mmap_info *ip = cq->ip;
+		struct hfi2_ibdev *ibd = to_hfi_ibd(ibcq->device);
+		struct hfi2_mmap_info *ip = cq->ip;
 
-		opa_ib_update_mmap_info(ibd, ip, sz, wc);
+		hfi2_update_mmap_info(ibd, ip, sz, wc);
 
 		/*
 		 * Return the offset to mmap.
-		 * See opa_ib_mmap() for details.
+		 * See hfi2_mmap() for details.
 		 */
 		if (udata && udata->outlen >= sizeof(__u64)) {
 			ret = ib_copy_to_udata(udata, &ip->offset,
@@ -525,7 +525,7 @@ bail:
 	return ret;
 }
 
-int opa_ib_cq_init(struct opa_ib_data *ibd)
+int hfi2_cq_init(struct hfi2_ibdev *ibd)
 {
 	int ret = 0;
 	int cpu;
@@ -541,7 +541,7 @@ int opa_ib_cq_init(struct opa_ib_data *ibd)
 		kthread_worker_fn,
 		ibd->worker,
 		ibd->assigned_node_id,
-		"opa_ib_cq%d", ibd->dd->unit);
+		"hfi2_cq%d", ibd->dd->unit);
 
 	if (IS_ERR(task))
 		goto task_fail;
@@ -557,7 +557,7 @@ task_fail:
 	goto out;
 }
 
-void opa_ib_cq_exit(struct opa_ib_data *ibd)
+void hfi2_cq_exit(struct hfi2_ibdev *ibd)
 {
 	struct kthread_worker *worker;
 
@@ -566,7 +566,7 @@ void opa_ib_cq_exit(struct opa_ib_data *ibd)
 		return;
 	/* blocks future queuing from send_complete() */
 	ibd->worker = NULL;
-	smp_wmb(); /* See opa_ib_cq_enter */
+	smp_wmb(); /* See hfi2_cq_enter */
 	flush_kthread_worker(worker);
 	kthread_stop(worker->task);
 	kfree(worker);

@@ -67,7 +67,6 @@
  */
 struct hfi_devdata;
 struct opa_core_device;
-struct opa_ib_qp;
 
 /**
  * struct hfi_ctx - state for HFI resources assigned to this context

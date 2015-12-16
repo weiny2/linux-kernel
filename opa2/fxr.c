@@ -1626,7 +1626,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	 */
 	hfi_pport_down(dd);
 
-	opa_ib_remove(dd);
+	hfi2_ib_remove(dd);
 	if (dd->bus_dev)
 		opa_core_unregister_device(dd->bus_dev);
 
@@ -2049,7 +2049,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	bus_id.device = ent->device;
 	bus_id.revision = (u32)pdev->revision;
 	memcpy(&dd->bus_id, &bus_id, sizeof(struct opa_core_device_id));
-	ret = opa_ib_add(dd, &opa_core_ops);
+	ret = hfi2_ib_add(dd, &opa_core_ops);
 	if (ret)
 		goto err_post_alloc;
 

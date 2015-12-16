@@ -59,15 +59,15 @@
 #define OP(x) IB_OPCODE_UC_##x
 
 /**
- * opa_ib_make_uc_req - construct a request packet (SEND, RDMA write)
+ * hfi2_make_uc_req - construct a request packet (SEND, RDMA write)
  * @qp: a pointer to the QP
  *
  * Return: 1 if constructed; otherwise, return 0.
  */
-int opa_ib_make_uc_req(struct opa_ib_qp *qp)
+int hfi2_make_uc_req(struct hfi2_qp *qp)
 {
 	struct ib_l4_headers *ohdr;
-	struct opa_ib_swqe *wqe;
+	struct hfi2_swqe *wqe;
 	unsigned long flags;
 	u16 lrh0;
 	u32 hwords = 5;
@@ -90,7 +90,7 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 			goto bail;
 		}
 		wqe = get_swqe_ptr(qp, qp->s_last);
-		opa_ib_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
+		hfi2_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
 		goto done;
 	}
 
@@ -232,7 +232,7 @@ int opa_ib_make_uc_req(struct opa_ib_qp *qp)
 	qp->s_hdrwords = hwords;
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
-	opa_ib_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
+	hfi2_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
 			       mask_psn(qp->s_next_psn++), &lrh0);
 
 	/* TODO for now, WQE contains everything needed to perform the Send */
@@ -258,18 +258,18 @@ unlock:
 }
 
 /**
- * opa_ib_uc_rcv - receive an incoming UC packet
+ * hfi2_uc_rcv - receive an incoming UC packet
  * @qp: the QP the packet came on
  * @packet: incoming packet information
  *
- * This is called from opa_ib_rcv() to process an incoming UC packet
+ * This is called from hfi2_rcv() to process an incoming UC packet
  * for the given QP.
  */
-void opa_ib_uc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
+void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 {
-	struct opa_ib_portdata *ibp = packet->ibp;
+	struct hfi2_ibport *ibp = packet->ibp;
 	struct hfi_pportdata *ppd = ibp->ppd;
-	struct opa_ib_header *hdr = packet->hdr;
+	struct hfi2_ib_header *hdr = packet->hdr;
 	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
@@ -298,7 +298,7 @@ void opa_ib_uc_rcv(struct opa_ib_qp *qp, struct opa_ib_packet *packet)
 
 	opcode = be32_to_cpu(ohdr->bth[0]);
 #if 0
-	if (opa_ib_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
+	if (hfi2_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
 		return;
 #endif
 
@@ -348,7 +348,7 @@ inv:
 			set_bit(HFI1_R_REWIND_SGE, &qp->r_aflags);
 			qp->r_sge.num_sge = 0;
 		} else
-			opa_ib_put_ss(&qp->r_sge);
+			hfi2_put_ss(&qp->r_sge);
 		qp->r_state = OP(SEND_LAST);
 		switch (opcode) {
 		case OP(SEND_FIRST):
@@ -416,7 +416,7 @@ send_first:
 		if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
 			qp->r_sge = qp->s_rdma_read_sge;
 		else {
-			ret = opa_ib_get_rwqe(qp, 0);
+			ret = hfi2_get_rwqe(qp, 0);
 			if (ret < 0)
 				goto op_err;
 			if (!ret)
@@ -440,7 +440,7 @@ send_first:
 		qp->r_rcv_len += pmtu;
 		if (unlikely(qp->r_rcv_len > qp->r_len))
 			goto rewind;
-		opa_ib_copy_sge(&qp->r_sge, data, pmtu, 0);
+		hfi2_copy_sge(&qp->r_sge, data, pmtu, 0);
 		break;
 
 	case OP(SEND_LAST_WITH_IMMEDIATE):
@@ -466,8 +466,8 @@ send_last:
 		if (unlikely(wc.byte_len > qp->r_len))
 			goto rewind;
 		wc.opcode = IB_WC_RECV;
-		opa_ib_copy_sge(&qp->r_sge, data, tlen, 0);
-		opa_ib_put_ss(&qp->s_rdma_read_sge);
+		hfi2_copy_sge(&qp->r_sge, data, tlen, 0);
+		hfi2_put_ss(&qp->s_rdma_read_sge);
 last_imm:
 		wc.wr_id = qp->r_wr_id;
 		wc.status = IB_WC_SUCCESS;
@@ -492,7 +492,7 @@ last_imm:
 		wc.dlid_path_bits = 0;
 		wc.port_num = 0;
 		/* Signal completion event if the solicited bit is set. */
-		opa_ib_cq_enter(to_opa_ibcq(qp->ibqp.recv_cq), &wc,
+		hfi2_cq_enter(to_hfi_cq(qp->ibqp.recv_cq), &wc,
 				(ohdr->bth[0] &
 				cpu_to_be32(IB_BTH_SOLICITED)) != 0);
 		break;
@@ -516,7 +516,7 @@ rdma_first:
 			int ok;
 
 			/* Check rkey */
-			ok = opa_ib_rkey_ok(qp, &qp->r_sge.sge, qp->r_len,
+			ok = hfi2_rkey_ok(qp, &qp->r_sge.sge, qp->r_len,
 					  vaddr, rkey, IB_ACCESS_REMOTE_WRITE);
 			if (unlikely(!ok))
 				goto drop;
@@ -542,7 +542,7 @@ rdma_first:
 		qp->r_rcv_len += pmtu;
 		if (unlikely(qp->r_rcv_len > qp->r_len))
 			goto drop;
-		opa_ib_copy_sge(&qp->r_sge, data, pmtu, 1);
+		hfi2_copy_sge(&qp->r_sge, data, pmtu, 1);
 		break;
 
 	case OP(RDMA_WRITE_LAST_WITH_IMMEDIATE):
@@ -562,9 +562,9 @@ rdma_last_imm:
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
 		if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
-			opa_ib_put_ss(&qp->s_rdma_read_sge);
+			hfi2_put_ss(&qp->s_rdma_read_sge);
 		else {
-			ret = opa_ib_get_rwqe(qp, 1);
+			ret = hfi2_get_rwqe(qp, 1);
 			if (ret < 0)
 				goto op_err;
 			if (!ret)
@@ -572,8 +572,8 @@ rdma_last_imm:
 		}
 		wc.byte_len = qp->r_len;
 		wc.opcode = IB_WC_RECV_RDMA_WITH_IMM;
-		opa_ib_copy_sge(&qp->r_sge, data, tlen, 1);
-		opa_ib_put_ss(&qp->r_sge);
+		hfi2_copy_sge(&qp->r_sge, data, tlen, 1);
+		hfi2_put_ss(&qp->r_sge);
 		goto last_imm;
 
 	case OP(RDMA_WRITE_LAST):
@@ -588,8 +588,8 @@ rdma_last:
 		tlen -= (hdrsize + pad + 4);
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
-		opa_ib_copy_sge(&qp->r_sge, data, tlen, 1);
-		opa_ib_put_ss(&qp->r_sge);
+		hfi2_copy_sge(&qp->r_sge, data, tlen, 1);
+		hfi2_put_ss(&qp->r_sge);
 		break;
 
 	default:
@@ -609,7 +609,7 @@ drop:
 	return;
 
 op_err:
-	opa_ib_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
+	hfi2_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
 	return;
 
 }

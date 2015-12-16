@@ -175,7 +175,7 @@ static void hfi_dma_free_coherent(struct ib_device *dev, size_t size,
 	free_pages((unsigned long) cpu_addr, get_order(size));
 }
 
-struct ib_dma_mapping_ops opa_ib_dma_mapping_ops = {
+struct ib_dma_mapping_ops hfi2_dma_mapping_ops = {
 	.mapping_error = hfi_mapping_error,
 	.map_single = hfi_dma_map_single,
 	.unmap_single = hfi_dma_unmap_single,
