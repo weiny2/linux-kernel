@@ -593,17 +593,16 @@ struct opa_ib_portdata {
 	u64 n_vl15_dropped;
 
 	u32 port_cap_flags;
-	u32 sm_trap_qp;
-	u32 sa_qp;
 	u16 mkey_lease_period;
 	u16 pkey_violations;
 	u16 qkey_violations;
 	u16 mkey_violations;
 	u16 sm_lid;
 	u8 port_num;
-	u8 smsl;
+	u8 sm_sl;
 	u8 mkeyprot;
 	u8 subnet_timeout;
+	u8 vl_high_limit;
 
 	struct hfi_ctx *ctx;
 	struct hfi_cq cmdq_tx;
@@ -789,17 +788,11 @@ int opa_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr);
 int opa_ib_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 			struct ib_recv_wr **bad_wr);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
-int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-		       const struct ib_wc *in_wc, const struct ib_grh *in_grh,
-		       const struct ib_mad_hdr *in_mad, size_t in_mad_size,
-		       struct ib_mad_hdr *out_mad, size_t *out_mad_size,
-		       u16 *out_mad_pkey_index);
-#else
-int opa_ib_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
-		       struct ib_wc *in_wc, struct ib_grh *in_grh,
-		       struct ib_mad *in_mad, struct ib_mad *out_mad);
-#endif
+int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
+		     const struct ib_wc *in_wc, const struct ib_grh *in_grh,
+		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,
+		     struct ib_mad_hdr *out_mad, size_t *out_mad_size,
+		     u16 *out_mad_pkey_index);
 int opa_ib_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 int opa_ib_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 struct opa_mcast *

@@ -307,6 +307,28 @@ static const char *opa_pstate_name(u32 pstate)
 	return "unknown";
 }
 
+/* return the link state reason name */
+static const char *link_state_reason_name(struct hfi_pportdata *ppd, u32 state)
+{
+	if (state == HLS_UP_INIT) {
+		switch (ppd->linkinit_reason) {
+		case OPA_LINKINIT_REASON_LINKUP:
+			return "(LINKUP)";
+		case OPA_LINKINIT_REASON_FLAPPING:
+			return "(FLAPPING)";
+		case OPA_LINKINIT_OUTSIDE_POLICY:
+			return "(OUTSIDE_POLICY)";
+		case OPA_LINKINIT_QUARANTINED:
+			return "(QUARANTINED)";
+		case OPA_LINKINIT_INSUFIC_CAPABILITY:
+			return "(INSUFIC_CAPABILITY)";
+		default:
+			break;
+		}
+	}
+	return "";
+}
+
 u32 hfi_to_opa_pstate(struct hfi_devdata *dd, u32 hfi_pstate)
 {
 	/* look at the HFI meta-states only */
@@ -1938,9 +1960,11 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 
 	mutex_lock(&ppd->hls_lock);
 
-	ppd_dev_info(ppd, "%s(%d) -> %s(%d)\n",
-		link_state_name(ppd->host_link_state), ilog2(ppd->host_link_state),
-		link_state_name(state), ilog2(state));
+	ppd_dev_info(ppd, "%s(%d) -> %s(%d) %s\n",
+		     link_state_name(ppd->host_link_state),
+		     ilog2(ppd->host_link_state),
+		     link_state_name(state), ilog2(state),
+		     link_state_reason_name(ppd, state));
 
 	/*
 	 * If we're going to a (HLS_*) link state that implies the logical
@@ -2074,6 +2098,10 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 				"%s: logical state did not change to INIT\n",
 				__func__);
 		} else {
+			/* clear old transient LINKINIT_REASON code */
+			if (ppd->linkinit_reason >= OPA_LINKINIT_REASON_CLEAR)
+				ppd->linkinit_reason =
+					OPA_LINKINIT_REASON_LINKUP;
 			/* enable the port */
 #if 0 /* where RCV_CTRL_RCV_PORT_ENABLE_SMASK is defined */
 			add_rcvctrl(dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);

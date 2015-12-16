@@ -234,7 +234,7 @@ static int opa_ib_query_port(struct ib_device *ibdev, u8 port,
 	props->lid = ppd->lid;
 	props->lmc = ppd->lmc;
 	props->sm_lid = ibp->sm_lid;
-	props->sm_sl = ibp->smsl;
+	props->sm_sl = ibp->sm_sl;
 	props->state = ibp->ppd->lstate;
 	props->phys_state = hfi_ibphys_portstate(ibp->ppd);
 	props->port_cap_flags = ibp->port_cap_flags;
@@ -415,7 +415,7 @@ static int opa_ib_register_device(struct opa_ib_data *ibd, const char *name)
 	ibdev->reg_phys_mr = opa_ib_reg_phys_mr;
 	ibdev->reg_user_mr = opa_ib_reg_user_mr;
 	ibdev->dereg_mr = opa_ib_dereg_mr;
-	ibdev->process_mad = opa_ib_process_mad;
+	ibdev->process_mad = hfi2_process_mad;
 	ibdev->alloc_ucontext = opa_ib_alloc_ucontext;
 	ibdev->dealloc_ucontext = opa_ib_dealloc_ucontext;
 	ibdev->dma_device = ibd->parent_dev;
@@ -488,14 +488,6 @@ static int opa_ib_init_port(struct opa_ib_data *ibd,
 	ibp->guid = ppd->pguid;
 	ibp->sm_lid = 0;
 
-	/*
-	 * FXRTODO: These need to be reset to their
-	 * defaults after every linkup also. Once LNI code is up
-	 * and working. we will need a notification to the
-	 * verbs layer on linkup event.
-	 */
-	ibp->sm_trap_qp = OPA_DEFAULT_SM_TRAP_QP;
-	ibp->sa_qp = OPA_DEFAULT_SA_QP;
 	/* Below should only set bits defined in OPA PortInfo.CapabilityMask */
 	ibp->port_cap_flags = IB_PORT_AUTO_MIGR_SUP |
 		IB_PORT_CAP_MASK_NOTICE_SUP;
