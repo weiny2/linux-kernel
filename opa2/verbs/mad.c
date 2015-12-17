@@ -1996,6 +1996,7 @@ static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 			    u32 *resp_len)
 {
 	int ret;
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
 
 	switch (attr_id) {
 	case IB_SMP_ATTR_PORT_INFO:
@@ -2050,15 +2051,12 @@ static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		ret = __subn_set_opa_led_info(smp, am, data, ibdev, port,
 					      resp_len);
 		break;
-#if 0
-	/* FXRTODO: figure out if this code is valid for fxr */
 	case IB_SMP_ATTR_SM_INFO:
 		if (ibp->port_cap_flags & IB_PORT_SM_DISABLED)
 			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
 		if (ibp->port_cap_flags & IB_PORT_SM)
 			return IB_MAD_RESULT_SUCCESS;
 		/* FALLTHROUGH */
-#endif
 	default:
 		smp->status |=
 		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB);
