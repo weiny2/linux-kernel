@@ -210,6 +210,31 @@ static void qp_update_sge(struct hfi2_qp *qp, u32 length)
 }
 
 /*
+ * read QP's SG list state for next address and length to send
+ */
+static void qp_read_sge(struct hfi2_qp *qp, uint64_t *start,
+			uint32_t *length)
+{
+	uint32_t iov_length;
+	struct hfi2_sge *sge = &qp->s_sge.sge;
+
+	/* use length from next MR segment */
+	iov_length = sge->length;
+	/* the SGE can describe less than the MR segment */
+	if (iov_length > sge->sge_length)
+		iov_length = sge->sge_length;
+	/* TODO SGE can be larger than total_length? */
+	if (iov_length > qp->s_cur_size)
+		iov_length = qp->s_cur_size;
+
+	*length = iov_length;
+	*start = (uint64_t)sge->vaddr;
+
+	/* update internal state */
+	qp_update_sge(qp, iov_length);
+}
+
+/*
  * TODO - keep around for now, in case this hack
  * has value again during bring-up
  */
@@ -314,34 +339,16 @@ eq_advance:
 	goto next_event;
 }
 
-int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
-		    struct hfi2_swqe *wqe)
+static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+			     struct hfi2_wqe_iov *wqe_iov, int *out_niovs,
+			     uint32_t *iov_bytes)
 {
-	int i, ret, ndelays = 0;
-	unsigned long flags;
-	uint8_t dma_cmd;
-	union base_iovec *iov = NULL;
-	struct hfi2_wqe_iov *wqe_iov = NULL;
-	uint32_t num_iovs, total_length;
-	struct hfi2_sge *sge;
-	size_t payload_bytes;
+	int i, niovs = *out_niovs;
+	uint32_t payload_bytes;
+	union base_iovec *iov;
+	struct hfi2_swqe *wqe = wqe_iov->wqe;
 
-	dma_cmd = (wqe->use_sc15) ? MGMT_DMA : GENERAL_DMA;
-	/* TODO - optimize for OFED_DMA here */
-
-	ret = qp_max_iovs(ibp, qp, &num_iovs);
-	if (ret)
-		return ret;
-
-	wqe_iov = kzalloc(sizeof(*wqe_iov) + sizeof(*iov) * num_iovs,
-			  GFP_ATOMIC);
-	if (!wqe_iov)
-		return -ENOMEM;
-
-	wqe_iov->wqe = wqe;
-	wqe_iov->remaining_bytes = qp->s_len;
 	iov = wqe_iov->iov;
-
 	/* first entry is IB header */
 	iov[0].length = (wqe->s_hdrwords << 2);
 	iov[0].use_9b = 1;
@@ -356,22 +363,13 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	iov[0].start = (uint64_t)(&wqe_iov->ib_hdr);
 
 	/* write IOVEC entries */
-	total_length = qp->s_cur_size;
 	payload_bytes = 0;
-	for (i = 1; total_length && i < num_iovs; i++) {
+	for (i = 1; payload_bytes < qp->s_cur_size && i < niovs; i++) {
+		uint64_t iov_start;
 		uint32_t iov_length;
 
-		/* get current SGE, qp_update_sge() advances */
-		sge = &qp->s_sge.sge;
-
-		/* use length from next MR segment */
-		iov_length = sge->length;
-		/* the SGE can describe less than the MR segment */
-		if (iov_length > sge->sge_length)
-			iov_length = sge->sge_length;
-		/* TODO SGE can be larger than total_length? */
-		if (iov_length > total_length)
-			iov_length = total_length;
+		/* read current SGE address/length, updates internal state */
+		qp_read_sge(qp, &iov_start, &iov_length);
 
 		/*
 		 * If payload is now larger than MTU, start new packet;
@@ -380,11 +378,10 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		 */
 		if (payload_bytes + iov_length > wqe->pmtu && i > 1) {
 			dev_err(ibp->dev,
-				"PT %d: large DMA not implemented, %ld > %d MTU!\n",
+				"PT %d: large DMA not implemented, %d > %d MTU!\n",
 				ibp->port_num,
 				payload_bytes + iov_length, wqe->pmtu);
-			ret = -EIO;
-			goto err;
+			return -EIO;
 		}
 
 		iov[i].length = iov_length;
@@ -392,35 +389,62 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		iov[i].ep = 0;
 		iov[i].sp = 0;
 		iov[i].v = 1;
-		iov[i].start = (uint64_t)sge->vaddr;
+		iov[i].start = iov_start;
 		payload_bytes += iov_length;
-		total_length -= iov_length;
-
-		/* update internal state in QP tracking SG_list progress */
-		qp_update_sge(qp, iov_length);
 	}
 
-	if (total_length) {
+	/* adjust iovs actually used, earlier calculation can be larger */
+	niovs = i;
+	iov[niovs - 1].ep = 1;
+
+	*out_niovs = niovs;
+	*iov_bytes = payload_bytes;
+	return 0;
+}
+
+int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+		  struct hfi2_swqe *wqe)
+{
+	int ret, ndelays = 0;
+	unsigned long flags;
+	uint8_t dma_cmd;
+	struct hfi2_wqe_iov *wqe_iov = NULL;
+	uint32_t num_iovs, length = 0;
+
+	dma_cmd = (wqe->use_sc15) ? MGMT_DMA : GENERAL_DMA;
+
+	ret = qp_max_iovs(ibp, qp, &num_iovs);
+	if (ret)
+		return ret;
+
+	wqe_iov = kzalloc(sizeof(*wqe_iov) + sizeof(*wqe_iov->iov) * num_iovs,
+			  GFP_ATOMIC);
+	if (!wqe_iov)
+		return -ENOMEM;
+	wqe_iov->wqe = wqe;
+	wqe_iov->remaining_bytes = qp->s_len;
+
+	ret = build_iovec_array(ibp, qp, wqe_iov, &num_iovs, &length);
+	if (ret)
+		goto err;
+	if (qp->s_cur_size != length) {
 		dev_err(ibp->dev,
-			"PT %d: TX error, %d bytes unsent after %d iovs\n",
-			ibp->port_num, total_length, num_iovs);
+			"PT %d: TX error %d of %d bytes unsent, %d iovs\n",
+			ibp->port_num, qp->s_cur_size - length,
+			qp->s_cur_size, num_iovs);
 		ret = -EIO;
 		goto err;
 	}
 
-	/* adjust iovs actually used, earlier calculation can be larger */
-	num_iovs = i;
-	iov[num_iovs - 1].ep = 1;
-
-	dev_dbg(ibp->dev, "PT %d: cmd %d len %d/%d pmtu %d n_iov %d sent %ld\n",
+	dev_dbg(ibp->dev, "PT %d: cmd %d len %d/%d pmtu %d n_iov %d sent %d\n",
 		ibp->port_num, dma_cmd, qp->s_cur_size, wqe->length, wqe->pmtu,
-		num_iovs, payload_bytes);
+		num_iovs, length);
 
 _tx_cmd:
 	/* send with GENERAL or MGMT DMA */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
 	ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, wqe->s_ctx,
-				    (uint64_t)iov, num_iovs,
+				    (uint64_t)wqe_iov->iov, num_iovs,
 				    (uint64_t)wqe_iov, PTL_MD_RESERVED_IOV,
 				    ibp->send_eq, HFI_CT_NONE,
 				    ibp->port_num, wqe->sl, 0,
