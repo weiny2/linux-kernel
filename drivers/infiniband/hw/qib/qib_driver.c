@@ -140,11 +140,6 @@ int qib_set_mod_param(const char *str, struct kernel_param *kp)
 	else if (*next && *next == ':')
 		/* no default, rewind the string */
 		next = tmp;
-	else {
-		pr_warn("invalid parameter value\n");
-		ret =  -EINVAL;
-		goto done;
-	}
 	while (*next && next[1]) {
 		if (*next == ',')
 			tmp = ++next;
