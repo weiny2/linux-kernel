@@ -590,7 +590,10 @@ void ipoib_mcast_join_task(struct work_struct *work)
 			  port_attr.state);
 		return;
 	}
-	priv->local_lid = port_attr.lid;
+	/* TODO: This casting will not be needed once priv->local_lid
+	 * is extended to 32 bits.
+	 */
+	priv->local_lid = (u16)port_attr.lid;
 
 	if (ib_query_gid(priv->ca, priv->port, 0, &priv->local_gid, NULL))
 		ipoib_warn(priv, "ib_query_gid() failed\n");
