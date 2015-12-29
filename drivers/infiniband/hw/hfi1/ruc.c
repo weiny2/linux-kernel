@@ -295,7 +295,8 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 				       (u16)bth0,
 				       (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
 				       0, qp->ibqp.qp_num,
-				       hdr->lrh[3], hdr->lrh[1]);
+				       be16_to_cpu(hdr->lrh[3]),
+				       be16_to_cpu(hdr->lrh[1]));
 			goto err;
 		}
 		/* Validate the SLID. See Ch. 9.6.1.5 and 17.2.8 */
@@ -329,7 +330,8 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
 				       (u16)bth0,
 				       (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
 				       0, qp->ibqp.qp_num,
-				       hdr->lrh[3], hdr->lrh[1]);
+				       be16_to_cpu(hdr->lrh[3]),
+				       be16_to_cpu(hdr->lrh[1]));
 			goto err;
 		}
 		/* Validate the SLID. See Ch. 9.6.1.5 */
