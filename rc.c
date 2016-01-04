@@ -670,6 +670,7 @@ bail:
 bail_no_tx:
 	qp->s_flags &= ~HFI1_S_BUSY;
 	ps->s_txreq = NULL;
+	qp->s_hdrwords = 0;
 	return 0;
 }
 
