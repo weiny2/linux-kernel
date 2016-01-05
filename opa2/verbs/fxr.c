@@ -76,7 +76,7 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 			 uint16_t *eq, void **eq_base)
 {
 	u32 *eq_head_array, *eq_head_addr;
-	u64 *eq_entry, done;
+	u64 *eq_entry = 0, done;
 	int rc;
 
 	eq_alloc->base = (u64)vzalloc(eq_alloc->size * HFI_EQ_ENTRY_SIZE);
@@ -97,13 +97,15 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 	*eq_base = (void *)eq_alloc->base;
 
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait(ctx, 0x0, &eq_entry);
+	hfi_eq_wait_timed(ctx, 0x0, HFI_EQ_WAIT_TIMEOUT_MS, &eq_entry);
 	if (eq_entry) {
 		unsigned long flags;
 
 		spin_lock_irqsave(cq_lock, flags);
 		hfi_eq_advance(ctx, cq, 0x0, eq_entry);
 		spin_unlock_irqrestore(cq_lock, flags);
+	} else {
+		rc = -EIO;
 	}
 err:
 	return rc;
@@ -114,11 +116,11 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
 			    spinlock_t *cq_lock,
 			    hfi_eq_handle_t eq, void *eq_base)
 {
-	u64 *eq_entry, done;
+	u64 *eq_entry = NULL, done;
 
 	hfi_cteq_release(ctx, 0, eq, (u64)&done);
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait(ctx, 0x0, &eq_entry);
+	hfi_eq_wait_timed(ctx, 0x0, HFI_EQ_WAIT_TIMEOUT_MS, &eq_entry);
 	if (eq_entry) {
 		unsigned long flags;
 
@@ -588,7 +590,7 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp)
 
 	/* write Eager entries */
 	for (i = 0; i < OPA_IB_EAGER_COUNT; i++) {
-		u64 *eq_entry, done;
+		u64 *eq_entry = NULL, done;
 
 		n_slots = hfi_format_rx_bypass(ibp->ctx, HFI_NI_BYPASS,
 					       ibp->rcv_egr_base + (i*OPA_IB_EAGER_SIZE),
@@ -606,9 +608,13 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp)
 			goto kthread_err;
 
 		/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-		hfi_eq_wait(ibp->ctx, 0x0, &eq_entry);
-		if (eq_entry)
+		hfi_eq_wait_timed(ibp->ctx, 0x0, HFI_EQ_WAIT_TIMEOUT_MS, &eq_entry);
+		if (eq_entry) {
 			hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, 0x0, eq_entry);
+		} else {
+			ret = -EIO;
+			goto kthread_err;
+		}
 	}
 
 	/* kthread create and wait for packets! */

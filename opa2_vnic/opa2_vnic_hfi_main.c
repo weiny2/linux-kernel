@@ -178,7 +178,7 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 			 hfi_eq_handle_t *eq, void **eq_base)
 {
 	u32 *eq_head_array, *eq_head_addr;
-	u64 *eq_entry, done;
+	u64 *eq_entry = NULL, done;
 	int rc;
 
 	eq_alloc->base = (u64)vzalloc(eq_alloc->size * HFI_EQ_ENTRY_SIZE);
@@ -199,13 +199,15 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 	*eq_base = (void *)eq_alloc->base;
 
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait(ctx, 0x0, &eq_entry);
+	hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS, &eq_entry);
 	if (eq_entry) {
 		unsigned long flags;
 
 		spin_lock_irqsave(cq_lock, flags);
 		hfi_eq_advance(ctx, cq, 0x0, eq_entry);
 		spin_unlock_irqrestore(cq_lock, flags);
+	} else {
+		rc = -EIO;
 	}
 err:
 	return rc;
@@ -216,11 +218,11 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
 			    spinlock_t *cq_lock,
 			    hfi_eq_handle_t eq, void *eq_base)
 {
-	u64 *eq_entry, done;
+	u64 *eq_entry = NULL, done;
 
 	ctx->ops->ev_release(ctx, 0, eq, (u64)&done);
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait(ctx, 0x0, &eq_entry);
+	hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS, &eq_entry);
 	if (eq_entry) {
 		unsigned long flags;
 
@@ -239,7 +241,7 @@ static int opa2_vnic_append_skb(struct opa_netdev *ndev, int idx)
 	struct hfi_cq *rx = &ndev->rx;
 	hfi_rx_cq_command_t rx_cmd;
 	int n_slots, rc;
-	u64 *eq_entry, done;
+	u64 *eq_entry = NULL, done;
 	unsigned long sflags;
 
 	n_slots = hfi_format_rx_bypass(ctx, ndev->ni,
@@ -261,11 +263,13 @@ static int opa2_vnic_append_skb(struct opa_netdev *ndev, int idx)
 	}
 
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait(ctx, 0x0, &eq_entry);
+	hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS, &eq_entry);
 	if (eq_entry) {
 		spin_lock_irqsave(&ndev->rx_lock, sflags);
 		hfi_eq_advance(ctx, rx, 0x0, eq_entry);
 		spin_unlock_irqrestore(&ndev->rx_lock, sflags);
+	} else {
+		return -EIO;
 	}
 
 	return 0;

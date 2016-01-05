@@ -631,7 +631,7 @@ int hfi_e2e_eq_assign(struct hfi_ctx *ctx)
 	struct opa_ev_assign eq_assign = {0};
 	int ret;
 	u32 *eq_head_array, *eq_head_addr;
-	u64 *eq_entry;
+	u64 *eq_entry = NULL;
 
 	eq_assign.ni = PTL_NONMATCHING_PHYSICAL;
 	eq_assign.size = 64;
@@ -651,10 +651,13 @@ int hfi_e2e_eq_assign(struct hfi_ctx *ctx)
 	eq_head_addr = &eq_head_array[eq_assign.ev_idx];
 	*eq_head_addr = 0;
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait(ctx, 0x0, &eq_entry);
+	hfi_eq_wait_timed(ctx, 0x0, HFI_EQ_WAIT_TIMEOUT_MS, &eq_entry);
 	if (eq_entry)
 		hfi_eq_advance(ctx, &ctx->devdata->priv_rx_cq,
 			       0x0, eq_entry);
+	else
+		return -EIO;
+
 	return 0;
 }
 
