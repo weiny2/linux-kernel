@@ -81,8 +81,14 @@ static struct opa_core_client opa_vnic_clnt = {
 #define OPA2_NET_TIMEOUT_MS 100
 #define OPA2_NET_RX_POLL_MS 1
 #define OPA2_NET_NUM_RX_BUFS 2048
-/* FXRTODO: Obtain MTU from vdev once supported */
+/*
+ * FXRTODO:
+ * Obtain MTU from vdev once supported
+ * We could also use the default MAX OPA MTU once Simics supports
+ * transfers larger than 8192 bytes.
+ */
 #define OPA2_NET_DEFAULT_MTU 8192
+#define OPA2_NET_EAGER_SIZE (PAGE_SIZE * 4)
 
 #define OPA_VNIC_ICRC_LEN   4
 #define OPA_VNIC_TAIL_LEN   1
@@ -246,7 +252,7 @@ static int opa2_vnic_append_skb(struct opa_netdev *ndev, int idx)
 
 	n_slots = hfi_format_rx_bypass(ctx, ndev->ni,
 				       ndev->buf[idx],
-				       OPA2_NET_DEFAULT_MTU,
+				       OPA2_NET_EAGER_SIZE,
 				       HFI_PT_BYPASS_EAGER,
 				       ctx->ptl_uid,
 				       PTL_OP_PUT,
@@ -305,6 +311,12 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	} else {
 		iov.length = skb->len;
 	}
+	if (iov.length > OPA2_NET_DEFAULT_MTU) {
+		rc = -ENOSPC;
+		dev_err(&odev->dev, "%s %d iov.length %d > max MTU %d\n",
+			__func__, __LINE__, iov.length, OPA2_NET_DEFAULT_MTU);
+		goto err;
+	}
 	iov.ep = 1;
 	iov.sp = 1;
 	iov.v = 1;
@@ -349,6 +361,7 @@ retry:
 	}
 err1:
 	spin_unlock_irqrestore(&ndev->tx_lock, sflags);
+err:
 	if (rc)
 		vdev->hfi_stats.tx_logic_errors++;
 	return rc;
@@ -392,6 +405,12 @@ static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
 	buf = ndev->buf[idx];
 	/* RHF packet length is in dwords */
 	len = rhf->pktlen << 2;
+	if (len > OPA2_NET_DEFAULT_MTU) {
+		dev_err(&ndev->odev->dev,
+			"packet drop: eager buf len %d > max MTU %d\n",
+			len, OPA2_NET_DEFAULT_MTU);
+		goto alloc_fail;
+	}
 	if (!vdev->is_eeph) {
 		pad_info = buf + len - 1;
 		len -= *pad_info & 0x3f;
@@ -502,7 +521,7 @@ static int opa2_alloc_rx_bufs(struct opa_netdev *ndev)
 	int i, rc = 0;
 
 	for (i = 0; i < OPA2_NET_NUM_RX_BUFS; i++) {
-		ndev->buf[i] = vzalloc(OPA2_NET_DEFAULT_MTU);
+		ndev->buf[i] = vzalloc(OPA2_NET_EAGER_SIZE);
 		if (!ndev->buf[i]) {
 			rc = -ENOMEM;
 			goto err1;
