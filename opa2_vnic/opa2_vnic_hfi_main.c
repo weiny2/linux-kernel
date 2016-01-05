@@ -120,6 +120,7 @@ static struct opa_core_client opa_vnic_clnt = {
  * @port_num: physical port number
  * @init: true if veswport is initialized
  * @vnic_cb: vnic callback function
+ * @skbq: Queue of received socket buffers
  */
 struct opa_veswport {
 	int			slid;
@@ -130,6 +131,7 @@ struct opa_veswport {
 	u8			port_num;
 	bool			init;
 	opa_vnic_hfi_evt_cb_fn	__rcu vnic_cb;
+	struct sk_buff_head	skbq;
 };
 
 /*
@@ -367,94 +369,35 @@ err:
 	return rc;
 }
 
-/*
- * Receive a packet notification by querying the RX event queue and
- * update the length of the packet received in the SKB. A new SKB is
- * allocated and appended to the free list.
- */
+/* Retrieve a SKB from the head of the list */
 static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
-	struct opa_core_device *odev = dev->odev;
-	struct opa_netdev *ndev = dev->ndev;
-	struct hfi_ctx *ctx = &ndev->ctx;
-	struct hfi_cq *rx = &ndev->rx;
-	u64 *eq_entry;
-	union rhf *rhf;
-	int idx, rc, len;
-	unsigned char *pad_info = NULL, *buf;
-	struct sk_buff *skb = NULL;
-	unsigned long sflags;
 
-	hfi_eq_peek(ctx, ndev->eq_rx, &eq_entry);
-	if (!eq_entry)
-		goto done;
-	rhf = (union rhf *)eq_entry;
-
-	idx = rhf->egrindex;
-	if (idx >= OPA2_NET_NUM_RX_BUFS) {
-		dev_err(&ndev->odev->dev,
-			"packet drop: incorrect eager index %d\n",
-			rhf->egrindex);
-		spin_lock_irqsave(&ndev->rx_lock, sflags);
-		hfi_eq_advance(ctx, &ndev->rx, ndev->eq_rx, eq_entry);
-		spin_unlock_irqrestore(&ndev->rx_lock, sflags);
-		vdev->hfi_stats.rx_logic_errors++;
-		return NULL;
-	}
-	buf = ndev->buf[idx];
-	/* RHF packet length is in dwords */
-	len = rhf->pktlen << 2;
-	if (len > OPA2_NET_DEFAULT_MTU) {
-		dev_err(&ndev->odev->dev,
-			"packet drop: eager buf len %d > max MTU %d\n",
-			len, OPA2_NET_DEFAULT_MTU);
-		goto alloc_fail;
-	}
-	if (!vdev->is_eeph) {
-		pad_info = buf + len - 1;
-		len -= *pad_info & 0x3f;
-	}
-	skb = netdev_alloc_skb(vdev->netdev, len);
-	if (!skb) {
-		vdev->hfi_stats.rx_missed_errors++;
-		goto alloc_fail;
-	}
-	memcpy(skb->data, buf, len);
-	skb_put(skb, len);
-	dev_dbg(&odev->dev, "RX kind %d skb->len %4d flit_len %4d "
-		"(pad & 0x3f) %d vpnum %d port %d egridx %d egroffset %d\n",
-		rhf->event_kind, skb->len, rhf->pktlen << 2,
-		pad_info ? *pad_info & 0x3f : 0x0,
-		dev->vport_num, rhf->pt + 1,
-		rhf->egrindex, rhf->egroffset);
-alloc_fail:
-	spin_lock_irqsave(&ndev->rx_lock, sflags);
-	rc = hfi_pt_update_eager(ctx, rx, idx);
-	/* FXRTODO: error handling? */
-	hfi_eq_advance(ctx, rx, ndev->eq_rx, eq_entry);
-	spin_unlock_irqrestore(&ndev->rx_lock, sflags);
-done:
-	return skb;
+	return skb_dequeue(&dev->skbq);
 }
 
 /* return 1 if there are buffers available to be read and 0 otherwise */
 static int opa2_vnic_hfi_get_read_avail(struct opa_vnic_device *vdev)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
-	struct opa_netdev *ndev = dev->ndev;
-	struct hfi_ctx *ctx = &ndev->ctx;
-	u64 *eq_entry;
 
-	hfi_eq_peek(ctx, ndev->eq_rx, &eq_entry);
-	if (eq_entry)
-		return 1;
-
-	return 0;
+	return !skb_queue_empty(&dev->skbq);
 }
 
-/* RX ISR callback */
-/* FXRTODO: Need an efficient way to enable/disable interrupt notifications */
+/*
+ * This RX ISR callback does the following:
+ * a) queries the EQ for received packets
+ * b) figures out the veswport the packet is destined for
+ * c) allocates an SKB
+ * d) copies the data from the eager buffer into the SKB
+ * e) appends the skb to the appropriate RX queue
+ * f) notifies the upper layer about a received packet
+ * FXRTODO:
+ * a) Need an efficient way to enable/disable interrupt notifications
+ * b) There is a lot being done in the ISR. do we need to defer the
+ * handling to a bottom half instead?
+ */
 static void opa2_vnic_rx_isr_cb(void *data)
 {
 	struct opa_netdev *ndev = data;
@@ -463,11 +406,17 @@ static void opa2_vnic_rx_isr_cb(void *data)
 	union rhf *rhf;
 	int l4_type, id = 0;
 	opa_vnic_hfi_evt_cb_fn vnic_cb;
-	struct opa_veswport *dev;
+	struct opa_veswport *dev = NULL;
 	struct opa_vnic_device *vdev = NULL;
 	void *buf;
 	unsigned long sflags;
+	struct hfi_cq *rx = &ndev->rx;
+	int len;
+	unsigned char *pad_info = NULL;
+	struct sk_buff *skb;
 
+retry:
+	skb = NULL;
 	hfi_eq_peek(ctx, ndev->eq_rx, &eq_entry);
 	if (!eq_entry)
 		return;
@@ -482,9 +431,9 @@ static void opa2_vnic_rx_isr_cb(void *data)
 		spin_unlock_irqrestore(&ndev->rx_lock, sflags);
 		return;
 	}
-	rcu_read_lock();
 	buf = ndev->buf[rhf->egrindex];
 	l4_type = OPA_VNIC_GET_L4_TYPE(buf);
+	rcu_read_lock();
 	if (l4_type == OPA_VNIC_L4_EEPH) {
 		vdev = ndev->eeph_dev;
 	} else if (l4_type == OPA_VNIC_L4_ETHR) {
@@ -492,14 +441,55 @@ static void opa2_vnic_rx_isr_cb(void *data)
 		id = OPA_VNIC_GET_VESWID(buf);
 		vdev = idr_find(&ndev->vesw_idr[rhf->pt], id);
 	}
+	/* Drop the packet if a vdev is not available */
 	if (!vdev)
-		goto done;
+		goto pkt_drop;
 	dev = vdev->hfi_priv;
-	vnic_cb = rcu_dereference(dev->vnic_cb);
-	if (vnic_cb)
-		vnic_cb(vdev, OPA_VNIC_HFI_EVT_RX);
-done:
+	/* RHF packet length is in dwords */
+	len = rhf->pktlen << 2;
+	if (len > OPA2_NET_DEFAULT_MTU) {
+		dev_err(&ndev->odev->dev,
+			"packet drop: eager buf len %d > max MTU %d\n",
+			len, OPA2_NET_DEFAULT_MTU);
+		goto pkt_drop;
+	}
+	if (!vdev->is_eeph) {
+		pad_info = buf + len - 1;
+		len -= *pad_info & 0x3f;
+	}
+	/*
+	 * Allocate the skb and then copy the data from the eager
+	 * buffer into the skb
+	 */
+	skb = netdev_alloc_skb(vdev->netdev, len);
+	if (!skb) {
+		vdev->hfi_stats.rx_missed_errors++;
+		goto pkt_drop;
+	}
+	memcpy(skb->data, buf, len);
+	skb_put(skb, len);
+	skb_queue_tail(&dev->skbq, skb);
+	dev_dbg(&ndev->odev->dev, "RX kind %d skb->len %4d flit_len %4d "
+		"(pad & 0x3f) %d vpnum %d port %d egridx %d egroffset %d\n",
+		rhf->event_kind, skb->len, rhf->pktlen << 2,
+		pad_info ? *pad_info & 0x3f : 0x0,
+		dev->vport_num, rhf->pt + 1,
+		rhf->egrindex, rhf->egroffset);
+pkt_drop:
+	spin_lock_irqsave(&ndev->rx_lock, sflags);
+	hfi_pt_update_eager(ctx, rx, rhf->egrindex);
+	/* FXRTODO: error handling? */
+	hfi_eq_advance(ctx, rx, ndev->eq_rx, eq_entry);
+	spin_unlock_irqrestore(&ndev->rx_lock, sflags);
+	/* Notify the upper layer about a received packet */
+	if (skb) {
+		vnic_cb = rcu_dereference(dev->vnic_cb);
+		if (vnic_cb)
+			vnic_cb(vdev, OPA_VNIC_HFI_EVT_RX);
+	}
 	rcu_read_unlock();
+	/* Check if there are more events */
+	goto retry;
 }
 
 /* Free any RX buffers previously allocated */
@@ -602,6 +592,7 @@ static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 			__func__, __LINE__, rc);
 		goto err1;
 	}
+	skb_queue_head_init(&dev->skbq);
 	dev->vdev = vdev;
 	rcu_assign_pointer(dev->vnic_cb, cb);
 	synchronize_rcu();
@@ -627,6 +618,7 @@ static void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
 
 	rcu_assign_pointer(dev->vnic_cb, NULL);
 	synchronize_rcu();
+	skb_queue_purge(&dev->skbq);
 
 	opa2_uninit_tx_rx(dev);
 	if (vdev->is_eeph)
