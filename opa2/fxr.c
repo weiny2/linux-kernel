@@ -1641,9 +1641,10 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	 */
 	hfi_pport_down(dd);
 
-	hfi2_ib_remove(dd);
 	if (dd->bus_dev)
 		opa_core_unregister_device(dd->bus_dev);
+
+	hfi2_ib_remove(dd);
 
 	hfi_e2e_destroy(dd);
 

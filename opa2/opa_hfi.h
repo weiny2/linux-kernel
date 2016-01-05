@@ -132,8 +132,8 @@ enum {
 /* TX timeout for E2E control messages */
 #define HFI_TX_TIMEOUT_MS	100
 
-/* TX timeout for EQ assignment */
-#define HFI_EQ_TIMEOUT_MS	1000
+/* timeout for EQ assignment */
+#define HFI_EQ_WAIT_TIMEOUT_MS	500
 #define HFI_VL_STATUS_CLEAR_TIMEOUT	5000	/* per-VL status clear, in ms */
 
 /* use this MTU size if none other is given */

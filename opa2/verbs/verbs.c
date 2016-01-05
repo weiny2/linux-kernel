@@ -627,6 +627,9 @@ void hfi2_ib_remove(struct hfi_devdata *dd)
 	int i;
 	struct hfi2_ibdev *ibd = dd->ibd;
 
+	if (!dd->ibd)
+		return;
+
 	dd->ibd = NULL;
 	hfi2_unregister_device(ibd);
 	for (i = 0; i < ibd->num_pports; i++)
