@@ -62,6 +62,8 @@
 #include <rdma/hfi_rx.h>
 #include <rdma/hfi_tx.h>
 
+static bool disable_ofed_dma;
+
 #define OPA_IB_CQ_FULL_RETRIES		10
 #define OPA_IB_CQ_FULL_DELAY_MS		1
 #define OPA_IB_EAGER_COUNT		2048 /* minimum Eager entries */
@@ -365,7 +367,10 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	 * and we'd like to maintain asyncronous send and send_complete
 	 * TODO - can be removed by refactoring where upper layer builds header
 	 */
-	memcpy(&wqe_iov->ph, &wqe->s_hdr->ph, iov[0].length);
+	if (!wqe->use_16b)
+		memcpy(&wqe_iov->ph, &wqe->s_hdr->ph.ibh, iov[0].length);
+	else
+		memcpy(&wqe_iov->ph, &wqe->s_hdr->opa16b, iov[0].length);
 	iov[0].start = (uint64_t)(&wqe_iov->ph);
 
 	/* write IOVEC entries */
@@ -413,9 +418,11 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 {
 	int ret, ndelays = 0;
 	unsigned long flags;
-	uint8_t dma_cmd;
+	uint8_t dma_cmd, eth_size = 0;
 	struct hfi2_wqe_iov *wqe_iov = NULL;
 	uint32_t num_iovs, length = 0;
+	uint64_t start = 0;
+	bool use_ofed_dma;
 
 	BUG_ON(!wqe); /* TODO - delete me after RC acks stable */
 
@@ -425,6 +432,25 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	if (ret)
 		return ret;
 
+	/*
+	 * use OFED_DMA command if possible (header + single IOVEC payload)
+	 * TODO - WFR-like AHG optimization for Middles
+	 * TODO - add 16B support
+	 */
+	use_ofed_dma = (num_iovs == 2 && dma_cmd != MGMT_DMA &&
+			!disable_ofed_dma && !wqe->use_16b);
+	if (use_ofed_dma) {
+		/* switch to appropriate OFED_DMA command */
+		if (wqe->lnh == HFI1_LRH_GRH) {
+			dma_cmd = OFED_9B_DMA_GRH;
+			eth_size = (wqe->s_hdrwords - 15) << 2;
+		} else {
+			dma_cmd = OFED_9B_DMA;
+			eth_size = (wqe->s_hdrwords - 5) << 2;
+		}
+		num_iovs = 0;
+	}
+
 	wqe_iov = kzalloc(sizeof(*wqe_iov) + sizeof(*wqe_iov->iov) * num_iovs,
 			  GFP_ATOMIC);
 	if (!wqe_iov)
@@ -432,9 +458,15 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	wqe_iov->wqe = wqe;
 	wqe_iov->remaining_bytes = qp->s_len;
 
-	ret = build_iovec_array(ibp, qp, wqe_iov, &num_iovs, &length);
-	if (ret)
-		goto err;
+	if (use_ofed_dma) {
+		/* read current SGE address/length, updates internal state */
+		qp_read_sge(qp, &start, &length);
+	} else {
+		ret = build_iovec_array(ibp, qp, wqe_iov, &num_iovs, &length);
+		if (ret)
+			goto err;
+	}
+
 	if (qp->s_cur_size != length) {
 		dev_err(ibp->dev,
 			"PT %d: TX error %d of %d bytes unsent, %d iovs\n",
@@ -449,14 +481,28 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		num_iovs, length);
 
 _tx_cmd:
-	/* send with GENERAL or MGMT DMA */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
-	ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, wqe->s_ctx,
-				    (uint64_t)wqe_iov->iov, num_iovs,
-				    (uint64_t)wqe_iov, PTL_MD_RESERVED_IOV,
-				    &ibp->send_eq, HFI_CT_NONE,
-				    ibp->port_num, wqe->sl, 0,
-				    wqe->use_16b ? HDR_16B : HDR_EXT, dma_cmd);
+	if (use_ofed_dma) {
+		/* send with OFED_DMA */
+		ret = hfi_tx_cmd_ofed_dma(&ibp->cmdq_tx, wqe->s_ctx,
+					  wqe->s_hdr, (void *)start,
+					  length, eth_size,
+					  opa_mtu_to_id(wqe->pmtu),
+					  (uint64_t)wqe_iov, 0,
+					  &ibp->send_eq,
+					  ibp->port_num, wqe->sl,
+					  ibp->ppd->lid, dma_cmd);
+	} else {
+		/* send with GENERAL or MGMT DMA */
+		ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, wqe->s_ctx,
+					    (uint64_t)wqe_iov->iov, num_iovs,
+					    (uint64_t)wqe_iov,
+					    PTL_MD_RESERVED_IOV,
+					    &ibp->send_eq, HFI_CT_NONE,
+					    ibp->port_num, wqe->sl, 0,
+					    wqe->use_16b ? HDR_16B : HDR_EXT,
+					    dma_cmd);
+	}
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 
 	if (ret == -EAGAIN) {
@@ -674,8 +720,8 @@ void hfi2_rcv_uninit(struct hfi2_ibrcv *rcv)
 	ret = hfi_pt_disable(rcv->ctx, &ibp->cmdq_rx, HFI_NI_BYPASS,
 			     HFI_PT_BYPASS_EAGER);
 	spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
-	/* TODO - handle error  */
-	BUG_ON(ret < 0);
+	if (ret < 0)
+		dev_err(ibp->dev, "unexpected PT disable error %d\n", ret);
 
 	if (rcv->eq.base)
 		_hfi_eq_release(rcv->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,

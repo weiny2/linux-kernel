@@ -97,10 +97,10 @@ static int _hfi2_make_uc_req(struct hfi2_qp *qp, bool is_16b)
 	}
 
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = is_16b ? &qp->s_hdr->ph.opa16b.u.l.oth :
+		ohdr = is_16b ? &qp->s_hdr->opa16b.u.l.oth :
 				&qp->s_hdr->ph.ibh.u.l.oth;
 	else
-		ohdr = is_16b ? &qp->s_hdr->ph.opa16b.u.oth :
+		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
 				&qp->s_hdr->ph.ibh.u.oth;
 
 	/* Get the next send request. */

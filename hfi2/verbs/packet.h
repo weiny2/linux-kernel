@@ -177,11 +177,20 @@ union hfi2_packet_header {
 	struct hfi2_opa16b_header opa16b;
 } __packed;
 
-/* IB header prefixed with 8-bytes of OPA2-specific data */
-struct hfi2_ib_dma_header {
-	uint64_t opa2_hdr_reserved;
-	union hfi2_packet_header ph;
-};
+/*
+ * 9B IB header prefixed with 8-bytes of OPA2-specific data.
+ * 16B header is not prefixed with padding as matches TX command.
+ * Tail padded to 128B to allow for 64B writes to command queue
+ * for OFED_DMA commands.
+ */
+union hfi2_ib_dma_header {
+	struct {
+		uint64_t opa2_hdr_reserved;
+		struct hfi2_ib_header ibh;
+	} ph;
+	struct hfi2_opa16b_header opa16b;
+	uint64_t padding[16]; /* 128 bytes */
+} __packed;
 
 /*
  * Represents a single packet at a high level. Put commonly computed things in
