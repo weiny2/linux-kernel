@@ -340,7 +340,7 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 			      u32 bth0, u32 bth2, u8 *lnh)
 {
-	struct hfi2_opa16b_header *opa16b = &qp->s_hdr->ph.opa16b;
+	struct hfi2_opa16b_header *opa16b = &qp->s_hdr->opa16b;
 	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
 	u32 nwords, extra_bytes;
@@ -446,8 +446,8 @@ static int send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
  * Return: zero if packet is sent or queued OK, non-zero
  * and clear qp->s_flags HFI1_S_BUSY otherwise.
  */
-int hfi2_verbs_send(struct hfi2_qp *qp, struct hfi2_ib_dma_header *hdr,
-		    u32 hdrwords, struct hfi2_sge_state *ss, u32 len)
+static int hfi2_verbs_send(struct hfi2_qp *qp, union hfi2_ib_dma_header *hdr,
+			   u32 hdrwords, struct hfi2_sge_state *ss, u32 len)
 {
 	struct hfi2_ibport *ibp;
 	int ret = 0;

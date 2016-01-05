@@ -312,6 +312,7 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	} else {
 		lrh0 = HFI1_LRH_BTH;
 	}
+	wqe->lnh = lrh0;
 
 	sc5 = ppd->sl_to_sc[ah_attr->sl];
 	lrh0 |= (ah_attr->sl & 0xf) << 4;
@@ -367,7 +368,7 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 				    struct ib_l4_headers *ohdr, u8 opcode)
 {
-	struct hfi2_opa16b_header *opa16b = &qp->s_hdr->ph.opa16b;
+	struct hfi2_opa16b_header *opa16b = &qp->s_hdr->opa16b;
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	struct hfi_pportdata *ppd = ibp->ppd;
 	struct ib_ah_attr *ah_attr;
@@ -393,8 +394,10 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 						&ah_attr->grh,
 						(qp->s_hdrwords - 4), nwords);
 		l4 = HFI1_L4_IB_GLOBAL;
+		wqe->lnh = HFI1_LRH_GRH;
 	} else {
 		l4 = HFI1_L4_IB_LOCAL;
+		wqe->lnh = HFI1_LRH_BTH;
 	}
 
 	sc5 = ppd->sl_to_sc[ah_attr->sl];
@@ -441,7 +444,7 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 
 	qwords = (qp->s_hdrwords + nwords) >> 1;
 
-	opa_make_16b_header((u32 *)&qp->s_hdr->ph.opa16b,
+	opa_make_16b_header((u32 *)&qp->s_hdr->opa16b,
 			    slid, dlid, qwords, pkey,
 			    0, qp->s_sc, 0, 0, 0, 0, l4);
 
@@ -564,10 +567,10 @@ static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
 		 * Don't worry about sending to locally attached multicast
 		 * QPs.  It is unspecified by the spec. what happens.
 		 */
-		ohdr = is_16b ? &qp->s_hdr->ph.opa16b.u.l.oth :
+		ohdr = is_16b ? &qp->s_hdr->opa16b.u.l.oth :
 				&qp->s_hdr->ph.ibh.u.l.oth;
 	else
-		ohdr = is_16b ? &qp->s_hdr->ph.opa16b.u.oth :
+		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
 				&qp->s_hdr->ph.ibh.u.oth;
 
 	if (wqe->wr.opcode == IB_WR_SEND_WITH_IMM) {

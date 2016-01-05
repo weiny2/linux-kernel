@@ -267,7 +267,7 @@ struct hfi2_swqe {
 	struct list_head pending_list;
 	struct hfi2_sge_state	*s_sge;
 	struct hfi2_qp *s_qp;
-	struct hfi2_ib_dma_header *s_hdr; /* next packet header to send */
+	union hfi2_ib_dma_header *s_hdr; /* next packet header to send */
 	struct hfi_ctx *s_ctx;           /* associated send context */
 	u16 s_hdrwords;	         /* size of s_hdr in 32 bit words */
 	u16 pmtu;
@@ -367,7 +367,7 @@ struct hfi2_qp {
 	struct ib_ah_attr alt_ah_attr;
 	struct hfi2_swqe *s_wq;  /* send work queue */
 	struct hfi2_mmap_info *ip;
-	struct hfi2_ib_dma_header *s_hdr; /* next packet header to send */
+	union hfi2_ib_dma_header *s_hdr; /* next packet header to send */
 	unsigned long timeout_jiffies;  /* computed from timeout */
 
 	enum ib_mtu path_mtu;

@@ -542,8 +542,8 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 
 	/* Get the destination QP number. */
 	qp_num = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
-	dev_dbg(ibp->dev, "PT %d: IB packet for PID %d QPN %d\n",
-		ibp->port_num, packet->ctx->pid, qp_num);
+	dev_dbg(ibp->dev, "PT %d: IB packet %d len %d for PID %d QPN %d\n",
+		ibp->port_num, l4, tlen, packet->ctx->pid, qp_num);
 	if (rhf_sc4(packet->rhf))
 		packet->rcv_flags |= HFI1_SC4_BIT;
 
