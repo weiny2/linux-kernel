@@ -93,7 +93,7 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 	_hfi_format_base_put_flit0(ctx, ni, &command->flit0, cmd,
 				   E2E_CTRL, cmd_length, target_id, port, 0,
 				   RC_IN_ORDER_0, sl, 0, pkey, 0, 0, 0,
-				   FXR_TRUE, ack_req, md_options, dd->e2e_eq,
+				   FXR_TRUE, ack_req, md_options, &dd->e2e_eq,
 				   PTL_CT_NONE, 0, 0);
 
 	command->flit1.e.max_dist = 27; /* TODO: Why? */
@@ -109,8 +109,8 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 	/* PTL_SINGLE_DESTROY does not initiate events at the initiator */
 	if (op != PTL_SINGLE_CONNECT)
 		goto done;
-	/* Check on EQ 0 NI 0 for a PTL_EVENT_INITIATOR_CONNECT event */
-	hfi_eq_wait_timed(ctx, dd->e2e_eq, HFI_TX_TIMEOUT_MS,
+	/* Check on E2E EQ for a PTL_EVENT_INITIATOR_CONNECT event */
+	hfi_eq_wait_timed(ctx, &dd->e2e_eq, HFI_TX_TIMEOUT_MS,
 			  &eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *txe =
@@ -126,7 +126,7 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 					    txe->event_kind);
 			}
 			hfi_eq_advance(ctx, &dd->priv_rx_cq,
-				       dd->e2e_eq, eq_entry);
+				       &dd->e2e_eq, eq_entry);
 		} else {
 			rc = -EIO;
 			dd_dev_err(dd, "Invalid E2E event %d\n",

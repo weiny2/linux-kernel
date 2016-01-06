@@ -172,10 +172,8 @@ struct opa_netdev {
 	struct hfi_cq			rx;
 	void				*buf[OPA2_NET_NUM_RX_BUFS];
 	hfi_ni_t			ni;
-	hfi_eq_handle_t			eq_tx;
-	void				*eq_alloc_tx_base;
-	hfi_eq_handle_t			eq_rx;
-	void				*eq_alloc_rx_base;
+	struct hfi_eq 			eq_tx;
+	struct hfi_eq 			eq_rx;
 	struct idr			vesw_idr[OPA2_MAX_NUM_PORTS];
 };
 
@@ -183,13 +181,13 @@ struct opa_netdev {
 static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 			 spinlock_t *cq_lock,
 			 struct opa_ev_assign *eq_alloc,
-			 hfi_eq_handle_t *eq, void **eq_base)
+			 struct hfi_eq *eq)
 {
 	u32 *eq_head_array, *eq_head_addr;
 	u64 *eq_entry = NULL, done;
 	int rc;
 
-	eq_alloc->base = (u64)vzalloc(eq_alloc->size * HFI_EQ_ENTRY_SIZE);
+	eq_alloc->base = (u64)vzalloc(eq_alloc->count * HFI_EQ_ENTRY_SIZE);
 	if (!eq_alloc->base)
 		return -ENOMEM;
 	eq_alloc->mode = OPA_EV_MODE_BLOCKING;
@@ -203,16 +201,18 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 	/* Reset the EQ SW head */
 	eq_head_addr = &eq_head_array[eq_alloc->ev_idx];
 	*eq_head_addr = 0;
-	*eq = eq_alloc->ev_idx;
-	*eq_base = (void *)eq_alloc->base;
+	eq->idx = eq_alloc->ev_idx;
+	eq->base = (void *)eq_alloc->base;
+	eq->count = eq_alloc->count;
 
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS, &eq_entry);
+	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], OPA2_NET_TIMEOUT_MS,
+			  &eq_entry);
 	if (eq_entry) {
 		unsigned long flags;
 
 		spin_lock_irqsave(cq_lock, flags);
-		hfi_eq_advance(ctx, cq, 0x0, eq_entry);
+		hfi_eq_advance(ctx, cq, &ctx->eq_zero[0], eq_entry);
 		spin_unlock_irqrestore(cq_lock, flags);
 	} else {
 		rc = -EIO;
@@ -223,23 +223,24 @@ err:
 
 /* TODO - delete and make common for all kernel clients */
 static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
-			    spinlock_t *cq_lock,
-			    hfi_eq_handle_t eq, void *eq_base)
+			    spinlock_t *cq_lock, struct hfi_eq *eq)
 {
 	u64 *eq_entry = NULL, done;
 
-	ctx->ops->ev_release(ctx, 0, eq, (u64)&done);
+	ctx->ops->ev_release(ctx, 0, eq->idx, (u64)&done);
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS, &eq_entry);
+	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], OPA2_NET_TIMEOUT_MS,
+			  &eq_entry);
 	if (eq_entry) {
 		unsigned long flags;
 
 		spin_lock_irqsave(cq_lock, flags);
-		hfi_eq_advance(ctx, cq, 0x0, eq_entry);
+		hfi_eq_advance(ctx, cq, &ctx->eq_zero[0], eq_entry);
 		spin_unlock_irqrestore(cq_lock, flags);
 	}
 
-	vfree(eq_base);
+	vfree(eq->base);
+	eq->base = NULL;
 }
 
 /* Append a single socket buffer */
@@ -271,10 +272,11 @@ static int opa2_vnic_append_skb(struct opa_netdev *ndev, int idx)
 	}
 
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, 0x0, OPA2_NET_TIMEOUT_MS, &eq_entry);
+	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], OPA2_NET_TIMEOUT_MS,
+			  &eq_entry);
 	if (eq_entry) {
 		spin_lock_irqsave(&ndev->rx_lock, sflags);
-		hfi_eq_advance(ctx, rx, 0x0, eq_entry);
+		hfi_eq_advance(ctx, rx, &ctx->eq_zero[0], eq_entry);
 		spin_unlock_irqrestore(&ndev->rx_lock, sflags);
 	} else {
 		return -EIO;
@@ -327,7 +329,7 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 retry:
 	rc = hfi_tx_cmd_bypass_dma(tx, ctx, (u64)&iov, 1, 0xdead,
 				   PTL_MD_RESERVED_IOV,
-				   ndev->eq_tx, HFI_CT_NONE,
+				   &ndev->eq_tx, HFI_CT_NONE,
 				   dev->port_num - 1,
 				   0x0, dev->slid, HDR_10B,
 				   GENERAL_DMA);
@@ -343,7 +345,7 @@ retry:
 	}
 
 	/* FXRTODO: need to wait for completion asynchronously */
-	rc = hfi_eq_wait_timed(ctx, ndev->eq_tx, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, &ndev->eq_tx, OPA2_NET_TIMEOUT_MS,
 			       &eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *txe =
@@ -351,7 +353,7 @@ retry:
 		int flit_len = ((*(u32 *)skb->data) >> 20) << 3;
 
 		spin_lock(&ndev->rx_lock);
-		hfi_eq_advance(ctx, rx, ndev->eq_tx, eq_entry);
+		hfi_eq_advance(ctx, rx, &ndev->eq_tx, eq_entry);
 		spin_unlock(&ndev->rx_lock);
 		rc = 0;
 		dev_dbg(&odev->dev,
@@ -398,7 +400,7 @@ static int opa2_vnic_hfi_get_read_avail(struct opa_vnic_device *vdev)
  * b) There is a lot being done in the ISR. do we need to defer the
  * handling to a bottom half instead?
  */
-static void opa2_vnic_rx_isr_cb(void *data)
+static void opa2_vnic_rx_isr_cb(struct hfi_eq *eq_rx, void *data)
 {
 	struct opa_netdev *ndev = data;
 	struct hfi_ctx *ctx = &ndev->ctx;
@@ -417,7 +419,7 @@ static void opa2_vnic_rx_isr_cb(void *data)
 
 retry:
 	skb = NULL;
-	hfi_eq_peek(ctx, ndev->eq_rx, &eq_entry);
+	hfi_eq_peek(ctx, eq_rx, &eq_entry);
 	if (!eq_entry)
 		return;
 	rhf = (union rhf *)eq_entry;
@@ -427,7 +429,7 @@ retry:
 			"packet drop: incorrect eager index %d\n",
 			rhf->egrindex);
 		spin_lock_irqsave(&ndev->rx_lock, sflags);
-		hfi_eq_advance(ctx, &ndev->rx, ndev->eq_rx, eq_entry);
+		hfi_eq_advance(ctx, &ndev->rx, eq_rx, eq_entry);
 		spin_unlock_irqrestore(&ndev->rx_lock, sflags);
 		return;
 	}
@@ -479,7 +481,7 @@ pkt_drop:
 	spin_lock_irqsave(&ndev->rx_lock, sflags);
 	hfi_pt_update_eager(ctx, rx, rhf->egrindex);
 	/* FXRTODO: error handling? */
-	hfi_eq_advance(ctx, rx, ndev->eq_rx, eq_entry);
+	hfi_eq_advance(ctx, rx, eq_rx, eq_entry);
 	spin_unlock_irqrestore(&ndev->rx_lock, sflags);
 	/* Notify the upper layer about a received packet */
 	if (skb) {
@@ -664,23 +666,23 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev)
 	/* TX EQ can be allocated per netdev */
 	eq_alloc_tx.ni = ndev->ni;
 	eq_alloc_tx.user_data = 0xdeadbeef;
-	eq_alloc_tx.size = OPA2_NET_NUM_RX_BUFS;
+	eq_alloc_tx.count = OPA2_NET_NUM_RX_BUFS;
 	eq_alloc_tx.cookie = ndev;
 	rc = _hfi_eq_alloc(ctx, rx, &ndev->rx_lock, &eq_alloc_tx,
-			   &ndev->eq_tx, &ndev->eq_alloc_tx_base);
+			   &ndev->eq_tx);
 	if (rc)
 		goto err2;
 	eq_alloc_rx.ni = ndev->ni;
 	eq_alloc_rx.user_data = 0xdeadbeef;
-	eq_alloc_rx.size = OPA2_NET_NUM_RX_BUFS;
+	eq_alloc_rx.count = OPA2_NET_NUM_RX_BUFS;
 	eq_alloc_rx.isr_cb = opa2_vnic_rx_isr_cb;
 	eq_alloc_rx.cookie = ndev;
 	rc = _hfi_eq_alloc(ctx, rx, &ndev->rx_lock, &eq_alloc_rx,
-			   &ndev->eq_rx, &ndev->eq_alloc_rx_base);
+			   &ndev->eq_rx);
 	if (rc)
 		goto err3;
 	pt_alloc.eager_order = ilog2(OPA2_NET_NUM_RX_BUFS) - 2;
-	pt_alloc.eq_handle = ndev->eq_rx;
+	pt_alloc.eq_handle = &ndev->eq_rx;
 	rc = hfi_pt_alloc_eager(ctx, rx, &pt_alloc);
 	if (rc < 0)
 		goto err4;
@@ -692,13 +694,9 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev)
 err5:
 	hfi_pt_disable(ctx, &ndev->rx, ndev->ni, HFI_PT_BYPASS_EAGER);
 err4:
-	_hfi_eq_release(ctx, rx, &ndev->rx_lock,
-			ndev->eq_rx, ndev->eq_alloc_rx_base);
-	ndev->eq_alloc_rx_base = NULL;
+	_hfi_eq_release(ctx, rx, &ndev->rx_lock, &ndev->eq_rx);
 err3:
-	_hfi_eq_release(ctx, rx, &ndev->rx_lock,
-			ndev->eq_tx, ndev->eq_alloc_tx_base);
-	ndev->eq_alloc_tx_base = NULL;
+	_hfi_eq_release(ctx, rx, &ndev->rx_lock, &ndev->eq_tx);
 err2:
 	ops->cq_unmap(&ndev->tx, &ndev->rx);
 err1:
@@ -719,9 +717,8 @@ static void opa2_vnic_uninit_ctx(struct opa_vnic_device *vdev)
 
 	hfi_pt_disable(ctx, &ndev->rx, ndev->ni, HFI_PT_BYPASS_EAGER);
 	opa2_free_rx_bufs(ndev);
-	_hfi_eq_release(ctx, &ndev->rx, &ndev->rx_lock,
-			ndev->eq_rx, ndev->eq_alloc_rx_base);
-	ndev->eq_alloc_rx_base = NULL;
+	_hfi_eq_release(ctx, &ndev->rx, &ndev->rx_lock, &ndev->eq_rx);
+	_hfi_eq_release(ctx, &ndev->rx, &ndev->rx_lock, &ndev->eq_tx);
 	ops->cq_unmap(&ndev->tx, &ndev->rx);
 	ops->cq_release(ctx, ndev->cq_idx);
 	odev->bus_ops->ctx_release(ctx);

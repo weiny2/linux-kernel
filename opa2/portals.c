@@ -421,11 +421,12 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		return -EFAULT;
 
 	/* FXR requires EQ size as power of 2 */
-	if (is_power_of_2(eq_assign->size))
-		order = __ilog2_u64(eq_assign->size);
+	if (is_power_of_2(eq_assign->count))
+		order = __ilog2_u64(eq_assign->count);
 	else
 		return -EINVAL;
-	if (order > HFI_MAX_EVENT_ORDER)
+	if ((order < HFI_MIN_EVENT_ORDER) ||
+	    (order > HFI_MAX_EVENT_ORDER))
 		return -EINVAL;
 
 	if (eq_assign->mode & OPA_EV_MODE_BLOCKING) {
@@ -461,18 +462,24 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 			   dd->num_eq_irqs;
 		me = &dd->msix_entries[msix_idx];
 		eq->irq_vector = msix_idx;
+		eq->isr_cb = eq_assign->isr_cb;
+		eq->cookie = eq_assign->cookie;
+
+		/* record info needed for hfi_eq_peek() */
+		eq->desc.base = (void *)eq_assign->base;
+		eq->desc.count = eq_assign->count;
+		eq->desc.idx = eq_idx;
+
 		/* add EQ to list of IRQ waiters */
 		write_lock_irqsave(&me->irq_wait_lock, flags);
 		list_add(&eq->irq_wait_chain, &me->irq_wait_head);
 		write_unlock_irqrestore(&me->irq_wait_lock, flags);
-		eq->isr_cb = eq_assign->isr_cb;
-		eq->cookie = eq_assign->cookie;
 	}
 
 	/* set EQ descriptor in host memory */
 	eq_desc.val[1] = 0; /* clear head/tail */
 	eq_desc.order = order;
-	eq_desc.start = (eq_assign->base >> 12);
+	eq_desc.start = (eq_assign->base >> PAGE_SHIFT);
 	eq_desc.ni = eq_assign->ni;
 	eq_desc.irq = msix_idx;
 	eq_desc.i = (eq_assign->mode & OPA_EV_MODE_BLOCKING);
@@ -512,7 +519,7 @@ static int hfi_eq_zero_event_wait(struct hfi_ctx *ctx, u64 **eq_entry)
 {
 	int rc;
 
-	rc = hfi_eq_wait_irq(ctx, 0, -1, eq_entry);
+	rc = hfi_eq_wait_irq(ctx, &ctx->eq_zero[0], -1, eq_entry);
 	if (rc == -EAGAIN || rc == -ERESTARTSYS)
 		/* timeout or wait interrupted, not abnormal */
 		rc = 0;
@@ -550,7 +557,7 @@ static int hfi_eq_zero_thread(void *data)
 		case PTL_EVENT_DISCONNECT:
 			/* FXRTODO: Handle E2E connection/destroy messages */
 			hfi_eq_advance(ctx, &dd->priv_rx_cq,
-					0x0, eq_entry);
+				       &ctx->eq_zero[0], eq_entry);
 			dd_dev_info(dd, "%s ev %d pt %d lid %lld uptr 0x%llx\n",
 					__func__, rxe->event_kind, rxe->pt,
 					(u64)rxe->initiator_id,
@@ -576,9 +583,9 @@ int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 
 	for (ni = 0; ni < HFI_NUM_NIS; ni++) {
 		eq_assign.ni = ni;
-		eq_assign.size = 64;
+		eq_assign.count = 64;
 		/* TODO: Need to ensure alignment */
-		eq_assign.base = (u64)kzalloc(eq_assign.size *
+		eq_assign.base = (u64)kzalloc(eq_assign.count *
 					      HFI_EQ_ENTRY_SIZE,
 					      GFP_KERNEL);
 		if (!eq_assign.base)
@@ -594,13 +601,18 @@ int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 		ret = hfi_eq_assign(ctx, &eq_assign);
 		if (ret)
 			return ret;
-		ctx->eq_base[ni] = (void *)eq_assign.base;
-		ctx->eq_zero[ni] = eq_assign.ev_idx;
+		ctx->eq_zero[ni].base = (void *)eq_assign.base;
+		ctx->eq_zero[ni].count = eq_assign.count;
+		ctx->eq_zero[ni].idx = eq_assign.ev_idx;
 		eq_head_array = ctx->eq_head_addr;
 		/* Reset the EQ SW head */
-		eq_head_addr = &eq_head_array[ni];
+		eq_head_addr = &eq_head_array[eq_assign.ev_idx];
 		*eq_head_addr = 0;
 	}
+
+	/* TODO - ensure that EQ0 is created before events are delivered */
+	mdelay(2);
+
 	return 0;
 }
 
@@ -634,9 +646,9 @@ int hfi_e2e_eq_assign(struct hfi_ctx *ctx)
 	u64 *eq_entry = NULL;
 
 	eq_assign.ni = PTL_NONMATCHING_PHYSICAL;
-	eq_assign.size = 64;
+	eq_assign.count = 64;
 	/* TODO: Need to ensure alignment */
-	eq_assign.base = (u64)kzalloc(eq_assign.size *
+	eq_assign.base = (u64)kzalloc(eq_assign.count *
 				      HFI_EQ_ENTRY_SIZE,
 				      GFP_KERNEL);
 	if (!eq_assign.base)
@@ -644,17 +656,20 @@ int hfi_e2e_eq_assign(struct hfi_ctx *ctx)
 	ret = hfi_eq_assign(ctx, &eq_assign);
 	if (ret)
 		return ret;
-	dd->e2e_eq_base = (void *)eq_assign.base;
-	dd->e2e_eq = eq_assign.ev_idx;
+	dd->e2e_eq.base = (void *)eq_assign.base;
+	dd->e2e_eq.count = eq_assign.count;
+	dd->e2e_eq.idx = eq_assign.ev_idx;
 	eq_head_array = ctx->eq_head_addr;
 	/* Reset the EQ SW head */
 	eq_head_addr = &eq_head_array[eq_assign.ev_idx];
 	*eq_head_addr = 0;
+
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, 0x0, HFI_EQ_WAIT_TIMEOUT_MS, &eq_entry);
+	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], HFI_EQ_WAIT_TIMEOUT_MS,
+			  &eq_entry);
 	if (eq_entry)
 		hfi_eq_advance(ctx, &ctx->devdata->priv_rx_cq,
-			       0x0, eq_entry);
+			       &ctx->eq_zero[0], eq_entry);
 	else
 		return -EIO;
 
@@ -748,10 +763,10 @@ void hfi_eq_zero_release(struct hfi_ctx *ctx)
 		dd->eq_zero_thread = NULL;
 	}
 	for (ni = 0; ni < HFI_NUM_NIS; ni++) {
-		if (ctx->eq_base[ni]) {
+		if (ctx->eq_zero[ni].base) {
 			hfi_eq_release(ctx, ni * HFI_NUM_EVENT_HANDLES, 0);
-			kfree(ctx->eq_base[ni]);
-			ctx->eq_base[ni] = NULL;
+			kfree(ctx->eq_zero[ni].base);
+			ctx->eq_zero[ni].base = NULL;
 		}
 	}
 }
@@ -760,18 +775,18 @@ void hfi_e2e_eq_release(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 
-	if (dd->e2e_eq_base) {
-		hfi_eq_release(ctx, dd->e2e_eq, 0x0);
-		kfree(dd->e2e_eq_base);
-		dd->e2e_eq_base = NULL;
+	if (dd->e2e_eq.base) {
+		hfi_eq_release(ctx, dd->e2e_eq.idx, 0x0);
+		kfree(dd->e2e_eq.base);
+		dd->e2e_eq.base = NULL;
 	}
 }
 
 /* Returns true if there is a valid pending event and false otherwise */
-static bool __hfi_eq_wait_condition(struct hfi_ctx *ctx, u16 eq_idx)
+static bool __hfi_eq_wait_condition(struct hfi_ctx *ctx, struct hfi_eq *eq)
 {
 	u64 *entry;
-	int ret = hfi_eq_peek(ctx, eq_idx, &entry);
+	int ret = hfi_eq_peek(ctx, eq, &entry);
 
 	if (ret >= 0 && ret != HFI_EQ_EMPTY)
 		return true;
@@ -803,7 +818,7 @@ idr_end:
 	if (eq) {
 		/* TODO - increment waiter count? */
 		ret = wait_event_interruptible_timeout(eq->wq,
-					__hfi_eq_wait_condition(ctx, eq_idx),
+					__hfi_eq_wait_condition(ctx, &eq->desc),
 					timeout);
 		dd_dev_dbg(ctx->devdata, "wait_event returned %d\n", ret);
 		if (ret == 0)	/* timeout */

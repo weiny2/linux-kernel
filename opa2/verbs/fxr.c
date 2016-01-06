@@ -73,13 +73,13 @@
 static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 			 spinlock_t *cq_lock,
 			 struct opa_ev_assign *eq_alloc,
-			 uint16_t *eq, void **eq_base)
+			 struct hfi_eq *eq)
 {
 	u32 *eq_head_array, *eq_head_addr;
-	u64 *eq_entry = 0, done;
+	u64 *eq_entry = NULL, done;
 	int rc;
 
-	eq_alloc->base = (u64)vzalloc(eq_alloc->size * HFI_EQ_ENTRY_SIZE);
+	eq_alloc->base = (u64)vzalloc(eq_alloc->count * HFI_EQ_ENTRY_SIZE);
 	if (!eq_alloc->base)
 		return -ENOMEM;
 	eq_alloc->mode = OPA_EV_MODE_BLOCKING;
@@ -93,43 +93,47 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 	/* Reset the EQ SW head */
 	eq_head_addr = &eq_head_array[eq_alloc->ev_idx];
 	*eq_head_addr = 0;
-	*eq = eq_alloc->ev_idx;
-	*eq_base = (void *)eq_alloc->base;
+	eq->idx = eq_alloc->ev_idx;
+	eq->base = (void *)eq_alloc->base;
+	eq->count = eq_alloc->count;
 
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, 0x0, HFI_EQ_WAIT_TIMEOUT_MS, &eq_entry);
+	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], HFI_EQ_WAIT_TIMEOUT_MS,
+			  &eq_entry);
 	if (eq_entry) {
 		unsigned long flags;
 
 		spin_lock_irqsave(cq_lock, flags);
-		hfi_eq_advance(ctx, cq, 0x0, eq_entry);
+		hfi_eq_advance(ctx, cq, &ctx->eq_zero[0], eq_entry);
 		spin_unlock_irqrestore(cq_lock, flags);
 	} else {
 		rc = -EIO;
 	}
+
 err:
 	return rc;
 }
 
 /* TODO - delete and make common for all kernel clients */
 static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
-			    spinlock_t *cq_lock,
-			    hfi_eq_handle_t eq, void *eq_base)
+			    spinlock_t *cq_lock, struct hfi_eq *eq)
 {
 	u64 *eq_entry = NULL, done;
 
-	hfi_cteq_release(ctx, 0, eq, (u64)&done);
+	hfi_cteq_release(ctx, 0, eq->idx, (u64)&done);
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, 0x0, HFI_EQ_WAIT_TIMEOUT_MS, &eq_entry);
+	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], HFI_EQ_WAIT_TIMEOUT_MS,
+			  &eq_entry);
 	if (eq_entry) {
 		unsigned long flags;
 
 		spin_lock_irqsave(cq_lock, flags);
-		hfi_eq_advance(ctx, cq, 0x0, eq_entry);
+		hfi_eq_advance(ctx, cq, &ctx->eq_zero[0], eq_entry);
 		spin_unlock_irqrestore(cq_lock, flags);
 	}
 
-	vfree(eq_base);
+	vfree(eq->base);
+	eq->base = NULL;
 }
 
 /*
@@ -289,7 +293,7 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_swqe *wqe)
 	return ret;
 }
 
-static void hfi2_send_event(void *data)
+static void hfi2_send_event(struct hfi_eq *eq_tx, void *data)
 {
 	struct hfi2_ibport *ibp = data;
 	struct hfi2_qp *qp;
@@ -300,7 +304,7 @@ static void hfi2_send_event(void *data)
 
 next_event:
 	eq_entry = NULL;
-	hfi_eq_peek(ibp->ctx, ibp->send_eq, (uint64_t **)&eq_entry);
+	hfi_eq_peek(ibp->ctx, eq_tx, (uint64_t **)&eq_entry);
 	if (!eq_entry)
 		return;
 
@@ -334,7 +338,7 @@ next_event:
 
 eq_advance:
 	spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
-	hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, ibp->send_eq,
+	hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, eq_tx,
 		       (uint64_t *)eq_entry);
 	spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
 
@@ -448,7 +452,7 @@ _tx_cmd:
 	ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, wqe->s_ctx,
 				    (uint64_t)wqe_iov->iov, num_iovs,
 				    (uint64_t)wqe_iov, PTL_MD_RESERVED_IOV,
-				    ibp->send_eq, HFI_CT_NONE,
+				    &ibp->send_eq, HFI_CT_NONE,
 				    ibp->port_num, wqe->sl, 0,
 				    HDR_EXT /* 9B */, dma_cmd);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
@@ -504,7 +508,7 @@ int _hfi2_rcv_wait(struct hfi2_ibport *ibp, u64 **rhf_entry)
 {
 	int rc;
 
-	rc = hfi_eq_wait_irq(ibp->ctx, ibp->rcv_eq, -1,
+	rc = hfi_eq_wait_irq(ibp->ctx, &ibp->rcv_eq, -1,
 			     rhf_entry);
 	if (rc == -EAGAIN || rc == -ERESTARTSYS) {
 		/* timeout or wait interrupted, not abnormal */
@@ -521,7 +525,7 @@ void hfi2_rcv_advance(struct hfi2_ibport *ibp, u64 *rhf_entry)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
-	hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, ibp->rcv_eq, rhf_entry);
+	hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, &ibp->rcv_eq, rhf_entry);
 	spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
 }
 
@@ -571,9 +575,9 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp)
 	memset(&eq_alloc, 0, sizeof(eq_alloc));
 	eq_alloc.ni = HFI_NI_BYPASS;
 	eq_alloc.user_data = (unsigned long)ibp;
-	eq_alloc.size = rhq_count;
+	eq_alloc.count = rhq_count;
 	ret = _hfi_eq_alloc(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
-			    &eq_alloc, &ibp->rcv_eq, &ibp->rcv_eq_base);
+			    &eq_alloc, &ibp->rcv_eq);
 	if (ret < 0)
 		goto kthread_err;
 
@@ -582,7 +586,7 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp)
 	if (!ibp->rcv_egr_base)
 		goto kthread_err;
 
-	pt_alloc.eq_handle = ibp->rcv_eq;
+	pt_alloc.eq_handle = &ibp->rcv_eq;
 	pt_alloc.eager_order = OPA_IB_EAGER_COUNT_ORDER;
 	ret = hfi_pt_alloc_eager(ibp->ctx, &ibp->cmdq_rx, &pt_alloc);
 	if (ret < 0)
@@ -608,9 +612,11 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp)
 			goto kthread_err;
 
 		/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-		hfi_eq_wait_timed(ibp->ctx, 0x0, HFI_EQ_WAIT_TIMEOUT_MS, &eq_entry);
+		hfi_eq_wait_timed(ibp->ctx, &ibp->ctx->eq_zero[0],
+				  HFI_EQ_WAIT_TIMEOUT_MS, &eq_entry);
 		if (eq_entry) {
-			hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, 0x0, eq_entry);
+			hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx,
+				       &ibp->ctx->eq_zero[0], eq_entry);
 		} else {
 			ret = -EIO;
 			goto kthread_err;
@@ -653,11 +659,9 @@ void hfi2_rcv_uninit(struct hfi2_ibport *ibp)
 	/* TODO - handle error  */
 	BUG_ON(ret < 0);
 
-	if (ibp->rcv_eq_base) {
+	if (ibp->rcv_eq.base)
 		_hfi_eq_release(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
-				ibp->rcv_eq, ibp->rcv_eq_base);
-		ibp->rcv_eq_base = NULL;
-	}
+				&ibp->rcv_eq);
 	if (ibp->rcv_egr_base) {
 		vfree(ibp->rcv_egr_base);
 		ibp->rcv_egr_base = NULL;
@@ -721,11 +725,11 @@ int hfi2_ctx_init_port(struct hfi2_ibport *ibp)
 	eq_alloc.ni = HFI_NI_BYPASS;
 	eq_alloc.user_data = (unsigned long)ibp;
 	/* TODO - set EQ size equal to CmdQ slots (DMA commands) for now */
-	eq_alloc.size = HFI_CQ_TX_ENTRIES;
+	eq_alloc.count = HFI_CQ_TX_ENTRIES;
 	eq_alloc.isr_cb = hfi2_send_event;
 	eq_alloc.cookie = (void *)ibp;
 	ret = _hfi_eq_alloc(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
-			    &eq_alloc, &ibp->send_eq, &ibp->send_eq_base);
+			    &eq_alloc, &ibp->send_eq);
 	if (ret < 0)
 		goto ctx_init_err;
 
@@ -749,11 +753,9 @@ void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp)
 	if (!ibp->ctx)
 		return;
 
-	if (ibp->send_eq_base) {
+	if (ibp->send_eq.base)
 		_hfi_eq_release(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
-				ibp->send_eq, ibp->send_eq_base);
-		ibp->send_eq_base = NULL;
-	}
+				&ibp->send_eq);
 
 	hfi2_rcv_uninit(ibp);
 	hfi_cq_unmap(&ibp->cmdq_tx, &ibp->cmdq_rx);

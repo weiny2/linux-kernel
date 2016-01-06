@@ -1584,7 +1584,7 @@ static irqreturn_t irq_eq_handler(int irq, void *dev_id)
 	read_lock(&me->irq_wait_lock);
 	list_for_each_entry(eq, &me->irq_wait_head, irq_wait_chain) {
 		if (eq->isr_cb)
-			eq->isr_cb(eq->cookie);
+			eq->isr_cb(&eq->desc, eq->cookie);
 		else
 			wake_up_interruptible(&(eq->wq));
 	}
