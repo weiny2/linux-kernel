@@ -626,13 +626,11 @@ struct hfi2_ibport {
 	/* protect changes in this struct */
 	spinlock_t lock;
 	struct rb_root mcast_tree;
-	struct task_struct *rcv_task;
-	uint16_t rcv_eq;
+	struct hfi_eq send_eq;
+	struct hfi_eq rcv_eq;
 	uint16_t rcv_egr_last_idx;
-	uint16_t send_eq;
-	void *rcv_eq_base;
 	void *rcv_egr_base;
-	void *send_eq_base;
+	struct task_struct *rcv_task;
 };
 
 struct hfi2_ibdev {

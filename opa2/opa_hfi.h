@@ -378,8 +378,9 @@ struct hfi_event_queue {
 	struct list_head irq_wait_chain;
 	wait_queue_head_t wq;
 	u32 irq_vector;
-	void (*isr_cb)(void *cookie);
+	void (*isr_cb)(struct hfi_eq *eq, void *cookie);
 	void *cookie;
+	struct hfi_eq desc;
 };
 
 /*
@@ -697,10 +698,7 @@ struct hfi_devdata {
 	struct mutex e2e_lock;
 
 	/* E2E EQ handle for initiator events */
-	u16 e2e_eq;
-
-	/* E2E EQ base */
-	void *e2e_eq_base;
+	struct hfi_eq e2e_eq;
 
 	/* registered IB device data pointer */
 	struct hfi2_ibdev *ibd;
