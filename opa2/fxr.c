@@ -1633,8 +1633,6 @@ void hfi_pport_down(struct hfi_devdata *dd)
  */
 void hfi_pci_dd_free(struct hfi_devdata *dd)
 {
-	int i;
-
 	/*
 	 * shutdown ports to notify OPA core clients.
 	 * FXRTODO: Check error handling if hfi_pci_dd_init fails early
@@ -1659,8 +1657,6 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	}
 	hfi_cleanup_interrupts(dd);
 
-	hfi_iommu_root_clear_context(dd);
-
 	hfi_psn_uninit(dd);
 
 	/* free host memory for FXR and Portals resources */
@@ -1668,9 +1664,8 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 		free_pages((unsigned long)dd->cq_head_base,
 			   get_order(dd->cq_head_size));
 
-	for (i = 0; i < HFI_NUM_BARS; i++)
-		if (dd->kregbase[i])
-			iounmap((void __iomem *)dd->kregbase[i]);
+	if (dd->kregbase)
+		iounmap((void __iomem *)dd->kregbase);
 
 	idr_destroy(&dd->cq_pair);
 	idr_destroy(&dd->ptl_user);
@@ -1958,21 +1953,18 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	spin_lock_init(&dd->priv_rx_cq_lock);
 	mutex_init(&dd->e2e_lock);
 
-	for (i = 0; i < HFI_NUM_BARS; i++) {
-		addr = pci_resource_start(pdev, i);
-		len = pci_resource_len(pdev, i);
-		pr_debug("BAR[%d] @ start 0x%lx len %lu\n", i, (long)addr, len);
-
-		dd->pcibar[i] = addr;
-		dd->kregbase[i] = ioremap_nocache(addr, len);
-		if (!dd->kregbase[i]) {
-			ret = -ENOMEM;
-			goto err_post_alloc;
-		}
-		dd->kregend[i] = dd->kregbase[i] + len;
-	}
 	/* FXR resources are on BAR0 (used for io_remap, etc.) */
-	dd->physaddr = dd->pcibar[0];
+	addr = pci_resource_start(pdev, HFI_FXR_BAR);
+	len = pci_resource_len(pdev, HFI_FXR_BAR);
+	dd->kregbase = ioremap_nocache(addr, len);
+	if (!dd->kregbase) {
+		ret = -ENOMEM;
+		goto err_post_alloc;
+	}
+	dd->kregend = dd->kregbase + len;
+	dd->physaddr = addr;
+	dev_dbg(&pdev->dev, "BAR[%d] @ start 0x%lx len %lu\n",
+			HFI_FXR_BAR, (long)addr, len);
 
 	ret = hfi_psn_init(dd);
 	if (ret)
@@ -1980,11 +1972,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 
 	/* Ensure CSRs are sane, we can't trust they haven't been manipulated */
 	init_csrs(dd);
-
-	/* set IOMMU tables for w/PASID translations */
-	ret = hfi_iommu_root_set_context(dd);
-	if (ret)
-		goto err_post_alloc;
 
 	/* enable MSI-X */
 	ret = hfi_setup_interrupts(dd, HFI_NUM_INTERRUPTS, 0);
@@ -2020,6 +2007,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 
 	ctx = &dd->priv_ctx;
 	HFI_CTX_INIT(ctx, dd, &opa_core_ops);
+
 	/* configure system PID/PASID needed by privileged CQs */
 	ctx_assign.pid = HFI_PID_SYSTEM;
 	ctx_assign.le_me_count = 0;
@@ -2046,11 +2034,11 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		me->dd = dd;
 		me->intr_src = i;
 
-		dd_dev_dbg(dd, "request for IRQ %d:%d\n", i, me->msix.vector);
+		dev_dbg(&pdev->dev, "request for IRQ %d:%d\n", i, me->msix.vector);
 		ret = request_irq(me->msix.vector, irq_eq_handler, 0,
 				  "hfi_irq_eq", me);
 		if (ret) {
-			dd_dev_err(dd, "IRQ[%d] request failed %d\n", i, ret);
+			dev_err(&pdev->dev, "IRQ[%d] request failed %d\n", i, ret);
 			/* IRQ cleanup done in hfi_pci_dd_free() */
 			goto err_post_alloc;
 		}
@@ -2060,7 +2048,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->num_eq_irqs = i;
 	atomic_set(&dd->msix_eq_next, 0);
 	/* TODO - remove or change to debug later */
-	dd_dev_info(dd, "%d IRQs assigned to EQs\n", i);
+	dev_info(&pdev->dev, "%d IRQs assigned to EQs\n", i);
 
 	/* assign one EQ for privileged events */
 	ret = hfi_eq_zero_assign_privileged(ctx);
@@ -2084,13 +2072,13 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->bus_dev = opa_core_register_device(&pdev->dev, &bus_id, dd, &opa_core_ops);
 	/* All the unit management is handled by opa_core */
 	dd->unit = dd->bus_dev->index;
-	dd->bus_dev->kregbase = dd->kregbase[0];
-	dd->bus_dev->kregend = dd->kregend[0];
+	dd->bus_dev->kregbase = dd->kregbase;
+	dd->bus_dev->kregend = dd->kregend;
 
 	return dd;
 
 err_post_alloc:
-	dd_dev_err(dd, "%s %d FAILED ret %d\n", __func__, __LINE__, ret);
+	dev_err(&pdev->dev, "%s %d FAILED ret %d\n", __func__, __LINE__, ret);
 	hfi_pci_dd_free(dd);
 
 	return ERR_PTR(ret);

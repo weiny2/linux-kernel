@@ -124,6 +124,7 @@ struct hfi_ctx {
 	u16	qpn_map_count;
 	u16	mode;
 	u16	pid;
+	u32	pasid;
 	u32	ptl_uid;
 	void	*ptl_state_base;
 	void    *le_me_addr;
