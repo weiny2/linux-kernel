@@ -1085,7 +1085,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		ctx->le_me_free_list = vzalloc(sizeof(uint16_t) *
 					       (ctx->le_me_count - 1));
 		if (!ctx->le_me_free_list)
-			goto err_vmalloc;
+			goto err_psb_vmalloc;
 
 		for (i = 0; i < ctx->le_me_count - 1; i++)
 			/* Entry 0 is reserved, so start from 1. */
@@ -1159,8 +1159,10 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 
 	return 0;
 
+err_psb_vmalloc:
+	vfree(ctx->ptl_state_base);
 err_vmalloc:
-	hfi_ctxt_cleanup(ctx);
+	hfi_pid_free(dd, ptl_pid);
 	return ret;
 }
 
@@ -1252,7 +1254,6 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 	unsigned long flags;
 
 	spin_lock_irqsave(&dd->ptl_lock, flags);
-	hfi_pcb_reset(dd, ptl_pid);
 	idr_remove(&dd->ptl_user, ptl_pid);
 	dd->pid_num_assigned--;
 	spin_unlock_irqrestore(&dd->ptl_lock, flags);
@@ -1283,6 +1284,9 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 
 	/* first release any assigned CQs */
 	hfi_cq_cleanup(ctx);
+
+	/* reset PCB (host memory) */
+	hfi_pcb_reset(dd, ptl_pid);
 
 	/* stop pasid translation */
 	hfi_iommu_clear_pasid(ctx);
