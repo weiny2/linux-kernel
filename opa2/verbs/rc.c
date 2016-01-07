@@ -394,7 +394,8 @@ normal:
 	qp->s_hdrwords = hwords;
 	qp->s_cur_size = len;
 	hfi2_make_ruc_header(qp, ohdr, bth0, bth2, &lnh);
-	/* TODO */
+	/* TODO other packets write the WQE structure, we don't have one.... */
+
 	return 1;
 
 bail:
@@ -464,6 +465,9 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 		/* will get called again */
 		goto done;
 	}
+
+	/* TODO - RC not complete, disable ack/credit protocol */
+	qp->s_flags |= HFI1_S_UNLIMITED_CREDIT;
 
 	if (qp->s_flags & (HFI1_S_WAIT_RNR | HFI1_S_WAIT_ACK))
 		goto bail;
@@ -815,7 +819,21 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 		bth0 | (qp->s_state << 24),
 		bth2,
 		&wqe->lnh);
-	/* TODO */
+
+	/* HFI1 doesn't set this, but we need it */
+	qp->s_wqe = wqe;
+
+	/* TODO for now, WQE contains everything needed to perform the Send */
+	wqe->s_qp = qp;
+	wqe->s_sge = qp->s_cur_sge;
+	wqe->s_hdr = qp->s_hdr;
+	wqe->s_hdrwords = qp->s_hdrwords;
+	wqe->s_ctx = qp->s_ctx;
+	wqe->sl = qp->remote_ah_attr.sl;
+	wqe->use_sc15 = false;
+	wqe->pkt_errors = 0;
+	wqe->pmtu = pmtu;
+
 done:
 	ret = 1;
 	goto unlock;
@@ -843,8 +861,17 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 	u16 sc5;
 	u32 bth0;
 	u32 hwords;
-	struct hfi2_ib_header hdr; /* TODO */
+	/* TODO - might need something like this: */
+#if 0
+	struct hfi2_wqe_iov wqe_iov;
+	struct hfi2_ib_header *hdr = &wqe_iov->ib_hdr;
+#else
+	struct hfi2_ib_header hdr;
+#endif
 	struct ib_l4_headers *ohdr;
+
+	/* TODO - remove */
+	dev_warn(ibp->dev, "RC acks not implemented!");
 
 	/* Don't send ACK or NAK if a RDMA read or atomic is pending. */
 	if (qp->s_flags & HFI1_S_RESP_PENDING)
@@ -895,6 +922,7 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 	if (ibp->ppd->lstate != IB_PORT_ACTIVE)
 		return;
 
+	/* TODO - hook into GEN_DMA via send_wqe */
 #if 0
 	plen = 2 /* PBC */ + hwords;
 	pbuf = sc_buffer_alloc(sc, plen, NULL, NULL);
@@ -915,6 +943,9 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 	return;
 
 queue_ack:
+	/* TODO - remove */
+	dev_warn(ibp->dev, "attempt to queue RC ack!");
+
 	this_cpu_inc(*ibp->rc_qacks);
 	spin_lock(&qp->s_lock);
 	qp->s_flags |= HFI1_S_ACK_PENDING | HFI1_S_RESP_PENDING;
@@ -1364,7 +1395,7 @@ static int do_rc_ack(struct hfi2_qp *qp, u32 aeth, u32 psn, int opcode,
 					qp->r_flags |= HFI1_R_RSP_SEND;
 					atomic_inc(&qp->refcount);
 					list_add_tail(&qp->rspwait,
-						      &ctx->qp_wait_list);
+						      &ctx->wait_list);
 				}
 			}
 			/*
@@ -1547,7 +1578,7 @@ static void rdma_seq_err(struct hfi2_qp *qp, struct hfi2_ibport *ibp,
 	if (list_empty(&qp->rspwait)) {
 		qp->r_flags |= HFI1_R_RSP_SEND;
 		atomic_inc(&qp->refcount);
-		list_add_tail(&qp->rspwait, &ctx->qp_wait_list);
+		list_add_tail(&qp->rspwait, &ctx->wait_list);
 	}
 }
 
@@ -1789,7 +1820,7 @@ static noinline int rc_rcv_error(struct ib_l4_headers *ohdr, void *data,
 			if (list_empty(&qp->rspwait)) {
 				qp->r_flags |= HFI1_R_RSP_NAK;
 				atomic_inc(&qp->refcount);
-				list_add_tail(&qp->rspwait, &ctx->qp_wait_list);
+				list_add_tail(&qp->rspwait, &ctx->wait_list);
 			}
 		}
 		goto done;
@@ -1979,6 +2010,7 @@ static inline void update_ack_queue(struct hfi2_qp *qp, unsigned n)
  *
  * This is called from hfi2_rcv() to process an incoming RC packet
  * for the given QP.
+ * TODO - verify that packet->ctx->wait_list usage is safe to not hold a lock.
  */
 void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 {
@@ -2031,6 +2063,18 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		is_fecn = bth1 & HFI1_FECN_SMASK;
 	}
 #endif
+	/* TODO - error this class of opcode for now - no target ACK support */
+	switch (opcode) {
+	case OP(RDMA_READ_REQUEST):
+	case OP(COMPARE_SWAP):
+	case OP(FETCH_ADD):
+		goto drop;
+	}
+	/* TODO - error this class of opcode for now - rc_rcv_resp() incomplete */
+	if (opcode >= OP(RDMA_READ_RESPONSE_FIRST) &&
+	    opcode <= OP(ATOMIC_ACKNOWLEDGE)) {
+		goto drop;
+	}
 
 	/*
 	 * Process responses (ACKs) before anything else.  Note that the
@@ -2381,8 +2425,11 @@ send_last:
 	qp->r_ack_psn = psn;
 	qp->r_nak_state = 0;
 	/* Send an ACK if requested or required. */
+#if 0
+	/* TODO - RC transport ACKs disabled */
 	if (psn & (1 << 31))
 		goto send_ack;
+#endif
 	return;
 
 rnr_nak:
@@ -2392,7 +2439,7 @@ rnr_nak:
 	if (list_empty(&qp->rspwait)) {
 		qp->r_flags |= HFI1_R_RSP_NAK;
 		atomic_inc(&qp->refcount);
-		list_add_tail(&qp->rspwait, &ctx->qp_wait_list);
+		list_add_tail(&qp->rspwait, &ctx->wait_list);
 	}
 	return;
 
@@ -2404,7 +2451,7 @@ nack_op_err:
 	if (list_empty(&qp->rspwait)) {
 		qp->r_flags |= HFI1_R_RSP_NAK;
 		atomic_inc(&qp->refcount);
-		list_add_tail(&qp->rspwait, &ctx->qp_wait_list);
+		list_add_tail(&qp->rspwait, &ctx->wait_list);
 	}
 	return;
 
@@ -2418,7 +2465,7 @@ nack_inv:
 	if (list_empty(&qp->rspwait)) {
 		qp->r_flags |= HFI1_R_RSP_NAK;
 		atomic_inc(&qp->refcount);
-		list_add_tail(&qp->rspwait, &ctx->qp_wait_list);
+		list_add_tail(&qp->rspwait, &ctx->wait_list);
 	}
 	return;
 
@@ -2430,4 +2477,8 @@ nack_acc:
 	qp->r_ack_psn = qp->r_psn;
 send_ack:
 	hfi2_send_rc_ack(qp, is_fecn);
+	return;
+drop:
+	dev_info(ibp->dev, "RC dropping packet\n");
+	return;
 }

@@ -753,11 +753,8 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 		break;
 	case IB_QPT_UD:
 	case IB_QPT_UC:
-		break;
 	case IB_QPT_RC:
-		/* TODO - Not supported yet */
-		ret = ERR_PTR(-ENOSYS);
-		goto bail;
+		break;
 	default:
 		/* Don't support raw QPs */
 		ret = ERR_PTR(-ENOSYS);
