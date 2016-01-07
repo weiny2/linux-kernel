@@ -115,7 +115,8 @@ struct opa_core_device;
  * @le_me_free_index: Index of first free handle
  * @pt_free_list: List of free PT entries (per NI)
  * @pt_free_index: Index of first free PT entry (per NI)
- * @qp_wait_list: QPs waiing for processing
+ * @wait_list: context waitlist, needed by some kernel-clients
+ * TODO @wait_list needed by Verbs, look at moving to hfi2_ibrcv
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
@@ -163,7 +164,7 @@ struct hfi_ctx {
 	uint32_t	le_me_free_index;
 	uint8_t		pt_free_list[HFI_NUM_NIS][HFI_NUM_PT_ENTRIES];
 	uint32_t	pt_free_index[HFI_NUM_NIS];
-	struct list_head qp_wait_list;
+	struct list_head wait_list;
 };
 
 #define HFI_CTX_TYPE_KERNEL	1
@@ -187,6 +188,7 @@ struct hfi_ctx {
 		(ctx)->pid_count = 0;		\
 		/* 0 reserved for kernel clients */ \
 		(ctx)->ptl_uid = 0;		\
+		INIT_LIST_HEAD(&(ctx)->wait_list); \
 	} while (0)
 
 /**

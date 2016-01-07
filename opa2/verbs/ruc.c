@@ -423,8 +423,13 @@ static int send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	int ret;
 
 	ret = hfi2_send_wqe(ibp, qp, wqe);
-	if (ret < 0)
+	if (ret < 0) {
+		/*
+		 * TODO - also correct for RC transport to error?
+		 * check what hfi1 does.
+		 */
 		hfi2_send_complete(qp, wqe, IB_WC_FATAL_ERR);
+	}
 	/* else send_complete issued upon DMA completion event */
 
 	return ret;
@@ -507,7 +512,7 @@ void hfi2_do_send(struct work_struct *work)
 	/* FXRTODO - WFR performs RC/UC loopback here */
 
 	if (qp->ibqp.qp_type == IB_QPT_RC)
-		return; /* TODO - no RC support yet */
+		make_req = hfi2_make_rc_req;
 	else if (qp->ibqp.qp_type == IB_QPT_UC)
 		make_req = hfi2_make_uc_req;
 	else

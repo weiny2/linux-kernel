@@ -316,6 +316,7 @@ next_event:
 
 	wqe_iov = (struct hfi2_wqe_iov *)eq_entry->user_ptr;
 	wqe = wqe_iov->wqe;
+	BUG_ON(!wqe); /* TODO - delete me */
 	qp = wqe->s_qp;
 	dev_dbg(ibp->dev,
 		"PT %d: TX event %p, fail %d, for QPN %d, remain %d\n",
@@ -328,6 +329,12 @@ next_event:
 	/* if final packet, tell verbs if success or failure */
 	if (!wqe_iov->remaining_bytes) {
 		spin_lock(&qp->s_lock);
+#if 0
+		/* TODO - RC starts response/ack timer */
+		if (qp->ibqp.qp_type == IB_QPT_RC)
+			hfi2_rc_send_complete(qp, &wqe_iov->ib_hdr);
+		else
+#endif
 		if (wqe->pkt_errors)
 			hfi2_send_complete(qp, wqe, IB_WC_FATAL_ERR);
 		else
@@ -416,6 +423,8 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	uint8_t dma_cmd;
 	struct hfi2_wqe_iov *wqe_iov = NULL;
 	uint32_t num_iovs, length = 0;
+
+	BUG_ON(!wqe); /* TODO - delete me after RC acks stable */
 
 	dma_cmd = (wqe->use_sc15) ? MGMT_DMA : GENERAL_DMA;
 
