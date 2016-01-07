@@ -92,10 +92,13 @@ int hfi_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto done;
 	}
 
-	ret = pci_request_regions(pdev, DRIVER_NAME);
+	/*
+	 * Only request HFI_FXR_BAR region.
+	 */
+	ret = pci_request_region(pdev, HFI_FXR_BAR, DRIVER_NAME);
 	if (ret) {
 		dev_err(&pdev->dev,
-			"pci_request_regions fails: err %d\n", -ret);
+			"pci_request_region fails: err %d\n", -ret);
 		goto err_pci;
 	}
 
@@ -141,7 +144,7 @@ void hfi_pci_cleanup(struct pci_dev *pdev)
 	 * Release regions should be called after the disable. OK to
 	 * call if request regions has not been called or failed.
 	 */
-	pci_release_regions(pdev);
+	pci_release_region(pdev, HFI_FXR_BAR);
 }
 
 static void hfi_msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
@@ -203,7 +206,8 @@ int hfi_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
 		if (!pos)
 			dd_dev_err(dd, "Can't find PCI MSI-X capability!\n");
 		hfi_enable_intx(dd->pcidev);
-		if (nent) *nent = 0;
+		if (nent)
+			*nent = 0;
 	}
 
 	if (!pci_is_pcie(dd->pcidev)) {

@@ -101,7 +101,7 @@ enum {
 #define HFI_PART_ENFORCE_OUT	BIT(1)
 
 #define HFI_IB_CC_TABLE_CAP_DEFAULT 31
-#define HFI_NUM_BARS		2
+#define HFI_FXR_BAR		0
 #define HFI_NUM_PPORTS		2
 #define HFI_MAX_VLS		32
 #define HFI_PID_SYSTEM		0
@@ -632,10 +632,9 @@ struct hfi_devdata {
 	u32 lbus_speed;
 	int unit; /* unit # of this chip */
 	int node; /* home node of this chip */
-	u32 pcibar[HFI_NUM_BARS];
 	/* mem-mapped pointer to base of chip regs */
-	u8 __iomem *kregbase[HFI_NUM_BARS];
-	u8 __iomem *kregend[HFI_NUM_BARS];
+	u8 __iomem *kregbase;
+	u8 __iomem *kregend;
 	/* physical address of chip for io_remap, etc. */
 	resource_size_t physaddr;
 
@@ -666,9 +665,8 @@ struct hfi_devdata {
 	void *cq_head_base;
 	size_t cq_head_size;
 
-	/* IOMMU */
-	void *iommu_excontext_tbl;
-	void *iommu_pasid_tbl;
+	/* iommu system pasid */
+	u32 system_pasid;
 
 	/* node_guid identifying node */
 	__be64 nguid;
@@ -751,7 +749,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 void hfi_pci_dd_free(struct hfi_devdata *dd);
 int hfi_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
 		    struct hfi_msix_entry *entry);
-void hfi_disable_msix(struct hfi_devdata * dd);
+void hfi_disable_msix(struct hfi_devdata *dd);
 int hfi_setup_interrupts(struct hfi_devdata *dd, int total, int minw);
 void hfi_cleanup_interrupts(struct hfi_devdata *dd);
 void hfi_disable_interrupts(struct hfi_devdata *dd);
@@ -808,13 +806,8 @@ void hfi_ctxt_set_bypass(struct hfi_ctx *ctx);
 int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e_ctrl);
 void hfi_e2e_destroy(struct hfi_devdata *dd);
 
-int hfi_iommu_root_alloc(void);
-void hfi_iommu_root_free(void);
-int hfi_iommu_root_set_context(struct hfi_devdata *dd);
-void hfi_iommu_root_clear_context(struct hfi_devdata *dd);
-void hfi_iommu_set_pasid(struct hfi_devdata *dd, struct mm_struct *user_mm,
-			 u16 pasid);
-void hfi_iommu_clear_pasid(struct hfi_devdata *dd, u16 pasid);
+int hfi_iommu_set_pasid(struct hfi_ctx *ctx);
+int hfi_iommu_clear_pasid(struct hfi_ctx *ctx);
 
 static inline struct hfi_pportdata *to_hfi_ppd(struct hfi_devdata *dd,
 							u8 port)
@@ -949,7 +942,7 @@ static inline u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
 
-	BUG_ON(dd->kregbase[0] == NULL);
+	BUG_ON(dd->kregbase == NULL);
 
 	/*
 	 * FXRTODO: Do not touch MNH CSRs if MNH is not available
@@ -962,13 +955,13 @@ static inline u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 		return 0;
 	}
 
-	val = readq(dd->kregbase[0] + offset);
+	val = readq(dd->kregbase + offset);
 	return le64_to_cpu(val);
 }
 
 static inline void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value)
 {
-	BUG_ON(dd->kregbase[0] == NULL);
+	BUG_ON(dd->kregbase == NULL);
 	/*
 	 * FXRTODO: Do not touch MNH CSRs if MNH is not available
 	 * for early bring up
@@ -979,6 +972,6 @@ static inline void write_csr(const struct hfi_devdata *dd, u32 offset, u64 value
 		BUG_ON(1);
 		return;
 	}
-	writeq(cpu_to_le64(value), dd->kregbase[0] + offset);
+	writeq(cpu_to_le64(value), dd->kregbase + offset);
 }
 #endif

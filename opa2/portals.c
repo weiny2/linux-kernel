@@ -64,7 +64,7 @@
 #include "opa_hfi.h"
 #include <rdma/hfi_eq.h>
 
-static uint cq_alloc_cyclic = 0;
+static uint cq_alloc_cyclic;
 
 static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *ptl_pid);
 static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid);
@@ -1102,8 +1102,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		    psb_size, trig_op_size, le_me_size, unexp_size);
 
 	/* set PASID entry for w/PASID translations */
-	hfi_iommu_set_pasid(dd, (ctx->type == HFI_CTX_TYPE_USER) ?
-			    current->mm : NULL, ptl_pid);
+	hfi_iommu_set_pasid(ctx);
 
 	/* write PCB (host memory) */
 	hfi_pcb_write(ctx, ptl_pid);
@@ -1254,7 +1253,6 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 
 	spin_lock_irqsave(&dd->ptl_lock, flags);
 	hfi_pcb_reset(dd, ptl_pid);
-	hfi_iommu_clear_pasid(dd, ptl_pid);
 	idr_remove(&dd->ptl_user, ptl_pid);
 	dd->pid_num_assigned--;
 	spin_unlock_irqrestore(&dd->ptl_lock, flags);
@@ -1285,6 +1283,9 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 
 	/* first release any assigned CQs */
 	hfi_cq_cleanup(ctx);
+
+	/* stop pasid translation */
+	hfi_iommu_clear_pasid(ctx);
 
 	/* release assigned PID */
 	hfi_pid_free(dd, ptl_pid);

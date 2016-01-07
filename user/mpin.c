@@ -62,7 +62,7 @@ struct hfi_mpin_entry {
 
 /*
  * This page pinning interface is likely unneeded when we have an IOMMU.
- * But perhaps even then we will still want ability for user to pin 
+ * But perhaps even then we will still want ability for user to pin
  * certain memory regions to ensure they stay resident.
  */
 int hfi_mpin(struct hfi_userdata *ud, struct hfi_mpin_args *mpin)

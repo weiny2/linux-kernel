@@ -504,7 +504,7 @@ static void handle_link_down(struct work_struct *work)
 
 	if (read_physical_state(ppd) == PLS_OFFLINE_READY_TO_QUIET_LT) {
 		ret = set_physical_link_state(ppd, PLS_OFFLINE_QUIET);
-		ret = ret != HCMD_SUCCESS ? -EINVAL: 0;
+		ret = ret != HCMD_SUCCESS ? -EINVAL : 0;
 		if (ret)
 			ppd_dev_err(ppd, "%s(): can't set physical port state to 0x%x",
 				__func__, PLS_OFFLINE_QUIET);
@@ -1829,7 +1829,7 @@ int hfi2_enable_8051_intr(struct hfi_pportdata *ppd)
 		(BC_PWR_MGM_MSG | BC_SMA_MSG | BC_BCC_UNKOWN_MSG |
 		 BC_IDLE_UNKNOWN_MSG | EXT_DEVICE_CFG_REQ | VERIFY_CAP_FRAME |
 		 LINKUP_ACHIEVED | LINK_GOING_DOWN | LINK_WIDTH_DOWNGRADED) << 8);
-	ret = ret != HCMD_SUCCESS ? -EINVAL: 0;
+	ret = ret != HCMD_SUCCESS ? -EINVAL : 0;
 	if (ret)
 		goto _return;
 
@@ -1855,7 +1855,7 @@ int hfi2_disable_8051_intr(struct hfi_pportdata *ppd)
 	/* disable all interrupt from 8051 */
 	ret = load_8051_config(ppd, HOST_INT_MSG_MASK, GENERAL_CONFIG,
 		0x0000 << 8);
-	ret = ret != HCMD_SUCCESS ? -EINVAL: 0;
+	ret = ret != HCMD_SUCCESS ? -EINVAL : 0;
 	if (ret)
 		goto _return;
 
