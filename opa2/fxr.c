@@ -2105,6 +2105,7 @@ void hfi_eq_cache_invalidate(struct hfi_devdata *dd, u16 ptl_pid)
 
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 {
+	unsigned long flags;
 	RX_HIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
 	RX_HIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
 	RXHP_CFG_PTE_CACHE_ACCESS_CTL_t pte_cache_access = {.val = 0};
@@ -2125,6 +2126,10 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	/* write PCB_LOW first to clear valid bit */
 	write_csr(dd, FXR_RX_HIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
 	write_csr(dd, FXR_RX_HIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
+
+	/* We need this lock to guard cache invalidation
+	 * CSR writes, all pids use the same CSR */
+	spin_lock_irqsave(&dd->ptl_lock, flags);
 
 	/* invalidate cached host memory in HFI for Portals Tables by PID */
 	pte_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
@@ -2165,6 +2170,8 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 
 	/* TODO - write fake simics CSR to flush mini-TLB (AT interface TBD) */
 	write_csr(dd, FXR_RX_HIARB_CSRS + 0x20000, 1);
+
+	spin_unlock_irqrestore(&dd->ptl_lock, flags);
 }
 
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid)
