@@ -77,6 +77,7 @@ struct opa_core_device;
  * @qpn_map_count: if a Verbs context, count of mapped QPNs
  * @mode: Describes if PIDs or LIDs are virtualized or not
  * @pid: Assigned Portals Process ID
+ * @pasid: Assigned Process Address Space ID
  * @ptl_uid: Assigned Protection Domain ID
  * @ptl_state_base: Pointer to Portals state in host memory
  * @le_me_addr: Pointer to head of ME/LE descriptor buffer
