@@ -48,13 +48,13 @@
 int qib_post_srq_receive(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
 			 struct ib_recv_wr **bad_wr)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
-	struct qib_rwq *wq;
+	struct rvt_srq *srq = ibsrq_to_rvtsrq(ibsrq);
+	struct rvt_rwq *wq;
 	unsigned long flags;
 	int ret;
 
 	for (; wr; wr = wr->next) {
-		struct qib_rwqe *wqe;
+		struct rvt_rwqe *wqe;
 		u32 next;
 		int i;
 
@@ -103,7 +103,7 @@ struct ib_srq *qib_create_srq(struct ib_pd *ibpd,
 			      struct ib_udata *udata)
 {
 	struct qib_ibdev *dev = to_idev(ibpd->device);
-	struct qib_srq *srq;
+	struct rvt_srq *srq;
 	u32 sz;
 	struct ib_srq *ret;
 
@@ -132,8 +132,8 @@ struct ib_srq *qib_create_srq(struct ib_pd *ibpd,
 	srq->rq.size = srq_init_attr->attr.max_wr + 1;
 	srq->rq.max_sge = srq_init_attr->attr.max_sge;
 	sz = sizeof(struct ib_sge) * srq->rq.max_sge +
-		sizeof(struct qib_rwqe);
-	srq->rq.wq = vmalloc_user(sizeof(struct qib_rwq) + srq->rq.size * sz);
+		sizeof(struct rvt_rwqe);
+	srq->rq.wq = vmalloc_user(sizeof(struct rvt_rwq) + srq->rq.size * sz);
 	if (!srq->rq.wq) {
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_srq;
@@ -145,10 +145,10 @@ struct ib_srq *qib_create_srq(struct ib_pd *ibpd,
 	 */
 	if (udata && udata->outlen >= sizeof(__u64)) {
 		int err;
-		u32 s = sizeof(struct qib_rwq) + srq->rq.size * sz;
+		u32 s = sizeof(struct rvt_rwq) + srq->rq.size * sz;
 
 		srq->ip =
-		    qib_create_mmap_info(dev, s, ibpd->uobject->context,
+		    rvt_create_mmap_info(&dev->rdi, s, ibpd->uobject->context,
 					 srq->rq.wq);
 		if (!srq->ip) {
 			ret = ERR_PTR(-ENOMEM);
@@ -183,9 +183,9 @@ struct ib_srq *qib_create_srq(struct ib_pd *ibpd,
 	spin_unlock(&dev->n_srqs_lock);
 
 	if (srq->ip) {
-		spin_lock_irq(&dev->pending_lock);
-		list_add(&srq->ip->pending_mmaps, &dev->pending_mmaps);
-		spin_unlock_irq(&dev->pending_lock);
+		spin_lock_irq(&dev->rdi.pending_lock);
+		list_add(&srq->ip->pending_mmaps, &dev->rdi.pending_mmaps);
+		spin_unlock_irq(&dev->rdi.pending_lock);
 	}
 
 	ret = &srq->ibsrq;
@@ -212,13 +212,13 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 		   enum ib_srq_attr_mask attr_mask,
 		   struct ib_udata *udata)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
-	struct qib_rwq *wq;
+	struct rvt_srq *srq = ibsrq_to_rvtsrq(ibsrq);
+	struct rvt_rwq *wq;
 	int ret = 0;
 
 	if (attr_mask & IB_SRQ_MAX_WR) {
-		struct qib_rwq *owq;
-		struct qib_rwqe *p;
+		struct rvt_rwq *owq;
+		struct rvt_rwqe *p;
 		u32 sz, size, n, head, tail;
 
 		/* Check that the requested sizes are below the limits. */
@@ -229,10 +229,10 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 			goto bail;
 		}
 
-		sz = sizeof(struct qib_rwqe) +
+		sz = sizeof(struct rvt_rwqe) +
 			srq->rq.max_sge * sizeof(struct ib_sge);
 		size = attr->max_wr + 1;
-		wq = vmalloc_user(sizeof(struct qib_rwq) + size * sz);
+		wq = vmalloc_user(sizeof(struct rvt_rwq) + size * sz);
 		if (!wq) {
 			ret = -ENOMEM;
 			goto bail;
@@ -279,7 +279,7 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 		n = 0;
 		p = wq->wq;
 		while (tail != head) {
-			struct qib_rwqe *wqe;
+			struct rvt_rwqe *wqe;
 			int i;
 
 			wqe = get_rwqe_ptr(&srq->rq, tail);
@@ -288,7 +288,7 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 			for (i = 0; i < wqe->num_sge; i++)
 				p->sg_list[i] = wqe->sg_list[i];
 			n++;
-			p = (struct qib_rwqe *)((char *) p + sz);
+			p = (struct rvt_rwqe *)((char *)p + sz);
 			if (++tail >= srq->rq.size)
 				tail = 0;
 		}
@@ -303,11 +303,11 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 		vfree(owq);
 
 		if (srq->ip) {
-			struct qib_mmap_info *ip = srq->ip;
+			struct rvt_mmap_info *ip = srq->ip;
 			struct qib_ibdev *dev = to_idev(srq->ibsrq.device);
-			u32 s = sizeof(struct qib_rwq) + size * sz;
+			u32 s = sizeof(struct rvt_rwq) + size * sz;
 
-			qib_update_mmap_info(dev, ip, s, wq);
+			rvt_update_mmap_info(&dev->rdi, ip, s, wq);
 
 			/*
 			 * Return the offset to mmap.
@@ -324,11 +324,11 @@ int qib_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 			 * Put user mapping info onto the pending list
 			 * unless it already is on the list.
 			 */
-			spin_lock_irq(&dev->pending_lock);
+			spin_lock_irq(&dev->rdi.pending_lock);
 			if (list_empty(&ip->pending_mmaps))
 				list_add(&ip->pending_mmaps,
-					 &dev->pending_mmaps);
-			spin_unlock_irq(&dev->pending_lock);
+					 &dev->rdi.pending_mmaps);
+			spin_unlock_irq(&dev->rdi.pending_lock);
 		}
 	} else if (attr_mask & IB_SRQ_LIMIT) {
 		spin_lock_irq(&srq->rq.lock);
@@ -350,7 +350,7 @@ bail:
 
 int qib_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
+	struct rvt_srq *srq = ibsrq_to_rvtsrq(ibsrq);
 
 	attr->max_wr = srq->rq.size - 1;
 	attr->max_sge = srq->rq.max_sge;
@@ -364,14 +364,14 @@ int qib_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
  */
 int qib_destroy_srq(struct ib_srq *ibsrq)
 {
-	struct qib_srq *srq = to_isrq(ibsrq);
+	struct rvt_srq *srq = ibsrq_to_rvtsrq(ibsrq);
 	struct qib_ibdev *dev = to_idev(ibsrq->device);
 
 	spin_lock(&dev->n_srqs_lock);
 	dev->n_srqs_allocated--;
 	spin_unlock(&dev->n_srqs_lock);
 	if (srq->ip)
-		kref_put(&srq->ip->ref, qib_release_mmap_info);
+		kref_put(&srq->ip->ref, rvt_release_mmap_info);
 	else
 		vfree(srq->rq.wq);
 	kfree(srq);

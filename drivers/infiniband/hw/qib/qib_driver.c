@@ -90,6 +90,22 @@ const char *qib_get_unit_name(int unit)
 	return iname;
 }
 
+const char *qib_get_card_name(struct rvt_dev_info *rdi)
+{
+	struct qib_ibdev *ibdev = container_of(rdi, struct qib_ibdev, rdi);
+	struct qib_devdata *dd = container_of(ibdev,
+					      struct qib_devdata, verbs_dev);
+	return qib_get_unit_name(dd->unit);
+}
+
+struct pci_dev *qib_get_pci_dev(struct rvt_dev_info *rdi)
+{
+	struct qib_ibdev *ibdev = container_of(rdi, struct qib_ibdev, rdi);
+	struct qib_devdata *dd = container_of(ibdev,
+					      struct qib_devdata, verbs_dev);
+	return dd->pcidev;
+}
+
 /*
  * Return count of units with at least one port ACTIVE.
  */
@@ -306,7 +322,7 @@ static u32 qib_rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 		struct qib_ib_header *hdr = (struct qib_ib_header *) rhdr;
 		struct qib_other_headers *ohdr = NULL;
 		struct qib_ibport *ibp = &ppd->ibport_data;
-		struct qib_qp *qp = NULL;
+		struct rvt_qp *qp = NULL;
 		u32 tlen = qib_hdrget_length_in_bytes(rhf_addr);
 		u16 lid  = be16_to_cpu(hdr->lrh[1]);
 		int lnh = be16_to_cpu(hdr->lrh[0]) & 3;
@@ -319,7 +335,7 @@ static u32 qib_rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 		if (tlen < 24)
 			goto drop;
 
-		if (lid < QIB_MULTICAST_LID_BASE) {
+		if (lid < be16_to_cpu(IB_MULTICAST_LID_BASE)) {
 			lid &= ~((1 << ppd->lmc) - 1);
 			if (unlikely(lid != ppd->lid))
 				goto drop;
@@ -363,7 +379,7 @@ static u32 qib_rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 			/* Check for valid receive state. */
 			if (!(ib_qib_state_ops[qp->state] &
 			      QIB_PROCESS_RECV_OK)) {
-				ibp->n_pkt_drops++;
+				ibp->rvp.n_pkt_drops++;
 				goto unlock;
 			}
 
@@ -383,7 +399,7 @@ static u32 qib_rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 				    IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST) {
 					diff = qib_cmp24(psn, qp->r_psn);
 					if (!qp->r_nak_state && diff >= 0) {
-						ibp->n_rc_seqnak++;
+						ibp->rvp.n_rc_seqnak++;
 						qp->r_nak_state =
 							IB_NAK_PSN_ERROR;
 						/* Use the expected PSN. */
@@ -398,7 +414,7 @@ static u32 qib_rcv_hdrerr(struct qib_ctxtdata *rcd, struct qib_pportdata *ppd,
 						 */
 						if (list_empty(&qp->rspwait)) {
 							qp->r_flags |=
-								QIB_R_RSP_NAK;
+								RVT_R_RSP_NAK;
 							atomic_inc(
 								&qp->refcount);
 							list_add_tail(
@@ -456,7 +472,7 @@ u32 qib_kreceive(struct qib_ctxtdata *rcd, u32 *llic, u32 *npkts)
 	u32 eflags, etype, tlen, i = 0, updegr = 0, crcs = 0;
 	int last;
 	u64 lval;
-	struct qib_qp *qp, *nqp;
+	struct rvt_qp *qp, *nqp;
 
 	l = rcd->head;
 	rhf_addr = (__le32 *) rcd->rcvhdrq + l + dd->rhf_offset;
@@ -567,14 +583,14 @@ move_along:
 	 */
 	list_for_each_entry_safe(qp, nqp, &rcd->qp_wait_list, rspwait) {
 		list_del_init(&qp->rspwait);
-		if (qp->r_flags & QIB_R_RSP_NAK) {
-			qp->r_flags &= ~QIB_R_RSP_NAK;
+		if (qp->r_flags & RVT_R_RSP_NAK) {
+			qp->r_flags &= ~RVT_R_RSP_NAK;
 			qib_send_rc_ack(qp);
 		}
-		if (qp->r_flags & QIB_R_RSP_SEND) {
+		if (qp->r_flags & RVT_R_RSP_SEND) {
 			unsigned long flags;
 
-			qp->r_flags &= ~QIB_R_RSP_SEND;
+			qp->r_flags &= ~RVT_R_RSP_SEND;
 			spin_lock_irqsave(&qp->s_lock, flags);
 			if (ib_qib_state_ops[qp->state] &
 					QIB_PROCESS_OR_FLUSH_SEND)

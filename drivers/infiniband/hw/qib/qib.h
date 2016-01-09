@@ -52,6 +52,7 @@
 #include <linux/kref.h>
 #include <linux/sched.h>
 #include <linux/kthread.h>
+#include <rdma/rdma_vt.h>
 
 #include "qib_common.h"
 #include "qib_verbs.h"
@@ -230,7 +231,7 @@ struct qib_ctxtdata {
 	/* ctxt rcvhdrq head offset */
 	u32 head;
 	/* lookaside fields */
-	struct qib_qp *lookaside_qp;
+	struct rvt_qp *lookaside_qp;
 	u32 lookaside_qpn;
 	/* QPs waiting for context processing */
 	struct list_head qp_wait_list;
@@ -240,7 +241,7 @@ struct qib_ctxtdata {
 #endif
 };
 
-struct qib_sge_state;
+struct rvt_sge_state;
 
 struct qib_sdma_txreq {
 	int                 flags;
@@ -258,14 +259,14 @@ struct qib_sdma_desc {
 
 struct qib_verbs_txreq {
 	struct qib_sdma_txreq   txreq;
-	struct qib_qp           *qp;
-	struct qib_swqe         *wqe;
+	struct rvt_qp           *qp;
+	struct rvt_swqe         *wqe;
 	u32                     dwords;
 	u16                     hdr_dwords;
 	u16                     hdr_inx;
 	struct qib_pio_header	*align_buf;
-	struct qib_mregion	*mr;
-	struct qib_sge_state    *ss;
+	struct rvt_mregion	*mr;
+	struct rvt_sge_state    *ss;
 };
 
 #define QIB_SDMA_TXREQ_F_USELARGEBUF  0x1
@@ -1135,8 +1136,9 @@ extern spinlock_t qib_devs_lock;
 extern struct qib_devdata *qib_lookup(int unit);
 extern u32 qib_cpulist_count;
 extern unsigned long *qib_cpulist;
-
+extern u16 qpt_mask;
 extern unsigned qib_cc_table_size;
+
 int qib_init(struct qib_devdata *, int);
 int init_chip_wc_pat(struct qib_devdata *dd, u32);
 int qib_enable_wc(struct qib_devdata *dd);
@@ -1323,7 +1325,7 @@ void __qib_sdma_intr(struct qib_pportdata *);
 void qib_sdma_intr(struct qib_pportdata *);
 void qib_user_sdma_send_desc(struct qib_pportdata *dd,
 			struct list_head *pktlist);
-int qib_sdma_verbs_send(struct qib_pportdata *, struct qib_sge_state *,
+int qib_sdma_verbs_send(struct qib_pportdata *, struct rvt_sge_state *,
 			u32, struct qib_verbs_txreq *);
 /* ppd->sdma_lock should be locked before calling this. */
 int qib_sdma_make_progress(struct qib_pportdata *dd);
@@ -1454,6 +1456,8 @@ u64 qib_sps_ints(void);
 dma_addr_t qib_map_page(struct pci_dev *, struct page *, unsigned long,
 			  size_t, int);
 const char *qib_get_unit_name(int unit);
+const char *qib_get_card_name(struct rvt_dev_info *rdi);
+struct pci_dev *qib_get_pci_dev(struct rvt_dev_info *rdi);
 
 /*
  * Flush write combining store buffers (if present) and perform a write
