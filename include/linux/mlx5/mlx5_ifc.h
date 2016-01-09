@@ -67,6 +67,11 @@ enum {
 };
 
 enum {
+	MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE        = 0x0,
+	MLX5_SET_HCA_CAP_OP_MOD_ATOMIC                = 0x3,
+};
+
+enum {
 	MLX5_CMD_OP_QUERY_HCA_CAP                 = 0x100,
 	MLX5_CMD_OP_QUERY_ADAPTER                 = 0x101,
 	MLX5_CMD_OP_INIT_HCA                      = 0x102,
@@ -527,21 +532,24 @@ enum {
 struct mlx5_ifc_atomic_caps_bits {
 	u8         reserved_0[0x40];
 
-	u8         atomic_req_endianness[0x1];
-	u8         reserved_1[0x1f];
+	u8         atomic_req_8B_endianess_mode[0x2];
+	u8         reserved_1[0x4];
+	u8         supported_atomic_req_8B_endianess_mode_1[0x1];
 
-	u8         reserved_2[0x20];
+	u8         reserved_2[0x19];
 
-	u8         reserved_3[0x10];
-	u8         atomic_operations[0x10];
+	u8         reserved_3[0x20];
 
 	u8         reserved_4[0x10];
-	u8         atomic_size_qp[0x10];
+	u8         atomic_operations[0x10];
 
 	u8         reserved_5[0x10];
+	u8         atomic_size_qp[0x10];
+
+	u8         reserved_6[0x10];
 	u8         atomic_size_dc[0x10];
 
-	u8         reserved_6[0x720];
+	u8         reserved_7[0x720];
 };
 
 struct mlx5_ifc_odp_cap_bits {
@@ -794,15 +802,18 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 	u8         reserved_63[0x8];
 	u8         log_uar_page_sz[0x10];
 
-	u8         reserved_64[0x100];
+	u8	   reserved_64[0x20];
+	u8	   device_frequency_mhz[0x20];
+	u8	   device_frequency_khz[0x20];
+	u8         reserved_65[0xa0];
 
-	u8         reserved_65[0x1f];
+	u8         reserved_66[0x1f];
 	u8         cqe_zip[0x1];
 
 	u8         cqe_zip_timeout[0x10];
 	u8         cqe_zip_max_num[0x10];
 
-	u8         reserved_66[0x220];
+	u8         reserved_67[0x220];
 };
 
 enum {
@@ -2141,7 +2152,15 @@ struct mlx5_ifc_nic_vport_context_bits {
 	u8         reserved_0[0x1f];
 	u8         roce_en[0x1];
 
-	u8         reserved_1[0x760];
+	u8         reserved_1[0x120];
+
+	u8         system_image_guid[0x40];
+	u8         port_guid[0x40];
+	u8         node_guid[0x40];
+
+	u8         reserved_5[0x140];
+	u8         qkey_violation_counter[0x10];
+	u8         reserved_6[0x430];
 
 	u8         reserved_2[0x5];
 	u8         allowed_list_type[0x3];

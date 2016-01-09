@@ -37,6 +37,11 @@
 
 u8 mlx5_query_vport_state(struct mlx5_core_dev *mdev, u8 opmod);
 void mlx5_query_nic_vport_mac_address(struct mlx5_core_dev *mdev, u8 *addr);
+int mlx5_query_nic_vport_system_image_guid(struct mlx5_core_dev *mdev,
+					   u64 *system_image_guid);
+int mlx5_query_nic_vport_node_guid(struct mlx5_core_dev *mdev, u64 *node_guid);
+int mlx5_query_nic_vport_qkey_viol_cntr(struct mlx5_core_dev *mdev,
+					u16 *qkey_viol_cntr);
 int mlx5_query_hca_vport_gid(struct mlx5_core_dev *dev, u8 other_vport,
 			     u8 port_num, u16  vf_num, u16 gid_index,
 			     union ib_gid *gid);
@@ -51,5 +56,8 @@ int mlx5_query_hca_vport_system_image_guid(struct mlx5_core_dev *dev,
 					   u64 *sys_image_guid);
 int mlx5_query_hca_vport_node_guid(struct mlx5_core_dev *dev,
 				   u64 *node_guid);
+
+int mlx5_nic_vport_enable_roce(struct mlx5_core_dev *mdev);
+int mlx5_nic_vport_disable_roce(struct mlx5_core_dev *mdev);
 
 #endif /* __MLX5_VPORT_H__ */
