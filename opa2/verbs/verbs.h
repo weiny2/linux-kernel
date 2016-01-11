@@ -590,7 +590,6 @@ struct hfi2_ibrcv {
 };
 
 struct hfi2_ibport {
-	struct opa_core_device *odev;
 	struct hfi2_ibdev *ibd;
 	struct device *dev; /* from IB's ib_device */
 	struct hfi_pportdata *ppd;

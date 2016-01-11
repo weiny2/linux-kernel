@@ -323,6 +323,7 @@ static void init_csrs(struct hfi_devdata *dd)
 
 	/* enable non-portals */
 	nptl_ctl.field.RcvQPMapEnable = 1;
+	nptl_ctl.field.RcvRsmEnable = 1;
 	nptl_ctl.field.RcvBypassEnable = 1;
 	write_csr(dd, FXR_RXHP_CFG_NPTL_CTL, nptl_ctl.val);
 	kdeth_qp.field.KDETH_QP = (OPA_QPN_KDETH_BASE >> 16);
@@ -1688,7 +1689,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 }
 
 static void hfi_port_desc(struct opa_core_device *odev,
-				struct opa_pport_desc *pdesc, u8 port_num)
+			  struct opa_pport_desc *pdesc, u8 port_num)
 {
 	struct hfi_pportdata *ppd = to_hfi_ppd(odev->dd, port_num);
 	int i;
@@ -1713,7 +1714,7 @@ static void hfi_port_desc(struct opa_core_device *odev,
 }
 
 static void hfi_device_desc(struct opa_core_device *odev,
-						struct opa_dev_desc *desc)
+			    struct opa_dev_desc *desc)
 {
 	struct hfi_devdata *dd = odev->dd;
 
@@ -1722,6 +1723,18 @@ static void hfi_device_desc(struct opa_core_device *odev,
 	desc->nguid = dd->nguid;
 	desc->numa_node = dd->node;
 	desc->ibdev = &dd->ibd->ibdev;
+}
+
+static int set_rsm_rule(struct opa_core_device *odev, struct hfi_rsm_rule *rule,
+			struct hfi_ctx *rx_ctx[], u16 num_contexts)
+{
+	return hfi_rsm_set_rule(odev->dd, rule, rx_ctx, num_contexts);
+}
+
+
+static void clear_rsm_rule(struct opa_core_device *odev, u8 rule_idx)
+{
+	hfi_rsm_clear_rule(odev->dd, rule_idx);
 }
 
 static struct opa_core_ops opa_core_ops = {
@@ -1745,6 +1758,8 @@ static struct opa_core_ops opa_core_ops = {
 	.get_port_desc = hfi_port_desc,
 	.check_ptl_slp = hfi_check_ptl_slp,
 	.get_hw_limits = hfi_get_hw_limits,
+	.set_rsm_rule = set_rsm_rule,
+	.clear_rsm_rule = clear_rsm_rule,
 };
 
 /*
@@ -2513,6 +2528,105 @@ int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr, ssize
 	return ret;
 }
 
+static void write_csr_pidmap(struct hfi_devdata *dd, u32 base, int i, u8 rx_ctx)
+{
+	u32 csr_idx, off;
+	u64 val;
+
+	off = (i / 8) * 8;
+	val = read_csr(dd, base + off);
+	/* set just the 8-bit sub-field in this CSR */
+	csr_idx = i % 8;
+	val &= ~(0xFFuLL << (csr_idx * 8));
+	val |= rx_ctx << (csr_idx * 8);
+	write_csr(dd, base + off, val);
+}
+
+void hfi_rsm_clear_rule(struct hfi_devdata *dd, u8 rule_idx)
+{
+	/* Update bitmap and disable rule in hardware */
+	spin_lock(&dd->ptl_lock);
+	bitmap_clear(dd->rsm_map, dd->rsm_offset[rule_idx],
+		     dd->rsm_size[rule_idx]);
+	dd->rsm_size[rule_idx] = 0;
+	write_csr(dd, FXR_RXHP_CFG_NPTL_RSM_CFG + (8 * rule_idx), 0);
+	spin_unlock(&dd->ptl_lock);
+}
+
+int hfi_rsm_set_rule(struct hfi_devdata *dd, struct hfi_rsm_rule *rule,
+		     struct hfi_ctx *rx_ctx[], u16 num_contexts)
+{
+	RXHP_CFG_NPTL_RSM_CFG_t rsm_cfg = {.val = 0};
+	RXHP_CFG_NPTL_RSM_SELECT_t select = {.val = 0};
+	RXHP_CFG_NPTL_RSM_MATCH_t match = {.val = 0};
+	int i, ret = 0;
+	u8 idx = rule->idx;
+	u16 map_idx, map_size;
+
+	if (rule->idx >= HFI_NUM_RSM_RULES)
+		return -EINVAL;
+	if (rule->select_width[0] > 8)
+		return -EINVAL;
+	if (rule->select_width[1] > 8)
+		return -EINVAL;
+	map_size = 1 << max_t(u8, rule->select_width[0], rule->select_width[1]);
+	if (map_size != num_contexts)
+		return -EINVAL;
+
+	spin_lock(&dd->ptl_lock);
+	/* RSM rule is in use if already has RSM_MAP entries */
+	if (dd->rsm_size[idx]) {
+		ret = -EBUSY;
+		goto done;
+	}
+
+	/* find space in RSM map */
+	map_idx = bitmap_find_next_zero_area(dd->rsm_map, HFI_RSM_MAP_SIZE,
+					     0, map_size, 0);
+	if (map_idx >= HFI_RSM_MAP_SIZE) {
+		ret = -EBUSY;
+		goto done;
+	}
+	bitmap_set(dd->rsm_map, map_idx, map_size);
+	/* record information for validation in setting RSM_MAP entry later */
+	dd->rsm_offset[idx] = map_idx;
+	dd->rsm_size[idx] = map_size;
+
+	rsm_cfg.val |= (1 << idx); /* set Enable bit */
+	rsm_cfg.field.BypassHdrSize = rule->hdr_size;
+	/* packet matching criteria */
+	rsm_cfg.field.PacketType = rule->pkt_type;
+	match.field.Mask1 = rule->match_mask[0];
+	match.field.Value1 = rule->match_value[0];
+	match.field.Mask2 = rule->match_mask[1];
+	match.field.Value2 = rule->match_value[1];
+	select.field.Field1Offset = rule->match_offset[0];
+	select.field.Field2Offset = rule->match_offset[1];
+	/* context selection criteria */
+	rsm_cfg.field.Offset = map_idx;
+	select.field.Index1Offset = rule->select_offset[0];
+	select.field.Index1Width = rule->select_width[0];
+	select.field.Index2Offset = rule->select_offset[1];
+	select.field.Index2Width = rule->select_width[1];
+
+	write_csr(dd, FXR_RXHP_CFG_NPTL_RSM_CFG + (8 * idx), rsm_cfg.val);
+	write_csr(dd, FXR_RXHP_CFG_NPTL_RSM_SELECT + (8 * idx), select.val);
+	write_csr(dd, FXR_RXHP_CFG_NPTL_RSM_MATCH + (8 * idx), match.val);
+
+	for (i = 0; i < map_size; i++) {
+		write_csr_pidmap(dd, FXR_RXHP_CFG_NPTL_RSM_MAP_TABLE,
+				 map_idx + i,
+				 rx_ctx[i]->pid - HFI_PID_BYPASS_BASE);
+		rx_ctx[i]->rsm_mask |= (1 << idx);
+	}
+
+	dd_dev_dbg(dd, "active RSM rule %d off %d size %d\n",
+		   idx, map_idx, map_size);
+done:
+	spin_unlock(&dd->ptl_lock);
+	return ret;
+}
+
 void hfi_ctxt_set_bypass(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
@@ -2545,8 +2659,6 @@ void hfi_ctxt_set_bypass(struct hfi_ctx *ctx)
 	}
 
 	if (ctx->mode & HFI_CTX_MODE_BYPASS_9B) {
-		u64 val;
-		u32 csr_idx, off;
 		int i, count;
 
 		/* TODO - revisit when adding multiple receive context support */
@@ -2558,15 +2670,9 @@ void hfi_ctxt_set_bypass(struct hfi_ctx *ctx)
 
 		/* for each QPN_MAP entry, read appropriate CSR and update */
 		count = min_t(int, ctx->qpn_map_count, OPA_QPN_MAP_MAX);
-		for (i = ctx->qpn_map_idx; i < count; i++) {
-			off = (i / 8) * 8;
-			val = read_csr(dd, FXR_RXHP_CFG_NPTL_QP_MAP_TABLE + off);
-			/* set just the 8-bit sub-field in this CSR for this QPN */
-			csr_idx = i % 8;
-			val &= ~(0xFFuLL << (csr_idx * 8));
-			val |= rx_ctx << (csr_idx * 8);
-			write_csr(dd, FXR_RXHP_CFG_NPTL_QP_MAP_TABLE + off, val);
-		}
+		for (i = ctx->qpn_map_idx; i < count; i++)
+			write_csr_pidmap(dd, FXR_RXHP_CFG_NPTL_QP_MAP_TABLE,
+					 i, rx_ctx);
 	}
 	spin_unlock(&dd->ptl_lock);
 }
