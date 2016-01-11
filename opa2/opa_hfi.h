@@ -643,10 +643,15 @@ struct hfi_devdata {
 	u32 num_eq_irqs;
 	atomic_t msix_eq_next;
 
+	/* RSM */
+	u8 rsm_offset[HFI_NUM_RSM_RULES];
+	u16 rsm_size[HFI_NUM_RSM_RULES];
+	DECLARE_BITMAP(rsm_map, HFI_RSM_MAP_SIZE);
+
 	/* Device Portals State */
 	struct idr ptl_user;
 	struct idr ptl_tpid;
-	unsigned long ptl_map[HFI_NUM_PIDS / BITS_PER_LONG];
+	DECLARE_BITMAP(ptl_map, HFI_NUM_PIDS);
 	u16 vl15_pid;
 	u16 bypass_pid;
 	spinlock_t ptl_lock;
@@ -775,6 +780,8 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
 void hfi_eq_cache_invalidate(struct hfi_devdata *dd, u16 ptl_pid);
 void hfi_tpid_enable(struct hfi_devdata *dd, u8 idx, u16 base, u32 ptl_uid);
 void hfi_tpid_disable(struct hfi_devdata *dd, u8 idx);
+int hfi_iommu_set_pasid(struct hfi_ctx *ctx);
+int hfi_iommu_clear_pasid(struct hfi_ctx *ctx);
 
 /* OPA core functions */
 int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx);
@@ -802,9 +809,9 @@ int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int token, u16 ctxt, void **addr,
 void hfi_ctxt_set_bypass(struct hfi_ctx *ctx);
 int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e_ctrl);
 void hfi_e2e_destroy(struct hfi_devdata *dd);
-
-int hfi_iommu_set_pasid(struct hfi_ctx *ctx);
-int hfi_iommu_clear_pasid(struct hfi_ctx *ctx);
+void hfi_rsm_clear_rule(struct hfi_devdata *dd, u8 rule_idx);
+int hfi_rsm_set_rule(struct hfi_devdata *dd, struct hfi_rsm_rule *rule,
+		     struct hfi_ctx *rx_ctx[], u16 num_contexts);
 
 static inline struct hfi_pportdata *to_hfi_ppd(struct hfi_devdata *dd,
 							u8 port)

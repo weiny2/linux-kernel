@@ -73,6 +73,7 @@ struct opa_core_device;
  * @devdata: HFI device specific data, private to the hardware driver
  * @ops: OPA_CORE device operations
  * @type: kernel or user context
+ * @rsm_mask: associated RSM rules, if non-portals context
  * @qpn_map_idx: if a Verbs context, index into QPN->PID table
  * @qpn_map_count: if a Verbs context, count of mapped QPNs
  * @mode: Describes if PIDs or LIDs are virtualized or not
@@ -122,6 +123,7 @@ struct hfi_ctx {
 	struct hfi_devdata *devdata;
 	struct opa_core_ops *ops;
 	u8	type;
+	u8	rsm_mask;
 	u8	qpn_map_idx;
 	u16	qpn_map_count;
 	u16	mode;
@@ -348,6 +350,34 @@ struct opa_dev_desc {
 	struct ib_device *ibdev;
 };
 
+#define HFI_NUM_RSM_CONDITIONS 2
+#define HFI_NUM_RSM_RULES 4
+#define HFI_RSM_MAP_SIZE 256
+
+/*
+ * struct hfi_rsm_rule - Receive Side Mapping (RSM) rule specification
+ * @idx: Index of RSM rule to program (0-3)
+ * @chain_mask: Mask of chained rules (not implemented)
+ * @pkt_type: Packet type to match
+ * @hdr_size: Header size used for payload split (bypass pkt_type only)
+ * @match_offset: Bit offset of match byte (0-511)
+ * @match_mask: 8-bit mask to use for match condition
+ * @match_value: Match value used with above masked bits
+ * @select_offset: Bit offset of context selection bits (0-511)
+ * @select_width: Bits to use for context selection
+ */
+struct hfi_rsm_rule {
+	u8 idx;
+	u8 chain_mask;
+	u8 pkt_type;
+	u8 hdr_size;
+	u16 match_offset[HFI_NUM_RSM_CONDITIONS];
+	u8 match_mask[HFI_NUM_RSM_CONDITIONS];
+	u8 match_value[HFI_NUM_RSM_CONDITIONS];
+	u16 select_offset[HFI_NUM_RSM_CONDITIONS];
+	u8 select_width[HFI_NUM_RSM_CONDITIONS];
+};
+
 /**
  * struct opa_core_ops - HW operations for accessing an OPA device
  * @ctx_assign: Assign a Send/Receive context of the HFI
@@ -370,6 +400,8 @@ struct opa_dev_desc {
  * @get_port_desc: get port specific HW details
  * @check_ptl_slp: check SL pair being used for portals traffic
  * @get_hw_limits: obtain HW specific resource limits
+ * @set_rsm_rule: set an RSM rule for receive side context mapping
+ * @clear_rsm_rule: disable previously set RSM rule
  */
 struct opa_core_ops {
 	int (*ctx_assign)(struct hfi_ctx *ctx,
@@ -403,6 +435,10 @@ struct opa_core_ops {
 				struct opa_pport_desc *pdesc, u8 port_num);
 	int (*check_ptl_slp)(struct hfi_ctx *ctx, struct hfi_sl_pair *slp);
 	int (*get_hw_limits)(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl);
+	int (*set_rsm_rule)(struct opa_core_device *odev,
+			    struct hfi_rsm_rule *rule,
+			    struct hfi_ctx *rsm_ctx[], u16 num_contexts);
+	void (*clear_rsm_rule)(struct opa_core_device *odev, u8 rule_idx);
 };
 
 /**
