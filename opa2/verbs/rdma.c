@@ -447,43 +447,87 @@ static inline bool is_qp_ok(struct hfi2_ibport *ibp,
  * @packet: data packet information
  *
  * Called from receive kthread upon processing event in RHQ.
- * packet->tlen is the length of the header + data + CRC in bytes.
  */
 static void hfi2_rcv(struct hfi2_ib_packet *packet)
 {
-	struct hfi2_ib_header *hdr = packet->hdr;
+	union hfi2_packet_header *ph = packet->hdr;
+	struct ib_grh *grh = NULL;
 	u32 tlen = packet->tlen;
 	struct hfi2_ibport *ibp = packet->ibp;
 	struct ib_l4_headers *ohdr;
 	struct hfi2_qp *qp;
-	u32 qp_num;
-	int lnh;
-	u8 opcode;
-	u16 lid;
+	u32 qp_num, dlid;
+	u8 opcode, l4;
 
-	/* 24 == LRH+BTH+CRC */
-	if (unlikely(tlen < 24))
+	if (packet->etype == RHF_RCV_TYPE_IB) {
+		int lnh;
+
+		/* 24 == LRH+BTH+CRC */
+		if (unlikely(tlen < 24))
+			goto drop;
+
+		/* Check for a valid destination LID (see ch. 7.11.1). */
+		dlid = be16_to_cpu(ph->ibh.lrh[1]);
+
+		/* Check for GRH */
+		lnh = be16_to_cpu(ph->ibh.lrh[0]) & 3;
+		if (lnh == HFI1_LRH_BTH) {
+			l4 = HFI1_L4_IB_LOCAL;
+			ohdr = &ph->ibh.u.oth;
+		} else if (lnh == HFI1_LRH_GRH) {
+			l4 = HFI1_L4_IB_GLOBAL;
+			ohdr = &ph->ibh.u.l.oth;
+			grh = &ph->ibh.u.l.grh;
+		} else {
+			goto drop;
+		}
+	} else if ((packet->etype == RHF_RCV_TYPE_BYPASS) &&
+		   (packet->bypass_type == OPA_BYPASS_HDR_16B)) {
+		/* 32 == 16B + (MGMT L4/BTH) FLIT + CRC FLIT */
+		if (unlikely(tlen < 32))
+			goto drop;
+
+		l4 = OPA_16B_GET_L4_TYPE(ph);
+		dlid = opa_16b_get_dlid((u32 *)ph);
+
+		/*
+		 * FXRTODO: Translate 16B multicast and permissive LIDs
+		 * to those of 9B for now, fix later.
+		 */
+		if (dlid == HFI1_16B_PERMISSIVE_LID) {
+			dlid = HFI1_PERMISSIVE_LID;
+		} else if (dlid >= HFI1_16B_MULTICAST_LID_BASE) {
+			dlid -= HFI1_16B_MULTICAST_LID_BASE;
+			dlid += HFI1_MULTICAST_LID_BASE;
+		}
+
+		if (l4 == HFI1_L4_IB_LOCAL) {
+			/* 16B + 12B BTH + 8B DETH */
+			packet->hlen = 36;
+			ohdr = &ph->opa16b.u.oth;
+		} else if (l4 == HFI1_L4_IB_GLOBAL) {
+			/* 16B + 40B GRH + 12B BTH + 8B DETH */
+			packet->hlen = 76;
+			ohdr = &ph->opa16b.u.l.oth;
+			grh = &ph->opa16b.u.l.grh;
+		} else {
+			goto drop;
+		}
+	} else {
+		dev_err(ibp->dev, "Invalid packet type\n");
 		goto drop;
+	}
 
-	/* Check for a valid destination LID (see ch. 7.11.1). */
-	lid = be16_to_cpu(hdr->lrh[1]);
-
-	/* Check for GRH */
-	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
-	if (lnh == HFI1_LRH_BTH)
-		ohdr = &hdr->u.oth;
-	else if (lnh == HFI1_LRH_GRH) {
+	if (l4 == HFI1_L4_IB_GLOBAL) {
 		u32 vtf;
 
-		ohdr = &hdr->u.l.oth;
-		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
+		if (grh->next_hdr != IB_GRH_NEXT_HDR)
 			goto drop;
-		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
+		vtf = be32_to_cpu(grh->version_tclass_flow);
 		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
 			goto drop;
 		packet->rcv_flags |= HFI1_HAS_GRH;
-	} else
-		goto drop;
+	}
 
 	opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0x7f;
 #if 0	/* TODO */
@@ -498,14 +542,14 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 	if (rhf_sc4(packet->rhf))
 		packet->rcv_flags |= HFI1_SC4_BIT;
 
-	if ((lid >= HFI1_MULTICAST_LID_BASE) &&
-	    (lid != HFI1_PERMISSIVE_LID)) {
+	if ((dlid >= HFI1_MULTICAST_LID_BASE) &&
+	    (dlid != HFI1_PERMISSIVE_LID)) {
 		struct hfi2_mcast *mcast;
 		struct hfi2_mcast_qp *p;
 
-		if (lnh != HFI1_LRH_GRH)
+		if (l4 != HFI1_L4_IB_GLOBAL)
 			goto drop;
-		mcast = hfi2_mcast_find(ibp, &hdr->u.l.grh.dgid);
+		mcast = hfi2_mcast_find(ibp, &grh->dgid);
 		if (mcast == NULL)
 			goto drop;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
@@ -529,7 +573,7 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 			goto drop;
 		}
 
-		if (lnh == HFI1_LRH_GRH)
+		if (l4 == HFI1_L4_IB_GLOBAL)
 			packet->rcv_flags |= HFI1_HAS_GRH;
 
 		spin_lock(&qp->r_lock);
@@ -576,6 +620,11 @@ static void process_rcv_packet(struct hfi2_ibport *ibp, u64 *rhf_entry,
 	else
 		packet->ebuf = hfi2_rcv_get_ebuf(ibp, idx, off);
 
+	if (packet->etype == RHF_RCV_TYPE_BYPASS) {
+		packet->bypass_type = OPA_BYPASS_GET_L2_TYPE(packet->ebuf);
+		packet->hdr = packet->ebuf;
+	}
+
 	packet->port = rhf_port(rhf);
 	dev_dbg(ibp->dev,
 		"PT %d: RX type 0x%x hlen %d tlen %d egr %d %d ebuf %p\n",
@@ -614,7 +663,9 @@ int hfi2_rcv_wait(void *data)
 		if (rhf_entry) {
 			/* parse packet header and call hfi2_rcv() to handle */
 			process_rcv_packet(ibp, rhf_entry, &pkt);
-			if (pkt.etype == RHF_RCV_TYPE_IB)
+			if ((pkt.etype == RHF_RCV_TYPE_IB) ||
+			    ((pkt.etype == RHF_RCV_TYPE_BYPASS) &&
+			     (pkt.bypass_type == OPA_BYPASS_HDR_16B)))
 				hfi2_rcv(&pkt);
 			else
 				dev_warn(ibp->dev,

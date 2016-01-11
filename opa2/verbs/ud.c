@@ -67,6 +67,7 @@
  * Note that the receive logic may be calling hfi2_ud_rcv() while
  * this is being called.
  */
+/* FXRTODO: Need to support 16B loopback */
 static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 {
 	struct ib_device *ibdev;
@@ -268,13 +269,168 @@ drop:
 	rcu_read_unlock();
 }
 
+static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
+				struct ib_l4_headers *ohdr, u8 opcode)
+{
+	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
+	struct hfi_pportdata *ppd = ibp->ppd;
+	struct ib_ah_attr *ah_attr;
+	u16 lrh0;
+	u32 nwords;
+	u32 extra_bytes;
+	u32 bth0;
+	u8 sc5;
+
+	/* Construct the header. */
+	extra_bytes = -wqe->length & 3;
+	nwords = ((wqe->length + extra_bytes) >> 2) + SIZE_OF_CRC;
+
+	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+	if (ah_attr->ah_flags & IB_AH_GRH) {
+		/* remove LRH size from s_hdrwords for GRH */
+		qp->s_hdrwords += hfi2_make_grh(ibp, &qp->s_hdr->ph.ibh.u.l.grh,
+						&ah_attr->grh,
+						(qp->s_hdrwords - 2),
+						nwords);
+		lrh0 = HFI1_LRH_GRH;
+	} else {
+		lrh0 = HFI1_LRH_BTH;
+	}
+
+	sc5 = ppd->sl_to_sc[ah_attr->sl];
+	lrh0 |= (ah_attr->sl & 0xf) << 4;
+	if (qp->ibqp.qp_type == IB_QPT_SMI) {
+		lrh0 |= 0xF000; /* Set VL (see ch. 13.5.3.1) */
+		qp->s_sc = 0xf;
+		wqe->use_sc15 = true;
+	} else {
+		lrh0 |= (sc5 & 0xf) << 12;
+		qp->s_sc = sc5;
+		wqe->use_sc15 = false;
+	}
+	qp->s_hdr->ph.ibh.lrh[0] = cpu_to_be16(lrh0);
+	qp->s_hdr->ph.ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */
+	qp->s_hdr->ph.ibh.lrh[2] =
+		cpu_to_be16(qp->s_hdrwords + nwords);
+	if (ah_attr->dlid == IB_LID_PERMISSIVE) {
+		qp->s_hdr->ph.ibh.lrh[3] = IB_LID_PERMISSIVE;
+	} else {
+		u16 lid = ppd->lid;
+
+		if (lid) {
+			lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
+			qp->s_hdr->ph.ibh.lrh[3] = cpu_to_be16(lid);
+		} else {
+			qp->s_hdr->ph.ibh.lrh[3] = IB_LID_PERMISSIVE;
+		}
+	}
+
+	bth0 = opcode << 24;
+	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
+		bth0 |= IB_BTH_SOLICITED;
+	bth0 |= extra_bytes << 20;
+	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI)
+		bth0 |= hfi2_get_pkey(ibp, wqe->wr.wr.ud.pkey_index);
+	else
+		bth0 |= hfi2_get_pkey(ibp, qp->s_pkey_index);
+
+	ohdr->bth[0] = cpu_to_be32(bth0);
+	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
+	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
+	wqe->use_16b = false;
+}
+
+static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
+				    struct ib_l4_headers *ohdr, u8 opcode)
+{
+	struct hfi2_opa16b_header *opa16b = &qp->s_hdr->ph.opa16b;
+	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
+	struct hfi_pportdata *ppd = ibp->ppd;
+	struct ib_ah_attr *ah_attr;
+	u32 nwords, extra_bytes;
+	u32 bth0, qwords, slid, dlid;
+	u8 sc5, l4;
+	u16 pkey;
+
+	/* Construct the header. */
+	/* Whole packet (hdr, data, crc, tail byte) should be flit aligned */
+	extra_bytes = -(wqe->length + (qp->s_hdrwords << 2) +
+			(SIZE_OF_CRC << 2) + 1) & 7;
+	nwords = (wqe->length + (SIZE_OF_CRC << 2) + 1 + extra_bytes) >> 2;
+
+	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+	if (ah_attr->ah_flags & IB_AH_GRH) {
+		/* remove 16B HDR size from s_hdrwords for GRH */
+		qp->s_hdrwords += hfi2_make_grh(ibp, &opa16b->u.l.grh,
+						&ah_attr->grh,
+						(qp->s_hdrwords - 4), nwords);
+		l4 = HFI1_L4_IB_GLOBAL;
+	} else {
+		l4 = HFI1_L4_IB_LOCAL;
+	}
+
+	sc5 = ppd->sl_to_sc[ah_attr->sl];
+	if (qp->ibqp.qp_type == IB_QPT_SMI) {
+		qp->s_sc = 0xf;
+		wqe->use_sc15 = true;
+	} else {
+		qp->s_sc = sc5;
+		wqe->use_sc15 = false;
+	}
+
+	/*
+	 * FXRTODO: Translate 9B multicast and permissive LIDs
+	 * to 16B for now, fix later.
+	 * Also need to program FECN/BECN.
+	 */
+	if (ah_attr->dlid == IB_LID_PERMISSIVE) {
+		slid = HFI1_16B_PERMISSIVE_LID;
+	} else {
+		slid = ppd->lid;
+		if (slid)
+			slid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
+		else
+			slid = HFI1_16B_PERMISSIVE_LID;
+	}
+
+	if (ah_attr->dlid == IB_LID_PERMISSIVE) {
+		dlid = HFI1_16B_PERMISSIVE_LID;
+	} else if (ah_attr->dlid >= HFI1_MULTICAST_LID_BASE) {
+		dlid = ah_attr->dlid - HFI1_MULTICAST_LID_BASE;
+		dlid += HFI1_16B_MULTICAST_LID_BASE;
+	} else {
+		dlid = ah_attr->dlid;
+	}
+
+	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI)
+		pkey = hfi2_get_pkey(ibp, wqe->wr.wr.ud.pkey_index);
+	else
+		pkey = hfi2_get_pkey(ibp, qp->s_pkey_index);
+
+	qwords = (qp->s_hdrwords + nwords) >> 1;
+
+	opa_make_16b_header((u32 *)&qp->s_hdr->ph.opa16b,
+			    slid, dlid, qwords, pkey,
+			    0, qp->s_sc, 0, 0, 0, 0, l4);
+
+	bth0 = opcode << 24;
+	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
+		bth0 |= IB_BTH_SOLICITED;
+	bth0 |= extra_bytes << 20;
+	ohdr->bth[0] = cpu_to_be32(bth0);
+	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
+	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
+	wqe->use_16b = true;
+}
+
 /**
- * hfi2_make_ud_req - construct a UD request packet
+ * _hfi2_make_ud_req - construct a UD request packet
  * @qp: the QP
+ * @is_16b: if set use 16B header, otherwise use LRH
  *
  * Return: 1 if constructed; otherwise 0.
  */
-int hfi2_make_ud_req(struct hfi2_qp *qp)
+static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
 {
 	struct ib_l4_headers *ohdr;
 	struct ib_ah_attr *ah_attr;
@@ -282,15 +438,10 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 	struct hfi_pportdata *ppd;
 	struct hfi2_swqe *wqe;
 	unsigned long flags;
-	u32 nwords;
-	u32 extra_bytes;
-	u32 bth0;
-	u16 lrh0;
+	u8 opcode;
 	u16 lid;
 	int ret = 0;
 	int next_cur;
-	u8 sc5;
-	bool use_sc15 = false;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
@@ -355,11 +506,9 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 	}
 
 	qp->s_cur = next_cur;
-	extra_bytes = -wqe->length & 3;
-	nwords = (wqe->length + extra_bytes) >> 2;
 
-	/* header size in 32-bit words LRH+BTH+DETH = (8+12+8)/4. */
-	qp->s_hdrwords = 7;
+	/* 16B(4)/LRH(2) + BTH(3) + DETH(2) */
+	qp->s_hdrwords = is_16b ? 9 : 7;
 	qp->s_cur_size = wqe->length;
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_srate = ah_attr->static_rate;
@@ -370,62 +519,29 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 	qp->s_sge.num_sge = wqe->wr.num_sge;
 	qp->s_sge.total_len = wqe->length;
 
-	if (ah_attr->ah_flags & IB_AH_GRH) {
-		/* Header size in 32-bit words. */
-		qp->s_hdrwords += hfi2_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
-						  &ah_attr->grh,
-						  qp->s_hdrwords, nwords);
-		lrh0 = HFI1_LRH_GRH;
-		ohdr = &qp->s_hdr->ibh.u.l.oth;
+	if (ah_attr->ah_flags & IB_AH_GRH)
 		/*
 		 * Don't worry about sending to locally attached multicast
 		 * QPs.  It is unspecified by the spec. what happens.
 		 */
-	} else {
-		/* Header size in 32-bit words. */
-		lrh0 = HFI1_LRH_BTH;
-		ohdr = &qp->s_hdr->ibh.u.oth;
-	}
+		ohdr = is_16b ? &qp->s_hdr->ph.opa16b.u.l.oth :
+				&qp->s_hdr->ph.ibh.u.l.oth;
+	else
+		ohdr = is_16b ? &qp->s_hdr->ph.opa16b.u.oth :
+				&qp->s_hdr->ph.ibh.u.oth;
+
 	if (wqe->wr.opcode == IB_WR_SEND_WITH_IMM) {
 		qp->s_hdrwords++;
 		ohdr->u.ud.imm_data = wqe->wr.ex.imm_data;
-		bth0 = IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE << 24;
+		opcode = IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE;
 	} else
-		bth0 = IB_OPCODE_UD_SEND_ONLY << 24;
-	sc5 = ppd->sl_to_sc[ah_attr->sl];
-	lrh0 |= (ah_attr->sl & 0xf) << 4;
-	if (qp->ibqp.qp_type == IB_QPT_SMI) {
-		lrh0 |= 0xF000; /* Set VL (see ch. 13.5.3.1) */
-		qp->s_sc = 0xf;
-		use_sc15 = true;
-	} else {
-		lrh0 |= (sc5 & 0xf) << 12;
-		qp->s_sc = sc5;
-	}
-	qp->s_hdr->ibh.lrh[0] = cpu_to_be16(lrh0);
-	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */
-	qp->s_hdr->ibh.lrh[2] =
-		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	if (ah_attr->dlid == IB_LID_PERMISSIVE)
-		qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
-	else {
-		lid = ppd->lid;
-		if (lid) {
-			lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
-			qp->s_hdr->ibh.lrh[3] = cpu_to_be16(lid);
-		} else
-			qp->s_hdr->ibh.lrh[3] = IB_LID_PERMISSIVE;
-	}
-	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
-		bth0 |= IB_BTH_SOLICITED;
-	bth0 |= extra_bytes << 20;
-	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI)
-		bth0 |= hfi2_get_pkey(ibp, wqe->wr.wr.ud.pkey_index);
+		opcode = IB_OPCODE_UD_SEND_ONLY;
+
+	if (is_16b)
+		hfi2_make_16b_ud_header(qp, wqe, ohdr, opcode);
 	else
-		bth0 |= hfi2_get_pkey(ibp, qp->s_pkey_index);
-	ohdr->bth[0] = cpu_to_be32(bth0);
-	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
-	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
+		hfi2_make_ud_header(qp, wqe, ohdr, opcode);
+
 	/*
 	 * Qkeys with the high order bit set mean use the
 	 * qkey from the QP context instead of the WR (see 10.2.5).
@@ -440,9 +556,7 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 	wqe->s_hdr = qp->s_hdr;
 	wqe->s_hdrwords = qp->s_hdrwords;
 	wqe->s_ctx = qp->s_ctx;
-	wqe->lnh = lrh0 & 0x3;
 	wqe->sl = ah_attr->sl;
-	wqe->use_sc15 = use_sc15;
 	wqe->pkt_errors = 0;
 	/*
 	 * UD packets are not fragmented, set to max MTU as send_wqe()
@@ -458,6 +572,12 @@ bail:
 unlock:
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 	return ret;
+}
+
+int hfi2_make_ud_req(struct hfi2_qp *qp)
+{
+	/* FXRTODO: Dynamically determain encapsulation type */
+	return _hfi2_make_ud_req(qp, is_16b_mode());
 }
 
 /*
@@ -522,42 +642,89 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 	struct ib_wc wc;
 	u32 qkey;
 	u32 src_qp;
-	u16 dlid, slid, pkey;
 	int mgmt_pkey_idx = -1;
 	struct hfi2_ibport *ibp = packet->ibp;
 	struct hfi_pportdata *ppd = ibp->ppd;
-	struct hfi2_ib_header *hdr = packet->hdr;
+	union hfi2_packet_header *ph = packet->hdr;
 	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
 	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
 	int sc4_bit = (!!(rcv_flags & HFI1_SC4_BIT)) << 4;
-	u8 sc5;
-	int is_becn, is_fecn, is_mcast;
+	u8 sc5, extra_bytes;
+	bool is_becn, is_fecn, is_mcast;
 	struct ib_grh *grh = NULL;
+	u32 slid, dlid;
+	u8 age, l4, rc;
+	u16 entropy, len, pkey;
+	bool is_16b = (packet->etype == RHF_RCV_TYPE_BYPASS);
 
+	/* FXRTODO: Probably we can set these in process_rcv_packet */
 	/* Check for GRH */
 	if (!has_grh) {
-		ohdr = &hdr->u.oth;
-		hdrsize = 8 + 12 + 8;   /* LRH + BTH + DETH */
+		if (is_16b) {
+			hdrsize = 16 + 12 + 8;   /* 16B_HDR + BTH + DETH */
+			ohdr = &ph->opa16b.u.oth;
+		} else {
+			hdrsize = 8 + 12 + 8;   /* LRH + BTH + DETH */
+			ohdr = &ph->ibh.u.oth;
+		}
 	} else {
-		ohdr = &hdr->u.l.oth;
-		hdrsize = 8 + 40 + 12 + 8; /* LRH + GRH + BTH + DETH */
-		grh = &hdr->u.l.grh;
+		if (is_16b) {
+			/* 16B_HDR + GRH + BTH + DETH */
+			hdrsize = 16 + 40 + 12 + 8;
+			ohdr = &ph->opa16b.u.l.oth;
+			grh = &ph->opa16b.u.l.grh;
+		} else {
+			/* LRH + GRH + BTH + DETH */
+			hdrsize = 8 + 40 + 12 + 8;
+			ohdr = &ph->ibh.u.l.oth;
+			grh = &ph->opa16b.u.l.grh;
+		}
 	}
+	if (is_16b) {
+		data = packet->ebuf + hdrsize;
+		opa_parse_16b_header((u32 *)&ph->opa16b, &slid, &dlid, &len,
+				     &pkey, &entropy, &sc5, &rc, &is_fecn,
+				     &is_becn, &age, &l4);
+
+		/*
+		 * FXRTODO: Translate 16B multicast and permissive LIDs
+		 * to 9B for now, fix later.
+		 */
+		if (slid == HFI1_16B_PERMISSIVE_LID)
+			slid = HFI1_PERMISSIVE_LID;
+		if (dlid == HFI1_16B_PERMISSIVE_LID) {
+			dlid = HFI1_PERMISSIVE_LID;
+		} else if (dlid >= HFI1_16B_MULTICAST_LID_BASE) {
+			dlid -= HFI1_16B_MULTICAST_LID_BASE;
+			dlid += HFI1_MULTICAST_LID_BASE;
+		}
+
+		/* Get the number of bytes the message was padded by. */
+		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 7;
+		extra_bytes = 5;    /* ICRC + TAIL byte */
+	} else {
+		dlid = be16_to_cpu(ph->ibh.lrh[1]);
+		slid = be16_to_cpu(ph->ibh.lrh[3]);
+		sc5 = (be16_to_cpu(ph->ibh.lrh[0]) >> 12) & 0xf;
+		sc5 |= sc4_bit;
+		pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+
+		is_becn = !!((be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
+			     & HFI1_BECN_MASK);
+		is_fecn = !!((be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
+			     & HFI1_FECN_MASK);
+
+		/* Get the number of bytes the message was padded by. */
+		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+		extra_bytes = 4;    /* ICRC */
+	}
+
 	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
 	src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & HFI1_QPN_MASK;
-	dlid = be16_to_cpu(hdr->lrh[1]);
-	slid = be16_to_cpu(hdr->lrh[3]);
-	sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
-	sc5 |= sc4_bit;
-	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 	is_mcast = (dlid > HFI1_MULTICAST_LID_BASE) &&
 			(dlid != HFI1_PERMISSIVE_LID);
-	is_becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
-		& HFI1_BECN_MASK;
-	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
-		& HFI1_FECN_MASK;
 
 	/*
 	 * The opcode is in the low byte when its in network order
@@ -583,24 +750,17 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		return_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc5, grh);
 #endif
 
-	/*
-	 * Get the number of bytes the message was padded by
-	 * and drop incomplete packets.
-	 */
-	pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
-	if (unlikely(tlen < (hdrsize + pad + 4)))
+	/* Drop incomplete packets */
+	if (unlikely(tlen < (hdrsize + pad + extra_bytes)))
 		goto drop;
-
-	tlen -= hdrsize + pad + 4;
-
+	tlen -= hdrsize + pad + extra_bytes;
 	/*
 	 * Check that the permissive LID is only used on QP0
 	 * and the QKEY matches (see 9.6.1.4.1 and 9.6.1.5.1).
 	 */
 	if (qp->ibqp.qp_num) {
-		/* u8 sl = (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF; */
-		if (unlikely(hdr->lrh[1] == IB_LID_PERMISSIVE ||
-			     hdr->lrh[3] == IB_LID_PERMISSIVE))
+		if (unlikely(dlid == IB_LID_PERMISSIVE ||
+			     slid == IB_LID_PERMISSIVE))
 			goto drop;
 		if (qp->ibqp.qp_num > 1) {
 #if 0 /* FXRTODO */
@@ -616,9 +776,9 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 				 * IB spec (release 1.3, section 10.9.4)
 				 */
 				hfi2_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
-						 pkey, sl,
-						 src_qp, qp->ibqp.qp_num,
-						 hdr->lrh[3], hdr->lrh[1]);
+					       pkey, sl,
+					       src_qp, qp->ibqp.qp_num,
+					       slid, dlid);
 				return;
 			}
 #endif
@@ -632,9 +792,9 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 #if 0 /* FXRTODO */
 		if (unlikely(qkey != qp->qkey)) {
 			hfi2_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY,
-					 qkey, sl,
-					 src_qp, qp->ibqp.qp_num,
-					 hdr->lrh[3], hdr->lrh[1]);
+				       qkey, sl,
+				       src_qp, qp->ibqp.qp_num,
+				       slid, dlid);
 			return;
 		}
 #endif
@@ -642,7 +802,7 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		/* TODO - bug?  4-bit SC versus 5-bit SC here? */
 		if (unlikely(qp->ibqp.qp_num == 1 &&
 			     (tlen > 2048 ||
-			      (be16_to_cpu(hdr->lrh[0]) >> 12) == 15)))
+			      (sc5 == 15))))
 			goto drop;
 	} else {
 		/* Received on QP0, and so by definition, this is an SMP */
@@ -657,8 +817,8 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 
 		if (tlen > 2048)
 			goto drop;
-		if ((hdr->lrh[1] == IB_LID_PERMISSIVE ||
-		     hdr->lrh[3] == IB_LID_PERMISSIVE) &&
+		if ((dlid == IB_LID_PERMISSIVE ||
+		     slid == IB_LID_PERMISSIVE) &&
 		    smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 			goto drop;
 
@@ -710,8 +870,8 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		goto drop;
 	}
 	if (has_grh) {
-		hfi2_copy_sge(&qp->r_sge, &hdr->u.l.grh,
-			     sizeof(struct ib_grh), 1);
+		hfi2_copy_sge(&qp->r_sge, grh,
+			      sizeof(struct ib_grh), 1);
 		wc.wc_flags |= IB_WC_GRH;
 	} else
 		hfi2_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);

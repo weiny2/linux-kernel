@@ -286,7 +286,7 @@ void hfi2_migrate_qp(struct hfi2_qp *qp)
 }
 
 void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
-			  u32 bth0, u32 bth2, u16 *out_lrh0)
+			  u32 bth0, u32 bth2, u8 *lnh)
 {
 	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
@@ -300,24 +300,29 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	ppd = ibp->ppd;
 	extra_bytes = -qp->s_cur_size & 3;
-	nwords = (qp->s_cur_size + extra_bytes) >> 2;
-	lrh0 = HFI1_LRH_BTH;
+	nwords = ((qp->s_cur_size + extra_bytes) >> 2) + SIZE_OF_CRC;
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
-		qp->s_hdrwords += hfi2_make_grh(ibp, &qp->s_hdr->ibh.u.l.grh,
-					       &qp->remote_ah_attr.grh,
-					       qp->s_hdrwords, nwords);
-		lrh0 = HFI1_LRH_GRH;
+		/* remove LRH size from s_hdrwords for GRH */
+		qp->s_hdrwords += hfi2_make_grh(ibp, &qp->s_hdr->ph.ibh.u.l.grh,
+						&qp->remote_ah_attr.grh,
+						(qp->s_hdrwords - 2),
+						nwords);
+		*lnh = HFI1_LRH_GRH;
+	} else {
+		*lnh = HFI1_LRH_BTH;
 	}
+
+	lrh0 = *lnh;
 	sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
 	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
 	qp->s_sc = sc5;
 	if (qp->s_mig_state == IB_MIG_MIGRATED)
 		bth0 |= IB_BTH_MIG_REQ;
-	qp->s_hdr->ibh.lrh[0] = cpu_to_be16(lrh0);
-	qp->s_hdr->ibh.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
-	qp->s_hdr->ibh.lrh[2] =
-		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	qp->s_hdr->ibh.lrh[3] = cpu_to_be16(ppd->lid |
+	qp->s_hdr->ph.ibh.lrh[0] = cpu_to_be16(lrh0);
+	qp->s_hdr->ph.ibh.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
+	qp->s_hdr->ph.ibh.lrh[2] =
+		cpu_to_be16(qp->s_hdrwords + nwords);
+	qp->s_hdr->ph.ibh.lrh[3] = cpu_to_be16(ppd->lid |
 				       qp->remote_ah_attr.src_path_bits);
 	bth0 |= hfi2_get_pkey(ibp, qp->s_pkey_index);
 	bth0 |= extra_bytes << 20;
@@ -330,7 +335,72 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 	}
 	ohdr->bth[1] = cpu_to_be32(bth1);
 	ohdr->bth[2] = cpu_to_be32(bth2);
-	*out_lrh0 = lrh0;
+}
+
+void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
+			      u32 bth0, u32 bth2, u8 *lnh)
+{
+	struct hfi2_opa16b_header *opa16b = &qp->s_hdr->ph.opa16b;
+	struct hfi2_ibport *ibp;
+	struct hfi_pportdata *ppd;
+	u32 nwords, extra_bytes;
+	u32 bth1, qwords, slid, dlid;
+	u8 sc5, l4;
+	u16 pkey;
+	bool becn;
+
+	/* Construct the header. */
+	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
+	ppd = ibp->ppd;
+
+	/* Whole packet (hdr, data, crc, tail byte) should be flit aligned */
+	extra_bytes = -(qp->s_cur_size + (qp->s_hdrwords << 2) +
+			(SIZE_OF_CRC << 2) + 1) & 7;
+	nwords = (qp->s_cur_size + (SIZE_OF_CRC << 2) + 1 + extra_bytes) >> 2;
+
+	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
+		/* remove 16B HDR size from s_hdrwords for GRH */
+		qp->s_hdrwords += hfi2_make_grh(ibp, &opa16b->u.l.grh,
+						&qp->remote_ah_attr.grh,
+						(qp->s_hdrwords - 4), nwords);
+		l4 = HFI1_L4_IB_GLOBAL;
+		*lnh = HFI1_LRH_GRH;
+	} else {
+		l4 = HFI1_L4_IB_LOCAL;
+		*lnh = HFI1_LRH_BTH;
+	}
+
+	sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
+	qp->s_sc = sc5;
+
+	if (qp->s_mig_state == IB_MIG_MIGRATED)
+		bth1 |= IB_16B_BTH_MIG_REQ;
+	bth0 |= extra_bytes << 20;
+
+	bth1 = qp->remote_qpn;
+	if (qp->s_flags & HFI1_S_ECN) {
+		qp->s_flags &= ~HFI1_S_ECN;
+		/* we recently received a FECN, so return a BECN */
+		becn = true;
+	}
+
+	dlid = qp->remote_ah_attr.dlid;
+	/* FXRTODO: Translate 9B multicast LIDs to 16B for now, fix later */
+	if (dlid >= HFI1_MULTICAST_LID_BASE) {
+		dlid = qp->remote_ah_attr.dlid - HFI1_MULTICAST_LID_BASE;
+		dlid += HFI1_16B_MULTICAST_LID_BASE;
+	}
+
+	slid = ppd->lid | qp->remote_ah_attr.src_path_bits;
+	pkey = hfi2_get_pkey(ibp, qp->s_pkey_index);
+	qwords = (qp->s_hdrwords + nwords) >> 1;
+
+	opa_make_16b_header((u32 *)opa16b, slid, dlid, qwords,
+			    pkey, 0, qp->s_sc, 0, 0, becn, 0, l4);
+
+	ohdr->bth[0] = cpu_to_be32(bth0);
+	ohdr->bth[1] = cpu_to_be32(bth1);
+	ohdr->bth[2] = cpu_to_be32(bth2);
 }
 
 /**
@@ -380,7 +450,7 @@ int hfi2_verbs_send(struct hfi2_qp *qp, struct hfi2_ib_dma_header *hdr,
 
 	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 
-	/* ret = egress_pkey_check(ibp, &hdr->ibh, qp); */
+	/* ret = egress_pkey_check(ibp, &hdr->ph.ibh, qp); */
 	if (unlikely(ret)) {
 		/*
 		 * hfi1_cdbg(PIO, "%s() Failed. Completing with err",

@@ -70,6 +70,7 @@
 #define IB_BTH_REQ_ACK		(1 << 31)
 #define IB_BTH_SOLICITED	(1 << 23)
 #define IB_BTH_MIG_REQ		(1 << 22)
+#define IB_16B_BTH_MIG_REQ	(1 << 31)
 
 #define IB_GRH_VERSION		6
 #define IB_GRH_VERSION_MASK	0xF
@@ -85,7 +86,14 @@
 #define HFI1_LRH_GRH 0x0003      /* 1. word of IB LRH - next header: GRH */
 #define HFI1_LRH_BTH 0x0002      /* 1. word of IB LRH - next header: BTH */
 
+/* L4 Encoding for 8B,10B,16B packets */
+/* FXRTODO: Use correct L4 type for management packets */
+#define HFI1_L4_IB_MGMT   0x0008
+#define HFI1_L4_IB_LOCAL  0x0009
+#define HFI1_L4_IB_GLOBAL 0x000A
+
 #define HFI1_PERMISSIVE_LID 0xFFFF
+#define HFI1_16B_PERMISSIVE_LID 0xFFFFFF
 #define HFI1_AETH_CREDIT_SHIFT 24
 #define HFI1_AETH_CREDIT_MASK 0x1F
 #define HFI1_AETH_CREDIT_INVAL 0x1F
@@ -96,6 +104,7 @@
 #define HFI1_BECN_SHIFT 30
 #define HFI1_BECN_MASK 0x1
 #define HFI1_MULTICAST_LID_BASE 0xC000
+#define HFI1_16B_MULTICAST_LID_BASE 0xF00000
 
 struct ib_reth {
 	__be64 vaddr;
@@ -150,10 +159,28 @@ struct hfi2_ib_header {
 	} u;
 } __packed;
 
+/* OPA 16B header structure with BTH, GRH and DETH */
+struct hfi2_opa16b_header {
+	u32 opah[4];
+	union {
+		struct {
+			struct ib_grh grh;
+			struct ib_l4_headers oth;
+		} l;
+		struct ib_l4_headers oth;
+	} u;
+} __packed;
+
+/* Packet header with either IB or OPA 16B format */
+union hfi2_packet_header {
+	struct hfi2_ib_header ibh;
+	struct hfi2_opa16b_header opa16b;
+} __packed;
+
 /* IB header prefixed with 8-bytes of OPA2-specific data */
 struct hfi2_ib_dma_header {
 	uint64_t opa2_hdr_reserved;
-	struct hfi2_ib_header ibh;
+	union hfi2_packet_header ph;
 };
 
 /*
@@ -173,13 +200,14 @@ struct hfi2_ib_packet {
 	u16 tlen;
 	u16 hlen;
 	u32 etype;
+	u32 bypass_type;
 	u32 rcv_flags;
 };
 
 /* Store IOVEC array information for General DMA command */
 struct hfi2_wqe_iov {
 	struct hfi2_swqe *wqe;
-	struct hfi2_ib_header ib_hdr;
+	union hfi2_packet_header ph;
 	u32 remaining_bytes;
 	union base_iovec iov[0];
 };
@@ -241,8 +269,8 @@ static inline u32 delta_psn(u32 a, u32 b)
  * @ibp: a pointer to the IB port
  * @hdr: a pointer to the GRH header being constructed
  * @grh: the global route address to send to
- * @hwords: the number of 32 bit words of header being sent
- * @nwords: the number of 32 bit words of data being sent
+ * @hwords: size of header after grh being sent in dwords
+ * @nwords: size of data being sent in dwords
  *
  * Return the size of the header in 32 bit words.
  */
@@ -254,7 +282,7 @@ u32 hfi2_make_grh(struct hfi2_ibport *ibp, struct ib_grh *hdr,
 		cpu_to_be32((IB_GRH_VERSION << IB_GRH_VERSION_SHIFT) |
 			    (grh->traffic_class << IB_GRH_TCLASS_SHIFT) |
 			    (grh->flow_label << IB_GRH_FLOW_SHIFT));
-	hdr->paylen = cpu_to_be16((hwords - 2 + nwords + SIZE_OF_CRC) << 2);
+	hdr->paylen = cpu_to_be16((hwords + nwords) << 2);
 	/* next_hdr is defined by C8-7 in ch. 8.4.1 */
 	hdr->next_hdr = IB_GRH_NEXT_HDR;
 	hdr->hop_limit = grh->hop_limit;
@@ -397,6 +425,122 @@ static inline u32 rhf_egr_buf_offset(u64 rhf)
 static inline u32 rhf_port(u64 rhf)
 {
 	return (rhf >> RHF_PORT_SHIFT) & RHF_PORT_MASK;
+}
+
+/* Bypass packet types */
+#define OPA_BYPASS_HDR_8B              0x0
+#define OPA_BYPASS_HDR_10B             0x1
+#define OPA_BYPASS_HDR_16B             0x2
+
+/* OPA 16B Header fields */
+#define OPA_16B_LID_MASK        0xFFFFFull
+#define OPA_16B_SLID_SHFT       8
+#define OPA_16B_SLID_MASK       0xF00ull
+#define OPA_16B_DLID_SHFT       12
+#define OPA_16B_DLID_MASK       0xF000ull
+#define OPA_16B_LEN_SHFT        20
+#define OPA_16B_LEN_MASK        0x7FF00000ull
+#define OPA_16B_BECN_SHFT       31
+#define OPA_16B_BECN_MASK       0x80000000ull
+#define OPA_16B_FECN_SHFT       28
+#define OPA_16B_FECN_MASK       0x10000000ull
+#define OPA_16B_SC_SHFT         20
+#define OPA_16B_SC_MASK         0x1F00000ull
+#define OPA_16B_RC_SHFT         25
+#define OPA_16B_RC_MASK         0xE000000ull
+#define OPA_16B_PKEY_SHFT       16
+#define OPA_16B_PKEY_MASK       0xFFFF0000ull
+#define OPA_BYPASS_L2_OFFSET    1
+#define OPA_BYPASS_L2_SHFT      29
+#define OPA_BYPASS_L2_MASK      0x3ull
+#define OPA_16B_L4_OFFSET       2
+#define OPA_16B_L4_MASK         0xFFull
+#define OPA_16B_ENTROPY_MASK    0xFFFFull
+#define OPA_16B_AGE_SHFT        16
+#define OPA_16B_AGE_MASK        0xFF0000ull
+
+#define OPA_BYPASS_GET_L2_TYPE(data)                         \
+	((*((u32 *)(data) + OPA_BYPASS_L2_OFFSET) >>         \
+	  OPA_BYPASS_L2_SHFT) & OPA_BYPASS_L2_MASK)
+
+#define OPA_16B_GET_L4_TYPE(data)                            \
+	(*((u32 *)(data) + OPA_16B_L4_OFFSET) & OPA_16B_L4_MASK)
+
+static inline u32 opa_16b_get_dlid(u32 *hdr)
+{
+	u32 h1 = hdr[1];
+	u32 h2 = hdr[2];
+
+	/* Append upper 4 bits with lower 20 bits of dlid */
+	return ((h1 & OPA_16B_LID_MASK) |
+		(((h2 & OPA_16B_DLID_MASK) >> OPA_16B_DLID_SHFT) << 20));
+}
+
+static inline void opa_make_16b_header(u32 *hdr, u32 slid, u32 dlid, u16 len,
+				       u16 pkey, u16 entropy, u8 sc, u8 rc,
+				       bool fecn, bool becn, u8 age, u8 l4)
+{
+	u32 h0 = 0;
+	u32 h1 = 0x40000000; /* 16B L2=10 */
+	u32 h2 = 0;
+	u32 h3 = 0;
+
+	/* Extract and set 4 upper bits and 20 lower bits of the lids */
+	h0 |= (slid & OPA_16B_LID_MASK);
+	h2 |= ((slid >> (20 - OPA_16B_SLID_SHFT)) & OPA_16B_SLID_MASK);
+
+	h0 |= (len << OPA_16B_LEN_SHFT);
+	if (becn)
+		h0 |= OPA_16B_BECN_MASK;
+
+	h1 |= (dlid & OPA_16B_LID_MASK);
+	h2 |= ((dlid >> (20 - OPA_16B_DLID_SHFT)) & OPA_16B_DLID_MASK);
+
+	h1 |= (rc << OPA_16B_RC_SHFT);
+	h1 |= (sc << OPA_16B_SC_SHFT);
+	if (fecn)
+		h1 |= OPA_16B_FECN_MASK;
+
+	h2 |= l4;
+	h2 |= ((u32)pkey << OPA_16B_PKEY_SHFT);
+
+	h3 |= entropy;
+	h3 |= ((u32)age << OPA_16B_AGE_SHFT);
+
+	hdr[0] = h0;
+	hdr[1] = h1;
+	hdr[2] = h2;
+	hdr[3] = h3;
+}
+
+static inline void opa_parse_16b_header(u32 *hdr, u32 *slid, u32 *dlid,
+					u16 *len, u16 *pkey, u16 *entropy,
+					u8 *sc, u8 *rc, bool *fecn, bool *becn,
+					u8 *age, u8 *l4)
+{
+	u32 h0 = *hdr++;
+	u32 h1 = *hdr++;
+	u32 h2 = *hdr++;
+	u32 h3 = *hdr;
+
+	/* Append upper 4 bits with lower 20 bits of lid */
+	*slid = (h0 & OPA_16B_LID_MASK) |
+		(((h2 & OPA_16B_SLID_MASK) >> OPA_16B_SLID_SHFT) << 20);
+	*dlid = (h1 & OPA_16B_LID_MASK) |
+		(((h2 & OPA_16B_DLID_MASK) >> OPA_16B_DLID_SHFT) << 20);
+
+	*len  = (h0 & OPA_16B_LEN_MASK)  >> OPA_16B_LEN_SHFT;
+	*becn = !!((h0 & OPA_16B_BECN_MASK) >> OPA_16B_BECN_SHFT);
+
+	*sc = (h1 & OPA_16B_SC_MASK) >> OPA_16B_SC_SHFT;
+	*rc = (h1 & OPA_16B_RC_MASK) >> OPA_16B_RC_SHFT;
+	*fecn = !!((h1 & OPA_16B_FECN_MASK) >> OPA_16B_FECN_SHFT);
+
+	*l4 = h2 & OPA_16B_L4_MASK;
+	*pkey = (h2 & OPA_16B_PKEY_MASK) >> OPA_16B_PKEY_SHFT;
+
+	*entropy = h3 & OPA_16B_ENTROPY_MASK;
+	*age = (h3 & OPA_16B_AGE_MASK) >> OPA_16B_AGE_SHFT;
 }
 
 #endif
