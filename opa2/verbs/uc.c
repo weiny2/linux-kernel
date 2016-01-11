@@ -59,25 +59,27 @@
 #define OP(x) IB_OPCODE_UC_##x
 
 /**
- * hfi2_make_uc_req - construct a request packet (SEND, RDMA write)
+ * _hfi2_make_uc_req - construct a request packet (SEND, RDMA write)
  * @qp: a pointer to the QP
+ * @is_16b: if set use 16B header, otherwise use LRH
  *
  * Return: 1 if constructed; otherwise, return 0.
  */
-int hfi2_make_uc_req(struct hfi2_qp *qp)
+static int _hfi2_make_uc_req(struct hfi2_qp *qp, bool is_16b)
 {
 	struct ib_l4_headers *ohdr;
 	struct hfi2_swqe *wqe;
 	unsigned long flags;
-	u16 lrh0;
-	u32 hwords = 5;
+	u32 hwords;
 	u32 bth0 = 0;
 	u32 len;
 	u32 pmtu = qp->pmtu;
 	int ret = 0;
 
-	spin_lock_irqsave(&qp->s_lock, flags);
+	/* 16B(4)/LRH(2) + BTH(3) */
+	hwords = is_16b ? 7 : 5;
 
+	spin_lock_irqsave(&qp->s_lock, flags);
 	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_SEND_OK)) {
 		if (!(ib_qp_state_ops[qp->state] & HFI1_FLUSH_SEND))
 			goto bail;
@@ -94,9 +96,12 @@ int hfi2_make_uc_req(struct hfi2_qp *qp)
 		goto done;
 	}
 
-	ohdr = &qp->s_hdr->ibh.u.oth;
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = &qp->s_hdr->ibh.u.l.oth;
+		ohdr = is_16b ? &qp->s_hdr->ph.opa16b.u.l.oth :
+				&qp->s_hdr->ph.ibh.u.l.oth;
+	else
+		ohdr = is_16b ? &qp->s_hdr->ph.opa16b.u.oth :
+				&qp->s_hdr->ph.ibh.u.oth;
 
 	/* Get the next send request. */
 	wqe = get_swqe_ptr(qp, qp->s_cur);
@@ -232,8 +237,12 @@ int hfi2_make_uc_req(struct hfi2_qp *qp)
 	qp->s_hdrwords = hwords;
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
-	hfi2_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
-			       mask_psn(qp->s_next_psn++), &lrh0);
+	if (is_16b)
+		hfi2_make_16b_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
+					 mask_psn(qp->s_next_psn++), &wqe->lnh);
+	else
+		hfi2_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
+				     mask_psn(qp->s_next_psn++), &wqe->lnh);
 
 	/* TODO for now, WQE contains everything needed to perform the Send */
 	wqe->s_qp = qp;
@@ -241,9 +250,9 @@ int hfi2_make_uc_req(struct hfi2_qp *qp)
 	wqe->s_hdr = qp->s_hdr;
 	wqe->s_hdrwords = qp->s_hdrwords;
 	wqe->s_ctx = qp->s_ctx;
-	wqe->lnh = lrh0 & 0x3; /* next header (BTH or GRH) */
 	wqe->sl = qp->remote_ah_attr.sl;
 	wqe->use_sc15 = false;
+	wqe->use_16b = is_16b;
 	wqe->pkt_errors = 0;
 	wqe->pmtu = pmtu;
 done:
@@ -255,6 +264,12 @@ bail:
 unlock:
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 	return ret;
+}
+
+int hfi2_make_uc_req(struct hfi2_qp *qp)
+{
+	/* FXRTODO: Dynamically determain encapsulation type */
+	return _hfi2_make_uc_req(qp, is_16b_mode());
 }
 
 /**
@@ -269,7 +284,7 @@ void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 {
 	struct hfi2_ibport *ibp = packet->ibp;
 	struct hfi_pportdata *ppd = ibp->ppd;
-	struct hfi2_ib_header *hdr = packet->hdr;
+	union hfi2_packet_header *ph = packet->hdr;
 	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
@@ -282,53 +297,99 @@ void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 	u16 pmtu = qp->pmtu;
 	struct ib_reth *reth;
 	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
-	int is_becn, is_fecn, ret;
+	bool is_becn, is_fecn;
+	int ret;
 	struct ib_grh *grh = NULL;
-	u8 sc5;
+	u8 sc5, extra_bytes;
+	u8 age, l4, rc, sc;
+	u16 entropy, len, pkey;
+	u32 slid, dlid;
+	bool is_16b = (packet->etype == RHF_RCV_TYPE_BYPASS);
 
+	/* FXRTODO: Probably we can set these in process_rcv_packet */
 	/* Check for GRH */
 	if (!has_grh) {
-		ohdr = &hdr->u.oth;
-		hdrsize = 8 + 12;       /* LRH + BTH */
+		if (is_16b) {
+			hdrsize = 16 + 8 + 12;   /* 16B + LRH + BTH */
+			ohdr = &ph->opa16b.u.oth;
+		} else {
+			hdrsize = 8 + 12;   /* LRH + BTH */
+			ohdr = &ph->ibh.u.oth;
+		}
 	} else {
-		ohdr = &hdr->u.l.oth;
-		hdrsize = 8 + 40 + 12;  /* LRH + GRH + BTH */
-		grh = &hdr->u.l.grh;
+		if (is_16b) {
+			hdrsize = 16 + 8 + 40 + 12;  /* 16B + LRH + GRH + BTH */
+			ohdr = &ph->opa16b.u.l.oth;
+			grh = &ph->opa16b.u.l.grh;
+		} else {
+			hdrsize = 8 + 40 + 12;  /* LRH + GRH + BTH */
+			ohdr = &ph->ibh.u.l.oth;
+			grh = &ph->ibh.u.l.grh;
+		}
 	}
 
 	opcode = be32_to_cpu(ohdr->bth[0]);
+	if (is_16b) {
+		data = packet->ebuf + hdrsize;
 #if 0
-	if (hfi2_ruc_check_hdr(ibp, hdr, has_grh, qp, opcode))
-		return;
+		if (hfi2_ruc_check_hdr_16b(ibp, ph->opa16b,
+					   has_grh, qp, opcode))
+			return;
 #endif
+		opa_parse_16b_header((u32 *)&ph->opa16b, &slid, &dlid, &len,
+				     &pkey, &entropy, &sc, &rc, &is_fecn,
+				     &is_becn, &age, &l4);
 
-	is_becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
-		& HFI1_BECN_MASK;
-	is_fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
-		& HFI1_FECN_MASK;
+		/*
+		 * FXRTODO: Translate 16B multicast LIDs to 9B for now,
+		 * fix later.
+		 */
+		if (dlid >= HFI1_16B_MULTICAST_LID_BASE) {
+			dlid -= HFI1_16B_MULTICAST_LID_BASE;
+			dlid += HFI1_MULTICAST_LID_BASE;
+		}
+
+		/* Get the number of bytes the message was padded by. */
+		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 7;
+		extra_bytes = 5;    /* ICRC + TAIL byte */
+
+	} else {
+#if 0
+		if (hfi2_ruc_check_hdr(ibp, ph->ibh, has_grh, qp, opcode)) {
+			return;
+#endif
+		pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+		slid = be16_to_cpu(ph->ibh.lrh[3]);
+		dlid = be16_to_cpu(ph->ibh.lrh[1]);
+
+		is_becn = !!((be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
+			     & HFI1_BECN_MASK);
+		is_fecn = !!((be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT)
+			     & HFI1_FECN_MASK);
+
+		/* Get the number of bytes the message was padded by. */
+		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+		extra_bytes = 4;    /* ICRC */
+	}
+
 	sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
-
 #if 0
 	if (is_becn) {
 		u32 rqpn, lqpn;
-		u16 rlid = be16_to_cpu(hdr->lrh[3]);
-		u8 sl;
+		u8 sl = 0;
 
 		lqpn = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
 		rqpn = qp->remote_qpn;
 
 		sl = ibp->sc_to_sl[sc5];
-
-		process_becn(ibp, sl, rlid, lqpn, rqpn, IB_CC_SVCTYPE_UC);
+		process_becn(ibp, sl, (u16)slid, lqpn, rqpn, IB_CC_SVCTYPE_UC);
 	}
 
 	if (is_fecn) {
-		u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
-		u16 slid = be16_to_cpu(hdr->lrh[3]);
-		u16 dlid = be16_to_cpu(hdr->lrh[1]);
 		u32 src_qp = qp->remote_qpn;
 
-		return_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc5, grh);
+		return_cnp(ibp, qp, src_qp, pkey, (u16)dlid,
+			   (u16)slid, sc5, grh);
 	}
 #endif
 
@@ -454,14 +515,12 @@ no_immediate_data:
 		wc.ex.imm_data = 0;
 		wc.wc_flags = 0;
 send_last:
-		/* Get the number of bytes the message was padded by. */
-		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
-		if (unlikely(tlen < (hdrsize + pad + 4)))
+		if (unlikely(tlen < (hdrsize + pad + extra_bytes)))
 			goto rewind;
 		/* Don't count the CRC. */
-		tlen -= (hdrsize + pad + 4);
+		tlen -= (hdrsize + pad + extra_bytes);
 		wc.byte_len = tlen + qp->r_rcv_len;
 		if (unlikely(wc.byte_len > qp->r_len))
 			goto rewind;
@@ -551,14 +610,12 @@ rdma_last_imm:
 		hdrsize += 4;
 		wc.wc_flags = IB_WC_WITH_IMM;
 
-		/* Get the number of bytes the message was padded by. */
-		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
-		if (unlikely(tlen < (hdrsize + pad + 4)))
+		if (unlikely(tlen < (hdrsize + pad + extra_bytes)))
 			goto drop;
 		/* Don't count the CRC. */
-		tlen -= (hdrsize + pad + 4);
+		tlen -= (hdrsize + pad + extra_bytes);
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
 		if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
@@ -578,14 +635,12 @@ rdma_last_imm:
 
 	case OP(RDMA_WRITE_LAST):
 rdma_last:
-		/* Get the number of bytes the message was padded by. */
-		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
-		if (unlikely(tlen < (hdrsize + pad + 4)))
+		if (unlikely(tlen < (hdrsize + pad + extra_bytes)))
 			goto drop;
 		/* Don't count the CRC. */
-		tlen -= (hdrsize + pad + 4);
+		tlen -= (hdrsize + pad + extra_bytes);
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
 		hfi2_copy_sge(&qp->r_sge, data, tlen, 1);

@@ -267,6 +267,7 @@ struct hfi2_swqe {
 	u8 lnh;
 	u8 sl;
 	bool use_sc15;
+	bool use_16b;
 	u32 pkt_errors;
 
 	struct hfi2_sge sg_list[0];
@@ -788,7 +789,9 @@ void hfi2_update_mmap_info(struct hfi2_ibdev *ibd,
 int hfi2_get_rwqe(struct hfi2_qp *qp, int wr_id_only);
 void hfi2_migrate_qp(struct hfi2_qp *qp);
 void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
-			  u32 bth0, u32 bth2, u16 *lrh0);
+			  u32 bth0, u32 bth2, u8 *lnh);
+void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
+			      u32 bth0, u32 bth2, u8 *lnh);
 void hfi2_do_send(struct work_struct *work);
 void hfi2_schedule_send(struct hfi2_qp *qp);
 void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,

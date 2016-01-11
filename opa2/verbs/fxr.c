@@ -357,7 +357,7 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	iov = wqe_iov->iov;
 	/* first entry is IB header */
 	iov[0].length = (wqe->s_hdrwords << 2);
-	iov[0].use_9b = 1;
+	iov[0].use_9b = !wqe->use_16b;
 	iov[0].sp = 1;
 	iov[0].v = 1;
 	/*
@@ -365,8 +365,8 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	 * and we'd like to maintain asyncronous send and send_complete
 	 * TODO - can be removed by refactoring where upper layer builds header
 	 */
-	memcpy(&wqe_iov->ib_hdr, &wqe->s_hdr->ibh, iov[0].length);
-	iov[0].start = (uint64_t)(&wqe_iov->ib_hdr);
+	memcpy(&wqe_iov->ph, &wqe->s_hdr->ph, iov[0].length);
+	iov[0].start = (uint64_t)(&wqe_iov->ph);
 
 	/* write IOVEC entries */
 	payload_bytes = 0;
@@ -391,7 +391,7 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		}
 
 		iov[i].length = iov_length;
-		iov[i].use_9b = 1;
+		iov[i].use_9b = !wqe->use_16b;
 		iov[i].ep = 0;
 		iov[i].sp = 0;
 		iov[i].v = 1;
@@ -454,7 +454,7 @@ _tx_cmd:
 				    (uint64_t)wqe_iov, PTL_MD_RESERVED_IOV,
 				    &ibp->send_eq, HFI_CT_NONE,
 				    ibp->port_num, wqe->sl, 0,
-				    HDR_EXT /* 9B */, dma_cmd);
+				    wqe->use_16b ? HDR_16B : HDR_EXT, dma_cmd);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 
 	if (ret == -EAGAIN) {
@@ -679,7 +679,7 @@ int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops)
 	 */
 	HFI_CTX_INIT(&ibd->ctx, ibd->dd, bus_ops);
 
-	ibd->ctx.mode |= HFI_CTX_MODE_BYPASS_9B;
+	ibd->ctx.mode |= HFI_CTX_MODE_BYPASS_9B | HFI_CTX_MODE_BYPASS_16B;
 	ibd->ctx.qpn_map_idx = 0; /* this context is for QPN 0 and 1 */
 	/* TODO - for now map all QPNs to this receive context */
 	ibd->ctx.qpn_map_count = OPA_QPN_MAP_MAX;

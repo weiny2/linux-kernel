@@ -261,7 +261,7 @@ static int make_rc_ack(struct hfi2_ibdev *dev, struct hfi2_qp *qp,
 	u32 len;
 	u32 bth0;
 	u32 bth2;
-	u16 lrh0;
+	u8 lnh;
 
 	/* Don't send an ACK if we aren't supposed to. */
 	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK))
@@ -393,7 +393,7 @@ normal:
 	qp->s_rdma_ack_cnt++;
 	qp->s_hdrwords = hwords;
 	qp->s_cur_size = len;
-	hfi2_make_ruc_header(qp, ohdr, bth0, bth2, &lrh0);
+	hfi2_make_ruc_header(qp, ohdr, bth0, bth2, &lnh);
 	/* TODO */
 	return 1;
 
@@ -427,15 +427,14 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 	u32 bth0 = 0;
 	u32 bth2;
 	u32 pmtu = qp->pmtu;
-	u16 lrh0;
 	char newreq;
 	unsigned long flags;
 	int ret = 0;
 	int delta;
 
-	ohdr = &qp->s_hdr->ibh.u.oth;
+	ohdr = &qp->s_hdr->ph.ibh.u.oth;
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = &qp->s_hdr->ibh.u.l.oth;
+		ohdr = &qp->s_hdr->ph.ibh.u.l.oth;
 
 	/*
 	 * The lock is needed to synchronize between the sending tasklet,
@@ -815,7 +814,7 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 		ohdr,
 		bth0 | (qp->s_state << 24),
 		bth2,
-		&lrh0);
+		&wqe->lnh);
 	/* TODO */
 done:
 	ret = 1;

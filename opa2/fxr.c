@@ -120,6 +120,11 @@ bool zebu;
 module_param_named(zebu, zebu, bool, S_IRUGO);
 MODULE_PARM_DESC(mnh_avail, "Set to true if running on ZEBU");
 
+/* FXRTODO: Remove this once dynamic format selection is enabled */
+static uint opa_16b;
+module_param(opa_16b, uint, S_IRUGO);
+MODULE_PARM_DESC(opa_16b, "Use OPA 16 packet headers (1 = 16B)");
+
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
 
@@ -1901,6 +1906,11 @@ int hfi_pport_init(struct hfi_devdata *dd)
 	return hfi2_pport_link_init(dd);
 }
 
+int is_16b_mode(void)
+{
+	return opa_16b;
+}
+
 /**
  * hfi_pci_dd_init - chip-specific initialization
  * @dev: the pci_dev for this HFI device
@@ -2074,6 +2084,10 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->unit = dd->bus_dev->index;
 	dd->bus_dev->kregbase = dd->kregbase;
 	dd->bus_dev->kregend = dd->kregend;
+
+	/* set via 'opa_16b' module param */
+	dd_dev_info(dd, "OPA Packet Header: %s\n",
+		    is_16b_mode() ? "16B" : "9B");
 
 	return dd;
 
@@ -2499,10 +2513,17 @@ void hfi_ctxt_set_bypass(struct hfi_ctx *ctx)
 	/* Get the 'Gen1 context' number from FXR PID */
 	rx_ctx = ctx->pid - HFI_PID_BYPASS_BASE;
 
+	/*
+	 * FXRTODO: Disable VNIC receive for now.
+	 * We need to have shared default bypass context b/w verbs and vnic.
+	 */
+	if (is_16b_mode() && (ctx->mode & HFI_CTX_MODE_BYPASS_10B))
+		return;
+
 	spin_lock(&dd->ptl_lock);
-	if (ctx->mode & HFI_CTX_MODE_BYPASS_10B) {
+	if (ctx->mode & (HFI_CTX_MODE_BYPASS_10B | HFI_CTX_MODE_BYPASS_16B)) {
 		/*
-		 * FXRTODO - Unconditionally claim bypass_pid for 10B STLEEP
+		 * FXRTODO - Unconditionally claim bypass_pid for 10B/16B
 		 * for now. Use RSM to distribute packets for other bypass
 		 * contexts eventually.
 		 */
