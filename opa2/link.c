@@ -1725,10 +1725,9 @@ static void handle_verify_cap(struct work_struct *work)
 	/* give 8051 access to the LCB CSRs */
 	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
 	set_8051_lcb_access(dd);
-
-	ppd->neighbor_guid =
-		read_csr(dd, DC_DC8051_STS_REMOTE_GUID);
 #endif
+	ppd->neighbor_guid =
+		read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_GUID);
 	ppd->neighbor_port_number =
 		read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_PORT_NO) &
 				CRK_CRK8051_STS_REMOTE_PORT_NO_VAL_SMASK;
@@ -1738,12 +1737,12 @@ static void handle_verify_cap(struct work_struct *work)
 	ppd->neighbor_fm_security =
 		read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_FM_SECURITY) &
 		CRK_CRK8051_STS_REMOTE_FM_SECURITY_DISABLED_SMASK;
-#if 0
+
 	ppd_dev_info(ppd,
 		"Neighbor Guid: %llx Neighbor type %d MgmtAllowed %d FM security bypass %d\n",
 		ppd->neighbor_guid, ppd->neighbor_type,
 		ppd->mgmt_allowed, ppd->neighbor_fm_security);
-#endif
+
 	if (ppd->mgmt_allowed)
 		hfi_add_full_mgmt_pkey(ppd);
 
