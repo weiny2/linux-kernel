@@ -34,9 +34,9 @@ static bool force_enable_dimms;
 module_param(force_enable_dimms, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(force_enable_dimms, "Ignore _STA (ACPI DIMM device) status");
 
-static bool ignore_ars;
-module_param(ignore_ars, bool, S_IRUGO|S_IWUSR);
-MODULE_PARM_DESC(ignore_ars, "Ignore ARS (Address Range Scrub) failures");
+static bool dont_ignore_ars;
+module_param(dont_ignore_ars, bool, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(dont_ignore_ars, "Fail initialization on ARS failures");
 
 struct nfit_table_prev {
 	struct list_head spas;
@@ -1790,9 +1790,7 @@ static int acpi_nfit_register_region(struct acpi_nfit_desc *acpi_desc,
 			dev_err(acpi_desc->dev,
 				"error while performing ARS to find poison: %d\n",
 				rc);
-			if (ignore_ars)
-				; /* continue initialization */
-			else
+			if (dont_ignore_ars)
 				return rc;
 		}
 		if (!nvdimm_pmem_region_create(nvdimm_bus, ndr_desc))
