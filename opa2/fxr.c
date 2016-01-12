@@ -80,6 +80,7 @@
 #include <rdma/fxr/fxr_lm_cm_csrs.h>
 #include <rdma/fxr/fxr_lm_fpc_csrs.h>
 #include <rdma/fxr/fxr_linkmux_tp_defs.h>
+#include <rdma/fxr/mnh_8051_defs.h>
 #include <rdma/fxr/fxr_linkmux_fpc_defs.h>
 #include <rdma/fxr/fxr_fc_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
@@ -287,6 +288,30 @@ static void hfi_init_tx_cid_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_TXCID_CFG_MAD_TO_TC, reg.val);
 }
 
+static void hfi_read_guid(struct hfi_devdata *dd)
+{
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, 1);
+	int port;
+	u64 base_guid;
+
+	/*
+	 * Read from one of the port's 8051 register, since node
+	 * guid is common between the two ports.
+	 */
+	base_guid = read_8051_csr(ppd, CRK_CRK8051_CFG_LOCAL_GUID);
+	dd->nguid =  cpu_to_be64(base_guid);
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		ppd = to_hfi_ppd(dd, port);
+		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
+		ppd_dev_info(ppd, "PORT GUID %llx",
+			     (unsigned long long)ppd->pguid);
+	}
+
+	dd_dev_info(dd, "NODE GUID %llx",
+		    (unsigned long long)be64_to_cpu(dd->nguid));
+}
+
 static void init_csrs(struct hfi_devdata *dd)
 {
 	RXHP_CFG_NPTL_CTL_t nptl_ctl = {.val = 0};
@@ -326,7 +351,6 @@ static void init_csrs(struct hfi_devdata *dd)
 	if (!strncmp(utsname()->nodename, "viper", 5)) {
 		const char *hostname = utsname()->nodename;
 		int node = 0, rc;
-		u64 nnguid;
 
 		/* Extract the node id from the host name */
 		hostname += 5;
@@ -339,24 +363,6 @@ static void init_csrs(struct hfi_devdata *dd)
 		}
 		dd_dev_info(dd, "viper%d port0 lid %d port1 lid %d\n",
 			    node, dd->pport[0].lid, dd->pport[1].lid);
-		/*
-		 * FXRTODO: read nodeguid from MNH Register
-		 * 8051_CFG_LOCAL_GUID. This register is
-		 * yet to be implemented in Simics. Temporarily
-		 * keeping node guid unique
-		 */
-		dd->nguid = cpu_to_be64(NODE_GUID + node);
-
-		/*
-		 * FXRTODO: Read this from DC_DC8051_STS_REMOTE_GUID
-		 * equivalent in MNH. The neighbor guid is set to a
-		 * random value for now.
-		 *
-		 * Move this code to 8051 INTR handler
-		 */
-		nnguid = cpu_to_be64(NODE_GUID + (node ? 0 : 1));
-		dd->pport[0].neighbor_guid = nnguid;
-		dd->pport[1].neighbor_guid = nnguid;
 	}
 	if (opafm_disable) {
 		lmp0.field.DLID = dd->pport[0].lid;
@@ -1785,7 +1791,6 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		ppd = to_hfi_ppd(dd, port);
 		ppd->dd = dd;
 		ppd->pnum = port;
-		ppd->pguid = cpu_to_be64(PORT_GUID(dd->nguid, port));
 		if (no_mnh) {
 			ppd->lstate = IB_PORT_INIT;
 			ppd->host_link_state = HLS_UP_INIT;
@@ -1994,6 +1999,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	ret = hfi_pport_init(dd);
 	if (ret)
 		goto err_post_alloc;
+
+	hfi_read_guid(dd);
 
 	dd->oui[0] = be64_to_cpu(dd->nguid) >> 56 & 0xFF;
 	dd->oui[1] = be64_to_cpu(dd->nguid) >> 48 & 0xFF;

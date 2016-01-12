@@ -152,9 +152,6 @@ enum {
 #define PORT_GUID(ng, pn)	(((be64_to_cpu(ng)) & PGUID_MASK) |\
 				 (((u64)pn) << 32))
 
-/* FXRTODO: Harcoded for now. Fix this once MNH reg is available */
-#define NODE_GUID		0x11750101000000UL
-
 #define pidx_to_pnum(id)	((id) + 1)
 #define pnum_to_pidx(pn)	((pn) - 1)
 
