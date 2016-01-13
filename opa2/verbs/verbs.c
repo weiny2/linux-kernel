@@ -512,7 +512,7 @@ static int hfi2_init_port(struct hfi2_ibdev *ibd,
 		goto ctx_init_err;
 
 	/* start RX processing, call this last after no errors */
-	hfi2_rcv_start(ibp);
+	hfi2_ctx_start_port(ibp);
 	return 0;
 
 ctx_init_err:

@@ -482,33 +482,35 @@ err:
 	return ret;
 }
 
-void *hfi2_rcv_get_ebuf(struct hfi2_ibport *ibp, u16 idx, u32 offset)
+void *hfi2_rcv_get_ebuf(struct hfi2_ibrcv *rcv, u16 idx, u32 offset)
 {
+	struct hfi2_ibport *ibp;
 	int ret;
 	unsigned long flags;
 
 	/* TODO - this needs to be optimized to limit PT_UPDATEs */
-	if (idx != ibp->rcv_egr_last_idx) {
+	if (idx != rcv->egr_last_idx) {
+		ibp = rcv->ibp;
 		dev_dbg(ibp->dev, "PT %d: EAGER_HEAD UPDATE %d -> %d\n",
-			ibp->port_num, ibp->rcv_egr_last_idx, idx);
+			ibp->port_num, rcv->egr_last_idx, idx);
 
 		/* Tell HW we are finished reading previous eager buffer */
 		spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
-		ret = hfi_pt_update_eager(ibp->ctx, &ibp->cmdq_rx, idx);
+		ret = hfi_pt_update_eager(rcv->ctx, &ibp->cmdq_rx, idx);
 		spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
 		/* TODO - handle error  */
 		BUG_ON(ret < 0);
-		ibp->rcv_egr_last_idx = idx;
+		rcv->egr_last_idx = idx;
 	}
 
-	return ibp->rcv_egr_base + (idx * OPA_IB_EAGER_SIZE) + offset;
+	return rcv->egr_base + (idx * OPA_IB_EAGER_SIZE) + offset;
 }
 
-int _hfi2_rcv_wait(struct hfi2_ibport *ibp, u64 **rhf_entry)
+int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry)
 {
 	int rc;
 
-	rc = hfi_eq_wait_irq(ibp->ctx, &ibp->rcv_eq, -1,
+	rc = hfi_eq_wait_irq(rcv->ctx, &rcv->eq, -1,
 			     rhf_entry);
 	if (rc == -EAGAIN || rc == -ERESTARTSYS) {
 		/* timeout or wait interrupted, not abnormal */
@@ -520,33 +522,35 @@ int _hfi2_rcv_wait(struct hfi2_ibport *ibp, u64 **rhf_entry)
 	return rc;
 }
 
-void hfi2_rcv_advance(struct hfi2_ibport *ibp, u64 *rhf_entry)
+void hfi2_rcv_advance(struct hfi2_ibrcv *rcv, u64 *rhf_entry)
 {
+	struct hfi2_ibport *ibp = rcv->ibp;
 	unsigned long flags;
 
 	spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
-	hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx, &ibp->rcv_eq, rhf_entry);
+	hfi_eq_advance(rcv->ctx, &ibp->cmdq_rx, &rcv->eq, rhf_entry);
 	spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
 }
 
-void hfi2_rcv_start(struct hfi2_ibport *ibp)
+static void hfi2_rcv_start(struct hfi2_ibrcv *rcv)
 {
 	/* RX events can be received after this thread becomes runable */
-	if (ibp->rcv_task)
-		wake_up_process(ibp->rcv_task);
+	if (rcv->task)
+		wake_up_process(rcv->task);
 }
 
-static void hfi2_rcv_stop(struct hfi2_ibport *ibp)
+static void hfi2_rcv_stop(struct hfi2_ibrcv *rcv)
 {
-	if (ibp->rcv_task) {
+	if (rcv->task) {
 		/* stop the RX thread, signal it to break out of wait_event */
-		send_sig(SIGINT, ibp->rcv_task, 1);
-		kthread_stop(ibp->rcv_task);
-		ibp->rcv_task = NULL;
+		send_sig(SIGINT, rcv->task, 1);
+		kthread_stop(rcv->task);
+		rcv->task = NULL;
 	}
 }
 
-int hfi2_rcv_init(struct hfi2_ibport *ibp)
+int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
+		  struct hfi2_ibrcv *rcv)
 {
 	struct task_struct *rcv_task;
 	struct hfi_pt_alloc_eager_args pt_alloc;
@@ -563,6 +567,8 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp)
 	 */
 	if (ibp->port_num != 0)
 		return 0;
+	rcv->ibp = ibp;
+	rcv->ctx = ctx;
 
 	total_eager_size = OPA_IB_EAGER_COUNT * OPA_IB_EAGER_SIZE;
 	/*
@@ -576,19 +582,19 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp)
 	eq_alloc.ni = HFI_NI_BYPASS;
 	eq_alloc.user_data = (unsigned long)ibp;
 	eq_alloc.count = rhq_count;
-	ret = _hfi_eq_alloc(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
-			    &eq_alloc, &ibp->rcv_eq);
+	ret = _hfi_eq_alloc(rcv->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
+			    &eq_alloc, &rcv->eq);
 	if (ret < 0)
 		goto kthread_err;
 
-	ibp->rcv_egr_last_idx = 0;
-	ibp->rcv_egr_base = vzalloc(total_eager_size);
-	if (!ibp->rcv_egr_base)
+	rcv->egr_last_idx = 0;
+	rcv->egr_base = vzalloc(total_eager_size);
+	if (!rcv->egr_base)
 		goto kthread_err;
 
-	pt_alloc.eq_handle = &ibp->rcv_eq;
+	pt_alloc.eq_handle = &rcv->eq;
 	pt_alloc.eager_order = OPA_IB_EAGER_COUNT_ORDER;
-	ret = hfi_pt_alloc_eager(ibp->ctx, &ibp->cmdq_rx, &pt_alloc);
+	ret = hfi_pt_alloc_eager(rcv->ctx, &ibp->cmdq_rx, &pt_alloc);
 	if (ret < 0)
 		goto kthread_err;
 
@@ -596,27 +602,30 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp)
 	for (i = 0; i < OPA_IB_EAGER_COUNT; i++) {
 		u64 *eq_entry = NULL, done;
 
-		n_slots = hfi_format_rx_bypass(ibp->ctx, HFI_NI_BYPASS,
-					       ibp->rcv_egr_base + (i*OPA_IB_EAGER_SIZE),
+		n_slots = hfi_format_rx_bypass(rcv->ctx, HFI_NI_BYPASS,
+					       rcv->egr_base +
+					       (i*OPA_IB_EAGER_SIZE),
 					       OPA_IB_EAGER_SIZE,
 					       HFI_PT_BYPASS_EAGER,
-					       ibp->ctx->ptl_uid,
-					       OPA_IB_EAGER_PT_FLAGS | PTL_OP_PUT,
+					       rcv->ctx->ptl_uid,
+					       OPA_IB_EAGER_PT_FLAGS |
+					       PTL_OP_PUT,
 					       HFI_CT_NONE,
 						/* minfree is max MTU */
 					       HFI_DEFAULT_MAX_MTU,
 					       (unsigned long)&done,
 					       i, &rx_cmd);
-		ret = hfi_rx_command(&ibp->cmdq_rx, (uint64_t *)&rx_cmd, n_slots);
+		ret = hfi_rx_command(&ibp->cmdq_rx, (uint64_t *)&rx_cmd,
+				     n_slots);
 		if (ret < 0)
 			goto kthread_err;
 
 		/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-		hfi_eq_wait_timed(ibp->ctx, &ibp->ctx->eq_zero[0],
+		hfi_eq_wait_timed(rcv->ctx, &rcv->ctx->eq_zero[0],
 				  HFI_EQ_WAIT_TIMEOUT_MS, &eq_entry);
 		if (eq_entry) {
-			hfi_eq_advance(ibp->ctx, &ibp->cmdq_rx,
-				       &ibp->ctx->eq_zero[0], eq_entry);
+			hfi_eq_advance(rcv->ctx, &ibp->cmdq_rx,
+				       &rcv->ctx->eq_zero[0], eq_entry);
 		} else {
 			ret = -EIO;
 			goto kthread_err;
@@ -624,73 +633,98 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp)
 	}
 
 	/* kthread create and wait for packets! */
-	rcv_task = kthread_create_on_node(hfi2_rcv_wait, ibp,
+	rcv_task = kthread_create_on_node(hfi2_rcv_wait, rcv,
 					  ibp->ibd->assigned_node_id,
 					  "opa2_hfi_rcv");
 	if (IS_ERR(rcv_task)) {
 		ret = PTR_ERR(rcv_task);
 		goto kthread_err;
 	}
-	ibp->rcv_task = rcv_task;
+	rcv->task = rcv_task;
 
 	return 0;
 
 kthread_err:
-	hfi2_rcv_uninit(ibp);
+	hfi2_rcv_uninit(rcv);
 	return ret;
 }
 
-void hfi2_rcv_uninit(struct hfi2_ibport *ibp)
+void hfi2_rcv_uninit(struct hfi2_ibrcv *rcv)
 {
+	struct hfi2_ibport *ibp = rcv->ibp;
 	int ret;
 	unsigned long flags;
 
-	if (ibp->port_num != 0)
+	if (!ibp)
 		return;
 
 	/* stop further RX processing */
-	hfi2_rcv_stop(ibp);
+	hfi2_rcv_stop(rcv);
 
 	/* disable PT so EQ buffer and RX buffers can be released */
 	spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
-	ret = hfi_pt_disable(ibp->ctx, &ibp->cmdq_rx, HFI_NI_BYPASS,
+	ret = hfi_pt_disable(rcv->ctx, &ibp->cmdq_rx, HFI_NI_BYPASS,
 			     HFI_PT_BYPASS_EAGER);
 	spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
 	/* TODO - handle error  */
 	BUG_ON(ret < 0);
 
-	if (ibp->rcv_eq.base)
-		_hfi_eq_release(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
-				&ibp->rcv_eq);
-	if (ibp->rcv_egr_base) {
-		vfree(ibp->rcv_egr_base);
-		ibp->rcv_egr_base = NULL;
+	if (rcv->eq.base)
+		_hfi_eq_release(rcv->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
+				&rcv->eq);
+	if (rcv->egr_base) {
+		vfree(rcv->egr_base);
+		rcv->egr_base = NULL;
 	}
+	rcv->ctx = NULL;
+	rcv->ibp = NULL;
+}
+
+void hfi2_ctx_start_port(struct hfi2_ibport *ibp)
+{
+	hfi2_rcv_start(&ibp->sm_rcv);
+	hfi2_rcv_start(&ibp->qp_rcv);
 }
 
 int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops)
 {
+	int ret;
 	struct opa_ctx_assign ctx_assign = {0};
 
+	/* Allocate the management context */
+	HFI_CTX_INIT(&ibd->sm_ctx, ibd->dd, bus_ops);
+	ibd->sm_ctx.mode |= HFI_CTX_MODE_BYPASS_9B;
+	ibd->sm_ctx.qpn_map_idx = 0; /* this context is for QPN 0 and 1 */
+	ibd->sm_ctx.qpn_map_count = 1;
+	ctx_assign.pid = HFI_PID_ANY;
+	ctx_assign.le_me_count = OPA_IB_EAGER_COUNT;
+	ret = hfi_ctxt_attach(&ibd->sm_ctx, &ctx_assign);
+	if (ret < 0)
+		goto out;
+
 	/*
-	 * Allocate the management context.
+	 * Allocate the general QP receive context.
 	 * TODO - later we will likely allocate a pool of general contexts
 	 * to choose based on QPN or SC.
 	 */
-	HFI_CTX_INIT(&ibd->ctx, ibd->dd, bus_ops);
-
-	ibd->ctx.mode |= HFI_CTX_MODE_BYPASS_9B | HFI_CTX_MODE_BYPASS_16B;
-	ibd->ctx.qpn_map_idx = 0; /* this context is for QPN 0 and 1 */
-	/* TODO - for now map all QPNs to this receive context */
-	ibd->ctx.qpn_map_count = OPA_QPN_MAP_MAX;
+	HFI_CTX_INIT(&ibd->qp_ctx, ibd->dd, bus_ops);
+	ibd->qp_ctx.mode |= HFI_CTX_MODE_BYPASS_9B | HFI_CTX_MODE_BYPASS_16B;
+	/* TODO - for now map all general QPNs to this receive context */
+	ibd->qp_ctx.qpn_map_idx = 1;
+	ibd->qp_ctx.qpn_map_count = OPA_QPN_MAP_MAX - 1;
 	ctx_assign.pid = HFI_PID_ANY;
 	ctx_assign.le_me_count = OPA_IB_EAGER_COUNT;
-	return hfi_ctxt_attach(&ibd->ctx, &ctx_assign);
+	ret = hfi_ctxt_attach(&ibd->qp_ctx, &ctx_assign);
+	if (ret < 0)
+		hfi_ctxt_cleanup(&ibd->sm_ctx);
+out:
+	return ret;
 }
 
 void hfi2_ctx_uninit(struct hfi2_ibdev *ibd)
 {
-	hfi_ctxt_cleanup(&ibd->ctx);
+	hfi_ctxt_cleanup(&ibd->qp_ctx);
+	hfi_ctxt_cleanup(&ibd->sm_ctx);
 }
 
 int hfi2_ctx_init_port(struct hfi2_ibport *ibp)
@@ -704,21 +738,24 @@ int hfi2_ctx_init_port(struct hfi2_ibport *ibp)
 	spin_lock_init(&ibp->cmdq_rx_lock);
 
 	/*
-	 * Obtain a pair of command queues for this port for
-	 * the management context.
+	 * Obtain a pair of command queues for this port.
 	 * TODO - later we will likely allocate a pool of general Contexts
 	 * and associated CMDQs.
+	 * For now, associate this with the management context.
 	 */
-	ret = hfi_cq_assign(&ibd->ctx, NULL, &cq_idx);
+	ret = hfi_cq_assign(&ibd->sm_ctx, NULL, &cq_idx);
 	if (ret)
 		goto err;
-	ret = hfi_cq_map(&ibd->ctx, cq_idx, &ibp->cmdq_tx, &ibp->cmdq_rx);
+	ret = hfi_cq_map(&ibd->sm_ctx, cq_idx, &ibp->cmdq_tx, &ibp->cmdq_rx);
 	if (ret) {
-		hfi_cq_release(&ibd->ctx, cq_idx);
+		hfi_cq_release(&ibd->sm_ctx, cq_idx);
 		goto err;
 	}
-	/* set Context pointer only after CMDQs allocated */
-	ibp->ctx = &(ibd->ctx);
+	/*
+	 * set Send Context pointer only after CMDQs allocated
+	 * Currently we use single CMDQ and send EQ, attached to this context.
+	 */
+	ibp->ctx = &ibd->sm_ctx;
 
 	/* Each port has send EQ for TX completions */
 	memset(&eq_alloc, 0, sizeof(eq_alloc));
@@ -734,7 +771,10 @@ int hfi2_ctx_init_port(struct hfi2_ibport *ibp)
 		goto ctx_init_err;
 
 	/* assign device specific RX resources */
-	ret = hfi2_rcv_init(ibp);
+	ret = hfi2_rcv_init(ibp, &ibd->sm_ctx, &ibp->sm_rcv);
+	if (ret)
+		goto ctx_init_err;
+	ret = hfi2_rcv_init(ibp, &ibd->qp_ctx, &ibp->qp_rcv);
 	if (ret)
 		goto ctx_init_err;
 
@@ -757,13 +797,14 @@ void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp)
 		_hfi_eq_release(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
 				&ibp->send_eq);
 
-	hfi2_rcv_uninit(ibp);
+	hfi2_rcv_uninit(&ibp->qp_rcv);
+	hfi2_rcv_uninit(&ibp->sm_rcv);
 	hfi_cq_unmap(&ibp->cmdq_tx, &ibp->cmdq_rx);
 	hfi_cq_release(ibp->ctx, cq_idx);
 	ibp->ctx = NULL;
 }
 
-int hfi2_ctx_assign_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp,
+int hfi2_ctx_assign_qp(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 			 bool is_user)
 {
 	/* FXRTODO: fix me */
@@ -775,11 +816,11 @@ int hfi2_ctx_assign_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp,
 	if (ret)
 		return ret;
 #endif
-	qp->s_ctx = &ibd->ctx;
+	qp->s_ctx = ibp->ctx;
 	return 0;
 }
 
-void hfi2_ctx_release_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp)
+void hfi2_ctx_release_qp(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 {
 	qp->s_ctx = NULL;
 	/* FXRTODO: fix me */

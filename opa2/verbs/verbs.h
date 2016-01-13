@@ -580,6 +580,15 @@ struct hfi2_mcast {
 	int n_attached;
 };
 
+struct hfi2_ibrcv {
+	struct hfi2_ibport *ibp;
+	struct hfi_ctx *ctx;
+	struct hfi_eq eq;
+	uint16_t egr_last_idx;
+	void *egr_base;
+	struct task_struct *task;
+};
+
 struct hfi2_ibport {
 	struct opa_core_device *odev;
 	struct hfi2_ibdev *ibd;
@@ -619,19 +628,18 @@ struct hfi2_ibport {
 	u8 subnet_timeout;
 	u8 vl_high_limit;
 
+	/* protect changes in this struct */
+	spinlock_t lock;
+	struct rb_root mcast_tree;
+
 	struct hfi_ctx *ctx;
 	struct hfi_cq cmdq_tx;
 	struct hfi_cq cmdq_rx;
 	spinlock_t cmdq_tx_lock;
 	spinlock_t cmdq_rx_lock;
-	/* protect changes in this struct */
-	spinlock_t lock;
-	struct rb_root mcast_tree;
 	struct hfi_eq send_eq;
-	struct hfi_eq rcv_eq;
-	uint16_t rcv_egr_last_idx;
-	void *rcv_egr_base;
-	struct task_struct *rcv_task;
+	struct hfi2_ibrcv sm_rcv;
+	struct hfi2_ibrcv qp_rcv;
 };
 
 struct hfi2_ibdev {
@@ -671,7 +679,8 @@ struct hfi2_ibdev {
 	/* per device cq worker */
 	struct kthread_worker *worker;
 
-	struct hfi_ctx ctx;
+	struct hfi_ctx sm_ctx;
+	struct hfi_ctx qp_ctx;
 };
 
 #define to_hfi_pd(pd)	container_of((pd), struct hfi2_pd, ibpd)
@@ -818,19 +827,20 @@ hfi2_mcast_find(struct hfi2_ibport *ibp, union ib_gid *mgid);
 /* Device specific */
 int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		  struct hfi2_swqe *wqe);
-void hfi2_rcv_start(struct hfi2_ibport *ibp);
-void *hfi2_rcv_get_ebuf(struct hfi2_ibport *ibp, u16 idx, u32 offset);
-void hfi2_rcv_advance(struct hfi2_ibport *ibp, u64 *rhf_entry);
-int _hfi2_rcv_wait(struct hfi2_ibport *ibp, u64 **rhf_entry);
-int hfi2_rcv_init(struct hfi2_ibport *ibp);
-void hfi2_rcv_uninit(struct hfi2_ibport *ibp);
+void *hfi2_rcv_get_ebuf(struct hfi2_ibrcv *rcv, u16 idx, u32 offset);
+void hfi2_rcv_advance(struct hfi2_ibrcv *rcv, u64 *rhf_entry);
+int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry);
+int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
+		  struct hfi2_ibrcv *rcv);
+void hfi2_rcv_uninit(struct hfi2_ibrcv *rcv);
 int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops);
 void hfi2_ctx_uninit(struct hfi2_ibdev *ibd);
 int hfi2_ctx_init_port(struct hfi2_ibport *ibp);
 void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp);
-int hfi2_ctx_assign_qp(struct hfi2_ibdev *ibd,
+void hfi2_ctx_start_port(struct hfi2_ibport *ibp);
+int hfi2_ctx_assign_qp(struct hfi2_ibport *ibp,
 		       struct hfi2_qp *qp, bool is_user);
-void hfi2_ctx_release_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp);
+void hfi2_ctx_release_qp(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
 int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops);
 void hfi2_ib_remove(struct hfi_devdata *dd);
 struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev);

@@ -152,7 +152,7 @@ static int insert_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp, bool is_user)
 		goto bail;
 
 	/* Associate QP with Send Context */
-	ret = hfi2_ctx_assign_qp(ibd, qp, is_user);
+	ret = hfi2_ctx_assign_qp(ibp, qp, is_user);
 	if (ret < 0)
 		goto bail_ctx;
 
@@ -175,13 +175,13 @@ static void remove_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp)
 	int removed = 1;
 	u32 qpn = qp->ibqp.qp_num;
 
+	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
+
 	/* Remove association with Send Context */
-	hfi2_ctx_release_qp(ibd, qp);
+	hfi2_ctx_release_qp(ibp, qp);
 
 	spin_lock_irqsave(&ibd->qpt_lock, flags);
 	if (qpn <= 1) {
-		ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
-
 		if (rcu_dereference_protected(ibp->qp[0],
 		    lockdep_is_held(&ibd->qpt_lock)) == qp)
 			RCU_INIT_POINTER(ibp->qp[0], NULL);
