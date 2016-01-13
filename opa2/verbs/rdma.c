@@ -537,8 +537,8 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 
 	/* Get the destination QP number. */
 	qp_num = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
-	dev_dbg(ibp->dev, "PT %d: IB packet for QPN %d\n",
-		ibp->port_num, qp_num);
+	dev_dbg(ibp->dev, "PT %d: IB packet for PID %d QPN %d\n",
+		ibp->port_num, packet->ctx->pid, qp_num);
 	if (rhf_sc4(packet->rhf))
 		packet->rcv_flags |= HFI1_SC4_BIT;
 
@@ -600,12 +600,15 @@ static void hfi2_cnp_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		ibp->n_pkt_drops++;
 }
 
-static void process_rcv_packet(struct hfi2_ibport *ibp, u64 *rhf_entry,
+static void process_rcv_packet(struct hfi2_ibport *ibp,
+			       struct hfi2_ibrcv *rcv,
+			       u64 *rhf_entry,
 			       struct hfi2_ib_packet *packet)
 {
 	u16 idx, off;
 	u64 rhf = *rhf_entry;
 
+	packet->ctx = rcv->ctx;
 	packet->rcv_flags = 0;
 	packet->rhf = rhf;
 	packet->hdr = rhf_get_hdr(packet, rhf_entry);
@@ -618,7 +621,7 @@ static void process_rcv_packet(struct hfi2_ibport *ibp, u64 *rhf_entry,
 	    packet->etype > RHF_RCV_TYPE_BYPASS)
 		packet->ebuf = NULL;
 	else
-		packet->ebuf = hfi2_rcv_get_ebuf(ibp, idx, off);
+		packet->ebuf = hfi2_rcv_get_ebuf(rcv, idx, off);
 
 	if (packet->etype == RHF_RCV_TYPE_BYPASS) {
 		packet->bypass_type = OPA_BYPASS_GET_L2_TYPE(packet->ebuf);
@@ -644,7 +647,8 @@ static void process_rcv_packet(struct hfi2_ibport *ibp, u64 *rhf_entry,
  */
 int hfi2_rcv_wait(void *data)
 {
-	struct hfi2_ibport *ibp = data;
+	struct hfi2_ibrcv *rcv = data;
+	struct hfi2_ibport *ibp = rcv->ibp;
 	struct hfi2_ib_packet pkt;
 	int rc;
 	u64 *rhf_entry;
@@ -653,7 +657,7 @@ int hfi2_rcv_wait(void *data)
 	allow_signal(SIGINT);
 	while (!kthread_should_stop()) {
 		rhf_entry = NULL;
-		rc = _hfi2_rcv_wait(ibp, &rhf_entry);
+		rc = _hfi2_rcv_wait(rcv, &rhf_entry);
 		if (rc < 0) {
 			dev_warn(ibp->dev, "RX EQ failure, %d\n", rc);
 			/* TODO - handle this */
@@ -662,7 +666,7 @@ int hfi2_rcv_wait(void *data)
 
 		if (rhf_entry) {
 			/* parse packet header and call hfi2_rcv() to handle */
-			process_rcv_packet(ibp, rhf_entry, &pkt);
+			process_rcv_packet(ibp, rcv, rhf_entry, &pkt);
 			if ((pkt.etype == RHF_RCV_TYPE_IB) ||
 			    ((pkt.etype == RHF_RCV_TYPE_BYPASS) &&
 			     (pkt.bypass_type == OPA_BYPASS_HDR_16B)))
@@ -673,7 +677,7 @@ int hfi2_rcv_wait(void *data)
 					 pkt.port, pkt.etype);
 
 			/* mark RHF entry as processed */
-			hfi2_rcv_advance(ibp, rhf_entry);
+			hfi2_rcv_advance(rcv, rhf_entry);
 		}
 	}
 
