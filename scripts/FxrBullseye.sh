@@ -5,6 +5,10 @@ set -x
 . scripts/bullseye_define.sh
 
 myname=$0
+PWD=`pwd`
+CURRENT_DIR=`basename ${PWD}`
+BULLSEYE_WORK=${HOME_DIR}/${CURRENT_DIR}
+COVFILE=${BULLSEYE_WORK}/cov.test
 
 test_type=quick
 if [ $# -gt 0 ]; then
@@ -41,13 +45,13 @@ popd
 git clean -xfd # remove garbage
 git submodule update
 pushd ..
-tar cf - --exclude=".*" fxr-driver | ${SSH_CMD} "cd ${HOME_DIR}; tar xf -" 2>/dev/null
+tar cf - --exclude=".*" ${CURRENT_DIR} | ${SSH_CMD} "cd ${HOME_DIR}; tar xf -" 2>/dev/null
 popd
 
 # build and install bullseye kernel module and driver
 ${SSH_CMD} "\
 	${BULLSEYE_DIR}/bin/cov01 -1; \
-	export COVFILE=${BULLSEYE_WORK}/cov.test; \
+	export COVFILE=${COVFILE}; \
 	cd ${BULLSEYE_DIR}/run/linuxKernel; \
 	make -C /lib/modules/\`uname -r\`/build M=\`pwd\`; \
 	insmod ${BULLSEYE_DIR}/run/linuxKernel/libcov-lkm.ko; \
@@ -55,7 +59,7 @@ ${SSH_CMD} "\
 		cat Module.symvers >>/lib/modules/\`uname -r\`/build/Module.symvers; \
 	export PATH=${BULLSEYE_DIR}/bin:${PATH}; \
 	cd ${BULLSEYE_WORK}; \
-	make -C /lib/modules/\`uname -r\`/build M=${BULLSEYE_WORK}; \
+	make -C /lib/modules/\`uname -r\`/build M=\`pwd\`; \
 	cp \`find . -name "*.ko"\` /lib/modules/\`uname -r\`/updates; \
 "
 
@@ -67,14 +71,14 @@ popd
 # wrap up bullseye
 ${SSH_CMD} "\
 	service --skip-redirect opafm stop; \
-	export COVFILE=${BULLSEYE_WORK}/cov.test; ${BULLSEYE_DIR}/bin/covgetkernel; \
+	export COVFILE=${COVFILE}; ${BULLSEYE_DIR}/bin/covgetkernel; \
 	service --skip-redirect opa2_hfi stop; \
 	rmmod libcov-lkm; \
 	${BULLSEYE_DIR}/bin/cov01 -0; \
 "
 
 # transfer to host
-${SSH_CMD} "cd ${HOME_DIR}; tar cf - fxr-driver" | (cd /tmp; tar xf -)
+${SSH_CMD} "cd ${HOME_DIR}; tar cf - ${CURRENT_DIR}" | (cd /tmp; tar xf -)
 ${SSH_CMD} "cat ${COVFILE}" >cov.test
 
 # to view code coverage result
