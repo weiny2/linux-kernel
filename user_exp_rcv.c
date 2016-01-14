@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2015 Intel Corporation.
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -18,7 +18,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2015 Intel Corporation.
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -300,7 +300,6 @@ int hfi1_user_exp_rcv_free(struct hfi1_filedata *fdata)
 		mmu_notifier_unregister(&fdata->mn, current->mm);
 
 	kfree(fdata->invalid_tids);
-	kfree(fdata->entry_to_rb);
 
 	if (!uctxt->cnt) {
 		if (!EXP_TID_SET_EMPTY(uctxt->tid_full_list))
@@ -329,6 +328,8 @@ int hfi1_user_exp_rcv_free(struct hfi1_filedata *fdata)
 		spin_unlock(&fdata->rb_lock);
 		hfi1_clear_tids(uctxt);
 	}
+
+	kfree(fdata->entry_to_rb);
 	return 0;
 }
 
