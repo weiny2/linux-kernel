@@ -16,9 +16,9 @@ if [ -d .git ]; then
 fi
 make rpm KVER=${KERNEL_BUILT_AGAINST} NAME=${RPM_PACKAGE_NAME} VERSION=${VERSION} RELEASE=${RELEASE}
 res=$?
-if [ ! ${res} ]; then
-    echo fail on building driver
-    exit 1
+if [ ${res} -ne 0 ]; then
+    echo fail on building driver: ${res}
+    exit ${res}
 fi
 
 cd opa-headers.git
@@ -27,9 +27,9 @@ rm -f *.x86_64.rpm
 git fetch # acquire newly created tag
 ./build_rpm.sh
 res=$?
-if [ ! ${res} ]; then
-    echo fail on building rpm
-    exit 2
+if [ ${res} -ne 0 ]; then
+    echo fail on building rpm: ${res}
+    exit ${res}
 fi
 
 exit 0
