@@ -3,6 +3,10 @@ set -x
 
 . scripts/GlobalDefinition.sh
 
+function cleanup_lock {
+	rm -f ${LOCK_FILE}
+}
+
 if [ ${ByJenkins} == yes ] ; then
 	umask 022
 	# Only one Simics instance is allowed because no way to access individual
@@ -21,6 +25,7 @@ if [ ${ByJenkins} == yes ] ; then
 		fi
 		sleep 1
 	done
+	trap cleanup_lock INT TERM
 	touch ${LOCK_FILE}
 
     # make sure no simics process running

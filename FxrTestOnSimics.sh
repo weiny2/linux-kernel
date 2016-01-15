@@ -3,59 +3,14 @@ set -x
 
 myname=`basename $0 .sh`
 
-fxr=/mnt/fabric/fxr
-viper0=4022
-viper1=5022
-export LD_LIBRARY_PATH=${fxr}/simics/SynopsisInstructionSetSimulator/lib
-export SNPSLMD_LICENSE_FILE="26586@synopsys03p.elic.intel.com"
-export LM_PROJECT=”FDO”
-LOCK_DIR=/run/lock
-LOCK_FILE=${LOCK_DIR}/${myname}.lock
-LOCK_TIMEOUT=900 # 900 = 60 * 15 = 15min
+. scripts/GlobalDefinition.sh
 
 # Am I invoked by Jenkins?
 ByJenkins=no
 [ `id -un` == root ] && pwd | grep --quiet jenkins && ByJenkins=yes
 
-if [ ${ByJenkins} == yes ] ; then
-	umask 022
-	# Only one Simics instance is allowed because no way to access individual
-	# Simics. Remember, ports are 4022 and 5022.
-	#
-	# There is a gap between done and touch. So that this is not a perfect
-	# mutual exclusion, but practically works.
-	#
-	# Wait until Simics dies
-	declare -i iterate=0
-	while [ -e ${LOCK_FILE} ]; do
-		iterate=$((iterate + 1))
-		if [ ${iterate} -gt ${LOCK_TIMEOUT} ]; then
-			echo Simics is running: ${LOCK_TIMEOUT}
-			exit 15
-		fi
-		sleep 1
-	done
-	touch ${LOCK_FILE}
-
-    # make sure no simics process running
-    killall simics-common
-
-    # start simics
-    pushd ${fxr}/simics/workspace
-    ./simics -no-win -e '$disk_image=../FxrRhel7.craff' \
-	FXR.simics >../simics.log &
-    popd
-    sleep 120
-else # manual invocation
-    # start simics if not yet
-    if [ -z `pidof simics-common` ]; then
-	pushd ${fxr}/simics/workspace
-	./simics -no-win -e '$disk_image=../FxrRhel7.craff' \
-	    FXR.simics >../simics.log &
-	popd
-	sleep 120
-    fi
-fi
+. scripts/StartSimics.sh
+. scripts/WaitSimics.sh
 
 # show which version/commit of Simics, craff file and others I am using
 pwd; git log -n1 | head -1
@@ -119,7 +74,7 @@ if [ ${ByJenkins} == yes ] ; then
 	echo simics console logs
 	cat ${fxr}/simics/workspace/KnightsHill0.log
 
-	rm -f ${LOCK_FILE}
+	cleanup_lock
 fi
 
 exit $res
