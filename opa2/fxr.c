@@ -2200,9 +2200,10 @@ void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid)
 	/* write PCB in FXR */
 	pcb_low.field.valid = 1;
 	pcb_low.field.portals_state_base = psb_addr >> PAGE_SHIFT;
-	pcb_high.field.triggered_op_size = (ctx->trig_op_size >> PAGE_SHIFT);
-	pcb_high.field.unexpected_size = (ctx->unexpected_size >> PAGE_SHIFT);
-	pcb_high.field.le_me_size = (ctx->le_me_size >> PAGE_SHIFT);
+	/* written as number of pages - 1, caller allocates at least one page */
+	pcb_high.field.triggered_op_size = (ctx->trig_op_size >> PAGE_SHIFT) - 1;
+	pcb_high.field.unexpected_size = (ctx->unexpected_size >> PAGE_SHIFT) - 1;
+	pcb_high.field.le_me_size = (ctx->le_me_size >> PAGE_SHIFT) - 1;
 
 	write_csr(dd, FXR_RX_HIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
 	write_csr(dd, FXR_RX_HIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
