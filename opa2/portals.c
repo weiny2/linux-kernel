@@ -1062,10 +1062,16 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	if (ctx_assign->unexpected_count > HFI_UNEXP_MAX_COUNT)
 		ctx_assign->unexpected_count = HFI_UNEXP_MAX_COUNT;
 
-	/* compute total Portals State Base size */
-	trig_op_size = PAGE_ALIGN(ctx_assign->trig_op_count * HFI_TRIG_OP_SIZE);
-	le_me_size = PAGE_ALIGN(ctx_assign->le_me_count * HFI_LE_ME_SIZE);
-	unexp_size = PAGE_ALIGN(ctx_assign->unexpected_count * HFI_UNEXP_SIZE);
+	/* compute total Portals State size, HW requires minimum of one page */
+	trig_op_size = ctx_assign->trig_op_count ?
+		       PAGE_ALIGN(ctx_assign->trig_op_count * HFI_TRIG_OP_SIZE) :
+		       PAGE_SIZE;
+	le_me_size = ctx_assign->le_me_count ?
+		     PAGE_ALIGN(ctx_assign->le_me_count * HFI_LE_ME_SIZE) :
+		     PAGE_SIZE;
+	unexp_size = ctx_assign->unexpected_count ?
+		     PAGE_ALIGN(ctx_assign->unexpected_count * HFI_UNEXP_SIZE) :
+		     PAGE_SIZE;
 	le_me_off = HFI_PSB_FIXED_TOTAL_MEM + trig_op_size;
 	psb_size = le_me_off + le_me_size + unexp_size;
 
