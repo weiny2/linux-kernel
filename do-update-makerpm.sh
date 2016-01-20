@@ -177,7 +177,7 @@ cp ${sources_to_copy} $tardir
 popd
 echo "Building tar file"
 (cd $tardir; tar cfz - --transform="s,^,${rpmname}-${rpmversion}/," *) > \
-	rpmbuild/SOURCES/$rpmname-$rpmversion-$rpmrelease.tgz
+	rpmbuild/SOURCES/$rpmname-$rpmversion.tgz
 cd $workdir
 
 # create the spec file
@@ -189,7 +189,7 @@ Summary:        Extra kernel modules for IFS
 Version:        $rpmversion
 Release:        $rpmrelease
 License:        GPL v2
-Source:         %{name}-%{version}-%{release}.tgz
+Source:         %{name}-%{version}.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root
 Requires:	kernel = $rpmrequires
 Provides:	$rpmname-$DEFAULT_KERNEL_VERSION
