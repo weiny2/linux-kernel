@@ -833,6 +833,7 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		wc.ex.imm_data = ohdr->u.ud.imm_data;
 		wc.wc_flags = IB_WC_WITH_IMM;
 		tlen -= sizeof(u32);
+		data += (is_16b ? sizeof(u32) : 0);
 	} else if (opcode == IB_OPCODE_UD_SEND_ONLY) {
 		wc.ex.imm_data = 0;
 		wc.wc_flags = 0;
