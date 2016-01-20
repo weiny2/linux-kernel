@@ -1141,6 +1141,25 @@ void fabric_serdes_reset(struct hfi1_devdata *dd)
 	if (!fw_fabric_serdes_load)
 		return;
 
+	if (is_ax(dd)) {
+		/* A0 serdes do not work with a re-download */
+		u8 ra = fabric_serdes_broadcast[dd->hfi1_id];
+
+		acquire_hw_mutex(dd);
+		set_sbus_fast_mode(dd);
+		/* place SerDes in reset and disable SPICO */
+		sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000011);
+		/* wait 100 refclk cycles @ 156.25MHz => 640ns */
+		udelay(1);
+		/* remove SerDes reset */
+		sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000010);
+		/* turn SPICO enable on */
+		sbus_request(dd, ra, 0x07, WRITE_SBUS_RECEIVER, 0x00000002);
+		clear_sbus_fast_mode(dd);
+		release_hw_mutex(dd);
+		return;
+	}
+
 	acquire_hw_mutex(dd);
 	set_sbus_fast_mode(dd);
 
