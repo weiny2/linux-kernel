@@ -374,6 +374,7 @@ static void ruc_loopback(struct hfi1_qp *sqp)
 	int release;
 	int ret;
 	unsigned long to;
+	int copy_last = 0;
 
 	rcu_read_lock();
 
@@ -463,10 +464,13 @@ again:
 			goto op_err;
 		if (!ret)
 			goto rnr_nak;
-		/* FALLTHROUGH */
+		/* skip copy_last set and qp_access_flags recheck */
+		goto do_write;
 	case IB_WR_RDMA_WRITE:
+		copy_last = to_ipd(qp->ibqp.pd)->user;
 		if (unlikely(!(qp->qp_access_flags & IB_ACCESS_REMOTE_WRITE)))
 			goto inv_err;
+do_write:
 		if (wqe->length == 0)
 			break;
 		if (unlikely(!hfi1_rkey_ok(qp, &qp->r_sge.sge, wqe->length,
@@ -531,7 +535,7 @@ again:
 		if (len > sge->sge_length)
 			len = sge->sge_length;
 		WARN_ON_ONCE(len == 0);
-		hfi1_copy_sge(&qp->r_sge, sge->vaddr, len, release);
+		hfi1_copy_sge(&qp->r_sge, sge->vaddr, len, release, copy_last);
 		sge->vaddr += len;
 		sge->length -= len;
 		sge->sge_length -= len;
