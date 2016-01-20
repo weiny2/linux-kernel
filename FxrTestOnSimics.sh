@@ -58,6 +58,11 @@ res=$?
 if [ ! ${res} ]; then
     echo fail on harness.
 fi
+./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad
+res=$?
+if [ ! ${res} ]; then
+    echo fail on ModuleReload of harness.
+fi
 
 if [ ${ByJenkins} == yes ] ; then
 	for viper in ${viper0} ${viper1}; do
