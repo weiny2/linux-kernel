@@ -50,8 +50,10 @@ popd
 
 # build and install bullseye kernel module and driver
 ${SSH_CMD} "\
-	${BULLSEYE_DIR}/bin/cov01 -1; \
 	export COVFILE=${COVFILE}; \
+	${BULLSEYE_DIR}/bin/cov01 -1; \
+	${BULLSEYE_DIR}/bin/covselect --deleteAll; \
+	${BULLSEYE_DIR}/bin/covselect --add ./; \
 	cd ${BULLSEYE_DIR}/run/linuxKernel; \
 	make -C /lib/modules/\`uname -r\`/build M=\`pwd\`; \
 	insmod ${BULLSEYE_DIR}/run/linuxKernel/libcov-lkm.ko; \
