@@ -3,6 +3,11 @@ set -x
 
 myname=`basename $0 .sh`
 
+test_type=default
+if [ $# -gt 0 ]; then
+	test_type=$1
+fi
+
 . scripts/GlobalDefinition.sh
 
 # Am I invoked by Jenkins?
@@ -53,7 +58,7 @@ done
 
 # run default tests
 cd opa-headers.git/test
-./harness.py --nodelist=viper0,viper1 --type=default
+./harness.py --nodelist=viper0,viper1 --type=${test_type}
 res=$?
 if [ ! ${res} ]; then
     echo fail on harness.
