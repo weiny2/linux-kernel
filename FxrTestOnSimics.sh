@@ -2,13 +2,51 @@
 set -x
 
 myname=`basename $0 .sh`
-
+tmp_dir=/tmp
 test_type=default
-if [ $# -gt 0 ]; then
-	test_type=$1
-fi
 
 . scripts/GlobalDefinition.sh
+
+while getopts "ilhd:t:" opt
+do
+	case $opt in
+	i)
+		only_install=true
+		;;
+	l)
+		only_load_driver=true
+		;;
+	d)
+		if !(ssh -p${viper0} root@localhost "[ -d ${OPTARG} ]"); then
+			echo "Directory $OPTARG does not exist"
+			exit 1;
+		fi
+		tmp_dir=$OPTARG
+		;;
+	t)
+		test_type=$OPTARG
+		;;
+	h)
+		set +x
+		echo "Usage: `basename $0` [-i] [-l] [-d <path to temp directory>] [-t <test_type argument>"
+		echo "By Default this script installs the necessary driver"
+		echo "and runs the harness test suite(default) "
+		echo "   -i     Only installs the appropriate drivers"
+		echo "          built in ~/rpmbuild"
+		echo "   -l     Installs and only runs ModuleLoad test"
+		echo "          (When -l option is used -i is ignored)"
+		echo "   -d     Specify path to temporary directory in viperx host"
+		echo "          to copy and extract drivers"
+		echo "   -t     test_type argument sent to harness.py"
+		exit 0
+		;;
+	\?)
+		echo "Invalid option: -$OPTARG"
+		exit 1
+		;;
+	esac
+done
+shift $(($OPTIND - 1))
 
 # Am I invoked by Jenkins?
 ByJenkins=no
@@ -38,23 +76,33 @@ for viper in ${viper0} ${viper1}; do
 	exit 12
     fi
     # update the driver
-    ${ssh_cmd} "rm -f /tmp/opa*.x86_64.rpm"
+    ${ssh_cmd} "rm -f ${tmp_dir}/opa*.x86_64.rpm"
     ${scp_cmd} \
 	~/rpmbuild/RPMS/x86_64/opa2_hfi-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm \
 	opa-headers.git/opa-headers-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm \
-	root@localhost:/tmp
+	root@localhost:${tmp_dir}
     if [ ! $? ]; then
 	echo fail on copying rpm files.
 	exit 13
     fi
     ${ssh_cmd} "rpm -e opa2_hfi" 2>/dev/null
     ${ssh_cmd} "rpm -e opa-headers" 2>/dev/null
-    ${ssh_cmd} "rpm -i /tmp/opa*.x86_64.rpm"
+    ${ssh_cmd} "rpm -i ${tmp_dir}/opa*.x86_64.rpm"
     if [ ! $? ]; then
 	echo fail on the installation of rpm files.
 	exit 14
     fi
 done
+
+if [ $only_install ] && ! [ $only_load_driver ]; then
+	exit 0
+fi
+
+if [ $only_load_driver ]; then
+	cd opa-headers.git/test
+	./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad
+	exit 0
+fi
 
 # run default tests
 cd opa-headers.git/test
