@@ -1,6 +1,9 @@
-fxr=/mnt/fabric/fxr
+KERNEL_VERSION=4.3.0+
+
+# for Simics
 viper0=4022
 viper1=5022
+fxr=/mnt/fabric/fxr
 export LD_LIBRARY_PATH=${fxr}/simics/SynopsisInstructionSetSimulator/lib
 export SNPSLMD_LICENSE_FILE="26586@synopsys03p.elic.intel.com"
 export LM_PROJECT=”FDO”
