@@ -106,17 +106,18 @@ fi
 
 # run default tests
 cd opa-headers.git/test
-./harness.py --nodelist=viper0,viper1 --type=${test_type}
+./harness.py --nodelist=viper0,viper1 --type=${test_type} | tee /tmp/${myname}.$$
 res=$?
 if [ ! ${res} ]; then
     echo fail on harness.
 fi
-./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad
+./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad | tee -a /tmp/${myname}.$$
 res=$?
 if [ ! ${res} ]; then
     echo fail on ModuleReload of harness.
 fi
 
+set +x
 if [ ${ByJenkins} == yes ] ; then
 	for viper in ${viper0} ${viper1}; do
 		ssh_cmd="ssh -p${viper} root@localhost"
@@ -131,8 +132,11 @@ if [ ${ByJenkins} == yes ] ; then
 	# display simics console logs
 	echo simics console logs
 	cat ${fxr}/simics/workspace/KnightsHill0.log
+	echo "----- Failed harness test(s) -----"
+	grep "^\[FAIL\]" /tmp/${myname}.$$ || echo None.
 
 	cleanup_lock
 fi
+rm -f /tmp/${myname}.$$
 
 exit $res
