@@ -175,7 +175,8 @@ struct hfi_ctx {
 #define HFI_CTX_MODE_BYPASS_9B    0x100
 #define HFI_CTX_MODE_BYPASS_10B   0x200
 #define HFI_CTX_MODE_BYPASS_16B   0x400
-#define HFI_CTX_MODE_BYPASS_MASK  0x700
+#define HFI_CTX_MODE_BYPASS_RSM   0x800
+#define HFI_CTX_MODE_BYPASS_MASK  0xF00
 
 #define HFI_CTX_INIT(ctx, dd, bus_ops)		\
 	do {					\
