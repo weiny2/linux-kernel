@@ -10,7 +10,7 @@ CURRENT_DIR=`basename ${PWD}`
 BULLSEYE_WORK=${HOME_DIR}/${CURRENT_DIR}
 COVFILE=${BULLSEYE_WORK}/cov.test
 
-test_type=quick
+test_type=default
 if [ $# -gt 0 ]; then
 	test_type=$1
 fi
