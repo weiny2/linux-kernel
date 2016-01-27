@@ -50,6 +50,8 @@ popd
 
 # build and install bullseye kernel module and driver
 ${SSH_CMD} "\
+	sed -i -e'/^export COVFILE=/d' /root/.bashrc; \
+	echo export COVFILE=${COVFILE} >>/root/.bashrc
 	export COVFILE=${COVFILE}; \
 	${BULLSEYE_DIR}/bin/cov01 -1; \
 	${BULLSEYE_DIR}/bin/covselect --deleteAll; \
@@ -59,12 +61,16 @@ ${SSH_CMD} "\
 	insmod ${BULLSEYE_DIR}/run/linuxKernel/libcov-lkm.ko; \
 	grep -q cov_ /lib/modules/\`uname -r\`/build/Module.symvers || \
 		cat Module.symvers >>/lib/modules/\`uname -r\`/build/Module.symvers; \
+	cd ${BULLSEYE_WORK}/opa-headers.git; \
+	./autogen.sh; \
+	./configure; \
 	export PATH=${BULLSEYE_DIR}/bin:${PATH}; \
 	cd ${BULLSEYE_WORK}; \
 	make -C /lib/modules/\`uname -r\`/build M=\`pwd\`; \
 	cp \`find . -name "*.ko"\` /lib/modules/\`uname -r\`/updates; \
+	make -C opa-headers.git; \
+	make -C opa-headers.git install; \
 "
-
 # run harness
 pushd opa-headers.git/test
 ./harness.py --nodelist=viper0,viper1 --type=${test_type}
