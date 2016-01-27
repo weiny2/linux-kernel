@@ -648,6 +648,7 @@ struct hfi2_ibdev {
 	__be64 node_guid;
 	u8 num_pports;
 	u8 oui[3];
+	u8 rsm_mask;
 	int assigned_node_id;
 	struct hfi2_ibport *pport;
 

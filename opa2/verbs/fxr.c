@@ -699,6 +699,8 @@ int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops)
 {
 	int ret;
 	struct opa_ctx_assign ctx_assign = {0};
+	struct hfi_rsm_rule rule = {0};
+	struct hfi_ctx *rsm_ctx[1];
 
 	/* Allocate the management context */
 	HFI_CTX_INIT(&ibd->sm_ctx, ibd->dd, bus_ops);
@@ -709,7 +711,7 @@ int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops)
 	ctx_assign.le_me_count = OPA_IB_EAGER_COUNT;
 	ret = hfi_ctxt_attach(&ibd->sm_ctx, &ctx_assign);
 	if (ret < 0)
-		goto out;
+		goto err;
 
 	/*
 	 * Allocate the general QP receive context.
@@ -717,7 +719,7 @@ int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops)
 	 * to choose based on QPN or SC.
 	 */
 	HFI_CTX_INIT(&ibd->qp_ctx, ibd->dd, bus_ops);
-	ibd->qp_ctx.mode |= HFI_CTX_MODE_BYPASS_9B | HFI_CTX_MODE_BYPASS_16B;
+	ibd->qp_ctx.mode |= HFI_CTX_MODE_BYPASS_9B | HFI_CTX_MODE_BYPASS_RSM;
 	/* TODO - for now map all general QPNs to this receive context */
 	ibd->qp_ctx.qpn_map_idx = 1;
 	ibd->qp_ctx.qpn_map_count = OPA_QPN_MAP_MAX - 1;
@@ -725,13 +727,48 @@ int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops)
 	ctx_assign.le_me_count = OPA_IB_EAGER_COUNT;
 	ret = hfi_ctxt_attach(&ibd->qp_ctx, &ctx_assign);
 	if (ret < 0)
-		hfi_ctxt_cleanup(&ibd->sm_ctx);
-out:
+		goto err_qp_ctx;
+
+	if (is_16b_mode()) {
+		/* set RSM rule for 16B Verbs receive using L2 and L4 */
+		rule.idx = 0;
+		rule.pkt_type = 0x4; /* bypass */
+		/* match L2 == 16B (0x2)*/
+		rule.match_offset[0] = 61;
+		rule.match_mask[0] = OPA_BYPASS_L2_MASK;
+		rule.match_value[0] = OPA_BYPASS_HDR_16B;
+		/* match IB L4s: 0x8 0x9 0xA */
+		rule.match_offset[1] = 64;
+		rule.match_mask[1] = 0xFC;
+		rule.match_value[1] = 0x8;
+		/* disable selection, result is always RSM_MAP index of 0 */
+		rule.select_width[0] = 0;
+		rule.select_width[1] = 0;
+		rsm_ctx[0] = &ibd->qp_ctx;
+		ret = hfi_rsm_set_rule(ibd->dd, &rule, rsm_ctx, 1);
+		if (ret < 0)
+			goto err_rsm;
+		ibd->rsm_mask |= (1 << rule.idx);
+	}
+
+	return 0;
+
+err_rsm:
+	hfi_ctxt_cleanup(&ibd->qp_ctx);
+err_qp_ctx:
+	hfi_ctxt_cleanup(&ibd->sm_ctx);
+err:
 	return ret;
 }
 
 void hfi2_ctx_uninit(struct hfi2_ibdev *ibd)
 {
+	int i;
+
+	for (i = 0; i < HFI_NUM_RSM_RULES; i++)
+		if (ibd->rsm_mask & (1 << i))
+			hfi_rsm_clear_rule(ibd->dd, i);
+	ibd->rsm_mask = 0;
 	hfi_ctxt_cleanup(&ibd->qp_ctx);
 	hfi_ctxt_cleanup(&ibd->sm_ctx);
 }

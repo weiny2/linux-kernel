@@ -2570,8 +2570,14 @@ int hfi_rsm_set_rule(struct hfi_devdata *dd, struct hfi_rsm_rule *rule,
 	if (rule->select_width[1] > 8)
 		return -EINVAL;
 	map_size = 1 << max_t(u8, rule->select_width[0], rule->select_width[1]);
+	/* specified number of contexts must match RSM_MAP entries */
 	if (map_size != num_contexts)
 		return -EINVAL;
+	/* verify contexts were correctly setup for bypass mode */
+	for (i = 0; i < map_size; i++)
+		if (rx_ctx[i]->pid < HFI_PID_BYPASS_BASE ||
+		    !(rx_ctx[i]->mode & HFI_CTX_MODE_BYPASS_MASK))
+			return -EINVAL;
 
 	spin_lock(&dd->ptl_lock);
 	/* RSM rule is in use if already has RSM_MAP entries */
@@ -2634,13 +2640,6 @@ void hfi_ctxt_set_bypass(struct hfi_ctx *ctx)
 
 	/* Get the 'Gen1 context' number from FXR PID */
 	rx_ctx = ctx->pid - HFI_PID_BYPASS_BASE;
-
-	/*
-	 * FXRTODO: Disable VNIC receive for now.
-	 * We need to have shared default bypass context b/w verbs and vnic.
-	 */
-	if (is_16b_mode() && (ctx->mode & HFI_CTX_MODE_BYPASS_10B))
-		return;
 
 	spin_lock(&dd->ptl_lock);
 	if (ctx->mode & (HFI_CTX_MODE_BYPASS_10B | HFI_CTX_MODE_BYPASS_16B)) {
