@@ -530,9 +530,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->buffer_units = cpu_to_be32(buffer_units);
 
 	pi->opa_cap_mask = cpu_to_be16(OPA_CAP_MASK3_IsSharedSpaceSupported);
-	/* FXRTODO: Enable this as part of STL-4298 */
-#if 0
 	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsVLrSupported);
+#if 0
 
 	/* FXRTODO: replay depth buffer for FXR */
 	/* HFI supports a replay buffer 128 LTPs in size */
@@ -1691,19 +1690,15 @@ static int __subn_set_opa_sc_to_vlr(struct opa_smp *smp, u32 am, u8 *data,
 	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 	u32 n_blocks = OPA_AM_NBLK(am);
-	int async_update = OPA_AM_ASYNC(am);
 	u8 *p = (void *)data;
 	int i, lstate, map_changed = 0;
 	int sc_len = ARRAY_SIZE(ppd->sc_to_vlr);
 
-	if (n_blocks != 1 || async_update)
+	if (n_blocks != 1)
 		goto err;
 
 	lstate = hfi_driver_lstate(ppd);
 
-	if (!async_update &&
-	    (lstate == IB_PORT_ARMED || lstate == IB_PORT_ACTIVE))
-		goto err;
 
 	for (i = 0; i < sc_len; i++) {
 		if (p[i] >= OPA_MAX_VLS)
