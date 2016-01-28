@@ -13,7 +13,7 @@ if [ ! -e test/tests/checkkconfigsymbols.py ] ; then
 fi
 
 # Run test
-./test/tests/checkkconfigsymbols.py  -i '(test|scripts)' | tee ./test/tests/checkkconfigsymbols.log
+./test/tests/checkkconfigsymbols.py  -i '(test|scripts|configs)' | tee ./test/tests/checkkconfigsymbols.log
 
 # Process results
 popd 1> /dev/null
