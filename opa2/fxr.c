@@ -1448,13 +1448,6 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 		break;
 	case HFI_IB_CFG_SC_TO_VLNT:
 		hfi_set_sc_to_vlnt(ppd, data);
-		/*
-		 * FXRTODO: Use SC2VLNT to update SC2VLR since the FM is not
-		 * sending across the attribute for SC2VLR yet. The local VLT
-		 * should match the remote VLR. The local VLNT matches the
-		 * remote VLT. So the local VLR should match the local VLNT.
-		 */
-		hfi_set_sc_to_vlr(ppd, data);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
