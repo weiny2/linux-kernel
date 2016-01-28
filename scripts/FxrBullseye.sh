@@ -8,12 +8,12 @@ myname=$0
 PWD=`pwd`
 CURRENT_DIR=`basename ${PWD}`
 BULLSEYE_WORK=${HOME_DIR}/${CURRENT_DIR}
-COVFILE=${BULLSEYE_WORK}/cov.test
 
 test_type=default
 if [ $# -gt 0 ]; then
 	test_type=$1
 fi
+COVFILE=${BULLSEYE_WORK}/cov.${test_type}
 
 # Am I invoked by Jenkins?
 export ByJenkins=no
@@ -87,10 +87,10 @@ ${SSH_CMD} "\
 
 # transfer to host
 ${SSH_CMD} "cd ${HOME_DIR}; tar cf - ${CURRENT_DIR}" | (cd /tmp; tar xf -)
-${SSH_CMD} "cat ${COVFILE}" >cov.test
+${SSH_CMD} "cat ${COVFILE}" >cov.${test_type}
 
 # to view code coverage result
-# export COVFILE=`pwd`/cov.test
+# export COVFILE=`pwd`/cov.${test_type}
 # ${BULLSEYE_DIR}/bin/CoverageBrowser
 
 # epilogue
