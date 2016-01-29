@@ -65,6 +65,7 @@ ${SSH_CMD} "\
 	cd ${BULLSEYE_WORK}/opa-headers.git; \
 	./autogen.sh; \
 	./configure; \
+	echo '--symbolic' >${BULLSEYE_DIR}/bin/covc.cfg
 	export PATH=${BULLSEYE_DIR}/bin:${PATH}; \
 	cd ${BULLSEYE_WORK}; \
 	make -C /lib/modules/\`uname -r\`/build M=\`pwd\`; \
