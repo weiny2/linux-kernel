@@ -11,17 +11,17 @@
 # before invoking any of the client modules. Force a load order
 # and an unload order for now. Eventually the VPD should be
 # merged with the PCIe driver to avoid this hack.
-opa2_base_modules="opa2_hfi opa_core"
-opa2_client_modules="opa_vnic opa2_vnic_hfi opa_vnic_bus opa2_user"
+hfi2_base_modules="hfi2 hfi_core"
+hfi2_client_modules="opa_vnic hfi2_vnic opa_vnic_bus hfi2_user"
 
 start ()
 {
     local RC=0
 
-    modprobe -a $opa2_base_modules
-    modprobe -a $opa2_client_modules
+    modprobe -a $hfi2_base_modules
+    modprobe -a $hfi2_client_modules
 
-    touch /var/lock/subsys/opa2
+    touch /var/lock/subsys/hfi2
     [ $RC -eq 0 ] && echo_success || echo_failure
     echo
     return $RC
@@ -31,10 +31,10 @@ stop ()
 {
     local RC=0
 
-    modprobe -r $opa2_client_modules
-    modprobe -r $opa2_base_modules
+    modprobe -r $hfi2_client_modules
+    modprobe -r $hfi2_base_modules
 
-    rm -f /var/lock/subsys/opa2
+    rm -f /var/lock/subsys/hfi2
     [ $RC -eq 0 ] && echo_success || echo_failure
     echo
     return $RC
@@ -48,18 +48,18 @@ restart ()
 
 condrestart ()
 {
-    [ -e /var/lock/subsys/opa2 ] && restart || return 0
+    [ -e /var/lock/subsys/hfi2 ] && restart || return 0
 }
 
 status ()
 {
         local RC=0
         declare -i nmodules=0
-        nmodules=`lsmod | grep opa | wc -l`
-        if [ ${nmodules} -ge 8 ]; then
-                echo "OPA modules loaded"
+        nmodules=`lsmod | grep hfi2 | wc -l`
+        if [ ${nmodules} -ge 3 ]; then
+                echo "OPA HFI2 modules loaded"
         else
-                echo "OPA modules not loaded"
+                echo "OPA HFI2 modules not loaded"
                 RC=1
         fi
         [ $RC -eq 0 ] && echo_success || echo_failure

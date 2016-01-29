@@ -4,11 +4,11 @@
 #
 ccflags-y += -I $(src)/../common
 ccflags-y += -I $(src)/../common/uapi
-obj-m += opa2_user.o
+obj-m += hfi2_user.o
 
-opa2_user-y :=
-opa2_user-y += device.o
-opa2_user-y += file_ops.o
-opa2_user-y += job.o
-opa2_user-y += mpin.o
-opa2_user-y += ui.o
+hfi2_user-y :=
+hfi2_user-y += device.o
+hfi2_user-y += file_ops.o
+hfi2_user-y += job.o
+hfi2_user-y += mpin.o
+hfi2_user-y += ui.o

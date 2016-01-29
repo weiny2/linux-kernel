@@ -643,7 +643,7 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 	/* kthread create and wait for packets! */
 	rcv_task = kthread_create_on_node(hfi2_rcv_wait, rcv,
 					  ibp->ibd->assigned_node_id,
-					  "opa2_hfi_rcv");
+					  "hfi2_ibrcv");
 	if (IS_ERR(rcv_task)) {
 		ret = PTR_ERR(rcv_task);
 		goto kthread_err;

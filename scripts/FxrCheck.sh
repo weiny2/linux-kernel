@@ -6,7 +6,7 @@ myname=$0
 PWD=`pwd`
 
 # checkpatch
-DIRS="opa2 opa2_vnic opa_core user verbs"
+DIRS="hfi2 hfi2_vnic hfi_core user"
 CHECKPATCH_COMMAND=/lib/modules/${KERNEL_VERSION}/build/scripts/checkpatch.pl
 CHECKPATCH_OPTIONS="--file --no-tree --terse --strict"
 
