@@ -874,7 +874,7 @@ static int __hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count,
 {
 	u16 start, n;
 	int ret = 0;
-	unsigned long flags, align_mask = 0;
+	unsigned long align_mask = 0;
 
 	if (size > HFI_NUM_USABLE_PIDS)
 		return -EINVAL;
@@ -892,22 +892,20 @@ static int __hfi_ctxt_reserve(struct hfi_devdata *dd, u16 *base, u16 count,
 		start = offset + *base;
 	}
 
-	spin_lock_irqsave(&dd->ptl_lock, flags);
+	spin_lock(&dd->ptl_lock);
 	n = bitmap_find_next_zero_area(dd->ptl_map, size,
 				       start, count, align_mask);
 	if (n >= size)
 		ret = -EBUSY;
-	if (!IS_PID_ANY(*base) && n != start)
+	else if (!IS_PID_ANY(*base) && n != start)
 		ret = -EBUSY;
-	if (ret) {
-		spin_unlock_irqrestore(&dd->ptl_lock, flags);
-		return ret;
+	else {
+		bitmap_set(dd->ptl_map, n, count);
+		*base = n;
 	}
-	bitmap_set(dd->ptl_map, n, count);
-	spin_unlock_irqrestore(&dd->ptl_lock, flags);
+	spin_unlock(&dd->ptl_lock);
 
-	*base = n;
-	return 0;
+	return ret;
 }
 
 static int hfi_ctxt_set_virtual_pid_range(struct hfi_ctx *ctx)
@@ -993,11 +991,9 @@ int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
 
 static void __hfi_ctxt_unreserve(struct hfi_devdata *dd, u16 base, u16 count)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&dd->ptl_lock, flags);
+	spin_lock(&dd->ptl_lock);
 	bitmap_clear(dd->ptl_map, base, count);
-	spin_unlock_irqrestore(&dd->ptl_lock, flags);
+	spin_unlock(&dd->ptl_lock);
 	return;
 }
 
@@ -1174,7 +1170,6 @@ err_vmalloc:
 
 static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 {
-	unsigned long flags;
 	int ret;
 	struct hfi_devdata *dd = ctx->devdata;
 	u16 start, end, ptl_pid = *assigned_pid;
@@ -1232,11 +1227,11 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 
 	/* Now assign the PID and associate with this context */
 	idr_preload(GFP_KERNEL);
-	spin_lock_irqsave(&dd->ptl_lock, flags);
+	spin_lock(&dd->ptl_lock);
 	ret = idr_alloc(&dd->ptl_user, ctx, start, end, GFP_NOWAIT);
 	if (ret >= 0)
 		dd->pid_num_assigned++;
-	spin_unlock_irqrestore(&dd->ptl_lock, flags);
+	spin_unlock(&dd->ptl_lock);
 	idr_preload_end();
 
 	if (ret < 0) {
@@ -1257,12 +1252,10 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *assigned_pid)
 
 static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&dd->ptl_lock, flags);
+	spin_lock(&dd->ptl_lock);
 	idr_remove(&dd->ptl_user, ptl_pid);
 	dd->pid_num_assigned--;
-	spin_unlock_irqrestore(&dd->ptl_lock, flags);
+	spin_unlock(&dd->ptl_lock);
 	dd_dev_info(dd, "Portals PID %u released\n", ptl_pid);
 }
 
@@ -1274,16 +1267,15 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	u16 ptl_pid = ctx->pid;
-	unsigned long flags;
 
 	if (ptl_pid == HFI_PID_NONE)
 		/* no assigned PID */
 		return;
 
 	/* verify PID state is not corrupted  */
-	spin_lock_irqsave(&dd->ptl_lock, flags);
+	spin_lock(&dd->ptl_lock);
 	BUG_ON(idr_find(&dd->ptl_user, ptl_pid) != ctx);
-	spin_unlock_irqrestore(&dd->ptl_lock, flags);
+	spin_unlock(&dd->ptl_lock);
 
 	/* release EQ 0 in each NI */
 	hfi_eq_zero_release(ctx);

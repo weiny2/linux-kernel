@@ -71,6 +71,9 @@
 
 #include <linux/kthread.h>
 #include <linux/types.h>
+#if 1 /* TODO: should be __SIMICS__ instead of 1 */
+#include <linux/delay.h>
+#endif
 #include <linux/intel-svm.h>
 #include <rdma/fxr/fxr_top_defs.h>
 #include <rdma/fxr/fxr_at_csrs.h>
@@ -138,7 +141,9 @@ hfi_iommu_clear_pasid(struct hfi_ctx *ctx)
 	struct hfi_devdata *dd = ctx->devdata;
 	struct device *dev = &dd->pcidev->dev;
 	FXR_AT_CFG_PASID_LUT_t lut = {.val = 0};
+	FXR_AT_CFG_USE_DRAIN_PASID_t drain_pasid = {.val = 0};
 
+	/* disable pid->pasid translation */
 	lut.field.enable = 0;
 	write_csr(dd, FXR_AT_CFG_PASID_LUT + (ctx->pid * 8), lut.val);
 
@@ -151,5 +156,19 @@ hfi_iommu_clear_pasid(struct hfi_ctx *ctx)
 		}
 	}
 
+	spin_lock(&dd->ptl_lock);
+
+	/* drain pasid before freeing it */
+	drain_pasid.field.pasid = ctx->pasid;
+	drain_pasid.field.busy = 1;
+	write_csr(dd, FXR_AT_CFG_USE_DRAIN_PASID, drain_pasid.val);
+	do {
+		mdelay(1);
+		drain_pasid.val = read_csr(dd, FXR_AT_CFG_USE_DRAIN_PASID);
+	} while (drain_pasid.field.busy == 1);
+
+	spin_unlock(&dd->ptl_lock);
+
+	/* call into svm to free pasid */
 	return intel_svm_unbind_mm(dev, ctx->pasid);
 }
