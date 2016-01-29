@@ -590,7 +590,7 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	if (ret)
 		goto ctx_err;
 
-	/* FXRTODO: Move pkey support to opa2_hfi  */
+	/* FXRTODO: Move pkey support to hfi2  */
 	for (i = 0; i < dd->num_pports; i++) {
 		struct hfi_pportdata *ppd = to_hfi_ppd(dd, i + 1);
 

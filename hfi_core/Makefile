@@ -4,4 +4,4 @@
 #
 ccflags-y += -I $(src)/../common
 ccflags-y += -I $(src)/../common/uapi
-obj-m += opa_core.o
+obj-m += hfi_core.o

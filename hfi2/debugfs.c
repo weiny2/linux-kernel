@@ -174,12 +174,12 @@ void hfi_dbg_init(struct hfi_devdata *dd)
 	char name[32], link[10];
 	int unit = dd->unit, j;
 
-	/* create /sys/kernel/debug/opa2_hfi */
+	/* create /sys/kernel/debug/hfi2 */
 	hfi_dbg_root = debugfs_create_dir(DRIVER_NAME, NULL);
 	if (!hfi_dbg_root)
 		pr_warn("can't create %s\n", DRIVER_NAME);
 
-	/* create /sys/kernel/debug/opa2_hfi/hfiN and .../N */
+	/* create /sys/kernel/debug/hfi2/hfiN and .../N */
 	snprintf(name, sizeof(name), "%s%d", hfi_class_name(), unit);
 	snprintf(link, sizeof(link), "%d", unit);
 	dd->hfi_dev_dbg = debugfs_create_dir(name, hfi_dbg_root);

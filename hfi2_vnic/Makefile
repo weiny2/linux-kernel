@@ -5,9 +5,9 @@
 ccflags-y += -I $(src)/../common
 ccflags-y += -I $(src)/../common/uapi
 ccflags-y += -I $(src)/vnic.git/Include
-obj-m = opa2_vnic_hfi.o
+obj-m = hfi2_vnic.o
 
-opa2_vnic_hfi-y = opa2_vnic_hfi_main.o
+hfi2_vnic-y = hfi2_vnic_main.o
 
 obj-m += vnic.git/opa_vnic_bus/
 obj-m += vnic.git/opa_vnic/

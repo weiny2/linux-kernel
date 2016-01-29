@@ -554,7 +554,7 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 		/*
 		 * FXRTODO - this code was different with HFI1 driver as
-		 * SC2VL was in equivalent of opa2_hfi driver, revisit later
+		 * SC2VL was in equivalent of hfi2 driver, revisit later
 		 */
 		sc = ppd->sl_to_sc[qp->remote_ah_attr.sl];
 		vl = ppd->sc_to_vlt[sc];

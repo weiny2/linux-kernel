@@ -56,7 +56,7 @@ EXCLUDES := --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp
 	--exclude='series' --exclude='*.orig' --exclude='$(NAME).spec*' \
 	--exclude='Fxr*' --exclude=scripts
 
-#BUILD_KERNEL ?= 3.12.18-wfr+
+#BUILD_KERNEL ?= 4.3.0+
 BUILD_KERNEL ?= $(shell uname -r)
 KVER := $(BUILD_KERNEL)
 KBUILD ?= /lib/modules/$(KVER)/build
@@ -76,7 +76,7 @@ headers:
 
 vnic:
 	@if [ -e .git ]; then \
-		git submodule update --init opa2_vnic/vnic.git; \
+		git submodule update --init hfi2_vnic/vnic.git; \
 		git submodule status; \
 	fi
 
@@ -112,12 +112,12 @@ dist: $(NAME).spec headers vnic
 install:
 	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	mkdir -p $(RPM_BUILD_ROOT)/etc/init.d
-	install opa2/$(NAME).ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install opa_core/opa_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install user/opa2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install opa2_vnic/vnic.git/opa_vnic_bus/opa_vnic_bus.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install opa2_vnic/vnic.git/opa_vnic/opa_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install opa2_vnic/opa2_vnic_hfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi2/hfi2.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi_core/hfi_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install user/hfi2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi2_vnic/vnic.git/opa_vnic_bus/opa_vnic_bus.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi2_vnic/vnic.git/opa_vnic/opa_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi2_vnic/hfi2_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
 	depmod -a $(KVER)
 
