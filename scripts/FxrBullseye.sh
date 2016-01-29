@@ -54,8 +54,9 @@ ${SSH_CMD} "\
 	echo export COVFILE=${COVFILE} >>/root/.bashrc
 	export COVFILE=${COVFILE}; \
 	${BULLSEYE_DIR}/bin/cov01 -1; \
-	${BULLSEYE_DIR}/bin/covselect --deleteAll; \
-	${BULLSEYE_DIR}/bin/covselect --add ./; \
+	${BULLSEYE_DIR}/bin/covselect -q --deleteAll; \
+	${BULLSEYE_DIR}/bin/covselect -q --add ./; \
+	${BULLSEYE_DIR}/bin/covselect -q --add '!opa2_vnic/vnic.git/opa_vnic/opa_vnic_debug.c'; \
 	cd ${BULLSEYE_DIR}/run/linuxKernel; \
 	make -C /lib/modules/\`uname -r\`/build M=\`pwd\`; \
 	insmod ${BULLSEYE_DIR}/run/linuxKernel/libcov-lkm.ko; \
