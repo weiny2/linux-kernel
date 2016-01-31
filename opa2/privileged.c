@@ -60,6 +60,82 @@
 #include <rdma/hfi_eq.h>
 #include "opa_hfi.h"
 
+#define HFI_MAX_DLIDRELOC_CMD_LEN	15
+
+union hfi_tx_dlid_reloctable_update_t {
+	struct {
+		union tx_cq_a1	a;
+		TXCID_CFG_DLID_RT_DATA_t payload[HFI_MAX_DLIDRELOC_CMD_LEN];
+	} __attribute__ ((__packed__));
+	uint64_t	command[HFI_MAX_DLIDRELOC_CMD_LEN + 1];
+} __aligned(64);
+
+/* Format DLID relocation table message and write it to the command queue */
+static int hfi_write_dlid_reloc_cmd(struct hfi_ctx *ctx,
+				    u32 dlid_base, u32 count,
+				    TXCID_CFG_DLID_RT_DATA_t *dlid_entries_ptr)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	union hfi_tx_dlid_reloctable_update_t dlid_reloc_cmd;
+	u16 num_entries;
+	u16 cmd_slots;
+	TXCID_CFG_DLID_RT_DATA_t *p =
+		(TXCID_CFG_DLID_RT_DATA_t *)dlid_entries_ptr;
+	u8 index;
+	unsigned long flags;
+	int rc = 0;
+
+	if ((dlid_base >= HFI_DLID_TABLE_SIZE) ||
+	    (dlid_base + count > HFI_DLID_TABLE_SIZE))
+			return -EINVAL;
+
+	memset(&dlid_reloc_cmd, 0, sizeof(dlid_reloc_cmd));
+
+	dlid_reloc_cmd.a.dlid = dlid_base;
+	dlid_reloc_cmd.a.ctype = LocalCommand;
+	dlid_reloc_cmd.a.cmd = 0;
+
+	while (count > 0) {
+
+		num_entries = (count > HFI_MAX_DLIDRELOC_CMD_LEN) ?
+			HFI_MAX_DLIDRELOC_CMD_LEN : count;
+		cmd_slots = _HFI_CMD_SLOTS(num_entries+1);
+
+		if (NULL != p) {
+
+			for (index = 0; index < num_entries; index++) {
+				/* They must be 0 when granularity = 1 */
+				if ((p->field.RPLC_BLK_SIZE != 0) ||
+				    (p->field.RPLC_MATCH != 0))
+					return -EINVAL;
+
+				memcpy((void *)&dlid_reloc_cmd.payload[index],
+				       (void *)p, sizeof(*p));
+				p++;
+			}
+		}
+
+		dlid_reloc_cmd.a.cmd_length = num_entries + 1;
+
+		spin_lock_irqsave(&dd->priv_tx_cq_lock, flags);
+		/* Transmit dlid relocation table update message */
+		do {
+				rc = hfi_tx_cmd_put_buff(&dd->priv_tx_cq,
+							 dlid_reloc_cmd.command,
+							 cmd_slots);
+		} while (rc == -EAGAIN);
+		spin_unlock_irqrestore(&dd->priv_tx_cq_lock, flags);
+
+		if (rc < 0)
+			break;
+
+		count -= num_entries;
+		dlid_reloc_cmd.a.dlid += num_entries;
+	}
+
+	return rc;
+}
+
 /* Format an E2E control message, transmit it and wait for an acknowledgment */
 static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 			    int sl, int port, enum ptl_op_e2e_ctrl op)
@@ -264,7 +340,9 @@ int hfi_dlid_assign(struct hfi_ctx *ctx,
 	}
 
 	/* write DLID relocation table */
-	ret = hfi_update_dlid_relocation_table(ctx, dlid_assign);
+	ret = hfi_write_dlid_reloc_cmd(ctx, dlid_assign->dlid_base,
+				       dlid_assign->count,
+				       dlid_assign->dlid_entries_ptr);
 	if (ret < 0)
 		return ret;
 
@@ -280,7 +358,7 @@ int hfi_dlid_release(struct hfi_ctx *ctx, u32 dlid_base, u32 count)
 
 	BUG_ON(!capable(CAP_SYS_ADMIN));
 
-	ret = hfi_reset_dlid_relocation_table(ctx, dlid_base, count);
+	ret = hfi_write_dlid_reloc_cmd(ctx, dlid_base, count, NULL);
 	if (ret < 0)
 		return ret;
 
