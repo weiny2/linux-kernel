@@ -77,6 +77,7 @@ static struct opa_core_client opa_vnic_clnt = {
 	.event_notify = opa_netdev_event_notify
 };
 
+#define OPA2_NUM_VNIC_CTXT 1
 #define OPA2_MAX_NUM_PORTS 2
 #define OPA2_NET_TIMEOUT_MS 100
 #define OPA2_NET_RX_POLL_MS 1
@@ -120,7 +121,7 @@ static struct opa_core_client opa_vnic_clnt = {
  * @port_num: physical port number
  * @init: true if veswport is initialized
  * @vnic_cb: vnic callback function
- * @skbq: Queue of received socket buffers
+ * @skbq: Array of queues for received socket buffers
  */
 struct opa_veswport {
 	int			slid;
@@ -131,7 +132,7 @@ struct opa_veswport {
 	u8			port_num;
 	bool			init;
 	opa_vnic_hfi_evt_cb_fn	__rcu vnic_cb;
-	struct sk_buff_head	skbq;
+	struct sk_buff_head	skbq[OPA2_NUM_VNIC_CTXT];
 };
 
 /*
@@ -290,7 +291,7 @@ static int opa2_vnic_append_skb(struct opa_netdev *ndev, int idx)
  * polling on the TX counting event
  */
 static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
-				 struct sk_buff *skb)
+				 u8 q_idx, struct sk_buff *skb)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
 	struct opa_core_device *odev = dev->odev;
@@ -302,6 +303,10 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	union base_iovec iov;
 	unsigned long sflags;
 	int rc, ms_delay = 0;
+
+	/* FXRTODO: Need to count this error */
+	if (q_idx >= vdev->hfi_info.num_tx_q)
+		return -EINVAL;
 
 	iov.val[0] = 0x0;
 	iov.val[1] = 0x0;
@@ -367,24 +372,31 @@ err1:
 	spin_unlock_irqrestore(&ndev->tx_lock, sflags);
 err:
 	if (rc)
-		vdev->hfi_stats.tx_logic_errors++;
+		vdev->hfi_stats[q_idx].tx_logic_errors++;
 	return rc;
 }
 
 /* Retrieve a SKB from the head of the list */
-static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev)
+static struct sk_buff *opa2_vnic_hfi_get_skb(struct opa_vnic_device *vdev,
+					     u8 q_idx)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
 
-	return skb_dequeue(&dev->skbq);
+	if (q_idx >= vdev->hfi_info.num_rx_q)
+		return NULL;
+
+	return skb_dequeue(&dev->skbq[q_idx]);
 }
 
 /* return 1 if there are buffers available to be read and 0 otherwise */
-static int opa2_vnic_hfi_get_read_avail(struct opa_vnic_device *vdev)
+static int opa2_vnic_hfi_get_read_avail(struct opa_vnic_device *vdev, u8 q_idx)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
 
-	return !skb_queue_empty(&dev->skbq);
+	if (q_idx >= vdev->hfi_info.num_rx_q)
+		return 0;
+
+	return !skb_queue_empty(&dev->skbq[q_idx]);
 }
 
 /*
@@ -416,6 +428,7 @@ static void opa2_vnic_rx_isr_cb(struct hfi_eq *eq_rx, void *data)
 	int len;
 	unsigned char *pad_info = NULL;
 	struct sk_buff *skb;
+	u8 q_idx = 0;
 
 retry:
 	skb = NULL;
@@ -465,15 +478,15 @@ retry:
 	 */
 	skb = netdev_alloc_skb(vdev->netdev, len);
 	if (!skb) {
-		vdev->hfi_stats.rx_missed_errors++;
+		vdev->hfi_stats[q_idx].rx_missed_errors++;
 		goto pkt_drop;
 	}
 	memcpy(skb->data, buf, len);
 	skb_put(skb, len);
-	skb_queue_tail(&dev->skbq, skb);
-	dev_dbg(&ndev->odev->dev, "RX kind %d skb->len %4d flit_len %4d "
+	skb_queue_tail(&dev->skbq[q_idx], skb);
+	dev_dbg(&ndev->odev->dev, "RX%d kind %d skb->len %4d flit_len %4d "
 		"(pad & 0x3f) %d vpnum %d port %d egridx %d egroffset %d\n",
-		rhf->event_kind, skb->len, rhf->pktlen << 2,
+		q_idx, rhf->event_kind, skb->len, rhf->pktlen << 2,
 		pad_info ? *pad_info & 0x3f : 0x0,
 		dev->vport_num, rhf->pt + 1,
 		rhf->egrindex, rhf->egroffset);
@@ -487,7 +500,7 @@ pkt_drop:
 	if (skb) {
 		vnic_cb = rcu_dereference(dev->vnic_cb);
 		if (vnic_cb)
-			vnic_cb(vdev, OPA_VNIC_HFI_EVT_RX);
+			vnic_cb(vdev, OPA_VNIC_HFI_EVT_RX0 + q_idx);
 	}
 	rcu_read_unlock();
 	/* Check if there are more events */
@@ -594,7 +607,7 @@ static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 			__func__, __LINE__, rc);
 		goto err1;
 	}
-	skb_queue_head_init(&dev->skbq);
+	skb_queue_head_init(&dev->skbq[0]);
 	dev->vdev = vdev;
 	rcu_assign_pointer(dev->vnic_cb, cb);
 	synchronize_rcu();
@@ -620,7 +633,7 @@ static void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
 
 	rcu_assign_pointer(dev->vnic_cb, NULL);
 	synchronize_rcu();
-	skb_queue_purge(&dev->skbq);
+	skb_queue_purge(&dev->skbq[0]);
 
 	opa2_uninit_tx_rx(dev);
 	if (vdev->is_eeph)
@@ -782,6 +795,7 @@ static int hfi_vdev_create(struct opa_vnic_ctrl_device *cdev,
 {
 	int rc;
 	struct opa_netdev *ndev = cdev->hfi_priv;
+	struct opa_vnic_hfi_info hfi_info;
 	struct opa_veswport *vport;
 	struct opa_vnic_device *vdev;
 
@@ -795,9 +809,10 @@ static int hfi_vdev_create(struct opa_vnic_ctrl_device *cdev,
 	vport->vport_num = vport_num;
 	vport->odev = ndev->odev;
 	vport->ndev = opa_core_get_priv_data(&opa_vnic_clnt, ndev->odev);
-
-	vdev = opa_vnic_device_register(cdev, port_num, vport_num,
-					vport, &vnic_ops, is_eeph);
+	hfi_info.num_tx_q = 1;
+	hfi_info.num_rx_q = is_eeph ? 1 : OPA2_NUM_VNIC_CTXT;
+	vdev = opa_vnic_device_register(cdev, port_num, vport_num, vport,
+					&vnic_ops, hfi_info, is_eeph);
 	if (IS_ERR(vdev)) {
 		rc = PTR_ERR(vdev);
 		dev_err(&ndev->odev->dev, "error adding vport %d\n", rc);
