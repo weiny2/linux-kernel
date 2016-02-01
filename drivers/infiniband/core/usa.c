@@ -153,15 +153,13 @@ static int insert_id(struct usa_id *id)
 {
 	int ret;
 
-	do {
-		idr_preload(GFP_KERNEL);
+	idr_preload(GFP_KERNEL);
 
-		mutex_lock(&usa_mutex);
-		ret = idr_alloc(&usa_idr, id, 0, 0, GFP_NOWAIT);
-		if (ret >= 0)
-			id->num = ret;
-		mutex_unlock(&usa_mutex);
-	} while (ret < 0);
+	mutex_lock(&usa_mutex);
+	ret = idr_alloc(&usa_idr, id, 0, 0, GFP_NOWAIT);
+	if (ret >= 0)
+		id->num = ret;
+	mutex_unlock(&usa_mutex);
 
 	idr_preload_end();
 
@@ -329,7 +327,7 @@ static int join_mcast(struct usa_file *file, struct ib_usa_request *req,
 	mcast->id.uid = req->uid;
 
 	ret = insert_id(&mcast->id);
-	if (ret)
+	if (ret < 0)
 		goto err2;
 
 	mcast->event.resp.id = mcast->id.num;
@@ -480,7 +478,7 @@ static int reg_inform(struct usa_file *file, struct ib_usa_request *req,
 	inform->id.uid = req->uid;
 
 	ret = insert_id(&inform->id);
-	if (ret)
+	if (ret < 0)
 		goto err2;
 
 	if (copy_to_user((void __user *) (unsigned long) req->response,
