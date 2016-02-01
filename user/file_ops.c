@@ -560,6 +560,9 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_JOB_SETUP:
 		ret = hfi_job_setup(ud, &job_setup);
+		if (ret)
+			break;
+		job_setup.pid_base = ud->ctx.pid_base;
 		break;
 	case HFI_CMD_MPIN:
 		ret = hfi_mpin(ud, &mpin);
