@@ -1,7 +1,5 @@
 #!/bin/bash
 
-COBBLER_CMD="/usr/bin/cobbler reposync --only=fxr-next"
-
 # We copy all rpms to the drop directory, but base on version of driver rpm.
 # We copy whichever opa-headers rpm was used, in case the tagging of headers
 # was not done correctly.
@@ -26,8 +24,16 @@ function copy_drop_rpms {
       echo fail on copying rpm files to yum repository
       exit 21
   fi
-  # TODO use better command to update both fxr and fxr-next
-  COBBLER_CMD="/usr/bin/cobbler reposync"
+
+  # update repo for drop release rpms
+  COBBLER_CMD="/usr/bin/cobbler reposync --only=fxr"
+  ssh -i ~/ssh-jenkins/id_rsa \
+    jenkins@phlsdevlab.ph.intel.com $COBBLER_CMD
+  res=$?
+  if [ ! ${res} ]; then
+      echo fail on updating yum database for drop release packages
+      exit 22
+  fi
 }
 
 # main start here
@@ -44,10 +50,8 @@ if [ ! ${res} ]; then
     exit 21
 fi
 
-# if first build of driver for next drop, this will update drop directory
-copy_drop_rpms $DRV_RPM $HDR_RPM
-
 # update yum database
+COBBLER_CMD="/usr/bin/cobbler reposync --only=fxr-next"
 ssh -i ~/ssh-jenkins/id_rsa \
     jenkins@phlsdevlab.ph.intel.com $COBBLER_CMD
 res=$?
@@ -55,5 +59,8 @@ if [ ! ${res} ]; then
     echo fail on updating yum database
     exit 22
 fi
+
+# if first build of driver for next drop, this will update drop directory
+copy_drop_rpms $DRV_RPM $HDR_RPM
 
 exit 0
