@@ -333,7 +333,7 @@ int hfi_dlid_assign(struct hfi_ctx *ctx,
 	if (dlid_assign->dlid_base == HFI_LID_ANY) {
 		u32 lid_part_size = HFI_DLID_TABLE_SIZE / HFI_TPID_ENTRIES;
 
-		if (!(ctx->mode & HFI_CTX_MODE_PID_VIRTUALIZED) ||
+		if (!IS_PID_VIRTUALIZED(ctx) ||
 		    dlid_assign->count > lid_part_size)
 			return -EINVAL;
 		dlid_assign->dlid_base = ctx->tpid_idx * lid_part_size;

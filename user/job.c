@@ -91,8 +91,7 @@ void hfi_job_init(struct hfi_userdata *ud)
 			memcpy(ud->ctx.auth_uid, job_info->ctx.auth_uid,
 			       sizeof(ud->ctx.auth_uid));
 			/* replace default UID (used for TPID_CAM if PIDs virtualized) */
-			if (ud->ctx.auth_mask & 0x1)
-				ud->ctx.ptl_uid = ud->ctx.auth_uid[0];
+			ud->ctx.ptl_uid = TPID_UID(&ud->ctx);
 			pr_info("joined PID group [%u - %u] tag (%u) UID %d\n",
 				ud->ctx.pid_base, ud->ctx.pid_base + ud->ctx.pid_count - 1,
 				job_info->sid, ud->ctx.ptl_uid);
@@ -122,8 +121,7 @@ int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info *job_info)
 
 int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 {
-	/* job_id, pid_base, count */
-	int i, ret;
+	int ret;
 	u16 pid_align, pid_base, count;
 	struct opa_core_ops *ops = ud->bus_ops;
 
@@ -132,18 +130,17 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 	count = job_setup->pid_count;
 	ret = 0;
 
-	BUG_ON(!capable(CAP_SYS_ADMIN));
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
 
 	/*
-	 * Store Authentication PTL_UIDs from resource manager, set here
+	 * Set Authentication PTL_UIDs allowed for job, set here
 	 * before reserving PIDs
 	 */
-	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
-		if (job_setup->auth_uid[i]) {
-			ud->ctx.auth_mask |= (1 << i);
-			ud->ctx.auth_uid[i] = job_setup->auth_uid[i];
-		}
-	}
+	ret = ops->ctx_set_allowed_uids(&ud->ctx, job_setup->auth_uid,
+					HFI_NUM_AUTH_TUPLES);
+	if (ret)
+		return ret;
 
 	ret = ops->ctx_reserve(&ud->ctx, &pid_base, count, pid_align,
 			       job_setup->pid_mode);
@@ -169,8 +166,7 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 	up_write(&hfi_job_sem);
 	pr_info("created PID group [%u - %u] UID [%u] tag (%u:%u,%u)\n",
 		ud->ctx.pid_base, ud->ctx.pid_base + ud->ctx.pid_count - 1,
-		(ud->ctx.auth_mask & 0x1) ? ud->ctx.auth_uid[0] : ud->ctx.ptl_uid,
-		ud->job_res_mode, ud->sid, ud->pid);
+		TPID_UID(&ud->ctx), ud->job_res_mode, ud->sid, ud->pid);
 
 	return ret;
 }

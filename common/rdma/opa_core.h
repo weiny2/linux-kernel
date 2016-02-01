@@ -385,6 +385,7 @@ struct hfi_rsm_rule {
  * @ctx_release: Release Send/Receive context in the HFI
  * @ctx_reserve: Reserve range of contiguous Send/Receive contexts in the HFI
  * @ctx_unreserve: Release reservation from ctx_reserve
+ * @ctx_set_allowed_uids: Set Portals UIDs allowed for application
  * @ctx_addr: Return address for HFI resources providing memory access/mapping
  * @cq_assign: Assign a Command Queue for HFI send/receive operations
  * @cq_update: Update configuration of Command Queue
@@ -411,6 +412,7 @@ struct opa_core_ops {
 	int (*ctx_reserve)(struct hfi_ctx *ctx, u16 *base, u16 count,
 			   u16 align, u16 mode);
 	void (*ctx_unreserve)(struct hfi_ctx *ctx);
+	int (*ctx_set_allowed_uids)(struct hfi_ctx *ctx, u32 *auth_uid, u8 num_uids);
 	int (*ctx_addr)(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr,
 			ssize_t *len);
 	int (*cq_assign)(struct hfi_ctx *ctx,

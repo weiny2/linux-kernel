@@ -1739,6 +1739,7 @@ static struct opa_core_ops opa_core_ops = {
 	.ctx_release = hfi_ctxt_cleanup,
 	.ctx_reserve = hfi_ctxt_reserve,
 	.ctx_unreserve = hfi_ctxt_unreserve,
+	.ctx_set_allowed_uids = hfi_ctxt_set_allowed_uids,
 	.ctx_addr = hfi_ctxt_hw_addr,
 	.cq_assign = hfi_cq_assign,
 	.cq_update = hfi_cq_update,
