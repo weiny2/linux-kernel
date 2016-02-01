@@ -63,6 +63,14 @@
 #define HFI_MMAP_PSB_TOKEN(type, ptl_ctxt, size)  \
 	HFI_MMAP_TOKEN((type), ptl_ctxt, 0, size)
 
+/*
+ * For TPID_CAM.UID, use first value from resource manager (if set).
+ * This value is inherited during open() and returned to the user as
+ * their default UID.
+ */
+#define TPID_UID(ctx) \
+	(((ctx)->auth_mask & 0x1) ? (ctx)->auth_uid[0] : (ctx)->ptl_uid)
+
 /* List of vma pointers to zap on release */
 struct hfi_vma {
 	struct vm_area_struct *vma;

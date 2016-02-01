@@ -112,6 +112,17 @@ enum {
 #define HFI_TPID_ENTRIES	16
 #define HFI_DLID_TABLE_SIZE	(64 * 1024)
 
+#define IS_PID_VIRTUALIZED(ctx) \
+	((ctx)->mode & HFI_CTX_MODE_PID_VIRTUALIZED)
+
+/*
+ * For TPID_CAM.UID, use first value from resource manager (if set).
+ * This value is inherited during open() and returned to the user as
+ * their default UID.
+ */
+#define TPID_UID(ctx) \
+	(((ctx)->auth_mask & 0x1) ? (ctx)->auth_uid[0] : (ctx)->ptl_uid)
+
 /* FXRTODO: based on 16bit (9B) LID */
 #define HFI_MULTICAST_LID_BASE	0xC000
 /* Maximum number of traffic classes supported */
@@ -813,6 +824,8 @@ int hfi_cteq_wait_single(struct hfi_ctx *ctx, u16 eq_mode, u16 ev_idx,
 			 long timeout);
 int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
 void hfi_ctxt_cleanup(struct hfi_ctx *ctx);
+int hfi_ctxt_set_allowed_uids(struct hfi_ctx *ctx, u32 *auth_uid,
+			      u8 num_uids);
 int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
 		     u16 mode);
 int hfi_get_hw_limits(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl);
