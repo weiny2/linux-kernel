@@ -145,6 +145,7 @@ struct opa_veswport {
  * @ctx_lock: Lock to synchronize setup and teardown of the bypass context
  * @tx_lock: Lock to synchronize access to the TX CQ
  * @rx_lock: Lock to synchronize access to the RX CQ
+ * @stats_lock: Lock to synchronize access to common stats
  * @ctx: HFI context
  * @cq_idx: command queue index
  * @tx: TX command queue
@@ -167,6 +168,7 @@ struct opa_netdev {
 	struct mutex			ctx_lock;
 	spinlock_t			tx_lock;
 	spinlock_t			rx_lock;
+	spinlock_t			stats_lock;
 	struct hfi_ctx			ctx;
 	u16				cq_idx;
 	struct hfi_cq			tx;
@@ -455,6 +457,22 @@ retry:
 		/* FXRTODO: Check performance impact of idr_find */
 		id = OPA_VNIC_GET_VESWID(buf);
 		vdev = idr_find(&ndev->vesw_idr[rhf->pt], id);
+
+		/*
+		 * In case of invalid vesw id, update the rx_bad_veswid
+		 * error count of first available vdev.
+		 */
+		if (unlikely(!vdev)) {
+			struct opa_vnic_device *vdev_tmp;
+			int id_tmp = 0;
+
+			spin_lock_irqsave(&ndev->stats_lock, sflags);
+			vdev_tmp =  idr_get_next(&ndev->vesw_idr[rhf->pt],
+						 &id_tmp);
+			if (vdev_tmp)
+				vdev_tmp->hfi_stats[0].rx_bad_veswid++;
+			spin_unlock_irqrestore(&ndev->stats_lock, sflags);
+		}
 	}
 	/* Drop the packet if a vdev is not available */
 	if (!vdev)
@@ -1016,6 +1034,7 @@ static int opa_netdev_probe(struct opa_core_device *odev)
 	mutex_init(&ndev->ctx_lock);
 	spin_lock_init(&ndev->tx_lock);
 	spin_lock_init(&ndev->rx_lock);
+	spin_lock_init(&ndev->stats_lock);
 	opa_netdev_link_handling(ndev);
 	return rc;
 priv_err:
