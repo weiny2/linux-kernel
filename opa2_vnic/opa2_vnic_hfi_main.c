@@ -757,6 +757,7 @@ static int opa2_vnic_hfi_init(struct opa_vnic_device *vdev)
 	}
 finish:
 	ndev->num_vports++;
+	vdev->opa_mtu = OPA2_NET_DEFAULT_MTU;
 fail:
 	mutex_unlock(&ndev->ctx_lock);
 	if (rc)
