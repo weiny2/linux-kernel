@@ -172,17 +172,10 @@ static int qp_max_iovs(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 			off = sge->mr->map[sge->m]->segs[sge->n].length -
 				sge->length;
 			niovs += ((off + sge->sge_length + segsz - 1) / segsz);
+			/* TODO - above needs to limit to s_cur_size? */
 		} else {
 			niovs++;
 		}
-	}
-
-	/* TODO - delete below when TX firmware supports this */
-	if (niovs > 4) {
-		dev_err(ibp->dev,
-			"PT %d: large IOVEC not supported in simics (%d)\n",
-			ibp->port_num, niovs);
-		return -EIO;
 	}
 
 	*out_niovs = niovs;
