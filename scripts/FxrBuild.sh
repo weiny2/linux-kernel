@@ -6,7 +6,6 @@ VERSION=0.0
 TAG="v[0-9]*.[0-9]*"
 
 # main start here
-rm -rf ~/rpmbuild
 git fetch # acquire newly created tag
 if [ -d .git ]; then
 	FULL_TAG=`git describe --tags --long --match="$TAG"`

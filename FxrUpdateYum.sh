@@ -38,7 +38,7 @@ function copy_drop_rpms {
 
 # main start here
 
-DRV_RPM=~/rpmbuild/RPMS/x86_64/opa2_hfi-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm
+DRV_RPM=rpmbuild/RPMS/x86_64/opa2_hfi-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm
 HDR_RPM=opa-headers.git/opa-headers-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm
 # copy rpm files to yum repository
 scp -i ~/ssh-jenkins/id_rsa \
