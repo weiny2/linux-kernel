@@ -52,7 +52,9 @@ MVERSION = $(VERSION)-$(RELEASE)
 # This is for changelog in specfile
 BASEVERSION :=
 
-EXCLUDES := --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp' --exclude='series' --exclude='*.orig' --exclude=$(NAME).spec.in
+EXCLUDES := --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp' \
+	--exclude='series' --exclude='*.orig' --exclude='$(NAME).spec*' \
+	--exclude='Fxr*' --exclude=scripts
 
 #BUILD_KERNEL ?= 3.12.18-wfr+
 BUILD_KERNEL ?= $(shell uname -r)
@@ -82,8 +84,8 @@ clean: headers vnic
 	make -C $(KBUILD) M=${PWD} clean
 
 distclean: clean
-	rm -f $(NAME).spec
-	rm -f *.tgz
+	rm -f $(NAME).spec cov.* *~
+	rm -rf rpmbuild
 
 specfile: $(NAME).spec.in
 	sed \
@@ -120,7 +122,12 @@ install:
 	depmod -a $(KVER)
 
 rpm: dist
-	rpmbuild --define 'require_kver $(KVER)' -ta $(NAME)-$(VERSION).tgz
+	mkdir -p rpmbuild/SOURCES
+	mv opa2_hfi-0.6.tgz rpmbuild/SOURCES
+	rpmbuild -bb \
+		--define "_topdir ${PWD}/rpmbuild" \
+		--define 'require_kver $(KVER)' \
+		opa2_hfi.spec
 
 version:
 	echo $(NAME) $(MVERSION)

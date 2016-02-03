@@ -32,7 +32,7 @@ do
 		echo "By Default this script installs the necessary driver"
 		echo "and runs the harness test suite(default) "
 		echo "   -i     Only installs the appropriate drivers"
-		echo "          built in ~/rpmbuild"
+		echo "          built in rpmbuild"
 		echo "   -l     Installs and only runs ModuleLoad test"
 		echo "          (When -l option is used -i is ignored)"
 		echo "   -d     Specify path to temporary directory in viperx host"
@@ -78,7 +78,7 @@ for viper in ${viper0} ${viper1}; do
     # update the driver
     ${ssh_cmd} "rm -f ${tmp_dir}/opa*.x86_64.rpm"
     ${scp_cmd} \
-	~/rpmbuild/RPMS/x86_64/opa2_hfi-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm \
+	rpmbuild/RPMS/x86_64/opa2_hfi-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm \
 	opa-headers.git/opa-headers-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm \
 	root@localhost:${tmp_dir}
     if [ ! $? ]; then

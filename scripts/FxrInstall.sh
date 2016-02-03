@@ -23,7 +23,7 @@ for viper in ${viper0} ${viper1}; do
     # update the driver
     ${ssh_cmd} "rm -f /tmp/opa*.x86_64.rpm"
     ${scp_cmd} \
-	~/rpmbuild/RPMS/x86_64/opa2_hfi-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm \
+	rpmbuild/RPMS/x86_64/opa2_hfi-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm \
 	opa-headers.git/opa-headers-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm \
 	root@localhost:/tmp
     if [ ! $? ]; then
