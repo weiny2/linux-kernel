@@ -561,10 +561,18 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 				qp->s_flags |= HFI1_S_WAIT_SSN_CREDIT;
 				goto bail;
 			}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+			ohdr->u.rc.reth.vaddr =
+				cpu_to_be64(wqe->rdma_wr.remote_addr);
+			ohdr->u.rc.reth.rkey =
+				cpu_to_be32(wqe->rdma_wr.rkey);
+
+#else
 			ohdr->u.rc.reth.vaddr =
 				cpu_to_be64(wqe->wr.wr.rdma.remote_addr);
 			ohdr->u.rc.reth.rkey =
 				cpu_to_be32(wqe->wr.wr.rdma.rkey);
+#endif
 			ohdr->u.rc.reth.length = cpu_to_be32(len);
 			hwords += sizeof(struct ib_reth) / sizeof(u32);
 			wqe->lpsn = wqe->psn;
@@ -612,10 +620,17 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 					qp->s_next_psn += (len - 1) / pmtu;
 				wqe->lpsn = qp->s_next_psn++;
 			}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+			ohdr->u.rc.reth.vaddr =
+				cpu_to_be64(wqe->rdma_wr.remote_addr);
+			ohdr->u.rc.reth.rkey =
+				cpu_to_be32(wqe->rdma_wr.rkey);
+#else
 			ohdr->u.rc.reth.vaddr =
 				cpu_to_be64(wqe->wr.wr.rdma.remote_addr);
 			ohdr->u.rc.reth.rkey =
 				cpu_to_be32(wqe->wr.wr.rdma.rkey);
+#endif
 			ohdr->u.rc.reth.length = cpu_to_be32(len);
 			qp->s_state = OP(RDMA_READ_REQUEST);
 			hwords += sizeof(ohdr->u.rc.reth) / sizeof(u32);
@@ -645,22 +660,43 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 			}
 			if (wqe->wr.opcode == IB_WR_ATOMIC_CMP_AND_SWP) {
 				qp->s_state = OP(COMPARE_SWAP);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+				ohdr->u.atomic_eth.swap_data = cpu_to_be64(
+					wqe->atomic_wr.swap);
+				ohdr->u.atomic_eth.compare_data = cpu_to_be64(
+					wqe->atomic_wr.compare_add);
+#else
 				ohdr->u.atomic_eth.swap_data = cpu_to_be64(
 					wqe->wr.wr.atomic.swap);
 				ohdr->u.atomic_eth.compare_data = cpu_to_be64(
 					wqe->wr.wr.atomic.compare_add);
+#endif
 			} else {
 				qp->s_state = OP(FETCH_ADD);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+				ohdr->u.atomic_eth.swap_data = cpu_to_be64(
+					wqe->atomic_wr.compare_add);
+#else
 				ohdr->u.atomic_eth.swap_data = cpu_to_be64(
 					wqe->wr.wr.atomic.compare_add);
+#endif
 				ohdr->u.atomic_eth.compare_data = 0;
 			}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+			ohdr->u.atomic_eth.vaddr[0] = cpu_to_be32(
+				wqe->atomic_wr.remote_addr >> 32);
+			ohdr->u.atomic_eth.vaddr[1] = cpu_to_be32(
+				wqe->atomic_wr.remote_addr);
+			ohdr->u.atomic_eth.rkey = cpu_to_be32(
+				wqe->atomic_wr.rkey);
+#else
 			ohdr->u.atomic_eth.vaddr[0] = cpu_to_be32(
 				wqe->wr.wr.atomic.remote_addr >> 32);
 			ohdr->u.atomic_eth.vaddr[1] = cpu_to_be32(
 				wqe->wr.wr.atomic.remote_addr);
 			ohdr->u.atomic_eth.rkey = cpu_to_be32(
 				wqe->wr.wr.atomic.rkey);
+#endif
 			hwords += sizeof(struct ib_atomic_eth) / sizeof(u32);
 			ss = NULL;
 			len = 0;
@@ -784,10 +820,17 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 		 * See restart_rc().
 		 */
 		len = (delta_psn(qp->s_psn, wqe->psn)) * pmtu;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+		ohdr->u.rc.reth.vaddr =
+			cpu_to_be64(wqe->rdma_wr.remote_addr + len);
+		ohdr->u.rc.reth.rkey =
+			cpu_to_be32(wqe->rdma_wr.rkey);
+#else
 		ohdr->u.rc.reth.vaddr =
 			cpu_to_be64(wqe->wr.wr.rdma.remote_addr + len);
 		ohdr->u.rc.reth.rkey =
 			cpu_to_be32(wqe->wr.wr.rdma.rkey);
+#endif
 		ohdr->u.rc.reth.length = cpu_to_be32(wqe->length - len);
 		qp->s_state = OP(RDMA_READ_REQUEST);
 		hwords += sizeof(ohdr->u.rc.reth) / sizeof(u32);

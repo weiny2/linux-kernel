@@ -412,7 +412,9 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->poll_cq = hfi2_poll_cq;
 	ibdev->req_notify_cq = hfi2_req_notify_cq;
 	ibdev->get_dma_mr = hfi2_get_dma_mr;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
 	ibdev->reg_phys_mr = hfi2_reg_phys_mr;
+#endif
 	ibdev->reg_user_mr = hfi2_reg_user_mr;
 	ibdev->dereg_mr = hfi2_dereg_mr;
 	ibdev->process_mad = hfi2_process_mad;

@@ -199,10 +199,7 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 	 * undefined operations.
 	 * Make sure buffer is large enough to hold the result for atomics.
 	 */
-	if (wr->opcode == IB_WR_FAST_REG_MR) {
-		if (hfi2_fast_reg_mr(qp, wr))
-			goto bail_inval;
-	} else if (qp->ibqp.qp_type == IB_QPT_UC) {
+	if (qp->ibqp.qp_type == IB_QPT_UC) {
 		if ((unsigned) wr->opcode >= IB_WR_RDMA_READ)
 			goto bail_inval;
 	} else if (qp->ibqp.qp_type != IB_QPT_RC) {
@@ -211,7 +208,11 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 		    wr->opcode != IB_WR_SEND_WITH_IMM)
 			goto bail_inval;
 		/* Check UD destination address PD */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+		if (qp->ibqp.pd != ud_wr(wr)->ah->pd)
+#else
 		if (qp->ibqp.pd != wr->wr.ud.ah->pd)
+#endif
 			goto bail_inval;
 	} else if ((unsigned) wr->opcode > IB_WR_ATOMIC_FETCH_AND_ADD)
 		goto bail_inval;
@@ -276,7 +277,11 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 		if (wqe->length > 0x80000000U)
 			goto bail_inval_free;
 	} else {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+		struct hfi2_ah *ah = to_hfi_ah(ud_wr(wr)->ah);
+#else
 		struct hfi2_ah *ah = to_hfi_ah(wr->wr.ud.ah);
+#endif
 		u8 sc5, vl;
 
 		if (qp->ibqp.qp_type == IB_QPT_SMI) {

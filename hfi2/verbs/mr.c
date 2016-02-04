@@ -178,6 +178,7 @@ bail:
 	return ERR_PTR(rval);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
 /**
  * hfi2_reg_phys_mr - register a physical memory region
  * @pd: protection domain for this memory region
@@ -223,6 +224,7 @@ struct ib_mr *hfi2_reg_phys_mr(struct ib_pd *pd,
 bail:
 	return ret;
 }
+#endif
 
 /**
  * hfi2_reg_user_mr - register a userspace memory region
@@ -667,13 +669,5 @@ ok:
 	return 1;
 bail:
 	rcu_read_unlock();
-	return 0;
-}
-
-/*
- * Initialize the memory region specified by the work reqeust.
- */
-int hfi2_fast_reg_mr(struct hfi2_qp *qp, struct ib_send_wr *wr)
-{
 	return 0;
 }

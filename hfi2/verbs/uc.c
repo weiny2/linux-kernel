@@ -152,10 +152,17 @@ static int _hfi2_make_uc_req(struct hfi2_qp *qp, bool is_16b)
 
 		case IB_WR_RDMA_WRITE:
 		case IB_WR_RDMA_WRITE_WITH_IMM:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+			ohdr->u.rc.reth.vaddr =
+				cpu_to_be64(wqe->rdma_wr.remote_addr);
+			ohdr->u.rc.reth.rkey =
+				cpu_to_be32(wqe->rdma_wr.rkey);
+#else
 			ohdr->u.rc.reth.vaddr =
 				cpu_to_be64(wqe->wr.wr.rdma.remote_addr);
 			ohdr->u.rc.reth.rkey =
 				cpu_to_be32(wqe->wr.wr.rdma.rkey);
+#endif
 			ohdr->u.rc.reth.length = cpu_to_be32(len);
 			hwords += sizeof(struct ib_reth) / 4;
 			qp->s_wqe = wqe;
