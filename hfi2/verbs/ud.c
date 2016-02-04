@@ -88,7 +88,11 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 
 	rcu_read_lock();
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	qp = hfi2_lookup_qpn(ibp, swqe->ud_wr.remote_qpn);
+#else
 	qp = hfi2_lookup_qpn(ibp, swqe->wr.wr.ud.remote_qpn);
+#endif
 	if (!qp) {
 		ibp->n_pkt_drops++;
 		rcu_read_unlock();
@@ -109,7 +113,11 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 		goto drop;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	ah_attr = &to_hfi_ah(swqe->ud_wr.ah)->attr;
+#else
 	ah_attr = &to_hfi_ah(swqe->wr.wr.ud.ah)->attr;
+#endif
 
 #if 0 /* FXRTODO */
 	if (qp->ibqp.qp_num > 1) {
@@ -246,7 +254,11 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI) {
 		if (sqp->ibqp.qp_type == IB_QPT_GSI ||
 		    sqp->ibqp.qp_type == IB_QPT_SMI)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+			wc.pkey_index = swqe->ud_wr.pkey_index;
+#else
 			wc.pkey_index = swqe->wr.wr.ud.pkey_index;
+#endif
 		else
 			wc.pkey_index = sqp->s_pkey_index;
 	} else {
@@ -285,7 +297,11 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	extra_bytes = -wqe->length & 3;
 	nwords = ((wqe->length + extra_bytes) >> 2) + SIZE_OF_CRC;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	ah_attr = &to_hfi_ah(wqe->ud_wr.ah)->attr;
+#else
 	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+#endif
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		/* remove LRH size from s_hdrwords for GRH */
 		qp->s_hdrwords += hfi2_make_grh(ibp, &qp->s_hdr->ph.ibh.u.l.grh,
@@ -330,12 +346,20 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 		bth0 |= IB_BTH_SOLICITED;
 	bth0 |= extra_bytes << 20;
 	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+		bth0 |= hfi2_get_pkey(ibp, wqe->ud_wr.pkey_index);
+#else
 		bth0 |= hfi2_get_pkey(ibp, wqe->wr.wr.ud.pkey_index);
+#endif
 	else
 		bth0 |= hfi2_get_pkey(ibp, qp->s_pkey_index);
 
 	ohdr->bth[0] = cpu_to_be32(bth0);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	ohdr->bth[1] = cpu_to_be32(wqe->ud_wr.remote_qpn);
+#else
 	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
+#endif
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
 	wqe->use_16b = false;
 }
@@ -358,7 +382,11 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 			(SIZE_OF_CRC << 2) + 1) & 7;
 	nwords = (wqe->length + (SIZE_OF_CRC << 2) + 1 + extra_bytes) >> 2;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	ah_attr = &to_hfi_ah(wqe->ud_wr.ah)->attr;
+#else
 	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+#endif
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		/* remove 16B HDR size from s_hdrwords for GRH */
 		qp->s_hdrwords += hfi2_make_grh(ibp, &opa16b->u.l.grh,
@@ -403,7 +431,11 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	}
 
 	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+		pkey = hfi2_get_pkey(ibp, wqe->ud_wr.pkey_index);
+#else
 		pkey = hfi2_get_pkey(ibp, wqe->wr.wr.ud.pkey_index);
+#endif
 	else
 		pkey = hfi2_get_pkey(ibp, qp->s_pkey_index);
 
@@ -418,7 +450,11 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 		bth0 |= IB_BTH_SOLICITED;
 	bth0 |= extra_bytes << 20;
 	ohdr->bth[0] = cpu_to_be32(bth0);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	ohdr->bth[1] = cpu_to_be32(wqe->ud_wr.remote_qpn);
+#else
 	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
+#endif
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
 	wqe->use_16b = true;
 }
@@ -473,7 +509,11 @@ static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
 	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	ppd = ibp->ppd;
 	/* TODO - review wr.wr.ud.ah */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	ah_attr = &to_hfi_ah(wqe->ud_wr.ah)->attr;
+#else
 	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+#endif
 	if (ah_attr->dlid < HFI1_MULTICAST_LID_BASE ||
 	    ah_attr->dlid == HFI1_PERMISSIVE_LID) {
 		lid = ah_attr->dlid & ~((1 << ppd->lmc) - 1);
@@ -546,8 +586,13 @@ static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
 	 * Qkeys with the high order bit set mean use the
 	 * qkey from the QP context instead of the WR (see 10.2.5).
 	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	ohdr->u.ud.deth[0] = cpu_to_be32((int)wqe->ud_wr.remote_qkey < 0 ?
+					 qp->qkey : wqe->ud_wr.remote_qkey);
+#else
 	ohdr->u.ud.deth[0] = cpu_to_be32((int)wqe->wr.wr.ud.remote_qkey < 0 ?
 					 qp->qkey : wqe->wr.wr.ud.remote_qkey);
+#endif
 	ohdr->u.ud.deth[1] = cpu_to_be32(qp->ibqp.qp_num);
 
 	/* TODO for now, WQE contains everything needed to perform the Send */

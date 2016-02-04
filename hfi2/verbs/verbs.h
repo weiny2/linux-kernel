@@ -247,7 +247,14 @@ struct hfi2_sge {
  * in qp->s_max_sge.
  */
 struct hfi2_swqe {
-	struct ib_send_wr wr;   /* don't use wr.sg_list */
+	union {
+		struct ib_send_wr wr;   /* don't use wr.sg_list */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+		struct ib_rdma_wr rdma_wr;
+		struct ib_atomic_wr atomic_wr;
+		struct ib_ud_wr ud_wr;
+#endif
+	};
 	u32 psn;                /* first packet sequence number */
 	u32 lpsn;               /* last packet sequence number */
 	u32 ssn;                /* send sequence number */
@@ -778,14 +785,15 @@ int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct hfi2_pd *pd,
 int hfi2_rkey_ok(struct hfi2_qp *qp, struct hfi2_sge *sge,
 		 u32 len, u64 vaddr, u32 rkey, int acc);
 struct ib_mr *hfi2_get_dma_mr(struct ib_pd *pd, int acc);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
 struct ib_mr *hfi2_reg_phys_mr(struct ib_pd *pd,
 			       struct ib_phys_buf *buffer_list,
 			       int num_phys_buf, int acc, u64 *iova_start);
+#endif
 struct ib_mr *hfi2_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 			       u64 virt_addr, int mr_access_flags,
 			       struct ib_udata *udata);
 int hfi2_dereg_mr(struct ib_mr *ibmr);
-int hfi2_fast_reg_mr(struct hfi2_qp *qp, struct ib_send_wr *wr);
 void hfi2_release_mmap_info(struct kref *ref);
 int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
 struct hfi2_mmap_info *hfi2_create_mmap_info(struct hfi2_ibdev *ibd,
