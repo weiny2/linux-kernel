@@ -294,11 +294,15 @@ static void hfi_read_guid(struct hfi_devdata *dd)
 	int port;
 	u64 base_guid;
 
+#define NODE_GUID              0x11750101000000UL
 	/*
 	 * Read from one of the port's 8051 register, since node
 	 * guid is common between the two ports.
 	 */
-	base_guid = read_8051_csr(ppd, CRK_CRK8051_CFG_LOCAL_GUID);
+	if (no_mnh)
+		base_guid = NODE_GUID;
+	else
+		base_guid = read_8051_csr(ppd, CRK_CRK8051_CFG_LOCAL_GUID);
 	dd->nguid =  cpu_to_be64(base_guid);
 
 	for (port = 1; port <= dd->num_pports; port++) {
