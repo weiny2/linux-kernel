@@ -100,6 +100,7 @@
 #define OPA_PM_ATTRIB_ID_ERROR_PORT_COUNTERS	cpu_to_be16(0x0043)
 #define OPA_PM_ATTRIB_ID_ERROR_INFO		cpu_to_be16(0x0044)
 
+#define OPA_PM_STATUS_REQUEST_TOO_LARGE		cpu_to_be16(0x100)
 /* attribute modifier macros */
 #define OPA_AM_NPORT_SHIFT	24
 #define OPA_AM_NPORT_MASK	0xff
