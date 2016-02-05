@@ -770,10 +770,6 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx,
 		   struct hfi_auth_tuple *auth_table, bool user_priv);
 void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 			  struct hfi_auth_tuple *auth_table);
-int hfi_update_dlid_relocation_table(struct hfi_ctx *ctx,
-			       struct hfi_dlid_assign_args *dlid_assign);
-int hfi_reset_dlid_relocation_table(struct hfi_ctx *ctx, u32 dlid_base,
-				    u32 count);
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid);
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
