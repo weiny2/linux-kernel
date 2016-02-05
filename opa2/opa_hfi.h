@@ -361,6 +361,18 @@ struct hfi_link_down_reason {
 	u8 latest;
 };
 
+struct err_info_rcvport {
+	u8 status_and_code;
+	u64 packet_flit1;
+	u64 packet_flit2;
+};
+
+struct err_info_constraint {
+	u8 status;
+	u16 pkey;
+	u32 slid;
+};
+
 struct hfi_msix_entry {
 	struct msix_entry msix;
 	void *arg;
@@ -658,6 +670,11 @@ struct hfi_devdata {
 	struct hfi_ctx priv_ctx;
 	struct hfi_cq priv_tx_cq;
 	struct hfi_cq priv_rx_cq;
+	struct err_info_rcvport err_info_rcvport;
+	struct err_info_constraint err_info_rcv_constraint;
+	struct err_info_constraint err_info_xmit_constraint;
+	u8 err_info_uncorrectable;
+	u8 err_info_fmconfig;
 
 	/* Command Queue State */
 	struct idr cq_pair;

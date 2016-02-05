@@ -2272,8 +2272,21 @@ bail:
 static int pma_get_opa_classportinfo(struct opa_pma_mad *pmp,
 				     struct ib_device *ibdev, u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct opa_class_port_info *p =
+		(struct opa_class_port_info *)pmp->data;
+	memset(pmp->data, 0, sizeof(pmp->data));
+	if (pmp->mad_hdr.attr_mod != 0)
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+	p->base_version = OPA_MGMT_BASE_VERSION;
+	p->class_version = OPA_SMI_CLASS_VERSION;
+	/*
+	 * Expected response time is 4.096 usec. * 2^18 == 1.073741824 sec.
+	 */
+	p->cap_mask2_resp_time = cpu_to_be32(18);
+	if (resp_len)
+		*resp_len += sizeof(*p);
+	return reply((struct ib_mad_hdr *)pmp);
+
 }
 
 static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
@@ -2282,12 +2295,82 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 {
 	struct opa_port_status_req *req =
 		(struct opa_port_status_req *)pmp->data;
+	struct opa_port_status_rsp *rsp;
 	u32 vl_select_mask = be32_to_cpu(req->vl_select_mask);
 	size_t response_data_size;
+	unsigned long vl;
+	u32 nports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	u8 port_num = req->port_num;
 	u8 num_vls = hweight32(vl_select_mask);
+	struct _vls_pctrs *vlinfo;
+	int vfi;
 
 	response_data_size = sizeof(struct opa_port_status_rsp) +
 				num_vls * sizeof(struct _vls_pctrs);
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= OPA_PM_STATUS_REQUEST_TOO_LARGE;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	if (nports != 1 || (port_num && port_num != port) ||
+	    num_vls > OPA_MAX_VLS || (vl_select_mask & ~VL_MASK_ALL)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	memset(pmp->data, 0, sizeof(pmp->data));
+
+	rsp = (struct opa_port_status_rsp *)pmp->data;
+	if (port_num)
+		rsp->port_num = port_num;
+	else
+		rsp->port_num = port;
+
+	rsp->port_rcv_constraint_errors = 0;
+	rsp->vl_select_mask = cpu_to_be32(vl_select_mask);
+	rsp->port_xmit_data = 0;
+	rsp->port_rcv_data = 0;
+	rsp->port_xmit_pkts = 0;
+	rsp->port_rcv_pkts = 0;
+	rsp->port_multicast_xmit_pkts = 0;
+	rsp->port_multicast_rcv_pkts = 0;
+	rsp->port_xmit_wait = 0;
+	rsp->port_rcv_fecn = 0;
+	rsp->port_rcv_becn = 0;
+	rsp->port_xmit_discards = 0;
+	rsp->port_xmit_constraint_errors = 0;
+	rsp->port_rcv_remote_physical_errors = 0;
+	rsp->link_quality_indicator = 0x5;
+	rsp->local_link_integrity_errors = 0;
+	rsp->link_error_recovery = 0;
+	rsp->port_rcv_errors = 0;
+	rsp->excessive_buffer_overruns = 0;
+	rsp->fm_config_errors = 0;
+	rsp->link_downed = 0;
+	rsp->port_xmit_wait = 0;
+	rsp->uncorrectable_errors = 0;
+
+	vlinfo = &rsp->vls[0];
+	vfi = 0;
+	/*
+	 * The vl_select_mask has been checked above, and we know
+	 * that it contains only entries which represent valid VLs.
+	 * So in the for_each_set_bit() loop below, we don't need
+	 * any additional checks for vl.
+	 */
+	for_each_set_bit(vl, (unsigned long *)&vl_select_mask,
+			 8 * sizeof(vl_select_mask)) {
+		memset(vlinfo, 0, sizeof(*vlinfo));
+		rsp->vls[vfi].port_vl_rcv_data = 0;
+		rsp->vls[vfi].port_vl_rcv_pkts = 0;
+		rsp->vls[vfi].port_vl_xmit_data = 0;
+		rsp->vls[vfi].port_vl_xmit_pkts = 0;
+		rsp->vls[vfi].port_vl_xmit_wait = 0;
+		rsp->vls[vfi].port_vl_rcv_fecn = 0;
+		rsp->vls[vfi].port_vl_rcv_becn = 0;
+		vlinfo++;
+		vfi++;
+	}
 
 	if (resp_len)
 		*resp_len += response_data_size;
@@ -2299,40 +2382,354 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 				    struct ib_device *ibdev, u8 port,
 				    u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct opa_port_data_counters_msg *req =
+		(struct opa_port_data_counters_msg *)pmp->data;
+	struct _port_dctrs *rsp;
+	struct _vls_dctrs *vlinfo;
+	size_t response_data_size;
+	u32 num_ports;
+	u8 num_pslm;
+	u8 num_vls;
+	u64 port_mask;
+	unsigned long port_num;
+	unsigned long vl;
+	u32 vl_select_mask;
+	int vfi;
+
+	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+	num_vls = hweight32(be32_to_cpu(req->vl_select_mask));
+	vl_select_mask = be32_to_cpu(req->vl_select_mask);
+
+	if (num_ports != 1 || (vl_select_mask & ~VL_MASK_ALL)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	/* Sanity check */
+	response_data_size = sizeof(struct opa_port_data_counters_msg) +
+				num_vls * sizeof(struct _vls_dctrs);
+
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	/*
+	 * The bit set in the mask needs to be consistent with the
+	 * port the request came in on.
+	 */
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
+				  sizeof(port_mask));
+
+	if ((u8)port_num != port) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	rsp = (struct _port_dctrs *)&req->port[0];
+	memset(rsp, 0, sizeof(*rsp));
+	/* FXRTODO: replace fake values(zeros) with actual register reads */
+	rsp->port_number = port;
+	rsp->link_quality_indicator = 0x5;
+	rsp->port_xmit_data = 0;
+	rsp->port_rcv_data = 0;
+	rsp->port_xmit_pkts = 0;
+	rsp->port_rcv_pkts = 0;
+	rsp->port_multicast_xmit_pkts = 0;
+	rsp->port_multicast_rcv_pkts = 0;
+	rsp->port_xmit_wait = 0;
+	rsp->port_rcv_fecn = 0;
+	rsp->port_rcv_becn = 0;
+	rsp->port_error_counter_summary = 0;
+	vlinfo = &rsp->vls[0];
+	vfi = 0;
+	/*
+	 * The vl_select_mask has been checked above, and we know
+	 * that it contains only entries which represent valid VLs.
+	 * So in the for_each_set_bit() loop below, we don't need
+	 * any additional checks for vl.
+	 */
+	for_each_set_bit(vl, (unsigned long *)&vl_select_mask,
+			 8 * sizeof(req->vl_select_mask)) {
+		memset(vlinfo, 0, sizeof(*vlinfo));
+		rsp->vls[vfi].port_vl_xmit_data = 0;
+		rsp->vls[vfi].port_vl_rcv_data = 0;
+		rsp->vls[vfi].port_vl_xmit_pkts = 0;
+		rsp->vls[vfi].port_vl_rcv_pkts = 0;
+		rsp->vls[vfi].port_vl_xmit_wait = 0;
+		rsp->vls[vfi].port_vl_rcv_fecn = 0;
+		rsp->vls[vfi].port_vl_rcv_becn = 0;
+		vlinfo++;
+		vfi++;
+	}
+
+	if (resp_len)
+		*resp_len += response_data_size;
+
+	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 				  struct ib_device *ibdev, u8 port,
 				  u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	size_t response_data_size;
+	struct _port_ectrs *rsp;
+	unsigned long port_num;
+	struct opa_port_error_counters64_msg *req;
+	u32 num_ports;
+	u8 num_pslm;
+	u8 num_vls;
+	struct _vls_ectrs *vlinfo;
+	unsigned long vl;
+	u64 port_mask;
+	u32 vl_select_mask;
+	int vfi;
+
+	req = (struct opa_port_error_counters64_msg *)pmp->data;
+
+	num_ports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+	num_vls = hweight32(be32_to_cpu(req->vl_select_mask));
+
+	if (num_ports != 1 || num_ports != num_pslm) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	response_data_size = sizeof(struct opa_port_error_counters64_msg) +
+				num_vls * sizeof(struct _vls_ectrs);
+
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+	/*
+	 * The bit set in the mask needs to be consistent with the
+	 * port the request came in on.
+	 */
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
+				  sizeof(port_mask));
+
+	if ((u8)port_num != port) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	rsp = (struct _port_ectrs *)&req->port[0];
+
+	memset(rsp, 0, sizeof(*rsp));
+	rsp->port_number = (u8)port_num;
+	/* FXRTODO: replace fake values(zeros) with actual register reads */
+	rsp->port_rcv_constraint_errors = 0;
+	rsp->port_xmit_discards = 0;
+	rsp->port_rcv_remote_physical_errors = 0;
+	rsp->port_xmit_constraint_errors = 0;
+	rsp->excessive_buffer_overruns = 0;
+	rsp->fm_config_errors = 0;
+	rsp->link_downed = 0;
+	rsp->uncorrectable_errors = 0;
+
+	vlinfo = (struct _vls_ectrs *)&rsp->vls[0];
+	vfi = 0;
+	vl_select_mask = be32_to_cpu(req->vl_select_mask);
+	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
+			 8 * sizeof(req->vl_select_mask)) {
+		memset(vlinfo, 0, sizeof(*vlinfo));
+		/* vlinfo->vls[vfi].port_vl_xmit_discards ??? */
+		vlinfo += 1;
+		vfi++;
+	}
+
+	if (resp_len)
+		*resp_len += response_data_size;
+
+	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 				 struct ib_device *ibdev, u8 port,
 				 u32 *resp_len)
-{
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+{	size_t response_data_size;
+	struct _port_ei *rsp;
+	struct opa_port_error_info_msg *req;
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
+	u64 port_mask;
+	u32 num_ports;
+	unsigned long port_num;
+	u8 num_pslm;
+
+	req = (struct opa_port_error_info_msg *)pmp->data;
+	rsp = (struct _port_ei *)&req->port[0];
+
+	num_ports = OPA_AM_NPORT(be32_to_cpu(pmp->mad_hdr.attr_mod));
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+
+	memset(rsp, 0, sizeof(*rsp));
+
+	if (num_ports != 1 || num_ports != num_pslm) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	/* Sanity check */
+	response_data_size = sizeof(struct opa_port_error_info_msg);
+
+	if (response_data_size > sizeof(pmp->data)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	/*
+	 * The bit set in the mask needs to be consistent with the port
+	 * the request came in on.
+	 */
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
+				  sizeof(port_mask));
+
+	if ((u8)port_num != port) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	/*
+	 * FXRTODO: err_info fields needs to be filled with values
+	 * in FZC error handler
+	 */
+	rsp->port_rcv_ei.status_and_code =
+		dd->err_info_rcvport.status_and_code;
+	memcpy(&rsp->port_rcv_ei.ei.ei1to12.packet_flit1,
+	       &dd->err_info_rcvport.packet_flit1, sizeof(u64));
+	memcpy(&rsp->port_rcv_ei.ei.ei1to12.packet_flit2,
+	       &dd->err_info_rcvport.packet_flit2, sizeof(u64));
+
+	/* ExcessiverBufferOverrunInfo */
+	rsp->excessive_buffer_overrun_ei.status_and_sc |= 0x80;
+
+	rsp->port_xmit_constraint_ei.status =
+		dd->err_info_xmit_constraint.status;
+	rsp->port_xmit_constraint_ei.pkey =
+		cpu_to_be16(dd->err_info_xmit_constraint.pkey);
+	rsp->port_xmit_constraint_ei.slid =
+		cpu_to_be32(dd->err_info_xmit_constraint.slid);
+
+	rsp->port_rcv_constraint_ei.status =
+		dd->err_info_rcv_constraint.status;
+	rsp->port_rcv_constraint_ei.pkey =
+		cpu_to_be16(dd->err_info_rcv_constraint.pkey);
+	rsp->port_rcv_constraint_ei.slid =
+		cpu_to_be32(dd->err_info_rcv_constraint.slid);
+
+	/* UncorrectableErrorInfo */
+	rsp->uncorrectable_ei.status_and_code = dd->err_info_uncorrectable;
+
+	/* FMConfigErrorInfo */
+	rsp->fm_config_ei.status_and_code = dd->err_info_fmconfig;
+
+	if (resp_len)
+		*resp_len += response_data_size;
+
+	return reply((struct ib_mad_hdr *)pmp);
+
 }
 
 static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 				  struct ib_device *ibdev, u8 port,
 				  u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct opa_clear_port_status *req =
+		(struct opa_clear_port_status *)pmp->data;
+	u32 nports = be32_to_cpu(pmp->mad_hdr.attr_mod) >> 24;
+	u64 portn = be64_to_cpu(req->port_select_mask[3]);
+
+	if ((nports != 1) || (portn != 1 << port)) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	if (resp_len)
+		*resp_len += sizeof(*req);
+	/*
+	 * FXRTODO: clear all performace and error counters by
+	 * by zeroing out the registers
+	 */
+	return reply((struct ib_mad_hdr *)pmp);
+
 }
 
 static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
 				 struct ib_device *ibdev, u8 port,
 				 u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	struct _port_ei *rsp;
+	struct opa_port_error_info_msg *req;
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
+	u64 port_mask;
+	u32 num_ports;
+	unsigned long port_num;
+	u8 num_pslm;
+	u32 error_info_select;
+
+	req = (struct opa_port_error_info_msg *)pmp->data;
+	rsp = (struct _port_ei *)&req->port[0];
+
+	num_ports = OPA_AM_NPORT(be32_to_cpu(pmp->mad_hdr.attr_mod));
+	num_pslm = hweight64(be64_to_cpu(req->port_select_mask[3]));
+
+	memset(rsp, 0, sizeof(*rsp));
+
+	if (num_ports != 1 || num_ports != num_pslm) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	/*
+	 * The bit set in the mask needs to be consistent with the port
+	 * the request came in on.
+	 */
+	port_mask = be64_to_cpu(req->port_select_mask[3]);
+	port_num = find_first_bit((unsigned long *)&port_mask,
+				  sizeof(port_mask));
+
+	if ((u8)port_num != port) {
+		pmp->mad_hdr.status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)pmp);
+	}
+
+	error_info_select = be32_to_cpu(req->error_info_select_mask);
+
+	/* PortRcvErrorInfo */
+	if (error_info_select & ES_PORT_RCV_ERROR_INFO)
+		/* turn off status bit */
+		dd->err_info_rcvport.status_and_code &= ~OPA_EI_STATUS_SMASK;
+
+	/* ExcessiverBufferOverrunInfo */
+
+	if (error_info_select & ES_PORT_XMIT_CONSTRAINT_ERROR_INFO)
+		dd->err_info_xmit_constraint.status &= ~OPA_EI_STATUS_SMASK;
+
+	if (error_info_select & ES_PORT_RCV_CONSTRAINT_ERROR_INFO)
+		dd->err_info_rcv_constraint.status &= ~OPA_EI_STATUS_SMASK;
+
+	/* UncorrectableErrorInfo */
+	if (error_info_select & ES_UNCORRECTABLE_ERROR_INFO)
+		/* turn off status bit */
+		dd->err_info_uncorrectable &= ~OPA_EI_STATUS_SMASK;
+
+	/* FMConfigErrorInfo */
+	if (error_info_select & ES_FM_CONFIG_ERROR_INFO)
+		/* turn off status bit */
+		dd->err_info_fmconfig &= ~OPA_EI_STATUS_SMASK;
+
+	if (resp_len)
+		*resp_len += sizeof(*req);
+
+	return reply((struct ib_mad_hdr *)pmp);
 }
 
 static int process_perf_opa(struct ib_device *ibdev, u8 port,
