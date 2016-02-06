@@ -500,8 +500,14 @@ void *hfi2_rcv_get_ebuf(struct hfi2_ibrcv *rcv, u16 idx, u32 offset)
 		spin_lock_irqsave(&ibp->cmdq_rx_lock, flags);
 		ret = hfi_pt_update_eager(rcv->ctx, &ibp->cmdq_rx, idx);
 		spin_unlock_irqrestore(&ibp->cmdq_rx_lock, flags);
-		/* TODO - handle error  */
-		BUG_ON(ret < 0);
+		if (ret < 0) {
+			/*
+			 * only potential error is DROPPED event on EQ0 to
+			 * confirm the PT_UPDATE, print error and ignore.
+			 */
+			dev_err(ibp->dev, "unexpected PT update error %d\n",
+				ret);
+		}
 		rcv->egr_last_idx = idx;
 	}
 
