@@ -652,9 +652,6 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 		if (type == TOK_CQ_HEAD)
 			vm_ro = 1;
 		break;
-	case TOK_CONTROL_BLOCK:
-		vm_ro = 1;
-		break;
 	case TOK_EVENTS_CT:
 	case TOK_EVENTS_EQ_DESC:
 	case TOK_PORTALS_TABLE:

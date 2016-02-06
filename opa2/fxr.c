@@ -2405,11 +2405,6 @@ int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr, ssize
 		*addr = HFI_CQ_HEAD_ADDR(dd->cq_head_base, ctxt);
 		*len = PAGE_SIZE;
 		break;
-	case TOK_CONTROL_BLOCK:
-		/* kmalloc - RO (debug) */
-		/* TODO - this was requested but there are security concerns */
-		ret = -ENOSYS;
-		break;
 	case TOK_EVENTS_CT:
 		/* vmalloc - RO */
 		*addr = (psb_base + HFI_PSB_CT_OFFSET);

@@ -70,8 +70,8 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 *ptl_pid);
 static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid);
 
 /*
- * TODO - PID_ANY changed to 4095, as FXR PID is 12-bits.
- *        For temporary compatibility with unit tests, also catch -1.
+ * PID_ANY changed to 4095, as FXR PID is 12-bits.
+ * We also consider -1 to mean PID_ANY assignment.
  */
 #define IS_PID_ANY(x)	(x == HFI_PID_ANY || x == (u16)-1)
 
@@ -82,7 +82,6 @@ static int hfi_cq_validate_tuples(struct hfi_ctx *ctx,
 	u32 auth_uid, last_job_uid = HFI_UID_ANY;
 
 	/* validate auth_tuples */
-	/* TODO - some rework here when we fully understand UID management */
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
 		auth_uid = auth_table[i].uid;
 
@@ -237,7 +236,6 @@ int hfi_cq_release(struct hfi_ctx *ctx, u16 cq_idx)
 		idr_remove(&dd->cq_pair, cq_idx);
 		ctx->cq_pair_num_assigned--;
 		dd->cq_pair_num_assigned--;
-		/* TODO - remove any CQ head mappings */
 	}
 	spin_unlock_irqrestore(&dd->cq_lock, flags);
 
@@ -339,7 +337,6 @@ static int hfi_ct_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign)
 	ct_base = ev_assign->ni * num_cts;
 	if (ev_assign->ni >= HFI_NUM_NIS)
 		return -EINVAL;
-	/* TODO blocking mode coming soon... */
 	if (ev_assign->mode & OPA_EV_MODE_BLOCKING)
 		return -EINVAL;
 
@@ -544,9 +541,10 @@ static int hfi_eq_zero_thread(void *data)
 		eq_entry = NULL;
 		rc = hfi_eq_zero_event_wait(ctx, &eq_entry);
 		if (rc < 0) {
-			/* TODO - handle this */
-			dd_dev_warn(dd, "EQ failure, %d\n", rc);
-			continue;
+			/* only likely error is DROPPED event */
+			dd_dev_err(dd, "%s unexpected EQ wait error %d\n",
+				   __func__, rc);
+			break;
 		}
 		if (!eq_entry)
 			continue;
@@ -583,8 +581,8 @@ int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 
 	for (ni = 0; ni < HFI_NUM_NIS; ni++) {
 		eq_assign.ni = ni;
+		/* EQ is one page and meets 64B alignment */
 		eq_assign.count = 64;
-		/* TODO: Need to ensure alignment */
 		eq_assign.base = (u64)kzalloc(eq_assign.count *
 					      HFI_EQ_ENTRY_SIZE,
 					      GFP_KERNEL);
@@ -646,8 +644,8 @@ int hfi_e2e_eq_assign(struct hfi_ctx *ctx)
 	u64 *eq_entry = NULL;
 
 	eq_assign.ni = PTL_NONMATCHING_PHYSICAL;
+	/* EQ is one page and meets 64B alignment */
 	eq_assign.count = 64;
-	/* TODO: Need to ensure alignment */
 	eq_assign.base = (u64)kzalloc(eq_assign.count *
 				      HFI_EQ_ENTRY_SIZE,
 				      GFP_KERNEL);

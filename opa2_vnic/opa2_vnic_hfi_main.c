@@ -427,7 +427,7 @@ static void opa2_vnic_rx_isr_cb(struct hfi_eq *eq_rx, void *data)
 	void *buf;
 	unsigned long sflags;
 	struct hfi_cq *rx = &ndev->rx;
-	int len;
+	int len, err;
 	unsigned char *pad_info = NULL;
 	struct sk_buff *skb;
 	u8 q_idx = 0;
@@ -510,8 +510,15 @@ retry:
 		rhf->egrindex, rhf->egroffset);
 pkt_drop:
 	spin_lock_irqsave(&ndev->rx_lock, sflags);
-	hfi_pt_update_eager(ctx, rx, rhf->egrindex);
-	/* FXRTODO: error handling? */
+	err = hfi_pt_update_eager(ctx, rx, rhf->egrindex);
+	if (err < 0) {
+		/*
+		 * only potential error is DROPPED event on EQ0 to
+		 * confirm the PT_UPDATE, print error and ignore.
+		 */
+		dev_err(&ndev->odev->dev, "unexpected PT update error %d\n",
+			err);
+	}
 	hfi_eq_advance(ctx, rx, eq_rx, eq_entry);
 	spin_unlock_irqrestore(&ndev->rx_lock, sflags);
 	/* Notify the upper layer about a received packet */

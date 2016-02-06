@@ -659,9 +659,9 @@ int hfi2_rcv_wait(void *data)
 		rhf_entry = NULL;
 		rc = _hfi2_rcv_wait(rcv, &rhf_entry);
 		if (rc < 0) {
-			dev_warn(ibp->dev, "RX EQ failure, %d\n", rc);
-			/* TODO - handle this */
-			continue;
+			/* only likely error is DROPPED event */
+			dev_err(ibp->dev, "unexpected EQ wait error %d\n", rc);
+			break;
 		}
 
 		if (rhf_entry) {
