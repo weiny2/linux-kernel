@@ -1,21 +1,12 @@
 #!/bin/sh
 set -x
 
-. scripts/SimicsDefinition.sh
-if [ -z "`find rpmbuild -name *.rpm 2>/dev/null`" -o \
-	-z "`find opa-headers.git -name *.rpm`" ]; then
-	echo no rpm files.
-	exit 20
-fi
-
 . scripts/GlobalDefinition.sh
-if [ -z `pidof simics-common` ]; then
-	. scripts/StartSimics.sh
-fi
+. scripts/StartSimics.sh
 . scripts/WaitSimics.sh
 
 # make sure to stop opafm
-ssh -p${viper0} root@localhost "service --skip-redirect opafm stop" 2>/dev/null
+ssh -p${viper0} root@localhost "service --skip-redirect opafm stop"
 
 # install driver and unit tests
 for viper in ${viper0} ${viper1}; do

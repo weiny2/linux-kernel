@@ -1,6 +1,6 @@
 #!/bin/sh
 
-. scripts/GlobalDefinition.sh
+KERNEL_BUILT_AGAINST=4.3.0+
 RPM_PACKAGE_NAME=opa2_hfi
 VERSION=0.0
 TAG="v[0-9]*.[0-9]*"
@@ -13,7 +13,7 @@ if [ -d .git ]; then
 	RELEASE=`echo ${FULL_TAG} | cut -d'-' -f2`
 	RELEASE=${RELEASE}`echo ${FULL_TAG} | cut -d'-' -f3`
 fi
-make rpm KVER=${KERNEL_VERSION} NAME=${RPM_PACKAGE_NAME} VERSION=${VERSION} RELEASE=${RELEASE}
+make rpm KVER=${KERNEL_BUILT_AGAINST} NAME=${RPM_PACKAGE_NAME} VERSION=${VERSION} RELEASE=${RELEASE}
 res=$?
 if [ ${res} -ne 0 ]; then
     echo fail on building driver: ${res}

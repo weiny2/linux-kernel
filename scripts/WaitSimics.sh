@@ -3,7 +3,6 @@ xtrace_state=`set -o | grep xtrace | sed -e"s/ *//g" | sed -e"s/\t/ /" | cut -d"
 set +x
 
 . scripts/GlobalDefinition.sh
-. scripts/SimicsDefinition.sh
 
 declare -i iterate=0
 

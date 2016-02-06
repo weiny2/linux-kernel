@@ -2,7 +2,6 @@
 set -x
 
 . scripts/GlobalDefinition.sh
-. scripts/SimicsDefinition.sh
 . scripts/bullseye_define.sh
 
 myname=$0
@@ -15,6 +14,10 @@ if [ $# -gt 0 ]; then
 	test_type=$1
 fi
 COVFILE=${BULLSEYE_WORK}/cov.${test_type}
+
+# Am I invoked by Jenkins?
+export ByJenkins=no
+[ `id -un` == root ] && pwd | grep --quiet jenkins && ByJenkins=yes
 
 . scripts/FxrInstall.sh
 
@@ -39,16 +42,10 @@ tar cf - BullseyeCoverage | ${SSH_CMD} "cd /opt; tar xf -" 2>/dev/null
 popd
 
 # transfer driver source code.
+git clean -xfd # remove garbage
 git submodule update
 pushd ..
-tar cf - \
-	--exclude=".*" \
-	--exclude="rpmbuild" \
-	--exclude="scripts" \
-	--exclude="opa2_hfi*" \
-	--exclude="cov.*" \
-	${CURRENT_DIR} | \
-	${SSH_CMD} "cd ${HOME_DIR}; tar xf -" 2>/dev/null
+tar cf - --exclude=".*" ${CURRENT_DIR} | ${SSH_CMD} "cd ${HOME_DIR}; tar xf -" 2>/dev/null
 popd
 
 # build and install bullseye kernel module and driver
@@ -98,4 +95,10 @@ ${SSH_CMD} "cat ${COVFILE}" >cov.${test_type}
 # export COVFILE=`pwd`/cov.${test_type}
 # ${BULLSEYE_DIR}/bin/CoverageBrowser
 
-cleanup_simics
+# epilogue
+if [ ${ByJenkins} == yes ] ; then
+	# stop simics
+	killall simics-common
+
+	rm -f ${LOCK_FILE}
+fi
