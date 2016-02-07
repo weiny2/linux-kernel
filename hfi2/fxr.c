@@ -2459,7 +2459,7 @@ static void write_csr_pidmap(struct hfi_devdata *dd, u32 base, int i, u8 rx_ctx)
 	/* set just the 8-bit sub-field in this CSR */
 	csr_idx = i % 8;
 	val &= ~(0xFFuLL << (csr_idx * 8));
-	val |= rx_ctx << (csr_idx * 8);
+	val |= (u64)rx_ctx << (csr_idx * 8);
 	write_csr(dd, base + off, val);
 }
 
