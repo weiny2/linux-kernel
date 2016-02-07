@@ -354,6 +354,7 @@ struct opa_dev_desc {
 #define HFI_NUM_RSM_CONDITIONS 2
 #define HFI_NUM_RSM_RULES 4
 #define HFI_RSM_MAP_SIZE 256
+#define HFI_VNIC_RSM_RULE_IDX 1
 
 /*
  * struct hfi_rsm_rule - Receive Side Mapping (RSM) rule specification

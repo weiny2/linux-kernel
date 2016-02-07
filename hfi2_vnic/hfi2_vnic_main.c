@@ -77,7 +77,7 @@ static struct opa_core_client opa_vnic_clnt = {
 	.event_notify = opa_netdev_event_notify
 };
 
-#define OPA2_NUM_VNIC_CTXT 1
+#define OPA2_NUM_VNIC_CTXT 4
 #define OPA2_MAX_NUM_PORTS 2
 #define OPA2_NET_TIMEOUT_MS 100
 #define OPA2_NET_RX_POLL_MS 1
@@ -110,6 +110,15 @@ static struct opa_core_client opa_vnic_clnt = {
 #define OPA_VNIC_GET_VESWID(data)   \
 	(*((u8 *)(data) + OPA_VNIC_VESWID_OFFSET))
 
+/* TODO: Share duplicated macros with PCIe driver in common headers */
+#define OPA_BYPASS_L2_MASK	0x3ull
+#define OPA_BYPASS_HDR_10B	0x1
+#define QW_SHIFT		6ull
+/* VESWID[0..1] QW 1, OFFSET 16 - for select */
+#define L4_HDR_VESWID_OFFSET	((1 << QW_SHIFT) | (16ull))
+/* ENTROPY[0..1] QW 1, OFFSET 8 - for select */
+#define L2_ENTROPY_OFFSET	((1 << QW_SHIFT) | (8ull))
+
 /*
  * struct opa_veswport - OPA2 virtual ethernet switch port specific fields
  *
@@ -136,47 +145,61 @@ struct opa_veswport {
 };
 
 /*
- * struct opa_netdev - OPA2 net device specific fields
- * @odev: OPA core device
- * @num_ports: number of physical ports
- * @num_vports: number of virtual switch ports including VNIC and EEPH
- * @vnic_ctrl_dev: VNIC control device for device instantiation
- * @ctrl_lock: Lock to synchronize setup and teardown of the ctrl device
- * @ctx_lock: Lock to synchronize setup and teardown of the bypass context
+ * struct opa_ctx_info - HFI context specific fields
+ *
+ * @ctx: HFI context
  * @tx_lock: Lock to synchronize access to the TX CQ
  * @rx_lock: Lock to synchronize access to the RX CQ
- * @stats_lock: Lock to synchronize access to common stats
- * @ctx: HFI context
  * @cq_idx: command queue index
  * @tx: TX command queue
  * @rx: RX command queue
  * @buf: Array of receive buffers
- * @ni: portals network interface
  * @eq_tx: TX event handle
- * @eq_alloc_tx_base: buffer for TX EQ descriptors
  * @eq_rx: RX event handle
- * @eq_alloc_rx_base: buffer for RX EQ descriptors
+ * @ndev: back pointer to OPA netdev
+ * @q_idx: Queue index number
+ */
+struct opa_ctx_info {
+	struct hfi_ctx			ctx;
+	spinlock_t			tx_lock;
+	spinlock_t			rx_lock;
+	u16				cq_idx;
+	struct hfi_cq			tx;
+	struct hfi_cq			rx;
+	void				*buf[OPA2_NET_NUM_RX_BUFS];
+	struct hfi_eq 			eq_tx;
+	struct hfi_eq 			eq_rx;
+	struct opa_netdev		*ndev;
+	u8				q_idx;
+};
+
+/*
+ * struct opa_netdev - OPA2 net device specific fields
+ * @odev: OPA core device
+ * @num_ports: number of physical ports
+ * @num_vports: number of virtual ethernet switch ports
+ * @num_eports: number of ethernet exception ports
+ * @vnic_ctrl_dev: VNIC control device for device instantiation
+ * @eeph_dev: EEPH device
+ * @ctrl_lock: Lock to synchronize setup and teardown of the ctrl device
+ * @ctx_lock: Lock to synchronize setup and teardown of the bypass context
+ * @stats_lock: Lock to synchronize access to common stats
+ * @eth_ctx: array of ethernet contexts
+ * @def_ctx: default bypass context containing EEPH packets
  * @vesw_idr: IDR for looking up vesw information
  */
 struct opa_netdev {
 	struct opa_core_device		*odev;
 	int				num_ports;
 	int				num_vports;
+	int				num_eports;
 	struct opa_vnic_ctrl_device	*vnic_ctrl_dev;
 	struct opa_vnic_device		*eeph_dev;
 	struct mutex			ctrl_lock;
 	struct mutex			ctx_lock;
-	spinlock_t			tx_lock;
-	spinlock_t			rx_lock;
 	spinlock_t			stats_lock;
-	struct hfi_ctx			ctx;
-	u16				cq_idx;
-	struct hfi_cq			tx;
-	struct hfi_cq			rx;
-	void				*buf[OPA2_NET_NUM_RX_BUFS];
-	hfi_ni_t			ni;
-	struct hfi_eq 			eq_tx;
-	struct hfi_eq 			eq_rx;
+	struct opa_ctx_info		eth_ctx[OPA2_NUM_VNIC_CTXT];
+	struct opa_ctx_info		def_ctx;
 	struct idr			vesw_idr[OPA2_MAX_NUM_PORTS];
 };
 
@@ -247,17 +270,18 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
 }
 
 /* Append a single socket buffer */
-static int opa2_vnic_append_skb(struct opa_netdev *ndev, int idx)
+static int opa2_vnic_append_skb(struct opa_ctx_info *ctx_i, int idx)
 {
-	struct hfi_ctx *ctx = &ndev->ctx;
-	struct hfi_cq *rx = &ndev->rx;
+	struct opa_netdev *ndev = ctx_i->ndev;
+	struct hfi_ctx *ctx = &ctx_i->ctx;
+	struct hfi_cq *rx = &ctx_i->rx;
 	hfi_rx_cq_command_t rx_cmd;
 	int n_slots, rc;
 	u64 *eq_entry = NULL, done;
 	unsigned long sflags;
 
-	n_slots = hfi_format_rx_bypass(ctx, ndev->ni,
-				       ndev->buf[idx],
+	n_slots = hfi_format_rx_bypass(ctx, HFI_NI_BYPASS,
+				       ctx_i->buf[idx],
 				       OPA2_NET_EAGER_SIZE,
 				       HFI_PT_BYPASS_EAGER,
 				       ctx->ptl_uid,
@@ -266,9 +290,9 @@ static int opa2_vnic_append_skb(struct opa_netdev *ndev, int idx)
 				       0, (unsigned long)&done,
 				       idx, &rx_cmd);
 
-	spin_lock_irqsave(&ndev->rx_lock, sflags);
+	spin_lock_irqsave(&ctx_i->rx_lock, sflags);
 	rc = hfi_rx_command(rx, (uint64_t *)&rx_cmd, n_slots);
-	spin_unlock_irqrestore(&ndev->rx_lock, sflags);
+	spin_unlock_irqrestore(&ctx_i->rx_lock, sflags);
 	if (rc < 0) {
 		dev_err(&ndev->odev->dev, "%s rc %d\n", __func__, rc);
 		return rc;
@@ -278,9 +302,9 @@ static int opa2_vnic_append_skb(struct opa_netdev *ndev, int idx)
 	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], OPA2_NET_TIMEOUT_MS,
 			  &eq_entry);
 	if (eq_entry) {
-		spin_lock_irqsave(&ndev->rx_lock, sflags);
+		spin_lock_irqsave(&ctx_i->rx_lock, sflags);
 		hfi_eq_advance(ctx, rx, &ctx->eq_zero[0], eq_entry);
-		spin_unlock_irqrestore(&ndev->rx_lock, sflags);
+		spin_unlock_irqrestore(&ctx_i->rx_lock, sflags);
 	} else {
 		return -EIO;
 	}
@@ -298,9 +322,10 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	struct opa_veswport *dev = vdev->hfi_priv;
 	struct opa_core_device *odev = dev->odev;
 	struct opa_netdev *ndev = dev->ndev;
-	struct hfi_ctx *ctx = &ndev->ctx;
-	struct hfi_cq *tx = &ndev->tx;
-	struct hfi_cq *rx = &ndev->rx;
+	struct opa_ctx_info *ctx_i;
+	struct hfi_ctx *ctx;
+	struct hfi_cq *tx;
+	struct hfi_cq *rx;
 	u64 *eq_entry = NULL;
 	union base_iovec iov;
 	unsigned long sflags;
@@ -319,9 +344,14 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 		pad_info = skb->data + skb->len - 1;
 		iov.length = skb->len - OPA_VNIC_ICRC_TAIL_LEN -
 				(*pad_info & 0x3f);
+		ctx_i = &ndev->def_ctx;
 	} else {
 		iov.length = skb->len;
+		ctx_i = &ndev->eth_ctx[q_idx];
 	}
+	ctx = &ctx_i->ctx;
+	tx = &ctx_i->tx;
+	rx = &ctx_i->rx;
 	if (iov.length > OPA2_NET_DEFAULT_MTU) {
 		rc = -ENOSPC;
 		dev_err(&odev->dev, "%s %d iov.length %d > max MTU %d\n",
@@ -332,11 +362,11 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	iov.sp = 1;
 	iov.v = 1;
 
-	spin_lock_irqsave(&ndev->tx_lock, sflags);
+	spin_lock_irqsave(&ctx_i->tx_lock, sflags);
 retry:
 	rc = hfi_tx_cmd_bypass_dma(tx, ctx, (u64)&iov, 1, 0xdead,
 				   PTL_MD_RESERVED_IOV,
-				   &ndev->eq_tx, HFI_CT_NONE,
+				   &ctx_i->eq_tx, HFI_CT_NONE,
 				   dev->port_num - 1,
 				   0x0, dev->slid, HDR_10B,
 				   GENERAL_DMA);
@@ -352,16 +382,16 @@ retry:
 	}
 
 	/* FXRTODO: need to wait for completion asynchronously */
-	rc = hfi_eq_wait_timed(ctx, &ndev->eq_tx, OPA2_NET_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(ctx, &ctx_i->eq_tx, OPA2_NET_TIMEOUT_MS,
 			       &eq_entry);
 	if (eq_entry) {
 		union initiator_EQEntry *txe =
 			(union initiator_EQEntry *)eq_entry;
 		int flit_len = ((*(u32 *)skb->data) >> 20) << 3;
 
-		spin_lock(&ndev->rx_lock);
-		hfi_eq_advance(ctx, rx, &ndev->eq_tx, eq_entry);
-		spin_unlock(&ndev->rx_lock);
+		spin_lock(&ctx_i->rx_lock);
+		hfi_eq_advance(ctx, rx, &ctx_i->eq_tx, eq_entry);
+		spin_unlock(&ctx_i->rx_lock);
 		rc = 0;
 		dev_dbg(&odev->dev,
 			"TX kind %d skb->len %4d flit_len %4d vpnum %d port %d\n",
@@ -371,7 +401,7 @@ retry:
 		dev_err(&odev->dev, "TX CT event 1 failure, %d\n", rc);
 	}
 err1:
-	spin_unlock_irqrestore(&ndev->tx_lock, sflags);
+	spin_unlock_irqrestore(&ctx_i->tx_lock, sflags);
 err:
 	if (rc)
 		vdev->hfi_stats[q_idx].tx_logic_errors++;
@@ -416,8 +446,9 @@ static int opa2_vnic_hfi_get_read_avail(struct opa_vnic_device *vdev, u8 q_idx)
  */
 static void opa2_vnic_rx_isr_cb(struct hfi_eq *eq_rx, void *data)
 {
-	struct opa_netdev *ndev = data;
-	struct hfi_ctx *ctx = &ndev->ctx;
+	struct opa_ctx_info *ctx_i = data;
+	struct hfi_ctx *ctx = &ctx_i->ctx;
+	struct opa_netdev *ndev = ctx_i->ndev;
 	u64 *eq_entry;
 	union rhf *rhf;
 	int l4_type, id = 0;
@@ -426,11 +457,11 @@ static void opa2_vnic_rx_isr_cb(struct hfi_eq *eq_rx, void *data)
 	struct opa_vnic_device *vdev = NULL;
 	void *buf;
 	unsigned long sflags;
-	struct hfi_cq *rx = &ndev->rx;
+	struct hfi_cq *rx = &ctx_i->rx;
 	int len, err;
 	unsigned char *pad_info = NULL;
 	struct sk_buff *skb;
-	u8 q_idx = 0;
+	u8 q_idx = ctx_i->q_idx;
 
 retry:
 	skb = NULL;
@@ -443,12 +474,12 @@ retry:
 		dev_err(&ndev->odev->dev,
 			"packet drop: incorrect eager index %d\n",
 			rhf->egrindex);
-		spin_lock_irqsave(&ndev->rx_lock, sflags);
-		hfi_eq_advance(ctx, &ndev->rx, eq_rx, eq_entry);
-		spin_unlock_irqrestore(&ndev->rx_lock, sflags);
+		spin_lock_irqsave(&ctx_i->rx_lock, sflags);
+		hfi_eq_advance(ctx, &ctx_i->rx, eq_rx, eq_entry);
+		spin_unlock_irqrestore(&ctx_i->rx_lock, sflags);
 		return;
 	}
-	buf = ndev->buf[rhf->egrindex];
+	buf = ctx_i->buf[rhf->egrindex];
 	l4_type = OPA_VNIC_GET_L4_TYPE(buf);
 	rcu_read_lock();
 	if (l4_type == OPA_VNIC_L4_EEPH) {
@@ -509,7 +540,7 @@ retry:
 		dev->vport_num, rhf->pt + 1,
 		rhf->egrindex, rhf->egroffset);
 pkt_drop:
-	spin_lock_irqsave(&ndev->rx_lock, sflags);
+	spin_lock_irqsave(&ctx_i->rx_lock, sflags);
 	err = hfi_pt_update_eager(ctx, rx, rhf->egrindex);
 	if (err < 0) {
 		/*
@@ -520,7 +551,7 @@ pkt_drop:
 			err);
 	}
 	hfi_eq_advance(ctx, rx, eq_rx, eq_entry);
-	spin_unlock_irqrestore(&ndev->rx_lock, sflags);
+	spin_unlock_irqrestore(&ctx_i->rx_lock, sflags);
 	/* Notify the upper layer about a received packet */
 	if (skb) {
 		vnic_cb = rcu_dereference(dev->vnic_cb);
@@ -533,37 +564,37 @@ pkt_drop:
 }
 
 /* Free any RX buffers previously allocated */
-static void opa2_free_rx_bufs(struct opa_netdev *ndev)
+static void opa2_free_rx_bufs(struct opa_ctx_info *ctx_i)
 {
 	int i = 0;
 
 	for (i = 0; i < OPA2_NET_NUM_RX_BUFS; i++) {
-		if (ndev->buf[i]) {
-			vfree(ndev->buf[i]);
-			ndev->buf[i] = NULL;
+		if (ctx_i->buf[i]) {
+			vfree(ctx_i->buf[i]);
+			ctx_i->buf[i] = NULL;
 		}
 	}
 }
 
 /* Allocate and append RX buffers */
-static int opa2_alloc_rx_bufs(struct opa_netdev *ndev)
+static int opa2_alloc_rx_bufs(struct opa_ctx_info *ctx_i)
 {
 	int i, rc = 0;
 
 	for (i = 0; i < OPA2_NET_NUM_RX_BUFS; i++) {
-		ndev->buf[i] = vzalloc(OPA2_NET_EAGER_SIZE);
-		if (!ndev->buf[i]) {
+		ctx_i->buf[i] = vzalloc(OPA2_NET_EAGER_SIZE);
+		if (!ctx_i->buf[i]) {
 			rc = -ENOMEM;
 			goto err1;
 		}
 
-		rc = opa2_vnic_append_skb(ndev, i);
+		rc = opa2_vnic_append_skb(ctx_i, i);
 		if (rc)
 			goto err1;
 	}
 	return rc;
 err1:
-	opa2_free_rx_bufs(ndev);
+	opa2_free_rx_bufs(ctx_i);
 	return rc;
 }
 
@@ -592,7 +623,7 @@ static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
 	struct opa_netdev *ndev = dev->ndev;
-	int rc;
+	int rc, i;
 
 	if (!cb)
 		return -EINVAL;
@@ -632,7 +663,8 @@ static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 			__func__, __LINE__, rc);
 		goto err1;
 	}
-	skb_queue_head_init(&dev->skbq[0]);
+	for (i = 0; i < OPA2_NUM_VNIC_CTXT; i++)
+		skb_queue_head_init(&dev->skbq[i]);
 	dev->vdev = vdev;
 	rcu_assign_pointer(dev->vnic_cb, cb);
 	synchronize_rcu();
@@ -650,6 +682,7 @@ static void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
 	struct opa_netdev *ndev = dev->ndev;
+	int i;
 
 	if (vdev->is_eeph)
 		ndev->eeph_dev = NULL;
@@ -658,19 +691,21 @@ static void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
 
 	rcu_assign_pointer(dev->vnic_cb, NULL);
 	synchronize_rcu();
-	skb_queue_purge(&dev->skbq[0]);
+	for (i = 0; i < OPA2_NUM_VNIC_CTXT; i++)
+		skb_queue_purge(&dev->skbq[i]);
 
 	opa2_uninit_tx_rx(dev);
 	if (vdev->is_eeph)
 		hfi_vdev_put(vdev);
 }
 
-static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev)
+static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev, int ctx_num)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
 	struct opa_netdev *ndev = dev->ndev;
-	struct hfi_ctx *ctx = &ndev->ctx;
-	struct hfi_cq *rx = &ndev->rx;
+	struct opa_ctx_info *ctx_i;
+	struct hfi_ctx *ctx;
+	struct hfi_cq *rx;
 	struct opa_core_device *odev = dev->odev;
 	struct opa_core_ops *ops = odev->bus_ops;
 	struct opa_ctx_assign ctx_assign = {0};
@@ -679,8 +714,22 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev)
 	hfi_pt_alloc_eager_args_t pt_alloc = {0};
 	int rc;
 
+	if (vdev->is_eeph)
+		ctx_i = &ndev->def_ctx;
+	else
+		ctx_i = &ndev->eth_ctx[ctx_num];
+	ctx_i->ndev = ndev;
+	ctx_i->q_idx = ctx_num;
+	ctx = &ctx_i->ctx;
+	rx = &ctx_i->rx;
+	spin_lock_init(&ctx_i->tx_lock);
+	spin_lock_init(&ctx_i->rx_lock);
 	HFI_CTX_INIT(ctx, odev->dd, odev->bus_ops);
-	ctx->mode |= HFI_CTX_MODE_BYPASS_10B;
+	/* EEPH uses bypass context whereas STLEEP uses RSM */
+	if (vdev->is_eeph)
+		ctx->mode |= HFI_CTX_MODE_BYPASS_10B;
+	else
+		ctx->mode |= HFI_CTX_MODE_BYPASS_RSM;
 	ctx_assign.pid = HFI_PID_ANY;
 	ctx_assign.le_me_count = OPA2_NET_NUM_RX_BUFS;
 	rc = ops->ctx_assign(ctx, &ctx_assign);
@@ -693,72 +742,79 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev)
 	 * separate CQs for each port for scalability reasons as a
 	 * potential future performance optimization.
 	 */
-	rc = ops->cq_assign(ctx, NULL, &ndev->cq_idx);
+	rc = ops->cq_assign(ctx, NULL, &ctx_i->cq_idx);
 	if (rc)
 		goto err;
-	rc = ops->cq_map(ctx, ndev->cq_idx, &ndev->tx, &ndev->rx);
+	rc = ops->cq_map(ctx, ctx_i->cq_idx, &ctx_i->tx, rx);
 	if (rc)
 		goto err1;
-	ndev->ni = HFI_NI_BYPASS;
 
 	/* TX EQ can be allocated per netdev */
-	eq_alloc_tx.ni = ndev->ni;
+	eq_alloc_tx.ni = HFI_NI_BYPASS;
 	eq_alloc_tx.user_data = 0xdeadbeef;
 	eq_alloc_tx.count = OPA2_NET_NUM_RX_BUFS;
-	eq_alloc_tx.cookie = ndev;
-	rc = _hfi_eq_alloc(ctx, rx, &ndev->rx_lock, &eq_alloc_tx,
-			   &ndev->eq_tx);
+	eq_alloc_tx.cookie = ctx_i;
+	rc = _hfi_eq_alloc(ctx, rx, &ctx_i->rx_lock, &eq_alloc_tx,
+			   &ctx_i->eq_tx);
 	if (rc)
 		goto err2;
-	eq_alloc_rx.ni = ndev->ni;
+	eq_alloc_rx.ni = HFI_NI_BYPASS;
 	eq_alloc_rx.user_data = 0xdeadbeef;
 	eq_alloc_rx.count = OPA2_NET_NUM_RX_BUFS;
 	eq_alloc_rx.isr_cb = opa2_vnic_rx_isr_cb;
-	eq_alloc_rx.cookie = ndev;
-	rc = _hfi_eq_alloc(ctx, rx, &ndev->rx_lock, &eq_alloc_rx,
-			   &ndev->eq_rx);
+	eq_alloc_rx.cookie = ctx_i;
+	rc = _hfi_eq_alloc(ctx, rx, &ctx_i->rx_lock, &eq_alloc_rx,
+			   &ctx_i->eq_rx);
 	if (rc)
 		goto err3;
 	pt_alloc.eager_order = ilog2(OPA2_NET_NUM_RX_BUFS) - 2;
-	pt_alloc.eq_handle = &ndev->eq_rx;
+	pt_alloc.eq_handle = &ctx_i->eq_rx;
 	rc = hfi_pt_alloc_eager(ctx, rx, &pt_alloc);
 	if (rc < 0)
 		goto err4;
-	rc = opa2_alloc_rx_bufs(ndev);
+	rc = opa2_alloc_rx_bufs(ctx_i);
 	if (rc < 0)
 		goto err5;
 
 	return 0;
 err5:
-	hfi_pt_disable(ctx, &ndev->rx, ndev->ni, HFI_PT_BYPASS_EAGER);
+	hfi_pt_disable(ctx, rx, HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
 err4:
-	_hfi_eq_release(ctx, rx, &ndev->rx_lock, &ndev->eq_rx);
+	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_rx);
 err3:
-	_hfi_eq_release(ctx, rx, &ndev->rx_lock, &ndev->eq_tx);
+	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_tx);
 err2:
-	ops->cq_unmap(&ndev->tx, &ndev->rx);
+	ops->cq_unmap(&ctx_i->tx, &ctx_i->rx);
 err1:
-	ops->cq_release(ctx, ndev->cq_idx);
+	ops->cq_release(ctx, ctx_i->cq_idx);
 err:
 	ops->ctx_release(ctx);
 	dev_err(&odev->dev, "%s rc %d\n", __func__, rc);
 	return rc;
 }
 
-static void opa2_vnic_uninit_ctx(struct opa_vnic_device *vdev)
+static void opa2_vnic_uninit_ctx(struct opa_vnic_device *vdev, int ctx_num)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
 	struct opa_netdev *ndev = dev->ndev;
-	struct hfi_ctx *ctx = &ndev->ctx;
+	struct opa_ctx_info *ctx_i;
+	struct hfi_ctx *ctx;
+	struct hfi_cq *rx;
 	struct opa_core_device *odev = dev->odev;
 	struct opa_core_ops *ops = odev->bus_ops;
 
-	hfi_pt_disable(ctx, &ndev->rx, ndev->ni, HFI_PT_BYPASS_EAGER);
-	opa2_free_rx_bufs(ndev);
-	_hfi_eq_release(ctx, &ndev->rx, &ndev->rx_lock, &ndev->eq_rx);
-	_hfi_eq_release(ctx, &ndev->rx, &ndev->rx_lock, &ndev->eq_tx);
-	ops->cq_unmap(&ndev->tx, &ndev->rx);
-	ops->cq_release(ctx, ndev->cq_idx);
+	if (vdev->is_eeph)
+		ctx_i = &ndev->def_ctx;
+	else
+		ctx_i = &ndev->eth_ctx[ctx_num];
+	ctx = &ctx_i->ctx;
+	rx = &ctx_i->rx;
+	hfi_pt_disable(ctx, rx, HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
+	opa2_free_rx_bufs(ctx_i);
+	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_rx);
+	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_tx);
+	ops->cq_unmap(&ctx_i->tx, &ctx_i->rx);
+	ops->cq_release(ctx, ctx_i->cq_idx);
 	odev->bus_ops->ctx_release(ctx);
 }
 
@@ -766,25 +822,71 @@ static int opa2_vnic_hfi_init(struct opa_vnic_device *vdev)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
 	struct opa_core_device *odev = dev->odev;
+	struct opa_core_ops *ops = odev->bus_ops;
 	struct opa_netdev *ndev = dev->ndev;
-	int rc = 0, i;
+	struct hfi_ctx *rsm_ctx[OPA2_NUM_VNIC_CTXT];
+	int rc = 0, i, j, num_ctx;
 
 	mutex_lock(&ndev->ctx_lock);
-	if (ndev->num_vports)
-		goto finish;
+	if (vdev->is_eeph) {
+		if (ndev->num_eports)
+			goto finish;
+		num_ctx = 1;
+	} else {
+		if (ndev->num_vports)
+			goto finish;
+		num_ctx = OPA2_NUM_VNIC_CTXT;
+	}
 
 	for (i = 0; i < ndev->num_ports; i++)
 		idr_init(&ndev->vesw_idr[i]);
-	rc = opa2_vnic_init_ctx(vdev);
-	if (rc) {
-		dev_err(&odev->dev, "alloc_ctx fail rc %d\n", rc);
-		goto fail;
+	for (i = 0; i < num_ctx; i++) {
+		rc = opa2_vnic_init_ctx(vdev, i);
+		if (rc) {
+			dev_err(&odev->dev, "alloc_ctx fail rc %d\n", rc);
+			goto fail;
+		}
+		rsm_ctx[i] = &ndev->eth_ctx[i].ctx;
+	}
+	if (!vdev->is_eeph) {
+		struct hfi_rsm_rule rule = {0};
+
+		/* set RSM rule for 10B STLEEP using L2 and L4 */
+		rule.idx = HFI_VNIC_RSM_RULE_IDX;
+		/* bypass */
+		rule.pkt_type = 0x4;
+		/* match L2 == 10B (0x1)*/
+		rule.match_offset[0] = 61;
+		rule.match_mask[0] = OPA_BYPASS_L2_MASK;
+		rule.match_value[0] = OPA_BYPASS_HDR_10B;
+		/* match 10B STLEEP L4: 0x0 */
+		rule.match_offset[1] = 64;
+		rule.match_mask[1] = 0xF;
+		rule.match_value[1] = 0x0;
+
+		rule.select_width[0] = ilog2(OPA2_NUM_VNIC_CTXT);
+		rule.select_offset[0] = L4_HDR_VESWID_OFFSET;
+		rule.select_width[1] = ilog2(OPA2_NUM_VNIC_CTXT);
+		rule.select_offset[1] = L2_ENTROPY_OFFSET;
+		rc = ops->set_rsm_rule(odev, &rule, rsm_ctx,
+				       OPA2_NUM_VNIC_CTXT);
+		if (rc) {
+			dev_err(&odev->dev, "rsm fail rc %d\n", rc);
+			goto fail;
+		}
 	}
 finish:
-	ndev->num_vports++;
+	if (vdev->is_eeph)
+		ndev->num_eports++;
+	else
+		ndev->num_vports++;
 	vdev->opa_mtu = OPA2_NET_DEFAULT_MTU;
+	mutex_unlock(&ndev->ctx_lock);
+	return 0;
 fail:
 	mutex_unlock(&ndev->ctx_lock);
+	for (j = 0; j < i; j++)
+		opa2_vnic_uninit_ctx(vdev, j);
 	if (rc)
 		dev_err(&odev->dev, "%s rc %d\n", __func__, rc);
 	return rc;
@@ -793,12 +895,16 @@ fail:
 static void opa2_vnic_hfi_deinit(struct opa_vnic_device *vdev)
 {
 	struct opa_veswport *dev = vdev->hfi_priv;
+	struct opa_core_device *odev = dev->odev;
+	struct opa_core_ops *ops = odev->bus_ops;
 	struct opa_netdev *ndev = dev->ndev;
 	int i;
 
 	mutex_lock(&ndev->ctx_lock);
 	if (!--ndev->num_vports) {
-		opa2_vnic_uninit_ctx(vdev);
+		for (i = 0; i < OPA2_NUM_VNIC_CTXT; i++)
+			opa2_vnic_uninit_ctx(vdev, i);
+		ops->clear_rsm_rule(odev, 1);
 		for (i = 0; i < ndev->num_ports; i++)
 			idr_destroy(&ndev->vesw_idr[i]);
 	}
@@ -835,7 +941,7 @@ static int hfi_vdev_create(struct opa_vnic_ctrl_device *cdev,
 	vport->vport_num = vport_num;
 	vport->odev = ndev->odev;
 	vport->ndev = opa_core_get_priv_data(&opa_vnic_clnt, ndev->odev);
-	hfi_info.num_tx_q = 1;
+	hfi_info.num_tx_q = is_eeph ? 1 : OPA2_NUM_VNIC_CTXT;
 	hfi_info.num_rx_q = is_eeph ? 1 : OPA2_NUM_VNIC_CTXT;
 	vdev = opa_vnic_device_register(cdev, port_num, vport_num, vport,
 					&vnic_ops, hfi_info, is_eeph);
@@ -1039,8 +1145,6 @@ static int opa_netdev_probe(struct opa_core_device *odev)
 	ndev->odev = odev;
 	mutex_init(&ndev->ctrl_lock);
 	mutex_init(&ndev->ctx_lock);
-	spin_lock_init(&ndev->tx_lock);
-	spin_lock_init(&ndev->rx_lock);
 	spin_lock_init(&ndev->stats_lock);
 	opa_netdev_link_handling(ndev);
 	return rc;
