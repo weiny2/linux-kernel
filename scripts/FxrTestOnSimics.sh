@@ -4,10 +4,11 @@ set -x
 myname=`basename $0 .sh`
 tmp_dir=/tmp
 test_type=default
+cleanup_simics=true
 
 . scripts/GlobalDefinition.sh
 
-while getopts "ilhd:t:" opt
+while getopts "ilhcd:t:" opt
 do
 	case $opt in
 	i)
@@ -15,6 +16,9 @@ do
 		;;
 	l)
 		only_load_driver=true
+		;;
+	c)
+		cleanup_simics=false
 		;;
 	d)
 		if !(ssh -p${viper0} root@localhost "[ -d ${OPTARG} ]"); then
@@ -35,6 +39,7 @@ do
 		echo "          built in rpmbuild"
 		echo "   -l     Installs and only runs ModuleLoad test"
 		echo "          (When -l option is used -i is ignored)"
+		echo "   -c     stop Simics and cleanup"
 		echo "   -d     Specify path to temporary directory in viperx host"
 		echo "          to copy and extract drivers"
 		echo "   -t     test_type argument sent to harness.py"
@@ -47,17 +52,6 @@ do
 	esac
 done
 shift $(($OPTIND - 1))
-
-# Am I invoked by Jenkins?
-ByJenkins=no
-[ `id -un` == root ] && pwd | grep --quiet jenkins && ByJenkins=yes
-
-# show which version/commit of Simics, craff file and others I am using
-pwd; git log -n1 | head -1
-${fxr}/simics/workspace/bin/simics --version
-( cd ${fxr}/simics/workspace/; git log -n1 | head -1 )
-ls -l ${fxr}/simics/FxrRhel7.craff
-ls -l ${fxr}/simics/SynopsisInstructionSetSimulator
 
 . scripts/FxrInstall.sh
 
@@ -93,17 +87,17 @@ if [ ${ByJenkins} == yes ] ; then
 		${ssh_cmd} "dmesg -c"
 		echo dmesg on viper with port ${viper} end
 	done
-	# stop simics
-	killall simics-common
 
 	# display simics console logs
 	echo simics console logs
 	cat ${fxr}/simics/workspace/KnightsHill0.log
 	echo "----- Failed harness test(s) -----"
 	grep "^\[FAIL\]" /tmp/${myname}.$$ || echo None.
-
-	cleanup_lock
 fi
 rm -f /tmp/${myname}.$$
+
+if [ ${cleanup_simics} = "true" ]; then
+	cleanup_simics
+fi
 
 exit $res
