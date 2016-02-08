@@ -39,7 +39,7 @@ do
 		echo "          built in rpmbuild"
 		echo "   -l     Installs and only runs ModuleLoad test"
 		echo "          (When -l option is used -i is ignored)"
-		echo "   -c     stop Simics and cleanup"
+		echo "   -c     don\'t stop Simics"
 		echo "   -d     Specify path to temporary directory in viperx host"
 		echo "          to copy and extract drivers"
 		echo "   -t     test_type argument sent to harness.py"

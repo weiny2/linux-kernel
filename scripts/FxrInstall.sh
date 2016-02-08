@@ -24,7 +24,7 @@ for viper in ${viper0} ${viper1}; do
 
     ${ssh_cmd} "dmesg -c > /dev/null"
     # stop opa2_hfi daemon to release the driver
-    ${ssh_cmd} "service --skip-redirect opa2_hfi stop"
+    ${ssh_cmd} "service --skip-redirect opa2_hfi stop" 2>/dev/null
     if [ ! $? ]; then
 		echo fail on stoping opa2_hfi.
 		exit 12
