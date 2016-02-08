@@ -7,7 +7,7 @@ set -x
 if [ ${ByJenkins} == yes ] ; then
 	lock_simics
 	res=$?
-	if [ ${res} ]; then
+	if [ ! ${res} ]; then
 		echo Simics keeps running: ${LOCK_TIMEOUT}
 		exit ${res}
 	fi

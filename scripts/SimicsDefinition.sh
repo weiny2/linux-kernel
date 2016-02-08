@@ -6,7 +6,7 @@ export LD_LIBRARY_PATH=${fxr}/simics/SynopsisInstructionSetSimulator/lib
 export SNPSLMD_LICENSE_FILE="26586@synopsys03p.elic.intel.com"
 export LM_PROJECT=”FDO”
 LOCK_DIR=/run/lock
-LOCK_FILE=${LOCK_DIR}/${myname}.lock
+LOCK_FILE=${LOCK_DIR}/FxrSimics.lock
 LOCK_TIMEOUT=900 # 900 = 60 * 15 = 15min
 MAX_SIMICS_WAIT=180 # = 3 * 60 = 3min
 DISK_IMAGE="../FxrRhel7.craff"
