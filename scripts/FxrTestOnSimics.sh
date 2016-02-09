@@ -67,8 +67,8 @@ fi
 
 # run default tests
 cd opa-headers.git/test
-./harness.py --nodelist=viper0,viper1 --type=${test_type} | tee /tmp/${myname}.$$
-res=$?
+( ./harness.py --nodelist=viper0,viper1 --type=${test_type}; export res=$? ) | \
+	tee /tmp/${myname}.$$
 if [ ! ${res} ]; then
     echo fail on harness.
 fi
