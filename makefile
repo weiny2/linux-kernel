@@ -87,7 +87,7 @@ distclean: clean
 	rm -f $(NAME).spec cov.* *~
 	rm -rf rpmbuild
 
-specfile: $(NAME).spec.in
+$(NAME).spec: $(NAME).spec.in
 	sed \
 		-e 's/@VERSION@/'${VERSION}'/g' \
 		-e 's/@RELEASE@/'${RELEASE}'/g' \
@@ -102,7 +102,7 @@ ifneq (,$(BASEVERSION))
 	fi
 endif
 
-dist: distclean specfile headers vnic
+dist: $(NAME).spec headers vnic
 	rm -rf /tmp/$(NAME)-$(VERSION)
 	mkdir -p /tmp/$(NAME)-$(VERSION)
 	cp -r . /tmp/$(NAME)-$(VERSION)
