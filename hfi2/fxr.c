@@ -180,6 +180,19 @@ static void write_lm_cm_csr(const struct hfi_pportdata *ppd,
 	write_csr(ppd->dd, offset, value);
 }
 
+static u64 read_lm_fpc_csr(const struct hfi_pportdata *ppd,
+			     u32 offset)
+{
+	if (ppd->pnum == 1)
+		offset += FXR_LM_FPC0_CSRS;
+	else if (ppd->pnum == 2)
+		offset += FXR_LM_FPC1_CSRS;
+	else
+		ppd_dev_warn(ppd, "invalid port");
+
+	return read_csr(ppd->dd, offset);
+}
+
 static u64 read_lm_tp_csr(const struct hfi_pportdata *ppd,
 			  u32 offset)
 {
@@ -487,7 +500,20 @@ static void hfi_set_lid_lmc(struct hfi_pportdata *ppd)
  */
 static void hfi_set_send_length(struct hfi_pportdata *ppd)
 {
-	/*FXRTODO: HW related code to change MTU */
+	TP_CFG_VL_MTU_t vlmtu;
+
+	/*FXRTODO: Set vl*_tx_mtu from values suppled by fabric manager */
+	vlmtu.val = read_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU);
+	vlmtu.field.vl0_tx_mtu = 0x7;
+	vlmtu.field.vl1_tx_mtu = 0x7;
+	vlmtu.field.vl2_tx_mtu = 0x7;
+	vlmtu.field.vl3_tx_mtu = 0x7;
+	vlmtu.field.vl4_tx_mtu = 0x7;
+	vlmtu.field.vl5_tx_mtu = 0x7;
+	vlmtu.field.vl6_tx_mtu = 0x7;
+	vlmtu.field.vl7_tx_mtu = 0x7;
+	vlmtu.field.vl8_tx_mtu = 0x7;
+	write_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU, vlmtu.val);
 }
 
 void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable)
@@ -1789,6 +1815,25 @@ void hfi_init_sc_to_vl_tables(struct hfi_pportdata *ppd)
 	hfi_set_sc_to_vlr(ppd, vlt);
 }
 
+static void hfi_init_linkmux_csrs(struct hfi_pportdata *ppd)
+{
+	TP_CFG_MISC_CTRL_t misc;
+	FPC_CFG_PORT_CONFIG_t fpc;
+
+	misc.val = read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
+	/*FXRTODO: Check spec if operational_vl value is supplied by FM */
+	misc.field.operational_vl = 0x1FF;
+	misc.field.disable_reliable_vl15_pkts = 0;
+	misc.field.disable_reliable_vl8_0_pkts = 0;
+	write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
+
+	fpc.val = read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
+	fpc.field.mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.pkt_formats_enabled = 0xF;
+	fpc.field.pkt_formats_supported = 0xF;
+	write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);
+}
+
 /*
  * hfi_pport_init - initialize per port
  * data structs
@@ -1886,6 +1931,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		 */
 		ppd->vl_mtu[15] = HFI_MIN_VL_15_MTU;
 		ppd->vls_operational = ppd->vls_supported;
+		hfi_init_linkmux_csrs(ppd);
 		for (i = 0; i < ARRAY_SIZE(ppd->sl_to_sc); i++)
 			ppd->sl_to_sc[i] = i;
 		for (i = 0; i < ARRAY_SIZE(ppd->sc_to_sl); i++)
