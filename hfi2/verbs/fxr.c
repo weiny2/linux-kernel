@@ -275,7 +275,7 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_swqe *wqe)
 
 	/* send the WQE via PIO path */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
-	ret = hfi_tx_cmd_bypass_pio(&ibp->cmdq_tx, wqe->s_ctx,
+	ret = hfi_tx_9b_kdeth_cmd_pio(&ibp->cmdq_tx, wqe->s_ctx,
 				    wqe->s_hdr, 8 + (wqe->s_hdrwords << 2),
 				    wqe->sg_list[0].vaddr,
 				    wqe->length, ibp->port_num,
