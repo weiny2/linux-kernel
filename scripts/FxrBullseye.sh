@@ -60,6 +60,7 @@ ${SSH_CMD} "\
 	${BULLSEYE_DIR}/bin/covselect -q --deleteAll; \
 	${BULLSEYE_DIR}/bin/covselect -q --add ./; \
 	${BULLSEYE_DIR}/bin/covselect -q --add '!opa2_vnic/vnic.git/opa_vnic/opa_vnic_debug.c'; \
+	${BULLSEYE_DIR}/bin/covselect -q --add '!opa-headers.git/test/'
 	cd ${BULLSEYE_DIR}/run/linuxKernel; \
 	make -C /lib/modules/\`uname -r\`/build M=\`pwd\`; \
 	insmod ${BULLSEYE_DIR}/run/linuxKernel/libcov-lkm.ko; \
