@@ -226,14 +226,6 @@ int hfi1_user_exp_rcv_init(struct file *fp)
 		}
 	}
 
-	if (HFI1_CAP_IS_USET(TID_UNMAP)) {
-		fdata->mmu_rb_insert = mmu_rb_insert;
-		fdata->mmu_rb_remove = mmu_rb_remove;
-	} else {
-		fdata->mmu_rb_insert = hfi1_mmu_rb_insert;
-		fdata->mmu_rb_remove = hfi1_mmu_rb_remove;
-	}
-
 	/*
 	 * PSM does not have a good way to separate, count, and
 	 * effectively enforce a limit on RcvArray entries used by
@@ -840,7 +832,10 @@ static int set_rcvarray_entry(struct file *fp, unsigned long vaddr,
 	node->freed = false;
 	memcpy(node->pages, pages, sizeof(struct page *) * npages);
 
-	ret = fdata->mmu_rb_insert(root, &node->mmu);
+	if (HFI1_CAP_IS_USET(TID_UNMAP))
+		ret = mmu_rb_insert(root, &node->mmu);
+	else
+		ret = hfi1_mmu_rb_insert(root, &node->mmu);
 
 	if (ret) {
 		hfi1_cdbg(TID, "Failed to insert RB node %u 0x%lx, 0x%lx %d",
@@ -880,7 +875,10 @@ static int unprogram_rcvarray(struct file *fp, u32 tidinfo,
 	node = fdata->entry_to_rb[rcventry];
 	if (!node || node->rcventry != (uctxt->expected_base + rcventry))
 		return -EBADF;
-	fdata->mmu_rb_remove(&fdata->tid_rb_root, &node->mmu);
+	if (HFI1_CAP_IS_USET(TID_UNMAP))
+		mmu_rb_remove(&fdata->tid_rb_root, &node->mmu);
+	else
+		hfi1_mmu_rb_remove(&fdata->tid_rb_root, &node->mmu);
 
 	if (grp)
 		*grp = node->grp;
@@ -941,7 +939,12 @@ static void unlock_exp_tids(struct hfi1_ctxtdata *uctxt,
 							  uctxt->expected_base];
 				if (!node || node->rcventry != rcventry)
 					continue;
-				fdata->mmu_rb_remove(root, &node->mmu);
+				if (HFI1_CAP_IS_USET(TID_UNMAP))
+					mmu_rb_remove(&fdata->tid_rb_root,
+						      &node->mmu);
+				else
+					hfi1_mmu_rb_remove(&fdata->tid_rb_root,
+							   &node->mmu);
 				clear_tid_node(fdata, -1, node);
 			}
 		}
