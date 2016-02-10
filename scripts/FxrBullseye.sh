@@ -92,7 +92,6 @@ ${SSH_CMD} "\
 "
 
 # transfer to host
-${SSH_CMD} "cd ${HOME_DIR}; tar cf - ${CURRENT_DIR}" | (cd /tmp; tar xf -)
 ${SSH_CMD} "cat ${COVFILE}" >cov.${test_type}
 
 # to view code coverage result
