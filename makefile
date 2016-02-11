@@ -54,7 +54,12 @@ BASEVERSION :=
 
 EXCLUDES := --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp' \
 	--exclude='series' --exclude='*.orig' --exclude='$(NAME).spec*' \
-	--exclude='Fxr*' --exclude=scripts
+	--exclude="cov.*" \
+	--exclude="rpmbuild" \
+	--exclude="*.tgz" \
+	--exclude="*~" \
+	--exclude="*.rpm" \
+	--exclude=scripts
 
 #BUILD_KERNEL ?= 4.3.0+
 BUILD_KERNEL ?= $(shell uname -r)
