@@ -143,7 +143,7 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 		return ret;
 
 	ret = ops->ctx_reserve(&ud->ctx, &pid_base, count, pid_align,
-			       job_setup->pid_mode);
+			       job_setup->flags);
 	if (ret)
 		return ret;
 	ud->ctx.pid_base = pid_base;

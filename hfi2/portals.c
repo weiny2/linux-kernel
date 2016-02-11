@@ -1046,7 +1046,13 @@ idr_done:
 	/* program TPID_CAM for our reserved PID range */
 	hfi_tpid_enable(dd, tpid_idx, ctx->pid_base, TPID_UID(ctx));
 	ctx->tpid_idx = tpid_idx;
-	ctx->mode |= HFI_CTX_MODE_PID_VIRTUALIZED;
+	/*
+	 * inform user which NIs are enabled for TPID_CAM
+	 * TODO - driver doesn't yet allow disabling for a given NI
+	 */
+	ctx->mode |= HFI_CTX_MODE_VTPID_MATCHING;
+	ctx->mode |= HFI_CTX_MODE_VTPID_NONMATCHING;
+
 	return 0;
 }
 
@@ -1062,11 +1068,12 @@ static void hfi_ctxt_unset_virtual_pid_range(struct hfi_ctx *ctx)
 	spin_lock(&dd->ptl_lock);
 	idr_remove(&dd->ptl_tpid, ctx->tpid_idx);
 	spin_unlock(&dd->ptl_lock);
-	ctx->mode &= ~HFI_CTX_MODE_PID_VIRTUALIZED;
+	ctx->mode &= ~HFI_CTX_MODE_VTPID_MATCHING;
+	ctx->mode &= ~HFI_CTX_MODE_VTPID_NONMATCHING;
 }
 
 int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
-		     u16 mode)
+		     u16 flags)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	u16 offset = 0, size = HFI_NUM_USABLE_PIDS;
@@ -1076,11 +1083,8 @@ int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
 	if (ctx->pid_count)
 		return -EPERM;
 
-	/*
-	 * TODO: not sure if this is correct, depends on how we
-	 * document interface for PSM to reserve block of PIDs.
-	 */
-	if (ctx->mode & HFI_CTX_MODE_BYPASS_MASK) {
+	/* If requested, use non-portals PID reservation (for PSM) */
+	if (flags & HFI_CTX_FLAG_USE_BYPASS) {
 		offset = HFI_PID_BYPASS_BASE;
 		size = offset + HFI_NUM_BYPASS_PIDS;
 	}
@@ -1091,7 +1095,7 @@ int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
 		ctx->pid_count = count;
 	}
 
-	if (mode & HFI_CTX_MODE_PID_VIRTUALIZED) {
+	if (flags & HFI_CTX_FLAG_SET_VIRTUAL_PIDS) {
 		ret = hfi_ctxt_set_virtual_pid_range(ctx);
 		if (ret) {
 			hfi_ctxt_unreserve(ctx);
@@ -1151,7 +1155,7 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		return -EPERM;
 
 	/* if requested (by PSM), allocate PID from BYPASS range */
-	if (ctx_assign->flags & HFI_CTX_MODE_USE_BYPASS)
+	if (ctx_assign->flags & HFI_CTX_FLAG_USE_BYPASS)
 		ctx->mode |= (HFI_CTX_MODE_USE_BYPASS | HFI_CTX_MODE_BYPASS_9B);
 
 	ptl_pid = ctx_assign->pid;
