@@ -113,7 +113,8 @@ enum {
 #define HFI_DLID_TABLE_SIZE	(64 * 1024)
 
 #define IS_PID_VIRTUALIZED(ctx) \
-	((ctx)->mode & HFI_CTX_MODE_PID_VIRTUALIZED)
+	((ctx)->mode & (HFI_CTX_MODE_VTPID_MATCHING | \
+			HFI_CTX_MODE_VTPID_NONMATCHING))
 
 /*
  * For TPID_CAM.UID, use first value from resource manager (if set).
@@ -829,7 +830,7 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx);
 int hfi_ctxt_set_allowed_uids(struct hfi_ctx *ctx, u32 *auth_uid,
 			      u8 num_uids);
 int hfi_ctxt_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
-		     u16 mode);
+		     u16 flags);
 int hfi_get_hw_limits(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl);
 void hfi_ctxt_unreserve(struct hfi_ctx *ctx);
 int hfi_ctxt_hw_addr(struct hfi_ctx *ctx, int token, u16 ctxt, void **addr,

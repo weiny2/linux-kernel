@@ -411,7 +411,7 @@ struct opa_core_ops {
 			  struct opa_ctx_assign *ctx_assign);
 	void (*ctx_release)(struct hfi_ctx *ctx);
 	int (*ctx_reserve)(struct hfi_ctx *ctx, u16 *base, u16 count,
-			   u16 align, u16 mode);
+			   u16 align, u16 flags);
 	void (*ctx_unreserve)(struct hfi_ctx *ctx);
 	int (*ctx_set_allowed_uids)(struct hfi_ctx *ctx, u32 *auth_uid, u8 num_uids);
 	int (*ctx_addr)(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr,
