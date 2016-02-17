@@ -5571,12 +5571,28 @@ static void handle_send_egress_err_info(struct hfi1_devdata *dd,
 		int weight, i;
 
 		/*
-		 * Count all, in case multiple bits are set.  Reminder:
-		 * since there is only one info register for many sources,
-		 * these may be attributed to the wrong VL if they occur
-		 * too close together.
+		 * Count all applicable bits as individual errors and
+		 * attribute them to the packet that triggered this handler.
+		 * This may not be completely accurate due to limitations
+		 * on the available hardware error information.  There is
+		 * a single information register and any number of error
+		 * packets may have occurred and contributed to it before
+		 * this routine is called.  This means that:
+		 * a) If multiple packets with the same error occur before
+		 *    this routine is called, earlier packets are missed.
+		 *    There is only a single bit for each error type.
+		 * b) Errors may not be attributed to the correct VL.
+		 *    The driver is attributing all bits in the info register
+		 *    to the packet that triggered this call, but bits
+		 *    could be an accumulation of different packets with
+		 *    different VLs.
+		 * c) A single error packet may have multiple counts attached
+		 *    to it.  There is no way for the driver to know if
+		 *    multiple bits set in the info register are due to a
+		 *    single packet or multiple packets.  The driver assumes
+		 *    multiple packets.
 		 */
-		weight = hweight64(info);
+		weight = hweight64(info & PORT_DISCARD_EGRESS_ERRS);
 		for (i = 0; i < weight; i++) {
 			__count_port_discards(ppd);
 			if (vl >= 0 && vl < TXE_NUM_DATA_VL)
@@ -5935,10 +5951,10 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 	u64 qsfp_int_mgmt = (u64)(QSFP_HFI0_INT_N | QSFP_HFI0_MODPRST_N);
 
 	if (reg & QSFP_HFI0_MODPRST_N) {
-		dd_dev_info(dd, "%s: ModPresent triggered QSFP interrupt\n",
-			    __func__);
-
 		if (!qsfp_mod_present(ppd)) {
+			dd_dev_info(dd, "%s: QSFP module removed\n",
+				    __func__);
+
 			ppd->driver_link_ready = 0;
 
 			/*
@@ -5980,6 +5996,9 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 				queue_work(ppd->hfi1_wq, &ppd->link_down_work);
 			}
 		} else {
+			dd_dev_info(dd, "%s: QSFP module inserted\n",
+				    __func__);
+
 			spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
 			ppd->qsfp_info.cache_valid = 0;
 			ppd->qsfp_info.cache_refresh_required = 1;
@@ -6000,7 +6019,7 @@ static void handle_qsfp_int(struct hfi1_devdata *dd, u32 src_ctx, u64 reg)
 	}
 
 	if (reg & QSFP_HFI0_INT_N) {
-		dd_dev_info(dd, "%s: IntN triggered QSFP interrupt\n",
+		dd_dev_info(dd, "%s: Interrupt received from QSFP module\n",
 			    __func__);
 		spin_lock_irqsave(&ppd->qsfp_info.qsfp_lock, flags);
 		ppd->qsfp_info.check_interrupt_flags = 1;
@@ -11408,28 +11427,19 @@ void hfi1_rcvctrl(struct hfi1_devdata *dd, unsigned int op, int ctxt)
 				dd->rcvhdrtail_dummy_physaddr);
 }
 
-u32 hfi1_read_cntrs(struct hfi1_devdata *dd, loff_t pos, char **namep,
-		    u64 **cntrp)
+u32 hfi1_read_cntrs(struct hfi1_devdata *dd, char **namep, u64 **cntrp)
 {
 	int ret;
 	u64 val = 0;
 
 	if (namep) {
 		ret = dd->cntrnameslen;
-		if (pos != 0) {
-			dd_dev_err(dd, "read_cntrs does not support indexing");
-			return 0;
-		}
 		*namep = dd->cntrnames;
 	} else {
 		const struct cntr_entry *entry;
 		int i, j;
 
 		ret = (dd->ndevcntrs) * sizeof(u64);
-		if (pos != 0) {
-			dd_dev_err(dd, "read_cntrs does not support indexing");
-			return 0;
-		}
 
 		/* Get the start of the block of counters */
 		*cntrp = dd->cntrs;
@@ -11487,30 +11497,19 @@ u32 hfi1_read_cntrs(struct hfi1_devdata *dd, loff_t pos, char **namep,
 /*
  * Used by sysfs to create files for hfi stats to read
  */
-u32 hfi1_read_portcntrs(struct hfi1_devdata *dd, loff_t pos, u32 port,
-			char **namep, u64 **cntrp)
+u32 hfi1_read_portcntrs(struct hfi1_pportdata *ppd, char **namep, u64 **cntrp)
 {
 	int ret;
 	u64 val = 0;
 
 	if (namep) {
-		ret = dd->portcntrnameslen;
-		if (pos != 0) {
-			dd_dev_err(dd, "index not supported");
-			return 0;
-		}
-		*namep = dd->portcntrnames;
+		ret = ppd->dd->portcntrnameslen;
+		*namep = ppd->dd->portcntrnames;
 	} else {
 		const struct cntr_entry *entry;
-		struct hfi1_pportdata *ppd;
 		int i, j;
 
-		ret = (dd->nportcntrs) * sizeof(u64);
-		if (pos != 0) {
-			dd_dev_err(dd, "indexing not supported");
-			return 0;
-		}
-		ppd = (struct hfi1_pportdata *)(dd + 1 + port);
+		ret = ppd->dd->nportcntrs * sizeof(u64);
 		*cntrp = ppd->cntrs;
 
 		for (i = 0; i < PORT_CNTR_LAST; i++) {
