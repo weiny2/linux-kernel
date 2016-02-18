@@ -99,6 +99,7 @@
 1 init.c CHECK: usleep_range is preferred over udelay; see Documentation/timers/timers-howto.txt
 2 init.c WARNING: Possible unnecessary 'out of memory' message
 1 mad.c CHECK: Avoid CamelCase: <OPA_CAP_MASK3_IsSharedSpaceSupported>
+1 mmu_rb.c WARNING: storage class should be at the beginning of the declaration
 2 pcie.c WARNING: ENOSYS means 'invalid syscall nr' and nothing else
 2 pio.c WARNING: Possible unnecessary 'out of memory' message
 2 pio.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt
