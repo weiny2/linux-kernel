@@ -53,9 +53,10 @@
 #include "hfi.h"
 
 struct mmu_rb_node {
-	struct rb_node node;
 	unsigned long addr;
 	unsigned long len;
+	unsigned long __last;
+	struct rb_node node;
 };
 
 struct mmu_rb_ops {
