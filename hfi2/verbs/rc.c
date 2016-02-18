@@ -2058,14 +2058,12 @@ static inline void update_ack_queue(struct hfi2_qp *qp, unsigned n)
 void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 {
 	struct hfi_ctx *ctx = packet->ctx;
-	struct hfi2_ib_header *hdr = packet->hdr;
-	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
 	struct hfi2_ibport *ibp = packet->ibp;
-	struct ib_l4_headers *ohdr;
+	struct ib_l4_headers *ohdr = packet->ohdr;
 	u32 bth0, opcode;
-	u32 hdrsize = packet->hlen;
+	u32 hdrsize = packet->hlen_9b;
 	u32 psn;
 	u32 pad;
 	struct ib_wc wc;
@@ -2075,19 +2073,14 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 	unsigned long flags;
 	u32 bth1;
 	int ret, is_fecn = 0;
-	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
 
-	if (!has_grh)
-		ohdr = &hdr->u.oth;
-	else
-		ohdr = &hdr->u.l.oth;
 	bth0 = be32_to_cpu(ohdr->bth[0]);
 	bth1 = be32_to_cpu(ohdr->bth[1]);
 	psn = be32_to_cpu(ohdr->bth[2]);
 	opcode = bth0 >> 24;
 
 #if 0
-	if (hfi2_ruc_check_hdr(ibp, hdr, rcv_flags & HFI1_HAS_GRH, qp, bth0))
+	if (hfi2_ruc_check_hdr(ibp, packet->hdr, !!packet->grh, qp, bth0))
 		return;
 
 	if (unlikely(bth1 & (HFI1_BECN_SMASK | HFI1_FECN_SMASK))) {

@@ -683,9 +683,9 @@ int hfi2_lookup_pkey_idx(struct hfi2_ibport *ibp, u16 pkey)
  */
 void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 {
-	struct ib_l4_headers *ohdr;
+	struct ib_l4_headers *ohdr = packet->ohdr;
 	int opcode;
-	u32 hdrsize;
+	u32 hdrsize = packet->hlen;
 	u32 pad;
 	struct ib_wc wc;
 	u32 qkey;
@@ -694,42 +694,19 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 	struct hfi2_ibport *ibp = packet->ibp;
 	struct hfi_pportdata *ppd = ibp->ppd;
 	union hfi2_packet_header *ph = packet->hdr;
-	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
-	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
-	int sc4_bit = (!!(rcv_flags & HFI1_SC4_BIT)) << 4;
 	u8 sc5, extra_bytes;
 	bool is_becn, is_fecn, is_mcast;
-	struct ib_grh *grh = NULL;
+	struct ib_grh *grh = packet->grh;
 	u32 slid, dlid;
 	u8 age, l4, rc;
 	u16 entropy, len, pkey;
 	bool is_16b = (packet->etype == RHF_RCV_TYPE_BYPASS);
 
-	/* FXRTODO: Probably we can set these in process_rcv_packet */
-	/* Check for GRH */
-	if (!has_grh) {
-		if (is_16b) {
-			hdrsize = 16 + 12 + 8;   /* 16B_HDR + BTH + DETH */
-			ohdr = &ph->opa16b.u.oth;
-		} else {
-			hdrsize = 8 + 12 + 8;   /* LRH + BTH + DETH */
-			ohdr = &ph->ibh.u.oth;
-		}
-	} else {
-		if (is_16b) {
-			/* 16B_HDR + GRH + BTH + DETH */
-			hdrsize = 16 + 40 + 12 + 8;
-			ohdr = &ph->opa16b.u.l.oth;
-			grh = &ph->opa16b.u.l.grh;
-		} else {
-			/* LRH + GRH + BTH + DETH */
-			hdrsize = 8 + 40 + 12 + 8;
-			ohdr = &ph->ibh.u.l.oth;
-			grh = &ph->opa16b.u.l.grh;
-		}
-	}
+	/* add DETH */
+	hdrsize += 8;
+
 	if (is_16b) {
 		data = packet->ebuf + hdrsize;
 		opa_parse_16b_header((u32 *)&ph->opa16b, &slid, &dlid, &len,
@@ -756,7 +733,7 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		dlid = be16_to_cpu(ph->ibh.lrh[1]);
 		slid = be16_to_cpu(ph->ibh.lrh[3]);
 		sc5 = (be16_to_cpu(ph->ibh.lrh[0]) >> 12) & 0xf;
-		sc5 |= sc4_bit;
+		sc5 |= packet->sc4_bit;
 		pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 
 		is_becn = !!((be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT)
@@ -918,7 +895,7 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		qp->r_flags |= HFI1_R_REUSE_SGE;
 		goto drop;
 	}
-	if (has_grh) {
+	if (grh) {
 		hfi2_copy_sge(&qp->r_sge, grh,
 			      sizeof(struct ib_grh), 1);
 		wc.wc_flags |= IB_WC_GRH;

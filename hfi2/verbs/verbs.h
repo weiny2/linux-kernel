@@ -89,10 +89,6 @@
 #define HFI1_PROCESS_OR_FLUSH_SEND \
 	(HFI1_PROCESS_SEND_OK | HFI1_FLUSH_SEND)
 
-/* flags passed by hfi2_rcv() */
-#define HFI1_HAS_GRH                     0x1
-#define HFI1_SC4_BIT                     0x2
-
 #define OPA_DEFAULT_SM_TRAP_QP			0x0
 #define OPA_DEFAULT_SA_QP			0x1
 

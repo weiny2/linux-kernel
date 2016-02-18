@@ -474,20 +474,28 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 		/* Check for a valid destination LID (see ch. 7.11.1). */
 		dlid = be16_to_cpu(ph->ibh.lrh[1]);
 
-		/* Check for GRH */
+		/*
+		 * Check for GRH.
+		 * Note, packet->hlen already includes ETH headers but
+		 * we reset packet->hlen here so the 9B/16B header parsing
+		 * is kept common.
+		 */
 		lnh = be16_to_cpu(ph->ibh.lrh[0]) & 3;
 		if (lnh == HFI1_LRH_BTH) {
 			l4 = HFI1_L4_IB_LOCAL;
+			/* 8B LRH + 12B BTH */
+			packet->hlen = 20;
 			ohdr = &ph->ibh.u.oth;
 		} else if (lnh == HFI1_LRH_GRH) {
 			l4 = HFI1_L4_IB_GLOBAL;
+			/* 8B LRH + 40B GRH + 12B BTH */
+			packet->hlen = 60;
 			ohdr = &ph->ibh.u.l.oth;
 			grh = &ph->ibh.u.l.grh;
 		} else {
 			goto drop;
 		}
-	} else if ((packet->etype == RHF_RCV_TYPE_BYPASS) &&
-		   (packet->bypass_type == OPA_BYPASS_HDR_16B)) {
+	} else if (packet->etype == RHF_RCV_TYPE_BYPASS) {
 		/* 32 == 16B + (MGMT L4/BTH) FLIT + CRC FLIT */
 		if (unlikely(tlen < 32))
 			goto drop;
@@ -507,12 +515,12 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 		}
 
 		if (l4 == HFI1_L4_IB_LOCAL) {
-			/* 16B + 12B BTH + 8B DETH */
-			packet->hlen = 36;
+			/* 16B + 12B BTH */
+			packet->hlen = 28;
 			ohdr = &ph->opa16b.u.oth;
 		} else if (l4 == HFI1_L4_IB_GLOBAL) {
-			/* 16B + 40B GRH + 12B BTH + 8B DETH */
-			packet->hlen = 76;
+			/* 16B + 40B GRH + 12B BTH */
+			packet->hlen = 68;
 			ohdr = &ph->opa16b.u.l.oth;
 			grh = &ph->opa16b.u.l.grh;
 		} else {
@@ -522,6 +530,8 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 		dev_err(ibp->dev, "Invalid packet type\n");
 		goto drop;
 	}
+	packet->ohdr = ohdr;
+	packet->grh = grh;
 
 	if (l4 == HFI1_L4_IB_GLOBAL) {
 		u32 vtf;
@@ -531,7 +541,6 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 		vtf = be32_to_cpu(grh->version_tclass_flow);
 		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
 			goto drop;
-		packet->rcv_flags |= HFI1_HAS_GRH;
 	}
 
 	opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0x7f;
@@ -544,8 +553,6 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 	qp_num = be32_to_cpu(ohdr->bth[1]) & HFI1_QPN_MASK;
 	dev_dbg(ibp->dev, "PT %d: IB packet %d len %d for PID %d QPN %d\n",
 		ibp->port_num, l4, tlen, packet->ctx->pid, qp_num);
-	if (rhf_sc4(packet->rhf))
-		packet->rcv_flags |= HFI1_SC4_BIT;
 
 	if ((dlid >= HFI1_MULTICAST_LID_BASE) &&
 	    (dlid != HFI1_PERMISSIVE_LID)) {
@@ -578,9 +585,6 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 			goto drop;
 		}
 
-		if (l4 == HFI1_L4_IB_GLOBAL)
-			packet->rcv_flags |= HFI1_HAS_GRH;
-
 		spin_lock(&qp->r_lock);
 		if (likely((is_qp_ok(ibp, qp, opcode))))
 			opcode_handler_tbl[opcode](qp, packet);
@@ -605,7 +609,7 @@ static void hfi2_cnp_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		ibp->n_pkt_drops++;
 }
 
-static void process_rcv_packet(struct hfi2_ibport *ibp,
+static bool process_rcv_packet(struct hfi2_ibport *ibp,
 			       struct hfi2_ibrcv *rcv,
 			       u64 *rhf_entry,
 			       struct hfi2_ib_packet *packet)
@@ -614,23 +618,24 @@ static void process_rcv_packet(struct hfi2_ibport *ibp,
 	u64 rhf = *rhf_entry;
 
 	packet->ctx = rcv->ctx;
-	packet->rcv_flags = 0;
-	packet->rhf = rhf;
+	packet->sc4_bit = rhf_sc4(rhf) ? BIT(4) : 0;
 	packet->hdr = rhf_get_hdr(packet, rhf_entry);
-	packet->hlen = rhf_hdr_len(rhf);  /* in bytes */
+	packet->hlen_9b = rhf_hdr_len(rhf);  /* in bytes */
+	packet->hlen = packet->hlen_9b;
 	packet->tlen = rhf_pkt_len(rhf);  /* in bytes */
 	packet->etype = rhf_rcv_type(rhf);
 	idx = rhf_egr_index(rhf);
 	off = rhf_egr_buf_offset(rhf);
-	if (packet->etype < RHF_RCV_TYPE_EAGER ||
-	    packet->etype > RHF_RCV_TYPE_BYPASS)
-		packet->ebuf = NULL;
-	else
+	if (packet->etype == RHF_RCV_TYPE_IB) {
 		packet->ebuf = hfi2_rcv_get_ebuf(rcv, idx, off);
-
-	if (packet->etype == RHF_RCV_TYPE_BYPASS) {
-		packet->bypass_type = OPA_BYPASS_GET_L2_TYPE(packet->ebuf);
+	} else if (packet->etype == RHF_RCV_TYPE_BYPASS) {
+		packet->ebuf = hfi2_rcv_get_ebuf(rcv, idx, off);
 		packet->hdr = packet->ebuf;
+		if (OPA_BYPASS_GET_L2_TYPE(packet->ebuf) != OPA_BYPASS_HDR_16B)
+			return false;
+	} else {
+		/* not supported packet type */
+		return false;
 	}
 
 	packet->port = rhf_port(rhf);
@@ -644,6 +649,8 @@ static void process_rcv_packet(struct hfi2_ibport *ibp,
 	 * in argument that contains the Eager Buffer for this RHQ.
 	 */
 	packet->ibp = &(ibp->ibd->pport[packet->port]);
+
+	return true;
 }
 
 /*
@@ -671,10 +678,7 @@ int hfi2_rcv_wait(void *data)
 
 		if (rhf_entry) {
 			/* parse packet header and call hfi2_rcv() to handle */
-			process_rcv_packet(ibp, rcv, rhf_entry, &pkt);
-			if ((pkt.etype == RHF_RCV_TYPE_IB) ||
-			    ((pkt.etype == RHF_RCV_TYPE_BYPASS) &&
-			     (pkt.bypass_type == OPA_BYPASS_HDR_16B)))
+			if (process_rcv_packet(ibp, rcv, rhf_entry, &pkt))
 				hfi2_rcv(&pkt);
 			else
 				dev_warn(ibp->dev,

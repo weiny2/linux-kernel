@@ -204,13 +204,14 @@ struct hfi2_ib_packet {
 	struct hfi2_ibport *ibp;
 	void *ebuf;
 	void *hdr;
-	u64 rhf;
+	struct ib_l4_headers *ohdr;
+	struct ib_grh *grh;
 	u8 port;
+	u8 etype;
+	u8 sc4_bit;
 	u16 tlen;
 	u16 hlen;
-	u32 etype;
-	u32 bypass_type;
-	u32 rcv_flags;
+	u16 hlen_9b;
 };
 
 /* Store IOVEC array information for General DMA command */
