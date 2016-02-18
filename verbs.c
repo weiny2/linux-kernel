@@ -1916,13 +1916,13 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 	 * the LKEY).  The remaining bits act as a generation number or tag.
 	 */
 	spin_lock_init(&dev->lk_table.lock);
-	dev->lk_table.max = 1 << hfi1_lkey_table_size;
 	/* ensure generation is at least 4 bits (keys.c) */
 	if (hfi1_lkey_table_size > MAX_LKEY_TABLE_BITS) {
 		dd_dev_warn(dd, "lkey bits %u too large, reduced to %u\n",
 			    hfi1_lkey_table_size, MAX_LKEY_TABLE_BITS);
 		hfi1_lkey_table_size = MAX_LKEY_TABLE_BITS;
 	}
+	dev->lk_table.max = 1 << hfi1_lkey_table_size;
 	lk_tab_size = dev->lk_table.max * sizeof(*dev->lk_table.table);
 	dev->lk_table.table = (struct hfi1_mregion __rcu **)
 		vmalloc_node(lk_tab_size, dd->node);
