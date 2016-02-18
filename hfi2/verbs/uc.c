@@ -292,54 +292,29 @@ void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 	struct hfi2_ibport *ibp = packet->ibp;
 	struct hfi_pportdata *ppd = ibp->ppd;
 	union hfi2_packet_header *ph = packet->hdr;
-	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
-	struct ib_l4_headers *ohdr;
+	struct ib_l4_headers *ohdr = packet->ohdr;
 	u32 opcode;
-	u32 hdrsize;
+	u32 hdrsize = packet->hlen;
 	u32 psn;
 	u32 pad;
 	struct ib_wc wc;
 	u16 pmtu = qp->pmtu;
 	struct ib_reth *reth;
-	int has_grh = !!(rcv_flags & HFI1_HAS_GRH);
 	bool is_becn, is_fecn;
 	int ret;
-	struct ib_grh *grh = NULL;
 	u8 sc5, extra_bytes;
 	u8 age, l4, rc, sc;
 	u16 entropy, len, pkey;
 	u32 slid, dlid;
 	bool is_16b = (packet->etype == RHF_RCV_TYPE_BYPASS);
 
-	/* FXRTODO: Probably we can set these in process_rcv_packet */
-	/* Check for GRH */
-	if (!has_grh) {
-		if (is_16b) {
-			hdrsize = 16 + 12;   /* 16B + BTH */
-			ohdr = &ph->opa16b.u.oth;
-		} else {
-			hdrsize = 8 + 12;   /* LRH + BTH */
-			ohdr = &ph->ibh.u.oth;
-		}
-	} else {
-		if (is_16b) {
-			hdrsize = 16 + 40 + 12;  /* 16B + GRH + BTH */
-			ohdr = &ph->opa16b.u.l.oth;
-			grh = &ph->opa16b.u.l.grh;
-		} else {
-			hdrsize = 8 + 40 + 12;  /* LRH + GRH + BTH */
-			ohdr = &ph->ibh.u.l.oth;
-			grh = &ph->ibh.u.l.grh;
-		}
-	}
-
 	opcode = be32_to_cpu(ohdr->bth[0]);
 	if (is_16b) {
 #if 0
 		if (hfi2_ruc_check_hdr_16b(ibp, ph->opa16b,
-					   has_grh, qp, opcode))
+					   !!packet->grh, qp, opcode))
 			return;
 #endif
 		opa_parse_16b_header((u32 *)&ph->opa16b, &slid, &dlid, &len,
@@ -361,7 +336,7 @@ void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 
 	} else {
 #if 0
-		if (hfi2_ruc_check_hdr(ibp, ph->ibh, has_grh, qp, opcode)) {
+		if (hfi2_ruc_check_hdr(ibp, ph->ibh, !!packet->grh, qp, opcode))
 			return;
 #endif
 		pkey = (u16)be32_to_cpu(ohdr->bth[0]);
@@ -395,7 +370,7 @@ void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		u32 src_qp = qp->remote_qpn;
 
 		return_cnp(ibp, qp, src_qp, pkey, (u16)dlid,
-			   (u16)slid, sc5, grh);
+			   (u16)slid, sc5, packet->grh);
 	}
 #endif
 
