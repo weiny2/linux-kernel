@@ -129,6 +129,24 @@ struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
 	return ret;
 }
 
+struct ib_ah *hfi2_create_qp0_ah(struct hfi2_ibport *ibp, u16 dlid)
+{
+	struct ib_ah_attr attr;
+	struct ib_ah *ah = ERR_PTR(-EINVAL);
+	struct hfi2_qp *qp0;
+
+	memset(&attr, 0, sizeof(attr));
+	attr.dlid = dlid;
+	attr.port_num = ibp->port_num + 1;
+	attr.sl = ibp->sm_sl;
+	rcu_read_lock();
+	qp0 = rcu_dereference(ibp->qp[0]);
+	if (qp0)
+		ah = ib_create_ah(qp0->ibqp.pd, &attr);
+	rcu_read_unlock();
+	return ah;
+}
+
 /**
  * hfi2_destroy_ah - destroy an address handle
  * @ibah: the AH to destroy

@@ -598,10 +598,12 @@ struct hfi2_ibport {
 	struct hfi_pportdata *ppd;
 	struct hfi2_qp __rcu *qp[2];
 	/* non-zero when timer is set */
+	unsigned long trap_timeout;
 	unsigned long mkey_lease_timeout;
 	__be64 gid_prefix;
 	__be64 mkey;
 	__be64 guid;
+	u64 tid;
 	u64 n_rc_resends;
 	u64 n_seq_naks;
 	u64 n_rdma_seq;
@@ -642,6 +644,8 @@ struct hfi2_ibport {
 	struct hfi_eq send_eq;
 	struct hfi2_ibrcv sm_rcv;
 	struct hfi2_ibrcv qp_rcv;
+	struct ib_mad_agent *send_agent;
+	struct hfi2_ah *sm_ah;
 };
 
 struct hfi2_ibdev {
@@ -654,7 +658,6 @@ struct hfi2_ibdev {
 	u8 rsm_mask;
 	int assigned_node_id;
 	struct hfi2_ibport *pport;
-
 	struct ida qpn_even_table;
 	struct ida qpn_odd_table;
 	struct idr qp_ptr;
@@ -741,6 +744,7 @@ int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
 			     struct ib_ah_attr *ah_attr);
 int hfi2_destroy_ah(struct ib_ah *ibah);
+struct ib_ah *hfi2_create_qp0_ah(struct hfi2_ibport *ibp, u16 dlid);
 int hfi2_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
 int hfi2_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
 struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
@@ -825,6 +829,8 @@ int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,
 		     struct ib_mad_hdr *out_mad, size_t *out_mad_size,
 		     u16 *out_mad_pkey_index);
+int hfi2_create_agents(struct ib_device *ibdev);
+void hfi2_free_agents(struct ib_device *ibdev);
 int hfi2_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 int hfi2_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 struct hfi2_mcast *
@@ -850,4 +856,7 @@ void hfi2_ctx_release_qp(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
 int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops);
 void hfi2_ib_remove(struct hfi_devdata *dd);
 struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev);
+void hfi2_cap_mask_chg(struct hfi2_ibport *ibp);
+void hfi2_sys_guid_chg(struct hfi2_ibport *ibp);
+void hfi2_node_desc_chg(struct hfi2_ibport *ibp);
 #endif
