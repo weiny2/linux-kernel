@@ -82,44 +82,119 @@ static inline void clear_opa_smp_data(struct opa_smp *smp)
 	memset(data, 0, size);
 }
 
-/* This attribute is implemented only here (sma-ib) */
-static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
-			     u8 port)
+static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
 {
-	struct ib_node_info *ni;
-	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
-	struct hfi_devdata *dd = ibd->dd;
-	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
-	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	struct ib_mad_send_buf *send_buf;
+	struct ib_mad_agent *agent;
+	struct opa_smp *smp;
+	int ret = 0;
+	unsigned long flags;
+	unsigned long timeout;
+	int pkey_idx;
+	struct hfi_pportdata *ppd = ibp->ppd;
+	u32 qpn = ppd->sm_trap_qp;
 
-	ni = (struct ib_node_info *)smp->data;
+	agent = ibp->send_agent;
+	if (!agent)
+		return;
 
-	/* GUID 0 is illegal */
-	if (smp->attr_mod || ibd->node_guid == 0
-				|| !ibp) {
-		smp->status |=
-			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
-		return reply(ibh);
+	/* o14-3.2.1 */
+	if (ppd->lstate != IB_PORT_ACTIVE)
+		return;
+
+	/* o14-2 */
+	if (ibp->trap_timeout && time_before(jiffies, ibp->trap_timeout))
+		return;
+
+	pkey_idx = hfi2_lookup_pkey_idx(ibp, OPA_LIM_MGMT_PKEY);
+	if (pkey_idx < 0) {
+		pr_warn("%s: failed to find limited mgmt pkey, defaulting 0x%x\n",
+			__func__, hfi2_get_pkey(ibp, 1));
+		pkey_idx = 1;
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
-	ni->base_version = OPA_MGMT_BASE_VERSION;
-#else
-	ni->base_version = JUMBO_MGMT_BASE_VERSION;
-#endif
-	ni->class_version = OPA_SMI_CLASS_VERSION;
-	ni->node_type = 1;     /* channel adapter */
-	ni->num_ports = ibd->num_pports;
-	/* This is already in network order */
-	ni->sys_guid = hfi2_sys_guid;
-	ni->node_guid = ibd->node_guid;
-	ni->port_guid = ibp->guid;
-	ni->partition_cap = cpu_to_be16(HFI_MAX_PKEYS);
-	ni->local_port_num = port;
-	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
-	ni->device_id = cpu_to_be16(dd->bus_id.device);
-	ni->revision = cpu_to_be32(dd->bus_id.revision);
 
-	return reply(ibh);
+	send_buf = ib_create_send_mad(agent, qpn, pkey_idx, 0,
+				      IB_MGMT_MAD_HDR, IB_MGMT_MAD_DATA,
+				      GFP_ATOMIC, OPA_MGMT_BASE_VERSION);
+	if (IS_ERR(send_buf))
+		return;
+
+	smp = send_buf->mad;
+	smp->base_version = OPA_MGMT_BASE_VERSION;
+	smp->mgmt_class = IB_MGMT_CLASS_SUBN_LID_ROUTED;
+	smp->class_version = OPA_SMI_CLASS_VERSION;
+	smp->method = IB_MGMT_METHOD_TRAP;
+	ibp->tid++;
+	smp->tid = cpu_to_be64(ibp->tid);
+	smp->attr_id = IB_SMP_ATTR_NOTICE;
+	/* o14-1: smp->mkey = 0; */
+	memcpy(smp->route.lid.data, data, len);
+
+	spin_lock_irqsave(&ibp->lock, flags);
+	if (!ibp->sm_ah) {
+		if (ibp->sm_lid != be16_to_cpu(IB_LID_PERMISSIVE)) {
+			struct ib_ah *ah;
+
+			ah = hfi2_create_qp0_ah(ibp, ibp->sm_lid);
+			if (IS_ERR(ah)) {
+				ret = PTR_ERR(ah);
+			} else {
+				send_buf->ah = ah;
+				ibp->sm_ah = to_hfi_ah(ah);
+			}
+		} else {
+			ret = -EINVAL;
+		}
+	} else {
+		send_buf->ah = &ibp->sm_ah->ibah;
+	}
+	spin_unlock_irqrestore(&ibp->lock, flags);
+
+	if (!ret)
+		ret = ib_post_send_mad(send_buf, NULL);
+	if (!ret) {
+		timeout = (4096 * (1UL << ibp->subnet_timeout)) / 1000;
+		ibp->trap_timeout = jiffies + usecs_to_jiffies(timeout);
+	} else {
+		ib_free_send_mad(send_buf);
+		ibp->trap_timeout = 0;
+	}
+}
+
+/*
+ * Send a bad [PQ]_Key trap (ch. 14.3.8).
+ * FXRTODO:
+ * STL-6007: hfi2_bad_pqkey calls needs to implemented
+ */
+void hfi2_bad_pqkey(struct hfi2_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
+		    u32 qp1, u32 qp2, u16 lid1, u16 lid2)
+{
+	struct opa_mad_notice_attr data;
+	u32 lid = ibp->ppd->lid;
+	u32 _lid1 = lid1;
+	u32 _lid2 = lid2;
+
+	memset(&data, 0, sizeof(data));
+
+	if (trap_num == OPA_TRAP_BAD_P_KEY)
+		ibp->pkey_violations++;
+	else
+		ibp->qkey_violations++;
+	ibp->n_pkt_drops++;
+
+	/* Send violation trap */
+	data.generic_type = IB_NOTICE_TYPE_SECURITY;
+	data.prod_type_lsb = IB_NOTICE_PROD_CA;
+	data.trap_num = trap_num;
+	data.issuer_lid = cpu_to_be32(lid);
+	data.ntc_257_258.lid1 = cpu_to_be32(_lid1);
+	data.ntc_257_258.lid2 = cpu_to_be32(_lid2);
+	data.ntc_257_258.key = cpu_to_be32(key);
+	data.ntc_257_258.sl = sl << 3;
+	data.ntc_257_258.qp1 = cpu_to_be32(qp1);
+	data.ntc_257_258.qp2 = cpu_to_be32(qp2);
+
+	send_trap(ibp, &data, sizeof(data));
 }
 
 /*
@@ -128,39 +203,91 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 static void bad_mkey(struct hfi2_ibport *ibp, struct ib_mad_hdr *mad,
 		     __be64 mkey, __be32 dr_slid, u8 return_path[], u8 hop_cnt)
 {
-	struct ib_mad_notice_attr data;
+	struct opa_mad_notice_attr data;
+	u32 lid = ibp->ppd->lid;
 
+	memset(&data, 0, sizeof(data));
 	/* Send violation trap */
 	data.generic_type = IB_NOTICE_TYPE_SECURITY;
-	data.prod_type_msb = 0;
 	data.prod_type_lsb = IB_NOTICE_PROD_CA;
-	data.trap_num = IB_NOTICE_TRAP_BAD_MKEY;
-	data.issuer_lid = cpu_to_be16(ibp->ppd->lid);
-	data.toggle_count = 0;
-	memset(&data.details, 0, sizeof(data.details));
-	data.details.ntc_256.lid = data.issuer_lid;
-	data.details.ntc_256.method = mad->method;
-	data.details.ntc_256.attr_id = mad->attr_id;
-	data.details.ntc_256.attr_mod = mad->attr_mod;
-	data.details.ntc_256.mkey = mkey;
+	data.trap_num = OPA_TRAP_BAD_M_KEY;
+	data.issuer_lid = cpu_to_be32(lid);
+	data.ntc_256.lid = data.issuer_lid;
+	data.ntc_256.method = mad->method;
+	data.ntc_256.attr_id = mad->attr_id;
+	data.ntc_256.attr_mod = mad->attr_mod;
+	data.ntc_256.mkey = mkey;
 	if (mad->mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE) {
-
-		data.details.ntc_256.dr_slid = (__force __be16)dr_slid;
-		data.details.ntc_256.dr_trunc_hop = IB_NOTICE_TRAP_DR_NOTICE;
-		if (hop_cnt > ARRAY_SIZE(data.details.ntc_256.dr_rtn_path)) {
-			data.details.ntc_256.dr_trunc_hop |=
+		data.ntc_256.dr_slid = dr_slid;
+		data.ntc_256.dr_trunc_hop = IB_NOTICE_TRAP_DR_NOTICE;
+		if (hop_cnt > ARRAY_SIZE(data.ntc_256.dr_rtn_path)) {
+			data.ntc_256.dr_trunc_hop |=
 				IB_NOTICE_TRAP_DR_TRUNC;
-			hop_cnt = ARRAY_SIZE(data.details.ntc_256.dr_rtn_path);
+			hop_cnt = ARRAY_SIZE(data.ntc_256.dr_rtn_path);
 		}
-		data.details.ntc_256.dr_trunc_hop |= hop_cnt;
-		memcpy(data.details.ntc_256.dr_rtn_path, return_path,
+		data.ntc_256.dr_trunc_hop |= hop_cnt;
+		memcpy(data.ntc_256.dr_rtn_path, return_path,
 		       hop_cnt);
 	}
-
-#if 0
-	/* FXRTODO: JIRA STL-1138 */
 	send_trap(ibp, &data, sizeof(data));
-#endif
+}
+
+void hfi2_cap_mask_chg(struct hfi2_ibport *ibp)
+{
+	struct opa_mad_notice_attr data;
+	u32 lid = ibp->ppd->lid;
+
+	memset(&data, 0, sizeof(data));
+
+	data.generic_type = IB_NOTICE_TYPE_INFO;
+	data.prod_type_lsb = IB_NOTICE_PROD_CA;
+	data.trap_num = OPA_TRAP_CHANGE_CAPABILITY;
+	data.issuer_lid = cpu_to_be32(lid);
+	data.ntc_144.lid = data.issuer_lid;
+	data.ntc_144.new_cap_mask = cpu_to_be32(ibp->port_cap_flags);
+
+	send_trap(ibp, &data, sizeof(data));
+}
+
+/*
+ * Send a System Image GUID Changed trap (ch. 14.3.12).
+ */
+void hfi2_sys_guid_chg(struct hfi2_ibport *ibp)
+{
+	struct opa_mad_notice_attr data;
+	u32 lid = ibp->ppd->lid;
+
+	memset(&data, 0, sizeof(data));
+
+	data.generic_type = IB_NOTICE_TYPE_INFO;
+	data.prod_type_lsb = IB_NOTICE_PROD_CA;
+	data.trap_num = OPA_TRAP_CHANGE_SYSGUID;
+	data.issuer_lid = cpu_to_be32(lid);
+	data.ntc_145.new_sys_guid = hfi2_sys_guid;
+	data.ntc_145.lid = data.issuer_lid;
+
+	send_trap(ibp, &data, sizeof(data));
+}
+
+/*
+ * Send a Node Description Changed trap (ch. 14.3.13).
+ */
+void hfi2_node_desc_chg(struct hfi2_ibport *ibp)
+{
+	struct opa_mad_notice_attr data;
+	u32 lid = ibp->ppd->lid;
+
+	memset(&data, 0, sizeof(data));
+
+	data.generic_type = IB_NOTICE_TYPE_INFO;
+	data.prod_type_lsb = IB_NOTICE_PROD_CA;
+	data.trap_num = OPA_TRAP_CHANGE_CAPABILITY;
+	data.issuer_lid = cpu_to_be32(lid);
+	data.ntc_144.lid = data.issuer_lid;
+	data.ntc_144.change_flags =
+		cpu_to_be16(OPA_NOTICE_TRAP_NODE_DESC_CHG);
+
+	send_trap(ibp, &data, sizeof(data));
 }
 
 static int check_mkey(struct hfi2_ibport *ibp, struct ib_mad_hdr *mad,
@@ -210,6 +337,42 @@ static int check_mkey(struct hfi2_ibport *ibp, struct ib_mad_hdr *mad,
 	}
 
 	return ret;
+}
+
+/* This attribute is implemented only here (sma-ib) */
+static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
+			     u8 port)
+{
+	struct ib_node_info *ni;
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
+	struct hfi_devdata *dd = ibd->dd;
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+
+	ni = (struct ib_node_info *)smp->data;
+
+	/* GUID 0 is illegal */
+	if (smp->attr_mod || ibd->node_guid == 0
+				|| !ibp) {
+		smp->status |=
+			cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
+		return reply(ibh);
+	}
+	ni->base_version = OPA_MGMT_BASE_VERSION;
+	ni->class_version = OPA_SMI_CLASS_VERSION;
+	ni->node_type = 1;     /* channel adapter */
+	ni->num_ports = ibd->num_pports;
+	/* This is already in network order */
+	ni->sys_guid = hfi2_sys_guid;
+	ni->node_guid = ibd->node_guid;
+	ni->port_guid = ibp->guid;
+	ni->partition_cap = cpu_to_be16(HFI_MAX_PKEYS);
+	ni->local_port_num = port;
+	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
+	ni->device_id = cpu_to_be16(dd->bus_id.device);
+	ni->revision = cpu_to_be32(dd->bus_id.revision);
+
+	return reply(ibh);
 }
 
 static int process_subn(struct ib_device *ibdev, int mad_flags,
@@ -1158,6 +1321,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	u8 msl;
 	u8 crc_enabled;
 	u16 lse, lwe, mtu;
+	unsigned long flags;
 	u32 num_ports = OPA_AM_NPORT(am);
 	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
 	int ret, i, invalid = 0, call_set_mtu = 0;
@@ -1277,14 +1441,6 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		pr_warn("SubnSet(OPA_PortInfo) smlid invalid 0x%x\n", smlid);
 	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
 		pr_warn("SubnSet(OPA_PortInfo) smlid 0x%x\n", smlid);
-		/*
-		 * FXRTODO: These are needed for sending trap
-		 * to FM. Implement this as part of that task.
-		 * Idea on allocating sm_ah based on code review
-		 * 1. Per port static variable
-		 * 2. Allocate here when new SM lid is assigned
-		 */
-#if 0
 		spin_lock_irqsave(&ibp->lock, flags);
 		if (ibp->sm_ah) {
 			if (smlid != ibp->sm_lid)
@@ -1293,7 +1449,6 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				ibp->sm_ah->attr.sl = msl;
 		}
 		spin_unlock_irqrestore(&ibp->lock, flags);
-#endif
 		if (smlid != ibp->sm_lid)
 			ibp->sm_lid = smlid;
 		if (msl != ibp->sm_sl)
@@ -2912,4 +3067,59 @@ int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	}
 
 	return IB_MAD_RESULT_FAILURE;
+}
+
+static void send_handler(struct ib_mad_agent *agent,
+			 struct ib_mad_send_wc *mad_send_wc)
+{
+	ib_free_send_mad(mad_send_wc->send_buf);
+}
+
+int hfi2_create_agents(struct ib_device *ibdev)
+{
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
+	struct ib_mad_agent *agent;
+	struct hfi2_ibport *ibp;
+	int p;
+	int ret = 0;
+
+	for (p = 0; p < ibd->num_pports; p++) {
+		ibp = to_hfi_ibp(ibdev, p + 1);
+		agent = ib_register_mad_agent(ibdev, p + 1, IB_QPT_SMI,
+					      NULL, 0, send_handler,
+					      NULL, NULL, 0);
+		if (IS_ERR(agent)) {
+			ret = PTR_ERR(agent);
+			goto err;
+		}
+
+		ibp->send_agent = agent;
+	}
+
+	return ret;
+
+err:
+	hfi2_free_agents(ibdev);
+	return ret;
+}
+
+void hfi2_free_agents(struct ib_device *ibdev)
+{
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
+	struct ib_mad_agent *agent;
+	struct hfi2_ibport *ibp;
+	int p;
+
+	for (p = 0; p < ibd->num_pports; p++) {
+		ibp = to_hfi_ibp(ibdev, p + 1);
+		if (ibp->send_agent) {
+			agent = ibp->send_agent;
+			ibp->send_agent = NULL;
+			ib_unregister_mad_agent(agent);
+		}
+		if (ibp->sm_ah) {
+			ib_destroy_ah(&ibp->sm_ah->ibah);
+			ibp->sm_ah = NULL;
+		}
+	}
 }

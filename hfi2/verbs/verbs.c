@@ -188,36 +188,6 @@ static int hfi2_query_device(struct ib_device *ibdev,
 	return 0;
 }
 
-static int hfi2_modify_port(struct ib_device *ibdev, u8 port,
-		       int port_modify_mask, struct ib_port_modify *props)
-{
-	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
-	int ret = 0;
-
-	ibp->port_cap_flags |= props->set_port_cap_mask;
-	ibp->port_cap_flags &= ~props->clr_port_cap_mask;
-	if (props->set_port_cap_mask || props->clr_port_cap_mask) {
-		/* FXRTODO: yet to be implemented ref STL-2194 */
-#if 0
-		hfi1_cap_mask_chg(ibp);
-#endif
-	}
-	if (port_modify_mask & IB_PORT_SHUTDOWN) {
-		/*
-		 * FXRTODO: Need to support setting link states
-		 * from verbs layer
-		 */
-#if 0
-		set_link_down_reason(ppd, OPA_LINKDOWN_REASON_UNKNOWN, 0,
-		  OPA_LINKDOWN_REASON_UNKNOWN);
-		ret = set_link_state(ppd, HLS_DN_DOWNDEF);
-#endif
-	}
-	if (port_modify_mask & IB_PORT_RESET_QKEY_CNTR)
-		ibp->qkey_violations = 0;
-	return ret;
-}
-
 static int hfi2_query_port(struct ib_device *ibdev, u8 port,
 			     struct ib_port_attr *props)
 {
@@ -263,6 +233,66 @@ static int hfi2_query_port(struct ib_device *ibdev, u8 port,
 	props->subnet_timeout = ibp->subnet_timeout;
 
 	return 0;
+}
+
+static int hfi2_modify_device(struct ib_device *ibdev, int device_modify_mask,
+			      struct ib_device_modify *device_modify)
+{
+	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
+	unsigned i;
+	int ret;
+
+	if (device_modify_mask & ~(IB_DEVICE_MODIFY_SYS_IMAGE_GUID |
+				   IB_DEVICE_MODIFY_NODE_DESC)) {
+		ret = -EOPNOTSUPP;
+		goto bail;
+	}
+
+	if (device_modify_mask & IB_DEVICE_MODIFY_NODE_DESC) {
+		memcpy(ibdev->node_desc, device_modify->node_desc, 64);
+		for (i = 0; i < ibd->num_pports; i++) {
+			struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, i + 1);
+
+			hfi2_node_desc_chg(ibp);
+		}
+	}
+
+	if (device_modify_mask & IB_DEVICE_MODIFY_SYS_IMAGE_GUID) {
+		hfi2_sys_guid =
+			cpu_to_be64(device_modify->sys_image_guid);
+		for (i = 0; i < ibd->num_pports; i++) {
+			struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, i + 1);
+
+			hfi2_sys_guid_chg(ibp);
+		}
+	}
+
+	ret = 0;
+
+bail:
+	return ret;
+}
+
+static int hfi2_modify_port(struct ib_device *ibdev, u8 port,
+		       int port_modify_mask, struct ib_port_modify *props)
+{
+	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	int ret = 0;
+
+	ibp->port_cap_flags |= props->set_port_cap_mask;
+	ibp->port_cap_flags &= ~props->clr_port_cap_mask;
+	if (props->set_port_cap_mask || props->clr_port_cap_mask)
+		hfi2_cap_mask_chg(ibp);
+	if (port_modify_mask & IB_PORT_SHUTDOWN) {
+		hfi_set_link_down_reason(ppd, OPA_LINKDOWN_REASON_UNKNOWN, 0,
+		  OPA_LINKDOWN_REASON_UNKNOWN);
+		ret = hfi_set_link_state(ppd, HLS_DN_DOWNDEF);
+	}
+	if (port_modify_mask & IB_PORT_RESET_QKEY_CNTR)
+		ibp->qkey_violations = 0;
+	return ret;
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
@@ -422,8 +452,8 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->dealloc_ucontext = hfi2_dealloc_ucontext;
 	ibdev->dma_device = ibd->parent_dev;
 	ibdev->modify_port = hfi2_modify_port;
-#if 0
 	ibdev->modify_device = hfi2_modify_device;
+#if 0
 	ibdev->create_srq = hfi2_create_srq;
 	ibdev->modify_srq = hfi2_modify_srq;
 	ibdev->query_srq = hfi2_query_srq;
@@ -449,22 +479,19 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	if (ret)
 		goto err_reg;
 
-#if 0
-	ret = hfi2_create_agents(dev);
+	ret = hfi2_create_agents(ibdev);
 	if (ret)
 		goto err_agents;
-
+#if 0
 	if (hfi2_verbs_register_sysfs(dd))
 		goto err_class;
 #endif
 	goto exit;
 
-#if 0
 err_class:
-	hfi2_free_agents(dev);
+	hfi2_free_agents(ibdev);
 err_agents:
 	ib_unregister_device(ibdev);
-#endif
 err_reg:
 	pr_err("Failed to register with IB core: %d\n", ret);
 exit:
@@ -473,6 +500,7 @@ exit:
 
 static void hfi2_unregister_device(struct hfi2_ibdev *ibd)
 {
+	hfi2_free_agents(&ibd->ibdev);
 	ib_unregister_device(&ibd->ibdev);
 }
 
