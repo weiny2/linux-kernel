@@ -33,6 +33,7 @@
  */
 
 #include <linux/slab.h>
+#include <rdma/ib_addr.h>
 
 #include "mad_priv.h"
 #include "mad_rmpp.h"
@@ -850,11 +851,14 @@ out:
 static int init_newwin(struct ib_mad_send_wr_private *mad_send_wr)
 {
 	struct ib_mad_agent_private *agent = mad_send_wr->mad_agent_priv;
+	struct ib_device *ib_dev = agent->qp_info->port_priv->device;
+	u8 port = agent->qp_info->port_priv->port_num;
 	struct ib_mad_hdr *mad_hdr = mad_send_wr->send_buf.mad;
 	struct mad_rmpp_recv *rmpp_recv;
 	struct ib_ah_attr ah_attr;
 	unsigned long flags;
 	int newwin = 1;
+	u32 dlid;
 
 	if (!(mad_hdr->method & IB_MGMT_METHOD_RESP))
 		goto out;
@@ -870,7 +874,19 @@ static int init_newwin(struct ib_mad_send_wr_private *mad_send_wr)
 		if (ib_query_ah(mad_send_wr->send_buf.ah, &ah_attr))
 			continue;
 
-		if (rmpp_recv->slid == ah_attr.dlid) {
+		if (rdma_cap_opa_ah(ib_dev, port)) {
+			if ((ah_attr.ah_flags & IB_AH_GRH) &&
+			    (ib_is_opa_gid(&ah_attr.grh.dgid)))
+				dlid = be64_to_cpu(
+					ah_attr.grh.dgid.global.interface_id)
+					& 0xFFFFFFFF;
+			else
+				dlid = OPA_TO_IB_UCAST_LID(ah_attr.dlid);
+		} else {
+			dlid = ah_attr.dlid;
+		}
+
+		if (rmpp_recv->slid == dlid) {
 			newwin = rmpp_recv->repwin;
 			break;
 		}
