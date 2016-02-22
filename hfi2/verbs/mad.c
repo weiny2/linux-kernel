@@ -720,8 +720,49 @@ static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	u32 nports = OPA_AM_NPORT(am);
+	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
+	u32 lstate;
+	struct hfi_devdata *dd;
+	struct hfi_pportdata *ppd;
+	struct opa_port_state_info *psi = (struct opa_port_state_info *)data;
+
+	if (nports != 1) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)smp);
+	}
+
+	dd = hfi_dd_from_ibdev(ibdev);
+	/* IB numbers ports from 1, hw from 0 */
+	ppd = to_hfi_ppd(dd, port);
+
+	lstate = hfi_driver_lstate(ppd);
+
+	if (start_of_sm_config && (lstate == IB_PORT_INIT))
+		ppd->is_sm_config_started = 1;
+
+#if PI_LED_ENABLE_SUP
+	psi->port_states.ledenable_offlinereason = ppd->neighbor_normal << 4;
+	psi->port_states.ledenable_offlinereason |=
+		ppd->is_sm_config_started << 5;
+	psi->port_states.ledenable_offlinereason |=
+		ppd->offline_disabled_reason;
+#else
+	psi->port_states.offline_reason = ppd->neighbor_normal << 4;
+	psi->port_states.offline_reason |= ppd->is_sm_config_started << 5;
+	psi->port_states.offline_reason |= ppd->offline_disabled_reason;
+#endif /* PI_LED_ENABLE_SUP */
+
+	psi->port_states.portphysstate_portstate =
+		(hfi_ibphys_portstate(ppd) << 4) | (lstate & 0xf);
+	psi->link_width_downgrade_tx_active =
+		cpu_to_be16(ppd->link_width_downgrade_tx_active);
+	psi->link_width_downgrade_rx_active =
+		cpu_to_be16(ppd->link_width_downgrade_rx_active);
+	if (resp_len)
+		*resp_len += sizeof(struct opa_port_state_info);
+
+	return reply((struct ib_mad_hdr *)smp);
 }
 
 static int __subn_get_opa_pkeytable(struct opa_smp *smp, u32 am, u8 *data,
@@ -1957,8 +1998,49 @@ static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					 u32 *resp_len)
 {
-	/* FXRTODO: to be implemented */
-	return IB_MAD_RESULT_FAILURE;
+	u32 nports = OPA_AM_NPORT(am);
+	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
+	u32 ls_old;
+	u8 ls_new, ps_new;
+	struct hfi_devdata *dd;
+	struct hfi_pportdata *ppd;
+	struct opa_port_state_info *psi = (struct opa_port_state_info *)data;
+	int ret, invalid = 0;
+
+	if (nports != 1) {
+		smp->status |= IB_SMP_INVALID_FIELD;
+		return reply((struct ib_mad_hdr *)smp);
+	}
+
+	dd = hfi_dd_from_ibdev(ibdev);
+	/* IB numbers ports from 1, hw from 0 */
+	ppd = to_hfi_ppd(dd, port);
+
+	ls_old = hfi_driver_lstate(ppd);
+
+	ls_new = psi->port_states.portphysstate_portstate &
+			OPA_PI_MASK_PORT_STATE;
+	ps_new = (psi->port_states.portphysstate_portstate &
+			OPA_PI_MASK_PORT_PHYSICAL_STATE) >> 4;
+
+	if (ls_old == IB_PORT_INIT) {
+		if (start_of_sm_config) {
+			if (ls_new == ls_old || (ls_new == IB_PORT_ARMED))
+				ppd->is_sm_config_started = 1;
+		} else if (ls_new == IB_PORT_ARMED) {
+			if (ppd->is_sm_config_started == 0)
+				invalid = 1;
+		}
+	}
+
+	ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
+	if (ret)
+		return ret;
+
+	if (invalid)
+		smp->status |= IB_SMP_INVALID_FIELD;
+
+	return __subn_get_opa_psi(smp, am, data, ibdev, port, resp_len);
 }
 
 static int __subn_set_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
