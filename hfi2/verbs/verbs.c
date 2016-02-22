@@ -487,9 +487,10 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 		goto err_class;
 #endif
 	goto exit;
-
+#if 0
 err_class:
 	hfi2_free_agents(ibdev);
+#endif
 err_agents:
 	ib_unregister_device(ibdev);
 err_reg:
