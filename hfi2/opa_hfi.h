@@ -406,7 +406,8 @@ struct hfi_event_queue {
 /*
  * hfi_ptcdata - HFI traffic class specific information per port
  * @psn_base: packet sequence number buffer used for TX/RX
- * @e2e_state_cache: E2E connection state cache
+ * @e2e_tx_state_cache: E2E connection TX state cache
+ * @e2e_rx_state_cache: E2E connection RX state cache
  * @max_e2e_dlid: Maximum DLID to which an E2E connection has been
  *	established which is used to detect the DLID till which
  *	destroy messages have to be sent during driver unload
@@ -414,7 +415,8 @@ struct hfi_event_queue {
  */
 struct hfi_ptcdata {
 	void *psn_base;
-	struct ida e2e_state_cache;
+	struct ida e2e_tx_state_cache;
+	struct ida e2e_rx_state_cache;
 	u32 max_e2e_dlid;
 	u8 req_sl;
 };

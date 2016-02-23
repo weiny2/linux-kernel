@@ -238,7 +238,7 @@ int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 	tc = HFI_GET_TC(ppd->sl_to_mctc[sl]);
 
 	ptc = &dd->pport[e2e->port_num - 1].ptc[tc];
-	cache = &ptc->e2e_state_cache;
+	cache = &ptc->e2e_tx_state_cache;
 
 	mutex_lock(&dd->e2e_lock);
 	/* Check if a new entry can be inserted into the cache */
@@ -290,7 +290,7 @@ void hfi_e2e_destroy(struct hfi_devdata *dd)
 
 		for (tc = 0; tc < HFI_MAX_TC; tc++) {
 			struct hfi_ptcdata *ptc = &dd->pport[port].ptc[tc];
-			struct ida *cache = &ptc->e2e_state_cache;
+			struct ida *cache = &ptc->e2e_tx_state_cache;
 
 			for (dlid = 0; dlid <= ptc->max_e2e_dlid; dlid++) {
 				ret = ida_simple_get(cache, dlid, dlid + 1,
@@ -300,14 +300,6 @@ void hfi_e2e_destroy(struct hfi_devdata *dd)
 				hfi_put_e2e_ctrl(dd, slid, dlid,
 						 ptc->req_sl, port,
 						 PTL_SINGLE_DESTROY);
-				/*
-				 * TODO: implement mechanism to inform the
-				 * peer to invalidate its cache. Either the
-				 * FXR HW has to provide a notification
-				 * mechanism or custom node to node
-				 * messages need to be implemented in SW
-				 * via the system PID TX/RX CQs.
-				 */
 			}
 			ida_destroy(cache);
 		}

@@ -526,6 +526,15 @@ static int hfi_eq_zero_event_wait(struct hfi_ctx *ctx, u64 **eq_entry)
 	return rc;
 }
 
+static void hfi_e2e_cache_invalidate(struct ida *cache, u32 lid)
+{
+	ida_simple_get(cache, lid, lid + 1,
+			    GFP_KERNEL);
+	ida_simple_remove(cache, lid);
+
+	return;
+}
+
 /* kernel thread handling EQ0 events for the system PID */
 static int hfi_eq_zero_thread(void *data)
 {
@@ -534,6 +543,11 @@ static int hfi_eq_zero_thread(void *data)
 	u64 *eq_entry;
 	union target_EQEntry *rxe;
 	int rc;
+	u8 port, tc;
+	u32 slid;
+	struct hfi_ptcdata *ptc;
+	struct ida *cache_rx;
+	struct ida *cache_tx;
 
 	allow_signal(SIGINT);
 
@@ -550,16 +564,69 @@ static int hfi_eq_zero_thread(void *data)
 			continue;
 
 		rxe = (union target_EQEntry *)eq_entry;
+		port = rxe->pt;
+		tc = HFI_GET_TC(rxe->user_ptr);
+		slid = rxe->initiator_id;
+
 		switch (rxe->event_kind) {
-		case PTL_EVENT_TARGET_CONNECT:
 		case PTL_EVENT_DISCONNECT:
-			/* FXRTODO: Handle E2E connection/destroy messages */
-			hfi_eq_advance(ctx, &dd->priv_rx_cq,
-				       &ctx->eq_zero[0], eq_entry);
-			dd_dev_info(dd, "%s ev %d pt %d lid %lld uptr 0x%llx\n",
-					__func__, rxe->event_kind, rxe->pt,
-					(u64)rxe->initiator_id,
-					(u64)rxe->user_ptr);
+			dd_dev_dbg(dd, "%s E2E disconnect request\n",
+					__func__);
+
+			if (tc >= HFI_MAX_TC) {
+				dd_dev_err(dd, "%s unexpected tc %d\n",
+				   __func__, tc);
+				break;
+			}
+			ptc = &dd->pport[port].ptc[tc];
+			cache_rx = &ptc->e2e_rx_state_cache;
+			cache_tx = &ptc->e2e_tx_state_cache;
+
+			hfi_e2e_cache_invalidate(cache_rx, slid);
+
+			mutex_lock(&dd->e2e_lock);
+			hfi_e2e_cache_invalidate(cache_tx, slid);
+			mutex_unlock(&dd->e2e_lock);
+
+			dd_dev_info(dd, "%s ev %d pt %d lid %lld tc %d\n",
+				    __func__, rxe->event_kind, rxe->pt,
+				    (u64)rxe->initiator_id, tc);
+			break;
+
+		case PTL_EVENT_TARGET_CONNECT:
+			dd_dev_dbg(dd, "%s E2E connect request\n",
+					__func__);
+
+			if (tc >= HFI_MAX_TC) {
+				dd_dev_err(dd, "%s unexpected tc %d\n",
+				   __func__, tc);
+				break;
+			}
+			ptc = &dd->pport[port].ptc[tc];
+			cache_rx = &ptc->e2e_rx_state_cache;
+			cache_tx = &ptc->e2e_tx_state_cache;
+
+			rc = ida_simple_get(cache_rx, slid, slid + 1,
+					    GFP_KERNEL);
+
+			if (-ENOSPC == rc) {
+				dd_dev_dbg(dd, "%s E2E Crashed node reconnect\n",
+					   __func__);
+
+				/*
+				 * The node requesting this connect, went down
+				 * without a disconnect request. Therfore the
+				 * TX E2E connection has to be re established
+				 * hence the TX cache invalidate.
+				 */
+				mutex_lock(&dd->e2e_lock);
+				hfi_e2e_cache_invalidate(cache_tx, slid);
+				mutex_unlock(&dd->e2e_lock);
+			}
+
+			dd_dev_info(dd, "%s ev %d pt %d lid %lld tc %d\n",
+				    __func__, rxe->event_kind, rxe->pt,
+				    (u64)rxe->initiator_id, tc);
 			break;
 		case PTL_CMD_COMPLETE:
 			/* These events are handled synchronously */
@@ -569,6 +636,10 @@ static int hfi_eq_zero_thread(void *data)
 				   __func__, rxe->event_kind, rxe->pt);
 			break;
 		}
+
+		if (rxe->event_kind != PTL_CMD_COMPLETE)
+			hfi_eq_advance(ctx, &dd->priv_rx_cq,
+				       &ctx->eq_zero[0], eq_entry);
 	}
 	return 0;
 }
