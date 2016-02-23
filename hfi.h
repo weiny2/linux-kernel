@@ -65,8 +65,6 @@
 #include <linux/cdev.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
-#include <linux/mmu_notifier.h>
-#include <linux/rbtree.h>
 
 #include "chip_registers.h"
 #include "common.h"
@@ -1182,6 +1180,7 @@ struct hfi1_devdata {
 #define PT_EAGER    1
 #define PT_INVALID  2
 
+struct tid_rb_node;
 struct mmu_rb_node;
 
 /* Private data for file operations */
@@ -1192,21 +1191,16 @@ struct hfi1_filedata {
 	struct hfi1_user_sdma_pkt_q *pq;
 	/* for cpu affinity; -1 if none */
 	int rec_cpu_num;
-	struct mmu_notifier mn;
 	struct rb_root tid_rb_root;
-	struct mmu_rb_node **entry_to_rb;
+	struct tid_rb_node **entry_to_rb;
 	u32 tid_limit;
 	u32 tid_used;
-	/* protect rb tree */
-	spinlock_t rb_lock;
 	u32 *invalid_tids;
 	u32 invalid_tid_idx;
-	/* protect invalid tid info */
+	/* protect invalid_tids array and invalid_tid_idx */
 	spinlock_t invalid_lock;
-	int (*mmu_rb_insert)(struct hfi1_filedata *, struct rb_root *,
-			     struct mmu_rb_node *);
-	void (*mmu_rb_remove)(struct hfi1_filedata *, struct rb_root *,
-			      struct mmu_rb_node *);
+	int (*mmu_rb_insert)(struct rb_root *, struct mmu_rb_node *);
+	void (*mmu_rb_remove)(struct rb_root *, struct mmu_rb_node *);
 };
 
 extern struct list_head hfi1_dev_list;
