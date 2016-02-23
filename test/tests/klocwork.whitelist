@@ -2,7 +2,6 @@
 #---------------------------------------
 	0	1	diag.c
 	0	1	iowait.h
-	1	0	user_sdma.c
 	0	2	qp.c
 	1	0	file_ops.c
 	0	4	verbs_mcast.c
