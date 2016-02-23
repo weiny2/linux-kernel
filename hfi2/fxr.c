@@ -1796,7 +1796,8 @@ void hfi_ptc_init(struct hfi_pportdata *ppd)
 	for (i = 0; i < HFI_MAX_TC; i++) {
 		struct hfi_ptcdata *tc = &ppd->ptc[i];
 
-		ida_init(&tc->e2e_state_cache);
+		ida_init(&tc->e2e_tx_state_cache);
+		ida_init(&tc->e2e_rx_state_cache);
 	}
 }
 
