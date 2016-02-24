@@ -593,10 +593,6 @@ static ssize_t __i2c_debugfs_write(struct file *file, const char __user *buf,
 		goto _free;
 	}
 
-	ret = acquire_chip_resource(ppd->dd, i2c_target(target), 0);
-	if (ret)
-		goto _free;
-
 	total_written = i2c_write(ppd, target, i2c_addr, offset, buff, count);
 	if (total_written < 0) {
 		ret = total_written;
@@ -657,10 +653,6 @@ static ssize_t __i2c_debugfs_read(struct file *file, char __user *buf,
 		ret = -ENOMEM;
 		goto _return;
 	}
-
-	ret = acquire_chip_resource(ppd->dd, i2c_target(target), 0);
-	if (ret)
-		goto _free;
 
 	total_read = i2c_read(ppd, target, i2c_addr, offset, buff, count);
 	if (total_read < 0) {
