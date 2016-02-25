@@ -59,13 +59,12 @@
 #define OP(x) IB_OPCODE_UC_##x
 
 /**
- * _hfi2_make_uc_req - construct a request packet (SEND, RDMA write)
+ * hfi2_make_uc_req - construct a request packet (SEND, RDMA write)
  * @qp: a pointer to the QP
- * @is_16b: if set use 16B header, otherwise use LRH
  *
  * Return: 1 if constructed; otherwise, return 0.
  */
-static int _hfi2_make_uc_req(struct hfi2_qp *qp, bool is_16b)
+int hfi2_make_uc_req(struct hfi2_qp *qp)
 {
 	struct ib_l4_headers *ohdr;
 	struct hfi2_swqe *wqe;
@@ -75,9 +74,7 @@ static int _hfi2_make_uc_req(struct hfi2_qp *qp, bool is_16b)
 	u32 len;
 	u32 pmtu = qp->pmtu;
 	int ret = 0;
-
-	/* 16B(4)/LRH(2) + BTH(3) */
-	hwords = is_16b ? 7 : 5;
+	bool is_16b;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_SEND_OK)) {
@@ -96,8 +93,13 @@ static int _hfi2_make_uc_req(struct hfi2_qp *qp, bool is_16b)
 		goto done;
 	}
 
+	is_16b = hfi2_use_16b(qp);
+	/* 16B(4)/LRH(2) + BTH(3) */
+	hwords = is_16b ? 7 : 5;
+
+	/* FXRTODO: 16B will never use GRH? Check later */
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = is_16b ? &qp->s_hdr->opa16b.u.l.oth :
+		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
 				&qp->s_hdr->ph.ibh.u.l.oth;
 	else
 		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
@@ -273,12 +275,6 @@ unlock:
 	return ret;
 }
 
-int hfi2_make_uc_req(struct hfi2_qp *qp)
-{
-	/* FXRTODO: Dynamically determain encapsulation type */
-	return _hfi2_make_uc_req(qp, is_16b_mode());
-}
-
 /**
  * hfi2_uc_rcv - receive an incoming UC packet
  * @qp: the QP the packet came on
@@ -320,15 +316,6 @@ void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		opa_parse_16b_header((u32 *)&ph->opa16b, &slid, &dlid, &len,
 				     &pkey, &entropy, &sc, &rc, &is_fecn,
 				     &is_becn, &age, &l4);
-
-		/*
-		 * FXRTODO: Translate 16B multicast LIDs to 9B for now,
-		 * fix later.
-		 */
-		if (dlid >= HFI1_16B_MULTICAST_LID_BASE) {
-			dlid -= HFI1_16B_MULTICAST_LID_BASE;
-			dlid += HFI1_MULTICAST_LID_BASE;
-		}
 
 		/* Get the number of bytes the message was padded by. */
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 7;

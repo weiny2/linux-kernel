@@ -298,7 +298,7 @@ static inline u32 delta_psn(u32 a, u32 b)
  */
 static inline
 u32 hfi2_make_grh(struct hfi2_ibport *ibp, struct ib_grh *hdr,
-		    struct ib_global_route *grh, u32 hwords, u32 nwords)
+		  struct ib_global_route *grh, u32 hwords, u32 nwords)
 {
 	hdr->version_tclass_flow =
 		cpu_to_be32((IB_GRH_VERSION << IB_GRH_VERSION_SHIFT) |
@@ -523,6 +523,52 @@ static inline bool hfi2_check_permissive(struct ib_ah_attr *ah_attr)
 		}
 	}
 	return ah_attr->dlid == HFI1_PERMISSIVE_LID;
+}
+
+/* Check if current wqe needs 16B */
+static inline bool hfi2_use_16b(struct hfi2_qp *qp)
+{
+	struct hfi2_swqe *wqe = qp->s_wqe;
+	struct ib_ah_attr *ah_attr;
+	struct hfi_pportdata *ppd;
+	struct hfi2_ibport *ibp;
+
+	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
+	ppd = ibp->ppd;
+	if (ppd->lid >= HFI1_MULTICAST_LID_BASE)
+		return true;
+
+	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
+	    (qp->ibqp.qp_type == IB_QPT_UC))
+		return ib_is_opa_gid(&qp->remote_ah_attr.grh.dgid);
+
+	if (!wqe)
+		return false;
+
+	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+	return ib_is_opa_gid(&ah_attr->grh.dgid);
+}
+
+static inline void hfi2_make_ext_grh(struct hfi2_ibport *ibp,
+				     struct ib_grh *grh, u32 slid, u32 dlid)
+{
+	grh->hop_limit = 1;
+	grh->sgid.global.subnet_prefix = ibp->gid_prefix;
+	grh->sgid.global.interface_id = OPA_MAKE_GID(slid);
+
+	/* This is called in the recv codepath where the dlid will
+	 * will be the local lid of the node. If this is a DR packet
+	 * in which case dlid is permissive, set the default
+	 * gid in the GRH.
+	 * FXRTODO: The permissive LID check below seems wrong and also
+	 * unnecessary. Revisit later.
+	 */
+	grh->dgid.global.subnet_prefix = ibp->gid_prefix;
+	if ((dlid == HFI1_16B_PERMISSIVE_LID) ||
+	    (dlid == HFI1_PERMISSIVE_LID))
+		grh->dgid.global.interface_id = ibp->ppd->pguid;
+	else
+		grh->dgid.global.interface_id = OPA_MAKE_GID(dlid);
 }
 
 /* Bypass packet types */

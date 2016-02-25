@@ -463,6 +463,7 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 	struct hfi2_qp *qp;
 	u32 qp_num, dlid;
 	u8 opcode, l4;
+	bool is_mcast;
 
 	if (packet->etype == RHF_RCV_TYPE_IB) {
 		int lnh;
@@ -495,6 +496,9 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 		} else {
 			goto drop;
 		}
+
+		is_mcast = (dlid >= HFI1_MULTICAST_LID_BASE) &&
+				  (dlid != HFI1_PERMISSIVE_LID);
 	} else if (packet->etype == RHF_RCV_TYPE_BYPASS) {
 		/* 32 == 16B + (MGMT L4/BTH) FLIT + CRC FLIT */
 		if (unlikely(tlen < 32))
@@ -502,18 +506,6 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 
 		l4 = OPA_16B_GET_L4_TYPE(ph);
 		dlid = opa_16b_get_dlid((u32 *)ph);
-
-		/*
-		 * FXRTODO: Translate 16B multicast and permissive LIDs
-		 * to those of 9B for now, fix later.
-		 */
-		if (dlid == HFI1_16B_PERMISSIVE_LID) {
-			dlid = HFI1_PERMISSIVE_LID;
-		} else if (dlid >= HFI1_16B_MULTICAST_LID_BASE) {
-			dlid -= HFI1_16B_MULTICAST_LID_BASE;
-			dlid += HFI1_MULTICAST_LID_BASE;
-		}
-
 		if (l4 == HFI1_L4_IB_LOCAL) {
 			/* 16B + 12B BTH */
 			packet->hlen = 28;
@@ -526,6 +518,9 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 		} else {
 			goto drop;
 		}
+
+		is_mcast = (dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
+				  (dlid != HFI1_16B_PERMISSIVE_LID);
 	} else {
 		dev_err(ibp->dev, "Invalid packet type\n");
 		goto drop;
@@ -554,8 +549,7 @@ static void hfi2_rcv(struct hfi2_ib_packet *packet)
 	dev_dbg(ibp->dev, "PT %d: IB packet %d len %d for PID %d QPN %d\n",
 		ibp->port_num, l4, tlen, packet->ctx->pid, qp_num);
 
-	if ((dlid >= HFI1_MULTICAST_LID_BASE) &&
-	    (dlid != HFI1_PERMISSIVE_LID)) {
+	if (is_mcast) {
 		struct hfi2_mcast *mcast;
 		struct hfi2_mcast_qp *p;
 

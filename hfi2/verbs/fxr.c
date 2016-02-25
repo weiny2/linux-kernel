@@ -876,28 +876,26 @@ int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops)
 	if (ret < 0)
 		goto err_qp_ctx;
 
-	if (is_16b_mode()) {
-		/* set RSM rule for 16B Verbs receive using L2 and L4 */
-		rule.idx = 0;
-		rule.pkt_type = 0x4; /* bypass */
-		/* match L2 == 16B (0x2)*/
-		rule.match_offset[0] = 61;
-		rule.match_mask[0] = OPA_BYPASS_L2_MASK;
-		rule.match_value[0] = OPA_BYPASS_HDR_16B;
-		/* match IB L4s: 0x8 0x9 0xA */
-		rule.match_offset[1] = 64;
-		rule.match_mask[1] = 0xFC;
-		rule.match_value[1] = 0x8;
-		/* disable selection, result is always RSM_MAP index of 0 */
-		rule.select_width[0] = 0;
-		rule.select_width[1] = 0;
-		rsm_ctx[0] = &ibd->qp_ctx;
-		ret = hfi_rsm_set_rule(ibd->dd, &rule, rsm_ctx, 1);
-		if (ret < 0)
-			goto err_rsm;
-		ibd->rsm_mask |= (1 << rule.idx);
-	}
 
+	/* set RSM rule for 16B Verbs receive using L2 and L4 */
+	rule.idx = 0;
+	rule.pkt_type = 0x4; /* bypass */
+	/* match L2 == 16B (0x2)*/
+	rule.match_offset[0] = 61;
+	rule.match_mask[0] = OPA_BYPASS_L2_MASK;
+	rule.match_value[0] = OPA_BYPASS_HDR_16B;
+	/* match IB L4s: 0x8 0x9 0xA */
+	rule.match_offset[1] = 64;
+	rule.match_mask[1] = 0xFC;
+	rule.match_value[1] = 0x8;
+	/* disable selection, result is always RSM_MAP index of 0 */
+	rule.select_width[0] = 0;
+	rule.select_width[1] = 0;
+	rsm_ctx[0] = &ibd->qp_ctx;
+	ret = hfi_rsm_set_rule(ibd->dd, &rule, rsm_ctx, 1);
+	if (ret < 0)
+		goto err_rsm;
+	ibd->rsm_mask |= (1 << rule.idx);
 	return 0;
 
 err_rsm:

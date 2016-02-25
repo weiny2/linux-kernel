@@ -485,6 +485,7 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 	int ret = 0;
 	int delta;
 
+	/* FXRTODO: Need to add 16B RC support */
 	ohdr = &qp->s_hdr->ph.ibh.u.oth;
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
 		ohdr = &qp->s_hdr->ph.ibh.u.l.oth;

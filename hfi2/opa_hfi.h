@@ -917,7 +917,7 @@ int neigh_is_hfi(struct hfi_pportdata *ppd);
 void hfi_add_full_mgmt_pkey(struct hfi_pportdata *ppd);
 const char *hfi_class_name(void);
 int hfi_set_lid(struct hfi_pportdata *ppd, u32 lid, u8 lmc);
-int is_16b_mode(void);
+
 /*
  * dev_err can be used (only!) to print early errors before devdata is
  * allocated, or when dd->pcidev may not be valid, and at the tail end of
