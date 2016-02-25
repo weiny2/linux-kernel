@@ -82,6 +82,15 @@ static inline void clear_opa_smp_data(struct opa_smp *smp)
 	memset(data, 0, size);
 }
 
+static void hfi2_update_sm_ah_attr(struct hfi2_ibport *ibp, u32 lid)
+{
+	ibp->sm_ah->attr.ah_flags = IB_AH_GRH;
+	ibp->sm_ah->attr.dlid = OPA_TO_IB_UCAST_LID(lid);
+	ibp->sm_ah->attr.grh.sgid_index = OPA_GID_INDEX;
+	ibp->sm_ah->attr.grh.dgid.global.subnet_prefix = ibp->gid_prefix;
+	ibp->sm_ah->attr.grh.dgid.global.interface_id = OPA_MAKE_GID(lid);
+}
+
 static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
 {
 	struct ib_mad_send_buf *send_buf;
@@ -141,6 +150,7 @@ static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
 			} else {
 				send_buf->ah = ah;
 				ibp->sm_ah = to_hfi_ah(ah);
+				hfi2_update_sm_ah_attr(ibp, ibp->sm_lid);
 			}
 		} else {
 			ret = -EINVAL;
@@ -1373,16 +1383,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		return reply(ibh);
 	}
 
-	/*
-	 * FXRTODO:
-	 * Currently this check ensures that the LID is 16bit
-	 * i.e the packet is 9B
-	 *
-	 * When we support 16B packets on FXR, there will
-	 * be additional check/modifications for 24 bit LID here.
-	 *
-	 * bail out early if the LID and SMLID are invalid
-	 */
+	/* bail out early if the LID and SMLID are invalid */
 	lid = be32_to_cpu(pi->lid);
 	if (lid & 0xFF000000) {
 		pr_warn("OPA_PortInfo lid out of range: %X\n", lid);
@@ -1392,13 +1393,12 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	smlid = be32_to_cpu(pi->sm_lid);
-	if (smlid & 0xFFFF0000) {
+	if (smlid & 0xFF000000) {
 		pr_warn("OPA_PortInfo SM lid out of range: %X\n", smlid);
-		pr_warn("(> 16b LIDs not supported)\n");
+		pr_warn("(> 24b LIDs not supported)\n");
 		hfi_invalid_attr(smp);
 		goto get_only;
 	}
-	smlid &= 0x0000FFFF;
 
 	clientrereg = (pi->clientrereg_subnettimeout &
 			OPA_PI_MASK_CLIENT_REREGISTER);
@@ -1488,7 +1488,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		spin_lock_irqsave(&ibp->lock, flags);
 		if (ibp->sm_ah) {
 			if (smlid != ibp->sm_lid)
-				ibp->sm_ah->attr.dlid = smlid;
+				hfi2_update_sm_ah_attr(ibp, smlid);
 			if (msl != ibp->sm_sl)
 				ibp->sm_ah->attr.sl = msl;
 		}
