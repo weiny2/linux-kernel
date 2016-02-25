@@ -122,11 +122,11 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 #if 0 /* FXRTODO */
 	if (qp->ibqp.qp_num > 1) {
 		u16 pkey;
-		u16 slid;
+		u32 slid;
 		u8 sc5 = ibp->sl_to_sc[ah_attr->sl];
 
 		pkey = hfi2_get_pkey(ibp, sqp->s_pkey_index);
-		slid = ibp->lid | (ah_attr->src_path_bits &
+		slid = ppd->lid | (ah_attr->src_path_bits &
 				   ((1 << ibp->lmc) - 1));
 		if (unlikely(ingress_pkey_check(ibp, pkey, sc5,
 						qp->s_pkey_index, slid))) {
@@ -150,9 +150,9 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 		qkey = (int)swqe->wr.wr.ud.remote_qkey < 0 ?
 			sqp->qkey : swqe->wr.wr.ud.remote_qkey;
 		if (unlikely(qkey != qp->qkey)) {
-			u16 lid;
+			u32 lid;
 
-			lid = ibp->lid | (ah_attr->src_path_bits &
+			lid = ppd->lid | (ah_attr->src_path_bits &
 					  ((1 << ibp->lmc) - 1));
 			hfi2_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
 					 ah_attr->sl,
