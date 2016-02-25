@@ -311,7 +311,13 @@ next_event:
 
 	wqe_iov = (struct hfi2_wqe_iov *)eq_entry->user_ptr;
 	wqe = wqe_iov->wqe;
-	BUG_ON(!wqe); /* TODO - delete me */
+
+	/* ACKs don't have backing wqe */
+	if (!wqe) {
+		kfree(wqe_iov);
+		goto eq_advance;
+	}
+
 	qp = wqe->s_qp;
 	dev_dbg(ibp->dev,
 		"PT %d: TX event %p, fail %d, for QPN %d, remain %d\n",
@@ -324,13 +330,9 @@ next_event:
 	/* if final packet, tell verbs if success or failure */
 	if (!wqe_iov->remaining_bytes) {
 		spin_lock(&qp->s_lock);
-#if 0
-		/* TODO - RC starts response/ack timer */
 		if (qp->ibqp.qp_type == IB_QPT_RC)
-			hfi2_rc_send_complete(qp, &wqe_iov->ib_hdr);
-		else
-#endif
-		if (wqe->pkt_errors)
+			hfi2_rc_send_complete(qp, &wqe_iov->ph.ibh);
+		else if (wqe->pkt_errors)
 			hfi2_send_complete(qp, wqe, IB_WC_FATAL_ERR);
 		else
 			hfi2_send_complete(qp, wqe, IB_WC_SUCCESS);
@@ -362,15 +364,6 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	iov[0].use_9b = !wqe->use_16b;
 	iov[0].sp = 1;
 	iov[0].v = 1;
-	/*
-	 * store a copy of the IB header as MIDDLE and LAST packets modify it,
-	 * and we'd like to maintain asyncronous send and send_complete
-	 * TODO - can be removed by refactoring where upper layer builds header
-	 */
-	if (!wqe->use_16b)
-		memcpy(&wqe_iov->ph, &wqe->s_hdr->ph.ibh, iov[0].length);
-	else
-		memcpy(&wqe_iov->ph, &wqe->s_hdr->opa16b, iov[0].length);
 	iov[0].start = (uint64_t)(&wqe_iov->ph);
 
 	/* write IOVEC entries */
@@ -411,6 +404,105 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	*out_niovs = niovs;
 	*iov_bytes = payload_bytes;
 	return 0;
+}
+
+#ifdef HFI_VERBS_TEST
+bool hfi2_drop_check(uint64_t *count, uint64_t pkt_num)
+{
+	(*count)++;
+
+	if (*count % pkt_num == 0) {
+		*count = 0;
+		return true;
+	}
+	return false;
+}
+
+bool hfi2_drop_ack(uint64_t pkt_num)
+{
+	static uint64_t count;
+
+	return hfi2_drop_check(&count, pkt_num);
+}
+#endif
+
+int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+		  struct hfi2_ib_header *hdr, size_t hwords)
+{
+	int ret, ndelays = 0;
+	unsigned long flags;
+	uint8_t dma_cmd = GENERAL_DMA;
+	struct hfi2_wqe_iov *wqe_iov = NULL;
+	uint32_t num_iovs = 1, length = 0;
+	union base_iovec *iov;
+	uint8_t sl = qp->remote_ah_attr.sl;
+
+#ifdef HFI_VERBS_TEST
+	if (hfi2_drop_ack(5)) {
+		dev_dbg(ibp->dev, "Droping %s with PSN = %d\n",
+			(qp->r_nak_state) ? "NAK" : "ACK",
+			 be32_to_cpu(hdr->u.oth.bth[2]));
+		return -1;
+	}
+#endif
+	wqe_iov = kzalloc(sizeof(*wqe_iov) + sizeof(*wqe_iov->iov) * num_iovs,
+			  GFP_ATOMIC);
+	if (!wqe_iov)
+		return -ENOMEM;
+
+	/* hfi_tx_cmd_bypass_dma is asynchronous. Don't use stack memory */
+	/* FXRTODO: Remove memcpy when implementing STL--6302 */
+	memcpy(&wqe_iov->ph.ibh, hdr, sizeof(*hdr));
+
+	iov = wqe_iov->iov;
+	wqe_iov->wqe = NULL;
+	wqe_iov->remaining_bytes = 0;
+
+	/* first entry is IB header */
+	iov[0].length = (hwords << 2);
+	iov[0].use_9b = 1;
+	iov[0].sp = 1;
+	iov[0].ep = 1;
+	iov[0].v = 1;
+	iov[0].start = (uint64_t)&wqe_iov->ph.ibh;
+
+	dev_info(ibp->dev, "PT %d: cmd %d len 0 n_iov 1 sent %d, length (iov[0]) = %u\n",
+		 ibp->port_num, dma_cmd, length, iov[0].length);
+
+_tx_cmd:
+	/* send with GENERAL or MGMT DMA */
+	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
+	ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, qp->s_ctx,
+				    (uint64_t)wqe_iov->iov, num_iovs,
+				    (uint64_t)wqe_iov, PTL_MD_RESERVED_IOV,
+				    &ibp->send_eq, HFI_CT_NONE,
+				    ibp->port_num, sl, 0,
+				    HDR_EXT, dma_cmd);
+	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
+
+	if (ret == -EAGAIN) {
+		/* FXRTODO - remove delay via deferred send WQE logic */
+		if (ndelays >= OPA_IB_CQ_FULL_RETRIES) {
+			dev_warn(ibp->dev,
+				 "PT %d: TX CQ still full after %d retries!\n",
+				 ibp->port_num, ndelays);
+			goto err;
+		} else {
+			ndelays++;
+			mdelay(OPA_IB_CQ_FULL_DELAY_MS);
+			goto _tx_cmd;
+		}
+	} else if (ret < 0) {
+		goto err;
+	} else if (ndelays) {
+		dev_info(ibp->dev, "PT %d: full TX CQ required %d retries\n",
+			 ibp->port_num, ndelays);
+	}
+
+	return 0;
+err:
+	kfree(wqe_iov);
+	return ret;
 }
 
 int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
@@ -457,6 +549,16 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		return -ENOMEM;
 	wqe_iov->wqe = wqe;
 	wqe_iov->remaining_bytes = qp->s_len;
+
+	/*
+	 * store a copy of the IB header as MIDDLE and LAST packets modify it,
+	 * and we'd like to maintain asyncronous send and send_complete
+	 * TODO - can be removed by refactoring where upper layer builds header
+	 */
+	if (!wqe->use_16b)
+		memcpy(&wqe_iov->ph, &wqe->s_hdr->ph.ibh, wqe->s_hdrwords << 2);
+	else
+		memcpy(&wqe_iov->ph, &wqe->s_hdr->opa16b, wqe->s_hdrwords << 2);
 
 	if (use_ofed_dma) {
 		/* read current SGE address/length, updates internal state */
@@ -750,7 +852,7 @@ int hfi2_ctx_init(struct hfi2_ibdev *ibd, struct opa_core_ops *bus_ops)
 	/* Allocate the management context */
 	HFI_CTX_INIT(&ibd->sm_ctx, ibd->dd, bus_ops);
 	ibd->sm_ctx.mode |= HFI_CTX_MODE_BYPASS_9B;
-	ibd->sm_ctx.qpn_map_idx = 0; /* this context is for QPN 0 and 1 */
+	ibd->sm_ctx.qpn_map_idx = 0; /* this context is for QPN 0 */
 	ibd->sm_ctx.qpn_map_count = 1;
 	ctx_assign.pid = HFI_PID_ANY;
 	ctx_assign.le_me_count = OPA_IB_EAGER_COUNT;

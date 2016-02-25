@@ -69,6 +69,8 @@
 #include "iowait.h"
 #include "../opa_hfi.h"
 
+#define HFI_VERBS_TEST
+
 /* TODO - these carried from WFR driver */
 #define OPA_IB_MAX_RDMA_ATOMIC  16
 #define OPA_IB_INIT_RDMA_ATOMIC 255
@@ -839,6 +841,11 @@ hfi2_mcast_find(struct hfi2_ibport *ibp, union ib_gid *mgid);
 /* Device specific */
 int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		  struct hfi2_swqe *wqe);
+#ifdef HFI_VERBS_TEST
+bool hfi2_drop_check(uint64_t *count, uint64_t pkt_num);
+#endif
+int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+		  struct hfi2_ib_header *hdr, size_t hwords);
 void *hfi2_rcv_get_ebuf(struct hfi2_ibrcv *rcv, u16 idx, u32 offset);
 void hfi2_rcv_advance(struct hfi2_ibrcv *rcv, u64 *rhf_entry);
 int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry);

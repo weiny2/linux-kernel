@@ -69,6 +69,58 @@
 
 #define HFI1_PSN_CREDIT  16
 
+#ifdef HFI_VERBS_TEST
+#define _UC(x) IB_OPCODE_UC_##x
+#define _UD(x) IB_OPCODE_UD_##x
+
+static const char opcode_to_str[256][256] = {
+	/* RC */
+	[OP(SEND_FIRST)]                     = "RC_SEND_FIRST",
+	[OP(SEND_MIDDLE)]                    = "RC_SEND_MIDDLE",
+	[OP(SEND_LAST)]                      = "RC_SEND_LAST",
+	[OP(SEND_LAST_WITH_IMMEDIATE)]       = "RC_SEND_LAST_WITH_IMMEDIATE",
+	[OP(SEND_ONLY)]                      = "RC_SEND_ONLY",
+	[OP(SEND_ONLY_WITH_IMMEDIATE)]       = "RC_SEND_ONLY_WITH_IMMEDIATE",
+	[OP(RDMA_WRITE_FIRST)]               = "RC_RDMA_WRITE_FIRST",
+	[OP(RDMA_WRITE_MIDDLE)]              = "RC_RDMA_WRITE_MIDDLE",
+	[OP(RDMA_WRITE_LAST)]                = "RC_RDMA_WRITE_LAST",
+	[OP(RDMA_WRITE_LAST_WITH_IMMEDIATE)] =
+				"RC_RDMA_WRITE_LAST_WITH_IMMEDIATE",
+	[OP(RDMA_WRITE_ONLY)]                = "RC_RDMA_WRITE_ONLY",
+	[OP(RDMA_WRITE_ONLY_WITH_IMMEDIATE)] =
+				"RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE",
+	[OP(RDMA_READ_REQUEST)]              = "RC_RDMA_READ_REQUEST",
+	[OP(RDMA_READ_RESPONSE_FIRST)]       = "RC_RDMA_READ_RESPONSE_FIRST",
+	[OP(RDMA_READ_RESPONSE_MIDDLE)]      = "RC_RDMA_READ_RESPONSE_MIDDLE",
+	[OP(RDMA_READ_RESPONSE_LAST)]        = "RC_RDMA_READ_RESPONSE_LAST",
+	[OP(RDMA_READ_RESPONSE_ONLY)]        = "RC_RDMA_READ_RESPONSE_ONLY",
+	[OP(ACKNOWLEDGE)]                    = "RC_ACKNOWLEDGE",
+	[OP(ATOMIC_ACKNOWLEDGE)]             = "RC_ATOMIC_ACKNOWLEDGE",
+	[OP(COMPARE_SWAP)]                   = "RC_COMPARE_SWAP",
+	[OP(FETCH_ADD)]                      = "RC_FETCH_ADD",
+	/* UC */
+	[_UC(SEND_FIRST)]                     = "UC_SEND_FIRST",
+	[_UC(SEND_MIDDLE)]                    = "UC_SEND_MIDDLE",
+	[_UC(SEND_LAST)]                      = "UC_SEND_LAST",
+	[_UC(SEND_LAST_WITH_IMMEDIATE)]       = "UC_SEND_LAST_WITH_IMMEDIATE",
+	[_UC(SEND_ONLY)]                      = "UC_SEND_ONLY",
+	[_UC(SEND_ONLY_WITH_IMMEDIATE)]       = "UC_SEND_ONLY_WITH_IMMEDIATE",
+	[_UC(RDMA_WRITE_FIRST)]               = "UC_RDMA_WRITE_FIRST",
+	[_UC(RDMA_WRITE_MIDDLE)]              = "UC_RDMA_WRITE_MIDDLE",
+	[_UC(RDMA_WRITE_LAST)]                = "UC_RDMA_WRITE_LAST",
+	[_UC(RDMA_WRITE_LAST_WITH_IMMEDIATE)] =
+					"UC_RDMA_WRITE_LAST_WITH_IMMEDIATE",
+	[_UC(RDMA_WRITE_ONLY)]                = "UC_RDMA_WRITE_ONLY",
+	[_UC(RDMA_WRITE_ONLY_WITH_IMMEDIATE)] =
+					"UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE",
+	/* UD */
+	[_UD(SEND_ONLY)]                      = "UD_SEND_ONLY",
+	[_UD(SEND_ONLY_WITH_IMMEDIATE)]       = "UD_SEND_ONLY_WITH_IMMEDIATE",
+	/* CNP */
+	[CNP_OPCODE]			      = "CNP_OPCODE"
+};
+#endif
+
 /*
  * Convert the AETH credit code into the number of credits.
  */
@@ -904,17 +956,9 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 	u16 sc5;
 	u32 bth0;
 	u32 hwords;
-	/* TODO - might need something like this: */
-#if 0
-	struct hfi2_wqe_iov wqe_iov;
-	struct hfi2_ib_header *hdr = &wqe_iov->ib_hdr;
-#else
+	/*FXRTODO: Add 16B support */
 	struct hfi2_ib_header hdr;
-#endif
 	struct ib_l4_headers *ohdr;
-
-	/* TODO - remove */
-	dev_warn(ibp->dev, "RC acks not implemented!");
 
 	/* Don't send ACK or NAK if a RDMA read or atomic is pending. */
 	if (qp->s_flags & HFI1_S_RESP_PENDING)
@@ -955,7 +999,8 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 	hdr.lrh[0] = cpu_to_be16(lrh0);
 	hdr.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
 	hdr.lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);
-	hdr.lrh[3] = cpu_to_be16(ibp->ppd->lid | qp->remote_ah_attr.src_path_bits);
+	hdr.lrh[3] = cpu_to_be16(ibp->ppd->lid |
+				  qp->remote_ah_attr.src_path_bits);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(qp->remote_qpn);
 	ohdr->bth[1] |= cpu_to_be32((!!is_fecn) << HFI1_BECN_SHIFT);
@@ -965,30 +1010,12 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 	if (ibp->ppd->lstate != IB_PORT_ACTIVE)
 		return;
 
-	/* TODO - hook into GEN_DMA via send_wqe */
-#if 0
-	plen = 2 /* PBC */ + hwords;
-	pbuf = sc_buffer_alloc(sc, plen, NULL, NULL);
-	if (!pbuf) {
-		/*
-		 * We have no room to send at the moment.  Pass
-		 * responsibility for sending the ACK to the send tasklet
-		 * so that when enough buffer space becomes available,
-		 * the ACK is sent ahead of other outgoing packets.
-		 */
-		goto queue_ack;
-	}
-
-	/* write the pbc and data */
-	ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc, &hdr, hwords);
-#endif
-
+	dev_dbg(ibp->dev, "Send RC %s for PSN %u\n",
+		(qp->r_nak_state) ? "NAK" : "ACK", mask_psn(qp->r_ack_psn));
+	hfi2_send_ack(ibp, qp, &hdr, hwords);
 	return;
 
 queue_ack:
-	/* TODO - remove */
-	dev_warn(ibp->dev, "attempt to queue RC ack!");
-
 	this_cpu_inc(*ibp->rc_qacks);
 	spin_lock(&qp->s_lock);
 	qp->s_flags |= HFI1_S_ACK_PENDING | HFI1_S_RESP_PENDING;
@@ -1819,6 +1846,34 @@ bail:
 	return;
 }
 
+static inline void rc_defered_ack(struct hfi_ctx *ctx,
+				  struct hfi2_qp *qp)
+{
+	/*  FXRTODO: Implement deferrred ack */
+#if 0
+	if (list_empty(&qp->rspwait)) {
+		qp->r_flags |= HFI1_R_RSP_DEFERED_ACK;
+		atomic_inc(&qp->refcount);
+		list_add_tail(&qp->rspwait, &ctx->qp_wait_list);
+	}
+#else
+	hfi2_send_rc_ack(qp, 0);
+#endif
+}
+
+static inline void rc_cancel_ack(struct hfi2_qp *qp)
+{
+	/*  FXRTODO: Implement deferrred ack */
+#if 0
+	qp->r_adefered = 0;
+	if (list_empty(&qp->rspwait))
+		return;
+	list_del_init(&qp->rspwait);
+	qp->r_flags &= ~HFI1_R_RSP_DEFERED_ACK;
+	if (atomic_dec_and_test(&qp->refcount))
+		wake_up(&qp->wait);
+#endif
+}
 /**
  * rc_rcv_error - process an incoming duplicate or error RC packet
  * @ohdr: the other headers for this packet
@@ -1860,11 +1915,7 @@ static noinline int rc_rcv_error(struct ib_l4_headers *ohdr, void *data,
 			 * in the receive queue have been processed.
 			 * Otherwise, we end up propagating congestion.
 			 */
-			if (list_empty(&qp->rspwait)) {
-				qp->r_flags |= HFI1_R_RSP_NAK;
-				atomic_inc(&qp->refcount);
-				list_add_tail(&qp->rspwait, &ctx->wait_list);
-			}
+			rc_defered_ack(ctx, qp);
 		}
 		goto done;
 	}
@@ -2046,6 +2097,15 @@ static inline void update_ack_queue(struct hfi2_qp *qp, unsigned n)
 	qp->s_ack_state = OP(ACKNOWLEDGE);
 }
 
+#ifdef HFI_VERBS_TEST
+bool hfi2_drop_packet(uint64_t pkt_num)
+{
+	static uint64_t count;
+
+	return hfi2_drop_check(&count, pkt_num);
+}
+#endif
+
 /**
  * hfi2_rc_rcv - process an incoming RC packet
  * @qp: the QP for this packet
@@ -2101,14 +2161,8 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 #endif
 	/* TODO - error this class of opcode for now - no target ACK support */
 	switch (opcode) {
-	case OP(RDMA_READ_REQUEST):
 	case OP(COMPARE_SWAP):
 	case OP(FETCH_ADD):
-		goto drop;
-	}
-	/* TODO - error this class of opcode for now - rc_rcv_resp() incomplete */
-	if (opcode >= OP(RDMA_READ_RESPONSE_FIRST) &&
-	    opcode <= OP(ATOMIC_ACKNOWLEDGE)) {
 		goto drop;
 	}
 
@@ -2134,6 +2188,13 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 			return;
 		goto send_ack;
 	}
+#ifdef HFI_VERBS_TEST
+	if (hfi2_drop_packet(3)) {
+		dev_dbg(ibp->dev, "Droping packet (opcode = %s) at rcv end with PSN = %u\n",
+			opcode_to_str[opcode], mask_psn(psn));
+		goto drop;
+	}
+#endif
 
 	/* Check for opcode sequence errors. */
 	switch (qp->r_state) {
@@ -2461,22 +2522,31 @@ send_last:
 	qp->r_ack_psn = psn;
 	qp->r_nak_state = 0;
 	/* Send an ACK if requested or required. */
+	if (psn & IB_BTH_REQ_ACK) {
 #if 0
-	/* TODO - RC transport ACKs disabled */
-	if (psn & (1 << 31))
-		goto send_ack;
+		if (packet->numpkt == 0) {
+			rc_cancel_ack(qp);
+			goto send_ack;
+		}
+		if (qp->r_adefered >= HFI1_PSN_CREDIT) {
+			rc_cancel_ack(qp);
+			goto send_ack;
+		}
+		if (unlikely(is_fecn)) {
+			rc_cancel_ack(qp);
+			goto send_ack;
+		}
+		qp->r_adefered++;
 #endif
+		rc_defered_ack(ctx, qp);
+	}
 	return;
 
 rnr_nak:
 	qp->r_nak_state = IB_RNR_NAK | qp->r_min_rnr_timer;
 	qp->r_ack_psn = qp->r_psn;
 	/* Queue RNR NAK for later */
-	if (list_empty(&qp->rspwait)) {
-		qp->r_flags |= HFI1_R_RSP_NAK;
-		atomic_inc(&qp->refcount);
-		list_add_tail(&qp->rspwait, &ctx->wait_list);
-	}
+	rc_defered_ack(ctx, qp);
 	return;
 
 nack_op_err:
@@ -2484,11 +2554,7 @@ nack_op_err:
 	qp->r_nak_state = IB_NAK_REMOTE_OPERATIONAL_ERROR;
 	qp->r_ack_psn = qp->r_psn;
 	/* Queue NAK for later */
-	if (list_empty(&qp->rspwait)) {
-		qp->r_flags |= HFI1_R_RSP_NAK;
-		atomic_inc(&qp->refcount);
-		list_add_tail(&qp->rspwait, &ctx->wait_list);
-	}
+	rc_defered_ack(ctx, qp);
 	return;
 
 nack_inv_unlck:
@@ -2498,11 +2564,7 @@ nack_inv:
 	qp->r_nak_state = IB_NAK_INVALID_REQUEST;
 	qp->r_ack_psn = qp->r_psn;
 	/* Queue NAK for later */
-	if (list_empty(&qp->rspwait)) {
-		qp->r_flags |= HFI1_R_RSP_NAK;
-		atomic_inc(&qp->refcount);
-		list_add_tail(&qp->rspwait, &ctx->wait_list);
-	}
+	rc_defered_ack(ctx, qp);
 	return;
 
 nack_acc_unlck:
