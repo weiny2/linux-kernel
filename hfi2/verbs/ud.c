@@ -390,7 +390,8 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 #else
 	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
 #endif
-	if (ah_attr->ah_flags & IB_AH_GRH) {
+	/* FXRTODO: 16B will never use GRH? Check later */
+	if (ah_attr->ah_flags & IB_AH_GRH & 0) {
 		/* remove 16B HDR size from s_hdrwords for GRH */
 		qp->s_hdrwords += hfi2_make_grh(ibp, &opa16b->u.l.grh,
 						&ah_attr->grh,
@@ -411,30 +412,14 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 		wqe->use_sc15 = false;
 	}
 
-	/*
-	 * FXRTODO: Translate 9B multicast and permissive LIDs
-	 * to 16B for now, fix later.
-	 * Also need to program FECN/BECN.
-	 */
-	if (ah_attr->dlid == IB_LID_PERMISSIVE) {
+	/* FXRTODO: Need to program FECN/BECN */
+	slid = ppd->lid;
+	if (slid)
+		slid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
+	else
 		slid = HFI1_16B_PERMISSIVE_LID;
-	} else {
-		slid = ppd->lid;
-		if (slid)
-			slid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
-		else
-			slid = HFI1_16B_PERMISSIVE_LID;
-	}
 
-	if (ah_attr->dlid == IB_LID_PERMISSIVE) {
-		dlid = HFI1_16B_PERMISSIVE_LID;
-	} else if (ah_attr->dlid >= HFI1_MULTICAST_LID_BASE) {
-		dlid = ah_attr->dlid - HFI1_MULTICAST_LID_BASE;
-		dlid += HFI1_16B_MULTICAST_LID_BASE;
-	} else {
-		dlid = ah_attr->dlid;
-	}
-
+	dlid = hfi2_retrieve_lid(ah_attr);
 	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
 		pkey = hfi2_get_pkey(ibp, wqe->ud_wr.pkey_index);
@@ -465,13 +450,12 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 }
 
 /**
- * _hfi2_make_ud_req - construct a UD request packet
+ * hfi2_make_ud_req - construct a UD request packet
  * @qp: the QP
- * @is_16b: if set use 16B header, otherwise use LRH
  *
  * Return: 1 if constructed; otherwise 0.
  */
-static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
+int hfi2_make_ud_req(struct hfi2_qp *qp)
 {
 	struct ib_l4_headers *ohdr;
 	struct ib_ah_attr *ah_attr;
@@ -483,6 +467,7 @@ static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
 	u32 lid;
 	int ret = 0;
 	int next_cur;
+	bool is_16b;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
@@ -550,6 +535,10 @@ static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
 	}
 
 	qp->s_cur = next_cur;
+	qp->s_wqe = wqe;
+
+	/* For UD, call hfi2_use_16b() after setting qp->s_wqe */
+	is_16b = hfi2_use_16b(qp);
 
 	/* 16B(4)/LRH(2) + BTH(3) + DETH(2) */
 	qp->s_hdrwords = is_16b ? 9 : 7;
@@ -557,18 +546,18 @@ static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_srate = ah_attr->static_rate;
 	qp->srate_mbps = ib_rate_to_mbps(qp->s_srate);
-	qp->s_wqe = wqe;
 	qp->s_sge.sge = wqe->sg_list[0];
 	qp->s_sge.sg_list = wqe->sg_list + 1;
 	qp->s_sge.num_sge = wqe->wr.num_sge;
 	qp->s_sge.total_len = wqe->length;
 
+	/* FXRTODO: 16B will never use GRH? Check later */
 	if (ah_attr->ah_flags & IB_AH_GRH)
 		/*
 		 * Don't worry about sending to locally attached multicast
 		 * QPs.  It is unspecified by the spec. what happens.
 		 */
-		ohdr = is_16b ? &qp->s_hdr->opa16b.u.l.oth :
+		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
 				&qp->s_hdr->ph.ibh.u.l.oth;
 	else
 		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
@@ -621,12 +610,6 @@ bail:
 unlock:
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 	return ret;
-}
-
-int hfi2_make_ud_req(struct hfi2_qp *qp)
-{
-	/* FXRTODO: Dynamically determain encapsulation type */
-	return _hfi2_make_ud_req(qp, is_16b_mode());
 }
 
 /*
@@ -714,22 +697,11 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 				     &pkey, &entropy, &sc5, &rc, &is_fecn,
 				     &is_becn, &age, &l4);
 
-		/*
-		 * FXRTODO: Translate 16B multicast and permissive LIDs
-		 * to 9B for now, fix later.
-		 */
-		if (slid == HFI1_16B_PERMISSIVE_LID)
-			slid = HFI1_PERMISSIVE_LID;
-		if (dlid == HFI1_16B_PERMISSIVE_LID) {
-			dlid = HFI1_PERMISSIVE_LID;
-		} else if (dlid >= HFI1_16B_MULTICAST_LID_BASE) {
-			dlid -= HFI1_16B_MULTICAST_LID_BASE;
-			dlid += HFI1_MULTICAST_LID_BASE;
-		}
-
 		/* Get the number of bytes the message was padded by. */
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 7;
 		extra_bytes = 5;    /* ICRC + TAIL byte */
+		is_mcast = (dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
+				(dlid != HFI1_16B_PERMISSIVE_LID);
 	} else {
 		dlid = be16_to_cpu(ph->ibh.lrh[1]);
 		slid = be16_to_cpu(ph->ibh.lrh[3]);
@@ -745,12 +717,12 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		/* Get the number of bytes the message was padded by. */
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
 		extra_bytes = 4;    /* ICRC */
+		is_mcast = (dlid >= HFI1_MULTICAST_LID_BASE) &&
+				(dlid != HFI1_PERMISSIVE_LID);
 	}
 
 	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
 	src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & HFI1_QPN_MASK;
-	is_mcast = (dlid > HFI1_MULTICAST_LID_BASE) &&
-			(dlid != HFI1_PERMISSIVE_LID);
 
 	/*
 	 * The opcode is in the low byte when its in network order
@@ -900,8 +872,23 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		hfi2_copy_sge(&qp->r_sge, grh,
 			      sizeof(struct ib_grh), 1);
 		wc.wc_flags |= IB_WC_GRH;
-	} else
+	} else if (is_16b && (((slid != HFI1_16B_PERMISSIVE_LID) &&
+			       (slid >= HFI1_MULTICAST_LID_BASE)) ||
+			      ((dlid != HFI1_16B_PERMISSIVE_LID) &&
+			       (dlid >= HFI1_MULTICAST_LID_BASE)))) {
+		struct ib_grh ext_grh;
+
+		/**
+		 * Assuming we only created 16B on the send side
+		 * if we want to use large LIDs, since GRH was stripped
+		 * out when creating 16B, add back the GRH here.
+		 */
+		hfi2_make_ext_grh(ibp, &ext_grh, slid, dlid);
+		hfi2_copy_sge(&qp->r_sge, &ext_grh, sizeof(ext_grh), 1);
+		wc.wc_flags |= IB_WC_GRH;
+	} else {
 		hfi2_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
+	}
 	hfi2_copy_sge(&qp->r_sge, data,
 			wc.byte_len - sizeof(struct ib_grh), 1);
 	hfi2_put_ss(&qp->r_sge);
@@ -930,8 +917,12 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 	/*
 	 * Save the LMC lower bits if the destination LID is a unicast LID.
 	 */
-	wc.dlid_path_bits = dlid >= HFI1_MULTICAST_LID_BASE ? 0 :
-		dlid & ((1 << ppd->lmc) - 1);
+	if (is_16b)
+		wc.dlid_path_bits = (dlid >= HFI1_16B_MULTICAST_LID_BASE) ? 0 :
+					dlid & ((1 << ppd->lmc) - 1);
+	else
+		wc.dlid_path_bits = (dlid >= HFI1_MULTICAST_LID_BASE) ? 0 :
+					dlid & ((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
 	hfi2_cq_enter(to_hfi_cq(qp->ibqp.recv_cq), &wc,

@@ -358,7 +358,8 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 			(SIZE_OF_CRC << 2) + 1) & 7;
 	nwords = (qp->s_cur_size + (SIZE_OF_CRC << 2) + 1 + extra_bytes) >> 2;
 
-	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
+	/* FXRTODO: 16B will never use GRH? Check later */
+	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH & 0)) {
 		/* remove 16B HDR size from s_hdrwords for GRH */
 		qp->s_hdrwords += hfi2_make_grh(ibp, &opa16b->u.l.grh,
 						&qp->remote_ah_attr.grh,
@@ -384,13 +385,7 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 		becn = true;
 	}
 
-	dlid = qp->remote_ah_attr.dlid;
-	/* FXRTODO: Translate 9B multicast LIDs to 16B for now, fix later */
-	if (dlid >= HFI1_MULTICAST_LID_BASE) {
-		dlid = qp->remote_ah_attr.dlid - HFI1_MULTICAST_LID_BASE;
-		dlid += HFI1_16B_MULTICAST_LID_BASE;
-	}
-
+	dlid = hfi2_retrieve_lid(&qp->remote_ah_attr);
 	slid = ppd->lid | qp->remote_ah_attr.src_path_bits;
 	pkey = hfi2_get_pkey(ibp, qp->s_pkey_index);
 	qwords = (qp->s_hdrwords + nwords) >> 1;
