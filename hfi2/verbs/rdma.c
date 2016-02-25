@@ -665,7 +665,8 @@ int hfi2_rcv_wait(void *data)
 	int rc;
 	u64 *rhf_entry;
 
-	dev_info(ibp->dev, "RX kthread %d starting\n", ibp->port_num);
+	dev_info(ibp->dev, "RX kthread %d starting for CTX PID = %#x\n",
+		 ibp->port_num, rcv->ctx->pid);
 	allow_signal(SIGINT);
 	while (!kthread_should_stop()) {
 		rhf_entry = NULL;

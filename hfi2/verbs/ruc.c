@@ -607,13 +607,10 @@ void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
  */
 void hfi2_schedule_send(struct hfi2_qp *qp)
 {
-	/* FXRTODO */
-#if 0
 	if (send_ok(qp)) {
 		struct hfi2_ibport *ibp;
 
 		ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
-		iowait_schedule(&qp->s_iowait, ibp->wq);
+		iowait_schedule(&qp->s_iowait, ibp->ppd->hfi_wq);
 	}
-#endif
 }
