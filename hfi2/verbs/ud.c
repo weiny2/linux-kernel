@@ -206,8 +206,10 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 	}
 
 	if (ah_attr->ah_flags & IB_AH_GRH) {
-		hfi2_copy_sge(&qp->r_sge, &ah_attr->grh,
-				sizeof(struct ib_grh), 1);
+		struct ib_grh grh;
+
+		hfi2_make_grh(ibp, &grh, &ah_attr->grh, 0, 0);
+		hfi2_copy_sge(&qp->r_sge, &grh, sizeof(grh), 1);
 		wc.wc_flags |= IB_WC_GRH;
 	} else
 		hfi2_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
