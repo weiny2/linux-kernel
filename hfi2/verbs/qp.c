@@ -367,14 +367,16 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		goto inval;
 
 	if (attr_mask & IB_QP_AV) {
-		if (attr->ah_attr.dlid >= HFI1_MULTICAST_LID_BASE)
+		if (hfi2_check_mcast(&attr->ah_attr) ||
+		    hfi2_check_permissive(&attr->ah_attr))
 			goto inval;
 		if (hfi2_check_ah(ibdev, &attr->ah_attr))
 			goto inval;
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
-		if (attr->alt_ah_attr.dlid >= HFI1_MULTICAST_LID_BASE)
+		if (hfi2_check_mcast(&attr->alt_ah_attr) ||
+		    hfi2_check_permissive(&attr->alt_ah_attr))
 			goto inval;
 		if (hfi2_check_ah(ibdev, &attr->alt_ah_attr))
 			goto inval;

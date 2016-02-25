@@ -106,6 +106,18 @@
 #define HFI1_MULTICAST_LID_BASE 0xC000
 #define HFI1_16B_MULTICAST_LID_BASE 0xF00000
 
+/**
+ * 0xF8 - 4 bits of multicast range and 1 bit for collective range
+ * Example: For 24 bit LID space,
+ * Multicast range: 0xF00000 to 0xF7FFFF
+ * Collective range: 0xF80000 to 0xFFFFFE
+ */
+#define HFI1_MCAST_NR 0x4 /* Number of top bits set */
+#define HFI1_COLLECTIVE_NR 0x1 /* Number of bits after MCAST_NR */
+#define HFI1_MCAST_MASK (0xFFFFFF << (24 - HFI1_MCAST_NR))
+#define HFI1_COLLECTIVE_MASK (0xFFFFFF << (24 -\
+				   (HFI1_MCAST_NR + HFI1_COLLECTIVE_NR)))
+
 struct ib_reth {
 	__be64 vaddr;
 	__be32 rkey;
@@ -463,6 +475,54 @@ static inline u32 hfi2_retrieve_lid(struct ib_ah_attr *ah_attr)
 			return hfi2_get_lid_from_gid(dgid);
 	}
 	return ah_attr->dlid;
+}
+
+/**
+ * hfi2_check_mcast- Check if the lid contained
+ * in the address handle is a multicast LID.
+ *
+ * The LID might either reside in ah.dlid or might be
+ * in the GRH of the address handle as DGID if extended
+ * addresses are in use.
+ */
+static inline bool hfi2_check_mcast(struct ib_ah_attr *ah_attr)
+{
+	union ib_gid dgid;
+	u32 lid;
+
+	if (ah_attr->ah_flags & IB_AH_GRH) {
+		dgid = ah_attr->grh.dgid;
+		if (ib_is_opa_gid(&dgid)) {
+			lid = hfi2_get_lid_from_gid(&dgid);
+			return ((lid >= HFI1_16B_MULTICAST_LID_BASE) &&
+				(lid != HFI1_16B_PERMISSIVE_LID));
+		}
+	}
+	lid = ah_attr->dlid;
+	return ((lid >= HFI1_MULTICAST_LID_BASE) &&
+		(lid != HFI1_PERMISSIVE_LID));
+}
+
+/**
+ * hfi2_check_permissive- Check if the lid contained
+ * in the address handle is a permissive LID.
+ *
+ * The LID might either reside in ah.dlid or might be
+ * in the GRH of the address handle as DGID if extended
+ * addresses are in use.
+ */
+static inline bool hfi2_check_permissive(struct ib_ah_attr *ah_attr)
+{
+	union ib_gid dgid;
+
+	if (ah_attr->ah_flags & IB_AH_GRH) {
+		dgid = ah_attr->grh.dgid;
+		if (ib_is_opa_gid(&dgid)) {
+			return HFI1_16B_PERMISSIVE_LID ==
+				hfi2_get_lid_from_gid(&dgid);
+		}
+	}
+	return ah_attr->dlid == HFI1_PERMISSIVE_LID;
 }
 
 /* Bypass packet types */
