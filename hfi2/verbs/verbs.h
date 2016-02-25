@@ -80,6 +80,8 @@
 #define OPA_LIM_MGMT_PKEY       0x7FFF
 #define OPA_FULL_MGMT_PKEY      0xFFFF
 
+#define HFI2_GUIDS_PER_PORT     2
+
 /* Flags for checking QP state (see ib_hfi1_state_ops[]) */
 #define HFI1_POST_SEND_OK                0x01
 #define HFI1_POST_RECV_OK                0x02
@@ -604,7 +606,7 @@ struct hfi2_ibport {
 	unsigned long mkey_lease_timeout;
 	__be64 gid_prefix;
 	__be64 mkey;
-	__be64 guid;
+	__be64 guids[HFI2_GUIDS_PER_PORT - 1];
 	u64 tid;
 	u64 n_rc_resends;
 	u64 n_seq_naks;

@@ -365,7 +365,7 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 	/* This is already in network order */
 	ni->sys_guid = hfi2_sys_guid;
 	ni->node_guid = ibd->node_guid;
-	ni->port_guid = ibp->guid;
+	ni->port_guid = ibp->ppd->pguid;
 	ni->partition_cap = cpu_to_be16(HFI_MAX_PKEYS);
 	ni->local_port_num = port;
 	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
@@ -476,7 +476,7 @@ static int __subn_get_opa_nodeinfo(struct opa_smp *smp, u32 am, u8 *data,
 	/* This is already in network order */
 	ni->system_image_guid = hfi2_sys_guid;
 	ni->node_guid = ibd->node_guid;
-	ni->port_guid = ibp->guid;
+	ni->port_guid = ibp->ppd->pguid;
 	ni->partition_cap = cpu_to_be16(HFI_MAX_PKEYS);
 	ni->local_port_num = port;
 	memcpy(ni->vendor_id, ibd->oui, ARRAY_SIZE(ni->vendor_id));
@@ -1438,6 +1438,11 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 #endif
 		hfi_set_lid(ppd, lid, pi->mkeyprotect_lmc & OPA_PI_MASK_LMC);
 		event.event = IB_EVENT_LID_CHANGE;
+		ib_dispatch_event(&event);
+
+		/* Manufacture GID from LID to support extended addresses */
+		ibp->guids[0] = OPA_MAKE_GID(lid);
+		event.event = IB_EVENT_GID_CHANGE;
 		ib_dispatch_event(&event);
 	}
 
