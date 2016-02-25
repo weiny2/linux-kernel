@@ -1355,8 +1355,8 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	struct hfi_pportdata *ppd;
 	struct hfi2_ibport *ibp;
 	u8 clientrereg;
-	u32 smlid, opa_lid; /* tmp vars to hold LID values */
-	u16 lid;
+	u32 smlid;
+	u32 lid;
 	u8 ls_old, ls_new, ps_new;
 	u8 vls;
 	u8 msl;
@@ -1383,15 +1383,13 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	 *
 	 * bail out early if the LID and SMLID are invalid
 	 */
-	opa_lid = be32_to_cpu(pi->lid);
-	if (opa_lid & 0xFFFF0000) {
-		pr_warn("OPA_PortInfo lid out of range: %X\n", opa_lid);
-		pr_warn("(> 16b LIDs not supported)\n");
+	lid = be32_to_cpu(pi->lid);
+	if (lid & 0xFF000000) {
+		pr_warn("OPA_PortInfo lid out of range: %X\n", lid);
+		pr_warn("(> 24b LIDs not supported)\n");
 		hfi_invalid_attr(smp);
 		goto get_only;
 	}
-
-	lid = (u16)(opa_lid & 0x0000FFFF);
 
 	smlid = be32_to_cpu(pi->sm_lid);
 	if (smlid & 0xFFFF0000) {
