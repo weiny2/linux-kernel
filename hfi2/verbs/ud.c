@@ -271,7 +271,7 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 	if (wc.slid == 0 && sqp->ibqp.qp_type == IB_QPT_GSI)
 		wc.slid = HFI1_PERMISSIVE_LID;
 	wc.sl = ah_attr->sl;
-	wc.dlid_path_bits = ah_attr->dlid & ((1 << ppd->lmc) - 1);
+	wc.dlid_path_bits = hfi2_retrieve_lid(ah_attr) & ((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
 	hfi2_cq_enter(to_hfi_cq(qp->ibqp.recv_cq), &wc,
@@ -480,7 +480,7 @@ static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
 	struct hfi2_swqe *wqe;
 	unsigned long flags;
 	u8 opcode;
-	u16 lid;
+	u32 lid;
 	int ret = 0;
 	int next_cur;
 
@@ -521,7 +521,7 @@ static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
 #endif
 	if (ah_attr->dlid < HFI1_MULTICAST_LID_BASE ||
 	    ah_attr->dlid == HFI1_PERMISSIVE_LID) {
-		lid = ah_attr->dlid & ~((1 << ppd->lmc) - 1);
+		lid = hfi2_retrieve_lid(ah_attr) & ~((1 << ppd->lmc) - 1);
 		/*
 		 * FXRTODO - WFR had additional test to skip when in link
 		 * loopback, maybe to ensure datapath tested in that mode
