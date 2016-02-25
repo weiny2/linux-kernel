@@ -437,6 +437,34 @@ static inline u32 rhf_port(u64 rhf)
 	return (rhf >> RHF_PORT_SHIFT) & RHF_PORT_MASK;
 }
 
+static inline u32 hfi2_get_lid_from_gid(union ib_gid *gid)
+{
+	/* Caller should ensure gid is of type opa gid */
+	return be64_to_cpu(gid->global.interface_id) & 0xFFFFFFFF;
+}
+
+/**
+ * hfi2_retrieve_lid - Get lid in the GID.
+ *
+ * Extended LIDs are stored in the GID if the STL
+ * device supports extended addresses. This function
+ * retirieves the 32 bit lid.
+ *
+ * If GRH is not specified or if an IB GID is specified
+ * in the GRH, the function simply returns the 16 bit lid.
+ */
+static inline u32 hfi2_retrieve_lid(struct ib_ah_attr *ah_attr)
+{
+	union ib_gid *dgid;
+
+	if ((ah_attr->ah_flags & IB_AH_GRH)) {
+		dgid = &ah_attr->grh.dgid;
+		if (ib_is_opa_gid(dgid))
+			return hfi2_get_lid_from_gid(dgid);
+	}
+	return ah_attr->dlid;
+}
+
 /* Bypass packet types */
 #define OPA_BYPASS_HDR_8B              0x0
 #define OPA_BYPASS_HDR_10B             0x1
