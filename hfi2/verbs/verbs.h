@@ -629,7 +629,7 @@ struct hfi2_ibport {
 	u16 pkey_violations;
 	u16 qkey_violations;
 	u16 mkey_violations;
-	u16 sm_lid;
+	u32 sm_lid;
 	u8 port_num;
 	u8 sm_sl;
 	u8 mkeyprot;
@@ -748,7 +748,7 @@ int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
 			     struct ib_ah_attr *ah_attr);
 int hfi2_destroy_ah(struct ib_ah *ibah);
-struct ib_ah *hfi2_create_qp0_ah(struct hfi2_ibport *ibp, u16 dlid);
+struct ib_ah *hfi2_create_qp0_ah(struct hfi2_ibport *ibp, u32 dlid);
 int hfi2_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
 int hfi2_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
 struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,

@@ -129,14 +129,14 @@ struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
 	return ret;
 }
 
-struct ib_ah *hfi2_create_qp0_ah(struct hfi2_ibport *ibp, u16 dlid)
+struct ib_ah *hfi2_create_qp0_ah(struct hfi2_ibport *ibp, u32 dlid)
 {
 	struct ib_ah_attr attr;
 	struct ib_ah *ah = ERR_PTR(-EINVAL);
 	struct hfi2_qp *qp0;
 
 	memset(&attr, 0, sizeof(attr));
-	attr.dlid = dlid;
+	attr.dlid = OPA_TO_IB_UCAST_LID(dlid);
 	attr.port_num = ibp->port_num + 1;
 	attr.sl = ibp->sm_sl;
 	rcu_read_lock();
