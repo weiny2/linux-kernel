@@ -519,8 +519,7 @@ static int _hfi2_make_ud_req(struct hfi2_qp *qp, bool is_16b)
 #else
 	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
 #endif
-	if (ah_attr->dlid < HFI1_MULTICAST_LID_BASE ||
-	    ah_attr->dlid == HFI1_PERMISSIVE_LID) {
+	if (!hfi2_check_mcast(ah_attr)) {
 		lid = hfi2_retrieve_lid(ah_attr) & ~((1 << ppd->lmc) - 1);
 		/*
 		 * FXRTODO - WFR had additional test to skip when in link

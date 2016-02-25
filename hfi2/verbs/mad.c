@@ -54,6 +54,7 @@
 #include <linux/pci.h>
 #include "verbs.h"
 #include "mad.h"
+#include "packet.h"
 #include "../link.h"
 
 static inline void hfi_invalid_attr(struct opa_smp *smp)
@@ -704,6 +705,12 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->opa_cap_mask = cpu_to_be16(OPA_CAP_MASK3_IsSharedSpaceSupported);
 	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsVLrSupported);
+
+	/* Driver does not support mcast/collective configuration */
+	pi->opa_cap_mask &=
+		cpu_to_be16(~OPA_CAP_MASK3_IsAddrRangeConfigSupported);
+	pi->collectivemask_multicastmask = ((HFI1_COLLECTIVE_NR & 0x7)
+					    << 3 | (HFI1_MCAST_NR & 0x7));
 #if 0
 
 	/* FXRTODO: replay depth buffer for FXR */
@@ -1418,11 +1425,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	/* Must be a valid unicast LID address. */
 	if ((lid == 0 && ls_old > IB_PORT_INIT) ||
-	    lid >= HFI_MULTICAST_LID_BASE) {
-		/*
-		 * FXRTODO: HFI_MULTICAST_LID_BASE valid for 9B only.
-		 * modify this check for 16B
-		 */
+	    (lid >= HFI1_16B_MULTICAST_LID_BASE)) {
 		hfi_invalid_attr(smp);
 		pr_warn("SubnSet(OPA_PortInfo) lid invalid 0x%x\n", lid);
 	} else if (ppd->lid != lid ||
@@ -1480,7 +1483,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	/* Must be a valid unicast LID address. */
 	if ((smlid == 0 && ls_old > IB_PORT_INIT) ||
-	    smlid >= HFI_MULTICAST_LID_BASE) {
+	    (smlid >= HFI1_16B_MULTICAST_LID_BASE)) {
 		hfi_invalid_attr(smp);
 		pr_warn("SubnSet(OPA_PortInfo) smlid invalid 0x%x\n", smlid);
 	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
