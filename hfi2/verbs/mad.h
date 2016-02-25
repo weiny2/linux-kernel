@@ -55,6 +55,7 @@
 #define _OPA_MAD_H
 
 #include <rdma/opa_smi.h>
+#include <rdma/ib_addr.h>
 #include <rdma/ib_mad.h>
 #include <rdma/ib_pma.h>
 #include <rdma/opa_port_info.h>

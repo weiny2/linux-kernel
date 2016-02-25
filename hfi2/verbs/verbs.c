@@ -208,7 +208,7 @@ static int hfi2_query_port(struct ib_device *ibdev, u8 port,
 	props->state = ibp->ppd->lstate;
 	props->phys_state = hfi_ibphys_portstate(ibp->ppd);
 	props->port_cap_flags = ibp->port_cap_flags;
-	props->gid_tbl_len = 1;
+	props->gid_tbl_len = HFI2_GUIDS_PER_PORT;
 	props->max_msg_sz = OPA_IB_MAX_MSG_SZ;
 	props->pkey_tbl_len = HFI_MAX_PKEYS;
 	props->bad_pkey_cntr = ibp->pkey_violations;
@@ -330,17 +330,20 @@ static int hfi2_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 }
 
 static int hfi2_query_gid(struct ib_device *ibdev, u8 port,
-			 int index, union ib_gid *gid)
+			  int index, union ib_gid *gid)
 {
 	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
-	int ret = 0;
 
-	if (!ibp || index != 0)
+	if (!ibp || (index >= HFI2_GUIDS_PER_PORT))
 		return -EINVAL;
 
 	gid->global.subnet_prefix = ibp->gid_prefix;
-	gid->global.interface_id = ibp->guid;
-	return ret;
+	if (index == 0)
+		gid->global.interface_id = ibp->ppd->pguid;
+	else
+		gid->global.interface_id = ibp->guids[index - 1];
+
+	return 0;
 }
 
 /**
@@ -516,7 +519,6 @@ static int hfi2_init_port(struct hfi2_ibdev *ibd,
 	ibp->dev = &ibd->ibdev.dev; /* for dev_info, etc. */
 	ibp->ppd = ppd;
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
-	ibp->guid = ppd->pguid;
 	ibp->sm_lid = 0;
 
 	ibp->rc_acks = alloc_percpu(u64);
