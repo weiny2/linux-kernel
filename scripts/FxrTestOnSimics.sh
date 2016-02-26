@@ -2,6 +2,7 @@
 set -x
 
 myname=`basename $0 .sh`
+invoked_dir=`pwd`
 tmp_dir=/tmp
 test_type=default
 cleanup_simics=true
@@ -67,15 +68,22 @@ fi
 
 # run default tests
 cd opa-headers.git/test
-( ./harness.py --nodelist=viper0,viper1 --type=${test_type}; export res=$? ) | \
-	tee /tmp/${myname}.$$
+(
+	. ${invoked_dir}/scripts/SimicsDefinition.sh
+	./harness.py --nodelist=viper0,viper1 --type=${test_type}
+	export res=$?
+) | tee /tmp/${myname}.$$
 if [ ! ${res} ]; then
     echo fail on harness.
-fi
-./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad | tee -a /tmp/${myname}.$$
-res=$?
-if [ ! ${res} ]; then
-    echo fail on ModuleReload of harness.
+else
+	(
+		. ${invoked_dir}/scripts/SimicsDefinition.sh
+		./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad
+		export res=$?
+		if [ ! ${res} ]; then
+		    echo fail on ModuleReload of harness.
+		fi
+	) | tee -a /tmp/${myname}.$$
 fi
 
 set +x
