@@ -133,8 +133,8 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 			hfi2_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY, pkey,
 					 ah_attr->sl,
 					 sqp->ibqp.qp_num, qp->ibqp.qp_num,
-					 cpu_to_be16(slid),
-					 cpu_to_be16(ah_attr->dlid));
+					 cpu_to_be32(slid),
+					 cpu_to_be32(ah_attr->dlid));
 			goto drop;
 		}
 	}
@@ -157,8 +157,8 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 			hfi2_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
 					 ah_attr->sl,
 					 sqp->ibqp.qp_num, qp->ibqp.qp_num,
-					 cpu_to_be16(lid),
-					 cpu_to_be16(ah_attr->dlid));
+					 cpu_to_be32(lid),
+					 cpu_to_be32(ah_attr->dlid));
 			goto drop;
 		}
 	}
@@ -328,7 +328,7 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 		wqe->use_sc15 = false;
 	}
 	qp->s_hdr->ph.ibh.lrh[0] = cpu_to_be16(lrh0);
-	qp->s_hdr->ph.ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);  /* DEST LID */
+	qp->s_hdr->ph.ibh.lrh[1] = cpu_to_be16((u16)ah_attr->dlid);
 	qp->s_hdr->ph.ibh.lrh[2] =
 		cpu_to_be16(qp->s_hdrwords + nwords);
 	if (ah_attr->dlid == IB_LID_PERMISSIVE) {

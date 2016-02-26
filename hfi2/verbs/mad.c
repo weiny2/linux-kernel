@@ -178,12 +178,10 @@ static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
  * STL-6007: hfi2_bad_pqkey calls needs to implemented
  */
 void hfi2_bad_pqkey(struct hfi2_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
-		    u32 qp1, u32 qp2, u16 lid1, u16 lid2)
+		    u32 qp1, u32 qp2, u32 lid1, u32 lid2)
 {
 	struct opa_mad_notice_attr data;
 	u32 lid = ibp->ppd->lid;
-	u32 _lid1 = lid1;
-	u32 _lid2 = lid2;
 
 	memset(&data, 0, sizeof(data));
 
@@ -198,8 +196,9 @@ void hfi2_bad_pqkey(struct hfi2_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 	data.prod_type_lsb = IB_NOTICE_PROD_CA;
 	data.trap_num = trap_num;
 	data.issuer_lid = cpu_to_be32(lid);
-	data.ntc_257_258.lid1 = cpu_to_be32(_lid1);
-	data.ntc_257_258.lid2 = cpu_to_be32(_lid2);
+	/* FXRTODO: These castings are not correct; fix later */
+	data.ntc_257_258.lid1 = (u16)lid1;
+	data.ntc_257_258.lid2 = (u16)lid2;
 	data.ntc_257_258.key = cpu_to_be32(key);
 	data.ntc_257_258.sl = sl << 3;
 	data.ntc_257_258.qp1 = cpu_to_be32(qp1);
