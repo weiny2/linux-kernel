@@ -146,7 +146,10 @@ def main():
             driver_name = qib_driver_name
             sys_class_ib = "/sys/class/infiniband/qib0"
         else:
-            driver_path = linux_src + "/drivers/staging/rdma/hfi1/" + driver_file
+            if os.path.exists(linux_src + "/drivers/staging/rdma/hfi1"):
+                driver_path = linux_src + "/drivers/staging/rdma/hfi1/" + driver_file
+            else:
+                driver_path = linux_src + "/drivers/infiniband/hw/hfi1/" + driver_file
 
         RegLib.test_log(0, "Using %s for driver" % driver_path)
         # If rdmavt dir exists use it

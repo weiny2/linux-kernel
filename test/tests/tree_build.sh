@@ -188,7 +188,14 @@ function do_build
 	fi
 }
 
-HFI_D="drivers/staging/rdma"
+if [[ -e $linux_src/drivers/staging/rdma/hfi1 ]]; then
+	HFI_D="drivers/staging/rdma"
+elif [[ -e $linux_src/drivers/infiniband/hw/hfi1 ]]; then
+	HFI_D="drivers/infiniband/hw"
+else
+	echo "Could not find hfi1 dir"
+	exit 1
+fi
 HFI_C="hfi1"
 
 QIB_D="drivers/infiniband/hw"
