@@ -58,7 +58,7 @@ test_list = [
     # Load an aleady built driver on 2 nodes and bring the links up
     { "test_name" : "ModuleLoad",
       "test_exe" : "LoadModule.py",
-      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
+      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC%",
       "type" : "default,perf",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
@@ -296,21 +296,21 @@ test_list = [
 
     { "test_name" : "8K-MTU-Verbs",
       "test_exe" : "MTUTest.py",
-      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
+      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC%",
       "type" : "mgmt",
       "desc" : "Test 4K and 8K MTU with verbs traffic"
     },
 
     { "test_name" : "Loopback-Test",
       "test_exe" : "Loopback.py",
-      "args" : "--nodelist %HOST[1]% --hfisrc %HFI_SRC% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
+      "args" : "--nodelist %HOST[1]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\"",
       "type" : "default,quick,nosm",
       "desc" : "Test loopback. LCB on Simics, Serdes on FPGA, both on ASIC."
     },
 
     { "test_name" : "RestoreSanity",
       "test_exe" : "LoadModule.py",
-      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC%",
+      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC%",
       "type" : "default,quick",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
@@ -346,6 +346,7 @@ test_info = RegLib.TestInfo()
 variable_map = {
     "KBUILD_DIR" : test_info.get_kbuild_dir,
     "HFI_SRC" : test_info.get_hfi_src,
+    "LINUX_SRC" : test_info.get_linux_src,
     "HOST" : test_info.get_host_name_by_index,
     "PSM_LIB" : test_info.get_psm_lib,
     "TEST_PKT_DIR" : test_info.get_test_pkt_dir,

@@ -77,16 +77,16 @@ def stop_sm(host, sm):
     out = do_ssh(host, cmd)
     return
 
-def wait_for_active(host, timeout, attempts):
+def wait_for_active(host, timeout, attempts, sys_class_ib):
     for iter in range(attempts):
         RegLib.test_log(0, "Checking for LinkUp")
-        cmd = "cat /sys/class/infiniband/hfi1_0/ports/1/phys_state"
+        cmd = "cat %s/ports/1/phys_state" % sys_class_ib
         out = do_ssh(host, cmd)
         for line in out:
             matchObj = re.match(r"5: LinkUp", line)
             if matchObj:
                 RegLib.test_log(0, "LinkUp")
-                cmd = "cat /sys/class/infiniband/hfi1_0/ports/1/state"
+                cmd = "cat %s/ports/1/state" % sys_class_ib
                 out = do_ssh(host, cmd)
                 for line in out:
                     matchObj = re.match(r"4: ACTIVE", line)
@@ -131,14 +131,24 @@ def main():
     vt_driver_name = "rdmavt"
     vt_driver_file = "rdmavt.ko"
     vt_driver_path = ""
+    qib_driver_name = "ib_qib"
+    qib_driver_file = "ib_qib.ko"
+    sys_class_ib = "/sys/class/infiniband/hfi1_0"
 
     linux_src = test_info.get_linux_src()
     hfi_src = test_info.get_hfi_src()
 
     if linux_src != "None":
         RegLib.test_log(0, "Running with full kernel at: %s" % linux_src)
-        driver_path = linux_src + "/drivers/staging/rdma/hfi1/" + driver_file
-        RegLib.test_log(0, "Using %s for hfi1 driver" % driver_path)
+
+        if test_info.is_qib() == True:
+            driver_path = linux_src + "/drivers/infiniband/hw/qib/" + qib_driver_file
+            driver_name = qib_driver_name
+            sys_class_ib = "/sys/class/infiniband/qib0"
+        else:
+            driver_path = linux_src + "/drivers/staging/rdma/hfi1/" + driver_file
+
+        RegLib.test_log(0, "Using %s for driver" % driver_path)
         # If rdmavt dir exists use it
         vt_driver_path = linux_src + "/drivers/infiniband/sw/rdmavt/" + vt_driver_file
         if os.path.exists(vt_driver_path):
@@ -262,7 +272,8 @@ def main():
     num_loaded = 0
     for host in hostlist:
         name = host.get_name()
-        err = wait_for_active(host, 10, 20)
+
+        err = wait_for_active(host, 10, 20, sys_class_ib)
         if err:
             RegLib.test_log(0, name + " Could not reach active state")
         else:
@@ -281,7 +292,7 @@ def main():
         	out = do_ssh(host, cmd)
         	print out
         print host.get_name(), "module load address is:"
-        cmd = "cat /sys/module/hfi1/sections/.init.text"
+        cmd = "cat /sys/module/%s/sections/.init.text" % driver_name
         out = do_ssh(host, cmd)
         print out
 

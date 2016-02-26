@@ -421,6 +421,7 @@ class TestInfo:
     linux_src = None
     kbuild_dir = None
     simics = False
+    qib = False
     fpga = False
     mpiverbs = False
     paramdict = None
@@ -436,6 +437,9 @@ class TestInfo:
 
     def is_simics(self):
         return self.simics
+
+    def is_qib(self):
+        return self.qib
 
     def is_fpga(self):
         return self.fpga
@@ -494,6 +498,9 @@ class TestInfo:
         parser.add_option("--simics", action="store_true", dest="simics",
                           help="Run on simics environment. Optional if using "
                                + "viper0,viper1 as nodelist")
+
+        parser.add_option("--qib", action="store_true", dest="qib",
+                          help="Run on Truescale using qib driver ")
 
         parser.add_option("--fpga", action="store_true", dest="fpga",
                           help="Run on FPGA environment. Optional if using "
@@ -569,6 +576,10 @@ class TestInfo:
             self.simics = False
         else:
             self.force_root = True
+
+        self.qib = options.qib
+        if self.qib == None:
+            self.qib = False
 
         self.fpga = options.fpga
         if self.fpga == None:
