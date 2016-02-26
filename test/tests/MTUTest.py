@@ -39,7 +39,7 @@ def run_subtest(cmd):
 
 def reload_module(hostlist, src=None, opts=[]):
     optstr = "--nodelist=%s" % ",".join([x.get_name() for x in hostlist])
-    if src: optstr += " --hfisrc=%s" % src
+    if src: optstr += (" " + src)
     if opts:
         o = []
         for x in range(len(hostlist)):
@@ -71,7 +71,12 @@ def main():
         RegLib.test_fail("Could not find dependency test script")
 
     test_info = RegLib.TestInfo()
-    module_src = test_info.get_hfi_src()
+    linux_src = test_info.get_linux_src()
+    module_src = ""
+    if linux_src != "None":
+        module_src = "--linuxsrc=%s" % linux_src
+    else:
+        module_src = "--hfisrc=%s" % test_info.get_hfi_src()
 
     host1 = test_info.get_host_record(0)
     host2 = test_info.get_host_record(1)

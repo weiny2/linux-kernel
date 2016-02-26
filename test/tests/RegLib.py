@@ -418,6 +418,7 @@ class TestInfo:
     # Standard variables
     nodelist = []
     hfi_src = None
+    linux_src = None
     kbuild_dir = None
     simics = False
     fpga = False
@@ -429,6 +430,9 @@ class TestInfo:
 
     def get_hfi_src(self):
         return self.hfi_src
+
+    def get_linux_src(self):
+        return self.linux_src
 
     def is_simics(self):
         return self.simics
@@ -477,6 +481,11 @@ class TestInfo:
                           help="Path to hfi driver source. Default: " + git_root,
                           metavar="PATH",
                           default=git_root)
+
+        parser.add_option("--linuxsrc", dest="linuxsrc",
+                          help="Path to full kernel source. Default: None",
+                          metavar="PATH",
+                          default=None)
 
         parser.add_option("--kbuild", dest="kbuild",
                           help="Path to kbuild dir",
@@ -633,6 +642,18 @@ class TestInfo:
                 test_fail("hfi_src is not a valid path [" + self.hfi_src + "]")
             if not os.path.isdir(self.hfi_src):
                 test_fail("hfi_src is not a directory")
+
+        if options.linuxsrc:
+            if options.linuxsrc != "None":
+                self.linux_src = os.path.abspath(options.linuxsrc)
+                if not os.path.exists(self.linux_src):
+                    test_fail("linux_src is not a valid path [" + self.linux_src + "]")
+                if not os.path.isdir(self.linux_src):
+                    test_fail("linux_src is not a directory")
+            else:
+                self.linux_src = "None"
+        else:
+            self.linux_src = "None"
 
         # Location of the kbuild dir.
         if options.kbuild:

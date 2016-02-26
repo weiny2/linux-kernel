@@ -8,6 +8,7 @@ import RegLib
 import time
 import sys
 import re
+import os
 
 def do_ssh(host, cmd):
     RegLib.test_log(5, "Running " + cmd)
@@ -58,7 +59,7 @@ def is_sm_active(host, sm):
         RegLib.test_log(0, "%s is not running" % sm)
     else:
         RegLib.test_log(0, "%s is running" % sm)
-    
+
     return ret
 
 def start_sm(host, sm):
@@ -123,12 +124,37 @@ def main():
     # body of test #
     ################
 
+    # TODO: Add a flag to RegLib to differentiate between qib and hfi tests
     driver_name = "hfi1"
     driver_file = "hfi1.ko"
-    driver_path = test_info.get_hfi_src() + "/" + driver_file
+    driver_path = ""
+    vt_driver_name = "rdmavt"
+    vt_driver_file = "rdmavt.ko"
+    vt_driver_path = ""
+
+    linux_src = test_info.get_linux_src()
+    hfi_src = test_info.get_hfi_src()
+
+    if linux_src != "None":
+        RegLib.test_log(0, "Running with full kernel at: %s" % linux_src)
+        driver_path = linux_src + "/drivers/staging/rdma/hfi1/" + driver_file
+        RegLib.test_log(0, "Using %s for hfi1 driver" % driver_path)
+        # If rdmavt dir exists use it
+        vt_driver_path = linux_src + "/drivers/infiniband/sw/rdmavt/" + vt_driver_file
+        if os.path.exists(vt_driver_path):
+            RegLib.test_log(0, "Using %s for rdmvat driver" % vt_driver_path)
+            if test_info.is_simics() == True:
+                vt_driver_path = "/host" + vt_driver_path
+        else:
+            RegLib.test_log(0, "No rdmavt driver found, not using one")
+            vt_driver_path = None
+    else:
+        RegLib.test_log(0, "Running with out-of-tree driver in: %s" % hfi_src)
+        driver_path = hfi_src + "/" + driver_file
+        vt_driver_file = None  # rdmavt not supported for out of tree testing
     if test_info.is_simics() == True:
         driver_path = "/host" + driver_path
-    
+
     driver_parms = test_info.get_mod_parms()
     sm = test_info.which_sm()
 
@@ -147,9 +173,9 @@ def main():
     host_parms = [x.strip() for x in host_parms]
     for x in range(len(host_parms)):
         RegLib.test_log(5, "host%d parms: %s" % (x, host_parms[x]))
-      
+
     opafm_host = None
-   
+
     if sm == "local":
         RegLib.test_log(0, "Trying to determine which node the fm is running on")
         for host in hostlist:
@@ -179,19 +205,33 @@ def main():
         name = host.get_name()
         loaded = is_driver_loaded(host, driver_name)
         if loaded == True:
-            RegLib.test_log(0, name + " Need to remove driver first")
+            RegLib.test_log(0, name + " Need to remove HFI driver first")
             removed = unload_driver(host, driver_name)
             if removed == False:
                 RegLib.test_fail(name + " Could not remove HFI driver")
-                # If we could not remove the driver it is a failure so bail.
-                # We gave it 90 seconds if it takes longer something is wonky.
-                RegLib.test_fail("Could not remove driver after 90 seconds!")
-        
+
+        loaded = is_driver_loaded(host, vt_driver_name)
+        if loaded == True:
+            RegLib.test_log(0, name + " Need to remove rdmavt driver")
+            removed = unload_driver(host, vt_driver_name)
+            if removed == False:
+                RegLib.test_fail(name + " Could not remove rdmavt driver")
+
         # Make sure rdma service is running before loading the driver
         cmd = "service rdma start"
         do_ssh(host, cmd)
 
-        RegLib.test_log(0, name + " Loading Driver")
+        if vt_driver_file:
+            RegLib.test_log(0, name + " Loading rdmavt driver")
+            loaded = load_driver(host, vt_driver_name, vt_driver_path, "")
+            if loaded == True:
+                RegLib.test_log(0, name + " rdmavt loaded successfully")
+            else:
+                RegLib.test_fail(name + " could not load rdmavt driver")
+        else:
+            RegLib.test_log(0, "Using legacy driver no rdmavt")
+
+        RegLib.test_log(0, name + " Loading Hfi Driver")
         driver_parms = host_parms[hostlist.index(host)]
 
         loaded = load_driver(host, driver_name, driver_path, driver_parms)
