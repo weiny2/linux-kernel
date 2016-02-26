@@ -114,9 +114,9 @@
  */
 #define HFI1_MCAST_NR 0x4 /* Number of top bits set */
 #define HFI1_COLLECTIVE_NR 0x1 /* Number of bits after MCAST_NR */
-#define HFI1_MCAST_MASK (0xFFFFFF << (24 - HFI1_MCAST_NR))
-#define HFI1_COLLECTIVE_MASK (0xFFFFFF << (24 -\
-				   (HFI1_MCAST_NR + HFI1_COLLECTIVE_NR)))
+#define HFI1_MCAST_MASK ((0xFFFFFFFF << (32 - HFI1_MCAST_NR)) >> 8)
+#define HFI1_COLLECTIVE_MASK ((0xFFFFFFFF <<                               \
+			(32 - (HFI1_MCAST_NR + HFI1_COLLECTIVE_NR))) >> 8)
 
 struct ib_reth {
 	__be64 vaddr;
@@ -310,7 +310,10 @@ u32 hfi2_make_grh(struct hfi2_ibport *ibp, struct ib_grh *hdr,
 	hdr->hop_limit = grh->hop_limit;
 	/* The SGID is 32-bit aligned. */
 	hdr->sgid.global.subnet_prefix = ibp->gid_prefix;
-	hdr->sgid.global.interface_id = ibp->ppd->pguid;
+	hdr->sgid.global.interface_id =
+		(grh->sgid_index && grh->sgid_index < ARRAY_SIZE(ibp->guids)) ?
+		ibp->guids[grh->sgid_index - 1] : ibp->ppd->pguid;
+
 	hdr->dgid = grh->dgid;
 
 	/* GRH header size in 32-bit words. */
@@ -456,6 +459,18 @@ static inline u32 hfi2_get_lid_from_gid(union ib_gid *gid)
 }
 
 /**
+ * hfi1_mcast_xlate - Translate 9B MLID to the 16B MLID range
+ */
+static inline u32 hfi1_mcast_xlate(u32 lid)
+{
+	if ((lid >= HFI1_MULTICAST_LID_BASE) &&
+	    (lid != HFI1_PERMISSIVE_LID))
+		return lid - HFI1_MULTICAST_LID_BASE +
+			HFI1_16B_MULTICAST_LID_BASE;
+	return lid;
+}
+
+/**
  * hfi2_retrieve_lid - Get lid in the GID.
  *
  * Extended LIDs are stored in the GID if the STL
@@ -474,7 +489,7 @@ static inline u32 hfi2_retrieve_lid(struct ib_ah_attr *ah_attr)
 		if (ib_is_opa_gid(dgid))
 			return hfi2_get_lid_from_gid(dgid);
 	}
-	return ah_attr->dlid;
+	return hfi1_mcast_xlate(ah_attr->dlid);
 }
 
 /**
@@ -525,28 +540,36 @@ static inline bool hfi2_check_permissive(struct ib_ah_attr *ah_attr)
 	return ah_attr->dlid == HFI1_PERMISSIVE_LID;
 }
 
+#define IS_EXT_LID(x) (ib_is_opa_gid(x) &&              \
+		       (hfi2_get_lid_from_gid(x) >=     \
+			HFI1_MULTICAST_LID_BASE))
+
 /* Check if current wqe needs 16B */
 static inline bool hfi2_use_16b(struct hfi2_qp *qp)
 {
 	struct hfi2_swqe *wqe = qp->s_wqe;
 	struct ib_ah_attr *ah_attr;
-	struct hfi_pportdata *ppd;
-	struct hfi2_ibport *ibp;
-
-	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
-	ppd = ibp->ppd;
-	if (ppd->lid >= HFI1_MULTICAST_LID_BASE)
-		return true;
+	union ib_gid sgid;
+	union ib_gid *dgid;
 
 	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
-	    (qp->ibqp.qp_type == IB_QPT_UC))
-		return ib_is_opa_gid(&qp->remote_ah_attr.grh.dgid);
+	    (qp->ibqp.qp_type == IB_QPT_UC)) {
+		if (ib_query_gid(qp->ibqp.device, qp->port_num,
+				 qp->remote_ah_attr.grh.sgid_index, &sgid))
+			return false;
+		dgid = &qp->remote_ah_attr.grh.dgid;
+		return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
+	}
 
 	if (!wqe)
 		return false;
 
 	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
-	return ib_is_opa_gid(&ah_attr->grh.dgid);
+	if (ib_query_gid(qp->ibqp.device, qp->port_num,
+			 ah_attr->grh.sgid_index, &sgid))
+		return false;
+	dgid = &ah_attr->grh.dgid;
+	return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
 }
 
 static inline void hfi2_make_ext_grh(struct hfi2_ibport *ibp,
