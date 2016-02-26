@@ -59,7 +59,7 @@ test_list = [
     { "test_name" : "ModuleLoad",
       "test_exe" : "LoadModule.py",
       "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC% --sm %SM%",
-      "type" : "default,perf,qib",
+      "type" : "default,perf,qib,verbs",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
 
@@ -138,7 +138,7 @@ test_list = [
     { "test_name" : "IbSendBwRC-badSL",
       "test_exe" : "IbSendBwRC-badSL.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,verbs",
+      "type" : "bad",
       "desc" : "Run ib_send_bw with bad SL values to ensure they fail to modify_qp",
     },
 
@@ -297,7 +297,7 @@ test_list = [
     { "test_name" : "8K-MTU-Verbs",
       "test_exe" : "MTUTest.py",
       "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC%",
-      "type" : "mgmt",
+      "type" : "mgmt,verbs",
       "desc" : "Test 4K and 8K MTU with verbs traffic"
     },
 
@@ -311,7 +311,7 @@ test_list = [
     { "test_name" : "RestoreSanity",
       "test_exe" : "LoadModule.py",
       "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC% --sm %SM%",
-      "type" : "default,quick,qib",
+      "type" : "default,quick,qib,snoop",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
 
