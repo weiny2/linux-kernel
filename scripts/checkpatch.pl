@@ -495,7 +495,7 @@ if (open(my $spelling, '<', $spelling_file)) {
 	}
 	close($spelling);
 } else {
-	warn "No typos will be found - file '$spelling_file': $!\n";
+	#warn "No typos will be found - file '$spelling_file': $!\n";
 }
 
 if ($codespell) {
