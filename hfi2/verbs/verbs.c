@@ -310,7 +310,8 @@ static int port_immutable(struct ib_device *ibdev, u8 port_num,
 
 	immutable->pkey_tbl_len = attr.pkey_tbl_len;
 	immutable->gid_tbl_len = attr.gid_tbl_len;
-	immutable->core_cap_flags = RDMA_CORE_PORT_INTEL_OPA;
+	immutable->core_cap_flags = RDMA_CORE_PORT_INTEL_OPA |
+					RDMA_CORE_CAP_OPA_AH;
 	immutable->max_mad_size = OPA_MGMT_MAD_SIZE;
 
 	return 0;
