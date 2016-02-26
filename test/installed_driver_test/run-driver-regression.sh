@@ -13,14 +13,14 @@ fi
 nodelist=$1
 kern_ver=`uname -r`
 dts=`date +%Y-%m-%d-%H%M`
-output_file="$driver_repo/test/upstream/$kern_ver-$dts.output"
+output_file="$driver_repo/test/installed_driver_test/$kern_ver-$dts.output"
 
 echo "Testing installed kernel version : $kern_ver"
 echo "     test repo : $driver_repo"
 echo "     nodelist : $nodelist"
 
 pushd $driver_repo/test > /dev/null
-./harness.py --nodelist=$nodelist --type=upstream | tee $output_file
+./harness.py --nodelist=$nodelist --type=installed | tee $output_file
 popd > /dev/null
 
 echo "Testing installed kernel version : $kern_ver"
