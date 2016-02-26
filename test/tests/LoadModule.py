@@ -100,6 +100,8 @@ def wait_for_active(host, timeout, attempts, sys_class_ib):
 
 def main():
 
+    topdir = os.path.dirname(os.path.realpath(__file__))
+    
     #############################
     # create a test info object #
     #############################
@@ -134,7 +136,7 @@ def main():
     qib_driver_name = "ib_qib"
     qib_driver_file = "ib_qib.ko"
     sys_class_ib = "/sys/class/infiniband/hfi1_0"
-
+    qib_flag = ""
     linux_src = test_info.get_linux_src()
     hfi_src = test_info.get_hfi_src()
 
@@ -142,6 +144,7 @@ def main():
         RegLib.test_log(0, "Running with full kernel at: %s" % linux_src)
 
         if test_info.is_qib() == True:
+            qib_flag = "--qib"
             driver_path = linux_src + "/drivers/infiniband/hw/qib/" + qib_driver_file
             driver_name = qib_driver_name
             sys_class_ib = "/sys/class/infiniband/qib0"
@@ -289,15 +292,24 @@ def main():
     # Before bailing out dump the kmod load address in case we need to do some
     # debugging later. We also need to restart irq balance for best performance.
     for host in hostlist:
-	if test_info.is_simics() == False:
-        	RegLib.test_log(0, "Restarting irq balance on %s" % host.get_name())
-        	cmd = "service irqbalance restart"
-        	out = do_ssh(host, cmd)
-        	print out
-        print host.get_name(), "module load address is:"
-        cmd = "cat /sys/module/%s/sections/.init.text" % driver_name
-        out = do_ssh(host, cmd)
-        print out
+        if test_info.is_simics() == False:
+            RegLib.test_log(0, "Restarting irq balance on %s" % host.get_name())
+            cmd = "service irqbalance restart"
+            out = do_ssh(host, cmd)
+            print out
+            print host.get_name(), "module load address is:"
+            cmd = "cat /sys/module/%s/sections/.init.text" % driver_name
+            out = do_ssh(host, cmd)
+            print out
+
+            path = os.path.join(topdir, "CheckModule.py")
+            if linux_src != "None":
+                res = os.system("%s --linuxsrc %s --nodelist %s %s" % (path, linux_src, host.get_name(), qib_flag))
+            else:
+                res = os.system("%s --hfisrc %s --nodelist %s %s" % (path, hfi_src, host.get_name(), qib_flag))
+    
+            if res != 0:
+                RegLib.test_fail("Incorrect driver loaded!")
 
     RegLib.test_pass("Driver loaded, adapters up SM running in the fabric.")
 
