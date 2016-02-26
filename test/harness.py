@@ -58,8 +58,8 @@ test_list = [
     # Load an aleady built driver on 2 nodes and bring the links up
     { "test_name" : "ModuleLoad",
       "test_exe" : "LoadModule.py",
-      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC%",
-      "type" : "default,perf",
+      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC% --sm %SM%",
+      "type" : "default,perf,qib",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
 
@@ -67,7 +67,7 @@ test_list = [
     { "test_name" : "IbSendLat-Verbs",
       "test_exe" : "IbSendLat.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs,upstream",
+      "type" : "default,quick,verbs,upstream,qib",
       "desc" : "Run ib_send_lat for 5 iterations.",
     },
 
@@ -75,63 +75,63 @@ test_list = [
     { "test_name" : "IbSendBwUD-Verbs",
       "test_exe" : "IbSendBwUD.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs,upstream",
+      "type" : "default,quick,verbs,upstream,qib",
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using UD.",
     },
 
     { "test_name" : "IbSendBwRC-Verbs",
       "test_exe" : "IbSendBwRC.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs,upstream",
+      "type" : "default,quick,verbs,upstream,qib",
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using RC.",
     },
 
     { "test_name" : "IbWriteBwRC-Verbs",
       "test_exe" : "IbWriteBwRC.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs,upstream",
+      "type" : "default,quick,verbs,upstream,qib",
       "desc" : "Run ib_write_bw for 5 iterations with various sizes using RC.",
     },
 
     { "test_name" : "IbWriteBwUC-Verbs",
       "test_exe" : "IbWriteBwUC.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs,upstream",
+      "type" : "default,quick,verbs,upstream,qib",
       "desc" : "Run ib_write_bw for 5 iterations with various sizes using UC.",
     },
 
     { "test_name" : "IbReadBwRC-Verbs",
       "test_exe" : "IbReadBwRC.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs,upstream",
+      "type" : "default,quick,verbs,upstream,qib",
       "desc" : "Run ib_read_bw for 5 iterations with various sizes using RC.",
     },
 
     { "test_name" : "IbSendBwUC-Verbs",
       "test_exe" : "IbSendBwUC.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs,upstream",
+      "type" : "default,quick,verbs,upstream,qib",
       "desc" : "Run ib_send_bw for 5 iterations with various sizes using UC.",
     },
 
     { "test_name" : "IbAtomicBw-Verbs",
       "test_exe" : "IbAtomicBw.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs,upstream",
+      "type" : "default,quick,verbs,upstream,qib",
       "desc" : "Run ib_atomic_bw for 5 iterations with the two RC atomic operations.",
     },
 
     { "test_name" : "IPoIB-Verbs",
       "test_exe" : "IpoibPing.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs,upstream",
+      "type" : "default,quick,verbs,upstream,qib",
       "desc" : "Run ping for 5 packets using ipoib.",
     },
 
     { "test_name" : "IbSendBwRC-8MB",
       "test_exe" : "IbSendBwRC-a.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,verbs",
+      "type" : "default,verbs,qib",
       "desc" : "Run ib_send_bw for 16 iterations using sizes up to 2^23 using RC.",
     },
 
@@ -145,7 +145,7 @@ test_list = [
     { "test_name" : "IPoIB-Qperf",
       "test_exe" : "IpoibQperf.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,verbs,upstream",
+      "type" : "default,verbs,upstream,qib",
       "desc" : "Run qperf/tcp_bw for 8 to 64 bytes.",
     },
 
@@ -153,28 +153,28 @@ test_list = [
     { "test_name" : "OSU-MPI-Psm",
       "test_exe" : "OsuMpi.py",
       "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS%",
-      "type" : "mpi,mpipsm,default",
+      "type" : "mpi,mpipsm,default,qib",
       "desc" : "Run OSU MPI benchmarks with PSM",
     },
 
     { "test_name" : "OSU-MPI-Psm-One-node",
       "test_exe" : "OsuMpi.py",
       "args" : "--nodelist %HOST[1]% --psm %PSM_LIB% --psmopts %PSM_OPTS%",
-      "type" : "mpi,mpipsm,default",
+      "type" : "mpi,mpipsm,default,qib",
       "desc" : "Run OSU MPI benchmarks on one node with PSM",
     },
 
     { "test_name" : "OSU-MPI-Verbs",
       "test_exe" : "OsuMpi.py",
       "args" : "--nodelist %HOST[2]% --mpiverbs",
-      "type" : "default,mpi,mpiverbs,verbs",
+      "type" : "default,mpi,mpiverbs,verbs,qib",
       "desc" : "Run OSU MPI benchmarks with verbs",
     },
 
     { "test_name" : "OpcodeCounters",
       "test_exe" : "OpcodeCounters.py",
       "args" : "--nodelist %HOST[2]%",
-      "type" : "default,quick,verbs,upstream",
+      "type" : "default,quick,verbs,upstream,qib",
       "desc" : "Run test opcode counters after quick tests have been run.",
     },
 
@@ -182,14 +182,14 @@ test_list = [
     { "test_name" : "IMB-Psm",
       "test_exe" : "IMB.py",
       "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-time 1 -iter 10\"",
-      "type" : "default,mpi,mpipsm",
+      "type" : "default,mpi,mpipsm,qib",
       "desc" : "Run full IMB suite with PSM",
     },
 
     { "test_name" : "IMB-Verbs",
       "test_exe" : "IMB.py",
       "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-time 1 -iter 10\"",
-      "type" : "default,mpi,mpiverbs,verbs",
+      "type" : "default,mpi,mpiverbs,verbs,qib",
       "desc" : "Run full IMB suite with verbs",
     },
 
@@ -233,28 +233,28 @@ test_list = [
     { "test_name" : "MPI-Stress-PSM-Long",
       "test_exe" : "MpiStress.py",
       "args" : "--nodelist %HOST[2]% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 10 -M 10 -w 20 -z\"",
-      "type" : "mpi,mpipsm,default,integrity",
+      "type" : "mpi,mpipsm,default,integrity,qib",
       "desc" : "Run MPI stress with PSM",
     },
 
     { "test_name" : "MPI-Stress-Verbs-Long",
       "test_exe" : "MpiStress.py",
       "args" : "--nodelist %HOST[2]% --mpiverbs --args \"-L 10 -M 10 -w 20 -z\"",
-      "type" : "default,mpi,mpiverbs,verbs,default,integrity",
+      "type" : "default,mpi,mpiverbs,verbs,default,integrity,qib",
       "desc" : "Run MPI stress with verbs",
     },
 
     { "test_name" : "Hpcc-Verbs",
       "test_exe" : "Hpcc.py",
       "args" : "--nodelist %HOST[2]% --mpiverbs",
-      "type" : "default,mpi,mpiverbs,verbs",
+      "type" : "default,mpi,mpiverbs,verbs,qib",
       "desc" : "Run Hpcc with verbs",
     },
 
     { "test_name" : "Hpcc-Psm",
       "test_exe" : "Hpcc.py",
       "args" : "--nodelist %HOST[2]% --psm %PSM_LIB%",
-      "type" : "default,mpi,mpipsm",
+      "type" : "default,mpi,mpipsm,qib",
       "desc" : "Run Hpcc with psm",
     },
 
@@ -310,8 +310,8 @@ test_list = [
 
     { "test_name" : "RestoreSanity",
       "test_exe" : "LoadModule.py",
-      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC%",
-      "type" : "default,quick",
+      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC% --sm %SM%",
+      "type" : "default,quick,qib",
       "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
     },
 
@@ -353,6 +353,7 @@ variable_map = {
     "DIAG_LIB" : test_info.get_diag_lib,
     "PSM_OPTS" : test_info.get_psm_opts,
     "NP" : test_info.get_np,
+    "SM" : test_info.which_sm,
 }
 
 # Build a list of all test types. This will be used when the user
@@ -462,6 +463,8 @@ for test in tests_to_run:
                 processed_args += arg + " "
             if simics == True:
                 processed_args += "--simics"
+            if test_type == "qib":
+                processed_args += "--qib"
 
             # We may need to pass on some module parameters too
             modparms = test_info.get_mod_parms()

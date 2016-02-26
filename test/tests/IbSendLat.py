@@ -48,7 +48,11 @@ def main():
     # Start ib_send_lat on host1 (server)
     child_pid = os.fork()
     if child_pid == 0:
-        cmd = "ib_send_lat -d hfi1_0 -c UD -n 5 -p %d" % test_port
+        if test_info.is_qib():
+            dev = "qib0"
+        else:
+            dev = "hfi1_0"
+        cmd = "ib_send_lat -d %s -c UD -n 5 -p %d" % (dev, test_port)
         (err, out) = do_ssh(host1, cmd)
         if err:
             RegLib.test_log(0, "Child SSH exit status bad")
@@ -62,7 +66,11 @@ def main():
 
     # Start ib_send_lat on host2 (client)
     server_name = host1.get_name()
-    cmd = "ib_send_lat -d hfi1_0 -c UD -n 5 -p %d %s" % (test_port, server_name)
+    if test_info.is_qib():
+        dev = "qib0"
+    else:
+        dev = "hfi1_0"
+    cmd = "ib_send_lat -d %s -c UD -n 5 -p %d %s" % (dev, test_port, server_name)
     (err, out) = do_ssh(host2, cmd)
     if err:
         RegLib.test_log(0, "Error on client")

@@ -165,8 +165,11 @@ def main():
 
     while test_index < len(test_list):
         test = test_list[test_index]
-
-        cmd = "taskset -c 4 %s -d hfi1_0" % (test)
+        if test_info.is_qib():
+            dev = "qib0"
+        else:
+            dev = "hfi1_0"
+        cmd = "taskset -c 4 %s -d %s" % (test, dev)
         child_pid = start_server(host1, cmd, test_dir, test_names[test_index])
 
         RegLib.test_log(0, "Giving server thread %d seconds to start %s" % (server_delay, test))

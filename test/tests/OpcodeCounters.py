@@ -40,11 +40,17 @@ def main():
 
     test_fail = 0
     # file must be present
-    (err, out) = do_ssh(host1, "cat /sys/kernel/debug/hfi1/hfi1_0/opcode_stats > /tmp/opcode_stats");
+    if test_info.is_qib():
+       (err, out) = do_ssh(host1, "cat /sys/kernel/debug/ib_qib/qib0/opcode_stats > /tmp/opcode_stats");
+    else:
+       (err, out) = do_ssh(host1, "cat /sys/kernel/debug/hfi1/hfi1_0/opcode_stats > /tmp/opcode_stats");
     if err:
        RegLib.test_log(0, "ssh host1 opcode_stats read failed")
        test_fail=1
-    (err, out) = do_ssh(host2, "cat /sys/kernel/debug/hfi1/hfi1_0/opcode_stats > /tmp/opcode_stats");
+    if test_info.is_qib():
+       (err, out) = do_ssh(host2, "cat /sys/kernel/debug/ib_qib/qib0/opcode_stats > /tmp/opcode_stats");
+    else:
+       (err, out) = do_ssh(host2, "cat /sys/kernel/debug/hfi1/hfi1_0/opcode_stats > /tmp/opcode_stats");
     if err:
        RegLib.test_log(0, "ssh host2 opcode_stats read failed")
        test_fail=1

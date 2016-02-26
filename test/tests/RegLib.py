@@ -257,7 +257,10 @@ class HostInfo:
         return self.name
 
     def get_lid(self):
-        cmd = "cat /sys/class/infiniband/hfi1_0/ports/1/lid"
+        if self.qib == False:
+            cmd = "cat /sys/class/infiniband/hfi1_0/ports/1/lid"
+        else:
+            cmd = "cat /sys/class/infiniband/qib0/ports/1/lid"
         (err, out) = self.send_ssh(cmd)
         if err:
             return None
@@ -461,6 +464,8 @@ class TestInfo:
             self.mpipsm_path = "/usr/mpi/gcc/openmpi-1.8.2a1-hfi"
         elif host.file_exists("/usr/mpi/gcc/openmpi-1.10.0-hfi/bin/mpirun"):
             self.mpipsm_path = "/usr/mpi/gcc/openmpi-1.10.0-hfi"
+        elif host.file_exists("/usr/mpi/gcc/openmpi-1.8.4-qlc/bin/mpirun"):
+            self.mpipsm_path = "/usr/mpi/gcc/openmpi-1.8.4-qlc"
         else:
             test_log(0, "could not find PSM MPI path")
 
@@ -561,7 +566,7 @@ class TestInfo:
                           help="List of tests to execute. Can be used with '--type' to further filter the test list.")
         parser.add_option("--psmopts", dest="psm_opts",
                           help="String of options to pass to PSM tests.",
-                          default="-x PSM_SDMA=1 -x PSM_TID=1")
+                          default="")
         parser.add_option("--forceroot", action="store_true", dest="force_root",
                           help="Force all commands to run as root.")
         parser.add_option("--np", dest="np",
@@ -803,9 +808,15 @@ class TestInfo:
 
     def get_mpi_opts(self):
         if not self.mpiverbs:
-             ret = " --mca pml cm --mca mtl psm2 -x HFI_UNIT=0 -x HFI_PORT=1 -x xxxPSM_CHECKSUM=1 -x PSM_PKEY=0x8001 %s --allow-run-as-root -x" % self.psm_opts
+	     if self.qib == False:
+                  ret = " --mca pml cm --mca mtl psm2 -x HFI_UNIT=0 -x HFI_PORT=1 -x xxxPSM_CHECKSUM=1 -x PSM_PKEY=0x8001 -x PSM_SDMA=1 -x PSM_TID=1 %s --allow-run-as-root -x" % self.psm_opts
+	     else:
+                  ret = " --mca pml cm --mca mtl psm -x IPATH_UNIT=0 -x IPATH_PORT=1 -x PSM_PKEY=0x7FFF %s --allow-run-as-root -x" % self.psm_opts
         else:
-             ret = " --mca btl sm,openib,self --mca mtl ^psm,psm2 -mca btl_openib_max_inline_data 0 --mca btl_openib_warn_no_device_params_found 0 --allow-run-as-root -x"
+	     if self.qib == False:
+                  ret = " --mca btl sm,openib,self --mca mtl ^psm,psm2 -mca btl_openib_max_inline_data 0 --mca btl_openib_warn_no_device_params_found 0 --allow-run-as-root -x"
+	     else:
+                  ret = " --mca btl sm,openib,self --mca mtl ^psm -mca btl_openib_max_inline_data 0 --mca btl_openib_warn_no_device_params_found 0 --allow-run-as-root -x"
         return ret
 
     def get_osu_benchmark_dir(self):

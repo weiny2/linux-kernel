@@ -50,7 +50,11 @@ def main():
         # not just in this script. So add stdbuf to the beginning and it seems
         # to help. We don't want to blindl do this in the SSH routine as it
         # seems to screw up the MPI tests.
-        cmd = "stdbuf -oL ib_send_bw -d hfi1_0 -p %d -S 14 2>&1" % test_port
+        if test_info.is_qib():
+            dev = "qib0"
+        else:
+            dev = "hfi1_0"
+        cmd = "stdbuf -oL ib_send_bw -d %s -p %d -S 14 2>&1" % (dev, test_port)
         # This is the server let's display his output now
         err = host1.send_ssh(cmd, 0)
         RegLib.test_log(5, "Running cmd: " + cmd)
@@ -63,7 +67,11 @@ def main():
         RegLib.test_fail("Could not get socket listening")
 
     server_name = host1.get_name()
-    cmd = "ib_send_bw -d hfi1_0 -p %d -S 14 %s 2>&1" % (test_port, server_name)
+    if test_info.is_qib():
+        dev = "qib0"
+    else:
+        dev = "hfi1_0"
+    cmd = "ib_send_bw -d %s -p %d -S 14 %s 2>&1" % (dev, test_port, server_name)
     RegLib.test_log(0, "Running cmd: " + cmd)
     (err, out) = host2.send_ssh(cmd)
     if err:
