@@ -1,0 +1,68 @@
+---------------------------------------------------------------------------
+1 (Local) /ddalessa-devel/wfr-linux-devel/include/linux/scatterlist.h:195 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+2 (Local) /ddalessa-devel/wfr-linux-devel/include/linux/scatterlist.h:211 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+105 (Local) /ddalessa-devel/wfr-linux-devel/drivers/infiniband/sw/rdmavt/mr.c:453 FMM.MIGHT (2:Error) Analyze
+Possible freeing of mismatched memory from 'mr'. Memory referenced by 'mr' allocated through function '__rvt_alloc_mr' at line 417 is illegally freed by passing argument 1 to function '__rvt_free_mr' at line 453
+  * mr.c:412: IS_ERR(umem) is false
+  * mr.c:418: IS_ERR(mr) is false
+  * mr.c:434: Entering loop, because entry< (umem->nmap) is true
+  * mr.c:438: !vaddr is true
+  * mr.c:417: 'mr' is allocated by '__rvt_alloc_mr'
+    * mr.c:264: 'mr' is allocated by function 'kzalloc'.
+      * slab.h:593: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
+    * mr.c:265: !mr is false
+    * mr.c:269: rval is false
+    * mr.c:276: rval is false
+  * mr.c:453: 'mr' is freed by passing argument 1 to function '__rvt_free_mr'.
+    * mr.c:291: Tracking 'mr'.
+    * mr.c:295: 'mr' is freed by calling 'vfree'.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+106 (Local) /ddalessa-devel/wfr-linux-devel/drivers/infiniband/sw/rdmavt/mr.c:458 MLK.MIGHT (2:Error) Analyze
+Possible memory leak. Dynamic memory stored in 'mr' allocated through function '__rvt_alloc_mr' at line 417 can be lost at line 458
+  * mr.c:417: Dynamic memory stored in 'mr' is allocated by calling function '__rvt_alloc_mr'.
+    * mr.c:264: 'mr' is allocated by function 'kzalloc'.
+      * slab.h:593: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
+    * mr.c:265: !mr is false
+    * mr.c:269: rval is false
+    * mr.c:276: rval is false
+  * mr.c:418: IS_ERR(mr) is false
+  * mr.c:458: Dynamic memory stored in '&mr->ibmr' is lost.
+Current status 'Analyze'
+
+
+111 (Local)
+/nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/sw/rdmavt/mcast.c:293
+MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in 'mcast' allocated through function
+'rvt_mcast_alloc' at line 266 is lost at line 293
+
+112 (Local)
+/nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/sw/rdmavt/mcast.c:293
+MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in 'mqp' allocated through function
+'rvt_mcast_qp_alloc' at line 270 is lost at line 293
+
+113 (Local)
+/nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/sw/rdmavt/mcast.c:298
+MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in 'mcast' allocated through function
+'rvt_mcast_alloc' at line 266 is lost at line 298
+
+114 (Local)
+/nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/sw/rdmavt/mcast.c:298
+MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in 'mqp' allocated through function
+'rvt_mcast_qp_alloc' at line 270 is lost at line 298
+
+Summary: 8 Local
+8 Total Issue(s)

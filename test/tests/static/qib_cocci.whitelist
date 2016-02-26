@@ -1,0 +1,10 @@
+
+Please check for false positives in the output before submitting a patch.
+When using "patch" mode, carefully review the patch before submitting it.
+
+drivers/infiniband/hw/qib/qib_fs.c:341:7-14: WARNING opportunity for memdup_user
+drivers/infiniband/hw/qib/qib_file_ops.c:1815:5-8: Unneeded variable: "ret". Return "0" on line 1901
+drivers/infiniband/hw/qib/qib_iba7322.c:6941:8-11: Unneeded variable: "ret". Return "0" on line 6971
+drivers/infiniband/hw/qib/qib_iba7322.c:2390:5-8: Unneeded variable: "ret". Return "0" on line 2525
+drivers/infiniband/hw/qib/qib_iba7322.c:8519:2-34: duplicated argument to && or ||
+drivers/infiniband/hw/qib/qib_iba7322.c:8521:2-33: duplicated argument to && or ||

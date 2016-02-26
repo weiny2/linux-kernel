@@ -1,0 +1,227 @@
+---------------------------------------------------------------------------
+1 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/include/linux/scatterlist.h:195 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+2 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/include/linux/scatterlist.h:211 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+3 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/platform.c:488 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+4 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/platform.c:500 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+5 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/rc.c:738 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+6 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:307 ABV.MEMBER (1:Critical) Analyze
+Array '&tinfo.tidcnt' of size 4 may use index value(s) 4..7
+  * file_ops.c:307: Array '&tinfo.tidcnt' size is 1.
+  * file_ops.c:307: '&tinfo.tidcnt' is passed as an argument to function 'copy_to_user'.
+    * file_ops.c:307: Result of expression '$3-1' is == 7.
+      * file_ops.c:307: Function argument '$3' is == 8.
+  * file_ops.c:307: Object '&tinfo.tidcnt' of type 'unsigned int[1]' is a buffer of length 4 bytes.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+7 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:508 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+8 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:509 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+9 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:527 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+10 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:528 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+11 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:560 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+12 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:588 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+13 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:605 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+14 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:611 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+15 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:628 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+16 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:633 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+17 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:639 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+18 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:645 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+19 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:646 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+20 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:658 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+21 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/ud.c:406 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+22 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/ud.c:408 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+23 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/ud.c:525 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+24 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/chip.c:12142 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+25 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/diag.c:586 SV.TAINTED.ALLOC_SIZE (2:Error) Analyze
+Unvalidated integer value 'dp.len' is received from 'copy_from_user' at line 564 and can be used to alter memory allocation size through call to 'diagpkt_send' at line 586.
+  * diag.c:564: Tainted data 'dp' is received from the call to 'copy_from_user'
+  * diag.c:564: copy_from_user( &dp, data, sizeof(dp) ) is false
+  * diag.c:571: dp.pbc is true
+  * diag.c:586: Tainted data 'dp.len' is passed to 'diagpkt_send'
+    * diag.c:400: dp->len&3 is false
+    * diag.c:434: Tainted data 'dp->len' is passed to 'vmalloc'
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+26 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:783 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+27 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:806 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+28 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:872 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+29 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:1120 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+30 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:1274 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+31 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:537 MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in '__u.__val' allocated through function 'kzalloc' at line 537 is lost at line 537
+  * init.c:537: Dynamic memory stored in '__u.__val' is allocated by calling function 'kzalloc'.
+    * slab.h:607: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
+  * init.c:537: End of scope for '__u.__val'. Memory leak.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+32 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/user_exp_rcv.c:222 MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in 'grp' allocated through function 'kzalloc' at line 208 is lost at line 222
+  * user_exp_rcv.c:204: Continue loop iteration, while i<uctxt->expected_count/dd->rcv_entries.group_size is true
+  * user_exp_rcv.c:208: Dynamic memory stored in 'grp' is allocated by calling function 'kzalloc'.
+    * slab.h:607: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
+  * user_exp_rcv.c:209: !grp is false
+  * user_exp_rcv.c:222: End of scope for 'grp'. Memory leak.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+33 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/verbs.c:822 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+34 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/verbs.c:934 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+35 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/twsi.c:212 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+36 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/ruc.c:794 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+37 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/user_sdma.c:960 NPD.CHECK.MIGHT (1:Critical) Analyze
+Pointer 'iovec->pages' checked for NULL at line 867 may be dereferenced at line 960.
+  * user_sdma.c:867: 'iovec->pages' is checked for NULL.
+  * user_sdma.c:867: !iovec->pages is true
+  * user_sdma.c:867: __builtin_expect( ! ! ( !iovec->pages&&iovec->iov.iov_len), 0) is false
+  * user_sdma.c:883: __builtin_constant_p( (3) ) is true
+  * user_sdma.c:946: Entering loop, because queued<datalen&& (req->sent+data_sent) <req->data_len is true
+  * user_sdma.c:960: 'iovec->pages' is explicitly dereferenced.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+38 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/pio.c:914 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+39 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/pio.c:1340 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+40 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/wfr-linux-devel/drivers/staging/rdma/hfi1/pio.c:1344 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+Summary: 40 Local
+40 Total Issue(s)

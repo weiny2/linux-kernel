@@ -1,0 +1,297 @@
+---------------------------------------------------------------------------
+1 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/include/linux/scatterlist.h:195 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+2 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/include/linux/scatterlist.h:211 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+54 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_mad.c:1575 ABV.MEMBER (1:Critical) Analyze
+Array 'pmp->reserved' of size 40 may use index value(s) 40..231
+  * qib_mad.c:1575: Array 'pmp->reserved' size is 40.
+  * qib_mad.c:1575: 'pmp->reserved' is passed as an argument to function 'memset'.
+    * qib_mad.c:1575: Result of expression '$3-1' is == 231.
+      * qib_mad.c:1575: Function argument '$3' is == 232.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+55 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_init.c:513 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+56 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_init.c:777 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+57 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_init.c:889 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+58 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_init.c:1211 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+59 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_init.c:1367 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+60 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_verbs.c:1693 MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in 'tx' allocated through function 'kzalloc' at line 1686 is lost at line 1693
+  * qib_verbs.c:1683: Continue loop iteration, while i<ppd->sdma_descq_cnt is true
+  * qib_verbs.c:1686: Dynamic memory stored in 'tx' is allocated by calling function 'kzalloc'.
+    * slab.h:602: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
+  * qib_verbs.c:1687: !tx is false
+  * qib_verbs.c:1693: End of scope for 'tx'. Memory leak.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+61 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_file_ops.c:755 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+62 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_file_ops.c:791 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+63 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_file_ops.c:835 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+64 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_file_ops.c:836 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+65 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_file_ops.c:877 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+66 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_file_ops.c:969 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+67 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_file_ops.c:980 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+72 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_intr.c:121 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+73 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_intr.c:142 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+74 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_intr.c:164 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+75 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7322.c:1724 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+76 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7322.c:2471 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+77 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7322.c:2908 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+78 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7322.c:3033 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+79 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7322.c:6383 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+80 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7322.c:8369 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+81 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7322.c:7119 UNINIT.STACK.MIGHT (1:Critical) Analyze
+'shadow' might be used uninitialized in this function.
+  * qib_iba7322.c:7100: 'shadow' is declared.
+  * qib_iba7322.c:7111: Entering loop, because cstart<=last is true
+  * qib_iba7322.c:7114: i!=previ is false
+  * qib_iba7322.c:7119: __builtin_constant_p( ( ( (2*cstart) +1) %64) ) is false
+  * qib_iba7322.c:7119: 'shadow' is used, but is uninitialized.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+82 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7322.c:3654 NPD.CHECK.MUST (1:Critical) Analyze
+Pointer 'dd->boardname' checked for NULL at line 3647 will be dereferenced at line 3654.
+  * qib_iba7322.c:3647: 'dd->boardname' is checked for NULL.
+  * qib_iba7322.c:3647: !dd->boardname is true
+  * qib_iba7322.c:3654: 'dd->boardname' is dereferenced by formatted printing function 'snprintf'.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+83 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7322.c:3831 CWARN.NOEFFECT.UCMP.GE (4:Review) Analyze
+Comparison of unsigned value against 0 is always true
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+84 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba6120.c:1774 NPD.CHECK.MUST (1:Critical) Analyze
+Pointer 'dd->boardname' checked for NULL at line 1762 will be dereferenced at line 1774.
+  * qib_iba6120.c:1762: 'dd->boardname' is checked for NULL.
+  * qib_iba6120.c:1762: !dd->boardname is true
+  * qib_iba6120.c:1767: dd->majrev!=4|| !dd->minrev||dd->minrev>2 is true
+  * qib_iba6120.c:1774: 'dd->boardname' is dereferenced by formatted printing function 'snprintf'.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+85 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba6120.c:1102 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+86 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba6120.c:1597 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+87 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba6120.c:1896 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+88 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba6120.c:1962 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+89 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_ruc.c:670 ABV.GENERAL (1:Critical) Analyze
+Array 'guids' of size 4 may use index value(s) 4..254
+  * qib_ruc.c:660: __builtin_constant_p( (__u32) ( ( (6<<28) | (grh->traffic_class<<20) | (grh->flow_label<<0) ) ) ) is false
+  * qib_ruc.c:663: __builtin_constant_p( (__u16) ( ( (hwords-2+nwords+1) <<2) ) ) is false
+  * qib_ruc.c:669: grh->sgid_index is true
+  * qib_ruc.c:669: True condition branch assumes that grh->sgid_index may be [1,255]
+  * qib_ruc.c:670: grh->sgid_index-1
+    * qib_ruc.c:670: Inferred value 'grh->sgid_index' is '[5,255]'
+    * qib_ruc.c:670: Result of expression 'grh->sgid_index - 1' is '[4,254]'
+  * qib_ruc.c:670: Array 'guids' size is 4.
+  * qib_ruc.c:669: Possible attempt to access element 4..254 of array 'guids'.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+90 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:1202 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+91 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:1585 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+92 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:1589 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+93 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:1594 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+94 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:1596 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+95 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:1602 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+96 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:1608 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+97 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:1915 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+98 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:3506 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+99 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:3510 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+100 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:3513 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+101 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:2194 CWARN.NOEFFECT.UCMP.GE (4:Review) Analyze
+Comparison of unsigned value against 0 is always true
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+102 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_iba7220.c:2085 NPD.CHECK.MUST (1:Critical) Analyze
+Pointer 'dd->boardname' checked for NULL at line 2073 will be dereferenced at line 2085.
+  * qib_iba7220.c:2073: 'dd->boardname' is checked for NULL.
+  * qib_iba7220.c:2073: !dd->boardname is true
+  * qib_iba7220.c:2078: dd->majrev!=5|| !dd->minrev||dd->minrev>2 is true
+  * qib_iba7220.c:2085: 'dd->boardname' is dereferenced by formatted printing function 'snprintf'.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+103 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_twsi.c:183 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+104 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_twsi.c:295 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+105 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/infiniband/hw/qib/qib_user_sdma.c:557 MLK.MIGHT (2:Error) Analyze
+Possible memory leak. Dynamic memory stored in 'pbcvaddr' allocated through function 'qib_user_sdma_alloc_header' at line 437 can be lost at line 557
+  * qib_user_sdma.c:422: lastdesc==0 is false
+  * qib_user_sdma.c:437: Dynamic memory stored in 'pbcvaddr' is allocated by calling function 'qib_user_sdma_alloc_header'.
+    * qib_user_sdma.c:288: !hdr is true
+    * qib_user_sdma.c:289: 'hdr' is allocated by function 'kmalloc'.
+    * qib_user_sdma.c:290: !hdr is false
+  * qib_user_sdma.c:438: !pbcvaddr is false
+  * qib_user_sdma.c:453: __builtin_constant_p( (__u16) ( ( ( (__u16) (__le16) (pbc16[0] ) ) ) ) ) is false
+  * qib_user_sdma.c:470: __builtin_constant_p( (__u16) ( (__u16) (__be16) (hdr->lrh[2] ) ) ) is false
+  * qib_user_sdma.c:477: !pkt->addr[pkt->index] .addr is true
+  * qib_user_sdma.c:483: dma_mapping_error( &dd->pcidev->dev, pkt->addr[pkt->index] .addr) is true
+  * qib_user_sdma.c:557: Dynamic memory stored in 'pbcvaddr' is lost.
+Current status 'Analyze'
+
+Summary: 50 Local
+50 Total Issue(s)
