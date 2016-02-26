@@ -5,7 +5,7 @@ myname=`basename $0 .sh`
 invoked_dir=`pwd`
 tmp_dir=/tmp
 test_type=default
-cleanup_simics=true
+cleanup_simics_flag=true
 
 . scripts/GlobalDefinition.sh
 
@@ -19,7 +19,7 @@ do
 		only_load_driver=true
 		;;
 	c)
-		cleanup_simics=false
+		cleanup_simics_flag=false
 		;;
 	d)
 		if !(ssh -p${viper0} root@localhost "[ -d ${OPTARG} ]"); then
@@ -86,7 +86,6 @@ else
 	) | tee -a /tmp/${myname}.$$
 fi
 
-set +x
 if [ ${ByJenkins} == yes ] ; then
 	for viper in ${viper0} ${viper1}; do
 		ssh_cmd="ssh -p${viper} root@localhost"
@@ -104,7 +103,7 @@ if [ ${ByJenkins} == yes ] ; then
 fi
 rm -f /tmp/${myname}.$$
 
-if [ ${cleanup_simics} = "true" ]; then
+if [ ${cleanup_simics_flag} = "true" ]; then
 	cleanup_simics
 fi
 
