@@ -319,7 +319,7 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 	if (qp->s_mig_state == IB_MIG_MIGRATED)
 		bth0 |= IB_BTH_MIG_REQ;
 	qp->s_hdr->ph.ibh.lrh[0] = cpu_to_be16(lrh0);
-	qp->s_hdr->ph.ibh.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
+	qp->s_hdr->ph.ibh.lrh[1] = cpu_to_be16((u16)qp->remote_ah_attr.dlid);
 	qp->s_hdr->ph.ibh.lrh[2] =
 		cpu_to_be16(qp->s_hdrwords + nwords);
 	qp->s_hdr->ph.ibh.lrh[3] = cpu_to_be16(ppd->lid |

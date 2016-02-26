@@ -350,7 +350,7 @@ void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		rqpn = qp->remote_qpn;
 
 		sl = ibp->sc_to_sl[sc5];
-		process_becn(ibp, sl, (u16)slid, lqpn, rqpn, IB_CC_SVCTYPE_UC);
+		process_becn(ibp, sl, slid, lqpn, rqpn, IB_CC_SVCTYPE_UC);
 	}
 
 	if (is_fecn) {

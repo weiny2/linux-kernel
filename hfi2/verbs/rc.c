@@ -998,7 +998,7 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 	 */
 	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
 	hdr.lrh[0] = cpu_to_be16(lrh0);
-	hdr.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
+	hdr.lrh[1] = cpu_to_be16((u16)qp->remote_ah_attr.dlid);
 	hdr.lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);
 	hdr.lrh[3] = cpu_to_be16(ibp->ppd->lid |
 				  qp->remote_ah_attr.src_path_bits);
@@ -2146,7 +2146,7 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 
 	if (unlikely(bth1 & (HFI1_BECN_SMASK | HFI1_FECN_SMASK))) {
 		if (bth1 & HFI1_BECN_SMASK) {
-			u16 rlid = qp->remote_ah_attr.dlid;
+			u32 rlid = qp->remote_ah_attr.dlid;
 			u32 lqpn, rqpn;
 
 			lqpn = qp->ibqp.qp_num;
