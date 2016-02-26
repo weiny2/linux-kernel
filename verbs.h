@@ -1135,6 +1135,22 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 
 struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5);
 
+int hfi1_wss_init(void);
+void hfi1_wss_exit(void);
+
+/* platform specific: return the lowest level cache (llc) size, in KiB */
+static inline int wss_llc_size(void)
+{
+	/* assume that the boot CPU value is universal for all CPUs */
+	return boot_cpu_data.x86_cache_size;
+}
+
+/* platform specific: cacheless copy */
+static inline void cacheless_memcpy(void *dst, void *src, size_t n)
+{
+	__copy_user_nocache(dst, src, n, 0);
+}
+
 extern const enum ib_wc_opcode ib_hfi1_wc_opcode[];
 
 extern const u8 hdr_len_by_opcode[];
