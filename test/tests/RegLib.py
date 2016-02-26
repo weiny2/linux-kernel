@@ -257,10 +257,9 @@ class HostInfo:
         return self.name
 
     def get_lid(self):
-        if self.qib == False:
-            cmd = "cat /sys/class/infiniband/hfi1_0/ports/1/lid"
-        else:
-            cmd = "cat /sys/class/infiniband/qib0/ports/1/lid"
+        # Not supported for qib. The only tests which need this are for HFI
+        # we should probably fix this at some point.
+        cmd = "cat /sys/class/infiniband/hfi1_0/ports/1/lid"
         (err, out) = self.send_ssh(cmd)
         if err:
             return None
