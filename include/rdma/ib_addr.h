@@ -344,4 +344,16 @@ static inline bool ib_is_opa_gid(union ib_gid *gid)
 	return ((be64_to_cpu(gid->global.interface_id) >> 40) ==
 		OPA_STL_OUI);
 }
+
+/**
+ * opa_get_lid_from_gid: Returns the last 32 bits of the gid.
+ * OPA devices use one of the gids in the gid table to also
+ * store the lid.
+ *
+ * @gid: The Global identifier
+ */
+static inline u32 opa_get_lid_from_gid(union ib_gid *gid)
+{
+	return be64_to_cpu(gid->global.interface_id) & 0xFFFFFFFF;
+}
 #endif /* IB_ADDR_H */
