@@ -51,6 +51,7 @@
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_pack.h>
 #include <rdma/ib_sa.h>
+#include <rdma/ib_addr.h>
 #include <linux/sched.h>
 
 /* constants */
