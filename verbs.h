@@ -1148,7 +1148,13 @@ static inline int wss_llc_size(void)
 /* platform specific: cacheless copy */
 static inline void cacheless_memcpy(void *dst, void *src, size_t n)
 {
-	__copy_user_nocache(dst, src, n, 0);
+	/*
+	 * Use the only available X64 cacheless copy.  Add a __user cast
+	 * to quiet sparse.  The src agument is already in the kernel so
+	 * there are no security issues.  The extra fault recovery machinery
+	 * is not invoked.
+	 */
+	__copy_user_nocache(dst, (void __user *)src, n, 0);
 }
 
 extern const enum ib_wc_opcode ib_hfi1_wc_opcode[];
