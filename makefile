@@ -123,6 +123,7 @@ install:
 	install hfi2_vnic/vnic.git/opa_vnic_bus/opa_vnic_bus.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install hfi2_vnic/vnic.git/opa_vnic/opa_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install hfi2_vnic/hfi2_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install kfi/kfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
 	depmod -a $(KVER)
 
