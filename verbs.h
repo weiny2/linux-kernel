@@ -441,6 +441,7 @@ struct hfi1_qp {
 
 	enum ib_mtu path_mtu;
 	int srate_mbps;		/* s_srate (below) converted to Mbit/s */
+	pid_t pid;		/* pid for user QP */
 	u32 remote_qpn;
 	u32 qkey;               /* QKEY for this QP (for UD or RD) */
 	u32 s_size;             /* send work queue size */
