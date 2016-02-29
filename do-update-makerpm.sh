@@ -183,21 +183,25 @@ cd $workdir
 # create the spec file
 echo "Creating spec file"
 cat > rpmbuild/SPECS/$rpmname.spec <<EOF
+%define kver %(uname -r)
+%define kdir /lib/modules/%{kver}/build
+BuildRequires: kernel-devel
+
 Name:           $rpmname
 Group:		System Environment/Kernel
 Summary:        Extra kernel modules for IFS
-Version:        $rpmversion
+Version:        %(echo %{kver}|sed -e 's/-/_/g')
 Release:        $rpmrelease
 License:        GPL v2
-Source:         %{name}-%{version}.tgz
+Source:         %{name}-$rpmversion.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root
-Requires:	kernel = $rpmrequires
-Provides:	$rpmname-$DEFAULT_KERNEL_VERSION
+%define arch %(uname -p)
+Requires:	kernel = %(echo %{kver} | sed -e 's/\(.*\)\.%{arch}/\1/g')
 
 # find our target version
 %global kbuild %(
 if [ -z "\$kbuild" ]; then 
-	echo "/lib/modules/$DEFAULT_KERNEL_VERSION/build"
+	echo "/lib/modules/%{kver}/build"
 else 
 	echo "\$kbuild"
 fi
@@ -216,12 +220,12 @@ fi
 Updated kernel modules for OPA IFS
 
 %prep
-%setup -q
+%setup -n %{name}-$rpmversion
 
 %build
 if [ "%kver" = "fail" ]; then
         if [ -z "%kbuild" ]; then
-                echo "The default target kernel, $DEFAULT_KERNEL_VERSION, is not installed" >&2
+                echo "The default target kernel, %kver, is not installed" >&2
                 echo "To build, set \\\$kbuild to your target kernel build directory" >&2
         else
                 echo "Cannot find kernel version in %kbuild" >&2
@@ -232,7 +236,6 @@ echo "Kernel version is %kver"
 echo "Kernel source directory is \"%kbuild\""
 
 # Build Core support first...
-# make -C %kbuild M=\$(pwd)/drivers/infiniband/core ib_uverbs.ko
 make
 
 # Then build drivers...
@@ -246,14 +249,13 @@ make
 %install
 rm -rf \$RPM_BUILD_ROOT
 mkdir -p \$RPM_BUILD_ROOT/lib/modules/%kver/updates
-
 cp ib_uverbs.ko \$RPM_BUILD_ROOT/lib/modules/%kver/updates
 
 %post
-depmod -a $DEFAULT_KERNEL_VERSION
+depmod -a %{kver}
 
 %postun
-depmod -a $DEFAULT_KERNEL_VERSION
+depmod -a %{kver}
 
 %clean
 rm -rf \${RPM_BUILD_ROOT}
