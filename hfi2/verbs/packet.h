@@ -218,6 +218,7 @@ struct hfi2_ib_packet {
 	void *hdr;
 	struct ib_l4_headers *ohdr;
 	struct ib_grh *grh;
+	u64 rhf;
 	u8 port;
 	u8 etype;
 	u8 sc4_bit;
@@ -346,6 +347,9 @@ u32 hfi2_make_grh(struct hfi2_ibport *ibp, struct ib_grh *hdr,
 #define RHF_LEN_ERR		(0x1ull << 46)
 #define RHF_ICRC_ERR		(0x1ull << 47)
 #define RHF_K_HDR_LEN_ERR	(0x1ull << 53)
+#define RHF_ERROR_SHIFT		42
+#define RHF_ERROR_MASK		0x83full  /* 7 error bits 53,47:42 */
+#define RHF_ERROR_SMASK (RHF_ERROR_MASK << RHF_ERROR_SHIFT)
 
 #define RHF_HDR_LEN_SHIFT	48
 #define RHF_HDR_LEN_MASK	0x1full
@@ -364,14 +368,15 @@ u32 hfi2_make_grh(struct hfi2_ibport *ibp, struct ib_grh *hdr,
 #define RHF_RCV_TYPE_SMASK (RHF_RCV_TYPE_MASK << RHF_RCV_TYPE_SHIFT)
 
 /* RHF receive types */
-#define RHF_RCV_TYPE_EXPECTED 0x30
-#define RHF_RCV_TYPE_EAGER    0x31
-#define RHF_RCV_TYPE_IB       0x32 /* normal IB, IB Raw, or IPv6 */
-#define RHF_RCV_TYPE_ERROR    0x33
-#define RHF_RCV_TYPE_BYPASS   0x34
-#define RHF_RCV_TYPE_INVALID5 0x35
-#define RHF_RCV_TYPE_INVALID6 0x36
-#define RHF_RCV_TYPE_INVALID7 0x37
+#define RHF_RCV_TYPE_BASE     0x30
+#define RHF_RCV_TYPE_EXPECTED 0x0
+#define RHF_RCV_TYPE_EAGER    0x1
+#define RHF_RCV_TYPE_IB       0x2 /* normal IB, IB Raw, or IPv6 */
+#define RHF_RCV_TYPE_ERROR    0x3
+#define RHF_RCV_TYPE_BYPASS   0x4
+#define RHF_RCV_TYPE_INVALID5 0x5
+#define RHF_RCV_TYPE_INVALID6 0x6
+#define RHF_RCV_TYPE_INVALID7 0x7
 
 /* RHF receive type error - expected packet errors */
 #define RHF_RTE_EXPECTED_FLOW_SEQ_ERR	0x2
@@ -402,12 +407,18 @@ static inline __u64 rhf_to_cpu(const __le32 *rbuf)
 
 static inline u32 rhf_rcv_type(u64 rhf)
 {
-	return (rhf >> RHF_RCV_TYPE_SHIFT) & RHF_RCV_TYPE_MASK;
+	return ((rhf >> RHF_RCV_TYPE_SHIFT) & RHF_RCV_TYPE_MASK) -
+	       RHF_RCV_TYPE_BASE;
 }
 
 static inline u32 rhf_rcv_type_err(u64 rhf)
 {
 	return (rhf >> RHF_RCV_TYPE_ERR_SHIFT) & RHF_RCV_TYPE_ERR_MASK;
+}
+
+static inline u64 rhf_err_flags(u64 rhf)
+{
+	return rhf & RHF_ERROR_SMASK;
 }
 
 /* return size is in bytes, not DWORDs */

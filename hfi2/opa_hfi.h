@@ -941,6 +941,10 @@ int hfi_set_lid(struct hfi_pportdata *ppd, u32 lid, u8 lmc);
 	dev_warn(&(dd)->pcidev->dev, "%d: " fmt, \
 		 (dd)->unit, ##__VA_ARGS__)
 
+#define dd_dev_warn_ratelimited(dd, fmt, ...) \
+	dev_warn_ratelimited(&(dd)->pcidev->dev, "%d: " fmt, \
+			     (dd)->unit, ##__VA_ARGS__)
+
 #define ppd_dev_err(ppd, fmt, ...) \
 	dev_err(&(ppd)->dd->pcidev->dev, "%d/%d: " fmt,	\
 		(ppd)->dd->unit, ppd->pnum, ##__VA_ARGS__)

@@ -448,12 +448,12 @@ static inline bool is_qp_ok(struct hfi2_ibport *ibp,
 }
 
 /**
- * hfi2_rcv - process an incoming packet
+ * hfi2_ib_rcv - process an incoming packet
  * @packet: data packet information
  *
  * Called from receive kthread upon processing event in RHQ.
  */
-static void hfi2_rcv(struct hfi2_ib_packet *packet)
+void hfi2_ib_rcv(struct hfi2_ib_packet *packet)
 {
 	union hfi2_packet_header *ph = packet->hdr;
 	struct ib_grh *grh = NULL;
@@ -612,6 +612,7 @@ static bool process_rcv_packet(struct hfi2_ibport *ibp,
 	u64 rhf = *rhf_entry;
 
 	packet->ctx = rcv->ctx;
+	packet->rhf = rhf;
 	packet->sc4_bit = rhf_sc4(rhf) ? BIT(4) : 0;
 	packet->hdr = rhf_get_hdr(packet, rhf_entry);
 	packet->hlen_9b = rhf_hdr_len(rhf);  /* in bytes */
@@ -655,6 +656,7 @@ int hfi2_rcv_wait(void *data)
 {
 	struct hfi2_ibrcv *rcv = data;
 	struct hfi2_ibport *ibp = rcv->ibp;
+	struct hfi2_ibdev *ibd = ibp->ibd;
 	struct hfi2_ib_packet pkt;
 	int rc;
 	u64 *rhf_entry;
@@ -674,7 +676,7 @@ int hfi2_rcv_wait(void *data)
 		if (rhf_entry) {
 			/* parse packet header and call hfi2_rcv() to handle */
 			if (process_rcv_packet(ibp, rcv, rhf_entry, &pkt))
-				hfi2_rcv(&pkt);
+				ibd->rhf_rcv_function_map[pkt.etype](&pkt);
 			else
 				dev_warn(ibp->dev,
 					 "PT %d: Unexpected packet! 0x%x\n",

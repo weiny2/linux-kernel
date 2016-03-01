@@ -81,6 +81,7 @@
 #define OPA_FULL_MGMT_PKEY      0xFFFF
 
 #define HFI2_GUIDS_PER_PORT     2
+#define HFI2_RHF_RCV_TYPES      8
 
 /* Flags for checking QP state (see ib_hfi1_state_ops[]) */
 #define HFI1_POST_SEND_OK                0x01
@@ -587,6 +588,8 @@ struct hfi2_mcast {
 	int n_attached;
 };
 
+typedef void (*rhf_rcv_function_ptr)(struct hfi2_ib_packet *packet);
+
 struct hfi2_ibrcv {
 	struct hfi2_ibport *ibp;
 	struct hfi_ctx *ctx;
@@ -689,6 +692,10 @@ struct hfi2_ibdev {
 	/* per device cq worker */
 	struct kthread_worker *worker;
 
+	/* receive interrupt functions */
+	rhf_rcv_function_ptr *rhf_rcv_function_map;
+	rhf_rcv_function_ptr rhf_rcv_functions[HFI2_RHF_RCV_TYPES];
+
 	struct hfi_ctx sm_ctx;
 	struct hfi_ctx qp_ctx;
 };
@@ -782,6 +789,7 @@ void hfi2_rc_error(struct hfi2_qp *qp, enum ib_wc_status err);
 void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
 void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
 void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
+void hfi2_ib_rcv(struct hfi2_ib_packet *packet);
 int hfi2_rcv_wait(void *data);
 int hfi2_lookup_pkey_idx(struct hfi2_ibport *ibp, u16 pkey);
 int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct hfi2_pd *pd,
