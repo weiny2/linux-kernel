@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# Meant to be run by cron but can be run manually.
+cd tests
+
+# Check if kedr found on target node
+if [ ! $(ssh root@sperf-05 which kedr 2>/dev/null) ] ; then
+	echo "KEDR not found!"
+	exit 1
+fi
+
+# Stop the opafm and unload driver on both nodes
+ssh root@sperf-05 systemctl stop opafm
+ssh root@sperf-05 rmmod hfi1
+ssh root@sperf-06 rmmod hfi1
+
+# Start KEDR leak check on one node
+ssh root@sperf-05 kedr start hfi1
+
+# Build the driver
+./build.sh
+if [ $? -ne 0 ]; then
+	echo "Build failed"
+	exit 1
+fi
+
+# Load the driver
+./LoadModule.py --nodelist=sperf-05,sperf-06
+
+# Stop opafm and unload the driver
+ssh root@sperf-05 systemctl stop opafm
+ssh root@sperf-05 rmmod hfi1
+ssh root@sperf-06 rmmod hfi1
+
+# Get kedr leak check logs from machine
+echo "Logging results to kedr_leakcheck.log"
+
+`ssh root@sperf-05 cat /sys/kernel/debug/kedr_leak_check/hfi1/possible_leaks` > kedr_leakcheck.log
+`ssh root@sperf-05 cat /sys/kernel/debug/kedr_leak_check/hfi1/unallocated_frees` >> kedr_leakcheck.log
+
+# Stop KEDR leak check on one node
+ssh root@sperf-05 kedr stop
+
+# Compare to whitelist and report failure. Log file left for failure analysis.
+if [ $(diff kedr_leakcheck.whitelist kedr_leakcheck.log) ] ; then
+	echo "KEDR leak check failed"
+	exit 1
+fi
+
+# If success, remove log file
+rm kedr_leakcheck.log
+echo "KEDR leak check succeeded"
+exit 0
