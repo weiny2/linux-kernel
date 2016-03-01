@@ -60,10 +60,11 @@
 #include <linux/pci.h>
 #include <linux/version.h>
 #include <linux/delay.h>
+#include <rdma/opa_core_ib.h>
 #include "mad.h"
 #include "verbs.h"
+#include "packet.h"
 #include "../link.h"
-#include <rdma/opa_core_ib.h>
 
 static void hfi2_uninit_port(struct hfi2_ibport *ibp);
 
@@ -637,6 +638,11 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	}
 	if (ret)
 		goto port_err;
+
+	/* set RHF event table for Verbs receive */
+	ibd->rhf_rcv_functions[RHF_RCV_TYPE_IB] = hfi2_ib_rcv;
+	ibd->rhf_rcv_functions[RHF_RCV_TYPE_BYPASS] = hfi2_ib_rcv;
+	ibd->rhf_rcv_function_map = ibd->rhf_rcv_functions;
 
 	ret = hfi2_register_device(ibd, hfi_class_name());
 	if (ret)
