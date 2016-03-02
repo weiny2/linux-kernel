@@ -1473,9 +1473,10 @@ bad:
  * and size
  */
 static inline send_routine get_send_routine(struct hfi1_qp *qp,
-					    struct hfi1_ib_header *h)
+					    struct verbs_txreq *tx)
 {
 	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
+	struct hfi1_ib_header *h = &tx->phdr.hdr;
 
 	if (unlikely(!(dd->flags & HFI1_HAS_SEND_DMA)))
 		return dd->process_pio_send;
@@ -1484,21 +1485,21 @@ static inline send_routine get_send_routine(struct hfi1_qp *qp,
 		return dd->process_pio_send;
 	case IB_QPT_GSI:
 	case IB_QPT_UD:
-		if (piothreshold && qp->s_cur_size <= piothreshold)
-			return dd->process_pio_send;
 		break;
 	case IB_QPT_RC:
 		if (piothreshold &&
 		    qp->s_cur_size <= min(piothreshold, qp->pmtu) &&
 		    (BIT(get_opcode(h) & 0x1f) & rc_only_opcode) &&
-		    iowait_sdma_pending(&qp->s_iowait) == 0)
+		    iowait_sdma_pending(&qp->s_iowait) == 0 &&
+		    !sdma_txreq_built(&tx->txreq))
 			return dd->process_pio_send;
 		break;
 	case IB_QPT_UC:
 		if (piothreshold &&
 		    qp->s_cur_size <= min(piothreshold, qp->pmtu) &&
 		    (BIT(get_opcode(h) & 0x1f) & uc_only_opcode) &&
-		    iowait_sdma_pending(&qp->s_iowait) == 0)
+		    iowait_sdma_pending(&qp->s_iowait) == 0 &&
+		    !sdma_txreq_built(&tx->txreq))
 			return dd->process_pio_send;
 		break;
 	default:
@@ -1520,7 +1521,7 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 	send_routine sr;
 	int ret;
 
-	sr = get_send_routine(qp, &ps->s_txreq->phdr.hdr);
+	sr = get_send_routine(qp, ps->s_txreq);
 	ret = egress_pkey_check(dd->pport, &ps->s_txreq->phdr.hdr, qp);
 	if (unlikely(ret)) {
 		/*
@@ -1542,6 +1543,11 @@ int hfi1_verbs_send(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 		}
 		return -EINVAL;
 	}
+	if (sr == dd->process_dma_send && iowait_pio_pending(&qp->s_iowait))
+		return pio_wait(qp,
+				ps->s_txreq->psc,
+				ps,
+				HFI1_S_WAIT_PIO_DRAIN);
 	return sr(qp, ps, 0);
 }
 
