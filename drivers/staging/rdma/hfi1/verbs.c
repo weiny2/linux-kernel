@@ -710,7 +710,7 @@ static void verbs_sdma_complete(
 	if (tx->wqe) {
 		hfi1_send_complete(qp, tx->wqe, IB_WC_SUCCESS);
 	} else if (qp->ibqp.qp_type == IB_QPT_RC) {
-		struct hfi1_ib_header *hdr;
+		struct hfi1_opa_header *hdr;
 
 		hdr = &tx->phdr.hdr;
 		hfi1_rc_send_complete(qp, hdr);
@@ -827,14 +827,28 @@ static int build_verbs_tx_desc(
 		if (ret)
 			goto bail_txadd;
 		phdr->pbc = cpu_to_le64(pbc);
+		
+		/* dchandr1: First setup PBC */
 		ret = sdma_txadd_kvaddr(
 			sde->dd,
 			&tx->txreq,
-			phdr,
-			hdrbytes);
+			&phdr->pbc,
+			8);
+		if (ret)
+			goto bail_txadd;
+		/* dchandr1: Then copy the 9B header */
+		/* TODO: Account for 16B */
+		ret = sdma_txadd_kvaddr(
+			sde->dd,
+			&tx->txreq,
+			&phdr->hdr.pkt.ibh,
+			hdrbytes - 8);
 		if (ret)
 			goto bail_txadd;
 	} else {
+		/* This should be agnostic to 9B/16B as no header
+		 * is being copied
+		 */
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
 			ahg_info->tx_flags,
@@ -897,8 +911,12 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 			goto bail_ecomm;
 		return ret;
 	}
+	/**
+	 * dchandr1: We should generalze this trace call so it can take in either
+	 * a 9B or a 16B header
+	 */ 
 	trace_sdma_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
-				&ps->s_txreq->phdr.hdr);
+				&ps->s_txreq->phdr.hdr.pkt.ibh);
 	return ret;
 
 bail_ecomm:
@@ -983,7 +1001,7 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	u32 dwords = (len + 3) >> 2;
 	u32 plen = hdrwords + dwords + 2; /* includes pbc */
 	struct hfi1_pportdata *ppd = ps->ppd;
-	u32 *hdr = (u32 *)&ps->s_txreq->phdr.hdr;
+	u32 *hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh; /* TODO: Account for 16B */
 	u64 pbc_flags = 0;
 	u8 sc5;
 	unsigned long flags = 0;
@@ -1067,7 +1085,7 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	}
 
 	trace_pio_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
-			       &ps->s_txreq->phdr.hdr);
+			       &ps->s_txreq->phdr.hdr.pkt.ibh);
 
 pio_bail:
 	if (qp->s_wqe) {
@@ -1116,12 +1134,13 @@ static inline int egress_pkey_matches_entry(u16 pkey, u16 ent)
  * criteria in the OPAv1 spec., section 9.11.7.
  */
 static inline int egress_pkey_check(struct hfi1_pportdata *ppd,
-				    struct hfi1_ib_header *hdr,
+				    struct hfi1_opa_header *hdr,
 				    struct rvt_qp *qp)
 {
 	struct hfi1_qp_priv *priv = qp->priv;
 	struct hfi1_other_headers *ohdr;
 	struct hfi1_devdata *dd;
+	struct hfi1_ib_header *ibh = &hdr->pkt.ibh;
 	int i = 0;
 	u16 pkey;
 	u8 lnh, sc5 = priv->s_sc;
@@ -1130,11 +1149,11 @@ static inline int egress_pkey_check(struct hfi1_pportdata *ppd,
 		return 0;
 
 	/* locate the pkey within the headers */
-	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
+	lnh = be16_to_cpu(ibh->lrh[0]) & 3;
 	if (lnh == HFI1_LRH_GRH)
-		ohdr = &hdr->u.l.oth;
+		ohdr = &ibh->u.l.oth;
 	else
-		ohdr = &hdr->u.oth;
+		ohdr = &ibh->u.oth;
 
 	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 
@@ -1163,7 +1182,7 @@ bad:
 	incr_cntr64(&ppd->port_xmit_constraint_errors);
 	dd = ppd->dd;
 	if (!(dd->err_info_xmit_constraint.status & OPA_EI_STATUS_SMASK)) {
-		u16 slid = be16_to_cpu(hdr->lrh[3]);
+		u16 slid = be16_to_cpu(ibh->lrh[3]);
 
 		dd->err_info_xmit_constraint.status |= OPA_EI_STATUS_SMASK;
 		dd->err_info_xmit_constraint.slid = slid;
@@ -1183,7 +1202,7 @@ static inline send_routine get_send_routine(struct rvt_qp *qp,
 {
 	struct hfi1_devdata *dd = dd_from_ibdev(qp->ibqp.device);
 	struct hfi1_qp_priv *priv = qp->priv;
-	struct hfi1_ib_header *h = &tx->phdr.hdr;
+	struct hfi1_opa_header *h = &tx->phdr.hdr;
 
 	if (unlikely(!(dd->flags & HFI1_HAS_SEND_DMA)))
 		return dd->process_pio_send;

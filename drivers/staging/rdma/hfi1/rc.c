@@ -407,9 +407,9 @@ int hfi1_make_rc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	if (IS_ERR(ps->s_txreq))
 		goto bail_no_tx;
 
-	ohdr = &ps->s_txreq->phdr.hdr.u.oth;
+	ohdr = &ps->s_txreq->phdr.hdr.pkt.ibh.u.oth;
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = &ps->s_txreq->phdr.hdr.u.l.oth;
+		ohdr = &ps->s_txreq->phdr.hdr.pkt.ibh.u.l.oth;
 
 	/* Sending responses has higher priority over sending requests. */
 	if ((qp->s_flags & RVT_S_RESP_PENDING) &&
@@ -1098,12 +1098,13 @@ static void reset_sending_psn(struct rvt_qp *qp, u32 psn)
 /*
  * This should be called with the QP s_lock held and interrupts disabled.
  */
-void hfi1_rc_send_complete(struct rvt_qp *qp, struct hfi1_ib_header *hdr)
+void hfi1_rc_send_complete(struct rvt_qp *qp, struct hfi1_opa_header *opah)
 {
 	struct hfi1_other_headers *ohdr;
 	struct rvt_swqe *wqe;
 	struct ib_wc wc;
 	unsigned i;
+	struct hfi1_ib_header *hdr = &opah->pkt.ibh;
 	u32 opcode;
 	u32 psn;
 

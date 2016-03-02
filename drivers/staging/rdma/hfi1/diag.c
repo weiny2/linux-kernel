@@ -1687,7 +1687,7 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	u32 plen = hdrwords + dwords + 2; /* includes pbc */
 	struct hfi1_pportdata *ppd = ps->ppd;
 	struct snoop_packet *s_packet = NULL;
-	u32 *hdr = (u32 *)&ps->s_txreq->phdr.hdr;
+	u32 *hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh; /* TODO: Account for 16B */
 	u32 length = 0;
 	struct rvt_sge_state temp_ss;
 	void *data = NULL;
@@ -1698,7 +1698,7 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	struct capture_md md;
 	u32 vl;
 	u32 hdr_len = hdrwords << 2;
-	u32 tlen = HFI1_GET_PKT_LEN(&ps->s_txreq->phdr.hdr);
+	u32 tlen = HFI1_GET_PKT_LEN(&ps->s_txreq->phdr.hdr.pkt.ibh); /* TODO: Account for 16B */
 
 	md.u.pbc = 0;
 
@@ -1725,7 +1725,8 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		md.port = 1;
 		md.dir = PKT_DIR_EGRESS;
 		if (likely(pbc == 0)) {
-			vl = be16_to_cpu(ps->s_txreq->phdr.hdr.lrh[0]) >> 12;
+			/* TODO: Account for 16B */
+			vl = be16_to_cpu(ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0]) >> 12;
 			md.u.pbc = create_pbc(ppd, 0, qp->s_srate, vl, plen);
 		} else {
 			md.u.pbc = 0;
@@ -1787,7 +1788,7 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		ret = HFI1_FILTER_HIT;
 	} else {
 		ret = ppd->dd->hfi1_snoop.filter_callback(
-					&ps->s_txreq->phdr.hdr,
+					&ps->s_txreq->phdr.hdr.pkt.ibh,
 					NULL,
 					ppd->dd->hfi1_snoop.filter_value);
 	}

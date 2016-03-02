@@ -177,6 +177,25 @@ struct hfi1_ib_header {
 	} u;
 } __packed;
 
+struct hfi1_16b_header {
+	__be32 lrh[4];
+	union {
+		struct {
+			struct ib_grh grh;
+			struct hfi1_other_headers oth;
+		} l;
+		struct hfi1_other_headers oth;
+	} u;
+} __packed;
+
+struct hfi1_opa_header {
+	u8 hdr_type; /* 9B or 16B */
+	union {
+		struct hfi1_ib_header ibh; /* 9B header */
+		struct hfi1_16b_header opah; /* 16B header */
+	} pkt;
+} __packed;
+
 struct hfi1_ahg_info {
 	u32 ahgdesc[2];
 	u16 tx_flags;
@@ -186,7 +205,7 @@ struct hfi1_ahg_info {
 
 struct hfi1_pio_header {
 	__le64 pbc;
-	struct hfi1_ib_header hdr;
+	struct hfi1_opa_header hdr;
 } __packed;
 
 /*
@@ -401,7 +420,7 @@ void hfi1_rc_timeout(unsigned long arg);
 void hfi1_del_timers_sync(struct rvt_qp *qp);
 void hfi1_stop_rc_timers(struct rvt_qp *qp);
 
-void hfi1_rc_send_complete(struct rvt_qp *qp, struct hfi1_ib_header *hdr);
+void hfi1_rc_send_complete(struct rvt_qp *qp, struct hfi1_opa_header *opah);
 
 void hfi1_rc_error(struct rvt_qp *qp, enum ib_wc_status err);
 
@@ -424,8 +443,10 @@ int hfi1_check_send_wqe(struct rvt_qp *qp, struct rvt_swqe *wqe);
 extern const u32 rc_only_opcode;
 extern const u32 uc_only_opcode;
 
-static inline u8 get_opcode(struct hfi1_ib_header *h)
+static inline u8 get_opcode(struct hfi1_opa_header *hdr)
 {
+	struct hfi1_ib_header *h = &hdr->pkt.ibh;
+
 	u16 lnh = be16_to_cpu(h->lrh[0]) & 3;
 
 	if (lnh == IB_LNH_IBA_LOCAL)
