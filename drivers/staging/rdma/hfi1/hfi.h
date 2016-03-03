@@ -1943,13 +1943,6 @@ static inline u32 qsfp_resource(struct hfi1_devdata *dd)
 
 int hfi1_tempsense_rd(struct hfi1_devdata *dd, struct hfi1_temp *temp);
 
-
-static inline u32 hfi1_get_lid_from_gid(union ib_gid *gid)
-{
-	/* Caller should ensure gid is of type opa gid */
-	return be64_to_cpu(gid->global.interface_id) & 0xFFFFFFFF;
-}
-
 /**
  * hfi1_retrieve_lid - Get lid in the GID.
  *
@@ -1967,7 +1960,7 @@ static inline u32 hfi1_retrieve_lid(struct ib_ah_attr *ah_attr)
 	if ((ah_attr->ah_flags & IB_AH_GRH)) {
 		dgid = &ah_attr->grh.dgid;
 		if (ib_is_opa_gid(dgid))
-			return hfi1_get_lid_from_gid(dgid);
+			return opa_get_lid_from_gid(dgid);
 	}
 	return ah_attr->dlid;
 }
@@ -1988,7 +1981,7 @@ static inline bool hfi1_check_mcast(struct ib_ah_attr *ah_attr)
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		dgid = ah_attr->grh.dgid;
 		if (ib_is_opa_gid(&dgid)) {
-			lid = hfi1_get_lid_from_gid(&dgid);
+			lid = opa_get_lid_from_gid(&dgid);
 			return ((lid >= HFI1_16B_MULTICAST_LID_BASE) &&
 				(lid != HFI1_16B_PERMISSIVE_LID));
 		}
@@ -2014,7 +2007,7 @@ static inline bool hfi1_check_permissive(struct ib_ah_attr *ah_attr)
 		dgid = ah_attr->grh.dgid;
 		if (ib_is_opa_gid(&dgid)) {
 			return HFI1_16B_PERMISSIVE_LID ==
-				hfi1_get_lid_from_gid(&dgid);
+				opa_get_lid_from_gid(&dgid);
 		}
 	}
 	return ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE);

@@ -3955,7 +3955,7 @@ static int is_local_mad(struct hfi1_ibport *ibp, const struct opa_mad *mad,
 	if (in_grh) {
 		gid = in_grh->sgid;
 		if (ib_is_opa_gid(&gid))
-			return (hfi1_get_lid_from_gid(&gid) == ppd->lid);
+			return (opa_get_lid_from_gid(&gid) == ppd->lid);
 	}
 	return (in_wc->slid == (u16)ppd->lid);
 }
