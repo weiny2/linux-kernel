@@ -1,11 +1,10 @@
 /*
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
  *
  * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,8 +16,6 @@
  * General Public License for more details.
  *
  * BSD LICENSE
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -1552,7 +1549,7 @@ static void sc_piobufavail(struct send_context *sc)
 		struct iowait *wait;
 
 		if (n == ARRAY_SIZE(qps))
-			goto full;
+			break;
 		wait = list_first_entry(list, struct iowait, list);
 		qp = container_of(wait, struct hfi1_qp, s_iowait);
 		list_del_init(&qp->s_iowait.list);
@@ -1560,12 +1557,14 @@ static void sc_piobufavail(struct send_context *sc)
 		qps[n++] = qp;
 	}
 	/*
-	 * Counting: only call wantpiobuf_intr() if there were waiters and they
-	 * are now all gone.
+	 * If there had been waiters and there are more
+	 * insure that we redo the force to avoid a potential hang.
 	 */
-	if (n)
+	if (n) {
 		hfi1_sc_wantpiobuf_intr(sc, 0);
-full:
+		if (!list_empty(list))
+			hfi1_sc_wantpiobuf_intr(sc, 1);
+	}
 	write_sequnlock_irqrestore(&dev->iowait_lock, flags);
 
 	for (i = 0; i < n; i++)
@@ -1887,7 +1886,7 @@ void free_pio_map(struct hfi1_devdata *dd)
 	/* Free PIO map if allocated */
 	if (rcu_access_pointer(dd->pio_map)) {
 		spin_lock_irq(&dd->pio_map_lock);
-		kfree(rcu_access_pointer(dd->pio_map));
+		pio_map_free(rcu_access_pointer(dd->pio_map));
 		RCU_INIT_POINTER(dd->pio_map, NULL);
 		spin_unlock_irq(&dd->pio_map_lock);
 		synchronize_rcu();
