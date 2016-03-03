@@ -1,13 +1,12 @@
 #ifndef _HFI1_KERNEL_H
 #define _HFI1_KERNEL_H
 /*
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
  *
  * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -19,8 +18,6 @@
  * General Public License for more details.
  *
  * BSD LICENSE
- *
- * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -65,8 +62,6 @@
 #include <linux/cdev.h>
 #include <linux/delay.h>
 #include <linux/kthread.h>
-#include <linux/mmu_notifier.h>
-#include <linux/rbtree.h>
 
 #include "chip_registers.h"
 #include "common.h"
@@ -807,6 +802,12 @@ struct hfi1_temp {
 	u8 triggers;      /* temperature triggers */
 };
 
+/* common data between shared ASIC HFIs */
+struct hfi1_asic_data {
+	struct hfi1_devdata *dds[2];	/* back pointers */
+	struct mutex asic_resource_mutex;
+};
+
 /* device data struct now contains only "general per-device" info.
  * fields related to a physical IB port are in a hfi1_pportdata struct.
  */
@@ -881,6 +882,9 @@ struct hfi1_devdata {
 	/* SPC freeze waitqueue and variable */
 	wait_queue_head_t		  sdma_unfreeze_wq;
 	atomic_t			  sdma_unfreeze_count;
+
+	/* common data between shared ASIC HFIs in this OS */
+	struct hfi1_asic_data *asic_data;
 
 	/* hfi1_pportdata, points to array of (physical) port-specific
 	 * data structs, indexed by pidx (0..n-1)
@@ -1041,8 +1045,6 @@ struct hfi1_devdata {
 
 	struct platform_config platform_config;
 	struct platform_config_cache pcfg_cache;
-	/* control high-level access to qsfp */
-	struct mutex qsfp_i2c_mutex;
 
 	struct diag_client *diag_client;
 	spinlock_t hfi1_diag_trans_lock; /* protect diag observer ops */
@@ -1175,6 +1177,7 @@ struct hfi1_devdata {
 #define PT_EAGER    1
 #define PT_INVALID  2
 
+struct tid_rb_node;
 struct mmu_rb_node;
 
 /* Private data for file operations */
@@ -1185,21 +1188,15 @@ struct hfi1_filedata {
 	struct hfi1_user_sdma_pkt_q *pq;
 	/* for cpu affinity; -1 if none */
 	int rec_cpu_num;
-	struct mmu_notifier mn;
+	u32 tid_n_pinned;
 	struct rb_root tid_rb_root;
-	struct mmu_rb_node **entry_to_rb;
+	struct tid_rb_node **entry_to_rb;
 	u32 tid_limit;
 	u32 tid_used;
-	/* protect rb tree */
-	spinlock_t rb_lock;
 	u32 *invalid_tids;
 	u32 invalid_tid_idx;
-	/* protect invalid tid info */
+	/* protect invalid_tids array and invalid_tid_idx */
 	spinlock_t invalid_lock;
-	int (*mmu_rb_insert)(struct hfi1_filedata *, struct rb_root *,
-			     struct mmu_rb_node *);
-	void (*mmu_rb_remove)(struct hfi1_filedata *, struct rb_root *,
-			      struct mmu_rb_node *);
 };
 
 extern struct list_head hfi1_dev_list;
@@ -1595,7 +1592,6 @@ static inline struct cc_state *get_cc_state(struct hfi1_pportdata *ppd)
 #define HFI1_HAS_SDMA_TIMEOUT  0x8
 #define HFI1_HAS_SEND_DMA      0x10   /* Supports Send DMA */
 #define HFI1_FORCED_FREEZE     0x80   /* driver forced freeze mode */
-#define HFI1_DO_INIT_ASIC      0x100  /* This device will init the ASIC */
 
 /* IB dword length mask in PBC (lower 11 bits); same for all chips */
 #define HFI1_PBC_LENGTH_MASK                     ((1 << 11) - 1)
@@ -1666,8 +1662,9 @@ void shutdown_led_override(struct hfi1_pportdata *ppd);
  */
 #define DEFAULT_RCVHDR_ENTSIZE 32
 
+bool hfi1_can_pin_pages(struct hfi1_devdata *, u32, u32);
 int hfi1_acquire_user_pages(unsigned long, size_t, bool, struct page **);
-void hfi1_release_user_pages(struct page **, size_t, bool);
+void hfi1_release_user_pages(struct mm_struct *, struct page **, size_t, bool);
 
 static inline void clear_rcvhdrtail(const struct hfi1_ctxtdata *rcd)
 {
@@ -1922,6 +1919,18 @@ static inline void setextled(struct hfi1_devdata *dd, u32 on)
 		write_csr(dd, DCC_CFG_LED_CNTRL, 0x1F);
 	else
 		write_csr(dd, DCC_CFG_LED_CNTRL, 0x10);
+}
+
+/* return the i2c resource given the target */
+static inline u32 i2c_target(u32 target)
+{
+	return target ? CR_I2C2 : CR_I2C1;
+}
+
+/* return the i2c chain chip resource that this HFI uses for QSFP */
+static inline u32 qsfp_resource(struct hfi1_devdata *dd)
+{
+	return i2c_target(dd->hfi1_id);
 }
 
 int hfi1_tempsense_rd(struct hfi1_devdata *dd, struct hfi1_temp *temp);

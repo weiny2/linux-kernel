@@ -1,11 +1,10 @@
 /*
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
  *
  * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,8 +16,6 @@
  * General Public License for more details.
  *
  * BSD LICENSE
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -588,9 +585,16 @@ bail:
 static int tune_active_qsfp(struct hfi1_pportdata *ppd, u32 *ptr_tx_preset,
 			    u32 *ptr_rx_preset, u32 *ptr_total_atten)
 {
-	int ret = 0;
+	int ret;
 	u16 lss = ppd->link_speed_supported, lse = ppd->link_speed_enabled;
 	u8 *cache = ppd->qsfp_info.cache;
+
+	ret = acquire_chip_resource(ppd->dd, qsfp_resource(ppd->dd), QSFP_WAIT);
+	if (ret) {
+		dd_dev_err(ppd->dd, "%s: hfi%d: cannot lock i2c chain\n",
+			   __func__, (int)ppd->dd->hfi1_id);
+		goto bail_no_unlock;
+	}
 
 	ppd->qsfp_info.limiting_active = 1;
 
@@ -664,6 +668,8 @@ static int tune_active_qsfp(struct hfi1_pportdata *ppd, u32 *ptr_tx_preset,
 	ret = set_qsfp_tx(ppd, 1);
 
 bail:
+	release_chip_resource(ppd->dd, qsfp_resource(ppd->dd));
+bail_no_unlock:
 	return ret;
 }
 
