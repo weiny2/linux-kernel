@@ -10,7 +10,8 @@ function print_help
 	exit 1
 }
 
-script_dir=`readlink -f ../../scripts`
+top_dir=$(git rev-parse --show-toplevel)
+script_dir=$(readlink -f $top_dir/scripts)
 
 while getopts "k:b:t:" opt
 do
