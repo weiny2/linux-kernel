@@ -1,11 +1,10 @@
 /*
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
  *
  * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,8 +16,6 @@
  * General Public License for more details.
  *
  * BSD LICENSE
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -444,6 +441,7 @@ struct hfi1_qp {
 
 	enum ib_mtu path_mtu;
 	int srate_mbps;		/* s_srate (below) converted to Mbit/s */
+	pid_t pid;		/* pid for user QP */
 	u32 remote_qpn;
 	u32 qkey;               /* QKEY for this QP (for UD or RD) */
 	u32 s_size;             /* send work queue size */
@@ -1137,6 +1135,28 @@ int hfi1_verbs_send_pio(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 			u64 pbc);
 
 struct send_context *qp_to_send_context(struct hfi1_qp *qp, u8 sc5);
+
+int hfi1_wss_init(void);
+void hfi1_wss_exit(void);
+
+/* platform specific: return the lowest level cache (llc) size, in KiB */
+static inline int wss_llc_size(void)
+{
+	/* assume that the boot CPU value is universal for all CPUs */
+	return boot_cpu_data.x86_cache_size;
+}
+
+/* platform specific: cacheless copy */
+static inline void cacheless_memcpy(void *dst, void *src, size_t n)
+{
+	/*
+	 * Use the only available X64 cacheless copy.  Add a __user cast
+	 * to quiet sparse.  The src agument is already in the kernel so
+	 * there are no security issues.  The extra fault recovery machinery
+	 * is not invoked.
+	 */
+	__copy_user_nocache(dst, (void __user *)src, n, 0);
+}
 
 extern const enum ib_wc_opcode ib_hfi1_wc_opcode[];
 

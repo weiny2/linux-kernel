@@ -1,11 +1,10 @@
 /*
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
  *
  * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,8 +16,6 @@
  * General Public License for more details.
  *
  * BSD LICENSE
- *
- * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -981,6 +978,25 @@ void hfi1_free_ctxtdata(struct hfi1_devdata *dd, struct hfi1_ctxtdata *rcd)
 	kfree(rcd);
 }
 
+/*
+ * Release our hold on the shared asic data.  If we are the last one,
+ * free the structure.  Must be holding hfi1_devs_lock.
+ */
+static void release_asic_data(struct hfi1_devdata *dd)
+{
+	int other;
+
+	if (!dd->asic_data)
+		return;
+	dd->asic_data->dds[dd->hfi1_id] = NULL;
+	other = dd->hfi1_id ? 0 : 1;
+	if (!dd->asic_data->dds[other]) {
+		/* we are the last holder, free it */
+		kfree(dd->asic_data);
+	}
+	dd->asic_data = NULL;
+}
+
 void hfi1_free_devdata(struct hfi1_devdata *dd)
 {
 	unsigned long flags;
@@ -988,6 +1004,7 @@ void hfi1_free_devdata(struct hfi1_devdata *dd)
 	spin_lock_irqsave(&hfi1_devs_lock, flags);
 	idr_remove(&hfi1_unit_table, dd->unit);
 	list_del(&dd->list);
+	release_asic_data(dd);
 	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
 	free_platform_config(dd);
 	rcu_barrier(); /* wait for rcu callbacks to complete */
@@ -1049,7 +1066,6 @@ struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra)
 	spin_lock_init(&dd->sc_init_lock);
 	spin_lock_init(&dd->dc8051_lock);
 	spin_lock_init(&dd->dc8051_memlock);
-	mutex_init(&dd->qsfp_i2c_mutex);
 	seqlock_init(&dd->sc2vl_lock);
 	spin_lock_init(&dd->sde_map_lock);
 	spin_lock_init(&dd->pio_map_lock);
@@ -1227,6 +1243,9 @@ static int __init hfi1_mod_init(void)
 	idr_init(&hfi1_unit_table);
 
 	hfi1_dbg_init();
+	ret = hfi1_wss_init();
+	if (ret < 0)
+		goto bail_wss;
 	ret = pci_register_driver(&hfi1_pci_driver);
 	if (ret < 0) {
 		pr_err("Unable to register driver: error %d\n", -ret);
@@ -1235,6 +1254,8 @@ static int __init hfi1_mod_init(void)
 	goto bail; /* all OK */
 
 bail_dev:
+	hfi1_wss_exit();
+bail_wss:
 	hfi1_dbg_exit();
 	idr_destroy(&hfi1_unit_table);
 	dev_cleanup();
@@ -1250,6 +1271,7 @@ module_init(hfi1_mod_init);
 static void __exit hfi1_mod_cleanup(void)
 {
 	pci_unregister_driver(&hfi1_pci_driver);
+	hfi1_wss_exit();
 	hfi1_dbg_exit();
 	hfi1_cpulist_count = 0;
 	kfree(hfi1_cpulist);
@@ -1328,6 +1350,8 @@ static void cleanup_device_data(struct hfi1_devdata *dd)
 	dd->num_send_contexts = 0;
 	kfree(dd->send_contexts);
 	dd->send_contexts = NULL;
+	kfree(dd->hw_to_sw);
+	dd->hw_to_sw = NULL;
 	kfree(dd->boardname);
 	vfree(dd->events);
 	vfree(dd->status);

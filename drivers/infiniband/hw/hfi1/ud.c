@@ -1,11 +1,10 @@
 /*
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
  *
  * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,8 +16,6 @@
  * General Public License for more details.
  *
  * BSD LICENSE
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -348,9 +345,6 @@ int hfi1_make_ud_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 
 	/* header size in 32-bit words LRH+BTH+DETH = (8+12+8)/4. */
 	qp->s_hdrwords = 7;
-	/* pbc */
-	ps->s_txreq->hdr_dwords = qp->s_hdrwords + 2;
-	qp->s_hdrwords = 7;
 	qp->s_cur_size = wqe->length;
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_srate = ah_attr->static_rate;
@@ -436,6 +430,7 @@ int hfi1_make_ud_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 	qp->s_hdr->ahgidx = 0;
 	qp->s_hdr->tx_flags = 0;
 	qp->s_hdr->sde = NULL;
+	/* pbc */
 	ps->s_txreq->hdr_dwords = qp->s_hdrwords + 2;
 	return 1;
 

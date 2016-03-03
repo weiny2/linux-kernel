@@ -1,11 +1,10 @@
 /*
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
  *
  * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,8 +16,6 @@
  * General Public License for more details.
  *
  * BSD LICENSE
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -239,10 +236,11 @@ normal:
 	}
 	qp->s_rdma_ack_cnt++;
 	qp->s_hdrwords = hwords;
-	tx->hdr_dwords = hwords + 2;
 	tx->sde = qp->s_sde;
 	qp->s_cur_size = len;
 	hfi1_make_ruc_header(qp, ohdr, bth0, bth2, middle, ps);
+	/* pbc */
+	tx->hdr_dwords = qp->s_hdrwords + 2;
 	return 1;
 
 bail:
@@ -646,8 +644,6 @@ int hfi1_make_rc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 	}
 	qp->s_len -= len;
 	qp->s_hdrwords = hwords;
-	/* pbc */
-	ps->s_txreq->hdr_dwords = hwords + 2;
 	ps->s_txreq->sde = qp->s_sde;
 	qp->s_cur_sge = ss;
 	qp->s_cur_size = len;
@@ -658,6 +654,8 @@ int hfi1_make_rc_req(struct hfi1_qp *qp, struct hfi1_pkt_state *ps)
 		bth2,
 		middle,
 		ps);
+	/* pbc */
+	ps->s_txreq->hdr_dwords = qp->s_hdrwords + 2;
 	return 1;
 
 done_free_tx:
@@ -763,7 +761,7 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct hfi1_qp *qp,
 		goto queue_ack;
 	}
 
-	trace_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &hdr);
+	trace_ack_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &hdr);
 
 	/* write the pbc and data */
 	ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc, &hdr, hwords);
