@@ -1,11 +1,10 @@
 /*
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
  *
  * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,8 +16,6 @@
  * General Public License for more details.
  *
  * BSD LICENSE
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -640,7 +637,15 @@ DEFINE_EVENT(hfi1_ibhdr_template, input_ibhdr,
 	     TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ib_header *hdr),
 	     TP_ARGS(dd, hdr));
 
-DEFINE_EVENT(hfi1_ibhdr_template, output_ibhdr,
+DEFINE_EVENT(hfi1_ibhdr_template, pio_output_ibhdr,
+	     TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ib_header *hdr),
+	     TP_ARGS(dd, hdr));
+
+DEFINE_EVENT(hfi1_ibhdr_template, ack_output_ibhdr,
+	     TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ib_header *hdr),
+	     TP_ARGS(dd, hdr));
+
+DEFINE_EVENT(hfi1_ibhdr_template, sdma_output_ibhdr,
 	     TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ib_header *hdr),
 	     TP_ARGS(dd, hdr));
 
@@ -1468,6 +1473,7 @@ __hfi1_trace_def(DC8051);
 __hfi1_trace_def(FIRMWARE);
 __hfi1_trace_def(RCVCTRL);
 __hfi1_trace_def(TID);
+__hfi1_trace_def(MMU);
 
 #define hfi1_cdbg(which, fmt, ...) \
 	__hfi1_trace_##which(__func__, fmt, ##__VA_ARGS__)
