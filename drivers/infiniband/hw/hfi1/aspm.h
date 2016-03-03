@@ -1,11 +1,10 @@
 /*
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
  *
  * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,8 +16,6 @@
  * General Public License for more details.
  *
  * BSD LICENSE
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -73,6 +70,13 @@ static inline bool aspm_hw_l1_supported(struct hfi1_devdata *dd)
 	struct pci_dev *parent = dd->pcidev->bus->self;
 	u32 up, dn;
 
+	/*
+	 * If the driver does not have access to the upstream component,
+	 * it cannot support ASPM L1 at all.
+	 */
+	if (!parent)
+		return false;
+
 	pcie_capability_read_dword(dd->pcidev, PCI_EXP_LNKCAP, &dn);
 	dn = ((dn & PCI_EXP_LNKCAP_ASPMS) >> 10) & 0x2;
 
@@ -99,6 +103,13 @@ static inline void aspm_hw_enable_l1(struct hfi1_devdata *dd)
 {
 	struct pci_dev *parent = dd->pcidev->bus->self;
 
+	/*
+	 * If the driver does not have access to the upstream component,
+	 * it cannot support ASPM L1 at all.
+	 */
+	if (!parent)
+		return;
+
 	/* Enable ASPM L1 first in upstream component and then downstream */
 	pcie_capability_clear_and_set_word(parent, PCI_EXP_LNKCTL,
 					   PCI_EXP_LNKCTL_ASPMC,
@@ -115,8 +126,9 @@ static inline void aspm_hw_disable_l1(struct hfi1_devdata *dd)
 	/* Disable ASPM L1 first in downstream component and then upstream */
 	pcie_capability_clear_and_set_word(dd->pcidev, PCI_EXP_LNKCTL,
 					   PCI_EXP_LNKCTL_ASPMC, 0x0);
-	pcie_capability_clear_and_set_word(parent, PCI_EXP_LNKCTL,
-					   PCI_EXP_LNKCTL_ASPMC, 0x0);
+	if (parent)
+		pcie_capability_clear_and_set_word(parent, PCI_EXP_LNKCTL,
+						   PCI_EXP_LNKCTL_ASPMC, 0x0);
 }
 
 static inline void aspm_enable(struct hfi1_devdata *dd)
