@@ -2012,4 +2012,67 @@ static inline bool hfi1_check_permissive(struct ib_ah_attr *ah_attr)
 	}
 	return ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE);
 }
+
+#define IS_EXT_LID(x) (ib_is_opa_gid(x) && \
+			(opa_get_lid_from_gid(x) >=\
+			be16_to_cpu(IB_MULTICAST_LID_BASE)))
+
+/* Check if current wqe needs 16B*/
+static inline bool hfi1_use_16b(struct rvt_qp *qp)
+{
+	struct rvt_swqe *wqe = qp->s_wqe;
+	struct ib_ah_attr *ah_attr;
+	union ib_gid sgid;
+	union ib_gid *dgid;
+
+	/* TODO: This should be done just once when the RC/UD QP
+	 * is created.
+	 */ 
+	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
+	    (qp->ibqp.qp_type == IB_QPT_UC)) {
+		if (ib_query_gid(qp->ibqp.device, qp->port_num,
+				 qp->remote_ah_attr.grh.sgid_index,
+				 &sgid, NULL))
+			return false;
+		dgid = &qp->remote_ah_attr.grh.dgid;
+		return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
+	}
+
+	if (!wqe)
+		return false;
+
+	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
+	if (ib_query_gid(qp->ibqp.device, qp->port_num,
+			 ah_attr->grh.sgid_index, &sgid, NULL))
+		return false;
+	dgid = &ah_attr->grh.dgid;
+	return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
+}
+
+static inline void hfi1_make_ext_grh(struct hfi1_packet *packet,
+				     struct ib_grh *grh, u32 slid,
+				     u32 dlid)
+{
+	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+
+	if (!ibp)
+		return;
+
+	grh->hop_limit = 1;
+	grh->sgid.global.subnet_prefix = ibp->rvp.gid_prefix;
+	grh->sgid.global.interface_id = OPA_MAKE_GID(slid);
+
+	/* This is called in the recv codepath where the dlid will
+	 * will be the local lid of the node. If this is a DR packet
+	 * in which case dlid is permissive, set the default
+	 * gid in the GRH
+	 */
+	grh->dgid.global.subnet_prefix = ibp->rvp.gid_prefix;
+	if ((dlid == HFI1_16B_PERMISSIVE_LID) ||
+	    (dlid == be16_to_cpu(IB_LID_PERMISSIVE)))
+		grh->dgid.global.interface_id = cpu_to_be64(ppd->guid);
+	else
+		grh->dgid.global.interface_id = OPA_MAKE_GID(dlid);
+}
 #endif                          /* _HFI1_KERNEL_H */
