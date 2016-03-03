@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2015, 2016 Intel Corporation.
+ * Copyright(c) 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
@@ -44,64 +44,30 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef _HFI1_AFFINITY_H
-#define _HFI1_AFFINITY_H
+#ifndef _HFI1_MMU_RB_H
+#define _HFI1_MMU_RB_H
 
 #include "hfi.h"
 
-enum irq_type {
-	IRQ_SDMA,
-	IRQ_RCVCTXT,
-	IRQ_GENERAL,
-	IRQ_OTHER
+struct mmu_rb_node {
+	unsigned long addr;
+	unsigned long len;
+	unsigned long __last;
+	struct rb_node node;
 };
 
-/* Can be used for both memory and cpu */
-enum affinity_flags {
-	AFF_AUTO,
-	AFF_NUMA_LOCAL,
-	AFF_DEV_LOCAL,
-	AFF_IRQ_LOCAL
+struct mmu_rb_ops {
+	bool (*filter)(struct mmu_rb_node *, unsigned long, unsigned long);
+	int (*insert)(struct rb_root *, struct mmu_rb_node *);
+	void (*remove)(struct rb_root *, struct mmu_rb_node *, bool);
+	int (*invalidate)(struct rb_root *, struct mmu_rb_node *);
 };
 
-enum ctxt_mem_type {
-	MEM_RCVHDRQ,           /* bit 0 - rcv header queue */
-	MEM_EAGERBUF,          /* bit 1 - rcv eager buffers */
-	MEM_RCVHDRTAIL,        /* bit 2 - rcv header queue tail update */
-	MEM_CREDIT_RET,        /* bit 3 - pio credit return */
-	MEM_SUBCTXT_UREGS,     /* bit 4 - */
-	MEM_SUBCTXT_HDRQ,      /* bit 5 - */
-	MEM_SUBCTXT_EAGERBUF,  /* bit 6 - */
-	MEM_SDMA_COMPL,        /* bit 7 - PSM SDMA completion ring */
-	MEM_SDMA_DESCQ,        /* bit 8 - SDMA descriptor queue */
-};
+int hfi1_mmu_rb_register(struct rb_root *root, struct mmu_rb_ops *ops);
+void hfi1_mmu_rb_unregister(struct rb_root *);
+int hfi1_mmu_rb_insert(struct rb_root *, struct mmu_rb_node *);
+void hfi1_mmu_rb_remove(struct rb_root *, struct mmu_rb_node *);
+struct mmu_rb_node *hfi1_mmu_rb_search(struct rb_root *, unsigned long,
+				       unsigned long);
 
-extern uint mem_affinity;
-#define MEM_AFF_DEV_NUMA(type) (!!(mem_affinity & (1 << MEM_##type)))
-#define MEM_AFF_PROC_NUMA(type) (!!(mem_affinity & (1 << MEM_##type)))
-
-struct hfi1_msix_entry;
-
-/* Initialize driver affinity data */
-int hfi1_dev_affinity_init(struct hfi1_devdata *);
-/* Free driver affinity data */
-void hfi1_dev_affinity_free(struct hfi1_devdata *);
-/*
- * Set IRQ affinity to a CPU. The function will determine the
- * CPU and set the affinity to it.
- */
-int hfi1_get_irq_affinity(struct hfi1_devdata *, struct hfi1_msix_entry *);
-/*
- * Remove the IRQ's CPU affinity. This function also updates
- * any internal CPU tracking data
- */
-void hfi1_put_irq_affinity(struct hfi1_devdata *, struct hfi1_msix_entry *);
-/*
- * Determine a CPU affinity for a user process, if the process does not
- * have an affinity set yet.
- */
-int hfi1_get_proc_affinity(struct hfi1_devdata *, int);
-/* Release a CPU used by a user process. */
-void hfi1_put_proc_affinity(struct hfi1_devdata *, int);
-
-#endif /* _HFI1_AFFINITY_H */
+#endif /* _HFI1_MMU_RB_H */
