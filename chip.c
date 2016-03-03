@@ -1,11 +1,10 @@
 /*
+ * Copyright(c) 2015, 2016 Intel Corporation.
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  * redistributing this file, you may do so under either license.
  *
  * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -17,8 +16,6 @@
  * General Public License for more details.
  *
  * BSD LICENSE
- *
- * Copyright(c) 2015 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -966,7 +963,8 @@ static struct flag_table dc8051_info_err_flags[] = {
 	FLAG_ENTRY0("Failed LNI(OptEq)",       FAILED_LNI_OPTEQ),
 	FLAG_ENTRY0("Failed LNI(VerifyCap_1)", FAILED_LNI_VERIFY_CAP1),
 	FLAG_ENTRY0("Failed LNI(VerifyCap_2)", FAILED_LNI_VERIFY_CAP2),
-	FLAG_ENTRY0("Failed LNI(ConfigLT)",    FAILED_LNI_CONFIGLT)
+	FLAG_ENTRY0("Failed LNI(ConfigLT)",    FAILED_LNI_CONFIGLT),
+	FLAG_ENTRY0("Host Handshake Timeout",  HOST_HANDSHAKE_TIMEOUT)
 };
 
 /*
@@ -6280,8 +6278,8 @@ void handle_8051_request(struct work_struct *work)
 				}
 			}
 		}
-		qsfp_write(ppd, ppd->dd->hfi1_id, QSFP_CDR_CTRL_BYTE_OFFS,
-			   &cdr_ctrl_byte, 1);
+		one_qsfp_write(ppd, dd->hfi1_id, QSFP_CDR_CTRL_BYTE_OFFS,
+			       &cdr_ctrl_byte, 1);
 		hreq_response(dd, HREQ_SUCCESS, data);
 		refresh_qsfp_cache(ppd, &ppd->qsfp_info);
 		break;
@@ -9306,8 +9304,8 @@ void qsfp_event(struct work_struct *work)
 	if (qd->check_interrupt_flags) {
 		u8 qsfp_interrupt_status[16] = {0,};
 
-		if (qsfp_read(ppd, dd->hfi1_id, 6,
-			      &qsfp_interrupt_status[0], 16) != 16) {
+		if (one_qsfp_read(ppd, dd->hfi1_id, 6,
+				  &qsfp_interrupt_status[0], 16) != 16) {
 			dd_dev_info(dd,
 				    "%s: Failed to read status of QSFP module\n",
 				    __func__);
@@ -9863,7 +9861,17 @@ static int goto_offline(struct hfi1_pportdata *ppd, u8 rem_reason)
 	if (ppd->port_type == PORT_TYPE_QSFP &&
 	    ppd->qsfp_info.limiting_active &&
 	    qsfp_mod_present(ppd)) {
-		set_qsfp_tx(ppd, 0);
+		int ret;
+
+		ret = acquire_chip_resource(dd, qsfp_resource(dd), QSFP_WAIT);
+		if (ret == 0) {
+			set_qsfp_tx(ppd, 0);
+			release_chip_resource(dd, qsfp_resource(dd));
+		} else {
+			/* not fatal, but should warn */
+			dd_dev_err(dd,
+				   "Unable to acquire lock to turn off QSFP TX\n");
+		}
 	}
 
 	/*
@@ -12964,91 +12972,6 @@ static void reset_cce_csrs(struct hfi1_devdata *dd)
 		write_csr(dd, CCE_INT_COUNTER_ARRAY32 + (8 * i), 0);
 }
 
-/* set ASIC CSRs to chip reset defaults */
-static void reset_asic_csrs(struct hfi1_devdata *dd)
-{
-	int i;
-
-	/*
-	 * If the HFIs are shared between separate nodes or VMs,
-	 * then more will need to be done here.  One idea is a module
-	 * parameter that returns early, letting the first power-on or
-	 * a known first load do the reset and blocking all others.
-	 */
-
-	if (!(dd->flags & HFI1_DO_INIT_ASIC))
-		return;
-
-	if (dd->icode != ICODE_FPGA_EMULATION) {
-		/* emulation does not have an SBus - leave these alone */
-		/*
-		 * All writes to ASIC_CFG_SBUS_REQUEST do something.
-		 * Notes:
-		 * o The reset is not zero if aimed at the core.  See the
-		 *   SBus documentation for details.
-		 * o If the SBus firmware has been updated (e.g. by the BIOS),
-		 *   will the reset revert that?
-		 */
-		/* ASIC_CFG_SBUS_REQUEST leave alone */
-		write_csr(dd, ASIC_CFG_SBUS_EXECUTE, 0);
-	}
-	/* ASIC_SBUS_RESULT read-only */
-	write_csr(dd, ASIC_STS_SBUS_COUNTERS, 0);
-	for (i = 0; i < ASIC_NUM_SCRATCH; i++)
-		write_csr(dd, ASIC_CFG_SCRATCH + (8 * i), 0);
-	write_csr(dd, ASIC_CFG_MUTEX, 0);	/* this will clear it */
-
-	/* We might want to retain this state across FLR if we ever use it */
-	write_csr(dd, ASIC_CFG_DRV_STR, 0);
-
-	/* ASIC_CFG_THERM_POLL_EN leave alone */
-	/* ASIC_STS_THERM read-only */
-	/* ASIC_CFG_RESET leave alone */
-
-	write_csr(dd, ASIC_PCIE_SD_HOST_CMD, 0);
-	/* ASIC_PCIE_SD_HOST_STATUS read-only */
-	write_csr(dd, ASIC_PCIE_SD_INTRPT_DATA_CODE, 0);
-	write_csr(dd, ASIC_PCIE_SD_INTRPT_ENABLE, 0);
-	/* ASIC_PCIE_SD_INTRPT_PROGRESS read-only */
-	write_csr(dd, ASIC_PCIE_SD_INTRPT_STATUS, ~0ull); /* clear */
-	/* ASIC_HFI0_PCIE_SD_INTRPT_RSPD_DATA read-only */
-	/* ASIC_HFI1_PCIE_SD_INTRPT_RSPD_DATA read-only */
-	for (i = 0; i < 16; i++)
-		write_csr(dd, ASIC_PCIE_SD_INTRPT_LIST + (8 * i), 0);
-
-	/* ASIC_GPIO_IN read-only */
-	write_csr(dd, ASIC_GPIO_OE, 0);
-	write_csr(dd, ASIC_GPIO_INVERT, 0);
-	write_csr(dd, ASIC_GPIO_OUT, 0);
-	write_csr(dd, ASIC_GPIO_MASK, 0);
-	/* ASIC_GPIO_STATUS read-only */
-	write_csr(dd, ASIC_GPIO_CLEAR, ~0ull);
-	/* ASIC_GPIO_FORCE leave alone */
-
-	/* ASIC_QSFP1_IN read-only */
-	write_csr(dd, ASIC_QSFP1_OE, 0);
-	write_csr(dd, ASIC_QSFP1_INVERT, 0);
-	write_csr(dd, ASIC_QSFP1_OUT, 0);
-	write_csr(dd, ASIC_QSFP1_MASK, 0);
-	/* ASIC_QSFP1_STATUS read-only */
-	write_csr(dd, ASIC_QSFP1_CLEAR, ~0ull);
-	/* ASIC_QSFP1_FORCE leave alone */
-
-	/* ASIC_QSFP2_IN read-only */
-	write_csr(dd, ASIC_QSFP2_OE, 0);
-	write_csr(dd, ASIC_QSFP2_INVERT, 0);
-	write_csr(dd, ASIC_QSFP2_OUT, 0);
-	write_csr(dd, ASIC_QSFP2_MASK, 0);
-	/* ASIC_QSFP2_STATUS read-only */
-	write_csr(dd, ASIC_QSFP2_CLEAR, ~0ull);
-	/* ASIC_QSFP2_FORCE leave alone */
-
-	write_csr(dd, ASIC_EEP_CTL_STAT, ASIC_EEP_CTL_STAT_RESETCSR);
-	/* this also writes a NOP command, clearing paging mode */
-	write_csr(dd, ASIC_EEP_ADDR_CMD, 0);
-	write_csr(dd, ASIC_EEP_DATA, 0);
-}
-
 /* set MISC CSRs to chip reset defaults */
 static void reset_misc_csrs(struct hfi1_devdata *dd)
 {
@@ -13458,14 +13381,11 @@ static void init_chip(struct hfi1_devdata *dd)
 			hfi1_pcie_flr(dd);
 			restore_pci_variables(dd);
 		}
-
-		reset_asic_csrs(dd);
 	} else {
 		dd_dev_info(dd, "Resetting CSRs with writes\n");
 		reset_cce_csrs(dd);
 		reset_txe_csrs(dd);
 		reset_rxe_csrs(dd);
-		reset_asic_csrs(dd);
 		reset_misc_csrs(dd);
 	}
 	/* clear the DC reset */
@@ -13486,6 +13406,7 @@ static void init_chip(struct hfi1_devdata *dd)
 	 */
 	write_csr(dd, ASIC_QSFP1_OUT, 0x1f);
 	write_csr(dd, ASIC_QSFP2_OUT, 0x1f);
+	init_chip_resources(dd);
 }
 
 static void init_early_variables(struct hfi1_devdata *dd)
@@ -13916,21 +13837,22 @@ void hfi1_start_cleanup(struct hfi1_devdata *dd)
 	free_cntrs(dd);
 	free_rcverr(dd);
 	clean_up_interrupts(dd);
+	finish_chip_resources(dd);
 }
 
 #define HFI_BASE_GUID(dev) \
 	((dev)->base_guid & ~(1ULL << GUID_HFI_INDEX_SHIFT))
 
 /*
- * Certain chip functions need to be initialized only once per asic
- * instead of per-device. This function finds the peer device and
- * checks whether that chip initialization needs to be done by this
- * device.
+ * Information can be shared between the two HFIs on the same ASIC
+ * in the same OS.  This function finds the peer device and sets
+ * up a shared structure.
  */
-static void asic_should_init(struct hfi1_devdata *dd)
+static int init_asic_data(struct hfi1_devdata *dd)
 {
 	unsigned long flags;
 	struct hfi1_devdata *tmp, *peer = NULL;
+	int ret = 0;
 
 	spin_lock_irqsave(&hfi1_devs_lock, flags);
 	/* Find our peer device */
@@ -13942,13 +13864,21 @@ static void asic_should_init(struct hfi1_devdata *dd)
 		}
 	}
 
-	/*
-	 * "Claim" the ASIC for initialization if it hasn't been
-	 " "claimed" yet.
-	 */
-	if (!peer || !(peer->flags & HFI1_DO_INIT_ASIC))
-		dd->flags |= HFI1_DO_INIT_ASIC;
+	if (peer) {
+		dd->asic_data = peer->asic_data;
+	} else {
+		dd->asic_data = kzalloc(sizeof(*dd->asic_data), GFP_KERNEL);
+		if (!dd->asic_data) {
+			ret = -ENOMEM;
+			goto done;
+		}
+		mutex_init(&dd->asic_data->asic_resource_mutex);
+	}
+	dd->asic_data->dds[dd->hfi1_id] = dd; /* self back-pointer */
+
+done:
 	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
+	return ret;
 }
 
 /*
@@ -13977,6 +13907,50 @@ static int obtain_boardname(struct hfi1_devdata *dd)
 	return 0;
 }
 
+/*
+ * Check the interrupt registers to make sure that they are mapped correctly.
+ * It is intended to help user identify any mismapping by VMM when the driver
+ * is running in a VM. This function should only be called before interrupt
+ * is set up properly.
+ *
+ * Return 0 on success, -EINVAL on failure.
+ */
+static int check_int_registers(struct hfi1_devdata *dd)
+{
+	u64 reg;
+	u64 all_bits = ~(u64)0;
+	u64 mask;
+
+	/* Clear CceIntMask[0] to avoid raising any interrupts */
+	mask = read_csr(dd, CCE_INT_MASK);
+	write_csr(dd, CCE_INT_MASK, 0ull);
+	reg = read_csr(dd, CCE_INT_MASK);
+	if (reg)
+		goto err_exit;
+
+	/* Clear all interrupt status bits */
+	write_csr(dd, CCE_INT_CLEAR, all_bits);
+	reg = read_csr(dd, CCE_INT_STATUS);
+	if (reg)
+		goto err_exit;
+
+	/* Set all interrupt status bits */
+	write_csr(dd, CCE_INT_FORCE, all_bits);
+	reg = read_csr(dd, CCE_INT_STATUS);
+	if (reg != all_bits)
+		goto err_exit;
+
+	/* Restore the interrupt mask */
+	write_csr(dd, CCE_INT_CLEAR, all_bits);
+	write_csr(dd, CCE_INT_MASK, mask);
+
+	return 0;
+err_exit:
+	write_csr(dd, CCE_INT_MASK, mask);
+	dd_dev_err(dd, "Interrupt registers not properly mapped by VMM\n");
+	return -EINVAL;
+}
+
 /**
  * Allocate and initialize the device structure for the hfi.
  * @dev: the pci_dev for hfi1_ib device
@@ -14001,6 +13975,7 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		"RTL FPGA emulation",
 		"Functional simulator"
 	};
+	struct pci_dev *parent = pdev->bus->self;
 
 	dd = hfi1_alloc_devdata(pdev, NUM_IB_PORTS *
 				sizeof(struct hfi1_pportdata));
@@ -14079,6 +14054,17 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	dd->minrev = (dd->revision >> CCE_REVISION_CHIP_REV_MINOR_SHIFT)
 			& CCE_REVISION_CHIP_REV_MINOR_MASK;
 
+	/*
+	 * Check interrupt registers mapping if the driver has no access to
+	 * the upstream component. In this case, it is likely that the driver
+	 * is running in a VM.
+	 */
+	if (!parent) {
+		ret = check_int_registers(dd);
+		if (ret)
+			goto bail_cleanup;
+	}
+
 	/* obtain the hardware ID - NOT related to unit, which is a
 	 * software enumeration
 	 */
@@ -14143,8 +14129,10 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	/* needs to be done before we look for the peer device */
 	read_guid(dd);
 
-	/* should this device init the ASIC block? */
-	asic_should_init(dd);
+	/* set up shared ASIC data with peer device */
+	ret = init_asic_data(dd);
+	if (ret)
+		goto bail_cleanup;
 
 	/* obtain chip sizes, reset chip CSRs */
 	init_chip(dd);
@@ -14364,10 +14352,15 @@ static int thermal_init(struct hfi1_devdata *dd)
 	int ret = 0;
 
 	if (dd->icode != ICODE_RTL_SILICON ||
-	    !(dd->flags & HFI1_DO_INIT_ASIC))
+	    check_chip_resource(dd, CR_THERM_INIT, NULL))
 		return ret;
 
-	acquire_hw_mutex(dd);
+	ret = acquire_chip_resource(dd, CR_SBUS, SBUS_TIMEOUT);
+	if (ret) {
+		THERM_FAILURE(dd, ret, "Acquire SBus");
+		return ret;
+	}
+
 	dd_dev_info(dd, "Initializing thermal sensor\n");
 	/* Disable polling of thermal readings */
 	write_csr(dd, ASIC_CFG_THERM_POLL_EN, 0x0);
@@ -14414,8 +14407,14 @@ static int thermal_init(struct hfi1_devdata *dd)
 
 	/* Enable polling of thermal readings */
 	write_csr(dd, ASIC_CFG_THERM_POLL_EN, 0x1);
+
+	/* Set initialized flag */
+	ret = acquire_chip_resource(dd, CR_THERM_INIT, 0);
+	if (ret)
+		THERM_FAILURE(dd, ret, "Unable to set thermal init flag");
+
 done:
-	release_hw_mutex(dd);
+	release_chip_resource(dd, CR_SBUS);
 	return ret;
 }
 
