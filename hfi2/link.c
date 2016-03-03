@@ -500,15 +500,9 @@ static void handle_link_down(struct work_struct *work)
 #if 0 /* WFR legacy */
 	u8 lcl_reason, neigh_reason = 0;
 #endif
-	int ret;
 
-	if (read_physical_state(ppd) == PLS_OFFLINE_READY_TO_QUIET_LT) {
-		ret = set_physical_link_state(ppd, PLS_OFFLINE_QUIET);
-		ret = ret != HCMD_SUCCESS ? -EINVAL : 0;
-		if (ret)
-			ppd_dev_err(ppd, "%s(): can't set physical port state to 0x%x",
-				__func__, PLS_OFFLINE_QUIET);
-	}
+	/* Go offline first, then deal with reading/writing through 8051 */
+	hfi_set_link_state(ppd, HLS_DN_OFFLINE);
 
 #if 0 /* WFR legacy */
 	lcl_reason = 0;
@@ -533,8 +527,8 @@ static void handle_link_down(struct work_struct *work)
 	if (!qsfp_mod_present(ppd))
 		dc_shutdown(ppd->dd);
 	else
-		start_link(ppd);
 #endif
+		hfi_start_link(ppd);
 }
 
 static void set_logical_state(struct hfi_pportdata *ppd, u32 chip_lstate)
@@ -1768,8 +1762,18 @@ static irqreturn_t irq_mnh_handler(int irq, void *dev_id)
 			queue_work(ppd->hfi_wq, &ppd->link_vc_work);
 		if (reg & LINKUP_ACHIEVED)
 			queue_work(ppd->hfi_wq, &ppd->link_up_work);
-		if (reg & LINK_GOING_DOWN)
-			queue_work(ppd->hfi_wq, &ppd->link_down_work);
+		if (reg & LINK_GOING_DOWN) {
+			/*
+			 * if the link is already going down or disabled, do not
+			 * queue another
+			 */
+			if (ppd->host_link_state & (HLS_GOING_OFFLINE |
+				HLS_LINK_COOLDOWN | HLS_DN_OFFLINE)) {
+				ppd_dev_info(ppd, "%s() %d: not queuing link down: 0x%x\n",
+					__func__, __LINE__, ppd->host_link_state);
+			} else
+				queue_work(ppd->hfi_wq, &ppd->link_down_work);
+		}
 		if (reg & BC_SMA_MSG)
 			queue_work(ppd->hfi_wq, &ppd->sma_message_work);
 		/* TODO: take care other interrupts */
