@@ -68,7 +68,10 @@
 
 #define WAIT_TILL_8051_LINKUP 1000
 
+/* TODO: delete all module parameters when possible */
 bool quick_linkup; /* skip VerifyCap and Config* state. */
+module_param(quick_linkup, bool, S_IRUGO);
+MODULE_PARM_DESC(quick_linkup, "quick linkup, i.e. skip Verifycap and goes to Init");
 
 static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup);
 static u32 read_physical_state(const struct hfi_pportdata *ppd);
