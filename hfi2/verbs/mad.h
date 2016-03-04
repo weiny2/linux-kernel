@@ -58,8 +58,8 @@
 #include <rdma/ib_addr.h>
 #include <rdma/ib_mad.h>
 #include <rdma/ib_pma.h>
-#include <rdma/opa_port_info.h>
-#include <rdma/opa_core_ib.h>
+#include "opa_port_info.h"
+#include "opa_core_ib.h"
 
 #define MKEY_SHIFT		6
 

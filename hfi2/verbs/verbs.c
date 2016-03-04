@@ -60,7 +60,7 @@
 #include <linux/pci.h>
 #include <linux/version.h>
 #include <linux/delay.h>
-#include <rdma/opa_core_ib.h>
+#include "opa_core_ib.h"
 #include "mad.h"
 #include "verbs.h"
 #include "packet.h"
