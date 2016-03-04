@@ -64,19 +64,23 @@
 #include <linux/uaccess.h>
 #include <linux/module.h>
 #include <rdma/ib_smi.h>
-#include "verbs.h"
-#include "device.h"
-#include "trace.h"
+#include "opa_hfi.h"
+#include "verbs/verbs.h"
+#include "verbs/packet.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
+#if 0
 #define snoop_dbg(fmt, ...) \
 	hfi1_cdbg(SNOOP, fmt, ##__VA_ARGS__)
+#else
+#define snoop_dbg(fmt, ...) \
+	pr_debug(fmt, ##__VA_ARGS__)
+#endif
 
 /* Snoop option mask */
 #define SNOOP_DROP_SEND		BIT(0)
 #define SNOOP_USE_METADATA	BIT(1)
-#define SNOOP_SET_VL0TOVL15     BIT(2)
 
 static u8 snoop_flags;
 
@@ -92,16 +96,27 @@ enum hfi1_filter_status {
 	HFI1_FILTER_MISS
 };
 
+static void snoop_invalid_handler(struct hfi2_ib_packet *packet)
+{
+	struct hfi2_ibdev *ibd = packet->ibp->ibd;
+
+	/* take no action except call normal handler (if any) */
+	if (ibd->rhf_rcv_functions[packet->etype])
+		ibd->rhf_rcv_functions[packet->etype](packet);
+}
+
+static void snoop_recv_handler(struct hfi2_ib_packet *packet);
+
 /* snoop processing functions */
-rhf_rcv_function_ptr snoop_rhf_rcv_functions[8] = {
+rhf_rcv_function_ptr snoop_rhf_rcv_functions[HFI2_RHF_RCV_TYPES] = {
 	[RHF_RCV_TYPE_EXPECTED] = snoop_recv_handler,
 	[RHF_RCV_TYPE_EAGER]    = snoop_recv_handler,
 	[RHF_RCV_TYPE_IB]       = snoop_recv_handler,
 	[RHF_RCV_TYPE_ERROR]    = snoop_recv_handler,
 	[RHF_RCV_TYPE_BYPASS]   = snoop_recv_handler,
-	[RHF_RCV_TYPE_INVALID5] = process_receive_invalid,
-	[RHF_RCV_TYPE_INVALID6] = process_receive_invalid,
-	[RHF_RCV_TYPE_INVALID7] = process_receive_invalid
+	[RHF_RCV_TYPE_INVALID5] = snoop_invalid_handler,
+	[RHF_RCV_TYPE_INVALID6] = snoop_invalid_handler,
+	[RHF_RCV_TYPE_INVALID7] = snoop_invalid_handler
 };
 
 /* Snoop packet structure */
@@ -227,50 +242,47 @@ static void drain_snoop_list(struct list_head *queue)
 	}
 }
 
-void hfi1_snoop_remove(struct hfi1_devdata *dd)
+void hfi_snoop_remove(struct hfi_devdata *dd)
 {
 	unsigned long flags = 0;
 
 	spin_lock_irqsave(&dd->hfi1_snoop.snoop_lock, flags);
 	drain_snoop_list(&dd->hfi1_snoop.queue);
-	hfi1_cdev_cleanup(&dd->hfi1_snoop.cdev, &dd->hfi1_snoop.class_dev);
+	misc_deregister(&dd->hfi1_snoop.miscdev);
 	spin_unlock_irqrestore(&dd->hfi1_snoop.snoop_lock, flags);
 }
 
-int hfi1_snoop_add(struct hfi1_devdata *dd)
+int hfi_snoop_add(struct hfi_devdata *dd)
 {
 	char name[16];
 	int ret = 0;
+	struct miscdevice *mdev;
 
-	snprintf(name, sizeof(name), "%s_diagpkt%d", class_name(),
+#if 1
+	/* TODO - delete when opapacketcapture -d option is fixed */
+	snprintf(name, sizeof(name), "%s_diagpkt%d", "hfi1",
 		 dd->unit);
+#else
+	snprintf(name, sizeof(name), "%s_diagpkt%d", hfi_class_name(),
+		 dd->unit);
+#endif
 
 	dd->hfi1_snoop.mode_flag = 0;
 	spin_lock_init(&dd->hfi1_snoop.snoop_lock);
 	INIT_LIST_HEAD(&dd->hfi1_snoop.queue);
 	init_waitqueue_head(&dd->hfi1_snoop.waitq);
 
-	ret = hfi1_cdev_init(HFI1_SNOOP_CAPTURE_BASE + dd->unit, name,
-			     &snoop_file_ops,
-			     &dd->hfi1_snoop.cdev, &dd->hfi1_snoop.class_dev);
+	mdev = &dd->hfi1_snoop.miscdev;
+	mdev->minor = MISC_DYNAMIC_MINOR;
+	mdev->name = name,
+	mdev->fops = &snoop_file_ops,
+	mdev->parent = &dd->pcidev->dev;
 
-	if (ret) {
-		dd_dev_err(dd, "Couldn't create %s device: %d", name, ret);
-		hfi1_cdev_cleanup(&dd->hfi1_snoop.cdev,
-				  &dd->hfi1_snoop.class_dev);
-		dd_dev_err(dd, "Unable to init snoop/capture device");
-	}
+	ret = misc_register(mdev);
+	if (ret)
+		dd_dev_err(dd, "Unable to create snoop/capture device: %d", ret);
 
 	return ret;
-}
-
-static struct hfi1_devdata *hfi1_dd_from_sc_inode(struct inode *in)
-{
-	int unit = iminor(in) - HFI1_SNOOP_CAPTURE_BASE;
-	struct hfi1_devdata *dd = NULL;
-
-	dd = hfi1_lookup(unit);
-	return dd;
 }
 
 static int hfi1_snoop_open(struct inode *in, struct file *fp)
@@ -278,16 +290,9 @@ static int hfi1_snoop_open(struct inode *in, struct file *fp)
 	int ret;
 	int mode_flag = 0;
 	unsigned long flags = 0;
-	struct hfi1_devdata *dd;
 	struct list_head *queue;
-
-	mutex_lock(&hfi1_mutex);
-
-	dd = hfi1_dd_from_sc_inode(in);
-	if (!dd) {
-		ret = -ENODEV;
-		goto bail;
-	}
+	struct hfi_devdata *dd = container_of(fp->private_data,
+					      struct hfi_devdata, hfi1_snoop);
 
 	/*
 	 * File mode determines snoop or capture. Some existing user
@@ -307,7 +312,6 @@ static int hfi1_snoop_open(struct inode *in, struct file *fp)
 		ret =  -EINVAL;
 		goto bail;
 	}
-	queue = &dd->hfi1_snoop.queue;
 
 	/*
 	 * We are not supporting snoop and capture at the same time.
@@ -320,6 +324,7 @@ static int hfi1_snoop_open(struct inode *in, struct file *fp)
 	}
 
 	dd->hfi1_snoop.mode_flag = mode_flag;
+	queue = &dd->hfi1_snoop.queue;
 	drain_snoop_list(queue);
 
 	dd->hfi1_snoop.filter_callback = NULL;
@@ -333,29 +338,26 @@ static int hfi1_snoop_open(struct inode *in, struct file *fp)
 	 * allocated and get stuck on the snoop_lock before getting added to the
 	 * queue. Same goes for send.
 	 */
-	dd->rhf_rcv_function_map = snoop_rhf_rcv_functions;
+	dd->ibd->rhf_rcv_function_map = snoop_rhf_rcv_functions;
+#if 0
 	dd->process_pio_send = snoop_send_pio_handler;
 	dd->process_dma_send = snoop_send_pio_handler;
 	dd->pio_inline_send = snoop_inline_pio_send;
+#endif
 
 	spin_unlock_irqrestore(&dd->hfi1_snoop.snoop_lock, flags);
 	ret = 0;
+	fp->private_data = dd;
 
 bail:
-	mutex_unlock(&hfi1_mutex);
-
 	return ret;
 }
 
 static int hfi1_snoop_release(struct inode *in, struct file *fp)
 {
 	unsigned long flags = 0;
-	struct hfi1_devdata *dd;
+	struct hfi_devdata *dd = fp->private_data;
 	int mode_flag;
-
-	dd = hfi1_dd_from_sc_inode(in);
-	if (!dd)
-		return -ENODEV;
 
 	spin_lock_irqsave(&dd->hfi1_snoop.snoop_lock, flags);
 
@@ -372,9 +374,9 @@ static int hfi1_snoop_release(struct inode *in, struct file *fp)
 
 	/*
 	 * User is done snooping and capturing, return control to the normal
-	 * handler. Re-enable SDMA handling.
+	 * handler.
 	 */
-	dd->rhf_rcv_function_map = dd->normal_rhf_rcv_functions;
+	dd->ibd->rhf_rcv_function_map = dd->ibd->rhf_rcv_functions;
 
 	spin_unlock_irqrestore(&dd->hfi1_snoop.snoop_lock, flags);
 	snoop_dbg("snoop/capture device released");
@@ -387,11 +389,7 @@ static unsigned int hfi1_snoop_poll(struct file *fp,
 {
 	int ret = 0;
 	unsigned long flags = 0;
-	struct hfi1_devdata *dd;
-
-	dd = hfi1_dd_from_sc_inode(fp->f_inode);
-	if (!dd)
-		return -ENODEV;
+	struct hfi_devdata *dd = fp->private_data;
 
 	spin_lock_irqsave(&dd->hfi1_snoop.snoop_lock, flags);
 
@@ -409,11 +407,7 @@ static ssize_t hfi1_snoop_read(struct file *fp, char __user *data,
 	ssize_t ret = 0;
 	unsigned long flags = 0;
 	struct snoop_packet *packet = NULL;
-	struct hfi1_devdata *dd;
-
-	dd = hfi1_dd_from_sc_inode(fp->f_inode);
-	if (!dd)
-		return -ENODEV;
+	struct hfi_devdata *dd = fp->private_data;
 
 	spin_lock_irqsave(&dd->hfi1_snoop.snoop_lock, flags);
 
@@ -456,24 +450,15 @@ static ssize_t hfi1_snoop_read(struct file *fp, char __user *data,
 
 static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 {
-	struct hfi1_devdata *dd;
+	struct hfi_devdata *dd = fp->private_data;
 	void *filter_value = NULL;
 	long ret = 0;
 	int value = 0;
-	u8 phys_state = 0;
-	u8 link_state = 0;
-	u16 dev_state = 0;
 	unsigned long flags = 0;
 	unsigned long *argp = NULL;
 	struct hfi1_packet_filter_command filter_cmd = {0};
 	int mode_flag = 0;
-	struct hfi1_pportdata *ppd = NULL;
-	unsigned int index;
 	int read_cmd, write_cmd, read_ok, write_ok;
-
-	dd = hfi1_dd_from_sc_inode(fp->f_inode);
-	if (!dd)
-		return -ENODEV;
 
 	mode_flag = dd->hfi1_snoop.mode_flag;
 	read_cmd = _IOC_DIR(cmd) & _IOC_READ;
@@ -485,18 +470,16 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		ret = -EFAULT;
 	} else if (!capable(CAP_SYS_ADMIN)) {
 		ret = -EPERM;
-	} else if (((mode_flag & HFI1_PORT_CAPTURE_MODE) &&
-		    (cmd != HFI1_SNOOP_IOCCLEARQUEUE) &&
-		    (cmd != HFI1_SNOOP_IOCCLEARFILTER) &&
-		    (cmd != HFI1_SNOOP_IOCSETFILTER)) ||
-		    (cmd == HFI1_SNOOP_IOCSETLINKSTATE)) {
+	} else if ((mode_flag & HFI1_PORT_CAPTURE_MODE) &&
+		   (cmd != HFI1_SNOOP_IOCCLEARQUEUE) &&
+		   (cmd != HFI1_SNOOP_IOCCLEARFILTER) &&
+		   (cmd != HFI1_SNOOP_IOCSETFILTER)) {
 		/*
 		 * Capture devices are allowed only 3 operations
 		 * 1.Clear capture queue
 		 * 2.Clear capture filter
 		 * 3.Set capture filter
 		 * Others are invalid.
-		 * We also do not suppor the old setlink state.
 		 */
 		return -EINVAL;
 	}
@@ -576,22 +559,17 @@ static long hfi1_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			snoop_flags |= SNOOP_DROP_SEND;
 		if (value & SNOOP_USE_METADATA)
 			snoop_flags |= SNOOP_USE_METADATA;
-		if (value & (SNOOP_SET_VL0TOVL15)) {
-			ppd = &dd->pport[0];  /* first port will do */
-			ret = hfi1_assign_snoop_link_credits(ppd, value);
-		}
 		break;
 	default:
 		ret = -ENOTTY;
 		break;
 	}
-done:
 
 	return ret;
 }
 
 static void snoop_list_add_tail(struct snoop_packet *packet,
-				struct hfi1_devdata *dd)
+				struct hfi_devdata *dd)
 {
 	unsigned long flags = 0;
 
@@ -623,7 +601,7 @@ static inline int hfi1_filter_check(void *val, const char *msg)
 
 static int hfi1_filter_lid(void *ibhdr, void *packet_data, void *value)
 {
-	struct hfi1_ib_header *hdr;
+	struct hfi2_ib_header *hdr;
 	int ret;
 
 	ret = hfi1_filter_check(ibhdr, "header");
@@ -632,7 +610,7 @@ static int hfi1_filter_lid(void *ibhdr, void *packet_data, void *value)
 	ret = hfi1_filter_check(value, "user");
 	if (ret)
 		return ret;
-	hdr = (struct hfi1_ib_header *)ibhdr;
+	hdr = (struct hfi2_ib_header *)ibhdr;
 
 	if (*((u16 *)value) == be16_to_cpu(hdr->lrh[3])) /* matches slid */
 		return HFI1_FILTER_HIT; /* matched */
@@ -642,7 +620,7 @@ static int hfi1_filter_lid(void *ibhdr, void *packet_data, void *value)
 
 static int hfi1_filter_dlid(void *ibhdr, void *packet_data, void *value)
 {
-	struct hfi1_ib_header *hdr;
+	struct hfi2_ib_header *hdr;
 	int ret;
 
 	ret = hfi1_filter_check(ibhdr, "header");
@@ -652,7 +630,7 @@ static int hfi1_filter_dlid(void *ibhdr, void *packet_data, void *value)
 	if (ret)
 		return ret;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+	hdr = (struct hfi2_ib_header *)ibhdr;
 
 	if (*((u16 *)value) == be16_to_cpu(hdr->lrh[1]))
 		return HFI1_FILTER_HIT;
@@ -664,8 +642,8 @@ static int hfi1_filter_dlid(void *ibhdr, void *packet_data, void *value)
 static int hfi1_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 				      void *value)
 {
-	struct hfi1_ib_header *hdr;
-	struct hfi1_other_headers *ohdr = NULL;
+	struct hfi2_ib_header *hdr;
+	struct ib_l4_headers *ohdr = NULL;
 	struct ib_smp *smp = NULL;
 	u32 qpn = 0;
 	int ret;
@@ -680,7 +658,7 @@ static int hfi1_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 	if (ret)
 		return ret;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+	hdr = (struct hfi2_ib_header *)ibhdr;
 
 	/* Check for GRH */
 	if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
@@ -701,8 +679,8 @@ static int hfi1_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 
 static int hfi1_filter_qp_number(void *ibhdr, void *packet_data, void *value)
 {
-	struct hfi1_ib_header *hdr;
-	struct hfi1_other_headers *ohdr = NULL;
+	struct hfi2_ib_header *hdr;
+	struct ib_l4_headers *ohdr = NULL;
 	int ret;
 
 	ret = hfi1_filter_check(ibhdr, "header");
@@ -712,7 +690,7 @@ static int hfi1_filter_qp_number(void *ibhdr, void *packet_data, void *value)
 	if (ret)
 		return ret;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+	hdr = (struct hfi2_ib_header *)ibhdr;
 
 	/* Check for GRH */
 	if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
@@ -730,8 +708,8 @@ static int hfi1_filter_ibpacket_type(void *ibhdr, void *packet_data,
 {
 	u32 lnh = 0;
 	u8 opcode = 0;
-	struct hfi1_ib_header *hdr;
-	struct hfi1_other_headers *ohdr = NULL;
+	struct hfi2_ib_header *hdr;
+	struct ib_l4_headers *ohdr = NULL;
 	int ret;
 
 	ret = hfi1_filter_check(ibhdr, "header");
@@ -741,7 +719,7 @@ static int hfi1_filter_ibpacket_type(void *ibhdr, void *packet_data,
 	if (ret)
 		return ret;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+	hdr = (struct hfi2_ib_header *)ibhdr;
 
 	lnh = (be16_to_cpu(hdr->lrh[0]) & 3);
 
@@ -763,7 +741,7 @@ static int hfi1_filter_ibpacket_type(void *ibhdr, void *packet_data,
 static int hfi1_filter_ib_service_level(void *ibhdr, void *packet_data,
 					void *value)
 {
-	struct hfi1_ib_header *hdr;
+	struct hfi2_ib_header *hdr;
 	int ret;
 
 	ret = hfi1_filter_check(ibhdr, "header");
@@ -773,7 +751,7 @@ static int hfi1_filter_ib_service_level(void *ibhdr, void *packet_data,
 	if (ret)
 		return ret;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+	hdr = (struct hfi2_ib_header *)ibhdr;
 
 	if ((*((u8 *)value)) == ((be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF))
 		return HFI1_FILTER_HIT;
@@ -784,8 +762,8 @@ static int hfi1_filter_ib_service_level(void *ibhdr, void *packet_data,
 static int hfi1_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 {
 	u32 lnh = 0;
-	struct hfi1_ib_header *hdr;
-	struct hfi1_other_headers *ohdr = NULL;
+	struct hfi2_ib_header *hdr;
+	struct ib_l4_headers *ohdr = NULL;
 	int ret;
 
 	ret = hfi1_filter_check(ibhdr, "header");
@@ -795,7 +773,7 @@ static int hfi1_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	if (ret)
 		return ret;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+	hdr = (struct hfi2_ib_header *)ibhdr;
 
 	lnh = (be16_to_cpu(hdr->lrh[0]) & 3);
 	if (lnh == HFI1_LRH_BTH)
@@ -867,7 +845,7 @@ static struct snoop_packet *allocate_snoop_packet(u32 hdr_len,
 
 /*
  * Instead of having snoop and capture code intermixed with the recv functions,
- * both the interrupt handler and hfi1_ib_rcv() we are going to hijack the call
+ * both the interrupt handler and hfi2_ib_rcv() we are going to hijack the call
  * and land in here for snoop/capture but if not enabled the call will go
  * through as before. This gives us a single point to constrain all of the snoop
  * snoop recv logic. There is nothing special that needs to happen for bypass
@@ -876,10 +854,12 @@ static struct snoop_packet *allocate_snoop_packet(u32 hdr_len,
  * there is no specific support. Bottom line is this routine does now even know
  * what a bypass packet is.
  */
-int snoop_recv_handler(struct hfi1_packet *packet)
+static void snoop_recv_handler(struct hfi2_ib_packet *packet)
 {
-	struct hfi1_pportdata *ppd = packet->rcd->ppd;
-	struct hfi1_ib_header *hdr = packet->hdr;
+	struct hfi2_ibport *ibp = packet->ibp;
+	struct hfi2_ibdev *ibd = ibp->ibd;
+	struct hfi_devdata *dd = ibd->dd;
+	union hfi2_packet_header *hdr = packet->hdr;
 	int header_size = packet->hlen;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
@@ -891,16 +871,17 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 
 	snoop_dbg("PACKET IN: hdr size %d tlen %d data %p", header_size, tlen,
 		  data);
-
+#if 0
 	trace_snoop_capture(ppd->dd, header_size, hdr, tlen - header_size,
 			    data);
+#endif
 
-	if (!ppd->dd->hfi1_snoop.filter_callback) {
+	if (!dd->hfi1_snoop.filter_callback) {
 		snoop_dbg("filter not set");
 		ret = HFI1_FILTER_HIT;
 	} else {
-		ret = ppd->dd->hfi1_snoop.filter_callback(hdr, data,
-					ppd->dd->hfi1_snoop.filter_value);
+		ret = dd->hfi1_snoop.filter_callback(hdr, data,
+					dd->hfi1_snoop.filter_value);
 	}
 
 	switch (ret) {
@@ -912,7 +893,7 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 		break;
 	case HFI1_FILTER_HIT:
 
-		if (ppd->dd->hfi1_snoop.mode_flag & HFI1_PORT_SNOOP_MODE)
+		if (dd->hfi1_snoop.mode_flag & HFI1_PORT_SNOOP_MODE)
 			snoop_mode = 1;
 		if ((snoop_mode == 0) ||
 		    unlikely(snoop_flags & SNOOP_USE_METADATA))
@@ -923,23 +904,23 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 						 md_len);
 
 		if (unlikely(!s_packet)) {
-			dd_dev_warn_ratelimited(ppd->dd, "Unable to allocate snoop/capture packet\n");
+			dd_dev_warn_ratelimited(dd, "Unable to allocate snoop/capture packet\n");
 			break;
 		}
 
 		if (md_len > 0) {
 			memset(&md, 0, sizeof(struct capture_md));
-			md.port = 1;
+			md.port = packet->port + 1; /* IB ports start from 1 */
 			md.dir = PKT_DIR_INGRESS;
 			md.u.rhf = packet->rhf;
 			memcpy(s_packet->data, &md, md_len);
 		}
 
-		/* We should always have a header */
-		if (hdr) {
+		/* We should always have a header (not always with BYPASS) */
+		if (hdr && header_size) {
 			memcpy(s_packet->data + md_len, hdr, header_size);
-		} else {
-			dd_dev_err(ppd->dd, "Unable to copy header to snoop/capture packet\n");
+		} else if (packet->etype != RHF_RCV_TYPE_BYPASS) {
+			dd_dev_err(dd, "Unable to copy header to snoop/capture packet\n");
 			kfree(s_packet);
 			break;
 		}
@@ -956,15 +937,16 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 			       tlen - header_size);
 
 		s_packet->total_len = tlen + md_len;
-		snoop_list_add_tail(s_packet, ppd->dd);
+		snoop_list_add_tail(s_packet, dd);
 
 		/*
 		 * If we are snooping the packet not capturing then throw away
 		 * after adding to the list.
 		 */
 		snoop_dbg("Capturing packet");
-		if (ppd->dd->hfi1_snoop.mode_flag & HFI1_PORT_SNOOP_MODE) {
+		if (dd->hfi1_snoop.mode_flag & HFI1_PORT_SNOOP_MODE) {
 			snoop_dbg("Throwing packet away");
+#if 0
 			/*
 			 * If we are dropping the packet we still may need to
 			 * handle the case where error flags are set, this is
@@ -973,9 +955,9 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 			 */
 			if (unlikely(rhf_err_flags(packet->rhf)))
 				handle_eflags(packet);
-
+#endif
 			/* throw the packet on the floor */
-			return RHF_RCV_CONTINUE;
+			return;
 		}
 		break;
 	default:
@@ -986,8 +968,7 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 	 * We do not care what type of packet came in here - just pass it off
 	 * to the normal handler.
 	 */
-	return ppd->dd->normal_rhf_rcv_functions[rhf_rcv_type(packet->rhf)]
-			(packet);
+	ibd->rhf_rcv_functions[packet->etype](packet);
 }
 
 #if 0
