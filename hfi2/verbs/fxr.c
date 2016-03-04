@@ -78,14 +78,13 @@ static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
 			 struct hfi_eq *eq)
 {
 	u32 *eq_head_array, *eq_head_addr;
-	u64 *eq_entry = NULL, done;
+	u64 *eq_entry = NULL;
 	int rc;
 
 	eq_alloc->base = (u64)vzalloc(eq_alloc->count * HFI_EQ_ENTRY_SIZE);
 	if (!eq_alloc->base)
 		return -ENOMEM;
 	eq_alloc->mode = OPA_EV_MODE_BLOCKING;
-	eq_alloc->user_data = (u64)&done;
 	rc = hfi_cteq_assign(ctx, eq_alloc);
 	if (rc < 0) {
 		vfree((void *)eq_alloc->base);

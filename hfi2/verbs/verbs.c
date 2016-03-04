@@ -193,11 +193,11 @@ static int hfi2_query_port(struct ib_device *ibdev, u8 port,
 			     struct ib_port_attr *props)
 {
 	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
-	struct hfi_pportdata *ppd = ibp->ppd;
+	struct hfi_pportdata *ppd;
 
 	if (!ibp)
 		return -EINVAL;
-
+	ppd = ibp->ppd;
 	memset(props, 0, sizeof(*props));
 
 	/* TODO - first cut at port attributes */
