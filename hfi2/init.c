@@ -123,10 +123,15 @@ static int hfi_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		goto err_dd_init;
 
+	ret = hfi_snoop_add(dd);
+	if (ret)
+		goto err_snoop;
+
 	hfi_dbg_init(dd);
 
 	return 0;
 
+err_snoop:
 	hfi_pci_dd_free(dd);
 err_dd_init:
 	hfi_pci_cleanup(pdev);
@@ -139,6 +144,7 @@ static void hfi_pci_remove(struct pci_dev *pdev)
 	struct hfi_devdata *dd = pci_get_drvdata(pdev);
 
 	hfi_dbg_exit(dd);
+	hfi_snoop_remove(dd);
 	hfi_pci_dd_free(dd);
 	hfi_pci_cleanup(pdev);
 }

@@ -54,6 +54,7 @@
 #ifndef _OPA_HFI_H
 #define _OPA_HFI_H
 
+#include <linux/miscdevice.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/version.h>
@@ -240,6 +241,24 @@ enum {
  *
  */
 #define HFI_PTL_SL_START 0
+
+/*
+ * Private data for snoop/capture support.
+ */
+struct hfi1_snoop_data {
+	struct miscdevice miscdev;
+	int mode_flag;
+	/* protect snoop data */
+	spinlock_t snoop_lock;
+	struct list_head queue;
+	wait_queue_head_t waitq;
+	void *filter_value;
+	int (*filter_callback)(void *hdr, void *data, void *value);
+};
+
+/* snoop mode_flag values */
+#define HFI1_PORT_SNOOP_MODE     1U
+#define HFI1_PORT_CAPTURE_MODE   2U
 
 /*
  * HFI or Host Link States
@@ -693,6 +712,8 @@ struct hfi_devdata {
 	/* OUI comes from the HW. Used everywhere as 3 separate bytes. */
 	u8 oui[3];
 
+	struct hfi1_snoop_data hfi1_snoop;
+
 	/* Lock to synchronize access to tx_priv_cq */
 	spinlock_t priv_tx_cq_lock;
 
@@ -916,6 +937,8 @@ u64 hfi_read_lm_tp_prf_csr(const struct hfi_pportdata *ppd,
 			  u32 offset);
 u64 hfi_read_lm_cm_csr(const struct hfi_pportdata *ppd,
 			  u32 offset);
+int hfi_snoop_add(struct hfi_devdata *dd);
+void hfi_snoop_remove(struct hfi_devdata *dd);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is

@@ -588,6 +588,7 @@ struct hfi2_mcast {
 	int n_attached;
 };
 
+/* TODO - hfi1 returns an int, review when we attempt common logic. */
 typedef void (*rhf_rcv_function_ptr)(struct hfi2_ib_packet *packet);
 
 struct hfi2_ibrcv {
