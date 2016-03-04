@@ -55,7 +55,7 @@
 #include <linux/sched.h>
 #include "verbs.h"
 #include "packet.h"
-#include <rdma/opa_core_ib.h>
+#include "opa_core_ib.h"
 
 static void remove_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp);
 

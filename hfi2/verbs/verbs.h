@@ -63,8 +63,8 @@
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_user_verbs.h>
 #include <rdma/opa_smi.h>
-#include <rdma/opa_port_info.h>
 #include <rdma/opa_core.h>
+#include "opa_port_info.h"
 #include "ib_compat.h"
 #include "iowait.h"
 #include "../opa_hfi.h"

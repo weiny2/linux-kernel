@@ -87,7 +87,6 @@
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs.h>
 #include <rdma/fxr/fxr_pcim_defs.h>
 #include "opa_hfi.h"
-#include <rdma/opa_core_ib.h>
 #include "link.h"
 #include "firmware.h"
 #include "verbs/verbs.h"

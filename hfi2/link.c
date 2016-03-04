@@ -62,7 +62,6 @@
 #include <rdma/fxr/mnh_8051_defs.h>
 #include <linux/interrupt.h>
 #include "opa_hfi.h"
-#include <rdma/opa_core_ib.h>
 #include "link.h"
 #include "firmware.h"
 

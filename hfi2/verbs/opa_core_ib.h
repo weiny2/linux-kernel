@@ -54,7 +54,7 @@
 #ifndef _OPA_CORE_IB_H_
 #define _OPA_CORE_IB_H_
 #include <rdma/opa_smi.h>
-#include <rdma/opa_port_info.h>
+#include "opa_port_info.h"
 
 /*
  * QP numbering defines
