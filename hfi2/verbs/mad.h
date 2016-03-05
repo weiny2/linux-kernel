@@ -75,6 +75,7 @@ struct opa_pma_mad {
 
 #define VL_MASK_ALL		0x000080ff
 #define OPA_EI_STATUS_SMASK	0x80
+#define OPA_EI_CODE_SMASK	0x0f
 
 struct opa_class_port_info {
 	u8 base_version;
@@ -173,6 +174,36 @@ struct opa_clear_port_status {
 	__be32 counter_select_mask;
 };
 
+#define MSK_LLI 0x000000f0
+#define MSK_LLI_SFT 4
+#define MSK_LER 0x0000000f
+#define MSK_LER_SFT 0
+#define ADD_LLI 8
+#define ADD_LER 2
+
+enum {
+	C_VL_0 = 0,
+	C_VL_1,
+	C_VL_2,
+	C_VL_3,
+	C_VL_4,
+	C_VL_5,
+	C_VL_6,
+	C_VL_7,
+	C_VL_8,
+	C_VL_15,
+	C_VL_COUNT
+};
+
+static inline int vl_from_idx(int idx)
+{
+	return (idx == C_VL_15 ? 15 : idx);
+}
+
+static inline int idx_from_vl(int vl)
+{
+	return (vl == 15 ? C_VL_15 : vl);
+}
 struct opa_port_data_counters_msg {
 	__be64 port_select_mask[4];
 	__be32 vl_select_mask;
@@ -337,6 +368,36 @@ enum error_info_selects {
 	ES_PORT_RCV_SWITCH_RELAY_ERROR_INFO	= (1 << 27),
 	ES_UNCORRECTABLE_ERROR_INFO		= (1 << 26),
 	ES_FM_CONFIG_ERROR_INFO			= (1 << 25)
+};
+
+enum counter_selects {
+	CS_PORT_XMIT_DATA			= (1 << 31),
+	CS_PORT_RCV_DATA			= (1 << 30),
+	CS_PORT_XMIT_PKTS			= (1 << 29),
+	CS_PORT_RCV_PKTS			= (1 << 28),
+	CS_PORT_MCAST_XMIT_PKTS			= (1 << 27),
+	CS_PORT_MCAST_RCV_PKTS			= (1 << 26),
+	CS_PORT_XMIT_WAIT			= (1 << 25),
+	CS_SW_PORT_CONGESTION			= (1 << 24),
+	CS_PORT_RCV_FECN			= (1 << 23),
+	CS_PORT_RCV_BECN			= (1 << 22),
+	CS_PORT_XMIT_TIME_CONG			= (1 << 21),
+	CS_PORT_XMIT_WASTED_BW			= (1 << 20),
+	CS_PORT_XMIT_WAIT_DATA			= (1 << 19),
+	CS_PORT_RCV_BUBBLE			= (1 << 18),
+	CS_PORT_MARK_FECN			= (1 << 17),
+	CS_PORT_RCV_CONSTRAINT_ERRORS		= (1 << 16),
+	CS_PORT_RCV_SWITCH_RELAY_ERRORS		= (1 << 15),
+	CS_PORT_XMIT_DISCARDS			= (1 << 14),
+	CS_PORT_XMIT_CONSTRAINT_ERRORS		= (1 << 13),
+	CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS	= (1 << 12),
+	CS_LOCAL_LINK_INTEGRITY_ERRORS		= (1 << 11),
+	CS_PORT_RCV_ERRORS			= (1 << 10),
+	CS_EXCESSIVE_BUFFER_OVERRUNS		= (1 << 9),
+	CS_FM_CONFIG_ERRORS			= (1 << 8),
+	CS_LINK_ERROR_RECOVERY			= (1 << 7),
+	CS_LINK_DOWNED				= (1 << 6),
+	CS_UNCORRECTABLE_ERRORS			= (1 << 5),
 };
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)

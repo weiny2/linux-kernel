@@ -584,6 +584,7 @@ struct hfi_pportdata {
 	struct hfi_link_down_reason neigh_link_down_reason;
 	struct buffer_control bct;
 	u8 remote_link_down_reason;
+	u64 link_downed;
 
 	/* Congestion control */
 	struct ib_cc_table_entry_shadow ccti_entries[HFI_CC_TABLE_SHADOW_MAX];
@@ -918,6 +919,26 @@ int neigh_is_hfi(struct hfi_pportdata *ppd);
 void hfi_add_full_mgmt_pkey(struct hfi_pportdata *ppd);
 const char *hfi_class_name(void);
 int hfi_set_lid(struct hfi_pportdata *ppd, u32 lid, u8 lmc);
+void hfi_write_lm_fpc_csr(const struct hfi_pportdata *ppd,
+			     u32 offset, u64 value);
+void hfi_write_lm_tp_csr(const struct hfi_pportdata *ppd,
+			    u32 offset, u64 value);
+void hfi_write_lm_tp_prf_csr(const struct hfi_pportdata *ppd,
+			    u32 offset, u64 value);
+void hfi_write_lm_cm_csr(const struct hfi_pportdata *ppd,
+			    u32 offset, u64 value);
+void hfi_write_lm_fpc_prf_per_vl_csr(const struct hfi_pportdata *ppd,
+			     u32 offset, u32 index, u64 value);
+u64 hfi_read_lm_fpc_csr(const struct hfi_pportdata *ppd,
+			     u32 offset);
+u64 hfi_read_lm_fpc_prf_per_vl_csr(const struct hfi_pportdata *ppd,
+			     u32 offset, u32 index);
+u64 hfi_read_lm_tp_csr(const struct hfi_pportdata *ppd,
+			  u32 offset);
+u64 hfi_read_lm_tp_prf_csr(const struct hfi_pportdata *ppd,
+			  u32 offset);
+u64 hfi_read_lm_cm_csr(const struct hfi_pportdata *ppd,
+			  u32 offset);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is

@@ -136,8 +136,8 @@ int neigh_is_hfi(struct hfi_pportdata *ppd)
 	return (ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE) == 0;
 }
 
-static void write_lm_fpc_csr(const struct hfi_pportdata *ppd,
-			     u32 offset, u64 value)
+void hfi_write_lm_fpc_csr(const struct hfi_pportdata *ppd,
+			u32 offset, u64 value)
 {
 	if (ppd->pnum == 1)
 		offset += FXR_LM_FPC0_CSRS;
@@ -149,8 +149,15 @@ static void write_lm_fpc_csr(const struct hfi_pportdata *ppd,
 	write_csr(ppd->dd, offset, value);
 }
 
-static void write_lm_tp_csr(const struct hfi_pportdata *ppd,
-			    u32 offset, u64 value)
+void hfi_write_lm_fpc_prf_per_vl_csr(const struct hfi_pportdata *ppd,
+			u32 offset, u32 index, u64 value)
+{
+	offset = offset + (index * 8);
+	hfi_write_lm_fpc_csr(ppd, offset, value);
+}
+
+void hfi_write_lm_tp_csr(const struct hfi_pportdata *ppd,
+			u32 offset, u64 value)
 {
 	if (ppd->pnum == 1)
 		offset += FXR_LM_TP0_CSRS;
@@ -162,8 +169,15 @@ static void write_lm_tp_csr(const struct hfi_pportdata *ppd,
 	write_csr(ppd->dd, offset, value);
 }
 
-static void write_lm_cm_csr(const struct hfi_pportdata *ppd,
-			    u32 offset, u64 value)
+void hfi_write_lm_tp_prf_csr(const struct hfi_pportdata *ppd,
+				u32 offset, u64 value)
+{
+	offset = FXR_TP_PRF_COUNTERS + (offset * 8);
+	hfi_write_lm_tp_csr(ppd, offset, value);
+}
+
+void hfi_write_lm_cm_csr(const struct hfi_pportdata *ppd,
+			u32 offset, u64 value)
 {
 	if (ppd->pnum == 1)
 		offset += FXR_LM_CM0_CSRS;
@@ -175,8 +189,8 @@ static void write_lm_cm_csr(const struct hfi_pportdata *ppd,
 	write_csr(ppd->dd, offset, value);
 }
 
-static u64 read_lm_fpc_csr(const struct hfi_pportdata *ppd,
-			     u32 offset)
+u64 hfi_read_lm_fpc_csr(const struct hfi_pportdata *ppd,
+			u32 offset)
 {
 	if (ppd->pnum == 1)
 		offset += FXR_LM_FPC0_CSRS;
@@ -188,7 +202,14 @@ static u64 read_lm_fpc_csr(const struct hfi_pportdata *ppd,
 	return read_csr(ppd->dd, offset);
 }
 
-static u64 read_lm_tp_csr(const struct hfi_pportdata *ppd,
+u64 hfi_read_lm_fpc_prf_per_vl_csr(const struct hfi_pportdata *ppd,
+			     u32 offset, u32 index)
+{
+	offset = offset + (index * 8);
+	return hfi_read_lm_fpc_csr(ppd, offset);
+}
+
+u64 hfi_read_lm_tp_csr(const struct hfi_pportdata *ppd,
 			  u32 offset)
 {
 	if (ppd->pnum == 1)
@@ -201,7 +222,14 @@ static u64 read_lm_tp_csr(const struct hfi_pportdata *ppd,
 	return read_csr(ppd->dd, offset);
 }
 
-static u64 read_lm_cm_csr(const struct hfi_pportdata *ppd,
+u64 hfi_read_lm_tp_prf_csr(const struct hfi_pportdata *ppd,
+				u32 offset)
+{
+	offset = FXR_TP_PRF_COUNTERS + (offset * 8);
+	return hfi_read_lm_tp_csr(ppd, offset);
+}
+
+u64 hfi_read_lm_cm_csr(const struct hfi_pportdata *ppd,
 			  u32 offset)
 {
 	if (ppd->pnum == 1)
@@ -498,7 +526,7 @@ static void hfi_set_send_length(struct hfi_pportdata *ppd)
 	TP_CFG_VL_MTU_t vlmtu;
 
 	/*FXRTODO: Set vl*_tx_mtu from values suppled by fabric manager */
-	vlmtu.val = read_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU);
+	vlmtu.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU);
 	vlmtu.field.vl0_tx_mtu = 0x7;
 	vlmtu.field.vl1_tx_mtu = 0x7;
 	vlmtu.field.vl2_tx_mtu = 0x7;
@@ -508,16 +536,16 @@ static void hfi_set_send_length(struct hfi_pportdata *ppd)
 	vlmtu.field.vl6_tx_mtu = 0x7;
 	vlmtu.field.vl7_tx_mtu = 0x7;
 	vlmtu.field.vl8_tx_mtu = 0x7;
-	write_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU, vlmtu.val);
+	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU, vlmtu.val);
 }
 
 void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 {
 	TP_CFG_MISC_CTRL_t misc;
 
-	misc.val = read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
+	misc.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
 	misc.field.disable_pkey_chk = !enable;
-	write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
+	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
 }
 
 void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable)
@@ -551,12 +579,12 @@ void hfi_set_implicit_pkeys(struct hfi_pportdata *ppd,
 	LM_CONFIG_PORT1_t lmp1;
 
 	/* Egress */
-	reg.val = read_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL);
+	reg.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL);
 	if (pkey_8b)
 		reg.field.pkey_8b = *pkey_8b;
 	if (pkey_10b)
 		reg.field.pkey_10b = *pkey_10b;
-	write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL, reg.val);
+	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL, reg.val);
 
 	/* Ingress */
 	switch (ppd_to_pnum(ppd)) {
@@ -609,9 +637,9 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 		rx_pkey.field.entry1 = ppd->pkeys[i + 1];
 		rx_pkey.field.entry2 = ppd->pkeys[i + 2];
 		rx_pkey.field.entry3 = ppd->pkeys[i + 3];
-		write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_TABLE + 0x08 * j,
+		hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_TABLE + 0x08 * j,
 				tx_pkey.val);
-		write_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_TABLE + 0x08 * j,
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_TABLE + 0x08 * j,
 				 rx_pkey.val);
 	}
 
@@ -672,7 +700,7 @@ static void hfi_set_sc_to_vlr(struct hfi_pportdata *ppd, u8 *t)
 		for (j = 0, reg_val = 0; j < 16; j++, sc_num++)
 			reg_val |= (t[sc_num] & HFI_SC_VLR_MASK)
 					 << (j * 4);
-		write_lm_fpc_csr(ppd, FXR_FPC_CFG_SC_VL_TABLE_15_0 +
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_SC_VL_TABLE_15_0 +
 				 i * 8, reg_val);
 	}
 
@@ -710,7 +738,7 @@ static void hfi_set_sc_to_vlt(struct hfi_pportdata *ppd, u8 *t)
 		for (j = 0, reg_val = 0; j < 16; j++, sc_num++)
 			reg_val |= (t[sc_num] & HFI_SC_VLT_MASK)
 					 << (j * 4);
-		write_lm_tp_csr(ppd, FXR_TP_CFG_SC_TO_VLT_MAP +
+		hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_SC_TO_VLT_MAP +
 					i * 8, reg_val);
 	}
 
@@ -763,8 +791,8 @@ static void hfi_assign_cm_au_table(struct hfi_pportdata *ppd, u32 cu,
 	reg1.field.Entry6 = 32ull * cu;
 	reg1.field.Entry7 = 64ull * cu;
 
-	write_lm_cm_csr(ppd, offset, reg0.val);
-	write_lm_cm_csr(ppd, offset + 0x08, reg1.val);
+	hfi_write_lm_cm_csr(ppd, offset, reg0.val);
+	hfi_write_lm_cm_csr(ppd, offset + 0x08, reg1.val);
 }
 
 void hfi_assign_local_cm_au_table(struct hfi_pportdata *ppd, u8 vcu)
@@ -784,7 +812,7 @@ static u16 hfi_get_dedicated_crdt(struct hfi_pportdata *ppd, int vl_idx)
 	TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT_t reg;
 	u32 addr = FXR_TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT + 8 * vl_idx;
 
-	reg.val = read_lm_cm_csr(ppd, addr);
+	reg.val = hfi_read_lm_cm_csr(ppd, addr);
 	return reg.field.Dedicated;
 }
 
@@ -793,7 +821,7 @@ static u16 hfi_get_shared_crdt(struct hfi_pportdata *ppd, int vl_idx)
 	TP_CFG_CM_SHARED_VL_CRDT_LIMIT_t reg;
 	u32 addr = FXR_TP_CFG_CM_SHARED_VL_CRDT_LIMIT + 8 * vl_idx;
 
-	reg.val = read_lm_cm_csr(ppd, addr);
+	reg.val = hfi_read_lm_cm_csr(ppd, addr);
 	return reg.field.Shared;
 }
 
@@ -818,7 +846,7 @@ void hfi_get_buffer_control(struct hfi_pportdata *ppd,
 		vll->shared = cpu_to_be16(hfi_get_shared_crdt(ppd, i));
 	}
 
-	reg.val = read_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
+	reg.val = hfi_read_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
 	bc->overall_shared_limit = reg.field.Shared;
 	if (overall_limit)
 		*overall_limit = reg.field.Total_Credit_Limit;
@@ -836,27 +864,27 @@ static void hfi_set_vau(struct hfi_pportdata *ppd, u8 vau)
 {
 	TP_CFG_CM_CRDT_SEND_t reg;
 
-	reg.val = read_lm_cm_csr(ppd, FXR_TP_CFG_CM_CRDT_SEND);
+	reg.val = hfi_read_lm_cm_csr(ppd, FXR_TP_CFG_CM_CRDT_SEND);
 	reg.field.AU = vau;
-	write_lm_cm_csr(ppd, FXR_TP_CFG_CM_CRDT_SEND, reg.val);
+	hfi_write_lm_cm_csr(ppd, FXR_TP_CFG_CM_CRDT_SEND, reg.val);
 }
 
 static void hfi_set_global_shared(struct hfi_pportdata *ppd, u16 limit)
 {
 	TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT_t reg;
 
-	reg.val = read_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
+	reg.val = hfi_read_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
 	reg.field.Shared = limit;
-	write_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT, reg.val);
+	hfi_write_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT, reg.val);
 }
 
 static void hfi_set_global_limit(struct hfi_pportdata *ppd, u16 limit)
 {
 	TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT_t reg;
 
-	reg.val = read_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
+	reg.val = hfi_read_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
 	reg.field.Total_Credit_Limit = limit;
-	write_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT, reg.val);
+	hfi_write_lm_cm_csr(ppd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT, reg.val);
 }
 
 static void hfi_set_vl_dedicated(struct hfi_pportdata *ppd, int vl, u16 limit)
@@ -864,9 +892,9 @@ static void hfi_set_vl_dedicated(struct hfi_pportdata *ppd, int vl, u16 limit)
 	TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT_t reg;
 	u32 addr = FXR_TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT + (8 * hfi_vl_to_idx(vl));
 
-	reg.val = read_lm_cm_csr(ppd, addr);
+	reg.val = hfi_read_lm_cm_csr(ppd, addr);
 	reg.field.Dedicated = limit;
-	write_lm_cm_csr(ppd, addr, reg.val);
+	hfi_write_lm_cm_csr(ppd, addr, reg.val);
 }
 
 static void hfi_set_vl_shared(struct hfi_pportdata *ppd, int vl, u16 limit)
@@ -874,9 +902,9 @@ static void hfi_set_vl_shared(struct hfi_pportdata *ppd, int vl, u16 limit)
 	TP_CFG_CM_SHARED_VL_CRDT_LIMIT_t reg;
 	u32 addr = FXR_TP_CFG_CM_SHARED_VL_CRDT_LIMIT + (8 * hfi_vl_to_idx(vl));
 
-	reg.val = read_lm_cm_csr(ppd, addr);
+	reg.val = hfi_read_lm_cm_csr(ppd, addr);
 	reg.field.Shared = limit;
-	write_lm_cm_csr(ppd, addr, reg.val);
+	hfi_write_lm_cm_csr(ppd, addr, reg.val);
 }
 
 /*
@@ -919,7 +947,7 @@ static void hfi_wait_for_vl_status_clear(struct hfi_pportdata *ppd, u64 mask,
 
 	timeout = jiffies + msecs_to_jiffies(HFI_VL_STATUS_CLEAR_TIMEOUT);
 	while (1) {
-		reg = read_lm_cm_csr(ppd, FXR_TP_CFG_CM_CRDT_SEND) & mask;
+		reg = hfi_read_lm_cm_csr(ppd, FXR_TP_CFG_CM_CRDT_SEND) & mask;
 
 		if (reg == 0)
 			return;	/* success */
@@ -1119,7 +1147,7 @@ static void hfi_set_sc_to_vlnt(struct hfi_pportdata *ppd, u8 *t)
 		for (j = 0, reg_val = 0; j < 16; j++, sc_num++)
 			reg_val |= (t[sc_num] & HFI_SC_VLNT_MASK)
 					 << (j * 4);
-		write_lm_cm_csr(ppd, FXR_TP_CFG_CM_SC_TO_VLT_MAP +
+		hfi_write_lm_cm_csr(ppd, FXR_TP_CFG_CM_SC_TO_VLT_MAP +
 				i * 8, reg_val);
 	}
 
@@ -1814,20 +1842,32 @@ void hfi_init_sc_to_vl_tables(struct hfi_pportdata *ppd)
 static void hfi_init_linkmux_csrs(struct hfi_pportdata *ppd)
 {
 	TP_CFG_MISC_CTRL_t misc;
+	/*TP_PRF_CTRL_t tp_perf;*/
+	FPC_CFG_EVENT_CNTR_CTRL_t fpc_ctrl;
 	FPC_CFG_PORT_CONFIG_t fpc;
 
-	misc.val = read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
+	misc.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
 	/*FXRTODO: Check spec if operational_vl value is supplied by FM */
 	misc.field.operational_vl = 0x1FF;
 	misc.field.disable_reliable_vl15_pkts = 0;
 	misc.field.disable_reliable_vl8_0_pkts = 0;
-	write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
+	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
 
-	fpc.val = read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
+	#if 0
+	tp_perf.val = hfi_read_lm_tp_csr(ppd, FXR_TP_PRF_CTRL);
+	tp_perf.field.enable_cntrs = 0x1;
+	hfi_write_lm_tp_csr(ppd, FXR_TP_PRF_CTRL, tp_perf.val);
+	#endif
+
+	fpc.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
 	fpc.field.mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
 	fpc.field.pkt_formats_enabled = 0xF;
 	fpc.field.pkt_formats_supported = 0xF;
-	write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);
+	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);
+
+	fpc_ctrl.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_EVENT_CNTR_CTRL);
+	fpc_ctrl.field.enable_cntrs = 0x1;
+	hfi_write_lm_tp_csr(ppd, FXR_FPC_CFG_EVENT_CNTR_CTRL, fpc_ctrl.val);
 }
 
 /*

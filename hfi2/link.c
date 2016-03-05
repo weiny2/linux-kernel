@@ -204,6 +204,22 @@ static int write_vc_local_fabric(struct hfi_pportdata *ppd, u8 vau, u8 z,
 				GENERAL_CONFIG, frame);
 }
 
+void hfi_read_link_quality(struct hfi_pportdata *ppd, u8 *link_quality)
+{
+	u32 frame;
+	int ret;
+
+	*link_quality = 0x1;
+	if (ppd->host_link_state & HLS_UP) {
+		ret = hfi2_read_8051_config(ppd, LINK_QUALITY_INFO,
+						GENERAL_CONFIG, &frame);
+		pr_info("link quality info is %#x\n", frame);
+		if (ret == 0)
+			*link_quality = (frame >> LINK_QUALITY_SHIFT)
+						& LINK_QUALITY_MASK;
+	}
+}
+
 /*
  * Mask conversion: Capability exchange to Port LTP.  The capability
  * exchange has an implicit 16b CRC that is mandatory.
@@ -227,7 +243,6 @@ u16 hfi_cap_to_port_ltp(u16 cap)
 u16 hfi_port_ltp_to_cap(u16 port_ltp)
 {
 	u16 cap_mask = 0;
-
 	if (port_ltp & OPA_PORT_LTP_CRC_MODE_14)
 		cap_mask |= HFI_CAP_CRC_14B;
 	if (port_ltp & OPA_PORT_LTP_CRC_MODE_48)
@@ -1792,6 +1807,68 @@ static irqreturn_t irq_mnh_handler(int irq, void *dev_id)
 }
 
 /*
+ * FXRTODO: enable this code and test it once the
+ * FZC ERROR interrupt is enabled
+ */
+#if 0
+static irqreturn_t irq_fzc0_handler(int irq, void *dev_id)
+{
+	struct hfi_msix_entry *me = dev_id;
+	struct hfi_devdata *dd = me->dd;
+	struct hfi_pportdata *ppd;
+	u64 reg, info, hdr0, hdr1;
+	u8 port;
+
+	hfi_ack_interrupt(me);
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		ppd = to_hfi_ppd(dd, port);
+		reg = hfi_read_lm_fpc_csr(ppd, FXR_FPC_ERR_STS);
+		if (reg & FXR_FPC_ERR_STS_UNCORRECTABLE_ERR_SMASK) {
+			if (!(dd->err_info_uncorrectable &
+				OPA_EI_STATUS_SMASK)) {
+				info = hfi_read_lm_fpc_csr(ppd,
+						FXR_FPC_UNCORRECTABLE_ERROR);
+				dd->err_info_uncorrectable = info
+							& OPA_EI_CODE_SMASK;
+				dd->err_info_uncorrectable |=
+							OPA_EI_STATUS_SMASK;
+			}
+		}
+		if (reg & FXR_FPC_ERR_STS_LINK_ERR_SMASK) {
+			if (ppd->link_downed < (u32)UINT_MAX)
+				ppd->link_downed++;
+		}
+		if (reg & FXR_FPC_ERR_STS_FMCONFIG_ERR_SMASK) {
+			if (!(dd->err_info_fmconfig & OPA_EI_STATUS_SMASK)) {
+			info = hfi_read_lm_fpc_csr(ppd, FXR_FPC_FMCONFIG_ERROR);
+			dd->err_info_fmconfig = info & OPA_EI_CODE_SMASK;
+			dd->err_info_fmconfig |= OPA_EI_STATUS_SMASK;
+			}
+		}
+		if (reg & FXR_FPC_ERR_STS_RCVPORT_ERR_SMASK) {
+			info = hfi_read_lm_fpc_csr(ppd,
+					FXR_FPC_PORTRCV_ERROR);
+			hdr0 = hfi_read_lm_fpc_csr(ppd,
+					FXR_FPC_ERR_INFO_PORTRCV_HDR0_A);
+			hdr1 = hfi_read_lm_fpc_csr(ppd,
+					FXR_FPC_ERR_INFO_PORTRCV_HDR1_A);
+			if (!(dd->err_info_rcvport.status_and_code &
+				OPA_EI_STATUS_SMASK)) {
+				dd->err_info_rcvport.status_and_code =
+					info & OPA_EI_CODE_SMASK;
+				dd->err_info_rcvport.status_and_code |=
+					OPA_EI_STATUS_SMASK;
+				dd->err_info_rcvport.packet_flit1 = hdr0;
+				dd->err_info_rcvport.packet_flit2 = hdr1;
+			}
+		}
+	}
+	return IRQ_HANDLED;
+}
+#endif
+
+/*
  * configure IRQs for MNH
 */
 int hfi2_cfg_link_intr_vector(struct hfi_devdata *dd)
@@ -1823,6 +1900,45 @@ int hfi2_cfg_link_intr_vector(struct hfi_devdata *dd)
 }
 
 /*
+* FXRTODO: enable this code after interrupt is enabled in simics
+*/
+#if 0
+/*
+ * configure irqs for fzc0
+*/
+int hfi2_cfg_fzc0_intr_vector(struct hfi_devdata *dd)
+{
+	struct hfi_msix_entry *me = &dd->msix_entries[HFI2_FZC0_ERROR];
+	int ret;
+
+	if (me->arg) {
+		dd_dev_err(dd, "msix entry is already configured: %d\n",
+			HFI2_FZC0_ERROR);
+		ret = -EINVAL;
+		goto _return;
+	}
+	INIT_LIST_HEAD(&me->irq_wait_head);
+	rwlock_init(&me->irq_wait_lock);
+	me->dd = dd;
+	me->intr_src = HFI2_FZC0_ERROR;
+
+	dd_dev_dbg(dd, "request for irq %d:%d\n", HFI2_FZC0_ERROR,
+			me->msix.vector);
+	ret = request_irq(me->msix.vector, irq_fzc0_handler, 0,
+		"hfi_irq_fzc0", me);
+	if (ret) {
+		dd_dev_err(dd, "irq[%d] request failed %d\n", HFI2_FZC0_ERROR,
+				ret);
+		goto _return;
+	}
+	me->arg = me;	/* mark as in use */
+ _return:
+	return ret;
+}
+#endif
+
+/*
+ *
  * Enable interrupots from MNH/8051 by configuring its registers
 */
 int hfi2_enable_8051_intr(struct hfi_pportdata *ppd)
@@ -1904,7 +2020,7 @@ void hfi2_pport_link_uninit(struct hfi_devdata *dd)
 }
 
 /*
-	initialize ports
+ * initialize ports
  */
 int hfi2_pport_link_init(struct hfi_devdata *dd)
 {
@@ -1922,6 +2038,19 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 		goto _return;
 	}
 
+	/*
+	* FXRTODO: enable this code after
+	* FZC ERROR interrupt is enabled in
+	* simics
+	*/
+	#if 0
+	ret = hfi2_cfg_fzc0_intr_vector(dd);
+	if (ret) {
+		dd_dev_err(dd, "Can't configure interrupt vector of FZC0: %d\n",
+			ret);
+		goto _return;
+	}
+	#endif
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
 		/* configure workqueues */
