@@ -201,6 +201,9 @@
 #define MGMT_ALLOWED_SHIFT 23
 #define MGMT_ALLOWED_MASK 0x1
 
+#define LINK_QUALITY_SHIFT 24
+#define LINK_QUALITY_MASK 0x7
+
 /* New on FXR, not defined in 4.3 kernel */
 #define OPA_LINK_SPEED_32G 3 /* 32.2265625 32Gbps */
 
@@ -243,5 +246,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
 int hfi_start_link(struct hfi_pportdata *ppd);
 u16 hfi_cap_to_port_ltp(u16 cap);
 u16 hfi_port_ltp_to_cap(u16 port_ltp);
+void hfi_read_link_quality(struct hfi_pportdata *ppd, u8 *link_quality);
+
 
 #endif /* _LINK_H */
