@@ -229,7 +229,7 @@ int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 	if (e2e->port_num > dd->num_pports)
 		return -EINVAL;
 
-	if (e2e->dlid >= HFI_MAX_LID_SUPP)
+	if (e2e->dlid >= ppd->max_lid)
 		return -EINVAL;
 
 	if (!hfi_is_portals_req_sl(ppd, sl))

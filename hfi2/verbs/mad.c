@@ -537,6 +537,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	pi->lid = cpu_to_be32(ppd->lid);
+	pi->max_lid = cpu_to_be32(ppd->max_lid);
 
 	/* Only return the mkey if the protection field allows it. */
 	if (!(smp->method == IB_MGMT_METHOD_GET &&
@@ -708,6 +709,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->opa_cap_mask = cpu_to_be16(OPA_CAP_MASK3_IsSharedSpaceSupported);
 	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsVLrSupported);
+	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsMAXLIDSupported);
 
 	/* Driver does not support mcast/collective configuration */
 	pi->opa_cap_mask &=
@@ -1449,6 +1451,9 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		event.event = IB_EVENT_GID_CHANGE;
 		ib_dispatch_event(&event);
 	}
+	ret = hfi_set_max_lid(ppd, be32_to_cpu(pi->max_lid));
+	if (ret)
+		return ret;
 
 	msl = pi->smsl & OPA_PI_MASK_SMSL;
 	if (pi->partenforce_filterraw & OPA_PI_MASK_LINKINIT_REASON)

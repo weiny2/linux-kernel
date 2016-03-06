@@ -131,15 +131,8 @@ enum {
 /* Maximum number of message classes supported */
 #define HFI_MAX_MC		2
 
-/* Maximum number of unicast LIDs supported */
-#define HFI_MAX_LID_SUPP	(0xBFFF)
-
-/*
- * Size of packet sequence number state assuming LMC = 0
- * The same PSN buffer is used for both TX and RX and hence
- * the multiplication by 2
- */
-#define HFI_PSN_SIZE		(2 * HFI_MAX_LID_SUPP * 8)
+/* Maximum number of unicast LIDs supported by default */
+#define HFI_DEFAULT_MAX_LID_SUPP	0xBFFF
 
 /* TX timeout for E2E control messages */
 #define HFI_TX_TIMEOUT_MS	100
@@ -440,6 +433,7 @@ struct ib_vl_weight_elem {
  * @pguid: port_guid identifying port
  * @neighbor_guid: Node guid of the neighboring port
  * @lid: LID for this port
+ * @max_lid: Maximum LID in the fabric this port is attached to
  * @ptc: per traffic class specific fields
  * @lstate: Logical link state
  * @ibmtu: The MTU programmed for this port
@@ -530,6 +524,7 @@ struct hfi_pportdata {
 	__be64 pguid;
 	__be64 neighbor_guid;
 	u32 lid;
+	u32 max_lid;
 	struct hfi_ptcdata ptc[HFI_MAX_TC];
 	/* host link state which keeps both Physical Port and Logical Link
 	   state by having HLS_* */
@@ -919,6 +914,7 @@ int neigh_is_hfi(struct hfi_pportdata *ppd);
 void hfi_add_full_mgmt_pkey(struct hfi_pportdata *ppd);
 const char *hfi_class_name(void);
 int hfi_set_lid(struct hfi_pportdata *ppd, u32 lid, u8 lmc);
+int hfi_set_max_lid(struct hfi_pportdata *ppd, u32 lid);
 void hfi_write_lm_fpc_csr(const struct hfi_pportdata *ppd,
 			     u32 offset, u64 value);
 void hfi_write_lm_tp_csr(const struct hfi_pportdata *ppd,
