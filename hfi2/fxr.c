@@ -90,6 +90,7 @@
 #include "link.h"
 #include "firmware.h"
 #include "verbs/verbs.h"
+#include "verbs/packet.h"
 
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
@@ -241,6 +242,27 @@ u64 hfi_read_lm_cm_csr(const struct hfi_pportdata *ppd,
 	return read_csr(ppd->dd, offset);
 }
 
+static void hfi_init_max_lid_csrs(const struct hfi_pportdata *ppd)
+{
+	const struct hfi_devdata *dd = ppd->dd;
+	RXE2E_CFG_VALID_TC_SLID_t rx_tc_slid;
+	txotr_pkt_cfg_valid_tc_dlid_t tx_tc_slid;
+
+	tx_tc_slid.val = read_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID);
+	rx_tc_slid.val = read_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID);
+
+	if (1 == ppd->pnum) {
+		tx_tc_slid.field.max_dlid_p0 = dd->pport[0].max_lid;
+		rx_tc_slid.field.max_slid_p0 = dd->pport[0].max_lid;
+	} else if (2 == ppd->pnum) {
+		tx_tc_slid.field.max_dlid_p1 = dd->pport[1].max_lid;
+		rx_tc_slid.field.max_slid_p1 = dd->pport[1].max_lid;
+	}
+
+	write_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID, tx_tc_slid.val);
+	write_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID, rx_tc_slid.val);
+}
+
 static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 {
 	RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM_t flt = {.val = 0};
@@ -269,9 +291,7 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 	offset += 8;
 	write_csr(dd, FXR_RXE2E_CFG_MC0_HDR_FLIT_CNT_CAM + offset, flt.val);
 
-	tc_slid.field.max_slid_p0 = HFI_MAX_LID_SUPP;
 	tc_slid.field.tc_valid_p0 = 0xf;
-	tc_slid.field.max_slid_p1 = HFI_MAX_LID_SUPP;
 	tc_slid.field.tc_valid_p1 = 0xf;
 	write_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID, tc_slid.val);
 }
@@ -302,9 +322,7 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 {
 	txotr_pkt_cfg_valid_tc_dlid_t tc_slid = {.val = 0};
 
-	tc_slid.field.max_dlid_p0 = HFI_MAX_LID_SUPP;
 	tc_slid.field.tc_valid_p0 = 0xf;
-	tc_slid.field.max_dlid_p1 = HFI_MAX_LID_SUPP;
 	tc_slid.field.tc_valid_p1 = 0xf;
 	write_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID, tc_slid.val);
 
@@ -419,57 +437,58 @@ static void init_csrs(struct hfi_devdata *dd)
 	hfi_init_tx_cid_csrs(dd);
 }
 
-static int hfi_psn_init(const struct hfi_devdata *dd)
+static int hfi_psn_init(struct hfi_pportdata *port, u32 max_lid)
 {
-	int i, j, rc = 0;
-	struct hfi_pportdata *port;
+	int pnum = port->pnum - 1, j, rc = 0;
+	struct hfi_devdata *dd = port->dd;
 	u32 tx_offset = FXR_TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC;
 	txotr_pkt_cfg_psn_base_addr_p0_tc_t tx_psn_base = {.val = 0};
 	u32 rx_offset = FXR_RXE2E_CFG_PSN_BASE_ADDR_P0_TC;
 	RXE2E_CFG_PSN_BASE_ADDR_P0_TC_t rx_psn_base = {.val = 0};
+	/*
+	 * Size of packet sequence number state assuming LMC = 0
+	 * The same PSN buffer is used for both TX and RX and hence
+	 * the multiplication by 2
+	 * TODO: LMC settings other than 0 need to be handled
+	 */
+	size_t psn_size = 2 * max_lid * 8;
 
-	for (i = 0; i < HFI_NUM_PPORTS; i++) {
-		port = &dd->pport[i];
-		for (j = 0; j < HFI_MAX_TC; j++) {
-			struct hfi_ptcdata *tc = &port->ptc[i];
+	for (j = 0; j < HFI_MAX_TC; j++) {
+		struct hfi_ptcdata *tc = &port->ptc[j];
 
-			tc->psn_base = vmalloc(HFI_PSN_SIZE);
-			if (!tc->psn_base) {
-				rc = -ENOMEM;
-				goto done;
-			}
-			tx_psn_base.field.address =
-				(u64)tc->psn_base >> PAGE_SHIFT;
-			rx_psn_base.field.address =
-				(u64)tc->psn_base >> PAGE_SHIFT;
-			write_csr(dd, tx_offset + i * 0x20 + j * 8,
-				  tx_psn_base.val);
-			write_csr(dd, rx_offset + i * 0x20 + j * 8,
-				  rx_psn_base.val);
+		tc->psn_base = vmalloc(psn_size);
+		if (!tc->psn_base) {
+			rc = -ENOMEM;
+			goto done;
 		}
+		tx_psn_base.field.address =
+			(u64)tc->psn_base >> PAGE_SHIFT;
+		rx_psn_base.field.address =
+			(u64)tc->psn_base >> PAGE_SHIFT;
+		write_csr(dd, tx_offset + pnum * 0x20 + j * 8,
+			  tx_psn_base.val);
+		write_csr(dd, rx_offset + pnum * 0x20 + j * 8,
+			  rx_psn_base.val);
 	}
 done:
 	return rc;
 }
 
-static void hfi_psn_uninit(const struct hfi_devdata *dd)
+static void hfi_psn_uninit(struct hfi_pportdata *port)
 {
-	int i, j;
-	struct hfi_pportdata *port;
+	int pnum = port->pnum - 1, j;
+	struct hfi_devdata *dd = port->dd;
 	u32 tx_offset = FXR_TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC;
 	u32 rx_offset = FXR_RXE2E_CFG_PSN_BASE_ADDR_P0_TC;
 
-	for (i = 0; i < HFI_NUM_PPORTS; i++) {
-		port = &dd->pport[i];
-		for (j = 0; j < HFI_MAX_TC; j++) {
-			struct hfi_ptcdata *tc = &port->ptc[i];
+	for (j = 0; j < HFI_MAX_TC; j++) {
+		struct hfi_ptcdata *tc = &port->ptc[j];
 
-			if (tc->psn_base) {
-				vfree(tc->psn_base);
-				tc->psn_base = NULL;
-				write_csr(dd, tx_offset + i * 0x20 + j * 8, 0);
-				write_csr(dd, rx_offset + i * 0x20 + j * 8, 0);
-			}
+		if (tc->psn_base) {
+			vfree(tc->psn_base);
+			tc->psn_base = NULL;
+			write_csr(dd, tx_offset + pnum * 0x20 + j * 8, 0);
+			write_csr(dd, rx_offset + pnum * 0x20 + j * 8, 0);
 		}
 	}
 }
@@ -1524,6 +1543,48 @@ int hfi_set_lid(struct hfi_pportdata *ppd, u32 lid, u8 lmc)
 	return 0;
 }
 
+int hfi_set_max_lid(struct hfi_pportdata *ppd, u32 lid)
+{
+	struct hfi_devdata *dd = ppd->dd;
+	int rc = 0;
+
+	mutex_lock(&ppd->hls_lock);
+	if (ppd->max_lid != lid) {
+		if (!lid || lid >= HFI1_16B_MULTICAST_LID_BASE) {
+			rc = -EINVAL;
+			ppd_dev_err(ppd, "invalid %s lid 0x%x\n",
+				    __func__, lid);
+			goto unlock;
+		}
+		/*
+		 * It is an error to modify the PSN state while the link state
+		 * is armed or active to avoid disruption to active jobs
+		 */
+		if (HLS_UP_ARMED == ppd->host_link_state ||
+			HLS_UP_ACTIVE == ppd->host_link_state) {
+			rc = -EINVAL;
+			ppd_dev_err(ppd, "invalid %s state 0x%x\n",
+				    __func__, ppd->host_link_state);
+			goto unlock;
+		}
+		/* Free the old PSN state first before allocating a new one */
+		hfi_psn_uninit(ppd);
+		rc = hfi_psn_init(ppd, lid);
+		if (!rc) {
+			ppd->max_lid = lid;
+			hfi_init_max_lid_csrs(ppd);
+			ppd_dev_dbg(ppd, "IB%u:%u max_lid 0x%x\n",
+				    dd->unit, ppd->pnum, lid);
+		} else {
+			ppd_dev_err(ppd, "IB%u:%u %s lid 0x%x rc %d\n",
+				    dd->unit, ppd->pnum, __func__, lid, rc);
+		}
+	}
+unlock:
+	mutex_unlock(&ppd->hls_lock);
+	return rc;
+}
+
 /*
  * set_mtu - set the MTU
  * @ppd: the per port data
@@ -1690,6 +1751,8 @@ void hfi_pport_down(struct hfi_devdata *dd)
  */
 void hfi_pci_dd_free(struct hfi_devdata *dd)
 {
+	int port;
+
 	/*
 	 * shutdown ports to notify OPA core clients.
 	 * FXRTODO: Check error handling if hfi_pci_dd_init fails early
@@ -1714,7 +1777,11 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	}
 	hfi_cleanup_interrupts(dd);
 
-	hfi_psn_uninit(dd);
+	for (port = 1; port <= dd->num_pports; port++) {
+		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+
+		hfi_psn_uninit(ppd);
+	}
 
 	/* free host memory for FXR and Portals resources */
 	if (dd->cq_head_base)
@@ -1988,6 +2055,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 
 		hfi_init_sc_to_vl_tables(ppd);
 		hfi_ptc_init(ppd);
+		hfi_set_max_lid(ppd, HFI_DEFAULT_MAX_LID_SUPP);
 
 		size = sizeof(struct cc_state);
 		RCU_INIT_POINTER(ppd->cc_state, kzalloc(size, GFP_KERNEL));
@@ -2069,10 +2137,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->physaddr = addr;
 	dev_dbg(&pdev->dev, "BAR[%d] @ start 0x%lx len %lu\n",
 			HFI_FXR_BAR, (long)addr, len);
-
-	ret = hfi_psn_init(dd);
-	if (ret)
-		goto err_post_alloc;
 
 	/* Ensure CSRs are sane, we can't trust they haven't been manipulated */
 	init_csrs(dd);

@@ -132,6 +132,13 @@
 #define OPA_LINK_WIDTH_3X            0x0004
 #define OPA_LINK_WIDTH_4X            0x0008
 
+#define OPA_CAP_MASK3_IsSLPairsSupported          (1 << 14)
+#define OPA_CAP_MASK3_IsEthOnFabricSupported      (1 << 13)
+#define OPA_CAP_MASK3_IsMAXLIDSupported           (1 << 12)
+#define OPA_CAP_MASK3_IsMultiPortModeSupported    (1 << 11)
+/* reserved (1 << 10) TODO: Do we need IsWormholeSupported */
+#define OPA_CAP_MASK3_IsTimeSyncSupported         (1 << 9)
+#define OPA_CAP_MASK3_IsBwMeterSupported          (1 << 8)
 #define OPA_CAP_MASK3_IsSnoopSupported            (1 << 7)
 #define OPA_CAP_MASK3_IsAsyncSC2VLSupported       (1 << 6)
 #define OPA_CAP_MASK3_IsAddrRangeConfigSupported  (1 << 5)
@@ -369,7 +376,8 @@ struct opa_port_info {
 		} preemption;
 	} flit_control;
 
-	__be32 reserved4;
+	__be32 max_lid;
+
 	__be32 port_error_action; /* bit field */
 
 	struct {
