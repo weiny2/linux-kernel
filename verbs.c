@@ -778,6 +778,8 @@ static int post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 	struct hfi1_qp *qp = to_iqp(ibqp);
 	struct hfi1_rwq *wq = qp->r_rq.wq;
 	unsigned long flags;
+	int qp_err_flush = (ib_hfi1_state_ops[qp->state] & HFI1_FLUSH_RECV) &&
+				!qp->ibqp.srq;
 	int ret;
 
 	/* Check that state is OK to post receive. */
@@ -808,15 +810,28 @@ static int post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 			ret = -ENOMEM;
 			goto bail;
 		}
+		if (unlikely(qp_err_flush)) {
+			struct ib_wc wc;
 
-		wqe = get_rwqe_ptr(&qp->r_rq, wq->head);
-		wqe->wr_id = wr->wr_id;
-		wqe->num_sge = wr->num_sge;
-		for (i = 0; i < wr->num_sge; i++)
-			wqe->sg_list[i] = wr->sg_list[i];
-		/* Make sure queue entry is written before the head index. */
-		smp_wmb();
-		wq->head = next;
+			memset(&wc, 0, sizeof(wc));
+			wc.qp = &qp->ibqp;
+			wc.opcode = IB_WC_RECV;
+			wc.wr_id = wr->wr_id;
+			wc.status = IB_WC_WR_FLUSH_ERR;
+			hfi1_cq_enter(to_icq(qp->ibqp.recv_cq), &wc, 1);
+		} else {
+			wqe = get_rwqe_ptr(&qp->r_rq, wq->head);
+			wqe->wr_id = wr->wr_id;
+			wqe->num_sge = wr->num_sge;
+			for (i = 0; i < wr->num_sge; i++)
+				wqe->sg_list[i] = wr->sg_list[i];
+			/*
+			 * Make sure queue entry is written
+			 * before the head index.
+			 */
+			smp_wmb();
+			wq->head = next;
+		}
 		spin_unlock_irqrestore(&qp->r_rq.lock, flags);
 	}
 	ret = 0;
