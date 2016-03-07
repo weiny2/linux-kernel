@@ -63,6 +63,7 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 #include <rdma/rdma_vt.h>
+#include <rdma/rdmavt_qp.h>
 
 #include "chip_registers.h"
 #include "common.h"
@@ -390,6 +391,34 @@ struct hfi1_snoop_data {
 /* snoop mode_flag values */
 #define HFI1_PORT_SNOOP_MODE     1U
 #define HFI1_PORT_CAPTURE_MODE   2U
+
+/*
+ * OPA 9B Packet Format
+ */
+#define OPA_9B_BTH_PAD_BITS	3
+
+/*
+ * OPA 16B Packet Format
+ */
+#define OPA_16B_LID_MASK	0xFFFFFull
+#define OPA_16B_SLID_MASK	0xF00ull
+#define OPA_16B_DLID_MASK	0xF000ull
+#define OPA_16B_LEN_MASK	0x7FF00000ull
+#define OPA_16B_BECN_MASK	0x80000000ull
+#define OPA_16B_FECN_MASK	0x10000000ull
+#define OPA_16B_SC_MASK		0x1F00000ull
+#define OPA_16B_RC_MASK		0xE000000ull
+#define OPA_16B_PKEY_MASK	0xFFFF0000ull
+#define OPA_16B_L4_MASK		0xFFull
+#define OPA_16B_ENTROPY_MASK	0xFFFFull
+#define OPA_16B_AGE_MASK	0xFF0000ull
+#define OPA_16B_SLID_HIGH_SHIFT	8
+#define OPA_16B_DLID_HIGH_SHIFT	12
+#define OPA_16B_BTH_PAD_SHIFT	20
+#define OPA_16B_BTH_PAD_BITS	7
+
+#define OPA_16B_MAKE_QW(low_dw, high_dw) (((u64)high_dw << 32) | low_dw)
+#define OPA_16B_GET_L4(stl_h1) ((u32)(stl_h1 & OPA_16B_L4_MASK))
 
 struct rvt_sge_state;
 
@@ -1944,6 +1973,19 @@ static inline u32 qsfp_resource(struct hfi1_devdata *dd)
 int hfi1_tempsense_rd(struct hfi1_devdata *dd, struct hfi1_temp *temp);
 
 /**
+ * hfi1_mcast_xlate - Translate 9B MLID to the 16B
+ * MLID range
+ */
+static inline u32 hfi1_mcast_xlate(u32 lid)
+{
+	if ((lid >= HFI1_MULTICAST_LID_BASE) &&
+	    lid != HFI1_9B_PERMISSIVE_LID)
+		return lid - HFI1_MULTICAST_LID_BASE +
+				HFI1_16B_MULTICAST_LID_BASE;
+	return lid;
+}
+
+/**
  * hfi1_retrieve_lid - Get lid in the GID.
  *
  * Extended LIDs are stored in the GID if the STL
@@ -2074,5 +2116,241 @@ static inline void hfi1_make_ext_grh(struct hfi1_packet *packet,
 		grh->dgid.global.interface_id = cpu_to_be64(ppd->guid);
 	else
 		grh->dgid.global.interface_id = OPA_MAKE_GID(dlid);
+}
+
+static inline struct ib_ah_attr *hfi1_get_ah_attr(struct rvt_qp *qp)
+{
+	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
+	    (qp->ibqp.qp_type == IB_QPT_UC)) {
+			return &qp->remote_ah_attr;
+	} else {
+		struct rvt_swqe *wqe = qp->s_wqe;
+
+		if (!wqe)
+			return NULL;
+		return &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
+	}
+}
+#define DBG_MK_16B_HDR 0
+static inline int make_16b_header(struct rvt_qp *qp,
+				  struct hfi1_ib_header *ibh,
+				  u32 *plen_16b, u32 sc5, u8 *l4,
+				  u64 *stl_h0, u64 *stl_h1,
+				  u8 *new_pad, u8 *old_pad,
+				  bool update_bth)
+{
+	u8  lnh = (u8)(be16_to_cpu(ibh->lrh[0]) & 3);
+	struct ib_ah_attr *ah_attr;
+	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct hfi1_pportdata *ppd =  ppd_from_ibp(ibp);
+	struct hfi1_other_headers *ohdr;
+	u32 ext_slid;
+	u32 ext_dlid;
+	int ret = 0;
+	int plen_in_bytes;
+	int pad_to_flit;
+	u32 *bth0;
+
+	/* decode 9b header */
+#if DBG_MK_16B_HDR
+	u8   vl = (u8)(be16_to_cpu(ibh->lrh[0]) >> 12);
+	u8 lver = (u8)(be16_to_cpu(ibh->lrh[0]) >> 8) & 0xf;
+	u16 len = be16_to_cpu(ibh->lrh[2]);
+	u8   sl = (u8)(be16_to_cpu(ibh->lrh[0]) >> 4) & 0xf;
+#endif /* DBG_MK_16B_HDR */
+
+	u16 dlid = be16_to_cpu(ibh->lrh[1]);
+	u16 slid = be16_to_cpu(ibh->lrh[3]);
+	u16 pkey;
+	u8 fecn, becn;
+	u32 h0, h1, h2, h3, qwords;
+
+	ah_attr = hfi1_get_ah_attr(qp);
+	if (!ah_attr) {
+		pr_warn("%s:%d. Cannot retrieve address handle\n",
+			__func__, __LINE__);
+		return -1;
+	}
+
+	if (lnh == HFI1_LRH_BTH) {
+		/* LRH */
+		ohdr = &ibh->u.oth;
+		*l4 = HFI1_L4_IB_LOCAL;
+	} else if (lnh == HFI1_LRH_GRH) {
+		/* BTH */
+		*l4 = HFI1_L4_IB_GLOBAL;
+		ohdr = &ibh->u.l.oth;
+	} else {
+		pr_err("%s: Unsupported header: lnh:%x\n", __func__, lnh);
+		return -1;
+	}
+
+	/* Convert dwords to bytes */
+	plen_in_bytes = *plen_16b << 2;
+
+	/* Get current padding from BTH0 */
+	*old_pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+
+	/* Remove existing padding, if any */
+	plen_in_bytes -= *old_pad;
+
+	/* Add 4 bytes for CRC */
+	plen_in_bytes += 4;
+
+	/* Add 1 byte for LT */
+	plen_in_bytes += 1;
+
+	/* Calculate new number of padding bytes to flit */
+	pad_to_flit = 8 - (plen_in_bytes % 8);
+
+	if (pad_to_flit == 8)
+		pad_to_flit = 0; /* no padding needed */
+
+	*new_pad = pad_to_flit;
+
+	/*
+	 * The IB BTH has a 2 bit pad field to pad packets with as much as 3
+	 * bytes to align them on a 4 byte boundary. OPA aligns on a 8 byte
+	 * boundary so we may have to extend the pad by as much as 4 bytes.
+	 *
+	 * The OPA pad field is 3 bits to allow for the additional pad size.
+	 */
+	if (update_bth) {
+		/* Remove existing padding from BTH */
+		bth0 = &ohdr->bth[0];
+		*bth0 = be32_to_cpu(*bth0);
+		*bth0 &= ~(OPA_9B_BTH_PAD_BITS << OPA_16B_BTH_PAD_SHIFT);
+		*bth0 = cpu_to_be32(*bth0);
+
+		/* Update new padding in BTH */
+		ohdr->bth[0] |= (cpu_to_be32(*new_pad) <<
+				 OPA_16B_BTH_PAD_SHIFT);
+		bth0 = &ohdr->bth[0];
+		*bth0 = be32_to_cpu(*bth0);
+		*bth0 |= (*new_pad << OPA_16B_BTH_PAD_SHIFT);
+		*bth0 = cpu_to_be32(*bth0);
+	}
+
+	/**
+	 * From WFR HAS Sec 7.1.5.2:
+	 * The actual length of the packet is calculated from
+	 * PbcLengthDWs as follows: For bypass packets, the actual
+	 * length is PbcLengthDWs minus the 2 DWs of PBC, and this
+	 * is also the length on the wire. This value must be aligned
+	 * to a flit boundary.
+	 */
+	qwords = (plen_in_bytes + pad_to_flit) >> 3;
+
+	/**
+	 * plen already accounts for 9B header size of 2 dwords.
+	 * Add 2 more dwords to account for the 16B header.
+	 */
+	*plen_16b = (plen_in_bytes + pad_to_flit + 8) >> 2;
+
+	/* stl 16b header */
+	h0 = 0x0;
+	h1 = 0x40000000; /* 16B L2=10 RC=0 */
+	h2 = 0x0;        /* {D,S}LID[23:20] = 0 */
+	h3 = 0x0;        /* R=0, Age=0, Entropy = 0 */
+
+	pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
+	fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) & HFI1_FECN_MASK;
+	becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) & HFI1_BECN_MASK;
+
+#if DBG_MK_16B_HDR
+	pr_info("old_pad: %d, new_pad: %d, stored pad: %d\n",
+		*old_pad, *new_pad, ((be32_to_cpu(ohdr->bth[0]) >> 20) & 7));
+	pr_info("%s: plen=%d bytes (%d DWs) qwords=%d\n",
+		__func__, plen_in_bytes, *plen_16b, qwords);
+	pr_info("%s: l4=0x%x len=%d plen_16b=%d qwords=%d\n",
+		__func__, *l4, len, *plen_16b, qwords);
+	pr_info("%s: lhn=%.2x vl:%.2x lver:%.2x sl:%.2x len:%.4x\n",
+		__func__, lnh, vl, lver, sl, len);
+	pr_info("%s: slid:%.4x dlid:%.4x fecn:%.2x becn:%.2x pkey:%.4x\n",
+		__func__, slid, dlid, fecn, becn, pkey);
+#endif /* DBG_MK_16B_HDR */
+
+	/* Retain the last 3 bits from the 16 bit LID since it
+	 * already has the LMC set correctly from the src_path_bits
+	 */
+	if (!ppd->lid)
+		ext_slid = 0xFFFFFFFF;
+	else
+		ext_slid = ppd->lid | (ah_attr->src_path_bits &
+					      ((1 << ppd->lmc) - 1));
+
+	if (hfi1_use_16b(qp)) {
+		ext_dlid = hfi1_retrieve_lid(ah_attr);
+	} else {
+		ext_slid = slid;
+		ext_dlid = hfi1_mcast_xlate(dlid);
+	}
+
+	/* Take care of Bits 20:23 of DLID and SLID later */
+	h0 = (h0 & ~OPA_16B_LID_MASK)  | ext_slid;
+	h0 = (h0 & ~OPA_16B_LEN_MASK)  | (qwords << 20);
+	h0 = (h0 & ~OPA_16B_BECN_MASK) | (becn << 31);
+
+	h1 = (h1 & ~OPA_16B_LID_MASK)  | ext_dlid;
+	h1 = (h1 & ~OPA_16B_SC_MASK)   | (sc5 << 20);
+	h1 = (h1 & ~OPA_16B_FECN_MASK) | (fecn << 28);
+
+	h2 = (h2 & ~OPA_16B_L4_MASK)   | *l4;
+
+	/* Higher bits of slid and dlid */
+	h2 = (h2 & ~OPA_16B_SLID_MASK) | ((ext_slid >> 20)
+		<< OPA_16B_SLID_HIGH_SHIFT);
+	h2 = (h2 & ~OPA_16B_DLID_MASK) | ((ext_dlid >> 20)
+		<< OPA_16B_DLID_HIGH_SHIFT);
+	h2 = (h2 & ~OPA_16B_PKEY_MASK) | (pkey << 16);
+#if DBG_MK_16B_HDR
+	pr_info("%s: h0:0x%x, h1:0x%x, h2:0x%x, h3:0x%x\n",
+		__func__, h0, h1, h2, h3);
+#endif
+	/* build 16B header (2 QW) */
+	*stl_h0 = OPA_16B_MAKE_QW(h0, h1);
+	*stl_h1 = OPA_16B_MAKE_QW(h2, h3);
+
+	return ret;
+}
+
+#define DBG_PARSE_16B_HDR 0
+static inline void parse_16b_header(u32 *hdr, u32 *slid, u32 *dlid,
+				    u16 *len, u16 *pkey, u16 *entropy,
+				    u8 *sc, u8 *rc, u8 *fecn, u8 *becn,
+				    u8 *age, u8 *l4)
+{
+	u32 h0 = *hdr++;
+	u32 h1 = *hdr++;
+	u32 h2 = *hdr++;
+	u32 h3 = *hdr;
+
+	*slid = (h0 & OPA_16B_LID_MASK) | (((h2 & OPA_16B_SLID_MASK) >>
+		OPA_16B_SLID_HIGH_SHIFT) << 20);
+	*dlid = (h1 & OPA_16B_LID_MASK) | (((h2 & OPA_16B_DLID_MASK) >>
+		OPA_16B_DLID_HIGH_SHIFT) << 20);
+	*len  = (h0 & OPA_16B_LEN_MASK)  >> 20;
+	*becn = (h0 & OPA_16B_BECN_MASK) >> 31;
+
+	*sc = (h1 & OPA_16B_SC_MASK) >> 20;
+	*rc = (h1 & OPA_16B_RC_MASK) >> 25;
+	*fecn = (h1 & OPA_16B_FECN_MASK) >> 28;
+
+	*l4 = h2 & OPA_16B_L4_MASK;
+	*pkey = (h2 & OPA_16B_PKEY_MASK) >> 16;
+
+	*entropy = h3 & OPA_16B_ENTROPY_MASK;
+	*age = (h3 & OPA_16B_AGE_MASK) >> 16;
+
+#if DBG_PARSE_16B_HDR
+	pr_info("(hdr) h0=%.08x h1=%.08x h2=%.08x h3=%.08x\n",
+		h0, h1, h2, h3);
+	pr_info(" (h0) slid=%.08x len=%.08x becn=%.02x\n",
+		*slid, *len, *becn);
+	pr_info(" (h1) dlid=%.08x sc=%.02x rc=%.02x fecn=%.02x\n",
+		*dlid, *sc, *rc, *fecn);
+	pr_info(" (h2) l4=%.02x pkey=%.04x\n", *l4, *pkey);
+	pr_info(" (h3) entropy=%.04x age=%.02x\n", *entropy, *age);
+#endif /* DBG_PARSE_16B_HDR */
 }
 #endif                          /* _HFI1_KERNEL_H */

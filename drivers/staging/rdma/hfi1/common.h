@@ -331,6 +331,10 @@ struct hfi1_message_header {
 #define HFI1_LRH_GRH 0x0003      /* 1. word of IB LRH - next header: GRH */
 #define HFI1_LRH_BTH 0x0002      /* 1. word of IB LRH - next header: BTH */
 
+/* L4 Encoding for OPA 8B,10B,16B packets */
+#define HFI1_L4_IB_LOCAL  0x0009
+#define HFI1_L4_IB_GLOBAL 0x000A
+
 /* misc. */
 #define SIZE_OF_CRC 1
 
@@ -348,6 +352,7 @@ struct hfi1_message_header {
 #define HFI1_BECN_SHIFT 30
 #define HFI1_BECN_MASK 1
 #define HFI1_BECN_SMASK BIT(HFI1_BECN_SHIFT)
+#define HFI1_9B_PERMISSIVE_LID 0xFFFF
 #define HFI1_16B_PERMISSIVE_LID 0xFFFFFF
 
 /**
@@ -358,6 +363,7 @@ struct hfi1_message_header {
  */
 #define HFI1_MCAST_NR 0x4 /* Number of top bits set */
 #define HFI1_COLLECTIVE_NR 0x1 /* Number of bits after MCAST_NR */
+#define HFI1_MULTICAST_LID_BASE 0xC000
 #define HFI1_16B_MULTICAST_LID_BASE (0xFFFFFF << (24 - HFI1_MCAST_NR))
 #define HFI1_16B_COLLECTIVE_LID_BASE (0xFFFFFF << (24 -\
 				       (HFI1_MCAST_NR + HFI1_COLLECTIVE_NR)))
