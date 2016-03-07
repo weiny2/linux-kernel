@@ -1399,7 +1399,7 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 	/* first release any assigned CQs */
 	hfi_cq_cleanup(ctx);
 
-	/* reset PCB (host memory) */
+	/* reset PCB, cancel OTR, flush caches */
 	hfi_pcb_reset(dd, ptl_pid);
 
 	/* stop pasid translation */
