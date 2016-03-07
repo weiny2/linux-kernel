@@ -418,7 +418,7 @@ struct hfi1_snoop_data {
 #define OPA_16B_BTH_PAD_BITS	7
 
 #define OPA_16B_MAKE_QW(low_dw, high_dw) (((u64)high_dw << 32) | low_dw)
-#define OPA_16B_GET_L4(stl_h1) ((u32)(stl_h1 & OPA_16B_L4_MASK))
+#define OPA_16B_GET_L4(opa_h1) ((u32)(opa_h1 & OPA_16B_L4_MASK))
 
 struct rvt_sge_state;
 
@@ -2135,7 +2135,7 @@ static inline struct ib_ah_attr *hfi1_get_ah_attr(struct rvt_qp *qp)
 static inline int make_16b_header(struct rvt_qp *qp,
 				  struct hfi1_ib_header *ibh,
 				  u32 *plen_16b, u32 sc5, u8 *l4,
-				  u64 *stl_h0, u64 *stl_h1,
+				  u64 *opa_h0, u64 *opa_h1,
 				  u8 *new_pad, u8 *old_pad,
 				  bool update_bth)
 {
@@ -2247,7 +2247,7 @@ static inline int make_16b_header(struct rvt_qp *qp,
 	 */
 	*plen_16b = (plen_in_bytes + pad_to_flit + 8) >> 2;
 
-	/* stl 16b header */
+	/* OPA 16B packet header */
 	h0 = 0x0;
 	h1 = 0x40000000; /* 16B L2=10 RC=0 */
 	h2 = 0x0;        /* {D,S}LID[23:20] = 0 */
@@ -2307,9 +2307,9 @@ static inline int make_16b_header(struct rvt_qp *qp,
 	pr_info("%s: h0:0x%x, h1:0x%x, h2:0x%x, h3:0x%x\n",
 		__func__, h0, h1, h2, h3);
 #endif
-	/* build 16B header (2 QW) */
-	*stl_h0 = OPA_16B_MAKE_QW(h0, h1);
-	*stl_h1 = OPA_16B_MAKE_QW(h2, h3);
+	/* Build OPA 16B header (2 QW) */
+	*opa_h0 = OPA_16B_MAKE_QW(h0, h1);
+	*opa_h1 = OPA_16B_MAKE_QW(h2, h3);
 
 	return ret;
 }
