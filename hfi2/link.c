@@ -213,7 +213,7 @@ void hfi_read_link_quality(struct hfi_pportdata *ppd, u8 *link_quality)
 	if (ppd->host_link_state & HLS_UP) {
 		ret = hfi2_read_8051_config(ppd, LINK_QUALITY_INFO,
 						GENERAL_CONFIG, &frame);
-		pr_info("link quality info is %#x\n", frame);
+		ppd_dev_dbg(ppd, "link quality info is %#x\n", frame);
 		if (ret == 0)
 			*link_quality = (frame >> LINK_QUALITY_SHIFT)
 						& LINK_QUALITY_MASK;
