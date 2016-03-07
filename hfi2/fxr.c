@@ -85,6 +85,8 @@
 #include <rdma/fxr/fxr_fc_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
 #include <rdma/fxr/fxr_tx_otr_pkt_top_csrs.h>
+#include <rdma/fxr/fxr_tx_otr_msg_top_csrs_defs.h>
+#include <rdma/fxr/fxr_tx_otr_msg_top_csrs.h>
 #include <rdma/fxr/fxr_pcim_defs.h>
 #include "opa_hfi.h"
 #include "link.h"
@@ -2277,6 +2279,10 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 {
 	RX_HIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
 	RX_HIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
+	txotr_msg_cfg_cancel_msg_req_1_t cancel_msg_req1 = {.val = 0};
+	txotr_msg_cfg_cancel_msg_req_2_t cancel_msg_req2 = {.val = 0};
+	txotr_msg_cfg_cancel_msg_req_3_t cancel_msg_req3 = {.val = 0};
+	txotr_msg_cfg_cancel_msg_req_4_t cancel_msg_req4 = {.val = 0};
 	RXHP_CFG_PTE_CACHE_ACCESS_CTL_t pte_cache_access = {.val = 0};
 	RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t trig_op_cache_access = {.val = 0};
 	RXHP_CFG_PSC_CACHE_ACCESS_CTL_t me_le_uh_cache_access = {.val = 0};
@@ -2299,6 +2305,26 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	/* We need this lock to guard cache invalidation
 	 * CSR writes, all pids use the same CSR */
 	spin_lock(&dd->ptl_lock);
+
+	/*
+	 * Cancel pending OTR operations for current PID,
+	 * except ipid_mask, all other masks are zero.
+	 */
+	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_4, cancel_msg_req4.val);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_3, cancel_msg_req3.val);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_2, cancel_msg_req2.val);
+	cancel_msg_req1.field.ipid_mask = 0xFFF;
+	cancel_msg_req1.field.ipid = ptl_pid;
+	cancel_msg_req1.field.cancel_req = 1;
+	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1, cancel_msg_req1.val);
+
+	/* HW takes max 64K clock cycles on 1.2GHz, so delay 1ms */
+	mdelay(1);
+	/* for debugging purpose, read the CSR back */
+	cancel_msg_req1.val = read_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1);
+	if (cancel_msg_req1.field.cancel_req)
+		dd_dev_err(dd, "OTR cancellation not done after 1ms, pid %d\n",
+			ptl_pid);
 
 	/* invalidate cached host memory in HFI for Portals Tables by PID */
 	pte_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
