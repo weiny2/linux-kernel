@@ -50,9 +50,7 @@ static int __dma_tx(struct uart_8250_port *p, struct uart_8250_dma *dma)
 {
 	struct circ_buf			*xmit = &p->port.state->xmit;
 	struct dma_async_tx_descriptor	*desc;
-
-	if (dma->tx_running)
-		return 0;
+	struct device			*tx_dev = dma->txchan->device->dev;
 
 	if (uart_tx_stopped(&p->port) || uart_circ_empty(xmit)) {
 		/* We have been called from __dma_tx_complete() */
@@ -75,8 +73,7 @@ static int __dma_tx(struct uart_8250_port *p, struct uart_8250_dma *dma)
 
 	dma->tx_cookie = dmaengine_submit(desc);
 
-	dma_sync_single_for_device(dma->txchan->device->dev, dma->tx_addr,
-				   UART_XMIT_SIZE, DMA_TO_DEVICE);
+	dma_sync_single_for_device(tx_dev, dma->tx_addr, UART_XMIT_SIZE, DMA_TO_DEVICE);
 
 	dma_async_issue_pending(dma->txchan);
 	return 0;
@@ -86,6 +83,9 @@ int serial8250_tx_dma(struct uart_8250_port *p)
 {
 	struct uart_8250_dma *dma = p->dma;
 	int ret;
+
+	if (dma->tx_running)
+		return 0;
 
 	ret = __dma_tx(p, dma);
 	if (ret) {
@@ -167,6 +167,7 @@ int serial8250_request_dma(struct uart_8250_port *p)
 				  dma->rx_dma_addr : p->port.mapbase;
 	phys_addr_t tx_dma_addr = dma->tx_dma_addr ?
 				  dma->tx_dma_addr : p->port.mapbase;
+	struct device		*rx_dev, *tx_dev;
 	dma_cap_mask_t		mask;
 	struct dma_slave_caps	caps;
 	int			ret;
@@ -223,24 +224,21 @@ int serial8250_request_dma(struct uart_8250_port *p)
 	dmaengine_slave_config(dma->txchan, &dma->txconf);
 
 	/* RX buffer */
+	rx_dev = dma->rxchan->device->dev;
 	if (!dma->rx_size)
 		dma->rx_size = PAGE_SIZE;
 
-	dma->rx_buf = dma_alloc_coherent(dma->rxchan->device->dev, dma->rx_size,
-					&dma->rx_addr, GFP_KERNEL);
+	dma->rx_buf = dma_alloc_coherent(rx_dev, dma->rx_size, &dma->rx_addr, GFP_KERNEL);
 	if (!dma->rx_buf) {
 		ret = -ENOMEM;
 		goto err;
 	}
 
 	/* TX buffer */
-	dma->tx_addr = dma_map_single(dma->txchan->device->dev,
-					p->port.state->xmit.buf,
-					UART_XMIT_SIZE,
-					DMA_TO_DEVICE);
-	if (dma_mapping_error(dma->txchan->device->dev, dma->tx_addr)) {
-		dma_free_coherent(dma->rxchan->device->dev, dma->rx_size,
-				  dma->rx_buf, dma->rx_addr);
+	tx_dev = dma->txchan->device->dev;
+	dma->tx_addr = dma_map_single(tx_dev, p->port.state->xmit.buf, UART_XMIT_SIZE, DMA_TO_DEVICE);
+	if (dma_mapping_error(tx_dev, dma->tx_addr)) {
+		dma_free_coherent(rx_dev, dma->rx_size, dma->rx_buf, dma->rx_addr);
 		ret = -ENOMEM;
 		goto err;
 	}
