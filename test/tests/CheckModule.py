@@ -89,7 +89,7 @@ def main():
     if test_info.is_simics() == True:
         driver_path = "/host" + driver_path
 
-    cmd = "modinfo -F srcversion %s" % driver_path
+    cmd = "/sbin/modinfo -F srcversion %s" % driver_path
     proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
     status = proc.wait()
@@ -123,7 +123,7 @@ def main():
         loaded = is_driver_loaded(host, "rdmavt")
         if loaded == True:
             RegLib.test_log(0, "Need to check rdmavt too")
-            cmd = "modinfo -F srcversion %s" % vt_driver_path
+            cmd = "/sbin/modinfo -F srcversion %s" % vt_driver_path
             proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
             status = proc.wait()
