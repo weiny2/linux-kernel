@@ -1978,9 +1978,9 @@ int hfi1_tempsense_rd(struct hfi1_devdata *dd, struct hfi1_temp *temp);
  */
 static inline u32 hfi1_mcast_xlate(u32 lid)
 {
-	if ((lid >= HFI1_MULTICAST_LID_BASE) &&
+	if ((lid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
 	    lid != HFI1_9B_PERMISSIVE_LID)
-		return lid - HFI1_MULTICAST_LID_BASE +
+		return lid - be16_to_cpu(IB_MULTICAST_LID_BASE) +
 				HFI1_16B_MULTICAST_LID_BASE;
 	return lid;
 }
@@ -2030,7 +2030,7 @@ static inline bool hfi1_check_mcast(struct ib_ah_attr *ah_attr)
 	}
 	lid = ah_attr->dlid;
 	return ((lid >= be16_to_cpu(IB_MULTICAST_LID_BASE) &&
-		lid != IB_LID_PERMISSIVE));
+		lid != be16_to_cpu(IB_LID_PERMISSIVE)));
 }
 
 /**
@@ -2112,7 +2112,8 @@ static inline void hfi1_make_ext_grh(struct hfi1_packet *packet,
 	 */
 	grh->dgid.global.subnet_prefix = ibp->rvp.gid_prefix;
 	if ((dlid == HFI1_16B_PERMISSIVE_LID) ||
-	    (dlid == be16_to_cpu(IB_LID_PERMISSIVE)))
+	    (dlid == be16_to_cpu(IB_LID_PERMISSIVE)) ||
+	    (dlid < be16_to_cpu(IB_MULTICAST_LID_BASE)))
 		grh->dgid.global.interface_id = cpu_to_be64(ppd->guid);
 	else
 		grh->dgid.global.interface_id = OPA_MAKE_GID(dlid);
@@ -2315,15 +2316,15 @@ static inline int make_16b_header(struct rvt_qp *qp,
 }
 
 #define DBG_PARSE_16B_HDR 0
-static inline void parse_16b_header(u32 *hdr, u32 *slid, u32 *dlid,
+static inline void parse_16b_header(struct hfi1_16b_header *hdr, u32 *slid, u32 *dlid,
 				    u16 *len, u16 *pkey, u16 *entropy,
 				    u8 *sc, u8 *rc, u8 *fecn, u8 *becn,
 				    u8 *age, u8 *l4)
 {
-	u32 h0 = *hdr++;
-	u32 h1 = *hdr++;
-	u32 h2 = *hdr++;
-	u32 h3 = *hdr;
+	u32 h0 = hdr->lrh[0];
+	u32 h1 = hdr->lrh[1];
+	u32 h2 = hdr->lrh[2];
+	u32 h3 = hdr->lrh[3];
 
 	*slid = (h0 & OPA_16B_LID_MASK) | (((h2 & OPA_16B_SLID_MASK) >>
 		OPA_16B_SLID_HIGH_SHIFT) << 20);
@@ -2352,5 +2353,11 @@ static inline void parse_16b_header(u32 *hdr, u32 *slid, u32 *dlid,
 	pr_info(" (h2) l4=%.02x pkey=%.04x\n", *l4, *pkey);
 	pr_info(" (h3) entropy=%.04x age=%.02x\n", *entropy, *age);
 #endif /* DBG_PARSE_16B_HDR */
+}
+
+static inline int hfi1_get_16b_padding(u32 hdr_size, u32 payload)
+{
+	/* 4 = CRC, 1 = LT */
+	return 8 - ((hdr_size + payload + 4 + 1) % 8);
 }
 #endif                          /* _HFI1_KERNEL_H */

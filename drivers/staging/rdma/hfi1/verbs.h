@@ -178,7 +178,7 @@ struct hfi1_ib_header {
 } __packed;
 
 struct hfi1_16b_header {
-	__be32 lrh[4];
+	u32 lrh[4]; /* 16B header is in CPU format */
 	union {
 		struct {
 			struct ib_grh grh;
@@ -189,11 +189,11 @@ struct hfi1_16b_header {
 } __packed;
 
 struct hfi1_opa_header {
-	u8 hdr_type; /* 9B or 16B */
 	union {
 		struct hfi1_ib_header ibh; /* 9B header */
 		struct hfi1_16b_header opah; /* 16B header */
 	} pkt;
+	u8 hdr_type; /* 9B or 16B */
 } __packed;
 
 struct hfi1_ahg_info {
@@ -426,6 +426,8 @@ void hfi1_rc_error(struct rvt_qp *qp, enum ib_wc_status err);
 
 void hfi1_ud_rcv(struct hfi1_packet *packet);
 
+void hfi1_ud_rcv_16b(struct hfi1_packet *packet);
+
 int hfi1_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey);
 
 int hfi1_rvt_get_rwqe(struct rvt_qp *qp, int wr_id_only);
@@ -485,6 +487,8 @@ int hfi1_register_ib_device(struct hfi1_devdata *);
 void hfi1_unregister_ib_device(struct hfi1_devdata *);
 
 void hfi1_ib_rcv(struct hfi1_packet *packet);
+
+void hfi1_ib16_rcv(struct hfi1_packet *packet);
 
 unsigned hfi1_get_npkeys(struct hfi1_devdata *);
 

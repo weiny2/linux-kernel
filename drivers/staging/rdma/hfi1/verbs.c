@@ -644,6 +644,104 @@ drop:
 	ibp->rvp.n_pkt_drops++;
 }
 
+void hfi1_ib16_rcv(struct hfi1_packet *packet)
+{
+	struct hfi1_ctxtdata *rcd = packet->rcd;
+	u32 tlen = packet->tlen;
+	struct hfi1_pportdata *ppd = rcd->ppd;
+	struct hfi1_ibport *ibp = &ppd->ibport_data;
+	struct rvt_dev_info *rdi = &ppd->dd->verbs_dev.rdi;
+	struct hfi1_16b_header *hdr;
+	u32 qp_num;
+	u8 opcode;
+	u32 slid, dlid;
+	u8 age, becn, fecn, l4, rc, sc;
+	u16 entropy, len, pkey;
+
+	/**
+	 * For a bypass packet, ebuf contains the entire packet
+	 * including the header.
+	 * Set packet->hdr and packet->hlen appropriately here so
+	 * functions downstream are able to work with the header.
+	 */
+	hdr = packet->ebuf;
+	packet->hdr = packet->ebuf;
+	parse_16b_header(hdr, &slid, &dlid, &len, &pkey, &entropy,
+			 &sc, &rc, &fecn, &becn, &age, &l4);
+
+	if (l4 == HFI1_L4_IB_LOCAL) {
+		packet->ohdr = &hdr->u.oth;
+		packet->hlen = 36;
+	} else if (l4 == HFI1_L4_IB_GLOBAL) {
+		u32 vtf;
+
+		packet->hlen = 76;
+		packet->ohdr = &hdr->u.l.oth;
+
+		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
+			goto drop;
+		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
+		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
+			goto drop;
+		packet->rcv_flags |= HFI1_HAS_GRH;
+	} else {
+		goto drop;
+	}
+
+	//trace_input_16b_hdr(rcd->dd, slid, dlid, len, pkey, entropy,
+	//		    sc, rc, fecn, becn, age, l4);
+
+	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
+	inc_opstats(tlen, &rcd->opstats->stats[opcode]);
+
+	/* Get the destination QP number. */
+	qp_num = be32_to_cpu(packet->ohdr->bth[1]) & RVT_QPN_MASK;
+
+	if (unlikely(((dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
+		      (dlid != HFI1_16B_PERMISSIVE_LID)))) {
+		struct rvt_mcast *mcast;
+		struct rvt_mcast_qp *p;
+
+		if (l4 != HFI1_L4_IB_GLOBAL)
+			goto drop;
+		mcast = rvt_mcast_find(&ibp->rvp, &hdr->u.l.grh.dgid);
+		if (!mcast)
+			goto drop;
+		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
+			packet->qp = p->qp;
+			spin_lock(&packet->qp->r_lock);
+			if (likely((qp_ok(opcode, packet))))
+				opcode_handler_tbl[opcode](packet);
+			spin_unlock(&packet->qp->r_lock);
+		}
+		/*
+		 * Notify hfi1_multicast_detach() if it is waiting for us
+		 * to finish.
+		 */
+		if (atomic_dec_return(&mcast->refcount) <= 1)
+			wake_up(&mcast->wait);
+	} else {
+		rcu_read_lock();
+		packet->qp = rvt_lookup_qpn(rdi, &ibp->rvp, qp_num);
+		if (!packet->qp) {
+			rcu_read_unlock();
+			goto drop;
+		}
+		spin_lock(&packet->qp->r_lock);
+		if (likely((qp_ok(opcode, packet))))
+			opcode_handler_tbl[opcode](packet);
+		else
+			dd_dev_err(rcd->dd, "%s: no opcode_handler_tbl\n",
+				   __func__);
+		spin_unlock(&packet->qp->r_lock);
+		rcu_read_unlock();
+	}
+	return;
+
+drop:
+	dd_dev_err(rcd->dd, "%s: packet dropped\n", __func__);
+	ibp->rvp.n_pkt_drops++;
+}
 /*
  * This is called from a timer to check for QPs
  * which need kernel memory in order to send a packet.
@@ -813,12 +911,28 @@ static int build_verbs_tx_desc(
 	int ret = 0;
 	struct hfi1_sdma_header *phdr = &tx->phdr;
 	u16 hdrbytes = tx->hdr_dwords << 2;
-
+	u32 *hdr;
+	u8 extra_bytes = 0;
+	u8 crc_lt = 0;
+	char opa_16b_pad_bytes[32] = {0};
+	
+	if (tx->phdr.hdr.hdr_type) {
+		/* hdrbytes accounts for PBC. Need to subtract 8 bytes before
+		 * calculating padding.
+		 */ 
+		extra_bytes = hfi1_get_16b_padding(hdrbytes - 8, length);
+		crc_lt = (SIZE_OF_CRC << 2) + SIZE_OF_LT;
+		hdr = (u32 *)&phdr->hdr.pkt.opah;
+	} else { 
+		hdr = (u32 *)&phdr->hdr.pkt.ibh;
+	}
+		
 	if (!ahg_info->ahgcount) {
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
 			ahg_info->tx_flags,
-			hdrbytes + length,
+			hdrbytes + length +
+			crc_lt + extra_bytes,
 			ahg_info->ahgidx,
 			0,
 			NULL,
@@ -828,27 +942,14 @@ static int build_verbs_tx_desc(
 			goto bail_txadd;
 		phdr->pbc = cpu_to_le64(pbc);
 		
-		/* dchandr1: First setup PBC */
 		ret = sdma_txadd_kvaddr(
 			sde->dd,
 			&tx->txreq,
-			&phdr->pbc,
-			8);
-		if (ret)
-			goto bail_txadd;
-		/* dchandr1: Then copy the 9B header */
-		/* TODO: Account for 16B */
-		ret = sdma_txadd_kvaddr(
-			sde->dd,
-			&tx->txreq,
-			&phdr->hdr.pkt.ibh,
-			hdrbytes - 8);
+			phdr,
+			hdrbytes);
 		if (ret)
 			goto bail_txadd;
 	} else {
-		/* This should be agnostic to 9B/16B as no header
-		 * is being copied
-		 */
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
 			ahg_info->tx_flags,
@@ -865,6 +966,18 @@ static int build_verbs_tx_desc(
 	/* add the ulp payload - if any.  ss can be NULL for acks */
 	if (ss)
 		ret = build_verbs_ulp_payload(sde, ss, length, tx);
+		if (ret)
+			goto bail_txadd;
+
+	/* add icrc, lt byte, and padding to flit */
+	if ((crc_lt + extra_bytes) != 0) {
+		ret = sdma_txadd_kvaddr(
+                	sde->dd,
+                	&tx->txreq,
+                	opa_16b_pad_bytes,
+                	crc_lt + extra_bytes);
+	}
+
 bail_txadd:
 	return ret;
 }
@@ -877,7 +990,9 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	u32 hdrwords = qp->s_hdrwords;
 	struct rvt_sge_state *ss = qp->s_cur_sge;
 	u32 len = qp->s_cur_size;
-	u32 plen = hdrwords + ((len + 3) >> 2) + 2; /* includes pbc */
+	//u32 plen = hdrwords + ((len + 3) >> 2) + 2; /* includes pbc */
+	u32 plen;
+	u32 dwords;
 	struct hfi1_ibdev *dev = ps->dev;
 	struct hfi1_pportdata *ppd = ps->ppd;
 	struct verbs_txreq *tx;
@@ -885,14 +1000,28 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	u8 sc5 = priv->s_sc;
 
 	int ret;
-
+	
+	if (ps->s_txreq->phdr.hdr.hdr_type) {
+		u8 extra_bytes = hfi1_get_16b_padding((hdrwords << 2), len);
+ 		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
+		//printk("%s: %d: Doing 16B DMA send. header: %d, payload: %d, extra: %d, plen: %d\n",
+		//	__func__, __LINE__, hdrwords << 2, len, extra_bytes, (hdrwords + dwords + 2) << 2);
+		printk("%s:%d: Doing 16B DMA\n", __func__, __LINE__);
+	} else {
+		dwords = (len + 3) >> 2;
+	}
+	plen = hdrwords + dwords + 2;
+	
 	tx = ps->s_txreq;
 	if (!sdma_txreq_built(&tx->txreq)) {
 		if (likely(pbc == 0)) {
 			u32 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
 			/* No vl15 here */
 			/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
-			pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
+			if (ps->s_txreq->phdr.hdr.hdr_type)
+				pbc_flags |= PBC_PACKET_BYPASS | PBC_INSERT_BYPASS_ICRC;
+			else
+				pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
 
 			pbc = create_pbc(ppd,
 					 pbc_flags,
@@ -998,10 +1127,10 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	u32 hdrwords = qp->s_hdrwords;
 	struct rvt_sge_state *ss = qp->s_cur_sge;
 	u32 len = qp->s_cur_size;
-	u32 dwords = (len + 3) >> 2;
-	u32 plen = hdrwords + dwords + 2; /* includes pbc */
+	u32 dwords;
+	u32 plen;
 	struct hfi1_pportdata *ppd = ps->ppd;
-	u32 *hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh; /* TODO: Account for 16B */
+	u32 *hdr;
 	u64 pbc_flags = 0;
 	u8 sc5;
 	unsigned long flags = 0;
@@ -1010,7 +1139,24 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	int wc_status = IB_WC_SUCCESS;
 	int ret = 0;
 	pio_release_cb cb = NULL;
+	u32 lrh0_16b;
 
+	
+	
+	if (ps->s_txreq->phdr.hdr.hdr_type) {
+		u8 extra_bytes = hfi1_get_16b_padding((hdrwords << 2), len);
+ 		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
+		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.opah;
+		lrh0_16b = ps->s_txreq->phdr.hdr.pkt.opah.lrh[0];
+		//printk("%s: %d: Doing 16B PIO send. header: %d, payload: %d extra: %d, plen: %d len: %llu\n",
+		//	__func__, __LINE__, hdrwords << 2, len, extra_bytes, ((hdrwords + dwords + 2) << 2),  ((lrh0_16b & STL_16B_LEN_MASK) >> 20));
+		printk("%s:%d: Doing 16B PIO\n", __func__, __LINE__);
+	} else {
+		dwords = (len + 3) >> 2;
+		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh;
+	}
+	plen = hdrwords + dwords + 2;
+		
 	/* only RC/UC use complete */
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_RC:
@@ -1028,7 +1174,10 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	if (likely(pbc == 0)) {
 		u8 vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
 		/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
-		pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
+		if (ps->s_txreq->phdr.hdr.hdr_type)
+			pbc_flags |= PBC_PACKET_BYPASS | PBC_INSERT_BYPASS_ICRC;
+		else
+			pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
 		pbc = create_pbc(ppd, pbc_flags, qp->srate_mbps, vl, plen);
 	}
 	if (cb)
@@ -1361,7 +1510,7 @@ static int query_port(struct rvt_dev_info *rdi, u8 port_num,
 	struct hfi1_ibdev *verbs_dev = dev_from_rdi(rdi);
 	struct hfi1_devdata *dd = dd_from_dev(verbs_dev);
 	struct hfi1_pportdata *ppd = &dd->pport[port_num - 1];
-	u16 lid = (u16)ppd->lid;
+	u32 lid = ppd->lid;
 
 	props->lid = lid ? lid : 0;
 	props->lmc = ppd->lmc;

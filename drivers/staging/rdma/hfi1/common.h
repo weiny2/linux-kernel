@@ -337,6 +337,7 @@ struct hfi1_message_header {
 
 /* misc. */
 #define SIZE_OF_CRC 1
+#define SIZE_OF_LT 1 /* in bytes */
 
 #define LIM_MGMT_P_KEY       0x7FFF
 #define FULL_MGMT_P_KEY      0xFFFF
@@ -363,10 +364,9 @@ struct hfi1_message_header {
  */
 #define HFI1_MCAST_NR 0x4 /* Number of top bits set */
 #define HFI1_COLLECTIVE_NR 0x1 /* Number of bits after MCAST_NR */
-#define HFI1_MULTICAST_LID_BASE 0xC000
-#define HFI1_16B_MULTICAST_LID_BASE (0xFFFFFF << (24 - HFI1_MCAST_NR))
-#define HFI1_16B_COLLECTIVE_LID_BASE (0xFFFFFF << (24 -\
-				       (HFI1_MCAST_NR + HFI1_COLLECTIVE_NR)))
+#define HFI1_16B_MULTICAST_LID_BASE ((0xFFFFFF << (32 - HFI1_MCAST_NR)) >> 8)
+#define HFI1_16B_COLLECTIVE_LID_BASE ((0xFFFFFF << (32 -\
+				       (HFI1_MCAST_NR + HFI1_COLLECTIVE_NR))) >> 8)
 
 static inline __u64 rhf_to_cpu(const __le32 *rbuf)
 {
