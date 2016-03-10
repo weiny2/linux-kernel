@@ -554,157 +554,25 @@ dropit:
 	return 0;
 }
 
-/**
- * hfi1_ib_rcv - process an incoming packet
- * @packet: data packet information
- *
- * This is called to process an incoming packet at interrupt level.
- *
- * Tlen is the length of the header + data + CRC in bytes.
- */
-void hfi1_ib_rcv(struct hfi1_packet *packet)
-{
+static int hfi1_handle_packet(struct hfi1_packet *packet, union ib_gid *mgid) {
+	u8 opcode;
+	u32 qp_num;
 	struct hfi1_ctxtdata *rcd = packet->rcd;
-	struct hfi1_ib_header *hdr = packet->hdr;
-	u32 tlen = packet->tlen;
 	struct hfi1_pportdata *ppd = rcd->ppd;
 	struct hfi1_ibport *ibp = &ppd->ibport_data;
 	struct rvt_dev_info *rdi = &ppd->dd->verbs_dev.rdi;
-	unsigned long flags;
-	u32 qp_num;
-	int lnh;
-	u8 opcode;
-	u16 lid;
-
-	/* Check for GRH */
-	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
-	if (lnh == HFI1_LRH_BTH) {
-		packet->ohdr = &hdr->u.oth;
-	} else if (lnh == HFI1_LRH_GRH) {
-		u32 vtf;
-
-		packet->ohdr = &hdr->u.l.oth;
-		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
-			goto drop;
-		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
-		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
-			goto drop;
-		packet->rcv_flags |= HFI1_HAS_GRH;
-	} else {
-		goto drop;
-	}
-
-	trace_input_ibhdr(rcd->dd, hdr);
 
 	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
-	inc_opstats(tlen, &rcd->opstats->stats[opcode]);
-
-	/* Get the destination QP number. */
-	qp_num = be32_to_cpu(packet->ohdr->bth[1]) & RVT_QPN_MASK;
-	lid = be16_to_cpu(hdr->lrh[1]);
-	if (unlikely((lid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
-		     (lid != be16_to_cpu(IB_LID_PERMISSIVE)))) {
-		struct rvt_mcast *mcast;
-		struct rvt_mcast_qp *p;
-
-		if (lnh != HFI1_LRH_GRH)
-			goto drop;
-		mcast = rvt_mcast_find(&ibp->rvp, &hdr->u.l.grh.dgid);
-		if (!mcast)
-			goto drop;
-		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
-			packet->qp = p->qp;
-			spin_lock_irqsave(&packet->qp->r_lock, flags);
-			if (likely((qp_ok(opcode, packet))))
-				opcode_handler_tbl[opcode](packet);
-			spin_unlock_irqrestore(&packet->qp->r_lock, flags);
-		}
-		/*
-		 * Notify rvt_multicast_detach() if it is waiting for us
-		 * to finish.
-		 */
-		if (atomic_dec_return(&mcast->refcount) <= 1)
-			wake_up(&mcast->wait);
-	} else {
-		rcu_read_lock();
-		packet->qp = rvt_lookup_qpn(rdi, &ibp->rvp, qp_num);
-		if (!packet->qp) {
-			rcu_read_unlock();
-			goto drop;
-		}
-		spin_lock_irqsave(&packet->qp->r_lock, flags);
-		if (likely((qp_ok(opcode, packet))))
-			opcode_handler_tbl[opcode](packet);
-		spin_unlock_irqrestore(&packet->qp->r_lock, flags);
-		rcu_read_unlock();
-	}
-	return;
-
-drop:
-	ibp->rvp.n_pkt_drops++;
-}
-
-void hfi1_ib16_rcv(struct hfi1_packet *packet)
-{
-	struct hfi1_ctxtdata *rcd = packet->rcd;
-	u32 tlen = packet->tlen;
-	struct hfi1_pportdata *ppd = rcd->ppd;
-	struct hfi1_ibport *ibp = &ppd->ibport_data;
-	struct rvt_dev_info *rdi = &ppd->dd->verbs_dev.rdi;
-	struct hfi1_16b_header *hdr;
-	u32 qp_num;
-	u8 opcode;
-	u32 slid, dlid;
-	u8 age, becn, fecn, l4, rc, sc;
-	u16 entropy, len, pkey;
-
-	/**
-	 * For a bypass packet, ebuf contains the entire packet
-	 * including the header.
-	 * Set packet->hdr and packet->hlen appropriately here so
-	 * functions downstream are able to work with the header.
-	 */
-	hdr = packet->ebuf;
-	packet->hdr = packet->ebuf;
-	parse_16b_header(hdr, &slid, &dlid, &len, &pkey, &entropy,
-			 &sc, &rc, &fecn, &becn, &age, &l4);
-
-	if (l4 == HFI1_L4_IB_LOCAL) {
-		packet->ohdr = &hdr->u.oth;
-		packet->hlen = 36;
-	} else if (l4 == HFI1_L4_IB_GLOBAL) {
-		u32 vtf;
-
-		packet->hlen = 76;
-		packet->ohdr = &hdr->u.l.oth;
-
-		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
-			goto drop;
-		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
-		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
-			goto drop;
-		packet->rcv_flags |= HFI1_HAS_GRH;
-	} else {
-		goto drop;
-	}
-
-	//trace_input_16b_hdr(rcd->dd, slid, dlid, len, pkey, entropy,
-	//		    sc, rc, fecn, becn, age, l4);
-
-	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
-	inc_opstats(tlen, &rcd->opstats->stats[opcode]);
+	inc_opstats(packet->tlen, &rcd->opstats->stats[opcode]);
 
 	/* Get the destination QP number. */
 	qp_num = be32_to_cpu(packet->ohdr->bth[1]) & RVT_QPN_MASK;
 
-	if (unlikely(((dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
-		      (dlid != HFI1_16B_PERMISSIVE_LID)))) {
+	if (unlikely(mgid)) {
 		struct rvt_mcast *mcast;
 		struct rvt_mcast_qp *p;
 
-		if (l4 != HFI1_L4_IB_GLOBAL)
-			goto drop;
-		mcast = rvt_mcast_find(&ibp->rvp, &hdr->u.l.grh.dgid);
+		mcast = rvt_mcast_find(&ibp->rvp, mgid);
 		if (!mcast)
 			goto drop;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
@@ -736,6 +604,114 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 		spin_unlock(&packet->qp->r_lock);
 		rcu_read_unlock();
 	}
+	return 0;
+drop:
+	return 1;
+}
+
+/**
+ * hfi1_ib_rcv - process an incoming packet
+ * @packet: data packet information
+ *
+ * This is called to process an incoming packet at interrupt level.
+ *
+ * Tlen is the length of the header + data + CRC in bytes.
+ */
+void hfi1_ib_rcv(struct hfi1_packet *packet)
+{
+	struct hfi1_ctxtdata *rcd = packet->rcd;
+	struct hfi1_ib_header *hdr = packet->hdr;
+	struct hfi1_pportdata *ppd = rcd->ppd;
+	struct hfi1_ibport *ibp = &ppd->ibport_data;
+	int lnh;
+	u16 lid;
+	union ib_gid *mgid = NULL;
+
+	/* Check for GRH */
+	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
+	lid = be16_to_cpu(hdr->lrh[1]);
+	if (unlikely((lid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
+		     (lid != be16_to_cpu(IB_LID_PERMISSIVE))))
+		mgid = &hdr->u.l.grh.dgid;
+
+	if (lnh == HFI1_LRH_BTH) {
+		packet->ohdr = &hdr->u.oth;
+		if (mgid)
+			goto drop;
+	} else if (lnh == HFI1_LRH_GRH) {
+		u32 vtf;
+
+		packet->ohdr = &hdr->u.l.oth;
+		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
+			goto drop;
+		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
+		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
+			goto drop;
+		packet->rcv_flags |= HFI1_HAS_GRH;
+	} else {
+		goto drop;
+	}
+
+	trace_input_ibhdr(rcd->dd, hdr);
+
+	if (hfi1_handle_packet(packet, mgid))
+		goto drop;	
+	return;
+
+drop:
+	ibp->rvp.n_pkt_drops++;
+}
+
+void hfi1_ib16_rcv(struct hfi1_packet *packet)
+{
+	struct hfi1_ctxtdata *rcd = packet->rcd;
+	struct hfi1_pportdata *ppd = rcd->ppd;
+	struct hfi1_ibport *ibp = &ppd->ibport_data;
+	struct hfi1_16b_header *hdr;
+	u32 dlid;
+	u8 l4;
+	union ib_gid *mgid = NULL;
+
+	/**
+	 * For a bypass packet, ebuf contains the entire packet
+	 * including the header.
+	 * Set packet->hdr and packet->hlen appropriately here so
+	 * functions downstream are able to work with the header.
+	 */
+	hdr = packet->ebuf;
+	packet->hdr = packet->ebuf;
+	l4 = hdr->lrh[2] & OPA_16B_L4_MASK;
+	dlid =  (hdr->lrh[1] & OPA_16B_LID_MASK) |
+		(((hdr->lrh[2] & OPA_16B_DLID_MASK) >>
+		  OPA_16B_DLID_HIGH_SHIFT) << 20);
+
+	if (unlikely(((dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
+		      (dlid != HFI1_16B_PERMISSIVE_LID))))
+		mgid = &hdr->u.l.grh.dgid;
+
+	if (l4 == HFI1_L4_IB_LOCAL) {
+		packet->ohdr = &hdr->u.oth;
+		packet->hlen = 36;
+		if (mgid)
+			goto drop;
+	} else if (l4 == HFI1_L4_IB_GLOBAL) {
+		u32 vtf;
+
+		packet->hlen = 76;
+		packet->ohdr = &hdr->u.l.oth;
+
+		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
+			goto drop;
+		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
+		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
+			goto drop;
+		packet->rcv_flags |= HFI1_HAS_GRH;
+	} else {
+		goto drop;
+	}
+
+	if (hfi1_handle_packet(packet, mgid))
+		goto drop;	
 	return;
 
 drop:
