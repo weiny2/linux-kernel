@@ -345,9 +345,9 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 	struct hfi_pportdata *ppd;
 	u32 nwords, extra_bytes;
 	u32 bth1, qwords, slid, dlid;
+	bool becn = false;
 	u8 sc5, l4;
 	u16 pkey;
-	bool becn;
 
 	/* Construct the header. */
 	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
