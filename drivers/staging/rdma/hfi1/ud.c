@@ -1098,7 +1098,7 @@ void hfi1_ud_rcv_16b(struct hfi1_packet *packet)
 	is_mcast = (dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
 			(dlid != HFI1_16B_PERMISSIVE_LID);
 	bth1 = be32_to_cpu(ohdr->bth[1]);
-	if (unlikely(bth1 & HFI1_BECN_SMASK)) {
+	if (unlikely(becn)) {
 		/*
 		 * In pre-B0 h/w the CNP_OPCODE is handled via an
 		 * error path (errata 291394).
@@ -1119,9 +1119,7 @@ void hfi1_ud_rcv_16b(struct hfi1_packet *packet)
 	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
 	opcode &= 0xff;
 
-	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
-
-	if (!is_mcast && (opcode != IB_OPCODE_CNP) && bth1 & HFI1_FECN_SMASK)
+	if (!is_mcast && (opcode != IB_OPCODE_CNP) && fecn)
 		return_cnp_bypass(ibp, qp, src_qp, pkey, dlid, slid, sc, grh);
 
 	/*
