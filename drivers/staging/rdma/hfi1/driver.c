@@ -972,12 +972,15 @@ int handle_receive_interrupt(struct hfi1_ctxtdata *rcd, int thread)
 			last = skip_rcv_packet(&packet, thread);
 			skip_pkt = 0;
 		} else {
-			/* Auto activate link on non-SC15 packet receive */
-			if (unlikely(rcd->ppd->host_link_state ==
-				     HLS_UP_ARMED) &&
-			    set_armed_to_active(rcd, packet, dd))
-				goto bail;
+			if (rhf_rcv_type(packet.rhf) != RHF_RCV_TYPE_BYPASS) { 
+				/* Auto activate link on non-SC15 packet receive */
+				if (unlikely(rcd->ppd->host_link_state ==
+					     HLS_UP_ARMED) &&
+			    	set_armed_to_active(rcd, packet, dd))
+					goto bail;
+			}
 			last = process_rcv_packet(&packet, thread);
+
 		}
 
 		if (!HFI1_CAP_KGET_MASK(rcd->flags, DMA_RTAIL)) {
