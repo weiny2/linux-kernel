@@ -1907,7 +1907,7 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 		}
 
 		/* Add the packet data which is a single buffer */
-		memcpy(s_packet->data + md_len, from, packet_len);
+		memcpy(s_packet->data + md_len, from, (count << 2));
 
 		snoop_list_add_tail(s_packet, dd);
 
