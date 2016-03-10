@@ -573,6 +573,84 @@ int hfi1_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey)
 	return -1;
 }
 
+void return_cnp_bypass(struct hfi1_ibport *ibp, struct rvt_qp *qp, u32 remote_qpn,
+		u32 pkey, u32 slid, u32 dlid, u8 sc5,
+		const struct ib_grh *old_grh)
+{
+	u64 pbc, pbc_flags = 0;
+	u32 bth0, plen, vl, hwords = 7;
+	u32 lrh0 = 0;
+	u32 lrh1 = 0x40000000;
+	u32 lrh2 = 0;
+	u32 lrh3 = 0;
+	struct hfi1_16b_header hdr;
+	struct hfi1_other_headers *ohdr;
+	struct pio_buf *pbuf;
+	struct send_context *ctxt = qp_to_send_context(qp, sc5);
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+	u32 nwords;
+
+	/* Populate length */
+	nwords = (hfi1_get_16b_padding(hwords << 2, 0) + 
+		  (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
+	if (old_grh) {
+		struct ib_grh *grh = &hdr.u.l.grh;
+
+		grh->version_tclass_flow = old_grh->version_tclass_flow;
+		grh->paylen = cpu_to_be16((hwords - 2 + nwords) << 2);
+		grh->hop_limit = 0xff;
+		grh->sgid = old_grh->dgid;
+		grh->dgid = old_grh->sgid;
+		ohdr = &hdr.u.l.oth;
+		lrh2 = (lrh2 & ~OPA_16B_L4_MASK) | HFI1_L4_IB_GLOBAL;
+		hwords += sizeof(struct ib_grh) / sizeof(u32);
+	} else {
+		ohdr = &hdr.u.oth;
+		lrh2 = (lrh2 & ~OPA_16B_L4_MASK) | HFI1_L4_IB_LOCAL;
+	}
+
+	lrh1 = (lrh1 & ~OPA_16B_SC_MASK) | (sc5 << 20);
+
+	/* BIT 16 to 19 is TVER. Bit 20 to 22 is pad cnt */
+	bth0 = (IB_OPCODE_CNP << 24) | (1 << 16) |
+	       (hfi1_get_16b_padding(hwords << 2, 0) << 20);
+	lrh2 = (lrh2 & ~OPA_16B_PKEY_MASK) | (pkey << 16);
+	ohdr->bth[0] = cpu_to_be32(bth0);
+
+	ohdr->bth[1] = cpu_to_be32(remote_qpn);
+	ohdr->bth[2] = 0; /* PSN 0 */
+
+	/* BECN bit is in the LRH */
+	lrh0 = (lrh0 & ~OPA_16B_BECN_MASK) | (1 << 31);
+	/* Populate dlid */
+	lrh1 = (lrh1 & ~OPA_16B_LID_MASK) | dlid;
+	lrh2 = (lrh2 & ~OPA_16B_DLID_MASK) | ((dlid >> 20) 
+				<< OPA_16B_DLID_HIGH_SHIFT);
+
+	/* Populate slid */
+	lrh0 = (lrh0 & ~OPA_16B_LID_MASK)  | slid;
+	lrh2 = (lrh2 & ~OPA_16B_SLID_MASK) | ((slid >> 20) 
+				<< OPA_16B_SLID_HIGH_SHIFT);
+
+	lrh0 = (lrh0 & ~OPA_16B_LEN_MASK) |
+			(((hwords + nwords) >> 1) << 20);
+
+	hdr.lrh[0] = lrh0;
+	hdr.lrh[1] = lrh1;
+	hdr.lrh[2] = lrh2;
+	hdr.lrh[3] = lrh3;
+
+	plen = 2 /* PBC */ + hwords + nwords;
+	pbc_flags |= PBC_PACKET_BYPASS | PBC_INSERT_BYPASS_ICRC;
+	vl = sc_to_vlt(ppd->dd, sc5);
+	pbc = create_pbc(ppd, pbc_flags, qp->srate_mbps, vl, plen);
+	if (ctxt) {
+		pbuf = sc_buffer_alloc(ctxt, plen, NULL, NULL);
+		if (pbuf)
+			ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc,
+						 &hdr, hwords);
+	}
+}
 void return_cnp(struct hfi1_ibport *ibp, struct rvt_qp *qp, u32 remote_qpn,
 		u32 pkey, u32 slid, u32 dlid, u8 sc5,
 		const struct ib_grh *old_grh)
@@ -1044,7 +1122,7 @@ void hfi1_ud_rcv_16b(struct hfi1_packet *packet)
 	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 
 	if (!is_mcast && (opcode != IB_OPCODE_CNP) && bth1 & HFI1_FECN_SMASK)
-		return_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc, grh);
+		return_cnp_bypass(ibp, qp, src_qp, pkey, dlid, slid, sc, grh);
 
 	/*
 	 * Get the number of bytes the message was padded by

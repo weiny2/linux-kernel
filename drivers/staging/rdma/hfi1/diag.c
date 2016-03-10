@@ -1854,13 +1854,20 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 	struct capture_md md;
 	struct snoop_packet *s_packet = NULL;
 
-	/*
-	 * count is in dwords so we need to convert to bytes.
-	 * We also need to account for CRC which would be tacked on by hardware.
-	 */
-	int packet_len = (count << 2) + 4;
+	 /* count is in dwords so we need to convert to bytes. */
+	int packet_len = (count << 2);
 	int ret;
 
+	 /**
+	 * Account for CRC + LT and Padding for bypass packets.
+	 * Account only for CRC for non-bypass packets
+	 */
+	if (!((pbc >> 28) & 0x1))
+		packet_len += (SIZE_OF_CRC << 2);
+	else
+		packet_len += hfi1_get_16b_padding(count << 2, 0) +
+				(SIZE_OF_CRC << 2) + SIZE_OF_LT;
+		
 	snoop_dbg("ACK OUT: len %d", packet_len);
 
 	if (!dd->hfi1_snoop.filter_callback) {
