@@ -312,7 +312,7 @@ u32 hfi2_make_grh(struct hfi2_ibport *ibp, struct ib_grh *hdr,
 	/* The SGID is 32-bit aligned. */
 	hdr->sgid.global.subnet_prefix = ibp->gid_prefix;
 	hdr->sgid.global.interface_id =
-		(grh->sgid_index && grh->sgid_index < ARRAY_SIZE(ibp->guids)) ?
+		(grh->sgid_index && grh->sgid_index <= ARRAY_SIZE(ibp->guids)) ?
 		ibp->guids[grh->sgid_index - 1] : ibp->ppd->pguid;
 
 	hdr->dgid = grh->dgid;
