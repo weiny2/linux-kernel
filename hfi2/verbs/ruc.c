@@ -374,11 +374,10 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 	sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
 	qp->s_sc = sc5;
 
+	bth0 |= extra_bytes << 20;
+	bth1 = qp->remote_qpn;
 	if (qp->s_mig_state == IB_MIG_MIGRATED)
 		bth1 |= IB_16B_BTH_MIG_REQ;
-	bth0 |= extra_bytes << 20;
-
-	bth1 = qp->remote_qpn;
 	if (qp->s_flags & HFI1_S_ECN) {
 		qp->s_flags &= ~HFI1_S_ECN;
 		/* we recently received a FECN, so return a BECN */
