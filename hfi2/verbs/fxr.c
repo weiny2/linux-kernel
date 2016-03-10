@@ -188,32 +188,6 @@ static int qp_max_iovs(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 }
 
 /*
- * update QP state that is tracking progress within the SG list to note
- * that length bytes have been sent
- */
-static void qp_update_sge(struct hfi2_qp *qp, u32 length)
-{
-	struct hfi2_sge_state *ss = qp->s_cur_sge;
-	struct hfi2_sge *sge = &ss->sge;
-
-	sge->vaddr += length;
-	sge->length -= length;
-	sge->sge_length -= length;
-	if (sge->sge_length == 0) {
-		if (--ss->num_sge)
-			*sge = *ss->sg_list++;
-	} else if (sge->length == 0 && sge->mr->lkey) {
-		if (++sge->n >= HFI2_SEGSZ) {
-			if (++sge->m >= sge->mr->mapsz)
-				return;
-			sge->n = 0;
-		}
-		sge->vaddr = sge->mr->map[sge->m]->segs[sge->n].vaddr;
-		sge->length = sge->mr->map[sge->m]->segs[sge->n].length;
-	}
-}
-
-/*
  * read QP's SG list state for next address and length to send
  */
 static void qp_read_sge(struct hfi2_qp *qp, uint64_t *start,
@@ -235,8 +209,8 @@ static void qp_read_sge(struct hfi2_qp *qp, uint64_t *start,
 	*length = iov_length;
 	*start = (uint64_t)sge->vaddr;
 
-	/* update internal state */
-	qp_update_sge(qp, iov_length);
+	/* update QP internal state */
+	hfi2_update_sge(qp->s_cur_sge, iov_length);
 }
 
 /*

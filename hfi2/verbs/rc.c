@@ -1004,7 +1004,7 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 
 	dev_dbg(ibp->dev, "Send RC %s for PSN %u\n",
 		(qp->r_nak_state) ? "NAK" : "ACK", mask_psn(qp->r_ack_psn));
-	hfi2_send_ack(ibp, qp, &hdr, hwords);
+	ibp->ibd->send_ack(ibp, qp, &hdr, hwords);
 	return;
 
 queue_ack:

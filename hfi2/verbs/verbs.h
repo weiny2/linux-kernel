@@ -679,7 +679,11 @@ struct hfi2_ibdev {
 	/* per device cq worker */
 	struct kthread_worker *worker;
 
-	/* receive interrupt functions */
+	/* send functions, snoop overrides */
+	int (*send_wqe)(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
+	int (*send_ack)(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+			struct hfi2_ib_header *hdr, size_t hwords);
+	/* receive interrupt functions, snoop intercepts */
 	rhf_rcv_function_ptr *rhf_rcv_function_map;
 	rhf_rcv_function_ptr rhf_rcv_functions[HFI2_RHF_RCV_TYPES];
 
@@ -819,6 +823,7 @@ int hfi2_make_rc_req(struct hfi2_qp *qp);
 void hfi2_copy_sge(struct hfi2_sge_state *ss, void *data, u32 length,
 		   int release);
 void hfi2_skip_sge(struct hfi2_sge_state *ss, u32 length, int release);
+void hfi2_update_sge(struct hfi2_sge_state *ss, u32 length);
 int hfi2_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		   struct ib_send_wr **bad_wr);
 int hfi2_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,

@@ -681,6 +681,14 @@ static inline u32 opa_16b_get_dlid(u32 *hdr)
 		(((h2 & OPA_16B_DLID_MASK) >> OPA_16B_DLID_SHFT) << 20));
 }
 
+static inline u32 opa_16b_pkt_len(u32 *hdr)
+{
+	u32 h0 = *hdr;
+
+	/* packet field in qwords, return length in bytes */
+	return ((h0 & OPA_16B_LEN_MASK) >> OPA_16B_LEN_SHFT) << 3;
+}
+
 static inline void opa_make_16b_header(u32 *hdr, u32 slid, u32 dlid, u16 len,
 				       u16 pkey, u16 entropy, u8 sc, u8 rc,
 				       bool fecn, bool becn, u8 age, u8 l4)
@@ -747,5 +755,4 @@ static inline void opa_parse_16b_header(u32 *hdr, u32 *slid, u32 *dlid,
 	*entropy = h3 & OPA_16B_ENTROPY_MASK;
 	*age = (h3 & OPA_16B_AGE_MASK) >> OPA_16B_AGE_SHFT;
 }
-
 #endif

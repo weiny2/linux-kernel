@@ -160,6 +160,33 @@ void hfi2_skip_sge(struct hfi2_sge_state *ss, u32 length, int release)
 }
 
 /**
+ * hfi2_update_sge - update state that is tracking progress within the
+ * SG list to note that length bytes have been sent
+ * @ss: the SGE state
+ * @length: the number of bytes to skip
+ */
+void hfi2_update_sge(struct hfi2_sge_state *ss, u32 length)
+{
+	struct hfi2_sge *sge = &ss->sge;
+
+	sge->vaddr += length;
+	sge->length -= length;
+	sge->sge_length -= length;
+	if (sge->sge_length == 0) {
+		if (--ss->num_sge)
+			*sge = *ss->sg_list++;
+	} else if (sge->length == 0 && sge->mr->lkey) {
+		if (++sge->n >= HFI2_SEGSZ) {
+			if (++sge->m >= sge->mr->mapsz)
+				return;
+			sge->n = 0;
+		}
+		sge->vaddr = sge->mr->map[sge->m]->segs[sge->n].vaddr;
+		sge->length = sge->mr->map[sge->m]->segs[sge->n].length;
+	}
+}
+
+/**
  * post_one_send - post one RC, UC, or UD send work request
  * @qp: the QP to post on
  * @wr: the work request to send
