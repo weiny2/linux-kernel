@@ -170,6 +170,10 @@ struct snoop_packet {
 	u8 data[];
 };
 
+static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
+static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+			  struct hfi2_ib_header *from, size_t hwords);
+
 /* Do not make these an enum or it will blow up the capture_md */
 #define PKT_DIR_EGRESS 0x0
 #define PKT_DIR_INGRESS 0x1
@@ -383,11 +387,8 @@ static int hfi1_snoop_open(struct inode *in, struct file *fp)
 	 * queue. Same goes for send.
 	 */
 	dd->ibd->rhf_rcv_function_map = snoop_rhf_rcv_functions;
-#if 0
-	dd->process_pio_send = snoop_send_pio_handler;
-	dd->process_dma_send = snoop_send_pio_handler;
-	dd->pio_inline_send = snoop_inline_pio_send;
-#endif
+	dd->ibd->send_wqe = snoop_send_wqe;
+	dd->ibd->send_ack = snoop_send_ack;
 
 	spin_unlock_irqrestore(&dd->hfi1_snoop.snoop_lock, flags);
 	ret = 0;
@@ -421,6 +422,8 @@ static int hfi1_snoop_release(struct inode *in, struct file *fp)
 	 * handler.
 	 */
 	dd->ibd->rhf_rcv_function_map = dd->ibd->rhf_rcv_functions;
+	dd->ibd->send_wqe = hfi2_send_wqe;
+	dd->ibd->send_ack = hfi2_send_ack;
 
 	spin_unlock_irqrestore(&dd->hfi1_snoop.snoop_lock, flags);
 	snoop_dbg("snoop/capture device released");
@@ -916,7 +919,7 @@ static void snoop_recv_handler(struct hfi2_ib_packet *packet)
 	snoop_dbg("PACKET IN: hdr size %d tlen %d data %p", header_size, tlen,
 		  data);
 #if 0
-	trace_snoop_capture(ppd->dd, header_size, hdr, tlen - header_size,
+	trace_snoop_capture(dd, header_size, hdr, tlen - header_size,
 			    data);
 #endif
 
@@ -1015,40 +1018,44 @@ static void snoop_recv_handler(struct hfi2_ib_packet *packet)
 	ibd->rhf_rcv_functions[packet->etype](packet);
 }
 
-#if 0
 /*
- * Handle snooping and capturing packets when pio is being used. Does not handle
- * bypass packets. The only way to send a bypass packet currently is to use the
- * diagpkt interface. When that interface is enable snoop/capture is not.
+ * Handle snooping and capturing 9B and 16B IB packets.
  */
-int snoop_send_pio_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
-			   u64 pbc)
+static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 {
 	u32 hdrwords = qp->s_hdrwords;
-	struct hfi1_sge_state *ss = qp->s_cur_sge;
+	struct hfi2_sge_state *ss = qp->s_cur_sge;
 	u32 len = qp->s_cur_size;
-	u32 dwords = (len + 3) >> 2;
-	u32 plen = hdrwords + dwords + 2; /* includes pbc */
-	struct hfi1_pportdata *ppd = ps->ppd;
+	u32 dwords = (len + 3) >> 2; /* debug only */
+	struct hfi_devdata *dd = ibp->ibd->dd;
 	struct snoop_packet *s_packet = NULL;
-	u32 *hdr = (u32 *)&ps->s_txreq->phdr.hdr;
+	void *hdr;
 	u32 length = 0;
-	struct hfi1_sge_state temp_ss;
+	struct hfi2_sge_state temp_ss;
 	void *data = NULL;
 	void *data_start = NULL;
 	int ret;
 	int snoop_mode = 0;
 	int md_len = 0;
 	struct capture_md md;
-	u32 vl;
 	u32 hdr_len = hdrwords << 2;
-	u32 tlen = HFI1_GET_PKT_LEN(&ps->s_txreq->phdr.hdr);
+	u32 tlen;
+	bool use_16b = (qp->s_wqe && qp->s_wqe->use_16b);
 
-	md.u.pbc = 0;
+	if (!use_16b) {
+		struct hfi2_ib_header *ibhdr;
+
+		ibhdr = &qp->s_hdr->ph.ibh;
+		hdr = ibhdr;
+		tlen = HFI1_GET_PKT_LEN(ibhdr);
+	} else {
+		hdr = &qp->s_hdr->opa16b;
+		tlen = opa_16b_pkt_len(hdr);
+	}
 
 	snoop_dbg("PACKET OUT: hdrword %u len %u plen %u dwords %u tlen %u",
-		  hdrwords, len, plen, dwords, tlen);
-	if (ppd->dd->hfi1_snoop.mode_flag & HFI1_PORT_SNOOP_MODE)
+		  hdrwords, len, hdrwords + dwords, dwords, tlen);
+	if (dd->hfi1_snoop.mode_flag & HFI1_PORT_SNOOP_MODE)
 		snoop_mode = 1;
 	if ((snoop_mode == 0) ||
 	    unlikely(snoop_flags & SNOOP_USE_METADATA))
@@ -1058,7 +1065,7 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 	s_packet = allocate_snoop_packet(hdr_len, tlen - hdr_len, md_len);
 
 	if (unlikely(!s_packet)) {
-		dd_dev_warn_ratelimited(ppd->dd, "Unable to allocate snoop/capture packet\n");
+		dd_dev_warn_ratelimited(dd, "Unable to allocate snoop/capture packet\n");
 		goto out;
 	}
 
@@ -1066,28 +1073,14 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 
 	if (md_len > 0) {
 		memset(&md, 0, sizeof(struct capture_md));
-		md.port = 1;
+		md.port = ibp->port_num + 1; /* IB ports start from 1 */
 		md.dir = PKT_DIR_EGRESS;
-		if (likely(pbc == 0)) {
-			vl = be16_to_cpu(ps->s_txreq->phdr.hdr.lrh[0]) >> 12;
-			md.u.pbc = create_pbc(ppd, 0, qp->s_srate, vl, plen);
-		} else {
-			md.u.pbc = 0;
-		}
+		md.u.pbc = to_hfi1_pbc(use_16b);
 		memcpy(s_packet->data, &md, md_len);
-	} else {
-		md.u.pbc = pbc;
 	}
 
 	/* Copy header */
-	if (likely(hdr)) {
-		memcpy(s_packet->data + md_len, hdr, hdr_len);
-	} else {
-		dd_dev_err(ppd->dd,
-			   "Unable to copy header to snoop/capture packet\n");
-		kfree(s_packet);
-		goto out;
-	}
+	memcpy(s_packet->data + md_len, hdr, hdr_len);
 
 	if (ss) {
 		data = s_packet->data + hdr_len + md_len;
@@ -1114,7 +1107,7 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 			}
 			snoop_dbg("copy %d to %p", slen, addr);
 			memcpy(data, addr, slen);
-			update_sge(&temp_ss, slen);
+			hfi2_update_sge(&temp_ss, slen);
 			length -= slen;
 			data += slen;
 			snoop_dbg("data is now %p bytes left %d", data, length);
@@ -1126,14 +1119,13 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 	 * Why do the filter check down here? Because the event tracing has its
 	 * own filtering and we need to have the walked the SGE list.
 	 */
-	if (!ppd->dd->hfi1_snoop.filter_callback) {
+	if (!dd->hfi1_snoop.filter_callback) {
 		snoop_dbg("filter not set\n");
 		ret = HFI1_FILTER_HIT;
 	} else {
-		ret = ppd->dd->hfi1_snoop.filter_callback(
-					&ps->s_txreq->phdr.hdr,
-					NULL,
-					ppd->dd->hfi1_snoop.filter_value);
+		ret = dd->hfi1_snoop.filter_callback(
+					hdr, NULL,
+					dd->hfi1_snoop.filter_value);
 	}
 
 	switch (ret) {
@@ -1146,33 +1138,26 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 		break;
 	case HFI1_FILTER_HIT:
 		snoop_dbg("Capturing packet");
-		snoop_list_add_tail(s_packet, ppd->dd);
+		snoop_list_add_tail(s_packet, dd);
 
 		if (unlikely((snoop_flags & SNOOP_DROP_SEND) &&
-			     (ppd->dd->hfi1_snoop.mode_flag &
+			     (dd->hfi1_snoop.mode_flag &
 			      HFI1_PORT_SNOOP_MODE))) {
 			unsigned long flags;
 
 			snoop_dbg("Dropping packet");
-			if (qp->s_wqe) {
+			if (qp->ibqp.qp_type == IB_QPT_RC) {
 				spin_lock_irqsave(&qp->s_lock, flags);
-				hfi1_send_complete(
-					qp,
-					qp->s_wqe,
+				hfi2_rc_send_complete(qp, hdr);
+				spin_unlock_irqrestore(&qp->s_lock, flags);
+			} else if (!qp->s_len && qp->s_wqe) {
+				/* !s_len means this is last packet in WQE */
+				spin_lock_irqsave(&qp->s_lock, flags);
+				hfi2_send_complete(
+					qp, qp->s_wqe,
 					IB_WC_SUCCESS);
 				spin_unlock_irqrestore(&qp->s_lock, flags);
-			} else if (qp->ibqp.qp_type == IB_QPT_RC) {
-				spin_lock_irqsave(&qp->s_lock, flags);
-				hfi1_rc_send_complete(qp,
-						      &ps->s_txreq->phdr.hdr);
-				spin_unlock_irqrestore(&qp->s_lock, flags);
 			}
-
-			/*
-			 * If snoop is dropping the packet we need to put the
-			 * txreq back because no one else will.
-			 */
-			hfi1_put_txreq(ps->s_txreq);
 			return 0;
 		}
 		break;
@@ -1181,27 +1166,24 @@ int snoop_send_pio_handler(struct hfi1_qp *qp, struct hfi1_pkt_state *ps,
 		break;
 	}
 out:
-	return hfi1_verbs_send_pio(qp, ps, md.u.pbc);
+	return hfi2_send_wqe(ibp, qp);
 }
 
 /*
- * Callers of this must pass a hfi1_ib_header type for the from ptr. Currently
+ * Callers of this must pass a hfi2_ib_header type for the from ptr. Currently
  * this can be used anywhere, but the intention is for inline ACKs for RC and
  * CCA packets. We don't restrict this usage though.
  */
-void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
-			   u64 pbc, const void *from, size_t count)
+static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+			  struct hfi2_ib_header *from, size_t hwords)
 {
+	struct hfi_devdata *dd = ibp->ibd->dd;
 	int snoop_mode = 0;
 	int md_len = 0;
 	struct capture_md md;
 	struct snoop_packet *s_packet = NULL;
-
-	/*
-	 * count is in dwords so we need to convert to bytes.
-	 * We also need to account for CRC which would be tacked on by hardware.
-	 */
-	int packet_len = (count << 2) + 4;
+	bool use_16b = false; /* TODO */
+	int packet_len = HFI1_GET_PKT_LEN(from);
 	int ret;
 
 	snoop_dbg("ACK OUT: len %d", packet_len);
@@ -1211,8 +1193,7 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 		ret = HFI1_FILTER_HIT;
 	} else {
 		ret = dd->hfi1_snoop.filter_callback(
-				(struct hfi1_ib_header *)from,
-				NULL,
+				from, NULL,
 				dd->hfi1_snoop.filter_value);
 	}
 
@@ -1245,7 +1226,7 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 			memset(&md, 0, sizeof(struct capture_md));
 			md.port = 1;
 			md.dir = PKT_DIR_EGRESS;
-			md.u.pbc = pbc;
+			md.u.pbc = to_hfi1_pbc(use_16b);
 			memcpy(s_packet->data, &md, md_len);
 		}
 
@@ -1256,7 +1237,7 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 
 		if (unlikely((snoop_flags & SNOOP_DROP_SEND) && snoop_mode)) {
 			snoop_dbg("Dropping packet");
-			return;
+			return 0;
 		}
 		break;
 	default:
@@ -1264,6 +1245,5 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 	}
 
 inline_pio_out:
-	pio_copy(dd, pbuf, pbc, from, count);
+	return hfi2_send_ack(ibp, qp, from, hwords);
 }
-#endif

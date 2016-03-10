@@ -414,7 +414,7 @@ static int send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 {
 	int ret;
 
-	ret = hfi2_send_wqe(ibp, qp);
+	ret = ibp->ibd->send_wqe(ibp, qp);
 	if (ret < 0 && qp->s_wqe)
 		hfi2_send_complete(qp, qp->s_wqe, IB_WC_FATAL_ERR);
 	/* else send_complete issued upon DMA completion event */
