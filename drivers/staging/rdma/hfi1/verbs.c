@@ -980,9 +980,6 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	if (ps->s_txreq->phdr.hdr.hdr_type) {
 		u8 extra_bytes = hfi1_get_16b_padding((hdrwords << 2), len);
  		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
-		//printk("%s: %d: Doing 16B DMA send. header: %d, payload: %d, extra: %d, plen: %d\n",
-		//	__func__, __LINE__, hdrwords << 2, len, extra_bytes, (hdrwords + dwords + 2) << 2);
-		printk("%s:%d: Doing 16B DMA\n", __func__, __LINE__);
 	} else {
 		dwords = (len + 3) >> 2;
 	}
@@ -1124,9 +1121,6 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
  		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
 		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.opah;
 		lrh0_16b = ps->s_txreq->phdr.hdr.pkt.opah.lrh[0];
-		//printk("%s: %d: Doing 16B PIO send. header: %d, payload: %d extra: %d, plen: %d len: %llu\n",
-		//	__func__, __LINE__, hdrwords << 2, len, extra_bytes, ((hdrwords + dwords + 2) << 2),  ((lrh0_16b & STL_16B_LEN_MASK) >> 20));
-		printk("%s:%d: Doing 16B PIO\n", __func__, __LINE__);
 	} else {
 		dwords = (len + 3) >> 2;
 		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh;
