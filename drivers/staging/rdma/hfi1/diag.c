@@ -67,6 +67,7 @@
 #include "hfi.h"
 #include "device.h"
 #include "common.h"
+#include "qp.h"
 #include "verbs_txreq.h"
 #include "trace.h"
 
@@ -1680,14 +1681,15 @@ int snoop_send_dma_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 			   u64 pbc)
 {
+	struct hfi1_qp_priv *priv = qp->priv;
 	u32 hdrwords = qp->s_hdrwords;
 	struct rvt_sge_state *ss = qp->s_cur_sge;
 	u32 len = qp->s_cur_size;
-	u32 dwords = (len + 3) >> 2;
-	u32 plen = hdrwords + dwords + 2; /* includes pbc */
+	u32 dwords = 0;
+	u32 plen = 0;
 	struct hfi1_pportdata *ppd = ps->ppd;
 	struct snoop_packet *s_packet = NULL;
-	u32 *hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh; /* TODO: Account for 16B */
+	u32 *hdr;
 	u32 length = 0;
 	struct rvt_sge_state temp_ss;
 	void *data = NULL;
@@ -1696,38 +1698,71 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	int snoop_mode = 0;
 	int md_len = 0;
 	struct capture_md md;
-	u32 vl;
+	u32 vl = 0;
 	u32 hdr_len = hdrwords << 2;
-	u32 tlen = HFI1_GET_PKT_LEN(&ps->s_txreq->phdr.hdr.pkt.ibh); /* TODO: Account for 16B */
+	u32 tlen = 0;
+	u32 total_len = 0;
+	bool use_16b = false;
 
 	md.u.pbc = 0;
 
-	snoop_dbg("PACKET OUT: hdrword %u len %u plen %u dwords %u tlen %u",
-		  hdrwords, len, plen, dwords, tlen);
 	if (ppd->dd->hfi1_snoop.mode_flag & HFI1_PORT_SNOOP_MODE)
 		snoop_mode = 1;
 	if ((snoop_mode == 0) ||
 	    unlikely(snoop_flags & SNOOP_USE_METADATA))
 		md_len = sizeof(struct capture_md);
 
-	/* not using ss->total_len as arg 2 b/c that does not count CRC */
-	s_packet = allocate_snoop_packet(hdr_len, tlen - hdr_len, md_len);
+	use_16b = ps->s_txreq->phdr.hdr.hdr_type;
+	if (!use_16b) {
+		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh;
+		tlen = HFI1_GET_PKT_LEN(&ps->s_txreq->phdr.hdr.pkt.ibh);
+		dwords = (len + 3) >> 2;
+		/* not using ss->total_len as arg 2 b/c that does not count CRC */
+		s_packet = allocate_snoop_packet(hdr_len, tlen - hdr_len, md_len);
+		total_len = tlen + md_len;
+	} else {
+		u8 extra_bytes = hfi1_get_16b_padding((hdrwords << 2), len);
+
+		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
+		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.opah;
+		tlen = OPA_16B_GET_LEN(ps->s_txreq->phdr.hdr.pkt.opah.lrh[0], 0, 0, 0) << 3; /* in bytes */
+		s_packet = allocate_snoop_packet(hdr_len, tlen - hdr_len, md_len);
+		total_len = tlen + md_len;
+	}
+	plen = hdrwords + dwords + 2; /* includes pbc */
+
+	snoop_dbg("PACKET OUT: hdrword %u len %u plen %u dwords %u tlen %u",
+		  hdrwords, len, plen, dwords, tlen);
 
 	if (unlikely(!s_packet)) {
 		dd_dev_warn_ratelimited(ppd->dd, "Unable to allocate snoop/capture packet\n");
 		goto out;
 	}
 
-	s_packet->total_len = tlen + md_len;
+	s_packet->total_len = total_len;
 
 	if (md_len > 0) {
 		memset(&md, 0, sizeof(struct capture_md));
 		md.port = 1;
 		md.dir = PKT_DIR_EGRESS;
 		if (likely(pbc == 0)) {
-			/* TODO: Account for 16B */
-			vl = be16_to_cpu(ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0]) >> 12;
-			md.u.pbc = create_pbc(ppd, 0, qp->s_srate, vl, plen);
+			if (!use_16b) {
+				vl = be16_to_cpu(ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0]) >> 12;
+				md.u.pbc = create_pbc(ppd, 0, qp->s_srate, vl, plen);
+			} else {
+				struct send_context *sc;
+				u8 sc5 = priv->s_sc;
+				u64 pbc_flags = 0;
+
+				sc = qp_to_send_context(qp, sc5);
+				vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
+
+				pbc_flags = PBC_PACKET_BYPASS |
+					    PBC_INSERT_BYPASS_ICRC;
+				md.u.pbc = create_pbc(ppd, pbc_flags,
+						      qp->srate_mbps,
+						      vl, plen);
+			}
 		} else {
 			md.u.pbc = 0;
 		}
