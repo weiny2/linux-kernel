@@ -478,16 +478,14 @@ int get_qsfp_power_class(u8 power_byte)
 	if (QSFP_HIGH_PWR(power_byte) == QSFP_HIGH_PWR_UNUSED)
 		/* power classes count from 1, their bit encodings from 0 */
 		return (QSFP_PWR(power_byte) + 1);
-	else
-		/*
-		 * 00 in the high power classes stands for unused, bringing
-		 * balance to the off-by-1 offset above, we add 4 here to
-		 * account for the difference between the low and high power
-		 * groups
-		 */
-		return (QSFP_HIGH_PWR(power_byte) + 4);
+	/*
+	 * 00 in the high power classes stands for unused, bringing
+	 * balance to the off-by-1 offset above, we add 4 here to
+	 * account for the difference between the low and high power
+	 * groups
+	 */
+	return (QSFP_HIGH_PWR(power_byte) + 4);
 }
-
 
 int qsfp_mod_present(struct hfi1_pportdata *ppd)
 {
