@@ -920,6 +920,7 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 	qp->s_wqe = wqe;
 
 	/* TODO for now, WQE contains everything needed to perform the Send */
+	wqe->use_16b = false;
 	wqe->s_qp = qp;
 	wqe->s_sge = qp->s_cur_sge;
 	wqe->s_hdr = qp->s_hdr;
@@ -2191,7 +2192,7 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 	}
 #ifdef HFI_VERBS_TEST
 	if (hfi2_drop_packet(3)) {
-		dev_dbg(ibp->dev, "Droping packet (opcode = %s) at rcv end with PSN = %u\n",
+		dev_dbg(ibp->dev, "Dropping packet (opcode = %s) at rcv end with PSN = %u\n",
 			opcode_to_str[opcode], mask_psn(psn));
 		goto drop;
 	}
@@ -2578,6 +2579,6 @@ send_ack:
 	hfi2_send_rc_ack(qp, is_fecn);
 	return;
 drop:
-	dev_info(ibp->dev, "RC dropping packet\n");
+	dev_dbg(ibp->dev, "RC dropping packet\n");
 	return;
 }
