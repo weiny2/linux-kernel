@@ -454,9 +454,9 @@ struct hfi1_sge_state;
 #define HLS_UP (HLS_UP_INIT | HLS_UP_ARMED | HLS_UP_ACTIVE)
 
 /* use this MTU size if none other is given */
-#define HFI1_DEFAULT_ACTIVE_MTU 8192
+#define HFI1_DEFAULT_ACTIVE_MTU 10240
 /* use this MTU size as the default maximum */
-#define HFI1_DEFAULT_MAX_MTU 8192
+#define HFI1_DEFAULT_MAX_MTU 10240
 /* default partition key */
 #define DEFAULT_PKEY 0xffff
 
@@ -605,7 +605,6 @@ struct hfi1_pportdata {
 	struct work_struct link_vc_work;
 	struct work_struct link_up_work;
 	struct work_struct link_down_work;
-	struct work_struct dc_host_req_work;
 	struct work_struct sma_message_work;
 	struct work_struct freeze_work;
 	struct work_struct link_downgrade_work;
@@ -1613,13 +1612,9 @@ void hfi1_free_devdata(struct hfi1_devdata *);
 void cc_state_reclaim(struct rcu_head *rcu);
 struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev, size_t extra);
 
-void hfi1_set_led_override(struct hfi1_pportdata *ppd, unsigned int timeon,
-			   unsigned int timeoff);
-/*
- * Only to be used for driver unload or device reset where we cannot allow
- * the timer to fire even the one extra time, else use hfi1_set_led_override
- * with timeon = timeoff = 0
- */
+/* LED beaconing functions */
+void hfi1_start_led_override(struct hfi1_pportdata *ppd, unsigned int timeon,
+			     unsigned int timeoff);
 void shutdown_led_override(struct hfi1_pportdata *ppd);
 
 #define HFI1_CREDIT_RETURN_RATE (100)
