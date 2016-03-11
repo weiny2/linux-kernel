@@ -770,7 +770,7 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 	sz = sizeof(struct hfi2_sge) *
 		init_attr->cap.max_send_sge +
 		sizeof(struct hfi2_swqe);
-	swq = vmalloc((init_attr->cap.max_send_wr + 1) * sz);
+	swq = vzalloc((init_attr->cap.max_send_wr + 1) * sz);
 	if (swq == NULL) {
 		ret = ERR_PTR(-ENOMEM);
 		goto bail;

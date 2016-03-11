@@ -326,17 +326,19 @@ next_event:
 	if (eq_entry->fail_type)
 		wqe->pkt_errors++;
 
-	/* if final packet, tell verbs if success or failure */
-	if (!wqe_iov->remaining_bytes) {
-		spin_lock(&qp->s_lock);
-		if (qp->ibqp.qp_type == IB_QPT_RC)
-			hfi2_rc_send_complete(qp, &wqe_iov->ph.ibh);
-		else if (wqe->pkt_errors)
-			hfi2_send_complete(qp, wqe, IB_WC_FATAL_ERR);
-		else
-			hfi2_send_complete(qp, wqe, IB_WC_SUCCESS);
-		spin_unlock(&qp->s_lock);
+	spin_lock(&qp->s_lock);
+	if (qp->ibqp.qp_type == IB_QPT_RC) {
+		hfi2_rc_send_complete(qp, &wqe_iov->ph.ibh);
+	} else {
+		/* if final packet, tell verbs if success or failure */
+		if (!wqe_iov->remaining_bytes) {
+			if (wqe->pkt_errors)
+				hfi2_send_complete(qp, wqe, IB_WC_FATAL_ERR);
+			else
+				hfi2_send_complete(qp, wqe, IB_WC_SUCCESS);
+		}
 	}
+	spin_unlock(&qp->s_lock);
 	kfree(wqe_iov);
 
 eq_advance:
@@ -438,7 +440,7 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 
 #ifdef HFI_VERBS_TEST
 	if (hfi2_drop_ack(5)) {
-		dev_dbg(ibp->dev, "Droping %s with PSN = %d\n",
+		dev_dbg(ibp->dev, "Dropping %s with PSN = %d\n",
 			(qp->r_nak_state) ? "NAK" : "ACK",
 			 be32_to_cpu(hdr->u.oth.bth[2]));
 		return -1;
@@ -465,8 +467,8 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	iov[0].v = 1;
 	iov[0].start = (uint64_t)&wqe_iov->ph.ibh;
 
-	dev_info(ibp->dev, "PT %d: cmd %d len 0 n_iov 1 sent %d, length (iov[0]) = %u\n",
-		 ibp->port_num, dma_cmd, length, iov[0].length);
+	dev_dbg(ibp->dev, "PT %d: cmd %d len 0 n_iov 1 sent %d, length (iov[0]) = %u\n",
+		ibp->port_num, dma_cmd, length, iov[0].length);
 
 _tx_cmd:
 	/* send with GENERAL or MGMT DMA */
