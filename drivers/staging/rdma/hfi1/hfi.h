@@ -400,25 +400,60 @@ struct hfi1_snoop_data {
 /*
  * OPA 16B Packet Format
  */
-#define OPA_16B_LID_MASK	0xFFFFFull
-#define OPA_16B_SLID_MASK	0xF00ull
-#define OPA_16B_DLID_MASK	0xF000ull
-#define OPA_16B_LEN_MASK	0x7FF00000ull
-#define OPA_16B_BECN_MASK	0x80000000ull
-#define OPA_16B_FECN_MASK	0x10000000ull
-#define OPA_16B_SC_MASK		0x1F00000ull
-#define OPA_16B_RC_MASK		0xE000000ull
-#define OPA_16B_PKEY_MASK	0xFFFF0000ull
 #define OPA_16B_L4_MASK		0xFFull
-#define OPA_16B_ENTROPY_MASK	0xFFFFull
+#define OPA_16B_RC_MASK		0xE000000ull
+#define OPA_16B_RC_SHIFT	25
+#define OPA_16B_SC_MASK		0x1F00000ull
+#define OPA_16B_SC_SHIFT	20
 #define OPA_16B_AGE_MASK	0xFF0000ull
-#define OPA_16B_SLID_HIGH_SHIFT	8
+#define OPA_16B_AGE_SHIFT	16
+#define OPA_16B_LEN_MASK	0x7FF00000ull
+#define OPA_16B_LEN_SHIFT	20
+#define OPA_16B_LID_MASK	0xFFFFFull
+#define OPA_16B_BECN_MASK	0x80000000ull
+#define OPA_16B_BECN_SHIFT	31
+#define OPA_16B_FECN_MASK	0x10000000ull
+#define OPA_16B_FECN_SHIFT	28
+#define OPA_16B_PKEY_MASK	0xFFFF0000ull
+#define OPA_16B_PKEY_SHIFT	16
+#define OPA_16B_DLID_MASK	0xF000ull
+#define OPA_16B_DLID_SHIFT	20
 #define OPA_16B_DLID_HIGH_SHIFT	12
+#define OPA_16B_SLID_MASK	0xF00ull
+#define OPA_16B_SLID_SHIFT	20
+#define OPA_16B_SLID_HIGH_SHIFT	8
+#define OPA_16B_ENTROPY_MASK	0xFFFFull
+
 #define OPA_16B_BTH_PAD_SHIFT	20
 #define OPA_16B_BTH_PAD_BITS	7
 
 #define OPA_16B_MAKE_QW(low_dw, high_dw) (((u64)high_dw << 32) | low_dw)
-#define OPA_16B_GET_L4(opa_h1) ((u32)(opa_h1 & OPA_16B_L4_MASK))
+
+#define OPA_16B_GET_L4(h0, h1, h2, h3) ((u8)(h2 & OPA_16B_L4_MASK))
+#define OPA_16B_GET_RC(h0, h1, h2, h3) ((u8)((h1 & OPA_16B_RC_MASK)\
+					>> OPA_16B_RC_SHIFT))
+#define OPA_16B_GET_SC(h0, h1, h2, h3) ((u8)((h1 & OPA_16B_SC_MASK)\
+					>> OPA_16B_SC_SHIFT))
+
+#define OPA_16B_GET_AGE(h0, h1, h2, h3) ((u8)((h3 & OPA_16B_AGE_MASK)\
+					>> OPA_16B_AGE_SHIFT))
+#define OPA_16B_GET_LEN(h0, h1, h2, h3) ((u16)((h0 & OPA_16B_LEN_MASK)\
+					>> OPA_16B_LEN_SHIFT))
+#define OPA_16B_GET_BECN(h0, h1, h2, h3) ((u8)((h0 & OPA_16B_BECN_MASK)\
+					>> OPA_16B_BECN_SHIFT))
+#define OPA_16B_GET_FECN(h0, h1, h2, h3) ((u8)((h1 & OPA_16B_FECN_MASK)\
+					>> OPA_16B_FECN_SHIFT))
+#define OPA_16B_GET_PKEY(h0, h1, h2, h3) ((u16)((h2 & OPA_16B_PKEY_MASK)\
+					>> OPA_16B_PKEY_SHIFT))
+#define OPA_16B_GET_DLID(h0, h1, h2, h3) ((u32)((h1 & OPA_16B_LID_MASK)\
+					 | (((h2 & OPA_16B_DLID_MASK)\
+					>> OPA_16B_DLID_HIGH_SHIFT)\
+					<< OPA_16B_DLID_SHIFT)))
+#define OPA_16B_GET_SLID(h0, h1, h2, h3) ((u32)((h0 & OPA_16B_LID_MASK)\
+					 | (((h2 & OPA_16B_SLID_MASK)\
+					>> OPA_16B_SLID_HIGH_SHIFT)\
+					<< OPA_16B_SLID_SHIFT)))
+#define OPA_16B_GET_ENTROPY(h0, h1, h2, h3) ((u16)(h3 & OPA_16B_ENTROPY_MASK))
 
 struct rvt_sge_state;
 
@@ -2326,22 +2361,17 @@ static inline void parse_16b_header(struct hfi1_16b_header *hdr, u32 *slid, u32 
 	u32 h2 = hdr->lrh[2];
 	u32 h3 = hdr->lrh[3];
 
-	*slid = (h0 & OPA_16B_LID_MASK) | (((h2 & OPA_16B_SLID_MASK) >>
-		OPA_16B_SLID_HIGH_SHIFT) << 20);
-	*dlid = (h1 & OPA_16B_LID_MASK) | (((h2 & OPA_16B_DLID_MASK) >>
-		OPA_16B_DLID_HIGH_SHIFT) << 20);
-	*len  = (h0 & OPA_16B_LEN_MASK)  >> 20;
-	*becn = (h0 & OPA_16B_BECN_MASK) >> 31;
-
-	*sc = (h1 & OPA_16B_SC_MASK) >> 20;
-	*rc = (h1 & OPA_16B_RC_MASK) >> 25;
-	*fecn = (h1 & OPA_16B_FECN_MASK) >> 28;
-
-	*l4 = h2 & OPA_16B_L4_MASK;
-	*pkey = (h2 & OPA_16B_PKEY_MASK) >> 16;
-
-	*entropy = h3 & OPA_16B_ENTROPY_MASK;
-	*age = (h3 & OPA_16B_AGE_MASK) >> 16;
+	*l4 = OPA_16B_GET_L4(h0, h1, h2, h3);
+	*rc = OPA_16B_GET_RC(h0, h1, h2, h3);
+	*sc = OPA_16B_GET_SC(h0, h1, h2, h3);
+	*age = OPA_16B_GET_AGE(h0, h1, h2, h3);
+	*len = OPA_16B_GET_LEN(h0, h1, h2, h3);
+	*becn = OPA_16B_GET_BECN(h0, h1, h2, h3);
+	*dlid = OPA_16B_GET_DLID(h0, h1, h2, h3);
+	*fecn = OPA_16B_GET_FECN(h0, h1, h2, h3);
+	*pkey = OPA_16B_GET_PKEY(h0, h1, h2, h3);
+	*slid = OPA_16B_GET_SLID(h0, h1, h2, h3);
+	*entropy = OPA_16B_GET_ENTROPY(h0, h1, h2, h3);
 
 #if DBG_PARSE_16B_HDR
 	pr_info("(hdr) h0=%.08x h1=%.08x h2=%.08x h3=%.08x\n",
@@ -2353,6 +2383,33 @@ static inline void parse_16b_header(struct hfi1_16b_header *hdr, u32 *slid, u32 
 	pr_info(" (h2) l4=%.02x pkey=%.04x\n", *l4, *pkey);
 	pr_info(" (h3) entropy=%.04x age=%.02x\n", *entropy, *age);
 #endif /* DBG_PARSE_16B_HDR */
+}
+
+static inline void dump_16b_header(struct hfi1_16b_header *hdr)
+{
+	u32 h0 = hdr->lrh[0];
+	u32 h1 = hdr->lrh[1];
+	u32 h2 = hdr->lrh[2];
+	u32 h3 = hdr->lrh[3];
+
+
+	pr_info("(hdr) h0=%.08x h1=%.08x h2=%.08x h3=%.08x\n",
+		h0, h1, h2, h3);
+	pr_info(" (h0) slid=0x%.08x len=%.04x becn=%.02x\n",
+		OPA_16B_GET_SLID(h0, h1, h2, h3),
+		OPA_16B_GET_LEN(h0, h1, h2, h3),
+		OPA_16B_GET_BECN(h0, h1, h2, h3));
+	pr_info(" (h1) dlid=0x%.08x sc=%.02x rc=%.02x fecn=%.02x\n",
+		OPA_16B_GET_DLID(h0, h1, h2, h3),
+		OPA_16B_GET_SC(h0, h1, h2, h3),
+		OPA_16B_GET_RC(h0, h1, h2, h3),
+		OPA_16B_GET_FECN(h0, h1, h2, h3));
+	pr_info(" (h2) l4=%.02x pkey=%.04x\n",
+		OPA_16B_GET_L4(h0, h1, h2, h3),
+		OPA_16B_GET_PKEY(h0, h1, h2, h3));
+	pr_info(" (h3) entropy=%.04x age=%.02x\n",
+		OPA_16B_GET_ENTROPY(h0, h1, h2, h3),
+		OPA_16B_GET_AGE(h0, h1, h2, h3));
 }
 
 static inline int hfi1_get_16b_padding(u32 hdr_size, u32 payload)
