@@ -96,7 +96,7 @@ int i2c_write(struct hfi1_pportdata *ppd, u32 target, int i2c_addr, int offset,
 {
 	int ret;
 
-	if (!check_chip_resource(ppd->dd, qsfp_resource(ppd->dd), __func__))
+	if (!check_chip_resource(ppd->dd, i2c_target(target), __func__))
 		return -EACCES;
 
 	/* make sure the TWSI bus is in a sane state */
@@ -162,7 +162,7 @@ int i2c_read(struct hfi1_pportdata *ppd, u32 target, int i2c_addr, int offset,
 {
 	int ret;
 
-	if (!check_chip_resource(ppd->dd, qsfp_resource(ppd->dd), __func__))
+	if (!check_chip_resource(ppd->dd, i2c_target(target), __func__))
 		return -EACCES;
 
 	/* make sure the TWSI bus is in a sane state */
@@ -192,7 +192,7 @@ int qsfp_write(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
 	int ret;
 	u8 page;
 
-	if (!check_chip_resource(ppd->dd, qsfp_resource(ppd->dd), __func__))
+	if (!check_chip_resource(ppd->dd, i2c_target(target), __func__))
 		return -EACCES;
 
 	/* make sure the TWSI bus is in a sane state */
@@ -275,7 +275,7 @@ int qsfp_read(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
 	int ret;
 	u8 page;
 
-	if (!check_chip_resource(ppd->dd, qsfp_resource(ppd->dd), __func__))
+	if (!check_chip_resource(ppd->dd, i2c_target(target), __func__))
 		return -EACCES;
 
 	/* make sure the TWSI bus is in a sane state */
@@ -464,7 +464,28 @@ const char * const hfi1_qsfp_devtech[16] = {
 #define QSFP_DUMP_CHUNK 16 /* Holds longest string */
 #define QSFP_DEFAULT_HDR_CNT 224
 
-static const char *pwr_codes = "1.5W2.0W2.5W3.5W";
+#define QSFP_PWR(pbyte) (((pbyte) >> 6) & 3)
+#define QSFP_HIGH_PWR(pbyte) ((pbyte) & 3)
+/* For use with QSFP_HIGH_PWR macro */
+#define QSFP_HIGH_PWR_UNUSED	0 /* Bits [1:0] = 00 implies low power module */
+
+/*
+ * Takes power class byte [Page 00 Byte 129] in SFF 8636
+ * Returns power class as integer (1 through 7, per SFF 8636 rev 2.4)
+ */
+int get_qsfp_power_class(u8 power_byte)
+{
+	if (QSFP_HIGH_PWR(power_byte) == QSFP_HIGH_PWR_UNUSED)
+		/* power classes count from 1, their bit encodings from 0 */
+		return (QSFP_PWR(power_byte) + 1);
+	/*
+	 * 00 in the high power classes stands for unused, bringing
+	 * balance to the off-by-1 offset above, we add 4 here to
+	 * account for the difference between the low and high power
+	 * groups
+	 */
+	return (QSFP_HIGH_PWR(power_byte) + 4);
+}
 
 int qsfp_mod_present(struct hfi1_pportdata *ppd)
 {
@@ -535,6 +556,16 @@ set_zeroes:
 	return ret;
 }
 
+static const char *pwr_codes[8] = {"N/AW",
+				  "1.5W",
+				  "2.0W",
+				  "2.5W",
+				  "3.5W",
+				  "4.0W",
+				  "4.5W",
+				  "5.0W"
+				 };
+
 int qsfp_dump(struct hfi1_pportdata *ppd, char *buf, int len)
 {
 	u8 *cache = &ppd->qsfp_info.cache[0];
@@ -544,6 +575,7 @@ int qsfp_dump(struct hfi1_pportdata *ppd, char *buf, int len)
 	int bidx = 0;
 	u8 *atten = &cache[QSFP_ATTEN_OFFS];
 	u8 *vendor_oui = &cache[QSFP_VOUI_OFFS];
+	u8 power_byte = 0;
 
 	sofar = 0;
 	lenstr[0] = ' ';
@@ -553,9 +585,9 @@ int qsfp_dump(struct hfi1_pportdata *ppd, char *buf, int len)
 		if (QSFP_IS_CU(cache[QSFP_MOD_TECH_OFFS]))
 			sprintf(lenstr, "%dM ", cache[QSFP_MOD_LEN_OFFS]);
 
+		power_byte = cache[QSFP_MOD_PWR_OFFS];
 		sofar += scnprintf(buf + sofar, len - sofar, "PWR:%.3sW\n",
-				pwr_codes +
-				(QSFP_PWR(cache[QSFP_MOD_PWR_OFFS]) * 4));
+				pwr_codes[get_qsfp_power_class(power_byte)]);
 
 		sofar += scnprintf(buf + sofar, len - sofar, "TECH:%s%s\n",
 				lenstr,
