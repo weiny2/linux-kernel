@@ -623,8 +623,9 @@ struct hfi1_pkt_state {
 /*
  * Wait flags that would prevent any packet type from being sent.
  */
-#define HFI1_S_ANY_WAIT_IO (HFI1_S_WAIT_PIO | HFI1_S_WAIT_TX | \
-	HFI1_S_WAIT_DMA_DESC | HFI1_S_WAIT_KMEM)
+#define HFI1_S_ANY_WAIT_IO \
+	(HFI1_S_WAIT_PIO | HFI1_S_WAIT_PIO_DRAIN | HFI1_S_WAIT_TX | \
+	 HFI1_S_WAIT_DMA_DESC | HFI1_S_WAIT_KMEM)
 
 /*
  * Wait flags that would prevent send work requests from making progress.
