@@ -6205,18 +6205,13 @@ static void hreq_response(struct hfi1_devdata *dd, u8 return_code, u16 rsp_data)
 
 /*
  * Handle host requests from the 8051.
- *
- * This is a work-queue function outside of the interrupt.
  */
-void handle_8051_request(struct work_struct *work)
+static void handle_8051_request(struct hfi1_pportdata *ppd)
 {
-	struct hfi1_pportdata *ppd = container_of(work, struct hfi1_pportdata,
-							dc_host_req_work);
 	struct hfi1_devdata *dd = ppd->dd;
 	u64 reg;
 	u16 data = 0;
-	u8 type, i, lanes, *cache = ppd->qsfp_info.cache;
-	u8 cdr_ctrl_byte = cache[QSFP_CDR_CTRL_BYTE_OFFS];
+	u8 type;
 
 	reg = read_csr(dd, DC_DC8051_CFG_EXT_DEV_1);
 	if ((reg & DC_DC8051_CFG_EXT_DEV_1_REQ_NEW_SMASK) == 0)
@@ -6237,53 +6232,11 @@ void handle_8051_request(struct work_struct *work)
 	case HREQ_READ_CONFIG:
 	case HREQ_SET_TX_EQ_ABS:
 	case HREQ_SET_TX_EQ_REL:
+	case HREQ_ENABLE:
 		dd_dev_info(dd, "8051 request: request 0x%x not supported\n",
 			    type);
 		hreq_response(dd, HREQ_NOT_SUPPORTED, 0);
 		break;
-
-	case HREQ_ENABLE:
-		lanes = data & 0xF;
-		for (i = 0; lanes; lanes >>= 1, i++) {
-			if (!(lanes & 1)) {
-				continue;
-			} else {
-				if (data & 0x200) {
-					/* enable TX CDR */
-					if (cache[QSFP_MOD_PWR_OFFS] & 0x8 &&
-					    cache[QSFP_CDR_INFO_OFFS] & 0x80) {
-						cdr_ctrl_byte |= (1 << (i + 4));
-					}
-				} else {
-					/* disable TX CDR */
-					if (cache[QSFP_MOD_PWR_OFFS] & 0x8 &&
-					    cache[QSFP_CDR_INFO_OFFS] & 0x80) {
-						cdr_ctrl_byte &=
-								~(1 << (i + 4));
-					}
-				}
-
-				if (data & 0x800) {
-					/* enable RX CDR */
-					if (cache[QSFP_MOD_PWR_OFFS] & 0x4 &&
-					    cache[QSFP_CDR_INFO_OFFS] & 0x40) {
-						cdr_ctrl_byte |= (1 << i);
-					}
-				} else {
-					/* disable RX CDR */
-					if (cache[QSFP_MOD_PWR_OFFS] & 0x4 &&
-					    cache[QSFP_CDR_INFO_OFFS] & 0x40) {
-						cdr_ctrl_byte &= ~(1 << i);
-					}
-				}
-			}
-		}
-		one_qsfp_write(ppd, dd->hfi1_id, QSFP_CDR_CTRL_BYTE_OFFS,
-			       &cdr_ctrl_byte, 1);
-		hreq_response(dd, HREQ_SUCCESS, data);
-		refresh_qsfp_cache(ppd, &ppd->qsfp_info);
-		break;
-
 	case HREQ_CONFIG_DONE:
 		hreq_response(dd, HREQ_SUCCESS, 0);
 		break;
@@ -6291,7 +6244,6 @@ void handle_8051_request(struct work_struct *work)
 	case HREQ_INTERFACE_TEST:
 		hreq_response(dd, HREQ_SUCCESS, data);
 		break;
-
 	default:
 		dd_dev_err(dd, "8051 request: unknown request 0x%x\n", type);
 		hreq_response(dd, HREQ_NOT_SUPPORTED, 0);
@@ -7548,7 +7500,7 @@ static void handle_8051_interrupt(struct hfi1_devdata *dd, u32 unused, u64 reg)
 			host_msg &= ~(u64)LINKUP_ACHIEVED;
 		}
 		if (host_msg & EXT_DEVICE_CFG_REQ) {
-			queue_work(ppd->hfi1_wq, &ppd->dc_host_req_work);
+			handle_8051_request(ppd);
 			host_msg &= ~(u64)EXT_DEVICE_CFG_REQ;
 		}
 		if (host_msg & VERIFY_CAP_FRAME) {
@@ -12706,20 +12658,20 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 	unsigned ngroups;
 
 	/*
-	 * Kernel contexts: (to be fixed later):
-	 * - min or 2 or 1 context/numa (excluding control context)
+	 * Kernel receive contexts:
+	 * - min of 2 or 1 context/numa (excluding control context)
 	 * - Context 0 - control context (VL15/multicast/error)
-	 * - Context 1 - default context
+	 * - Context 1 - first kernel context
+	 * - Context 2 - second kernel context
+	 * ...
 	 */
 	if (n_krcvqs)
 		/*
-		 * Don't count context 0 in n_krcvqs since
-		 * is isn't used for normal verbs traffic.
-		 *
-		 * krcvqs will reflect number of kernel
-		 * receive contexts above 0.
+		 * n_krcvqs is the sum of module parameter kernel receive
+		 * contexts, krcvqs[].  It does not include the control
+		 * context, so add that.
 		 */
-		num_kernel_contexts = n_krcvqs + MIN_KERNEL_KCTXTS - 1;
+		num_kernel_contexts = n_krcvqs + 1;
 	else
 		num_kernel_contexts = num_online_nodes() + 1;
 	num_kernel_contexts =
@@ -13503,22 +13455,17 @@ static void init_qpmap_table(struct hfi1_devdata *dd,
 /**
  * init_qos - init RX qos
  * @dd - device data
- * @first_context
  *
- * This routine initializes Rule 0 and the
- * RSM map table to implement qos.
+ * This routine initializes Rule 0 and the RSM map table to implement
+ * quality of service (qos).
  *
- * If all of the limit tests succeed,
- * qos is applied based on the array
- * interpretation of krcvqs where
- * entry 0 is VL0.
+ * If all of the limit tests succeed, qos is applied based on the array
+ * interpretation of krcvqs where entry 0 is VL0.
  *
- * The number of vl bits (n) and the number of qpn
- * bits (m) are computed to feed both the RSM map table
- * and the single rule.
- *
+ * The number of vl bits (n) and the number of qpn bits (m) are computed to
+ * feed both the RSM map table and the single rule.
  */
-static void init_qos(struct hfi1_devdata *dd, u32 first_ctxt)
+static void init_qos(struct hfi1_devdata *dd)
 {
 	u8 max_by_vl = 0;
 	unsigned qpns_per_vl, ctxt, i, qpn, n = 1, m;
@@ -13538,19 +13485,17 @@ static void init_qos(struct hfi1_devdata *dd, u32 first_ctxt)
 		goto bail;
 	qpns_per_vl = __roundup_pow_of_two(max_by_vl);
 	/* determine bits vl */
-	n = ilog2(num_vls);
+	n = ilog2(__roundup_pow_of_two(num_vls));
 	/* determine bits for qpn */
 	m = ilog2(qpns_per_vl);
 	if ((m + n) > 7)
-		goto bail;
-	if (num_vls * qpns_per_vl > dd->chip_rcv_contexts)
 		goto bail;
 	rsmmap = kmalloc_array(NUM_MAP_REGS, sizeof(u64), GFP_KERNEL);
 	if (!rsmmap)
 		goto bail;
 	memset(rsmmap, rxcontext, NUM_MAP_REGS * sizeof(u64));
 	/* init the local copy of the table */
-	for (i = 0, ctxt = first_ctxt; i < num_vls; i++) {
+	for (i = 0, ctxt = FIRST_KERNEL_KCTXT; i < num_vls; i++) {
 		unsigned tctxt;
 
 		for (qpn = 0, tctxt = ctxt;
@@ -13578,11 +13523,11 @@ static void init_qos(struct hfi1_devdata *dd, u32 first_ctxt)
 	/* add rule0 */
 	write_csr(dd, RCV_RSM_CFG /* + (8 * 0) */,
 		  RCV_RSM_CFG_ENABLE_OR_CHAIN_RSM0_MASK <<
-		  RCV_RSM_CFG_ENABLE_OR_CHAIN_RSM0_SHIFT |
+			RCV_RSM_CFG_ENABLE_OR_CHAIN_RSM0_SHIFT |
 		  2ull << RCV_RSM_CFG_PACKET_TYPE_SHIFT);
 	write_csr(dd, RCV_RSM_SELECT /* + (8 * 0) */,
 		  LRH_BTH_MATCH_OFFSET <<
-		  RCV_RSM_SELECT_FIELD1_OFFSET_SHIFT |
+			RCV_RSM_SELECT_FIELD1_OFFSET_SHIFT |
 		  LRH_SC_MATCH_OFFSET << RCV_RSM_SELECT_FIELD2_OFFSET_SHIFT |
 		  LRH_SC_SELECT_OFFSET << RCV_RSM_SELECT_INDEX1_OFFSET_SHIFT |
 		  ((u64)n) << RCV_RSM_SELECT_INDEX1_WIDTH_SHIFT |
@@ -13596,8 +13541,8 @@ static void init_qos(struct hfi1_devdata *dd, u32 first_ctxt)
 	/* Enable RSM */
 	add_rcvctrl(dd, RCV_CTRL_RCV_RSM_ENABLE_SMASK);
 	kfree(rsmmap);
-	/* map everything else to first context */
-	init_qpmap_table(dd, FIRST_KERNEL_KCTXT, MIN_KERNEL_KCTXTS - 1);
+	/* map everything else to the mcast/err/vl15 context */
+	init_qpmap_table(dd, HFI1_CTRL_CTXT, HFI1_CTRL_CTXT);
 	dd->qos_shift = n + 1;
 	return;
 bail:
@@ -13610,9 +13555,7 @@ static void init_rxe(struct hfi1_devdata *dd)
 	/* enable all receive errors */
 	write_csr(dd, RCV_ERR_MASK, ~0ull);
 	/* setup QPN map table - start where VL15 context leaves off */
-	init_qos(
-		dd,
-		dd->n_krcv_queues > MIN_KERNEL_KCTXTS ? MIN_KERNEL_KCTXTS : 0);
+	init_qos(dd);
 	/*
 	 * make sure RcvCtrl.RcvWcb <= PCIe Device Control
 	 * Register Max_Payload_Size (PCI_EXP_DEVCTL in Linux PCIe config
