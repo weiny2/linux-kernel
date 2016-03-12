@@ -1174,14 +1174,43 @@ static void hfi_set_sc_to_vlnt(struct hfi_pportdata *ppd, u8 *t)
 	memcpy(ppd->sc_to_vlnt, t, OPA_MAX_SCS);
 }
 
-int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
+int hfi_get_bw_arb(struct hfi_pportdata *ppd, int section,
+		   struct opa_bw_arb *bw_arb)
+{
+	struct bw_arb_cache *cache = &ppd->bw_arb_cache;
+	union opa_bw_arb_table *arb_block = bw_arb->arb_block;
+	int size = 0;
+
+	spin_lock(&cache->lock);
+
+	switch (section) {
+	case OPA_BWARB_GROUP:
+		size = sizeof(cache->bw_group);
+		memcpy(arb_block->bw_group, cache->bw_group, size);
+		break;
+	case OPA_BWARB_PREEMPT_MATRIX:
+		size = sizeof(cache->preempt_matrix);
+		memcpy(arb_block->matrix, cache->preempt_matrix, size);
+		break;
+	default:
+		ppd_dev_err(ppd, "Invalid section when setting BW ARB table\n");
+	}
+
+	spin_unlock(&cache->lock);
+	return size;
+}
+
+int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 {
 	struct hfi_devdata *dd = ppd->dd;
-	int val = 0;
+	int ret = 0;
 
 	switch (which) {
 	case HFI_IB_CFG_OP_VLS:
-		val = ppd->vls_operational;
+		ret = ppd->vls_operational;
+		break;
+	case HFI_IB_CFG_BW_ARB:
+		ret = hfi_get_bw_arb(ppd, val, data);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
@@ -1189,7 +1218,7 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which)
 		break;
 	}
 
-	return val;
+	return ret;
 }
 
 /*
@@ -1462,6 +1491,62 @@ static void hfi_sc_to_resp_sl(struct hfi_pportdata *ppd, void *data)
 		write_csr(dd, reg_addr + i * 8, reg[i]);
 }
 
+void hfi_set_bw_group(struct hfi_pportdata *ppd,
+		      const struct opa_bw_element *bw_group)
+{
+	int i;
+
+	/* FXRTODO: BW Group related HW register configurations goes here */
+	for (i = 0; i < OPA_NUM_BW_GROUP_SUPPORTED; i++) {
+		ppd_dev_dbg(ppd, "BW group %d priority   = %u\n",
+			    i, bw_group[i].priority);
+		ppd_dev_dbg(ppd, "            bw_percent = %u\n",
+			    bw_group[i].bw_percentage);
+		ppd_dev_dbg(ppd, "            vl_mask    = %#x\n",
+			    be32_to_cpu(bw_group[i].vl_mask));
+	}
+}
+
+void hfi_set_bw_prempt_matrix(struct hfi_pportdata *ppd,
+			      const __be32 *matrix)
+{
+	int i;
+
+	/*
+	 * FXRTODO: BW Preemption matrix related HW register configurations
+	 * goes here
+	 */
+	ppd_dev_dbg(ppd, " Preemption Matrix :\n");
+	for (i = 0; i < OPA_NUM_BW_GROUP_SUPPORTED; i++)
+		ppd_dev_dbg(ppd, " %#x\n", be32_to_cpu(matrix[i]));
+}
+
+void hfi_set_bw_arb(struct hfi_pportdata *ppd, int section,
+		    const struct opa_bw_arb *bw_arb)
+{
+	struct bw_arb_cache *cache = &ppd->bw_arb_cache;
+	const union opa_bw_arb_table *arb_block = bw_arb->arb_block;
+
+	switch (section) {
+	case OPA_BWARB_GROUP:
+		spin_lock(&cache->lock);
+		memcpy(cache->bw_group, arb_block->bw_group,
+		       sizeof(cache->bw_group));
+		spin_unlock(&cache->lock);
+		hfi_set_bw_group(ppd, arb_block->bw_group);
+		break;
+	case OPA_BWARB_PREEMPT_MATRIX:
+		spin_lock(&cache->lock);
+		memcpy(cache->preempt_matrix, arb_block->matrix,
+		       sizeof(cache->preempt_matrix));
+		spin_unlock(&cache->lock);
+		hfi_set_bw_prempt_matrix(ppd, arb_block->matrix);
+		break;
+	default:
+		ppd_dev_err(ppd, "Invalid section when getting BW ARB table\n");
+	}
+}
+
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -1521,6 +1606,9 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 		break;
 	case HFI_IB_CFG_SC_TO_VLNT:
 		hfi_set_sc_to_vlnt(ppd, data);
+		break;
+	case HFI_IB_CFG_BW_ARB:
+		hfi_set_bw_arb(ppd, val, data);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
@@ -1938,6 +2026,21 @@ static void hfi_init_linkmux_csrs(struct hfi_pportdata *ppd)
 	hfi_write_lm_tp_csr(ppd, FXR_FPC_CFG_EVENT_CNTR_CTRL, fpc_ctrl.val);
 }
 
+static void hfi_init_bw_arb_caches(struct hfi_pportdata *ppd)
+{
+	/*
+	 * Note that we always return values directly from the
+	 * 'bw_arb_cache' (and do no CSR reads) in response to a
+	 * 'Get(BWArbTable)'. This is obviously correct after a
+	 * 'Set(BWArbTable)', since the cache will then be up to
+	 * date. But it's also correct prior to any 'Set(BWArbTable)'
+	 * since then both the cache, and the relevant h/w registers
+	 * will be zeroed.
+	 */
+
+	spin_lock_init(&ppd->bw_arb_cache.lock);
+}
+
 /*
  * hfi_pport_init - initialize per port
  * data structs
@@ -2054,6 +2157,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0, NULL);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_RESP_SL, 0, ppd->sc_to_sl);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_MCTC, 0, ppd->sc_to_sl);
+		hfi_init_bw_arb_caches(ppd);
 
 		hfi_init_sc_to_vl_tables(ppd);
 		hfi_ptc_init(ppd);

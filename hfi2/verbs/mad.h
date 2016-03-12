@@ -63,10 +63,42 @@
 
 #define MKEY_SHIFT		6
 
+/* FXRTODO:  Rightful place for this is ./include/rdma/opa_smi.h */
+#define OPA_ATTRIB_ID_BW_ARBITRATION		cpu_to_be16(0x0092)
+
+#define OPA_BWARB_GROUP				0
+#define OPA_BWARB_PREEMPT_MATRIX		1
+
 #define IB_SMP_UNSUP_VERSION    cpu_to_be16(0x0004)
 #define IB_SMP_UNSUP_METHOD     cpu_to_be16(0x0008)
 #define IB_SMP_UNSUP_METH_ATTR  cpu_to_be16(0x000C)
 #define IB_SMP_INVALID_FIELD    cpu_to_be16(0x001C)
+
+#define OPA_MAX_BW_GROUP		32
+#define OPA_NUM_BW_GROUP_SUPPORTED	8
+
+struct opa_bw_element {
+	u8 priority;
+	u8 bw_percentage;
+	u8 reserved[2];
+	__be32 vl_mask;
+} __packed;
+
+union opa_bw_arb_table {
+	struct opa_bw_element bw_group[OPA_MAX_BW_GROUP];
+	__be32 matrix[OPA_MAX_BW_GROUP];
+} __packed;
+
+struct opa_bw_arb {
+	__be64 port_sel_mask[4];
+	union opa_bw_arb_table arb_block[0];
+} __packed;
+
+enum opa_vl_prioriy {
+	OPA_VL_PRIORITY_LOW,
+	OPA_VL_PRIORITY_MEDIUM,
+	OPA_VL_PRIORITY_HIGH
+};
 
 struct opa_pma_mad {
 	struct ib_mad_hdr mad_hdr;

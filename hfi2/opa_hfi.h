@@ -299,6 +299,7 @@ enum {
 	HFI_IB_CFG_SC_TO_VLR,		/* Change SCtoVLr mapping */
 	HFI_IB_CFG_SC_TO_VLT,		/* Change SCtoVLt mapping */
 	HFI_IB_CFG_SC_TO_VLNT,		/* Change Neighbor's SCtoVL mapping */
+	HFI_IB_CFG_BW_ARB		/* Change BW Arbitrator tables */
 };
 
 /* verify capability fabric CRC size bits */
@@ -426,6 +427,13 @@ struct ib_vl_weight_elem {
 };
 #endif
 
+struct bw_arb_cache {
+	/* protect bw arb cache */
+	spinlock_t lock;
+	struct opa_bw_element bw_group[OPA_MAX_BW_GROUP];
+	__be32 preempt_matrix[OPA_MAX_BW_GROUP];
+};
+
 /*
  * hfi_pportdata - HFI port specific information
  *
@@ -518,6 +526,7 @@ struct ib_vl_weight_elem {
  *@vcu: Virtual return credit unit for this port
  *@link_credits: link credits of this device
  *@vl15_init: Initial vl15 credits to use
+ *@bw_arb_cache: Caching of BW ARB tables
  */
 struct hfi_pportdata {
 	struct hfi_devdata *dd;
@@ -605,6 +614,8 @@ struct hfi_pportdata {
 	struct ib_vl_weight_elem vl_arb_high[HFI_VL_ARB_TABLE_SIZE];
 	struct ib_vl_weight_elem vl_arb_prempt_ele[HFI_VL_ARB_TABLE_SIZE];
 	struct ib_vl_weight_elem vl_arb_prempt_mat[HFI_VL_ARB_TABLE_SIZE];
+
+	struct bw_arb_cache bw_arb_cache;
 
 	/* for exclusive access to 8051 */
 	spinlock_t crk8051_lock;
@@ -894,7 +905,7 @@ void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
 void hfi_ack_interrupt(struct hfi_msix_entry *me);
 u8 hfi_porttype(struct hfi_pportdata *ppd);
-int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which);
+int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data);
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data);
 int hfi_set_mtu(struct hfi_pportdata *ppd);
 u16 hfi_port_ltp_to_cap(u16 port_ltp);
