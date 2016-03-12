@@ -605,7 +605,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	mtu = opa_mtu_to_enum(ppd->vl_mtu[15]);
 	pi->neigh_mtu.pvlx_to_mtu[15 / 2] |= mtu;
 	pi->smsl = ibp->sm_sl & OPA_PI_MASK_SMSL;
-	pi->operational_vls = hfi_get_ib_cfg(ppd, HFI_IB_CFG_OP_VLS);
+	pi->operational_vls = hfi_get_ib_cfg(ppd, HFI_IB_CFG_OP_VLS, 0, NULL);
 	pi->partenforce_filterraw |=
 		(ppd->linkinit_reason & OPA_PI_MASK_LINKINIT_REASON);
 	if (ppd->part_enforce & HFI_PART_ENFORCE_IN)
@@ -619,11 +619,11 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 
 	pi->vl.cap = ppd->vls_supported;
 	pi->vl.high_limit = cpu_to_be16(ibp->vl_high_limit);
-	/* vlarb absent for STL2 */
-#if 0
-	pi->vl.arb_high_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_HIGH_CAP);
-	pi->vl.arb_low_cap = (u8)hfi1_get_ib_cfg(ppd, HFI1_IB_CFG_VL_LOW_CAP);
-#endif
+	/*
+	 * BW arb update not yet done to struct opa_port_info.
+	 * So send BwGroupCap using arb_high_cap.
+	 */
+	pi->vl.arb_high_cap = OPA_NUM_BW_GROUP_SUPPORTED;
 
 	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
 
@@ -710,6 +710,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->opa_cap_mask = cpu_to_be16(OPA_CAP_MASK3_IsSharedSpaceSupported);
 	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsVLrSupported);
 	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsMAXLIDSupported);
+	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsBwMeterSupported);
+	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsVLMarkerSupported);
 
 	/* Driver does not support mcast/collective configuration */
 	pi->opa_cap_mask &=
@@ -944,6 +946,35 @@ static int __subn_get_opa_sc_to_vlnt(struct opa_smp *smp, u32 am, u8 *data,
 	if (resp_len)
 		*resp_len += size;
 
+	return reply(ibh);
+}
+
+static int __subn_get_opa_bw_arb(struct opa_smp *smp, u32 am, u8 *data,
+				 struct ib_device *ibdev, u8 port,
+				 u32 *resp_len)
+{
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	u32 num_ports = OPA_AM_NPORT(am);
+	u8 section = OPA_BW_SECTION(am);
+	int size = sizeof(struct opa_bw_arb);
+	struct opa_bw_arb *bw_arb = (struct opa_bw_arb *)data;
+
+	if ((num_ports != 1) || (section != OPA_BWARB_GROUP &&
+				 section != OPA_BWARB_PREEMPT_MATRIX))
+		goto err;
+
+	bw_arb->port_sel_mask[3] = cpu_to_be64((uint64_t)(1) << (port - 1));
+	size += hfi_get_ib_cfg(ppd, HFI_IB_CFG_BW_ARB, section, data);
+
+	if (resp_len)
+		*resp_len += size;
+
+	goto done;
+err:
+	hfi_invalid_attr(smp);
+done:
 	return reply(ibh);
 }
 
@@ -1224,6 +1255,10 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		break;
 	case IB_SMP_ATTR_VL_ARB_TABLE:
 		ret = __subn_get_opa_vl_arb(smp, am, data, ibdev, port,
+					    resp_len);
+		break;
+	case OPA_ATTRIB_ID_BW_ARBITRATION:
+		ret = __subn_get_opa_bw_arb(smp, am, data, ibdev, port,
 					    resp_len);
 		break;
 	case IB_SMP_ATTR_LED_INFO:
@@ -2081,6 +2116,30 @@ done:
 	return __subn_get_opa_bct(smp, am, data, ibdev, port, resp_len);
 }
 
+static int __subn_set_opa_bw_arb(struct opa_smp *smp, u32 am, u8 *data,
+				 struct ib_device *ibdev, u8 port,
+				 u32 *resp_len)
+{
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	u32 num_ports = OPA_AM_NPORT(am);
+	u8 section = OPA_BW_SECTION(am);
+
+	if ((num_ports != 1) || (section != OPA_BWARB_GROUP &&
+				 section != OPA_BWARB_PREEMPT_MATRIX))
+		goto err;
+
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_BW_ARB, section, data);
+
+	goto done;
+err:
+	hfi_invalid_attr(smp);
+	return reply(ibh);
+done:
+	return __subn_get_opa_bw_arb(smp, am, data, ibdev, port, resp_len);
+}
+
 static int __subn_set_opa_vl_arb(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					    u32 *resp_len)
@@ -2283,6 +2342,10 @@ static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		break;
 	case IB_SMP_ATTR_VL_ARB_TABLE:
 		ret = __subn_set_opa_vl_arb(smp, am, data, ibdev, port,
+					    resp_len);
+		break;
+	case OPA_ATTRIB_ID_BW_ARBITRATION:
+		ret = __subn_set_opa_bw_arb(smp, am, data, ibdev, port,
 					    resp_len);
 		break;
 	case OPA_ATTRIB_ID_HFI_CONGESTION_SETTING:
