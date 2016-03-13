@@ -2323,8 +2323,9 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	/* for debugging purpose, read the CSR back */
 	cancel_msg_req1.val = read_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1);
 	if (cancel_msg_req1.field.cancel_req)
-		dd_dev_err(dd, "OTR cancellation not done after 1ms, pid %d\n",
-			ptl_pid);
+		/* FXRTODO: Change to dd_dev_err once Simics is fixed */
+		dd_dev_dbg(dd, "OTR cancellation not done after 1ms, pid %d\n",
+			   ptl_pid);
 
 	/* invalidate cached host memory in HFI for Portals Tables by PID */
 	pte_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
