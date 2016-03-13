@@ -904,10 +904,10 @@ static void update_sm_ah(struct work_struct *work)
 		if (ib_is_opa_gid(&sgid))
 			slid = opa_get_lid_from_gid(&sgid);
 
+		ah_attr.dlid = OPA_TO_IB_UCAST_LID(port_attr.sm_lid);
 		if ((port_attr.sm_lid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) ||
-		    (slid >= IB_MULTICAST_LID_BASE)) {
+		    (slid >= be16_to_cpu(IB_MULTICAST_LID_BASE))) {
 			ah_attr.ah_flags = IB_AH_GRH;
-			ah_attr.dlid = OPA_TO_IB_UCAST_LID(port_attr.sm_lid);
 			ah_attr.grh.sgid_index = OPA_GID_INDEX;
 			/* Same prefix as sgid */
 			ah_attr.grh.dgid.global.subnet_prefix =
