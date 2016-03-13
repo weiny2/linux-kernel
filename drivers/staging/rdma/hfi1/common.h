@@ -364,8 +364,8 @@ struct hfi1_message_header {
  */
 #define HFI1_MCAST_NR 0x4 /* Number of top bits set */
 #define HFI1_COLLECTIVE_NR 0x1 /* Number of bits after MCAST_NR */
-#define HFI1_16B_MULTICAST_LID_BASE ((0xFFFFFF << (32 - HFI1_MCAST_NR)) >> 8)
-#define HFI1_16B_COLLECTIVE_LID_BASE ((0xFFFFFF << (32 -\
+#define HFI1_16B_MULTICAST_LID_BASE ((0xFFFFFFFF << (32 - HFI1_MCAST_NR)) >> 8)
+#define HFI1_16B_COLLECTIVE_LID_BASE ((0xFFFFFFFF << (32 -\
 				       (HFI1_MCAST_NR + HFI1_COLLECTIVE_NR))) >> 8)
 
 static inline __u64 rhf_to_cpu(const __le32 *rbuf)

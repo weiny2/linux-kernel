@@ -2046,7 +2046,7 @@ static inline u32 hfi1_retrieve_lid(struct ib_ah_attr *ah_attr)
 		if (ib_is_opa_gid(dgid))
 			return opa_get_lid_from_gid(dgid);
 	}
-	return ah_attr->dlid;
+	return hfi1_mcast_xlate(ah_attr->dlid);
 }
 
 /**
