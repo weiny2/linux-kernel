@@ -387,8 +387,21 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	if ((ah_attr->ah_flags & IB_AH_GRH) &&
  		(!(hfi1_use_16b(qp) && !hfi1_check_mcast(ah_attr)))) {
 		/* Header size in 32-bit words. */
+		struct ib_grh *grh;
+
+		if (!use_16b) {
+			grh = &ps->s_txreq->phdr.hdr.pkt.ibh.u.l.grh;
+		} else {
+			
+			/* Ensure OPA GIDs are transformed to IB gids before creating the GRH */
+			if (ah_attr->grh.sgid_index == OPA_GID_INDEX)
+				ah_attr->grh.sgid_index = 0;
+			grh = &ps->s_txreq->phdr.hdr.pkt.opah.u.l.grh;
+		}
+			
+
 		qp->s_hdrwords += hfi1_make_grh(ibp,
-						&ps->s_txreq->phdr.hdr.pkt.ibh.u.l.grh,
+						grh,
 						&ah_attr->grh,
 						qp->s_hdrwords, nwords);
 		lrh0 = HFI1_LRH_GRH;
