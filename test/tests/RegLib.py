@@ -83,38 +83,36 @@ def chomp_comma(str):
 def _get_test_port():
     port = random.randrange(1025, 65535)
     return port
-    
 
-def get_test_port(host1, host2):
+def _verify_test_port_available(host, port, num_ports=1):
+    cmd = "/bin/netstat -vatn"
+    test_log(0, "Running %s" % cmd)
+    (err, out) = host.send_ssh(cmd)
+    if (err != 0) or \
+        any(str(port_x) in out for port_x in range(port, port+num_ports)):
+        if not num_ports > 1:
+            # Dump the output of netstat for later triage
+            for line in out:
+                test_log(0, line)
+        return False
+
+    return True
+
+def get_test_port(host1, host2, num_ports=1):
     attempts = 100
     while attempts > 0:
         attempts -= 1
         port = _get_test_port()
-        cmd = "/bin/netstat -vatn"
-        test_log(0, "Running %s" %cmd)
-        (err, out) = host1.send_ssh(cmd)
-        for line in out:
-            if str(port) in line:
-                port = 0
-        
-        # Port is free on host1 now to check host2
-        if port != 0:
-            test_log(0, "Port %d should be free checking host2." % port)
-            cmd = "/bin/netstat -vatn"
-            test_log(0, "Running %s" %cmd)
-            (err, out) = host2.send_ssh(cmd)
-            for line in out:
-                if str(port) in line:
-                    port = 0
-            if port != 0:
+
+        test_log(0, "Checking if port(s) %d is available on host1." % port)
+        if _verify_test_port_available(host1, port, num_ports):
+            test_log(0, "Port(s) %d should be free checking host2." % port)
+            if _verify_test_port_available(host2, port, num_ports):
                 return port
             else:
-                for line in out:
-                    test_log(0, line)
+                port = 0
         else:
-            # Dump the output of netstat for later triage
-            for line in out:
-                test_log(0, line)
+            port = 0
 
 def md5_from_packet(packet):
 
@@ -278,7 +276,7 @@ class HostInfo:
             return False
         return True
 
-    def wait_for_socket(self, port, state, timeout=1, attempts=60):
+    def _wait_for_single_socket(self, port, state, timeout=1, attempts=60):
         """ Waits for the socket at the given port to reach a specific state"""
 
         while attempts > 0:
@@ -293,6 +291,12 @@ class HostInfo:
             test_log(5, "Sleeping for %d seconds" % timeout)
             time.sleep(timeout)
         return False #if we get to here it is an error
+
+    def wait_for_socket(self, port, state, timeout=1, attempts=60, num_ports=1):
+        """ Waits for the socket at the given port(s) to reach a specific state"""
+
+        return all(self._wait_for_single_socket(port_x, state, timeout, attempts)\
+                    for port_x in range(port, port+num_ports))
 
     def send_ssh(self, cmd, buffered=1, timeout=0, run_as_root=False, use_tty=False):
         """ Send an SSH command. We may need to add a timeout mechanism
