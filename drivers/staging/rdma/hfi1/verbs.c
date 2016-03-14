@@ -680,10 +680,10 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 	 */
 	hdr = packet->ebuf;
 	packet->hdr = packet->ebuf;
-	l4 = hdr->lrh[2] & OPA_16B_L4_MASK;
-	dlid =  (hdr->lrh[1] & OPA_16B_LID_MASK) |
-		(((hdr->lrh[2] & OPA_16B_DLID_MASK) >>
-		  OPA_16B_DLID_HIGH_SHIFT) << 20);
+	l4 = OPA_16B_GET_L4(hdr->lrh[0], hdr->lrh[1],
+			    hdr->lrh[2], hdr->lrh[3]);
+	dlid = OPA_16B_GET_DLID(hdr->lrh[0], hdr->lrh[1],
+				hdr->lrh[2], hdr->lrh[3]);
 
 	if (unlikely(((dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
 		      (dlid != HFI1_16B_PERMISSIVE_LID))))
