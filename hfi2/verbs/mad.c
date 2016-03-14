@@ -978,52 +978,6 @@ done:
 	return reply(ibh);
 }
 
-static int __subn_get_opa_vl_arb(struct opa_smp *smp, u32 am, u8 *data,
-					struct ib_device *ibdev, u8 port,
-							u32 *resp_len)
-{
-	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
-	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
-	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
-	u32 num_ports = OPA_AM_NPORT(am);
-	u8 section = (am & 0x00ff0000) >> 16;
-	u8 *p = data;
-	int size = 256;
-	int table_size =
-		HFI_VL_ARB_TABLE_SIZE * sizeof(struct ib_vl_weight_elem);
-
-	if (num_ports != 1)
-		goto err;
-
-	switch (section) {
-	case OPA_VLARB_LOW_ELEMENTS:
-		memcpy(p, ppd->vl_arb_low, table_size);
-		break;
-	case OPA_VLARB_HIGH_ELEMENTS:
-		memcpy(p, ppd->vl_arb_high, table_size);
-		break;
-	case OPA_VLARB_PREEMPT_ELEMENTS:
-		memcpy(p, ppd->vl_arb_prempt_ele, table_size);
-		break;
-	case OPA_VLARB_PREEMPT_MATRIX:
-		memcpy(p, ppd->vl_arb_prempt_mat, table_size);
-		break;
-	default:
-		pr_warn("OPA SubnGet(VL Arb) AM Invalid : 0x%x\n",
-			be32_to_cpu(smp->attr_mod));
-		goto err;
-	}
-
-	if (resp_len)
-		*resp_len += size;
-
-	goto done;
-err:
-	hfi_invalid_attr(smp);
-done:
-	return reply(ibh);
-}
-
 static int __subn_get_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 							u32 *resp_len)
@@ -1252,10 +1206,6 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 	case OPA_ATTRIB_ID_SC_TO_VLNT_MAP:
 		ret = __subn_get_opa_sc_to_vlnt(smp, am, data, ibdev, port,
 					       resp_len);
-		break;
-	case IB_SMP_ATTR_VL_ARB_TABLE:
-		ret = __subn_get_opa_vl_arb(smp, am, data, ibdev, port,
-					    resp_len);
 		break;
 	case OPA_ATTRIB_ID_BW_ARBITRATION:
 		ret = __subn_get_opa_bw_arb(smp, am, data, ibdev, port,
@@ -2140,53 +2090,6 @@ done:
 	return __subn_get_opa_bw_arb(smp, am, data, ibdev, port, resp_len);
 }
 
-static int __subn_set_opa_vl_arb(struct opa_smp *smp, u32 am, u8 *data,
-				struct ib_device *ibdev, u8 port,
-					    u32 *resp_len)
-{
-	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
-	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
-	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
-	u32 num_ports = OPA_AM_NPORT(am);
-	int table_size =
-		HFI_VL_ARB_TABLE_SIZE * sizeof(struct ib_vl_weight_elem);
-	u8 section = (am & 0x00ff0000) >> 16;
-	u8 *p = data;
-
-	if (num_ports != 1)
-		goto err;
-
-	switch (section) {
-	case OPA_VLARB_LOW_ELEMENTS:
-		memcpy(ppd->vl_arb_low, p, table_size);
-		break;
-	case OPA_VLARB_HIGH_ELEMENTS:
-		memcpy(ppd->vl_arb_high, p, table_size);
-		break;
-	/*
-	 * neither OPA_VLARB_PREEMPT_ELEMENTS, or OPA_VLARB_PREEMPT_MATRIX
-	 * can be changed from the default values
-	 */
-	case OPA_VLARB_PREEMPT_ELEMENTS:
-		/* FALLTHROUGH */
-	case OPA_VLARB_PREEMPT_MATRIX:
-		smp->status |=
-		cpu_to_be16(IB_MGMT_MAD_STATUS_UNSUPPORTED_METHOD_ATTRIB);
-		break;
-	default:
-		pr_warn("OPA SubnSet(VL Arb) AM Invalid : 0x%x\n",
-			be32_to_cpu(smp->attr_mod));
-		goto err;
-	}
-
-	goto done;
-err:
-	hfi_invalid_attr(smp);
-	return reply(ibh);
-done:
-	return __subn_get_opa_vl_arb(smp, am, data, ibdev, port, resp_len);
-}
-
 static int __subn_set_opa_cong_setting(struct opa_smp *smp, u32 am, u8 *data,
 					struct ib_device *ibdev, u8 port,
 						u32 *resp_len)
@@ -2339,10 +2242,6 @@ static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 	case OPA_ATTRIB_ID_BUFFER_CONTROL_TABLE:
 		ret = __subn_set_opa_bct(smp, am, data, ibdev, port,
 					 resp_len);
-		break;
-	case IB_SMP_ATTR_VL_ARB_TABLE:
-		ret = __subn_set_opa_vl_arb(smp, am, data, ibdev, port,
-					    resp_len);
 		break;
 	case OPA_ATTRIB_ID_BW_ARBITRATION:
 		ret = __subn_set_opa_bw_arb(smp, am, data, ibdev, port,

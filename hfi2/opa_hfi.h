@@ -337,16 +337,6 @@ enum {
 					HFI_LTP_CRC_ENABLED_SHIFT) & \
 					HFI_LTP_CRC_ACTIVE_MASK)
 
-/*
- * FXRTODO: VL ARB is absent for FXR. Remove these
- * once we have STL2 specific opafm
- */
-#define HFI_VL_ARB_TABLE_SIZE		16
-#define OPA_VLARB_LOW_ELEMENTS		0
-#define OPA_VLARB_HIGH_ELEMENTS		1
-#define OPA_VLARB_PREEMPT_ELEMENTS	2
-#define OPA_VLARB_PREEMPT_MATRIX	3
-
 struct vl_limit {
 	__be16 dedicated;
 	__be16 shared;
@@ -415,17 +405,6 @@ struct hfi_ptcdata {
 	u32 max_e2e_dlid;
 	u8 req_sl;
 };
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
-/*
- * FXRTODO: VL ARB is absent for FXR. Remove these
- * once we have STL2 specific opafm
- */
-struct ib_vl_weight_elem {
-	u8      vl;     /* Only low 4 bits, upper 4 bits reserved */
-	u8      weight;
-};
-#endif
 
 struct bw_arb_cache {
 	/* protect bw arb cache */
@@ -605,15 +584,6 @@ struct hfi_pportdata {
 	u8 vcu;
 	u16 link_credits;
 	u16 vl15_init;
-
-	/*
-	 * FXRTODO: VL ARB is absent for FXR. Remove these
-	 * once we have STL2 specific opafm
-	 */
-	struct ib_vl_weight_elem vl_arb_low[HFI_VL_ARB_TABLE_SIZE];
-	struct ib_vl_weight_elem vl_arb_high[HFI_VL_ARB_TABLE_SIZE];
-	struct ib_vl_weight_elem vl_arb_prempt_ele[HFI_VL_ARB_TABLE_SIZE];
-	struct ib_vl_weight_elem vl_arb_prempt_mat[HFI_VL_ARB_TABLE_SIZE];
 
 	struct bw_arb_cache bw_arb_cache;
 
