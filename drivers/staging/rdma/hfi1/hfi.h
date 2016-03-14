@@ -396,6 +396,10 @@ struct hfi1_snoop_data {
  * OPA 9B Packet Format
  */
 #define OPA_9B_BTH_PAD_BITS	3
+#define OPA_9B_BTH_PAD_SHIFT	20
+#define OPA_9B_BTH_GET_PAD(bth0) ((u8)((bth0 >> \
+				       OPA_9B_BTH_PAD_SHIFT) \
+				       & OPA_9B_BTH_PAD_BITS))
 
 /*
  * OPA 16B Packet Format
@@ -426,6 +430,9 @@ struct hfi1_snoop_data {
 
 #define OPA_16B_BTH_PAD_SHIFT	20
 #define OPA_16B_BTH_PAD_BITS	7
+#define OPA_16B_BTH_GET_PAD(bth0) ((u8)((bth0 >> \
+					OPA_16B_BTH_PAD_SHIFT) \
+					& OPA_16B_BTH_PAD_BITS))
 
 #define OPA_16B_MAKE_QW(low_dw, high_dw) (((u64)high_dw << 32) | low_dw)
 

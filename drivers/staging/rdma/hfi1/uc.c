@@ -295,6 +295,7 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 	int has_grh = rcv_flags & HFI1_HAS_GRH;
 	int ret;
 	u32 bth1;
+	bool use_16b = hfi1_use_16b(qp);
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
 	if (hfi1_ruc_check_hdr(ibp, hdr, has_grh, qp, bth0))
@@ -449,7 +450,10 @@ no_immediate_data:
 		wc.wc_flags = 0;
 send_last:
 		/* Get the number of bytes the message was padded by. */
-		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+		if (!use_16b)
+			pad = OPA_9B_BTH_GET_PAD(bth0);
+		else
+			pad = OPA_16B_BTH_GET_PAD(bth0);
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))
@@ -544,7 +548,11 @@ rdma_last_imm:
 		wc.wc_flags = IB_WC_WITH_IMM;
 
 		/* Get the number of bytes the message was padded by. */
-		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+		if (!use_16b)
+			pad = OPA_9B_BTH_GET_PAD(bth0);
+		else
+			pad = OPA_16B_BTH_GET_PAD(bth0);
+
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))
@@ -571,7 +579,10 @@ rdma_last_imm:
 	case OP(RDMA_WRITE_LAST):
 rdma_last:
 		/* Get the number of bytes the message was padded by. */
-		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+		if (!use_16b)
+			pad = OPA_9B_BTH_GET_PAD(bth0);
+		else
+			pad = OPA_16B_BTH_GET_PAD(bth0);
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))

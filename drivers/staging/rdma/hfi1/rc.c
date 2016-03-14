@@ -1565,11 +1565,14 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 	u32 pad;
 	u32 aeth;
 	u64 val;
+	u32 bth0 = 0;
+	bool use_16b = hfi1_use_16b(qp);
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
 	trace_hfi1_rc_ack(qp, psn);
 
+	bth0 = be32_to_cpu(ohdr->bth[0]);
 	/* Ignore invalid responses. */
 	smp_read_barrier_depends(); /* see post_one_send */
 	if (cmp_psn(psn, ACCESS_ONCE(qp->s_next_psn)) >= 0)
@@ -1671,7 +1674,10 @@ read_middle:
 		if (!do_rc_ack(qp, aeth, psn, opcode, 0, rcd))
 			goto ack_done;
 		/* Get the number of bytes the message was padded by. */
-		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+		if (!use_16b)
+			pad = OPA_9B_BTH_GET_PAD(bth0);
+		else
+			pad = OPA_16B_BTH_GET_PAD(bth0);
 		/*
 		 * Check that the data size is >= 0 && <= pmtu.
 		 * Remember to account for ICRC (4).
@@ -1695,7 +1701,10 @@ read_middle:
 		if (unlikely(wqe->wr.opcode != IB_WR_RDMA_READ))
 			goto ack_op_err;
 		/* Get the number of bytes the message was padded by. */
-		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+		if (!use_16b)
+			pad = OPA_9B_BTH_GET_PAD(bth0);
+		else
+			pad = OPA_16B_BTH_GET_PAD(bth0);
 		/*
 		 * Check that the data size is >= 1 && <= pmtu.
 		 * Remember to account for ICRC (4).
@@ -2102,6 +2111,7 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	u32 bth1;
 	int ret, is_fecn = 0;
 	int copy_last = 0;
+	bool use_16b = hfi1_use_16b(qp);
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
 	if (hfi1_ruc_check_hdr(ibp, hdr, rcv_flags & HFI1_HAS_GRH, qp, bth0))
@@ -2243,7 +2253,11 @@ no_immediate_data:
 		wc.ex.imm_data = 0;
 send_last:
 		/* Get the number of bytes the message was padded by. */
-		pad = (bth0 >> 20) & 3;
+		if (!use_16b)
+			pad = OPA_9B_BTH_GET_PAD(bth0);
+		else
+			pad = OPA_16B_BTH_GET_PAD(bth0);
+
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))

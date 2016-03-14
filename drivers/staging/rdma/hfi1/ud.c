@@ -883,7 +883,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	 * Get the number of bytes the message was padded by
 	 * and drop incomplete packets.
 	 */
-	pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+	pad = OPA_9B_BTH_GET_PAD(be32_to_cpu(ohdr->bth[0]));
 	if (unlikely(tlen < (hdrsize + pad + 4)))
 		goto drop;
 
@@ -1126,8 +1126,7 @@ void hfi1_ud_rcv_16b(struct hfi1_packet *packet)
 	 * Get the number of bytes the message was padded by
 	 * and drop incomplete packets.
 	 */
-	pad = (be32_to_cpu(ohdr->bth[0]) >> OPA_16B_BTH_PAD_SHIFT) &
-	       OPA_16B_BTH_PAD_BITS;
+	pad = OPA_16B_BTH_GET_PAD(be32_to_cpu(ohdr->bth[0]));
 	if (unlikely(tlen < (hdrsize + pad + 4 + 1)))
 		goto drop;
 
