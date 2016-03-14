@@ -449,21 +449,21 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	priv->s_sendcontext = qp_to_send_context(qp, priv->s_sc);
 	ps->s_txreq->psc = priv->s_sendcontext;
 	if (!use_16b) {
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0] = cpu_to_be16(lrh0);
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[2] =
-		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	if (ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE)) {
-		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = IB_LID_PERMISSIVE;
-	} else {
-		lid = (u16)ppd->lid;
-		if (lid) {
-			lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
-			ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = cpu_to_be16(lid);
-		} else {
+		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0] = cpu_to_be16(lrh0);
+		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);
+		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[2] =
+			cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
+		if (ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE)) {
 			ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = IB_LID_PERMISSIVE;
+		} else {
+			lid = (u16)ppd->lid;
+			if (lid) {
+				lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
+				ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = cpu_to_be16(lid);
+			} else {
+				ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = IB_LID_PERMISSIVE;
+			}
 		}
-	}
 	} else {
 		u32 dlid_16b = hfi1_retrieve_lid(ah_attr);
 		u32 slid_16b;
@@ -482,6 +482,8 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		lrh0_16b = (lrh0_16b & ~OPA_16B_LID_MASK)  | slid_16b;
 		lrh2_16b = (lrh2_16b & ~OPA_16B_SLID_MASK) | ((slid_16b >> 20) 
 				<< OPA_16B_SLID_HIGH_SHIFT);
+		if (dlid_16b == 0xbb)
+			dump_stack();
 	}
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 		bth0 |= IB_BTH_SOLICITED;
@@ -830,95 +832,116 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	struct hfi1_other_headers *ohdr = packet->ohdr;
 	int opcode;
 	u32 hdrsize = packet->hlen;
-	u32 pad;
 	struct ib_wc wc;
 	u32 qkey;
 	u32 src_qp;
-	u16 dlid, pkey;
+	u32 dlid;
+	u16  pkey;
 	int mgmt_pkey_idx = -1;
 	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
-	struct hfi1_ib_header *hdr = packet->hdr;
+	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+	struct hfi1_ib_header *hdr = NULL;
+	struct hfi1_16b_header *hdr_16b = NULL;
 	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
 	struct rvt_qp *qp = packet->qp;
 	bool has_grh = rcv_flags & HFI1_HAS_GRH;
 	bool sc4_bit = has_sc4_bit(packet);
-	u8 sc;
 	u32 bth1;
 	int is_mcast;
 	struct ib_grh *grh = NULL;
-
+	bool bypass = false;
+	u8 fecn, becn, sc;
+	u8 sl_from_sc, sc5, sl;
+	u32 lqpn;
+	u32 slid;
+	u8 extra_bytes;
+	bool dlid_is_permissive;
+	bool slid_is_permissive;
+	void (*fn_cnp)(struct hfi1_ibport *ibp,
+		       struct rvt_qp *qp, u32 remote_qpn,
+		       u32 pkey, u32 slid, u32 dlid, u8 sc5,
+		       const struct ib_grh *old_grh);
 	if (packet->etype == RHF_RCV_TYPE_BYPASS)
-		return hfi1_ud_rcv_16b(packet);
+		bypass = true;
 
 	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
 	src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & RVT_QPN_MASK;
-	dlid = be16_to_cpu(hdr->lrh[1]);
-	is_mcast = (dlid > be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
-			(dlid != be16_to_cpu(IB_LID_PERMISSIVE));
+	lqpn =  be32_to_cpu(ohdr->bth[1]) & RVT_QPN_MASK;
 	bth1 = be32_to_cpu(ohdr->bth[1]);
-	if (unlikely(bth1 & HFI1_BECN_SMASK)) {
-		/*
-		 * In pre-B0 h/w the CNP_OPCODE is handled via an
-		 * error path.
-		 */
-		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-		u32 lqpn =  be32_to_cpu(ohdr->bth[1]) & RVT_QPN_MASK;
-		u8 sl, sc5;
-
-		sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
-		sc5 |= sc4_bit;
+	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+	if (bypass) {
+		hdr_16b = packet->hdr;
+		data = packet->ebuf + hdrsize;
+		dlid = OPA_16B_GET_DLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3]);
+		slid = OPA_16B_GET_SLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3]);
+		fecn = OPA_16B_GET_FECN(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3]);
+		becn = OPA_16B_GET_BECN(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3]);
+		sc = OPA_16B_GET_SC(hdr_16b->lrh[0], hdr_16b->lrh[1],
+				    hdr_16b->lrh[2], hdr_16b->lrh[3]);
+		pkey = OPA_16B_GET_PKEY(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3]); 
+		is_mcast = (dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
+				(dlid != HFI1_16B_PERMISSIVE_LID);
+		sc5 = sc; /* 16B provides the 5 bit SC */
 		sl = ibp->sc_to_sl[sc5];
-
-		process_becn(ppd, sl, 0, lqpn, 0, IB_CC_SVCTYPE_UD);
+		extra_bytes = OPA_16B_BTH_GET_PAD(be32_to_cpu(ohdr->bth[0]));
+		extra_bytes += (SIZE_OF_CRC << 2) + (SIZE_OF_LT);
+		dlid_is_permissive = (dlid == HFI1_16B_PERMISSIVE_LID);
+		slid_is_permissive = (slid == HFI1_16B_PERMISSIVE_LID);
+		fn_cnp = return_cnp;
+	} else {
+		hdr = packet->hdr;
+		data = packet->ebuf;
+		dlid = be16_to_cpu(hdr->lrh[1]);
+		slid = be16_to_cpu(hdr->lrh[3]);
+		fecn = bth1 & HFI1_FECN_SMASK;
+		becn = bth1 & HFI1_BECN_SMASK;
+		sc = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
+		pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+		is_mcast = (dlid > be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
+				(dlid != be16_to_cpu(IB_LID_PERMISSIVE));
+		sc5 = sc | sc4_bit; /* Get the correct SC */
+		sl = (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF;
+		extra_bytes = OPA_9B_BTH_GET_PAD(be32_to_cpu(ohdr->bth[0]));
+		extra_bytes += (SIZE_OF_CRC << 2);
+		dlid_is_permissive = (dlid == be16_to_cpu(IB_LID_PERMISSIVE));
+		slid_is_permissive = (slid == be16_to_cpu(IB_LID_PERMISSIVE));
+		fn_cnp = return_cnp_bypass;
 	}
+	sl_from_sc = ibp->sc_to_sl[sc5];
 
 	/*
-	 * The opcode is in the low byte when its in network order
-	 * (top byte when in host order).
+	 * In pre-B0 h/w the CNP_OPCODE is handled via an
+	 * error path.
 	 */
-	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
-	opcode &= 0xff;
+	if (unlikely(becn))
+		process_becn(ppd, sl, 0, lqpn, 0, IB_CC_SVCTYPE_UD);
 
-	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
-
-	if (!is_mcast && (opcode != IB_OPCODE_CNP) && bth1 & HFI1_FECN_SMASK) {
-		u16 slid = be16_to_cpu(hdr->lrh[3]);
-		u8 sc5;
-
-		sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
-		sc5 |= sc4_bit;
-
-		return_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc5, grh);
+	if (!is_mcast && (opcode != IB_OPCODE_CNP) && fecn) {
+		fn_cnp(ibp, qp, src_qp, pkey, (u16)dlid, (u16)slid, sc5, grh);
 	}
 	/*
 	 * Get the number of bytes the message was padded by
 	 * and drop incomplete packets.
 	 */
-	pad = OPA_9B_BTH_GET_PAD(be32_to_cpu(ohdr->bth[0]));
-	if (unlikely(tlen < (hdrsize + pad + 4)))
+	if (unlikely(tlen < (hdrsize + extra_bytes)))
 		goto drop;
-
-	tlen -= hdrsize + pad + 4;
+	tlen -= hdrsize + extra_bytes;
 
 	/*
 	 * Check that the permissive LID is only used on QP0
 	 * and the QKEY matches (see 9.6.1.4.1 and 9.6.1.5.1).
 	 */
 	if (qp->ibqp.qp_num) {
-		if (unlikely(hdr->lrh[1] == IB_LID_PERMISSIVE ||
-			     hdr->lrh[3] == IB_LID_PERMISSIVE))
+		if (unlikely(dlid_is_permissive || slid_is_permissive))
 			goto drop;
 		if (qp->ibqp.qp_num > 1) {
-			struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-			u16 slid;
-			u8 sc5;
-
-			sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
-			sc5 |= sc4_bit;
-
-			slid = be16_to_cpu(hdr->lrh[3]);
 			if (unlikely(rcv_pkey_check(ppd, pkey, sc5, slid))) {
 				/*
 				 * Traps will not be sent for packets dropped
@@ -927,12 +950,9 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 				 * IB spec (release 1.3, section 10.9.4)
 				 */
 				hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY,
-					       pkey,
-					       (be16_to_cpu(hdr->lrh[0]) >> 4) &
-						0xF,
+					       pkey, sl,
 					       src_qp, qp->ibqp.qp_num,
-					       be16_to_cpu(hdr->lrh[3]),
-					       be16_to_cpu(hdr->lrh[1]));
+					       (u16)slid, (u16)dlid);
 				return;
 			}
 		} else {
@@ -942,34 +962,24 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 				goto drop;
 		}
 		if (unlikely(qkey != qp->qkey)) {
-			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_Q_KEY, qkey,
-				       (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
+			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_Q_KEY, qkey, sl,
 				       src_qp, qp->ibqp.qp_num,
-				       be16_to_cpu(hdr->lrh[3]),
-				       be16_to_cpu(hdr->lrh[1]));
+				       (u16) slid, (u16) dlid);
 			return;
 		}
 		/* Drop invalid MAD packets (see 13.5.3.1). */
 		if (unlikely(qp->ibqp.qp_num == 1 &&
-			     (tlen > 2048 ||
-			      (be16_to_cpu(hdr->lrh[0]) >> 12) == 15)))
+			     (tlen > 2048 || (sc == 0xF))))
 			goto drop;
 	} else {
 		/* Received on QP0, and so by definition, this is an SMP */
 		struct opa_smp *smp = (struct opa_smp *)data;
-		u16 slid = be16_to_cpu(hdr->lrh[3]);
-		u8 sc5;
-
-		sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
-		sc5 |= sc4_bit;
-
 		if (opa_smp_check(ibp, pkey, sc5, qp, slid, smp))
 			goto drop;
 
 		if (tlen > 2048)
 			goto drop;
-		if ((hdr->lrh[1] == IB_LID_PERMISSIVE ||
-		     hdr->lrh[3] == IB_LID_PERMISSIVE) &&
+		if ((dlid_is_permissive || slid_is_permissive) &&
 		    smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 			goto drop;
 
@@ -1021,12 +1031,37 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		qp->r_flags |= RVT_R_REUSE_SGE;
 		goto drop;
 	}
-	if (has_grh) {
-		hfi1_copy_sge(&qp->r_sge, &hdr->u.l.grh,
-			      sizeof(struct ib_grh), 1, 0);
-		wc.wc_flags |= IB_WC_GRH;
+
+	/* TODO: Clean this up */
+	if (bypass) {
+		if (has_grh) {
+			hfi1_copy_sge(&qp->r_sge, &hdr_16b->u.l.grh, sizeof(struct ib_grh), 1, 0);
+			wc.wc_flags |= IB_WC_GRH;
+		} else if (((slid != HFI1_16B_PERMISSIVE_LID) &&
+			    (slid >= be16_to_cpu(IB_MULTICAST_LID_BASE))) ||
+			   ((dlid != HFI1_16B_PERMISSIVE_LID) &&
+			    (dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE)))) {
+			struct ib_grh grh;
+			/**
+			 * Assuming we only created 16B on the send side
+			 * if we want to use large LIDs, since GRH was stripped
+			 * out when creating 16B, add back the GRH here.
+			 */
+			hfi1_make_ext_grh(packet, &grh, slid, dlid);
+			//trace_make_ext_grh(ppd_from_ibp(ibp)->dd, &grh);
+			hfi1_copy_sge(&qp->r_sge, &grh, sizeof(struct ib_grh), 1, 0);
+			wc.wc_flags |= IB_WC_GRH;
+		} else {
+			hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
+		}
 	} else {
-		hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
+		if (has_grh) {
+			hfi1_copy_sge(&qp->r_sge, &hdr->u.l.grh,
+				      sizeof(struct ib_grh), 1, 0);
+			wc.wc_flags |= IB_WC_GRH;
+		} else {
+			hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
+		}
 	}
 	hfi1_copy_sge(&qp->r_sge, data, wc.byte_len - sizeof(struct ib_grh),
 		      1, 0);
@@ -1044,256 +1079,6 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	    qp->ibqp.qp_type == IB_QPT_SMI) {
 		if (mgmt_pkey_idx < 0) {
 			if (net_ratelimit()) {
-				struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-				struct hfi1_devdata *dd = ppd->dd;
-
-				dd_dev_err(dd, "QP type %d mgmt_pkey_idx < 0 and packet not dropped???\n",
-					   qp->ibqp.qp_type);
-				mgmt_pkey_idx = 0;
-			}
-		}
-		wc.pkey_index = (unsigned)mgmt_pkey_idx;
-	} else {
-		wc.pkey_index = 0;
-	}
-
-	wc.slid = be16_to_cpu(hdr->lrh[3]);
-	sc = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
-	sc |= sc4_bit;
-	wc.sl = ibp->sc_to_sl[sc];
-
-	/*
-	 * Save the LMC lower bits if the destination LID is a unicast LID.
-	 */
-	wc.dlid_path_bits = dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE) ? 0 :
-		dlid & ((1 << ppd_from_ibp(ibp)->lmc) - 1);
-	wc.port_num = qp->port_num;
-	/* Signal completion event if the solicited bit is set. */
-	rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc,
-		     (ohdr->bth[0] &
-		      cpu_to_be32(IB_BTH_SOLICITED)) != 0);
-	return;
-
-drop:
-	ibp->rvp.n_pkt_drops++;
-}
-
-void hfi1_ud_rcv_16b(struct hfi1_packet *packet)
-{
-	struct hfi1_other_headers *ohdr = packet->ohdr;
-	int opcode;
-	u32 hdrsize = packet->hlen;
-	u32 pad;
-	struct ib_wc wc;
-	u32 qkey;
-	u32 src_qp;
-	int mgmt_pkey_idx = -1;
-	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
-	struct hfi1_16b_header *hdr = packet->hdr;
-	u32 rcv_flags = packet->rcv_flags;
-	u32 tlen = packet->tlen;
-	struct rvt_qp *qp = packet->qp;
-	bool has_grh = rcv_flags & HFI1_HAS_GRH;
-	u32 bth1;
-	int is_mcast;
-	struct ib_grh *grh = NULL;
-	u32 slid, dlid;
-	u8 age, becn, fecn, l4, rc, sc;
-	u16 entropy, len, pkey;
-	u32 sl = 0; /* 16B has no sl but hfi1_bad_pkqkey needs it */
-	u8 *data = packet->ebuf + hdrsize;
-
-	parse_16b_header(hdr, &slid, &dlid, &len, &pkey, &entropy,
-			 &sc, &rc, &fecn, &becn, &age, &l4);
-
-	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
-	src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & RVT_QPN_MASK;
-	is_mcast = (dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
-			(dlid != HFI1_16B_PERMISSIVE_LID);
-	bth1 = be32_to_cpu(ohdr->bth[1]);
-	if (unlikely(becn)) {
-		/*
-		 * In pre-B0 h/w the CNP_OPCODE is handled via an
-		 * error path (errata 291394).
-		 */
-		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-		u32 lqpn =  be32_to_cpu(ohdr->bth[1]) & RVT_QPN_MASK;
-		u8 sl;
-
-		sl = ibp->sc_to_sl[sc];
-
-		process_becn(ppd, sl, 0, lqpn, 0, IB_CC_SVCTYPE_UD);
-	}
-
-	/*
-	 * The opcode is in the low byte when its in network order
-	 * (top byte when in host order).
-	 */
-	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
-	opcode &= 0xff;
-
-	if (!is_mcast && (opcode != IB_OPCODE_CNP) && fecn)
-		return_cnp_bypass(ibp, qp, src_qp, pkey, dlid, slid, sc, grh);
-
-	/*
-	 * Get the number of bytes the message was padded by
-	 * and drop incomplete packets.
-	 */
-	pad = OPA_16B_BTH_GET_PAD(be32_to_cpu(ohdr->bth[0]));
-	if (unlikely(tlen < (hdrsize + pad + 4 + 1)))
-		goto drop;
-
-	tlen -= hdrsize + pad + 4 + 1;
-//#if DBG_MK_16B_HDR
-#if 0
-	pr_info("%s: tlen=%d hdrsize=%d pad=%d\n", __func__,
-		tlen, hdrsize, pad);
-#endif
-	/*
-	 * Check that the permissive LID is only used on QP0
-	 * and the QKEY matches (see 9.6.1.4.1 and 9.6.1.5.1).
-	 */
-	if (qp->ibqp.qp_num) {
-		if (unlikely(dlid == IB_LID_PERMISSIVE ||
-			     slid == IB_LID_PERMISSIVE))
-			goto drop;
-		if (qp->ibqp.qp_num > 1) {
-			struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-
-			if (unlikely(rcv_pkey_check(ppd, pkey, sc, slid))) {
-				/*
-				 * Traps will not be sent for packets dropped
-				 * by the HW. This is fine, as sending trap
-				 * for invalid pkeys is optional according to
-				 * IB spec (release 1.3, section 10.9.4)
-				 */
-				hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY,
-					       pkey, sl,
-					       src_qp, qp->ibqp.qp_num,
-					       slid, dlid);
-				return;
-			}
-		} else {
-			/* GSI packet */
-			mgmt_pkey_idx = hfi1_lookup_pkey_idx(ibp, pkey);
-			if (mgmt_pkey_idx < 0)
-				goto drop;
-		}
-		if (unlikely(qkey != qp->qkey)) {
-			hfi1_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
-				       sl, src_qp, qp->ibqp.qp_num,
-				       slid, dlid);
-			return;
-		}
-		/* Drop invalid MAD packets (see 13.5.3.1). */
-		if (unlikely(qp->ibqp.qp_num == 1 &&
-			     (tlen > 2048 ||
-			      sc  == 15))) {
-			pr_err("%s gonna drop: tlen=%d sc=%d\n",
-			       __func__, tlen, sc);
-			goto drop;
-		}
-	} else {
-		/* Received on QP0, and so by definition, this is an SMP */
-		struct opa_smp *smp;
-
-		smp = (struct opa_smp *)data;
-
-		if (opa_smp_check(ibp, pkey, sc, qp, slid, smp))
-			goto drop;
-		if (tlen > 2048)
-			goto drop;
-		if ((dlid == IB_LID_PERMISSIVE ||
-		     slid == IB_LID_PERMISSIVE) &&
-		    smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
-			goto drop;
-
-		/* look up SMI pkey */
-		mgmt_pkey_idx = hfi1_lookup_pkey_idx(ibp, pkey);
-		if (mgmt_pkey_idx < 0)
-			goto drop;
-	}
-
-	if (qp->ibqp.qp_num > 1 &&
-	    opcode == IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE) {
-		wc.ex.imm_data = ohdr->u.ud.imm_data;
-		wc.wc_flags = IB_WC_WITH_IMM;
-		tlen -= sizeof(u32);
-	} else if (opcode == IB_OPCODE_UD_SEND_ONLY) {
-		wc.ex.imm_data = 0;
-		wc.wc_flags = 0;
-	} else {
-		goto drop;
-	}
-
-	/*
-	 * A GRH is expected to precede the data even if not
-	 * present on the wire.
-	 */
-	wc.byte_len = tlen + sizeof(struct ib_grh);
-
-	/*
-	 * Get the next work request entry to find where to put the data.
-	 */
-	if (qp->r_flags & RVT_R_REUSE_SGE) {
-		qp->r_flags &= ~RVT_R_REUSE_SGE;
-	} else {
-		int ret;
-
-		ret = hfi1_rvt_get_rwqe(qp, 0);
-		if (ret < 0) {
-			hfi1_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
-			return;
-		}
-		if (!ret) {
-			if (qp->ibqp.qp_num == 0)
-				ibp->rvp.n_vl15_dropped++;
-			return;
-		}
-	}
-	/* Silently drop packets which are too big. */
-	if (unlikely(wc.byte_len > qp->r_len)) {
-		qp->r_flags |= RVT_R_REUSE_SGE;
-		goto drop;
-	}
-	if (has_grh) {
-		hfi1_copy_sge(&qp->r_sge, &hdr->u.l.grh, sizeof(struct ib_grh), 1, 0);
-		wc.wc_flags |= IB_WC_GRH;
-	} else if (((slid != HFI1_16B_PERMISSIVE_LID) &&
-		    (slid >= be16_to_cpu(IB_MULTICAST_LID_BASE))) ||
-		   ((dlid != HFI1_16B_PERMISSIVE_LID) &&
-		    (dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE)))) {
-		struct ib_grh grh;
-		/**
-		 * Assuming we only created 16B on the send side
-		 * if we want to use large LIDs, since GRH was stripped
-		 * out when creating 16B, add back the GRH here.
-		 */
-		hfi1_make_ext_grh(packet, &grh, slid, dlid);
-		//trace_make_ext_grh(ppd_from_ibp(ibp)->dd, &grh);
-		hfi1_copy_sge(&qp->r_sge, &grh, sizeof(struct ib_grh), 1, 0);
-		wc.wc_flags |= IB_WC_GRH;
-	} else {
-		hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
-	}
-
-	hfi1_copy_sge(&qp->r_sge, data, wc.byte_len - sizeof(struct ib_grh), 1, 0);
-
-	rvt_put_ss(&qp->r_sge);
-	if (!test_and_clear_bit(RVT_R_WRID_VALID, &qp->r_aflags))
-		return;
-	wc.wr_id = qp->r_wr_id;
-	wc.status = IB_WC_SUCCESS;
-	wc.opcode = IB_WC_RECV;
-	wc.vendor_err = 0;
-	wc.qp = &qp->ibqp;
-	wc.src_qp = src_qp;
-
-	if (qp->ibqp.qp_type == IB_QPT_GSI ||
-	    qp->ibqp.qp_type == IB_QPT_SMI) {
-		if (mgmt_pkey_idx < 0) {
-			if (net_ratelimit()) {
-				struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 				struct hfi1_devdata *dd = ppd->dd;
 
 				dd_dev_err(dd, "QP type %d mgmt_pkey_idx < 0 and packet not dropped???\n",
@@ -1307,18 +1092,18 @@ void hfi1_ud_rcv_16b(struct hfi1_packet *packet)
 	}
 
 	wc.slid = slid;
-	wc.sl = ibp->sc_to_sl[sc];
+	wc.sl = sl_from_sc;
 
 	/*
 	 * Save the LMC lower bits if the destination LID is a unicast LID.
 	 */
-	wc.dlid_path_bits = (dlid >= HFI1_16B_MULTICAST_LID_BASE) ? 0 :
+	wc.dlid_path_bits = dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE) ? 0 :
 		dlid & ((1 << ppd_from_ibp(ibp)->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
 	rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc,
-		      (ohdr->bth[0] &
-			cpu_to_be32(IB_BTH_SOLICITED)) != 0);
+		     (ohdr->bth[0] &
+		      cpu_to_be32(IB_BTH_SOLICITED)) != 0);
 	return;
 
 drop:
