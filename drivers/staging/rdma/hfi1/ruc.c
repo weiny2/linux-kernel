@@ -262,77 +262,95 @@ static int gid_ok(union ib_gid *gid, __be64 gid_prefix, __be64 id)
  *
  * The s_lock will be acquired around the hfi1_migrate_qp() call.
  */
-int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
-		       int has_grh, struct rvt_qp *qp, u32 bth0)
+int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void * hfi1_hdr,
+		       bool grh, bool bypass, struct rvt_qp *qp, u32 bth0)
 {
 	__be64 guid;
 	unsigned long flags;
 	u8 sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+	struct hfi1_ib_header *hdr = NULL;
+	struct hfi1_16b_header *hdr_16b = NULL;
+	u32 dlid, slid, sl, opa_dlid;
+	union ib_gid *dgid;
+	union ib_gid *sgid;
+
+	if (bypass) {
+		hdr_16b = (struct hfi1_16b_header *)hfi1_hdr;
+
+
+		dlid = OPA_16B_GET_DLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3]);
+		slid = OPA_16B_GET_SLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3]);
+		sl = 0; /* 16B has no sl but hfi1_bad_pkqkey needs it */
+		dgid = &hdr_16b->u.l.grh.dgid;
+		sgid = &hdr_16b->u.l.grh.sgid;
+	} else {
+		hdr = (struct hfi1_ib_header *)hfi1_hdr;
+		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
+		slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
+		sl = OPA_9B_GET_SL(be16_to_cpu(hdr->lrh[0]));
+		dgid = &hdr->u.l.grh.dgid;
+		sgid = &hdr->u.l.grh.sgid;
+	}
 
 	if (qp->s_mig_state == IB_MIG_ARMED && (bth0 & IB_BTH_MIG_REQ)) {
-		if (!has_grh) {
+		if (!grh) {
 			if (qp->alt_ah_attr.ah_flags & IB_AH_GRH)
 				goto err;
 		} else {
 			if (!(qp->alt_ah_attr.ah_flags & IB_AH_GRH))
 				goto err;
 			guid = get_sguid(ibp, qp->alt_ah_attr.grh.sgid_index);
-			if (!gid_ok(&hdr->u.l.grh.dgid, ibp->rvp.gid_prefix,
-				    guid))
+			if (!gid_ok(dgid, ibp->rvp.gid_prefix, guid))
 				goto err;
 			if (!gid_ok(
-				&hdr->u.l.grh.sgid,
+				sgid,
 				qp->alt_ah_attr.grh.dgid.global.subnet_prefix,
 				qp->alt_ah_attr.grh.dgid.global.interface_id))
 				goto err;
 		}
 		if (unlikely(rcv_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
-					    sc5, be16_to_cpu(hdr->lrh[3])))) {
-			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY,
-				       (u16)bth0,
-				       (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
-				       0, qp->ibqp.qp_num,
-				       be16_to_cpu(hdr->lrh[3]),
-				       be16_to_cpu(hdr->lrh[1]));
+					    sc5, slid))) {
+			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY, (u16)bth0, sl,
+				       0, qp->ibqp.qp_num, slid, dlid);
 			goto err;
 		}
 		/* Validate the SLID. See Ch. 9.6.1.5 and 17.2.8 */
-		if (be16_to_cpu(hdr->lrh[3]) != qp->alt_ah_attr.dlid ||
+		if (slid != qp->alt_ah_attr.dlid ||
 		    ppd_from_ibp(ibp)->port != qp->alt_ah_attr.port_num)
 			goto err;
 		spin_lock_irqsave(&qp->s_lock, flags);
 		hfi1_migrate_qp(qp);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	} else {
-		if (!has_grh) {
-			if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
+		if (!grh) {
+			if ((qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
+			    (!(hfi1_use_16b(qp) &&
+			    !hfi1_check_mcast(&qp->remote_ah_attr))))
 				goto err;
 		} else {
 			if (!(qp->remote_ah_attr.ah_flags & IB_AH_GRH))
 				goto err;
 			guid = get_sguid(ibp,
 					 qp->remote_ah_attr.grh.sgid_index);
-			if (!gid_ok(&hdr->u.l.grh.dgid, ibp->rvp.gid_prefix,
-				    guid))
+			if (!gid_ok(dgid, ibp->rvp.gid_prefix, guid))
 				goto err;
 			if (!gid_ok(
-			     &hdr->u.l.grh.sgid,
+			     sgid,
 			     qp->remote_ah_attr.grh.dgid.global.subnet_prefix,
 			     qp->remote_ah_attr.grh.dgid.global.interface_id))
 				goto err;
 		}
 		if (unlikely(rcv_pkey_check(ppd_from_ibp(ibp), (u16)bth0,
-					    sc5, be16_to_cpu(hdr->lrh[3])))) {
-			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY,
-				       (u16)bth0,
-				       (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF,
-				       0, qp->ibqp.qp_num,
-				       be16_to_cpu(hdr->lrh[3]),
-				       be16_to_cpu(hdr->lrh[1]));
+					    sc5, slid))) {
+			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY, (u16)bth0, sl,
+				       0, qp->ibqp.qp_num, slid, dlid);
 			goto err;
 		}
 		/* Validate the SLID. See Ch. 9.6.1.5 */
-		if (be16_to_cpu(hdr->lrh[3]) != qp->remote_ah_attr.dlid ||
+		opa_dlid = (u32)(be64_to_cpu(qp->remote_ah_attr.grh.dgid.global.interface_id));
+		if (slid != (bypass ? opa_dlid : qp->remote_ah_attr.dlid) ||
 		    ppd_from_ibp(ibp)->port != qp->port_num)
 			goto err;
 		if (qp->s_mig_state == IB_MIG_REARM &&
@@ -751,20 +769,52 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	u32 nwords;
 	u32 extra_bytes;
 	u32 bth1;
+	bool use_16b = false;
+	u32 lrh0_16b = 0;
+	u32 lrh1_16b = 0x40000000;
+	u32 lrh2_16b = 0;
+	u32 lrh3_16b = 0;
+
+	use_16b = hfi1_use_16b(qp);
+	//pr_info("%s: Making %s ruc header\n", __func__, use_16b ? "16B" : "9B");
 
 	/* Construct the header. */
-	extra_bytes = -qp->s_cur_size & 3;
-	nwords = (qp->s_cur_size + extra_bytes) >> 2;
 	lrh0 = HFI1_LRH_BTH;
-	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
-		qp->s_hdrwords += hfi1_make_grh(ibp,
-						&ps->s_txreq->phdr.hdr.pkt.ibh.u.l.grh,
+	if (!use_16b) {
+		extra_bytes = -qp->s_cur_size & 3;
+		nwords = (qp->s_cur_size + extra_bytes) >> 2;
+	} else {
+		extra_bytes = hfi1_get_16b_padding((qp->s_hdrwords << 2), qp->s_cur_size);
+		nwords = (qp->s_cur_size + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
+		lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) | HFI1_L4_IB_LOCAL;
+	}
+
+	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
+		(!(hfi1_use_16b(qp) && !hfi1_check_mcast(&qp->remote_ah_attr)))) {
+		struct ib_grh *grh;
+
+		if (!use_16b) {
+			grh = &ps->s_txreq->phdr.hdr.pkt.ibh.u.l.grh;
+			lrh0 = HFI1_LRH_GRH;
+		} else {
+			// XXX: Is this needed ?
+			/* Ensure OPA GIDs are transformed to IB gids before creating the GRH */
+			if (qp->remote_ah_attr.grh.sgid_index == OPA_GID_INDEX)
+				qp->remote_ah_attr.grh.sgid_index = 0;
+			grh = &ps->s_txreq->phdr.hdr.pkt.opah.u.l.grh;
+			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) | HFI1_L4_IB_GLOBAL;
+		}
+
+		qp->s_hdrwords += hfi1_make_grh(ibp, grh,
 						&qp->remote_ah_attr.grh,
 						qp->s_hdrwords, nwords);
-		lrh0 = HFI1_LRH_GRH;
 		middle = 0;
 	}
 	lrh0 |= (priv->s_sc & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
+	if (use_16b) {
+		ohdr = &ps->s_txreq->phdr.hdr.pkt.opah.u.oth;
+		lrh1_16b = (lrh1_16b & ~OPA_16B_SC_MASK) | (priv->s_sc << 20);
+	}
 	/*
 	 * reset s_hdr/AHG fields
 	 *
@@ -787,12 +837,39 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 		build_ahg(qp, bth2, ps);
 	else
 		qp->s_flags &= ~RVT_S_AHG_VALID;
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0] = cpu_to_be16(lrh0);
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[2] =
-		cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = cpu_to_be16(ppd_from_ibp(ibp)->lid |
-				       qp->remote_ah_attr.src_path_bits);
+
+	if (!use_16b) {
+		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0] = cpu_to_be16(lrh0);
+		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
+		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[2] =
+			cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
+		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = cpu_to_be16(ppd_from_ibp(ibp)->lid |
+					       qp->remote_ah_attr.src_path_bits);
+	} else {
+		struct hfi1_pportdata *ppd;
+		u32 slid_16b;
+		u32 dlid_16b = hfi1_retrieve_lid(&qp->remote_ah_attr);
+
+		ppd = ppd_from_ibp(ibp);
+		lrh1_16b = (lrh1_16b & ~OPA_16B_LID_MASK) | dlid_16b;
+		lrh2_16b = (lrh2_16b & ~OPA_16B_DLID_MASK) | ((dlid_16b >> 20)
+				<< OPA_16B_DLID_HIGH_SHIFT);
+		/* Convert dwords to flits */
+		lrh0_16b = (lrh0_16b & ~OPA_16B_LEN_MASK) |
+				(((qp->s_hdrwords + nwords) >> 1) << 20);
+
+		if (!ppd->lid)
+			slid_16b = 0xFFFFFFFF;
+		else
+			slid_16b = ppd->lid | (qp->remote_ah_attr.src_path_bits &
+				   ((1 << ppd->lmc) - 1));
+
+		lrh0_16b = (lrh0_16b & ~OPA_16B_LID_MASK)  | slid_16b;
+		lrh2_16b = (lrh2_16b & ~OPA_16B_SLID_MASK) | ((slid_16b >> 20)
+				<< OPA_16B_SLID_HIGH_SHIFT);
+
+	}
+
 	bth0 |= hfi1_get_pkey(ibp, qp->s_pkey_index);
 	bth0 |= extra_bytes << 20;
 	ohdr->bth[0] = cpu_to_be32(bth0);
@@ -804,6 +881,23 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	}
 	ohdr->bth[1] = cpu_to_be32(bth1);
 	ohdr->bth[2] = cpu_to_be32(bth2);
+
+	if (use_16b) {
+		u8 fecn, becn;
+		u16 pkey;
+
+		pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
+	        fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) & HFI1_FECN_MASK;
+	        becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) & HFI1_BECN_MASK;
+		lrh0_16b = (lrh0_16b & ~OPA_16B_BECN_MASK) | (becn << 31);
+		lrh1_16b = (lrh1_16b & ~OPA_16B_FECN_MASK) | (fecn << 28);
+		lrh2_16b = (lrh2_16b & ~OPA_16B_PKEY_MASK) | (pkey << 16);
+
+		ps->s_txreq->phdr.hdr.pkt.opah.lrh[0] = lrh0_16b;
+		ps->s_txreq->phdr.hdr.pkt.opah.lrh[1] = lrh1_16b;
+		ps->s_txreq->phdr.hdr.pkt.opah.lrh[2] = lrh2_16b;
+		ps->s_txreq->phdr.hdr.pkt.opah.lrh[3] = lrh3_16b;
+	}
 }
 
 /* when sending, force a reschedule every one of these periods */

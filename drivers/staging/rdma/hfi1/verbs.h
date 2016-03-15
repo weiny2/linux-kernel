@@ -457,8 +457,8 @@ static inline u8 get_opcode(struct hfi1_opa_header *hdr)
 		return be32_to_cpu(h->u.l.oth.bth[0]) >> 24;
 }
 
-int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_ib_header *hdr,
-		       int has_grh, struct rvt_qp *qp, u32 bth0);
+int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
+		       bool grh, bool bypass, struct rvt_qp *qp, u32 bth0);
 
 u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
 		  struct ib_global_route *grh, u32 hwords, u32 nwords);
@@ -474,7 +474,8 @@ void hfi1_do_send(struct rvt_qp *qp);
 void hfi1_send_complete(struct rvt_qp *qp, struct rvt_swqe *wqe,
 			enum ib_wc_status status);
 
-void hfi1_send_rc_ack(struct hfi1_ctxtdata *, struct rvt_qp *qp, int is_fecn);
+void hfi1_send_rc_ack(struct hfi1_ctxtdata *, struct rvt_qp *qp,
+		      bool is_fecn, bool bypass);
 
 int hfi1_make_rc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps);
 

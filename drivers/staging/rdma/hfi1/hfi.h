@@ -395,11 +395,27 @@ struct hfi1_snoop_data {
 /*
  * OPA 9B Packet Format
  */
+#define OPA_9B_LNH_BITS		3
+#define OPA_9B_SC5_MASK		0xf
+#define OPA_9B_SC5_SHIFT	12
+#define OPA_9B_SL_MASK		0xf
+#define OPA_9B_SL_SHIFT		4
+
+#define OPA_9B_GET_LNH(lrh)	((u16)(lrh & OPA_9B_LNH_BITS))
+#define OPA_9B_GET_LID(lrh)	((u16)(lrh))
+#define OPA_9B_GET_SC5(lrh)	((u8)((lrh >> \
+				       OPA_9B_SC5_SHIFT) \
+				       & OPA_9B_SC5_MASK))
+#define OPA_9B_GET_SL(lrh)	((u32)((lrh >> \
+				       OPA_9B_SL_SHIFT) \
+				       & OPA_9B_SL_MASK))
+
 #define OPA_9B_BTH_PAD_BITS	3
 #define OPA_9B_BTH_PAD_SHIFT	20
 #define OPA_9B_BTH_GET_PAD(bth0) ((u8)((bth0 >> \
 				       OPA_9B_BTH_PAD_SHIFT) \
 				       & OPA_9B_BTH_PAD_BITS))
+#define OPA_9B_BTH_GET_PKEY(bth0) ((u16)(bth0))
 
 /*
  * OPA 16B Packet Format
