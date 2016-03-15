@@ -314,7 +314,6 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	} else {
 		lrh0 = HFI1_LRH_BTH;
 	}
-	wqe->lnh = lrh0;
 
 	sc5 = ppd->sl_to_sc[ah_attr->sl];
 	lrh0 |= (ah_attr->sl & 0xf) << 4;
@@ -400,10 +399,8 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 						&ah_attr->grh,
 						(qp->s_hdrwords - 4), nwords);
 		l4 = HFI1_L4_IB_GLOBAL;
-		wqe->lnh = HFI1_LRH_GRH;
 	} else {
 		l4 = HFI1_L4_IB_LOCAL;
-		wqe->lnh = HFI1_LRH_BTH;
 	}
 
 	sc5 = ppd->sl_to_sc[ah_attr->sl];
@@ -595,19 +592,10 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 #endif
 	ohdr->u.ud.deth[1] = cpu_to_be32(qp->ibqp.qp_num);
 
-	/* TODO for now, WQE contains everything needed to perform the Send */
+	/* set remaining WQE fields needed for DMA command */
 	wqe->s_qp = qp;
-	wqe->s_sge = &qp->s_sge;
-	wqe->s_hdr = qp->s_hdr;
-	wqe->s_hdrwords = qp->s_hdrwords;
-	wqe->s_ctx = qp->s_ctx;
 	wqe->sl = ah_attr->sl;
 	wqe->pkt_errors = 0;
-	/*
-	 * UD packets are not fragmented, set to max MTU as send_wqe()
-	 * is transport agnostic.
-	 */
-	wqe->pmtu = opa_enum_to_mtu(OPA_MTU_10240);
 done:
 	ret = 1;
 	goto unlock;

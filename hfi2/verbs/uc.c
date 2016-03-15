@@ -251,22 +251,17 @@ int hfi2_make_uc_req(struct hfi2_qp *qp)
 	qp->s_cur_size = len;
 	if (is_16b)
 		hfi2_make_16b_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
-					 mask_psn(qp->s_next_psn++), &wqe->lnh);
+					 mask_psn(qp->s_next_psn++));
 	else
 		hfi2_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
-				     mask_psn(qp->s_next_psn++), &wqe->lnh);
+				     mask_psn(qp->s_next_psn++));
 
-	/* TODO for now, WQE contains everything needed to perform the Send */
+	/* set remaining WQE fields needed for DMA command */
 	wqe->s_qp = qp;
-	wqe->s_sge = &qp->s_sge;
-	wqe->s_hdr = qp->s_hdr;
-	wqe->s_hdrwords = qp->s_hdrwords;
-	wqe->s_ctx = qp->s_ctx;
 	wqe->sl = qp->remote_ah_attr.sl;
 	wqe->use_sc15 = false;
 	wqe->use_16b = is_16b;
 	wqe->pkt_errors = 0;
-	wqe->pmtu = pmtu;
 done:
 	ret = 1;
 	goto unlock;
