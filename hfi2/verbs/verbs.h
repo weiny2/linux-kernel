@@ -260,24 +260,11 @@ struct hfi2_swqe {
 	u32 lpsn;               /* last packet sequence number */
 	u32 ssn;                /* send sequence number */
 	u32 length;             /* total length of data in sg_list */
-
-	/*
-	 * TODO - try maintaining all state here instead of creating a
-	 * verbs_txreq and sdma_txreq as WFR does
-	 */
-	struct list_head pending_list;
-	struct hfi2_sge_state	*s_sge;
 	struct hfi2_qp *s_qp;
-	union hfi2_ib_dma_header *s_hdr; /* next packet header to send */
-	struct hfi_ctx *s_ctx;           /* associated send context */
-	u16 s_hdrwords;	         /* size of s_hdr in 32 bit words */
-	u16 pmtu;
-	u8 lnh;
 	u8 sl;
 	bool use_sc15;
 	bool use_16b;
 	u32 pkt_errors;
-
 	struct hfi2_sge sg_list[0];
 };
 
@@ -819,9 +806,9 @@ void hfi2_update_mmap_info(struct hfi2_ibdev *ibd,
 int hfi2_get_rwqe(struct hfi2_qp *qp, int wr_id_only);
 void hfi2_migrate_qp(struct hfi2_qp *qp);
 void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
-			  u32 bth0, u32 bth2, u8 *lnh);
+			  u32 bth0, u32 bth2);
 void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
-			      u32 bth0, u32 bth2, u8 *lnh);
+			      u32 bth0, u32 bth2);
 void hfi2_do_send(struct work_struct *work);
 void hfi2_schedule_send(struct hfi2_qp *qp);
 void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
@@ -850,8 +837,7 @@ struct hfi2_mcast *
 hfi2_mcast_find(struct hfi2_ibport *ibp, union ib_gid *mgid);
 
 /* Device specific */
-int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
-		  struct hfi2_swqe *wqe);
+int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
 #ifdef HFI_VERBS_TEST
 bool hfi2_drop_check(uint64_t *count, uint64_t pkt_num);
 #endif

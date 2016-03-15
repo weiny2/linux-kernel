@@ -286,7 +286,7 @@ void hfi2_migrate_qp(struct hfi2_qp *qp)
 }
 
 void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
-			  u32 bth0, u32 bth2, u8 *lnh)
+			  u32 bth0, u32 bth2)
 {
 	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
@@ -307,12 +307,11 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 						&qp->remote_ah_attr.grh,
 						(qp->s_hdrwords - 2),
 						nwords);
-		*lnh = HFI1_LRH_GRH;
+		lrh0 = HFI1_LRH_GRH;
 	} else {
-		*lnh = HFI1_LRH_BTH;
+		lrh0 = HFI1_LRH_BTH;
 	}
 
-	lrh0 = *lnh;
 	sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
 	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
 	qp->s_sc = sc5;
@@ -338,7 +337,7 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 }
 
 void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
-			      u32 bth0, u32 bth2, u8 *lnh)
+			      u32 bth0, u32 bth2)
 {
 	struct hfi2_opa16b_header *opa16b = &qp->s_hdr->opa16b;
 	struct hfi2_ibport *ibp;
@@ -368,10 +367,8 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 						&qp->remote_ah_attr.grh,
 						(qp->s_hdrwords - 4), nwords);
 		l4 = HFI1_L4_IB_GLOBAL;
-		*lnh = HFI1_LRH_GRH;
 	} else {
 		l4 = HFI1_L4_IB_LOCAL;
-		*lnh = HFI1_LRH_BTH;
 	}
 
 	sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
@@ -401,10 +398,9 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 }
 
 /**
- * send_wqe() - submit a WGE to the hardware
+ * send_wqe() - submit a WQE to the hardware
  * @ibp: outgoing port
- * @qp: the QP to send on
- * @wge: WGE to submit
+ * @qp: the QP of the WQE to send
  * TODO - delete below when STL-2554 implemented
  * @wait: wait structure to use when no slots (may be NULL)
  *
@@ -414,19 +410,13 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
  *
  * Return: TBD
  */
-static int send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
-		    struct hfi2_swqe *wqe)
+static int send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 {
 	int ret;
 
-	ret = hfi2_send_wqe(ibp, qp, wqe);
-	if (ret < 0) {
-		/*
-		 * TODO - also correct for RC transport to error?
-		 * check what hfi1 does.
-		 */
-		hfi2_send_complete(qp, wqe, IB_WC_FATAL_ERR);
-	}
+	ret = hfi2_send_wqe(ibp, qp);
+	if (ret < 0 && qp->s_wqe)
+		hfi2_send_complete(qp, qp->s_wqe, IB_WC_FATAL_ERR);
 	/* else send_complete issued upon DMA completion event */
 
 	return ret;
@@ -470,6 +460,8 @@ static int hfi2_verbs_send(struct hfi2_qp *qp, union hfi2_ib_dma_header *hdr,
 	 * enqueues to this list in sdma_check_progress via sleep callback.
 	 */
 	if (!list_empty(&qp->s_iowait.tx_head)) {
+		/* TODO - STL-2554 */
+#if 0
 		struct hfi2_swqe *wqe;
 
 		wqe = list_first_entry(
@@ -478,17 +470,19 @@ static int hfi2_verbs_send(struct hfi2_qp *qp, union hfi2_ib_dma_header *hdr,
 			pending_list);
 		list_del_init(&wqe->pending_list);
 		/* send queued pending WGE into fabric */
-		/* TODO - STL-2554 should qp->s_wqe be updated? */
-		ret = send_wqe(ibp, qp, wqe);
+		ret = send_wqe(ibp, qp);
 		/*
 		 * TODO - why does WFR just return without enqueuing the
 		 * WQE that would have been sent below (qp->s_wqe).
 		 */
+#else
+		ret = -EINVAL;
+#endif
 		return ret;
 	}
 
 	/* send WGE into fabric */
-	return send_wqe(ibp, qp, qp->s_wqe);
+	return send_wqe(ibp, qp);
 }
 
 /**

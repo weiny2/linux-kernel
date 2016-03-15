@@ -239,23 +239,28 @@ static void qp_read_sge(struct hfi2_qp *qp, uint64_t *start,
  * has value again during bring-up
  */
 static int __attribute__ ((unused))
-send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_swqe *wqe)
+send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 {
+	struct hfi2_swqe *wqe = qp->s_wqe;
 	int ret;
 	unsigned long flags;
+	uint32_t length = 0;
+	uint64_t start = 0;
 
-	if (wqe->use_sc15)
+	if (!wqe || wqe->use_sc15)
 		return -EINVAL;
 
-	if (wqe->length > wqe->pmtu) {
+	qp_read_sge(qp, &start, &length);
+
+	if (length > qp->pmtu) {
 		dev_err(ibp->dev,
 			"PT %d: multi-packet PIO not supported (%d > %d)!\n",
-			ibp->port_num, wqe->length, wqe->pmtu);
+			ibp->port_num, length, qp->pmtu);
 		return -EINVAL;
 	}
 
 	/* low-level PIO support routines don't do IOVEC */
-	if (wqe->s_sge->num_sge > 1) {
+	if (length < qp->s_cur_size) {
 		dev_err(ibp->dev,
 			"PT %d: PIO-IOVEC not implemented!\n",
 			ibp->port_num);
@@ -263,23 +268,18 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_swqe *wqe)
 	}
 
 	/* only support kernel virtual addresses */
-	if ((u64)wqe->sg_list[0].vaddr < PAGE_OFFSET) {
+	if (start < PAGE_OFFSET) {
 		dev_err(ibp->dev,
-			"PT %d: PIO send with UVA not supported\n",
-			ibp->port_num);
+			"PT %d: PIO send with UVA 0x%llx not supported\n",
+			ibp->port_num, start);
 		return -EFAULT;
 	}
 
-	dev_dbg(ibp->dev, "PT %d: PIO send hdr %p data %p %d\n",
-		ibp->port_num, wqe->s_hdr,
-		wqe->sg_list[0].vaddr, wqe->length);
-
 	/* send the WQE via PIO path */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
-	ret = hfi_tx_9b_kdeth_cmd_pio(&ibp->cmdq_tx, wqe->s_ctx,
-				    wqe->s_hdr, 8 + (wqe->s_hdrwords << 2),
-				    wqe->sg_list[0].vaddr,
-				    wqe->length, ibp->port_num,
+	ret = hfi_tx_9b_kdeth_cmd_pio(&ibp->cmdq_tx, qp->s_ctx,
+				    qp->s_hdr, 8 + (qp->s_hdrwords << 2),
+				    (void *)start, length, ibp->port_num,
 				    wqe->sl, 0, KDETH_9B_PIO);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 
@@ -351,18 +351,17 @@ eq_advance:
 }
 
 static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
-			     struct hfi2_wqe_iov *wqe_iov, int *out_niovs,
-			     uint32_t *iov_bytes)
+			     bool use_16b, struct hfi2_wqe_iov *wqe_iov,
+			     int *out_niovs, uint32_t *iov_bytes)
 {
 	int i, niovs = *out_niovs;
 	uint32_t payload_bytes;
 	union base_iovec *iov;
-	struct hfi2_swqe *wqe = wqe_iov->wqe;
 
 	iov = wqe_iov->iov;
 	/* first entry is IB header */
-	iov[0].length = (wqe->s_hdrwords << 2);
-	iov[0].use_9b = !wqe->use_16b;
+	iov[0].length = (qp->s_hdrwords << 2);
+	iov[0].use_9b = !use_16b;
 	iov[0].sp = 1;
 	iov[0].v = 1;
 	iov[0].start = (uint64_t)(&wqe_iov->ph);
@@ -381,16 +380,16 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		 * caller doesn't do this currently, but test for it
 		 * TODO - may need if auto-header optimization
 		 */
-		if (payload_bytes + iov_length > wqe->pmtu && i > 1) {
+		if (payload_bytes + iov_length > qp->pmtu && i > 1) {
 			dev_err(ibp->dev,
 				"PT %d: large DMA not implemented, %d > %d MTU!\n",
 				ibp->port_num,
-				payload_bytes + iov_length, wqe->pmtu);
+				payload_bytes + iov_length, qp->pmtu);
 			return -EIO;
 		}
 
 		iov[i].length = iov_length;
-		iov[i].use_9b = !wqe->use_16b;
+		iov[i].use_9b = !use_16b;
 		iov[i].ep = 0;
 		iov[i].sp = 0;
 		iov[i].v = 1;
@@ -506,20 +505,28 @@ err:
 	return ret;
 }
 
-int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
-		  struct hfi2_swqe *wqe)
+int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 {
+	struct hfi2_swqe *wqe = qp->s_wqe;
+	struct hfi2_wqe_iov *wqe_iov = NULL;
 	int ret, ndelays = 0;
 	unsigned long flags;
-	uint8_t dma_cmd, eth_size = 0;
-	struct hfi2_wqe_iov *wqe_iov = NULL;
+	uint8_t sl, dma_cmd, eth_size = 0;
 	uint32_t num_iovs, length = 0;
 	uint64_t start = 0;
-	bool use_ofed_dma;
+	bool use_16b, use_ofed_dma;
 
-	BUG_ON(!wqe); /* TODO - delete me after RC acks stable */
-
-	dma_cmd = (wqe->use_sc15) ? MGMT_DMA : GENERAL_DMA;
+	if (wqe) {
+		sl = wqe->sl;
+		dma_cmd = (wqe->use_sc15) ? MGMT_DMA : GENERAL_DMA;
+		use_16b = wqe->use_16b;
+	} else {
+		/* RC response has no WQE */
+		sl = qp->remote_ah_attr.sl;
+		dma_cmd = GENERAL_DMA;
+		/* TODO 16B support */
+		use_16b = false;
+	}
 
 	ret = qp_max_iovs(ibp, qp, &num_iovs);
 	if (ret)
@@ -531,15 +538,20 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	 * TODO - add 16B support
 	 */
 	use_ofed_dma = (num_iovs == 2 && dma_cmd != MGMT_DMA &&
-			!disable_ofed_dma && !wqe->use_16b);
+			!disable_ofed_dma && !use_16b);
 	if (use_ofed_dma) {
-		/* switch to appropriate OFED_DMA command */
-		if (wqe->lnh == HFI1_LRH_GRH) {
+		u8 base_hdrwords = (use_16b ? 7 : 5); /* L2 + BTH */
+
+		eth_size = (qp->s_hdrwords - base_hdrwords) << 2;
+		/*
+		 * switch to appropriate OFED_DMA command; maximum ETH size
+		 * is 36 bytes, if larger the GRH needs to be subtracted
+		 */
+		if (eth_size >= 40) {
 			dma_cmd = OFED_9B_DMA_GRH;
-			eth_size = (wqe->s_hdrwords - 15) << 2;
+			eth_size -= 40;
 		} else {
 			dma_cmd = OFED_9B_DMA;
-			eth_size = (wqe->s_hdrwords - 5) << 2;
 		}
 		num_iovs = 0;
 	}
@@ -556,16 +568,17 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	 * and we'd like to maintain asyncronous send and send_complete
 	 * TODO - can be removed by refactoring where upper layer builds header
 	 */
-	if (!wqe->use_16b)
-		memcpy(&wqe_iov->ph, &wqe->s_hdr->ph.ibh, wqe->s_hdrwords << 2);
+	if (!use_16b)
+		memcpy(&wqe_iov->ph, &qp->s_hdr->ph.ibh, qp->s_hdrwords << 2);
 	else
-		memcpy(&wqe_iov->ph, &wqe->s_hdr->opa16b, wqe->s_hdrwords << 2);
+		memcpy(&wqe_iov->ph, &qp->s_hdr->opa16b, qp->s_hdrwords << 2);
 
 	if (use_ofed_dma) {
 		/* read current SGE address/length, updates internal state */
 		qp_read_sge(qp, &start, &length);
 	} else {
-		ret = build_iovec_array(ibp, qp, wqe_iov, &num_iovs, &length);
+		ret = build_iovec_array(ibp, qp, use_16b, wqe_iov,
+					&num_iovs, &length);
 		if (ret)
 			goto err;
 	}
@@ -579,31 +592,31 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		goto err;
 	}
 
-	dev_dbg(ibp->dev, "PT %d: cmd %d len %d/%d pmtu %d n_iov %d sent %d\n",
-		ibp->port_num, dma_cmd, qp->s_cur_size, wqe->length, wqe->pmtu,
+	dev_dbg(ibp->dev, "PT %d: cmd %d len %d pmtu %d n_iov %d sent %d\n",
+		ibp->port_num, dma_cmd, qp->s_cur_size, qp->pmtu,
 		num_iovs, length);
 
 _tx_cmd:
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
 	if (use_ofed_dma) {
 		/* send with OFED_DMA */
-		ret = hfi_tx_cmd_ofed_dma(&ibp->cmdq_tx, wqe->s_ctx,
-					  wqe->s_hdr, (void *)start,
+		ret = hfi_tx_cmd_ofed_dma(&ibp->cmdq_tx, qp->s_ctx,
+					  qp->s_hdr, (void *)start,
 					  length, eth_size,
-					  opa_mtu_to_id(wqe->pmtu),
+					  opa_mtu_to_id(qp->pmtu),
 					  (uint64_t)wqe_iov, 0,
 					  &ibp->send_eq,
-					  ibp->port_num, wqe->sl,
+					  ibp->port_num, sl,
 					  ibp->ppd->lid, dma_cmd);
 	} else {
 		/* send with GENERAL or MGMT DMA */
-		ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, wqe->s_ctx,
+		ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, qp->s_ctx,
 					    (uint64_t)wqe_iov->iov, num_iovs,
 					    (uint64_t)wqe_iov,
 					    PTL_MD_RESERVED_IOV,
 					    &ibp->send_eq, HFI_CT_NONE,
-					    ibp->port_num, wqe->sl, 0,
-					    wqe->use_16b ? HDR_16B : HDR_EXT,
+					    ibp->port_num, sl, 0,
+					    use_16b ? HDR_16B : HDR_EXT,
 					    dma_cmd);
 	}
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);

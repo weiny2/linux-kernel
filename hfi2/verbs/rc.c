@@ -313,7 +313,6 @@ static int make_rc_ack(struct hfi2_ibdev *dev, struct hfi2_qp *qp,
 	u32 len;
 	u32 bth0;
 	u32 bth2;
-	u8 lnh;
 
 	/* Don't send an ACK if we aren't supposed to. */
 	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK))
@@ -445,8 +444,9 @@ normal:
 	qp->s_rdma_ack_cnt++;
 	qp->s_hdrwords = hwords;
 	qp->s_cur_size = len;
-	hfi2_make_ruc_header(qp, ohdr, bth0, bth2, &lnh);
-	/* TODO other packets write the WQE structure, we don't have one.... */
+	hfi2_make_ruc_header(qp, ohdr, bth0, bth2);
+	/* hfi2_send_wqe() requires this set to NULL for RC response */
+	qp->s_wqe = NULL;
 
 	return 1;
 
@@ -913,23 +913,17 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 		qp,
 		ohdr,
 		bth0 | (qp->s_state << 24),
-		bth2,
-		&wqe->lnh);
+		bth2);
 
-	/* HFI1 doesn't set this, but we need it */
+	/* hfi2_send_wqe() requires this set */
 	qp->s_wqe = wqe;
 
-	/* TODO for now, WQE contains everything needed to perform the Send */
-	wqe->use_16b = false;
+	/* set remaining WQE fields needed for DMA command */
 	wqe->s_qp = qp;
-	wqe->s_sge = qp->s_cur_sge;
-	wqe->s_hdr = qp->s_hdr;
-	wqe->s_hdrwords = qp->s_hdrwords;
-	wqe->s_ctx = qp->s_ctx;
 	wqe->sl = qp->remote_ah_attr.sl;
 	wqe->use_sc15 = false;
+	wqe->use_16b = false;
 	wqe->pkt_errors = 0;
-	wqe->pmtu = pmtu;
 
 done:
 	ret = 1;

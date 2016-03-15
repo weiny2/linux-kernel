@@ -251,6 +251,11 @@ static void reset_qp(struct hfi2_qp *qp, enum ib_qp_type type)
 		qp->r_rq.wq->tail = 0;
 	}
 	qp->r_sge.num_sge = 0;
+	/*
+	 * pmtu unused for UD transport (unfragmented), so set to maximum here
+	 * as logic to write DMA commands uses this
+	 */
+	qp->pmtu = opa_enum_to_mtu(OPA_MTU_10240);
 }
 
 static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
