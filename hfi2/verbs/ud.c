@@ -390,8 +390,11 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 #else
 	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
 #endif
-	/* FXRTODO: 16B will never use GRH? Check later */
-	if (ah_attr->ah_flags & IB_AH_GRH & 0) {
+	/*
+	 * FXRTODO: Later, we also need to make grh for 16B packets
+	 * going across the network based on hop_count.
+	 */
+	if ((ah_attr->ah_flags & IB_AH_GRH) && hfi2_check_mcast(ah_attr)) {
 		/* remove 16B HDR size from s_hdrwords for GRH */
 		qp->s_hdrwords += hfi2_make_grh(ibp, &opa16b->u.l.grh,
 						&ah_attr->grh,
@@ -551,13 +554,17 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 	qp->s_sge.num_sge = wqe->wr.num_sge;
 	qp->s_sge.total_len = wqe->length;
 
-	/* FXRTODO: 16B will never use GRH? Check later */
-	if (ah_attr->ah_flags & IB_AH_GRH)
+	/*
+	 * FXRTODO: Later, we also need to make grh for 16B packets
+	 * going across the network based on hop_count.
+	 */
+	if ((ah_attr->ah_flags & IB_AH_GRH) &&
+	    (!is_16b || hfi2_check_mcast(ah_attr)))
 		/*
 		 * Don't worry about sending to locally attached multicast
 		 * QPs.  It is unspecified by the spec. what happens.
 		 */
-		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
+		ohdr = is_16b ? &qp->s_hdr->opa16b.u.l.oth :
 				&qp->s_hdr->ph.ibh.u.l.oth;
 	else
 		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :

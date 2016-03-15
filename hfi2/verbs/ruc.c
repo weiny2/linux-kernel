@@ -358,7 +358,10 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 			(SIZE_OF_CRC << 2) + 1) & 7;
 	nwords = (qp->s_cur_size + (SIZE_OF_CRC << 2) + 1 + extra_bytes) >> 2;
 
-	/* FXRTODO: 16B will never use GRH? Check later */
+	/*
+	 * FXRTODO: Later, we need to make grh for 16B packets
+	 * going across the network based on hop_count.
+	 */
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH & 0)) {
 		/* remove 16B HDR size from s_hdrwords for GRH */
 		qp->s_hdrwords += hfi2_make_grh(ibp, &opa16b->u.l.grh,

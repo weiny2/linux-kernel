@@ -97,7 +97,10 @@ int hfi2_make_uc_req(struct hfi2_qp *qp)
 	/* 16B(4)/LRH(2) + BTH(3) */
 	hwords = is_16b ? 7 : 5;
 
-	/* FXRTODO: 16B will never use GRH? Check later */
+	/*
+	 * FXRTODO: Later, we need to make grh for 16B packets
+	 * going across the network based on hop_count.
+	 */
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
 		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
 				&qp->s_hdr->ph.ibh.u.l.oth;
