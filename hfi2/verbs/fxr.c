@@ -314,34 +314,38 @@ next_event:
 	}
 
 	wqe_iov = (struct hfi2_wqe_iov *)eq_entry->user_ptr;
-	wqe = wqe_iov->wqe;
+	qp = wqe_iov->qp;
 
-	/* ACKs don't have backing wqe */
-	if (!wqe) {
+	/* RC ACKs don't set associated QP */
+	if (!qp) {
 		kfree(wqe_iov);
 		goto eq_advance;
 	}
 
-	qp = wqe->s_qp;
+	if (qp->ibqp.qp_type == IB_QPT_RC) {
+		wqe = NULL;
+		/* for RC READ responses, release the MR */
+		if (wqe_iov->mr)
+			hfi2_put_mr(wqe_iov->mr);
+	} else {
+		wqe = wqe_iov->wqe;
+	}
+
 	dev_dbg(ibp->dev,
 		"PT %d: TX event %p, fail %d, for QPN %d, remain %d\n",
 		ibp->port_num, eq_entry, eq_entry->fail_type,
 		qp->ibqp.qp_num, wqe_iov->remaining_bytes);
 
-	if (eq_entry->fail_type)
-		wqe->pkt_errors++;
-
 	spin_lock(&qp->s_lock);
-	if (qp->ibqp.qp_type == IB_QPT_RC) {
+	if (!wqe) {
 		hfi2_rc_send_complete(qp, &wqe_iov->ph.ibh);
 	} else {
-		/* if final packet, tell verbs if success or failure */
-		if (!wqe_iov->remaining_bytes) {
-			if (wqe->pkt_errors)
-				hfi2_send_complete(qp, wqe, IB_WC_FATAL_ERR);
-			else
-				hfi2_send_complete(qp, wqe, IB_WC_SUCCESS);
-		}
+		if (eq_entry->fail_type)
+			wqe->pkt_errors++;
+		/* if final UD/UC packet, call send_complete */
+		if (!wqe_iov->remaining_bytes)
+			hfi2_send_complete(qp, wqe, (wqe->pkt_errors) ?
+					   IB_WC_FATAL_ERR : IB_WC_SUCCESS);
 	}
 	spin_unlock(&qp->s_lock);
 	kfree(wqe_iov);
@@ -460,7 +464,7 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	memcpy(&wqe_iov->ph.ibh, hdr, sizeof(*hdr));
 
 	iov = wqe_iov->iov;
-	wqe_iov->wqe = NULL;
+	wqe_iov->qp = NULL;
 	wqe_iov->remaining_bytes = 0;
 
 	/* first entry is IB header */
@@ -529,7 +533,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 		/* RC response has no WQE */
 		sl = qp->remote_ah_attr.sl;
 		dma_cmd = GENERAL_DMA;
-		/* TODO 16B support */
+		/* TODO 16B RC support */
 		use_16b = false;
 	}
 
@@ -541,6 +545,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 	 * use OFED_DMA command if possible (header + single IOVEC payload)
 	 * TODO - WFR-like AHG optimization for Middles
 	 * TODO - add 16B support
+	 * TODO - test with header only packets (num_iovs <= 2)
 	 */
 	use_ofed_dma = (num_iovs == 2 && dma_cmd != MGMT_DMA &&
 			!disable_ofed_dma && !use_16b);
@@ -565,12 +570,12 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 			  GFP_ATOMIC);
 	if (!wqe_iov)
 		return -ENOMEM;
-	wqe_iov->wqe = wqe;
-	wqe_iov->remaining_bytes = qp->s_len;
 
 	/*
-	 * store a copy of the IB header as MIDDLE and LAST packets modify it,
-	 * and we'd like to maintain asyncronous send and send_complete
+	 * Store a copy of the IB header as MIDDLE and LAST packets modify it,
+	 * and we'd like to maintain asyncronous send and send_complete.
+	 * This is needed for General DMA, but is also needed for RC queue
+	 * pairs to call rc_send_complete() upon send completion event.
 	 * TODO - can be removed by refactoring where upper layer builds header
 	 */
 	if (!use_16b)
@@ -600,6 +605,17 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 		ret = -EIO;
 		goto err;
 	}
+
+	/* fill in rest of wqe_iov */
+	wqe_iov->qp = qp;
+	if (qp->ibqp.qp_type == IB_QPT_RC) {
+		/* take over release of MR for RC responses */
+		wqe_iov->mr = qp->s_rdma_mr;
+		qp->s_rdma_mr = NULL;
+	} else {
+		wqe_iov->wqe = wqe;
+	}
+	wqe_iov->remaining_bytes = qp->s_len;
 
 	dev_dbg(ibp->dev, "PT %d: cmd %d len %d pmtu %d n_iov %d sent %d\n",
 		ibp->port_num, dma_cmd, qp->s_cur_size, qp->pmtu,

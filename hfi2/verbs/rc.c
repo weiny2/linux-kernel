@@ -919,7 +919,6 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 	qp->s_wqe = wqe;
 
 	/* set remaining WQE fields needed for DMA command */
-	wqe->s_qp = qp;
 	wqe->sl = qp->remote_ah_attr.sl;
 	wqe->use_sc15 = false;
 	wqe->use_16b = false;
@@ -2155,12 +2154,6 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		is_fecn = bth1 & HFI1_FECN_SMASK;
 	}
 #endif
-	/* TODO - error this class of opcode for now - no target ACK support */
-	switch (opcode) {
-	case OP(COMPARE_SWAP):
-	case OP(FETCH_ADD):
-		goto drop;
-	}
 
 	/*
 	 * Process responses (ACKs) before anything else.  Note that the
