@@ -67,6 +67,112 @@ struct dmar_res_callback {
 DECLARE_RWSEM(dmar_global_lock);
 LIST_HEAD(dmar_drhd_units);
 
+#if 1
+static unsigned char static_dmar_tbl[] =
+	{
+	    'D', 'M', 'A', 'R',  /* Signature */
+	    0x48, 0x00, 0x00, 0x00, /* Length */
+	    0x01, /* Revision */
+	    0x00, /* Checksum */
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* OEM ID */
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* OEM Table ID */
+	    0x00, 0x00, 0x00, 0x00, /* OEM Revision */
+	    0x00, 0x00, 0x00, 0x00, /* creator id, or asl_compiler_id */
+	    0x00, 0x00, 0x00, 0x00, /* creator revision, or asl_compiler_revision */
+	    0x33, /* Host Address Width: 52 */
+	    0x01, /* Flags, INTR_REMAP is supported */
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* reserved */
+
+	    0x00, 0x00, /* Type */
+	    0x18, 0x00, /* Length */
+	    0x00, /* Flags */
+	    0x00, /* Reserved */
+	    0x00, 0x00, /* PCI segment */
+	    0x00, 0x50, 0xd1, 0xfe, 0x00, 0x00, 0x00, 0x00, /* Register base address */
+	    /* Device scope: */
+	    0x01, /* Type */
+	    0x08, /* Length */
+	    0x00, 0x00, /* Reserved */
+	    0x00, /* Enumeration ID */
+	    0x01, /* Bus number */
+	    0x00, 0x00, /* Path */
+
+#if 0
+	    0x02, 0x00, /* Type */
+	    0x10, 0x00, /* Length */
+	    0x00, /* Flags */
+	    0x00, /* Reserved */
+	    0x00, 0x00, /* PCI segment */
+	    /* Device scope: */
+	    0x02, /* Type */
+	    0x08, /* Length */
+	    0x00, 0x00, /* Reserved */
+	    0x00, /* Enumeration ID */
+	    0x1, /* Bus number */
+	    0x01, 0x00, /* Path */
+#endif
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	};
+
+static unsigned char static_dmar_zebu_tbl[] =
+	{
+	    'D', 'M', 'A', 'R',  /* Signature */
+	    0x48, 0x00, 0x00, 0x00, /* Length */
+	    0x01, /* Revision */
+	    0x00, /* Checksum */
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* OEM ID */
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* OEM Table ID */
+	    0x00, 0x00, 0x00, 0x00, /* OEM Revision */
+	    0x00, 0x00, 0x00, 0x00, /* creator id, or asl_compiler_id */
+	    0x00, 0x00, 0x00, 0x00, /* creator revision, or asl_compiler_revision */
+	    0x33, /* Host Address Width: 52 */
+	    0x01, /* Flags, INTR_REMAP is supported */
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* reserved */
+
+	    0x00, 0x00, /* Type */
+	    0x18, 0x00, /* Length */
+	    0x00, /* Flags */
+	    0x00, /* Reserved */
+	    0x00, 0x00, /* PCI segment */
+	    0x00, 0x50, 0xd1, 0xfe, 0x00, 0x00, 0x00, 0x00, /* Register base address */
+	    /* Device scope: */
+	    0x01, /* Type */
+	    0x08, /* Length */
+	    0x00, 0x00, /* Reserved */
+	    0x18, /* Enumeration ID */
+	    0x00, /* Bus number */
+	    0x00, 0x00, /* Path */
+
+#if 0
+	    0x02, 0x00, /* Type */
+	    0x10, 0x00, /* Length */
+	    0x00, /* Flags */
+	    0x00, /* Reserved */
+	    0x00, 0x00, /* PCI segment */
+	    /* Device scope: */
+	    0x02, /* Type */
+	    0x08, /* Length */
+	    0x00, 0x00, /* Reserved */
+	    0x00, /* Enumeration ID */
+	    0x1, /* Bus number */
+	    0x01, 0x00, /* Path */
+#endif
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	};
+static unsigned static_dmar_tbl_size = 0x48;
+#endif
+
+static int zebu;
+
+static __init int setup_zebu(char *str)
+{
+	zebu = 1;
+	return 0;
+}
+early_param("zebu", setup_zebu);
+
 struct acpi_table_header * __initdata dmar_tbl;
 static acpi_size dmar_tbl_size;
 static int dmar_dev_scope_status = 1;
@@ -528,6 +634,7 @@ static int __init dmar_table_detect(void)
 {
 	acpi_status status = AE_OK;
 
+#if 0
 	/* if we could find DMAR table, then there are DMAR devices */
 	status = acpi_get_table_with_size(ACPI_SIG_DMAR, 0,
 				(struct acpi_table_header **)&dmar_tbl,
@@ -537,6 +644,16 @@ static int __init dmar_table_detect(void)
 		pr_warn("Unable to map DMAR\n");
 		status = AE_NOT_FOUND;
 	}
+#else
+	if (zebu) {
+		dmar_tbl = (struct acpi_table_header *)static_dmar_zebu_tbl;
+		pr_err("%s on ZEBU\n", __func__);
+	} else {
+		dmar_tbl = (struct acpi_table_header *)static_dmar_tbl;
+		pr_err("%s on Simics\n", __func__);
+	}
+	dmar_tbl_size = static_dmar_tbl_size;
+#endif
 
 	return (ACPI_SUCCESS(status) ? 1 : 0);
 }
@@ -613,11 +730,13 @@ parse_dmar_table(void)
 	 */
 	dmar_table_detect();
 
+#if 0
 	/*
 	 * ACPI tables may not be DMA protected by tboot, so use DMAR copy
 	 * SINIT saved in SinitMleData in TXT heap (which is DMA protected)
 	 */
 	dmar_tbl = tboot_get_dmar_table(dmar_tbl);
+#endif
 
 	dmar = (struct acpi_table_dmar *)dmar_tbl;
 	if (!dmar)
@@ -892,7 +1011,9 @@ int __init detect_intel_iommu(void)
 		x86_init.iommu.iommu_init = intel_iommu_init;
 #endif
 
+#if 0
 	early_acpi_os_unmap_memory((void __iomem *)dmar_tbl, dmar_tbl_size);
+#endif
 	dmar_tbl = NULL;
 	up_write(&dmar_global_lock);
 

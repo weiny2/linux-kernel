@@ -869,7 +869,8 @@ static inline struct context_entry *iommu_context_addr(struct intel_iommu *iommu
 
 static int iommu_dummy(struct device *dev)
 {
-	return dev->archdata.iommu == DUMMY_DEVICE_DOMAIN_INFO;
+	//return dev->archdata.iommu == DUMMY_DEVICE_DOMAIN_INFO;
+	return dev->archdata.dma_ops == NULL;
 }
 
 static struct intel_iommu *device_to_iommu(struct device *dev, u8 *bus, u8 *devfn)
@@ -4317,6 +4318,10 @@ int dmar_find_matched_atsr_unit(struct pci_dev *dev)
 		/* If it's an integrated device, allow ATS */
 		if (!bridge)
 			return 1;
+
+		/* always integrated device */
+		return 1;
+
 		/* Connected via non-PCIe: no ATS */
 		if (!pci_is_pcie(bridge) ||
 		    pci_pcie_type(bridge) == PCI_EXP_TYPE_PCI_BRIDGE)
@@ -4581,6 +4586,8 @@ int __init intel_iommu_init(void)
 	int ret = -ENODEV;
 	struct dmar_drhd_unit *drhd;
 	struct intel_iommu *iommu;
+	struct device *dev;
+	int i;
 
 	/* VT-d is required for a TXT/tboot launch, so enforce that */
 	force_on = tboot_force_iommu();
@@ -4639,10 +4646,16 @@ int __init intel_iommu_init(void)
 
 	init_iommu_pm_ops();
 
-	for_each_active_iommu(iommu, drhd)
+	for_each_active_iommu(iommu, drhd) {
 		iommu->iommu_dev = iommu_device_create(NULL, iommu,
 						       intel_iommu_groups,
 						       "%s", iommu->name);
+
+		for_each_active_dev_scope(drhd->devices, drhd->devices_cnt, i, dev)
+			if (dev) {
+				dev->archdata.dma_ops = &intel_dma_ops;
+			}
+	}
 
 	bus_set_iommu(&pci_bus_type, &intel_iommu_ops);
 	bus_register_notifier(&pci_bus_type, &device_nb);
