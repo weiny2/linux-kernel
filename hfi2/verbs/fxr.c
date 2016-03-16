@@ -147,14 +147,13 @@ static int qp_max_iovs(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		       int *out_niovs)
 {
 	int niovs, i;
-	size_t off, segsz, payload_bytes;
-	struct hfi2_sge *sge;
+	size_t off, segsz, payload_bytes, length;
 	struct hfi2_sge_state *ss = qp->s_cur_sge;
+	struct hfi2_sge *sge = &ss->sge;
 
 	niovs = 1; /* one IOV for header */
 
 	/* step through SGEs to send in this packet */
-	sge = &qp->s_sge.sge;
 	for (payload_bytes = 0, i = 0;
 	     (payload_bytes < qp->s_cur_size) && sge;
 	     payload_bytes += sge->sge_length, sge = ss->sg_list + i, i++) {
@@ -172,8 +171,13 @@ static int qp_max_iovs(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 			/* TODO - store sge->offset to remove this */
 			off = sge->mr->map[sge->m]->segs[sge->n].length -
 				sge->length;
-			niovs += ((off + sge->sge_length + segsz - 1) / segsz);
-			/* TODO - above needs to limit to s_cur_size? */
+			/*
+			 * compute max iovs needed if sending all bytes in SGE,
+			 * except limited to remaining payload size.
+			 */
+			length = min_t(size_t, qp->s_cur_size - payload_bytes,
+				       sge->sge_length);
+			niovs += ((off + length + segsz - 1) / segsz);
 		} else {
 			niovs++;
 		}
@@ -216,14 +220,15 @@ static void qp_read_sge(struct hfi2_qp *qp, uint64_t *start,
 			uint32_t *length)
 {
 	uint32_t iov_length;
-	struct hfi2_sge *sge = &qp->s_sge.sge;
+	struct hfi2_sge_state *ss = qp->s_cur_sge;
+	struct hfi2_sge *sge = &ss->sge;
 
 	/* use length from next MR segment */
 	iov_length = sge->length;
 	/* the SGE can describe less than the MR segment */
 	if (iov_length > sge->sge_length)
 		iov_length = sge->sge_length;
-	/* TODO SGE can be larger than total_length? */
+	/* SGE can be larger than total length */
 	if (iov_length > qp->s_cur_size)
 		iov_length = qp->s_cur_size;
 
@@ -574,8 +579,12 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 		memcpy(&wqe_iov->ph, &qp->s_hdr->opa16b, qp->s_hdrwords << 2);
 
 	if (use_ofed_dma) {
-		/* read current SGE address/length, updates internal state */
-		qp_read_sge(qp, &start, &length);
+		/*
+		 * read current SGE address/length, updates internal state;
+		 * if no payload (cur_size), start and length are zero
+		 */
+		if (qp->s_cur_size)
+			qp_read_sge(qp, &start, &length);
 	} else {
 		ret = build_iovec_array(ibp, qp, use_16b, wqe_iov,
 					&num_iovs, &length);
