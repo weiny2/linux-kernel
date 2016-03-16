@@ -260,7 +260,6 @@ struct hfi2_swqe {
 	u32 lpsn;               /* last packet sequence number */
 	u32 ssn;                /* send sequence number */
 	u32 length;             /* total length of data in sg_list */
-	struct hfi2_qp *s_qp;
 	u8 sl;
 	bool use_sc15;
 	bool use_16b;

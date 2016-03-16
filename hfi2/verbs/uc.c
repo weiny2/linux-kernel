@@ -257,7 +257,6 @@ int hfi2_make_uc_req(struct hfi2_qp *qp)
 				     mask_psn(qp->s_next_psn++));
 
 	/* set remaining WQE fields needed for DMA command */
-	wqe->s_qp = qp;
 	wqe->sl = qp->remote_ah_attr.sl;
 	wqe->use_sc15 = false;
 	wqe->use_16b = is_16b;

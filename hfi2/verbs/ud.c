@@ -593,7 +593,6 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 	ohdr->u.ud.deth[1] = cpu_to_be32(qp->ibqp.qp_num);
 
 	/* set remaining WQE fields needed for DMA command */
-	wqe->s_qp = qp;
 	wqe->sl = ah_attr->sl;
 	wqe->pkt_errors = 0;
 done:

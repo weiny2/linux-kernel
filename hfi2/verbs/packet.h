@@ -227,9 +227,23 @@ struct hfi2_ib_packet {
 	u16 hlen_9b;
 };
 
-/* Store IOVEC array information for General DMA command */
+/*
+ * Store IOVEC array information for General DMA command.
+ * FXR will read the packet header from this structure when processing
+ * the General DMA command's first IOVEC entry.
+ *
+ * The first 3 fields are needed in order to call send_complete()
+ * or rc_send_complete(), and put_mr() in the send EQ callback:
+ *    QP is null for RC ACKs, set for all other transmits
+ *    WQE is set for UD/UC queue pairs only
+ *    MR is set for RC READ responses only
+ */
 struct hfi2_wqe_iov {
-	struct hfi2_swqe *wqe;
+	struct hfi2_qp *qp;
+	union {
+		struct hfi2_swqe *wqe;
+		struct hfi2_mregion *mr;
+	};
 	union hfi2_packet_header ph;
 	u32 remaining_bytes;
 	union base_iovec iov[0];
