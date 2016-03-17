@@ -467,7 +467,8 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	} else {
 		u32 dlid_16b = hfi1_retrieve_lid(ah_attr);
 		u32 slid_16b;
-		lrh1_16b = (lrh1_16b & ~OPA_16B_LID_MASK) | dlid_16b;
+		lrh1_16b = (lrh1_16b & ~OPA_16B_LID_MASK) |
+				(dlid_16b & OPA_16B_LID_MASK);
 		lrh2_16b = (lrh2_16b & ~OPA_16B_DLID_MASK) | ((dlid_16b >> 20) 
 				<< OPA_16B_DLID_HIGH_SHIFT);
 		/* Convert dwords to flits */
@@ -479,7 +480,8 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
                 	slid_16b = ppd->lid | (ah_attr->src_path_bits &
                                               ((1 << ppd->lmc) - 1));
 
-		lrh0_16b = (lrh0_16b & ~OPA_16B_LID_MASK)  | slid_16b;
+		lrh0_16b = (lrh0_16b & ~OPA_16B_LID_MASK)  |
+				(slid_16b & OPA_16B_LID_MASK);
 		lrh2_16b = (lrh2_16b & ~OPA_16B_SLID_MASK) | ((slid_16b >> 20) 
 				<< OPA_16B_SLID_HIGH_SHIFT);
 		if (dlid_16b == 0xbb)
