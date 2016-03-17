@@ -11,8 +11,8 @@ set -x
 
 debug=false
 
-KERNELRELEASE=4.3.0+
-CHECKPATCH_COMMAND=/lib/modules/${KERNELRELEASE}/build/scripts/checkpatch.pl
+. scripts/GlobalDefinition.sh
+CHECKPATCH_COMMAND=/lib/modules/${KERNEL_VERSION}/build/scripts/checkpatch.pl
 CHECKPATCH_OPTIONS="--patch --no-tree --terse --no-signoff --strict"
 
 declare -i ret=0
