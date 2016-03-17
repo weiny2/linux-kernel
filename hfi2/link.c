@@ -213,9 +213,15 @@ void hfi_read_link_quality(struct hfi_pportdata *ppd, u8 *link_quality)
 		ret = hfi2_read_8051_config(ppd, LINK_QUALITY_INFO,
 						GENERAL_CONFIG, &frame);
 		ppd_dev_dbg(ppd, "link quality info is %#x\n", frame);
-		if (ret == 0)
+		if (ret == 0) {
+			/* FXRTODO: remove this after STL-7480 is fixed */
+#if 1
+			*link_quality = 0x5;
+#else
 			*link_quality = (frame >> LINK_QUALITY_SHIFT)
 						& LINK_QUALITY_MASK;
+#endif
+		}
 	}
 }
 
