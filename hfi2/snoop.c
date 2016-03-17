@@ -78,6 +78,50 @@
 	pr_debug(fmt, ##__VA_ARGS__)
 #endif
 
+union rhf_gen1 {
+	struct {
+		uint64_t	pktlen                  : 12;
+		uint64_t	rcvtype                 : 3;
+		uint64_t	u                       : 1;
+		uint64_t	egrindex                : 11;
+		uint64_t	sc4                     : 1;
+		uint64_t	egroffset               : 16;
+		uint64_t	hdrqoffset              : 9;
+		uint64_t	khdrlenerr              : 1;
+		uint64_t	dcerr                   : 2;
+		uint64_t	pkterr                  : 5;
+		uint64_t	reserved                : 2;
+		uint64_t	icrcerr                 : 1;
+	};
+	uint64_t val;
+};
+
+/* Construct Gen1 RHF for compability; Gen2 RHF provides almost same content */
+static u64 to_hfi1_rhf(u64 rhf)
+{
+	union rhf_gen1 out_rhf;
+
+	out_rhf.val = 0;
+	out_rhf.pktlen = rhf_pkt_len(rhf) >> 2;
+	out_rhf.rcvtype = rhf_rcv_type(rhf);
+	out_rhf.u = !!rhf_use_egr_bfr(rhf);
+	out_rhf.egrindex = rhf_egr_index(rhf);
+	out_rhf.sc4 = !!rhf_sc4(rhf);
+	out_rhf.egroffset = rhf_egr_buf_offset(rhf);
+	out_rhf.hdrqoffset = rhf_hdr_len(rhf) >> 2;
+	out_rhf.khdrlenerr = !!(rhf_err_flags(rhf) & RHF_K_HDR_LEN_ERR);
+	out_rhf.pkterr = (rhf_err_flags(rhf) >> RHF_ERROR_SHIFT);
+	out_rhf.icrcerr = !!(rhf_err_flags(rhf) & RHF_ICRC_ERR);
+
+	return out_rhf.val;
+}
+
+/* Construct Gen1 PBC: for 16B, PBC's bypass bit must be set */
+static u64 to_hfi1_pbc(bool use_16b)
+{
+	return (use_16b) ? BIT(28) : 0;
+}
+
 /* Snoop option mask */
 #define SNOOP_DROP_SEND		BIT(0)
 #define SNOOP_USE_METADATA	BIT(1)
@@ -912,7 +956,7 @@ static void snoop_recv_handler(struct hfi2_ib_packet *packet)
 			memset(&md, 0, sizeof(struct capture_md));
 			md.port = packet->port + 1; /* IB ports start from 1 */
 			md.dir = PKT_DIR_INGRESS;
-			md.u.rhf = packet->rhf;
+			md.u.rhf = to_hfi1_rhf(packet->rhf);
 			memcpy(s_packet->data, &md, md_len);
 		}
 
