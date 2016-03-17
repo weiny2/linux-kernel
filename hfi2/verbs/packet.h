@@ -566,7 +566,12 @@ static inline bool hfi2_use_16b(struct hfi2_qp *qp)
 	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
 	    (qp->ibqp.qp_type == IB_QPT_UC)) {
 		if (ib_query_gid(qp->ibqp.device, qp->port_num,
-				 qp->remote_ah_attr.grh.sgid_index, &sgid))
+				 qp->remote_ah_attr.grh.sgid_index,
+				 &sgid
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+				 ,NULL
+#endif
+				 ))
 			return false;
 		dgid = &qp->remote_ah_attr.grh.dgid;
 		return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
@@ -575,9 +580,17 @@ static inline bool hfi2_use_16b(struct hfi2_qp *qp)
 	if (!wqe)
 		return false;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	ah_attr = &to_hfi_ah(wqe->ud_wr.ah)->attr;
+#else
 	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+#endif
 	if (ib_query_gid(qp->ibqp.device, qp->port_num,
-			 ah_attr->grh.sgid_index, &sgid))
+			 ah_attr->grh.sgid_index, &sgid
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+			 ,NULL
+#endif
+))
 		return false;
 	dgid = &ah_attr->grh.dgid;
 	return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);

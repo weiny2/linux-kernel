@@ -235,7 +235,22 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 	rkt = &to_hfi_ibd(qp->ibqp.device)->lk_table;
 	pd = to_hfi_pd(qp->ibqp.pd);
 	wqe = get_swqe_ptr(qp, qp->s_head);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	if (qp->ibqp.qp_type != IB_QPT_UC &&
+	    qp->ibqp.qp_type != IB_QPT_RC)
+		memcpy(&wqe->ud_wr, ud_wr(wr), sizeof(wqe->ud_wr));
+	else if (wr->opcode == IB_WR_RDMA_WRITE_WITH_IMM ||
+		 wr->opcode == IB_WR_RDMA_WRITE ||
+		 wr->opcode == IB_WR_RDMA_READ)
+		memcpy(&wqe->rdma_wr, rdma_wr(wr), sizeof(wqe->rdma_wr));
+	else if (wr->opcode == IB_WR_ATOMIC_CMP_AND_SWP ||
+		 wr->opcode == IB_WR_ATOMIC_FETCH_AND_ADD)
+		memcpy(&wqe->atomic_wr, atomic_wr(wr), sizeof(wqe->atomic_wr));
+	else
+		memcpy(&wqe->wr, wr, sizeof(wqe->wr));
+#else
 	wqe->wr = *wr;
+#endif
 	wqe->length = 0;
 	j = 0;
 	if (wr->num_sge) {
