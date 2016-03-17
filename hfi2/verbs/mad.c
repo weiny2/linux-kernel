@@ -2579,7 +2579,8 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 	rsp->port_rcv_remote_physical_errors = cpu_to_be64(hfi_read_lm_fpc_csr(
 				ppd, FXR_FPC_PORTRCV_PHY_REMOTE_ERROR));
 	hfi_read_link_quality(ppd, &lq);
-	rsp->link_quality_indicator = cpu_to_be32((u32)lq);
+	rsp->link_quality_indicator = lq;
+
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
 	tmp2 = tmp + read_fzc_csr(ppd, FZC_LCB_ERR_INFO_TX_REPLAY_CNT);
 	if (tmp2 < tmp)
@@ -2741,7 +2742,6 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	memset(rsp, 0, sizeof(*rsp));
 	/* FXRTODO: replace fake values(zeros) with actual register reads */
 	rsp->port_number = port;
-	rsp->link_quality_indicator = 0x5;
 	rsp->port_xmit_data = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 							TP_XMIT_DATA));
 	rsp->port_rcv_data = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
