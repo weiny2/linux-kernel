@@ -624,14 +624,14 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	struct hfi1_pportdata *ppd = rcd->ppd;
 	struct hfi1_ibport *ibp = &ppd->ibport_data;
 	int lnh;
-	u16 lid;
+	u16 dlid;
 	union ib_gid *mgid = NULL;
 
 	/* Check for GRH */
-	lnh = be16_to_cpu(hdr->lrh[0]) & 3;
-	lid = be16_to_cpu(hdr->lrh[1]);
-	if (unlikely((lid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
-		     (lid != be16_to_cpu(IB_LID_PERMISSIVE))))
+	lnh = OPA_9B_GET_LNH(be16_to_cpu(hdr->lrh[0]));
+	dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
+	if (unlikely((dlid >= IB_MULTICAST_LID_BASE) &&
+		     (dlid != IB_LID_PERMISSIVE)))
 		mgid = &hdr->u.l.grh.dgid;
 
 	if (lnh == HFI1_LRH_BTH) {
@@ -1268,13 +1268,13 @@ static inline int egress_pkey_check(struct hfi1_pportdata *ppd,
 		return 0;
 
 	/* locate the pkey within the headers */
-	lnh = be16_to_cpu(ibh->lrh[0]) & 3;
+	lnh = OPA_9B_GET_LNH(be16_to_cpu(ibh->lrh[0]));
 	if (lnh == HFI1_LRH_GRH)
 		ohdr = &ibh->u.l.oth;
 	else
 		ohdr = &ibh->u.oth;
 
-	pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+	pkey = OPA_9B_BTH_GET_PKEY(be32_to_cpu(ohdr->bth[0]));
 
 	/* If SC15, pkey[0:14] must be 0x7fff */
 	if ((sc5 == 0xf) && ((pkey & PKEY_LOW_15_MASK) != PKEY_LOW_15_MASK))
@@ -1301,7 +1301,7 @@ bad:
 	incr_cntr64(&ppd->port_xmit_constraint_errors);
 	dd = ppd->dd;
 	if (!(dd->err_info_xmit_constraint.status & OPA_EI_STATUS_SMASK)) {
-		u16 slid = be16_to_cpu(ibh->lrh[3]);
+		u16 slid = OPA_9B_GET_LID(be16_to_cpu(ibh->lrh[3]));
 
 		dd->err_info_xmit_constraint.status |= OPA_EI_STATUS_SMASK;
 		dd->err_info_xmit_constraint.slid = slid;
@@ -1873,7 +1873,7 @@ void hfi1_cnp_rcv(struct hfi1_packet *packet)
 	}
 
 	sc4_bit = sc4_set << 4;
-	sc5 = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
+	sc5 = OPA_9B_GET_SC5(be16_to_cpu(hdr->lrh[0]));
 	sc5 |= sc4_bit;
 	sl = ibp->sc_to_sl[sc5];
 	lqpn = qp->ibqp.qp_num;
