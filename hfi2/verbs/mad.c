@@ -636,6 +636,9 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->port_mode = cpu_to_be16(
 				ppd->is_active_optimize_enabled ?
 					OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE : 0);
+	pi->port_mode |= cpu_to_be16(
+				ppd->is_vl_marker_enabled ?
+					OPA_PI_MASK_PORT_MODE_VL_MARKER : 0);
 
 	/*
 	 * FXRTODO:
@@ -958,7 +961,7 @@ static int __subn_get_opa_bw_arb(struct opa_smp *smp, u32 am, u8 *data,
 	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
 	u32 num_ports = OPA_AM_NPORT(am);
 	u8 section = OPA_BW_SECTION(am);
-	int size = sizeof(struct opa_bw_arb);
+	int size = sizeof(struct opa_bw_arb) +  sizeof(union opa_bw_arb_table);
 	struct opa_bw_arb *bw_arb = (struct opa_bw_arb *)data;
 
 	if ((num_ports != 1) || (section != OPA_BWARB_GROUP &&
@@ -966,7 +969,7 @@ static int __subn_get_opa_bw_arb(struct opa_smp *smp, u32 am, u8 *data,
 		goto err;
 
 	bw_arb->port_sel_mask[3] = cpu_to_be64((uint64_t)(1) << (port - 1));
-	size += hfi_get_ib_cfg(ppd, HFI_IB_CFG_BW_ARB, section, data);
+	hfi_get_ib_cfg(ppd, HFI_IB_CFG_BW_ARB, section, data);
 
 	if (resp_len)
 		*resp_len += size;
@@ -1637,6 +1640,9 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ppd->is_active_optimize_enabled =
 			!!(be16_to_cpu(pi->port_mode)
 					& OPA_PI_MASK_PORT_ACTIVE_OPTOMIZE);
+	ppd->is_vl_marker_enabled =
+			!!(be16_to_cpu(pi->port_mode)
+					& OPA_PI_MASK_PORT_MODE_VL_MARKER);
 
 	ls_new = pi->port_states.portphysstate_portstate &
 			OPA_PI_MASK_PORT_STATE;

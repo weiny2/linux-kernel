@@ -1174,30 +1174,28 @@ static void hfi_set_sc_to_vlnt(struct hfi_pportdata *ppd, u8 *t)
 	memcpy(ppd->sc_to_vlnt, t, OPA_MAX_SCS);
 }
 
-int hfi_get_bw_arb(struct hfi_pportdata *ppd, int section,
-		   struct opa_bw_arb *bw_arb)
+void hfi_get_bw_arb(struct hfi_pportdata *ppd, int section,
+		    struct opa_bw_arb *bw_arb)
 {
 	struct bw_arb_cache *cache = &ppd->bw_arb_cache;
 	union opa_bw_arb_table *arb_block = bw_arb->arb_block;
-	int size = 0;
 
 	spin_lock(&cache->lock);
 
 	switch (section) {
 	case OPA_BWARB_GROUP:
-		size = sizeof(cache->bw_group);
-		memcpy(arb_block->bw_group, cache->bw_group, size);
+		memcpy(arb_block->bw_group, cache->bw_group,
+		       sizeof(cache->bw_group));
 		break;
 	case OPA_BWARB_PREEMPT_MATRIX:
-		size = sizeof(cache->preempt_matrix);
-		memcpy(arb_block->matrix, cache->preempt_matrix, size);
+		memcpy(arb_block->matrix, cache->preempt_matrix,
+		       sizeof(cache->preempt_matrix));
 		break;
 	default:
 		ppd_dev_err(ppd, "Invalid section when setting BW ARB table\n");
 	}
 
 	spin_unlock(&cache->lock);
-	return size;
 }
 
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
@@ -1210,7 +1208,7 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 		ret = ppd->vls_operational;
 		break;
 	case HFI_IB_CFG_BW_ARB:
-		ret = hfi_get_bw_arb(ppd, val, data);
+		hfi_get_bw_arb(ppd, val, data);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",

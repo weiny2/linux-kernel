@@ -482,6 +482,8 @@ struct bw_arb_cache {
  * @is_active_optimize_enabled: if enabled, then LinkArmed -> LinkActive state
  *	change propogates this event to neighboring port via SMA Idle Flit
  *	messages
+ * @is_vl_marker_enabled: If 1, indicates that explicit interleaving is enabled.
+ *      Thus enabling preemption matrix setup by the FM
  * @local_tx_rate: rate given to 8051 firmware
  * @mgmt_allowed: Indicates if neighbor is allowing this node to be a mgmt node
  *	(information received via LNI)
@@ -568,6 +570,7 @@ struct hfi_pportdata {
 	u8 is_sm_config_started;
 	u8 offline_disabled_reason;
 	u8 is_active_optimize_enabled;
+	u8 is_vl_marker_enabled;
 	u8 local_tx_rate;
 	u8 mgmt_allowed;
 	u8 part_enforce;
