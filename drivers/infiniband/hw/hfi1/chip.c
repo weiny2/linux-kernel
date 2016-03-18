@@ -13433,20 +13433,17 @@ static void init_qpmap_table(struct hfi1_devdata *dd,
 	int i;
 	u64 ctxt = first_ctxt;
 
-	for (i = 0; i < 256;) {
+	for (i = 0; i < 256; i++) {
 		reg |= ctxt << (8 * (i % 8));
-		i++;
 		ctxt++;
 		if (ctxt > last_ctxt)
 			ctxt = first_ctxt;
-		if (i % 8 == 0) {
+		if (i % 8 == 7) {
 			write_csr(dd, regno, reg);
 			reg = 0;
 			regno += 8;
 		}
 	}
-	if (i % 8)
-		write_csr(dd, regno, reg);
 
 	add_rcvctrl(dd, RCV_CTRL_RCV_QP_MAP_ENABLE_SMASK
 			| RCV_CTRL_RCV_BYPASS_ENABLE_SMASK);
@@ -13739,6 +13736,7 @@ int hfi1_set_ctxt_pkey(struct hfi1_devdata *dd, unsigned ctxt, u16 pkey)
 	write_kctxt_csr(dd, sctxt, SEND_CTXT_CHECK_PARTITION_KEY, reg);
 	reg = read_kctxt_csr(dd, sctxt, SEND_CTXT_CHECK_ENABLE);
 	reg |= SEND_CTXT_CHECK_ENABLE_CHECK_PARTITION_KEY_SMASK;
+	reg &= ~SEND_CTXT_CHECK_ENABLE_DISALLOW_KDETH_PACKETS_SMASK;
 	write_kctxt_csr(dd, sctxt, SEND_CTXT_CHECK_ENABLE, reg);
 done:
 	return ret;
