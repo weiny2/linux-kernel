@@ -1255,7 +1255,7 @@ static inline int hdr2sc(struct hfi1_message_header *hdr, u64 rhf)
 {
 	return
 		((be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf) |
-		((!!(rhf & RHF_DC_INFO_MASK)) << 4);
+		((!!(rhf & RHF_DC_INFO_SMASK)) << 4);
 }
 
 static inline u16 generate_jkey(kuid_t uid)
@@ -1330,6 +1330,9 @@ void process_becn(struct hfi1_pportdata *ppd, u8 sl,  u16 rlid, u32 lqpn,
 void return_cnp(struct hfi1_ibport *ibp, struct hfi1_qp *qp, u32 remote_qpn,
 		u32 pkey, u32 slid, u32 dlid, u8 sc5,
 		const struct ib_grh *old_grh);
+#define PKEY_CHECK_INVALID -1
+int egress_pkey_check(struct hfi1_pportdata *ppd, __be16 *lrh, __be32 *bth,
+		      u8 sc5, int8_t s_pkey_index);
 
 #define PACKET_EGRESS_TIMEOUT 350
 static inline void pause_for_credit_return(struct hfi1_devdata *dd)
@@ -1767,6 +1770,7 @@ extern struct mutex hfi1_mutex;
 
 #define HFI1_PKT_USER_SC_INTEGRITY					    \
 	(SEND_CTXT_CHECK_ENABLE_DISALLOW_NON_KDETH_PACKETS_SMASK	    \
+	| SEND_CTXT_CHECK_ENABLE_DISALLOW_KDETH_PACKETS_SMASK		\
 	| SEND_CTXT_CHECK_ENABLE_DISALLOW_BYPASS_SMASK		    \
 	| SEND_CTXT_CHECK_ENABLE_DISALLOW_GRH_SMASK)
 
