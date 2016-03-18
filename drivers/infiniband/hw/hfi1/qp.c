@@ -231,6 +231,24 @@ void hfi1_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 		priv->s_sde = qp_to_sdma_engine(qp, priv->s_sc);
 		priv->s_sendcontext = qp_to_send_context(qp, priv->s_sc);
 	}
+
+	if (ibqp->qp_type == IB_QPT_RC) {
+		priv->trdma.enabled = true;
+
+		priv->trdma.local.qp =
+			TID_RDMA_LOCAL_KDETH_QP_BASE | TID_RDMA_DEFAULT_CTXT;
+		priv->trdma.local.max_len = TID_RDMA_SEGMENT_SIZE;
+		priv->trdma.local.jkey = TID_RDMA_DEFAULT_JKEY;
+		priv->trdma.local.max_read = TID_RDMA_MAX_READ_FLOWS;
+		priv->trdma.local.max_write = TID_RDMA_MAX_WRITE_FLOWS;
+
+		priv->trdma.remote.qp =
+			TID_RDMA_LOCAL_KDETH_QP_BASE | TID_RDMA_DEFAULT_CTXT;
+		priv->trdma.remote.max_len = TID_RDMA_SEGMENT_SIZE;
+		priv->trdma.remote.jkey = TID_RDMA_DEFAULT_JKEY;
+		priv->trdma.remote.max_read = TID_RDMA_MAX_READ_FLOWS;
+		priv->trdma.remote.max_write = TID_RDMA_MAX_WRITE_FLOWS;
+	}
 }
 
 /**

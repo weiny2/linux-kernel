@@ -192,6 +192,27 @@ struct hfi1_pio_header {
 	struct hfi1_ib_header hdr;
 } __packed;
 
+#define TID_RDMA_DEFAULT_CTXT		0x0	  /* FIXME: Needs krcvqs == 1 */
+#define TID_RDMA_LOCAL_KDETH_QP_BASE	0x800000
+#define TID_RDMA_SEGMENT_SIZE		(1 << 16) /* 64 KiB (for now) */
+#define TID_RDMA_DEFAULT_JKEY		0xabcd
+#define TID_RDMA_MAX_READ_FLOWS		(RXE_NUM_TID_FLOWS / 2)
+#define TID_RDMA_MAX_WRITE_FLOWS	TID_RDMA_MAX_READ_FLOWS
+
+struct tid_rdma_params {
+	u32 qp;
+	u32 max_len;
+	u16 jkey;
+	u8 max_read;
+	u8 max_write;
+};
+
+struct tid_rdma_qp_params {
+	bool enabled;
+	struct tid_rdma_params local;
+	struct tid_rdma_params remote;
+};
+
 /*
  * hfi1 specific data structures that will be hidden from rvt after the queue
  * pair is made common
@@ -204,6 +225,7 @@ struct hfi1_qp_priv {
 	u8 r_adefered;                            /* number of acks defered */
 	struct iowait s_iowait;
 	struct timer_list s_rnr_timer;
+	struct tid_rdma_qp_params trdma;
 	struct rvt_qp *owner;
 };
 
