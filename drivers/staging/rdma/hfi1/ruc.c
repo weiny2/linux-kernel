@@ -714,31 +714,30 @@ u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
  * Subsequent middles use the copied entry, editing the
  * PSN with 1 or 2 edits.
  */
-static inline void build_ahg(struct rvt_qp *qp, u32 npsn,
-			     struct hfi1_pkt_state *ps)
+static inline void build_ahg(struct rvt_qp *qp, u32 npsn)
 {
 	struct hfi1_qp_priv *priv = qp->priv;
 
 	if (unlikely(qp->s_flags & RVT_S_AHG_CLEAR))
-		clear_ahg(qp, ps);
+		clear_ahg(qp);
 	if (!(qp->s_flags & RVT_S_AHG_VALID)) {
 		/* first middle that needs copy  */
 		if (qp->s_ahgidx < 0)
 			qp->s_ahgidx = sdma_ahg_alloc(priv->s_sde);
 		if (qp->s_ahgidx >= 0) {
 			qp->s_ahgpsn = npsn;
-			ps->ahg_info.tx_flags |= SDMA_TXREQ_F_AHG_COPY;
+			priv->s_hdr->tx_flags |= SDMA_TXREQ_F_AHG_COPY;
 			/* save to protect a change in another thread */
-			ps->ahg_info.ahgidx = qp->s_ahgidx;
+			priv->s_hdr->ahgidx = qp->s_ahgidx;
 			qp->s_flags |= RVT_S_AHG_VALID;
 		}
 	} else {
 		/* subsequent middle after valid */
 		if (qp->s_ahgidx >= 0) {
-			ps->ahg_info.tx_flags |= SDMA_TXREQ_F_USE_AHG;
-			ps->ahg_info.ahgidx = qp->s_ahgidx;
-			ps->ahg_info.ahgcount++;
-			ps->ahg_info.ahgdesc[0] =
+			priv->s_hdr->tx_flags |= SDMA_TXREQ_F_USE_AHG;
+			priv->s_hdr->ahgidx = qp->s_ahgidx;
+			priv->s_hdr->ahgcount++;
+			priv->s_hdr->ahgdesc[0] =
 				sdma_build_ahg_descriptor(
 					(__force u16)cpu_to_be16((u16)npsn),
 					BTH2_OFFSET,
@@ -746,8 +745,8 @@ static inline void build_ahg(struct rvt_qp *qp, u32 npsn,
 					16);
 			if ((npsn & 0xffff0000) !=
 					(qp->s_ahgpsn & 0xffff0000)) {
-				ps->ahg_info.ahgcount++;
-				ps->ahg_info.ahgdesc[1] =
+				priv->s_hdr->ahgcount++;
+				priv->s_hdr->ahgdesc[1] =
 					sdma_build_ahg_descriptor(
 						(__force u16)cpu_to_be16(
 							(u16)(npsn >> 16)),
@@ -826,15 +825,15 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	 * build_ahg() will modify as appropriate
 	 * to use the AHG feature.
 	 */
-	ps->ahg_info.tx_flags = 0;
-	ps->ahg_info.ahgcount = 0;
-	ps->ahg_info.ahgidx = 0;
+	priv->s_hdr->tx_flags = 0;
+	priv->s_hdr->ahgcount = 0;
+	priv->s_hdr->ahgidx = 0;
 	if (qp->s_mig_state == IB_MIG_MIGRATED)
 		bth0 |= IB_BTH_MIG_REQ;
 	else
 		middle = 0;
 	if (middle)
-		build_ahg(qp, bth2, ps);
+		build_ahg(qp, bth2);
 	else
 		qp->s_flags &= ~RVT_S_AHG_VALID;
 

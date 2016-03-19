@@ -450,7 +450,7 @@ int hfi1_make_rc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 			qp->s_flags |= RVT_S_WAIT_DMA;
 			goto bail;
 		}
-		clear_ahg(qp, ps);
+		clear_ahg(qp);
 		wqe = rvt_get_swqe_ptr(qp, qp->s_last);
 		hfi1_send_complete(qp, wqe, qp->s_last != qp->s_acked ?
 			IB_WC_SUCCESS : IB_WC_WR_FLUSH_ERR);
@@ -487,7 +487,7 @@ int hfi1_make_rc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		if (qp->s_cur == qp->s_tail) {
 			/* Check if send work queue is empty. */
 			if (qp->s_tail == qp->s_head) {
-				clear_ahg(qp, ps);
+				clear_ahg(qp);
 				goto bail;
 			}
 			/*

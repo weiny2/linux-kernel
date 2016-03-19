@@ -881,7 +881,7 @@ static int build_verbs_tx_desc(
 	struct rvt_sge_state *ss,
 	u32 length,
 	struct verbs_txreq *tx,
-	struct hfi1_ahg_info *ahg_info,
+	struct ahg_ib_header *ahdr,
 	u64 pbc)
 {
 	int ret = 0;
@@ -903,13 +903,13 @@ static int build_verbs_tx_desc(
 		hdr = (u32 *)&phdr->hdr.pkt.ibh;
 	}
 		
-	if (!ahg_info->ahgcount) {
+	if (!ahdr->ahgcount) {
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
-			ahg_info->tx_flags,
+			ahdr->tx_flags,
 			hdrbytes + length +
 			crc_lt + extra_bytes,
-			ahg_info->ahgidx,
+			ahdr->ahgidx,
 			0,
 			NULL,
 			0,
@@ -928,11 +928,11 @@ static int build_verbs_tx_desc(
 	} else {
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
-			ahg_info->tx_flags,
+			ahdr->tx_flags,
 			length,
-			ahg_info->ahgidx,
-			ahg_info->ahgcount,
-			ahg_info->ahgdesc,
+			ahdr->ahgidx,
+			ahdr->ahgcount,
+			ahdr->ahgdesc,
 			hdrbytes,
 			verbs_sdma_complete);
 		if (ret)
@@ -962,7 +962,7 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 			u64 pbc)
 {
 	struct hfi1_qp_priv *priv = qp->priv;
-	struct hfi1_ahg_info *ahg_info = &ps->ahg_info;
+	struct ahg_ib_header *ahdr = priv->s_hdr;
 	u32 hdrwords = qp->s_hdrwords;
 	struct rvt_sge_state *ss = qp->s_cur_sge;
 	u32 len = qp->s_cur_size;
@@ -1003,7 +1003,7 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 					 plen);
 		}
 		tx->wqe = qp->s_wqe;
-		ret = build_verbs_tx_desc(tx->sde, ss, len, tx, ahg_info, pbc);
+		ret = build_verbs_tx_desc(tx->sde, ss, len, tx, ahdr, pbc);
 		if (unlikely(ret))
 			goto bail_build;
 	}

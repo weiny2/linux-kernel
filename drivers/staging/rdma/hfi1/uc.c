@@ -95,7 +95,7 @@ int hfi1_make_uc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 			qp->s_flags |= RVT_S_WAIT_DMA;
 			goto bail;
 		}
-		clear_ahg(qp, ps);
+		clear_ahg(qp);
 		wqe = rvt_get_swqe_ptr(qp, qp->s_last);
 		hfi1_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
 		goto done_free_tx;
@@ -131,7 +131,7 @@ int hfi1_make_uc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		/* Check if send work queue is empty. */
 		smp_read_barrier_depends(); /* see post_one_send() */
 		if (qp->s_cur == ACCESS_ONCE(qp->s_head)) {
-			clear_ahg(qp, ps);
+			clear_ahg(qp);
 			goto bail;
 		}
 		/*
