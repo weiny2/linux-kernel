@@ -881,7 +881,7 @@ static int build_verbs_tx_desc(
 	struct rvt_sge_state *ss,
 	u32 length,
 	struct verbs_txreq *tx,
-	struct ahg_ib_header *ahdr,
+	struct hfi1_ahg_info *ahdr,
 	u64 pbc)
 {
 	int ret = 0;
@@ -962,7 +962,7 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 			u64 pbc)
 {
 	struct hfi1_qp_priv *priv = qp->priv;
-	struct ahg_ib_header *ahdr = priv->s_hdr;
+	struct hfi1_ahg_info *ahdr = priv->s_ahg;
 	u32 hdrwords = qp->s_hdrwords;
 	struct rvt_sge_state *ss = qp->s_cur_sge;
 	u32 len = qp->s_cur_size;

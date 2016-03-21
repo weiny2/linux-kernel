@@ -196,7 +196,7 @@ struct hfi1_opa_header {
 	u8 hdr_type; /* 9B or 16B */
 } __packed;
 
-struct ahg_ib_header {
+struct hfi1_ahg_info {
 	u32 ahgdesc[2];
 	u16 tx_flags;
 	u8 ahgcount;
@@ -213,7 +213,7 @@ struct hfi1_sdma_header {
  * pair is made common
  */
 struct hfi1_qp_priv {
-	struct ahg_ib_header *s_hdr;              /* next header to send */
+	struct hfi1_ahg_info *s_ahg;              /* next header to send */
 	struct sdma_engine *s_sde;                /* current sde */
 	struct send_context *s_sendcontext;       /* current sendcontext */
 	u8 s_sc;		                  /* SC[0..4] for next packet */
