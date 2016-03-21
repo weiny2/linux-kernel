@@ -519,9 +519,6 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 		goto done;
 	}
 
-	/* TODO - RC not complete, disable ack/credit protocol */
-	qp->s_flags |= HFI1_S_UNLIMITED_CREDIT;
-
 	if (qp->s_flags & (HFI1_S_WAIT_RNR | HFI1_S_WAIT_ACK))
 		goto bail;
 
