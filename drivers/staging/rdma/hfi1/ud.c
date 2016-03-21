@@ -896,7 +896,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		extra_bytes += (SIZE_OF_CRC << 2) + (SIZE_OF_LT);
 		dlid_is_permissive = (dlid == HFI1_16B_PERMISSIVE_LID);
 		slid_is_permissive = (slid == HFI1_16B_PERMISSIVE_LID);
-		fn_cnp = return_cnp;
+		fn_cnp = return_cnp_bypass;
 	} else {
 		hdr = packet->hdr;
 		data = packet->ebuf;
@@ -914,7 +914,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		extra_bytes += (SIZE_OF_CRC << 2);
 		dlid_is_permissive = (dlid == be16_to_cpu(IB_LID_PERMISSIVE));
 		slid_is_permissive = (slid == be16_to_cpu(IB_LID_PERMISSIVE));
-		fn_cnp = return_cnp_bypass;
+		fn_cnp = return_cnp;
 	}
 	sl_from_sc = ibp->sc_to_sl[sc5];
 
@@ -926,7 +926,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		process_becn(ppd, sl, 0, lqpn, 0, IB_CC_SVCTYPE_UD);
 
 	if (!is_mcast && (opcode != IB_OPCODE_CNP) && fecn) {
-		fn_cnp(ibp, qp, src_qp, pkey, (u16)dlid, (u16)slid, sc5, grh);
+		fn_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc5, grh);
 	}
 	/*
 	 * Get the number of bytes the message was padded by
