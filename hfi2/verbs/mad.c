@@ -2566,27 +2566,27 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 	rsp->port_xmit_data = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 							TP_XMIT_DATA));
 	rsp->port_rcv_data = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_PORTRCV_DATA_CNT));
+						FXR_FPC_PRF_PORTRCV_DATA_CNT));
 	rsp->port_xmit_pkts = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 								TP_XMIT_PKTS));
 	rsp->port_rcv_pkts = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_PORTRCV_PKT_CNT));
+						FXR_FPC_PRF_PORTRCV_PKT_CNT));
 	rsp->port_multicast_rcv_pkts = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_PORTRCV_MCAST_PKT_CNT));
+						FXR_FPC_PRF_PORTRCV_MCAST_PKT_CNT));
 	rsp->port_multicast_xmit_pkts = cpu_to_be64(hfi_read_lm_tp_prf_csr(
 						ppd, TP_MULTICAST_XMIT_PKTS));
 	rsp->port_xmit_wait = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 								TP_XMIT_WAIT));
 	rsp->port_rcv_fecn = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-							FXR_FPC_PORTRCV_FECN));
+							FXR_FPC_PRF_PORTRCV_FECN));
 	rsp->port_rcv_becn = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-							FXR_FPC_PORTRCV_BECN));
+							FXR_FPC_PRF_PORTRCV_BECN));
 	rsp->port_xmit_discards = 0;
 	rsp->port_xmit_constraint_errors = 0;
 	rsp->port_rcv_constraint_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-					FXR_FPC_PORTRCV_CONSTRAINT_ERROR));
+					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR));
 	rsp->port_rcv_remote_physical_errors = cpu_to_be64(hfi_read_lm_fpc_csr(
-				ppd, FXR_FPC_PORTRCV_PHY_REMOTE_ERROR));
+				ppd, FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR));
 	hfi_read_link_quality(ppd, &lq);
 	rsp->link_quality_indicator = lq;
 
@@ -2605,13 +2605,13 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 		rsp->link_error_recovery = cpu_to_be64(tmp2);
 
 	rsp->port_rcv_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_PORTRCV_ERROR));
+						FXR_FPC_ERR_PORTRCV_ERROR));
 	rsp->excessive_buffer_overruns = 0;
 	rsp->fm_config_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_FMCONFIG_ERROR));
+						FXR_FPC_ERR_FMCONFIG_ERROR));
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
 	rsp->uncorrectable_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_UNCORRECTABLE_ERROR));
+						FXR_FPC_ERR_UNCORRECTABLE_ERROR));
 
 	vlinfo = &rsp->vls[0];
 	vfi = 0;
@@ -2626,11 +2626,11 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 		memset(vlinfo, 0, sizeof(*vlinfo));
 		rsp->vls[vfi].port_vl_rcv_data = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-					FXR_FPC_PORT_VL_RCV_DATA_CNT,
+					FXR_FPC_PRF_PORT_VL_RCV_DATA_CNT,
 					idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_rcv_pkts = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-					FXR_FPC_PORT_VL_RCV_PKT_CNT,
+					FXR_FPC_PRF_PORT_VL_RCV_PKT_CNT,
 					idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_xmit_data = cpu_to_be64(
 					hfi_read_lm_tp_prf_csr(ppd,
@@ -2646,11 +2646,11 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 						idx_from_vl(vl) + 1)));
 		rsp->vls[vfi].port_vl_rcv_fecn = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-						FXR_FPC_PORT_VL_RCV_FECN,
+						FXR_FPC_PRF_PORT_VL_RCV_FECN,
 						idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_rcv_becn = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-						FXR_FPC_PORT_VL_RCV_BECN,
+						FXR_FPC_PRF_PORT_VL_RCV_BECN,
 						idx_from_vl(vl)));
 		vlinfo++;
 		vfi++;
@@ -2673,9 +2673,9 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port,
 	ppd = to_hfi_ppd(dd, port);
 
 	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
-					FXR_FPC_PORTRCV_CONSTRAINT_ERROR);
+					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR);
 	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
-					FXR_FPC_PORTRCV_PHY_REMOTE_ERROR);
+					FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR);
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
 	tmp += read_fzc_csr(ppd, FZC_LCB_ERR_INFO_TX_REPLAY_CNT);
 	error_counter_summary += (tmp >> res_lli);
@@ -2685,13 +2685,13 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port,
 	error_counter_summary += (tmp >> res_ler);
 
 	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_PORTRCV_ERROR);
+						FXR_FPC_ERR_PORTRCV_ERROR);
 	/*rsp->excessive_buffer_overruns = 0;*/
 	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_FMCONFIG_ERROR);
+						FXR_FPC_ERR_FMCONFIG_ERROR);
 	error_counter_summary += ppd->link_downed;
 	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_UNCORRECTABLE_ERROR);
+						FXR_FPC_ERR_UNCORRECTABLE_ERROR);
 	return error_counter_summary;
 }
 
@@ -2761,21 +2761,21 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 	rsp->port_xmit_data = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 							TP_XMIT_DATA));
 	rsp->port_rcv_data = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_PORTRCV_DATA_CNT));
+						FXR_FPC_PRF_PORTRCV_DATA_CNT));
 	rsp->port_xmit_pkts = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 								TP_XMIT_PKTS));
 	rsp->port_rcv_pkts = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_PORTRCV_PKT_CNT));
+						FXR_FPC_PRF_PORTRCV_PKT_CNT));
 	rsp->port_multicast_rcv_pkts = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_PORTRCV_MCAST_PKT_CNT));
+						FXR_FPC_PRF_PORTRCV_MCAST_PKT_CNT));
 	rsp->port_multicast_xmit_pkts = cpu_to_be64(hfi_read_lm_tp_prf_csr(
 						ppd, TP_MULTICAST_XMIT_PKTS));
 	rsp->port_xmit_wait = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 								TP_XMIT_WAIT));
 	rsp->port_rcv_fecn = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-							FXR_FPC_PORTRCV_FECN));
+							FXR_FPC_PRF_PORTRCV_FECN));
 	rsp->port_rcv_becn = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-							FXR_FPC_PORTRCV_BECN));
+							FXR_FPC_PRF_PORTRCV_BECN));
 	hfi_read_link_quality(ppd, &lq);
 	rsp->link_quality_indicator = cpu_to_be32((u32)lq);
 
@@ -2796,11 +2796,11 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 		memset(vlinfo, 0, sizeof(*vlinfo));
 		rsp->vls[vfi].port_vl_rcv_data = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-					FXR_FPC_PORT_VL_RCV_DATA_CNT,
+					FXR_FPC_PRF_PORT_VL_RCV_DATA_CNT,
 					idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_rcv_pkts = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-					FXR_FPC_PORT_VL_RCV_PKT_CNT,
+					FXR_FPC_PRF_PORT_VL_RCV_PKT_CNT,
 					idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_xmit_data = cpu_to_be64(
 						hfi_read_lm_tp_prf_csr(ppd,
@@ -2816,11 +2816,11 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 						idx_from_vl(vl) + 1)));
 		rsp->vls[vfi].port_vl_rcv_fecn = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-						FXR_FPC_PORT_VL_RCV_FECN,
+						FXR_FPC_PRF_PORT_VL_RCV_FECN,
 						idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_rcv_becn = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-						FXR_FPC_PORT_VL_RCV_BECN,
+						FXR_FPC_PRF_PORT_VL_RCV_BECN,
 						idx_from_vl(vl)));
 		vlinfo++;
 		vfi++;
@@ -2893,9 +2893,9 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 	rsp->port_xmit_discards = 0;
 	rsp->port_xmit_constraint_errors = 0;
 	rsp->port_rcv_constraint_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-					FXR_FPC_PORTRCV_CONSTRAINT_ERROR));
+					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR));
 	rsp->port_rcv_remote_physical_errors = cpu_to_be64(hfi_read_lm_fpc_csr(
-				ppd, FXR_FPC_PORTRCV_PHY_REMOTE_ERROR));
+				ppd, FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR));
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
 	tmp2 = tmp + read_fzc_csr(ppd, FZC_LCB_ERR_INFO_TX_REPLAY_CNT);
 	if (tmp2 < tmp)
@@ -2911,13 +2911,13 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 		rsp->link_error_recovery = cpu_to_be64(tmp2);
 
 	rsp->port_rcv_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_PORTRCV_ERROR));
+						FXR_FPC_ERR_PORTRCV_ERROR));
 	rsp->excessive_buffer_overruns = 0;
 	rsp->fm_config_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_FMCONFIG_ERROR));
+						FXR_FPC_ERR_FMCONFIG_ERROR));
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
 	rsp->uncorrectable_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_UNCORRECTABLE_ERROR));
+						FXR_FPC_ERR_UNCORRECTABLE_ERROR));
 
 	vlinfo = (struct _vls_ectrs *)&rsp->vls[0];
 	vfi = 0;
@@ -3049,37 +3049,37 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 		hfi_write_lm_tp_prf_csr(ppd, TP_XMIT_DATA, 0);
 
 	if (counter_select & CS_PORT_RCV_DATA)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PORTRCV_DATA_CNT, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_DATA_CNT, 0);
 
 	if (counter_select & CS_PORT_XMIT_PKTS)
 		hfi_write_lm_tp_prf_csr(ppd, TP_XMIT_PKTS, 0);
 
 	if (counter_select & CS_PORT_RCV_PKTS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PORTRCV_PKT_CNT, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_PKT_CNT, 0);
 
 	if (counter_select & CS_PORT_MCAST_XMIT_PKTS)
 		hfi_write_lm_tp_prf_csr(ppd, TP_MULTICAST_XMIT_PKTS, 0);
 
 	if (counter_select & CS_PORT_MCAST_RCV_PKTS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PORTRCV_MCAST_PKT_CNT, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_MCAST_PKT_CNT, 0);
 
 	if (counter_select & CS_PORT_XMIT_WAIT)
 		hfi_write_lm_tp_prf_csr(ppd, TP_XMIT_WAIT, 0);
 
 	if (counter_select & CS_PORT_RCV_FECN)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PORTRCV_FECN, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_FECN, 0);
 
 	if (counter_select & CS_PORT_RCV_BECN)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PORTRCV_BECN, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_BECN, 0);
 
 	if (counter_select & CS_PORT_RCV_BUBBLE)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PORTRCV_BUBBLE, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_BUBBLE, 0);
 
 	if (counter_select & CS_PORT_RCV_CONSTRAINT_ERRORS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PORTRCV_CONSTRAINT_ERROR, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR, 0);
 
 	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PORTRCV_PHY_REMOTE_ERROR, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR, 0);
 
 	if (counter_select & CS_LOCAL_LINK_INTEGRITY_ERRORS) {
 		write_fzc_csr(ppd, FZC_LCB_ERR_INFO_TX_REPLAY_CNT, 0);
@@ -3092,16 +3092,16 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 	}
 
 	if (counter_select & CS_PORT_RCV_ERRORS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PORTRCV_ERROR, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_PORTRCV_ERROR, 0);
 
 	if (counter_select & CS_EXCESSIVE_BUFFER_OVERRUNS)
 
 	if (counter_select & CS_FM_CONFIG_ERRORS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_FMCONFIG_ERROR, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_FMCONFIG_ERROR, 0);
 	if (counter_select & CS_LINK_DOWNED)
 		ppd->link_downed = 0;
 	if (counter_select & CS_UNCORRECTABLE_ERRORS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_UNCORRECTABLE_ERROR, 0);
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_UNCORRECTABLE_ERROR, 0);
 
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 			 8 * sizeof(vl_select_mask)) {
@@ -3110,14 +3110,14 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 					(TP_XMIT_DATA + idx_from_vl(vl)) + 1, 0);
 		if (counter_select & CS_PORT_RCV_DATA)
 			hfi_write_lm_fpc_prf_per_vl_csr(ppd,
-			FXR_FPC_PORT_VL_RCV_DATA_CNT, idx_from_vl(vl), 0);
+			FXR_FPC_PRF_PORT_VL_RCV_DATA_CNT, idx_from_vl(vl), 0);
 		if (counter_select & CS_PORT_XMIT_PKTS)
 			hfi_write_lm_tp_prf_csr(ppd,
 			(TP_XMIT_PKTS + idx_from_vl(vl)) + 1, 0);
 
 		if (counter_select & CS_PORT_RCV_PKTS)
 			hfi_write_lm_fpc_prf_per_vl_csr(ppd,
-			FXR_FPC_PORT_VL_RCV_PKT_CNT,
+			FXR_FPC_PRF_PORT_VL_RCV_PKT_CNT,
 			idx_from_vl(vl), 0);
 
 		if (counter_select & CS_PORT_XMIT_WAIT)
@@ -3127,12 +3127,12 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 		/* sw_port_vl_congestion is 0 for HFIs */
 		if (counter_select & CS_PORT_RCV_FECN)
 			hfi_write_lm_fpc_prf_per_vl_csr(ppd,
-				FXR_FPC_PORT_VL_RCV_FECN,
+				FXR_FPC_PRF_PORT_VL_RCV_FECN,
 				idx_from_vl(vl), 0);
 
 		if (counter_select & CS_PORT_RCV_BECN)
 			hfi_write_lm_fpc_prf_per_vl_csr(ppd,
-				FXR_FPC_PORT_VL_RCV_BECN,
+				FXR_FPC_PRF_PORT_VL_RCV_BECN,
 				idx_from_vl(vl), 0);
 
 		/* port_vl_xmit_time_cong is 0 for HFIs */
@@ -3140,7 +3140,7 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 		/* port_vl_xmit_wait_data - TXE (table 13-9 HFI spec) ??? */
 		if (counter_select & CS_PORT_RCV_BUBBLE)
 			hfi_write_lm_fpc_prf_per_vl_csr(ppd,
-				FXR_FPC_PORT_VL_RCV_BUBBLE,
+				FXR_FPC_PRF_PORT_VL_RCV_BUBBLE,
 				idx_from_vl(vl), 0);
 	}
 	if (resp_len)
