@@ -72,11 +72,12 @@ int hfi1_make_uc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	struct hfi1_qp_priv *priv = qp->priv;
 	struct hfi1_other_headers *ohdr;
 	struct rvt_swqe *wqe;
-	u32 hwords = 5;
+	u32 hwords;
 	u32 bth0 = 0;
 	u32 len;
 	u32 pmtu = qp->pmtu;
 	int middle = 0;
+	bool bypass = false;
 
 	ps->s_txreq = get_txreq(ps->dev, qp);
 	if (IS_ERR(ps->s_txreq))
@@ -100,9 +101,24 @@ int hfi1_make_uc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		goto done_free_tx;
 	}
 
-	ohdr = &ps->s_txreq->phdr.hdr.pkt.ibh.u.oth;
-	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = &ps->s_txreq->phdr.hdr.pkt.ibh.u.l.oth;
+	bypass = hfi1_use_16b(qp);
+	if (!bypass) {
+		ps->s_txreq->phdr.hdr.hdr_type = 0;
+		/* header size in 32-bit words LRH+BTH = (8+12)/4. */
+		hwords = 5;
+		if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
+			ohdr = &ps->s_txreq->phdr.hdr.pkt.ibh.u.l.oth;
+		else
+			ohdr = &ps->s_txreq->phdr.hdr.pkt.ibh.u.oth;
+	} else {
+		ps->s_txreq->phdr.hdr.hdr_type = 1;
+		/* header size in 32-bit words 16B LRH+BTH = (16+12)/4. */
+		hwords = 7;
+		if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
+			ohdr = &ps->s_txreq->phdr.hdr.pkt.opah.u.l.oth;
+		else
+			ohdr = &ps->s_txreq->phdr.hdr.pkt.opah.u.oth;
+	}
 
 	/* Get the next send request. */
 	wqe = rvt_get_swqe_ptr(qp, qp->s_cur);
@@ -279,7 +295,8 @@ bail_no_tx:
 void hfi1_uc_rcv(struct hfi1_packet *packet)
 {
 	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
-	struct hfi1_ib_header *hdr = packet->hdr;
+	struct hfi1_ib_header *hdr = NULL;
+	struct hfi1_16b_header *hdr_16b = NULL;
 	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
@@ -292,25 +309,32 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 	struct ib_wc wc;
 	u32 pmtu = qp->pmtu;
 	struct ib_reth *reth;
-	int has_grh = rcv_flags & HFI1_HAS_GRH;
+	bool has_grh = rcv_flags & HFI1_HAS_GRH;
 	int ret;
-	u32 bth1;
-	bool grh = false;
-	bool bypass = hfi1_use_16b(qp);
+	u32 bth1, dlid, slid;
+	bool bypass = false;
 
-	if (rcv_flags & HFI1_HAS_GRH)
-		grh = true;
+	if (packet->etype == RHF_RCV_TYPE_BYPASS) {
+		bypass = true;
+		hdr_16b = packet->hdr;
+		data = packet->ebuf + hdrsize;
+	} else {
+		hdr = packet->hdr;
+	}
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
-	if (hfi1_ruc_check_hdr(ibp, hdr, grh, bypass, qp, bth0))
+	if (hfi1_ruc_check_hdr(ibp,
+			       bypass ? (void *)hdr_16b : (void *)hdr,
+			       has_grh, bypass, qp, bth0)) {
+		pr_warn("%s ruc check header failed\n", bypass ? "16B" : "9B");
 		return;
+	}
 
 	bth1 = be32_to_cpu(ohdr->bth[1]);
 	if (unlikely(bth1 & (HFI1_BECN_SMASK | HFI1_FECN_SMASK))) {
 		if (bth1 & HFI1_BECN_SMASK) {
 			struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 			u32 rqpn, lqpn;
-			u16 rlid = be16_to_cpu(hdr->lrh[3]);
 			u8 sl, sc5;
 
 			lqpn = bth1 & RVT_QPN_MASK;
@@ -319,18 +343,39 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 			sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 			sl = ibp->sc_to_sl[sc5];
 
-			process_becn(ppd, sl, rlid, lqpn, rqpn,
+			if (bypass)
+				slid = OPA_16B_GET_SLID(hdr_16b->lrh[0],
+							hdr_16b->lrh[1],
+							hdr_16b->lrh[2],
+							hdr_16b->lrh[3]);
+			else
+				slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
+
+			process_becn(ppd, sl, slid, lqpn, rqpn,
 				     IB_CC_SVCTYPE_UC);
 		}
 
 		if (bth1 & HFI1_FECN_SMASK) {
 			struct ib_grh *grh = NULL;
-			u16 pkey = (u16)be32_to_cpu(ohdr->bth[0]);
-			u16 slid = be16_to_cpu(hdr->lrh[3]);
-			u16 dlid = be16_to_cpu(hdr->lrh[1]);
 			u32 src_qp = qp->remote_qpn;
+			u16 pkey;
 			u8 sc5;
 
+			if (bypass) {
+				dlid = OPA_16B_GET_DLID(hdr_16b->lrh[0],
+							hdr_16b->lrh[1],
+							hdr_16b->lrh[2],
+							hdr_16b->lrh[3]);
+				slid = OPA_16B_GET_SLID(hdr_16b->lrh[0],
+							hdr_16b->lrh[1],
+							hdr_16b->lrh[2],
+							hdr_16b->lrh[3]);
+			} else {
+				dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
+				slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
+			}
+
+			pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 			sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 			if (has_grh)
 				grh = &hdr->u.l.grh;
