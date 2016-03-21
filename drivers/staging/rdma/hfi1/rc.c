@@ -227,13 +227,20 @@ static int make_rc_ack(struct hfi1_ibdev *dev, struct rvt_qp *qp,
 	int middle = 0;
 	u32 pmtu = qp->pmtu;
 	struct hfi1_qp_priv *priv = qp->priv;
+	bool bypass = false;
 
 	/* Don't send an ACK if we aren't supposed to. */
 	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_RECV_OK))
 		goto bail;
 
-	/* header size in 32-bit words LRH+BTH = (8+12)/4. */
-	hwords = 5;
+	bypass = hfi1_use_16b(qp);
+	if (!bypass)
+		/* header size in 32-bit words LRH+BTH = (8+12)/4. */
+		hwords = 5;
+	else
+		/* header size in 32-bit words 16B LRH+BTH = (16+12)/4. */
+		hwords = 7;
+
 
 	switch (qp->s_ack_state) {
 	case OP(RDMA_READ_RESPONSE_LAST):
@@ -401,14 +408,14 @@ int hfi1_make_rc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	char newreq;
 	int middle = 0;
 	int delta;
-	bool use_16b = false;
+	bool bypass = false;
 
 	ps->s_txreq = get_txreq(ps->dev, qp);
 	if (IS_ERR(ps->s_txreq))
 		goto bail_no_tx;
 
-	use_16b = hfi1_use_16b(qp);
-	if (!use_16b) {
+	bypass = hfi1_use_16b(qp);
+	if (!bypass) {
 		ps->s_txreq->phdr.hdr.hdr_type = 0;
 		/* header size in 32-bit words LRH+BTH = (8+12)/4. */
 		hwords = 5;
@@ -1663,7 +1670,7 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 	u32 aeth;
 	u64 val;
 	u32 bth0 = 0;
-	bool use_16b = hfi1_use_16b(qp);
+	bool bypass = hfi1_use_16b(qp);
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
@@ -1771,7 +1778,7 @@ read_middle:
 		if (!do_rc_ack(qp, aeth, psn, opcode, 0, rcd))
 			goto ack_done;
 		/* Get the number of bytes the message was padded by. */
-		if (!use_16b)
+		if (!bypass)
 			pad = OPA_9B_BTH_GET_PAD(bth0);
 		else
 			pad = OPA_16B_BTH_GET_PAD(bth0);
@@ -1798,7 +1805,7 @@ read_middle:
 		if (unlikely(wqe->wr.opcode != IB_WR_RDMA_READ))
 			goto ack_op_err;
 		/* Get the number of bytes the message was padded by. */
-		if (!use_16b)
+		if (!bypass)
 			pad = OPA_9B_BTH_GET_PAD(bth0);
 		else
 			pad = OPA_16B_BTH_GET_PAD(bth0);
