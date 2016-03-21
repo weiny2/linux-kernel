@@ -2030,7 +2030,16 @@ static void hfi_init_linkmux_csrs(struct hfi_pportdata *ppd)
 	#endif
 
 	fpc.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
-	fpc.field.mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.vl0_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.vl1_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.vl2_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.vl3_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.vl4_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.vl5_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.vl6_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.vl7_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.vl8_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
+	fpc.field.vl15_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
 	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);
 
 	fpc_ctrl.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_EVENT_CNTR_CTRL);
