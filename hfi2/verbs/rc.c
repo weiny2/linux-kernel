@@ -2237,6 +2237,13 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 	/* OK, process the packet. */
 	switch (opcode) {
 	case OP(SEND_FIRST):
+#ifdef HFI_VERBS_TEST
+		if (hfi2_drop_packet()) {
+			dev_dbg(ibp->dev, "Initiating RNR (opcode = %s) with PSN = %u\n"
+				 , opcode_to_str[opcode], mask_psn(psn));
+			goto rnr_nak;
+		}
+#endif
 		ret = hfi2_get_rwqe(qp, 0);
 		if (ret < 0)
 			goto nack_op_err;
@@ -2257,6 +2264,13 @@ send_middle:
 		break;
 
 	case OP(RDMA_WRITE_LAST_WITH_IMMEDIATE):
+#ifdef HFI_VERBS_TEST
+		if (hfi2_drop_packet()) {
+			dev_dbg(ibp->dev, "Initiating RNR (opcode = %s) with PSN = %u\n"
+				 , opcode_to_str[opcode], mask_psn(psn));
+			goto rnr_nak;
+		}
+#endif
 		/* consume RWQE */
 		ret = hfi2_get_rwqe(qp, 1);
 		if (ret < 0)
@@ -2267,6 +2281,13 @@ send_middle:
 
 	case OP(SEND_ONLY):
 	case OP(SEND_ONLY_WITH_IMMEDIATE):
+#ifdef HFI_VERBS_TEST
+		if (hfi2_drop_packet()) {
+			dev_dbg(ibp->dev, "Initiating RNR (opcode = %s) with PSN = %u\n"
+				 , opcode_to_str[opcode], mask_psn(psn));
+			goto rnr_nak;
+		}
+#endif
 		ret = hfi2_get_rwqe(qp, 0);
 		if (ret < 0)
 			goto nack_op_err;
@@ -2367,6 +2388,13 @@ send_last:
 			goto send_middle;
 		else if (opcode == OP(RDMA_WRITE_ONLY))
 			goto no_immediate_data;
+#ifdef HFI_VERBS_TEST
+		if (hfi2_drop_packet()) {
+			dev_dbg(ibp->dev, "Initiating RNR for packet (opcode = %s) at rcv end with PSN = %u\n"
+				 , opcode_to_str[opcode], mask_psn(psn));
+			goto rnr_nak;
+		}
+#endif
 		ret = hfi2_get_rwqe(qp, 1);
 		if (ret < 0)
 			goto nack_op_err;
