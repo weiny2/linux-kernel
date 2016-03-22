@@ -52,7 +52,7 @@
 #define	OPA_STL_OUI		(0x00066AULL)
 #define OPA_MAKE_GID(x)		(cpu_to_be64(OPA_STL_OUI << 40 | (x)))
 #define OPA_GID_INDEX		0x1
-#define OPA_TO_IB_UCAST_LID(x) (((x) >= be16_to_cpu(IB_MULTICAST_LID_BASE)) ? x & 0x3FFF : x)
+#define OPA_TO_IB_UCAST_LID(x)	(((x) >= be16_to_cpu(IB_MULTICAST_LID_BASE)) ? 0 : x)
 
 struct rdma_addr_client {
 	atomic_t refcount;
