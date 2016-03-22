@@ -197,11 +197,11 @@ union hfi2_packet_header {
  */
 union hfi2_ib_dma_header {
 	struct {
-		uint64_t opa2_hdr_reserved;
+		u64 opa2_hdr_reserved;
 		struct hfi2_ib_header ibh;
 	} ph;
 	struct hfi2_opa16b_header opa16b;
-	uint64_t padding[16]; /* 128 bytes */
+	u64 padding[16]; /* 128 bytes */
 } __packed;
 
 /*
@@ -273,7 +273,7 @@ struct hfi2_wqe_iov {
  */
 static inline int cmp_msn(u32 a, u32 b)
 {
-	return (((int) a) - ((int) b)) << 8;
+	return (((int)a) - ((int)b)) << 8;
 }
 
 /*
@@ -282,7 +282,7 @@ static inline int cmp_msn(u32 a, u32 b)
  */
 static inline int cmp_psn(u32 a, u32 b)
 {
-	return (((int) a) - ((int) b)) << PSN_SHIFT;
+	return (((int)a) - ((int)b)) << PSN_SHIFT;
 }
 
 /*
@@ -583,7 +583,7 @@ static inline bool hfi2_use_16b(struct hfi2_qp *qp)
 				 qp->remote_ah_attr.grh.sgid_index,
 				 &sgid
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-				 ,NULL
+				 , NULL
 #endif
 				 ))
 			return false;
@@ -602,9 +602,9 @@ static inline bool hfi2_use_16b(struct hfi2_qp *qp)
 	if (ib_query_gid(qp->ibqp.device, qp->port_num,
 			 ah_attr->grh.sgid_index, &sgid
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-			 ,NULL
+			 , NULL
 #endif
-))
+			 ))
 		return false;
 	dgid = &ah_attr->grh.dgid;
 	return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
