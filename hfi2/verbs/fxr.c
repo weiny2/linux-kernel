@@ -415,26 +415,6 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	return 0;
 }
 
-#ifdef HFI_VERBS_TEST
-bool hfi2_drop_check(uint64_t *count, uint64_t pkt_num)
-{
-	(*count)++;
-
-	if (*count % pkt_num == 0) {
-		*count = 0;
-		return true;
-	}
-	return false;
-}
-
-bool hfi2_drop_ack(uint64_t pkt_num)
-{
-	static uint64_t count;
-
-	return hfi2_drop_check(&count, pkt_num);
-}
-#endif
-
 int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		  struct hfi2_ib_header *hdr, size_t hwords)
 {
@@ -447,7 +427,7 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	uint8_t sl = qp->remote_ah_attr.sl;
 
 #ifdef HFI_VERBS_TEST
-	if (hfi2_drop_ack(5)) {
+	if (hfi2_drop_packet()) {
 		dev_dbg(ibp->dev, "Dropping %s with PSN = %d\n",
 			(qp->r_nak_state) ? "NAK" : "ACK",
 			 be32_to_cpu(hdr->u.oth.bth[2]));

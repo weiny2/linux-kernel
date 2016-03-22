@@ -2090,11 +2090,26 @@ static inline void update_ack_queue(struct hfi2_qp *qp, unsigned n)
 }
 
 #ifdef HFI_VERBS_TEST
-bool hfi2_drop_packet(uint64_t pkt_num)
+/* In  Percentage 0 - 100 */
+#define MIN_DROP_RATE	0
+#define MAX_DROP_RATE	80
+bool hfi2_drop_packet(void)
 {
-	static uint64_t count;
+	static bool prev_drop;
+	static int prev_dr = MAX_DROP_RATE;
+	uint8_t rand_num;
+	uint8_t rand_size = sizeof(rand_num);
+	int curr_dr;
+	uint8_t check;
 
-	return hfi2_drop_check(&count, pkt_num);
+	curr_dr = prev_drop ? max_t(int, prev_dr - 10, MIN_DROP_RATE) :
+				min_t(int, prev_dr + 10, MAX_DROP_RATE);
+	check = (curr_dr << (rand_size * BITS_PER_BYTE)) / 100;
+	prev_dr = curr_dr;
+
+	get_random_bytes(&rand_num, rand_size);
+	prev_drop = (rand_num < check) ? true : false;
+	return prev_drop;
 }
 #endif
 
@@ -2175,7 +2190,7 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 		goto send_ack;
 	}
 #ifdef HFI_VERBS_TEST
-	if (hfi2_drop_packet(3)) {
+	if (hfi2_drop_packet()) {
 		dev_dbg(ibp->dev, "Dropping packet (opcode = %s) at rcv end with PSN = %u\n",
 			opcode_to_str[opcode], mask_psn(psn));
 		goto drop;
