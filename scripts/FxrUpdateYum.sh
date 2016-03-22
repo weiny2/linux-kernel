@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. scripts/GlobalDefinition.sh
+
 # We copy all rpms to the drop directory, but base on version of driver rpm.
 # We copy whichever opa-headers rpm was used, in case the tagging of headers
 # was not done correctly.
@@ -40,9 +42,10 @@ function copy_drop_rpms {
 
 DRV_RPM=rpmbuild/RPMS/x86_64/opa2_hfi-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm
 HDR_RPM=opa-headers.git/opa-headers-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm
+DIAG_RPM=${JENKINS_WORKSPACE}/${DIAGTOOL_REPO}/rpmbuild/RPMS/x86_64/hfidiags-hfi2-*.x86_64.rpm
 # copy rpm files to yum repository
 scp -i ~/ssh-jenkins/id_rsa \
-    $DRV_RPM $HDR_RPM \
+    $DRV_RPM $HDR_RPM ${DIAG_RPM}\
     cyokoyam@phlsvlogin02.ph.intel.com:/nfs/site/proj/ftp/fxr_yum/next
 res=$?
 if [ ! ${res} ]; then
@@ -61,6 +64,6 @@ if [ ! ${res} ]; then
 fi
 
 # if first build of driver for next drop, this will update drop directory
-copy_drop_rpms $DRV_RPM $HDR_RPM
+copy_drop_rpms $DRV_RPM $HDR_RPM ${DIAG_RPM}
 
 exit 0
