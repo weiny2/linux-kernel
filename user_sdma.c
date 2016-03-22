@@ -1121,7 +1121,6 @@ static int pin_vector_pages(struct user_sdma_request *req,
 			return -ENOMEM;
 
 		node->rb.addr = (unsigned long)iovec->iov.iov_base;
-		node->rb.len = iovec->iov.iov_len;
 		node->pq = pq;
 		atomic_set(&node->refcount, 0);
 		INIT_LIST_HEAD(&node->list);
@@ -1162,6 +1161,7 @@ retry:
 			goto bail;
 		}
 		kfree(node->pages);
+		node->rb.len = iovec->iov.iov_len;
 		node->pages = pages;
 		node->npages += pinned;
 		npages = node->npages;
@@ -1173,6 +1173,7 @@ retry:
 		pq->n_locked += pinned;
 		spin_unlock(&pq->evict_lock);
 	}
+
 	iovec->pages = node->pages;
 	iovec->npages = npages;
 
@@ -1188,6 +1189,7 @@ retry:
 			goto bail;
 		}
 	} else {
+		hfi1_mmu_rb_reinsert(&req->pq->sdma_rb_root, &node->rb);
 		atomic_inc(&node->refcount);
 	}
 	return ret;
