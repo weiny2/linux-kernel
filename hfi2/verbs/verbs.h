@@ -838,7 +838,7 @@ hfi2_mcast_find(struct hfi2_ibport *ibp, union ib_gid *mgid);
 /* Device specific */
 int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
 #ifdef HFI_VERBS_TEST
-bool hfi2_drop_check(uint64_t *count, uint64_t pkt_num);
+bool hfi2_drop_packet(void);
 #endif
 int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		  struct hfi2_ib_header *hdr, size_t hwords);
