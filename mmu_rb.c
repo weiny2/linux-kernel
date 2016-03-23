@@ -91,7 +91,7 @@ static unsigned long mmu_node_start(struct mmu_rb_node *node)
 
 static unsigned long mmu_node_last(struct mmu_rb_node *node)
 {
-	return PAGE_ALIGN((node->addr & PAGE_MASK) + node->len) - 1;
+	return PAGE_ALIGN(node->addr + node->len) - 1;
 }
 
 int hfi1_mmu_rb_register(struct rb_root *root, struct mmu_rb_ops *ops)
@@ -243,6 +243,20 @@ void hfi1_mmu_rb_remove(struct rb_root *root, struct mmu_rb_node *node)
 		return;
 
 	__mmu_rb_remove(handler, node, NULL);
+}
+
+void hfi1_mmu_rb_reinsert(struct rb_root *root, struct mmu_rb_node *node)
+{
+	struct mmu_rb_handler *handler = find_mmu_handler(root);
+	unsigned long flags;
+
+	if (!handler || !node)
+		return;
+
+	spin_lock_irqsave(&handler->lock, flags);
+	__mmu_int_rb_remove(node, root);
+	__mmu_int_rb_insert(node, root);
+	spin_unlock_irqrestore(&handler->lock, flags);
 }
 
 static struct mmu_rb_handler *find_mmu_handler(struct rb_root *root)
