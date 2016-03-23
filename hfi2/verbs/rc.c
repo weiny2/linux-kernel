@@ -2149,9 +2149,12 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 #if 0
 	if (hfi2_ruc_check_hdr(ibp, packet->hdr, !!packet->grh, qp, bth0))
 		return;
+#endif
 
 	if (unlikely(bth1 & (HFI1_BECN_SMASK | HFI1_FECN_SMASK))) {
 		if (bth1 & HFI1_BECN_SMASK) {
+			/* FXRTODO: Implement as part of STL-1212 */
+#if 0
 			u32 rlid = qp->remote_ah_attr.dlid;
 			u32 lqpn, rqpn;
 
@@ -2162,10 +2165,10 @@ void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 				qp->remote_ah_attr.sl,
 				rlid, lqpn, rqpn,
 				IB_CC_SVCTYPE_RC);
+#endif
 		}
 		is_fecn = bth1 & HFI1_FECN_SMASK;
 	}
-#endif
 
 	/*
 	 * Process responses (ACKs) before anything else.  Note that the
@@ -2557,14 +2560,18 @@ send_last:
 			rc_cancel_ack(qp);
 			goto send_ack;
 		}
+		/* FXRTODO: Enable as part of STL-7648 */
 		if (qp->r_adefered >= HFI1_PSN_CREDIT) {
 			rc_cancel_ack(qp);
 			goto send_ack;
 		}
+#endif
 		if (unlikely(is_fecn)) {
 			rc_cancel_ack(qp);
 			goto send_ack;
 		}
+		/* FXRTODO: Enable as part of STL-7648 */
+#if 0
 		qp->r_adefered++;
 #endif
 		rc_defered_ack(ctx, qp);
