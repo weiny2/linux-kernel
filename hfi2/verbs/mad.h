@@ -105,7 +105,7 @@ struct opa_pma_mad {
 	u8 data[2024];
 } __packed;
 
-#define VL_MASK_ALL		0x000080ff
+#define VL_MASK_ALL		0x000081ff
 #define OPA_EI_STATUS_SMASK	0x80
 #define OPA_EI_CODE_SMASK	0x0f
 
