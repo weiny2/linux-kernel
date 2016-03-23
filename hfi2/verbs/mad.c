@@ -2623,25 +2623,32 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 		memset(vlinfo, 0, sizeof(*vlinfo));
 		rsp->vls[vfi].port_vl_rcv_data = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-					FXR_FPC_PORT_VL_RCV_DATA_CNT, vfi));
+					FXR_FPC_PORT_VL_RCV_DATA_CNT,
+					idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_rcv_pkts = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-					FXR_FPC_PORT_VL_RCV_PKT_CNT, vfi));
+					FXR_FPC_PORT_VL_RCV_PKT_CNT,
+					idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_xmit_data = cpu_to_be64(
 					hfi_read_lm_tp_prf_csr(ppd,
-						(TP_XMIT_DATA + vfi)));
+						(TP_XMIT_DATA +
+						idx_from_vl(vl) + 1)));
 		rsp->vls[vfi].port_vl_xmit_pkts = cpu_to_be64(
 						hfi_read_lm_tp_prf_csr(ppd,
-						(TP_XMIT_PKTS + vfi)));
+						(TP_XMIT_PKTS +
+						idx_from_vl(vl) + 1)));
 		rsp->vls[vfi].port_vl_xmit_wait = cpu_to_be64(
 						hfi_read_lm_tp_prf_csr(ppd,
-						(TP_XMIT_WAIT + vfi)));
+						(TP_XMIT_WAIT +
+						idx_from_vl(vl) + 1)));
 		rsp->vls[vfi].port_vl_rcv_fecn = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-						FXR_FPC_PORT_VL_RCV_FECN, vfi));
+						FXR_FPC_PORT_VL_RCV_FECN,
+						idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_rcv_becn = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-						FXR_FPC_PORT_VL_RCV_BECN, vfi));
+						FXR_FPC_PORT_VL_RCV_BECN,
+						idx_from_vl(vl)));
 		vlinfo++;
 		vfi++;
 	}
@@ -2786,25 +2793,32 @@ static int pma_get_opa_datacounters(struct opa_pma_mad *pmp,
 		memset(vlinfo, 0, sizeof(*vlinfo));
 		rsp->vls[vfi].port_vl_rcv_data = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-					FXR_FPC_PORT_VL_RCV_DATA_CNT, vfi));
+					FXR_FPC_PORT_VL_RCV_DATA_CNT,
+					idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_rcv_pkts = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-					FXR_FPC_PORT_VL_RCV_PKT_CNT, vfi));
+					FXR_FPC_PORT_VL_RCV_PKT_CNT,
+					idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_xmit_data = cpu_to_be64(
 						hfi_read_lm_tp_prf_csr(ppd,
-						(TP_XMIT_DATA + vfi)));
+						(TP_XMIT_DATA +
+						idx_from_vl(vl) + 1)));
 		rsp->vls[vfi].port_vl_xmit_pkts = cpu_to_be64(
 						hfi_read_lm_tp_prf_csr(ppd,
-						(TP_XMIT_PKTS + vfi)));
+						(TP_XMIT_PKTS +
+						idx_from_vl(vl) + 1)));
 		rsp->vls[vfi].port_vl_xmit_wait = cpu_to_be64(
 						hfi_read_lm_tp_prf_csr(ppd,
-						(TP_XMIT_WAIT + vfi)));
+						(TP_XMIT_WAIT +
+						idx_from_vl(vl) + 1)));
 		rsp->vls[vfi].port_vl_rcv_fecn = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-						FXR_FPC_PORT_VL_RCV_FECN, vfi));
+						FXR_FPC_PORT_VL_RCV_FECN,
+						idx_from_vl(vl)));
 		rsp->vls[vfi].port_vl_rcv_becn = cpu_to_be64(
 					hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-						FXR_FPC_PORT_VL_RCV_BECN, vfi));
+						FXR_FPC_PORT_VL_RCV_BECN,
+						idx_from_vl(vl)));
 		vlinfo++;
 		vfi++;
 	}
@@ -3090,13 +3104,13 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 			 8 * sizeof(vl_select_mask)) {
 		if (counter_select & CS_PORT_XMIT_DATA)
 			hfi_write_lm_tp_prf_csr(ppd,
-					(TP_XMIT_DATA + idx_from_vl(vl)), 0);
+					(TP_XMIT_DATA + idx_from_vl(vl)) + 1, 0);
 		if (counter_select & CS_PORT_RCV_DATA)
 			hfi_write_lm_fpc_prf_per_vl_csr(ppd,
 			FXR_FPC_PORT_VL_RCV_DATA_CNT, idx_from_vl(vl), 0);
 		if (counter_select & CS_PORT_XMIT_PKTS)
 			hfi_write_lm_tp_prf_csr(ppd,
-			(TP_XMIT_PKTS + idx_from_vl(vl)), 0);
+			(TP_XMIT_PKTS + idx_from_vl(vl)) + 1, 0);
 
 		if (counter_select & CS_PORT_RCV_PKTS)
 			hfi_write_lm_fpc_prf_per_vl_csr(ppd,
@@ -3105,7 +3119,7 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 
 		if (counter_select & CS_PORT_XMIT_WAIT)
 			hfi_write_lm_tp_prf_csr(ppd,
-			(TP_XMIT_WAIT + idx_from_vl(vl)), 0);
+			(TP_XMIT_WAIT + idx_from_vl(vl)) + 1, 0);
 
 		/* sw_port_vl_congestion is 0 for HFIs */
 		if (counter_select & CS_PORT_RCV_FECN)
