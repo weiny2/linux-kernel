@@ -282,7 +282,8 @@ static inline void pq_update(struct hfi1_user_sdma_pkt_q *);
 static void user_sdma_free_request(struct user_sdma_request *, bool);
 static int pin_vector_pages(struct user_sdma_request *,
 			    struct user_sdma_iovec *);
-static void unpin_vector_pages(struct mm_struct *, struct page **, unsigned);
+static void unpin_vector_pages(struct mm_struct *, struct page **, unsigned,
+			       unsigned);
 static int check_header_template(struct user_sdma_request *,
 				 struct hfi1_pkt_header *, u32, u32);
 static int set_txreq_header(struct user_sdma_request *,
@@ -1116,7 +1117,6 @@ static int pin_vector_pages(struct user_sdma_request *req,
 			return -ENOMEM;
 
 		node->rb.addr = (unsigned long)iovec->iov.iov_base;
-		node->rb.len = iovec->iov.iov_len;
 		node->pq = pq;
 		atomic_set(&node->refcount, 0);
 		INIT_LIST_HEAD(&node->list);
@@ -1151,11 +1151,13 @@ retry:
 			goto bail;
 		}
 		if (pinned != npages) {
-			unpin_vector_pages(current->mm, pages, pinned);
+			unpin_vector_pages(current->mm, pages, node->npages,
+					   pinned);
 			ret = -EFAULT;
 			goto bail;
 		}
 		kfree(node->pages);
+		node->rb.len = iovec->iov.iov_len;
 		node->pages = pages;
 		node->npages += pinned;
 		npages = node->npages;
@@ -1167,6 +1169,7 @@ retry:
 		pq->n_locked += pinned;
 		spin_unlock(&pq->evict_lock);
 	}
+
 	iovec->pages = node->pages;
 	iovec->npages = npages;
 
@@ -1174,13 +1177,15 @@ retry:
 		ret = hfi1_mmu_rb_insert(&req->pq->sdma_rb_root, &node->rb);
 		if (ret) {
 			spin_lock(&pq->evict_lock);
-			list_del(&node->list);
+			if (!list_empty(&node->list))
+				list_del(&node->list);
 			pq->n_locked -= node->npages;
 			spin_unlock(&pq->evict_lock);
 			ret = 0;
 			goto bail;
 		}
 	} else {
+		hfi1_mmu_rb_reinsert(&req->pq->sdma_rb_root, &node->rb);
 		atomic_inc(&node->refcount);
 	}
 	return ret;
@@ -1191,9 +1196,9 @@ bail:
 }
 
 static void unpin_vector_pages(struct mm_struct *mm, struct page **pages,
-			       unsigned npages)
+			       unsigned start, unsigned npages)
 {
-	hfi1_release_user_pages(mm, pages, npages, 0);
+	hfi1_release_user_pages(mm, pages + start, npages, 0);
 	kfree(pages);
 }
 
@@ -1597,7 +1602,8 @@ static void sdma_rb_remove(struct rb_root *root, struct mmu_rb_node *mnode,
 		container_of(mnode, struct sdma_mmu_node, rb);
 
 	spin_lock(&node->pq->evict_lock);
-	list_del(&node->list);
+	if (!list_empty(&node->list))
+		list_del(&node->list);
 	node->pq->n_locked -= node->npages;
 	spin_unlock(&node->pq->evict_lock);
 
@@ -1607,7 +1613,8 @@ static void sdma_rb_remove(struct rb_root *root, struct mmu_rb_node *mnode,
 	 * prevent a deadlock when hfi1_release_user_pages() attempts to
 	 * take the mmap_sem, which the MMU notifier has already taken.
 	 */
-	unpin_vector_pages(mm ? NULL : current->mm, node->pages, node->npages);
+	unpin_vector_pages(mm ? NULL : current->mm, node->pages, 0,
+			   node->npages);
 	/*
 	 * If called by the MMU notifier, we have to adjust the pinned
 	 * page count ourselves.
