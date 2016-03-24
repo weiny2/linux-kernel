@@ -1701,7 +1701,6 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	u32 vl = 0;
 	u32 hdr_len = hdrwords << 2;
 	u32 tlen = 0;
-	u32 total_len = 0;
 	bool use_16b = false;
 
 	md.u.pbc = 0;
@@ -1715,31 +1714,29 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	use_16b = ps->s_txreq->phdr.hdr.hdr_type;
 	if (!use_16b) {
 		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh;
+		/* not using ss->total_len as arg 2 b/c that does not count CRC */
 		tlen = HFI1_GET_PKT_LEN(&ps->s_txreq->phdr.hdr.pkt.ibh);
 		dwords = (len + 3) >> 2;
-		/* not using ss->total_len as arg 2 b/c that does not count CRC */
-		s_packet = allocate_snoop_packet(hdr_len, tlen - hdr_len, md_len);
-		total_len = tlen + md_len;
 	} else {
-		u8 extra_bytes = hfi1_get_16b_padding((hdrwords << 2), len);
+		u8 extra_bytes = hfi1_get_16b_padding(hdr_len, len);
 
-		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
+		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) +
+			  SIZE_OF_LT) >> 2;
 		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.opah;
-		tlen = OPA_16B_GET_LEN(ps->s_txreq->phdr.hdr.pkt.opah.lrh[0], 0, 0, 0) << 3; /* in bytes */
-		s_packet = allocate_snoop_packet(hdr_len, tlen - hdr_len, md_len);
-		total_len = tlen + md_len;
+		tlen = OPA_16B_GET_LEN(ps->s_txreq->phdr.hdr.pkt.opah.lrh[0],
+				       0, 0, 0) << 3;
 	}
+
 	plen = hdrwords + dwords + 2; /* includes pbc */
-
-	snoop_dbg("PACKET OUT: hdrword %u len %u plen %u dwords %u tlen %u",
-		  hdrwords, len, plen, dwords, tlen);
-
+	s_packet = allocate_snoop_packet(hdr_len, tlen - hdr_len, md_len);
 	if (unlikely(!s_packet)) {
 		dd_dev_warn_ratelimited(ppd->dd, "Unable to allocate snoop/capture packet\n");
 		goto out;
 	}
+	s_packet->total_len = tlen + md_len;
 
-	s_packet->total_len = total_len;
+	snoop_dbg("PACKET OUT: hdrword %u len %u plen %u dwords %u tlen %u",
+		  hdrwords, len, plen, dwords, tlen);
 
 	if (md_len > 0) {
 		memset(&md, 0, sizeof(struct capture_md));
