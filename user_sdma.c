@@ -1185,7 +1185,8 @@ retry:
 				list_del(&node->list);
 			pq->n_locked -= node->npages;
 			spin_unlock(&pq->evict_lock);
-			ret = 0;
+			unpin_vector_pages(current->mm, node->pages, 0,
+					   node->npages);
 			goto bail;
 		}
 	} else {
