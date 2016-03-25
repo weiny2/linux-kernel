@@ -318,7 +318,8 @@ enum {
 	HFI_IB_CFG_SC_TO_VLR,		/* Change SCtoVLr mapping */
 	HFI_IB_CFG_SC_TO_VLT,		/* Change SCtoVLt mapping */
 	HFI_IB_CFG_SC_TO_VLNT,		/* Change Neighbor's SCtoVL mapping */
-	HFI_IB_CFG_BW_ARB		/* Change BW Arbitrator tables */
+	HFI_IB_CFG_BW_ARB,		/* Change BW Arbitrator tables */
+	HFI_IB_CFG_PKT_FORMAT		/* Change HFI packet format */
 };
 
 /* verify capability fabric CRC size bits */
@@ -459,6 +460,8 @@ struct bw_arb_cache {
  * @link_width_downgrade_rx_active: Current RX side link width downgrading
  * @link_speed_active: Current active link speed
  * @port_ltp_crc_mode: Supported, enabled and active LTP CRC modes
+ * @packet_format_supported: Supported packet format on this port.
+ * @packet_format_enabled: Enabled packet format on this port
  * @port_crc_mode_enabled: CRC mode to be enabled
  * @lmc: LID mask control
  * @pnum: port number of this port
@@ -557,6 +560,8 @@ struct hfi_pportdata {
 	u16 link_width_downgrade_rx_active;
 	u16 link_speed_active;
 	u16 port_ltp_crc_mode;
+	u8 packet_format_supported;
+	u8 packet_format_enabled;
 	u8 linkinit_reason;
 	u8 port_crc_mode_enabled;
 	u8 lmc;
