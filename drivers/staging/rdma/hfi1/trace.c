@@ -47,16 +47,39 @@
 #define CREATE_TRACE_POINTS
 #include "trace.h"
 
-u8 ibhdr_exhdr_len(struct hfi1_ib_header *hdr)
+u8 ibhdr_exhdr_len(void *hfi1_hdr, bool bypass)
 {
 	struct hfi1_other_headers *ohdr;
 	u8 opcode;
-	u8 lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
 
-	if (lnh == HFI1_LRH_BTH)
-		ohdr = &hdr->u.oth;
-	else
-		ohdr = &hdr->u.l.oth;
+	if (bypass) {
+		u32 h0, h1, h2, h3;
+		u8 l4;
+		struct hfi1_16b_header *hdr = NULL;
+
+		hdr = (struct hfi1_16b_header *)hfi1_hdr;
+		h0 = hdr->lrh[0];
+		h1 = hdr->lrh[1];
+		h2 = hdr->lrh[2];
+		h3 = hdr->lrh[3];
+
+		l4 = OPA_16B_GET_L4(h0, h1, h2, h3);
+		if (l4 == HFI1_L4_IB_LOCAL)
+			ohdr = &hdr->u.oth;
+		else
+			ohdr = &hdr->u.l.oth;
+	} else {
+		struct hfi1_ib_header *hdr = NULL;
+		u8 lnh;
+
+		hdr = (struct hfi1_ib_header *)hfi1_hdr;
+		lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
+		if (lnh == HFI1_LRH_BTH)
+			ohdr = &hdr->u.oth;
+		else
+			ohdr = &hdr->u.l.oth;
+	}
+
 	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
 	return hdr_len_by_opcode[opcode] == 0 ?
 	       0 : hdr_len_by_opcode[opcode] - (12 + 8);
@@ -87,6 +110,14 @@ static const char *parse_syndrome(u8 syndrome)
 		return "NAK";
 	}
 	return "";
+}
+
+const char *ibhdr_get_packet_type_str(u8 l4)
+{
+	if (l4)
+		return "16B";
+	else
+		return "9B";
 }
 
 const char *parse_everbs_hdrs(

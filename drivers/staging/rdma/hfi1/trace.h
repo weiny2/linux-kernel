@@ -353,7 +353,8 @@ DEFINE_EVENT(hfi1_qpsleepwakeup_template, hfi1_qpsleep,
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_ibhdrs
 
-u8 ibhdr_exhdr_len(struct hfi1_ib_header *hdr);
+u8 ibhdr_exhdr_len(void *hfi1_hdr, bool bypass);
+const char *ibhdr_get_packet_type_str(u8 l4);
 const char *parse_everbs_hdrs(struct trace_seq *p, u8 opcode, void *ehdrs);
 
 #define __parse_ib_ehdrs(op, ehdrs) parse_everbs_hdrs(p, op, ehdrs)
@@ -408,66 +409,128 @@ __print_symbolic(opcode,                                   \
 	ib_opcode_name(UD_SEND_ONLY_WITH_IMMEDIATE),       \
 	ib_opcode_name(CNP))
 
-#define LRH_PRN "vl %d lver %d sl %d lnh %d,%s dlid %.4x len %d slid %.4x"
+#define LRH_PRN "len:%d dlid:0x%.4x slid:0x%.4x"
+#define LRH_9B_PRN "lnh:%d,%s lver:%d sl:%d vl:%d "
+#define LRH_16B_PRN "age:%d becn:%d fecn:%d l4:%d rc:%d sc:%d entropy:%d"
 #define BTH_PRN \
-	"op 0x%.2x,%s se %d m %d pad %d tver %d pkey 0x%.4x " \
-	"f %d b %d qpn 0x%.6x a %d psn 0x%.8x"
+	"op:0x%.2x,%s se:%d m:%d pad:%d tver:%d pkey:0x%.4x " \
+	"f:%d b:%d qpn:0x%.6x a:%d psn:0x%.8x"
 #define EHDR_PRN "%s"
 
 DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 		    TP_PROTO(struct hfi1_devdata *dd,
-			     struct hfi1_ib_header *hdr),
-		    TP_ARGS(dd, hdr),
+			     void *hfi1_hdr, bool bypass),
+		    TP_ARGS(dd, hfi1_hdr, bypass),
 		    TP_STRUCT__entry(
-			    DD_DEV_ENTRY(dd)
-			    /* LRH */
-			    __field(u8, vl)
-			    __field(u8, lver)
-			    __field(u8, sl)
-			    __field(u8, lnh)
-			    __field(u16, dlid)
-			    __field(u16, len)
-			    __field(u16, slid)
-			    /* BTH */
-			    __field(u8, opcode)
-			    __field(u8, se)
-			    __field(u8, m)
-			    __field(u8, pad)
-			    __field(u8, tver)
-			    __field(u16, pkey)
-			    __field(u8, f)
-			    __field(u8, b)
-			    __field(u32, qpn)
-			    __field(u8, a)
-			    __field(u32, psn)
-			    /* extended headers */
-			    __dynamic_array(u8, ehdrs, ibhdr_exhdr_len(hdr))
-			    ),
+			DD_DEV_ENTRY(dd)
+			/* 9B LRH */
+			__field(u8, lnh)
+			__field(u8, lver)
+			__field(u8, sl)
+			__field(u8, vl)
+
+			/* 16B LRH */
+			__field(u8, age)
+			__field(u8, becn)
+			__field(u8, fecn)
+			__field(u8, l4)
+			__field(u8, rc)
+			__field(u8, sc)
+			__field(u16, entropy)
+
+			/* 9B and 16B LRH */
+			__field(u16, len)
+			__field(u32, dlid)
+			__field(u32, slid)
+
+			/* BTH */
+			__field(u8, opcode)
+			__field(u8, se)
+			__field(u8, m)
+			__field(u8, pad)
+			__field(u8, tver)
+			__field(u16, pkey)
+			__field(u8, f)
+			__field(u8, b)
+			__field(u32, qpn)
+			__field(u8, a)
+			__field(u32, psn)
+			/* extended headers */
+			__dynamic_array(u8, ehdrs,
+				    ibhdr_exhdr_len(hfi1_hdr, bypass))
+			),
 		    TP_fast_assign(
 			   struct hfi1_other_headers *ohdr;
 
 			   DD_DEV_ASSIGN(dd);
-			   /* LRH */
-			   __entry->vl =
-			   (u8)(be16_to_cpu(hdr->lrh[0]) >> 12);
-			   __entry->lver =
-			   (u8)(be16_to_cpu(hdr->lrh[0]) >> 8) & 0xf;
-			   __entry->sl =
-			   (u8)(be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
-			   __entry->lnh =
-			   (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
-			   __entry->dlid =
-			   be16_to_cpu(hdr->lrh[1]);
-			   /* allow for larger len */
-			   __entry->len =
-			   be16_to_cpu(hdr->lrh[2]);
-			   __entry->slid =
-			   be16_to_cpu(hdr->lrh[3]);
+			   if (bypass) {
+				u32 h0, h1, h2, h3;
+				struct hfi1_16b_header *hdr = NULL;
+
+				hdr = (struct hfi1_16b_header *)hfi1_hdr;
+				h0 = hdr->lrh[0];
+				h1 = hdr->lrh[1];
+				h2 = hdr->lrh[2];
+				h3 = hdr->lrh[3];
+
+				/* zero out 9B only fields */
+				__entry->lnh = 0;
+				__entry->lver = 0;
+				__entry->sl = 0;
+				__entry->vl = 0;
+				/* fill in 16B fields */
+				__entry->l4 = OPA_16B_GET_L4(h0, h1, h2, h3);
+				__entry->rc = OPA_16B_GET_RC(h0, h1, h2, h3);
+				__entry->sc = OPA_16B_GET_SC(h0, h1, h2, h3);
+				__entry->age = OPA_16B_GET_AGE(h0, h1, h2, h3);
+				__entry->len = OPA_16B_GET_LEN(h0, h1, h2, h3);
+				__entry->becn = OPA_16B_GET_BECN(h0, h1, h2, h3);
+				__entry->dlid = OPA_16B_GET_DLID(h0, h1, h2, h3);
+				__entry->fecn = OPA_16B_GET_FECN(h0, h1, h2, h3);
+				__entry->pkey = OPA_16B_GET_PKEY(h0, h1, h2, h3);
+				__entry->slid = OPA_16B_GET_SLID(h0, h1, h2, h3);
+				__entry->entropy = OPA_16B_GET_ENTROPY(h0, h1, h2, h3);
+
+				if (__entry->l4 == HFI1_L4_IB_LOCAL)
+					ohdr = &hdr->u.oth;
+				else
+					ohdr = &hdr->u.l.oth;
+
+			   } else {
+				struct hfi1_ib_header *hdr = NULL;
+				hdr = (struct hfi1_ib_header *)hfi1_hdr;
+
+				__entry->vl =
+				(u8)(be16_to_cpu(hdr->lrh[0]) >> 12);
+				__entry->lver =
+				(u8)(be16_to_cpu(hdr->lrh[0]) >> 8) & 0xf;
+				__entry->sl =
+				(u8)(be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
+				__entry->lnh =
+				(u8)(be16_to_cpu(hdr->lrh[0]) & 3);
+				__entry->dlid =
+				be16_to_cpu(hdr->lrh[1]);
+				/* allow for larger len */
+				__entry->len =
+				be16_to_cpu(hdr->lrh[2]);
+				__entry->slid =
+				be16_to_cpu(hdr->lrh[3]);
+
+				/* zero out 16B only fields */
+				__entry->age = 0;
+				__entry->becn = 0;
+				__entry->fecn = 0;
+				__entry->l4 = 0;
+				__entry->rc = 0;
+				__entry->sc = 0;
+				__entry->entropy = 0;
+
+				if (__entry->lnh == HFI1_LRH_BTH)
+					ohdr = &hdr->u.oth;
+				else
+					ohdr = &hdr->u.l.oth;
+			  }
 			   /* BTH */
-			   if (__entry->lnh == HFI1_LRH_BTH)
-				ohdr = &hdr->u.oth;
-			   else
-				ohdr = &hdr->u.l.oth;
 			  __entry->opcode =
 			  (be32_to_cpu(ohdr->bth[0]) >> 24) & 0xff;
 			  __entry->se =
@@ -495,18 +558,28 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 			  be32_to_cpu(ohdr->bth[2]) & 0x7fffffff;
 			  /* extended headers */
 			  memcpy(__get_dynamic_array(ehdrs), &ohdr->u,
-				 ibhdr_exhdr_len(hdr));
+				 ibhdr_exhdr_len(hfi1_hdr, bypass));
 			 ),
-		    TP_printk("[%s] " LRH_PRN " " BTH_PRN " " EHDR_PRN,
+		    TP_printk("[%s] (%s) " LRH_PRN " " LRH_9B_PRN " " LRH_16B_PRN " " BTH_PRN " " EHDR_PRN,
 			      __get_str(dev),
-			      /* LRH */
-			      __entry->vl,
+			      ibhdr_get_packet_type_str(__entry->l4),
+			      /* 9B and 16B LRH */
+			      __entry->len,
+			      __entry->dlid,
+			      __entry->slid,
+			      /* 9B LRH */
+			      __entry->lnh, show_lnh(__entry->lnh),
 			      __entry->lver,
 			      __entry->sl,
-			      __entry->lnh, show_lnh(__entry->lnh),
-			      __entry->dlid,
-			      __entry->len,
-			      __entry->slid,
+			      __entry->vl,
+			      /* 16B LRH */
+			      __entry->age,
+			      __entry->becn,
+			      __entry->fecn,
+			      __entry->l4,
+			      __entry->rc,
+			      __entry->sc,
+			      __entry->entropy,
 			      /* BTH */
 			      __entry->opcode, show_ib_opcode(__entry->opcode),
 			      __entry->se,
@@ -527,20 +600,20 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 );
 
 DEFINE_EVENT(hfi1_ibhdr_template, input_ibhdr,
-	     TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ib_header *hdr),
-	     TP_ARGS(dd, hdr));
+	     TP_PROTO(struct hfi1_devdata *dd, void *hfi1_hdr, bool bypass),
+	     TP_ARGS(dd, hfi1_hdr, bypass));
 
 DEFINE_EVENT(hfi1_ibhdr_template, pio_output_ibhdr,
-	     TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ib_header *hdr),
-	     TP_ARGS(dd, hdr));
+	     TP_PROTO(struct hfi1_devdata *dd, void *hfi1_hdr, bool bypass),
+	     TP_ARGS(dd, hfi1_hdr, bypass));
 
 DEFINE_EVENT(hfi1_ibhdr_template, ack_output_ibhdr,
-	     TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ib_header *hdr),
-	     TP_ARGS(dd, hdr));
+	     TP_PROTO(struct hfi1_devdata *dd, void *hfi1_hdr, bool bypass),
+	     TP_ARGS(dd, hfi1_hdr, bypass));
 
 DEFINE_EVENT(hfi1_ibhdr_template, sdma_output_ibhdr,
-	     TP_PROTO(struct hfi1_devdata *dd, struct hfi1_ib_header *hdr),
-	     TP_ARGS(dd, hdr));
+	     TP_PROTO(struct hfi1_devdata *dd, void *hfi1_hdr, bool bypass),
+	     TP_ARGS(dd, hfi1_hdr, bypass));
 
 #define SNOOP_PRN \
 	"slid %.4x dlid %.4x qpn 0x%.6x opcode 0x%.2x,%s " \

@@ -652,7 +652,7 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		goto drop;
 	}
 
-	trace_input_ibhdr(rcd->dd, hdr);
+	trace_input_ibhdr(rcd->dd, hdr, false);
 
 	if (hfi1_handle_packet(packet, mgid))
 		goto drop;	
@@ -709,6 +709,8 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 	} else {
 		goto drop;
 	}
+
+	trace_input_ibhdr(rcd->dd, hdr, true);
 
 	if (hfi1_handle_packet(packet, mgid))
 		goto drop;	
@@ -974,12 +976,15 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	struct verbs_txreq *tx;
 	u64 pbc_flags = 0;
 	u8 sc5 = priv->s_sc;
+	bool bypass = false;
 
 	int ret;
 	
 	if (ps->s_txreq->phdr.hdr.hdr_type) {
 		u8 extra_bytes = hfi1_get_16b_padding((hdrwords << 2), len);
+
  		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
+		bypass = true;
 	} else {
 		dwords = (len + 3) >> 2;
 	}
@@ -1018,7 +1023,10 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	 * a 9B or a 16B header
 	 */ 
 	trace_sdma_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
-				&ps->s_txreq->phdr.hdr.pkt.ibh);
+				&ps->s_txreq->phdr.hdr.pkt.ibh, bypass);
+	ret =  sdma_send_txreq(tx->sde, &priv->s_iowait, &tx->txreq);
+	if (unlikely(ret == -ECOMM))
+		goto bail_ecomm;
 	return ret;
 
 bail_ecomm:
@@ -1113,14 +1121,15 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	int ret = 0;
 	pio_release_cb cb = NULL;
 	u32 lrh0_16b;
+	bool bypass = false;
 
-	
-	
 	if (ps->s_txreq->phdr.hdr.hdr_type) {
 		u8 extra_bytes = hfi1_get_16b_padding((hdrwords << 2), len);
+
  		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
 		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.opah;
 		lrh0_16b = ps->s_txreq->phdr.hdr.pkt.opah.lrh[0];
+		bypass = true;
 	} else {
 		dwords = (len + 3) >> 2;
 		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh;
@@ -1204,7 +1213,7 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	}
 
 	trace_pio_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
-			       &ps->s_txreq->phdr.hdr.pkt.ibh);
+			       &ps->s_txreq->phdr.hdr.pkt.ibh, bypass);
 
 pio_bail:
 	if (qp->s_wqe) {
