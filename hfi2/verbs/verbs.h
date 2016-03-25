@@ -116,6 +116,7 @@ extern const u32 ib_hfi1_rnr_table[];
 struct ib_l4_headers;
 struct hfi2_ib_header;
 struct hfi2_ib_packet;
+union hfi2_packet_header;
 
 struct hfi2_ucontext {
 	struct ib_ucontext ibucontext;
@@ -682,7 +683,8 @@ struct hfi2_ibdev {
 	/* send functions, snoop overrides */
 	int (*send_wqe)(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
 	int (*send_ack)(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
-			struct hfi2_ib_header *hdr, size_t hwords);
+			union hfi2_packet_header *hdr, size_t hwords,
+			bool use_16b);
 	/* receive interrupt functions, snoop intercepts */
 	rhf_rcv_function_ptr *rhf_rcv_function_map;
 	rhf_rcv_function_ptr rhf_rcv_functions[HFI2_RHF_RCV_TYPES];
@@ -846,7 +848,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
 bool hfi2_drop_packet(void);
 #endif
 int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
-		  struct hfi2_ib_header *hdr, size_t hwords);
+		  union hfi2_packet_header *ph, size_t hwords, bool use_16b);
 void *hfi2_rcv_get_ebuf(struct hfi2_ibrcv *rcv, u16 idx, u32 offset);
 void hfi2_rcv_advance(struct hfi2_ibrcv *rcv, u64 *rhf_entry);
 int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry);
