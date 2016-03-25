@@ -390,13 +390,14 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 }
 
 int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
-		  struct hfi2_ib_header *hdr, size_t hwords)
+		  union hfi2_packet_header *ph, size_t hwords,
+		  bool use_16b)
 {
 	int ret, ndelays = 0;
 	unsigned long flags;
 	uint8_t dma_cmd = GENERAL_DMA;
 	struct hfi2_wqe_iov *wqe_iov = NULL;
-	uint32_t num_iovs = 1, length = 0;
+	uint32_t num_iovs = 1, hlen = (hwords << 2);
 	union base_iovec *iov;
 	uint8_t sl = qp->remote_ah_attr.sl;
 
@@ -404,7 +405,7 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	if (hfi2_drop_packet()) {
 		dev_dbg(ibp->dev, "Dropping %s with PSN = %d\n",
 			(qp->r_nak_state) ? "NAK" : "ACK",
-			 be32_to_cpu(hdr->u.oth.bth[2]));
+			mask_psn(qp->r_ack_psn));
 		return -1;
 	}
 #endif
@@ -415,22 +416,22 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 
 	/* hfi_tx_cmd_bypass_dma is asynchronous. Don't use stack memory */
 	/* FXRTODO: Remove memcpy when implementing STL--6302 */
-	memcpy(&wqe_iov->ph.ibh, hdr, sizeof(*hdr));
+	memcpy(&wqe_iov->ph, ph, hlen);
 
 	iov = wqe_iov->iov;
 	wqe_iov->qp = NULL;
 	wqe_iov->remaining_bytes = 0;
 
 	/* first entry is IB header */
-	iov[0].length = (hwords << 2);
-	iov[0].use_9b = 1;
+	iov[0].length = hlen;
+	iov[0].use_9b = !use_16b;
 	iov[0].sp = 1;
 	iov[0].ep = 1;
 	iov[0].v = 1;
-	iov[0].start = (uint64_t)&wqe_iov->ph.ibh;
+	iov[0].start = (uint64_t)&wqe_iov->ph;
 
-	dev_dbg(ibp->dev, "PT %d: cmd %d len 0 n_iov 1 sent %d, length (iov[0]) = %u\n",
-		ibp->port_num, dma_cmd, length, iov[0].length);
+	dev_dbg(ibp->dev, "PT %d: cmd %d len 0 n_iov 1 sent (iov[0]) = %u\n",
+		ibp->port_num, dma_cmd, iov[0].length);
 
 _tx_cmd:
 	/* send with GENERAL or MGMT DMA */
@@ -440,7 +441,7 @@ _tx_cmd:
 				    (uint64_t)wqe_iov, PTL_MD_RESERVED_IOV,
 				    &ibp->send_eq, HFI_CT_NONE,
 				    ibp->port_num, sl, 0,
-				    HDR_EXT, dma_cmd);
+				    use_16b ? HDR_16B : HDR_EXT, dma_cmd);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 
 	if (ret == -EAGAIN) {

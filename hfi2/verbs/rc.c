@@ -948,9 +948,11 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 	u16 sc5;
 	u32 bth0;
 	u32 hwords;
+	union hfi2_packet_header ph;
 	/*FXRTODO: Add 16B support */
-	struct hfi2_ib_header hdr;
+	struct hfi2_ib_header *hdr = &ph.ibh;
 	struct ib_l4_headers *ohdr;
+	bool use_16b = false;
 
 	/* Don't send ACK or NAK if a RDMA read or atomic is pending. */
 	if (qp->s_flags & HFI1_S_RESP_PENDING)
@@ -965,12 +967,12 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 	/* header size in 32-bit words LRH+BTH+AETH = (8+12+4)/4 */
 	hwords = 6;
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
-		hwords += hfi2_make_grh(ibp, &hdr.u.l.grh,
+		hwords += hfi2_make_grh(ibp, &hdr->u.l.grh,
 				       &qp->remote_ah_attr.grh, hwords, 0);
-		ohdr = &hdr.u.l.oth;
+		ohdr = &hdr->u.l.oth;
 		lrh0 = HFI1_LRH_GRH;
 	} else {
-		ohdr = &hdr.u.oth;
+		ohdr = &hdr->u.oth;
 		lrh0 = HFI1_LRH_BTH;
 	}
 	/* read pkey_index w/o lock (its atomic) */
@@ -988,10 +990,10 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 	 * pbc_flags |= ((!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT);
 	 */
 	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
-	hdr.lrh[0] = cpu_to_be16(lrh0);
-	hdr.lrh[1] = cpu_to_be16((u16)qp->remote_ah_attr.dlid);
-	hdr.lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);
-	hdr.lrh[3] = cpu_to_be16(ibp->ppd->lid |
+	hdr->lrh[0] = cpu_to_be16(lrh0);
+	hdr->lrh[1] = cpu_to_be16((u16)qp->remote_ah_attr.dlid);
+	hdr->lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);
+	hdr->lrh[3] = cpu_to_be16(ibp->ppd->lid |
 				  qp->remote_ah_attr.src_path_bits);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(qp->remote_qpn);
@@ -1004,7 +1006,7 @@ void hfi2_send_rc_ack(struct hfi2_qp *qp, int is_fecn)
 
 	dev_dbg(ibp->dev, "Send RC %s for PSN %u\n",
 		(qp->r_nak_state) ? "NAK" : "ACK", mask_psn(qp->r_ack_psn));
-	ibp->ibd->send_ack(ibp, qp, &hdr, hwords);
+	ibp->ibd->send_ack(ibp, qp, &ph, hwords, use_16b);
 	return;
 
 queue_ack:

@@ -172,7 +172,8 @@ struct snoop_packet {
 
 static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
 static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
-			  struct hfi2_ib_header *from, size_t hwords);
+			  union hfi2_packet_header *from, size_t hwords,
+			  bool use_16b);
 
 /* Do not make these an enum or it will blow up the capture_md */
 #define PKT_DIR_EGRESS 0x0
@@ -1043,11 +1044,8 @@ static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 	bool use_16b = (qp->s_wqe && qp->s_wqe->use_16b);
 
 	if (!use_16b) {
-		struct hfi2_ib_header *ibhdr;
-
-		ibhdr = &qp->s_hdr->ph.ibh;
-		hdr = ibhdr;
-		tlen = HFI1_GET_PKT_LEN(ibhdr);
+		tlen = HFI1_GET_PKT_LEN(&qp->s_hdr->ph.ibh);
+		hdr = &qp->s_hdr->ph.ibh;
 	} else {
 		hdr = &qp->s_hdr->opa16b;
 		tlen = opa_16b_pkt_len(hdr);
@@ -1175,16 +1173,19 @@ out:
  * CCA packets. We don't restrict this usage though.
  */
 static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
-			  struct hfi2_ib_header *from, size_t hwords)
+			  union hfi2_packet_header *from, size_t hwords,
+			  bool use_16b)
 {
 	struct hfi_devdata *dd = ibp->ibd->dd;
 	int snoop_mode = 0;
 	int md_len = 0;
 	struct capture_md md;
 	struct snoop_packet *s_packet = NULL;
-	bool use_16b = false; /* TODO */
-	int packet_len = HFI1_GET_PKT_LEN(from);
+	int packet_len;
 	int ret;
+
+	packet_len = use_16b ? opa_16b_pkt_len((u32 *)from) :
+			       HFI1_GET_PKT_LEN(&from->ibh);
 
 	snoop_dbg("ACK OUT: len %d", packet_len);
 
@@ -1245,5 +1246,5 @@ static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	}
 
 inline_pio_out:
-	return hfi2_send_ack(ibp, qp, from, hwords);
+	return hfi2_send_ack(ibp, qp, from, hwords, use_16b);
 }
