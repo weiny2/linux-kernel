@@ -1545,6 +1545,18 @@ void hfi_set_bw_arb(struct hfi_pportdata *ppd, int section,
 	}
 }
 
+void hfi_set_pkt_format(struct hfi_pportdata *ppd,
+			const u8 *pkt_formats_enabled)
+{
+	FPC_CFG_PORT_CONFIG_t fpc;
+
+	ppd->packet_format_enabled = *pkt_formats_enabled;
+	fpc.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
+	fpc.field.pkt_formats_enabled = *pkt_formats_enabled;
+	fpc.field.pkt_formats_supported = ppd->packet_format_supported;
+	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);
+}
+
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -1607,6 +1619,9 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 		break;
 	case HFI_IB_CFG_BW_ARB:
 		hfi_set_bw_arb(ppd, val, data);
+		break;
+	case HFI_IB_CFG_PKT_FORMAT:
+		hfi_set_pkt_format(ppd, data);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
@@ -2015,8 +2030,6 @@ static void hfi_init_linkmux_csrs(struct hfi_pportdata *ppd)
 
 	fpc.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
 	fpc.field.mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	fpc.field.pkt_formats_enabled = 0xF;
-	fpc.field.pkt_formats_supported = 0xF;
 	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);
 
 	fpc_ctrl.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_EVENT_CNTR_CTRL);
@@ -2095,6 +2108,11 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		 */
 		ppd->pkeys[OPA_LIM_MGMT_PKEY_IDX] = OPA_LIM_MGMT_PKEY;
 
+		ppd->packet_format_supported =
+			OPA_PORT_PACKET_FORMAT_9B | OPA_PORT_PACKET_FORMAT_8B |
+			OPA_PORT_PACKET_FORMAT_10B | OPA_PORT_PACKET_FORMAT_16B;
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_PKT_FORMAT, 0,
+			       &ppd->packet_format_supported);
 		/*
 		 * FXRTODO: Disabling for now since we are not yet
 		 * PKEY ready

@@ -640,26 +640,10 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 				ppd->is_vl_marker_enabled ?
 					OPA_PI_MASK_PORT_MODE_VL_MARKER : 0);
 
-	/*
-	 * FXRTODO:
-	 * 1. STL2 spec says that the enabled field is
-	 *    to be referred to verify that the ingress packet matches
-	 *    the formats in this mask. This is not done in WFR
-	 *    for some reason. If there is a valid reason then
-	 *    would that apply even for FXR ?
-	 * 2. If we should implement this check according to STL2
-	 *    spec (section 9.10.7), then probably that needs
-	 *    to be done in the verbs layer. This will make this
-	 *    field part of per port IB structure and be queried
-	 *    by get_port_desc opa_core op. STL-1660
-	 * 3. Once we add 16B support in the driver then driver
-	 *    should advertize this in the supported field.
-	 *    STL-1661
-	 */
 	pi->port_packet_format.supported =
-		cpu_to_be16(OPA_PORT_PACKET_FORMAT_9B);
+		cpu_to_be16(ppd->packet_format_supported);
 	pi->port_packet_format.enabled =
-		cpu_to_be16(OPA_PORT_PACKET_FORMAT_9B);
+		cpu_to_be16(ppd->packet_format_enabled);
 
 	/*
 	 * flit_control.interleave is (OPA V1, version .76):
@@ -1371,6 +1355,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	u8 vls;
 	u8 msl;
 	u8 crc_enabled;
+	u8 pkt_formats_enabled;
 	u16 lse, lwe, mtu;
 	unsigned long flags;
 	u32 num_ports = OPA_AM_NPORT(am);
@@ -1558,6 +1543,24 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	ibp->vl_high_limit = be16_to_cpu(pi->vl.high_limit) & 0xFF;
 	hfi_set_ib_cfg(ppd, HFI_IB_CFG_VL_HIGH_LIMIT,
 		       ibp->vl_high_limit, NULL);
+
+	pkt_formats_enabled = be16_to_cpu(pi->port_packet_format.enabled);
+	if (!(pkt_formats_enabled & OPA_PORT_PACKET_FORMAT_16B) &&
+	    (ppd->max_lid >= HFI1_MULTICAST_LID_BASE)) {
+		ppd_dev_warn(ppd, "Cannot disable 16B with max_lid 0x%#x\n",
+			     ppd->max_lid);
+		hfi_invalid_attr(smp);
+		pkt_formats_enabled |= OPA_PORT_PACKET_FORMAT_16B;
+	}
+
+	if (~ppd->packet_format_supported & pkt_formats_enabled) {
+		ppd_dev_warn(ppd, "Cannot enable packet format that is not supported (sup: %#x, enb: %#x\n"
+		, ppd->packet_format_supported, pkt_formats_enabled);
+		hfi_invalid_attr(smp);
+		pkt_formats_enabled &= ppd->packet_format_supported;
+	}
+
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_PKT_FORMAT, 0, &pkt_formats_enabled);
 
 	if (ppd->vls_supported / 2 > ARRAY_SIZE(pi->neigh_mtu.pvlx_to_mtu) ||
 	    ppd->vls_supported > ARRAY_SIZE(ppd->vl_mtu)) {
