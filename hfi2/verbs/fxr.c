@@ -274,6 +274,7 @@ static void hfi2_send_event(struct hfi_eq *eq_tx, void *data)
 	struct hfi2_wqe_iov *wqe_iov;
 	unsigned long flags;
 	union initiator_EQEntry *eq_entry;
+	struct ib_l4_headers *ohdr;
 
 next_event:
 	eq_entry = NULL;
@@ -312,7 +313,20 @@ next_event:
 
 	spin_lock(&qp->s_lock);
 	if (!wqe) {
-		hfi2_rc_send_complete(qp, &wqe_iov->ph.ibh);
+		if (wqe_iov->use_16b)
+			if (OPA_16B_GET_L4_TYPE(&wqe_iov->ph) ==
+			    HFI1_L4_IB_LOCAL)
+				ohdr = &wqe_iov->ph.opa16b.u.oth;
+			else
+				ohdr = &wqe_iov->ph.opa16b.u.l.oth;
+		else
+			if ((be16_to_cpu(wqe_iov->ph.ibh.lrh[0]) & 3) ==
+			    HFI1_LRH_BTH)
+				ohdr = &wqe_iov->ph.ibh.u.oth;
+			else
+				ohdr = &wqe_iov->ph.ibh.u.l.oth;
+
+		hfi2_rc_send_complete(qp, ohdr);
 	} else {
 		if (eq_entry->fail_type)
 			wqe->pkt_errors++;
@@ -421,6 +435,7 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	iov = wqe_iov->iov;
 	wqe_iov->qp = NULL;
 	wqe_iov->remaining_bytes = 0;
+	wqe_iov->use_16b = use_16b;
 
 	/* first entry is IB header */
 	iov[0].length = hlen;
@@ -488,8 +503,12 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 		/* RC response has no WQE */
 		sl = qp->remote_ah_attr.sl;
 		dma_cmd = GENERAL_DMA;
-		/* TODO 16B RC support */
-		use_16b = false;
+
+		/*
+		 * FXRTODO: Avoid calling hfi2_use_16b here again.
+		 * It is already determined while making the request.
+		 */
+		use_16b = hfi2_use_16b(qp);
 	}
 
 	ret = qp_max_iovs(ibp, qp, &num_iovs);
@@ -538,6 +557,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 	else
 		memcpy(&wqe_iov->ph, &qp->s_hdr->opa16b, qp->s_hdrwords << 2);
 
+	wqe_iov->use_16b = use_16b;
 	if (use_ofed_dma) {
 		/*
 		 * read current SGE address/length, updates internal state;
