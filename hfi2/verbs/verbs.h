@@ -818,7 +818,7 @@ void hfi2_do_send(struct work_struct *work);
 void hfi2_schedule_send(struct hfi2_qp *qp);
 void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 			enum ib_wc_status status);
-void hfi2_rc_send_complete(struct hfi2_qp *qp, struct hfi2_ib_header *hdr);
+void hfi2_rc_send_complete(struct hfi2_qp *qp, struct ib_l4_headers *ohdr);
 int hfi2_make_uc_req(struct hfi2_qp *qp);
 int hfi2_make_ud_req(struct hfi2_qp *qp);
 int hfi2_make_rc_req(struct hfi2_qp *qp);
