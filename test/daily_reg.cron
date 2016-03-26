@@ -34,7 +34,7 @@ get_uptime () {
 power_cycle() {
 	host=$1
 	echo "Power cycling $host"
-	ssh fabserv2 "/nfs/site/proj/fabric/apps/power/bin/power -r $host"
+	/nfs/site/proj/fabric/apps/power/bin/power -r $host
 }
 
 check_up() {
@@ -64,6 +64,7 @@ check_up() {
 		else
 			echo "$host does not ping"
 		fi
+		(( attempts++ ))
 		echo "Checking again in 30 seconds"
 		sleep 30
 	done
@@ -74,6 +75,9 @@ check_up() {
 do_reboot() {
 	host=$1
 	uptime=$(get_uptime $host)
+	while [ -z "$uptime" ]; do
+		uptime=$(get_uptime $host)
+	done
 	echo "$host has been up for $uptime"
 	ssh root@$host 'reboot'&
 	echo "Waiting 2 minutes to give host time to shutdown and start booting"
@@ -83,11 +87,11 @@ do_reboot() {
 		return 0
 	else
 		echo "$host never came up"
-		power_cycle $host1
+		power_cycle $host
 
 	fi
 	check_up $host $uptime
-	if [ $? -eq 0]; then
+	if [ $? -eq 0 ]; then
 		return 0
 	else
 		echo "$host never came back after power cycle"
@@ -205,7 +209,7 @@ else
 	echo "Rebooting $host1"
 	do_reboot $host1
 	if [ $? -ne 0 ]; then
-		echo "$host1 never rebooted cleanlyi"
+		echo "$host1 never rebooted cleanly"
 		exit 1
 	fi
 
