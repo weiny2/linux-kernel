@@ -587,19 +587,13 @@ bail:
 	return ret;
 }
 
+/* Must be holding the QSFP i2c resource */
 static int tune_active_qsfp(struct hfi1_pportdata *ppd, u32 *ptr_tx_preset,
 			    u32 *ptr_rx_preset, u32 *ptr_total_atten)
 {
 	int ret;
 	u16 lss = ppd->link_speed_supported, lse = ppd->link_speed_enabled;
 	u8 *cache = ppd->qsfp_info.cache;
-
-	ret = acquire_chip_resource(ppd->dd, qsfp_resource(ppd->dd), QSFP_WAIT);
-	if (ret) {
-		dd_dev_err(ppd->dd, "%s: hfi%d: cannot lock i2c chain\n",
-			   __func__, (int)ppd->dd->hfi1_id);
-		goto bail_no_unlock;
-	}
 
 	ppd->qsfp_info.limiting_active = 1;
 
@@ -673,8 +667,6 @@ static int tune_active_qsfp(struct hfi1_pportdata *ppd, u32 *ptr_tx_preset,
 	ret = set_qsfp_tx(ppd, 1);
 
 bail:
-	release_chip_resource(ppd->dd, qsfp_resource(ppd->dd));
-bail_no_unlock:
 	return ret;
 }
 
@@ -814,6 +806,14 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 		break;
 	case PORT_TYPE_QSFP:
 		if (qsfp_mod_present(ppd)) {
+			ret = acquire_chip_resource(ppd->dd,
+						    qsfp_resource(ppd->dd),
+						    QSFP_WAIT);
+			if (ret) {
+				dd_dev_err(ppd->dd, "%s: hfi%d: cannot lock i2c chain\n",
+					   __func__, (int)ppd->dd->hfi1_id);
+				goto bail;
+			}
 			refresh_qsfp_cache(ppd, &ppd->qsfp_info);
 
 			if (ppd->qsfp_info.cache_valid) {
@@ -830,14 +830,15 @@ int tune_serdes(struct hfi1_pportdata *ppd)
 				 * update the cache to reflect the changes
 				 */
 				refresh_qsfp_cache(ppd, &ppd->qsfp_info);
-				if (ret)
-					goto bail;
 			} else {
 				dd_dev_info(dd,
 					    "%s: Reading QSFP memory failed\n",
 						__func__);
-				goto bail;
+				ret = -EINVAL; /* a fail indication */
 			}
+			release_chip_resource(ppd->dd, qsfp_resource(ppd->dd));
+			if (ret)
+				goto bail;
 		} else {
 			ppd->offline_disabled_reason =
 			   HFI1_ODR_MASK(
