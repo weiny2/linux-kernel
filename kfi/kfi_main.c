@@ -256,7 +256,7 @@ static int opa_xfer_test(struct opa_core_device *odev, struct opa_kfi *dev)
 	/* Wait for TX command 1 to complete */
 	rc = hfi_ct_wait_timed(ctx, ct_tx, 1, OPA2_TX_TIMEOUT_MS, NULL);
 	if (rc < 0) {
-		dev_info(&odev->dev, "TX CT event 1 failure, %d\n", rc);
+		dev_err(&odev->dev, "TX CT event 1 failure, %d\n", rc);
 		goto err2;
 	} else {
 		dev_info(&odev->dev, "TX CT event 1 success\n");
@@ -265,7 +265,7 @@ static int opa_xfer_test(struct opa_core_device *odev, struct opa_kfi *dev)
 	/* Wait to receive from peer */
 	rc = hfi_ct_wait_timed(ctx, ct_rx, 1, OPA2_TX_TIMEOUT_MS, NULL);
 	if (rc < 0) {
-		dev_info(&odev->dev, "RX CT failure, %d\n", rc);
+		dev_err(&odev->dev, "RX CT failure, %d\n", rc);
 		goto err2;
 	} else {
 		dev_info(&odev->dev, "RX CT success\n");
@@ -275,7 +275,7 @@ static int opa_xfer_test(struct opa_core_device *odev, struct opa_kfi *dev)
 	if (!memcmp(tx_base, rx_base, PAYLOAD_SIZE))
 		dev_info(&odev->dev, "basic PTE data transfer test passed\n");
 	else
-		dev_info(&odev->dev, "basic PTE data transfer test failed\n");
+		dev_err(&odev->dev, "basic PTE data transfer test failed\n");
 
 	kfree(rx_base);
 	kfree(tx_base);
