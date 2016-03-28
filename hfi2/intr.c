@@ -70,7 +70,7 @@ void hfi_disable_interrupts(struct hfi_devdata *dd)
 				continue;
 			irq_set_affinity_hint(dd->msix_entries[i].msix.vector,
 					NULL);
-			free_irq(me->msix.vector, me->arg);
+			free_irq(me->msix.vector, me);
 		}
 
 		/* turn off interrupts */

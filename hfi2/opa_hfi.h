@@ -792,6 +792,7 @@ void hfi_disable_msix(struct hfi_devdata *dd);
 int hfi_setup_interrupts(struct hfi_devdata *dd, int total, int minw);
 void hfi_cleanup_interrupts(struct hfi_devdata *dd);
 void hfi_disable_interrupts(struct hfi_devdata *dd);
+int hfi_setup_irqerr(struct hfi_devdata *dd);
 
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
 void hfi_cc_state_reclaim(struct rcu_head *rcu);
