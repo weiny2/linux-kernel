@@ -2341,6 +2341,11 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* TODO - remove or change to debug later */
 	dev_info(&pdev->dev, "%d IRQs assigned to EQs\n", i);
 
+	/* configure IRQs for error domains */
+	ret = hfi_setup_irqerr(dd);
+	if (ret)
+		goto err_post_alloc;
+
 	/* assign one EQ for privileged events */
 	ret = hfi_eq_zero_assign_privileged(ctx);
 	if (ret)
