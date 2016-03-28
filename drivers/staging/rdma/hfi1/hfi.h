@@ -2142,6 +2142,10 @@ static inline bool hfi1_use_16b(struct rvt_qp *qp)
 		return false;
 
 	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
+	
+	if (!(ah_attr->ah_flags & IB_AH_GRH))
+		return false;
+
 	if (ib_query_gid(qp->ibqp.device, qp->port_num,
 			 ah_attr->grh.sgid_index, &sgid, NULL))
 		return false;
@@ -2163,18 +2167,16 @@ static inline void hfi1_make_ext_grh(struct hfi1_packet *packet,
 	grh->sgid.global.subnet_prefix = ibp->rvp.gid_prefix;
 	grh->sgid.global.interface_id = OPA_MAKE_GID(slid);
 
-	/* This is called in the recv codepath where the dlid will
-	 * will be the local lid of the node. If this is a DR packet
-	 * in which case dlid is permissive, set the default
-	 * gid in the GRH
-	 */
+	/**
+ 	* Set the dgid appropriately here. Upper layers (like mad) 
+ 	* may compare the dgid in the wc with the sgid_index in 
+ 	* the wr.
+ 	*/
 	grh->dgid.global.subnet_prefix = ibp->rvp.gid_prefix;
-	if ((dlid == HFI1_16B_PERMISSIVE_LID) ||
-	    (dlid == be16_to_cpu(IB_LID_PERMISSIVE)) ||
-	    (dlid < be16_to_cpu(IB_MULTICAST_LID_BASE)))
-		grh->dgid.global.interface_id = cpu_to_be64(ppd->guid);
-	else
+	if (dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE))
 		grh->dgid.global.interface_id = OPA_MAKE_GID(dlid);
+	else
+		grh->dgid.global.interface_id = cpu_to_be64(ppd->guid);
 }
 
 static inline struct ib_ah_attr *hfi1_get_ah_attr(struct rvt_qp *qp)

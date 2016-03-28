@@ -323,14 +323,27 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	/* Construct the header. */
 	ibp = to_iport(qp->ibqp.device, qp->port_num);
 	ppd = ppd_from_ibp(ibp);
+	qp->s_wqe = wqe;
 	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
+	use_16b = hfi1_use_16b(qp);
 	if ((!hfi1_check_mcast(ah_attr)) ||
 	    (hfi1_check_permissive(ah_attr))) {
 		lid = hfi1_retrieve_lid(ah_attr) & ~((1 << ppd->lmc) - 1);
+		/**
+		 * A DLID of 0xFFFF needs special handing.
+		 * If this is a 9B packet (i.e. use_16b is not true),
+		 * 0xFFFF is permissive LID and the packet with DLID
+		 * of 0xFFFF is a directed route packet.
+		 * If this is a 16B packet, 0xFFFF is a regular unicast
+		 * LID
+		 */
 		if (unlikely(!loopback &&
-			     (lid == ppd->lid ||
-			      (lid == be16_to_cpu(IB_LID_PERMISSIVE) &&
-			      qp->ibqp.qp_type == IB_QPT_GSI)))) {
+			     (use_16b ||
+			      (lid != be16_to_cpu(IB_LID_PERMISSIVE))) &&
+			     ((lid == ppd->lid) ||
+			      ((lid == (use_16b ? HFI1_16B_PERMISSIVE_LID :
+					be16_to_cpu(IB_LID_PERMISSIVE))) &&
+			       (qp->ibqp.qp_type == IB_QPT_GSI))))) {
 			unsigned long flags;
 			/*
 			 * If DMAs are in progress, we can't generate
@@ -354,8 +367,6 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	}
 
 	/* Determine what header to construct */
-	qp->s_wqe = wqe;
-	use_16b = hfi1_use_16b(qp);
 	qp->s_cur = next_cur;
 	if (!use_16b) {
 		extra_bytes = -wqe->length & 3;
@@ -484,8 +495,6 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 				(slid_16b & OPA_16B_LID_MASK);
 		lrh2_16b = (lrh2_16b & ~OPA_16B_SLID_MASK) | ((slid_16b >> 20) 
 				<< OPA_16B_SLID_HIGH_SHIFT);
-		if (dlid_16b == 0xbb)
-			dump_stack();
 	}
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 		bth0 |= IB_BTH_SOLICITED;
@@ -865,6 +874,8 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		       struct rvt_qp *qp, u32 remote_qpn,
 		       u32 pkey, u32 slid, u32 dlid, u8 sc5,
 		       const struct ib_grh *old_grh);
+	u32 mlid_base;
+
 	if (packet->etype == RHF_RCV_TYPE_BYPASS)
 		bypass = true;
 
@@ -897,6 +908,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		dlid_is_permissive = (dlid == HFI1_16B_PERMISSIVE_LID);
 		slid_is_permissive = (slid == HFI1_16B_PERMISSIVE_LID);
 		fn_cnp = return_cnp_bypass;
+		mlid_base = HFI1_16B_MULTICAST_LID_BASE;
 	} else {
 		hdr = packet->hdr;
 		data = packet->ebuf;
@@ -915,6 +927,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		dlid_is_permissive = (dlid == be16_to_cpu(IB_LID_PERMISSIVE));
 		slid_is_permissive = (slid == be16_to_cpu(IB_LID_PERMISSIVE));
 		fn_cnp = return_cnp;
+		mlid_base = be16_to_cpu(IB_MULTICAST_LID_BASE);
 	}
 	sl_from_sc = ibp->sc_to_sl[sc5];
 
@@ -1099,7 +1112,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	/*
 	 * Save the LMC lower bits if the destination LID is a unicast LID.
 	 */
-	wc.dlid_path_bits = dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE) ? 0 :
+	wc.dlid_path_bits = dlid >= mlid_base ? 0 :
 		dlid & ((1 << ppd_from_ibp(ibp)->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */

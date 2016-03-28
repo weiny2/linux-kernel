@@ -927,6 +927,7 @@ void hfi1_do_send(struct rvt_qp *qp)
 	unsigned long timeout;
 	unsigned long timeout_int;
 	int cpu;
+	u32 lid;
 
 	ps.dev = to_idev(qp->ibqp.device);
 	ps.ibp = to_iport(qp->ibqp.device, qp->port_num);
@@ -934,10 +935,11 @@ void hfi1_do_send(struct rvt_qp *qp)
 
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_RC:
-		if (!loopback && ((hfi1_retrieve_lid(&qp->remote_ah_attr)
-						     & ~((1 << ps.ppd->lmc)
-							- 1)) ==
-				  ps.ppd->lid)) {
+		lid = hfi1_retrieve_lid(&qp->remote_ah_attr)
+					& ~((1 << ps.ppd->lmc)- 1);
+		if (!loopback && (lid == ps.ppd->lid) &&
+		    (hfi1_use_16b(qp) ||
+		     (lid != be16_to_cpu(IB_LID_PERMISSIVE)))) {
 			ruc_loopback(qp);
 			return;
 		}
@@ -945,10 +947,11 @@ void hfi1_do_send(struct rvt_qp *qp)
 		timeout_int = (qp->timeout_jiffies);
 		break;
 	case IB_QPT_UC:
-		if (!loopback && ((hfi1_retrieve_lid(&qp->remote_ah_attr)
-						     & ~((1 << ps.ppd->lmc)
-							- 1)) ==
-				  ps.ppd->lid)) {
+		lid = hfi1_retrieve_lid(&qp->remote_ah_attr)
+					& ~((1 << ps.ppd->lmc)- 1);
+		if (!loopback && (lid == ps.ppd->lid) &&
+		    (hfi1_use_16b(qp) ||
+		     (lid != be16_to_cpu(IB_LID_PERMISSIVE)))) {
 			ruc_loopback(qp);
 			return;
 		}
