@@ -458,7 +458,7 @@ static int hfi_psn_init(struct hfi_pportdata *port, u32 max_lid)
 	for (j = 0; j < HFI_MAX_TC; j++) {
 		struct hfi_ptcdata *tc = &port->ptc[j];
 
-		tc->psn_base = vmalloc(psn_size);
+		tc->psn_base = vzalloc(psn_size);
 		if (!tc->psn_base) {
 			rc = -ENOMEM;
 			goto done;
@@ -2205,7 +2205,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (zebu) {
 		force_loopback = true;
 		no_mnh = true;
-		no_pe_fw = true;
 	}
 	dd = hfi_alloc_devdata(pdev);
 	if (IS_ERR(dd))
