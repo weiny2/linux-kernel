@@ -1415,7 +1415,7 @@ static inline u32 egress_cycles(u32 len, u32 rate)
 }
 
 void set_link_ipg(struct hfi1_pportdata *ppd);
-void process_becn(struct hfi1_pportdata *ppd, u8 sl,  u16 rlid, u32 lqpn,
+void process_becn(struct hfi1_pportdata *ppd, u8 sl, u32 rlid, u32 lqpn,
 		  u32 rqpn, u8 svc_type);
 void return_cnp(struct hfi1_ibport *ibp, struct rvt_qp *qp, u32 remote_qpn,
 		u32 pkey, u32 slid, u32 dlid, u8 sc5,

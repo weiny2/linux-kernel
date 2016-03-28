@@ -1856,7 +1856,7 @@ void hfi1_cnp_rcv(struct hfi1_packet *packet)
 	struct hfi1_ib_header *hdr = packet->hdr;
 	struct rvt_qp *qp = packet->qp;
 	u32 lqpn, rqpn = 0;
-	u16 rlid = 0;
+	u32 rlid = 0;
 	u8 sl, sc5, sc4_bit, svc_type;
 	bool sc4_set = has_sc4_bit(packet);
 

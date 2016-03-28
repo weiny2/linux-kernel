@@ -2123,7 +2123,7 @@ static void log_cca_event(struct hfi1_pportdata *ppd, u8 sl, u32 rlid,
 	spin_unlock_irqrestore(&ppd->cc_log_lock, flags);
 }
 
-void process_becn(struct hfi1_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
+void process_becn(struct hfi1_pportdata *ppd, u8 sl, u32 rlid, u32 lqpn,
 		  u32 rqpn, u8 svc_type)
 {
 	struct cca_timer *cca_timer;
@@ -2242,7 +2242,7 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	bth1 = be32_to_cpu(ohdr->bth[1]);
 	if (unlikely(bth1 & (HFI1_BECN_SMASK | HFI1_FECN_SMASK))) {
 		if (bth1 & HFI1_BECN_SMASK) {
-			u16 rlid = qp->remote_ah_attr.dlid;
+			u32 rlid = qp->remote_ah_attr.dlid;
 			u32 lqpn, rqpn;
 
 			lqpn = qp->ibqp.qp_num;

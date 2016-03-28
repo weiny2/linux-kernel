@@ -388,7 +388,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			 */
 			struct rvt_qp *qp = NULL;
 			u32 lqpn, rqpn;
-			u16 rlid;
+			u32 rlid;
 			u8 svc_type, sl, sc5;
 
 			sc5  = (be16_to_cpu(rhdr->lrh[0]) >> 12) & 0xf;
