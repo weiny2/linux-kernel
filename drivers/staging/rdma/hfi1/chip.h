@@ -1323,7 +1323,9 @@ enum {
 u64 get_all_cpu_total(u64 __percpu *cntr);
 void hfi1_start_cleanup(struct hfi1_devdata *dd);
 void hfi1_clear_tids(struct hfi1_ctxtdata *rcd);
-struct hfi1_message_header *hfi1_get_msgheader(
+struct hfi1_ib_message_header *hfi1_get_ib_msgheader(
+				struct hfi1_devdata *dd, __le32 *rhf_addr);
+struct hfi1_16b_message_header *hfi1_get_16b_msgheader(
 				struct hfi1_devdata *dd, __le32 *rhf_addr);
 int hfi1_get_base_kinfo(struct hfi1_ctxtdata *rcd,
 			struct hfi1_ctxt_info *kinfo);

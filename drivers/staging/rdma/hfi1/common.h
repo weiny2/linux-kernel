@@ -320,11 +320,19 @@ struct diag_pkt {
 #define RHF_RTE_BYPASS_NO_ERR		0x0
 
 /*
- * This structure contains the first field common to all protocols
+ * This structure contains the 9B LRH common to all protocols
  * that employ this chip.
  */
-struct hfi1_message_header {
+struct hfi1_ib_message_header {
 	__be16 lrh[4];
+};
+
+/*
+ * This structure contains the 16B LRH common to all protocols
+ * that employ this chip.
+ */
+struct hfi1_16b_message_header {
+	u32 lrh[4]; /* 16B header is in CPU format */
 };
 
 /* IB - LRH header constants */

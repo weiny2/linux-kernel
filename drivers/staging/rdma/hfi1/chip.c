@@ -9527,15 +9527,23 @@ int hfi1_get_base_kinfo(struct hfi1_ctxtdata *rcd,
 	return 0;
 }
 
-struct hfi1_message_header *hfi1_get_msgheader(
+struct hfi1_ib_message_header *hfi1_get_ib_msgheader(
 				struct hfi1_devdata *dd, __le32 *rhf_addr)
 {
 	u32 offset = rhf_hdrq_offset(rhf_to_cpu(rhf_addr));
 
-	return (struct hfi1_message_header *)
+	return (struct hfi1_ib_message_header *)
 		(rhf_addr - dd->rhf_offset + offset);
 }
 
+struct hfi1_16b_message_header *hfi1_get_16b_msgheader(
+				struct hfi1_devdata *dd, __le32 *rhf_addr)
+{
+	u32 offset = rhf_hdrq_offset(rhf_to_cpu(rhf_addr));
+
+	return (struct hfi1_16b_message_header *)
+		(rhf_addr - dd->rhf_offset + offset);
+}
 static const char * const ib_cfg_name_strings[] = {
 	"HFI1_IB_CFG_LIDLMC",
 	"HFI1_IB_CFG_LWID_DG_ENB",
