@@ -1654,7 +1654,8 @@ int hfi_set_max_lid(struct hfi_pportdata *ppd, u32 lid)
 
 	mutex_lock(&ppd->hls_lock);
 	if (ppd->max_lid != lid) {
-		if (!lid || lid >= HFI1_16B_MULTICAST_LID_BASE) {
+		if (!lid || lid >= HFI1_16B_MULTICAST_LID_BASE ||
+		    lid < ppd->lid) {
 			rc = -EINVAL;
 			ppd_dev_err(ppd, "invalid %s lid 0x%x\n",
 				    __func__, lid);

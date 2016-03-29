@@ -1425,8 +1425,10 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		ib_dispatch_event(&event);
 	}
 	ret = hfi_set_max_lid(ppd, be32_to_cpu(pi->max_lid));
-	if (ret)
-		return ret;
+	if (ret) {
+		hfi_invalid_attr(smp);
+		goto get_only;
+	}
 
 	msl = pi->smsl & OPA_PI_MASK_SMSL;
 	if (pi->partenforce_filterraw & OPA_PI_MASK_LINKINIT_REASON)
