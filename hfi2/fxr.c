@@ -2138,6 +2138,8 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		 */
 		ppd->link_speed_supported = OPA_LINK_SPEED_25G;
 		ppd->link_speed_enabled = ppd->link_speed_supported;
+		/* give a reasonable active value, will be set on link up */
+		ppd->link_speed_active = OPA_LINK_SPEED_25G;
 
 		ppd->port_crc_mode_enabled = HFI_SUPPORTED_CRCS;
 		/* initialize supported LTP CRC mode */
