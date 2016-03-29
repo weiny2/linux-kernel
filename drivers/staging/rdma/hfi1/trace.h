@@ -409,9 +409,9 @@ __print_symbolic(opcode,                                   \
 	ib_opcode_name(UD_SEND_ONLY_WITH_IMMEDIATE),       \
 	ib_opcode_name(CNP))
 
-#define LRH_PRN "len:%d dlid:0x%.4x slid:0x%.4x"
-#define LRH_9B_PRN "lnh:%d,%s lver:%d sl:%d vl:%d "
-#define LRH_16B_PRN "age:%d becn:%d fecn:%d l4:%d rc:%d sc:%d entropy:%d"
+#define LRH_PRN "len:%d sc:%d dlid:0x%.4x slid:0x%.4x"
+#define LRH_9B_PRN "lnh:%d,%s lver:%d sl:%d "
+#define LRH_16B_PRN "age:%d becn:%d fecn:%d l4:%d rc:%d entropy:%d"
 #define BTH_PRN \
 	"op:0x%.2x,%s se:%d m:%d pad:%d tver:%d pkey:0x%.4x " \
 	"f:%d b:%d qpn:0x%.6x a:%d psn:0x%.8x"
@@ -427,7 +427,6 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 			__field(u8, lnh)
 			__field(u8, lver)
 			__field(u8, sl)
-			__field(u8, vl)
 
 			/* 16B LRH */
 			__field(u8, age)
@@ -435,12 +434,12 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 			__field(u8, fecn)
 			__field(u8, l4)
 			__field(u8, rc)
-			__field(u8, sc)
 			__field(u16, entropy)
 
 			/* 9B and 16B LRH */
 			__field(u16, len)
 			__field(u32, dlid)
+			__field(u8, sc)
 			__field(u32, slid)
 
 			/* BTH */
@@ -477,7 +476,6 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 				__entry->lnh = 0;
 				__entry->lver = 0;
 				__entry->sl = 0;
-				__entry->vl = 0;
 				/* fill in 16B fields */
 				__entry->l4 = OPA_16B_GET_L4(h0, h1, h2, h3);
 				__entry->rc = OPA_16B_GET_RC(h0, h1, h2, h3);
@@ -500,8 +498,7 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 				struct hfi1_ib_header *hdr = NULL;
 				hdr = (struct hfi1_ib_header *)hfi1_hdr;
 
-				__entry->vl =
-				(u8)(be16_to_cpu(hdr->lrh[0]) >> 12);
+				__entry->sc = OPA_9B_GET_SC5(be16_to_cpu(hdr->lrh[0]));
 				__entry->lver =
 				(u8)(be16_to_cpu(hdr->lrh[0]) >> 8) & 0xf;
 				__entry->sl =
@@ -522,7 +519,6 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 				__entry->fecn = 0;
 				__entry->l4 = 0;
 				__entry->rc = 0;
-				__entry->sc = 0;
 				__entry->entropy = 0;
 
 				if (__entry->lnh == HFI1_LRH_BTH)
@@ -565,20 +561,19 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 			      ibhdr_get_packet_type_str(__entry->l4),
 			      /* 9B and 16B LRH */
 			      __entry->len,
+			      __entry->sc,
 			      __entry->dlid,
 			      __entry->slid,
 			      /* 9B LRH */
 			      __entry->lnh, show_lnh(__entry->lnh),
 			      __entry->lver,
 			      __entry->sl,
-			      __entry->vl,
 			      /* 16B LRH */
 			      __entry->age,
 			      __entry->becn,
 			      __entry->fecn,
 			      __entry->l4,
 			      __entry->rc,
-			      __entry->sc,
 			      __entry->entropy,
 			      /* BTH */
 			      __entry->opcode, show_ib_opcode(__entry->opcode),
