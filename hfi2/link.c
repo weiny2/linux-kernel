@@ -892,6 +892,7 @@ static int do_quick_linkup(struct hfi_pportdata *ppd)
 	set_8051_lcb_access(dd);
 #endif
 
+	ppd->host_link_state = HLS_UP_INIT;
 	/*
 	 * State "quick" LinkUp request sets the physical link state to
 	 * LinkUp without a verify capability sequence.
@@ -905,11 +906,24 @@ static int do_quick_linkup(struct hfi_pportdata *ppd)
 #if 0 /* WFR legacy */
 		write_csr(dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
 
+#endif
 		if (ret >= 0)
 			ret = -EINVAL;
-#endif
 		return ret;
 	}
+	ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_INIT, 1000);
+	if (ret) {
+		/* logical state didn't change. */
+		ppd_dev_err(ppd,
+			"%s: logical state did not change to INIT\n",
+			__func__);
+		return ret;
+	}
+	/* clear old transient LINKINIT_REASON code */
+	if (ppd->linkinit_reason >= OPA_LINKINIT_REASON_CLEAR)
+		ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
+	handle_linkup_change(ppd, 1);
+	ppd->lstate = IB_PORT_INIT;
 
 	return 0; /* success */
 }
@@ -1404,15 +1418,13 @@ static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup)
 		 * NOTE: This uses this device's vAU, vCU, and vl15_init for
 		 * the remote values.  Both sides must be using the values.
 		 */
-#if 1
 		if (quick_linkup) {
-#else /* WFR legacy */
-		if (quick_linkup
-			    || dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
-			set_up_vl15(dd, dd->vau, dd->vl15_init);
-			assign_remote_cm_au_table(dd, dd->vcu);
-#endif
+			hfi_set_up_vl15(ppd, ppd->vau, ppd->vl15_init);
+			write_fzc_csr(ppd, FZC_LCB_CFG_CRC_MODE,
+				HFI_LCB_CRC_14B << FZC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
+			hfi_assign_remote_cm_au_table(ppd, ppd->vcu);
 			handle_quick_linkup(ppd);
+			hfi_add_full_mgmt_pkey(ppd);
 		}
 
 		/* physical link went up */
@@ -2236,10 +2248,6 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		 */
 		if (quick_linkup) {
 			ret = do_quick_linkup(ppd);
-#if 1 /* new on FXR */
-			ppd->host_link_state = HLS_UP_INIT;
-			ppd->lstate = IB_PORT_INIT;
-#endif
 		} else {
 			ret1 = set_physical_link_state(ppd, PLS_POLLING);
 			if (ret1 != HCMD_SUCCESS) {
