@@ -845,7 +845,6 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 	u32 lrh2_16b = 0;
 	u32 lrh3_16b = 0;
 
-	//pr_info("%s: Making %s rc ack\n", __func__, bypass ? "16B" : "9B");
 	/* Don't send ACK or NAK if a RDMA read or atomic is pending. */
 	if (qp->s_flags & RVT_S_RESP_PENDING)
 		goto queue_ack;
@@ -947,8 +946,6 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 		hdr_16b.lrh[1] = lrh1_16b;
 		hdr_16b.lrh[2] = lrh2_16b;
 		hdr_16b.lrh[3] = lrh3_16b;
-
-		//dump_16b_header(&hdr_16b);
 	}
 
 	/* Don't try to send ACKs if the link isn't ACTIVE */
@@ -967,7 +964,9 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 		goto queue_ack;
 	}
 
-	//trace_ack_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &hdr);
+	trace_ack_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
+			   bypass ? (void *)&hdr_16b : (void *)&hdr,
+			   bypass);
 
 	/* write the pbc and data */
 	ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc,
