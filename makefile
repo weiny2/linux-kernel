@@ -129,7 +129,7 @@ install:
 
 rpm: dist
 	mkdir -p rpmbuild/SOURCES
-	mv opa2_hfi-0.6.tgz rpmbuild/SOURCES
+	mv opa2_hfi-$(VERSION).tgz rpmbuild/SOURCES
 	rpmbuild -bb \
 		--define "_topdir ${PWD}/rpmbuild" \
 		--define 'require_kver $(KVER)' \
