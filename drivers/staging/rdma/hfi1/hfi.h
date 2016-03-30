@@ -365,6 +365,7 @@ struct hfi1_packet {
 	u8 updegr;
 	u8 rcv_flags;
 	u8 etype;
+	bool bypass;
 };
 
 static inline bool has_sc4_bit(struct hfi1_packet *p)

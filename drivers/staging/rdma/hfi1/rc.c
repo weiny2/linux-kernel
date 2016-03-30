@@ -2218,14 +2218,12 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	int copy_last = 0;
 	bool is_fecn = false;
 	bool grh = false;
-	bool bypass = false;
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
 	if (rcv_flags & HFI1_HAS_GRH)
 		grh = true;
 
-	if (packet->etype == RHF_RCV_TYPE_BYPASS) {
-		bypass = true;
+	if (packet->bypass) {
 		hdr_16b = packet->hdr;
 		data = packet->ebuf + hdrsize;
 	} else {
@@ -2233,9 +2231,9 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	}
 
 	if (hfi1_ruc_check_hdr(ibp,
-			       bypass ? (void *)hdr_16b : (void *)hdr,
-			       grh, bypass, qp, bth0)) {
-		pr_warn("%s ruc check header failed\n", bypass ? "16B" : "9B");
+			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
+			       grh, packet->bypass, qp, bth0)) {
+		pr_warn("%s ruc check header failed\n", packet->bypass ? "16B" : "9B");
 		return;
 	}
 
@@ -2375,7 +2373,7 @@ no_immediate_data:
 		wc.ex.imm_data = 0;
 send_last:
 		/* Get the number of bytes the message was padded by. */
-		if (!bypass)
+		if (!packet->bypass)
 			pad = OPA_9B_BTH_GET_PAD(bth0);
 		else
 			pad = OPA_16B_BTH_GET_PAD(bth0);
@@ -2668,7 +2666,7 @@ nack_acc:
 	qp->r_nak_state = IB_NAK_REMOTE_ACCESS_ERROR;
 	qp->r_ack_psn = qp->r_psn;
 send_ack:
-	hfi1_send_rc_ack(rcd, qp, is_fecn, bypass);
+	hfi1_send_rc_ack(rcd, qp, is_fecn, packet->bypass);
 }
 
 void hfi1_rc_hdrerr(

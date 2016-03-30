@@ -862,7 +862,6 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	u32 bth1;
 	int is_mcast;
 	struct ib_grh *grh = NULL;
-	bool bypass = false;
 	u8 fecn, becn, sc;
 	u8 sl_from_sc, sc5, sl;
 	u32 lqpn;
@@ -876,15 +875,12 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		       const struct ib_grh *old_grh);
 	u32 mlid_base;
 
-	if (packet->etype == RHF_RCV_TYPE_BYPASS)
-		bypass = true;
-
 	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
 	src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & RVT_QPN_MASK;
 	lqpn =  be32_to_cpu(ohdr->bth[1]) & RVT_QPN_MASK;
 	bth1 = be32_to_cpu(ohdr->bth[1]);
 	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
-	if (bypass) {
+	if (packet->bypass) {
 		hdr_16b = packet->hdr;
 		data = packet->ebuf + hdrsize;
 		dlid = OPA_16B_GET_DLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
@@ -1048,7 +1044,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	}
 
 	/* TODO: Clean this up */
-	if (bypass) {
+	if (packet->bypass) {
 		if (has_grh) {
 			hfi1_copy_sge(&qp->r_sge, &hdr_16b->u.l.grh, sizeof(struct ib_grh), 1, 0);
 			wc.wc_flags |= IB_WC_GRH;

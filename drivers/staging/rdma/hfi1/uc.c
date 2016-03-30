@@ -312,10 +312,8 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 	bool has_grh = rcv_flags & HFI1_HAS_GRH;
 	int ret;
 	u32 bth1, dlid, slid;
-	bool bypass = false;
 
-	if (packet->etype == RHF_RCV_TYPE_BYPASS) {
-		bypass = true;
+	if (packet->bypass) {
 		hdr_16b = packet->hdr;
 		data = packet->ebuf + hdrsize;
 	} else {
@@ -324,9 +322,9 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
 	if (hfi1_ruc_check_hdr(ibp,
-			       bypass ? (void *)hdr_16b : (void *)hdr,
-			       has_grh, bypass, qp, bth0)) {
-		pr_warn("%s ruc check header failed\n", bypass ? "16B" : "9B");
+			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
+			       has_grh, packet->bypass, qp, bth0)) {
+		pr_warn("%s ruc check header failed\n", packet->bypass ? "16B" : "9B");
 		return;
 	}
 
@@ -343,7 +341,7 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 			sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 			sl = ibp->sc_to_sl[sc5];
 
-			if (bypass)
+			if (packet->bypass)
 				slid = OPA_16B_GET_SLID(hdr_16b->lrh[0],
 							hdr_16b->lrh[1],
 							hdr_16b->lrh[2],
@@ -361,7 +359,7 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 			u16 pkey;
 			u8 sc5;
 
-			if (bypass) {
+			if (packet->bypass) {
 				dlid = OPA_16B_GET_DLID(hdr_16b->lrh[0],
 							hdr_16b->lrh[1],
 							hdr_16b->lrh[2],
@@ -499,7 +497,7 @@ no_immediate_data:
 		wc.wc_flags = 0;
 send_last:
 		/* Get the number of bytes the message was padded by. */
-		if (!bypass)
+		if (!packet->bypass)
 			pad = OPA_9B_BTH_GET_PAD(bth0);
 		else
 			pad = OPA_16B_BTH_GET_PAD(bth0);
@@ -597,7 +595,7 @@ rdma_last_imm:
 		wc.wc_flags = IB_WC_WITH_IMM;
 
 		/* Get the number of bytes the message was padded by. */
-		if (!bypass)
+		if (!packet->bypass)
 			pad = OPA_9B_BTH_GET_PAD(bth0);
 		else
 			pad = OPA_16B_BTH_GET_PAD(bth0);
@@ -628,7 +626,7 @@ rdma_last_imm:
 	case OP(RDMA_WRITE_LAST):
 rdma_last:
 		/* Get the number of bytes the message was padded by. */
-		if (!bypass)
+		if (!packet->bypass)
 			pad = OPA_9B_BTH_GET_PAD(bth0);
 		else
 			pad = OPA_16B_BTH_GET_PAD(bth0);

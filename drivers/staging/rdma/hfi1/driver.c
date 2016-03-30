@@ -287,16 +287,14 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 	void *ebuf = NULL;
 	__be32 *bth = NULL;
 	u32 slid, dlid;
-	bool bypass = false;
 	bool has_grh = false;
 
 	if (packet->rhf & (RHF_VCRC_ERR | RHF_ICRC_ERR))
 		return;
 
-	if (packet->etype == RHF_RCV_TYPE_BYPASS) {
+	if (packet->bypass) {
 		u8 l4;
 
-		bypass = true;
 		rhdr_16b = packet->hdr;
 		hdr_16b = (struct hfi1_16b_header *)rhdr_16b;
 		l4 = OPA_16B_GET_L4(rhdr_16b->lrh[0], rhdr_16b->lrh[1],
@@ -423,7 +421,7 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 			u32 lqpn, rqpn;
 			u8 svc_type, sl, sc5;
 
-			if (!bypass) {
+			if (!packet->bypass) {
 				sc5  = (be16_to_cpu(rhdr->lrh[0]) >> 12) & 0xf;
 				if (rhf_dc_info(packet->rhf))
 					sc5 |= 0x10;
@@ -764,12 +762,15 @@ static inline int process_rcv_packet(struct hfi1_packet *packet, int thread)
 	int ret = RCV_PKT_OK;
 
 	packet->etype = rhf_rcv_type(packet->rhf);
-	if (packet->etype == RHF_RCV_TYPE_BYPASS)
+	if (packet->etype == RHF_RCV_TYPE_BYPASS) {
 		packet->hdr = hfi1_get_16b_msgheader(packet->rcd->dd,
 						     packet->rhf_addr);
-	else
+		packet->bypass = true;
+	} else {
 		packet->hdr = hfi1_get_ib_msgheader(packet->rcd->dd,
 						    packet->rhf_addr);
+		packet->bypass = false;
+	}
 
 	packet->hlen = (u8 *)packet->rhf_addr - (u8 *)packet->hdr;
 	/* total length */
@@ -1063,7 +1064,7 @@ int handle_receive_interrupt(struct hfi1_ctxtdata *rcd, int thread)
 			last = skip_rcv_packet(&packet, thread);
 			skip_pkt = 0;
 		} else {
-			if (rhf_rcv_type(packet.rhf) != RHF_RCV_TYPE_BYPASS) { 
+			if (!packet.bypass) {
 				/* Auto activate link on non-SC15 packet receive */
 				if (unlikely(rcd->ppd->host_link_state ==
 					     HLS_UP_ARMED) &&
