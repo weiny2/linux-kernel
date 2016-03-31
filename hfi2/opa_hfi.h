@@ -69,6 +69,12 @@
 #include "firmware.h"
 #include "verbs/verbs.h"
 
+/* bumped 1 from s/w major version of TrueScale */
+#define HFI2_CHIP_VERS_MAJ 4U
+
+/* don't care about this except printing */
+#define HFI2_CHIP_VERS_MIN 0U
+
 extern unsigned int hfi_max_mtu;
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME
@@ -636,6 +642,8 @@ struct hfi_pportdata {
 #endif
 };
 
+#define BOARD_VERS_MAX 96 /* how long the version string can be */
+
 /*
  * device data struct contains only per-HFI info.
  *
@@ -647,6 +655,7 @@ struct hfi_pportdata {
  *@fw_8051_load: indicate whether 8051 firmware should be loaded
  *@fw_8051: 8051 firmware loaded in memory
  *@crk8051_ver: 8051 firmware version
+ *@boardname: human readable board info
  */
 struct hfi_devdata {
 	/* pci access data structure */
@@ -755,6 +764,8 @@ struct hfi_devdata {
 	bool fw_8051_load;
 	struct firmware_details fw_8051;
 	u16 crk8051_ver; /* 8051 firmware version */
+
+	char *boardname; /* human readable board info */
 
 	/* chip minor rev, from CceRevision */
 	u8 minrev;

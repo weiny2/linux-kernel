@@ -34,3 +34,4 @@ hfi2-y += verbs/uc.o
 hfi2-y += verbs/ud.o
 hfi2-y += verbs/verbs.o
 hfi2-y += verbs/verbs_mcast.o
+hfi2-y += verbs/sysfs.o

@@ -125,6 +125,7 @@ MODULE_PARM_DESC(mnh_avail, "Set to true if running on ZEBU");
 
 static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 			       void *head_base);
+static int obtain_boardname(struct hfi_devdata *dd);
 
 static const char *hfi2_class_name = "hfi2";
 
@@ -2373,6 +2374,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->bus_dev->kregbase = dd->kregbase;
 	dd->bus_dev->kregend = dd->kregend;
 
+	obtain_boardname(dd); /* Set dd->boardname */
+
 	return dd;
 
 err_post_alloc:
@@ -2884,4 +2887,34 @@ void hfi_ctxt_set_bypass(struct hfi_ctx *ctx)
 					 i, rx_ctx);
 	}
 	spin_unlock(&dd->ptl_lock);
+}
+
+/*
+ * Set dd->boardname.  Use a generic name if a name is not returned from
+ * EFI variable space.
+ *
+ * Return 0 on success, -ENOMEM if space could not be allocated.
+ */
+static int obtain_boardname(struct hfi_devdata *dd)
+{
+	/* generic board description */
+	const char generic[] =
+		"Intel Omni-Path Host Fabric Interface Adapter 100 Series";
+#if 0 /* FXRTODO: implement read_hfi2_efi_var. */
+	unsigned long size;
+	int ret;
+
+	ret = read_hfi2_efi_var(dd, "description", &size,
+				(void **)&dd->boardname);
+	if (ret) {
+		dd_dev_info(dd, "Board description not found\n");
+#endif
+		/* use generic description */
+		dd->boardname = kstrdup(generic, GFP_KERNEL);
+		if (!dd->boardname)
+			return -ENOMEM;
+#if 0 /* FXRTODO: implement read_hfi2_efi_var. */
+	}
+#endif
+	return 0;
 }

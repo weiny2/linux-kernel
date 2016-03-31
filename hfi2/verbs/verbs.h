@@ -867,4 +867,6 @@ struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev);
 void hfi2_cap_mask_chg(struct hfi2_ibport *ibp);
 void hfi2_sys_guid_chg(struct hfi2_ibport *ibp);
 void hfi2_node_desc_chg(struct hfi2_ibport *ibp);
+void hfi2_verbs_register_sysfs(struct device *dev);
+
 #endif
