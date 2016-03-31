@@ -304,6 +304,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_hw_limit hwl;
 	struct opa_ctx_assign ctx_assign;
 	struct opa_ev_assign ev_assign;
+	struct hfi_ts_master_regs master_ts;
+	struct hfi_ts_fm_data fm_data;
 	int need_admin = 0;
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *copy_ptr = NULL;
@@ -406,6 +408,16 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_GET_HW_LIMITS:
 		copy_out = sizeof(hwl);
 		copy_ptr = &hwl;
+		break;
+	case HFI_CMD_TS_GET_MASTER:
+		copy_in = sizeof(master_ts);
+		copy_out = copy_in;
+		copy_ptr = &master_ts;
+		break;
+	case HFI_CMD_TS_GET_FM_DATA:
+		copy_in = sizeof(fm_data);
+		copy_out = copy_in;
+		copy_ptr = &fm_data;
 		break;
 	default:
 		ret = -EINVAL;
@@ -578,6 +590,12 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_GET_HW_LIMITS:
 		ret = ops->get_hw_limits(&ud->ctx, &hwl);
+		break;
+	case HFI_CMD_TS_GET_MASTER:
+		ret = ops->get_ts_master_regs(&ud->ctx, &master_ts);
+		break;
+	case HFI_CMD_TS_GET_FM_DATA:
+		ret = ops->get_ts_fm_data(&ud->ctx, &fm_data);
 		break;
 	default:
 		ret = -EINVAL;

@@ -91,6 +91,7 @@
 #include "opa_hfi.h"
 #include "link.h"
 #include "firmware.h"
+#include "timesync.h"
 #include "verbs/verbs.h"
 #include "verbs/packet.h"
 #include "platform.h"
@@ -1829,6 +1830,8 @@ void hfi_pport_uninit(struct hfi_devdata *dd)
 		struct cc_state *cc_state;
 		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
 
+		hfi_timesync_stop(ppd);
+
 		spin_lock(&ppd->cc_state_lock);
 		cc_state = hfi_get_cc_state(ppd);
 		rcu_assign_pointer(ppd->cc_state, NULL);
@@ -1981,6 +1984,8 @@ static struct opa_core_ops opa_core_ops = {
 	.get_hw_limits = hfi_get_hw_limits,
 	.set_rsm_rule = set_rsm_rule,
 	.clear_rsm_rule = clear_rsm_rule,
+	.get_ts_master_regs = hfi_get_ts_master_regs,
+	.get_ts_fm_data = hfi_get_ts_fm_data,
 };
 
 /*
@@ -2442,7 +2447,8 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	write_csr(dd, FXR_RX_HIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
 
 	/* We need this lock to guard cache invalidation
-	 * CSR writes, all pids use the same CSR */
+	 * CSR writes, all pids use the same CSR
+	 */
 	spin_lock(&dd->ptl_lock);
 
 	/*

@@ -64,6 +64,7 @@
 #include "opa_hfi.h"
 #include "link.h"
 #include "firmware.h"
+#include "timesync.h"
 
 #define WAIT_TILL_8051_LINKUP 1000
 
@@ -2367,6 +2368,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 			break;
 		}
 		ppd->host_link_state = HLS_GOING_UP;
+		hfi_timesync_init(ppd);
 		break;
 	case HLS_GOING_OFFLINE:		/* transient within goto_offline() */
 	case HLS_LINK_COOLDOWN:		/* transient within goto_offline() */

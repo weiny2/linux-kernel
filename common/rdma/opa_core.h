@@ -163,9 +163,9 @@ struct hfi_ctx {
 	u64	status_reg[HFI_NUM_NIS * HFI_NUM_CT_RESERVED];
 	struct hfi_eq	eq_zero[HFI_NUM_NIS];
 	hfi_me_handle_t *le_me_free_list;
-	uint32_t	le_me_free_index;
-	uint8_t		pt_free_list[HFI_NUM_NIS][HFI_NUM_PT_ENTRIES];
-	uint32_t	pt_free_index[HFI_NUM_NIS];
+	u32		le_me_free_index;
+	u8		pt_free_list[HFI_NUM_NIS][HFI_NUM_PT_ENTRIES];
+	u32		pt_free_index[HFI_NUM_NIS];
 	struct list_head wait_list;
 };
 
@@ -405,6 +405,8 @@ struct hfi_rsm_rule {
  * @get_hw_limits: obtain HW specific resource limits
  * @set_rsm_rule: set an RSM rule for receive side context mapping
  * @clear_rsm_rule: disable previously set RSM rule
+ * @get_master_ts_regs: Timesync master data
+ * @get_ts_fm_data: Return timesync data collected from FM MADs
  */
 struct opa_core_ops {
 	int (*ctx_assign)(struct hfi_ctx *ctx,
@@ -413,7 +415,8 @@ struct opa_core_ops {
 	int (*ctx_reserve)(struct hfi_ctx *ctx, u16 *base, u16 count,
 			   u16 align, u16 flags);
 	void (*ctx_unreserve)(struct hfi_ctx *ctx);
-	int (*ctx_set_allowed_uids)(struct hfi_ctx *ctx, u32 *auth_uid, u8 num_uids);
+	int (*ctx_set_allowed_uids)(struct hfi_ctx *ctx, u32 *auth_uid,
+				    u8 num_uids);
 	int (*ctx_addr)(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr,
 			ssize_t *len);
 	int (*cq_assign)(struct hfi_ctx *ctx,
@@ -434,19 +437,25 @@ struct opa_core_ops {
 	int (*dlid_release)(struct hfi_ctx *ctx, u32 dlid_base, u32 count);
 	int (*e2e_ctrl)(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e_ctrl);
 	void (*get_device_desc)(struct opa_core_device *odev,
-						struct opa_dev_desc *desc);
+				struct opa_dev_desc *desc);
 	void (*get_port_desc)(struct opa_core_device *odev,
-				struct opa_pport_desc *pdesc, u8 port_num);
+			      struct opa_pport_desc *pdesc, u8 port_num);
 	int (*check_ptl_slp)(struct hfi_ctx *ctx, struct hfi_sl_pair *slp);
 	int (*get_hw_limits)(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl);
 	int (*set_rsm_rule)(struct opa_core_device *odev,
 			    struct hfi_rsm_rule *rule,
 			    struct hfi_ctx *rsm_ctx[], u16 num_contexts);
 	void (*clear_rsm_rule)(struct opa_core_device *odev, u8 rule_idx);
+	int (*get_ts_master_regs)(struct hfi_ctx *ctx,
+				  struct hfi_ts_master_regs *ts_master_regs);
+	int (*get_ts_fm_data)(struct hfi_ctx *ctx,
+			      struct hfi_ts_fm_data *fm_data);
 };
 
 /**
- * struct opa_core_device - device, vendor and revision ID for an OPA core device
+ * struct opa_core_device - device, vendor and revision ID for an OPA core
+ * device
+ *
  * @vendor: OPA HFI PCIe vendor ID
  * @device: OPA HFI PCIe device ID
  * @revision: OPA HFI PCIe revision ID
