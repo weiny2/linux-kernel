@@ -1542,16 +1542,13 @@ static struct snoop_packet *allocate_snoop_packet(u32 hdr_len,
  * both the interrupt handler and hfi1_ib_rcv() we are going to hijack the call
  * and land in here for snoop/capture but if not enabled the call will go
  * through as before. This gives us a single point to constrain all of the snoop
- * snoop recv logic. There is nothing special that needs to happen for bypass
- * packets. This routine should not try to look into the packet. It just copied
- * it. There is no guarantee for filters when it comes to bypass packets as
- * there is no specific support. Bottom line is this routine does now even know
- * what a bypass packet is.
+ * snoop recv logic.
  */
 int snoop_recv_handler(struct hfi1_packet *packet)
 {
 	struct hfi1_pportdata *ppd = packet->rcd->ppd;
-	struct hfi1_ib_header *hdr = packet->hdr;
+	struct hfi1_ib_header *hdr = NULL;
+	struct hfi1_16b_header *hdr_16b = NULL;
 	int header_size = packet->hlen;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
@@ -1559,20 +1556,30 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 	int ret;
 	int snoop_mode = 0;
 	u32 md_len = 0;
+	u32 etype = rhf_rcv_type(packet->rhf);
 	struct capture_md md;
 
-	snoop_dbg("PACKET IN: hdr size %d tlen %d data %p", header_size, tlen,
-		  data);
+	snoop_dbg("PACKET IN: etype:%d hdr_size:%d tlen:%d data:%p",
+		  etype, header_size, tlen, data);
 
-	trace_snoop_capture(ppd->dd, header_size, hdr, tlen - header_size,
-			    data);
+	if (packet->bypass)
+		hdr_16b = packet->ebuf;
+	else
+		hdr = packet->hdr;
+
+	trace_snoop_capture(ppd->dd, header_size,
+			    packet->bypass ? (void *)hdr_16b : (void *)hdr,
+			    tlen - header_size,
+			    data, packet->bypass);
 
 	if (!ppd->dd->hfi1_snoop.filter_callback) {
 		snoop_dbg("filter not set");
 		ret = HFI1_FILTER_HIT;
 	} else {
-		ret = ppd->dd->hfi1_snoop.filter_callback(hdr, data,
-					ppd->dd->hfi1_snoop.filter_value);
+		ret = ppd->dd->hfi1_snoop.filter_callback(
+				packet->bypass ? (void *)hdr_16b : (void *)hdr,
+				data,
+				ppd->dd->hfi1_snoop.filter_value);
 	}
 
 	switch (ret) {
@@ -1608,8 +1615,10 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 		}
 
 		/* We should always have a header */
-		if (hdr) {
-			memcpy(s_packet->data + md_len, hdr, header_size);
+		if (hdr || hdr_16b) {
+			memcpy(s_packet->data + md_len,
+			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
+			       header_size);
 		} else {
 			dd_dev_err(ppd->dd, "Unable to copy header to snoop/capture packet\n");
 			kfree(s_packet);
@@ -1674,9 +1683,7 @@ int snoop_send_dma_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 }
 
 /*
- * Handle snooping and capturing packets when pio is being used. Does not handle
- * bypass packets. The only way to send a bypass packet currently is to use the
- * diagpkt interface. When that interface is enable snoop/capture is not.
+ * Handle snooping and capturing packets when pio is being used.
  */
 int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 			   u64 pbc)
