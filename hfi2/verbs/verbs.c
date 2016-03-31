@@ -479,6 +479,10 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 	ibdev->get_port_immutable = port_immutable;
 #endif
+
+	/* add optional sysfs files under /sys/class/infiniband/hfi2_0/ */
+	hfi2_verbs_register_sysfs(&ibdev->dev);
+
 	/* hfi2_create_port_files); */
 	ret = ib_register_device(ibdev, NULL);
 	if (ret)
@@ -487,15 +491,8 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ret = hfi2_create_agents(ibdev);
 	if (ret)
 		goto err_agents;
-#if 0
-	if (hfi2_verbs_register_sysfs(dd))
-		goto err_class;
-#endif
 	goto exit;
-#if 0
-err_class:
-	hfi2_free_agents(ibdev);
-#endif
+
 err_agents:
 	ib_unregister_device(ibdev);
 err_reg:
