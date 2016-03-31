@@ -58,6 +58,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/version.h>
+#include <linux/ptp_clock_kernel.h>
 #include <rdma/ib_smi.h>
 #include <rdma/hfi_cmd.h>
 #include <rdma/opa_core.h>
@@ -513,6 +514,15 @@ struct bw_arb_cache {
  *@link_down_work: for LinkUp -> LinkDown
  *@sma_message_work: for the interrupt caused by "Receive a back channel msg
  *		using LCB idle protocol HOST Type SMA"
+ *@tmreg_lock: protects the device time registers.
+ *@ptp_clock: pointer to PTP internal data
+ *@ptp_caps: PTP function pointers
+ *@fabric_time_offset: FM provided offset of current master clock from global
+ *		fabric time
+ *@propagation_delay: FM provided propagation delay for time flits between
+ *		current master and the slave node
+ *@update_interval: FM provided filt update interval
+ *@current_clock_id: FM provided current clock id
  *@vau: Virtual allocation unit for this port
  *@vcu: Virtual return credit unit for this port
  *@link_credits: link credits of this device
@@ -618,6 +628,16 @@ struct hfi_pportdata {
 	/* for the interrupt caused by "Receive a back channel msg using LCB idle
 	   protocol HOST Type SMA" */
 	struct work_struct sma_message_work;
+
+	/* for timesync */
+	struct mutex timesync_mutex;
+	spinlock_t tmreg_lock; /* Used to protect the device time registers. */
+	struct ptp_clock *ptp_clock;
+	struct ptp_clock_info ptp_caps;
+	u64 fabric_time_offset;
+	u16 propagation_delay;
+	u16 update_interval;
+	u8 current_clock_id;
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *hfi_port_dbg;
