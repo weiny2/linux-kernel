@@ -385,7 +385,8 @@ struct hfi1_snoop_data {
 	struct list_head queue;
 	wait_queue_head_t waitq;
 	void *filter_value;
-	int (*filter_callback)(void *hdr, void *data, void *value);
+	int (*filter_callback)(void *hdr, void *data,
+			       void *value, bool bypass);
 	u64 dcc_cfg; /* saved value of DCC Cfg register */
 };
 

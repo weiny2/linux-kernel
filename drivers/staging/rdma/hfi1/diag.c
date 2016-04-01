@@ -241,20 +241,25 @@ static const struct file_operations snoop_file_ops = {
 };
 
 struct hfi1_filter_array {
-	int (*filter)(void *, void *, void *);
+	int (*filter)(void *, void *, void *, bool);
 };
 
-static int hfi1_filter_lid(void *ibhdr, void *packet_data, void *value);
-static int hfi1_filter_dlid(void *ibhdr, void *packet_data, void *value);
+static int hfi1_filter_lid(void *ibhdr, void *packet_data,
+			   void *value, bool bypass);
+static int hfi1_filter_dlid(void *ibhdr, void *packet_data,
+			   void *value, bool bypass);
 static int hfi1_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
-				      void *value);
-static int hfi1_filter_qp_number(void *ibhdr, void *packet_data, void *value);
+				      void *value, bool bypass);
+static int hfi1_filter_qp_number(void *ibhdr, void *packet_data,
+				 void *value, bool bypass);
 static int hfi1_filter_ibpacket_type(void *ibhdr, void *packet_data,
-				     void *value);
+				     void *value, bool bypass);
 static int hfi1_filter_ib_service_level(void *ibhdr, void *packet_data,
-					void *value);
-static int hfi1_filter_ib_pkey(void *ibhdr, void *packet_data, void *value);
-static int hfi1_filter_direction(void *ibhdr, void *packet_data, void *value);
+					void *value, bool bypass);
+static int hfi1_filter_ib_pkey(void *ibhdr, void *packet_data,
+			       void *value, bool bypass);
+static int hfi1_filter_direction(void *ibhdr, void *packet_data,
+				 void *value, bool bypass);
 
 static const struct hfi1_filter_array hfi1_filters[] = {
 	{ hfi1_filter_lid },
@@ -1293,10 +1298,11 @@ static inline int hfi1_filter_check(void *val, const char *msg)
 	return 0;
 }
 
-static int hfi1_filter_lid(void *ibhdr, void *packet_data, void *value)
+static int hfi1_filter_lid(void *ibhdr, void *packet_data,
+			   void *value, bool bypass)
 {
-	struct hfi1_ib_header *hdr;
 	int ret;
+	u32 slid;
 
 	ret = hfi1_filter_check(ibhdr, "header");
 	if (ret)
@@ -1304,18 +1310,28 @@ static int hfi1_filter_lid(void *ibhdr, void *packet_data, void *value)
 	ret = hfi1_filter_check(value, "user");
 	if (ret)
 		return ret;
-	hdr = (struct hfi1_ib_header *)ibhdr;
+	if (bypass) {
+		struct hfi1_16b_header *hdr = (struct hfi1_16b_header *)ibhdr;
 
-	if (*((u16 *)value) == be16_to_cpu(hdr->lrh[3])) /* matches slid */
+		slid = OPA_16B_GET_SLID(hdr->lrh[0], hdr->lrh[1],
+					hdr->lrh[2], hdr->lrh[3]);
+	} else {
+		struct hfi1_ib_header *hdr = (struct hfi1_ib_header *)ibhdr;
+
+		slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
+	}
+
+	if (*((u32 *)value) == slid)
 		return HFI1_FILTER_HIT; /* matched */
 
 	return HFI1_FILTER_MISS; /* Not matched */
 }
 
-static int hfi1_filter_dlid(void *ibhdr, void *packet_data, void *value)
+static int hfi1_filter_dlid(void *ibhdr, void *packet_data,
+			    void *value, bool bypass)
 {
-	struct hfi1_ib_header *hdr;
 	int ret;
+	u32 dlid;
 
 	ret = hfi1_filter_check(ibhdr, "header");
 	if (ret)
@@ -1323,10 +1339,19 @@ static int hfi1_filter_dlid(void *ibhdr, void *packet_data, void *value)
 	ret = hfi1_filter_check(value, "user");
 	if (ret)
 		return ret;
+	if (bypass) {
+		struct hfi1_16b_header *hdr = (struct hfi1_16b_header *)ibhdr;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+		dlid = OPA_16B_GET_DLID(hdr->lrh[0], hdr->lrh[1],
+					hdr->lrh[2], hdr->lrh[3]);
+	} else {
+		struct hfi1_ib_header *hdr = (struct hfi1_ib_header *)ibhdr;
 
-	if (*((u16 *)value) == be16_to_cpu(hdr->lrh[1]))
+		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
+	}
+
+
+	if (*((u32 *)value) == dlid)
 		return HFI1_FILTER_HIT;
 
 	return HFI1_FILTER_MISS;
@@ -1334,10 +1359,8 @@ static int hfi1_filter_dlid(void *ibhdr, void *packet_data, void *value)
 
 /* Not valid for outgoing packets, send handler passes null for data*/
 static int hfi1_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
-				      void *value)
+				      void *value, bool bypass)
 {
-	struct hfi1_ib_header *hdr;
-	struct hfi1_other_headers *ohdr = NULL;
 	struct ib_smp *smp = NULL;
 	u32 qpn = 0;
 	int ret;
@@ -1351,16 +1374,30 @@ static int hfi1_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 	ret = hfi1_filter_check(value, "user");
 	if (ret)
 		return ret;
+	if (bypass) {
+		u8 l4;
+		struct hfi1_other_headers *ohdr = NULL;
+		struct hfi1_16b_header *hdr = (struct hfi1_16b_header *)ibhdr;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+		l4 = OPA_16B_GET_L4(hdr->lrh[0], hdr->lrh[1],
+				    hdr->lrh[2], hdr->lrh[3]);
+		if (l4 == HFI1_L4_IB_LOCAL)
+			ohdr = &hdr->u.oth;
+		else
+			ohdr = &hdr->u.l.oth;
+		qpn = be32_to_cpu(ohdr->bth[1]) & 0x00FFFFFF;
+	} else {
+		struct hfi1_other_headers *ohdr = NULL;
+		struct hfi1_ib_header *hdr = (struct hfi1_ib_header *)ibhdr;
 
-	/* Check for GRH */
-	if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
-		ohdr = &hdr->u.oth; /* LRH + BTH + DETH */
-	else
-		ohdr = &hdr->u.l.oth; /* LRH + GRH + BTH + DETH */
+		/* Check for GRH */
+		if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
+			ohdr = &hdr->u.oth; /* LRH + BTH + DETH */
+		else
+			ohdr = &hdr->u.l.oth; /* LRH + GRH + BTH + DETH */
+		qpn = be32_to_cpu(ohdr->bth[1]) & 0x00FFFFFF;
+	}
 
-	qpn = be32_to_cpu(ohdr->bth[1]) & 0x00FFFFFF;
 	if (qpn <= 1) {
 		smp = (struct ib_smp *)packet_data;
 		if (*((u8 *)value) == smp->mgmt_class)
@@ -1371,10 +1408,10 @@ static int hfi1_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 	return HFI1_FILTER_ERR;
 }
 
-static int hfi1_filter_qp_number(void *ibhdr, void *packet_data, void *value)
+static int hfi1_filter_qp_number(void *ibhdr, void *packet_data,
+				 void *value, bool bypass)
 {
-	struct hfi1_ib_header *hdr;
-	struct hfi1_other_headers *ohdr = NULL;
+	u32 qpn = 0;
 	int ret;
 
 	ret = hfi1_filter_check(ibhdr, "header");
@@ -1383,27 +1420,40 @@ static int hfi1_filter_qp_number(void *ibhdr, void *packet_data, void *value)
 	ret = hfi1_filter_check(value, "user");
 	if (ret)
 		return ret;
+	if (bypass) {
+		u8 l4;
+		struct hfi1_other_headers *ohdr = NULL;
+		struct hfi1_16b_header *hdr = (struct hfi1_16b_header *)ibhdr;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+		l4 = OPA_16B_GET_L4(hdr->lrh[0], hdr->lrh[1],
+				    hdr->lrh[2], hdr->lrh[3]);
+		if (l4 == HFI1_L4_IB_LOCAL)
+			ohdr = &hdr->u.oth;
+		else
+			ohdr = &hdr->u.l.oth;
+		qpn = be32_to_cpu(ohdr->bth[1]) & 0x00FFFFFF;
+	} else {
+		struct hfi1_other_headers *ohdr = NULL;
+		struct hfi1_ib_header *hdr = (struct hfi1_ib_header *)ibhdr;
 
-	/* Check for GRH */
-	if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
-		ohdr = &hdr->u.oth; /* LRH + BTH + DETH */
-	else
-		ohdr = &hdr->u.l.oth; /* LRH + GRH + BTH + DETH */
-	if (*((u32 *)value) == (be32_to_cpu(ohdr->bth[1]) & 0x00FFFFFF))
+		/* Check for GRH */
+		if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
+			ohdr = &hdr->u.oth; /* LRH + BTH + DETH */
+		else
+			ohdr = &hdr->u.l.oth; /* LRH + GRH + BTH + DETH */
+		qpn = be32_to_cpu(ohdr->bth[1]) & 0x00FFFFFF;
+	}
+
+	if (*((u32 *)value) == qpn)
 		return HFI1_FILTER_HIT;
 
 	return HFI1_FILTER_MISS;
 }
 
 static int hfi1_filter_ibpacket_type(void *ibhdr, void *packet_data,
-				     void *value)
+				     void *value, bool bypass)
 {
-	u32 lnh = 0;
 	u8 opcode = 0;
-	struct hfi1_ib_header *hdr;
-	struct hfi1_other_headers *ohdr = NULL;
 	int ret;
 
 	ret = hfi1_filter_check(ibhdr, "header");
@@ -1412,19 +1462,29 @@ static int hfi1_filter_ibpacket_type(void *ibhdr, void *packet_data,
 	ret = hfi1_filter_check(value, "user");
 	if (ret)
 		return ret;
+	if (bypass) {
+		u8 l4;
+		struct hfi1_other_headers *ohdr = NULL;
+		struct hfi1_16b_header *hdr = (struct hfi1_16b_header *)ibhdr;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+		l4 = OPA_16B_GET_L4(hdr->lrh[0], hdr->lrh[1],
+				    hdr->lrh[2], hdr->lrh[3]);
+		if (l4 == HFI1_L4_IB_LOCAL)
+			ohdr = &hdr->u.oth;
+		else
+			ohdr = &hdr->u.l.oth;
+		opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+	} else {
+		struct hfi1_other_headers *ohdr = NULL;
+		struct hfi1_ib_header *hdr = (struct hfi1_ib_header *)ibhdr;
 
-	lnh = (be16_to_cpu(hdr->lrh[0]) & 3);
-
-	if (lnh == HFI1_LRH_BTH)
-		ohdr = &hdr->u.oth;
-	else if (lnh == HFI1_LRH_GRH)
-		ohdr = &hdr->u.l.oth;
-	else
-		return HFI1_FILTER_ERR;
-
-	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+		/* Check for GRH */
+		if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
+			ohdr = &hdr->u.oth; /* LRH + BTH + DETH */
+		else
+			ohdr = &hdr->u.l.oth; /* LRH + GRH + BTH + DETH */
+		opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+	}
 
 	if (*((u8 *)value) == ((opcode >> 5) & 0x7))
 		return HFI1_FILTER_HIT;
@@ -1433,7 +1493,7 @@ static int hfi1_filter_ibpacket_type(void *ibhdr, void *packet_data,
 }
 
 static int hfi1_filter_ib_service_level(void *ibhdr, void *packet_data,
-					void *value)
+					void *value, bool bypass)
 {
 	struct hfi1_ib_header *hdr;
 	int ret;
@@ -1444,6 +1504,10 @@ static int hfi1_filter_ib_service_level(void *ibhdr, void *packet_data,
 	ret = hfi1_filter_check(value, "user");
 	if (ret)
 		return ret;
+
+	/* Bypass packets do not have a SL field */
+	if (bypass)
+		return HFI1_FILTER_MISS;
 
 	hdr = (struct hfi1_ib_header *)ibhdr;
 
@@ -1453,11 +1517,10 @@ static int hfi1_filter_ib_service_level(void *ibhdr, void *packet_data,
 	return HFI1_FILTER_MISS;
 }
 
-static int hfi1_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
+static int hfi1_filter_ib_pkey(void *ibhdr, void *packet_data,
+			       void *value, bool bypass)
 {
-	u32 lnh = 0;
-	struct hfi1_ib_header *hdr;
-	struct hfi1_other_headers *ohdr = NULL;
+	u32 pkey = 0;
 	int ret;
 
 	ret = hfi1_filter_check(ibhdr, "header");
@@ -1466,16 +1529,29 @@ static int hfi1_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	ret = hfi1_filter_check(value, "user");
 	if (ret)
 		return ret;
+	if (bypass) {
+		u8 l4;
+		struct hfi1_other_headers *ohdr = NULL;
+		struct hfi1_16b_header *hdr = (struct hfi1_16b_header *)ibhdr;
 
-	hdr = (struct hfi1_ib_header *)ibhdr;
+		l4 = OPA_16B_GET_L4(hdr->lrh[0], hdr->lrh[1],
+				    hdr->lrh[2], hdr->lrh[3]);
+		if (l4 == HFI1_L4_IB_LOCAL)
+			ohdr = &hdr->u.oth;
+		else
+			ohdr = &hdr->u.l.oth;
+		pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
+	} else {
+		struct hfi1_other_headers *ohdr = NULL;
+		struct hfi1_ib_header *hdr = (struct hfi1_ib_header *)ibhdr;
 
-	lnh = (be16_to_cpu(hdr->lrh[0]) & 3);
-	if (lnh == HFI1_LRH_BTH)
-		ohdr = &hdr->u.oth;
-	else if (lnh == HFI1_LRH_GRH)
-		ohdr = &hdr->u.l.oth;
-	else
-		return HFI1_FILTER_ERR;
+		/* Check for GRH */
+		if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
+			ohdr = &hdr->u.oth; /* LRH + BTH + DETH */
+		else
+			ohdr = &hdr->u.l.oth; /* LRH + GRH + BTH + DETH */
+		pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
+	}
 
 	/* P_key is 16-bit entity, however top most bit indicates
 	 * type of membership. 0 for limited and 1 for Full.
@@ -1484,9 +1560,7 @@ static int hfi1_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	 * every other combination of membership.
 	 * Hence we'll omit comparing top-most bit while filtering
 	 */
-
-	if ((*(u16 *)value & 0x7FFF) ==
-		((be32_to_cpu(ohdr->bth[0])) & 0x7FFF))
+	if ((*(u16 *)value & 0x7fff) == (pkey & 0x7fff))
 		return HFI1_FILTER_HIT;
 
 	return HFI1_FILTER_MISS;
@@ -1496,7 +1570,8 @@ static int hfi1_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
  * If packet_data is NULL then this is coming from one of the send functions.
  * Thus we know if its an ingressed or egressed packet.
  */
-static int hfi1_filter_direction(void *ibhdr, void *packet_data, void *value)
+static int hfi1_filter_direction(void *ibhdr, void *packet_data,
+				 void *value, bool bypass)
 {
 	u8 user_dir = *(u8 *)value;
 	int ret;
@@ -1579,7 +1654,8 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 		ret = ppd->dd->hfi1_snoop.filter_callback(
 				packet->bypass ? (void *)hdr_16b : (void *)hdr,
 				data,
-				ppd->dd->hfi1_snoop.filter_value);
+				ppd->dd->hfi1_snoop.filter_value,
+				packet->bypass);
 	}
 
 	switch (ret) {
@@ -1708,7 +1784,7 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	u32 vl = 0;
 	u32 hdr_len = hdrwords << 2;
 	u32 tlen = 0;
-	bool use_16b = false;
+	bool bypass = false;
 
 	md.u.pbc = 0;
 
@@ -1718,8 +1794,8 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	    unlikely(snoop_flags & SNOOP_USE_METADATA))
 		md_len = sizeof(struct capture_md);
 
-	use_16b = ps->s_txreq->phdr.hdr.hdr_type;
-	if (!use_16b) {
+	bypass = ps->s_txreq->phdr.hdr.hdr_type;
+	if (!bypass) {
 		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh;
 		/* not using ss->total_len as arg 2 b/c that does not count CRC */
 		tlen = HFI1_GET_PKT_LEN(&ps->s_txreq->phdr.hdr.pkt.ibh);
@@ -1750,7 +1826,7 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		md.port = 1;
 		md.dir = PKT_DIR_EGRESS;
 		if (likely(pbc == 0)) {
-			if (!use_16b) {
+			if (!bypass) {
 				vl = be16_to_cpu(ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0]) >> 12;
 				md.u.pbc = create_pbc(ppd, 0, qp->s_srate, vl, plen);
 			} else {
@@ -1829,7 +1905,8 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		ret = ppd->dd->hfi1_snoop.filter_callback(
 					&ps->s_txreq->phdr.hdr.pkt.ibh,
 					NULL,
-					ppd->dd->hfi1_snoop.filter_value);
+					ppd->dd->hfi1_snoop.filter_value,
+					bypass);
 	}
 
 	switch (ret) {
@@ -1892,6 +1969,7 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 	int md_len = 0;
 	struct capture_md md;
 	struct snoop_packet *s_packet = NULL;
+	bool bypass = false;
 
 	 /* count is in dwords so we need to convert to bytes. */
 	int packet_len = (count << 2);
@@ -1901,11 +1979,13 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 	 * Account for CRC + LT and Padding for bypass packets.
 	 * Account only for CRC for non-bypass packets
 	 */
-	if (!((pbc >> 28) & 0x1))
+	if (!((pbc >> 28) & 0x1)) {
 		packet_len += (SIZE_OF_CRC << 2);
-	else
+		bypass = true;
+	} else {
 		packet_len += hfi1_get_16b_padding(count << 2, 0) +
 				(SIZE_OF_CRC << 2) + SIZE_OF_LT;
+	}
 		
 	snoop_dbg("ACK OUT: len %d", packet_len);
 
@@ -1916,7 +1996,8 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 		ret = dd->hfi1_snoop.filter_callback(
 				(struct hfi1_ib_header *)from,
 				NULL,
-				dd->hfi1_snoop.filter_value);
+				dd->hfi1_snoop.filter_value,
+				bypass);
 	}
 
 	switch (ret) {
