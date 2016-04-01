@@ -1143,28 +1143,23 @@ bail:
 
 static int user_init(struct file *fp)
 {
-	int ret;
 	unsigned int rcvctrl_ops = 0;
 	struct hfi1_filedata *fd = fp->private_data;
 	struct hfi1_ctxtdata *uctxt = fd->uctxt;
 
 	/* make sure that the context has already been setup */
-	if (!test_bit(HFI1_CTXT_SETUP_DONE, &uctxt->event_flags)) {
-		ret = -EFAULT;
-		goto done;
-	}
+	if (!test_bit(HFI1_CTXT_SETUP_DONE, &uctxt->event_flags))
+		return -EFAULT;
 
 	/*
 	 * Subctxts don't need to initialize anything since master
 	 * has done it.
 	 */
-	if (fd->subctxt) {
-		ret = wait_event_interruptible(uctxt->wait,
-					       !test_bit(
-					       HFI1_CTXT_MASTER_UNINIT,
-					       &uctxt->event_flags));
-		goto expected;
-	}
+	if (fd->subctxt)
+		return wait_event_interruptible(
+			uctxt->wait,
+			!test_bit(HFI1_CTXT_MASTER_UNINIT,
+				  &uctxt->event_flags));
 
 	/* initialize poll variables... */
 	uctxt->urgent = 0;
@@ -1219,19 +1214,7 @@ static int user_init(struct file *fp)
 		wake_up(&uctxt->wait);
 	}
 
-expected:
-	/*
-	 * Expected receive has to be setup for all processes (including
-	 * shared contexts). However, it has to be done after the master
-	 * context has been fully configured as it depends on the
-	 * eager/expected split of the RcvArray entries.
-	 * Setting it up here ensures that the subcontexts will be waiting
-	 * (due to the above wait_event_interruptible() until the master
-	 * is setup.
-	 */
-	ret = hfi1_user_exp_rcv_init(fp);
-done:
-	return ret;
+	return 0;
 }
 
 static int get_ctxt_info(struct file *fp, void __user *ubase, __u32 len)
@@ -1300,6 +1283,18 @@ static int setup_ctxt(struct file *fp)
 		}
 	}
 	ret = hfi1_user_sdma_alloc_queues(uctxt, fp);
+	if (ret)
+		goto done;
+	/*
+	 * Expected receive has to be setup for all processes (including
+	 * shared contexts). However, it has to be done after the master
+	 * context has been fully configured as it depends on the
+	 * eager/expected split of the RcvArray entries.
+	 * Setting it up here ensures that the subcontexts will be waiting
+	 * (due to the above wait_event_interruptible() until the master
+	 * is setup.
+	 */
+	ret = hfi1_user_exp_rcv_init(fp);
 	if (ret)
 		goto done;
 
