@@ -771,10 +771,11 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 	/* write Eager entries */
 	for (i = 0; i < OPA_IB_EAGER_COUNT; i++) {
 		u64 *eq_entry = NULL, done;
+		void *egr_start = rcv->egr_base + (i * OPA_IB_EAGER_SIZE);
 
+		WARN_ON(!PTR_ALIGN(egr_start, 64));
 		n_slots = hfi_format_rx_bypass(rcv->ctx, HFI_NI_BYPASS,
-					       rcv->egr_base +
-					       (i*OPA_IB_EAGER_SIZE),
+					       egr_start,
 					       OPA_IB_EAGER_SIZE,
 					       HFI_PT_BYPASS_EAGER,
 					       rcv->ctx->ptl_uid,
