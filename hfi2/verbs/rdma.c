@@ -55,6 +55,7 @@
 #include <linux/sched.h>
 #include "verbs.h"
 #include "packet.h"
+#include "trace.h"
 
 static void hfi2_cnp_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
 typedef void (*opcode_handler)(struct hfi2_qp *qp,
@@ -340,6 +341,8 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 	}
 	wqe->ssn = qp->s_ssn++;
 	qp->s_head = next;
+
+	trace_hfi2_post_one_send(qp, wqe);
 
 	ret = 0;
 	goto bail;
@@ -686,6 +689,15 @@ static bool process_rcv_packet(struct hfi2_ibport *ibp,
 	 * in argument that contains the Eager Buffer for this RHQ.
 	 */
 	packet->ibp = &(ibp->ibd->pport[packet->port]);
+
+	trace_hfi2_rcvhdr(packet->ibp->ppd->dd,
+			  (u64)(packet->ctx),
+			  rhf_err_flags(rhf),
+			  packet->etype,
+			  packet->port,
+			  packet->hlen,
+			  packet->tlen,
+			  rhf_egr_index(rhf));
 
 	return true;
 }
