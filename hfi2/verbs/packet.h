@@ -472,7 +472,7 @@ static inline u64 rhf_sc4(u64 rhf)
 
 static inline u32 rhf_egr_buf_offset(u64 rhf)
 {
-	return (rhf >> RHF_EGR_OFFSET_SHIFT) & RHF_EGR_OFFSET_MASK;
+	return ((rhf >> RHF_EGR_OFFSET_SHIFT) & RHF_EGR_OFFSET_MASK) << 6;
 }
 
 static inline u32 rhf_port(u64 rhf)

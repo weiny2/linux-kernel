@@ -284,7 +284,7 @@ static int opa2_vnic_append_skb(struct opa_ctx_info *ctx_i, int idx)
 				       OPA2_NET_EAGER_SIZE,
 				       HFI_PT_BYPASS_EAGER,
 				       ctx->ptl_uid,
-				       PTL_OP_PUT,
+				       PTL_USE_ONCE | PTL_OP_PUT,
 				       HFI_CT_NONE,
 				       0, (unsigned long)&done,
 				       idx, &rx_cmd);
