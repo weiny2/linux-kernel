@@ -68,6 +68,7 @@
 #include "verbs/mad.h"
 #include "firmware.h"
 #include "verbs/verbs.h"
+#include "platform.h"
 
 /* bumped 1 from s/w major version of TrueScale */
 #define HFI2_CHIP_VERS_MAJ 4U
@@ -82,25 +83,6 @@ extern unsigned int hfi_max_mtu;
 enum {
 	SHARED_CREDITS,
 	DEDICATED_CREDITS
-};
-
-enum {
-	/* Port type is undefined */
-	HFI_PORT_TYPE_UNKNOWN = 0,
-	/* port is not currently usable, CableInfo not available */
-	HFI_PORT_TYPE_DISCONNECTED = 1,
-	/* A fixed backplane port in a director class switch. All HFI ASICS */
-	HFI_PORT_TYPE_FIXED = 2,
-	/* A backplane port in a blade system, possibly mixed configuration */
-	HFI_PORT_TYPE_VARIABLE = 3,
-	/* Implies a SFF-8636 defined format for CableInfo (QSFP) */
-	HFI_PORT_TYPE_STANDARD = 4,
-	/*
-	 * Intel Silicon Photonics x16 mid-board module connector is
-	 * integrated onto system board
-	 */
-	HFI_PORT_TYPE_SI_PHOTONICS = 5,
-	/* 6 - 15 are reserved */
 };
 
 /* partition enforcement flags */
@@ -655,6 +637,10 @@ struct hfi_pportdata {
  *@fw_8051_load: indicate whether 8051 firmware should be loaded
  *@fw_8051: 8051 firmware loaded in memory
  *@crk8051_ver: 8051 firmware version
+ *@platform_config: See pcfg_cache.
+ *@pcfg_cache: copy of platform config data/file. hfi2_parse_platform_config()
+ *             converts it to platform_config. pcfg_cache is never accessed by
+ *             other.
  *@boardname: human readable board info
  */
 struct hfi_devdata {
@@ -764,6 +750,9 @@ struct hfi_devdata {
 	bool fw_8051_load;
 	struct firmware_details fw_8051;
 	u16 crk8051_ver; /* 8051 firmware version */
+
+	struct platform_config platform_config;
+	struct platform_config_cache pcfg_cache;
 
 	char *boardname; /* human readable board info */
 
