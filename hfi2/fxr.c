@@ -93,6 +93,7 @@
 #include "firmware.h"
 #include "verbs/verbs.h"
 #include "verbs/packet.h"
+#include "platform.h"
 
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
@@ -1896,6 +1897,8 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	if (dd->kregbase)
 		iounmap((void __iomem *)dd->kregbase);
 
+	hfi2_free_platform_config(dd);
+
 	idr_destroy(&dd->cq_pair);
 	idr_destroy(&dd->ptl_user);
 	idr_destroy(&dd->ptl_tpid);
@@ -2094,7 +2097,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		ppd->sa_qp = OPA_DEFAULT_SA_QP;
 
 		/* FXRTODO: Remove after QSFP code implemented */
-		ppd->port_type = HFI_PORT_TYPE_STANDARD;
+		ppd->port_type = PORT_TYPE_QSFP;
 
 		ppd->cc_max_table_entries = HFI_IB_CC_TABLE_CAP_DEFAULT;
 
@@ -2383,6 +2386,11 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->unit = dd->bus_dev->index;
 	dd->bus_dev->kregbase = dd->kregbase;
 	dd->bus_dev->kregend = dd->kregend;
+
+	/* read platform_config to dd->platform_config */
+	hfi2_get_platform_config(dd);
+	/* dd->platform_config -> dd->pcfg_cache */
+	hfi2_parse_platform_config(dd);
 
 	obtain_boardname(dd); /* Set dd->boardname */
 

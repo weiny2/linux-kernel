@@ -19,6 +19,7 @@ hfi2-y += portals.o
 hfi2-y += privileged.o
 hfi2-y += snoop.o
 hfi2-y += error.o
+hfi2-y += platform.o
 hfi2-y += verbs/cq.o
 hfi2-y += verbs/dma.o
 hfi2-y += verbs/fxr.o
