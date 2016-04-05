@@ -459,18 +459,19 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 				    ibhdr_exhdr_len(hfi1_hdr, bypass))
 			),
 		    TP_fast_assign(
-			   struct hfi1_other_headers *ohdr;
+			   struct hfi1_ib_header *hdr = NULL;
+			   struct hfi1_16b_header *hdr_16b = NULL;
+			   struct hfi1_other_headers *ohdr = NULL;
 
 			   DD_DEV_ASSIGN(dd);
 			   if (bypass) {
 				u32 h0, h1, h2, h3;
-				struct hfi1_16b_header *hdr = NULL;
 
-				hdr = (struct hfi1_16b_header *)hfi1_hdr;
-				h0 = hdr->lrh[0];
-				h1 = hdr->lrh[1];
-				h2 = hdr->lrh[2];
-				h3 = hdr->lrh[3];
+				hdr_16b = (struct hfi1_16b_header *)hfi1_hdr;
+				h0 = hdr_16b->lrh[0];
+				h1 = hdr_16b->lrh[1];
+				h2 = hdr_16b->lrh[2];
+				h3 = hdr_16b->lrh[3];
 
 				/* zero out 9B only fields */
 				__entry->lnh = 0;
@@ -490,14 +491,12 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 				__entry->entropy = OPA_16B_GET_ENTROPY(h0, h1, h2, h3);
 
 				if (__entry->l4 == HFI1_L4_IB_LOCAL)
-					ohdr = &hdr->u.oth;
+					ohdr = &hdr_16b->u.oth;
 				else
-					ohdr = &hdr->u.l.oth;
+					ohdr = &hdr_16b->u.l.oth;
 
 			   } else {
-				struct hfi1_ib_header *hdr = NULL;
 				hdr = (struct hfi1_ib_header *)hfi1_hdr;
-
 				__entry->sc = OPA_9B_GET_SC5(be16_to_cpu(hdr->lrh[0]));
 				__entry->lver =
 				(u8)(be16_to_cpu(hdr->lrh[0]) >> 8) & 0xf;
@@ -641,29 +640,29 @@ TRACE_EVENT(snoop_capture,
 		__dynamic_array(u8, raw_pkt, data_len)
 		),
 	    TP_fast_assign(
-		struct hfi1_other_headers *ohdr;
+		struct hfi1_ib_header *hdr = NULL;
+		struct hfi1_16b_header *hdr_16b = NULL;
+		struct hfi1_other_headers *ohdr = NULL;
 
 		DD_DEV_ASSIGN(dd);
 		if (bypass) {
 			u32 h0, h1, h2, h3;
-			struct hfi1_16b_header *hdr = NULL;
 
-			hdr = (struct hfi1_16b_header *)hfi1_hdr;
-			h0 = hdr->lrh[0];
-			h1 = hdr->lrh[1];
-			h2 = hdr->lrh[2];
-			h3 = hdr->lrh[3];
+			hdr_16b = (struct hfi1_16b_header *)hfi1_hdr;
+			h0 = hdr_16b->lrh[0];
+			h1 = hdr_16b->lrh[1];
+			h2 = hdr_16b->lrh[2];
+			h3 = hdr_16b->lrh[3];
 
 			__entry->dlid = OPA_16B_GET_DLID(h0, h1, h2, h3);
 			__entry->slid = OPA_16B_GET_SLID(h0, h1, h2, h3);
 			__entry->sl = 0;
 			__entry->l4 = OPA_16B_GET_L4(h0, h1, h2, h3);
 			if (__entry->l4 == HFI1_L4_IB_LOCAL)
-				ohdr = &hdr->u.oth;
+				ohdr = &hdr_16b->u.oth;
 			else
-				ohdr = &hdr->u.l.oth;
+				ohdr = &hdr_16b->u.l.oth;
 		} else {
-			struct hfi1_ib_header *hdr = NULL;
 			hdr = (struct hfi1_ib_header *)hfi1_hdr;
 
 			__entry->slid = be16_to_cpu(hdr->lrh[3]);
