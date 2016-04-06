@@ -2,6 +2,9 @@
 
 . scripts/GlobalDefinition.sh
 
+PH_STAGING_SITE=cyokoyam@phlsvsds.ph.intel.com
+FXR_YUM=/mnt/ph_lab_yumrepos/fxr_yum
+
 # We copy all rpms to the drop directory, but base on version of driver rpm.
 # We copy whichever opa-headers rpm was used, in case the tagging of headers
 # was not done correctly.
@@ -16,11 +19,11 @@ function copy_drop_rpms {
     return
   fi
   ssh -i ~/ssh-jenkins/id_rsa \
-      cyokoyam@phlsvlogin02.ph.intel.com \
-      mkdir -p -m 777 /nfs/site/proj/ftp/fxr_yum/latest/drop${RDROP}/
+      ${PH_STAGING_SITE} \
+      mkdir -p -m 777 ${FXR_YUM}/latest/drop${RDROP}/
   scp -i ~/ssh-jenkins/id_rsa \
       ${RPMS} \
-      cyokoyam@phlsvlogin02.ph.intel.com:/nfs/site/proj/ftp/fxr_yum/latest/drop${RDROP}/
+      ${PH_STAGING_SITE}:${FXR_YUM}/latest/drop${RDROP}/
   res=$?
   if [ ! ${res} ]; then
       echo fail on copying rpm files to yum repository
@@ -46,7 +49,7 @@ DIAG_RPM=${JENKINS_WORKSPACE}/${DIAGTOOL_REPO}/rpmbuild/RPMS/x86_64/hfidiags-hfi
 # copy rpm files to yum repository
 scp -i ~/ssh-jenkins/id_rsa \
     $DRV_RPM $HDR_RPM ${DIAG_RPM}\
-    cyokoyam@phlsvlogin02.ph.intel.com:/nfs/site/proj/ftp/fxr_yum/next
+    ${PH_STAGING_SITE}:${FXR_YUM}/next
 res=$?
 if [ ! ${res} ]; then
     echo fail on copying rpm files to yum repository
