@@ -402,6 +402,7 @@ retry:
 err1:
 	spin_unlock_irqrestore(&ctx_i->tx_lock, sflags);
 err:
+	dev_kfree_skb_any(skb);
 	if (rc)
 		vdev->hfi_stats[q_idx].tx_logic_errors++;
 	return rc;
