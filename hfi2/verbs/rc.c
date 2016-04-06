@@ -2094,11 +2094,13 @@ static inline void update_ack_queue(struct hfi2_qp *qp, unsigned n)
 #ifdef HFI_VERBS_TEST
 /* In  Percentage 0 - 100 */
 #define MIN_DROP_RATE	0
-#define MAX_DROP_RATE	80
+#define MAX_DROP_RATE	50
+#define MAX_DROPS	6
 bool hfi2_drop_packet(void)
 {
 	static bool prev_drop;
 	static int prev_dr = MAX_DROP_RATE;
+	static int num_dropped;
 	uint8_t rand_num;
 	uint8_t rand_size = sizeof(rand_num);
 	int curr_dr;
@@ -2111,6 +2113,15 @@ bool hfi2_drop_packet(void)
 
 	get_random_bytes(&rand_num, rand_size);
 	prev_drop = (rand_num < check) ? true : false;
+
+	/* safety measure so we don't drop too many consecutive packets */
+	if (prev_drop)
+		num_dropped++;
+	if (num_dropped > MAX_DROPS)
+		prev_drop = false;
+	if (!prev_drop)
+		num_dropped = 0;
+
 	return prev_drop;
 }
 #endif
