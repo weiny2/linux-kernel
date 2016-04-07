@@ -508,6 +508,12 @@ int rvt_driver_cq_init(struct rvt_dev_info *rdi)
 	int cpu;
 	struct task_struct *task;
 
+#ifdef HFI2_RVT_WORKAROUND
+	/* TODO - temporary to allow disable of RDMAVT CQ support */
+	if (!strlen(rdi->dparms.cq_name))
+		return 0;
+#endif
+
 	if (rdi->worker)
 		return 0;
 	rdi->worker = kzalloc(sizeof(*rdi->worker), GFP_KERNEL);

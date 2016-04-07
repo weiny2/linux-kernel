@@ -129,8 +129,13 @@ __print_symbolic(opcode,                                   \
 	wr_opcode_name(MASKED_ATOMIC_CMP_AND_SWP),         \
 	wr_opcode_name(MASKED_ATOMIC_FETCH_AND_ADD))
 
+#ifdef HFI2_RVT_WORKAROUND
+#define RVT_POS_PRN \
+"[%s] wr_id %llx qpn %x psn 0x%x lpsn 0x%x length %u opcode 0x%.2x,%s size %u avail %u head %u last %u"
+#else
 #define POS_PRN \
 "[%s] wr_id %llx qpn %x psn 0x%x lpsn 0x%x length %u opcode 0x%.2x,%s size %u avail %u head %u last %u"
+#endif
 
 TRACE_EVENT(
 	rvt_post_one_wr,
@@ -163,7 +168,11 @@ TRACE_EVENT(
 		__entry->last = qp->s_last;
 	),
 	TP_printk(
+#ifdef HFI2_RVT_WORKAROUND
+		RVT_POS_PRN,
+#else
 		POS_PRN,
+#endif
 		__get_str(dev),
 		__entry->wr_id,
 		__entry->qpn,
@@ -182,6 +191,11 @@ TRACE_EVENT(
 
 #undef TRACE_INCLUDE_PATH
 #undef TRACE_INCLUDE_FILE
+#ifdef HFI2_RVT_WORKAROUND
+#define TRACE_INCLUDE_PATH verbs/rdmavt
+#define TRACE_INCLUDE_FILE rvt_trace
+#else
 #define TRACE_INCLUDE_PATH .
 #define TRACE_INCLUDE_FILE trace
+#endif
 #include <trace/define_trace.h>

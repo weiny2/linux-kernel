@@ -48,10 +48,15 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include "vt.h"
+#ifdef HFI2_RVT_WORKAROUND
+#include "rvt_trace.h"
+#else
 #include "trace.h"
+#endif
 
 #define RVT_UVERBS_ABI_VERSION 2
 
+#ifndef HFI2_RVT_WORKAROUND
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("RDMA Verbs Transport Library");
 
@@ -74,6 +79,7 @@ static void rvt_cleanup(void)
 	 */
 }
 module_exit(rvt_cleanup);
+#endif
 
 /**
  * rvt_alloc_device - allocate rdi
