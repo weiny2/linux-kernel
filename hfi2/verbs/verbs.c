@@ -118,47 +118,58 @@ const int ib_qp_state_ops[IB_QPS_ERR + 1] = {
 	    HFI1_POST_SEND_OK | HFI1_FLUSH_SEND,
 };
 
-inline struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev)
+static const char *get_unit_name(int unit)
 {
-	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
+	static char iname[16];
 
-	return ibd->dd;
+	snprintf(iname, sizeof(iname), DRIVER_NAME "_%u", unit);
+	return iname;
 }
 
-static int hfi2_query_device(struct ib_device *ibdev,
-			       struct ib_device_attr *props
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
-			       , struct ib_udata *uhw
-#endif
-			       )
+static const char *get_card_name(struct rvt_dev_info *rdi)
 {
-	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(&rdi->ibdev);
+
+	return get_unit_name(dd->unit);
+}
+
+static struct pci_dev *get_pci_dev(struct rvt_dev_info *rdi)
+{
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(&rdi->ibdev);
+
+	return dd->pcidev;
+}
+
+/*
+ * This is the callback from ib_register_device() when completing the
+ * sysfs registration for our ports under /sys/class/infiniband/.
+ */
+static int port_callback(struct ib_device *ibdev, u8 port_num,
+			 struct kobject *kobj)
+{
+	return 0;
+}
+
+static void fill_device_attr(struct hfi2_ibdev *ibd)
+{
 	struct hfi_devdata *dd = ibd->dd;
+	struct ib_device_attr *props = &ibd->rdi.dparms.props;
 
 	memset(props, 0, sizeof(*props));
-
-	/* TODO - first cut at device attributes */
 
 	props->device_cap_flags = IB_DEVICE_BAD_PKEY_CNTR |
 		IB_DEVICE_BAD_QKEY_CNTR | IB_DEVICE_SHUTDOWN_PORT |
 		IB_DEVICE_SYS_IMAGE_GUID | IB_DEVICE_RC_RNR_NAK_GEN |
-		IB_DEVICE_PORT_ACTIVE_EVENT | IB_DEVICE_SRQ_RESIZE
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
-		| IB_DEVICE_JUMBO_MAD_SUPPORT
-#endif
-		;
-
+		IB_DEVICE_PORT_ACTIVE_EVENT | IB_DEVICE_SRQ_RESIZE;
 	props->page_size_cap = PAGE_SIZE;
 #if 0
 	props->vendor_id = id.vendor;
 		dd->oui1 << 16 | dd->oui2 << 8 | dd->oui3;
-	props->vendor_part_id = dd->pcidev->device;
-	props->hw_ver = dd->minrev;
 #else
 	props->vendor_id = dd->bus_id.vendor;
-	props->vendor_part_id = dd->bus_id.device;
-	props->hw_ver = 0;
 #endif
+	props->vendor_part_id = dd->bus_id.device;
+	props->hw_ver = dd->bus_id.revision;
 	props->sys_image_guid = hfi2_sys_guid;
 	props->max_mr_size = ~0ULL;
 	props->max_qp = hfi2_max_qps;
@@ -185,8 +196,6 @@ static int hfi2_query_device(struct ib_device *ibdev,
 	props->max_mcast_qp_attach = hfi2_max_mcast_qp_attached;
 	props->max_total_mcast_qp_attach = props->max_mcast_qp_attach *
 					   props->max_mcast_grp;
-
-	return 0;
 }
 
 static int hfi2_query_port(struct ib_device *ibdev, u8 port,
@@ -278,8 +287,7 @@ static int hfi2_modify_port(struct ib_device *ibdev, u8 port,
 		       int port_modify_mask, struct ib_port_modify *props)
 {
 	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
-	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
-	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct hfi_pportdata *ppd = ibp->ppd;
 	int ret = 0;
 
 	ibp->port_cap_flags |= props->set_port_cap_mask;
@@ -385,47 +393,26 @@ static int hfi2_dealloc_ucontext(struct ib_ucontext *context)
 
 static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 {
-	struct ib_device *ibdev = &ibd->ibdev;
-	int ret;
+	struct ib_device *ibdev = &ibd->rdi.ibdev;
+	struct hfi2_ibport *ibp;
+	int i, ret;
 	size_t lcpysz = IB_DEVICE_NAME_MAX;
 
 	lcpysz = strlcpy(ibdev->name, name, lcpysz);
-	strlcpy(ibdev->name + lcpysz, "_%d", lcpysz);
+	strlcpy(ibdev->name + lcpysz, "_%d", IB_DEVICE_NAME_MAX - lcpysz);
 	strncpy(ibdev->node_desc, init_utsname()->nodename,
 		sizeof(ibdev->node_desc));
 	ibdev->node_guid = ibd->node_guid;
+	/*
+	 * The system image GUID is supposed to be the same for all
+	 * HFIs in a single system but since there can be other
+	 * device types in the system, we can't be sure this is unique.
+	 */
 	if (!hfi2_sys_guid)
 		hfi2_sys_guid = ibdev->node_guid;
-	ibdev->node_type = RDMA_NODE_IB_CA;
-	ibdev->num_comp_vectors = 1;
 	ibdev->owner = THIS_MODULE;
 	ibdev->phys_port_cnt = ibd->num_pports;
-	ibdev->uverbs_abi_ver = IB_USER_VERBS_ABI_VERSION;
-	ibdev->uverbs_cmd_mask =
-		(1ull << IB_USER_VERBS_CMD_GET_CONTEXT)         |
-		(1ull << IB_USER_VERBS_CMD_QUERY_DEVICE)        |
-		(1ull << IB_USER_VERBS_CMD_QUERY_PORT)          |
-		(1ull << IB_USER_VERBS_CMD_ALLOC_PD)            |
-		(1ull << IB_USER_VERBS_CMD_DEALLOC_PD)          |
-		(1ull << IB_USER_VERBS_CMD_CREATE_AH)           |
-		(1ull << IB_USER_VERBS_CMD_MODIFY_AH)           |
-		(1ull << IB_USER_VERBS_CMD_QUERY_AH)            |
-		(1ull << IB_USER_VERBS_CMD_DESTROY_AH)          |
-		(1ull << IB_USER_VERBS_CMD_REG_MR)              |
-		(1ull << IB_USER_VERBS_CMD_DEREG_MR)            |
-		(1ull << IB_USER_VERBS_CMD_CREATE_COMP_CHANNEL) |
-		(1ull << IB_USER_VERBS_CMD_CREATE_CQ)           |
-		(1ull << IB_USER_VERBS_CMD_RESIZE_CQ)           |
-		(1ull << IB_USER_VERBS_CMD_DESTROY_CQ)          |
-		(1ull << IB_USER_VERBS_CMD_POLL_CQ)             |
-		(1ull << IB_USER_VERBS_CMD_REQ_NOTIFY_CQ)       |
-		(1ull << IB_USER_VERBS_CMD_CREATE_QP)           |
-		(1ull << IB_USER_VERBS_CMD_QUERY_QP)            |
-		(1ull << IB_USER_VERBS_CMD_MODIFY_QP)           |
-		(1ull << IB_USER_VERBS_CMD_DESTROY_QP)          |
-		(1ull << IB_USER_VERBS_CMD_POST_SEND)           |
-		(1ull << IB_USER_VERBS_CMD_POST_RECV);
-	ibdev->query_device = hfi2_query_device;
+
 	ibdev->query_port = hfi2_query_port;
 	ibdev->query_pkey = hfi2_query_pkey;
 	ibdev->query_gid = hfi2_query_gid;
@@ -447,9 +434,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->poll_cq = hfi2_poll_cq;
 	ibdev->req_notify_cq = hfi2_req_notify_cq;
 	ibdev->get_dma_mr = hfi2_get_dma_mr;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
-	ibdev->reg_phys_mr = hfi2_reg_phys_mr;
-#endif
 	ibdev->reg_user_mr = hfi2_reg_user_mr;
 	ibdev->dereg_mr = hfi2_dereg_mr;
 	ibdev->process_mad = hfi2_process_mad;
@@ -458,53 +442,100 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->dma_device = ibd->parent_dev;
 	ibdev->modify_port = hfi2_modify_port;
 	ibdev->modify_device = hfi2_modify_device;
-#if 0
-	ibdev->create_srq = hfi2_create_srq;
-	ibdev->modify_srq = hfi2_modify_srq;
-	ibdev->query_srq = hfi2_query_srq;
-	ibdev->destroy_srq = hfi2_destroy_srq;
-	ibdev->post_srq_recv = hfi2_post_srq_receive;
-	ibdev->alloc_fast_reg_mr = hfi2_alloc_fast_reg_mr;
-	ibdev->alloc_fast_reg_page_list = hfi2_alloc_fast_reg_page_list;
-	ibdev->free_fast_reg_page_list = hfi2_free_fast_reg_page_list;
-	ibdev->alloc_fmr = hfi2_alloc_fmr;
-	ibdev->map_phys_fmr = hfi2_map_phys_fmr;
-	ibdev->unmap_fmr = hfi2_unmap_fmr;
-	ibdev->dealloc_fmr = hfi2_dealloc_fmr;
-#endif
 	ibdev->attach_mcast = hfi2_multicast_attach;
 	ibdev->detach_mcast = hfi2_multicast_detach;
 	ibdev->mmap = hfi2_mmap;
 	ibdev->dma_ops = &hfi2_dma_mapping_ops;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 	ibdev->get_port_immutable = port_immutable;
+
+	/*
+	 * Fill in rvt info object.
+	 */
+	ibd->rdi.driver_f.port_callback = port_callback;
+	ibd->rdi.driver_f.get_card_name = get_card_name;
+	ibd->rdi.driver_f.get_pci_dev = get_pci_dev;
+#if 0
+	ibd->rdi.driver_f.check_ah = hfi1_check_ah;
+	ibd->rdi.driver_f.notify_new_ah = hfi1_notify_new_ah;
+	ibd->rdi.driver_f.get_guid_be = hfi1_get_guid_be;
+	ibd->rdi.driver_f.query_port_state = query_port;
+	ibd->rdi.driver_f.shut_down_port = shut_down_port;
+	ibd->rdi.driver_f.cap_mask_chg = hfi1_cap_mask_chg;
 #endif
+	/*
+	 * Fill in rvt info device attributes.
+	 */
+	fill_device_attr(ibd);
+
+#if 0
+	/* queue pair */
+	dd->verbs_dev.rdi.dparms.qp_table_size = hfi1_qp_table_size;
+	dd->verbs_dev.rdi.dparms.qpn_start = 0;
+	dd->verbs_dev.rdi.dparms.qpn_inc = 1;
+	dd->verbs_dev.rdi.dparms.qos_shift = dd->qos_shift;
+	dd->verbs_dev.rdi.dparms.qpn_res_start = kdeth_qp << 16;
+	dd->verbs_dev.rdi.dparms.qpn_res_end =
+	dd->verbs_dev.rdi.dparms.qpn_res_start + 65535;
+	dd->verbs_dev.rdi.dparms.max_rdma_atomic = HFI1_MAX_RDMA_ATOMIC;
+	dd->verbs_dev.rdi.dparms.psn_mask = PSN_MASK;
+	dd->verbs_dev.rdi.dparms.psn_shift = PSN_SHIFT;
+	dd->verbs_dev.rdi.dparms.psn_modify_mask = PSN_MODIFY_MASK;
+	dd->verbs_dev.rdi.dparms.core_cap_flags = RDMA_CORE_PORT_INTEL_OPA;
+	dd->verbs_dev.rdi.dparms.max_mad_size = OPA_MGMT_MAD_SIZE;
+
+	dd->verbs_dev.rdi.driver_f.qp_priv_alloc = qp_priv_alloc;
+	dd->verbs_dev.rdi.driver_f.qp_priv_free = qp_priv_free;
+	dd->verbs_dev.rdi.driver_f.free_all_qps = free_all_qps;
+	dd->verbs_dev.rdi.driver_f.notify_qp_reset = notify_qp_reset;
+	dd->verbs_dev.rdi.driver_f.do_send = hfi1_do_send;
+	dd->verbs_dev.rdi.driver_f.schedule_send = hfi1_schedule_send;
+	dd->verbs_dev.rdi.driver_f.schedule_send_no_lock = _hfi1_schedule_send;
+	dd->verbs_dev.rdi.driver_f.get_pmtu_from_attr = get_pmtu_from_attr;
+	dd->verbs_dev.rdi.driver_f.notify_error_qp = notify_error_qp;
+	dd->verbs_dev.rdi.driver_f.flush_qp_waiters = flush_qp_waiters;
+	dd->verbs_dev.rdi.driver_f.stop_send_queue = stop_send_queue;
+	dd->verbs_dev.rdi.driver_f.quiesce_qp = quiesce_qp;
+	dd->verbs_dev.rdi.driver_f.notify_error_qp = notify_error_qp;
+	dd->verbs_dev.rdi.driver_f.mtu_from_qp = mtu_from_qp;
+	dd->verbs_dev.rdi.driver_f.mtu_to_path_mtu = mtu_to_path_mtu;
+	dd->verbs_dev.rdi.driver_f.check_modify_qp = hfi1_check_modify_qp;
+	dd->verbs_dev.rdi.driver_f.modify_qp = hfi1_modify_qp;
+	dd->verbs_dev.rdi.driver_f.check_send_wqe = hfi1_check_send_wqe;
+
+	/* completion queue */
+	snprintf(dd->verbs_dev.rdi.dparms.cq_name,
+		 sizeof(dd->verbs_dev.rdi.dparms.cq_name),
+		 "hfi1_cq%d", dd->unit);
+	dd->verbs_dev.rdi.dparms.node = dd->node;
+#endif
+
+	ibd->rdi.dparms.cq_name[0] = 0;      /* disable RDMAVT-CQ */
+	ibd->rdi.dparms.lkey_table_size = 0; /* disable RDMAVT-MR */
+	ibd->rdi.dparms.qp_table_size = 0;   /* disable RDMAVT-QP */
+	ibd->rdi.dparms.nports = ibd->num_pports;
+	ibd->rdi.dparms.npkeys = HFI_MAX_PKEYS;
+
+	ibp = ibd->pport;
+	for (i = 0; i < ibd->num_pports; i++, ibp++)
+		rvt_init_port(&ibd->rdi, &ibp->rvp, i, ibp->ppd->pkeys);
+
+	ret = rvt_register_device(&ibd->rdi);
+	if (ret)
+		goto err_reg;
 
 	/* add optional sysfs files under /sys/class/infiniband/hfi2_0/ */
 	hfi2_verbs_register_sysfs(&ibdev->dev);
 
-	/* hfi2_create_port_files); */
-	ret = ib_register_device(ibdev, NULL);
-	if (ret)
-		goto err_reg;
+	return ret;
 
-	ret = hfi2_create_agents(ibdev);
-	if (ret)
-		goto err_agents;
-	goto exit;
-
-err_agents:
-	ib_unregister_device(ibdev);
 err_reg:
-	pr_err("Failed to register with IB core: %d\n", ret);
-exit:
+	dd_dev_err(ibd->dd, "Failed to register with RDMAVT: %d\n", ret);
 	return ret;
 }
 
 static void hfi2_unregister_device(struct hfi2_ibdev *ibd)
 {
-	hfi2_free_agents(&ibd->ibdev);
-	ib_unregister_device(&ibd->ibdev);
+	rvt_unregister_device(&ibd->rdi);
 }
 
 static int hfi2_init_port(struct hfi2_ibdev *ibd,
@@ -515,7 +546,7 @@ static int hfi2_init_port(struct hfi2_ibdev *ibd,
 	struct hfi2_ibport *ibp = &ibd->pport[pidx];
 
 	ibp->ibd = ibd;
-	ibp->dev = &ibd->ibdev.dev; /* for dev_info, etc. */
+	ibp->dev = &ibd->rdi.ibdev.dev; /* for dev_info, etc. */
 	ibp->ppd = ppd;
 	ibp->gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->sm_lid = 0;
@@ -569,8 +600,9 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	struct hfi2_ibport *ibp;
 
 	num_ports = dd->num_pports;
-	ibd = (struct hfi2_ibdev *)ib_alloc_device(sizeof(*ibd) +
-						    sizeof(*ibp) * num_ports);
+	ibd = (struct hfi2_ibdev *)rvt_alloc_device(sizeof(*ibd) +
+						    sizeof(*ibp) * num_ports,
+						    num_ports);
 	if (!ibd) {
 		ret = -ENOMEM;
 		goto exit;
@@ -656,8 +688,11 @@ port_err:
 ctx_err:
 	hfi2_cq_exit(ibd);
 cq_init_err:
-	ib_dealloc_device(&ibd->ibdev);
+	kfree(ibd->rdi.ports); /* TODO - workaround RDMAVT leak */
+	ib_dealloc_device(&ibd->rdi.ibdev);
 exit:
+	/* must clear dd->ibd so state is sane during error cleanup */
+	dd->ibd = NULL;
 	dev_err(&dd->pcidev->dev, "%s error rc %d\n", __func__, ret);
 	return ret;
 }
@@ -681,5 +716,7 @@ void hfi2_ib_remove(struct hfi_devdata *dd)
 	idr_destroy(&ibd->qp_ptr);
 	ida_destroy(&ibd->qpn_even_table);
 	ida_destroy(&ibd->qpn_odd_table);
-	ib_dealloc_device(&ibd->ibdev);
+	/* TODO - workaround for RDMAVT leak */
+	kfree(ibd->rdi.ports);
+	ib_dealloc_device(&ibd->rdi.ibdev);
 }

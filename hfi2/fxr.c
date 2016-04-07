@@ -1945,7 +1945,7 @@ static void hfi_device_desc(struct opa_core_device *odev,
 	desc->num_pports = dd->num_pports;
 	desc->nguid = dd->nguid;
 	desc->numa_node = dd->node;
-	desc->ibdev = &dd->ibd->ibdev;
+	desc->ibdev = &dd->ibd->rdi.ibdev;
 }
 
 static int set_rsm_rule(struct opa_core_device *odev, struct hfi_rsm_rule *rule,

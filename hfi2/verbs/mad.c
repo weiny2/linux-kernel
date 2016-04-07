@@ -108,7 +108,7 @@ static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
 	struct hfi_pportdata *ppd = ibp->ppd;
 	u32 qpn = ppd->sm_trap_qp;
 
-	agent = ibp->send_agent;
+	agent = ibp->rvp.send_agent;
 	if (!agent)
 		return;
 
@@ -3401,59 +3401,4 @@ int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	}
 
 	return IB_MAD_RESULT_FAILURE;
-}
-
-static void send_handler(struct ib_mad_agent *agent,
-			 struct ib_mad_send_wc *mad_send_wc)
-{
-	ib_free_send_mad(mad_send_wc->send_buf);
-}
-
-int hfi2_create_agents(struct ib_device *ibdev)
-{
-	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
-	struct ib_mad_agent *agent;
-	struct hfi2_ibport *ibp;
-	int p;
-	int ret = 0;
-
-	for (p = 0; p < ibd->num_pports; p++) {
-		ibp = to_hfi_ibp(ibdev, p + 1);
-		agent = ib_register_mad_agent(ibdev, p + 1, IB_QPT_SMI,
-					      NULL, 0, send_handler,
-					      NULL, NULL, 0);
-		if (IS_ERR(agent)) {
-			ret = PTR_ERR(agent);
-			goto err;
-		}
-
-		ibp->send_agent = agent;
-	}
-
-	return ret;
-
-err:
-	hfi2_free_agents(ibdev);
-	return ret;
-}
-
-void hfi2_free_agents(struct ib_device *ibdev)
-{
-	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
-	struct ib_mad_agent *agent;
-	struct hfi2_ibport *ibp;
-	int p;
-
-	for (p = 0; p < ibd->num_pports; p++) {
-		ibp = to_hfi_ibp(ibdev, p + 1);
-		if (ibp->send_agent) {
-			agent = ibp->send_agent;
-			ibp->send_agent = NULL;
-			ib_unregister_mad_agent(agent);
-		}
-		if (ibp->sm_ah) {
-			ib_destroy_ah(&ibp->sm_ah->ibah);
-			ibp->sm_ah = NULL;
-		}
-	}
 }

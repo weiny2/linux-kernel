@@ -39,3 +39,16 @@ hfi2-y += verbs/ud.o
 hfi2-y += verbs/verbs.o
 hfi2-y += verbs/verbs_mcast.o
 hfi2-y += verbs/sysfs.o
+# TODO - below is temporary
+hfi2-y += verbs/rdmavt/vt.o
+hfi2-y += verbs/rdmavt/ah.o
+hfi2-y += verbs/rdmavt/cq.o
+hfi2-y += verbs/rdmavt/dma.o
+hfi2-y += verbs/rdmavt/mad.o
+hfi2-y += verbs/rdmavt/mcast.o
+hfi2-y += verbs/rdmavt/mmap.o
+hfi2-y += verbs/rdmavt/mr.o
+hfi2-y += verbs/rdmavt/pd.o
+hfi2-y += verbs/rdmavt/qp.o
+hfi2-y += verbs/rdmavt/srq.o
+hfi2-y += verbs/rdmavt/trace.o
