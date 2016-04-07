@@ -2132,12 +2132,9 @@ static inline bool hfi1_use_16b(struct rvt_qp *qp)
 	 */ 
 	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
 	    (qp->ibqp.qp_type == IB_QPT_UC)) {
-		if (ib_query_gid(qp->ibqp.device, qp->port_num,
-				 qp->remote_ah_attr.grh.sgid_index,
-				 &sgid, NULL))
-			return false;
-		dgid = &qp->remote_ah_attr.grh.dgid;
-		return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
+		struct hfi1_qp_priv *priv = qp->priv;
+
+		return priv->use_16b;
 	}
 
 	if (!wqe)

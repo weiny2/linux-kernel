@@ -221,6 +221,7 @@ struct hfi1_qp_priv {
 	struct iowait s_iowait;
 	struct timer_list s_rnr_timer;
 	struct rvt_qp *owner;
+	bool use_16b;
 };
 
 /*

@@ -215,6 +215,29 @@ int hfi1_check_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 	return 0;
 }
 
+/**
+ * qp_set_16b - Set the use_16b flag based on whether the slid or the
+ * dlid in the connection is extended. Only applicable for RC and UD
+ * QPs. UD QPs determine this on the fly from the ah in the wqe
+ */
+static inline void qp_set_16b(struct rvt_qp *qp)
+{
+	struct hfi1_pportdata *ppd;
+	struct hfi1_ibport *ibp;
+	union ib_gid *dgid;
+	struct hfi1_qp_priv *priv = qp->priv;
+
+	if (!(qp->remote_ah_attr.ah_flags & IB_AH_GRH))
+		return;
+
+	ibp = to_iport(qp->ibqp.device, qp->port_num);
+	ppd = ppd_from_ibp(ibp);
+	dgid = &qp->remote_ah_attr.grh.dgid;
+	priv->use_16b = (ppd->lid >= IB_MULTICAST_LID_BASE) ||
+		      (qp->remote_ah_attr.grh.hop_limit == 1) ||
+		      IS_EXT_LID(dgid);
+}
+
 void hfi1_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 		    int attr_mask, struct ib_udata *udata)
 {
@@ -225,6 +248,7 @@ void hfi1_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 		priv->s_sc = ah_to_sc(ibqp->device, &qp->remote_ah_attr);
 		priv->s_sde = qp_to_sdma_engine(qp, priv->s_sc);
 		priv->s_sendcontext = qp_to_send_context(qp, priv->s_sc);
+		qp_set_16b(qp);
 	}
 
 	if (attr_mask & IB_QP_PATH_MIG_STATE &&
@@ -234,6 +258,7 @@ void hfi1_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 		priv->s_sc = ah_to_sc(ibqp->device, &qp->remote_ah_attr);
 		priv->s_sde = qp_to_sdma_engine(qp, priv->s_sc);
 		priv->s_sendcontext = qp_to_send_context(qp, priv->s_sc);
+		qp_set_16b(qp);
 	}
 }
 
