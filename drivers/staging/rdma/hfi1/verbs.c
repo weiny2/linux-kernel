@@ -1122,6 +1122,10 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	pio_release_cb cb = NULL;
 	u32 lrh0_16b;
 	bool bypass = false;
+	u8 *packet = NULL;
+	u32 packet_size;
+	struct rvt_sge_state temp_ss;
+	void *data = NULL;
 
 	if (ps->s_txreq->phdr.hdr.hdr_type) {
 		u8 extra_bytes = hfi1_get_16b_padding((hdrwords << 2), len);
@@ -1193,22 +1197,57 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		}
 	}
 
-	if (len == 0) {
-		pio_copy(ppd->dd, pbuf, pbc, hdr, hdrwords);
-	} else {
-		if (ss) {
-			seg_pio_copy_start(pbuf, pbc, hdr, hdrwords * 4);
-			while (len) {
-				void *addr = ss->sge.vaddr;
-				u32 slen = ss->sge.length;
+	if (ps->s_txreq->phdr.hdr.hdr_type) {
+		/**
+		 * TODO: Segmented pio copy seems to be broken for certain
+		 * payload sizes. As a workaround, copy the entire packet,
+		 * excluding the 16B LRH into a buffer and perform pio_copy.
+		 */
 
-				if (slen > len)
-					slen = len;
-				update_sge(ss, slen);
-				seg_pio_copy_mid(pbuf, addr, slen);
-				len -= slen;
+		packet_size = (hdrwords + dwords) * 4;
+		packet = kmalloc_array(packet_size, sizeof(u8), GFP_KERNEL);
+		if (!packet)
+			goto pio_bail;
+
+		/* copy header -- LRH, GRH, BTH, DETH etc. */
+		memcpy(packet,  hdr, (hdrwords * 4));
+
+		/* copy data */
+		temp_ss = *ss;
+		data = packet + (hdrwords * 4);
+
+		while (len) {
+			void *addr = temp_ss.sge.vaddr;
+			u32 slen = temp_ss.sge.length;
+
+			if (slen > len)
+				slen = len;
+			memcpy(data, addr, slen);
+			update_sge(&temp_ss, slen);
+			len -= slen;
+			data += slen;
+		}
+
+		pio_copy(ppd->dd, pbuf, pbc, packet, (packet_size >> 2));
+		kfree(packet);
+	} else { 
+		if (len == 0) {
+			pio_copy(ppd->dd, pbuf, pbc, hdr, hdrwords);
+		} else {
+			if (ss) {
+				seg_pio_copy_start(pbuf, pbc, hdr, hdrwords * 4);
+				while (len) {
+					void *addr = ss->sge.vaddr;
+					u32 slen = ss->sge.length;
+	
+					if (slen > len)
+						slen = len;
+					update_sge(ss, slen);
+					seg_pio_copy_mid(pbuf, addr, slen);
+					len -= slen;
+				}
+				seg_pio_copy_end(pbuf);
 			}
-			seg_pio_copy_end(pbuf);
 		}
 	}
 
