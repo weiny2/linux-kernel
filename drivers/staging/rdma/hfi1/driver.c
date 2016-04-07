@@ -1451,16 +1451,14 @@ int process_receive_ib(struct hfi1_packet *packet)
 
 int process_receive_bypass(struct hfi1_packet *packet)
 {
-#if 0
-	trace_hfi1_receive_bypass(packet->rcd->ppd->dd,
-				  packet->rcd->ctxt,
-				  rhf_err_flags(packet->rhf),
-				  packet->etype,
-				  packet->hlen,
-				  packet->tlen,
-				  packet->updegr,
-				  rhf_egr_index(packet->rhf));
-#endif
+	trace_hfi1_rcvhdr(packet->rcd->ppd->dd,
+			  packet->rcd->ctxt,
+			  rhf_err_flags(packet->rhf),
+			  packet->etype,
+			  packet->hlen,
+			  packet->tlen,
+			  packet->updegr,
+			  rhf_egr_index(packet->rhf));
 
 	if (unlikely(rhf_err_flags(packet->rhf))) {
 		handle_eflags(packet);
