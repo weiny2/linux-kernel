@@ -335,12 +335,6 @@ test_list = [
       "type" : "perf,installed",
       "desc" : "Run the required performance regression tests"
     },
-    { "test_name" : "Adaptive-PIO",
-      "test_exe" : "AdaptivePIO.py",
-      "args" : "--nodelist %HOST[2]%",
-      "type" : "default,verbs",
-      "desc" : "Run the Adaptive PIO regression tests"
-    },
 
 ]
 
