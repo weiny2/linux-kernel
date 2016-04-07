@@ -72,7 +72,12 @@ int rvt_driver_mr_init(struct rvt_dev_info *rdi)
 	 * the LKEY).  The remaining bits act as a generation number or tag.
 	 */
 	if (!lkey_table_size)
+#ifdef HFI2_RVT_WORKAROUND
+		/* TODO - temporary to allow disable of RDMAVT MR support */
+		return 0;
+#else
 		return -EINVAL;
+#endif
 
 	spin_lock_init(&rdi->lkey_table.lock);
 

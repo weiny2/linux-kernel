@@ -46,4 +46,9 @@
  */
 
 #define CREATE_TRACE_POINTS
+#define HFI2_RVT_WORKAROUND
+#ifdef HFI2_RVT_WORKAROUND
+#include "rvt_trace.h"
+#else
 #include "trace.h"
+#endif

@@ -53,7 +53,11 @@
 #include <rdma/ib_verbs.h>
 #include "qp.h"
 #include "vt.h"
+#ifdef HFI2_RVT_WORKAROUND
+#include "rvt_trace.h"
+#else
 #include "trace.h"
+#endif
 
 /*
  * Note that it is OK to post send work requests in the SQE and ERR
@@ -174,7 +178,12 @@ int rvt_driver_qp_init(struct rvt_dev_info *rdi)
 	int ret = -ENOMEM;
 
 	if (!rdi->dparms.qp_table_size)
+#ifdef HFI2_RVT_WORKAROUND
+		/* TODO - temporary to allow disable of RDMAVT QP support */
+		return 0;
+#else
 		return -EINVAL;
+#endif
 
 	/*
 	 * If driver is not doing any QP allocation then make sure it is

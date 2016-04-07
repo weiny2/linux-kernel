@@ -62,6 +62,13 @@
 #include "mad.h"
 #include "mmap.h"
 
+/* TODO - delete when hfi2 is fully integrated with using rdmavt */
+#define HFI2_RVT_WORKAROUND
+
+#if defined(HFI2_RVT_WORKAROUND) && !defined(IB_MULTICAST_LID_BASE)
+#define IB_MULTICAST_LID_BASE  0xC000
+#endif
+
 #define rvt_pr_info(rdi, fmt, ...) \
 	__rvt_pr_info(rdi->driver_f.get_pci_dev(rdi), \
 		      rdi->driver_f.get_card_name(rdi), \
