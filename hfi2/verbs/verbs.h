@@ -64,6 +64,7 @@
 #include <rdma/ib_user_verbs.h>
 #include <rdma/opa_smi.h>
 #include <rdma/opa_core.h>
+#include "rdmavt/vt.h"
 #include "opa_port_info.h"
 #include "ib_compat.h"
 #include "iowait.h"
@@ -594,6 +595,7 @@ struct hfi2_ibrcv {
 };
 
 struct hfi2_ibport {
+	struct rvt_ibport rvp;
 	struct hfi2_ibdev *ibd;
 	struct device *dev; /* from IB's ib_device */
 	struct hfi_pportdata *ppd;
@@ -650,7 +652,7 @@ struct hfi2_ibport {
 };
 
 struct hfi2_ibdev {
-	struct ib_device ibdev;
+	struct rvt_dev_info rdi;
 	struct device *parent_dev;
 	struct hfi_devdata *dd;
 	__be64 node_guid;
@@ -705,9 +707,11 @@ struct hfi2_ibdev {
 #define to_hfi_cq(cq)	container_of((cq), struct hfi2_cq, ibcq)
 #define to_hfi_mr(mr)	container_of((mr), struct hfi2_mr, ibmr)
 #define to_hfi_srq(srq)	container_of((srq), struct hfi2_srq, ibsrq)
-#define to_hfi_ibd(ibd)	container_of((ibd), struct hfi2_ibdev, ibdev)
 #define to_hfi_ucontext(ibu)	container_of((ibu),\
 				struct hfi2_ucontext, ibucontext)
+/* TODO - for now use typecast below, revisit when fully RDMAVT integrated */
+#define to_hfi_ibd(ibdev)	container_of((struct rvt_dev_info *)(ibdev),\
+				struct hfi2_ibdev, rdi)
 
 static inline struct hfi2_ibport *to_hfi_ibp(struct ib_device *ibdev,
 							u8 port)
@@ -720,6 +724,11 @@ static inline struct hfi2_ibport *to_hfi_ibp(struct ib_device *ibdev,
 		return NULL;
 	}
 	return &(ibd->pport[pidx]);
+}
+
+static inline struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev)
+{
+	return to_hfi_ibd(ibdev)->dd;
 }
 
 /*
@@ -871,7 +880,6 @@ int hfi2_ctx_assign_qp(struct hfi2_ibport *ibp,
 void hfi2_ctx_release_qp(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
 int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops);
 void hfi2_ib_remove(struct hfi_devdata *dd);
-struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev);
 void hfi2_cap_mask_chg(struct hfi2_ibport *ibp);
 void hfi2_sys_guid_chg(struct hfi2_ibport *ibp);
 void hfi2_node_desc_chg(struct hfi2_ibport *ibp);
