@@ -930,7 +930,7 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 		lrh2_16b = (lrh2_16b & ~OPA_16B_PKEY_MASK) | (pkey << 16);
 		lrh1_16b = (lrh1_16b & ~OPA_16B_SC_MASK) | (sc5 << 20);
 
-		dlid = hfi1_retrieve_lid(&qp->remote_ah_attr);
+		dlid = hfi1_retrieve_dlid(qp);
 		lrh1_16b = (lrh1_16b & ~OPA_16B_LID_MASK) | dlid;
 		lrh2_16b = (lrh2_16b & ~OPA_16B_DLID_MASK) | ((dlid >> 20)
 					<< OPA_16B_DLID_HIGH_SHIFT);

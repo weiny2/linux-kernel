@@ -848,7 +848,7 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	} else {
 		struct hfi1_pportdata *ppd;
 		u32 slid_16b;
-		u32 dlid_16b = hfi1_retrieve_lid(&qp->remote_ah_attr);
+		u32 dlid_16b = hfi1_retrieve_dlid(qp);
 
 		ppd = ppd_from_ibp(ibp);
 		lrh1_16b = (lrh1_16b & ~OPA_16B_LID_MASK) | dlid_16b;
@@ -936,8 +936,7 @@ void hfi1_do_send(struct rvt_qp *qp)
 
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_RC:
-		lid = hfi1_retrieve_lid(&qp->remote_ah_attr)
-					& ~((1 << ps.ppd->lmc)- 1);
+		lid = hfi1_retrieve_dlid(qp) & ~((1 << ps.ppd->lmc)- 1);
 		if (!loopback && (lid == ps.ppd->lid) &&
 		    (priv->use_16b ||
 		     (lid != be16_to_cpu(IB_LID_PERMISSIVE)))) {
@@ -948,8 +947,7 @@ void hfi1_do_send(struct rvt_qp *qp)
 		timeout_int = (qp->timeout_jiffies);
 		break;
 	case IB_QPT_UC:
-		lid = hfi1_retrieve_lid(&qp->remote_ah_attr)
-					& ~((1 << ps.ppd->lmc)- 1);
+		lid = hfi1_retrieve_dlid(qp) & ~((1 << ps.ppd->lmc)- 1);
 		if (!loopback && (lid == ps.ppd->lid) &&
 		    (priv->use_16b ||
 		     (lid != be16_to_cpu(IB_LID_PERMISSIVE)))) {

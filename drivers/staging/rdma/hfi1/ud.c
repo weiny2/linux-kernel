@@ -75,6 +75,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	struct ib_wc wc;
 	u32 length;
 	enum ib_qp_type sqptype, dqptype;
+	bool use_16b;
 
 	rcu_read_lock();
 
@@ -86,6 +87,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 		return;
 	}
 
+	use_16b = hfi1_use_16b(qp, swqe);
 	sqptype = sqp->ibqp.qp_type == IB_QPT_GSI ?
 			IB_QPT_UD : sqp->ibqp.qp_type;
 	dqptype = qp->ibqp.qp_type == IB_QPT_GSI ?
@@ -184,8 +186,33 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	}
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		struct ib_grh grh;
+		struct ib_global_route grd = ah_attr->grh;
 
-		hfi1_make_grh(ibp, &grh, &ah_attr->grh, 0, 0);
+		/**
+		 * For loopback packets with extended LIDs, the
+		 * sgid_index in the GRH is 0 and the dgid is
+		 * OPA GID of the sender. While creating a response
+		 * to the loopback packet, IB core creates the new
+		 * sgid_index from the DGID and that will be the
+		 * OPA_GID_INDEX. The new dgid is from the sgid
+		 * index and that will be in the IB GID format.
+		 *
+		 * We now have a case where the sent packet had a
+		 * different sgid_index and dgid compared to the
+		 * one that was received in response.
+		 *
+		 * Attempt to fix this inconsistency.
+		 */
+		if (use_16b) {
+			if (grd.sgid_index == 0)
+				grd.sgid_index = OPA_GID_INDEX;
+
+			if (ib_is_opa_gid(&grd.dgid))
+				grd.dgid.global.interface_id =
+					cpu_to_be64(ppd->guid);
+		}
+
+		hfi1_make_grh(ibp, &grh, &grd, 0, 0);
 		hfi1_copy_sge(&qp->r_sge, &grh,
 			      sizeof(grh), 1, 0);
 		wc.wc_flags |= IB_WC_GRH;
@@ -247,7 +274,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	if (wc.slid == 0 && sqp->ibqp.qp_type == IB_QPT_GSI)
 		wc.slid = be16_to_cpu(IB_LID_PERMISSIVE);
 	wc.sl = ah_attr->sl;
-	wc.dlid_path_bits = hfi1_retrieve_lid(ah_attr) &
+	wc.dlid_path_bits = hfi1_get_dlid_from_ah(ah_attr) &
 				((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
@@ -327,7 +354,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	use_16b = hfi1_use_16b(qp, wqe);
 	if ((!hfi1_check_mcast(ah_attr)) ||
 	    (hfi1_check_permissive(ah_attr))) {
-		lid = hfi1_retrieve_lid(ah_attr) & ~((1 << ppd->lmc) - 1);
+		lid = hfi1_get_dlid_from_ah(ah_attr) & ~((1 << ppd->lmc) - 1);
 		/**
 		 * A DLID of 0xFFFF needs special handing.
 		 * If GRD has been not been specified,
@@ -482,7 +509,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 			}
 		}
 	} else {
-		u32 dlid_16b = hfi1_retrieve_lid(ah_attr);
+		u32 dlid_16b = hfi1_get_dlid_from_ah(ah_attr);
 		u32 slid_16b;
 		lrh1_16b = (lrh1_16b & ~OPA_16B_LID_MASK) |
 				(dlid_16b & OPA_16B_LID_MASK);
