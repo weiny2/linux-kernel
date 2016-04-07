@@ -408,10 +408,12 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		if (!use_16b) {
 			grh = &ps->s_txreq->phdr.hdr.pkt.ibh.u.l.grh;
 		} else {
-			
 			/* Ensure OPA GIDs are transformed to IB gids before creating the GRH */
-			if (grd.sgid_index == OPA_GID_INDEX)
+			if (grd.sgid_index == OPA_GID_INDEX) {
+				dd_dev_warn(ppd->dd, "Bad sgid_index. sgid_index: %d\n",
+					    grd.sgid_index);
 				grd.sgid_index = 0;
+			}
 			grh = &ps->s_txreq->phdr.hdr.pkt.opah.u.l.grh;
 		}
 			
