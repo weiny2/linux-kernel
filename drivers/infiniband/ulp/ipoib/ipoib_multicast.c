@@ -213,7 +213,6 @@ static int ipoib_mcast_join_finish(struct ipoib_mcast *mcast,
 	struct ipoib_ah *ah;
 	int ret;
 	int set_qkey = 0;
-	union ib_gid sgid;
 
 	mcast->mcmember = *mcmember;
 
@@ -279,30 +278,10 @@ static int ipoib_mcast_join_finish(struct ipoib_mcast *mcast,
 			.grh	       = {
 				.flow_label    = be32_to_cpu(mcast->mcmember.flow_label),
 				.hop_limit     = mcast->mcmember.hop_limit,
+				.sgid_index    = 0,
 				.traffic_class = mcast->mcmember.traffic_class
 			}
 		};
-
-		if (rdma_cap_opa_ah(priv->ca, priv->port)) {
-			u32 slid = 0;
-
-			if (ib_query_gid(priv->ca, priv->port,
-					 OPA_GID_INDEX, &sgid, NULL)) {
-				pr_warn("Couldn't query GID\n");
-				return -EINVAL;
-			}
-
-			if (ib_is_opa_gid(&sgid))
-				slid = opa_get_lid_from_gid(&sgid);
-			if (slid >= IB_MULTICAST_LID_BASE)
-				av.grh.sgid_index = 1;
-			else
-				av.grh.sgid_index = 0;
-
-		} else {
-			av.grh.sgid_index = 0;
-		}
-
 		av.grh.dgid = mcast->mcmember.mgid;
 
 		ah = ipoib_create_ah(dev, priv->pd, &av);
