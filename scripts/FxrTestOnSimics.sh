@@ -67,23 +67,21 @@ if [ $only_load_driver ]; then
 fi
 
 # run default tests
-cd opa-headers.git/test
-(
-	. ${invoked_dir}/scripts/SimicsDefinition.sh
-	./harness.py --nodelist=viper0,viper1 --type=${test_type}
-	export res=$?
-) | tee /tmp/${myname}.$$
-if [ ! ${res} ]; then
-    echo fail on harness.
+pushd opa-headers.git/test
+./harness.py --nodelist=viper0,viper1 --type=${test_type} | tee /tmp/${myname}.$$
+popd
+res=0
+if grep --quiet "\[FAIL\]" /tmp/${myname}.$$; then
+	echo fail on harness.
+	res=255
 else
-	(
-		. ${invoked_dir}/scripts/SimicsDefinition.sh
-		./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad
-		export res=$?
-		if [ ! ${res} ]; then
-		    echo fail on ModuleReload of harness.
-		fi
-	) | tee -a /tmp/${myname}.$$
+	pushd opa-headers.git/test
+	./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad | tee -a /tmp/${myname}.$$
+	popd
+	if grep --quiet "\[FAIL\]" /tmp/${myname}.$$; then
+		echo fail on ModuleReload of harness.
+		res=254
+	fi
 fi
 
 if [ ${ByJenkins} == yes ] ; then
