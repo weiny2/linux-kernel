@@ -294,7 +294,7 @@ static int ipoib_mcast_join_finish(struct ipoib_mcast *mcast,
 
 			if (ib_is_opa_gid(&sgid))
 				slid = opa_get_lid_from_gid(&sgid);
-			if (slid >= be16_to_cpu(IB_MULTICAST_LID_BASE))
+			if (slid >= IB_MULTICAST_LID_BASE)
 				av.grh.sgid_index = 1;
 			else
 				av.grh.sgid_index = 0;
