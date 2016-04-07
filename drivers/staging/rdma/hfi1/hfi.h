@@ -2120,16 +2120,12 @@ static inline bool hfi1_check_permissive(struct ib_ah_attr *ah_attr)
 			be16_to_cpu(IB_MULTICAST_LID_BASE)))
 
 /* Check if current wqe needs 16B*/
-static inline bool hfi1_use_16b(struct rvt_qp *qp)
+static inline bool hfi1_use_16b(struct rvt_qp *qp, struct rvt_swqe *wqe)
 {
-	struct rvt_swqe *wqe = qp->s_wqe;
 	struct ib_ah_attr *ah_attr;
 	union ib_gid sgid;
 	union ib_gid *dgid;
 
-	/* TODO: This should be done just once when the RC/UD QP
-	 * is created.
-	 */ 
 	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
 	    (qp->ibqp.qp_type == IB_QPT_UC)) {
 		struct hfi1_qp_priv *priv = qp->priv;

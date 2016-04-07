@@ -233,7 +233,7 @@ static int make_rc_ack(struct hfi1_ibdev *dev, struct rvt_qp *qp,
 	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_RECV_OK))
 		goto bail;
 
-	bypass = hfi1_use_16b(qp);
+	bypass = priv->use_16b;
 	if (!bypass)
 		/* header size in 32-bit words LRH+BTH = (8+12)/4. */
 		hwords = 5;
@@ -414,7 +414,7 @@ int hfi1_make_rc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	if (IS_ERR(ps->s_txreq))
 		goto bail_no_tx;
 
-	bypass = hfi1_use_16b(qp);
+	bypass = priv->use_16b;
 	if (!bypass) {
 		ps->s_txreq->phdr.hdr.hdr_type = 0;
 		/* header size in 32-bit words LRH+BTH = (8+12)/4. */
@@ -825,6 +825,7 @@ bail_no_tx:
 void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 		      bool is_fecn, bool bypass)
 {
+	struct hfi1_qp_priv *priv = qp->priv;
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	u64 pbc, pbc_flags = 0;
@@ -867,7 +868,7 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 	}
 
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
-		(!(hfi1_use_16b(qp) && !hfi1_check_mcast(&qp->remote_ah_attr)))) {
+		(!(priv->use_16b && !hfi1_check_mcast(&qp->remote_ah_attr)))) {
 		hwords += hfi1_make_grh(ibp, &hdr.u.l.grh,
 				       &qp->remote_ah_attr.grh, hwords, 0);
 		if (!bypass) {
@@ -1187,6 +1188,7 @@ static void reset_sending_psn(struct rvt_qp *qp, u32 psn)
 void hfi1_rc_send_complete(struct rvt_qp *qp, struct hfi1_opa_header *opah)
 {
 	struct hfi1_other_headers *ohdr;
+	struct hfi1_qp_priv *priv = qp->priv;
 	struct rvt_swqe *wqe;
 	struct ib_wc wc;
 	unsigned i;
@@ -1194,7 +1196,7 @@ void hfi1_rc_send_complete(struct rvt_qp *qp, struct hfi1_opa_header *opah)
 	struct hfi1_16b_header *hdr_16b = NULL;
 	u32 opcode;
 	u32 psn;
-	bool bypass = hfi1_use_16b(qp);
+	bool bypass = priv->use_16b;
 
 	//pr_info("%s: Sending %s rc complete\n", __func__, bypass ? "16B" : "9B");
 	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_OR_FLUSH_SEND))
@@ -1661,6 +1663,7 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 			u32 opcode, u32 psn, u32 hdrsize, u32 pmtu,
 			struct hfi1_ctxtdata *rcd)
 {
+	struct hfi1_qp_priv *priv = qp->priv;
 	struct rvt_swqe *wqe;
 	enum ib_wc_status status;
 	unsigned long flags;
@@ -1669,7 +1672,7 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 	u32 aeth;
 	u64 val;
 	u32 bth0 = 0;
-	bool bypass = hfi1_use_16b(qp);
+	bool bypass = priv->use_16b;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
@@ -2676,11 +2679,12 @@ void hfi1_rc_hdrerr(
 {
 	struct hfi1_other_headers *ohdr;
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
+	struct hfi1_qp_priv *priv = qp->priv;
 	int diff;
 	u32 opcode;
 	u32 psn, bth0;
 	bool grh = false;
-	bool bypass = hfi1_use_16b(qp);
+	bool bypass = priv->use_16b;
 
 	if (rcv_flags & HFI1_HAS_GRH)
 		grh = true;

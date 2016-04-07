@@ -265,6 +265,7 @@ static int gid_ok(union ib_gid *gid, __be64 gid_prefix, __be64 id)
 int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void * hfi1_hdr,
 		       bool grh, bool bypass, struct rvt_qp *qp, u32 bth0)
 {
+	struct hfi1_qp_priv *priv = qp->priv;
 	__be64 guid;
 	unsigned long flags;
 	u8 sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
@@ -326,7 +327,7 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void * hfi1_hdr,
 	} else {
 		if (!grh) {
 			if ((qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
-			    (!(hfi1_use_16b(qp) &&
+			    (!(priv->use_16b &&
 			    !hfi1_check_mcast(&qp->remote_ah_attr))))
 				goto err;
 		} else {
@@ -774,7 +775,7 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	u32 lrh2_16b = 0;
 	u32 lrh3_16b = 0;
 
-	use_16b = hfi1_use_16b(qp);
+	use_16b = priv->use_16b;
 	//pr_info("%s: Making %s ruc header\n", __func__, use_16b ? "16B" : "9B");
 
 	/* Construct the header. */
@@ -789,7 +790,7 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	}
 
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
-		(!(hfi1_use_16b(qp) && !hfi1_check_mcast(&qp->remote_ah_attr)))) {
+		(!(use_16b && !hfi1_check_mcast(&qp->remote_ah_attr)))) {
 		struct ib_grh *grh;
 
 		if (!use_16b) {
@@ -938,7 +939,7 @@ void hfi1_do_send(struct rvt_qp *qp)
 		lid = hfi1_retrieve_lid(&qp->remote_ah_attr)
 					& ~((1 << ps.ppd->lmc)- 1);
 		if (!loopback && (lid == ps.ppd->lid) &&
-		    (hfi1_use_16b(qp) ||
+		    (priv->use_16b ||
 		     (lid != be16_to_cpu(IB_LID_PERMISSIVE)))) {
 			ruc_loopback(qp);
 			return;
@@ -950,7 +951,7 @@ void hfi1_do_send(struct rvt_qp *qp)
 		lid = hfi1_retrieve_lid(&qp->remote_ah_attr)
 					& ~((1 << ps.ppd->lmc)- 1);
 		if (!loopback && (lid == ps.ppd->lid) &&
-		    (hfi1_use_16b(qp) ||
+		    (priv->use_16b ||
 		     (lid != be16_to_cpu(IB_LID_PERMISSIVE)))) {
 			ruc_loopback(qp);
 			return;

@@ -323,27 +323,30 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	/* Construct the header. */
 	ibp = to_iport(qp->ibqp.device, qp->port_num);
 	ppd = ppd_from_ibp(ibp);
-	qp->s_wqe = wqe;
 	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
-	use_16b = hfi1_use_16b(qp);
+	use_16b = hfi1_use_16b(qp, wqe);
 	if ((!hfi1_check_mcast(ah_attr)) ||
 	    (hfi1_check_permissive(ah_attr))) {
 		lid = hfi1_retrieve_lid(ah_attr) & ~((1 << ppd->lmc) - 1);
 		/**
 		 * A DLID of 0xFFFF needs special handing.
-		 * If this is a 9B packet (i.e. use_16b is not true),
-		 * 0xFFFF is permissive LID and the packet with DLID
+		 * If GRD has been not been specified,
+		 * (i.e. use_16b is not true), 0xFFFF is
+		 * permissive LID and the packet with DLID
 		 * of 0xFFFF is a directed route packet.
-		 * If this is a 16B packet, 0xFFFF is a regular unicast
-		 * LID
+		 * If not, 0xFFFF is a regular unicast LID.
+		 *
+		 * GSI traffic with permissive LIDs are used to perform
+		 * local query when no LID has been assigned.
 		 */
 		if (unlikely(!loopback &&
-			     (use_16b ||
+			     ((use_16b ||
 			      (lid != be16_to_cpu(IB_LID_PERMISSIVE))) &&
-			     ((lid == ppd->lid) ||
-			      ((lid == (use_16b ? HFI1_16B_PERMISSIVE_LID :
-					be16_to_cpu(IB_LID_PERMISSIVE))) &&
-			       (qp->ibqp.qp_type == IB_QPT_GSI))))) {
+			      ((lid == ppd->lid) ||
+			       ((lid == (use_16b ? HFI1_16B_PERMISSIVE_LID :
+				 be16_to_cpu(IB_LID_PERMISSIVE))) &&
+				(qp->ibqp.qp_type == IB_QPT_GSI) &&
+				(!ppd->lid)))))) {
 			unsigned long flags;
 			/*
 			 * If DMAs are in progress, we can't generate
@@ -390,6 +393,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_srate = ah_attr->static_rate;
 	qp->srate_mbps = ib_rate_to_mbps(qp->s_srate);
+	qp->s_wqe = wqe;
 	qp->s_sge.sge = wqe->sg_list[0];
 	qp->s_sge.sg_list = wqe->sg_list + 1;
 	qp->s_sge.num_sge = wqe->wr.num_sge;

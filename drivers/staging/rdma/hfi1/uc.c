@@ -101,7 +101,7 @@ int hfi1_make_uc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		goto done_free_tx;
 	}
 
-	bypass = hfi1_use_16b(qp);
+	bypass = priv->use_16b;
 	if (!bypass) {
 		ps->s_txreq->phdr.hdr.hdr_type = 0;
 		/* header size in 32-bit words LRH+BTH = (8+12)/4. */
