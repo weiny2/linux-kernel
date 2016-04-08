@@ -427,7 +427,7 @@ int hfi2_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 			struct ib_recv_wr **bad_wr)
 {
 	struct hfi2_qp *qp = to_hfi_qp(ibqp);
-	struct hfi2_rwq *wq = qp->r_rq.wq;
+	struct rvt_rwq *wq = qp->r_rq.wq;
 	unsigned long flags;
 	int ret;
 
@@ -439,7 +439,7 @@ int hfi2_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 	}
 
 	for (; wr; wr = wr->next) {
-		struct hfi2_rwqe *wqe;
+		struct rvt_rwqe *wqe;
 		u32 next;
 		int i;
 
@@ -460,7 +460,7 @@ int hfi2_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 			goto bail;
 		}
 
-		wqe = get_rwqe_ptr(&qp->r_rq, wq->head);
+		wqe = rvt_get_rwqe_ptr(&qp->r_rq, wq->head);
 		wqe->wr_id = wr->wr_id;
 		wqe->num_sge = wr->num_sge;
 		for (i = 0; i < wr->num_sge; i++)

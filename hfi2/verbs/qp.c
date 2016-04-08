@@ -783,7 +783,7 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 
 	sg_list_sz = 0;
 	if (init_attr->srq) {
-		struct hfi2_srq *srq = to_hfi_srq(init_attr->srq);
+		struct rvt_srq *srq = ibsrq_to_rvtsrq(init_attr->srq);
 
 		if (srq->rq.max_sge > 1)
 			sg_list_sz = sizeof(*qp->r_sg_list) *
@@ -808,9 +808,9 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 	else {
 		qp->r_rq.size = init_attr->cap.max_recv_wr + 1;
 		qp->r_rq.max_sge = init_attr->cap.max_recv_sge;
-		sz = (sizeof(struct hfi2_sge) * qp->r_rq.max_sge) +
-		     sizeof(struct hfi2_rwqe);
-		qp->r_rq.wq = vmalloc_user(sizeof(struct hfi2_rwq) +
+		sz = (sizeof(struct ib_sge) * qp->r_rq.max_sge) +
+		     sizeof(struct rvt_rwqe);
+		qp->r_rq.wq = vmalloc_user(sizeof(struct rvt_rwq) +
 					   qp->r_rq.size * sz);
 		if (!qp->r_rq.wq) {
 			ret = ERR_PTR(-ENOMEM);
@@ -864,7 +864,7 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 				goto bail_ip;
 			}
 		} else {
-			u32 s = sizeof(struct hfi2_rwq) + qp->r_rq.size * sz;
+			u32 s = sizeof(struct rvt_rwq) + qp->r_rq.size * sz;
 
 			qp->ip = hfi2_create_mmap_info(ibd, s,
 						      ibpd->uobject->context,

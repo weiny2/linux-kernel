@@ -275,47 +275,6 @@ struct hfi2_swqe {
 	struct hfi2_sge sg_list[0];
 };
 
-/*
- * Receive work request queue entry.
- * The size of the sg_list is determined when the QP (or SRQ) is created
- * and stored in qp->r_rq.max_sge (or srq->rq.max_sge).
- */
-struct hfi2_rwqe {
-	u64 wr_id;
-	u8 num_sge;
-	struct ib_sge sg_list[0];
-};
-
-/*
- * This structure is used to contain the head pointer, tail pointer,
- * and receive work queue entries as a single memory allocation so
- * it can be mmap'ed into user space.
- * Note that the wq array elements are variable size so you can't
- * just index into the array to get the N'th element;
- * use get_rwqe_ptr() instead.
- */
-struct hfi2_rwq {
-	u32 head;               /* new work requests posted to the head */
-	u32 tail;               /* receives pull requests from here. */
-	struct hfi2_rwqe wq[0];
-};
-
-struct hfi2_rq {
-	struct hfi2_rwq *wq;
-	u32 size;               /* size of RWQE array */
-	u8 max_sge;
-	/* protect changes in this struct */
-	spinlock_t lock ____cacheline_aligned_in_smp;
-};
-
-struct hfi2_srq {
-	struct ib_srq ibsrq;
-	struct hfi2_rq rq;
-	struct hfi2_mmap_info *ip;
-	/* send signal when number of RWQEs < limit */
-	u32 limit;
-};
-
 struct hfi2_sge_state {
 	struct hfi2_sge *sg_list;  /* next SGE to be used if any */
 	struct hfi2_sge sge;	   /* progress state for the current SGE */
@@ -413,7 +372,7 @@ struct hfi2_qp {
 	u8 r_head_ack_queue;    /* index into s_ack_queue[] */
 	struct list_head rspwait;	/* link for waiting to respond */
 	struct hfi2_sge_state r_sge;	/* current receive data */
-	struct hfi2_rq r_rq;		/* receive work queue */
+	struct rvt_rq r_rq;		/* receive work queue */
 
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
 	struct hfi2_sge_state *s_cur_sge;
@@ -552,18 +511,6 @@ static inline struct hfi2_swqe *get_swqe_ptr(struct hfi2_qp *qp,
 }
 
 /*
- * Since struct hfi2_rwqe is not a fixed size, we can't simply index into
- * struct hfi2_rwq.wq.  This function does the array index computation.
- */
-static inline struct hfi2_rwqe *get_rwqe_ptr(struct hfi2_rq *rq, unsigned n)
-{
-	return (struct hfi2_rwqe *)
-		((char *) rq->wq->wq +
-		 (sizeof(struct hfi2_rwqe) +
-		  rq->max_sge * sizeof(struct ib_sge)) * n);
-}
-
-/*
  * There is one struct hfi2_mcast for each multicast GID.
  * All attached QPs are then stored as a list of
  * struct hfi2_mcast_qp.
@@ -680,8 +627,6 @@ struct hfi2_ibdev {
 	spinlock_t n_cqs_lock;
 	u32 n_qps_allocated;
 	spinlock_t n_qps_lock;
-	u32 n_srqs_allocated;
-	spinlock_t n_srqs_lock;
 	u32 n_mcast_grps_allocated; /* number of mcast groups allocated */
 	spinlock_t n_mcast_grps_lock;
 
@@ -706,7 +651,6 @@ struct hfi2_ibdev {
 #define to_hfi_qp(qp)	container_of((qp), struct hfi2_qp, ibqp)
 #define to_hfi_cq(cq)	container_of((cq), struct hfi2_cq, ibcq)
 #define to_hfi_mr(mr)	container_of((mr), struct hfi2_mr, ibmr)
-#define to_hfi_srq(srq)	container_of((srq), struct hfi2_srq, ibsrq)
 #define to_hfi_ucontext(ibu)	container_of((ibu),\
 				struct hfi2_ucontext, ibucontext)
 /* TODO - for now use typecast below, revisit when fully RDMAVT integrated */

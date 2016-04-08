@@ -633,7 +633,6 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	spin_lock_init(&ibd->n_ahs_lock);
 	spin_lock_init(&ibd->n_cqs_lock);
 	spin_lock_init(&ibd->n_qps_lock);
-	spin_lock_init(&ibd->n_srqs_lock);
 	spin_lock_init(&ibd->n_mcast_grps_lock);
 
 	/*
