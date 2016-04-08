@@ -803,14 +803,15 @@ static int hfi1_file_close(struct inode *inode, struct file *fp)
 	spin_unlock_irqrestore(&dd->uctxt_lock, flags);
 
 	dd->rcd[uctxt->ctxt] = NULL;
+
+	hfi1_user_exp_rcv_free(fdata);
+	hfi1_clear_ctxt_pkey(dd, uctxt->ctxt);
+
 	uctxt->rcvwait_to = 0;
 	uctxt->piowait_to = 0;
 	uctxt->rcvnowait = 0;
 	uctxt->pionowait = 0;
 	uctxt->event_flags = 0;
-
-	hfi1_user_exp_rcv_free(fdata);
-	hfi1_clear_ctxt_pkey(dd, uctxt->ctxt);
 
 	hfi1_stats.sps_ctxts--;
 	if (++dd->freectxts == dd->num_user_contexts)
@@ -1151,16 +1152,6 @@ static int user_init(struct file *fp)
 	if (!test_bit(HFI1_CTXT_SETUP_DONE, &uctxt->event_flags))
 		return -EFAULT;
 
-	/*
-	 * Subctxts don't need to initialize anything since master
-	 * has done it.
-	 */
-	if (fd->subctxt)
-		return wait_event_interruptible(
-			uctxt->wait,
-			!test_bit(HFI1_CTXT_MASTER_UNINIT,
-				  &uctxt->event_flags));
-
 	/* initialize poll variables... */
 	uctxt->urgent = 0;
 	uctxt->urgent_poll = 0;
@@ -1260,7 +1251,7 @@ static int setup_ctxt(struct file *fp)
 	int ret = 0;
 
 	/*
-	 * Context should be set up only once (including allocation and
+	 * Context should be set up only once, including allocation and
 	 * programming of eager buffers. This is done if context sharing
 	 * is not requested or by the master process.
 	 */
@@ -1281,7 +1272,15 @@ static int setup_ctxt(struct file *fp)
 			if (ret)
 				goto done;
 		}
+	} else {
+		ret = wait_event_interruptible(
+			uctxt->wait,
+			!test_bit(HFI1_CTXT_MASTER_UNINIT,
+				  &uctxt->event_flags));
+		if (ret)
+			goto done;
 	}
+
 	ret = hfi1_user_sdma_alloc_queues(uctxt, fp);
 	if (ret)
 		goto done;
