@@ -426,8 +426,10 @@ static void rcv_hdrerr(struct hfi1_ctxtdata *rcd, struct hfi1_pportdata *ppd,
 				if (rhf_dc_info(packet->rhf))
 					sc5 |= 0x10;
 			} else {
-				sc5 = OPA_16B_GET_SC(rhdr_16b->lrh[0], rhdr_16b->lrh[1],
-						     rhdr_16b->lrh[2], rhdr_16b->lrh[3]);
+				sc5 = OPA_16B_GET_SC(rhdr_16b->lrh[0],
+						     rhdr_16b->lrh[1],
+						     rhdr_16b->lrh[2],
+						     rhdr_16b->lrh[3]);
 			}
 			sl = ibp->sc_to_sl[sc5];
 
@@ -671,13 +673,12 @@ static void __prescan_rxq(struct hfi1_packet *packet)
 				hfi1_get_16b_msgheader(dd, rhf_addr);
 			l4 = OPA_16B_GET_L4(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					    hdr_16b->lrh[2], hdr_16b->lrh[3]);
-			if (l4 == HFI1_L4_IB_LOCAL) {
+			if (l4 == HFI1_L4_IB_LOCAL)
 				ohdr = &hdr_16b->u.oth;
-			} else if (l4 == HFI1_L4_IB_GLOBAL) {
+			else if (l4 == HFI1_L4_IB_GLOBAL)
 				ohdr = &hdr_16b->u.l.oth;
-			} else {
+			else
 				goto next; /* just in case */
-			}
 		} else {
 			u8 lnh;
 
@@ -719,7 +720,7 @@ static void __prescan_rxq(struct hfi1_packet *packet)
 			goto next;
 		}
 
-		process_ecn(qp, (bypass ? (void *) hdr_16b : (void *)hdr),
+		process_ecn(qp, (bypass ? (void *)hdr_16b : (void *)hdr),
 			    ohdr, rhf, bth1, grh, bypass);
 		rcu_read_unlock();
 
@@ -1065,10 +1066,11 @@ int handle_receive_interrupt(struct hfi1_ctxtdata *rcd, int thread)
 			skip_pkt = 0;
 		} else {
 			if (!packet.bypass) {
-				/* Auto activate link on non-SC15 packet receive */
+				/* Auto activate link on non-SC15 packet rx */
 				if (unlikely(rcd->ppd->host_link_state ==
 					     HLS_UP_ARMED) &&
-			    	set_armed_to_active(rcd, packet, dd))
+					     set_armed_to_active(rcd,
+								 packet, dd))
 					goto bail;
 			}
 			last = process_rcv_packet(&packet, thread);

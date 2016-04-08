@@ -315,7 +315,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	u32 lrh1_16b = 0x40000000;
 	u32 lrh2_16b = 0;
 	u32 lrh3_16b = 0;
-	
+
 	ps->s_txreq = get_txreq(ps->dev, qp);
 	if (IS_ERR(ps->s_txreq))
 		goto bail_no_tx;
@@ -401,17 +401,19 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	if (!use_16b) {
 		extra_bytes = -wqe->length & 3;
 		nwords = (wqe->length + extra_bytes) >> 2;
-		/* header size in 32-bit words LRH+BTH+DETH = (8+12+8)/4. */
+		/* header size in dwords LRH+BTH+DETH = (8+12+8)/4. */
 		qp->s_hdrwords = 7;
 
 		/* Set the packet type */
 		ps->s_txreq->phdr.hdr.hdr_type = 0;
 	} else {
-		/* header size in 32-bit words 16B LRH+BTH+DETH = (16+12+8)/4. */
+		/* header size in dwords 16B LRH+BTH+DETH = (16+12+8)/4. */
 		qp->s_hdrwords = 9;
 		/* SW provides space for CRC and LT for bypass packets. */
-		extra_bytes = hfi1_get_16b_padding((qp->s_hdrwords << 2), wqe->length);
-		nwords = (wqe->length + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
+		extra_bytes = hfi1_get_16b_padding((qp->s_hdrwords << 2),
+						   wqe->length);
+		nwords = (wqe->length + extra_bytes + (SIZE_OF_CRC << 2) +
+			 SIZE_OF_LT) >> 2;
 		/* Set the packet type */
 		ps->s_txreq->phdr.hdr.hdr_type = 1;
 	}
@@ -427,7 +429,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	qp->s_sge.total_len = wqe->length;
 
 	if ((ah_attr->ah_flags & IB_AH_GRH) &&
- 		(!(use_16b && !hfi1_check_mcast(ah_attr)))) {
+	    (!(use_16b && !hfi1_check_mcast(ah_attr)))) {
 		/* Header size in 32-bit words. */
 		struct ib_grh *grh;
 		struct ib_global_route grd = ah_attr->grh;
@@ -435,7 +437,10 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		if (!use_16b) {
 			grh = &ps->s_txreq->phdr.hdr.pkt.ibh.u.l.grh;
 		} else {
-			/* Ensure OPA GIDs are transformed to IB gids before creating the GRH */
+			/*
+			 * Ensure OPA GIDs are transformed to IB gids
+			 * before creating the GRH.
+			 */
 			if (grd.sgid_index == OPA_GID_INDEX) {
 				dd_dev_warn(ppd->dd, "Bad sgid_index. sgid_index: %d\n",
 					    grd.sgid_index);
@@ -443,17 +448,16 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 			}
 			grh = &ps->s_txreq->phdr.hdr.pkt.opah.u.l.grh;
 		}
-			
-		qp->s_hdrwords += hfi1_make_grh(ibp,
-						grh,
-						&grd,
+
+		qp->s_hdrwords += hfi1_make_grh(ibp, grh, &grd,
 						qp->s_hdrwords, nwords);
 		lrh0 = HFI1_LRH_GRH;
 		if (!use_16b) {
 			ohdr = &ps->s_txreq->phdr.hdr.pkt.ibh.u.l.oth;
 		} else {
 			ohdr = &ps->s_txreq->phdr.hdr.pkt.opah.u.l.oth;
-			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) | HFI1_L4_IB_GLOBAL;
+			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) |
+				    HFI1_L4_IB_GLOBAL;
 		}
 		/*
 		 * Don't worry about sending to locally attached multicast
@@ -466,9 +470,9 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 			ohdr = &ps->s_txreq->phdr.hdr.pkt.ibh.u.oth;
 		} else {
 			ohdr = &ps->s_txreq->phdr.hdr.pkt.opah.u.oth;
-			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) | HFI1_L4_IB_LOCAL;
+			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) |
+				   HFI1_L4_IB_LOCAL;
 		}
-		
 	}
 	if (wqe->wr.opcode == IB_WR_SEND_WITH_IMM) {
 		qp->s_hdrwords++;
@@ -493,41 +497,48 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	priv->s_sendcontext = qp_to_send_context(qp, priv->s_sc);
 	ps->s_txreq->psc = priv->s_sendcontext;
 	if (!use_16b) {
-		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0] = cpu_to_be16(lrh0);
-		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);
+		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0] =
+			cpu_to_be16(lrh0);
+		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[1] =
+			cpu_to_be16(ah_attr->dlid);
 		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[2] =
 			cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
 		if (ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE)) {
-			ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = IB_LID_PERMISSIVE;
+			ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] =
+				IB_LID_PERMISSIVE;
 		} else {
 			lid = (u16)ppd->lid;
 			if (lid) {
-				lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
-				ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = cpu_to_be16(lid);
+				lid |= ah_attr->src_path_bits &
+					((1 << ppd->lmc) - 1);
+				ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] =
+					cpu_to_be16(lid);
 			} else {
-				ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = IB_LID_PERMISSIVE;
+				ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] =
+					IB_LID_PERMISSIVE;
 			}
 		}
 	} else {
 		u32 dlid_16b = hfi1_get_dlid_from_ah(ah_attr);
 		u32 slid_16b;
+
 		lrh1_16b = (lrh1_16b & ~OPA_16B_LID_MASK) |
 				(dlid_16b & OPA_16B_LID_MASK);
-		lrh2_16b = (lrh2_16b & ~OPA_16B_DLID_MASK) | ((dlid_16b >> 20) 
+		lrh2_16b = (lrh2_16b & ~OPA_16B_DLID_MASK) | ((dlid_16b >> 20)
 				<< OPA_16B_DLID_HIGH_SHIFT);
 		/* Convert dwords to flits */
 		lrh0_16b = (lrh0_16b & ~OPA_16B_LEN_MASK) |
-				(((qp->s_hdrwords + nwords) >> 1) << 20);
+			    (((qp->s_hdrwords + nwords) >> 1) << 20);
 		if (!ppd->lid)
-                	slid_16b = 0xFFFFFFFF;
-        	else
-                	slid_16b = ppd->lid | (ah_attr->src_path_bits &
-                                              ((1 << ppd->lmc) - 1));
+			slid_16b = 0xFFFFFFFF;
+		else
+			slid_16b = ppd->lid | (ah_attr->src_path_bits &
+				   ((1 << ppd->lmc) - 1));
 
 		lrh0_16b = (lrh0_16b & ~OPA_16B_LID_MASK)  |
-				(slid_16b & OPA_16B_LID_MASK);
-		lrh2_16b = (lrh2_16b & ~OPA_16B_SLID_MASK) | ((slid_16b >> 20) 
-				<< OPA_16B_SLID_HIGH_SHIFT);
+			    (slid_16b & OPA_16B_LID_MASK);
+		lrh2_16b = (lrh2_16b & ~OPA_16B_SLID_MASK) | ((slid_16b >> 20)
+			    << OPA_16B_SLID_HIGH_SHIFT);
 	}
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
 		bth0 |= IB_BTH_SOLICITED;
@@ -544,8 +555,10 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		u16 pkey;
 
 		pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
-	        fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) & HFI1_FECN_MASK;
-	        becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) & HFI1_BECN_MASK;
+		fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) &
+			HFI1_FECN_MASK;
+		becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) &
+			HFI1_BECN_MASK;
 		lrh0_16b = (lrh0_16b & ~OPA_16B_BECN_MASK) | (becn << 31);
 		lrh1_16b = (lrh1_16b & ~OPA_16B_FECN_MASK) | (fecn << 28);
 		lrh2_16b = (lrh2_16b & ~OPA_16B_PKEY_MASK) | (pkey << 16);
@@ -632,9 +645,9 @@ int hfi1_lookup_pkey_idx(struct hfi1_ibport *ibp, u16 pkey)
 	return -1;
 }
 
-void return_cnp_bypass(struct hfi1_ibport *ibp, struct rvt_qp *qp, u32 remote_qpn,
-		u32 pkey, u32 slid, u32 dlid, u8 sc5,
-		const struct ib_grh *old_grh)
+void return_cnp_bypass(struct hfi1_ibport *ibp, struct rvt_qp *qp,
+		       u32 remote_qpn, u32 pkey, u32 slid, u32 dlid,
+		       u8 sc5, const struct ib_grh *old_grh)
 {
 	u64 pbc, pbc_flags = 0;
 	u32 bth0, plen, vl, hwords = 7;
@@ -650,7 +663,7 @@ void return_cnp_bypass(struct hfi1_ibport *ibp, struct rvt_qp *qp, u32 remote_qp
 	u32 nwords;
 
 	/* Populate length */
-	nwords = (hfi1_get_16b_padding(hwords << 2, 0) + 
+	nwords = (hfi1_get_16b_padding(hwords << 2, 0) +
 		  (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
 	if (old_grh) {
 		struct ib_grh *grh = &hdr.u.l.grh;
@@ -683,12 +696,12 @@ void return_cnp_bypass(struct hfi1_ibport *ibp, struct rvt_qp *qp, u32 remote_qp
 	lrh0 = (lrh0 & ~OPA_16B_BECN_MASK) | (1 << 31);
 	/* Populate dlid */
 	lrh1 = (lrh1 & ~OPA_16B_LID_MASK) | dlid;
-	lrh2 = (lrh2 & ~OPA_16B_DLID_MASK) | ((dlid >> 20) 
+	lrh2 = (lrh2 & ~OPA_16B_DLID_MASK) | ((dlid >> 20)
 				<< OPA_16B_DLID_HIGH_SHIFT);
 
 	/* Populate slid */
 	lrh0 = (lrh0 & ~OPA_16B_LID_MASK)  | slid;
-	lrh2 = (lrh2 & ~OPA_16B_SLID_MASK) | ((slid >> 20) 
+	lrh2 = (lrh2 & ~OPA_16B_SLID_MASK) | ((slid >> 20)
 				<< OPA_16B_SLID_HIGH_SHIFT);
 
 	lrh0 = (lrh0 & ~OPA_16B_LEN_MASK) |
@@ -927,7 +940,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		sc = OPA_16B_GET_SC(hdr_16b->lrh[0], hdr_16b->lrh[1],
 				    hdr_16b->lrh[2], hdr_16b->lrh[3]);
 		pkey = OPA_16B_GET_PKEY(hdr_16b->lrh[0], hdr_16b->lrh[1],
-					hdr_16b->lrh[2], hdr_16b->lrh[3]); 
+					hdr_16b->lrh[2], hdr_16b->lrh[3]);
 		is_mcast = (dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
 				(dlid != HFI1_16B_PERMISSIVE_LID);
 		sc5 = sc; /* 16B provides the 5 bit SC */
@@ -967,9 +980,8 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	if (unlikely(becn))
 		process_becn(ppd, sl, 0, lqpn, 0, IB_CC_SVCTYPE_UD);
 
-	if (!is_mcast && (opcode != IB_OPCODE_CNP) && fecn) {
+	if (!is_mcast && (opcode != IB_OPCODE_CNP) && fecn)
 		fn_cnp(ibp, qp, src_qp, pkey, dlid, slid, sc5, grh);
-	}
 	/*
 	 * Get the number of bytes the message was padded by
 	 * and drop incomplete packets.
@@ -1008,7 +1020,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		if (unlikely(qkey != qp->qkey)) {
 			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_Q_KEY, qkey, sl,
 				       src_qp, qp->ibqp.qp_num,
-				       (u16) slid, (u16) dlid);
+				       (u16)slid, (u16)dlid);
 			return;
 		}
 		/* Drop invalid MAD packets (see 13.5.3.1). */
@@ -1079,7 +1091,8 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	/* TODO: Clean this up */
 	if (packet->bypass) {
 		if (has_grh) {
-			hfi1_copy_sge(&qp->r_sge, &hdr_16b->u.l.grh, sizeof(struct ib_grh), 1, 0);
+			hfi1_copy_sge(&qp->r_sge, &hdr_16b->u.l.grh,
+				      sizeof(struct ib_grh), 1, 0);
 			wc.wc_flags |= IB_WC_GRH;
 		} else if (((slid != HFI1_16B_PERMISSIVE_LID) &&
 			    (slid >= be16_to_cpu(IB_MULTICAST_LID_BASE))) ||
@@ -1092,8 +1105,8 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 			 * out when creating 16B, add back the GRH here.
 			 */
 			hfi1_make_ext_grh(packet, &grh, slid, dlid);
-			//trace_make_ext_grh(ppd_from_ibp(ibp)->dd, &grh);
-			hfi1_copy_sge(&qp->r_sge, &grh, sizeof(struct ib_grh), 1, 0);
+			hfi1_copy_sge(&qp->r_sge, &grh,
+				      sizeof(struct ib_grh), 1, 0);
 			wc.wc_flags |= IB_WC_GRH;
 		} else {
 			hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);

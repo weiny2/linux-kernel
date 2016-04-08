@@ -324,7 +324,8 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 	if (hfi1_ruc_check_hdr(ibp,
 			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
 			       has_grh, packet->bypass, qp, bth0)) {
-		pr_warn("%s ruc check header failed\n", packet->bypass ? "16B" : "9B");
+		pr_warn("%s ruc check header failed\n",
+			packet->bypass ? "16B" : "9B");
 		return;
 	}
 

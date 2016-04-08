@@ -868,15 +868,16 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 	}
 
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
-		(!(priv->use_16b && !hfi1_check_mcast(&qp->remote_ah_attr)))) {
+	    (!(priv->use_16b && !hfi1_check_mcast(&qp->remote_ah_attr)))) {
 		hwords += hfi1_make_grh(ibp, &hdr.u.l.grh,
-				       &qp->remote_ah_attr.grh, hwords, 0);
+					&qp->remote_ah_attr.grh, hwords, 0);
 		if (!bypass) {
 			ohdr = &hdr.u.l.oth;
 			lrh0 = HFI1_LRH_GRH;
 		} else {
 			ohdr = &hdr_16b.u.l.oth;
-			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) | HFI1_L4_IB_GLOBAL;
+			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) |
+				    HFI1_L4_IB_GLOBAL;
 		}
 	} else {
 		if (!bypass) {
@@ -884,7 +885,8 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 			lrh0 = HFI1_LRH_BTH;
 		} else {
 			ohdr = &hdr_16b.u.oth;
-			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) | HFI1_L4_IB_LOCAL;
+			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) |
+				    HFI1_L4_IB_LOCAL;
 		}
 	}
 	/* read pkey_index w/o lock (its atomic) */
@@ -914,7 +916,8 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 		hdr.lrh[0] = cpu_to_be16(lrh0);
 		hdr.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
 		hdr.lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);
-		hdr.lrh[3] = cpu_to_be16(ppd->lid | qp->remote_ah_attr.src_path_bits);
+		hdr.lrh[3] = cpu_to_be16(ppd->lid |
+					 qp->remote_ah_attr.src_path_bits);
 	} else {
 		u8 fecn, becn;
 		u16 pkey;
@@ -922,8 +925,10 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 		pbc_flags |= PBC_PACKET_BYPASS | PBC_INSERT_BYPASS_ICRC;
 
 		pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
-	        fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) & HFI1_FECN_MASK;
-	        becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) & HFI1_BECN_MASK;
+		fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) &
+				    HFI1_FECN_MASK;
+		becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) &
+				    HFI1_BECN_MASK;
 
 		lrh0_16b = (lrh0_16b & ~OPA_16B_BECN_MASK) | (becn << 31);
 		lrh1_16b = (lrh1_16b & ~OPA_16B_FECN_MASK) | (fecn << 28);
@@ -971,7 +976,8 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 
 	/* write the pbc and data */
 	ppd->dd->pio_inline_send(ppd->dd, pbuf, pbc,
-				 (bypass ? (void *)&hdr_16b : (void *)&hdr), hwords);
+				 (bypass ? (void *)&hdr_16b : (void *)&hdr),
+				 hwords);
 
 	return;
 
@@ -1198,7 +1204,6 @@ void hfi1_rc_send_complete(struct rvt_qp *qp, struct hfi1_opa_header *opah)
 	u32 psn;
 	bool bypass = priv->use_16b;
 
-	//pr_info("%s: Sending %s rc complete\n", __func__, bypass ? "16B" : "9B");
 	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_OR_FLUSH_SEND))
 		return;
 
@@ -2235,7 +2240,8 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	if (hfi1_ruc_check_hdr(ibp,
 			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
 			       grh, packet->bypass, qp, bth0)) {
-		pr_warn("%s ruc check header failed\n", packet->bypass ? "16B" : "9B");
+		pr_warn("%s ruc check header failed\n",
+			packet->bypass ? "16B" : "9B");
 		return;
 	}
 

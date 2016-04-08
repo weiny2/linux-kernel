@@ -247,7 +247,7 @@ struct hfi1_filter_array {
 static int hfi1_filter_lid(void *ibhdr, void *packet_data,
 			   void *value, bool bypass);
 static int hfi1_filter_dlid(void *ibhdr, void *packet_data,
-			   void *value, bool bypass);
+			    void *value, bool bypass);
 static int hfi1_filter_mad_mgmt_class(void *ibhdr, void *packet_data,
 				      void *value, bool bypass);
 static int hfi1_filter_qp_number(void *ibhdr, void *packet_data,
@@ -1350,7 +1350,6 @@ static int hfi1_filter_dlid(void *ibhdr, void *packet_data,
 		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
 	}
 
-
 	if (*((u32 *)value) == dlid)
 		return HFI1_FILTER_HIT;
 
@@ -1797,7 +1796,7 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	bypass = ps->s_txreq->phdr.hdr.hdr_type;
 	if (!bypass) {
 		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh;
-		/* not using ss->total_len as arg 2 b/c that does not count CRC */
+		/* not using ss->total_len because it does not count CRC */
 		tlen = HFI1_GET_PKT_LEN(&ps->s_txreq->phdr.hdr.pkt.ibh);
 		dwords = (len + 3) >> 2;
 	} else {
@@ -1827,15 +1826,19 @@ int snoop_send_pio_handler(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		md.dir = PKT_DIR_EGRESS;
 		if (likely(pbc == 0)) {
 			if (!bypass) {
-				vl = be16_to_cpu(ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0]) >> 12;
-				md.u.pbc = create_pbc(ppd, 0, qp->s_srate, vl, plen);
+				vl = be16_to_cpu(
+				     ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0]) >>
+				     12;
+				md.u.pbc = create_pbc(ppd, 0,
+						      qp->s_srate, vl, plen);
 			} else {
 				struct send_context *sc;
 				u8 sc5 = priv->s_sc;
 				u64 pbc_flags = 0;
 
 				sc = qp_to_send_context(qp, sc5);
-				vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device), sc5);
+				vl = sc_to_vlt(dd_from_ibdev(qp->ibqp.device),
+					       sc5);
 
 				pbc_flags = PBC_PACKET_BYPASS |
 					    PBC_INSERT_BYPASS_ICRC;
@@ -1986,7 +1989,7 @@ void snoop_inline_pio_send(struct hfi1_devdata *dd, struct pio_buf *pbuf,
 		packet_len += hfi1_get_16b_padding(count << 2, 0) +
 				(SIZE_OF_CRC << 2) + SIZE_OF_LT;
 	}
-		
+
 	snoop_dbg("ACK OUT: len %d", packet_len);
 
 	if (!dd->hfi1_snoop.filter_callback) {

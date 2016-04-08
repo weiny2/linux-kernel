@@ -2049,7 +2049,7 @@ static inline struct ib_ah_attr *hfi1_get_ah_attr(struct rvt_qp *qp)
 {
 	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
 	    (qp->ibqp.qp_type == IB_QPT_UC)) {
-			return &qp->remote_ah_attr;
+		return &qp->remote_ah_attr;
 	} else {
 		struct rvt_swqe *wqe = qp->s_wqe;
 
@@ -2114,7 +2114,7 @@ static inline bool hfi1_check_mcast(struct ib_ah_attr *ah_attr)
 	}
 	lid = ah_attr->dlid;
 	return ((lid >= be16_to_cpu(IB_MULTICAST_LID_BASE) &&
-		lid != be16_to_cpu(IB_LID_PERMISSIVE)));
+		 lid != be16_to_cpu(IB_LID_PERMISSIVE)));
 }
 
 /**
@@ -2162,7 +2162,7 @@ static inline bool hfi1_use_16b(struct rvt_qp *qp, struct rvt_swqe *wqe)
 		return false;
 
 	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
-	
+
 	if (!(ah_attr->ah_flags & IB_AH_GRH))
 		return false;
 
@@ -2205,7 +2205,6 @@ static inline void dump_16b_header(struct hfi1_16b_header *hdr)
 	u32 h1 = hdr->lrh[1];
 	u32 h2 = hdr->lrh[2];
 	u32 h3 = hdr->lrh[3];
-
 
 	pr_info("(hdr) h0=%.08x h1=%.08x h2=%.08x h3=%.08x\n",
 		h0, h1, h2, h3);

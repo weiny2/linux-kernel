@@ -456,7 +456,7 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 			__field(u32, psn)
 			/* extended headers */
 			__dynamic_array(u8, ehdrs,
-				    ibhdr_exhdr_len(hfi1_hdr, bypass))
+					ibhdr_exhdr_len(hfi1_hdr, bypass))
 			),
 		    TP_fast_assign(
 			   struct hfi1_ib_header *hdr = NULL;
@@ -483,12 +483,18 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 				__entry->sc = OPA_16B_GET_SC(h0, h1, h2, h3);
 				__entry->age = OPA_16B_GET_AGE(h0, h1, h2, h3);
 				__entry->len = OPA_16B_GET_LEN(h0, h1, h2, h3);
-				__entry->becn = OPA_16B_GET_BECN(h0, h1, h2, h3);
-				__entry->dlid = OPA_16B_GET_DLID(h0, h1, h2, h3);
-				__entry->fecn = OPA_16B_GET_FECN(h0, h1, h2, h3);
-				__entry->pkey = OPA_16B_GET_PKEY(h0, h1, h2, h3);
-				__entry->slid = OPA_16B_GET_SLID(h0, h1, h2, h3);
-				__entry->entropy = OPA_16B_GET_ENTROPY(h0, h1, h2, h3);
+				__entry->becn = OPA_16B_GET_BECN(h0, h1,
+								 h2, h3);
+				__entry->dlid = OPA_16B_GET_DLID(h0, h1,
+								 h2, h3);
+				__entry->fecn = OPA_16B_GET_FECN(h0, h1,
+								 h2, h3);
+				__entry->pkey = OPA_16B_GET_PKEY(h0, h1,
+								 h2, h3);
+				__entry->slid = OPA_16B_GET_SLID(h0, h1,
+								 h2, h3);
+				__entry->entropy = OPA_16B_GET_ENTROPY(h0, h1,
+								       h2, h3);
 
 				if (__entry->l4 == HFI1_L4_IB_LOCAL)
 					ohdr = &hdr_16b->u.oth;
@@ -497,7 +503,9 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 
 			   } else {
 				hdr = (struct hfi1_ib_header *)hfi1_hdr;
-				__entry->sc = OPA_9B_GET_SC5(be16_to_cpu(hdr->lrh[0]));
+
+				__entry->sc =
+				OPA_9B_GET_SC5(be16_to_cpu(hdr->lrh[0]));
 				__entry->lver =
 				(u8)(be16_to_cpu(hdr->lrh[0]) >> 8) & 0xf;
 				__entry->sl =
@@ -555,7 +563,8 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 			  memcpy(__get_dynamic_array(ehdrs), &ohdr->u,
 				 ibhdr_exhdr_len(hfi1_hdr, bypass));
 			 ),
-		    TP_printk("[%s] (%s) " LRH_PRN " " LRH_9B_PRN " " LRH_16B_PRN " " BTH_PRN " " EHDR_PRN,
+		    TP_printk("[%s] (%s) " LRH_PRN " " LRH_9B_PRN " "
+			      LRH_16B_PRN " " BTH_PRN " " EHDR_PRN,
 			      __get_str(dev),
 			      ibhdr_get_packet_type_str(__entry->l4),
 			      /* 9B and 16B LRH */

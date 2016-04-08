@@ -554,7 +554,8 @@ dropit:
 	return 0;
 }
 
-static int hfi1_handle_packet(struct hfi1_packet *packet, union ib_gid *mgid) {
+static int hfi1_handle_packet(struct hfi1_packet *packet, union ib_gid *mgid)
+{
 	u8 opcode;
 	u32 qp_num;
 	struct hfi1_ctxtdata *rcd = packet->rcd;
@@ -655,7 +656,7 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	trace_input_ibhdr(rcd->dd, hdr, false);
 
 	if (hfi1_handle_packet(packet, mgid))
-		goto drop;	
+		goto drop;
 	return;
 
 drop:
@@ -713,7 +714,7 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 	trace_input_ibhdr(rcd->dd, hdr, true);
 
 	if (hfi1_handle_packet(packet, mgid))
-		goto drop;	
+		goto drop;
 	return;
 
 drop:
@@ -893,18 +894,19 @@ static int build_verbs_tx_desc(
 	u8 extra_bytes = 0;
 	u8 crc_lt = 0;
 	char opa_16b_pad_bytes[32] = {0};
-	
+
 	if (tx->phdr.hdr.hdr_type) {
-		/* hdrbytes accounts for PBC. Need to subtract 8 bytes before
-		 * calculating padding.
-		 */ 
+		/*
+		 * hdrbytes accounts for PBC. Need to subtract 8 bytes
+		 * before calculating padding.
+		 */
 		extra_bytes = hfi1_get_16b_padding(hdrbytes - 8, length);
 		crc_lt = (SIZE_OF_CRC << 2) + SIZE_OF_LT;
 		hdr = (u32 *)&phdr->hdr.pkt.opah;
-	} else { 
+	} else {
 		hdr = (u32 *)&phdr->hdr.pkt.ibh;
 	}
-		
+
 	if (!ahdr->ahgcount) {
 		ret = sdma_txinit_ahg(
 			&tx->txreq,
@@ -919,7 +921,7 @@ static int build_verbs_tx_desc(
 		if (ret)
 			goto bail_txadd;
 		phdr->pbc = cpu_to_le64(pbc);
-		
+
 		ret = sdma_txadd_kvaddr(
 			sde->dd,
 			&tx->txreq,
@@ -949,11 +951,8 @@ static int build_verbs_tx_desc(
 
 	/* add icrc, lt byte, and padding to flit */
 	if ((crc_lt + extra_bytes) != 0) {
-		ret = sdma_txadd_kvaddr(
-                	sde->dd,
-                	&tx->txreq,
-                	opa_16b_pad_bytes,
-                	crc_lt + extra_bytes);
+		ret = sdma_txadd_kvaddr(sde->dd, &tx->txreq, opa_16b_pad_bytes,
+					crc_lt + extra_bytes);
 	}
 
 bail_txadd:
@@ -968,7 +967,6 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	u32 hdrwords = qp->s_hdrwords;
 	struct rvt_sge_state *ss = qp->s_cur_sge;
 	u32 len = qp->s_cur_size;
-	//u32 plen = hdrwords + ((len + 3) >> 2) + 2; /* includes pbc */
 	u32 plen;
 	u32 dwords;
 	struct hfi1_ibdev *dev = ps->dev;
@@ -979,17 +977,18 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	bool bypass = false;
 
 	int ret;
-	
+
 	if (ps->s_txreq->phdr.hdr.hdr_type) {
 		u8 extra_bytes = hfi1_get_16b_padding((hdrwords << 2), len);
 
- 		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
+		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) +
+			  SIZE_OF_LT) >> 2;
 		bypass = true;
 	} else {
 		dwords = (len + 3) >> 2;
 	}
 	plen = hdrwords + dwords + 2;
-	
+
 	tx = ps->s_txreq;
 	if (!sdma_txreq_built(&tx->txreq)) {
 		if (likely(pbc == 0)) {
@@ -997,9 +996,11 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 			/* No vl15 here */
 			/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
 			if (ps->s_txreq->phdr.hdr.hdr_type)
-				pbc_flags |= PBC_PACKET_BYPASS | PBC_INSERT_BYPASS_ICRC;
+				pbc_flags |= PBC_PACKET_BYPASS |
+					     PBC_INSERT_BYPASS_ICRC;
 			else
-				pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
+				pbc_flags |= (!!(sc5 & 0x10)) <<
+					     PBC_DC_INFO_SHIFT;
 
 			pbc = create_pbc(ppd,
 					 pbc_flags,
@@ -1130,7 +1131,8 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	if (ps->s_txreq->phdr.hdr.hdr_type) {
 		u8 extra_bytes = hfi1_get_16b_padding((hdrwords << 2), len);
 
- 		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) + SIZE_OF_LT) >> 2;
+		dwords = (len + extra_bytes + (SIZE_OF_CRC << 2) +
+			 SIZE_OF_LT) >> 2;
 		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.opah;
 		lrh0_16b = ps->s_txreq->phdr.hdr.pkt.opah.lrh[0];
 		bypass = true;
@@ -1139,7 +1141,7 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		hdr = (u32 *)&ps->s_txreq->phdr.hdr.pkt.ibh;
 	}
 	plen = hdrwords + dwords + 2;
-		
+
 	/* only RC/UC use complete */
 	switch (qp->ibqp.qp_type) {
 	case IB_QPT_RC:
@@ -1230,16 +1232,17 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 
 		pio_copy(ppd->dd, pbuf, pbc, packet, (packet_size >> 2));
 		kfree(packet);
-	} else { 
+	} else {
 		if (len == 0) {
 			pio_copy(ppd->dd, pbuf, pbc, hdr, hdrwords);
 		} else {
 			if (ss) {
-				seg_pio_copy_start(pbuf, pbc, hdr, hdrwords * 4);
+				seg_pio_copy_start(pbuf, pbc,
+						   hdr, hdrwords * 4);
 				while (len) {
 					void *addr = ss->sge.vaddr;
 					u32 slen = ss->sge.length;
-	
+
 					if (slen > len)
 						slen = len;
 					update_sge(ss, slen);
@@ -1641,7 +1644,7 @@ static int hfi1_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 	struct hfi1_pportdata *ppd;
 	struct hfi1_devdata *dd;
 	u8 sc5;
-	
+
 	if (hfi1_get_dlid_from_ah(ah_attr) == 0)
 		return -EINVAL;
 
