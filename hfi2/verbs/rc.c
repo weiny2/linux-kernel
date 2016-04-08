@@ -179,7 +179,7 @@ static __be32 compute_aeth(struct hfi2_qp *qp)
 	} else {
 		u32 min, max, x;
 		u32 credits;
-		struct hfi2_rwq *wq = qp->r_rq.wq;
+		struct rvt_rwq *wq = qp->r_rq.wq;
 		u32 head;
 		u32 tail;
 

@@ -121,7 +121,7 @@ static inline int send_ok(struct hfi2_qp *qp)
  * Validate a RWQE and fill in the receive SGE state.
  * Return 1 if OK.
  */
-static int init_sge(struct hfi2_qp *qp, struct hfi2_rwqe *wqe)
+static int init_sge(struct hfi2_qp *qp, struct rvt_rwqe *wqe)
 {
 	int i, j, ret;
 	struct ib_wc wc;
@@ -181,17 +181,17 @@ bail:
 int hfi2_get_rwqe(struct hfi2_qp *qp, int wr_id_only)
 {
 	unsigned long flags;
-	struct hfi2_rq *rq;
-	struct hfi2_rwq *wq;
-	struct hfi2_srq *srq;
-	struct hfi2_rwqe *wqe;
+	struct rvt_rq *rq;
+	struct rvt_rwq *wq;
+	struct rvt_srq *srq;
+	struct rvt_rwqe *wqe;
 
 	void (*handler)(struct ib_event *, void *);
 	u32 tail;
 	int ret;
 
 	if (qp->ibqp.srq) {
-		srq = to_hfi_srq(qp->ibqp.srq);
+		srq = ibsrq_to_rvtsrq(qp->ibqp.srq);
 		handler = srq->ibsrq.event_handler;
 		rq = &srq->rq;
 	} else {
@@ -217,7 +217,7 @@ int hfi2_get_rwqe(struct hfi2_qp *qp, int wr_id_only)
 	}
 	/* Make sure entry is read after head index is read. */
 	smp_rmb();
-	wqe = get_rwqe_ptr(rq, tail);
+	wqe = rvt_get_rwqe_ptr(rq, tail);
 	/*
 	 * Even though we update the tail index in memory, the verbs
 	 * consumer is not supposed to post more entries until a
