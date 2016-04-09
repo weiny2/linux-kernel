@@ -1905,7 +1905,6 @@ void process_becn(struct hfi1_pportdata *ppd, u8 sl, u16 rlid, u32 lqpn,
 	if (sl >= OPA_MAX_SLS)
 		return;
 
-
 	cc_state = get_cc_state(ppd);
 
 	if (!cc_state)
