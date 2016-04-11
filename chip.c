@@ -1034,7 +1034,8 @@ static void read_link_down_reason(struct hfi1_devdata *dd, u8 *ldr);
 static void handle_temp_err(struct hfi1_devdata *);
 static void dc_shutdown(struct hfi1_devdata *);
 static void dc_start(struct hfi1_devdata *);
-static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned *mp, unsigned *np);
+static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned int *mp,
+			   unsigned int *np);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -13590,7 +13591,7 @@ static void init_qpmap_table(struct hfi1_devdata *dd,
 
 struct rsm_map_table {
 	u64 map[NUM_MAP_REGS];
-	unsigned used;
+	unsigned int used;
 };
 
 struct rsm_rule_data {
@@ -13670,10 +13671,11 @@ static void add_rsm_rule(struct hfi1_devdata *dd, u8 rule_index,
 }
 
 /* return the number of RSM map table entries that will be used for QOS */
-static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned *mp, unsigned *np)
+static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned int *mp,
+			   unsigned int *np)
 {
 	int i;
-	unsigned m, n;
+	unsigned int m, n;
 	u8 max_by_vl = 0;
 
 	/* is QOS active at all? */
@@ -13683,7 +13685,7 @@ static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned *mp, unsigned *np)
 		goto no_qos;
 
 	/* determine bits for qpn */
-	for (i = 0; i < min_t(unsigned, num_vls, krcvqsset); i++)
+	for (i = 0; i < min_t(unsigned int, num_vls, krcvqsset); i++)
 		if (krcvqs[i] > max_by_vl)
 			max_by_vl = krcvqs[i];
 	if (max_by_vl > 32)
@@ -13730,7 +13732,7 @@ static void init_qos(struct hfi1_devdata *dd, struct rsm_map_table *rmt)
 {
 	struct rsm_rule_data rrd;
 	unsigned qpns_per_vl, ctxt, i, qpn, n = 1, m;
-	unsigned rmt_entries;
+	unsigned int rmt_entries;
 	u64 reg;
 
 	if (!rmt)
