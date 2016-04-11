@@ -180,7 +180,7 @@ struct opa_ctx_info {
  * @num_vports: number of virtual ethernet switch ports
  * @num_eports: number of ethernet exception ports
  * @vnic_ctrl_dev: VNIC control device for device instantiation
- * @eeph_dev: EEPH device
+ * @eeph_dev: EEPH devices
  * @ctrl_lock: Lock to synchronize setup and teardown of the ctrl device
  * @ctx_lock: Lock to synchronize setup and teardown of the bypass context
  * @stats_lock: Lock to synchronize access to common stats
@@ -194,7 +194,7 @@ struct opa_netdev {
 	int				num_vports;
 	int				num_eports;
 	struct opa_vnic_ctrl_device	*vnic_ctrl_dev;
-	struct opa_vnic_device		*eeph_dev;
+	struct opa_vnic_device		*eeph_dev[OPA2_MAX_NUM_PORTS];
 	struct mutex			ctrl_lock;
 	struct mutex			ctx_lock;
 	spinlock_t			stats_lock;
@@ -483,7 +483,7 @@ retry:
 	l4_type = OPA_VNIC_GET_L4_TYPE(buf);
 	rcu_read_lock();
 	if (l4_type == OPA_VNIC_L4_EEPH) {
-		vdev = ndev->eeph_dev;
+		vdev = ndev->eeph_dev[rhf->pt];
 	} else if (l4_type == OPA_VNIC_L4_ETHR) {
 		/* FXRTODO: Check performance impact of idr_find */
 		id = OPA_VNIC_GET_VESWID(buf);
@@ -640,7 +640,7 @@ static int opa2_vnic_hfi_open(struct opa_vnic_device *vdev,
 				__func__, __LINE__, rc);
 			goto err;
 		}
-		ndev->eeph_dev = vdev;
+		ndev->eeph_dev[dev->port_num - 1] = vdev;
 	} else {
 		/* ensure virtual eth switch id is valid */
 		if (!vdev->vesw_id)
@@ -685,7 +685,7 @@ static void opa2_vnic_hfi_close(struct opa_vnic_device *vdev)
 	int i;
 
 	if (vdev->is_eeph)
-		ndev->eeph_dev = NULL;
+		ndev->eeph_dev[dev->port_num - 1] = NULL;
 	else
 		idr_remove(&ndev->vesw_idr[dev->port_num - 1], vdev->vesw_id);
 
