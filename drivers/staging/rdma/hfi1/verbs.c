@@ -354,6 +354,46 @@ const u8 hdr_len_by_opcode[256] = {
 	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = 12 + 8 + 12
 };
 
+const u8 hdr_16b_len_by_opcode[256] = {
+	/* RC */
+	[IB_OPCODE_RC_SEND_FIRST]                     = 16 + 12 + 8,
+	[IB_OPCODE_RC_SEND_MIDDLE]                    = 16 + 12 + 8,
+	[IB_OPCODE_RC_SEND_LAST]                      = 16 + 12 + 8,
+	[IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE]       = 16 + 12 + 8 + 4,
+	[IB_OPCODE_RC_SEND_ONLY]                      = 16 + 12,
+	[IB_OPCODE_RC_SEND_ONLY_WITH_IMMEDIATE]       = 16 + 12 + 8 + 4,
+	[IB_OPCODE_RC_RDMA_WRITE_FIRST]               = 16 + 12 + 8 + 16,
+	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]              = 16 + 12 + 8,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST]                = 16 + 12 + 8,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 16 + 12 + 8 + 4,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = 16 + 12 + 8 + 16,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 16 + 12 + 8 + 20,
+	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = 16 + 12 + 8 + 16,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = 16 + 12 + 8 + 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = 16 + 12 + 8,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = 16 + 12 + 8 + 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = 16 + 12 + 8 + 4,
+	[IB_OPCODE_RC_ACKNOWLEDGE]                    = 16 + 12 + 8,
+	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = 16 + 12 + 8 + 4,
+	[IB_OPCODE_RC_COMPARE_SWAP]                   = 16 + 12 + 8 + 28,
+	[IB_OPCODE_RC_FETCH_ADD]                      = 16 + 12 + 8 + 28,
+	/* UC */
+	[IB_OPCODE_UC_SEND_FIRST]                     = 16 + 12 + 8,
+	[IB_OPCODE_UC_SEND_MIDDLE]                    = 16 + 12 + 8,
+	[IB_OPCODE_UC_SEND_LAST]                      = 16 + 12 + 8,
+	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = 16 + 12 + 8 + 4,
+	[IB_OPCODE_UC_SEND_ONLY]                      = 16 + 12 + 8,
+	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = 16 + 12 + 8 + 4,
+	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = 16 + 12 + 8 + 16,
+	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = 16 + 12 + 8,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST]                = 16 + 12 + 8,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 16 + 12 + 8 + 4,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY]                = 16 + 12 + 8 + 16,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 16 + 12 + 8 + 20,
+	/* UD */
+	[IB_OPCODE_UD_SEND_ONLY]                      = 16 + 12 + 8,
+	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = 16 + 12 + 8 + 12
+};
 static const opcode_handler opcode_handler_tbl[256] = {
 	/* RC */
 	[IB_OPCODE_RC_SEND_FIRST]                     = &hfi1_rc_rcv,
@@ -554,16 +594,15 @@ dropit:
 	return 0;
 }
 
-static int hfi1_handle_packet(struct hfi1_packet *packet, union ib_gid *mgid)
+static int hfi1_handle_packet(struct hfi1_packet *packet,
+			      u8 opcode, union ib_gid *mgid)
 {
-	u8 opcode;
 	u32 qp_num;
 	struct hfi1_ctxtdata *rcd = packet->rcd;
 	struct hfi1_pportdata *ppd = rcd->ppd;
 	struct hfi1_ibport *ibp = &ppd->ibport_data;
 	struct rvt_dev_info *rdi = &ppd->dd->verbs_dev.rdi;
 
-	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
 	inc_opstats(packet->tlen, &rcd->opstats->stats[opcode]);
 
 	/* Get the destination QP number. */
@@ -626,6 +665,7 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	struct hfi1_ibport *ibp = &ppd->ibport_data;
 	int lnh;
 	u16 dlid;
+	u8 opcode;
 	union ib_gid *mgid = NULL;
 
 	/* Check for GRH */
@@ -655,7 +695,8 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 
 	trace_input_ibhdr(rcd->dd, hdr, false);
 
-	if (hfi1_handle_packet(packet, mgid))
+	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
+	if (hfi1_handle_packet(packet, opcode, mgid))
 		goto drop;
 	return;
 
@@ -670,7 +711,8 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 	struct hfi1_ibport *ibp = &ppd->ibport_data;
 	struct hfi1_16b_header *hdr;
 	u32 dlid;
-	u8 l4;
+	u8 l4, opcode;
+	u8 extra_hlen = 0;
 	union ib_gid *mgid = NULL;
 
 	/**
@@ -692,13 +734,12 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 
 	if (l4 == HFI1_L4_IB_LOCAL) {
 		packet->ohdr = &hdr->u.oth;
-		packet->hlen = 36;
 		if (mgid)
 			goto drop;
 	} else if (l4 == HFI1_L4_IB_GLOBAL) {
 		u32 vtf;
 
-		packet->hlen = 76;
+		extra_hlen = 40; /* GRH */
 		packet->ohdr = &hdr->u.l.oth;
 
 		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
@@ -713,7 +754,9 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 
 	trace_input_ibhdr(rcd->dd, hdr, true);
 
-	if (hfi1_handle_packet(packet, mgid))
+	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
+	packet->hlen = hdr_16b_len_by_opcode[opcode] + extra_hlen;
+	if (hfi1_handle_packet(packet, opcode, mgid))
 		goto drop;
 	return;
 
