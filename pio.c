@@ -243,7 +243,7 @@ int init_sc_pools_and_sizes(struct hfi1_devdata *dd)
 	 * "piothreshold". Reduce pio buffer allocation for kernel context by
 	 * setting it to a fixed size. The allocation allows 3-deep buffering
 	 * of the largest pio packets plus up to 128 bytes header, sufficient
-	 * to maintain verbs performance. 
+	 * to maintain verbs performance.
 	 *
 	 * When SDMA is disabled, keep the default pooling allocation.
 	 */
@@ -828,7 +828,8 @@ struct send_context *sc_alloc(struct hfi1_devdata *dd, int type,
 						 user_credit_return_threshold);
 	} else { /* kernel */
 		thresh = min(sc_percent_to_threshold(sc, 50),
-			     sc_mtu_to_threshold(sc, hfi1_max_mtu, hdrqentsize));
+			     sc_mtu_to_threshold(sc, hfi1_max_mtu,
+						 hdrqentsize));
 	}
 	reg = thresh << SC(CREDIT_CTRL_THRESHOLD_SHIFT);
 	/* add in early return */
