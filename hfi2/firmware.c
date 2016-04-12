@@ -668,15 +668,15 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 	int ret = 0;
 
 	/* write the signature */
-	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_CFG_RSA_SIGNATURE,
-		signature, KEY_SIZE);
+	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_SIGNATURE,
+		       signature, KEY_SIZE);
 
 	/* initialize RSA */
-	write_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_CFG_RSA_CMD, RSA_CMD_INIT);
+	write_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_CMD, RSA_CMD_INIT);
 
 	/*
 	 * Make sure the engine is idle and insert a delay between the two
-	 * writes to MNH_MISC_CFG_RSA_CMD.
+	 * writes to MNH_MISC_MSC_RSA_CMD.
 	 */
 	status = (read_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_STS_FW)
 			   & MNH_MISC_STS_FW_RSA_STATUS_SMASK)
@@ -688,7 +688,7 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 	}
 
 	/* start RSA */
-	write_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_CFG_RSA_CMD, RSA_CMD_START);
+	write_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_CMD, RSA_CMD_START);
 
 	/*
 	 * Look for the result.
@@ -766,16 +766,17 @@ static void load_security_variables(struct hfi_devdata *dd,
 				    struct firmware_details *fdet)
 {
 	/* Security variables a.  Write the modulus */
-	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_CFG_RSA_MODULUS,
-		fdet->modulus, KEY_SIZE);
+	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_MODULUS,
+		       fdet->modulus, KEY_SIZE);
 	/* Security variables b.  Write the r2 */
-	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_CFG_RSA_R2,
-		fdet->r2, KEY_SIZE);
+	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_R2,
+		       fdet->r2, KEY_SIZE);
 	/* Security variables c.  Write the mu */
-	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_CFG_RSA_MU,
-		fdet->mu, MU_SIZE);
+	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_MU,
+		       fdet->mu, MU_SIZE);
 	/* Security variables d.  Write the header */
-	write_streamed_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_CFG_SHA_PRELOAD,
+	write_streamed_rsa_data(dd, FXR_MNH_MISC_CSRS +
+				MNH_MISC_MSC_SHA_PRELOAD,
 				(u8 *)fdet->css_header,
 				sizeof(struct css_header));
 }

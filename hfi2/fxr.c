@@ -2435,15 +2435,7 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	RXHP_CFG_PSC_CACHE_ACCESS_CTL_t me_le_uh_cache_access = {.val = 0};
 	union pte_cache_addr pte_cache_tag;
 	union trig_op_cache_addr trig_op_cache_tag;
-	/* TODO temporary structure for LE/ME/UH cache invalidation */
-	union me_le_uh_cache_addr {
-		struct {
-			uint64_t me_le	: 1;  /* [0:0] ME/LE */
-			uint64_t pid	: 12; /* [12:1] Target Process Id */
-			uint64_t handle	: 16; /* [28:13] Handle */
-		};
-		uint64_t val;
-	} me_le_uh_cache_tag;
+	union psc_cache_addr me_le_uh_cache_tag;
 
 	/* write PCB_LOW first to clear valid bit */
 	write_csr(dd, FXR_RX_HIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
