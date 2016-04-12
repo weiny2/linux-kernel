@@ -123,6 +123,8 @@ struct flag_table {
 
 #define MIN_KERNEL_KCTXTS         2
 #define FIRST_KERNEL_KCTXT        1
+/* sizes for both the QP and RSM map tables */
+#define NUM_MAP_ENTRIES		256
 #define NUM_MAP_REGS             32
 
 /* Bit offset into the GUID which carries HFI id information */
@@ -1032,6 +1034,8 @@ static void read_link_down_reason(struct hfi1_devdata *dd, u8 *ldr);
 static void handle_temp_err(struct hfi1_devdata *);
 static void dc_shutdown(struct hfi1_devdata *);
 static void dc_start(struct hfi1_devdata *);
+static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned int *mp,
+			   unsigned int *np);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -5667,7 +5671,7 @@ static int sc_to_vl(struct hfi1_devdata *dd, int sw_index)
 	sci = &dd->send_contexts[sw_index];
 
 	/* there is no information for user (PSM) and ack contexts */
-	if (sci->type != SC_KERNEL)
+	if ((sci->type != SC_KERNEL) && (sci->type != SC_VL15))
 		return -1;
 
 	sc = sci->sc;
@@ -6107,7 +6111,7 @@ int acquire_lcb_access(struct hfi1_devdata *dd, int sleep_ok)
 	}
 
 	/* this access is valid only when the link is up */
-	if ((ppd->host_link_state & HLS_UP) == 0) {
+	if (ppd->host_link_state & HLS_DOWN) {
 		dd_dev_info(dd, "%s: link state %s not up\n",
 			    __func__, link_state_name(ppd->host_link_state));
 		ret = -EBUSY;
@@ -7431,7 +7435,7 @@ void apply_link_downgrade_policy(struct hfi1_pportdata *ppd, int refresh_widths)
 retry:
 	mutex_lock(&ppd->hls_lock);
 	/* only apply if the link is up */
-	if (!(ppd->host_link_state & HLS_UP)) {
+	if (ppd->host_link_state & HLS_DOWN) {
 		/* still going up..wait and retry */
 		if (ppd->host_link_state & HLS_GOING_UP) {
 			if (++tries < 1000) {
@@ -9257,6 +9261,12 @@ static int handle_qsfp_error_conditions(struct hfi1_pportdata *ppd,
 		dd_dev_info(dd, "%s: QSFP cable temperature too low\n",
 			    __func__);
 
+	/*
+	 * The remaining alarms/warnings don't matter if the link is down.
+	 */
+	if (ppd->host_link_state & HLS_DOWN)
+		return 0;
+
 	if ((qsfp_interrupt_status[1] & QSFP_HIGH_VCC_ALARM) ||
 	    (qsfp_interrupt_status[1] & QSFP_HIGH_VCC_WARNING))
 		dd_dev_info(dd, "%s: QSFP supply voltage too high\n",
@@ -9351,9 +9361,8 @@ void qsfp_event(struct work_struct *work)
 		return;
 
 	/*
-	 * Turn DC back on after cables has been
-	 * re-inserted. Up until now, the DC has been in
-	 * reset to save power.
+	 * Turn DC back on after cable has been re-inserted. Up until
+	 * now, the DC has been in reset to save power.
 	 */
 	dc_start(dd);
 
@@ -9485,8 +9494,14 @@ int bringup_serdes(struct hfi1_pportdata *ppd)
 			return ret;
 	}
 
+	get_port_type(ppd);
+	if (ppd->port_type == PORT_TYPE_QSFP) {
+		set_qsfp_int_n(ppd, 0);
+		wait_for_qsfp_init(ppd);
+		set_qsfp_int_n(ppd, 1);
+	}
 	/*
-	 * tune the SERDES to a ballpark setting for
+	 * Tune the SerDes to a ballpark setting for
 	 * optimal signal and bit error rate
 	 * Needs to be done before starting the link
 	 */
@@ -9765,6 +9780,7 @@ static void set_send_length(struct hfi1_pportdata *ppd)
 			      & SEND_LEN_CHECK1_LEN_VL15_MASK) <<
 		SEND_LEN_CHECK1_LEN_VL15_SHIFT;
 	int i;
+	u32 thres;
 
 	for (i = 0; i < ppd->vls_supported; i++) {
 		if (dd->vld[i].mtu > maxvlmtu)
@@ -9783,16 +9799,17 @@ static void set_send_length(struct hfi1_pportdata *ppd)
 	/* adjust kernel credit return thresholds based on new MTUs */
 	/* all kernel receive contexts have the same hdrqentsize */
 	for (i = 0; i < ppd->vls_supported; i++) {
-		sc_set_cr_threshold(dd->vld[i].sc,
-				    sc_mtu_to_threshold(dd->vld[i].sc,
-							dd->vld[i].mtu,
-							dd->rcd[0]->
-							rcvhdrqentsize));
-	}
-	sc_set_cr_threshold(dd->vld[15].sc,
-			    sc_mtu_to_threshold(dd->vld[15].sc,
-						dd->vld[15].mtu,
+		thres = min(sc_percent_to_threshold(dd->vld[i].sc, 50),
+			    sc_mtu_to_threshold(dd->vld[i].sc,
+						dd->vld[i].mtu,
 						dd->rcd[0]->rcvhdrqentsize));
+		sc_set_cr_threshold(dd->vld[i].sc, thres);
+	}
+	thres = min(sc_percent_to_threshold(dd->vld[15].sc, 50),
+		    sc_mtu_to_threshold(dd->vld[15].sc,
+					dd->vld[15].mtu,
+					dd->rcd[0]->rcvhdrqentsize));
+	sc_set_cr_threshold(dd->vld[15].sc, thres);
 
 	/* Adjust maximum MTU for the port in DC */
 	dcmtu = maxvlmtu == 10240 ? DCC_CFG_PORT_MTU_CAP_10240 :
@@ -10079,7 +10096,7 @@ u32 driver_physical_state(struct hfi1_pportdata *ppd)
  */
 u32 driver_logical_state(struct hfi1_pportdata *ppd)
 {
-	if (ppd->host_link_state && !(ppd->host_link_state & HLS_UP))
+	if (ppd->host_link_state && (ppd->host_link_state & HLS_DOWN))
 		return IB_PORT_DOWN;
 
 	switch (ppd->host_link_state & HLS_UP) {
@@ -12762,6 +12779,8 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 	int total_contexts;
 	int ret;
 	unsigned ngroups;
+	int qos_rmt_count;
+	int user_rmt_reduced;
 
 	/*
 	 * Kernel receive contexts:
@@ -12817,6 +12836,19 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 		total_contexts = num_kernel_contexts + num_user_contexts;
 	}
 
+	/* each user context requires an entry in the RMT */
+	qos_rmt_count = qos_rmt_entries(dd, NULL, NULL);
+	if (qos_rmt_count + num_user_contexts > NUM_MAP_ENTRIES) {
+		user_rmt_reduced = NUM_MAP_ENTRIES - qos_rmt_count;
+		dd_dev_err(dd,
+			   "RMT size is reducing the number of user receive contexts from %d to %d\n",
+			   (int)num_user_contexts,
+			   user_rmt_reduced);
+		/* recalculate */
+		num_user_contexts = user_rmt_reduced;
+		total_contexts = num_kernel_contexts + num_user_contexts;
+	}
+
 	/* the first N are kernel contexts, the rest are user contexts */
 	dd->num_rcv_contexts = total_contexts;
 	dd->n_krcv_queues = num_kernel_contexts;
@@ -12866,12 +12898,13 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 		dd->num_send_contexts = ret;
 		dd_dev_info(
 			dd,
-			"send contexts: chip %d, used %d (kernel %d, ack %d, user %d)\n",
+			"send contexts: chip %d, used %d (kernel %d, ack %d, user %d, vl15 %d)\n",
 			dd->chip_send_contexts,
 			dd->num_send_contexts,
 			dd->sc_sizes[SC_KERNEL].count,
 			dd->sc_sizes[SC_ACK].count,
-			dd->sc_sizes[SC_USER].count);
+			dd->sc_sizes[SC_USER].count,
+			dd->sc_sizes[SC_VL15].count);
 		ret = 0;	/* success */
 	}
 
@@ -13556,9 +13589,135 @@ static void init_qpmap_table(struct hfi1_devdata *dd,
 			| RCV_CTRL_RCV_BYPASS_ENABLE_SMASK);
 }
 
+struct rsm_map_table {
+	u64 map[NUM_MAP_REGS];
+	unsigned int used;
+};
+
+struct rsm_rule_data {
+	u8 offset;
+	u8 pkt_type;
+	u32 field1_off;
+	u32 field2_off;
+	u32 index1_off;
+	u32 index1_width;
+	u32 index2_off;
+	u32 index2_width;
+	u32 mask1;
+	u32 value1;
+	u32 mask2;
+	u32 value2;
+};
+
+/*
+ * Return an initialized RMT map table for users to fill in.  OK if it
+ * returns NULL, indicating no table.
+ */
+static struct rsm_map_table *alloc_rsm_map_table(struct hfi1_devdata *dd)
+{
+	struct rsm_map_table *rmt;
+	u8 rxcontext = is_ax(dd) ? 0 : 0xff;  /* 0 is default if a0 ver. */
+
+	rmt = kmalloc(sizeof(*rmt), GFP_KERNEL);
+	if (rmt) {
+		memset(rmt->map, rxcontext, sizeof(rmt->map));
+		rmt->used = 0;
+	}
+
+	return rmt;
+}
+
+/*
+ * Write the final RMT map table to the chip and free the table.  OK if
+ * table is NULL.
+ */
+static void complete_rsm_map_table(struct hfi1_devdata *dd,
+				   struct rsm_map_table *rmt)
+{
+	int i;
+
+	if (rmt) {
+		/* write table to chip */
+		for (i = 0; i < NUM_MAP_REGS; i++)
+			write_csr(dd, RCV_RSM_MAP_TABLE + (8 * i), rmt->map[i]);
+
+		/* enable RSM */
+		add_rcvctrl(dd, RCV_CTRL_RCV_RSM_ENABLE_SMASK);
+	}
+}
+
+/*
+ * Add a receive side mapping rule.
+ */
+static void add_rsm_rule(struct hfi1_devdata *dd, u8 rule_index,
+			 struct rsm_rule_data *rrd)
+{
+	write_csr(dd, RCV_RSM_CFG + (8 * rule_index),
+		  (u64)rrd->offset << RCV_RSM_CFG_OFFSET_SHIFT |
+		  1ull << rule_index | /* enable bit */
+		  (u64)rrd->pkt_type << RCV_RSM_CFG_PACKET_TYPE_SHIFT);
+	write_csr(dd, RCV_RSM_SELECT + (8 * rule_index),
+		  (u64)rrd->field1_off << RCV_RSM_SELECT_FIELD1_OFFSET_SHIFT |
+		  (u64)rrd->field2_off << RCV_RSM_SELECT_FIELD2_OFFSET_SHIFT |
+		  (u64)rrd->index1_off << RCV_RSM_SELECT_INDEX1_OFFSET_SHIFT |
+		  (u64)rrd->index1_width << RCV_RSM_SELECT_INDEX1_WIDTH_SHIFT |
+		  (u64)rrd->index2_off << RCV_RSM_SELECT_INDEX2_OFFSET_SHIFT |
+		  (u64)rrd->index2_width << RCV_RSM_SELECT_INDEX2_WIDTH_SHIFT);
+	write_csr(dd, RCV_RSM_MATCH + (8 * rule_index),
+		  (u64)rrd->mask1 << RCV_RSM_MATCH_MASK1_SHIFT |
+		  (u64)rrd->value1 << RCV_RSM_MATCH_VALUE1_SHIFT |
+		  (u64)rrd->mask2 << RCV_RSM_MATCH_MASK2_SHIFT |
+		  (u64)rrd->value2 << RCV_RSM_MATCH_VALUE2_SHIFT);
+}
+
+/* return the number of RSM map table entries that will be used for QOS */
+static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned int *mp,
+			   unsigned int *np)
+{
+	int i;
+	unsigned int m, n;
+	u8 max_by_vl = 0;
+
+	/* is QOS active at all? */
+	if (dd->n_krcv_queues <= MIN_KERNEL_KCTXTS ||
+	    num_vls == 1 ||
+	    krcvqsset <= 1)
+		goto no_qos;
+
+	/* determine bits for qpn */
+	for (i = 0; i < min_t(unsigned int, num_vls, krcvqsset); i++)
+		if (krcvqs[i] > max_by_vl)
+			max_by_vl = krcvqs[i];
+	if (max_by_vl > 32)
+		goto no_qos;
+	m = ilog2(__roundup_pow_of_two(max_by_vl));
+
+	/* determine bits for vl */
+	n = ilog2(__roundup_pow_of_two(num_vls));
+
+	/* reject if too much is used */
+	if ((m + n) > 7)
+		goto no_qos;
+
+	if (mp)
+		*mp = m;
+	if (np)
+		*np = n;
+
+	return 1 << (m + n);
+
+no_qos:
+	if (mp)
+		*mp = 0;
+	if (np)
+		*np = 0;
+	return 0;
+}
+
 /**
  * init_qos - init RX qos
  * @dd - device data
+ * @rmt - RSM map table
  *
  * This routine initializes Rule 0 and the RSM map table to implement
  * quality of service (qos).
@@ -13569,36 +13728,26 @@ static void init_qpmap_table(struct hfi1_devdata *dd,
  * The number of vl bits (n) and the number of qpn bits (m) are computed to
  * feed both the RSM map table and the single rule.
  */
-static void init_qos(struct hfi1_devdata *dd)
+static void init_qos(struct hfi1_devdata *dd, struct rsm_map_table *rmt)
 {
-	u8 max_by_vl = 0;
+	struct rsm_rule_data rrd;
 	unsigned qpns_per_vl, ctxt, i, qpn, n = 1, m;
-	u64 *rsmmap;
+	unsigned int rmt_entries;
 	u64 reg;
-	u8  rxcontext = is_ax(dd) ? 0 : 0xff;  /* 0 is default if a0 ver. */
 
-	/* validate */
-	if (dd->n_krcv_queues <= MIN_KERNEL_KCTXTS ||
-	    num_vls == 1 ||
-	    krcvqsset <= 1)
+	if (!rmt)
 		goto bail;
-	for (i = 0; i < min_t(unsigned, num_vls, krcvqsset); i++)
-		if (krcvqs[i] > max_by_vl)
-			max_by_vl = krcvqs[i];
-	if (max_by_vl > 32)
+	rmt_entries = qos_rmt_entries(dd, &m, &n);
+	if (rmt_entries == 0)
 		goto bail;
-	qpns_per_vl = __roundup_pow_of_two(max_by_vl);
-	/* determine bits vl */
-	n = ilog2(__roundup_pow_of_two(num_vls));
-	/* determine bits for qpn */
-	m = ilog2(qpns_per_vl);
-	if ((m + n) > 7)
+	qpns_per_vl = 1 << m;
+
+	/* enough room in the map table? */
+	rmt_entries = 1 << (m + n);
+	if (rmt->used + rmt_entries >= NUM_MAP_ENTRIES)
 		goto bail;
-	rsmmap = kmalloc_array(NUM_MAP_REGS, sizeof(u64), GFP_KERNEL);
-	if (!rsmmap)
-		goto bail;
-	memset(rsmmap, rxcontext, NUM_MAP_REGS * sizeof(u64));
-	/* init the local copy of the table */
+
+	/* add qos entries to the the RSM map table */
 	for (i = 0, ctxt = FIRST_KERNEL_KCTXT; i < num_vls; i++) {
 		unsigned tctxt;
 
@@ -13606,45 +13755,40 @@ static void init_qos(struct hfi1_devdata *dd)
 		     krcvqs[i] && qpn < qpns_per_vl; qpn++) {
 			unsigned idx, regoff, regidx;
 
-			/* generate index <= 128 */
-			idx = (qpn << n) ^ i;
+			/* generate the index the hardware will produce */
+			idx = rmt->used + ((qpn << n) ^ i);
 			regoff = (idx % 8) * 8;
 			regidx = idx / 8;
-			reg = rsmmap[regidx];
-			/* replace 0xff with context number */
+			/* replace default with context number */
+			reg = rmt->map[regidx];
 			reg &= ~(RCV_RSM_MAP_TABLE_RCV_CONTEXT_A_MASK
 				<< regoff);
 			reg |= (u64)(tctxt++) << regoff;
-			rsmmap[regidx] = reg;
+			rmt->map[regidx] = reg;
 			if (tctxt == ctxt + krcvqs[i])
 				tctxt = ctxt;
 		}
 		ctxt += krcvqs[i];
 	}
-	/* flush cached copies to chip */
-	for (i = 0; i < NUM_MAP_REGS; i++)
-		write_csr(dd, RCV_RSM_MAP_TABLE + (8 * i), rsmmap[i]);
-	/* add rule0 */
-	write_csr(dd, RCV_RSM_CFG /* + (8 * 0) */,
-		  RCV_RSM_CFG_ENABLE_OR_CHAIN_RSM0_MASK <<
-			RCV_RSM_CFG_ENABLE_OR_CHAIN_RSM0_SHIFT |
-		  2ull << RCV_RSM_CFG_PACKET_TYPE_SHIFT);
-	write_csr(dd, RCV_RSM_SELECT /* + (8 * 0) */,
-		  LRH_BTH_MATCH_OFFSET <<
-			RCV_RSM_SELECT_FIELD1_OFFSET_SHIFT |
-		  LRH_SC_MATCH_OFFSET << RCV_RSM_SELECT_FIELD2_OFFSET_SHIFT |
-		  LRH_SC_SELECT_OFFSET << RCV_RSM_SELECT_INDEX1_OFFSET_SHIFT |
-		  ((u64)n) << RCV_RSM_SELECT_INDEX1_WIDTH_SHIFT |
-		  QPN_SELECT_OFFSET << RCV_RSM_SELECT_INDEX2_OFFSET_SHIFT |
-		  ((u64)m + (u64)n) << RCV_RSM_SELECT_INDEX2_WIDTH_SHIFT);
-	write_csr(dd, RCV_RSM_MATCH /* + (8 * 0) */,
-		  LRH_BTH_MASK << RCV_RSM_MATCH_MASK1_SHIFT |
-		  LRH_BTH_VALUE << RCV_RSM_MATCH_VALUE1_SHIFT |
-		  LRH_SC_MASK << RCV_RSM_MATCH_MASK2_SHIFT |
-		  LRH_SC_VALUE << RCV_RSM_MATCH_VALUE2_SHIFT);
-	/* Enable RSM */
-	add_rcvctrl(dd, RCV_CTRL_RCV_RSM_ENABLE_SMASK);
-	kfree(rsmmap);
+
+	rrd.offset = rmt->used;
+	rrd.pkt_type = 2;
+	rrd.field1_off = LRH_BTH_MATCH_OFFSET;
+	rrd.field2_off = LRH_SC_MATCH_OFFSET;
+	rrd.index1_off = LRH_SC_SELECT_OFFSET;
+	rrd.index1_width = n;
+	rrd.index2_off = QPN_SELECT_OFFSET;
+	rrd.index2_width = m + n;
+	rrd.mask1 = LRH_BTH_MASK;
+	rrd.value1 = LRH_BTH_VALUE;
+	rrd.mask2 = LRH_SC_MASK;
+	rrd.value2 = LRH_SC_VALUE;
+
+	/* add rule 0 */
+	add_rsm_rule(dd, 0, &rrd);
+
+	/* mark RSM map entries as used */
+	rmt->used += rmt_entries;
 	/* map everything else to the mcast/err/vl15 context */
 	init_qpmap_table(dd, HFI1_CTRL_CTXT, HFI1_CTRL_CTXT);
 	dd->qos_shift = n + 1;
@@ -13654,12 +13798,86 @@ bail:
 	init_qpmap_table(dd, FIRST_KERNEL_KCTXT, dd->n_krcv_queues - 1);
 }
 
+static void init_user_fecn_handling(struct hfi1_devdata *dd,
+				    struct rsm_map_table *rmt)
+{
+	struct rsm_rule_data rrd;
+	u64 reg;
+	int i, idx, regoff, regidx;
+	u8 offset;
+
+	/* there needs to be enough room in the map table */
+	if (rmt->used + dd->num_user_contexts >= NUM_MAP_ENTRIES) {
+		dd_dev_err(dd, "User FECN handling disabled - too many user contexts allocated\n");
+		return;
+	}
+
+	/*
+	 * RSM will extract the destination context as an index into the
+	 * map table.  The destination contexts are a sequential block
+	 * in the range first_user_ctxt...num_rcv_contexts-1 (inclusive).
+	 * Map entries are accessed as offset + extracted value.  Adjust
+	 * the added offset so this sequence can be placed anywhere in
+	 * the table - as long as the entries themselves do not wrap.
+	 * There are only enough bits in offset for the table size, so
+	 * start with that to allow for a "negative" offset.
+	 */
+	offset = (u8)(NUM_MAP_ENTRIES + (int)rmt->used -
+						(int)dd->first_user_ctxt);
+
+	for (i = dd->first_user_ctxt, idx = rmt->used;
+				i < dd->num_rcv_contexts; i++, idx++) {
+		/* replace with identity mapping */
+		regoff = (idx % 8) * 8;
+		regidx = idx / 8;
+		reg = rmt->map[regidx];
+		reg &= ~(RCV_RSM_MAP_TABLE_RCV_CONTEXT_A_MASK << regoff);
+		reg |= (u64)i << regoff;
+		rmt->map[regidx] = reg;
+	}
+
+	/*
+	 * For RSM intercept of Expected FECN packets:
+	 * o packet type 0 - expected
+	 * o match on F (bit 95), using select/match 1, and
+	 * o match on SH (bit 133), using select/match 2.
+	 *
+	 * Use index 1 to extract the 8-bit receive context from DestQP
+	 * (start at bit 64).  Use that as the RSM map table index.
+	 */
+	rrd.offset = offset;
+	rrd.pkt_type = 0;
+	rrd.field1_off = 95;
+	rrd.field2_off = 133;
+	rrd.index1_off = 64;
+	rrd.index1_width = 8;
+	rrd.index2_off = 0;
+	rrd.index2_width = 0;
+	rrd.mask1 = 1;
+	rrd.value1 = 1;
+	rrd.mask2 = 1;
+	rrd.value2 = 1;
+
+	/* add rule 1 */
+	add_rsm_rule(dd, 1, &rrd);
+
+	rmt->used += dd->num_user_contexts;
+}
+
 static void init_rxe(struct hfi1_devdata *dd)
 {
+	struct rsm_map_table *rmt;
+
 	/* enable all receive errors */
 	write_csr(dd, RCV_ERR_MASK, ~0ull);
-	/* setup QPN map table - start where VL15 context leaves off */
-	init_qos(dd);
+
+	rmt = alloc_rsm_map_table(dd);
+	/* set up QOS, including the QPN map table */
+	init_qos(dd, rmt);
+	init_user_fecn_handling(dd, rmt);
+	complete_rsm_map_table(dd, rmt);
+	kfree(rmt);
+
 	/*
 	 * make sure RcvCtrl.RcvWcb <= PCIe Device Control
 	 * Register Max_Payload_Size (PCI_EXP_DEVCTL in Linux PCIe config
