@@ -1,219 +1,214 @@
 ---------------------------------------------------------------------------
-1 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/include/linux/scatterlist.h:195 CWARN.BITOP.SIZE (4:Review) Analyze
+3 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/include/linux/scatterlist.h:195 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-2 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/include/linux/scatterlist.h:211 CWARN.BITOP.SIZE (4:Review) Analyze
+4 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/include/linux/scatterlist.h:211 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-57 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/ud.c:419 CWARN.BITOP.SIZE (4:Review) Analyze
+9 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:530 MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in '__u.__val' allocated through function 'kzalloc' at line 530 is lost at line 530
+  * init.c:530: Dynamic memory stored in '__u.__val' is allocated by calling function 'kzalloc'.
+    * slab.h:622: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
+  * init.c:530: End of scope for '__u.__val'. Memory leak.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+10 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:776 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-58 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/ud.c:421 CWARN.BITOP.SIZE (4:Review) Analyze
+11 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:801 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-59 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/ud.c:546 CWARN.BITOP.SIZE (4:Review) Analyze
+12 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:867 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-60 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/user_exp_rcv.c:190 MLK.MUST (2:Error) Analyze
-Memory leak. Dynamic memory stored in 'grp' allocated through function 'kzalloc' at line 176 is lost at line 190
-  * user_exp_rcv.c:172: Continue loop iteration, while i<uctxt->expected_count/dd->rcv_entries.group_size is true
-  * user_exp_rcv.c:176: Dynamic memory stored in 'grp' is allocated by calling function 'kzalloc'.
-    * slab.h:607: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
-  * user_exp_rcv.c:177: !grp is false
-  * user_exp_rcv.c:190: End of scope for 'grp'. Memory leak.
-Current status 'Analyze'
-
----------------------------------------------------------------------------
-61 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:534 MLK.MUST (2:Error) Analyze
-Memory leak. Dynamic memory stored in '__u.__val' allocated through function 'kzalloc' at line 534 is lost at line 534
-  * init.c:534: Dynamic memory stored in '__u.__val' is allocated by calling function 'kzalloc'.
-    * slab.h:607: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
-  * init.c:534: End of scope for '__u.__val'. Memory leak.
-Current status 'Analyze'
-
----------------------------------------------------------------------------
-62 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:780 CWARN.BITOP.SIZE (4:Review) Analyze
+13 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:1134 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-63 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:805 CWARN.BITOP.SIZE (4:Review) Analyze
+14 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/init.c:1296 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-64 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:871 CWARN.BITOP.SIZE (4:Review) Analyze
+15 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/rc.c:853 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-65 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:1138 CWARN.BITOP.SIZE (4:Review) Analyze
+16 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/diag.c:554 SV.TAINTED.ALLOC_SIZE (2:Error) Analyze
+Unvalidated integer value 'dp.len' is received from 'copy_from_user' at line 532 and can be used to alter memory allocation size through call to 'diagpkt_send' at line 554.
+  * diag.c:532: Tainted data 'dp' is received from the call to 'copy_from_user'
+  * diag.c:532: copy_from_user( &dp, data, sizeof(dp) ) is false
+  * diag.c:539: dp.pbc is true
+  * diag.c:554: Tainted data 'dp.len' is passed to 'diagpkt_send'
+    * diag.c:367: dp->len&3 is false
+    * diag.c:402: Tainted data 'dp->len' is passed to 'vmalloc'
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+17 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/ud.c:419 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-66 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:1300 CWARN.BITOP.SIZE (4:Review) Analyze
+18 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/ud.c:421 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-67 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:509 CWARN.BITOP.SIZE (4:Review) Analyze
+19 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/ud.c:546 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-68 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:508 CWARN.BITOP.SIZE (4:Review) Analyze
+20 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/user_exp_rcv.c:191 MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in 'grp' allocated through function 'kzalloc' at line 177 is lost at line 191
+  * user_exp_rcv.c:173: Continue loop iteration, while i<uctxt->expected_count/dd->rcv_entries.group_size is true
+  * user_exp_rcv.c:177: Dynamic memory stored in 'grp' is allocated by calling function 'kzalloc'.
+    * slab.h:622: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
+  * user_exp_rcv.c:178: !grp is false
+  * user_exp_rcv.c:191: End of scope for 'grp'. Memory leak.
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+21 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/twsi.c:209 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-69 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:528 CWARN.BITOP.SIZE (4:Review) Analyze
+22 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/verbs.c:881 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-70 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:527 CWARN.BITOP.SIZE (4:Review) Analyze
+23 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/verbs.c:1013 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-71 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:560 CWARN.BITOP.SIZE (4:Review) Analyze
+24 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/pio.c:941 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-72 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:588 CWARN.BITOP.SIZE (4:Review) Analyze
+25 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/pio.c:1366 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-73 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:605 CWARN.BITOP.SIZE (4:Review) Analyze
+26 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/pio.c:1370 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-74 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:611 CWARN.BITOP.SIZE (4:Review) Analyze
+27 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:464 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-75 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:628 CWARN.BITOP.SIZE (4:Review) Analyze
+28 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:465 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-76 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:633 CWARN.BITOP.SIZE (4:Review) Analyze
+29 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:483 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-77 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:639 CWARN.BITOP.SIZE (4:Review) Analyze
+30 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:484 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-78 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:646 CWARN.BITOP.SIZE (4:Review) Analyze
+31 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:516 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-79 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:645 CWARN.BITOP.SIZE (4:Review) Analyze
+32 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:544 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-80 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:658 CWARN.BITOP.SIZE (4:Review) Analyze
+33 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:561 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-81 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:304 ABV.MEMBER (1:Critical) Analyze
-Array '&tinfo.tidcnt' of size 4 may use index value(s) 4..7
-  * file_ops.c:304: Array '&tinfo.tidcnt' size is 1.
-  * file_ops.c:304: '&tinfo.tidcnt' is passed as an argument to function 'copy_to_user'.
-    * file_ops.c:304: Result of expression '$3-1' is == 7.
-      * file_ops.c:304: Function argument '$3' is == 8.
-  * file_ops.c:304: Object '&tinfo.tidcnt' of type 'unsigned int[1]' is a buffer of length 4 bytes.
-Current status 'Analyze'
-
----------------------------------------------------------------------------
-82 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/twsi.c:209 CWARN.BITOP.SIZE (4:Review) Analyze
+34 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:567 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-83 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/chip.c:12170 CWARN.BITOP.SIZE (4:Review) Analyze
+35 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:584 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-84 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/platform.c:527 CWARN.BITOP.SIZE (4:Review) Analyze
+36 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:589 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-85 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/platform.c:540 CWARN.BITOP.SIZE (4:Review) Analyze
+37 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:595 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-86 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/diag.c:585 SV.TAINTED.ALLOC_SIZE (2:Error) Analyze
-Unvalidated integer value 'dp.len' is received from 'copy_from_user' at line 563 and can be used to alter memory allocation size through call to 'diagpkt_send' at line 585.
-  * diag.c:563: Tainted data 'dp' is received from the call to 'copy_from_user'
-  * diag.c:563: copy_from_user( &dp, data, sizeof(dp) ) is false
-  * diag.c:570: dp.pbc is true
-  * diag.c:585: Tainted data 'dp.len' is passed to 'diagpkt_send'
-    * diag.c:399: dp->len&3 is false
-    * diag.c:433: Tainted data 'dp->len' is passed to 'vmalloc'
-Current status 'Analyze'
-
----------------------------------------------------------------------------
-88 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/verbs.c:881 CWARN.BITOP.SIZE (4:Review) Analyze
+38 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:601 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-89 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/verbs.c:1014 CWARN.BITOP.SIZE (4:Review) Analyze
+39 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:602 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-90 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/rc.c:853 CWARN.BITOP.SIZE (4:Review) Analyze
+40 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:614 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-91 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/pio.c:912 CWARN.BITOP.SIZE (4:Review) Analyze
+42 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/chip.c:12251 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-92 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/pio.c:1337 CWARN.BITOP.SIZE (4:Review) Analyze
+43 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/ruc.c:797 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-93 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/pio.c:1341 CWARN.BITOP.SIZE (4:Review) Analyze
+44 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/platform.c:543 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-94 (Local) /nfs/sc/disks/fabric_work/jjohn/rdmavt-jjohn/wfr-linux-devel/drivers/infiniband/hw/hfi1/ruc.c:797 CWARN.BITOP.SIZE (4:Review) Analyze
+45 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/platform.c:556 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-119 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/staging/rdma/hfi1/file_ops.c:255 SV.TAINTED.CALL.INDEX_ACCESS (2:Error) Analyze
+94 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/platform.c:579 CWARN.BITOP.SIZE (4:Review) Analyze
+Operands in a bitwise operation have different size
+Current status 'Analyze'
+
+---------------------------------------------------------------------------
+95 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:255 SV.TAINTED.CALL.INDEX_ACCESS (2:Error) Analyze
 Unvalidated integer value 'tinfo.tidcnt' is received from 'copy_from_user' at line 250 and can be used to access an array through call to 'hfi1_user_exp_rcv_clear' at line 255.
   * file_ops.c:250: Tainted data 'tinfo' is received from the call to 'copy_from_user'
   * file_ops.c:250: copy_from_user( &tinfo,  (struct hfi11_tid_info* )arg, sizeof(tinfo) ) is false
@@ -221,6 +216,15 @@ Unvalidated integer value 'tinfo.tidcnt' is received from 'copy_from_user' at li
     * user_exp_rcv.c:584: Tainted data 'sizeof(tidinfo[0] ) *tinfo->tidcnt' is passed to 'copy_from_user'
 Current status 'Analyze'
 
+---------------------------------------------------------------------------
+96 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/file_ops.c:242 ABV.MEMBER (1:Critical) Analyze
+Array '&tinfo.tidcnt' of size 4 may use index value(s) 4..7
+  * file_ops.c:242: Array '&tinfo.tidcnt' size is 1.
+  * file_ops.c:242: '&tinfo.tidcnt' is passed as an argument to function 'copy_to_user'.
+    * file_ops.c:242: Result of expression '$3-1' is == 7.
+      * file_ops.c:242: Function argument '$3' is == 8.
+  * file_ops.c:242: Object '&tinfo.tidcnt' of type 'unsigned int[1]' is a buffer of length 4 bytes.
+Current status 'Analyze'
 
-Summary: 40 Local
-40 Total Issue(s)
+Summary: 41 Local
+41 Total Issue(s)
