@@ -76,7 +76,7 @@ static hfi_error_domain_t hfi_fzc0_error[] = {
 		},
 		{
 		"LOST_REINIT_STALL_OR_TOS",
-		"  lost clock stall or turn on signal during reinit. This is catastrophic and will take down the link.",
+		"  lost clock stall or turn on signal during reinit. Only active when just 1 lane operating on Rx side.",
 		},
 		{
 		"TX_LESS_THAN_FOUR_LNS",
@@ -171,155 +171,155 @@ static hfi_error_domain_t hfi_fzc0_error[] = {
 		"  self explanatory",
 		},
 		{
-		"Unused_63_26:[0/38]",
+		"UNEXPECTED_MASTER_TIME_FLIT",
+		"  MasterTime flits that arrive at a switch port that is not configured as an upstream port for the indicated clock tree are ignored, and an error is logged.",
+		},
+		{
+		"QUARANTINE",
+		"  KNH/FXR viral event to take down the link. Tied low in OC.",
+		},
+		{
+		"CSR_CHAIN_PARITY_ERR",
+		"  OC CSR chain parity error on the input request bus. Tied low on FZC.",
+		},
+		{
+		"PM_MBE",
+		"  Multi bit error detected in a high priority DN stream MasterTime flit.",
+		},
+		{
+		"PM_SBE",
+		"  Single bit error detected in a high priority DN stream MasterTime flit.",
+		},
+		{
+		"Unused_63_31:[0/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[1/38]",
+		"Unused_63_31:[1/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[2/38]",
+		"Unused_63_31:[2/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[3/38]",
+		"Unused_63_31:[3/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[4/38]",
+		"Unused_63_31:[4/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[5/38]",
+		"Unused_63_31:[5/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[6/38]",
+		"Unused_63_31:[6/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[7/38]",
+		"Unused_63_31:[7/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[8/38]",
+		"Unused_63_31:[8/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[9/38]",
+		"Unused_63_31:[9/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[10/38]",
+		"Unused_63_31:[10/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[11/38]",
+		"Unused_63_31:[11/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[12/38]",
+		"Unused_63_31:[12/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[13/38]",
+		"Unused_63_31:[13/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[14/38]",
+		"Unused_63_31:[14/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[15/38]",
+		"Unused_63_31:[15/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[16/38]",
+		"Unused_63_31:[16/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[17/38]",
+		"Unused_63_31:[17/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[18/38]",
+		"Unused_63_31:[18/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[19/38]",
+		"Unused_63_31:[19/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[20/38]",
+		"Unused_63_31:[20/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[21/38]",
+		"Unused_63_31:[21/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[22/38]",
+		"Unused_63_31:[22/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[23/38]",
+		"Unused_63_31:[23/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[24/38]",
+		"Unused_63_31:[24/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[25/38]",
+		"Unused_63_31:[25/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[26/38]",
+		"Unused_63_31:[26/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[27/38]",
+		"Unused_63_31:[27/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[28/38]",
+		"Unused_63_31:[28/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[29/38]",
+		"Unused_63_31:[29/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[30/38]",
+		"Unused_63_31:[30/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[31/38]",
+		"Unused_63_31:[31/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[32/38]",
-		"  Unused",
-		},
-		{
-		"Unused_63_26:[33/38]",
-		"  Unused",
-		},
-		{
-		"Unused_63_26:[34/38]",
-		"  Unused",
-		},
-		{
-		"Unused_63_26:[35/38]",
-		"  Unused",
-		},
-		{
-		"Unused_63_26:[36/38]",
-		"  Unused",
-		},
-		{
-		"Unused_63_26:[37/38]",
+		"Unused_63_31:[32/33]",
 		"  Unused",
 		}
 	}
@@ -346,7 +346,7 @@ static hfi_error_domain_t hfi_fzc1_error[] = {
 		},
 		{
 		"LOST_REINIT_STALL_OR_TOS",
-		"  lost clock stall or turn on signal during reinit. This is catastrophic and will take down the link.",
+		"  lost clock stall or turn on signal during reinit. Only active when just 1 lane operating on Rx side.",
 		},
 		{
 		"TX_LESS_THAN_FOUR_LNS",
@@ -441,155 +441,155 @@ static hfi_error_domain_t hfi_fzc1_error[] = {
 		"  self explanatory",
 		},
 		{
-		"Unused_63_26:[0/38]",
+		"UNEXPECTED_MASTER_TIME_FLIT",
+		"  MasterTime flits that arrive at a switch port that is not configured as an upstream port for the indicated clock tree are ignored, and an error is logged.",
+		},
+		{
+		"QUARANTINE",
+		"  KNH/FXR viral event to take down the link. Tied low in OC.",
+		},
+		{
+		"CSR_CHAIN_PARITY_ERR",
+		"  OC CSR chain parity error on the input request bus. Tied low on FZC.",
+		},
+		{
+		"PM_MBE",
+		"  Multi bit error detected in a high priority DN stream MasterTime flit.",
+		},
+		{
+		"PM_SBE",
+		"  Single bit error detected in a high priority DN stream MasterTime flit.",
+		},
+		{
+		"Unused_63_31:[0/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[1/38]",
+		"Unused_63_31:[1/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[2/38]",
+		"Unused_63_31:[2/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[3/38]",
+		"Unused_63_31:[3/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[4/38]",
+		"Unused_63_31:[4/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[5/38]",
+		"Unused_63_31:[5/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[6/38]",
+		"Unused_63_31:[6/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[7/38]",
+		"Unused_63_31:[7/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[8/38]",
+		"Unused_63_31:[8/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[9/38]",
+		"Unused_63_31:[9/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[10/38]",
+		"Unused_63_31:[10/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[11/38]",
+		"Unused_63_31:[11/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[12/38]",
+		"Unused_63_31:[12/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[13/38]",
+		"Unused_63_31:[13/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[14/38]",
+		"Unused_63_31:[14/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[15/38]",
+		"Unused_63_31:[15/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[16/38]",
+		"Unused_63_31:[16/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[17/38]",
+		"Unused_63_31:[17/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[18/38]",
+		"Unused_63_31:[18/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[19/38]",
+		"Unused_63_31:[19/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[20/38]",
+		"Unused_63_31:[20/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[21/38]",
+		"Unused_63_31:[21/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[22/38]",
+		"Unused_63_31:[22/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[23/38]",
+		"Unused_63_31:[23/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[24/38]",
+		"Unused_63_31:[24/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[25/38]",
+		"Unused_63_31:[25/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[26/38]",
+		"Unused_63_31:[26/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[27/38]",
+		"Unused_63_31:[27/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[28/38]",
+		"Unused_63_31:[28/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[29/38]",
+		"Unused_63_31:[29/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[30/38]",
+		"Unused_63_31:[30/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[31/38]",
+		"Unused_63_31:[31/33]",
 		"  Unused",
 		},
 		{
-		"Unused_63_26:[32/38]",
-		"  Unused",
-		},
-		{
-		"Unused_63_26:[33/38]",
-		"  Unused",
-		},
-		{
-		"Unused_63_26:[34/38]",
-		"  Unused",
-		},
-		{
-		"Unused_63_26:[35/38]",
-		"  Unused",
-		},
-		{
-		"Unused_63_26:[36/38]",
-		"  Unused",
-		},
-		{
-		"Unused_63_26:[37/38]",
+		"Unused_63_31:[32/33]",
 		"  Unused",
 		}
 	}
@@ -2507,12 +2507,20 @@ static hfi_error_domain_t hfi_txdma_error[] = {
 	FXR_TXDMA_ERR_STS, FXR_TXDMA_ERR_CLR, FXR_TXDMA_ERR_FRC,
 	{
 		{
-		"pkt_desc_cor_err",
-		"  Packet descriptor from OTR contained a correctable error",
+		"pkt_desc_cor_sb_err",
+		"  Packet descriptor from OTR contained a correctable sb error",
 		},
 		{
-		"pkt_desc_unc_err",
-		"  Packet descriptor from OTR contained a uncorrectable error",
+		"pkt_desc_unc_sb_err",
+		"  Packet descriptor from OTR contained a uncorrectable sb error",
+		},
+		{
+		"pkt_desc_cor_dat_err",
+		"  Packet descriptor from OTR contained a correctable data error",
+		},
+		{
+		"pkt_desc_unc_dat_err",
+		"  Packet descriptor from OTR contained a uncorrectable data error",
 		},
 		{
 		"pkt_desc_gen_err",
@@ -2537,18 +2545,6 @@ static hfi_error_domain_t hfi_txdma_error[] = {
 		{
 		"inpq_overflow",
 		"  Input queue FIFO overflowed",
-		},
-		{
-		"inpq_underflow",
-		"  Input queue FIFO underflowed",
-		},
-		{
-		"xlateq_overflow",
-		"  Translation queue FIFO overflowed",
-		},
-		{
-		"xlateq_underflow",
-		"  Translation queue FIFO underflowed",
 		},
 		{
 		"at_status_err",
@@ -2611,10 +2607,6 @@ static hfi_error_domain_t hfi_txdma_error[] = {
 		"  Response queue FIFO overflowed",
 		},
 		{
-		"rspq_underflow",
-		"  Response queue FIFO underflowed",
-		},
-		{
 		"lm0_credit_err",
 		"  The credit acknowledge from LM0 contained a parity error",
 		},
@@ -2639,127 +2631,135 @@ static hfi_error_domain_t hfi_txdma_error[] = {
 		"  Packet tracking memory encountered a uncorrectable error",
 		},
 		{
-		"Reserved_63_33:[0/31]",
+		"Reserved_63_31:[0/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[1/31]",
+		"Reserved_63_31:[1/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[2/31]",
+		"Reserved_63_31:[2/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[3/31]",
+		"Reserved_63_31:[3/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[4/31]",
+		"Reserved_63_31:[4/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[5/31]",
+		"Reserved_63_31:[5/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[6/31]",
+		"Reserved_63_31:[6/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[7/31]",
+		"Reserved_63_31:[7/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[8/31]",
+		"Reserved_63_31:[8/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[9/31]",
+		"Reserved_63_31:[9/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[10/31]",
+		"Reserved_63_31:[10/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[11/31]",
+		"Reserved_63_31:[11/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[12/31]",
+		"Reserved_63_31:[12/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[13/31]",
+		"Reserved_63_31:[13/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[14/31]",
+		"Reserved_63_31:[14/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[15/31]",
+		"Reserved_63_31:[15/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[16/31]",
+		"Reserved_63_31:[16/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[17/31]",
+		"Reserved_63_31:[17/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[18/31]",
+		"Reserved_63_31:[18/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[19/31]",
+		"Reserved_63_31:[19/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[20/31]",
+		"Reserved_63_31:[20/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[21/31]",
+		"Reserved_63_31:[21/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[22/31]",
+		"Reserved_63_31:[22/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[23/31]",
+		"Reserved_63_31:[23/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[24/31]",
+		"Reserved_63_31:[24/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[25/31]",
+		"Reserved_63_31:[25/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[26/31]",
+		"Reserved_63_31:[26/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[27/31]",
+		"Reserved_63_31:[27/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[28/31]",
+		"Reserved_63_31:[28/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[29/31]",
+		"Reserved_63_31:[29/33]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_33:[30/31]",
+		"Reserved_63_31:[30/33]",
+		"  Unused",
+		},
+		{
+		"Reserved_63_31:[31/33]",
+		"  Unused",
+		},
+		{
+		"Reserved_63_31:[32/33]",
 		"  Unused",
 		}
 	}
@@ -2784,83 +2784,83 @@ static hfi_error_domain_t hfi_rxe2e_error[] = {
 		},
 		{
 		"mc0_lm_in_mbe",
-		"  MC0 LINKMUX input mbe Error information: Section 28.11.4.11, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
+		"  MC0 LINKMUX input mbe Error information: Section 29.13.4.11, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
 		},
 		{
 		"mc0_lm_in_sbe",
-		"  MC0 LINKMUX input sbe Error information: . Section 28.11.4.11, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
+		"  MC0 LINKMUX input sbe Error information: . Section 29.13.4.11, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
 		},
 		{
 		"mc1_lm_in_mbe",
-		"  MC1 LINKMUX input mbe Error information: Section 28.11.4.12, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
+		"  MC1 LINKMUX input mbe Error information: Section 29.13.4.12, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
 		},
 		{
 		"mc1_lm_in_sbe",
-		"  MC1 LINKMUX input sbe Error information: . Section 28.11.4.12, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
+		"  MC1 LINKMUX input sbe Error information: . Section 29.13.4.12, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
 		},
 		{
 		"mc0_input_fifo_mbe",
-		"  MC0 input fifo mbe Error information: Section 28.11.4.16, 'RXE2E Error Info PSN Cache Tag MBE'",
+		"  MC0 input fifo mbe Error information: Section 29.13.4.16, 'RXE2E Error Info PSN Cache Tag MBE'",
 		},
 		{
 		"mc0_input_fifo_sbe",
-		"  MC0 input fifo sbe Error information: . Section 28.11.4.16, 'RXE2E Error Info PSN Cache Tag MBE'",
+		"  MC0 input fifo sbe Error information: . Section 29.13.4.16, 'RXE2E Error Info PSN Cache Tag MBE'",
 		},
 		{
 		"mc1_input_fifo_mbe",
-		"  MC1 input fifo mbe Error information: Section 28.11.4.13, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
+		"  MC1 input fifo mbe Error information: Section 29.13.4.13, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
 		},
 		{
 		"mc1_input_fifo_sbe",
-		"  MC1 input fifo sbe Error information: . Section 28.11.4.13, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
+		"  MC1 input fifo sbe Error information: . Section 29.13.4.13, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
 		},
 		{
 		"psn_cache_tag_mbe",
-		"  PSN Cache tag mbe Error information: Section 28.11.4.16, 'RXE2E Error Info PSN Cache Tag MBE' Note: these are fairly fatal as you don't know what connection is bad.",
+		"  PSN Cache tag mbe Error information: Section 29.13.4.16, 'RXE2E Error Info PSN Cache Tag MBE' Note: these are fairly fatal as you don't know what connection is bad.",
 		},
 		{
 		"psn_cache_tag_sbe",
-		"  PSN Cache tag sbe Error information: . Section 28.11.4.15, 'RXE2E Error Info PSN Cache Tag SBE'",
+		"  PSN Cache tag sbe Error information: . Section 29.13.4.15, 'RXE2E Error Info PSN Cache Tag SBE'",
 		},
 		{
 		"psn_cache_data_mbe",
-		"  PSN Cache data mbe Error information: Section 28.11.4.17, 'RXE2E Error Info PSN Cache Data SBE/MBE' Note: This will result in auto-disconnect for the connection. This may also remove a big scoreboard slot from being re-allocated as you can't rely on either the big_in_use bit or the big_scoreboard pointer in the data. So if a big scoreboard was in use, that slot will remain unavailabe for re-use until the next hard reset.",
+		"  PSN Cache data mbe Error information: Section 29.13.4.17, 'RXE2E Error Info PSN Cache Data SBE/MBE' Note: This will result in auto-disconnect for the connection. This may also remove a big scoreboard slot from being re-allocated as you can't rely on either the big_in_use bit or the big_scoreboard pointer in the data. So if a big scoreboard was in use, that slot will remain unavailabe for re-use until the next hard reset.",
 		},
 		{
 		"psn_cache_data_sbe",
-		"  PSN Cache data sbe Error information: . Section 28.11.4.17, 'RXE2E Error Info PSN Cache Data SBE/MBE'",
+		"  PSN Cache data sbe Error information: . Section 29.13.4.17, 'RXE2E Error Info PSN Cache Data SBE/MBE'",
 		},
 		{
 		"MC0crc",
-		"  CRC error on MC0 Error information: . Section 28.11.4.20, 'RXE2E Error Info CRC'",
+		"  CRC error on MC0 Error information: . Section 29.13.4.20, 'RXE2E Error Info CRC'",
 		},
 		{
 		"MC1crc",
-		"  CRC error on MC1 Error information: . Section 28.11.4.20, 'RXE2E Error Info CRC'",
+		"  CRC error on MC1 Error information: . Section 29.13.4.20, 'RXE2E Error Info CRC'",
 		},
 		{
 		"big_scoreboard_mbe",
-		"  big scoreboard mbe. Error information: Section 28.11.4.19, 'RXE2E Error Info Big Scoreboard MBE'",
+		"  big scoreboard mbe. Error information: Section 29.13.4.19, 'RXE2E Error Info Big Scoreboard MBE'",
 		},
 		{
 		"big_scoreboard_sbe",
-		"  big scoreboard sbe. Error information: Section 28.11.4.18, 'RXE2E Error Info Big Scoreboard SBE'",
+		"  big scoreboard sbe. Error information: Section 29.13.4.18, 'RXE2E Error Info Big Scoreboard SBE'",
 		},
 		{
 		"any_mbe_cntr_max",
-		"  Some mbe cntr is saturated (all 1's). Error information: Section 28.11.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
+		"  Some mbe cntr is saturated (all 1's). Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
 		},
 		{
 		"any_mbe_cntr_non_zero",
-		"  Some mbe cntr is non-zero. Error information: Section 28.11.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
+		"  Some mbe cntr is non-zero. Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
 		},
 		{
 		"any_sbe_cntr_max",
-		"  Some sbe cntr is saturated (all 1's). Error information: Section 28.11.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
+		"  Some sbe cntr is saturated (all 1's). Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
 		},
 		{
 		"any_sbe_cntr_non_zero",
-		"  Some sbe cntr is non-zero. Error information: Section 28.11.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
+		"  Some sbe cntr is non-zero. Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
 		},
 		{
 		"Reserved_63_21:[0/43]",
@@ -3071,12 +3071,20 @@ static hfi_error_domain_t hfi_rxhp_error[] = {
 		"  PTE Cache data sbe Error information: . Section 29.12.3.12, 'RXHP Error Info PTE Cache Data SBE/MBE'",
 		},
 		{
-		"psc_cache_mbe",
-		"  PSC Cache mbe",
+		"psc0_cache_mbe",
+		"  PSC0 Cache mbe",
 		},
 		{
-		"psc_cache_sbe",
-		"  PSC Cache sbe",
+		"psc0_cache_sbe",
+		"  PSC0 Cache sbe",
+		},
+		{
+		"psc1_cache_mbe",
+		"  PSC1 Cache mbe",
+		},
+		{
+		"psc1_cache_sbe",
+		"  PSC1 Cache sbe",
 		},
 		{
 		"hiarb_data_sbe",
@@ -3127,55 +3135,47 @@ static hfi_error_domain_t hfi_rxhp_error[] = {
 		"  packet status mbe",
 		},
 		{
-		"Reserved_31_19:[0/13]",
+		"ptq_sbe",
+		"  ptq sbe",
+		},
+		{
+		"ptq_mbe",
+		"  ptq mbe",
+		},
+		{
+		"Reserved_31_23:[0/9]",
 		" ",
 		},
 		{
-		"Reserved_31_19:[1/13]",
+		"Reserved_31_23:[1/9]",
 		" ",
 		},
 		{
-		"Reserved_31_19:[2/13]",
+		"Reserved_31_23:[2/9]",
 		" ",
 		},
 		{
-		"Reserved_31_19:[3/13]",
+		"Reserved_31_23:[3/9]",
 		" ",
 		},
 		{
-		"Reserved_31_19:[4/13]",
+		"Reserved_31_23:[4/9]",
 		" ",
 		},
 		{
-		"Reserved_31_19:[5/13]",
+		"Reserved_31_23:[5/9]",
 		" ",
 		},
 		{
-		"Reserved_31_19:[6/13]",
+		"Reserved_31_23:[6/9]",
 		" ",
 		},
 		{
-		"Reserved_31_19:[7/13]",
+		"Reserved_31_23:[7/9]",
 		" ",
 		},
 		{
-		"Reserved_31_19:[8/13]",
-		" ",
-		},
-		{
-		"Reserved_31_19:[9/13]",
-		" ",
-		},
-		{
-		"Reserved_31_19:[10/13]",
-		" ",
-		},
-		{
-		"Reserved_31_19:[11/13]",
-		" ",
-		},
-		{
-		"Reserved_31_19:[12/13]",
+		"Reserved_31_23:[8/9]",
 		" ",
 		},
 		{
@@ -3482,36 +3482,92 @@ static hfi_error_domain_t hfi_rxdma_error[] = {
 		"  Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
 		},
 		{
-		"war_ecc_sbe:[0/4]",
-		"  Correctable Error on data to the WAR Buffer from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
+		"host_ecc_sbe:[0/4]",
+		"  Correctable Error on data from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
 		},
 		{
-		"war_ecc_sbe:[1/4]",
-		"  Correctable Error on data to the WAR Buffer from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
+		"host_ecc_sbe:[1/4]",
+		"  Correctable Error on data from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
 		},
 		{
-		"war_ecc_sbe:[2/4]",
-		"  Correctable Error on data to the WAR Buffer from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
+		"host_ecc_sbe:[2/4]",
+		"  Correctable Error on data from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
 		},
 		{
-		"war_ecc_sbe:[3/4]",
-		"  Correctable Error on data to the WAR Buffer from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
+		"host_ecc_sbe:[3/4]",
+		"  Correctable Error on data from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
 		},
 		{
-		"war_ecc_mbe:[0/4]",
-		"  Uncorrectable Error on data to the WAR Buffer from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
+		"host_ecc_mbe:[0/4]",
+		"  Uncorrectable Error on data from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
 		},
 		{
-		"war_ecc_mbe:[1/4]",
-		"  Uncorrectable Error on data to the WAR Buffer from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
+		"host_ecc_mbe:[1/4]",
+		"  Uncorrectable Error on data from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
 		},
 		{
-		"war_ecc_mbe:[2/4]",
-		"  Uncorrectable Error on data to the WAR Buffer from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
+		"host_ecc_mbe:[2/4]",
+		"  Uncorrectable Error on data from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
 		},
 		{
-		"war_ecc_mbe:[3/4]",
-		"  Uncorrectable Error on data to the WAR Buffer from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
+		"host_ecc_mbe:[3/4]",
+		"  Uncorrectable Error on data from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.",
+		},
+		{
+		"ack_tail_sbe",
+		"  Correctable Error on a read from the TailAck Array",
+		},
+		{
+		"ack_tail_mbe",
+		"  Uncorrectable Error on a read from the TailAck Array",
+		},
+		{
+		"ack_head_sbe",
+		"  Correctable Error on a read from the Head Ack Array",
+		},
+		{
+		"ack_head_mbe",
+		"  Uncorrectable Error on a read from the Head Ack Array",
+		},
+		{
+		"cq_sbe",
+		"  Correctable Error on a read from the CQ Ack Array",
+		},
+		{
+		"cq_mbe",
+		"  Uncorrectable Error on a read from the CQ Ack Array",
+		},
+		{
+		"hp_pool_op_sbe",
+		"  Correctable Error on a read from the HP Pool OP Array",
+		},
+		{
+		"hp_pool_op_mbe",
+		"  Uncorrectable Error on a read from the HP Pool OP Array",
+		},
+		{
+		"hp_pool_cteq_sbe",
+		"  Correctable Error on a read from the HP Pool CTEQ Array",
+		},
+		{
+		"hp_pool_cteq_mbe",
+		"  Uncorrectable Error on a read from the HP Pool CTEQ Array",
+		},
+		{
+		"otr_pool_op_sbe",
+		"  Correctable Error on a read from the OTR Pool OP Array",
+		},
+		{
+		"otr_pool_op_mbe",
+		"  Uncorrectable Error on a read from the OTR Pool OP Array",
+		},
+		{
+		"otr_pool_cteq_sbe",
+		"  Correctable Error on a read from the OTR Pool CTEQ Array",
+		},
+		{
+		"otr_pool_cteq_mbe",
+		"  Uncorrectable Error on a read from the OTR Pool CTEQ Array",
 		},
 		{
 		"mc0_dropped_cmd",
@@ -3520,62 +3576,6 @@ static hfi_error_domain_t hfi_rxdma_error[] = {
 		{
 		"mc1_dropped_cmd",
 		"  RxDMA Command from RxOTR was dropped because command pool was full.",
-		},
-		{
-		"packet_timeout:[0/8]",
-		"  Some number of packets have been sitting the Data Queue without any commands to the Queue for the timeout period specified by the Data Queue Timeout value in RXDMA_CFG_DQ_TIMEOUT - Data Queue Timeout Configuration CSR",
-		},
-		{
-		"packet_timeout:[1/8]",
-		"  Some number of packets have been sitting the Data Queue without any commands to the Queue for the timeout period specified by the Data Queue Timeout value in RXDMA_CFG_DQ_TIMEOUT - Data Queue Timeout Configuration CSR",
-		},
-		{
-		"packet_timeout:[2/8]",
-		"  Some number of packets have been sitting the Data Queue without any commands to the Queue for the timeout period specified by the Data Queue Timeout value in RXDMA_CFG_DQ_TIMEOUT - Data Queue Timeout Configuration CSR",
-		},
-		{
-		"packet_timeout:[3/8]",
-		"  Some number of packets have been sitting the Data Queue without any commands to the Queue for the timeout period specified by the Data Queue Timeout value in RXDMA_CFG_DQ_TIMEOUT - Data Queue Timeout Configuration CSR",
-		},
-		{
-		"packet_timeout:[4/8]",
-		"  Some number of packets have been sitting the Data Queue without any commands to the Queue for the timeout period specified by the Data Queue Timeout value in RXDMA_CFG_DQ_TIMEOUT - Data Queue Timeout Configuration CSR",
-		},
-		{
-		"packet_timeout:[5/8]",
-		"  Some number of packets have been sitting the Data Queue without any commands to the Queue for the timeout period specified by the Data Queue Timeout value in RXDMA_CFG_DQ_TIMEOUT - Data Queue Timeout Configuration CSR",
-		},
-		{
-		"packet_timeout:[6/8]",
-		"  Some number of packets have been sitting the Data Queue without any commands to the Queue for the timeout period specified by the Data Queue Timeout value in RXDMA_CFG_DQ_TIMEOUT - Data Queue Timeout Configuration CSR",
-		},
-		{
-		"packet_timeout:[7/8]",
-		"  Some number of packets have been sitting the Data Queue without any commands to the Queue for the timeout period specified by the Data Queue Timeout value in RXDMA_CFG_DQ_TIMEOUT - Data Queue Timeout Configuration CSR",
-		},
-		{
-		"Reserved_63_58:[0/6]",
-		"  Reserved",
-		},
-		{
-		"Reserved_63_58:[1/6]",
-		"  Reserved",
-		},
-		{
-		"Reserved_63_58:[2/6]",
-		"  Reserved",
-		},
-		{
-		"Reserved_63_58:[3/6]",
-		"  Reserved",
-		},
-		{
-		"Reserved_63_58:[4/6]",
-		"  Reserved",
-		},
-		{
-		"Reserved_63_58:[5/6]",
-		"  Reserved",
 		}
 	}
 /* domain bits defined: 64 */
@@ -4938,8 +4938,8 @@ static hfi_error_domain_t hfi_opio_error[] = {
 static hfi_error_domain_t hfi_rxcid_error[] = {
 /*
  * RXCID_ERR_STS desc:  This is the Error Status CSR. Bits are set by hardware or by writing
- * to the RXCI_ERR_FRC CSR. Bits are cleared by writing to the
- * RXCI_ERR_CLR CSR.
+ * to the RXCID_ERR_FRC CSR. Bits are cleared by writing to the
+ * RXCID_ERR_CLR CSR.
  */
     {
 	"RXCID",
@@ -4947,259 +4947,259 @@ static hfi_error_domain_t hfi_rxcid_error[] = {
 	FXR_RXCID_ERR_STS, FXR_RXCID_ERR_CLR, FXR_RXCID_ERR_FRC,
 	{
 		{
-		"diagnostic",
-		"  Diagnostic Error Flag",
+		"inv_write_inactive",
+		"  A CQ write occurred to a CQ that was inactive",
 		},
 		{
-		"timeout",
-		"  Timeout of something",
+		"cmdq_csr_err_mbe",
+		"  Command queue MBE CSR error",
 		},
 		{
-		"sbe",
-		"  Correctable SBE. Error information:",
+		"cmdq_csr_err_sbe",
+		"  Command queue SBE CSR error",
 		},
 		{
-		"mbe",
-		"  Uncorrectable MBE. Error information:",
+		"cq_mem_mbe_err",
+		"  CQ memory MBE error",
 		},
 		{
-		"Reserved_63_4:[0/60]",
+		"cq_mem_sbe_err",
+		"  CQ memory SBE error",
+		},
+		{
+		"out_of_bound_err",
+		"  Detected a HIFIS write which crosses the 64byte boundary",
+		},
+		{
+		"Reserved_63_6:[0/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[1/60]",
+		"Reserved_63_6:[1/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[2/60]",
+		"Reserved_63_6:[2/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[3/60]",
+		"Reserved_63_6:[3/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[4/60]",
+		"Reserved_63_6:[4/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[5/60]",
+		"Reserved_63_6:[5/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[6/60]",
+		"Reserved_63_6:[6/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[7/60]",
+		"Reserved_63_6:[7/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[8/60]",
+		"Reserved_63_6:[8/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[9/60]",
+		"Reserved_63_6:[9/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[10/60]",
+		"Reserved_63_6:[10/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[11/60]",
+		"Reserved_63_6:[11/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[12/60]",
+		"Reserved_63_6:[12/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[13/60]",
+		"Reserved_63_6:[13/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[14/60]",
+		"Reserved_63_6:[14/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[15/60]",
+		"Reserved_63_6:[15/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[16/60]",
+		"Reserved_63_6:[16/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[17/60]",
+		"Reserved_63_6:[17/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[18/60]",
+		"Reserved_63_6:[18/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[19/60]",
+		"Reserved_63_6:[19/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[20/60]",
+		"Reserved_63_6:[20/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[21/60]",
+		"Reserved_63_6:[21/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[22/60]",
+		"Reserved_63_6:[22/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[23/60]",
+		"Reserved_63_6:[23/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[24/60]",
+		"Reserved_63_6:[24/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[25/60]",
+		"Reserved_63_6:[25/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[26/60]",
+		"Reserved_63_6:[26/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[27/60]",
+		"Reserved_63_6:[27/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[28/60]",
+		"Reserved_63_6:[28/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[29/60]",
+		"Reserved_63_6:[29/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[30/60]",
+		"Reserved_63_6:[30/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[31/60]",
+		"Reserved_63_6:[31/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[32/60]",
+		"Reserved_63_6:[32/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[33/60]",
+		"Reserved_63_6:[33/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[34/60]",
+		"Reserved_63_6:[34/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[35/60]",
+		"Reserved_63_6:[35/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[36/60]",
+		"Reserved_63_6:[36/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[37/60]",
+		"Reserved_63_6:[37/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[38/60]",
+		"Reserved_63_6:[38/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[39/60]",
+		"Reserved_63_6:[39/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[40/60]",
+		"Reserved_63_6:[40/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[41/60]",
+		"Reserved_63_6:[41/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[42/60]",
+		"Reserved_63_6:[42/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[43/60]",
+		"Reserved_63_6:[43/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[44/60]",
+		"Reserved_63_6:[44/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[45/60]",
+		"Reserved_63_6:[45/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[46/60]",
+		"Reserved_63_6:[46/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[47/60]",
+		"Reserved_63_6:[47/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[48/60]",
+		"Reserved_63_6:[48/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[49/60]",
+		"Reserved_63_6:[49/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[50/60]",
+		"Reserved_63_6:[50/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[51/60]",
+		"Reserved_63_6:[51/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[52/60]",
+		"Reserved_63_6:[52/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[53/60]",
+		"Reserved_63_6:[53/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[54/60]",
+		"Reserved_63_6:[54/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[55/60]",
+		"Reserved_63_6:[55/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[56/60]",
+		"Reserved_63_6:[56/58]",
 		"  Unused",
 		},
 		{
-		"Reserved_63_4:[57/60]",
-		"  Unused",
-		},
-		{
-		"Reserved_63_4:[58/60]",
-		"  Unused",
-		},
-		{
-		"Reserved_63_4:[59/60]",
+		"Reserved_63_6:[57/58]",
 		"  Unused",
 		}
 	}
@@ -5219,7 +5219,7 @@ static hfi_error_domain_t hfi_fpc0_error[] = {
 	FXR_LM_FPC0_CSRS+FXR_FPC_ERR_STS, FXR_LM_FPC0_CSRS+FXR_FPC_ERR_CLR, FXR_LM_FPC0_CSRS+FXR_FPC_ERR_FRC,
 	{
 		{
-		"reserved_0",
+		"spare_0",
 		"  reserved",
 		},
 		{
@@ -5251,7 +5251,7 @@ static hfi_error_domain_t hfi_fpc0_error[] = {
 		"  Received VL Marker control flit.",
 		},
 		{
-		"reserved_8",
+		"spare_8",
 		"  reserved",
 		},
 		{
@@ -5263,11 +5263,11 @@ static hfi_error_domain_t hfi_fpc0_error[] = {
 		"  Illegal LVer in header",
 		},
 		{
-		"reserved_11",
+		"spare_11",
 		"  reserved",
 		},
 		{
-		"reserved_12",
+		"spare_12",
 		"  reserved",
 		},
 		{
@@ -5295,8 +5295,8 @@ static hfi_error_domain_t hfi_fpc0_error[] = {
 		"  Event counter rollover.",
 		},
 		{
-		"reserved_19",
-		"  reserved",
+		"link_err",
+		"  Link went from INIT/ARM/ACTIVE to DOWN.",
 		},
 		{
 		"misc_cntr_rollover_err",
@@ -5347,7 +5347,7 @@ static hfi_error_domain_t hfi_fpc0_error[] = {
 		"  Pkt contained LRH:Length > MTU_Cap",
 		},
 		{
-		"reserved_32",
+		"spare_32",
 		"  reserved",
 		},
 		{
@@ -5367,35 +5367,35 @@ static hfi_error_domain_t hfi_fpc0_error[] = {
 		"  Packet arriving contained EBP, marked EBP by remote device.",
 		},
 		{
-		"reserved_44_37:[0/8]",
+		"spare_44_37:[0/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[1/8]",
+		"spare_44_37:[1/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[2/8]",
+		"spare_44_37:[2/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[3/8]",
+		"spare_44_37:[3/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[4/8]",
+		"spare_44_37:[4/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[5/8]",
+		"spare_44_37:[5/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[6/8]",
+		"spare_44_37:[6/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[7/8]",
+		"spare_44_37:[7/8]",
 		"  reserved",
 		},
 		{
@@ -5407,31 +5407,31 @@ static hfi_error_domain_t hfi_fpc0_error[] = {
 		"  dc_common recieved an illegal csr address.",
 		},
 		{
-		"reserved_53_47:[0/7]",
+		"spare_53_47:[0/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[1/7]",
+		"spare_53_47:[1/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[2/7]",
+		"spare_53_47:[2/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[3/7]",
+		"spare_53_47:[3/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[4/7]",
+		"spare_53_47:[4/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[5/7]",
+		"spare_53_47:[5/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[6/7]",
+		"spare_53_47:[6/7]",
 		"  reserved",
 		},
 		{
@@ -5440,7 +5440,7 @@ static hfi_error_domain_t hfi_fpc0_error[] = {
 		},
 		{
 		"rcvport_err",
-		"  One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] Reserved [E14] Reserved [E15] Reserved When this flag is asserted the following CSRs provide additional error information. Section 17.4.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 17.4.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 17.4.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A '",
+		"  One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] BadSC Marker [E14] Reserved [E15] Reserved When this flag is asserted the following CSRs provide additional error information. Section 17.4.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 17.4.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 17.4.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A '",
 		},
 		{
 		"reserved_63_56:[0/8]",
@@ -5491,7 +5491,7 @@ static hfi_error_domain_t hfi_fpc1_error[] = {
 	FXR_LM_FPC1_CSRS+FXR_FPC_ERR_STS, FXR_LM_FPC1_CSRS+FXR_FPC_ERR_CLR, FXR_LM_FPC1_CSRS+FXR_FPC_ERR_FRC,
 	{
 		{
-		"reserved_0",
+		"spare_0",
 		"  reserved",
 		},
 		{
@@ -5523,7 +5523,7 @@ static hfi_error_domain_t hfi_fpc1_error[] = {
 		"  Received VL Marker control flit.",
 		},
 		{
-		"reserved_8",
+		"spare_8",
 		"  reserved",
 		},
 		{
@@ -5535,11 +5535,11 @@ static hfi_error_domain_t hfi_fpc1_error[] = {
 		"  Illegal LVer in header",
 		},
 		{
-		"reserved_11",
+		"spare_11",
 		"  reserved",
 		},
 		{
-		"reserved_12",
+		"spare_12",
 		"  reserved",
 		},
 		{
@@ -5567,8 +5567,8 @@ static hfi_error_domain_t hfi_fpc1_error[] = {
 		"  Event counter rollover.",
 		},
 		{
-		"reserved_19",
-		"  reserved",
+		"link_err",
+		"  Link went from INIT/ARM/ACTIVE to DOWN.",
 		},
 		{
 		"misc_cntr_rollover_err",
@@ -5619,7 +5619,7 @@ static hfi_error_domain_t hfi_fpc1_error[] = {
 		"  Pkt contained LRH:Length > MTU_Cap",
 		},
 		{
-		"reserved_32",
+		"spare_32",
 		"  reserved",
 		},
 		{
@@ -5639,35 +5639,35 @@ static hfi_error_domain_t hfi_fpc1_error[] = {
 		"  Packet arriving contained EBP, marked EBP by remote device.",
 		},
 		{
-		"reserved_44_37:[0/8]",
+		"spare_44_37:[0/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[1/8]",
+		"spare_44_37:[1/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[2/8]",
+		"spare_44_37:[2/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[3/8]",
+		"spare_44_37:[3/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[4/8]",
+		"spare_44_37:[4/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[5/8]",
+		"spare_44_37:[5/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[6/8]",
+		"spare_44_37:[6/8]",
 		"  reserved",
 		},
 		{
-		"reserved_44_37:[7/8]",
+		"spare_44_37:[7/8]",
 		"  reserved",
 		},
 		{
@@ -5679,31 +5679,31 @@ static hfi_error_domain_t hfi_fpc1_error[] = {
 		"  dc_common recieved an illegal csr address.",
 		},
 		{
-		"reserved_53_47:[0/7]",
+		"spare_53_47:[0/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[1/7]",
+		"spare_53_47:[1/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[2/7]",
+		"spare_53_47:[2/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[3/7]",
+		"spare_53_47:[3/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[4/7]",
+		"spare_53_47:[4/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[5/7]",
+		"spare_53_47:[5/7]",
 		"  reserved",
 		},
 		{
-		"reserved_53_47:[6/7]",
+		"spare_53_47:[6/7]",
 		"  reserved",
 		},
 		{
@@ -5712,7 +5712,7 @@ static hfi_error_domain_t hfi_fpc1_error[] = {
 		},
 		{
 		"rcvport_err",
-		"  One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] Reserved [E14] Reserved [E15] Reserved When this flag is asserted the following CSRs provide additional error information. Section 17.4.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 17.4.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 17.4.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A '",
+		"  One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] BadSC Marker [E14] Reserved [E15] Reserved When this flag is asserted the following CSRs provide additional error information. Section 17.4.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 17.4.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 17.4.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A '",
 		},
 		{
 		"reserved_63_56:[0/8]",
