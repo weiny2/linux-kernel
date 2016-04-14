@@ -9220,10 +9220,6 @@ void reset_qsfp(struct hfi1_pportdata *ppd)
 
 	/* Reset the QSFP */
 	mask = (u64)QSFP_HFI0_RESET_N;
-	qsfp_mask = read_csr(dd, dd->hfi1_id ? ASIC_QSFP2_OE : ASIC_QSFP1_OE);
-	qsfp_mask |= mask;
-	write_csr(dd, dd->hfi1_id ?
-		  ASIC_QSFP2_OE : ASIC_QSFP1_OE, qsfp_mask);
 
 	qsfp_mask = read_csr(dd, dd->hfi1_id ?
 			     ASIC_QSFP2_OUT : ASIC_QSFP1_OUT);
@@ -14615,7 +14611,7 @@ u64 create_pbc(struct hfi1_pportdata *ppd, u64 flags, int srate_mbs, u32 vl,
 		   (reason), (ret))
 
 /*
- * Initialize the Avago Thermal sensor.
+ * Initialize the thermal sensor.
  *
  * After initialization, enable polling of thermal sensor through
  * SBus interface. In order for this to work, the SBus Master
