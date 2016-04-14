@@ -212,5 +212,15 @@ Current status 'Analyze'
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
-Summary: 39 Local
-39 Total Issue(s)
+---------------------------------------------------------------------------
+119 (Local) /nfs/sc/disks/fabric_work/ddalessa/wfr/rdmavt-dev/drivers/staging/rdma/hfi1/file_ops.c:255 SV.TAINTED.CALL.INDEX_ACCESS (2:Error) Analyze
+Unvalidated integer value 'tinfo.tidcnt' is received from 'copy_from_user' at line 250 and can be used to access an array through call to 'hfi1_user_exp_rcv_clear' at line 255.
+  * file_ops.c:250: Tainted data 'tinfo' is received from the call to 'copy_from_user'
+  * file_ops.c:250: copy_from_user( &tinfo,  (struct hfi11_tid_info* )arg, sizeof(tinfo) ) is false
+  * file_ops.c:255: Tainted data 'tinfo.tidcnt' is passed to 'hfi1_user_exp_rcv_clear'
+    * user_exp_rcv.c:584: Tainted data 'sizeof(tidinfo[0] ) *tinfo->tidcnt' is passed to 'copy_from_user'
+Current status 'Analyze'
+
+
+Summary: 40 Local
+40 Total Issue(s)
