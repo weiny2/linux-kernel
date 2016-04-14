@@ -17,6 +17,7 @@ datestamp=`date "+%s"`
 top_dir=$(git rev-parse --show-toplevel)
 new_branch="for-a-stream-$datestamp"
 log_dir="/nfs/sc/disks/fabric_mirror/scratch/upstream_logs"
+orig_branch="a-stream-master"
 
 while getopts "k:b:s:r:" opt
 do
@@ -63,6 +64,10 @@ if [[ $? -ne 0 ]]; then
 	exit 1
 fi
 
+#----------------------------------------------------
+# Create a working branch and get the commits into it
+#----------------------------------------------------
+
 echo "Pulling a branch from $branch in the git tree at $kernel_build called $new_branch"
 
 echo "Updating remote: $remote"
@@ -96,7 +101,7 @@ else
 	git cherry-pick $series | tee $log_dir/cherry_pick_${datestamp}.log
 fi
 
-echo "All commits processed, changing to stgit"
+echo "All commits cherry-picked, changing to stgit"
 stg init
 if [[ $? -ne 0 ]]; then
 	echo "Could not stg init the branch"
@@ -110,28 +115,14 @@ if [[ $? -ne 0 ]]; then
 	exit 1
 fi
 
+#-------------------------------------------------------------------
+# Validate the commits look OK to post. Run checkpatch and diff them
+#-------------------------------------------------------------------
+
 echo "Checking patches..."
 cd $top_dir/test/tests
 ./checkpatch.sh -k $kernel_build -b $branch -t upstream | tee $log_dir/check_patch_${datestamp}.log
-echo "Press ENTER to continue:"
-read blah
-
-echo "Running presubmit checks"
-./presubmit_checks.sh -k $kernel_build | tee $log_dir/presubmit_${datestamp}.log
-if [[ $? -ne 0 ]]; then
-	echo "Did not pass presubmit checks"
-	exit 1
-fi
-
-echo "Running tests"
-cd ..
-./queue_test.sh -k $kernel_build -m hfi1 | tee $log_dir/hfi1_test_${datestamp}.log
-if [[ $? -ne 0 ]]; then
-	echo "Test failed! Do not submit"
-	exit 1
-fi
-
-echo "Tests passed, process commit messages? Press ENTER"
+echo "Press ENTER to examine patches:"
 read blah
 
 cd $kernel_build
@@ -151,39 +142,53 @@ do
 		break
 	fi
 
-	stg edit
+	stg show -O -U5 | vim -c "set filetype=gitcommit" -
 	if [[ $? -ne 0 ]]; then
 		echo "Could not edit commit message"
 		exit 1
 	fi
 done
 
-echo "Checking patches again..."
+#---------------
+# Kick off tests
+#---------------
+
+echo "Press ENTER to run presubmit checks and regression tests"
+read blah
+
 cd $top_dir/test/tests
-./checkpatch.sh -k $kernel_build -b $branch -t upstream | tee $log_dir/check_patch_revised_${datestamp}.log
+./presubmit_checks.sh -k $kernel_build | tee $log_dir/presubmit_${datestamp}.log
+if [[ $? -ne 0 ]]; then
+	echo "Did not pass presubmit checks"
+	exit 1
+fi
+
+echo "Running tests"
+cd ..
+./queue_test.sh -k $kernel_build -m hfi1 | tee $log_dir/hfi1_test_${datestamp}.log
+if [[ $? -ne 0 ]]; then
+	echo "Test failed! Do not submit"
+	exit 1
+fi
+
+#------------------------------------------
+# Looks good if we got to here time to push
+#------------------------------------------
+
 cd $kernel_build
 if [[ $? -ne 0 ]]; then
 	echo "Could not change back to $kernel_build"
 	exit 1
 fi
 
-echo "Done, now on branch: $branch"
-cur_branch=`stg branch`
 
 echo "Logs are located at:"
 echo "                    $log_dir/cherry_pick_${datestamp}.log"
 echo "                    $log_dir/check_patch_${datestamp}.log"
 echo "			  $log_dir/presubmit_${datestamp}.log"
 echo "                    $log_dir/hfi1_test_${datestamp}.log"
-echo "                    $log_dir/check_patch_revised_${datestamp}.log"
 
-echo "Add these commits to the spreadsheet:"
-git --no-pager log -n $cnt --pretty=format:'%s'; echo ""
-echo ""
-
-echo "If user requested their branch can now be removed with: git push origin --delete <branch>"
-
-cmd="git push $remote $cur_branch:$branch"
+cmd="git push $remote $new_branch:$branch"
 
 echo "Press Enter to commit this with: $cmd otherwise exit with ctrl+c"
 read blah
@@ -193,7 +198,11 @@ if [[ $? -ne 0 ]]; then
 	exit 1
 fi
 
-echo "Sending mail notification"
+#-------------
+# Notification
+#-------------
+
+echo "Sending mail notification:"
 
 echo "This is a note to confirm that the following commits have been added to the branch: $branch" > mail.tmp
 echo "" >> mail.tmp
@@ -207,5 +216,29 @@ echo "Just sent:"
 cat mail.tmp
 rm mail.tmp
 
-exit 0
+echo ""
+echo "If user requested their branch can now be removed with: git push origin --delete <branch>"
 
+echo "-------------------------------------------------------------"
+echo "Add these commits to the spreadsheet:"
+git --no-pager log -n $cnt --pretty=format:'%s'; echo ""
+echo "-------------------------------------------------------------"
+echo ""
+
+#--------------------
+# Update local branch
+#--------------------
+echo "To return to $orig_branch and pull updates press ENTER"
+read blah
+git checkout $orig_branch
+git pull --rebase
+
+#-----------------------
+# Remove working branch?
+#-----------------------
+echo ""
+echo "Remove temporary branch: $new_branch press ENTER?"
+read blarg
+stg branch --delete --force $new_branch
+
+exit 0
