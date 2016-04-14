@@ -181,7 +181,7 @@ static irqreturn_t irq_err_handler(int irq, void *dev_id)
 			continue;
 
 		for (j = 0; j < 64; j++) {
-			if (csrval & (1<<j))
+			if (csrval & (1uLL<<j))
 				dd_dev_err(dd, "%s:%s:%s\n",
 					domain[i].domain_name,
 					domain[i].events[j].event_name,
