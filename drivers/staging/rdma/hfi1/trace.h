@@ -415,7 +415,7 @@ __print_symbolic(opcode,                                   \
 #define BTH_PRN \
 	"op:0x%.2x,%s se:%d m:%d pad:%d tver:%d pkey:0x%.4x " \
 	"f:%d b:%d qpn:0x%.6x a:%d psn:0x%.8x"
-#define EHDR_PRN "%s"
+#define EHDR_PRN "hlen:%d %s"
 
 DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 		    TP_PROTO(struct hfi1_devdata *dd,
@@ -455,6 +455,7 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 			__field(u8, a)
 			__field(u32, psn)
 			/* extended headers */
+			__field(u8, hlen)
 			__dynamic_array(u8, ehdrs,
 					ibhdr_exhdr_len(hfi1_hdr, bypass))
 			),
@@ -560,8 +561,9 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 			  __entry->psn =
 			  be32_to_cpu(ohdr->bth[2]) & 0x7fffffff;
 			  /* extended headers */
+			  __entry->hlen = ibhdr_exhdr_len(hfi1_hdr, bypass);
 			  memcpy(__get_dynamic_array(ehdrs), &ohdr->u,
-				 ibhdr_exhdr_len(hfi1_hdr, bypass));
+				 __entry->hlen);
 			 ),
 		    TP_printk("[%s] (%s) " LRH_PRN " " LRH_9B_PRN " "
 			      LRH_16B_PRN " " BTH_PRN " " EHDR_PRN,
@@ -596,6 +598,7 @@ DECLARE_EVENT_CLASS(hfi1_ibhdr_template,
 			      __entry->a,
 			      __entry->psn,
 			      /* extended headers */
+			      __entry->hlen,
 			      __parse_ib_ehdrs(
 					__entry->opcode,
 					(void *)__get_dynamic_array(ehdrs))

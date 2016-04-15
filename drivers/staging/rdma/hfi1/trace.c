@@ -50,7 +50,8 @@
 u8 ibhdr_exhdr_len(void *hfi1_hdr, bool bypass)
 {
 	struct hfi1_other_headers *ohdr;
-	u8 opcode;
+	u8 hlen = 0;
+	u8 opcode = 0;
 
 	if (bypass) {
 		u32 h0, h1, h2, h3;
@@ -64,10 +65,15 @@ u8 ibhdr_exhdr_len(void *hfi1_hdr, bool bypass)
 		h3 = hdr->lrh[3];
 
 		l4 = OPA_16B_GET_L4(h0, h1, h2, h3);
-		if (l4 == HFI1_L4_IB_LOCAL)
+		if (l4 == HFI1_L4_IB_LOCAL) {
 			ohdr = &hdr->u.oth;
-		else
+		} else {
+			hlen = 40; /* GRH */
 			ohdr = &hdr->u.l.oth;
+		}
+
+		opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+		hlen += hdr_16b_len_by_opcode[opcode];
 	} else {
 		struct hfi1_ib_header *hdr = NULL;
 		u8 lnh;
@@ -78,11 +84,13 @@ u8 ibhdr_exhdr_len(void *hfi1_hdr, bool bypass)
 			ohdr = &hdr->u.oth;
 		else
 			ohdr = &hdr->u.l.oth;
+
+		opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+		hlen =  hdr_len_by_opcode[opcode] == 0 ?
+			0 : hdr_len_by_opcode[opcode] - (12 + 8);
 	}
 
-	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
-	return hdr_len_by_opcode[opcode] == 0 ?
-	       0 : hdr_len_by_opcode[opcode] - (12 + 8);
+	return hlen;
 }
 
 #define IMM_PRN  "imm %d"

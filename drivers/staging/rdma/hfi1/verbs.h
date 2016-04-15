@@ -525,6 +525,7 @@ static inline void cacheless_memcpy(void *dst, void *src, size_t n)
 extern const enum ib_wc_opcode ib_hfi1_wc_opcode[];
 
 extern const u8 hdr_len_by_opcode[];
+extern const u8 hdr_16b_len_by_opcode[];
 
 extern const int ib_rvt_state_ops[];
 
