@@ -2745,7 +2745,9 @@ nack_acc:
 send_ack:
 	hfi2_send_rc_ack(qp, is_fecn, is_16b);
 	return;
+#ifdef HFI_VERBS_TEST
 drop:
+#endif
 	dev_dbg(ibp->dev, "RC dropping packet\n");
 	return;
 }
