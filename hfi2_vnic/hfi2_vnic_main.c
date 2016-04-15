@@ -326,44 +326,84 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	struct hfi_cq *tx;
 	struct hfi_cq *rx;
 	u64 *eq_entry = NULL;
-	union base_iovec iov;
+	union base_iovec *iov;
 	unsigned long sflags;
 	int rc, ms_delay = 0;
+	u8 nr_frags = skb_shinfo(skb)->nr_frags;
+	u16 tot_length, headlen = skb_headlen(skb);
+	u8 num_iov = nr_frags;
+	u8 j, i = 0;
 
 	/* FXRTODO: Need to count this error */
-	if (q_idx >= vdev->hfi_info.num_tx_q)
+	if (q_idx >= vdev->hfi_info.num_tx_q) {
+		dev_kfree_skb_any(skb);
 		return -EINVAL;
+	}
 
-	iov.val[0] = 0x0;
-	iov.val[1] = 0x0;
-	iov.start = (u64)skb->data;
+	if (headlen)
+		num_iov++;
+
+	if (!num_iov) {
+		rc = -EINVAL;
+		goto err;
+	}
+
 	if (vdev->is_eeph) {
 		unsigned char *pad_info = NULL;
 
+		/* EEPH do not support SG */
+		if (nr_frags) {
+			rc = -EINVAL;
+			goto err;
+		}
+
 		pad_info = skb->data + skb->len - 1;
-		iov.length = skb->len - OPA_VNIC_ICRC_TAIL_LEN -
-				(*pad_info & 0x3f);
+		tot_length = skb->len - OPA_VNIC_ICRC_TAIL_LEN -
+			     (*pad_info & 0x3f);
+		headlen = tot_length;
 		ctx_i = &ndev->def_ctx;
 	} else {
-		iov.length = skb->len;
+		tot_length = skb->len;
 		ctx_i = &ndev->eth_ctx[q_idx];
 	}
 	ctx = &ctx_i->ctx;
 	tx = &ctx_i->tx;
 	rx = &ctx_i->rx;
-	if (iov.length > OPA2_NET_DEFAULT_MTU) {
+	if (tot_length > OPA2_NET_DEFAULT_MTU) {
 		rc = -ENOSPC;
-		dev_err(&odev->dev, "%s %d iov.length %d > max MTU %d\n",
-			__func__, __LINE__, iov.length, OPA2_NET_DEFAULT_MTU);
+		dev_err(&odev->dev, "%s %d length %d > max MTU %d\n",
+			__func__, __LINE__, tot_length, OPA2_NET_DEFAULT_MTU);
 		goto err;
 	}
-	iov.ep = 1;
-	iov.sp = 1;
-	iov.v = 1;
 
+	/* FXRTODO: Need to either use kmem cache or static descriptor ring */
+	iov = kcalloc(num_iov, sizeof(*iov), GFP_KERNEL);
+	if (!iov) {
+		rc = -ENOMEM;
+		goto err;
+	}
+
+	iov[0].sp = 1;
+	iov[num_iov - 1].ep = 1;
+	if (headlen) {
+		iov[i].start = (u64)skb->data;
+		iov[i].length = headlen;
+		iov[i].v = 1;
+		i++;
+	}
+
+	for (j = 0; j < nr_frags; j++) {
+		struct skb_frag_struct *frag = &skb_shinfo(skb)->frags[j];
+
+		/* FXRTODO: combine virtually continuous fragments */
+		iov[i].start = (u64)skb_frag_address(frag);
+		iov[i].length = skb_frag_size(frag);
+		iov[i].v = 1;
+		i++;
+	}
 	spin_lock_irqsave(&ctx_i->tx_lock, sflags);
 retry:
-	rc = hfi_tx_cmd_bypass_dma(tx, ctx, (u64)&iov, 1, 0xdead,
+	rc = hfi_tx_cmd_bypass_dma(tx, ctx, (u64)iov, num_iov, 0xdead,
 				   PTL_MD_RESERVED_IOV,
 				   &ctx_i->eq_tx, HFI_CT_NONE,
 				   dev->port_num - 1,
@@ -401,6 +441,7 @@ retry:
 	}
 err1:
 	spin_unlock_irqrestore(&ctx_i->tx_lock, sflags);
+	kfree(iov);
 err:
 	dev_kfree_skb_any(skb);
 	if (rc)
@@ -943,6 +984,7 @@ static int hfi_vdev_create(struct opa_vnic_ctrl_device *cdev,
 	vport->ndev = opa_core_get_priv_data(&opa_vnic_clnt, ndev->odev);
 	hfi_info.num_tx_q = is_eeph ? 1 : OPA2_NUM_VNIC_CTXT;
 	hfi_info.num_rx_q = is_eeph ? 1 : OPA2_NUM_VNIC_CTXT;
+	hfi_info.cap = is_eeph ? 0 : OPA_VNIC_HFI_CAP_SG;
 	vdev = opa_vnic_device_register(cdev, port_num, vport_num, vport,
 					&vnic_ops, hfi_info, is_eeph);
 	if (IS_ERR(vdev)) {
