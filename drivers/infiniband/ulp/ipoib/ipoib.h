@@ -416,6 +416,8 @@ struct ipoib_path {
 
 	struct rb_node	      rb_node;
 	struct list_head      list;
+	u32		      dlid;
+	u32		      slid;
 	int  		      valid;
 };
 
