@@ -323,7 +323,7 @@ static inline int hfi1_send_ok(struct rvt_qp *qp)
  * This must be called with s_lock held.
  */
 void hfi1_bad_pqkey(struct hfi1_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
-		    u32 qp1, u32 qp2, u16 lid1, u16 lid2);
+		    u32 qp1, u32 qp2, u32 lid1, u32 lid2);
 void hfi1_cap_mask_chg(struct rvt_dev_info *rdi, u8 port_num);
 void hfi1_sys_guid_chg(struct hfi1_ibport *ibp);
 void hfi1_node_desc_chg(struct hfi1_ibport *ibp);
@@ -412,8 +412,6 @@ void hfi1_rc_hdrerr(
 	struct rvt_qp *qp);
 
 u8 ah_to_sc(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
-
-struct ib_ah *hfi1_create_qp0_ah(struct hfi1_ibport *ibp, u32 dlid);
 
 void hfi1_rc_rnr_retry(unsigned long arg);
 void hfi1_add_rnr_timer(struct rvt_qp *qp, u32 to);

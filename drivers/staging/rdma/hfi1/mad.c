@@ -78,15 +78,52 @@ static inline void clear_opa_smp_data(struct opa_smp *smp)
 	memset(data, 0, size);
 }
 
-static void hfi1_update_sm_ah_attr(struct hfi1_ibport *ibp, u32 lid)
+static void hfi1_update_sm_ah_attr(struct hfi1_ibport *ibp,
+				   struct ib_ah_attr *attr, u32 dlid)
 {
-	ibp->rvp.sm_ah->attr.ah_flags = IB_AH_GRH;
-	ibp->rvp.sm_ah->attr.dlid = OPA_TO_IB_UCAST_LID(lid);
-	ibp->rvp.sm_ah->attr.grh.sgid_index = 0;
-	ibp->rvp.sm_ah->attr.grh.hop_limit = 1;
-	ibp->rvp.sm_ah->attr.grh.dgid.global.subnet_prefix =
-		ibp->rvp.gid_prefix;
-	ibp->rvp.sm_ah->attr.grh.dgid.global.interface_id = OPA_MAKE_GID(lid);
+	attr->dlid = OPA_TO_IB_UCAST_LID(dlid);
+	attr->port_num = ppd_from_ibp(ibp)->port;
+	if (dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) {
+		attr->ah_flags = IB_AH_GRH;
+		attr->grh.sgid_index = 0;
+		attr->grh.hop_limit = 1;
+		attr->grh.dgid.global.subnet_prefix =
+			ibp->rvp.gid_prefix;
+		attr->grh.dgid.global.interface_id = OPA_MAKE_GID(dlid);
+	}
+}
+
+static int hfi1_modify_qp0_ah(struct hfi1_ibport *ibp,
+			      struct rvt_ah *ah, u32 dlid)
+{
+	struct ib_ah_attr attr;
+	struct rvt_qp *qp0;
+	int ret = -EINVAL;
+
+	memset(&attr, 0, sizeof(attr));
+	hfi1_update_sm_ah_attr(ibp, &attr, dlid);
+	rcu_read_lock();
+	qp0 = rcu_dereference(ibp->rvp.qp[0]);
+	if (qp0)
+		ret = ib_modify_ah(&ah->ibah, &attr);
+	rcu_read_unlock();
+	return ret;
+}
+
+static struct ib_ah *hfi1_create_qp0_ah(struct hfi1_ibport *ibp, u32 dlid)
+{
+	struct ib_ah_attr attr;
+	struct ib_ah *ah = ERR_PTR(-EINVAL);
+	struct rvt_qp *qp0;
+
+	memset(&attr, 0, sizeof(attr));
+	hfi1_update_sm_ah_attr(ibp, &attr, dlid);
+	rcu_read_lock();
+	qp0 = rcu_dereference(ibp->rvp.qp[0]);
+	if (qp0)
+		ah = ib_create_ah(qp0->ibqp.pd, &attr);
+	rcu_read_unlock();
+	return ah;
 }
 
 static void send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
@@ -148,7 +185,6 @@ static void send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
 			} else {
 				send_buf->ah = ah;
 				ibp->rvp.sm_ah = ibah_to_rvtah(ah);
-				hfi1_update_sm_ah_attr(ibp, ibp->rvp.sm_lid);
 				ret = 0;
 			}
 		} else {
@@ -176,12 +212,10 @@ static void send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
  * Send a bad [PQ]_Key trap (ch. 14.3.8).
  */
 void hfi1_bad_pqkey(struct hfi1_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
-		    u32 qp1, u32 qp2, u16 lid1, u16 lid2)
+		    u32 qp1, u32 qp2, u32 lid1, u32 lid2)
 {
 	struct opa_mad_notice_attr data;
 	u32 lid = ppd_from_ibp(ibp)->lid;
-	u32 _lid1 = lid1;
-	u32 _lid2 = lid2;
 
 	memset(&data, 0, sizeof(data));
 
@@ -196,8 +230,8 @@ void hfi1_bad_pqkey(struct hfi1_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 	data.prod_type_lsb = IB_NOTICE_PROD_CA;
 	data.trap_num = trap_num;
 	data.issuer_lid = cpu_to_be32(lid);
-	data.ntc_257_258.lid1 = cpu_to_be32(_lid1);
-	data.ntc_257_258.lid2 = cpu_to_be32(_lid2);
+	data.ntc_257_258.lid1 = cpu_to_be32(lid1);
+	data.ntc_257_258.lid2 = cpu_to_be32(lid2);
 	data.ntc_257_258.key = cpu_to_be32(key);
 	data.ntc_257_258.sl = sl << 3;
 	data.ntc_257_258.qp1 = cpu_to_be32(qp1);
@@ -1173,7 +1207,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		spin_lock_irqsave(&ibp->rvp.lock, flags);
 		if (ibp->rvp.sm_ah) {
 			if (smlid != ibp->rvp.sm_lid)
-				hfi1_update_sm_ah_attr(ibp, smlid);
+				hfi1_modify_qp0_ah(ibp, ibp->rvp.sm_ah, smlid);
 			if (msl != ibp->rvp.sm_sl)
 				ibp->rvp.sm_ah->attr.sl = msl;
 		}

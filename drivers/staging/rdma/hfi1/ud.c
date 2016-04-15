@@ -115,7 +115,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY, pkey,
 				       ah_attr->sl,
 				       sqp->ibqp.qp_num, qp->ibqp.qp_num,
-				       slid, ah_attr->dlid);
+				       slid, hfi1_get_dlid_from_ah(ah_attr));
 			goto drop;
 		}
 	}
@@ -139,7 +139,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 				       ah_attr->sl,
 				       sqp->ibqp.qp_num, qp->ibqp.qp_num,
 				       lid,
-				       ah_attr->dlid);
+				       hfi1_get_dlid_from_ah(ah_attr));
 			goto drop;
 		}
 	}
@@ -1008,7 +1008,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 				hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY,
 					       pkey, sl,
 					       src_qp, qp->ibqp.qp_num,
-					       (u16)slid, (u16)dlid);
+					       slid, dlid);
 				return;
 			}
 		} else {
@@ -1020,7 +1020,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		if (unlikely(qkey != qp->qkey)) {
 			hfi1_bad_pqkey(ibp, OPA_TRAP_BAD_Q_KEY, qkey, sl,
 				       src_qp, qp->ibqp.qp_num,
-				       (u16)slid, (u16)dlid);
+				       slid, dlid);
 			return;
 		}
 		/* Drop invalid MAD packets (see 13.5.3.1). */

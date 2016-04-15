@@ -1697,23 +1697,6 @@ static void hfi1_notify_new_ah(struct ib_device *ibdev,
 		ah->log_pmtu = ilog2(dd->vld[ah->vl].mtu);
 }
 
-struct ib_ah *hfi1_create_qp0_ah(struct hfi1_ibport *ibp, u32 dlid)
-{
-	struct ib_ah_attr attr;
-	struct ib_ah *ah = ERR_PTR(-EINVAL);
-	struct rvt_qp *qp0;
-
-	memset(&attr, 0, sizeof(attr));
-	attr.dlid = OPA_TO_IB_UCAST_LID(dlid);
-	attr.port_num = ppd_from_ibp(ibp)->port;
-	rcu_read_lock();
-	qp0 = rcu_dereference(ibp->rvp.qp[0]);
-	if (qp0)
-		ah = ib_create_ah(qp0->ibqp.pd, &attr);
-	rcu_read_unlock();
-	return ah;
-}
-
 /**
  * hfi1_get_npkeys - return the size of the PKEY table for context 0
  * @dd: the hfi1_ib device
