@@ -349,9 +349,8 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 			goto err;
 		}
 		/* Validate the SLID. See Ch. 9.6.1.5 */
-		opa_dlid = (u32)(be64_to_cpu(
-			   qp->remote_ah_attr.grh.dgid.global.interface_id));
-		if (slid != (bypass ? opa_dlid : qp->remote_ah_attr.dlid) ||
+		opa_dlid = hfi1_get_dlid_from_ah(&qp->remote_ah_attr);
+		if ((slid != opa_dlid) ||
 		    ppd_from_ibp(ibp)->port != qp->port_num)
 			goto err;
 		if (qp->s_mig_state == IB_MIG_REARM &&
