@@ -274,7 +274,7 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 	wc.dlid_path_bits = hfi2_retrieve_lid(ah_attr) & ((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
-	hfi2_cq_enter(to_hfi_cq(qp->ibqp.recv_cq), &wc,
+	rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc,
 			swqe->wr.send_flags & IB_SEND_SOLICITED);
 	ibp->n_loop_pkts++;
 bail_unlock:
@@ -919,7 +919,7 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 					dlid & ((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
-	hfi2_cq_enter(to_hfi_cq(qp->ibqp.recv_cq), &wc,
+	rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc,
 			(ohdr->bth[0] & cpu_to_be32(IB_BTH_SOLICITED)) != 0);
 	return;
 

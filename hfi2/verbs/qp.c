@@ -851,7 +851,7 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 
 	/*
 	 * Return the address of the RWQ as the offset to mmap.
-	 * See hfi2_mmap() for details.
+	 * See rvt_mmap() for details.
 	 */
 	if (udata && udata->outlen >= sizeof(__u64)) {
 		if (!qp->r_rq.wq) {
@@ -866,7 +866,7 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 		} else {
 			u32 s = sizeof(struct rvt_rwq) + qp->r_rq.size * sz;
 
-			qp->ip = hfi2_create_mmap_info(ibd, s,
+			qp->ip = rvt_create_mmap_info(&ibd->rdi, s,
 						      ibpd->uobject->context,
 						      qp->r_rq.wq);
 			if (!qp->ip) {
@@ -894,9 +894,9 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 	spin_unlock(&ibd->n_qps_lock);
 
 	if (qp->ip) {
-		spin_lock_irq(&ibd->pending_lock);
-		list_add(&qp->ip->pending_mmaps, &ibd->pending_mmaps);
-		spin_unlock_irq(&ibd->pending_lock);
+		spin_lock_irq(&ibd->rdi.pending_lock);
+		list_add(&qp->ip->pending_mmaps, &ibd->rdi.pending_mmaps);
+		spin_unlock_irq(&ibd->rdi.pending_lock);
 	}
 
 	ret = &qp->ibqp;
@@ -927,7 +927,7 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 
 bail_ip:
 	if (qp->ip)
-		kref_put(&qp->ip->ref, hfi2_release_mmap_info);
+		kref_put(&qp->ip->ref, rvt_release_mmap_info);
 	else
 		vfree(qp->r_rq.wq);
 	free_qpn(ibd, qp);
@@ -982,7 +982,7 @@ int hfi2_destroy_qp(struct ib_qp *ibqp)
 	spin_unlock(&ibd->n_qps_lock);
 
 	if (qp->ip)
-		kref_put(&qp->ip->ref, hfi2_release_mmap_info);
+		kref_put(&qp->ip->ref, rvt_release_mmap_info);
 	else
 		vfree(qp->r_rq.wq);
 	vfree(qp->s_wq);

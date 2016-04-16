@@ -1364,7 +1364,7 @@ void hfi2_rc_send_complete(struct hfi2_qp *qp, struct ib_l4_headers *ohdr)
 			wc.opcode = ib_hfi1_wc_opcode[wqe->wr.opcode];
 			wc.byte_len = wqe->length;
 			wc.qp = &qp->ibqp;
-			hfi2_cq_enter(to_hfi_cq(qp->ibqp.send_cq), &wc, 0);
+			rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.send_cq), &wc, 0);
 		}
 		if (++qp->s_last >= qp->s_size)
 			qp->s_last = 0;
@@ -1420,7 +1420,7 @@ static struct hfi2_swqe *do_rc_completion(struct hfi2_qp *qp,
 			wc.opcode = ib_hfi1_wc_opcode[wqe->wr.opcode];
 			wc.byte_len = wqe->length;
 			wc.qp = &qp->ibqp;
-			hfi2_cq_enter(to_hfi_cq(qp->ibqp.send_cq), &wc, 0);
+			rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.send_cq), &wc, 0);
 		}
 		if (++qp->s_last >= qp->s_size)
 			qp->s_last = 0;
@@ -2486,7 +2486,7 @@ send_last:
 		wc.dlid_path_bits = 0;
 		wc.port_num = 0;
 		/* Signal completion event if the solicited bit is set. */
-		hfi2_cq_enter(to_hfi_cq(qp->ibqp.recv_cq), &wc,
+		rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc,
 			      (bth0 & IB_BTH_SOLICITED) != 0);
 		break;
 

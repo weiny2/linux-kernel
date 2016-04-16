@@ -391,11 +391,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->destroy_qp = hfi2_destroy_qp;
 	ibdev->post_send = hfi2_post_send;
 	ibdev->post_recv = hfi2_post_receive;
-	ibdev->create_cq = hfi2_create_cq;
-	ibdev->destroy_cq = hfi2_destroy_cq;
-	ibdev->resize_cq = hfi2_resize_cq;
-	ibdev->poll_cq = hfi2_poll_cq;
-	ibdev->req_notify_cq = hfi2_req_notify_cq;
 	ibdev->get_dma_mr = hfi2_get_dma_mr;
 	ibdev->reg_user_mr = hfi2_reg_user_mr;
 	ibdev->dereg_mr = hfi2_dereg_mr;
@@ -405,7 +400,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->modify_device = hfi2_modify_device;
 	ibdev->attach_mcast = hfi2_multicast_attach;
 	ibdev->detach_mcast = hfi2_multicast_detach;
-	ibdev->mmap = hfi2_mmap;
 	ibdev->dma_ops = &hfi2_dma_mapping_ops;
 	ibdev->get_port_immutable = port_immutable;
 
@@ -462,15 +456,13 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	dd->verbs_dev.rdi.driver_f.check_modify_qp = hfi1_check_modify_qp;
 	dd->verbs_dev.rdi.driver_f.modify_qp = hfi1_modify_qp;
 	dd->verbs_dev.rdi.driver_f.check_send_wqe = hfi1_check_send_wqe;
-
-	/* completion queue */
-	snprintf(dd->verbs_dev.rdi.dparms.cq_name,
-		 sizeof(dd->verbs_dev.rdi.dparms.cq_name),
-		 "hfi1_cq%d", dd->unit);
-	dd->verbs_dev.rdi.dparms.node = dd->node;
 #endif
 
-	ibd->rdi.dparms.cq_name[0] = 0;      /* disable RDMAVT-CQ */
+	/* completion queue */
+	snprintf(ibd->rdi.dparms.cq_name, sizeof(ibd->rdi.dparms.cq_name),
+		 "hfi2_cq%d", ibd->dd->unit);
+	ibd->rdi.dparms.node = ibd->assigned_node_id;
+
 	ibd->rdi.dparms.lkey_table_size = 0; /* disable RDMAVT-MR */
 	ibd->rdi.dparms.qp_table_size = 0;   /* disable RDMAVT-QP */
 	ibd->rdi.dparms.nports = ibd->num_pports;
@@ -586,12 +578,7 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	ida_init(&ibd->qpn_odd_table);
 	idr_init(&ibd->qp_ptr);
 	spin_lock_init(&ibd->qpt_lock);
-	INIT_LIST_HEAD(&ibd->pending_mmaps);
-	spin_lock_init(&ibd->pending_lock);
-	ibd->mmap_offset = PAGE_SIZE;
-	spin_lock_init(&ibd->mmap_offset_lock);
 	spin_lock_init(&ibd->n_ahs_lock);
-	spin_lock_init(&ibd->n_cqs_lock);
 	spin_lock_init(&ibd->n_qps_lock);
 	spin_lock_init(&ibd->n_mcast_grps_lock);
 
@@ -603,10 +590,6 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	spin_lock_init(&ibd->lk_table.lock);
 	ibd->lk_table.max = 1 << hfi2_lkey_table_size;
 	idr_init(&ibd->lk_table.table);
-
-	ret = hfi2_cq_init(ibd);
-	if (ret)
-		goto cq_init_err;
 
 	/* Allocate Management Context */
 	ret = hfi2_ctx_init(ibd, bus_ops);
@@ -645,8 +628,6 @@ ib_reg_err:
 port_err:
 	hfi2_ctx_uninit(ibd);
 ctx_err:
-	hfi2_cq_exit(ibd);
-cq_init_err:
 	kfree(ibd->rdi.ports); /* TODO - workaround RDMAVT leak */
 	ib_dealloc_device(&ibd->rdi.ibdev);
 exit:
@@ -669,7 +650,6 @@ void hfi2_ib_remove(struct hfi_devdata *dd)
 	for (i = 0; i < ibd->num_pports; i++)
 		hfi2_uninit_port(&ibd->pport[i]);
 	hfi2_ctx_uninit(ibd);
-	hfi2_cq_exit(ibd);
 	idr_destroy(&ibd->lk_table.table);
 	/* TODO - verify empty IDR? */
 	idr_destroy(&ibd->qp_ptr);

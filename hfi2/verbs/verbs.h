@@ -131,46 +131,6 @@ struct hfi2_ah {
 	atomic_t refcount;
 };
 
-/*
- * This structure is used by hfi2_mmap() to validate an offset
- * when an mmap() request is made.  The vm_area_struct then uses
- * this as its vm_private_data.
- */
-struct hfi2_mmap_info {
-	struct list_head pending_mmaps;
-	struct ib_ucontext *context;
-	void *obj;
-	__u64 offset;
-	struct kref ref;
-	unsigned size;
-};
-
-/*
- * This structure is used to contain the head pointer, tail pointer,
- * and completion queue entries as a single memory allocation so
- * it can be mmap'ed into user space.
- */
-struct hfi2_cq_wc {
-	u32 head;               /* index of next entry to fill */
-	u32 tail;               /* index of next ib_poll_cq() entry */
-	union {
-		/* these are actually size ibcq.cqe + 1 */
-		struct ib_uverbs_wc uqueue[0];
-		struct ib_wc kqueue[0];
-	};
-};
-
-struct hfi2_cq {
-	struct ib_cq ibcq;
-	struct kthread_work comptask;
-	struct hfi2_ibdev *ibd;
-	spinlock_t lock;	/* protect changes in this struct */
-	u8 notify;
-	u8 triggered;
-	struct hfi2_cq_wc *queue;
-	struct hfi2_mmap_info *ip;
-};
-
 struct hfi2_lkey_table {
 	spinlock_t lock;        /* protect changes in this struct */
 	u32 gen;                /* generation count */
@@ -311,7 +271,7 @@ struct hfi2_qp {
 	struct ib_ah_attr remote_ah_attr;
 	struct ib_ah_attr alt_ah_attr;
 	struct hfi2_swqe *s_wq;  /* send work queue */
-	struct hfi2_mmap_info *ip;
+	struct rvt_mmap_info *ip;
 	union hfi2_ib_dma_header *s_hdr; /* next packet header to send */
 	unsigned long timeout_jiffies;  /* computed from timeout */
 
@@ -606,14 +566,8 @@ struct hfi2_ibdev {
 	spinlock_t qpt_lock;
 	struct hfi2_lkey_table lk_table;
 	struct hfi2_mregion __rcu *dma_mr;
-	struct list_head pending_mmaps;
-	spinlock_t pending_lock;
-	u32 mmap_offset;
-	spinlock_t mmap_offset_lock;
 	u32 n_ahs_allocated;
 	spinlock_t n_ahs_lock;
-	u32 n_cqs_allocated;
-	spinlock_t n_cqs_lock;
 	u32 n_qps_allocated;
 	spinlock_t n_qps_lock;
 	u32 n_mcast_grps_allocated; /* number of mcast groups allocated */
@@ -637,7 +591,6 @@ struct hfi2_ibdev {
 
 #define to_hfi_ah(ah)	container_of((ah), struct hfi2_ah, ibah)
 #define to_hfi_qp(qp)	container_of((qp), struct hfi2_qp, ibqp)
-#define to_hfi_cq(cq)	container_of((cq), struct hfi2_cq, ibcq)
 #define to_hfi_mr(mr)	container_of((mr), struct hfi2_mr, ibmr)
 /* TODO - for now use typecast below, revisit when fully RDMAVT integrated */
 #define to_hfi_ibd(ibdev)	container_of((struct rvt_dev_info *)(ibdev),\
@@ -702,23 +655,6 @@ int hfi2_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		  int attr_mask, struct ib_qp_init_attr *init_attr);
 int hfi2_destroy_qp(struct ib_qp *ibqp);
 int hfi2_error_qp(struct hfi2_qp *qp, enum ib_wc_status err);
-int hfi2_cq_init(struct hfi2_ibdev *ibd);
-void hfi2_cq_exit(struct hfi2_ibdev *ibd);
-void hfi2_cq_enter(struct hfi2_cq *cq, struct ib_wc *entry, int solicited);
-int hfi2_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
-struct ib_cq *hfi2_create_cq(struct ib_device *ibdev,
-			     const struct ib_cq_init_attr *attr,
-			     struct ib_ucontext *context,
-			     struct ib_udata *udata);
-#else
-struct ib_cq *hfi2_create_cq(struct ib_device *ibdev, int entries,
-			     int comp_vector, struct ib_ucontext *context,
-			     struct ib_udata *udata);
-#endif
-int hfi2_destroy_cq(struct ib_cq *ibcq);
-int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags);
-int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
 void hfi2_rc_error(struct hfi2_qp *qp, enum ib_wc_status err);
 void hfi2_rc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
 void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
@@ -740,15 +676,6 @@ struct ib_mr *hfi2_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 			       u64 virt_addr, int mr_access_flags,
 			       struct ib_udata *udata);
 int hfi2_dereg_mr(struct ib_mr *ibmr);
-void hfi2_release_mmap_info(struct kref *ref);
-int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
-struct hfi2_mmap_info *hfi2_create_mmap_info(struct hfi2_ibdev *ibd,
-					     u32 size,
-					     struct ib_ucontext *context,
-					     void *obj);
-void hfi2_update_mmap_info(struct hfi2_ibdev *ibd,
-			   struct hfi2_mmap_info *ip,
-			   u32 size, void *obj);
 int hfi2_get_rwqe(struct hfi2_qp *qp, int wr_id_only);
 void hfi2_migrate_qp(struct hfi2_qp *qp);
 void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
