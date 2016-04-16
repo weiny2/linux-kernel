@@ -162,7 +162,7 @@ bad_lkey:
 	wc.opcode = IB_WC_RECV;
 	wc.qp = &qp->ibqp;
 	/* Signal solicited completion event. */
-	hfi2_cq_enter(to_hfi_cq(qp->ibqp.recv_cq), &wc, 1);
+	rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc, 1);
 	ret = 0;
 bail:
 	return ret;
@@ -574,7 +574,7 @@ void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 		wc.qp = &qp->ibqp;
 		if (status == IB_WC_SUCCESS)
 			wc.byte_len = wqe->length;
-		hfi2_cq_enter(to_hfi_cq(qp->ibqp.send_cq), &wc,
+		rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.send_cq), &wc,
 				status != IB_WC_SUCCESS);
 	}
 
