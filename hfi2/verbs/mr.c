@@ -111,7 +111,7 @@ struct ib_mr *hfi2_get_dma_mr(struct ib_pd *pd, int acc)
 	struct ib_mr *ret;
 	int rval;
 
-	if (to_hfi_pd(pd)->is_user) {
+	if (ibpd_to_rvtpd(pd)->user) {
 		ret = ERR_PTR(-EPERM);
 		goto bail;
 	}
@@ -484,7 +484,7 @@ out:
  *
  * Return: 1 if valid and successful, otherwise returns 0.
  */
-int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct hfi2_pd *pd,
+int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct rvt_pd *pd,
 		   struct hfi2_sge *isge, struct ib_sge *sge, int acc)
 {
 	struct hfi2_mregion *mr;
@@ -500,7 +500,7 @@ int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct hfi2_pd *pd,
 	if (sge->lkey == 0) {
 		struct hfi2_ibdev *ibd = to_hfi_ibd(pd->ibpd.device);
 
-		if (pd->is_user)
+		if (pd->user)
 			goto bail;
 		mr = rcu_dereference(ibd->dma_mr);
 		if (!mr)
@@ -603,9 +603,9 @@ int hfi2_rkey_ok(struct hfi2_qp *qp, struct hfi2_sge *sge,
 	 */
 	rcu_read_lock();
 	if (rkey == 0) {
-		struct hfi2_pd *pd = to_hfi_pd(qp->ibqp.pd);
+		struct rvt_pd *pd = ibpd_to_rvtpd(qp->ibqp.pd);
 
-		if (pd->is_user)
+		if (pd->user)
 			goto bail;
 		mr = rcu_dereference(ibd->dma_mr);
 		if (!mr)

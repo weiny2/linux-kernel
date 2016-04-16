@@ -125,15 +125,6 @@ struct hfi2_ib_header;
 struct hfi2_ib_packet;
 union hfi2_packet_header;
 
-struct hfi2_ucontext {
-	struct ib_ucontext ibucontext;
-};
-
-struct hfi2_pd {
-	struct ib_pd ibpd;
-	int is_user;
-};
-
 struct hfi2_ah {
 	struct ib_ah ibah;
 	struct ib_ah_attr attr;
@@ -619,8 +610,6 @@ struct hfi2_ibdev {
 	spinlock_t pending_lock;
 	u32 mmap_offset;
 	spinlock_t mmap_offset_lock;
-	u32 n_pds_allocated;
-	spinlock_t n_pds_lock;
 	u32 n_ahs_allocated;
 	spinlock_t n_ahs_lock;
 	u32 n_cqs_allocated;
@@ -646,13 +635,10 @@ struct hfi2_ibdev {
 	struct hfi_ctx qp_ctx;
 };
 
-#define to_hfi_pd(pd)	container_of((pd), struct hfi2_pd, ibpd)
 #define to_hfi_ah(ah)	container_of((ah), struct hfi2_ah, ibah)
 #define to_hfi_qp(qp)	container_of((qp), struct hfi2_qp, ibqp)
 #define to_hfi_cq(cq)	container_of((cq), struct hfi2_cq, ibcq)
 #define to_hfi_mr(mr)	container_of((mr), struct hfi2_mr, ibmr)
-#define to_hfi_ucontext(ibu)	container_of((ibu),\
-				struct hfi2_ucontext, ibucontext)
 /* TODO - for now use typecast below, revisit when fully RDMAVT integrated */
 #define to_hfi_ibd(ibdev)	container_of((struct rvt_dev_info *)(ibdev),\
 				struct hfi2_ibdev, rdi)
@@ -699,10 +685,6 @@ static inline u8 valid_ib_mtu(u16 mtu)
 		mtu == 1024 || mtu == 2048 ||
 		mtu == 4096;
 }
-struct ib_pd *hfi2_alloc_pd(struct ib_device *ibdev,
-			    struct ib_ucontext *context,
-			    struct ib_udata *udata);
-int hfi2_dealloc_pd(struct ib_pd *ibpd);
 int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
 			     struct ib_ah_attr *ah_attr);
@@ -744,7 +726,7 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
 void hfi2_ib_rcv(struct hfi2_ib_packet *packet);
 int hfi2_rcv_wait(void *data);
 int hfi2_lookup_pkey_idx(struct hfi2_ibport *ibp, u16 pkey);
-int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct hfi2_pd *pd,
+int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct rvt_pd *pd,
 		 struct hfi2_sge *isge, struct ib_sge *sge, int acc);
 int hfi2_rkey_ok(struct hfi2_qp *qp, struct hfi2_sge *sge,
 		 u32 len, u64 vaddr, u32 rkey, int acc);
