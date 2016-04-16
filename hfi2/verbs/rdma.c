@@ -205,7 +205,7 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 	int ret;
 	unsigned long flags;
 	struct hfi2_lkey_table *rkt;
-	struct hfi2_pd *pd;
+	struct rvt_pd *pd;
 	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
 	struct hfi2_sge *last_sge;
@@ -261,7 +261,7 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 	}
 
 	rkt = &to_hfi_ibd(qp->ibqp.device)->lk_table;
-	pd = to_hfi_pd(qp->ibqp.pd);
+	pd = ibpd_to_rvtpd(qp->ibqp.pd);
 	wqe = get_swqe_ptr(qp, qp->s_head);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
 	if (qp->ibqp.qp_type != IB_QPT_UC &&
@@ -301,7 +301,7 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 				last_sge->sge_length += length;
 			} else {
 				ok = hfi2_lkey_ok(rkt, pd, &wqe->sg_list[j],
-						    &wr->sg_list[i], acc);
+						  &wr->sg_list[i], acc);
 				if (!ok)
 					goto bail_inval_free;
 

@@ -54,46 +54,6 @@
 
 #include "verbs.h"
 
-/**
- * hfi2_alloc_pd - create a protection domain
- * @ibdev: the IB device
- * @ucontext: associated user context
- * @udata: associated user data
- *
- * Return: a pointer to the protection domain on success, otherwise
- * returns an errno.
- */
-struct ib_pd *hfi2_alloc_pd(struct ib_device *ibdev,
-			      struct ib_ucontext *context,
-			      struct ib_udata *udata)
-{
-	struct hfi2_pd *pd;
-	struct ib_pd *ret;
-
-	pd = kzalloc(sizeof(*pd), GFP_KERNEL);
-	if (!pd)
-		return ERR_PTR(-ENOMEM);
-	pd->is_user = udata != NULL;
-
-	/* ib_alloc_pd() will initialize pd->ibpd. */
-	ret = &pd->ibpd;
-	return ret;
-}
-
-/**
- * hfi2_dealloc_pd - destroy a protection domain
- * @ibpd: the PD to destroy
- *
- * Return: 0 on success, otherwise returns an errno.
- */
-int hfi2_dealloc_pd(struct ib_pd *ibpd)
-{
-	struct hfi2_pd *pd = to_hfi_pd(ibpd);
-
-	kfree(pd);
-	return 0;
-}
-
 int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 {
 	return 0;

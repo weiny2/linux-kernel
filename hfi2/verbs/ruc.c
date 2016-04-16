@@ -126,11 +126,11 @@ static int init_sge(struct hfi2_qp *qp, struct rvt_rwqe *wqe)
 	int i, j, ret;
 	struct ib_wc wc;
 	struct hfi2_lkey_table *rkt;
-	struct hfi2_pd *pd;
+	struct rvt_pd *pd;
 	struct hfi2_sge_state *ss;
 
 	rkt = &to_hfi_ibd(qp->ibqp.device)->lk_table;
-	pd = to_hfi_pd(qp->ibqp.srq ? qp->ibqp.srq->pd : qp->ibqp.pd);
+	pd = ibpd_to_rvtpd(qp->ibqp.srq ? qp->ibqp.srq->pd : qp->ibqp.pd);
 	ss = &qp->r_sge;
 	ss->sg_list = qp->r_sg_list;
 	qp->r_len = 0;
@@ -139,7 +139,7 @@ static int init_sge(struct hfi2_qp *qp, struct rvt_rwqe *wqe)
 			continue;
 		/* Check LKEY */
 		if (!hfi2_lkey_ok(rkt, pd, j ? &ss->sg_list[j - 1] : &ss->sge,
-				    &wqe->sg_list[i], IB_ACCESS_LOCAL_WRITE))
+				  &wqe->sg_list[i], IB_ACCESS_LOCAL_WRITE))
 			goto bad_lkey;
 		qp->r_len += wqe->sg_list[i].length;
 		j++;

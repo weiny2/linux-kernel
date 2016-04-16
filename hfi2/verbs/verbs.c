@@ -356,41 +356,6 @@ static int hfi2_query_gid(struct ib_device *ibdev, u8 port,
 	return 0;
 }
 
-/**
- * qib_alloc_ucontext - allocate a ucontext
- * @ibdev: the infiniband device
- * @udata: not used
- */
-
-static struct ib_ucontext *hfi2_alloc_ucontext(struct ib_device *ibdev,
-						struct ib_udata *udata)
-{
-	struct hfi2_ucontext *context;
-	struct ib_ucontext *ret;
-
-	context = kmalloc(sizeof(*context), GFP_KERNEL);
-	if (!context) {
-		ret = ERR_PTR(-ENOMEM);
-		goto bail;
-	}
-
-	ret = &context->ibucontext;
-
-bail:
-	return ret;
-}
-
-/**
- * hfi2_dealloc_ucontext - deallocate a ucontext
- * @context: the context to deallocate
- */
-
-static int hfi2_dealloc_ucontext(struct ib_ucontext *context)
-{
-	kfree(to_hfi_ucontext(context));
-	return 0;
-}
-
 static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 {
 	struct ib_device *ibdev = &ibd->rdi.ibdev;
@@ -416,8 +381,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->query_port = hfi2_query_port;
 	ibdev->query_pkey = hfi2_query_pkey;
 	ibdev->query_gid = hfi2_query_gid;
-	ibdev->alloc_pd = hfi2_alloc_pd;
-	ibdev->dealloc_pd = hfi2_dealloc_pd;
 	ibdev->create_ah = hfi2_create_ah;
 	ibdev->modify_ah = hfi2_modify_ah;
 	ibdev->query_ah = hfi2_query_ah;
@@ -437,8 +400,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->reg_user_mr = hfi2_reg_user_mr;
 	ibdev->dereg_mr = hfi2_dereg_mr;
 	ibdev->process_mad = hfi2_process_mad;
-	ibdev->alloc_ucontext = hfi2_alloc_ucontext;
-	ibdev->dealloc_ucontext = hfi2_dealloc_ucontext;
 	ibdev->dma_device = ibd->parent_dev;
 	ibdev->modify_port = hfi2_modify_port;
 	ibdev->modify_device = hfi2_modify_device;
@@ -629,7 +590,6 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	spin_lock_init(&ibd->pending_lock);
 	ibd->mmap_offset = PAGE_SIZE;
 	spin_lock_init(&ibd->mmap_offset_lock);
-	spin_lock_init(&ibd->n_pds_lock);
 	spin_lock_init(&ibd->n_ahs_lock);
 	spin_lock_init(&ibd->n_cqs_lock);
 	spin_lock_init(&ibd->n_qps_lock);
