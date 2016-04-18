@@ -515,10 +515,7 @@ static int srpt_refresh_port(struct srpt_port *sport)
 		goto err_query_port;
 
 	sport->sm_lid = port_attr.sm_lid;
-	/* TODO: This casting will not be needed once sport->lid
-	 * is extended to 32 bits.
-	 */
-	sport->lid = (u16)port_attr.lid;
+	sport->lid = port_attr.lid;
 
 	ret = ib_query_gid(sport->sdev->device, sport->port, 0, &sport->gid,
 			   NULL);
