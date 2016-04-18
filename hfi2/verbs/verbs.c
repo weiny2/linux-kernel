@@ -400,7 +400,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->modify_device = hfi2_modify_device;
 	ibdev->attach_mcast = hfi2_multicast_attach;
 	ibdev->detach_mcast = hfi2_multicast_detach;
-	ibdev->dma_ops = &hfi2_dma_mapping_ops;
 	ibdev->get_port_immutable = port_immutable;
 
 	/*
