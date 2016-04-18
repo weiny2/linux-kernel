@@ -116,7 +116,6 @@ extern unsigned int hfi2_max_sges;
 extern unsigned int hfi2_lkey_table_size;
 extern unsigned int hfi2_max_mcast_grps;
 extern unsigned int hfi2_max_mcast_qp_attached;
-extern struct ib_dma_mapping_ops hfi2_dma_mapping_ops;
 extern const enum ib_wc_opcode ib_hfi1_wc_opcode[];
 extern const u32 ib_hfi1_rnr_table[];
 
