@@ -2169,9 +2169,8 @@ static inline bool hfi1_use_16b(struct rvt_qp *qp, struct rvt_swqe *wqe)
 	ibp = to_iport(qp->ibqp.device, qp->port_num);
 	ppd = ppd_from_ibp(ibp);
 	dgid = &ah_attr->grh.dgid;
-	return (ppd->lid >= IB_MULTICAST_LID_BASE) ||
-	       (ah_attr->grh.hop_limit == 1) ||
-	       IS_EXT_LID(dgid);
+	return ((ppd->lid >= IB_MULTICAST_LID_BASE || IS_EXT_LID(dgid)) &&
+		ah_attr->grh.hop_limit == 1);
 }
 
 static inline void hfi1_make_ext_grh(struct hfi1_packet *packet,
