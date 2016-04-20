@@ -114,9 +114,9 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-	ah_attr = &to_hfi_ah(swqe->ud_wr.ah)->attr;
+	ah_attr = &ibah_to_rvtah(swqe->ud_wr.ah)->attr;
 #else
-	ah_attr = &to_hfi_ah(swqe->wr.wr.ud.ah)->attr;
+	ah_attr = &ibah_to_rvtah(swqe->wr.wr.ud.ah)->attr;
 #endif
 
 #if 0 /* FXRTODO */
@@ -300,9 +300,9 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	nwords = ((wqe->length + extra_bytes) >> 2) + SIZE_OF_CRC;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-	ah_attr = &to_hfi_ah(wqe->ud_wr.ah)->attr;
+	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
 #else
-	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+	ah_attr = &ibah_to_rvtah(wqe->wr.wr.ud.ah)->attr;
 #endif
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		/* remove LRH size from s_hdrwords for GRH */
@@ -385,9 +385,9 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	nwords = (wqe->length + (SIZE_OF_CRC << 2) + 1 + extra_bytes) >> 2;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-	ah_attr = &to_hfi_ah(wqe->ud_wr.ah)->attr;
+	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
 #else
-	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+	ah_attr = &ibah_to_rvtah(wqe->wr.wr.ud.ah)->attr;
 #endif
 	/*
 	 * FXRTODO: Later, we also need to make grh for 16B packets
@@ -500,9 +500,9 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 	ppd = ibp->ppd;
 	/* TODO - review wr.wr.ud.ah */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-	ah_attr = &to_hfi_ah(wqe->ud_wr.ah)->attr;
+	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
 #else
-	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+	ah_attr = &ibah_to_rvtah(wqe->wr.wr.ud.ah)->attr;
 #endif
 	if (!hfi2_check_mcast(ah_attr)) {
 		lid = hfi2_retrieve_lid(ah_attr) & ~((1 << ppd->lmc) - 1);

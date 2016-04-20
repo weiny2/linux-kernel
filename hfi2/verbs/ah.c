@@ -72,7 +72,7 @@ int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
 			       struct ib_ah_attr *ah_attr)
 {
-	struct hfi2_ah *ah;
+	struct rvt_ah *ah;
 	struct ib_ah *ret;
 
 	if (hfi2_check_ah(pd->device, ah_attr))
@@ -117,7 +117,7 @@ struct ib_ah *hfi2_create_qp0_ah(struct hfi2_ibport *ibp, u32 dlid)
  */
 int hfi2_destroy_ah(struct ib_ah *ibah)
 {
-	struct hfi2_ah *ah = to_hfi_ah(ibah);
+	struct rvt_ah *ah = ibah_to_rvtah(ibah);
 
 	kfree(ah);
 	return 0;
@@ -132,7 +132,7 @@ int hfi2_destroy_ah(struct ib_ah *ibah)
  */
 int hfi2_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
 {
-	struct hfi2_ah *ah = to_hfi_ah(ibah);
+	struct rvt_ah *ah = ibah_to_rvtah(ibah);
 
 	if (hfi2_check_ah(ibah->device, ah_attr))
 		return -EINVAL;
@@ -150,7 +150,7 @@ int hfi2_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
  */
 int hfi2_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
 {
-	struct hfi2_ah *ah = to_hfi_ah(ibah);
+	struct rvt_ah *ah = ibah_to_rvtah(ibah);
 
 	*ah_attr = ah->attr;
 	return 0;

@@ -154,7 +154,7 @@ static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
 				ret = PTR_ERR(ah);
 			} else {
 				send_buf->ah = ah;
-				ibp->sm_ah = to_hfi_ah(ah);
+				ibp->sm_ah = ibah_to_rvtah(ah);
 				hfi2_update_sm_ah_attr(ibp, ibp->sm_lid);
 			}
 		} else {

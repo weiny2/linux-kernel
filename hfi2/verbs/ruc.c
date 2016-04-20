@@ -556,9 +556,9 @@ void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	    qp->ibqp.qp_type == IB_QPT_SMI ||
 	    qp->ibqp.qp_type == IB_QPT_GSI)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-		atomic_dec(&to_hfi_ah(wqe->ud_wr.ah)->refcount);
+		atomic_dec(&ibah_to_rvtah(wqe->ud_wr.ah)->refcount);
 #else
-		atomic_dec(&to_hfi_ah(wqe->wr.wr.ud.ah)->refcount);
+		atomic_dec(&ibah_to_rvtah(wqe->wr.wr.ud.ah)->refcount);
 #endif
 
 	/* See ch. 11.2.4.1 and 10.7.3.1 */
