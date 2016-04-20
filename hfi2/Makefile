@@ -19,6 +19,7 @@ hfi2-y += pcie.o
 hfi2-y += portals.o
 hfi2-y += privileged.o
 hfi2-y += snoop.o
+hfi2-y += diag.o
 hfi2-y += error.o
 hfi2-y += platform.o
 hfi2-y += trace.o

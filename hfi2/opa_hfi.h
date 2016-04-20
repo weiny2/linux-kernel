@@ -245,6 +245,26 @@ struct hfi1_snoop_data {
 	int (*filter_callback)(void *hdr, void *data, void *value);
 };
 
+/*
+ * Private data for diagnostic packet support
+ * @miscdev: MISC device for diagnostic packet transmission
+ * @ctx: Pointer to HFI context
+ * @cq_tx: Pointer to TX Command Queue
+ * @cq_rx: Pointer to RX Command Queue
+ * @cq_tx_lock: Pointer to lock protecting TX CQ
+ * @cq_rx_lock: Pointer to lock protecting RX CQ
+ * @eq_tx: Event queue used for tracking sent packets
+ */
+struct hfi2_diagpkt_data {
+	struct miscdevice miscdev;
+	struct hfi_ctx *ctx;
+	struct hfi_cq *cq_tx;
+	struct hfi_cq *cq_rx;
+	struct hfi_eq eq_tx;
+	spinlock_t *cq_tx_lock;
+	spinlock_t *cq_rx_lock;
+};
+
 /* snoop mode_flag values */
 #define HFI1_PORT_SNOOP_MODE     1U
 #define HFI1_PORT_CAPTURE_MODE   2U
@@ -737,6 +757,8 @@ struct hfi_devdata {
 
 	struct hfi1_snoop_data hfi1_snoop;
 
+	struct hfi2_diagpkt_data hfi2_diag;
+
 	/* Lock to synchronize access to tx_priv_cq */
 	spinlock_t priv_tx_cq_lock;
 
@@ -968,6 +990,8 @@ u64 hfi_read_lm_cm_csr(const struct hfi_pportdata *ppd,
 			  u32 offset);
 int hfi_snoop_add(struct hfi_devdata *dd);
 void hfi_snoop_remove(struct hfi_devdata *dd);
+int hfi2_diag_add(struct hfi_devdata *dd);
+void hfi2_diag_remove(struct hfi_devdata *dd);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is
