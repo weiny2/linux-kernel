@@ -53,6 +53,12 @@
 #include "verbs_txreq.h"
 #include "qp.h"
 
+/* We support only two types - 9B and 16B for now */
+static const hfi1_make_req hfi1_make_ud_req_tbl[2] = {
+	[HFI1_PKT_TYPE_9B] = &hfi1_make_ud_req_9B,
+	[HFI1_PKT_TYPE_16B] = &hfi1_make_ud_req_16B
+};
+
 /**
  * ud_loopback - handle send on loopback QPs
  * @sqp: the sending QP
@@ -322,8 +328,8 @@ static void hfi1_make_bth_deth(struct rvt_qp *qp, struct rvt_swqe *wqe,
 	ohdr->u.ud.deth[1] = cpu_to_be32(qp->ibqp.qp_num);
 }
 
-static void hfi1_make_ud_req_9B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
-				struct rvt_swqe *wqe)
+void hfi1_make_ud_req_9B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
+			 struct rvt_swqe *wqe)
 {
 	u32 nwords, extra_bytes;
 	u16 lid;
@@ -390,8 +396,8 @@ static void hfi1_make_ud_req_9B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = slid;
 }
 
-static void hfi1_make_ud_req_16B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
-				 struct rvt_swqe *wqe)
+void hfi1_make_ud_req_16B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
+			  struct rvt_swqe *wqe)
 {
 	struct hfi1_qp_priv *priv = qp->priv;
 	struct hfi1_other_headers *ohdr;
@@ -592,10 +598,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	qp->s_sge.total_len = wqe->length;
 
 	/* Make the appropriate header */
-	if (use_16b)
-		hfi1_make_ud_req_16B(qp, ps, qp->s_wqe);
-	else
-		hfi1_make_ud_req_9B(qp, ps, qp->s_wqe);
+	hfi1_make_ud_req_tbl[use_16b] (qp, ps, qp->s_wqe);
 
 	priv->s_sde = qp_to_sdma_engine(qp, priv->s_sc);
 	ps->s_txreq->sde = priv->s_sde;

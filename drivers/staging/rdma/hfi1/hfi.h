@@ -419,6 +419,9 @@ struct hfi1_snoop_data {
 				       & OPA_9B_BTH_PAD_BITS))
 #define OPA_9B_BTH_GET_PKEY(bth0) ((u16)(bth0))
 
+/* Packet types */
+#define HFI1_PKT_TYPE_9B  0
+#define HFI1_PKT_TYPE_16B 1
 /*
  * OPA 16B Packet Format
  */
@@ -854,6 +857,10 @@ struct hfi1_pportdata {
 typedef int (*rhf_rcv_function_ptr)(struct hfi1_packet *packet);
 
 typedef void (*opcode_handler)(struct hfi1_packet *packet);
+
+typedef void (*hfi1_make_req)(struct rvt_qp *qp,
+			      struct hfi1_pkt_state *ps,
+			      struct rvt_swqe *wqe);
 
 /* return values for the RHF receive functions */
 #define RHF_RCV_CONTINUE  0	/* keep going */
@@ -1321,6 +1328,14 @@ int handle_receive_interrupt(struct hfi1_ctxtdata *, int);
 int handle_receive_interrupt_nodma_rtail(struct hfi1_ctxtdata *, int);
 int handle_receive_interrupt_dma_rtail(struct hfi1_ctxtdata *, int);
 void set_all_slowpath(struct hfi1_devdata *dd);
+
+void hfi1_make_ud_req_9B(struct rvt_qp *qp,
+			 struct hfi1_pkt_state *ps,
+			 struct rvt_swqe *wqe);
+
+void hfi1_make_ud_req_16B(struct rvt_qp *qp,
+			  struct hfi1_pkt_state *ps,
+			  struct rvt_swqe *wqe);
 
 /* receive packet handler dispositions */
 #define RCV_PKT_OK      0x0 /* keep going */
