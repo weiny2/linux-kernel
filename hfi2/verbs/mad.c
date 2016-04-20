@@ -89,11 +89,11 @@ static inline void clear_opa_smp_data(struct opa_smp *smp)
 
 static void hfi2_update_sm_ah_attr(struct hfi2_ibport *ibp, u32 lid)
 {
-	ibp->sm_ah->attr.ah_flags = IB_AH_GRH;
-	ibp->sm_ah->attr.dlid = OPA_TO_IB_UCAST_LID(lid);
-	ibp->sm_ah->attr.grh.sgid_index = OPA_GID_INDEX;
-	ibp->sm_ah->attr.grh.dgid.global.subnet_prefix = ibp->gid_prefix;
-	ibp->sm_ah->attr.grh.dgid.global.interface_id = OPA_MAKE_GID(lid);
+	ibp->rvp.sm_ah->attr.ah_flags = IB_AH_GRH;
+	ibp->rvp.sm_ah->attr.dlid = OPA_TO_IB_UCAST_LID(lid);
+	ibp->rvp.sm_ah->attr.grh.sgid_index = OPA_GID_INDEX;
+	ibp->rvp.sm_ah->attr.grh.dgid.global.subnet_prefix = ibp->gid_prefix;
+	ibp->rvp.sm_ah->attr.grh.dgid.global.interface_id = OPA_MAKE_GID(lid);
 }
 
 static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
@@ -145,7 +145,7 @@ static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
 	memcpy(smp->route.lid.data, data, len);
 
 	spin_lock_irqsave(&ibp->lock, flags);
-	if (!ibp->sm_ah) {
+	if (!ibp->rvp.sm_ah) {
 		if (ibp->sm_lid != be16_to_cpu(IB_LID_PERMISSIVE)) {
 			struct ib_ah *ah;
 
@@ -154,14 +154,14 @@ static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
 				ret = PTR_ERR(ah);
 			} else {
 				send_buf->ah = ah;
-				ibp->sm_ah = ibah_to_rvtah(ah);
+				ibp->rvp.sm_ah = ibah_to_rvtah(ah);
 				hfi2_update_sm_ah_attr(ibp, ibp->sm_lid);
 			}
 		} else {
 			ret = -EINVAL;
 		}
 	} else {
-		send_buf->ah = &ibp->sm_ah->ibah;
+		send_buf->ah = &ibp->rvp.sm_ah->ibah;
 	}
 	spin_unlock_irqrestore(&ibp->lock, flags);
 
@@ -1472,11 +1472,11 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
 		pr_warn("SubnSet(OPA_PortInfo) smlid 0x%x\n", smlid);
 		spin_lock_irqsave(&ibp->lock, flags);
-		if (ibp->sm_ah) {
+		if (ibp->rvp.sm_ah) {
 			if (smlid != ibp->sm_lid)
 				hfi2_update_sm_ah_attr(ibp, smlid);
 			if (msl != ibp->sm_sl)
-				ibp->sm_ah->attr.sl = msl;
+				ibp->rvp.sm_ah->attr.sl = msl;
 		}
 		spin_unlock_irqrestore(&ibp->lock, flags);
 		if (smlid != ibp->sm_lid)

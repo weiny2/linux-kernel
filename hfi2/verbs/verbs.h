@@ -452,8 +452,6 @@ struct hfi2_ibport {
 	struct hfi_eq send_eq;
 	struct hfi2_ibrcv sm_rcv;
 	struct hfi2_ibrcv qp_rcv;
-	struct ib_mad_agent *send_agent;
-	struct rvt_ah *sm_ah;
 };
 
 struct hfi2_ibdev {
