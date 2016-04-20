@@ -374,7 +374,7 @@ inv:
 			set_bit(HFI1_R_REWIND_SGE, &qp->r_aflags);
 			qp->r_sge.num_sge = 0;
 		} else
-			hfi2_put_ss(&qp->r_sge);
+			rvt_put_ss(&qp->r_sge);
 		qp->r_state = OP(SEND_LAST);
 		switch (opcode) {
 		case OP(SEND_FIRST):
@@ -493,7 +493,7 @@ send_last:
 		wc.opcode = IB_WC_RECV;
 		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, tlen, 0);
-		hfi2_put_ss(&qp->s_rdma_read_sge);
+		rvt_put_ss(&qp->s_rdma_read_sge);
 last_imm:
 		wc.wr_id = qp->r_wr_id;
 		wc.status = IB_WC_SUCCESS;
@@ -587,7 +587,7 @@ rdma_last_imm:
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
 		if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
-			hfi2_put_ss(&qp->s_rdma_read_sge);
+			rvt_put_ss(&qp->s_rdma_read_sge);
 		else {
 			ret = hfi2_get_rwqe(qp, 1);
 			if (ret < 0)
@@ -599,7 +599,7 @@ rdma_last_imm:
 		wc.opcode = IB_WC_RECV_RDMA_WITH_IMM;
 		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, tlen, 1);
-		hfi2_put_ss(&qp->r_sge);
+		rvt_put_ss(&qp->r_sge);
 		goto last_imm;
 
 	case OP(RDMA_WRITE_LAST):
@@ -614,7 +614,7 @@ rdma_last:
 			goto drop;
 		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, tlen, 1);
-		hfi2_put_ss(&qp->r_sge);
+		rvt_put_ss(&qp->r_sge);
 		break;
 
 	default:

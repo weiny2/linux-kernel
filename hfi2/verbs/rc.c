@@ -271,7 +271,7 @@ static void qp_comm_est(struct hfi2_qp *qp)
 	}
 }
 
-static u32 restart_sge(struct hfi2_sge_state *ss, struct hfi2_swqe *wqe,
+static u32 restart_sge(struct rvt_sge_state *ss, struct hfi2_swqe *wqe,
 		       u32 psn, u32 pmtu)
 {
 	u32 len;
@@ -327,7 +327,7 @@ static int make_rc_ack(struct hfi2_ibdev *dev, struct hfi2_qp *qp,
 	case OP(RDMA_READ_RESPONSE_ONLY):
 		e = &qp->s_ack_queue[qp->s_tail_ack_queue];
 		if (e->rdma_sge.mr) {
-			hfi2_put_mr(e->rdma_sge.mr);
+			rvt_put_mr(e->rdma_sge.mr);
 			e->rdma_sge.mr = NULL;
 		}
 		/* FALLTHROUGH */
@@ -365,7 +365,7 @@ static int make_rc_ack(struct hfi2_ibdev *dev, struct hfi2_qp *qp,
 			/* Copy SGE state in case we need to resend */
 			qp->s_rdma_mr = e->rdma_sge.mr;
 			if (qp->s_rdma_mr)
-				hfi2_get_mr(qp->s_rdma_mr);
+				rvt_get_mr(qp->s_rdma_mr);
 			qp->s_ack_rdma_sge.sge = e->rdma_sge;
 			qp->s_ack_rdma_sge.num_sge = 1;
 			qp->s_cur_sge = &qp->s_ack_rdma_sge;
@@ -404,7 +404,7 @@ static int make_rc_ack(struct hfi2_ibdev *dev, struct hfi2_qp *qp,
 		qp->s_cur_sge = &qp->s_ack_rdma_sge;
 		qp->s_rdma_mr = qp->s_ack_rdma_sge.sge.mr;
 		if (qp->s_rdma_mr)
-			hfi2_get_mr(qp->s_rdma_mr);
+			rvt_get_mr(qp->s_rdma_mr);
 		len = qp->s_ack_rdma_sge.sge.sge_length;
 		if (len > pmtu) {
 			len = pmtu;
@@ -476,7 +476,7 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 {
 	struct hfi2_ibdev *dev = to_hfi_ibd(qp->ibqp.device);
 	struct ib_l4_headers *ohdr;
-	struct hfi2_sge_state *ss;
+	struct rvt_sge_state *ss;
 	struct hfi2_swqe *wqe;
 	/* header size in 32-bit words LRH+BTH = (8+12)/4. */
 	u32 hwords;
@@ -1351,9 +1351,9 @@ void hfi2_rc_send_complete(struct hfi2_qp *qp, struct ib_l4_headers *ohdr)
 		    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) <= 0)
 			break;
 		for (i = 0; i < wqe->wr.num_sge; i++) {
-			struct hfi2_sge *sge = &wqe->sg_list[i];
+			struct rvt_sge *sge = &wqe->sg_list[i];
 
-			hfi2_put_mr(sge->mr);
+			rvt_put_mr(sge->mr);
 		}
 		/* Post a send completion queue entry if requested. */
 		if (!(qp->s_flags & HFI1_S_SIGNAL_REQ_WR) ||
@@ -1407,9 +1407,9 @@ static struct hfi2_swqe *do_rc_completion(struct hfi2_qp *qp,
 	if (cmp_psn(wqe->lpsn, qp->s_sending_psn) < 0 ||
 	    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
 		for (i = 0; i < wqe->wr.num_sge; i++) {
-			struct hfi2_sge *sge = &wqe->sg_list[i];
+			struct rvt_sge *sge = &wqe->sg_list[i];
 
-			hfi2_put_mr(sge->mr);
+			rvt_put_mr(sge->mr);
 		}
 		/* Post a send completion queue entry if requested. */
 		if (!(qp->s_flags & HFI1_S_SIGNAL_REQ_WR) ||
@@ -2079,7 +2079,7 @@ static noinline int rc_rcv_error(struct ib_l4_headers *ohdr, void *data,
 		if (unlikely(offset + len != e->rdma_sge.sge_length))
 			goto unlock_done;
 		if (e->rdma_sge.mr) {
-			hfi2_put_mr(e->rdma_sge.mr);
+			rvt_put_mr(e->rdma_sge.mr);
 			e->rdma_sge.mr = NULL;
 		}
 		if (len != 0) {
@@ -2454,7 +2454,7 @@ send_last:
 			goto nack_inv;
 		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, tlen, 1);
-		hfi2_put_ss(&qp->r_sge);
+		rvt_put_ss(&qp->r_sge);
 		qp->r_msn++;
 		if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 			break;
@@ -2559,7 +2559,7 @@ send_last:
 		}
 		e = &qp->s_ack_queue[qp->r_head_ack_queue];
 		if (e->opcode == OP(RDMA_READ_REQUEST) && e->rdma_sge.mr) {
-			hfi2_put_mr(e->rdma_sge.mr);
+			rvt_put_mr(e->rdma_sge.mr);
 			e->rdma_sge.mr = NULL;
 		}
 		reth = &ohdr->u.rc.reth;
@@ -2634,7 +2634,7 @@ send_last:
 		}
 		e = &qp->s_ack_queue[qp->r_head_ack_queue];
 		if (e->opcode == OP(RDMA_READ_REQUEST) && e->rdma_sge.mr) {
-			hfi2_put_mr(e->rdma_sge.mr);
+			rvt_put_mr(e->rdma_sge.mr);
 			e->rdma_sge.mr = NULL;
 		}
 		ateth = &ohdr->u.atomic_eth;
@@ -2656,7 +2656,7 @@ send_last:
 			(u64) cmpxchg((u64 *) qp->r_sge.sge.vaddr,
 				      be64_to_cpu(ateth->compare_data),
 				      sdata);
-		hfi2_put_mr(qp->r_sge.sge.mr);
+		rvt_put_mr(qp->r_sge.sge.mr);
 		qp->r_sge.num_sge = 0;
 		e->opcode = opcode;
 		e->sent = 0;

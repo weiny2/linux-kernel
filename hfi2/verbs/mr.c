@@ -55,525 +55,6 @@
 #include <rdma/ib_umem.h>
 #include "verbs.h"
 
-static int hfi2_alloc_lkey(struct hfi2_mregion *mr, int dma_region);
-static void hfi2_free_lkey(struct hfi2_mregion *mr);
-
-static int init_mregion(struct hfi2_mregion *mr, struct ib_pd *pd,
-			int count)
-{
-	int m, i = 0;
-	int rval = 0;
-
-	m = (count + HFI2_SEGSZ - 1) / HFI2_SEGSZ;
-	for (; i < m; i++) {
-		mr->map[i] = kzalloc(sizeof(*mr->map[0]), GFP_KERNEL);
-		if (!mr->map[i])
-			goto bail;
-	}
-	mr->mapsz = m;
-	init_completion(&mr->comp);
-	/* count returning the ptr to user */
-	atomic_set(&mr->refcount, 1);
-	mr->pd = pd;
-	mr->max_segs = count;
-out:
-	return rval;
-bail:
-	while (i)
-		kfree(mr->map[--i]);
-	rval = -ENOMEM;
-	goto out;
-}
-
-static void deinit_mregion(struct hfi2_mregion *mr)
-{
-	int i = mr->mapsz;
-
-	mr->mapsz = 0;
-	while (i)
-		kfree(mr->map[--i]);
-}
-
-
-/**
- * hfi2_get_dma_mr - get a DMA memory region
- * @pd: protection domain for this memory region
- * @acc: access flags
- *
- * Note that all DMA addresses should be created via the
- * struct ib_dma_mapping_ops functions (see dma.c).
- *
- * Return: the memory region on success, otherwise returns an errno.
- */
-struct ib_mr *hfi2_get_dma_mr(struct ib_pd *pd, int acc)
-{
-	struct hfi2_mr *mr = NULL;
-	struct ib_mr *ret;
-	int rval;
-
-	if (ibpd_to_rvtpd(pd)->user) {
-		ret = ERR_PTR(-EPERM);
-		goto bail;
-	}
-
-	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
-	if (!mr) {
-		ret = ERR_PTR(-ENOMEM);
-		goto bail;
-	}
-
-	rval = init_mregion(&mr->mr, pd, 0);
-	if (rval) {
-		ret = ERR_PTR(rval);
-		goto bail;
-	}
-
-	rval = hfi2_alloc_lkey(&mr->mr, 1);
-	if (rval) {
-		ret = ERR_PTR(rval);
-		goto bail_mregion;
-	}
-
-	mr->mr.access_flags = acc;
-	ret = &mr->ibmr;
-	return ret;
-
-bail_mregion:
-	deinit_mregion(&mr->mr);
-bail:
-	kfree(mr);
-	return ret;
-}
-
-static struct hfi2_mr *alloc_mr(int count, struct ib_pd *pd)
-{
-	struct hfi2_mr *mr;
-	int rval = -ENOMEM;
-	int m;
-
-	/* Allocate struct plus pointers to first level page tables. */
-	m = (count + HFI2_SEGSZ - 1) / HFI2_SEGSZ;
-	mr = kzalloc(sizeof(*mr) + m * sizeof(mr->mr.map[0]), GFP_KERNEL);
-	if (!mr)
-		goto bail;
-
-	rval = init_mregion(&mr->mr, pd, count);
-	if (rval)
-		goto bail;
-	/*
-	 * ib_reg_phys_mr() will initialize mr->ibmr except for
-	 * lkey and rkey.
-	 */
-	rval = hfi2_alloc_lkey(&mr->mr, 0);
-	if (rval)
-		goto bail_mregion;
-	mr->ibmr.lkey = mr->mr.lkey;
-	mr->ibmr.rkey = mr->mr.lkey;
-	return mr;
-
-bail_mregion:
-	deinit_mregion(&mr->mr);
-bail:
-	kfree(mr);
-	return ERR_PTR(rval);
-}
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
-/**
- * hfi2_reg_phys_mr - register a physical memory region
- * @pd: protection domain for this memory region
- * @buffer_list: pointer to the list of physical buffers to register
- * @num_phys_buf: the number of physical buffers to register
- * @iova_start: the starting address passed over IB which maps to this MR
- *
- * Return: the memory region on success, otherwise returns an errno.
- */
-struct ib_mr *hfi2_reg_phys_mr(struct ib_pd *pd,
-				 struct ib_phys_buf *buffer_list,
-				 int num_phys_buf, int acc, u64 *iova_start)
-{
-	struct hfi2_mr *mr;
-	int n, m, i;
-	struct ib_mr *ret;
-
-	mr = alloc_mr(num_phys_buf, pd);
-	if (IS_ERR(mr)) {
-		ret = (struct ib_mr *)mr;
-		goto bail;
-	}
-
-	mr->mr.user_base = *iova_start;
-	mr->mr.iova = *iova_start;
-	mr->mr.access_flags = acc;
-
-	m = 0;
-	n = 0;
-	for (i = 0; i < num_phys_buf; i++) {
-		mr->mr.map[m]->segs[n].vaddr = (void *) buffer_list[i].addr;
-		mr->mr.map[m]->segs[n].length = buffer_list[i].size;
-		mr->mr.length += buffer_list[i].size;
-		n++;
-		if (n == HFI2_SEGSZ) {
-			m++;
-			n = 0;
-		}
-	}
-
-	ret = &mr->ibmr;
-
-bail:
-	return ret;
-}
-#endif
-
-/**
- * hfi2_reg_user_mr - register a userspace memory region
- * @pd: protection domain for this memory region
- * @start: starting userspace address
- * @length: length of region to register
- * @mr_access_flags: access flags for this memory region
- * @udata: unused by the driver
- *
- * Return: the memory region on success, otherwise returns an errno.
- */
-struct ib_mr *hfi2_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
-				 u64 virt_addr, int mr_access_flags,
-				 struct ib_udata *udata)
-{
-	struct hfi2_mr *mr;
-	struct ib_umem *umem;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
-	struct ib_umem_chunk *chunk;
-	int i;
-#else
-	int entry;
-	struct scatterlist *sg;
-#endif
-	int n, m;
-	struct ib_mr *ret;
-
-	if (length == 0) {
-		ret = ERR_PTR(-EINVAL);
-		goto bail;
-	}
-
-	umem = ib_umem_get(pd->uobject->context, start, length,
-			   mr_access_flags, 0);
-	if (IS_ERR(umem))
-		return (void *)umem;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
-	n = 0;
-	list_for_each_entry(chunk, &umem->chunk_list, list)
-		n += chunk->nents;
-#else
-	n = umem->nmap;
-#endif
-	mr = alloc_mr(n, pd);
-	if (IS_ERR(mr)) {
-		ret = (struct ib_mr *)mr;
-		ib_umem_release(umem);
-		goto bail;
-	}
-
-	mr->mr.user_base = start;
-	mr->mr.iova = virt_addr;
-	mr->mr.length = length;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
-	mr->mr.offset = umem->offset;
-#else
-	mr->mr.offset = ib_umem_offset(umem);
-#endif
-	mr->mr.access_flags = mr_access_flags;
-	mr->umem = umem;
-
-	if (is_power_of_2(umem->page_size))
-		mr->mr.page_shift = ilog2(umem->page_size);
-	m = 0;
-	n = 0;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
-	list_for_each_entry(chunk, &umem->chunk_list, list) {
-		for (i = 0; i < chunk->nents; i++) {
-			void *vaddr;
-
-			vaddr = page_address(sg_page(&chunk->page_list[i]));
-			if (!vaddr) {
-				ret = ERR_PTR(-EINVAL);
-				goto bail;
-			}
-			mr->mr.map[m]->segs[n].vaddr = vaddr;
-			mr->mr.map[m]->segs[n].length = umem->page_size;
-			n++;
-			if (n == HFI2_SEGSZ) {
-				m++;
-				n = 0;
-			}
-		}
-	}
-#else
-	for_each_sg(umem->sg_head.sgl, sg, umem->nmap, entry) {
-		void *vaddr;
-
-		vaddr = page_address(sg_page(sg));
-		if (!vaddr) {
-			ret = ERR_PTR(-EINVAL);
-			goto bail;
-		}
-		mr->mr.map[m]->segs[n].vaddr = vaddr;
-		mr->mr.map[m]->segs[n].length = umem->page_size;
-		n++;
-		if (n == HFI2_SEGSZ) {
-			m++;
-			n = 0;
-		}
-	}
-#endif
-	ret = &mr->ibmr;
-
-bail:
-	return ret;
-}
-
-/**
- * hfi2_dereg_mr - unregister and free a memory region
- * @ibmr: the memory region to free
- *
- * Note that this is called to free MRs created by hfi2_get_dma_mr()
- * or hfi2_reg_user_mr().
- *
- * Return: 0 on success, otherwise returns an errno.
- */
-int hfi2_dereg_mr(struct ib_mr *ibmr)
-{
-	struct hfi2_mr *mr = to_hfi_mr(ibmr);
-	int ret = 0;
-	unsigned long timeout;
-
-	hfi2_free_lkey(&mr->mr);
-
-	hfi2_put_mr(&mr->mr); /* will set completion if last */
-	timeout = wait_for_completion_timeout(&mr->mr.comp,
-		5 * HZ);
-	if (!timeout) {
-		struct ib_device *ibdev = mr->mr.pd->device;
-
-		dev_err(&ibdev->dev,
-			"hfi2_dereg_mr timeout mr %p pd %p refcount %u\n",
-			mr, mr->mr.pd, atomic_read(&mr->mr.refcount));
-		hfi2_get_mr(&mr->mr);
-		ret = -EBUSY;
-		goto out;
-	}
-	deinit_mregion(&mr->mr);
-
-	if (mr->umem)
-		ib_umem_release(mr->umem);
-	kfree(mr);
-out:
-	return ret;
-}
-
-/**
- * hfi2_alloc_lkey - allocate an lkey
- * @mr: memory region that this lkey protects
- * @dma_region: 0->normal key, 1->restricted DMA key
- *
- * Increments mr reference count as required.
- * Sets the lkey field mr for non-dma regions.
- *
- * Return: 0 if successful, otherwise returns -errno.
- */
-static int hfi2_alloc_lkey(struct hfi2_mregion *mr, int dma_region)
-{
-	unsigned long flags;
-	u32 r;
-	int ret;
-	struct hfi2_ibdev *ibd = to_hfi_ibd(mr->pd->device);
-	struct hfi2_lkey_table *rkt = &ibd->lk_table;
-
-	hfi2_get_mr(mr);
-
-	/* special case for dma_mr lkey == 0 */
-	if (dma_region) {
-		struct hfi2_mregion *tmr;
-
-		spin_lock_irqsave(&rkt->lock, flags);
-		tmr = rcu_access_pointer(ibd->dma_mr);
-		if (!tmr) {
-			rcu_assign_pointer(ibd->dma_mr, mr);
-			mr->lkey_published = 1;
-		} else {
-			hfi2_put_mr(mr);
-		}
-		spin_unlock_irqrestore(&rkt->lock, flags);
-		return 0;
-	}
-
-	idr_preload(GFP_KERNEL);
-	spin_lock_irqsave(&rkt->lock, flags);
-	/* Find the next available LKEY */
-	ret = idr_alloc_cyclic(&rkt->table, mr, 0, rkt->max, GFP_NOWAIT);
-	if (ret < 0) {
-		hfi2_put_mr(mr);
-		goto idr_err;
-	}
-	r = ret;
-	ret = 0;
-
-	/*
-	 * Make sure lkey is never zero which is reserved to indicate an
-	 * unrestricted LKEY.
-	 */
-	rkt->gen++;
-	mr->lkey = (r << (32 - hfi2_lkey_table_size)) |
-		((((1 << (24 - hfi2_lkey_table_size)) - 1) & rkt->gen)
-		 << 8);
-	if (mr->lkey == 0) {
-		mr->lkey |= 1 << 8;
-		rkt->gen++;
-	}
-	mr->lkey_published = 1;
-
-idr_err:
-	spin_unlock_irqrestore(&rkt->lock, flags);
-	idr_preload_end();
-	return ret;
-}
-
-/**
- * hfi2_free_lkey - free an lkey
- * @mr: mr to free from tables
- */
-static void hfi2_free_lkey(struct hfi2_mregion *mr)
-{
-	unsigned long flags;
-	u32 lkey = mr->lkey;
-	u32 r;
-	struct hfi2_ibdev *ibd = to_hfi_ibd(mr->pd->device);
-	struct hfi2_lkey_table *rkt = &ibd->lk_table;
-	int freed = 0;
-
-	spin_lock_irqsave(&rkt->lock, flags);
-	if (!mr->lkey_published)
-		goto out;
-	if (lkey == 0) {
-		RCU_INIT_POINTER(ibd->dma_mr, NULL);
-	} else {
-		r = lkey >> (32 - hfi2_lkey_table_size);
-		idr_remove(&rkt->table, r);
-	}
-	mr->lkey_published = 0;
-	freed++;
-out:
-	spin_unlock_irqrestore(&rkt->lock, flags);
-	if (freed) {
-		synchronize_rcu();
-		hfi2_put_mr(mr);
-	}
-}
-
-/**
- * hfi2_lkey_ok - check IB SGE for validity and initialize
- * @rkt: table containing lkey to check SGE against
- * @pd: protection domain
- * @isge: outgoing internal SGE
- * @sge: SGE to check
- * @acc: access flags
- *
- * Check the IB SGE for validity and initialize our internal version
- * of it.  Increments the reference count upon success.
- *
- * Return: 1 if valid and successful, otherwise returns 0.
- */
-int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct rvt_pd *pd,
-		   struct hfi2_sge *isge, struct ib_sge *sge, int acc)
-{
-	struct hfi2_mregion *mr;
-	u32 r;
-	unsigned n, m;
-	size_t off;
-
-	/*
-	 * We use LKEY == zero for kernel virtual addresses
-	 * (see hfi2_get_dma_mr and dma.c).
-	 */
-	rcu_read_lock();
-	if (sge->lkey == 0) {
-		struct hfi2_ibdev *ibd = to_hfi_ibd(pd->ibpd.device);
-
-		if (pd->user)
-			goto bail;
-		mr = rcu_dereference(ibd->dma_mr);
-		if (!mr)
-			goto bail;
-		atomic_inc(&mr->refcount);
-		rcu_read_unlock();
-
-		isge->mr = mr;
-		isge->vaddr = (void *)sge->addr;
-		isge->length = sge->length;
-		isge->sge_length = sge->length;
-		isge->m = 0;
-		isge->n = 0;
-		goto ok;
-	}
-
-	r = sge->lkey >> (32 - hfi2_lkey_table_size);
-	mr = idr_find(&rkt->table, r);
-	if (unlikely(!mr || mr->lkey != sge->lkey || mr->pd != &pd->ibpd))
-		goto bail;
-
-	off = sge->addr - mr->user_base;
-	if (unlikely(sge->addr < mr->user_base ||
-		     off + sge->length > mr->length ||
-		     (mr->access_flags & acc) != acc))
-		goto bail;
-	atomic_inc(&mr->refcount);
-	rcu_read_unlock();
-
-	off += mr->offset;
-	if (mr->page_shift) {
-		/*
-		 * page sizes are uniform power of 2 so no loop is necessary
-		 * entries_spanned_by_off is the number of times the loop below
-		 * would have executed.
-		 */
-		size_t entries_spanned_by_off;
-
-		entries_spanned_by_off = off >> mr->page_shift;
-		off -= (entries_spanned_by_off << mr->page_shift);
-		m = entries_spanned_by_off / HFI2_SEGSZ;
-		n = entries_spanned_by_off % HFI2_SEGSZ;
-	} else {
-		m = 0;
-		n = 0;
-		while (off >= mr->map[m]->segs[n].length) {
-			off -= mr->map[m]->segs[n].length;
-			n++;
-			if (n >= HFI2_SEGSZ) {
-				m++;
-				n = 0;
-			}
-		}
-	}
-	isge->mr = mr;
-#if 1
-	isge->vaddr = mr->map[m]->segs[n].vaddr + off;
-	isge->length = mr->map[m]->segs[n].length - off;
-#else
-	/* TODO - future user PASID optimization */
-	isge->vaddr = (void *)sge->addr;
-	isge->length = sge->length;
-#endif
-	isge->sge_length = sge->length;
-	isge->m = m;
-	isge->n = n;
-ok:
-	return 1;
-bail:
-	rcu_read_unlock();
-	return 0;
-}
-
 /**
  * hfi2_rkey_ok - check the IB virtual address, length, and RKEY
  * @qp: qp for validation
@@ -584,37 +65,36 @@ bail:
  * @acc: access flags
  *
  * Increments the reference count upon success.
+ * TODO - this function temporary until we replace hfi2_qp with rvt_qp
  *
  * Return: 1 if successful, otherwise 0.
  */
-int hfi2_rkey_ok(struct hfi2_qp *qp, struct hfi2_sge *sge,
-		   u32 len, u64 vaddr, u32 rkey, int acc)
+int hfi2_rkey_ok(struct hfi2_qp *qp, struct rvt_sge *sge,
+		 u32 len, u64 vaddr, u32 rkey, int acc)
 {
-	struct hfi2_mregion *mr;
-	u32 r;
+	struct rvt_mregion *mr;
 	unsigned n, m;
 	size_t off;
-	struct hfi2_ibdev *ibd = to_hfi_ibd(qp->ibqp.device);
-	struct hfi2_lkey_table *rkt = &ibd->lk_table;
+	struct rvt_pd *pd = ibpd_to_rvtpd(qp->ibqp.pd);
+	struct rvt_dev_info *dev = ib_to_rvt(pd->ibpd.device);
+	struct rvt_lkey_table *rkt = &dev->lkey_table;
 
 	/*
 	 * We use RKEY == zero for kernel virtual addresses
-	 * (see hfi2_get_dma_mr and dma.c).
+	 * (see rvt_get_dma_mr and dma.c).
 	 */
 	rcu_read_lock();
 	if (rkey == 0) {
-		struct rvt_pd *pd = ibpd_to_rvtpd(qp->ibqp.pd);
-
 		if (pd->user)
 			goto bail;
-		mr = rcu_dereference(ibd->dma_mr);
+		mr = rcu_dereference(dev->dma_mr);
 		if (!mr)
 			goto bail;
 		atomic_inc(&mr->refcount);
 		rcu_read_unlock();
 
 		sge->mr = mr;
-		sge->vaddr = (void *) vaddr;
+		sge->vaddr = (void *)vaddr;
 		sge->length = len;
 		sge->sge_length = len;
 		sge->m = 0;
@@ -622,9 +102,9 @@ int hfi2_rkey_ok(struct hfi2_qp *qp, struct hfi2_sge *sge,
 		goto ok;
 	}
 
-	r = rkey >> (32 - hfi2_lkey_table_size);
-	mr = idr_find(&rkt->table, r);
-	if (unlikely(!mr || mr->lkey != rkey || qp->ibqp.pd != mr->pd))
+	mr = rcu_dereference(
+		rkt->table[(rkey >> (32 - hfi2_lkey_table_size))]);
+	if (unlikely(!mr || mr->lkey != rkey || &pd->ibpd != mr->pd))
 		goto bail;
 
 	off = vaddr - mr->iova;
@@ -645,15 +125,15 @@ int hfi2_rkey_ok(struct hfi2_qp *qp, struct hfi2_sge *sge,
 
 		entries_spanned_by_off = off >> mr->page_shift;
 		off -= (entries_spanned_by_off << mr->page_shift);
-		m = entries_spanned_by_off / HFI2_SEGSZ;
-		n = entries_spanned_by_off % HFI2_SEGSZ;
+		m = entries_spanned_by_off / RVT_SEGSZ;
+		n = entries_spanned_by_off % RVT_SEGSZ;
 	} else {
 		m = 0;
 		n = 0;
 		while (off >= mr->map[m]->segs[n].length) {
 			off -= mr->map[m]->segs[n].length;
 			n++;
-			if (n >= HFI2_SEGSZ) {
+			if (n >= RVT_SEGSZ) {
 				m++;
 				n = 0;
 			}

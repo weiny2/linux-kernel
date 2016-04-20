@@ -263,9 +263,9 @@ static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
 	unsigned n;
 
 	if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
-		hfi2_put_ss(&qp->s_rdma_read_sge);
+		rvt_put_ss(&qp->s_rdma_read_sge);
 
-	hfi2_put_ss(&qp->r_sge);
+	rvt_put_ss(&qp->r_sge);
 
 	if (clr_sends) {
 		while (qp->s_last != qp->s_head) {
@@ -273,9 +273,9 @@ static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
 			unsigned i;
 
 			for (i = 0; i < wqe->wr.num_sge; i++) {
-				struct hfi2_sge *sge = &wqe->sg_list[i];
+				struct rvt_sge *sge = &wqe->sg_list[i];
 
-				hfi2_put_mr(sge->mr);
+				rvt_put_mr(sge->mr);
 			}
 			if (qp->ibqp.qp_type == IB_QPT_UD ||
 			    qp->ibqp.qp_type == IB_QPT_SMI ||
@@ -289,7 +289,7 @@ static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
 				qp->s_last = 0;
 		}
 		if (qp->s_rdma_mr) {
-			hfi2_put_mr(qp->s_rdma_mr);
+			rvt_put_mr(qp->s_rdma_mr);
 			qp->s_rdma_mr = NULL;
 		}
 	}
@@ -302,7 +302,7 @@ static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
 
 		if (e->opcode == IB_OPCODE_RC_RDMA_READ_REQUEST &&
 		    e->rdma_sge.mr) {
-			hfi2_put_mr(e->rdma_sge.mr);
+			rvt_put_mr(e->rdma_sge.mr);
 			e->rdma_sge.mr = NULL;
 		}
 	}
@@ -772,7 +772,7 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 		goto bail;
 	}
 
-	sz = sizeof(struct hfi2_sge) *
+	sz = sizeof(struct rvt_sge) *
 		init_attr->cap.max_send_sge +
 		sizeof(struct hfi2_swqe);
 	swq = vzalloc((init_attr->cap.max_send_wr + 1) * sz);

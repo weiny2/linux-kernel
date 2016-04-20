@@ -391,9 +391,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->destroy_qp = hfi2_destroy_qp;
 	ibdev->post_send = hfi2_post_send;
 	ibdev->post_recv = hfi2_post_receive;
-	ibdev->get_dma_mr = hfi2_get_dma_mr;
-	ibdev->reg_user_mr = hfi2_reg_user_mr;
-	ibdev->dereg_mr = hfi2_dereg_mr;
 	ibdev->process_mad = hfi2_process_mad;
 	ibdev->dma_device = ibd->parent_dev;
 	ibdev->modify_port = hfi2_modify_port;
@@ -462,8 +459,8 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 		 "hfi2_cq%d", ibd->dd->unit);
 	ibd->rdi.dparms.node = ibd->assigned_node_id;
 
-	ibd->rdi.dparms.lkey_table_size = 0; /* disable RDMAVT-MR */
 	ibd->rdi.dparms.qp_table_size = 0;   /* disable RDMAVT-QP */
+	ibd->rdi.dparms.lkey_table_size = hfi2_lkey_table_size;
 	ibd->rdi.dparms.nports = ibd->num_pports;
 	ibd->rdi.dparms.npkeys = HFI_MAX_PKEYS;
 
@@ -581,15 +578,6 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	spin_lock_init(&ibd->n_qps_lock);
 	spin_lock_init(&ibd->n_mcast_grps_lock);
 
-	/*
-	 * The top hfi2_lkey_table_size bits are used to index the
-	 * table.  The lower 8 bits can be owned by the user (copied from
-	 * the LKEY).  The remaining bits act as a generation number or tag.
-	 */
-	spin_lock_init(&ibd->lk_table.lock);
-	ibd->lk_table.max = 1 << hfi2_lkey_table_size;
-	idr_init(&ibd->lk_table.table);
-
 	/* Allocate Management Context */
 	ret = hfi2_ctx_init(ibd, bus_ops);
 	if (ret)
@@ -649,7 +637,6 @@ void hfi2_ib_remove(struct hfi_devdata *dd)
 	for (i = 0; i < ibd->num_pports; i++)
 		hfi2_uninit_port(&ibd->pport[i]);
 	hfi2_ctx_uninit(ibd);
-	idr_destroy(&ibd->lk_table.table);
 	/* TODO - verify empty IDR? */
 	idr_destroy(&ibd->qp_ptr);
 	ida_destroy(&ibd->qpn_even_table);

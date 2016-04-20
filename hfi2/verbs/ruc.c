@@ -125,11 +125,11 @@ static int init_sge(struct hfi2_qp *qp, struct rvt_rwqe *wqe)
 {
 	int i, j, ret;
 	struct ib_wc wc;
-	struct hfi2_lkey_table *rkt;
+	struct rvt_lkey_table *rkt;
 	struct rvt_pd *pd;
-	struct hfi2_sge_state *ss;
+	struct rvt_sge_state *ss;
 
-	rkt = &to_hfi_ibd(qp->ibqp.device)->lk_table;
+	rkt = &ib_to_rvt(qp->ibqp.device)->lkey_table;
 	pd = ibpd_to_rvtpd(qp->ibqp.srq ? qp->ibqp.srq->pd : qp->ibqp.pd);
 	ss = &qp->r_sge;
 	ss->sg_list = qp->r_sg_list;
@@ -138,7 +138,7 @@ static int init_sge(struct hfi2_qp *qp, struct rvt_rwqe *wqe)
 		if (wqe->sg_list[i].length == 0)
 			continue;
 		/* Check LKEY */
-		if (!hfi2_lkey_ok(rkt, pd, j ? &ss->sg_list[j - 1] : &ss->sge,
+		if (!rvt_lkey_ok(rkt, pd, j ? &ss->sg_list[j - 1] : &ss->sge,
 				  &wqe->sg_list[i], IB_ACCESS_LOCAL_WRITE))
 			goto bad_lkey;
 		qp->r_len += wqe->sg_list[i].length;
@@ -151,9 +151,9 @@ static int init_sge(struct hfi2_qp *qp, struct rvt_rwqe *wqe)
 
 bad_lkey:
 	while (j) {
-		struct hfi2_sge *sge = --j ? &ss->sg_list[j - 1] : &ss->sge;
+		struct rvt_sge *sge = --j ? &ss->sg_list[j - 1] : &ss->sge;
 
-		hfi2_put_mr(sge->mr);
+		rvt_put_mr(sge->mr);
 	}
 	ss->num_sge = 0;
 	memset(&wc, 0, sizeof(wc));
@@ -434,7 +434,7 @@ static int send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
  * and clear qp->s_flags HFI1_S_BUSY otherwise.
  */
 static int hfi2_verbs_send(struct hfi2_qp *qp, union hfi2_ib_dma_header *hdr,
-			   u32 hdrwords, struct hfi2_sge_state *ss, u32 len)
+			   u32 hdrwords, struct rvt_sge_state *ss, u32 len)
 {
 	struct hfi2_ibport *ibp;
 	int ret = 0;
@@ -548,9 +548,9 @@ void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 		return;
 
 	for (i = 0; i < wqe->wr.num_sge; i++) {
-		struct hfi2_sge *sge = &wqe->sg_list[i];
+		struct rvt_sge *sge = &wqe->sg_list[i];
 
-		hfi2_put_mr(sge->mr);
+		rvt_put_mr(sge->mr);
 	}
 	if (qp->ibqp.qp_type == IB_QPT_UD ||
 	    qp->ibqp.qp_type == IB_QPT_SMI ||

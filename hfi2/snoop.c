@@ -1025,14 +1025,14 @@ static void snoop_recv_handler(struct hfi2_ib_packet *packet)
 static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 {
 	u32 hdrwords = qp->s_hdrwords;
-	struct hfi2_sge_state *ss = qp->s_cur_sge;
+	struct rvt_sge_state *ss = qp->s_cur_sge;
 	u32 len = qp->s_cur_size;
 	u32 dwords = (len + 3) >> 2; /* debug only */
 	struct hfi_devdata *dd = ibp->ibd->dd;
 	struct snoop_packet *s_packet = NULL;
 	void *hdr;
 	u32 length = 0;
-	struct hfi2_sge_state temp_ss;
+	struct rvt_sge_state temp_ss;
 	void *data = NULL;
 	void *data_start = NULL;
 	int ret;
