@@ -2143,6 +2143,19 @@ static inline bool hfi1_check_permissive(struct ib_ah_attr *ah_attr)
 			(opa_get_lid_from_gid(x) >=\
 			be16_to_cpu(IB_MULTICAST_LID_BASE)))
 
+/**
+ * Send a 16B packet if either lid is extended and the hop_limit
+ * is 1 (OPA GID) or 0xff (ah was created by ib_init_ah_from_wc).
+ */
+static inline bool hfi1_use_opa_16b(u32 lid, union ib_gid *dgid, u8 hop_limit)
+{
+	if ((lid >= IB_MULTICAST_LID_BASE ||
+	     IS_EXT_LID(dgid)) && (hop_limit == 1 || hop_limit == 0xff))
+		return true;
+	else
+		return false;
+}
+
 /* Check if current wqe needs 16B*/
 static inline bool hfi1_use_16b(struct rvt_qp *qp, struct rvt_swqe *wqe)
 {
@@ -2169,8 +2182,8 @@ static inline bool hfi1_use_16b(struct rvt_qp *qp, struct rvt_swqe *wqe)
 	ibp = to_iport(qp->ibqp.device, qp->port_num);
 	ppd = ppd_from_ibp(ibp);
 	dgid = &ah_attr->grh.dgid;
-	return ((ppd->lid >= IB_MULTICAST_LID_BASE || IS_EXT_LID(dgid)) &&
-		ah_attr->grh.hop_limit == 1);
+
+	return hfi1_use_opa_16b(ppd->lid, dgid, ah_attr->grh.hop_limit);
 }
 
 static inline void hfi1_make_ext_grh(struct hfi1_packet *packet,

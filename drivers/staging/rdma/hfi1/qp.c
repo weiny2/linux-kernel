@@ -233,9 +233,8 @@ static inline void qp_set_16b(struct rvt_qp *qp)
 	ibp = to_iport(qp->ibqp.device, qp->port_num);
 	ppd = ppd_from_ibp(ibp);
 	dgid = &qp->remote_ah_attr.grh.dgid;
-	priv->use_16b = ((ppd->lid >= IB_MULTICAST_LID_BASE ||
-			 IS_EXT_LID(dgid)) &&
-			 qp->remote_ah_attr.grh.hop_limit == 1);
+	priv->use_16b = hfi1_use_opa_16b(ppd->lid, dgid,
+					 qp->remote_ah_attr.grh.hop_limit);
 }
 
 void hfi1_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
