@@ -167,8 +167,9 @@
 					OPA_AM_CI_LEN_MASK)
 #define MKEY_SHIFT		6
 
-/* FXRTODO:  Rightful place for this is ./include/rdma/opa_smi.h */
+/* FXRTODO:  Rightful place for these are in ./include/rdma/opa_smi.h */
 #define OPA_ATTRIB_ID_BW_ARBITRATION		cpu_to_be16(0x0092)
+#define OPA_ATTRIB_ID_SL_PAIRS			cpu_to_be16(0x0097)
 
 #define OPA_BWARB_GROUP				0
 #define OPA_BWARB_PREEMPT_MATRIX		1

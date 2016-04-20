@@ -1224,6 +1224,11 @@ void hfi_get_bw_arb(struct hfi_pportdata *ppd, int section,
 	spin_unlock(&cache->lock);
 }
 
+static void hfi_get_sl_pairs(struct hfi_pportdata *ppd, u8 *sl_pairs)
+{
+	memcpy(sl_pairs, ppd->sl_pairs, sizeof(ppd->sl_pairs));
+}
+
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -1235,6 +1240,9 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 		break;
 	case HFI_IB_CFG_BW_ARB:
 		hfi_get_bw_arb(ppd, val, data);
+		break;
+	case HFI_IB_CFG_SL_PAIRS:
+		hfi_get_sl_pairs(ppd, data);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
@@ -1251,12 +1259,25 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
  */
 bool hfi_is_portals_req_sl(struct hfi_pportdata *ppd, u8 sl)
 {
+	int num_sls = ARRAY_SIZE(ppd->sl_pairs);
+
+	return (sl < num_sls &&  ppd->sl_to_sc[sl] != HFI_INVALID_RESP_SL &&
+		ppd->sl_pairs[sl] != HFI_INVALID_RESP_SL &&
+		ppd->sl_pairs[sl] < num_sls);
+}
+
+/*
+ * Returns true if the SL is used for portals traffic and the SL is the
+ * resp SL of the req/resp SL pairs.
+ */
+static bool hfi_is_portals_resp_sl(struct hfi_pportdata *ppd, u8 sl)
+{
 	int i;
 
-	for (i = 0; i < ppd->num_ptl_slp; i++)
-		if (ppd->ptl_slp[i][0] == sl)
+	for (i = 0; i < ARRAY_SIZE(ppd->sl_pairs); i++)
+		if (hfi_is_portals_req_sl(ppd, i) &&
+		    ppd->sl_pairs[i] == sl)
 			return true;
-
 	return false;
 }
 
@@ -1266,17 +1287,14 @@ bool hfi_is_portals_req_sl(struct hfi_pportdata *ppd, u8 sl)
  */
 static bool hfi_is_portals_sl(struct hfi_pportdata *ppd, u8 sl, u8 *resp_sl)
 {
-	int i, j;
+	bool is_req = hfi_is_portals_req_sl(ppd, sl);
 
-	for (i = 0; i < ppd->num_ptl_slp; i++) {
-		for (j = 0; j < HFI_MAX_MC; j++) {
-			if (ppd->ptl_slp[i][j] == sl) {
-				if (resp_sl)
-					*resp_sl = ppd->ptl_slp[i][1];
-				return true;
-			}
-		}
+	if (is_req || hfi_is_portals_resp_sl(ppd, sl)) {
+		if (resp_sl)
+			*resp_sl = is_req ? ppd->sl_pairs[sl] : sl;
+		return true;
 	}
+
 	return false;
 }
 
@@ -1288,20 +1306,13 @@ static int hfi_check_ptl_slp(struct hfi_ctx *ctx, struct hfi_sl_pair *slp)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	struct hfi_pportdata *ppd;
-	int i;
 
 	if (slp->port <= 0 || slp->port > dd->num_pports)
 		return -EINVAL;
 
 	ppd = to_hfi_ppd(dd, slp->port);
-	for (i = 0; i < ppd->num_ptl_slp; i++) {
-		u8 sl1 = ppd->ptl_slp[i][0];
-		u8 sl2 = ppd->ptl_slp[i][1];
-
-		if (slp->sl1 == sl1 && slp->sl2 == sl2)
-			return 0;
-	}
-	return -EINVAL;
+	return (hfi_is_portals_req_sl(ppd, slp->sl1) &&
+		ppd->sl_pairs[slp->sl1] == slp->sl2) ? 0 : -EINVAL;
 }
 
 /* Service level to message class and traffic class mapping */
@@ -1312,16 +1323,20 @@ static void hfi_sl_to_mctc(struct hfi_pportdata *ppd)
 	u32 tx_reg_addr, rx_reg_addr;
 	int i, j, k, tc = 0;
 	int nregs = ARRAY_SIZE(reg);
+	int num_sls = ARRAY_SIZE(ppd->sl_pairs);
 
-	/* set up SL to MCTC for portals traffic */
-	for (i = 0; i < ppd->num_ptl_slp; i++) {
-		u8 sl1 = ppd->ptl_slp[i][0];
-		u8 sl2 = ppd->ptl_slp[i][1];
+	for (i = 0; i < num_sls; i++) {
+		int resp_sl;
+
+		if (!hfi_is_portals_req_sl(ppd, i))
+			continue;
+
+		resp_sl = ppd->sl_pairs[i];
 
 		/* Request SL on TC MC 0 */
-		ppd->sl_to_mctc[sl1] = tc;
+		ppd->sl_to_mctc[i] = tc;
 		/* Response SL on TC MC 1 */
-		ppd->sl_to_mctc[sl2] = tc | (1 << 2);
+		ppd->sl_to_mctc[resp_sl] = tc | (1 << 2);
 
 		/* Round robin through available TCs. Locking? */
 		tc = (tc + 1) % HFI_MAX_TC;
@@ -1583,6 +1598,36 @@ void hfi_set_pkt_format(struct hfi_pportdata *ppd,
 	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);
 }
 
+static int hfi_set_sl_pairs(struct hfi_pportdata *ppd, const u8 *sl_pairs)
+{
+	int num_sls = ARRAY_SIZE(ppd->sl_pairs);
+	int i;
+
+	for (i = 0 ; i < num_sls; i++) {
+		u8 resp = sl_pairs[i];
+
+		if (resp == HFI_INVALID_RESP_SL)
+			continue;
+
+		/*
+		 * sl_pairs[resp] != HFI_INVALID_RESP_SL
+		 * means "Any SL which is tself a response SL shall
+		 * map to 0xff"
+		 */
+		if ((resp > num_sls && resp != HFI_INVALID_RESP_SL) ||
+		    sl_pairs[resp] != HFI_INVALID_RESP_SL) {
+			ppd_dev_err(ppd, "Invalid SL pair table\n");
+			return -EINVAL;
+		}
+	}
+
+	memcpy(ppd->sl_pairs, sl_pairs, sizeof(ppd->sl_pairs));
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_MCTC, 0, NULL);
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_RESP_SL, 0, ppd->sc_to_sl);
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_MCTC, 0, ppd->sc_to_sl);
+	return 0;
+}
+
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 {
 	struct hfi_devdata *dd = ppd->dd;
@@ -1628,6 +1673,9 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 	case HFI_IB_CFG_SL_TO_SC:
 		hfi_sl_to_sc(ppd);
 		break;
+	case HFI_IB_CFG_SL_TO_MCTC:
+		hfi_sl_to_mctc(ppd);
+		break;
 	case HFI_IB_CFG_SC_TO_RESP_SL:
 		hfi_sc_to_resp_sl(ppd, data);
 		break;
@@ -1648,6 +1696,9 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 		break;
 	case HFI_IB_CFG_PKT_FORMAT:
 		hfi_set_pkt_format(ppd, data);
+		break;
+	case HFI_IB_CFG_SL_PAIRS:
+		 ret = hfi_set_sl_pairs(ppd, data);
 		break;
 	default:
 		dd_dev_info(dd, "%s: which %d: not implemented\n",
@@ -2088,7 +2139,7 @@ static void hfi_init_bw_arb_caches(struct hfi_pportdata *ppd)
 int hfi_pport_init(struct hfi_devdata *dd)
 {
 	struct hfi_pportdata *ppd;
-	int i, j, size;
+	int i, size;
 	u8 port;
 	int ret;
 
@@ -2191,17 +2242,11 @@ int hfi_pport_init(struct hfi_devdata *dd)
 			ppd->sl_to_sc[i] = i;
 		for (i = 0; i < ARRAY_SIZE(ppd->sc_to_sl); i++)
 			ppd->sc_to_sl[i] = i;
-		/*
-		 * FXRTODO: Hard code the number of SL pairs for portals till
-		 * we receive these values from the FM
-		 */
-		ppd->num_ptl_slp = HFI_NUM_PTL_SLP;
-		for (i = 0, j = HFI_PTL_SL_START;
-			i < ppd->num_ptl_slp; i++, j += 2) {
-			ppd->ptl_slp[i][0] = j;
-			ppd->ptl_slp[i][1] = j + 1;
-		}
-		hfi_sl_to_mctc(ppd);
+
+		for (i = 0; i < ARRAY_SIZE(ppd->sl_pairs); i++)
+			ppd->sl_pairs[i] = HFI_INVALID_RESP_SL;
+
+		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_MCTC, 0, NULL);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0, NULL);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_RESP_SL, 0, ppd->sc_to_sl);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_MCTC, 0, ppd->sc_to_sl);

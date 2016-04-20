@@ -109,7 +109,7 @@ static const struct counter_info port_cntr_ops[] = {
 static int hfi_qos_show(struct seq_file *s, void *unused)
 {
 	struct hfi_pportdata *ppd = s->private;
-	int i = 0;
+	int i = 0, j;
 
 	seq_printf(s, "QoS mappings for port number %d\n", ppd->pnum);
 	for (i = 0; i < OPA_MAX_SCS; i++) {
@@ -132,9 +132,13 @@ static int hfi_qos_show(struct seq_file *s, void *unused)
 		seq_printf(s, "sc2vlnt[%2d] %2d\n", i, ppd->sc_to_vlnt[i]);
 	}
 
-	for (i = 0; i < ppd->num_ptl_slp; i++)
+	for (i = 0, j = 0; i < ARRAY_SIZE(ppd->sl_pairs); i++) {
+		if (!hfi_is_portals_req_sl(ppd, i))
+			continue;
+
 		seq_printf(s, "ptl_sl_pair %d sl1 %d sl2 %d\n",
-			   i, ppd->ptl_slp[i][0], ppd->ptl_slp[i][1]);
+			   j++, i, ppd->sl_pairs[i]);
+	}
 
 	return 0;
 }
