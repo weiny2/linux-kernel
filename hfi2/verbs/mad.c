@@ -702,6 +702,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsMAXLIDSupported);
 	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsBwMeterSupported);
 	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsVLMarkerSupported);
+	pi->opa_cap_mask |= cpu_to_be16(OPA_CAP_MASK3_IsSLPairsSupported);
 
 	/* Driver does not support mcast/collective configuration */
 	pi->opa_cap_mask &=
@@ -1145,6 +1146,28 @@ static int __subn_get_opa_cc_table(struct opa_smp *smp, u32 am, u8 *data,
 	return reply(ibh);
 }
 
+static int __subn_get_opa_sl_pairs(struct opa_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
+{
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+	struct ib_mad_hdr *ibh = (struct ib_mad_hdr *)smp;
+	size_t size = sizeof(ppd->sl_pairs);
+
+	if (am) {
+		hfi_invalid_attr(smp);
+		return reply(ibh);
+	}
+
+	hfi_get_ib_cfg(ppd, HFI_IB_CFG_SL_PAIRS, 0, data);
+
+	if (resp_len)
+		*resp_len += size;
+
+	return reply(ibh);
+}
+
 static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 			    u8 *data, struct ib_device *ibdev, u8 port,
 			    u32 *resp_len)
@@ -1227,6 +1250,10 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		break;
 	case OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
 		ret = __subn_get_opa_cc_table(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case OPA_ATTRIB_ID_SL_PAIRS:
+		ret = __subn_get_opa_sl_pairs(smp, am, data, ibdev, port,
 					      resp_len);
 		break;
 	case IB_SMP_ATTR_SM_INFO:
@@ -2205,6 +2232,26 @@ done:
 	return __subn_get_opa_cc_table(smp, am, data, ibdev, port, resp_len);
 }
 
+static int __subn_set_opa_sl_pairs(struct opa_smp *smp, u32 am, u8 *data,
+				   struct ib_device *ibdev, u8 port,
+				   u32 *resp_len)
+{
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+
+	if (am)
+		goto err;
+
+	if (hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_PAIRS, 0, data))
+		goto err;
+
+	goto done;
+err:
+	hfi_invalid_attr(smp);
+done:
+	return __subn_get_opa_sl_pairs(smp, am, data, ibdev, port, resp_len);
+}
+
 static int __subn_set_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 				struct ib_device *ibdev, u8 port,
 					      u32 *resp_len)
@@ -2267,6 +2314,10 @@ static int subn_set_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 		break;
 	case OPA_ATTRIB_ID_CONGESTION_CONTROL_TABLE:
 		ret = __subn_set_opa_cc_table(smp, am, data, ibdev, port,
+					      resp_len);
+		break;
+	case OPA_ATTRIB_ID_SL_PAIRS:
+		ret = __subn_set_opa_sl_pairs(smp, am, data, ibdev, port,
 					      resp_len);
 		break;
 	case IB_SMP_ATTR_LED_INFO:

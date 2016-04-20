@@ -217,18 +217,12 @@ enum {
 #define HFI_RCV_BUFFER_SIZE		(128 * 1024)
 
 /*
- * FXRTODO: Get rid of hard coded number of SL pairs and SL start once the FM
- * provides it
+ * Any SL which is
+ *  - Invalid (mapped to SC15 in the SL2SC table
+ *  - No response SL
+ *  - Is itself a response SL
  */
-/* Number of SL pairs used by Portals */
-#define HFI_NUM_PTL_SLP 2
-
-/*
- * Starting SL for Portals traffic. The following pairs are reserved for
- * portals. [0, 1], [2, 3]
- *
- */
-#define HFI_PTL_SL_START 0
+#define HFI_INVALID_RESP_SL		0xff
 
 /*
  * Private data for snoop/capture support.
@@ -321,13 +315,15 @@ enum {
 	HFI_IB_CFG_MTU,			/* update MTU in IBC */
 	HFI_IB_CFG_VL_HIGH_LIMIT,	/* Change VL high limit */
 	HFI_IB_CFG_SL_TO_SC,		/* Change SLtoSC mapping */
+	HFI_IB_CFG_SL_TO_MCTC,		/* Change SLtoMCTC mapping */
 	HFI_IB_CFG_SC_TO_RESP_SL,	/* Change SCtoRespSL mapping */
 	HFI_IB_CFG_SC_TO_MCTC,		/* Change SCtoMCTC mapping */
 	HFI_IB_CFG_SC_TO_VLR,		/* Change SCtoVLr mapping */
 	HFI_IB_CFG_SC_TO_VLT,		/* Change SCtoVLt mapping */
 	HFI_IB_CFG_SC_TO_VLNT,		/* Change Neighbor's SCtoVL mapping */
 	HFI_IB_CFG_BW_ARB,		/* Change BW Arbitrator tables */
-	HFI_IB_CFG_PKT_FORMAT		/* Change HFI packet format */
+	HFI_IB_CFG_PKT_FORMAT,		/* Change HFI packet format */
+	HFI_IB_CFG_SL_PAIRS		/* Change SL pairs */
 };
 
 /* verify capability fabric CRC size bits */
@@ -508,8 +504,10 @@ struct bw_arb_cache {
  * @sc_to_vlnt: service class to (RX) neighbor virtual lane table
  * @sl_to_mctc: service level to traffic class & message class mapping
  * @sc_to_mctc: service class to traffic class & message class mapping
- * @ptl_slp: SL pairs reserved for portals
- * @num_ptl_slp: number of SL pairs reserved for portals
+ * @sl_pairs: SL pairs set by the SM. It is indexed by SL request and the
+ *      value is SL response. Any SL which is invalid (mapped to SC15 in
+ *      the SL2SC table), has no response SL, or is itself a response SL
+ *      shall map to 0xFF
  * @bct: buffer control table
  *@local_link_down_reason: Reason why this port transitioned to link down
  *@local_link_down_reason: Reason why the neighboring port transitioned to
@@ -604,8 +602,7 @@ struct hfi_pportdata {
 	u8 sc_to_vlnt[OPA_MAX_SCS];
 	u8 sl_to_mctc[OPA_MAX_SLS];
 	u8 sc_to_mctc[OPA_MAX_SCS];
-	u8 ptl_slp[OPA_MAX_SLS / 2][HFI_MAX_MC];
-	u8 num_ptl_slp;
+	u8 sl_pairs[OPA_MAX_SLS];
 	u16 vl_mtu[OPA_MAX_VLS];
 	struct hfi_link_down_reason local_link_down_reason;
 	struct hfi_link_down_reason neigh_link_down_reason;
@@ -671,7 +668,7 @@ struct hfi_pportdata {
  * device data struct contains only per-HFI info.
  *
  *@fw_mutex: The mutex protects fw_state, fw_err, and all of the
- * 		firmware_details variables.
+ *		firmware_details variables.
  *@fw_state: keep firmware status, FW_EMPTY, FW_TRY, FW_FINAL, FW_ERR
  *@fw_err: keep firmware loading error code.
  *@fw_8051_name: Firmware file names get set in firmware_init()
