@@ -598,9 +598,9 @@ static inline bool hfi2_use_16b(struct hfi2_qp *qp)
 		return false;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-	ah_attr = &to_hfi_ah(wqe->ud_wr.ah)->attr;
+	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
 #else
-	ah_attr = &to_hfi_ah(wqe->wr.wr.ud.ah)->attr;
+	ah_attr = &ibah_to_rvtah(wqe->wr.wr.ud.ah)->attr;
 #endif
 	if (ib_query_gid(qp->ibqp.device, qp->port_num,
 			 ah_attr->grh.sgid_index, &sgid

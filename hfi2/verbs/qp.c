@@ -281,9 +281,9 @@ static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
 			    qp->ibqp.qp_type == IB_QPT_SMI ||
 			    qp->ibqp.qp_type == IB_QPT_GSI)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-				atomic_dec(&to_hfi_ah(wqe->ud_wr.ah)->refcount);
+				atomic_dec(&ibah_to_rvtah(wqe->ud_wr.ah)->refcount);
 #else
-				atomic_dec(&to_hfi_ah(wqe->wr.wr.ud.ah)->refcount);
+				atomic_dec(&ibah_to_rvtah(wqe->wr.wr.ud.ah)->refcount);
 #endif
 			if (++qp->s_last >= qp->s_size)
 				qp->s_last = 0;

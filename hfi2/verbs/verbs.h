@@ -124,12 +124,6 @@ struct hfi2_ib_header;
 struct hfi2_ib_packet;
 union hfi2_packet_header;
 
-struct hfi2_ah {
-	struct ib_ah ibah;
-	struct ib_ah_attr attr;
-	atomic_t refcount;
-};
-
 /*
  * Send work request queue entry.
  * The size of the sg_list is determined when the QP is created and stored
@@ -459,7 +453,7 @@ struct hfi2_ibport {
 	struct hfi2_ibrcv sm_rcv;
 	struct hfi2_ibrcv qp_rcv;
 	struct ib_mad_agent *send_agent;
-	struct hfi2_ah *sm_ah;
+	struct rvt_ah *sm_ah;
 };
 
 struct hfi2_ibdev {
@@ -500,7 +494,6 @@ struct hfi2_ibdev {
 	struct hfi_ctx qp_ctx;
 };
 
-#define to_hfi_ah(ah)	container_of((ah), struct hfi2_ah, ibah)
 #define to_hfi_qp(qp)	container_of((qp), struct hfi2_qp, ibqp)
 /* TODO - for now use typecast below, revisit when fully RDMAVT integrated */
 #define to_hfi_ibd(ibdev)	container_of((struct rvt_dev_info *)(ibdev),\

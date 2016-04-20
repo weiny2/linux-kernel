@@ -319,9 +319,9 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 	} else {
 		struct hfi_pportdata *ppd;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-		struct hfi2_ah *ah = to_hfi_ah(ud_wr(wr)->ah);
+		struct rvt_ah *ah = ibah_to_rvtah(ud_wr(wr)->ah);
 #else
-		struct hfi2_ah *ah = to_hfi_ah(wr->wr.ud.ah);
+		struct rvt_ah *ah = ibah_to_rvtah(wr->wr.ud.ah);
 #endif
 		u8 sc5, vl;
 
