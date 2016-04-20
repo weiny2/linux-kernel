@@ -130,76 +130,6 @@ struct hfi2_ah {
 	atomic_t refcount;
 };
 
-struct hfi2_lkey_table {
-	spinlock_t lock;        /* protect changes in this struct */
-	u32 gen;                /* generation count */
-	u32 max;                /* size of the table */
-	struct idr table;
-};
-
-/*
- * A segment is a linear region of low physical memory.
- * Used by the verbs layer.
- */
-struct hfi2_seg {
-	void *vaddr;
-	size_t length;
-};
-
-/* The number of hfi2_segs that fit in a page. */
-#define HFI2_SEGSZ     (PAGE_SIZE / sizeof(struct hfi2_seg))
-
-struct hfi2_segarray {
-	struct hfi2_seg segs[HFI2_SEGSZ];
-};
-
-struct hfi2_mregion {
-	struct ib_pd *pd;       /* shares refcnt of ibmr.pd */
-	u64 user_base;          /* User's address for this region */
-	u64 iova;               /* IB start address of this region */
-	size_t length;
-	u32 lkey;
-	u32 offset;             /* offset (bytes) to start of region */
-	int access_flags;
-	u32 max_segs;           /* number of hfi1_segs in all the arrays */
-	u32 mapsz;              /* size of the map array */
-	u8  page_shift;         /* 0 - non unform/non powerof2 sizes */
-	u8  lkey_published;     /* in global table */
-	struct completion comp; /* complete when refcount goes to zero */
-	atomic_t refcount;
-	struct hfi2_segarray *map[0];    /* the segments */
-};
-
-struct hfi2_mr {
-	struct ib_mr ibmr;
-	struct ib_umem *umem;
-	struct hfi2_mregion mr;  /* must be last */
-};
-
-static inline void hfi2_get_mr(struct hfi2_mregion *mr)
-{
-	atomic_inc(&mr->refcount);
-}
-
-static inline void hfi2_put_mr(struct hfi2_mregion *mr)
-{
-	if (unlikely(atomic_dec_and_test(&mr->refcount)))
-		complete(&mr->comp);
-}
-
-/*
- * These keep track of the copy progress within a memory region.
- * Used by the verbs layer.
- */
-struct hfi2_sge {
-	struct hfi2_mregion *mr;
-	void *vaddr;            /* kernel virtual address of segment */
-	u32 sge_length;         /* length of the SGE */
-	u32 length;             /* remaining length of the segment */
-	u16 m;                  /* current index: mr->map[m] */
-	u16 n;                  /* current index: mr->map[m]->segs[n] */
-};
-
 /*
  * Send work request queue entry.
  * The size of the sg_list is determined when the QP is created and stored
@@ -222,24 +152,8 @@ struct hfi2_swqe {
 	bool use_sc15;
 	bool use_16b;
 	u32 pkt_errors;
-	struct hfi2_sge sg_list[0];
+	struct rvt_sge sg_list[0];
 };
-
-struct hfi2_sge_state {
-	struct hfi2_sge *sg_list;  /* next SGE to be used if any */
-	struct hfi2_sge sge;	   /* progress state for the current SGE */
-	u32 total_len;
-	u8 num_sge;
-};
-
-static inline void hfi2_put_ss(struct hfi2_sge_state *ss)
-{
-	while (ss->num_sge) {
-		hfi2_put_mr(ss->sge.mr);
-		if (--ss->num_sge)
-			ss->sge = *ss->sg_list++;
-	}
-}
 
 /*
  * This structure holds the information that the send tasklet needs
@@ -251,7 +165,7 @@ struct hfi2_ack_entry {
 	u32 psn;
 	u32 lpsn;
 	union {
-		struct hfi2_sge rdma_sge;
+		struct rvt_sge rdma_sge;
 		u64 atomic_data;
 	};
 };
@@ -307,7 +221,7 @@ struct hfi2_qp {
 
 	struct hfi2_ack_entry s_ack_queue[OPA_IB_MAX_RDMA_ATOMIC + 1]
 		____cacheline_aligned_in_smp;
-	struct hfi2_sge_state s_rdma_read_sge;
+	struct rvt_sge_state s_rdma_read_sge;
 
 	spinlock_t r_lock ____cacheline_aligned_in_smp;      /* used for APM */
 	unsigned long r_aflags;
@@ -321,15 +235,15 @@ struct hfi2_qp {
 	u8 r_flags;
 	u8 r_head_ack_queue;    /* index into s_ack_queue[] */
 	struct list_head rspwait;	/* link for waiting to respond */
-	struct hfi2_sge_state r_sge;	/* current receive data */
+	struct rvt_sge_state r_sge;	/* current receive data */
 	struct rvt_rq r_rq;		/* receive work queue */
 
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
-	struct hfi2_sge_state *s_cur_sge;
+	struct rvt_sge_state *s_cur_sge;
 	u32 s_flags;
 	struct hfi2_swqe *s_wqe;
-	struct hfi2_sge_state s_sge;     /* current send request data */
-	struct hfi2_mregion *s_rdma_mr;
+	struct rvt_sge_state s_sge;     /* current send request data */
+	struct rvt_mregion *s_rdma_mr;
 	u32 s_cur_size;         /* size of send packet in bytes */
 	u32 s_len;              /* total length of s_sge */
 	u32 s_rdma_read_len;    /* total length of s_rdma_read_sge */
@@ -360,11 +274,11 @@ struct hfi2_qp {
 	u8 s_tail_ack_queue;    /* index into s_ack_queue[] */
 	u8 allowed_ops;		/* high order bits of allowed opcodes */
 
-	struct hfi2_sge_state s_ack_rdma_sge;
+	struct rvt_sge_state s_ack_rdma_sge;
 	struct timer_list s_timer;
 	struct iowait s_iowait;
 
-	struct hfi2_sge r_sg_list[0] /* verified SGEs */
+	struct rvt_sge r_sg_list[0] /* verified SGEs */
 		____cacheline_aligned_in_smp;
 
 	struct hfi_ctx *s_ctx;	/* QP's send context */
@@ -457,7 +371,7 @@ static inline struct hfi2_swqe *get_swqe_ptr(struct hfi2_qp *qp,
 	return (struct hfi2_swqe *)((char *)qp->s_wq +
 				     (sizeof(struct hfi2_swqe) +
 				      qp->s_max_sge *
-				      sizeof(struct hfi2_sge)) * n);
+				      sizeof(struct rvt_sge)) * n);
 }
 
 /*
@@ -563,8 +477,6 @@ struct hfi2_ibdev {
 	struct idr qp_ptr;
 	unsigned long reserved_qps;
 	spinlock_t qpt_lock;
-	struct hfi2_lkey_table lk_table;
-	struct hfi2_mregion __rcu *dma_mr;
 	u32 n_ahs_allocated;
 	spinlock_t n_ahs_lock;
 	u32 n_qps_allocated;
@@ -590,7 +502,6 @@ struct hfi2_ibdev {
 
 #define to_hfi_ah(ah)	container_of((ah), struct hfi2_ah, ibah)
 #define to_hfi_qp(qp)	container_of((qp), struct hfi2_qp, ibqp)
-#define to_hfi_mr(mr)	container_of((mr), struct hfi2_mr, ibmr)
 /* TODO - for now use typecast below, revisit when fully RDMAVT integrated */
 #define to_hfi_ibd(ibdev)	container_of((struct rvt_dev_info *)(ibdev),\
 				struct hfi2_ibdev, rdi)
@@ -661,20 +572,8 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
 void hfi2_ib_rcv(struct hfi2_ib_packet *packet);
 int hfi2_rcv_wait(void *data);
 int hfi2_lookup_pkey_idx(struct hfi2_ibport *ibp, u16 pkey);
-int hfi2_lkey_ok(struct hfi2_lkey_table *rkt, struct rvt_pd *pd,
-		 struct hfi2_sge *isge, struct ib_sge *sge, int acc);
-int hfi2_rkey_ok(struct hfi2_qp *qp, struct hfi2_sge *sge,
+int hfi2_rkey_ok(struct hfi2_qp *qp, struct rvt_sge *sge,
 		 u32 len, u64 vaddr, u32 rkey, int acc);
-struct ib_mr *hfi2_get_dma_mr(struct ib_pd *pd, int acc);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
-struct ib_mr *hfi2_reg_phys_mr(struct ib_pd *pd,
-			       struct ib_phys_buf *buffer_list,
-			       int num_phys_buf, int acc, u64 *iova_start);
-#endif
-struct ib_mr *hfi2_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
-			       u64 virt_addr, int mr_access_flags,
-			       struct ib_udata *udata);
-int hfi2_dereg_mr(struct ib_mr *ibmr);
 int hfi2_get_rwqe(struct hfi2_qp *qp, int wr_id_only);
 void hfi2_migrate_qp(struct hfi2_qp *qp);
 void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
@@ -689,10 +588,10 @@ void hfi2_rc_send_complete(struct hfi2_qp *qp, struct ib_l4_headers *ohdr);
 int hfi2_make_uc_req(struct hfi2_qp *qp);
 int hfi2_make_ud_req(struct hfi2_qp *qp);
 int hfi2_make_rc_req(struct hfi2_qp *qp);
-void hfi2_copy_sge(struct hfi2_sge_state *ss, void *data, u32 length,
+void hfi2_copy_sge(struct rvt_sge_state *ss, void *data, u32 length,
 		   int release);
-void hfi2_skip_sge(struct hfi2_sge_state *ss, u32 length, int release);
-void hfi2_update_sge(struct hfi2_sge_state *ss, u32 length);
+void hfi2_skip_sge(struct rvt_sge_state *ss, u32 length, int release);
+void hfi2_update_sge(struct rvt_sge_state *ss, u32 length);
 int hfi2_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		   struct ib_send_wr **bad_wr);
 int hfi2_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,

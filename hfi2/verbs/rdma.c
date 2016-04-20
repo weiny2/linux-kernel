@@ -110,10 +110,10 @@ static const opcode_handler opcode_handler_tbl[256] = {
  * @data: the data to copy
  * @length: the length of the data
  */
-void hfi2_copy_sge(struct hfi2_sge_state *ss, void *data, u32 length,
+void hfi2_copy_sge(struct rvt_sge_state *ss, void *data, u32 length,
 		     int release)
 {
-	struct hfi2_sge *sge = &ss->sge;
+	struct rvt_sge *sge = &ss->sge;
 
 	while (length) {
 		u32 len = sge->length;
@@ -132,11 +132,11 @@ void hfi2_copy_sge(struct hfi2_sge_state *ss, void *data, u32 length,
 		sge->sge_length -= len;
 		if (sge->sge_length == 0) {
 			if (release)
-				hfi2_put_mr(sge->mr);
+				rvt_put_mr(sge->mr);
 			if (--ss->num_sge)
 				*sge = *ss->sg_list++;
 		} else if (sge->length == 0 && sge->mr->lkey) {
-			if (++sge->n >= HFI2_SEGSZ) {
+			if (++sge->n >= RVT_SEGSZ) {
 				if (++sge->m >= sge->mr->mapsz)
 					break;
 				sge->n = 0;
@@ -155,7 +155,7 @@ void hfi2_copy_sge(struct hfi2_sge_state *ss, void *data, u32 length,
  * @ss: the SGE state
  * @length: the number of bytes to skip
  */
-void hfi2_skip_sge(struct hfi2_sge_state *ss, u32 length, int release)
+void hfi2_skip_sge(struct rvt_sge_state *ss, u32 length, int release)
 {
 	hfi2_copy_sge(ss, NULL, length, release);
 }
@@ -166,9 +166,9 @@ void hfi2_skip_sge(struct hfi2_sge_state *ss, u32 length, int release)
  * @ss: the SGE state
  * @length: the number of bytes to skip
  */
-void hfi2_update_sge(struct hfi2_sge_state *ss, u32 length)
+void hfi2_update_sge(struct rvt_sge_state *ss, u32 length)
 {
-	struct hfi2_sge *sge = &ss->sge;
+	struct rvt_sge *sge = &ss->sge;
 
 	sge->vaddr += length;
 	sge->length -= length;
@@ -177,7 +177,7 @@ void hfi2_update_sge(struct hfi2_sge_state *ss, u32 length)
 		if (--ss->num_sge)
 			*sge = *ss->sg_list++;
 	} else if (sge->length == 0 && sge->mr->lkey) {
-		if (++sge->n >= HFI2_SEGSZ) {
+		if (++sge->n >= RVT_SEGSZ) {
 			if (++sge->m >= sge->mr->mapsz)
 				return;
 			sge->n = 0;
@@ -197,6 +197,7 @@ void hfi2_update_sge(struct hfi2_sge_state *ss, u32 length)
 static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 			 int *scheduled)
 {
+	struct ib_device *ibdev = qp->ibqp.device;
 	struct hfi2_swqe *wqe;
 	u32 next;
 	int i;
@@ -204,15 +205,11 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 	int acc;
 	int ret;
 	unsigned long flags;
-	struct hfi2_lkey_table *rkt;
+	struct rvt_lkey_table *rkt;
 	struct rvt_pd *pd;
-	struct hfi2_ibport *ibp;
-	struct hfi_pportdata *ppd;
-	struct hfi2_sge *last_sge;
+	struct rvt_sge *last_sge;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
-	ppd = ibp->ppd;
 
 	/* Check that state is OK to post send. */
 	if (unlikely(!(ib_qp_state_ops[qp->state] & HFI1_POST_SEND_OK)))
@@ -260,7 +257,7 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 		goto bail;
 	}
 
-	rkt = &to_hfi_ibd(qp->ibqp.device)->lk_table;
+	rkt = &ib_to_rvt(ibdev)->lkey_table;
 	pd = ibpd_to_rvtpd(qp->ibqp.pd);
 	wqe = get_swqe_ptr(qp, qp->s_head);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
@@ -300,8 +297,8 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 				last_sge->length += length;
 				last_sge->sge_length += length;
 			} else {
-				ok = hfi2_lkey_ok(rkt, pd, &wqe->sg_list[j],
-						  &wr->sg_list[i], acc);
+				ok = rvt_lkey_ok(rkt, pd, &wqe->sg_list[j],
+						 &wr->sg_list[i], acc);
 				if (!ok)
 					goto bail_inval_free;
 
@@ -320,6 +317,7 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 		if (wqe->length > 0x80000000U)
 			goto bail_inval_free;
 	} else {
+		struct hfi_pportdata *ppd;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
 		struct hfi2_ah *ah = to_hfi_ah(ud_wr(wr)->ah);
 #else
@@ -327,6 +325,7 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 #endif
 		u8 sc5, vl;
 
+		ppd = to_hfi_ibp(ibdev, qp->port_num)->ppd;
 		if (qp->ibqp.qp_type == IB_QPT_SMI) {
 			vl = ppd->sc_to_vlt[15];
 		} else {
@@ -349,9 +348,9 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 
 bail_inval_free:
 	while (j) {
-		struct hfi2_sge *sge = &wqe->sg_list[--j];
+		struct rvt_sge *sge = &wqe->sg_list[--j];
 
-		hfi2_put_mr(sge->mr);
+		rvt_put_mr(sge->mr);
 	}
 bail_inval:
 	ret = -EINVAL;

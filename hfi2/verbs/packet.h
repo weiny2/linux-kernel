@@ -244,7 +244,7 @@ struct hfi2_wqe_iov {
 	struct hfi2_qp *qp;
 	union {
 		struct hfi2_swqe *wqe;
-		struct hfi2_mregion *mr;
+		struct rvt_mregion *mr;
 	};
 	union hfi2_packet_header ph;
 	bool use_16b;

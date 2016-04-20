@@ -148,8 +148,8 @@ static int qp_max_iovs(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 {
 	int niovs, i;
 	size_t off, segsz, payload_bytes, length;
-	struct hfi2_sge_state *ss = qp->s_cur_sge;
-	struct hfi2_sge *sge = &ss->sge;
+	struct rvt_sge_state *ss = qp->s_cur_sge;
+	struct rvt_sge *sge = &ss->sge;
 
 	niovs = 1; /* one IOV for header */
 
@@ -194,8 +194,8 @@ static void qp_read_sge(struct hfi2_qp *qp, uint64_t *start,
 			uint32_t *length)
 {
 	uint32_t iov_length;
-	struct hfi2_sge_state *ss = qp->s_cur_sge;
-	struct hfi2_sge *sge = &ss->sge;
+	struct rvt_sge_state *ss = qp->s_cur_sge;
+	struct rvt_sge *sge = &ss->sge;
 
 	/* use length from next MR segment */
 	iov_length = sge->length;
@@ -301,7 +301,7 @@ next_event:
 		wqe = NULL;
 		/* for RC READ responses, release the MR */
 		if (wqe_iov->mr)
-			hfi2_put_mr(wqe_iov->mr);
+			rvt_put_mr(wqe_iov->mr);
 	} else {
 		wqe = wqe_iov->wqe;
 	}

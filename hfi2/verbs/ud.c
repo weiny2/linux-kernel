@@ -76,8 +76,8 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 	struct hfi2_qp *qp;
 	struct ib_ah_attr *ah_attr;
 	unsigned long flags;
-	struct hfi2_sge_state ssge;
-	struct hfi2_sge *sge;
+	struct rvt_sge_state ssge;
+	struct rvt_sge *sge;
 	struct ib_wc wc;
 	u32 length;
 	enum ib_qp_type sqptype, dqptype;
@@ -233,7 +233,7 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 			if (--ssge.num_sge)
 				*sge = *ssge.sg_list++;
 		} else if (sge->length == 0 && sge->mr->lkey) {
-			if (++sge->n >= HFI2_SEGSZ) {
+			if (++sge->n >= RVT_SEGSZ) {
 				if (++sge->m >= sge->mr->mapsz)
 					break;
 				sge->n = 0;
@@ -245,7 +245,7 @@ static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
 		}
 		length -= len;
 	}
-	hfi2_put_ss(&qp->r_sge);
+	rvt_put_ss(&qp->r_sge);
 	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		goto bail_unlock;
 	wc.wr_id = qp->r_wr_id;
@@ -885,7 +885,7 @@ void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
 	}
 	hfi2_copy_sge(&qp->r_sge, data,
 			wc.byte_len - sizeof(struct ib_grh), 1);
-	hfi2_put_ss(&qp->r_sge);
+	rvt_put_ss(&qp->r_sge);
 	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
 		return;
 	wc.wr_id = qp->r_wr_id;
