@@ -252,7 +252,7 @@ static void hfi_init_max_lid_csrs(const struct hfi_pportdata *ppd)
 {
 	const struct hfi_devdata *dd = ppd->dd;
 	RXE2E_CFG_VALID_TC_SLID_t rx_tc_slid;
-	txotr_pkt_cfg_valid_tc_dlid_t tx_tc_slid;
+	TXOTR_PKT_CFG_VALID_TC_DLID_t tx_tc_slid;
 
 	tx_tc_slid.val = read_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID);
 	rx_tc_slid.val = read_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID);
@@ -326,7 +326,7 @@ static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 
 static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 {
-	txotr_pkt_cfg_valid_tc_dlid_t tc_slid = {.val = 0};
+	TXOTR_PKT_CFG_VALID_TC_DLID_t tc_slid = {.val = 0};
 
 	tc_slid.field.tc_valid_p0 = 0xf;
 	tc_slid.field.tc_valid_p1 = 0xf;
@@ -381,7 +381,7 @@ static void init_csrs(struct hfi_devdata *dd)
 	RXHP_CFG_NPTL_BTH_QP_t kdeth_qp = {.val = 0};
 	LM_CONFIG_PORT0_t lmp0 = {.val = 0};
 	LM_CONFIG_PORT1_t lmp1 = {.val = 0};
-	txotr_pkt_cfg_timeout_t txotr_timeout = {.val = 0};
+	TXOTR_PKT_CFG_TIMEOUT_t txotr_timeout = {.val = 0};
 	LM_CONFIG_t lm_config = {.val = 0};
 
 	/* enable non-portals */
@@ -448,7 +448,7 @@ static int hfi_psn_init(struct hfi_pportdata *port, u32 max_lid)
 	int pnum = port->pnum - 1, j, rc = 0;
 	struct hfi_devdata *dd = port->dd;
 	u32 tx_offset = FXR_TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC;
-	txotr_pkt_cfg_psn_base_addr_p0_tc_t tx_psn_base = {.val = 0};
+	TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC_t tx_psn_base = {.val = 0};
 	u32 rx_offset = FXR_RXE2E_CFG_PSN_BASE_ADDR_P0_TC;
 	RXE2E_CFG_PSN_BASE_ADDR_P0_TC_t rx_psn_base = {.val = 0};
 	/*
@@ -568,69 +568,38 @@ void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 	TP_CFG_MISC_CTRL_t misc;
 
 	misc.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
-	misc.field.disable_pkey_chk = !enable;
+	misc.field.pkey_chk_enable = enable;
 	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
 }
 
 void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 {
-	struct hfi_devdata *dd = ppd->dd;
-	LM_CONFIG_PORT0_t lmp0;
-	LM_CONFIG_PORT1_t lmp1;
+	FPC_CFG_PORT_CONFIG_t fpc;
 
-	switch (ppd_to_pnum(ppd)) {
-	case 1:
-		lmp0.val = read_csr(dd, FXR_LM_CONFIG_PORT0);
-		lmp0.field.ENABLE_PKEY = enable;
-		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
-		break;
-	case 2:
-		lmp1.val = read_csr(dd, FXR_LM_CONFIG_PORT1);
-		lmp1.field.ENABLE_PKEY = enable;
-		write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
-		break;
-	default:
-		return;
-	}
+	fpc.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
+	fpc.field.pkey_en = enable;
+	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);
 }
 
 void hfi_set_implicit_pkeys(struct hfi_pportdata *ppd,
 			    u16 *pkey_8b, u16 *pkey_10b)
 {
-	TP_CFG_PKEY_CHECK_CTRL_t reg;
-	struct hfi_devdata *dd = ppd->dd;
-	LM_CONFIG_PORT0_t lmp0;
-	LM_CONFIG_PORT1_t lmp1;
+	TP_CFG_PKEY_CHECK_CTRL_t eg_pkey;
+	FPC_CFG_PKEY_CTRL_t in_pkey;
 
-	/* Egress */
-	reg.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL);
-	if (pkey_8b)
-		reg.field.pkey_8b = *pkey_8b;
-	if (pkey_10b)
-		reg.field.pkey_10b = *pkey_10b;
-	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL, reg.val);
-
-	/* Ingress */
-	switch (ppd_to_pnum(ppd)) {
-	case 1:
-		lmp0.val = read_csr(dd, FXR_LM_CONFIG_PORT0);
-		if (pkey_8b)
-			lmp0.field.IMPLICIT_PKEY_8B = *pkey_8b;
-		if (pkey_10b)
-			lmp0.field.IMPLICIT_PKEY_10B = *pkey_10b;
-		write_csr(dd, FXR_LM_CONFIG_PORT0, lmp0.val);
-		break;
-	case 2:
-		lmp1.val = read_csr(dd, FXR_LM_CONFIG_PORT1);
-		if (pkey_8b)
-			lmp1.field.IMPLICIT_PKEY_8B = *pkey_8b;
-		if (pkey_10b)
-			lmp1.field.IMPLICIT_PKEY_10B = *pkey_10b;
-		write_csr(dd, FXR_LM_CONFIG_PORT1, lmp1.val);
-		break;
-	default:
-		return;
+	/* Set ingress and egress implicit 8B/10B pkeys */
+	eg_pkey.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL);
+	in_pkey.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_CTRL);
+	if (pkey_8b) {
+		eg_pkey.field.pkey_8b = *pkey_8b;
+		in_pkey.field.pkey_8b = *pkey_8b;
 	}
+	if (pkey_10b) {
+		eg_pkey.field.pkey_10b = *pkey_10b;
+		in_pkey.field.pkey_10b = *pkey_10b;
+	}
+	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL, eg_pkey.val);
+	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_CTRL, in_pkey.val);
 }
 
 static void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
@@ -2432,12 +2401,12 @@ void hfi_eq_cache_invalidate(struct hfi_devdata *dd, u16 ptl_pid)
 
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 {
-	RX_HIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
-	RX_HIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
-	txotr_msg_cfg_cancel_msg_req_1_t cancel_msg_req1 = {.val = 0};
-	txotr_msg_cfg_cancel_msg_req_2_t cancel_msg_req2 = {.val = 0};
-	txotr_msg_cfg_cancel_msg_req_3_t cancel_msg_req3 = {.val = 0};
-	txotr_msg_cfg_cancel_msg_req_4_t cancel_msg_req4 = {.val = 0};
+	RXHIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
+	RXHIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
+	TXOTR_MSG_CFG_CANCEL_MSG_REQ_1_t cancel_msg_req1 = {.val = 0};
+	TXOTR_MSG_CFG_CANCEL_MSG_REQ_2_t cancel_msg_req2 = {.val = 0};
+	TXOTR_MSG_CFG_CANCEL_MSG_REQ_3_t cancel_msg_req3 = {.val = 0};
+	TXOTR_MSG_CFG_CANCEL_MSG_REQ_4_t cancel_msg_req4 = {.val = 0};
 	RXHP_CFG_PTE_CACHE_ACCESS_CTL_t pte_cache_access = {.val = 0};
 	RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t trig_op_cache_access = {.val = 0};
 	RXHP_CFG_PSC_CACHE_ACCESS_CTL_t me_le_uh_cache_access = {.val = 0};
@@ -2446,8 +2415,8 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	union psc_cache_addr me_le_uh_cache_tag;
 
 	/* write PCB_LOW first to clear valid bit */
-	write_csr(dd, FXR_RX_HIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
-	write_csr(dd, FXR_RX_HIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
+	write_csr(dd, FXR_RXHIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
+	write_csr(dd, FXR_RXHIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
 
 	/* We need this lock to guard cache invalidation
 	 * CSR writes, all pids use the same CSR
@@ -2463,14 +2432,14 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_2, cancel_msg_req2.val);
 	cancel_msg_req1.field.ipid_mask = 0xFFF;
 	cancel_msg_req1.field.ipid = ptl_pid;
-	cancel_msg_req1.field.cancel_req = 1;
+	cancel_msg_req1.field.busy = 1;
 	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1, cancel_msg_req1.val);
 
 	/* HW takes max 64K clock cycles on 1.2GHz, so delay 1ms */
 	mdelay(1);
 	/* for debugging purpose, read the CSR back */
 	cancel_msg_req1.val = read_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1);
-	if (cancel_msg_req1.field.cancel_req)
+	if (cancel_msg_req1.field.busy)
 		/* FXRTODO: Change to dd_dev_err once Simics is fixed */
 		dd_dev_dbg(dd, "OTR cancellation not done after 1ms, pid %d\n",
 			   ptl_pid);
@@ -2521,8 +2490,8 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	RX_HIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
-	RX_HIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
+	RXHIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
+	RXHIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
 	u64 psb_addr;
 
 	psb_addr = (u64)ctx->ptl_state_base;
@@ -2535,8 +2504,8 @@ void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid)
 	pcb_high.field.unexpected_size = (ctx->unexpected_size >> PAGE_SHIFT) - 1;
 	pcb_high.field.le_me_size = (ctx->le_me_size >> PAGE_SHIFT) - 1;
 
-	write_csr(dd, FXR_RX_HIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
-	write_csr(dd, FXR_RX_HIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
+	write_csr(dd, FXR_RXHIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
+	write_csr(dd, FXR_RXHIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
 }
 
 /* Write CSR address for CQ head index, maintained by FXR */
