@@ -190,8 +190,8 @@ static int qp_max_iovs(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 /*
  * read QP's SG list state for next address and length to send
  */
-static void qp_read_sge(struct hfi2_qp *qp, uint64_t *start,
-			uint32_t *length)
+static void qp_read_sge(struct hfi2_qp *qp, uint32_t sent,
+			uint64_t *start, uint32_t *length)
 {
 	uint32_t iov_length;
 	struct rvt_sge_state *ss = qp->s_cur_sge;
@@ -202,9 +202,9 @@ static void qp_read_sge(struct hfi2_qp *qp, uint64_t *start,
 	/* the SGE can describe less than the MR segment */
 	if (iov_length > sge->sge_length)
 		iov_length = sge->sge_length;
-	/* SGE can be larger than total length */
-	if (iov_length > qp->s_cur_size)
-		iov_length = qp->s_cur_size;
+	/* SGE can be larger than remaining length */
+	if (iov_length > qp->s_cur_size - sent)
+		iov_length = qp->s_cur_size - sent;
 
 	*length = iov_length;
 	*start = (uint64_t)sge->vaddr;
@@ -229,7 +229,7 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 	if (!wqe || wqe->use_sc15)
 		return -EINVAL;
 
-	qp_read_sge(qp, &start, &length);
+	qp_read_sge(qp, 0, &start, &length);
 
 	if (length > qp->pmtu) {
 		dev_err(ibp->dev,
@@ -370,7 +370,7 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 		uint32_t iov_length;
 
 		/* read current SGE address/length, updates internal state */
-		qp_read_sge(qp, &iov_start, &iov_length);
+		qp_read_sge(qp, payload_bytes, &iov_start, &iov_length);
 
 		/*
 		 * If payload is now larger than MTU, start new packet;
@@ -564,7 +564,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 		 * if no payload (cur_size), start and length are zero
 		 */
 		if (qp->s_cur_size)
-			qp_read_sge(qp, &start, &length);
+			qp_read_sge(qp, 0, &start, &length);
 	} else {
 		ret = build_iovec_array(ibp, qp, use_16b, wqe_iov,
 					&num_iovs, &length);
