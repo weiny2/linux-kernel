@@ -1065,7 +1065,7 @@ int handle_receive_interrupt(struct hfi1_ctxtdata *rcd, int thread)
 			last = skip_rcv_packet(&packet, thread);
 			skip_pkt = 0;
 		} else {
-			if (!packet.bypass) {
+			if (rhf_rcv_type(packet.rhf) != RHF_RCV_TYPE_BYPASS) {
 				/* Auto activate link on non-SC15 packet rx */
 				if (unlikely(rcd->ppd->host_link_state ==
 					     HLS_UP_ARMED) &&
