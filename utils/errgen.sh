@@ -219,8 +219,6 @@ echo "" >> errdef.h
 #
 echo "static hfi_error_domain_t hfi_at_error[] = {" >> errdef.h
 cat AT_1.domain >> errdef.h
-echo "    ," >> errdef.h
-cat AT_2.domain >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 

@@ -144,7 +144,7 @@ static hfi_error_vector_t hfi_error_vector[] = {
 	{ RXDMA_IRQ,	1, hfi_rxdma_error },
 	{ RXET_IRQ,	1, hfi_rxet_error },
 	{ RXHIARB_IRQ,	1, hfi_rxhiarb_error },
-	{ AT_IRQ,	2, hfi_at_error },
+	{ AT_IRQ,	1, hfi_at_error },
 	{ OPIO_IRQ,	1, hfi_opio_error },
 	{ RXCID_IRQ,	1, hfi_rxcid_error },
 	{ FPC0_IRQ,	1, hfi_fpc0_error },
