@@ -59,11 +59,52 @@
 #include "debugfs.h"
 #include "firmware.h"
 #include "link.h"
+#include "counters.h"
 #include "rdma/fxr/mnh_8051_defs.h"
 #include "rdma/fxr/fxr_fc_defs.h"
 
 #ifdef CONFIG_DEBUG_FS
 struct dentry *hfi_dbg_root;
+
+static ssize_t portcntrnames_read(struct file *file, char __user *buf,
+				  size_t count, loff_t *ppos)
+{
+	char *names;
+	size_t avail;
+	struct hfi_devdata *dd;
+	ssize_t rval;
+
+	rcu_read_lock();
+	dd = private2dd(file);
+	avail = hfi_read_portcntrs(dd->pport, &names, NULL);
+	rval = simple_read_from_buffer(buf, count, ppos, names, avail);
+	rcu_read_unlock();
+	return rval;
+}
+
+static ssize_t portcntrs_read(struct file *file, char __user *buf,
+					size_t count, loff_t *ppos)
+{
+	u64 *counters;
+	size_t avail;
+	struct hfi_pportdata *ppd;
+	size_t rval;
+
+	rcu_read_lock();
+	ppd = private2ppd(file);
+	avail = hfi_read_portcntrs(ppd, NULL, &counters);
+	rval = simple_read_from_buffer(buf, count, ppos, counters, avail);
+	rcu_read_unlock();
+	return rval;
+}
+
+static const struct counter_info cntr_ops[] = {
+	DEBUGFS_OPS("portcounter_names", portcntrnames_read, NULL),
+};
+
+static const struct counter_info port_cntr_ops[] = {
+	DEBUGFS_OPS("counters", portcntrs_read, NULL),
+};
 
 static int hfi_qos_show(struct seq_file *s, void *unused)
 {
@@ -168,6 +209,35 @@ void hfi_firmware_dbg_init(struct hfi_devdata *dd)
 	}
 }
 
+void hfi_portcntrs_dbg_init(struct hfi_devdata *dd)
+{
+	struct hfi_pportdata *ppd;
+	int i, j;
+
+	/* create files for each port */
+	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++) {
+		for (i = 0; i < ARRAY_SIZE(port_cntr_ops); i++) {
+			DEBUGFS_FILE_CREATE(port_cntr_ops[i].name,
+				ppd->hfi_port_dbg,
+				ppd,
+				&port_cntr_ops[i].ops,
+				!port_cntr_ops[i].ops.write ?
+					S_IRUGO : S_IRUGO | S_IWUSR);
+		}
+	}
+}
+
+void hfi_devcntrs_dbg_init(struct hfi_devdata *dd)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(cntr_ops); i++)
+		DEBUGFS_FILE_CREATE(cntr_ops[i].name,
+				    dd->hfi_dev_dbg,
+				    dd,
+				    &cntr_ops[i].ops, S_IRUGO);
+}
+
 void hfi_dbg_init(struct hfi_devdata *dd)
 {
 	struct hfi_pportdata *ppd;
@@ -203,6 +273,8 @@ void hfi_dbg_init(struct hfi_devdata *dd)
 
 	hfi_qos_dbg_init(dd);
 	hfi_firmware_dbg_init(dd);
+	hfi_devcntrs_dbg_init(dd);
+	hfi_portcntrs_dbg_init(dd);
 }
 
 void hfi_dbg_exit(struct hfi_devdata *dd)
@@ -211,6 +283,7 @@ void hfi_dbg_exit(struct hfi_devdata *dd)
 	dd->hfi_dev_dbg = NULL;
 	hfi_dbg_root = NULL;
 }
+
 #else
 void hfi_dbg_init(struct hfi_devdata *dd) {}
 void hfi_dbg_exit(struct hfi_devdata *dd) {}

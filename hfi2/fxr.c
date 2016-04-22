@@ -95,6 +95,7 @@
 #include "verbs/verbs.h"
 #include "verbs/packet.h"
 #include "platform.h"
+#include "counters.h"
 
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
@@ -1866,6 +1867,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	 * shutdown ports to notify OPA core clients.
 	 * FXRTODO: Check error handling if hfi_pci_dd_init fails early
 	 */
+	hfi_free_cntrs(dd);
 	hfi_pport_down(dd);
 
 	if (dd->bus_dev)
@@ -2398,6 +2400,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	hfi2_parse_platform_config(dd);
 
 	obtain_boardname(dd); /* Set dd->boardname */
+	hfi_init_cntrs(dd);
 
 	return dd;
 
