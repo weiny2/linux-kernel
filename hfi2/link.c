@@ -1036,7 +1036,9 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 	 * Now in charge of LCB - must be after the physical state is
 	 * offline.quiet and before host_link_state is changed.
 	 */
-	write_fzc_csr(ppd, FZC_LCB_ERR_FRC, ~0ull); /* watch LCB errors */
+#if 0 /* WFR legacy */
+	write_fzc_csr(ppd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
+#endif
 	ppd->host_link_state = HLS_LINK_COOLDOWN; /* LCB access allowed */
 
 	/*
