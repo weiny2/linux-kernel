@@ -648,6 +648,8 @@ struct hfi_pportdata {
 	/* for the interrupt caused by "Receive a back channel msg using LCB idle
 	   protocol HOST Type SMA" */
 	struct work_struct sma_message_work;
+	/* per port counter values */
+	u64 *portcntrs;
 
 	/* for timesync */
 	struct mutex timesync_mutex;
@@ -800,6 +802,12 @@ struct hfi_devdata {
 
 	/* chip minor rev, from CceRevision */
 	u8 minrev;
+
+	/* maintain info about port counters */
+	size_t nportcntrs;
+	size_t portcntrnameslen;
+	char *portcntrnames;
+
 #ifdef CONFIG_DEBUG_FS
 	/* per HFI debugfs */
 	struct dentry *hfi_dev_dbg;

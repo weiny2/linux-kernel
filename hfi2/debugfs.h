@@ -164,6 +164,11 @@ struct firmware_info {
 	const struct file_operations ops;
 };
 
+struct counter_info {
+	char *name;
+	const struct file_operations ops;
+};
+
 #define DEBUGFS_OPS(nm, readroutine, writeroutine)	\
 { \
 	.name = nm, \

@@ -25,6 +25,7 @@ hfi2-y += platform.o
 hfi2-y += trace.o
 hfi2-y += timesync.o
 hfi2-y += verbs/ah.o
+hfi2-y += counters.o
 hfi2-y += verbs/fxr.o
 hfi2-y += verbs/mad.o
 hfi2-y += verbs/mr.o
