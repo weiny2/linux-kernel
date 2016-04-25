@@ -61,6 +61,9 @@
 #include <rdma/fxr/fxr_linkmux_tp_defs.h>
 #include <rdma/fxr/fxr_fc_defs.h>
 
+/* Maximum number of vnic ports per HFI ports */
+#define HFI_PORT_MAX_VPORTS  4
+
 static inline void hfi_invalid_attr(struct opa_smp *smp)
 {
 	smp->status |=
@@ -670,6 +673,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->resptimevalue = 3;
 
 	pi->local_port_num = port;
+	pi->num_vesw_port_supported = HFI_PORT_MAX_VPORTS;
 
 	/* buffer info for FM */
 	pi->overall_buffer_space = cpu_to_be16(ppd->link_credits);
