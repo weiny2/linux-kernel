@@ -60,6 +60,7 @@
 #include <rdma/ib_verbs.h>
 
 #include "opa_hfi.h"
+#include "verbs/verbs.h"
 #include "verbs/mad.h"
 #include "verbs/packet.h"
 
