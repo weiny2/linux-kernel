@@ -575,18 +575,8 @@ static inline bool hfi2_use_16b(struct hfi2_qp *qp)
 	union ib_gid *dgid;
 
 	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
-	    (qp->ibqp.qp_type == IB_QPT_UC)) {
-		if (ib_query_gid(qp->ibqp.device, qp->port_num,
-				 qp->remote_ah_attr.grh.sgid_index,
-				 &sgid
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-				 , NULL
-#endif
-				 ))
-			return false;
-		dgid = &qp->remote_ah_attr.grh.dgid;
-		return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
-	}
+	    (qp->ibqp.qp_type == IB_QPT_UC))
+		return qp->use_16b;
 
 	if (!wqe)
 		return false;

@@ -334,6 +334,30 @@ static void flush_iowait(struct hfi2_qp *qp)
 	/* FXRTODO looks to be unneeded if we avoid adding a verbs_txreq */
 }
 
+/*
+ * qp_set_16b - Determine and set the use_16b flag
+ * @qp: queue pair pointer
+ *
+ * Set the use_16b flag based on whether the slid or the dlid
+ * in the connection is extended. Only applicable for RC and UC
+ * QPs. UD QPs determine this on the fly from the ah in the wqe.
+ */
+static inline void qp_set_16b(struct hfi2_qp *qp)
+{
+	union ib_gid sgid;
+	union ib_gid *dgid;
+
+	qp->use_16b = false;
+	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH) {
+		if (ib_query_gid(qp->ibqp.device, qp->port_num,
+				 qp->remote_ah_attr.grh.sgid_index,
+				 &sgid, NULL))
+			return;
+		dgid = &qp->remote_ah_attr.grh.dgid;
+		qp->use_16b = IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
+	}
+}
+
 /**
  * hfi2_modify_qp - modify the attributes of a queue pair
  * @ibqp: the queue pair who's attributes we're modifying
@@ -538,6 +562,7 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		qp->remote_ah_attr = attr->ah_attr;
 		qp->s_srate = attr->ah_attr.static_rate;
 		qp->srate_mbps = ib_rate_to_mbps(qp->s_srate);
+		qp_set_16b(qp);
 	}
 
 	if (attr_mask & IB_QP_ALT_PATH) {
@@ -551,6 +576,7 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			qp->remote_ah_attr = qp->alt_ah_attr;
 			qp->port_num = qp->alt_ah_attr.port_num;
 			qp->s_pkey_index = qp->s_alt_pkey_index;
+			qp_set_16b(qp);
 		}
 	}
 
