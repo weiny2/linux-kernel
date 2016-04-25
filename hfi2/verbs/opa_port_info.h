@@ -434,7 +434,7 @@ struct opa_port_info {
 
 	u8     resptimevalue;		        /* 3 res, 5 bits */
 	u8     local_port_num;
-	u8     reserved12;
+	u8     num_vesw_port_supported;
 	u8     reserved13;                       /* was guid_cap */
 } __attribute__ ((packed));
 
