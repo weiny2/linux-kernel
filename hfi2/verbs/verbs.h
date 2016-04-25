@@ -180,6 +180,7 @@ struct hfi2_qp {
 	struct hfi2_swqe *s_wq;  /* send work queue */
 	struct rvt_mmap_info *ip;
 	union hfi2_ib_dma_header *s_hdr; /* next packet header to send */
+	bool use_16b; /* Applicable for RC/UC QPs. Based on ah for UD */
 	unsigned long timeout_jiffies;  /* computed from timeout */
 
 	enum ib_mtu path_mtu;
