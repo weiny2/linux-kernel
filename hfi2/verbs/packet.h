@@ -597,6 +597,13 @@ static inline bool hfi2_use_16b(struct hfi2_qp *qp)
 	return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
 }
 
+/**
+ * hfi2_make_ext_grh - Make grh for extended LID case
+ *
+ * This function is called upon UD receive for 16B packets.
+ * Since GRH was stripped out when creating 16B on the send side,
+ * it is added back on the receive side.
+ */
 static inline void hfi2_make_ext_grh(struct hfi2_ibport *ibp,
 				     struct ib_grh *grh, u32 slid, u32 dlid)
 {
@@ -604,19 +611,16 @@ static inline void hfi2_make_ext_grh(struct hfi2_ibport *ibp,
 	grh->sgid.global.subnet_prefix = ibp->gid_prefix;
 	grh->sgid.global.interface_id = OPA_MAKE_GID(slid);
 
-	/* This is called in the recv codepath where the dlid will
-	 * will be the local lid of the node. If this is a DR packet
-	 * in which case dlid is permissive, set the default
-	 * gid in the GRH.
-	 * FXRTODO: The permissive LID check below seems wrong and also
-	 * unnecessary. Revisit later.
+	/**
+	 * Set the dgid appropriately here. Upper layers (like mad)
+	 * may compare the dgid in the wc with the sgid_index in
+	 * the wr.
 	 */
 	grh->dgid.global.subnet_prefix = ibp->gid_prefix;
-	if ((dlid == HFI1_16B_PERMISSIVE_LID) ||
-	    (dlid == HFI1_PERMISSIVE_LID))
-		grh->dgid.global.interface_id = ibp->ppd->pguid;
-	else
+	if (dlid >= HFI1_MULTICAST_LID_BASE)
 		grh->dgid.global.interface_id = OPA_MAKE_GID(dlid);
+	else
+		grh->dgid.global.interface_id = ibp->ppd->pguid;
 }
 
 /* Bypass packet types */
