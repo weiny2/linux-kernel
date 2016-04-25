@@ -388,9 +388,19 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	 * going across the network based on hop_count.
 	 */
 	if ((ah_attr->ah_flags & IB_AH_GRH) && hfi2_check_mcast(ah_attr)) {
+		struct ib_global_route grd = ah_attr->grh;
+
+		/* No usecase to put OPA GID on the wire */
+		/* FXRTODO: A warning is helpful here; revisit later */
+		if (grd.sgid_index == OPA_GID_INDEX) {
+			dev_warn(ibp->dev, "Bad sgid_index %d\n",
+				 grd.sgid_index);
+			grd.sgid_index = 0;
+		}
+
 		/* remove 16B HDR size from s_hdrwords for GRH */
 		qp->s_hdrwords += hfi2_make_grh(ibp, &opa16b->u.l.grh,
-						&ah_attr->grh,
+						&grd,
 						(qp->s_hdrwords - 4), nwords);
 		l4 = HFI1_L4_IB_GLOBAL;
 	} else {
