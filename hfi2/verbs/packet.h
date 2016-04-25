@@ -480,12 +480,6 @@ static inline u32 rhf_port(u64 rhf)
 	return (rhf >> RHF_PORT_SHIFT) & RHF_PORT_MASK;
 }
 
-static inline u32 hfi2_get_lid_from_gid(union ib_gid *gid)
-{
-	/* Caller should ensure gid is of type opa gid */
-	return be64_to_cpu(gid->global.interface_id) & 0xFFFFFFFF;
-}
-
 /**
  * hfi1_mcast_xlate - Translate 9B MLID to the 16B MLID range
  */
@@ -515,7 +509,7 @@ static inline u32 hfi2_retrieve_lid(struct ib_ah_attr *ah_attr)
 	if ((ah_attr->ah_flags & IB_AH_GRH)) {
 		dgid = &ah_attr->grh.dgid;
 		if (ib_is_opa_gid(dgid))
-			return hfi2_get_lid_from_gid(dgid);
+			return opa_get_lid_from_gid(dgid);
 	}
 	return hfi1_mcast_xlate(ah_attr->dlid);
 }
@@ -536,7 +530,7 @@ static inline bool hfi2_check_mcast(struct ib_ah_attr *ah_attr)
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		dgid = ah_attr->grh.dgid;
 		if (ib_is_opa_gid(&dgid)) {
-			lid = hfi2_get_lid_from_gid(&dgid);
+			lid = opa_get_lid_from_gid(&dgid);
 			return ((lid >= HFI1_16B_MULTICAST_LID_BASE) &&
 				(lid != HFI1_16B_PERMISSIVE_LID));
 		}
@@ -562,14 +556,14 @@ static inline bool hfi2_check_permissive(struct ib_ah_attr *ah_attr)
 		dgid = ah_attr->grh.dgid;
 		if (ib_is_opa_gid(&dgid)) {
 			return HFI1_16B_PERMISSIVE_LID ==
-				hfi2_get_lid_from_gid(&dgid);
+				opa_get_lid_from_gid(&dgid);
 		}
 	}
 	return ah_attr->dlid == HFI1_PERMISSIVE_LID;
 }
 
 #define IS_EXT_LID(x) (ib_is_opa_gid(x) &&              \
-		       (hfi2_get_lid_from_gid(x) >=     \
+		       (opa_get_lid_from_gid(x) >=      \
 			HFI1_MULTICAST_LID_BASE))
 
 /* Check if current wqe needs 16B */

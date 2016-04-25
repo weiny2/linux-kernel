@@ -2370,7 +2370,7 @@ static int hfi_is_local_mad(struct hfi2_ibport *ibp, const struct opa_mad *mad,
 	if (in_grh) {
 		gid = in_grh->sgid;
 		if (ib_is_opa_gid(&gid))
-			return (hfi2_get_lid_from_gid(&gid) == ibp->ppd->lid);
+			return (opa_get_lid_from_gid(&gid) == ibp->ppd->lid);
 	}
 	return (in_wc->slid == ibp->ppd->lid);
 }
