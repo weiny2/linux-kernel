@@ -68,7 +68,6 @@
 #include <rdma/fxr/fxr_linkmux_cm_defs.h>
 #include "verbs/mad.h"
 #include "firmware.h"
-#include "verbs/verbs.h"
 #include "platform.h"
 
 /* bumped 1 from s/w major version of TrueScale */

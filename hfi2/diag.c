@@ -56,6 +56,7 @@
 #include <linux/uaccess.h>
 
 #include "opa_hfi.h"
+#include "verbs/verbs.h"
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_eq.h>
 #include <rdma/hfi_pt.h>
