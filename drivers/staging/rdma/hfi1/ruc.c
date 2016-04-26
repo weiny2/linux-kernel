@@ -263,49 +263,45 @@ static int gid_ok(union ib_gid *gid, __be64 gid_prefix, __be64 id)
  * The s_lock will be acquired around the hfi1_migrate_qp() call.
  */
 int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
-		       bool grh, bool bypass, struct rvt_qp *qp, u32 bth0)
+		       struct ib_grh *grh, bool bypass,
+		       struct rvt_qp *qp, u32 bth0)
 {
 	struct hfi1_qp_priv *priv = qp->priv;
 	__be64 guid;
 	unsigned long flags;
 	u8 sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 	struct hfi1_ib_header *hdr = NULL;
-	struct hfi1_16b_header *hdr_16b = NULL;
+	struct hfi1_16b_message_header *hdr_16b = NULL;
 	u32 dlid, slid, sl, opa_dlid;
-	union ib_gid *dgid;
-	union ib_gid *sgid;
 
 	if (bypass) {
-		hdr_16b = (struct hfi1_16b_header *)hfi1_hdr;
+		hdr_16b = (struct hfi1_16b_message_header *)hfi1_hdr;
 
 		dlid = OPA_16B_GET_DLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					hdr_16b->lrh[2], hdr_16b->lrh[3]);
 		slid = OPA_16B_GET_SLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					hdr_16b->lrh[2], hdr_16b->lrh[3]);
 		sl = 0; /* 16B has no sl but hfi1_bad_pkqkey needs it */
-		dgid = &hdr_16b->u.l.grh.dgid;
-		sgid = &hdr_16b->u.l.grh.sgid;
 	} else {
 		hdr = (struct hfi1_ib_header *)hfi1_hdr;
 		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
 		slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
 		sl = OPA_9B_GET_SL(be16_to_cpu(hdr->lrh[0]));
-		dgid = &hdr->u.l.grh.dgid;
-		sgid = &hdr->u.l.grh.sgid;
 	}
 
 	if (qp->s_mig_state == IB_MIG_ARMED && (bth0 & IB_BTH_MIG_REQ)) {
 		if (!grh) {
-			if (qp->alt_ah_attr.ah_flags & IB_AH_GRH)
+			if ((qp->alt_ah_attr.ah_flags & IB_AH_GRH) &&
+			    !priv->use_16b)
 				goto err;
 		} else {
 			if (!(qp->alt_ah_attr.ah_flags & IB_AH_GRH))
 				goto err;
 			guid = get_sguid(ibp, qp->alt_ah_attr.grh.sgid_index);
-			if (!gid_ok(dgid, ibp->rvp.gid_prefix, guid))
+			if (!gid_ok(&grh->dgid, ibp->rvp.gid_prefix, guid))
 				goto err;
 			if (!gid_ok(
-				sgid,
+				&grh->sgid,
 				qp->alt_ah_attr.grh.dgid.global.subnet_prefix,
 				qp->alt_ah_attr.grh.dgid.global.interface_id))
 				goto err;
@@ -317,7 +313,8 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 			goto err;
 		}
 		/* Validate the SLID. See Ch. 9.6.1.5 and 17.2.8 */
-		if (slid != qp->alt_ah_attr.dlid ||
+		opa_dlid = hfi1_get_dlid_from_ah(&qp->alt_ah_attr);
+		if ((slid != opa_dlid) ||
 		    ppd_from_ibp(ibp)->port != qp->alt_ah_attr.port_num)
 			goto err;
 		spin_lock_irqsave(&qp->s_lock, flags);
@@ -326,18 +323,17 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 	} else {
 		if (!grh) {
 			if ((qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
-			    (!(priv->use_16b &&
-			    !hfi1_check_mcast(&qp->remote_ah_attr))))
+			    !priv->use_16b)
 				goto err;
 		} else {
 			if (!(qp->remote_ah_attr.ah_flags & IB_AH_GRH))
 				goto err;
 			guid = get_sguid(ibp,
 					 qp->remote_ah_attr.grh.sgid_index);
-			if (!gid_ok(dgid, ibp->rvp.gid_prefix, guid))
+			if (!gid_ok(&grh->dgid, ibp->rvp.gid_prefix, guid))
 				goto err;
 			if (!gid_ok(
-			     sgid,
+			     &grh->sgid,
 			     qp->remote_ah_attr.grh.dgid.global.subnet_prefix,
 			     qp->remote_ah_attr.grh.dgid.global.interface_id))
 				goto err;

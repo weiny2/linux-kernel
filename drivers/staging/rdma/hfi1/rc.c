@@ -2203,7 +2203,7 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 {
 	struct hfi1_ctxtdata *rcd = packet->rcd;
 	struct hfi1_ib_header *hdr = NULL;
-	struct hfi1_16b_header *hdr_16b = NULL;
+	struct hfi1_16b_message_header *hdr_16b = NULL;
 	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
@@ -2232,14 +2232,14 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 
 	if (packet->bypass) {
 		hdr_16b = packet->hdr;
-		data = packet->ebuf + hdrsize;
+		data = packet->payload;
 	} else {
 		hdr = packet->hdr;
 	}
 
 	if (hfi1_ruc_check_hdr(ibp,
 			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
-			       grh, packet->bypass, qp, bth0)) {
+			       packet->grh, packet->bypass, qp, bth0)) {
 		pr_warn("%s ruc check header failed\n",
 			packet->bypass ? "16B" : "9B");
 		return;
@@ -2679,32 +2679,20 @@ send_ack:
 
 void hfi1_rc_hdrerr(
 	struct hfi1_ctxtdata *rcd,
-	struct hfi1_ib_header *hdr,
-	u32 rcv_flags,
+	struct hfi1_packet *packet,
 	struct rvt_qp *qp)
 {
-	struct hfi1_other_headers *ohdr;
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
-	struct hfi1_qp_priv *priv = qp->priv;
 	int diff;
 	u32 opcode;
 	u32 psn, bth0;
-	bool grh = false;
-	bool bypass = priv->use_16b;
 
-	if (rcv_flags & HFI1_HAS_GRH)
-		grh = true;
-
-	/* Check for GRH */
-	ohdr = &hdr->u.oth;
-	if (grh)
-		ohdr = &hdr->u.l.oth;
-
-	bth0 = be32_to_cpu(ohdr->bth[0]);
-	if (hfi1_ruc_check_hdr(ibp, hdr, grh, bypass, qp, bth0))
+	bth0 = be32_to_cpu(packet->ohdr->bth[0]);
+	if (hfi1_ruc_check_hdr(ibp, packet->hdr, packet->grh,
+			       packet->bypass, qp, bth0))
 		return;
 
-	psn = be32_to_cpu(ohdr->bth[2]);
+	psn = be32_to_cpu(packet->ohdr->bth[2]);
 	opcode = (bth0 >> 24) & 0xff;
 
 	/* Only deal with RDMA Writes for now */

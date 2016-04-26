@@ -595,7 +595,7 @@ dropit:
 }
 
 static int hfi1_handle_packet(struct hfi1_packet *packet,
-			      u8 opcode, union ib_gid *mgid)
+			      u8 opcode, bool is_mcast)
 {
 	u32 qp_num;
 	struct hfi1_ctxtdata *rcd = packet->rcd;
@@ -608,11 +608,11 @@ static int hfi1_handle_packet(struct hfi1_packet *packet,
 	/* Get the destination QP number. */
 	qp_num = be32_to_cpu(packet->ohdr->bth[1]) & RVT_QPN_MASK;
 
-	if (unlikely(mgid)) {
+	if (unlikely(is_mcast)) {
 		struct rvt_mcast *mcast;
 		struct rvt_mcast_qp *p;
 
-		mcast = rvt_mcast_find(&ibp->rvp, mgid);
+		mcast = rvt_mcast_find(&ibp->rvp, &packet->grh->dgid);
 		if (!mcast)
 			goto drop;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list) {
@@ -666,23 +666,25 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	int lnh;
 	u16 dlid;
 	u8 opcode;
-	union ib_gid *mgid = NULL;
+	bool is_mcast = false;
 
 	/* Check for GRH */
 	lnh = OPA_9B_GET_LNH(be16_to_cpu(hdr->lrh[0]));
 	dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
 	if (unlikely((dlid >= IB_MULTICAST_LID_BASE) &&
 		     (dlid != IB_LID_PERMISSIVE)))
-		mgid = &hdr->u.l.grh.dgid;
+		is_mcast = true;
 
 	if (lnh == HFI1_LRH_BTH) {
+		packet->grh = NULL;
 		packet->ohdr = &hdr->u.oth;
-		if (mgid)
+		if (is_mcast)
 			goto drop;
 	} else if (lnh == HFI1_LRH_GRH) {
 		u32 vtf;
 
 		packet->ohdr = &hdr->u.l.oth;
+		packet->grh = &hdr->u.l.grh;
 		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
 			goto drop;
 		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
@@ -696,7 +698,7 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	trace_input_ibhdr(rcd->dd, hdr, false);
 
 	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
-	if (hfi1_handle_packet(packet, opcode, mgid))
+	if (hfi1_handle_packet(packet, opcode, is_mcast))
 		goto drop;
 	return;
 
@@ -709,11 +711,10 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 	struct hfi1_ctxtdata *rcd = packet->rcd;
 	struct hfi1_pportdata *ppd = rcd->ppd;
 	struct hfi1_ibport *ibp = &ppd->ibport_data;
-	struct hfi1_16b_header *hdr;
+	struct hfi1_16b_message_header *hdr;
 	u32 dlid;
 	u8 l4, opcode;
-	u8 extra_hlen = 0;
-	union ib_gid *mgid = NULL;
+	bool is_mcast = false;
 
 	/**
 	 * For a bypass packet, ebuf contains the entire packet
@@ -721,8 +722,7 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 	 * Set packet->hdr and packet->hlen appropriately here so
 	 * functions downstream are able to work with the header.
 	 */
-	hdr = packet->ebuf;
-	packet->hdr = packet->ebuf;
+	hdr = packet->hdr;
 	l4 = OPA_16B_GET_L4(hdr->lrh[0], hdr->lrh[1],
 			    hdr->lrh[2], hdr->lrh[3]);
 	dlid = OPA_16B_GET_DLID(hdr->lrh[0], hdr->lrh[1],
@@ -730,33 +730,15 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 
 	if (unlikely(((dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
 		      (dlid != HFI1_16B_PERMISSIVE_LID))))
-		mgid = &hdr->u.l.grh.dgid;
+		is_mcast = true;
 
-	if (l4 == HFI1_L4_IB_LOCAL) {
-		packet->ohdr = &hdr->u.oth;
-		if (mgid)
-			goto drop;
-	} else if (l4 == HFI1_L4_IB_GLOBAL) {
-		u32 vtf;
-
-		extra_hlen = 40; /* GRH */
-		packet->ohdr = &hdr->u.l.oth;
-
-		if (hdr->u.l.grh.next_hdr != IB_GRH_NEXT_HDR)
-			goto drop;
-		vtf = be32_to_cpu(hdr->u.l.grh.version_tclass_flow);
-		if ((vtf >> IB_GRH_VERSION_SHIFT) != IB_GRH_VERSION)
-			goto drop;
-		packet->rcv_flags |= HFI1_HAS_GRH;
-	} else {
+	if ((l4 == HFI1_L4_IB_LOCAL) && (is_mcast))
 		goto drop;
-	}
 
-	trace_input_ibhdr(rcd->dd, hdr, true);
+	/*trace_input_ibhdr(rcd->dd, hdr, true);*/
 
 	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
-	packet->hlen = hdr_16b_len_by_opcode[opcode] + extra_hlen;
-	if (hfi1_handle_packet(packet, opcode, mgid))
+	if (hfi1_handle_packet(packet, opcode, is_mcast))
 		goto drop;
 	return;
 

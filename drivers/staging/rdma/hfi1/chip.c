@@ -13584,6 +13584,8 @@ bail:
 
 static void init_rxe(struct hfi1_devdata *dd)
 {
+	u64 val;
+
 	/* enable all receive errors */
 	write_csr(dd, RCV_ERR_MASK, ~0ull);
 	/* setup QPN map table - start where VL15 context leaves off */
@@ -13600,6 +13602,12 @@ static void init_rxe(struct hfi1_devdata *dd)
 	 * (64 bytes).  Max_Payload_Size is possibly modified upward in
 	 * tune_pcie_caps() which is called after this routine.
 	 */
+	/* Have 16 bytes (4DW) of bypass header available in header
+	 * queue
+	 */
+	val = read_csr(dd, RCV_BYPASS);
+	val |= (0x4 << 16);
+	write_csr(dd, RCV_BYPASS, val);
 }
 
 static void init_other(struct hfi1_devdata *dd)

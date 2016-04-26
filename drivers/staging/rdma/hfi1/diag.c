@@ -1622,7 +1622,7 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 {
 	struct hfi1_pportdata *ppd = packet->rcd->ppd;
 	struct hfi1_ib_header *hdr = NULL;
-	struct hfi1_16b_header *hdr_16b = NULL;
+	struct hfi1_16b_header hdr_16b;
 	int header_size = packet->hlen;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
@@ -1636,13 +1636,40 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 	snoop_dbg("PACKET IN: etype:%d hdr_size:%d tlen:%d data:%p",
 		  etype, header_size, tlen, data);
 
-	if (packet->bypass)
-		hdr_16b = packet->ebuf;
-	else
+	if (packet->bypass) {
+		u8 l4;
+
+		if (hfi1_setup_bypass_packet(packet))
+			goto snoop_fail;
+		/**
+		 * Since bypass packet header is split across
+		 * packet->hdr and packet->ebuf, a header copy
+		 * is needed here in order to have the snoop
+		 * filter functions work properly. Since snoop
+		 * is not in the fast-path, this copy might be
+		 * acceptable.
+		 */
+		memcpy(&hdr_16b.lrh, packet->hdr,
+		       sizeof(struct hfi1_16b_message_header));
+		l4 = OPA_16B_GET_L4(hdr_16b.lrh[0], hdr_16b.lrh[1],
+				    hdr_16b.lrh[2], hdr_16b.lrh[3]);
+		if (l4 == HFI1_L4_IB_LOCAL) {
+			memcpy(&hdr_16b.u.oth, packet->ohdr,
+			       sizeof(struct hfi1_other_headers));
+		} else {
+			memcpy(&hdr_16b.u.l.oth, packet->ohdr,
+			       sizeof(struct hfi1_other_headers));
+			memcpy(&hdr_16b.u.l.grh, packet->grh,
+			       sizeof(struct ib_grh));
+		}
+		header_size = packet->hlen;
+		data = packet->payload;
+	} else {
 		hdr = packet->hdr;
+	}
 
 	trace_snoop_capture(ppd->dd, header_size,
-			    packet->bypass ? (void *)hdr_16b : (void *)hdr,
+			    packet->bypass ? (void *)&hdr_16b : (void *)hdr,
 			    tlen - header_size,
 			    data, packet->bypass);
 
@@ -1651,7 +1678,7 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 		ret = HFI1_FILTER_HIT;
 	} else {
 		ret = ppd->dd->hfi1_snoop.filter_callback(
-				packet->bypass ? (void *)hdr_16b : (void *)hdr,
+				packet->bypass ? (void *)&hdr_16b : (void *)hdr,
 				data,
 				ppd->dd->hfi1_snoop.filter_value,
 				packet->bypass);
@@ -1690,9 +1717,9 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 		}
 
 		/* We should always have a header */
-		if (hdr || hdr_16b) {
+		if (packet->hdr) {
 			memcpy(s_packet->data + md_len,
-			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
+			       packet->bypass ? (void *)&hdr_16b : (void *)hdr,
 			       header_size);
 		} else {
 			dd_dev_err(ppd->dd, "Unable to copy header to snoop/capture packet\n");
@@ -1738,6 +1765,7 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 		break;
 	}
 
+snoop_fail:
 	/*
 	 * We do not care what type of packet came in here - just pass it off
 	 * to the normal handler.

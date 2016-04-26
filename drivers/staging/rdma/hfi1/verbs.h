@@ -407,8 +407,7 @@ void hfi1_rc_rcv(struct hfi1_packet *packet);
 
 void hfi1_rc_hdrerr(
 	struct hfi1_ctxtdata *rcd,
-	struct hfi1_ib_header *hdr,
-	u32 rcv_flags,
+	struct hfi1_packet *packet,
 	struct rvt_qp *qp);
 
 u8 ah_to_sc(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
@@ -457,7 +456,8 @@ static inline u8 get_opcode(struct hfi1_opa_header *hdr)
 }
 
 int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
-		       bool grh, bool bypass, struct rvt_qp *qp, u32 bth0);
+		       struct ib_grh *grh, bool bypass,
+		       struct rvt_qp *qp, u32 bth0);
 
 u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
 		  struct ib_global_route *grh, u32 hwords, u32 nwords);

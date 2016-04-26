@@ -349,10 +349,12 @@ struct hfi1_ctxtdata {
 struct hfi1_packet {
 	void *ebuf;
 	void *hdr;
+	void *payload;
 	struct hfi1_ctxtdata *rcd;
 	__le32 *rhf_addr;
 	struct rvt_qp *qp;
 	struct hfi1_other_headers *ohdr;
+	struct ib_grh *grh;
 	u64 rhf;
 	u32 maxcnt;
 	u32 rhqoff;
@@ -1337,6 +1339,8 @@ void hfi1_make_ud_req_16B(struct rvt_qp *qp,
 			  struct hfi1_pkt_state *ps,
 			  struct rvt_swqe *wqe);
 
+int hfi1_setup_bypass_packet(struct hfi1_packet *packet);
+
 /* receive packet handler dispositions */
 #define RCV_PKT_OK      0x0 /* keep going */
 #define RCV_PKT_LIMIT   0x1 /* stop, hit limit, start thread */
@@ -1437,6 +1441,10 @@ void process_becn(struct hfi1_pportdata *ppd, u8 sl, u32 rlid, u32 lqpn,
 void return_cnp(struct hfi1_ibport *ibp, struct rvt_qp *qp, u32 remote_qpn,
 		u32 pkey, u32 slid, u32 dlid, u8 sc5,
 		const struct ib_grh *old_grh);
+
+void return_cnp_bypass(struct hfi1_ibport *ibp, struct rvt_qp *qp,
+		       u32 remote_qpn, u32 pkey, u32 slid, u32 dlid,
+		       u8 sc5, const struct ib_grh *old_grh);
 
 #define PACKET_EGRESS_TIMEOUT 350
 static inline void pause_for_credit_return(struct hfi1_devdata *dd)

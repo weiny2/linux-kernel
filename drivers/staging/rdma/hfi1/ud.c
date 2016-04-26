@@ -926,7 +926,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	struct hfi1_ibport *ibp = &packet->rcd->ppd->ibport_data;
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	struct hfi1_ib_header *hdr = NULL;
-	struct hfi1_16b_header *hdr_16b = NULL;
+	struct hfi1_16b_message_header *hdr_16b = NULL;
 	u32 rcv_flags = packet->rcv_flags;
 	void *data = packet->ebuf;
 	u32 tlen = packet->tlen;
@@ -956,7 +956,7 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
 	if (packet->bypass) {
 		hdr_16b = packet->hdr;
-		data = packet->ebuf + hdrsize;
+		data = packet->payload;
 		dlid = OPA_16B_GET_DLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					hdr_16b->lrh[2], hdr_16b->lrh[3]);
 		slid = OPA_16B_GET_SLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
@@ -1116,38 +1116,29 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 		goto drop;
 	}
 
-	/* TODO: Clean this up */
-	if (packet->bypass) {
-		if (has_grh) {
-			hfi1_copy_sge(&qp->r_sge, &hdr_16b->u.l.grh,
-				      sizeof(struct ib_grh), 1, 0);
-			wc.wc_flags |= IB_WC_GRH;
-		} else if (((slid != HFI1_16B_PERMISSIVE_LID) &&
-			    (slid >= be16_to_cpu(IB_MULTICAST_LID_BASE))) ||
-			   ((dlid != HFI1_16B_PERMISSIVE_LID) &&
-			    (dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE)))) {
-			struct ib_grh grh;
-			/**
-			 * Assuming we only created 16B on the send side
-			 * if we want to use large LIDs, since GRH was stripped
-			 * out when creating 16B, add back the GRH here.
-			 */
-			hfi1_make_ext_grh(packet, &grh, slid, dlid);
-			hfi1_copy_sge(&qp->r_sge, &grh,
-				      sizeof(struct ib_grh), 1, 0);
-			wc.wc_flags |= IB_WC_GRH;
-		} else {
-			hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
-		}
+	if (has_grh) {
+		hfi1_copy_sge(&qp->r_sge, packet->grh,
+			      sizeof(struct ib_grh), 1, 0);
+		wc.wc_flags |= IB_WC_GRH;
+	} else if ((packet->bypass) &&
+		   (((slid != HFI1_16B_PERMISSIVE_LID) &&
+		    (slid >= be16_to_cpu(IB_MULTICAST_LID_BASE))) ||
+		   ((dlid != HFI1_16B_PERMISSIVE_LID) &&
+		    (dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE))))) {
+		struct ib_grh grh;
+		/**
+		 * Assuming we only created 16B on the send side
+		 * if we want to use large LIDs, since GRH was stripped
+		 * out when creating 16B, add back the GRH here.
+		 */
+		hfi1_make_ext_grh(packet, &grh, slid, dlid);
+		hfi1_copy_sge(&qp->r_sge, &grh,
+			      sizeof(struct ib_grh), 1, 0);
+		wc.wc_flags |= IB_WC_GRH;
 	} else {
-		if (has_grh) {
-			hfi1_copy_sge(&qp->r_sge, &hdr->u.l.grh,
-				      sizeof(struct ib_grh), 1, 0);
-			wc.wc_flags |= IB_WC_GRH;
-		} else {
-			hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
-		}
+		hfi1_skip_sge(&qp->r_sge, sizeof(struct ib_grh), 1);
 	}
+
 	hfi1_copy_sge(&qp->r_sge, data, wc.byte_len - sizeof(struct ib_grh),
 		      1, 0);
 	rvt_put_ss(&qp->r_sge);
