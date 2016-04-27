@@ -93,7 +93,7 @@ struct ib_ah *hfi2_create_qp0_ah(struct hfi2_ibport *ibp, u32 dlid)
 {
 	struct ib_ah_attr attr;
 	struct ib_ah *ah = ERR_PTR(-EINVAL);
-	struct hfi2_qp *qp0;
+	struct rvt_qp *qp0;
 
 	memset(&attr, 0, sizeof(attr));
 	attr.dlid = OPA_TO_IB_UCAST_LID(dlid);

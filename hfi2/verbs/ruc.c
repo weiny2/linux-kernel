@@ -110,7 +110,7 @@ const u32 ib_hfi1_rnr_table[32] = {
  * Send if not busy or waiting for I/O and either
  * a RC response is pending or we can process send work requests.
  */
-static inline int send_ok(struct hfi2_qp *qp)
+static inline int send_ok(struct rvt_qp *qp)
 {
 	return !(qp->s_flags & (HFI1_S_BUSY | HFI1_S_ANY_WAIT_IO)) &&
 		(qp->s_hdrwords || (qp->s_flags & HFI1_S_RESP_PENDING) ||
@@ -121,7 +121,7 @@ static inline int send_ok(struct hfi2_qp *qp)
  * Validate a RWQE and fill in the receive SGE state.
  * Return 1 if OK.
  */
-static int init_sge(struct hfi2_qp *qp, struct rvt_rwqe *wqe)
+static int init_sge(struct rvt_qp *qp, struct rvt_rwqe *wqe)
 {
 	int i, j, ret;
 	struct ib_wc wc;
@@ -178,7 +178,7 @@ bail:
  * Return: -1 if there is a local error, 0 if no RWQE is available,
  * otherwise return 1.
  */
-int hfi2_get_rwqe(struct hfi2_qp *qp, int wr_id_only)
+int hfi2_get_rwqe(struct rvt_qp *qp, int wr_id_only)
 {
 	unsigned long flags;
 	struct rvt_rq *rq;
@@ -270,7 +270,7 @@ bail:
  * Switch to alternate path.
  * The QP s_lock should be held and interrupts disabled.
  */
-void hfi2_migrate_qp(struct hfi2_qp *qp)
+void hfi2_migrate_qp(struct rvt_qp *qp)
 {
 	struct ib_event ev;
 
@@ -285,9 +285,11 @@ void hfi2_migrate_qp(struct hfi2_qp *qp)
 	qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
 }
 
-void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
+void hfi2_make_ruc_header(struct rvt_qp *qp, struct ib_l4_headers *ohdr,
 			  u32 bth0, u32 bth2)
 {
+	struct hfi2_qp_priv *qp_priv = qp->priv;
+	union hfi2_ib_dma_header *s_hdr = qp_priv->s_hdr;
 	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
 	u16 lrh0;
@@ -302,7 +304,7 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 	nwords = ((qp->s_cur_size + extra_bytes) >> 2) + SIZE_OF_CRC;
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH)) {
 		/* remove LRH size from s_hdrwords for GRH */
-		qp->s_hdrwords += hfi2_make_grh(ibp, &qp->s_hdr->ph.ibh.u.l.grh,
+		qp->s_hdrwords += hfi2_make_grh(ibp, &s_hdr->ph.ibh.u.l.grh,
 						&qp->remote_ah_attr.grh,
 						(qp->s_hdrwords - 2),
 						nwords);
@@ -311,16 +313,16 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 		lrh0 = HFI1_LRH_BTH;
 	}
 
-	qp->s_sl = qp->remote_ah_attr.sl;
-	qp->s_sc = ppd->sl_to_sc[qp->s_sl];
-	lrh0 |= (qp->s_sc & 0xf) << 12 | (qp->s_sl & 0xf) << 4;
+	qp_priv->s_sl = qp->remote_ah_attr.sl;
+	qp_priv->s_sc = ppd->sl_to_sc[qp_priv->s_sl];
+	lrh0 |= (qp_priv->s_sc & 0xf) << 12 | (qp_priv->s_sl & 0xf) << 4;
 	if (qp->s_mig_state == IB_MIG_MIGRATED)
 		bth0 |= IB_BTH_MIG_REQ;
-	qp->s_hdr->ph.ibh.lrh[0] = cpu_to_be16(lrh0);
-	qp->s_hdr->ph.ibh.lrh[1] = cpu_to_be16((u16)qp->remote_ah_attr.dlid);
-	qp->s_hdr->ph.ibh.lrh[2] =
+	s_hdr->ph.ibh.lrh[0] = cpu_to_be16(lrh0);
+	s_hdr->ph.ibh.lrh[1] = cpu_to_be16((u16)qp->remote_ah_attr.dlid);
+	s_hdr->ph.ibh.lrh[2] =
 		cpu_to_be16(qp->s_hdrwords + nwords);
-	qp->s_hdr->ph.ibh.lrh[3] = cpu_to_be16(ppd->lid |
+	s_hdr->ph.ibh.lrh[3] = cpu_to_be16(ppd->lid |
 				       qp->remote_ah_attr.src_path_bits);
 	bth0 |= hfi2_get_pkey(ibp, qp->s_pkey_index);
 	bth0 |= extra_bytes << 20;
@@ -335,10 +337,11 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 	ohdr->bth[2] = cpu_to_be32(bth2);
 }
 
-void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
+void hfi2_make_16b_ruc_header(struct rvt_qp *qp, struct ib_l4_headers *ohdr,
 			      u32 bth0, u32 bth2)
 {
-	struct hfi2_opa16b_header *opa16b = &qp->s_hdr->opa16b;
+	struct hfi2_qp_priv *qp_priv = qp->priv;
+	struct hfi2_opa16b_header *opa16b = &qp_priv->s_hdr->opa16b;
 	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
 	u32 nwords, extra_bytes;
@@ -370,8 +373,8 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 		l4 = HFI1_L4_IB_LOCAL;
 	}
 
-	qp->s_sl = qp->remote_ah_attr.sl;
-	qp->s_sc = ppd->sl_to_sc[qp->s_sl];
+	qp_priv->s_sl = qp->remote_ah_attr.sl;
+	qp_priv->s_sc = ppd->sl_to_sc[qp_priv->s_sl];
 
 	bth0 |= extra_bytes << 20;
 	bth1 = qp->remote_qpn;
@@ -389,7 +392,7 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 	qwords = (qp->s_hdrwords + nwords) >> 1;
 
 	opa_make_16b_header((u32 *)opa16b, slid, dlid, qwords,
-			    pkey, 0, qp->s_sc, 0, 0, becn, 0, l4);
+			    pkey, 0, qp_priv->s_sc, 0, 0, becn, 0, l4);
 
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(bth1);
@@ -409,11 +412,11 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
  *
  * Return: TBD
  */
-static int send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
+static int send_wqe(struct hfi2_ibport *ibp, struct rvt_qp *qp)
 {
 	int ret;
 
-	ret = ibp->ibd->send_wqe(ibp, qp);
+	ret = ibp->ibd->send_wqe(ibp, qp->priv);
 	if (ret < 0 && qp->s_wqe)
 		hfi2_send_complete(qp, qp->s_wqe, IB_WC_FATAL_ERR);
 	/* else send_complete issued upon DMA completion event */
@@ -424,16 +427,11 @@ static int send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 /**
  * hfi2_verbs_send - send a packet
  * @qp: the QP to send on
- * @hdr: the packet header
- * @hdrwords: the number of 32-bit words in the header
- * @ss: the SGE to send
- * @len: the length of the packet in bytes
  *
  * Return: zero if packet is sent or queued OK, non-zero
  * and clear qp->s_flags HFI1_S_BUSY otherwise.
  */
-static int hfi2_verbs_send(struct hfi2_qp *qp, union hfi2_ib_dma_header *hdr,
-			   u32 hdrwords, struct rvt_sge_state *ss, u32 len)
+static int hfi2_verbs_send(struct rvt_qp *qp)
 {
 	struct hfi2_ibport *ibp;
 	int ret = 0;
@@ -458,9 +456,9 @@ static int hfi2_verbs_send(struct hfi2_qp *qp, union hfi2_ib_dma_header *hdr,
 	 * TODO - not fully integrated, we should reuse if we can. WFR
 	 * enqueues to this list in sdma_check_progress via sleep callback.
 	 */
+#if 0
 	if (!list_empty(&qp->s_iowait.tx_head)) {
 		/* TODO - STL-2554 */
-#if 0
 		struct rvt_swqe *wqe;
 
 		wqe = list_first_entry(
@@ -474,11 +472,10 @@ static int hfi2_verbs_send(struct hfi2_qp *qp, union hfi2_ib_dma_header *hdr,
 		 * TODO - why does WFR just return without enqueuing the
 		 * WQE that would have been sent below (qp->s_wqe).
 		 */
-#else
 		ret = -EINVAL;
-#endif
 		return ret;
 	}
+#endif
 
 	/* send WGE into fabric */
 	return send_wqe(ibp, qp);
@@ -495,9 +492,13 @@ static int hfi2_verbs_send(struct hfi2_qp *qp, union hfi2_ib_dma_header *hdr,
 void hfi2_do_send(struct work_struct *work)
 {
 	struct iowait *wait = container_of(work, struct iowait, iowork);
-	struct hfi2_qp *qp = container_of(wait, struct hfi2_qp, s_iowait);
-	int (*make_req)(struct hfi2_qp *qp);
+	struct hfi2_qp_priv *qp_priv;
+	struct rvt_qp *qp;
 	unsigned long flags;
+	int (*make_req)(struct rvt_qp *qp);
+
+	qp_priv = container_of(wait, struct hfi2_qp_priv, s_iowait);
+	qp = qp_priv->owner;
 
 	/* FXRTODO - WFR performs RC/UC loopback here */
 
@@ -524,8 +525,7 @@ void hfi2_do_send(struct work_struct *work)
 			 * If the packet cannot be sent now, return and
 			 * the send tasklet will be woken up later.
 			 */
-			if (hfi2_verbs_send(qp, qp->s_hdr, qp->s_hdrwords,
-					      qp->s_cur_sge, qp->s_cur_size))
+			if (hfi2_verbs_send(qp))
 				break;
 
 			/* Record that s_hdr is empty. */
@@ -537,7 +537,7 @@ void hfi2_do_send(struct work_struct *work)
 /*
  * This should be called with s_lock held.
  */
-void hfi2_send_complete(struct hfi2_qp *qp, struct rvt_swqe *wqe,
+void hfi2_send_complete(struct rvt_qp *qp, struct rvt_swqe *wqe,
 			enum ib_wc_status status)
 {
 	u32 old_last, last;
@@ -595,12 +595,13 @@ void hfi2_send_complete(struct hfi2_qp *qp, struct rvt_swqe *wqe,
 /*
  * This must be called with s_lock held.
  */
-void hfi2_schedule_send(struct hfi2_qp *qp)
+void hfi2_schedule_send(struct rvt_qp *qp)
 {
 	if (send_ok(qp)) {
+		struct hfi2_qp_priv *qp_priv = qp->priv;
 		struct hfi2_ibport *ibp;
 
 		ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
-		iowait_schedule(&qp->s_iowait, ibp->ppd->hfi_wq);
+		iowait_schedule(&qp_priv->s_iowait, ibp->ppd->hfi_wq);
 	}
 }

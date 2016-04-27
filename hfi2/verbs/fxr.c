@@ -143,7 +143,7 @@ static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
  * TODO may need to determine packet boundaries depending on how auto-header
  * optimization is implemented in upper layers (need add'l header IOVECs)
  */
-static int qp_max_iovs(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+static int qp_max_iovs(struct hfi2_ibport *ibp, struct rvt_qp *qp,
 		       int *out_niovs)
 {
 	int niovs, i;
@@ -190,7 +190,7 @@ static int qp_max_iovs(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 /*
  * read QP's SG list state for next address and length to send
  */
-static void qp_read_sge(struct hfi2_qp *qp, uint32_t sent,
+static void qp_read_sge(struct rvt_qp *qp, uint32_t sent,
 			uint64_t *start, uint32_t *length)
 {
 	uint32_t iov_length;
@@ -218,8 +218,9 @@ static void qp_read_sge(struct hfi2_qp *qp, uint32_t sent,
  * has value again during bring-up
  */
 static int __attribute__ ((unused))
-send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
+send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv)
 {
+	struct rvt_qp *qp = qp_priv->owner;
 	int ret;
 	unsigned long flags;
 	uint32_t length = 0;
@@ -255,10 +256,10 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 
 	/* send the WQE via PIO path */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
-	ret = hfi_tx_9b_kdeth_cmd_pio(&ibp->cmdq_tx, qp->s_ctx,
-				    qp->s_hdr, 8 + (qp->s_hdrwords << 2),
+	ret = hfi_tx_9b_kdeth_cmd_pio(&ibp->cmdq_tx, qp_priv->s_ctx,
+				    qp_priv->s_hdr, 8 + (qp->s_hdrwords << 2),
 				    (void *)start, length, ibp->port_num,
-				    qp->s_sl, 0, KDETH_9B_PIO);
+				    qp_priv->s_sl, 0, KDETH_9B_PIO);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 
 	/* caller must handle retransmit due to no slots (-EAGAIN) */
@@ -268,7 +269,7 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 static void hfi2_send_event(struct hfi_eq *eq_tx, void *data)
 {
 	struct hfi2_ibport *ibp = data;
-	struct hfi2_qp *qp;
+	struct rvt_qp *qp;
 	struct rvt_swqe *wqe;
 	struct hfi2_wqe_iov *wqe_iov;
 	u32 pkt_errors = 0;
@@ -357,7 +358,7 @@ eq_advance:
 	goto next_event;
 }
 
-static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+static int build_iovec_array(struct hfi2_ibport *ibp, struct rvt_qp *qp,
 			     bool use_16b, struct hfi2_wqe_iov *wqe_iov,
 			     int *out_niovs, uint32_t *iov_bytes)
 {
@@ -413,10 +414,11 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	return 0;
 }
 
-int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 		  union hfi2_packet_header *ph, size_t hwords,
 		  bool use_16b)
 {
+	struct rvt_qp *qp = qp_priv->owner;
 	int ret, ndelays = 0;
 	unsigned long flags;
 	uint8_t dma_cmd = GENERAL_DMA;
@@ -461,7 +463,7 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 _tx_cmd:
 	/* send with GENERAL or MGMT DMA */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
-	ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, qp->s_ctx,
+	ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, qp_priv->s_ctx,
 				    (uint64_t)wqe_iov->iov, num_iovs,
 				    (uint64_t)wqe_iov, PTL_MD_RESERVED_IOV,
 				    &ibp->send_eq, HFI_CT_NONE,
@@ -494,8 +496,9 @@ err:
 	return ret;
 }
 
-int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
+int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv)
 {
+	struct rvt_qp *qp = qp_priv->owner;
 	enum ib_qp_type qp_type = qp->ibqp.qp_type;
 	struct hfi2_wqe_iov *wqe_iov = NULL;
 	int ret, ndelays = 0;
@@ -515,7 +518,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 	 * WQE from pending list; suboptimal to call hfi2_use_16() again for
 	 * UD queue pair, should make_req() stash the pkt_type in QP?
 	 */
-	sl = qp->s_sl;
+	sl = qp_priv->s_sl;
 	use_16b = hfi2_use_16b(qp);
 
 	/*
@@ -556,11 +559,13 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 	 * TODO - can be removed by refactoring where upper layer builds header
 	 */
 	if (!use_16b)
-		memcpy(&wqe_iov->ph, &qp->s_hdr->ph.ibh, qp->s_hdrwords << 2);
+		memcpy(&wqe_iov->ph, &qp_priv->s_hdr->ph.ibh,
+		       qp->s_hdrwords << 2);
 	else
-		memcpy(&wqe_iov->ph, &qp->s_hdr->opa16b, qp->s_hdrwords << 2);
-
+		memcpy(&wqe_iov->ph, &qp_priv->s_hdr->opa16b,
+		       qp->s_hdrwords << 2);
 	wqe_iov->use_16b = use_16b;
+
 	if (use_ofed_dma) {
 		/*
 		 * read current SGE address/length, updates internal state;
@@ -603,8 +608,8 @@ _tx_cmd:
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
 	if (use_ofed_dma) {
 		/* send with OFED_DMA */
-		ret = hfi_tx_cmd_ofed_dma(&ibp->cmdq_tx, qp->s_ctx,
-					  qp->s_hdr, (void *)start,
+		ret = hfi_tx_cmd_ofed_dma(&ibp->cmdq_tx, qp_priv->s_ctx,
+					  qp_priv->s_hdr, (void *)start,
 					  length, eth_size,
 					  opa_mtu_to_id(qp->pmtu),
 					  (uint64_t)wqe_iov, 0,
@@ -613,7 +618,7 @@ _tx_cmd:
 					  ibp->ppd->lid, dma_cmd);
 	} else {
 		/* send with GENERAL or MGMT DMA */
-		ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, qp->s_ctx,
+		ret = hfi_tx_cmd_bypass_dma(&ibp->cmdq_tx, qp_priv->s_ctx,
 					    (uint64_t)wqe_iov->iov, num_iovs,
 					    (uint64_t)wqe_iov,
 					    PTL_MD_RESERVED_IOV,
@@ -1013,7 +1018,7 @@ void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp)
 	ibp->ctx = NULL;
 }
 
-int hfi2_ctx_assign_qp(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+int hfi2_ctx_assign_qp(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 			 bool is_user)
 {
 	/* FXRTODO: fix me */
@@ -1025,13 +1030,13 @@ int hfi2_ctx_assign_qp(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	if (ret)
 		return ret;
 #endif
-	qp->s_ctx = ibp->ctx;
+	qp_priv->s_ctx = ibp->ctx;
 	return 0;
 }
 
-void hfi2_ctx_release_qp(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
+void hfi2_ctx_release_qp(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv)
 {
-	qp->s_ctx = NULL;
+	qp_priv->s_ctx = NULL;
 	/* FXRTODO: fix me */
 #if 0
 	opa_core_device_put(ibd->odev);
