@@ -293,7 +293,6 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	u32 nwords;
 	u32 extra_bytes;
 	u32 bth0;
-	u8 sc5;
 
 	/* Construct the header. */
 	extra_bytes = -wqe->length & 3;
@@ -315,17 +314,13 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 		lrh0 = HFI1_LRH_BTH;
 	}
 
-	sc5 = ppd->sl_to_sc[ah_attr->sl];
-	lrh0 |= (ah_attr->sl & 0xf) << 4;
-	if (qp->ibqp.qp_type == IB_QPT_SMI) {
-		lrh0 |= 0xF000; /* Set VL (see ch. 13.5.3.1) */
-		qp->s_sc = 0xf;
-		wqe->use_sc15 = true;
-	} else {
-		lrh0 |= (sc5 & 0xf) << 12;
-		qp->s_sc = sc5;
-		wqe->use_sc15 = false;
-	}
+	qp->s_sl = ah_attr->sl;
+	if (qp->ibqp.qp_type == IB_QPT_SMI)
+		qp->s_sc = 0xf; /* Set VL (see ch. 13.5.3.1) */
+	else
+		qp->s_sc = ppd->sl_to_sc[qp->s_sl];
+	lrh0 |= (qp->s_sc & 0xf) << 12 | (qp->s_sl & 0xf) << 4;
+
 	qp->s_hdr->ph.ibh.lrh[0] = cpu_to_be16(lrh0);
 	qp->s_hdr->ph.ibh.lrh[1] = cpu_to_be16((u16)ah_attr->dlid);
 	qp->s_hdr->ph.ibh.lrh[2] =
@@ -363,7 +358,6 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
 #endif
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
-	wqe->use_16b = false;
 }
 
 static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
@@ -375,7 +369,7 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	struct ib_ah_attr *ah_attr;
 	u32 nwords, extra_bytes;
 	u32 bth0, qwords, slid, dlid;
-	u8 sc5, l4;
+	u8 l4;
 	u16 pkey;
 
 	/* Construct the header. */
@@ -403,14 +397,11 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 		l4 = HFI1_L4_IB_LOCAL;
 	}
 
-	sc5 = ppd->sl_to_sc[ah_attr->sl];
-	if (qp->ibqp.qp_type == IB_QPT_SMI) {
+	qp->s_sl = ah_attr->sl;
+	if (qp->ibqp.qp_type == IB_QPT_SMI)
 		qp->s_sc = 0xf;
-		wqe->use_sc15 = true;
-	} else {
-		qp->s_sc = sc5;
-		wqe->use_sc15 = false;
-	}
+	else
+		qp->s_sc = ppd->sl_to_sc[qp->s_sl];
 
 	/* FXRTODO: Need to program FECN/BECN */
 	slid = ppd->lid;
@@ -446,7 +437,6 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	ohdr->bth[1] = cpu_to_be32(wqe->wr.wr.ud.remote_qpn);
 #endif
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
-	wqe->use_16b = true;
 }
 
 /**
@@ -592,9 +582,6 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 #endif
 	ohdr->u.ud.deth[1] = cpu_to_be32(qp->ibqp.qp_num);
 
-	/* set remaining WQE fields needed for DMA command */
-	wqe->sl = ah_attr->sl;
-	wqe->pkt_errors = 0;
 done:
 	ret = 1;
 	goto unlock;

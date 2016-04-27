@@ -256,11 +256,6 @@ int hfi2_make_uc_req(struct hfi2_qp *qp)
 		hfi2_make_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
 				     mask_psn(qp->s_next_psn++));
 
-	/* set remaining WQE fields needed for DMA command */
-	wqe->sl = qp->remote_ah_attr.sl;
-	wqe->use_sc15 = false;
-	wqe->use_16b = is_16b;
-	wqe->pkt_errors = 0;
 done:
 	ret = 1;
 	goto unlock;

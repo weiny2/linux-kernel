@@ -293,7 +293,6 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 	u16 lrh0;
 	u32 nwords;
 	u32 extra_bytes;
-	u8 sc5;
 	u32 bth1;
 
 	/* Construct the header. */
@@ -312,9 +311,9 @@ void hfi2_make_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 		lrh0 = HFI1_LRH_BTH;
 	}
 
-	sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
-	lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
-	qp->s_sc = sc5;
+	qp->s_sl = qp->remote_ah_attr.sl;
+	qp->s_sc = ppd->sl_to_sc[qp->s_sl];
+	lrh0 |= (qp->s_sc & 0xf) << 12 | (qp->s_sl & 0xf) << 4;
 	if (qp->s_mig_state == IB_MIG_MIGRATED)
 		bth0 |= IB_BTH_MIG_REQ;
 	qp->s_hdr->ph.ibh.lrh[0] = cpu_to_be16(lrh0);
@@ -345,7 +344,7 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 	u32 nwords, extra_bytes;
 	u32 bth1, qwords, slid, dlid;
 	bool becn = false;
-	u8 sc5, l4;
+	u8 l4;
 	u16 pkey;
 
 	/* Construct the header. */
@@ -371,8 +370,8 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 		l4 = HFI1_L4_IB_LOCAL;
 	}
 
-	sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
-	qp->s_sc = sc5;
+	qp->s_sl = qp->remote_ah_attr.sl;
+	qp->s_sc = ppd->sl_to_sc[qp->s_sl];
 
 	bth0 |= extra_bytes << 20;
 	bth1 = qp->remote_qpn;
