@@ -461,11 +461,11 @@ static int hfi2_verbs_send(struct hfi2_qp *qp, union hfi2_ib_dma_header *hdr,
 	if (!list_empty(&qp->s_iowait.tx_head)) {
 		/* TODO - STL-2554 */
 #if 0
-		struct hfi2_swqe *wqe;
+		struct rvt_swqe *wqe;
 
 		wqe = list_first_entry(
 			&qp->s_iowait.tx_head,
-			struct hfi2_swqe,
+			struct rvt_swqe,
 			pending_list);
 		list_del_init(&wqe->pending_list);
 		/* send queued pending WGE into fabric */
@@ -537,7 +537,7 @@ void hfi2_do_send(struct work_struct *work)
 /*
  * This should be called with s_lock held.
  */
-void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
+void hfi2_send_complete(struct hfi2_qp *qp, struct rvt_swqe *wqe,
 			enum ib_wc_status status)
 {
 	u32 old_last, last;

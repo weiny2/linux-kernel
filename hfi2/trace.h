@@ -397,7 +397,7 @@ __print_symbolic(opcode,                                   \
 "wr_id: %llx qpn: %x, psn: 0x%x, lpsn: 0x%x, length: %u opcode: 0x%.2x,%s, size: %u, head: %u, last: %u"
 
 TRACE_EVENT(hfi2_post_one_send,
-	    TP_PROTO(struct hfi2_qp *qp, struct hfi2_swqe *wqe),
+	    TP_PROTO(struct hfi2_qp *qp, struct rvt_swqe *wqe),
 	    TP_ARGS(qp, wqe),
 	    TP_STRUCT__entry(
 		    __field(u64, wr_id)

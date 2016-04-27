@@ -243,7 +243,7 @@ struct hfi2_ib_packet {
 struct hfi2_wqe_iov {
 	struct hfi2_qp *qp;
 	union {
-		struct hfi2_swqe *wqe;
+		struct rvt_swqe *wqe;
 		struct rvt_mregion *mr;
 	};
 	union hfi2_packet_header ph;
@@ -569,7 +569,7 @@ static inline bool hfi2_check_permissive(struct ib_ah_attr *ah_attr)
 /* Check if current wqe needs 16B */
 static inline bool hfi2_use_16b(struct hfi2_qp *qp)
 {
-	struct hfi2_swqe *wqe = qp->s_wqe;
+	struct rvt_swqe *wqe = qp->s_wqe;
 	struct ib_ah_attr *ah_attr;
 	union ib_gid sgid;
 	union ib_gid *dgid;
