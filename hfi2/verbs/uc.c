@@ -67,7 +67,7 @@
 int hfi2_make_uc_req(struct hfi2_qp *qp)
 {
 	struct ib_l4_headers *ohdr;
-	struct hfi2_swqe *wqe;
+	struct rvt_swqe *wqe;
 	unsigned long flags;
 	u32 hwords;
 	u32 bth0 = 0;

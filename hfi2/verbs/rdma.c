@@ -198,7 +198,7 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 			 int *scheduled)
 {
 	struct ib_device *ibdev = qp->ibqp.device;
-	struct hfi2_swqe *wqe;
+	struct rvt_swqe *wqe;
 	u32 next;
 	int i;
 	int j;

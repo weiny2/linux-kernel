@@ -269,7 +269,7 @@ static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
 
 	if (clr_sends) {
 		while (qp->s_last != qp->s_head) {
-			struct hfi2_swqe *wqe = get_swqe_ptr(qp, qp->s_last);
+			struct rvt_swqe *wqe = get_swqe_ptr(qp, qp->s_last);
 			unsigned i;
 
 			for (i = 0; i < wqe->wr.num_sge; i++) {
@@ -298,7 +298,7 @@ static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
 		return;
 
 	for (n = 0; n < ARRAY_SIZE(qp->s_ack_queue); n++) {
-		struct hfi2_ack_entry *e = &qp->s_ack_queue[n];
+		struct rvt_ack_entry *e = &qp->s_ack_queue[n];
 
 		if (e->opcode == IB_OPCODE_RC_RDMA_READ_REQUEST &&
 		    e->rdma_sge.mr) {
@@ -750,7 +750,7 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 {
 	struct hfi2_qp *qp;
 	int err;
-	struct hfi2_swqe *swq = NULL;
+	struct rvt_swqe *swq = NULL;
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ibpd->device);
 	size_t sz;
 	size_t sg_list_sz;
@@ -800,7 +800,7 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 
 	sz = sizeof(struct rvt_sge) *
 		init_attr->cap.max_send_sge +
-		sizeof(struct hfi2_swqe);
+		sizeof(struct rvt_swqe);
 	swq = vzalloc((init_attr->cap.max_send_wr + 1) * sz);
 	if (swq == NULL) {
 		ret = ERR_PTR(-ENOMEM);

@@ -125,45 +125,6 @@ struct hfi2_ib_packet;
 union hfi2_packet_header;
 
 /*
- * Send work request queue entry.
- * The size of the sg_list is determined when the QP is created and stored
- * in qp->s_max_sge.
- */
-struct hfi2_swqe {
-	union {
-		struct ib_send_wr wr;   /* don't use wr.sg_list */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-		struct ib_rdma_wr rdma_wr;
-		struct ib_atomic_wr atomic_wr;
-		struct ib_ud_wr ud_wr;
-#endif
-	};
-	u32 psn;                /* first packet sequence number */
-	u32 lpsn;               /* last packet sequence number */
-	u32 ssn;                /* send sequence number */
-	u32 length;             /* total length of data in sg_list */
-#ifdef HFI2_WQE_PKT_ERRORS
-	u32 pkt_errors;
-#endif
-	struct rvt_sge sg_list[0];
-};
-
-/*
- * This structure holds the information that the send tasklet needs
- * to send a RDMA read response or atomic operation.
- */
-struct hfi2_ack_entry {
-	u8 opcode;
-	u8 sent;
-	u32 psn;
-	u32 lpsn;
-	union {
-		struct rvt_sge rdma_sge;
-		u64 atomic_data;
-	};
-};
-
-/*
  * Variables prefixed with s_ are for the requester (sender).
  * Variables prefixed with r_ are for the responder (receiver).
  * Variables prefixed with ack_ are for responder replies.
@@ -176,7 +137,7 @@ struct hfi2_qp {
 	/* read mostly fields above and below */
 	struct ib_ah_attr remote_ah_attr;
 	struct ib_ah_attr alt_ah_attr;
-	struct hfi2_swqe *s_wq;  /* send work queue */
+	struct rvt_swqe *s_wq;  /* send work queue */
 	struct rvt_mmap_info *ip;
 	union hfi2_ib_dma_header *s_hdr; /* next packet header to send */
 	bool use_16b; /* Applicable for RC/UC QPs. Based on ah for UD */
@@ -214,7 +175,7 @@ struct hfi2_qp {
 	atomic_t refcount ____cacheline_aligned_in_smp;
 	wait_queue_head_t wait;
 
-	struct hfi2_ack_entry s_ack_queue[OPA_IB_MAX_RDMA_ATOMIC + 1]
+	struct rvt_ack_entry s_ack_queue[OPA_IB_MAX_RDMA_ATOMIC + 1]
 		____cacheline_aligned_in_smp;
 	struct rvt_sge_state s_rdma_read_sge;
 
@@ -236,7 +197,7 @@ struct hfi2_qp {
 	spinlock_t s_lock ____cacheline_aligned_in_smp;
 	struct rvt_sge_state *s_cur_sge;
 	u32 s_flags;
-	struct hfi2_swqe *s_wqe;
+	struct rvt_swqe *s_wqe;
 	struct rvt_sge_state s_sge;     /* current send request data */
 	struct rvt_mregion *s_rdma_mr;
 	u32 s_cur_size;         /* size of send packet in bytes */
@@ -357,16 +318,17 @@ struct hfi2_qp {
 #define OPCODE_QP_MASK 0xE0
 
 /*
- * Since struct hfi2_swqe is not a fixed size, we can't simply index into
+ * Since struct rvt_swqe is not a fixed size, we can't simply index into
  * struct hfi2_qp.s_wq.  This function does the array index computation.
+ * TODO - can delete when moving to struct rvt_qp.
  */
-static inline struct hfi2_swqe *get_swqe_ptr(struct hfi2_qp *qp,
-					      unsigned n)
+static inline struct rvt_swqe *get_swqe_ptr(struct hfi2_qp *qp,
+					    unsigned n)
 {
-	return (struct hfi2_swqe *)((char *)qp->s_wq +
-				     (sizeof(struct hfi2_swqe) +
-				      qp->s_max_sge *
-				      sizeof(struct rvt_sge)) * n);
+	return (struct rvt_swqe *)((char *)qp->s_wq +
+				   (sizeof(struct rvt_swqe) +
+				    qp->s_max_sge *
+				    sizeof(struct rvt_sge)) * n);
 }
 
 /*
@@ -574,7 +536,7 @@ void hfi2_make_16b_ruc_header(struct hfi2_qp *qp, struct ib_l4_headers *ohdr,
 			      u32 bth0, u32 bth2);
 void hfi2_do_send(struct work_struct *work);
 void hfi2_schedule_send(struct hfi2_qp *qp);
-void hfi2_send_complete(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
+void hfi2_send_complete(struct hfi2_qp *qp, struct rvt_swqe *wqe,
 			enum ib_wc_status status);
 void hfi2_rc_send_complete(struct hfi2_qp *qp, struct ib_l4_headers *ohdr);
 int hfi2_make_uc_req(struct hfi2_qp *qp);

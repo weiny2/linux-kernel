@@ -68,7 +68,7 @@
  * this is being called.
  */
 /* FXRTODO: Need to support 16B loopback */
-static void ud_loopback(struct hfi2_qp *sqp, struct hfi2_swqe *swqe)
+static void ud_loopback(struct hfi2_qp *sqp, struct rvt_swqe *swqe)
 {
 	struct ib_device *ibdev;
 	struct hfi2_ibport *ibp;
@@ -283,7 +283,7 @@ drop:
 	rcu_read_unlock();
 }
 
-static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
+static void hfi2_make_ud_header(struct hfi2_qp *qp, struct rvt_swqe *wqe,
 				struct ib_l4_headers *ohdr, u8 opcode)
 {
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
@@ -360,7 +360,7 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
 }
 
-static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct hfi2_swqe *wqe,
+static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct rvt_swqe *wqe,
 				    struct ib_l4_headers *ohdr, u8 opcode)
 {
 	struct hfi2_opa16b_header *opa16b = &qp->s_hdr->opa16b;
@@ -461,7 +461,7 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 	struct ib_ah_attr *ah_attr;
 	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
-	struct hfi2_swqe *wqe;
+	struct rvt_swqe *wqe;
 	unsigned long flags;
 	u8 opcode;
 	u32 lid;

@@ -269,7 +269,7 @@ static void hfi2_send_event(struct hfi_eq *eq_tx, void *data)
 {
 	struct hfi2_ibport *ibp = data;
 	struct hfi2_qp *qp;
-	struct hfi2_swqe *wqe;
+	struct rvt_swqe *wqe;
 	struct hfi2_wqe_iov *wqe_iov;
 	u32 pkt_errors = 0;
 	unsigned long flags;

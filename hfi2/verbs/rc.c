@@ -271,7 +271,7 @@ static void qp_comm_est(struct hfi2_qp *qp)
 	}
 }
 
-static u32 restart_sge(struct rvt_sge_state *ss, struct hfi2_swqe *wqe,
+static u32 restart_sge(struct rvt_sge_state *ss, struct rvt_swqe *wqe,
 		       u32 psn, u32 pmtu)
 {
 	u32 len;
@@ -309,7 +309,7 @@ static void start_timer(struct hfi2_qp *qp)
 static int make_rc_ack(struct hfi2_ibdev *dev, struct hfi2_qp *qp,
 		       struct ib_l4_headers *ohdr, u32 pmtu, bool is_16b)
 {
-	struct hfi2_ack_entry *e;
+	struct rvt_ack_entry *e;
 	u32 hwords;
 	u32 len;
 	u32 bth0;
@@ -477,7 +477,7 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 	struct hfi2_ibdev *dev = to_hfi_ibd(qp->ibqp.device);
 	struct ib_l4_headers *ohdr;
 	struct rvt_sge_state *ss;
-	struct hfi2_swqe *wqe;
+	struct rvt_swqe *wqe;
 	/* header size in 32-bit words LRH+BTH = (8+12)/4. */
 	u32 hwords;
 	u32 len;
@@ -1123,7 +1123,7 @@ queue_ack:
 static void reset_psn(struct hfi2_qp *qp, u32 psn)
 {
 	u32 n = qp->s_acked;
-	struct hfi2_swqe *wqe = get_swqe_ptr(qp, n);
+	struct rvt_swqe *wqe = get_swqe_ptr(qp, n);
 	u32 opcode;
 
 	qp->s_cur = n;
@@ -1207,7 +1207,7 @@ done:
  */
 static void restart_rc(struct hfi2_qp *qp, u32 psn, int wait)
 {
-	struct hfi2_swqe *wqe = get_swqe_ptr(qp, qp->s_acked);
+	struct rvt_swqe *wqe = get_swqe_ptr(qp, qp->s_acked);
 	struct hfi2_ibport *ibp;
 
 	if (qp->s_retry == 0) {
@@ -1283,7 +1283,7 @@ static void rc_rnr_retry(unsigned long arg)
  */
 static void reset_sending_psn(struct hfi2_qp *qp, u32 psn)
 {
-	struct hfi2_swqe *wqe;
+	struct rvt_swqe *wqe;
 	u32 n = qp->s_last;
 
 	/* Find the work request corresponding to the given PSN. */
@@ -1308,7 +1308,7 @@ static void reset_sending_psn(struct hfi2_qp *qp, u32 psn)
  */
 void hfi2_rc_send_complete(struct hfi2_qp *qp, struct ib_l4_headers *ohdr)
 {
-	struct hfi2_swqe *wqe;
+	struct rvt_swqe *wqe;
 	struct ib_wc wc;
 	unsigned i;
 	u32 opcode;
@@ -1385,8 +1385,8 @@ static inline void update_last_psn(struct hfi2_qp *qp, u32 psn)
  * This is similar to hfi2_send_complete but has to check to be sure
  * that the SGEs are not being referenced if the SWQE is being resent.
  */
-static struct hfi2_swqe *do_rc_completion(struct hfi2_qp *qp,
-					  struct hfi2_swqe *wqe,
+static struct rvt_swqe *do_rc_completion(struct hfi2_qp *qp,
+					  struct rvt_swqe *wqe,
 					  struct hfi2_ibport *ibp)
 {
 	struct ib_wc wc;
@@ -1478,7 +1478,7 @@ static int do_rc_ack(struct hfi2_qp *qp, u32 aeth, u32 psn, int opcode,
 {
 	struct hfi2_ibport *ibp;
 	enum ib_wc_status status;
-	struct hfi2_swqe *wqe;
+	struct rvt_swqe *wqe;
 	int ret = 0;
 	u32 ack_psn;
 	int diff;
@@ -1699,7 +1699,7 @@ bail:
 static void rdma_seq_err(struct hfi2_qp *qp, struct hfi2_ibport *ibp,
 			 u32 psn, struct hfi_ctx *ctx)
 {
-	struct hfi2_swqe *wqe;
+	struct rvt_swqe *wqe;
 
 	/* Remove QP from retry timer */
 	if (qp->s_flags & (HFI1_S_TIMER | HFI1_S_WAIT_RNR)) {
@@ -1751,7 +1751,7 @@ static void rc_rcv_resp(struct hfi2_ibport *ibp,
 			u32 opcode, u32 psn, u32 hdrsize, u32 pmtu,
 			struct hfi_ctx *ctx, u32 pad, u8 extra_bytes)
 {
-	struct hfi2_swqe *wqe;
+	struct rvt_swqe *wqe;
 	enum ib_wc_status status;
 	unsigned long flags;
 	int diff;
@@ -1975,7 +1975,7 @@ static noinline int rc_rcv_error(struct ib_l4_headers *ohdr, void *data,
 			struct hfi_ctx *ctx, bool is_16b)
 {
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
-	struct hfi2_ack_entry *e;
+	struct rvt_ack_entry *e;
 	unsigned long flags;
 	u8 i, prev;
 	int old_req;
@@ -2534,7 +2534,7 @@ send_last:
 		goto send_last;
 
 	case OP(RDMA_READ_REQUEST): {
-		struct hfi2_ack_entry *e;
+		struct rvt_ack_entry *e;
 		u32 len;
 		u8 next;
 
@@ -2607,7 +2607,7 @@ send_last:
 	case OP(COMPARE_SWAP):
 	case OP(FETCH_ADD): {
 		struct ib_atomic_eth *ateth;
-		struct hfi2_ack_entry *e;
+		struct rvt_ack_entry *e;
 		u64 vaddr;
 		atomic64_t *maddr;
 		u64 sdata;
