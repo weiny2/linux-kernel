@@ -2539,7 +2539,6 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 	struct _vls_pctrs *vlinfo;
 	int vfi;
 	u64 tmp, tmp2;
-	u8 lq;
 
 	dd = hfi_dd_from_ibdev(ibdev);
 	ppd = to_hfi_ppd(dd, port);
@@ -2589,8 +2588,7 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR));
 	rsp->port_rcv_remote_physical_errors = cpu_to_be64(hfi_read_lm_fpc_csr(
 				ppd, FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR));
-	hfi_read_link_quality(ppd, &lq);
-	rsp->link_quality_indicator = lq;
+	hfi_read_link_quality(ppd, &rsp->link_quality_indicator);
 
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
 	tmp2 = tmp + read_fzc_csr(ppd, FZC_LCB_ERR_INFO_TX_REPLAY_CNT);
