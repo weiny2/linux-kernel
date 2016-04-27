@@ -316,7 +316,7 @@ static int make_rc_ack(struct hfi2_ibdev *dev, struct rvt_qp *qp,
 	u32 bth2;
 
 	/* Don't send an ACK if we aren't supposed to. */
-	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK))
+	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_RECV_OK))
 		goto bail;
 
 	/* 16B(4)/LRH(2) + BTH(3) */
@@ -517,8 +517,8 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 	    make_rc_ack(dev, qp, ohdr, pmtu, is_16b))
 		goto done;
 
-	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_SEND_OK)) {
-		if (!(ib_qp_state_ops[qp->state] & HFI1_FLUSH_SEND))
+	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_SEND_OK)) {
+		if (!(ib_rvt_state_ops[qp->state] & RVT_FLUSH_SEND))
 			goto bail;
 		/* We are in the error state, flush the work request. */
 		if (qp->s_last == qp->s_head)
@@ -551,7 +551,7 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 	wqe = rvt_get_swqe_ptr(qp, qp->s_cur);
 	switch (qp->s_state) {
 	default:
-		if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_NEXT_SEND_OK))
+		if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_NEXT_SEND_OK))
 			goto bail;
 		/*
 		 * Resend an old request or start a new one.
@@ -1315,7 +1315,7 @@ void hfi2_rc_send_complete(struct rvt_qp *qp, struct ib_l4_headers *ohdr)
 	u32 opcode;
 	u32 psn;
 
-	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_OR_FLUSH_SEND))
+	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_OR_FLUSH_SEND))
 		return;
 
 	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
@@ -1336,7 +1336,7 @@ void hfi2_rc_send_complete(struct rvt_qp *qp, struct ib_l4_headers *ohdr)
 	if ((psn & IB_BTH_REQ_ACK) && qp->s_acked != qp->s_tail &&
 	    !(qp->s_flags &
 		(HFI1_S_TIMER | HFI1_S_WAIT_RNR | HFI1_S_WAIT_PSN)) &&
-		(ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK))
+		(ib_rvt_state_ops[qp->state] & RVT_PROCESS_RECV_OK))
 		start_timer(qp);
 
 	while (qp->s_last != qp->s_acked) {

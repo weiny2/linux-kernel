@@ -78,8 +78,8 @@ int hfi2_make_uc_req(struct rvt_qp *qp)
 	bool is_16b;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_SEND_OK)) {
-		if (!(ib_qp_state_ops[qp->state] & HFI1_FLUSH_SEND))
+	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_SEND_OK)) {
+		if (!(ib_rvt_state_ops[qp->state] & RVT_FLUSH_SEND))
 			goto bail;
 		/* We are in the error state, flush the work request. */
 		if (qp->s_last == qp->s_head)
@@ -114,8 +114,8 @@ int hfi2_make_uc_req(struct rvt_qp *qp)
 	qp->s_wqe = NULL;
 	switch (qp->s_state) {
 	default:
-		if (!(ib_qp_state_ops[qp->state] &
-		    HFI1_PROCESS_NEXT_SEND_OK))
+		if (!(ib_rvt_state_ops[qp->state] &
+		    RVT_PROCESS_NEXT_SEND_OK))
 			goto bail;
 		/* Check if send work queue is empty. */
 		if (qp->s_cur == qp->s_head) {

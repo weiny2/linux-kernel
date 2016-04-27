@@ -212,7 +212,7 @@ static int post_one_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	spin_lock_irqsave(&qp->s_lock, flags);
 
 	/* Check that state is OK to post send. */
-	if (unlikely(!(ib_qp_state_ops[qp->state] & HFI1_POST_SEND_OK)))
+	if (unlikely(!(ib_rvt_state_ops[qp->state] & RVT_POST_SEND_OK)))
 		goto bail_inval;
 
 	/* IB spec says that num_sge == 0 is OK. */
@@ -420,76 +420,13 @@ bail:
 	return err;
 }
 
-/**
- * hfi2_post_receive - post a receive on a QP
- * @ibqp: the QP to post the receive on
- * @wr: the WR to post
- * @bad_wr: the first bad WR is put here
- *
- * This may be called from interrupt context.
- *
- * Return: 0 on success, otherwise returns an errno.
- */
-int hfi2_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
-			struct ib_recv_wr **bad_wr)
-{
-	struct rvt_qp *qp = ibqp_to_rvtqp(ibqp);
-	struct rvt_rwq *wq = qp->r_rq.wq;
-	unsigned long flags;
-	int ret;
-
-	/* Check that state is OK to post receive. */
-	if (!(ib_qp_state_ops[qp->state] & HFI1_POST_RECV_OK) || !wq) {
-		*bad_wr = wr;
-		ret = -EINVAL;
-		goto bail;
-	}
-
-	for (; wr; wr = wr->next) {
-		struct rvt_rwqe *wqe;
-		u32 next;
-		int i;
-
-		if ((unsigned) wr->num_sge > qp->r_rq.max_sge) {
-			*bad_wr = wr;
-			ret = -EINVAL;
-			goto bail;
-		}
-
-		spin_lock_irqsave(&qp->r_rq.lock, flags);
-		next = wq->head + 1;
-		if (next >= qp->r_rq.size)
-			next = 0;
-		if (next == wq->tail) {
-			spin_unlock_irqrestore(&qp->r_rq.lock, flags);
-			*bad_wr = wr;
-			ret = -ENOMEM;
-			goto bail;
-		}
-
-		wqe = rvt_get_rwqe_ptr(&qp->r_rq, wq->head);
-		wqe->wr_id = wr->wr_id;
-		wqe->num_sge = wr->num_sge;
-		for (i = 0; i < wr->num_sge; i++)
-			wqe->sg_list[i] = wr->sg_list[i];
-		/* Make sure queue entry is written before the head index. */
-		smp_wmb();
-		wq->head = next;
-		spin_unlock_irqrestore(&qp->r_rq.lock, flags);
-	}
-	ret = 0;
-
-bail:
-	return ret;
-}
-
 /*
  * Make sure the QP is ready and able to accept the given opcode.
  */
 static inline bool is_qp_ok(struct hfi2_ibport *ibp,
 			    struct rvt_qp *qp, int opcode)
 {
-	if ((ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) &&
+	if ((ib_rvt_state_ops[qp->state] & RVT_PROCESS_RECV_OK) &&
 	    (((opcode & OPCODE_QP_MASK) == qp->allowed_ops) ||
 	     (opcode == CNP_OPCODE))) {
 		return true;

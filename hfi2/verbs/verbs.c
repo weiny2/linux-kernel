@@ -97,26 +97,6 @@ unsigned int hfi2_max_srq_wrs = 0x1FFFF;
 /* LKEY table size in bits (2^n, 1 <= n <= 23) */
 unsigned int hfi2_lkey_table_size = 16;
 
-/*
- * Note that it is OK to post send work requests in the SQE and ERR
- * states; qib_do_send() will process them and generate error
- * completions as per IB 1.2 C10-96.
- */
-const int ib_qp_state_ops[IB_QPS_ERR + 1] = {
-	[IB_QPS_RESET] = 0,
-	[IB_QPS_INIT] = HFI1_POST_RECV_OK,
-	[IB_QPS_RTR] = HFI1_POST_RECV_OK | HFI1_PROCESS_RECV_OK,
-	[IB_QPS_RTS] = HFI1_POST_RECV_OK | HFI1_PROCESS_RECV_OK |
-	    HFI1_POST_SEND_OK | HFI1_PROCESS_SEND_OK |
-	    HFI1_PROCESS_NEXT_SEND_OK,
-	[IB_QPS_SQD] = HFI1_POST_RECV_OK | HFI1_PROCESS_RECV_OK |
-	    HFI1_POST_SEND_OK | HFI1_PROCESS_SEND_OK,
-	[IB_QPS_SQE] = HFI1_POST_RECV_OK | HFI1_PROCESS_RECV_OK |
-	    HFI1_POST_SEND_OK | HFI1_FLUSH_SEND,
-	[IB_QPS_ERR] = HFI1_POST_RECV_OK | HFI1_FLUSH_RECV |
-	    HFI1_POST_SEND_OK | HFI1_FLUSH_SEND,
-};
-
 static const char *get_unit_name(int unit)
 {
 	static char iname[16];
@@ -389,7 +369,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->query_qp = hfi2_query_qp;
 	ibdev->destroy_qp = hfi2_destroy_qp;
 	ibdev->post_send = hfi2_post_send;
-	ibdev->post_recv = hfi2_post_receive;
 	ibdev->process_mad = hfi2_process_mad;
 	ibdev->dma_device = ibd->parent_dev;
 	ibdev->modify_port = hfi2_modify_port;
