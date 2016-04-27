@@ -15,7 +15,7 @@ hostfile="${host1}_${host2}.hosts"
 perf_git="/nfs/sc/disks/fabric_work/ddalessa/perf_analysis/perfromance_team-fab_perf"
 verbs_dir="/nfs_scratch/driver_perf/Verbs/verbs-perf-check-r1.0"
 turbo="noturbo"
-WFRMPI="/usr/mpi/gcc/openmpi-1.10.0-hfi"
+WFRMPI="/usr/mpi/gcc/openmpi-1.10.2-hfi"
 datestamp=`date "+%m-%d-%y"`
 logdir="/nfs/sc/disks/fabric_mirror/scratch/wfr_reg_test/daily_logs/RHEL7"
 
@@ -151,7 +151,7 @@ function do_verbs_perf()
 		INCLUDE=$INCLUDE:$MPI_INCLUDE \
 		WFRBUILDS=/nfs_scratch/perfromance_team-fab_perf/wfr-sys/wfr-builds/rh7.0/floor \
 		WFRDRIVER=$WFRBUILDS/driver/hfi1.ko \
-		WFRMPI=$WFRBUILDS/mpi/openmpi-1.10.0 \
+		WFRMPI=$WFRBUILDS/mpi/openmpi-1.10.2 \
 	 	WFRDIAGS=$WFRBUILDS/diags/hfidiags \
 	 	WFROPAFM=$WFRBUILDS/opafm-config \
 		WFRSCRIPTS=$WFRBUILDS/scripts \

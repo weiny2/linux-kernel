@@ -119,14 +119,14 @@ function dump_config {
 	echo "Host 1 software versions":
 	run_cmd_fatal $host1_ssh "rpm -qa | grep hfi1-psm"
 	run_cmd_fatal $host1_ssh "rpm -qa | grep hfi1-diagtools"
-	run_cmd_fatal $host1_ssh "rpm -qa | grep openmpi | grep \"2a1\|1.8.5\|1.10.0\""
+	run_cmd_fatal $host1_ssh "rpm -qa | grep openmpi | grep \"2a1\|1.8.5\|1.10\""
 
 	echo ""
 
 	echo "Host 2 software versions":
 	run_cmd_fatal $host2_ssh "rpm -qa | grep hfi1-psm"
 	run_cmd_fatal $host2_ssh "rpm -qa | grep hfi1-diagtools"
-	run_cmd_fatal $host2_ssh "rpm -qa | grep openmpi | grep \"2a1\|1.8.5\|1.10.0\""
+	run_cmd_fatal $host2_ssh "rpm -qa | grep openmpi | grep \"2a1\|1.8.5\|1.10\""
 
 	echo ""
 

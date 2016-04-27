@@ -25,7 +25,7 @@ def check_output(output):
             test_failed = test_failed + 1
 
 def test_mpi(host1, host2, temp_dir, perf_test_dir):
-    wfr_mpi="/usr/mpi/gcc/openmpi-1.10.0-hfi"
+    wfr_mpi="/usr/mpi/gcc/openmpi-1.10.2-hfi"
     mpi_dir = perf_test_dir + "/scripts/regression/osu-perf-check "
     RegLib.test_log(5, "Running MPI test")
     RegLib.test_log(5, "This test will set the CPU freq")
