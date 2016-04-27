@@ -28,7 +28,6 @@ hfi2-y += verbs/ah.o
 hfi2-y += counters.o
 hfi2-y += verbs/fxr.o
 hfi2-y += verbs/mad.o
-hfi2-y += verbs/mr.o
 hfi2-y += verbs/qp.o
 hfi2-y += verbs/rc.o
 hfi2-y += verbs/rdma.o

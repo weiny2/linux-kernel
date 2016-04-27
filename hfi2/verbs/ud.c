@@ -68,12 +68,12 @@
  * this is being called.
  */
 /* FXRTODO: Need to support 16B loopback */
-static void ud_loopback(struct hfi2_qp *sqp, struct rvt_swqe *swqe)
+static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 {
 	struct ib_device *ibdev;
 	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
-	struct hfi2_qp *qp;
+	struct rvt_qp *qp;
 	struct ib_ah_attr *ah_attr;
 	unsigned long flags;
 	struct rvt_sge_state ssge;
@@ -283,9 +283,11 @@ drop:
 	rcu_read_unlock();
 }
 
-static void hfi2_make_ud_header(struct hfi2_qp *qp, struct rvt_swqe *wqe,
+static void hfi2_make_ud_header(struct rvt_qp *qp, struct rvt_swqe *wqe,
 				struct ib_l4_headers *ohdr, u8 opcode)
 {
+	struct hfi2_qp_priv *qp_priv = qp->priv;
+	union hfi2_ib_dma_header *s_hdr = qp_priv->s_hdr;
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	struct hfi_pportdata *ppd = ibp->ppd;
 	struct ib_ah_attr *ah_attr;
@@ -305,7 +307,7 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct rvt_swqe *wqe,
 #endif
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		/* remove LRH size from s_hdrwords for GRH */
-		qp->s_hdrwords += hfi2_make_grh(ibp, &qp->s_hdr->ph.ibh.u.l.grh,
+		qp->s_hdrwords += hfi2_make_grh(ibp, &s_hdr->ph.ibh.u.l.grh,
 						&ah_attr->grh,
 						(qp->s_hdrwords - 2),
 						nwords);
@@ -314,27 +316,27 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct rvt_swqe *wqe,
 		lrh0 = HFI1_LRH_BTH;
 	}
 
-	qp->s_sl = ah_attr->sl;
+	qp_priv->s_sl = ah_attr->sl;
 	if (qp->ibqp.qp_type == IB_QPT_SMI)
-		qp->s_sc = 0xf; /* Set VL (see ch. 13.5.3.1) */
+		qp_priv->s_sc = 0xf; /* Set VL (see ch. 13.5.3.1) */
 	else
-		qp->s_sc = ppd->sl_to_sc[qp->s_sl];
-	lrh0 |= (qp->s_sc & 0xf) << 12 | (qp->s_sl & 0xf) << 4;
+		qp_priv->s_sc = ppd->sl_to_sc[qp_priv->s_sl];
+	lrh0 |= (qp_priv->s_sc & 0xf) << 12 | (qp_priv->s_sl & 0xf) << 4;
 
-	qp->s_hdr->ph.ibh.lrh[0] = cpu_to_be16(lrh0);
-	qp->s_hdr->ph.ibh.lrh[1] = cpu_to_be16((u16)ah_attr->dlid);
-	qp->s_hdr->ph.ibh.lrh[2] =
+	s_hdr->ph.ibh.lrh[0] = cpu_to_be16(lrh0);
+	s_hdr->ph.ibh.lrh[1] = cpu_to_be16((u16)ah_attr->dlid);
+	s_hdr->ph.ibh.lrh[2] =
 		cpu_to_be16(qp->s_hdrwords + nwords);
 	if (ah_attr->dlid == IB_LID_PERMISSIVE) {
-		qp->s_hdr->ph.ibh.lrh[3] = IB_LID_PERMISSIVE;
+		s_hdr->ph.ibh.lrh[3] = IB_LID_PERMISSIVE;
 	} else {
 		u16 lid = ppd->lid;
 
 		if (lid) {
 			lid |= ah_attr->src_path_bits & ((1 << ppd->lmc) - 1);
-			qp->s_hdr->ph.ibh.lrh[3] = cpu_to_be16(lid);
+			s_hdr->ph.ibh.lrh[3] = cpu_to_be16(lid);
 		} else {
-			qp->s_hdr->ph.ibh.lrh[3] = IB_LID_PERMISSIVE;
+			s_hdr->ph.ibh.lrh[3] = IB_LID_PERMISSIVE;
 		}
 	}
 
@@ -360,10 +362,11 @@ static void hfi2_make_ud_header(struct hfi2_qp *qp, struct rvt_swqe *wqe,
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->s_next_psn++));
 }
 
-static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct rvt_swqe *wqe,
+static void hfi2_make_16b_ud_header(struct rvt_qp *qp, struct rvt_swqe *wqe,
 				    struct ib_l4_headers *ohdr, u8 opcode)
 {
-	struct hfi2_opa16b_header *opa16b = &qp->s_hdr->opa16b;
+	struct hfi2_qp_priv *qp_priv = qp->priv;
+	struct hfi2_opa16b_header *opa16b = &qp_priv->s_hdr->opa16b;
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	struct hfi_pportdata *ppd = ibp->ppd;
 	struct ib_ah_attr *ah_attr;
@@ -407,11 +410,11 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct rvt_swqe *wqe,
 		l4 = HFI1_L4_IB_LOCAL;
 	}
 
-	qp->s_sl = ah_attr->sl;
+	qp_priv->s_sl = ah_attr->sl;
 	if (qp->ibqp.qp_type == IB_QPT_SMI)
-		qp->s_sc = 0xf;
+		qp_priv->s_sc = 0xf;
 	else
-		qp->s_sc = ppd->sl_to_sc[qp->s_sl];
+		qp_priv->s_sc = ppd->sl_to_sc[qp_priv->s_sl];
 
 	/* FXRTODO: Need to program FECN/BECN */
 	slid = ppd->lid;
@@ -432,9 +435,9 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct rvt_swqe *wqe,
 
 	qwords = (qp->s_hdrwords + nwords) >> 1;
 
-	opa_make_16b_header((u32 *)&qp->s_hdr->opa16b,
+	opa_make_16b_header((u32 *)opa16b,
 			    slid, dlid, qwords, pkey,
-			    0, qp->s_sc, 0, 0, 0, 0, l4);
+			    0, qp_priv->s_sc, 0, 0, 0, 0, l4);
 
 	bth0 = opcode << 24;
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
@@ -455,8 +458,9 @@ static void hfi2_make_16b_ud_header(struct hfi2_qp *qp, struct rvt_swqe *wqe,
  *
  * Return: 1 if constructed; otherwise 0.
  */
-int hfi2_make_ud_req(struct hfi2_qp *qp)
+int hfi2_make_ud_req(struct rvt_qp *qp)
 {
+	struct hfi2_qp_priv *qp_priv = qp->priv;
 	struct ib_l4_headers *ohdr;
 	struct ib_ah_attr *ah_attr;
 	struct hfi2_ibport *ibp;
@@ -478,11 +482,11 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 		if (qp->s_last == qp->s_head)
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
-		if (is_iowait_sdma_busy(&qp->s_iowait)) {
+		if (is_iowait_sdma_busy(&qp_priv->s_iowait)) {
 			qp->s_flags |= HFI1_S_WAIT_DMA;
 			goto bail;
 		}
-		wqe = get_swqe_ptr(qp, qp->s_last);
+		wqe = rvt_get_swqe_ptr(qp, qp->s_last);
 		hfi2_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
 		goto done;
 	}
@@ -490,7 +494,7 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 	if (qp->s_cur == qp->s_head)
 		goto bail;
 
-	wqe = get_swqe_ptr(qp, qp->s_cur);
+	wqe = rvt_get_swqe_ptr(qp, qp->s_cur);
 	next_cur = qp->s_cur + 1;
 	if (next_cur >= qp->s_size)
 		next_cur = 0;
@@ -521,7 +525,7 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 			 * Instead of waiting, we could queue a
 			 * zero length descriptor so we get a callback.
 			 */
-			if (is_iowait_sdma_busy(&qp->s_iowait)) {
+			if (is_iowait_sdma_busy(&qp_priv->s_iowait)) {
 				qp->s_flags |= HFI1_S_WAIT_DMA;
 				goto bail;
 			}
@@ -561,11 +565,11 @@ int hfi2_make_ud_req(struct hfi2_qp *qp)
 		 * Don't worry about sending to locally attached multicast
 		 * QPs.  It is unspecified by the spec. what happens.
 		 */
-		ohdr = is_16b ? &qp->s_hdr->opa16b.u.l.oth :
-				&qp->s_hdr->ph.ibh.u.l.oth;
+		ohdr = is_16b ? &qp_priv->s_hdr->opa16b.u.l.oth :
+				&qp_priv->s_hdr->ph.ibh.u.l.oth;
 	else
-		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
-				&qp->s_hdr->ph.ibh.u.oth;
+		ohdr = is_16b ? &qp_priv->s_hdr->opa16b.u.oth :
+				&qp_priv->s_hdr->ph.ibh.u.oth;
 
 	if (wqe->wr.opcode == IB_WR_SEND_WITH_IMM) {
 		qp->s_hdrwords++;
@@ -656,7 +660,7 @@ int hfi2_lookup_pkey_idx(struct hfi2_ibport *ibp, u16 pkey)
  * This is called from hfi2_rcv() to process an incoming UD packet
  * for the given QP.
  */
-void hfi2_ud_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
+void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 {
 	struct ib_l4_headers *ohdr = packet->ohdr;
 	int opcode;

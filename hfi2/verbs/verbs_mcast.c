@@ -60,7 +60,7 @@
  * mcast_qp_alloc - alloc a struct to link a QP to mcast GID struct
  * @qp: the QP to link
  */
-static struct hfi2_mcast_qp *mcast_qp_alloc(struct hfi2_qp *qp)
+static struct hfi2_mcast_qp *mcast_qp_alloc(struct rvt_qp *qp)
 {
 	struct hfi2_mcast_qp *mqp;
 
@@ -77,7 +77,7 @@ bail:
 
 static void mcast_qp_free(struct hfi2_mcast_qp *mqp)
 {
-	struct hfi2_qp *qp = mqp->qp;
+	struct rvt_qp *qp = mqp->qp;
 
 	/* Notify hfi2_destroy_qp() if it is waiting. */
 	if (atomic_dec_and_test(&qp->refcount))
@@ -246,7 +246,7 @@ bail:
 
 int hfi2_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 {
-	struct hfi2_qp *qp = to_hfi_qp(ibqp);
+	struct rvt_qp *qp = ibqp_to_rvtqp(ibqp);
 	struct ib_device *ibdev = ibqp->device;
 	struct hfi2_ibdev *dev = to_hfi_ibd(ibdev);
 	struct hfi2_ibport *ibp;
@@ -305,7 +305,7 @@ bail:
 
 int hfi2_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 {
-	struct hfi2_qp *qp = to_hfi_qp(ibqp);
+	struct rvt_qp *qp = ibqp_to_rvtqp(ibqp);
 	struct ib_device *ibdev = ibqp->device;
 	struct hfi2_ibdev *dev = to_hfi_ibd(ibdev);
 	struct hfi2_ibport *ibp =

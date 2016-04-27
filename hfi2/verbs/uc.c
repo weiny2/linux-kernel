@@ -64,8 +64,9 @@
  *
  * Return: 1 if constructed; otherwise, return 0.
  */
-int hfi2_make_uc_req(struct hfi2_qp *qp)
+int hfi2_make_uc_req(struct rvt_qp *qp)
 {
+	struct hfi2_qp_priv *qp_priv = qp->priv;
 	struct ib_l4_headers *ohdr;
 	struct rvt_swqe *wqe;
 	unsigned long flags;
@@ -84,11 +85,11 @@ int hfi2_make_uc_req(struct hfi2_qp *qp)
 		if (qp->s_last == qp->s_head)
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
-		if (is_iowait_sdma_busy(&qp->s_iowait)) {
+		if (is_iowait_sdma_busy(&qp_priv->s_iowait)) {
 			qp->s_flags |= HFI1_S_WAIT_DMA;
 			goto bail;
 		}
-		wqe = get_swqe_ptr(qp, qp->s_last);
+		wqe = rvt_get_swqe_ptr(qp, qp->s_last);
 		hfi2_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
 		goto done;
 	}
@@ -102,14 +103,14 @@ int hfi2_make_uc_req(struct hfi2_qp *qp)
 	 * going across the network based on hop_count.
 	 */
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
-				&qp->s_hdr->ph.ibh.u.l.oth;
+		ohdr = is_16b ? &qp_priv->s_hdr->opa16b.u.oth :
+				&qp_priv->s_hdr->ph.ibh.u.l.oth;
 	else
-		ohdr = is_16b ? &qp->s_hdr->opa16b.u.oth :
-				&qp->s_hdr->ph.ibh.u.oth;
+		ohdr = is_16b ? &qp_priv->s_hdr->opa16b.u.oth :
+				&qp_priv->s_hdr->ph.ibh.u.oth;
 
 	/* Get the next send request. */
-	wqe = get_swqe_ptr(qp, qp->s_cur);
+	wqe = rvt_get_swqe_ptr(qp, qp->s_cur);
 	qp->s_wqe = NULL;
 	switch (qp->s_state) {
 	default:
@@ -275,7 +276,7 @@ unlock:
  * This is called from hfi2_rcv() to process an incoming UC packet
  * for the given QP.
  */
-void hfi2_uc_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
+void hfi2_uc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 {
 	struct hfi2_ibport *ibp = packet->ibp;
 	struct hfi_pportdata *ppd = ibp->ppd;
@@ -537,8 +538,8 @@ rdma_first:
 			int ok;
 
 			/* Check rkey */
-			ok = hfi2_rkey_ok(qp, &qp->r_sge.sge, qp->r_len,
-					  vaddr, rkey, IB_ACCESS_REMOTE_WRITE);
+			ok = rvt_rkey_ok(qp, &qp->r_sge.sge, qp->r_len,
+					 vaddr, rkey, IB_ACCESS_REMOTE_WRITE);
 			if (unlikely(!ok))
 				goto drop;
 			qp->r_sge.num_sge = 1;

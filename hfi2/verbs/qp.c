@@ -57,7 +57,7 @@
 #include "packet.h"
 #include "opa_core_ib.h"
 
-static void remove_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp);
+static void remove_qp(struct hfi2_ibdev *ibd, struct rvt_qp *qp);
 
 /*
  * Allocate the next available QPN or
@@ -100,7 +100,7 @@ static int alloc_qpn(struct hfi2_ibdev *ibd,
 	return ret;
 }
 
-static void free_qpn(struct hfi2_ibdev *ibd, struct hfi2_qp *qp)
+static void free_qpn(struct hfi2_ibdev *ibd, struct rvt_qp *qp)
 {
 	u8 ib_port = qp->port_num;
 	u32 qpn = qp->ibqp.qp_num;
@@ -124,7 +124,7 @@ static void free_qpn(struct hfi2_ibdev *ibd, struct hfi2_qp *qp)
  * Put the QP into the hash table.
  * The hash table holds a reference to the QP.
  */
-static int insert_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp, bool is_user)
+static int insert_qp(struct hfi2_ibdev *ibd, struct rvt_qp *qp, bool is_user)
 {
 	struct hfi2_ibport *ibp;
 	int ret = 0;
@@ -152,7 +152,7 @@ static int insert_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp, bool is_user)
 		goto bail;
 
 	/* Associate QP with Send Context */
-	ret = hfi2_ctx_assign_qp(ibp, qp, is_user);
+	ret = hfi2_ctx_assign_qp(ibp, qp->priv, is_user);
 	if (ret < 0)
 		goto bail_ctx;
 
@@ -168,7 +168,7 @@ bail:
  * Remove the QP from the table so it can't be found asynchronously by
  * the receive interrupt routine.
  */
-static void remove_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp)
+static void remove_qp(struct hfi2_ibdev *ibd, struct rvt_qp *qp)
 {
 	struct hfi2_ibport *ibp;
 	unsigned long flags;
@@ -178,7 +178,7 @@ static void remove_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp)
 	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 
 	/* Remove association with Send Context */
-	hfi2_ctx_release_qp(ibp, qp);
+	hfi2_ctx_release_qp(ibp, qp->priv);
 
 	spin_lock_irqsave(&ibd->qpt_lock, flags);
 	if (qpn <= 1) {
@@ -200,18 +200,90 @@ static void remove_qp(struct hfi2_ibdev *ibd, struct hfi2_qp *qp)
 	}
 }
 
+static void flush_tx_list(struct rvt_qp *qp)
+{
+	/* FXRTODO SDMA -> TX_CQ */
+}
+
+static void flush_iowait(struct rvt_qp *qp)
+{
+	/* FXRTODO looks to be unneeded if we avoid adding a verbs_txreq */
+}
+
+/*
+ * TODO - note the new functions below will be later registered with RDMAVT
+ * in next phase of rvt_qp integration. They are based on functions in hfi1.
+ */
+
+static void *qp_priv_alloc(struct rvt_dev_info *rdi, struct rvt_qp *qp,
+			   gfp_t gfp)
+{
+	struct hfi2_qp_priv *priv;
+
+	priv = kzalloc_node(sizeof(*priv), gfp, rdi->dparms.node);
+	if (!priv)
+		return ERR_PTR(-ENOMEM);
+	priv->owner = qp;
+
+	priv->s_hdr = kzalloc_node(sizeof(*priv->s_hdr), gfp, rdi->dparms.node);
+	if (!priv->s_hdr) {
+		kfree(priv);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	return priv;
+}
+
+static void qp_priv_free(struct rvt_dev_info *rdi, struct rvt_qp *qp)
+{
+	struct hfi2_qp_priv *priv = qp->priv;
+
+	kfree(priv->s_hdr);
+	kfree(priv);
+}
+
+static void stop_send_queue(struct rvt_qp *qp)
+{
+	struct hfi2_qp_priv *priv = qp->priv;
+
+	cancel_work_sync(&priv->s_iowait.iowork);
+	del_timer_sync(&qp->s_timer);
+}
+static void quiesce_qp(struct rvt_qp *qp)
+{
+	struct hfi2_qp_priv *priv = qp->priv;
+
+	iowait_sdma_drain(&priv->s_iowait);
+	flush_tx_list(qp);
+}
+
+static void notify_qp_reset(struct rvt_qp *qp)
+{
+	struct hfi2_qp_priv *priv = qp->priv;
+
+	iowait_init(&priv->s_iowait, 1, hfi2_do_send);
+
+	/*
+	 * pmtu unused for UD transport (unfragmented), so set to maximum here
+	 * as logic to write DMA commands uses this
+	 */
+	qp->pmtu = opa_enum_to_mtu(OPA_MTU_10240);
+}
+
 /**
  * reset_qp - initialize the QP state to the reset state
  * @qp: the QP to reset
  * @type: the QP type
  */
-static void reset_qp(struct hfi2_qp *qp, enum ib_qp_type type)
+static void reset_qp(struct rvt_qp *qp, enum ib_qp_type type)
 {
+
+	/* TODO - placeholder for future RDMAVT integration */
+	notify_qp_reset(qp);
+
 	qp->remote_qpn = 0;
 	qp->qkey = 0;
 	qp->qp_access_flags = 0;
-	/* FXRTODO - iowait SDMA -> TX_CQ */
-	iowait_init(&qp->s_iowait, 1, hfi2_do_send);
 	qp->s_flags &= HFI1_S_SIGNAL_REQ_WR;
 	qp->s_hdrwords = 0;
 	qp->s_wqe = NULL;
@@ -251,14 +323,9 @@ static void reset_qp(struct hfi2_qp *qp, enum ib_qp_type type)
 		qp->r_rq.wq->tail = 0;
 	}
 	qp->r_sge.num_sge = 0;
-	/*
-	 * pmtu unused for UD transport (unfragmented), so set to maximum here
-	 * as logic to write DMA commands uses this
-	 */
-	qp->pmtu = opa_enum_to_mtu(OPA_MTU_10240);
 }
 
-static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
+static void clear_mr_refs(struct rvt_qp *qp, int clr_sends)
 {
 	unsigned n;
 
@@ -269,7 +336,7 @@ static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
 
 	if (clr_sends) {
 		while (qp->s_last != qp->s_head) {
-			struct rvt_swqe *wqe = get_swqe_ptr(qp, qp->s_last);
+			struct rvt_swqe *wqe = rvt_get_swqe_ptr(qp, qp->s_last);
 			unsigned i;
 
 			for (i = 0; i < wqe->wr.num_sge; i++) {
@@ -318,20 +385,10 @@ static void clear_mr_refs(struct hfi2_qp *qp, int clr_sends)
  * The QP r_lock and s_lock should be held and interrupts disabled.
  * If we are already in error state, just return.
  */
-int hfi2_error_qp(struct hfi2_qp *qp, enum ib_wc_status err)
+int hfi2_error_qp(struct rvt_qp *qp, enum ib_wc_status err)
 {
 	/* FXRTODO */
 	return 0;
-}
-
-static void flush_tx_list(struct hfi2_qp *qp)
-{
-	/* FXRTODO SDMA -> TX_CQ */
-}
-
-static void flush_iowait(struct hfi2_qp *qp)
-{
-	/* FXRTODO looks to be unneeded if we avoid adding a verbs_txreq */
 }
 
 /*
@@ -342,19 +399,20 @@ static void flush_iowait(struct hfi2_qp *qp)
  * in the connection is extended. Only applicable for RC and UC
  * QPs. UD QPs determine this on the fly from the ah in the wqe.
  */
-static inline void qp_set_16b(struct hfi2_qp *qp)
+static inline void qp_set_16b(struct rvt_qp *qp)
 {
+	struct hfi2_qp_priv *qp_priv = qp->priv;
 	union ib_gid sgid;
 	union ib_gid *dgid;
 
-	qp->use_16b = false;
+	qp_priv->use_16b = false;
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH) {
 		if (ib_query_gid(qp->ibqp.device, qp->port_num,
 				 qp->remote_ah_attr.grh.sgid_index,
 				 &sgid, NULL))
 			return;
 		dgid = &qp->remote_ah_attr.grh.dgid;
-		qp->use_16b = IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
+		qp_priv->use_16b = IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
 	}
 }
 
@@ -370,7 +428,7 @@ static inline void qp_set_16b(struct hfi2_qp *qp)
 int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		     int attr_mask, struct ib_udata *udata)
 {
-	struct hfi2_qp *qp = to_hfi_qp(ibqp);
+	struct rvt_qp *qp = ibqp_to_rvtqp(ibqp);
 	struct ib_device *ibdev = ibqp->device;
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ibdev);
 	enum ib_qp_state cur_state, new_state;
@@ -496,10 +554,8 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			spin_unlock(&qp->s_lock);
 			spin_unlock_irq(&qp->r_lock);
 			/* Stop the sending work queue and retry timer */
-			cancel_work_sync(&qp->s_iowait.iowork);
-			del_timer_sync(&qp->s_timer);
-			iowait_sdma_drain(&qp->s_iowait);
-			flush_tx_list(qp);
+			stop_send_queue(qp);
+			quiesce_qp(qp);
 			remove_qp(ibd, qp);
 			wait_event(qp->wait, !atomic_read(&qp->refcount));
 			spin_lock_irq(&qp->r_lock);
@@ -687,7 +743,7 @@ bail:
 int hfi2_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		    int attr_mask, struct ib_qp_init_attr *init_attr)
 {
-	struct hfi2_qp *qp = to_hfi_qp(ibqp);
+	struct rvt_qp *qp = ibqp_to_rvtqp(ibqp);
 
 	attr->qp_state = qp->state;
 	attr->cur_qp_state = attr->qp_state;
@@ -748,10 +804,11 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 			       struct ib_qp_init_attr *init_attr,
 			       struct ib_udata *udata)
 {
-	struct hfi2_qp *qp;
+	struct rvt_qp *qp;
 	int err;
 	struct rvt_swqe *swq = NULL;
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ibpd->device);
+	struct rvt_dev_info *rdi = &ibd->rdi;
 	size_t sz;
 	size_t sg_list_sz;
 	struct ib_qp *ret;
@@ -822,13 +879,15 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_swq;
 	}
-	qp->s_hdr = kzalloc(sizeof(*qp->s_hdr), GFP_KERNEL);
-	if (!qp->s_hdr) {
+
+	qp->priv = qp_priv_alloc(rdi, qp, GFP_KERNEL);
+	if (!qp->priv) {
 		ret = ERR_PTR(-ENOMEM);
 		goto bail_qp;
 	}
 	qp->timeout_jiffies = usecs_to_jiffies((4096UL * (1UL << qp->timeout)) /
 			      1000UL);
+
 	if (init_attr->srq)
 		sz = 0;
 	else {
@@ -958,7 +1017,7 @@ bail_ip:
 		vfree(qp->r_rq.wq);
 	free_qpn(ibd, qp);
 bail_qp:
-	kfree(qp->s_hdr);
+	qp_priv_free(rdi, qp);
 	kfree(qp);
 bail_swq:
 	vfree(swq);
@@ -976,8 +1035,9 @@ bail:
  */
 int hfi2_destroy_qp(struct ib_qp *ibqp)
 {
-	struct hfi2_qp *qp = to_hfi_qp(ibqp);
+	struct rvt_qp *qp = ibqp_to_rvtqp(ibqp);
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ibqp->device);
+	struct rvt_dev_info *rdi = &ibd->rdi;
 
 	/* Make sure HW and driver activity is stopped. */
 	spin_lock_irq(&qp->r_lock);
@@ -988,10 +1048,8 @@ int hfi2_destroy_qp(struct ib_qp *ibqp)
 		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_ANY_WAIT);
 		spin_unlock(&qp->s_lock);
 		spin_unlock_irq(&qp->r_lock);
-		cancel_work_sync(&qp->s_iowait.iowork);
-		del_timer_sync(&qp->s_timer);
-		iowait_sdma_drain(&qp->s_iowait);
-		flush_tx_list(qp);
+		stop_send_queue(qp);
+		quiesce_qp(qp);
 		remove_qp(ibd, qp);
 		wait_event(qp->wait, !atomic_read(&qp->refcount));
 		spin_lock_irq(&qp->r_lock);
@@ -1012,7 +1070,7 @@ int hfi2_destroy_qp(struct ib_qp *ibqp)
 	else
 		vfree(qp->r_rq.wq);
 	vfree(qp->s_wq);
-	kfree(qp->s_hdr);
+	qp_priv_free(rdi, qp);
 	kfree(qp);
 	return 0;
 }

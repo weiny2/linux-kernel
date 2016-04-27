@@ -170,8 +170,8 @@ struct snoop_packet {
 	u8 data[];
 };
 
-static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp);
-static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *priv);
+static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *priv,
 			  union hfi2_packet_header *from, size_t hwords,
 			  bool use_16b);
 
@@ -1022,8 +1022,9 @@ static void snoop_recv_handler(struct hfi2_ib_packet *packet)
 /*
  * Handle snooping and capturing 9B and 16B IB packets.
  */
-static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
+static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *priv)
 {
+	struct rvt_qp *qp = priv->owner;
 	u32 hdrwords = qp->s_hdrwords;
 	struct rvt_sge_state *ss = qp->s_cur_sge;
 	u32 len = qp->s_cur_size;
@@ -1044,10 +1045,10 @@ static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 	bool use_16b = hfi2_use_16b(qp);
 
 	if (!use_16b) {
-		tlen = HFI1_GET_PKT_LEN(&qp->s_hdr->ph.ibh);
-		hdr = &qp->s_hdr->ph.ibh;
+		tlen = HFI1_GET_PKT_LEN(&priv->s_hdr->ph.ibh);
+		hdr = &priv->s_hdr->ph.ibh;
 	} else {
-		hdr = &qp->s_hdr->opa16b;
+		hdr = &priv->s_hdr->opa16b;
 		tlen = opa_16b_pkt_len(hdr);
 	}
 
@@ -1164,7 +1165,7 @@ static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 		break;
 	}
 out:
-	return hfi2_send_wqe(ibp, qp);
+	return hfi2_send_wqe(ibp, priv);
 }
 
 /*
@@ -1172,7 +1173,7 @@ out:
  * this can be used anywhere, but the intention is for inline ACKs for RC and
  * CCA packets. We don't restrict this usage though.
  */
-static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
+static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *priv,
 			  union hfi2_packet_header *from, size_t hwords,
 			  bool use_16b)
 {
@@ -1246,5 +1247,5 @@ static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp *qp,
 	}
 
 inline_pio_out:
-	return hfi2_send_ack(ibp, qp, from, hwords, use_16b);
+	return hfi2_send_ack(ibp, priv, from, hwords, use_16b);
 }

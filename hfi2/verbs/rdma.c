@@ -57,8 +57,8 @@
 #include "packet.h"
 #include "trace.h"
 
-static void hfi2_cnp_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet);
-typedef void (*opcode_handler)(struct hfi2_qp *qp,
+static void hfi2_cnp_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet);
+typedef void (*opcode_handler)(struct rvt_qp *qp,
 			       struct hfi2_ib_packet *packet);
 
 static const opcode_handler opcode_handler_tbl[256] = {
@@ -194,7 +194,7 @@ void hfi2_update_sge(struct rvt_sge_state *ss, u32 length)
  *
  * Return: 0 on success, otherwise returns an errno.
  */
-static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
+static int post_one_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 			 int *scheduled)
 {
 	struct ib_device *ibdev = qp->ibqp.device;
@@ -259,7 +259,7 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 
 	rkt = &ib_to_rvt(ibdev)->lkey_table;
 	pd = ibpd_to_rvtpd(qp->ibqp.pd);
-	wqe = get_swqe_ptr(qp, qp->s_head);
+	wqe = rvt_get_swqe_ptr(qp, qp->s_head);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
 	if (qp->ibqp.qp_type != IB_QPT_UC &&
 	    qp->ibqp.qp_type != IB_QPT_RC)
@@ -359,6 +359,8 @@ bail_inval:
 	ret = -EINVAL;
 bail:
 	if (!ret && !wr->next) {
+		struct hfi2_qp_priv *qp_priv = qp->priv;
+
 		/*
 		 * FXRTODO - revisit versus WFR code.
 		 * This appears to kick the workqueue if other prior Verbs
@@ -368,7 +370,7 @@ bail:
 		 * the SC is busy, we currently use one TX Command Queue
 		 * so cannot do the more narrow check..
 		 */
-		if (is_iowait_sdma_busy(&qp->s_iowait)) {
+		if (is_iowait_sdma_busy(&qp_priv->s_iowait)) {
 			hfi2_schedule_send(qp);
 			*scheduled = 1;
 		}
@@ -391,7 +393,7 @@ bail:
 int hfi2_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr)
 {
-	struct hfi2_qp *qp = to_hfi_qp(ibqp);
+	struct rvt_qp *qp = ibqp_to_rvtqp(ibqp);
 	int err = 0;
 	int scheduled = 0;
 
@@ -408,8 +410,11 @@ int hfi2_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 	}
 
 	/* Try to do the send work in the caller's context. */
-	if (!scheduled)
-		hfi2_do_send(&qp->s_iowait.iowork);
+	if (!scheduled) {
+		struct hfi2_qp_priv *qp_priv = qp->priv;
+
+		hfi2_do_send(&qp_priv->s_iowait.iowork);
+	}
 
 bail:
 	return err;
@@ -428,7 +433,7 @@ bail:
 int hfi2_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 			struct ib_recv_wr **bad_wr)
 {
-	struct hfi2_qp *qp = to_hfi_qp(ibqp);
+	struct rvt_qp *qp = ibqp_to_rvtqp(ibqp);
 	struct rvt_rwq *wq = qp->r_rq.wq;
 	unsigned long flags;
 	int ret;
@@ -482,7 +487,7 @@ bail:
  * Make sure the QP is ready and able to accept the given opcode.
  */
 static inline bool is_qp_ok(struct hfi2_ibport *ibp,
-			    struct hfi2_qp *qp, int opcode)
+			    struct rvt_qp *qp, int opcode)
 {
 	if ((ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK) &&
 	    (((opcode & OPCODE_QP_MASK) == qp->allowed_ops) ||
@@ -507,7 +512,7 @@ void hfi2_ib_rcv(struct hfi2_ib_packet *packet)
 	u32 tlen = packet->tlen;
 	struct hfi2_ibport *ibp = packet->ibp;
 	struct ib_l4_headers *ohdr;
-	struct hfi2_qp *qp;
+	struct rvt_qp *qp;
 	u32 qp_num, dlid;
 	u8 opcode, l4;
 	bool is_mcast;
@@ -638,7 +643,7 @@ drop:
 	ibp->n_pkt_drops++;
 }
 
-static void hfi2_cnp_rcv(struct hfi2_qp *qp, struct hfi2_ib_packet *packet)
+static void hfi2_cnp_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 {
 	struct hfi2_ibport *ibp = packet->ibp;
 

@@ -241,7 +241,7 @@ struct hfi2_ib_packet {
  *    MR is set for RC READ responses only
  */
 struct hfi2_wqe_iov {
-	struct hfi2_qp *qp;
+	struct rvt_qp *qp;
 	union {
 		struct rvt_swqe *wqe;
 		struct rvt_mregion *mr;
@@ -567,8 +567,9 @@ static inline bool hfi2_check_permissive(struct ib_ah_attr *ah_attr)
 			HFI1_MULTICAST_LID_BASE))
 
 /* Check if current wqe needs 16B */
-static inline bool hfi2_use_16b(struct hfi2_qp *qp)
+static inline bool hfi2_use_16b(struct rvt_qp *qp)
 {
+	struct hfi2_qp_priv *qp_priv = qp->priv;
 	struct rvt_swqe *wqe = qp->s_wqe;
 	struct ib_ah_attr *ah_attr;
 	union ib_gid sgid;
@@ -576,7 +577,7 @@ static inline bool hfi2_use_16b(struct hfi2_qp *qp)
 
 	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
 	    (qp->ibqp.qp_type == IB_QPT_UC))
-		return qp->use_16b;
+		return qp_priv->use_16b;
 
 	if (!wqe)
 		return false;
