@@ -142,7 +142,9 @@ struct hfi2_swqe {
 	u32 lpsn;               /* last packet sequence number */
 	u32 ssn;                /* send sequence number */
 	u32 length;             /* total length of data in sg_list */
+#ifdef HFI2_WQE_PKT_ERRORS
 	u32 pkt_errors;
+#endif
 	struct rvt_sge sg_list[0];
 };
 
