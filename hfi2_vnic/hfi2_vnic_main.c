@@ -98,7 +98,8 @@ static struct opa_core_client opa_vnic_clnt = {
 #define OPA_VNIC_L4_TYPE_OFFSET 8
 #define OPA_VNIC_L4_TYPE_MASK   0xf
 #define OPA_VNIC_VESWID_OFFSET 10
-#define OPA_VNIC_SC_OFFSET 6
+#define OPA_VNIC_SC_OFFSET      6
+#define OPA_VNIC_SC_HIGH_OFFSET 7
 #define OPA_VNIC_SC_SHIFT 4
 
 #define OPA_VNIC_L4_ETHR 0
@@ -109,6 +110,16 @@ static struct opa_core_client opa_vnic_clnt = {
 
 #define OPA_VNIC_GET_VESWID(data)   \
 	(*((u8 *)(data) + OPA_VNIC_VESWID_OFFSET))
+
+static inline u8 opa_vnic_get_sc(u8 *hdr)
+{
+	u8 sc5;
+
+	/* sc5 = bit hdr7[0] + bits hdr6[7..4] */
+	sc5 = ((*(hdr + OPA_VNIC_SC_HIGH_OFFSET) & 0x1) << OPA_VNIC_SC_SHIFT);
+	sc5 |= (*(hdr + OPA_VNIC_SC_OFFSET) >> OPA_VNIC_SC_SHIFT);
+	return sc5;
+}
 
 /* TODO: Share duplicated macros with PCIe driver in common headers */
 #define OPA_BYPASS_L2_MASK	0x3ull
@@ -123,6 +134,7 @@ static struct opa_core_client opa_vnic_clnt = {
  * struct opa_veswport - OPA2 virtual ethernet switch port specific fields
  *
  * @slid: source LID
+ * @sc_to_sl: SC to SL translation table
  * @vdev: back pointer to opa vnic device
  * @odev: back pointer to opa core device
  * @ndev: back pointer to opa net device
@@ -134,6 +146,7 @@ static struct opa_core_client opa_vnic_clnt = {
  */
 struct opa_veswport {
 	int			slid;
+	u8                      sc_to_sl[OPA_MAX_SCS];
 	struct opa_vnic_device	*vdev;
 	struct opa_core_device	*odev;
 	struct opa_netdev	*ndev;
@@ -332,7 +345,7 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 	u8 nr_frags = skb_shinfo(skb)->nr_frags;
 	u16 tot_length, headlen = skb_headlen(skb);
 	u8 num_iov = nr_frags;
-	u8 j, i = 0;
+	u8 sc5, sl, j, i = 0;
 
 	/* FXRTODO: Need to count this error */
 	if (q_idx >= vdev->hfi_info.num_tx_q) {
@@ -401,13 +414,16 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 		iov[i].v = 1;
 		i++;
 	}
+	/* FXRTODO: Not an effient way to read sc5; revisit later */
+	sc5 = opa_vnic_get_sc(skb->data);
+	sl = dev->sc_to_sl[sc5];
 	spin_lock_irqsave(&ctx_i->tx_lock, sflags);
 retry:
 	rc = hfi_tx_cmd_bypass_dma(tx, ctx, (u64)iov, num_iov, 0xdead,
 				   PTL_MD_RESERVED_IOV,
 				   &ctx_i->eq_tx, HFI_CT_NONE,
 				   dev->port_num - 1,
-				   0x0, dev->slid, HDR_10B,
+				   sl, dev->slid, HDR_10B,
 				   GENERAL_DMA);
 	if (rc < 0) {
 		mdelay(1);
@@ -651,6 +667,12 @@ static int opa2_init_tx_rx(struct opa_veswport *dev)
 
 	ops->get_port_desc(odev, &pdesc, dev->port_num);
 	dev->slid = pdesc.lid;
+
+	/*
+	 * FXRTODO: Need to add and handle opa core client notifications
+	 * upon dynamic sc_to_sl map changes.
+	 */
+	memcpy(dev->sc_to_sl, pdesc.sc_to_sl, ARRAY_SIZE(dev->sc_to_sl));
 
 	return 0;
 }
