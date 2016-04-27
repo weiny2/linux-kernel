@@ -90,24 +90,13 @@
 #define HFI2_GUIDS_PER_PORT     2
 #define HFI2_RHF_RCV_TYPES      8
 
-/* Flags for checking QP state (see ib_hfi1_state_ops[]) */
-#define HFI1_POST_SEND_OK                0x01
-#define HFI1_POST_RECV_OK                0x02
-#define HFI1_PROCESS_RECV_OK             0x04
-#define HFI1_PROCESS_SEND_OK             0x08
-#define HFI1_PROCESS_NEXT_SEND_OK        0x10
-#define HFI1_FLUSH_SEND                  0x20
-#define HFI1_FLUSH_RECV                  0x40
-#define HFI1_PROCESS_OR_FLUSH_SEND \
-	(HFI1_PROCESS_SEND_OK | HFI1_FLUSH_SEND)
-
 #define OPA_DEFAULT_SM_TRAP_QP			0x0
 #define OPA_DEFAULT_SA_QP			0x1
 
 /* TODO - placeholders */
 extern __be64 hfi2_sys_guid;
 
-extern const int ib_qp_state_ops[];
+extern const int ib_rvt_state_ops[];
 extern unsigned int hfi2_max_cqes;
 extern unsigned int hfi2_max_cqs;
 extern unsigned int hfi2_max_qp_wrs;
@@ -438,8 +427,6 @@ void hfi2_skip_sge(struct rvt_sge_state *ss, u32 length, int release);
 void hfi2_update_sge(struct rvt_sge_state *ss, u32 length);
 int hfi2_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 		   struct ib_send_wr **bad_wr);
-int hfi2_post_receive(struct ib_qp *ibqp, struct ib_recv_wr *wr,
-		      struct ib_recv_wr **bad_wr);
 int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     const struct ib_wc *in_wc, const struct ib_grh *in_grh,
 		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,

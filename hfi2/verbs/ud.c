@@ -109,7 +109,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 			IB_QPT_UD : qp->ibqp.qp_type;
 
 	if (dqptype != sqptype ||
-	    !(ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK)) {
+	    !(ib_rvt_state_ops[qp->state] & RVT_PROCESS_RECV_OK)) {
 		ibp->n_pkt_drops++;
 		goto drop;
 	}
@@ -501,8 +501,8 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
-	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_NEXT_SEND_OK)) {
-		if (!(ib_qp_state_ops[qp->state] & HFI1_FLUSH_SEND))
+	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_NEXT_SEND_OK)) {
+		if (!(ib_rvt_state_ops[qp->state] & RVT_FLUSH_SEND))
 			goto bail;
 		/* We are in the error state, flush the work request. */
 		if (qp->s_last == qp->s_head)

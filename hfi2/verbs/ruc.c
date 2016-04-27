@@ -201,7 +201,7 @@ int hfi2_get_rwqe(struct rvt_qp *qp, int wr_id_only)
 	}
 
 	spin_lock_irqsave(&rq->lock, flags);
-	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_RECV_OK)) {
+	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_RECV_OK)) {
 		ret = 0;
 		goto unlock;
 	}
@@ -544,7 +544,7 @@ void hfi2_send_complete(struct rvt_qp *qp, struct rvt_swqe *wqe,
 	u32 old_last, last;
 	unsigned i;
 
-	if (!(ib_qp_state_ops[qp->state] & HFI1_PROCESS_OR_FLUSH_SEND))
+	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_OR_FLUSH_SEND))
 		return;
 
 	for (i = 0; i < wqe->wr.num_sge; i++) {
