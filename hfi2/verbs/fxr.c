@@ -271,6 +271,7 @@ static void hfi2_send_event(struct hfi_eq *eq_tx, void *data)
 	struct hfi2_qp *qp;
 	struct hfi2_swqe *wqe;
 	struct hfi2_wqe_iov *wqe_iov;
+	u32 pkt_errors = 0;
 	unsigned long flags;
 	union initiator_EQEntry *eq_entry;
 	struct ib_l4_headers *ohdr;
@@ -327,11 +328,21 @@ next_event:
 
 		hfi2_rc_send_complete(qp, ohdr);
 	} else {
+#ifdef HFI2_WQE_PKT_ERRORS
+		/*
+		 * FXRTODO - disabling this for now.
+		 * Need to revisit if this is actually helpful to return
+		 * completion error to user.
+		 * Enabling this again would mean pushing changes upstream to
+		 * modify struct rvt_swqe.
+		 */
 		if (eq_entry->fail_type)
 			wqe->pkt_errors++;
+		pkt_errors = wqe->pkt_errors;
+#endif
 		/* if final UD/UC packet, call send_complete */
 		if (!wqe_iov->remaining_bytes)
-			hfi2_send_complete(qp, wqe, (wqe->pkt_errors) ?
+			hfi2_send_complete(qp, wqe, pkt_errors ?
 					   IB_WC_FATAL_ERR : IB_WC_SUCCESS);
 	}
 	spin_unlock(&qp->s_lock);
