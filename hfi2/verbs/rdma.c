@@ -277,6 +277,7 @@ static int post_one_send(struct hfi2_qp *qp, struct ib_send_wr *wr,
 	wqe->wr = *wr;
 #endif
 	wqe->length = 0;
+	wqe->pkt_errors = 0;
 	j = 0;
 	if (wr->num_sge) {
 		last_sge = NULL;

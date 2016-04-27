@@ -220,13 +220,12 @@ static void qp_read_sge(struct hfi2_qp *qp, uint32_t sent,
 static int __attribute__ ((unused))
 send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 {
-	struct hfi2_swqe *wqe = qp->s_wqe;
 	int ret;
 	unsigned long flags;
 	uint32_t length = 0;
 	uint64_t start = 0;
 
-	if (!wqe || wqe->use_sc15)
+	if (qp->ibqp.qp_type == IB_QPT_SMI)
 		return -EINVAL;
 
 	qp_read_sge(qp, 0, &start, &length);
@@ -259,7 +258,7 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 	ret = hfi_tx_9b_kdeth_cmd_pio(&ibp->cmdq_tx, qp->s_ctx,
 				    qp->s_hdr, 8 + (qp->s_hdrwords << 2),
 				    (void *)start, length, ibp->port_num,
-				    wqe->sl, 0, KDETH_9B_PIO);
+				    qp->s_sl, 0, KDETH_9B_PIO);
 	spin_unlock_irqrestore(&ibp->cmdq_tx_lock, flags);
 
 	/* caller must handle retransmit due to no slots (-EAGAIN) */
@@ -486,7 +485,7 @@ err:
 
 int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 {
-	struct hfi2_swqe *wqe = qp->s_wqe;
+	enum ib_qp_type qp_type = qp->ibqp.qp_type;
 	struct hfi2_wqe_iov *wqe_iov = NULL;
 	int ret, ndelays = 0;
 	unsigned long flags;
@@ -495,25 +494,18 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 	uint64_t start = 0;
 	bool use_16b, use_ofed_dma;
 
-	if (wqe) {
-		sl = wqe->sl;
-		dma_cmd = (wqe->use_sc15) ? MGMT_DMA : GENERAL_DMA;
-		use_16b = wqe->use_16b;
-	} else {
-		/* RC response has no WQE */
-		sl = qp->remote_ah_attr.sl;
-		dma_cmd = GENERAL_DMA;
-
-		/*
-		 * FXRTODO: Avoid calling hfi2_use_16b here again.
-		 * It is already determined while making the request.
-		 */
-		use_16b = hfi2_use_16b(qp);
-	}
-
 	ret = qp_max_iovs(ibp, qp, &num_iovs);
 	if (ret)
 		return ret;
+
+	dma_cmd = (qp_type == IB_QPT_SMI) ? MGMT_DMA : GENERAL_DMA;
+	/*
+	 * TODO - below QP fields cannot be used when we implement sending
+	 * WQE from pending list; suboptimal to call hfi2_use_16() again for
+	 * UD queue pair, should make_req() stash the pkt_type in QP?
+	 */
+	sl = qp->s_sl;
+	use_16b = hfi2_use_16b(qp);
 
 	/*
 	 * use OFED_DMA command if possible (header + single IOVEC payload)
@@ -583,12 +575,12 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp *qp)
 
 	/* fill in rest of wqe_iov */
 	wqe_iov->qp = qp;
-	if (qp->ibqp.qp_type == IB_QPT_RC) {
+	if (qp_type == IB_QPT_RC) {
 		/* take over release of MR for RC responses */
 		wqe_iov->mr = qp->s_rdma_mr;
 		qp->s_rdma_mr = NULL;
 	} else {
-		wqe_iov->wqe = wqe;
+		wqe_iov->wqe = qp->s_wqe;
 	}
 	wqe_iov->remaining_bytes = qp->s_len;
 

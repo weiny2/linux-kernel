@@ -445,12 +445,12 @@ normal:
 	qp->s_rdma_ack_cnt++;
 	qp->s_hdrwords = hwords;
 	qp->s_cur_size = len;
+	/* hfi2_send_wqe() requires this set to NULL for RC response */
+	qp->s_wqe = NULL;
 	if (is_16b)
 		hfi2_make_16b_ruc_header(qp, ohdr, bth0, bth2);
 	else
 		hfi2_make_ruc_header(qp, ohdr, bth0, bth2);
-	/* hfi2_send_wqe() requires this set to NULL for RC response */
-	qp->s_wqe = NULL;
 
 	return 1;
 
@@ -921,20 +921,13 @@ int hfi2_make_rc_req(struct hfi2_qp *qp)
 	qp->s_hdrwords = hwords;
 	qp->s_cur_sge = ss;
 	qp->s_cur_size = len;
+	/* hfi2_send_wqe() requires this set */
+	qp->s_wqe = wqe;
 	bth0 |= (qp->s_state << 24);
 	if (is_16b)
 		hfi2_make_16b_ruc_header(qp, ohdr, bth0, bth2);
 	else
 		hfi2_make_ruc_header(qp, ohdr, bth0, bth2);
-
-	/* hfi2_send_wqe() requires this set */
-	qp->s_wqe = wqe;
-
-	/* set remaining WQE fields needed for DMA command */
-	wqe->sl = qp->remote_ah_attr.sl;
-	wqe->use_sc15 = false;
-	wqe->use_16b = is_16b;
-	wqe->pkt_errors = 0;
 
 done:
 	ret = 1;

@@ -142,9 +142,6 @@ struct hfi2_swqe {
 	u32 lpsn;               /* last packet sequence number */
 	u32 ssn;                /* send sequence number */
 	u32 length;             /* total length of data in sg_list */
-	u8 sl;
-	bool use_sc15;
-	bool use_16b;
 	u32 pkt_errors;
 	struct rvt_sge sg_list[0];
 };
@@ -208,6 +205,7 @@ struct hfi2_qp {
 	u8 s_max_sge;           /* size of s_wq->sg_list */
 	u8 s_draining;
 	u8 s_sc;		/* SC[0..4] for next packet */
+	u8 s_sl;		/* SL for next packet */
 
 	/* start of read/write fields */
 
