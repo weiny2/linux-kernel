@@ -121,6 +121,15 @@ static inline u8 opa_vnic_get_sc(u8 *hdr)
 	return sc5;
 }
 
+static inline void opa_vnic_set_sc(u8 *hdr, u8 sc)
+{
+	/* sc5 = bit hdr7[0] + bits hdr6[7..4] */
+	*(hdr + OPA_VNIC_SC_HIGH_OFFSET) &= ~0x1;
+	*(hdr + OPA_VNIC_SC_OFFSET) &= ~0xf0;
+	*(hdr + OPA_VNIC_SC_HIGH_OFFSET) |= (sc >> OPA_VNIC_SC_SHIFT) & 0x1;
+	*(hdr + OPA_VNIC_SC_OFFSET) |= sc << OPA_VNIC_SC_SHIFT;
+}
+
 /* TODO: Share duplicated macros with PCIe driver in common headers */
 #define OPA_BYPASS_L2_MASK	0x3ull
 #define OPA_BYPASS_HDR_10B	0x1
@@ -414,9 +423,12 @@ static int opa2_vnic_hfi_put_skb(struct opa_vnic_device *vdev,
 		iov[i].v = 1;
 		i++;
 	}
-	/* FXRTODO: Not an effient way to read sc5; revisit later */
+	/* FXRTODO: Not an effient way to read/update sc5; revisit later */
 	sc5 = opa_vnic_get_sc(skb->data);
 	sl = dev->sc_to_sl[sc5];
+	/* FXRTODO: Simics expects sl value in sc field of L2; remove later */
+	opa_vnic_set_sc(skb->data, sl);
+
 	spin_lock_irqsave(&ctx_i->tx_lock, sflags);
 retry:
 	rc = hfi_tx_cmd_bypass_dma(tx, ctx, (u64)iov, num_iov, 0xdead,
