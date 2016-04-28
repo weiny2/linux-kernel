@@ -788,6 +788,7 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev, int ctx_num)
 	struct opa_ev_assign eq_alloc_tx = {0};
 	hfi_pt_alloc_eager_args_t pt_alloc = {0};
 	int rc;
+	unsigned long flags;
 
 	if (vdev->is_eeph)
 		ctx_i = &ndev->def_ctx;
@@ -844,7 +845,10 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev, int ctx_num)
 		goto err3;
 	pt_alloc.eager_order = ilog2(OPA2_NET_NUM_RX_BUFS) - 2;
 	pt_alloc.eq_handle = &ctx_i->eq_rx;
+
+	spin_lock_irqsave(&ctx_i->rx_lock, flags);
 	rc = hfi_pt_alloc_eager(ctx, rx, &pt_alloc);
+	spin_unlock_irqrestore(&ctx_i->rx_lock, flags);
 	if (rc < 0)
 		goto err4;
 	rc = opa2_alloc_rx_bufs(ctx_i);
@@ -853,7 +857,9 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev, int ctx_num)
 
 	return 0;
 err5:
+	spin_lock_irqsave(&ctx_i->rx_lock, flags);
 	hfi_pt_disable(ctx, rx, HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
+	spin_unlock_irqrestore(&ctx_i->rx_lock, flags);
 err4:
 	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_rx);
 err3:
@@ -875,6 +881,7 @@ static void opa2_vnic_uninit_ctx(struct opa_vnic_device *vdev, int ctx_num)
 	struct opa_ctx_info *ctx_i;
 	struct hfi_ctx *ctx;
 	struct hfi_cq *rx;
+	unsigned long flags;
 	struct opa_core_device *odev = dev->odev;
 	struct opa_core_ops *ops = odev->bus_ops;
 
@@ -884,7 +891,12 @@ static void opa2_vnic_uninit_ctx(struct opa_vnic_device *vdev, int ctx_num)
 		ctx_i = &ndev->eth_ctx[ctx_num];
 	ctx = &ctx_i->ctx;
 	rx = &ctx_i->rx;
+	/* FXRTODO: Release EQ before disabling PT to prevent EQ ISR
+	 * firing while PT is being disabled
+	 */
+	spin_lock_irqsave(&ctx_i->rx_lock, flags);
 	hfi_pt_disable(ctx, rx, HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
+	spin_unlock_irqrestore(&ctx_i->rx_lock, flags);
 	opa2_free_rx_bufs(ctx_i);
 	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_rx);
 	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_tx);
@@ -911,10 +923,10 @@ static int opa2_vnic_hfi_init(struct opa_vnic_device *vdev)
 		if (ndev->num_vports)
 			goto finish;
 		num_ctx = OPA2_NUM_VNIC_CTXT;
+		for (i = 0; i < ndev->num_ports; i++)
+			idr_init(&ndev->vesw_idr[i]);
 	}
 
-	for (i = 0; i < ndev->num_ports; i++)
-		idr_init(&ndev->vesw_idr[i]);
 	for (i = 0; i < num_ctx; i++) {
 		rc = opa2_vnic_init_ctx(vdev, i);
 		if (rc) {
@@ -976,12 +988,18 @@ static void opa2_vnic_hfi_deinit(struct opa_vnic_device *vdev)
 	int i;
 
 	mutex_lock(&ndev->ctx_lock);
-	if (!--ndev->num_vports) {
-		for (i = 0; i < OPA2_NUM_VNIC_CTXT; i++)
-			opa2_vnic_uninit_ctx(vdev, i);
-		ops->clear_rsm_rule(odev, 1);
-		for (i = 0; i < ndev->num_ports; i++)
-			idr_destroy(&ndev->vesw_idr[i]);
+	if (vdev->is_eeph) {
+		if (!--ndev->num_eports) {
+			opa2_vnic_uninit_ctx(vdev, 0);
+		}
+	} else {
+		if (!--ndev->num_vports) {
+			for (i = 0; i < OPA2_NUM_VNIC_CTXT; i++)
+				opa2_vnic_uninit_ctx(vdev, i);
+			ops->clear_rsm_rule(odev, 1);
+			for (i = 0; i < ndev->num_ports; i++)
+				idr_destroy(&ndev->vesw_idr[i]);
+		}
 	}
 	mutex_unlock(&ndev->ctx_lock);
 }
