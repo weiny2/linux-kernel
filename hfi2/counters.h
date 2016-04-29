@@ -94,57 +94,6 @@ struct cntr_entry {
 			u64 data);
 };
 
-static u64 port_access_tp_csr(const struct cntr_entry *entry, void *context,
-				int vl, u64 data)
-{
-	struct hfi_pportdata *ppd = (struct hfi_pportdata *)context;
-	u64 csr = entry->csr;
-
-	if (entry->flags & CNTR_VL) {
-		return hfi_read_lm_tp_prf_csr(ppd,
-		csr + idx_from_vl(vl) + 1);
-	} else
-		return hfi_read_lm_tp_prf_csr(ppd, csr);
-
-}
-
-static u64 port_access_fpc_csr(const struct cntr_entry *entry, void *context,
-				int vl, u64 data)
-{
-	struct hfi_pportdata *ppd = (struct hfi_pportdata *)context;
-	u64 csr = entry->csr;
-
-	if (entry->flags & CNTR_VL) {
-		return hfi_read_lm_fpc_prf_per_vl_csr(ppd,
-		csr, idx_from_vl(vl));
-	} else
-		return hfi_read_lm_fpc_csr(ppd, csr);
-
-}
-
-#define CNTR_ELEM(name, csr, offset, flags, accessor)\
-{ \
-	name, \
-	csr, \
-	offset, \
-	flags, \
-	accessor \
-}
-
-#define TP_CNTR(name, counter, flags) \
-CNTR_ELEM(#name, \
-	  counter, \
-	  0, \
-	  flags, \
-	  port_access_tp_csr)
-
-#define FPC_CNTR(name, counter, flags) \
-CNTR_ELEM(#name, \
-	  counter, \
-	  0, \
-	  flags, \
-	  port_access_fpc_csr)
-
 int hfi_init_cntrs(struct hfi_devdata *dd);
 u32 hfi_read_portcntrs(struct hfi_pportdata *ppd, char **namep, u64 **cntrp);
 void hfi_free_cntrs(struct hfi_devdata *dd);
