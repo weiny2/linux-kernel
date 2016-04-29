@@ -238,20 +238,20 @@ static void get_credit(struct rvt_qp *qp, u32 aeth)
 	 * honor the credit field.
 	 */
 	if (credit == HFI1_AETH_CREDIT_INVAL) {
-		if (!(qp->s_flags & HFI1_S_UNLIMITED_CREDIT)) {
-			qp->s_flags |= HFI1_S_UNLIMITED_CREDIT;
-			if (qp->s_flags & HFI1_S_WAIT_SSN_CREDIT) {
-				qp->s_flags &= ~HFI1_S_WAIT_SSN_CREDIT;
+		if (!(qp->s_flags & RVT_S_UNLIMITED_CREDIT)) {
+			qp->s_flags |= RVT_S_UNLIMITED_CREDIT;
+			if (qp->s_flags & RVT_S_WAIT_SSN_CREDIT) {
+				qp->s_flags &= ~RVT_S_WAIT_SSN_CREDIT;
 				hfi2_schedule_send(qp);
 			}
 		}
-	} else if (!(qp->s_flags & HFI1_S_UNLIMITED_CREDIT)) {
+	} else if (!(qp->s_flags & RVT_S_UNLIMITED_CREDIT)) {
 		/* Compute new LSN (i.e., MSN + credit) */
 		credit = (aeth + credit_table[credit]) & HFI1_MSN_MASK;
 		if (cmp_msn(credit, qp->s_lsn) > 0) {
 			qp->s_lsn = credit;
-			if (qp->s_flags & HFI1_S_WAIT_SSN_CREDIT) {
-				qp->s_flags &= ~HFI1_S_WAIT_SSN_CREDIT;
+			if (qp->s_flags & RVT_S_WAIT_SSN_CREDIT) {
+				qp->s_flags &= ~RVT_S_WAIT_SSN_CREDIT;
 				hfi2_schedule_send(qp);
 			}
 		}
@@ -260,7 +260,7 @@ static void get_credit(struct rvt_qp *qp, u32 aeth)
 
 static void qp_comm_est(struct rvt_qp *qp)
 {
-	qp->r_flags |= HFI1_R_COMM_EST;
+	qp->r_flags |= RVT_R_COMM_EST;
 	if (qp->ibqp.event_handler) {
 		struct ib_event ev;
 
@@ -287,7 +287,7 @@ static u32 restart_sge(struct rvt_sge_state *ss, struct rvt_swqe *wqe,
 
 static void start_timer(struct rvt_qp *qp)
 {
-	qp->s_flags |= HFI1_S_TIMER;
+	qp->s_flags |= RVT_S_TIMER;
 	qp->s_timer.function = rc_timeout;
 	/* 4.096 usec. * (1 << qp->timeout) */
 	qp->s_timer.expires = jiffies + qp->timeout_jiffies;
@@ -344,7 +344,7 @@ static int make_rc_ack(struct hfi2_ibdev *dev, struct rvt_qp *qp,
 	case OP(ACKNOWLEDGE):
 		/* Check for no next entry in the queue. */
 		if (qp->r_head_ack_queue == qp->s_tail_ack_queue) {
-			if (qp->s_flags & HFI1_S_ACK_PENDING)
+			if (qp->s_flags & RVT_S_ACK_PENDING)
 				goto normal;
 			goto bail;
 		}
@@ -428,7 +428,7 @@ normal:
 		 * (see above).
 		 */
 		qp->s_ack_state = OP(SEND_ONLY);
-		qp->s_flags &= ~HFI1_S_ACK_PENDING;
+		qp->s_flags &= ~RVT_S_ACK_PENDING;
 		qp->s_cur_sge = NULL;
 		if (qp->s_nak_state)
 			ohdr->u.aeth =
@@ -458,11 +458,11 @@ bail:
 	qp->s_ack_state = OP(ACKNOWLEDGE);
 	/*
 	 * Ensure s_rdma_ack_cnt changes are committed prior to resetting
-	 * HFI1_S_RESP_PENDING
+	 * RVT_S_RESP_PENDING
 	 */
 	smp_wmb();
-	qp->s_flags &= ~(HFI1_S_RESP_PENDING
-				| HFI1_S_ACK_PENDING);
+	qp->s_flags &= ~(RVT_S_RESP_PENDING
+				| RVT_S_ACK_PENDING);
 	return 0;
 }
 
@@ -513,7 +513,7 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 	spin_lock_irqsave(&qp->s_lock, flags);
 
 	/* Sending responses has higher priority over sending requests. */
-	if ((qp->s_flags & HFI1_S_RESP_PENDING) &&
+	if ((qp->s_flags & RVT_S_RESP_PENDING) &&
 	    make_rc_ack(dev, qp, ohdr, pmtu, is_16b))
 		goto done;
 
@@ -525,7 +525,7 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
 		if (atomic_read(&qp_priv->s_iowait.sdma_busy)) {
-			qp->s_flags |= HFI1_S_WAIT_DMA;
+			qp->s_flags |= RVT_S_WAIT_DMA;
 			goto bail;
 		}
 		wqe = rvt_get_swqe_ptr(qp, qp->s_last);
@@ -535,12 +535,12 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 		goto done;
 	}
 
-	if (qp->s_flags & (HFI1_S_WAIT_RNR | HFI1_S_WAIT_ACK))
+	if (qp->s_flags & (RVT_S_WAIT_RNR | RVT_S_WAIT_ACK))
 		goto bail;
 
 	if (cmp_psn(qp->s_psn, qp->s_sending_hpsn) <= 0) {
 		if (cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) <= 0) {
-			qp->s_flags |= HFI1_S_WAIT_PSN;
+			qp->s_flags |= RVT_S_WAIT_PSN;
 			goto bail;
 		}
 		qp->s_sending_psn = qp->s_psn;
@@ -571,7 +571,7 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 			 */
 			if ((wqe->wr.send_flags & IB_SEND_FENCE) &&
 			    qp->s_num_rd_atomic) {
-				qp->s_flags |= HFI1_S_WAIT_FENCE;
+				qp->s_flags |= RVT_S_WAIT_FENCE;
 				goto bail;
 			}
 			wqe->psn = qp->s_next_psn;
@@ -589,9 +589,9 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 		case IB_WR_SEND:
 		case IB_WR_SEND_WITH_IMM:
 			/* If no credit, return. */
-			if (!(qp->s_flags & HFI1_S_UNLIMITED_CREDIT) &&
+			if (!(qp->s_flags & RVT_S_UNLIMITED_CREDIT) &&
 			    cmp_msn(wqe->ssn, qp->s_lsn + 1) > 0) {
-				qp->s_flags |= HFI1_S_WAIT_SSN_CREDIT;
+				qp->s_flags |= RVT_S_WAIT_SSN_CREDIT;
 				goto bail;
 			}
 			wqe->lpsn = wqe->psn;
@@ -617,14 +617,14 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 			break;
 
 		case IB_WR_RDMA_WRITE:
-			if (newreq && !(qp->s_flags & HFI1_S_UNLIMITED_CREDIT))
+			if (newreq && !(qp->s_flags & RVT_S_UNLIMITED_CREDIT))
 				qp->s_lsn++;
 			/* FALLTHROUGH */
 		case IB_WR_RDMA_WRITE_WITH_IMM:
 			/* If no credit, return. */
-			if (!(qp->s_flags & HFI1_S_UNLIMITED_CREDIT) &&
+			if (!(qp->s_flags & RVT_S_UNLIMITED_CREDIT) &&
 			    cmp_msn(wqe->ssn, qp->s_lsn + 1) > 0) {
-				qp->s_flags |= HFI1_S_WAIT_SSN_CREDIT;
+				qp->s_flags |= RVT_S_WAIT_SSN_CREDIT;
 				goto bail;
 			}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
@@ -672,11 +672,11 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 			if (newreq) {
 				if (qp->s_num_rd_atomic >=
 				    qp->s_max_rd_atomic) {
-					qp->s_flags |= HFI1_S_WAIT_RDMAR;
+					qp->s_flags |= RVT_S_WAIT_RDMAR;
 					goto bail;
 				}
 				qp->s_num_rd_atomic++;
-				if (!(qp->s_flags & HFI1_S_UNLIMITED_CREDIT))
+				if (!(qp->s_flags & RVT_S_UNLIMITED_CREDIT))
 					qp->s_lsn++;
 				/*
 				 * Adjust s_next_psn to count the
@@ -716,11 +716,11 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 			if (newreq) {
 				if (qp->s_num_rd_atomic >=
 				    qp->s_max_rd_atomic) {
-					qp->s_flags |= HFI1_S_WAIT_RDMAR;
+					qp->s_flags |= RVT_S_WAIT_RDMAR;
 					goto bail;
 				}
 				qp->s_num_rd_atomic++;
-				if (!(qp->s_flags & HFI1_S_UNLIMITED_CREDIT))
+				if (!(qp->s_flags & RVT_S_UNLIMITED_CREDIT))
 					qp->s_lsn++;
 				wqe->lpsn = wqe->psn;
 			}
@@ -913,9 +913,9 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 	delta = delta_psn(bth2, wqe->psn);
 	if (delta && delta % HFI1_PSN_CREDIT == 0)
 		bth2 |= IB_BTH_REQ_ACK;
-	if (qp->s_flags & HFI1_S_SEND_ONE) {
-		qp->s_flags &= ~HFI1_S_SEND_ONE;
-		qp->s_flags |= HFI1_S_WAIT_ACK;
+	if (qp->s_flags & RVT_S_SEND_ONE) {
+		qp->s_flags &= ~RVT_S_SEND_ONE;
+		qp->s_flags |= RVT_S_WAIT_ACK;
 		bth2 |= IB_BTH_REQ_ACK;
 	}
 	qp->s_len -= len;
@@ -935,7 +935,7 @@ done:
 	goto unlock;
 
 bail:
-	qp->s_flags &= ~HFI1_S_BUSY;
+	qp->s_flags &= ~RVT_S_BUSY;
 unlock:
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 	return ret;
@@ -1058,7 +1058,7 @@ static void hfi2_send_rc_ack(struct rvt_qp *qp, bool is_fecn, bool use_16b)
 	u32 hwords;
 
 	/* Don't send ACK or NAK if a RDMA read or atomic is pending. */
-	if (qp->s_flags & HFI1_S_RESP_PENDING)
+	if (qp->s_flags & RVT_S_RESP_PENDING)
 		goto queue_ack;
 
 	/* Ensure s_rdma_ack_cnt changes are committed */
@@ -1101,11 +1101,11 @@ static void hfi2_send_rc_ack(struct rvt_qp *qp, bool is_fecn, bool use_16b)
 queue_ack:
 	this_cpu_inc(*ibp->rc_qacks);
 	spin_lock(&qp->s_lock);
-	qp->s_flags |= HFI1_S_ACK_PENDING | HFI1_S_RESP_PENDING;
+	qp->s_flags |= RVT_S_ACK_PENDING | RVT_S_RESP_PENDING;
 	qp->s_nak_state = qp->r_nak_state;
 	qp->s_ack_psn = qp->r_ack_psn;
 	if (is_fecn)
-		qp->s_flags |= HFI1_S_ECN;
+		qp->s_flags |= RVT_S_ECN;
 
 	/* Schedule the send tasklet. */
 	hfi2_schedule_send(qp);
@@ -1193,13 +1193,13 @@ static void reset_psn(struct rvt_qp *qp, u32 psn)
 done:
 	qp->s_psn = psn;
 	/*
-	 * Set HFI1_S_WAIT_PSN as rc_complete() may start the timer
+	 * Set RVT_S_WAIT_PSN as rc_complete() may start the timer
 	 * asynchronously before the send tasklet can get scheduled.
 	 * Doing it in hfi2_make_rc_req() is too late.
 	 */
 	if ((cmp_psn(qp->s_psn, qp->s_sending_hpsn) <= 0) &&
 	    (cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) <= 0))
-		qp->s_flags |= HFI1_S_WAIT_PSN;
+		qp->s_flags |= RVT_S_WAIT_PSN;
 }
 
 /*
@@ -1230,11 +1230,11 @@ static void restart_rc(struct rvt_qp *qp, u32 psn, int wait)
 	else
 		ibp->n_rc_resends += delta_psn(qp->s_psn, psn);
 
-	qp->s_flags &= ~(HFI1_S_WAIT_FENCE | HFI1_S_WAIT_RDMAR |
-			 HFI1_S_WAIT_SSN_CREDIT | HFI1_S_WAIT_PSN |
-			 HFI1_S_WAIT_ACK);
+	qp->s_flags &= ~(RVT_S_WAIT_FENCE | RVT_S_WAIT_RDMAR |
+			 RVT_S_WAIT_SSN_CREDIT | RVT_S_WAIT_PSN |
+			 RVT_S_WAIT_ACK);
 	if (wait)
-		qp->s_flags |= HFI1_S_SEND_ONE;
+		qp->s_flags |= RVT_S_SEND_ONE;
 	reset_psn(qp, psn);
 }
 
@@ -1249,10 +1249,10 @@ static void rc_timeout(unsigned long arg)
 
 	spin_lock_irqsave(&qp->r_lock, flags);
 	spin_lock(&qp->s_lock);
-	if (qp->s_flags & HFI1_S_TIMER) {
+	if (qp->s_flags & RVT_S_TIMER) {
 		ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 		ibp->n_rc_timeouts++;
-		qp->s_flags &= ~HFI1_S_TIMER;
+		qp->s_flags &= ~RVT_S_TIMER;
 		del_timer(&qp->s_timer);
 		restart_rc(qp, qp->s_last_psn + 1, 1);
 		hfi2_schedule_send(qp);
@@ -1270,8 +1270,8 @@ static void rc_rnr_retry(unsigned long arg)
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-	if (qp->s_flags & HFI1_S_WAIT_RNR) {
-		qp->s_flags &= ~HFI1_S_WAIT_RNR;
+	if (qp->s_flags & RVT_S_WAIT_RNR) {
+		qp->s_flags &= ~RVT_S_WAIT_RNR;
 		del_timer(&qp->s_timer);
 		hfi2_schedule_send(qp);
 	}
@@ -1335,7 +1335,7 @@ void hfi2_rc_send_complete(struct rvt_qp *qp, struct ib_l4_headers *ohdr)
 	 */
 	if ((psn & IB_BTH_REQ_ACK) && qp->s_acked != qp->s_tail &&
 	    !(qp->s_flags &
-		(HFI1_S_TIMER | HFI1_S_WAIT_RNR | HFI1_S_WAIT_PSN)) &&
+		(RVT_S_TIMER | RVT_S_WAIT_RNR | RVT_S_WAIT_PSN)) &&
 		(ib_rvt_state_ops[qp->state] & RVT_PROCESS_RECV_OK))
 		start_timer(qp);
 
@@ -1350,7 +1350,7 @@ void hfi2_rc_send_complete(struct rvt_qp *qp, struct ib_l4_headers *ohdr)
 			rvt_put_mr(sge->mr);
 		}
 		/* Post a send completion queue entry if requested. */
-		if (!(qp->s_flags & HFI1_S_SIGNAL_REQ_WR) ||
+		if (!(qp->s_flags & RVT_S_SIGNAL_REQ_WR) ||
 		    (wqe->wr.send_flags & IB_SEND_SIGNALED)) {
 			memset(&wc, 0, sizeof(wc));
 			wc.wr_id = wqe->wr.wr_id;
@@ -1367,9 +1367,9 @@ void hfi2_rc_send_complete(struct rvt_qp *qp, struct ib_l4_headers *ohdr)
 	 * If we were waiting for sends to complete before re-sending,
 	 * and they are now complete, restart sending.
 	 */
-	if (qp->s_flags & HFI1_S_WAIT_PSN &&
+	if (qp->s_flags & RVT_S_WAIT_PSN &&
 	    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
-		qp->s_flags &= ~HFI1_S_WAIT_PSN;
+		qp->s_flags &= ~RVT_S_WAIT_PSN;
 		qp->s_sending_psn = qp->s_psn;
 		qp->s_sending_hpsn = qp->s_psn - 1;
 		hfi2_schedule_send(qp);
@@ -1406,7 +1406,7 @@ static struct rvt_swqe *do_rc_completion(struct rvt_qp *qp,
 			rvt_put_mr(sge->mr);
 		}
 		/* Post a send completion queue entry if requested. */
-		if (!(qp->s_flags & HFI1_S_SIGNAL_REQ_WR) ||
+		if (!(qp->s_flags & RVT_S_SIGNAL_REQ_WR) ||
 		    (wqe->wr.send_flags & IB_SEND_SIGNALED)) {
 			memset(&wc, 0, sizeof(wc));
 			wc.wr_id = wqe->wr.wr_id;
@@ -1485,8 +1485,8 @@ static int do_rc_ack(struct rvt_qp *qp, u32 aeth, u32 psn, int opcode,
 	int diff;
 
 	/* Remove QP from retry timer */
-	if (qp->s_flags & (HFI1_S_TIMER | HFI1_S_WAIT_RNR)) {
-		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_WAIT_RNR);
+	if (qp->s_flags & (RVT_S_TIMER | RVT_S_WAIT_RNR)) {
+		qp->s_flags &= ~(RVT_S_TIMER | RVT_S_WAIT_RNR);
 		del_timer(&qp->s_timer);
 	}
 
@@ -1534,11 +1534,11 @@ static int do_rc_ack(struct rvt_qp *qp, u32 aeth, u32 psn, int opcode,
 		      wqe->wr.opcode == IB_WR_ATOMIC_FETCH_AND_ADD) &&
 		     (opcode != OP(ATOMIC_ACKNOWLEDGE) || diff != 0))) {
 			/* Retry this request. */
-			if (!(qp->r_flags & HFI1_R_RDMAR_SEQ)) {
-				qp->r_flags |= HFI1_R_RDMAR_SEQ;
+			if (!(qp->r_flags & RVT_R_RDMAR_SEQ)) {
+				qp->r_flags |= RVT_R_RDMAR_SEQ;
 				restart_rc(qp, qp->s_last_psn + 1, 0);
 				if (list_empty(&qp->rspwait)) {
-					qp->r_flags |= HFI1_R_RSP_SEND;
+					qp->r_flags |= RVT_R_RSP_SEND;
 					atomic_inc(&qp->refcount);
 					list_add_tail(&qp->rspwait,
 						      &ctx->wait_list);
@@ -1561,14 +1561,14 @@ static int do_rc_ack(struct rvt_qp *qp, u32 aeth, u32 psn, int opcode,
 		     wqe->wr.opcode == IB_WR_ATOMIC_FETCH_AND_ADD)) {
 			qp->s_num_rd_atomic--;
 			/* Restart sending task if fence is complete */
-			if ((qp->s_flags & HFI1_S_WAIT_FENCE) &&
+			if ((qp->s_flags & RVT_S_WAIT_FENCE) &&
 			    !qp->s_num_rd_atomic) {
-				qp->s_flags &= ~(HFI1_S_WAIT_FENCE |
-						 HFI1_S_WAIT_ACK);
+				qp->s_flags &= ~(RVT_S_WAIT_FENCE |
+						 RVT_S_WAIT_ACK);
 				hfi2_schedule_send(qp);
-			} else if (qp->s_flags & HFI1_S_WAIT_RDMAR) {
-				qp->s_flags &= ~(HFI1_S_WAIT_RDMAR |
-						 HFI1_S_WAIT_ACK);
+			} else if (qp->s_flags & RVT_S_WAIT_RDMAR) {
+				qp->s_flags &= ~(RVT_S_WAIT_RDMAR |
+						 RVT_S_WAIT_ACK);
 				hfi2_schedule_send(qp);
 			}
 		}
@@ -1596,8 +1596,8 @@ static int do_rc_ack(struct rvt_qp *qp, u32 aeth, u32 psn, int opcode,
 			qp->s_state = OP(SEND_LAST);
 			qp->s_psn = psn + 1;
 		}
-		if (qp->s_flags & HFI1_S_WAIT_ACK) {
-			qp->s_flags &= ~HFI1_S_WAIT_ACK;
+		if (qp->s_flags & RVT_S_WAIT_ACK) {
+			qp->s_flags &= ~RVT_S_WAIT_ACK;
 			hfi2_schedule_send(qp);
 		}
 		get_credit(qp, aeth);
@@ -1611,7 +1611,7 @@ static int do_rc_ack(struct rvt_qp *qp, u32 aeth, u32 psn, int opcode,
 		ibp->n_rnr_naks++;
 		if (qp->s_acked == qp->s_tail)
 			goto bail;
-		if (qp->s_flags & HFI1_S_WAIT_RNR)
+		if (qp->s_flags & RVT_S_WAIT_RNR)
 			goto bail;
 		if (qp->s_rnr_retry == 0) {
 			status = IB_WC_RNR_RETRY_EXC_ERR;
@@ -1627,8 +1627,8 @@ static int do_rc_ack(struct rvt_qp *qp, u32 aeth, u32 psn, int opcode,
 
 		reset_psn(qp, psn);
 
-		qp->s_flags &= ~(HFI1_S_WAIT_SSN_CREDIT | HFI1_S_WAIT_ACK);
-		qp->s_flags |= HFI1_S_WAIT_RNR;
+		qp->s_flags &= ~(RVT_S_WAIT_SSN_CREDIT | RVT_S_WAIT_ACK);
+		qp->s_flags |= RVT_S_WAIT_RNR;
 		qp->s_timer.function = rc_rnr_retry;
 		qp->s_timer.expires = jiffies + usecs_to_jiffies(
 			ib_hfi1_rnr_table[(aeth >> HFI1_AETH_CREDIT_SHIFT) &
@@ -1703,8 +1703,8 @@ static void rdma_seq_err(struct rvt_qp *qp, struct hfi2_ibport *ibp,
 	struct rvt_swqe *wqe;
 
 	/* Remove QP from retry timer */
-	if (qp->s_flags & (HFI1_S_TIMER | HFI1_S_WAIT_RNR)) {
-		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_WAIT_RNR);
+	if (qp->s_flags & (RVT_S_TIMER | RVT_S_WAIT_RNR)) {
+		qp->s_flags &= ~(RVT_S_TIMER | RVT_S_WAIT_RNR);
 		del_timer(&qp->s_timer);
 	}
 
@@ -1719,10 +1719,10 @@ static void rdma_seq_err(struct rvt_qp *qp, struct hfi2_ibport *ibp,
 	}
 
 	ibp->n_rdma_seq++;
-	qp->r_flags |= HFI1_R_RDMAR_SEQ;
+	qp->r_flags |= RVT_R_RDMAR_SEQ;
 	restart_rc(qp, qp->s_last_psn + 1, 0);
 	if (list_empty(&qp->rspwait)) {
-		qp->r_flags |= HFI1_R_RSP_SEND;
+		qp->r_flags |= RVT_R_RSP_SEND;
 		atomic_inc(&qp->refcount);
 		list_add_tail(&qp->rspwait, &ctx->wait_list);
 	}
@@ -1781,10 +1781,10 @@ static void rc_rcv_resp(struct hfi2_ibport *ibp,
 	 * Skip everything other than the PSN we expect, if we are waiting
 	 * for a reply to a restarted RDMA read or atomic op.
 	 */
-	if (qp->r_flags & HFI1_R_RDMAR_SEQ) {
+	if (qp->r_flags & RVT_R_RDMAR_SEQ) {
 		if (cmp_psn(psn, qp->s_last_psn + 1) != 0)
 			goto ack_done;
-		qp->r_flags &= ~HFI1_R_RDMAR_SEQ;
+		qp->r_flags &= ~RVT_R_RDMAR_SEQ;
 	}
 
 	if (unlikely(qp->s_acked == qp->s_tail))
@@ -1836,10 +1836,10 @@ read_middle:
 		 * We got a response so update the timeout.
 		 * 4.096 usec. * (1 << qp->timeout)
 		 */
-		qp->s_flags |= HFI1_S_TIMER;
+		qp->s_flags |= RVT_S_TIMER;
 		mod_timer(&qp->s_timer, jiffies + qp->timeout_jiffies);
-		if (qp->s_flags & HFI1_S_WAIT_ACK) {
-			qp->s_flags &= ~HFI1_S_WAIT_ACK;
+		if (qp->s_flags & RVT_S_WAIT_ACK) {
+			qp->s_flags &= ~RVT_S_WAIT_ACK;
 			hfi2_schedule_send(qp);
 		}
 
@@ -1932,7 +1932,7 @@ static inline void rc_defered_ack(struct hfi_ctx *ctx,
 	/*  FXRTODO: Implement deferrred ack */
 #if 0
 	if (list_empty(&qp->rspwait)) {
-		qp->r_flags |= HFI1_R_RSP_DEFERED_ACK;
+		qp->r_flags |= RVT_R_RSP_DEFERED_ACK;
 		atomic_inc(&qp->refcount);
 		list_add_tail(&qp->rspwait, &ctx->qp_wait_list);
 	}
@@ -1949,7 +1949,7 @@ static inline void rc_cancel_ack(struct rvt_qp *qp)
 	if (list_empty(&qp->rspwait))
 		return;
 	list_del_init(&qp->rspwait);
-	qp->r_flags &= ~HFI1_R_RSP_DEFERED_ACK;
+	qp->r_flags &= ~RVT_R_RSP_DEFERED_ACK;
 	if (atomic_dec_and_test(&qp->refcount))
 		wake_up(&qp->wait);
 #endif
@@ -2136,7 +2136,7 @@ static noinline int rc_rcv_error(struct ib_l4_headers *ohdr, void *data,
 		break;
 	}
 	qp->s_ack_state = OP(ACKNOWLEDGE);
-	qp->s_flags |= HFI1_S_RESP_PENDING;
+	qp->s_flags |= RVT_S_RESP_PENDING;
 	qp->r_nak_state = 0;
 	hfi2_schedule_send(qp);
 
@@ -2358,7 +2358,7 @@ void hfi2_rc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		break;
 	}
 
-	if (qp->state == IB_QPS_RTR && !(qp->r_flags & HFI1_R_COMM_EST))
+	if (qp->state == IB_QPS_RTR && !(qp->r_flags & RVT_R_COMM_EST))
 		qp_comm_est(qp);
 
 	/* OK, process the packet. */
@@ -2450,7 +2450,7 @@ send_last:
 		hfi2_copy_sge(&qp->r_sge, data, tlen, 1);
 		rvt_put_ss(&qp->r_sge);
 		qp->r_msn++;
-		if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
+		if (!test_and_clear_bit(RVT_R_WRID_VALID, &qp->r_aflags))
 			break;
 		wc.wr_id = qp->r_wr_id;
 		wc.status = IB_WC_SUCCESS;
@@ -2596,7 +2596,7 @@ send_last:
 		qp->r_head_ack_queue = next;
 
 		/* Schedule the send tasklet. */
-		qp->s_flags |= HFI1_S_RESP_PENDING;
+		qp->s_flags |= RVT_S_RESP_PENDING;
 		hfi2_schedule_send(qp);
 
 		spin_unlock_irqrestore(&qp->s_lock, flags);
@@ -2663,7 +2663,7 @@ send_last:
 		qp->r_head_ack_queue = next;
 
 		/* Schedule the send tasklet. */
-		qp->s_flags |= HFI1_S_RESP_PENDING;
+		qp->s_flags |= RVT_S_RESP_PENDING;
 		hfi2_schedule_send(qp);
 
 		spin_unlock_irqrestore(&qp->s_lock, flags);

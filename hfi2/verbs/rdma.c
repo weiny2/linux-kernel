@@ -427,7 +427,7 @@ static inline bool is_qp_ok(struct hfi2_ibport *ibp,
 			    struct rvt_qp *qp, int opcode)
 {
 	if ((ib_rvt_state_ops[qp->state] & RVT_PROCESS_RECV_OK) &&
-	    (((opcode & OPCODE_QP_MASK) == qp->allowed_ops) ||
+	    (((opcode & RVT_OPCODE_QP_MASK) == qp->allowed_ops) ||
 	     (opcode == CNP_OPCODE))) {
 		return true;
 	} else {
