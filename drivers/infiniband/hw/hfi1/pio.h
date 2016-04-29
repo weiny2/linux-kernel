@@ -49,9 +49,9 @@
 
 /* send context types */
 #define SC_KERNEL 0
-#define SC_ACK    1
-#define SC_USER   2
-#define SC_VL15   3
+#define SC_VL15   1
+#define SC_ACK    2
+#define SC_USER   3	/* must be the last one: it may take all left */
 #define SC_MAX    4
 
 /* invalid send context index */
