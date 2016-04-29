@@ -56,6 +56,7 @@
 #include "verbs.h"
 #include "packet.h"
 #include "opa_core_ib.h"
+#include "trace.h"
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_eq.h>
 #include <rdma/hfi_pt.h>
@@ -460,6 +461,8 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 	dev_dbg(ibp->dev, "PT %d: cmd %d len 0 n_iov 1 sent (iov[0]) = %u\n",
 		ibp->port_num, dma_cmd, iov[0].length);
 
+	trace_hfi2_hdr_send_ack(ibp->ibd->dd, &wqe_iov->ph, use_16b);
+
 _tx_cmd:
 	/* send with GENERAL or MGMT DMA */
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
@@ -603,6 +606,8 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv)
 	dev_dbg(ibp->dev, "PT %d: cmd %d len %d pmtu %d n_iov %d sent %d\n",
 		ibp->port_num, dma_cmd, qp->s_cur_size, qp->pmtu,
 		num_iovs, length);
+
+	trace_hfi2_hdr_send_wqe(ibp->ibd->dd, &wqe_iov->ph, use_16b);
 
 _tx_cmd:
 	spin_lock_irqsave(&ibp->cmdq_tx_lock, flags);
