@@ -551,6 +551,8 @@ void hfi2_ib_rcv(struct hfi2_ib_packet *packet)
 
 		is_mcast = (dlid >= HFI1_MULTICAST_LID_BASE) &&
 				  (dlid != HFI1_PERMISSIVE_LID);
+
+		trace_hfi2_hdr_rcv(ibp->ibd->dd, ph, false);
 	} else if (packet->etype == RHF_RCV_TYPE_BYPASS) {
 		/* 32 == 16B + (MGMT L4/BTH) FLIT + CRC FLIT */
 		if (unlikely(tlen < 32))
@@ -573,6 +575,8 @@ void hfi2_ib_rcv(struct hfi2_ib_packet *packet)
 
 		is_mcast = (dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
 				  (dlid != HFI1_16B_PERMISSIVE_LID);
+
+		trace_hfi2_hdr_rcv(ibp->ibd->dd, ph, true);
 	} else {
 		dev_err(ibp->dev, "Invalid packet type\n");
 		goto drop;
@@ -592,7 +596,6 @@ void hfi2_ib_rcv(struct hfi2_ib_packet *packet)
 
 	opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0x7f;
 #if 0	/* TODO */
-	trace_input_ibhdr(rcd->devdata, hdr);
 	inc_opstats(tlen, &rcd->opstats->stats[opcode]);
 #endif
 

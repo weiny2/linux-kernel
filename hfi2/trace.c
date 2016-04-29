@@ -52,21 +52,73 @@
 #define CREATE_TRACE_POINTS
 #include "trace.h"
 
-#if 0
-u8 ibhdr_exhdr_len(struct hfi1_ib_header *hdr)
-{
-	struct hfi1_other_headers *ohdr;
-	u8 opcode;
-	u8 lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
+/*
+ * Extended Transport Header length by opcode
+ */
+static const u8 eth_len_by_opcode[256] = {
+	/* RC */
+	[IB_OPCODE_RC_SEND_FIRST]                     = 0,
+	[IB_OPCODE_RC_SEND_MIDDLE]                    = 0,
+	[IB_OPCODE_RC_SEND_LAST]                      = 0,
+	[IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE]       = 4,
+	[IB_OPCODE_RC_SEND_ONLY]                      = 0,
+	[IB_OPCODE_RC_SEND_ONLY_WITH_IMMEDIATE]       = 4,
+	[IB_OPCODE_RC_RDMA_WRITE_FIRST]               = 16,
+	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]              = 0,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST]                = 0,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 4,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = 16,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 20,
+	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = 16,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = 0,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = 4,
+	[IB_OPCODE_RC_ACKNOWLEDGE]                    = 4,
+	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = 4,
+	[IB_OPCODE_RC_COMPARE_SWAP]                   = 28,
+	[IB_OPCODE_RC_FETCH_ADD]                      = 28,
+	/* UC */
+	[IB_OPCODE_UC_SEND_FIRST]                     = 0,
+	[IB_OPCODE_UC_SEND_MIDDLE]                    = 0,
+	[IB_OPCODE_UC_SEND_LAST]                      = 0,
+	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = 4,
+	[IB_OPCODE_UC_SEND_ONLY]                      = 0,
+	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = 4,
+	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = 16,
+	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = 0,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST]                = 0,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 4,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY]                = 16,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 20,
+	/* UD */
+	[IB_OPCODE_UD_SEND_ONLY]                      = 8,
+	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = 12
+};
 
-	if (lnh == HFI1_LRH_BTH)
-		ohdr = &hdr->u.oth;
-	else
-		ohdr = &hdr->u.l.oth;
+u8 ibhdr_exhdr_len(union hfi2_packet_header *hdr,
+				   bool use_16b)
+{
+	struct ib_l4_headers *ohdr;
+	u8 opcode;
+
+	if (use_16b) {
+		if (OPA_16B_GET_L4_TYPE(hdr) == HFI1_L4_IB_LOCAL)
+			ohdr = &hdr->opa16b.u.oth;
+		else
+			ohdr = &hdr->opa16b.u.l.oth;
+	} else {
+		u8 lnh = (u8)(be16_to_cpu(hdr->ibh.lrh[0]) & 3);
+
+		if (lnh == HFI1_LRH_BTH)
+			ohdr = &hdr->ibh.u.oth;
+		else
+			ohdr = &hdr->ibh.u.l.oth;
+	}
 	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
-	return hdr_len_by_opcode[opcode] == 0 ?
-	       0 : hdr_len_by_opcode[opcode] - (12 + 8);
+	return eth_len_by_opcode[opcode];
 }
+
 
 #define IMM_PRN  "imm %d"
 #define RETH_PRN "reth vaddr 0x%.16llx rkey 0x%.8x dlen 0x%.8x"
@@ -101,7 +153,7 @@ const char *parse_everbs_hdrs(
 	void *ehdrs)
 {
 	union ib_ehdrs *eh = ehdrs;
-	const char *ret = p->buffer + p->len;
+	const char *ret = trace_seq_buffer_ptr(p);
 
 	switch (opcode) {
 	/* imm */
@@ -177,11 +229,12 @@ const char *parse_everbs_hdrs(
 	return ret;
 }
 
+#if 0
 const char *parse_sdma_flags(
 	struct trace_seq *p,
 	u64 desc0, u64 desc1)
 {
-	const char *ret = p->buffer + p->len;
+	const char *ret = trace_seq_buffer_ptr(p);
 	char flags[5] = { 'x', 'x', 'x', 'x', 0 };
 
 	flags[0] = (desc1 & SDMA_DESC1_INT_REQ_FLAG) ? 'I' : '-';
@@ -199,13 +252,14 @@ const char *parse_sdma_flags(
 				 & SDMA_DESC1_HEADER_DWS_MASK));
 	return ret;
 }
+#endif
 
 const char *print_u32_array(
 	struct trace_seq *p,
 	u32 *arr, int len)
 {
 	int i;
-	const char *ret = p->buffer + p->len;
+	const char *ret = trace_seq_buffer_ptr(p);
 
 	for (i = 0; i < len ; i++)
 		trace_seq_printf(p, "%s%#x", i == 0 ? "" : " ", arr[i]);
@@ -218,7 +272,7 @@ const char *print_u64_array(
 	u64 *arr, int len)
 {
 	int i;
-	const char *ret = p->buffer + p->len;
+	const char *ret = trace_seq_buffer_ptr(p);
 
 	for (i = 0; i < len; i++)
 		trace_seq_printf(p, "%s0x%016llx", i == 0 ? "" : " ", arr[i]);
@@ -226,6 +280,7 @@ const char *print_u64_array(
 	return ret;
 }
 
+#if 0
 __hfi1_trace_fn(PKT);
 __hfi1_trace_fn(PROC);
 __hfi1_trace_fn(SDMA);
@@ -239,5 +294,4 @@ __hfi1_trace_fn(FIRMWARE);
 __hfi1_trace_fn(RCVCTRL);
 __hfi1_trace_fn(TID);
 __hfi1_trace_fn(MMU);
-
 #endif
