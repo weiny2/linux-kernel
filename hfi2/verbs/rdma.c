@@ -704,7 +704,8 @@ static bool process_rcv_packet(struct hfi2_ibport *ibp,
 			  packet->port,
 			  packet->hlen,
 			  packet->tlen,
-			  rhf_egr_index(rhf));
+			  idx,
+			  off);
 
 	return true;
 }

@@ -87,8 +87,10 @@ TRACE_EVENT(hfi2_rcvhdr,
 		     u32 port,
 		     u32 hlen,
 		     u32 tlen,
-		     u32 etail),
-	    TP_ARGS(dd, ctxt, eflags, etype, port, hlen, tlen, etail),
+		     u32 egr_idx,
+		     u32 egr_off
+	    ),
+		TP_ARGS(dd, ctxt, eflags, etype, port, hlen, tlen, egr_idx, egr_off),
 	    TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
 		__field(u64, ctxt)
@@ -97,7 +99,8 @@ TRACE_EVENT(hfi2_rcvhdr,
 		__field(u32, port)
 		__field(u32, hlen)
 		__field(u32, tlen)
-		__field(u32, etail)
+		__field(u32, egr_idx)
+		__field(u32, egr_off)
 	    ),
 	    TP_fast_assign(
 		DD_DEV_ASSIGN(dd);
@@ -107,17 +110,19 @@ TRACE_EVENT(hfi2_rcvhdr,
 		__entry->port = port;
 		__entry->hlen = hlen;
 		__entry->tlen = tlen;
-		__entry->etail = etail;
-	    ),
+		__entry->egr_idx = egr_idx;
+		__entry->egr_off = egr_off;
+		),
 	    TP_printk(
-"[%s] ctxt 0x%llx eflags 0x%llx etype %d,%s hlen %d tlen %d etail %d",
+"[%s] ctxt 0x%llx eflags 0x%llx etype %d,%s hlen %d tlen %d egr idx %d off %d",
 		__get_str(dev),
 		__entry->ctxt,
 		__entry->eflags,
 		__entry->etype, show_packettype(__entry->etype),
 		__entry->hlen,
 		__entry->tlen,
-		__entry->etail
+		__entry->egr_idx,
+		__entry->egr_off
 	    )
 );
 
