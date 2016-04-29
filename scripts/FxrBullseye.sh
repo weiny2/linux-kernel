@@ -5,6 +5,26 @@ set -x
 . scripts/SimicsDefinition.sh
 . scripts/bullseye_define.sh
 
+# stop FM to prepare unloading the driver
+stop_fm() {
+	SSH_CMD="ssh -p${viper0} root@localhost"
+	${SSH_CMD} "service --skip-redirect opafm stop"
+}
+
+# wrap up bullseye
+wrapup_bullseye() {
+	for viper in ${viper0} ${viper1}; do
+		SSH_CMD="ssh -p${viper} root@localhost"
+		${SSH_CMD} "
+			export COVFILE=${COVFILE}; ${BULLSEYE_DIR}/bin/covgetkernel
+			service --skip-redirect opa2_hfi stop
+			rmmod libcov-lkm
+			${BULLSEYE_DIR}/bin/cov01 -0
+		"
+	done
+}
+
+# main start here
 myname=$0
 PWD=`pwd`
 CURRENT_DIR=`basename ${PWD}`
@@ -59,14 +79,6 @@ for viper in ${viper0} ${viper1}; do
 		sed -i -e'/^export COVFILE=/d' /root/.bashrc
 		echo export COVFILE=${COVFILE} >>/root/.bashrc
 		export COVFILE=${COVFILE}
-		${BULLSEYE_DIR}/bin/cov01 -1
-		${BULLSEYE_DIR}/bin/covselect -q --deleteAll
-		${BULLSEYE_DIR}/bin/covselect -q --add ./
-		${BULLSEYE_DIR}/bin/covselect -q --add '!hfi2_vnic/vnic.git/opa_vnic/opa_vnic_debug.c'
-		${BULLSEYE_DIR}/bin/covselect -q --add '!opa-headers.git/test/'
-		${BULLSEYE_DIR}/bin/covselect -q --add '!kfi/kfi_main.c'
-		${BULLSEYE_DIR}/bin/covselect -q --add '!hfi2/verbs/rdmavt/'
-		${BULLSEYE_DIR}/bin/covselect -q --add '!hfi2/snoop.c'
 		cd ${BULLSEYE_DIR}/run/linuxKernel
 		make -C /lib/modules/\`uname -r\`/build M=\`pwd\`
 		insmod ${BULLSEYE_DIR}/run/linuxKernel/libcov-lkm.ko
@@ -76,14 +88,32 @@ for viper in ${viper0} ${viper1}; do
 		./autogen.sh
 		./configure
 		echo '--symbolic' >${BULLSEYE_DIR}/bin/covc.cfg
+		${BULLSEYE_DIR}/bin/covselect -q --deleteAll
+		${BULLSEYE_DIR}/bin/covselect -q --add ./
+		${BULLSEYE_DIR}/bin/covselect -q --add '!hfi2_vnic/vnic.git/opa_vnic/opa_vnic_debug.c'
+		${BULLSEYE_DIR}/bin/covselect -q --add '!opa-headers.git/test/'
+		${BULLSEYE_DIR}/bin/covselect -q --add '!kfi/kfi_main.c'
+		${BULLSEYE_DIR}/bin/covselect -q --add '!hfi2/verbs/rdmavt/'
+		${BULLSEYE_DIR}/bin/covselect -q --add '!hfi2/snoop.c'
+		${BULLSEYE_DIR}/bin/cov01 -1
 		export PATH=${BULLSEYE_DIR}/bin:${PATH}
 		cd ${BULLSEYE_WORK}
-		make -C /lib/modules/\`uname -r\`/build M=\`pwd\`
+		make -C /lib/modules/\`uname -r\`/build M=\`pwd\` || exit \$?
 		cp \`find . -name "*.ko"\` /lib/modules/\`uname -r\`/updates
-		make -C opa-headers.git
-		make -C opa-headers.git install
+		make -C opa-headers.git || exit \$?
+		make -C opa-headers.git install || exit \$?
+		exit 0
 	"
+	res=$?
+	[ ${res} != 0 ] && break
 done
+if [ ${res} != 0 ]; then
+	# stop FM to prepare unloading the driver
+	stop_fm
+	wrapup_bullseye
+	cleanup_simics
+	exit ${res}
+fi
 
 # run harness
 pushd opa-headers.git/test
@@ -91,19 +121,14 @@ pushd opa-headers.git/test
 popd
 
 # stop FM to prepare unloading the driver
-SSH_CMD="ssh -p${viper0} root@localhost"
-${SSH_CMD} "service --skip-redirect opafm stop"
+stop_fm
 
 # wrap up bullseye
+wrapup_bullseye
+
+# transfer to host
 for viper in ${viper0} ${viper1}; do
 	SSH_CMD="ssh -p${viper} root@localhost"
-	${SSH_CMD} "
-		export COVFILE=${COVFILE}; ${BULLSEYE_DIR}/bin/covgetkernel
-		service --skip-redirect opa2_hfi stop
-		rmmod libcov-lkm
-		${BULLSEYE_DIR}/bin/cov01 -0
-	"
-	# transfer to host
 	${SSH_CMD} "cat ${COVFILE}" >cov.${test_type}.${viper}
 done
 
@@ -117,3 +142,5 @@ rm -f cov.${test_type}.*
 # ${BULLSEYE_DIR}/bin/CoverageBrowser
 
 cleanup_simics
+
+exit ${res}
