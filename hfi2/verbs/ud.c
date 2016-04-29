@@ -181,8 +181,8 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	/*
 	 * Get the next work request entry to find where to put the data.
 	 */
-	if (qp->r_flags & HFI1_R_REUSE_SGE)
-		qp->r_flags &= ~HFI1_R_REUSE_SGE;
+	if (qp->r_flags & RVT_R_REUSE_SGE)
+		qp->r_flags &= ~RVT_R_REUSE_SGE;
 	else {
 		int ret;
 
@@ -199,7 +199,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	}
 	/* Silently drop packets which are too big. */
 	if (unlikely(wc.byte_len > qp->r_len)) {
-		qp->r_flags |= HFI1_R_REUSE_SGE;
+		qp->r_flags |= RVT_R_REUSE_SGE;
 		ibp->n_pkt_drops++;
 		goto bail_unlock;
 	}
@@ -269,7 +269,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 		length -= len;
 	}
 	rvt_put_ss(&qp->r_sge);
-	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
+	if (!test_and_clear_bit(RVT_R_WRID_VALID, &qp->r_aflags))
 		goto bail_unlock;
 	wc.wr_id = qp->r_wr_id;
 	wc.status = IB_WC_SUCCESS;
@@ -509,7 +509,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 			goto bail;
 		/* If DMAs are in progress, we can't flush immediately. */
 		if (is_iowait_sdma_busy(&qp_priv->s_iowait)) {
-			qp->s_flags |= HFI1_S_WAIT_DMA;
+			qp->s_flags |= RVT_S_WAIT_DMA;
 			goto bail;
 		}
 		wqe = rvt_get_swqe_ptr(qp, qp->s_last);
@@ -568,7 +568,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 			 * zero length descriptor so we get a callback.
 			 */
 			if (is_iowait_sdma_busy(&qp_priv->s_iowait)) {
-				qp->s_flags |= HFI1_S_WAIT_DMA;
+				qp->s_flags |= RVT_S_WAIT_DMA;
 				goto bail;
 			}
 			qp->s_cur = next_cur;
@@ -640,7 +640,7 @@ done:
 	goto unlock;
 
 bail:
-	qp->s_flags &= ~HFI1_S_BUSY;
+	qp->s_flags &= ~RVT_S_BUSY;
 unlock:
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 	return ret;
@@ -881,8 +881,8 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	/*
 	 * Get the next work request entry to find where to put the data.
 	 */
-	if (qp->r_flags & HFI1_R_REUSE_SGE)
-		qp->r_flags &= ~HFI1_R_REUSE_SGE;
+	if (qp->r_flags & RVT_R_REUSE_SGE)
+		qp->r_flags &= ~RVT_R_REUSE_SGE;
 	else {
 		int ret;
 
@@ -899,7 +899,7 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	}
 	/* Silently drop packets which are too big. */
 	if (unlikely(wc.byte_len > qp->r_len)) {
-		qp->r_flags |= HFI1_R_REUSE_SGE;
+		qp->r_flags |= RVT_R_REUSE_SGE;
 		goto drop;
 	}
 	if (grh) {
@@ -926,7 +926,7 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	hfi2_copy_sge(&qp->r_sge, data,
 			wc.byte_len - sizeof(struct ib_grh), 1);
 	rvt_put_ss(&qp->r_sge);
-	if (!test_and_clear_bit(HFI1_R_WRID_VALID, &qp->r_aflags))
+	if (!test_and_clear_bit(RVT_R_WRID_VALID, &qp->r_aflags))
 		return;
 	wc.wr_id = qp->r_wr_id;
 	wc.status = IB_WC_SUCCESS;

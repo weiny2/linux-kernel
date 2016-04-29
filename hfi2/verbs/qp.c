@@ -283,7 +283,7 @@ static void reset_qp(struct rvt_qp *qp, enum ib_qp_type type)
 	qp->remote_qpn = 0;
 	qp->qkey = 0;
 	qp->qp_access_flags = 0;
-	qp->s_flags &= HFI1_S_SIGNAL_REQ_WR;
+	qp->s_flags &= RVT_S_SIGNAL_REQ_WR;
 	qp->s_hdrwords = 0;
 	qp->s_wqe = NULL;
 	qp->s_draining = 0;
@@ -328,7 +328,7 @@ static void clear_mr_refs(struct rvt_qp *qp, int clr_sends)
 {
 	unsigned n;
 
-	if (test_and_clear_bit(HFI1_R_REWIND_SGE, &qp->r_aflags))
+	if (test_and_clear_bit(RVT_R_REWIND_SGE, &qp->r_aflags))
 		rvt_put_ss(&qp->s_rdma_read_sge);
 
 	rvt_put_ss(&qp->r_sge);
@@ -552,7 +552,7 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		if (qp->state != IB_QPS_RESET) {
 			qp->state = IB_QPS_RESET;
 			flush_iowait(qp);
-			qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_ANY_WAIT);
+			qp->s_flags &= ~(RVT_S_TIMER | RVT_S_ANY_WAIT);
 			spin_unlock(&qp->s_lock);
 			spin_unlock_irq(&qp->r_lock);
 			/* Stop the sending work queue and retry timer */
@@ -569,7 +569,7 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 	case IB_QPS_RTR:
 		/* Allow event to re-trigger if QP set to RTR more than once */
-		qp->r_flags &= ~HFI1_R_COMM_EST;
+		qp->r_flags &= ~RVT_R_COMM_EST;
 		qp->state = new_state;
 		break;
 
@@ -783,7 +783,7 @@ int hfi2_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	init_attr->recv_cq = qp->ibqp.recv_cq;
 	init_attr->srq = qp->ibqp.srq;
 	init_attr->cap = attr->cap;
-	if (qp->s_flags & HFI1_S_SIGNAL_REQ_WR)
+	if (qp->s_flags & RVT_S_SIGNAL_REQ_WR)
 		init_attr->sq_sig_type = IB_SIGNAL_REQ_WR;
 	else
 		init_attr->sq_sig_type = IB_SIGNAL_ALL_WR;
@@ -922,7 +922,7 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 	qp->s_size = init_attr->cap.max_send_wr + 1;
 	qp->s_max_sge = init_attr->cap.max_send_sge;
 	if (init_attr->sq_sig_type == IB_SIGNAL_REQ_WR)
-		qp->s_flags = HFI1_S_SIGNAL_REQ_WR;
+		qp->s_flags = RVT_S_SIGNAL_REQ_WR;
 
 	err = alloc_qpn(ibd, init_attr->qp_type, init_attr->port_num);
 	if (err < 0) {
@@ -997,13 +997,13 @@ struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
 	case IB_QPT_SMI:
 	case IB_QPT_GSI:
 	case IB_QPT_UD:
-		qp->allowed_ops = IB_OPCODE_UD_SEND_ONLY & OPCODE_QP_MASK;
+		qp->allowed_ops = IB_OPCODE_UD_SEND_ONLY & RVT_OPCODE_QP_MASK;
 		break;
 	case IB_QPT_RC:
-		qp->allowed_ops = IB_OPCODE_RC_SEND_ONLY & OPCODE_QP_MASK;
+		qp->allowed_ops = IB_OPCODE_RC_SEND_ONLY & RVT_OPCODE_QP_MASK;
 		break;
 	case IB_QPT_UC:
-		qp->allowed_ops = IB_OPCODE_UC_SEND_ONLY & OPCODE_QP_MASK;
+		qp->allowed_ops = IB_OPCODE_UC_SEND_ONLY & RVT_OPCODE_QP_MASK;
 		break;
 	default:
 		ret = ERR_PTR(-EINVAL);
@@ -1047,7 +1047,7 @@ int hfi2_destroy_qp(struct ib_qp *ibqp)
 	if (qp->state != IB_QPS_RESET) {
 		qp->state = IB_QPS_RESET;
 		flush_iowait(qp);
-		qp->s_flags &= ~(HFI1_S_TIMER | HFI1_S_ANY_WAIT);
+		qp->s_flags &= ~(RVT_S_TIMER | RVT_S_ANY_WAIT);
 		spin_unlock(&qp->s_lock);
 		spin_unlock_irq(&qp->r_lock);
 		stop_send_queue(qp);

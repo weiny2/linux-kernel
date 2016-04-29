@@ -112,9 +112,9 @@ const u32 ib_hfi1_rnr_table[32] = {
  */
 static inline int send_ok(struct rvt_qp *qp)
 {
-	return !(qp->s_flags & (HFI1_S_BUSY | HFI1_S_ANY_WAIT_IO)) &&
-		(qp->s_hdrwords || (qp->s_flags & HFI1_S_RESP_PENDING) ||
-		 !(qp->s_flags & HFI1_S_ANY_WAIT_SEND));
+	return !(qp->s_flags & (RVT_S_BUSY | RVT_S_ANY_WAIT_IO)) &&
+		(qp->s_hdrwords || (qp->s_flags & RVT_S_RESP_PENDING) ||
+		 !(qp->s_flags & RVT_S_ANY_WAIT_SEND));
 }
 
 /*
@@ -233,7 +233,7 @@ int hfi2_get_rwqe(struct rvt_qp *qp, int wr_id_only)
 	qp->r_wr_id = wqe->wr_id;
 
 	ret = 1;
-	set_bit(HFI1_R_WRID_VALID, &qp->r_aflags);
+	set_bit(RVT_R_WRID_VALID, &qp->r_aflags);
 	if (handler) {
 		u32 n;
 
@@ -328,8 +328,8 @@ void hfi2_make_ruc_header(struct rvt_qp *qp, struct ib_l4_headers *ohdr,
 	bth0 |= extra_bytes << 20;
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	bth1 = qp->remote_qpn;
-	if (qp->s_flags & HFI1_S_ECN) {
-		qp->s_flags &= ~HFI1_S_ECN;
+	if (qp->s_flags & RVT_S_ECN) {
+		qp->s_flags &= ~RVT_S_ECN;
 		/* we recently received a FECN, so return a BECN */
 		bth1 |= (HFI1_BECN_MASK << HFI1_BECN_SHIFT);
 	}
@@ -380,8 +380,8 @@ void hfi2_make_16b_ruc_header(struct rvt_qp *qp, struct ib_l4_headers *ohdr,
 	bth1 = qp->remote_qpn;
 	if (qp->s_mig_state == IB_MIG_MIGRATED)
 		bth1 |= IB_16B_BTH_MIG_REQ;
-	if (qp->s_flags & HFI1_S_ECN) {
-		qp->s_flags &= ~HFI1_S_ECN;
+	if (qp->s_flags & RVT_S_ECN) {
+		qp->s_flags &= ~RVT_S_ECN;
 		/* we recently received a FECN, so return a BECN */
 		becn = true;
 	}
@@ -430,7 +430,7 @@ static int send_wqe(struct hfi2_ibport *ibp, struct rvt_qp *qp)
  * @qp: the QP to send on
  *
  * Return: zero if packet is sent or queued OK, non-zero
- * and clear qp->s_flags HFI1_S_BUSY otherwise.
+ * and clear qp->s_flags RVT_S_BUSY otherwise.
  */
 static int hfi2_verbs_send(struct rvt_qp *qp)
 {
@@ -516,7 +516,7 @@ void hfi2_do_send(struct work_struct *work)
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 		return;
 	}
-	qp->s_flags |= HFI1_S_BUSY;
+	qp->s_flags |= RVT_S_BUSY;
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 
 	do {
@@ -562,7 +562,7 @@ void hfi2_send_complete(struct rvt_qp *qp, struct rvt_swqe *wqe,
 #endif
 
 	/* See ch. 11.2.4.1 and 10.7.3.1 */
-	if (!(qp->s_flags & HFI1_S_SIGNAL_REQ_WR) ||
+	if (!(qp->s_flags & RVT_S_SIGNAL_REQ_WR) ||
 	    (wqe->wr.send_flags & IB_SEND_SIGNALED) ||
 	    status != IB_WC_SUCCESS) {
 		struct ib_wc wc;
