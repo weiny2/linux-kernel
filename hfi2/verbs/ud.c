@@ -510,16 +510,32 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 #else
 	ah_attr = &ibah_to_rvtah(wqe->wr.wr.ud.ah)->attr;
 #endif
+	is_16b = hfi2_use_16b(qp, wqe);
 	if (!hfi2_check_mcast(ah_attr)) {
 		lid = hfi2_retrieve_lid(ah_attr) & ~((1 << ppd->lmc) - 1);
 		/*
 		 * FXRTODO - WFR had additional test to skip when in link
 		 * loopback, maybe to ensure datapath tested in that mode
 		 */
-		if (unlikely(lid == ppd->lid ||
-		    (lid == HFI1_PERMISSIVE_LID &&
-		    qp->ibqp.qp_type == IB_QPT_GSI) ||
-		    (force_loopback && qp->ibqp.qp_type == IB_QPT_SMI))) {
+		/**
+		 * A DLID of 0xFFFF needs special handing.
+		 * If GRD has been not been specified,
+		 * (i.e. is_16b is not true), 0xFFFF is
+		 * permissive LID and the packet with DLID
+		 * of 0xFFFF is a directed route packet.
+		 * If not, 0xFFFF is a regular unicast LID.
+		 *
+		 * GSI traffic with permissive LIDs are used to perform
+		 * local query when no LID has been assigned.
+		 */
+		if (unlikely(!force_loopback &&
+			     ((is_16b ||
+			       (lid != HFI1_PERMISSIVE_LID)) &&
+			     ((lid == ppd->lid) ||
+			      ((lid == (is_16b ? HFI1_16B_PERMISSIVE_LID :
+					HFI1_PERMISSIVE_LID)) &&
+			       (qp->ibqp.qp_type == IB_QPT_GSI) &&
+			       (!ppd->lid)))))) {
 			/*
 			 * If DMAs are in progress, we can't generate
 			 * a completion for the loopback packet since
@@ -542,9 +558,6 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 
 	qp->s_cur = next_cur;
 	qp->s_wqe = wqe;
-
-	/* For UD, call hfi2_use_16b() after setting qp->s_wqe */
-	is_16b = hfi2_use_16b(qp);
 
 	/* 16B(4)/LRH(2) + BTH(3) + DETH(2) */
 	qp->s_hdrwords = is_16b ? 9 : 7;
@@ -680,7 +693,7 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	u8 sc5, extra_bytes;
 	bool is_becn, is_fecn, is_mcast;
 	struct ib_grh *grh = packet->grh;
-	u32 slid, dlid;
+	u32 slid, dlid, permissive_lid;
 	u8 age, l4, rc;
 	u16 entropy, len, pkey;
 	bool is_16b = (packet->etype == RHF_RCV_TYPE_BYPASS);
@@ -699,6 +712,7 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		extra_bytes = 5;    /* ICRC + TAIL byte */
 		is_mcast = (dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
 				(dlid != HFI1_16B_PERMISSIVE_LID);
+		permissive_lid = HFI1_16B_PERMISSIVE_LID;
 	} else {
 		dlid = be16_to_cpu(ph->ibh.lrh[1]);
 		slid = be16_to_cpu(ph->ibh.lrh[3]);
@@ -716,6 +730,7 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		extra_bytes = 4;    /* ICRC */
 		is_mcast = (dlid >= HFI1_MULTICAST_LID_BASE) &&
 				(dlid != HFI1_PERMISSIVE_LID);
+		permissive_lid = IB_LID_PERMISSIVE;
 	}
 
 	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
@@ -754,8 +769,7 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	 * and the QKEY matches (see 9.6.1.4.1 and 9.6.1.5.1).
 	 */
 	if (qp->ibqp.qp_num) {
-		if (unlikely(dlid == IB_LID_PERMISSIVE ||
-			     slid == IB_LID_PERMISSIVE))
+		if (unlikely(dlid == permissive_lid || slid == permissive_lid))
 			goto drop;
 		if (qp->ibqp.qp_num > 1) {
 #if 0 /* FXRTODO */
@@ -812,8 +826,7 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 
 		if (tlen > 2048)
 			goto drop;
-		if ((dlid == IB_LID_PERMISSIVE ||
-		     slid == IB_LID_PERMISSIVE) &&
+		if ((dlid == permissive_lid || slid == permissive_lid) &&
 		    smp->mgmt_class != IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE)
 			goto drop;
 

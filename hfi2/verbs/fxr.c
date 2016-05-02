@@ -522,7 +522,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv)
 	 * UD queue pair, should make_req() stash the pkt_type in QP?
 	 */
 	sl = qp_priv->s_sl;
-	use_16b = hfi2_use_16b(qp);
+	use_16b = hfi2_use_16b(qp, qp->s_wqe);
 
 	/*
 	 * use OFED_DMA command if possible (header + single IOVEC payload)

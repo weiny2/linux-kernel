@@ -94,7 +94,7 @@ int hfi2_make_uc_req(struct rvt_qp *qp)
 		goto done;
 	}
 
-	is_16b = hfi2_use_16b(qp);
+	is_16b = qp_priv->use_16b;
 	/* 16B(4)/LRH(2) + BTH(3) */
 	hwords = is_16b ? 7 : 5;
 
