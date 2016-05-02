@@ -567,10 +567,9 @@ static inline bool hfi2_check_permissive(struct ib_ah_attr *ah_attr)
 			HFI1_MULTICAST_LID_BASE))
 
 /* Check if current wqe needs 16B */
-static inline bool hfi2_use_16b(struct rvt_qp *qp)
+static inline bool hfi2_use_16b(struct rvt_qp *qp, struct rvt_swqe *wqe)
 {
 	struct hfi2_qp_priv *qp_priv = qp->priv;
-	struct rvt_swqe *wqe = qp->s_wqe;
 	struct ib_ah_attr *ah_attr;
 	union ib_gid sgid;
 	union ib_gid *dgid;
@@ -587,6 +586,9 @@ static inline bool hfi2_use_16b(struct rvt_qp *qp)
 #else
 	ah_attr = &ibah_to_rvtah(wqe->wr.wr.ud.ah)->attr;
 #endif
+	if (!(ah_attr->ah_flags & IB_AH_GRH))
+		return false;
+
 	if (ib_query_gid(qp->ibqp.device, qp->port_num,
 			 ah_attr->grh.sgid_index, &sgid
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)

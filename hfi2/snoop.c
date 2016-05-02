@@ -1042,7 +1042,7 @@ static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *priv)
 	struct capture_md md;
 	u32 hdr_len = hdrwords << 2;
 	u32 tlen;
-	bool use_16b = hfi2_use_16b(qp);
+	bool use_16b = hfi2_use_16b(qp, qp->s_wqe);
 
 	if (!use_16b) {
 		tlen = HFI1_GET_PKT_LEN(&priv->s_hdr->ph.ibh);
