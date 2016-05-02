@@ -445,14 +445,23 @@ extern const u32 uc_only_opcode;
 
 static inline u8 get_opcode(struct hfi1_opa_header *hdr)
 {
-	struct hfi1_ib_header *h = &hdr->pkt.ibh;
+	if (!hdr->hdr_type) {
+		struct hfi1_ib_header *h = &hdr->pkt.ibh;
+		u16 lnh = be16_to_cpu(h->lrh[0]) & 3;
 
-	u16 lnh = be16_to_cpu(h->lrh[0]) & 3;
-
-	if (lnh == IB_LNH_IBA_LOCAL)
-		return be32_to_cpu(h->u.oth.bth[0]) >> 24;
-	else
-		return be32_to_cpu(h->u.l.oth.bth[0]) >> 24;
+		if (lnh == IB_LNH_IBA_LOCAL)
+			return be32_to_cpu(h->u.oth.bth[0]) >> 24;
+		else
+			return be32_to_cpu(h->u.l.oth.bth[0]) >> 24;
+	} else {
+		struct hfi1_16b_header *h = &hdr->pkt.opah;
+		u8 l4 = h->lrh[2] & 0xFF;
+		
+		if (l4 == HFI1_L4_IB_LOCAL)
+			return be32_to_cpu(h->u.oth.bth[0]) >> 24;
+		else
+			return be32_to_cpu(h->u.l.oth.bth[0]) >> 24;
+	}
 }
 
 int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
