@@ -100,6 +100,10 @@ special_build qib kw
 #special_build hfi1 cocci
 #special_build qib cocci
 
+special_build rdmavt kedr
+special_build hfi1 kedr
+special_build qib kedr
+
 grep BUILD_FAILURE .build_fail
 if [[ $? -eq 0 ]]; then
 	echo "One or more tests failed!"

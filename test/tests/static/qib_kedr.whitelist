@@ -1,0 +1,23 @@
+Process: insmod (PID: 15715)
+Address: 0xffff880ff7ec1000, size: 4096; stack trace of the allocation:
+[<ffffffffa080d571>] qib_alloc_qpn+0x1d1/0x290 [ib_qib]
+[<ffffffffa02f7be3>] rvt_create_qp+0x303/0x960 [rdmavt]
+[<ffffffffa00d25a2>] ib_create_qp+0x32/0x1b0 [ib_core]
+[<ffffffffa058d6e5>] ipoib_transport_dev_init+0x1f5/0x400 [ib_ipoib]
+[<ffffffffa058ad41>] ipoib_ib_dev_init+0x31/0xb0 [ib_ipoib]
+[<ffffffffa0587cfa>] ipoib_dev_init+0x7a/0x1d0 [ib_ipoib]
+[<ffffffffa0588513>] ipoib_add_one+0x293/0x4a0 [ib_ipoib]
+[<ffffffffa00d5a5a>] ib_register_device+0x3ca/0x500 [ib_core]
+[<ffffffffa02f3b80>] rvt_register_device+0x110/0x260 [rdmavt]
+[<ffffffffa0832f61>] qib_register_ib_device+0x751/0xa50 [ib_qib]
+[<ffffffffa080705c>] qib_init_one+0x1cc/0x560 [ib_qib]
+[<ffffffff81386315>] local_pci_probe+0x45/0xa0
+[<ffffffff8138775c>] pci_device_probe+0xfc/0x140
+[<ffffffff81474039>] driver_probe_device+0x239/0x460
+[<ffffffff81474329>] __driver_attach+0xc9/0xf0
+[<ffffffff81471bbc>] bus_for_each_dev+0x6c/0xc0
++1 more allocation(s) with the same call stack.
+----------------------------------------
+Allocations: 573
+Possible leaks: 2
+Unallocated frees: 0

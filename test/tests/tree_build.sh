@@ -7,16 +7,35 @@
 sparse=0
 kw=0
 cocci=0
+kedr=0
+top_dir=`pwd`
 cur_dir=`pwd`/static
 
 function print_help
 {
-	echo "Usage: `basename $0` -k kernel_src -m [hfi1|rdmavt|qib|clean|full] -t [cocci|kw|sparse]"
+	echo "Usage: `basename $0` -k kernel_src -m [hfi1|rdmavt|qib|clean|full] -t [cocci|kw|sparse|kedr]"
 	echo "required: -k, -m"
 	echo "optional: -t"
 	exit 1
 }
 
+function lock
+{
+	$lock_dir/lock wait $lock
+	if [[ $? -ne 0 ]]; then
+		echo "Could not get lock!"
+		exit 1
+	fi
+}
+
+function unlock
+{
+	$lock_dir/lock drop $lock
+	if [[ $? -ne 0 ]]; then
+		echo "Could not release lock!"
+		exit 1
+	fi
+}
 
 while getopts "k:m:t:" opt
 do
@@ -80,6 +99,102 @@ function do_build
 
 		echo "Build Passes Sparse Check"
 
+		return
+	fi
+
+	if [[ $kedr -ne 0 ]]; then
+		echo "Doing KEDR leak check"
+		make SUBDIRS=$dir/$comp clean
+		make SUBDIRS=$dir/$comp 2>&1
+		if [[ $fail -ne 0 ]]; then
+			echo "XXXXXXXXXXXXXX"
+			echo "ERROR IN BUILD"
+			echo "XXXXXXXXXXXXXX"
+			exit 1
+		fi
+
+		# Choose which hosts to use and corresponding lock
+		if [[ $comp = "hfi1" ]]; then
+			host1="knc-09"
+			host2="knc-10"
+			mod_name="hfi1"
+			test_args=""
+		elif [[ $comp = "rdmavt" ]]; then
+			host1="knc-09"
+			host2="knc-10"
+			mod_name="rdmavt"
+			test_args=""
+		elif [[ $comp = "qib" ]]; then
+			host1="knc-03"
+			host2="knc-04"
+			mod_name="ib_qib"
+			test_args="--sm remote --qib"
+		fi
+		lock_dir=/nfs/sc/disks/fabric_work/test_locks
+		lock=${host1}_${host2}
+
+		# Check if lock is valid and acquire lock
+		if [[ ! -f $lock_dir/resources/$lock ]]; then
+			echo "Did not find valid lock: $lock"
+			exit 1
+		fi
+		lock
+
+		# Check if kedr found on target node
+		if [[ ! $(ssh root@$host1 which kedr 2>/dev/null) ]] ; then
+			echo "KEDR not found!"
+			unlock
+			exit 1
+		fi
+
+		# Stop the opafm and unload driver on both nodes
+		if [[ ! $comp = "qib" ]]; then
+			ssh root@${host1} systemctl stop opafm
+		fi
+		ssh root@${host1} rmmod $mod_name
+		ssh root@${host2} rmmod $mod_name
+
+		# Start KEDR leak check on one node
+		ssh root@${host1} kedr start $mod_name
+
+		# Load the drdiver
+		$top_dir/LoadModule.py --nodelist=$host1,$host2 --linuxsrc=$linux_src $test_args
+
+		# Stop opafm and unload the driver
+		if [[ ! $comp = "qib" ]]; then
+			ssh root@${host1} systemctl stop opafm
+			# wait for opafm to stop
+			sleep 5
+		fi
+		if [[ $comp = "rdmavt" ]]; then
+			ssh root@${host1} rmmod hfi1
+			ssh root@${host2} rmmod hfi1
+		fi
+		ssh root@${host1} rmmod $mod_name
+		ssh root@${host2} rmmod $mod_name
+
+		# Get kedr leak check logs from machine
+		echo "Logging results to ${comp}_kedr.log"
+		ssh root@${host1} cat /sys/kernel/debug/kedr_leak_check/possible_leaks > $cur_dir/${comp}_kedr.log
+		ssh root@${host1} cat /sys/kernel/debug/kedr_leak_check/unallocated_frees >> $cur_dir/${comp}_kedr.log
+		ssh root@${host1} cat /sys/kernel/debug/kedr_leak_check/info >> $cur_dir/${comp}_kedr.log
+
+		# Stop KEDR leak check on one node and release lock
+		ssh root@${host1} kedr stop
+		unlock
+
+		# Compare to whitelist and report failure. Log file left for failure analysis.
+		whitelist="$(grep "Possible leaks" $cur_dir/${comp}_kedr.whitelist)"
+		log="$(grep "Possible leaks" $cur_dir/${comp}_kedr.log)"
+		if [[ $whitelist != $log ]] ; then
+			echo "KEDR leak check failed"
+			echo "XXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			echo "ERROR IN KEDR LEAK CHECKING"
+			echo "XXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			exit 1
+		fi
+
+		echo "Passes KEDR leak check"
 		return
 	fi
 
@@ -216,6 +331,10 @@ fi
 
 if [[ $build_type == "kw" ]]; then
 	kw=1
+fi
+
+if [[ $build_type == "kedr" ]]; then
+	kedr=1
 fi
 
 if [[ -z $module ]]; then
