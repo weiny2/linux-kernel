@@ -2172,7 +2172,7 @@ static inline bool hfi1_check_permissive(struct ib_ah_attr *ah_attr)
  */
 static inline bool hfi1_use_opa_16b(u32 lid, union ib_gid *dgid, u8 hop_limit)
 {
-	if ((lid >= IB_MULTICAST_LID_BASE ||
+	if ((lid >= be16_to_cpu(IB_MULTICAST_LID_BASE) ||
 	     IS_EXT_LID(dgid)) && (hop_limit == 1 || hop_limit == 0xff))
 		return true;
 	else

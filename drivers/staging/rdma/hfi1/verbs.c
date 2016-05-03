@@ -671,8 +671,8 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	/* Check for GRH */
 	lnh = OPA_9B_GET_LNH(be16_to_cpu(hdr->lrh[0]));
 	dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
-	if (unlikely((dlid >= IB_MULTICAST_LID_BASE) &&
-		     (dlid != IB_LID_PERMISSIVE)))
+	if (unlikely((dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
+		     (dlid != be16_to_cpu(IB_LID_PERMISSIVE))))
 		is_mcast = true;
 
 	if (lnh == HFI1_LRH_BTH) {
@@ -703,6 +703,7 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	return;
 
 drop:
+	dd_dev_err(rcd->dd, "%s: packet dropped\n", __func__);
 	ibp->rvp.n_pkt_drops++;
 }
 
