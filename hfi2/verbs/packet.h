@@ -493,16 +493,25 @@ static inline u32 hfi1_mcast_xlate(u32 lid)
 }
 
 /**
- * hfi2_retrieve_lid - Get lid in the GID.
- *
- * Extended LIDs are stored in the GID if the STL
- * device supports extended addresses. This function
- * retirieves the 32 bit lid.
- *
- * If GRH is not specified or if an IB GID is specified
- * in the GRH, the function simply returns the 16 bit lid.
+ * hfi2_get_ah_attr - Get ah attribute for the given qp
  */
-static inline u32 hfi2_retrieve_lid(struct ib_ah_attr *ah_attr)
+static inline struct ib_ah_attr *hfi2_get_ah_attr(struct rvt_qp *qp)
+{
+	struct rvt_swqe *wqe = qp->s_wqe;
+
+	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
+	    (qp->ibqp.qp_type == IB_QPT_UC))
+		return &qp->remote_ah_attr;
+
+	if (!wqe)
+		return NULL;
+	return &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
+}
+
+/**
+ * hfi2_get_dlid_from_ah - Get dlid from the address handle
+ */
+static inline u32 hfi2_get_dlid_from_ah(struct ib_ah_attr *ah_attr)
 {
 	union ib_gid *dgid;
 
@@ -512,6 +521,26 @@ static inline u32 hfi2_retrieve_lid(struct ib_ah_attr *ah_attr)
 			return opa_get_lid_from_gid(dgid);
 	}
 	return hfi1_mcast_xlate(ah_attr->dlid);
+}
+
+/**
+ * hfi2_retrieve_dlid - Get dlid in the GID.
+ *
+ * Extended LIDs are stored in the GID if the STL
+ * device supports extended addresses. This function
+ * retirieves the 32 bit dlid.
+ *
+ * If GRH is not specified or if an IB GID is specified
+ * in the GRH, the function simply returns the 16 bit dlid.
+ */
+static inline u32 hfi2_retrieve_dlid(struct rvt_qp *qp)
+{
+	struct ib_ah_attr *ah_attr;
+
+	ah_attr = hfi2_get_ah_attr(qp);
+	if (!ah_attr)
+		return 0;
+	return hfi2_get_dlid_from_ah(ah_attr);
 }
 
 /**
@@ -571,7 +600,8 @@ static inline bool hfi2_use_16b(struct rvt_qp *qp, struct rvt_swqe *wqe)
 {
 	struct hfi2_qp_priv *qp_priv = qp->priv;
 	struct ib_ah_attr *ah_attr;
-	union ib_gid sgid;
+	struct ib_device *ibdev;
+	struct hfi2_ibport *ibp;
 	union ib_gid *dgid;
 
 	if ((qp->ibqp.qp_type == IB_QPT_RC) ||
@@ -589,15 +619,13 @@ static inline bool hfi2_use_16b(struct rvt_qp *qp, struct rvt_swqe *wqe)
 	if (!(ah_attr->ah_flags & IB_AH_GRH))
 		return false;
 
-	if (ib_query_gid(qp->ibqp.device, qp->port_num,
-			 ah_attr->grh.sgid_index, &sgid
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-			 , NULL
-#endif
-			 ))
-		return false;
+	ibdev = qp->ibqp.device;
+	ibp = to_hfi_ibp(ibdev, qp->port_num);
+
 	dgid = &ah_attr->grh.dgid;
-	return IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
+	return (ibp->ppd->lid >= IB_MULTICAST_LID_BASE) ||
+		(ah_attr->grh.hop_limit == 1) ||
+		IS_EXT_LID(dgid);
 }
 
 /**
@@ -615,15 +643,14 @@ static inline void hfi2_make_ext_grh(struct hfi2_ibport *ibp,
 	grh->sgid.global.interface_id = OPA_MAKE_GID(slid);
 
 	/**
-	 * Set the dgid appropriately here. Upper layers (like mad)
-	 * may compare the dgid in the wc with the sgid_index in
-	 * the wr.
+	 * Upper layers (like mad) may compare the dgid in the
+	 * wc that is obtained here with the sgid_index in
+	 * the wr. Since sgid_index in wr is always 0 for
+	 * extended lids, set the dgid here to the default
+	 * IB gid.
 	 */
 	grh->dgid.global.subnet_prefix = ibp->gid_prefix;
-	if (dlid >= HFI1_MULTICAST_LID_BASE)
-		grh->dgid.global.interface_id = OPA_MAKE_GID(dlid);
-	else
-		grh->dgid.global.interface_id = ibp->ppd->pguid;
+	grh->dgid.global.interface_id = ibp->ppd->pguid;
 }
 
 /* Bypass packet types */

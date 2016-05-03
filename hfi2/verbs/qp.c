@@ -394,25 +394,28 @@ int hfi2_error_qp(struct rvt_qp *qp, enum ib_wc_status err)
  * qp_set_16b - Determine and set the use_16b flag
  * @qp: queue pair pointer
  *
- * Set the use_16b flag based on whether the slid or the dlid
- * in the connection is extended. Only applicable for RC and UC
- * QPs. UD QPs determine this on the fly from the ah in the wqe.
+ * Set the use_16b flag if dgid is opa gid and dlid is extended,
+ * or if the hop_limit is 1, or local port lid is extended.
+ * Only applicable for RC and UC QPs.
+ * UD QPs determine this on the fly from the ah in the wqe.
  */
 static inline void qp_set_16b(struct rvt_qp *qp)
 {
 	struct hfi2_qp_priv *qp_priv = qp->priv;
-	union ib_gid sgid;
+	struct ib_device *ibdev;
+	struct hfi2_ibport *ibp;
 	union ib_gid *dgid;
 
 	qp_priv->use_16b = false;
-	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH) {
-		if (ib_query_gid(qp->ibqp.device, qp->port_num,
-				 qp->remote_ah_attr.grh.sgid_index,
-				 &sgid, NULL))
-			return;
-		dgid = &qp->remote_ah_attr.grh.dgid;
-		qp_priv->use_16b = IS_EXT_LID(dgid) || IS_EXT_LID(&sgid);
-	}
+	if (!(qp->remote_ah_attr.ah_flags & IB_AH_GRH))
+		return;
+
+	ibdev = qp->ibqp.device;
+	ibp = to_hfi_ibp(ibdev, qp->port_num);
+	dgid = &qp->remote_ah_attr.grh.dgid;
+	qp_priv->use_16b = (ibp->ppd->lid >= IB_MULTICAST_LID_BASE) ||
+			   (qp->remote_ah_attr.grh.hop_limit == 1) ||
+			   IS_EXT_LID(dgid);
 }
 
 /**

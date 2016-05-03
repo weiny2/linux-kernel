@@ -386,7 +386,7 @@ void hfi2_make_16b_ruc_header(struct rvt_qp *qp, struct ib_l4_headers *ohdr,
 		becn = true;
 	}
 
-	dlid = hfi2_retrieve_lid(&qp->remote_ah_attr);
+	dlid = hfi2_retrieve_dlid(qp);
 	slid = ppd->lid | qp->remote_ah_attr.src_path_bits;
 	pkey = hfi2_get_pkey(ibp, qp->s_pkey_index);
 	qwords = (qp->s_hdrwords + nwords) >> 1;
