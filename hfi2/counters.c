@@ -245,13 +245,9 @@ void hfi_free_cntrs(struct hfi_devdata *dd)
 
 	for (i = 0; i < dd->num_pports; i++) {
 		ppd = to_hfi_ppd(dd, i + 1);
-		if (ppd->portcntrs) {
-			kfree(ppd->portcntrs);
-			ppd->portcntrs = NULL;
-		}
+		kfree(ppd->portcntrs);
+		ppd->portcntrs = NULL;
 	}
-	if (dd->portcntrnames) {
-		kfree(dd->portcntrnames);
-		dd->portcntrnames = NULL;
-	}
+	kfree(dd->portcntrnames);
+	dd->portcntrnames = NULL;
 }
