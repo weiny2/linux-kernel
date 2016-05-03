@@ -80,6 +80,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	struct ib_wc wc;
 	u32 length;
 	enum ib_qp_type sqptype, dqptype;
+	bool use_16b;
 
 	ibdev = sqp->ibqp.device;
 	ibp = to_hfi_ibp(ibdev, sqp->port_num);
@@ -101,6 +102,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	dev_dbg(ibp->dev,
 		"exercising UD loopback path, to/from lid %d\n", ppd->lid);
 
+	use_16b = hfi2_use_16b(qp, swqe);
 	sqptype = sqp->ibqp.qp_type == IB_QPT_GSI ?
 			IB_QPT_UD : sqp->ibqp.qp_type;
 	dqptype = qp->ibqp.qp_type == IB_QPT_GSI ?
@@ -204,8 +206,32 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		struct ib_grh grh;
+		struct ib_global_route grd = ah_attr->grh;
 
-		hfi2_make_grh(ibp, &grh, &ah_attr->grh, 0, 0);
+		/**
+		 * For loopback packets with extended LIDs, the
+		 * sgid_index in the GRH is 0 and the dgid is
+		 * OPA GID of the sender. While creating a response
+		 * to the loopback packet, IB core creates the new
+		 * sgid_index from the DGID and that will be the
+		 * OPA_GID_INDEX. The new dgid is from the sgid
+		 * index and that will be in the IB GID format.
+		 *
+		 * We now have a case where the sent packet had a
+		 * different sgid_index and dgid compared to the
+		 * one that was received in response.
+		 *
+		 * Attempt to fix this inconsistency.
+		 */
+		if (use_16b) {
+			if (grd.sgid_index == 0)
+				grd.sgid_index = OPA_GID_INDEX;
+
+			if (ib_is_opa_gid(&grd.dgid))
+				grd.dgid.global.interface_id = ppd->pguid;
+		}
+
+		hfi2_make_grh(ibp, &grh, &grd, 0, 0);
 		hfi2_copy_sge(&qp->r_sge, &grh, sizeof(grh), 1);
 		wc.wc_flags |= IB_WC_GRH;
 	} else
@@ -268,7 +294,8 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	if (wc.slid == 0 && sqp->ibqp.qp_type == IB_QPT_GSI)
 		wc.slid = HFI1_PERMISSIVE_LID;
 	wc.sl = ah_attr->sl;
-	wc.dlid_path_bits = hfi2_retrieve_lid(ah_attr) & ((1 << ppd->lmc) - 1);
+	wc.dlid_path_bits = hfi2_get_dlid_from_ah(ah_attr) &
+				((1 << ppd->lmc) - 1);
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
 	rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc,
@@ -420,7 +447,7 @@ static void hfi2_make_16b_ud_header(struct rvt_qp *qp, struct rvt_swqe *wqe,
 	else
 		slid = HFI1_16B_PERMISSIVE_LID;
 
-	dlid = hfi2_retrieve_lid(ah_attr);
+	dlid = hfi2_get_dlid_from_ah(ah_attr);
 	if (qp->ibqp.qp_type == IB_QPT_GSI || qp->ibqp.qp_type == IB_QPT_SMI)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
 		pkey = hfi2_get_pkey(ibp, wqe->ud_wr.pkey_index);
@@ -509,7 +536,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 #endif
 	is_16b = hfi2_use_16b(qp, wqe);
 	if (!hfi2_check_mcast(ah_attr)) {
-		lid = hfi2_retrieve_lid(ah_attr) & ~((1 << ppd->lmc) - 1);
+		lid = hfi2_get_dlid_from_ah(ah_attr) & ~((1 << ppd->lmc) - 1);
 		/*
 		 * FXRTODO - WFR had additional test to skip when in link
 		 * loopback, maybe to ensure datapath tested in that mode

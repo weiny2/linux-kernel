@@ -1025,7 +1025,7 @@ static u32 hfi2_make_16b_rc_ack_header(struct rvt_qp *qp,
 		bth1 |= IB_16B_BTH_MIG_REQ;
 
 	sc5 = ibp->ppd->sl_to_sc[qp->remote_ah_attr.sl];
-	dlid = hfi2_retrieve_lid(&qp->remote_ah_attr);
+	dlid = hfi2_retrieve_dlid(qp);
 	slid = ibp->ppd->lid | qp->remote_ah_attr.src_path_bits;
 	pkey = hfi2_get_pkey(ibp, qp->s_pkey_index);
 	qwords = (hwords + nwords) >> 1;

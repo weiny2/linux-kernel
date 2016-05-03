@@ -94,7 +94,8 @@ static void hfi2_update_sm_ah_attr(struct hfi2_ibport *ibp, u32 lid)
 {
 	ibp->rvp.sm_ah->attr.ah_flags = IB_AH_GRH;
 	ibp->rvp.sm_ah->attr.dlid = OPA_TO_IB_UCAST_LID(lid);
-	ibp->rvp.sm_ah->attr.grh.sgid_index = OPA_GID_INDEX;
+	ibp->rvp.sm_ah->attr.grh.hop_limit = 1;
+	ibp->rvp.sm_ah->attr.grh.sgid_index = 0;
 	ibp->rvp.sm_ah->attr.grh.dgid.global.subnet_prefix = ibp->gid_prefix;
 	ibp->rvp.sm_ah->attr.grh.dgid.global.interface_id = OPA_MAKE_GID(lid);
 }
