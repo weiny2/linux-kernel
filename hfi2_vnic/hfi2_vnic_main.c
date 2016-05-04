@@ -333,6 +333,13 @@ static int opa2_vnic_append_skb(struct opa_ctx_info *ctx_i, int idx)
 	return 0;
 }
 
+/* Select vnic TX queue */
+u8 opa2_vnic_hfi_select_queue(struct opa_vnic_device *vdev, u8 vl, u8 entropy)
+{
+	/* FXRTODO: Only queue 0 is functional; revisit later */
+	return 0;
+}
+
 /*
  * Transmit an SKB and wait for the transmission to complete by
  * polling on the TX counting event
@@ -1012,6 +1019,7 @@ static struct opa_vnic_hfi_ops vnic_ops = {
 	.hfi_put_skb = opa2_vnic_hfi_put_skb,
 	.hfi_get_skb = opa2_vnic_hfi_get_skb,
 	.hfi_get_read_avail = opa2_vnic_hfi_get_read_avail,
+	.hfi_select_queue = opa2_vnic_hfi_select_queue,
 };
 
 /* hfi_vdev_create - add vnic device on vnic bus */
