@@ -195,6 +195,10 @@ static ssize_t hfi1_file_write(struct file *fp, const char __user *data,
 	__u64 user_val = 0;
 	int uctxt_required = 1;
 	int must_be_root = 0;
+	bool access_allowed = fp->f_cred == current_cred() && segment_eq(get_fs(), USER_DS);
+
+	if (WARN_ON_ONCE(!access_allowed))
+		return -EACCES;
 
 	if (count < sizeof(cmd)) {
 		ret = -EINVAL;
