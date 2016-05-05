@@ -2225,6 +2225,7 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	int copy_last = 0;
 	bool is_fecn = false;
 	bool grh = false;
+	u8 extra_byte = 0;
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
 	if (rcv_flags & HFI1_HAS_GRH)
@@ -2233,6 +2234,7 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	if (packet->bypass) {
 		hdr_16b = packet->hdr;
 		data = packet->payload;
+		extra_byte = 1; /* LT BYTE */
 	} else {
 		hdr = packet->hdr;
 	}
@@ -2388,10 +2390,10 @@ send_last:
 
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
-		if (unlikely(tlen < (hdrsize + pad + 4)))
+		if (unlikely(tlen < (hdrsize + pad + 4 + extra_byte)))
 			goto nack_inv;
 		/* Don't count the CRC. */
-		tlen -= (hdrsize + pad + 4);
+		tlen -= (hdrsize + pad + 4 + extra_byte);
 		wc.byte_len = tlen + qp->r_rcv_len;
 		if (unlikely(wc.byte_len > qp->r_len))
 			goto nack_inv;
