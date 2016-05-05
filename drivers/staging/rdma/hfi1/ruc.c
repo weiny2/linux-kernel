@@ -811,10 +811,6 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 		middle = 0;
 	}
 	lrh0 |= (priv->s_sc & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
-	if (use_16b) {
-		ohdr = &ps->s_txreq->phdr.hdr.pkt.opah.u.oth;
-		lrh1_16b = (lrh1_16b & ~OPA_16B_SC_MASK) | (priv->s_sc << 20);
-	}
 	/*
 	 * reset s_ahg/AHG fields
 	 *
@@ -853,6 +849,7 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 		u32 dlid_16b = hfi1_retrieve_dlid(qp);
 
 		ppd = ppd_from_ibp(ibp);
+		lrh1_16b = (lrh1_16b & ~OPA_16B_SC_MASK) | (priv->s_sc << 20);
 		lrh1_16b = (lrh1_16b & ~OPA_16B_LID_MASK) | dlid_16b;
 		lrh2_16b = (lrh2_16b & ~OPA_16B_DLID_MASK) | ((dlid_16b >> 20)
 				<< OPA_16B_DLID_HIGH_SHIFT);
