@@ -615,7 +615,7 @@ _tx_cmd:
 		ret = hfi_tx_cmd_ofed_dma(&ibp->cmdq_tx, qp_priv->s_ctx,
 					  qp_priv->s_hdr, (void *)start,
 					  length, eth_size,
-					  opa_mtu_to_id(qp->pmtu),
+					  opa_mtu_to_enum(qp->pmtu),
 					  (uint64_t)wqe_iov, 0,
 					  &ibp->send_eq,
 					  ibp->port_num, sl,

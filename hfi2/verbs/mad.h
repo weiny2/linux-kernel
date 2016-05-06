@@ -904,8 +904,6 @@ static inline u16 opa_pi_to_mtu(struct opa_port_info *pi, int vl_num)
 	return mtu;
 }
 
-u8 opa_mtu_to_id(u16 mtu);
-
 /*
  * OPA port physical states
  * Returned by the ibphys_portstate() routine.
