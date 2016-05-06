@@ -110,3 +110,4 @@
 1 sdma.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt
 1 srq.c WARNING: ENOSYS means 'invalid syscall nr' and nothing else
 1 user_sdma.c WARNING: Macros with flow control statements should be avoided
+1 file_ops.c WARNING: line over 80 characters
