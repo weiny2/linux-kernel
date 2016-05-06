@@ -391,8 +391,9 @@ void hfi2_make_16b_ruc_header(struct rvt_qp *qp, struct ib_l4_headers *ohdr,
 	pkey = hfi2_get_pkey(ibp, qp->s_pkey_index);
 	qwords = (qp->s_hdrwords + nwords) >> 1;
 
+	/* FXRTODO: Simics expects sl value in sc field of L2; remove later */
 	opa_make_16b_header((u32 *)opa16b, slid, dlid, qwords,
-			    pkey, 0, qp_priv->s_sc, 0, 0, becn, 0, l4);
+			    pkey, 0, qp_priv->s_sl, 0, 0, becn, 0, l4);
 
 	ohdr->bth[0] = cpu_to_be32(bth0);
 	ohdr->bth[1] = cpu_to_be32(bth1);

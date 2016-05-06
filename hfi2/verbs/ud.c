@@ -372,7 +372,7 @@ static void hfi2_make_16b_ud_header(struct rvt_qp *qp, struct rvt_swqe *wqe,
 	struct ib_ah_attr *ah_attr;
 	u32 nwords, extra_bytes;
 	u32 bth0, qwords, slid, dlid;
-	u8 l4;
+	u8 l4, sc;
 	u16 pkey;
 
 	/* Construct the header. */
@@ -435,9 +435,11 @@ static void hfi2_make_16b_ud_header(struct rvt_qp *qp, struct rvt_swqe *wqe,
 
 	qwords = (qp->s_hdrwords + nwords) >> 1;
 
+	/* FXRTODO: Simics expects sl value in sc field of L2; remove later */
+	sc = (qp->ibqp.qp_type == IB_QPT_SMI) ? qp_priv->s_sc : qp_priv->s_sl;
 	opa_make_16b_header((u32 *)opa16b,
 			    slid, dlid, qwords, pkey,
-			    0, qp_priv->s_sc, 0, 0, 0, 0, l4);
+			    0, sc, 0, 0, 0, 0, l4);
 
 	bth0 = opcode << 24;
 	if (wqe->wr.send_flags & IB_SEND_SOLICITED)
