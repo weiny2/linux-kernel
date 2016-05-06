@@ -202,7 +202,7 @@
  * to the driver itself, not the software interfaces it supports.
  */
 #ifndef HFI1_DRIVER_VERSION_BASE
-#define HFI1_DRIVER_VERSION_BASE "0.11-159"
+#define HFI1_DRIVER_VERSION_BASE "0.11-160"
 #endif
 
 /* create the final driver version string */
