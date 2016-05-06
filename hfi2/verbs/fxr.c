@@ -55,7 +55,6 @@
 #include <linux/delay.h>
 #include "verbs.h"
 #include "packet.h"
-#include "opa_core_ib.h"
 #include "trace.h"
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_eq.h>

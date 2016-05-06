@@ -302,6 +302,24 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID, tc_slid.val);
 }
 
+/*
+ * Convert MTU sizes to compressed 3-bit encoding (0..7)
+ * TODO: this is FXR specific, can move to opa2 directory
+ *  when VPD is merged with PCIe driver
+ */
+inline u8 opa_mtu_to_id(u16 mtu)
+{
+	switch (mtu) {
+	case   256: return 1;
+	case   512: return 2;
+	case  1024: return 3;
+	case  2048: return 4;
+	case  4096: return 5;
+	case  8192: return 6;
+	case 10240: return 7;
+	default: return INVALID_MTU_ENC;
+	}
+}
 static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 {
 	int i;

@@ -53,7 +53,6 @@
  */
 
 #include <rdma/ib_smi.h>
-#include "opa_core_ib.h"
 #include "verbs.h"
 #include "packet.h"
 
