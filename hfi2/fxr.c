@@ -302,29 +302,11 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID, tc_slid.val);
 }
 
-/*
- * Convert MTU sizes to compressed 3-bit encoding (0..7)
- * TODO: this is FXR specific, can move to opa2 directory
- *  when VPD is merged with PCIe driver
- */
-inline u8 opa_mtu_to_id(u16 mtu)
-{
-	switch (mtu) {
-	case   256: return 1;
-	case   512: return 2;
-	case  1024: return 3;
-	case  2048: return 4;
-	case  4096: return 5;
-	case  8192: return 6;
-	case 10240: return 7;
-	default: return INVALID_MTU_ENC;
-	}
-}
 static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 {
 	int i;
 	u64 reg = 0;
-	u8 mtu_id = opa_mtu_to_id(mtu);
+	u8 mtu_id = opa_mtu_to_enum(mtu);
 
 	if (mtu_id == INVALID_MTU_ENC) {
 		dd_dev_warn(dd, "invalid mtu %d", mtu);
@@ -565,20 +547,73 @@ static void hfi_set_lid_lmc(struct hfi_pportdata *ppd)
  */
 static void hfi_set_send_length(struct hfi_pportdata *ppd)
 {
-	TP_CFG_VL_MTU_t vlmtu;
+	TP_CFG_VL_MTU_t tp_vlmtu;
+	FPC_CFG_PORT_CONFIG_t fpc_vlmtu;
+	u8 vl0 = opa_mtu_to_enum(ppd->vl_mtu[0]);
+	u8 vl1 = opa_mtu_to_enum(ppd->vl_mtu[1]);
+	u8 vl2 = opa_mtu_to_enum(ppd->vl_mtu[2]);
+	u8 vl3 = opa_mtu_to_enum(ppd->vl_mtu[3]);
+	u8 vl4 = opa_mtu_to_enum(ppd->vl_mtu[4]);
+	u8 vl5 = opa_mtu_to_enum(ppd->vl_mtu[5]);
+	u8 vl6 = opa_mtu_to_enum(ppd->vl_mtu[6]);
+	u8 vl7 = opa_mtu_to_enum(ppd->vl_mtu[7]);
+	u8 vl8 = opa_mtu_to_enum(ppd->vl_mtu[8]);
+	u8 vl15 = opa_mtu_to_enum(ppd->vl_mtu[15]);
 
-	/*FXRTODO: Set vl*_tx_mtu from values suppled by fabric manager */
-	vlmtu.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU);
-	vlmtu.field.vl0_tx_mtu = 0x7;
-	vlmtu.field.vl1_tx_mtu = 0x7;
-	vlmtu.field.vl2_tx_mtu = 0x7;
-	vlmtu.field.vl3_tx_mtu = 0x7;
-	vlmtu.field.vl4_tx_mtu = 0x7;
-	vlmtu.field.vl5_tx_mtu = 0x7;
-	vlmtu.field.vl6_tx_mtu = 0x7;
-	vlmtu.field.vl7_tx_mtu = 0x7;
-	vlmtu.field.vl8_tx_mtu = 0x7;
-	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU, vlmtu.val);
+	tp_vlmtu.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU);
+	fpc_vlmtu.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
+
+	if (vl0 != INVALID_MTU_ENC) {
+		tp_vlmtu.field.vl0_tx_mtu = vl0;
+		fpc_vlmtu.field.vl0_mtu_cap = vl0;
+	}
+
+	if (vl1 != INVALID_MTU_ENC) {
+		tp_vlmtu.field.vl1_tx_mtu = vl1;
+		fpc_vlmtu.field.vl1_mtu_cap = vl1;
+	}
+
+	if (vl2 != INVALID_MTU_ENC) {
+		tp_vlmtu.field.vl2_tx_mtu = vl2;
+		fpc_vlmtu.field.vl2_mtu_cap = vl2;
+	}
+
+	if (vl3 != INVALID_MTU_ENC) {
+		tp_vlmtu.field.vl3_tx_mtu = vl3;
+		fpc_vlmtu.field.vl3_mtu_cap = vl3;
+	}
+
+	if (vl4 != INVALID_MTU_ENC) {
+		tp_vlmtu.field.vl4_tx_mtu = vl4;
+		fpc_vlmtu.field.vl4_mtu_cap = vl4;
+	}
+
+	if (vl5 != INVALID_MTU_ENC) {
+		tp_vlmtu.field.vl5_tx_mtu = vl5;
+		fpc_vlmtu.field.vl5_mtu_cap = vl5;
+	}
+
+	if (vl6 != INVALID_MTU_ENC) {
+		tp_vlmtu.field.vl6_tx_mtu = vl6;
+		fpc_vlmtu.field.vl6_mtu_cap = vl6;
+	}
+
+	if (vl7 != INVALID_MTU_ENC) {
+		tp_vlmtu.field.vl7_tx_mtu = vl7;
+		fpc_vlmtu.field.vl7_mtu_cap = vl7;
+	}
+
+	if (vl8 != INVALID_MTU_ENC) {
+		tp_vlmtu.field.vl8_tx_mtu = vl8;
+		fpc_vlmtu.field.vl8_mtu_cap = vl8;
+	}
+
+	if (vl15 != INVALID_MTU_ENC) {
+		tp_vlmtu.field.vl15_tx_mtu = vl15;
+		fpc_vlmtu.field.vl15_mtu_cap = vl15;
+	}
+	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU, tp_vlmtu.val);
+	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc_vlmtu.val);
 }
 
 void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable)
@@ -2012,7 +2047,6 @@ static void hfi_init_linkmux_csrs(struct hfi_pportdata *ppd)
 	TP_CFG_MISC_CTRL_t misc;
 	/*TP_PRF_CTRL_t tp_perf;*/
 	FPC_CFG_EVENT_CNTR_CTRL_t fpc_ctrl;
-	FPC_CFG_PORT_CONFIG_t fpc;
 
 	misc.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
 	/*FXRTODO: Check spec if operational_vl value is supplied by FM */
@@ -2026,19 +2060,6 @@ static void hfi_init_linkmux_csrs(struct hfi_pportdata *ppd)
 	tp_perf.field.enable_cntrs = 0x1;
 	hfi_write_lm_tp_csr(ppd, FXR_TP_PRF_CTRL, tp_perf.val);
 	#endif
-
-	fpc.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
-	fpc.field.vl0_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	fpc.field.vl1_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	fpc.field.vl2_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	fpc.field.vl3_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	fpc.field.vl4_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	fpc.field.vl5_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	fpc.field.vl6_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	fpc.field.vl7_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	fpc.field.vl8_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	fpc.field.vl15_mtu_cap = opa_mtu_to_id(HFI_DEFAULT_MAX_MTU);
-	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);
 
 	fpc_ctrl.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_EVENT_CNTR_CTRL);
 	fpc_ctrl.field.enable_cntrs = 0x1;
@@ -2163,6 +2184,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		 * is valid as per the spec
 		 */
 		ppd->vl_mtu[15] = HFI_MIN_VL_15_MTU;
+		hfi_set_mtu(ppd);
 		ppd->vls_operational = ppd->vls_supported;
 		hfi_init_linkmux_csrs(ppd);
 		for (i = 0; i < ARRAY_SIZE(ppd->sl_to_sc); i++)
