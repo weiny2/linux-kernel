@@ -94,6 +94,7 @@
 8 chip.h CHECK: Prefer using the BIT_ULL macro
 1 eprom.c CHECK: Prefer using the BIT_ULL macro
 1 file_ops.c CHECK: Prefer kzalloc(sizeof(*fp->private_data)...) over kzalloc(sizeof(struct hfi1_filedata)...)
+1 file_ops.c WARNING: line over 80 characters
 2 hfi.h CHECK: 'ment' may be misspelled - perhaps 'meant'?
 2 hfi.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt
 1 init.c CHECK: usleep_range is preferred over udelay; see Documentation/timers/timers-howto.txt
@@ -110,4 +111,3 @@
 1 sdma.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt
 1 srq.c WARNING: ENOSYS means 'invalid syscall nr' and nothing else
 1 user_sdma.c WARNING: Macros with flow control statements should be avoided
-1 file_ops.c WARNING: line over 80 characters
