@@ -81,12 +81,18 @@ int rvt_check_ah(struct ib_device *ibdev,
 	    ah_attr->grh.sgid_index >= port_attr.gid_tbl_len)
 		return -EINVAL;
 	if (link != IB_LINK_LAYER_ETHERNET) {
-		if (ah_attr->dlid == 0)
-			return -EINVAL;
-		if (ah_attr->dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE) &&
-		    ah_attr->dlid != be16_to_cpu(IB_LID_PERMISSIVE) &&
-		    !(ah_attr->ah_flags & IB_AH_GRH))
-			return -EINVAL;
+		/**
+		 * OPA devices that support extended addresses have
+		 * different constraints on the dlid
+		 */
+		if (!rdma_cap_opa_ah(ibdev, ah_attr->port_num)) {
+			if (ah_attr->dlid == 0)
+				return -EINVAL;
+			if (ah_attr->dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE) &&
+			    ah_attr->dlid != be16_to_cpu(IB_LID_PERMISSIVE) &&
+			    !(ah_attr->ah_flags & IB_AH_GRH))
+				return -EINVAL;
+		}
 	}
 	if (rdi->driver_f.check_ah)
 		return rdi->driver_f.check_ah(ibdev, ah_attr);
