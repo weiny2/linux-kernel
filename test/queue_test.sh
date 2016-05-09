@@ -116,7 +116,7 @@ elif [[ $module == "hfi1" ]]; then
 	lock
 	if [[ $test_type == "quick" ]]; then
 
-		test_args="--type quick"
+		test_args="--type quick_upstream"
 		curdir=`pwd`
 		echo "Loading driver on $host1,$host2"
 		cd $test_dir/tests
@@ -130,7 +130,7 @@ elif [[ $module == "hfi1" ]]; then
 	elif [[ $test_type == "loadonly" ]]; then
 		test_args=""
 	else
-		test_args="--type default"
+		test_args="--type upstream"
 	fi
 
 elif [[ $module == "simics" ]]; then
