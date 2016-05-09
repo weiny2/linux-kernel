@@ -3096,8 +3096,13 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 	if (counter_select & CS_PORT_RCV_ERRORS)
 		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_PORTRCV_ERROR, 0);
 
+	/*
+	 * FXRTODO: clear excessive_buffer_overrun register once the register
+	 * is implemented
+	 */
+#if 0
 	if (counter_select & CS_EXCESSIVE_BUFFER_OVERRUNS)
-
+#endif
 	if (counter_select & CS_FM_CONFIG_ERRORS)
 		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_FMCONFIG_ERROR, 0);
 	if (counter_select & CS_LINK_DOWNED)
