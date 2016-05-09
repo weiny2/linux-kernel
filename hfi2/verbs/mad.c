@@ -203,9 +203,8 @@ void hfi2_bad_pqkey(struct hfi2_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
 	data.prod_type_lsb = IB_NOTICE_PROD_CA;
 	data.trap_num = trap_num;
 	data.issuer_lid = cpu_to_be32(lid);
-	/* FXRTODO: These castings are not correct; fix later */
-	data.ntc_257_258.lid1 = (u16)lid1;
-	data.ntc_257_258.lid2 = (u16)lid2;
+	data.ntc_257_258.lid1 = cpu_to_be32(lid1);
+	data.ntc_257_258.lid2 = cpu_to_be32(lid2);
 	data.ntc_257_258.key = cpu_to_be32(key);
 	data.ntc_257_258.sl = sl << 3;
 	data.ntc_257_258.qp1 = cpu_to_be32(qp1);
