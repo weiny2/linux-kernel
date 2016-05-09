@@ -46,9 +46,11 @@ function copy_drop_rpms {
 DRV_RPM=rpmbuild/RPMS/x86_64/opa2_hfi-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm
 HDR_RPM=opa-headers.git/opa-headers-[0-9]*.[0-9]*-[0-9]*.x86_64.rpm
 DIAG_RPM=${JENKINS_WORKSPACE}/${DIAGTOOL_REPO}/rpmbuild/RPMS/x86_64/hfidiags-hfi2-*.x86_64.rpm
+STAT_RPM=${JENKINS_WORKSPACE}/${DIAGTOOL_REPO}/rpmbuild/RPMS/x86_64/hfi2-diagtools-sw-*.x86_64.rpm
 # copy rpm files to yum repository
 scp -i ~/ssh-jenkins/id_rsa \
     $DRV_RPM $HDR_RPM ${DIAG_RPM}\
+    $DRV_RPM $HDR_RPM ${STAT_RPM}\
     ${PH_STAGING_SITE}:${FXR_YUM}/next
 res=$?
 if [ ! ${res} ]; then
@@ -67,6 +69,6 @@ if [ ! ${res} ]; then
 fi
 
 # if first build of driver for next drop, this will update drop directory
-copy_drop_rpms $DRV_RPM $HDR_RPM ${DIAG_RPM}
+copy_drop_rpms $DRV_RPM $HDR_RPM ${DIAG_RPM} ${STAT_RPM}
 
 exit 0
