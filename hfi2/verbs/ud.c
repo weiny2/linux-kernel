@@ -133,8 +133,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 			hfi2_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_PKEY, pkey,
 					 ah_attr->sl,
 					 sqp->ibqp.qp_num, qp->ibqp.qp_num,
-					 cpu_to_be32(slid),
-					 cpu_to_be32(ah_attr->dlid));
+					 slid, ah_attr->dlid);
 			goto drop;
 		}
 	}
@@ -157,8 +156,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 			hfi2_bad_pqkey(ibp, IB_NOTICE_TRAP_BAD_QKEY, qkey,
 					 ah_attr->sl,
 					 sqp->ibqp.qp_num, qp->ibqp.qp_num,
-					 cpu_to_be32(lid),
-					 cpu_to_be32(ah_attr->dlid));
+					 lid, ah_attr->dlid);
 			goto drop;
 		}
 	}
