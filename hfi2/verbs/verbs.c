@@ -420,20 +420,20 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	dd->verbs_dev.rdi.driver_f.free_all_qps = free_all_qps;
 	dd->verbs_dev.rdi.driver_f.notify_qp_reset = notify_qp_reset;
 	dd->verbs_dev.rdi.driver_f.do_send = hfi1_do_send;
-	dd->verbs_dev.rdi.driver_f.schedule_send = hfi1_schedule_send;
 	dd->verbs_dev.rdi.driver_f.schedule_send_no_lock = _hfi1_schedule_send;
 	dd->verbs_dev.rdi.driver_f.get_pmtu_from_attr = get_pmtu_from_attr;
-	dd->verbs_dev.rdi.driver_f.notify_error_qp = notify_error_qp;
 	dd->verbs_dev.rdi.driver_f.flush_qp_waiters = flush_qp_waiters;
 	dd->verbs_dev.rdi.driver_f.stop_send_queue = stop_send_queue;
 	dd->verbs_dev.rdi.driver_f.quiesce_qp = quiesce_qp;
-	dd->verbs_dev.rdi.driver_f.notify_error_qp = notify_error_qp;
 	dd->verbs_dev.rdi.driver_f.mtu_from_qp = mtu_from_qp;
 	dd->verbs_dev.rdi.driver_f.mtu_to_path_mtu = mtu_to_path_mtu;
 	dd->verbs_dev.rdi.driver_f.check_modify_qp = hfi1_check_modify_qp;
 	dd->verbs_dev.rdi.driver_f.modify_qp = hfi1_modify_qp;
 	dd->verbs_dev.rdi.driver_f.check_send_wqe = hfi1_check_send_wqe;
 #endif
+	/* error QP support */
+	ibd->rdi.driver_f.notify_error_qp = notify_error_qp;
+	ibd->rdi.driver_f.schedule_send = hfi2_schedule_send;
 
 	/* completion queue */
 	snprintf(ibd->rdi.dparms.cq_name, sizeof(ibd->rdi.dparms.cq_name),

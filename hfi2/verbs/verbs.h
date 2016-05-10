@@ -306,6 +306,10 @@ static inline u8 valid_ib_mtu(u16 mtu)
 		mtu == 1024 || mtu == 2048 ||
 		mtu == 4096;
 }
+
+/* callbacks registered with rdmavt */
+void notify_error_qp(struct rvt_qp *qp);
+
 int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
 			     struct ib_ah_attr *ah_attr);
@@ -322,7 +326,6 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 int hfi2_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		  int attr_mask, struct ib_qp_init_attr *init_attr);
 int hfi2_destroy_qp(struct ib_qp *ibqp);
-int hfi2_error_qp(struct rvt_qp *qp, enum ib_wc_status err);
 void hfi2_rc_error(struct rvt_qp *qp, enum ib_wc_status err);
 void hfi2_rc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet);
 void hfi2_uc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet);
