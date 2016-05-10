@@ -2056,16 +2056,18 @@ static inline u32 qsfp_resource(struct hfi1_devdata *dd)
 int hfi1_tempsense_rd(struct hfi1_devdata *dd, struct hfi1_temp *temp);
 
 /**
- * hfi1_mcast_xlate - Translate 9B MLID to the 16B
- * MLID range
+ * hfi1_mcast_xlate - Called when creating th 16B header.
+ * If the DLID is in the 9B MLID range, this translation
+ * is needed.
+ *
  */
-static inline u32 hfi1_mcast_xlate(u32 lid)
+static inline u32 hfi1_mcast_xlate(u16 mlid)
 {
-	if ((lid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
-	    lid != HFI1_9B_PERMISSIVE_LID)
-		return lid - be16_to_cpu(IB_MULTICAST_LID_BASE) +
+	if ((mlid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
+	    mlid != HFI1_9B_PERMISSIVE_LID)
+		return mlid - be16_to_cpu(IB_MULTICAST_LID_BASE) +
 				HFI1_16B_MULTICAST_LID_BASE;
-	return lid;
+	return mlid;
 }
 
 static inline struct ib_ah_attr *hfi1_get_ah_attr(struct rvt_qp *qp)
@@ -2091,7 +2093,7 @@ static inline u32 hfi1_get_dlid_from_ah(struct ib_ah_attr *ah_attr)
 		if (ib_is_opa_gid(dgid))
 			return opa_get_lid_from_gid(dgid);
 	}
-	return hfi1_mcast_xlate(ah_attr->dlid);
+	return ah_attr->dlid;
 }
 
 /**

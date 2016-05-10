@@ -455,7 +455,10 @@ void hfi1_make_ud_req_16B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		priv->s_sc = sc5;
 
 	lrh1 = (lrh1 & ~OPA_16B_SC_MASK) | (priv->s_sc << 20);
-	dlid = hfi1_get_dlid_from_ah(ah_attr);
+	if (IS_EXT_LID(&ah_attr->grh.dgid))
+		dlid = hfi1_get_dlid_from_ah(ah_attr);
+	else
+		dlid = hfi1_mcast_xlate(ah_attr->dlid);
 
 	lrh1 = (lrh1 & ~OPA_16B_LID_MASK) |
 			(dlid & OPA_16B_LID_MASK);
