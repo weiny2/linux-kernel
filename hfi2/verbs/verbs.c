@@ -96,6 +96,8 @@ unsigned int hfi2_max_srq_sges = 128;
 unsigned int hfi2_max_srq_wrs = 0x1FFFF;
 /* LKEY table size in bits (2^n, 1 <= n <= 23) */
 unsigned int hfi2_lkey_table_size = 16;
+/* Size of QP hash table */
+unsigned int hfi2_qp_table_size = 256;
 
 /*
  * Extended Transport Header length by opcode
@@ -327,10 +329,10 @@ static int hfi2_modify_port(struct ib_device *ibdev, u8 port,
 	return ret;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 static int port_immutable(struct ib_device *ibdev, u8 port_num,
 			  struct ib_port_immutable *immutable)
 {
+	struct rvt_dev_info *rdi = ib_to_rvt(ibdev);
 	struct ib_port_attr attr;
 	int err;
 
@@ -342,13 +344,10 @@ static int port_immutable(struct ib_device *ibdev, u8 port_num,
 
 	immutable->pkey_tbl_len = attr.pkey_tbl_len;
 	immutable->gid_tbl_len = attr.gid_tbl_len;
-	immutable->core_cap_flags = RDMA_CORE_PORT_INTEL_OPA |
-					RDMA_CORE_CAP_OPA_AH;
-	immutable->max_mad_size = OPA_MGMT_MAD_SIZE;
-
+	immutable->core_cap_flags = rdi->dparms.core_cap_flags;
+	immutable->max_mad_size = rdi->dparms.max_mad_size;
 	return 0;
 }
-#endif
 
 static int hfi2_query_pkey(struct ib_device *ibdev, u8 port, u16 index,
 			  u16 *pkey)
@@ -408,10 +407,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->modify_ah = hfi2_modify_ah;
 	ibdev->query_ah = hfi2_query_ah;
 	ibdev->destroy_ah = hfi2_destroy_ah;
-	ibdev->create_qp = hfi2_create_qp;
-	ibdev->modify_qp = hfi2_modify_qp;
-	ibdev->query_qp = hfi2_query_qp;
-	ibdev->destroy_qp = hfi2_destroy_qp;
 	ibdev->post_send = hfi2_post_send;
 	ibdev->process_mad = hfi2_process_mad;
 	ibdev->dma_device = ibd->parent_dev;
@@ -431,61 +426,68 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibd->rdi.driver_f.get_card_name = get_card_name;
 	ibd->rdi.driver_f.get_pci_dev = get_pci_dev;
 #if 0
-	ibd->rdi.driver_f.check_ah = hfi1_check_ah;
-	ibd->rdi.driver_f.notify_new_ah = hfi1_notify_new_ah;
+	/* for query_guid, query_port, and modify_port */
 	ibd->rdi.driver_f.get_guid_be = hfi1_get_guid_be;
 	ibd->rdi.driver_f.query_port_state = query_port;
 	ibd->rdi.driver_f.shut_down_port = shut_down_port;
 	ibd->rdi.driver_f.cap_mask_chg = hfi1_cap_mask_chg;
 #endif
+
 	/*
 	 * Fill in rvt info device attributes.
 	 */
 	fill_device_attr(ibd);
 
-#if 0
-	/* queue pair */
-	dd->verbs_dev.rdi.dparms.qp_table_size = hfi1_qp_table_size;
-	dd->verbs_dev.rdi.dparms.qpn_start = 0;
-	dd->verbs_dev.rdi.dparms.qpn_inc = 1;
-	dd->verbs_dev.rdi.dparms.qos_shift = dd->qos_shift;
-	dd->verbs_dev.rdi.dparms.qpn_res_start = kdeth_qp << 16;
-	dd->verbs_dev.rdi.dparms.qpn_res_end =
-	dd->verbs_dev.rdi.dparms.qpn_res_start + 65535;
-	dd->verbs_dev.rdi.dparms.max_rdma_atomic = HFI1_MAX_RDMA_ATOMIC;
-	dd->verbs_dev.rdi.dparms.psn_mask = PSN_MASK;
-	dd->verbs_dev.rdi.dparms.psn_shift = PSN_SHIFT;
-	dd->verbs_dev.rdi.dparms.psn_modify_mask = PSN_MODIFY_MASK;
-	dd->verbs_dev.rdi.dparms.core_cap_flags = RDMA_CORE_PORT_INTEL_OPA;
-	dd->verbs_dev.rdi.dparms.max_mad_size = OPA_MGMT_MAD_SIZE;
+	/* general parameters */
+	ibd->rdi.dparms.lkey_table_size = hfi2_lkey_table_size;
+	ibd->rdi.dparms.max_rdma_atomic = OPA_IB_MAX_RDMA_ATOMIC;
+	ibd->rdi.dparms.psn_mask = PSN_MASK;
+	ibd->rdi.dparms.psn_shift = PSN_SHIFT;
+	ibd->rdi.dparms.psn_modify_mask = PSN_MODIFY_MASK;
+	ibd->rdi.dparms.core_cap_flags = RDMA_CORE_PORT_INTEL_OPA |
+					 RDMA_CORE_CAP_OPA_AH;
+	ibd->rdi.dparms.max_mad_size = OPA_MGMT_MAD_SIZE;
 
-	dd->verbs_dev.rdi.driver_f.qp_priv_alloc = qp_priv_alloc;
-	dd->verbs_dev.rdi.driver_f.qp_priv_free = qp_priv_free;
-	dd->verbs_dev.rdi.driver_f.free_all_qps = free_all_qps;
-	dd->verbs_dev.rdi.driver_f.notify_qp_reset = notify_qp_reset;
-	dd->verbs_dev.rdi.driver_f.do_send = hfi1_do_send;
-	dd->verbs_dev.rdi.driver_f.schedule_send_no_lock = _hfi1_schedule_send;
-	dd->verbs_dev.rdi.driver_f.get_pmtu_from_attr = get_pmtu_from_attr;
-	dd->verbs_dev.rdi.driver_f.flush_qp_waiters = flush_qp_waiters;
-	dd->verbs_dev.rdi.driver_f.stop_send_queue = stop_send_queue;
-	dd->verbs_dev.rdi.driver_f.quiesce_qp = quiesce_qp;
-	dd->verbs_dev.rdi.driver_f.mtu_from_qp = mtu_from_qp;
-	dd->verbs_dev.rdi.driver_f.mtu_to_path_mtu = mtu_to_path_mtu;
-	dd->verbs_dev.rdi.driver_f.check_modify_qp = hfi1_check_modify_qp;
-	dd->verbs_dev.rdi.driver_f.modify_qp = hfi1_modify_qp;
-	dd->verbs_dev.rdi.driver_f.check_send_wqe = hfi1_check_send_wqe;
-#endif
-	/* error QP support */
+	/* queue pair parameters */
+	ibd->rdi.dparms.qp_table_size = hfi2_qp_table_size;
+	ibd->rdi.dparms.qpn_start = 0;
+	ibd->rdi.dparms.qpn_inc = 1;
+	ibd->rdi.dparms.qos_shift = 0;
+	ibd->rdi.dparms.qpn_res_start = OPA_QPN_KDETH_BASE;
+	ibd->rdi.dparms.qpn_res_end = ibd->rdi.dparms.qpn_res_start +
+				      OPA_QPN_KDETH_SIZE;
+
+	/* basic queue pair support */
+	ibd->rdi.driver_f.qp_priv_alloc = qp_priv_alloc;
+	ibd->rdi.driver_f.qp_priv_free = qp_priv_free;
+	ibd->rdi.driver_f.free_all_qps = free_all_qps;
+	ibd->rdi.driver_f.notify_qp_reset = notify_qp_reset;
+	ibd->rdi.driver_f.flush_qp_waiters = flush_qp_waiters;
+	ibd->rdi.driver_f.stop_send_queue = stop_send_queue;
+	ibd->rdi.driver_f.quiesce_qp = quiesce_qp;
 	ibd->rdi.driver_f.notify_error_qp = notify_error_qp;
 	ibd->rdi.driver_f.schedule_send = hfi2_schedule_send;
+	/* modify QP support */
+	ibd->rdi.driver_f.get_pmtu_from_attr = get_pmtu_from_attr;
+	ibd->rdi.driver_f.mtu_from_qp = mtu_from_qp;
+	ibd->rdi.driver_f.mtu_to_path_mtu = mtu_to_path_mtu;
+	ibd->rdi.driver_f.check_modify_qp = hfi2_check_modify_qp;
+	ibd->rdi.driver_f.modify_qp = hfi2_modify_qp;
+#if 0
+	/* for post_send */
+	ibd->rdi.driver_f.schedule_send_no_lock = _hfi2_schedule_send;
+	ibd->rdi.driver_f.do_send = hfi2_do_send;
+	ibd->rdi.driver_f.check_send_wqe = hfi2_check_send_wqe;
+	/* for AH support */
+	ibd->rdi.driver_f.check_ah = hfi1_check_ah;
+	ibd->rdi.driver_f.notify_new_ah = hfi1_notify_new_ah;
+#endif
 
 	/* completion queue */
 	snprintf(ibd->rdi.dparms.cq_name, sizeof(ibd->rdi.dparms.cq_name),
 		 "hfi2_cq%d", ibd->dd->unit);
 	ibd->rdi.dparms.node = ibd->assigned_node_id;
 
-	ibd->rdi.dparms.qp_table_size = 0;   /* disable RDMAVT-QP */
-	ibd->rdi.dparms.lkey_table_size = hfi2_lkey_table_size;
 	ibd->rdi.dparms.nports = ibd->num_pports;
 	ibd->rdi.dparms.npkeys = HFI_MAX_PKEYS;
 
@@ -537,8 +539,8 @@ static int hfi2_init_port(struct hfi2_ibdev *ibd,
 		IB_PORT_CAP_MASK_NOTICE_SUP;
 	ibp->port_num = ppd->pnum - 1;
 
-	RCU_INIT_POINTER(ibp->qp[0], NULL);
-	RCU_INIT_POINTER(ibp->qp[1], NULL);
+	RCU_INIT_POINTER(ibp->rvp.qp[0], NULL);
+	RCU_INIT_POINTER(ibp->rvp.qp[1], NULL);
 
 	spin_lock_init(&ibp->lock);
 	ret = hfi2_ctx_init_port(ibp);
@@ -587,17 +589,7 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	ibd->assigned_node_id = dd->node;
 	ibd->pport = (struct hfi2_ibport *)(ibd + 1);
 	ibd->parent_dev = &dd->pcidev->dev;
-
-	/*
-	 * Note, ida_simple_get usage restricts itself to QPNs not
-	 * reserved for KDETH (PSM).
-	 */
-	ida_init(&ibd->qpn_even_table);
-	ida_init(&ibd->qpn_odd_table);
-	idr_init(&ibd->qp_ptr);
-	spin_lock_init(&ibd->qpt_lock);
 	spin_lock_init(&ibd->n_ahs_lock);
-	spin_lock_init(&ibd->n_qps_lock);
 	spin_lock_init(&ibd->n_mcast_grps_lock);
 
 	/* set RHF event table for Verbs receive */
@@ -659,10 +651,6 @@ void hfi2_ib_remove(struct hfi_devdata *dd)
 	for (i = 0; i < ibd->num_pports; i++)
 		hfi2_uninit_port(&ibd->pport[i]);
 	hfi2_ctx_uninit(ibd);
-	/* TODO - verify empty IDR? */
-	idr_destroy(&ibd->qp_ptr);
-	ida_destroy(&ibd->qpn_even_table);
-	ida_destroy(&ibd->qpn_odd_table);
 	/* TODO - workaround for RDMAVT leak */
 	kfree(ibd->rdi.ports);
 	ib_dealloc_device(&ibd->rdi.ibdev);

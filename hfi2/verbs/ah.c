@@ -100,7 +100,7 @@ struct ib_ah *hfi2_create_qp0_ah(struct hfi2_ibport *ibp, u32 dlid)
 	attr.port_num = ibp->port_num + 1;
 	attr.sl = ibp->sm_sl;
 	rcu_read_lock();
-	qp0 = rcu_dereference(ibp->qp[0]);
+	qp0 = rcu_dereference(ibp->rvp.qp[0]);
 	if (qp0)
 		ah = ib_create_ah(qp0->ibqp.pd, &attr);
 	rcu_read_unlock();
