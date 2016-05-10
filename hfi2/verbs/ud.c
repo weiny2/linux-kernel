@@ -86,12 +86,8 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe, bool use_16b)
 	ppd = ibp->ppd;
 
 	rcu_read_lock();
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
-	qp = hfi2_lookup_qpn(ibp, swqe->ud_wr.remote_qpn);
-#else
-	qp = hfi2_lookup_qpn(ibp, swqe->wr.wr.ud.remote_qpn);
-#endif
+	qp = rvt_lookup_qpn(ib_to_rvt(ibdev), &ibp->rvp,
+			    swqe->ud_wr.remote_qpn);
 	if (!qp) {
 		ibp->n_pkt_drops++;
 		rcu_read_unlock();

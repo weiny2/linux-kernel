@@ -60,19 +60,6 @@
 #include <rdma/ib_pma.h>
 #include "opa_port_info.h"
 
-/*
- * QP numbering defines
- * Unique QPN[23..16] value (KDETH_BASE) determines start of the KDETH
- * QPNs (lower 16 bits = 64K QPNs).
- * TODO - For now just limit the Verbs QPNs to the 23-bits below the
- * KDETH base.  Support to allocate from KDETH range (for TID RDMA) or
- * the ones above the KDETH range is not yet provided.
- */
-#define OPA_QPN_MAX		BIT(24)
-#define OPA_QPN_KDETH_BASE	BIT(23) /* Gen1 default */
-#define OPA_QPN_VERBS_MAX	OPA_QPN_KDETH_BASE
-#define OPA_QPN_MAP_MAX		BIT(8)	/* 8-bits to map to Recv Context */
-
 #define OPA_NUM_PKEY_BLOCKS_PER_SMP 	(OPA_SMP_DR_DATA_SIZE \
 			/ (OPA_PKEY_TABLE_BLK_COUNT * sizeof(u16)))
 

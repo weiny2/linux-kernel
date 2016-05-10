@@ -565,7 +565,7 @@ void hfi2_ib_rcv(struct hfi2_ib_packet *packet)
 			wake_up(&mcast->wait);
 	} else {
 		rcu_read_lock();
-		qp = hfi2_lookup_qpn(ibp, qp_num);
+		qp = rvt_lookup_qpn(&ibp->ibd->rdi, &ibp->rvp, qp_num);
 		if (!qp) {
 			/* FXRTODO: Hazard - qp might be not initialized yet */
 			rcu_read_unlock();

@@ -87,6 +87,16 @@
 #define OPA_LIM_MGMT_PKEY       0x7FFF
 #define OPA_FULL_MGMT_PKEY      0xFFFF
 
+/*
+ * QP numbering defines
+ * Unique QPN[23..16] value (KDETH_BASE) determines start of the KDETH
+ * QPNs (lower 16 bits = 64K QPNs).
+ * RDMAVT manages QPN allocation.
+ */
+#define OPA_QPN_KDETH_BASE	BIT(23) /* Gen1 default */
+#define OPA_QPN_KDETH_SIZE	0xFFFF
+#define OPA_QPN_MAP_MAX		BIT(8)	/* 8-bits to map to Recv Context */
+
 #define HFI2_GUIDS_PER_PORT     2
 #define HFI2_RHF_RCV_TYPES      8
 
@@ -174,7 +184,6 @@ struct hfi2_ibport {
 	struct hfi2_ibdev *ibd;
 	struct device *dev; /* from IB's ib_device */
 	struct hfi_pportdata *ppd;
-	struct rvt_qp __rcu *qp[2];
 	/* non-zero when timer is set */
 	unsigned long trap_timeout;
 	unsigned long mkey_lease_timeout;
@@ -234,15 +243,8 @@ struct hfi2_ibdev {
 	u8 rsm_mask;
 	int assigned_node_id;
 	struct hfi2_ibport *pport;
-	struct ida qpn_even_table;
-	struct ida qpn_odd_table;
-	struct idr qp_ptr;
-	unsigned long reserved_qps;
-	spinlock_t qpt_lock;
 	u32 n_ahs_allocated;
 	spinlock_t n_ahs_lock;
-	u32 n_qps_allocated;
-	spinlock_t n_qps_lock;
 	u32 n_mcast_grps_allocated; /* number of mcast groups allocated */
 	spinlock_t n_mcast_grps_lock;
 
@@ -283,21 +285,6 @@ static inline struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev)
 	return to_hfi_ibd(ibdev)->dd;
 }
 
-/*
- * Return the QP with the given QPN
- * The caller must hold the rcu_read_lock(), and keep the lock until
- * the returned qp is no longer in use.
- * TODO - revisit if IDR is really best for a fast lookup_qpn.
- */
-static inline struct rvt_qp *hfi2_lookup_qpn(struct hfi2_ibport *ibp,
-						  u32 qpn) __must_hold(RCU)
-{
-	if (unlikely(qpn <= 1))
-		return rcu_dereference(ibp->qp[qpn]);
-	else
-		return idr_find(&ibp->ibd->qp_ptr, qpn);
-}
-
 #define hfi2_get_pkey(ibp, index) \
 	((index) >= (HFI_MAX_PKEYS) ? 0 : (ibp)->ppd->pkeys[(index)])
 
@@ -309,7 +296,22 @@ static inline u8 valid_ib_mtu(u16 mtu)
 }
 
 /* callbacks registered with rdmavt */
+void *qp_priv_alloc(struct rvt_dev_info *rdi, struct rvt_qp *qp, gfp_t gfp);
+void qp_priv_free(struct rvt_dev_info *rdi, struct rvt_qp *qp);
+unsigned free_all_qps(struct rvt_dev_info *rdi);
+void flush_qp_waiters(struct rvt_qp *qp);
+void stop_send_queue(struct rvt_qp *qp);
+void quiesce_qp(struct rvt_qp *qp);
+void notify_qp_reset(struct rvt_qp *qp);
+int mtu_to_path_mtu(u32 mtu);
+u32 mtu_from_qp(struct rvt_dev_info *rdi, struct rvt_qp *qp, u32 pmtu);
+int get_pmtu_from_attr(struct rvt_dev_info *rdi, struct rvt_qp *qp,
+		       struct ib_qp_attr *attr);
 void notify_error_qp(struct rvt_qp *qp);
+int hfi2_check_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
+			 int attr_mask, struct ib_udata *udata);
+void hfi2_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
+		    int attr_mask, struct ib_udata *udata);
 
 int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr);
 struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
@@ -318,15 +320,6 @@ int hfi2_destroy_ah(struct ib_ah *ibah);
 struct ib_ah *hfi2_create_qp0_ah(struct hfi2_ibport *ibp, u32 dlid);
 int hfi2_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
 int hfi2_query_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr);
-struct ib_qp *hfi2_create_qp(struct ib_pd *ibpd,
-			     struct ib_qp_init_attr *init_attr,
-			     struct ib_udata *udata);
-struct rvt_qp *hfi2_lookup_qpn(struct hfi2_ibport *ibp, u32 qpn);
-int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		   int attr_mask, struct ib_udata *udata);
-int hfi2_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
-		  int attr_mask, struct ib_qp_init_attr *init_attr);
-int hfi2_destroy_qp(struct ib_qp *ibqp);
 void hfi2_rc_error(struct rvt_qp *qp, enum ib_wc_status err);
 void hfi2_rc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet);
 void hfi2_uc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet);
@@ -359,12 +352,11 @@ int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,
 		     struct ib_mad_hdr *out_mad, size_t *out_mad_size,
 		     u16 *out_mad_pkey_index);
-int hfi2_create_agents(struct ib_device *ibdev);
-void hfi2_free_agents(struct ib_device *ibdev);
 int hfi2_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 int hfi2_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
 struct hfi2_mcast *
 hfi2_mcast_find(struct hfi2_ibport *ibp, union ib_gid *mgid);
+int hfi2_mcast_tree_empty(struct hfi2_ibport *ibp);
 
 /* Device specific */
 int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv);
@@ -384,8 +376,8 @@ void hfi2_ctx_uninit(struct hfi2_ibdev *ibd);
 int hfi2_ctx_init_port(struct hfi2_ibport *ibp);
 void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp);
 void hfi2_ctx_start_port(struct hfi2_ibport *ibp);
-int hfi2_ctx_assign_qp(struct hfi2_ibport *ibp,
-		       struct hfi2_qp_priv *qp_priv, bool is_user);
+void hfi2_ctx_assign_qp(struct hfi2_ibport *ibp,
+			struct hfi2_qp_priv *qp_priv, bool is_user);
 void hfi2_ctx_release_qp(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv);
 int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops);
 void hfi2_ib_remove(struct hfi_devdata *dd);

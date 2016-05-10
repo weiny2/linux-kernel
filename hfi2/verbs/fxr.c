@@ -1031,27 +1031,13 @@ void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp)
 	ibp->ctx = NULL;
 }
 
-int hfi2_ctx_assign_qp(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
-			 bool is_user)
+void hfi2_ctx_assign_qp(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
+			bool is_user)
 {
-	/* FXRTODO: fix me */
-#if 0
-	int ret;
-
-	/* hold the device so it cannot be removed while QP is active */
-	ret = opa_core_device_get(ibd->odev);
-	if (ret)
-		return ret;
-#endif
 	qp_priv->s_ctx = ibp->ctx;
-	return 0;
 }
 
 void hfi2_ctx_release_qp(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv)
 {
 	qp_priv->s_ctx = NULL;
-	/* FXRTODO: fix me */
-#if 0
-	opa_core_device_put(ibd->odev);
-#endif
 }
