@@ -1045,16 +1045,11 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 			goto bail_ecomm;
 		return ret;
 	}
-	/**
-	 * dchandr1: We should generalze this trace call so it can take in either
-	 * a 9B or a 16B header
-	 */ 
 	trace_sdma_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
-				&ps->s_txreq->phdr.hdr.pkt.ibh, bypass);
-	ret =  sdma_send_txreq(tx->sde, &priv->s_iowait, &tx->txreq);
-	if (unlikely(ret == -ECOMM))
-		goto bail_ecomm;
-	return ret;
+				(bypass) ?
+				(void *)&ps->s_txreq->phdr.hdr.pkt.opah :
+				(void *)&ps->s_txreq->phdr.hdr.pkt.ibh,
+				bypass);
 
 bail_ecomm:
 	/* The current one got "sent" */
@@ -1253,8 +1248,7 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		}
 	}
 
-	trace_pio_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
-			       &ps->s_txreq->phdr.hdr.pkt.ibh, bypass);
+	trace_pio_output_ibhdr(dd_from_ibdev(qp->ibqp.device), hdr, bypass);
 
 pio_bail:
 	if (qp->s_wqe) {
