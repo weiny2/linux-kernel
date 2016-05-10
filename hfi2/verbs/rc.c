@@ -1217,7 +1217,7 @@ static void restart_rc(struct rvt_qp *qp, u32 psn, int wait)
 			qp->s_retry = qp->s_retry_cnt;
 		} else if (qp->s_last == qp->s_acked) {
 			hfi2_send_complete(qp, wqe, IB_WC_RETRY_EXC_ERR);
-			hfi2_error_qp(qp, IB_WC_WR_FLUSH_ERR);
+			rvt_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 			return;
 		} else /* need to handle delayed completion */
 			return;
@@ -1671,7 +1671,7 @@ static int do_rc_ack(struct rvt_qp *qp, u32 aeth, u32 psn, int opcode,
 class_b:
 			if (qp->s_last == qp->s_acked) {
 				hfi2_send_complete(qp, wqe, status);
-				hfi2_error_qp(qp, IB_WC_WR_FLUSH_ERR);
+				rvt_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 			}
 			break;
 
@@ -1917,7 +1917,7 @@ ack_len_err:
 ack_err:
 	if (qp->s_last == qp->s_acked) {
 		hfi2_send_complete(qp, wqe, status);
-		hfi2_error_qp(qp, IB_WC_WR_FLUSH_ERR);
+		rvt_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 	}
 ack_done:
 	spin_unlock_irqrestore(&qp->s_lock, flags);
@@ -2155,7 +2155,7 @@ void hfi2_rc_error(struct rvt_qp *qp, enum ib_wc_status err)
 	int lastwqe;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-	lastwqe = hfi2_error_qp(qp, err);
+	lastwqe = rvt_error_qp(qp, err);
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 
 	if (lastwqe) {

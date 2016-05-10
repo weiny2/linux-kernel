@@ -248,6 +248,7 @@ static void stop_send_queue(struct rvt_qp *qp)
 	cancel_work_sync(&priv->s_iowait.iowork);
 	del_timer_sync(&qp->s_timer);
 }
+
 static void quiesce_qp(struct rvt_qp *qp)
 {
 	struct hfi2_qp_priv *priv = qp->priv;
@@ -267,6 +268,19 @@ static void notify_qp_reset(struct rvt_qp *qp)
 	 * as logic to write DMA commands uses this
 	 */
 	qp->pmtu = opa_enum_to_mtu(OPA_MTU_10240);
+}
+
+void notify_error_qp(struct rvt_qp *qp)
+{
+	if (!(qp->s_flags & RVT_S_BUSY)) {
+		flush_iowait(qp);
+		qp->s_hdrwords = 0;
+		if (qp->s_rdma_mr) {
+			rvt_put_mr(qp->s_rdma_mr);
+			qp->s_rdma_mr = NULL;
+		}
+		flush_tx_list(qp);
+	}
 }
 
 /**
@@ -372,22 +386,6 @@ static void clear_mr_refs(struct rvt_qp *qp, int clr_sends)
 			e->rdma_sge.mr = NULL;
 		}
 	}
-}
-
-/**
- * hfi2_error_qp - put a QP into the error state
- * @qp: the QP to put into the error state
- * @err: the receive completion error to signal if a RWQE is active
- *
- * Flushes both send and receive work queues.
- * Returns true if last WQE event should be generated.
- * The QP r_lock and s_lock should be held and interrupts disabled.
- * If we are already in error state, just return.
- */
-int hfi2_error_qp(struct rvt_qp *qp, enum ib_wc_status err)
-{
-	/* FXRTODO */
-	return 0;
 }
 
 /*
@@ -585,7 +583,7 @@ int hfi2_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 		break;
 
 	case IB_QPS_ERR:
-		lastwqe = hfi2_error_qp(qp, IB_WC_WR_FLUSH_ERR);
+		lastwqe = rvt_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 		break;
 
 	default:
