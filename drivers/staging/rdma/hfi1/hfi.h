@@ -2157,7 +2157,7 @@ static inline bool hfi1_check_permissive(struct ib_ah_attr *ah_attr)
 	if (ah_attr->ah_flags & IB_AH_GRH) {
 		dgid = ah_attr->grh.dgid;
 		if (ib_is_opa_gid(&dgid)) {
-			return HFI1_16B_PERMISSIVE_LID ==
+			return HFI1_PERMISSIVE_LID ==
 				opa_get_lid_from_gid(&dgid);
 		}
 	}

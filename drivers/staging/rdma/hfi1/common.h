@@ -363,6 +363,8 @@ struct hfi1_16b_message_header {
 #define HFI1_BECN_SMASK BIT(HFI1_BECN_SHIFT)
 #define HFI1_9B_PERMISSIVE_LID 0xFFFF
 #define HFI1_16B_PERMISSIVE_LID 0xFFFFFF
+/* SW representation of permissive LIDs. */
+#define HFI1_PERMISSIVE_LID 0xFFFFFFFF
 
 /**
  * 0xF8 - 4 bits of multicast range and 1 bit for collective range

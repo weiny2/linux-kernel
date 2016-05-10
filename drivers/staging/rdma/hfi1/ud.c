@@ -547,6 +547,7 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	use_16b = hfi1_use_16b(qp, wqe);
 	if ((!hfi1_check_mcast(ah_attr)) ||
 	    (hfi1_check_permissive(ah_attr))) {
+		bool is_ucast_lid = true;
 		lid = hfi1_get_dlid_from_ah(ah_attr) & ~((1 << ppd->lmc) - 1);
 		/**
 		 * A DLID of 0xFFFF needs special handing.
@@ -559,14 +560,14 @@ int hfi1_make_ud_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		 * GSI traffic with permissive LIDs are used to perform
 		 * local query when no LID has been assigned.
 		 */
+		if (((lid == be16_to_cpu(IB_LID_PERMISSIVE)) && !use_16b) ||
+		    (lid == HFI1_PERMISSIVE_LID))
+			is_ucast_lid = false;
+
 		if (unlikely(!loopback &&
-			     ((use_16b ||
-			      (lid != be16_to_cpu(IB_LID_PERMISSIVE))) &&
-			      ((lid == ppd->lid) ||
-			       ((lid == (use_16b ? HFI1_16B_PERMISSIVE_LID :
-				 be16_to_cpu(IB_LID_PERMISSIVE))) &&
-				(qp->ibqp.qp_type == IB_QPT_GSI) &&
-				(!ppd->lid)))))) {
+			     (((lid == ppd->lid) && is_ucast_lid) ||
+			      ((qp->ibqp.qp_type == IB_QPT_GSI) &&
+			       (!is_ucast_lid))))) {
 			unsigned long flags;
 			/*
 			 * If DMAs are in progress, we can't generate
