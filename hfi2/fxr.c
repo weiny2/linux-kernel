@@ -302,10 +302,52 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID, tc_slid.val);
 }
 
+static void hfi_set_rfs(const struct hfi_devdata *dd, u16 mtu)
+{
+	u64 reg = 0;
+	int i;
+	u8 mtu_id = opa_mtu_to_enum(mtu);
+
+	if (mtu_id == INVALID_MTU_ENC) {
+		dd_dev_warn(dd, "invalid mtu for rfs %d", mtu);
+		return;
+	}
+
+	for (i = 0; i < (HFI_MAX_TC * HFI_MAX_MC); i++)
+		reg |= (mtu_id << (i * 4));
+
+	dd_dev_dbg(dd, "Setting RFS to %u, reg value: %llx\n", mtu, reg);
+
+	write_csr(dd, FXR_TXOTR_PKT_CFG_RFS, reg);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_RFS, reg);
+}
+
+static u16 hfi_get_smallest_mtu(const struct hfi_devdata *dd)
+{
+	int i, port;
+	u16 smallest_mtu = INVALID_MTU;
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+
+		/* Only check data VLs */
+		for (i = 0; i < HFI_NUM_DATA_VLS; i++) {
+			u16 vl_mtu = ppd->vl_mtu[i];
+
+			if (vl_mtu && vl_mtu < smallest_mtu)
+				smallest_mtu = vl_mtu;
+		}
+	}
+
+	dd_dev_dbg(dd, "Found smallest MTU %u\n", smallest_mtu);
+
+	return smallest_mtu;
+}
+
 static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 {
-	int i;
-	u64 reg = 0;
+	TP_CFG_VL_MTU_t vlmtu;
+	int i, port;
 	u8 mtu_id = opa_mtu_to_enum(mtu);
 
 	if (mtu_id == INVALID_MTU_ENC) {
@@ -313,15 +355,20 @@ static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 		return;
 	}
 
-	for (i = 0; i < 8; i++)
-		reg |= (mtu_id << (i * 4));
-	write_csr(dd, FXR_TXOTR_PKT_CFG_RFS, reg);
-#if 0
-	/* Error seen when writing to these registers */
-	/* TODO: These are not implemented in Simics yet */
-	write_csr(dd, FXR_TXOTR_MSG_CFG_MTU_PT0, reg);
-	write_csr(dd, FXR_TXOTR_MSG_CFG_MTU_PT1, reg);
-#endif
+	hfi_set_rfs(dd, mtu);
+
+	vlmtu.val = 0;
+	for (i = 0; i < HFI_NUM_DATA_VLS; i++)
+		vlmtu.val |= (mtu_id << (i * 4));
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+
+		for (i = 0; i < HFI_NUM_DATA_VLS; i++)
+			ppd->vl_mtu[i] = mtu;
+
+		hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU, vlmtu.val);
+	}
 }
 
 static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
@@ -332,8 +379,7 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 	tc_slid.field.tc_valid_p1 = 0xf;
 	write_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID, tc_slid.val);
 
-	/* FXRTODO: Re-initialize if FM requests different MTU? */
-	hfi_init_tx_otr_mtu(dd, 4096);
+	hfi_init_tx_otr_mtu(dd, HFI_DEFAULT_MAX_MTU);
 }
 
 static void hfi_init_tx_cid_csrs(const struct hfi_devdata *dd)
@@ -549,6 +595,7 @@ static void hfi_set_send_length(struct hfi_pportdata *ppd)
 {
 	TP_CFG_VL_MTU_t tp_vlmtu;
 	FPC_CFG_PORT_CONFIG_t fpc_vlmtu;
+	u16 smallest_mtu;
 	u8 vl0 = opa_mtu_to_enum(ppd->vl_mtu[0]);
 	u8 vl1 = opa_mtu_to_enum(ppd->vl_mtu[1]);
 	u8 vl2 = opa_mtu_to_enum(ppd->vl_mtu[2]);
@@ -614,6 +661,15 @@ static void hfi_set_send_length(struct hfi_pportdata *ppd)
 	}
 	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_VL_MTU, tp_vlmtu.val);
 	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc_vlmtu.val);
+
+	/*
+	 * Find the smallest MTU from any valid data VL on
+	 * any port for this HFI. This value will be used to set
+	 * the Rendezvous Fragment Size for the whole HFI.
+	 */
+	smallest_mtu = hfi_get_smallest_mtu(ppd->dd);
+
+	hfi_set_rfs(ppd->dd, smallest_mtu);
 }
 
 void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable)
