@@ -47,17 +47,6 @@ Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-16 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/diag.c:554 SV.TAINTED.ALLOC_SIZE (2:Error) Analyze
-Unvalidated integer value 'dp.len' is received from 'copy_from_user' at line 532 and can be used to alter memory allocation size through call to 'diagpkt_send' at line 554.
-  * diag.c:532: Tainted data 'dp' is received from the call to 'copy_from_user'
-  * diag.c:532: copy_from_user( &dp, data, sizeof(dp) ) is false
-  * diag.c:539: dp.pbc is true
-  * diag.c:554: Tainted data 'dp.len' is passed to 'diagpkt_send'
-    * diag.c:367: dp->len&3 is false
-    * diag.c:402: Tainted data 'dp->len' is passed to 'vmalloc'
-Current status 'Analyze'
-
----------------------------------------------------------------------------
 17 (Local) /nfs/sc/disks/fabric_work/eharihar/wfr-linux-devel/drivers/staging/rdma/hfi1/ud.c:419 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
@@ -226,5 +215,5 @@ Array '&tinfo.tidcnt' of size 4 may use index value(s) 4..7
   * file_ops.c:242: Object '&tinfo.tidcnt' of type 'unsigned int[1]' is a buffer of length 4 bytes.
 Current status 'Analyze'
 
-Summary: 41 Local
-41 Total Issue(s)
+Summary: 40 Local
+40 Total Issue(s)
