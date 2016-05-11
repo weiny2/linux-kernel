@@ -398,6 +398,9 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->detach_mcast = hfi2_multicast_detach;
 	ibdev->get_port_immutable = port_immutable;
 
+	/* add optional sysfs files under /sys/class/infiniband/hfi2_0/ */
+	hfi2_verbs_register_sysfs(&ibdev->dev);
+
 	/*
 	 * Fill in rvt info object.
 	 */
@@ -470,9 +473,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ret = rvt_register_device(&ibd->rdi);
 	if (ret)
 		goto err_reg;
-
-	/* add optional sysfs files under /sys/class/infiniband/hfi2_0/ */
-	hfi2_verbs_register_sysfs(&ibdev->dev);
 
 	return ret;
 
