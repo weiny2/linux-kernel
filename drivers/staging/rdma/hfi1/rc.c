@@ -1679,8 +1679,12 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 	u64 val;
 	u32 bth0 = 0;
 	bool bypass = priv->use_16b;
+	u8 extra_byte = 0;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
+
+	if (bypass)
+		extra_byte = 1; /* LT BYTE */
 
 	trace_hfi1_rc_ack(qp, psn);
 
@@ -1824,7 +1828,7 @@ read_middle:
 		if (unlikely(tlen <= (hdrsize + pad + 4)))
 			goto ack_len_err;
 read_last:
-		tlen -= hdrsize + pad + 4;
+		tlen -= hdrsize + pad + 4 - extra_byte;
 		if (unlikely(tlen != qp->s_rdma_read_len))
 			goto ack_len_err;
 		aeth = be32_to_cpu(ohdr->u.aeth);

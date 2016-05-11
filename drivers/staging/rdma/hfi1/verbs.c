@@ -369,10 +369,13 @@ const u8 hdr_16b_len_by_opcode[256] = {
 	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = 16 + 12 + 8 + 16,
 	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 16 + 12 + 8 + 20,
 	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = 16 + 12 + 8 + 16,
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = 16 + 12 + 8 + 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = 16 + 12 + 8,
 	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = 16 + 12 + 8,
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = 16 + 12 + 8 + 4,
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = 16 + 12 + 8 + 4,
+	/* FIXME: The +2 is needed otherwise packets are dropped on length
+	 * errors. Very weird, need to figure out why.
+	 */
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = 16 + 12 + 2,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = 16 + 12 + 4,
 	[IB_OPCODE_RC_ACKNOWLEDGE]                    = 16 + 12 + 8,
 	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = 16 + 12 + 8 + 4,
 	[IB_OPCODE_RC_COMPARE_SWAP]                   = 16 + 12 + 8 + 28,
