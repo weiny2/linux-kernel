@@ -591,6 +591,8 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->port_states.offline_reason |= ppd->offline_disabled_reason;
 #endif /* PI_LED_ENABLE_SUP */
 
+	pi->pkey_8b = cpu_to_be16(ppd->pkey_8b);
+	pi->pkey_10b = cpu_to_be16(ppd->pkey_10b);
 	pi->port_states.portphysstate_portstate =
 		(hfi_ibphys_portstate(ppd) << 4) | state;
 
@@ -1388,6 +1390,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	u8 crc_enabled;
 	u8 pkt_formats_enabled;
 	u16 lse, lwe, mtu;
+	u16 pkey_8b, pkey_10b;
 	unsigned long flags;
 	u32 num_ports = OPA_AM_NPORT(am);
 	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
@@ -1460,6 +1463,12 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		hfi_invalid_attr(smp);
 		goto get_only;
 	}
+
+	pkey_8b = be16_to_cpu(pi->pkey_8b);
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_8B_PKEY, 0, &pkey_8b);
+
+	pkey_10b = be16_to_cpu(pi->pkey_10b);
+	hfi_set_ib_cfg(ppd, HFI_IB_CFG_10B_PKEY, 0, &pkey_10b);
 
 	msl = pi->smsl & OPA_PI_MASK_SMSL;
 	if (pi->partenforce_filterraw & OPA_PI_MASK_LINKINIT_REASON)
