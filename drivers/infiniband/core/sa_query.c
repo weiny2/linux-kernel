@@ -863,7 +863,6 @@ static void update_sm_ah(struct work_struct *work)
 	struct ib_sa_sm_ah *new_ah;
 	struct ib_port_attr port_attr;
 	struct ib_ah_attr   ah_attr;
-	union ib_gid sgid;
 
 	if (ib_query_port(port->agent->device, port->port_num, &port_attr)) {
 		pr_warn("Couldn't query port\n");
@@ -901,7 +900,7 @@ static void update_sm_ah(struct work_struct *work)
 			ah_attr.grh.sgid_index = 0;
 			/* Same prefix as sgid */
 			ah_attr.grh.dgid.global.subnet_prefix =
-				sgid.global.subnet_prefix;
+				port_attr.subnet_prefix;
 			ah_attr.grh.dgid.global.interface_id =
 					OPA_MAKE_GID(port_attr.sm_lid);
 		}
