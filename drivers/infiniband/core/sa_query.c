@@ -893,20 +893,9 @@ static void update_sm_ah(struct work_struct *work)
 	}
 
 	if (rdma_cap_opa_ah(port->agent->device, port->port_num)) {
-		u32 slid = 0;
-
-		if (ib_query_gid(port->agent->device, port->port_num,
-				 OPA_GID_INDEX, &sgid, NULL)) {
-			pr_warn("Couldn't query GID\n");
-			return;
-		}
-
-		if (ib_is_opa_gid(&sgid))
-			slid = opa_get_lid_from_gid(&sgid);
-
 		ah_attr.dlid = OPA_TO_IB_UCAST_LID(port_attr.sm_lid);
 		if ((port_attr.sm_lid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) ||
-		    (slid >= be16_to_cpu(IB_MULTICAST_LID_BASE))) {
+		    (port_attr.lid >= be16_to_cpu(IB_MULTICAST_LID_BASE))) {
 			ah_attr.ah_flags = IB_AH_GRH;
 			ah_attr.grh.hop_limit = 1;
 			ah_attr.grh.sgid_index = 0;
