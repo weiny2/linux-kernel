@@ -1,80 +1,43 @@
-Process: insmod (PID: 217125)
-Address: 0xffff881015849b60, size: 9; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
+Process: rmmod (PID: 180248)
+Address: 0xffff8808169a7488, size: 7; stack trace of the allocation:
+[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
 [<ffffffff814711d5>] device_get_devnode+0x65/0xd0
 [<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
 [<ffffffff813482bf>] kobject_uevent_env+0x26f/0x660
 [<ffffffff813486bb>] kobject_uevent+0xb/0x10
-[<ffffffff81470c5a>] device_add+0x41a/0x610
-[<ffffffff81471048>] device_create_groups_vargs+0xd8/0x100
-[<ffffffff814710e1>] device_create+0x51/0x70
-[<ffffffffa0780a18>] hfi1_cdev_init+0x98/0x110 [hfi1]
-[<ffffffffa078906a>] hfi1_device_create+0x14a/0x170 [hfi1]
-[<ffffffffa078ea81>] init_one+0x2c1/0x420 [hfi1]
-[<ffffffff81386315>] local_pci_probe+0x45/0xa0
-[<ffffffff8138775c>] pci_device_probe+0xfc/0x140
-[<ffffffff81474039>] driver_probe_device+0x239/0x460
-[<ffffffff81474329>] __driver_attach+0xc9/0xf0
-[<ffffffff81471bbc>] bus_for_each_dev+0x6c/0xc0
+[<ffffffff8146f49f>] device_del+0x18f/0x260
+[<ffffffff8146f58e>] device_unregister+0x1e/0x60
+[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
+[<ffffffffa0785a8c>] hfi1_device_remove+0x1c/0x20 [hfi1]
+[<ffffffffa0789f2b>] remove_one+0x1cb/0x1e0 [hfi1]
+[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
+[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
+[<ffffffff814746b8>] driver_detach+0xb8/0xc0
+[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
+[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
+[<ffffffff81385c7a>] pci_unregister_driver+0x2a/0x80
 ----------------------------------------
-Process: insmod (PID: 217125)
-Address: 0xffff881015849b60, size: 9; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
+Process: rmmod (PID: 180248)
+Address: 0xffff8808169a7488, size: 7; stack trace of the allocation:
+[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
 [<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147b6d3>] devtmpfs_create_node+0x63/0x140
-[<ffffffff81470e05>] device_add+0x5c5/0x610
-[<ffffffff81471048>] device_create_groups_vargs+0xd8/0x100
-[<ffffffff814710e1>] device_create+0x51/0x70
-[<ffffffffa0780a18>] hfi1_cdev_init+0x98/0x110 [hfi1]
-[<ffffffffa078906a>] hfi1_device_create+0x14a/0x170 [hfi1]
-[<ffffffffa078ea81>] init_one+0x2c1/0x420 [hfi1]
-[<ffffffff81386315>] local_pci_probe+0x45/0xa0
-[<ffffffff8138775c>] pci_device_probe+0xfc/0x140
-[<ffffffff81474039>] driver_probe_device+0x239/0x460
-[<ffffffff81474329>] __driver_attach+0xc9/0xf0
-[<ffffffff81471bbc>] bus_for_each_dev+0x6c/0xc0
-[<ffffffff814738ae>] driver_attach+0x1e/0x20
-[<ffffffff81473320>] bus_add_driver+0x1d0/0x290
-----------------------------------------
-Process: systemd-udevd (PID: 217141)
-Address: 0xffff881016211be0, size: 14; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
-[<ffffffff81470010>] uevent_show+0x90/0x100
-[<ffffffff8146f280>] dev_attr_show+0x20/0x50
-[<ffffffff812986c2>] sysfs_kf_seq_show+0xc2/0x1a0
-[<ffffffff81296f13>] kernfs_seq_show+0x23/0x30
-[<ffffffff8123cdd4>] seq_read+0xf4/0x370
-[<ffffffff812976ad>] kernfs_fop_read+0x10d/0x170
-[<ffffffff81217e17>] __vfs_read+0x37/0x100
-[<ffffffff81218d1f>] vfs_read+0x7f/0x130
-[<ffffffff8121a205>] SyS_read+0x55/0xc0
-[<ffffffff81003c12>] do_syscall_64+0x62/0x110
-[<ffffffff816bb521>] return_from_SYSCALL_64+0x0/0x6a
-[<ffffffffffffffff>] 0xffffffffffffffff
-+5 more allocation(s) with the same call stack.
+[<ffffffff8147b7f5>] devtmpfs_delete_node+0x45/0xf0
+[<ffffffff8146f4ef>] device_del+0x1df/0x260
+[<ffffffff8146f58e>] device_unregister+0x1e/0x60
+[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
+[<ffffffffa0785a8c>] hfi1_device_remove+0x1c/0x20 [hfi1]
+[<ffffffffa0789f2b>] remove_one+0x1cb/0x1e0 [hfi1]
+[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
+[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
+[<ffffffff814746b8>] driver_detach+0xb8/0xc0
+[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
+[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
+[<ffffffff81385c7a>] pci_unregister_driver+0x2a/0x80
+[<ffffffffa07bde5d>] hfi1_mod_cleanup+0x10/0x1b3 [hfi1]
+[<ffffffff8110f520>] SyS_delete_module+0x190/0x220
 ----------------------------------------
 Process: systemd-udevd (PID: 819)
-Address: 0xffff8808169acd40, size: 14; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
-[<ffffffff81470010>] uevent_show+0x90/0x100
-[<ffffffff8146f280>] dev_attr_show+0x20/0x50
-[<ffffffff812986c2>] sysfs_kf_seq_show+0xc2/0x1a0
-[<ffffffff81296f13>] kernfs_seq_show+0x23/0x30
-[<ffffffff8123cdd4>] seq_read+0xf4/0x370
-[<ffffffff812976ad>] kernfs_fop_read+0x10d/0x170
-[<ffffffff81217e17>] __vfs_read+0x37/0x100
-[<ffffffff81218d1f>] vfs_read+0x7f/0x130
-[<ffffffff8121a205>] SyS_read+0x55/0xc0
-[<ffffffff816bb472>] entry_SYSCALL_64_fastpath+0x1a/0xa4
-[<ffffffffffffffff>] 0xffffffffffffffff
-+1 more allocation(s) with the same call stack.
-----------------------------------------
-Process: systemd-udevd (PID: 819)
-Address: 0xffff8808169a7998, size: 7; stack trace of the allocation:
+Address: 0xffff8800b6ae3008, size: 7; stack trace of the allocation:
 [<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
 [<ffffffff814711d5>] device_get_devnode+0x65/0xd0
 [<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
@@ -89,200 +52,9 @@ Address: 0xffff8808169a7998, size: 7; stack trace of the allocation:
 [<ffffffff8121a205>] SyS_read+0x55/0xc0
 [<ffffffff816bb472>] entry_SYSCALL_64_fastpath+0x1a/0xa4
 [<ffffffffffffffff>] 0xffffffffffffffff
-+1 more allocation(s) with the same call stack.
 ----------------------------------------
-Process: insmod (PID: 217125)
-Address: 0xffff8807a0b52040, size: 13; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
-[<ffffffff813482bf>] kobject_uevent_env+0x26f/0x660
-[<ffffffff813486bb>] kobject_uevent+0xb/0x10
-[<ffffffff81470c5a>] device_add+0x41a/0x610
-[<ffffffff81471048>] device_create_groups_vargs+0xd8/0x100
-[<ffffffff814710e1>] device_create+0x51/0x70
-[<ffffffffa0780a18>] hfi1_cdev_init+0x98/0x110 [hfi1]
-[<ffffffffa07832d8>] hfi1_diag_add+0x188/0x1b0 [hfi1]
-[<ffffffffa078907d>] hfi1_device_create+0x15d/0x170 [hfi1]
-[<ffffffffa078ea81>] init_one+0x2c1/0x420 [hfi1]
-[<ffffffff81386315>] local_pci_probe+0x45/0xa0
-[<ffffffff8138775c>] pci_device_probe+0xfc/0x140
-[<ffffffff81474039>] driver_probe_device+0x239/0x460
-[<ffffffff81474329>] __driver_attach+0xc9/0xf0
-----------------------------------------
-Process: insmod (PID: 217125)
-Address: 0xffff8807a0b52040, size: 13; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147b6d3>] devtmpfs_create_node+0x63/0x140
-[<ffffffff81470e05>] device_add+0x5c5/0x610
-[<ffffffff81471048>] device_create_groups_vargs+0xd8/0x100
-[<ffffffff814710e1>] device_create+0x51/0x70
-[<ffffffffa0780a18>] hfi1_cdev_init+0x98/0x110 [hfi1]
-[<ffffffffa07832d8>] hfi1_diag_add+0x188/0x1b0 [hfi1]
-[<ffffffffa078907d>] hfi1_device_create+0x15d/0x170 [hfi1]
-[<ffffffffa078ea81>] init_one+0x2c1/0x420 [hfi1]
-[<ffffffff81386315>] local_pci_probe+0x45/0xa0
-[<ffffffff8138775c>] pci_device_probe+0xfc/0x140
-[<ffffffff81474039>] driver_probe_device+0x239/0x460
-[<ffffffff81474329>] __driver_attach+0xc9/0xf0
-[<ffffffff81471bbc>] bus_for_each_dev+0x6c/0xc0
-[<ffffffff814738ae>] driver_attach+0x1e/0x20
-----------------------------------------
-Process: rmmod (PID: 217408)
-Address: 0xffff881015b05080, size: 13; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
-[<ffffffff813482bf>] kobject_uevent_env+0x26f/0x660
-[<ffffffff813486bb>] kobject_uevent+0xb/0x10
-[<ffffffff8146f49f>] device_del+0x18f/0x260
-[<ffffffff8146f58e>] device_unregister+0x1e/0x60
-[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
-[<ffffffffa0783383>] hfi1_diag_remove+0x83/0x90 [hfi1]
-[<ffffffffa07890aa>] hfi1_device_remove+0x1a/0x20 [hfi1]
-[<ffffffffa078d54b>] remove_one+0x1cb/0x1e0 [hfi1]
-[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
-[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
-[<ffffffff814746b8>] driver_detach+0xb8/0xc0
-[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
-[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
-----------------------------------------
-Process: rmmod (PID: 217408)
-Address: 0xffff881015b05080, size: 13; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147b7f5>] devtmpfs_delete_node+0x45/0xf0
-[<ffffffff8146f4ef>] device_del+0x1df/0x260
-[<ffffffff8146f58e>] device_unregister+0x1e/0x60
-[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
-[<ffffffffa0783383>] hfi1_diag_remove+0x83/0x90 [hfi1]
-[<ffffffffa07890aa>] hfi1_device_remove+0x1a/0x20 [hfi1]
-[<ffffffffa078d54b>] remove_one+0x1cb/0x1e0 [hfi1]
-[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
-[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
-[<ffffffff814746b8>] driver_detach+0xb8/0xc0
-[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
-[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
-[<ffffffff81385c7a>] pci_unregister_driver+0x2a/0x80
-[<ffffffffa07c14c1>] hfi1_mod_cleanup+0x10/0xb4f [hfi1]
-----------------------------------------
-Process: rmmod (PID: 217408)
-Address: 0xffff881015b05080, size: 14; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
-[<ffffffff813482bf>] kobject_uevent_env+0x26f/0x660
-[<ffffffff813486bb>] kobject_uevent+0xb/0x10
-[<ffffffff8146f49f>] device_del+0x18f/0x260
-[<ffffffff8146f58e>] device_unregister+0x1e/0x60
-[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
-[<ffffffffa0783342>] hfi1_diag_remove+0x42/0x90 [hfi1]
-[<ffffffffa07890aa>] hfi1_device_remove+0x1a/0x20 [hfi1]
-[<ffffffffa078d54b>] remove_one+0x1cb/0x1e0 [hfi1]
-[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
-[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
-[<ffffffff814746b8>] driver_detach+0xb8/0xc0
-[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
-[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
-----------------------------------------
-Process: rmmod (PID: 217408)
-Address: 0xffff881015b05080, size: 14; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147b7f5>] devtmpfs_delete_node+0x45/0xf0
-[<ffffffff8146f4ef>] device_del+0x1df/0x260
-[<ffffffff8146f58e>] device_unregister+0x1e/0x60
-[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
-[<ffffffffa0783342>] hfi1_diag_remove+0x42/0x90 [hfi1]
-[<ffffffffa07890aa>] hfi1_device_remove+0x1a/0x20 [hfi1]
-[<ffffffffa078d54b>] remove_one+0x1cb/0x1e0 [hfi1]
-[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
-[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
-[<ffffffff814746b8>] driver_detach+0xb8/0xc0
-[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
-[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
-[<ffffffff81385c7a>] pci_unregister_driver+0x2a/0x80
-[<ffffffffa07c14c1>] hfi1_mod_cleanup+0x10/0xb4f [hfi1]
-----------------------------------------
-Process: rmmod (PID: 217408)
-Address: 0xffff881015b05080, size: 9; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
-[<ffffffff813482bf>] kobject_uevent_env+0x26f/0x660
-[<ffffffff813486bb>] kobject_uevent+0xb/0x10
-[<ffffffff8146f49f>] device_del+0x18f/0x260
-[<ffffffff8146f58e>] device_unregister+0x1e/0x60
-[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
-[<ffffffffa0787335>] user_remove+0x45/0x60 [hfi1]
-[<ffffffffa07890a2>] hfi1_device_remove+0x12/0x20 [hfi1]
-[<ffffffffa078d54b>] remove_one+0x1cb/0x1e0 [hfi1]
-[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
-[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
-[<ffffffff814746b8>] driver_detach+0xb8/0xc0
-[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
-[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
-----------------------------------------
-Process: rmmod (PID: 217408)
-Address: 0xffff881015b05080, size: 9; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147b7f5>] devtmpfs_delete_node+0x45/0xf0
-[<ffffffff8146f4ef>] device_del+0x1df/0x260
-[<ffffffff8146f58e>] device_unregister+0x1e/0x60
-[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
-[<ffffffffa0787335>] user_remove+0x45/0x60 [hfi1]
-[<ffffffffa07890a2>] hfi1_device_remove+0x12/0x20 [hfi1]
-[<ffffffffa078d54b>] remove_one+0x1cb/0x1e0 [hfi1]
-[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
-[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
-[<ffffffff814746b8>] driver_detach+0xb8/0xc0
-[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
-[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
-[<ffffffff81385c7a>] pci_unregister_driver+0x2a/0x80
-[<ffffffffa07c14c1>] hfi1_mod_cleanup+0x10/0xb4f [hfi1]
-----------------------------------------
-Process: insmod (PID: 217125)
-Address: 0xffff88080af9f960, size: 5; stack trace of the allocation:
-[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
-[<ffffffff813482bf>] kobject_uevent_env+0x26f/0x660
-[<ffffffff813486bb>] kobject_uevent+0xb/0x10
-[<ffffffff81470c5a>] device_add+0x41a/0x610
-[<ffffffff81471048>] device_create_groups_vargs+0xd8/0x100
-[<ffffffff814710e1>] device_create+0x51/0x70
-[<ffffffffa0780a43>] hfi1_cdev_init+0xc3/0x110 [hfi1]
-[<ffffffffa0788f7a>] hfi1_device_create+0x5a/0x170 [hfi1]
-[<ffffffffa078ea81>] init_one+0x2c1/0x420 [hfi1]
-[<ffffffff81386315>] local_pci_probe+0x45/0xa0
-[<ffffffff8138775c>] pci_device_probe+0xfc/0x140
-[<ffffffff81474039>] driver_probe_device+0x239/0x460
-[<ffffffff81474329>] __driver_attach+0xc9/0xf0
-[<ffffffff81471bbc>] bus_for_each_dev+0x6c/0xc0
-----------------------------------------
-Process: insmod (PID: 217125)
-Address: 0xffff88080af9f960, size: 5; stack trace of the allocation:
-[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147b6d3>] devtmpfs_create_node+0x63/0x140
-[<ffffffff81470e05>] device_add+0x5c5/0x610
-[<ffffffff81471048>] device_create_groups_vargs+0xd8/0x100
-[<ffffffff814710e1>] device_create+0x51/0x70
-[<ffffffffa0780a43>] hfi1_cdev_init+0xc3/0x110 [hfi1]
-[<ffffffffa0788f7a>] hfi1_device_create+0x5a/0x170 [hfi1]
-[<ffffffffa078ea81>] init_one+0x2c1/0x420 [hfi1]
-[<ffffffff81386315>] local_pci_probe+0x45/0xa0
-[<ffffffff8138775c>] pci_device_probe+0xfc/0x140
-[<ffffffff81474039>] driver_probe_device+0x239/0x460
-[<ffffffff81474329>] __driver_attach+0xc9/0xf0
-[<ffffffff81471bbc>] bus_for_each_dev+0x6c/0xc0
-[<ffffffff814738ae>] driver_attach+0x1e/0x20
-[<ffffffff81473320>] bus_add_driver+0x1d0/0x290
-----------------------------------------
-Process: systemd-udevd (PID: 217131)
-Address: 0xffff8808156b7ca8, size: 5; stack trace of the allocation:
+Process: systemd-udevd (PID: 179959)
+Address: 0xffff880816af9828, size: 7; stack trace of the allocation:
 [<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
 [<ffffffff814711d5>] device_get_devnode+0x65/0xd0
 [<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
@@ -298,11 +70,11 @@ Address: 0xffff8808156b7ca8, size: 5; stack trace of the allocation:
 [<ffffffff81003c12>] do_syscall_64+0x62/0x110
 [<ffffffff816bb521>] return_from_SYSCALL_64+0x0/0x6a
 [<ffffffffffffffff>] 0xffffffffffffffff
-+3 more allocation(s) with the same call stack.
++1 more allocation(s) with the same call stack.
 ----------------------------------------
-Process: insmod (PID: 217125)
-Address: 0xffff8807a0b52000, size: 14; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
+Process: insmod (PID: 179953)
+Address: 0xffff880816a9d678, size: 7; stack trace of the allocation:
+[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
 [<ffffffff814711d5>] device_get_devnode+0x65/0xd0
 [<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
 [<ffffffff813482bf>] kobject_uevent_env+0x26f/0x660
@@ -310,39 +82,39 @@ Address: 0xffff8807a0b52000, size: 14; stack trace of the allocation:
 [<ffffffff81470c5a>] device_add+0x41a/0x610
 [<ffffffff81471048>] device_create_groups_vargs+0xd8/0x100
 [<ffffffff814710e1>] device_create+0x51/0x70
-[<ffffffffa0780a18>] hfi1_cdev_init+0x98/0x110 [hfi1]
-[<ffffffffa0783215>] hfi1_diag_add+0xc5/0x1b0 [hfi1]
-[<ffffffffa078907d>] hfi1_device_create+0x15d/0x170 [hfi1]
-[<ffffffffa078ea81>] init_one+0x2c1/0x420 [hfi1]
+[<ffffffffa0780a43>] hfi1_cdev_init+0xc3/0x110 [hfi1]
+[<ffffffffa0785a2d>] hfi1_device_create+0x7d/0xc0 [hfi1]
+[<ffffffffa078b461>] init_one+0x2c1/0x420 [hfi1]
 [<ffffffff81386315>] local_pci_probe+0x45/0xa0
 [<ffffffff8138775c>] pci_device_probe+0xfc/0x140
 [<ffffffff81474039>] driver_probe_device+0x239/0x460
 [<ffffffff81474329>] __driver_attach+0xc9/0xf0
+[<ffffffff81471bbc>] bus_for_each_dev+0x6c/0xc0
 ----------------------------------------
-Process: insmod (PID: 217125)
-Address: 0xffff8807a0b52000, size: 14; stack trace of the allocation:
-[<ffffffffa0780972>] hfi1_devnode+0x32/0x40 [hfi1]
+Process: insmod (PID: 179953)
+Address: 0xffff880816a9d678, size: 7; stack trace of the allocation:
+[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
 [<ffffffff814711d5>] device_get_devnode+0x65/0xd0
 [<ffffffff8147b6d3>] devtmpfs_create_node+0x63/0x140
 [<ffffffff81470e05>] device_add+0x5c5/0x610
 [<ffffffff81471048>] device_create_groups_vargs+0xd8/0x100
 [<ffffffff814710e1>] device_create+0x51/0x70
-[<ffffffffa0780a18>] hfi1_cdev_init+0x98/0x110 [hfi1]
-[<ffffffffa0783215>] hfi1_diag_add+0xc5/0x1b0 [hfi1]
-[<ffffffffa078907d>] hfi1_device_create+0x15d/0x170 [hfi1]
-[<ffffffffa078ea81>] init_one+0x2c1/0x420 [hfi1]
+[<ffffffffa0780a43>] hfi1_cdev_init+0xc3/0x110 [hfi1]
+[<ffffffffa0785a2d>] hfi1_device_create+0x7d/0xc0 [hfi1]
+[<ffffffffa078b461>] init_one+0x2c1/0x420 [hfi1]
 [<ffffffff81386315>] local_pci_probe+0x45/0xa0
 [<ffffffff8138775c>] pci_device_probe+0xfc/0x140
 [<ffffffff81474039>] driver_probe_device+0x239/0x460
 [<ffffffff81474329>] __driver_attach+0xc9/0xf0
 [<ffffffff81471bbc>] bus_for_each_dev+0x6c/0xc0
 [<ffffffff814738ae>] driver_attach+0x1e/0x20
+[<ffffffff81473320>] bus_add_driver+0x1d0/0x290
 ----------------------------------------
-Process: insmod (PID: 217125)
-Address: 0xffff8800b685c000, size: 16384; stack trace of the allocation:
-[<ffffffffa07a6acb>] sdma_init+0x27b/0x9d0 [hfi1]
+Process: insmod (PID: 179953)
+Address: 0xffff88080de10000, size: 16384; stack trace of the allocation:
+[<ffffffffa07a34ab>] sdma_init+0x27b/0x9d0 [hfi1]
 [<ffffffffa077fa35>] hfi1_init_dd+0x1615/0x2460 [hfi1]
-[<ffffffffa078e8ef>] init_one+0x12f/0x420 [hfi1]
+[<ffffffffa078b2cf>] init_one+0x12f/0x420 [hfi1]
 [<ffffffff81386315>] local_pci_probe+0x45/0xa0
 [<ffffffff8138775c>] pci_device_probe+0xfc/0x140
 [<ffffffff81474039>] driver_probe_device+0x239/0x460
@@ -352,126 +124,12 @@ Address: 0xffff8800b685c000, size: 16384; stack trace of the allocation:
 [<ffffffff81473320>] bus_add_driver+0x1d0/0x290
 [<ffffffff81474dd0>] driver_register+0x60/0xe0
 [<ffffffff81385c4c>] __pci_register_driver+0x4c/0x50
-[<ffffffffa080129b>] hfi1_mod_init+0x187/0x1ef [hfi1]
+[<ffffffffa06b729b>] hfi1_mod_init+0x187/0x1ef [hfi1]
 [<ffffffff8100213d>] do_one_initcall+0xcd/0x1f0
 [<ffffffff8118db8e>] do_init_module+0x60/0x1da
 [<ffffffff81111362>] load_module+0x1d12/0x25c0
 +15 more allocation(s) with the same call stack.
 ----------------------------------------
-Process: insmod (PID: 217125)
-Address: 0xffff88080af9fa60, size: 7; stack trace of the allocation:
-[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
-[<ffffffff813482bf>] kobject_uevent_env+0x26f/0x660
-[<ffffffff813486bb>] kobject_uevent+0xb/0x10
-[<ffffffff81470c5a>] device_add+0x41a/0x610
-[<ffffffff81471048>] device_create_groups_vargs+0xd8/0x100
-[<ffffffff814710e1>] device_create+0x51/0x70
-[<ffffffffa0780a43>] hfi1_cdev_init+0xc3/0x110 [hfi1]
-[<ffffffffa0789009>] hfi1_device_create+0xe9/0x170 [hfi1]
-[<ffffffffa078ea81>] init_one+0x2c1/0x420 [hfi1]
-[<ffffffff81386315>] local_pci_probe+0x45/0xa0
-[<ffffffff8138775c>] pci_device_probe+0xfc/0x140
-[<ffffffff81474039>] driver_probe_device+0x239/0x460
-[<ffffffff81474329>] __driver_attach+0xc9/0xf0
-[<ffffffff81471bbc>] bus_for_each_dev+0x6c/0xc0
-----------------------------------------
-Process: insmod (PID: 217125)
-Address: 0xffff88080af9fa60, size: 7; stack trace of the allocation:
-[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147b6d3>] devtmpfs_create_node+0x63/0x140
-[<ffffffff81470e05>] device_add+0x5c5/0x610
-[<ffffffff81471048>] device_create_groups_vargs+0xd8/0x100
-[<ffffffff814710e1>] device_create+0x51/0x70
-[<ffffffffa0780a43>] hfi1_cdev_init+0xc3/0x110 [hfi1]
-[<ffffffffa0789009>] hfi1_device_create+0xe9/0x170 [hfi1]
-[<ffffffffa078ea81>] init_one+0x2c1/0x420 [hfi1]
-[<ffffffff81386315>] local_pci_probe+0x45/0xa0
-[<ffffffff8138775c>] pci_device_probe+0xfc/0x140
-[<ffffffff81474039>] driver_probe_device+0x239/0x460
-[<ffffffff81474329>] __driver_attach+0xc9/0xf0
-[<ffffffff81471bbc>] bus_for_each_dev+0x6c/0xc0
-[<ffffffff814738ae>] driver_attach+0x1e/0x20
-[<ffffffff81473320>] bus_add_driver+0x1d0/0x290
-----------------------------------------
-Process: rmmod (PID: 217408)
-Address: 0xffff88080b5f50d0, size: 7; stack trace of the allocation:
-[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
-[<ffffffff813482bf>] kobject_uevent_env+0x26f/0x660
-[<ffffffff813486bb>] kobject_uevent+0xb/0x10
-[<ffffffff8146f49f>] device_del+0x18f/0x260
-[<ffffffff8146f58e>] device_unregister+0x1e/0x60
-[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
-[<ffffffffa0787322>] user_remove+0x32/0x60 [hfi1]
-[<ffffffffa07890a2>] hfi1_device_remove+0x12/0x20 [hfi1]
-[<ffffffffa078d54b>] remove_one+0x1cb/0x1e0 [hfi1]
-[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
-[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
-[<ffffffff814746b8>] driver_detach+0xb8/0xc0
-[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
-[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
-----------------------------------------
-Process: rmmod (PID: 217408)
-Address: 0xffff88080b5f50d0, size: 7; stack trace of the allocation:
-[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147b7f5>] devtmpfs_delete_node+0x45/0xf0
-[<ffffffff8146f4ef>] device_del+0x1df/0x260
-[<ffffffff8146f58e>] device_unregister+0x1e/0x60
-[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
-[<ffffffffa0787322>] user_remove+0x32/0x60 [hfi1]
-[<ffffffffa07890a2>] hfi1_device_remove+0x12/0x20 [hfi1]
-[<ffffffffa078d54b>] remove_one+0x1cb/0x1e0 [hfi1]
-[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
-[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
-[<ffffffff814746b8>] driver_detach+0xb8/0xc0
-[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
-[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
-[<ffffffff81385c7a>] pci_unregister_driver+0x2a/0x80
-[<ffffffffa07c14c1>] hfi1_mod_cleanup+0x10/0xb4f [hfi1]
-----------------------------------------
-Process: rmmod (PID: 217408)
-Address: 0xffff88080b5f50d0, size: 5; stack trace of the allocation:
-[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147142d>] dev_uevent+0x1ed/0x2e0
-[<ffffffff813482bf>] kobject_uevent_env+0x26f/0x660
-[<ffffffff813486bb>] kobject_uevent+0xb/0x10
-[<ffffffff8146f49f>] device_del+0x18f/0x260
-[<ffffffff8146f58e>] device_unregister+0x1e/0x60
-[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
-[<ffffffffa078734b>] user_remove+0x5b/0x60 [hfi1]
-[<ffffffffa07890a2>] hfi1_device_remove+0x12/0x20 [hfi1]
-[<ffffffffa078d54b>] remove_one+0x1cb/0x1e0 [hfi1]
-[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
-[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
-[<ffffffff814746b8>] driver_detach+0xb8/0xc0
-[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
-[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
-----------------------------------------
-Process: rmmod (PID: 217408)
-Address: 0xffff88080b5f50d0, size: 5; stack trace of the allocation:
-[<ffffffffa0780932>] hfi1_user_devnode+0x32/0x40 [hfi1]
-[<ffffffff814711d5>] device_get_devnode+0x65/0xd0
-[<ffffffff8147b7f5>] devtmpfs_delete_node+0x45/0xf0
-[<ffffffff8146f4ef>] device_del+0x1df/0x260
-[<ffffffff8146f58e>] device_unregister+0x1e/0x60
-[<ffffffffa0780aaf>] hfi1_cdev_cleanup+0x1f/0x40 [hfi1]
-[<ffffffffa078734b>] user_remove+0x5b/0x60 [hfi1]
-[<ffffffffa07890a2>] hfi1_device_remove+0x12/0x20 [hfi1]
-[<ffffffffa078d54b>] remove_one+0x1cb/0x1e0 [hfi1]
-[<ffffffff813875d9>] pci_device_remove+0x39/0xc0
-[<ffffffff8147450a>] __device_release_driver+0x9a/0x140
-[<ffffffff814746b8>] driver_detach+0xb8/0xc0
-[<ffffffff81473435>] bus_remove_driver+0x55/0xd0
-[<ffffffff81474e7c>] driver_unregister+0x2c/0x50
-[<ffffffff81385c7a>] pci_unregister_driver+0x2a/0x80
-[<ffffffffa07c14c1>] hfi1_mod_cleanup+0x10/0xb4f [hfi1]
-----------------------------------------
-Allocations: 333
-Possible leaks: 50
+Allocations: 272
+Possible leaks: 23
 Unallocated frees: 0
