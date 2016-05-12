@@ -362,6 +362,7 @@ int refresh_qsfp_cache(struct hfi1_pportdata *ppd, struct qsfp_data *cp)
 {
 	u32 target = ppd->dd->hfi1_id;
 	int ret;
+	int retry_count;
 	unsigned long flags;
 	u8 *cache = &cp->cache[0];
 
@@ -376,8 +377,23 @@ int refresh_qsfp_cache(struct hfi1_pportdata *ppd, struct qsfp_data *cp)
 		goto bail;
 	}
 
+	retry_count = 0;
+retry:
 	ret = qsfp_read(ppd, target, 0, cache, QSFP_PAGESIZE);
 	if (ret != QSFP_PAGESIZE) {
+		/*
+		 * This is the first QSFP access the driver makes.
+		 * Some QSFPs don't respond within the expected time,
+		 * but later appear fine.  Retry at 2s intervals for up
+		 * to 10s.
+		 */
+		if (ret < 0 && retry_count < 5) {
+			retry_count++;
+			dd_dev_info(ppd->dd, "%s: QSFP not responding, waiting and retrying %d\n",
+				    __func__, retry_count);
+			msleep(2000);
+			goto retry;
+		}
 		dd_dev_info(ppd->dd,
 			    "%s: Page 0 read failed, expected %d, got %d\n",
 			    __func__, QSFP_PAGESIZE, ret);
