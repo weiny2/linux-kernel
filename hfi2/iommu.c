@@ -142,6 +142,7 @@ hfi_iommu_clear_pasid(struct hfi_ctx *ctx)
 	struct device *dev = &dd->pcidev->dev;
 	FXR_AT_CFG_PASID_LUT_t lut = {.val = 0};
 	FXR_AT_CFG_DRAIN_PASID_t drain_pasid = {.val = 0};
+	int time, ms;
 
 	/* disable pid->pasid translation */
 	lut.field.enable = 0;
@@ -162,10 +163,20 @@ hfi_iommu_clear_pasid(struct hfi_ctx *ctx)
 	drain_pasid.field.pasid = ctx->pasid;
 	drain_pasid.field.busy = 1;
 	write_csr(dd, FXR_AT_CFG_DRAIN_PASID, drain_pasid.val);
-	do {
-		mdelay(1);
+
+	/* wait for completion, if timeout log a message */
+	ms = 1;
+	for (time = 0; time < HFI_PASID_DRAIN_TIMEOUT_MS; time += ms) {
+		mdelay(ms);
 		drain_pasid.val = read_csr(dd, FXR_AT_CFG_DRAIN_PASID);
-	} while (drain_pasid.field.busy == 1);
+		if (!drain_pasid.field.busy)
+			break;
+
+		ms *= 2;	/* double the waiting time */
+	}
+	if (time >= HFI_PASID_DRAIN_TIMEOUT_MS)
+		dd_dev_err(dd, "PASID draining not done "
+			"after %dms, pid %d\n", time, ctx->pid);
 
 	spin_unlock(&dd->ptl_lock);
 

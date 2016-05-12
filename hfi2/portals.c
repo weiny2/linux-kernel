@@ -795,17 +795,22 @@ static int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx, u64 user_data)
 	eq_desc.val[0] = 0;
 	eq_desc.val[1] = 0;
 
+retry:
 	spin_lock_irqsave(&dd->priv_rx_cq_lock, sflags);
 	/* issue write to privileged CQ to complete EQ release */
 	ret = _hfi_eq_update_desc_cmd(ctx, &dd->priv_rx_cq, eq_idx, &eq_desc,
 				      user_data);
 	spin_unlock_irqrestore(&dd->priv_rx_cq_lock, sflags);
 	if (ret < 0) {
-		/* TODO - revisit how to handle waiting for CQ slots */
-		goto idr_end;
+		if (ret != -EAGAIN)
+			goto idr_end;
+
+		/* no slot on rx cq, delay and retry */
+		mdelay(1);
+		goto retry;
 	}
-	/* FXRTODO: Ensure the command above has completed by polling EQ 0 */
-	mdelay(1);
+
+	/* caller will take care the command completion */
 
 	eq_desc_base[eq_idx].val[0] = 0; /* clear valid */
 

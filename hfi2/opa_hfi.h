@@ -130,6 +130,12 @@ enum {
 #define HFI_EQ_WAIT_TIMEOUT_MS	500
 #define HFI_VL_STATUS_CLEAR_TIMEOUT	5000	/* per-VL status clear, in ms */
 
+/* timeout for ctxt cleanup */
+#define HFI_CQ_RESET_TIMEOUT_MS			10
+#define HFI_OTR_CANCELLATION_TIMEOUT_MS		1
+#define HFI_CACHE_INVALIDATION_TIMEOUT_MS	10
+#define HFI_PASID_DRAIN_TIMEOUT_MS		2000
+
 /* use this MTU size if none other is given */
 #define HFI_DEFAULT_ACTIVE_MTU	10240
 /* use this MTU size as the default maximum */
@@ -857,7 +863,6 @@ void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
 void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx);
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid);
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
-void hfi_eq_cache_invalidate(struct hfi_devdata *dd, u16 ptl_pid);
 void hfi_tpid_enable(struct hfi_devdata *dd, u8 idx, u16 base, u32 ptl_uid);
 void hfi_tpid_disable(struct hfi_devdata *dd, u8 idx);
 int hfi_iommu_set_pasid(struct hfi_ctx *ctx);
