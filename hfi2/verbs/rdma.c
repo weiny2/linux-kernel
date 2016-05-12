@@ -542,12 +542,12 @@ void hfi2_ib_rcv(struct hfi2_ib_packet *packet)
 		ibp->port_num, l4, tlen, packet->ctx->pid, qp_num);
 
 	if (is_mcast) {
-		struct hfi2_mcast *mcast;
-		struct hfi2_mcast_qp *p;
+		struct rvt_mcast *mcast;
+		struct rvt_mcast_qp *p;
 
 		if (l4 != HFI1_L4_IB_GLOBAL)
 			goto drop;
-		mcast = hfi2_mcast_find(ibp, &grh->dgid);
+		mcast = rvt_mcast_find(&ibp->rvp, &grh->dgid);
 		if (mcast == NULL)
 			goto drop;
 		list_for_each_entry_rcu(p, &mcast->qp_list, list) {

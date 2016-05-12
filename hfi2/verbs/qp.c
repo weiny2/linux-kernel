@@ -108,9 +108,6 @@ unsigned free_all_qps(struct rvt_dev_info *rdi)
 		if (rcu_dereference(ibp->rvp.qp[1]))
 			qp_inuse++;
 		rcu_read_unlock();
-
-		/* TODO - can remove when hfi2_mcast converted to rvt_mcast */
-		qp_inuse += hfi2_mcast_tree_empty(ibp);
 	}
 
 	return qp_inuse;
