@@ -707,10 +707,12 @@ void hfi_set_implicit_pkeys(struct hfi_pportdata *ppd,
 	if (pkey_8b) {
 		eg_pkey.field.pkey_8b = *pkey_8b;
 		in_pkey.field.pkey_8b = *pkey_8b;
+		ppd->pkey_8b = *pkey_8b;
 	}
 	if (pkey_10b) {
-		eg_pkey.field.pkey_10b = *pkey_10b;
-		in_pkey.field.pkey_10b = *pkey_10b;
+		eg_pkey.field.pkey_10b = *pkey_10b >> 4;
+		in_pkey.field.pkey_10b = *pkey_10b >> 4;
+		ppd->pkey_10b = *pkey_10b;
 	}
 	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_PKEY_CHECK_CTRL, eg_pkey.val);
 	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_CTRL, in_pkey.val);
@@ -732,7 +734,6 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 	TP_CFG_PKEY_TABLE_t tx_pkey;
 	FPC_CFG_PKEY_TABLE_t rx_pkey;
 	int i, j;
-	u16 pkey_8b, pkey_10b;
 
 	for (i = 0, j = 0; i < HFI_MAX_PKEYS; i += 4, j++) {
 		tx_pkey.field.entry0 = ppd->pkeys[i];
@@ -749,20 +750,6 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
 		hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_TABLE + 0x08 * j,
 				 rx_pkey.val);
 	}
-
-	/*
-	 * FXRTODO: 8B and 10B implicit pkeys are to obtained from FM.
-	 * Until that is implemented use a pkey of 0x8002 for 8B
-	 * which is currently only used by portals traffic.
-	 * Correspondingly opafm.xml will have 0x8002
-	 * programmed.
-	 *
-	 * For 10B use the upper 12bits as 0x800. Make sure that opafm.xml
-	 * uses a PKEY in the range of 0x0 - 0xF for 10B
-	 */
-	pkey_8b = 0x8002;
-	pkey_10b = 0x800;
-	hfi_set_implicit_pkeys(ppd, &pkey_8b, &pkey_10b);
 
 	hfi_cfg_pkey_check(ppd, 1);
 }
@@ -1730,6 +1717,12 @@ int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 		if (HFI1_CAP_IS_KSET(PKEY_CHECK))
 #endif
 			hfi_set_pkey_table(ppd);
+		break;
+	case HFI_IB_CFG_8B_PKEY:
+		hfi_set_implicit_pkeys(ppd, data, NULL);
+		break;
+	case HFI_IB_CFG_10B_PKEY:
+		hfi_set_implicit_pkeys(ppd, NULL, data);
 		break;
 	case HFI_IB_CFG_SL_TO_SC:
 		hfi_sl_to_sc(ppd);

@@ -320,6 +320,8 @@ enum {
 	HFI_IB_CFG_SPD,			/* current Link spd */
 	HFI_IB_CFG_OP_VLS,		/* operational VLs */
 	HFI_IB_CFG_PKEYS,		/* update partition keys */
+	HFI_IB_CFG_8B_PKEY,		/* update 8B key */
+	HFI_IB_CFG_10B_PKEY,		/* update 10B key */
 	HFI_IB_CFG_MTU,			/* update MTU in IBC */
 	HFI_IB_CFG_VL_HIGH_LIMIT,	/* Change VL high limit */
 	HFI_IB_CFG_SL_TO_SC,		/* Change SLtoSC mapping */
@@ -472,6 +474,8 @@ struct bw_arb_cache {
  * @link_width_downgrade_rx_active: Current RX side link width downgrading
  * @link_speed_active: Current active link speed
  * @port_ltp_crc_mode: Supported, enabled and active LTP CRC modes
+ * @pkey_8b: Implicit 8B Pkey
+ * @pkey_10b: Partial 10B Pkey
  * @packet_format_supported: Supported packet format on this port.
  * @packet_format_enabled: Enabled packet format on this port
  * @port_crc_mode_enabled: CRC mode to be enabled
@@ -583,6 +587,8 @@ struct hfi_pportdata {
 	u16 link_width_downgrade_rx_active;
 	u16 link_speed_active;
 	u16 port_ltp_crc_mode;
+	u16 pkey_8b;
+	u16 pkey_10b;
 	u8 packet_format_supported;
 	u8 packet_format_enabled;
 	u8 linkinit_reason;
