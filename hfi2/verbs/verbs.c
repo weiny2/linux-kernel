@@ -412,8 +412,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->dma_device = ibd->parent_dev;
 	ibdev->modify_port = hfi2_modify_port;
 	ibdev->modify_device = hfi2_modify_device;
-	ibdev->attach_mcast = hfi2_multicast_attach;
-	ibdev->detach_mcast = hfi2_multicast_detach;
 	ibdev->get_port_immutable = port_immutable;
 
 	/* add optional sysfs files under /sys/class/infiniband/hfi2_0/ */
@@ -539,10 +537,11 @@ static int hfi2_init_port(struct hfi2_ibdev *ibd,
 		IB_PORT_CAP_MASK_NOTICE_SUP;
 	ibp->port_num = ppd->pnum - 1;
 
+	/* FXRTODO - this should all be inside rvt_init_port */
 	RCU_INIT_POINTER(ibp->rvp.qp[0], NULL);
 	RCU_INIT_POINTER(ibp->rvp.qp[1], NULL);
+	spin_lock_init(&ibp->rvp.lock);
 
-	spin_lock_init(&ibp->lock);
 	ret = hfi2_ctx_init_port(ibp);
 	if (ret < 0)
 		goto ctx_init_err;
@@ -590,7 +589,6 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	ibd->pport = (struct hfi2_ibport *)(ibd + 1);
 	ibd->parent_dev = &dd->pcidev->dev;
 	spin_lock_init(&ibd->n_ahs_lock);
-	spin_lock_init(&ibd->n_mcast_grps_lock);
 
 	/* set RHF event table for Verbs receive */
 	ibd->rhf_rcv_functions[RHF_RCV_TYPE_IB] = hfi2_ib_rcv;

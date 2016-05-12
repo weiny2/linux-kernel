@@ -148,7 +148,7 @@ static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
 	/* o14-1: smp->mkey = 0; */
 	memcpy(smp->route.lid.data, data, len);
 
-	spin_lock_irqsave(&ibp->lock, flags);
+	spin_lock_irqsave(&ibp->rvp.lock, flags);
 	if (!ibp->rvp.sm_ah) {
 		if (ibp->sm_lid != be16_to_cpu(IB_LID_PERMISSIVE)) {
 			struct ib_ah *ah;
@@ -167,7 +167,7 @@ static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
 	} else {
 		send_buf->ah = &ibp->rvp.sm_ah->ibah;
 	}
-	spin_unlock_irqrestore(&ibp->lock, flags);
+	spin_unlock_irqrestore(&ibp->rvp.lock, flags);
 
 	if (!ret)
 		ret = ib_post_send_mad(send_buf, NULL);
@@ -1502,14 +1502,14 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 		pr_warn("SubnSet(OPA_PortInfo) smlid invalid 0x%x\n", smlid);
 	} else if (smlid != ibp->sm_lid || msl != ibp->sm_sl) {
 		pr_warn("SubnSet(OPA_PortInfo) smlid 0x%x\n", smlid);
-		spin_lock_irqsave(&ibp->lock, flags);
+		spin_lock_irqsave(&ibp->rvp.lock, flags);
 		if (ibp->rvp.sm_ah) {
 			if (smlid != ibp->sm_lid)
 				hfi2_update_sm_ah_attr(ibp, smlid);
 			if (msl != ibp->sm_sl)
 				ibp->rvp.sm_ah->attr.sl = msl;
 		}
-		spin_unlock_irqrestore(&ibp->lock, flags);
+		spin_unlock_irqrestore(&ibp->rvp.lock, flags);
 		if (smlid != ibp->sm_lid)
 			ibp->sm_lid = smlid;
 		if (msl != ibp->sm_sl)

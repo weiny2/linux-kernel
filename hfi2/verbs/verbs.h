@@ -148,25 +148,6 @@ struct hfi2_qp_priv {
 	struct iowait s_iowait;
 };
 
-/*
- * There is one struct hfi2_mcast for each multicast GID.
- * All attached QPs are then stored as a list of
- * struct hfi2_mcast_qp.
- */
-struct hfi2_mcast_qp {
-	struct list_head list;
-	struct rvt_qp *qp;
-};
-
-struct hfi2_mcast {
-	struct rb_node rb_node;
-	union ib_gid mgid;
-	struct list_head qp_list;
-	wait_queue_head_t wait;
-	atomic_t refcount;
-	int n_attached;
-};
-
 /* TODO - hfi1 returns an int, review when we attempt common logic. */
 typedef void (*rhf_rcv_function_ptr)(struct hfi2_ib_packet *packet);
 
@@ -219,10 +200,6 @@ struct hfi2_ibport {
 	u8 subnet_timeout;
 	u8 vl_high_limit;
 
-	/* protect changes in this struct */
-	spinlock_t lock;
-	struct rb_root mcast_tree;
-
 	struct hfi_ctx *ctx;
 	struct hfi_cq cmdq_tx;
 	struct hfi_cq cmdq_rx;
@@ -245,8 +222,6 @@ struct hfi2_ibdev {
 	struct hfi2_ibport *pport;
 	u32 n_ahs_allocated;
 	spinlock_t n_ahs_lock;
-	u32 n_mcast_grps_allocated; /* number of mcast groups allocated */
-	spinlock_t n_mcast_grps_lock;
 
 	/* per device cq worker */
 	struct kthread_worker *worker;
@@ -352,11 +327,6 @@ int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,
 		     struct ib_mad_hdr *out_mad, size_t *out_mad_size,
 		     u16 *out_mad_pkey_index);
-int hfi2_multicast_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
-int hfi2_multicast_detach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid);
-struct hfi2_mcast *
-hfi2_mcast_find(struct hfi2_ibport *ibp, union ib_gid *mgid);
-int hfi2_mcast_tree_empty(struct hfi2_ibport *ibp);
 
 /* Device specific */
 int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv);
