@@ -107,6 +107,7 @@ struct hfi1_packet;
 #define IB_BTH_REQ_ACK		BIT(31)
 #define IB_BTH_SOLICITED	BIT(23)
 #define IB_BTH_MIG_REQ		BIT(22)
+#define STL_BTH_MIG_REQ		BIT(31)
 
 #define IB_GRH_VERSION		6
 #define IB_GRH_VERSION_MASK	0xF
@@ -466,7 +467,7 @@ static inline u8 get_opcode(struct hfi1_opa_header *hdr)
 
 int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 		       struct ib_grh *grh, bool bypass,
-		       struct rvt_qp *qp, u32 bth0);
+		       struct rvt_qp *qp, u32 bth0, u32 bth1);
 
 u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
 		  struct ib_global_route *grh, u32 hwords, u32 nwords);

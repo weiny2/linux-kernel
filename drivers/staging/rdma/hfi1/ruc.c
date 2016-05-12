@@ -264,7 +264,7 @@ static int gid_ok(union ib_gid *gid, __be64 gid_prefix, __be64 id)
  */
 int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 		       struct ib_grh *grh, bool bypass,
-		       struct rvt_qp *qp, u32 bth0)
+		       struct rvt_qp *qp, u32 bth0, u32 bth1)
 {
 	struct hfi1_qp_priv *priv = qp->priv;
 	__be64 guid;
@@ -273,6 +273,7 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 	struct hfi1_ib_header *hdr = NULL;
 	struct hfi1_16b_message_header *hdr_16b = NULL;
 	u32 dlid, slid, sl, opa_dlid;
+	int migrated;
 
 	if (bypass) {
 		hdr_16b = (struct hfi1_16b_message_header *)hfi1_hdr;
@@ -282,14 +283,16 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 		slid = OPA_16B_GET_SLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					hdr_16b->lrh[2], hdr_16b->lrh[3]);
 		sl = 0; /* 16B has no sl but hfi1_bad_pkqkey needs it */
+		migrated = bth0 & IB_BTH_MIG_REQ;
 	} else {
 		hdr = (struct hfi1_ib_header *)hfi1_hdr;
 		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
 		slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
 		sl = OPA_9B_GET_SL(be16_to_cpu(hdr->lrh[0]));
+		migrated = bth1 & STL_BTH_MIG_REQ;
 	}
 
-	if (qp->s_mig_state == IB_MIG_ARMED && (bth0 & IB_BTH_MIG_REQ)) {
+	if (qp->s_mig_state == IB_MIG_ARMED && (migrated)) {
 		if (!grh) {
 			if ((qp->alt_ah_attr.ah_flags & IB_AH_GRH) &&
 			    !priv->use_16b)
@@ -350,7 +353,7 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 		    ppd_from_ibp(ibp)->port != qp->port_num)
 			goto err;
 		if (qp->s_mig_state == IB_MIG_REARM &&
-		    !(bth0 & IB_BTH_MIG_REQ))
+		    !migrated)
 			qp->s_mig_state = IB_MIG_ARMED;
 	}
 
@@ -764,7 +767,7 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	u16 lrh0;
 	u32 nwords;
 	u32 extra_bytes;
-	u32 bth1;
+	u32 bth1 = 0;
 	bool use_16b = false;
 	u32 lrh0_16b = 0;
 	u32 lrh1_16b = 0x40000000;
@@ -825,10 +828,14 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	priv->s_ahg->tx_flags = 0;
 	priv->s_ahg->ahgcount = 0;
 	priv->s_ahg->ahgidx = 0;
-	if (qp->s_mig_state == IB_MIG_MIGRATED)
-		bth0 |= IB_BTH_MIG_REQ;
-	else
+	if (qp->s_mig_state == IB_MIG_MIGRATED) {
+		if (!use_16b)
+			bth0 |= IB_BTH_MIG_REQ;
+		else
+			bth1 |= STL_BTH_MIG_REQ;
+	} else {
 		middle = 0;
+	}
 	if (middle)
 		build_ahg(qp, bth2);
 	else
@@ -872,26 +879,22 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	bth0 |= hfi1_get_pkey(ibp, qp->s_pkey_index);
 	bth0 |= extra_bytes << 20;
 	ohdr->bth[0] = cpu_to_be32(bth0);
-	bth1 = qp->remote_qpn;
+	bth1 |= qp->remote_qpn;
 	if (qp->s_flags & RVT_S_ECN) {
 		qp->s_flags &= ~RVT_S_ECN;
 		/* we recently received a FECN, so return a BECN */
-		bth1 |= (HFI1_BECN_MASK << HFI1_BECN_SHIFT);
+		if (!use_16b)
+			bth1 |= (HFI1_BECN_MASK << HFI1_BECN_SHIFT);
+		else
+			lrh0_16b = (lrh0_16b & ~OPA_16B_BECN_MASK) | (1 << 31);
 	}
 	ohdr->bth[1] = cpu_to_be32(bth1);
 	ohdr->bth[2] = cpu_to_be32(bth2);
 
 	if (use_16b) {
-		u8 fecn, becn;
 		u16 pkey;
 
 		pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
-		fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) &
-			HFI1_FECN_MASK;
-		becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) &
-			HFI1_BECN_MASK;
-		lrh0_16b = (lrh0_16b & ~OPA_16B_BECN_MASK) | (becn << 31);
-		lrh1_16b = (lrh1_16b & ~OPA_16B_FECN_MASK) | (fecn << 28);
 		lrh2_16b = (lrh2_16b & ~OPA_16B_PKEY_MASK) | (pkey << 16);
 
 		ps->s_txreq->phdr.hdr.pkt.opah.lrh[0] = lrh0_16b;

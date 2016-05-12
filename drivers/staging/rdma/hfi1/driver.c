@@ -636,8 +636,7 @@ static void __prescan_rxq(struct hfi1_packet *packet)
 		if (ps_skip(&mdata, rhf, rcd))
 			goto next;
 
-		if ((etype != RHF_RCV_TYPE_IB) ||
-		    (etype != RHF_RCV_TYPE_BYPASS))
+		if (etype != RHF_RCV_TYPE_IB)
 			goto next;
 
 		hdr = (struct hfi1_ib_header *)

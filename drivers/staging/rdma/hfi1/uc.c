@@ -312,6 +312,8 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 	bool has_grh = rcv_flags & HFI1_HAS_GRH;
 	int ret;
 	u32 bth1, dlid, slid;
+	bool is_fecn = false;
+	bool is_becn = false;
 
 	if (packet->bypass) {
 		hdr_16b = packet->hdr;
@@ -321,69 +323,68 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 	}
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
+	bth1 = be32_to_cpu(ohdr->bth[1]);
 	if (hfi1_ruc_check_hdr(ibp,
 			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
-			       packet->grh, packet->bypass, qp, bth0)) {
+			       packet->grh, packet->bypass, qp, bth0, bth1)) {
 		pr_warn("%s ruc check header failed\n",
 			packet->bypass ? "16B" : "9B");
 		return;
 	}
 
-	bth1 = be32_to_cpu(ohdr->bth[1]);
-	if (unlikely(bth1 & (HFI1_BECN_SMASK | HFI1_FECN_SMASK))) {
-		if (bth1 & HFI1_BECN_SMASK) {
-			struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
-			u32 rqpn, lqpn;
-			u8 sl, sc5;
+	if (packet->bypass) {
+		is_fecn = (OPA_16B_GET_FECN(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3])) ?
+				true : false;
+		is_becn = (OPA_16B_GET_BECN(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3])) ?
+				true : false;
+		slid = OPA_16B_GET_SLID(hdr_16b->lrh[0],
+					hdr_16b->lrh[1],
+					hdr_16b->lrh[2],
+					hdr_16b->lrh[3]);
+		dlid = OPA_16B_GET_DLID(hdr_16b->lrh[0],
+					hdr_16b->lrh[1],
+					hdr_16b->lrh[2],
+					hdr_16b->lrh[3]);
+	} else {
+		is_becn = (bth1 & HFI1_BECN_SMASK) ? true : false;
+		is_fecn = (bth1 & HFI1_FECN_SMASK) ? true : false;
+		slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
+		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
+	}
 
-			lqpn = bth1 & RVT_QPN_MASK;
-			rqpn = qp->remote_qpn;
+	if (is_becn) {
+		struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
+		u32 rqpn, lqpn;
+		u8 sl, sc5;
 
-			sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-			sl = ibp->sc_to_sl[sc5];
+		lqpn = bth1 & RVT_QPN_MASK;
+		rqpn = qp->remote_qpn;
 
-			if (packet->bypass)
-				slid = OPA_16B_GET_SLID(hdr_16b->lrh[0],
-							hdr_16b->lrh[1],
-							hdr_16b->lrh[2],
-							hdr_16b->lrh[3]);
-			else
-				slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
+		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+		sl = ibp->sc_to_sl[sc5];
 
-			process_becn(ppd, sl, slid, lqpn, rqpn,
-				     IB_CC_SVCTYPE_UC);
-		}
+		process_becn(ppd, sl, slid, lqpn, rqpn,
+			     IB_CC_SVCTYPE_UC);
+	}
 
-		if (bth1 & HFI1_FECN_SMASK) {
-			struct ib_grh *grh = NULL;
-			u32 src_qp = qp->remote_qpn;
-			u16 pkey;
-			u8 sc5;
+	if (is_fecn) {
+		struct ib_grh *grh = NULL;
+		u32 src_qp = qp->remote_qpn;
+		u16 pkey;
+		u8 sc5;
 
-			pkey = (u16)be32_to_cpu(ohdr->bth[0]);
-			sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
-			if (has_grh)
-				grh = packet->grh;
-			if (packet->bypass) {
-				dlid = OPA_16B_GET_DLID(hdr_16b->lrh[0],
-							hdr_16b->lrh[1],
-							hdr_16b->lrh[2],
-							hdr_16b->lrh[3]);
-				slid = OPA_16B_GET_SLID(hdr_16b->lrh[0],
-							hdr_16b->lrh[1],
-							hdr_16b->lrh[2],
-							hdr_16b->lrh[3]);
-				return_cnp_bypass(ibp, qp, src_qp, pkey,
-						  dlid, slid, sc5, grh);
-			} else {
-				dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
-				slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
-				return_cnp(ibp, qp, src_qp, pkey, dlid,
-					   slid, sc5, grh);
-			}
-
-
-		}
+		pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
+		if (has_grh)
+			grh = packet->grh;
+		if (packet->bypass)
+			return_cnp_bypass(ibp, qp, src_qp, pkey,
+					  dlid, slid, sc5, grh);
+		else
+			return_cnp(ibp, qp, src_qp, pkey, dlid,
+				   slid, sc5, grh);
 	}
 
 	psn = be32_to_cpu(ohdr->bth[2]);

@@ -674,6 +674,7 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	/* Check for GRH */
 	lnh = OPA_9B_GET_LNH(be16_to_cpu(hdr->lrh[0]));
 	dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
+
 	if (unlikely((dlid >= be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
 		     (dlid != be16_to_cpu(IB_LID_PERMISSIVE))))
 		is_mcast = true;

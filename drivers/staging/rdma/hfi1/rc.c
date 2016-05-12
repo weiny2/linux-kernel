@@ -832,7 +832,7 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 	u64 pbc, pbc_flags = 0;
 	u16 lrh0;
 	u16 sc5;
-	u32 bth0;
+	u32 bth0, bth1 = 0;
 	u32 hwords = 0;
 	u32 nwords = 0;
 	u32 vl, plen, slid, dlid;
@@ -892,8 +892,12 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 	}
 	/* read pkey_index w/o lock (its atomic) */
 	bth0 = hfi1_get_pkey(ibp, qp->s_pkey_index) | (OP(ACKNOWLEDGE) << 24);
-	if (qp->s_mig_state == IB_MIG_MIGRATED)
-		bth0 |= IB_BTH_MIG_REQ;
+	if (qp->s_mig_state == IB_MIG_MIGRATED) {
+		if (!bypass)
+			bth0 |= IB_BTH_MIG_REQ;
+		else
+			bth1 = STL_BTH_MIG_REQ;
+	}
 	if (qp->r_nak_state)
 		ohdr->u.aeth = cpu_to_be32((qp->r_msn & HFI1_MSN_MASK) |
 					    (qp->r_nak_state <<
@@ -906,13 +910,13 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 	plen = 2 /* PBC */ + hwords + nwords;
 	vl = sc_to_vlt(ppd->dd, sc5);
 	ohdr->bth[0] = cpu_to_be32(bth0);
-	ohdr->bth[1] = cpu_to_be32(qp->remote_qpn);
-	ohdr->bth[1] |= cpu_to_be32((!!is_fecn) << HFI1_BECN_SHIFT);
+	ohdr->bth[1] = cpu_to_be32(bth1 | qp->remote_qpn);
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->r_ack_psn));
 
 	if (!bypass) {
 		/* set PBC_DC_INFO bit (aka SC[4]) in pbc_flags */
 		pbc_flags |= ((!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT);
+		ohdr->bth[1] |= cpu_to_be32((!!is_fecn) << HFI1_BECN_SHIFT);
 		lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
 		hdr.lrh[0] = cpu_to_be16(lrh0);
 		hdr.lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
@@ -920,19 +924,13 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 		hdr.lrh[3] = cpu_to_be16(ppd->lid |
 					 qp->remote_ah_attr.src_path_bits);
 	} else {
-		u8 fecn, becn;
 		u16 pkey;
 
 		pbc_flags |= PBC_PACKET_BYPASS | PBC_INSERT_BYPASS_ICRC;
 
 		pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
-		fecn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) &
-				    HFI1_FECN_MASK;
-		becn = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) &
-				    HFI1_BECN_MASK;
 
-		lrh0_16b = (lrh0_16b & ~OPA_16B_BECN_MASK) | (becn << 31);
-		lrh1_16b = (lrh1_16b & ~OPA_16B_FECN_MASK) | (fecn << 28);
+		lrh0_16b = (lrh0_16b & ~OPA_16B_BECN_MASK) | (!!is_fecn << 31);
 		lrh2_16b = (lrh2_16b & ~OPA_16B_PKEY_MASK) | (pkey << 16);
 		lrh1_16b = (lrh1_16b & ~OPA_16B_SC_MASK) | (sc5 << 20);
 
@@ -2229,10 +2227,12 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	int ret;
 	int copy_last = 0;
 	bool is_fecn = false;
+	bool is_becn = false;
 	bool grh = false;
 	u8 extra_byte = 0;
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
+	bth1 = be32_to_cpu(ohdr->bth[1]);
 	if (rcv_flags & HFI1_HAS_GRH)
 		grh = true;
 
@@ -2246,27 +2246,35 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 
 	if (hfi1_ruc_check_hdr(ibp,
 			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
-			       packet->grh, packet->bypass, qp, bth0)) {
+			       packet->grh, packet->bypass, qp, bth0, bth1)) {
 		pr_warn("%s ruc check header failed\n",
 			packet->bypass ? "16B" : "9B");
 		return;
 	}
 
-	bth1 = be32_to_cpu(ohdr->bth[1]);
-	if (unlikely(bth1 & (HFI1_BECN_SMASK | HFI1_FECN_SMASK))) {
-		if (bth1 & HFI1_BECN_SMASK) {
-			u32 rlid = qp->remote_ah_attr.dlid;
-			u32 lqpn, rqpn;
-
-			lqpn = qp->ibqp.qp_num;
-			rqpn = qp->remote_qpn;
-			process_becn(
-				ppd,
-				qp->remote_ah_attr.sl,
-				rlid, lqpn, rqpn,
-				IB_CC_SVCTYPE_RC);
-		}
+	if (packet->bypass) {
+		is_fecn = (OPA_16B_GET_FECN(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3])) ?
+				true : false;
+		is_becn = (OPA_16B_GET_BECN(hdr_16b->lrh[0], hdr_16b->lrh[1],
+					hdr_16b->lrh[2], hdr_16b->lrh[3])) ?
+				true : false;
+	} else {
+		is_becn = (bth1 & HFI1_BECN_SMASK) ? true : false;
 		is_fecn = (bth1 & HFI1_FECN_SMASK) ? true : false;
+	}
+
+	if (is_becn) {
+		u32 rlid = qp->remote_ah_attr.dlid;
+		u32 lqpn, rqpn;
+
+		lqpn = qp->ibqp.qp_num;
+		rqpn = qp->remote_qpn;
+		process_becn(
+			ppd,
+			qp->remote_ah_attr.sl,
+			rlid, lqpn, rqpn,
+			IB_CC_SVCTYPE_RC);
 	}
 
 	psn = be32_to_cpu(ohdr->bth[2]);
@@ -2692,11 +2700,12 @@ void hfi1_rc_hdrerr(
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	int diff;
 	u32 opcode;
-	u32 psn, bth0;
+	u32 psn, bth0, bth1;
 
 	bth0 = be32_to_cpu(packet->ohdr->bth[0]);
+	bth1 = be32_to_cpu(packet->ohdr->bth[1]);
 	if (hfi1_ruc_check_hdr(ibp, packet->hdr, packet->grh,
-			       packet->bypass, qp, bth0))
+			       packet->bypass, qp, bth0, bth1))
 		return;
 
 	psn = be32_to_cpu(packet->ohdr->bth[2]);
