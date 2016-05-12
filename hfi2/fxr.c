@@ -2465,25 +2465,6 @@ err_post_alloc:
 	return ERR_PTR(ret);
 }
 
-void hfi_eq_cache_invalidate(struct hfi_devdata *dd, u16 ptl_pid)
-{
-	RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_t eq_cache_access = {.val = 0};
-	union eq_cache_addr eq_cache_tag;
-
-	eq_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
-	eq_cache_tag.val = 0;
-	eq_cache_tag.pid = ptl_pid;
-	eq_cache_access.field.address = eq_cache_tag.val;
-	eq_cache_tag.val = -1;
-	eq_cache_tag.pid = 0;
-	eq_cache_access.field.mask_address = eq_cache_tag.val;
-	write_csr(dd, FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL,
-		  eq_cache_access.val);
-
-	/* TODO - above incomplete, deferred processing to wait for .ack bit */
-	mdelay(10);
-}
-
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 {
 	RXHIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
@@ -2493,11 +2474,14 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	TXOTR_MSG_CFG_CANCEL_MSG_REQ_3_t cancel_msg_req3 = {.val = 0};
 	TXOTR_MSG_CFG_CANCEL_MSG_REQ_4_t cancel_msg_req4 = {.val = 0};
 	RXHP_CFG_PTE_CACHE_ACCESS_CTL_t pte_cache_access = {.val = 0};
+	RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_t eq_cache_access = {.val = 0};
 	RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t trig_op_cache_access = {.val = 0};
 	RXHP_CFG_PSC_CACHE_ACCESS_CTL_t me_le_uh_cache_access = {.val = 0};
 	union pte_cache_addr pte_cache_tag;
+	union eq_cache_addr eq_cache_tag;
 	union trig_op_cache_addr trig_op_cache_tag;
 	union psc_cache_addr me_le_uh_cache_tag;
+	int time;
 
 	/* write PCB_LOW first to clear valid bit */
 	write_csr(dd, FXR_RXHIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
@@ -2520,14 +2504,14 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	cancel_msg_req1.field.busy = 1;
 	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1, cancel_msg_req1.val);
 
-	/* HW takes max 64K clock cycles on 1.2GHz, so delay 1ms */
-	mdelay(1);
+	/* HW takes max 64K clock cycles on 1.2GHz, so delay a bit longer */
+	mdelay(HFI_OTR_CANCELLATION_TIMEOUT_MS);
 	/* for debugging purpose, read the CSR back */
 	cancel_msg_req1.val = read_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1);
 	if (cancel_msg_req1.field.busy)
 		/* FXRTODO: Change to dd_dev_err once Simics is fixed */
-		dd_dev_dbg(dd, "OTR cancellation not done after 1ms, pid %d\n",
-			   ptl_pid);
+		dd_dev_dbg(dd, "OTR cancellation not done after %dms, pid %d\n",
+			   HFI_OTR_CANCELLATION_TIMEOUT_MS, ptl_pid);
 
 	/* invalidate cached host memory in HFI for Portals Tables by PID */
 	pte_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
@@ -2537,10 +2521,20 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	pte_cache_tag.val = -1;
 	pte_cache_tag.tpid = 0;
 	pte_cache_access.field.mask_address = pte_cache_tag.val;
+	pte_cache_access.field.busy = 1;
 	write_csr(dd, FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL, pte_cache_access.val);
 
 	/* invalidate cached host memory in HFI for EQ Descs by PID */
-	hfi_eq_cache_invalidate(dd, ptl_pid);
+	eq_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
+	eq_cache_tag.val = 0;
+	eq_cache_tag.pid = ptl_pid;
+	eq_cache_access.field.address = eq_cache_tag.val;
+	eq_cache_tag.val = -1;
+	eq_cache_tag.pid = 0;
+	eq_cache_access.field.mask_address = eq_cache_tag.val;
+	eq_cache_access.field.busy = 1;
+	write_csr(dd, FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL,
+		eq_cache_access.val);
 
 	/* invalidate cached host memory in HFI for Triggered Ops by PID */
 	trig_op_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
@@ -2550,8 +2544,9 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	trig_op_cache_tag.val = -1;
 	trig_op_cache_tag.pid = 0;
 	trig_op_cache_access.field.mask_address = trig_op_cache_tag.val;
+	trig_op_cache_access.field.busy = 1;
 	write_csr(dd, FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL,
-		  trig_op_cache_access.val);
+		trig_op_cache_access.val);
 
 	/* invalidate cached host memory in HFI for ME/LE/UH */
 	me_le_uh_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
@@ -2561,10 +2556,49 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	me_le_uh_cache_tag.val = -1;
 	me_le_uh_cache_tag.pid = 0;
 	me_le_uh_cache_access.field.mask_address = me_le_uh_cache_tag.val;
-	write_csr(dd, FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL, me_le_uh_cache_access.val);
+	me_le_uh_cache_access.field.busy = 1;
+	write_csr(dd, FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL,
+		me_le_uh_cache_access.val);
 
-	/* TODO - above incomplete, deferred processing to wait for .ack bit */
-	mdelay(10);
+	/* wait for completion, if timeout log a message */
+	for (time = 0; time < HFI_CACHE_INVALIDATION_TIMEOUT_MS; time++) {
+		mdelay(1);
+		if (pte_cache_access.field.busy)
+			pte_cache_access.val = read_csr(dd,
+				FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL);
+		if (eq_cache_access.field.busy)
+			eq_cache_access.val = read_csr(dd,
+				FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL);
+		if (trig_op_cache_access.field.busy)
+			trig_op_cache_access.val = read_csr(dd,
+				FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL);
+		if (me_le_uh_cache_access.field.busy)
+			me_le_uh_cache_access.val = read_csr(dd,
+				FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL);
+		if (!pte_cache_access.field.busy &&
+		    !eq_cache_access.field.busy &&
+		    !trig_op_cache_access.field.busy &&
+		    !me_le_uh_cache_access.field.busy)
+			break;
+	}
+	if (time >= HFI_CACHE_INVALIDATION_TIMEOUT_MS) {
+		if (pte_cache_access.field.busy)
+			dd_dev_err(dd, "PTE cache invalidation "
+				"not done after %dms\n",
+				HFI_CACHE_INVALIDATION_TIMEOUT_MS);
+		if (eq_cache_access.field.busy)
+			dd_dev_err(dd, "EQ cache invalidation "
+				"not done after %dms\n",
+				HFI_CACHE_INVALIDATION_TIMEOUT_MS);
+		if (trig_op_cache_access.field.busy)
+			dd_dev_err(dd, "trig_op cache invalidation "
+				"not done after %dms\n",
+				HFI_CACHE_INVALIDATION_TIMEOUT_MS);
+		if (me_le_uh_cache_access.field.busy)
+			dd_dev_err(dd, "ME/LE/UH cache invalidation "
+				"not done after %dms\n",
+				HFI_CACHE_INVALIDATION_TIMEOUT_MS);
+	}
 
 	/* TODO - write fake simics CSR to flush mini-TLB (AT interface TBD) */
 	write_csr(dd, FXR_RX_HIARB_CSRS + 0x20000, 1);
@@ -2599,8 +2633,6 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 {
 	u32 head_offset;
 	RXCID_CFG_HEAD_UPDATE_ADDR_t cq_head = {.val = 0};
-	TXCIC_CFG_DRAIN_RESET_t tx_cq_reset = {.val = 0};
-	RXCIC_CFG_CQ_DRAIN_RESET_t rx_cq_reset = {.val = 0};
 
 	head_offset = FXR_RXCID_CFG_HEAD_UPDATE_ADDR + (cq_idx * 8);
 
@@ -2608,17 +2640,7 @@ static void hfi_cq_head_config(struct hfi_devdata *dd, u16 cq_idx,
 	write_csr(dd, head_offset, 0);
 
 	/* reset CQ state, as CQ head starts at 0 */
-	tx_cq_reset.field.drain_cq = cq_idx;
-	tx_cq_reset.field.reset = 1;
-	rx_cq_reset.field.drain_cq = cq_idx;
-	rx_cq_reset.field.reset = 1;
-
-	write_csr(dd, FXR_TXCIC_CFG_DRAIN_RESET, tx_cq_reset.val);
-	write_csr(dd, FXR_RXCIC_CFG_CQ_DRAIN_RESET, rx_cq_reset.val);
-#if 1 /* TODO: should be __SIMICS__ instead of 1 */
-	/* 'reset to zero' is not visible for a few cycles in Simics */
-	mdelay(1);
-#endif
+	hfi_cq_disable(dd, cq_idx);
 
 	/* set CQ head, should be set after CQ reset */
 	cq_head.field.valid = 1;
@@ -2636,19 +2658,42 @@ void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
 {
 	TXCIC_CFG_DRAIN_RESET_t tx_cq_reset = {.val = 0};
 	RXCIC_CFG_CQ_DRAIN_RESET_t rx_cq_reset = {.val = 0};
+	int time;
 
 	/* reset CQ state, as CQ head starts at 0 */
 	tx_cq_reset.field.drain_cq = cq_idx;
 	tx_cq_reset.field.reset = 1;
+	tx_cq_reset.field.busy = 1;
 	rx_cq_reset.field.drain_cq = cq_idx;
 	rx_cq_reset.field.reset = 1;
+	rx_cq_reset.field.busy = 1;
 
 	write_csr(dd, FXR_TXCIC_CFG_DRAIN_RESET, tx_cq_reset.val);
 	write_csr(dd, FXR_RXCIC_CFG_CQ_DRAIN_RESET, rx_cq_reset.val);
-#if 1 /* TODO: should be __SIMICS__ instead of 1 */
-	/* 'reset to zero' is not visible for a few cycles in Simics */
-	mdelay(1);
-#endif
+
+	/* wait for completion, if timeout log a message */
+	for (time = 0; time < HFI_CQ_RESET_TIMEOUT_MS; time++) {
+		mdelay(1);
+		if (tx_cq_reset.field.busy)
+			tx_cq_reset.val = read_csr(dd,
+				FXR_TXCIC_CFG_DRAIN_RESET);
+		if (rx_cq_reset.field.busy)
+			rx_cq_reset.val = read_csr(dd,
+				FXR_RXCIC_CFG_CQ_DRAIN_RESET);
+		if (!tx_cq_reset.field.busy &&
+		    !rx_cq_reset.field.busy)
+			break;
+	}
+	if (time >= HFI_CQ_RESET_TIMEOUT_MS) {
+		if (tx_cq_reset.field.busy)
+			dd_dev_err(dd, "TX CQ reset "
+				"not done after %dms\n",
+				HFI_CQ_RESET_TIMEOUT_MS);
+		if (rx_cq_reset.field.busy)
+			dd_dev_err(dd, "RX CQ reset "
+				"not done after %dms\n",
+				HFI_CQ_RESET_TIMEOUT_MS);
+	}
 }
 
 void hfi_cq_config_tuples(struct hfi_ctx *ctx, u16 cq_idx,
