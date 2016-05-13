@@ -333,6 +333,16 @@ static int opa2_vnic_append_skb(struct opa_ctx_info *ctx_i, int idx)
 	return 0;
 }
 
+/* FXRTODO: return true for valid tx queues for now; update later */
+static inline bool opa2_vnic_hfi_get_write_avail(struct opa_vnic_device *vdev,
+						 u8 q_idx)
+{
+	if (q_idx >= vdev->hfi_info.num_tx_q)
+		return false;
+
+	return true;
+}
+
 /* Select vnic TX queue */
 u8 opa2_vnic_hfi_select_queue(struct opa_vnic_device *vdev, u8 vl, u8 entropy)
 {
@@ -1019,6 +1029,7 @@ static struct opa_vnic_hfi_ops vnic_ops = {
 	.hfi_put_skb = opa2_vnic_hfi_put_skb,
 	.hfi_get_skb = opa2_vnic_hfi_get_skb,
 	.hfi_get_read_avail = opa2_vnic_hfi_get_read_avail,
+	.hfi_get_write_avail = opa2_vnic_hfi_get_write_avail,
 	.hfi_select_queue = opa2_vnic_hfi_select_queue,
 };
 
