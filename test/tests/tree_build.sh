@@ -150,6 +150,14 @@ function do_build
 		# Stop the opafm and unload driver on both nodes
 		if [[ ! $comp = "qib" ]]; then
 			ssh root@${host1} systemctl stop opafm
+			# wait for opafm to stop
+			sleep 5
+		fi
+		if [[ $comp = "rdmavt" ]]; then
+			ssh root@${host1} rmmod hfi1
+			ssh root@${host2} rmmod hfi1
+			# wait for hfi1 driver to be unloaded
+			sleep 5
 		fi
 		ssh root@${host1} rmmod $mod_name
 		ssh root@${host2} rmmod $mod_name
@@ -169,6 +177,8 @@ function do_build
 		if [[ $comp = "rdmavt" ]]; then
 			ssh root@${host1} rmmod hfi1
 			ssh root@${host2} rmmod hfi1
+			# wait for hfi1 driver to be unloaded
+			sleep 5
 		fi
 		ssh root@${host1} rmmod $mod_name
 		ssh root@${host2} rmmod $mod_name
@@ -184,9 +194,9 @@ function do_build
 		unlock
 
 		# Compare to whitelist and report failure. Log file left for failure analysis.
-		whitelist="$(grep "Possible leaks" $cur_dir/${comp}_kedr.whitelist)"
-		log="$(grep "Possible leaks" $cur_dir/${comp}_kedr.log)"
-		if [[ $whitelist != $log ]] ; then
+		whitelist_count=$(grep "Possible leaks" $cur_dir/${comp}_kedr.whitelist | awk -F ":" '{print $2}' | bc)
+		log_count=$(grep "Possible leaks" $cur_dir/${comp}_kedr.log | awk -F ":" '{print $2}' | bc)
+		if [[ $log_count -gt $whitelist_count ]] ; then
 			echo "KEDR leak check failed"
 			echo "XXXXXXXXXXXXXXXXXXXXXXXXXXX"
 			echo "ERROR IN KEDR LEAK CHECKING"
