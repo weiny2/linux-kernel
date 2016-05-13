@@ -87,6 +87,17 @@ void free_platform_config(struct hfi1_devdata *dd)
 	 */
 }
 
+void get_port_type(struct hfi1_pportdata *ppd)
+{
+	int ret;
+
+	ret = get_platform_config_field(ppd->dd, PLATFORM_CONFIG_PORT_TABLE, 0,
+					PORT_TABLE_PORT_TYPE, &ppd->port_type,
+					4);
+	if (ret)
+		ppd->port_type = PORT_TYPE_UNKNOWN;
+}
+
 int set_qsfp_tx(struct hfi1_pportdata *ppd, int on)
 {
 	u8 tx_ctrl_byte = on ? 0x0 : 0xF;
@@ -564,8 +575,8 @@ static void apply_tunings(
 		ret = read_8051_config(ppd->dd, DC_HOST_COMM_SETTINGS,
 				       GENERAL_CONFIG, &config_data);
 		/* Clear, then set the external device config field */
-		config_data &= ~(0xFF << 24);
-		config_data |= (external_device_config << 24);
+		config_data &= ~(u32)0xFF;
+		config_data |= external_device_config;
 		ret = load_8051_config(ppd->dd, DC_HOST_COMM_SETTINGS,
 				       GENERAL_CONFIG, config_data);
 		if (ret != HCMD_SUCCESS)
@@ -783,12 +794,6 @@ void tune_serdes(struct hfi1_pportdata *ppd)
 		ppd->driver_link_ready = 1;
 		return;
 	}
-
-	ret = get_platform_config_field(ppd->dd, PLATFORM_CONFIG_PORT_TABLE, 0,
-					PORT_TABLE_PORT_TYPE, &ppd->port_type,
-					4);
-	if (ret)
-		ppd->port_type = PORT_TYPE_UNKNOWN;
 
 	switch (ppd->port_type) {
 	case PORT_TYPE_DISCONNECTED:
