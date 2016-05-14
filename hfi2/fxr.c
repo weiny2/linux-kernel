@@ -2012,6 +2012,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	hfi_e2e_destroy(dd);
 
 	hfi_disable_interrupts(dd);
+	hfi_free_spill_area(dd);
 
 	/* release system context and any privileged CQs */
 	if (dd->priv_ctx.devdata) {
@@ -2399,6 +2400,11 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 
 	/* Ensure CSRs are sane, we can't trust they haven't been manipulated */
 	init_csrs(dd);
+
+	if (hfi_alloc_spill_area(dd)) {
+		ret = -ENOMEM;
+		goto err_post_alloc;
+	}
 
 	/* enable MSI-X */
 	ret = hfi_setup_interrupts(dd, HFI_NUM_INTERRUPTS, 0);

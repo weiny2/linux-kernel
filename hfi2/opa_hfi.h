@@ -230,6 +230,8 @@ enum {
  */
 #define HFI_INVALID_RESP_SL		0xff
 
+#define TRIGGER_OPS_SPILL_SIZE		(1024 * 1024 * 8)
+
 /*
  * Private data for snoop/capture support.
  */
@@ -686,6 +688,7 @@ struct hfi_pportdata {
  *             converts it to platform_config. pcfg_cache is never accessed by
  *             other.
  *@boardname: human readable board info
+ *@trig_op_spill_area: Pointer to trigger ops spill area for deallocation
  */
 struct hfi_devdata {
 	/* pci access data structure */
@@ -810,6 +813,8 @@ struct hfi_devdata {
 	size_t portcntrnameslen;
 	char *portcntrnames;
 
+	/* Pointer to trigger ops spill area for deallocation */
+	void *trig_op_spill_area;
 #ifdef CONFIG_DEBUG_FS
 	/* per HFI debugfs */
 	struct dentry *hfi_dev_dbg;
@@ -867,6 +872,8 @@ void hfi_tpid_enable(struct hfi_devdata *dd, u8 idx, u16 base, u32 ptl_uid);
 void hfi_tpid_disable(struct hfi_devdata *dd, u8 idx);
 int hfi_iommu_set_pasid(struct hfi_ctx *ctx);
 int hfi_iommu_clear_pasid(struct hfi_ctx *ctx);
+int hfi_alloc_spill_area(struct hfi_devdata *dd);
+void hfi_free_spill_area(struct hfi_devdata *dd);
 
 /* OPA core functions */
 int hfi_cq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table, u16 *cq_idx);
