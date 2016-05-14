@@ -63,6 +63,7 @@
 #include <rdma/hfi_eq.h>
 #include "opa_hfi.h"
 #include <rdma/hfi_eq.h>
+#include <rdma/fxr/fxr_rx_dma_defs.h>
 
 static uint cq_alloc_cyclic;
 
@@ -1450,4 +1451,53 @@ int hfi_get_hw_limits(struct hfi_ctx *ctx, struct hfi_hw_limit *hwl)
 	hwl->unexpected_count_limit = HFI_UNEXP_MAX_COUNT;
 	hwl->trig_op_count_limit = HFI_TRIG_OP_MAX_COUNT;
 	return 0;
+}
+
+static void __hfi_alloc_spill_area(struct hfi_devdata *dd,
+				   u64 reg_base, u64 reg_bounds,
+				   void *ptr, u64 size)
+{
+	write_csr(dd, reg_base, (u64)ptr);
+	write_csr(dd, reg_bounds, (u64)ptr + size);
+}
+
+int hfi_alloc_spill_area(struct hfi_devdata *dd)
+{
+	void *ptr;
+	int i;
+	u64 size = TRIGGER_OPS_SPILL_SIZE;
+
+	ptr = vmalloc(size * 5);
+
+	if (!ptr)
+		return -ENOMEM;
+
+	dd->trig_op_spill_area = ptr;
+
+	for (i = 0; i < 5; i++)
+		__hfi_alloc_spill_area(dd, FXR_RXDMA_CFG_TO_BASE_TC0 + i * 16,
+				       FXR_RXDMA_CFG_TO_BOUNDS_TC0 + i * 16,
+				       ptr + size * i, size);
+	return 0;
+}
+
+static void __hfi_free_spill_area(struct hfi_devdata *dd,
+				  u64 reg_base, u64 reg_bounds)
+{
+	write_csr(dd, reg_base, 0);
+	write_csr(dd, reg_bounds, 0);
+}
+
+void hfi_free_spill_area(struct hfi_devdata *dd)
+{
+	int i;
+
+	if (!dd->trig_op_spill_area)
+		return;
+
+	for (i = 0; i < 5; i++)
+		__hfi_free_spill_area(dd, FXR_RXDMA_CFG_TO_BASE_TC0 + i * 16,
+				      FXR_RXDMA_CFG_TO_BOUNDS_TC0 + i * 16);
+
+	vfree(dd->trig_op_spill_area);
 }
