@@ -439,6 +439,8 @@ struct hfi1_snoop_data {
 #define OPA_16B_LID_MASK	0xFFFFFull
 #define OPA_16B_BECN_MASK	0x80000000ull
 #define OPA_16B_BECN_SHIFT	31
+#define OPA_16B_L2_MASK		0x60000000ull
+#define OPA_16B_L2_SHIFT	29
 #define OPA_16B_FECN_MASK	0x10000000ull
 #define OPA_16B_FECN_SHIFT	28
 #define OPA_16B_PKEY_MASK	0xFFFF0000ull
@@ -471,6 +473,8 @@ struct hfi1_snoop_data {
 					>> OPA_16B_LEN_SHIFT))
 #define OPA_16B_GET_BECN(h0, h1, h2, h3) ((u8)((h0 & OPA_16B_BECN_MASK)\
 					>> OPA_16B_BECN_SHIFT))
+#define OPA_16B_GET_L2(h0, h1, h2, h3) ((u8)((h1 & OPA_16B_L2_MASK)\
+					>> OPA_16B_L2_SHIFT))
 #define OPA_16B_GET_FECN(h0, h1, h2, h3) ((u8)((h1 & OPA_16B_FECN_MASK)\
 					>> OPA_16B_FECN_SHIFT))
 #define OPA_16B_GET_PKEY(h0, h1, h2, h3) ((u16)((h2 & OPA_16B_PKEY_MASK)\

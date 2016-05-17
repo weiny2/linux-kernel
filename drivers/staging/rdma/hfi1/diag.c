@@ -1668,10 +1668,9 @@ int snoop_recv_handler(struct hfi1_packet *packet)
 		hdr = packet->hdr;
 	}
 
-	trace_snoop_capture(ppd->dd, header_size,
-			    packet->bypass ? (void *)&hdr_16b : (void *)hdr,
+	trace_snoop_capture(ppd->dd, header_size, packet,
 			    tlen - header_size,
-			    data, packet->bypass);
+			    data);
 
 	if (!ppd->dd->hfi1_snoop.filter_callback) {
 		snoop_dbg("filter not set");

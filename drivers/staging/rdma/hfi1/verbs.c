@@ -699,7 +699,7 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 		goto drop;
 	}
 
-	trace_input_ibhdr(rcd->dd, hdr, false);
+	trace_input_ibhdr(rcd->dd, packet);
 
 	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
 	if (hfi1_handle_packet(packet, opcode, is_mcast))
@@ -740,7 +740,7 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 	if ((l4 == HFI1_L4_IB_LOCAL) && (is_mcast))
 		goto drop;
 
-	/*trace_input_ibhdr(rcd->dd, hdr, true);*/
+	trace_input_ibhdr(rcd->dd, packet);
 
 	opcode = (be32_to_cpu(packet->ohdr->bth[0]) >> 24);
 	if (hfi1_handle_packet(packet, opcode, is_mcast))
@@ -1050,10 +1050,7 @@ int hfi1_verbs_send_dma(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		return ret;
 	}
 	trace_sdma_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
-				(bypass) ?
-				(void *)&ps->s_txreq->phdr.hdr.pkt.opah :
-				(void *)&ps->s_txreq->phdr.hdr.pkt.ibh,
-				bypass);
+				&ps->s_txreq->phdr.hdr);
 
 bail_ecomm:
 	/* The current one got "sent" */
@@ -1251,8 +1248,8 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		}
 		seg_pio_copy_end(pbuf);
 	}
-
-	trace_pio_output_ibhdr(dd_from_ibdev(qp->ibqp.device), hdr, bypass);
+	trace_pio_output_ibhdr(dd_from_ibdev(qp->ibqp.device),
+			       &ps->s_txreq->phdr.hdr);
 
 pio_bail:
 	if (qp->s_wqe) {

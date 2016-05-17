@@ -47,50 +47,79 @@
 #define CREATE_TRACE_POINTS
 #include "trace.h"
 
-u8 ibhdr_exhdr_len(void *hfi1_hdr, bool bypass)
+static u8 __get_16b_hdr_len (struct hfi1_16b_header *hdr)
 {
 	struct hfi1_other_headers *ohdr;
-	u8 hlen = 0;
-	u8 opcode = 0;
+	u8 hlen, l4, opcode;
 
-	if (bypass) {
-		u32 h0, h1, h2, h3;
-		u8 l4;
-		struct hfi1_16b_header *hdr = NULL;
-
-		hdr = (struct hfi1_16b_header *)hfi1_hdr;
-		h0 = hdr->lrh[0];
-		h1 = hdr->lrh[1];
-		h2 = hdr->lrh[2];
-		h3 = hdr->lrh[3];
-
-		l4 = OPA_16B_GET_L4(h0, h1, h2, h3);
-		if (l4 == HFI1_L4_IB_LOCAL) {
-			ohdr = &hdr->u.oth;
-		} else {
-			hlen = 40; /* GRH */
-			ohdr = &hdr->u.l.oth;
-		}
-
-		opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
-		hlen += hdr_16b_len_by_opcode[opcode];
+	l4 = OPA_16B_GET_L4(0, 0, hdr->lrh[2], 0);
+	if (l4 == HFI1_L4_IB_LOCAL) {
+		ohdr = &hdr->u.oth;
 	} else {
-		struct hfi1_ib_header *hdr = NULL;
-		u8 lnh;
-
-		hdr = (struct hfi1_ib_header *)hfi1_hdr;
-		lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
-		if (lnh == HFI1_LRH_BTH)
-			ohdr = &hdr->u.oth;
-		else
-			ohdr = &hdr->u.l.oth;
-
-		opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
-		hlen =  hdr_len_by_opcode[opcode] == 0 ?
-			0 : hdr_len_by_opcode[opcode] - (12 + 8);
+		hlen = 40; /* GRH */
+		ohdr = &hdr->u.l.oth;
 	}
 
+	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+	hlen += hdr_16b_len_by_opcode[opcode];
+
 	return hlen;
+}
+
+static u8 __get_ib_hdr_len (struct hfi1_ib_header *hdr)
+{
+	struct hfi1_other_headers *ohdr;
+	u8 hlen, lnh, opcode;
+
+	lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
+	if (lnh == HFI1_LRH_BTH)
+		ohdr = &hdr->u.oth;
+	else
+		ohdr = &hdr->u.l.oth;
+
+	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+	hlen =  hdr_len_by_opcode[opcode] == 0 ?
+		0 : hdr_len_by_opcode[opcode] - (12 + 8);
+
+	return hlen;
+}
+
+u8 hfi1_trace_packet_hdr_len(struct hfi1_packet *packet)
+{
+	if (packet->bypass)
+		return __get_16b_hdr_len(packet->hdr);
+	else
+		return __get_ib_hdr_len(packet->hdr);
+}
+
+u8 hfi1_trace_opa_hdr_len(struct hfi1_opa_header *opa_hdr)
+{
+	if (opa_hdr->hdr_type)
+		return __get_16b_hdr_len(&opa_hdr->pkt.opah);
+	else
+		return __get_ib_hdr_len(&opa_hdr->pkt.ibh);
+}
+
+const char *hfi1_trace_get_packet_str(struct hfi1_packet *packet)
+{
+	if (packet->bypass) {
+		struct hfi1_16b_header *hdr_16b = packet->hdr;
+		u8 l2 = OPA_16B_GET_L2(0, hdr_16b->lrh[1], 0, 0);
+
+		switch(l2) {
+		case 0:
+			return "8B";
+		case 1:
+			return "10B";
+		case 2:
+			return "16B";
+		case 3:
+			return "9B";
+		}
+		return "";
+	} else {
+		return "IB";
+	}
 }
 
 #define IMM_PRN  "imm %d"
@@ -120,12 +149,80 @@ static const char *parse_syndrome(u8 syndrome)
 	return "";
 }
 
-const char *ibhdr_get_packet_type_str(u8 l4)
+const char *hfi1_trace_get_packet_type_str(u8 l4)
 {
 	if (l4)
 		return "16B";
 	else
 		return "9B";
+}
+
+void hfi1_trace_parse_bth(struct hfi1_other_headers *ohdr,
+			   u8 *a, u8 *b, u8 *f, u8 *m,
+			   u8 *se, u8 *pad, u8 *opcode, u8 *tver,
+			   u16 *pkey, u32 *psn, u32 *qpn)
+{
+	*opcode = (be32_to_cpu(ohdr->bth[0]) >> 24) & 0xff;
+	*se = (be32_to_cpu(ohdr->bth[0]) >> 23) & 1;
+	*m = (be32_to_cpu(ohdr->bth[0]) >> 22) & 1;
+	*pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 3;
+	*tver = (be32_to_cpu(ohdr->bth[0]) >> 16) & 0xf;
+	*pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
+	*f = (be32_to_cpu(ohdr->bth[1]) >> HFI1_FECN_SHIFT) & HFI1_FECN_MASK;
+	*b = (be32_to_cpu(ohdr->bth[1]) >> HFI1_BECN_SHIFT) & HFI1_BECN_MASK;
+	*qpn = be32_to_cpu(ohdr->bth[1]) & RVT_QPN_MASK;
+	*a = (be32_to_cpu(ohdr->bth[2]) >> 31) & 1;
+	/* allow for larger PSN */
+	*psn = be32_to_cpu(ohdr->bth[2]) & 0x7fffffff;
+}
+
+void hfi1_trace_parse_16b_hdr(struct hfi1_16b_header *hdr,
+			      u8 *age, u8 *becn, u8 *fecn, u8 *l4, u8 *rc,
+			      u8 *sc, u16 *entropy, u16 *len, u16 *pkey,
+			      u32 *dlid, u32 *slid, u8 *lnh, u8 *lver, u8 *sl)
+{
+	u32 h0 = hdr->lrh[0];
+	u32 h1 = hdr->lrh[1];
+	u32 h2 = hdr->lrh[2];
+	u32 h3 = hdr->lrh[3];
+
+	*l4 = OPA_16B_GET_L4(h0, h1, h2, h3);
+	*rc = OPA_16B_GET_RC(h0, h1, h2, h3);
+	*sc = OPA_16B_GET_SC(h0, h1, h2, h3);
+	*age = OPA_16B_GET_AGE(h0, h1, h2, h3);
+	*len = OPA_16B_GET_LEN(h0, h1, h2, h3);
+	*becn = OPA_16B_GET_BECN(h0, h1, h2, h3);
+	*dlid = OPA_16B_GET_DLID(h0, h1, h2, h3);
+	*fecn = OPA_16B_GET_FECN(h0, h1, h2, h3);
+	*pkey = OPA_16B_GET_PKEY(h0, h1, h2, h3);
+	*slid = OPA_16B_GET_SLID(h0, h1, h2, h3);
+	*entropy = OPA_16B_GET_ENTROPY(h0, h1, h2, h3);
+	/* zero out 9B only fields */
+	*lnh = 0;
+	*lver = 0;
+	*sl = 0;
+}
+
+void hfi1_trace_parse_9b_hdr(struct hfi1_ib_header *hdr,
+			     u8 *lnh, u8* lver, u8 *sl, u8 *sc,
+			     u16 *len, u32 *dlid, u32 *slid,
+			     u8 *age, u8 *becn, u8 *fecn, u8 *l4,
+			     u8 *rc, u16 *entropy)
+{
+	*lnh = (u8)(be16_to_cpu(hdr->lrh[0]) & 3);
+	*lver = (u8)(be16_to_cpu(hdr->lrh[0]) >> 8) & 0xf;
+	*sl = (u8)(be16_to_cpu(hdr->lrh[0]) >> 4) & 0xf;
+	*sc = OPA_9B_GET_SC5(be16_to_cpu(hdr->lrh[0]));
+	*len = be16_to_cpu(hdr->lrh[2]);
+	*dlid = be16_to_cpu(hdr->lrh[1]);
+	*slid = be16_to_cpu(hdr->lrh[3]);
+	/* zero out 16B only fields */
+	*age = 0;
+	*becn = 0;
+	*fecn = 0;
+	*l4 = 0;
+	*rc = 0;
+	*entropy = 0;
 }
 
 const char *parse_everbs_hdrs(
