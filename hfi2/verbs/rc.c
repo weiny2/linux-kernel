@@ -300,14 +300,14 @@ static void start_timer(struct rvt_qp *qp)
  * @qp: a pointer to the QP
  * @ohdr: a pointer to the IB header being constructed
  * @pmtu: the path MTU
- * @is_16b: is a 16B packet
+ * @use_16b: is a 16B packet
  *
  * Return 1 if constructed; otherwise, return 0.
  * Note that we are in the responder's side of the QP context.
  * Note the QP s_lock must be held.
  */
 static int make_rc_ack(struct hfi2_ibdev *dev, struct rvt_qp *qp,
-		       struct ib_l4_headers *ohdr, u32 pmtu, bool is_16b)
+		       struct ib_l4_headers *ohdr, u32 pmtu, bool use_16b)
 {
 	struct rvt_ack_entry *e;
 	u32 hwords;
@@ -320,7 +320,7 @@ static int make_rc_ack(struct hfi2_ibdev *dev, struct rvt_qp *qp,
 		goto bail;
 
 	/* 16B(4)/LRH(2) + BTH(3) */
-	hwords = is_16b ? 7 : 5;
+	hwords = use_16b ? 7 : 5;
 
 	switch (qp->s_ack_state) {
 	case OP(RDMA_READ_RESPONSE_LAST):
@@ -447,7 +447,7 @@ normal:
 	qp->s_cur_size = len;
 	/* hfi2_send_wqe() requires this set to NULL for RC response */
 	qp->s_wqe = NULL;
-	if (is_16b)
+	if (use_16b)
 		hfi2_make_16b_ruc_header(qp, ohdr, bth0, bth2);
 	else
 		hfi2_make_ruc_header(qp, ohdr, bth0, bth2);
@@ -489,22 +489,22 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 	unsigned long flags;
 	int ret = 0;
 	int delta;
-	bool is_16b;
+	bool use_16b;
 
-	is_16b = qp_priv->use_16b;
+	use_16b = qp_priv->use_16b;
 	/* 16B(4)/LRH(2) + BTH(3) */
-	hwords = is_16b ? 7 : 5;
+	hwords = use_16b ? 7 : 5;
 
 	/*
 	 * FXRTODO: Later, we need to make grh for 16B packets
 	 * going across the network based on hop_count.
 	 */
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = is_16b ? &qp_priv->s_hdr->opa16b.u.oth :
-				&qp_priv->s_hdr->ph.ibh.u.l.oth;
+		ohdr = use_16b ? &qp_priv->s_hdr->opa16b.u.oth :
+				 &qp_priv->s_hdr->ph.ibh.u.l.oth;
 	else
-		ohdr = is_16b ? &qp_priv->s_hdr->opa16b.u.oth :
-				&qp_priv->s_hdr->ph.ibh.u.oth;
+		ohdr = use_16b ? &qp_priv->s_hdr->opa16b.u.oth :
+				 &qp_priv->s_hdr->ph.ibh.u.oth;
 
 	/*
 	 * The lock is needed to synchronize between the sending tasklet,
@@ -514,7 +514,7 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 
 	/* Sending responses has higher priority over sending requests. */
 	if ((qp->s_flags & RVT_S_RESP_PENDING) &&
-	    make_rc_ack(dev, qp, ohdr, pmtu, is_16b))
+	    make_rc_ack(dev, qp, ohdr, pmtu, use_16b))
 		goto done;
 
 	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_SEND_OK)) {
@@ -925,7 +925,7 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 	/* hfi2_send_wqe() requires this set */
 	qp->s_wqe = wqe;
 	bth0 |= (qp->s_state << 24);
-	if (is_16b)
+	if (use_16b)
 		hfi2_make_16b_ruc_header(qp, ohdr, bth0, bth2);
 	else
 		hfi2_make_ruc_header(qp, ohdr, bth0, bth2);
@@ -1043,18 +1043,19 @@ static u32 hfi2_make_16b_rc_ack_header(struct rvt_qp *qp,
  * hfi2_send_rc_ack - Construct an ACK packet and send it
  * @qp: a pointer to the QP
  * @is_fecn: is fecn recived
- * @use_16b: 16B format to be used
  *
  * This is called from hfi2_rc_rcv().
  * TODO - HFI1 also calls from handle_receive_interrupt()
  * Note that RDMA reads and atomics are handled in the
  * send side QP state and tasklet.
  */
-static void hfi2_send_rc_ack(struct rvt_qp *qp, bool is_fecn, bool use_16b)
+static void hfi2_send_rc_ack(struct rvt_qp *qp, bool is_fecn)
 {
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
+	struct hfi2_qp_priv *qp_priv = qp->priv;
 	union hfi2_packet_header ph;
 	struct ib_l4_headers *ohdr;
+	bool use_16b;
 	u32 hwords;
 
 	/* Don't send ACK or NAK if a RDMA read or atomic is pending. */
@@ -1066,6 +1067,7 @@ static void hfi2_send_rc_ack(struct rvt_qp *qp, bool is_fecn, bool use_16b)
 	if (qp->s_rdma_ack_cnt)
 		goto queue_ack;
 
+	use_16b = qp_priv->use_16b;
 	/*
 	 * FXRTODO: Later, we need to make grh for 16B packets
 	 * going across the network based on hop_count.
@@ -1095,7 +1097,7 @@ static void hfi2_send_rc_ack(struct rvt_qp *qp, bool is_fecn, bool use_16b)
 
 	dev_dbg(ibp->dev, "Send RC %s for PSN %u\n",
 		(qp->r_nak_state) ? "NAK" : "ACK", mask_psn(qp->r_ack_psn));
-	ibp->ibd->send_ack(ibp, qp->priv, &ph, hwords, use_16b);
+	ibp->ibd->send_ack(ibp, qp->priv, &ph, hwords);
 	return;
 
 queue_ack:
@@ -1926,8 +1928,7 @@ bail:
 }
 
 static inline void rc_defered_ack(struct hfi_ctx *ctx,
-				  struct rvt_qp *qp,
-				  bool is_16b)
+				  struct rvt_qp *qp)
 {
 	/*  FXRTODO: Implement deferrred ack */
 #if 0
@@ -1937,7 +1938,7 @@ static inline void rc_defered_ack(struct hfi_ctx *ctx,
 		list_add_tail(&qp->rspwait, &ctx->qp_wait_list);
 	}
 #else
-	hfi2_send_rc_ack(qp, 0, is_16b);
+	hfi2_send_rc_ack(qp, 0);
 #endif
 }
 
@@ -1963,7 +1964,6 @@ static inline void rc_cancel_ack(struct rvt_qp *qp)
  * @psn: the packet sequence number for this packet
  * @diff: the difference between the PSN and the expected PSN
  * @ctx: context
- * @is_16b: packet in 16B format
  *
  * This is called from hfi2_rc_rcv() to process an unexpected
  * incoming RC packet for the given QP.
@@ -1973,7 +1973,7 @@ static inline void rc_cancel_ack(struct rvt_qp *qp)
  */
 static noinline int rc_rcv_error(struct ib_l4_headers *ohdr, void *data,
 			struct rvt_qp *qp, u32 opcode, u32 psn, int diff,
-			struct hfi_ctx *ctx, bool is_16b)
+			struct hfi_ctx *ctx)
 {
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	struct rvt_ack_entry *e;
@@ -1997,7 +1997,7 @@ static noinline int rc_rcv_error(struct ib_l4_headers *ohdr, void *data,
 			 * in the receive queue have been processed.
 			 * Otherwise, we end up propagating congestion.
 			 */
-			rc_defered_ack(ctx, qp, is_16b);
+			rc_defered_ack(ctx, qp);
 		}
 		goto done;
 	}
@@ -2311,8 +2311,7 @@ void hfi2_rc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	/* Compute 24 bits worth of difference. */
 	diff = delta_psn(psn, qp->r_psn);
 	if (unlikely(diff)) {
-		if (rc_rcv_error(ohdr, data, qp, opcode,
-				 psn, diff, ctx, is_16b))
+		if (rc_rcv_error(ohdr, data, qp, opcode, psn, diff, ctx))
 			return;
 		goto send_ack;
 	}
@@ -2701,7 +2700,7 @@ send_last:
 #if 0
 		qp->r_adefered++;
 #endif
-		rc_defered_ack(ctx, qp, is_16b);
+		rc_defered_ack(ctx, qp);
 	}
 	return;
 
@@ -2709,7 +2708,7 @@ rnr_nak:
 	qp->r_nak_state = IB_RNR_NAK | qp->r_min_rnr_timer;
 	qp->r_ack_psn = qp->r_psn;
 	/* Queue RNR NAK for later */
-	rc_defered_ack(ctx, qp, is_16b);
+	rc_defered_ack(ctx, qp);
 	return;
 
 nack_op_err:
@@ -2717,7 +2716,7 @@ nack_op_err:
 	qp->r_nak_state = IB_NAK_REMOTE_OPERATIONAL_ERROR;
 	qp->r_ack_psn = qp->r_psn;
 	/* Queue NAK for later */
-	rc_defered_ack(ctx, qp, is_16b);
+	rc_defered_ack(ctx, qp);
 	return;
 
 nack_inv_unlck:
@@ -2727,7 +2726,7 @@ nack_inv:
 	qp->r_nak_state = IB_NAK_INVALID_REQUEST;
 	qp->r_ack_psn = qp->r_psn;
 	/* Queue NAK for later */
-	rc_defered_ack(ctx, qp, is_16b);
+	rc_defered_ack(ctx, qp);
 	return;
 
 nack_acc_unlck:
@@ -2737,7 +2736,7 @@ nack_acc:
 	qp->r_nak_state = IB_NAK_REMOTE_ACCESS_ERROR;
 	qp->r_ack_psn = qp->r_psn;
 send_ack:
-	hfi2_send_rc_ack(qp, is_fecn, is_16b);
+	hfi2_send_rc_ack(qp, is_fecn);
 	return;
 #ifdef HFI_VERBS_TEST
 drop:

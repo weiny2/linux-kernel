@@ -75,7 +75,7 @@ int hfi2_make_uc_req(struct rvt_qp *qp)
 	u32 len;
 	u32 pmtu = qp->pmtu;
 	int ret = 0;
-	bool is_16b;
+	bool use_16b;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_SEND_OK)) {
@@ -94,20 +94,20 @@ int hfi2_make_uc_req(struct rvt_qp *qp)
 		goto done;
 	}
 
-	is_16b = qp_priv->use_16b;
+	use_16b = qp_priv->use_16b;
 	/* 16B(4)/LRH(2) + BTH(3) */
-	hwords = is_16b ? 7 : 5;
+	hwords = use_16b ? 7 : 5;
 
 	/*
 	 * FXRTODO: Later, we need to make grh for 16B packets
 	 * going across the network based on hop_count.
 	 */
 	if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
-		ohdr = is_16b ? &qp_priv->s_hdr->opa16b.u.oth :
-				&qp_priv->s_hdr->ph.ibh.u.l.oth;
+		ohdr = use_16b ? &qp_priv->s_hdr->opa16b.u.oth :
+				 &qp_priv->s_hdr->ph.ibh.u.l.oth;
 	else
-		ohdr = is_16b ? &qp_priv->s_hdr->opa16b.u.oth :
-				&qp_priv->s_hdr->ph.ibh.u.oth;
+		ohdr = use_16b ? &qp_priv->s_hdr->opa16b.u.oth :
+				 &qp_priv->s_hdr->ph.ibh.u.oth;
 
 	/* Get the next send request. */
 	wqe = rvt_get_swqe_ptr(qp, qp->s_cur);
@@ -250,7 +250,7 @@ int hfi2_make_uc_req(struct rvt_qp *qp)
 	qp->s_hdrwords = hwords;
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_cur_size = len;
-	if (is_16b)
+	if (use_16b)
 		hfi2_make_16b_ruc_header(qp, ohdr, bth0 | (qp->s_state << 24),
 					 mask_psn(qp->s_next_psn++));
 	else

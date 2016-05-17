@@ -314,7 +314,10 @@ next_event:
 
 	spin_lock(&qp->s_lock);
 	if (!wqe) {
-		if (wqe_iov->use_16b)
+		struct hfi2_qp_priv *qp_priv = qp->priv;
+
+		/* RC case, we can use qp's private use_16b flag */
+		if (qp_priv->use_16b)
 			if (OPA_16B_GET_L4_TYPE(&wqe_iov->ph) ==
 			    HFI1_L4_IB_LOCAL)
 				ohdr = &wqe_iov->ph.opa16b.u.oth;
@@ -415,8 +418,7 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct rvt_qp *qp,
 }
 
 int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
-		  union hfi2_packet_header *ph, size_t hwords,
-		  bool use_16b)
+		  union hfi2_packet_header *ph, size_t hwords)
 {
 	struct rvt_qp *qp = qp_priv->owner;
 	int ret, ndelays = 0;
@@ -426,6 +428,7 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 	uint32_t num_iovs = 1, hlen = (hwords << 2);
 	union base_iovec *iov;
 	uint8_t sl = qp->remote_ah_attr.sl;
+	bool use_16b = qp_priv->use_16b;
 
 #ifdef HFI_VERBS_TEST
 	if (hfi2_drop_packet()) {
@@ -447,7 +450,6 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 	iov = wqe_iov->iov;
 	wqe_iov->qp = NULL;
 	wqe_iov->remaining_bytes = 0;
-	wqe_iov->use_16b = use_16b;
 
 	/* first entry is IB header */
 	iov[0].length = hlen;
@@ -517,7 +519,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv)
 	dma_cmd = (qp_type == IB_QPT_SMI) ? MGMT_DMA : GENERAL_DMA;
 	/*
 	 * TODO - below QP fields cannot be used when we implement sending
-	 * WQE from pending list; suboptimal to call hfi2_use_16() again for
+	 * WQE from pending list; suboptimal to call hfi2_use_16b() again for
 	 * UD queue pair, should make_req() stash the pkt_type in QP?
 	 */
 	sl = qp_priv->s_sl;
@@ -566,7 +568,6 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv)
 	else
 		memcpy(&wqe_iov->ph, &qp_priv->s_hdr->opa16b,
 		       qp->s_hdrwords << 2);
-	wqe_iov->use_16b = use_16b;
 
 	if (use_ofed_dma) {
 		/*

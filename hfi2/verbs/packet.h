@@ -247,7 +247,6 @@ struct hfi2_wqe_iov {
 		struct rvt_mregion *mr;
 	};
 	union hfi2_packet_header ph;
-	bool use_16b;
 	u32 remaining_bytes;
 	union base_iovec iov[0];
 };
