@@ -556,6 +556,14 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	spin_lock_init(&ibd->n_qps_lock);
 	spin_lock_init(&ibd->n_mcast_grps_lock);
 
+	/* set RHF event table for Verbs receive */
+	ibd->rhf_rcv_functions[RHF_RCV_TYPE_IB] = hfi2_ib_rcv;
+	ibd->rhf_rcv_functions[RHF_RCV_TYPE_BYPASS] = hfi2_ib_rcv;
+	ibd->rhf_rcv_function_map = ibd->rhf_rcv_functions;
+	/* Verbs send functions, can be replaced by snoop */
+	ibd->send_wqe = hfi2_send_wqe;
+	ibd->send_ack = hfi2_send_ack;
+
 	/* Allocate Management Context */
 	ret = hfi2_ctx_init(ibd, bus_ops);
 	if (ret)
@@ -574,14 +582,6 @@ int hfi2_ib_add(struct hfi_devdata *dd, struct opa_core_ops *bus_ops)
 	}
 	if (ret)
 		goto port_err;
-
-	/* set RHF event table for Verbs receive */
-	ibd->rhf_rcv_functions[RHF_RCV_TYPE_IB] = hfi2_ib_rcv;
-	ibd->rhf_rcv_functions[RHF_RCV_TYPE_BYPASS] = hfi2_ib_rcv;
-	ibd->rhf_rcv_function_map = ibd->rhf_rcv_functions;
-	/* Verbs send functions, can be replaced by snoop */
-	ibd->send_wqe = hfi2_send_wqe;
-	ibd->send_ack = hfi2_send_ack;
 
 	ret = hfi2_register_device(ibd, hfi_class_name());
 	if (ret)
