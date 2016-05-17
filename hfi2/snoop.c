@@ -172,8 +172,7 @@ struct snoop_packet {
 
 static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *priv);
 static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *priv,
-			  union hfi2_packet_header *from, size_t hwords,
-			  bool use_16b);
+			  union hfi2_packet_header *from, size_t hwords);
 
 /* Do not make these an enum or it will blow up the capture_md */
 #define PKT_DIR_EGRESS 0x0
@@ -1174,14 +1173,14 @@ out:
  * CCA packets. We don't restrict this usage though.
  */
 static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *priv,
-			  union hfi2_packet_header *from, size_t hwords,
-			  bool use_16b)
+			  union hfi2_packet_header *from, size_t hwords)
 {
 	struct hfi_devdata *dd = ibp->ibd->dd;
 	int snoop_mode = 0;
 	int md_len = 0;
 	struct capture_md md;
 	struct snoop_packet *s_packet = NULL;
+	bool use_16b = priv->use_16b;
 	int packet_len;
 	int ret;
 
@@ -1247,5 +1246,5 @@ static int snoop_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *priv,
 	}
 
 inline_pio_out:
-	return hfi2_send_ack(ibp, priv, from, hwords, use_16b);
+	return hfi2_send_ack(ibp, priv, from, hwords);
 }

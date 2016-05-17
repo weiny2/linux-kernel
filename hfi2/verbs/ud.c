@@ -66,8 +66,8 @@
  * Note that the receive logic may be calling hfi2_ud_rcv() while
  * this is being called.
  */
-/* FXRTODO: Need to support 16B loopback */
-static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
+/* FXRTODO: Probably make use_16b part of rvt_swqe */
+static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe, bool use_16b)
 {
 	struct ib_device *ibdev;
 	struct hfi2_ibport *ibp;
@@ -80,7 +80,6 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	struct ib_wc wc;
 	u32 length;
 	enum ib_qp_type sqptype, dqptype;
-	bool use_16b;
 
 	ibdev = sqp->ibqp.device;
 	ibp = to_hfi_ibp(ibdev, sqp->port_num);
@@ -102,7 +101,6 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	dev_dbg(ibp->dev,
 		"exercising UD loopback path, to/from lid %d\n", ppd->lid);
 
-	use_16b = hfi2_use_16b(qp, swqe);
 	sqptype = sqp->ibqp.qp_type == IB_QPT_GSI ?
 			IB_QPT_UD : sqp->ibqp.qp_type;
 	dqptype = qp->ibqp.qp_type == IB_QPT_GSI ?
@@ -497,7 +495,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 	u32 lid;
 	int ret = 0;
 	int next_cur;
-	bool is_16b;
+	bool use_16b;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
@@ -534,7 +532,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 #else
 	ah_attr = &ibah_to_rvtah(wqe->wr.wr.ud.ah)->attr;
 #endif
-	is_16b = hfi2_use_16b(qp, wqe);
+	use_16b = hfi2_use_16b(qp, wqe);
 	if (!hfi2_check_mcast(ah_attr)) {
 		lid = hfi2_get_dlid_from_ah(ah_attr) & ~((1 << ppd->lmc) - 1);
 		/*
@@ -544,7 +542,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 		/**
 		 * A DLID of 0xFFFF needs special handing.
 		 * If GRD has been not been specified,
-		 * (i.e. is_16b is not true), 0xFFFF is
+		 * (i.e. use_16b is not true), 0xFFFF is
 		 * permissive LID and the packet with DLID
 		 * of 0xFFFF is a directed route packet.
 		 * If not, 0xFFFF is a regular unicast LID.
@@ -553,10 +551,10 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 		 * local query when no LID has been assigned.
 		 */
 		if (unlikely(!force_loopback &&
-			     ((is_16b ||
+			     ((use_16b ||
 			       (lid != HFI1_PERMISSIVE_LID)) &&
 			     ((lid == ppd->lid) ||
-			      ((lid == (is_16b ? HFI1_16B_PERMISSIVE_LID :
+			      ((lid == (use_16b ? HFI1_16B_PERMISSIVE_LID :
 					HFI1_PERMISSIVE_LID)) &&
 			       (qp->ibqp.qp_type == IB_QPT_GSI) &&
 			       (!ppd->lid)))))) {
@@ -573,7 +571,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 			}
 			qp->s_cur = next_cur;
 			spin_unlock_irqrestore(&qp->s_lock, flags);
-			ud_loopback(qp, wqe);
+			ud_loopback(qp, wqe, use_16b);
 			spin_lock_irqsave(&qp->s_lock, flags);
 			hfi2_send_complete(qp, wqe, IB_WC_SUCCESS);
 			goto done;
@@ -584,7 +582,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 	qp->s_wqe = wqe;
 
 	/* 16B(4)/LRH(2) + BTH(3) + DETH(2) */
-	qp->s_hdrwords = is_16b ? 9 : 7;
+	qp->s_hdrwords = use_16b ? 9 : 7;
 	qp->s_cur_size = wqe->length;
 	qp->s_cur_sge = &qp->s_sge;
 	qp->s_srate = ah_attr->static_rate;
@@ -599,16 +597,16 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 	 * going across the network based on hop_count.
 	 */
 	if ((ah_attr->ah_flags & IB_AH_GRH) &&
-	    (!is_16b || hfi2_check_mcast(ah_attr)))
+	    (!use_16b || hfi2_check_mcast(ah_attr)))
 		/*
 		 * Don't worry about sending to locally attached multicast
 		 * QPs.  It is unspecified by the spec. what happens.
 		 */
-		ohdr = is_16b ? &qp_priv->s_hdr->opa16b.u.l.oth :
-				&qp_priv->s_hdr->ph.ibh.u.l.oth;
+		ohdr = use_16b ? &qp_priv->s_hdr->opa16b.u.l.oth :
+				 &qp_priv->s_hdr->ph.ibh.u.l.oth;
 	else
-		ohdr = is_16b ? &qp_priv->s_hdr->opa16b.u.oth :
-				&qp_priv->s_hdr->ph.ibh.u.oth;
+		ohdr = use_16b ? &qp_priv->s_hdr->opa16b.u.oth :
+				 &qp_priv->s_hdr->ph.ibh.u.oth;
 
 	if (wqe->wr.opcode == IB_WR_SEND_WITH_IMM) {
 		qp->s_hdrwords++;
@@ -617,7 +615,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 	} else
 		opcode = IB_OPCODE_UD_SEND_ONLY;
 
-	if (is_16b)
+	if (use_16b)
 		hfi2_make_16b_ud_header(qp, wqe, ohdr, opcode);
 	else
 		hfi2_make_ud_header(qp, wqe, ohdr, opcode);
@@ -717,8 +715,8 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	u8 sc5, extra_bytes;
 	bool is_becn, is_fecn, is_mcast;
 	struct ib_grh *grh = packet->grh;
-	u32 slid, dlid, permissive_lid;
-	u8 age, l4, rc;
+	u32 slid, dlid, permissive_lid, mcast_lid_base;
+	u8 age, l4, rc, imm_data_size = 0;
 	u16 entropy, len, pkey;
 	bool is_16b = (packet->etype == RHF_RCV_TYPE_BYPASS);
 
@@ -737,6 +735,9 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		is_mcast = (dlid >= HFI1_16B_MULTICAST_LID_BASE) &&
 				(dlid != HFI1_16B_PERMISSIVE_LID);
 		permissive_lid = HFI1_16B_PERMISSIVE_LID;
+		mcast_lid_base = HFI1_16B_MULTICAST_LID_BASE;
+		/* bypass packet do not have header separation HW support */
+		imm_data_size = sizeof(u32);
 	} else {
 		dlid = be16_to_cpu(ph->ibh.lrh[1]);
 		slid = be16_to_cpu(ph->ibh.lrh[3]);
@@ -755,6 +756,7 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		is_mcast = (dlid >= HFI1_MULTICAST_LID_BASE) &&
 				(dlid != HFI1_PERMISSIVE_LID);
 		permissive_lid = IB_LID_PERMISSIVE;
+		mcast_lid_base = HFI1_MULTICAST_LID_BASE;
 	}
 
 	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
@@ -865,7 +867,7 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		wc.ex.imm_data = ohdr->u.ud.imm_data;
 		wc.wc_flags = IB_WC_WITH_IMM;
 		tlen -= sizeof(u32);
-		data += (is_16b ? sizeof(u32) : 0);
+		data += imm_data_size;
 	} else if (opcode == IB_OPCODE_UD_SEND_ONLY) {
 		wc.ex.imm_data = 0;
 		wc.wc_flags = 0;
@@ -951,12 +953,9 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	/*
 	 * Save the LMC lower bits if the destination LID is a unicast LID.
 	 */
-	if (is_16b)
-		wc.dlid_path_bits = (dlid >= HFI1_16B_MULTICAST_LID_BASE) ? 0 :
-					dlid & ((1 << ppd->lmc) - 1);
-	else
-		wc.dlid_path_bits = (dlid >= HFI1_MULTICAST_LID_BASE) ? 0 :
-					dlid & ((1 << ppd->lmc) - 1);
+	wc.dlid_path_bits = (dlid >= mcast_lid_base) ? 0 :
+				dlid & ((1 << ppd->lmc) - 1);
+
 	wc.port_num = qp->port_num;
 	/* Signal completion event if the solicited bit is set. */
 	rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc,
