@@ -1223,9 +1223,9 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	if (dwords == 0) {
 		pio_copy(ppd->dd, pbuf, pbc, hdr, hdrwords);
 	} else {
+		seg_pio_copy_start(pbuf, pbc,
+				   hdr, hdrwords * 4);
 		if (ss) {
-			seg_pio_copy_start(pbuf, pbc,
-					   hdr, hdrwords * 4);
 			while (len) {
 				void *addr = ss->sge.vaddr;
 				u32 slen = ss->sge.length;
@@ -1236,20 +1236,20 @@ int hfi1_verbs_send_pio(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 				seg_pio_copy_mid(pbuf, addr, slen);
 				len -= slen;
 			}
-			/**
-			 * Bypass packet will need to copy additional
-			 * bytes to accommodate for CRC and LT bytes
-			 */
-			if (extra_bytes) {
-				u8 *empty_buf;
-
-				empty_buf = kcalloc(extra_bytes, sizeof(u8),
-						    GFP_KERNEL);
-				seg_pio_copy_mid(pbuf, empty_buf, extra_bytes);
-				kfree(empty_buf);
-			}
-			seg_pio_copy_end(pbuf);
 		}
+		/**
+		 * Bypass packet will need to copy additional
+		 * bytes to accommodate for CRC and LT bytes
+		 */
+		if (extra_bytes) {
+			u8 *empty_buf;
+
+			empty_buf = kcalloc(extra_bytes, sizeof(u8),
+					    GFP_KERNEL);
+			seg_pio_copy_mid(pbuf, empty_buf, extra_bytes);
+			kfree(empty_buf);
+		}
+		seg_pio_copy_end(pbuf);
 	}
 
 	trace_pio_output_ibhdr(dd_from_ibdev(qp->ibqp.device), hdr, bypass);
