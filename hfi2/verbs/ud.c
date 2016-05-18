@@ -716,12 +716,19 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	bool is_becn, is_fecn, is_mcast;
 	struct ib_grh *grh = packet->grh;
 	u32 slid, dlid, permissive_lid, mcast_lid_base;
-	u8 age, l4, rc, imm_data_size = 0;
+	u8 age, l4, rc;
 	u16 entropy, len, pkey;
 	bool is_16b = (packet->etype == RHF_RCV_TYPE_BYPASS);
 
+	/*
+	 * The opcode is in the low byte when its in network order
+	 * (top byte when in host order).
+	 */
+	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+	opcode &= 0xff;
+
 	/* add DETH */
-	hdrsize += 8;
+	hdrsize += eth_len_by_opcode[opcode];
 
 	if (is_16b) {
 		data = packet->ebuf + hdrsize;
@@ -736,8 +743,6 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 				(dlid != HFI1_16B_PERMISSIVE_LID);
 		permissive_lid = HFI1_16B_PERMISSIVE_LID;
 		mcast_lid_base = HFI1_16B_MULTICAST_LID_BASE;
-		/* bypass packet do not have header separation HW support */
-		imm_data_size = sizeof(u32);
 	} else {
 		dlid = be16_to_cpu(ph->ibh.lrh[1]);
 		slid = be16_to_cpu(ph->ibh.lrh[3]);
@@ -761,13 +766,6 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 
 	qkey = be32_to_cpu(ohdr->u.ud.deth[0]);
 	src_qp = be32_to_cpu(ohdr->u.ud.deth[1]) & HFI1_QPN_MASK;
-
-	/*
-	 * The opcode is in the low byte when its in network order
-	 * (top byte when in host order).
-	 */
-	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
-	opcode &= 0xff;
 
 #if 0	/* FXRTODO - becn/fecn */
 	if (is_becn) {
@@ -867,7 +865,6 @@ void hfi2_ud_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		wc.ex.imm_data = ohdr->u.ud.imm_data;
 		wc.wc_flags = IB_WC_WITH_IMM;
 		tlen -= sizeof(u32);
-		data += imm_data_size;
 	} else if (opcode == IB_OPCODE_UD_SEND_ONLY) {
 		wc.ex.imm_data = 0;
 		wc.wc_flags = 0;

@@ -299,7 +299,8 @@ void hfi2_uc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	u32 slid, dlid;
 	bool is_16b = (packet->etype == RHF_RCV_TYPE_BYPASS);
 
-	opcode = be32_to_cpu(ohdr->bth[0]);
+	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
+	hdrsize += eth_len_by_opcode[opcode];
 	if (is_16b) {
 #if 0
 		if (hfi2_ruc_check_hdr_16b(ibp, ph->opa16b,
@@ -313,7 +314,7 @@ void hfi2_uc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		/* Get the number of bytes the message was padded by. */
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 7;
 		extra_bytes = 5;    /* ICRC + TAIL byte */
-
+		data += hdrsize;
 	} else {
 #if 0
 		if (hfi2_ruc_check_hdr(ibp, ph->ibh, !!packet->grh, qp, opcode))
@@ -353,9 +354,7 @@ void hfi2_uc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 			   (u16)slid, sc5, packet->grh);
 	}
 #endif
-
 	psn = be32_to_cpu(ohdr->bth[2]);
-	opcode >>= 24;
 
 	/* Compare the PSN verses the expected PSN. */
 	if (unlikely(cmp_psn(psn, qp->r_psn) != 0)) {
@@ -462,14 +461,12 @@ send_first:
 		qp->r_rcv_len += pmtu;
 		if (unlikely(qp->r_rcv_len > qp->r_len))
 			goto rewind;
-		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, pmtu, 0);
 		break;
 
 	case OP(SEND_LAST_WITH_IMMEDIATE):
 send_last_imm:
 		wc.ex.imm_data = ohdr->u.imm_data;
-		hdrsize += 4;
 		wc.wc_flags = IB_WC_WITH_IMM;
 		goto send_last;
 	case OP(SEND_LAST):
@@ -487,7 +484,6 @@ send_last:
 		if (unlikely(wc.byte_len > qp->r_len))
 			goto rewind;
 		wc.opcode = IB_WC_RECV;
-		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, tlen, 0);
 		rvt_put_ss(&qp->s_rdma_read_sge);
 last_imm:
@@ -528,7 +524,6 @@ rdma_first:
 			goto drop;
 		}
 		reth = &ohdr->u.rc.reth;
-		hdrsize += sizeof(*reth);
 		qp->r_len = be32_to_cpu(reth->length);
 		qp->r_rcv_len = 0;
 		qp->r_sge.sg_list = NULL;
@@ -564,14 +559,12 @@ rdma_first:
 		qp->r_rcv_len += pmtu;
 		if (unlikely(qp->r_rcv_len > qp->r_len))
 			goto drop;
-		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, pmtu, 1);
 		break;
 
 	case OP(RDMA_WRITE_LAST_WITH_IMMEDIATE):
 		wc.ex.imm_data = ohdr->u.imm_data;
 rdma_last_imm:
-		hdrsize += 4;
 		wc.wc_flags = IB_WC_WITH_IMM;
 
 		/* Check for invalid length. */
@@ -593,7 +586,6 @@ rdma_last_imm:
 		}
 		wc.byte_len = qp->r_len;
 		wc.opcode = IB_WC_RECV_RDMA_WITH_IMM;
-		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, tlen, 1);
 		rvt_put_ss(&qp->r_sge);
 		goto last_imm;
@@ -608,7 +600,6 @@ rdma_last:
 		tlen -= (hdrsize + pad + extra_bytes);
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
-		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, tlen, 1);
 		rvt_put_ss(&qp->r_sge);
 		break;
