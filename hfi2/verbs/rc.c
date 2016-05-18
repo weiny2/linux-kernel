@@ -1734,7 +1734,6 @@ static void rdma_seq_err(struct rvt_qp *qp, struct hfi2_ibport *ibp,
  * rc_rcv_resp - process an incoming RC response packet
  * @ibp: the port this packet came in on
  * @ohdr: the other headers for this packet
- * @is_16b: is a 16B packet
  * @data: the packet data
  * @tlen: the packet length
  * @qp: the QP for this packet
@@ -1749,7 +1748,7 @@ static void rdma_seq_err(struct rvt_qp *qp, struct hfi2_ibport *ibp,
  * packet for the given QP.
  */
 static void rc_rcv_resp(struct hfi2_ibport *ibp,
-			struct ib_l4_headers *ohdr, bool is_16b,
+			struct ib_l4_headers *ohdr,
 			void *data, u32 tlen, struct rvt_qp *qp,
 			u32 opcode, u32 psn, u32 hdrsize, u32 pmtu,
 			struct hfi_ctx *ctx, u32 pad, u8 extra_bytes)
@@ -1817,7 +1816,6 @@ static void rc_rcv_resp(struct hfi2_ibport *ibp,
 		 * have to be careful to copy the data to the right
 		 * location.
 		 */
-		hdrsize += 4;
 		qp->s_rdma_read_len = restart_sge(&qp->s_rdma_read_sge,
 						  wqe, psn, pmtu);
 		goto read_middle;
@@ -1855,7 +1853,6 @@ read_middle:
 		qp->s_rdma_read_len -= pmtu;
 		update_last_psn(qp, psn);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
-		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->s_rdma_read_sge, data, pmtu, 0);
 		goto bail;
 
@@ -1867,7 +1864,6 @@ read_middle:
 		 * Check that the data size is >= 0 && <= pmtu.
 		 * Remember to account for ICRC and any TAIL.
 		 */
-		hdrsize += 4;
 		if (unlikely(tlen < (hdrsize + pad + extra_bytes)))
 			goto ack_len_err;
 		/*
@@ -1890,7 +1886,6 @@ read_middle:
 		 * Check that the data size is >= 1 && <= pmtu.
 		 * Remember to account for ICRC and any TAIL.
 		 */
-		hdrsize += 4;
 		if (unlikely(tlen <= (hdrsize + pad + extra_bytes)))
 			goto ack_len_err;
 read_last:
@@ -1898,7 +1893,6 @@ read_last:
 		if (unlikely(tlen != qp->s_rdma_read_len))
 			goto ack_len_err;
 		aeth = be32_to_cpu(ohdr->u.aeth);
-		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->s_rdma_read_sge, data, tlen, 0);
 		WARN_ON(qp->s_rdma_read_sge.num_sge);
 		(void) do_rc_ack(qp, aeth, psn,
@@ -2252,7 +2246,7 @@ void hfi2_rc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	bth1 = be32_to_cpu(ohdr->bth[1]);
 	psn = be32_to_cpu(ohdr->bth[2]);
 	opcode = bth0 >> 24;
-
+	hdrsize += eth_len_by_opcode[opcode];
 	if (is_16b) {
 #if 0
 		if (hfi2_ruc_check_hdr_16b(ibp, ph->opa16b,
@@ -2266,7 +2260,7 @@ void hfi2_rc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		/* Get the number of bytes the message was padded by. */
 		pad = (be32_to_cpu(ohdr->bth[0]) >> 20) & 7;
 		extra_bytes = 5;    /* ICRC + TAIL byte */
-
+		data += hdrsize;
 	} else {
 #if 0
 		if (hfi2_ruc_check_hdr(ibp, ph->ibh, !!packet->grh, qp, bth0))
@@ -2301,7 +2295,7 @@ void hfi2_rc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	 */
 	if (opcode >= OP(RDMA_READ_RESPONSE_FIRST) &&
 	    opcode <= OP(ATOMIC_ACKNOWLEDGE)) {
-		rc_rcv_resp(ibp, ohdr, is_16b, data, tlen, qp, opcode, psn,
+		rc_rcv_resp(ibp, ohdr, data, tlen, qp, opcode, psn,
 			    hdrsize, pmtu, ctx, pad, extra_bytes);
 		if (is_fecn)
 			goto send_ack;
@@ -2386,7 +2380,6 @@ send_middle:
 		qp->r_rcv_len += pmtu;
 		if (unlikely(qp->r_rcv_len > qp->r_len))
 			goto nack_inv;
-		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, pmtu, 1);
 		break;
 
@@ -2427,7 +2420,6 @@ send_middle:
 	case OP(SEND_LAST_WITH_IMMEDIATE):
 send_last_imm:
 		wc.ex.imm_data = ohdr->u.imm_data;
-		hdrsize += 4;
 		wc.wc_flags = IB_WC_WITH_IMM;
 		goto send_last;
 	case OP(SEND_LAST):
@@ -2445,7 +2437,6 @@ send_last:
 		wc.byte_len = tlen + qp->r_rcv_len;
 		if (unlikely(wc.byte_len > qp->r_len))
 			goto nack_inv;
-		data += (is_16b ? hdrsize : 0);
 		hfi2_copy_sge(&qp->r_sge, data, tlen, 1);
 		rvt_put_ss(&qp->r_sge);
 		qp->r_msn++;
@@ -2490,7 +2481,6 @@ send_last:
 			goto nack_inv;
 		/* consume RWQE */
 		reth = &ohdr->u.rc.reth;
-		hdrsize += sizeof(*reth);
 		qp->r_len = be32_to_cpu(reth->length);
 		qp->r_rcv_len = 0;
 		qp->r_sge.sg_list = NULL;
@@ -2529,7 +2519,6 @@ send_last:
 		if (!ret)
 			goto rnr_nak;
 		wc.ex.imm_data = ohdr->u.rc.imm_data;
-		hdrsize += 4;
 		wc.wc_flags = IB_WC_WITH_IMM;
 		goto send_last;
 

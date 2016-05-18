@@ -113,6 +113,8 @@ struct hfi2_ib_header;
 struct hfi2_ib_packet;
 union hfi2_packet_header;
 
+extern const u8 eth_len_by_opcode[256];
+
 /*
  * hfi2 specific QP state which is hidden from rvt after queue pair created,
  * used for hfi2 driver specific interactions with hardware device.

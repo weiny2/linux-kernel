@@ -97,6 +97,50 @@ unsigned int hfi2_max_srq_wrs = 0x1FFFF;
 /* LKEY table size in bits (2^n, 1 <= n <= 23) */
 unsigned int hfi2_lkey_table_size = 16;
 
+/*
+ * Extended Transport Header length by opcode
+ */
+const u8 eth_len_by_opcode[256] = {
+	/* RC */
+	[IB_OPCODE_RC_SEND_FIRST]                     = 0,
+	[IB_OPCODE_RC_SEND_MIDDLE]                    = 0,
+	[IB_OPCODE_RC_SEND_LAST]                      = 0,
+	[IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE]       = 4,
+	[IB_OPCODE_RC_SEND_ONLY]                      = 0,
+	[IB_OPCODE_RC_SEND_ONLY_WITH_IMMEDIATE]       = 4,
+	[IB_OPCODE_RC_RDMA_WRITE_FIRST]               = 16,
+	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]              = 0,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST]                = 0,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 4,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = 16,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 20,
+	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = 16,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = 0,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = 4,
+	[IB_OPCODE_RC_ACKNOWLEDGE]                    = 4,
+	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = 4,
+	[IB_OPCODE_RC_COMPARE_SWAP]                   = 28,
+	[IB_OPCODE_RC_FETCH_ADD]                      = 28,
+	/* UC */
+	[IB_OPCODE_UC_SEND_FIRST]                     = 0,
+	[IB_OPCODE_UC_SEND_MIDDLE]                    = 0,
+	[IB_OPCODE_UC_SEND_LAST]                      = 0,
+	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = 4,
+	[IB_OPCODE_UC_SEND_ONLY]                      = 0,
+	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = 4,
+	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = 16,
+	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = 0,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST]                = 0,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 4,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY]                = 16,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 20,
+	/* UD */
+	[IB_OPCODE_UD_SEND_ONLY]                      = 8,
+	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = 12
+};
+
 static const char *get_unit_name(int unit)
 {
 	static char iname[16];
