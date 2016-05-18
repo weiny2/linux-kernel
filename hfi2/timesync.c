@@ -55,8 +55,6 @@
 #include "link.h"
 #include "timesync.h"
 
-#define LCB_CFG_LOCAL_TIME_DUMMY 0
-
 /**
  * hfi_ptp_read - Read the PHC time from the device
  * @ppd: Board private structure
@@ -70,7 +68,7 @@ static void hfi_ptp_read(struct hfi_pportdata *ppd, struct timespec64 *ts)
 {
 	u64 ns;
 
-	ns = read_fzc_csr(ppd, LCB_CFG_LOCAL_TIME_DUMMY);
+	ns = read_fzc_csr(ppd, FZC_LCB_STS_UPPER_LOCAL_TIME);
 	*ts = ns_to_timespec64(ns);
 }
 
@@ -88,7 +86,7 @@ static void hfi_ptp_write(struct hfi_pportdata *ppd,
 {
 	u64 ns = timespec64_to_ns(ts);
 
-	write_fzc_csr(ppd, LCB_CFG_LOCAL_TIME_DUMMY, ns);
+	write_fzc_csr(ppd, FZC_LCB_STS_UPPER_LOCAL_TIME, ns);
 }
 
 /**
@@ -114,6 +112,7 @@ static int hfi_ptp_adjfreq(struct ptp_clock_info *ptp, s32 ppb)
 	}
 
 	freq = read_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_1);
+	freq &= FZC_LCB_CFG_TIME_SYNC_1_TSYN_INC_SMASK;
 	adj = freq;
 
 	freq *= ppb;
@@ -151,7 +150,6 @@ static int hfi_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	hfi_ptp_write(ppd, (struct timespec64 *)&now);
 
 	spin_unlock_irqrestore(&ppd->tmreg_lock, flags);
-
 	return 0;
 }
 
@@ -277,10 +275,12 @@ void hfi_timesync_init(struct hfi_pportdata *ppd)
 
 	/* ensure we have a clock device */
 	err = hfi_ptp_create_clock(ppd);
+
 	if (err) {
 		ppd->ptp_clock = NULL;
 		dd_dev_err(ppd->dd, "Timesync initialization failed");
 	} else {
+		ppd->ptp_index = ptp_clock_index(ppd->ptp_clock);
 #if 0
 		/* FXRTODO: complete this for FXR timesync when registers
 		 * are functional
@@ -288,9 +288,8 @@ void hfi_timesync_init(struct hfi_pportdata *ppd)
 		struct timespec64 ts;
 		u32 regval;
 #endif
-		ppd_dev_info(ppd, "%s: added PHC on %s\n", __func__,
-			     "device TBD");
-			    /* netdev->name); */
+		ppd_dev_info(ppd, "%s: added PHC on /dev/ptp%d\n", __func__,
+			     ppd->ptp_index);
 #if 0
 		/* DEBUG - Check for flits on each clockid and report */
 
@@ -303,7 +302,8 @@ void hfi_timesync_init(struct hfi_pportdata *ppd)
 }
 
 /**
- * hfi_timesync_stop - Disable the driver/hardware support and unregister the PHC
+ * hfi_timesync_stop - Disable the driver/hardware support and unregister
+ *                     the PHC
  * @ppd: Port specific structure
  *
  * This function handles the cleanup work required from the initialization by
@@ -335,42 +335,81 @@ int hfi_get_ts_master_regs(struct hfi_ctx *ctx,
 	u64 master_high;
 	u64 reg;
 	struct hfi_pportdata *ppd = to_hfi_ppd(ctx->devdata, master_ts->port);
-
-	printk(KERN_DEBUG "%s:%d ppd=%p port=%d\n", __func__, __LINE__, ppd,
-	       master_ts->port);
+	u64 ns;
 
 	if (!ppd)
 		return -ENOENT;
 
-	return 0;	/* FXRTODO - Do this until registers are in Simics */
-
 	/* Disable_snaps here to ensure atomic reads */
 	reg = read_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_0);
 	reg |= 1 << (FZC_LCB_CFG_TIME_SYNC_0_DISABLE_SNAPS_SHIFT +
-		     master_ts->clkid);
+		     3 - master_ts->clkid);
 	write_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_0, reg);
 
-	master_low = read_fzc_csr(ppd, FZC_LCB_STS_MASTER_0_TIME_LOW + 0x18 *
+	master_low = read_fzc_csr(ppd, FZC_LCB_STS_MASTER_TIME_LOW_0 + 0x18 *
 				  master_ts->clkid) &
-				  FZC_LCB_STS_MASTER_0_TIME_LOW_VAL_SMASK;
-	master_high = read_fzc_csr(ppd, FZC_LCB_STS_MASTER_0_TIME_HIGH + 0x18 *
+				  FZC_LCB_STS_MASTER_TIME_LOW_0_VAL_SMASK;
+	master_high = read_fzc_csr(ppd, FZC_LCB_STS_MASTER_TIME_HIGH_0 + 0x18 *
 				   master_ts->clkid) &
-				   FZC_LCB_STS_MASTER_0_TIME_HIGH_VAL_SMASK;
-	master_ts->timestamp = read_fzc_csr(ppd, FZC_LCB_STS_LOCAL_0_TIME +
+				   FZC_LCB_STS_MASTER_TIME_HIGH_0_VAL_SMASK;
+	master_ts->timestamp = read_fzc_csr(ppd,
+					    FZC_LCB_STS_SNAPPED_LOCAL_TIME_0 +
 					    0x18 * master_ts->clkid);
-
+	ns = read_fzc_csr(ppd, FZC_LCB_STS_UPPER_LOCAL_TIME); /* temp hack */
 	/* Enable snaps again */
 	reg &= ~FZC_LCB_CFG_TIME_SYNC_0_DISABLE_SNAPS_SMASK;
 	write_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_0, reg);
-
 	/* See if low and high are from the same sample */
 	if ((master_high & 0xff) == (master_low >> 32)) {
 		master_ts->master = (master_high << 32) |
 				    (master_low & 0xffffffff);
 		return 0;
 	}
-
 	return -EAGAIN;
+}
+
+static void simics_hack_write_local_time(struct hfi_pportdata *ppd, u64 ns)
+{
+	write_fzc_csr(ppd, FZC_LCB_STS_UPPER_LOCAL_TIME, ns);
+}
+
+/*
+ * Temporary hack to configure Simics for timesync.
+ */
+void simics_hack_timesync(struct hfi_pportdata *ppd, u64 hack_timesync, u8 port)
+{
+#define HACK_TIMESYNC_1 0x2000040
+#define HACK_TIMESYNC_2 0x2004040
+/* abbccccdddddddddddddddddddddddd  fields
+ * 0987654321098765432109876543210  ruler
+ * 3         2         1
+ *        111111111111111111111111  SnapFreq
+ *    1111   .   .   .   .   .   .  TimeIncShift
+ *  11   .   .   .   .   .   .   .  ClockId
+ * 1 .   .   .   .   .   .   .   .  Enable
+ *   .   .   .   .   .   .   .   .
+ *   .   .   .   .   .   .   .   .  mask         shift
+ *   .   .   f   f   f   f   f   f    0xffffff    0
+ *   .   f   0   0   0   0   0   0   0xf000000   24
+ *   3   0   0   0   0   0   0   0  0x30000000   28
+ *   4   0   0   0   0   0   0   0  0x40000000   30
+ *
+ * If bit 63 is 1 then write register otherwise ignore.
+ */
+	u32 a, b, c, d;
+
+	if (!(hack_timesync & (1UL << 63)))
+		return;
+
+	a = (hack_timesync & 0x40000000) >> 30;
+	b = (hack_timesync & 0x30000000) >> 28;
+	c = (hack_timesync & 0xf000000) >> 24;
+	d = hack_timesync & 0xffffff;
+
+	if (port == 1)
+		write_csr(ppd->dd, HACK_TIMESYNC_1, hack_timesync);
+	else
+		write_csr(ppd->dd, HACK_TIMESYNC_2, hack_timesync);
 }
 
 /**
@@ -386,9 +425,18 @@ int hfi_get_ts_fm_data(struct hfi_ctx *ctx, struct hfi_ts_fm_data *fm_data)
 	if (!ppd)
 		return -ENOENT;
 
+	/* Dummy data for testing */
+	ppd->propagation_delay = 100;
+	ppd->fabric_time_offset = 500;
+	ppd->update_interval = 100;
+	ppd->current_clock_id = 0;
+	/* End dummy data */
+
 	fm_data->propagation_delay = ppd->propagation_delay;
 	fm_data->fabric_time_offset = ppd->fabric_time_offset;
 	fm_data->update_interval = ppd->update_interval;
 	fm_data->current_clock_id = ppd->current_clock_id;
+	fm_data->ptp_index = ppd->ptp_index;
+	simics_hack_timesync(ppd, fm_data->hack_timesync, fm_data->port);
 	return 0;
 }

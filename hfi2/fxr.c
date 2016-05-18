@@ -432,6 +432,7 @@ static void init_csrs(struct hfi_devdata *dd)
 	LM_CONFIG_PORT1_t lmp1 = {.val = 0};
 	TXOTR_PKT_CFG_TIMEOUT_t txotr_timeout = {.val = 0};
 	LM_CONFIG_t lm_config = {.val = 0};
+	RXET_CFG_EQD_t rxet_cfg_eqd;
 
 	/* enable non-portals */
 	nptl_ctl.field.RcvQPMapEnable = 1;
@@ -461,6 +462,10 @@ static void init_csrs(struct hfi_devdata *dd)
 	 * 1 << 30 is 0.895 seconds
 	 */
 	write_csr(dd, FXR_TXCIC_CFG_TO_LIMIT, 1 << 30);
+	/* FXRTODO Temporary hack.  Must set real value here. */
+	rxet_cfg_eqd.val = read_csr(dd, FXR_RXET_CFG_EQD);
+	rxet_cfg_eqd.field.head_refetch_thresh = 0;
+	write_csr(dd, FXR_RXET_CFG_EQD, rxet_cfg_eqd.val);
 	/*
 	 * Set the SLID based on the hostname to enable back to back
 	 * support in Simics.

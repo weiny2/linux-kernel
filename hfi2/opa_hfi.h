@@ -552,6 +552,7 @@ struct bw_arb_cache {
  *		current master and the slave node
  *@update_interval: FM provided filt update interval
  *@current_clock_id: FM provided current clock id
+ *@ptp_index: Index of /dev/ptp%d
  *@vau: Virtual allocation unit for this port
  *@vcu: Virtual return credit unit for this port
  *@link_credits: link credits of this device
@@ -670,6 +671,7 @@ struct hfi_pportdata {
 	u16 propagation_delay;
 	u16 update_interval;
 	u8 current_clock_id;
+	u8 ptp_index;
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *hfi_port_dbg;
