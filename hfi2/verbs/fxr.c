@@ -63,6 +63,7 @@
 #include <rdma/hfi_tx.h>
 
 static bool disable_ofed_dma;
+static bool enable_replace_sc = true;
 
 #define OPA_IB_CQ_FULL_RETRIES		10
 #define OPA_IB_CQ_FULL_DELAY_MS		1
@@ -443,6 +444,10 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 	if (!wqe_iov)
 		return -ENOMEM;
 
+	if (enable_replace_sc)
+		/* FXRTODO: Simics expects sl value in sc field of L2 */
+		replace_sc(ph, sl, use_16b);
+
 	/* hfi_tx_cmd_bypass_dma is asynchronous. Don't use stack memory */
 	/* FXRTODO: Remove memcpy when implementing STL--6302 */
 	memcpy(&wqe_iov->ph, ph, hlen);
@@ -548,6 +553,9 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv)
 			dma_cmd = OFED_9B_DMA;
 		}
 		num_iovs = 0;
+	} else if (dma_cmd != MGMT_DMA && enable_replace_sc) {
+		/* FXRTODO: Simics expects sl value in sc field of L2 */
+		replace_sc_dma(qp_priv->s_hdr, sl, use_16b);
 	}
 
 	wqe_iov = kzalloc(sizeof(*wqe_iov) + sizeof(*wqe_iov->iov) * num_iovs,

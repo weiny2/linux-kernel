@@ -775,4 +775,37 @@ static inline void opa_parse_16b_header(u32 *hdr, u32 *slid, u32 *dlid,
 	*entropy = h3 & OPA_16B_ENTROPY_MASK;
 	*age = (h3 & OPA_16B_AGE_MASK) >> OPA_16B_AGE_SHFT;
 }
+
+/* FXRTODO: Simics expects sl value in sc field of L2 */
+static inline void replace_sc(union hfi2_packet_header *ph, u8 sl, bool use_16b)
+{
+	if (use_16b) {
+		u32 h1;
+
+		h1 = ph->opa16b.opah[1] & ~OPA_16B_SC_MASK;
+		h1 |=  (sl & 0x1F) << OPA_16B_SC_SHFT;
+		ph->opa16b.opah[1] = h1;
+	} else {
+		u16 lrh0;
+
+		lrh0 = ph->ibh.lrh[0] & 0xFF0F;
+		lrh0 |= (sl & 0xF) << 4;
+		ph->ibh.lrh[0] = lrh0;
+	}
+}
+
+/*
+ * Wrapper for above function due to differences between the different
+ * packet structures that are used.
+ */
+static inline void replace_sc_dma(union hfi2_ib_dma_header *s_hdr, u8 sl, bool use_16b)
+{
+	void *ph;
+
+	if (use_16b)
+		ph = &s_hdr->opa16b;
+	else
+		ph = &s_hdr->ph.ibh;
+	replace_sc(ph, sl, use_16b);
+}
 #endif
