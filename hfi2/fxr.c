@@ -91,6 +91,10 @@
 #include "fxr/fxr_tx_otr_pkt_top_csrs.h"
 #include "fxr/fxr_tx_otr_msg_top_csrs_defs.h"
 #include "fxr/fxr_tx_otr_msg_top_csrs.h"
+#include "fxr/fxr_tx_dma_csrs.h"
+#include "fxr/fxr_tx_dma_defs.h"
+#include "fxr/fxr_rx_dma_defs.h"
+#include "fxr/fxr_rx_dma_csrs.h"
 #include "fxr/fxr_pcim_defs.h"
 #include "opa_hfi.h"
 #include "link.h"
@@ -1610,19 +1614,163 @@ static void hfi_sc_to_resp_sl(struct hfi_pportdata *ppd, void *data)
 		write_csr(dd, reg_addr + i * 8, reg[i]);
 }
 
+/* This takes the sc_to_vlX table pointer */
+static int compute_vl_from_mctc(struct hfi_pportdata *ppd, u8 mctc, u8 *sc2vl)
+{
+	int i;
+
+	/* First get the SC, since we'll use that in sc2vl table */
+	for (i = 0; i < OPA_MAX_SCS; i++) {
+		if (ppd->sc_to_mctc[i] == mctc) {
+			u8 vl = sc2vl[i];
+
+			ppd_dev_dbg(ppd, "Found vl:%u from mctc:%u sc:%d\n",
+				    vl, mctc, i);
+			return vl;
+		}
+	}
+
+	ppd_dev_err(ppd, "Cannot lookup sc/vl from mctc %u\n", mctc);
+	return HFI_ILLEGAL_VL;
+}
+
+static void hfi_set_txdma_bw(struct hfi_devdata *dd, u8 whole, u8 frac, u8 mctc)
+{
+	TXDMA_CFG_BWMETER_MC0TC0_t cfg = { .val = 0 };
+
+	cfg.field.leak_amount_fractional = frac;
+	cfg.field.leak_amount_integral = whole;
+	cfg.field.enable_capping = 1;
+	cfg.field.bandwidth_limit = FXR_DEFAULT_BW_LIMIT_FLITS;
+
+	write_csr(dd, FXR_TXDMA_CFG_BWMETER_MC0TC0 + (8 * mctc), cfg.val);
+}
+
+static void hfi_set_rxdma_bw(struct hfi_devdata *dd, u8 whole, u8 frac, u8 mctc)
+{
+	RXDMA_CFG_BW_SHAPE_B0_t cfg;
+	int offset = 8 * mctc;
+
+	cfg.val = read_csr(dd, FXR_RXDMA_CFG_BW_SHAPE_B0 + offset);
+
+	cfg.field.METER_CONFIG = mctc;
+	cfg.field.BW_LIMIT = FXR_DEFAULT_BW_LIMIT_FLITS;
+	cfg.field.LEAK_FRACTION = frac;
+	cfg.field.LEAK_INTEGER = whole;
+
+	write_csr(dd, FXR_RXDMA_CFG_BW_SHAPE_B0 + offset, cfg.val);
+}
+
+static void hfi_set_txotr_bw(struct hfi_devdata *dd, u8 whole, u8 frac, u8 mctc)
+{
+	TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0_t pf_cfg = { .val = 0 };
+	TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0_t fp_cfg = { .val = 0 };
+	TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0_t arb_cfg = { .val = 0 };
+
+	pf_cfg.field.BW_LIMIT = FXR_DEFAULT_BW_LIMIT_FLITS;
+	pf_cfg.field.LEAK_FRACTION = frac;
+	pf_cfg.field.LEAK_INTEGER = whole;
+	write_csr(dd, FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0 + (8 * mctc),
+		  pf_cfg.val);
+
+	fp_cfg.field.BW_LIMIT = FXR_DEFAULT_BW_LIMIT_FLITS;
+	fp_cfg.field.LEAK_FRACTION = frac;
+	fp_cfg.field.LEAK_INTEGER = whole;
+	write_csr(dd, FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0 + (8 * mctc),
+		  fp_cfg.val);
+
+	arb_cfg.field.BW_LIMIT = FXR_DEFAULT_BW_LIMIT_FLITS;
+	arb_cfg.field.LEAK_FRACTION = frac;
+	arb_cfg.field.LEAK_INTEGER = whole;
+	write_csr(dd, FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0 + (8 * mctc),
+		  arb_cfg.val);
+}
+
+void hfi_program_mctc_bw_arb(struct hfi_pportdata *ppd, u64 vl_mask, u8 tx_int,
+			     u8 tx_frac, u8 rx_int, u8 rx_frac)
+{
+	const unsigned long int vlm = vl_mask;
+	int mctc;
+	/*
+	 * For each MC/TC pair, find out what VL that maps to. Then,
+	 * check and see if that VL is in the VL mask provided by FM.
+	 */
+	for (mctc = 0; mctc < (HFI_MAX_TC * HFI_MAX_MC); mctc++) {
+		int rx_vl, tx_vl;
+
+		rx_vl = compute_vl_from_mctc(ppd, mctc, ppd->sc_to_vlr);
+		tx_vl = compute_vl_from_mctc(ppd, mctc, ppd->sc_to_vlt);
+
+		ppd_dev_dbg(ppd, "mctc %d: rx vl %d, tx vl %d\n",
+			    mctc, tx_vl, rx_vl);
+
+		if (hfi_valid_vl(rx_vl) && test_bit(rx_vl, &vlm))
+			hfi_set_rxdma_bw(ppd->dd, rx_int, rx_frac, mctc);
+
+		if (hfi_valid_vl(tx_vl) && test_bit(tx_vl, &vlm)) {
+			hfi_set_txdma_bw(ppd->dd, tx_int, tx_frac, mctc);
+			hfi_set_txotr_bw(ppd->dd, tx_int, tx_frac, mctc);
+		}
+	}
+}
+
 void hfi_set_bw_group(struct hfi_pportdata *ppd,
 		      const struct opa_bw_element *bw_group)
 {
 	int i;
+	u32 tx_amt, rx_amt;
+	u16 lws;
+	u16 lwe;
+	u8 tx_int, tx_frac, rx_int, rx_frac;
 
-	/* FXRTODO: BW Group related HW register configurations goes here */
+	lws = (u16)find_last_bit((void *)&ppd->link_width_supported, 16) + 1;
+	lwe = (u16)find_first_bit((void *)&ppd->link_width_enabled, 16) + 1;
+
 	for (i = 0; i < OPA_NUM_BW_GROUP_SUPPORTED; i++) {
-		ppd_dev_dbg(ppd, "BW group %d priority   = %u\n",
-			    i, bw_group[i].priority);
-		ppd_dev_dbg(ppd, "            bw_percent = %u\n",
-			    bw_group[i].bw_percentage);
-		ppd_dev_dbg(ppd, "            vl_mask    = %#x\n",
-			    be32_to_cpu(bw_group[i].vl_mask));
+		unsigned long int vl_mask;
+
+		u8 prio = bw_group[i].priority;
+		u8 perc = bw_group[i].bw_percentage;
+
+		vl_mask = (u64)(be32_to_cpu(bw_group[i].vl_mask));
+		if (!vl_mask)
+			continue;
+
+		ppd_dev_dbg(ppd, "BW group %d priority %u\n", i, prio);
+		ppd_dev_dbg(ppd, "bw_percent = %u\n", perc);
+		ppd_dev_dbg(ppd, "vl_mask = %#lx\n", vl_mask);
+		ppd_dev_dbg(ppd, "link width = %u/%u\n", lwe, lws);
+
+		/* The integral and fractional amounts are calculated
+		 * by multiplying the FM supplied percent by the flits
+		 * per clock and the ratio of currently enabled lanes.
+		 * Since these are 8 bit values, the fractional part is
+		 * scaled by 256 before the division. For example:
+		 * If a group is given 25% of the BW and the channel is
+		 * at full rate, capable of sending 2 flits per clock,
+		 * then Leak Amount would be set to 0.5 flits per clock.
+		 * With the fraction portion being an 8-bit field,
+		 * holding a maximum value of 256, 0.5 is represented
+		 * by setting 0 for the integer portion and 128 for its
+		 * fractional portion.
+		 */
+		tx_amt = 256 * perc * lwe * FXR_TX_FLITS_PER_CLK;
+		tx_amt /= lws * 100;
+		tx_int = (u8)(tx_amt >> 8);
+		tx_frac = (u8)tx_amt;
+
+		rx_amt = 256 * perc * lwe * FXR_RX_FLITS_PER_CLK;
+		rx_amt /= lws * 100;
+		rx_int = (u8)(rx_amt >> 8);
+		rx_frac = (u8)rx_amt;
+
+		ppd_dev_dbg(ppd, "tx int amount = %u\n", tx_int);
+		ppd_dev_dbg(ppd, "tx frac amount = %u\n", tx_frac);
+		ppd_dev_dbg(ppd, "rx int amount = %u\n", rx_int);
+		ppd_dev_dbg(ppd, "rx frac amount = %u\n", rx_frac);
+
+		hfi_program_mctc_bw_arb(ppd, vl_mask, tx_int, tx_frac, rx_int,
+					rx_frac);
 	}
 }
 
@@ -2220,6 +2368,18 @@ static void hfi_init_bw_arb_caches(struct hfi_pportdata *ppd)
 	spin_lock_init(&ppd->bw_arb_cache.lock);
 }
 
+static void hfi_init_bw_arb_registers(struct hfi_pportdata *ppd)
+{
+	int mctc;
+
+	/*
+	 * The TxOTR registers are currently defaulted to values that
+	 * don't provide 100% bandwidth.
+	 */
+	for (mctc = 0; mctc < (HFI_MAX_TC * HFI_MAX_MC); mctc++)
+		hfi_set_txotr_bw(ppd->dd, HFI_MAX_TXOTR_LEAK_INTEGER, 0, mctc);
+}
+
 /*
  * hfi_pport_init - initialize per port
  * data structs
@@ -2339,6 +2499,7 @@ int hfi_pport_init(struct hfi_devdata *dd)
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_RESP_SL, 0, ppd->sc_to_sl);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_MCTC, 0, ppd->sc_to_sl);
 		hfi_init_bw_arb_caches(ppd);
+		hfi_init_bw_arb_registers(ppd);
 
 		hfi_init_sc_to_vl_tables(ppd);
 		hfi_ptc_init(ppd);

@@ -72,6 +72,17 @@
 /* don't care about this except printing */
 #define HFI2_CHIP_VERS_MIN 0U
 
+/* FXRTODO: Revisit this port allocation when BW groups per
+ * port are more well defined.
+ * There are 4 TCs, and one of them is used for management
+ * traffic only (TC3). The other three will be used for
+ * bandwidth group arbitration. Currently we're setting
+ * two bandwidth arbitration groups to port 1, and one to
+ * port 2.
+ */
+#define HFI2_PORT1_NUM_BW_GROUPS 2
+#define HFI2_PORT2_NUM_BW_GROUPS 1
+
 extern unsigned int hfi_max_mtu;
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME
@@ -117,6 +128,7 @@ enum {
 #define HFI_MAX_MC		2
 #define HFI_MAX_MCTC		8
 #define HFI_MCTC_MASK		(HFI_MAX_MCTC - 1)
+#define HFI_MC_SHIFT		2
 
 /* Maximum number of unicast LIDs supported by default */
 #define HFI_DEFAULT_MAX_LID_SUPP	0xBFFF
@@ -145,6 +157,12 @@ enum {
 #define HFI_NUM_DATA_VLS	9
 /* Number of PKey entries in the HW */
 #define HFI_MAX_PKEYS		64
+/* Number of flits for bandwidth limit shaping */
+#define FXR_DEFAULT_BW_LIMIT_FLITS 2500
+/* Number of flits per clock in TX */
+#define FXR_TX_FLITS_PER_CLK 2
+/* Number of flits per clock in RX */
+#define FXR_RX_FLITS_PER_CLK 1
 
 /* In accordance with stl vol 1 section 4.1 */
 #define PGUID_MASK		(~(0x3UL << 32))
@@ -167,6 +185,8 @@ enum {
 #define HFI_SC_TO_TC_MC_MASK	(u64)(HFI_MCTC_MASK)
 #define HFI_SL_TO_TC_MC_MASK	(u64)(HFI_MCTC_MASK)
 #define HFI_GET_TC(mctc)	((mctc) & HFI_TC_MASK)
+#define HFI_GET_MC(mctc)	((mctc) >> HFI_MC_SHIFT)
+#define HFI_GET_MCTC(mc, tc)	(((mc) << HFI_MC_SHIFT) | (tc))
 #define HFI_SL_TO_SC_MASK	(u64)(OPA_MAX_SCS - 1)
 #define HFI_SC_TO_RESP_SL_MASK	(u64)(OPA_MAX_SLS - 1)
 
@@ -220,6 +240,12 @@ enum {
 #define HFI_INVALID_RESP_SL		0xff
 
 #define TRIGGER_OPS_SPILL_SIZE		(1024 * 1024 * 8)
+
+/*
+ * Setting the leak integral amount to the maximum effectively gives 100% of
+ * the bandwidth to the MCTC
+ */
+#define HFI_MAX_TXOTR_LEAK_INTEGER 0x7
 
 /*
  * Private data for snoop/capture support.

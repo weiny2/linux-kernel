@@ -645,7 +645,17 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	 * BW arb update not yet done to struct opa_port_info.
 	 * So send BwGroupCap using arb_high_cap.
 	 */
-	pi->vl.arb_high_cap = OPA_NUM_BW_GROUP_SUPPORTED;
+
+	/* FXRTODO: Design pending on supporting multiple ports with
+	 * 3 BW groups
+	 * 3 bandwidth groups since we have 4 traffic classes and one
+	 * is reserved for management. Let the other three each be
+	 * a bandwidth group.
+	 */
+	if (port == 1)
+		pi->vl.arb_high_cap = HFI2_PORT1_NUM_BW_GROUPS;
+	else
+		pi->vl.arb_high_cap = HFI2_PORT2_NUM_BW_GROUPS;
 
 	pi->clientrereg_subnettimeout = ibp->subnet_timeout;
 
@@ -1293,6 +1303,7 @@ static int subn_get_opa_sma(u16 attr_id, struct opa_smp *smp, u32 am,
 
 static void hfi_set_link_width_enabled(struct hfi_pportdata *ppd, u32 w)
 {
+	ppd->link_width_enabled = w;
 	hfi_set_ib_cfg(ppd, HFI_IB_CFG_LWID_ENB, w, NULL);
 }
 

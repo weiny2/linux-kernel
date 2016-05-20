@@ -64,6 +64,12 @@
 #include "fxr/fxr_fc_defs.h"
 #include "fxr/fxr_tx_ci_cic_csrs_defs.h"
 #include "fxr/fxr_rx_ci_cid_csrs_defs.h"
+#include <fxr/fxr_tx_dma_csrs.h>
+#include <fxr/fxr_tx_dma_defs.h>
+#include <fxr/fxr_rx_dma_csrs.h>
+#include <fxr/fxr_rx_dma_defs.h>
+#include <fxr/fxr_tx_otr_pkt_top_csrs.h>
+#include <fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
 
 #ifdef CONFIG_DEBUG_FS
 struct dentry *hfi_dbg_root;
@@ -120,6 +126,7 @@ static int hfi_qos_show(struct seq_file *s, void *unused)
 			   i, ppd->sl_to_mctc[i] >> 2,
 			   i, ppd->sl_to_mctc[i] & HFI_TC_MASK,
 			   i, ppd->sl_to_sc[i]);
+		seq_printf(s, "sl2mctc[%2d] %2d ", i, ppd->sl_to_mctc[i]);
 		seq_printf(s,
 			   "sc2vlr[%2d] %2d sc2vlt[%2d] %2d sc2sl[%2d] %2d ",
 			   i, ppd->sc_to_vlr[i],
@@ -172,6 +179,117 @@ void hfi_qos_dbg_init(struct hfi_devdata *dd)
 	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++)
 		debugfs_create_file("qos", 0444, ppd->hfi_port_dbg,
 				    ppd, &hfi_qos_ops);
+}
+
+static int hfi_bw_arb_show(struct seq_file *s, void *unused)
+{
+	struct hfi_pportdata *ppd = s->private;
+	struct opa_bw_element *bw;
+	int i;
+
+	bw = (struct opa_bw_element *)&ppd->bw_arb_cache.bw_group;
+
+	seq_printf(s, "Bandwidth arbitration info for port %d\n", ppd->pnum);
+	for (i = 0; i < OPA_NUM_BW_GROUP_SUPPORTED; i++) {
+		seq_printf(s, "group[%1d] prio:%1u vl_mask:0x%08x perc:%u\n",
+			   i, bw->priority, be32_to_cpu(bw->vl_mask),
+			   bw->bw_percentage);
+		bw++;
+	}
+	seq_puts(s, "\nHW programmed values:\n");
+
+	for (i = 0; i < (HFI_MAX_TC * HFI_MAX_MC); i++) {
+		TXDMA_CFG_BWMETER_MC0TC0_t txcfg;
+		RXDMA_CFG_BW_SHAPE_B0_t rxcfg;
+		TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0_t pcfg;
+		TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0_t fcfg;
+		TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0_t acfg;
+		int off = 8 * i;
+
+		txcfg.val = read_csr(ppd->dd,
+				 FXR_TXDMA_CFG_BWMETER_MC0TC0 + off);
+		rxcfg.val = read_csr(ppd->dd,
+				 FXR_RXDMA_CFG_BW_SHAPE_B0 + off);
+		pcfg.val = read_csr(ppd->dd,
+				FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0 + off);
+		fcfg.val = read_csr(ppd->dd,
+				FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0 + off);
+		acfg.val = read_csr(ppd->dd,
+				FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0 + off);
+
+		seq_printf(s, "MC%1dTC%1d:\n", i / HFI_MAX_TC, i % HFI_MAX_TC);
+		seq_printf(s, "\tTXDMA limit:   0x%04x\n",
+			   txcfg.field.bandwidth_limit);
+		seq_printf(s, "\tTXDMA whole:   0x%04x\n",
+			   txcfg.field.leak_amount_integral);
+		seq_printf(s, "\tTXDMA frac:    0x%04x\n",
+			   txcfg.field.leak_amount_fractional);
+		seq_printf(s, "\tTXDMA cap?:    %s\n",
+			   txcfg.field.enable_capping ? "  true" : " false");
+
+		seq_printf(s, "\tTXDMA limit:   0x%04x\n",
+			   rxcfg.field.BW_LIMIT);
+		seq_printf(s, "\tRXDMA whole:   0x%04x\n",
+			   rxcfg.field.LEAK_INTEGER);
+		seq_printf(s, "\tRXDMA frac:    0x%04x\n",
+			   rxcfg.field.LEAK_FRACTION);
+		seq_printf(s, "\tRXDMA config:  0x%04x\n",
+			   rxcfg.field.METER_CONFIG);
+
+		seq_printf(s, "\tARB_PF limit:  0x%04x\n",
+			   pcfg.field.BW_LIMIT);
+		seq_printf(s, "\tARB_PF whole:  0x%04x\n",
+			   pcfg.field.LEAK_INTEGER);
+		seq_printf(s, "\tARB_PF frac:   0x%04x\n",
+			   pcfg.field.LEAK_FRACTION);
+
+		seq_printf(s, "\tARB_FP limit:  0x%04x\n",
+			   fcfg.field.BW_LIMIT);
+		seq_printf(s, "\tARB_FP whole:  0x%04x\n",
+			   fcfg.field.LEAK_INTEGER);
+		seq_printf(s, "\tARB_FP frac:   0x%04x\n",
+			   fcfg.field.LEAK_FRACTION);
+
+		seq_printf(s, "\tARB limit:     0x%04x\n",
+			   acfg.field.BW_LIMIT);
+		seq_printf(s, "\tARB whole:     0x%04x\n",
+			   acfg.field.LEAK_INTEGER);
+		seq_printf(s, "\tARB frac:      0x%04x\n",
+			   acfg.field.LEAK_FRACTION);
+
+		seq_puts(s, "\n");
+	}
+
+	return 0;
+}
+
+static int hfi_bw_arb_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, hfi_bw_arb_show, inode->i_private);
+}
+
+static int hfi_bw_arb_release(struct inode *inode, struct file *file)
+{
+	return single_release(inode, file);
+}
+
+static const struct file_operations hfi_bw_arb_ops = {
+	.owner   = THIS_MODULE,
+	.open    = hfi_bw_arb_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = hfi_bw_arb_release
+};
+
+void hfi_bw_arb_dbg_init(struct hfi_devdata *dd)
+{
+	struct hfi_pportdata *ppd;
+	int j;
+
+	/* create bw_arb file for each port */
+	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++)
+		debugfs_create_file("bw_arb", 0444, ppd->hfi_port_dbg,
+				    ppd, &hfi_bw_arb_ops);
 }
 
 /* link negotiation and initialization */
@@ -375,6 +493,7 @@ void hfi_dbg_init(struct hfi_devdata *dd)
 	}
 
 	hfi_qos_dbg_init(dd);
+	hfi_bw_arb_dbg_init(dd);
 	hfi_firmware_dbg_init(dd);
 	hfi_devcntrs_dbg_init(dd);
 	hfi_portcntrs_dbg_init(dd);
