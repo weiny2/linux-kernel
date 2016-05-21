@@ -102,13 +102,14 @@ do_reboot() {
 function do_mpi_perf()
 {
 	ssh -t $run_host "cd $perf_git/scripts/regression/osu-perf-check && \
-		WFRMPI=$WFRMPI PATH=$WFRMPI/bin:$PATH make clean"
+		source $WFRMPI/bin/mpivars.sh && PATH=$WFRMPI/bin:$PATH make clean"
 
 	ssh -t $run_host "cd $perf_git/scripts/regression/osu-perf-check && \
-		WFRMPI=$WFRMPI PATH=$WFRMPI/bin:$PATH make"
+		source $WFRMPI/bin/mpivars.sh && PATH=$WFRMPI/bin:$PATH make"
 
 	ssh -t $run_host "cd $perf_git/scripts/regression/osu-perf-check && \
-		WFRMPI=$WFRMPI ./run.sh $hostfile $turbo"
+		source $WFRMPI/bin/mpivars.sh && ./run.sh $hostfile $turbo"
+
 	mv $perf_git/scripts/regression/osu-perf-check/OUTPUT-$datestamp $logdir/mpi_perf.$datestamp
 }
 

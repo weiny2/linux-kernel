@@ -26,6 +26,7 @@ def check_output(output):
 
 def test_mpi(host1, host2, temp_dir, perf_test_dir):
     wfr_mpi="/usr/mpi/gcc/openmpi-1.10.2-hfi"
+    wfr_mpivars="/usr/mpi/gcc/openmpi-1.10.2-hfi/bin/mpivars.sh"
     mpi_dir = perf_test_dir + "/scripts/regression/osu-perf-check "
     RegLib.test_log(5, "Running MPI test")
     RegLib.test_log(5, "This test will set the CPU freq")
@@ -44,7 +45,7 @@ def test_mpi(host1, host2, temp_dir, perf_test_dir):
 
     turbo="noturbo"
 
-    mpi_cmd="cd %s && WFRMPI=%s ./run.sh %s %s" % (temp_dir, wfr_mpi, hosts, turbo)
+    mpi_cmd="cd %s && source %s && ./run.sh %s %s" % (temp_dir, wfr_mpivars, hosts, turbo)
     RegLib.test_log(5, "MPI Cmd: %s" % mpi_cmd)
     # Figure out what the MPI test is going to name the output directory
     # Technically we could figure this out and the day could roll between now
