@@ -986,16 +986,16 @@ void hfi1_ud_rcv(struct hfi1_packet *packet)
 	} else {
 		hdr = packet->hdr;
 		data = packet->ebuf;
-		dlid = be16_to_cpu(hdr->lrh[1]);
-		slid = be16_to_cpu(hdr->lrh[3]);
+		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
+		slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
 		fecn = bth1 & HFI1_FECN_SMASK;
 		becn = bth1 & HFI1_BECN_SMASK;
-		sc = (be16_to_cpu(hdr->lrh[0]) >> 12) & 0xf;
-		pkey = (u16)be32_to_cpu(ohdr->bth[0]);
+		sc = OPA_9B_GET_SC5(be16_to_cpu(hdr->lrh[0]));
+		pkey = OPA_9B_BTH_GET_PKEY(be32_to_cpu(ohdr->bth[0]));
 		is_mcast = (dlid > be16_to_cpu(IB_MULTICAST_LID_BASE)) &&
 				(dlid != be16_to_cpu(IB_LID_PERMISSIVE));
 		sc5 = sc | sc4_bit; /* Get the correct SC */
-		sl = (be16_to_cpu(hdr->lrh[0]) >> 4) & 0xF;
+		sl = OPA_9B_GET_SL(be16_to_cpu(hdr->lrh[0]));
 		extra_bytes = OPA_9B_BTH_GET_PAD(be32_to_cpu(ohdr->bth[0]));
 		extra_bytes += (SIZE_OF_CRC << 2);
 		dlid_is_permissive = (dlid == be16_to_cpu(IB_LID_PERMISSIVE));
