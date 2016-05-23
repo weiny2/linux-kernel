@@ -47,6 +47,7 @@ def unload_driver(host, driver_name):
     return False
 
 def load_driver(host, driver_name, driver_path, driver_opts):
+    out = do_ssh(host, "modprobe i2c_algo_bit")
     cmd = "/sbin/insmod " + driver_path + " " + driver_opts
     out = do_ssh(host, cmd)
     loaded = is_driver_loaded(host, driver_name)
