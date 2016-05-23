@@ -324,9 +324,7 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
 	bth1 = be32_to_cpu(ohdr->bth[1]);
-	if (hfi1_ruc_check_hdr(ibp,
-			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
-			       packet->grh, packet->bypass, qp, bth0, bth1)) {
+	if (hfi1_ruc_check_hdr(ibp, packet, qp, bth0, bth1)) {
 		pr_warn("%s ruc check header failed\n",
 			packet->bypass ? "16B" : "9B");
 		return;

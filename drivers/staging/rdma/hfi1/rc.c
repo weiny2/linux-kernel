@@ -227,20 +227,17 @@ static int make_rc_ack(struct hfi1_ibdev *dev, struct rvt_qp *qp,
 	int middle = 0;
 	u32 pmtu = qp->pmtu;
 	struct hfi1_qp_priv *priv = qp->priv;
-	bool bypass = false;
 
 	/* Don't send an ACK if we aren't supposed to. */
 	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_RECV_OK))
 		goto bail;
 
-	bypass = priv->use_16b;
-	if (!bypass)
+	if (!priv->use_16b)
 		/* header size in 32-bit words LRH+BTH = (8+12)/4. */
 		hwords = 5;
 	else
 		/* header size in 32-bit words 16B LRH+BTH = (16+12)/4. */
 		hwords = 7;
-
 
 	switch (qp->s_ack_state) {
 	case OP(RDMA_READ_RESPONSE_LAST):
@@ -408,14 +405,12 @@ int hfi1_make_rc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	char newreq;
 	int middle = 0;
 	int delta;
-	bool bypass = false;
 
 	ps->s_txreq = get_txreq(ps->dev, qp);
 	if (IS_ERR(ps->s_txreq))
 		goto bail_no_tx;
 
-	bypass = priv->use_16b;
-	if (!bypass) {
+	if (!priv->use_16b) {
 		ps->s_txreq->phdr.hdr.hdr_type = 0;
 		/* header size in 32-bit words LRH+BTH = (8+12)/4. */
 		hwords = 5;
@@ -1203,13 +1198,12 @@ void hfi1_rc_send_complete(struct rvt_qp *qp, struct hfi1_opa_header *opah)
 	struct hfi1_16b_header *hdr_16b = NULL;
 	u32 opcode;
 	u32 psn;
-	bool bypass = priv->use_16b;
 
 	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_OR_FLUSH_SEND))
 		return;
 
 	/* Find out where the BTH is */
-	if (!bypass) {
+	if (!priv->use_16b) {
 		hdr = &opah->pkt.ibh;
 		if ((be16_to_cpu(hdr->lrh[0]) & 3) == HFI1_LRH_BTH)
 			ohdr = &hdr->u.oth;
@@ -1678,17 +1672,20 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 	u32 aeth;
 	u64 val;
 	u32 bth0 = 0;
-	bool bypass = priv->use_16b;
 	u8 extra_byte = 0;
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-
-	if (bypass)
-		extra_byte = 1; /* LT BYTE */
-
 	trace_hfi1_rc_ack(qp, psn);
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
+	/* Get the number of bytes the message was padded by. */
+	if (!priv->use_16b) {
+		pad = OPA_9B_BTH_GET_PAD(bth0);
+	} else {
+		pad = OPA_16B_BTH_GET_PAD(bth0);
+		extra_byte = 1; /* LT BYTE */
+	}
+
 	/* Ignore invalid responses. */
 	smp_read_barrier_depends(); /* see post_one_send */
 	if (cmp_psn(psn, ACCESS_ONCE(qp->s_next_psn)) >= 0)
@@ -1789,11 +1786,6 @@ read_middle:
 		aeth = be32_to_cpu(ohdr->u.aeth);
 		if (!do_rc_ack(qp, aeth, psn, opcode, 0, rcd))
 			goto ack_done;
-		/* Get the number of bytes the message was padded by. */
-		if (!bypass)
-			pad = OPA_9B_BTH_GET_PAD(bth0);
-		else
-			pad = OPA_16B_BTH_GET_PAD(bth0);
 		/*
 		 * Check that the data size is >= 0 && <= pmtu.
 		 * Remember to account for ICRC (4).
@@ -1816,11 +1808,6 @@ read_middle:
 			goto ack_seq_err;
 		if (unlikely(wqe->wr.opcode != IB_WR_RDMA_READ))
 			goto ack_op_err;
-		/* Get the number of bytes the message was padded by. */
-		if (!bypass)
-			pad = OPA_9B_BTH_GET_PAD(bth0);
-		else
-			pad = OPA_16B_BTH_GET_PAD(bth0);
 		/*
 		 * Check that the data size is >= 1 && <= pmtu.
 		 * Remember to account for ICRC (4).
@@ -2238,32 +2225,26 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	if (rcv_flags & HFI1_HAS_GRH)
 		grh = true;
 
-	if (packet->bypass) {
-		hdr_16b = packet->hdr;
-		data = packet->payload;
-		extra_byte = 1; /* LT BYTE */
-	} else {
-		hdr = packet->hdr;
-	}
-
-	if (hfi1_ruc_check_hdr(ibp,
-			       packet->bypass ? (void *)hdr_16b : (void *)hdr,
-			       packet->grh, packet->bypass, qp, bth0, bth1)) {
+	if (hfi1_ruc_check_hdr(ibp, packet, qp, bth0, bth1)) {
 		pr_warn("%s ruc check header failed\n",
 			packet->bypass ? "16B" : "9B");
 		return;
 	}
 
-	if (packet->bypass) {
+	if (!packet->bypass) {
+		hdr = packet->hdr;
+		is_becn = (bth1 & HFI1_BECN_SMASK) ? true : false;
+		is_fecn = (bth1 & HFI1_FECN_SMASK) ? true : false;
+	} else {
+		hdr_16b = packet->hdr;
+		data = packet->payload;
+		extra_byte = 1; /* LT BYTE */
 		is_fecn = (OPA_16B_GET_FECN(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					hdr_16b->lrh[2], hdr_16b->lrh[3])) ?
 				true : false;
 		is_becn = (OPA_16B_GET_BECN(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					hdr_16b->lrh[2], hdr_16b->lrh[3])) ?
 				true : false;
-	} else {
-		is_becn = (bth1 & HFI1_BECN_SMASK) ? true : false;
-		is_fecn = (bth1 & HFI1_FECN_SMASK) ? true : false;
 	}
 
 	if (is_becn) {
@@ -2706,8 +2687,7 @@ void hfi1_rc_hdrerr(
 
 	bth0 = be32_to_cpu(packet->ohdr->bth[0]);
 	bth1 = be32_to_cpu(packet->ohdr->bth[1]);
-	if (hfi1_ruc_check_hdr(ibp, packet->hdr, packet->grh,
-			       packet->bypass, qp, bth0, bth1))
+	if (hfi1_ruc_check_hdr(ibp, packet, qp, bth0, bth1))
 		return;
 
 	psn = be32_to_cpu(packet->ohdr->bth[2]);

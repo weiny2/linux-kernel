@@ -262,8 +262,7 @@ static int gid_ok(union ib_gid *gid, __be64 gid_prefix, __be64 id)
  *
  * The s_lock will be acquired around the hfi1_migrate_qp() call.
  */
-int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
-		       struct ib_grh *grh, bool bypass,
+int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_packet *packet,
 		       struct rvt_qp *qp, u32 bth0, u32 bth1)
 {
 	struct hfi1_qp_priv *priv = qp->priv;
@@ -275,25 +274,24 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 	u32 dlid, slid, sl, opa_dlid;
 	int migrated;
 
-	if (bypass) {
-		hdr_16b = (struct hfi1_16b_message_header *)hfi1_hdr;
-
+	if (!packet->bypass) {
+		hdr = (struct hfi1_ib_header *)packet->hdr;
+		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
+		slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
+		sl = OPA_9B_GET_SL(be16_to_cpu(hdr->lrh[0]));
+		migrated = bth1 & STL_BTH_MIG_REQ;
+	} else {
+		hdr_16b = (struct hfi1_16b_message_header *)packet->hdr;
 		dlid = OPA_16B_GET_DLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					hdr_16b->lrh[2], hdr_16b->lrh[3]);
 		slid = OPA_16B_GET_SLID(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					hdr_16b->lrh[2], hdr_16b->lrh[3]);
 		sl = 0; /* 16B has no sl but hfi1_bad_pkqkey needs it */
 		migrated = bth0 & IB_BTH_MIG_REQ;
-	} else {
-		hdr = (struct hfi1_ib_header *)hfi1_hdr;
-		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
-		slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
-		sl = OPA_9B_GET_SL(be16_to_cpu(hdr->lrh[0]));
-		migrated = bth1 & STL_BTH_MIG_REQ;
 	}
 
 	if (qp->s_mig_state == IB_MIG_ARMED && (migrated)) {
-		if (!grh) {
+		if (!packet->grh) {
 			if ((qp->alt_ah_attr.ah_flags & IB_AH_GRH) &&
 			    !priv->use_16b)
 				goto err;
@@ -301,10 +299,11 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 			if (!(qp->alt_ah_attr.ah_flags & IB_AH_GRH))
 				goto err;
 			guid = get_sguid(ibp, qp->alt_ah_attr.grh.sgid_index);
-			if (!gid_ok(&grh->dgid, ibp->rvp.gid_prefix, guid))
+			if (!gid_ok(&packet->grh->dgid,
+				    ibp->rvp.gid_prefix, guid))
 				goto err;
 			if (!gid_ok(
-				&grh->sgid,
+				&packet->grh->sgid,
 				qp->alt_ah_attr.grh.dgid.global.subnet_prefix,
 				qp->alt_ah_attr.grh.dgid.global.interface_id))
 				goto err;
@@ -324,7 +323,7 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 		hfi1_migrate_qp(qp);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	} else {
-		if (!grh) {
+		if (!packet->grh) {
 			if ((qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
 			    !priv->use_16b)
 				goto err;
@@ -333,10 +332,11 @@ int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
 				goto err;
 			guid = get_sguid(ibp,
 					 qp->remote_ah_attr.grh.sgid_index);
-			if (!gid_ok(&grh->dgid, ibp->rvp.gid_prefix, guid))
+			if (!gid_ok(&packet->grh->dgid,
+				    ibp->rvp.gid_prefix, guid))
 				goto err;
 			if (!gid_ok(
-			     &grh->sgid,
+			     &packet->grh->sgid,
 			     qp->remote_ah_attr.grh.dgid.global.subnet_prefix,
 			     qp->remote_ah_attr.grh.dgid.global.interface_id))
 				goto err;

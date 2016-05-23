@@ -465,8 +465,7 @@ static inline u8 get_opcode(struct hfi1_opa_header *hdr)
 	}
 }
 
-int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, void *hfi1_hdr,
-		       struct ib_grh *grh, bool bypass,
+int hfi1_ruc_check_hdr(struct hfi1_ibport *ibp, struct hfi1_packet *packet,
 		       struct rvt_qp *qp, u32 bth0, u32 bth1);
 
 u32 hfi1_make_grh(struct hfi1_ibport *ibp, struct ib_grh *hdr,
