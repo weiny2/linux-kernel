@@ -1835,11 +1835,11 @@ int pio_map_init(struct hfi1_devdata *dd, u8 port, u8 num_vls, u8 *vl_scontexts)
 	int scontext = 1;
 	int num_kernel_send_contexts = 0;
 	u8 lvl_scontexts[OPA_MAX_VLS];
+	u32 thres;
 	struct pio_vl_map *oldmap, *newmap;
 
 	if (!vl_scontexts) {
-		/* send context 0 reserved for VL15 */
-		for (i = 1; i < dd->num_send_contexts; i++)
+		for (i = 0; i < dd->num_send_contexts; i++)
 			if (dd->send_contexts[i].type == SC_KERNEL)
 				num_kernel_send_contexts++;
 		/* truncate divide */
@@ -1876,11 +1876,27 @@ int pio_map_init(struct hfi1_devdata *dd, u8 port, u8 num_vls, u8 *vl_scontexts)
 			if (!newmap->map[i])
 				goto bail;
 			newmap->map[i]->mask = (1 << ilog2(sz)) - 1;
-			/* assign send contexts */
+			/*
+			 * assign send contexts and
+			 * adjust credit return threshold
+			 */
 			for (j = 0; j < sz; j++) {
-				if (dd->kernel_send_context[scontext])
+				if (dd->kernel_send_context[scontext]) {
 					newmap->map[i]->ksc[j] =
 					dd->kernel_send_context[scontext];
+					thres = min(sc_percent_to_threshold(
+						    dd->kernel_send_context
+						    [scontext], 50),
+						    sc_mtu_to_threshold(
+						    dd->kernel_send_context
+						    [scontext], dd->vld[i].mtu,
+						    dd->rcd[0]->rcvhdrqentsize)
+						    );
+					sc_set_cr_threshold(
+						dd->
+						kernel_send_context[scontext],
+						thres);
+				}
 				if (++scontext >= first_scontext +
 						  vl_scontexts[i])
 					/* wrap back to first send context */

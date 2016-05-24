@@ -1036,6 +1036,7 @@ static void dc_shutdown(struct hfi1_devdata *);
 static void dc_start(struct hfi1_devdata *);
 static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned int *mp,
 			   unsigned int *np);
+static void remove_full_mgmt_pkey(struct hfi1_pportdata *ppd);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -6967,6 +6968,8 @@ void handle_link_down(struct work_struct *work)
 	}
 
 	reset_neighbor_info(ppd);
+	if (ppd->mgmt_allowed)
+		remove_full_mgmt_pkey(ppd);
 
 	/* disable the port */
 	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
@@ -7072,6 +7075,12 @@ static void add_full_mgmt_pkey(struct hfi1_pportdata *ppd)
 		dd_dev_warn(dd, "%s pkey[2] already set to 0x%x, resetting it to 0x%x\n",
 			    __func__, ppd->pkeys[2], FULL_MGMT_P_KEY);
 	ppd->pkeys[2] = FULL_MGMT_P_KEY;
+	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_PKEYS, 0);
+}
+
+static void remove_full_mgmt_pkey(struct hfi1_pportdata *ppd)
+{
+	ppd->pkeys[2] = 0;
 	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_PKEYS, 0);
 }
 
@@ -9775,7 +9784,7 @@ static void set_send_length(struct hfi1_pportdata *ppd)
 	u64 len1 = 0, len2 = (((dd->vld[15].mtu + max_hb) >> 2)
 			      & SEND_LEN_CHECK1_LEN_VL15_MASK) <<
 		SEND_LEN_CHECK1_LEN_VL15_SHIFT;
-	int i;
+	int i, j;
 	u32 thres;
 
 	for (i = 0; i < ppd->vls_supported; i++) {
@@ -9799,7 +9808,10 @@ static void set_send_length(struct hfi1_pportdata *ppd)
 			    sc_mtu_to_threshold(dd->vld[i].sc,
 						dd->vld[i].mtu,
 						dd->rcd[0]->rcvhdrqentsize));
-		sc_set_cr_threshold(dd->vld[i].sc, thres);
+		for (j = 0; j < INIT_SC_PER_VL; j++)
+			sc_set_cr_threshold(
+					pio_select_send_context_vl(dd, j, i),
+					    thres);
 	}
 	thres = min(sc_percent_to_threshold(dd->vld[15].sc, 50),
 		    sc_mtu_to_threshold(dd->vld[15].sc,
