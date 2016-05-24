@@ -226,7 +226,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp, struct hfi_devdata *dd, u8 sl)
 free:
 	vfree(tmpbuf);
 bail:
-	if (ret < 0)
+	if (ret < 0 && dd != NULL)
 		dd_dev_err(dd, "%s %d err %ld\n", __func__, __LINE__, ret);
 	return ret;
 }
