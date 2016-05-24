@@ -2271,4 +2271,34 @@ static inline int hfi1_get_16b_padding(u32 hdr_size, u32 payload)
 	/* 4 = CRC, 1 = LT */
 	return 8 - ((hdr_size + payload + 4 + 1) % 8);
 }
+
+static inline void hfi1_make_16b_hdr(struct hfi1_16b_header *hdr,
+				     u32 slid, u32 dlid,
+				     u16 len, u16 pkey,
+				     u8 becn, u8 fecn, u8 l4,
+				     u8 sc)
+{
+	u32 lrh0 = 0;
+	u32 lrh1 = 0x40000000;
+	u32 lrh2 = 0;
+	u32 lrh3 = 0;
+
+	lrh0 = (lrh0 & ~OPA_16B_BECN_MASK) | (becn << OPA_16B_BECN_SHIFT);
+	lrh0 = (lrh0 & ~OPA_16B_LEN_MASK) | (len << OPA_16B_LEN_SHIFT);
+	lrh0 = (lrh0 & ~OPA_16B_LID_MASK)  | (slid & OPA_16B_LID_MASK);
+	lrh1 = (lrh1 & ~OPA_16B_FECN_MASK) | (fecn << OPA_16B_FECN_SHIFT);
+	lrh1 = (lrh1 & ~OPA_16B_SC_MASK) | (sc << OPA_16B_SC_SHIFT);
+	lrh1 = (lrh1 & ~OPA_16B_LID_MASK) | (dlid & OPA_16B_LID_MASK);
+	lrh2 = (lrh2 & ~OPA_16B_SLID_MASK) |
+		((slid >> OPA_16B_SLID_SHIFT) << OPA_16B_SLID_HIGH_SHIFT);
+	lrh2 = (lrh2 & ~OPA_16B_DLID_MASK) |
+		((dlid >> OPA_16B_DLID_SHIFT) << OPA_16B_DLID_HIGH_SHIFT);
+	lrh2 = (lrh2 & ~OPA_16B_PKEY_MASK) | (pkey << OPA_16B_PKEY_SHIFT);
+	lrh2 = (lrh2 & ~OPA_16B_L4_MASK) | l4;
+
+	hdr->lrh[0] = lrh0;
+	hdr->lrh[1] = lrh1;
+	hdr->lrh[2] = lrh2;
+	hdr->lrh[3] = lrh3;
+}
 #endif                          /* _HFI1_KERNEL_H */

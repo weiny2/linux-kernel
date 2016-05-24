@@ -404,13 +404,9 @@ void hfi1_make_ud_req_16B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	struct ib_ah_attr *ah_attr;
 	struct hfi1_pportdata *ppd;
 	struct hfi1_ibport *ibp;
-	u32 lrh0 = 0;
-	u32 lrh1 = 0x40000000;
-	u32 lrh2 = 0;
-	u32 lrh3 = 0;
 	u32 dlid, slid, nwords, extra_bytes;
-	u16 pkey;
-	u8 sc5;
+	u16 len, pkey;
+	u8 l4, sc5;
 
 	ibp = to_iport(qp->ibqp.device, qp->port_num);
 	ppd = ppd_from_ibp(ibp);
@@ -440,12 +436,10 @@ void hfi1_make_ud_req_16B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 		qp->s_hdrwords += hfi1_make_grh(ibp, grh, &grd,
 					qp->s_hdrwords, nwords);
 		ohdr = &ps->s_txreq->phdr.hdr.pkt.opah.u.l.oth;
-		lrh2 = (lrh2 & ~OPA_16B_L4_MASK) |
-			HFI1_L4_IB_GLOBAL;
+		l4 = HFI1_L4_IB_GLOBAL;
 	} else {
 		ohdr = &ps->s_txreq->phdr.hdr.pkt.opah.u.oth;
-		lrh2 = (lrh2 & ~OPA_16B_L4_MASK) |
-			   HFI1_L4_IB_LOCAL;
+		l4 = HFI1_L4_IB_LOCAL;
 	}
 
 	sc5 = ibp->sl_to_sc[ah_attr->sl];
@@ -454,40 +448,27 @@ void hfi1_make_ud_req_16B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	else
 		priv->s_sc = sc5;
 
-	lrh1 = (lrh1 & ~OPA_16B_SC_MASK) | (priv->s_sc << 20);
 	if (IS_EXT_LID(&ah_attr->grh.dgid))
 		dlid = hfi1_get_dlid_from_ah(ah_attr);
 	else
 		dlid = hfi1_mcast_xlate(ah_attr->dlid);
 
-	lrh1 = (lrh1 & ~OPA_16B_LID_MASK) |
-			(dlid & OPA_16B_LID_MASK);
-	lrh2 = (lrh2 & ~OPA_16B_DLID_MASK) | ((dlid >> 20)
-			<< OPA_16B_DLID_HIGH_SHIFT);
-	/* Convert dwords to flits */
-	lrh0 = (lrh0 & ~OPA_16B_LEN_MASK) |
-		(((qp->s_hdrwords + nwords) >> 1) << 20);
 	if (!ppd->lid)
 		slid = 0xFFFFFFFF;
 	else
 		slid = ppd->lid | (ah_attr->src_path_bits &
 			   ((1 << ppd->lmc) - 1));
 
-	lrh0 = (lrh0 & ~OPA_16B_LID_MASK)  |
-		    (slid & OPA_16B_LID_MASK);
-	lrh2 = (lrh2 & ~OPA_16B_SLID_MASK) | ((slid >> 20)
-		    << OPA_16B_SLID_HIGH_SHIFT);
+	/* Convert dwords to flits */
+	len = (qp->s_hdrwords + nwords) >> 1;
 
 	hfi1_make_bth_deth(qp, wqe, ohdr, extra_bytes);
 	pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
-	lrh2 = (lrh2 & ~OPA_16B_PKEY_MASK) | (pkey << 16);
 
-	/* Header is poulated. Setup the packet */
+	/* Setup the packet */
 	ps->s_txreq->phdr.hdr.hdr_type = 1;
-	ps->s_txreq->phdr.hdr.pkt.opah.lrh[0] = lrh0;
-	ps->s_txreq->phdr.hdr.pkt.opah.lrh[1] = lrh1;
-	ps->s_txreq->phdr.hdr.pkt.opah.lrh[2] = lrh2;
-	ps->s_txreq->phdr.hdr.pkt.opah.lrh[3] = lrh3;
+	hfi1_make_16b_hdr(&ps->s_txreq->phdr.hdr.pkt.opah,
+			  slid, dlid, len, pkey, 0, 0, l4, priv->s_sc);
 }
 
 /**
@@ -683,10 +664,8 @@ void return_cnp_bypass(struct hfi1_ibport *ibp, struct rvt_qp *qp,
 {
 	u64 pbc, pbc_flags = 0;
 	u32 bth0, plen, vl, hwords = 7;
-	u32 lrh0 = 0;
-	u32 lrh1 = 0x40000000;
-	u32 lrh2 = 0;
-	u32 lrh3 = 0;
+	u16 len;
+	u8 l4;
 	struct hfi1_16b_header hdr;
 	struct hfi1_other_headers *ohdr;
 	struct pio_buf *pbuf;
@@ -706,43 +685,24 @@ void return_cnp_bypass(struct hfi1_ibport *ibp, struct rvt_qp *qp,
 		grh->sgid = old_grh->dgid;
 		grh->dgid = old_grh->sgid;
 		ohdr = &hdr.u.l.oth;
-		lrh2 = (lrh2 & ~OPA_16B_L4_MASK) | HFI1_L4_IB_GLOBAL;
+		l4 = HFI1_L4_IB_GLOBAL;
 		hwords += sizeof(struct ib_grh) / sizeof(u32);
 	} else {
 		ohdr = &hdr.u.oth;
-		lrh2 = (lrh2 & ~OPA_16B_L4_MASK) | HFI1_L4_IB_LOCAL;
+		l4 = HFI1_L4_IB_LOCAL;
 	}
-
-	lrh1 = (lrh1 & ~OPA_16B_SC_MASK) | (sc5 << 20);
 
 	/* BIT 16 to 19 is TVER. Bit 20 to 22 is pad cnt */
 	bth0 = (IB_OPCODE_CNP << 24) | (1 << 16) |
 	       (hfi1_get_16b_padding(hwords << 2, 0) << 20);
-	lrh2 = (lrh2 & ~OPA_16B_PKEY_MASK) | (pkey << 16);
 	ohdr->bth[0] = cpu_to_be32(bth0);
 
 	ohdr->bth[1] = cpu_to_be32(remote_qpn);
 	ohdr->bth[2] = 0; /* PSN 0 */
 
-	/* BECN bit is in the LRH */
-	lrh0 = (lrh0 & ~OPA_16B_BECN_MASK) | (1 << 31);
-	/* Populate dlid */
-	lrh1 = (lrh1 & ~OPA_16B_LID_MASK) | dlid;
-	lrh2 = (lrh2 & ~OPA_16B_DLID_MASK) | ((dlid >> 20)
-				<< OPA_16B_DLID_HIGH_SHIFT);
-
-	/* Populate slid */
-	lrh0 = (lrh0 & ~OPA_16B_LID_MASK)  | slid;
-	lrh2 = (lrh2 & ~OPA_16B_SLID_MASK) | ((slid >> 20)
-				<< OPA_16B_SLID_HIGH_SHIFT);
-
-	lrh0 = (lrh0 & ~OPA_16B_LEN_MASK) |
-			(((hwords + nwords) >> 1) << 20);
-
-	hdr.lrh[0] = lrh0;
-	hdr.lrh[1] = lrh1;
-	hdr.lrh[2] = lrh2;
-	hdr.lrh[3] = lrh3;
+	/* Convert dwords to flits */
+	len = (hwords + nwords) >> 1;
+	hfi1_make_16b_hdr(&hdr, slid, dlid, len, pkey, 1, 0, l4, sc5);
 
 	plen = 2 /* PBC */ + hwords + nwords;
 	pbc_flags |= PBC_PACKET_BYPASS | PBC_INSERT_BYPASS_ICRC;

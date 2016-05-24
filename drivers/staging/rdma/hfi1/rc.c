@@ -825,8 +825,9 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 	struct hfi1_ibport *ibp = to_iport(qp->ibqp.device, qp->port_num);
 	struct hfi1_pportdata *ppd = ppd_from_ibp(ibp);
 	u64 pbc, pbc_flags = 0;
-	u16 lrh0;
-	u16 sc5;
+	u16 len, lrh0;
+	u8 sc5;
+	u8 l4 = 0;
 	u32 bth0, bth1 = 0;
 	u32 hwords = 0;
 	u32 nwords = 0;
@@ -838,10 +839,6 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 	struct hfi1_opa_header opa_hdr;
 	struct hfi1_other_headers *ohdr;
 	unsigned long flags;
-	u32 lrh0_16b = 0;
-	u32 lrh1_16b = 0x40000000;
-	u32 lrh2_16b = 0;
-	u32 lrh3_16b = 0;
 
 	/* Don't send ACK or NAK if a RDMA read or atomic is pending. */
 	if (qp->s_flags & RVT_S_RESP_PENDING)
@@ -877,8 +874,7 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 			lrh0 = HFI1_LRH_GRH;
 		} else {
 			ohdr = &hdr_16b->u.l.oth;
-			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) |
-				    HFI1_L4_IB_GLOBAL;
+			l4 = HFI1_L4_IB_GLOBAL;
 		}
 	} else {
 		if (!bypass) {
@@ -886,8 +882,7 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 			lrh0 = HFI1_LRH_BTH;
 		} else {
 			ohdr = &hdr_16b->u.oth;
-			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) |
-				    HFI1_L4_IB_LOCAL;
+			l4 = HFI1_L4_IB_LOCAL;
 		}
 	}
 	/* read pkey_index w/o lock (its atomic) */
@@ -925,32 +920,20 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 					  qp->remote_ah_attr.src_path_bits);
 	} else {
 		u16 pkey;
+		u8 becn = !!is_fecn;
 
 		pbc_flags |= PBC_PACKET_BYPASS | PBC_INSERT_BYPASS_ICRC;
 
 		pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
 
-		lrh0_16b = (lrh0_16b & ~OPA_16B_BECN_MASK) | (!!is_fecn << 31);
-		lrh2_16b = (lrh2_16b & ~OPA_16B_PKEY_MASK) | (pkey << 16);
-		lrh1_16b = (lrh1_16b & ~OPA_16B_SC_MASK) | (sc5 << 20);
-
 		dlid = hfi1_retrieve_dlid(qp);
-		lrh1_16b = (lrh1_16b & ~OPA_16B_LID_MASK) | dlid;
-		lrh2_16b = (lrh2_16b & ~OPA_16B_DLID_MASK) | ((dlid >> 20)
-					<< OPA_16B_DLID_HIGH_SHIFT);
-
 		slid  = ppd->lid | qp->remote_ah_attr.src_path_bits;
-		lrh0_16b = (lrh0_16b & ~OPA_16B_LID_MASK)  | slid;
-		lrh2_16b = (lrh2_16b & ~OPA_16B_SLID_MASK) | ((slid >> 20)
-					<< OPA_16B_SLID_HIGH_SHIFT);
 
-		lrh0_16b = (lrh0_16b & ~OPA_16B_LEN_MASK) |
-				(((hwords + nwords) >> 1) << 20);
+		/* Convert dwords to flits */
+		len = (hwords + nwords) >> 1;
 
-		hdr_16b->lrh[0] = lrh0_16b;
-		hdr_16b->lrh[1] = lrh1_16b;
-		hdr_16b->lrh[2] = lrh2_16b;
-		hdr_16b->lrh[3] = lrh3_16b;
+		hfi1_make_16b_hdr(hdr_16b, slid, dlid, len,
+				  pkey, becn, 0, l4, sc5);
 	}
 
 	/* Don't try to send ACKs if the link isn't ACTIVE */

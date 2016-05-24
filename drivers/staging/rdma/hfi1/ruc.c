@@ -765,20 +765,16 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	struct hfi1_qp_priv *priv = qp->priv;
 	struct hfi1_ibport *ibp = ps->ibp;
 	u16 lrh0;
-	u32 nwords;
-	u32 extra_bytes;
+	u32 extra_bytes, nwords;
+	u32 slid = 0;
+	u32 dlid = 0;
 	u32 bth1 = 0;
-	bool use_16b = false;
-	u32 lrh0_16b = 0;
-	u32 lrh1_16b = 0x40000000;
-	u32 lrh2_16b = 0;
-	u32 lrh3_16b = 0;
-
-	use_16b = priv->use_16b;
+	u16 len = 0;
+	u8 becn, l4;
 
 	/* Construct the header. */
 	lrh0 = HFI1_LRH_BTH;
-	if (!use_16b) {
+	if (!priv->use_16b) {
 		extra_bytes = -qp->s_cur_size & 3;
 		nwords = (qp->s_cur_size + extra_bytes) >> 2;
 	} else {
@@ -786,14 +782,14 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 						   qp->s_cur_size);
 		nwords = (qp->s_cur_size + extra_bytes + (SIZE_OF_CRC << 2) +
 			  SIZE_OF_LT) >> 2;
-		lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) | HFI1_L4_IB_LOCAL;
+		l4 =  HFI1_L4_IB_LOCAL;
 	}
 
 	if (unlikely(qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
-	    (!(use_16b && !hfi1_check_mcast(&qp->remote_ah_attr)))) {
+	    (!(priv->use_16b && !hfi1_check_mcast(&qp->remote_ah_attr)))) {
 		struct ib_grh *grh;
 
-		if (!use_16b) {
+		if (!priv->use_16b) {
 			grh = &ps->s_txreq->phdr.hdr.pkt.ibh.u.l.grh;
 			lrh0 = HFI1_LRH_GRH;
 		} else {
@@ -804,8 +800,7 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 			if (qp->remote_ah_attr.grh.sgid_index == OPA_GID_INDEX)
 				qp->remote_ah_attr.grh.sgid_index = 0;
 			grh = &ps->s_txreq->phdr.hdr.pkt.opah.u.l.grh;
-			lrh2_16b = (lrh2_16b & ~OPA_16B_L4_MASK) |
-				    HFI1_L4_IB_GLOBAL;
+			l4 = HFI1_L4_IB_GLOBAL;
 		}
 
 		qp->s_hdrwords += hfi1_make_grh(ibp, grh,
@@ -829,7 +824,7 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	priv->s_ahg->ahgcount = 0;
 	priv->s_ahg->ahgidx = 0;
 	if (qp->s_mig_state == IB_MIG_MIGRATED) {
-		if (!use_16b)
+		if (!priv->use_16b)
 			bth0 |= IB_BTH_MIG_REQ;
 		else
 			bth1 |= STL_BTH_MIG_REQ;
@@ -841,7 +836,7 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	else
 		qp->s_flags &= ~RVT_S_AHG_VALID;
 
-	if (!use_16b) {
+	if (!priv->use_16b) {
 		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0] = cpu_to_be16(lrh0);
 		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[1] =
 			cpu_to_be16(qp->remote_ah_attr.dlid);
@@ -852,28 +847,19 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 				    qp->remote_ah_attr.src_path_bits);
 	} else {
 		struct hfi1_pportdata *ppd;
-		u32 slid_16b;
-		u32 dlid_16b = hfi1_retrieve_dlid(qp);
+
+		dlid = hfi1_retrieve_dlid(qp);
+
+		/* Convert dwords to flits */
+		len = (qp->s_hdrwords + nwords) >> 1;
 
 		ppd = ppd_from_ibp(ibp);
-		lrh1_16b = (lrh1_16b & ~OPA_16B_SC_MASK) | (priv->s_sc << 20);
-		lrh1_16b = (lrh1_16b & ~OPA_16B_LID_MASK) | dlid_16b;
-		lrh2_16b = (lrh2_16b & ~OPA_16B_DLID_MASK) | ((dlid_16b >> 20)
-				<< OPA_16B_DLID_HIGH_SHIFT);
-		/* Convert dwords to flits */
-		lrh0_16b = (lrh0_16b & ~OPA_16B_LEN_MASK) |
-				(((qp->s_hdrwords + nwords) >> 1) << 20);
-
 		if (!ppd->lid)
-			slid_16b = 0xFFFFFFFF;
+			slid = 0xFFFFFFFF;
 		else
-			slid_16b = ppd->lid |
-				   (qp->remote_ah_attr.src_path_bits &
-				   ((1 << ppd->lmc) - 1));
-
-		lrh0_16b = (lrh0_16b & ~OPA_16B_LID_MASK)  | slid_16b;
-		lrh2_16b = (lrh2_16b & ~OPA_16B_SLID_MASK) | ((slid_16b >> 20)
-				<< OPA_16B_SLID_HIGH_SHIFT);
+			slid = ppd->lid |
+				(qp->remote_ah_attr.src_path_bits &
+				((1 << ppd->lmc) - 1));
 	}
 
 	bth0 |= hfi1_get_pkey(ibp, qp->s_pkey_index);
@@ -883,24 +869,20 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 	if (qp->s_flags & RVT_S_ECN) {
 		qp->s_flags &= ~RVT_S_ECN;
 		/* we recently received a FECN, so return a BECN */
-		if (!use_16b)
+		if (!priv->use_16b)
 			bth1 |= (HFI1_BECN_MASK << HFI1_BECN_SHIFT);
 		else
-			lrh0_16b = (lrh0_16b & ~OPA_16B_BECN_MASK) | (1 << 31);
+			becn = 1;
 	}
 	ohdr->bth[1] = cpu_to_be32(bth1);
 	ohdr->bth[2] = cpu_to_be32(bth2);
 
-	if (use_16b) {
-		u16 pkey;
+	if (priv->use_16b) {
+		u16 pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
 
-		pkey = be32_to_cpu(ohdr->bth[0]) & 0xffff;
-		lrh2_16b = (lrh2_16b & ~OPA_16B_PKEY_MASK) | (pkey << 16);
-
-		ps->s_txreq->phdr.hdr.pkt.opah.lrh[0] = lrh0_16b;
-		ps->s_txreq->phdr.hdr.pkt.opah.lrh[1] = lrh1_16b;
-		ps->s_txreq->phdr.hdr.pkt.opah.lrh[2] = lrh2_16b;
-		ps->s_txreq->phdr.hdr.pkt.opah.lrh[3] = lrh3_16b;
+		hfi1_make_16b_hdr(&ps->s_txreq->phdr.hdr.pkt.opah,
+				  slid, dlid, len, pkey,
+				  becn, 0, l4, priv->s_sc);
 	}
 }
 
