@@ -730,7 +730,7 @@ static void path_rec_completion(int status,
 			path->slid = opa_get_lid_from_gid(&pathrec->sgid);
 			pathrec->sgid = path->pathrec.sgid;
 		} else {
-			path->slid = pathrec->slid;
+			path->slid = be16_to_cpu(pathrec->slid);
 		}
 
 		if (rdma_cap_opa_ah(priv->ca, priv->port) &&
@@ -738,7 +738,7 @@ static void path_rec_completion(int status,
 			path->dlid = opa_get_lid_from_gid(&pathrec->dgid);
 			pathrec->dgid = path->pathrec.dgid;
 		} else {
-			path->dlid = pathrec->dlid;
+			path->dlid = be16_to_cpu(pathrec->dlid);
 		}
 		ipoib_dbg(priv, "PathRec SGID %pI6 DGID %pI6\n",
 			  pathrec->sgid.raw, pathrec->dgid.raw);
