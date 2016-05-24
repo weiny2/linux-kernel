@@ -91,23 +91,51 @@
 1 chip.c CHECK: Avoid CamelCase: <Unaligned>
 1 chip.c CHECK: usleep_range is preferred over udelay; see Documentation/timers/timers-howto.txt
 1 chip.c WARNING: Possible unnecessary 'out of memory' message
+12 chip.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 8 chip.h CHECK: Prefer using the BIT_ULL macro
+4 chip.h WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+1 cq.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 1 eprom.c CHECK: Prefer using the BIT_ULL macro
 1 file_ops.c CHECK: Prefer kzalloc(sizeof(*fp->private_data)...) over kzalloc(sizeof(struct hfi1_filedata)...)
 1 file_ops.c WARNING: line over 80 characters
+16 file_ops.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 2 hfi.h CHECK: 'ment' may be misspelled - perhaps 'meant'?
+7 hfi.h WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 2 hfi.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt
 1 init.c CHECK: usleep_range is preferred over udelay; see Documentation/timers/timers-howto.txt
 2 init.c WARNING: Possible unnecessary 'out of memory' message
+8 init.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+2 iowait.h WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+3 keys.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 1 mad.c CHECK: Avoid CamelCase: <OPA_CAP_MASK3_IsSharedSpaceSupported>
+7 mad.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 1 mmu_rb.c WARNING: storage class should be at the beginning of the declaration
+1 mr.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 2 pcie.c WARNING: ENOSYS means 'invalid syscall nr' and nothing else
 2 pio.c WARNING: Possible unnecessary 'out of memory' message
+2 pio.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 2 pio.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt
 1 qp.c WARNING: ENOSYS means 'invalid syscall nr' and nothing else
+9 qp.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+1 qp.h WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 2 qsfp.c CHECK: usleep_range is preferred over udelay; see Documentation/timers/timers-howto.txt
+2 qsfp.h WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+4 rc.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+2 ruc.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 1 sdma.c CHECK: usleep_range is preferred over udelay; see Documentation/timers/timers-howto.txt
+14 sdma.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 4 sdma.h CHECK: Prefer using the BIT_ULL macro
+6 sdma.h WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 1 sdma.h WARNING: Use of volatile is usually wrong: see Documentation/volatile-considered-harmful.txt
 1 srq.c WARNING: ENOSYS means 'invalid syscall nr' and nothing else
+1 srq.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+13 trace.h WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+3 ud.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+4 user_exp_rcv.c WARNING: Prefer 'unsigned int *' to bare use of 'unsigned *'
+14 user_exp_rcv.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+1 user_pages.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
 1 user_sdma.c WARNING: Macros with flow control statements should be avoided
+1 user_sdma.c WARNING: Possible unnecessary 'out of memory' message
+17 user_sdma.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+3 user_sdma.h WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
+7 verbs.c WARNING: Prefer 'unsigned int' to bare use of 'unsigned'
