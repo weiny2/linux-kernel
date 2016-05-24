@@ -8,12 +8,13 @@ sparse=0
 kw=0
 cocci=0
 kedr=0
+smatch=0
 top_dir=`pwd`
 cur_dir=`pwd`/static
 
 function print_help
 {
-	echo "Usage: `basename $0` -k kernel_src -m [hfi1|rdmavt|qib|clean|full] -t [cocci|kw|sparse|kedr]"
+	echo "Usage: `basename $0` -k kernel_src -m [hfi1|rdmavt|qib|clean|full] -t [cocci|kw|sparse|kedr|smatch]"
 	echo "required: -k, -m"
 	echo "optional: -t"
 	exit 1
@@ -208,6 +209,39 @@ function do_build
 		return
 	fi
 
+	if [[ $smatch -ne 0 ]]; then
+		echo "Doing smatch check"
+
+		if [[ -z "$SMATCH_PATH" ]]; then
+			echo "SMATCH_PATH not defined, using default"
+			SMATCH_PATH="/nfs/site/proj/fabric/files/tools/smatch/"
+		fi
+
+		make SUBDIRS=$dir/$comp clean
+		make CHECK="$SMATCH_PATH/smatch -p=kernel" C=1 SUBDIRS=$dir/$comp 2>&1 | tee $cur_dir/${comp}.smatch
+		if [[ $? -ne 0 ]]; then
+			echo "XXXXXXXXXXXXXX"
+			echo "ERROR IN BUILD"
+			echo "XXXXXXXXXXXXXX"
+			exit 1
+		fi
+
+		# Count number of warns in smatch whitelist
+		wl_count=$(grep -c "warn:" $cur_dir/${comp}_smatch.whitelist)
+		# Count number of warns in current smatch log
+		curr_count=$(grep "warn:" $cur_dir/${comp}.smatch | grep -c "$comp")
+		if [[ $curr_count -ne $wl_count ]] ; then
+			echo "Smatch check failed"
+			echo "XXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			echo "ERROR IN SMATCH CHECKING"
+			echo "XXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			exit 1
+		fi
+
+		echo "Passes smatch check"
+		return
+	fi
+
 	if [[ $cocci -ne 0 ]]; then
 		echo "Doing cocci check"
 		fail=0
@@ -345,6 +379,10 @@ fi
 
 if [[ $build_type == "kedr" ]]; then
 	kedr=1
+fi
+
+if [[ $build_type == "smatch" ]]; then
+	smatch=1
 fi
 
 if [[ -z $module ]]; then

@@ -1,0 +1,7 @@
+qib_rc.c qib_make_rc_ack() warn: missing break? reassigning 'e->opcode'
+qib_rc.c qib_make_rc_req() warn: missing break? reassigning 'qp->s_state'
+qib_tx.c qib_disarm_piobufs_set() warn: test_bit() takes a bit number
+qib_uc.c qib_make_uc_req() warn: missing break? reassigning 'qp->s_state'
+qib_iba7322.c write_7322_initregs() warn: should 'ctxt << (5 * (i % 6))' be a 64 bit type?
+qib_iba7322.c ahb_mod() warn: should '((chan << 6) | addr) << ((16) + 1)' be a 64 bit type?
+qib_iba7322.c ahb_mod() warn: should '((chan << 6) | addr) << ((16) + 1)' be a 64 bit type?

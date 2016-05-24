@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Meant to be run by cron but can be run manually
+cd tests
+
+# Check if smatch found in patch, otherwise use default smatch
+if [[ ! $(which smatch 2>/dev/null) ]]; then
+	echo "Smatch not found in path, using default smatch"
+	export PATH=$PATH:/nfs/site/proj/fabric/files/tools/smatch/
+fi
+
+# Build driver with smatch and redirect stdout and stderr to temporary
+# log file
+./build.sh "" "" "" "" "" "" 1 2>&1 | tee smatch.log
+if [[ $? -ne 0 ]]; then
+	echo "Build failed"
+	rm smatch.log
+	exit 1
+fi
+
+# Count the number of warns in smatch whitelist
+count1="$(grep -c "warn:" smatch.whitelist)"
+# Count total number of warns in current smatch log, only for wfr-driver
+count2="$(grep "warn:" smatch.log | grep -c "wfr-driver")"
+
+# If the counts don't match, display and return error. Leave temporary
+# log file in place.
+if [[ $count1 -ne $count2 ]]; then
+	echo "Smatch check failed"
+	exit 1
+fi
+
+# If success, remove temporary log file
+echo "Smatch check succeeded"
+rm smatch.log

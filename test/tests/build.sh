@@ -40,6 +40,11 @@ if [ -z $6 ]; then
 	klocwork=0
 fi
 
+smatch=$7
+if [ -z $7 ]; then
+	smatch=0
+fi
+
 if [ ! -d $kernel_build ]; then
 	echo "Could not find dir: $kernel_build for kernel build"
 	exit 1
@@ -115,6 +120,12 @@ if [ $klocwork -eq 1 ];then
 	fi
 	kwcheck list -F detailed > ./test/tests/klocwork.current
 	exit
+fi
+
+if [ $smatch -eq 1 ];then
+	cd $wfr_src
+	make CHECK="/nfs/site/proj/fabric/files/tools/smatch/smatch --full-path" CC=/nfs/site/proj/fabric/files/tools/smatch/cgcc
+	exit 0
 fi
 
 echo "Doing build in $PWD"

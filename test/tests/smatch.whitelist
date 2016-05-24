@@ -1,0 +1,13 @@
+chip.c handle_dcc_err() warn: inconsistent indenting
+chip.c read_dev_port_cntr() warn: impossible condition '(val > -1) => (0-u64max > u64max)'
+chip.c update_synth_timer() warn: inconsistent indenting
+diag.c hfi1_ioctl() warn: missing break? reassigning 'ppd->ibport_data.send_agent'
+init.c cleanup_device_data() warn: inconsistent indenting
+pio.c sc_alloc() warn: should 'thresh << 0' be a 64 bit type?
+qp.c hfi1_error_qp() warn: if statement not indented
+rc.c make_rc_ack() warn: missing break? reassigning 'e->opcode'
+rc.c hfi1_make_rc_req() warn: missing break? reassigning 'qp->s_state'
+sdma.c dump_sdma_state() warn: mask and shift to zero
+sdma.c sdma_seqfile_dump_sde() warn: mask and shift to zero
+uc.c hfi1_make_uc_req() warn: missing break? reassigning 'qp->s_state'
+user_sdma.c set_txreq_header_ahg() warn: mask and shift to zero
