@@ -332,9 +332,8 @@ void hfi1_make_ud_req_9B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 			 struct rvt_swqe *wqe)
 {
 	u32 nwords, extra_bytes;
-	u16 lid;
+	u16 len, lid, slid;
 	u16 lrh0 = 0;
-	__be16 slid;
 	u8 sc5;
 	struct hfi1_qp_priv *priv = qp->priv;
 	struct hfi1_other_headers *ohdr;
@@ -374,26 +373,24 @@ void hfi1_make_ud_req_9B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
 	}
 
 	if (ah_attr->dlid == be16_to_cpu(IB_LID_PERMISSIVE)) {
-		slid = IB_LID_PERMISSIVE;
+		slid = be16_to_cpu(IB_LID_PERMISSIVE);
 	} else {
 		lid = (u16)ppd->lid;
 		if (lid) {
 			lid |= ah_attr->src_path_bits &
 				((1 << ppd->lmc) - 1);
-			slid = cpu_to_be16(lid);
+			slid = lid;
 		} else {
-			slid =	IB_LID_PERMISSIVE;
+			slid =	cpu_to_be16(IB_LID_PERMISSIVE);
 		}
 	}
 	hfi1_make_bth_deth(qp, wqe, ohdr, extra_bytes);
+	len = qp->s_hdrwords + nwords + SIZE_OF_CRC;
 
-	/* Header is poulated. Setup the packet */
+	/* Setup the packet */
 	ps->s_txreq->phdr.hdr.hdr_type = 0;
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0] = cpu_to_be16(lrh0);
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[1] = cpu_to_be16(ah_attr->dlid);
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[2] =
-			cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-	ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] = slid;
+	hfi1_make_ib_hdr(&ps->s_txreq->phdr.hdr.pkt.ibh,
+			 lrh0, len, ah_attr->dlid, slid);
 }
 
 void hfi1_make_ud_req_16B(struct rvt_qp *qp, struct hfi1_pkt_state *ps,
@@ -753,11 +750,7 @@ void return_cnp(struct hfi1_ibport *ibp, struct rvt_qp *qp, u32 remote_qpn,
 	ohdr->bth[1] = cpu_to_be32(remote_qpn | (1 << HFI1_BECN_SHIFT));
 	ohdr->bth[2] = 0; /* PSN 0 */
 
-	hdr.lrh[0] = cpu_to_be16(lrh0);
-	hdr.lrh[1] = cpu_to_be16(dlid);
-	hdr.lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);
-	hdr.lrh[3] = cpu_to_be16(slid);
-
+	hfi1_make_ib_hdr(&hdr, lrh0, hwords + SIZE_OF_CRC, dlid, slid);
 	plen = 2 /* PBC */ + hwords;
 	pbc_flags |= (!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT;
 	vl = sc_to_vlt(ppd->dd, sc5);

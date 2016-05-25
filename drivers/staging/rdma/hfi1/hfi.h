@@ -2272,6 +2272,16 @@ static inline int hfi1_get_16b_padding(u32 hdr_size, u32 payload)
 	return 8 - ((hdr_size + payload + 4 + 1) % 8);
 }
 
+static inline void hfi1_make_ib_hdr(struct hfi1_ib_header *hdr,
+				    u16 lrh0, u16 len,
+				    u16 dlid, u16 slid)
+{
+	hdr->lrh[0] = cpu_to_be16(lrh0);
+	hdr->lrh[1] = cpu_to_be16(dlid);
+	hdr->lrh[2] = cpu_to_be16(len);
+	hdr->lrh[3] = cpu_to_be16(slid);
+}
+
 static inline void hfi1_make_16b_hdr(struct hfi1_16b_header *hdr,
 				     u32 slid, u32 dlid,
 				     u16 len, u16 pkey,

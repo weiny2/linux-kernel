@@ -837,14 +837,12 @@ void hfi1_make_ruc_header(struct rvt_qp *qp, struct hfi1_other_headers *ohdr,
 		qp->s_flags &= ~RVT_S_AHG_VALID;
 
 	if (!priv->use_16b) {
-		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[0] = cpu_to_be16(lrh0);
-		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[1] =
-			cpu_to_be16(qp->remote_ah_attr.dlid);
-		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[2] =
-			cpu_to_be16(qp->s_hdrwords + nwords + SIZE_OF_CRC);
-		ps->s_txreq->phdr.hdr.pkt.ibh.lrh[3] =
-			cpu_to_be16(ppd_from_ibp(ibp)->lid |
-				    qp->remote_ah_attr.src_path_bits);
+		hfi1_make_ib_hdr(&ps->s_txreq->phdr.hdr.pkt.ibh,
+				 lrh0,
+				 qp->s_hdrwords + nwords + SIZE_OF_CRC,
+				 qp->remote_ah_attr.dlid,
+				 ppd_from_ibp(ibp)->lid |
+					qp->remote_ah_attr.src_path_bits);
 	} else {
 		struct hfi1_pportdata *ppd;
 

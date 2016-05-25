@@ -913,11 +913,9 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd, struct rvt_qp *qp,
 		pbc_flags |= ((!!(sc5 & 0x10)) << PBC_DC_INFO_SHIFT);
 		ohdr->bth[1] |= cpu_to_be32((!!is_fecn) << HFI1_BECN_SHIFT);
 		lrh0 |= (sc5 & 0xf) << 12 | (qp->remote_ah_attr.sl & 0xf) << 4;
-		hdr->lrh[0] = cpu_to_be16(lrh0);
-		hdr->lrh[1] = cpu_to_be16(qp->remote_ah_attr.dlid);
-		hdr->lrh[2] = cpu_to_be16(hwords + SIZE_OF_CRC);
-		hdr->lrh[3] = cpu_to_be16(ppd->lid |
-					  qp->remote_ah_attr.src_path_bits);
+		hfi1_make_ib_hdr(hdr, lrh0, hwords + SIZE_OF_CRC,
+				 qp->remote_ah_attr.dlid,
+				 ppd->lid | qp->remote_ah_attr.src_path_bits);
 	} else {
 		u16 pkey;
 		u8 becn = !!is_fecn;
