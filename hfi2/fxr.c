@@ -457,6 +457,11 @@ static void init_csrs(struct hfi_devdata *dd)
 	txotr_timeout.field.SCALER = 0x165A0D;
 	write_csr(dd, FXR_TXOTR_PKT_CFG_TIMEOUT, txotr_timeout.val);
 	/*
+	 * Set timeout for CQ.  This is intentionally high for Simics.
+	 * 1 << 30 is 0.895 seconds
+	 */
+	write_csr(dd, FXR_TXCIC_CFG_TO_LIMIT, 1 << 30);
+	/*
 	 * Set the SLID based on the hostname to enable back to back
 	 * support in Simics.
 	 * TODO: Delete this hack once the LID is received via MADs
