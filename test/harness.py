@@ -482,7 +482,8 @@ for test in tests_to_run:
             RegLib.test_log(5, "Test Type: " + curr_type)
 
             INFO("Staring Test " + curr_exe + " [" + processed_args + "]")
-            args = shlex.split("./tests/" + curr_exe + " " + processed_args)
+            args = shlex.split(os.path.dirname(os.path.realpath(__file__)) +
+                    "/tests/" + curr_exe + " " + processed_args)
 
             test_runner = subprocess.Popen(args)
             result = test_runner.wait()
