@@ -79,20 +79,21 @@ def main():
     RegLib.test_log(0, "Waiting for socket to be listening")
     if server.wait_for_socket(test_port, "LISTEN", num_ports=num_ports) == False:
         RegLib.test_log(0, server_log_msg)
-        RegLib.test_fail("Could not get socket listening")
-
-    # Starting client
-    cmd = "%s -d=%s -p=%d -q=%d -m=%d -n=%d -a=%d -b=%d %s 2>&1" \
-           % (exec_full_path, hca, test_port, qpn, test_mode, iterations,
-              pkt_size_min, pkt_size_max, server.get_name())
-    err = do_ssh(client, cmd)
-    if err:
-        # If the process was terminated by a signal
-        if err >= 128:
-            RegLib.test_log(0, "Server was killed with a signal - %s" % err)
-        else:
-            RegLib.test_log(0, "ERROR - Client detected error - %s", err)
-            test_fail = 1
+        RegLib.test_log(0, "Could not get socket listening")
+        test_fail = 1
+    else:
+        # Starting client
+        cmd = "%s -d=%s -p=%d -q=%d -m=%d -n=%d -a=%d -b=%d %s 2>&1" \
+               % (exec_full_path, hca, test_port, qpn, test_mode, iterations,
+                  pkt_size_min, pkt_size_max, server.get_name())
+        err = do_ssh(client, cmd)
+        if err:
+            # If the process was terminated by a signal
+            if err >= 128:
+                RegLib.test_log(0, "Server was killed with a signal - %s" % err)
+            else:
+                RegLib.test_log(0, "ERROR - Client detected error - %s", err)
+                test_fail = 1
 
     # Checking if there's at least one server process running
     cmd = "/usr/bin/pgrep -f %s > /dev/null 2>&1" % executable_name
