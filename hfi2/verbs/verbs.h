@@ -70,13 +70,7 @@
 #include "iowait.h"
 #include "../opa_hfi.h"
 
-/*
- * FXRTODO: ipoib connected test fails with this
- * to be fixed
- */
-#if 0
 #define HFI_VERBS_TEST
-#endif
 
 /* TODO - these carried from WFR driver */
 #define OPA_IB_MAX_RDMA_ATOMIC  16

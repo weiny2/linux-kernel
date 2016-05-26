@@ -432,7 +432,7 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 	bool use_16b = qp_priv->use_16b;
 
 #ifdef HFI_VERBS_TEST
-	if (hfi2_drop_packet()) {
+	if (hfi2_drop_packet() && qp->s_retry_cnt) {
 		dev_dbg(ibp->dev, "Dropping %s with PSN = %d\n",
 			(qp->r_nak_state) ? "NAK" : "ACK",
 			mask_psn(qp->r_ack_psn));

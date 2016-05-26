@@ -2310,7 +2310,7 @@ void hfi2_rc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		goto send_ack;
 	}
 #ifdef HFI_VERBS_TEST
-	if (hfi2_drop_packet()) {
+	if (hfi2_drop_packet() && qp->s_retry_cnt) {
 		dev_dbg(ibp->dev, "Dropping packet (opcode = %s) at rcv end with PSN = %u\n",
 			opcode_to_str[opcode], mask_psn(psn));
 		goto drop;
@@ -2358,7 +2358,7 @@ void hfi2_rc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 	switch (opcode) {
 	case OP(SEND_FIRST):
 #ifdef HFI_VERBS_TEST
-		if (hfi2_drop_packet()) {
+		if (hfi2_drop_packet() && qp->s_rnr_retry_cnt) {
 			dev_dbg(ibp->dev, "Initiating RNR (opcode = %s) with PSN = %u\n"
 				 , opcode_to_str[opcode], mask_psn(psn));
 			goto rnr_nak;
@@ -2385,7 +2385,7 @@ send_middle:
 
 	case OP(RDMA_WRITE_LAST_WITH_IMMEDIATE):
 #ifdef HFI_VERBS_TEST
-		if (hfi2_drop_packet()) {
+		if (hfi2_drop_packet() && qp->s_rnr_retry_cnt) {
 			dev_dbg(ibp->dev, "Initiating RNR (opcode = %s) with PSN = %u\n"
 				 , opcode_to_str[opcode], mask_psn(psn));
 			goto rnr_nak;
@@ -2402,7 +2402,7 @@ send_middle:
 	case OP(SEND_ONLY):
 	case OP(SEND_ONLY_WITH_IMMEDIATE):
 #ifdef HFI_VERBS_TEST
-		if (hfi2_drop_packet()) {
+		if (hfi2_drop_packet() && qp->s_rnr_retry_cnt) {
 			dev_dbg(ibp->dev, "Initiating RNR (opcode = %s) with PSN = %u\n"
 				 , opcode_to_str[opcode], mask_psn(psn));
 			goto rnr_nak;
@@ -2507,7 +2507,7 @@ send_last:
 		else if (opcode == OP(RDMA_WRITE_ONLY))
 			goto no_immediate_data;
 #ifdef HFI_VERBS_TEST
-		if (hfi2_drop_packet()) {
+		if (hfi2_drop_packet() && qp->s_rnr_retry_cnt) {
 			dev_dbg(ibp->dev, "Initiating RNR for packet (opcode = %s) at rcv end with PSN = %u\n"
 				 , opcode_to_str[opcode], mask_psn(psn));
 			goto rnr_nak;
@@ -2727,9 +2727,7 @@ nack_acc:
 send_ack:
 	hfi2_send_rc_ack(qp, is_fecn);
 	return;
-#ifdef HFI_VERBS_TEST
 drop:
-#endif
 	dev_dbg(ibp->dev, "RC dropping packet\n");
 	return;
 }
