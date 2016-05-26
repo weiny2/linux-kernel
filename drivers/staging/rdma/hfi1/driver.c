@@ -814,10 +814,8 @@ static inline void process_rcv_qp_work(struct hfi1_packet *packet)
 	list_for_each_entry_safe(qp, nqp, &rcd->qp_wait_list, rspwait) {
 		list_del_init(&qp->rspwait);
 		if (qp->r_flags & RVT_R_RSP_NAK) {
-			bool bypass = hfi1_use_16b(qp, qp->s_wqe);
-
 			qp->r_flags &= ~RVT_R_RSP_NAK;
-			hfi1_send_rc_ack(rcd, qp, false, bypass);
+			hfi1_send_rc_ack(rcd, qp, false);
 		}
 		if (qp->r_flags & RVT_R_RSP_SEND) {
 			unsigned long flags;
