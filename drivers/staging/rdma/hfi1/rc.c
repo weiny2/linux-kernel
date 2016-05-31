@@ -2246,12 +2246,14 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 
 	if (!packet->bypass) {
 		hdr = packet->hdr;
+		pad = OPA_9B_BTH_GET_PAD(bth0);
 		is_becn = (bth1 & HFI1_BECN_SMASK) ? true : false;
 		is_fecn = (bth1 & HFI1_FECN_SMASK) ? true : false;
 	} else {
 		hdr_16b = packet->hdr;
 		data = packet->payload;
 		extra_byte = 1; /* LT BYTE */
+		pad = OPA_16B_BTH_GET_PAD(bth0);
 		is_fecn = (OPA_16B_GET_FECN(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					hdr_16b->lrh[2], hdr_16b->lrh[3])) ?
 				true : false;
@@ -2391,12 +2393,6 @@ no_immediate_data:
 		wc.wc_flags = 0;
 		wc.ex.imm_data = 0;
 send_last:
-		/* Get the number of bytes the message was padded by. */
-		if (!packet->bypass)
-			pad = OPA_9B_BTH_GET_PAD(bth0);
-		else
-			pad = OPA_16B_BTH_GET_PAD(bth0);
-
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4 + extra_byte)))
