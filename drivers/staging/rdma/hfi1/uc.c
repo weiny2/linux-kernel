@@ -52,6 +52,16 @@
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_UC_##x
 
+typedef void (*hfi1_handle_cnp)(struct hfi1_ibport *ibp, struct rvt_qp *qp,
+				u32 remote_qpn, u32 pkey, u32 slid, u32 dlid,
+				u8 sc5, const struct ib_grh *old_grh);
+
+/* We support only two types - 9B and 16B for now */
+static const hfi1_handle_cnp hfi1_handle_cnp_tbl[2] = {
+	[HFI1_PKT_TYPE_9B] = &return_cnp,
+	[HFI1_PKT_TYPE_16B] = &return_cnp_bypass
+};
+
 /* only opcode mask for adaptive pio */
 const u32 uc_only_opcode =
 	BIT(OP(SEND_ONLY) & 0x1f) |
@@ -77,7 +87,6 @@ int hfi1_make_uc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 	u32 len;
 	u32 pmtu = qp->pmtu;
 	int middle = 0;
-	bool bypass = false;
 
 	ps->s_txreq = get_txreq(ps->dev, qp);
 	if (IS_ERR(ps->s_txreq))
@@ -101,8 +110,7 @@ int hfi1_make_uc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		goto done_free_tx;
 	}
 
-	bypass = priv->use_16b;
-	if (!bypass) {
+	if (!priv->use_16b) {
 		ps->s_txreq->phdr.hdr.hdr_type = 0;
 		/* header size in 32-bit words LRH+BTH = (8+12)/4. */
 		hwords = 5;
@@ -315,13 +323,7 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 	u32 bth1, dlid, slid;
 	bool is_fecn = false;
 	bool is_becn = false;
-
-	if (packet->bypass) {
-		hdr_16b = packet->hdr;
-		data = packet->payload;
-	} else {
-		hdr = packet->hdr;
-	}
+	u8 extra_byte = 0;
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
 	bth1 = be32_to_cpu(ohdr->bth[1]);
@@ -331,7 +333,18 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 		return;
 	}
 
-	if (packet->bypass) {
+	if (!packet->bypass) {
+		hdr = packet->hdr;
+		pad = OPA_9B_BTH_GET_PAD(bth0);
+		is_becn = (bth1 & HFI1_BECN_SMASK) ? true : false;
+		is_fecn = (bth1 & HFI1_FECN_SMASK) ? true : false;
+		slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
+		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
+	} else {
+		hdr_16b = packet->hdr;
+		data = packet->payload;
+		extra_byte = 1; /* LT BYTE */
+		pad = OPA_16B_BTH_GET_PAD(bth0);
 		is_fecn = (OPA_16B_GET_FECN(hdr_16b->lrh[0], hdr_16b->lrh[1],
 					hdr_16b->lrh[2], hdr_16b->lrh[3])) ?
 				true : false;
@@ -346,11 +359,6 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 					hdr_16b->lrh[1],
 					hdr_16b->lrh[2],
 					hdr_16b->lrh[3]);
-	} else {
-		is_becn = (bth1 & HFI1_BECN_SMASK) ? true : false;
-		is_fecn = (bth1 & HFI1_FECN_SMASK) ? true : false;
-		slid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[3]));
-		dlid = OPA_9B_GET_LID(be16_to_cpu(hdr->lrh[1]));
 	}
 
 	if (is_becn) {
@@ -378,12 +386,9 @@ void hfi1_uc_rcv(struct hfi1_packet *packet)
 		sc5 = ibp->sl_to_sc[qp->remote_ah_attr.sl];
 		if (has_grh)
 			grh = packet->grh;
-		if (packet->bypass)
-			return_cnp_bypass(ibp, qp, src_qp, pkey,
-					  dlid, slid, sc5, grh);
-		else
-			return_cnp(ibp, qp, src_qp, pkey, dlid,
-				   slid, sc5, grh);
+		/* Call appropriate CNP handler */
+		hfi1_handle_cnp_tbl[packet->bypass] (ibp, qp, src_qp, pkey,
+						     dlid, slid, sc5, grh);
 	}
 
 	psn = be32_to_cpu(ohdr->bth[2]);
@@ -499,17 +504,12 @@ no_immediate_data:
 		wc.ex.imm_data = 0;
 		wc.wc_flags = 0;
 send_last:
-		/* Get the number of bytes the message was padded by. */
-		if (!packet->bypass)
-			pad = OPA_9B_BTH_GET_PAD(bth0);
-		else
-			pad = OPA_16B_BTH_GET_PAD(bth0);
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
-		if (unlikely(tlen < (hdrsize + pad + 4)))
+		if (unlikely(tlen < (hdrsize + pad + 4 + extra_byte)))
 			goto rewind;
 		/* Don't count the CRC. */
-		tlen -= (hdrsize + pad + 4);
+		tlen -= (hdrsize + pad + 4 + extra_byte);
 		wc.byte_len = tlen + qp->r_rcv_len;
 		if (unlikely(wc.byte_len > qp->r_len))
 			goto rewind;
@@ -596,19 +596,12 @@ rdma_first:
 		wc.ex.imm_data = ohdr->u.imm_data;
 rdma_last_imm:
 		wc.wc_flags = IB_WC_WITH_IMM;
-
-		/* Get the number of bytes the message was padded by. */
-		if (!packet->bypass)
-			pad = OPA_9B_BTH_GET_PAD(bth0);
-		else
-			pad = OPA_16B_BTH_GET_PAD(bth0);
-
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))
 			goto drop;
 		/* Don't count the CRC. */
-		tlen -= (hdrsize + pad + 4);
+		tlen -= (hdrsize + pad + 4 + extra_byte);
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
 		if (test_and_clear_bit(RVT_R_REWIND_SGE, &qp->r_aflags)) {
@@ -628,17 +621,12 @@ rdma_last_imm:
 
 	case OP(RDMA_WRITE_LAST):
 rdma_last:
-		/* Get the number of bytes the message was padded by. */
-		if (!packet->bypass)
-			pad = OPA_9B_BTH_GET_PAD(bth0);
-		else
-			pad = OPA_16B_BTH_GET_PAD(bth0);
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
 		if (unlikely(tlen < (hdrsize + pad + 4)))
 			goto drop;
 		/* Don't count the CRC. */
-		tlen -= (hdrsize + pad + 4);
+		tlen -= (hdrsize + pad + 4 + extra_byte);
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
 		hfi1_copy_sge(&qp->r_sge, data, tlen, 1, 0);
