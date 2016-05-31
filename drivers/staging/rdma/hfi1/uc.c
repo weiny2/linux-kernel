@@ -114,7 +114,8 @@ int hfi1_make_uc_req(struct rvt_qp *qp, struct hfi1_pkt_state *ps)
 		ps->s_txreq->phdr.hdr.hdr_type = 1;
 		/* header size in 32-bit words 16B LRH+BTH = (16+12)/4. */
 		hwords = 7;
-		if (qp->remote_ah_attr.ah_flags & IB_AH_GRH)
+		if ((qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
+		    (hfi1_check_mcast(&qp->remote_ah_attr)))
 			ohdr = &ps->s_txreq->phdr.hdr.pkt.opah.u.l.oth;
 		else
 			ohdr = &ps->s_txreq->phdr.hdr.pkt.opah.u.oth;
