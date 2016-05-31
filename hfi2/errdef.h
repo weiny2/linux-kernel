@@ -57,7 +57,7 @@
  * PLEASE GO THROUGH utils/errgen.sh SCRIPT
  */
 
-static hfi_error_domain_t hfi_fzc0_error[] = {
+static struct hfi_error_csr hfi_fzc0_error[] = {
 /*
  * LCB_ERR_STS desc:
  */
@@ -66,268 +66,268 @@ static hfi_error_domain_t hfi_fzc0_error[] = {
 	FXR_FZC_LCB0_CSRS+FZC_LCB_ERR_EN_HOST, FXR_FZC_LCB0_CSRS+FZC_LCB_ERR_FIRST_HOST,
 	FXR_FZC_LCB0_CSRS+FZC_LCB_ERR_STS, FXR_FZC_LCB0_CSRS+FZC_LCB_ERR_CLR, FXR_FZC_LCB0_CSRS+FZC_LCB_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"RST_FOR_FAILED_DESKEW",
 		" self explanatory",
 		},
-		{
+		{ /* bit 1 */
 		"ALL_LNS_FAILED_REINIT_TEST",
 		" All four lanes failed testing during reinit, triggers a reset.",
 		},
-		{
+		{ /* bit 2 */
 		"LOST_REINIT_STALL_OR_TOS",
 		" lost clock stall or turn on signal during reinit. Only active when just 1 lane operating on Rx side.",
 		},
-		{
+		{ /* bit 3 */
 		"TX_LESS_THAN_FOUR_LNS",
 		" self explanatory",
 		},
-		{
+		{ /* bit 4 */
 		"RX_LESS_THAN_FOUR_LNS",
 		" self explanatory",
 		},
-		{
+		{ /* bit 5 */
 		"SEQ_CRC_ERR",
 		" A sequential CRC error was encountered. This triggers a reinit sequence.",
 		},
-		{
+		{ /* bit 6 */
 		"REINIT_FROM_PEER",
 		" A reinit sequence was triggered by the peer.",
 		},
-		{
+		{ /* bit 7 */
 		"REINIT_FOR_LN_DEGRADE",
 		" A reinit sequence was triggered during which a lane was removed from operation.",
 		},
-		{
+		{ /* bit 8 */
 		"CRC_ERR_CNT_HIT_LIMIT",
 		" Programmed using the LCB_CFG_CRC_INTERRUPT CSR.",
 		},
-		{
+		{ /* bit 9 */
 		"RCLK_STOPPED",
 		" The (1 of 4) lane receive clock that is being used on the Rx side/pipe during LTP mode stopped toggling.This is catastrophic and will take down the link.",
 		},
-		{
+		{ /* bit 10 */
 		"UNEXPECTED_REPLAY_MARKER",
 		" self explanatory",
 		},
-		{
+		{ /* bit 11 */
 		"UNEXPECTED_ROUND_TRIP_MARKER",
 		" self explanatory",
 		},
-		{
+		{ /* bit 12 */
 		"ILLEGAL_NULL_LTP",
 		" link transfer LTPs",
 		},
-		{
+		{ /* bit 13 */
 		"ILLEGAL_FLIT_ENCODING",
 		" The only legal flits from the FPE are head, body, tail, Idle, CrdtRet, HeadBadPkt, BodyBadPkt, TailBadPkt and the architecturally hidden ForceIdle ([64:56] = 9'h002).",
 		},
-		{
+		{ /* bit 14 */
 		"FLIT_INPUT_BUF_OFLW",
 		" self explanatory",
 		},
-		{
+		{ /* bit 15 */
 		"VL_ACK_INPUT_BUF_OFLW",
 		" self explanatory",
 		},
-		{
+		{ /* bit 16 */
 		"VL_ACK_INPUT_PARITY_ERR",
 		" self explanatory",
 		},
-		{
+		{ /* bit 17 */
 		"VL_ACK_INPUT_WRONG_CRC_MODE",
 		" VC ack input valid and not in 14 bit CRC mode",
 		},
-		{
+		{ /* bit 18 */
 		"FLIT_INPUT_BUF_MBE",
 		" self explanatory",
 		},
-		{
+		{ /* bit 19 */
 		"FLIT_INPUT_BUF_SBE",
 		" self explanatory",
 		},
-		{
+		{ /* bit 20 */
 		"REPLAY_BUF_MBE",
 		" self explanatory",
 		},
-		{
+		{ /* bit 21 */
 		"REPLAY_BUF_SBE",
 		" self explanatory",
 		},
-		{
+		{ /* bit 22 */
 		"RST_FOR_LINK_TIMEOUT",
 		" A reinit sequence is triggered in a last ditch attempt at keeping the link up when the timer expires. If this succeeds the NEG_EDGE_LINK_TRANSFER_ACTIVE and HOLD_REINIT flags will remain clear.",
 		},
-		{
+		{ /* bit 23 */
 		"RST_FOR_INCOMPLT_RND_TRIP",
 		" A reinit sequence is triggered in a last ditch attempt at keeping the link up when a round trip marker fails to return. If this succeeds the NEG_EDGE_LINK_TRANSFER_ACTIVE and HOLD_REINIT flags will remain clear.",
 		},
-		{
+		{ /* bit 24 */
 		"HOLD_REINIT",
 		" This indicates the link will not come up. Useful when the link has never been up and the NEG_EDGE_LINK_TRANSFER_ACTIVE flag will be clear.",
 		},
-		{
+		{ /* bit 25 */
 		"NEG_EDGE_LINK_TRANSFER_ACTIVE",
 		" self explanatory",
 		},
-		{
+		{ /* bit 26 */
 		"UNEXPECTED_MASTER_TIME_FLIT",
 		" MasterTime flits that arrive at a switch port that is not configured as an upstream port for the indicated clock tree are ignored, and an error is logged.",
 		},
-		{
+		{ /* bit 27 */
 		"QUARANTINE",
 		" KNH/FXR viral event to take down the link. Tied low in OC.",
 		},
-		{
+		{ /* bit 28 */
 		"CSR_CHAIN_PARITY_ERR",
 		" OC CSR chain parity error on the input request bus. Tied low on FZC.",
 		},
-		{
+		{ /* bit 29 */
 		"PM_MBE",
 		" Multi bit error detected in a high priority DN stream MasterTime flit.",
 		},
-		{
+		{ /* bit 30 */
 		"PM_SBE",
 		" Single bit error detected in a high priority DN stream MasterTime flit.",
 		},
-		{
-		"Unused_63_31:[0/33]",
+		{ /* bit 31 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[1/33]",
+		{ /* bit 32 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[2/33]",
+		{ /* bit 33 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[3/33]",
+		{ /* bit 34 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[4/33]",
+		{ /* bit 35 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[5/33]",
+		{ /* bit 36 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[6/33]",
+		{ /* bit 37 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[7/33]",
+		{ /* bit 38 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[8/33]",
+		{ /* bit 39 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[9/33]",
+		{ /* bit 40 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[10/33]",
+		{ /* bit 41 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[11/33]",
+		{ /* bit 42 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[12/33]",
+		{ /* bit 43 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[13/33]",
+		{ /* bit 44 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[14/33]",
+		{ /* bit 45 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[15/33]",
+		{ /* bit 46 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[16/33]",
+		{ /* bit 47 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[17/33]",
+		{ /* bit 48 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[18/33]",
+		{ /* bit 49 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[19/33]",
+		{ /* bit 50 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[20/33]",
+		{ /* bit 51 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[21/33]",
+		{ /* bit 52 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[22/33]",
+		{ /* bit 53 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[23/33]",
+		{ /* bit 54 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[24/33]",
+		{ /* bit 55 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[25/33]",
+		{ /* bit 56 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[26/33]",
+		{ /* bit 57 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[27/33]",
+		{ /* bit 58 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[28/33]",
+		{ /* bit 59 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[29/33]",
+		{ /* bit 60 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[30/33]",
+		{ /* bit 61 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[31/33]",
+		{ /* bit 62 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[32/33]",
+		{ /* bit 63 */
+		"Unused_63_31",
 		" Unused",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_fzc1_error[] = {
+static struct hfi_error_csr hfi_fzc1_error[] = {
 /*
  * LCB_ERR_STS desc:
  */
@@ -336,268 +336,268 @@ static hfi_error_domain_t hfi_fzc1_error[] = {
 	FXR_FZC_LCB1_CSRS+FZC_LCB_ERR_EN_HOST, FXR_FZC_LCB1_CSRS+FZC_LCB_ERR_FIRST_HOST,
 	FXR_FZC_LCB1_CSRS+FZC_LCB_ERR_STS, FXR_FZC_LCB1_CSRS+FZC_LCB_ERR_CLR, FXR_FZC_LCB1_CSRS+FZC_LCB_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"RST_FOR_FAILED_DESKEW",
 		" self explanatory",
 		},
-		{
+		{ /* bit 1 */
 		"ALL_LNS_FAILED_REINIT_TEST",
 		" All four lanes failed testing during reinit, triggers a reset.",
 		},
-		{
+		{ /* bit 2 */
 		"LOST_REINIT_STALL_OR_TOS",
 		" lost clock stall or turn on signal during reinit. Only active when just 1 lane operating on Rx side.",
 		},
-		{
+		{ /* bit 3 */
 		"TX_LESS_THAN_FOUR_LNS",
 		" self explanatory",
 		},
-		{
+		{ /* bit 4 */
 		"RX_LESS_THAN_FOUR_LNS",
 		" self explanatory",
 		},
-		{
+		{ /* bit 5 */
 		"SEQ_CRC_ERR",
 		" A sequential CRC error was encountered. This triggers a reinit sequence.",
 		},
-		{
+		{ /* bit 6 */
 		"REINIT_FROM_PEER",
 		" A reinit sequence was triggered by the peer.",
 		},
-		{
+		{ /* bit 7 */
 		"REINIT_FOR_LN_DEGRADE",
 		" A reinit sequence was triggered during which a lane was removed from operation.",
 		},
-		{
+		{ /* bit 8 */
 		"CRC_ERR_CNT_HIT_LIMIT",
 		" Programmed using the LCB_CFG_CRC_INTERRUPT CSR.",
 		},
-		{
+		{ /* bit 9 */
 		"RCLK_STOPPED",
 		" The (1 of 4) lane receive clock that is being used on the Rx side/pipe during LTP mode stopped toggling.This is catastrophic and will take down the link.",
 		},
-		{
+		{ /* bit 10 */
 		"UNEXPECTED_REPLAY_MARKER",
 		" self explanatory",
 		},
-		{
+		{ /* bit 11 */
 		"UNEXPECTED_ROUND_TRIP_MARKER",
 		" self explanatory",
 		},
-		{
+		{ /* bit 12 */
 		"ILLEGAL_NULL_LTP",
 		" link transfer LTPs",
 		},
-		{
+		{ /* bit 13 */
 		"ILLEGAL_FLIT_ENCODING",
 		" The only legal flits from the FPE are head, body, tail, Idle, CrdtRet, HeadBadPkt, BodyBadPkt, TailBadPkt and the architecturally hidden ForceIdle ([64:56] = 9'h002).",
 		},
-		{
+		{ /* bit 14 */
 		"FLIT_INPUT_BUF_OFLW",
 		" self explanatory",
 		},
-		{
+		{ /* bit 15 */
 		"VL_ACK_INPUT_BUF_OFLW",
 		" self explanatory",
 		},
-		{
+		{ /* bit 16 */
 		"VL_ACK_INPUT_PARITY_ERR",
 		" self explanatory",
 		},
-		{
+		{ /* bit 17 */
 		"VL_ACK_INPUT_WRONG_CRC_MODE",
 		" VC ack input valid and not in 14 bit CRC mode",
 		},
-		{
+		{ /* bit 18 */
 		"FLIT_INPUT_BUF_MBE",
 		" self explanatory",
 		},
-		{
+		{ /* bit 19 */
 		"FLIT_INPUT_BUF_SBE",
 		" self explanatory",
 		},
-		{
+		{ /* bit 20 */
 		"REPLAY_BUF_MBE",
 		" self explanatory",
 		},
-		{
+		{ /* bit 21 */
 		"REPLAY_BUF_SBE",
 		" self explanatory",
 		},
-		{
+		{ /* bit 22 */
 		"RST_FOR_LINK_TIMEOUT",
 		" A reinit sequence is triggered in a last ditch attempt at keeping the link up when the timer expires. If this succeeds the NEG_EDGE_LINK_TRANSFER_ACTIVE and HOLD_REINIT flags will remain clear.",
 		},
-		{
+		{ /* bit 23 */
 		"RST_FOR_INCOMPLT_RND_TRIP",
 		" A reinit sequence is triggered in a last ditch attempt at keeping the link up when a round trip marker fails to return. If this succeeds the NEG_EDGE_LINK_TRANSFER_ACTIVE and HOLD_REINIT flags will remain clear.",
 		},
-		{
+		{ /* bit 24 */
 		"HOLD_REINIT",
 		" This indicates the link will not come up. Useful when the link has never been up and the NEG_EDGE_LINK_TRANSFER_ACTIVE flag will be clear.",
 		},
-		{
+		{ /* bit 25 */
 		"NEG_EDGE_LINK_TRANSFER_ACTIVE",
 		" self explanatory",
 		},
-		{
+		{ /* bit 26 */
 		"UNEXPECTED_MASTER_TIME_FLIT",
 		" MasterTime flits that arrive at a switch port that is not configured as an upstream port for the indicated clock tree are ignored, and an error is logged.",
 		},
-		{
+		{ /* bit 27 */
 		"QUARANTINE",
 		" KNH/FXR viral event to take down the link. Tied low in OC.",
 		},
-		{
+		{ /* bit 28 */
 		"CSR_CHAIN_PARITY_ERR",
 		" OC CSR chain parity error on the input request bus. Tied low on FZC.",
 		},
-		{
+		{ /* bit 29 */
 		"PM_MBE",
 		" Multi bit error detected in a high priority DN stream MasterTime flit.",
 		},
-		{
+		{ /* bit 30 */
 		"PM_SBE",
 		" Single bit error detected in a high priority DN stream MasterTime flit.",
 		},
-		{
-		"Unused_63_31:[0/33]",
+		{ /* bit 31 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[1/33]",
+		{ /* bit 32 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[2/33]",
+		{ /* bit 33 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[3/33]",
+		{ /* bit 34 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[4/33]",
+		{ /* bit 35 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[5/33]",
+		{ /* bit 36 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[6/33]",
+		{ /* bit 37 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[7/33]",
+		{ /* bit 38 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[8/33]",
+		{ /* bit 39 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[9/33]",
+		{ /* bit 40 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[10/33]",
+		{ /* bit 41 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[11/33]",
+		{ /* bit 42 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[12/33]",
+		{ /* bit 43 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[13/33]",
+		{ /* bit 44 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[14/33]",
+		{ /* bit 45 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[15/33]",
+		{ /* bit 46 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[16/33]",
+		{ /* bit 47 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[17/33]",
+		{ /* bit 48 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[18/33]",
+		{ /* bit 49 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[19/33]",
+		{ /* bit 50 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[20/33]",
+		{ /* bit 51 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[21/33]",
+		{ /* bit 52 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[22/33]",
+		{ /* bit 53 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[23/33]",
+		{ /* bit 54 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[24/33]",
+		{ /* bit 55 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[25/33]",
+		{ /* bit 56 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[26/33]",
+		{ /* bit 57 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[27/33]",
+		{ /* bit 58 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[28/33]",
+		{ /* bit 59 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[29/33]",
+		{ /* bit 60 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[30/33]",
+		{ /* bit 61 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[31/33]",
+		{ /* bit 62 */
+		"Unused_63_31",
 		" Unused",
 		},
-		{
-		"Unused_63_31:[32/33]",
+		{ /* bit 63 */
+		"Unused_63_31",
 		" Unused",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_hifis_error[] = {
+static struct hfi_error_csr hfi_hifis_error[] = {
 /*
  * HIFIS_ERR_STS desc:
  */
@@ -606,268 +606,268 @@ static hfi_error_domain_t hfi_hifis_error[] = {
 	FXR_HIFIS_ERR_EN_HOST, FXR_HIFIS_ERR_FIRST_HOST,
 	FXR_HIFIS_ERR_STS, FXR_HIFIS_ERR_CLR, FXR_HIFIS_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"pcim_q_err",
 		" Underflow/overflow of PCIM Request Queue",
 		},
-		{
+		{ /* bit 1 */
 		"imi_hdr_mbe",
 		" IMI Header MBE. See imi_hdr_synd in HIFIS Error Info",
 		},
-		{
+		{ /* bit 2 */
 		"imi_hdr_sbe",
 		" IMI Header SBE. See imi_hdr_synd in HIFIS Error Info",
 		},
-		{
+		{ /* bit 3 */
 		"adm_hdr_mbe",
 		" ADM Header MBE See adm_hdr_synd in HIFIS Error Info",
 		},
-		{
+		{ /* bit 4 */
 		"adm_hdr_sbe",
 		" ADM Header SBE. See adm_hdr_synd in HIFIS Error Info",
 		},
-		{
-		"Reserved_63_5:[0/59]",
+		{ /* bit 5 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[1/59]",
+		{ /* bit 6 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[2/59]",
+		{ /* bit 7 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[3/59]",
+		{ /* bit 8 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[4/59]",
+		{ /* bit 9 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[5/59]",
+		{ /* bit 10 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[6/59]",
+		{ /* bit 11 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[7/59]",
+		{ /* bit 12 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[8/59]",
+		{ /* bit 13 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[9/59]",
+		{ /* bit 14 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[10/59]",
+		{ /* bit 15 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[11/59]",
+		{ /* bit 16 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[12/59]",
+		{ /* bit 17 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[13/59]",
+		{ /* bit 18 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[14/59]",
+		{ /* bit 19 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[15/59]",
+		{ /* bit 20 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[16/59]",
+		{ /* bit 21 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[17/59]",
+		{ /* bit 22 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[18/59]",
+		{ /* bit 23 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[19/59]",
+		{ /* bit 24 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[20/59]",
+		{ /* bit 25 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[21/59]",
+		{ /* bit 26 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[22/59]",
+		{ /* bit 27 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[23/59]",
+		{ /* bit 28 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[24/59]",
+		{ /* bit 29 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[25/59]",
+		{ /* bit 30 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[26/59]",
+		{ /* bit 31 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[27/59]",
+		{ /* bit 32 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[28/59]",
+		{ /* bit 33 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[29/59]",
+		{ /* bit 34 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[30/59]",
+		{ /* bit 35 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[31/59]",
+		{ /* bit 36 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[32/59]",
+		{ /* bit 37 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[33/59]",
+		{ /* bit 38 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[34/59]",
+		{ /* bit 39 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[35/59]",
+		{ /* bit 40 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[36/59]",
+		{ /* bit 41 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[37/59]",
+		{ /* bit 42 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[38/59]",
+		{ /* bit 43 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[39/59]",
+		{ /* bit 44 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[40/59]",
+		{ /* bit 45 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[41/59]",
+		{ /* bit 46 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[42/59]",
+		{ /* bit 47 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[43/59]",
+		{ /* bit 48 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[44/59]",
+		{ /* bit 49 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[45/59]",
+		{ /* bit 50 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[46/59]",
+		{ /* bit 51 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[47/59]",
+		{ /* bit 52 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[48/59]",
+		{ /* bit 53 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[49/59]",
+		{ /* bit 54 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[50/59]",
+		{ /* bit 55 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[51/59]",
+		{ /* bit 56 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[52/59]",
+		{ /* bit 57 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[53/59]",
+		{ /* bit 58 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[54/59]",
+		{ /* bit 59 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[55/59]",
+		{ /* bit 60 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[56/59]",
+		{ /* bit 61 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[57/59]",
+		{ /* bit 62 */
+		"Reserved_63_5",
 		" Reserved",
 		},
-		{
-		"Reserved_63_5:[58/59]",
+		{ /* bit 63 */
+		"Reserved_63_5",
 		" Reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_loca_error[] = {
+static struct hfi_error_csr hfi_loca_error[] = {
 /*
  * LOCA0_ERR_STS desc:
  */
@@ -876,264 +876,264 @@ static hfi_error_domain_t hfi_loca_error[] = {
 	FXR_LOCA0_ERR_EN_HOST, FXR_LOCA0_ERR_FIRST_HOST,
 	FXR_LOCA0_ERR_STS, FXR_LOCA0_ERR_CLR, FXR_LOCA0_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"hcc_idi_rsp_err",
 		" IDI Response Error (Go-Err). See LOCA Error Info14 .",
 		},
-		{
+		{ /* bit 1 */
 		"u2c_req_pe",
 		" U2C Request Parity Error",
 		},
-		{
+		{ /* bit 2 */
 		"u2c_rsp_opcode",
 		" U2C Response Opcode invalid for given pending request",
 		},
-		{
+		{ /* bit 3 */
 		"u2c_rsp_invalid",
 		" U2C Response is invalid",
 		},
-		{
+		{ /* bit 4 */
 		"u2c_rsp_go",
 		" U2C Response GO state error",
 		},
-		{
+		{ /* bit 5 */
 		"u2c_rsp_pe",
 		" U2C Response Parity Error",
 		},
-		{
+		{ /* bit 6 */
 		"dpb_snpq_err",
 		" Data Pull Buffer Snoop Queue Error (over/under flow)",
 		},
-		{
+		{ /* bit 7 */
 		"imi_req_que_err",
 		" IMI Request Queue Error (over/underflow)",
 		},
-		{
+		{ /* bit 8 */
 		"proq_g_mbe",
 		" PROQ Global tail pointer queue MBE",
 		},
-		{
+		{ /* bit 9 */
 		"proq_f_mbe",
 		" PROQ Flow tail pointer queue MBE",
 		},
-		{
+		{ /* bit 10 */
 		"proq_hl_mbe",
 		" PROQ hold queue MBE",
 		},
-		{
+		{ /* bit 11 */
 		"conq_hdr_mbe",
 		" ConQ header MBE",
 		},
-		{
+		{ /* bit 12 */
 		"iti_wp_mbe",
 		" IDI Target WP (UQB) MBE",
 		},
-		{
+		{ /* bit 13 */
 		"u2c_data_mbe",
 		" U2C Data MBE",
 		},
-		{
+		{ /* bit 14 */
 		"u2c_poi_mbe",
 		" U2C Poison and ECC Valid bit queue MBE",
 		},
-		{
+		{ /* bit 15 */
 		"u2c_dir_mbe",
 		" U2C L1DIR (detected in IMI) MBE",
 		},
-		{
+		{ /* bit 16 */
 		"u2c_wp_mbe",
 		" U2C WritePull (USB) MBE",
 		},
-		{
+		{ /* bit 17 */
 		"c2u_eqb_mbe",
 		" C2U Eviction Request (EQB) MBE",
 		},
-		{
+		{ /* bit 18 */
 		"c2u_nqb_mbe",
 		" C2U New Request (NQB) MBE",
 		},
-		{
+		{ /* bit 19 */
 		"c2u_snp_mbe",
 		" C2U DPB Snoop header MBE",
 		},
-		{
+		{ /* bit 20 */
 		"c2u_wp_mbe",
 		" C2U DPB WritePull header MBE",
 		},
-		{
+		{ /* bit 21 */
 		"c2u_data_mbe",
 		" C2U DPB Data MBE",
 		},
-		{
+		{ /* bit 22 */
 		"imi_orb_cnf_mbe",
 		" IDI Master ORB CNF MBE",
 		},
-		{
+		{ /* bit 23 */
 		"imi_orb_rsp_mbe",
 		" IDI Master ORB RSP MBE",
 		},
-		{
+		{ /* bit 24 */
 		"imi_orb_sch_mbe",
 		" IDI Master ORB SCH MBE",
 		},
-		{
+		{ /* bit 25 */
 		"mru_table_mbe",
 		" MRU Table MBE",
 		},
-		{
+		{ /* bit 26 */
 		"pcam_mbe",
 		" PCAM data MBE",
 		},
-		{
+		{ /* bit 27 */
 		"hcc_dcd_tag_mbe",
 		" HCC received MBE signaling with DCD tag data",
 		},
-		{
+		{ /* bit 28 */
 		"adm_cas_db_mbe",
 		" ADM Compare & Swap Delay Buffer MBE",
 		},
-		{
+		{ /* bit 29 */
 		"adm_hdr_db_mbe",
 		" ADM Header Delay Buffer MBE",
 		},
-		{
+		{ /* bit 30 */
 		"adm_paf_db_mbe",
 		" ADM PAF Delay Buffer MBE",
 		},
-		{
+		{ /* bit 31 */
 		"adm_re_db_mbe",
 		" ADM RE Delay Buffer MBE",
 		},
-		{
+		{ /* bit 32 */
 		"adm_sl_db_mbe",
 		" ADM ShortLoop Delay Buffer MBE",
 		},
-		{
-		"conq_data_mbe",
-		" ConQ Data MBE",
-		},
-		{
+		{ /* bit 33 */
 		"dcache_mbe",
 		" DataCache MBE",
 		},
-		{
+		{ /* bit 34 */
 		"wrifill_mbe",
 		" WriteFill Buffer MBE",
 		},
-		{
+		{ /* bit 35 */
+		"hcc_rpl_delay_perr",
+		" HCC Replay Delay RF Parity Error",
+		},
+		{ /* bit 36 */
 		"proq_g_sbe",
 		" PROQ global tail pointer queue SBE",
 		},
-		{
+		{ /* bit 37 */
 		"proq_f_sbe",
 		" PROQ Flow tail pointer queue SBE",
 		},
-		{
+		{ /* bit 38 */
 		"proq_hl_sbe",
 		" PROQ hold queue SBE",
 		},
-		{
+		{ /* bit 39 */
 		"conq_hdr_sbe",
 		" ConQ header SBE",
 		},
-		{
+		{ /* bit 40 */
 		"iti_wp_sbe",
 		" IDI Target WP (UQB) SBE",
 		},
-		{
+		{ /* bit 41 */
 		"u2c_data_sbe",
 		" U2C Data SBE",
 		},
-		{
+		{ /* bit 42 */
 		"u2c_poi_sbe",
 		" U2C Poison and ECC valid bit queue SBE",
 		},
-		{
+		{ /* bit 43 */
 		"u2c_dir_sbe",
 		" U2C L1DIR (detected in IMI) SBE",
 		},
-		{
+		{ /* bit 44 */
 		"u2c_wp_sbe",
 		" U2C WritePull (USB) SBE",
 		},
-		{
-		"c2u_ebq_sbe",
+		{ /* bit 45 */
+		"c2u_eqb_sbe",
 		" C2U Eviction Request (EQB) SBE",
 		},
-		{
+		{ /* bit 46 */
 		"c2u_nqb_sbe",
 		" C2U New Request (NQB) SBE",
 		},
-		{
+		{ /* bit 47 */
 		"c2u_snp_sbe",
 		" C2U DPB Snoop header SBE",
 		},
-		{
+		{ /* bit 48 */
 		"c2u_wp_sbe",
 		" C2U DPB WritePull header SBE",
 		},
-		{
+		{ /* bit 49 */
 		"c2u_data_sbe",
 		" C2U DPB Data SBE",
 		},
-		{
+		{ /* bit 50 */
 		"imi_orb_cnf_sbe",
 		" IDI Master ORB CNF SBE",
 		},
-		{
+		{ /* bit 51 */
 		"imi_orb_rsp_sbe",
 		" IDI Master ORB RSP SBE",
 		},
-		{
+		{ /* bit 52 */
 		"imi_orb_sch_sbe",
 		" IDI Master ORB SCH SBE",
 		},
-		{
+		{ /* bit 53 */
 		"mru_table_sbe",
 		" MRU Table SBE",
 		},
-		{
+		{ /* bit 54 */
 		"pcam_sbe",
 		" PCAM data SBE",
 		},
-		{
+		{ /* bit 55 */
 		"hcc_replay_err",
 		" HCC Replay state consistency error. See hcc_replay_status",
 		},
-		{
+		{ /* bit 56 */
 		"adm_cas_db_sbe",
 		" ADM Compare & Swap Delay Buffer SBE",
 		},
-		{
+		{ /* bit 57 */
 		"adm_hdr_db_sbe",
 		" ADM Header Delay Buffer SBE",
 		},
-		{
+		{ /* bit 58 */
 		"adm_paf_db_sbe",
 		" ADM PAF Delay Buffer SBE",
 		},
-		{
+		{ /* bit 59 */
 		"adm_re_db_sbe",
 		" ADM RE Delay Buffer SBE",
 		},
-		{
+		{ /* bit 60 */
 		"adm_sl_db_sbe",
 		" ADM ShortLoop Delay Buffer SBE",
 		},
-		{
-		"conq_data_sbe",
-		" ConQ Data SBE",
-		},
-		{
+		{ /* bit 61 */
 		"dcache_sbe",
 		" DataCache SBE",
 		},
-		{
+		{ /* bit 62 */
 		"wrifill_sbe",
 		" WriteFill Buffer SBE",
+		},
+		{ /* bit 63 */
+		"reserved_63",
+		" Reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
     ,
 /*
@@ -1144,268 +1144,268 @@ static hfi_error_domain_t hfi_loca_error[] = {
 	FXR_LOCA1_ERR_EN_HOST, FXR_LOCA1_ERR_FIRST_HOST,
 	FXR_LOCA1_ERR_STS, FXR_LOCA1_ERR_CLR, FXR_LOCA1_ERR_FRC,
 	{
-		{
-		"dcd_bank_mbe:[0/16]",
+		{ /* bit 0 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[1/16]",
+		{ /* bit 1 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[2/16]",
+		{ /* bit 2 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[3/16]",
+		{ /* bit 3 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[4/16]",
+		{ /* bit 4 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[5/16]",
+		{ /* bit 5 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[6/16]",
+		{ /* bit 6 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[7/16]",
+		{ /* bit 7 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[8/16]",
+		{ /* bit 8 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[9/16]",
+		{ /* bit 9 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[10/16]",
+		{ /* bit 10 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[11/16]",
+		{ /* bit 11 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[12/16]",
+		{ /* bit 12 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[13/16]",
+		{ /* bit 13 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[14/16]",
+		{ /* bit 14 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_mbe:[15/16]",
+		{ /* bit 15 */
+		"dcd_bank_mbe",
 		" DCD Bank level MBE",
 		},
-		{
-		"dcd_bank_sbe:[0/16]",
+		{ /* bit 16 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[1/16]",
+		{ /* bit 17 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[2/16]",
+		{ /* bit 18 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[3/16]",
+		{ /* bit 19 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[4/16]",
+		{ /* bit 20 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[5/16]",
+		{ /* bit 21 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[6/16]",
+		{ /* bit 22 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[7/16]",
+		{ /* bit 23 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[8/16]",
+		{ /* bit 24 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[9/16]",
+		{ /* bit 25 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[10/16]",
+		{ /* bit 26 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[11/16]",
+		{ /* bit 27 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[12/16]",
+		{ /* bit 28 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[13/16]",
+		{ /* bit 29 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[14/16]",
+		{ /* bit 30 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
-		"dcd_bank_sbe:[15/16]",
+		{ /* bit 31 */
+		"dcd_bank_sbe",
 		" DCD Bank level SBE",
 		},
-		{
+		{ /* bit 32 */
 		"conq_tail_mbe",
 		" ConQ Tail pointer MBE. See conq_tail_synd",
 		},
-		{
+		{ /* bit 33 */
 		"hifis_hdr_mbe",
 		" HIFIS Header MBE. See hifis_hdr_synd",
 		},
-		{
+		{ /* bit 34 */
 		"conq_tail_sbe",
 		" ConQ Tail pointer SBE. See conq_tail_synd",
 		},
-		{
+		{ /* bit 35 */
 		"hifis_hdr_sbe",
 		" HIFIS Header SBE. See hifis_hdr_synd",
 		},
-		{
+		{ /* bit 36 */
 		"pmon_rollover",
 		" Performance Monitor Rollover Event.",
 		},
-		{
+		{ /* bit 37 */
 		"adm_malform_blen",
 		" Atomic operation with misaligned BLEN/ADT",
 		},
-		{
+		{ /* bit 38 */
 		"adm_malform_addr",
 		" Atomic operation with misaligned ADDR/ADT",
 		},
-		{
+		{ /* bit 39 */
 		"adm_malform_adt",
 		" Atomic operation with invalid ADT",
 		},
-		{
+		{ /* bit 40 */
 		"adm_malform_aso",
 		" Atomic operation with invalid ASOP",
 		},
-		{
-		"reserved_63_41:[0/23]",
+		{ /* bit 41 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[1/23]",
+		{ /* bit 42 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[2/23]",
+		{ /* bit 43 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[3/23]",
+		{ /* bit 44 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[4/23]",
+		{ /* bit 45 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[5/23]",
+		{ /* bit 46 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[6/23]",
+		{ /* bit 47 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[7/23]",
+		{ /* bit 48 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[8/23]",
+		{ /* bit 49 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[9/23]",
+		{ /* bit 50 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[10/23]",
+		{ /* bit 51 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[11/23]",
+		{ /* bit 52 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[12/23]",
+		{ /* bit 53 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[13/23]",
+		{ /* bit 54 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[14/23]",
+		{ /* bit 55 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[15/23]",
+		{ /* bit 56 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[16/23]",
+		{ /* bit 57 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[17/23]",
+		{ /* bit 58 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[18/23]",
+		{ /* bit 59 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[19/23]",
+		{ /* bit 60 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[20/23]",
+		{ /* bit 61 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[21/23]",
+		{ /* bit 62 */
+		"reserved_63_41",
 		" reserved",
 		},
-		{
-		"reserved_63_41:[22/23]",
+		{ /* bit 63 */
+		"reserved_63_41",
 		" reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_pcim_error[] = {
+static struct hfi_error_csr hfi_pcim_error[] = {
 /*
  * PCIM_ERR_STS desc:
  */
@@ -1414,268 +1414,268 @@ static hfi_error_domain_t hfi_pcim_error[] = {
 	FXR_PCIM_ERR_EN_HOST, FXR_PCIM_ERR_FIRST_HOST,
 	FXR_PCIM_ERR_STS, FXR_PCIM_ERR_CLR, FXR_PCIM_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"itr_read_pe",
 		" ITR read parity error. See itr_rpe_entry .",
 		},
-		{
+		{ /* bit 1 */
 		"msix_addr_mbe",
 		" MISX Table Addr MBE",
 		},
-		{
+		{ /* bit 2 */
 		"msix_data_mbe",
 		" MISX Table Data MBE",
 		},
-		{
+		{ /* bit 3 */
 		"msix_addr_sbe",
 		" MISX Table Addr SBE",
 		},
-		{
+		{ /* bit 4 */
 		"msix_data_sbe",
 		" MISX Table Data SBE",
 		},
-		{
+		{ /* bit 5 */
 		"marb_cmp_hdr_uf",
 		" MARB Completion Header credit Underflow",
 		},
-		{
+		{ /* bit 6 */
 		"marb_cmp_hdr_of",
 		" MARB Completion Header credit Overflow",
 		},
-		{
+		{ /* bit 7 */
 		"marb_np_hdr_uf",
 		" MARB NonPosted Header credit Underflow",
 		},
-		{
+		{ /* bit 8 */
 		"marb_np_hdr_of",
 		" MARB NonPosted Header credit Overflow",
 		},
-		{
+		{ /* bit 9 */
 		"marb_p_hdr_uf",
 		" MARB Posted Header credit Underflow",
 		},
-		{
+		{ /* bit 10 */
 		"marb_p_hdr_of",
 		" MARB Posted Header credit Overflow",
 		},
-		{
+		{ /* bit 11 */
 		"marb_cmp_data_uf",
 		" MARB Completion Data credit Underflow",
 		},
-		{
+		{ /* bit 12 */
 		"marb_cmp_data_of",
 		" MARB Completion Data credit Overflow",
 		},
-		{
+		{ /* bit 13 */
 		"marb_np_data_uf",
 		" MARB NonPosted Data credit Underflow",
 		},
-		{
+		{ /* bit 14 */
 		"marb_np_data_of",
 		" MARB NonPosted Data credit Overflow",
 		},
-		{
+		{ /* bit 15 */
 		"marb_p_data_uf",
 		" MARB Posted Data credit Underflow",
 		},
-		{
+		{ /* bit 16 */
 		"marb_p_data_of",
 		" MARB Posted Data credit Overflow",
 		},
-		{
+		{ /* bit 17 */
 		"hpi_data_parity_err",
 		" HPI Data Parity Error",
 		},
-		{
+		{ /* bit 18 */
 		"hpi_data_poison_err",
 		" HPI Data Poison Error",
 		},
-		{
+		{ /* bit 19 */
 		"gpsb_error",
 		" GPSB Endpoint Error",
 		},
-		{
+		{ /* bit 20 */
 		"p2sb_p_unsup_req",
 		" P2SB Posted Unsupported Request (PCIError asserted)",
 		},
-		{
+		{ /* bit 21 */
 		"p2sb_np_unsup_req",
 		" P2SB NonPosted Unsupported Request",
 		},
-		{
+		{ /* bit 22 */
 		"p2sb_np_addr_err",
 		" P2SB NonPosted request Address Error",
 		},
-		{
+		{ /* bit 23 */
 		"p2sb_unexp_cmp",
 		" P2SB Unexpected Completion",
 		},
-		{
+		{ /* bit 24 */
 		"p2sb_p_data_ep",
 		" P2SB Posted Data poison",
 		},
-		{
+		{ /* bit 25 */
 		"p2sb_p_data_parity",
 		" P2SB Posted Data Parity error",
 		},
-		{
+		{ /* bit 26 */
 		"p2sb_np_data_ep",
 		" P2SB NonPosted Data poison",
 		},
-		{
+		{ /* bit 27 */
 		"p2sb_np_data_parity",
 		" P2SB NonPosted Data Parity error",
 		},
-		{
+		{ /* bit 28 */
 		"p2sb_p_addr_err",
 		" P2SB Posted request Address Error",
 		},
-		{
+		{ /* bit 29 */
 		"p2sb_data_len_err",
 		" P2SB Data Length Error",
 		},
-		{
+		{ /* bit 30 */
 		"p2sb_np_read_err",
 		" P2SB NonPosted read size error",
 		},
-		{
+		{ /* bit 31 */
 		"p2sb_dataq0_mbe",
 		" P2SB Data Queue0 MBE (PCIError asserted)",
 		},
-		{
+		{ /* bit 32 */
 		"p2sb_dataq0_sbe",
 		" P2SB Data Queue0 SBE",
 		},
-		{
+		{ /* bit 33 */
 		"p2sb_dataq1_mbe",
 		" P2SB Data Queue1 MBE (PCIError asserted)",
 		},
-		{
+		{ /* bit 34 */
 		"p2sb_dataq1_sbe",
 		" P2SB Data Queue1 SBE",
 		},
-		{
+		{ /* bit 35 */
 		"sb2p_unsup_pc_fmt",
 		" SB2P Unsupport Posted/Cmp Format",
 		},
-		{
+		{ /* bit 36 */
 		"sb2p_unsup_pc_opc",
 		" SB2P Unsupport Posted/Cmp Opcode",
 		},
-		{
+		{ /* bit 37 */
 		"sb2p_unsup_np_fmt",
 		" SB2P Unsupport NonPosted Format",
 		},
-		{
+		{ /* bit 38 */
 		"sb2p_unsup_np_opc",
 		" SB2P Unsupport NonPosted Opcode",
 		},
-		{
+		{ /* bit 39 */
 		"tarb_hdr_ep_error",
 		" TARB Request Header with EP (poison) set (PCIError asserted)",
 		},
-		{
+		{ /* bit 40 */
 		"tarb_hdr_parity_error",
 		" TARB Request Header Parity Error (PCIError asserted)",
 		},
-		{
-		"Reserved_63_41:[0/23]",
+		{ /* bit 41 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[1/23]",
+		{ /* bit 42 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[2/23]",
+		{ /* bit 43 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[3/23]",
+		{ /* bit 44 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[4/23]",
+		{ /* bit 45 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[5/23]",
+		{ /* bit 46 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[6/23]",
+		{ /* bit 47 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[7/23]",
+		{ /* bit 48 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[8/23]",
+		{ /* bit 49 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[9/23]",
+		{ /* bit 50 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[10/23]",
+		{ /* bit 51 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[11/23]",
+		{ /* bit 52 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[12/23]",
+		{ /* bit 53 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[13/23]",
+		{ /* bit 54 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[14/23]",
+		{ /* bit 55 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[15/23]",
+		{ /* bit 56 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[16/23]",
+		{ /* bit 57 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[17/23]",
+		{ /* bit 58 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[18/23]",
+		{ /* bit 59 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[19/23]",
+		{ /* bit 60 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[20/23]",
+		{ /* bit 61 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[21/23]",
+		{ /* bit 62 */
+		"Reserved_63_41",
 		" Reserved",
 		},
-		{
-		"Reserved_63_41:[22/23]",
+		{ /* bit 63 */
+		"Reserved_63_41",
 		" Reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_txcid_error[] = {
+static struct hfi_error_csr hfi_txcid_error[] = {
 /*
  * TXCID_ERR_STS desc:
  */
@@ -1684,268 +1684,268 @@ static hfi_error_domain_t hfi_txcid_error[] = {
 	FXR_TXCID_ERR_EN_HOST, FXR_TXCID_ERR_FIRST_HOST,
 	FXR_TXCID_ERR_STS, FXR_TXCID_ERR_CLR, FXR_TXCID_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"diagnostic",
 		" Diagnostic Error Flag",
 		},
-		{
+		{ /* bit 1 */
 		"timeout",
 		" Timeout of something",
 		},
-		{
+		{ /* bit 2 */
 		"sbe",
 		" Correctable SBE. Error information: TXCID_ERR_INFO_SBE_MBE",
 		},
-		{
+		{ /* bit 3 */
 		"mbe",
 		" Uncorrectable MBE. Error information: TXCID_ERR_INFO_SBE_MBE .",
 		},
-		{
-		"Reserved_63_4:[0/60]",
+		{ /* bit 4 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[1/60]",
+		{ /* bit 5 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[2/60]",
+		{ /* bit 6 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[3/60]",
+		{ /* bit 7 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[4/60]",
+		{ /* bit 8 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[5/60]",
+		{ /* bit 9 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[6/60]",
+		{ /* bit 10 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[7/60]",
+		{ /* bit 11 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[8/60]",
+		{ /* bit 12 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[9/60]",
+		{ /* bit 13 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[10/60]",
+		{ /* bit 14 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[11/60]",
+		{ /* bit 15 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[12/60]",
+		{ /* bit 16 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[13/60]",
+		{ /* bit 17 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[14/60]",
+		{ /* bit 18 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[15/60]",
+		{ /* bit 19 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[16/60]",
+		{ /* bit 20 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[17/60]",
+		{ /* bit 21 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[18/60]",
+		{ /* bit 22 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[19/60]",
+		{ /* bit 23 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[20/60]",
+		{ /* bit 24 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[21/60]",
+		{ /* bit 25 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[22/60]",
+		{ /* bit 26 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[23/60]",
+		{ /* bit 27 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[24/60]",
+		{ /* bit 28 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[25/60]",
+		{ /* bit 29 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[26/60]",
+		{ /* bit 30 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[27/60]",
+		{ /* bit 31 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[28/60]",
+		{ /* bit 32 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[29/60]",
+		{ /* bit 33 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[30/60]",
+		{ /* bit 34 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[31/60]",
+		{ /* bit 35 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[32/60]",
+		{ /* bit 36 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[33/60]",
+		{ /* bit 37 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[34/60]",
+		{ /* bit 38 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[35/60]",
+		{ /* bit 39 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[36/60]",
+		{ /* bit 40 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[37/60]",
+		{ /* bit 41 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[38/60]",
+		{ /* bit 42 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[39/60]",
+		{ /* bit 43 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[40/60]",
+		{ /* bit 44 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[41/60]",
+		{ /* bit 45 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[42/60]",
+		{ /* bit 46 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[43/60]",
+		{ /* bit 47 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[44/60]",
+		{ /* bit 48 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[45/60]",
+		{ /* bit 49 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[46/60]",
+		{ /* bit 50 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[47/60]",
+		{ /* bit 51 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[48/60]",
+		{ /* bit 52 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[49/60]",
+		{ /* bit 53 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[50/60]",
+		{ /* bit 54 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[51/60]",
+		{ /* bit 55 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[52/60]",
+		{ /* bit 56 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[53/60]",
+		{ /* bit 57 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[54/60]",
+		{ /* bit 58 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[55/60]",
+		{ /* bit 59 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[56/60]",
+		{ /* bit 60 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[57/60]",
+		{ /* bit 61 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[58/60]",
+		{ /* bit 62 */
+		"Reserved_63_4",
 		" Reserved",
 		},
-		{
-		"Reserved_63_4:[59/60]",
+		{ /* bit 63 */
+		"Reserved_63_4",
 		" Reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_otr_error[] = {
+static struct hfi_error_csr hfi_otr_error[] = {
 /*
  * TXOTR_PKT_ERR_STS_1 desc:
  */
@@ -1954,264 +1954,264 @@ static hfi_error_domain_t hfi_otr_error[] = {
 	FXR_TXOTR_PKT_ERR_EN_HOST_1, FXR_TXOTR_PKT_ERR_FIRST_HOST_1,
 	FXR_TXOTR_PKT_ERR_STS_1, FXR_TXOTR_PKT_ERR_CLR_1, FXR_TXOTR_PKT_ERR_FRC_1,
 	{
-		{
+		{ /* bit 0 */
 		"diagnostic",
 		" Diagnostic Error Flag",
 		},
-		{
+		{ /* bit 1 */
 		"fpe_firmware",
 		" Fragmentation Programmable Engine Error Flag. See txotr_pkt_err_info_fpe_firmware CSR for error information.",
 		},
-		{
+		{ /* bit 2 */
 		"opb_mbe",
 		" Outstanding Packet Buffer MBE Error Flag. See txotr_pkt_err_info_opb_be CSR for error information.",
 		},
-		{
+		{ /* bit 3 */
 		"opb_sbe",
 		" Outstanding Packet Buffer SBE Error Flag. See txotr_pkt_err_info_opb_be CSR for error information.",
 		},
-		{
+		{ /* bit 4 */
 		"pktid_list_mbe",
 		" Packet Identifier List MBE Error Flag. See txotr_pkt_err_info_pktid_list_be CSR for error information.",
 		},
-		{
+		{ /* bit 5 */
 		"pktid_list_sbe",
 		" Packet Identifier List SBE Error Flag. See txotr_pkt_err_info_pktid_list_be CSR for error information.",
 		},
-		{
+		{ /* bit 6 */
 		"hash_table_mbe",
 		" Hash Table MBE Error Flag. See txotr_pkt_err_info_hash_table_be CSR for error information.",
 		},
-		{
+		{ /* bit 7 */
 		"hash_table_sbe",
 		" Hash Table SBE Error Flag. See txotr_pkt_err_info_hash_table_be CSR for error information.",
 		},
-		{
+		{ /* bit 8 */
 		"iovec_buff_mbe",
 		" IOVEC Buffer Space MBE Error Flag. See txotr_pkt_err_info_iovec_buff_be CSR for error information.",
 		},
-		{
+		{ /* bit 9 */
 		"iovec_buff_sbe",
 		" IOVEC Buffer Space SBE Error Flag. See txotr_pkt_err_info_iovec_buff_be CSR for error information.",
 		},
-		{
+		{ /* bit 10 */
 		"otm_mbe",
 		" Outstanding Translation Memory MBE Error Flag. See txotr_pkt_err_info_otm_be CSR for error information.",
 		},
-		{
+		{ /* bit 11 */
 		"otm_sbe",
 		" Outstanding Translation Memory SBE Error Flag. See txotr_pkt_err_info_otm_be CSR for error information.",
 		},
-		{
+		{ /* bit 12 */
 		"psn_cache_data_mbe",
 		" PSN Data Cache MBE Error Flag. See txotr_pkt_err_info_psn_cache_data_sbe_mbe CSR for error information.",
 		},
-		{
+		{ /* bit 13 */
 		"psn_cache_data_sbe",
 		" PSN Data Cache SBE Error Flag. See txotr_pkt_err_info_psn_cache_data_sbe_mbe CSR for error information.",
 		},
-		{
+		{ /* bit 14 */
 		"psn_cache_tag_mbe",
 		" PSN Tag Cache MBE Error Flag. See txotr_pkt_err_info_psn_cache_tag_mbe CSR for error information.",
 		},
-		{
+		{ /* bit 15 */
 		"psn_cache_tag_sbe",
 		" PSN Tag Cache SBE Error Flag. See txotr_pkt_err_info_psn_cache_tag_sbe CSR for error information.",
 		},
-		{
+		{ /* bit 16 */
 		"fpe_prog_mem_mbe",
 		" Fragmentation Programmable Engine Program Memory MBE Error Flag. See txotr_pkt_err_info_fpe_prog_mem_be CSR for error information.",
 		},
-		{
+		{ /* bit 17 */
 		"fpe_prog_mem_sbe",
 		" Fragmentation Programmable Engine Program Memory SBE Error Flag. See txotr_pkt_err_info_fpe_prog_mem_be CSR for error information.",
 		},
-		{
+		{ /* bit 18 */
 		"fpe_data_mem_mbe",
 		" Fragmentation Programmable Engine Data Memory MBE Error Flag. See txotr_pkt_err_info_fpe_data_mem_be CSR for error information.",
 		},
-		{
+		{ /* bit 19 */
 		"fpe_data_mem_sbe",
 		" Fragmentation Programmable Engine Data Memory SBE Error Flag. See txotr_pkt_err_info_fpe_data_mem_be CSR for error information.",
 		},
-		{
+		{ /* bit 20 */
 		"rx_pkt_mbe",
 		" Multiple Bit Error in command from RXE2E Error Flag. See txotr_pkt_err_info_rx_pkt_be CSR for error information.",
 		},
-		{
+		{ /* bit 21 */
 		"rx_pkt_sbe",
 		" Single Bit Error in packet from RXE2E Error Flag. See txotr_pkt_err_info_rx_pkt_be CSR for error information.",
 		},
-		{
+		{ /* bit 22 */
 		"hi_mbe",
 		" Multiple Bit Error in response state from Host Memory Error Flag. See txotr_pkt_err_info_hi_be CSR for error information.",
 		},
-		{
+		{ /* bit 23 */
 		"hi_sbe",
 		" Single Bit Error in response state from Host Memory Error Flag. See txotr_pkt_err_info_hi_be CSR for error information.",
 		},
-		{
+		{ /* bit 24 */
 		"pkt_queue_ovf",
 		" A queue in the packet partition has overflowed. See txotr_pkt_err_info_pkt_ovf_unf CSR for error information.",
 		},
-		{
+		{ /* bit 25 */
 		"pkt_queue_unf",
 		" A queue in the packet partition has underflowed. See txotr_pkt_err_info_pkt_ovf_unf CSR for error information.",
 		},
-		{
+		{ /* bit 26 */
 		"at_rsp",
 		" Address Translation response contains an error. See txotr_pkt_err_info_at_rsp CSR for error information.",
 		},
-		{
+		{ /* bit 27 */
 		"misrouted_pkt",
 		" Packet received from RXE2E mismatches in one of the following fields: MSG_ID, PSN, DLID, or Port, or the OPB entry which corresponds to the PKT_ID in the packet from RXE2E is not valid. See txotr_pkt_err_info_misrouted_pkt CSR for error information.",
 		},
-		{
+		{ /* bit 28 */
 		"unconnected_dlid",
 		" Attempt to send a command to an unconnected DLID. See txotr_pkt_err_info_unconnected_dlid CSR for error information.",
 		},
-		{
+		{ /* bit 29 */
 		"hash_timeout",
 		" Entry at the head of the Hash Table has experienced a timeout. See txotr_pkt_err_info_hash_timeout CSR for error information.",
 		},
-		{
+		{ /* bit 30 */
 		"retrans_nack",
 		" NACK packet received which generates a retransmit. See txotr_pkt_err_info_retrans_nack CSR for error information.",
 		},
-		{
+		{ /* bit 31 */
 		"txdma",
 		" Packet experienced an error in TXDMA that caused the packet to be dropped. - Unrecoverable translation fault (cannot retransmit) - Memory Response Timeout (can retransmit - no feedback) - SECDED (can retransmit - no feedback). See txotr_pkt_err_info_txdma CSR for error information.",
 		},
-		{
+		{ /* bit 32 */
 		"local_seq_stall",
 		" If set, indicates that a local sequence has stalled due to the maximum distance between the oldest outstanding local packet sequence number and the next available local packet sequence number exceeding half of the sequence number space. See txotr_pkt_err_info_local_seq_stall CSR for error information.",
 		},
-		{
+		{ /* bit 33 */
 		"tc0_fail_over",
 		" MC0TC0 Fail Over Limit reached. See txotr_pkt_err_info_tc0_fail_over_limit CSR for error information.",
 		},
-		{
+		{ /* bit 34 */
 		"tc1_fail_over",
 		" MC0TC1 Fail Over Limit reached. See txotr_pkt_err_info_tc1_fail_over_limit CSR for error information.",
 		},
-		{
+		{ /* bit 35 */
 		"tc2_fail_over",
 		" MC0TC2 Fail Over Limit reached. See txotr_pkt_err_info_tc2_fail_over_limit CSR for error information.",
 		},
-		{
+		{ /* bit 36 */
 		"tc3_fail_over",
 		" MC0TC3 Fail Over Limit reached. See txotr_pkt_err_info_tc3_fail_over_limit CSR for error information.",
 		},
-		{
+		{ /* bit 37 */
 		"tc0_retrans_limit",
 		" MC0TC0 Retransmit Limit reached. See txotr_pkt_err_info_tc0_retrans_limit CSR for error information.",
 		},
-		{
+		{ /* bit 38 */
 		"tc1_retrans_limit",
 		" MC0TC1 Retransmit Limit reached. See txotr_pkt_err_info_tc1_retrans_limit CSR for error information.",
 		},
-		{
+		{ /* bit 39 */
 		"tc2_retrans_limit",
 		" MC0TC2 Retransmit Limit reached. See txotr_pkt_err_info_tc2_retrans_limit CSR for error information.",
 		},
-		{
+		{ /* bit 40 */
 		"tc3_retrans_limit",
 		" MC0TC3 Retransmit Limit reached. See txotr_pkt_err_info_tc3_retrans_limit CSR for error information.",
 		},
-		{
-		"UNUSED_63_41:[0/23]",
+		{ /* bit 41 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[1/23]",
+		{ /* bit 42 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[2/23]",
+		{ /* bit 43 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[3/23]",
+		{ /* bit 44 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[4/23]",
+		{ /* bit 45 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[5/23]",
+		{ /* bit 46 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[6/23]",
+		{ /* bit 47 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[7/23]",
+		{ /* bit 48 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[8/23]",
+		{ /* bit 49 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[9/23]",
+		{ /* bit 50 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[10/23]",
+		{ /* bit 51 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[11/23]",
+		{ /* bit 52 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[12/23]",
+		{ /* bit 53 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[13/23]",
+		{ /* bit 54 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[14/23]",
+		{ /* bit 55 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[15/23]",
+		{ /* bit 56 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[16/23]",
+		{ /* bit 57 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[17/23]",
+		{ /* bit 58 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[18/23]",
+		{ /* bit 59 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[19/23]",
+		{ /* bit 60 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[20/23]",
+		{ /* bit 61 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[21/23]",
+		{ /* bit 62 */
+		"UNUSED_63_41",
 		" Unused",
 		},
-		{
-		"UNUSED_63_41:[22/23]",
+		{ /* bit 63 */
+		"UNUSED_63_41",
 		" Unused",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
     ,
 /*
@@ -2222,268 +2222,268 @@ static hfi_error_domain_t hfi_otr_error[] = {
 	FXR_TXOTR_MSG_ERR_EN_HOST_2, FXR_TXOTR_MSG_ERR_FIRST_HOST_2,
 	FXR_TXOTR_MSG_ERR_STS_2, FXR_TXOTR_MSG_ERR_CLR_2, FXR_TXOTR_MSG_ERR_FRC_2,
 	{
-		{
+		{ /* bit 0 */
 		"diagnostic",
 		" Diagnostic Error Flag",
 		},
-		{
+		{ /* bit 1 */
 		"bpe_firmware",
 		" Buffer Programmable Engine Error Flag. See txotr_msg_err_info_bpe_firmware CSR for error information.",
 		},
-		{
+		{ /* bit 2 */
 		"omb_mbe",
 		" Outstanding Message Buffer MBE Error Flag. See txotr_msg_err_info_omb_be CSR for error information.",
 		},
-		{
+		{ /* bit 3 */
 		"omb_sbe",
 		" Outstanding Message Buffer SBE Error Flag. See txotr_msg_err_info_omb_be CSR for error information.",
 		},
-		{
+		{ /* bit 4 */
 		"msgid_mem_mbe",
 		" Message Identifier Memory MBE Error Flag. See txotr_msg_err_info_msgid_mem_be CSR for error information.",
 		},
-		{
+		{ /* bit 5 */
 		"msgid_mem_sbe",
 		" Message Identifier Memory SBE Error Flag. See txotr_msg_err_info_msgid_mem_be CSR for error information.",
 		},
-		{
+		{ /* bit 6 */
 		"bpe_prog_mem_mbe",
 		" Buffer Programmable Engine Program Memory MBE Error Flag. See txotr_msg_err_info_bpe_prog_mem_be CSR for error information.",
 		},
-		{
+		{ /* bit 7 */
 		"bpe_prog_mem_sbe",
 		" Buffer Programmable Engine Program Memory SBE Error Flag. See txotr_msg_err_info_bpe_prog_mem_be CSR for error information.",
 		},
-		{
+		{ /* bit 8 */
 		"bpe_data_mem_mbe",
 		" Buffer Programmable Engine Data Memory MBE Error Flag. See txotr_msg_err_info_bpe_data_mem_be CSR for error information.",
 		},
-		{
+		{ /* bit 9 */
 		"bpe_data_mem_sbe",
 		" Buffer Programmable Engine Data Memory SBE Error Flag. See txotr_msg_err_info_bpe_data_mem_be CSR for error information.",
 		},
-		{
+		{ /* bit 10 */
 		"cmd_mbe",
 		" Multiple BIt Error in command from TXCI or Buffer Programmable Engine Error Flag. See txotr_msg_err_info_txci_cmd_be CSR for error information.",
 		},
-		{
+		{ /* bit 11 */
 		"cmd_sbe",
 		" Single Bit Error in command from TXCI or Buffer Programmable Engine Error Flag. See txotr_msg_err_info_txci_cmd_be CSR for error information.",
 		},
-		{
+		{ /* bit 12 */
 		"msg_queue_ovf",
 		" A queue in the message partition has overflowed. See txotr_msg_err_info_msg_ovf_unf CSR for error information.",
 		},
-		{
+		{ /* bit 13 */
 		"msg_queue_unf",
 		" A queue in the message partition has underflowed. See txotr_msg_err_info_msg_ovf_unf CSR for error information.",
 		},
-		{
+		{ /* bit 14 */
 		"bpe_queue_ovf",
 		" A queue in the buffer partition has overflowed. See txotr_msg_err_info_bpe_ovf_unf CSR for error information.",
 		},
-		{
+		{ /* bit 15 */
 		"bpe_queue_unf",
 		" A queue in the buffer partition has underflowed. See txotr_msg_err_info_bpe_ovf_unf CSR for error information.",
 		},
-		{
+		{ /* bit 16 */
 		"invalid_cmd",
 		" Command received from TXCI is incomplete. - PIO does not contain enough payload. - Message Length exceeds amount allowable for a packet (not Rendezvous) - Command type is not expected to be MC0 - Command type is not expected to be MC1 See txotr_msg_err_info_invalid_cmd CSR for error information.",
 		},
-		{
+		{ /* bit 17 */
 		"unknown_cmd",
 		" Command received from TXCI was mapped to an unknown command type encoding. See txotr_msg_err_info_unknown_cmd CSR for error information.",
 		},
-		{
+		{ /* bit 18 */
 		"rmessage_cmd",
 		" Rendezvous Message received from TXCI, instead of being received from one of the Rendezvous Queues. See txotr_msg_err_info_rmessage_cmd CSR for error information.",
 		},
-		{
+		{ /* bit 19 */
 		"cancelled_msg",
 		" Message in the OMB has been canceled. See txotr_msg_err_info_cancelled_msg CSR for error information.",
 		},
-		{
+		{ /* bit 20 */
 		"multicast_addr",
 		" Portals command received from TXCI is targeting a multicast address range.",
 		},
-		{
-		"UNUSED_63_21:[0/43]",
+		{ /* bit 21 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[1/43]",
+		{ /* bit 22 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[2/43]",
+		{ /* bit 23 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[3/43]",
+		{ /* bit 24 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[4/43]",
+		{ /* bit 25 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[5/43]",
+		{ /* bit 26 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[6/43]",
+		{ /* bit 27 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[7/43]",
+		{ /* bit 28 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[8/43]",
+		{ /* bit 29 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[9/43]",
+		{ /* bit 30 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[10/43]",
+		{ /* bit 31 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[11/43]",
+		{ /* bit 32 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[12/43]",
+		{ /* bit 33 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[13/43]",
+		{ /* bit 34 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[14/43]",
+		{ /* bit 35 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[15/43]",
+		{ /* bit 36 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[16/43]",
+		{ /* bit 37 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[17/43]",
+		{ /* bit 38 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[18/43]",
+		{ /* bit 39 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[19/43]",
+		{ /* bit 40 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[20/43]",
+		{ /* bit 41 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[21/43]",
+		{ /* bit 42 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[22/43]",
+		{ /* bit 43 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[23/43]",
+		{ /* bit 44 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[24/43]",
+		{ /* bit 45 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[25/43]",
+		{ /* bit 46 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[26/43]",
+		{ /* bit 47 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[27/43]",
+		{ /* bit 48 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[28/43]",
+		{ /* bit 49 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[29/43]",
+		{ /* bit 50 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[30/43]",
+		{ /* bit 51 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[31/43]",
+		{ /* bit 52 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[32/43]",
+		{ /* bit 53 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[33/43]",
+		{ /* bit 54 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[34/43]",
+		{ /* bit 55 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[35/43]",
+		{ /* bit 56 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[36/43]",
+		{ /* bit 57 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[37/43]",
+		{ /* bit 58 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[38/43]",
+		{ /* bit 59 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[39/43]",
+		{ /* bit 60 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[40/43]",
+		{ /* bit 61 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[41/43]",
+		{ /* bit 62 */
+		"UNUSED_63_21",
 		" Unused",
 		},
-		{
-		"UNUSED_63_21:[42/43]",
+		{ /* bit 63 */
+		"UNUSED_63_21",
 		" Unused",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_txdma_error[] = {
+static struct hfi_error_csr hfi_txdma_error[] = {
 /*
  * TXDMA_ERR_STS desc:
  */
@@ -2492,268 +2492,268 @@ static hfi_error_domain_t hfi_txdma_error[] = {
 	FXR_TXDMA_ERR_EN_HOST, FXR_TXDMA_ERR_FIRST_HOST,
 	FXR_TXDMA_ERR_STS, FXR_TXDMA_ERR_CLR, FXR_TXDMA_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"pkt_desc_cor_sb_err",
 		" Packet descriptor from OTR contained a correctable sb error",
 		},
-		{
+		{ /* bit 1 */
 		"pkt_desc_unc_sb_err",
 		" Packet descriptor from OTR contained a uncorrectable sb error",
 		},
-		{
+		{ /* bit 2 */
 		"pkt_desc_cor_dat_err",
 		" Packet descriptor from OTR contained a correctable data error",
 		},
-		{
+		{ /* bit 3 */
 		"pkt_desc_unc_dat_err",
 		" Packet descriptor from OTR contained a uncorrectable data error",
 		},
-		{
+		{ /* bit 4 */
 		"pkt_desc_gen_err",
 		" Packet descriptor generation error received from OTR",
 		},
-		{
+		{ /* bit 5 */
 		"inpq_cor_err",
 		" Input queue FIFO encountered a correctable error",
 		},
-		{
+		{ /* bit 6 */
 		"inpq_unc_err",
 		" Input queue FIFO encountered a uncorrectable error",
 		},
-		{
+		{ /* bit 7 */
 		"xlateq_cor_err",
 		" Translation queue FIFO encountered a correctable error",
 		},
-		{
+		{ /* bit 8 */
 		"xlateq_unc_err",
 		" Translation queue FIFO encountered a uncorrectable error",
 		},
-		{
+		{ /* bit 9 */
 		"inpq_overflow",
 		" Input queue FIFO overflowed",
 		},
-		{
+		{ /* bit 10 */
 		"at_status_err",
 		" Translation status error",
 		},
-		{
+		{ /* bit 11 */
 		"timeout_err",
 		" Timeout error",
 		},
-		{
+		{ /* bit 12 */
 		"mem_rsp_hdr_cor_err",
 		" Memory response header contained a correctable error",
 		},
-		{
+		{ /* bit 13 */
 		"mem_rsp_hdr_unc_err",
 		" Memory response header contained a uncorrectable error",
 		},
-		{
+		{ /* bit 14 */
 		"mem_rsp_dat_cor_err",
 		" Memory response data contained a correctable error",
 		},
-		{
+		{ /* bit 15 */
 		"mem_rsp_dat_unc_err",
 		" Memory response data contained a uncorrectable error",
 		},
-		{
+		{ /* bit 16 */
 		"orb_cor_err",
 		" ORB memory encountered a correctable error",
 		},
-		{
+		{ /* bit 17 */
 		"orb_unc_err",
 		" ORB memory encountered a uncorrectable error",
 		},
-		{
+		{ /* bit 18 */
 		"wce_cor_err",
 		" Write combining memory encountered a correctable error",
 		},
-		{
+		{ /* bit 19 */
 		"wce_unc_err",
 		" Write combining memory encountered a uncorrectable error",
 		},
-		{
+		{ /* bit 20 */
 		"pkt_buf_cor_err",
 		" Packet buffer memory encountered a correctable error",
 		},
-		{
+		{ /* bit 21 */
 		"pkt_buf_unc_err",
 		" Packet buffer memory encountered a uncorrectable error",
 		},
-		{
+		{ /* bit 22 */
 		"rspq_cor_err",
 		" Response queue FIFO encountered a correctable error",
 		},
-		{
+		{ /* bit 23 */
 		"rspq_unc_err",
 		" Response queue FIFO encountered a uncorrectable error",
 		},
-		{
+		{ /* bit 24 */
 		"rspq_overflow",
 		" Response queue FIFO overflowed",
 		},
-		{
+		{ /* bit 25 */
 		"lm0_credit_err",
 		" The credit acknowledge from LM0 contained a parity error",
 		},
-		{
+		{ /* bit 26 */
 		"lm1_credit_err",
 		" The credit acknowledge from LM1 contained a parity error",
 		},
-		{
+		{ /* bit 27 */
 		"buf_trk_cor_err",
 		" Buffer tracking memory encountered a correctable error",
 		},
-		{
+		{ /* bit 28 */
 		"buf_trk_unc_err",
 		" Buffer tracking memory encountered a uncorrectable error",
 		},
-		{
+		{ /* bit 29 */
 		"pkt_trk_cor_err",
 		" Packet tracking memory encountered a correctable error",
 		},
-		{
+		{ /* bit 30 */
 		"pkt_trk_unc_err",
 		" Packet tracking memory encountered a uncorrectable error",
 		},
-		{
-		"Reserved_63_31:[0/33]",
+		{ /* bit 31 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[1/33]",
+		{ /* bit 32 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[2/33]",
+		{ /* bit 33 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[3/33]",
+		{ /* bit 34 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[4/33]",
+		{ /* bit 35 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[5/33]",
+		{ /* bit 36 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[6/33]",
+		{ /* bit 37 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[7/33]",
+		{ /* bit 38 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[8/33]",
+		{ /* bit 39 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[9/33]",
+		{ /* bit 40 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[10/33]",
+		{ /* bit 41 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[11/33]",
+		{ /* bit 42 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[12/33]",
+		{ /* bit 43 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[13/33]",
+		{ /* bit 44 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[14/33]",
+		{ /* bit 45 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[15/33]",
+		{ /* bit 46 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[16/33]",
+		{ /* bit 47 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[17/33]",
+		{ /* bit 48 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[18/33]",
+		{ /* bit 49 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[19/33]",
+		{ /* bit 50 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[20/33]",
+		{ /* bit 51 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[21/33]",
+		{ /* bit 52 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[22/33]",
+		{ /* bit 53 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[23/33]",
+		{ /* bit 54 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[24/33]",
+		{ /* bit 55 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[25/33]",
+		{ /* bit 56 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[26/33]",
+		{ /* bit 57 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[27/33]",
+		{ /* bit 58 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[28/33]",
+		{ /* bit 59 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[29/33]",
+		{ /* bit 60 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[30/33]",
+		{ /* bit 61 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[31/33]",
+		{ /* bit 62 */
+		"Reserved_63_31",
 		" Unused",
 		},
-		{
-		"Reserved_63_31:[32/33]",
+		{ /* bit 63 */
+		"Reserved_63_31",
 		" Unused",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_rxe2e_error[] = {
+static struct hfi_error_csr hfi_rxe2e_error[] = {
 /*
  * RXE2E_ERR_STS_1 desc:
  */
@@ -2762,268 +2762,268 @@ static hfi_error_domain_t hfi_rxe2e_error[] = {
 	FXR_RXE2E_ERR_EN_HOST_1, FXR_RXE2E_ERR_FIRST_HOST_1,
 	FXR_RXE2E_ERR_STS_1, FXR_RXE2E_ERR_CLR_1, FXR_RXE2E_ERR_FRC_1,
 	{
-		{
+		{ /* bit 0 */
 		"diagnostic",
 		" Diagnostic Error Flag",
 		},
-		{
+		{ /* bit 1 */
 		"mc0_lm_in_mbe",
 		" MC0 LINKMUX input mbe Error information: Section 29.13.4.11, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
 		},
-		{
+		{ /* bit 2 */
 		"mc0_lm_in_sbe",
 		" MC0 LINKMUX input sbe Error information: . Section 29.13.4.11, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
 		},
-		{
+		{ /* bit 3 */
 		"mc1_lm_in_mbe",
 		" MC1 LINKMUX input mbe Error information: Section 29.13.4.12, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
 		},
-		{
+		{ /* bit 4 */
 		"mc1_lm_in_sbe",
 		" MC1 LINKMUX input sbe Error information: . Section 29.13.4.12, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
 		},
-		{
+		{ /* bit 5 */
 		"mc0_input_fifo_mbe",
 		" MC0 input fifo mbe Error information: Section 29.13.4.16, 'RXE2E Error Info PSN Cache Tag MBE'",
 		},
-		{
+		{ /* bit 6 */
 		"mc0_input_fifo_sbe",
 		" MC0 input fifo sbe Error information: . Section 29.13.4.16, 'RXE2E Error Info PSN Cache Tag MBE'",
 		},
-		{
+		{ /* bit 7 */
 		"mc1_input_fifo_mbe",
 		" MC1 input fifo mbe Error information: Section 29.13.4.13, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
 		},
-		{
+		{ /* bit 8 */
 		"mc1_input_fifo_sbe",
 		" MC1 input fifo sbe Error information: . Section 29.13.4.13, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
 		},
-		{
+		{ /* bit 9 */
 		"psn_cache_tag_mbe",
 		" PSN Cache tag mbe Error information: Section 29.13.4.16, 'RXE2E Error Info PSN Cache Tag MBE' Note: these are fairly fatal as you don't know what connection is bad.",
 		},
-		{
+		{ /* bit 10 */
 		"psn_cache_tag_sbe",
 		" PSN Cache tag sbe Error information: . Section 29.13.4.15, 'RXE2E Error Info PSN Cache Tag SBE'",
 		},
-		{
+		{ /* bit 11 */
 		"psn_cache_data_mbe",
 		" PSN Cache data mbe Error information: Section 29.13.4.17, 'RXE2E Error Info PSN Cache Data SBE/MBE' Note: This will result in auto-disconnect for the connection. This may also remove a big scoreboard slot from being re-allocated as you can't rely on either the big_in_use bit or the big_scoreboard pointer in the data. So if a big scoreboard was in use, that slot will remain unavailabe for re-use until the next hard reset.",
 		},
-		{
+		{ /* bit 12 */
 		"psn_cache_data_sbe",
 		" PSN Cache data sbe Error information: . Section 29.13.4.17, 'RXE2E Error Info PSN Cache Data SBE/MBE'",
 		},
-		{
+		{ /* bit 13 */
 		"MC0crc",
 		" CRC error on MC0 Error information: . Section 29.13.4.20, 'RXE2E Error Info CRC'",
 		},
-		{
+		{ /* bit 14 */
 		"MC1crc",
 		" CRC error on MC1 Error information: . Section 29.13.4.20, 'RXE2E Error Info CRC'",
 		},
-		{
+		{ /* bit 15 */
 		"big_scoreboard_mbe",
 		" big scoreboard mbe. Error information: Section 29.13.4.19, 'RXE2E Error Info Big Scoreboard MBE'",
 		},
-		{
+		{ /* bit 16 */
 		"big_scoreboard_sbe",
 		" big scoreboard sbe. Error information: Section 29.13.4.18, 'RXE2E Error Info Big Scoreboard SBE'",
 		},
-		{
+		{ /* bit 17 */
 		"any_mbe_cntr_max",
 		" Some mbe cntr is saturated (all 1's). Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
 		},
-		{
+		{ /* bit 18 */
 		"any_mbe_cntr_non_zero",
 		" Some mbe cntr is non-zero. Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
 		},
-		{
+		{ /* bit 19 */
 		"any_sbe_cntr_max",
 		" Some sbe cntr is saturated (all 1's). Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
 		},
-		{
+		{ /* bit 20 */
 		"any_sbe_cntr_non_zero",
 		" Some sbe cntr is non-zero. Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
 		},
-		{
-		"Reserved_63_21:[0/43]",
+		{ /* bit 21 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[1/43]",
+		{ /* bit 22 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[2/43]",
+		{ /* bit 23 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[3/43]",
+		{ /* bit 24 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[4/43]",
+		{ /* bit 25 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[5/43]",
+		{ /* bit 26 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[6/43]",
+		{ /* bit 27 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[7/43]",
+		{ /* bit 28 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[8/43]",
+		{ /* bit 29 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[9/43]",
+		{ /* bit 30 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[10/43]",
+		{ /* bit 31 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[11/43]",
+		{ /* bit 32 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[12/43]",
+		{ /* bit 33 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[13/43]",
+		{ /* bit 34 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[14/43]",
+		{ /* bit 35 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[15/43]",
+		{ /* bit 36 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[16/43]",
+		{ /* bit 37 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[17/43]",
+		{ /* bit 38 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[18/43]",
+		{ /* bit 39 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[19/43]",
+		{ /* bit 40 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[20/43]",
+		{ /* bit 41 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[21/43]",
+		{ /* bit 42 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[22/43]",
+		{ /* bit 43 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[23/43]",
+		{ /* bit 44 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[24/43]",
+		{ /* bit 45 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[25/43]",
+		{ /* bit 46 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[26/43]",
+		{ /* bit 47 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[27/43]",
+		{ /* bit 48 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[28/43]",
+		{ /* bit 49 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[29/43]",
+		{ /* bit 50 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[30/43]",
+		{ /* bit 51 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[31/43]",
+		{ /* bit 52 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[32/43]",
+		{ /* bit 53 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[33/43]",
+		{ /* bit 54 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[34/43]",
+		{ /* bit 55 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[35/43]",
+		{ /* bit 56 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[36/43]",
+		{ /* bit 57 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[37/43]",
+		{ /* bit 58 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[38/43]",
+		{ /* bit 59 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[39/43]",
+		{ /* bit 60 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[40/43]",
+		{ /* bit 61 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[41/43]",
+		{ /* bit 62 */
+		"Reserved_63_21",
 		" Reserved",
 		},
-		{
-		"Reserved_63_21:[42/43]",
+		{ /* bit 63 */
+		"Reserved_63_21",
 		" Reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_rxhp_error[] = {
+static struct hfi_error_csr hfi_rxhp_error[] = {
 /*
  * RXHP_ERR_STS_1 desc:
  */
@@ -3032,268 +3032,268 @@ static hfi_error_domain_t hfi_rxhp_error[] = {
 	FXR_RXHP_ERR_EN_HOST_1, FXR_RXHP_ERR_FIRST_HOST_1,
 	FXR_RXHP_ERR_STS_1, FXR_RXHP_ERR_CLR_1, FXR_RXHP_ERR_FRC_1,
 	{
-		{
-		"pe_inst_sbe:[0/8]",
+		{ /* bit 0 */
+		"pe_inst_sbe",
 		" PE instruction cache sbe",
 		},
-		{
-		"pe_inst_sbe:[1/8]",
+		{ /* bit 1 */
+		"pe_inst_sbe",
 		" PE instruction cache sbe",
 		},
-		{
-		"pe_inst_sbe:[2/8]",
+		{ /* bit 2 */
+		"pe_inst_sbe",
 		" PE instruction cache sbe",
 		},
-		{
-		"pe_inst_sbe:[3/8]",
+		{ /* bit 3 */
+		"pe_inst_sbe",
 		" PE instruction cache sbe",
 		},
-		{
-		"pe_inst_sbe:[4/8]",
+		{ /* bit 4 */
+		"pe_inst_sbe",
 		" PE instruction cache sbe",
 		},
-		{
-		"pe_inst_sbe:[5/8]",
+		{ /* bit 5 */
+		"pe_inst_sbe",
 		" PE instruction cache sbe",
 		},
-		{
-		"pe_inst_sbe:[6/8]",
+		{ /* bit 6 */
+		"pe_inst_sbe",
 		" PE instruction cache sbe",
 		},
-		{
-		"pe_inst_sbe:[7/8]",
+		{ /* bit 7 */
+		"pe_inst_sbe",
 		" PE instruction cache sbe",
 		},
-		{
-		"pe_inst_mbe:[0/8]",
+		{ /* bit 8 */
+		"pe_inst_mbe",
 		" PE instruction cache mbe",
 		},
-		{
-		"pe_inst_mbe:[1/8]",
+		{ /* bit 9 */
+		"pe_inst_mbe",
 		" PE instruction cache mbe",
 		},
-		{
-		"pe_inst_mbe:[2/8]",
+		{ /* bit 10 */
+		"pe_inst_mbe",
 		" PE instruction cache mbe",
 		},
-		{
-		"pe_inst_mbe:[3/8]",
+		{ /* bit 11 */
+		"pe_inst_mbe",
 		" PE instruction cache mbe",
 		},
-		{
-		"pe_inst_mbe:[4/8]",
+		{ /* bit 12 */
+		"pe_inst_mbe",
 		" PE instruction cache mbe",
 		},
-		{
-		"pe_inst_mbe:[5/8]",
+		{ /* bit 13 */
+		"pe_inst_mbe",
 		" PE instruction cache mbe",
 		},
-		{
-		"pe_inst_mbe:[6/8]",
+		{ /* bit 14 */
+		"pe_inst_mbe",
 		" PE instruction cache mbe",
 		},
-		{
-		"pe_inst_mbe:[7/8]",
+		{ /* bit 15 */
+		"pe_inst_mbe",
 		" PE instruction cache mbe",
 		},
-		{
-		"pe_data_sbe:[0/8]",
+		{ /* bit 16 */
+		"pe_data_sbe",
 		" PE data cache sbe",
 		},
-		{
-		"pe_data_sbe:[1/8]",
+		{ /* bit 17 */
+		"pe_data_sbe",
 		" PE data cache sbe",
 		},
-		{
-		"pe_data_sbe:[2/8]",
+		{ /* bit 18 */
+		"pe_data_sbe",
 		" PE data cache sbe",
 		},
-		{
-		"pe_data_sbe:[3/8]",
+		{ /* bit 19 */
+		"pe_data_sbe",
 		" PE data cache sbe",
 		},
-		{
-		"pe_data_sbe:[4/8]",
+		{ /* bit 20 */
+		"pe_data_sbe",
 		" PE data cache sbe",
 		},
-		{
-		"pe_data_sbe:[5/8]",
+		{ /* bit 21 */
+		"pe_data_sbe",
 		" PE data cache sbe",
 		},
-		{
-		"pe_data_sbe:[6/8]",
+		{ /* bit 22 */
+		"pe_data_sbe",
 		" PE data cache sbe",
 		},
-		{
-		"pe_data_sbe:[7/8]",
+		{ /* bit 23 */
+		"pe_data_sbe",
 		" PE data cache sbe",
 		},
-		{
-		"pe_data_mbe:[0/8]",
+		{ /* bit 24 */
+		"pe_data_mbe",
 		" PE data cache mbe",
 		},
-		{
-		"pe_data_mbe:[1/8]",
+		{ /* bit 25 */
+		"pe_data_mbe",
 		" PE data cache mbe",
 		},
-		{
-		"pe_data_mbe:[2/8]",
+		{ /* bit 26 */
+		"pe_data_mbe",
 		" PE data cache mbe",
 		},
-		{
-		"pe_data_mbe:[3/8]",
+		{ /* bit 27 */
+		"pe_data_mbe",
 		" PE data cache mbe",
 		},
-		{
-		"pe_data_mbe:[4/8]",
+		{ /* bit 28 */
+		"pe_data_mbe",
 		" PE data cache mbe",
 		},
-		{
-		"pe_data_mbe:[5/8]",
+		{ /* bit 29 */
+		"pe_data_mbe",
 		" PE data cache mbe",
 		},
-		{
-		"pe_data_mbe:[6/8]",
+		{ /* bit 30 */
+		"pe_data_mbe",
 		" PE data cache mbe",
 		},
-		{
-		"pe_data_mbe:[7/8]",
+		{ /* bit 31 */
+		"pe_data_mbe",
 		" PE data cache mbe",
 		},
-		{
+		{ /* bit 32 */
 		"diagnostic",
 		" Diagnostic Error Flag",
 		},
-		{
+		{ /* bit 33 */
 		"pte_cache_tag_mbe",
 		" PTE Cache tag mbe Error information: Section 29.12.3.11, 'RXHP Error Info PTE Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
 		},
-		{
+		{ /* bit 34 */
 		"pte_cache_tag_sbe",
 		" PTE Cache tag sbe Error information: . Section 29.12.3.10, 'RXHP Error Info PTE Cache Tag SBE'",
 		},
-		{
+		{ /* bit 35 */
 		"pte_cache_data_mbe",
 		" PTE Cache data mbe Error information: Section 29.12.3.12, 'RXHP Error Info PTE Cache Data SBE/MBE'",
 		},
-		{
+		{ /* bit 36 */
 		"pte_cache_data_sbe",
 		" PTE Cache data sbe Error information: . Section 29.12.3.12, 'RXHP Error Info PTE Cache Data SBE/MBE'",
 		},
-		{
+		{ /* bit 37 */
 		"psc0_cache_mbe",
 		" PSC0 Cache mbe",
 		},
-		{
+		{ /* bit 38 */
 		"psc0_cache_sbe",
 		" PSC0 Cache sbe",
 		},
-		{
+		{ /* bit 39 */
 		"psc1_cache_mbe",
 		" PSC1 Cache mbe",
 		},
-		{
+		{ /* bit 40 */
 		"psc1_cache_sbe",
 		" PSC1 Cache sbe",
 		},
-		{
+		{ /* bit 41 */
 		"hiarb_data_sbe",
 		" hiarb interface sbe",
 		},
-		{
+		{ /* bit 42 */
 		"hiarb_data_mbe",
 		" hiarb interface mbe",
 		},
-		{
+		{ /* bit 43 */
 		"qmap_table_sbe",
 		" qmap table sbe",
 		},
-		{
+		{ /* bit 44 */
 		"qmap_table_mbe",
 		" qmap table mbe",
 		},
-		{
+		{ /* bit 45 */
 		"flit_data_sbe",
 		" flit data sbe",
 		},
-		{
+		{ /* bit 46 */
 		"flit_data_mbe",
 		" flit data mbe",
 		},
-		{
+		{ /* bit 47 */
 		"ci_data_sbe",
 		" command interface data sbe",
 		},
-		{
+		{ /* bit 48 */
 		"ci_data_mbe",
 		" command interface data mbe",
 		},
-		{
+		{ /* bit 49 */
 		"trigop_data_sbe",
 		" triggered op data sbe",
 		},
-		{
+		{ /* bit 50 */
 		"trigop_data_mbe",
 		" triggered op data mbe",
 		},
-		{
+		{ /* bit 51 */
 		"pkt_status_sbe",
 		" packet status sbe",
 		},
-		{
+		{ /* bit 52 */
 		"pkt_status_mbe",
 		" packet status mbe",
 		},
-		{
+		{ /* bit 53 */
 		"ptq_sbe",
 		" ptq sbe",
 		},
-		{
+		{ /* bit 54 */
 		"ptq_mbe",
 		" ptq mbe",
 		},
-		{
-		"Reserved_63_55:[0/9]",
+		{ /* bit 55 */
+		"Reserved_63_55",
 		" ",
 		},
-		{
-		"Reserved_63_55:[1/9]",
+		{ /* bit 56 */
+		"Reserved_63_55",
 		" ",
 		},
-		{
-		"Reserved_63_55:[2/9]",
+		{ /* bit 57 */
+		"Reserved_63_55",
 		" ",
 		},
-		{
-		"Reserved_63_55:[3/9]",
+		{ /* bit 58 */
+		"Reserved_63_55",
 		" ",
 		},
-		{
-		"Reserved_63_55:[4/9]",
+		{ /* bit 59 */
+		"Reserved_63_55",
 		" ",
 		},
-		{
-		"Reserved_63_55:[5/9]",
+		{ /* bit 60 */
+		"Reserved_63_55",
 		" ",
 		},
-		{
-		"Reserved_63_55:[6/9]",
+		{ /* bit 61 */
+		"Reserved_63_55",
 		" ",
 		},
-		{
-		"Reserved_63_55:[7/9]",
+		{ /* bit 62 */
+		"Reserved_63_55",
 		" ",
 		},
-		{
-		"Reserved_63_55:[8/9]",
+		{ /* bit 63 */
+		"Reserved_63_55",
 		" ",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_rxdma_error[] = {
+static struct hfi_error_csr hfi_rxdma_error[] = {
 /*
  * RXDMA_ERR_STS_1 desc:
  */
@@ -3302,268 +3302,268 @@ static hfi_error_domain_t hfi_rxdma_error[] = {
 	FXR_RXDMA_ERR_EN_HOST_1, FXR_RXDMA_ERR_FIRST_HOST_1,
 	FXR_RXDMA_ERR_STS_1, FXR_RXDMA_ERR_CLR_1, FXR_RXDMA_ERR_FRC_1,
 	{
-		{
-		"dq_write_err:[0/8]",
+		{ /* bit 0 */
+		"dq_write_err",
 		" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
 		},
-		{
-		"dq_write_err:[1/8]",
+		{ /* bit 1 */
+		"dq_write_err",
 		" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
 		},
-		{
-		"dq_write_err:[2/8]",
+		{ /* bit 2 */
+		"dq_write_err",
 		" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
 		},
-		{
-		"dq_write_err:[3/8]",
+		{ /* bit 3 */
+		"dq_write_err",
 		" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
 		},
-		{
-		"dq_write_err:[4/8]",
+		{ /* bit 4 */
+		"dq_write_err",
 		" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
 		},
-		{
-		"dq_write_err:[5/8]",
+		{ /* bit 5 */
+		"dq_write_err",
 		" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
 		},
-		{
-		"dq_write_err:[6/8]",
+		{ /* bit 6 */
+		"dq_write_err",
 		" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
 		},
-		{
-		"dq_write_err:[7/8]",
+		{ /* bit 7 */
+		"dq_write_err",
 		" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
 		},
-		{
-		"dq_read_err:[0/9]",
+		{ /* bit 8 */
+		"dq_read_err",
 		" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>,16250 or size >16320 or reading to a section of the packet already discarded or reading past the end of a packet. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
 		},
-		{
-		"dq_read_err:[1/9]",
+		{ /* bit 9 */
+		"dq_read_err",
 		" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>,16250 or size >16320 or reading to a section of the packet already discarded or reading past the end of a packet. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
 		},
-		{
-		"dq_read_err:[2/9]",
+		{ /* bit 10 */
+		"dq_read_err",
 		" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>,16250 or size >16320 or reading to a section of the packet already discarded or reading past the end of a packet. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
 		},
-		{
-		"dq_read_err:[3/9]",
+		{ /* bit 11 */
+		"dq_read_err",
 		" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>,16250 or size >16320 or reading to a section of the packet already discarded or reading past the end of a packet. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
 		},
-		{
-		"dq_read_err:[4/9]",
+		{ /* bit 12 */
+		"dq_read_err",
 		" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>,16250 or size >16320 or reading to a section of the packet already discarded or reading past the end of a packet. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
 		},
-		{
-		"dq_read_err:[5/9]",
+		{ /* bit 13 */
+		"dq_read_err",
 		" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>,16250 or size >16320 or reading to a section of the packet already discarded or reading past the end of a packet. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
 		},
-		{
-		"dq_read_err:[6/9]",
+		{ /* bit 14 */
+		"dq_read_err",
 		" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>,16250 or size >16320 or reading to a section of the packet already discarded or reading past the end of a packet. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
 		},
-		{
-		"dq_read_err:[7/9]",
+		{ /* bit 15 */
+		"dq_read_err",
 		" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>,16250 or size >16320 or reading to a section of the packet already discarded or reading past the end of a packet. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
 		},
-		{
-		"dq_read_err:[8/9]",
+		{ /* bit 16 */
+		"dq_read_err",
 		" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>,16250 or size >16320 or reading to a section of the packet already discarded or reading past the end of a packet. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
 		},
-		{
-		"dq_ll_parity_err:[0/7]",
+		{ /* bit 17 */
+		"dq_ll_parity_err",
 		" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
 		},
-		{
-		"dq_ll_parity_err:[1/7]",
+		{ /* bit 18 */
+		"dq_ll_parity_err",
 		" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
 		},
-		{
-		"dq_ll_parity_err:[2/7]",
+		{ /* bit 19 */
+		"dq_ll_parity_err",
 		" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
 		},
-		{
-		"dq_ll_parity_err:[3/7]",
+		{ /* bit 20 */
+		"dq_ll_parity_err",
 		" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
 		},
-		{
-		"dq_ll_parity_err:[4/7]",
+		{ /* bit 21 */
+		"dq_ll_parity_err",
 		" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
 		},
-		{
-		"dq_ll_parity_err:[5/7]",
+		{ /* bit 22 */
+		"dq_ll_parity_err",
 		" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
 		},
-		{
-		"dq_ll_parity_err:[6/7]",
+		{ /* bit 23 */
+		"dq_ll_parity_err",
 		" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
 		},
-		{
-		"dq_tail_sbe:[0/8]",
+		{ /* bit 24 */
+		"dq_tail_sbe",
 		" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_sbe:[1/8]",
+		{ /* bit 25 */
+		"dq_tail_sbe",
 		" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_sbe:[2/8]",
+		{ /* bit 26 */
+		"dq_tail_sbe",
 		" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_sbe:[3/8]",
+		{ /* bit 27 */
+		"dq_tail_sbe",
 		" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_sbe:[4/8]",
+		{ /* bit 28 */
+		"dq_tail_sbe",
 		" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_sbe:[5/8]",
+		{ /* bit 29 */
+		"dq_tail_sbe",
 		" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_sbe:[6/8]",
+		{ /* bit 30 */
+		"dq_tail_sbe",
 		" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_sbe:[7/8]",
+		{ /* bit 31 */
+		"dq_tail_sbe",
 		" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_mbe:[0/8]",
+		{ /* bit 32 */
+		"dq_tail_mbe",
 		" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_mbe:[1/8]",
+		{ /* bit 33 */
+		"dq_tail_mbe",
 		" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_mbe:[2/8]",
+		{ /* bit 34 */
+		"dq_tail_mbe",
 		" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_mbe:[3/8]",
+		{ /* bit 35 */
+		"dq_tail_mbe",
 		" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_mbe:[4/8]",
+		{ /* bit 36 */
+		"dq_tail_mbe",
 		" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_mbe:[5/8]",
+		{ /* bit 37 */
+		"dq_tail_mbe",
 		" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_mbe:[6/8]",
+		{ /* bit 38 */
+		"dq_tail_mbe",
 		" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"dq_tail_mbe:[7/8]",
+		{ /* bit 39 */
+		"dq_tail_mbe",
 		" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
 		},
-		{
-		"ha_ecc_sbe:[0/4]",
+		{ /* bit 40 */
+		"ha_ecc_sbe",
 		" Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
 		},
-		{
-		"ha_ecc_sbe:[1/4]",
+		{ /* bit 41 */
+		"ha_ecc_sbe",
 		" Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
 		},
-		{
-		"ha_ecc_sbe:[2/4]",
+		{ /* bit 42 */
+		"ha_ecc_sbe",
 		" Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
 		},
-		{
-		"ha_ecc_sbe:[3/4]",
+		{ /* bit 43 */
+		"ha_ecc_sbe",
 		" Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
 		},
-		{
-		"ha_ecc_mbe:[0/4]",
+		{ /* bit 44 */
+		"ha_ecc_mbe",
 		" Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
 		},
-		{
-		"ha_ecc_mbe:[1/4]",
+		{ /* bit 45 */
+		"ha_ecc_mbe",
 		" Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
 		},
-		{
-		"ha_ecc_mbe:[2/4]",
+		{ /* bit 46 */
+		"ha_ecc_mbe",
 		" Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
 		},
-		{
-		"ha_ecc_mbe:[3/4]",
+		{ /* bit 47 */
+		"ha_ecc_mbe",
 		" Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
 		},
-		{
-		"Reserved_63_48:[0/16]",
+		{ /* bit 48 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[1/16]",
+		{ /* bit 49 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[2/16]",
+		{ /* bit 50 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[3/16]",
+		{ /* bit 51 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[4/16]",
+		{ /* bit 52 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[5/16]",
+		{ /* bit 53 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[6/16]",
+		{ /* bit 54 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[7/16]",
+		{ /* bit 55 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[8/16]",
+		{ /* bit 56 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[9/16]",
+		{ /* bit 57 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[10/16]",
+		{ /* bit 58 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[11/16]",
+		{ /* bit 59 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[12/16]",
+		{ /* bit 60 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[13/16]",
+		{ /* bit 61 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[14/16]",
+		{ /* bit 62 */
+		"Reserved_63_48",
 		" Reserved",
 		},
-		{
-		"Reserved_63_48:[15/16]",
+		{ /* bit 63 */
+		"Reserved_63_48",
 		" Reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_rxet_error[] = {
+static struct hfi_error_csr hfi_rxet_error[] = {
 /*
  * RXET_ERR_STS desc:
  */
@@ -3572,268 +3572,268 @@ static hfi_error_domain_t hfi_rxet_error[] = {
 	FXR_RXET_ERR_EN_HOST, FXR_RXET_ERR_FIRST_HOST,
 	FXR_RXET_ERR_STS, FXR_RXET_ERR_CLR, FXR_RXET_ERR_FRC,
 	{
-		{
-		"event_cam_err_par",
-		" Parity error detected on event cam.",
+		{ /* bit 0 */
+		"eb_cam_par_err",
+		" Parity error detected on event cam. This is fatal.",
 		},
-		{
+		{ /* bit 1 */
 		"eq_desc_cache_tag_mbe",
-		" EQ Desc Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 28.14.6.12, 'RXET Error Info EQ Desc Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
+		" EQ Desc Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 28.14.6.12, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_MBE - RXET Error Info EQ Desc Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
 		},
-		{
+		{ /* bit 2 */
 		"eq_desc_cache_tag_sbe",
-		" EQ Desc Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 28.14.6.11, 'RXET Error Info EQ Desc Cache Tag SBE'",
+		" EQ Desc Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 28.14.6.11, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_SBE - RXET Error Info EQ Desc Cache Tag SBE'",
 		},
-		{
+		{ /* bit 3 */
 		"eq_desc_cache_data_mbe",
-		" EQ Desc Cache data mbe. The 'or' of the 2 ecc domains. Error information: Section 28.14.6.13, 'RXET Error Info EQ Desc Cache Data SBE/MBE'",
+		" EQ Desc Cache data mbe. The 'or' of the 2 ecc domains. Error information: Section 28.14.6.13, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'",
 		},
-		{
+		{ /* bit 4 */
 		"eq_desc_cache_data_sbe",
-		" EQ Desc Cache data sbe. The 'or' of the 2 ecc domains. Error information: . Section 28.14.6.13, 'RXET Error Info EQ Desc Cache Data SBE/MBE'",
+		" EQ Desc Cache data sbe. The 'or' of the 2 ecc domains. Error information: . Section 28.14.6.13, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'",
 		},
-		{
+		{ /* bit 5 */
 		"trig_op_cache_tag_mbe",
-		" Trig Op Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 28.14.6.15, 'RXET Error Info Trig Op Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
+		" Trig Op Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 28.14.6.15, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_MBE - RXET Error Info Trig Op Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
 		},
-		{
+		{ /* bit 6 */
 		"trig_op_cache_tag_sbe",
-		" Trig Op Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 28.14.6.14, 'RXET Error Info Trig Op Cache Tag SBE'",
+		" Trig Op Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 28.14.6.14, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_SBE - RXET Error Info Trig Op Cache Tag SBE'",
 		},
-		{
+		{ /* bit 7 */
 		"trig_op_cache_data_mbe",
-		" Trig Op Cache data mbe. The 'or' of the 16 ecc domains. Error information: Section 28.14.6.16, 'RXET Error Info Trig Op Cache Data SBE'",
+		" Trig Op Cache data mbe. The 'or' of the 16 ecc domains. Error information: Section 28.14.6.16, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'",
 		},
-		{
+		{ /* bit 8 */
 		"trig_op_cache_data_sbe",
-		" Trig Op Cache data sbe. The 'or' of the 16ecc domains. Error information: . Section 28.14.6.16, 'RXET Error Info Trig Op Cache Data SBE'",
+		" Trig Op Cache data sbe. The 'or' of the 16ecc domains. Error information: . Section 28.14.6.16, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'",
 		},
-		{
+		{ /* bit 9 */
 		"toh_trig_out_overflow",
 		" Overflow on TrigOp response to RxDMA - 4",
 		},
-		{
+		{ /* bit 10 */
 		"toh_cache_req_fifo_overflow",
 		" Overflow on TrigOp cache active requests - 8",
 		},
-		{
+		{ /* bit 11 */
 		"toh_trig_in_fifo_overflow",
 		" Overflow in TrigOp holding FIFO - 4",
 		},
-		{
+		{ /* bit 12 */
 		"eeh_eqd_req_fifo_overflow",
 		" Overflow on EQD active requests - 8",
 		},
-		{
+		{ /* bit 13 */
 		"eeh_rsv_fifo_overflow",
 		" Overflow on EQD requests for reservations - 8",
 		},
-		{
+		{ /* bit 14 */
 		"eeh_event_fifo_overflow",
 		" Overflow on EQD requests for events - 58",
 		},
-		{
+		{ /* bit 15 */
 		"eb_rxdma_fifo_overflow",
 		" Overflow on RxDMA input requests FIFO - 9 requests",
 		},
-		{
-		"eb_event_q_overflow",
-		" Overflow on event queue - 58 events (116 flits)",
-		},
-		{
+		{ /* bit 16 */
 		"eb_event_hdr_q_overflow",
 		" Overflow on event header queue for event sideband info - 58 events",
 		},
-		{
+		{ /* bit 17 */
 		"eb_addr_q_overflow",
 		" Overflow on event address FIFO for EQD cache request - 58",
 		},
-		{
-		"rxhp_event_err_overflow",
+		{ /* bit 18 */
+		"rxhp_event_overflow",
 		" Overflow on RxHP event interface FIFO - one event (2 flits)",
 		},
-		{
-		"txotr_event_err_overflow",
+		{ /* bit 19 */
+		"txotr_event_overflow",
 		" Overflow on TxOTR event interface FIFO - one event (2 flits)",
 		},
-		{
-		"event_addr_err_mbe",
+		{ /* bit 20 */
+		"eb_addr_q_err_mbe",
 		" MBE detected on Event Address queue.",
 		},
-		{
-		"event_addr_err_sbe",
+		{ /* bit 21 */
+		"eb_addr_q_err_sbe",
 		" SBE detected on Event Address queue.",
 		},
-		{
+		{ /* bit 22 */
 		"rsv_err_mbe",
 		" MBE detected on Event reservation input queue.",
 		},
-		{
+		{ /* bit 23 */
 		"rsv_err_sbe",
 		" SBE detected on Event reservation input queue.",
 		},
-		{
+		{ /* bit 24 */
 		"event_req_err_mbe",
 		" MBE detected on Event request input queue.",
 		},
-		{
+		{ /* bit 25 */
 		"event_req_err_sbe",
 		" SBE detected on Event request input queue.",
 		},
-		{
+		{ /* bit 26 */
 		"toa_err_mbe",
-		" MBE detected on TrigOp Append request TrigOp data.",
+		" MBE detected on TrigOp Append request TrigOp data. Checked on 8 processing stages so is *or* of all.",
 		},
-		{
+		{ /* bit 27 */
 		"toa_err_sbe",
-		" SBE detected on TrigOp Append request TrigOp data.",
+		" SBE detected on TrigOp Append request TrigOp data. Checked on 8 processing stages so is *or* of all.",
 		},
-		{
+		{ /* bit 28 */
 		"to_cache_resp_err",
 		" resp_err from HiArb for TrigOp cache request",
 		},
-		{
+		{ /* bit 29 */
 		"to_cache_fr_err",
 		" Framing error on TrigOp cache response from HiArb.",
 		},
-		{
+		{ /* bit 30 */
 		"eq_cache_resp_err",
 		" resp_err from HiArb for EqDesc cache request",
 		},
-		{
+		{ /* bit 31 */
 		"eq_cache_fr_err",
 		" Framing error on EqDesc cache response from HiArb.",
 		},
-		{
+		{ /* bit 32 */
 		"toa_err",
 		" TrigOp Append request error - CT response not written *or* CT from RxDMA with no matching TrigOp from RxHP *or* TOA received with no TO buffers available.",
 		},
-		{
-		"eb_cam_err_wr",
+		{ /* bit 33 */
+		"eb_cam_write_err",
 		" New event with no empty slots in CAM/event buffer.",
 		},
-		{
-		"eb_cam_err_match",
+		{ /* bit 34 */
+		"eb_cam_match_err",
 		" No valid match in Event Buffer for request from RxDMA.",
 		},
-		{
-		"rxhp_event_err_frame",
+		{ /* bit 35 */
+		"rxhp_event_frame_err",
 		" Framing error on Event from RxHP.",
 		},
-		{
-		"txotr_event_err_frame",
+		{ /* bit 36 */
+		"txotr_event_frame_err",
 		" Framing error on Event from TxOTR.",
 		},
-		{
-		"Reserved_63_38:[0/26]",
+		{ /* bit 37 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[1/26]",
+		{ /* bit 38 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[2/26]",
+		{ /* bit 39 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[3/26]",
+		{ /* bit 40 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[4/26]",
+		{ /* bit 41 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[5/26]",
+		{ /* bit 42 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[6/26]",
+		{ /* bit 43 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[7/26]",
+		{ /* bit 44 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[8/26]",
+		{ /* bit 45 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[9/26]",
+		{ /* bit 46 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[10/26]",
+		{ /* bit 47 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[11/26]",
+		{ /* bit 48 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[12/26]",
+		{ /* bit 49 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[13/26]",
+		{ /* bit 50 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[14/26]",
+		{ /* bit 51 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[15/26]",
+		{ /* bit 52 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[16/26]",
+		{ /* bit 53 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[17/26]",
+		{ /* bit 54 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[18/26]",
+		{ /* bit 55 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[19/26]",
+		{ /* bit 56 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[20/26]",
+		{ /* bit 57 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[21/26]",
+		{ /* bit 58 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[22/26]",
+		{ /* bit 59 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[23/26]",
+		{ /* bit 60 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[24/26]",
+		{ /* bit 61 */
+		"Reserved_63_37",
 		" Not used.",
 		},
-		{
-		"Reserved_63_38:[25/26]",
+		{ /* bit 62 */
+		"Reserved_63_37",
+		" Not used.",
+		},
+		{ /* bit 63 */
+		"Reserved_63_37",
 		" Not used.",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_rxhiarb_error[] = {
+static struct hfi_error_csr hfi_rxhiarb_error[] = {
 /*
  * RXHIARB_ERR_STS_1 desc:
  */
@@ -3842,268 +3842,268 @@ static hfi_error_domain_t hfi_rxhiarb_error[] = {
 	FXR_RXHIARB_ERR_EN_HOST_1, FXR_RXHIARB_ERR_FIRST_HOST_1,
 	FXR_RXHIARB_ERR_STS_1, FXR_RXHIARB_ERR_CLR_1, FXR_RXHIARB_ERR_FRC_1,
 	{
-		{
+		{ /* bit 0 */
 		"pcb_err_nval",
 		" PCB access to a non-valid entry. Indicates that the requester attempted to access an invalid entry in the PCB table.",
 		},
-		{
+		{ /* bit 1 */
 		"pcb_err_bvio",
 		" PCB boundary violation. Indicates that either a PCB entry has overlapping regions or that te address calculation for a specific region overlapped into the subsequent PCB region.",
 		},
-		{
+		{ /* bit 2 */
 		"pcb_err_addr_oflw",
 		" PCB address calculation overflow. Indicates that the requester attempted to access an address beyond the maximum supported address range (e.g. 57-bits for virtual address)",
 		},
-		{
+		{ /* bit 3 */
 		"pcb_err_sbe",
 		" PCB table single bit error detected,",
 		},
-		{
+		{ /* bit 4 */
 		"pcb_err_mbe",
 		" PCB table multiple bit error detected,",
 		},
-		{
+		{ /* bit 5 */
 		"mtlb_err_at_rsp",
 		" Mini-TLB received an error response fro the AT while requesting a physical address.",
 		},
-		{
-		"hi_err_frame",
-		" Framing error detected on the HI interface. Indicates that a head/tail mismatch occurred during a request or response fro the HI,",
-		},
-		{
-		"hi_err_sbe",
-		" Single bit error detected on the HI interface.",
-		},
-		{
-		"hi_err_mbe",
-		" Multiple bit error detected on the Hi interface.",
-		},
-		{
+		{ /* bit 6 */
 		"rxdma_err_frame",
 		" Framing error detected on the RxDMA interface. Indicates that a head/tail mismatch occurred during a request from the RxDMA.",
 		},
-		{
+		{ /* bit 7 */
 		"rxdma_err_sbe",
 		" Single bit error detected on the RxDMA interface.",
 		},
-		{
+		{ /* bit 8 */
 		"rxdma_err_mbe",
 		" Multiple bit error detected on the RxDMA interface.",
 		},
-		{
+		{ /* bit 9 */
 		"rxhp_err_frame",
 		" Framing error detected on the RxHP interface. Indicates that the length does not match the number of dval flits between req_valids.",
 		},
-		{
+		{ /* bit 10 */
 		"rxchp_err_sbe",
 		" Single bit error detected on the RxHP interface.",
 		},
-		{
+		{ /* bit 11 */
 		"rxchp_err_mbe",
 		" Multiple bit error detected on the RxHP interface.",
 		},
-		{
+		{ /* bit 12 */
 		"rxet_err_frame",
 		" Framing error detected on the RxET interface. Indicates that the length does not match the number of dval flits between req_valids.",
 		},
-		{
+		{ /* bit 13 */
 		"rxet_err_sbe",
 		" Single bit error detected on the RxET interface.",
 		},
-		{
+		{ /* bit 14 */
 		"rxet_err_mbe",
 		" Multiple bit error detected on the RxET interface.",
 		},
-		{
+		{ /* bit 15 */
 		"rxe2e_err_sbe",
 		" Single bit error detected on the RxE2E interface.",
 		},
-		{
+		{ /* bit 16 */
 		"rxe2e_err_mbe",
 		" Multiple bit error detected on the RxE2E interface.",
 		},
-		{
+		{ /* bit 17 */
 		"rxcid_err_sbe",
 		" Single bit error detected on the RxCID interface.",
 		},
-		{
+		{ /* bit 18 */
 		"rxcid_err_mbe",
 		" Multiple bit error detected on the RxCID interface.",
 		},
-		{
+		{ /* bit 19 */
 		"slrsp_err_sbe",
 		" Slow response queue single bit error detected.",
 		},
-		{
+		{ /* bit 20 */
 		"slrsp_err_mbe",
 		" Slow response queue multiple bit error detected.",
 		},
-		{
+		{ /* bit 21 */
 		"fpfifo_perr",
 		" Free pool FIFO parity error detected.",
 		},
-		{
+		{ /* bit 22 */
 		"payld_err_sbe",
 		" Payload SRAM single bit error detected.",
 		},
-		{
+		{ /* bit 23 */
 		"payld_err_mbe",
 		" Payload SRAM multiple bit error detected.",
 		},
-		{
+		{ /* bit 24 */
 		"hque0_err_sbe",
 		" Holding queue 0 (MCTC=0) single bit error detected.",
 		},
-		{
+		{ /* bit 25 */
 		"hque0_err_mbe",
 		" Holding queue 0 (MCTC=0) multiple bit error detected.",
 		},
-		{
+		{ /* bit 26 */
 		"hque1_err_sbe",
 		" Holding queue 1(MCTC=1) single bit error detected.",
 		},
-		{
+		{ /* bit 27 */
 		"hque1_err_mbe",
 		" Holding queue 1(MCTC=1) multiple bit error detected.",
 		},
-		{
+		{ /* bit 28 */
 		"hque2_err_sbe",
 		" Holding queue 2 (MCTC=2) single bit error detected.",
 		},
-		{
+		{ /* bit 29 */
 		"hque2_err_mbe",
 		" Holding queue 2 (MCTC=2) multiple bit error detected.",
 		},
-		{
+		{ /* bit 30 */
 		"hque3_err_sbe",
 		" Holding queue 3 (MCTC=3) single bit error detected.",
 		},
-		{
+		{ /* bit 31 */
 		"hque3_err_mbe",
 		" Holding queue 3 (MCTC=3) multiple bit error detected.",
 		},
-		{
+		{ /* bit 32 */
 		"hque4_err_sbe",
 		" Holding queue 4 (MCTC=4) single bit error detected.",
 		},
-		{
+		{ /* bit 33 */
 		"hque4_err_mbe",
 		" Holding queue 4 (MCTC=4) multiple bit error detected.",
 		},
-		{
+		{ /* bit 34 */
 		"hque5_err_sbe",
 		" Holding queue 5 (MCTC=5) single bit error detected.",
 		},
-		{
+		{ /* bit 35 */
 		"hque5_err_mbe",
 		" Holding queue 5 (MCTC=5) multiple bit error detected.",
 		},
-		{
+		{ /* bit 36 */
 		"hque6_err_sbe",
 		" Holding queue 6 (MCTC=6) single bit error detected.",
 		},
-		{
+		{ /* bit 37 */
 		"hque6_err_mbe",
 		" Holding queue 6 (MCTC=6) multiple bit error detected.",
 		},
-		{
+		{ /* bit 38 */
 		"hque7_err_sbe",
 		" Holding queue 7 (MCTC=7) single bit error detected.",
 		},
-		{
+		{ /* bit 39 */
 		"hque7_err_mbe",
 		" Holding queue 7 (MCTC=7) multiple bit error detected.",
 		},
-		{
+		{ /* bit 40 */
 		"hque8_err_sbe",
 		" Holding queue 8 (misc) single bit error detected.",
 		},
-		{
+		{ /* bit 41 */
 		"hque8_err_mbe",
 		" Holding queue 8 (misc) multiple bit error detected.",
 		},
-		{
+		{ /* bit 42 */
 		"hque_vect_perr",
 		" Holding queues 0-8 present vector parity error",
 		},
-		{
+		{ /* bit 43 */
 		"mtlb_err_sbe",
 		" Mini-TLB single bit error detected.",
 		},
-		{
+		{ /* bit 44 */
 		"mtlb_err_mbe",
 		" Mini-TLB multiple bit error detected.",
 		},
-		{
+		{ /* bit 45 */
 		"mtlb_vect_perr",
 		" Mini-TLB state vector parity error detected",
 		},
-		{
+		{ /* bit 46 */
 		"atfifo_sbe",
 		" AT request FIFO single bit error detected",
 		},
-		{
+		{ /* bit 47 */
 		"atfifo_mbe",
 		" AT request FIFO multiple bit error detected",
 		},
-		{
+		{ /* bit 48 */
 		"hififo_sbe",
 		" HI request FIFO single bit error detected",
 		},
-		{
+		{ /* bit 49 */
 		"hififo_mbe",
 		" HI request FIFO multiple bit error detected",
 		},
-		{
+		{ /* bit 50 */
 		"hifi_err_frame",
 		" HIFIs interface framing error detected",
 		},
-		{
+		{ /* bit 51 */
 		"hifi_err_sbe",
 		" HIFIs interface single bit error detected",
 		},
-		{
+		{ /* bit 52 */
 		"hifi_err_mbe",
 		" HIFIs interface multiple bit error detected",
 		},
-		{
+		{ /* bit 53 */
 		"nack_err_sbe",
 		" Nack queue single bit error detected",
 		},
-		{
+		{ /* bit 54 */
 		"nack_err_mbe",
 		" Nack queue multiple bit error detected",
 		},
-		{
-		"Reserved_63_58:[0/6]",
+		{ /* bit 55 */
+		"Reserved_63_55",
 		" Reserved",
 		},
-		{
-		"Reserved_63_58:[1/6]",
+		{ /* bit 56 */
+		"Reserved_63_55",
 		" Reserved",
 		},
-		{
-		"Reserved_63_58:[2/6]",
+		{ /* bit 57 */
+		"Reserved_63_55",
 		" Reserved",
 		},
-		{
-		"Reserved_63_58:[3/6]",
+		{ /* bit 58 */
+		"Reserved_63_55",
 		" Reserved",
 		},
-		{
-		"Reserved_63_58:[4/6]",
+		{ /* bit 59 */
+		"Reserved_63_55",
 		" Reserved",
 		},
-		{
-		"Reserved_63_58:[5/6]",
+		{ /* bit 60 */
+		"Reserved_63_55",
+		" Reserved",
+		},
+		{ /* bit 61 */
+		"Reserved_63_55",
+		" Reserved",
+		},
+		{ /* bit 62 */
+		"Reserved_63_55",
+		" Reserved",
+		},
+		{ /* bit 63 */
+		"Reserved_63_55",
 		" Reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_at_error[] = {
+static struct hfi_error_csr hfi_at_error[] = {
 /*
  * FXR_AT_ERR_STS_1 desc:
  */
@@ -4112,268 +4112,268 @@ static hfi_error_domain_t hfi_at_error[] = {
 	FXR_AT_ERR_EN_HOST_1, FXR_AT_ERR_FIRST_HOST_1,
 	FXR_AT_ERR_STS_1, FXR_AT_ERR_CLR_1, FXR_AT_ERR_FRC_1,
 	{
-		{
+		{ /* bit 0 */
 		"iommu_disabled",
 		" IOMMU disabled, no device PASID memory access",
 		},
-		{
+		{ /* bit 1 */
 		"ats_disabled",
-		" PAddress Translation Disabled, no device PASID memory access",
+		" Address Translation Disabled, no device PASID memory access",
 		},
-		{
+		{ /* bit 2 */
 		"PASID_disabled",
 		" PASID access disabled, no device PASID memory access",
 		},
-		{
+		{ /* bit 3 */
 		"PASID_map_fail",
 		" PID to PASID mapping failed. Invalid PASID entry",
 		},
-		{
+		{ /* bit 4 */
 		"PASID_priv_fail",
 		" PID to PASID mapping failed. Request Privilege Level .NE. PASID Map Privilege Level",
 		},
-		{
+		{ /* bit 5 */
 		"pf_pgr_disabled",
 		" page fault for request that could have initiated Page Group Request",
 		},
-		{
+		{ /* bit 6 */
 		"pw_mem_type_err",
 		" Page Walk returned a memory type inconsistent with memory types supported by device.",
 		},
-		{
+		{ /* bit 7 */
 		"plmr_err",
 		" PLMR range check failed",
 		},
-		{
+		{ /* bit 8 */
 		"phmr_err",
 		" PHMR range check failed",
 		},
-		{
+		{ /* bit 9 */
 		"ltdpr_err",
 		" LTDPR range check failed",
 		},
-		{
+		{ /* bit 10 */
 		"genprot_err",
 		" GenProt range check failed",
 		},
-		{
+		{ /* bit 11 */
 		"pgr_rsp_err",
 		" PageGroup Response Error",
 		},
-		{
+		{ /* bit 12 */
 		"pgr_rsp_err_of",
 		" PageGroup Response Error Overflow",
 		},
-		{
+		{ /* bit 13 */
+		"iommu_rsp_err",
+		" Unexpected IOMMU Response",
+		},
+		{ /* bit 14 */
+		"future_err0",
+		" Place Holder for new error event",
+		},
+		{ /* bit 15 */
+		"future_err1",
+		" Place Holder for new error event",
+		},
+		{ /* bit 16 */
 		"ptec_tag_mbe",
 		" PTEC Cache Tag MBE",
 		},
-		{
+		{ /* bit 17 */
 		"ptec_data_mbe",
 		" PTEC Cache Data MBE",
 		},
-		{
+		{ /* bit 18 */
 		"tr_mbe",
 		" Translation Request Buffer MBE",
 		},
-		{
+		{ /* bit 19 */
 		"pw_trid_mbe",
 		" Page Walk TRID Buffer MBE",
 		},
-		{
+		{ /* bit 20 */
 		"pw_trid_of_mbe",
 		" PageWalk TRID Overflow Buffer MBE",
 		},
-		{
+		{ /* bit 21 */
 		"pw_resp_mbe",
 		" PageWalk Response Buffer MBE",
 		},
-		{
+		{ /* bit 22 */
 		"pid_pasid_mbe",
 		" PID to PASID Look Up Table MBE",
 		},
-		{
+		{ /* bit 23 */
 		"pte_lru_2m4k_mbe",
 		" PTE Cache LRU 2M/4K State Table MBE",
 		},
-		{
+		{ /* bit 24 */
 		"pte_lru_1g_mbe",
 		" PTE Cache LRU 1G State Table MBE",
 		},
-		{
+		{ /* bit 25 */
 		"ptec_tag_sbe",
 		" PTEC Cache Tag SBE",
 		},
-		{
+		{ /* bit 26 */
 		"ptec_data_sbe",
 		" PTEC Cache Data SBE",
 		},
-		{
+		{ /* bit 27 */
 		"tr_sbe",
 		" Translation Request Buffer SBE",
 		},
-		{
+		{ /* bit 28 */
 		"pw_trid_sbe",
 		" Page Walk TRID Buffer SBE",
 		},
-		{
+		{ /* bit 29 */
 		"pw_trid_of_sbe",
 		" PageWalk TRID Overflow Buffer SBE",
 		},
-		{
+		{ /* bit 30 */
 		"pw_resp_sbe",
 		" PageWalk Response Buffer SBE",
 		},
-		{
+		{ /* bit 31 */
 		"pid_pasid_sbe",
 		" PID to PASID Look Up Table SBE",
 		},
-		{
+		{ /* bit 32 */
 		"pte_lru_2m4k_sbe",
 		" PTE Cache LRU 2M/4K State Table SBE",
 		},
-		{
+		{ /* bit 33 */
 		"pte_lru_1g_sbe",
 		" PTE Cache LRU 1G State Table SBE",
 		},
-		{
-		"Reserved_63_31:[0/33]",
+		{ /* bit 34 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[1/33]",
+		{ /* bit 35 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[2/33]",
+		{ /* bit 36 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[3/33]",
+		{ /* bit 37 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[4/33]",
+		{ /* bit 38 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[5/33]",
+		{ /* bit 39 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[6/33]",
+		{ /* bit 40 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[7/33]",
+		{ /* bit 41 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[8/33]",
+		{ /* bit 42 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[9/33]",
+		{ /* bit 43 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[10/33]",
+		{ /* bit 44 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[11/33]",
+		{ /* bit 45 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[12/33]",
+		{ /* bit 46 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[13/33]",
+		{ /* bit 47 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[14/33]",
+		{ /* bit 48 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[15/33]",
+		{ /* bit 49 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[16/33]",
+		{ /* bit 50 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[17/33]",
+		{ /* bit 51 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[18/33]",
+		{ /* bit 52 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[19/33]",
+		{ /* bit 53 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[20/33]",
+		{ /* bit 54 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[21/33]",
+		{ /* bit 55 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[22/33]",
+		{ /* bit 56 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[23/33]",
+		{ /* bit 57 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[24/33]",
+		{ /* bit 58 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[25/33]",
+		{ /* bit 59 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[26/33]",
+		{ /* bit 60 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[27/33]",
+		{ /* bit 61 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[28/33]",
+		{ /* bit 62 */
+		"Reserved_63_34",
 		" Reserved",
 		},
-		{
-		"Reserved_63_31:[29/33]",
-		" Reserved",
-		},
-		{
-		"Reserved_63_31:[30/33]",
-		" Reserved",
-		},
-		{
-		"Reserved_63_31:[31/33]",
-		" Reserved",
-		},
-		{
-		"Reserved_63_31:[32/33]",
+		{ /* bit 63 */
+		"Reserved_63_34",
 		" Reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_opio_error[] = {
+static struct hfi_error_csr hfi_opio_error[] = {
 /*
  * OPIO_PHY_ERR_STS desc:
  */
@@ -4382,268 +4382,268 @@ static hfi_error_domain_t hfi_opio_error[] = {
 	MNH_OPIO_PHY_ERR_EN_HOST, MNH_OPIO_PHY_ERR_FIRST_HOST,
 	MNH_OPIO_PHY_ERR_STS, MNH_OPIO_PHY_ERR_CLR, MNH_OPIO_PHY_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"ERROR",
 		" Physical layer detected an error (framing or training)",
 		},
-		{
+		{ /* bit 1 */
 		"CERROR",
 		" Physical layer detected and fixed a correctable error",
 		},
-		{
+		{ /* bit 2 */
 		"TRAINERROR",
 		" Physical layer training failed",
 		},
-		{
-		"Unused_63_3:[0/61]",
+		{ /* bit 3 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[1/61]",
+		{ /* bit 4 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[2/61]",
+		{ /* bit 5 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[3/61]",
+		{ /* bit 6 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[4/61]",
+		{ /* bit 7 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[5/61]",
+		{ /* bit 8 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[6/61]",
+		{ /* bit 9 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[7/61]",
+		{ /* bit 10 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[8/61]",
+		{ /* bit 11 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[9/61]",
+		{ /* bit 12 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[10/61]",
+		{ /* bit 13 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[11/61]",
+		{ /* bit 14 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[12/61]",
+		{ /* bit 15 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[13/61]",
+		{ /* bit 16 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[14/61]",
+		{ /* bit 17 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[15/61]",
+		{ /* bit 18 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[16/61]",
+		{ /* bit 19 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[17/61]",
+		{ /* bit 20 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[18/61]",
+		{ /* bit 21 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[19/61]",
+		{ /* bit 22 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[20/61]",
+		{ /* bit 23 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[21/61]",
+		{ /* bit 24 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[22/61]",
+		{ /* bit 25 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[23/61]",
+		{ /* bit 26 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[24/61]",
+		{ /* bit 27 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[25/61]",
+		{ /* bit 28 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[26/61]",
+		{ /* bit 29 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[27/61]",
+		{ /* bit 30 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[28/61]",
+		{ /* bit 31 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[29/61]",
+		{ /* bit 32 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[30/61]",
+		{ /* bit 33 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[31/61]",
+		{ /* bit 34 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[32/61]",
+		{ /* bit 35 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[33/61]",
+		{ /* bit 36 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[34/61]",
+		{ /* bit 37 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[35/61]",
+		{ /* bit 38 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[36/61]",
+		{ /* bit 39 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[37/61]",
+		{ /* bit 40 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[38/61]",
+		{ /* bit 41 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[39/61]",
+		{ /* bit 42 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[40/61]",
+		{ /* bit 43 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[41/61]",
+		{ /* bit 44 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[42/61]",
+		{ /* bit 45 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[43/61]",
+		{ /* bit 46 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[44/61]",
+		{ /* bit 47 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[45/61]",
+		{ /* bit 48 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[46/61]",
+		{ /* bit 49 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[47/61]",
+		{ /* bit 50 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[48/61]",
+		{ /* bit 51 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[49/61]",
+		{ /* bit 52 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[50/61]",
+		{ /* bit 53 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[51/61]",
+		{ /* bit 54 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[52/61]",
+		{ /* bit 55 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[53/61]",
+		{ /* bit 56 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[54/61]",
+		{ /* bit 57 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[55/61]",
+		{ /* bit 58 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[56/61]",
+		{ /* bit 59 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[57/61]",
+		{ /* bit 60 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[58/61]",
+		{ /* bit 61 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[59/61]",
+		{ /* bit 62 */
+		"Unused_63_3",
 		" Unused",
 		},
-		{
-		"Unused_63_3:[60/61]",
+		{ /* bit 63 */
+		"Unused_63_3",
 		" Unused",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_rxcid_error[] = {
+static struct hfi_error_csr hfi_rxcid_error[] = {
 /*
  * RXCID_ERR_STS desc:
  */
@@ -4652,268 +4652,268 @@ static hfi_error_domain_t hfi_rxcid_error[] = {
 	FXR_RXCID_ERR_EN_HOST, FXR_RXCID_ERR_FIRST_HOST,
 	FXR_RXCID_ERR_STS, FXR_RXCID_ERR_CLR, FXR_RXCID_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"inv_write_inactive",
 		" A CQ write occurred to a CQ that was inactive",
 		},
-		{
+		{ /* bit 1 */
 		"cmdq_csr_err_mbe",
 		" Command queue MBE CSR error",
 		},
-		{
+		{ /* bit 2 */
 		"cmdq_csr_err_sbe",
 		" Command queue SBE CSR error",
 		},
-		{
+		{ /* bit 3 */
 		"cq_mem_mbe_err",
 		" CQ memory MBE error",
 		},
-		{
+		{ /* bit 4 */
 		"cq_mem_sbe_err",
 		" CQ memory SBE error",
 		},
-		{
+		{ /* bit 5 */
 		"out_of_bound_err",
 		" Detected a HIFIS write which crosses the 64byte boundary",
 		},
-		{
+		{ /* bit 6 */
 		"pid_mismatch_err",
 		" Detected a PID mis match",
 		},
-		{
-		"Reserved_63_7:[0/57]",
+		{ /* bit 7 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[1/57]",
+		{ /* bit 8 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[2/57]",
+		{ /* bit 9 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[3/57]",
+		{ /* bit 10 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[4/57]",
+		{ /* bit 11 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[5/57]",
+		{ /* bit 12 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[6/57]",
+		{ /* bit 13 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[7/57]",
+		{ /* bit 14 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[8/57]",
+		{ /* bit 15 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[9/57]",
+		{ /* bit 16 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[10/57]",
+		{ /* bit 17 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[11/57]",
+		{ /* bit 18 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[12/57]",
+		{ /* bit 19 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[13/57]",
+		{ /* bit 20 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[14/57]",
+		{ /* bit 21 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[15/57]",
+		{ /* bit 22 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[16/57]",
+		{ /* bit 23 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[17/57]",
+		{ /* bit 24 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[18/57]",
+		{ /* bit 25 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[19/57]",
+		{ /* bit 26 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[20/57]",
+		{ /* bit 27 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[21/57]",
+		{ /* bit 28 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[22/57]",
+		{ /* bit 29 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[23/57]",
+		{ /* bit 30 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[24/57]",
+		{ /* bit 31 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[25/57]",
+		{ /* bit 32 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[26/57]",
+		{ /* bit 33 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[27/57]",
+		{ /* bit 34 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[28/57]",
+		{ /* bit 35 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[29/57]",
+		{ /* bit 36 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[30/57]",
+		{ /* bit 37 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[31/57]",
+		{ /* bit 38 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[32/57]",
+		{ /* bit 39 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[33/57]",
+		{ /* bit 40 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[34/57]",
+		{ /* bit 41 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[35/57]",
+		{ /* bit 42 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[36/57]",
+		{ /* bit 43 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[37/57]",
+		{ /* bit 44 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[38/57]",
+		{ /* bit 45 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[39/57]",
+		{ /* bit 46 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[40/57]",
+		{ /* bit 47 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[41/57]",
+		{ /* bit 48 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[42/57]",
+		{ /* bit 49 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[43/57]",
+		{ /* bit 50 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[44/57]",
+		{ /* bit 51 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[45/57]",
+		{ /* bit 52 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[46/57]",
+		{ /* bit 53 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[47/57]",
+		{ /* bit 54 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[48/57]",
+		{ /* bit 55 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[49/57]",
+		{ /* bit 56 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[50/57]",
+		{ /* bit 57 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[51/57]",
+		{ /* bit 58 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[52/57]",
+		{ /* bit 59 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[53/57]",
+		{ /* bit 60 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[54/57]",
+		{ /* bit 61 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[55/57]",
+		{ /* bit 62 */
+		"Reserved_63_7",
 		" Unused",
 		},
-		{
-		"Reserved_63_7:[56/57]",
+		{ /* bit 63 */
+		"Reserved_63_7",
 		" Unused",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_fpc0_error[] = {
+static struct hfi_error_csr hfi_fpc0_error[] = {
 /*
  * FPC_ERR_STS desc:
  */
@@ -4922,268 +4922,268 @@ static hfi_error_domain_t hfi_fpc0_error[] = {
 	FXR_LM_FPC0_CSRS+FXR_FPC_ERR_EN_HOST, FXR_LM_FPC0_CSRS+FXR_FPC_ERR_FIRST_HOST,
 	FXR_LM_FPC0_CSRS+FXR_FPC_ERR_STS, FXR_LM_FPC0_CSRS+FXR_FPC_ERR_CLR, FXR_LM_FPC0_CSRS+FXR_FPC_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"spare_0",
 		" reserved",
 		},
-		{
+		{ /* bit 1 */
 		"bad_l2_err",
 		" Illegal L2 opcode",
 		},
-		{
+		{ /* bit 2 */
 		"bad_sc_err",
 		" Unconfigured SC",
 		},
-		{
+		{ /* bit 3 */
 		"bad_mid_tail_err",
 		" Unexpected Mid/Tail flit received ( headless )",
 		},
-		{
+		{ /* bit 4 */
 		"bad_preemption_err",
 		" Number of preemption nesting level exceeded.",
 		},
-		{
+		{ /* bit 5 */
 		"preemption_err",
 		" Preempting with same VL",
 		},
-		{
+		{ /* bit 6 */
 		"preemptionvl15_err",
 		" Preempting a VL15 packet",
 		},
-		{
+		{ /* bit 7 */
 		"bad_vl_marker_err",
 		" Received VL Marker control flit.",
 		},
-		{
+		{ /* bit 8 */
 		"spare_8",
 		" reserved",
 		},
-		{
+		{ /* bit 9 */
 		"bad_dlid_target_err",
 		" Does not match target dlid. ( HFI )",
 		},
-		{
+		{ /* bit 10 */
 		"bad_lver_err",
 		" Illegal LVer in header",
 		},
-		{
+		{ /* bit 11 */
 		"spare_11",
 		" reserved",
 		},
-		{
+		{ /* bit 12 */
 		"spare_12",
 		" reserved",
 		},
-		{
+		{ /* bit 13 */
 		"uncorrectable_err",
 		" Received an un-correctable error.(MBE)",
 		},
-		{
+		{ /* bit 14 */
 		"bad_crdt_ack_err",
 		" Credit acks returned on illegal VL's, 8-14.",
 		},
-		{
+		{ /* bit 15 */
 		"unsup_pkt_type",
 		" Received a packet type that was not configured.",
 		},
-		{
+		{ /* bit 16 */
 		"bad_ctrl_flit_err",
 		" Unknown or reserved control flit received",
 		},
-		{
+		{ /* bit 17 */
 		"event_cntr_parity_err",
 		" Event counter has taken a parity error.",
 		},
-		{
+		{ /* bit 18 */
 		"event_cntr_rollover_err",
 		" Event counter rollover.",
 		},
-		{
+		{ /* bit 19 */
 		"link_err",
 		" Link went from INIT/ARM/ACTIVE to DOWN.",
 		},
-		{
+		{ /* bit 20 */
 		"misc_cntr_rollover_err",
 		" One of the following counters rolled over. portrcv_err_cnt rcv_multicast_pkt_cnt fmconfig_cnt xmit_multicast_pkt_cnt dropped_pkt_cnt rcvremote_phy_err_cnt",
 		},
-		{
+		{ /* bit 21 */
 		"bad_ctrl_dist_err",
 		" Control flit violation",
 		},
-		{
+		{ /* bit 22 */
 		"bad_tail_dist_err",
 		" Tail distance violation",
 		},
-		{
+		{ /* bit 23 */
 		"bad_head_dist_err",
 		" Head distance violation",
 		},
-		{
+		{ /* bit 24 */
 		"nonvl15_state_err",
 		" Received Non-VL15 Pkt when ink state ==Init.",
 		},
-		{
+		{ /* bit 25 */
 		"vl15_multi_err",
 		" Pkt contained VL15 and multicast DLID",
 		},
-		{
+		{ /* bit 26 */
 		"bad_pkt_length_err",
 		" Packet length compare based on packet type.",
 		},
-		{
+		{ /* bit 27 */
 		"unsup_vl_err",
 		" Pkt contained VL not configured - discard packet *** packet not sent to Rbuf. - report error",
 		},
-		{
+		{ /* bit 28 */
 		"perm_nvl15_err",
 		" Pkt DLID=16'hFFFF & !VL15 this is (permissve and !VL15)",
 		},
-		{
+		{ /* bit 29 */
 		"slid_zero_err",
 		" Pkt contained SLID == 0",
 		},
-		{
+		{ /* bit 30 */
 		"dlid_zero_err",
 		" Pkt contained DLID == 0",
 		},
-		{
+		{ /* bit 31 */
 		"length_mtu_err",
 		" Pkt contained LRH:Length > MTU_Cap",
 		},
-		{
+		{ /* bit 32 */
 		"spare_32",
 		" reserved",
 		},
-		{
+		{ /* bit 33 */
 		"rx_early_drop_err",
 		" Flag indicates there was an early error on the packet and the packet was dropped.",
 		},
-		{
+		{ /* bit 34 */
 		"late_short_err",
 		" Actual Packet Length was less than LRH:Pkt_Length.",
 		},
-		{
+		{ /* bit 35 */
 		"late_long_err",
 		" Actual Packet Length was greater than LRH:Pkt_Length.",
 		},
-		{
+		{ /* bit 36 */
 		"late_ebp_err",
 		" Packet arriving contained EBP, marked EBP by remote device.",
 		},
-		{
-		"spare_44_37:[0/8]",
+		{ /* bit 37 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[1/8]",
+		{ /* bit 38 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[2/8]",
+		{ /* bit 39 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[3/8]",
+		{ /* bit 40 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[4/8]",
+		{ /* bit 41 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[5/8]",
+		{ /* bit 42 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[6/8]",
+		{ /* bit 43 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[7/8]",
+		{ /* bit 44 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
+		{ /* bit 45 */
 		"csr_parity_err",
 		" Parity error on csr write data.",
 		},
-		{
+		{ /* bit 46 */
 		"csr_inval_addr",
 		" dc_common recieved an illegal csr address.",
 		},
-		{
-		"spare_53_47:[0/7]",
+		{ /* bit 47 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[1/7]",
+		{ /* bit 48 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[2/7]",
+		{ /* bit 49 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[3/7]",
+		{ /* bit 50 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[4/7]",
+		{ /* bit 51 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[5/7]",
+		{ /* bit 52 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[6/7]",
+		{ /* bit 53 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
+		{ /* bit 54 */
 		"fmconfig_err",
 		" One of the following errors occurred. [E0] BadHeadDist: Distance violation between two head flits [E1] BadTailDist: Distance violation between two tail flits [E2] BadCtrlDist: Distance violation between two credit control flits [E3] BadCrdtAck: Credits return for unsupported VL [E4] UnsupportedVLMarker: Received VL Marker. [E5] BadPreempt: Exceeded the preemption nesting level [E6] BadControlFlit: Received unsupported control flit. [E7] reserved [E8] reserved See the following CSR for additional error information. See",
 		},
-		{
+		{ /* bit 55 */
 		"rcvport_err",
 		" One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] BadSC Marker [E14] Reserved [E15] Reserved When this flag is asserted the following CSRs provide additional error information. Section 17.4.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 17.4.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 17.4.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A '",
 		},
-		{
-		"reserved_63_56:[0/8]",
+		{ /* bit 56 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[1/8]",
+		{ /* bit 57 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[2/8]",
+		{ /* bit 58 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[3/8]",
+		{ /* bit 59 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[4/8]",
+		{ /* bit 60 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[5/8]",
+		{ /* bit 61 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[6/8]",
+		{ /* bit 62 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[7/8]",
+		{ /* bit 63 */
+		"reserved_63_56",
 		" reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_fpc1_error[] = {
+static struct hfi_error_csr hfi_fpc1_error[] = {
 /*
  * FPC_ERR_STS desc:
  */
@@ -5192,268 +5192,268 @@ static hfi_error_domain_t hfi_fpc1_error[] = {
 	FXR_LM_FPC1_CSRS+FXR_FPC_ERR_EN_HOST, FXR_LM_FPC1_CSRS+FXR_FPC_ERR_FIRST_HOST,
 	FXR_LM_FPC1_CSRS+FXR_FPC_ERR_STS, FXR_LM_FPC1_CSRS+FXR_FPC_ERR_CLR, FXR_LM_FPC1_CSRS+FXR_FPC_ERR_FRC,
 	{
-		{
+		{ /* bit 0 */
 		"spare_0",
 		" reserved",
 		},
-		{
+		{ /* bit 1 */
 		"bad_l2_err",
 		" Illegal L2 opcode",
 		},
-		{
+		{ /* bit 2 */
 		"bad_sc_err",
 		" Unconfigured SC",
 		},
-		{
+		{ /* bit 3 */
 		"bad_mid_tail_err",
 		" Unexpected Mid/Tail flit received ( headless )",
 		},
-		{
+		{ /* bit 4 */
 		"bad_preemption_err",
 		" Number of preemption nesting level exceeded.",
 		},
-		{
+		{ /* bit 5 */
 		"preemption_err",
 		" Preempting with same VL",
 		},
-		{
+		{ /* bit 6 */
 		"preemptionvl15_err",
 		" Preempting a VL15 packet",
 		},
-		{
+		{ /* bit 7 */
 		"bad_vl_marker_err",
 		" Received VL Marker control flit.",
 		},
-		{
+		{ /* bit 8 */
 		"spare_8",
 		" reserved",
 		},
-		{
+		{ /* bit 9 */
 		"bad_dlid_target_err",
 		" Does not match target dlid. ( HFI )",
 		},
-		{
+		{ /* bit 10 */
 		"bad_lver_err",
 		" Illegal LVer in header",
 		},
-		{
+		{ /* bit 11 */
 		"spare_11",
 		" reserved",
 		},
-		{
+		{ /* bit 12 */
 		"spare_12",
 		" reserved",
 		},
-		{
+		{ /* bit 13 */
 		"uncorrectable_err",
 		" Received an un-correctable error.(MBE)",
 		},
-		{
+		{ /* bit 14 */
 		"bad_crdt_ack_err",
 		" Credit acks returned on illegal VL's, 8-14.",
 		},
-		{
+		{ /* bit 15 */
 		"unsup_pkt_type",
 		" Received a packet type that was not configured.",
 		},
-		{
+		{ /* bit 16 */
 		"bad_ctrl_flit_err",
 		" Unknown or reserved control flit received",
 		},
-		{
+		{ /* bit 17 */
 		"event_cntr_parity_err",
 		" Event counter has taken a parity error.",
 		},
-		{
+		{ /* bit 18 */
 		"event_cntr_rollover_err",
 		" Event counter rollover.",
 		},
-		{
+		{ /* bit 19 */
 		"link_err",
 		" Link went from INIT/ARM/ACTIVE to DOWN.",
 		},
-		{
+		{ /* bit 20 */
 		"misc_cntr_rollover_err",
 		" One of the following counters rolled over. portrcv_err_cnt rcv_multicast_pkt_cnt fmconfig_cnt xmit_multicast_pkt_cnt dropped_pkt_cnt rcvremote_phy_err_cnt",
 		},
-		{
+		{ /* bit 21 */
 		"bad_ctrl_dist_err",
 		" Control flit violation",
 		},
-		{
+		{ /* bit 22 */
 		"bad_tail_dist_err",
 		" Tail distance violation",
 		},
-		{
+		{ /* bit 23 */
 		"bad_head_dist_err",
 		" Head distance violation",
 		},
-		{
+		{ /* bit 24 */
 		"nonvl15_state_err",
 		" Received Non-VL15 Pkt when ink state ==Init.",
 		},
-		{
+		{ /* bit 25 */
 		"vl15_multi_err",
 		" Pkt contained VL15 and multicast DLID",
 		},
-		{
+		{ /* bit 26 */
 		"bad_pkt_length_err",
 		" Packet length compare based on packet type.",
 		},
-		{
+		{ /* bit 27 */
 		"unsup_vl_err",
 		" Pkt contained VL not configured - discard packet *** packet not sent to Rbuf. - report error",
 		},
-		{
+		{ /* bit 28 */
 		"perm_nvl15_err",
 		" Pkt DLID=16'hFFFF & !VL15 this is (permissve and !VL15)",
 		},
-		{
+		{ /* bit 29 */
 		"slid_zero_err",
 		" Pkt contained SLID == 0",
 		},
-		{
+		{ /* bit 30 */
 		"dlid_zero_err",
 		" Pkt contained DLID == 0",
 		},
-		{
+		{ /* bit 31 */
 		"length_mtu_err",
 		" Pkt contained LRH:Length > MTU_Cap",
 		},
-		{
+		{ /* bit 32 */
 		"spare_32",
 		" reserved",
 		},
-		{
+		{ /* bit 33 */
 		"rx_early_drop_err",
 		" Flag indicates there was an early error on the packet and the packet was dropped.",
 		},
-		{
+		{ /* bit 34 */
 		"late_short_err",
 		" Actual Packet Length was less than LRH:Pkt_Length.",
 		},
-		{
+		{ /* bit 35 */
 		"late_long_err",
 		" Actual Packet Length was greater than LRH:Pkt_Length.",
 		},
-		{
+		{ /* bit 36 */
 		"late_ebp_err",
 		" Packet arriving contained EBP, marked EBP by remote device.",
 		},
-		{
-		"spare_44_37:[0/8]",
+		{ /* bit 37 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[1/8]",
+		{ /* bit 38 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[2/8]",
+		{ /* bit 39 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[3/8]",
+		{ /* bit 40 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[4/8]",
+		{ /* bit 41 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[5/8]",
+		{ /* bit 42 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[6/8]",
+		{ /* bit 43 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
-		"spare_44_37:[7/8]",
+		{ /* bit 44 */
+		"spare_44_37",
 		" reserved",
 		},
-		{
+		{ /* bit 45 */
 		"csr_parity_err",
 		" Parity error on csr write data.",
 		},
-		{
+		{ /* bit 46 */
 		"csr_inval_addr",
 		" dc_common recieved an illegal csr address.",
 		},
-		{
-		"spare_53_47:[0/7]",
+		{ /* bit 47 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[1/7]",
+		{ /* bit 48 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[2/7]",
+		{ /* bit 49 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[3/7]",
+		{ /* bit 50 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[4/7]",
+		{ /* bit 51 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[5/7]",
+		{ /* bit 52 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
-		"spare_53_47:[6/7]",
+		{ /* bit 53 */
+		"spare_53_47",
 		" reserved",
 		},
-		{
+		{ /* bit 54 */
 		"fmconfig_err",
 		" One of the following errors occurred. [E0] BadHeadDist: Distance violation between two head flits [E1] BadTailDist: Distance violation between two tail flits [E2] BadCtrlDist: Distance violation between two credit control flits [E3] BadCrdtAck: Credits return for unsupported VL [E4] UnsupportedVLMarker: Received VL Marker. [E5] BadPreempt: Exceeded the preemption nesting level [E6] BadControlFlit: Received unsupported control flit. [E7] reserved [E8] reserved See the following CSR for additional error information. See",
 		},
-		{
+		{ /* bit 55 */
 		"rcvport_err",
 		" One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] BadSC Marker [E14] Reserved [E15] Reserved When this flag is asserted the following CSRs provide additional error information. Section 17.4.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 17.4.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 17.4.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A '",
 		},
-		{
-		"reserved_63_56:[0/8]",
+		{ /* bit 56 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[1/8]",
+		{ /* bit 57 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[2/8]",
+		{ /* bit 58 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[3/8]",
+		{ /* bit 59 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[4/8]",
+		{ /* bit 60 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[5/8]",
+		{ /* bit 61 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[6/8]",
+		{ /* bit 62 */
+		"reserved_63_56",
 		" reserved",
 		},
-		{
-		"reserved_63_56:[7/8]",
+		{ /* bit 63 */
+		"reserved_63_56",
 		" reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_tp0_error[] = {
+static struct hfi_error_csr hfi_tp0_error[] = {
 /*
  * TP_ERR_STS_0 desc:
  */
@@ -5462,264 +5462,264 @@ static hfi_error_domain_t hfi_tp0_error[] = {
 	FXR_LM_TP0_CSRS+FXR_TP_ERR_EN_HOST_0, FXR_LM_TP0_CSRS+FXR_TP_ERR_FIRST_HOST_0,
 	FXR_LM_TP0_CSRS+FXR_TP_ERR_STS_0, FXR_LM_TP0_CSRS+FXR_TP_ERR_CLR_0, FXR_LM_TP0_CSRS+FXR_TP_ERR_FRC_0,
 	{
-		{
+		{ /* bit 0 */
 		"pkey_discard",
 		" Tx Pkey enable =1 and - Tx Pkey fail, discarded packet",
 		},
-		{
+		{ /* bit 1 */
 		"tport_pkt_ebp",
 		" TPORT received packet not marked EBP and marked it EBP. - Error due to MBE, parity, or timeout. OR; TPORT received packet with a length error and marked it EBP. - Sets whether or not the packet from the crossbar was marked EBP.",
 		},
-		{
+		{ /* bit 2 */
 		"subsw_pkt_ebp",
 		" Tport received a packet from the Subsw marked EBP.",
 		},
-		{
+		{ /* bit 3 */
 		"short_pkt",
 		" TPORT received a packet that was shorter than the length in the associated tag. -Packet was marked with an EBP and the remaining credits were returned to the credit manager.",
 		},
-		{
+		{ /* bit 4 */
 		"long_pkt",
 		" TPORT received a packet that was longer than the length in the associated tag. Packet was clipped and marked with an EBP.",
 		},
-		{
+		{ /* bit 5 */
 		"short_grh_pkt",
 		" TPORT received a GRH packet that was shorter than 8 Bytes but the length field in the packet matched the packet length. Packet was marked with an EBP.",
 		},
-		{
+		{ /* bit 6 */
 		"tailless_pkt",
 		" Will a packet was in progress, Tport received a head of another packet before the tail of the currecnt packet.",
 		},
-		{
+		{ /* bit 7 */
 		"headless_pkt",
 		" Tport received a body of a packet and while the packet was not in progress, meaning there was a body before a head.",
 		},
-		{
+		{ /* bit 8 */
 		"drop_data_pkt",
 		" Non-VL15 Packet was dropped, while in flight to OC because link was not in Active/Send state.",
 		},
-		{
+		{ /* bit 9 */
 		"mtu_error",
 		" MTU error - drop packet Bit set indicates error was detected.",
 		},
-		{
+		{ /* bit 10 */
 		"vlt_error",
 		" Packet received on a non-operational VLt, operational VLt's are set in Misc Control Registers . - drop packet Bit set indicates error was detected.",
 		},
-		{
+		{ /* bit 11 */
 		"invalid_vlt",
 		" Packet SC was mapped to an invalid VLt, only 8:0 are valid - drop packet Bit set indicates error was detected.",
 		},
-		{
+		{ /* bit 12 */
 		"l2_error",
 		" A packet with an L2 format not supported by neighbor. - drop packet Bit set indicates error was detected.",
 		},
-		{
+		{ /* bit 13 */
 		"congested",
 		" TPORT entered a VL congestion state and a least 1 packet was marked.",
 		},
-		{
-		"UNUSED_63_14:[0/50]",
+		{ /* bit 14 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[1/50]",
+		{ /* bit 15 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[2/50]",
+		{ /* bit 16 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[3/50]",
+		{ /* bit 17 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[4/50]",
+		{ /* bit 18 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[5/50]",
+		{ /* bit 19 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[6/50]",
+		{ /* bit 20 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[7/50]",
+		{ /* bit 21 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[8/50]",
+		{ /* bit 22 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[9/50]",
+		{ /* bit 23 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[10/50]",
+		{ /* bit 24 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[11/50]",
+		{ /* bit 25 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[12/50]",
+		{ /* bit 26 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[13/50]",
+		{ /* bit 27 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[14/50]",
+		{ /* bit 28 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[15/50]",
+		{ /* bit 29 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[16/50]",
+		{ /* bit 30 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[17/50]",
+		{ /* bit 31 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[18/50]",
+		{ /* bit 32 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[19/50]",
+		{ /* bit 33 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[20/50]",
+		{ /* bit 34 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[21/50]",
+		{ /* bit 35 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[22/50]",
+		{ /* bit 36 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[23/50]",
+		{ /* bit 37 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[24/50]",
+		{ /* bit 38 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[25/50]",
+		{ /* bit 39 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[26/50]",
+		{ /* bit 40 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[27/50]",
+		{ /* bit 41 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[28/50]",
+		{ /* bit 42 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[29/50]",
+		{ /* bit 43 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[30/50]",
+		{ /* bit 44 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[31/50]",
+		{ /* bit 45 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[32/50]",
+		{ /* bit 46 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[33/50]",
+		{ /* bit 47 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[34/50]",
+		{ /* bit 48 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[35/50]",
+		{ /* bit 49 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[36/50]",
+		{ /* bit 50 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[37/50]",
+		{ /* bit 51 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[38/50]",
+		{ /* bit 52 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[39/50]",
+		{ /* bit 53 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[40/50]",
+		{ /* bit 54 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[41/50]",
+		{ /* bit 55 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[42/50]",
+		{ /* bit 56 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[43/50]",
+		{ /* bit 57 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[44/50]",
+		{ /* bit 58 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[45/50]",
+		{ /* bit 59 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[46/50]",
+		{ /* bit 60 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[47/50]",
+		{ /* bit 61 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[48/50]",
+		{ /* bit 62 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[49/50]",
+		{ /* bit 63 */
+		"UNUSED_63_14",
 		" ",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
     ,
 /*
@@ -5730,268 +5730,268 @@ static hfi_error_domain_t hfi_tp0_error[] = {
 	FXR_LM_TP0_CSRS+FXR_TP_ERR_EN_HOST_1, FXR_LM_TP0_CSRS+FXR_TP_ERR_FIRST_HOST_1,
 	FXR_LM_TP0_CSRS+FXR_TP_ERR_STS_1, FXR_LM_TP0_CSRS+FXR_TP_ERR_CLR_1, FXR_LM_TP0_CSRS+FXR_TP_ERR_FRC_1,
 	{
-		{
+		{ /* bit 0 */
 		"request_to",
 		" Tport packet timeout (wait>Request TO reg) detected. A packet is in progress from the Subsw but the tail has not been received, detect timeout when wait > Request_TO reg. - Insert EBP",
 		},
-		{
+		{ /* bit 1 */
 		"subsw_sbe",
 		" Tport received a packet from the subsw with ECC error detected an SBE (Includes all VLs and CBUF's) - corrected error",
 		},
-		{
+		{ /* bit 2 */
 		"subsw_mbe",
 		" Tport received a packet from the subsw with ECC error detected an SBE (Includes all VLs and CBUF's) Head -discard entire packet Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
 		},
-		{
+		{ /* bit 3 */
 		"subsw_pe",
 		" Tport received sideband information from the subsw with parity error (Includes all VLs and CBUF's) Head -discard entire packet Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
 		},
-		{
+		{ /* bit 4 */
 		"rinfoq_sbe",
 		" Rinfo FIFO SBE - corrected error",
 		},
-		{
+		{ /* bit 5 */
 		"rinfoq_mbe",
 		" Rinfo FIFO mbe Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
 		},
-		{
+		{ /* bit 6 */
 		"rinfoq_underflow",
 		" TPORT route info queue underflow. - should never happen Note: If rinfoq_overflow is also set there are no EOP flits buffer.",
 		},
-		{
+		{ /* bit 7 */
 		"rinfoq_overflow",
 		" TPORT route info queue overflow. - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If rinfoq_overflow is also set there are no EOP flits buffer",
 		},
-		{
+		{ /* bit 8 */
 		"rinfoq_spill_sbe",
 		" Rinfo Spill FIFO SBE - corrected error",
 		},
-		{
+		{ /* bit 9 */
 		"rinfoq_spill_mbe",
 		" Rinfo Spill FIFO mbe Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
 		},
-		{
+		{ /* bit 10 */
 		"rinfoq_spill_underflow",
 		" TPORT route info queue underflow. - should never happen Note: If rinfoq_overflow is also set there are no EOP flits buffer.",
 		},
-		{
+		{ /* bit 11 */
 		"rinfoq_spill_overflow",
 		" TPORT route info queue overflow. - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If rinfoq_overflow is also set there are no EOP flits buffer",
 		},
-		{
+		{ /* bit 12 */
 		"dataq_underflow",
 		" TPORT data queue underflow. - should never happen Note: If dataq_overflow is also set there are no EOP flits buffer.",
 		},
-		{
+		{ /* bit 13 */
 		"dataq_overflow",
 		" TPORT data queue overflow. TBD, probably just discard flit --- - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If dataq_overflow is also set there are no EOP flits buffer",
 		},
-		{
+		{ /* bit 14 */
 		"dataq_spill_underflow",
 		" TPORT route info queue overflow. - should never happen Note: If dataq_overflow is also set there are no EOP flits buffer.",
 		},
-		{
+		{ /* bit 15 */
 		"dataq_spill_overflow",
 		" TPORT Spill data queue overflow. T- SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If dataq_overflow is also set there are no EOP flits buffer",
 		},
-		{
+		{ /* bit 16 */
 		"csr_addr_err",
 		" Tport received a CSR access to an invalid address or a write to an address that contains only Read-Only CSRs.",
 		},
-		{
+		{ /* bit 17 */
 		"lb_wr_pe",
 		" Local bus parity error detected on write data from CPORT.",
 		},
-		{
+		{ /* bit 18 */
 		"credit_overflow",
 		" STL mode: Detected a condition where the Transmitter's Consumed credit accounting exceeded programmed max. VL15, VL7:0 dedicated+shared > max credits at remote RBUF *** this should not occur.",
 		},
-		{
+		{ /* bit 19 */
 		"oc_credit_underflow",
 		" OC flow control counter underflow. Counter was at 0 and an ack was detected due to an ack from OC or a squashed flit.",
 		},
-		{
-		"hoq_discard:[0/10]",
+		{ /* bit 20 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[1/10]",
+		{ /* bit 21 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[2/10]",
+		{ /* bit 22 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[3/10]",
+		{ /* bit 23 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[4/10]",
+		{ /* bit 24 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[5/10]",
+		{ /* bit 25 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[6/10]",
+		{ /* bit 26 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[7/10]",
+		{ /* bit 27 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[8/10]",
+		{ /* bit 28 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[9/10]",
+		{ /* bit 29 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[0/10]",
+		{ /* bit 30 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[1/10]",
+		{ /* bit 31 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[2/10]",
+		{ /* bit 32 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[3/10]",
+		{ /* bit 33 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[4/10]",
+		{ /* bit 34 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[5/10]",
+		{ /* bit 35 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[6/10]",
+		{ /* bit 36 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[7/10]",
+		{ /* bit 37 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[8/10]",
+		{ /* bit 38 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[9/10]",
+		{ /* bit 39 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
+		{ /* bit 40 */
 		"perf_cntr_perr",
 		" A performance counter parity error",
 		},
-		{
+		{ /* bit 41 */
 		"perf_cntr_rollover",
 		" A performance counter rolled over",
 		},
-		{
+		{ /* bit 42 */
 		"crdt_rtrn_illegal_vl",
 		" VL written into the Credit Return Table is not in range. Legal range is 15,8:0.",
 		},
-		{
+		{ /* bit 43 */
 		"crdt_rtrn_par_err",
 		" Credit return block detected a parity error on the credit flit acknowledge bus.",
 		},
-		{
+		{ /* bit 44 */
 		"crdt_rtrn_vl_err",
 		" Credit return block detected an illegal vl pointer on credit return from remote device.",
 		},
-		{
-		"UNUSED_63_45:[0/19]",
+		{ /* bit 45 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[1/19]",
+		{ /* bit 46 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[2/19]",
+		{ /* bit 47 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[3/19]",
+		{ /* bit 48 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[4/19]",
+		{ /* bit 49 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[5/19]",
+		{ /* bit 50 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[6/19]",
+		{ /* bit 51 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[7/19]",
+		{ /* bit 52 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[8/19]",
+		{ /* bit 53 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[9/19]",
+		{ /* bit 54 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[10/19]",
+		{ /* bit 55 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[11/19]",
+		{ /* bit 56 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[12/19]",
+		{ /* bit 57 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[13/19]",
+		{ /* bit 58 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[14/19]",
+		{ /* bit 59 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[15/19]",
+		{ /* bit 60 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[16/19]",
+		{ /* bit 61 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[17/19]",
+		{ /* bit 62 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[18/19]",
+		{ /* bit 63 */
+		"UNUSED_63_45",
 		" ",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_tp1_error[] = {
+static struct hfi_error_csr hfi_tp1_error[] = {
 /*
  * TP_ERR_STS_0 desc:
  */
@@ -6000,264 +6000,264 @@ static hfi_error_domain_t hfi_tp1_error[] = {
 	FXR_LM_TP1_CSRS+FXR_TP_ERR_EN_HOST_0, FXR_LM_TP1_CSRS+FXR_TP_ERR_FIRST_HOST_0,
 	FXR_LM_TP1_CSRS+FXR_TP_ERR_STS_0, FXR_LM_TP1_CSRS+FXR_TP_ERR_CLR_0, FXR_LM_TP1_CSRS+FXR_TP_ERR_FRC_0,
 	{
-		{
+		{ /* bit 0 */
 		"pkey_discard",
 		" Tx Pkey enable =1 and - Tx Pkey fail, discarded packet",
 		},
-		{
+		{ /* bit 1 */
 		"tport_pkt_ebp",
 		" TPORT received packet not marked EBP and marked it EBP. - Error due to MBE, parity, or timeout. OR; TPORT received packet with a length error and marked it EBP. - Sets whether or not the packet from the crossbar was marked EBP.",
 		},
-		{
+		{ /* bit 2 */
 		"subsw_pkt_ebp",
 		" Tport received a packet from the Subsw marked EBP.",
 		},
-		{
+		{ /* bit 3 */
 		"short_pkt",
 		" TPORT received a packet that was shorter than the length in the associated tag. -Packet was marked with an EBP and the remaining credits were returned to the credit manager.",
 		},
-		{
+		{ /* bit 4 */
 		"long_pkt",
 		" TPORT received a packet that was longer than the length in the associated tag. Packet was clipped and marked with an EBP.",
 		},
-		{
+		{ /* bit 5 */
 		"short_grh_pkt",
 		" TPORT received a GRH packet that was shorter than 8 Bytes but the length field in the packet matched the packet length. Packet was marked with an EBP.",
 		},
-		{
+		{ /* bit 6 */
 		"tailless_pkt",
 		" Will a packet was in progress, Tport received a head of another packet before the tail of the currecnt packet.",
 		},
-		{
+		{ /* bit 7 */
 		"headless_pkt",
 		" Tport received a body of a packet and while the packet was not in progress, meaning there was a body before a head.",
 		},
-		{
+		{ /* bit 8 */
 		"drop_data_pkt",
 		" Non-VL15 Packet was dropped, while in flight to OC because link was not in Active/Send state.",
 		},
-		{
+		{ /* bit 9 */
 		"mtu_error",
 		" MTU error - drop packet Bit set indicates error was detected.",
 		},
-		{
+		{ /* bit 10 */
 		"vlt_error",
 		" Packet received on a non-operational VLt, operational VLt's are set in Misc Control Registers . - drop packet Bit set indicates error was detected.",
 		},
-		{
+		{ /* bit 11 */
 		"invalid_vlt",
 		" Packet SC was mapped to an invalid VLt, only 8:0 are valid - drop packet Bit set indicates error was detected.",
 		},
-		{
+		{ /* bit 12 */
 		"l2_error",
 		" A packet with an L2 format not supported by neighbor. - drop packet Bit set indicates error was detected.",
 		},
-		{
+		{ /* bit 13 */
 		"congested",
 		" TPORT entered a VL congestion state and a least 1 packet was marked.",
 		},
-		{
-		"UNUSED_63_14:[0/50]",
+		{ /* bit 14 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[1/50]",
+		{ /* bit 15 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[2/50]",
+		{ /* bit 16 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[3/50]",
+		{ /* bit 17 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[4/50]",
+		{ /* bit 18 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[5/50]",
+		{ /* bit 19 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[6/50]",
+		{ /* bit 20 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[7/50]",
+		{ /* bit 21 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[8/50]",
+		{ /* bit 22 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[9/50]",
+		{ /* bit 23 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[10/50]",
+		{ /* bit 24 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[11/50]",
+		{ /* bit 25 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[12/50]",
+		{ /* bit 26 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[13/50]",
+		{ /* bit 27 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[14/50]",
+		{ /* bit 28 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[15/50]",
+		{ /* bit 29 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[16/50]",
+		{ /* bit 30 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[17/50]",
+		{ /* bit 31 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[18/50]",
+		{ /* bit 32 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[19/50]",
+		{ /* bit 33 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[20/50]",
+		{ /* bit 34 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[21/50]",
+		{ /* bit 35 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[22/50]",
+		{ /* bit 36 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[23/50]",
+		{ /* bit 37 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[24/50]",
+		{ /* bit 38 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[25/50]",
+		{ /* bit 39 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[26/50]",
+		{ /* bit 40 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[27/50]",
+		{ /* bit 41 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[28/50]",
+		{ /* bit 42 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[29/50]",
+		{ /* bit 43 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[30/50]",
+		{ /* bit 44 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[31/50]",
+		{ /* bit 45 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[32/50]",
+		{ /* bit 46 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[33/50]",
+		{ /* bit 47 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[34/50]",
+		{ /* bit 48 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[35/50]",
+		{ /* bit 49 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[36/50]",
+		{ /* bit 50 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[37/50]",
+		{ /* bit 51 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[38/50]",
+		{ /* bit 52 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[39/50]",
+		{ /* bit 53 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[40/50]",
+		{ /* bit 54 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[41/50]",
+		{ /* bit 55 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[42/50]",
+		{ /* bit 56 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[43/50]",
+		{ /* bit 57 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[44/50]",
+		{ /* bit 58 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[45/50]",
+		{ /* bit 59 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[46/50]",
+		{ /* bit 60 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[47/50]",
+		{ /* bit 61 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[48/50]",
+		{ /* bit 62 */
+		"UNUSED_63_14",
 		" ",
 		},
-		{
-		"UNUSED_63_14:[49/50]",
+		{ /* bit 63 */
+		"UNUSED_63_14",
 		" ",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
     ,
 /*
@@ -6268,268 +6268,268 @@ static hfi_error_domain_t hfi_tp1_error[] = {
 	FXR_LM_TP1_CSRS+FXR_TP_ERR_EN_HOST_1, FXR_LM_TP1_CSRS+FXR_TP_ERR_FIRST_HOST_1,
 	FXR_LM_TP1_CSRS+FXR_TP_ERR_STS_1, FXR_LM_TP1_CSRS+FXR_TP_ERR_CLR_1, FXR_LM_TP1_CSRS+FXR_TP_ERR_FRC_1,
 	{
-		{
+		{ /* bit 0 */
 		"request_to",
 		" Tport packet timeout (wait>Request TO reg) detected. A packet is in progress from the Subsw but the tail has not been received, detect timeout when wait > Request_TO reg. - Insert EBP",
 		},
-		{
+		{ /* bit 1 */
 		"subsw_sbe",
 		" Tport received a packet from the subsw with ECC error detected an SBE (Includes all VLs and CBUF's) - corrected error",
 		},
-		{
+		{ /* bit 2 */
 		"subsw_mbe",
 		" Tport received a packet from the subsw with ECC error detected an SBE (Includes all VLs and CBUF's) Head -discard entire packet Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
 		},
-		{
+		{ /* bit 3 */
 		"subsw_pe",
 		" Tport received sideband information from the subsw with parity error (Includes all VLs and CBUF's) Head -discard entire packet Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
 		},
-		{
+		{ /* bit 4 */
 		"rinfoq_sbe",
 		" Rinfo FIFO SBE - corrected error",
 		},
-		{
+		{ /* bit 5 */
 		"rinfoq_mbe",
 		" Rinfo FIFO mbe Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
 		},
-		{
+		{ /* bit 6 */
 		"rinfoq_underflow",
 		" TPORT route info queue underflow. - should never happen Note: If rinfoq_overflow is also set there are no EOP flits buffer.",
 		},
-		{
+		{ /* bit 7 */
 		"rinfoq_overflow",
 		" TPORT route info queue overflow. - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If rinfoq_overflow is also set there are no EOP flits buffer",
 		},
-		{
+		{ /* bit 8 */
 		"rinfoq_spill_sbe",
 		" Rinfo Spill FIFO SBE - corrected error",
 		},
-		{
+		{ /* bit 9 */
 		"rinfoq_spill_mbe",
 		" Rinfo Spill FIFO mbe Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
 		},
-		{
+		{ /* bit 10 */
 		"rinfoq_spill_underflow",
 		" TPORT route info queue underflow. - should never happen Note: If rinfoq_overflow is also set there are no EOP flits buffer.",
 		},
-		{
+		{ /* bit 11 */
 		"rinfoq_spill_overflow",
 		" TPORT route info queue overflow. - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If rinfoq_overflow is also set there are no EOP flits buffer",
 		},
-		{
+		{ /* bit 12 */
 		"dataq_underflow",
 		" TPORT data queue underflow. - should never happen Note: If dataq_overflow is also set there are no EOP flits buffer.",
 		},
-		{
+		{ /* bit 13 */
 		"dataq_overflow",
 		" TPORT data queue overflow. TBD, probably just discard flit --- - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If dataq_overflow is also set there are no EOP flits buffer",
 		},
-		{
+		{ /* bit 14 */
 		"dataq_spill_underflow",
 		" TPORT route info queue overflow. - should never happen Note: If dataq_overflow is also set there are no EOP flits buffer.",
 		},
-		{
+		{ /* bit 15 */
 		"dataq_spill_overflow",
 		" TPORT Spill data queue overflow. T- SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If dataq_overflow is also set there are no EOP flits buffer",
 		},
-		{
+		{ /* bit 16 */
 		"csr_addr_err",
 		" Tport received a CSR access to an invalid address or a write to an address that contains only Read-Only CSRs.",
 		},
-		{
+		{ /* bit 17 */
 		"lb_wr_pe",
 		" Local bus parity error detected on write data from CPORT.",
 		},
-		{
+		{ /* bit 18 */
 		"credit_overflow",
 		" STL mode: Detected a condition where the Transmitter's Consumed credit accounting exceeded programmed max. VL15, VL7:0 dedicated+shared > max credits at remote RBUF *** this should not occur.",
 		},
-		{
+		{ /* bit 19 */
 		"oc_credit_underflow",
 		" OC flow control counter underflow. Counter was at 0 and an ack was detected due to an ack from OC or a squashed flit.",
 		},
-		{
-		"hoq_discard:[0/10]",
+		{ /* bit 20 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[1/10]",
+		{ /* bit 21 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[2/10]",
+		{ /* bit 22 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[3/10]",
+		{ /* bit 23 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[4/10]",
+		{ /* bit 24 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[5/10]",
+		{ /* bit 25 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[6/10]",
+		{ /* bit 26 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[7/10]",
+		{ /* bit 27 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[8/10]",
+		{ /* bit 28 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"hoq_discard:[9/10]",
+		{ /* bit 29 */
+		"hoq_discard",
 		" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 29:20 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[0/10]",
+		{ /* bit 30 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[1/10]",
+		{ /* bit 31 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[2/10]",
+		{ /* bit 32 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[3/10]",
+		{ /* bit 33 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[4/10]",
+		{ /* bit 34 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[5/10]",
+		{ /* bit 35 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[6/10]",
+		{ /* bit 36 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[7/10]",
+		{ /* bit 37 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[8/10]",
+		{ /* bit 38 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
-		"sll_timeout:[9/10]",
+		{ /* bit 39 */
+		"sll_timeout",
 		" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 39:30 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
 		},
-		{
+		{ /* bit 40 */
 		"perf_cntr_perr",
 		" A performance counter parity error",
 		},
-		{
+		{ /* bit 41 */
 		"perf_cntr_rollover",
 		" A performance counter rolled over",
 		},
-		{
+		{ /* bit 42 */
 		"crdt_rtrn_illegal_vl",
 		" VL written into the Credit Return Table is not in range. Legal range is 15,8:0.",
 		},
-		{
+		{ /* bit 43 */
 		"crdt_rtrn_par_err",
 		" Credit return block detected a parity error on the credit flit acknowledge bus.",
 		},
-		{
+		{ /* bit 44 */
 		"crdt_rtrn_vl_err",
 		" Credit return block detected an illegal vl pointer on credit return from remote device.",
 		},
-		{
-		"UNUSED_63_45:[0/19]",
+		{ /* bit 45 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[1/19]",
+		{ /* bit 46 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[2/19]",
+		{ /* bit 47 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[3/19]",
+		{ /* bit 48 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[4/19]",
+		{ /* bit 49 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[5/19]",
+		{ /* bit 50 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[6/19]",
+		{ /* bit 51 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[7/19]",
+		{ /* bit 52 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[8/19]",
+		{ /* bit 53 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[9/19]",
+		{ /* bit 54 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[10/19]",
+		{ /* bit 55 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[11/19]",
+		{ /* bit 56 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[12/19]",
+		{ /* bit 57 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[13/19]",
+		{ /* bit 58 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[14/19]",
+		{ /* bit 59 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[15/19]",
+		{ /* bit 60 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[16/19]",
+		{ /* bit 61 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[17/19]",
+		{ /* bit 62 */
+		"UNUSED_63_45",
 		" ",
 		},
-		{
-		"UNUSED_63_45:[18/19]",
+		{ /* bit 63 */
+		"UNUSED_63_45",
 		" ",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 
-static hfi_error_domain_t hfi_pmon_error[] = {
+static struct hfi_error_csr hfi_pmon_error[] = {
 /*
  * PMON_ERR_STS_1 desc:
  */
@@ -6538,264 +6538,264 @@ static hfi_error_domain_t hfi_pmon_error[] = {
 	FXR_PMON_ERR_EN_HOST_1, FXR_PMON_ERR_FIRST_HOST_1,
 	FXR_PMON_ERR_STS_1, FXR_PMON_ERR_CLR_1, FXR_PMON_ERR_FRC_1,
 	{
-		{
+		{ /* bit 0 */
 		"diagnostic",
 		" Diagnostic Error Flag",
 		},
-		{
-		"overflow:[0/16]",
+		{ /* bit 1 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[1/16]",
+		{ /* bit 2 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[2/16]",
+		{ /* bit 3 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[3/16]",
+		{ /* bit 4 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[4/16]",
+		{ /* bit 5 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[5/16]",
+		{ /* bit 6 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[6/16]",
+		{ /* bit 7 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[7/16]",
+		{ /* bit 8 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[8/16]",
+		{ /* bit 9 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[9/16]",
+		{ /* bit 10 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[10/16]",
+		{ /* bit 11 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[11/16]",
+		{ /* bit 12 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[12/16]",
+		{ /* bit 13 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[13/16]",
+		{ /* bit 14 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[14/16]",
+		{ /* bit 15 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"overflow:[15/16]",
+		{ /* bit 16 */
+		"overflow",
 		" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
 		},
-		{
-		"Reserved_63_17:[0/47]",
+		{ /* bit 17 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[1/47]",
+		{ /* bit 18 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[2/47]",
+		{ /* bit 19 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[3/47]",
+		{ /* bit 20 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[4/47]",
+		{ /* bit 21 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[5/47]",
+		{ /* bit 22 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[6/47]",
+		{ /* bit 23 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[7/47]",
+		{ /* bit 24 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[8/47]",
+		{ /* bit 25 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[9/47]",
+		{ /* bit 26 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[10/47]",
+		{ /* bit 27 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[11/47]",
+		{ /* bit 28 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[12/47]",
+		{ /* bit 29 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[13/47]",
+		{ /* bit 30 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[14/47]",
+		{ /* bit 31 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[15/47]",
+		{ /* bit 32 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[16/47]",
+		{ /* bit 33 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[17/47]",
+		{ /* bit 34 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[18/47]",
+		{ /* bit 35 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[19/47]",
+		{ /* bit 36 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[20/47]",
+		{ /* bit 37 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[21/47]",
+		{ /* bit 38 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[22/47]",
+		{ /* bit 39 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[23/47]",
+		{ /* bit 40 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[24/47]",
+		{ /* bit 41 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[25/47]",
+		{ /* bit 42 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[26/47]",
+		{ /* bit 43 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[27/47]",
+		{ /* bit 44 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[28/47]",
+		{ /* bit 45 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[29/47]",
+		{ /* bit 46 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[30/47]",
+		{ /* bit 47 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[31/47]",
+		{ /* bit 48 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[32/47]",
+		{ /* bit 49 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[33/47]",
+		{ /* bit 50 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[34/47]",
+		{ /* bit 51 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[35/47]",
+		{ /* bit 52 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[36/47]",
+		{ /* bit 53 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[37/47]",
+		{ /* bit 54 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[38/47]",
+		{ /* bit 55 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[39/47]",
+		{ /* bit 56 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[40/47]",
+		{ /* bit 57 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[41/47]",
+		{ /* bit 58 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[42/47]",
+		{ /* bit 59 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[43/47]",
+		{ /* bit 60 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[44/47]",
+		{ /* bit 61 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[45/47]",
+		{ /* bit 62 */
+		"Reserved_63_17",
 		" Reserved",
 		},
-		{
-		"Reserved_63_17:[46/47]",
+		{ /* bit 63 */
+		"Reserved_63_17",
 		" Reserved",
 		}
 	}
-/* domain bits defined: 64 */
+/* CSR bits defined: 64 */
     }
 };
 

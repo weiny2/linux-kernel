@@ -13,19 +13,19 @@
 #define FIELD_END	8
 %}
 
-%s	domain
+%s	CSR
 
 %%
 
-^\/\/\ .*_(err_sts|ERR_STS).*\ desc:.*	{BEGIN domain; return DESC_START;}
-<domain>^\/\/\ .*			return DESC_COMMENT;
-<domain>typedef.*			;
-<domain>struct\ \{			return FIELD_START;
-<domain>uint64_t			return FIELD_TYPE;
-<domain>[_a-zA-Z0-9]+			return FIELD_NAME;
-<domain>[0-9]+;				return FIELD_BITS;
-<domain>\/\/\ .*			return FIELD_COMMENT;
-<domain>\}				{BEGIN 0; return FIELD_END;}
+^\/\/\ .*_(err_sts|ERR_STS).*\ desc:.*	{BEGIN CSR; return DESC_START;}
+<CSR>^\/\/\ .*				return DESC_COMMENT;
+<CSR>typedef.*				;
+<CSR>struct\ \{				return FIELD_START;
+<CSR>uint64_t				return FIELD_TYPE;
+<CSR>[_a-zA-Z0-9]+			return FIELD_NAME;
+<CSR>[0-9]+;				return FIELD_BITS;
+<CSR>\/\/\ .*				return FIELD_COMMENT;
+<CSR>\}					{BEGIN 0; return FIELD_END;}
 
 .					;
 \n					;
@@ -98,7 +98,7 @@ next:
 		dbits = 0;
 
 		strcpy(filename, dname);
-		strcat(filename, ".domain");
+		strcat(filename, ".CSR");
 		out = fopen(filename, "w");
 		if (out == NULL)
 			perror(filename);
@@ -135,20 +135,16 @@ next:
 		strcat(fcomment, &yytext[2]);
 	} else
 	if (token == FIELD_TYPE || token == FIELD_END) {
-		dbits += fbits;
 		for (i = 0; i < fbits; i++) {
-			fprintf(out,"\t\t{\n");
-			if (fbits == 1) {
-				fprintf(out,"\t\t\"%s\",\n", fname);
-			} else {
-				fprintf(out,"\t\t\"%s:[%d/%d]\",\n", fname, i, fbits);
-			}
+			fprintf(out,"\t\t{ /* bit %d */\n", dbits);
+			fprintf(out,"\t\t\"%s\",\n", fname);
 			fprintf(out,"\t\t\"%s\",\n", fcomment);
+			dbits++;
 
 			if (token == FIELD_END && (i+1) == fbits) {
 				fprintf(out,"\t\t}\n");
 				fprintf(out,"\t}\n");
-				fprintf(out,"/* domain bits defined: %d */\n", dbits);
+				fprintf(out,"/* CSR bits defined: %d */\n", dbits);
 				fprintf(out,"    }\n");
 				fclose(out);
 				out = NULL;

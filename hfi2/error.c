@@ -70,31 +70,34 @@
 #include <rdma/fxr/mnh_opio_defs.h>
 #include <rdma/fxr/fxr_perfmon_defs.h>
 
-typedef struct hfi_error_event {
+/*
+ * error domain and error event processing structure.
+ */
+struct hfi_error_event {
 	char *event_name;
 	char *event_desc;
 	/* we can add action routine here */
-	void (*action)(void);
-} hfi_error_event_t;
+	void (*action)(struct hfi_devdata *dd);
+};
 
-typedef struct hfi_error_domain {
-	char *domain_name;
+struct hfi_error_csr {
+	char *csr_name;
 	uint64_t err_en_host;
 	uint64_t err_first_host;
 	uint64_t err_sts;		/* status CSR */
 	uint64_t err_clr;		/* clear CSR */
 	uint64_t err_frc;		/* set CSR */
-	hfi_error_event_t events[64];
-} hfi_error_domain_t;
+	struct hfi_error_event events[64];
+};
 
-typedef struct hfi_error_vector {
-	int			irq;
+struct hfi_error_domain {
+	struct hfi_error_csr	*csr;
 	int			count;
-	hfi_error_domain_t	*domain;
-} hfi_error_vector_t;
+	int			irq;
+};
 
 /*
- * Each error domain definition.
+ * Each error csr definition.
  */
 #include "errdef.h"
 
@@ -127,31 +130,37 @@ typedef struct hfi_error_vector {
 /*
  * When LM_ERR is added, this will be 22
  */
-#define NUM_ERR_IRQ		21
+#define NUM_ERR_DOMAIN		21
 
-static hfi_error_vector_t hfi_error_vector[] = {
-	{ FZC0_IRQ,	1, hfi_fzc0_error },
-	{ FZC1_IRQ,	1, hfi_fzc1_error },
-	{ HIFIS_IRQ,	1, hfi_hifis_error },
-	{ LOCA_IRQ,	2, hfi_loca_error },
-	{ PCIM_IRQ,	1, hfi_pcim_error },
-	{ TXCID_IRQ,	1, hfi_txcid_error },
-	{ OTR_IRQ,	2, hfi_otr_error },
-	{ TXDMA_IRQ,	1, hfi_txdma_error },
+/*
+ * Put all error domains into an array structure
+ */
+#define MAKE_DOMAIN(e, irq)	\
+	{e, sizeof(e) / sizeof(struct hfi_error_csr), irq }
+
+static struct hfi_error_domain hfi_error_domain[] = {
+	MAKE_DOMAIN(hfi_fzc0_error, FZC0_IRQ),
+	MAKE_DOMAIN(hfi_fzc1_error, FZC1_IRQ),
+	MAKE_DOMAIN(hfi_hifis_error, HIFIS_IRQ),
+	MAKE_DOMAIN(hfi_loca_error, LOCA_IRQ),
+	MAKE_DOMAIN(hfi_pcim_error, PCIM_IRQ),
+	MAKE_DOMAIN(hfi_txcid_error, TXCID_IRQ),
+	MAKE_DOMAIN(hfi_otr_error, OTR_IRQ),
+	MAKE_DOMAIN(hfi_txdma_error, TXDMA_IRQ),
 	/* add LM error here */
-	{ RXE2E_IRQ,	1, hfi_rxe2e_error },
-	{ RXHP_IRQ,	1, hfi_rxhp_error },
-	{ RXDMA_IRQ,	1, hfi_rxdma_error },
-	{ RXET_IRQ,	1, hfi_rxet_error },
-	{ RXHIARB_IRQ,	1, hfi_rxhiarb_error },
-	{ AT_IRQ,	1, hfi_at_error },
-	{ OPIO_IRQ,	1, hfi_opio_error },
-	{ RXCID_IRQ,	1, hfi_rxcid_error },
-	{ FPC0_IRQ,	1, hfi_fpc0_error },
-	{ FPC1_IRQ,	1, hfi_fpc1_error },
-	{ TP0_IRQ,	2, hfi_tp0_error },
-	{ TP1_IRQ,	2, hfi_tp1_error },
-	{ PMON_IRQ,	1, hfi_pmon_error }
+	MAKE_DOMAIN(hfi_rxe2e_error, RXE2E_IRQ),
+	MAKE_DOMAIN(hfi_rxhp_error, RXHP_IRQ),
+	MAKE_DOMAIN(hfi_rxdma_error, RXDMA_IRQ),
+	MAKE_DOMAIN(hfi_rxet_error, RXET_IRQ),
+	MAKE_DOMAIN(hfi_rxhiarb_error, RXHIARB_IRQ),
+	MAKE_DOMAIN(hfi_at_error, AT_IRQ),
+	MAKE_DOMAIN(hfi_opio_error, OPIO_IRQ),
+	MAKE_DOMAIN(hfi_rxcid_error, RXCID_IRQ),
+	MAKE_DOMAIN(hfi_fpc0_error, FPC0_IRQ),
+	MAKE_DOMAIN(hfi_fpc1_error, FPC1_IRQ),
+	MAKE_DOMAIN(hfi_tp0_error, TP0_IRQ),
+	MAKE_DOMAIN(hfi_tp1_error, TP1_IRQ),
+	MAKE_DOMAIN(hfi_pmon_error, PMON_IRQ)
 };
 
 /*
@@ -161,44 +170,49 @@ static irqreturn_t irq_err_handler(int irq, void *dev_id)
 {
 	struct hfi_msix_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
-	hfi_error_vector_t *vector = me->arg;
-	hfi_error_domain_t *domain = vector->domain;
-	int count = vector->count;
+	struct hfi_error_domain *domain = me->arg;
+	struct hfi_error_csr *csr = domain->csr;
+	struct hfi_error_event *event;
+	int count = domain->count;
 	int i, j;
-	u64 csrval;
+	u64 val;
 
 	hfi_ack_interrupt(me);
-	csrval = 0;
+	val = 0;
 
 	/* disable interrupt for domains using this irq */
 	for (i = 0; i < count; i++)
-		write_csr(dd, domain[i].err_en_host, csrval);
+		write_csr(dd, csr[i].err_en_host, val);
 
-	/* read all err_sts registers */
+	/* read all err_sts csr */
 	for (i = 0; i < count; i++) {
-		csrval = read_csr(dd, domain[i].err_sts);
-		if (!csrval)
+		val = read_csr(dd, csr[i].err_sts);
+		if (!val)
 			continue;
 
 		for (j = 0; j < 64; j++) {
-			if (csrval & (1uLL<<j))
+			if (val & (1uLL << j)) {
+				event = &csr[i].events[j];
 				dd_dev_err(dd, "%s:%s:%s\n",
-					domain[i].domain_name,
-					domain[i].events[j].event_name,
-					domain[i].events[j].event_desc);
+					csr[i].csr_name,
+					event->event_name,
+					event->event_desc);
+				if (event->action)
+					event->action(dd);
+			}
 		}
 	}
 
 	/* clear or set all bits */
-	csrval = ~0;
+	val = ~0;
 
 	/* clear err_sts bits */
 	for (i = 0; i < count; i++)
-		write_csr(dd, domain[i].err_clr, csrval);
+		write_csr(dd, csr[i].err_clr, val);
 
-	/* enable interrupt again for the domains */
+	/* enable interrupt again for the domain */
 	for (i = 0; i < count; i++)
-		write_csr(dd, domain[i].err_en_host, csrval);
+		write_csr(dd, csr[i].err_en_host, val);
 
 	return IRQ_HANDLED;
 }
@@ -209,16 +223,18 @@ static irqreturn_t irq_err_handler(int irq, void *dev_id)
 int hfi_setup_irqerr(struct hfi_devdata *dd)
 {
 	struct hfi_msix_entry *me;
-	hfi_error_domain_t *domain;
+	struct hfi_error_csr *csr;
 	int count, irq;
 	int i, j, ret;
-	u64 csrval;
+	u64 val;
 
 	/* set all bits */
-	csrval = ~0;
+	val = ~0;
+	BUILD_BUG_ON(sizeof(hfi_error_domain) !=
+		(NUM_ERR_DOMAIN * sizeof(struct hfi_error_domain)));
 
-	for (i = 0; i < NUM_ERR_IRQ; i++) {
-		irq = hfi_error_vector[i].irq;
+	for (i = 0; i < NUM_ERR_DOMAIN; i++) {
+		irq = hfi_error_domain[i].irq;
 		me = &dd->msix_entries[irq];
 
 		BUG_ON(me->arg != NULL);
@@ -234,13 +250,13 @@ int hfi_setup_irqerr(struct hfi_devdata *dd)
 		}
 
 		/* mark as in use */
-		me->arg = &hfi_error_vector[i];
+		me->arg = &hfi_error_domain[i];
 
 		/* enable interrupt from domains */
-		count = hfi_error_vector[i].count;
-		domain = hfi_error_vector[i].domain;
+		count = hfi_error_domain[i].count;
+		csr = hfi_error_domain[i].csr;
 		for (j = 0; j < count; j++)
-			write_csr(dd, domain[j].err_en_host, csrval);
+			write_csr(dd, csr[j].err_en_host, val);
 	}
 
 	return 0;

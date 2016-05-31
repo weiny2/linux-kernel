@@ -1,40 +1,39 @@
 #!/bin/sh
 
 #
-# generate all the domain structures.
+# generate all the CSR structures.
 #
 lex error.lex
-cc -g -o domain.x lex.yy.c
-cat ../common/uapi/rdma/fxr/* | ./domain.x
+cc -g -o CSR.x lex.yy.c
+cat ../common/uapi/rdma/fxr/* | ./CSR.x
 
 #
 # for TP/FPC/LCB, create two instances for each port.
 #
-cat TP_0.domain | sed -e 's/FXR_TP_/FXR_LM_TP0_CSRS+FXR_TP_/g' \
-	| sed -e 's/"TP_0"/"TP0_0"/g' > TP0_0.domain
-cat TP_1.domain | sed -e 's/FXR_TP_/FXR_LM_TP0_CSRS+FXR_TP_/g' \
-	| sed -e 's/"TP_1"/"TP0_1"/g' > TP0_1.domain
-cat TP_0.domain | sed -e 's/FXR_TP_/FXR_LM_TP1_CSRS+FXR_TP_/g' \
-	| sed -e 's/"TP_0"/"TP1_0"/g' > TP1_0.domain
-cat TP_1.domain | sed -e 's/FXR_TP_/FXR_LM_TP1_CSRS+FXR_TP_/g' \
-	| sed -e 's/"TP_1"/"TP1_1"/g' > TP1_1.domain
+cat TP_0.CSR | sed -e 's/FXR_TP_/FXR_LM_TP0_CSRS+FXR_TP_/g' \
+	| sed -e 's/"TP_0"/"TP0_0"/g' > TP0_0.CSR
+cat TP_1.CSR | sed -e 's/FXR_TP_/FXR_LM_TP0_CSRS+FXR_TP_/g' \
+	| sed -e 's/"TP_1"/"TP0_1"/g' > TP0_1.CSR
+cat TP_0.CSR | sed -e 's/FXR_TP_/FXR_LM_TP1_CSRS+FXR_TP_/g' \
+	| sed -e 's/"TP_0"/"TP1_0"/g' > TP1_0.CSR
+cat TP_1.CSR | sed -e 's/FXR_TP_/FXR_LM_TP1_CSRS+FXR_TP_/g' \
+	| sed -e 's/"TP_1"/"TP1_1"/g' > TP1_1.CSR
 
-cat FPC.domain | sed -e 's/FXR_FPC_/FXR_LM_FPC0_CSRS+FXR_FPC_/g' \
-	| sed -e 's/"FPC"/"FPC0"/g' > FPC0.domain
-cat FPC.domain | sed -e 's/FXR_FPC_/FXR_LM_FPC1_CSRS+FXR_FPC_/g' \
-	| sed -e 's/"FPC"/"FPC1"/g' > FPC1.domain
+cat FPC.CSR | sed -e 's/FXR_FPC_/FXR_LM_FPC0_CSRS+FXR_FPC_/g' \
+	| sed -e 's/"FPC"/"FPC0"/g' > FPC0.CSR
+cat FPC.CSR | sed -e 's/FXR_FPC_/FXR_LM_FPC1_CSRS+FXR_FPC_/g' \
+	| sed -e 's/"FPC"/"FPC1"/g' > FPC1.CSR
 
-cat LCB.domain | sed -e 's/FXR_LCB_/FXR_FZC_LCB0_CSRS+FZC_LCB_/g' \
-	| sed -e 's/"LCB"/"LCB0"/g' > LCB0.domain
-cat LCB.domain | sed -e 's/FXR_LCB_/FXR_FZC_LCB1_CSRS+FZC_LCB_/g' \
-	| sed -e 's/"LCB"/"LCB1"/g' > LCB1.domain
+cat LCB.CSR | sed -e 's/FXR_LCB_/FXR_FZC_LCB0_CSRS+FZC_LCB_/g' \
+	| sed -e 's/"LCB"/"LCB0"/g' > LCB0.CSR
+cat LCB.CSR | sed -e 's/FXR_LCB_/FXR_FZC_LCB1_CSRS+FZC_LCB_/g' \
+	| sed -e 's/"LCB"/"LCB1"/g' > LCB1.CSR
 
 #
 # OPIO name correction
 #
-cat OPIO_PHY.domain | sed -e 's/FXR_OPIO_/MNH_OPIO_/g' > tmp
-mv tmp OPIO_PHY.domain
-
+cat OPIO_PHY.CSR | sed -e 's/FXR_OPIO_/MNH_OPIO_/g' > tmp
+mv tmp OPIO_PHY.CSR
 
 ################################################################
 
@@ -102,183 +101,183 @@ echo "" >> errdef.h
 ################################################################
 
 #
-# FZC0 domain
+# FZC0 domain CSRs
 #
-echo "static hfi_error_domain_t hfi_fzc0_error[] = {" >> errdef.h
-cat LCB0.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_fzc0_error[] = {" >> errdef.h
+cat LCB0.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# FZC1 domain
+# FZC1 domain CSRs
 #
-echo "static hfi_error_domain_t hfi_fzc1_error[] = {" >> errdef.h
-cat LCB1.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_fzc1_error[] = {" >> errdef.h
+cat LCB1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# HIFIS domain
+# HIFIS domain CSRs
 #
-echo "static hfi_error_domain_t hfi_hifis_error[] = {" >> errdef.h
-cat HIFIS.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_hifis_error[] = {" >> errdef.h
+cat HIFIS.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# LOCA domains
+# LOCA domain CSRs
 #
-echo "static hfi_error_domain_t hfi_loca_error[] = {" >> errdef.h
-cat LOCA0.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_loca_error[] = {" >> errdef.h
+cat LOCA0.CSR >> errdef.h
 echo "    ," >> errdef.h
-cat LOCA1.domain >> errdef.h
+cat LOCA1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# PCIM domain
+# PCIM domain CSRs
 #
-echo "static hfi_error_domain_t hfi_pcim_error[] = {" >> errdef.h
-cat PCIM.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_pcim_error[] = {" >> errdef.h
+cat PCIM.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# TXCID domain
+# TXCID domain CSRs
 #
-echo "static hfi_error_domain_t hfi_txcid_error[] = {" >> errdef.h
-cat TXCID.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_txcid_error[] = {" >> errdef.h
+cat TXCID.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# OTR domain
+# OTR domain CSRs
 #
-echo "static hfi_error_domain_t hfi_otr_error[] = {" >> errdef.h
-cat TXOTR_PKT_1.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_otr_error[] = {" >> errdef.h
+cat TXOTR_PKT_1.CSR >> errdef.h
 echo "    ," >> errdef.h
-cat TXOTR_MSG_2.domain >> errdef.h
+cat TXOTR_MSG_2.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# TXDMA domain
+# TXDMA domain CSRs
 #
-echo "static hfi_error_domain_t hfi_txdma_error[] = {" >> errdef.h
-cat TXDMA.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_txdma_error[] = {" >> errdef.h
+cat TXDMA.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# LM domain
+# LM domain CSRs
 #
 
 
 #
-# RXE2E domain
+# RXE2E domain CSRs
 #
-echo "static hfi_error_domain_t hfi_rxe2e_error[] = {" >> errdef.h
-cat RXE2E_1.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_rxe2e_error[] = {" >> errdef.h
+cat RXE2E_1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# RXHP domain
+# RXHP domain CSRs
 #
-echo "static hfi_error_domain_t hfi_rxhp_error[] = {" >> errdef.h
-cat RXHP_1.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_rxhp_error[] = {" >> errdef.h
+cat RXHP_1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# RXDMA domain
+# RXDMA domain CSRs
 #
-echo "static hfi_error_domain_t hfi_rxdma_error[] = {" >> errdef.h
-cat RXDMA_1.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_rxdma_error[] = {" >> errdef.h
+cat RXDMA_1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# RXET domain
+# RXET domain CSRs
 #
-echo "static hfi_error_domain_t hfi_rxet_error[] = {" >> errdef.h
-cat RXET.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_rxet_error[] = {" >> errdef.h
+cat RXET.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# RXHIARB domain
+# RXHIARB domain CSRs
 #
-echo "static hfi_error_domain_t hfi_rxhiarb_error[] = {" >> errdef.h
-cat RXHIARB_1.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_rxhiarb_error[] = {" >> errdef.h
+cat RXHIARB_1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# AT domain
+# AT domain CSRs
 #
-echo "static hfi_error_domain_t hfi_at_error[] = {" >> errdef.h
-cat AT_1.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_at_error[] = {" >> errdef.h
+cat AT_1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# OPIO domain
+# OPIO domain CSRs
 #
-echo "static hfi_error_domain_t hfi_opio_error[] = {" >> errdef.h
-cat OPIO_PHY.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_opio_error[] = {" >> errdef.h
+cat OPIO_PHY.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# RXCID domain
+# RXCID domain CSRs
 #
-echo "static hfi_error_domain_t hfi_rxcid_error[] = {" >> errdef.h
-cat RXCID.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_rxcid_error[] = {" >> errdef.h
+cat RXCID.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# FPC0 domain
+# FPC0 domain CSRs
 #
-echo "static hfi_error_domain_t hfi_fpc0_error[] = {" >> errdef.h
-cat FPC0.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_fpc0_error[] = {" >> errdef.h
+cat FPC0.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# FPC1 domain
+# FPC1 domain CSRs
 #
-echo "static hfi_error_domain_t hfi_fpc1_error[] = {" >> errdef.h
-cat FPC1.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_fpc1_error[] = {" >> errdef.h
+cat FPC1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# TP0 domain
+# TP0 domain CSRs
 #
-echo "static hfi_error_domain_t hfi_tp0_error[] = {" >> errdef.h
-cat TP0_0.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_tp0_error[] = {" >> errdef.h
+cat TP0_0.CSR >> errdef.h
 echo "    ," >> errdef.h
-cat TP0_1.domain >> errdef.h
+cat TP0_1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# TP1 domain
+# TP1 domain CSRs
 #
-echo "static hfi_error_domain_t hfi_tp1_error[] = {" >> errdef.h
-cat TP1_0.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_tp1_error[] = {" >> errdef.h
+cat TP1_0.CSR >> errdef.h
 echo "    ," >> errdef.h
-cat TP1_1.domain >> errdef.h
+cat TP1_1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
 #
-# PMON domain
+# PMON domain CSRs
 #
-echo "static hfi_error_domain_t hfi_pmon_error[] = {" >> errdef.h
-cat PMON_1.domain >> errdef.h
+echo "static struct hfi_error_csr hfi_pmon_error[] = {" >> errdef.h
+cat PMON_1.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
@@ -292,8 +291,8 @@ cp errdef.h ../hfi2/
 #
 # remove generated tmp files
 #
-rm domain.x
-rm *.domain
+rm CSR.x
+rm *.CSR
 rm lex.yy.c
 rm errdef.h
 
