@@ -1,6 +1,5 @@
 [submodule "opa-headers"]
 	path = opa-headers.git
-	name = vsdhanal
 	url = ssh://git-amr-1.devtools.intel.com:29418/fxr-opa-headers
 [submodule "hfi2_vnic/vnic.git"]
 	path = hfi2_vnic/vnic.git
