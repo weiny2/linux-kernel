@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# Run nightly upstream regression runs on the passed in kernel
+
+linuxsrc=$1
+
+curdir=$PWD
+datestr=`date +\%Y\%m\%d_\%H\%M`
+logdir="/nfs/sc/disks/fabric_mirror/scratch/wfr_reg_test/daily_logs/upstream/$datestr"
+summary=$logdir/summary.txt
+hfi=$logdir/hfi1.txt
+qib=$logdir/qib.txt
+static=$logdir/static.txt
+email=`git config --global user.email`
+
+function send_res
+{
+
+	title="a-stream-master"
+	if [[ ! -z $email ]]; then
+		from="-r $email"
+	else
+		from=""
+	fi
+	# Test complete, time to build the response
+	echo "LogFiles:" > .tmpmail
+	echo "$summary" >> .tmpmail
+	echo "$hfi" >> .tmpmail
+	echo "$qib" >> .tmpmail
+	echo "$static" >> .tmpmail
+
+	echo "" >> .tmpmail
+	echo "Summary:" >> .tmpmail
+	grep "UPSTREAM_TEST_" $summary >> .tmpmail
+	echo "" >> .tmpmail
+	echo "Static Tests" >> .tmpmail
+	grep "Build Passes" $static >> .tmpmail
+	grep "ERROR" $static >> .tmpmail
+	echo "" >> .tmpmail
+	echo "HFI" >> .tmpmail
+	grep "\[FAIL\]" $hfi >> .tmpmail
+	grep "\[PASS\]" $hfi >> .tmpmail
+	echo "" >> .tmpmail
+	echo "QIB" >> .tmpmail
+	grep "\[FAIL\]" $qib >> .tmpmail
+	grep "\[PASS\]" $qib >> .tmpmail
+
+	grep "UPSTREAM_TEST_FAIL" $summary
+	if [[ $? -eq 0 ]]; then
+		#fail
+		to="`cat failed_reg.subscribers`"
+		mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] $title for commit $commit FAILED" $from $to  < .tmpmail
+		rm .tmpmail
+		exit 0
+	fi
+
+	grep "UPSTREAM_TEST_PASS" $summary
+	if [[ $? -eq 0 ]]; then
+		#pass
+		to="`cat passing_reg.subscribers`"
+		mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] $title for commit $commit SUCCESS" $from $to  < .tmpmail
+		rm .tmpmail
+		exit 0
+	fi
+
+	# Unknown status
+	to="`cat failed_reg.subscribers`"
+	mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] $title for commit $commit UNKNOWN" $from $to  < .tmpmail
+	rm .tmpmail
+	exit 0
+}
+
+mkdir $logdir
+if [[ $? -ne 0 ]]; then
+	echo "Could not create logdir $logdir"
+	exit 1
+fi
+
+echo "Starting test for $datestr" > $summary
+echo "Starting test for $datestr" > $hfi
+echo "Starting test for $datestr" > $qib
+echo "Starting test for $datestr" > $static
+
+if [[ ! -d $linuxsrc ]]; then
+	echo "UPSTREAM_TEST_FAIL: Linux src: [$linuxsrc] not valid" >> $summary
+	send_res
+fi
+
+cd $linuxsrc
+if [[ $? -ne 0 ]]; then
+	echo "UPSTEAM_TEST_FAIL: Unable to change dir to $linuxsrc" >> $summary
+	send_res
+fi
+
+git remote update origin
+if [[ $? -ne 0 ]]; then
+	echo "UPSTREAM_TEST_FAIL: Unable to update remote" >> $summary
+	send_res
+fi
+
+git pull --rebase
+if [[ $? -ne 0 ]]; then
+	echo "UPSTREAM_TEST_FAIL: Unable to pull updates" >> $summary
+	send_res
+fi
+
+commit=`git rev-parse --short HEAD`
+commit_msg=`git log -n 1 --oneline`
+echo "Running nightly upstream regression tests" >> $summary
+echo ""
+echo "UPSTREAM_TEST_COMMIT_ID: $commit" >> $summary
+echo "UPSTREAM_TEST_DESC: $commit_msg" >> $summary
+echo "UPSTREAM_DIR_PATH: $linuxsrc" >> $summary
+
+cd $curdir/tests
+if [[ $? -ne 0 ]]; then
+	echo "UPSTREAM_TEST_FAIL: Could not change back to $curdir/tests" >> $summary
+	send_res
+fi
+
+./presubmit_checks.sh -k $linuxsrc >> $static
+if [[ $? -ne 0 ]]; then
+	echo "UPSTREAM_TEST_FAIL: Presubmit test failed!" >> $summary
+else
+	echo "UPSTREAM_TEST_PASS: Presubmit" >> $summary
+fi
+
+cd ..
+./queue_test.sh -k $linuxsrc -m hfi1 >> $hfi
+if [[ $? -ne 0 ]]; then
+	echo "UPSTREAM_TEST_FAIL: hfi1" >> $summary
+else
+	echo "UPSTREAM_TEST_PASS: hfi1" >> $summary
+fi
+
+./queue_test.sh -k $linuxsrc -m qib >> $qib
+if [[ $? -ne 0 ]]; then
+	echo "UPSTREAM_TEST_FAIL: qib" >> $summary
+else
+	echo "UPSTREAM_TEST_PASS: qib" >> $summary
+fi
+
+send_res
+
