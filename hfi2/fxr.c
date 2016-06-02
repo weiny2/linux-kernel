@@ -2817,7 +2817,8 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx,
 	tx_cq_config.field.enable = 1;
 	tx_cq_config.field.pid = ctx->pid;
 	tx_cq_config.field.priv_level = user_priv;
-	tx_cq_config.field.dlid_base = ctx->dlid_base;
+	if (ctx->lid_count)
+		tx_cq_config.field.dlid_base = ctx->dlid_base;
 	tx_cq_config.field.phys_dlid = ctx->allow_phys_dlid;
 	tx_cq_config.field.sl_enable = ctx->sl_mask;
 	offset = FXR_TXCID_CFG_CSR + (cq_idx * 8);
@@ -2826,7 +2827,7 @@ void hfi_cq_config(struct hfi_ctx *ctx, u16 cq_idx,
 	/* set RX CQ config, enable */
 	rx_cq_config.field.enable = 1;
 	rx_cq_config.field.pid = ctx->pid;
-	tx_cq_config.field.priv_level = user_priv;
+	rx_cq_config.field.priv_level = user_priv;
 	offset = FXR_RXCID_CFG_CNTRL + (cq_idx * 8);
 	write_csr(dd, offset, rx_cq_config.val);
 }
