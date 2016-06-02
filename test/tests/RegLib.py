@@ -14,6 +14,7 @@ import random
 import struct
 import hashlib
 import fcntl
+import socket
 from ctypes import *
 from optparse import OptionParser
 from datetime import datetime
@@ -277,7 +278,7 @@ class HostInfo:
             return False
         return True
 
-    def _wait_for_single_socket(self, port, state, timeout=1, attempts=60):
+    def _wait_for_single_socket(self, port, state, timeout=1, attempts=10):
         """ Waits for the socket at the given port to reach a specific state"""
 
         while attempts > 0:
@@ -293,7 +294,7 @@ class HostInfo:
             time.sleep(timeout)
         return False #if we get to here it is an error
 
-    def wait_for_socket(self, port, state, timeout=1, attempts=60, num_ports=1):
+    def wait_for_socket(self, port, state, timeout=1, attempts=10, num_ports=1):
         """ Waits for the socket at the given port(s) to reach a specific state"""
 
         return all(self._wait_for_single_socket(port_x, state, timeout, attempts)\

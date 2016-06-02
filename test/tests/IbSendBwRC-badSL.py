@@ -36,7 +36,9 @@ def main():
     host2 = test_info.get_host_record(1)
     print host2
 
-    test_port = RegLib.get_test_port(host1, host2)
+    test_ports=[]
+    for i in range(3):
+        test_ports.append(RegLib.get_test_port(host1, host2))
 
     ################
     # body of test #
@@ -54,17 +56,26 @@ def main():
             dev = "qib0"
         else:
             dev = "hfi1_0"
-        cmd = "stdbuf -oL ib_send_bw -d %s -p %d -S 14 2>&1" % (dev, test_port)
-        # This is the server let's display his output now
-        err = host1.send_ssh(cmd, 0)
-        RegLib.test_log(5, "Running cmd: " + cmd)
-        if err:
-            RegLib.test_log(0, "Child SSH exit status bad")
-        sys.exit(err)
+	for test_port in test_ports:
+            cmd = "stdbuf -oL ib_send_bw -d %s -p %d -S 14 2>&1" % (dev, test_port)
+            # This is the server let's display his output now
+            err = host1.send_ssh(cmd, 0)
+            RegLib.test_log(5, "Running cmd: " + cmd)
+            if err:
+                RegLib.test_log(0, "Child SSH exit status bad")
+            sys.exit(err)
 
     RegLib.test_log(0, "Waiting for socket to be listening")
-    if host1.wait_for_socket(test_port, "LISTEN") == False:
-        RegLib.test_fail("Could not get socket listening")
+    port_acquired=0
+    for test_port in test_ports:
+        if host1.wait_for_socket(test_port, "LISTEN") == False:
+            RegLib.test_log(0, "Could not get socket listening")
+	else:
+	    port_acquired=1
+	    break
+
+    if port_acquired != 1:
+        RegLib.test_fail("Could not get any sockets listening")
 
     server_name = host1.get_name()
     if test_info.is_qib():

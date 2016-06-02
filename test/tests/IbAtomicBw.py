@@ -46,7 +46,9 @@ def main():
     ops = ['CMP_AND_SWAP', 'FETCH_AND_ADD']
 
     for op in ops:
-        test_port = RegLib.get_test_port(host1, host2)
+        test_ports=[]
+	for i in range(3):
+		test_ports.append(RegLib.get_test_port(host1, host2))
         test_fail = 0
         # Start ib_read_bw on host1 (server)
         child_pid = os.fork()
@@ -55,17 +57,28 @@ def main():
                 dev = "qib0"
             else:
                 dev = "hfi1_0"
-            cmd = "ib_atomic_bw -m 4096 -d %s -n 5 -u 21 -p %d -A %s" % (dev, test_port, op)
-            (err, out) = do_ssh(host1, cmd)
-            if err:
-                RegLib.test_log(0, "Child SSH exit status bad")
-            for line in out:
-                print RegLib.chomp(line)
+	    for test_port in test_ports:
+		cmd = "ib_atomic_bw -m 4096 -d %s -n 5 -u 21 -p %d -A %s" % (dev, test_port, op)
+		(err, out) = do_ssh(host1, cmd)
+		if err:
+			RegLib.test_log(0, "Child SSH exit status bad")
+		else:
+			break
+		for line in out:
+			print RegLib.chomp(line)
             sys.exit(err)
 
         RegLib.test_log(0, "Waiting for socket to be listening")
-        if host1.wait_for_socket(test_port, "LISTEN") == False:
-            RegLib.test_fail("Coudl not get socket listening")
+	port_acquired=0
+	for test_port in test_ports:
+        	if host1.wait_for_socket(test_port, "LISTEN") == False:
+            		RegLib.test_log(0, "Could not get socket listening")
+		else:
+			port_acquired=1
+			break
+
+	if port_acquired != 1:
+		RegLib.test_fail("Could not get any sockets listening");
 
         # Start ib_read_bw on host2 (client)
         server_name = host1.get_name()
