@@ -392,6 +392,29 @@ static void hfi_init_tx_cid_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_TXCID_CFG_MAD_TO_TC, reg.val);
 }
 
+static void hfi_init_rate_control(const struct hfi_devdata *dd)
+{
+	TXCIC_CFG_HEAD_UPDATE_CNTRL_t tx_reg = {.val = 0};
+	RXCID_CFG_HEAD_UPDATE_CNTRL_t rx_reg = {.val = 0};
+
+	/*
+	 * Set command queue update frequency to 1/4 of queue size.
+	 * For TX update freq will be (1 << 5) = 32 - hfi will update
+	 * cq head every 32 commands.
+	 * The largest tx command should be ~65 slots, so 1/32 is minimal
+	 * freq that we can use without deadlock.
+	 */
+	tx_reg.field.rate_ctrl = 5;
+	write_csr(dd, FXR_TXCIC_CFG_HEAD_UPDATE_CNTRL, tx_reg.val);
+
+	/*
+	 * For RX update head every (1 << 2) = 4 commands since RX queues
+	 * have only 16 slots.
+	 */
+	rx_reg.field.rate_ctrl = 2;
+	write_csr(dd, FXR_RXCID_CFG_HEAD_UPDATE_CNTRL, rx_reg.val);
+}
+
 static void hfi_read_guid(struct hfi_devdata *dd)
 {
 	struct hfi_pportdata *ppd = to_hfi_ppd(dd, 1);
@@ -496,6 +519,7 @@ static void init_csrs(struct hfi_devdata *dd)
 	hfi_init_rx_e2e_csrs(dd);
 	hfi_init_tx_otr_csrs(dd);
 	hfi_init_tx_cid_csrs(dd);
+	hfi_init_rate_control(dd);
 }
 
 static int hfi_psn_init(struct hfi_pportdata *port, u32 max_lid)

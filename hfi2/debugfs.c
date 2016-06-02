@@ -242,6 +242,104 @@ void hfi_devcntrs_dbg_init(struct hfi_devdata *dd)
 				    &cntr_ops[i].ops, S_IRUGO);
 }
 
+static int hfi_update_ctrl_show(struct seq_file *s, u32 reg)
+{
+	struct hfi_devdata *dd = s->private;
+	u64 val;
+
+	val = read_csr(dd, reg);
+	seq_printf(s, "%llu\n", val);
+	return 0;
+}
+
+static ssize_t hfi_update_ctrl_write(struct file *f, const char __user *ubuf,
+				     size_t count, loff_t *ppos, u32 reg,
+				     u8 max)
+{
+	struct hfi_devdata *dd = private2dd(f);
+	u64 val = 0;
+	int ret = 0;
+
+	ret = kstrtou64_from_user(ubuf, count, 0, &val);
+	if (ret < 0)
+		goto err;
+	/* Sanitize update freuquency */
+	if (val > max)
+		goto err;
+	write_csr(dd, reg, val);
+	return count;
+err:
+	dd_dev_err(dd, "Invalid cq_head_update_freq, must be uint <= %d", max);
+	return -EINVAL;
+}
+
+static int hfi_tx_update_ctrl_show(struct seq_file *s, void *unused)
+{
+	return hfi_update_ctrl_show(s, FXR_TXCIC_CFG_HEAD_UPDATE_CNTRL);
+}
+
+static int hfi_tx_update_ctrl_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, hfi_tx_update_ctrl_show, inode->i_private);
+}
+
+static ssize_t hfi_tx_update_ctrl_write(struct file *f, const char __user *ubuf,
+					size_t count, loff_t *ppos)
+{
+	/* See hfi_init_rate_control() for details */
+	return hfi_update_ctrl_write(f, ubuf, count, ppos,
+				     FXR_TXCIC_CFG_HEAD_UPDATE_CNTRL, 5);
+}
+
+static const struct file_operations hfi_tx_update_ctrl_ops = {
+	.owner   = THIS_MODULE,
+	.open    = hfi_tx_update_ctrl_open,
+	.read    = seq_read,
+	.write   = hfi_tx_update_ctrl_write,
+	.llseek  = seq_lseek,
+	.release = single_release
+};
+
+static int hfi_rx_update_ctrl_show(struct seq_file *s, void *unused)
+{
+	return hfi_update_ctrl_show(s, FXR_RXCID_CFG_HEAD_UPDATE_CNTRL);
+}
+
+static int hfi_rx_update_ctrl_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, hfi_rx_update_ctrl_show, inode->i_private);
+}
+
+static ssize_t hfi_rx_update_ctrl_write(struct file *f, const char __user *ubuf,
+					size_t count, loff_t *ppos)
+{
+	/* See hfi_init_rate_control() for details */
+	return hfi_update_ctrl_write(f, ubuf, count, ppos,
+				     FXR_RXCID_CFG_HEAD_UPDATE_CNTRL, 3);
+}
+
+static const struct file_operations hfi_rx_update_ctrl_ops = {
+	.owner   = THIS_MODULE,
+	.open    = hfi_rx_update_ctrl_open,
+	.read    = seq_read,
+	.write   = hfi_rx_update_ctrl_write,
+	.llseek  = seq_lseek,
+	.release = single_release
+};
+
+static void hfi_head_update_ctrl_dbg_init(struct hfi_devdata *dd)
+{
+	DEBUGFS_FILE_CREATE("tx_cq_head_update_freq",
+			    dd->hfi_dev_dbg, dd,
+			    &hfi_tx_update_ctrl_ops,
+			    S_IRUGO | S_IWUSR);
+
+	DEBUGFS_FILE_CREATE("rx_cq_head_update_freq",
+			    dd->hfi_dev_dbg, dd,
+			    &hfi_rx_update_ctrl_ops,
+			    S_IRUGO | S_IWUSR);
+}
+
 void hfi_dbg_init(struct hfi_devdata *dd)
 {
 	struct hfi_pportdata *ppd;
@@ -279,6 +377,7 @@ void hfi_dbg_init(struct hfi_devdata *dd)
 	hfi_firmware_dbg_init(dd);
 	hfi_devcntrs_dbg_init(dd);
 	hfi_portcntrs_dbg_init(dd);
+	hfi_head_update_ctrl_dbg_init(dd);
 }
 
 void hfi_dbg_exit(struct hfi_devdata *dd)
