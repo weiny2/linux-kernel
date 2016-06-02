@@ -383,9 +383,9 @@ const u8 hdr_16b_len_by_opcode[256] = {
 	/* UC */
 	[IB_OPCODE_UC_SEND_FIRST]                     = 16 + 12 + 8,
 	[IB_OPCODE_UC_SEND_MIDDLE]                    = 16 + 12 + 8,
-	[IB_OPCODE_UC_SEND_LAST]                      = 16 + 12 + 8,
+	[IB_OPCODE_UC_SEND_LAST]                      = 16 + 12, /* HDR+BTH */
 	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = 16 + 12 + 8 + 4,
-	[IB_OPCODE_UC_SEND_ONLY]                      = 16 + 12 + 8,
+	[IB_OPCODE_UC_SEND_ONLY]                      = 16 + 12, /* HDR+BTH */
 	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = 16 + 12 + 8 + 4,
 	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = 16 + 12 + 8 + 16,
 	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = 16 + 12 + 8,
