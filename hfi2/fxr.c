@@ -108,8 +108,7 @@ MODULE_PARM_DESC(force_loopback, "Force FXR into loopback");
 /* FXRTODO: Remove this once we have opafm working with B2B setup */
 bool opafm_disable;
 module_param_named(opafm_disable, opafm_disable, bool, S_IRUGO);
-MODULE_PARM_DESC(opafm_disable, "0 - driver needs opafm to work, \
-		 1 - driver works without opafm");
+MODULE_PARM_DESC(opafm_disable, "0 - driver needs opafm to work, 1 - driver works without opafm");
 
 /* FXRTODO: Remove this once MNH is available on all Pre-Si setups */
 bool no_mnh;
