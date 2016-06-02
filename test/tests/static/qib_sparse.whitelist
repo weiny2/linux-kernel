@@ -1,2 +1,4 @@
 1 include/rdma/rdmavt_mr.h: warning: crazy programmer
 2 drivers/infiniband/hw/qib/qib_debugfs.c: warning: context imbalance in '_qp_stats_seq_stop' - unexpected unlock
+41 drivers/infiniband/hw/qib/qib_mad.c: error: Expected constant expression in case statement
+

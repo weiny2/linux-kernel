@@ -1,3 +1,8 @@
 1 include/rdma/rdmavt_mr.h: warning: crazy programmer
-1 d1rivers/staging/rdma/hfi1/./trace.h: error: too long token expansion
-1 drivers/staging/rdma/hfi1/user_sdma.c: warning: dubious: !x & y
+1 drivers/infiniband/hw/hfi1/trace.h: error: too long token expansion
+1 drivers/infiniband/hw/hfi1/user_sdma.c: warning: dubious: !x & y
+44 drivers/infiniband/hw/hfi1/mad.c: error: Expected constant expression in case statement
+32 drivers/infiniband/hw/hfi1/trace.h: warning: cast to restricted __le32
+32 drivers/infiniband/hw/hfi1/trace.h: warning: restricted __le32 degrades to integer
+2 drivers/infiniband/hw/hfi1/trace.h: warning: cast removes address space of expression
+10 drivers/infiniband/hw/hfi1/trace.h: warning: incorrect type in assignment (different base types)
