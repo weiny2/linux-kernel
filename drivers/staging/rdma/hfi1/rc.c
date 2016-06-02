@@ -1766,7 +1766,8 @@ static void rc_rcv_resp(struct hfi1_ibport *ibp,
 		if (unlikely(wqe->wr.opcode != IB_WR_RDMA_READ))
 			goto ack_op_err;
 read_middle:
-		if (unlikely(tlen != (hdrsize + pmtu + 4)))
+		if (unlikely(tlen != (hdrsize + pmtu + (SIZE_OF_CRC << 2)
+				      + pad + extra_byte)))
 			goto ack_len_err;
 		if (unlikely(pmtu >= qp->s_rdma_read_len))
 			goto ack_len_err;
@@ -1803,7 +1804,8 @@ read_middle:
 		 * Check that the data size is >= 0 && <= pmtu.
 		 * Remember to account for ICRC (4).
 		 */
-		if (unlikely(tlen < (hdrsize + pad + 4)))
+		if (unlikely(tlen < (hdrsize + pad + (SIZE_OF_CRC << 2) +
+				     extra_byte)))
 			goto ack_len_err;
 		/*
 		 * If this is a response to a resent RDMA read, we
@@ -1825,10 +1827,11 @@ read_middle:
 		 * Check that the data size is >= 1 && <= pmtu.
 		 * Remember to account for ICRC (4).
 		 */
-		if (unlikely(tlen <= (hdrsize + pad + 4)))
+		if (unlikely(tlen <= (hdrsize + pad +
+				      (SIZE_OF_CRC << 2) + extra_byte)))
 			goto ack_len_err;
 read_last:
-		tlen -= hdrsize + pad + 4 - extra_byte;
+		tlen -= hdrsize + pad + (SIZE_OF_CRC << 2) + extra_byte;
 		if (unlikely(tlen != qp->s_rdma_read_len))
 			goto ack_len_err;
 		aeth = be32_to_cpu(ohdr->u.aeth);
@@ -2352,7 +2355,13 @@ void hfi1_rc_rcv(struct hfi1_packet *packet)
 	case OP(RDMA_WRITE_MIDDLE):
 send_middle:
 		/* Check for invalid length PMTU or posted rwqe len. */
-		if (unlikely(tlen != (hdrsize + pmtu + 4)))
+		/**
+		 * There will be no padding for 9B packet but 16B packets
+		 * will come in with some padding since we always add
+		 * CRC and LT bytes which will need to be flit aligned
+		 */
+		if (unlikely(tlen != (hdrsize + pmtu + (SIZE_OF_CRC << 2) +
+				      pad + extra_byte)))
 			goto nack_inv;
 		qp->r_rcv_len += pmtu;
 		if (unlikely(qp->r_rcv_len > qp->r_len))
@@ -2395,10 +2404,11 @@ no_immediate_data:
 send_last:
 		/* Check for invalid length. */
 		/* LAST len should be >= 1 */
-		if (unlikely(tlen < (hdrsize + pad + 4 + extra_byte)))
+		if (unlikely(tlen < (hdrsize + pad + (SIZE_OF_CRC << 2) +
+				     extra_byte)))
 			goto nack_inv;
-		/* Don't count the CRC. */
-		tlen -= (hdrsize + pad + 4 + extra_byte);
+		/* Don't count the CRC(and padding and LT byte for 16B). */
+		tlen -= (hdrsize + pad + (SIZE_OF_CRC << 2) + extra_byte);
 		wc.byte_len = tlen + qp->r_rcv_len;
 		if (unlikely(wc.byte_len > qp->r_len))
 			goto nack_inv;

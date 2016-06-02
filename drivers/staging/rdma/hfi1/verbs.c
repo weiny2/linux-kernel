@@ -356,46 +356,43 @@ const u8 hdr_len_by_opcode[256] = {
 
 const u8 hdr_16b_len_by_opcode[256] = {
 	/* RC */
-	[IB_OPCODE_RC_SEND_FIRST]                     = 16 + 12 + 8,
-	[IB_OPCODE_RC_SEND_MIDDLE]                    = 16 + 12 + 8,
-	[IB_OPCODE_RC_SEND_LAST]                      = 16 + 12 + 8,
-	[IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE]       = 16 + 12 + 8 + 4,
-	[IB_OPCODE_RC_SEND_ONLY]                      = 16 + 12,
-	[IB_OPCODE_RC_SEND_ONLY_WITH_IMMEDIATE]       = 16 + 12 + 8 + 4,
-	[IB_OPCODE_RC_RDMA_WRITE_FIRST]               = 16 + 12 + 8 + 16,
-	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]              = 16 + 12 + 8,
-	[IB_OPCODE_RC_RDMA_WRITE_LAST]                = 16 + 12 + 8,
-	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 16 + 12 + 8 + 4,
-	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = 16 + 12 + 16,
-	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 16 + 12 + 8 + 20,
-	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = 16 + 12 + 8 + 16,
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = 16 + 12 + 8,
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = 16 + 12 + 8,
-	/* FIXME: The +2 is needed otherwise packets are dropped on length
-	 * errors. Very weird, need to figure out why.
-	 */
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = 16 + 12 + 4 + 2,
-	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = 16 + 12 + 4 + 2,
-	[IB_OPCODE_RC_ACKNOWLEDGE]                    = 16 + 12 + 8,
-	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = 16 + 12 + 8 + 4,
-	[IB_OPCODE_RC_COMPARE_SWAP]                   = 16 + 12 + 8 + 28,
-	[IB_OPCODE_RC_FETCH_ADD]                      = 16 + 12 + 8 + 28,
+	[IB_OPCODE_RC_SEND_FIRST]                     = 12 + 16,
+	[IB_OPCODE_RC_SEND_MIDDLE]                    = 12 + 16,
+	[IB_OPCODE_RC_SEND_LAST]                      = 12 + 16,
+	[IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE]       = 12 + 16 + 4,
+	[IB_OPCODE_RC_SEND_ONLY]                      = 12 + 16,
+	[IB_OPCODE_RC_SEND_ONLY_WITH_IMMEDIATE]       = 12 + 16 + 4,
+	[IB_OPCODE_RC_RDMA_WRITE_FIRST]               = 12 + 16 + 16,
+	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]              = 12 + 16,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST]                = 12 + 16,
+	[IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 12 + 16 + 4,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY]                = 12 + 16 + 16,
+	[IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 12 + 16 + 20,
+	[IB_OPCODE_RC_RDMA_READ_REQUEST]              = 12 + 16 + 16,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_FIRST]       = 12 + 16 + 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_MIDDLE]      = 12 + 16,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_LAST]        = 12 + 16 + 4,
+	[IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY]        = 12 + 16 + 4,
+	[IB_OPCODE_RC_ACKNOWLEDGE]                    = 12 + 16 + 4,
+	[IB_OPCODE_RC_ATOMIC_ACKNOWLEDGE]             = 12 + 16 + 4,
+	[IB_OPCODE_RC_COMPARE_SWAP]                   = 12 + 16 + 28,
+	[IB_OPCODE_RC_FETCH_ADD]                      = 12 + 16 + 28,
 	/* UC */
-	[IB_OPCODE_UC_SEND_FIRST]                     = 16 + 12 + 8,
-	[IB_OPCODE_UC_SEND_MIDDLE]                    = 16 + 12 + 8,
-	[IB_OPCODE_UC_SEND_LAST]                      = 16 + 12, /* HDR+BTH */
-	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = 16 + 12 + 8 + 4,
-	[IB_OPCODE_UC_SEND_ONLY]                      = 16 + 12, /* HDR+BTH */
-	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = 16 + 12 + 8 + 4,
-	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = 16 + 12 + 8 + 16,
-	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = 16 + 12 + 8,
-	[IB_OPCODE_UC_RDMA_WRITE_LAST]                = 16 + 12 + 8,
-	[IB_OPCODE_UC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 16 + 12 + 8 + 4,
-	[IB_OPCODE_UC_RDMA_WRITE_ONLY]                = 16 + 12 + 8 + 16,
-	[IB_OPCODE_UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 16 + 12 + 8 + 20,
+	[IB_OPCODE_UC_SEND_FIRST]                     = 12 + 16,
+	[IB_OPCODE_UC_SEND_MIDDLE]                    = 12 + 16,
+	[IB_OPCODE_UC_SEND_LAST]                      = 12 + 16, /* HDR+BTH */
+	[IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE]       = 12 + 16 + 4,
+	[IB_OPCODE_UC_SEND_ONLY]                      = 12 + 16, /* HDR+BTH */
+	[IB_OPCODE_UC_SEND_ONLY_WITH_IMMEDIATE]       = 12 + 16 + 4,
+	[IB_OPCODE_UC_RDMA_WRITE_FIRST]               = 12 + 16 + 16,
+	[IB_OPCODE_UC_RDMA_WRITE_MIDDLE]              = 12 + 16,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST]                = 12 + 16,
+	[IB_OPCODE_UC_RDMA_WRITE_LAST_WITH_IMMEDIATE] = 12 + 16 + 4,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY]                = 12 + 16 + 16,
+	[IB_OPCODE_UC_RDMA_WRITE_ONLY_WITH_IMMEDIATE] = 12 + 16 + 20,
 	/* UD */
-	[IB_OPCODE_UD_SEND_ONLY]                      = 16 + 12 + 8,
-	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = 16 + 12 + 8 + 12
+	[IB_OPCODE_UD_SEND_ONLY]                      = 12 + 16 + 8,
+	[IB_OPCODE_UD_SEND_ONLY_WITH_IMMEDIATE]       = 12 + 16 + 8 + 12
 };
 static const opcode_handler opcode_handler_tbl[256] = {
 	/* RC */
@@ -707,7 +704,7 @@ void hfi1_ib_rcv(struct hfi1_packet *packet)
 	return;
 
 drop:
-	dd_dev_err(rcd->dd, "%s: packet dropped\n", __func__);
+	hfi1_cdbg(PKT, "%s: packet dropped\n", __func__);
 	ibp->rvp.n_pkt_drops++;
 }
 
@@ -748,7 +745,7 @@ void hfi1_ib16_rcv(struct hfi1_packet *packet)
 	return;
 
 drop:
-	dd_dev_err(rcd->dd, "%s: packet dropped\n", __func__);
+	hfi1_cdbg(PKT, "%s: packet dropped\n", __func__);
 	ibp->rvp.n_pkt_drops++;
 }
 /*
