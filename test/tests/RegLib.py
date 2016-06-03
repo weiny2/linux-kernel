@@ -86,11 +86,17 @@ def _get_test_port():
     return port
 
 def _verify_test_port_available(host, port, num_ports=1):
+    is_port_used = False
     cmd = "/bin/netstat -vatn"
     test_log(0, "Running %s" % cmd)
     (err, out) = host.send_ssh(cmd)
-    if (err != 0) or \
-        any(str(port_x) in out for port_x in range(port, port+num_ports)):
+
+    for port_x in range(port, port+num_ports):
+        for line in out:
+            is_port_used = re.match('\\b' + str(port_x) + '\\b', line) != None
+            break
+
+    if (err != 0) or is_port_used:
         if not num_ports > 1:
             # Dump the output of netstat for later triage
             for line in out:
