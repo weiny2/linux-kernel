@@ -78,6 +78,16 @@ static inline void clear_opa_smp_data(struct opa_smp *smp)
 	memset(data, 0, size);
 }
 
+void hfi1_event_pkey_change(struct hfi1_devdata *dd, u8 port)
+{
+	struct ib_event event;
+
+	event.event = IB_EVENT_PKEY_CHANGE;
+	event.device = &dd->verbs_dev.ibdev;
+	event.element.port_num = port;
+	ib_dispatch_event(&event);
+}
+
 static void send_trap(struct hfi1_ibport *ibp, void *data, unsigned len)
 {
 	struct ib_mad_send_buf *send_buf;
@@ -1423,15 +1433,10 @@ static int set_pkeys(struct hfi1_devdata *dd, u8 port, u16 *pkeys)
 	}
 
 	if (changed) {
-		struct ib_event event;
-
 		(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_PKEYS, 0);
-
-		event.event = IB_EVENT_PKEY_CHANGE;
-		event.device = &dd->verbs_dev.ibdev;
-		event.element.port_num = port;
-		ib_dispatch_event(&event);
+		hfi1_event_pkey_change(dd, port);
 	}
+
 	return 0;
 }
 
@@ -2501,6 +2506,9 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 			cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_BCN_VL,
 						  idx_from_vl(vl)));
 
+		rsp->vls[vfi].port_vl_xmit_discards =
+			cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_DSCD_VL,
+						   idx_from_vl(vl)));
 		vlinfo++;
 		vfi++;
 	}
@@ -2838,14 +2846,17 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 						CNTR_INVALID_VL));
 	tmp = read_dev_cntr(dd, C_DC_UNC_ERR, CNTR_INVALID_VL);
 	rsp->uncorrectable_errors = tmp < 0x100 ? (tmp & 0xff) : 0xff;
-
+	rsp->port_rcv_errors =
+		cpu_to_be64(read_dev_cntr(dd, C_DC_RCV_ERR, CNTR_INVALID_VL));
 	vlinfo = (struct _vls_ectrs *)&rsp->vls[0];
 	vfi = 0;
 	vl_select_mask = be32_to_cpu(req->vl_select_mask);
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 			 8 * sizeof(req->vl_select_mask)) {
 		memset(vlinfo, 0, sizeof(*vlinfo));
-		/* vlinfo->vls[vfi].port_vl_xmit_discards ??? */
+		rsp->vls[vfi].port_vl_xmit_discards =
+			cpu_to_be64(read_port_cntr(ppd, C_SW_XMIT_DSCD_VL,
+						   idx_from_vl(vl)));
 		vlinfo += 1;
 		vfi++;
 	}
@@ -3095,7 +3106,9 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 		 * if (counter_select & CS_PORT_MARK_FECN)
 		 *    write_csr(dd, DCC_PRF_PORT_VL_MARK_FECN_CNT + offset, 0);
 		*/
-		/* port_vl_xmit_discards ??? */
+		if (counter_select & C_SW_XMIT_DSCD_VL)
+			write_port_cntr(ppd, C_SW_XMIT_DSCD_VL,
+					idx_from_vl(vl), 0);
 	}
 
 	if (resp_len)
