@@ -238,6 +238,9 @@ struct flag_table {
 /* all CceStatus sub-block RXE pause bits */
 #define ALL_RXE_PAUSE CCE_STATUS_RXE_PAUSED_SMASK
 
+#define CNTR_MAX 0xFFFFFFFFFFFFFFFFULL
+#define CNTR_32BIT_MAX 0x00000000FFFFFFFF
+
 /*
  * CCE Error flags.
  */
@@ -1036,7 +1039,7 @@ static void dc_shutdown(struct hfi1_devdata *);
 static void dc_start(struct hfi1_devdata *);
 static int qos_rmt_entries(struct hfi1_devdata *dd, unsigned int *mp,
 			   unsigned int *np);
-static void remove_full_mgmt_pkey(struct hfi1_pportdata *ppd);
+static void clear_full_mgmt_pkey(struct hfi1_pportdata *ppd);
 
 /*
  * Error interrupt table entry.  This is used as input to the interrupt
@@ -3949,6 +3952,28 @@ static u64 access_sdma_wrong_dw_err_cnt(const struct cntr_entry *entry,
 	return dd->sw_send_dma_eng_err_status_cnt[0];
 }
 
+static u64 access_dc_rcv_err_cnt(const struct cntr_entry *entry,
+				 void *context, int vl, int mode,
+				 u64 data)
+{
+	struct hfi1_devdata *dd = (struct hfi1_devdata *)context;
+
+	u64 val = 0;
+	u64 csr = entry->csr;
+
+	val = read_write_csr(dd, csr, mode, data);
+	if (mode == CNTR_MODE_R) {
+		val = val > CNTR_MAX - dd->sw_rcv_bypass_packet_errors ?
+			CNTR_MAX : val + dd->sw_rcv_bypass_packet_errors;
+	} else if (mode == CNTR_MODE_W) {
+		dd->sw_rcv_bypass_packet_errors = 0;
+	} else {
+		dd_dev_err(dd, "Invalid cntr register access mode");
+		return 0;
+	}
+	return val;
+}
+
 #define def_access_sw_cpu(cntr) \
 static u64 access_sw_cpu_##cntr(const struct cntr_entry *entry,		      \
 				void *context, int vl, int mode, u64 data)    \
@@ -4026,7 +4051,8 @@ static struct cntr_entry dev_cntrs[DEV_CNTR_LAST] = {
 					    CNTR_NORMAL),
 [C_DC_UNC_ERR] = DC_PERF_CNTR(DcUnctblErr, DCC_ERR_UNCORRECTABLE_CNT,
 			      CNTR_SYNTH),
-[C_DC_RCV_ERR] = DC_PERF_CNTR(DcRecvErr, DCC_ERR_PORTRCV_ERR_CNT, CNTR_SYNTH),
+[C_DC_RCV_ERR] = CNTR_ELEM("DcRecvErr", DCC_ERR_PORTRCV_ERR_CNT, 0, CNTR_SYNTH,
+			    access_dc_rcv_err_cnt),
 [C_DC_FM_CFG_ERR] = DC_PERF_CNTR(DcFmCfgErr, DCC_ERR_FMCONFIG_ERR_CNT,
 				 CNTR_SYNTH),
 [C_DC_RMT_PHY_ERR] = DC_PERF_CNTR(DcRmtPhyErr, DCC_ERR_RCVREMOTE_PHY_ERR_CNT,
@@ -6968,8 +6994,6 @@ void handle_link_down(struct work_struct *work)
 	}
 
 	reset_neighbor_info(ppd);
-	if (ppd->mgmt_allowed)
-		remove_full_mgmt_pkey(ppd);
 
 	/* disable the port */
 	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
@@ -7076,12 +7100,16 @@ static void add_full_mgmt_pkey(struct hfi1_pportdata *ppd)
 			    __func__, ppd->pkeys[2], FULL_MGMT_P_KEY);
 	ppd->pkeys[2] = FULL_MGMT_P_KEY;
 	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_PKEYS, 0);
+	hfi1_event_pkey_change(ppd->dd, ppd->port);
 }
 
-static void remove_full_mgmt_pkey(struct hfi1_pportdata *ppd)
+static void clear_full_mgmt_pkey(struct hfi1_pportdata *ppd)
 {
-	ppd->pkeys[2] = 0;
-	(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_PKEYS, 0);
+	if (ppd->pkeys[2] != 0) {
+		ppd->pkeys[2] = 0;
+		(void)hfi1_set_ib_cfg(ppd, HFI1_IB_CFG_PKEYS, 0);
+		hfi1_event_pkey_change(ppd->dd, ppd->port);
+	}
 }
 
 /*
@@ -9175,6 +9203,13 @@ int start_link(struct hfi1_pportdata *ppd)
 			    __func__);
 		return 0;
 	}
+
+	/*
+	 * FULL_MGMT_P_KEY is cleared from the pkey table, so that the
+	 * pkey table can be configured properly if the HFI unit is connected
+	 * to switch port with MgmtAllowed=NO
+	 */
+	clear_full_mgmt_pkey(ppd);
 
 	return set_link_state(ppd, HLS_DN_POLL);
 }
@@ -11668,8 +11703,6 @@ static void free_cntrs(struct hfi1_devdata *dd)
 	dd->cntrnames = NULL;
 }
 
-#define CNTR_MAX 0xFFFFFFFFFFFFFFFFULL
-#define CNTR_32BIT_MAX 0x00000000FFFFFFFF
 
 static u64 read_dev_port_cntr(struct hfi1_devdata *dd, struct cntr_entry *entry,
 			      u64 *psval, void *context, int vl)
