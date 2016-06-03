@@ -24,6 +24,15 @@ wrapup_bullseye() {
 	done
 }
 
+# error exit
+error_exit() {
+	# stop FM to prepare unloading the driver
+	stop_fm
+	wrapup_bullseye
+	cleanup_simics
+	exit $1
+}
+
 # main start here
 myname=$0
 PWD=`pwd`
@@ -108,17 +117,17 @@ for viper in ${viper0} ${viper1}; do
 	[ ${res} != 0 ] && break
 done
 if [ ${res} != 0 ]; then
-	# stop FM to prepare unloading the driver
-	stop_fm
-	wrapup_bullseye
-	cleanup_simics
-	exit ${res}
+	error_exit ${res}
 fi
 
 # run harness
 pushd opa-headers.git/test
 ./harness.py --nodelist=viper0,viper1 --type=${test_type}
+res=$?
 popd
+if [ ${res} != 0 ]; then
+	error_exit ${res}
+fi
 
 # stop FM to prepare unloading the driver
 stop_fm
