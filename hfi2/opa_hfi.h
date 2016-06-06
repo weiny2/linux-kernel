@@ -115,10 +115,12 @@ enum {
 
 /* FXRTODO: based on 16bit (9B) LID */
 #define HFI_MULTICAST_LID_BASE	0xC000
-/* Maximum number of traffic classes supported */
+/* Maximum number of traffic and message classes supported */
 #define HFI_MAX_TC		4
-/* Maximum number of message classes supported */
+#define HFI_TC_MASK		(HFI_MAX_TC - 1)
 #define HFI_MAX_MC		2
+#define HFI_MAX_MCTC		8
+#define HFI_MCTC_MASK		(HFI_MAX_MCTC - 1)
 
 /* Maximum number of unicast LIDs supported by default */
 #define HFI_DEFAULT_MAX_LID_SUPP	0xBFFF
@@ -165,38 +167,28 @@ enum {
 #define HFI_PKEY_MEMBER_TYPE(pkey)	(((pkey) >> HFI_PKEY_MEMBER_SHIFT) & \
 					HFI_PKEY_MEMBER_MASK)
 
-#define HFI_SC_TO_TC_MC_MASK	FXR_LM_CFG_PORT1_SC2MCTC0_SC0_TO_MCTC_MASK
-
-#define HFI_SL_TO_TC_MC_MASK	(FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK | \
-			(FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_MC_MASK << \
-			FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_MC_SHIFT))
-
-#define HFI_GET_TC(mctc)	((mctc) & \
-				(u8)(FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK))
-
-#define HFI_SL_TO_SC_MASK	FXR_LM_CFG_PORT0_SL2SC0_SL0_TO_SC_MASK
-
-#define HFI_SC_TO_RESP_SL_MASK	FXR_LM_CFG_PORT0_SC2SL0_SC0_TO_SL_MASK
+#define HFI_SC_TO_TC_MC_MASK	(u64)(HFI_MCTC_MASK)
+#define HFI_SL_TO_TC_MC_MASK	(u64)(HFI_MCTC_MASK)
+#define HFI_GET_TC(mctc)	((mctc) & HFI_TC_MASK)
+#define HFI_SL_TO_SC_MASK	(u64)(OPA_MAX_SCS - 1)
+#define HFI_SC_TO_RESP_SL_MASK	(u64)(OPA_MAX_SLS - 1)
 
 /* Any lane between 8 and 14 is illegal. Randomly chosen one from that list */
-#define HFI_ILLEGAL_VL			12
+#define HFI_ILLEGAL_VL		12
+#define HFI_NUM_USABLE_VLS	16	/* look at VL15 and less */
 
-#define HFI_SC_VLT_MASK			FXR_TP_CFG_SC_TO_VLT_MAP_ENTRY0_MASK
-
-#define HFI_SC_VLNT_MASK		FXR_TP_CFG_CM_SC_TO_VLT_MAP_ENTRY0_MASK
-
-#define HFI_SC_VLR_MASK			FXR_FPC_CFG_SC_VL_TABLE_15_0_ENTRY0_MASK
+#define HFI_SC_VLT_MASK		(u64)(HFI_NUM_USABLE_VLS - 1)
+#define HFI_SC_VLNT_MASK	(u64)(HFI_NUM_USABLE_VLS - 1)
+#define HFI_SC_VLR_MASK		(u64)(HFI_NUM_USABLE_VLS - 1)
 
 /* Message class and traffic class for VL15 packets */
-#define HFI_VL15_MC			0
-#define HFI_VL15_TC			3
+#define HFI_VL15_MC		0
+#define HFI_VL15_TC		3
 
-#define hfi_vl_to_idx(vl)		(((vl) < HFI_NUM_DATA_VLS) ? \
+#define hfi_vl_to_idx(vl)	(((vl) < HFI_NUM_DATA_VLS) ? \
 				 (vl) : HFI_NUM_DATA_VLS)
-#define hfi_idx_to_vl(idx)		(((idx) == HFI_NUM_DATA_VLS) ? \
-				 15 : (idx))
+#define hfi_idx_to_vl(idx)	(((idx) == HFI_NUM_DATA_VLS) ? 15 : (idx))
 #define hfi_valid_vl(idx)	((idx) < HFI_NUM_DATA_VLS || (idx) == 15)
-#define HFI_NUM_USABLE_VLS 16	/* look at VL15 and less */
 
 /* verify capability fabric fields */
 #define HFI_VAU_SHIFT	0
