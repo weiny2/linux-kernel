@@ -11703,7 +11703,6 @@ static void free_cntrs(struct hfi1_devdata *dd)
 	dd->cntrnames = NULL;
 }
 
-
 static u64 read_dev_port_cntr(struct hfi1_devdata *dd, struct cntr_entry *entry,
 			      u64 *psval, void *context, int vl)
 {

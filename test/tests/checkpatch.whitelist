@@ -39,7 +39,6 @@
 1 chip.c CHECK: Avoid CamelCase: <DcRcvFcnVl>
 1 chip.c CHECK: Avoid CamelCase: <DcRcvFlits>
 1 chip.c CHECK: Avoid CamelCase: <DcRcvPkts>
-1 chip.c CHECK: Avoid CamelCase: <DcRecvErr>
 1 chip.c CHECK: Avoid CamelCase: <DcReinitPeer>
 1 chip.c CHECK: Avoid CamelCase: <DcRmtPhyErr>
 1 chip.c CHECK: Avoid CamelCase: <DcRxFCntl>
