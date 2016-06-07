@@ -53,23 +53,33 @@
  */
 
 #include <linux/interrupt.h>
+/* TODO - prefer hfi_cmd.h to only be included by files in hfi2_user.ko */
+#include <rdma/hfi_cmd.h>
 #include "opa_hfi.h"
 #include "link.h"
-#include <rdma/fxr/fxr_fc_defs.h>
-#include <rdma/fxr/fxr_hifis_defs.h>
-#include <rdma/fxr/fxr_loca_defs.h>
-#include <rdma/fxr/fxr_pcim_defs.h>
-#include <rdma/fxr/fxr_tx_otr_pkt_top_csrs_defs.h>
-#include <rdma/fxr/fxr_tx_otr_msg_top_csrs_defs.h>
-#include <rdma/fxr/fxr_tx_dma_defs.h>
-#include <rdma/fxr/fxr_rx_e2e_defs.h>
-#include <rdma/fxr/fxr_rx_hp_defs.h>
-#include <rdma/fxr/fxr_rx_dma_defs.h>
-#include <rdma/fxr/fxr_rx_et_defs.h>
-#include <rdma/fxr/fxr_rx_hiarb_defs.h>
-#include <rdma/fxr/fxr_at_defs.h>
-#include <rdma/fxr/mnh_opio_defs.h>
-#include <rdma/fxr/fxr_perfmon_defs.h>
+#include "fxr/fxr_fc_defs.h"
+#include "fxr/fxr_hifis_defs.h"
+#include "fxr/fxr_loca_defs.h"
+#include "fxr/fxr_pcim_defs.h"
+#include "fxr/fxr_tx_otr_pkt_top_csrs_defs.h"
+#include "fxr/fxr_tx_otr_msg_top_csrs_defs.h"
+#include "fxr/fxr_tx_dma_defs.h"
+#include "fxr/fxr_tx_ci_cic_csrs_defs.h"
+#include "fxr/fxr_tx_ci_cid_csrs_defs.h"
+#include "fxr/fxr_rx_ci_cic_csrs_defs.h"
+#include "fxr/fxr_rx_ci_cid_csrs_defs.h"
+#include "fxr/fxr_rx_e2e_defs.h"
+#include "fxr/fxr_rx_hp_defs.h"
+#include "fxr/fxr_rx_dma_defs.h"
+#include "fxr/fxr_rx_et_defs.h"
+#include "fxr/fxr_rx_hiarb_defs.h"
+#include "fxr/fxr_at_defs.h"
+#include "fxr/mnh_opio_defs.h"
+#include "fxr/fxr_perfmon_defs.h"
+#include "fxr/fxr_linkmux_defs.h"
+#include "fxr/fxr_linkmux_tp_defs.h"
+#include "fxr/fxr_linkmux_fpc_defs.h"
+#include "fxr/fxr_linkmux_cm_defs.h"
 
 /*
  * error domain and error event processing structure.

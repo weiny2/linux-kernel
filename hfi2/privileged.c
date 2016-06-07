@@ -58,6 +58,9 @@
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_ct.h>
 #include <rdma/hfi_eq.h>
+/* TODO - prefer hfi_cmd.h to only be included by files in hfi2_user.ko */
+#include <rdma/hfi_cmd.h>
+#include "fxr/fxr_tx_ci_cid_csrs.h"
 #include "opa_hfi.h"
 
 #define HFI_MAX_DLIDRELOC_CMD_LEN	15
@@ -334,6 +337,7 @@ int hfi_dlid_assign(struct hfi_ctx *ctx,
 	/* write DLID relocation table */
 	ret = hfi_write_dlid_reloc_cmd(ctx, dlid_assign->dlid_base,
 				       dlid_assign->count,
+				       (TXCID_CFG_DLID_RT_DATA_t *)
 				       dlid_assign->dlid_entries_ptr);
 	if (ret < 0)
 		return ret;

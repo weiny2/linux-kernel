@@ -57,10 +57,10 @@
  */
 
 #include <linux/delay.h>
-#include <rdma/fxr/fxr_fc_defs.h>
-#include <rdma/fxr/fxr_top_defs.h>
-#include <rdma/fxr/mnh_8051_defs.h>
 #include <linux/interrupt.h>
+#include "fxr/fxr_top_defs.h"
+#include "fxr/fxr_fc_defs.h"
+#include "fxr/mnh_8051_defs.h"
 #include "opa_hfi.h"
 #include "link.h"
 #include "firmware.h"

@@ -60,12 +60,8 @@
 #include <linux/version.h>
 #include <linux/ptp_clock_kernel.h>
 #include <rdma/ib_smi.h>
-#include <rdma/hfi_cmd.h>
 #include <rdma/opa_core.h>
-#include <rdma/fxr/fxr_linkmux_defs.h>
-#include <rdma/fxr/fxr_linkmux_tp_defs.h>
-#include <rdma/fxr/fxr_linkmux_fpc_defs.h>
-#include <rdma/fxr/fxr_linkmux_cm_defs.h>
+#include "fxr/fxr_top_defs.h"
 #include "verbs/mad.h"
 #include "firmware.h"
 #include "platform.h"

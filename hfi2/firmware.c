@@ -66,11 +66,11 @@
 #include "opa_hfi.h"
 #include "debugfs.h"
 #include "link.h"
-#include "rdma/fxr/mnh_8051_defs.h"
-#include "rdma/fxr/fxr_fc_defs.h"
 #include "firmware.h"
-#include "rdma/fxr/mnh_misc_defs.h"
-#include "rdma/fxr/fxr_rx_hp_defs.h"
+#include "fxr/mnh_8051_defs.h"
+#include "fxr/fxr_fc_defs.h"
+#include "fxr/mnh_misc_defs.h"
+#include "fxr/fxr_rx_hp_defs.h"
 
 /*
  * Make it easy to toggle firmware file name and if it gets loaded by

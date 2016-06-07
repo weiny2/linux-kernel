@@ -61,7 +61,7 @@
 #include <linux/vmalloc.h>
 #include "opa_hfi.h"
 #include <rdma/hfi_eq.h>
-#include <rdma/fxr/fxr_rx_dma_defs.h>
+#include "fxr/fxr_rx_dma_defs.h"
 
 static uint cq_alloc_cyclic;
 

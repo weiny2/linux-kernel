@@ -57,9 +57,9 @@
 #include "packet.h"
 #include "../link.h"
 #include "../opa_hfi.h"
-#include <rdma/fxr/fxr_linkmux_fpc_defs.h>
-#include <rdma/fxr/fxr_linkmux_tp_defs.h>
-#include <rdma/fxr/fxr_fc_defs.h>
+#include "fxr/fxr_linkmux_fpc_defs.h"
+#include "fxr/fxr_linkmux_tp_defs.h"
+#include "fxr/fxr_fc_defs.h"
 
 /* Maximum number of vnic ports per HFI ports */
 #define HFI_PORT_MAX_VPORTS  4

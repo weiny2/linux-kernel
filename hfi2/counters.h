@@ -52,9 +52,9 @@
  * Intel(R) Omni-Path Gen2 HFI PCIe Driver
  */
 #include "opa_hfi.h"
-#include <rdma/fxr/fxr_linkmux_fpc_defs.h>
-#include <rdma/fxr/fxr_linkmux_tp_defs.h>
-#include <rdma/fxr/fxr_fc_defs.h>
+#include "fxr/fxr_linkmux_fpc_defs.h"
+#include "fxr/fxr_linkmux_tp_defs.h"
+#include "fxr/fxr_fc_defs.h"
 
 #define CNTR_NORMAL	0x0
 #define CNTR_VL		0x1

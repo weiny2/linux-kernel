@@ -60,8 +60,10 @@
 #include "firmware.h"
 #include "link.h"
 #include "counters.h"
-#include "rdma/fxr/mnh_8051_defs.h"
-#include "rdma/fxr/fxr_fc_defs.h"
+#include "fxr/mnh_8051_defs.h"
+#include "fxr/fxr_fc_defs.h"
+#include "fxr/fxr_tx_ci_cic_csrs_defs.h"
+#include "fxr/fxr_rx_ci_cid_csrs_defs.h"
 
 #ifdef CONFIG_DEBUG_FS
 struct dentry *hfi_dbg_root;

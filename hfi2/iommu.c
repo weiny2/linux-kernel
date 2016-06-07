@@ -71,14 +71,12 @@
 
 #include <linux/kthread.h>
 #include <linux/types.h>
-#if 1 /* TODO: should be __SIMICS__ instead of 1 */
 #include <linux/delay.h>
-#endif
 #include <linux/intel-svm.h>
-#include <rdma/fxr/fxr_top_defs.h>
-#include <rdma/fxr/fxr_at_csrs.h>
-#include <rdma/fxr/fxr_at_defs.h>
-#include <rdma/fxr/translation_structs.h>
+#include "fxr/fxr_top_defs.h"
+#include "fxr/fxr_at_csrs.h"
+#include "fxr/fxr_at_defs.h"
+#include "fxr/translation_structs.h"
 #include "opa_hfi.h"
 
 int

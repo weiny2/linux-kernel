@@ -58,9 +58,9 @@
 #include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/sched.h>
+#include <rdma/opa_core.h>
 #include "opa_hfi.h"
-#include "../common/rdma/opa_core.h"
-#include "rdma/fxr/fxr_fc_defs.h"
+#include "fxr/fxr_fc_defs.h"
 
 void hfi_timesync_init(struct hfi_pportdata *ppd);
 void hfi_timesync_stop(struct hfi_pportdata *ppd);
