@@ -1053,6 +1053,7 @@ static int hfi_vdev_create(struct opa_vnic_ctrl_device *cdev,
 	vport->vport_num = vport_num;
 	vport->odev = ndev->odev;
 	vport->ndev = opa_core_get_priv_data(&opa_vnic_clnt, ndev->odev);
+	BUILD_BUG_ON(OPA2_NUM_VNIC_CTXT > OPA_VNIC_MAX_QUEUE);
 	hfi_info.num_tx_q = is_eeph ? 1 : OPA2_NUM_VNIC_CTXT;
 	hfi_info.num_rx_q = is_eeph ? 1 : OPA2_NUM_VNIC_CTXT;
 	hfi_info.cap = is_eeph ? 0 : OPA_VNIC_HFI_CAP_SG;
