@@ -2756,20 +2756,27 @@ void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
 	TXCIC_CFG_DRAIN_RESET_t tx_cq_reset = {.val = 0};
 	RXCIC_CFG_CQ_DRAIN_RESET_t rx_cq_reset = {.val = 0};
 	int time;
+	int timeout = HFI_CQ_DRAIN_RESET_TIMEOUT_MS;
 
 	/* reset CQ state, as CQ head starts at 0 */
 	tx_cq_reset.field.drain_cq = cq_idx;
 	tx_cq_reset.field.reset = 1;
+	tx_cq_reset.field.drain = 1;
 	tx_cq_reset.field.busy = 1;
 	rx_cq_reset.field.drain_cq = cq_idx;
 	rx_cq_reset.field.reset = 1;
+	rx_cq_reset.field.drain = 1;
 	rx_cq_reset.field.busy = 1;
 
-	write_csr(dd, FXR_TXCIC_CFG_DRAIN_RESET, tx_cq_reset.val);
-	write_csr(dd, FXR_RXCIC_CFG_CQ_DRAIN_RESET, rx_cq_reset.val);
+retry_reset:
+	if (tx_cq_reset.field.reset)
+		write_csr(dd, FXR_TXCIC_CFG_DRAIN_RESET, tx_cq_reset.val);
+
+	if (rx_cq_reset.field.reset)
+		write_csr(dd, FXR_RXCIC_CFG_CQ_DRAIN_RESET, rx_cq_reset.val);
 
 	/* wait for completion, if timeout log a message */
-	for (time = 0; time < HFI_CQ_RESET_TIMEOUT_MS; time++) {
+	for (time = 0; time < timeout; time++) {
 		mdelay(1);
 		if (tx_cq_reset.field.busy)
 			tx_cq_reset.val = read_csr(dd,
@@ -2781,7 +2788,28 @@ void hfi_cq_disable(struct hfi_devdata *dd, u16 cq_idx)
 		    !rx_cq_reset.field.busy)
 			break;
 	}
-	if (time >= HFI_CQ_RESET_TIMEOUT_MS) {
+	if (time >= timeout) {
+		if (tx_cq_reset.field.drain || rx_cq_reset.field.drain) {
+			if (tx_cq_reset.field.busy) {
+				tx_cq_reset.field.drain = 0;
+				dd_dev_err(dd, "TX CQ reset and drain are not done "
+						"after %dms..trying only reset\n",
+						HFI_CQ_RESET_TIMEOUT_MS);
+			}
+			if (rx_cq_reset.field.busy) {
+				rx_cq_reset.field.drain = 0;
+				dd_dev_err(dd, "RX CQ reset and drain are not done "
+						"after %dms..trying only reset\n",
+						HFI_CQ_RESET_TIMEOUT_MS);
+			}
+			/*FXRTODO revisit retry mechanism after design team confirmation*/
+			tx_cq_reset.field.drain_cq = cq_idx;
+			tx_cq_reset.field.reset = tx_cq_reset.field.busy;
+			rx_cq_reset.field.drain_cq = cq_idx;
+			rx_cq_reset.field.reset = rx_cq_reset.field.busy;
+			timeout = HFI_CQ_RESET_TIMEOUT_MS;
+			goto retry_reset;
+		}
 		if (tx_cq_reset.field.busy)
 			dd_dev_err(dd, "TX CQ reset "
 				"not done after %dms\n",
