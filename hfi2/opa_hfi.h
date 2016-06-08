@@ -715,6 +715,10 @@ struct hfi_devdata {
 	u32 num_eq_irqs;
 	atomic_t msix_eq_next;
 
+	/* List of context error queue to dispatch error to */
+	spinlock_t error_dispatch_lock;
+	struct list_head error_dispatch_head;
+
 	/* RSM */
 	u8 rsm_offset[HFI_NUM_RSM_RULES];
 	u16 rsm_size[HFI_NUM_RSM_RULES];
@@ -849,7 +853,11 @@ void hfi_disable_msix(struct hfi_devdata *dd);
 int hfi_setup_interrupts(struct hfi_devdata *dd, int total, int minw);
 void hfi_cleanup_interrupts(struct hfi_devdata *dd);
 void hfi_disable_interrupts(struct hfi_devdata *dd);
+
 int hfi_setup_irqerr(struct hfi_devdata *dd);
+void hfi_setup_errq(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
+void hfi_errq_cleanup(struct hfi_ctx *ctx);
+int hfi_get_async_error(struct hfi_ctx *ctx, void *ae, int timeout);
 
 struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev);
 void hfi_cc_state_reclaim(struct rcu_head *rcu);

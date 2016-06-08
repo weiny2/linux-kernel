@@ -306,6 +306,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct opa_ev_assign ev_assign;
 	struct hfi_ts_master_regs master_ts;
 	struct hfi_ts_fm_data fm_data;
+	struct hfi_async_error ae;
+	struct hfi_async_error_args ae_arg;
 	int need_admin = 0;
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *copy_ptr = NULL;
@@ -418,6 +420,10 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		copy_in = sizeof(fm_data);
 		copy_out = copy_in;
 		copy_ptr = &fm_data;
+		break;
+	case HFI_CMD_GET_ASYNC_ERROR:
+		copy_in = sizeof(ae_arg);
+		copy_ptr = &ae_arg;
 		break;
 	default:
 		ret = -EINVAL;
@@ -596,6 +602,12 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_TS_GET_FM_DATA:
 		ret = ops->get_ts_fm_data(&ud->ctx, &fm_data);
+		break;
+	case HFI_CMD_GET_ASYNC_ERROR:
+		user_data = (void __user *)ae_arg.ae;
+		copy_ptr = &ae;
+		copy_out = sizeof(ae);
+		ret = ops->get_async_error(&ud->ctx, copy_ptr, ae_arg.timeout);
 		break;
 	default:
 		ret = -EINVAL;

@@ -2144,6 +2144,7 @@ static struct opa_core_ops opa_core_ops = {
 	.clear_rsm_rule = clear_rsm_rule,
 	.get_ts_master_regs = hfi_get_ts_master_regs,
 	.get_ts_fm_data = hfi_get_ts_fm_data,
+	.get_async_error = hfi_get_async_error,
 };
 
 /*
@@ -2405,6 +2406,10 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	spin_lock_init(&dd->priv_tx_cq_lock);
 	spin_lock_init(&dd->priv_rx_cq_lock);
 	mutex_init(&dd->e2e_lock);
+
+	/* List of context error queue to dispatch error to */
+	INIT_LIST_HEAD(&dd->error_dispatch_head);
+	spin_lock_init(&dd->error_dispatch_lock);
 
 	/* FXR resources are on BAR0 (used for io_remap, etc.) */
 	addr = pci_resource_start(pdev, HFI_FXR_BAR);

@@ -69,6 +69,30 @@ struct hfi_devdata;
 struct opa_core_device;
 
 /**
+ * Error event queue, to be picked by user thread
+ * @waitq: user thread waiting for new error event
+ * @lock: spin lock for count/head update
+ * @count: -1: queue disabled, otherwise, # of events on queue
+ * @head: link list head for error event queue
+ */
+struct hfi_error_queue {
+	wait_queue_head_t waitq;
+	spinlock_t lock;
+	int count;
+	struct list_head head;
+};
+
+/**
+ * Context error list for dispatching by interrupt handler
+ * @list: link to global dispatch queue for the device
+ * @queue: error queue for a context
+ */
+struct hfi_ctx_error{
+	struct list_head list;
+	struct hfi_error_queue queue;
+};
+
+/**
  * struct hfi_ctx - state for HFI resources assigned to this context
  * @devdata: HFI device specific data, private to the hardware driver
  * @ops: OPA_CORE device operations
@@ -116,6 +140,7 @@ struct opa_core_device;
  * @le_me_free_index: Index of first free handle
  * @pt_free_list: List of free PT entries (per NI)
  * @pt_free_index: Index of first free PT entry (per NI)
+ * @error: struct to report errors to user space
  * @wait_list: context waitlist, needed by some kernel-clients
  * TODO @wait_list needed by Verbs, look at moving to hfi2_ibrcv
  */
@@ -166,6 +191,7 @@ struct hfi_ctx {
 	u32		le_me_free_index;
 	u8		pt_free_list[HFI_NUM_NIS][HFI_NUM_PT_ENTRIES];
 	u32		pt_free_index[HFI_NUM_NIS];
+	struct hfi_ctx_error error;
 	struct list_head wait_list;
 };
 
@@ -450,6 +476,7 @@ struct opa_core_ops {
 				  struct hfi_ts_master_regs *ts_master_regs);
 	int (*get_ts_fm_data)(struct hfi_ctx *ctx,
 			      struct hfi_ts_fm_data *fm_data);
+	int (*get_async_error)(struct hfi_ctx *ctx, void *ae, int timeout);
 };
 
 /**

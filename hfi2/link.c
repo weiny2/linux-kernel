@@ -1822,19 +1822,22 @@ static irqreturn_t irq_mnh_handler(int irq, void *dev_id)
 }
 
 /*
- * FXRTODO: enable this code and test it once the
- * FZC ERROR interrupt is enabled
+ * FPC error handling.
  */
-#if 0
-static irqreturn_t irq_fzc0_handler(int irq, void *dev_id)
+void hfi_handle_fpc_error(struct hfi_devdata *dd, u64 reg, char *fpc_name)
 {
+#if 0
+/* TODO: Vennila will work on this function:
+   1. reg = FXR_FPC_ERR_STS value
+   2. for port 1: fpc_name="FPC0"
+   3. for port 2: fpc_name="FPC1"
+ */
+
 	struct hfi_msix_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
 	struct hfi_pportdata *ppd;
 	u64 reg, info, hdr0, hdr1;
 	u8 port;
-
-	hfi_ack_interrupt(me);
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
@@ -1879,9 +1882,8 @@ static irqreturn_t irq_fzc0_handler(int irq, void *dev_id)
 			}
 		}
 	}
-	return IRQ_HANDLED;
-}
 #endif
+}
 
 /*
  * configure IRQs for MNH
@@ -1913,44 +1915,6 @@ int hfi2_cfg_link_intr_vector(struct hfi_devdata *dd)
  _return:
 	return ret;
 }
-
-/*
-* FXRTODO: enable this code after interrupt is enabled in simics
-*/
-#if 0
-/*
- * configure irqs for fzc0
-*/
-int hfi2_cfg_fzc0_intr_vector(struct hfi_devdata *dd)
-{
-	struct hfi_msix_entry *me = &dd->msix_entries[HFI2_FZC0_ERROR];
-	int ret;
-
-	if (me->arg) {
-		dd_dev_err(dd, "msix entry is already configured: %d\n",
-			HFI2_FZC0_ERROR);
-		ret = -EINVAL;
-		goto _return;
-	}
-	INIT_LIST_HEAD(&me->irq_wait_head);
-	rwlock_init(&me->irq_wait_lock);
-	me->dd = dd;
-	me->intr_src = HFI2_FZC0_ERROR;
-
-	dd_dev_dbg(dd, "request for irq %d:%d\n", HFI2_FZC0_ERROR,
-			me->msix.vector);
-	ret = request_irq(me->msix.vector, irq_fzc0_handler, 0,
-		"hfi_irq_fzc0", me);
-	if (ret) {
-		dd_dev_err(dd, "irq[%d] request failed %d\n", HFI2_FZC0_ERROR,
-				ret);
-		goto _return;
-	}
-	me->arg = me;	/* mark as in use */
- _return:
-	return ret;
-}
-#endif
 
 /*
  *
@@ -2053,19 +2017,6 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 		goto _return;
 	}
 
-	/*
-	* FXRTODO: enable this code after
-	* FZC ERROR interrupt is enabled in
-	* simics
-	*/
-	#if 0
-	ret = hfi2_cfg_fzc0_intr_vector(dd);
-	if (ret) {
-		dd_dev_err(dd, "Can't configure interrupt vector of FZC0: %d\n",
-			ret);
-		goto _return;
-	}
-	#endif
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
 		/* configure workqueues */

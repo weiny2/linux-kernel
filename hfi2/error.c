@@ -54,6 +54,7 @@
 
 #include <linux/interrupt.h>
 #include "opa_hfi.h"
+#include "link.h"
 #include <rdma/fxr/fxr_fc_defs.h>
 #include <rdma/fxr/fxr_hifis_defs.h>
 #include <rdma/fxr/fxr_loca_defs.h>
@@ -77,7 +78,7 @@ struct hfi_error_event {
 	char *event_name;
 	char *event_desc;
 	/* we can add action routine here */
-	void (*action)(struct hfi_devdata *dd);
+	void (*action)(struct hfi_devdata *dd, u64 err_sts, char *name);
 };
 
 struct hfi_error_csr {
@@ -96,6 +97,17 @@ struct hfi_error_domain {
 	int			irq;
 };
 
+#define HFI_ERROR_DISABLE	-1
+#define HFI_MAX_ERR_PER_CTXT	256
+
+/*
+ * error entry for error queue.
+ */
+struct hfi_error_entry {
+	struct hfi_async_error ae;
+	struct list_head list;	/* context queue */
+};
+
 /*
  * Each error csr definition.
  */
@@ -104,64 +116,142 @@ struct hfi_error_domain {
 /*
  * Interrupts assignment for each error domains.
  */
-#define FZC0_IRQ		257
-#define FZC1_IRQ		258
-#define HIFIS_IRQ		259
-#define LOCA_IRQ		260
-#define PCIM_IRQ		261
-#define TXCID_IRQ		262
-#define OTR_IRQ			263
-#define TXDMA_IRQ		264
-#define LM_IRQ			265
-#define RXE2E_IRQ		266
-#define RXHP_IRQ		267
-#define RXDMA_IRQ		268
-#define RXET_IRQ		269
-#define RXHIARB_IRQ		270
-#define AT_IRQ			271
-#define OPIO_IRQ		272
-#define RXCID_IRQ		273
-#define FPC0_IRQ		274
-#define FPC1_IRQ		275
-#define TP0_IRQ			276
-#define TP1_IRQ			277
-#define PMON_IRQ		278
+#define HFI_FZC0_IRQ		257
+#define HFI_FZC1_IRQ		258
+#define HFI_HIFIS_IRQ		259
+#define HFI_LOCA_IRQ		260
+#define HFI_PCIM_IRQ		261
+#define HFI_TXCID_IRQ		262
+#define HFI_OTR_IRQ		263
+#define HFI_TXDMA_IRQ		264
+#define HFI_LM_IRQ		265
+#define HFI_RXE2E_IRQ		266
+#define HFI_RXHP_IRQ		267
+#define HFI_RXDMA_IRQ		268
+#define HFI_RXET_IRQ		269
+#define HFI_RXHIARB_IRQ		270
+#define HFI_AT_IRQ		271
+#define HFI_OPIO_IRQ		272
+#define HFI_RXCID_IRQ		273
+#define HFI_FPC0_IRQ		274
+#define HFI_FPC1_IRQ		275
+#define HFI_TP0_IRQ		276
+#define HFI_TP1_IRQ		277
+#define HFI_PMON_IRQ		278
 
 /*
- * When LM_ERR is added, this will be 22
+ * When HFILM_ERR is added, this will be 22
  */
-#define NUM_ERR_DOMAIN		21
+#define HFI_NUM_ERR_DOMAIN	21
 
 /*
  * Put all error domains into an array structure
  */
-#define MAKE_DOMAIN(e, irq)	\
+#define HFI_MAKE_DOMAIN(e, irq)	\
 	{e, sizeof(e) / sizeof(struct hfi_error_csr), irq }
 
 static struct hfi_error_domain hfi_error_domain[] = {
-	MAKE_DOMAIN(hfi_fzc0_error, FZC0_IRQ),
-	MAKE_DOMAIN(hfi_fzc1_error, FZC1_IRQ),
-	MAKE_DOMAIN(hfi_hifis_error, HIFIS_IRQ),
-	MAKE_DOMAIN(hfi_loca_error, LOCA_IRQ),
-	MAKE_DOMAIN(hfi_pcim_error, PCIM_IRQ),
-	MAKE_DOMAIN(hfi_txcid_error, TXCID_IRQ),
-	MAKE_DOMAIN(hfi_otr_error, OTR_IRQ),
-	MAKE_DOMAIN(hfi_txdma_error, TXDMA_IRQ),
+	HFI_MAKE_DOMAIN(hfi_fzc0_error, HFI_FZC0_IRQ),
+	HFI_MAKE_DOMAIN(hfi_fzc1_error, HFI_FZC1_IRQ),
+	HFI_MAKE_DOMAIN(hfi_hifis_error, HFI_HIFIS_IRQ),
+	HFI_MAKE_DOMAIN(hfi_loca_error, HFI_LOCA_IRQ),
+	HFI_MAKE_DOMAIN(hfi_pcim_error, HFI_PCIM_IRQ),
+	HFI_MAKE_DOMAIN(hfi_txcid_error, HFI_TXCID_IRQ),
+	HFI_MAKE_DOMAIN(hfi_otr_error, HFI_OTR_IRQ),
+	HFI_MAKE_DOMAIN(hfi_txdma_error, HFI_TXDMA_IRQ),
 	/* add LM error here */
-	MAKE_DOMAIN(hfi_rxe2e_error, RXE2E_IRQ),
-	MAKE_DOMAIN(hfi_rxhp_error, RXHP_IRQ),
-	MAKE_DOMAIN(hfi_rxdma_error, RXDMA_IRQ),
-	MAKE_DOMAIN(hfi_rxet_error, RXET_IRQ),
-	MAKE_DOMAIN(hfi_rxhiarb_error, RXHIARB_IRQ),
-	MAKE_DOMAIN(hfi_at_error, AT_IRQ),
-	MAKE_DOMAIN(hfi_opio_error, OPIO_IRQ),
-	MAKE_DOMAIN(hfi_rxcid_error, RXCID_IRQ),
-	MAKE_DOMAIN(hfi_fpc0_error, FPC0_IRQ),
-	MAKE_DOMAIN(hfi_fpc1_error, FPC1_IRQ),
-	MAKE_DOMAIN(hfi_tp0_error, TP0_IRQ),
-	MAKE_DOMAIN(hfi_tp1_error, TP1_IRQ),
-	MAKE_DOMAIN(hfi_pmon_error, PMON_IRQ)
+	HFI_MAKE_DOMAIN(hfi_rxe2e_error, HFI_RXE2E_IRQ),
+	HFI_MAKE_DOMAIN(hfi_rxhp_error, HFI_RXHP_IRQ),
+	HFI_MAKE_DOMAIN(hfi_rxdma_error, HFI_RXDMA_IRQ),
+	HFI_MAKE_DOMAIN(hfi_rxet_error, HFI_RXET_IRQ),
+	HFI_MAKE_DOMAIN(hfi_rxhiarb_error, HFI_RXHIARB_IRQ),
+	HFI_MAKE_DOMAIN(hfi_at_error, HFI_AT_IRQ),
+	HFI_MAKE_DOMAIN(hfi_opio_error, HFI_OPIO_IRQ),
+	HFI_MAKE_DOMAIN(hfi_rxcid_error, HFI_RXCID_IRQ),
+	HFI_MAKE_DOMAIN(hfi_fpc0_error, HFI_FPC0_IRQ),
+	HFI_MAKE_DOMAIN(hfi_fpc1_error, HFI_FPC1_IRQ),
+	HFI_MAKE_DOMAIN(hfi_tp0_error, HFI_TP0_IRQ),
+	HFI_MAKE_DOMAIN(hfi_tp1_error, HFI_TP1_IRQ),
+	HFI_MAKE_DOMAIN(hfi_pmon_error, HFI_PMON_IRQ)
 };
+
+/*
+ * IOMMU page group request error, dispatch to the target process
+ */
+void hfi_handle_pgrrsp_error(struct hfi_devdata *dd, u64 err_sts, char *name)
+{
+	struct hfi_ctx *ctx;
+	struct hfi_ctx_error *error;
+	struct hfi_error_queue *errq;
+	struct hfi_error_entry *entry;
+	u64 info1f, info1g;
+	int pasid, cid;
+	char *client;
+
+	/* read page group request error info */
+	info1f = read_csr(dd, FXR_AT_ERR_INFO_1F);
+	info1g = read_csr(dd, FXR_AT_ERR_INFO_1G);
+	pasid = info1f & FXR_AT_ERR_INFO_1F_PGR_ERROR_PASID_MASK;
+	cid = (info1f >> FXR_AT_ERR_INFO_1F_PGR_ERROR_CLIENT_SHIFT) &
+		FXR_AT_ERR_INFO_1F_PGR_ERROR_CLIENT_MASK;
+	if (cid == 0x1)
+		client = "TXDMA";
+	else if (cid == 0x2)
+		client = "TXOTR";
+	else if (cid == 0x4)
+		client = "RXDMA";
+	else
+		client = "Unknown";
+
+	dd_dev_err(dd, "pgr errinfo: client=%s, pasid=%d\n",
+		   client, pasid);
+	dd_dev_err(dd, "vaddr=0x%llx, r=%lld w=%lld pa=%lld\n",
+		   (info1g & FXR_AT_ERR_INFO_1G_PGR_ERROR_VA_SMASK),
+		   (info1g >> FXR_AT_ERR_INFO_1G_PGR_ERROR_R_SHIFT) &
+			FXR_AT_ERR_INFO_1G_PGR_ERROR_R_MASK,
+		   (info1g >> FXR_AT_ERR_INFO_1G_PGR_ERROR_W_SHIFT) &
+			FXR_AT_ERR_INFO_1G_PGR_ERROR_W_MASK,
+		   (info1g >> FXR_AT_ERR_INFO_1G_PGR_ERROR_PA_SHIFT) &
+			FXR_AT_ERR_INFO_1G_PGR_ERROR_PA_MASK);
+
+	spin_lock(&dd->error_dispatch_lock);
+	list_for_each_entry(error, &dd->error_dispatch_head, list) {
+		ctx = container_of(error, struct hfi_ctx, error);
+		if (ctx->pasid != pasid)
+			continue;
+
+		errq = &error->queue;
+		spin_lock(&errq->lock);
+
+		/* queue is full, drop new error */
+		if (errq->count == HFI_MAX_ERR_PER_CTXT) {
+			spin_unlock(&errq->lock);
+			break;
+		}
+
+		/* No sleep, if no memory, terminate dispatching */
+		entry = kmalloc(sizeof(*entry), GFP_ATOMIC);
+		if (!entry) {
+			spin_unlock(&errq->lock);
+			break;
+		}
+
+		/* put new error into queue */
+		entry->ae.etype = HFI_PGR_ERR;
+		entry->ae.pgrinfo = info1g;
+		list_add_tail(&entry->list, &errq->head);
+		errq->count++;
+
+		spin_unlock(&errq->lock);
+
+		/* wake up waiting thread */
+		wake_up_interruptible(&errq->waitq);
+
+		/* only send to single ctx */
+		break;
+	}
+	spin_unlock(&dd->error_dispatch_lock);
+}
 
 /*
  * real error interrupt handler.
@@ -198,7 +288,8 @@ static irqreturn_t irq_err_handler(int irq, void *dev_id)
 					event->event_name,
 					event->event_desc);
 				if (event->action)
-					event->action(dd);
+					event->action(dd, (1uLL << j),
+						      csr->csr_name);
 			}
 		}
 	}
@@ -228,12 +319,36 @@ int hfi_setup_irqerr(struct hfi_devdata *dd)
 	int i, j, ret;
 	u64 val;
 
+	/*
+	 * Set address translation error event handler:
+	 * 11: PageGroup Response Error
+	 */
+	hfi_at_error[0].events[11].action = hfi_handle_pgrrsp_error;
+
+	/*
+	 * set FPC error event handler:
+	 * 13: uncorrectable_err
+	 * 19: link_err
+	 * 54: fmconfig_err
+	 * 55: rcvport_err
+	 */
+	hfi_fpc0_error[0].events[13].action = hfi_handle_fpc_error;
+	hfi_fpc0_error[0].events[19].action = hfi_handle_fpc_error;
+	hfi_fpc0_error[0].events[54].action = hfi_handle_fpc_error;
+	hfi_fpc0_error[0].events[55].action = hfi_handle_fpc_error;
+	hfi_fpc1_error[0].events[13].action = hfi_handle_fpc_error;
+	hfi_fpc1_error[0].events[19].action = hfi_handle_fpc_error;
+	hfi_fpc1_error[0].events[54].action = hfi_handle_fpc_error;
+	hfi_fpc1_error[0].events[55].action = hfi_handle_fpc_error;
+
+	/* Setup interrupt handler for each IRQ */
+
 	/* set all bits */
 	val = ~0;
 	BUILD_BUG_ON(sizeof(hfi_error_domain) !=
-		(NUM_ERR_DOMAIN * sizeof(struct hfi_error_domain)));
+		(HFI_NUM_ERR_DOMAIN * sizeof(struct hfi_error_domain)));
 
-	for (i = 0; i < NUM_ERR_DOMAIN; i++) {
+	for (i = 0; i < HFI_NUM_ERR_DOMAIN; i++) {
 		irq = hfi_error_domain[i].irq;
 		me = &dd->msix_entries[irq];
 
@@ -262,3 +377,114 @@ int hfi_setup_irqerr(struct hfi_devdata *dd)
 	return 0;
 }
 
+/*
+ * A context chooses to listen the interrupt error,
+ * here we register the context's error queue into
+ * the listening list.
+ */
+void hfi_setup_errq(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	struct hfi_ctx_error *error = &ctx->error;
+	struct hfi_error_queue *errq = &error->queue;
+	unsigned long flags;
+
+	errq->count = HFI_ERROR_DISABLE;
+	if (ctx->type == HFI_CTX_TYPE_KERNEL ||
+	    !(ctx_assign->flags & HFI_CTX_FLAG_ASYNC_ERROR))
+		return;
+
+	/* initialize queue struct */
+	init_waitqueue_head(&errq->waitq);
+	INIT_LIST_HEAD(&errq->head);
+	spin_lock_init(&errq->lock);
+	errq->count = 0; /* enable and no error on queue */
+
+	/* put into device error dispatch queue */
+	INIT_LIST_HEAD(&error->list);
+	spin_lock_irqsave(&dd->error_dispatch_lock, flags);
+	list_add_tail(&error->list, &dd->error_dispatch_head);
+	spin_unlock_irqrestore(&dd->error_dispatch_lock, flags);
+}
+
+/*
+ * The context is done, remove the context's error queue
+ * from device's error listening list. Also free all
+ * the remianing error entry in the error queue.
+ */
+void hfi_errq_cleanup(struct hfi_ctx *ctx)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	struct hfi_ctx_error *error = &ctx->error;
+	struct hfi_error_queue *errq = &error->queue;
+	unsigned long flags;
+	struct hfi_error_entry *entry, *tmp;
+
+	/* queue is disabled */
+	if (errq->count == HFI_ERROR_DISABLE)
+		return;
+
+	/* remove from device error queue list */
+	spin_lock_irqsave(&dd->error_dispatch_lock, flags);
+	list_del(&error->list);
+	spin_unlock_irqrestore(&dd->error_dispatch_lock, flags);
+
+	spin_lock_irqsave(&errq->lock, flags);
+	/* disable the error queue */
+	errq->count = HFI_ERROR_DISABLE;
+	/* free the remaining error events */
+	list_for_each_entry_safe(entry, tmp, &errq->head, list)
+		kfree(entry);
+	spin_unlock_irqrestore(&errq->lock, flags);
+
+	/* wake up the waiting threads */
+	wake_up_interruptible_all(&errq->waitq);
+}
+
+int hfi_get_async_error(struct hfi_ctx *ctx, void *ae, int timeout)
+{
+	struct hfi_error_queue *errq = &ctx->error.queue;
+	struct hfi_error_entry *entry;
+	unsigned long flags;
+	long jiffies, ret;	/* has to be same type */
+
+	if (timeout < 0)
+		jiffies = MAX_SCHEDULE_TIMEOUT;
+	else
+		jiffies = msecs_to_jiffies(timeout);
+
+	spin_lock_irqsave(&errq->lock, flags);
+
+	/* check if no error event, wait as necessary */
+	if (!errq->count) {
+		spin_unlock_irqrestore(&errq->lock, flags);
+
+		ret = wait_event_interruptible_timeout(errq->waitq,
+						       errq->count,
+						       jiffies);
+		if (ret < 0) /* interrupted */
+			return -ERESTARTSYS;
+		else if (ret == 0) /* timeout */
+			return -EAGAIN;
+
+		spin_lock_irqsave(&errq->lock, flags);
+	}
+
+	/* check if terminating condition */
+	if (errq->count == HFI_ERROR_DISABLE) {
+		spin_unlock_irqrestore(&errq->lock, flags);
+		return -EPERM;
+	}
+
+	/* pick the first entry from the queue */
+	entry = list_entry(errq->head.next,
+			   struct hfi_error_entry, list);
+	list_del(&entry->list);
+	errq->count--;
+	spin_unlock_irqrestore(&errq->lock, flags);
+
+	memcpy(ae, &entry->ae, sizeof(entry->ae));
+	/* free memory */
+	kfree(entry);
+	return 0;
+}

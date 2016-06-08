@@ -224,8 +224,6 @@
 
 /* interrupt vector number */
 #define HFI2_MNH_ERROR 256
-#define HFI2_FZC0_ERROR 257
-#define HFI2_FZC1_ERROR 258
 
 u64 read_fzc_csr(const struct hfi_pportdata *ppd, u32 offset);
 void write_fzc_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
@@ -248,5 +246,6 @@ u16 hfi_cap_to_port_ltp(u16 cap);
 u16 hfi_port_ltp_to_cap(u16 port_ltp);
 void hfi_read_link_quality(struct hfi_pportdata *ppd, u8 *link_quality);
 
+void hfi_handle_fpc_error(struct hfi_devdata *dd, u64 reg, char *name);
 
 #endif /* _LINK_H */

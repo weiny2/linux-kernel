@@ -59,8 +59,6 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 #include <linux/vmalloc.h>
-#include <rdma/opa_core.h>
-#include <rdma/hfi_eq.h>
 #include "opa_hfi.h"
 #include <rdma/hfi_eq.h>
 #include <rdma/fxr/fxr_rx_dma_defs.h>
@@ -1226,7 +1224,9 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		    psb_size, trig_op_size, le_me_size, unexp_size);
 
 	/* set PASID entry for w/PASID translations */
-	hfi_iommu_set_pasid(ctx);
+	ret = hfi_iommu_set_pasid(ctx);
+	if (ret)
+		goto err_pasid;
 
 	/* write PCB (host memory) */
 	hfi_pcb_write(ctx, ptl_pid);
@@ -1281,8 +1281,13 @@ int hfi_ctxt_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	/* Initialize the Unexpected Free List */
 	hfi_uh_init(ctx, ctx_assign->unexpected_count);
 
+	/* Initialize the erorr queue if requested */
+	hfi_setup_errq(ctx, ctx_assign);
+
 	return 0;
 
+err_pasid:
+	vfree(ctx->le_me_free_list);
 err_psb_vmalloc:
 	vfree(ctx->ptl_state_base);
 err_vmalloc:
@@ -1410,6 +1415,9 @@ void hfi_ctxt_cleanup(struct hfi_ctx *ctx)
 
 	/* stop pasid translation */
 	hfi_iommu_clear_pasid(ctx);
+
+	/* free error queue */
+	hfi_errq_cleanup(ctx);
 
 	/* release assigned PID */
 	hfi_pid_free(dd, ptl_pid);
