@@ -55,8 +55,10 @@
 #include "link.h"
 #include "timesync.h"
 
+static int freq_shift;
+
 /**
- * hfi_ptp_read - Read the PHC time from the device
+ * hfi_read_local_time - Read the PHC time from the device
  * @ppd: Board private structure
  * @ts: timespec structure to hold the current time value
  *
@@ -64,7 +66,8 @@
  * timespec. However, since the registers are 64 bits of nanoseconds, we must
  * convert the result to a timespec before we can return.
  **/
-static void hfi_ptp_read(struct hfi_pportdata *ppd, struct timespec64 *ts)
+static void hfi_read_local_time(struct hfi_pportdata *ppd,
+				struct timespec64 *ts)
 {
 	u64 ns;
 
@@ -73,7 +76,7 @@ static void hfi_ptp_read(struct hfi_pportdata *ppd, struct timespec64 *ts)
 }
 
 /**
- * hfi_ptp_write - Write the PHC time to the device
+ * hfi_write_local_time - Write the PHC time to the device
  * @ppd: Board private structure
  * @ts: timespec structure that holds the new time value
  *
@@ -81,8 +84,8 @@ static void hfi_ptp_read(struct hfi_pportdata *ppd, struct timespec64 *ts)
  * we receive a timespec from the stack, we must convert that timespec into
  * nanoseconds before programming the register.
  **/
-static void hfi_ptp_write(struct hfi_pportdata *ppd,
-			  const struct timespec64 *ts)
+static void hfi_write_local_time(struct hfi_pportdata *ppd,
+				 const struct timespec64 *ts)
 {
 	u64 ns = timespec64_to_ns(ts);
 
@@ -90,14 +93,14 @@ static void hfi_ptp_write(struct hfi_pportdata *ppd,
 }
 
 /**
- * hfi_ptp_adjfreq - Adjust the PHC frequency
+ * hfi_adjfreq - Adjust the PHC frequency
  * @ptp: The PTP clock structure
  * @ppb: Parts per billion adjustment from the base
  *
  * Adjust the frequency of the PHC by the indicated parts per billion from the
  * base frequency.
  **/
-static int hfi_ptp_adjfreq(struct ptp_clock_info *ptp, s32 ppb)
+static int hfi_adjfreq(struct ptp_clock_info *ptp, s32 ppb)
 {
 	struct hfi_pportdata *ppd = container_of(ptp, struct hfi_pportdata,
 						 ptp_caps);
@@ -115,28 +118,31 @@ static int hfi_ptp_adjfreq(struct ptp_clock_info *ptp, s32 ppb)
 	freq &= FZC_LCB_CFG_TIME_SYNC_1_TSYN_INC_SMASK;
 	adj = freq;
 
-	freq *= ppb;
-	diff = div_u64(freq, 1000000000ULL);
+	/* freq *= ppb; */
+	/* diff = div_u64(freq, 1000000000ULL); */
+
+	/* diff = (u64)ppb << 32; */
+	diff = (u64)ppb << freq_shift;
 
 	if (neg_adj)
 		adj -= diff;
 	else
 		adj += diff;
 
+	/* 38 bits - shift ppb up to whole ns */
 	write_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_1, adj &
-		      FZC_LCB_CFG_TIME_SYNC_1_TSYN_INC_MASK); /* 38 bits */
-
+		      FZC_LCB_CFG_TIME_SYNC_1_TSYN_INC_MASK);
 	return 0;
 }
 
 /**
- * hfi_ptp_adjtime - Adjust the PHC time
+ * hfi_adjtime - Adjust the PHC time
  * @ptp: The PTP clock structure
  * @delta: Offset in nanoseconds to adjust the PHC time by
  *
  * Adjust the time of the PHC by the indicated delta using read/modify/write.
  **/
-static int hfi_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
+static int hfi_adjtime(struct ptp_clock_info *ptp, s64 delta)
 {
 	struct hfi_pportdata *ppd = container_of(ptp, struct hfi_pportdata,
 						 ptp_caps);
@@ -145,59 +151,59 @@ static int hfi_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 
 	spin_lock_irqsave(&ppd->tmreg_lock, flags);
 
-	hfi_ptp_read(ppd, &now);
+	hfi_read_local_time(ppd, &now);
 	now = timespec64_add(now, then);
-	hfi_ptp_write(ppd, (struct timespec64 *)&now);
+	hfi_write_local_time(ppd, (struct timespec64 *)&now);
 
 	spin_unlock_irqrestore(&ppd->tmreg_lock, flags);
 	return 0;
 }
 
 /**
- * hfi_ptp_gettime - Get the time of the PHC
+ * hfi_gettime - Get the time of the PHC
  * @ptp: The PTP clock structure
  * @ts: timespec structure to hold the current time value
  *
  * Read the device clock and return the correct value on ns, after converting it
  * into a timespec struct.
  **/
-static int hfi_ptp_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
+static int hfi_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 {
 	struct hfi_pportdata *ppd = container_of(ptp, struct hfi_pportdata,
 						 ptp_caps);
 	unsigned long flags;
 
 	spin_lock_irqsave(&ppd->tmreg_lock, flags);
-	hfi_ptp_read(ppd, ts);
+	hfi_read_local_time(ppd, ts);
 	spin_unlock_irqrestore(&ppd->tmreg_lock, flags);
 
 	return 0;
 }
 
 /**
- * hfi_ptp_settime - Set the time of the PHC
+ * hfi_settime - Set the time of the PHC
  * @ptp: The PTP clock structure
  * @ts: timespec structure that holds the new time value
  *
  * Set the device clock to the user input value. The conversion from timespec
  * to ns happens in the write function.
  **/
-static int hfi_ptp_settime(struct ptp_clock_info *ptp,
-			   const struct timespec64 *ts)
+static int hfi_settime(struct ptp_clock_info *ptp,
+		       const struct timespec64 *ts)
 {
 	struct hfi_pportdata *ppd = container_of(ptp, struct hfi_pportdata,
 						 ptp_caps);
 	unsigned long flags;
 
 	spin_lock_irqsave(&ppd->tmreg_lock, flags);
-	hfi_ptp_write(ppd, ts);
+	hfi_write_local_time(ppd, ts);
 	spin_unlock_irqrestore(&ppd->tmreg_lock, flags);
 
 	return 0;
 }
 
 /**
- * hfi_ptp_feature_enable - Enable/disable ancillary features of the PHC
+ * hfi_feature_enable - Enable/disable ancillary features of the PHC
  * subsystem
  * @ptp: The PTP clock structure
  * @rq: The requested feature to change
@@ -206,14 +212,14 @@ static int hfi_ptp_settime(struct ptp_clock_info *ptp,
  * The XL710 does not support any of the ancillary features of the PHC
  * subsystem, so this function may just return.
  **/
-static int hfi_ptp_feature_enable(struct ptp_clock_info *ptp,
-				  struct ptp_clock_request *rq, int on)
+static int hfi_feature_enable(struct ptp_clock_info *ptp,
+			      struct ptp_clock_request *rq, int on)
 {
 	return -EOPNOTSUPP;
 }
 
 /**
- * hfi_ptp_create_clock - Create PTP clock device for userspace
+ * hfi_create_clock - Create PTP clock device for userspace
  * @ppd: Board private structure
  *
  * This function creates a new PTP clock device. It only creates one if we
@@ -222,7 +228,7 @@ static int hfi_ptp_feature_enable(struct ptp_clock_info *ptp,
  * by hfi_timesync_init to create clock initially, and prevent global resets
  * from creating new clock devices.
  **/
-static long hfi_ptp_create_clock(struct hfi_pportdata *ppd)
+static long hfi_create_clock(struct hfi_pportdata *ppd)
 {
 	/* no need to create a clock device if we already have one */
 	if (!IS_ERR_OR_NULL(ppd->ptp_clock))
@@ -230,14 +236,14 @@ static long hfi_ptp_create_clock(struct hfi_pportdata *ppd)
 
 	strncpy(ppd->ptp_caps.name, KBUILD_MODNAME, sizeof(ppd->ptp_caps.name));
 	ppd->ptp_caps.owner = THIS_MODULE;
-	ppd->ptp_caps.max_adj = 999999999;
+	ppd->ptp_caps.max_adj = 63;
 	ppd->ptp_caps.n_ext_ts = 0;
 	ppd->ptp_caps.pps = 0;
-	ppd->ptp_caps.adjfreq = hfi_ptp_adjfreq;
-	ppd->ptp_caps.adjtime = hfi_ptp_adjtime;
-	ppd->ptp_caps.gettime64 = hfi_ptp_gettime;
-	ppd->ptp_caps.settime64 = hfi_ptp_settime;
-	ppd->ptp_caps.enable = hfi_ptp_feature_enable;
+	ppd->ptp_caps.adjfreq = hfi_adjfreq;
+	ppd->ptp_caps.adjtime = hfi_adjtime;
+	ppd->ptp_caps.gettime64 = hfi_gettime;
+	ppd->ptp_caps.settime64 = hfi_settime;
+	ppd->ptp_caps.enable = hfi_feature_enable;
 
 	/* Attempt to register the clock */
 	ppd->ptp_clock = ptp_clock_register(&ppd->ptp_caps,
@@ -274,7 +280,7 @@ void hfi_timesync_init(struct hfi_pportdata *ppd)
 	mutex_lock(&ppd->timesync_mutex);
 
 	/* ensure we have a clock device */
-	err = hfi_ptp_create_clock(ppd);
+	err = hfi_create_clock(ppd);
 
 	if (err) {
 		ppd->ptp_clock = NULL;
@@ -295,7 +301,7 @@ void hfi_timesync_init(struct hfi_pportdata *ppd)
 
 		/* Set the clock value. */
 		ts = ktime_to_timespec64(ktime_get_real());
-		hfi_ptp_settime(&pf->ptp_caps, &ts);
+		hfi_settime(&pf->ptp_caps, &ts);
 #endif
 	}
 	mutex_unlock(&ppd->timesync_mutex);
@@ -380,36 +386,42 @@ void simics_hack_timesync(struct hfi_pportdata *ppd, u64 hack_timesync, u8 port)
 {
 #define HACK_TIMESYNC_1 0x2000040
 #define HACK_TIMESYNC_2 0x2004040
-/* abbccccdddddddddddddddddddddddd  fields
- * 0987654321098765432109876543210  ruler
- * 3         2         1
- *        111111111111111111111111  SnapFreq
- *    1111   .   .   .   .   .   .  TimeIncShift
- *  11   .   .   .   .   .   .   .  ClockId
- * 1 .   .   .   .   .   .   .   .  Enable
- *   .   .   .   .   .   .   .   .
- *   .   .   .   .   .   .   .   .  mask         shift
- *   .   .   f   f   f   f   f   f    0xffffff    0
- *   .   f   0   0   0   0   0   0   0xf000000   24
- *   3   0   0   0   0   0   0   0  0x30000000   28
- *   4   0   0   0   0   0   0   0  0x40000000   30
- *
- * If bit 63 is 1 then write register otherwise ignore.
+/*
+ * abbccccccdddddddddddddddddddddddd
+ * 210987654321098765432109876543210
+ *   3         2         1
+ *          111111111111111111111111
+ *    111111
+ *  11
+ * 1
+ *             f   f   f   f   f   f  0xffffff  shift 0
+ *     3   f   0   0   0   0   0   0  0x3f      shift 24
+ *     c   0   0   0   0   0   0   0  0x3       shift 30
+ * 1   0   0   0   0   0   0   0   0  0x1       shift 32
  */
 	u32 a, b, c, d;
 
+	/* Ignore this call if high it is not set */
 	if (!(hack_timesync & (1UL << 63)))
 		return;
 
-	a = (hack_timesync & 0x40000000) >> 30;
-	b = (hack_timesync & 0x30000000) >> 28;
-	c = (hack_timesync & 0xf000000) >> 24;
+	a = (hack_timesync & 0x100000000) >> 32;
+	b = (hack_timesync & 0xc0000000) >> 30;
+	c = (hack_timesync & 0x3f000000) >> 24;
 	d = hack_timesync & 0xffffff;
+
+	freq_shift = c;
 
 	if (port == 1)
 		write_csr(ppd->dd, HACK_TIMESYNC_1, hack_timesync);
 	else
 		write_csr(ppd->dd, HACK_TIMESYNC_2, hack_timesync);
+
+	/* Start with local time cleared */
+	simics_hack_write_local_time(ppd, 0);
+	/* Reset frequency */
+	write_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_1, 0x100000000);
+	/* Reset value is 0xd5555555 */
 }
 
 /**
