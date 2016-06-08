@@ -185,31 +185,6 @@ const char *parse_everbs_hdrs(
 	return ret;
 }
 
-#if 0
-const char *parse_sdma_flags(
-	struct trace_seq *p,
-	u64 desc0, u64 desc1)
-{
-	const char *ret = trace_seq_buffer_ptr(p);
-	char flags[5] = { 'x', 'x', 'x', 'x', 0 };
-
-	flags[0] = (desc1 & SDMA_DESC1_INT_REQ_FLAG) ? 'I' : '-';
-	flags[1] = (desc1 & SDMA_DESC1_HEAD_TO_HOST_FLAG) ?  'H' : '-';
-	flags[2] = (desc0 & SDMA_DESC0_FIRST_DESC_FLAG) ? 'F' : '-';
-	flags[3] = (desc0 & SDMA_DESC0_LAST_DESC_FLAG) ? 'L' : '-';
-	trace_seq_printf(p, "%s", flags);
-	if (desc0 & SDMA_DESC0_FIRST_DESC_FLAG)
-		trace_seq_printf(p, " amode:%u aidx:%u alen:%u",
-				 (u8)((desc1 >> SDMA_DESC1_HEADER_MODE_SHIFT)
-				 & SDMA_DESC1_HEADER_MODE_MASK),
-				 (u8)((desc1 >> SDMA_DESC1_HEADER_INDEX_SHIFT)
-				 & SDMA_DESC1_HEADER_INDEX_MASK),
-				 (u8)((desc1 >> SDMA_DESC1_HEADER_DWS_SHIFT)
-				 & SDMA_DESC1_HEADER_DWS_MASK));
-	return ret;
-}
-#endif
-
 const char *print_u32_array(
 	struct trace_seq *p,
 	u32 *arr, int len)
