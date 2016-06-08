@@ -90,6 +90,9 @@
 #define OPA_PM_ATTRIB_ID_DATA_PORT_COUNTERS	cpu_to_be16(0x0042)
 #define OPA_PM_ATTRIB_ID_ERROR_PORT_COUNTERS	cpu_to_be16(0x0043)
 #define OPA_PM_ATTRIB_ID_ERROR_INFO		cpu_to_be16(0x0044)
+#define OPA_PM_ATTRIB_ID_FREQUENT_COUNTERS	cpu_to_be16(0x0045)
+#define OPA_PM_ATTRIB_ID_INFREQUENT_COUNTERS	cpu_to_be16(0x0046)
+#define OPA_PM_ATTRIB_ID_ALL_COUNTERS		cpu_to_be16(0x0047)
 
 #define OPA_PM_STATUS_REQUEST_TOO_LARGE		cpu_to_be16(0x100)
 /* attribute modifier macros */
@@ -328,6 +331,7 @@ static inline int idx_from_vl(int vl)
 {
 	return (vl == 15 ? C_VL_15 : vl);
 }
+
 struct opa_port_data_counters_msg {
 	__be64 port_select_mask[4];
 	__be32 vl_select_mask;
@@ -483,6 +487,151 @@ struct opa_port_error_info_msg {
 	} port[1]; /* actual array size defined by #ports in attr modifier */
 };
 
+/* Attributes Structs Introduced in Gen2 */
+struct opa_frequent_counters_rsp {
+	__be64 port_select_mask[4];
+	__be32 vl_select_mask;
+	__be32 resolution;
+	__be64 node_clocks;
+
+	struct _port_fcntrs {
+		u8 link_quality_indicator;
+		u8 reserved[7];
+		__be64 port_xmit_data;
+		__be64 port_rcv_data;
+		__be64 port_xmit_pkts;
+		__be64 port_rcv_pkts;
+		__be64 port_multicast_xmit_pkts;
+		__be64 port_multicast_rcv_pkts;
+		__be64 port_xmit_reliable_ltps;
+		__be64 port_rcv_reliable_ltps;
+		__be64 port_xmit_wait;
+		__be64 port_xmit_time_cong;
+		__be64 port_xmit_wasted_bw;
+		__be64 port_xmit_wait_data;
+		__be64 port_rcv_bubble;
+		__be64 infrequent_counter_summary;
+		struct _vl_fcntrs {
+			__be64 port_vl_xmit_data;
+			__be64 port_vl_rcv_data;
+			__be64 port_vl_xmit_pkts;
+			__be64 port_vl_rcv_pkts;
+			__be64 port_vl_xmit_wait;
+			__be64 port_vl_xmit_time_cong;
+			__be64 port_vl_xmit_wasted_bw;
+			__be64 port_vl_xmit_wait_data;
+			__be64 port_vl_rcv_bubble;
+		} vls[0];
+
+	} port[1];
+};
+
+struct opa_frequent_counters_req {
+	__be64 port_select_mask[4];
+	__be32 vl_select_mask;
+	__be32 resolution;
+};
+
+struct opa_infrequent_counters_rsp {
+	__be64 port_select_mask[4];
+	__be32 vl_select_mask;
+	__be32 reserved;
+	struct _port_ifcntrs {
+		__be64 port_rcv_constraint_errors;
+		__be64 port_rcv_switch_relay_errors;
+		__be64 port_xmit_discards;
+		__be64 port_xmit_constraint_errors;
+		__be64 port_rcv_remote_physical_errors;
+		__be64 local_link_integrity_errors;
+		__be64 port_rcv_errors;
+		__be64 excessive_buffer_overruns;
+		__be64 fm_config_errors;
+		__be64 sw_port_congestion;
+		__be64 port_rcv_fecn;
+		__be64 port_rcv_becn;
+		__be64 port_mark_fecn;
+		__be32 link_error_recovery;
+		__be32 link_downed;
+		u8 uncorrectable_errors;
+		u8 reserved2[7];
+		struct _vl_ifcntrs {
+			__be64 port_vl_xmit_discards;
+			__be64 Swport_vl_congestion;
+			__be64 port_vl_rcv_fecn;
+			__be64 port_vl_rcv_becn;
+			__be64 port_vl_mark_fecn;
+		} vls[0];
+	} port[1];
+};
+
+struct opa_infrequent_counters_req {
+	__be64 port_select_mask[4];
+	__be32 vl_select_mask;
+	__be32 reserved;
+};
+
+struct opa_all_counters_req {
+	u8 port_num;
+	u8 reserved[3];
+	__be32 vl_select_mask;
+};
+
+struct opa_all_counters_rsp {
+	u8 port_num;
+	u8 reserved[3];
+	__be32 vl_select_mask;
+	u8 link_quality_indicator;
+	u8 reserved2[7];
+	__be64 port_xmit_data;
+	__be64 port_rcv_data;
+	__be64 port_xmit_pkts;
+	__be64 port_rcv_pkts;
+	__be64 port_multicast_xmit_pkts;
+	__be64 port_multicast_rcv_pkts;
+	__be64 port_xmit_reliable_ltps;
+	__be64 port_rcv_reliable_ltps;
+	__be64 port_xmit_wait;
+	__be64 port_xmit_time_cong;
+	__be64 port_xmit_wasted_bw;
+	__be64 port_xmit_wait_data;
+	__be64 port_rcv_bubble;
+
+	__be64 port_rcv_constraint_errors;
+	__be64 port_rcv_switch_relay_errors;
+	__be64 port_xmit_discards;
+	__be64 port_xmit_constraint_errors;
+	__be64 port_rcv_remote_physical_errors;
+	__be64 local_link_integrity_errors;
+	__be64 port_rcv_errors;
+	__be64 excessive_buffer_overruns;
+	__be64 fm_config_errors;
+	__be64 sw_port_congestion;
+	__be64 port_rcv_fecn;
+	__be64 port_rcv_becn;
+	__be64 port_mark_fecn;
+	__be32 link_error_recovery;
+	__be32 link_downed;
+	u8 uncorrectable_errors;
+	u8 reserved3[7];
+	struct _vl_all_cntrs {
+		__be64 port_vl_xmit_data;
+		__be64 port_vl_rcv_data;
+		__be64 port_vl_xmit_pkts;
+		__be64 port_vl_rcv_pkts;
+		__be64 port_vl_xmit_wait;
+		__be64 port_vl_xmit_time_cong;
+		__be64 port_vl_xmit_wasted_bw;
+		__be64 port_vl_xmit_wait_data;
+		__be64 port_vl_rcv_bubble;
+
+		__be64 port_vl_xmit_discards;
+		__be64 Swport_vl_congestion;
+		__be64 port_vl_rcv_fecn;
+		__be64 port_vl_rcv_becn;
+		__be64 port_vl_mark_fecn;
+	} vls[0];
+};
+
 /* opa_port_error_info_msg error_info_select_mask bit definitions */
 enum error_info_selects {
 	ES_PORT_RCV_ERROR_INFO			= (1 << 31),
@@ -522,6 +671,9 @@ enum counter_selects {
 	CS_LINK_ERROR_RECOVERY			= (1 << 7),
 	CS_LINK_DOWNED				= (1 << 6),
 	CS_UNCORRECTABLE_ERRORS			= (1 << 5),
+	CS_PORT_XMIT_RELIABLE_LTPS		= (1 << 4),
+	CS_PORT_RCV_RELIABLE_LTPS		= (1 << 3),
+	CS_NODE_CLOCKS				= (1 << 2),
 };
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
