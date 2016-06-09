@@ -46,4 +46,5 @@ for viper in ${viper0} ${viper1}; do
 		echo fail on the installation of rpm files.
 		exit 14
     fi
+    ${ssh_cmd} "systemctl daemon-reload"
 done

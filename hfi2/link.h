@@ -109,16 +109,42 @@
 #define HCMD_ONGOING 0xff
 
 /* DC_DC8051_DBG_ERR_INFO_SET_BY_8051.HOST_MSG - host message flags */
-#define HOST_REQ_DONE	   (1 << 0)
-#define BC_PWR_MGM_MSG	   (1 << 1)
-#define BC_SMA_MSG		   (1 << 2)
-#define BC_BCC_UNKOWN_MSG	   (1 << 3)
-#define BC_IDLE_UNKNOWN_MSG	   (1 << 4)
-#define EXT_DEVICE_CFG_REQ	   (1 << 5)
-#define VERIFY_CAP_FRAME	   (1 << 6)
-#define LINKUP_ACHIEVED	   (1 << 7)
-#define LINK_GOING_DOWN	   (1 << 8)
-#define LINK_WIDTH_DOWNGRADED  (1 << 9)
+#define HOST_REQ_DONE	           BIT(0)
+#define BC_PWR_MGM_MSG	           BIT(1)
+#define BC_SMA_MSG                 BIT(2)
+#define BC_BCC_UNKNOWN_MSG         BIT(3)
+#define BC_IDLE_UNKNOWN_MSG        BIT(4)
+#define EXT_DEVICE_CFG_REQ         BIT(5)
+#define VERIFY_CAP_FRAME           BIT(6)
+#define LINKUP_ACHIEVED            BIT(7)
+#define LINK_GOING_DOWN            BIT(8)
+#define LINK_WIDTH_DOWNGRADED      BIT(9)
+
+/* MNH8051_DBG_ERR_INFO_SET_BY_8051.ERROR - Error flags */
+#define UNKNOWN_FRAME              BIT(1)
+#define TARGET_BER_NOT_MET         BIT(2)
+#define SERDES_INTERNAL_LB_FAILURE BIT(3)
+#define FAILED_SERDES_INIT         BIT(4)
+#define FAILED_LNI_POLLING         BIT(5)
+#define FAILED_LNI_DEBOUNCE        BIT(6)
+#define FAILED_LNI_ESTB_COMM       BIT(7)
+#define FAILED_LNI_OPT_EQ          BIT(8)
+#define FAILED_LNI_VERIFY_CAP_1    BIT(9)
+#define FAILED_LNI_VERIFY_CAP_2    BIT(10)
+#define FAILED_LNI_CONFIG_LT       BIT(11)
+#define HOST_HANDSHAKE_TIMEOUT     BIT(12)
+#define FAILED_LNI (FAILED_LNI_POLLING | FAILED_LNI_DEBOUNCE | \
+		    FAILED_LNI_ESTB_COMM | FAILED_LNI_OPT_EQ | \
+		    FAILED_LNI_VERIFY_CAP_1 | FAILED_LNI_VERIFY_CAP_2 | \
+		    FAILED_LNI_CONFIG_LT)
+
+/*
+ * Split CRK_CRK8051_DBG_ERR_INFO_SET_BY_8051 register into either
+ * HOST_MSG or ERROR parts
+ */
+#define HFI_SET_BY_8051_SPLIT(reg, type) \
+	((reg >> CRK_CRK8051_DBG_ERR_INFO_SET_BY_8051_ ## type ## _SHIFT) \
+	 & CRK_CRK8051_DBG_ERR_INFO_SET_BY_8051_ ## type ## _MASK)
 
 /* idle flit message types */
 #define IDLE_PHYSICAL_LINK_MGMT 0x1

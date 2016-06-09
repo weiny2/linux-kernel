@@ -1316,8 +1316,8 @@ static int set_port_states(struct hfi_pportdata *ppd,
 	int ret;
 
 	if (pstate && !(lstate == IB_PORT_DOWN || lstate == IB_PORT_NOP)) {
-		pr_warn("SubnSet(OPA_PortInfo) port state invalid; port physstate 0x%x link state 0x%x\n"
-			, pstate, lstate);
+		ppd_dev_warn(ppd, "SubnSet(OPA_PortInfo) port state invalid; port physstate 0x%x link state 0x%x\n",
+			     pstate, lstate);
 		hfi_invalid_attr(smp);
 	}
 
@@ -1346,8 +1346,8 @@ static int set_port_states(struct hfi_pportdata *ppd,
 			hls = HLS_DN_DISABLE;
 			break;
 		default:
-			pr_warn("SubnSet(OPA_PortInfo) invalid Physical state 0x%x\n",
-				lstate);
+			ppd_dev_warn(ppd, "SubnSet(OPA_PortInfo) invalid Physical state 0x%x\n",
+				     lstate);
 			hfi_invalid_attr(smp);
 			goto done;
 		}
@@ -1376,12 +1376,13 @@ static int set_port_states(struct hfi_pportdata *ppd,
 			if (ret == 0)
 				hfi_send_idle_sma(ppd, SMA_IDLE_ACTIVE);
 		} else {
-			pr_warn("SubnSet(OPA_PortInfo) Cannot move to Active with NeighborNormal 0\n");
+			ppd_dev_warn(ppd, "Cannot move to Active with NeighborNormal 0\n");
 			hfi_invalid_attr(smp);
 		}
 		break;
 	default:
-		pr_warn("SubnSet(OPA_PortInfo) invalid state 0x%x\n", lstate);
+		ppd_dev_warn(ppd, "SubnSet(OPA_PortInfo) invalid state 0x%x\n",
+			     lstate);
 		hfi_invalid_attr(smp);
 	}
 done:

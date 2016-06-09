@@ -571,27 +571,10 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 {
 	u64 reg;
 	int return_code = 0;
-#if 0 /* WFR legacy */
 	unsigned long flags;
-#endif
 	unsigned long timeout;
-#if 0 /* WFR legacy */
-	struct hfi_devdata *dd = ppd->dd;
 
-	hfi1_cdbg(DC8051, "type %d, data 0x%012llx", type, in_data);
-
-	/*
-	 * Alternative to holding the lock for a long time:
-	 * - keep busy wait - have other users bounce off
-	 */
 	spin_lock_irqsave(&ppd->crk8051_lock, flags);
-
-	/* We can't send any commands to the 8051 if it's in reset */
-	if (dd->dc_shutdown) {
-		return_code = -ENODEV;
-		goto fail;
-	}
-#endif
 
 	/*
 	 * If an 8051 host command timed out previously, then the 8051 is
@@ -611,14 +594,10 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 			return_code = -ENXIO;
 			goto fail;
 		}
-#if 0 /* WFR legacy */
 		spin_unlock_irqrestore(&ppd->crk8051_lock, flags);
-#endif
 		mnh_shutdown(ppd);
 		mnh_start(ppd);
-#if 0 /* WFR legacy */
 		spin_lock_irqsave(&ppd->crk8051_lock, flags);
-#endif
 	}
 
 	/*
@@ -675,9 +654,7 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 	write_8051_csr(ppd, CRK_CRK8051_CFG_HOST_CMD_0, 0);
 
 fail:
-#if 0 /* WFR legacy */
 	spin_unlock_irqrestore(&ppd->crk8051_lock, flags);
-#endif
 
 	return return_code;
 }
@@ -764,6 +741,7 @@ static int read_idle_message(struct hfi_pportdata *ppd, u64 type, u64 *data_out)
 		*data_out);
 	/* return only the payload as we already know the type */
 	*data_out >>= IDLE_PAYLOAD_SHIFT;
+
 	return 0;
 }
 
@@ -1338,8 +1316,10 @@ static void handle_sma_message(struct work_struct *work)
 		 *
 		 * Only expected in INIT or ARMED, discard otherwise.
 		 */
+
 		if (ppd->host_link_state & (HLS_UP_INIT | HLS_UP_ARMED))
 			ppd->neighbor_normal = 1;
+
 		break;
 	case SMA_IDLE_ACTIVE:
 		/*
@@ -1348,15 +1328,28 @@ static void handle_sma_message(struct work_struct *work)
 		 *
 		 * Can activate the node.  Discard otherwise.
 		 */
-		if (ppd->host_link_state == HLS_UP_ARMED
-					&& ppd->is_active_optimize_enabled) {
-			ppd->neighbor_normal = 1;
+
+		/*
+		 * FXRTODO: We should only do this in the ARMED state or when
+		 * active optimize is enabled according to STL spec (chapter 9).
+		 * In Simics we see on FXR that MNH is only interrupting once
+		 * when we send two idle SMA messages (sending ARMED, then
+		 * ACTIVE). Since there is only room for one message, the
+		 * neighbor sees only the ACTIVE message. Set neighbor_normal
+		 * regardless of the state until we can get this sorted.
+		 */
+		ppd->neighbor_normal = 1;
+
+		if (ppd->host_link_state == HLS_UP_ARMED &&
+		    ppd->is_active_optimize_enabled) {
 			ret = hfi_set_link_state(ppd, HLS_UP_ACTIVE);
 			if (ret)
 				ppd_dev_err(ppd,
-					"%s: received Active SMA idle message, couldn't set link to Active\n",
-					__func__);
+					    "%s: received Active SMA idle message, couldn't set link to Active %d\n",
+					    __func__,
+					    ret);
 		}
+
 		break;
 	default:
 		ppd_dev_err(ppd,
@@ -1777,45 +1770,108 @@ static void handle_verify_cap(struct work_struct *work)
 	hfi_set_link_state(ppd, HLS_GOING_UP);
 }
 
+static void hfi_handle_8051_host_msg(struct hfi_pportdata *ppd, u64 msg)
+{
+	if (msg & VERIFY_CAP_FRAME) {
+		queue_work(ppd->hfi_wq, &ppd->link_vc_work);
+		msg &= ~VERIFY_CAP_FRAME;
+	}
+
+	if (msg & LINKUP_ACHIEVED) {
+		queue_work(ppd->hfi_wq, &ppd->link_up_work);
+		msg &= ~LINKUP_ACHIEVED;
+	}
+
+	if (msg & LINK_GOING_DOWN) {
+		/*
+		 * if the link is already going down or disabled, do not
+		 * queue another
+		 */
+		if (ppd->host_link_state & (HLS_GOING_OFFLINE |
+			HLS_LINK_COOLDOWN | HLS_DN_OFFLINE)) {
+			ppd_dev_info(ppd,
+				     "%s() %d: not queuing link down: 0x%x\n",
+				     __func__, __LINE__, ppd->host_link_state);
+		} else {
+			queue_work(ppd->hfi_wq, &ppd->link_down_work);
+		}
+		msg &= ~LINK_GOING_DOWN;
+	}
+
+	if (msg & BC_SMA_MSG) {
+		queue_work(ppd->hfi_wq, &ppd->sma_message_work);
+		msg &= ~BC_SMA_MSG;
+	}
+
+	/* FXRTODO: Implement this */
+	if (msg & EXT_DEVICE_CFG_REQ) {
+		ppd_dev_dbg(ppd, "EXT_DEVICE_CFG_REQ\n");
+		msg &= ~EXT_DEVICE_CFG_REQ;
+	}
+
+	/* FXRTODO: Implement this */
+	if (msg & LINK_WIDTH_DOWNGRADED) {
+		ppd_dev_dbg(ppd, "LINK_WIDTH_DOWNGRADED\n");
+		msg &= ~LINK_WIDTH_DOWNGRADED;
+	}
+
+	if (msg)
+		ppd_dev_warn(ppd, "Unhandled host message 0x%llx\n", msg);
+}
+
+static void hfi_handle_8051_err(struct hfi_pportdata *ppd, u64 err)
+{
+	/* FXRTODO: Implement this */
+	if (err & FAILED_LNI) {
+		ppd_dev_dbg(ppd, "FAILED_LNI\n");
+		err &= ~FAILED_LNI;
+	}
+
+	/* FXRTODO: Implement this */
+	if (err & UNKNOWN_FRAME) {
+		ppd_dev_dbg(ppd, "UNKNOWN_FRAME\n");
+		err &= ~UNKNOWN_FRAME;
+	}
+
+	if (err)
+		ppd_dev_warn(ppd, "Unhandled 8051 error 0x%llx\n", err);
+}
+
+static void hfi_handle_host_irq(struct hfi_pportdata *ppd)
+{
+	u64 reg, msg, err;
+
+	reg = read_8051_csr(ppd, CRK_CRK8051_DBG_ERR_INFO_SET_BY_8051);
+	msg = HFI_SET_BY_8051_SPLIT(reg, HOST_MSG);
+	err = HFI_SET_BY_8051_SPLIT(reg, ERROR);
+
+	if (err)
+		hfi_handle_8051_err(ppd, err);
+
+	if (msg)
+		hfi_handle_8051_host_msg(ppd, msg);
+
+	if (err || msg) {
+		reg = read_8051_csr(ppd, CRK_CRK8051_ERR_CLR);
+		write_8051_csr(ppd, CRK_CRK8051_ERR_CLR,
+			       reg | CRK_CRK8051_ERR_CLR_SET_BY_8051_SMASK);
+	}
+
+	/* TODO: take care other interrupts */
+}
+
 static irqreturn_t irq_mnh_handler(int irq, void *dev_id)
 {
 	struct hfi_msix_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
-	struct hfi_pportdata *ppd;
-	u64 reg;
 	u8 port;
 
 	hfi_ack_interrupt(me);
 
 	for (port = 1; port <= dd->num_pports; port++) {
-		ppd = to_hfi_ppd(dd, port);
-		reg = read_8051_csr(ppd, CRK_CRK8051_DBG_ERR_INFO_SET_BY_8051);
-		reg >>= CRK_CRK8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SHIFT;
-		if (reg & VERIFY_CAP_FRAME)
-			queue_work(ppd->hfi_wq, &ppd->link_vc_work);
-		if (reg & LINKUP_ACHIEVED)
-			queue_work(ppd->hfi_wq, &ppd->link_up_work);
-		if (reg & LINK_GOING_DOWN) {
-			/*
-			 * if the link is already going down or disabled, do not
-			 * queue another
-			 */
-			if (ppd->host_link_state & (HLS_GOING_OFFLINE |
-				HLS_LINK_COOLDOWN | HLS_DN_OFFLINE)) {
-				ppd_dev_info(ppd, "%s() %d: not queuing link down: 0x%x\n",
-					__func__, __LINE__, ppd->host_link_state);
-			} else
-				queue_work(ppd->hfi_wq, &ppd->link_down_work);
-		}
-		if (reg & BC_SMA_MSG)
-			queue_work(ppd->hfi_wq, &ppd->sma_message_work);
-		/* TODO: take care other interrupts */
+		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
 
-		if (reg & CRK_CRK8051_DBG_ERR_INFO_SET_BY_8051_HOST_MSG_SMASK) {
-			reg = read_8051_csr(ppd, CRK_CRK8051_ERR_CLR);
-			write_8051_csr(ppd, CRK_CRK8051_ERR_CLR,
-				reg | CRK_CRK8051_ERR_CLR_SET_BY_8051_SMASK);
-		}
+		hfi_handle_host_irq(ppd);
 	}
 
 	return IRQ_HANDLED;
@@ -1927,7 +1983,7 @@ int hfi2_enable_8051_intr(struct hfi_pportdata *ppd)
 
 	/* disable 8051 command complete interrupt and enable all others */
 	ret = load_8051_config(ppd, HOST_INT_MSG_MASK, GENERAL_CONFIG,
-		(BC_PWR_MGM_MSG | BC_SMA_MSG | BC_BCC_UNKOWN_MSG |
+		(BC_PWR_MGM_MSG | BC_SMA_MSG | BC_BCC_UNKNOWN_MSG |
 		 BC_IDLE_UNKNOWN_MSG | EXT_DEVICE_CFG_REQ | VERIFY_CAP_FRAME |
 		 LINKUP_ACHIEVED | LINK_GOING_DOWN | LINK_WIDTH_DOWNGRADED) << 8);
 	ret = ret != HCMD_SUCCESS ? -EINVAL : 0;
