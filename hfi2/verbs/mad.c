@@ -70,7 +70,7 @@ static inline void hfi_invalid_attr(struct opa_smp *smp)
 		cpu_to_be16(IB_MGMT_MAD_STATUS_INVALID_ATTRIB_VALUE);
 }
 
-static inline u64 max_u64_or_sum(u64 tmp, u64 tmp2)
+static inline u64 hfi_max_u64_or_sum(u64 tmp, u64 tmp2)
 {
 	tmp2 += tmp;
 	if (tmp2 < tmp)
@@ -79,7 +79,7 @@ static inline u64 max_u64_or_sum(u64 tmp, u64 tmp2)
 		return cpu_to_be64(tmp2);
 }
 
-static inline u32 max_u32_or_sum(u64 tmp, u64 tmp2)
+static inline u32 hfi_max_u32_or_sum(u64 tmp, u64 tmp2)
 {
 	tmp2 += tmp;
 	if (tmp2 < tmp)
@@ -2668,13 +2668,19 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
 	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_TX_REPLAY_CNT);
-	rsp->local_link_integrity_errors = max_u64_or_sum(tmp, tmp2);
+	rsp->local_link_integrity_errors = hfi_max_u64_or_sum(tmp, tmp2);
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
 	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
-	rsp->link_error_recovery = max_u32_or_sum(tmp, tmp2);
+	rsp->link_error_recovery = hfi_max_u32_or_sum(tmp, tmp2);
 
 	rsp->port_rcv_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_PORTRCV_ERROR));
+	/*
+	 * FXR TODO: replace with register read after hardware register
+	 * is available
+	 * HSD-ES 1404725905: FXR registers required for PMA Performance
+	 * and Error Counters
+	 */
 	rsp->excessive_buffer_overruns = 0;
 	rsp->fm_config_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_FMCONFIG_ERROR));
@@ -2755,7 +2761,10 @@ static u64 get_infrequent_counters_summary(struct ib_device *ibdev, u8 port,
 
 	infrequent_counters_summary += hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_PORTRCV_ERROR);
-	/* FXR TODO: Add Excessive Buffer Overrun error once register is available */
+	/*
+	 * FXR TODO: Add Excessive Buffer Overrun error
+	 * once register is available
+	 */
 	infrequent_counters_summary += hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_FMCONFIG_ERROR);
 	infrequent_counters_summary += ppd->link_downed;
@@ -2910,21 +2919,27 @@ static int pma_get_opa_infrequent_counters(struct opa_pma_mad *pmp,
 						FXR_FPC_PRF_PORTRCV_FECN));
 	rsp->port_rcv_becn = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_PRF_PORTRCV_BECN));
+	/*
+	 * FXR TODO: replace with register read after hardware register
+	 * is available
+	 * HSD-ES 1404725905: FXR registers required for PMA Performance
+	 * and Error Counters
+	 */
 	rsp->port_xmit_discards = 0;
 	rsp->port_xmit_constraint_errors = 0;
+	rsp->excessive_buffer_overruns = 0;
 	rsp->port_rcv_constraint_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR));
 	rsp->port_rcv_remote_physical_errors = cpu_to_be64(hfi_read_lm_fpc_csr(
 				ppd, FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR));
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
 	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_TX_REPLAY_CNT);
-	rsp->local_link_integrity_errors = max_u64_or_sum(tmp, tmp2);
+	rsp->local_link_integrity_errors = hfi_max_u64_or_sum(tmp, tmp2);
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
 	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
-	rsp->link_error_recovery = max_u32_or_sum(tmp, tmp2);
+	rsp->link_error_recovery = hfi_max_u32_or_sum(tmp, tmp2);
 	rsp->port_rcv_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_PORTRCV_ERROR));
-	rsp->excessive_buffer_overruns = 0;
 	rsp->fm_config_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_FMCONFIG_ERROR));
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
@@ -3019,6 +3034,13 @@ static int pma_get_opa_all_counters(struct opa_pma_mad *pmp,
 						FXR_FPC_PRF_PORTRCV_FECN));
 	rsp->port_rcv_becn = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_PRF_PORTRCV_BECN));
+	/*
+	 * FXR TODO: replace with register read after hardware register
+	 * is available
+	 * HSD-ES 1404725905: FXR registers required for PMA Performance
+	 * and Error Counters
+	 */
+	rsp->excessive_buffer_overruns = 0;
 	rsp->port_xmit_discards = 0;
 	rsp->port_xmit_constraint_errors = 0;
 	rsp->port_rcv_constraint_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
@@ -3028,14 +3050,13 @@ static int pma_get_opa_all_counters(struct opa_pma_mad *pmp,
 	hfi_read_link_quality(ppd, &rsp->link_quality_indicator);
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
 	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_TX_REPLAY_CNT);
-	rsp->local_link_integrity_errors = max_u64_or_sum(tmp, tmp2);
+	rsp->local_link_integrity_errors = hfi_max_u64_or_sum(tmp, tmp2);
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
 	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
-	rsp->link_error_recovery = max_u32_or_sum(tmp, tmp2);
+	rsp->link_error_recovery = hfi_max_u32_or_sum(tmp, tmp2);
 
 	rsp->port_rcv_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_PORTRCV_ERROR));
-	rsp->excessive_buffer_overruns = 0;
 	rsp->fm_config_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_FMCONFIG_ERROR));
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
@@ -3110,9 +3131,12 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port,
 	tmp += read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
 	error_counter_summary += (tmp >> res_ler);
 
+	/*
+	 * FXR TODO: Add Excessive Buffer Overrun error once
+	 * register is available
+	 */
 	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_PORTRCV_ERROR);
-	/*rsp->excessive_buffer_overruns = 0;*/
 	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_FMCONFIG_ERROR);
 	error_counter_summary += ppd->link_downed;
@@ -3310,21 +3334,27 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->port_number = (u8)port_num;
+	/*
+	 * FXR TODO: replace with register read after hardware register
+	 * is available
+	 * HSD-ES 1404725905: FXR registers required for PMA Performance
+	 * and Error Counters
+	 */
 	rsp->port_xmit_discards = 0;
 	rsp->port_xmit_constraint_errors = 0;
+	rsp->excessive_buffer_overruns = 0;
 	rsp->port_rcv_constraint_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR));
 	rsp->port_rcv_remote_physical_errors = cpu_to_be64(hfi_read_lm_fpc_csr(
 				ppd, FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR));
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
 	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_TX_REPLAY_CNT);
-	rsp->local_link_integrity_errors = max_u64_or_sum(tmp, tmp2);
+	rsp->local_link_integrity_errors = hfi_max_u64_or_sum(tmp, tmp2);
 	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
 	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
-	rsp->link_error_recovery = max_u32_or_sum(tmp, tmp2);
+	rsp->link_error_recovery = hfi_max_u32_or_sum(tmp, tmp2);
 	rsp->port_rcv_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_PORTRCV_ERROR));
-	rsp->excessive_buffer_overruns = 0;
 	rsp->fm_config_errors = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_FMCONFIG_ERROR));
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
