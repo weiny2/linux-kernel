@@ -1,6 +1,6 @@
 #!/bin/sh
 
-c_source_code_dirs="common/rdma hfi2 hfi2_vnic hfi_core kfi user"
+c_source_code_dirs="common/rdma hfi2"
 leading_sharp_files="makefile opa2_hfi.spec.in"
 
 myname=`basename $0 .sh`

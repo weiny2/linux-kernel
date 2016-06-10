@@ -52,7 +52,7 @@
 #include <linux/etherdevice.h>
 #include <linux/module.h>
 #include <linux/pci.h>
-#include <rdma/opa_core.h>
+#include "../hfi_core.h"
 #include <rdma/hfi_tx.h>
 #include <rdma/hfi_rx.h>
 #include <rdma/hfi_args.h>

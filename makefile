@@ -81,7 +81,7 @@ headers:
 
 vnic:
 	@if [ -e .git ]; then \
-		git submodule update --init hfi2_vnic/vnic.git; \
+		git submodule update --init hfi2/vnic/vnic.git; \
 		git submodule status; \
 	fi
 
@@ -118,12 +118,12 @@ install:
 	mkdir -p $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	mkdir -p $(RPM_BUILD_ROOT)/etc/init.d
 	install hfi2/hfi2.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install hfi_core/hfi_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install user/hfi2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install hfi2_vnic/vnic.git/opa_vnic_bus/opa_vnic_bus.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install hfi2_vnic/vnic.git/opa_vnic/opa_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install hfi2_vnic/hfi2_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install kfi/kfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi2/hfi_core.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi2/user/hfi2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi2/vnic/vnic.git/opa_vnic_bus/opa_vnic_bus.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi2/vnic/vnic.git/opa_vnic/opa_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi2/vnic/hfi2_vnic.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install hfi2/kfi/kfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install $(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
 	depmod -a $(KVER)
 

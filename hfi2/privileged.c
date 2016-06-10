@@ -53,7 +53,7 @@
  */
 
 #include <linux/sched.h>
-#include <rdma/opa_core.h>
+#include "opa_hfi.h"
 #include <rdma/hfi_tx.h>
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_ct.h>
@@ -61,7 +61,6 @@
 /* TODO - prefer hfi_cmd.h to only be included by files in hfi2_user.ko */
 #include <rdma/hfi_cmd.h>
 #include "fxr/fxr_tx_ci_cid_csrs.h"
-#include "opa_hfi.h"
 
 #define HFI_MAX_DLIDRELOC_CMD_LEN	15
 

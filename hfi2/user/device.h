@@ -52,99 +52,25 @@
  * Intel(R) Omni-Path User RDMA Driver
  */
 
-#include <linux/device.h>
-#include <linux/idr.h>
-#include <linux/module.h>
-#include <linux/slab.h>
-#include <rdma/opa_core.h>
-#include "device.h"
+#ifndef _HFI_DEVICE_H
+#define _HFI_DEVICE_H
 
-static int hfi_misc_add(struct opa_core_device *odev);
-static void hfi_misc_remove(struct opa_core_device *odev);
-static void hfi_event_notify(struct opa_core_device *odev,
-			     enum opa_core_event event, u8 port);
+#include <linux/miscdevice.h>
+#include "../hfi_core.h"
 
-static struct opa_core_client hfi_misc = {
-	.name = KBUILD_MODNAME,
-	.add = hfi_misc_add,
-	.remove = hfi_misc_remove,
-	.event_notify = hfi_event_notify
+/* device naming has leading zero to prevent /dev name collisions */
+#define DRIVER_DEVICE_PREFIX	"hfi02"
+
+struct hfi_info {
+	struct opa_core_device *odev;
+	struct miscdevice user_miscdev;
+	struct miscdevice ui_miscdev;
+	char user_name[16];
+	char ui_name[16];
 };
 
-static void hfi_event_notify(struct opa_core_device *odev,
-			     enum opa_core_event event, u8 port)
-{
-	/* FXRTODO: Add event handling */
-	dev_info(&odev->dev, "%s port %d event %d\n", __func__, port, event);
-}
-
-/*
- * Device initialization, called by OPA core when a OPA device is discovered
- */
-static int hfi_misc_add(struct opa_core_device *odev)
-{
-	int ret;
-	struct hfi_info *hi;
-
-	hi = kzalloc(sizeof(*hi), GFP_KERNEL);
-	if (!hi) {
-		ret = -ENOMEM;
-		goto exit;
-	}
-	hi->odev = odev;
-
-	ret = opa_core_set_priv_data(&hfi_misc, odev, hi);
-	if (ret)
-		goto priv_error;
-
-	ret = hfi_ui_add(hi);
-	if (ret)
-		goto add_error;
-
-	ret = hfi_user_add(hi);
-	if (ret) {
-		hfi_ui_remove(hi);
-		goto add_error;
-	}
-	return ret;
-add_error:
-	opa_core_clear_priv_data(&hfi_misc, odev);
-priv_error:
-	kfree(hi);
-exit:
-	dev_err(&odev->dev, "Failed to create /dev devices: %d\n", ret);
-	return ret;
-}
-
-/*
- * Perform required device shutdown logic, also remove /dev entries.
- * Called by OPA core when a OPA device is removed
- */
-static void hfi_misc_remove(struct opa_core_device *odev)
-{
-	struct hfi_info *hi;
-
-	hi = opa_core_get_priv_data(&hfi_misc, odev);
-	if (!hi)
-		return;
-	hfi_user_remove(hi);
-	hfi_ui_remove(hi);
-	kfree(hi);
-	opa_core_clear_priv_data(&hfi_misc, odev);
-}
-
-static int __init hfi_init(void)
-{
-	return opa_core_client_register(&hfi_misc);
-}
-module_init(hfi_init);
-
-static void hfi_cleanup(void)
-{
-	opa_core_client_unregister(&hfi_misc);
-}
-module_exit(hfi_cleanup);
-
-MODULE_LICENSE("Dual BSD/GPL");
-MODULE_AUTHOR("Intel Corporation");
-MODULE_DESCRIPTION("Intel(R) Omni-Path User RDMA Driver");
+int hfi_user_add(struct hfi_info *hi);
+void hfi_user_remove(struct hfi_info *hi);
+int hfi_ui_add(struct hfi_info *hi);
+void hfi_ui_remove(struct hfi_info *hi);
+#endif /* _HFI_DEVICE_H */

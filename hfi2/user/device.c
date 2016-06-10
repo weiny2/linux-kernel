@@ -52,60 +52,98 @@
  * Intel(R) Omni-Path User RDMA Driver
  */
 
-#ifndef _OPA_USER_H
-#define _OPA_USER_H
-
-#include <linux/list.h>
+#include <linux/device.h>
+#include <linux/idr.h>
+#include <linux/module.h>
 #include <linux/slab.h>
-#include <rdma/hfi_cmd.h>
-#include <rdma/opa_core.h>
+#include "device.h"
 
-#define HFI_MMAP_PSB_TOKEN(type, ptl_ctxt, size)  \
-	HFI_MMAP_TOKEN((type), ptl_ctxt, 0, size)
+static int hfi_misc_add(struct opa_core_device *odev);
+static void hfi_misc_remove(struct opa_core_device *odev);
+static void hfi_event_notify(struct opa_core_device *odev,
+			     enum opa_core_event event, u8 port);
+
+static struct opa_core_client hfi_misc = {
+	.name = KBUILD_MODNAME,
+	.add = hfi_misc_add,
+	.remove = hfi_misc_remove,
+	.event_notify = hfi_event_notify
+};
+
+static void hfi_event_notify(struct opa_core_device *odev,
+			     enum opa_core_event event, u8 port)
+{
+	/* FXRTODO: Add event handling */
+	dev_info(&odev->dev, "%s port %d event %d\n", __func__, port, event);
+}
 
 /*
- * For TPID_CAM.UID, use first value from resource manager (if set).
- * This value is inherited during open() and returned to the user as
- * their default UID.
+ * Device initialization, called by OPA core when a OPA device is discovered
  */
-#define TPID_UID(ctx) \
-	(((ctx)->auth_mask & 0x1) ? (ctx)->auth_uid[0] : (ctx)->ptl_uid)
+static int hfi_misc_add(struct opa_core_device *odev)
+{
+	int ret;
+	struct hfi_info *hi;
 
-/* List of vma pointers to zap on release */
-struct hfi_vma {
-	struct vm_area_struct *vma;
-	u16 cq_idx;
-	struct list_head vma_list;
-};
+	hi = kzalloc(sizeof(*hi), GFP_KERNEL);
+	if (!hi) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+	hi->odev = odev;
 
-/* Private data for file operations, created at open(). */
-struct hfi_userdata {
-	struct opa_core_device *odev;
-	struct opa_core_ops *bus_ops;
-	pid_t pid;
-	pid_t sid;
-	/* Per PID Portals State */
-	struct hfi_ctx ctx;
-	u16 job_res_mode;
-	struct list_head job_list;
-	struct list_head mpin_head;
-	spinlock_t mpin_lock;
-	/* List of vma's to zap on release */
-	struct list_head vma_head;
-	/* Lock for updating vma_head listt */
-	spinlock_t vma_lock;
-};
+	ret = opa_core_set_priv_data(&hfi_misc, odev, hi);
+	if (ret)
+		goto priv_error;
 
-void hfi_job_init(struct hfi_userdata *ud);
-int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info *job_info);
-int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup);
-void hfi_job_free(struct hfi_userdata *ud);
-int hfi_mpin(struct hfi_userdata *ud, struct hfi_mpin_args *mpin);
-int hfi_munpin(struct hfi_userdata *ud, struct hfi_munpin_args *munpin);
-int hfi_munpin_all(struct hfi_userdata *ud);
+	ret = hfi_ui_add(hi);
+	if (ret)
+		goto add_error;
 
-/* printk wrappers (pr_warn, etc) can also be used for general debugging. */
-#undef pr_fmt
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+	ret = hfi_user_add(hi);
+	if (ret) {
+		hfi_ui_remove(hi);
+		goto add_error;
+	}
+	return ret;
+add_error:
+	opa_core_clear_priv_data(&hfi_misc, odev);
+priv_error:
+	kfree(hi);
+exit:
+	dev_err(&odev->dev, "Failed to create /dev devices: %d\n", ret);
+	return ret;
+}
 
-#endif /* _OPA_USER_H */
+/*
+ * Perform required device shutdown logic, also remove /dev entries.
+ * Called by OPA core when a OPA device is removed
+ */
+static void hfi_misc_remove(struct opa_core_device *odev)
+{
+	struct hfi_info *hi;
+
+	hi = opa_core_get_priv_data(&hfi_misc, odev);
+	if (!hi)
+		return;
+	hfi_user_remove(hi);
+	hfi_ui_remove(hi);
+	kfree(hi);
+	opa_core_clear_priv_data(&hfi_misc, odev);
+}
+
+static int __init hfi_init(void)
+{
+	return opa_core_client_register(&hfi_misc);
+}
+module_init(hfi_init);
+
+static void hfi_cleanup(void)
+{
+	opa_core_client_unregister(&hfi_misc);
+}
+module_exit(hfi_cleanup);
+
+MODULE_LICENSE("Dual BSD/GPL");
+MODULE_AUTHOR("Intel Corporation");
+MODULE_DESCRIPTION("Intel(R) Omni-Path User RDMA Driver");

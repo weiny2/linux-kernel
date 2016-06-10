@@ -54,7 +54,6 @@
 
 #include <linux/fs.h>
 #include <linux/uaccess.h>
-#include <rdma/opa_core.h>
 #include "device.h"
 
 #define OPA_UI_SUFFIX			"_ui"

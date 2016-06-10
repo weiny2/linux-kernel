@@ -6,7 +6,7 @@ myname=$0
 PWD=`pwd`
 
 # checkpatch
-DIRS="hfi2 hfi2_vnic hfi_core user"
+DIRS="hfi2"
 CHECKPATCH_COMMAND=/lib/modules/${KERNEL_VERSION}/build/scripts/checkpatch.pl
 CHECKPATCH_OPTIONS="--file --no-tree --terse --strict"
 

@@ -56,7 +56,7 @@
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/idr.h>
-#include <rdma/opa_core.h>
+#include "hfi_core.h"
 
 /* Unique numbering for opa_core devices */
 static struct ida opa_core_index_ida;

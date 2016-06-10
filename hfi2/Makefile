@@ -5,6 +5,12 @@
 ccflags-y += -I $(src)/../common
 ccflags-y += -I $(src)/../common/uapi
 ccflags-y += -I $(src)
+
+obj-m += kfi/
+obj-m += user/
+obj-m += vnic/
+
+obj-m += hfi_core.o
 obj-m += hfi2.o
 
 hfi2-y :=

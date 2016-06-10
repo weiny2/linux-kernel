@@ -60,7 +60,7 @@
 #include <linux/version.h>
 #include <linux/ptp_clock_kernel.h>
 #include <rdma/ib_smi.h>
-#include <rdma/opa_core.h>
+#include "hfi_core.h"
 #include "fxr/fxr_top_defs.h"
 #include "verbs/mad.h"
 #include "firmware.h"

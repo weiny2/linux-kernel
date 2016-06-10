@@ -51,8 +51,8 @@
 /*
  * Intel(R) Omni-Path Core Driver Interface
  */
-#ifndef _OPA_CORE_H_
-#define _OPA_CORE_H_
+#ifndef _HFI_CORE_H_
+#define _HFI_CORE_H_
 #include <linux/device.h>
 #include <linux/idr.h>
 #include <linux/gfp.h>
@@ -668,4 +668,4 @@ static inline void opa_core_device_put(struct opa_core_device *odev)
 {
 	module_put(odev->owner);
 }
-#endif /* _OPA_CORE_H_ */
+#endif /* _HFI_CORE_H_ */
