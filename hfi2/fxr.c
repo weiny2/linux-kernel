@@ -1399,14 +1399,51 @@ static int hfi_check_ptl_slp(struct hfi_ctx *ctx, struct hfi_sl_pair *slp)
 		ppd->sl_pairs[slp->sl1] == slp->sl2) ? 0 : -EINVAL;
 }
 
-/* Service level to message class and traffic class mapping */
-static void hfi_sl_to_mctc(struct hfi_pportdata *ppd)
+/*
+ * Use sl_to_mctc table to program MC/TC HW
+ */
+void hfi_set_mctc_regs(struct hfi_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
 	u64 reg[2];
 	u32 tx_reg_addr, rx_reg_addr;
-	int i, j, k, tc = 0;
 	int nregs = ARRAY_SIZE(reg);
+	int i, j, k;
+
+	switch (ppd_to_pnum(ppd)) {
+	case 1:
+		tx_reg_addr = FXR_TXCID_CFG_SL0_TO_TC;
+		rx_reg_addr = FXR_RXCID_CFG_SL0_TO_TC;
+		break;
+	case 2:
+		tx_reg_addr = FXR_TXCID_CFG_SL2_TO_TC;
+		rx_reg_addr = FXR_RXCID_CFG_SL2_TO_TC;
+		break;
+	default:
+		return;
+	}
+
+	/* Read from the TX and update both TX/RX mappings */
+	for (i = 0; i < nregs; i++)
+		reg[i] = read_csr(dd, tx_reg_addr + i * 8);
+
+	for (i = 0, j = 0; i < nregs; i++)
+		for (k = 0; k < 64; k += 4, j++)
+			hfi_set_bits(&reg[i], ppd->sl_to_mctc[j],
+				     HFI_SL_TO_TC_MC_MASK, k);
+
+	/* FXRTODO: Can these be changed on the fly while apps are running */
+	/* TX & RX SL -> TC/MC mappings should be identical */
+	for (i = 0; i < nregs; i++) {
+		write_csr(dd, tx_reg_addr + i * 8, reg[i]);
+		write_csr(dd, rx_reg_addr + i * 8, reg[i]);
+	}
+}
+
+/* Service level to message class and traffic class mapping */
+static void hfi_sl_to_mctc(struct hfi_pportdata *ppd)
+{
+	int i, tc = 0;
 	int num_sls = ARRAY_SIZE(ppd->sl_pairs);
 
 	for (i = 0; i < num_sls; i++) {
@@ -1449,34 +1486,7 @@ static void hfi_sl_to_mctc(struct hfi_pportdata *ppd)
 		ppd->sl_to_mctc[i] = tc;
 	}
 
-	switch (ppd_to_pnum(ppd)) {
-	case 1:
-		tx_reg_addr = FXR_TXCID_CFG_SL0_TO_TC;
-		rx_reg_addr = FXR_RXCID_CFG_SL0_TO_TC;
-		break;
-	case 2:
-		tx_reg_addr = FXR_TXCID_CFG_SL2_TO_TC;
-		rx_reg_addr = FXR_RXCID_CFG_SL2_TO_TC;
-		break;
-	default:
-		return;
-	}
-
-	/* Read from the TX and update both TX/RX mappings */
-	for (i = 0; i < nregs; i++)
-		reg[i] = read_csr(dd, tx_reg_addr + i * 8);
-
-	for (i = 0, j = 0; i < nregs; i++)
-		for (k = 0; k < 64; k += 4, j++)
-			hfi_set_bits(&reg[i], ppd->sl_to_mctc[j],
-				     HFI_SL_TO_TC_MC_MASK, k);
-
-	/* FXRTODO: Can these be changed on the fly while apps are running */
-	/* TX & RX SL -> TC/MC mappings should be identical */
-	for (i = 0; i < nregs; i++) {
-		write_csr(dd, tx_reg_addr + i * 8, reg[i]);
-		write_csr(dd, rx_reg_addr + i * 8, reg[i]);
-	}
+	hfi_set_mctc_regs(ppd);
 }
 
 /* Service channel to message class and traffic class mapping */
@@ -1630,7 +1640,8 @@ static int compute_vl_from_mctc(struct hfi_pportdata *ppd, u8 mctc, u8 *sc2vl)
 		}
 	}
 
-	ppd_dev_err(ppd, "Cannot lookup sc/vl from mctc %u\n", mctc);
+	ppd_dev_dbg(ppd, "Cannot lookup sc/vl from mctc %u\n", mctc);
+
 	return HFI_ILLEGAL_VL;
 }
 
@@ -1686,17 +1697,76 @@ static void hfi_set_txotr_bw(struct hfi_devdata *dd, u8 whole, u8 frac, u8 mctc)
 		  arb_cfg.val);
 }
 
-void hfi_program_mctc_bw_arb(struct hfi_pportdata *ppd, u64 vl_mask, u8 tx_int,
-			     u8 tx_frac, u8 rx_int, u8 rx_frac)
+static int hfi_realloc_mctc(struct hfi_pportdata *ppd, int vl_mask, int group)
+{
+	int tc, i;
+
+	/* FXRTODO: Fixup when port stuff is settled.
+	 * Port 1 gets 2 groups, so TC 0 and 1. Port 2 gets one
+	 * group, so TC 2. TC 3 is always mgmt, so leave that.
+	 */
+	if (ppd->pnum == 1)
+		tc = 0 + group;
+	else
+		tc = 2 + group;
+
+	if (tc >= HFI_VL15_TC)
+		return -EINVAL;
+
+	ppd_dev_dbg(ppd, "realloc mctc to tc %d group %d vl 0x%x\n",
+		    tc, group, vl_mask);
+
+	for (i = 0; i < ARRAY_SIZE(ppd->sl_to_sc); i++) {
+		int mctc = ppd->sl_to_mctc[i];
+		int mc = HFI_GET_MC(mctc);
+		int old_tc = HFI_GET_TC(mctc);
+		int sc, vlr, vlt;
+
+		sc = ppd->sl_to_sc[i];
+		if (sc > ARRAY_SIZE(ppd->sc_to_vlt)) {
+			ppd_dev_dbg(ppd, "illegal sc %d\n", sc);
+			continue;
+		}
+
+		vlr = ppd->sc_to_vlr[sc];
+		vlt = ppd->sc_to_vlt[sc];
+		if (vlr == HFI_ILLEGAL_VL || vlt == HFI_ILLEGAL_VL) {
+			ppd_dev_dbg(ppd, "illegal vlr %d or vlt %d\n",
+				    vlr, vlt);
+			continue;
+		}
+
+		/*
+		 * If sl->sc->vlr or sl->sc->vlt is in the vl mask, this is
+		 * a candidate to move to this BW group's TC
+		 */
+		if (vl_mask & (BIT(vlr) | BIT(vlt))) {
+			ppd_dev_dbg(ppd, "sl2mctc[%d], mctc (%d,%d)->(%d,%d)\n",
+				    i, mc, old_tc, mc, tc);
+			ppd->sl_to_mctc[i] = HFI_GET_MCTC(mc, tc);
+		}
+	}
+
+	return 0;
+}
+
+static void hfi_program_mctc_bw_arb(struct hfi_pportdata *ppd, u64 vl_mask,
+				    u8 tx_int, u8 tx_frac, u8 rx_int,
+				    u8 rx_frac, int group)
 {
 	const unsigned long int vlm = vl_mask;
-	int mctc;
+	int mctc, ret;
+
 	/*
 	 * For each MC/TC pair, find out what VL that maps to. Then,
 	 * check and see if that VL is in the VL mask provided by FM.
 	 */
 	for (mctc = 0; mctc < (HFI_MAX_TC * HFI_MAX_MC); mctc++) {
 		int rx_vl, tx_vl;
+
+		/* Ignore mgmt VLs */
+		if (HFI_GET_TC(mctc) == HFI_VL15_TC)
+			continue;
 
 		rx_vl = compute_vl_from_mctc(ppd, mctc, ppd->sc_to_vlr);
 		tx_vl = compute_vl_from_mctc(ppd, mctc, ppd->sc_to_vlt);
@@ -1712,6 +1782,16 @@ void hfi_program_mctc_bw_arb(struct hfi_pportdata *ppd, u64 vl_mask, u8 tx_int,
 			hfi_set_txotr_bw(ppd->dd, tx_int, tx_frac, mctc);
 		}
 	}
+
+	ret = hfi_realloc_mctc(ppd, vl_mask, group);
+	if (ret) {
+		ppd_dev_err(ppd,
+			    "realloc mctc err %d: vl_mask 0x%llx, group %d\n",
+			    ret, vl_mask, group);
+		return;
+	}
+
+	hfi_set_mctc_regs(ppd);
 }
 
 void hfi_set_bw_group(struct hfi_pportdata *ppd,
@@ -1770,7 +1850,7 @@ void hfi_set_bw_group(struct hfi_pportdata *ppd,
 		ppd_dev_dbg(ppd, "rx frac amount = %u\n", rx_frac);
 
 		hfi_program_mctc_bw_arb(ppd, vl_mask, tx_int, tx_frac, rx_int,
-					rx_frac);
+					rx_frac, i);
 	}
 }
 

@@ -181,7 +181,6 @@ enum {
 #define HFI_PKEY_MEMBER_MASK		0x1
 #define HFI_PKEY_MEMBER_TYPE(pkey)	(((pkey) >> HFI_PKEY_MEMBER_SHIFT) & \
 					HFI_PKEY_MEMBER_MASK)
-
 #define HFI_SC_TO_TC_MC_MASK	(u64)(HFI_MCTC_MASK)
 #define HFI_SL_TO_TC_MC_MASK	(u64)(HFI_MCTC_MASK)
 #define HFI_GET_TC(mctc)	((mctc) & HFI_TC_MASK)
