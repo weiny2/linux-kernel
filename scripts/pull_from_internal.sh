@@ -4,11 +4,12 @@
 
 function print_help
 {
-	echo "Usage: `basename $0` -k kernel_src -b branch -r remote [-s series|COMMIT, COMMIT]"
+	echo "Usage: `basename $0` -k kernel_src -b branch -r remote -t type [-s series|COMMIT, COMMIT]"
 	echo " Specify a list of commits to cherry pick or use the -s for a consecutive series"
 	echo "-k: path to kernel src"
 	echo "-b: branch to checkout"
 	echo "-r: remote (default: origin)"
+	echo "-t: test type: none, static, regression or all"
 	echo "-s: first~1..last (you probably want the ~1)"
 	exit 1
 }
@@ -19,7 +20,7 @@ new_branch="for-a-stream-$datestamp"
 log_dir="/nfs/sc/disks/fabric_mirror/scratch/upstream_logs"
 orig_branch="a-stream-master"
 
-while getopts "k:b:s:r:" opt
+while getopts "k:b:s:r:t:" opt
 do
         case $opt in
         k)
@@ -34,6 +35,9 @@ do
 	s)
 		series=$OPTARG
 		;;
+	t)
+		test_type=$OPTARG
+		;;
         *)
                 print_help
                 ;;
@@ -41,6 +45,10 @@ do
 done
 
 shift $(($OPTIND - 1))
+
+if [[ -z $test_type ]]; then
+	test_type="all"
+fi
 
 if [[ -z $branch ]]; then
 	print_help
@@ -122,7 +130,8 @@ fi
 echo "Checking patches..."
 cd $top_dir/test/tests
 ./checkpatch.sh -k $kernel_build -b $branch -t upstream | tee $log_dir/check_patch_${datestamp}.log
-echo "Press ENTER to examine patches:"
+
+echo "Review checkpatch results and press ENTER"
 read blah
 
 cd $kernel_build
@@ -131,7 +140,7 @@ if [[ $? -ne 0 ]]; then
 	exit 1
 fi
 
-# Popping all commits
+# First just show the patches
 stg pop --all
 
 while :
@@ -141,35 +150,81 @@ do
 		echo "No more patches"
 		break
 	fi
-
 	stg show -O -U5 | vim -c "set filetype=gitcommit" -
 	if [[ $? -ne 0 ]]; then
-		echo "Could not edit commit message"
+		echo "Could not view patch"
 		exit 1
 	fi
 done
+
+# alternative edit commit messages
+echo "Edit commits? y|N:"
+read next_step
+
+if [[ $next_step == "y" ]]; then
+	stg pop --all
+
+	while :
+	do
+		stg push
+		if [[ $? -ne 0 ]]; then
+			echo "No more patches"
+			break
+		fi
+		
+		stg edit
+		if [[ $? -ne 0 ]]; then
+			echo "Could not edit commit"
+			exit 1
+		fi
+	done
+	
+	echo "Checking patches after editing commit messages..."
+	cd $top_dir/test/tests
+	./checkpatch.sh -k $kernel_build -b $branch -t upstream | tee $log_dir/check_patch_${datestamp}.log
+	echo "Review checkpatch results and press ENTER"
+	read blah
+fi
 
 #---------------
 # Kick off tests
 #---------------
 
-echo "Press ENTER to run presubmit checks and regression tests"
-read blah
+if [[ $test_type == "static" ]]; then
+	cd $top_dir/test/tests
+	./presubmit_checks.sh -k $kernel_build | tee $log_dir/presubmit_${datestamp}.log
+	if [[ $? -ne 0 ]]; then
+		echo "Did not pass presubmit checks"
+		exit 1
+	fi
+	cd ..
+elif [[ $test_type == "regression" ]]; then
+	cd $top_dir/test
+	./queue_test.sh -k $kernel_build -m hfi1 | tee $log_dir/hfi1_test_${datestamp}.log
+	if [[ $? -ne 0 ]]; then
+		echo "Test failed! Do not submit"
+		exit 1
+	fi
+elif [[ $test_type == "all" ]]; then
+	cd $top_dir/test/tests
+	./presubmit_checks.sh -k $kernel_build | tee $log_dir/presubmit_${datestamp}.log
+	if [[ $? -ne 0 ]]; then
+		echo "Did not pass presubmit checks"
+		exit 1
+	fi
 
-cd $top_dir/test/tests
-./presubmit_checks.sh -k $kernel_build | tee $log_dir/presubmit_${datestamp}.log
-if [[ $? -ne 0 ]]; then
-	echo "Did not pass presubmit checks"
-	exit 1
+	cd $top_dir/test
+	./queue_test.sh -k $kernel_build -m hfi1 | tee $log_dir/hfi1_test_${datestamp}.log
+	if [[ $? -ne 0 ]]; then
+		echo "Test failed! Do not submit"
+		exit 1
+	fi
+
+else
+	echo "Skipping all tests due to user chosen test_type of $test_type"
 fi
 
-echo "Running tests"
-cd ..
-./queue_test.sh -k $kernel_build -m hfi1 | tee $log_dir/hfi1_test_${datestamp}.log
-if [[ $? -ne 0 ]]; then
-	echo "Test failed! Do not submit"
-	exit 1
-fi
+
 
 #------------------------------------------
 # Looks good if we got to here time to push
@@ -182,7 +237,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 
-echo "Logs are located at:"
+echo "Logs if applicable are located at:"
 echo "                    $log_dir/cherry_pick_${datestamp}.log"
 echo "                    $log_dir/check_patch_${datestamp}.log"
 echo "			  $log_dir/presubmit_${datestamp}.log"
