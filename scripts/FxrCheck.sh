@@ -10,10 +10,17 @@ DIRS="hfi2 hfi2_vnic hfi_core user"
 CHECKPATCH_COMMAND=/lib/modules/${KERNEL_VERSION}/build/scripts/checkpatch.pl
 CHECKPATCH_OPTIONS="--file --no-tree --terse --strict"
 
-find ${DIRS} -type f -name "*.h" -o -name "*.c" |\
-while read file; do
-	${CHECKPATCH_COMMAND} ${CHECKPATCH_OPTIONS} ${file}
-done # just report
+# FRXTODO Exclude generated headers in hfi2/fxr/* from style check, those files
+# do conform to kernel coding standard and generate ~70K errors/warnings
+if [ "$1" == "" ]; then
+    find ${DIRS} -type f -name "*.h" -o -name "*.c" | grep -v "hfi2/fxr/" |\
+    while read file; do
+	    ${CHECKPATCH_COMMAND} ${CHECKPATCH_OPTIONS} ${file}
+    done # just report
+else
+    ${CHECKPATCH_COMMAND} ${CHECKPATCH_OPTIONS} $1
+    exit $?
+fi
 
 # sparse
 export PATH=$PATH:/usr/local/bin
