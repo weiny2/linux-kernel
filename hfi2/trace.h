@@ -90,7 +90,8 @@ TRACE_EVENT(hfi2_rcvhdr,
 		     u32 egr_idx,
 		     u32 egr_off
 	    ),
-		TP_ARGS(dd, ctxt, eflags, etype, port, hlen, tlen, egr_idx, egr_off),
+	    TP_ARGS(dd, ctxt, eflags, etype, port, hlen, tlen, egr_idx,
+		    egr_off),
 	    TP_STRUCT__entry(
 		DD_DEV_ENTRY(dd)
 		__field(u64, ctxt)
@@ -286,8 +287,8 @@ __print_symbolic(opcode,                                   \
 DECLARE_EVENT_CLASS(
 	hfi2_hdr_template,
 	TP_PROTO(struct hfi_devdata *dd,
-		union hfi2_packet_header *hdr,
-		bool use_16b
+		 union hfi2_packet_header *hdr,
+		 bool use_16b
 	),
 	TP_ARGS(dd, hdr, use_16b),
 	TP_STRUCT__entry(
@@ -336,7 +337,8 @@ DECLARE_EVENT_CLASS(
 			__entry->lver = 0;
 			__entry->sl = 0;
 
-			opa_parse_16b_header((u32 *)&hdr->opa16b,
+			opa_parse_16b_header(
+				(u32 *)&hdr->opa16b,
 				&__entry->slid,
 				&__entry->dlid,
 				&__entry->len,
@@ -442,50 +444,46 @@ DECLARE_EVENT_CLASS(
 );
 
 DEFINE_EVENT(hfi2_hdr_template, hfi2_hdr_rcv,
-			 TP_PROTO(
-					 struct hfi_devdata *dd,
-					 union hfi2_packet_header *hdr,
-					 bool use_16b),
-			 TP_ARGS(dd, hdr, use_16b));
+	     TP_PROTO(struct hfi_devdata *dd,
+		      union hfi2_packet_header *hdr,
+		      bool use_16b),
+	     TP_ARGS(dd, hdr, use_16b));
 DEFINE_EVENT(hfi2_hdr_template, hfi2_hdr_send_wqe,
-			 TP_PROTO(
-					 struct hfi_devdata *dd,
-					 union hfi2_packet_header *hdr,
-					 bool use_16b),
-			 TP_ARGS(dd, hdr, use_16b));
+	     TP_PROTO(struct hfi_devdata *dd,
+		      union hfi2_packet_header *hdr,
+		      bool use_16b),
+	     TP_ARGS(dd, hdr, use_16b));
 
 DEFINE_EVENT(hfi2_hdr_template, hfi2_hdr_send_ack,
-			 TP_PROTO(
-					 struct hfi_devdata *dd,
-					 union hfi2_packet_header *hdr,
-					 bool use_16b),
-			 TP_ARGS(dd, hdr, use_16b));
+	     TP_PROTO(struct hfi_devdata *dd,
+		      union hfi2_packet_header *hdr,
+		      bool use_16b),
+	     TP_ARGS(dd, hdr, use_16b));
 #endif
 
-#if 0
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi1_sma
 
+#define TRACE_SYSTEM hfi2_mad
 #define BCT_FORMAT \
-	"shared_limit %x vls 0-7 [%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x] 15 [%x,%x]"
+	"[%d:%d] shared_limit %x vls 0-7 [%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x] 15 [%x,%x]"
+#define BCT(field) be16_to_cpu(__entry->bc.field)
 
-#define BCT(field) \
-	be16_to_cpu( \
-		((struct buffer_control *)__get_dynamic_array(bct))->field \
-	)
-
-DECLARE_EVENT_CLASS(hfi1_bct_template,
-		    TP_PROTO(struct hfi_devdata *dd,
+DECLARE_EVENT_CLASS(hfi2_bct_template,
+		    TP_PROTO(u8 unit,
+			     u8 port,
 			     struct buffer_control *bc),
-		    TP_ARGS(dd, bc),
-		    TP_STRUCT__entry(DD_DEV_ENTRY(dd)
-				     __dynamic_array(u8, bct, sizeof(*bc))
+		    TP_ARGS(unit, port, bc),
+		    TP_STRUCT__entry(__field(u8, unit)
+				     __field(u8, port)
+				     __field_struct(struct buffer_control, bc)
 		    ),
-		    TP_fast_assign(DD_DEV_ASSIGN(dd);
-				   memcpy(__get_dynamic_array(bct), bc,
-					  sizeof(*bc));
+		    TP_fast_assign(__entry->unit = unit;
+				   __entry->port = port;
+				   __entry->bc = *bc;
 		    ),
 		    TP_printk(BCT_FORMAT,
+			      __entry->unit,
+			      __entry->port,
 			      BCT(overall_shared_limit),
 
 			      BCT(vl[0].dedicated),
@@ -517,15 +515,55 @@ DECLARE_EVENT_CLASS(hfi1_bct_template,
 		    )
 );
 
-DEFINE_EVENT(hfi1_bct_template, bct_set,
-	     TP_PROTO(struct hfi_devdata *dd, struct buffer_control *bc),
-	     TP_ARGS(dd, bc));
+DEFINE_EVENT(hfi2_bct_template, hfi2_mad_bct_set,
+	     TP_PROTO(u8 unit, u8 port, struct buffer_control *bc),
+	     TP_ARGS(unit, port, bc));
 
-DEFINE_EVENT(hfi1_bct_template, bct_get,
-	     TP_PROTO(struct hfi_devdata *dd, struct buffer_control *bc),
-	     TP_ARGS(dd, bc));
+DEFINE_EVENT(hfi2_bct_template, hfi2_mad_bct_get,
+	     TP_PROTO(u8 unit, u8 port, struct buffer_control *bc),
+	     TP_ARGS(unit, port, bc));
 
-#endif
+#define MAD_FORMAT "[%d:%d] mad bver: %2x, cl: %2x, clver: %2x, method: %2x, st: %4x, attr: %4x, tid: %llx"
+
+DECLARE_EVENT_CLASS(hfi2_mad_template,
+		    TP_PROTO(u8 unit,
+			     u8 port,
+			     const struct ib_mad_hdr *mad
+		    ),
+		    TP_ARGS(unit, port, mad),
+		    TP_STRUCT__entry(__field(u8, unit)
+				     __field(u8, port)
+				     __field_struct(struct ib_mad_hdr, mad)
+		    ),
+		    TP_fast_assign(__entry->unit = unit;
+				   __entry->port = port;
+				   __entry->mad = *mad;
+		    ),
+		    TP_printk(MAD_FORMAT,
+			      __entry->unit,
+			      __entry->port,
+			      __entry->mad.base_version,
+			      __entry->mad.mgmt_class,
+			      __entry->mad.class_version,
+			      __entry->mad.method,
+			      be16_to_cpu(__entry->mad.status),
+			      be16_to_cpu(__entry->mad.attr_id),
+			      be64_to_cpu(__entry->mad.tid)
+		    )
+);
+
+DEFINE_EVENT(hfi2_mad_template, hfi2_mad_recv,
+	     TP_PROTO(u8 unit, u8 port, const struct ib_mad_hdr *mad),
+	     TP_ARGS(unit, port, mad));
+
+DEFINE_EVENT(hfi2_mad_template, hfi2_mad_send,
+	     TP_PROTO(u8 unit, u8 port, const struct ib_mad_hdr *mad),
+	     TP_ARGS(unit, port, mad));
+
+DEFINE_EVENT(hfi2_mad_template, hfi2_mad_trap,
+	     TP_PROTO(u8 unit, u8 port, const struct ib_mad_hdr *mad),
+	     TP_ARGS(unit, port, mad));
+
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi2_rc
 

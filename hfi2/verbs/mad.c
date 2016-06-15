@@ -55,6 +55,7 @@
 #include "verbs.h"
 #include "mad.h"
 #include "packet.h"
+#include "trace.h"
 #include "../link.h"
 #include "../opa_hfi.h"
 #include "fxr/fxr_linkmux_fpc_defs.h"
@@ -186,8 +187,12 @@ static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned len)
 	}
 	spin_unlock_irqrestore(&ibp->rvp.lock, flags);
 
-	if (!ret)
+	if (!ret) {
+		trace_hfi2_mad_trap((u8)ppd->dd->unit, ppd->pnum,
+				    (struct ib_mad_hdr *)smp);
 		ret = ib_post_send_mad(send_buf, NULL);
+	}
+
 	if (!ret) {
 		timeout = (4096 * (1UL << ibp->subnet_timeout)) / 1000;
 		ibp->trap_timeout = jiffies + usecs_to_jiffies(timeout);
@@ -1040,6 +1045,7 @@ static int __subn_get_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	hfi_get_buffer_control(ppd, p, NULL);
+	trace_hfi2_mad_bct_get((u8)dd->unit, port, p);
 
 	if (resp_len)
 		*resp_len += size;
@@ -2134,6 +2140,8 @@ static int __subn_set_opa_bct(struct opa_smp *smp, u32 am, u8 *data,
 
 	if (num_ports != 1)
 		goto fail;
+
+	trace_hfi2_mad_bct_set(dd->unit, port, p);
 
 	if (hfi_set_buffer_control(ppd, p) < 0)
 		goto fail;
@@ -3726,11 +3734,11 @@ static int process_perf_opa(struct ib_device *ibdev, u8 port,
 			goto bail;
 		case OPA_PM_ATTRIB_ID_INFREQUENT_COUNTERS:
 			ret = pma_get_opa_infrequent_counters(pmp, ibdev, port,
-							    resp_len);
+							      resp_len);
 			goto bail;
 		case OPA_PM_ATTRIB_ID_ALL_COUNTERS:
 			ret = pma_get_opa_all_counters(pmp, ibdev, port,
-							    resp_len);
+						       resp_len);
 			goto bail;
 		default:
 			pmp->mad_hdr.status |= st;
@@ -3850,26 +3858,36 @@ int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     struct ib_mad_hdr *out_mad, size_t *out_mad_size,
 		     u16 *out_mad_pkey_index)
 {
+	int ret = IB_MAD_RESULT_FAILURE;
+
+	trace_hfi2_mad_recv(hfi_dd_from_ibdev(ibdev)->unit, port, in_mad);
+
 	switch (in_mad->base_version) {
 	case OPA_MGMT_BASE_VERSION:
 		if (unlikely(in_mad_size != sizeof(struct opa_mad))) {
 			dev_err(ibdev->dma_device, "invalid in_mad_size\n");
 			return IB_MAD_RESULT_FAILURE;
 		}
-		return hfi2_process_opa_mad(ibdev, mad_flags, port,
-				       in_wc, in_grh,
-				       (struct opa_mad *)in_mad,
-				       (struct opa_mad *)out_mad,
-				       out_mad_size,
-				       out_mad_pkey_index);
+		ret = hfi2_process_opa_mad(ibdev, mad_flags, port,
+					   in_wc, in_grh,
+					   (struct opa_mad *)in_mad,
+					   (struct opa_mad *)out_mad,
+					   out_mad_size,
+					   out_mad_pkey_index);
+		break;
 	case IB_MGMT_BASE_VERSION:
-		return hfi2_process_ib_mad(ibdev, mad_flags, port,
-				      in_wc, in_grh,
-				      (const struct ib_mad *)in_mad,
-				      (struct ib_mad *)out_mad);
+		ret =  hfi2_process_ib_mad(ibdev, mad_flags, port,
+					   in_wc, in_grh,
+					   (const struct ib_mad *)in_mad,
+					   (struct ib_mad *)out_mad);
+		break;
 	default:
 		break;
 	}
 
-	return IB_MAD_RESULT_FAILURE;
+	if (ret & IB_MAD_RESULT_REPLY)
+		trace_hfi2_mad_send(hfi_dd_from_ibdev(ibdev)->unit,
+				    port, out_mad);
+
+	return ret;
 }
