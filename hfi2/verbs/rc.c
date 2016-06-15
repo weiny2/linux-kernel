@@ -55,6 +55,7 @@
 #include <linux/io.h>
 #include "verbs.h"
 #include "packet.h"
+#include "trace.h"
 
 /* cut down ridiculously long IB macro names */
 #define OP(x) IB_OPCODE_RC_##x
@@ -1256,6 +1257,7 @@ static void rc_timeout(unsigned long arg)
 		ibp->n_rc_timeouts++;
 		qp->s_flags &= ~RVT_S_TIMER;
 		del_timer(&qp->s_timer);
+		trace_hfi2_rc_timeout(qp, qp->s_last_psn + 1);
 		restart_rc(qp, qp->s_last_psn + 1, 1);
 		hfi2_schedule_send(qp);
 	}
@@ -1369,6 +1371,7 @@ void hfi2_rc_send_complete(struct rvt_qp *qp, struct ib_l4_headers *ohdr)
 	 * If we were waiting for sends to complete before re-sending,
 	 * and they are now complete, restart sending.
 	 */
+	trace_hfi2_rc_sendcomplete(qp, psn);
 	if (qp->s_flags & RVT_S_WAIT_PSN &&
 	    cmp_psn(qp->s_sending_psn, qp->s_sending_hpsn) > 0) {
 		qp->s_flags &= ~RVT_S_WAIT_PSN;
@@ -1769,6 +1772,8 @@ static void rc_rcv_resp(struct hfi2_ibport *ibp,
 
 	spin_lock_irqsave(&qp->s_lock, flags);
 
+	trace_hfi2_rc_ack(qp, psn);
+
 	/* Ignore invalid responses. */
 	if (cmp_psn(psn, qp->s_next_psn) >= 0)
 		goto ack_done;
@@ -1982,6 +1987,7 @@ static noinline int rc_rcv_error(struct ib_l4_headers *ohdr, void *data,
 	u8 i, prev;
 	int old_req;
 
+	trace_hfi2_rc_rcv_error(qp, psn);
 	if (diff > 0) {
 		/*
 		 * Packet sequence error.
