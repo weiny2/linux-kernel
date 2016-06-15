@@ -407,7 +407,7 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	union eqd eq_desc;
 	u16 eq_base;
 	unsigned long sflags;
-	int order, eq_idx, msix_idx = 0;
+	int order, eq_idx, irq_idx = 0;
 	int num_eqs = HFI_NUM_EVENT_HANDLES;
 	int ret = 0;
 
@@ -446,7 +446,7 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	}
 
 	if (eq) {
-		struct hfi_msix_entry *me;
+		struct hfi_irq_entry *me;
 		unsigned long flags;
 
 		/* initialize EQ IRQ state */
@@ -454,10 +454,10 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		init_waitqueue_head(&eq->wq);
 
 		/* for now just do round-robin assignment */
-		msix_idx = atomic_inc_return(&dd->msix_eq_next) %
+		irq_idx = atomic_inc_return(&dd->irq_eq_next) %
 			   dd->num_eq_irqs;
-		me = &dd->msix_entries[msix_idx];
-		eq->irq_vector = msix_idx;
+		me = &dd->irq_entries[irq_idx];
+		eq->irq_vector = irq_idx;
 		eq->isr_cb = eq_assign->isr_cb;
 		eq->cookie = eq_assign->cookie;
 
@@ -477,7 +477,7 @@ static int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	eq_desc.order = order;
 	eq_desc.start = (eq_assign->base >> PAGE_SHIFT);
 	eq_desc.ni = eq_assign->ni;
-	eq_desc.irq = msix_idx;
+	eq_desc.irq = irq_idx;
 	eq_desc.i = (eq_assign->mode & OPA_EV_MODE_BLOCKING);
 	eq_desc.v = 1;
 	eq_desc_base[eq_idx].val[1] = eq_desc.val[1];
@@ -754,11 +754,11 @@ static int hfi_eq_irq_remove(int eq_idx, void *idr_ptr, void *idr_ctx)
 
 	/* test if blocking mode EQ */
 	if (ctx != idr_ptr) {
-		struct hfi_msix_entry *me;
+		struct hfi_irq_entry *me;
 		struct hfi_event_queue *eq = (struct hfi_event_queue *)idr_ptr;
 		unsigned long flags;
 
-		me = &ctx->devdata->msix_entries[eq->irq_vector];
+		me = &ctx->devdata->irq_entries[eq->irq_vector];
 		write_lock_irqsave(&me->irq_wait_lock, flags);
 		if (!list_empty(&eq->irq_wait_chain))
 			list_del(&eq->irq_wait_chain);

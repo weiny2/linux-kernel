@@ -1860,12 +1860,13 @@ static void hfi_handle_host_irq(struct hfi_pportdata *ppd)
 	/* TODO: take care other interrupts */
 }
 
-static irqreturn_t irq_mnh_handler(int irq, void *dev_id)
+irqreturn_t irq_mnh_handler(int irq, void *dev_id)
 {
-	struct hfi_msix_entry *me = dev_id;
+	struct hfi_irq_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
 	u8 port;
 
+	/* FXRTODO: remove this acking after simics bug fixed */
 	hfi_ack_interrupt(me);
 
 	for (port = 1; port <= dd->num_pports; port++) {
@@ -1889,7 +1890,7 @@ void hfi_handle_fpc_error(struct hfi_devdata *dd, u64 reg, char *fpc_name)
    3. for port 2: fpc_name="FPC1"
  */
 
-	struct hfi_msix_entry *me = dev_id;
+	struct hfi_irq_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
 	struct hfi_pportdata *ppd;
 	u64 reg, info, hdr0, hdr1;
@@ -1946,30 +1947,40 @@ void hfi_handle_fpc_error(struct hfi_devdata *dd, u64 reg, char *fpc_name)
 */
 int hfi2_cfg_link_intr_vector(struct hfi_devdata *dd)
 {
-	struct hfi_msix_entry *me = &dd->msix_entries[HFI2_MNH_ERROR];
+	struct hfi_irq_entry *me = &dd->irq_entries[HFI2_MNH_ERROR];
+	int irq = HFI2_MNH_ERROR;
 	int ret;
 
 	if (me->arg != NULL) {
 		dd_dev_err(dd, "MSIX entry is already configured: %d\n",
 			HFI2_MNH_ERROR);
-		ret = -EINVAL;
-		goto _return;
+		return -EINVAL;
 	}
+
 	INIT_LIST_HEAD(&me->irq_wait_head);
 	rwlock_init(&me->irq_wait_lock);
 	me->dd = dd;
-	me->intr_src = HFI2_MNH_ERROR;
+	me->intr_src = irq;
 
-	dd_dev_dbg(dd, "request for IRQ %d:%d\n", HFI2_MNH_ERROR, me->msix.vector);
-	ret = request_irq(me->msix.vector, irq_mnh_handler, 0,
-		"hfi_irq_mnh", me);
+	/* if intx interrupt, we return here */
+	if (!dd->num_irq_entries) {
+		me->arg = me;	/* mark as in use */
+		return 0;
+	}
+
+	dd_dev_dbg(dd, "request for msix IRQ %d:%d\n",
+		   irq, dd->msix[irq].vector);
+	ret = request_irq(dd->msix[irq].vector, hfi_irq_mnh_handler, 0,
+			  "hfi_irq_mnh", me);
 	if (ret) {
-		dd_dev_err(dd, "IRQ[%d] request failed %d\n", HFI2_MNH_ERROR, ret);
-		goto _return;
+		dd_dev_err(dd, "msix IRQ[%d] request failed %d\n",
+			   irq, ret);
+		/* IRQ cleanup done in hfi_pci_dd_free() */
+		return ret;
 	}
 	me->arg = me;	/* mark as in use */
- _return:
-	return ret;
+
+	return 0;
 }
 
 /*
@@ -2065,13 +2076,6 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 
 	if (no_mnh)
 		return 0;
-
-	ret = hfi2_cfg_link_intr_vector(dd);
-	if (ret) {
-		dd_dev_err(dd, "Can't configure interrupt vector of MNH/8051: %d\n",
-			ret);
-		goto _return;
-	}
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);

@@ -417,8 +417,7 @@ struct err_info_constraint {
 	u32 slid;
 };
 
-struct hfi_msix_entry {
-	struct msix_entry msix;
+struct hfi_irq_entry {
 	void *arg;
 	cpumask_var_t mask;
 	struct list_head irq_wait_head;
@@ -731,11 +730,12 @@ struct hfi_devdata {
 
 	struct opa_core_device_id bus_id;
 
-	/* MSI-X information */
-	struct hfi_msix_entry *msix_entries;
-	u32 num_msix_entries;
+	/* irq vector information for both MSIX and INTx */
+	struct hfi_irq_entry *irq_entries;
+	struct msix_entry *msix;
+	u32 num_irq_entries;
 	u32 num_eq_irqs;
-	atomic_t msix_eq_next;
+	atomic_t irq_eq_next;
 
 	/* List of context error queue to dispatch error to */
 	spinlock_t error_dispatch_lock;
@@ -869,14 +869,16 @@ void hfi_pci_cleanup(struct pci_dev *pdev);
 struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 				    const struct pci_device_id *ent);
 void hfi_pci_dd_free(struct hfi_devdata *dd);
-int hfi_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
-		    struct hfi_msix_entry *entry);
+int hfi_enable_msix(struct hfi_devdata *dd, u32 *nent,
+		    struct msix_entry *entry);
 void hfi_disable_msix(struct hfi_devdata *dd);
-int hfi_setup_interrupts(struct hfi_devdata *dd, int total, int minw);
+int hfi_setup_interrupts(struct hfi_devdata *dd, int total);
 void hfi_cleanup_interrupts(struct hfi_devdata *dd);
 void hfi_disable_interrupts(struct hfi_devdata *dd);
 
-int hfi_setup_irqerr(struct hfi_devdata *dd);
+int hfi_setup_errd_irq(struct hfi_devdata *dd);
+irqreturn_t hfi_irq_errd_handler(int irq, void *dev_id);
+
 void hfi_setup_errq(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
 void hfi_errq_cleanup(struct hfi_ctx *ctx);
 int hfi_get_async_error(struct hfi_ctx *ctx, void *ae, int timeout);
@@ -991,7 +993,7 @@ void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
 						int refresh_widths);
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
-void hfi_ack_interrupt(struct hfi_msix_entry *me);
+void hfi_ack_interrupt(struct hfi_irq_entry *me);
 u8 hfi_porttype(struct hfi_pportdata *ppd);
 int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data);
 int hfi_set_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data);

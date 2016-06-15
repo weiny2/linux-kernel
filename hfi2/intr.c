@@ -60,77 +60,75 @@ void hfi_disable_interrupts(struct hfi_devdata *dd)
 	int i;
 
 	/* remove irqs - must happen before disabling/turning off */
-	if (dd->num_msix_entries) {
+	if (dd->num_irq_entries) {
 		/* MSI-X */
-		struct hfi_msix_entry *me = dd->msix_entries;
+		struct hfi_irq_entry *me = dd->irq_entries;
 
 		/* loop over all IRQs, don't break early */
-		for (i = 0; i < dd->num_msix_entries; i++, me++) {
+		for (i = 0; i < dd->num_irq_entries; i++, me++) {
 			if (me->arg == NULL) /* => no irq, no affinity */
 				continue;
-			irq_set_affinity_hint(dd->msix_entries[i].msix.vector,
-					NULL);
-			free_irq(me->msix.vector, me);
+			irq_set_affinity_hint(dd->msix[i].vector, NULL);
+			free_irq(dd->msix[i].vector, me);
 		}
 
 		/* turn off interrupts */
 		hfi_disable_msix(dd);
-	}
+	} else
+		/* INTx */
+		free_irq(dd->pcidev->irq, dd);
 }
 
 void hfi_cleanup_interrupts(struct hfi_devdata *dd)
 {
-	kfree(dd->msix_entries);
-	dd->msix_entries = NULL;
-	dd->num_msix_entries = 0;
+	kfree(dd->irq_entries);
+	dd->irq_entries = NULL;
+	dd->num_irq_entries = 0;
 }
 
-int hfi_setup_interrupts(struct hfi_devdata *dd, int total, int minw)
+int hfi_setup_interrupts(struct hfi_devdata *dd, int total)
 {
-	struct hfi_msix_entry *entries;
+	struct hfi_irq_entry *entries;
+	struct msix_entry *msix;
 	u32 request;
 	int i, ret;
 
-	entries = kcalloc(total, sizeof(*entries), GFP_KERNEL);
+	entries = kcalloc(total, sizeof(*entries) +
+			  sizeof(*msix), GFP_KERNEL);
 	if (!entries) {
 		dd_dev_err(dd, "cannot allocate msix table\n");
 		ret = -ENOMEM;
 		goto fail;
 	}
+	msix = (struct msix_entry *)(entries + total);
+
 	/* 1-1 MSI-X entry assignment */
 	for (i = 0; i < total; i++)
-		entries[i].msix.entry = i;
+		msix[i].entry = i;
 
 	/* ask for MSI-X interrupts */
 	request = total;
-	ret = hfi_pcie_params(dd, minw, &request, entries);
+	ret = hfi_enable_msix(dd, &request, msix);
 	if (ret)
 		goto fail;
 
-	if (request == 0) {
-		/* INTx not supported */
-		/* dd->num_msix_entries already zero */
-		kfree(entries);
-		ret = -ENXIO;
-		goto fail;
-	} else if (request != total) {
+	/* if request is zero, INTx is used */
+	dd->num_irq_entries = request;
+	dd->irq_entries = entries;
+	dd->msix = msix;	/* not used for INTx */
+
+	/* MSIX-alias mode is not supported yet */
+	if (request > 0 && request < total) {
 		/* FXRTODO: handle using MSI-X, with reduced interrupts */
-		dd->num_msix_entries = request;
-		dd->msix_entries = entries;
 		dd_dev_err(dd, "reduced MSI-X interrupts, %u < %u err\n",
 			   request, total);
 		ret = -ENXIO;
 		goto fail;
-	} else {
-		/* using MSI-X */
-		dd->num_msix_entries = request;
-		dd->msix_entries = entries;
-		dd_dev_info(dd, "%u MSI-X interrupts allocated\n", total);
 	}
 
 	return 0;
 fail:
-	hfi_disable_interrupts(dd);
+	hfi_disable_msix(dd);
 	hfi_cleanup_interrupts(dd);
 	return ret;
 }

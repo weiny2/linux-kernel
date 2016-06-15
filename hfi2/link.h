@@ -272,6 +272,7 @@ u16 hfi_cap_to_port_ltp(u16 cap);
 u16 hfi_port_ltp_to_cap(u16 port_ltp);
 void hfi_read_link_quality(struct hfi_pportdata *ppd, u8 *link_quality);
 
+irqreturn_t hfi_irq_mnh_handler(int irq, void *dev_id);
 void hfi_handle_fpc_error(struct hfi_devdata *dd, u64 reg, char *name);
 
 #endif /* _LINK_H */

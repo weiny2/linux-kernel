@@ -62,7 +62,21 @@
  * This file contains PCIe utility routines.
  */
 
-static void hfi_enable_intx(struct pci_dev *pdev);
+/*
+ * Disable MSI-X.
+ */
+void hfi_disable_msix(struct hfi_devdata *dd)
+{
+	pci_disable_msix(dd->pcidev);
+}
+
+static void hfi_enable_intx(struct pci_dev *pdev)
+{
+	/* first, turn on INTx */
+	pci_intx(pdev, 1);
+	/* then turn off MSI-X */
+	pci_disable_msix(pdev);
+}
 
 /*
  * Do all the common PCIe setup and initialization.
@@ -147,79 +161,32 @@ void hfi_pci_cleanup(struct pci_dev *pdev)
 	pci_release_region(pdev, HFI_FXR_BAR);
 }
 
-static void hfi_msix_setup(struct hfi_devdata *dd, int pos, u32 *msixcnt,
-			   struct hfi_msix_entry *hfi_msix_entry)
-{
-	int ret;
-	u32 tabsize = 0;
-	u16 msix_flags;
-	struct msix_entry *msix_entry;
-	int i;
-
-	/* We can't pass hfi_msix_entry array to hfi_msix_setup
-	 * so use a dummy msix_entry array and copy the allocated
-	 * irq back to the hfi_msix_entry array. */
-	msix_entry = kmalloc_array(*msixcnt, sizeof(*msix_entry), GFP_KERNEL);
-	if (!msix_entry) {
-		ret = -ENOMEM;
-		goto do_intx;
-	}
-	for (i = 0; i < *msixcnt; i++)
-		msix_entry[i] = hfi_msix_entry[i].msix;
-
-	pci_read_config_word(dd->pcidev, pos + PCI_MSIX_FLAGS, &msix_flags);
-	tabsize = 1 + (msix_flags & PCI_MSIX_FLAGS_QSIZE);
-	if (tabsize > *msixcnt)
-		tabsize = *msixcnt;
-	ret = pci_enable_msix(dd->pcidev, msix_entry, tabsize);
-	if (ret > 0) {
-		tabsize = ret;
-		ret = pci_enable_msix(dd->pcidev, msix_entry, tabsize);
-	}
-do_intx:
-	if (ret) {
-		dd_dev_err(dd,
-			"pci_enable_msix %d vectors failed: %d, falling back to INTx\n",
-			tabsize, ret);
-		tabsize = 0;
-	}
-	for (i = 0; i < tabsize; i++)
-		hfi_msix_entry[i].msix = msix_entry[i];
-	kfree(msix_entry);
-	*msixcnt = tabsize;
-
-	if (ret)
-		hfi_enable_intx(dd->pcidev);
-}
-
-int hfi_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
-		    struct hfi_msix_entry *entry)
+int hfi_enable_msix(struct hfi_devdata *dd, u32 *nent, struct msix_entry *entry)
 {
 	u16 linkstat, speed, width;
-	int pos, ret = 0;
+	int ret, tabsize;
 
-	pos = pci_find_capability(dd->pcidev, PCI_CAP_ID_MSIX);
-	if (nent && *nent && pos) {
-		hfi_msix_setup(dd, pos, nent, entry);
-		/* did it, either MSI-X or INTx */
-	} else {
-		if (!pos)
-			dd_dev_err(dd, "Can't find PCI MSI-X capability!\n");
-		hfi_enable_intx(dd->pcidev);
-		if (nent)
-			*nent = 0;
-	}
+	ret = pci_msix_vec_count(dd->pcidev);
+	if (ret >= 0) {
+		tabsize = ret;
+		if (tabsize > *nent)
+			tabsize = *nent;
 
-	if (!pci_is_pcie(dd->pcidev)) {
-		/* set up something... */
-		dd->lbus_width = 1;
-		dd->lbus_speed = 2500; /* Gen1, 2.5GHz */
-		if (minw) {
-			dd_dev_err(dd, "Can't find PCI Express capability!\n");
-			ret = -EINVAL;
+		ret = pci_enable_msix(dd->pcidev, entry, tabsize);
+		if (ret > 0) {
+			tabsize = ret;
+			ret = pci_enable_msix(dd->pcidev, entry, tabsize);
 		}
-		goto err_pcie;
 	}
+
+	if (ret) {
+		dd_dev_err(dd, "Can't enable PCI MSI-X capability!\n");
+		hfi_enable_intx(dd->pcidev);
+		tabsize = 0;
+	}
+
+	/* return vectors configured */
+	*nent = tabsize;
 
 	pcie_capability_read_word(dd->pcidev, PCI_EXP_LNKSTA, &linkstat);
 	speed = linkstat & PCI_EXP_LNKSTA_CLS;
@@ -239,31 +206,5 @@ int hfi_pcie_params(struct hfi_devdata *dd, u32 minw, u32 *nent,
 		break;
 	}
 
-	/*
-	 * Check against expected pcie width and complain if "wrong"
-	 * on first initialization, not afterwards (i.e., reset).
-	 */
-	if (minw && width < minw)
-		dd_dev_err(dd,
-			    "PCIe width %u (x%u HFI), performance reduced\n",
-			    width, minw);
-
-err_pcie:
-	return ret;
-}
-
-/*
- * Disable MSI-X.
- */
-void hfi_disable_msix(struct hfi_devdata *dd)
-{
-	pci_disable_msix(dd->pcidev);
-}
-
-static void hfi_enable_intx(struct pci_dev *pdev)
-{
-	/* first, turn on INTx */
-	pci_intx(pdev, 1);
-	/* then turn off MSI-X */
-	pci_disable_msix(pdev);
+	return 0;
 }

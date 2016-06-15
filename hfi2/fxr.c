@@ -2156,7 +2156,7 @@ void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
 	 */
 }
 
-void hfi_ack_interrupt(struct hfi_msix_entry *me)
+void hfi_ack_interrupt(struct hfi_irq_entry *me)
 {
 	struct hfi_devdata *dd = me->dd;
 	/*
@@ -2187,12 +2187,14 @@ static void hfi_ack_all_interrupts(const struct hfi_devdata *dd)
 	}
 }
 
-static irqreturn_t irq_eq_handler(int irq, void *dev_id)
+static irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
 {
-	struct hfi_msix_entry *me = dev_id;
+	struct hfi_irq_entry *me = dev_id;
 	struct hfi_event_queue *eq;
 
+	/* FXRTODO: remove this acking after simics bug fixed */
 	hfi_ack_interrupt(me);
+
 	/* wake head waiter for each EQ using this IRQ */
 	read_lock(&me->irq_wait_lock);
 	list_for_each_entry(eq, &me->irq_wait_head, irq_wait_chain) {
@@ -2204,6 +2206,121 @@ static irqreturn_t irq_eq_handler(int irq, void *dev_id)
 	read_unlock(&me->irq_wait_lock);
 
 	return IRQ_HANDLED;
+}
+
+/*
+ * FXR defines 320 interrupt vectors, each vector is represented
+ * by a bit in INT_STS formed with 5 64bit CSRs (5*64=320).
+ *
+ * 'i' loop below goes through the 5 CSRs, 'j' loop goes through
+ * the 64 bits within a CSR.
+ *
+ * vectors 0-255 are assigned to EQ operation, which are all in
+ * the first 4 CSRs; the rest 64 vectors are in the last CSR.
+ * vector 256 is assigned to MNH, 257 and above are assigned to
+ * error domain interrupts.
+ *
+ * The dispatching of interrupt handlers are based on above info.
+ */
+static irqreturn_t hfi_irq_intx_handler(int irq, void *dev_id)
+{
+	struct hfi_devdata *dd = dev_id;
+	struct hfi_irq_entry *me;
+	int i, j;
+	u64 val;
+
+	for (i = 0; i <= PCIM_MAX_INT_CSRS; i++) {
+		val = read_csr(dd, FXR_PCIM_INT_STS + i * 8);
+		if (!val)
+			continue;
+
+		for (j = 0; j < 64; j++) {
+			if (!(val & (1uLL << j)))
+				continue;
+
+			me = &dd->irq_entries[i * 64 + j];
+			hfi_ack_interrupt(me);
+
+			if (i != PCIM_MAX_INT_CSRS)
+				hfi_irq_eq_handler(irq, me);
+			else if (j == 0)
+				hfi_irq_mnh_handler(irq, me);
+			else
+				hfi_irq_errd_handler(irq, me);
+		}
+	}
+
+	return IRQ_HANDLED;
+}
+
+static int hfi_setup_irqs(struct hfi_devdata *dd)
+{
+	struct pci_dev *pdev = dd->pcidev;
+	int i, ret;
+
+	/* configure IRQ for MNH if enabled */
+	if (!no_mnh) {
+		ret = hfi2_cfg_link_intr_vector(dd);
+		if (ret)
+			return ret;
+	}
+
+	/* configure IRQs for error domains */
+	ret = hfi_setup_errd_irq(dd);
+	if (ret)
+		return ret;
+
+	/* configure IRQs for EQ groups */
+	for (i = 0; i < HFI_NUM_EQ_INTERRUPTS; i++) {
+		struct hfi_irq_entry *me = &dd->irq_entries[i];
+
+		BUG_ON(me->arg != NULL);
+		INIT_LIST_HEAD(&me->irq_wait_head);
+		rwlock_init(&me->irq_wait_lock);
+		me->dd = dd;
+		me->intr_src = i;
+
+		/* if intx interrupt, we continue here */
+		if (!dd->num_irq_entries) {
+			/* mark as in use */
+			me->arg = me;
+			continue;
+		}
+
+		dev_dbg(&pdev->dev, "request for msix IRQ %d:%d\n",
+			i, dd->msix[i].vector);
+		ret = request_irq(dd->msix[i].vector, hfi_irq_eq_handler, 0,
+				  "hfi_irq_eq", me);
+		if (ret) {
+			dev_err(&pdev->dev, "msix IRQ[%d] request failed %d\n",
+				i, ret);
+			/* IRQ cleanup done in hfi_pci_dd_free() */
+			return ret;
+		}
+		/* mark as in use */
+		me->arg = me;
+	}
+
+	/* Even with intx, we use all the entries */
+	dd->num_eq_irqs = HFI_NUM_EQ_INTERRUPTS;
+	atomic_set(&dd->irq_eq_next, 0);
+	/* TODO - remove or change to debug later */
+	dev_info(&pdev->dev, "%d IRQs assigned to EQs\n", i);
+
+	/* request INTx irq */
+	if (!dd->num_irq_entries) {
+		dev_dbg(&pdev->dev, "request for intx IRQ %d\n", pdev->irq);
+		ret = request_irq(dd->pcidev->irq, hfi_irq_intx_handler, 0,
+				  "hfi_irq_intx", dd);
+		if (ret) {
+			/* IRQ cleanup done in hfi_pci_dd_free() */
+			dev_err(&pdev->dev, "intx IRQ[%d] request failed %d\n",
+				pdev->irq, ret);
+			return ret;
+		}
+	}
+
+	return 0;
 }
 
 /*
@@ -2619,7 +2736,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	struct hfi_devdata *dd;
 	unsigned long len;
 	resource_size_t addr;
-	int i, n_irqs, ret;
+	int i, ret;
 	struct opa_core_device_id bus_id;
 	struct hfi_ctx *ctx;
 	u16 priv_cq_idx;
@@ -2677,8 +2794,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		goto err_post_alloc;
 	}
 
-	/* enable MSI-X */
-	ret = hfi_setup_interrupts(dd, HFI_NUM_INTERRUPTS, 0);
+	/* enable MSI-X or INTx */
+	ret = hfi_setup_interrupts(dd, HFI_NUM_INTERRUPTS);
 	if (ret)
 		goto err_post_alloc;
 	hfi_ack_all_interrupts(dd);
@@ -2729,35 +2846,8 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
-	/* configure IRQs for EQ groups */
-	n_irqs = min_t(int, dd->num_msix_entries, HFI_NUM_EQ_INTERRUPTS);
-	for (i = 0; i < n_irqs; i++) {
-		struct hfi_msix_entry *me = &dd->msix_entries[i];
-
-		BUG_ON(me->arg != NULL);
-		INIT_LIST_HEAD(&me->irq_wait_head);
-		rwlock_init(&me->irq_wait_lock);
-		me->dd = dd;
-		me->intr_src = i;
-
-		dev_dbg(&pdev->dev, "request for IRQ %d:%d\n", i, me->msix.vector);
-		ret = request_irq(me->msix.vector, irq_eq_handler, 0,
-				  "hfi_irq_eq", me);
-		if (ret) {
-			dev_err(&pdev->dev, "IRQ[%d] request failed %d\n", i, ret);
-			/* IRQ cleanup done in hfi_pci_dd_free() */
-			goto err_post_alloc;
-		}
-		/* mark as in use */
-		me->arg = me;
-	}
-	dd->num_eq_irqs = i;
-	atomic_set(&dd->msix_eq_next, 0);
-	/* TODO - remove or change to debug later */
-	dev_info(&pdev->dev, "%d IRQs assigned to EQs\n", i);
-
-	/* configure IRQs for error domains */
-	ret = hfi_setup_irqerr(dd);
+	/* configure IRQs */
+	ret = hfi_setup_irqs(dd);
 	if (ret)
 		goto err_post_alloc;
 

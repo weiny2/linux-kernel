@@ -264,11 +264,11 @@ void hfi_handle_pgrrsp_error(struct hfi_devdata *dd, u64 err_sts, char *name)
 }
 
 /*
- * real error interrupt handler.
+ * error domain interrupt handler.
  */
-static irqreturn_t irq_err_handler(int irq, void *dev_id)
+irqreturn_t hfi_irq_errd_handler(int irq, void *dev_id)
 {
-	struct hfi_msix_entry *me = dev_id;
+	struct hfi_irq_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
 	struct hfi_error_domain *domain = me->arg;
 	struct hfi_error_csr *csr = domain->csr;
@@ -277,7 +277,9 @@ static irqreturn_t irq_err_handler(int irq, void *dev_id)
 	int i, j;
 	u64 val;
 
+	/* FXRTODO: remove this acking after simics bug fixed */
 	hfi_ack_interrupt(me);
+
 	val = 0;
 
 	/* disable interrupt for domains using this irq */
@@ -319,11 +321,11 @@ static irqreturn_t irq_err_handler(int irq, void *dev_id)
 }
 
 /*
- * configure and setup driver to receive error interrupt.
+ * configure and setup driver to receive error domain interrupt.
  */
-int hfi_setup_irqerr(struct hfi_devdata *dd)
+int hfi_setup_errd_irq(struct hfi_devdata *dd)
 {
-	struct hfi_msix_entry *me;
+	struct hfi_irq_entry *me;
 	struct hfi_error_csr *csr;
 	int count, irq;
 	int i, j, ret;
@@ -360,28 +362,37 @@ int hfi_setup_irqerr(struct hfi_devdata *dd)
 
 	for (i = 0; i < HFI_NUM_ERR_DOMAIN; i++) {
 		irq = hfi_error_domain[i].irq;
-		me = &dd->msix_entries[irq];
+		me = &dd->irq_entries[irq];
 
 		BUG_ON(me->arg != NULL);
 		me->dd = dd;
 		me->intr_src = irq;
-
-		dd_dev_info(dd, "request for IRQ %d:%d\n", irq, me->msix.vector);
-		ret = request_irq(me->msix.vector, irq_err_handler, 0,
-				"hfi_irq_error", me);
-		if (ret) {
-			dd_dev_err(dd, "IRQ[%d] request failed %d\n", irq, ret);
-			return ret;
-		}
-
-		/* mark as in use */
-		me->arg = &hfi_error_domain[i];
 
 		/* enable interrupt from domains */
 		count = hfi_error_domain[i].count;
 		csr = hfi_error_domain[i].csr;
 		for (j = 0; j < count; j++)
 			write_csr(dd, csr[j].err_en_host, val);
+
+		/* if intx interrupt, we continue here */
+		if (!dd->num_irq_entries) {
+			/* mark as in use */
+			me->arg = &hfi_error_domain[i];
+			continue;
+		}
+
+		dd_dev_info(dd, "request for msix IRQ %d:%d\n",
+			    irq, dd->msix[irq].vector);
+		ret = request_irq(dd->msix[irq].vector, hfi_irq_errd_handler, 0,
+				  "hfi_irq_errd", me);
+		if (ret) {
+			dd_dev_err(dd, "msix IRQ[%d] request failed %d\n",
+				   irq, ret);
+			/* IRQ cleanup done in hfi_pci_dd_free() */
+			return ret;
+		}
+		/* mark as in use */
+		me->arg = &hfi_error_domain[i];
 	}
 
 	return 0;
