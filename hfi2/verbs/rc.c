@@ -1465,6 +1465,22 @@ static struct rvt_swqe *do_rc_completion(struct rvt_qp *qp,
 	return wqe;
 }
 
+static inline void rc_deferred_send(struct hfi_ctx *ctx, struct rvt_qp *qp)
+{
+	/* FXRTODO: Implement deferred send, but first verify is worthwhile */
+#if 0
+	if (list_empty(&qp->rspwait)) {
+		qp->r_flags |= RVT_R_RSP_SEND;
+		atomic_inc(&qp->refcount);
+		list_add_tail(&qp->rspwait,
+			      &ctx->wait_list);
+	}
+#else
+	/* Schedule the send workqueue */
+	hfi2_schedule_send(qp);
+#endif
+}
+
 /**
  * do_rc_ack - process an incoming RC ACK
  * @qp: the QP the ACK came in on
@@ -1539,12 +1555,7 @@ static int do_rc_ack(struct rvt_qp *qp, u32 aeth, u32 psn, int opcode,
 			if (!(qp->r_flags & RVT_R_RDMAR_SEQ)) {
 				qp->r_flags |= RVT_R_RDMAR_SEQ;
 				restart_rc(qp, qp->s_last_psn + 1, 0);
-				if (list_empty(&qp->rspwait)) {
-					qp->r_flags |= RVT_R_RSP_SEND;
-					atomic_inc(&qp->refcount);
-					list_add_tail(&qp->rspwait,
-						      &ctx->wait_list);
-				}
+				rc_deferred_send(ctx, qp);
 			}
 			/*
 			 * No need to process the ACK/NAK since we are
@@ -1723,11 +1734,7 @@ static void rdma_seq_err(struct rvt_qp *qp, struct hfi2_ibport *ibp,
 	ibp->n_rdma_seq++;
 	qp->r_flags |= RVT_R_RDMAR_SEQ;
 	restart_rc(qp, qp->s_last_psn + 1, 0);
-	if (list_empty(&qp->rspwait)) {
-		qp->r_flags |= RVT_R_RSP_SEND;
-		atomic_inc(&qp->refcount);
-		list_add_tail(&qp->rspwait, &ctx->wait_list);
-	}
+	rc_deferred_send(ctx, qp);
 }
 
 /**
@@ -2176,8 +2183,8 @@ static inline void update_ack_queue(struct rvt_qp *qp, unsigned n)
 #ifdef HFI_VERBS_TEST
 /* In  Percentage 0 - 100 */
 #define MIN_DROP_RATE	0
-#define MAX_DROP_RATE	50
-#define MAX_DROPS	6
+#define MAX_DROP_RATE	40
+#define MAX_DROPS	4
 bool hfi2_drop_packet(void)
 {
 	static bool prev_drop;
