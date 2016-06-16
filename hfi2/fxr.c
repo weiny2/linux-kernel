@@ -104,6 +104,7 @@
 #include "verbs/packet.h"
 #include "platform.h"
 #include "counters.h"
+#include "trace.h"
 
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
@@ -2194,6 +2195,8 @@ static irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
 
 	/* FXRTODO: remove this acking after simics bug fixed */
 	hfi_ack_interrupt(me);
+
+	trace_hfi2_irq_eq(me);
 
 	/* wake head waiter for each EQ using this IRQ */
 	read_lock(&me->irq_wait_lock);

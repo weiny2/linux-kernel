@@ -80,6 +80,7 @@
 #include "fxr/fxr_linkmux_tp_defs.h"
 #include "fxr/fxr_linkmux_fpc_defs.h"
 #include "fxr/fxr_linkmux_cm_defs.h"
+#include "trace.h"
 
 /*
  * error domain and error event processing structure.
@@ -289,6 +290,8 @@ irqreturn_t hfi_irq_errd_handler(int irq, void *dev_id)
 
 	/* FXRTODO: remove this acking after simics bug fixed */
 	hfi_ack_interrupt(me);
+
+	trace_hfi2_irq_err(me);
 
 	val = 0;
 

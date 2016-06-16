@@ -66,6 +66,7 @@
 #include "link.h"
 #include "firmware.h"
 #include "timesync.h"
+#include "trace.h"
 
 #define WAIT_TILL_8051_LINKUP 1000
 
@@ -1880,6 +1881,8 @@ irqreturn_t hfi_irq_mnh_handler(int irq, void *dev_id)
 
 	/* FXRTODO: remove this acking after simics bug fixed */
 	hfi_ack_interrupt(me);
+
+	trace_hfi2_irq_phy(me);
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);

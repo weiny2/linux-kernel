@@ -126,43 +126,35 @@ TRACE_EVENT(hfi2_rcvhdr,
 	    )
 );
 
-#if 0
-TRACE_EVENT(hfi1_receive_interrupt,
-	    TP_PROTO(struct hfi_devdata *dd, u32 ctxt),
-	    TP_ARGS(dd, ctxt),
-	    TP_STRUCT__entry(
-		DD_DEV_ENTRY(dd)
-		__field(u32, ctxt)
-		__field(u8, slow_path)
-		__field(u8, dma_rtail)
-	    ),
-	    TP_fast_assign(
-		DD_DEV_ASSIGN(dd);
-		__entry->ctxt = ctxt;
-		if (dd->rcd[ctxt]->do_interrupt ==
-		    &handle_receive_interrupt) {
-			__entry->slow_path = 1;
-			__entry->dma_rtail = 0xFF;
-		} else if (dd->rcd[ctxt]->do_interrupt ==
-			&handle_receive_interrupt_dma_rtail){
-			__entry->dma_rtail = 1;
-			__entry->slow_path = 0;
-		} else if (dd->rcd[ctxt]->do_interrupt ==
-			 &handle_receive_interrupt_nodma_rtail) {
-			__entry->dma_rtail = 0;
-			__entry->slow_path = 0;
-		}
-	    ),
-	    TP_printk(
-		"[%s] ctxt %d SlowPath: %d DmaRtail: %d",
-		__get_str(dev),
-		__entry->ctxt,
-		__entry->slow_path,
-		__entry->dma_rtail
-	)
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM hfi2_irq
+
+DECLARE_EVENT_CLASS(hfi2_irq,
+		    TP_PROTO(struct hfi_irq_entry *me),
+		    TP_ARGS(me),
+		    TP_STRUCT__entry(
+			    __field(u32, unit)
+			    __field(u32, src)
+		    ),
+		    TP_fast_assign(
+			    __entry->unit = me->dd->unit;
+			    __entry->src = me->intr_src;
+		    ),
+		    TP_printk("[%d] src: %d", __entry->unit, __entry->src)
 );
 
-#endif
+DEFINE_EVENT(hfi2_irq, hfi2_irq_eq,
+	     TP_PROTO(struct hfi_irq_entry *me),
+	     TP_ARGS(me)
+);
+DEFINE_EVENT(hfi2_irq, hfi2_irq_phy,
+	     TP_PROTO(struct hfi_irq_entry *me),
+	     TP_ARGS(me)
+);
+DEFINE_EVENT(hfi2_irq, hfi2_irq_err,
+	     TP_PROTO(struct hfi_irq_entry *me),
+	     TP_ARGS(me)
+);
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_tx
