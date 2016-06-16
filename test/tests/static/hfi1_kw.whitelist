@@ -205,5 +205,19 @@ Current status 'Analyze'
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
-Summary: 38 Local
-38 Total Issue(s)
+---------------------------------------------------------------------------
+100 (Local) /nfs/sc/disks/fabric_work/sanchez1/tmp2/wfr-linux-devel_affinity/drivers/infiniband/hw/hfi1/affinity.c:346 MLK.MIGHT (2:Error) Analyze
+Possible memory leak. Dynamic memory stored in 'entry' allocated through function 'node_affinity_allocate' at line 252 can be lost at line 346
+  * affinity.c:251: !entry is true
+  * affinity.c:252: Dynamic memory stored in 'entry' is allocated by calling function 'node_affinity_allocate'.
+    * affinity.c:182: 'entry' is allocated by function 'kzalloc'.
+      * slab.h:622: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
+    * affinity.c:183: !entry is false
+  * affinity.c:253: !entry is false
+  * affinity.c:299: Break statement causes loop exit.
+    * affinity.c:289: See loop head here.
+  * affinity.c:346: Dynamic memory stored in '&entry->node' is lost.
+Current status 'Analyze'
+
+Summary: 39 Local
+39 Total Issue(s)
