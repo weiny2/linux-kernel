@@ -1860,7 +1860,7 @@ static void hfi_handle_host_irq(struct hfi_pportdata *ppd)
 	/* TODO: take care other interrupts */
 }
 
-irqreturn_t irq_mnh_handler(int irq, void *dev_id)
+irqreturn_t hfi_irq_mnh_handler(int irq, void *dev_id)
 {
 	struct hfi_irq_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
