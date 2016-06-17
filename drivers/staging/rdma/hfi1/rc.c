@@ -993,6 +993,7 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd,
 		 * the ACK is sent ahead of other outgoing packets.
 		 */
 		hfi1_queue_rc_ack(qp, is_fecn);
+		return;
 	}
 	trace_ack_output_ibhdr(dd_from_ibdev(qp->ibqp.device), &opa_hdr);
 
