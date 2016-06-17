@@ -149,6 +149,16 @@ struct hfi_error_entry {
 #define HFI_TP1_IRQ		277
 #define HFI_PMON_IRQ		278
 
+/* macros for error bits in FPC_ERR_STS reg */
+/* UnCorrectable Error */
+#define FPC_UC_ERR	13
+/* Link Error */
+#define FPC_LINK_ERR	19
+/* FmConfig Error */
+#define FPC_FMC_ERR	54
+/* RcvPort Error */
+#define FPC_RP_ERR	55
+
 /*
  * When HFILM_ERR is added, this will be 22
  */
@@ -337,21 +347,22 @@ int hfi_setup_errd_irq(struct hfi_devdata *dd)
 	 */
 	hfi_at_error[0].events[11].action = hfi_handle_pgrrsp_error;
 
-	/*
-	 * set FPC error event handler:
-	 * 13: uncorrectable_err
-	 * 19: link_err
-	 * 54: fmconfig_err
-	 * 55: rcvport_err
-	 */
-	hfi_fpc0_error[0].events[13].action = hfi_handle_fpc_error;
-	hfi_fpc0_error[0].events[19].action = hfi_handle_fpc_error;
-	hfi_fpc0_error[0].events[54].action = hfi_handle_fpc_error;
-	hfi_fpc0_error[0].events[55].action = hfi_handle_fpc_error;
-	hfi_fpc1_error[0].events[13].action = hfi_handle_fpc_error;
-	hfi_fpc1_error[0].events[19].action = hfi_handle_fpc_error;
-	hfi_fpc1_error[0].events[54].action = hfi_handle_fpc_error;
-	hfi_fpc1_error[0].events[55].action = hfi_handle_fpc_error;
+	hfi_fpc0_error[0].events[FPC_UC_ERR].action =
+				hfi_handle_fpc_uncorrectable_error;
+	hfi_fpc0_error[0].events[FPC_LINK_ERR].action =
+				hfi_handle_fpc_link_error;
+	hfi_fpc0_error[0].events[FPC_FMC_ERR].action =
+				hfi_handle_fpc_fmconfig_error;
+	hfi_fpc0_error[0].events[FPC_RP_ERR].action =
+				hfi_handle_fpc_rcvport_error;
+	hfi_fpc1_error[0].events[FPC_UC_ERR].action =
+				hfi_handle_fpc_uncorrectable_error;
+	hfi_fpc1_error[0].events[FPC_LINK_ERR].action =
+				hfi_handle_fpc_link_error;
+	hfi_fpc1_error[0].events[FPC_FMC_ERR].action =
+				hfi_handle_fpc_fmconfig_error;
+	hfi_fpc1_error[0].events[FPC_RP_ERR].action =
+				hfi_handle_fpc_rcvport_error;
 
 	/* Setup interrupt handler for each IRQ */
 

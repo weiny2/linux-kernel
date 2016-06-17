@@ -3395,6 +3395,7 @@ static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 	struct _port_ei *rsp;
 	struct opa_port_error_info_msg *req;
 	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
 	u64 port_mask;
 	u32 num_ports;
 	unsigned long port_num;
@@ -3436,37 +3437,38 @@ static int pma_get_opa_errorinfo(struct opa_pma_mad *pmp,
 
 	/*
 	 * FXRTODO: err_info fields needs to be filled with values
-	 * in FZC error handler
+	 * for ExcessiveBufferOverrun, port_xmit_constraint_error
+	 * and port_rcv_constraint_error
 	 */
 	rsp->port_rcv_ei.status_and_code =
-		dd->err_info_rcvport.status_and_code;
+		ppd->err_info_rcvport.status_and_code;
 	memcpy(&rsp->port_rcv_ei.ei.ei1to12.packet_flit1,
-	       &dd->err_info_rcvport.packet_flit1, sizeof(u64));
+	       &ppd->err_info_rcvport.packet_flit1, sizeof(u64));
 	memcpy(&rsp->port_rcv_ei.ei.ei1to12.packet_flit2,
-	       &dd->err_info_rcvport.packet_flit2, sizeof(u64));
+	       &ppd->err_info_rcvport.packet_flit2, sizeof(u64));
 
 	/* ExcessiverBufferOverrunInfo */
 	rsp->excessive_buffer_overrun_ei.status_and_sc |= 0x80;
 
 	rsp->port_xmit_constraint_ei.status =
-		dd->err_info_xmit_constraint.status;
+		ppd->err_info_xmit_constraint.status;
 	rsp->port_xmit_constraint_ei.pkey =
-		cpu_to_be16(dd->err_info_xmit_constraint.pkey);
+		cpu_to_be16(ppd->err_info_xmit_constraint.pkey);
 	rsp->port_xmit_constraint_ei.slid =
-		cpu_to_be32(dd->err_info_xmit_constraint.slid);
+		cpu_to_be32(ppd->err_info_xmit_constraint.slid);
 
 	rsp->port_rcv_constraint_ei.status =
-		dd->err_info_rcv_constraint.status;
+		ppd->err_info_rcv_constraint.status;
 	rsp->port_rcv_constraint_ei.pkey =
-		cpu_to_be16(dd->err_info_rcv_constraint.pkey);
+		cpu_to_be16(ppd->err_info_rcv_constraint.pkey);
 	rsp->port_rcv_constraint_ei.slid =
-		cpu_to_be32(dd->err_info_rcv_constraint.slid);
+		cpu_to_be32(ppd->err_info_rcv_constraint.slid);
 
 	/* UncorrectableErrorInfo */
-	rsp->uncorrectable_ei.status_and_code = dd->err_info_uncorrectable;
+	rsp->uncorrectable_ei.status_and_code = ppd->err_info_uncorrectable;
 
 	/* FMConfigErrorInfo */
-	rsp->fm_config_ei.status_and_code = dd->err_info_fmconfig;
+	rsp->fm_config_ei.status_and_code = ppd->err_info_fmconfig;
 
 	if (resp_len)
 		*resp_len += response_data_size;
@@ -3614,6 +3616,7 @@ static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
 	struct _port_ei *rsp;
 	struct opa_port_error_info_msg *req;
 	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
+	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
 	u64 port_mask;
 	u32 num_ports;
 	unsigned long port_num;
@@ -3651,25 +3654,25 @@ static int pma_set_opa_errorinfo(struct opa_pma_mad *pmp,
 	/* PortRcvErrorInfo */
 	if (error_info_select & ES_PORT_RCV_ERROR_INFO)
 		/* turn off status bit */
-		dd->err_info_rcvport.status_and_code &= ~OPA_EI_STATUS_SMASK;
+		ppd->err_info_rcvport.status_and_code &= ~OPA_EI_STATUS_SMASK;
 
 	/* ExcessiverBufferOverrunInfo */
 
 	if (error_info_select & ES_PORT_XMIT_CONSTRAINT_ERROR_INFO)
-		dd->err_info_xmit_constraint.status &= ~OPA_EI_STATUS_SMASK;
+		ppd->err_info_xmit_constraint.status &= ~OPA_EI_STATUS_SMASK;
 
 	if (error_info_select & ES_PORT_RCV_CONSTRAINT_ERROR_INFO)
-		dd->err_info_rcv_constraint.status &= ~OPA_EI_STATUS_SMASK;
+		ppd->err_info_rcv_constraint.status &= ~OPA_EI_STATUS_SMASK;
 
 	/* UncorrectableErrorInfo */
 	if (error_info_select & ES_UNCORRECTABLE_ERROR_INFO)
 		/* turn off status bit */
-		dd->err_info_uncorrectable &= ~OPA_EI_STATUS_SMASK;
+		ppd->err_info_uncorrectable &= ~OPA_EI_STATUS_SMASK;
 
 	/* FMConfigErrorInfo */
 	if (error_info_select & ES_FM_CONFIG_ERROR_INFO)
 		/* turn off status bit */
-		dd->err_info_fmconfig &= ~OPA_EI_STATUS_SMASK;
+		ppd->err_info_fmconfig &= ~OPA_EI_STATUS_SMASK;
 
 	if (resp_len)
 		*resp_len += sizeof(*req);

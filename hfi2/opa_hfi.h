@@ -672,6 +672,8 @@ struct hfi_pportdata {
 	/* for the interrupt caused by "Receive a back channel msg using LCB idle
 	   protocol HOST Type SMA" */
 	struct work_struct sma_message_work;
+	/* for LinkUp -> LinkDown -> LinkUp */
+	struct work_struct link_bounce_work;
 	/* per port counter values */
 	u64 *portcntrs;
 
@@ -685,6 +687,12 @@ struct hfi_pportdata {
 	u16 update_interval;
 	u8 current_clock_id;
 	u8 ptp_index;
+	struct err_info_rcvport err_info_rcvport;
+	struct err_info_constraint err_info_rcv_constraint;
+	struct err_info_constraint err_info_xmit_constraint;
+	u8 err_info_uncorrectable;
+	u8 err_info_fmconfig;
+
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *hfi_port_dbg;
@@ -756,11 +764,6 @@ struct hfi_devdata {
 	struct hfi_ctx priv_ctx;
 	struct hfi_cq priv_tx_cq;
 	struct hfi_cq priv_rx_cq;
-	struct err_info_rcvport err_info_rcvport;
-	struct err_info_constraint err_info_rcv_constraint;
-	struct err_info_constraint err_info_xmit_constraint;
-	u8 err_info_uncorrectable;
-	u8 err_info_fmconfig;
 
 	/* Command Queue State */
 	struct idr cq_pair;

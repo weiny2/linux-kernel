@@ -59,6 +59,7 @@
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include "fxr/fxr_top_defs.h"
+#include "fxr/fxr_linkmux_fpc_defs.h"
 #include "fxr/fxr_fc_defs.h"
 #include "fxr/mnh_8051_defs.h"
 #include "opa_hfi.h"
@@ -456,6 +457,17 @@ static void mnh_start(const struct hfi_pportdata *ppd)
 done:
 	spin_unlock_irqrestore(&dd->dc8051_lock, flags);
 #endif
+}
+
+static void handle_link_bounce(struct work_struct *work)
+{
+	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
+						  link_bounce_work);
+
+	ppd_dev_info(ppd, "bouncing link\n");
+	hfi_set_link_state(ppd, HLS_DN_OFFLINE);
+	/* call tune_serdes later when required */
+	hfi_start_link(ppd);
 }
 
 /*
@@ -1881,65 +1893,248 @@ irqreturn_t hfi_irq_mnh_handler(int irq, void *dev_id)
 /*
  * FPC error handling.
  */
-void hfi_handle_fpc_error(struct hfi_devdata *dd, u64 reg, char *fpc_name)
+static const char * const fm_config_txt[] = {
+[0] =
+	"BadHeadDist: Distance violation between two head flits",
+[1] =
+	"BadTailDist: Distance violation between two tail flits",
+[2] =
+	"BadCtrlDist: Distance violation between two credit control flits",
+[3] =
+	"BadCrdAck: Credits return for unsupported VL",
+[4] =
+	"UnsupportedVLMarker: Received VL Marker",
+[5] =
+	"BadPreempt: Exceeded the preemption nesting level",
+[6] =
+	"BadControlFlit: Received unsupported control flit",
+/* no 7 */
+[8] =
+	"UnsupportedVLMarker: Received VL Marker for unconfigured or disabled VL",
+};
+
+static const char * const port_rcv_txt[] = {
+[1] =
+	"BadPktLen: Illegal PktLen",
+[2] =
+	"PktLenTooLong: Packet longer than PktLen",
+[3] =
+	"PktLenTooShort: Packet shorter than PktLen",
+[4] =
+	"BadSLID: Illegal SLID (0, using multicast as SLID)",
+[5] =
+	"BadDLID: Illegal DLID (0, doesn't match HFI)",
+[6] =
+	"BadL2: Unsupported L2 Type",
+[7] =
+	"BadSC: Invalid SC",
+[9] =
+	"Headless: Tail or Body before Head",
+[11] =
+	"PreemptError: Preempting with same VL",
+[12] =
+	"PreemptVL15: Interleaving a VL15 packet between two Gen1 devices",
+[13] =
+	"BadVLMarker: SC Marker for an inactive VL",
+[14] =
+	"PreemptL2Head: Interleaving of the L2 Header"
+};
+
+#define OPA_LDR_FMCONFIG_OFFSET 16
+#define OPA_LDR_PORTRCV_OFFSET 0
+
+void hfi_handle_fpc_uncorrectable_error(struct hfi_devdata *dd, u64 reg,
+					 char *fpc_name)
 {
-#if 0
-/* TODO: Vennila will work on this function:
-   1. reg = FXR_FPC_ERR_STS value
-   2. for port 1: fpc_name="FPC0"
-   3. for port 2: fpc_name="FPC1"
- */
-
-	struct hfi_irq_entry *me = dev_id;
-	struct hfi_devdata *dd = me->dd;
 	struct hfi_pportdata *ppd;
-	u64 reg, info, hdr0, hdr1;
-	u8 port;
+	u64 info;
 
-	for (port = 1; port <= dd->num_pports; port++) {
-		ppd = to_hfi_ppd(dd, port);
-		reg = hfi_read_lm_fpc_csr(ppd, FXR_FPC_ERR_STS);
-		if (reg & FXR_FPC_ERR_STS_UNCORRECTABLE_ERR_SMASK) {
-			if (!(dd->err_info_uncorrectable &
-				OPA_EI_STATUS_SMASK)) {
-				info = hfi_read_lm_fpc_csr(ppd,
-						FXR_FPC_UNCORRECTABLE_ERROR);
-				dd->err_info_uncorrectable = info
-							& OPA_EI_CODE_SMASK;
-				dd->err_info_uncorrectable |=
-							OPA_EI_STATUS_SMASK;
-			}
-		}
-		if (reg & FXR_FPC_ERR_STS_LINK_ERR_SMASK) {
-			if (ppd->link_downed < (u32)UINT_MAX)
-				ppd->link_downed++;
-		}
-		if (reg & FXR_FPC_ERR_STS_FMCONFIG_ERR_SMASK) {
-			if (!(dd->err_info_fmconfig & OPA_EI_STATUS_SMASK)) {
-			info = hfi_read_lm_fpc_csr(ppd, FXR_FPC_FMCONFIG_ERROR);
-			dd->err_info_fmconfig = info & OPA_EI_CODE_SMASK;
-			dd->err_info_fmconfig |= OPA_EI_STATUS_SMASK;
-			}
-		}
-		if (reg & FXR_FPC_ERR_STS_RCVPORT_ERR_SMASK) {
-			info = hfi_read_lm_fpc_csr(ppd,
-					FXR_FPC_PORTRCV_ERROR);
-			hdr0 = hfi_read_lm_fpc_csr(ppd,
-					FXR_FPC_ERR_INFO_PORTRCV_HDR0_A);
-			hdr1 = hfi_read_lm_fpc_csr(ppd,
-					FXR_FPC_ERR_INFO_PORTRCV_HDR1_A);
-			if (!(dd->err_info_rcvport.status_and_code &
-				OPA_EI_STATUS_SMASK)) {
-				dd->err_info_rcvport.status_and_code =
-					info & OPA_EI_CODE_SMASK;
-				dd->err_info_rcvport.status_and_code |=
-					OPA_EI_STATUS_SMASK;
-				dd->err_info_rcvport.packet_flit1 = hdr0;
-				dd->err_info_rcvport.packet_flit2 = hdr1;
-			}
-		}
+	if (!strcmp(fpc_name, "FPC0"))
+		ppd = to_hfi_ppd(dd, 1);
+	else if (!strcmp(fpc_name, "FPC1"))
+		ppd = to_hfi_ppd(dd, 2);
+	else {
+		dd_dev_err(dd, "fpc_uncorrectable_error: invalid fpc name: %s\n",
+			   fpc_name);
+		return;
 	}
-#endif
+	if (!(ppd->err_info_uncorrectable &
+		OPA_EI_STATUS_SMASK)) {
+		info = hfi_read_lm_fpc_csr(ppd,
+				FXR_FPC_ERR_UNCORRECTABLE_ERROR);
+		/* save the error code and set the status bit */
+		ppd->err_info_uncorrectable = info
+					& OPA_EI_CODE_SMASK;
+		ppd->err_info_uncorrectable |=
+					OPA_EI_STATUS_SMASK;
+	}
+}
+
+void hfi_handle_fpc_link_error(struct hfi_devdata *dd, u64 reg, char *fpc_name)
+{
+	struct hfi_pportdata *ppd;
+
+	if (!strcmp(fpc_name, "FPC0"))
+		ppd = to_hfi_ppd(dd, 1);
+	else if (!strcmp(fpc_name, "FPC1"))
+		ppd = to_hfi_ppd(dd, 2);
+	else {
+		dd_dev_err(dd, "fpc_link_error: invalid fpc name: %s\n",
+			   fpc_name);
+		return;
+	}
+	/* link_downed is reported as an error counter in pma */
+	if (ppd->link_downed < (u32)UINT_MAX)
+		ppd->link_downed++;
+}
+
+void hfi_handle_fpc_fmconfig_error(struct hfi_devdata *dd, u64 reg,
+				    char *fpc_name)
+{
+	struct hfi_pportdata *ppd;
+	const char *extra;
+	u64 info;
+	char buf[96];
+	u8 reason_valid = 1;
+	u8 lcl_reason = 0;
+	int do_bounce = 0;
+
+	if (!strcmp(fpc_name, "FPC0"))
+		ppd = to_hfi_ppd(dd, 1);
+	else if (!strcmp(fpc_name, "FPC1"))
+		ppd = to_hfi_ppd(dd, 2);
+	else {
+		dd_dev_err(dd, "fpc_fmconfig_error: invalid fpc name: %s\n",
+			   fpc_name);
+		return;
+	}
+	info = hfi_read_lm_fpc_csr(ppd, FXR_FPC_ERR_FMCONFIG_ERROR);
+	if (!(ppd->err_info_fmconfig & OPA_EI_STATUS_SMASK)) {
+		ppd->err_info_fmconfig = info & OPA_EI_CODE_SMASK;
+		ppd->err_info_fmconfig |= OPA_EI_STATUS_SMASK;
+	}
+	switch (info) {
+	case 0:
+	case 1:
+	case 2:
+	case 3:
+	case 4:
+	case 5:
+	case 6:
+		extra = fm_config_txt[info];
+		break;
+	case 8:
+		extra = fm_config_txt[info];
+		if (ppd->port_error_action &
+		    OPA_PI_MASK_FM_CFG_UNSUPPORTED_VL_MARKER) {
+			do_bounce = 1;
+			/*
+			 * lcl_reason cannot be derived from info
+			 * for this error
+			 */
+			lcl_reason =
+			  OPA_LINKDOWN_REASON_UNSUPPORTED_VL_MARKER;
+		}
+		break;
+	default:
+		reason_valid = 0;
+		snprintf(buf, sizeof(buf), "reserved%llu", info);
+		extra = buf;
+		break;
+	}
+
+	if (reason_valid && !do_bounce) {
+		do_bounce = ppd->port_error_action &
+				(1 << (OPA_LDR_FMCONFIG_OFFSET + info));
+		lcl_reason = info + OPA_LINKDOWN_REASON_BAD_HEAD_DIST;
+	}
+
+	/* just report this */
+	ppd_dev_info(ppd, "FPC Error: fmconfig error: %s\n", extra);
+	if (do_bounce) {
+		ppd_dev_info(ppd,
+			     "%s: PortErrorAction bounce\n", __func__);
+		hfi_set_link_down_reason(ppd, lcl_reason, 0,
+							lcl_reason);
+		queue_work(ppd->hfi_wq, &ppd->link_bounce_work);
+	}
+}
+
+void hfi_handle_fpc_rcvport_error(struct hfi_devdata *dd, u64 reg,
+				   char *fpc_name)
+{
+	struct hfi_pportdata *ppd;
+	u64 info, hdr0, hdr1;
+	const char *extra;
+	char buf[96];
+	u8 reason_valid = 1;
+	u8 lcl_reason = 0;
+	int do_bounce = 0;
+
+	if (!strcmp(fpc_name, "FPC0"))
+		ppd = to_hfi_ppd(dd, 1);
+	else if (!strcmp(fpc_name, "FPC1"))
+		ppd = to_hfi_ppd(dd, 2);
+	else {
+		dd_dev_err(dd, "fpc_rcvport_error: invalid fpc name: %s\n",
+			   fpc_name);
+		return;
+	}
+	info = hfi_read_lm_fpc_csr(ppd,
+				FXR_FPC_ERR_PORTRCV_ERROR);
+	hdr0 = hfi_read_lm_fpc_csr(ppd,
+				FXR_FPC_ERR_INFO_PORTRCV_HDR0_A);
+	hdr1 = hfi_read_lm_fpc_csr(ppd,
+				FXR_FPC_ERR_INFO_PORTRCV_HDR1_A);
+	if (!(ppd->err_info_rcvport.status_and_code &
+		OPA_EI_STATUS_SMASK)) {
+		ppd->err_info_rcvport.status_and_code =
+			info & OPA_EI_CODE_SMASK;
+		ppd->err_info_rcvport.status_and_code |=
+			OPA_EI_STATUS_SMASK;
+		ppd->err_info_rcvport.packet_flit1 = hdr0;
+		ppd->err_info_rcvport.packet_flit2 = hdr1;
+	}
+	switch (info) {
+	case 1:
+	case 2:
+	case 3:
+	case 4:
+	case 5:
+	case 6:
+	case 7:
+	case 9:
+	case 11:
+	case 12:
+	case 13:
+	case 14:
+		extra = port_rcv_txt[info];
+		break;
+	default:
+		reason_valid = 0;
+		snprintf(buf, sizeof(buf), "reserved%lld", info);
+		extra = buf;
+		break;
+	}
+
+	if (reason_valid && !do_bounce) {
+		do_bounce = ppd->port_error_action &
+				(1 << (OPA_LDR_PORTRCV_OFFSET + info));
+		lcl_reason = info + OPA_LINKDOWN_REASON_RCV_ERROR_0;
+	}
+
+	/* just report this */
+	ppd_dev_info(ppd, "FPC Error: PortRcv error: %s\n", extra);
+	ppd_dev_info(ppd, "           hdr0 0x%llx, hdr1 0x%llx\n",
+		    hdr0, hdr1);
+	if (do_bounce) {
+		ppd_dev_info(ppd,
+			     "%s: PortErrorAction bounce\n", __func__);
+		hfi_set_link_down_reason(ppd, lcl_reason, 0,
+							lcl_reason);
+		queue_work(ppd->hfi_wq, &ppd->link_bounce_work);
+	}
+
 }
 
 /*
@@ -2083,6 +2278,7 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 		INIT_WORK(&ppd->link_vc_work, handle_verify_cap);
 		INIT_WORK(&ppd->link_up_work, handle_link_up);
 		INIT_WORK(&ppd->link_down_work, handle_link_down);
+		INIT_WORK(&ppd->link_bounce_work, handle_link_bounce);
 		INIT_WORK(&ppd->sma_message_work, handle_sma_message);
 		/* TODO: adjust 0 for max_active */
 		ppd->hfi_wq = alloc_workqueue("hfi2_%d_%d",
