@@ -62,13 +62,13 @@ fi
 
 if [ $only_load_driver ]; then
 	cd opa-headers.git/test
-	./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad
+	python -u ./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad
 	exit 0
 fi
 
 # run default tests
 pushd opa-headers.git/test
-./harness.py --nodelist=viper0,viper1 --type=${test_type} | tee /tmp/${myname}.$$
+python -u ./harness.py --nodelist=viper0,viper1 --type=${test_type} | tee /tmp/${myname}.$$
 popd
 res=0
 if grep --quiet "\[FAIL\]" /tmp/${myname}.$$; then
@@ -76,7 +76,7 @@ if grep --quiet "\[FAIL\]" /tmp/${myname}.$$; then
 	res=255
 else
 	pushd opa-headers.git/test
-	./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad | tee -a /tmp/${myname}.$$
+	python -u ./harness.py --nodelist=viper0,viper1 --testlist=ModuleLoad | tee -a /tmp/${myname}.$$
 	popd
 	if grep --quiet "\[FAIL\]" /tmp/${myname}.$$; then
 		echo fail on ModuleReload of harness.

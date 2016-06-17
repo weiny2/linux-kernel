@@ -122,7 +122,7 @@ fi
 
 # run harness
 pushd opa-headers.git/test
-./harness.py --nodelist=viper0,viper1 --type=${test_type}
+python -u ./harness.py --nodelist=viper0,viper1 --type=${test_type}
 res=$?
 popd
 if [ ${res} != 0 ]; then
