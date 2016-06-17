@@ -6,3 +6,4 @@
 	1	0	file_ops.c
 	0	4	verbs_mcast.c
 	0	1	user_exp_rcv.c
+	0	1	affinity.c
