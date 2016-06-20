@@ -39,6 +39,7 @@ def main():
     host2 = test_info.get_host_record(1)
     print host2
 
+    ext_lid = test_info.get_ext_lid()
     ################
     # body of test #
     ################
@@ -58,7 +59,10 @@ def main():
             else:
                 dev = "hfi1_0"
 	    for test_port in test_ports:
-		cmd = "ib_atomic_bw -m 4096 -d %s -n 5 -u 21 -p %d -A %s" % (dev, test_port, op)
+		if ext_lid:
+		    cmd = "ib_atomic_bw -m 4096 -d %s -n 5 -u 21 -p %d -A %s -x 1" % (dev, test_port, op)
+	        else:
+		    cmd = "ib_atomic_bw -m 4096 -d %s -n 5 -u 21 -p %d -A %s" % (dev, test_port, op)
 		(err, out) = do_ssh(host1, cmd)
 		if err:
 			RegLib.test_log(0, "Child SSH exit status bad")
@@ -86,7 +90,11 @@ def main():
             dev = "qib0"
         else:
             dev = "hfi1_0"
-        cmd = "ib_atomic_bw -m 4096 -d %s -n 5 -u 21 -p %d -A %s %s" % (dev, test_port, op,
+	if ext_lid:
+            cmd = "ib_atomic_bw -m 4096 -d %s -n 5 -u 21 -p %d -A %s -x 1 %s" % (dev, test_port, op,
+                                                                server_name)
+        else:
+            cmd = "ib_atomic_bw -m 4096 -d %s -n 5 -u 21 -p %d -A %s %s" % (dev, test_port, op,
                                                                 server_name)
         (err, out) = do_ssh(host2, cmd)
         if err:

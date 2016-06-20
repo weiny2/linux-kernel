@@ -442,6 +442,7 @@ class TestInfo:
     np = "6"
     mpiverbs_path = ""
     mpipsm_path = ""
+    ext_lid = False
 
     def get_hfi_src(self):
         return self.hfi_src
@@ -587,6 +588,8 @@ class TestInfo:
         parser.add_option("--np", dest="np",
                           help="Number of processes.",
                           default="6")
+        parser.add_option("--extlid", action="store_true", dest="ext_lid",
+                          help="Run with extended LIDs")
 
         (options, args) = parser.parse_args()
 
@@ -749,6 +752,9 @@ class TestInfo:
         if options.np:
             self.np = options.np
 
+        if options.ext_lid:
+            self.ext_lid = options.ext_lid
+
         self.perf_path = options.perf_path
 
     def get_host_list(self):
@@ -884,4 +890,7 @@ class TestInfo:
 
     def get_perf_dir(self):
         return self.perf_dir
+
+    def get_ext_lid(self):
+        return self.ext_lid
 

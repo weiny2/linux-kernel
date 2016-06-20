@@ -39,6 +39,7 @@ def main():
     host2 = test_info.get_host_record(1)
     print host2
 
+    ext_lid = test_info.get_ext_lid()
     ################
     # body of test #
     ################
@@ -52,7 +53,10 @@ def main():
             dev = "qib0"
         else:
             dev = "hfi1_0"
-        cmd = "ib_send_lat -d %s -c UD -n 5 -p %d" % (dev, test_port)
+	if ext_lid:
+            cmd = "ib_send_lat -d %s -c UD -n 5 -p %d -x 1" % (dev, test_port)
+        else:
+            cmd = "ib_send_lat -d %s -c UD -n 5 -p %d" % (dev, test_port)
         (err, out) = do_ssh(host1, cmd)
         if err:
             RegLib.test_log(0, "Child SSH exit status bad")
@@ -70,7 +74,10 @@ def main():
         dev = "qib0"
     else:
         dev = "hfi1_0"
-    cmd = "ib_send_lat -d %s -c UD -n 5 -p %d %s" % (dev, test_port, server_name)
+    if ext_lid:
+        cmd = "ib_send_lat -d %s -c UD -n 5 -p %d -x 1 %s" % (dev, test_port, server_name)
+    else:
+        cmd = "ib_send_lat -d %s -c UD -n 5 -p %d %s" % (dev, test_port, server_name)
     (err, out) = do_ssh(host2, cmd)
     if err:
         RegLib.test_log(0, "Error on client")

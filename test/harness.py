@@ -342,8 +342,95 @@ test_list = [
       "desc" : "Run the Adaptive PIO regression tests"
     },
 
-]
+    #Extended LID tests
+    #TODO: Following tests will be enabled soon
+    #IbSendBwRC-badSL
+    #Adaptive-PIO(needs updated rc_test)
+    { "test_name" : "ModuleLoad-ext",
+      "test_exe" : "LoadModule.py",
+      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC% --sm %SM% --extlid",
+      "type" : "extlid",
+      "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
+    },
 
+    # IB Send Lat test
+    { "test_name" : "IbSendLat-Verbs-ext",
+      "test_exe" : "IbSendLat.py",
+      "args" : "--nodelist %HOST[2]% --extlid",
+      "type" : "extlid",
+      "desc" : "Run ib_send_lat for 5 iterations.",
+    },
+
+    { "test_name" : "IbSendBwRC-Verbs-ext",
+      "test_exe" : "IbSendBwRC.py",
+      "args" : "--nodelist %HOST[2]% --extlid",
+      "type" : "extlid",
+      "desc" : "Run ib_send_bw for 5 iterations with various sizes using RC.",
+    },
+
+    { "test_name" : "IbWriteBwRC-Verbs-ext",
+      "test_exe" : "IbWriteBwRC.py",
+      "args" : "--nodelist %HOST[2]% --extlid",
+      "type" : "extlid",
+      "desc" : "Run ib_write_bw for 5 iterations with various sizes using RC.",
+    },
+
+    { "test_name" : "IbReadBwRC-Verbs-ext",
+      "test_exe" : "IbReadBwRC.py",
+      "args" : "--nodelist %HOST[2]% --extlid",
+      "type" : "extlid",
+      "desc" : "Run ib_read_bw for 5 iterations with various sizes using RC.",
+    },
+
+    { "test_name" : "IbAtomicBw-Verbs-ext",
+      "test_exe" : "IbAtomicBw.py",
+      "args" : "--nodelist %HOST[2]% --extlid",
+      "type" : "extlid",
+      "desc" : "Run ib_atomic_bw for 5 iterations with the two RC atomic operations.",
+    },
+
+    { "test_name" : "IPoIB-Verbs-ext",
+      "test_exe" : "IpoibPing.py",
+      "args" : "--nodelist %HOST[2]% --extlid",
+      "type" : "extlid",
+      "desc" : "Run ping for 5 packets using ipoib.",
+    },
+
+    { "test_name" : "IbSendBwRC-8MB-ext",
+      "test_exe" : "IbSendBwRC-a.py",
+      "args" : "--nodelist %HOST[2]% --extlid",
+      "type" : "extlid",
+      "desc" : "Run ib_send_bw for 16 iterations using sizes up to 2^23 using RC.",
+    },
+
+    { "test_name" : "IPoIB-Qperf-ext",
+      "test_exe" : "IpoibQperf.py",
+      "args" : "--nodelist %HOST[2]% --extlid",
+      "type" : "extlid",
+      "desc" : "Run qperf/tcp_bw for 8 to 64 bytes.",
+    },
+
+    { "test_name" : "OpcodeCounters-ext",
+      "test_exe" : "OpcodeCounters.py",
+      "args" : "--nodelist %HOST[2]% --extlid",
+      "type" : "extlid",
+      "desc" : "Run test opcode counters after quick tests have been run.",
+    },
+
+    { "test_name" : "Loopback-Test-ext",
+      "test_exe" : "Loopback.py",
+      "args" : "--nodelist %HOST[1]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC% --psm %PSM_LIB% --psmopts %PSM_OPTS% --args \"-L 2 -M 2 -w 3 -m 1048576 -z\" --extlid",
+      "type" : "extlid",
+      "desc" : "Test loopback. LCB on Simics, Serdes on FPGA, both on ASIC."
+    },
+
+    { "test_name" : "RestoreSanity-ext",
+      "test_exe" : "LoadModule.py",
+      "args" : "--nodelist %HOST[2]% --hfisrc %HFI_SRC% --linuxsrc %LINUX_SRC% --sm %SM%",
+      "type" : "extlid",
+      "desc" : "Load the hfi.ko on 2 nodes, restart opensm and make sure active state is reached"
+    },
+]
 
 # Collect CLI args
 test_info = RegLib.TestInfo()

@@ -48,6 +48,10 @@ def reload_module(hostlist, src=None, opts=[]):
             if opts[x]:
                 o.append(" ".join(["%s=%s" % (k, v) for k, v in opts[x].items()]))
         if o: optstr += " --modparm=\"%s\"" % " : ".join(o)
+    test_info = RegLib.TestInfo()
+    ext_lid = test_info.get_ext_lid;
+    if ext_lid:
+	optstr += " --extlid"
     cmd = os.path.join(topdir, "LoadModule.py") + " " + optstr
     RegLib.test_log(0, "Executing %s..." % cmd)
 

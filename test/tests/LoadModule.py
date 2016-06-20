@@ -63,6 +63,11 @@ def is_sm_active(host, sm):
 
     return ret
 
+def set_ext_lid(host):
+    cmd = "/usr/sbin/opaportconfig -L 0x10001"
+    out = do_ssh(host, cmd)
+    return
+
 def start_sm(host, sm):
     cmd = "/sbin/service %s start" % sm
     out = do_ssh(host, cmd)
@@ -140,6 +145,7 @@ def main():
     qib_flag = ""
     linux_src = test_info.get_linux_src()
     hfi_src = test_info.get_hfi_src()
+    ext_lid = test_info.get_ext_lid()
 
     if linux_src != "None":
         RegLib.test_log(0, "Running with full kernel at: %s" % linux_src)
@@ -265,12 +271,14 @@ def main():
 
     if sm == "local":
         RegLib.test_log(0, "Starting opafm on %s" % opafm_host.get_name())
-        start_sm(opafm_host, "opafm")
+	if ext_lid:
+	    set_ext_lid(opafm_host)
+	start_sm(opafm_host, "opafm")
         active = is_sm_active(opafm_host, "opafm")
         if active != 0:
             RegLib.test_fail("Could not start opafm")
     elif sm =="remote":
-        RegLib.test_log(0, "Not starting SM")  
+        RegLib.test_log(0, "Not starting SM")
     else:
         RegLib.test_pass("Driver loading. Ignoring SM")
 

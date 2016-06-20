@@ -35,6 +35,7 @@ def main():
     host2 = test_info.get_host_record(1)
     print host2
 
+    ext_lid = test_info.get_ext_lid()
     test_ports=[]
     for i in range(3):
 	test_ports.append(RegLib.get_test_port(host1, host2))
@@ -56,7 +57,10 @@ def main():
         else:
             dev = "hfi1_0"
 	for test_port in test_ports:
-	    cmd = "stdbuf -oL ib_send_bw -d %s -n 16 -u 21 -p %d -a 2>&1" % (dev, test_port)
+	    if ext_lid:
+	        cmd = "stdbuf -oL ib_send_bw -d %s -n 16 -u 21 -p %d -a -x 1 2>&1" % (dev, test_port)
+            else:
+	        cmd = "stdbuf -oL ib_send_bw -d %s -n 16 -u 21 -p %d -a 2>&1" % (dev, test_port)
             # This is the server let's display his output now
             err = host1.send_ssh(cmd, 0)
             RegLib.test_log(5, "Running cmd: " + cmd)
@@ -65,7 +69,7 @@ def main():
 	    else:
 		break
         sys.exit(err)
-    
+
     RegLib.test_log(0, "Waiting for socket to be listening")
     port_acquired=0
     for test_port in test_ports:
@@ -83,7 +87,10 @@ def main():
         dev = "qib0"
     else:
         dev = "hfi1_0"
-    cmd = "ib_send_bw -d %s -n 16 -u 21 -p %d -a %s 2>&1" % (dev, test_port, server_name)
+    if ext_lid:
+        cmd = "ib_send_bw -d %s -n 16 -u 21 -p %d -a -x 1 %s 2>&1" % (dev, test_port, server_name)
+    else:
+        cmd = "ib_send_bw -d %s -n 16 -u 21 -p %d -a %s 2>&1" % (dev, test_port, server_name)
     RegLib.test_log(0, "Running cmd: " + cmd)
     (err, out) = host2.send_ssh(cmd)
     if err:
