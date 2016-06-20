@@ -56,6 +56,7 @@
 #include <linux/pci.h>
 #include <linux/vmalloc.h>
 #include "../hfi_core.h"
+#include "../hfi_kclient.h"
 #include <rdma/hfi_tx.h>
 #include <rdma/hfi_rx.h>
 #include <rdma/hfi_args.h>
@@ -224,71 +225,6 @@ struct opa_netdev {
 	struct opa_ctx_info		def_ctx;
 	struct idr			vesw_idr[OPA2_MAX_NUM_PORTS];
 };
-
-/* TODO - delete and make common for all kernel clients */
-static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
-			 spinlock_t *cq_lock,
-			 struct opa_ev_assign *eq_alloc,
-			 struct hfi_eq *eq)
-{
-	u32 *eq_head_array, *eq_head_addr;
-	u64 *eq_entry = NULL;
-	int rc;
-
-	eq_alloc->base = (u64)vzalloc(eq_alloc->count * HFI_EQ_ENTRY_SIZE);
-	if (!eq_alloc->base)
-		return -ENOMEM;
-	eq_alloc->mode = OPA_EV_MODE_BLOCKING;
-	rc = ctx->ops->ev_assign(ctx, eq_alloc);
-	if (rc < 0) {
-		vfree((void *)eq_alloc->base);
-		goto err;
-	}
-	eq_head_array = ctx->eq_head_addr;
-	/* Reset the EQ SW head */
-	eq_head_addr = &eq_head_array[eq_alloc->ev_idx];
-	*eq_head_addr = 0;
-	eq->idx = eq_alloc->ev_idx;
-	eq->base = (void *)eq_alloc->base;
-	eq->count = eq_alloc->count;
-
-	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], OPA2_NET_TIMEOUT_MS,
-			  &eq_entry);
-	if (eq_entry) {
-		unsigned long flags;
-
-		spin_lock_irqsave(cq_lock, flags);
-		hfi_eq_advance(ctx, cq, &ctx->eq_zero[0], eq_entry);
-		spin_unlock_irqrestore(cq_lock, flags);
-	} else {
-		rc = -EIO;
-	}
-err:
-	return rc;
-}
-
-/* TODO - delete and make common for all kernel clients */
-static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
-			    spinlock_t *cq_lock, struct hfi_eq *eq)
-{
-	u64 *eq_entry = NULL, done;
-
-	ctx->ops->ev_release(ctx, 0, eq->idx, (u64)&done);
-	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], OPA2_NET_TIMEOUT_MS,
-			  &eq_entry);
-	if (eq_entry) {
-		unsigned long flags;
-
-		spin_lock_irqsave(cq_lock, flags);
-		hfi_eq_advance(ctx, cq, &ctx->eq_zero[0], eq_entry);
-		spin_unlock_irqrestore(cq_lock, flags);
-	}
-
-	vfree(eq->base);
-	eq->base = NULL;
-}
 
 /* Append a single socket buffer */
 static int opa2_vnic_append_skb(struct opa_ctx_info *ctx_i, int idx)
@@ -848,7 +784,7 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev, int ctx_num)
 	eq_alloc_tx.count = OPA2_NET_NUM_RX_BUFS;
 	eq_alloc_tx.cookie = ctx_i;
 	rc = _hfi_eq_alloc(ctx, rx, &ctx_i->rx_lock, &eq_alloc_tx,
-			   &ctx_i->eq_tx);
+			   &ctx_i->eq_tx, OPA2_NET_TIMEOUT_MS);
 	if (rc)
 		goto err2;
 	eq_alloc_rx.ni = HFI_NI_BYPASS;
@@ -857,7 +793,7 @@ static int opa2_vnic_init_ctx(struct opa_vnic_device *vdev, int ctx_num)
 	eq_alloc_rx.isr_cb = opa2_vnic_rx_isr_cb;
 	eq_alloc_rx.cookie = ctx_i;
 	rc = _hfi_eq_alloc(ctx, rx, &ctx_i->rx_lock, &eq_alloc_rx,
-			   &ctx_i->eq_rx);
+			   &ctx_i->eq_rx, OPA2_NET_TIMEOUT_MS);
 	if (rc)
 		goto err3;
 	pt_alloc.eager_order = ilog2(OPA2_NET_NUM_RX_BUFS) - 2;
@@ -878,9 +814,11 @@ err5:
 	hfi_pt_disable(ctx, rx, HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
 	spin_unlock_irqrestore(&ctx_i->rx_lock, flags);
 err4:
-	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_rx);
+	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_rx,
+			OPA2_NET_TIMEOUT_MS);
 err3:
-	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_tx);
+	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_tx,
+			OPA2_NET_TIMEOUT_MS);
 err2:
 	ops->cq_unmap(&ctx_i->tx, &ctx_i->rx);
 err1:
@@ -915,8 +853,10 @@ static void opa2_vnic_uninit_ctx(struct opa_vnic_device *vdev, int ctx_num)
 	hfi_pt_disable(ctx, rx, HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
 	spin_unlock_irqrestore(&ctx_i->rx_lock, flags);
 	opa2_free_rx_bufs(ctx_i);
-	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_rx);
-	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_tx);
+	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_rx,
+			OPA2_NET_TIMEOUT_MS);
+	_hfi_eq_release(ctx, rx, &ctx_i->rx_lock, &ctx_i->eq_tx,
+			OPA2_NET_TIMEOUT_MS);
 	ops->cq_unmap(&ctx_i->tx, &ctx_i->rx);
 	ops->cq_release(ctx, ctx_i->cq_idx);
 	odev->bus_ops->ctx_release(ctx);

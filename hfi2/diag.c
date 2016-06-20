@@ -57,6 +57,7 @@
 
 #include "opa_hfi.h"
 #include "verbs/verbs.h"
+#include "hfi_kclient.h"
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_eq.h>
 #include <rdma/hfi_pt.h>
@@ -280,71 +281,6 @@ static const struct file_operations diagpkt_file_ops = {
 	.llseek = noop_llseek,
 };
 
-/* TODO - delete and make common for all kernel clients */
-static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
-			 spinlock_t *cq_lock,
-			 struct opa_ev_assign *eq_alloc,
-			 struct hfi_eq *eq)
-{
-	u32 *eq_head_array, *eq_head_addr;
-	u64 *eq_entry = NULL;
-	int rc;
-
-	eq_alloc->base = (u64)vzalloc(eq_alloc->count * HFI_EQ_ENTRY_SIZE);
-	if (!eq_alloc->base)
-		return -ENOMEM;
-	eq_alloc->mode = OPA_EV_MODE_BLOCKING;
-	rc = ctx->ops->ev_assign(ctx, eq_alloc);
-	if (rc < 0) {
-		vfree((void *)eq_alloc->base);
-		goto err;
-	}
-	eq_head_array = ctx->eq_head_addr;
-	/* Reset the EQ SW head */
-	eq_head_addr = &eq_head_array[eq_alloc->ev_idx];
-	*eq_head_addr = 0;
-	eq->idx = eq_alloc->ev_idx;
-	eq->base = (void *)eq_alloc->base;
-	eq->count = eq_alloc->count;
-
-	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], HFI2_DIAG_TIMEOUT_MS,
-			  &eq_entry);
-	if (eq_entry) {
-		unsigned long flags;
-
-		spin_lock_irqsave(cq_lock, flags);
-		hfi_eq_advance(ctx, cq, &ctx->eq_zero[0], eq_entry);
-		spin_unlock_irqrestore(cq_lock, flags);
-	} else {
-		rc = -EIO;
-	}
-err:
-	return rc;
-}
-
-/* TODO - delete and make common for all kernel clients */
-static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
-			    spinlock_t *cq_lock, struct hfi_eq *eq)
-{
-	u64 *eq_entry = NULL, done;
-
-	ctx->ops->ev_release(ctx, 0, eq->idx, (u64)&done);
-	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], HFI2_DIAG_TIMEOUT_MS,
-			  &eq_entry);
-	if (eq_entry) {
-		unsigned long flags;
-
-		spin_lock_irqsave(cq_lock, flags);
-		hfi_eq_advance(ctx, cq, &ctx->eq_zero[0], eq_entry);
-		spin_unlock_irqrestore(cq_lock, flags);
-	}
-
-	vfree(eq->base);
-	eq->base = NULL;
-}
-
 static int hfi2_diag_init(struct hfi_devdata *dd)
 {
 	struct hfi2_diagpkt_data *diag = &dd->hfi2_diag;
@@ -371,7 +307,7 @@ static int hfi2_diag_init(struct hfi_devdata *dd)
 	eq_alloc_tx.count = HFI2_NUM_DIAGPKT_EVT;
 	eq_alloc_tx.cookie = dd;
 	rc = _hfi_eq_alloc(diag->ctx, diag->cq_rx, diag->cq_rx_lock,
-			   &eq_alloc_tx, &diag->eq_tx);
+			   &eq_alloc_tx, &diag->eq_tx, HFI2_DIAG_TIMEOUT_MS);
 	return rc;
 }
 
@@ -379,7 +315,8 @@ static void hfi2_diag_uninit(struct hfi_devdata *dd)
 {
 	struct hfi2_diagpkt_data *diag = &dd->hfi2_diag;
 
-	_hfi_eq_release(diag->ctx, diag->cq_rx, diag->cq_rx_lock, &diag->eq_tx);
+	_hfi_eq_release(diag->ctx, diag->cq_rx, diag->cq_rx_lock, &diag->eq_tx,
+			HFI2_DIAG_TIMEOUT_MS);
 }
 
 int hfi2_diag_add(struct hfi_devdata *dd)

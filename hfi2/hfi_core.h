@@ -250,6 +250,16 @@ enum mmap_token_types {
 	TOK_UNEXPECTED,
 };
 
+/* sizes of Portals State segments for above mmaps */
+#define HFI_PSB_PT_NI_SIZE	(HFI_NUM_PT_ENTRIES * HFI_PT_ENTRY_SIZE)
+#define HFI_PSB_PT_SIZE		(HFI_PSB_PT_NI_SIZE * HFI_NUM_NIS)
+#define HFI_PSB_CT_NI_SIZE	(HFI_NUM_CT_ENTRIES * HFI_CT_ENTRY_SIZE)
+#define HFI_PSB_CT_SIZE		(HFI_PSB_CT_NI_SIZE * HFI_NUM_NIS)
+#define HFI_PSB_EQ_DESC_NI_SIZE	(HFI_NUM_EVENT_HANDLES * HFI_EQ_DESC_ENTRY_SIZE)
+#define HFI_PSB_EQ_DESC_SIZE	(HFI_PSB_EQ_DESC_NI_SIZE * HFI_NUM_NIS)
+#define HFI_PSB_EQ_HEAD_NI_SIZE	(HFI_NUM_EVENT_HANDLES * HFI_EQ_HEAD_ENTRY_SIZE)
+#define HFI_PSB_EQ_HEAD_SIZE	(HFI_PSB_EQ_HEAD_NI_SIZE * HFI_NUM_NIS)
+
 /**
  * enum opa_core_event - events opa_core clients are notified about
  * @OPA_LINK_STATE_CHANGE: there has been a change in the link state

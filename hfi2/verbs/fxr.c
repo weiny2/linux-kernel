@@ -56,6 +56,7 @@
 #include "verbs.h"
 #include "packet.h"
 #include "trace.h"
+#include "hfi_kclient.h"
 #include <rdma/hfi_args.h>
 #include <rdma/hfi_eq.h>
 #include <rdma/hfi_pt.h>
@@ -72,70 +73,53 @@ static bool enable_replace_sc = true;
 #define OPA_IB_EAGER_SIZE		(PAGE_SIZE * 8)
 #define OPA_IB_EAGER_PT_FLAGS		(PTL_MAY_ALIGN | PTL_MANAGE_LOCAL)
 
-/* TODO - delete and make common for all kernel clients */
-static int _hfi_eq_alloc(struct hfi_ctx *ctx, struct hfi_cq *cq,
-			 spinlock_t *cq_lock,
-			 struct opa_ev_assign *eq_alloc,
-			 struct hfi_eq *eq)
+/*
+ * The header argument must point to memory that is padded to a full
+ * cacheline.  In addition, the first 8-bytes is reserved for this function
+ * if using 9B header, which begins at (hdr + 8).
+ */
+static int hfi_tx_cmd_ofed_dma(struct hfi_cq *cq, struct hfi_ctx *ctx,
+			       void *hdr, void *start, uint32_t len,
+			       uint8_t eth_size, uint8_t mtu_id,
+			       hfi_user_ptr_t user_ptr, hfi_md_options_t md_opts,
+			       hfi_eq_handle_t eq_handle,
+			       uint8_t port, uint8_t sl, uint8_t slid_low,
+			       uint8_t dma_cmd)
 {
-	u32 *eq_head_array, *eq_head_addr;
-	u64 *eq_entry = NULL;
-	int rc;
+	union hfi_tx_ofed_dma *cmd; /* all OFED_DMA can use this struct */
+	uint8_t l2;
+	uint16_t cmd_slots = 2;
 
-	eq_alloc->base = (u64)vzalloc(eq_alloc->count * HFI_EQ_ENTRY_SIZE);
-	if (!eq_alloc->base)
-		return -ENOMEM;
-	eq_alloc->mode = OPA_EV_MODE_BLOCKING;
-	rc = hfi_cteq_assign(ctx, eq_alloc);
-	if (rc < 0) {
-		vfree((void *)eq_alloc->base);
-		goto err;
-	}
-	eq_head_array = ctx->eq_head_addr;
-	/* Reset the EQ SW head */
-	eq_head_addr = &eq_head_array[eq_alloc->ev_idx];
-	*eq_head_addr = 0;
-	eq->idx = eq_alloc->ev_idx;
-	eq->base = (void *)eq_alloc->base;
-	eq->count = eq_alloc->count;
-
-	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], HFI_EQ_WAIT_TIMEOUT_MS,
-			  &eq_entry);
-	if (eq_entry) {
-		unsigned long flags;
-
-		spin_lock_irqsave(cq_lock, flags);
-		hfi_eq_advance(ctx, cq, &ctx->eq_zero[0], eq_entry);
-		spin_unlock_irqrestore(cq_lock, flags);
+	cmd = (union hfi_tx_ofed_dma *)hdr;
+	if (dma_cmd == OFED_9B_DMA || dma_cmd == OFED_9B_DMA_GRH) {
+		l2 = HDR_EXT;
 	} else {
-		rc = -EIO;
+		/* TODO - 16B support */
+		l2 = HDR_16B;
+		return -EINVAL;
 	}
 
-err:
-	return rc;
-}
+	/*
+	 * Current expectation is that caller already filled in all
+	 * IB header fields and passes in header pointer.
+	 * Update just A3 information, which is before IB fields.
+	 */
+	_hfi_format_nonptl_flit0_a3(ctx, &(cmd->flit0.a3), l2, dma_cmd,
+				    16 /* num 8B flits in 2 slots */,
+				    port, sl, slid_low);
 
-/* TODO - delete and make common for all kernel clients */
-static void _hfi_eq_release(struct hfi_ctx *ctx, struct hfi_cq *cq,
-			    spinlock_t *cq_lock, struct hfi_eq *eq)
-{
-	u64 *eq_entry = NULL, done;
+	/* Here we update just P..E4 flit, which is after IB fields */
+	_hfi_format_ofed_dma_flit3(ctx, &(cmd->flit3),
+				   eth_size, mtu_id,
+				   (uint64_t)start, len, 0,
+				   md_opts, eq_handle, user_ptr);
 
-	hfi_cteq_release(ctx, 0, eq->idx, (u64)&done);
-	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
-	hfi_eq_wait_timed(ctx, &ctx->eq_zero[0], HFI_EQ_WAIT_TIMEOUT_MS,
-			  &eq_entry);
-	if (eq_entry) {
-		unsigned long flags;
+	if (unlikely(!hfi_cmd_slots_avail(cq, cmd_slots)))
+		return -EAGAIN;
 
-		spin_lock_irqsave(cq_lock, flags);
-		hfi_eq_advance(ctx, cq, &ctx->eq_zero[0], eq_entry);
-		spin_unlock_irqrestore(cq_lock, flags);
-	}
-
-	vfree(eq->base);
-	eq->base = NULL;
+	/* Issue the 2-slot DMA */
+	_hfi_command2(cq, (uint64_t *)cmd, HFI_CQ_TX_ENTRIES);
+	return 0;
 }
 
 /*
@@ -774,7 +758,7 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 	eq_alloc.user_data = (unsigned long)ibp;
 	eq_alloc.count = rhq_count;
 	ret = _hfi_eq_alloc(rcv->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
-			    &eq_alloc, &rcv->eq);
+			    &eq_alloc, &rcv->eq, HFI_EQ_WAIT_TIMEOUT_MS);
 	if (ret < 0)
 		goto kthread_err;
 
@@ -863,7 +847,7 @@ void hfi2_rcv_uninit(struct hfi2_ibrcv *rcv)
 
 	if (rcv->eq.base)
 		_hfi_eq_release(rcv->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
-				&rcv->eq);
+				&rcv->eq, HFI_EQ_WAIT_TIMEOUT_MS);
 	if (rcv->egr_base) {
 		vfree(rcv->egr_base);
 		rcv->egr_base = NULL;
@@ -993,7 +977,7 @@ int hfi2_ctx_init_port(struct hfi2_ibport *ibp)
 	eq_alloc.isr_cb = hfi2_send_event;
 	eq_alloc.cookie = (void *)ibp;
 	ret = _hfi_eq_alloc(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
-			    &eq_alloc, &ibp->send_eq);
+			    &eq_alloc, &ibp->send_eq, HFI_EQ_WAIT_TIMEOUT_MS);
 	if (ret < 0)
 		goto ctx_init_err;
 
@@ -1022,7 +1006,7 @@ void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp)
 
 	if (ibp->send_eq.base)
 		_hfi_eq_release(ibp->ctx, &ibp->cmdq_rx, &ibp->cmdq_rx_lock,
-				&ibp->send_eq);
+				&ibp->send_eq, HFI_EQ_WAIT_TIMEOUT_MS);
 
 	hfi2_rcv_uninit(&ibp->qp_rcv);
 	hfi2_rcv_uninit(&ibp->sm_rcv);

@@ -87,6 +87,27 @@ extern unsigned int hfi_max_mtu;
 #define DRIVER_NAME		KBUILD_MODNAME
 #define DRIVER_CLASS_NAME	DRIVER_NAME
 
+/* IRQs */
+#define HFI_NUM_EQ_INTERRUPTS	256
+#define HFI_NUM_INTERRUPTS	320
+
+/* PSB and CMDQ offsets */
+#define HFI_PSB_PT_OFFSET	0
+#define HFI_PSB_CT_OFFSET	(HFI_PSB_PT_OFFSET + HFI_PSB_PT_SIZE)
+#define HFI_PSB_EQ_DESC_OFFSET	(HFI_PSB_CT_OFFSET  + HFI_PSB_CT_SIZE)
+#define HFI_PSB_EQ_HEAD_OFFSET	(HFI_PSB_EQ_DESC_OFFSET + HFI_PSB_EQ_DESC_SIZE)
+#define HFI_PSB_FIXED_TOTAL_MEM	(HFI_PSB_PT_SIZE + HFI_PSB_CT_SIZE + \
+				HFI_PSB_EQ_DESC_SIZE + HFI_PSB_EQ_HEAD_SIZE)
+#define HFI_PSB_TRIG_OFFSET	HFI_PSB_FIXED_TOTAL_MEM
+/* TX CSR spacing matches size of command queue */
+#define HFI_CQ_TX_OFFSET        HFI_CQ_TX_SIZE
+/* RX CSR spacing uses 8KB alignment (even though RX CQ is smaller) */
+#define HFI_CQ_RX_OFFSET        (PAGE_SIZE * 2)
+#define HFI_CQ_TX_IDX_ADDR(addr, idx)	((addr) + (HFI_CQ_TX_OFFSET * idx))
+#define HFI_CQ_RX_IDX_ADDR(addr, idx)	((addr) + (HFI_CQ_RX_OFFSET * idx))
+#define HFI_CQ_HEAD_OFFSET      64 /* put CQ heads on separate cachelines */
+#define HFI_CQ_HEAD_ADDR(addr, idx)	((addr) + (HFI_CQ_HEAD_OFFSET * idx))
+
 enum {
 	SHARED_CREDITS,
 	DEDICATED_CREDITS
