@@ -63,6 +63,7 @@
 #include "platform.h"
 #include "efivar.h"
 #include "aspm.h"
+#include "affinity.h"
 
 #define NUM_IB_PORTS 1
 
@@ -12859,7 +12860,7 @@ static int set_up_context_variables(struct hfi1_devdata *dd)
 	 */
 	if (num_user_contexts < 0)
 		num_user_contexts =
-			cpumask_weight(&dd->affinity->real_cpu_mask);
+			cpumask_weight(&node_affinity.real_cpu_mask);
 
 	total_contexts = num_kernel_contexts + num_user_contexts;
 
@@ -14158,7 +14159,12 @@ static int init_asic_data(struct hfi1_devdata *dd)
 {
 	unsigned long flags;
 	struct hfi1_devdata *tmp, *peer = NULL;
-	int ret = 0;
+	struct hfi1_asic_data *asic_data;
+
+	/* pre-allocate the asic structure in case we are the first device */
+	asic_data = kzalloc(sizeof(*dd->asic_data), GFP_KERNEL);
+	if (!asic_data)
+		return -ENOMEM;
 
 	spin_lock_irqsave(&hfi1_devs_lock, flags);
 	/* Find our peer device */
@@ -14171,20 +14177,16 @@ static int init_asic_data(struct hfi1_devdata *dd)
 	}
 
 	if (peer) {
+		/* use already allocated structure */
 		dd->asic_data = peer->asic_data;
+		kfree(asic_data);
 	} else {
-		dd->asic_data = kzalloc(sizeof(*dd->asic_data), GFP_KERNEL);
-		if (!dd->asic_data) {
-			ret = -ENOMEM;
-			goto done;
-		}
+		dd->asic_data = asic_data;
 		mutex_init(&dd->asic_data->asic_resource_mutex);
 	}
 	dd->asic_data->dds[dd->hfi1_id] = dd; /* self back-pointer */
-
-done:
 	spin_unlock_irqrestore(&hfi1_devs_lock, flags);
-	return ret;
+	return 0;
 }
 
 /*
@@ -14489,19 +14491,6 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 		 (dd->revision >> CCE_REVISION_SW_SHIFT)
 		    & CCE_REVISION_SW_MASK);
 
-	/*
-	 * The real cpu mask is part of the affinity struct but has to be
-	 * initialized earlier than the rest of the affinity struct because it
-	 * is needed to calculate the number of user contexts in
-	 * set_up_context_variables(). However, hfi1_dev_affinity_init(),
-	 * which initializes the rest of the affinity struct members,
-	 * depends on set_up_context_variables() for the number of kernel
-	 * contexts, so it cannot be called before set_up_context_variables().
-	 */
-	ret = init_real_cpu_mask(dd);
-	if (ret)
-		goto bail_cleanup;
-
 	ret = set_up_context_variables(dd);
 	if (ret)
 		goto bail_cleanup;
@@ -14515,7 +14504,9 @@ struct hfi1_devdata *hfi1_init_dd(struct pci_dev *pdev,
 	/* set up KDETH QP prefix in both RX and TX CSRs */
 	init_kdeth_qp(dd);
 
-	hfi1_dev_affinity_init(dd);
+	ret = hfi1_dev_affinity_init(dd);
+	if (ret)
+		goto bail_cleanup;
 
 	/* send contexts must be set up before receive contexts */
 	ret = init_send_contexts(dd);

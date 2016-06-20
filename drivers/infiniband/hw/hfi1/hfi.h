@@ -1155,7 +1155,6 @@ struct hfi1_devdata {
 	/* Save the enabled LCB error bits */
 	u64 lcb_err_en;
 	u8 dc_shutdown;
-	struct hfi1_affinity *affinity;
 
 	/* receive context tail dummy address */
 	__le64 *rcvhdrtail_dummy_kvaddr;
@@ -1230,6 +1229,8 @@ int handle_receive_interrupt(struct hfi1_ctxtdata *, int);
 int handle_receive_interrupt_nodma_rtail(struct hfi1_ctxtdata *, int);
 int handle_receive_interrupt_dma_rtail(struct hfi1_ctxtdata *, int);
 void set_all_slowpath(struct hfi1_devdata *dd);
+
+extern const struct pci_device_id hfi1_pci_tbl[];
 
 /* receive packet handler dispositions */
 #define RCV_PKT_OK      0x0 /* keep going */
