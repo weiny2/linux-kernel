@@ -80,7 +80,7 @@ for viper in ${viper0} ${viper1}; do
 			--exclude="cov.*" \
 			--exclude="cscope.out" \
 			${CURRENT_DIR} | \
-			${SSH_CMD} "cd ${HOME_DIR}; tar xf -" 2>/dev/null
+			${SSH_CMD} "mkdir -p ${HOME_DIR}; cd ${HOME_DIR}; tar xf -" 2>/dev/null
 	popd
 
 	# build and install bullseye kernel module and driver
