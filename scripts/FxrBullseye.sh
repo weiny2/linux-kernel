@@ -83,6 +83,11 @@ for viper in ${viper0} ${viper1}; do
 			${SSH_CMD} "mkdir -p ${HOME_DIR}; cd ${HOME_DIR}; tar xf -" 2>/dev/null
 	popd
 
+	# TODO - workaround to install kernel-devel rpm
+	# Might be good to leave this here as ignored if newer kernel-devel already
+	# present in craff file
+	${SSH_CMD} "rpm -Uvh ${BULLSEYE_SRC_DIR}/fxr/simics/kernel-devel*.x86_64.rpm"
+
 	# build and install bullseye kernel module and driver
 	${SSH_CMD} "\
 		sed -i -e'/^export COVFILE=/d' /root/.bashrc
