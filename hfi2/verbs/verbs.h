@@ -253,7 +253,6 @@ static inline struct hfi_devdata *hfi_dd_from_ibdev(struct ib_device *ibdev)
 {
 	return to_hfi_ibd(ibdev)->dd;
 }
-
 #define hfi2_get_pkey(ibp, index) \
 	((index) >= (HFI_MAX_PKEYS) ? 0 : (ibp)->ppd->pkeys[(index)])
 
@@ -321,6 +320,10 @@ int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,
 		     struct ib_mad_hdr *out_mad, size_t *out_mad_size,
 		     u16 *out_mad_pkey_index);
+void hfi2_bad_pqkey(struct hfi2_ibport *ibp, __be16 trap_num, u32 key, u32 sl,
+		    u32 qp1, u32 qp2, u32 lid1, u32 lid2);
+int hfi2_ruc_check_hdr(struct hfi2_ibport *ibp, struct hfi2_ib_packet *packet,
+		       struct rvt_qp *qp);
 
 /* Device specific */
 int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv);

@@ -261,11 +261,13 @@ enum {
 
 #define TRIGGER_OPS_SPILL_SIZE		(1024 * 1024 * 8)
 
+
 /*
  * Setting the leak integral amount to the maximum effectively gives 100% of
  * the bandwidth to the MCTC
  */
 #define HFI_MAX_TXOTR_LEAK_INTEGER 0x7
+
 
 /*
  * Private data for snoop/capture support.
@@ -1005,6 +1007,29 @@ static inline u8 hfi_parity(u16 val)
 		m ^= (val & 0x1);
 
 	return m;
+}
+
+/*
+ *  rcv_pkey_check - Return 0 if the ingress pkey is valid, return 1
+ *  otherwise. It only ensures pkey is vlid for QP0. This function
+ *  should be called on the data path instead of ingress_pkey_check
+ *  as on data path, pkey check is done by HW (except for QP0).
+ */
+
+static inline int hfi_rcv_pkey_check(struct hfi_pportdata *ppd, u16 pkey,
+				 u8 sc5, u16 slid)
+{
+	if (!(ppd->part_enforce & HFI_PART_ENFORCE_IN))
+		return 0;
+
+	/* If SC15, pkey[0:14] must be 0x7fff */
+	if ((sc5 == 0xf) && ((pkey & HFI_PKEY_CAM_MASK) != HFI_PKEY_CAM_MASK))
+		goto bad;
+
+	return 0;
+bad:
+/*        ingress_pkey_table_fail(ppd, pkey, slid); */
+	return 1;
 }
 
 int hfi_get_sma(struct hfi_devdata *dd, u16 attr_id, struct opa_smp *smp,

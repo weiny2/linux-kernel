@@ -301,12 +301,11 @@ void hfi2_uc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 
 	opcode = be32_to_cpu(ohdr->bth[0]) >> 24;
 	hdrsize += eth_len_by_opcode[opcode];
+	if (hfi2_ruc_check_hdr(ibp, packet, qp)) {
+		dev_dbg(ibp->dev, "header check failed\n");
+		return;
+	}
 	if (is_16b) {
-#if 0
-		if (hfi2_ruc_check_hdr_16b(ibp, ph->opa16b,
-					   !!packet->grh, qp, opcode))
-			return;
-#endif
 		opa_parse_16b_header((u32 *)&ph->opa16b, &slid, &dlid, &len,
 				     &pkey, &entropy, &sc, &rc, &is_fecn,
 				     &is_becn, &age, &l4);
@@ -316,10 +315,6 @@ void hfi2_uc_rcv(struct rvt_qp *qp, struct hfi2_ib_packet *packet)
 		extra_bytes = 5;    /* ICRC + TAIL byte */
 		data += hdrsize;
 	} else {
-#if 0
-		if (hfi2_ruc_check_hdr(ibp, ph->ibh, !!packet->grh, qp, opcode))
-			return;
-#endif
 		pkey = (u16)be32_to_cpu(ohdr->bth[0]);
 		slid = be16_to_cpu(ph->ibh.lrh[3]);
 		dlid = be16_to_cpu(ph->ibh.lrh[1]);

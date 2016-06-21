@@ -657,12 +657,45 @@ static inline void hfi2_make_ext_grh(struct hfi2_ibport *ibp,
 #define OPA_BYPASS_HDR_10B             0x1
 #define OPA_BYPASS_HDR_16B             0x2
 
+/* OPA 9B Header fields */
+#define OPA_9B_LNH_BITS         3
+#define OPA_9B_SC_MASK          0xf
+#define OPA_9B_SC_SHIFT 12
+#define OPA_9B_SL_MASK          0xf
+#define OPA_9B_SL_SHIFT         4
+#define OPA_9B_LVER_MASK        0xf
+#define OPA_9B_LVER_SHIFT       8
+#define OPA_9B_BTH_PAD_BITS     3
+#define OPA_9B_BTH_PAD_SHIFT    20
+
+#define OPA_9B_GET_LNH(hdr)     ((u8)(be16_to_cpu(hdr->lrh[0]) \
+				      & OPA_9B_LNH_BITS))
+#define OPA_9B_GET_SC(hdr)      ((u8)((be16_to_cpu(hdr->lrh[0]) >> \
+				       OPA_9B_SC_SHIFT) \
+				       & OPA_9B_SC_MASK))
+#define OPA_9B_GET_SL(hdr)      ((u8)((be16_to_cpu(hdr->lrh[0]) >> \
+				       OPA_9B_SL_SHIFT) \
+				       & OPA_9B_SL_MASK))
+#define OPA_9B_GET_LVER(hdr)    ((u8)((be16_to_cpu(hdr->lrh[0]) >> \
+				       OPA_9B_LVER_SHIFT) \
+				       & OPA_9B_LVER_MASK))
+#define OPA_9B_GET_DLID(hdr)    ((u16)(be16_to_cpu(hdr->lrh[1])))
+#define OPA_9B_GET_LEN(hdr)     ((u16)(be16_to_cpu(hdr->lrh[2])))
+#define OPA_9B_GET_SLID(hdr)    ((u16)(be16_to_cpu(hdr->lrh[3])))
+#define OPA_9B_BTH_GET_PKEY(ohdr) ((u16)(be32_to_cpu(ohdr->bth[0])))
+#define OPA_9B_BTH_GET_PAD(ohdr) ((u8)((be32_to_cpu(ohdr->bth[0]) >> \
+					OPA_9B_BTH_PAD_SHIFT) \
+					& OPA_9B_BTH_PAD_BITS))
+
+
 /* OPA 16B Header fields */
 #define OPA_16B_LID_MASK        0xFFFFFull
-#define OPA_16B_SLID_SHFT       8
+#define OPA_16B_SLID_SHFT      20
+#define OPA_16B_SLID_HIGH_SHFT 8
 #define OPA_16B_SLID_MASK       0xF00ull
-#define OPA_16B_DLID_SHFT       12
+#define OPA_16B_DLID_SHFT       20
 #define OPA_16B_DLID_MASK       0xF000ull
+#define OPA_16B_DLID_HIGH_SHFT 12
 #define OPA_16B_LEN_SHFT        20
 #define OPA_16B_LEN_MASK        0x7FF00000ull
 #define OPA_16B_BECN_SHFT       31
@@ -691,6 +724,40 @@ static inline void hfi2_make_ext_grh(struct hfi2_ibport *ibp,
 #define OPA_16B_GET_L4_TYPE(data)                            \
 	(*((u32 *)(data) + OPA_16B_L4_OFFSET) & OPA_16B_L4_MASK)
 
+#define OPA_16B_BTH_GET_PAD(ohdr) ((u8)((be32_to_cpu(ohdr->bth[0]) >> \
+					 OPA_16B_BTH_PAD_SHIFT) \
+					 & OPA_16B_BTH_PAD_BITS))
+
+#define OPA_16B_MAKE_QW(low_dw, high_dw) (((u64)high_dw << 32) | low_dw)
+
+#define OPA_16B_GET_L4(hdr) ((u8)(hdr->opah[2] & OPA_16B_L4_MASK))
+#define OPA_16B_GET_RC(hdr) ((u8)((hdr->opah[1] & OPA_16B_RC_MASK) \
+				   >> OPA_16B_RC_SHFT))
+#define OPA_16B_GET_SC(hdr) ((u8)((hdr->opah[1] & OPA_16B_SC_MASK) \
+				   >> OPA_16B_SC_SHFT))
+#define OPA_16B_GET_AGE(hdr) ((u8)((hdr->opah[3] & OPA_16B_AGE_MASK) \
+				    >> OPA_16B_AGE_SHFT))
+#define OPA_16B_GET_LEN(hdr) ((u16)((hdr->opah[0] & OPA_16B_LEN_MASK) \
+				     >> OPA_16B_LEN_SHFT))
+#define OPA_16B_GET_BECN(hdr) ((u8)((hdr->opah[0] & OPA_16B_BECN_MASK) \
+				     >> OPA_16B_BECN_SHFT))
+#define OPA_16B_GET_L2(hdr) ((u8)((hdr->opah[1] & OPA_16B_L2_MASK) \
+				   >> OPA_16B_L2_SHFT))
+#define OPA_16B_GET_FECN(hdr) ((u8)((hdr->opah[1] & OPA_16B_FECN_MASK) \
+				     >> OPA_16B_FECN_SHFT))
+#define OPA_16B_GET_PKEY(hdr) ((u16)((hdr->opah[2] & OPA_16B_PKEY_MASK) \
+				      >> OPA_16B_PKEY_SHFT))
+#define OPA_16B_GET_DLID(hdr) ((u32)((hdr->opah[1] & OPA_16B_LID_MASK) \
+				      | (((hdr->opah[2] & OPA_16B_DLID_MASK) \
+					>> OPA_16B_DLID_HIGH_SHFT) \
+					<< OPA_16B_DLID_SHFT)))
+#define OPA_16B_GET_SLID(hdr) ((u32)((hdr->opah[0] & OPA_16B_LID_MASK) \
+				      | (((hdr->opah[2] & OPA_16B_SLID_MASK) \
+					 >> OPA_16B_SLID_HIGH_SHFT) \
+					 << OPA_16B_SLID_SHFT)))
+#define OPA_16B_GET_ENTROPY(hdr) ((u16)(hdr->opah[3] & OPA_16B_ENTROPY_MASK))
+
+
 static inline u32 opa_16b_get_dlid(u32 *hdr)
 {
 	u32 h1 = hdr[1];
@@ -698,7 +765,7 @@ static inline u32 opa_16b_get_dlid(u32 *hdr)
 
 	/* Append upper 4 bits with lower 20 bits of dlid */
 	return ((h1 & OPA_16B_LID_MASK) |
-		(((h2 & OPA_16B_DLID_MASK) >> OPA_16B_DLID_SHFT) << 20));
+		(((h2 & OPA_16B_DLID_MASK) >> OPA_16B_DLID_HIGH_SHFT) << 20));
 }
 
 static inline u32 opa_16b_pkt_len(u32 *hdr)
@@ -720,14 +787,14 @@ static inline void opa_make_16b_header(u32 *hdr, u32 slid, u32 dlid, u16 len,
 
 	/* Extract and set 4 upper bits and 20 lower bits of the lids */
 	h0 |= (slid & OPA_16B_LID_MASK);
-	h2 |= ((slid >> (20 - OPA_16B_SLID_SHFT)) & OPA_16B_SLID_MASK);
+	h2 |= ((slid >> (20 - OPA_16B_SLID_HIGH_SHFT)) & OPA_16B_SLID_MASK);
 
 	h0 |= (len << OPA_16B_LEN_SHFT);
 	if (becn)
 		h0 |= OPA_16B_BECN_MASK;
 
 	h1 |= (dlid & OPA_16B_LID_MASK);
-	h2 |= ((dlid >> (20 - OPA_16B_DLID_SHFT)) & OPA_16B_DLID_MASK);
+	h2 |= ((dlid >> (20 - OPA_16B_DLID_HIGH_SHFT)) & OPA_16B_DLID_MASK);
 
 	h1 |= (rc << OPA_16B_RC_SHFT);
 	h1 |= (sc << OPA_16B_SC_SHFT);
@@ -758,9 +825,9 @@ static inline void opa_parse_16b_header(u32 *hdr, u32 *slid, u32 *dlid,
 
 	/* Append upper 4 bits with lower 20 bits of lid */
 	*slid = (h0 & OPA_16B_LID_MASK) |
-		(((h2 & OPA_16B_SLID_MASK) >> OPA_16B_SLID_SHFT) << 20);
+		(((h2 & OPA_16B_SLID_MASK) >> OPA_16B_SLID_HIGH_SHFT) << 20);
 	*dlid = (h1 & OPA_16B_LID_MASK) |
-		(((h2 & OPA_16B_DLID_MASK) >> OPA_16B_DLID_SHFT) << 20);
+		(((h2 & OPA_16B_DLID_MASK) >> OPA_16B_DLID_HIGH_SHFT) << 20);
 
 	*len  = (h0 & OPA_16B_LEN_MASK)  >> OPA_16B_LEN_SHFT;
 	*becn = !!((h0 & OPA_16B_BECN_MASK) >> OPA_16B_BECN_SHFT);

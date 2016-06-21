@@ -266,6 +266,130 @@ bail:
 	return ret;
 }
 
+static __be64 get_sguid(struct hfi2_ibport *ibp, unsigned index)
+{
+	if (!index) {
+		struct hfi_pportdata *ppd = ibp->ppd;
+
+		return cpu_to_be64(ppd->pguid);
+	}
+	return ibp->guids[index - 1];
+}
+
+static int gid_ok(union ib_gid *gid, __be64 gid_prefix, __be64 id)
+{
+	return (gid->global.interface_id == id &&
+		(gid->global.subnet_prefix == gid_prefix ||
+		gid->global.subnet_prefix == IB_DEFAULT_GID_PREFIX));
+}
+
+/*
+ * This should be called with the QP r_lock held.
+ * The s_lock will be acquired around the hfi2_migrate_qp() call.
+ */
+int hfi2_ruc_check_hdr(struct hfi2_ibport *ibp, struct hfi2_ib_packet *packet,
+			struct rvt_qp *qp)
+{
+	struct hfi2_qp_priv *priv = qp->priv;
+	__be64 guid;
+	unsigned long flags;
+	struct hfi_pportdata *ppd = ibp->ppd;
+	u8 sc5 = ppd->sl_to_sc[qp->remote_ah_attr.sl];
+	struct hfi2_ib_header *hdr = NULL;
+	struct hfi2_opa16b_header *hdr_16b = NULL;
+	struct ib_l4_headers *ohdr = packet->ohdr;
+	u32 dlid, slid, sl, opa_dlid;
+	int migrated;
+	u32 bth0, bth1;
+
+	bth0 = be32_to_cpu(ohdr->bth[0]);
+	bth1 = be32_to_cpu(ohdr->bth[1]);
+	if (!(packet->etype == RHF_RCV_TYPE_BYPASS)) {
+		hdr = (struct hfi2_ib_header *)packet->hdr;
+		dlid = OPA_9B_GET_DLID(hdr);
+		slid = OPA_9B_GET_SLID(hdr);
+		sl = OPA_9B_GET_SL(hdr);
+		migrated = bth1 & IB_BTH_MIG_REQ;
+	} else {
+		hdr_16b = (struct hfi2_opa16b_header *)packet->hdr;
+		dlid = OPA_16B_GET_DLID(hdr_16b);
+		slid = OPA_16B_GET_SLID(hdr_16b);
+		sl = 0; /* 16B has no sl but hfi1_bad_pkqkey needs it */
+		migrated = bth0 & IB_16B_BTH_MIG_REQ;
+	}
+	if (qp->s_mig_state == IB_MIG_ARMED && (migrated)) {
+		if (!packet->grh) {
+			if ((qp->alt_ah_attr.ah_flags & IB_AH_GRH) &&
+			     !priv->use_16b)
+				goto err;
+		} else {
+			if (!(qp->alt_ah_attr.ah_flags & IB_AH_GRH))
+				goto err;
+			guid = get_sguid(ibp, qp->alt_ah_attr.grh.sgid_index);
+			if (!gid_ok(&packet->grh->dgid,
+				    ibp->rvp.gid_prefix, guid))
+				goto err;
+			if (!gid_ok(
+				&packet->grh->sgid,
+				qp->alt_ah_attr.grh.dgid.global.subnet_prefix,
+				qp->alt_ah_attr.grh.dgid.global.interface_id))
+				goto err;
+		}
+		if (unlikely(hfi_rcv_pkey_check(ibp->ppd, (u16)bth0,
+					    sc5, slid))) {
+			hfi2_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY, (u16)bth0, sl,
+				       0, qp->ibqp.qp_num, slid, dlid);
+			goto err;
+		}
+		/* Validate the SLID. See Ch. 9.6.1.5 and 17.2.8 */
+		opa_dlid = hfi2_get_dlid_from_ah(&qp->alt_ah_attr);
+		if ((slid != opa_dlid) ||
+		     ibp->ppd->pnum != qp->alt_ah_attr.port_num)
+			goto err;
+		spin_lock_irqsave(&qp->s_lock, flags);
+		hfi2_migrate_qp(qp);
+		spin_unlock_irqrestore(&qp->s_lock, flags);
+	} else {
+		if (!packet->grh) {
+			if ((qp->remote_ah_attr.ah_flags & IB_AH_GRH) &&
+			     !priv->use_16b)
+				goto err;
+		} else {
+			if (!(qp->remote_ah_attr.ah_flags & IB_AH_GRH))
+				goto err;
+			guid = get_sguid(ibp,
+					 qp->remote_ah_attr.grh.sgid_index);
+			if (!gid_ok(&packet->grh->dgid,
+				    ibp->rvp.gid_prefix, guid))
+				goto err;
+			 if (!gid_ok(
+			     &packet->grh->sgid,
+			     qp->remote_ah_attr.grh.dgid.global.subnet_prefix,
+			     qp->remote_ah_attr.grh.dgid.global.interface_id))
+				goto err;
+		}
+		if (unlikely(hfi_rcv_pkey_check(ibp->ppd, (u16)bth0,
+					    sc5, slid))) {
+			hfi2_bad_pqkey(ibp, OPA_TRAP_BAD_P_KEY, (u16)bth0, sl,
+				       0, qp->ibqp.qp_num, slid, dlid);
+			goto err;
+		}
+		/* Validate the SLID. See Ch. 9.6.1.5 */
+		opa_dlid = hfi2_get_dlid_from_ah(&qp->remote_ah_attr);
+		if ((slid != opa_dlid) ||
+		    ibp->ppd->pnum != qp->port_num)
+			goto err;
+		 if (qp->s_mig_state == IB_MIG_REARM &&
+		    !migrated)
+		      qp->s_mig_state = IB_MIG_ARMED;
+	}
+
+	return 0;
+
+err:
+	return 1;
+}
+
 /*
  * Switch to alternate path.
  * The QP s_lock should be held and interrupts disabled.
