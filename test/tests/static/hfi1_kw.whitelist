@@ -14,11 +14,6 @@ Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-10 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/twsi.c:209 CWARN.BITOP.SIZE (4:Review) Analyze
-Operands in a bitwise operation have different size
-Current status 'Analyze'
-
----------------------------------------------------------------------------
 11 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/pio.c:941 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
@@ -34,7 +29,7 @@ Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-14 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/chip.c:12248 CWARN.BITOP.SIZE (4:Review) Analyze
+14 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/chip.c:12293 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
@@ -149,55 +144,55 @@ Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-40 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:530 MLK.MUST (2:Error) Analyze
-Memory leak. Dynamic memory stored in '__u.__val' allocated through function 'kzalloc' at line 530 is lost at line 530
-  * init.c:530: Dynamic memory stored in '__u.__val' is allocated by calling function 'kzalloc'.
+40 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:531 MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in '__u.__val' allocated through function 'kzalloc' at line 531 is lost at line 531
+  * init.c:531: Dynamic memory stored in '__u.__val' is allocated by calling function 'kzalloc'.
     * slab.h:622: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
-  * init.c:530: End of scope for '__u.__val'. Memory leak.
+  * init.c:531: End of scope for '__u.__val'. Memory leak.
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-41 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:776 CWARN.BITOP.SIZE (4:Review) Analyze
+41 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:777 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-42 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:801 CWARN.BITOP.SIZE (4:Review) Analyze
+42 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:802 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-43 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:867 CWARN.BITOP.SIZE (4:Review) Analyze
+43 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:868 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-44 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:1146 CWARN.BITOP.SIZE (4:Review) Analyze
+44 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:1157 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-45 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:1308 CWARN.BITOP.SIZE (4:Review) Analyze
+45 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/init.c:1324 CWARN.BITOP.SIZE (4:Review) Analyze
 Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-94 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:260 SV.TAINTED.CALL.INDEX_ACCESS (2:Error) Analyze
-Unvalidated integer value 'tinfo.tidcnt' is received from 'copy_from_user' at line 255 and can be used to access an array through call to 'hfi1_user_exp_rcv_clear' at line 260.
-  * file_ops.c:255: Tainted data 'tinfo' is received from the call to 'copy_from_user'
-  * file_ops.c:255: copy_from_user( &tinfo,  (struct hfi11_tid_info* )arg, sizeof(tinfo) ) is false
-  * file_ops.c:260: Tainted data 'tinfo.tidcnt' is passed to 'hfi1_user_exp_rcv_clear'
+94 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:263 SV.TAINTED.CALL.INDEX_ACCESS (2:Error) Analyze
+Unvalidated integer value 'tinfo.tidcnt' is received from 'copy_from_user' at line 258 and can be used to access an array through call to 'hfi1_user_exp_rcv_clear' at line 263.
+  * file_ops.c:258: Tainted data 'tinfo' is received from the call to 'copy_from_user'
+  * file_ops.c:258: copy_from_user( &tinfo,  (struct hfi11_tid_info* )arg, sizeof(tinfo) ) is false
+  * file_ops.c:263: Tainted data 'tinfo.tidcnt' is passed to 'hfi1_user_exp_rcv_clear'
     * user_exp_rcv.c:586: Tainted data 'sizeof(tidinfo[0] ) *tinfo->tidcnt' is passed to 'copy_from_user'
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-95 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:247 ABV.MEMBER (1:Critical) Analyze
+95 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/file_ops.c:250 ABV.MEMBER (1:Critical) Analyze
 Array '&tinfo.tidcnt' of size 4 may use index value(s) 4..7
-  * file_ops.c:247: Array '&tinfo.tidcnt' size is 1.
-  * file_ops.c:247: '&tinfo.tidcnt' is passed as an argument to function 'copy_to_user'.
-    * file_ops.c:247: Result of expression '$3-1' is == 7.
-      * file_ops.c:247: Function argument '$3' is == 8.
-  * file_ops.c:247: Object '&tinfo.tidcnt' of type 'unsigned int[1]' is a buffer of length 4 bytes.
+  * file_ops.c:250: Array '&tinfo.tidcnt' size is 1.
+  * file_ops.c:250: '&tinfo.tidcnt' is passed as an argument to function 'copy_to_user'.
+    * file_ops.c:250: Result of expression '$3-1' is == 7.
+      * file_ops.c:250: Function argument '$3' is == 8.
+  * file_ops.c:250: Object '&tinfo.tidcnt' of type 'unsigned int[1]' is a buffer of length 4 bytes.
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
@@ -206,18 +201,18 @@ Operands in a bitwise operation have different size
 Current status 'Analyze'
 
 ---------------------------------------------------------------------------
-100 (Local) /nfs/sc/disks/fabric_work/sanchez1/tmp2/wfr-linux-devel_affinity/drivers/infiniband/hw/hfi1/affinity.c:346 MLK.MIGHT (2:Error) Analyze
-Possible memory leak. Dynamic memory stored in 'entry' allocated through function 'node_affinity_allocate' at line 252 can be lost at line 346
-  * affinity.c:251: !entry is true
-  * affinity.c:252: Dynamic memory stored in 'entry' is allocated by calling function 'node_affinity_allocate'.
-    * affinity.c:182: 'entry' is allocated by function 'kzalloc'.
+97 (Local) /nfs/sc/disks/fabric_work/dluick/git/wfr/wfr-linux-devel/drivers/infiniband/hw/hfi1/affinity.c:310 MLK.MUST (2:Error) Analyze
+Memory leak. Dynamic memory stored in 'entry' allocated through function 'node_affinity_allocate' at line 245 is lost at line 310
+  * affinity.c:244: !entry is true
+  * affinity.c:245: Dynamic memory stored in 'entry' is allocated by calling function 'node_affinity_allocate'.
+    * affinity.c:177: 'entry' is allocated by function 'kzalloc'.
       * slab.h:622: 'kmalloc(size, flags| ( (gfp_t)32768) )' is allocated by function 'kmalloc'.
-    * affinity.c:183: !entry is false
-  * affinity.c:253: !entry is false
-  * affinity.c:299: Break statement causes loop exit.
-    * affinity.c:289: See loop head here.
-  * affinity.c:346: Dynamic memory stored in '&entry->node' is lost.
+    * affinity.c:178: !entry is false
+  * affinity.c:246: !entry is false
+  * affinity.c:292: Break statement causes loop exit.
+    * affinity.c:282: See loop head here.
+  * affinity.c:310: Dynamic memory stored in '&entry->node' is lost.
 Current status 'Analyze'
 
-Summary: 39 Local
-39 Total Issue(s)
+Summary: 38 Local
+38 Total Issue(s)
