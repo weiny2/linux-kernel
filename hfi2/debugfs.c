@@ -292,6 +292,18 @@ void hfi_bw_arb_dbg_init(struct hfi_devdata *dd)
 				    ppd, &hfi_bw_arb_ops);
 }
 
+static ssize_t host_link_bounce(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	struct hfi_pportdata *ppd;
+
+	ppd = private2ppd(file);
+
+	queue_work(ppd->hfi_wq, &ppd->link_bounce_work);
+
+	return count;
+}
+
 /* link negotiation and initialization */
 FIRMWARE_READ(8051_state, 8051, CRK_CRK8051_STS_CUR_STATE)
 FIRMWARE_READ(8051_cmd0, 8051, CRK_CRK8051_CFG_HOST_CMD_0)
@@ -309,6 +321,7 @@ static const struct firmware_info firmware_ops[] = {
 	DEBUGFS_OPS("8051_cmd1", _8051_cmd1_read, NULL),
 	DEBUGFS_OPS("logical_link", _logical_link_read, _logical_link_write),
 	DEBUGFS_OPS("host_link_state", host_link_state_read, NULL),
+	DEBUGFS_OPS("bounce_link", NULL, host_link_bounce),
 	DEBUGFS_OPS("lstate", lstate_read, NULL),
 	DEBUGFS_OPS("local_link_width", local_link_width_show, NULL),
 	DEBUGFS_OPS("remote_link_width", remote_link_width_show, NULL),
