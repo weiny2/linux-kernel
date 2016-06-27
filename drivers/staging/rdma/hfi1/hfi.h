@@ -2268,8 +2268,9 @@ static inline void dump_16b_header(struct hfi1_16b_header *hdr)
 
 static inline int hfi1_get_16b_padding(u32 hdr_size, u32 payload)
 {
-	/* 4 = CRC, 1 = LT */
-	return 8 - ((hdr_size + payload + 4 + 1) % 8);
+	u8 extra = ((hdr_size + payload + (SIZE_OF_CRC << 2) +
+			  SIZE_OF_LT) % 8);
+	return extra ? (8 - extra) : 0;
 }
 
 static inline void hfi1_make_ib_hdr(struct hfi1_ib_header *hdr,
