@@ -480,16 +480,19 @@ static void handle_link_up(struct work_struct *work)
 {
 	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
 								link_up_work);
-	u32 _8051_port = read_physical_state(ppd);
 
+	mutex_lock(&ppd->hls_lock);
 	/* transit to Init only from Going_Up. */
 	if (ppd->host_link_state != HLS_GOING_UP) {
+		u32 reg_8051_port = read_physical_state(ppd);
 		ppd_dev_info(ppd, "False interrupt on %s(): %s(%d) 0x%x",
 			__func__,
 			link_state_name(ppd->host_link_state),
-			ilog2(ppd->host_link_state), _8051_port);
+			ilog2(ppd->host_link_state), reg_8051_port);
+		mutex_unlock(&ppd->hls_lock);
 		return;
 	}
+	mutex_unlock(&ppd->hls_lock);
 	hfi_set_link_state(ppd, HLS_UP_INIT);
 
 #if 0 /* WFR legacy */
