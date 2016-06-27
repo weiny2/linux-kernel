@@ -955,8 +955,10 @@ void hfi1_send_rc_ack(struct hfi1_ctxtdata *rcd,
 
 	/* Ensure s_rdma_ack_cnt changes are committed */
 	smp_read_barrier_depends();
-	if (qp->s_rdma_ack_cnt)
+	if (qp->s_rdma_ack_cnt) {
 		hfi1_queue_rc_ack(qp, is_fecn);
+		return;
+	}
 
 	/* Don't try to send ACKs if the link isn't ACTIVE */
 	if (driver_lstate(ppd) != IB_PORT_ACTIVE)
