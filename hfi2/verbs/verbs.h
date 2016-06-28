@@ -140,6 +140,7 @@ struct hfi2_qp_priv {
 	u8 s_sl;
 	bool use_16b;
 	struct iowait s_iowait;
+	struct timer_list s_rnr_timer;
 };
 
 /* TODO - hfi1 returns an int, review when we attempt common logic. */
@@ -305,6 +306,12 @@ void hfi2_do_send(struct work_struct *work);
 void hfi2_schedule_send(struct rvt_qp *qp);
 void hfi2_send_complete(struct rvt_qp *qp, struct rvt_swqe *wqe,
 			enum ib_wc_status status);
+void hfi2_rc_rnr_retry(unsigned long arg);
+void hfi2_add_rnr_timer(struct rvt_qp *qp, u32 to);
+void hfi2_rc_timeout(unsigned long arg);
+void hfi2_del_timers_sync(struct rvt_qp *qp);
+void hfi2_stop_rc_timers(struct rvt_qp *qp);
+
 void hfi2_rc_send_complete(struct rvt_qp *qp, struct ib_l4_headers *ohdr);
 int hfi2_make_uc_req(struct rvt_qp *qp);
 int hfi2_make_ud_req(struct rvt_qp *qp);

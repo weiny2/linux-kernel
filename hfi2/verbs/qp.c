@@ -80,7 +80,8 @@ void *qp_priv_alloc(struct rvt_dev_info *rdi, struct rvt_qp *qp, gfp_t gfp)
 		kfree(priv);
 		return ERR_PTR(-ENOMEM);
 	}
-
+	setup_timer(&priv->s_rnr_timer, hfi2_rc_rnr_retry, (unsigned long)qp);
+	qp->s_timer.function = hfi2_rc_timeout;
 	return priv;
 }
 
@@ -116,7 +117,7 @@ unsigned free_all_qps(struct rvt_dev_info *rdi)
 void flush_qp_waiters(struct rvt_qp *qp)
 {
 	flush_iowait(qp);
-	/* FXRTODO: stop RC timers */
+	hfi2_stop_rc_timers(qp);
 }
 
 void stop_send_queue(struct rvt_qp *qp)
@@ -124,7 +125,7 @@ void stop_send_queue(struct rvt_qp *qp)
 	struct hfi2_qp_priv *priv = qp->priv;
 
 	cancel_work_sync(&priv->s_iowait.iowork);
-	del_timer_sync(&qp->s_timer);
+	hfi2_del_timers_sync(qp);
 }
 
 void quiesce_qp(struct rvt_qp *qp)
