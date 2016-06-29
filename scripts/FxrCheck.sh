@@ -2,8 +2,16 @@
 
 . scripts/GlobalDefinition.sh
 
-myname=$0
+myname=`basename $0`
 PWD=`pwd`
+
+# detect undefined symbol
+make KVER=${KERNEL_VERSION} >/dev/null 2>${myname}.stderr
+if grep -i warning ${myname}.stderr; then
+	rm -f ${myname}.stderr
+	exit 98
+fi
+rm -f ${myname}.stderr
 
 # checkpatch
 DIRS="hfi2"
