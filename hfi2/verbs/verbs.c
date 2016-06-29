@@ -629,8 +629,7 @@ ib_reg_err:
 port_err:
 	hfi2_ctx_uninit(ibd);
 ctx_err:
-	kfree(ibd->rdi.ports); /* TODO - workaround RDMAVT leak */
-	ib_dealloc_device(&ibd->rdi.ibdev);
+	rvt_dealloc_device(&ibd->rdi);
 exit:
 	/* must clear dd->ibd so state is sane during error cleanup */
 	dd->ibd = NULL;
@@ -651,7 +650,5 @@ void hfi2_ib_remove(struct hfi_devdata *dd)
 	for (i = 0; i < ibd->num_pports; i++)
 		hfi2_uninit_port(&ibd->pport[i]);
 	hfi2_ctx_uninit(ibd);
-	/* TODO - workaround for RDMAVT leak */
-	kfree(ibd->rdi.ports);
-	ib_dealloc_device(&ibd->rdi.ibdev);
+	rvt_dealloc_device(&ibd->rdi);
 }

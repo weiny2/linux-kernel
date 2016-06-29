@@ -110,7 +110,6 @@ for viper in ${viper0} ${viper1}; do
 		${BULLSEYE_DIR}/bin/covselect -q --add '!hfi2/vnic/vnic.git/opa_vnic/opa_vnic_debug.c'
 		${BULLSEYE_DIR}/bin/covselect -q --add '!opa-headers.git/test/'
 		${BULLSEYE_DIR}/bin/covselect -q --add '!hfi2/kfi/kfi_main.c'
-		${BULLSEYE_DIR}/bin/covselect -q --add '!hfi2/verbs/rdmavt/'
 		${BULLSEYE_DIR}/bin/covselect -q --add '!hfi2/snoop.c'
 		${BULLSEYE_DIR}/bin/cov01 -1
 		export PATH=${BULLSEYE_DIR}/bin:${PATH}
