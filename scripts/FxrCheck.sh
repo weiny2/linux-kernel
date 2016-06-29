@@ -19,8 +19,8 @@ CHECKPATCH_COMMAND=/lib/modules/${KERNEL_VERSION}/build/scripts/checkpatch.pl
 CHECKPATCH_OPTIONS="--file --no-tree --terse --strict"
 
 # FRXTODO Exclude generated headers in hfi2/fxr/* from style check, those files
-# do conform to kernel coding standard and generate ~70K errors/warnings
-if [ "$1" == "" ]; then
+# do not conform to kernel coding standard and generate ~70K errors/warnings
+if [ $# -lt 1 ]; then
     find ${DIRS} -type f -name "*.h" -o -name "*.c" | grep -v "hfi2/fxr/" |\
     while read file; do
 	    ${CHECKPATCH_COMMAND} ${CHECKPATCH_OPTIONS} ${file}

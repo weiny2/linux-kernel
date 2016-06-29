@@ -16,7 +16,10 @@ wrapup_bullseye() {
 	for viper in ${viper0} ${viper1}; do
 		SSH_CMD="ssh -p${viper} root@localhost"
 		${SSH_CMD} "
+			fuser -v -k /dev/infiniband/* /dev/hfi* /dev/eeph*
+			echo '0000:01:00.0' > /sys/bus/pci/drivers/hfi2/unbind
 			export COVFILE=${COVFILE}; ${BULLSEYE_DIR}/bin/covgetkernel
+			echo '0000:01:00.0' > /sys/bus/pci/drivers/hfi2/bind
 			service --skip-redirect opa2_hfi stop
 			rmmod libcov-lkm
 			${BULLSEYE_DIR}/bin/cov01 -0
