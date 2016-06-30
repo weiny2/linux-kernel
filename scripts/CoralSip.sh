@@ -1,6 +1,6 @@
 #!/bin/sh
 
-c_source_code_dirs="common/rdma hfi2"
+c_source_code_dirs="common/rdma hfi2 hfi2_vnic hfi_core kfi opa-headers.git user"
 leading_sharp_files="makefile opa2_hfi.spec.in"
 
 myname=`basename $0 .sh`
@@ -39,9 +39,12 @@ add_copyright() {
 		sed -e "/^ \* This file is provided under a dual BSD\/GPLv2 license.  When using or/,//d" >${prologue}
 	sed -e "1,/^ \* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE./d" ${file} >${epilogue}
 	sed -e "1,/^ \* SOFTWARE./d" ${file} >>${epilogue}
-	mv ${prologue} ${file}
-	copyright_statement | sed -e "s/^/ */" >>${file}
-	cat ${epilogue} >>${file}
+	if [ -s ${epilogue} ]; then # ${epilogue} is empty when there is no copyright notice in the file
+		mv ${prologue} ${file}
+		copyright_statement | sed -e "s/^/ */" >>${file}
+		cat ${epilogue} >>${file}
+	fi
+	rm -f ${prologue} ${epilogue}
 }
 
 add_sharp_copyright() {
