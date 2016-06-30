@@ -48,7 +48,7 @@ function send_res
 	grep "UPSTREAM_TEST_FAIL" $summary
 	if [[ $? -eq 0 ]]; then
 		#fail
-		to="`cat failed_reg.subscribers`"
+		to="hfi1-kernel@eclists.intel.com"
 		mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] $title for commit $commit FAILED" $from $to  < .tmpmail
 		rm .tmpmail
 		exit 0
@@ -57,14 +57,14 @@ function send_res
 	grep "UPSTREAM_TEST_PASS" $summary
 	if [[ $? -eq 0 ]]; then
 		#pass
-		to="`cat passing_reg.subscribers`"
+		to="hfi1-kernel@eclists.intel.com"
 		mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] $title for commit $commit SUCCESS" $from $to  < .tmpmail
 		rm .tmpmail
 		exit 0
 	fi
 
 	# Unknown status
-	to="`cat failed_reg.subscribers`"
+	to="hfi1-kernel@eclists.intel.com"
 	mailx -S smtp=smtp://smtp.intel.com -s "[CRON_REG] $title for commit $commit UNKNOWN" $from $to  < .tmpmail
 	rm .tmpmail
 	exit 0
