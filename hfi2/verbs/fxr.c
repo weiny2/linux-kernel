@@ -402,6 +402,23 @@ static int build_iovec_array(struct hfi2_ibport *ibp, struct rvt_qp *qp,
 	return 0;
 }
 
+/*
+ * Checking if the verbs user is using resp SL
+ * This function requires the sl passed is valid SL
+ * Returns true if the SL is resp SL  of the req/resp SL pairs.
+ */
+
+bool hfi2_is_verbs_resp_sl(struct hfi_pportdata *ppd, u8 sl)
+{
+	int i;
+	int num_sls = ARRAY_SIZE(ppd->sl_pairs);
+
+	for (i = 0; i < num_sls; i++)
+		if (ppd->sl_pairs[i] == sl)
+			return true;
+	return false;
+}
+
 int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 		  union hfi2_packet_header *ph, size_t hwords)
 {

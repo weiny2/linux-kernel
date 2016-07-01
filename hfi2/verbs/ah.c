@@ -59,17 +59,33 @@ int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 {
 	struct hfi2_ibport *ibp;
 	struct hfi_pportdata *ppd;
+	int num_sls;
 	u8 sc5;
 
 	if (hfi2_get_dlid_from_ah(ah_attr) == 0)
 		return -EINVAL;
+	num_sls = ARRAY_SIZE(ppd->sl_pairs);
+	if (ah_attr->sl >= num_sls || ah_attr->sl == HFI_INVALID_RESP_SL)
+		return -EINVAL;
 
 	/* test the mapping for validity */
 	ibp = to_hfi_ibp(ibdev, ah_attr->port_num);
+	if (!ibp)
+		return -EINVAL;
 	ppd = ibp->ppd;
 	sc5 = ppd->sl_to_sc[ah_attr->sl];
 	if (ppd->sc_to_vlt[sc5] > ppd->vls_supported &&
 	    ppd->sc_to_vlt[sc5] != 0xf)
+		return -EINVAL;
+
+	/*
+	 * HFI2 allows transmitting verbs packets on the response SL
+	 * but does not allow receiving anything but Portals on the
+	 * response SL due to the way the hardware control pipeline is plumbed.
+	 * This check during AH creation ensures that a response SL is
+	 * not used by verbs.
+	 */
+	if (hfi2_is_verbs_resp_sl(ibp->ppd, ah_attr->sl))
 		return -EINVAL;
 	return 0;
 }
