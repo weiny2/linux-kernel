@@ -183,143 +183,143 @@ static struct hfi_error_csr hfi_fzc0_error[] = {
 		" OC CSR chain parity error on the input request bus. Tied low on FZC.",
 		},
 		{ /* bit 29 */
+		"CSR_CPORT_ADDRESS_MISS",
+		" OC CSR address miss or timeout on a request from Cport. Tied low on FZC.",
+		},
+		{ /* bit 30 */
 		"PM_MBE",
 		" Multi bit error detected in a high priority DN stream MasterTime flit.",
 		},
-		{ /* bit 30 */
+		{ /* bit 31 */
 		"PM_SBE",
 		" Single bit error detected in a high priority DN stream MasterTime flit.",
 		},
-		{ /* bit 31 */
-		"Unused_63_31",
-		" Unused",
-		},
 		{ /* bit 32 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 33 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 34 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 35 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 36 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 37 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 38 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 39 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 40 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 41 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 42 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 43 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 44 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 45 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 46 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 47 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 48 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 49 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 50 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 51 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 52 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 53 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 54 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 55 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 56 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 57 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 58 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 59 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 60 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 61 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 62 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 63 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		}
 	}
@@ -453,143 +453,143 @@ static struct hfi_error_csr hfi_fzc1_error[] = {
 		" OC CSR chain parity error on the input request bus. Tied low on FZC.",
 		},
 		{ /* bit 29 */
+		"CSR_CPORT_ADDRESS_MISS",
+		" OC CSR address miss or timeout on a request from Cport. Tied low on FZC.",
+		},
+		{ /* bit 30 */
 		"PM_MBE",
 		" Multi bit error detected in a high priority DN stream MasterTime flit.",
 		},
-		{ /* bit 30 */
+		{ /* bit 31 */
 		"PM_SBE",
 		" Single bit error detected in a high priority DN stream MasterTime flit.",
 		},
-		{ /* bit 31 */
-		"Unused_63_31",
-		" Unused",
-		},
 		{ /* bit 32 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 33 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 34 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 35 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 36 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 37 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 38 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 39 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 40 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 41 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 42 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 43 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 44 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 45 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 46 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 47 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 48 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 49 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 50 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 51 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 52 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 53 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 54 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 55 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 56 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 57 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 58 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 59 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 60 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 61 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 62 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		},
 		{ /* bit 63 */
-		"Unused_63_31",
+		"Unused_63_32",
 		" Unused",
 		}
 	}
@@ -1690,15 +1690,15 @@ static struct hfi_error_csr hfi_txcid_error[] = {
 		},
 		{ /* bit 1 */
 		"timeout",
-		" Timeout of something",
+		" Timeout",
 		},
 		{ /* bit 2 */
 		"sbe",
-		" Correctable SBE. Error information: TXCID_ERR_INFO_SBE_MBE",
+		" Correctable Error",
 		},
 		{ /* bit 3 */
 		"mbe",
-		" Uncorrectable MBE. Error information: TXCID_ERR_INFO_SBE_MBE .",
+		" Uncorrectable Error",
 		},
 		{ /* bit 4 */
 		"Reserved_63_4",
@@ -4166,7 +4166,7 @@ static struct hfi_error_csr hfi_at_error[] = {
 		},
 		{ /* bit 13 */
 		"iommu_rsp_err",
-		" Unexpected IOMMU Response",
+		" Unexpected IOMMU Response. After coming out of FLR, this error may be raised as the OS continues to drain its request queue. It is safe to ignore/clear this error once it is guaranteed that the OS has completely drained its request queue. The device should not be enabled until this drain has occurred. The driver may use system software interfaces to initiate the page request/response drain. See section 7.11 of the IOMMU Specification for details.",
 		},
 		{ /* bit 14 */
 		"future_err0",
@@ -4681,231 +4681,231 @@ static struct hfi_error_csr hfi_rxcid_error[] = {
 		" Detected a PID mis match",
 		},
 		{ /* bit 7 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_maddr_mbe_err",
+		" Detected a MADDR MBE error",
 		},
 		{ /* bit 8 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_maddr_sbe_err",
+		" Detected a MADDR SBE error",
 		},
 		{ /* bit 9 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_tx_cnt_mbe_err",
+		" Detected a TX count MBE error",
 		},
 		{ /* bit 10 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_tx_cnt_sbe_err",
+		" Detected a TX count SBE error",
 		},
 		{ /* bit 11 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_rx_cnt_mbe_err",
+		" Detected a RX count MBE error",
 		},
 		{ /* bit 12 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_rx_cnt_sbe_err",
+		" Detected a RX count SBE error",
 		},
 		{ /* bit 13 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_tx_ptr_mbe_err",
+		" Detected a TX pointer MBE error",
 		},
 		{ /* bit 14 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_tx_ptr_sbe_err",
+		" Detected a TX pointer SBE error",
 		},
 		{ /* bit 15 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_rx_ptr_mbe_err",
+		" Detected a RX pointer MBE error",
 		},
 		{ /* bit 16 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_rx_ptr_sbe_err",
+		" Detected a RX pointer SBE error",
 		},
 		{ /* bit 17 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_req_fifo_mbe_err",
+		" Detected a Request FIFO MBE error",
 		},
 		{ /* bit 18 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_req_fifo_sbe_err",
+		" Detected a Request FIFO SBE error",
 		},
 		{ /* bit 19 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_tx_pend_inval_err",
+		" Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address",
 		},
 		{ /* bit 20 */
-		"Reserved_63_7",
-		" Unused",
+		"csr_rx_pend_inval_err",
+		" Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address",
 		},
 		{ /* bit 21 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 22 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 23 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 24 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 25 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 26 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 27 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 28 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 29 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 30 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 31 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 32 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 33 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 34 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 35 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 36 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 37 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 38 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 39 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 40 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 41 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 42 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 43 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 44 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 45 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 46 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 47 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 48 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 49 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 50 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 51 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 52 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 53 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 54 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 55 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 56 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 57 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 58 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 59 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 60 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 61 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 62 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		},
 		{ /* bit 63 */
-		"Reserved_63_7",
+		"Reserved_63_21",
 		" Unused",
 		}
 	}

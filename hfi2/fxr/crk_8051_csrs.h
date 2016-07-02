@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Jun  2 19:11:24 2016
+// Created on: Wed Jun 22 19:30:15 2016
 //
 
 #ifndef ___CRK_8051_CSRS_H__
@@ -39,8 +39,8 @@ typedef union {
 // CRK8051_CFG_RAM_ACCESS_STATUS desc:
 typedef union {
     struct {
-        uint64_t         AUTO_ADDRESS  : 16; // This register stores the current address VALue CRK8051 generate during auto_incr_addr mode
-        uint64_t     ACCESS_COMPLETED  :  1; // 1: the result of read data is VALid when reading, write operation completed when writing 0: read/write operation is ongoing
+        uint64_t         AUTO_ADDRESS  : 16; // This register stores the current address value CRK8051 generate during auto_incr_addr mode
+        uint64_t     ACCESS_COMPLETED  :  1; // 1: the result of read data is valid when reading, write operation completed when writing 0: read/write operation is ongoing
         uint64_t         Unused_63_17  : 47; // Unused
     } field;
     uint64_t val;
@@ -49,7 +49,7 @@ typedef union {
 // CRK8051_CFG_RAM_ACCESS_RD_DATA desc:
 typedef union {
     struct {
-        uint64_t                  VAL  : 64; // data when reading, VALid after access_completed is high, The least significant byte is bit[7:0].
+        uint64_t                  VAL  : 64; // data when reading, valid after access_completed is high, The least significant byte is bit[7:0].
     } field;
     uint64_t val;
 } CRK8051_CFG_RAM_ACCESS_RD_DATA_t;
@@ -70,7 +70,7 @@ typedef union {
     struct {
         uint64_t            COMPLETED  :  1; // 0 to indicate 8051 has received the Host Request and is executing the request, 1 to indicate request is done, and response is available.
         uint64_t           Unused_7_1  :  7; // Unused
-        uint64_t          RETURN_CODE  :  8; // return code for the execution of the command: 0x01: InVALid Command 0x02: Request Successfully executed 0xff: Request received, execution is ongoing others: Command specific
+        uint64_t          RETURN_CODE  :  8; // return code for the execution of the command: 0x01: Invalid Command 0x02: Request Successfully executed 0xff: Request received, execution is ongoing others: Command specific
         uint64_t             RSP_DATA  : 48; // Data output if any when command completed.
     } field;
     uint64_t val;
@@ -433,7 +433,7 @@ typedef union {
     struct {
         uint64_t            COMPLETED  :  1; // 0 to indicate HOST has received the external device config. request from the 8051. 1 to indicate request has been executed, result is available
         uint64_t           Unused_7_1  :  7; // Unused
-        uint64_t          RETURN_CODE  :  8; // Return code for the Host Response 0x01: InVALid Command. 0x02: Request Successfully executed. 0x03: Request not supported. 0xfe: Request rejected, stop further request. 0xff: Request received, execution is ongoing others: Request specific
+        uint64_t          RETURN_CODE  :  8; // Return code for the Host Response 0x01: Invalid Command. 0x02: Request Successfully executed. 0x03: Request not supported. 0xfe: Request rejected, stop further request. 0xff: Request received, execution is ongoing others: Request specific
         uint64_t             RSP_DATA  : 16; // Data for the Host Response
         uint64_t         Unused_63_32  : 32; // Unused
     } field;

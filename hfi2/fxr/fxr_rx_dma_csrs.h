@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Jun  2 19:11:25 2016
+// Created on: Wed Jun 22 19:30:15 2016
 //
 
 #ifndef ___FXR_rx_dma_CSRS_H__
@@ -30,7 +30,7 @@ typedef union {
         uint64_t     so_on_all_writes  :  1; // If 1, Strictly Ordered bit to the Host will always be 1 for any write. This takes priority over the always off, TDO and SDO bits.
         uint64_t      so_on_all_reads  :  1; // If 1, Strictly Ordered bit to the Host will always be 1 for any read or atomic. This takes priority over the always off and RDO bit.
         uint64_t                  tdo  :  1; // Total Data Ordering bit. Determines the setting of the SO bit on Ordered write or atomics that are not the last cache line of the packet.
-        uint64_t                  rco  :  1; // RC Ordering bit. Determines the setting of the SO bit on Ordered reads.
+        uint64_t                  rco  :  1; // RC Ordering bit. Determines the setting of the SO bit on Ordered cmds.
         uint64_t                  sdo  :  1; // Spontaneous Data Ordering bit. Determines the setting of the SO bit on Spontaneous Events.
         uint64_t              gen1_do  :  1; // Gen-1 Packet Data Ordering bit. Determines the setting of the SO bit on Gen-1 Put Events.
         uint64_t       Reserved_63_24  : 40; // Unused

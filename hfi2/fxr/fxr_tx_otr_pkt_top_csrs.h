@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Jun  2 19:11:24 2016
+// Created on: Wed Jun 22 19:30:15 2016
 //
 
 #ifndef ___FXR_tx_otr_pkt_top_CSRS_H__
@@ -621,11 +621,15 @@ typedef union {
 // TXOTR_PKT_CFG_NACK_RETRAS_DISABLE desc:
 typedef union {
     struct {
-        uint64_t                  tc0  :  1; // Disable TC0
-        uint64_t                  tc1  :  1; // Disable TC1
-        uint64_t                  tc2  :  1; // Disable TC2
-        uint64_t                  tc3  :  1; // Disable TC3
-        uint64_t        Reserved_63_4  : 60; // Unused
+        uint64_t              oos_tc0  :  1; // Disable retransmits resulting from Out-of-sequence NACK for TC0
+        uint64_t              oos_tc1  :  1; // Disable retransmits resulting from Out-of-sequence NACK for TC1
+        uint64_t              oos_tc2  :  1; // Disable retransmits resulting from Out-of-sequence NACK for TC2
+        uint64_t              oos_tc3  :  1; // Disable retransmits resulting from Out-of-sequence NACK for TC3
+        uint64_t         resource_tc0  :  1; // Disable retransmits resulting from Resource NACK for TC0
+        uint64_t         resource_tc1  :  1; // Disable retransmits resulting from Resource NACK for TC1
+        uint64_t         resource_tc2  :  1; // Disable retransmits resulting from Resource NACK for TC2
+        uint64_t         resource_tc3  :  1; // Disable retransmits resulting from Resource NACK for TC3
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_NACK_RETRAS_DISABLE_t;
@@ -1392,8 +1396,8 @@ typedef union {
 // TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS desc:
 typedef union {
     struct {
-        uint64_t              address  : 14; // Address for Read or Write. Valid address are from 0 to 16383.
-        uint64_t       Reserved_51_14  : 38; // Unused
+        uint64_t              address  : 13; // Address for Read or Write. Valid address are from 0 to 8191.
+        uint64_t       Reserved_51_13  : 39; // Unused
         uint64_t         Payload_regs  :  8; // Constant indicating number of payload registers follow
         uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0 = Read/Write Raw Data 1 = Generate ECC on Write, Correct Data on Read
@@ -1758,5 +1762,89 @@ typedef union {
     } field;
     uint64_t val;
 } TXOTR_PKG_DBG_HEAD_PENDING_t;
+
+// TXOTR_PKT_PRF_STALL_OPB_ENTRIES_X desc:
+typedef union {
+    struct {
+        uint64_t                 MCTC  :  3; // 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
+        uint64_t          UNUSED_63_3  : 61; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_PRF_STALL_OPB_ENTRIES_X_t;
+
+// TXOTR_PKT_PRF_STALL_OPB_ENTRIES_Y desc:
+typedef union {
+    struct {
+        uint64_t                 MCTC  :  3; // 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
+        uint64_t          UNUSED_63_3  : 61; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_PRF_STALL_OPB_ENTRIES_Y_t;
+
+// TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_X desc:
+typedef union {
+    struct {
+        uint64_t                 MCTC  :  3; // 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
+        uint64_t          UNUSED_63_3  : 61; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_X_t;
+
+// TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_Y desc:
+typedef union {
+    struct {
+        uint64_t                 MCTC  :  3; // 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
+        uint64_t          UNUSED_63_3  : 61; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_Y_t;
+
+// TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_X desc:
+typedef union {
+    struct {
+        uint64_t                 MCTC  :  2; // 2'd3 - MC1TC3 2'd2 - MC1TC2 2'd1 - MC1TC1 2'd0 - MC1TC0
+        uint64_t          UNUSED_63_2  : 62; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_X_t;
+
+// TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_Y desc:
+typedef union {
+    struct {
+        uint64_t                 MCTC  :  2; // 2'd3 - MC1TC3 2'd2 - MC1TC2 2'd1 - MC1TC1 2'd0 - MC1TC0
+        uint64_t          UNUSED_63_2  : 62; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_Y_t;
+
+// TXOTR_PKT_PRF_LATENCY desc:
+typedef union {
+    struct {
+        uint64_t                A_MAX  : 12; // Upper bound of lowest latency bin. Response latencies less than or equal to A_MAX increment bin A. This value should always be less than B_MAX .
+        uint64_t                B_MAX  : 12; // Upper bound of second lowest latency bin. Response latencies greater than A_MAX but less than or equal to B_MAX increment bin B. This value should always be less than C_MAX .
+        uint64_t                C_MAX  : 12; // Upper bound of third lowest latency bin.Response latencies greater than B_MAX but less than or equal to C_MAX increment bin B. This value should always be less than D_MAX .
+        uint64_t                D_MAX  : 12; // Upper bound of fourth lowest latency bin.Response latencies greater than C_MAX but less than or equal to D_MAX increment bin B. Response latencies greater than D_MAX increment bin E.
+        uint64_t         UNUSED_63_48  : 16; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_PRF_LATENCY_t;
+
+// TXOTR_PKT_PRF_PKTS_OPENED_X desc:
+typedef union {
+    struct {
+        uint64_t                 MCTC  :  3; // 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
+        uint64_t          UNUSED_63_3  : 61; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_PRF_PKTS_OPENED_X_t;
+
+// TXOTR_PKT_PRF_PKTS_CLOSED_X desc:
+typedef union {
+    struct {
+        uint64_t                 MCTC  :  3; // 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
+        uint64_t          UNUSED_63_3  : 61; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_PRF_PKTS_CLOSED_X_t;
 
 #endif /* ___FXR_tx_otr_pkt_top_CSRS_H__ */

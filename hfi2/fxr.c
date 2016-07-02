@@ -382,12 +382,20 @@ static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 {
 	TXOTR_PKT_CFG_VALID_TC_DLID_t tc_slid = {.val = 0};
+	TXOTR_MSG_CFG_SMALL_HEADER_t small = {.val = 0};
 
 	tc_slid.field.tc_valid_p0 = 0xf;
 	tc_slid.field.tc_valid_p1 = 0xf;
 	write_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID, tc_slid.val);
 
 	hfi_init_tx_otr_mtu(dd, HFI_DEFAULT_MAX_MTU);
+
+	/*
+	 * FXRTODO: Enable small headers once HW 8B PKEY CSRs
+	 * are available after HSD 1208770654 is resolved
+	 */
+	small.field.ENABLE = 0;
+	write_csr(dd, FXR_TXOTR_MSG_CFG_SMALL_HEADER, small.val);
 }
 
 static void hfi_init_tx_cid_csrs(const struct hfi_devdata *dd)
@@ -2192,9 +2200,6 @@ static irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
 {
 	struct hfi_irq_entry *me = dev_id;
 	struct hfi_event_queue *eq;
-
-	/* FXRTODO: remove this acking after simics bug fixed */
-	hfi_ack_interrupt(me);
 
 	trace_hfi2_irq_eq(me);
 

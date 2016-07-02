@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Jun  2 19:11:24 2016
+// Created on: Wed Jun 22 19:30:15 2016
 //
 
 #ifndef ___FXR_rx_hiarb_CSRS_H__
@@ -304,11 +304,11 @@ typedef union {
 // RXHIARB_ERR_INFO_PCB_NVAL desc:
 typedef union {
     struct {
-        uint64_t               handle  : 12; // equester handle of the most recent error.
-        uint64_t            rx_src_id  :  4; // Source requester ID for most recent error.This indicates the requester who caused the error. 0x0-0x3=rsvd, =0x4=RxE2E, 0x5-0x7=rsvd, 0x8=RxHP. 0x9=RxCID, 0xa=RxET, 0xb-0xe=rsvd, 0xf=RxDMA Note that only the handle-based requesters of RxDMA, RxHP, and RxET will cause this error
-        uint64_t              element  : 16; // Requester element of most recent error.
-        uint64_t               region  :  3; // PCB region being accessed during most recent error 0=PTE, 1=CT, 2-EQ, 3=SWEQ, 4-TrigOp, 5=LE/ME, 6-UnexpHdr, 7=rsvd Note that SWEQ not used by hardware.
-        uint64_t                   ni  :  2; // Requester network number during the most recemt error
+        uint64_t               handle  : 12; // equester handle of the first error.
+        uint64_t            rx_src_id  :  4; // Source requester ID for first error.This indicates the requester who caused the error. 0x0-0x3=rsvd, =0x4=RxE2E, 0x5-0x7=rsvd, 0x8=RxHP. 0x9=RxCID, 0xa=RxET, 0xb-0xe=rsvd, 0xf=RxDMA Note that only the handle-based requesters of RxDMA, RxHP, and RxET will cause this error
+        uint64_t              element  : 16; // Requester element of first error.
+        uint64_t               region  :  3; // PCB region being accessed during first error 0=PTE, 1=CT, 2-EQ, 3=SWEQ, 4-TrigOp, 5=LE/ME, 6-UnexpHdr, 7=rsvd Note that SWEQ not used by hardware.
+        uint64_t                   ni  :  2; // Requester network number during the first error
         uint64_t       Reserved_39_37  :  3; // Reserved
         uint64_t                count  :  8; // Saturating count PCB nval errors
         uint64_t       Reserved_63_48  : 16; // Reserved
@@ -319,11 +319,11 @@ typedef union {
 // RXHIARB_ERR_INFO_PCB_BVIO desc:
 typedef union {
     struct {
-        uint64_t               handle  : 12; // Requester handleof the most recent error.
-        uint64_t            rx_src_id  :  4; // Source requester ID for most recent error.This indicates the requester who caused the error. 0x0-0x3=rsvd, =0x4=RxE2E, 0x5-0x7=rsvd, 0x8=RxHP. 0x9=RxCID, 0xa=RxET, 0xb-0xe=rsvd, 0xf=RxDMA Note that only the handle-based requesters of RxDMA, RxHP, and RxET will cause this error
-        uint64_t              element  : 16; // Requester element being accessed during most recent error.
-        uint64_t               region  :  3; // PCB region being accessed during most recent error 0=PTE, 1=CT, 2-EQ, 3=SWEQ, 4-TrigOp, 5=LE/ME, 6-UnexpHdr, 7=rsvd
-        uint64_t                   ni  :  2; // Requester network number duringmost recent error
+        uint64_t               handle  : 12; // Requester handleof the first error.
+        uint64_t            rx_src_id  :  4; // Source requester ID for first error.This indicates the requester who caused the error. 0x0-0x3=rsvd, =0x4=RxE2E, 0x5-0x7=rsvd, 0x8=RxHP. 0x9=RxCID, 0xa=RxET, 0xb-0xe=rsvd, 0xf=RxDMA Note that only the handle-based requesters of RxDMA, RxHP, and RxET will cause this error
+        uint64_t              element  : 16; // Requester element being accessed during first error.
+        uint64_t               region  :  3; // PCB region being accessed during first error 0=PTE, 1=CT, 2-EQ, 3=SWEQ, 4-TrigOp, 5=LE/ME, 6-UnexpHdr, 7=rsvd
+        uint64_t                   ni  :  2; // Requester network number duringfirst error
         uint64_t       Reserved_39_37  :  3; // Reserved
         uint64_t                count  :  8; // Saturating count of bvio errors
         uint64_t       Reserved_63_48  : 16; // Reserved
@@ -334,11 +334,11 @@ typedef union {
 // RXHIARB_ERR_INFO_PCB_OFLW desc:
 typedef union {
     struct {
-        uint64_t               handle  : 12; // Requester handle of the most recent error.
-        uint64_t            rx_src_id  :  4; // Source requester ID for most recent error.This indicates the requester who caused the error. 0x0-0x3=rsvd, =0x4=RxE2E, 0x5-0x7=rsvd, 0x8=RxHP. 0x9=RxCID, 0xa=RxET, 0xb-0xe=rsvd, 0xf=RxDMA Note that only the handle-based requesters of RxDMA, RxHP, and RxET will cause this error.
-        uint64_t              element  : 16; // Requester element being accessed during most recent error.
-        uint64_t               region  :  3; // PCB region being accessed during most recent error 0=PTE, 1=CT, 2-EQ, 3=SWEQ, 4-TrigOp, 5=LE/ME, 6-UnexpHdr, 7=rsvd
-        uint64_t                   ni  :  2; // Requester network number during most recent error
+        uint64_t               handle  : 12; // Requester handle of the first error.
+        uint64_t            rx_src_id  :  4; // Source requester ID for first error.This indicates the requester who caused the error. 0x0-0x3=rsvd, =0x4=RxE2E, 0x5-0x7=rsvd, 0x8=RxHP. 0x9=RxCID, 0xa=RxET, 0xb-0xe=rsvd, 0xf=RxDMA Note that only the handle-based requesters of RxDMA, RxHP, and RxET will cause this error.
+        uint64_t              element  : 16; // Requester element being accessed during first error.
+        uint64_t               region  :  3; // PCB region being accessed during first error 0=PTE, 1=CT, 2-EQ, 3=SWEQ, 4-TrigOp, 5=LE/ME, 6-UnexpHdr, 7=rsvd
+        uint64_t                   ni  :  2; // Requester network number during first error
         uint64_t       Reserved_39_37  :  3; // Reserved
         uint64_t                count  :  8; // Saturating count of overlow errors
         uint64_t       Reserved_63_48  : 16; // Reserved
@@ -349,12 +349,12 @@ typedef union {
 // RXHIARB_ERR_INFO_PCB_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the most recent mbe
-        uint64_t       mbe_last_index  : 12; // PCB index (addr) of last mbe
+        uint64_t   mbe_first_syndrome  :  8; // syndrome of the first mbe
+        uint64_t      mbe_first_index  : 12; // PCB index (addr) of first mbe
         uint64_t       Reserved_23_20  :  4; // Reserved
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the most recent sbe
-        uint64_t       sbe_last_index  : 12; // PCB index (addr) of last sbe
+        uint64_t   sbe_first_syndrome  :  8; // syndrome of the first sbe
+        uint64_t      sbe_first_index  : 12; // PCB index (addr) of first sbe
         uint64_t       Reserved_55_52  :  4; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes.
     } field;
@@ -368,7 +368,7 @@ typedef union {
         uint64_t    err_inject_ecc_en  :  1; // ECC error injection enable.
         uint64_t  err_inject_ovflw_en  :  1; // Overflow error injection enable.
         uint64_t   err_inject_bvio_en  :  1; // Boundary violation error injection enable
-        uint64_t   err_inject_nval_en  :  1; // Non-valid error injec tion enable
+        uint64_t   err_inject_nval_en  :  1; // Non-valid error injection enable
         uint64_t       Reserved_63_12  : 52; // Reserved
     } field;
     uint64_t val;
@@ -377,9 +377,9 @@ typedef union {
 // RXHIARB_ERR_INFO_AT_RSP desc:
 typedef union {
     struct {
-        uint64_t               at_tid  :  7; // AT transaction ID of most recent error (HIARB only uses a 7-bit TID).
+        uint64_t               at_tid  :  7; // AT transaction ID of first error (HIARB only uses a 7-bit TID).
         uint64_t           Reserved_7  :  1; // Reserved.
-        uint64_t               status  :  4; // AT status field of most recent error.
+        uint64_t               status  :  4; // AT status field of first error.
         uint64_t       Reserved_15_12  :  4; // Reserved.
         uint64_t                count  : 16; // Saturating count of AT errors.
         uint64_t       Reserved_63_32  : 32; // Reserved
@@ -390,12 +390,12 @@ typedef union {
 // RXHIARB_ERR_INFO_RXDMA_FRAME desc:
 typedef union {
     struct {
-        uint64_t                  tid  :  8; // Last transaction ID.
-        uint64_t               domain  :  4; // Last domain
+        uint64_t                  tid  :  8; // first transaction ID.
+        uint64_t               domain  :  4; // first domain
         uint64_t       Reserved_15_12  :  4; // Reserved.
         uint64_t                 ferr  :  9; // framing error domain bit vector - 1 bit per domain.
         uint64_t       Reserved_31_25  :  7; // Reserved
-        uint64_t                count  :  8; // Saturating count of ferrThe increment signal is the 'or' of the 9 domain ferr signals.
+        uint64_t                count  :  8; // Saturating count of ferr, The increment signal is the 'or' of the 9 domain ferr signals.
         uint64_t       Reserved_63_40  : 24; // Reserved
     } field;
     uint64_t val;
@@ -404,13 +404,13 @@ typedef union {
 // RXHIARB_ERR_INFO_RXDMA_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the most recent least significant ecc domain mbe
-        uint64_t      mbe_last_domain  :  4; // ecc domain of the most recent least significant mbe
+        uint64_t   mbe_first_syndrome  :  8; // syndrome of the first least significant ecc domain mbe
+        uint64_t     mbe_first_domain  :  4; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  9; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_23_21  :  3; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 9 mbe domain signals.
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the most recent least significant ecc domain sbe
-        uint64_t      sbe_last_domain  :  4; // ecc domain of most recent least significant sbe
+        uint64_t   sbe_first_syndrome  :  8; // syndrome of the first least significant ecc domain sbe
+        uint64_t     sbe_first_domain  :  4; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  9; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_55_53  :  3; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 9 domain sbe signals.
@@ -466,7 +466,7 @@ typedef union {
 // RXHIARB_ERR_INFO_RXHP_FRAME desc:
 typedef union {
     struct {
-        uint64_t                  tid  :  8; // Transaction ID of most recent error.
+        uint64_t                  tid  :  8; // Transaction ID of first error.
         uint64_t                count  :  8; // Saturating count of ferr.
         uint64_t       Reserved_63_16  : 48; // Reserved
     } field;
@@ -476,10 +476,10 @@ typedef union {
 // RXHIARB_ERR_INFO_RXHP_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the most recent mbe
+        uint64_t   mbe_first_syndrome  :  8; // syndrome of the first mbe
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
         uint64_t       Reserved_31_16  : 16; // Reserved.
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the most recent sbe
+        uint64_t   sbe_first_syndrome  :  8; // syndrome of the first sbe
         uint64_t            sbe_count  :  8; // saturating counter of sbes.
         uint64_t       Reserved_63_48  : 16; // Reserved
     } field;
@@ -500,7 +500,7 @@ typedef union {
 // RXHIARB_ERR_INFO_RXET_FRAME desc:
 typedef union {
     struct {
-        uint64_t                  tid  :  8; // Transaction ID of most recent error.
+        uint64_t                  tid  :  8; // Transaction ID of first error.
         uint64_t                count  :  8; // Saturating count of ferr.
         uint64_t       Reserved_63_16  : 48; // Reserved
     } field;
@@ -510,10 +510,10 @@ typedef union {
 // RXHIARB_ERR_INFO_RXET_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the most recent mbe
+        uint64_t   mbe_first_syndrome  :  8; // syndrome of the first mbe
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
         uint64_t       Reserved_31_16  : 16; // Reserved.
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the most recent sbe
+        uint64_t   sbe_first_syndrome  :  8; // syndrome of the first sbe
         uint64_t            sbe_count  :  8; // saturating counter of sbes.
         uint64_t       Reserved_63_48  : 16; // Reserved
     } field;
@@ -534,10 +534,10 @@ typedef union {
 // RXHIARB_ERR_INFO_RXE2E_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the most recent mbe
+        uint64_t   mbe_first_syndrome  :  8; // syndrome of the first mbe
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
         uint64_t       Reserved_31_16  : 16; // Reserved.
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the most recent sbe
+        uint64_t   sbe_first_syndrome  :  8; // syndrome of the first sbe
         uint64_t            sbe_count  :  8; // saturating counter of sbes.
         uint64_t       Reserved_63_48  : 16; // Reserved
     } field;
@@ -557,10 +557,10 @@ typedef union {
 // RXHIARB_ERR_INFO_RXCID_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the most recent mbe
+        uint64_t   mbe_first_syndrome  :  8; // syndrome of the first mbe
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
         uint64_t       Reserved_31_16  : 16; // Reserved.
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the most recent sbe
+        uint64_t   sbe_first_syndrome  :  8; // syndrome of the first sbe
         uint64_t            sbe_count  :  8; // saturating counter of sbes.
         uint64_t       Reserved_63_48  : 16; // Reserved
     } field;
@@ -580,11 +580,11 @@ typedef union {
 // RXHIARB_ERR_INFO_SLRSP_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first mbe
         uint64_t         Reserved_7_6  :  2; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
         uint64_t       Reserved_31_16  : 16; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first sbe
         uint64_t       Reserved_39_38  :  2; // Reserved.
         uint64_t            sbe_count  :  8; // saturating counter of sbes.
         uint64_t       Reserved_63_48  : 16; // Reserved
@@ -624,13 +624,13 @@ typedef union {
 // RXHIARB_ERR_INFO_PYLD_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the most recent mbe
-        uint64_t       mbe_last_index  :  7; // Payload index (addr) of last mbe
+        uint64_t   mbe_first_syndrome  :  8; // syndrome of the first mbe
+        uint64_t      mbe_first_index  :  7; // Payload index (addr) of first mbe
         uint64_t          Reserved_15  :  1; // Reserved
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
         uint64_t       Reserved_31_24  :  8; // Reserved.
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the most recent sbe
-        uint64_t       sbe_last_index  :  7; // Payload index (addr) of last sbe
+        uint64_t   sbe_first_syndrome  :  8; // syndrome of the first sbe
+        uint64_t      sbe_first_index  :  7; // Payload index (addr) of first sbe
         uint64_t          Reserved_47  :  1; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes.
         uint64_t       Reserved_63_56  :  8; // Reserved
@@ -651,14 +651,14 @@ typedef union {
 // RXHIARB_ERR_INFO_HQUE0_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain mbe
-        uint64_t      mbe_last_domain  :  1; // ecc domain of the most recent least significant mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain mbe
+        uint64_t     mbe_first_domain  :  1; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t        Reserved_15_9  :  7; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe domain signals.
         uint64_t       Reserved_31_24  :  8; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain sbe
-        uint64_t      sbe_last_domain  :  1; // ecc domain of most recent least significant sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain sbe
+        uint64_t     sbe_first_domain  :  1; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_47_41  :  7; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 2 domain sbe signals.
@@ -670,14 +670,14 @@ typedef union {
 // RXHIARB_ERR_INFO_HQUE1_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain mbe
-        uint64_t      mbe_last_domain  :  1; // ecc domain of the most recent least significant mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain mbe
+        uint64_t     mbe_first_domain  :  1; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t        Reserved_15_9  :  7; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe domain signals.
         uint64_t       Reserved_31_24  :  8; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain sbe
-        uint64_t      sbe_last_domain  :  1; // ecc domain of most recent least significant sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain sbe
+        uint64_t     sbe_first_domain  :  1; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_47_41  :  7; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 2 domain sbe signals.
@@ -689,14 +689,14 @@ typedef union {
 // RXHIARB_ERR_INFO_HQUE2_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain mbe
-        uint64_t      mbe_last_domain  :  1; // ecc domain of the most recent least significant mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain mbe
+        uint64_t     mbe_first_domain  :  1; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t        Reserved_15_9  :  7; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe domain signals.
         uint64_t       Reserved_31_24  :  8; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain sbe
-        uint64_t      sbe_last_domain  :  1; // ecc domain of most recent least significant sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain sbe
+        uint64_t     sbe_first_domain  :  1; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_47_41  :  7; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 2 domain sbe signals.
@@ -708,14 +708,14 @@ typedef union {
 // RXHIARB_ERR_INFO_HQUE3_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain mbe
-        uint64_t      mbe_last_domain  :  1; // ecc domain of the most recent least significant mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain mbe
+        uint64_t     mbe_first_domain  :  1; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t        Reserved_15_9  :  7; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe domain signals.
         uint64_t       Reserved_31_24  :  8; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain sbe
-        uint64_t      sbe_last_domain  :  1; // ecc domain of most recent least significant sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain sbe
+        uint64_t     sbe_first_domain  :  1; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_47_41  :  7; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 2 domain sbe signals.
@@ -727,14 +727,14 @@ typedef union {
 // RXHIARB_ERR_INFO_HQUE4_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain mbe
-        uint64_t      mbe_last_domain  :  1; // ecc domain of the most recent least significant mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain mbe
+        uint64_t     mbe_first_domain  :  1; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t        Reserved_15_9  :  7; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe domain signals.
         uint64_t       Reserved_31_24  :  8; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain sbe
-        uint64_t      sbe_last_domain  :  1; // ecc domain of most recent least significant sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain sbe
+        uint64_t     sbe_first_domain  :  1; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_47_41  :  7; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 2 domain sbe signals.
@@ -746,14 +746,14 @@ typedef union {
 // RXHIARB_ERR_INFO_HQUE5_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain mbe
-        uint64_t      mbe_last_domain  :  1; // ecc domain of the most recent least significant mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain mbe
+        uint64_t     mbe_first_domain  :  1; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t        Reserved_15_9  :  7; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe domain signals.
         uint64_t       Reserved_31_24  :  8; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain sbe
-        uint64_t      sbe_last_domain  :  1; // ecc domain of most recent least significant sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain sbe
+        uint64_t     sbe_first_domain  :  1; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_47_41  :  7; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 2 domain sbe signals.
@@ -765,14 +765,14 @@ typedef union {
 // RXHIARB_ERR_INFO_HQUE6_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain mbe
-        uint64_t      mbe_last_domain  :  1; // ecc domain of the most recent least significant mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain mbe
+        uint64_t     mbe_first_domain  :  1; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t        Reserved_15_9  :  7; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe domain signals.
         uint64_t       Reserved_31_24  :  8; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain sbe
-        uint64_t      sbe_last_domain  :  1; // ecc domain of most recent least significant sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain sbe
+        uint64_t     sbe_first_domain  :  1; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_47_41  :  7; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 2 domain sbe signals.
@@ -784,14 +784,14 @@ typedef union {
 // RXHIARB_ERR_INFO_HQUE7_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain mbe
-        uint64_t      mbe_last_domain  :  1; // ecc domain of the most recent least significant mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain mbe
+        uint64_t     mbe_first_domain  :  1; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t        Reserved_15_9  :  7; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe domain signals.
         uint64_t       Reserved_31_24  :  8; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain sbe
-        uint64_t      sbe_last_domain  :  1; // ecc domain of most recent least significant sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain sbe
+        uint64_t     sbe_first_domain  :  1; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_47_41  :  7; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 2 domain sbe signals.
@@ -803,14 +803,14 @@ typedef union {
 // RXHIARB_ERR_INFO_HQUE8_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain mbe
-        uint64_t      mbe_last_domain  :  1; // ecc domain of the most recent least significant mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain mbe
+        uint64_t     mbe_first_domain  :  1; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t        Reserved_15_9  :  7; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe domain signals.
         uint64_t       Reserved_31_24  :  8; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain sbe
-        uint64_t      sbe_last_domain  :  1; // ecc domain of most recent least significant sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain sbe
+        uint64_t     sbe_first_domain  :  1; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_47_41  :  7; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 2 domain sbe signals.
@@ -885,7 +885,7 @@ typedef union {
 // RXHIARB_ERR_INFO_HQUE_PVECT desc:
 typedef union {
     struct {
-        uint64_t     verr_last_domain  :  4; // domain of the most recent least significant vector parity error
+        uint64_t    verr_first_domain  :  4; // domain of the first least significant vector parity error
         uint64_t         Reserved_7_4  :  4; // Reserved.
         uint64_t                 verr  :  9; // per domain single bit set whenever a parity error is detected for that domain. This helps find more significant errors when multiple domains have parity errors in the same clock and only the least significant domain is recorded.
         uint64_t       Reserved_63_17  : 47; // Reserved.
@@ -913,19 +913,19 @@ typedef union {
 // RXHIARB_ERR_INFO_MTLB_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  7; // syndrome of the most recent least significant ecc domain mbe
+        uint64_t   mbe_first_syndrome  :  7; // syndrome of the first least significant ecc domain mbe
         uint64_t           Reserved_7  :  1; // Reserved.
-        uint64_t       mbe_last_index  :  7; // index of the most recent least significant ecc domain mbe
+        uint64_t      mbe_first_index  :  7; // index of the first least significant ecc domain mbe
         uint64_t          Reserved_15  :  1; // Reserved.
-        uint64_t      mbe_last_domain  :  2; // ecc domain of the most recent least significant mbe
+        uint64_t     mbe_first_domain  :  2; // ecc domain of the first least significant mbe
         uint64_t                  mbe  :  4; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_23_22  :  2; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes. The increment signal is the 'or' of the 4 mbe domain signals.
-        uint64_t    sbe_last_syndrome  :  7; // syndrome of the most recent least significant ecc domain sbe
+        uint64_t   sbe_first_syndrome  :  7; // syndrome of the first least significant ecc domain sbe
         uint64_t          Reserved_39  :  1; // Reserved.
-        uint64_t       sbe_last_index  :  7; // index of the most recent least significant ecc domain sbe
+        uint64_t      sbe_first_index  :  7; // index of the first least significant ecc domain sbe
         uint64_t          Reserved_47  :  1; // Reserved.
-        uint64_t      sbe_last_domain  :  2; // ecc domain of most recent least significant sbe
+        uint64_t     sbe_first_domain  :  2; // ecc domain of first least significant sbe
         uint64_t                  sbe  :  4; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t       Reserved_55_54  :  2; // Reserved
         uint64_t            sbe_count  :  8; // saturating counter of sbes. The increment signal is the 'or' of the 2 domain sbe signals.
@@ -937,7 +937,8 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 verr  :  5; // per domain single bit set whenever a parity error is detected for that domain. This helps find more significant errors when multiple domains have parity errors in the same clock and only the least significant domain is recorded.
-        uint64_t        Reserved_63_5  : 59; // Reserved.
+        uint64_t           first_verr  :  5; // Captures first occurrence of a parity error within the control vectors. Note that that this could capture more than one domain if multiple vectors happened to error on the same clock cycle.
+        uint64_t       Reserved_63_10  : 54; // Reserved.
     } field;
     uint64_t val;
 } RXHIARB_ERR_INFO_MTLB_VECTS_t;
@@ -968,10 +969,10 @@ typedef union {
 // RXHIARB_ERR_INFO_ATFIFO_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the most recent least significant ecc domain mbe
+        uint64_t   mbe_first_syndrome  :  8; // syndrome of the first least significant ecc domain mbe
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
         uint64_t       Reserved_31_16  : 16; // Reserved.
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the most recent least significant ecc domain sbe
+        uint64_t   sbe_first_syndrome  :  8; // syndrome of the first least significant ecc domain sbe
         uint64_t            sbe_count  :  8; // saturating counter of sbes
         uint64_t       Reserved_63_48  : 16; // Reserved
     } field;
@@ -991,10 +992,10 @@ typedef union {
 // RXHIARB_ERR_INFO_HIFIFO_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the most recent least significant ecc domain mbe
+        uint64_t   mbe_first_syndrome  :  8; // syndrome of the first least significant ecc domain mbe
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
         uint64_t       Reserved_31_16  : 16; // Reserved.
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the most recent least significant ecc domain sbe
+        uint64_t   sbe_first_syndrome  :  8; // syndrome of the first least significant ecc domain sbe
         uint64_t            sbe_count  :  8; // saturating counter of sbes
         uint64_t       Reserved_63_48  : 16; // Reserved
     } field;
@@ -1014,10 +1015,10 @@ typedef union {
 // RXHIARB_ERR_INFO_HIFIS_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the most recent least significant ecc domain mbe
+        uint64_t   mbe_first_syndrome  :  8; // syndrome of the first least significant ecc domain mbe
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
         uint64_t       Reserved_31_16  : 16; // Reserved.
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the most recent least significant ecc domain sbe
+        uint64_t   sbe_first_syndrome  :  8; // syndrome of the first least significant ecc domain sbe
         uint64_t            sbe_count  :  8; // saturating counter of sbes
         uint64_t       Reserved_63_48  : 16; // Reserved
     } field;
@@ -1047,11 +1048,11 @@ typedef union {
 // RXHIARB_ERR_INFO_NACK_ECC desc:
 typedef union {
     struct {
-        uint64_t    mbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain mbe
+        uint64_t   mbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain mbe
         uint64_t         Reserved_7_6  :  2; // Reserved.
         uint64_t            mbe_count  :  8; // saturating counter of mbes.
         uint64_t       Reserved_31_16  : 16; // Reserved.
-        uint64_t    sbe_last_syndrome  :  6; // syndrome of the most recent least significant ecc domain sbe
+        uint64_t   sbe_first_syndrome  :  6; // syndrome of the first least significant ecc domain sbe
         uint64_t       Reserved_39_38  :  2; // Reserved.
         uint64_t            sbe_count  :  8; // saturating counter of sbes
         uint64_t       Reserved_63_48  : 16; // Reserved
@@ -1710,5 +1711,430 @@ typedef union {
     } field;
     uint64_t val;
 } RXHIARB_DBG_AT_REQ_STATE_t;
+
+// RXHIARB_DBG_XTRIG_CTRL desc:
+typedef union {
+    struct {
+        uint64_t           hi_in_hold  :  1; // Hold match state for HI in
+        uint64_t             hi_in_en  :  1; // Enable extended triggering for HI in interface
+        uint64_t          hi_out_hold  :  1; // Hold match state for HI out
+        uint64_t            hi_out_en  :  1; // Enable extended triggering for HI out interface
+        uint64_t         arb_mux_hold  :  1; // Hold match state for arb_mux
+        uint64_t           arb_mux_en  :  1; // Enable extended triggering for arb_mux bus
+        uint64_t          e2e_in_hold  :  1; // Hold match state for RxE2E
+        uint64_t            e2e_in_en  :  1; // Enable extended triggering for ExE2E interface
+        uint64_t           et_in_hold  :  1; // Hold match state for RxET
+        uint64_t             et_in_en  :  1; // Enable extended triggering for RxET interface
+        uint64_t           hp_in_hold  :  1; // Hold match state for RxHO
+        uint64_t             hp_in_en  :  1; // Enable extended triggering for RxHP interface
+        uint64_t          cid_in_hold  :  1; // Hold match state for RxCID
+        uint64_t            cid_in_en  :  1; // Enable extended triggering for RxCID interface
+        uint64_t          dma_in_hold  :  1; // Hold match state for RxDMA
+        uint64_t            dma_in_en  :  1; // Enable extended triggering for RxDMA interface
+        uint64_t       Reserved_63_16  : 48; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_CTRL_t;
+
+// RXHIARB_DBG_XTRIG_CNT desc:
+typedef union {
+    struct {
+        uint64_t            hi_in_cnt  :  8; // Extended triggering count value for HI in interface
+        uint64_t           hi_out_cnt  :  8; // Extended triggering count value for HI out interface
+        uint64_t          arb_mux_cnt  :  8; // Extended triggering count value for arb_mux bus
+        uint64_t           e2e_in_cnt  :  8; // Extended triggering count value for ExE2E interface
+        uint64_t            et_in_cnt  :  8; // Extended triggering count value for RxET interface
+        uint64_t            hp_in_cnt  :  8; // Extended triggering count value for RxHP interface
+        uint64_t           cid_in_cnt  :  8; // Extended triggering count value for RxCID interface
+        uint64_t           dma_in_cnt  :  8; // Extended triggering count value for RxDMA interface
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_CNT_t;
+
+// RXHIARB_DBG_XTRIG_DMA_IN0 desc:
+typedef union {
+    struct {
+        uint64_t               opcode  :  3; // Opcode
+        uint64_t                 addr  : 57; // Virtual/Physical address - bits [56:0]
+        uint64_t                 dval  :  1; // Data valid
+        uint64_t                 tail  :  1; // Tail indicator
+        uint64_t                 head  :  1; // Head indicator
+        uint64_t          Reserved_63  :  1; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_DMA_IN0_t;
+
+// RXHIARB_DBG_XTRIG_DMA_IN1 desc:
+typedef union {
+    struct {
+        uint64_t                   tc  :  4; // Traffic class
+        uint64_t                  tid  :  8; // Transaction ID
+        uint64_t                  pid  : 12; // Process ID
+        uint64_t                  len  :  7; // Byte length
+        uint64_t                chint  :  2; // Cache hints
+        uint64_t                 tmod  :  8; // Transaction Modifiers
+        uint64_t                  art  :  1; // Atomic data return
+        uint64_t                  adt  :  5; // Atomic data type
+        uint64_t                 asop  :  5; // Atomic sub-opcode
+        uint64_t       Reserved_63_52  : 12; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_DMA_IN1_t;
+
+// RXHIARB_DBG_XTRIG_DMA_IN_MSK0 desc:
+typedef union {
+    struct {
+        uint64_t               opcode  :  3; // Opcode
+        uint64_t                 addr  : 57; // Virtual/Physical address - bits [56:0]
+        uint64_t                 dval  :  1; // Data valid
+        uint64_t                 tail  :  1; // Tail indicator
+        uint64_t                 head  :  1; // Head indicator
+        uint64_t          Reserved_63  :  1; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_DMA_IN_MSK0_t;
+
+// RXHIARB_DBG_XTRIG_DMA_IN_MSK1 desc:
+typedef union {
+    struct {
+        uint64_t                   tc  :  4; // Traffic class
+        uint64_t                  tid  :  8; // Transaction ID
+        uint64_t                  pid  : 12; // Process ID
+        uint64_t                  len  :  7; // Byte length
+        uint64_t                chint  :  2; // Cache hints
+        uint64_t                 tmod  :  8; // Transaction Modifiers
+        uint64_t                  art  :  1; // Atomic data return
+        uint64_t                  adt  :  5; // Atomic data type
+        uint64_t                 asop  :  5; // Atomic sub-opcode
+        uint64_t       Reserved_63_52  : 12; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_DMA_IN_MSK1_t;
+
+// RXHIARB_DBG_XTRIG_CID_IN0 desc:
+typedef union {
+    struct {
+        uint64_t              req_tid  :  8; // Transaction ID
+        uint64_t             req_addr  : 54; // Virtual address - bits [56:3]
+        uint64_t            req_valid  :  1; // Valid
+        uint64_t          Reserved_63  :  1; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_CID_IN0_t;
+
+// RXHIARB_DBG_XTRIG_CID_IN1 desc:
+typedef union {
+    struct {
+        uint64_t            req_chint  :  2; // Cache hints
+        uint64_t       req_priv_level  :  1; // Privilege level
+        uint64_t             req_tmod  :  8; // Transaction Modifiers
+        uint64_t              req_pid  : 12; // Process ID
+        uint64_t       Reserved_63_23  : 41; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_CID_IN1_t;
+
+// RXHIARB_DBG_XTRIG_CID_IN_MSK0 desc:
+typedef union {
+    struct {
+        uint64_t              req_tid  :  8; // Transaction ID
+        uint64_t             req_addr  : 54; // Virtual address - bits [56:3]
+        uint64_t            req_valid  :  1; // Valid
+        uint64_t          Reserved_63  :  1; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_CID_IN_MSK0_t;
+
+// RXHIARB_DBG_XTRIG_CID_IN_MSK1 desc:
+typedef union {
+    struct {
+        uint64_t            req_chint  :  2; // Cache hints
+        uint64_t       req_priv_level  :  1; // Privilege level
+        uint64_t             req_tmod  :  8; // Transaction Modifiers
+        uint64_t              req_pid  : 12; // Process ID
+        uint64_t       Reserved_63_23  : 41; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_CID_IN_MSK1_t;
+
+// RXHIARB_DBG_XTRIG_HP_IN desc:
+typedef union {
+    struct {
+        uint64_t            req_chint  :  2; // Cache hints
+        uint64_t           req_region  :  3; // PCB region indicator
+        uint64_t               req_ni  :  2; // Network Indicator
+        uint64_t              req_tid  :  8; // Transaction ID
+        uint64_t              req_len  :  7; // Byte length
+        uint64_t             req_tmod  :  8; // Transaction Modifier
+        uint64_t           req_opcode  :  1; // Opcode
+        uint64_t          req_element  : 16; // Element within PCB region
+        uint64_t           req_handle  : 12; // PID - used as index to PCB table
+        uint64_t             req_dval  :  1; // Data valid
+        uint64_t            req_valid  :  1; // Valid
+        uint64_t       Reserved_63_61  :  3; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_HP_IN_t;
+
+// RXHIARB_DBG_XTRIG_HP_IN_MSK desc:
+typedef union {
+    struct {
+        uint64_t            req_chint  :  2; // Cache hints
+        uint64_t           req_region  :  3; // PCB region indicator
+        uint64_t               req_ni  :  2; // Network Indicator
+        uint64_t              req_tid  :  8; // Transaction ID
+        uint64_t              req_len  :  7; // Byte length
+        uint64_t             req_tmod  :  8; // Transaction Modifier
+        uint64_t           req_opcode  :  1; // Opcode
+        uint64_t          req_element  : 16; // Element within PCB region
+        uint64_t           req_handle  : 12; // PID - used as index to PCB table
+        uint64_t             req_dval  :  1; // Data valid
+        uint64_t            req_valid  :  1; // Valid
+        uint64_t       Reserved_63_61  :  3; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_HP_IN_MSK_t;
+
+// RXHIARB_DBG_XTRIG_ET_IN desc:
+typedef union {
+    struct {
+        uint64_t            req_chint  :  2; // Cache hints
+        uint64_t           req_region  :  3; // PCB region indicator
+        uint64_t               req_ni  :  2; // Network Indicator
+        uint64_t              req_tid  :  8; // Transaction ID
+        uint64_t              req_len  :  7; // Byte length
+        uint64_t             req_tmod  :  8; // Transaction Modifier
+        uint64_t           req_opcode  :  1; // Opcode
+        uint64_t          req_element  : 16; // Element within PCB region
+        uint64_t           req_handle  : 12; // PID - used as index to PCB table
+        uint64_t             req_dval  :  1; // Data valid
+        uint64_t            req_valid  :  1; // Valid
+        uint64_t       Reserved_63_61  :  3; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_ET_IN_t;
+
+// RXHIARB_DBG_XTRIG_ET_IN_MSK desc:
+typedef union {
+    struct {
+        uint64_t            req_chint  :  2; // Cache hints
+        uint64_t           req_region  :  3; // PCB region indicator
+        uint64_t               req_ni  :  2; // Network Indicator
+        uint64_t              req_tid  :  8; // Transaction ID
+        uint64_t              req_len  :  7; // Byte length
+        uint64_t             req_tmod  :  8; // Transaction Modifier
+        uint64_t           req_opcode  :  1; // Opcode
+        uint64_t          req_element  : 16; // Element within PCB region
+        uint64_t           req_handle  : 12; // PID - used as index to PCB table
+        uint64_t             req_dval  :  1; // Data valid
+        uint64_t            req_valid  :  1; // Valid
+        uint64_t       Reserved_63_61  :  3; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_ET_IN_MSK_t;
+
+// RXHIARB_DBG_XTRIG_E2E_IN desc:
+typedef union {
+    struct {
+        uint64_t            req_chint  :  2; // Cache hints
+        uint64_t              req_tid  :  6; // Transaction ID
+        uint64_t             req_read  :  1; // Opcode
+        uint64_t          req_address  : 54; // Virtual address - bits [56:3]
+        uint64_t            req_valid  :  1; // Valid
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_E2E_IN_t;
+
+// RXHIARB_DBG_XTRIG_E2E_IN_MSK desc:
+typedef union {
+    struct {
+        uint64_t            req_chint  :  2; // Cache hints
+        uint64_t              req_tid  :  6; // Transaction ID
+        uint64_t             req_read  :  1; // Opcode
+        uint64_t          req_address  : 54; // Virtual address - bits [56:3]
+        uint64_t            req_valid  :  1; // Valid
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_E2E_IN_MSK_t;
+
+// RXHIARB_DBG_XTRIG_ARBMUX0 desc:
+typedef union {
+    struct {
+        uint64_t                 addr  : 57; // Virtual address - bits [56:0]
+        uint64_t                dval1  :  1; // Data valud for flit 1
+        uint64_t                dval0  :  1; // Data valid for flit 0
+        uint64_t                 tval  :  1; // Tail indicator
+        uint64_t                 hval  :  1; // Head indicator
+        uint64_t       Reserved_63_61  :  3; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_ARBMUX0_t;
+
+// RXHIARB_DBG_XTRIG_ARBMUX1 desc:
+typedef union {
+    struct {
+        uint64_t            rx_src_id  :  4; // Rx source client ID
+        uint64_t                   tc  :  4; // Traffic class
+        uint64_t                  tid  : 12; // Transaction ID
+        uint64_t                  len  :  7; // Byte length
+        uint64_t                chint  :  2; // Cache hints
+        uint64_t                 tmod  :  8; // Transaction Modifiers
+        uint64_t                  art  :  1; // Atomic data return
+        uint64_t                  adt  :  5; // Atomic data type
+        uint64_t                 asop  :  5; // Atomic sub-opcode
+        uint64_t               opcode  :  3; // Opcode
+        uint64_t                  pid  : 12; // Process ID
+        uint64_t          Reserved_63  :  1; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_ARBMUX1_t;
+
+// RXHIARB_DBG_XTRIG_ARBMUX_MSK0 desc:
+typedef union {
+    struct {
+        uint64_t                 addr  : 57; // Virtual address - bits [56:0]
+        uint64_t                dval1  :  1; // Data valud for flit 1
+        uint64_t                dval0  :  1; // Data valid for flit 0
+        uint64_t                 tval  :  1; // Tail indicator
+        uint64_t                 hval  :  1; // Head indicator
+        uint64_t       Reserved_63_61  :  3; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_ARBMUX_MSK0_t;
+
+// RXHIARB_DBG_XTRIG_ARBMUX_MSK1 desc:
+typedef union {
+    struct {
+        uint64_t            rx_src_id  :  4; // Rx source client ID
+        uint64_t                   tc  :  4; // Traffic class
+        uint64_t                  tid  : 12; // Transaction ID
+        uint64_t                  len  :  7; // Byte length
+        uint64_t                chint  :  2; // Cache hints
+        uint64_t                 tmod  :  8; // Transaction Modifiers
+        uint64_t                  art  :  1; // Atomic data return
+        uint64_t                  adt  :  5; // Atomic data type
+        uint64_t                 asop  :  5; // Atomic sub-opcode
+        uint64_t               opcode  :  3; // Opcode
+        uint64_t                  pid  : 12; // Process ID
+        uint64_t          Reserved_63  :  1; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_ARBMUX_MSK1_t;
+
+// RXHIARB_DBG_XTRIG_HI_OUT0 desc:
+typedef union {
+    struct {
+        uint64_t                  top  :  3; // Opcode
+        uint64_t                 addr  : 52; // Physical address - bits [51:0]
+        uint64_t                ttype  :  1; // Transaction Tyoe
+        uint64_t                 dval  :  1; // Data valid
+        uint64_t                 tval  :  1; // Tail indicator
+        uint64_t                 hval  :  1; // Head indicator
+        uint64_t       Reserved_63_59  :  5; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_HI_OUT0_t;
+
+// RXHIARB_DBG_XTRIG_HI_OUT1 desc:
+typedef union {
+    struct {
+        uint64_t                  art  :  1; // Atomic data return
+        uint64_t                  adt  :  5; // Atomic data type
+        uint64_t                 asop  :  5; // Atomic sub-opcode
+        uint64_t                 blen  :  7; // Byte length
+        uint64_t                chint  :  2; // Cache hints
+        uint64_t                 tmod  :  8; // Transaction Modifiers
+        uint64_t                  tid  : 12; // Transaction ID
+        uint64_t       Reserved_63_40  : 24; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_HI_OUT1_t;
+
+// RXHIARB_DBG_XTRIG_HI_OUT_MSK0 desc:
+typedef union {
+    struct {
+        uint64_t                  top  :  3; // Opcode
+        uint64_t                 addr  : 52; // Physical address - bits [51:0]
+        uint64_t                ttype  :  1; // Transaction Tyoe
+        uint64_t                 dval  :  1; // Data valid
+        uint64_t                 tval  :  1; // Tail indicator
+        uint64_t                 hval  :  1; // Head indicator
+        uint64_t       Reserved_63_59  :  5; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_HI_OUT_MSK0_t;
+
+// RXHIARB_DBG_XTRIG_HI_OUT_MSK1 desc:
+typedef union {
+    struct {
+        uint64_t                  art  :  1; // Atomic data return
+        uint64_t                  adt  :  5; // Atomic data type
+        uint64_t                 asop  :  5; // Atomic sub-opcode
+        uint64_t                 blen  :  7; // Byte length
+        uint64_t                chint  :  2; // Cache hints
+        uint64_t                 tmod  :  8; // Transaction Modifiers
+        uint64_t                  tid  : 12; // Transaction ID
+        uint64_t       Reserved_63_40  : 24; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_HI_OUT_MSK1_t;
+
+// RXHIARB_DBG_XTRIG_HI_IN0 desc:
+typedef union {
+    struct {
+        uint64_t                  top  :  3; // Opcode
+        uint64_t                 addr  : 52; // Physical address - bits [51:0]
+        uint64_t                ttype  :  1; // Transaction Tyoe
+        uint64_t                 dval  :  1; // Data valid
+        uint64_t                 tval  :  1; // Tail indicator
+        uint64_t                 hval  :  1; // Head indicator
+        uint64_t       Reserved_63_59  :  5; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_HI_IN0_t;
+
+// RXHIARB_DBG_XTRIG_HI_IN1 desc:
+typedef union {
+    struct {
+        uint64_t                  art  :  1; // Atomic data return
+        uint64_t                  adt  :  5; // Atomic data type
+        uint64_t                 asop  :  5; // Atomic sub-opcode
+        uint64_t                 blen  :  7; // Byte length
+        uint64_t                chint  :  2; // Cache hints
+        uint64_t                 tmod  :  8; // Transaction Modifiers
+        uint64_t                  tid  : 12; // Transaction ID
+        uint64_t       Reserved_63_40  : 24; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_HI_IN1_t;
+
+// RXHIARB_DBG_XTRIG_HI_IN_MSK0 desc:
+typedef union {
+    struct {
+        uint64_t                  top  :  3; // Opcode
+        uint64_t                 addr  : 52; // Physical address - bits [51:0]
+        uint64_t                ttype  :  1; // Transaction Tyoe
+        uint64_t                 dval  :  1; // Data valid
+        uint64_t                 tval  :  1; // Tail indicator
+        uint64_t                 hval  :  1; // Head indicator
+        uint64_t       Reserved_63_59  :  5; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_HI_IN_MSK0_t;
+
+// RXHIARB_DBG_XTRIG_HI_IN_MSK1 desc:
+typedef union {
+    struct {
+        uint64_t                  art  :  1; // Atomic data return
+        uint64_t                  adt  :  5; // Atomic data type
+        uint64_t                 asop  :  5; // Atomic sub-opcode
+        uint64_t                 blen  :  7; // Byte length
+        uint64_t                chint  :  2; // Cache hints
+        uint64_t                 tmod  :  8; // Transaction Modifiers
+        uint64_t                  tid  : 12; // Transaction ID
+        uint64_t       Reserved_63_40  : 24; // Reserved
+    } field;
+    uint64_t val;
+} RXHIARB_DBG_XTRIG_HI_IN_MSK1_t;
 
 #endif /* ___FXR_rx_hiarb_CSRS_H__ */

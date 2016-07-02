@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Jun  2 19:11:24 2016
+// Created on: Wed Jun 22 19:30:15 2016
 //
 
 #ifndef ___FXR_tx_ci_cid_CSRS_H__
@@ -18,7 +18,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                  pid  : 12; // Process ID associated with this command queue. Default is to assign access to the kernel (reserved PID 0). Commands must use this PID as their IPID unless the CQ is privileged. See note in CSR description regarding the symmetrical pairing requirements between this and the Rx.
-        uint64_t           priv_level  :  1; // Supervisor=0, User=1. Supervisor privilege level is required to Write the DLID relocation table. See note in CSR description regarding the symmetrical pairing requirements between this and the Rx.
+        uint64_t           priv_level  :  1; // Supervisor=0, User=1. Supervisor privilege level is required to write the DLID relocation table. See note in CSR description regarding the symmetrical pairing requirements between this and the Rx.
         uint64_t               enable  :  1; // A CQ that is not enabled can be written, but slot full counts will always be zero. See note in CSR description regarding the symmetrical pairing requirements between this and the Rx.
         uint64_t          reserved_14  :  1; // Reserved
         uint64_t            phys_dlid  :  1; // Allow physical DLID.
@@ -278,15 +278,6 @@ typedef union {
     uint64_t val;
 } TXCID_CREDITS_TO_RX_t;
 
-// TXCID_CFG_HI_CRDTS desc:
-typedef union {
-    struct {
-        uint64_t                  tc0  :  5; // Request Input Queue Credits
-        uint64_t          unused_63_5  : 59; // Unused
-    } field;
-    uint64_t val;
-} TXCID_CFG_HI_CRDTS_t;
-
 // TXCID_CFG_RX_MC0_CRDTS desc:
 typedef union {
     struct {
@@ -398,9 +389,9 @@ typedef union {
 typedef union {
     struct {
         uint64_t           diagnostic  :  1; // Diagnostic Error Flag
-        uint64_t              timeout  :  1; // Timeout of something
-        uint64_t                  sbe  :  1; // Correctable SBE. Error information: TXCID_ERR_INFO_SBE_MBE
-        uint64_t                  mbe  :  1; // Uncorrectable MBE. Error information: TXCID_ERR_INFO_SBE_MBE .
+        uint64_t              timeout  :  1; // Timeout
+        uint64_t                  sbe  :  1; // Correctable Error
+        uint64_t                  mbe  :  1; // Uncorrectable Error
         uint64_t        Reserved_63_4  : 60; // Reserved
     } field;
     uint64_t val;
@@ -409,7 +400,7 @@ typedef union {
 // TXCID_ERR_CLR desc:
 typedef union {
     struct {
-        uint64_t               events  :  4; // Write 1's to clear corresponding status bits.
+        uint64_t               events  :  4; // write 1 to clear corresponding status bits
         uint64_t        Reserved_63_4  : 60; // Reserved
     } field;
     uint64_t val;
@@ -418,7 +409,7 @@ typedef union {
 // TXCID_ERR_FRC desc:
 typedef union {
     struct {
-        uint64_t               events  :  4; // Write 1 to set corresponding status bits.
+        uint64_t               events  :  4; // write 1 to set corresponding status bits
         uint64_t        Reserved_63_4  : 60; // Reserved
     } field;
     uint64_t val;
@@ -427,7 +418,7 @@ typedef union {
 // TXCID_ERR_EN_HOST desc:
 typedef union {
     struct {
-        uint64_t               events  :  4; // Enables corresponding status bits to generate host interrupt signal.
+        uint64_t               events  :  4; // event bits
         uint64_t        Reserved_63_4  : 60; // Reserved
     } field;
     uint64_t val;
@@ -436,7 +427,7 @@ typedef union {
 // TXCID_ERR_FIRST_HOST desc:
 typedef union {
     struct {
-        uint64_t               events  :  4; // Snapshot of status bits when host interrupt signal transitions from 0 to 1.
+        uint64_t               events  :  4; // event bits
         uint64_t        Reserved_63_4  : 60; // Reserved
     } field;
     uint64_t val;
@@ -445,7 +436,7 @@ typedef union {
 // TXCID_ERR_EN_BMC desc:
 typedef union {
     struct {
-        uint64_t               events  :  4; // Enable corresponding status bits to generate BMC interrupt signal.
+        uint64_t               events  :  4; // event bits
         uint64_t        Reserved_63_4  : 60; // Reserved
     } field;
     uint64_t val;
@@ -454,7 +445,7 @@ typedef union {
 // TXCID_ERR_FIRST_BMC desc:
 typedef union {
     struct {
-        uint64_t               events  :  4; // Snapshot of status bits when BMC interrupt signal transitions from 0 to 1.
+        uint64_t               events  :  4; // event bits
         uint64_t        Reserved_63_4  : 60; // Reserved
     } field;
     uint64_t val;
@@ -463,7 +454,7 @@ typedef union {
 // TXCID_ERR_EN_QUAR desc:
 typedef union {
     struct {
-        uint64_t               events  :  4; // Enable corresponding status bits to generate quarantine signal.
+        uint64_t               events  :  4; // event bits
         uint64_t        Reserved_63_4  : 60; // Reserved
     } field;
     uint64_t val;
@@ -472,7 +463,7 @@ typedef union {
 // TXCID_ERR_FIRST_QUAR desc:
 typedef union {
     struct {
-        uint64_t               events  :  4; // Snapshot of status bits when quarantine signal transitions from 0 to 1.
+        uint64_t               events  :  4; // event bits
         uint64_t        Reserved_63_4  : 60; // Reserved
     } field;
     uint64_t val;

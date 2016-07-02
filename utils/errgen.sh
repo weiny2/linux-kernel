@@ -5,7 +5,7 @@
 #
 lex error.lex
 cc -g -o CSR.x lex.yy.c
-cat ../common/uapi/rdma/fxr/* | ./CSR.x
+cat ../hfi2/fxr/* | ./CSR.x
 
 #
 # for TP/FPC/LCB, create two instances for each port.

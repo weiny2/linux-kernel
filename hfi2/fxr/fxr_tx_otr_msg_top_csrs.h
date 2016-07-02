@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Jun  2 19:11:24 2016
+// Created on: Wed Jun 22 19:30:14 2016
 //
 
 #ifndef ___FXR_tx_otr_msg_top_CSRS_H__
@@ -696,8 +696,8 @@ typedef union {
 // TXOTR_MSG_DBG_BPE_PROG_MEM_ACCESS desc:
 typedef union {
     struct {
-        uint64_t              address  : 14; // Address for Read or Write. Valid address are from 0 to 16383.
-        uint64_t       Reserved_51_14  : 38; // Unused
+        uint64_t              address  : 12; // Address for Read or Write. Valid address are from 0 to 4095.
+        uint64_t       Reserved_51_12  : 40; // Unused
         uint64_t         Payload_regs  :  8; // Constant indicating number of payload registers follow
         uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0 = Read/Write Raw Data 1 = Generate ECC on Write, Correct Data on Read
@@ -942,5 +942,23 @@ typedef union {
     } field;
     uint64_t val;
 } TXOTR_MSG_PRF_STALL_PREFRAG_CREDITS_Y_t;
+
+// TXOTR_MSG_PRF_MSGS_OPENED_X desc:
+typedef union {
+    struct {
+        uint64_t                 MCTC  :  3; // 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
+        uint64_t          UNUSED_63_3  : 61; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_MSG_PRF_MSGS_OPENED_X_t;
+
+// TXOTR_MSG_PRF_MSGS_CLOSED_X desc:
+typedef union {
+    struct {
+        uint64_t                 MCTC  :  3; // 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
+        uint64_t          UNUSED_63_3  : 61; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_MSG_PRF_MSGS_CLOSED_X_t;
 
 #endif /* ___FXR_tx_otr_msg_top_CSRS_H__ */

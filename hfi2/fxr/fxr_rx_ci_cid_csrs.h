@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Tue Jun  7 01:43:17 2016
+// Created on: Wed Jun 22 19:30:15 2016
 //
 
 #ifndef ___FXR_rx_ci_cid_CSRS_H__
@@ -256,15 +256,6 @@ typedef union {
     uint64_t val;
 } RXCID_CFG_SL3_TO_TC_t;
 
-// RXCID_CFG_HI_CRDTS desc:
-typedef union {
-    struct {
-        uint64_t           hi_credits  :  5; // Request Input Queue Credits
-        uint64_t          unused_63_5  : 59; // Unused
-    } field;
-    uint64_t val;
-} RXCID_CFG_HI_CRDTS_t;
-
 // RXCID_ERR_STS desc:
 typedef union {
     struct {
@@ -275,7 +266,21 @@ typedef union {
         uint64_t       cq_mem_sbe_err  :  1; // CQ memory SBE error
         uint64_t     out_of_bound_err  :  1; // Detected a HIFIS write which crosses the 64byte boundary
         uint64_t     pid_mismatch_err  :  1; // Detected a PID mis match
-        uint64_t        Reserved_63_7  : 57; // Unused
+        uint64_t    csr_maddr_mbe_err  :  1; // Detected a MADDR MBE error
+        uint64_t    csr_maddr_sbe_err  :  1; // Detected a MADDR SBE error
+        uint64_t   csr_tx_cnt_mbe_err  :  1; // Detected a TX count MBE error
+        uint64_t   csr_tx_cnt_sbe_err  :  1; // Detected a TX count SBE error
+        uint64_t   csr_rx_cnt_mbe_err  :  1; // Detected a RX count MBE error
+        uint64_t   csr_rx_cnt_sbe_err  :  1; // Detected a RX count SBE error
+        uint64_t   csr_tx_ptr_mbe_err  :  1; // Detected a TX pointer MBE error
+        uint64_t   csr_tx_ptr_sbe_err  :  1; // Detected a TX pointer SBE error
+        uint64_t   csr_rx_ptr_mbe_err  :  1; // Detected a RX pointer MBE error
+        uint64_t   csr_rx_ptr_sbe_err  :  1; // Detected a RX pointer SBE error
+        uint64_t csr_req_fifo_mbe_err  :  1; // Detected a Request FIFO MBE error
+        uint64_t csr_req_fifo_sbe_err  :  1; // Detected a Request FIFO SBE error
+        uint64_t csr_tx_pend_inval_err  :  1; // Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t csr_rx_pend_inval_err  :  1; // Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } RXCID_ERR_STS_t;
@@ -290,7 +295,21 @@ typedef union {
         uint64_t       cq_mem_sbe_err  :  1; // CQ memory SBE error
         uint64_t     out_of_bound_err  :  1; // Detected a HIFIS write which crosses the 64byte boundary
         uint64_t     pid_mismatch_err  :  1; // Detected a PID mis match
-        uint64_t        Reserved_63_7  : 57; // Unused
+        uint64_t    csr_maddr_mbe_err  :  1; // Detected a MADDR MBE error
+        uint64_t    csr_maddr_sbe_err  :  1; // Detected a MADDR SBE error
+        uint64_t   csr_tx_cnt_mbe_err  :  1; // Detected a TX count MBE error
+        uint64_t   csr_tx_cnt_sbe_err  :  1; // Detected a TX count SBE error
+        uint64_t   csr_rx_cnt_mbe_err  :  1; // Detected a RX count MBE error
+        uint64_t   csr_rx_cnt_sbe_err  :  1; // Detected a RX count SBE error
+        uint64_t   csr_tx_ptr_mbe_err  :  1; // Detected a TX pointer MBE error
+        uint64_t   csr_tx_ptr_sbe_err  :  1; // Detected a TX pointer SBE error
+        uint64_t   csr_rx_ptr_mbe_err  :  1; // Detected a RX pointer MBE error
+        uint64_t   csr_rx_ptr_sbe_err  :  1; // Detected a RX pointer SBE error
+        uint64_t csr_req_fifo_mbe_err  :  1; // Detected a Request FIFO MBE error
+        uint64_t csr_req_fifo_sbe_err  :  1; // Detected a Request FIFO SBE error
+        uint64_t csr_tx_pend_inval_err  :  1; // Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t csr_rx_pend_inval_err  :  1; // Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } RXCID_ERR_CLR_t;
@@ -305,7 +324,21 @@ typedef union {
         uint64_t       cq_mem_sbe_err  :  1; // CQ memory SBE error
         uint64_t     out_of_bound_err  :  1; // Detected a HIFIS write which crosses the 64byte boundary
         uint64_t     pid_mismatch_err  :  1; // Detected a PID mis match
-        uint64_t        Reserved_63_7  : 57; // Unused
+        uint64_t    csr_maddr_mbe_err  :  1; // Detected a MADDR MBE error
+        uint64_t    csr_maddr_sbe_err  :  1; // Detected a MADDR SBE error
+        uint64_t   csr_tx_cnt_mbe_err  :  1; // Detected a TX count MBE error
+        uint64_t   csr_tx_cnt_sbe_err  :  1; // Detected a TX count SBE error
+        uint64_t   csr_rx_cnt_mbe_err  :  1; // Detected a RX count MBE error
+        uint64_t   csr_rx_cnt_sbe_err  :  1; // Detected a RX count SBE error
+        uint64_t   csr_tx_ptr_mbe_err  :  1; // Detected a TX pointer MBE error
+        uint64_t   csr_tx_ptr_sbe_err  :  1; // Detected a TX pointer SBE error
+        uint64_t   csr_rx_ptr_mbe_err  :  1; // Detected a RX pointer MBE error
+        uint64_t   csr_rx_ptr_sbe_err  :  1; // Detected a RX pointer SBE error
+        uint64_t csr_req_fifo_mbe_err  :  1; // Detected a Request FIFO MBE error
+        uint64_t csr_req_fifo_sbe_err  :  1; // Detected a Request FIFO SBE error
+        uint64_t csr_tx_pend_inval_err  :  1; // Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t csr_rx_pend_inval_err  :  1; // Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } RXCID_ERR_FRC_t;
@@ -320,7 +353,21 @@ typedef union {
         uint64_t       cq_mem_sbe_err  :  1; // CQ memory SBE error
         uint64_t     out_of_bound_err  :  1; // Detected a HIFIS write which crosses the 64byte boundary
         uint64_t     pid_mismatch_err  :  1; // Detected a PID mis match
-        uint64_t        Reserved_63_7  : 57; // Unused
+        uint64_t    csr_maddr_mbe_err  :  1; // Detected a MADDR MBE error
+        uint64_t    csr_maddr_sbe_err  :  1; // Detected a MADDR SBE error
+        uint64_t   csr_tx_cnt_mbe_err  :  1; // Detected a TX count MBE error
+        uint64_t   csr_tx_cnt_sbe_err  :  1; // Detected a TX count SBE error
+        uint64_t   csr_rx_cnt_mbe_err  :  1; // Detected a RX count MBE error
+        uint64_t   csr_rx_cnt_sbe_err  :  1; // Detected a RX count SBE error
+        uint64_t   csr_tx_ptr_mbe_err  :  1; // Detected a TX pointer MBE error
+        uint64_t   csr_tx_ptr_sbe_err  :  1; // Detected a TX pointer SBE error
+        uint64_t   csr_rx_ptr_mbe_err  :  1; // Detected a RX pointer MBE error
+        uint64_t   csr_rx_ptr_sbe_err  :  1; // Detected a RX pointer SBE error
+        uint64_t csr_req_fifo_mbe_err  :  1; // Detected a Request FIFO MBE error
+        uint64_t csr_req_fifo_sbe_err  :  1; // Detected a Request FIFO SBE error
+        uint64_t csr_tx_pend_inval_err  :  1; // Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t csr_rx_pend_inval_err  :  1; // Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } RXCID_ERR_EN_HOST_t;
@@ -335,7 +382,21 @@ typedef union {
         uint64_t       cq_mem_sbe_err  :  1; // CQ memory SBE error
         uint64_t     out_of_bound_err  :  1; // Detected a HIFIS write which crosses the 64byte boundary
         uint64_t     pid_mismatch_err  :  1; // Detected a PID mis match
-        uint64_t        Reserved_63_7  : 57; // Unused
+        uint64_t    csr_maddr_mbe_err  :  1; // Detected a MADDR MBE error
+        uint64_t    csr_maddr_sbe_err  :  1; // Detected a MADDR SBE error
+        uint64_t   csr_tx_cnt_mbe_err  :  1; // Detected a TX count MBE error
+        uint64_t   csr_tx_cnt_sbe_err  :  1; // Detected a TX count SBE error
+        uint64_t   csr_rx_cnt_mbe_err  :  1; // Detected a RX count MBE error
+        uint64_t   csr_rx_cnt_sbe_err  :  1; // Detected a RX count SBE error
+        uint64_t   csr_tx_ptr_mbe_err  :  1; // Detected a TX pointer MBE error
+        uint64_t   csr_tx_ptr_sbe_err  :  1; // Detected a TX pointer SBE error
+        uint64_t   csr_rx_ptr_mbe_err  :  1; // Detected a RX pointer MBE error
+        uint64_t   csr_rx_ptr_sbe_err  :  1; // Detected a RX pointer SBE error
+        uint64_t csr_req_fifo_mbe_err  :  1; // Detected a Request FIFO MBE error
+        uint64_t csr_req_fifo_sbe_err  :  1; // Detected a Request FIFO SBE error
+        uint64_t csr_tx_pend_inval_err  :  1; // Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t csr_rx_pend_inval_err  :  1; // Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } RXCID_ERR_FIRST_HOST_t;
@@ -350,7 +411,21 @@ typedef union {
         uint64_t       cq_mem_sbe_err  :  1; // CQ memory SBE error
         uint64_t     out_of_bound_err  :  1; // Detected a HIFIS write which crosses the 64byte boundary
         uint64_t     pid_mismatch_err  :  1; // Detected a PID mis match
-        uint64_t        Reserved_63_7  : 57; // Unused
+        uint64_t    csr_maddr_mbe_err  :  1; // Detected a MADDR MBE error
+        uint64_t    csr_maddr_sbe_err  :  1; // Detected a MADDR SBE error
+        uint64_t   csr_tx_cnt_mbe_err  :  1; // Detected a TX count MBE error
+        uint64_t   csr_tx_cnt_sbe_err  :  1; // Detected a TX count SBE error
+        uint64_t   csr_rx_cnt_mbe_err  :  1; // Detected a RX count MBE error
+        uint64_t   csr_rx_cnt_sbe_err  :  1; // Detected a RX count SBE error
+        uint64_t   csr_tx_ptr_mbe_err  :  1; // Detected a TX pointer MBE error
+        uint64_t   csr_tx_ptr_sbe_err  :  1; // Detected a TX pointer SBE error
+        uint64_t   csr_rx_ptr_mbe_err  :  1; // Detected a RX pointer MBE error
+        uint64_t   csr_rx_ptr_sbe_err  :  1; // Detected a RX pointer SBE error
+        uint64_t csr_req_fifo_mbe_err  :  1; // Detected a Request FIFO MBE error
+        uint64_t csr_req_fifo_sbe_err  :  1; // Detected a Request FIFO SBE error
+        uint64_t csr_tx_pend_inval_err  :  1; // Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t csr_rx_pend_inval_err  :  1; // Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } RXCID_ERR_EN_BMC_t;
@@ -365,7 +440,21 @@ typedef union {
         uint64_t       cq_mem_sbe_err  :  1; // CQ memory SBE error
         uint64_t     out_of_bound_err  :  1; // Detected a HIFIS write which crosses the 64byte boundary
         uint64_t     pid_mismatch_err  :  1; // Detected a PID mis match
-        uint64_t        Reserved_63_7  : 57; // Unused
+        uint64_t    csr_maddr_mbe_err  :  1; // Detected a MADDR MBE error
+        uint64_t    csr_maddr_sbe_err  :  1; // Detected a MADDR SBE error
+        uint64_t   csr_tx_cnt_mbe_err  :  1; // Detected a TX count MBE error
+        uint64_t   csr_tx_cnt_sbe_err  :  1; // Detected a TX count SBE error
+        uint64_t   csr_rx_cnt_mbe_err  :  1; // Detected a RX count MBE error
+        uint64_t   csr_rx_cnt_sbe_err  :  1; // Detected a RX count SBE error
+        uint64_t   csr_tx_ptr_mbe_err  :  1; // Detected a TX pointer MBE error
+        uint64_t   csr_tx_ptr_sbe_err  :  1; // Detected a TX pointer SBE error
+        uint64_t   csr_rx_ptr_mbe_err  :  1; // Detected a RX pointer MBE error
+        uint64_t   csr_rx_ptr_sbe_err  :  1; // Detected a RX pointer SBE error
+        uint64_t csr_req_fifo_mbe_err  :  1; // Detected a Request FIFO MBE error
+        uint64_t csr_req_fifo_sbe_err  :  1; // Detected a Request FIFO SBE error
+        uint64_t csr_tx_pend_inval_err  :  1; // Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t csr_rx_pend_inval_err  :  1; // Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } RXCID_ERR_FIRST_BMC_t;
@@ -380,7 +469,21 @@ typedef union {
         uint64_t       cq_mem_sbe_err  :  1; // CQ memory SBE error
         uint64_t     out_of_bound_err  :  1; // Detected a HIFIS write which crosses the 64byte boundary
         uint64_t     pid_mismatch_err  :  1; // Detected a PID mis match
-        uint64_t        Reserved_63_7  : 57; // Unused
+        uint64_t    csr_maddr_mbe_err  :  1; // Detected a MADDR MBE error
+        uint64_t    csr_maddr_sbe_err  :  1; // Detected a MADDR SBE error
+        uint64_t   csr_tx_cnt_mbe_err  :  1; // Detected a TX count MBE error
+        uint64_t   csr_tx_cnt_sbe_err  :  1; // Detected a TX count SBE error
+        uint64_t   csr_rx_cnt_mbe_err  :  1; // Detected a RX count MBE error
+        uint64_t   csr_rx_cnt_sbe_err  :  1; // Detected a RX count SBE error
+        uint64_t   csr_tx_ptr_mbe_err  :  1; // Detected a TX pointer MBE error
+        uint64_t   csr_tx_ptr_sbe_err  :  1; // Detected a TX pointer SBE error
+        uint64_t   csr_rx_ptr_mbe_err  :  1; // Detected a RX pointer MBE error
+        uint64_t   csr_rx_ptr_sbe_err  :  1; // Detected a RX pointer SBE error
+        uint64_t csr_req_fifo_mbe_err  :  1; // Detected a Request FIFO MBE error
+        uint64_t csr_req_fifo_sbe_err  :  1; // Detected a Request FIFO SBE error
+        uint64_t csr_tx_pend_inval_err  :  1; // Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t csr_rx_pend_inval_err  :  1; // Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } RXCID_ERR_EN_QUAR_t;
@@ -395,12 +498,26 @@ typedef union {
         uint64_t       cq_mem_sbe_err  :  1; // CQ memory SBE error
         uint64_t     out_of_bound_err  :  1; // Detected a HIFIS write which crosses the 64byte boundary
         uint64_t     pid_mismatch_err  :  1; // Detected a PID mis match
-        uint64_t        Reserved_63_7  : 57; // Unused
+        uint64_t    csr_maddr_mbe_err  :  1; // Detected a MADDR MBE error
+        uint64_t    csr_maddr_sbe_err  :  1; // Detected a MADDR SBE error
+        uint64_t   csr_tx_cnt_mbe_err  :  1; // Detected a TX count MBE error
+        uint64_t   csr_tx_cnt_sbe_err  :  1; // Detected a TX count SBE error
+        uint64_t   csr_rx_cnt_mbe_err  :  1; // Detected a RX count MBE error
+        uint64_t   csr_rx_cnt_sbe_err  :  1; // Detected a RX count SBE error
+        uint64_t   csr_tx_ptr_mbe_err  :  1; // Detected a TX pointer MBE error
+        uint64_t   csr_tx_ptr_sbe_err  :  1; // Detected a TX pointer SBE error
+        uint64_t   csr_rx_ptr_mbe_err  :  1; // Detected a RX pointer MBE error
+        uint64_t   csr_rx_ptr_sbe_err  :  1; // Detected a RX pointer SBE error
+        uint64_t csr_req_fifo_mbe_err  :  1; // Detected a Request FIFO MBE error
+        uint64_t csr_req_fifo_sbe_err  :  1; // Detected a Request FIFO SBE error
+        uint64_t csr_tx_pend_inval_err  :  1; // Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t csr_rx_pend_inval_err  :  1; // Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } RXCID_ERR_FIRST_QUAR_t;
 
-// RXCID_ERR_INFO_SBE_MBE desc:
+// RXCID_ERR_INFO_SBE_MBE_0 desc:
 typedef union {
     struct {
         uint64_t syndrome_cmd_csr_mbe  :  8; // Syndrome of the last MBE of command queue CSR
@@ -413,9 +530,37 @@ typedef union {
         uint64_t syndrome_cq_qword4_sbe  :  8; // Syndrome of last SBE for the CQ memory QWORD 4
     } field;
     uint64_t val;
-} RXCID_ERR_INFO_SBE_MBE_t;
+} RXCID_ERR_INFO_SBE_MBE_0_t;
 
-// RXCID_ERR_CQ_GENERAL desc:
+// RXCID_ERR_INFO_SBE_MBE_1 desc:
+typedef union {
+    struct {
+        uint64_t syndrome_csr_maddr_mbe  :  7; // Syndrome of the last MBE of MADDR CSR
+        uint64_t syndrome_csr_maddr_sbe  :  7; // Syndrome of the last SBE of MADDR CSR
+        uint64_t  syndrome_tx_cnt_mbe  :  5; // Syndrome of last MBE for the TX count
+        uint64_t  syndrome_tx_cnt_sbe  :  5; // Syndrome of last SBE for the TX count
+        uint64_t  syndrome_rx_cnt_mbe  :  4; // Syndrome of last MBE for the RX count
+        uint64_t  syndrome_rx_cnt_sbe  :  4; // Syndrome of last SBE for the RX count
+        uint64_t  syndrome_tx_ptr_mbe  :  5; // Syndrome of last MBE for the TX pointer
+        uint64_t  syndrome_tx_ptr_sbe  :  5; // Syndrome of last SBE for the TX pointer
+        uint64_t  syndrome_rx_ptr_mbe  :  4; // Syndrome of last MBE for the RX pointer
+        uint64_t  syndrome_rx_ptr_sbe  :  4; // Syndrome of last SBE for the RX pointer
+        uint64_t       Reserved_63_50  : 14; // Unused
+    } field;
+    uint64_t val;
+} RXCID_ERR_INFO_SBE_MBE_1_t;
+
+// RXCID_ERR_INFO_SBE_MBE_2 desc:
+typedef union {
+    struct {
+        uint64_t syndrome_req_fifo_mbe  :  8; // Syndrome of the last MBE for the request fifo
+        uint64_t syndrome_req_fifo_sbe  :  8; // Syndrome of the last SBE for the request fifo
+        uint64_t       Reserved_63_16  : 48; // Unused
+    } field;
+    uint64_t val;
+} RXCID_ERR_INFO_SBE_MBE_2_t;
+
+// RXCID_ERR_CQ_GENERAL_0 desc:
 typedef union {
     struct {
         uint64_t inv_write_inactive_addr  :  4; // slot within CQ for inv_write_inactive error
@@ -430,17 +575,53 @@ typedef union {
         uint64_t  pid_mismatch_err_cq  :  8; // CQ number for the last PID mismatch err
     } field;
     uint64_t val;
-} RXCID_ERR_CQ_GENERAL_t;
+} RXCID_ERR_CQ_GENERAL_0_t;
+
+// RXCID_ERR_CQ_GENERAL_1 desc:
+typedef union {
+    struct {
+        uint64_t     csr_maddr_cq_mbe  :  8; // CQ for the last MADDR MBE error
+        uint64_t     csr_maddr_cq_sbe  :  8; // CQ for the last MADDR MBE error
+        uint64_t    csr_tx_cnt_cq_mbe  :  8; // CQ for the last TX count MBE error
+        uint64_t    csr_tx_cnt_cq_sbe  :  8; // CQ for the last TX count SBE error
+        uint64_t    csr_rx_cnt_cq_mbe  :  8; // CQ for the last RX count MBE error
+        uint64_t    csr_rx_cnt_cq_sbe  :  8; // CQ for the last RX count SBE error
+        uint64_t    csr_tx_ptr_cq_mbe  :  8; // CQ for the last TX pointer MBE error
+        uint64_t    csr_tx_ptr_cq_sbe  :  8; // CQ for the last TX pointer SBE error
+    } field;
+    uint64_t val;
+} RXCID_ERR_CQ_GENERAL_1_t;
+
+// RXCID_ERR_CQ_GENERAL_2 desc:
+typedef union {
+    struct {
+        uint64_t    csr_rx_ptr_cq_mbe  :  8; // CQ for the last RX pointer MBE error
+        uint64_t    csr_rx_ptr_cq_sbe  :  8; // CQ for the last RX pointer SBE error
+        uint64_t       Reserved_63_16  : 48; // Unused
+    } field;
+    uint64_t val;
+} RXCID_ERR_CQ_GENERAL_2_t;
 
 // RXCID_DBG_ERR_INJECT desc:
 typedef union {
     struct {
         uint64_t  inject_csr_err_mask  :  6; // Error injection mask for CSR ECC error
         uint64_t       inject_csr_err  :  1; // Error injection enable for CSR ECC error
-        uint64_t           Reserved_7  :  1; // Unused
         uint64_t   inject_cq_err_mask  :  8; // Error injection mask for CQ memory ECC error
         uint64_t        inject_cq_err  :  1; // Error injection enable for CQ memory ECC error
-        uint64_t       Reserved_63_17  : 47; // Unused
+        uint64_t inject_maddr_err_mask  :  7; // Error injection mask for MADDR ECC error
+        uint64_t     inject_maddr_err  :  1; // Error injection enable for MADDR ECC error
+        uint64_t   inject_tx_cnt_mask  :  5; // Error injection mask for TX count ECC error
+        uint64_t    inject_tx_cnt_err  :  1; // Error injection enable for TX count ECC error
+        uint64_t   inject_rx_cnt_mask  :  4; // Error injection mask for RX count ECC error
+        uint64_t    inject_rx_cnt_err  :  1; // Error injection enable for RX count ECC error
+        uint64_t   inject_tx_ptr_mask  :  5; // Error injection mask for TX pointer ECC error
+        uint64_t    inject_tx_ptr_err  :  1; // Error injection enable for TX pointer ECC error
+        uint64_t   inject_rx_ptr_mask  :  4; // Error injection mask for RX pointer ECC error
+        uint64_t    inject_rx_ptr_err  :  1; // Error injection enable for RX pointer ECC error
+        uint64_t inject_req_fifo_mask  :  8; // Error injection mask for Request FIFO ECC error
+        uint64_t  inject_req_fifo_err  :  1; // Error injection enable for Request FIFO ECC error
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXCID_DBG_ERR_INJECT_t;

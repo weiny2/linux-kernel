@@ -288,9 +288,6 @@ irqreturn_t hfi_irq_errd_handler(int irq, void *dev_id)
 	int i, j;
 	u64 val;
 
-	/* FXRTODO: remove this acking after simics bug fixed */
-	hfi_ack_interrupt(me);
-
 	trace_hfi2_irq_err(me);
 
 	val = 0;

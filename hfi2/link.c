@@ -1882,9 +1882,6 @@ irqreturn_t hfi_irq_mnh_handler(int irq, void *dev_id)
 	struct hfi_devdata *dd = me->dd;
 	u8 port;
 
-	/* FXRTODO: remove this acking after simics bug fixed */
-	hfi_ack_interrupt(me);
-
 	trace_hfi2_irq_phy(me);
 
 	for (port = 1; port <= dd->num_pports; port++) {

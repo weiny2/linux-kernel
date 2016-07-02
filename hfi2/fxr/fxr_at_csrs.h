@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Jun  2 19:11:24 2016
+// Created on: Wed Jun 22 19:30:15 2016
 //
 
 #ifndef ___FXR_at_CSRS_H__
@@ -134,7 +134,7 @@ typedef union {
         uint64_t          genprot_err  :  1; // GenProt range check failed
         uint64_t          pgr_rsp_err  :  1; // PageGroup Response Error
         uint64_t       pgr_rsp_err_of  :  1; // PageGroup Response Error Overflow
-        uint64_t        iommu_rsp_err  :  1; // Unexpected IOMMU Response
+        uint64_t        iommu_rsp_err  :  1; // Unexpected IOMMU Response. After coming out of FLR, this error may be raised as the OS continues to drain its request queue. It is safe to ignore/clear this error once it is guaranteed that the OS has completely drained its request queue. The device should not be enabled until this drain has occurred. The driver may use system software interfaces to initiate the page request/response drain. See section 7.11 of the IOMMU Specification for details.
         uint64_t          future_err0  :  1; // Place Holder for new error event
         uint64_t          future_err1  :  1; // Place Holder for new error event
         uint64_t         ptec_tag_mbe  :  1; // PTEC Cache Tag MBE
@@ -332,7 +332,7 @@ typedef union {
 // FXR_AT_STS_PLMR_BASE desc:
 typedef union {
     struct {
-        uint64_t                 pmem  :  1; // Protected Memory Region Checking Enabled
+        uint64_t                 pmen  :  1; // Protected Memory Region Checking Enabled
         uint64_t        reserved_19_1  : 19; // reserved
         uint64_t            plmr_base  : 12; // PLMR Base
         uint64_t       reserved_63_32  : 32; // reserved

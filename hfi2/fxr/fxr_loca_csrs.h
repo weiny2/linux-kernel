@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Jun  2 19:11:24 2016
+// Created on: Wed Jun 22 19:30:14 2016
 //
 
 #ifndef ___FXR_loca_CSRS_H__
@@ -119,8 +119,9 @@ typedef union {
         uint64_t     CACHE_FAR_WBMTOI  :  1; // Cache Far IDI control for WBMTOI request:0-Force to 01-Force to 1
         uint64_t    CACHE_NEAR_WBMTOI  :  1; // Cache Near IDI control for WBMTOI request:0-Force to 01-Force to 1
         uint64_t       reserved_55_54  :  2; // Reserved
-        uint64_t      IDI_ECC_DISABLE  :  1; // IDI ECC Disable. This is a defeature control for IDI ECC. When set, IDI ECC checking is disabled for all U2C Data responses.
-        uint64_t       reserved_63_57  :  7; // Reserved
+        uint64_t      IDI_ECC_DISABLE  :  1; // IDI ECC Disable. This is a de-feature control for IDI ECC. When set, IDI ECC checking is disabled for all U2C Data responses.
+        uint64_t  FULL_ADDR_PARITY_EN  :  1; // Full Address Parity Enable. Setting this bit enables parity calculation on the full address of IDI C2U Requests. The default setting of 0 forces parity calculation on just the cache line address (excludes address bits [5:0]).
+        uint64_t       reserved_63_58  :  6; // Reserved
     } field;
     uint64_t val;
 } LOCA_CFG_IMI3_t;
@@ -787,6 +788,31 @@ typedef union {
     uint64_t val;
 } LOCA1_VIRAL_ENABLE_t;
 
+// LOCA_PMON_AR_LOWER desc:
+typedef union {
+    struct {
+        uint64_t          read_enable  :  1; // Read Enable. When set, the associated AR PMON is incremented with Get requests. The request address must also match within the specified address range, and be enabled by cachemiss_enable and/or cachehit_enable .
+        uint64_t         write_enable  :  1; // Write Enable. When set, the associated AR PMON is incremented with Put requests. The request address must also match within the specified address range, and be enabled by cachemiss_enable and/or cachehit_enable .
+        uint64_t        atomic_enable  :  1; // Atomic Enable. When set, the associated AR PMON is incremented with Atomic requests. The request address must also match within the specified address range, and be enabled by cachemiss_enable and/or cachehit_enable
+        uint64_t      cachehit_enable  :  1; // Cache Hit Enable. When set, the associated AR PMON is incremented with requests that Hit in the FXR DCache. The request address must also match within the specified address range, and be enabled by one or more of atomic_enable , write_enable , or read_enable
+        uint64_t     cachemiss_enable  :  1; // Cache Miss Enable. When set, the associated AR PMON is incremented with requests that Miss in the FXR DCache. The request must also match within the specified address range, and be enabled by one of more of atomic_enable , write_enable , or read_enable
+        uint64_t        reserved_11_5  :  7; // Reserved
+        uint64_t     lower_addr_range  : 35; // Lower Address Range compare for address bits[46:12]. Associated pm_addr_range PMON is incremented when the following is true: upper_addr_range > request_addr[46:12] >= lower_addr_range . Also, cachemiss_enable and/or cachehit_enable must be set, and one or more of atomic_enable , write_enable , or read_enable must be set to enable pm_addr_range counting.
+        uint64_t       reserved_63_47  : 17; // Reserved
+    } field;
+    uint64_t val;
+} LOCA_PMON_AR_LOWER_t;
+
+// LOCA_PMON_AR_UPPER desc:
+typedef union {
+    struct {
+        uint64_t        reserved_11_0  : 12; // Reserved
+        uint64_t     upper_addr_range  : 35; // Upper Address Range compare for address bits[46:12]. Associated pm_addr_range PMON is incremented when the following is true: upper_addr_range > request_addr[46:12] >= lower_addr_range . See lower_addr_range description for additional PMON increment qualifiers.
+        uint64_t       reserved_63_47  : 17; // Reserved
+    } field;
+    uint64_t val;
+} LOCA_PMON_AR_UPPER_t;
+
 // LOCA_PMON_CFG desc:
 typedef union {
     struct {
@@ -844,6 +870,38 @@ typedef union {
     } field;
     uint64_t val;
 } LOCA_PMON_LOCAL_TIME_t;
+
+// LOCA_PMON_INFO desc:
+typedef union {
+    struct {
+        uint64_t   max_wbstoi_latency  : 20; // Maximum latency sampled for WbStoI request (hclks). Enabled with pm_wbstoi_latency
+        uint64_t   max_wbmtoi_latency  : 20; // Maximum latency sampled for WbMtoI request (hclks). Enabled with pm_wbmtoi_latency
+        uint64_t   max_itomwr_latency  : 20; // Maximum latency sampled for ItoMWr request (hclks). Enabled with pm_itomwr_latency
+        uint64_t       reserved_63_60  :  4; // reserved.
+    } field;
+    uint64_t val;
+} LOCA_PMON_INFO_t;
+
+// LOCA_PMON_INFO1 desc:
+typedef union {
+    struct {
+        uint64_t   max_rdcurr_latency  : 20; // Maximum latency sampled for RdCurr request (hclks). Enabled with pm_rdcurr_latency
+        uint64_t      max_drd_latency  : 20; // Maximum latency sampled for DRd_Opt request (hclks). Enabled with pm_drd_latency
+        uint64_t      max_rfo_latency  : 20; // Maximum latency sampled for RFO request (hclks). Enabled with pm_rfo_latency
+        uint64_t       reserved_63_60  :  4; // reserved.
+    } field;
+    uint64_t val;
+} LOCA_PMON_INFO1_t;
+
+// LOCA_PMON_INFO2 desc:
+typedef union {
+    struct {
+        uint64_t max_specitom_latency  : 20; // Maximum latency sampled for SpecItoM request (hclks). Enabled with pm_specitom_latency
+        uint64_t     max_itom_latency  : 20; // Maximum latency sampled for ItoM request (hclks). Enabled with pm_itom_latency
+        uint64_t       reserved_63_40  : 24; // reserved.
+    } field;
+    uint64_t val;
+} LOCA_PMON_INFO2_t;
 
 // LOCA_PMON_CNTR desc:
 typedef union {
