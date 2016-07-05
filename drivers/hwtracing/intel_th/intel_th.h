@@ -50,12 +50,14 @@ struct intel_th_output {
  * @multi_is_broken:	device has multiblock mode is broken
  * @has_mintctl:	device has interrupt control (MINTCTL) register
  * @host_mode_only:	device can only operate in 'host debugger' mode
+ * @does_d3:		device supports D3 power state
  */
 struct intel_th_drvdata {
 	unsigned int	tscu_enable        : 1,
 			multi_is_broken    : 1,
 			has_mintctl        : 1,
-			host_mode_only     : 1;
+			host_mode_only     : 1,
+			does_d3            : 1;
 };
 
 #define INTEL_TH_CAP(_th, _cap) ((_th)->drvdata ? (_th)->drvdata->_cap : 0)

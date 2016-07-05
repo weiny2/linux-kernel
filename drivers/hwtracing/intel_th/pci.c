@@ -273,11 +273,63 @@ static const struct pci_device_id intel_th_pci_id_table[] = {
 
 MODULE_DEVICE_TABLE(pci, intel_th_pci_id_table);
 
+#ifdef CONFIG_PM
+static int intel_th_runtime_suspend(struct device *dev)
+{
+	struct intel_th *th = dev_get_drvdata(dev);
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	if (!INTEL_TH_CAP(th, does_d3))
+		return 0;
+
+	pci_save_state(pdev);
+	pci_disable_device(pdev);
+	pci_set_power_state(pdev, PCI_D3hot);
+
+	return 0;
+}
+
+static int intel_th_runtime_resume(struct device *dev)
+{
+	struct intel_th *th = dev_get_drvdata(dev);
+	struct pci_dev *pdev = to_pci_dev(dev);
+	int ret;
+
+	if (!INTEL_TH_CAP(th, does_d3))
+		return 0;
+
+	pci_set_power_state(pdev, PCI_D0);
+	pci_restore_state(pdev);
+	ret = pcim_enable_device(pdev);
+	if (ret) {
+		dev_err(dev, "failed to enable after resume (%d)\n", ret);
+		return ret;
+	}
+
+	pci_set_master(pdev);
+
+	return 0;
+}
+
+static struct dev_pm_ops intel_th_pm = {
+	SET_RUNTIME_PM_OPS(intel_th_runtime_suspend,
+			   intel_th_runtime_resume,
+			   NULL)
+};
+
+#define INTEL_TH_PM	&intel_th_pm
+#else
+#define INTEL_TH_PM	NULL
+#endif /* CONFIG_PM */
+
 static struct pci_driver intel_th_pci_driver = {
 	.name		= DRIVER_NAME,
 	.id_table	= intel_th_pci_id_table,
 	.probe		= intel_th_pci_probe,
 	.remove		= intel_th_pci_remove,
+	.driver		= {
+		.pm	= INTEL_TH_PM,
+	},
 };
 
 module_pci_driver(intel_th_pci_driver);
