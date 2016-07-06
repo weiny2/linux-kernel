@@ -1,4 +1,4 @@
-KERNEL_VERSION=4.5.0-rc5+
+KERNEL_VERSION=4.6.0+
 
 # Am I invoked by Jenkins?
 export ByJenkins=no
