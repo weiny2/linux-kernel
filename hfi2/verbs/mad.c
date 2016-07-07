@@ -390,6 +390,8 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 
 	ni = (struct ib_node_info *)smp->data;
 
+	dd_dev_dbg(dd, "port %u %s\n", port, __func__);
+
 	/* GUID 0 is illegal */
 	if (smp->attr_mod || ibd->node_guid == 0
 				|| !ibp) {
@@ -416,11 +418,20 @@ static int __subn_get_ib_nodeinfo(struct ib_smp *smp, struct ib_device *ibdev,
 
 static int process_subn(struct ib_device *ibdev, int mad_flags,
 			u8 port, const struct ib_mad *in_mad,
-			struct ib_mad *out_mad)
+			struct ib_mad *out_mad,
+			u16 *out_mad_pkey_index)
 {
 	struct ib_smp *smp = (struct ib_smp *)out_mad;
 	struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
-	int ret = 0;
+	int ret = 0, pkey_idx;
+
+	pkey_idx = hfi2_lookup_pkey_idx(ibp, OPA_LIM_MGMT_PKEY);
+	if (pkey_idx < 0) {
+		pr_warn("%s: failed to find management pkey, defaulting 0x%x\n",
+			__func__, hfi2_get_pkey(ibp, 1));
+		pkey_idx = 1;
+	}
+	*out_mad_pkey_index = (u16)pkey_idx;
 
 	*out_mad = *in_mad;
 	if (!ibp) {
@@ -3834,7 +3845,8 @@ static int hfi2_process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 			       const struct ib_wc *in_wc,
 			       const struct ib_grh *in_grh,
 			       const struct ib_mad *in_mad,
-			       struct ib_mad *out_mad)
+			       struct ib_mad *out_mad,
+			       u16 *out_mad_pkey_index)
 {
 	int ret;
 
@@ -3842,7 +3854,8 @@ static int hfi2_process_ib_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
 	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
 		ret = process_subn(ibdev, mad_flags,
-				   port, in_mad, out_mad);
+				   port, in_mad, out_mad,
+				   out_mad_pkey_index);
 		goto bail;
 	default:
 		ret = IB_MAD_RESULT_SUCCESS;
@@ -3879,7 +3892,8 @@ int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		ret =  hfi2_process_ib_mad(ibdev, mad_flags, port,
 					   in_wc, in_grh,
 					   (const struct ib_mad *)in_mad,
-					   (struct ib_mad *)out_mad);
+					   (struct ib_mad *)out_mad,
+					   out_mad_pkey_index);
 		break;
 	default:
 		break;

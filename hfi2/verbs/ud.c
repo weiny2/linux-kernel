@@ -667,6 +667,9 @@ int hfi2_lookup_pkey_idx(struct hfi2_ibport *ibp, u16 pkey)
 		if (pkey == OPA_FULL_MGMT_PKEY)
 			return lim_idx;
 
+		ppd_dev_warn(ppd, "Did not find pkey_idx matching pkey %u\n",
+			     pkey);
+
 		/* no match...  */
 		return -1;
 	}
@@ -680,6 +683,7 @@ int hfi2_lookup_pkey_idx(struct hfi2_ibport *ibp, u16 pkey)
 	/*
 	 * Should not get here, this means hardware failed to validate pkeys.
 	 */
+	ppd_dev_err(ppd, "%s: Unable to find pkey %u\n", __func__, pkey);
 	return -1;
 }
 

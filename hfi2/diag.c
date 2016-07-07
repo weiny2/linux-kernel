@@ -72,6 +72,9 @@
 #define HFI_BYPASS_L2_OFFSET    1
 #define HFI_BYPASS_L2_SHFT      29
 #define HFI_BYPASS_L2_MASK      0x3ull
+#define HFI_9B_L2		0x3
+
+#define HFI2_PBC_PACKETBYPASS_SHIFT 28
 
 #define HFI_BYPASS_GET_L2_TYPE(data) \
 	((*((u32 *)(data) + HFI_BYPASS_L2_OFFSET) >> \
@@ -99,9 +102,8 @@ struct diag_pkt {
 
 /* diag_pkt flags */
 #define F_DIAGPKT_WAIT 0x1      /* wait until packet is sent */
-
 static int diagpkt_xmit(struct hfi_devdata *dd, void *buf,
-			u32 pkt_len, struct diag_pkt *dp, u8 sl)
+			struct diag_pkt *dp, u8 sl)
 {
 	struct hfi2_diagpkt_data *diag = &dd->hfi2_diag;
 	struct hfi_pportdata *ppd = to_hfi_ppd(dd, dp->port);
@@ -111,7 +113,7 @@ static int diagpkt_xmit(struct hfi_devdata *dd, void *buf,
 	u64 *eq_entry = NULL;
 	union base_iovec iov;
 	unsigned long sflags;
-	int rc, ms_delay = 0;
+	int rc, l2, ms_delay = 0;
 	hfi_eq_handle_t eq = HFI_EQ_NONE;
 
 	/* Cannot send packets till port is not active */
@@ -124,7 +126,7 @@ static int diagpkt_xmit(struct hfi_devdata *dd, void *buf,
 	iov.val[0] = 0x0;
 	iov.val[1] = 0x0;
 	iov.start = (u64)buf;
-	iov.length = pkt_len;
+	iov.length = dp->len;
 	iov.ep = 1;
 	iov.sp = 1;
 	iov.v = 1;
@@ -135,6 +137,14 @@ static int diagpkt_xmit(struct hfi_devdata *dd, void *buf,
 			   HFI2_DIAG_DEFAULT_MTU);
 		goto err;
 	}
+
+	/* Use 9B in base_iovec if it is not a bypass packet */
+	iov.use_9b = ((dp->pbc >> HFI2_PBC_PACKETBYPASS_SHIFT) & 0x1) == 0;
+
+	if (iov.use_9b)
+		l2 = HFI_9B_L2;
+	else
+		l2 = HFI_BYPASS_GET_L2_TYPE(buf);
 
 	/* Wait for an event only if requested by the user */
 	if (dp->flags & F_DIAGPKT_WAIT)
@@ -147,7 +157,7 @@ retry:
 				   eq, HFI_CT_NONE,
 				   dp->port - 1,
 				   sl, ppd->lid,
-				   HFI_BYPASS_GET_L2_TYPE(buf),
+				   l2,
 				   GENERAL_DMA);
 	if (rc < 0) {
 		mdelay(1);
@@ -187,7 +197,6 @@ static ssize_t diagpkt_send(struct diag_pkt *dp, struct hfi_devdata *dd, u8 sl)
 {
 	u32 *tmpbuf = NULL;
 	ssize_t ret = 0;
-	u32 pkt_len;
 
 	if (!dd || !dd->kregbase) {
 		ret = -ENODEV;
@@ -221,9 +230,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp, struct hfi_devdata *dd, u8 sl)
 		goto free;
 	}
 
-	/* pkt_len is how much data to write, includes header and data */
-	pkt_len = dp->len >> 2;
-	diagpkt_xmit(dd, tmpbuf, pkt_len, dp, sl);
+	diagpkt_xmit(dd, tmpbuf, dp, sl);
 free:
 	vfree(tmpbuf);
 bail:
