@@ -471,6 +471,8 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibd->rdi.driver_f.mtu_to_path_mtu = mtu_to_path_mtu;
 	ibd->rdi.driver_f.check_modify_qp = hfi2_check_modify_qp;
 	ibd->rdi.driver_f.modify_qp = hfi2_modify_qp;
+	/* Address handle checking */
+	ibd->rdi.driver_f.check_ah = hfi2_check_ah;
 #if 0
 	/* for post_send */
 	ibd->rdi.driver_f.schedule_send_no_lock = _hfi2_schedule_send;

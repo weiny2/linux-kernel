@@ -53,9 +53,24 @@
  */
 
 #include "verbs.h"
+#include "packet.h"
 
 int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
 {
+	struct hfi2_ibport *ibp;
+	struct hfi_pportdata *ppd;
+	u8 sc5;
+
+	if (hfi2_get_dlid_from_ah(ah_attr) == 0)
+		return -EINVAL;
+
+	/* test the mapping for validity */
+	ibp = to_hfi_ibp(ibdev, ah_attr->port_num);
+	ppd = ibp->ppd;
+	sc5 = ppd->sl_to_sc[ah_attr->sl];
+	if (ppd->sc_to_vlt[sc5] > ppd->vls_supported &&
+	    ppd->sc_to_vlt[sc5] != 0xf)
+		return -EINVAL;
 	return 0;
 }
 
@@ -70,12 +85,12 @@ int hfi2_check_ah(struct ib_device *ibdev, struct ib_ah_attr *ah_attr)
  * returns an errno.
  */
 struct ib_ah *hfi2_create_ah(struct ib_pd *pd,
-			       struct ib_ah_attr *ah_attr)
+			     struct ib_ah_attr *ah_attr)
 {
 	struct rvt_ah *ah;
 	struct ib_ah *ret;
 
-	if (hfi2_check_ah(pd->device, ah_attr))
+	if (rvt_check_ah(pd->device, ah_attr))
 		return ERR_PTR(-EINVAL);
 
 	ah = kzalloc(sizeof(*ah), GFP_ATOMIC);
@@ -134,7 +149,7 @@ int hfi2_modify_ah(struct ib_ah *ibah, struct ib_ah_attr *ah_attr)
 {
 	struct rvt_ah *ah = ibah_to_rvtah(ibah);
 
-	if (hfi2_check_ah(ibah->device, ah_attr))
+	if (rvt_check_ah(ibah->device, ah_attr))
 		return -EINVAL;
 
 	ah->attr = *ah_attr;
