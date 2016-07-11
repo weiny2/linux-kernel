@@ -53,6 +53,7 @@
  */
 
 #include <linux/sched.h>
+#include <linux/kernel.h>
 #include "opa_hfi.h"
 #include <rdma/hfi_tx.h>
 #include <rdma/hfi_args.h>
@@ -273,7 +274,7 @@ int hfi_e2e_ctrl(struct hfi_ctx *ctx, struct opa_e2e_ctrl *e2e)
 		 * hit the cache without initiating an E2E connection
 		 * message to the peer. Update the max DLID for this TC
 		 */
-		ptc->max_e2e_dlid = MAX(ptc->max_e2e_dlid, e2e->dlid);
+		ptc->max_e2e_dlid = max(ptc->max_e2e_dlid, e2e->dlid);
 unlock:
 	mutex_unlock(&dd->e2e_lock);
 	return ret;
