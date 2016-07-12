@@ -79,7 +79,7 @@ __print_symbolic(etype,                         \
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi1_rx
 
-TRACE_EVENT(hfi2_rcvhdr,
+TRACE_EVENT(hfi2_rx_packet,
 	    TP_PROTO(struct hfi_devdata *dd,
 		     u64 ctxt,
 		     u64 eflags,
@@ -158,7 +158,7 @@ DEFINE_EVENT(hfi2_irq, hfi2_irq_err,
 );
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi1_tx
+#define TRACE_SYSTEM hfi2_tx
 
 #define wr_opcode_name(opcode) { IB_WR_##opcode, #opcode  }
 #define show_wr_opcode(opcode)                             \
@@ -182,7 +182,7 @@ __print_symbolic(opcode,                                   \
 #define POS_PRN \
 "wr_id: %llx qpn: %x, psn: 0x%x, lpsn: 0x%x, length: %u opcode: 0x%.2x,%s, size: %u, head: %u, last: %u"
 
-TRACE_EVENT(hfi2_post_one_send,
+TRACE_EVENT(hfi2_tx_post_one_send,
 	    TP_PROTO(struct rvt_qp *qp, struct rvt_swqe *wqe),
 	    TP_ARGS(qp, wqe),
 	    TP_STRUCT__entry(
@@ -221,8 +221,7 @@ TRACE_EVENT(hfi2_post_one_send,
 );
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi1_ibhdrs
-#if 1
+#define TRACE_SYSTEM hfi2_hdr
 
 u8 ibhdr_exhdr_len(union hfi2_packet_header *hdr, bool use_16b);
 const char *parse_everbs_hdrs(struct trace_seq *p, u8 opcode, void *ehdrs);
@@ -459,11 +458,10 @@ DEFINE_EVENT(hfi2_hdr_template, hfi2_hdr_send_ack,
 		      union hfi2_packet_header *hdr,
 		      bool use_16b),
 	     TP_ARGS(dd, hdr, use_16b));
-#endif
 
 #undef TRACE_SYSTEM
-
 #define TRACE_SYSTEM hfi2_mad
+
 #define BCT_FORMAT \
 	"[%d:%d] shared_limit %x vls 0-7 [%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x][%x,%x] 15 [%x,%x]"
 #define BCT(field) be16_to_cpu(__entry->bc.field)
@@ -632,11 +630,11 @@ DEFINE_EVENT(hfi2_rc_template, hfi2_rc_rcv_error,
  * too long.
  */
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM hfi1_trace
+#define TRACE_SYSTEM hfi2_trace
 
 #define MAX_MSG_LEN 512
 
-DECLARE_EVENT_CLASS(hfi1_trace_template,
+DECLARE_EVENT_CLASS(hfi2_trace_template,
 		    TP_PROTO(const char *function, struct va_format *vaf),
 		    TP_ARGS(function, vaf),
 		    TP_STRUCT__entry(
@@ -655,18 +653,18 @@ DECLARE_EVENT_CLASS(hfi1_trace_template,
 );
 
 /*
- * It may be nice to macroize the __hfi1_trace but the va_* stuff requires an
+ * It may be nice to macroize the __hfi2_trace but the va_* stuff requires an
  * actual function to work and can not be in a macro.
  */
-#define __hfi1_trace_def(lvl) \
-void __hfi1_trace_##lvl(const char *funct, char *fmt, ...);		\
+#define __hfi2_trace_def(lvl) \
+void __hfi2_trace_##lvl(const char *funct, char *fmt, ...);		\
 									\
-DEFINE_EVENT(hfi1_trace_template, hfi1_ ##lvl,				\
+DEFINE_EVENT(hfi2_trace_template, hfi2_trace_##lvl,			\
 	TP_PROTO(const char *function, struct va_format *vaf),		\
 	TP_ARGS(function, vaf))
 
-#define __hfi1_trace_fn(lvl) \
-void __hfi1_trace_##lvl(const char *func, char *fmt, ...)		\
+#define __hfi2_trace_fn(lvl) \
+void __hfi2_trace_##lvl(const char *func, char *fmt, ...)		\
 {									\
 	struct va_format vaf = {					\
 		.fmt = fmt,						\
@@ -675,50 +673,43 @@ void __hfi1_trace_##lvl(const char *func, char *fmt, ...)		\
 									\
 	va_start(args, fmt);						\
 	vaf.va = &args;							\
-	trace_hfi1_ ##lvl(func, &vaf);					\
+	trace_hfi2_trace_##lvl(func, &vaf);				\
 	va_end(args);							\
 	return;								\
 }
 
 /*
- * To create a new trace level simply define it below and as a __hfi1_trace_fn
- * in trace.c. This will create all the hooks for calling
- * hfi1_cdbg(LVL, fmt, ...); as well as take care of all
- * the debugfs stuff.
+ * To create a new trace level simply define it below
+ * and as a __hfi2_trace_fn in trace.c.
+ * This will create all the hooks for calling hfi2_cdbg(LVL, fmt, ...)
+ * as well as take care of all the debugfs stuff.
  */
-__hfi1_trace_def(PKT);
-__hfi1_trace_def(PROC);
-__hfi1_trace_def(SDMA);
-__hfi1_trace_def(LINKVERB);
-__hfi1_trace_def(DEBUG);
-__hfi1_trace_def(SNOOP);
-__hfi1_trace_def(CNTR);
-__hfi1_trace_def(PIO);
-__hfi1_trace_def(DC8051);
-__hfi1_trace_def(FIRMWARE);
-__hfi1_trace_def(RCVCTRL);
-__hfi1_trace_def(TID);
-__hfi1_trace_def(MMU);
+__hfi2_trace_def(SNOOP);
+__hfi2_trace_def(8051);
 
-#define hfi1_cdbg(which, fmt, ...) \
-	__hfi1_trace_##which(__func__, fmt, ##__VA_ARGS__)
-
-#define hfi1_dbg(fmt, ...) \
-	hfi1_cdbg(DEBUG, fmt, ##__VA_ARGS__)
+#define hfi2_cdbg(which, fmt, ...) \
+	__hfi2_trace_##which(__func__, fmt, ##__VA_ARGS__)
 
 /*
- * Define HFI1_EARLY_DBG at compile time or here to enable early trace
+ * Generic debug trace message.
+ * Do not check in any uses of hfi2_dbg hfi2_cdbg(DEBUG,"") - just
+ * for experimentation in local code.
+ */
+__hfi2_trace_def(DEBUG);
+#define hfi2_dbg(fmt, ...) hfi2_cdbg(DEBUG, fmt, ##__VA_ARGS__)
+
+/*
+ * Define HFI2_EARLY_DBG at compile time or here to enable early trace
  * messages. Do not check in an enablement for this.
  */
-
-#ifdef HFI1_EARLY_DBG
-#define hfi1_dbg_early(fmt, ...) \
-	trace_printk(fmt, ##__VA_ARGS__)
+/* #define HFI2_EARLY_DBG 1 */
+#ifdef HFI2_EARLY_DBG
+#define hfi1_dbg_early(fmt, ...) trace_printk(fmt, ##__VA_ARGS__)
 #else
 #define hfi1_dbg_early(fmt, ...)
 #endif
 
-#endif /* __HFI1_TRACE_H */
+#endif /* __HFI_TRACE_H */
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM hfi2

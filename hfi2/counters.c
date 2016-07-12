@@ -53,9 +53,10 @@
  */
 
 #include "counters.h"
+#include "trace.h"
 
 static u64 port_access_tp_csr(const struct cntr_entry *entry, void *context,
-				int vl, u64 data)
+			      int vl, u64 data)
 {
 	struct hfi_pportdata *ppd = (struct hfi_pportdata *)context;
 	u64 csr = entry->csr;
@@ -63,13 +64,13 @@ static u64 port_access_tp_csr(const struct cntr_entry *entry, void *context,
 	if (entry->flags & CNTR_VL) {
 		return hfi_read_lm_tp_prf_csr(ppd,
 		csr + idx_from_vl(vl) + 1);
-	} else
+	} else {
 		return hfi_read_lm_tp_prf_csr(ppd, csr);
-
+	}
 }
 
 static u64 port_access_fpc_csr(const struct cntr_entry *entry, void *context,
-				int vl, u64 data)
+			       int vl, u64 data)
 {
 	struct hfi_pportdata *ppd = (struct hfi_pportdata *)context;
 	u64 csr = entry->csr;
@@ -77,9 +78,9 @@ static u64 port_access_fpc_csr(const struct cntr_entry *entry, void *context,
 	if (entry->flags & CNTR_VL) {
 		return hfi_read_lm_fpc_prf_per_vl_csr(ppd,
 		csr, idx_from_vl(vl));
-	} else
+	} else {
 		return hfi_read_lm_fpc_csr(ppd, csr);
-
+	}
 }
 
 #define CNTR_ELEM(name, csr, offset, flags, accessor)\
@@ -105,7 +106,6 @@ CNTR_ELEM(#name, \
 	  flags, \
 	  port_access_fpc_csr)
 
-
 static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
 [XMIT_DATA] = TP_CNTR(XmitFlits, TP_PRF_XMIT_DATA, CNTR_NORMAL),
 [XMIT_PKTS] = TP_CNTR(XmitPkts, TP_PRF_XMIT_PKTS, CNTR_NORMAL),
@@ -113,7 +113,8 @@ static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
 [RCV_PKTS] = FPC_CNTR(RcvPkts, FXR_FPC_PRF_PORTRCV_PKT_CNT, CNTR_NORMAL),
 [MCAST_RCVPKTS] = FPC_CNTR(RcvMCastPkts, FXR_FPC_PRF_PORTRCV_MCAST_PKT_CNT,
 			   CNTR_NORMAL),
-[MCAST_XMITPKTS] = TP_CNTR(XmitMCastPkts, TP_PRF_MULTICAST_XMIT_PKTS, CNTR_NORMAL),
+[MCAST_XMITPKTS] = TP_CNTR(XmitMCastPkts, TP_PRF_MULTICAST_XMIT_PKTS,
+			   CNTR_NORMAL),
 [XMIT_WAIT] = TP_CNTR(XmitWait, TP_PRF_XMIT_WAIT, CNTR_NORMAL),
 [RCV_FECN] = FPC_CNTR(RcvFecn, FXR_FPC_PRF_PORTRCV_FECN, CNTR_NORMAL),
 [RCV_BECN] = FPC_CNTR(RcvBecn, FXR_FPC_PRF_PORTRCV_BECN, CNTR_NORMAL),
@@ -128,8 +129,8 @@ static struct cntr_entry port_cntrs[PORT_CNTR_LAST] = {
 [FM_CONFIG_ERR] = FPC_CNTR(FmConfigErr, FXR_FPC_ERR_FMCONFIG_ERROR,
 			   CNTR_NORMAL),
 [UNCORRECTABLE_ERR] = FPC_CNTR(UnCorrectableErr,
-				FXR_FPC_ERR_UNCORRECTABLE_ERROR,
-				CNTR_NORMAL),
+			       FXR_FPC_ERR_UNCORRECTABLE_ERROR,
+			       CNTR_NORMAL),
 [XMIT_DATA_VL] = TP_CNTR(XmitFlits, TP_PRF_XMIT_DATA, CNTR_VL),
 [XMIT_PKTS_VL] = TP_CNTR(XmitPkts, TP_PRF_XMIT_PKTS, CNTR_VL),
 [RCV_DATA_VL] = FPC_CNTR(RcvFlits, FXR_FPC_PRF_PORT_VL_RCV_DATA_CNT, CNTR_VL),
@@ -193,7 +194,7 @@ int hfi_init_cntrs(struct hfi_devdata *dd)
 			}
 		} else {
 			memcpy(p, port_cntrs[i].name,
-				strlen(port_cntrs[i].name));
+			       strlen(port_cntrs[i].name));
 			p += strlen(port_cntrs[i].name);
 			*p++ = '\n';
 		}
@@ -229,8 +230,7 @@ u32 hfi_read_portcntrs(struct hfi_pportdata *ppd, char **namep, u64 **cntrp)
 				}
 			} else {
 				val = entry->rw_cntr(entry, ppd,
-							CNTR_INVALID_VL,
-							0);
+						     CNTR_INVALID_VL, 0);
 				ppd->portcntrs[entry->offset] = val;
 			}
 		}

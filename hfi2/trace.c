@@ -211,18 +211,6 @@ const char *print_u64_array(
 	return ret;
 }
 
-#if 0
-__hfi1_trace_fn(PKT);
-__hfi1_trace_fn(PROC);
-__hfi1_trace_fn(SDMA);
-__hfi1_trace_fn(LINKVERB);
-__hfi1_trace_fn(DEBUG);
-__hfi1_trace_fn(SNOOP);
-__hfi1_trace_fn(CNTR);
-__hfi1_trace_fn(PIO);
-__hfi1_trace_fn(DC8051);
-__hfi1_trace_fn(FIRMWARE);
-__hfi1_trace_fn(RCVCTRL);
-__hfi1_trace_fn(TID);
-__hfi1_trace_fn(MMU);
-#endif
+__hfi2_trace_fn(DEBUG);
+__hfi2_trace_fn(SNOOP);
+__hfi2_trace_fn(8051);

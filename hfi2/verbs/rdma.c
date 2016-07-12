@@ -344,7 +344,7 @@ static int post_one_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	wqe->ssn = qp->s_ssn++;
 	qp->s_head = next;
 
-	trace_hfi2_post_one_send(qp, wqe);
+	trace_hfi2_tx_post_one_send(qp, wqe);
 
 	ret = 0;
 	goto bail;
@@ -638,15 +638,15 @@ static bool process_rcv_packet(struct hfi2_ibport *ibp,
 	 */
 	packet->ibp = &(ibp->ibd->pport[packet->port]);
 
-	trace_hfi2_rcvhdr(packet->ibp->ppd->dd,
-			  (u64)(packet->ctx),
-			  rhf_err_flags(rhf),
-			  packet->etype,
-			  packet->port,
-			  packet->hlen,
-			  packet->tlen,
-			  idx,
-			  off);
+	trace_hfi2_rx_packet(packet->ibp->ppd->dd,
+			     (u64)(packet->ctx),
+			     rhf_err_flags(rhf),
+			     packet->etype,
+			     packet->port,
+			     packet->hlen,
+			     packet->tlen,
+			     idx,
+			     off);
 
 	return true;
 }

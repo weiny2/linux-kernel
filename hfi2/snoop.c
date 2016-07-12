@@ -67,12 +67,13 @@
 #include "opa_hfi.h"
 #include "verbs/verbs.h"
 #include "verbs/packet.h"
+#include "trace.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) DRIVER_NAME ": " fmt
-#if 0
+#if 1
 #define snoop_dbg(fmt, ...) \
-	hfi1_cdbg(SNOOP, fmt, ##__VA_ARGS__)
+	hfi2_cdbg(SNOOP, fmt, ##__VA_ARGS__)
 #else
 #define snoop_dbg(fmt, ...) \
 	pr_debug(fmt, ##__VA_ARGS__)
@@ -830,14 +831,14 @@ static int hfi1_filter_ib_pkey(void *ibhdr, void *packet_data, void *value)
 	else
 		return HFI1_FILTER_ERR;
 
-	/* P_key is 16-bit entity, however top most bit indicates
+	/*
+	 * P_key is 16-bit entity, however top most bit indicates
 	 * type of membership. 0 for limited and 1 for Full.
 	 * Limited members cannot accept information from other
 	 * Limited members, but communication is allowed between
 	 * every other combination of membership.
 	 * Hence we'll omit comparing top-most bit while filtering
 	 */
-
 	if ((*(u16 *)value & 0x7FFF) ==
 		((be32_to_cpu(ohdr->bth[0])) & 0x7FFF))
 		return HFI1_FILTER_HIT;

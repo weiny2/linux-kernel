@@ -565,10 +565,6 @@ static int hfi2_verbs_send(struct rvt_qp *qp)
 
 	/* ret = egress_pkey_check(ibp, &hdr->ph.ibh, qp); */
 	if (unlikely(ret)) {
-		/*
-		 * hfi1_cdbg(PIO, "%s() Failed. Completing with err",
-		 * __func__);
-		 */
 		spin_lock_irqsave(&qp->s_lock, flags);
 		hfi2_send_complete(qp, qp->s_wqe, IB_WC_GENERAL_ERR);
 		spin_unlock_irqrestore(&qp->s_lock, flags);

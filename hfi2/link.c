@@ -417,9 +417,11 @@ static void mnh_shutdown(struct hfi_pportdata *ppd)
 	/* Shutdown the LCB */
 	lcb_shutdown(dd, 1);
 #endif
-	/* Going to OFFLINE would have causes the 8051 to put the
+	/*
+	 * Going to OFFLINE would have causes the 8051 to put the
 	 * SerDes into reset already. Just need to shut down the 8051,
-	 * itself. */
+	 * itself.
+	 */
 	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, 0x1);
 }
 
@@ -557,8 +559,10 @@ static void handle_link_down(struct work_struct *work)
 	/* disable the port */
 	clear_rcvctrl(ppd->dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
 
-	/* If there is no cable attached, turn the DC off. Otherwise,
-	 * start the link bring up. */
+	/*
+	 * If there is no cable attached, turn the DC off. Otherwise,
+	 * start the link bring up.
+	 */
 	if (!qsfp_mod_present(ppd))
 		dc_shutdown(ppd->dd);
 	else
@@ -671,6 +675,9 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 
 fail:
 	spin_unlock_irqrestore(&ppd->crk8051_lock, flags);
+
+	hfi2_cdbg(8051, "type %d, data in 0x%012llx, out 0x%012llx, ret = %d",
+		  type, in_data, out_data ? *out_data : 0, return_code);
 
 	return return_code;
 }
@@ -1316,8 +1323,10 @@ static void handle_sma_message(struct work_struct *work)
 	u64 msg;
 	int ret;
 
-	/* msg is bytes 1-4 of the 40-bit idle message - the command code
-	   is stripped off */
+	/*
+	 * msg is bytes 1-4 of the 40-bit idle message - the command code
+	 * is stripped off
+	 */
 	ret = read_idle_sma(ppd, &msg);
 	if (ret)
 		return;
