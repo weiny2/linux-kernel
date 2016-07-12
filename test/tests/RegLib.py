@@ -95,6 +95,8 @@ def _verify_test_port_available(host, port, num_ports=1):
         for line in out:
             is_port_used = re.match('\\b' + str(port_x) + '\\b', line) != None
             break
+        if is_port_used:
+	    break
 
     if (err != 0) or is_port_used:
         if not num_ports > 1:
@@ -295,6 +297,9 @@ class HostInfo:
             for line in out:
                 if state in line:
                     return True
+                if line != "":
+	            test_log(0, "Netstat output: %s" % line)
+
             test_log(5, "Socket was not listening, will try %d more times" % attempts)
             test_log(5, "Sleeping for %d seconds" % timeout)
             time.sleep(timeout)

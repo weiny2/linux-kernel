@@ -57,6 +57,7 @@ def main():
                      % (server.get_name(), log_server_path)
 
     if test_port == 0:
+        do_ssh(server, "/bin/netstat -vatn")
         RegLib.test_fail("Could not get port number")
 
     RegLib.test_log(0, "Starting server on %s port=%d log=%s" \
@@ -80,6 +81,8 @@ def main():
     if server.wait_for_socket(test_port, "LISTEN", num_ports=num_ports) == False:
         RegLib.test_log(0, server_log_msg)
         RegLib.test_log(0, "Could not get socket listening")
+        do_ssh(server, "/bin/netstat -vatn")
+        do_ssh(server, "cat " + log_server_path)
         test_fail = 1
     else:
         # Starting client
@@ -92,7 +95,7 @@ def main():
             if err >= 128:
                 RegLib.test_log(0, "Server was killed with a signal - %s" % err)
             else:
-                RegLib.test_log(0, "ERROR - Client detected error - %s", err)
+                RegLib.test_log(0, "ERROR - Client detected error - %s" % err)
                 test_fail = 1
 
     # Checking if there's at least one server process running
