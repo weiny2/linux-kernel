@@ -95,7 +95,7 @@ if [ ${ByJenkins} == yes ] ; then
 
 	# display simics console logs
 	echo simics console logs
-	cat ${fxr}/simics/workspace/KnightsHill0.log
+	cat ${fxr}/simics/workspace/knh-crb-dual-busybox.log
 	echo "----- Failed harness test(s) -----"
 	grep "^\[FAIL\]" /tmp/${myname}.$$ || echo None.
 fi
