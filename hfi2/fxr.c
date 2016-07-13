@@ -726,6 +726,10 @@ void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 {
 	TP_CFG_MISC_CTRL_t misc;
 
+	if (enable)
+		ppd->part_enforce |= HFI_PART_ENFORCE_OUT;
+	else
+		ppd->part_enforce &= ~HFI_PART_ENFORCE_OUT;
 	misc.val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
 	misc.field.pkey_chk_enable = enable;
 	hfi_write_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL, misc.val);
@@ -735,6 +739,10 @@ void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 {
 	FPC_CFG_PORT_CONFIG_t fpc;
 
+	if (enable)
+		ppd->part_enforce |= HFI_PART_ENFORCE_IN;
+	else
+		ppd->part_enforce &= ~HFI_PART_ENFORCE_IN;
 	fpc.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
 	fpc.field.pkey_en = enable;
 	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);

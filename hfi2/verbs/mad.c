@@ -1522,33 +1522,24 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 			(pi->partenforce_filterraw &
 			 OPA_PI_MASK_LINKINIT_REASON);
 	/* enable/disable SW pkey checking as per FM control */
-	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_IN) {
-		ppd->part_enforce |= HFI_PART_ENFORCE_IN;
+	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_IN)
 		hfi_cfg_in_pkey_check(ppd, 1);
-	} else {
+	else
 		/*
 		 * FXRTODO: Ignore FM value if neighbhor is HFI. Currently
 		 * FM always sends 0. Design discussion still pending
 		 */
-		if (!neigh_is_hfi(ppd)) {
-			ppd->part_enforce &= ~HFI_PART_ENFORCE_IN;
+		if (!neigh_is_hfi(ppd))
 			hfi_cfg_in_pkey_check(ppd, 0);
-		}
-	}
-
-	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_OUT) {
-		ppd->part_enforce |= HFI_PART_ENFORCE_OUT;
+	if (pi->partenforce_filterraw & OPA_PI_MASK_PARTITION_ENFORCE_OUT)
 		hfi_cfg_out_pkey_check(ppd, 1);
-	} else {
+	else
 		/*
 		 * FXRTODO: Ignore FM value if neighbhor is HFI. Currently
 		 * FM always sends 0. Design discussion still pending
 		 */
-		if (!neigh_is_hfi(ppd)) {
-			ppd->part_enforce &= ~HFI_PART_ENFORCE_OUT;
+		if (!neigh_is_hfi(ppd))
 			hfi_cfg_out_pkey_check(ppd, 0);
-		}
-	}
 
 	/* Must be a valid unicast LID address. */
 	if ((smlid == 0 && ls_old > IB_PORT_INIT) ||
