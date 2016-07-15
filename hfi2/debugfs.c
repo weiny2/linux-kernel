@@ -151,34 +151,37 @@ static int hfi_qos_show(struct seq_file *s, void *unused)
 	return 0;
 }
 
-static int hfi_qos_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, hfi_qos_show, inode->i_private);
+#define SINGLE_HFI_OPEN(name) \
+static int hfi_##name##_open(struct inode *inode, struct file *file) \
+{ \
+	return single_open(file, hfi_##name##_show, inode->i_private); \
 }
 
-static int hfi_qos_release(struct inode *inode, struct file *file)
+static int hfi_mgmt_allowed_show(struct seq_file *s, void *unused)
 {
-	return single_release(inode, file);
+	struct hfi_pportdata *ppd = s->private;
+
+	seq_printf(s, "%u\n", ppd->mgmt_allowed);
+
+	return 0;
 }
 
-static const struct file_operations hfi_qos_ops = {
-	.owner   = THIS_MODULE,
-	.open    = hfi_qos_open,
-	.read    = seq_read,
-	.llseek  = seq_lseek,
-	.release = hfi_qos_release
-};
-
-
-void hfi_qos_dbg_init(struct hfi_devdata *dd)
+static int hfi_fw_auth_bypass_show(struct seq_file *s, void *unused)
 {
-	struct hfi_pportdata *ppd;
-	int j;
+	struct hfi_pportdata *ppd = s->private;
 
-	/* create qos file for each port */
-	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++)
-		debugfs_create_file("qos", 0444, ppd->hfi_port_dbg,
-				    ppd, &hfi_qos_ops);
+	seq_printf(s, "%u\n", ppd->neighbor_fm_security);
+
+	return 0;
+}
+
+static int hfi_neighbor_node_type_show(struct seq_file *s, void *unused)
+{
+	struct hfi_pportdata *ppd = s->private;
+
+	seq_printf(s, "%u\n", ppd->neighbor_type & OPA_PI_MASK_NEIGH_NODE_TYPE);
+
+	return 0;
 }
 
 static int hfi_bw_arb_show(struct seq_file *s, void *unused)
@@ -263,14 +266,29 @@ static int hfi_bw_arb_show(struct seq_file *s, void *unused)
 	return 0;
 }
 
-static int hfi_bw_arb_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, hfi_bw_arb_show, inode->i_private);
-}
+SINGLE_HFI_OPEN(mgmt_allowed)
+SINGLE_HFI_OPEN(fw_auth_bypass)
+SINGLE_HFI_OPEN(neighbor_node_type)
+SINGLE_HFI_OPEN(bw_arb)
+SINGLE_HFI_OPEN(qos)
 
-static int hfi_bw_arb_release(struct inode *inode, struct file *file)
+static const struct file_operations hfi_qos_ops = {
+	.owner   = THIS_MODULE,
+	.open    = hfi_qos_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release
+};
+
+void hfi_qos_dbg_init(struct hfi_devdata *dd)
 {
-	return single_release(inode, file);
+	struct hfi_pportdata *ppd;
+	int j;
+
+	/* create qos file for each port */
+	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++)
+		debugfs_create_file("qos", 0444, ppd->hfi_port_dbg,
+				    ppd, &hfi_qos_ops);
 }
 
 static const struct file_operations hfi_bw_arb_ops = {
@@ -278,7 +296,7 @@ static const struct file_operations hfi_bw_arb_ops = {
 	.open    = hfi_bw_arb_open,
 	.read    = seq_read,
 	.llseek  = seq_lseek,
-	.release = hfi_bw_arb_release
+	.release = single_release
 };
 
 void hfi_bw_arb_dbg_init(struct hfi_devdata *dd)
@@ -290,6 +308,49 @@ void hfi_bw_arb_dbg_init(struct hfi_devdata *dd)
 	for (ppd = dd->pport, j = 0; j < dd->num_pports; j++, ppd++)
 		debugfs_create_file("bw_arb", 0444, ppd->hfi_port_dbg,
 				    ppd, &hfi_bw_arb_ops);
+}
+
+static const struct file_operations hfi_mgmt_allowed_ops = {
+	.owner   = THIS_MODULE,
+	.open    = hfi_mgmt_allowed_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release
+};
+
+static const struct file_operations hfi_fw_auth_bypass_ops = {
+	.owner   = THIS_MODULE,
+	.open    = hfi_fw_auth_bypass_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release
+};
+
+static const struct file_operations hfi_neighbor_node_type_ops = {
+	.owner   = THIS_MODULE,
+	.open    = hfi_neighbor_node_type_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release
+};
+
+void hfi_node_mode_dbg_init(struct hfi_devdata *dd)
+{
+	struct hfi_pportdata *ppd;
+	int i;
+
+	/* create bw_arb file for each port */
+	for (ppd = dd->pport, i = 0; i < dd->num_pports; i++, ppd++) {
+		DEBUGFS_FILE_CREATE("mgmt_allowed",
+				    ppd->hfi_neighbor_dbg,
+				    ppd, &hfi_mgmt_allowed_ops, 0444);
+		DEBUGFS_FILE_CREATE("fw_auth_bypass",
+				    ppd->hfi_neighbor_dbg,
+				    ppd, &hfi_fw_auth_bypass_ops, 0444);
+		DEBUGFS_FILE_CREATE("neighbor_node_type",
+				    ppd->hfi_neighbor_dbg,
+				    ppd, &hfi_neighbor_node_type_ops, 0444);
+	}
 }
 
 static ssize_t host_link_bounce(struct file *file, const char __user *ubuf,
@@ -499,14 +560,17 @@ void hfi_dbg_init(struct hfi_devdata *dd)
 		return;
 	}
 
-	/* create a directory for each port */
+	/* create a directory for each port, and a neighbor_mode directory */
 	for (j = 0, ppd = dd->pport; j < dd->num_pports; ppd++, j++) {
 		snprintf(name, sizeof(name), "port%d", ppd->pnum);
 		ppd->hfi_port_dbg = debugfs_create_dir(name, dd->hfi_dev_dbg);
+		ppd->hfi_neighbor_dbg = debugfs_create_dir("neighbor_mode",
+							   ppd->hfi_port_dbg);
 	}
 
 	hfi_qos_dbg_init(dd);
 	hfi_bw_arb_dbg_init(dd);
+	hfi_node_mode_dbg_init(dd);
 	hfi_firmware_dbg_init(dd);
 	hfi_devcntrs_dbg_init(dd);
 	hfi_portcntrs_dbg_init(dd);

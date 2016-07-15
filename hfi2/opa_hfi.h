@@ -719,6 +719,7 @@ struct hfi_pportdata {
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *hfi_port_dbg;
+	struct dentry *hfi_neighbor_dbg;
 #endif
 };
 
