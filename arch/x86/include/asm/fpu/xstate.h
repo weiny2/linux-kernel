@@ -21,19 +21,29 @@
 #define XSAVE_YMM_SIZE	    256
 #define XSAVE_YMM_OFFSET    (XSAVE_HDR_SIZE + XSAVE_HDR_OFFSET)
 
-/* Supervisor features */
-#define XFEATURE_MASK_SUPERVISOR (XFEATURE_MASK_PT)
+/* All currently supported user features */
+#define SUPPORTED_XFEATURES_MASK_USER (XFEATURE_MASK_FP | \
+				       XFEATURE_MASK_SSE | \
+				       XFEATURE_MASK_YMM | \
+				       XFEATURE_MASK_OPMASK | \
+				       XFEATURE_MASK_ZMM_Hi256 | \
+				       XFEATURE_MASK_Hi16_ZMM	 | \
+				       XFEATURE_MASK_PKRU | \
+				       XFEATURE_MASK_BNDREGS | \
+				       XFEATURE_MASK_BNDCSR)
 
-/* All currently supported features */
-#define XCNTXT_MASK		(XFEATURE_MASK_FP | \
-				 XFEATURE_MASK_SSE | \
-				 XFEATURE_MASK_YMM | \
-				 XFEATURE_MASK_OPMASK | \
-				 XFEATURE_MASK_ZMM_Hi256 | \
-				 XFEATURE_MASK_Hi16_ZMM	 | \
-				 XFEATURE_MASK_PKRU | \
-				 XFEATURE_MASK_BNDREGS | \
-				 XFEATURE_MASK_BNDCSR)
+/* All currently supported supervisor features */
+#define SUPPORTED_XFEATURES_MASK_SUPERVISOR (0)
+
+/*
+ * Unsupported supervisor features. When a supervisor feature in this mask is
+ * supported in the future, move it to the supported supervisor feature mask.
+ */
+#define UNSUPPORTED_XFEATURES_MASK_SUPERVISOR (XFEATURE_MASK_PT)
+
+/* All supervisor states including supported and unsupported states. */
+#define ALL_XFEATURES_MASK_SUPERVISOR (SUPPORTED_XFEATURES_MASK_SUPERVISOR | \
+				       UNSUPPORTED_XFEATURES_MASK_SUPERVISOR)
 
 #ifdef CONFIG_X86_64
 #define REX_PREFIX	"0x48, "

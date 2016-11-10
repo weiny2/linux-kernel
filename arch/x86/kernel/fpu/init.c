@@ -224,7 +224,8 @@ static void __init fpu__init_system_xstate_size_legacy(void)
  */
 u64 __init fpu__get_supported_xfeatures_mask(void)
 {
-	return XCNTXT_MASK;
+	return SUPPORTED_XFEATURES_MASK_USER |
+	       SUPPORTED_XFEATURES_MASK_SUPERVISOR;
 }
 
 /* Legacy code to initialize eager fpu mode. */
