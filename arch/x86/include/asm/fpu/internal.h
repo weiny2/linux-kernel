@@ -476,6 +476,8 @@ static inline void copy_kernel_to_fpregs(union fpregs_state *fpstate)
 	__copy_kernel_to_fpregs(fpstate, -1);
 }
 
+extern int save_cet_to_sigframe(void __user *fp, unsigned long restorer,
+				int is_ia32);
 extern int copy_fpstate_to_sigframe(void __user *buf, void __user *fp, int size);
 
 /*
