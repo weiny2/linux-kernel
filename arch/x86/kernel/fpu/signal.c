@@ -52,6 +52,72 @@ static inline int check_for_xstate(struct fxregs_state __user *buf,
 	return 0;
 }
 
+#ifdef CONFIG_X86_INTEL_CET
+int save_cet_to_sigframe(void __user *fp, unsigned long restorer, int is_ia32)
+{
+	int err = 0;
+
+	if (!current->thread.cet.shstk_size)
+		return 0;
+
+	if (fp) {
+		struct sc_ext ext = {0, 0, 0};
+
+		err = cet_setup_signal(is_ia32, restorer, &ext);
+		if (!err) {
+			void __user *p = fp;
+
+			ext.total_size = sizeof(ext);
+
+			if (is_ia32)
+				p += sizeof(struct fregs_state);
+
+			p += fpu_user_xstate_size + FP_XSTATE_MAGIC2_SIZE;
+			p = (void __user *)ALIGN((unsigned long)p, 8);
+
+			if (copy_to_user(p, &ext, sizeof(ext)))
+				return -EFAULT;
+		}
+	}
+
+	return err;
+}
+
+static int restore_cet_from_sigframe(int is_ia32, void __user *fp)
+{
+	int err = 0;
+
+	if (!current->thread.cet.shstk_size)
+		return 0;
+
+	if (fp) {
+		struct sc_ext ext = {0, 0, 0};
+		void __user *p = fp;
+
+		if (is_ia32)
+			p += sizeof(struct fregs_state);
+
+		p += fpu_user_xstate_size + FP_XSTATE_MAGIC2_SIZE;
+		p = (void __user *)ALIGN((unsigned long)p, 8);
+
+		if (copy_from_user(&ext, p, sizeof(ext)))
+			return -EFAULT;
+
+		if (ext.total_size != sizeof(ext))
+			return -EFAULT;
+
+		err = cet_restore_signal(is_ia32, &ext);
+	}
+
+	return err;
+}
+#else
+static int restore_cet_from_sigframe(int is_ia32, void __user *fp)
+{
+	return 0;
+}
+#endif
+
 /*
  * Signal frame handlers.
  */
@@ -346,6 +412,9 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 		pagefault_disable();
 		ret = copy_user_to_fpregs_zeroing(buf_fx, user_xfeatures, fx_only);
 		pagefault_enable();
+		if (!ret)
+			ret = restore_cet_from_sigframe(0, buf);
+
 		if (!ret) {
 			/* Restore supervisor states */
 			if (test_thread_flag(TIF_NEED_FPU_LOAD) &&
@@ -401,6 +470,10 @@ static int __fpu__restore_sig(void __user *buf, void __user *buf_fx, int size)
 
 		sanitize_restored_user_xstate(&fpu->state, envp, user_xfeatures,
 					      fx_only);
+
+		ret = restore_cet_from_sigframe((int)ia32_fxstate, buf);
+		if (ret)
+			goto err_out;
 
 		fpregs_lock();
 		if (unlikely(init_bv))
@@ -473,11 +546,34 @@ int fpu__restore_sig(void __user *buf, int ia32_frame)
 	return __fpu__restore_sig(buf, buf_fx, size);
 }
 
+#ifdef CONFIG_X86_INTEL_CET
+static unsigned long fpu__alloc_sigcontext_ext(unsigned long sp)
+{
+	struct cet_status *cet = &current->thread.cet;
+
+	/*
+	 * sigcontext_ext is at: fpu + fpu_user_xstate_size +
+	 * FP_XSTATE_MAGIC2_SIZE, then aligned to 8.
+	 */
+	if (cet->shstk_size)
+		sp -= (sizeof(struct sc_ext) + 8);
+
+	return sp;
+}
+#else
+static unsigned long fpu__alloc_sigcontext_ext(unsigned long sp)
+{
+	return sp;
+}
+#endif
+
 unsigned long
 fpu__alloc_mathframe(unsigned long sp, int ia32_frame,
 		     unsigned long *buf_fx, unsigned long *size)
 {
 	unsigned long frame_size = xstate_sigframe_size();
+
+	sp = fpu__alloc_sigcontext_ext(sp);
 
 	*buf_fx = sp = round_down(sp - frame_size, 64);
 	if (ia32_frame && use_fxsr()) {
