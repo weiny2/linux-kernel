@@ -783,6 +783,13 @@ int rvt_register_device(struct rvt_dev_info *rdi, u32 driver_id)
 		goto bail_mr;
 	}
 
+	/* Memory Working Set Size */
+	ret = rvt_wss_init(rdi);
+	if (ret) {
+		rvt_pr_err(rdi, "Error in WSS init.\n");
+		goto bail_cq;
+	}
+
 	/* DMA Operations */
 	rdi->ibdev.dev.dma_ops = rdi->ibdev.dev.dma_ops ? : &dma_virt_ops;
 
@@ -836,13 +843,16 @@ int rvt_register_device(struct rvt_dev_info *rdi, u32 driver_id)
 	ret =  ib_register_device(&rdi->ibdev, rdi->driver_f.port_callback);
 	if (ret) {
 		rvt_pr_err(rdi, "Failed to register driver with ib core.\n");
-		goto bail_cq;
+		goto bail_wss;
 	}
 
 	rvt_create_mad_agents(rdi);
 
 	rvt_pr_info(rdi, "Registration with rdmavt done.\n");
 	return ret;
+
+bail_wss:
+	rvt_wss_exit(rdi);
 
 bail_cq:
 	rvt_cq_exit(rdi);
@@ -870,6 +880,7 @@ void rvt_unregister_device(struct rvt_dev_info *rdi)
 	rvt_free_mad_agents(rdi);
 
 	ib_unregister_device(&rdi->ibdev);
+	rvt_wss_exit(rdi);
 	rvt_cq_exit(rdi);
 	rvt_mr_exit(rdi);
 	rvt_qp_exit(rdi);
