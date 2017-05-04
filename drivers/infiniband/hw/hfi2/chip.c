@@ -140,6 +140,9 @@ MODULE_PARM_DESC(loopback,
 /* ITR_BECN_INDEX is calculated to be 255*8 */
 #define HFI_ITR_BECN_INDEX	(HFI_LM_BECN_EVENT * 8)
 
+#define HFI_AUTH_SRANK_MASK FXR_TXCID_CFG_AUTHENTICATION_CSR_SRANK_MASK
+#define HFI_AUTH_SRANK_SHIFT FXR_TXCID_CFG_AUTHENTICATION_CSR_SRANK_SHIFT
+
 static bool use_driver_reset = true;
 /* Driver reset is the default and only choice until a kernel bug is fixed. */
 module_param(use_driver_reset, bool, 0444);
@@ -1423,23 +1426,28 @@ static void hfi_set_global_limit(struct hfi_pportdata *ppd, u16 limit)
 
 static void hfi_set_vl_dedicated(struct hfi_pportdata *ppd, int vl, u16 limit)
 {
-	TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT_t reg;
+	u64 reg;
 	u32 addr = FXR_TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT +
 		   (8 * hfi_vl_to_idx(vl));
 
-	reg.val = hfi_read_lm_cm_csr(ppd, addr);
-	reg.field.Dedicated = limit;
-	hfi_write_lm_cm_csr(ppd, addr, reg.val);
+	reg = hfi_read_lm_cm_csr(ppd, addr);
+	reg &= ~FXR_TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT_DEDICATED_SMASK;
+	reg |= (FXR_TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT_DEDICATED_MASK &
+		limit) <<
+		FXR_TP_CFG_CM_DEDICATED_VL_CRDT_LIMIT_DEDICATED_SHIFT;
+	hfi_write_lm_cm_csr(ppd, addr, reg);
 }
 
 static void hfi_set_vl_shared(struct hfi_pportdata *ppd, int vl, u16 limit)
 {
-	TP_CFG_CM_SHARED_VL_CRDT_LIMIT_t reg;
+	u64 reg;
 	u32 addr = FXR_TP_CFG_CM_SHARED_VL_CRDT_LIMIT + (8 * hfi_vl_to_idx(vl));
 
-	reg.val = hfi_read_lm_cm_csr(ppd, addr);
-	reg.field.Shared = limit;
-	hfi_write_lm_cm_csr(ppd, addr, reg.val);
+	reg = hfi_read_lm_cm_csr(ppd, addr);
+	reg &= ~FXR_TP_CFG_CM_SHARED_VL_CRDT_LIMIT_SHARED_SMASK;
+	reg |= (FXR_TP_CFG_CM_SHARED_VL_CRDT_LIMIT_SHARED_MASK & limit) <<
+		FXR_TP_CFG_CM_SHARED_VL_CRDT_LIMIT_SHARED_SHIFT;
+	hfi_write_lm_cm_csr(ppd, addr, reg);
 }
 
 /*
@@ -2094,13 +2102,21 @@ static void hfi_sc_to_resp_sl(struct hfi_pportdata *ppd, void *data)
 static void hfi_set_txdma_mctc_bw(struct hfi_devdata *dd, u8 whole, u8 frac,
 				  u8 mctc, bool enable_capping)
 {
-	TXDMA_CFG_BWMETER_MC0TC0_t cfg = { .val = 0 };
+	u64 cfg = 0;
 
-	cfg.field.leak_amount_fractional = frac;
-	cfg.field.leak_amount_integral = whole;
-	cfg.field.enable_capping = enable_capping;
-	cfg.field.bandwidth_limit = HFI_DEFAULT_BW_LIMIT_FLITS;
-	write_csr(dd, FXR_TXDMA_CFG_BWMETER_MC0TC0 + (8 * mctc), cfg.val);
+	cfg = (FXR_TXDMA_CFG_BWMETER_MC0TC0_LEAK_AMOUNT_FRACTIONAL_MASK &
+	       frac) <<
+	       FXR_TXDMA_CFG_BWMETER_MC0TC0_LEAK_AMOUNT_FRACTIONAL_SHIFT;
+	cfg |= (FXR_TXDMA_CFG_BWMETER_MC0TC0_LEAK_AMOUNT_INTEGRAL_MASK &
+		whole) <<
+		FXR_TXDMA_CFG_BWMETER_MC0TC0_LEAK_AMOUNT_INTEGRAL_SHIFT;
+	cfg |= (FXR_TXDMA_CFG_BWMETER_MC0TC0_ENABLE_CAPPING_MASK &
+		enable_capping) <<
+		FXR_TXDMA_CFG_BWMETER_MC0TC0_ENABLE_CAPPING_SHIFT;
+	cfg |= (FXR_TXDMA_CFG_BWMETER_MC0TC0_BANDWIDTH_LIMIT_MASK &
+		HFI_DEFAULT_BW_LIMIT_FLITS) <<
+		FXR_TXDMA_CFG_BWMETER_MC0TC0_BANDWIDTH_LIMIT_SHIFT;
+	write_csr(dd, FXR_TXDMA_CFG_BWMETER_MC0TC0 + (8 * mctc), cfg);
 }
 
 static void hfi_set_txdma_bw(struct hfi_devdata *dd, u8 whole, u8 frac, u8 tc,
@@ -2115,17 +2131,27 @@ static void hfi_set_txdma_bw(struct hfi_devdata *dd, u8 whole, u8 frac, u8 tc,
 static void hfi_set_rxdma_mctc_bw(struct hfi_devdata *dd, u8 whole, u8 frac,
 				  u8 mctc)
 {
-	RXDMA_CFG_BW_SHAPE_B0_t cfg;
+	u64 cfg;
 	int offset = 8 * mctc;
 
-	cfg.val = read_csr(dd, FXR_RXDMA_CFG_BW_SHAPE_B0 + offset);
+	cfg = read_csr(dd, FXR_RXDMA_CFG_BW_SHAPE_B0 + offset);
 
-	cfg.field.METER_CONFIG = 1 << mctc;
-	cfg.field.BW_LIMIT = HFI_DEFAULT_BW_LIMIT_FLITS;
-	cfg.field.LEAK_FRACTION = frac;
-	cfg.field.LEAK_INTEGER = whole;
+	cfg &= ~(FXR_RXDMA_CFG_BW_SHAPE_B0_METER_CONFIG_SMASK |
+		 FXR_RXDMA_CFG_BW_SHAPE_B0_BW_LIMIT_SMASK |
+		 FXR_RXDMA_CFG_BW_SHAPE_B0_LEAK_FRACTION_SMASK |
+		 FXR_RXDMA_CFG_BW_SHAPE_B0_LEAK_INTEGER_SMASK);
 
-	write_csr(dd, FXR_RXDMA_CFG_BW_SHAPE_B0 + offset, cfg.val);
+	cfg |= (FXR_RXDMA_CFG_BW_SHAPE_B0_METER_CONFIG_MASK & (1 << mctc)) <<
+		FXR_RXDMA_CFG_BW_SHAPE_B0_METER_CONFIG_SHIFT;
+	cfg |= (FXR_RXDMA_CFG_BW_SHAPE_B0_BW_LIMIT_MASK &
+		HFI_DEFAULT_BW_LIMIT_FLITS) <<
+		FXR_RXDMA_CFG_BW_SHAPE_B0_BW_LIMIT_SHIFT;
+	cfg |= (FXR_RXDMA_CFG_BW_SHAPE_B0_LEAK_FRACTION_MASK & frac) <<
+		FXR_RXDMA_CFG_BW_SHAPE_B0_LEAK_FRACTION_SHIFT;
+	cfg |= (FXR_RXDMA_CFG_BW_SHAPE_B0_LEAK_INTEGER_MASK & whole) <<
+		FXR_RXDMA_CFG_BW_SHAPE_B0_LEAK_INTEGER_SHIFT;
+
+	write_csr(dd, FXR_RXDMA_CFG_BW_SHAPE_B0 + offset, cfg);
 }
 
 static void hfi_set_rxdma_bw(struct hfi_devdata *dd, u8 whole, u8 frac, u8 tc)
@@ -2137,27 +2163,45 @@ static void hfi_set_rxdma_bw(struct hfi_devdata *dd, u8 whole, u8 frac, u8 tc)
 static void hfi_set_txotr_mctc_bw(struct hfi_devdata *dd, u8 whole, u8 frac,
 				  u8 mctc)
 {
-	TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0_t pf_cfg = { .val = 0 };
-	TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0_t fp_cfg = { .val = 0 };
-	TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0_t arb_cfg = { .val = 0 };
+	u64 pf_cfg = 0;
+	u64 fp_cfg = 0;
+	u64 arb_cfg = 0;
 
-	pf_cfg.field.BW_LIMIT = HFI_DEFAULT_BW_LIMIT_FLITS;
-	pf_cfg.field.LEAK_FRACTION = frac;
-	pf_cfg.field.LEAK_INTEGER = whole;
+	pf_cfg = (FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0_BW_LIMIT_MASK &
+		   HFI_DEFAULT_BW_LIMIT_FLITS) <<
+		   FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0_BW_LIMIT_SHIFT;
+	pf_cfg |= (FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0_LEAK_FRACTION_MASK &
+		   frac) <<
+		   FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0_LEAK_FRACTION_SHIFT;
+	pf_cfg |= (FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0_LEAK_INTEGER_MASK &
+		   whole) <<
+		   FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0_LEAK_INTEGER_SHIFT;
 	write_csr(dd, FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0 + (8 * mctc),
-		  pf_cfg.val);
+		  pf_cfg);
 
-	fp_cfg.field.BW_LIMIT = HFI_DEFAULT_BW_LIMIT_FLITS;
-	fp_cfg.field.LEAK_FRACTION = frac;
-	fp_cfg.field.LEAK_INTEGER = whole;
+	fp_cfg = (FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0_BW_LIMIT_MASK &
+		  HFI_DEFAULT_BW_LIMIT_FLITS) <<
+		  FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0_BW_LIMIT_SHIFT;
+	fp_cfg |= (FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0_LEAK_FRACTION_MASK &
+		   frac) <<
+		   FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0_LEAK_FRACTION_SHIFT;
+	fp_cfg |= (FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0_LEAK_INTEGER_MASK &
+		   whole) <<
+		   FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0_LEAK_INTEGER_SHIFT;
 	write_csr(dd, FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0 + (8 * mctc),
-		  fp_cfg.val);
+		  fp_cfg);
 
-	arb_cfg.field.BW_LIMIT = HFI_DEFAULT_BW_LIMIT_FLITS;
-	arb_cfg.field.LEAK_FRACTION = frac;
-	arb_cfg.field.LEAK_INTEGER = whole;
+	arb_cfg = (FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0_BW_LIMIT_MASK &
+		    HFI_DEFAULT_BW_LIMIT_FLITS) <<
+		    FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0_BW_LIMIT_SHIFT;
+	arb_cfg |= (FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0_LEAK_FRACTION_MASK &
+		    frac) <<
+		    FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0_LEAK_FRACTION_SHIFT;
+	arb_cfg |= (FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0_LEAK_INTEGER_MASK &
+		    whole) <<
+		    FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0_LEAK_INTEGER_SHIFT;
 	write_csr(dd, FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0 + (8 * mctc),
-		  arb_cfg.val);
+		  arb_cfg);
 }
 
 static void hfi_set_txotr_bw(struct hfi_devdata *dd, u8 whole, u8 frac, u8 tc)
@@ -2375,16 +2419,23 @@ static void hfi_set_bw_arb(struct hfi_pportdata *ppd, int section,
 static void hfi_set_pkt_format(struct hfi_pportdata *ppd,
 			       const u8 *pkt_formats_enabled)
 {
-	FPC_CFG_PORT_CONFIG_t fpc;
+	u64 fpc;
 
 	if (*pkt_formats_enabled == OPA_PORT_PACKET_FORMAT_NOP)
 		return;
 
 	ppd->packet_format_enabled = *pkt_formats_enabled;
-	fpc.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
-	fpc.field.pkt_formats_enabled = *pkt_formats_enabled;
-	fpc.field.pkt_formats_supported = ppd->packet_format_supported;
-	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc.val);
+	fpc = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG);
+	fpc &= ~FXR_FPC_CFG_PORT_CONFIG_PKT_FORMATS_ENABLED_SMASK;
+	fpc &= ~FXR_FPC_CFG_PORT_CONFIG_PKT_FORMATS_SUPPORTED_SMASK;
+
+	fpc |= (FXR_FPC_CFG_PORT_CONFIG_PKT_FORMATS_ENABLED_MASK &
+		*pkt_formats_enabled) <<
+		FXR_FPC_CFG_PORT_CONFIG_PKT_FORMATS_ENABLED_SHIFT;
+	fpc |= (FXR_FPC_CFG_PORT_CONFIG_PKT_FORMATS_SUPPORTED_MASK &
+		ppd->packet_format_supported) <<
+		FXR_FPC_CFG_PORT_CONFIG_PKT_FORMATS_SUPPORTED_SHIFT;
+	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc);
 }
 
 static int hfi_set_sl_pairs(struct hfi_pportdata *ppd, const u8 *sl_pairs)
@@ -3074,7 +3125,7 @@ static void hfi_init_linkmux_csrs(struct hfi_pportdata *ppd)
 {
 	u64 val;
 	/*TP_PRF_CTRL_t tp_perf;*/
-	FPC_CFG_PORT_CONFIG1_t fpc1;
+	u64 fpc1;
 
 	val = hfi_read_lm_tp_csr(ppd, FXR_TP_CFG_MISC_CTRL);
 	val &= ~(FXR_TP_CFG_MISC_CTRL_DISABLE_RELIABLE_VL15_PKTS_SMASK |
@@ -3090,11 +3141,11 @@ static void hfi_init_linkmux_csrs(struct hfi_pportdata *ppd)
 	hfi_write_lm_tp_csr(ppd, FXR_TP_PRF_CTRL, tp_perf.val);
 	#endif
 
-	fpc1.val = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG1);
+	fpc1 = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG1);
 
 	/* Enable BECN interrupts on all SCs */
-	fpc1.field.b_sc_enable = FXR_FPC_CFG_PORT_CONFIG1_B_SC_ENABLE_MASK;
-	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG1, fpc1.val);
+	fpc1 |= FXR_FPC_CFG_PORT_CONFIG1_B_SC_ENABLE_SMASK;
+	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG1, fpc1);
 }
 
 static void hfi_init_bw_arb_caches(struct hfi_pportdata *ppd)
@@ -3672,7 +3723,7 @@ static int hfi_flr(struct hfi_devdata *dd, struct pci_dev *pdev)
 static int hfi_driver_reset(struct hfi_devdata *dd)
 {
 	int i;
-	PCIM_CFG_t reg = {.val = 0};
+	u64 reg = 0;
 
 	if (zebu) {
 		dd_dev_info(dd, "Skipping DRIVER_RESET\n");
@@ -3681,13 +3732,13 @@ static int hfi_driver_reset(struct hfi_devdata *dd)
 
 	dd_dev_info(dd, "Resetting HFI with DRIVER_RESET\n");
 
-	reg.field.DRIVER_RESET = 1;
-	write_csr(dd, FXR_PCIM_CFG, reg.val);
+	reg = FXR_PCIM_CFG_DRIVER_RESET_SMASK;
+	write_csr(dd, FXR_PCIM_CFG, reg);
 
 	for (i = 0; i < HFI_DRIVER_RESET_RETRIES; i++) {
-		reg.val = read_csr(dd, FXR_PCIM_CFG);
+		reg = read_csr(dd, FXR_PCIM_CFG);
 
-		if (!reg.field.DRIVER_RESET)
+		if (!(reg & FXR_PCIM_CFG_DRIVER_RESET_SMASK))
 			break;
 		msleep(20);
 	}
@@ -3951,28 +4002,27 @@ err_post_alloc:
 
 static void hfi_cancel_pending_otr(struct hfi_devdata *dd, u16 ptl_pid)
 {
-	TXOTR_MSG_CFG_CANCEL_MSG_REQ_1_t cancel_msg_req1 = {.val = 0};
-	TXOTR_MSG_CFG_CANCEL_MSG_REQ_2_t cancel_msg_req2 = {.val = 0};
-	TXOTR_MSG_CFG_CANCEL_MSG_REQ_3_t cancel_msg_req3 = {.val = 0};
-	TXOTR_MSG_CFG_CANCEL_MSG_REQ_4_t cancel_msg_req4 = {.val = 0};
+	u64 cancel_msg_req1 = 0;
 
 	/*
 	 * Cancel pending OTR operations for current PID,
 	 * except ipid_mask, all other masks are zero.
 	 */
-	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_4, cancel_msg_req4.val);
-	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_3, cancel_msg_req3.val);
-	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_2, cancel_msg_req2.val);
-	cancel_msg_req1.field.ipid_mask = 0xFFF;
-	cancel_msg_req1.field.ipid = ptl_pid;
-	cancel_msg_req1.field.busy = 1;
-	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1, cancel_msg_req1.val);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_4, 0);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_3, 0);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_2, 0);
+	cancel_msg_req1 = FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1_IPID_MASK_SMASK;
+	cancel_msg_req1 |= (FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1_IPID_MASK &
+			    ptl_pid) <<
+			    FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1_IPID_SHIFT;
+	cancel_msg_req1 |= FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1_BUSY_SMASK;
+	write_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1, cancel_msg_req1);
 
 	/* HW takes max 64K clock cycles on 1.2GHz, so delay a bit longer */
 	mdelay(HFI_OTR_CANCELLATION_TIMEOUT_MS);
 	/* for debugging purpose, read the CSR back */
-	cancel_msg_req1.val = read_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1);
-	if (cancel_msg_req1.field.busy)
+	cancel_msg_req1 = read_csr(dd, FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1);
+	if (cancel_msg_req1 & FXR_TXOTR_MSG_CFG_CANCEL_MSG_REQ_1_BUSY_SMASK)
 		/* FXRTODO: Change to dd_dev_err once Simics is fixed */
 		dd_dev_dbg(dd, "OTR cancellation not done after %dms, pid %d\n",
 			   HFI_OTR_CANCELLATION_TIMEOUT_MS, ptl_pid);
@@ -3980,12 +4030,10 @@ static void hfi_cancel_pending_otr(struct hfi_devdata *dd, u16 ptl_pid)
 
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 {
-	RXHIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
-	RXHIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
-	RXHP_CFG_PTE_CACHE_ACCESS_CTL_t pte_cache_access = {.val = 0};
-	RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_t eq_cache_access = {.val = 0};
-	RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t trig_op_cache_access = {.val = 0};
-	RXHP_CFG_PSC_CACHE_ACCESS_CTL_t me_le_uh_cache_access = {.val = 0};
+	u64 pte = 0;
+	u64 eq = 0;
+	u64 trig = 0;
+	u64 me_le_uh = 0;
 	union pte_cache_addr pte_cache_tag;
 	union eq_cache_addr eq_cache_tag;
 	union trig_op_cache_addr trig_op_cache_tag;
@@ -3993,8 +4041,8 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	int time;
 
 	/* write PCB_LOW first to clear valid bit */
-	write_csr(dd, FXR_RXHIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
-	write_csr(dd, FXR_RXHIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
+	write_csr(dd, FXR_RXHIARB_CFG_PCB_LOW + (ptl_pid * 8), 0);
+	write_csr(dd, FXR_RXHIARB_CFG_PCB_HIGH + (ptl_pid * 8), 0);
 
 	/* We need this lock to guard cache invalidation
 	 * CSR writes, all pids use the same CSR
@@ -4005,86 +4053,108 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 		hfi_cancel_pending_otr(dd, ptl_pid);
 
 	/* invalidate cached host memory in HFI for Portals Tables by PID */
-	pte_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
+	pte = (FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_CMD_MASK &
+			    FXR_CACHE_CMD_INVALIDATE) <<
+			    FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_CMD_SHIFT;
 	pte_cache_tag.val = 0;
 	pte_cache_tag.tpid = ptl_pid;
-	pte_cache_access.field.address = pte_cache_tag.val;
+	pte |= (FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_ADDRESS_MASK &
+			     pte_cache_tag.val) <<
+			     FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_ADDRESS_SHIFT;
 	pte_cache_tag.val = -1;
 	pte_cache_tag.tpid = 0;
-	pte_cache_access.field.mask_address = pte_cache_tag.val;
-	pte_cache_access.field.busy = 1;
-	write_csr(dd, FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL, pte_cache_access.val);
+	pte |= (FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_MASK_ADDRESS_MASK &
+		pte_cache_tag.val) <<
+		FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_MASK_ADDRESS_SHIFT;
+	pte |= FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_BUSY_SMASK;
+	write_csr(dd, FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL, pte);
 
 	/* invalidate cached host memory in HFI for EQ Descs by PID */
-	eq_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
+	eq = (FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_CMD_MASK &
+	      FXR_CACHE_CMD_INVALIDATE) <<
+	      FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_CMD_SHIFT;
 	eq_cache_tag.val = 0;
 	eq_cache_tag.pid = ptl_pid;
-	eq_cache_access.field.address = eq_cache_tag.val;
+	eq |= (FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_ADDRESS_MASK &
+	       eq_cache_tag.val) <<
+	       FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_ADDRESS_SHIFT;
 	eq_cache_tag.val = -1;
 	eq_cache_tag.pid = 0;
-	eq_cache_access.field.mask_address = eq_cache_tag.val;
-	eq_cache_access.field.busy = 1;
-	write_csr(dd, FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL,
-		  eq_cache_access.val);
+	eq |= (FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_MASK_ADDRESS_MASK &
+	       eq_cache_tag.val) <<
+	       FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_MASK_ADDRESS_SHIFT;
+	eq |= FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_BUSY_SMASK;
+	write_csr(dd, FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL, eq);
 
 	/* invalidate cached host memory in HFI for Triggered Ops by PID */
-	trig_op_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
+	trig = (FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_CMD_MASK &
+		FXR_CACHE_CMD_INVALIDATE) <<
+		FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_CMD_SHIFT;
 	trig_op_cache_tag.val = 0;
 	trig_op_cache_tag.pid = ptl_pid;
-	trig_op_cache_access.field.address = trig_op_cache_tag.val;
+	trig |= (FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_ADDRESS_MASK &
+		 trig_op_cache_tag.val) <<
+		 FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_ADDRESS_SHIFT;
 	trig_op_cache_tag.val = -1;
 	trig_op_cache_tag.pid = 0;
-	trig_op_cache_access.field.mask_address = trig_op_cache_tag.val;
-	trig_op_cache_access.field.busy = 1;
-	write_csr(dd, FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL,
-		  trig_op_cache_access.val);
+	trig |= (FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_MASK_ADDRESS_MASK &
+		 trig_op_cache_tag.val) <<
+		 FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_MASK_ADDRESS_SHIFT;
+	trig |= FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_BUSY_SMASK;
+	write_csr(dd, FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL, trig);
 
 	/* invalidate cached host memory in HFI for ME/LE/UH */
-	me_le_uh_cache_access.field.cmd = FXR_CACHE_CMD_INVALIDATE;
+	me_le_uh = (FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_CMD_MASK &
+		     FXR_CACHE_CMD_INVALIDATE) <<
+		     FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_CMD_SHIFT;
 	me_le_uh_cache_tag.val = 0;
 	me_le_uh_cache_tag.pid = ptl_pid;
-	me_le_uh_cache_access.field.address = me_le_uh_cache_tag.val;
+	me_le_uh |= (FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_ADDRESS_MASK &
+		     me_le_uh_cache_tag.val) <<
+		     FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_ADDRESS_SHIFT;
 	me_le_uh_cache_tag.val = -1;
 	me_le_uh_cache_tag.pid = 0;
-	me_le_uh_cache_access.field.mask_address = me_le_uh_cache_tag.val;
-	me_le_uh_cache_access.field.busy = 1;
+	me_le_uh |= (FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_MASK_ADDRESS_MASK &
+		     me_le_uh_cache_tag.val) <<
+		     FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_MASK_ADDRESS_SHIFT;
+	me_le_uh |= FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_BUSY_SMASK;
 	if (ptl_pid & 0x1)
-		me_le_uh_cache_access.field.bank = 1;
-	write_csr(dd, FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL,
-		  me_le_uh_cache_access.val);
+		me_le_uh |= FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_BANK_SMASK;
+	write_csr(dd, FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL, me_le_uh);
 
 	/* wait for completion, if timeout log a message */
 	for (time = 0; time < HFI_CACHE_INVALIDATION_TIMEOUT_MS; time++) {
-		if (pte_cache_access.field.busy)
-			pte_cache_access.val = read_csr(dd,
-				FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL);
-		if (eq_cache_access.field.busy)
-			eq_cache_access.val = read_csr(dd,
-				FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL);
-		if (trig_op_cache_access.field.busy)
-			trig_op_cache_access.val = read_csr(dd,
-				FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL);
-		if (me_le_uh_cache_access.field.busy)
-			me_le_uh_cache_access.val = read_csr(dd,
-				FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL);
-		if (!pte_cache_access.field.busy &&
-		    !eq_cache_access.field.busy &&
-		    !trig_op_cache_access.field.busy &&
-		    !me_le_uh_cache_access.field.busy)
+		mdelay(1);
+		if (pte & FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_BUSY_SMASK)
+			pte = read_csr(dd, FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL);
+		if (eq & FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_BUSY_SMASK)
+			eq = read_csr(dd,
+				      FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL);
+		if (trig & FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_BUSY_SMASK)
+			trig = read_csr(dd,
+					FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL);
+		if (me_le_uh & FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_BUSY_SMASK)
+			me_le_uh = read_csr(dd,
+					    FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL);
+		if (!(pte & FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_BUSY_SMASK) &&
+		    !(eq & FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_BUSY_SMASK) &&
+		    !(trig &
+		      FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_BUSY_SMASK) &&
+		    !(me_le_uh & FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_BUSY_SMASK))
 			break;
 		mdelay(1);
 	}
 	if (time >= HFI_CACHE_INVALIDATION_TIMEOUT_MS) {
-		if (pte_cache_access.field.busy)
+		if (pte & FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_BUSY_SMASK)
 			dd_dev_err(dd, "PTE cache invalidation not done after %dms\n",
 				   HFI_CACHE_INVALIDATION_TIMEOUT_MS);
-		if (eq_cache_access.field.busy)
+		if (eq & FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_BUSY_SMASK)
 			dd_dev_err(dd, "EQ cache invalidation not done after %dms\n",
 				   HFI_CACHE_INVALIDATION_TIMEOUT_MS);
-		if (trig_op_cache_access.field.busy)
+		if (trig & FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_BUSY_SMASK)
 			dd_dev_err(dd, "trig_op cache invalidation not done after %dms\n",
 				   HFI_CACHE_INVALIDATION_TIMEOUT_MS);
-		if (me_le_uh_cache_access.field.busy)
+		if (me_le_uh & FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_BUSY_SMASK)
 			dd_dev_err(dd, "ME/LE/UH cache invalidation not done after %dms\n",
 				   HFI_CACHE_INVALIDATION_TIMEOUT_MS);
 	}
@@ -4095,27 +4165,33 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	RXHIARB_CFG_PCB_LOW_t pcb_low = {.val = 0};
-	RXHIARB_CFG_PCB_HIGH_t pcb_high = {.val = 0};
+	u64 pcb_low = 0;
+	u64 pcb_high = 0;
 	u64 psb_addr;
 
 	psb_addr = (u64)ctx->ptl_state_base;
 
 	/* write PCB in FXR */
-	pcb_low.field.valid = 1;
-	pcb_low.field.portals_state_base = psb_addr >> PAGE_SHIFT;
+	pcb_low = FXR_RXHIARB_CFG_PCB_LOW_VALID_SMASK;
+	pcb_low |= (FXR_RXHIARB_CFG_PCB_LOW_PORTALS_STATE_BASE_MASK &
+		   (psb_addr >> PAGE_SHIFT)) <<
+		    FXR_RXHIARB_CFG_PCB_LOW_PORTALS_STATE_BASE_SHIFT;
 	/*
 	 * written as number of pages - 1, caller allocates at least one
 	 * page
 	 */
-	pcb_high.field.triggered_op_size =
-		(ctx->trig_op_size >> PAGE_SHIFT) - 1;
-	pcb_high.field.unexpected_size =
-		(ctx->unexpected_size >> PAGE_SHIFT) - 1;
-	pcb_high.field.le_me_size = (ctx->le_me_size >> PAGE_SHIFT) - 1;
+	pcb_high = (FXR_RXHIARB_CFG_PCB_HIGH_TRIGGERED_OP_SIZE_MASK &
+		   ((ctx->trig_op_size >> PAGE_SHIFT) - 1)) <<
+		    FXR_RXHIARB_CFG_PCB_HIGH_TRIGGERED_OP_SIZE_SHIFT;
+	pcb_high |= (FXR_RXHIARB_CFG_PCB_HIGH_UNEXPECTED_SIZE_MASK &
+		    ((ctx->unexpected_size >> PAGE_SHIFT) - 1)) <<
+		     FXR_RXHIARB_CFG_PCB_HIGH_UNEXPECTED_SIZE_SHIFT;
+	pcb_high |= (FXR_RXHIARB_CFG_PCB_HIGH_LE_ME_SIZE_MASK &
+		    ((ctx->le_me_size >> PAGE_SHIFT) - 1)) <<
+		     FXR_RXHIARB_CFG_PCB_HIGH_LE_ME_SIZE_SHIFT;
 
-	write_csr(dd, FXR_RXHIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high.val);
-	write_csr(dd, FXR_RXHIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low.val);
+	write_csr(dd, FXR_RXHIARB_CFG_PCB_HIGH + (ptl_pid * 8), pcb_high);
+	write_csr(dd, FXR_RXHIARB_CFG_PCB_LOW + (ptl_pid * 8), pcb_low);
 }
 
 /* Write CSR address for CMDQ head index, maintained by FXR */
@@ -4123,7 +4199,7 @@ static void hfi_cmdq_head_config(struct hfi_devdata *dd, u16 cmdq_idx,
 				 void *head_base)
 {
 	u32 head_offset;
-	RXCID_CFG_HEAD_UPDATE_ADDR_t cmdq_head = {.val = 0};
+	u64 cq_head = 0;
 
 	head_offset = FXR_RXCID_CFG_HEAD_UPDATE_ADDR + (cmdq_idx * 8);
 
@@ -4133,11 +4209,12 @@ static void hfi_cmdq_head_config(struct hfi_devdata *dd, u16 cmdq_idx,
 	/* reset CMDQ state, as CMDQ head starts at 0 */
 	hfi_cmdq_disable(dd, cmdq_idx);
 
-	/* set CMDQ head, should be set after CMDQ reset */
-	cmdq_head.field.valid = 1;
-	cmdq_head.field.hd_ptr_host_addr_56_4 =
-			(u64)HFI_CMDQ_HEAD_ADDR(head_base, cmdq_idx) >> 4;
-	write_csr(dd, head_offset, cmdq_head.val);
+	/* set CQ head, should be set after CQ reset */
+	cq_head = FXR_RXCID_CFG_HEAD_UPDATE_ADDR_VALID_SMASK;
+	cq_head |= (FXR_RXCID_CFG_HEAD_UPDATE_ADDR_HD_PTR_HOST_ADDR_56_4_MASK &
+		   ((u64)HFI_CMDQ_HEAD_ADDR(head_base, cmdq_idx) >> 4)) <<
+		    FXR_RXCID_CFG_HEAD_UPDATE_ADDR_HD_PTR_HOST_ADDR_56_4_SHIFT;
+	write_csr(dd, head_offset, cq_head);
 }
 
 /*
@@ -4147,71 +4224,84 @@ static void hfi_cmdq_head_config(struct hfi_devdata *dd, u16 cmdq_idx,
  */
 void hfi_cmdq_disable(struct hfi_devdata *dd, u16 cmdq_idx)
 {
-	TXCIC_CFG_DRAIN_RESET_t tx_cmdq_reset = {.val = 0};
-	RXCIC_CFG_CQ_DRAIN_RESET_t rx_cmdq_reset = {.val = 0};
+	u64 tx = 0;
+	u64 rx = 0;
 	int time;
 	int timeout = HFI_CMDQ_DRAIN_RESET_TIMEOUT_MS;
 
-	/* reset CMDQ state, as CMDQ head starts at 0 */
-	tx_cmdq_reset.field.drain_cq = cmdq_idx;
-	tx_cmdq_reset.field.reset = 1;
-	tx_cmdq_reset.field.drain = 1;
-	tx_cmdq_reset.field.busy = 1;
-	rx_cmdq_reset.field.drain_cq = cmdq_idx;
-	rx_cmdq_reset.field.reset = 1;
-	rx_cmdq_reset.field.drain = 1;
-	rx_cmdq_reset.field.busy = 1;
+	/* reset CQ state, as CQ head starts at 0 */
+	tx = (FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_CQ_MASK & cmdq_idx) <<
+	      FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_CQ_SHIFT;
+	tx |= FXR_TXCIC_CFG_DRAIN_RESET_RESET_SMASK;
+	tx |= FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_SMASK;
+	tx |= FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK;
+	rx = (FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_CQ_MASK & cmdq_idx) <<
+		     FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_CQ_SHIFT;
+	rx |= FXR_RXCIC_CFG_CQ_DRAIN_RESET_RESET_SMASK;
+	rx |= FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_SMASK;
+	rx |= FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK;
 
 retry_reset:
-	if (tx_cmdq_reset.field.reset)
-		write_csr(dd, FXR_TXCIC_CFG_DRAIN_RESET, tx_cmdq_reset.val);
+	if (tx & FXR_TXCIC_CFG_DRAIN_RESET_RESET_SMASK)
+		write_csr(dd, FXR_TXCIC_CFG_DRAIN_RESET, tx);
 
-	if (rx_cmdq_reset.field.reset)
-		write_csr(dd, FXR_RXCIC_CFG_CQ_DRAIN_RESET, rx_cmdq_reset.val);
+	if (rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_RESET_SMASK)
+		write_csr(dd, FXR_RXCIC_CFG_CQ_DRAIN_RESET, rx);
 
 	/* wait for completion, if timeout log a message */
 	for (time = 0; time < timeout; time++) {
 		mdelay(1);
-		if (tx_cmdq_reset.field.busy)
-			tx_cmdq_reset.val = read_csr(dd,
-				FXR_TXCIC_CFG_DRAIN_RESET);
-		if (rx_cmdq_reset.field.busy)
-			rx_cmdq_reset.val = read_csr(dd,
-				FXR_RXCIC_CFG_CQ_DRAIN_RESET);
-		if (!tx_cmdq_reset.field.busy &&
-		    !rx_cmdq_reset.field.busy)
+		if (tx & FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK)
+			tx = read_csr(dd, FXR_TXCIC_CFG_DRAIN_RESET);
+		if (rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK)
+			rx = read_csr(dd, FXR_RXCIC_CFG_CQ_DRAIN_RESET);
+		if (!(tx & FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK) &&
+		    !(rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK))
 			break;
 		if (zebu)
 			mdelay(1);
 	}
 	if (!zebu && time >= timeout) {
-		if (tx_cmdq_reset.field.drain || rx_cmdq_reset.field.drain) {
-			if (tx_cmdq_reset.field.busy) {
-				tx_cmdq_reset.field.drain = 0;
-				dd_dev_err(dd, "TX CMDQ reset and drain are not done after %dms..trying only reset\n",
+		if ((tx & FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_SMASK) ||
+		    (rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_SMASK)) {
+			if (tx & FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK) {
+				tx &= ~FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_SMASK;
+				dd_dev_err(dd, "TX CQ reset and drain are not done after %dms..trying only reset\n",
 					   HFI_CMDQ_RESET_TIMEOUT_MS);
 			}
-			if (rx_cmdq_reset.field.busy) {
-				rx_cmdq_reset.field.drain = 0;
-				dd_dev_err(dd, "RX CMDQ reset and drain are not done after %dms..trying only reset\n",
+			if (rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK) {
+				rx &= ~FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_SMASK;
+				dd_dev_err(dd, "RX CQ reset and drain are not done after %dms..trying only reset\n",
 					   HFI_CMDQ_RESET_TIMEOUT_MS);
 			}
 			/*
 			 * FXRTODO revisit retry mechanism after design team
 			 * confirmation
 			 */
-			tx_cmdq_reset.field.drain_cq = cmdq_idx;
-			tx_cmdq_reset.field.reset = tx_cmdq_reset.field.busy;
-			rx_cmdq_reset.field.drain_cq = cmdq_idx;
-			rx_cmdq_reset.field.reset = rx_cmdq_reset.field.busy;
+			tx |= (FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_CQ_MASK &
+			       cmdq_idx) <<
+			       FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_CQ_SHIFT;
+			tx |= (FXR_TXCIC_CFG_DRAIN_RESET_RESET_MASK &
+			      ((tx >>
+			       FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SHIFT) &
+			       FXR_TXCIC_CFG_DRAIN_RESET_BUSY_MASK)) <<
+			       FXR_TXCIC_CFG_DRAIN_RESET_RESET_SHIFT;
+			rx |= (FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_CQ_MASK &
+			       cmdq_idx) <<
+			       FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_CQ_SHIFT;
+			rx |= (FXR_RXCIC_CFG_CQ_DRAIN_RESET_RESET_MASK &
+			      ((rx >>
+			       FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SHIFT) &
+			       FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_MASK)) <<
+			       FXR_RXCIC_CFG_CQ_DRAIN_RESET_RESET_SHIFT;
 			timeout = HFI_CMDQ_RESET_TIMEOUT_MS;
 			goto retry_reset;
 		}
-		if (tx_cmdq_reset.field.busy)
-			dd_dev_err(dd, "TX CMDQ reset not done after %dms\n",
+		if (tx & FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK)
+			dd_dev_err(dd, "TX CQ reset not done after %dms\n",
 				   HFI_CMDQ_RESET_TIMEOUT_MS);
-		if (rx_cmdq_reset.field.busy)
-			dd_dev_err(dd, "RX CMDQ reset not done after %dms\n",
+		if (rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK)
+			dd_dev_err(dd, "RX CQ reset not done after %dms\n",
 				   HFI_CMDQ_RESET_TIMEOUT_MS);
 	}
 }
@@ -4222,7 +4312,7 @@ void hfi_cmdq_config_tuples(struct hfi_ctx *ctx, u16 cmdq_idx,
 	struct hfi_devdata *dd = ctx->devdata;
 	int i;
 	u32 offset;
-	TXCID_CFG_AUTHENTICATION_CSR_t cmdq_auth = {.val = 0};
+	u64 reg = 0;
 
 	/* write AUTH tuples */
 	offset = FXR_TXCID_CFG_AUTHENTICATION_CSR +
@@ -4230,28 +4320,35 @@ void hfi_cmdq_config_tuples(struct hfi_ctx *ctx, u16 cmdq_idx,
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
 		if (auth_table) {
 			/* if BYPASS, values adjusted in validate_tuples */
-			cmdq_auth.field.USER_ID = auth_table[i].uid;
-			cmdq_auth.field.SRANK = auth_table[i].srank;
+			reg = (FXR_TXCID_CFG_AUTHENTICATION_CSR_USER_ID_MASK &
+			       auth_table[i].uid) <<
+			       FXR_TXCID_CFG_AUTHENTICATION_CSR_USER_ID_SHIFT;
+			reg |= (HFI_AUTH_SRANK_MASK & auth_table[i].srank) <<
+					HFI_AUTH_SRANK_SHIFT;
 		} else {
 			/* only kernel-clients can come through here */
-			cmdq_auth.field.USER_ID = ctx->ptl_uid;
-			cmdq_auth.field.SRANK = IS_PID_BYPASS(ctx) ?
-					      PTL_RANK_ANY : 0;
+			reg = (FXR_TXCID_CFG_AUTHENTICATION_CSR_USER_ID_MASK &
+			       ctx->ptl_uid) <<
+			       FXR_TXCID_CFG_AUTHENTICATION_CSR_USER_ID_SHIFT;
+			if (IS_PID_BYPASS(ctx))
+				reg |= (HFI_AUTH_SRANK_MASK & PTL_RANK_ANY) <<
+					HFI_AUTH_SRANK_SHIFT;
 		}
-		write_csr(dd, offset, cmdq_auth.val);
+		write_csr(dd, offset, reg);
 		offset += 8;
 	}
 }
 
 void hfi_tpid_enable(struct hfi_devdata *dd, u8 idx, u16 base, u32 ptl_uid)
 {
-	RXHP_CFG_VTPID_CAM_t tpid;
+	u64 tpid = 0;
 
-	tpid.val = 0;
-	tpid.field.valid = 1;
-	tpid.field.uid = ptl_uid;
-	tpid.field.tpid_base = base;
-	write_csr(dd, FXR_RXHP_CFG_VTPID_CAM + (8 * idx), tpid.val);
+	tpid = FXR_RXHP_CFG_VTPID_CAM_VALID_SMASK;
+	tpid |= (FXR_RXHP_CFG_VTPID_CAM_UID_MASK & ptl_uid) <<
+		 FXR_RXHP_CFG_VTPID_CAM_UID_SHIFT;
+	tpid |= (FXR_RXHP_CFG_VTPID_CAM_TPID_BASE_MASK & base) <<
+		 FXR_RXHP_CFG_VTPID_CAM_TPID_BASE_SHIFT;
+	write_csr(dd, FXR_RXHP_CFG_VTPID_CAM + (8 * idx), tpid);
 }
 
 void hfi_tpid_disable(struct hfi_devdata *dd, u8 idx)
@@ -4268,34 +4365,46 @@ void hfi_cmdq_config(struct hfi_ctx *ctx, u16 cmdq_idx,
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	u32 offset;
-	TXCID_CFG_CSR_t tx_cmdq_config = {.val = 0};
-	RXCID_CFG_CNTRL_t rx_cmdq_config = {.val = 0};
+	u64 tx_config = 0;
+	u64 rx_config = 0;
 
 	hfi_cmdq_config_tuples(ctx, cmdq_idx, auth_table);
 
 	/* set TX CMDQ config, enable */
-	tx_cmdq_config.field.enable = 1;
-	tx_cmdq_config.field.pid = ctx->pid;
-	tx_cmdq_config.field.priv_level = user_priv;
+	tx_config = FXR_TXCID_CFG_CSR_ENABLE_SMASK;
+	tx_config |= (FXR_TXCID_CFG_CSR_PID_MASK & ctx->pid) <<
+			 FXR_TXCID_CFG_CSR_PID_SHIFT;
+	tx_config |= (FXR_TXCID_CFG_CSR_PRIV_LEVEL_MASK & user_priv) <<
+			 FXR_TXCID_CFG_CSR_PRIV_LEVEL_SHIFT;
 	if (ctx->lid_count)
-		tx_cmdq_config.field.dlid_base = ctx->dlid_base;
-	tx_cmdq_config.field.phys_dlid = ctx->allow_phys_dlid;
+		tx_config |= (FXR_TXCID_CFG_CSR_DLID_BASE_MASK &
+				 ctx->dlid_base) <<
+				 FXR_TXCID_CFG_CSR_DLID_BASE_SHIFT;
+	tx_config |= (FXR_TXCID_CFG_CSR_PHYS_DLID_MASK &
+			 ctx->allow_phys_dlid) <<
+			 FXR_TXCID_CFG_CSR_PHYS_DLID_SHIFT;
 	/* Use enabled SLs from port 0. MC1 assumes all SLs are enabled */
 	if (ctx->pid == HFI_PID_SYSTEM)
-		tx_cmdq_config.field.sl_enable = -1;
+		tx_config |= FXR_TXCID_CFG_CSR_SL_ENABLE_SMASK;
 	else if (IS_PID_BYPASS(ctx))
-		tx_cmdq_config.field.sl_enable = dd->pport->sl_mask;
+		tx_config |= (FXR_TXCID_CFG_CSR_SL_ENABLE_MASK &
+				dd->pport->sl_mask) <<
+				FXR_TXCID_CFG_CSR_SL_ENABLE_SHIFT;
 	else
-		tx_cmdq_config.field.sl_enable = dd->pport->req_sl_mask;
+		tx_config |= (FXR_TXCID_CFG_CSR_SL_ENABLE_MASK &
+				dd->pport->req_sl_mask) <<
+				FXR_TXCID_CFG_CSR_SL_ENABLE_SHIFT;
 	offset = FXR_TXCID_CFG_CSR + (cmdq_idx * 8);
-	write_csr(dd, offset, tx_cmdq_config.val);
+	write_csr(dd, offset, tx_config);
 
-	/* set RX CMDQ config, enable */
-	rx_cmdq_config.field.enable = 1;
-	rx_cmdq_config.field.pid = ctx->pid;
-	rx_cmdq_config.field.priv_level = user_priv;
+	/* set RX CQ config, enable */
+	rx_config = FXR_RXCID_CFG_CNTRL_ENABLE_SMASK;
+	rx_config |= (FXR_RXCID_CFG_CNTRL_PID_MASK & ctx->pid) <<
+			 FXR_RXCID_CFG_CNTRL_PID_SHIFT;
+	rx_config |= (FXR_RXCID_CFG_CNTRL_PRIV_LEVEL_MASK & user_priv) <<
+			 FXR_RXCID_CFG_CNTRL_PRIV_LEVEL_SHIFT;
 	offset = FXR_RXCID_CFG_CNTRL + (cmdq_idx * 8);
-	write_csr(dd, offset, rx_cmdq_config.val);
+	write_csr(dd, offset, rx_config);
 }
 
 int hfi_ctx_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr,
@@ -4420,9 +4529,9 @@ void hfi_rsm_clear_rule(struct hfi_devdata *dd, u8 rule_idx)
 int hfi_rsm_set_rule(struct hfi_devdata *dd, struct hfi_rsm_rule *rule,
 		     struct hfi_ctx *rx_ctx[], u16 num_contexts)
 {
-	RXHP_CFG_NPTL_RSM_CFG_t rsm_cfg = {.val = 0};
-	RXHP_CFG_NPTL_RSM_SELECT_t select = {.val = 0};
-	RXHP_CFG_NPTL_RSM_MATCH_t match = {.val = 0};
+	u64 rsm_cfg = 0;
+	u64 select = 0;
+	u64 match = 0;
 	int i, ret = 0;
 	u8 idx = rule->idx;
 	u16 map_idx, map_size;
@@ -4463,26 +4572,51 @@ int hfi_rsm_set_rule(struct hfi_devdata *dd, struct hfi_rsm_rule *rule,
 	dd->rsm_offset[idx] = map_idx;
 	dd->rsm_size[idx] = map_size;
 
-	rsm_cfg.val |= (1 << idx); /* set Enable bit */
-	rsm_cfg.field.BypassHdrSize = rule->hdr_size;
+	rsm_cfg = (1 << idx); /* set Enable bit */
+	rsm_cfg |= (FXR_RXHP_CFG_NPTL_RSM_CFG_BYPASS_HDR_SIZE_MASK &
+		    rule->hdr_size) <<
+		    FXR_RXHP_CFG_NPTL_RSM_CFG_BYPASS_HDR_SIZE_SHIFT;
 	/* packet matching criteria */
-	rsm_cfg.field.PacketType = rule->pkt_type;
-	match.field.Mask1 = rule->match_mask[0];
-	match.field.Value1 = rule->match_value[0];
-	match.field.Mask2 = rule->match_mask[1];
-	match.field.Value2 = rule->match_value[1];
-	select.field.Field1Offset = rule->match_offset[0];
-	select.field.Field2Offset = rule->match_offset[1];
+	rsm_cfg |= (FXR_RXHP_CFG_NPTL_RSM_CFG_PACKET_TYPE_MASK &
+		    rule->pkt_type) <<
+		    FXR_RXHP_CFG_NPTL_RSM_CFG_PACKET_TYPE_SHIFT;
+	match |= (FXR_RXHP_CFG_NPTL_RSM_MATCH_MASK1_MASK &
+		  rule->match_mask[0]) <<
+		  FXR_RXHP_CFG_NPTL_RSM_MATCH_MASK1_SHIFT;
+	match |= (FXR_RXHP_CFG_NPTL_RSM_MATCH_VALUE1_MASK &
+		  rule->match_value[0]) <<
+		  FXR_RXHP_CFG_NPTL_RSM_MATCH_VALUE1_SHIFT;
+	match |= (FXR_RXHP_CFG_NPTL_RSM_MATCH_MASK2_MASK &
+		  rule->match_mask[1]) <<
+		  FXR_RXHP_CFG_NPTL_RSM_MATCH_MASK2_SHIFT;
+	match |= (FXR_RXHP_CFG_NPTL_RSM_MATCH_VALUE2_MASK &
+		  rule->match_value[1]) <<
+		  FXR_RXHP_CFG_NPTL_RSM_MATCH_VALUE2_SHIFT;
+	select |= (FXR_RXHP_CFG_NPTL_RSM_SELECT_FIELD1_OFFSET_MASK &
+		   rule->match_offset[0]) <<
+		   FXR_RXHP_CFG_NPTL_RSM_SELECT_FIELD1_OFFSET_SHIFT;
+	select |= (FXR_RXHP_CFG_NPTL_RSM_SELECT_FIELD2_OFFSET_MASK &
+		   rule->match_offset[1]) <<
+		   FXR_RXHP_CFG_NPTL_RSM_SELECT_FIELD2_OFFSET_SHIFT;
 	/* context selection criteria */
-	rsm_cfg.field.Offset = map_idx;
-	select.field.Index1Offset = rule->select_offset[0];
-	select.field.Index1Width = rule->select_width[0];
-	select.field.Index2Offset = rule->select_offset[1];
-	select.field.Index2Width = rule->select_width[1];
+	rsm_cfg |= (FXR_RXHP_CFG_NPTL_RSM_CFG_OFFSET_MASK & map_idx) <<
+		    FXR_RXHP_CFG_NPTL_RSM_CFG_OFFSET_SHIFT;
+	select |= (FXR_RXHP_CFG_NPTL_RSM_SELECT_INDEX1_OFFSET_MASK &
+		   rule->select_offset[0]) <<
+		   FXR_RXHP_CFG_NPTL_RSM_SELECT_INDEX1_OFFSET_SHIFT;
+	select |= (FXR_RXHP_CFG_NPTL_RSM_SELECT_INDEX1_WIDTH_MASK &
+		   rule->select_width[0]) <<
+		   FXR_RXHP_CFG_NPTL_RSM_SELECT_INDEX1_WIDTH_SHIFT;
+	select |= (FXR_RXHP_CFG_NPTL_RSM_SELECT_INDEX2_OFFSET_MASK &
+		   rule->select_offset[1]) <<
+		   FXR_RXHP_CFG_NPTL_RSM_SELECT_INDEX2_OFFSET_SHIFT;
+	select |= (FXR_RXHP_CFG_NPTL_RSM_SELECT_INDEX2_WIDTH_MASK &
+		   rule->select_width[1]) <<
+		   FXR_RXHP_CFG_NPTL_RSM_SELECT_INDEX2_WIDTH_SHIFT;
 
-	write_csr(dd, FXR_RXHP_CFG_NPTL_RSM_CFG + (8 * idx), rsm_cfg.val);
-	write_csr(dd, FXR_RXHP_CFG_NPTL_RSM_SELECT + (8 * idx), select.val);
-	write_csr(dd, FXR_RXHP_CFG_NPTL_RSM_MATCH + (8 * idx), match.val);
+	write_csr(dd, FXR_RXHP_CFG_NPTL_RSM_CFG + (8 * idx), rsm_cfg);
+	write_csr(dd, FXR_RXHP_CFG_NPTL_RSM_SELECT + (8 * idx), select);
+	write_csr(dd, FXR_RXHP_CFG_NPTL_RSM_MATCH + (8 * idx), match);
 
 	/* Write hardware RSM context mapping table */
 	csr_off = FXR_RXHP_CFG_NPTL_RSM_MAP_TABLE + (map_idx / 8) * 8;
@@ -4512,12 +4646,12 @@ done:
 void hfi_ctx_clear_bypass(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	RXHP_CFG_NPTL_BYPASS_t bypass = {.val = 0};
+	u64 bypass = 0;
 
 	spin_lock(&dd->ptl_lock);
 	if (ctx->pid == dd->bypass_pid) {
-		bypass.field.BypassContext = -1;
-		write_csr(dd, FXR_RXHP_CFG_NPTL_BYPASS, bypass.val);
+		bypass = FXR_RXHP_CFG_NPTL_BYPASS_BYPASS_CONTEXT_SMASK;
+		write_csr(dd, FXR_RXHP_CFG_NPTL_BYPASS, bypass);
 		dd->bypass_pid = HFI_PID_NONE;
 	}
 	spin_unlock(&dd->ptl_lock);
@@ -4531,7 +4665,7 @@ int hfi_ctx_set_bypass(struct hfi_ctx *ctx, u8 hdr_size)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	int ret = 0;
-	RXHP_CFG_NPTL_BYPASS_t bypass = {.val = 0};
+	u64 bypass = 0;
 
 	if (!IS_PID_BYPASS(ctx))
 		return -EINVAL;
@@ -4541,9 +4675,12 @@ int hfi_ctx_set_bypass(struct hfi_ctx *ctx, u8 hdr_size)
 		ret = -EBUSY;
 		goto done;
 	}
-	bypass.field.BypassContext = ctx->pid - HFI_PID_BYPASS_BASE;
-	bypass.field.HdrSize = hdr_size;
-	write_csr(dd, FXR_RXHP_CFG_NPTL_BYPASS, bypass.val);
+	bypass = (FXR_RXHP_CFG_NPTL_BYPASS_BYPASS_CONTEXT_MASK &
+		 (ctx->pid - HFI_PID_BYPASS_BASE)) <<
+		  FXR_RXHP_CFG_NPTL_BYPASS_BYPASS_CONTEXT_SHIFT;
+	bypass |= (FXR_RXHP_CFG_NPTL_BYPASS_HDR_SIZE_MASK & hdr_size) <<
+		   FXR_RXHP_CFG_NPTL_BYPASS_HDR_SIZE_SHIFT;
+	write_csr(dd, FXR_RXHP_CFG_NPTL_BYPASS, bypass);
 	dd->bypass_pid = ctx->pid;
 done:
 	spin_unlock(&dd->ptl_lock);
