@@ -76,6 +76,8 @@
 
 #define MEI_DEV_ID_GLK        0x319A  /* Gemini Lake */
 
+#define MEI_DEV_ID_LKF        0x98E0  /* Lake Field */
+
 #define MEI_DEV_ID_KBP        0xA2BA  /* Kaby Point */
 #define MEI_DEV_ID_KBP_2      0xA2BB  /* Kaby Point 2 */
 #define MEI_DEV_ID_KBP_3      0xA2BE  /* Kaby Point 3 (iTouch) */
