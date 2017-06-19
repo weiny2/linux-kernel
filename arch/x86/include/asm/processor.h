@@ -138,6 +138,8 @@ struct cpuinfo_x86 {
 	u32			microcode;
 	/* Address space bits used by the cache internally */
 	u8			x86_cache_bits;
+	/* In hybrid parts, type of CPU */
+	u8			cpu_type;
 	unsigned		initialized : 1;
 } __randomize_layout;
 
