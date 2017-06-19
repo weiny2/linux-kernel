@@ -118,6 +118,18 @@
 #define INTEL_FAM6_XEON_PHI_KNL		0x57 /* Knights Landing */
 #define INTEL_FAM6_XEON_PHI_KNM		0x85 /* Knights Mill */
 
+/*
+ * Types of CPUs in hybrid parts. The first type identifies legacy, non-hybrid,
+ * parts. In such a case, it matches the uninitialized value of cpu_type in
+ * cpuinfo_x86. The rest of the values are only valid if the CPU has
+ * X86_FEATURE_HYBRID_CPU.
+ */
+#define INTEL_FAM6_HYBRID_NONHYBRID	0x00
+#define INTEL_FAM6_HYBRID_QUARK		0x10
+#define INTEL_FAM6_HYBRID_ATOM		0x20
+#define INTEL_FAM6_HYBRID_KNIGHTS	0x30
+#define INTEL_FAM6_HYBRID_CORE		0x40
+
 /* Useful macros */
 #define INTEL_CPU_FAM_ANY(_family, _model, _driver_data)	\
 {								\
