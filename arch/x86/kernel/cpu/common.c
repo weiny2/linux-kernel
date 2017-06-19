@@ -915,6 +915,13 @@ void get_cpu_cap(struct cpuinfo_x86 *c)
 		c->x86_capability[CPUID_D_1_EAX] = eax;
 	}
 
+	if (c->cpuid_level >= 0x0000001a) {
+		if (cpu_has(c, X86_FEATURE_HYBRID_CPU)) {
+			cpuid_count(0x0000001a, 0, &eax, &ebx, &ecx, &edx);
+			c->cpu_type = (eax >> 24) & 0xff;
+		}
+	}
+
 	/* AMD-defined flags: level 0x80000001 */
 	eax = cpuid_eax(0x80000000);
 	c->extended_cpuid_level = eax;
