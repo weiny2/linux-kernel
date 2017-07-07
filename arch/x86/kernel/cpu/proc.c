@@ -151,6 +151,15 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		}
 	}
 
+	/* If this is an hybrid CPU part, print the type of core. */
+	if (cpu_has(c, X86_FEATURE_HYBRID_CPU)) {
+		const char *name = intel_get_hybrid_cpu_type_name(c->cpu_type);
+
+		if (name)
+			seq_printf(m, "\ncpu type\t: %s", name);
+		else
+			seq_puts(m, "\ncpu type\t: unknown");
+	}
 	seq_puts(m, "\n\n");
 
 	return 0;
