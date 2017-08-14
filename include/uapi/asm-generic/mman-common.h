@@ -24,6 +24,7 @@
 #else
 # define MAP_UNINITIALIZED 0x0		/* Don't support this flag */
 #endif
+#define MAP_SHARED_VALIDATE 0x3		/* share + validate extension flags */
 
 /*
  * Flags for mlock

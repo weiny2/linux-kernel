@@ -30,6 +30,7 @@
 #define MAP_PRIVATE	0x002		/* Changes are private */
 #define MAP_TYPE	0x00f		/* Mask for type of mapping */
 #define MAP_FIXED	0x010		/* Interpret addr exactly */
+#define MAP_SHARED_VALIDATE 0x3		/* share + validate extension flags */
 
 /* not used by linux, but here to make sure we don't clash with ABI defines */
 #define MAP_RENAME	0x020		/* Assign page to file */
