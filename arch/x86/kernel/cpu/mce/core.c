@@ -140,6 +140,8 @@ void mce_setup(struct mce *m)
 	m->apicid = cpu_data(m->extcpu).initial_apicid;
 	rdmsrl(MSR_IA32_MCG_CAP, m->mcgcap);
 
+	m->cputype = cpu_data(m->extcpu).cpu_type;
+
 	if (this_cpu_has(X86_FEATURE_INTEL_PPIN))
 		rdmsrl(MSR_PPIN, m->ppin);
 
@@ -268,6 +270,9 @@ static void __print_mce(struct mce *m)
 	pr_emerg(HW_ERR "PROCESSOR %u:%x TIME %llu SOCKET %u APIC %x microcode %x\n",
 		m->cpuvendor, m->cpuid, m->time, m->socketid, m->apicid,
 		m->microcode);
+
+	if (this_cpu_has(X86_FEATURE_HYBRID_CPU))
+		pr_emerg(HW_ERR "CPU TYPE %x\n", m->cputype);
 }
 
 static void print_mce(struct mce *m)
