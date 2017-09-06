@@ -129,7 +129,7 @@ static int controlfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	u_int transp, struct fb_info *info);
 static int controlfb_blank(int blank_mode, struct fb_info *info);
 static int controlfb_mmap(struct fb_info *info,
-	struct vm_area_struct *vma);
+	struct vm_area_struct *vma, unsigned long map_flags);
 static int controlfb_set_par (struct fb_info *info);
 static int controlfb_check_var (struct fb_var_screeninfo *var, struct fb_info *info);
 
@@ -285,7 +285,7 @@ static int controlfb_pan_display(struct fb_var_screeninfo *var,
  * Note there's no locking in here; it's done in fb_mmap() in fbmem.c.
  */
 static int controlfb_mmap(struct fb_info *info,
-                       struct vm_area_struct *vma)
+                       struct vm_area_struct *vma, unsigned long map_flags)
 {
 	unsigned long mmio_pgoff;
 	unsigned long start;

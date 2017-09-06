@@ -228,7 +228,8 @@ static const struct backlight_ops ht16k33_bl_ops = {
 	.check_fb	= ht16k33_bl_check_fb,
 };
 
-static int ht16k33_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int ht16k33_mmap(struct fb_info *info, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	struct ht16k33_priv *priv = info->par;
 

@@ -29,7 +29,7 @@
 
 static int bw2_blank(int, struct fb_info *);
 
-static int bw2_mmap(struct fb_info *, struct vm_area_struct *);
+static int bw2_mmap(struct fb_info *, struct vm_area_struct *, unsigned long);
 static int bw2_ioctl(struct fb_info *, unsigned int, unsigned long);
 
 /*
@@ -159,7 +159,8 @@ static struct sbus_mmap_map bw2_mmap_map[] = {
 	{ .size = 0 }
 };
 
-static int bw2_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int bw2_mmap(struct fb_info *info, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct bw2_par *par = (struct bw2_par *)info->par;
 

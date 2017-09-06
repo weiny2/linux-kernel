@@ -2132,7 +2132,8 @@ out_nomem:
 	return retval;
 }
 
-static int shmem_mmap(struct file *file, struct vm_area_struct *vma)
+static int shmem_mmap(struct file *file, struct vm_area_struct *vma,
+		      unsigned long map_flags)
 {
 	file_accessed(file);
 	vma->vm_ops = &shmem_vm_ops;

@@ -467,7 +467,8 @@ static const struct vm_operations_struct kernfs_vm_ops = {
 #endif
 };
 
-static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma)
+static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	struct kernfs_open_file *of = kernfs_of(file);
 	const struct kernfs_ops *ops;

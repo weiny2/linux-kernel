@@ -327,7 +327,8 @@ int bochs_bo_unpin(struct bochs_bo *bo)
 	return 0;
 }
 
-int bochs_mmap(struct file *filp, struct vm_area_struct *vma)
+int bochs_mmap(struct file *filp, struct vm_area_struct *vma,
+	       unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct bochs_device *bochs;

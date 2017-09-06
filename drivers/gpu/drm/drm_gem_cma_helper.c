@@ -309,13 +309,14 @@ static int drm_gem_cma_mmap_obj(struct drm_gem_cma_object *cma_obj,
  * Returns:
  * 0 on success or a negative error code on failure.
  */
-int drm_gem_cma_mmap(struct file *filp, struct vm_area_struct *vma)
+int drm_gem_cma_mmap(struct file *filp, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	struct drm_gem_cma_object *cma_obj;
 	struct drm_gem_object *gem_obj;
 	int ret;
 
-	ret = drm_gem_mmap(filp, vma);
+	ret = drm_gem_mmap(filp, vma, map_flags);
 	if (ret)
 		return ret;
 
@@ -512,7 +513,8 @@ EXPORT_SYMBOL_GPL(drm_gem_cma_prime_import_sg_table);
  * 0 on success or a negative error code on failure.
  */
 int drm_gem_cma_prime_mmap(struct drm_gem_object *obj,
-			   struct vm_area_struct *vma)
+			   struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	struct drm_gem_cma_object *cma_obj;
 	int ret;

@@ -126,7 +126,8 @@ static const struct vm_operations_struct nilfs_file_vm_ops = {
 	.page_mkwrite	= nilfs_page_mkwrite,
 };
 
-static int nilfs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int nilfs_file_mmap(struct file *file, struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	file_accessed(file);
 	vma->vm_ops = &nilfs_file_vm_ops;

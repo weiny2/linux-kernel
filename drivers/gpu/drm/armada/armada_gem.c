@@ -518,7 +518,8 @@ armada_gem_dmabuf_no_kunmap(struct dma_buf *buf, unsigned long n, void *addr)
 }
 
 static int
-armada_gem_dmabuf_mmap(struct dma_buf *buf, struct vm_area_struct *vma)
+armada_gem_dmabuf_mmap(struct dma_buf *buf, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	return -EINVAL;
 }

@@ -1096,7 +1096,8 @@ static const struct vm_operations_struct mmap_user_ops = {
 	.close = mmap_user_close,
 };
 
-static int omapfb_mmap(struct fb_info *fbi, struct vm_area_struct *vma)
+static int omapfb_mmap(struct fb_info *fbi, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	struct omapfb_info *ofbi = FB2OFB(fbi);
 	struct fb_fix_screeninfo *fix = &fbi->fix;

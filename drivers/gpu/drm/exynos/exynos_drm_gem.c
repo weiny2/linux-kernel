@@ -485,13 +485,14 @@ err_close_vm:
 	return ret;
 }
 
-int exynos_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
+int exynos_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	struct drm_gem_object *obj;
 	int ret;
 
 	/* set vm_area_struct. */
-	ret = drm_gem_mmap(filp, vma);
+	ret = drm_gem_mmap(filp, vma, map_flags);
 	if (ret < 0) {
 		DRM_ERROR("failed to mmap.\n");
 		return ret;
@@ -500,7 +501,7 @@ int exynos_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	obj = vma->vm_private_data;
 
 	if (obj->import_attach)
-		return dma_buf_mmap(obj->dma_buf, vma, 0);
+		return dma_buf_mmap(obj->dma_buf, vma, 0, map_flags);
 
 	return exynos_drm_gem_mmap_obj(obj, vma);
 }
@@ -581,7 +582,8 @@ void exynos_drm_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr)
 }
 
 int exynos_drm_gem_prime_mmap(struct drm_gem_object *obj,
-			      struct vm_area_struct *vma)
+			      struct vm_area_struct *vma,
+			      unsigned long map_flags)
 {
 	int ret;
 

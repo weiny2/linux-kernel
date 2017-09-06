@@ -260,7 +260,8 @@ static long snd_hwdep_ioctl(struct file * file, unsigned int cmd,
 	return -ENOTTY;
 }
 
-static int snd_hwdep_mmap(struct file * file, struct vm_area_struct * vma)
+static int snd_hwdep_mmap(struct file * file, struct vm_area_struct * vma,
+			  unsigned long map_flags)
 {
 	struct snd_hwdep *hw = file->private_data;
 	if (hw->ops.mmap)

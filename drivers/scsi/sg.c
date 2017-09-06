@@ -1226,7 +1226,8 @@ static const struct vm_operations_struct sg_mmap_vm_ops = {
 };
 
 static int
-sg_mmap(struct file *filp, struct vm_area_struct *vma)
+sg_mmap(struct file *filp, struct vm_area_struct *vma,
+	unsigned long map_flags)
 {
 	Sg_fd *sfp;
 	unsigned long req_sz, len, sa;

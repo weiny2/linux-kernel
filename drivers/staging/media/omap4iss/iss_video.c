@@ -1192,7 +1192,8 @@ static unsigned int iss_video_poll(struct file *file, poll_table *wait)
 	return vb2_poll(&vfh->queue, file, wait);
 }
 
-static int iss_video_mmap(struct file *file, struct vm_area_struct *vma)
+static int iss_video_mmap(struct file *file, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	struct iss_video_fh *vfh = to_iss_video_fh(file->private_data);
 

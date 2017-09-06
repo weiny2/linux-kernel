@@ -1618,7 +1618,8 @@ static int sh_mobile_lcdc_overlay_blank(int blank, struct fb_info *info)
 }
 
 static int
-sh_mobile_lcdc_overlay_mmap(struct fb_info *info, struct vm_area_struct *vma)
+sh_mobile_lcdc_overlay_mmap(struct fb_info *info, struct vm_area_struct *vma,
+			    unsigned long map_flags)
 {
 	struct sh_mobile_lcdc_overlay *ovl = info->par;
 
@@ -2107,7 +2108,8 @@ static int sh_mobile_lcdc_blank(int blank, struct fb_info *info)
 }
 
 static int
-sh_mobile_lcdc_mmap(struct fb_info *info, struct vm_area_struct *vma)
+sh_mobile_lcdc_mmap(struct fb_info *info, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct sh_mobile_lcdc_chan *ch = info->par;
 

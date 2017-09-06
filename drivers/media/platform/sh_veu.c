@@ -1024,7 +1024,8 @@ static unsigned int sh_veu_poll(struct file *file,
 	return v4l2_m2m_poll(file, veu_file->veu_dev->m2m_ctx, wait);
 }
 
-static int sh_veu_mmap(struct file *file, struct vm_area_struct *vma)
+static int sh_veu_mmap(struct file *file, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	struct sh_veu_file *veu_file = file->private_data;
 

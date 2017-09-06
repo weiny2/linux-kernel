@@ -1161,7 +1161,8 @@ remove_pad_error:
 	return ret;
 }
 
-static int atomisp_mmap(struct file *file, struct vm_area_struct *vma)
+static int atomisp_mmap(struct file *file, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct atomisp_device *isp = video_get_drvdata(vdev);
@@ -1253,7 +1254,8 @@ error:
 	return ret;
 }
 
-static int atomisp_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int atomisp_file_mmap(struct file *file, struct vm_area_struct *vma,
+			     unsigned long map_flags)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct atomisp_video_pipe *pipe = atomisp_to_video_pipe(vdev);

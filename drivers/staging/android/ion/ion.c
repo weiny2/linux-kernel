@@ -284,7 +284,8 @@ static void ion_unmap_dma_buf(struct dma_buf_attachment *attachment,
 	dma_unmap_sg(attachment->dev, table->sgl, table->nents, direction);
 }
 
-static int ion_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
+static int ion_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct ion_buffer *buffer = dmabuf->priv;
 	int ret = 0;

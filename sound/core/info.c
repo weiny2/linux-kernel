@@ -232,7 +232,8 @@ static long snd_info_entry_ioctl(struct file *file, unsigned int cmd,
 				   file, cmd, arg);
 }
 
-static int snd_info_entry_mmap(struct file *file, struct vm_area_struct *vma)
+static int snd_info_entry_mmap(struct file *file, struct vm_area_struct *vma,
+			       unsigned long map_flags)
 {
 	struct inode *inode = file_inode(file);
 	struct snd_info_private_data *data;

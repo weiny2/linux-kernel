@@ -997,7 +997,8 @@ static int radeon_ttm_fault(struct vm_fault *vmf)
 	return r;
 }
 
-int radeon_mmap(struct file *filp, struct vm_area_struct *vma)
+int radeon_mmap(struct file *filp, struct vm_area_struct *vma,
+		unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct radeon_device *rdev;

@@ -418,7 +418,8 @@ int mgag200_bo_push_sysram(struct mgag200_bo *bo)
 	return 0;
 }
 
-int mgag200_mmap(struct file *filp, struct vm_area_struct *vma)
+int mgag200_mmap(struct file *filp, struct vm_area_struct *vma,
+		 unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct mga_device *mdev;

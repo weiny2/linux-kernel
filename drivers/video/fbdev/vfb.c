@@ -76,7 +76,7 @@ static int vfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 static int vfb_pan_display(struct fb_var_screeninfo *var,
 			   struct fb_info *info);
 static int vfb_mmap(struct fb_info *info,
-		    struct vm_area_struct *vma);
+		    struct vm_area_struct *vma, unsigned long map_flags);
 
 static struct fb_ops vfb_ops = {
 	.fb_read        = fb_sys_read,
@@ -367,7 +367,7 @@ static int vfb_pan_display(struct fb_var_screeninfo *var,
      */
 
 static int vfb_mmap(struct fb_info *info,
-		    struct vm_area_struct *vma)
+		    struct vm_area_struct *vma, unsigned long map_flags)
 {
 	return remap_vmalloc_range(vma, (void *)info->fix.smem_start, vma->vm_pgoff);
 }

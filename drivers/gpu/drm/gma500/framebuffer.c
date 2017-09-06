@@ -161,7 +161,8 @@ static const struct vm_operations_struct psbfb_vm_ops = {
 	.close	= psbfb_vm_close
 };
 
-static int psbfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int psbfb_mmap(struct fb_info *info, struct vm_area_struct *vma,
+		      unsigned long map_flags)
 {
 	struct psb_fbdev *fbdev = info->par;
 	struct psb_framebuffer *psbfb = &fbdev->pfb;

@@ -41,7 +41,8 @@ void msm_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr)
 	msm_gem_put_vaddr(obj);
 }
 
-int msm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+int msm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	int ret;
 

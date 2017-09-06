@@ -3475,7 +3475,8 @@ static const struct vm_operations_struct cifs_file_vm_ops = {
 	.page_mkwrite = cifs_page_mkwrite,
 };
 
-int cifs_file_strict_mmap(struct file *file, struct vm_area_struct *vma)
+int cifs_file_strict_mmap(struct file *file, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	int rc, xid;
 	struct inode *inode = file_inode(file);
@@ -3488,14 +3489,15 @@ int cifs_file_strict_mmap(struct file *file, struct vm_area_struct *vma)
 			return rc;
 	}
 
-	rc = generic_file_mmap(file, vma);
+	rc = generic_file_mmap(file, vma, map_flags);
 	if (rc == 0)
 		vma->vm_ops = &cifs_file_vm_ops;
 	free_xid(xid);
 	return rc;
 }
 
-int cifs_file_mmap(struct file *file, struct vm_area_struct *vma)
+int cifs_file_mmap(struct file *file, struct vm_area_struct *vma,
+		   unsigned long map_flags)
 {
 	int rc, xid;
 
@@ -3507,7 +3509,7 @@ int cifs_file_mmap(struct file *file, struct vm_area_struct *vma)
 		free_xid(xid);
 		return rc;
 	}
-	rc = generic_file_mmap(file, vma);
+	rc = generic_file_mmap(file, vma, map_flags);
 	if (rc == 0)
 		vma->vm_ops = &cifs_file_vm_ops;
 	free_xid(xid);

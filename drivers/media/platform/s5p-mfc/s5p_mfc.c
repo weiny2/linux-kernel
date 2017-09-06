@@ -1040,7 +1040,8 @@ end:
 }
 
 /* Mmap */
-static int s5p_mfc_mmap(struct file *file, struct vm_area_struct *vma)
+static int s5p_mfc_mmap(struct file *file, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(file->private_data);
 	struct s5p_mfc_dev *dev = ctx->dev;

@@ -412,9 +412,10 @@ long cxl_fd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	return afu_ioctl(file, cmd, arg);
 }
 EXPORT_SYMBOL_GPL(cxl_fd_ioctl);
-int cxl_fd_mmap(struct file *file, struct vm_area_struct *vm)
+int cxl_fd_mmap(struct file *file, struct vm_area_struct *vm,
+		unsigned long map_flags)
 {
-	return afu_mmap(file, vm);
+	return afu_mmap(file, vm, map_flags);
 }
 EXPORT_SYMBOL_GPL(cxl_fd_mmap);
 unsigned int cxl_fd_poll(struct file *file, struct poll_table_struct *poll)

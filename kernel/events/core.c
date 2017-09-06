@@ -5255,7 +5255,8 @@ static const struct vm_operations_struct perf_mmap_vmops = {
 	.page_mkwrite	= perf_mmap_fault,
 };
 
-static int perf_mmap(struct file *file, struct vm_area_struct *vma)
+static int perf_mmap(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	struct perf_event *event = file->private_data;
 	unsigned long user_locked, user_lock_limit;

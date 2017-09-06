@@ -39,7 +39,7 @@
 
 static long kfd_ioctl(struct file *, unsigned int, unsigned long);
 static int kfd_open(struct inode *, struct file *);
-static int kfd_mmap(struct file *, struct vm_area_struct *);
+static int kfd_mmap(struct file *, struct vm_area_struct *, unsigned long);
 
 static const char kfd_dev_name[] = "kfd";
 
@@ -1074,7 +1074,8 @@ err_i1:
 	return retcode;
 }
 
-static int kfd_mmap(struct file *filp, struct vm_area_struct *vma)
+static int kfd_mmap(struct file *filp, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct kfd_process *process;
 

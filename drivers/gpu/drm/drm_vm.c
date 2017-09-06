@@ -629,7 +629,8 @@ static int drm_mmap_locked(struct file *filp, struct vm_area_struct *vma)
 	return 0;
 }
 
-int drm_legacy_mmap(struct file *filp, struct vm_area_struct *vma)
+int drm_legacy_mmap(struct file *filp, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct drm_file *priv = filp->private_data;
 	struct drm_device *dev = priv->minor->dev;

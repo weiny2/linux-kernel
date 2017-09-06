@@ -2580,7 +2580,8 @@ const struct vm_operations_struct generic_file_vm_ops = {
 
 /* This is used for a general mmap of a disk file */
 
-int generic_file_mmap(struct file * file, struct vm_area_struct * vma)
+int generic_file_mmap(struct file * file, struct vm_area_struct * vma,
+		      unsigned long map_flags)
 {
 	struct address_space *mapping = file->f_mapping;
 
@@ -2594,18 +2595,22 @@ int generic_file_mmap(struct file * file, struct vm_area_struct * vma)
 /*
  * This is for filesystems which do not implement ->writepage.
  */
-int generic_file_readonly_mmap(struct file *file, struct vm_area_struct *vma)
+int generic_file_readonly_mmap(struct file *file, struct vm_area_struct *vma,
+			       unsigned long map_flags)
 {
 	if ((vma->vm_flags & VM_SHARED) && (vma->vm_flags & VM_MAYWRITE))
 		return -EINVAL;
-	return generic_file_mmap(file, vma);
+	return generic_file_mmap(file, vma, map_flags);
 }
 #else
-int generic_file_mmap(struct file * file, struct vm_area_struct * vma)
+int generic_file_mmap(struct file * file, struct vm_area_struct * vma,
+		      unsigned long map_flags)
 {
 	return -ENOSYS;
 }
-int generic_file_readonly_mmap(struct file * file, struct vm_area_struct * vma)
+int generic_file_readonly_mmap(struct file * file,
+			       struct vm_area_struct * vma,
+			       unsigned long map_flags)
 {
 	return -ENOSYS;
 }

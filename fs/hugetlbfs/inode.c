@@ -118,7 +118,8 @@ static void huge_pagevec_release(struct pagevec *pvec)
 	pagevec_reinit(pvec);
 }
 
-static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma,
+			       unsigned long map_flags)
 {
 	struct inode *inode = file_inode(file);
 	loff_t len, vma_len;

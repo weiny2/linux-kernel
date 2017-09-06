@@ -277,15 +277,16 @@ static long proc_reg_compat_ioctl(struct file *file, unsigned int cmd, unsigned 
 }
 #endif
 
-static int proc_reg_mmap(struct file *file, struct vm_area_struct *vma)
+static int proc_reg_mmap(struct file *file, struct vm_area_struct *vma,
+			 unsigned long map_flags)
 {
 	struct proc_dir_entry *pde = PDE(file_inode(file));
 	int rv = -EIO;
-	int (*mmap)(struct file *, struct vm_area_struct *);
+	int (*mmap)(struct file *, struct vm_area_struct *, unsigned long);
 	if (use_pde(pde)) {
 		mmap = pde->proc_fops->mmap;
 		if (mmap)
-			rv = mmap(file, vma);
+			rv = mmap(file, vma, map_flags);
 		unuse_pde(pde);
 	}
 	return rv;

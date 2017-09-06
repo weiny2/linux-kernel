@@ -1381,7 +1381,8 @@ static long fb_compat_ioctl(struct file *file, unsigned int cmd,
 #endif
 
 static int
-fb_mmap(struct file *file, struct vm_area_struct * vma)
+fb_mmap(struct file *file, struct vm_area_struct * vma,
+	unsigned long map_flags)
 {
 	struct fb_info *info = file_fb_info(file);
 	struct fb_ops *fb;
@@ -1403,7 +1404,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 		 * SME protection is removed ahead of the call
 		 */
 		vma->vm_page_prot = pgprot_decrypted(vma->vm_page_prot);
-		res = fb->fb_mmap(info, vma);
+		res = fb->fb_mmap(info, vma, map_flags);
 		mutex_unlock(&info->mm_lock);
 		return res;
 	}

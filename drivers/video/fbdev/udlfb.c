@@ -317,7 +317,8 @@ static int dlfb_set_video_mode(struct dlfb_data *dev,
 	return retval;
 }
 
-static int dlfb_ops_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int dlfb_ops_mmap(struct fb_info *info, struct vm_area_struct *vma,
+			 unsigned long map_flags)
 {
 	unsigned long start = vma->vm_start;
 	unsigned long size = vma->vm_end - vma->vm_start;

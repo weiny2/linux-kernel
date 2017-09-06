@@ -674,7 +674,8 @@ static int uio_mmap_physical(struct vm_area_struct *vma)
 			       vma->vm_page_prot);
 }
 
-static int uio_mmap(struct file *filep, struct vm_area_struct *vma)
+static int uio_mmap(struct file *filep, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct uio_listener *listener = filep->private_data;
 	struct uio_device *idev = listener->dev;

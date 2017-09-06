@@ -27,12 +27,13 @@
 		container_of(x, struct rockchip_drm_private, fbdev_helper)
 
 static int rockchip_fbdev_mmap(struct fb_info *info,
-			       struct vm_area_struct *vma)
+			       struct vm_area_struct *vma,
+			       unsigned long map_flags)
 {
 	struct drm_fb_helper *helper = info->par;
 	struct rockchip_drm_private *private = to_drm_private(helper);
 
-	return rockchip_gem_mmap_buf(private->fbdev_bo, vma);
+	return rockchip_gem_mmap_buf(private->fbdev_bo, vma, map_flags);
 }
 
 static struct fb_ops rockchip_drm_fbdev_ops = {

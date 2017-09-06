@@ -296,7 +296,8 @@ int mgag200_bo_create(struct drm_device *dev, int size, int align,
 		      uint32_t flags, struct mgag200_bo **pastbo);
 int mgag200_mm_init(struct mga_device *mdev);
 void mgag200_mm_fini(struct mga_device *mdev);
-int mgag200_mmap(struct file *filp, struct vm_area_struct *vma);
+int mgag200_mmap(struct file *filp, struct vm_area_struct *vma,
+		 unsigned long map_flags);
 int mgag200_bo_pin(struct mgag200_bo *bo, u32 pl_flag, u64 *gpu_addr);
 int mgag200_bo_unpin(struct mgag200_bo *bo);
 int mgag200_bo_push_sysram(struct mgag200_bo *bo);

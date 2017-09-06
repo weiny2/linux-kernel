@@ -871,7 +871,8 @@ static const struct vm_operations_struct omap_vout_vm_ops = {
 	.close	= omap_vout_vm_close,
 };
 
-static int omap_vout_mmap(struct file *file, struct vm_area_struct *vma)
+static int omap_vout_mmap(struct file *file, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	int i;
 	void *pos;

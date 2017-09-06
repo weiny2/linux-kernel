@@ -998,7 +998,8 @@ static int cpia2_streamoff(struct file *file, void *fh, enum v4l2_buf_type type)
  *  cpia2_mmap
  *
  *****************************************************************************/
-static int cpia2_mmap(struct file *file, struct vm_area_struct *area)
+static int cpia2_mmap(struct file *file, struct vm_area_struct *area,
+		      unsigned long map_flags)
 {
 	struct camera_data *cam = video_drvdata(file);
 	int retval;

@@ -1276,7 +1276,8 @@ static ssize_t vfio_fops_write(struct file *filep, const char __user *buf,
 	return ret;
 }
 
-static int vfio_fops_mmap(struct file *filep, struct vm_area_struct *vma)
+static int vfio_fops_mmap(struct file *filep, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	struct vfio_container *container = filep->private_data;
 	struct vfio_iommu_driver *driver;
@@ -1698,7 +1699,9 @@ static ssize_t vfio_device_fops_write(struct file *filep,
 	return device->ops->write(device->device_data, buf, count, ppos);
 }
 
-static int vfio_device_fops_mmap(struct file *filep, struct vm_area_struct *vma)
+static int vfio_device_fops_mmap(struct file *filep,
+				 struct vm_area_struct *vma,
+				 unsigned long map_flags)
 {
 	struct vfio_device *device = filep->private_data;
 

@@ -104,7 +104,8 @@ static void gru_vma_close(struct vm_area_struct *vma)
  * and private data structure necessary to allocate, track, and free the
  * underlying pages.
  */
-static int gru_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int gru_file_mmap(struct file *file, struct vm_area_struct *vma,
+			 unsigned long map_flags)
 {
 	if ((vma->vm_flags & (VM_SHARED | VM_WRITE)) != (VM_SHARED | VM_WRITE))
 		return -EPERM;

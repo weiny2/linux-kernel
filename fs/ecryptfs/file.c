@@ -169,7 +169,8 @@ out:
 	return rc;
 }
 
-static int ecryptfs_mmap(struct file *file, struct vm_area_struct *vma)
+static int ecryptfs_mmap(struct file *file, struct vm_area_struct *vma,
+			 unsigned long map_flags)
 {
 	struct file *lower_file = ecryptfs_file_to_lower(file);
 	/*
@@ -179,7 +180,7 @@ static int ecryptfs_mmap(struct file *file, struct vm_area_struct *vma)
 	 */
 	if (!lower_file->f_op->mmap)
 		return -ENODEV;
-	return generic_file_mmap(file, vma);
+	return generic_file_mmap(file, vma, map_flags);
 }
 
 /**

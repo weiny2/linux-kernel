@@ -478,7 +478,8 @@ struct drm_driver {
 	void *(*gem_prime_vmap)(struct drm_gem_object *obj);
 	void (*gem_prime_vunmap)(struct drm_gem_object *obj, void *vaddr);
 	int (*gem_prime_mmap)(struct drm_gem_object *obj,
-				struct vm_area_struct *vma);
+				struct vm_area_struct *vma,
+				unsigned long map_flags);
 
 	/**
 	 * @dumb_create:

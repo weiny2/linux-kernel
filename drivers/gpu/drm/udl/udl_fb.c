@@ -155,7 +155,8 @@ error:
 	return 0;
 }
 
-static int udl_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int udl_fb_mmap(struct fb_info *info, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	unsigned long start = vma->vm_start;
 	unsigned long size = vma->vm_end - vma->vm_start;

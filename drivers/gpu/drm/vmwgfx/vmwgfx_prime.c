@@ -96,7 +96,8 @@ static void vmw_prime_dmabuf_kunmap(struct dma_buf *dma_buf,
 }
 
 static int vmw_prime_dmabuf_mmap(struct dma_buf *dma_buf,
-				 struct vm_area_struct *vma)
+				 struct vm_area_struct *vma,
+				 unsigned long map_flags)
 {
 	WARN_ONCE(true, "Attempted use of dmabuf mmap. Bad.\n");
 	return -ENOSYS;

@@ -65,7 +65,8 @@ static unsigned long romfs_get_unmapped_area(struct file *file,
  * permit a R/O mapping to be made directly through onto an MTD device if
  * possible
  */
-static int romfs_mmap(struct file *file, struct vm_area_struct *vma)
+static int romfs_mmap(struct file *file, struct vm_area_struct *vma,
+		      unsigned long map_flags)
 {
 	return vma->vm_flags & (VM_SHARED | VM_MAYSHARE) ? 0 : -ENOSYS;
 }

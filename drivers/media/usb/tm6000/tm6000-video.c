@@ -1519,7 +1519,8 @@ static int tm6000_release(struct file *file)
 	return 0;
 }
 
-static int tm6000_mmap(struct file *file, struct vm_area_struct * vma)
+static int tm6000_mmap(struct file *file, struct vm_area_struct * vma,
+		       unsigned long map_flags)
 {
 	struct tm6000_fh *fh = file->private_data;
 	struct tm6000_core *dev = fh->dev;

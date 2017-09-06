@@ -339,7 +339,8 @@ struct drm_plane *virtio_gpu_plane_init(struct virtio_gpu_device *vgdev,
 /* virtio_gpu_ttm.c */
 int virtio_gpu_ttm_init(struct virtio_gpu_device *vgdev);
 void virtio_gpu_ttm_fini(struct virtio_gpu_device *vgdev);
-int virtio_gpu_mmap(struct file *filp, struct vm_area_struct *vma);
+int virtio_gpu_mmap(struct file *filp, struct vm_area_struct *vma,
+		    unsigned long map_flags);
 
 /* virtio_gpu_fence.c */
 int virtio_gpu_fence_emit(struct virtio_gpu_device *vgdev,
@@ -368,7 +369,8 @@ struct drm_gem_object *virtgpu_gem_prime_import_sg_table(
 void *virtgpu_gem_prime_vmap(struct drm_gem_object *obj);
 void virtgpu_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr);
 int virtgpu_gem_prime_mmap(struct drm_gem_object *obj,
-                                struct vm_area_struct *vma);
+                                struct vm_area_struct *vma,
+                                unsigned long map_flags);
 
 static inline struct virtio_gpu_object*
 virtio_gpu_object_ref(struct virtio_gpu_object *bo)

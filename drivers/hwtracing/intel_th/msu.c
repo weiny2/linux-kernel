@@ -1212,7 +1212,8 @@ static const struct vm_operations_struct msc_mmap_ops = {
 	.fault	= msc_mmap_fault,
 };
 
-static int intel_th_msc_mmap(struct file *file, struct vm_area_struct *vma)
+static int intel_th_msc_mmap(struct file *file, struct vm_area_struct *vma,
+			     unsigned long map_flags)
 {
 	unsigned long size = vma->vm_end - vma->vm_start;
 	struct msc_iter *iter = vma->vm_file->private_data;

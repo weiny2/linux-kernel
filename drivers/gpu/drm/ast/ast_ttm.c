@@ -417,7 +417,8 @@ int ast_bo_push_sysram(struct ast_bo *bo)
 	return 0;
 }
 
-int ast_mmap(struct file *filp, struct vm_area_struct *vma)
+int ast_mmap(struct file *filp, struct vm_area_struct *vma,
+	     unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct ast_private *ast;

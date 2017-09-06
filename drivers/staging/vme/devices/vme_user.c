@@ -484,7 +484,8 @@ static int vme_user_master_mmap(unsigned int minor, struct vm_area_struct *vma)
 	return 0;
 }
 
-static int vme_user_mmap(struct file *file, struct vm_area_struct *vma)
+static int vme_user_mmap(struct file *file, struct vm_area_struct *vma,
+			 unsigned long map_flags)
 {
 	unsigned int minor = MINOR(file_inode(file)->i_rdev);
 

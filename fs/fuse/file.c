@@ -2063,7 +2063,8 @@ static const struct vm_operations_struct fuse_file_vm_ops = {
 	.page_mkwrite	= fuse_page_mkwrite,
 };
 
-static int fuse_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int fuse_file_mmap(struct file *file, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	if ((vma->vm_flags & VM_SHARED) && (vma->vm_flags & VM_MAYWRITE))
 		fuse_link_write_file(file);
@@ -2073,7 +2074,8 @@ static int fuse_file_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
-static int fuse_direct_mmap(struct file *file, struct vm_area_struct *vma)
+static int fuse_direct_mmap(struct file *file, struct vm_area_struct *vma,
+			    unsigned long map_flags)
 {
 	/* Can't provide the coherency needed for MAP_SHARED */
 	if (vma->vm_flags & VM_MAYSHARE)
@@ -2081,7 +2083,7 @@ static int fuse_direct_mmap(struct file *file, struct vm_area_struct *vma)
 
 	invalidate_inode_pages2(file->f_mapping);
 
-	return generic_file_mmap(file, vma);
+	return generic_file_mmap(file, vma, map_flags);
 }
 
 static int convert_fuse_file_lock(struct fuse_conn *fc,

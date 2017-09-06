@@ -457,7 +457,8 @@ int vbox_bo_push_sysram(struct vbox_bo *bo)
 	return 0;
 }
 
-int vbox_mmap(struct file *filp, struct vm_area_struct *vma)
+int vbox_mmap(struct file *filp, struct vm_area_struct *vma,
+	      unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct vbox_private *vbox;

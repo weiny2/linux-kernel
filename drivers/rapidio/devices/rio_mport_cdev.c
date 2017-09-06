@@ -2261,7 +2261,8 @@ static const struct vm_operations_struct vm_ops = {
 	.close = mport_mm_close,
 };
 
-static int mport_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
+static int mport_cdev_mmap(struct file *filp, struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	struct mport_cdev_priv *priv = filp->private_data;
 	struct mport_dev *md;

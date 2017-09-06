@@ -168,7 +168,8 @@ int omap_gem_dumb_map_offset(struct drm_file *file, struct drm_device *dev,
 		uint32_t handle, uint64_t *offset);
 int omap_gem_dumb_create(struct drm_file *file, struct drm_device *dev,
 		struct drm_mode_create_dumb *args);
-int omap_gem_mmap(struct file *filp, struct vm_area_struct *vma);
+int omap_gem_mmap(struct file *filp, struct vm_area_struct *vma,
+		  unsigned long map_flags);
 int omap_gem_mmap_obj(struct drm_gem_object *obj,
 		struct vm_area_struct *vma);
 int omap_gem_fault(struct vm_fault *vmf);

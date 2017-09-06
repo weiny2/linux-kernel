@@ -114,7 +114,8 @@ int exynos_drm_gem_dumb_create(struct drm_file *file_priv,
 int exynos_drm_gem_fault(struct vm_fault *vmf);
 
 /* set vm_flags and we can change the vm attribute to other one at here. */
-int exynos_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma);
+int exynos_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma,
+			unsigned long map_flags);
 
 /* low-level interface prime helpers */
 struct sg_table *exynos_drm_gem_prime_get_sg_table(struct drm_gem_object *obj);
@@ -125,6 +126,7 @@ exynos_drm_gem_prime_import_sg_table(struct drm_device *dev,
 void *exynos_drm_gem_prime_vmap(struct drm_gem_object *obj);
 void exynos_drm_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr);
 int exynos_drm_gem_prime_mmap(struct drm_gem_object *obj,
-			      struct vm_area_struct *vma);
+			      struct vm_area_struct *vma,
+			      unsigned long map_flags);
 
 #endif

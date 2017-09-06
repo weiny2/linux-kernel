@@ -972,7 +972,8 @@ static long gntdev_ioctl(struct file *flip,
 	return 0;
 }
 
-static int gntdev_mmap(struct file *flip, struct vm_area_struct *vma)
+static int gntdev_mmap(struct file *flip, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	struct gntdev_priv *priv = flip->private_data;
 	int index = vma->vm_pgoff;

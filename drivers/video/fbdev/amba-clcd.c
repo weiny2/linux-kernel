@@ -426,7 +426,7 @@ static int clcdfb_blank(int blank_mode, struct fb_info *info)
 }
 
 static int clcdfb_mmap(struct fb_info *info,
-		       struct vm_area_struct *vma)
+		       struct vm_area_struct *vma, unsigned long map_flags)
 {
 	struct clcd_fb *fb = to_clcd(info);
 	unsigned long len, off = vma->vm_pgoff << PAGE_SHIFT;

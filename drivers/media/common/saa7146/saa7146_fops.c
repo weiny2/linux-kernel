@@ -287,7 +287,8 @@ static int fops_release(struct file *file)
 	return 0;
 }
 
-static int fops_mmap(struct file *file, struct vm_area_struct * vma)
+static int fops_mmap(struct file *file, struct vm_area_struct * vma,
+		     unsigned long map_flags)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct saa7146_fh *fh = file->private_data;

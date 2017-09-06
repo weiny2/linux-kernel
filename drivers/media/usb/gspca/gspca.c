@@ -1589,7 +1589,8 @@ static int vidioc_s_parm(struct file *filp, void *priv,
 	return 0;
 }
 
-static int dev_mmap(struct file *file, struct vm_area_struct *vma)
+static int dev_mmap(struct file *file, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct gspca_dev *gspca_dev = video_drvdata(file);
 	struct gspca_frame *frame;

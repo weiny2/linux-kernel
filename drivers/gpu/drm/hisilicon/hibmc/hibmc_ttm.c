@@ -389,7 +389,8 @@ int hibmc_bo_unpin(struct hibmc_bo *bo)
 	return 0;
 }
 
-int hibmc_mmap(struct file *filp, struct vm_area_struct *vma)
+int hibmc_mmap(struct file *filp, struct vm_area_struct *vma,
+	       unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct hibmc_drm_private *hibmc;

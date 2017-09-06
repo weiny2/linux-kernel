@@ -484,12 +484,13 @@ int v9fs_file_fsync_dotl(struct file *filp, loff_t start, loff_t end,
 }
 
 static int
-v9fs_file_mmap(struct file *filp, struct vm_area_struct *vma)
+v9fs_file_mmap(struct file *filp, struct vm_area_struct *vma,
+	       unsigned long map_flags)
 {
 	int retval;
 
 
-	retval = generic_file_mmap(filp, vma);
+	retval = generic_file_mmap(filp, vma, map_flags);
 	if (!retval)
 		vma->vm_ops = &v9fs_file_vm_ops;
 
@@ -497,7 +498,8 @@ v9fs_file_mmap(struct file *filp, struct vm_area_struct *vma)
 }
 
 static int
-v9fs_mmap_file_mmap(struct file *filp, struct vm_area_struct *vma)
+v9fs_mmap_file_mmap(struct file *filp, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	int retval;
 	struct inode *inode;
@@ -526,7 +528,7 @@ v9fs_mmap_file_mmap(struct file *filp, struct vm_area_struct *vma)
 	}
 	mutex_unlock(&v9inode->v_mutex);
 
-	retval = generic_file_mmap(filp, vma);
+	retval = generic_file_mmap(filp, vma, map_flags);
 	if (!retval)
 		vma->vm_ops = &v9fs_mmap_file_vm_ops;
 

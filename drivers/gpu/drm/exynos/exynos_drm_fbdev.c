@@ -35,7 +35,7 @@ struct exynos_drm_fbdev {
 };
 
 static int exynos_drm_fb_mmap(struct fb_info *info,
-			struct vm_area_struct *vma)
+			struct vm_area_struct *vma, unsigned long map_flags)
 {
 	struct drm_fb_helper *helper = info->par;
 	struct exynos_drm_fbdev *exynos_fbd = to_exynos_fbdev(helper);

@@ -375,7 +375,8 @@ static inline vm_flags_t calc_vm_may_flags(unsigned long prot)
 	       _calc_vm_trans(prot, PROT_EXEC,  VM_MAYEXEC);
 }
 
-static int ashmem_mmap(struct file *file, struct vm_area_struct *vma)
+static int ashmem_mmap(struct file *file, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	struct ashmem_area *asma = file->private_data;
 	int ret = 0;

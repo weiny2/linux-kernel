@@ -440,7 +440,8 @@ static long jsf_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
 	return error;
 }
 
-static int jsf_mmap(struct file * file, struct vm_area_struct * vma)
+static int jsf_mmap(struct file * file, struct vm_area_struct * vma,
+		    unsigned long map_flags)
 {
 	return -ENXIO;
 }

@@ -519,7 +519,8 @@ static const struct vm_operations_struct stm_mmap_vmops = {
 	.close	= stm_mmap_close,
 };
 
-static int stm_char_mmap(struct file *file, struct vm_area_struct *vma)
+static int stm_char_mmap(struct file *file, struct vm_area_struct *vma,
+			 unsigned long map_flags)
 {
 	struct stm_file *stmf = file->private_data;
 	struct stm_device *stm = stmf->stm;

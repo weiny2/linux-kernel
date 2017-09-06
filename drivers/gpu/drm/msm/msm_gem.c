@@ -198,11 +198,12 @@ int msm_gem_mmap_obj(struct drm_gem_object *obj,
 	return 0;
 }
 
-int msm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
+int msm_gem_mmap(struct file *filp, struct vm_area_struct *vma,
+		 unsigned long map_flags)
 {
 	int ret;
 
-	ret = drm_gem_mmap(filp, vma);
+	ret = drm_gem_mmap(filp, vma, map_flags);
 	if (ret) {
 		DBG("mmap failed: %d", ret);
 		return ret;

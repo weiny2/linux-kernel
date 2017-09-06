@@ -354,7 +354,8 @@ static long snd_disconnect_ioctl(struct file *file,
 	return -ENODEV;
 }
 
-static int snd_disconnect_mmap(struct file *file, struct vm_area_struct *vma)
+static int snd_disconnect_mmap(struct file *file, struct vm_area_struct *vma,
+			       unsigned long map_flags)
 {
 	return -ENODEV;
 }

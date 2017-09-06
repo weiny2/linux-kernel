@@ -784,7 +784,8 @@ EXPORT_SYMBOL_GPL(v4l2_m2m_ioctl_streamoff);
  * for the output and the capture buffer queue.
  */
 
-int v4l2_m2m_fop_mmap(struct file *file, struct vm_area_struct *vma)
+int v4l2_m2m_fop_mmap(struct file *file, struct vm_area_struct *vma,
+		      unsigned long map_flags)
 {
 	struct v4l2_fh *fh = file->private_data;
 

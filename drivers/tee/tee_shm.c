@@ -71,7 +71,8 @@ static void *tee_shm_op_map(struct dma_buf *dmabuf, unsigned long pgnum)
 	return NULL;
 }
 
-static int tee_shm_op_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
+static int tee_shm_op_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	struct tee_shm *shm = dmabuf->priv;
 	size_t size = vma->vm_end - vma->vm_start;

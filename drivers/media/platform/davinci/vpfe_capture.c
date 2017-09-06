@@ -717,7 +717,8 @@ static int vpfe_release(struct file *file)
  * vpfe_mmap : It is used to map kernel space buffers
  * into user spaces
  */
-static int vpfe_mmap(struct file *file, struct vm_area_struct *vma)
+static int vpfe_mmap(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	/* Get the device object and file handle object */
 	struct vpfe_device *vpfe_dev = video_drvdata(file);

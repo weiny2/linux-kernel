@@ -291,7 +291,8 @@ static const struct vm_operations_struct spufs_mem_mmap_vmops = {
 	.access = spufs_mem_mmap_access,
 };
 
-static int spufs_mem_mmap(struct file *file, struct vm_area_struct *vma)
+static int spufs_mem_mmap(struct file *file, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
@@ -379,7 +380,8 @@ static const struct vm_operations_struct spufs_cntl_mmap_vmops = {
 /*
  * mmap support for problem state control area [0x4000 - 0x4fff].
  */
-static int spufs_cntl_mmap(struct file *file, struct vm_area_struct *vma)
+static int spufs_cntl_mmap(struct file *file, struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
@@ -1059,7 +1061,8 @@ static const struct vm_operations_struct spufs_signal1_mmap_vmops = {
 	.fault = spufs_signal1_mmap_fault,
 };
 
-static int spufs_signal1_mmap(struct file *file, struct vm_area_struct *vma)
+static int spufs_signal1_mmap(struct file *file, struct vm_area_struct *vma,
+			      unsigned long map_flags)
 {
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
@@ -1197,7 +1200,8 @@ static const struct vm_operations_struct spufs_signal2_mmap_vmops = {
 	.fault = spufs_signal2_mmap_fault,
 };
 
-static int spufs_signal2_mmap(struct file *file, struct vm_area_struct *vma)
+static int spufs_signal2_mmap(struct file *file, struct vm_area_struct *vma,
+			      unsigned long map_flags)
 {
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
@@ -1320,7 +1324,8 @@ static const struct vm_operations_struct spufs_mss_mmap_vmops = {
 /*
  * mmap support for problem state MFC DMA area [0x0000 - 0x0fff].
  */
-static int spufs_mss_mmap(struct file *file, struct vm_area_struct *vma)
+static int spufs_mss_mmap(struct file *file, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
@@ -1382,7 +1387,8 @@ static const struct vm_operations_struct spufs_psmap_mmap_vmops = {
 /*
  * mmap support for full problem state area [0x00000 - 0x1ffff].
  */
-static int spufs_psmap_mmap(struct file *file, struct vm_area_struct *vma)
+static int spufs_psmap_mmap(struct file *file, struct vm_area_struct *vma,
+			    unsigned long map_flags)
 {
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
@@ -1442,7 +1448,8 @@ static const struct vm_operations_struct spufs_mfc_mmap_vmops = {
 /*
  * mmap support for problem state MFC DMA area [0x0000 - 0x0fff].
  */
-static int spufs_mfc_mmap(struct file *file, struct vm_area_struct *vma)
+static int spufs_mfc_mmap(struct file *file, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;

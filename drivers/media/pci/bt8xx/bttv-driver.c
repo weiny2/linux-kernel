@@ -3129,7 +3129,8 @@ static int bttv_release(struct file *file)
 }
 
 static int
-bttv_mmap(struct file *file, struct vm_area_struct *vma)
+bttv_mmap(struct file *file, struct vm_area_struct *vma,
+	  unsigned long map_flags)
 {
 	struct bttv_fh *fh = file->private_data;
 

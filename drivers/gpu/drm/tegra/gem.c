@@ -497,12 +497,13 @@ static int tegra_gem_mmap(struct drm_gem_object *gem,
 	return 0;
 }
 
-int tegra_drm_mmap(struct file *file, struct vm_area_struct *vma)
+int tegra_drm_mmap(struct file *file, struct vm_area_struct *vma,
+		   unsigned long map_flags)
 {
 	struct drm_gem_object *gem;
 	int err;
 
-	err = drm_gem_mmap(file, vma);
+	err = drm_gem_mmap(file, vma, map_flags);
 	if (err < 0)
 		return err;
 
@@ -592,7 +593,9 @@ static void tegra_gem_prime_kunmap(struct dma_buf *buf, unsigned long page,
 {
 }
 
-static int tegra_gem_prime_mmap(struct dma_buf *buf, struct vm_area_struct *vma)
+static int tegra_gem_prime_mmap(struct dma_buf *buf,
+				struct vm_area_struct *vma,
+				unsigned long map_flags)
 {
 	struct drm_gem_object *gem = buf->priv;
 	int err;

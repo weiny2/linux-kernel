@@ -117,7 +117,8 @@ static int qxl_ttm_fault(struct vm_fault *vmf)
 	return r;
 }
 
-int qxl_mmap(struct file *filp, struct vm_area_struct *vma)
+int qxl_mmap(struct file *filp, struct vm_area_struct *vma,
+	     unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct qxl_device *qdev;

@@ -755,7 +755,8 @@ static const struct vm_operations_struct stk_v4l_vm_ops = {
 	.close = stk_v4l_vm_close
 };
 
-static int v4l_stk_mmap(struct file *fp, struct vm_area_struct *vma)
+static int v4l_stk_mmap(struct file *fp, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	unsigned int i;
 	int ret;

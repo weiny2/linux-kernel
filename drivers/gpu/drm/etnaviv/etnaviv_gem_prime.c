@@ -42,7 +42,8 @@ void etnaviv_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr)
 }
 
 int etnaviv_gem_prime_mmap(struct drm_gem_object *obj,
-			   struct vm_area_struct *vma)
+			   struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	struct etnaviv_gem_object *etnaviv_obj = to_etnaviv_bo(obj);
 	int ret;
@@ -51,7 +52,7 @@ int etnaviv_gem_prime_mmap(struct drm_gem_object *obj,
 	if (ret < 0)
 		return ret;
 
-	return etnaviv_obj->ops->mmap(etnaviv_obj, vma);
+	return etnaviv_obj->ops->mmap(etnaviv_obj, vma, map_flags);
 }
 
 int etnaviv_gem_prime_pin(struct drm_gem_object *obj)
@@ -100,9 +101,9 @@ static void *etnaviv_gem_prime_vmap_impl(struct etnaviv_gem_object *etnaviv_obj)
 }
 
 static int etnaviv_gem_prime_mmap_obj(struct etnaviv_gem_object *etnaviv_obj,
-		struct vm_area_struct *vma)
+		struct vm_area_struct *vma, unsigned long map_flags)
 {
-	return dma_buf_mmap(etnaviv_obj->base.dma_buf, vma, 0);
+	return dma_buf_mmap(etnaviv_obj->base.dma_buf, vma, 0, map_flags);
 }
 
 static const struct etnaviv_gem_ops etnaviv_gem_prime_ops = {

@@ -215,7 +215,8 @@ static ssize_t sel_read_handle_status(struct file *filp, char __user *buf,
 }
 
 static int sel_mmap_handle_status(struct file *filp,
-				  struct vm_area_struct *vma)
+				  struct vm_area_struct *vma,
+				  unsigned long map_flags)
 {
 	struct page    *status = filp->private_data;
 	unsigned long	size = vma->vm_end - vma->vm_start;
@@ -444,7 +445,8 @@ static const struct vm_operations_struct sel_mmap_policy_ops = {
 	.page_mkwrite = sel_mmap_policy_fault,
 };
 
-static int sel_mmap_policy(struct file *filp, struct vm_area_struct *vma)
+static int sel_mmap_policy(struct file *filp, struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	if (vma->vm_flags & VM_SHARED) {
 		/* do not allow mprotect to make mapping writable */

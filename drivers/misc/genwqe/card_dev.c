@@ -435,7 +435,8 @@ static const struct vm_operations_struct genwqe_vma_ops = {
  * plain buffer, we lookup our dma_mapping list to find the
  * corresponding DMA address for the associated user-space address.
  */
-static int genwqe_mmap(struct file *filp, struct vm_area_struct *vma)
+static int genwqe_mmap(struct file *filp, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	int rc;
 	unsigned long pfn, vsize = vma->vm_end - vma->vm_start;

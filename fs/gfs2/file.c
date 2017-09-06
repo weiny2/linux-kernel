@@ -506,7 +506,8 @@ static const struct vm_operations_struct gfs2_vm_ops = {
  * Returns: 0
  */
 
-static int gfs2_mmap(struct file *file, struct vm_area_struct *vma)
+static int gfs2_mmap(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	struct gfs2_inode *ip = GFS2_I(file->f_mapping->host);
 

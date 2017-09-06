@@ -1396,7 +1396,8 @@ static unsigned int isp_video_poll(struct file *file, poll_table *wait)
 	return ret;
 }
 
-static int isp_video_mmap(struct file *file, struct vm_area_struct *vma)
+static int isp_video_mmap(struct file *file, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	struct isp_video_fh *vfh = to_isp_video_fh(file->private_data);
 

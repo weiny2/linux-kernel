@@ -455,7 +455,8 @@ static const struct vm_operations_struct ll_file_vm_ops = {
 	.close			= ll_vm_close,
 };
 
-int ll_file_mmap(struct file *file, struct vm_area_struct *vma)
+int ll_file_mmap(struct file *file, struct vm_area_struct *vma,
+		 unsigned long map_flags)
 {
 	struct inode *inode = file_inode(file);
 	int rc;
@@ -464,7 +465,7 @@ int ll_file_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EOPNOTSUPP;
 
 	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_MAP, 1);
-	rc = generic_file_mmap(file, vma);
+	rc = generic_file_mmap(file, vma, map_flags);
 	if (rc == 0) {
 		vma->vm_ops = &ll_file_vm_ops;
 		vma->vm_ops->open(vma);

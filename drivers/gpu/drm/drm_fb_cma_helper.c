@@ -238,7 +238,8 @@ int drm_fb_cma_debugfs_show(struct seq_file *m, void *arg)
 EXPORT_SYMBOL_GPL(drm_fb_cma_debugfs_show);
 #endif
 
-static int drm_fb_cma_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int drm_fb_cma_mmap(struct fb_info *info, struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	return dma_mmap_writecombine(info->device, vma, info->screen_base,
 				     info->fix.smem_start, info->fix.smem_len);
@@ -254,9 +255,10 @@ static struct fb_ops drm_fbdev_cma_ops = {
 };
 
 static int drm_fbdev_cma_deferred_io_mmap(struct fb_info *info,
-					  struct vm_area_struct *vma)
+					  struct vm_area_struct *vma,
+					  unsigned long map_flags)
 {
-	fb_deferred_io_mmap(info, vma);
+	fb_deferred_io_mmap(info, vma, map_flags);
 	vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 
 	return 0;

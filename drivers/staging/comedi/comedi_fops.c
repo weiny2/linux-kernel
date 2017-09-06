@@ -2185,7 +2185,8 @@ static const struct vm_operations_struct comedi_vm_ops = {
 	.access = comedi_vm_access,
 };
 
-static int comedi_mmap(struct file *file, struct vm_area_struct *vma)
+static int comedi_mmap(struct file *file, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	struct comedi_file *cfp = file->private_data;
 	struct comedi_device *dev = cfp->dev;

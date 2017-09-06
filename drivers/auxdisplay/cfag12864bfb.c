@@ -64,7 +64,8 @@ static struct fb_var_screeninfo cfag12864bfb_var = {
 	.vmode = FB_VMODE_NONINTERLACED,
 };
 
-static int cfag12864bfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int cfag12864bfb_mmap(struct fb_info *info, struct vm_area_struct *vma,
+			     unsigned long map_flags)
 {
 	return vm_insert_page(vma, vma->vm_start,
 		virt_to_page(cfag12864b_buffer));

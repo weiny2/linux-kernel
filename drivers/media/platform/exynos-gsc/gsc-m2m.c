@@ -723,7 +723,8 @@ static unsigned int gsc_m2m_poll(struct file *file,
 	return ret;
 }
 
-static int gsc_m2m_mmap(struct file *file, struct vm_area_struct *vma)
+static int gsc_m2m_mmap(struct file *file, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	struct gsc_ctx *ctx = fh_to_ctx(file->private_data);
 	struct gsc_dev *gsc = ctx->gsc_dev;

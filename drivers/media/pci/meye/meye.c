@@ -1452,7 +1452,8 @@ static const struct vm_operations_struct meye_vm_ops = {
 	.close		= meye_vm_close,
 };
 
-static int meye_mmap(struct file *file, struct vm_area_struct *vma)
+static int meye_mmap(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	unsigned long start = vma->vm_start;
 	unsigned long size = vma->vm_end - vma->vm_start;

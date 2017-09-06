@@ -1066,7 +1066,8 @@ static int usbvision_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
-static int usbvision_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
+static int usbvision_v4l2_mmap(struct file *file, struct vm_area_struct *vma,
+			       unsigned long map_flags)
 {
 	struct usb_usbvision *usbvision = video_drvdata(file);
 	int res;

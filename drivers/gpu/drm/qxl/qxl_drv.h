@@ -422,7 +422,8 @@ int qxl_mode_dumb_mmap(struct drm_file *filp,
 /* qxl ttm */
 int qxl_ttm_init(struct qxl_device *qdev);
 void qxl_ttm_fini(struct qxl_device *qdev);
-int qxl_mmap(struct file *filp, struct vm_area_struct *vma);
+int qxl_mmap(struct file *filp, struct vm_area_struct *vma,
+	     unsigned long map_flags);
 
 /* qxl image */
 
@@ -531,7 +532,8 @@ struct drm_gem_object *qxl_gem_prime_import_sg_table(
 void *qxl_gem_prime_vmap(struct drm_gem_object *obj);
 void qxl_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr);
 int qxl_gem_prime_mmap(struct drm_gem_object *obj,
-				struct vm_area_struct *vma);
+				struct vm_area_struct *vma,
+				unsigned long map_flags);
 
 /* qxl_irq.c */
 int qxl_irq_init(struct qxl_device *qdev);

@@ -132,7 +132,7 @@ static void omap_gem_dmabuf_kunmap(struct dma_buf *buffer,
 }
 
 static int omap_gem_dmabuf_mmap(struct dma_buf *buffer,
-		struct vm_area_struct *vma)
+		struct vm_area_struct *vma, unsigned long map_flags)
 {
 	struct drm_gem_object *obj = buffer->priv;
 	int ret = 0;

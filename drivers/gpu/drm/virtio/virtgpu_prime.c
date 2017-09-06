@@ -65,7 +65,7 @@ void virtgpu_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr)
 }
 
 int virtgpu_gem_prime_mmap(struct drm_gem_object *obj,
-		       struct vm_area_struct *area)
+		       struct vm_area_struct *area, unsigned long map_flags)
 {
 	return -ENODEV;
 }

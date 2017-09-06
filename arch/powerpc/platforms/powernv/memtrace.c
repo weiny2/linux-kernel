@@ -57,7 +57,8 @@ static bool valid_memtrace_range(struct memtrace_entry *dev,
 	return false;
 }
 
-static int memtrace_mmap(struct file *filp, struct vm_area_struct *vma)
+static int memtrace_mmap(struct file *filp, struct vm_area_struct *vma,
+			 unsigned long map_flags)
 {
 	unsigned long size = vma->vm_end - vma->vm_start;
 	struct memtrace_entry *dev = filp->private_data;

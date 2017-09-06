@@ -120,7 +120,9 @@ static void mock_dmabuf_kunmap(struct dma_buf *dma_buf, unsigned long page_num, 
 	return kunmap(mock->pages[page_num]);
 }
 
-static int mock_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
+static int mock_dmabuf_mmap(struct dma_buf *dma_buf,
+			    struct vm_area_struct *vma,
+			    unsigned long map_flags)
 {
 	return -ENODEV;
 }

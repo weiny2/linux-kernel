@@ -1160,7 +1160,8 @@ static const struct vm_operations_struct cxlflash_mmap_vmops = {
  *
  * Return: 0 on success, -errno on failure
  */
-static int cxlflash_cxl_mmap(struct file *file, struct vm_area_struct *vma)
+static int cxlflash_cxl_mmap(struct file *file, struct vm_area_struct *vma,
+			     unsigned long map_flags)
 {
 	struct cxl_context *ctx = cxl_fops_get_context(file);
 	struct cxlflash_cfg *cfg = container_of(file->f_op, struct cxlflash_cfg,
@@ -1188,7 +1189,7 @@ static int cxlflash_cxl_mmap(struct file *file, struct vm_area_struct *vma)
 
 	dev_dbg(dev, "%s: mmap for context %d\n", __func__, ctxid);
 
-	rc = cxl_fd_mmap(file, vma);
+	rc = cxl_fd_mmap(file, vma, map_flags);
 	if (likely(!rc)) {
 		/* Insert ourself in the mmap fault handler path */
 		ctxi->cxl_mmap_vmops = vma->vm_ops;

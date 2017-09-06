@@ -1615,11 +1615,12 @@ static const struct vm_operations_struct ubifs_file_vm_ops = {
 	.page_mkwrite = ubifs_vm_page_mkwrite,
 };
 
-static int ubifs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int ubifs_file_mmap(struct file *file, struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	int err;
 
-	err = generic_file_mmap(file, vma);
+	err = generic_file_mmap(file, vma, map_flags);
 	if (err)
 		return err;
 	vma->vm_ops = &ubifs_file_vm_ops;

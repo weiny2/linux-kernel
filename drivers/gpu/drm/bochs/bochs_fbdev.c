@@ -10,7 +10,7 @@
 /* ---------------------------------------------------------------------- */
 
 static int bochsfb_mmap(struct fb_info *info,
-			struct vm_area_struct *vma)
+			struct vm_area_struct *vma, unsigned long map_flags)
 {
 	struct drm_fb_helper *fb_helper = info->par;
 	struct bochs_device *bochs =

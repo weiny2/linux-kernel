@@ -1962,7 +1962,8 @@ static unsigned int cs4297a_poll(struct file *file,
 }
 
 
-static int cs4297a_mmap(struct file *file, struct vm_area_struct *vma)
+static int cs4297a_mmap(struct file *file, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
         /* XXXKW currently no mmap support */
         return -EINVAL;

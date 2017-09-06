@@ -337,7 +337,8 @@ static const struct vm_operations_struct mmap_mem_ops = {
 #endif
 };
 
-static int mmap_mem(struct file *file, struct vm_area_struct *vma)
+static int mmap_mem(struct file *file, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	size_t size = vma->vm_end - vma->vm_start;
 	phys_addr_t offset = (phys_addr_t)vma->vm_pgoff << PAGE_SHIFT;
@@ -376,7 +377,8 @@ static int mmap_mem(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
-static int mmap_kmem(struct file *file, struct vm_area_struct *vma)
+static int mmap_kmem(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	unsigned long pfn;
 
@@ -394,7 +396,7 @@ static int mmap_kmem(struct file *file, struct vm_area_struct *vma)
 		return -EIO;
 
 	vma->vm_pgoff = pfn;
-	return mmap_mem(file, vma);
+	return mmap_mem(file, vma, map_flags);
 }
 
 /*
@@ -679,7 +681,8 @@ static ssize_t read_iter_zero(struct kiocb *iocb, struct iov_iter *iter)
 	return written;
 }
 
-static int mmap_zero(struct file *file, struct vm_area_struct *vma)
+static int mmap_zero(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 #ifndef CONFIG_MMU
 	return -ENOSYS;

@@ -584,7 +584,8 @@ static long orangefs_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 /*
  * Memory map a region of a file.
  */
-static int orangefs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int orangefs_file_mmap(struct file *file, struct vm_area_struct *vma,
+			      unsigned long map_flags)
 {
 	gossip_debug(GOSSIP_FILE_DEBUG,
 		     "orangefs_file_mmap: called on %s\n",
@@ -597,7 +598,7 @@ static int orangefs_file_mmap(struct file *file, struct vm_area_struct *vma)
 	vma->vm_flags &= ~VM_RAND_READ;
 
 	/* Use readonly mmap since we cannot support writable maps. */
-	return generic_file_readonly_mmap(file, vma);
+	return generic_file_readonly_mmap(file, vma, map_flags);
 }
 
 #define mapping_nrpages(idata) ((idata)->nrpages)

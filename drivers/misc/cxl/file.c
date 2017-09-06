@@ -309,7 +309,8 @@ static long afu_compat_ioctl(struct file *file, unsigned int cmd,
 	return afu_ioctl(file, cmd, arg);
 }
 
-int afu_mmap(struct file *file, struct vm_area_struct *vm)
+int afu_mmap(struct file *file, struct vm_area_struct *vm,
+	     unsigned long map_flags)
 {
 	struct cxl_context *ctx = file->private_data;
 

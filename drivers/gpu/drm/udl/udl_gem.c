@@ -84,11 +84,12 @@ int udl_dumb_create(struct drm_file *file,
 			      args->size, &args->handle);
 }
 
-int udl_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
+int udl_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	int ret;
 
-	ret = drm_gem_mmap(filp, vma);
+	ret = drm_gem_mmap(filp, vma, map_flags);
 	if (ret)
 		return ret;
 

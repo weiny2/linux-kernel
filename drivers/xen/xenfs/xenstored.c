@@ -30,7 +30,8 @@ static int xsd_kva_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int xsd_kva_mmap(struct file *file, struct vm_area_struct *vma)
+static int xsd_kva_mmap(struct file *file, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	size_t size = vma->vm_end - vma->vm_start;
 

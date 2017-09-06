@@ -1834,7 +1834,8 @@ static unsigned int mpeg_poll(struct file *file,
 	return res;
 }
 
-static int mpeg_mmap(struct file *file, struct vm_area_struct *vma)
+static int mpeg_mmap(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	struct cx231xx_fh *fh = file->private_data;
 

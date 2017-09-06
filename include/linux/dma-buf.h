@@ -246,7 +246,8 @@ struct dma_buf_ops {
 	 *
 	 * 0 on success or a negative error code on failure.
 	 */
-	int (*mmap)(struct dma_buf *, struct vm_area_struct *vma);
+	int (*mmap)(struct dma_buf *, struct vm_area_struct *vma,
+			unsigned long map_flags);
 
 	void *(*vmap)(struct dma_buf *);
 	void (*vunmap)(struct dma_buf *, void *vaddr);
@@ -401,7 +402,7 @@ void *dma_buf_kmap(struct dma_buf *, unsigned long);
 void dma_buf_kunmap(struct dma_buf *, unsigned long, void *);
 
 int dma_buf_mmap(struct dma_buf *, struct vm_area_struct *,
-		 unsigned long);
+		 unsigned long, unsigned long);
 void *dma_buf_vmap(struct dma_buf *);
 void dma_buf_vunmap(struct dma_buf *, void *vaddr);
 #endif /* __DMA_BUF_H__ */

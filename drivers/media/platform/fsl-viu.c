@@ -1319,7 +1319,8 @@ void viu_reset(struct viu_reg *reg)
 	out_be32(&reg->alpha, 0x000000ff);
 }
 
-static int viu_mmap(struct file *file, struct vm_area_struct *vma)
+static int viu_mmap(struct file *file, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct viu_fh *fh = file->private_data;
 	struct viu_dev *dev = fh->dev;

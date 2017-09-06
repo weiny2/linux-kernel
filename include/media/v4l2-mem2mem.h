@@ -600,7 +600,8 @@ int v4l2_m2m_ioctl_streamon(struct file *file, void *fh,
 				enum v4l2_buf_type type);
 int v4l2_m2m_ioctl_streamoff(struct file *file, void *fh,
 				enum v4l2_buf_type type);
-int v4l2_m2m_fop_mmap(struct file *file, struct vm_area_struct *vma);
+int v4l2_m2m_fop_mmap(struct file *file, struct vm_area_struct *vma,
+		      unsigned long map_flags);
 unsigned int v4l2_m2m_fop_poll(struct file *file, poll_table *wait);
 
 #endif /* _MEDIA_V4L2_MEM2MEM_H */

@@ -4545,7 +4545,8 @@ static const struct vm_operations_struct binder_vm_ops = {
 	.fault = binder_vm_fault,
 };
 
-static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
+static int binder_mmap(struct file *filp, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	int ret;
 	struct binder_proc *proc = filp->private_data;

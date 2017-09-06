@@ -84,7 +84,8 @@ static int i810_freelist_put(struct drm_device *dev, struct drm_buf *buf)
 	return 0;
 }
 
-static int i810_mmap_buffers(struct file *filp, struct vm_area_struct *vma)
+static int i810_mmap_buffers(struct file *filp, struct vm_area_struct *vma,
+			     unsigned long map_flags)
 {
 	struct drm_file *priv = filp->private_data;
 	struct drm_device *dev;

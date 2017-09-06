@@ -122,7 +122,8 @@ static struct attribute *bsr_dev_attrs[] = {
 };
 ATTRIBUTE_GROUPS(bsr_dev);
 
-static int bsr_mmap(struct file *filp, struct vm_area_struct *vma)
+static int bsr_mmap(struct file *filp, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	unsigned long size   = vma->vm_end - vma->vm_start;
 	struct bsr_dev *dev = filp->private_data;

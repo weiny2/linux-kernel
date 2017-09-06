@@ -2269,7 +2269,9 @@ static const struct vm_operations_struct btrfs_file_vm_ops = {
 	.page_mkwrite	= btrfs_page_mkwrite,
 };
 
-static int btrfs_file_mmap(struct file	*filp, struct vm_area_struct *vma)
+static int btrfs_file_mmap(struct file	*filp,
+			   struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	struct address_space *mapping = filp->f_mapping;
 

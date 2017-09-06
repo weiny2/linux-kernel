@@ -1246,7 +1246,8 @@ static const struct vm_operations_struct mon_bin_vm_ops = {
 	.fault =    mon_bin_vma_fault,
 };
 
-static int mon_bin_mmap(struct file *filp, struct vm_area_struct *vma)
+static int mon_bin_mmap(struct file *filp, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	/* don't do anything here: "fault" will set up page table entries */
 	vma->vm_ops = &mon_bin_vm_ops;

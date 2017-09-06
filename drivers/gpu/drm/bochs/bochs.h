@@ -136,7 +136,8 @@ void bochs_hw_setbase(struct bochs_device *bochs,
 /* bochs_mm.c */
 int bochs_mm_init(struct bochs_device *bochs);
 void bochs_mm_fini(struct bochs_device *bochs);
-int bochs_mmap(struct file *filp, struct vm_area_struct *vma);
+int bochs_mmap(struct file *filp, struct vm_area_struct *vma,
+	       unsigned long map_flags);
 
 int bochs_gem_create(struct drm_device *dev, u32 size, bool iskernel,
 		     struct drm_gem_object **obj);

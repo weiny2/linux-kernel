@@ -179,7 +179,8 @@ static const struct vm_operations_struct ocfs2_file_vm_ops = {
 	.page_mkwrite	= ocfs2_page_mkwrite,
 };
 
-int ocfs2_mmap(struct file *file, struct vm_area_struct *vma)
+int ocfs2_mmap(struct file *file, struct vm_area_struct *vma,
+	       unsigned long map_flags)
 {
 	int ret = 0, lock_level = 0;
 

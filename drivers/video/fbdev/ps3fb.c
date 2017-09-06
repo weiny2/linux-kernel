@@ -703,7 +703,8 @@ static int ps3fb_pan_display(struct fb_var_screeninfo *var,
      *  As we have a virtual frame buffer, we need our own mmap function
      */
 
-static int ps3fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int ps3fb_mmap(struct fb_info *info, struct vm_area_struct *vma,
+		      unsigned long map_flags)
 {
 	int r;
 

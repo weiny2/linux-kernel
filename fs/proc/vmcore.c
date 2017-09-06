@@ -406,7 +406,8 @@ static int vmcore_remap_oldmem_pfn(struct vm_area_struct *vma,
 		return remap_oldmem_pfn_range(vma, from, pfn, size, prot);
 }
 
-static int mmap_vmcore(struct file *file, struct vm_area_struct *vma)
+static int mmap_vmcore(struct file *file, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	size_t size = vma->vm_end - vma->vm_start;
 	u64 start, end, len, tsz;
@@ -485,7 +486,8 @@ fail:
 	return -EAGAIN;
 }
 #else
-static int mmap_vmcore(struct file *file, struct vm_area_struct *vma)
+static int mmap_vmcore(struct file *file, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	return -ENOSYS;
 }

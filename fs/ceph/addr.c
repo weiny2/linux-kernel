@@ -1761,7 +1761,8 @@ static const struct vm_operations_struct ceph_vmops = {
 	.page_mkwrite	= ceph_page_mkwrite,
 };
 
-int ceph_mmap(struct file *file, struct vm_area_struct *vma)
+int ceph_mmap(struct file *file, struct vm_area_struct *vma,
+	      unsigned long map_flags)
 {
 	struct address_space *mapping = file->f_mapping;
 

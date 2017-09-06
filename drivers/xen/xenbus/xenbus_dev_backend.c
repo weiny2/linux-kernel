@@ -88,7 +88,8 @@ static long xenbus_backend_ioctl(struct file *file, unsigned int cmd,
 	}
 }
 
-static int xenbus_backend_mmap(struct file *file, struct vm_area_struct *vma)
+static int xenbus_backend_mmap(struct file *file, struct vm_area_struct *vma,
+			       unsigned long map_flags)
 {
 	size_t size = vma->vm_end - vma->vm_start;
 

@@ -1192,7 +1192,8 @@ static unsigned mtdchar_mmap_capabilities(struct file *file)
 /*
  * set up a mapping for shared memory segments
  */
-static int mtdchar_mmap(struct file *file, struct vm_area_struct *vma)
+static int mtdchar_mmap(struct file *file, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 #ifdef CONFIG_MMU
 	struct mtd_file_info *mfi = file->private_data;

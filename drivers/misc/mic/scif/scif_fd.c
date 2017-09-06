@@ -34,7 +34,8 @@ static int scif_fdclose(struct inode *inode, struct file *f)
 	return scif_close(priv);
 }
 
-static int scif_fdmmap(struct file *f, struct vm_area_struct *vma)
+static int scif_fdmmap(struct file *f, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	struct scif_endpt *priv = f->private_data;
 

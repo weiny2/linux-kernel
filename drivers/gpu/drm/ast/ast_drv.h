@@ -390,7 +390,8 @@ static inline void ast_bo_unreserve(struct ast_bo *bo)
 
 void ast_ttm_placement(struct ast_bo *bo, int domain);
 int ast_bo_push_sysram(struct ast_bo *bo);
-int ast_mmap(struct file *filp, struct vm_area_struct *vma);
+int ast_mmap(struct file *filp, struct vm_area_struct *vma,
+	     unsigned long map_flags);
 
 /* ast post */
 void ast_enable_vga(struct drm_device *dev);

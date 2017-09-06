@@ -1270,7 +1270,8 @@ static int zr364xx_close(struct file *file)
 }
 
 
-static int zr364xx_mmap(struct file *file, struct vm_area_struct *vma)
+static int zr364xx_mmap(struct file *file, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	struct zr364xx_camera *cam = video_drvdata(file);
 	int ret;

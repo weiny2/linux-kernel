@@ -28,7 +28,8 @@
 #include <drm/drmP.h>
 #include "vmwgfx_drv.h"
 
-int vmw_mmap(struct file *filp, struct vm_area_struct *vma)
+int vmw_mmap(struct file *filp, struct vm_area_struct *vma,
+	     unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct vmw_private *dev_priv;

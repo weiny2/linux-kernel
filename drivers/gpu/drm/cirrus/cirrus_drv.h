@@ -232,7 +232,8 @@ void cirrus_mm_fini(struct cirrus_device *cirrus);
 void cirrus_ttm_placement(struct cirrus_bo *bo, int domain);
 int cirrus_bo_create(struct drm_device *dev, int size, int align,
 		     uint32_t flags, struct cirrus_bo **pcirrusbo);
-int cirrus_mmap(struct file *filp, struct vm_area_struct *vma);
+int cirrus_mmap(struct file *filp, struct vm_area_struct *vma,
+		unsigned long map_flags);
 
 static inline int cirrus_bo_reserve(struct cirrus_bo *bo, bool no_wait)
 {

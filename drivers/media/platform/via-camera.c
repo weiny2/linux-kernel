@@ -772,7 +772,8 @@ static unsigned int viacam_poll(struct file *filp, struct poll_table_struct *pt)
 }
 
 
-static int viacam_mmap(struct file *filp, struct vm_area_struct *vma)
+static int viacam_mmap(struct file *filp, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	struct via_camera *cam = video_drvdata(filp);
 

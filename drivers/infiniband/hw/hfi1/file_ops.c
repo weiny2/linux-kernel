@@ -75,7 +75,8 @@ static int hfi1_file_open(struct inode *inode, struct file *fp);
 static int hfi1_file_close(struct inode *inode, struct file *fp);
 static ssize_t hfi1_write_iter(struct kiocb *kiocb, struct iov_iter *from);
 static unsigned int hfi1_poll(struct file *fp, struct poll_table_struct *pt);
-static int hfi1_file_mmap(struct file *fp, struct vm_area_struct *vma);
+static int hfi1_file_mmap(struct file *fp, struct vm_area_struct *vma,
+			  unsigned long map_flags);
 
 static u64 kvirt_to_phys(void *addr);
 static int assign_ctxt(struct hfi1_filedata *fd, struct hfi1_user_info *uinfo);
@@ -454,7 +455,8 @@ static ssize_t hfi1_write_iter(struct kiocb *kiocb, struct iov_iter *from)
 	return reqs;
 }
 
-static int hfi1_file_mmap(struct file *fp, struct vm_area_struct *vma)
+static int hfi1_file_mmap(struct file *fp, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	struct hfi1_filedata *fd = fp->private_data;
 	struct hfi1_ctxtdata *uctxt = fd->uctxt;

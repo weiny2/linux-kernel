@@ -562,7 +562,8 @@ int agp_remove_client(pid_t id)
 
 /* File Operations */
 
-static int agp_mmap(struct file *file, struct vm_area_struct *vma)
+static int agp_mmap(struct file *file, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	unsigned int size, current_size;
 	unsigned long offset;

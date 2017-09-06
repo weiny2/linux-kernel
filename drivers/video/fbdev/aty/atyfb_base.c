@@ -236,7 +236,8 @@ static int atyfb_pan_display(struct fb_var_screeninfo *var,
 static int atyfb_blank(int blank, struct fb_info *info);
 static int atyfb_ioctl(struct fb_info *info, u_int cmd, u_long arg);
 #ifdef __sparc__
-static int atyfb_mmap(struct fb_info *info, struct vm_area_struct *vma);
+static int atyfb_mmap(struct fb_info *info, struct vm_area_struct *vma,
+		      unsigned long map_flags);
 #endif
 static int atyfb_sync(struct fb_info *info);
 
@@ -1928,7 +1929,8 @@ static int atyfb_sync(struct fb_info *info)
 }
 
 #ifdef __sparc__
-static int atyfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int atyfb_mmap(struct fb_info *info, struct vm_area_struct *vma,
+		      unsigned long map_flags)
 {
 	struct atyfb_par *par = (struct atyfb_par *) info->par;
 	unsigned int size, page, map_size = 0;

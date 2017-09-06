@@ -2044,7 +2044,8 @@ static unsigned int cx231xx_v4l2_poll(struct file *filp, poll_table *wait)
 /*
  * cx231xx_v4l2_mmap()
  */
-static int cx231xx_v4l2_mmap(struct file *filp, struct vm_area_struct *vma)
+static int cx231xx_v4l2_mmap(struct file *filp, struct vm_area_struct *vma,
+			     unsigned long map_flags)
 {
 	struct cx231xx_fh *fh = filp->private_data;
 	struct cx231xx *dev = fh->dev;

@@ -652,7 +652,8 @@ unsigned int cx18_v4l2_enc_poll(struct file *filp, poll_table *wait)
 	return res;
 }
 
-int cx18_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
+int cx18_v4l2_mmap(struct file *file, struct vm_area_struct *vma,
+		   unsigned long map_flags)
 {
 	struct cx18_open_id *id = file->private_data;
 	struct cx18 *cx = id->cx;

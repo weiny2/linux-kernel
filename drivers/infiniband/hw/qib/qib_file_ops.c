@@ -59,7 +59,7 @@ static int qib_close(struct inode *, struct file *);
 static ssize_t qib_write(struct file *, const char __user *, size_t, loff_t *);
 static ssize_t qib_write_iter(struct kiocb *, struct iov_iter *);
 static unsigned int qib_poll(struct file *, struct poll_table_struct *);
-static int qib_mmapf(struct file *, struct vm_area_struct *);
+static int qib_mmapf(struct file *, struct vm_area_struct *, unsigned long);
 
 /*
  * This is really, really weird shit - write() and writev() here
@@ -993,7 +993,8 @@ bail:
  * buffers in the chip.  We have the open and close entries so we can bump
  * the ref count and keep the driver from being unloaded while still mapped.
  */
-static int qib_mmapf(struct file *fp, struct vm_area_struct *vma)
+static int qib_mmapf(struct file *fp, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	struct qib_ctxtdata *rcd;
 	struct qib_devdata *dd;

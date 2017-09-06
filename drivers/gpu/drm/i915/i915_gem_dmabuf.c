@@ -154,7 +154,9 @@ static void i915_gem_dmabuf_kunmap(struct dma_buf *dma_buf, unsigned long page_n
 	i915_gem_object_unpin_pages(obj);
 }
 
-static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
+static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf,
+				struct vm_area_struct *vma,
+				unsigned long map_flags)
 {
 	struct drm_i915_gem_object *obj = dma_buf_to_obj(dma_buf);
 	int ret;
@@ -165,7 +167,7 @@ static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *
 	if (!obj->base.filp)
 		return -ENODEV;
 
-	ret = call_mmap(obj->base.filp, vma);
+	ret = call_mmap(obj->base.filp, vma, map_flags);
 	if (ret)
 		return ret;
 

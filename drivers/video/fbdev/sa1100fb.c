@@ -559,7 +559,7 @@ static int sa1100fb_blank(int blank, struct fb_info *info)
 }
 
 static int sa1100fb_mmap(struct fb_info *info,
-			 struct vm_area_struct *vma)
+			 struct vm_area_struct *vma, unsigned long map_flags)
 {
 	struct sa1100fb_info *fbi =
 		container_of(info, struct sa1100fb_info, fb);

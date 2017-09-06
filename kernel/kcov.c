@@ -132,7 +132,8 @@ void kcov_task_exit(struct task_struct *t)
 	kcov_put(kcov);
 }
 
-static int kcov_mmap(struct file *filep, struct vm_area_struct *vma)
+static int kcov_mmap(struct file *filep, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	int res = 0;
 	void *area;

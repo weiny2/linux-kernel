@@ -1000,7 +1000,7 @@ static int gbefb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 }
 
 static int gbefb_mmap(struct fb_info *info,
-			struct vm_area_struct *vma)
+			struct vm_area_struct *vma, unsigned long map_flags)
 {
 	unsigned long size = vma->vm_end - vma->vm_start;
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;

@@ -502,7 +502,8 @@ static const struct vm_operations_struct gntalloc_vmops = {
 	.close = gntalloc_vma_close,
 };
 
-static int gntalloc_mmap(struct file *filp, struct vm_area_struct *vma)
+static int gntalloc_mmap(struct file *filp, struct vm_area_struct *vma,
+			 unsigned long map_flags)
 {
 	struct gntalloc_file_private_data *priv = filp->private_data;
 	struct gntalloc_vma_private_data *vm_priv;

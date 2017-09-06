@@ -1389,7 +1389,8 @@ void amdgpu_ttm_set_active_vram_size(struct amdgpu_device *adev, u64 size)
 	man->size = size >> PAGE_SHIFT;
 }
 
-int amdgpu_mmap(struct file *filp, struct vm_area_struct *vma)
+int amdgpu_mmap(struct file *filp, struct vm_area_struct *vma,
+		unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct amdgpu_device *adev;

@@ -1667,7 +1667,8 @@ static long fw_device_op_compat_ioctl(struct file *file,
 }
 #endif
 
-static int fw_device_op_mmap(struct file *file, struct vm_area_struct *vma)
+static int fw_device_op_mmap(struct file *file, struct vm_area_struct *vma,
+			     unsigned long map_flags)
 {
 	struct client *client = file->private_data;
 	unsigned long size;

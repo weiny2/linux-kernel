@@ -276,7 +276,7 @@ static int rockchip_drm_gem_object_mmap(struct drm_gem_object *obj,
 }
 
 int rockchip_gem_mmap_buf(struct drm_gem_object *obj,
-			  struct vm_area_struct *vma)
+			  struct vm_area_struct *vma, unsigned long map_flags)
 {
 	int ret;
 
@@ -288,12 +288,13 @@ int rockchip_gem_mmap_buf(struct drm_gem_object *obj,
 }
 
 /* drm driver mmap file operations */
-int rockchip_gem_mmap(struct file *filp, struct vm_area_struct *vma)
+int rockchip_gem_mmap(struct file *filp, struct vm_area_struct *vma,
+		      unsigned long map_flags)
 {
 	struct drm_gem_object *obj;
 	int ret;
 
-	ret = drm_gem_mmap(filp, vma);
+	ret = drm_gem_mmap(filp, vma, map_flags);
 	if (ret)
 		return ret;
 

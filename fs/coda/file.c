@@ -61,7 +61,8 @@ coda_file_write_iter(struct kiocb *iocb, struct iov_iter *to)
 }
 
 static int
-coda_file_mmap(struct file *coda_file, struct vm_area_struct *vma)
+coda_file_mmap(struct file *coda_file, struct vm_area_struct *vma,
+	       unsigned long map_flags)
 {
 	struct coda_file_info *cfi;
 	struct coda_inode_info *cii;
@@ -96,7 +97,7 @@ coda_file_mmap(struct file *coda_file, struct vm_area_struct *vma)
 	cfi->cfi_mapcount++;
 	spin_unlock(&cii->c_lock);
 
-	return call_mmap(host_file, vma);
+	return call_mmap(host_file, vma, map_flags);
 }
 
 int coda_open(struct inode *coda_inode, struct file *coda_file)

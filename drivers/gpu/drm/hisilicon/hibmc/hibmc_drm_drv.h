@@ -107,7 +107,8 @@ int hibmc_dumb_create(struct drm_file *file, struct drm_device *dev,
 		      struct drm_mode_create_dumb *args);
 int hibmc_dumb_mmap_offset(struct drm_file *file, struct drm_device *dev,
 			   u32 handle, u64 *offset);
-int hibmc_mmap(struct file *filp, struct vm_area_struct *vma);
+int hibmc_mmap(struct file *filp, struct vm_area_struct *vma,
+	       unsigned long map_flags);
 
 extern const struct drm_mode_config_funcs hibmc_mode_funcs;
 

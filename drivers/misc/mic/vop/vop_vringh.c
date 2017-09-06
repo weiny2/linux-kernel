@@ -1083,7 +1083,8 @@ vop_query_offset(struct vop_vdev *vdev, unsigned long offset,
 /*
  * Maps the device page and virtio rings to user space for readonly access.
  */
-static int vop_mmap(struct file *f, struct vm_area_struct *vma)
+static int vop_mmap(struct file *f, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct vop_vdev *vdev = f->private_data;
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;

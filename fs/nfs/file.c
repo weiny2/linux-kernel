@@ -176,7 +176,8 @@ nfs_file_read(struct kiocb *iocb, struct iov_iter *to)
 EXPORT_SYMBOL_GPL(nfs_file_read);
 
 int
-nfs_file_mmap(struct file * file, struct vm_area_struct * vma)
+nfs_file_mmap(struct file * file, struct vm_area_struct * vma,
+	      unsigned long map_flags)
 {
 	struct inode *inode = file_inode(file);
 	int	status;
@@ -186,7 +187,7 @@ nfs_file_mmap(struct file * file, struct vm_area_struct * vma)
 	/* Note: generic_file_mmap() returns ENOSYS on nommu systems
 	 *       so we call that before revalidating the mapping
 	 */
-	status = generic_file_mmap(file, vma);
+	status = generic_file_mmap(file, vma, map_flags);
 	if (!status) {
 		vma->vm_ops = &nfs_file_vm_ops;
 		status = nfs_revalidate_mapping(inode, file->f_mapping);

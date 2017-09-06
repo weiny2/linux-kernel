@@ -3498,7 +3498,8 @@ int snd_pcm_mmap_data(struct snd_pcm_substream *substream, struct file *file,
 }
 EXPORT_SYMBOL(snd_pcm_mmap_data);
 
-static int snd_pcm_mmap(struct file *file, struct vm_area_struct *area)
+static int snd_pcm_mmap(struct file *file, struct vm_area_struct *area,
+			unsigned long map_flags)
 {
 	struct snd_pcm_file * pcm_file;
 	struct snd_pcm_substream *substream;	

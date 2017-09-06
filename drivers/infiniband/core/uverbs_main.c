@@ -799,7 +799,8 @@ out:
 	return ret;
 }
 
-static int ib_uverbs_mmap(struct file *filp, struct vm_area_struct *vma)
+static int ib_uverbs_mmap(struct file *filp, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	struct ib_uverbs_file *file = filp->private_data;
 	struct ib_device *ib_dev;

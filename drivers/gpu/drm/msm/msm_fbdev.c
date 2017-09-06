@@ -23,7 +23,8 @@
 
 extern int msm_gem_mmap_obj(struct drm_gem_object *obj,
 					struct vm_area_struct *vma);
-static int msm_fbdev_mmap(struct fb_info *info, struct vm_area_struct *vma);
+static int msm_fbdev_mmap(struct fb_info *info, struct vm_area_struct *vma,
+			  unsigned long map_flags);
 
 /*
  * fbdev funcs, to implement legacy fbdev interface on top of drm driver
@@ -51,7 +52,8 @@ static struct fb_ops msm_fb_ops = {
 	.fb_mmap = msm_fbdev_mmap,
 };
 
-static int msm_fbdev_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int msm_fbdev_mmap(struct fb_info *info, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	struct drm_fb_helper *helper = (struct drm_fb_helper *)info->par;
 	struct msm_fbdev *fbdev = to_msm_fbdev(helper);

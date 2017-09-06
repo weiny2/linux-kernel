@@ -379,7 +379,8 @@ static __init int hpet_mmap_enable(char *str)
 }
 __setup("hpet_mmap", hpet_mmap_enable);
 
-static int hpet_mmap(struct file *file, struct vm_area_struct *vma)
+static int hpet_mmap(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	struct hpet_dev *devp;
 	unsigned long addr;
@@ -397,7 +398,8 @@ static int hpet_mmap(struct file *file, struct vm_area_struct *vma)
 	return vm_iomap_memory(vma, addr, PAGE_SIZE);
 }
 #else
-static int hpet_mmap(struct file *file, struct vm_area_struct *vma)
+static int hpet_mmap(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	return -ENOSYS;
 }

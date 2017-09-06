@@ -162,7 +162,8 @@ static const struct address_space_operations fb_deferred_io_aops = {
 	.set_page_dirty = fb_deferred_io_set_page_dirty,
 };
 
-int fb_deferred_io_mmap(struct fb_info *info, struct vm_area_struct *vma)
+int fb_deferred_io_mmap(struct fb_info *info, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	vma->vm_ops = &fb_deferred_io_vm_ops;
 	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;

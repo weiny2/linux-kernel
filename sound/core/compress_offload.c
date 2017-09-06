@@ -391,7 +391,8 @@ out:
 	return retval;
 }
 
-static int snd_compr_mmap(struct file *f, struct vm_area_struct *vma)
+static int snd_compr_mmap(struct file *f, struct vm_area_struct *vma,
+			  unsigned long map_flags)
 {
 	return -ENXIO;
 }

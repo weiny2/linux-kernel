@@ -998,7 +998,8 @@ static int vmlfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	return 0;
 }
 
-static int vmlfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int vmlfb_mmap(struct fb_info *info, struct vm_area_struct *vma,
+		      unsigned long map_flags)
 {
 	struct vml_info *vinfo = container_of(info, struct vml_info, info);
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;

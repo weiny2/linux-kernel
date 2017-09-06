@@ -94,7 +94,8 @@ static int mc68x328fb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			 u_int transp, struct fb_info *info);
 static int mc68x328fb_pan_display(struct fb_var_screeninfo *var,
 			   struct fb_info *info);
-static int mc68x328fb_mmap(struct fb_info *info, struct vm_area_struct *vma);
+static int mc68x328fb_mmap(struct fb_info *info, struct vm_area_struct *vma,
+			   unsigned long map_flags);
 
 static struct fb_ops mc68x328fb_ops = {
 	.fb_check_var	= mc68x328fb_check_var,
@@ -389,7 +390,8 @@ static int mc68x328fb_pan_display(struct fb_var_screeninfo *var,
      *  Most drivers don't need their own mmap function 
      */
 
-static int mc68x328fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int mc68x328fb_mmap(struct fb_info *info, struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 #ifndef MMU
 	/* this is uClinux (no MMU) specific code */

@@ -219,7 +219,7 @@ static void iga_blank_border(struct iga_par *par)
 
 #ifdef CONFIG_SPARC
 static int igafb_mmap(struct fb_info *info,
-		      struct vm_area_struct *vma)
+		      struct vm_area_struct *vma, unsigned long map_flags)
 {
 	struct iga_par *par = (struct iga_par *)info->par;
 	unsigned int size, page, map_size = 0;

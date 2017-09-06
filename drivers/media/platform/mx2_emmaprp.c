@@ -851,7 +851,8 @@ static unsigned int emmaprp_poll(struct file *file,
 	return res;
 }
 
-static int emmaprp_mmap(struct file *file, struct vm_area_struct *vma)
+static int emmaprp_mmap(struct file *file, struct vm_area_struct *vma,
+			unsigned long map_flags)
 {
 	struct emmaprp_dev *pcdev = video_drvdata(file);
 	struct emmaprp_ctx *ctx = file->private_data;

@@ -287,19 +287,22 @@ mspec_mmap(struct file *file, struct vm_area_struct *vma,
 }
 
 static int
-fetchop_mmap(struct file *file, struct vm_area_struct *vma)
+fetchop_mmap(struct file *file, struct vm_area_struct *vma,
+	     unsigned long map_flags)
 {
 	return mspec_mmap(file, vma, MSPEC_FETCHOP);
 }
 
 static int
-cached_mmap(struct file *file, struct vm_area_struct *vma)
+cached_mmap(struct file *file, struct vm_area_struct *vma,
+	    unsigned long map_flags)
 {
 	return mspec_mmap(file, vma, MSPEC_CACHED);
 }
 
 static int
-uncached_mmap(struct file *file, struct vm_area_struct *vma)
+uncached_mmap(struct file *file, struct vm_area_struct *vma,
+	      unsigned long map_flags)
 {
 	return mspec_mmap(file, vma, MSPEC_UNCACHED);
 }

@@ -432,7 +432,8 @@ static const struct vm_operations_struct dax_vm_ops = {
 	.huge_fault = dev_dax_huge_fault,
 };
 
-static int dax_mmap(struct file *filp, struct vm_area_struct *vma)
+static int dax_mmap(struct file *filp, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct dev_dax *dev_dax = filp->private_data;
 	int rc, id;

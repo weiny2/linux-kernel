@@ -81,7 +81,9 @@ static int dma_buf_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int dma_buf_mmap_internal(struct file *file, struct vm_area_struct *vma)
+static int dma_buf_mmap_internal(struct file *file,
+				 struct vm_area_struct *vma,
+				 unsigned long map_flags)
 {
 	struct dma_buf *dmabuf;
 
@@ -95,7 +97,7 @@ static int dma_buf_mmap_internal(struct file *file, struct vm_area_struct *vma)
 	    dmabuf->size >> PAGE_SHIFT)
 		return -EINVAL;
 
-	return dmabuf->ops->mmap(dmabuf, vma);
+	return dmabuf->ops->mmap(dmabuf, vma, map_flags);
 }
 
 static loff_t dma_buf_llseek(struct file *file, loff_t offset, int whence)
@@ -936,6 +938,7 @@ EXPORT_SYMBOL_GPL(dma_buf_kunmap);
  * @vma:	[in]	vma for the mmap
  * @pgoff:	[in]	offset in pages where this mmap should start within the
  *			dma-buf buffer.
+ * @map_flags:	[in]	flags that were passed to mmap(2)
  *
  * This function adjusts the passed in vma so that it points at the file of the
  * dma_buf operation. It also adjusts the starting pgoff and does bounds
@@ -945,7 +948,7 @@ EXPORT_SYMBOL_GPL(dma_buf_kunmap);
  * Can return negative error values, returns 0 on success.
  */
 int dma_buf_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma,
-		 unsigned long pgoff)
+		 unsigned long pgoff, unsigned long map_flags)
 {
 	struct file *oldfile;
 	int ret;
@@ -968,7 +971,7 @@ int dma_buf_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma,
 	vma->vm_file = dmabuf->file;
 	vma->vm_pgoff = pgoff;
 
-	ret = dmabuf->ops->mmap(dmabuf, vma);
+	ret = dmabuf->ops->mmap(dmabuf, vma, map_flags);
 	if (ret) {
 		/* restore old parameters on failure */
 		vma->vm_file = oldfile;

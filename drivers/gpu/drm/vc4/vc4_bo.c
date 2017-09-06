@@ -489,13 +489,14 @@ vc4_prime_export(struct drm_device *dev, struct drm_gem_object *obj, int flags)
 	return drm_gem_prime_export(dev, obj, flags);
 }
 
-int vc4_mmap(struct file *filp, struct vm_area_struct *vma)
+int vc4_mmap(struct file *filp, struct vm_area_struct *vma,
+	     unsigned long map_flags)
 {
 	struct drm_gem_object *gem_obj;
 	struct vc4_bo *bo;
 	int ret;
 
-	ret = drm_gem_mmap(filp, vma);
+	ret = drm_gem_mmap(filp, vma, map_flags);
 	if (ret)
 		return ret;
 
@@ -523,7 +524,8 @@ int vc4_mmap(struct file *filp, struct vm_area_struct *vma)
 	return ret;
 }
 
-int vc4_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+int vc4_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma,
+		   unsigned long map_flags)
 {
 	struct vc4_bo *bo = to_vc4_bo(obj);
 
@@ -532,7 +534,7 @@ int vc4_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
 		return -EINVAL;
 	}
 
-	return drm_gem_cma_prime_mmap(obj, vma);
+	return drm_gem_cma_prime_mmap(obj, vma, map_flags);
 }
 
 void *vc4_prime_vmap(struct drm_gem_object *obj)

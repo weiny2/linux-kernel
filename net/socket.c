@@ -115,7 +115,8 @@ unsigned int sysctl_net_busy_poll __read_mostly;
 
 static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to);
 static ssize_t sock_write_iter(struct kiocb *iocb, struct iov_iter *from);
-static int sock_mmap(struct file *file, struct vm_area_struct *vma);
+static int sock_mmap(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags);
 
 static int sock_close(struct inode *inode, struct file *file);
 static unsigned int sock_poll(struct file *file,
@@ -1114,7 +1115,8 @@ static unsigned int sock_poll(struct file *file, poll_table *wait)
 	return busy_flag | sock->ops->poll(file, sock, wait);
 }
 
-static int sock_mmap(struct file *file, struct vm_area_struct *vma)
+static int sock_mmap(struct file *file, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	struct socket *sock = file->private_data;
 

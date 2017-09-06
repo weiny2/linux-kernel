@@ -215,7 +215,8 @@ static const struct vm_operations_struct usbdev_vm_ops = {
 	.close = usbdev_vm_close
 };
 
-static int usbdev_mmap(struct file *file, struct vm_area_struct *vma)
+static int usbdev_mmap(struct file *file, struct vm_area_struct *vma,
+		       unsigned long map_flags)
 {
 	struct usb_memory *usbm = NULL;
 	struct usb_dev_state *ps = file->private_data;

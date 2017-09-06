@@ -347,7 +347,7 @@ static void *vb2_dc_dmabuf_ops_vmap(struct dma_buf *dbuf)
 }
 
 static int vb2_dc_dmabuf_ops_mmap(struct dma_buf *dbuf,
-	struct vm_area_struct *vma)
+	struct vm_area_struct *vma, unsigned long map_flags)
 {
 	return vb2_dc_mmap(dbuf->priv, vma);
 }

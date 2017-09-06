@@ -129,7 +129,8 @@ static int virtio_gpu_ttm_fault(struct vm_fault *vmf)
 }
 #endif
 
-int virtio_gpu_mmap(struct file *filp, struct vm_area_struct *vma)
+int virtio_gpu_mmap(struct file *filp, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct virtio_gpu_device *vgdev;

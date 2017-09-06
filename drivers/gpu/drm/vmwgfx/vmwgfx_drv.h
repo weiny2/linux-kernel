@@ -748,7 +748,8 @@ extern int vmw_fifo_flush(struct vmw_private *dev_priv,
 
 extern int vmw_ttm_global_init(struct vmw_private *dev_priv);
 extern void vmw_ttm_global_release(struct vmw_private *dev_priv);
-extern int vmw_mmap(struct file *filp, struct vm_area_struct *vma);
+extern int vmw_mmap(struct file *filp, struct vm_area_struct *vma,
+		    unsigned long map_flags);
 
 /**
  * TTM buffer object driver - vmwgfx_buffer.c

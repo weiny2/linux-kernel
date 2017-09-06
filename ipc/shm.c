@@ -413,7 +413,8 @@ static struct mempolicy *shm_get_policy(struct vm_area_struct *vma,
 }
 #endif
 
-static int shm_mmap(struct file *file, struct vm_area_struct *vma)
+static int shm_mmap(struct file *file, struct vm_area_struct *vma,
+		    unsigned long map_flags)
 {
 	struct shm_file_data *sfd = shm_file_data(file);
 	int ret;
@@ -426,7 +427,7 @@ static int shm_mmap(struct file *file, struct vm_area_struct *vma)
 	if (ret)
 		return ret;
 
-	ret = call_mmap(sfd->file, vma);
+	ret = call_mmap(sfd->file, vma, map_flags);
 	if (ret) {
 		shm_close(vma);
 		return ret;

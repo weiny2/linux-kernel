@@ -781,7 +781,8 @@ static ssize_t soc_camera_read(struct file *file, char __user *buf,
 	return -EINVAL;
 }
 
-static int soc_camera_mmap(struct file *file, struct vm_area_struct *vma)
+static int soc_camera_mmap(struct file *file, struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	struct soc_camera_device *icd = file->private_data;
 	struct soc_camera_host *ici = to_soc_camera_host(icd->parent);

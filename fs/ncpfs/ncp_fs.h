@@ -92,7 +92,7 @@ extern const struct file_operations ncp_file_operations;
 int ncp_make_open(struct inode *, int);
 
 /* linux/fs/ncpfs/mmap.c */
-int ncp_mmap(struct file *, struct vm_area_struct *);
+int ncp_mmap(struct file *, struct vm_area_struct *, unsigned long);
 
 /* linux/fs/ncpfs/ncplib_kernel.c */
 int ncp_make_closed(struct inode *);

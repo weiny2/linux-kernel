@@ -74,7 +74,8 @@ int drm_gem_cma_dumb_create(struct drm_file *file_priv,
 			    struct drm_mode_create_dumb *args);
 
 /* set vm_flags and we can change the VM attribute to other one at here */
-int drm_gem_cma_mmap(struct file *filp, struct vm_area_struct *vma);
+int drm_gem_cma_mmap(struct file *filp, struct vm_area_struct *vma,
+		     unsigned long map_flags);
 
 /* allocate physical memory */
 struct drm_gem_cma_object *drm_gem_cma_create(struct drm_device *drm,
@@ -100,7 +101,8 @@ drm_gem_cma_prime_import_sg_table(struct drm_device *dev,
 				  struct dma_buf_attachment *attach,
 				  struct sg_table *sgt);
 int drm_gem_cma_prime_mmap(struct drm_gem_object *obj,
-			   struct vm_area_struct *vma);
+			   struct vm_area_struct *vma,
+			   unsigned long map_flags);
 void *drm_gem_cma_prime_vmap(struct drm_gem_object *obj);
 void drm_gem_cma_prime_vunmap(struct drm_gem_object *obj, void *vaddr);
 

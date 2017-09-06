@@ -2651,7 +2651,7 @@ static const struct vm_operations_struct zoran_vm_ops = {
 
 static int
 zoran_mmap (struct file           *file,
-	    struct vm_area_struct *vma)
+	    struct vm_area_struct *vma, unsigned long map_flags)
 {
 	struct zoran_fh *fh = file->private_data;
 	struct zoran *zr = fh->zr;

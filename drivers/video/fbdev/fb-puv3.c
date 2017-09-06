@@ -640,7 +640,7 @@ static int unifb_pan_display(struct fb_var_screeninfo *var,
 }
 
 int unifb_mmap(struct fb_info *info,
-		    struct vm_area_struct *vma)
+		    struct vm_area_struct *vma, unsigned long map_flags)
 {
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 

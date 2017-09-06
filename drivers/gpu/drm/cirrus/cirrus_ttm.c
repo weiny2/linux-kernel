@@ -405,7 +405,8 @@ int cirrus_bo_push_sysram(struct cirrus_bo *bo)
 	return 0;
 }
 
-int cirrus_mmap(struct file *filp, struct vm_area_struct *vma)
+int cirrus_mmap(struct file *filp, struct vm_area_struct *vma,
+		unsigned long map_flags)
 {
 	struct drm_file *file_priv;
 	struct cirrus_device *cirrus;

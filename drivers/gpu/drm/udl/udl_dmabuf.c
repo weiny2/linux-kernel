@@ -179,7 +179,8 @@ static void udl_dmabuf_kunmap_atomic(struct dma_buf *dma_buf,
 }
 
 static int udl_dmabuf_mmap(struct dma_buf *dma_buf,
-			   struct vm_area_struct *vma)
+			   struct vm_area_struct *vma,
+			   unsigned long map_flags)
 {
 	/* TODO */
 

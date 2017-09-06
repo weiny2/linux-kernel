@@ -1413,7 +1413,8 @@ static ssize_t uvc_v4l2_read(struct file *file, char __user *data,
 	return -EINVAL;
 }
 
-static int uvc_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
+static int uvc_v4l2_mmap(struct file *file, struct vm_area_struct *vma,
+			 unsigned long map_flags)
 {
 	struct uvc_fh *handle = file->private_data;
 	struct uvc_streaming *stream = handle->stream;

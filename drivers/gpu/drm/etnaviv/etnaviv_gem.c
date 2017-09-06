@@ -132,7 +132,7 @@ void etnaviv_gem_put_pages(struct etnaviv_gem_object *etnaviv_obj)
 }
 
 static int etnaviv_gem_mmap_obj(struct etnaviv_gem_object *etnaviv_obj,
-		struct vm_area_struct *vma)
+		struct vm_area_struct *vma, unsigned long map_flags)
 {
 	pgprot_t vm_page_prot;
 
@@ -162,19 +162,20 @@ static int etnaviv_gem_mmap_obj(struct etnaviv_gem_object *etnaviv_obj,
 	return 0;
 }
 
-int etnaviv_gem_mmap(struct file *filp, struct vm_area_struct *vma)
+int etnaviv_gem_mmap(struct file *filp, struct vm_area_struct *vma,
+		     unsigned long map_flags)
 {
 	struct etnaviv_gem_object *obj;
 	int ret;
 
-	ret = drm_gem_mmap(filp, vma);
+	ret = drm_gem_mmap(filp, vma, map_flags);
 	if (ret) {
 		DBG("mmap failed: %d", ret);
 		return ret;
 	}
 
 	obj = to_etnaviv_bo(vma->vm_private_data);
-	return obj->ops->mmap(obj, vma);
+	return obj->ops->mmap(obj, vma, map_flags);
 }
 
 int etnaviv_gem_fault(struct vm_fault *vmf)
@@ -890,7 +891,7 @@ static void etnaviv_gem_userptr_release(struct etnaviv_gem_object *etnaviv_obj)
 }
 
 static int etnaviv_gem_userptr_mmap_obj(struct etnaviv_gem_object *etnaviv_obj,
-		struct vm_area_struct *vma)
+		struct vm_area_struct *vma, unsigned long map_flags)
 {
 	return -EINVAL;
 }

@@ -2356,7 +2356,8 @@ static const struct vm_operations_struct kvm_vcpu_vm_ops = {
 	.fault = kvm_vcpu_fault,
 };
 
-static int kvm_vcpu_mmap(struct file *file, struct vm_area_struct *vma)
+static int kvm_vcpu_mmap(struct file *file, struct vm_area_struct *vma,
+			 unsigned long map_flags)
 {
 	vma->vm_ops = &kvm_vcpu_vm_ops;
 	return 0;

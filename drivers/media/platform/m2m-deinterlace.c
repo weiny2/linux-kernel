@@ -963,7 +963,8 @@ static unsigned int deinterlace_poll(struct file *file,
 	return ret;
 }
 
-static int deinterlace_mmap(struct file *file, struct vm_area_struct *vma)
+static int deinterlace_mmap(struct file *file, struct vm_area_struct *vma,
+			    unsigned long map_flags)
 {
 	struct deinterlace_ctx *ctx = file->private_data;
 
