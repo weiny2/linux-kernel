@@ -101,6 +101,8 @@
 #define HFI2_QPN_KDETH_BASE	BIT(23) /* Gen1 default */
 #define HFI2_QPN_KDETH_SIZE	0xFFFF
 #define HFI2_QPN_MAP_MAX	BIT(8)	/* 8-bits to map to Recv Context */
+#define HFI2_QPN_QOS_SHIFT	1
+#define HFI2_MAX_QPS		16384	/* maximum SW will allocate */
 
 #define HFI2_RHF_RCV_TYPES      8
 

@@ -102,7 +102,7 @@ unsigned int hfi2_max_cqs = 0x1FFFF;
 /* Maximum number of QP WRs to support */
 unsigned int hfi2_max_qp_wrs = 0x3FFF;
 /* Maximum number of QPs to support */
-unsigned int hfi2_max_qps = 16384;
+unsigned int hfi2_max_qps = HFI2_MAX_QPS;
 /* Maximum number of SGEs to support */
 unsigned int hfi2_max_sges = 0x60;
 /* Maximum number of multicast groups to support */
@@ -525,7 +525,7 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibd->rdi.dparms.qp_table_size = hfi2_qp_table_size;
 	ibd->rdi.dparms.qpn_start = 0;
 	ibd->rdi.dparms.qpn_inc = 1;
-	ibd->rdi.dparms.qos_shift = 1;
+	ibd->rdi.dparms.qos_shift = HFI2_QPN_QOS_SHIFT;
 	ibd->rdi.dparms.qpn_res_start = HFI2_QPN_KDETH_BASE;
 	ibd->rdi.dparms.qpn_res_end = ibd->rdi.dparms.qpn_res_start +
 				      HFI2_QPN_KDETH_SIZE;

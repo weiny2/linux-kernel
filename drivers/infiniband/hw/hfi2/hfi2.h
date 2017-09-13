@@ -1012,6 +1012,10 @@ struct hfi_devdata {
 	/* PID Wait State */
 	struct idr pid_wait;
 
+	/* QP State */
+	void *qp_state_base;
+	u32 max_qp;
+
 	/* iommu system pasid */
 	u32 system_pasid;
 
