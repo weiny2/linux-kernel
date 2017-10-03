@@ -1970,6 +1970,8 @@ config X86_INTEL_SHADOW_STACK_USER
 	select X86_INTEL_CET
 	select ARCH_HAS_COW_MAPPING
 	select ARCH_HAS_SHSTK
+	select ARCH_USE_GNU_PROPERTY
+	select ARCH_BINFMT_ELF_STATE
 	---help---
 	  Shadow Stacks provides protection against program stack
 	  corruption.  It's a hardware feature.  This only matters
