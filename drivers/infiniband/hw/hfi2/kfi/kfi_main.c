@@ -53,8 +53,8 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include "../core/hfi_kclient.h"
+#include "../core/hfi_ct.h"
 #include "kfi_pt.h"
-#include "kfi_ct.h"
 #include "kfi_tx.h"
 
 static void opa_kfi_probe(struct ib_device *ibdev);

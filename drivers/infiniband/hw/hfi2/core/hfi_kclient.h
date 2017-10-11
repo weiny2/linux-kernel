@@ -61,6 +61,22 @@
 #include "../hfi2.h"
 
 /*
+ * Macros to extract and deposit from/to structures and bitfields
+ * from the hardware defined structures
+ */
+static inline
+u64 _hfi_extract(u64 val, const u64 offset, const u64 mask)
+{
+	return ((val & mask) >> offset);
+}
+
+static inline
+u64 _hfi_deposit(u64 reg, u64 src, const u64 offset, const u64 mask)
+{
+	return ((reg & ~mask) | ((src << offset) & mask));
+}
+
+/*
  * An hfi_eq pointer can never be NULL (we don't want to NULL-check
  * everywhere), so we create a dummy value we can pass into API
  * functions in cases where we didn't ask for and don't want any

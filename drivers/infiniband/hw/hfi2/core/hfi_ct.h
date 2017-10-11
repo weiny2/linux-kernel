@@ -47,10 +47,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Intel(R) Omni-Path Gen2 CT routines for KFI
+ * Intel(R) Omni-Path Gen2 CT routines
  */
-#ifndef _KFI_CT_H_
-#define _KFI_CT_H_
+#ifndef _HFI_CT_H_
+#define _HFI_CT_H_
 
 static inline
 u64 hfi_ct_get_success(struct hfi_ctx *ctx, u16 ct_handle)
