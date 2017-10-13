@@ -1540,6 +1540,7 @@ int rvt_post_recv(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 		  struct ib_recv_wr **bad_wr)
 {
 	struct rvt_qp *qp = ibqp_to_rvtqp(ibqp);
+	struct rvt_dev_info *rdi = ib_to_rvt(ibqp->device);
 	struct rvt_rwq *wq = qp->r_rq.wq;
 	unsigned long flags;
 	int qp_err_flush = (ib_rvt_state_ops[qp->state] & RVT_FLUSH_RECV) &&
@@ -1550,6 +1551,9 @@ int rvt_post_recv(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 		*bad_wr = wr;
 		return -EINVAL;
 	}
+
+	if (qp->r_rq.hw_rq && rdi->driver_f.native_recv)
+		return rdi->driver_f.native_recv(qp, wr, bad_wr);
 
 	for (; wr; wr = wr->next) {
 		struct rvt_rwqe *wqe;
@@ -1899,6 +1903,12 @@ int rvt_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 	unsigned nreq = 0;
 	int err = 0;
 
+	/* We hold no locks, the callback can acquire rvt_qp locks if needed */
+	if (qp->r_rq.hw_rq && rdi->driver_f.native_send) {
+		err = rdi->driver_f.native_send(qp, wr, bad_wr);
+		goto bail;
+	}
+
 	spin_lock_irqsave(&qp->s_hlock, flags);
 
 	/*
@@ -1950,8 +1960,21 @@ int rvt_post_srq_recv(struct ib_srq *ibsrq, struct ib_recv_wr *wr,
 		      struct ib_recv_wr **bad_wr)
 {
 	struct rvt_srq *srq = ibsrq_to_rvtsrq(ibsrq);
+	struct rvt_dev_info *rdi = ib_to_rvt(ibsrq->device);
 	struct rvt_rwq *wq;
 	unsigned long flags;
+	int err;
+
+	/*
+	 * User can post to SRQ before QPs are attached, so we need
+	 * to always callback to driver if callback is defined.
+	 */
+	if (rdi->driver_f.native_srq_recv) {
+		err = rdi->driver_f.native_srq_recv(srq, wr, bad_wr);
+		if (err != -EACCES)
+			return err;
+		/* on EACCES only, we fall-through to rdmavt queuing below */
+	}
 
 	for (; wr; wr = wr->next) {
 		struct rvt_rwqe *wqe;

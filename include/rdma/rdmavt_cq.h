@@ -87,6 +87,8 @@ struct rvt_cq {
 	struct rvt_dev_info *rdi;
 	struct rvt_cq_wc *queue;
 	struct rvt_mmap_info *ip;
+	void *hw_cq;
+	u64 hw_disarmed;
 };
 
 static inline struct rvt_cq *ibcq_to_rvtcq(struct ib_cq *ibcq)

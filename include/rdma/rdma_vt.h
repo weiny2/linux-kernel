@@ -224,6 +224,18 @@ struct rvt_driver_provided {
 	 */
 	void (*do_send)(struct rvt_qp *qp);
 
+	/*
+	 * Following are callbacks used to swtich from the legacy SW path
+	 * to optimized path for device's native transport.
+	 * Both paths must be available to the driver, thus use of callbacks.
+	 */
+	int (*native_send)(struct rvt_qp *rvtqp, struct ib_send_wr *wr,
+			   struct ib_send_wr **bad_wr);
+	int (*native_recv)(struct rvt_qp *rvtqp, struct ib_recv_wr *wr,
+			   struct ib_recv_wr **bad_wr);
+	int (*native_srq_recv)(struct rvt_srq *rvtsrq, struct ib_recv_wr *wr,
+			       struct ib_recv_wr **bad_wr);
+
 	/* Passed to ib core registration. Callback to create syfs files */
 	int (*port_callback)(struct ib_device *, u8, struct kobject *);
 

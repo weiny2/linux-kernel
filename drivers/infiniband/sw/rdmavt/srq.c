@@ -99,6 +99,7 @@ struct ib_srq *rvt_create_srq(struct ib_pd *ibpd,
 	 */
 	srq->rq.size = srq_init_attr->attr.max_wr + 1;
 	srq->rq.max_sge = srq_init_attr->attr.max_sge;
+	srq->rq.hw_rq = NULL;
 	sz = sizeof(struct ib_sge) * srq->rq.max_sge +
 		sizeof(struct rvt_rwqe);
 	srq->rq.wq = udata ?

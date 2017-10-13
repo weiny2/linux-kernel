@@ -200,6 +200,7 @@ struct rvt_rwq {
 
 struct rvt_rq {
 	struct rvt_rwq *wq;
+	void *hw_rq;
 	u32 size;               /* size of RWQE array */
 	u8 max_sge;
 	/* protect changes in this struct */
