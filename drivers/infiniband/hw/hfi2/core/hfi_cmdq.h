@@ -319,10 +319,16 @@ struct hfi_rx_cq_trig {
 	union rx_cq_trig_flit1		flit1;
 };
 
+struct hfi_rx_cq_verbs {
+	union rx_cq_state_verbs_flit0	flit0;
+	union rx_cq_state_flit1		flit1;
+};
+
 union hfi_rx_cq_command {
 	struct hfi_rx_cq_list		list;
 	struct hfi_rx_cq_state		state;
 	struct hfi_rx_cq_trig		trig;
+	struct hfi_rx_cq_verbs		verbs;
 } __aligned(64);
 
 /* Format an RX CMDQ command for a 64B STATE UPDATE operation */

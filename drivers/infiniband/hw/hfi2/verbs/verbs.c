@@ -490,6 +490,21 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->alloc_hw_stats = hfi2_alloc_hw_stats;
 	ibdev->alloc_rdma_netdev = hfi2_vnic_alloc_rn;
 
+#ifdef CONFIG_HFI2_STLNP
+	if (enable_native_verbs) {
+		/*
+		 * rdmavt callbacks -
+		 * We cannot override the ib_device verb for these as we need
+		 * QP and CQ to support legacy mode by default.  If the QP or
+		 * CQ becomes enabled for native transport, then these rdmavt
+		 * callbacks are used.
+		 */
+		ibd->rdi.driver_f.native_send = hfi2_native_send;
+		ibd->rdi.driver_f.native_recv = hfi2_native_recv;
+		ibd->rdi.driver_f.native_srq_recv = hfi2_native_srq_recv;
+	}
+#endif
+
 	/* add optional sysfs files under /sys/class/infiniband/hfi2_0/ */
 	hfi2_verbs_register_sysfs(&ibdev->dev);
 

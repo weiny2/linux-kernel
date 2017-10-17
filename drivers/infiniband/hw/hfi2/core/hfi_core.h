@@ -91,6 +91,8 @@ typedef union host_rx_priority_me	hfi_me_t;
 typedef union host_rx_uh_rts_get_le	hfi_uh_t;
 
 struct hfi_devdata;
+struct hfi_ctx;
+struct hfi_cmdq;
 
 struct hfi_ks {
 	struct mutex lock;
@@ -100,15 +102,21 @@ struct hfi_ks {
 };
 
 /**
- * IB context allocated to IB core clients
+ * IB context allocated to IB core clients,
+ * HW resources assigned and shared across Native PDs
  * @ibuc: IB ucontext state
- * @ops: hfi2 ops table
+ * @ops: hfi2 ops table (temporary for KFI)
  * @priv: hfi2 private data
  * @vma_head: linked list head for vma's to zap on release
  * @vm_lock: mutex to update the list of vma's
  * @support_native: boolean if this context is using native transport
  * @lkey_only: boolean if this context has shared LKEY/RKEYs
  * @is_user: boolean if this a user-space context
+ * @num_ctx: number of associated hfi_ctx
+ * @hw_ctx: primary hfi_ctx
+ * @tx_cmdq: TX command queue
+ * @rx_cmdq: RX command queue
+ * @ctx_lock: lock for adding/removing resources
  * @rkey_ks: RKEYs stack
  * @lkey_ks: LKEYs stack
  * @mr: MR array for LKEYs
@@ -122,8 +130,13 @@ struct hfi_ibcontext {
 	bool supports_native;
 	bool lkey_only;
 	bool is_user;
-	struct hfi_ks rkey_ks;
-	struct hfi_ks lkey_ks;
+	u16 num_ctx;
+	struct hfi_ctx	*hw_ctx;
+	struct hfi_cmdq	*tx_cmdq;
+	struct hfi_cmdq	*rx_cmdq;
+	struct mutex	ctx_lock;
+	struct hfi_ks	rkey_ks;
+	struct hfi_ks	lkey_ks;
 	struct rvt_mregion **lkey_mr;
 };
 
@@ -219,6 +232,7 @@ struct hfi_eq {
  * @error: struct to report errors to user space
  * @ctx_rwsem: protect multiple threads of same context from attaching/freeing
  * resources concurrently
+ * @shr_me_ks: ME key stack for use with native Verbs provider
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
@@ -274,6 +288,7 @@ struct hfi_ctx {
 	struct hfi_ctx_error error;
 
 	struct rw_semaphore ctx_rwsem;
+	struct hfi_ks	*shr_me_ks;
 
 	struct ib_uobject *uobject;
 };

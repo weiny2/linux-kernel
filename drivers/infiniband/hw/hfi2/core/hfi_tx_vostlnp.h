@@ -156,7 +156,7 @@ int hfi_format_buff_rc_send(struct hfi_ctx *ctx, hfi_ni_t ni,
 	hfi_match_bits_t match_bits = (hfi_match_bits_t)imm;
 	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm,HFI_MTYPE_MR,sl,dst_qp);
 	return hfi_format_buff_vostlnp(ctx, ni, start, length,
-				       (hfi_tx_ctype_t)VERBS_RC, target_id,
+				       (hfi_tx_ctype_t)VoNP_RC, target_id,
 				       port, rc, sl, becn, pkey, slid_low,
 				       auth_idx, user_ptr, match_bits, hdr_data,
 				       md_options, eq_handle, ct_handle,
@@ -194,7 +194,7 @@ int hfi_format_buff_rc_rdma_atomic(struct hfi_ctx *ctx, hfi_ni_t ni,
 	cmd.ttype = BUFFERED;
 
 	_hfi_format_base_put_flit0(ctx, ni,
-				   &command->flit0, cmd, VERBS_RC, cmd_length,
+				   &command->flit0, cmd, VoNP_RC, cmd_length,
 				   target_id, port, 0 /*pt_index*/, rc, sl, becn,
 				   pkey, slid_low, auth_idx, user_ptr, (hfi_flag_t) 1 /*hd*/,
 				   PTL_E2E_ACK_REQ, md_options, eq_handle, ct_handle,
@@ -242,7 +242,7 @@ int hfi_format_buff_rc_rdma(struct hfi_ctx *ctx, hfi_ni_t ni,
 	hfi_match_bits_t match_bits = (hfi_match_bits_t)rkey;
 	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm,HFI_MTYPE_MR,sl,dst_qp);
 	return hfi_format_buff_vostlnp(ctx, ni, start, length,
-				       (hfi_tx_ctype_t)VERBS_RC, target_id,
+				       (hfi_tx_ctype_t)VoNP_RC, target_id,
 				       port, rc, sl, becn, pkey, slid_low,
 				       auth_idx, user_ptr, match_bits, hdr_data,
 				       md_options, eq_handle, ct_handle,
@@ -345,7 +345,7 @@ int hfi_format_pio_rc_send(struct hfi_ctx *ctx, hfi_ni_t ni,
 	hfi_match_bits_t match_bits = (hfi_match_bits_t)imm;
 	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm,HFI_MTYPE_MR,sl,dst_qp);
 	return hfi_format_pio_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VERBS_RC, target_id, port,
+				      (hfi_tx_ctype_t)VoNP_RC, target_id, port,
 				      rc, sl, becn, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,
@@ -376,7 +376,7 @@ int hfi_format_pio_rc_rdma(struct hfi_ctx *ctx, hfi_ni_t ni,
 	hfi_match_bits_t match_bits = (hfi_match_bits_t)rkey;
 	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm,HFI_MTYPE_MR,sl,dst_qp);
 	return hfi_format_pio_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VERBS_RC, target_id, port,
+				      (hfi_tx_ctype_t)VoNP_RC, target_id, port,
 				      rc, sl, becn, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,
@@ -478,7 +478,7 @@ int hfi_format_dma_rc_send(struct hfi_ctx *ctx, hfi_ni_t ni,
 	hfi_match_bits_t match_bits = (hfi_match_bits_t)imm;
 	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm,HFI_MTYPE_MR,sl,dst_qp);
 	return hfi_format_dma_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VERBS_RC, target_id, port,
+				      (hfi_tx_ctype_t)VoNP_RC, target_id, port,
 				      rc, sl, becn, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,
@@ -508,7 +508,7 @@ int hfi_format_dma_rc_rdma(struct hfi_ctx *ctx, hfi_ni_t ni,
 	hfi_match_bits_t match_bits = (hfi_match_bits_t)rkey;
 	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm,HFI_MTYPE_MR,sl,dst_qp);
 	return hfi_format_dma_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VERBS_RC, target_id, port,
+				      (hfi_tx_ctype_t)VoNP_RC, target_id, port,
 				      rc, sl, becn, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,
@@ -618,7 +618,7 @@ int hfi_format_dma_iovec_rc_send(struct hfi_ctx *ctx, hfi_ni_t ni,
 	hfi_match_bits_t match_bits = (hfi_match_bits_t)imm;
 	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm,HFI_MTYPE_MR,sl,dst_qp);
 	return hfi_format_dma_iovec_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VERBS_RC, target_id, port,
+				      (hfi_tx_ctype_t)VoNP_RC, target_id, port,
 				      rc, sl, becn, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,
@@ -649,7 +649,7 @@ int hfi_format_dma_iovec_rc_rdma(struct hfi_ctx *ctx, hfi_ni_t ni,
 	hfi_match_bits_t match_bits = (hfi_match_bits_t)rkey;
 	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm,HFI_MTYPE_MR,sl,dst_qp);
 	return hfi_format_dma_iovec_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VERBS_RC, target_id, port,
+				      (hfi_tx_ctype_t)VoNP_RC, target_id, port,
 				      rc, sl, becn, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,

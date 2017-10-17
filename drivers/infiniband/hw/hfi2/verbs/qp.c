@@ -53,6 +53,7 @@
  */
 
 #include "verbs.h"
+#include "native.h"
 #include "packet.h"
 
 /**
@@ -144,6 +145,7 @@ void hfi2_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 		    int attr_mask, struct ib_udata *udata)
 {
 	struct hfi2_ibdev *ibd = to_hfi_ibd(qp->ibqp.device);
+	int ret;
 
 	if (attr_mask & IB_QP_AV)
 		qp_set_16b(qp);
@@ -165,6 +167,16 @@ void hfi2_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 		qp->timeout = HFI2_QP_MAX_TIMEOUT;
 		qp->timeout_jiffies = rvt_timeout_to_jiffies(qp->timeout);
 	}
+
+#ifdef CONFIG_HFI2_STLNP
+	/* attempt to setup for native transport */
+	ret = hfi2_native_modify_qp(qp, attr, attr_mask, udata);
+	/*
+	 * TODO do we silently remain in legacy QP mode if some failure is
+	 * encountered?  This is protoype, so display warning for now.
+	 */
+	WARN_ON(ret != 0);
+#endif
 }
 
 /*

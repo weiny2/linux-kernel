@@ -57,6 +57,7 @@
 
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_vt.h>
+#include "../core/hfi_core.h"
 #include "verbs.h"
 
 #define RESET_LKEY(key)	((key) & 0xFFFFFF00)
@@ -65,13 +66,18 @@
 #define INVALID_KEY_IDX	0xffffff00
 #define IS_INVALID_KEY(key) (RESET_LKEY(key) == INVALID_KEY_IDX)
 
-static inline
-struct hfi_ibcontext *ibpd_to_ibctx(struct ib_pd *obj)
-{
-	return (struct hfi_ibcontext *)
-		(obj->uobject ? obj->uobject->context :
-				to_hfi_ibd(obj->device)->ibkc);
-}
+#define NATIVE_NI	PTL_MATCHING_PHYSICAL
+
+#define obj_to_ibctx(obj) \
+	((struct hfi_ibcontext *)			\
+	  ((obj)->uobject ? (obj)->uobject->context :	\
+			    to_hfi_ibd((obj)->device)->ibkc))
+
+struct hfi_rq {
+	struct hfi_ctx *hw_ctx;
+	u32	recvq_root;
+	struct hfi_ks ded_me_ks;
+};
 
 static inline
 bool hfi2_ks_full(struct hfi_ks *ks)
@@ -177,5 +183,15 @@ int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region);
 int hfi2_free_lkey(struct rvt_mregion *mr);
 struct rvt_mregion *hfi2_find_mr_from_lkey(struct rvt_pd *pd, u32 lkey);
 struct rvt_mregion *hfi2_find_mr_from_rkey(struct rvt_pd *pd, u32 rkey);
+int hfi2_native_modify_qp(struct rvt_qp *rvtqp,
+			  struct ib_qp_attr *attr, int attr_mask,
+			  struct ib_udata *udata);
+int hfi2_native_send(struct rvt_qp *qp, struct ib_send_wr *wr,
+		     struct ib_send_wr **bad_wr);
+int hfi2_native_recv(struct rvt_qp *qp, struct ib_recv_wr *wr,
+		     struct ib_recv_wr **bad_wr);
+int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
+			 struct ib_recv_wr **bad_wr);
+int hfi2_native_poll_cq(struct rvt_cq *cq, int ne, struct ib_wc *wc);
 #endif
 #endif /* NATIVE_VERBS_H */

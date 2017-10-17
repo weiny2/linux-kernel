@@ -65,7 +65,7 @@ int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region)
 	u32 lkey, rkey;
 	bool need_reserved_rkey;
 
-	ctx = ibpd_to_ibctx(mr->pd);
+	ctx = obj_to_ibctx(mr->pd);
 	if (!ctx) {
 		WARN_ON(!ctx);
 		return -EINVAL;
@@ -113,7 +113,7 @@ int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region)
 
 int hfi2_free_lkey(struct rvt_mregion *mr)
 {
-	struct hfi_ibcontext *ctx = ibpd_to_ibctx(mr->pd);
+	struct hfi_ibcontext *ctx = obj_to_ibctx(mr->pd);
 	int ret;
 
 	/* Check LKEY */
@@ -155,14 +155,14 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
  */
 struct rvt_mregion *hfi2_find_mr_from_lkey(struct rvt_pd *pd, u32 lkey)
 {
-	struct hfi_ibcontext *ctx = ibpd_to_ibctx(&pd->ibpd);
+	struct hfi_ibcontext *ctx = obj_to_ibctx(&pd->ibpd);
 
 	return _hfi2_find_mr_from_lkey(ctx, lkey, true);
 }
 
 struct rvt_mregion *hfi2_find_mr_from_rkey(struct rvt_pd *pd, u32 rkey)
 {
-	struct hfi_ibcontext *ctx = ibpd_to_ibctx(&pd->ibpd);
+	struct hfi_ibcontext *ctx = obj_to_ibctx(&pd->ibpd);
 
 	if (!ctx) {
 		WARN_ON(!ctx);

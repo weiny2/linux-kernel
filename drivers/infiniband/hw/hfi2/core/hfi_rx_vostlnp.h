@@ -91,7 +91,6 @@ int hfi_format_rkey_write(hfi_ni_t ni,
 	cmd->list.flit1.j.val         = 0;
 	cmd->list.flit1.j.start       = (uintptr_t) start;
 	/* no longer set o and f bits which are private to firmware */
-	cmd->list.flit1.j.uh          = 1;
 	cmd->list.flit1.j.ni          = ni;
 	cmd->list.flit1.j.v           = valid;
 
@@ -224,24 +223,24 @@ int hfi_qp_write(struct hfi_cmdq *rx, uint8_t ni, struct hfi_ctx *ctx,
 	union hfi_rx_cq_command cmd;
 	int rc;
 
-	cmd.state.flit0.p0            = val[0];
-	cmd.state.flit0.p1	      = val[1];
-	cmd.state.flit0.c.ptl_idx     = 0;
-	cmd.state.flit0.c.qp_num      = qp_num;
-	cmd.state.flit0.d.ni          = ni;
-	cmd.state.flit0.d.ct_handle   = PTL_CT_NONE;
-	cmd.state.flit0.d.ncc         = HFI_GEN_CC;
-	cmd.state.flit0.d.command     = QP_WRITE;
-	cmd.state.flit0.d.cmd_len     = (sizeof(cmd.state) >> 5)-1;
+	cmd.verbs.flit0.p0            = val[0];
+	cmd.verbs.flit0.p1	      = val[1];
+	cmd.verbs.flit0.c.ptl_idx     = 0;
+	cmd.verbs.flit0.c.qp_num      = qp_num;
+	cmd.verbs.flit0.d.ni          = ni;
+	cmd.verbs.flit0.d.ct_handle   = PTL_CT_NONE;
+	cmd.verbs.flit0.d.ncc         = HFI_GEN_CC;
+	cmd.verbs.flit0.d.command     = QP_WRITE;
+	cmd.verbs.flit0.d.cmd_len     = (sizeof(cmd.verbs) >> 5)-1;
 
-	cmd.state.flit1.e.cmd_pid     = ctx->pid;
-	cmd.state.flit1.p2            = val[2];
-	cmd.state.flit1.p3            = val[3];
-	cmd.state.flit1.user_ptr      = user_ptr;
+	cmd.verbs.flit1.e.cmd_pid     = ctx->pid;
+	cmd.verbs.flit1.p2            = val[2];
+	cmd.verbs.flit1.p3            = val[3];
+	cmd.verbs.flit1.user_ptr      = user_ptr;
 
 	do {
 		/* Single slot command */
-		rc = hfi_rx_command(rx, (uint64_t *)&cmd, sizeof(cmd.state)>>6);
+		rc = hfi_rx_command(rx, (uint64_t *)&cmd, sizeof(cmd.verbs)>>6);
 	} while (rc == -EAGAIN);
 
 	return rc;
