@@ -35,6 +35,7 @@ hfi2-$(CONFIG_HFI2_STLNP) += privileged.o
 hfi2-$(CONFIG_HFI2_STLNP) += timesync.o
 hfi2-$(CONFIG_HFI2_STLNP) += verbs/native.o
 hfi2-$(CONFIG_HFI2_STLNP) += verbs/native_mr.o
+hfi2-$(CONFIG_HFI2_STLNP) += verbs/native_send.o
 hfi2-y += verbs/ah.o
 hfi2-y += verbs/hw.o
 hfi2-y += verbs/mad.o

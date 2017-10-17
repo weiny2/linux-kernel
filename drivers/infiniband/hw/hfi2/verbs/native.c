@@ -54,7 +54,7 @@
 
 #include "hfi_kclient.h"
 #include "hfi_ct.h"
-#include "hfi_tx_vostlnp.h"
+#include "hfi_tx_base.h"
 #include "hfi_rx_vostlnp.h"
 #include "native.h"
 
@@ -318,7 +318,8 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 	ret = hfi_ctx_attach(hw_ctx, &attach);
 	if (ret < 0)
 		goto err_attach;
-	pr_info("native: Got FXR PID %d\n", hw_ctx->pid);
+	pr_info("native: Got FXR PID %d PASID %d\n", hw_ctx->pid,
+		hw_ctx->pasid);
 
 	ret = hfi2_create_me_pool(hw_ctx);
 	if (ret < 0)
@@ -338,7 +339,8 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 	return hw_ctx;
 
 err_post_attach:
-	pr_info("native: Detach FXR PID %d\n", hw_ctx->pid);
+	pr_info("native: Error %d after HW attach, detaching PID %d\n",
+		ret, hw_ctx->pid);
 	hfi_ctx_cleanup(hw_ctx);
 err_attach:
 	kfree(hw_ctx);
@@ -354,8 +356,8 @@ static int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx)
 		mutex_lock(&ctx->ctx_lock);
 		if (!ctx->num_ctx) {
 			hw_ctx = hfi2_add_hw_context(ctx);
-			if (!hw_ctx)
-				ret = -EBUSY; /* TODO */
+			if (IS_ERR(hw_ctx))
+				ret = PTR_ERR(hw_ctx);
 			else
 				ret = hfi2_add_cmdq(ctx);
 		}
@@ -376,6 +378,8 @@ int hfi_init_hw_rq(struct hfi_ibcontext *ctx, struct rvt_rq *rvtrq,
 	struct hfi_rq *rq;
 
 	rq = kmalloc(sizeof(*rq), GFP_KERNEL);
+	if (!rq)
+		return -ENOMEM;
 	rq->hw_ctx = hw_ctx;
 	rq->ded_me_ks.free_keys = NULL;
 	if (pool_size) {
@@ -593,24 +597,8 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 
 qp_write_err:
 	/* TODO */
+	ctx->supports_native = false;
 	return -EIO;
-}
-
-/*
- * Issue the appropriate TX command
- * TODO If no TX slots, schedule some async thread?
- */
-static
-int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
-{
-	bool signal;
-
-	signal = !(qp->s_flags & RVT_S_SIGNAL_REQ_WR) ||
-		 (wr->send_flags & IB_SEND_SIGNALED);
-
-	/* TODO port from user provider */
-
-	return 0;
 }
 
 /*
@@ -626,23 +614,6 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 	/* TODO port from user provider */
 
 	return 0;
-}
-
-int hfi2_native_send(struct rvt_qp *qp, struct ib_send_wr *wr,
-		     struct ib_send_wr **bad_wr)
-{
-	int ret;
-
-	/* Issue pending TX commands */
-	do {
-		ret = hfi2_do_tx_work(qp, wr);
-		if (ret) {
-			*bad_wr = wr;
-			break;
-		}
-	} while ((wr = wr->next));
-
-	return ret;
 }
 
 int hfi2_native_recv(struct rvt_qp *qp, struct ib_recv_wr *wr,

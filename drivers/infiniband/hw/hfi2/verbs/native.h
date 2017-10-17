@@ -66,6 +66,7 @@
 #define INVALID_KEY_IDX	0xffffff00
 #define IS_INVALID_KEY(key) (RESET_LKEY(key) == INVALID_KEY_IDX)
 
+#define IOVEC_VALID	0x80
 #define NATIVE_NI	PTL_MATCHING_PHYSICAL
 
 #define obj_to_ibctx(obj) \
@@ -73,11 +74,27 @@
 	  ((obj)->uobject ? (obj)->uobject->context :	\
 			    to_hfi_ibd((obj)->device)->ibkc))
 
+struct hfi_iovec {
+	u64	addr;
+	u32	length;
+	u8	padding[3];
+	u8	flags;
+};
+
 struct hfi_rq {
 	struct hfi_ctx *hw_ctx;
 	u32	recvq_root;
 	struct hfi_ks ded_me_ks;
 };
+
+struct hfi_swqe {
+	u64	wr_id;
+	u32	length;
+	u8	num_iov;
+	u8	signal;
+	u8	padding[2];
+	struct hfi_iovec iov[0];
+} __aligned(16);
 
 static inline
 bool hfi2_ks_full(struct hfi_ks *ks)
