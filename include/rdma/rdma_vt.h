@@ -347,6 +347,9 @@ struct rvt_driver_provided {
 
 	/* Notify driver to restart rc */
 	void (*notify_restart_rc)(struct rvt_qp *qp, u32 psn, int wait);
+
+	/* Driver specific mmap */
+	int (*mmap)(struct ib_ucontext *context, struct vm_area_struct *vma);
 };
 
 struct rvt_dev_info {

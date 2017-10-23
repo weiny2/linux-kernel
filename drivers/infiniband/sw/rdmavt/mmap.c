@@ -116,6 +116,16 @@ int rvt_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	int ret = -EINVAL;
 
 	/*
+	 * A driver specific mmap function should return -EACCES
+	 * if the mmap is not called by one of its clients.
+	 */
+	if (rdi->driver_f.mmap) {
+		ret = rdi->driver_f.mmap(context, vma);
+		if (ret != -EACCES)
+			return ret;
+	}
+
+	/*
 	 * Search the device's list of objects waiting for a mmap call.
 	 * Normally, this list is very short since a call to create a
 	 * CQ, QP, or SRQ is soon followed by a call to mmap().
