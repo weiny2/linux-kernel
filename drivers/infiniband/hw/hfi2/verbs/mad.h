@@ -1048,5 +1048,6 @@ enum opa_sma_status {
 };
 
 void hfi_event_pkey_change(struct ib_device *ibdev, u8 port);
+void hfi_handle_trap_timer(struct timer_list *t);
 
 #endif				/* _OPA_MAD_H */

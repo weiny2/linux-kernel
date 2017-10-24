@@ -580,9 +580,13 @@ static void hfi2_unregister_device(struct hfi2_ibdev *ibd)
 static int hfi2_init_port(struct hfi2_ibdev *ibd,
 			  struct hfi_pportdata *ppd)
 {
-	int ret;
+	int ret, i;
 	int pidx = ppd->pnum - 1;
 	struct hfi2_ibport *ibp = &ibd->pport[pidx];
+
+	for (i = 0; i < RVT_MAX_TRAP_LISTS; i++)
+		INIT_LIST_HEAD(&ibp->rvp.trap_lists[i].list);
+	timer_setup(&ibp->rvp.trap_timer, hfi_handle_trap_timer, 0);
 
 	ibp->ibd = ibd;
 	ibp->dev = &ibd->rdi.ibdev.dev; /* for dev_info, etc. */
