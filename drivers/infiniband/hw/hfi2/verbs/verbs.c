@@ -203,8 +203,8 @@ static int hfi2_query_port(struct rvt_dev_info *rdi, u8 port,
 	props->lid = ppd->lid;
 	props->lmc = ppd->lmc;
 	props->pkey_tbl_len = HFI_MAX_PKEYS;
-	props->state = ibp->ppd->lstate;
-	props->phys_state = hfi_ibphys_portstate(ibp->ppd);
+	props->state = hfi_driver_lstate(ppd);
+	props->phys_state = hfi_driver_pstate(ppd);
 	props->gid_tbl_len = HFI2_GUIDS_PER_PORT;
 	props->active_width = (u8)opa_width_to_ib(ppd->link_width_active);
 	props->active_speed = (u8)opa_speed_to_ib(ppd->link_speed_active);

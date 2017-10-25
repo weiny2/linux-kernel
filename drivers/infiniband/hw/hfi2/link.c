@@ -85,7 +85,6 @@ MODULE_PARM_DESC(quick_linkup, "quick linkup, i.e. skip Verifycap and goes to In
 
 static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup);
 static u32 read_physical_state(const struct hfi_pportdata *ppd);
-static int set_physical_link_state(struct hfi_pportdata *ppd, u64 state);
 static void get_linkup_link_widths(struct hfi_pportdata *ppd);
 
 /*
@@ -461,25 +460,62 @@ static u32 hfi_to_opa_pstate(struct hfi_devdata *dd, u32 hfi_pstate)
 	}
 }
 
-u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd)
+static void log_state_transition(struct hfi_pportdata *ppd, u32 state)
 {
-	u32 pstate;
-	u32 ib_pstate;
+	u32 ib_pstate = hfi_to_opa_pstate(ppd->dd, state);
 
-	if (no_mnh)
-		pstate = PLS_LINKUP;
-	else
-		pstate = read_physical_state(ppd);
+	dd_dev_info(ppd->dd,
+		    "physical state changed to %s (0x%x), phy 0x%x\n",
+		    opa_pstate_name(ib_pstate), ib_pstate, state);
+}
 
-	ib_pstate = hfi_to_opa_pstate(ppd->dd, pstate);
-	if (ppd->last_phystate != ib_pstate) {
-		ppd_dev_info(ppd,
-			     "%s: physical state changed to %s (0x%x), phy 0x%x\n",
-			     __func__, opa_pstate_name(ib_pstate), ib_pstate,
-			     pstate);
-		ppd->last_phystate = ib_pstate;
+/*
+ * Read the physical hardware link state and check if it matches host
+ * drivers anticipated state.
+ */
+static void log_physical_state(struct hfi_pportdata *ppd, u32 state)
+{
+	u32 read_state = read_physical_state(ppd);
+
+	if (read_state == state) {
+		log_state_transition(ppd, state);
+	} else {
+		dd_dev_err(ppd->dd,
+			   "anticipated phy link state 0x%x, read 0x%x\n",
+			   state, read_state);
 	}
-	return ib_pstate;
+}
+
+/*
+ * wait_physical_linkstate - wait for an physical link state change to occur
+ * @ppd: port device
+ * @state: the state to wait for
+ * @msecs: the number of milliseconds to wait
+ * Wait up to msecs milliseconds for physical link state change to occur.
+ * Returns 0 if state reached, otherwise -ETIMEDOUT.
+ */
+static int wait_physical_linkstate(struct hfi_pportdata *ppd, u32 state,
+				   int msecs)
+{
+	u32 read_state;
+	unsigned long timeout;
+
+	timeout = jiffies + msecs_to_jiffies(msecs);
+	while (1) {
+		read_state = read_physical_state(ppd);
+		if (read_state == state)
+			break;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(ppd->dd,
+				   "timeout waiting for phy link state 0x%x\n",
+				   state);
+			return -ETIMEDOUT;
+		}
+		usleep_range(1950, 2050); /* sleep 2ms-ish */
+	}
+
+	log_state_transition(ppd, state);
+	return 0;
 }
 
 static void read_planned_down_reason_code(struct hfi_pportdata *ppd, u8 *pdrrc)
@@ -496,6 +532,64 @@ static void read_link_down_reason(struct hfi_pportdata *ppd, u8 *ldr)
 
 	hfi2_read_8051_config(ppd, LINK_DOWN_REASON, GENERAL_CONFIG, &frame);
 	*ldr = (frame & 0xff);
+}
+
+/*
+ * hfi_driver_pstate - convert the driver's notion of a port's
+ * state (an HLS_*) into a physical state (a {IB,OPA}_PORTPHYSSTATE_*).
+ * Return -1 (converted to a u32) to indicate error.
+ */
+u32 hfi_driver_pstate(struct hfi_pportdata *ppd)
+{
+	switch (ppd->host_link_state) {
+	case HLS_UP_INIT:
+	case HLS_UP_ARMED:
+	case HLS_UP_ACTIVE:
+		return IB_PORTPHYSSTATE_LINKUP;
+	case HLS_DN_POLL:
+		return IB_PORTPHYSSTATE_POLLING;
+	case HLS_DN_DISABLE:
+		return IB_PORTPHYSSTATE_DISABLED;
+	case HLS_DN_OFFLINE:
+		return OPA_PORTPHYSSTATE_OFFLINE;
+	case HLS_VERIFY_CAP:
+		return IB_PORTPHYSSTATE_POLLING;
+	case HLS_GOING_UP:
+		return IB_PORTPHYSSTATE_POLLING;
+	case HLS_GOING_OFFLINE:
+		return OPA_PORTPHYSSTATE_OFFLINE;
+	case HLS_LINK_COOLDOWN:
+		return OPA_PORTPHYSSTATE_OFFLINE;
+	case HLS_DN_DOWNDEF:
+	default:
+		dd_dev_err(ppd->dd, "invalid host_link_state 0x%x\n",
+			   ppd->host_link_state);
+		return  -1;
+	}
+}
+
+/*
+ * hfi_driver_lstate - convert the driver's notion of a port's
+ * state (an HLS_*) into a logical state (a IB_PORT_*). Return -1
+ * (converted to a u32) to indicate error.
+ */
+u32 hfi_driver_lstate(struct hfi_pportdata *ppd)
+{
+	if (ppd->host_link_state && (ppd->host_link_state & HLS_DOWN))
+		return IB_PORT_DOWN;
+
+	switch (ppd->host_link_state & HLS_UP) {
+	case HLS_UP_INIT:
+		return IB_PORT_INIT;
+	case HLS_UP_ARMED:
+		return IB_PORT_ARMED;
+	case HLS_UP_ACTIVE:
+		return IB_PORT_ACTIVE;
+	default:
+		dd_dev_err(ppd->dd, "invalid host_link_state 0x%x\n",
+			   ppd->host_link_state);
+	return -1;
+	}
 }
 
 void set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
@@ -1176,7 +1270,6 @@ static int do_quick_linkup(struct hfi_pportdata *ppd)
 	if (ppd->linkinit_reason >= OPA_LINKINIT_REASON_CLEAR)
 		ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
 	handle_linkup_change(ppd, 1);
-	ppd->lstate = IB_PORT_INIT;
 
 	return 0; /* success */
 }
@@ -1197,28 +1290,6 @@ static u32 read_logical_state(const struct hfi_pportdata *ppd)
 	reg = read_fzc_csr(ppd, FZC_LCB_CFG_PORT);
 	return (reg >> FZC_LCB_CFG_PORT_LINK_STATE_SHIFT)
 				& FZC_LCB_CFG_PORT_LINK_STATE_MASK;
-}
-
-static int wait_phy_linkstate(struct hfi_pportdata *ppd, u32 state, u32 msecs)
-{
-	unsigned long timeout;
-	u32 curr_state;
-
-	timeout = jiffies + msecs_to_jiffies(msecs);
-	while (1) {
-		curr_state = read_physical_state(ppd);
-		if (curr_state == state)
-			break;
-		if (time_after(jiffies, timeout)) {
-			ppd_dev_err(ppd,
-				    "timeout waiting for phy link state 0x%x, current state is 0x%x\n",
-				    state, curr_state);
-			return -ETIMEDOUT;
-		}
-		usleep_range(1950, 2050); /* sleep 2ms-ish */
-	}
-
-	return 0;
 }
 
 /*
@@ -1259,7 +1330,7 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 	 * Wait for offline transition. It can take a while for
 	 * the link to go down.
 	 */
-	ret = wait_phy_linkstate(ppd, PLS_OFFLINE, 10000);
+	ret = wait_physical_linkstate(ppd, PLS_OFFLINE, 10000);
 	if (ret < 0)
 		return ret;
 
@@ -1460,7 +1531,6 @@ static u32 chip_to_opa_lstate(struct hfi_devdata *dd, u32 chip_lstate)
 	}
 }
 
-#if 0
 /* return the OPA port logical state name */
 static const char *opa_lstate_name(u32 lstate)
 {
@@ -1476,54 +1546,8 @@ static const char *opa_lstate_name(u32 lstate)
 		return port_logical_names[lstate];
 	return "unknown";
 }
-#endif
 
 /*
- * Read the hardware link state and set the driver's cached value of it.
- * Return the (new) current value.
- */
-static u32 get_logical_state(struct hfi_pportdata *ppd)
-{
-	u32 new_state;
-
-	new_state = chip_to_opa_lstate(ppd->dd, read_logical_state(ppd));
-	if (new_state != ppd->lstate) {
-#if 0
-		dd_dev_info(ppd->dd, "logical link state: %s(%d) -> %s(%d)\n",
-			    opa_lstate_name(ppd->lstate), ppd->lstate,
-			    opa_lstate_name(new_state), new_state);
-#endif
-		ppd->lstate = new_state;
-	}
-#if 0 /* WFR legacy */
-	/*
-	 * Set port status flags in the page mapped into userspace
-	 * memory. Do it here to ensure a reliable state - this is
-	 * the only function called by all state handling code.
-	 * Always set the flags due to the fact that the cache value
-	 * might have been changed explicitly outside of this
-	 * function.
-	 */
-	if (ppd->statusp) {
-		switch (ppd->lstate) {
-		case IB_PORT_DOWN:
-		case IB_PORT_INIT:
-			*ppd->statusp &= ~(HFI1_STATUS_IB_CONF |
-					   HFI_STATUS_IB_READY);
-			break;
-		case IB_PORT_ARMED:
-			*ppd->statusp |= HFI_STATUS_IB_CONF;
-			break;
-		case IB_PORT_ACTIVE:
-			*ppd->statusp |= HFI_STATUS_IB_READY;
-			break;
-		}
-	}
-#endif
-	return ppd->lstate;
-}
-
-/**
  * hfi2_wait_logical_linkstate - wait for an IB link state change to occur
  * @ppd: port device
  * @state: the state to wait for
@@ -1537,21 +1561,28 @@ int hfi2_wait_logical_linkstate(struct hfi_pportdata *ppd, u32 state,
 				int msecs)
 {
 	unsigned long timeout;
-	u32 cur_state;
+	u32 new_state;
 
 	timeout = jiffies + msecs_to_jiffies(msecs);
 	while (1) {
-		cur_state = get_logical_state(ppd);
-		if (cur_state == state)
-			return 0;
-		if (time_after(jiffies, timeout))
+		new_state = chip_to_opa_lstate(ppd->dd,
+					       read_logical_state(ppd));
+		if (new_state == state)
 			break;
+		if (time_after(jiffies, timeout)) {
+			dd_dev_err(ppd->dd,
+				   "timeout waiting for link state 0x%x\n",
+				   state);
+			return -ETIMEDOUT;
+		}
 		msleep(20);
 	}
-	ppd_dev_err(ppd, "timeout waiting for link state 0x%x (0x%x)\n",
-		    state, cur_state);
 
-	return -ETIMEDOUT;
+	dd_dev_info(ppd->dd,
+		    "logical state changed to %s (0x%x)\n",
+		    opa_lstate_name(state),
+		    state);
+	return 0;
 }
 
 /*
@@ -2509,39 +2540,6 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 	int ret1, ret = 0;
 	struct ib_event event = {.device = NULL};
 
-	/* FXRTODO: Hack for early bring up */
-	if (no_mnh) {
-		ppd_dev_info(ppd, "%s(%d) -> %s(%d)\n",
-			     link_state_name(ppd->host_link_state),
-			     ilog2(ppd->host_link_state),
-			     link_state_name(state), ilog2(state));
-		switch (state) {
-		case HLS_DN_DISABLE:
-		case HLS_DN_DOWNDEF:
-			ppd->lstate = IB_PORT_DOWN;
-			break;
-		case HLS_DN_POLL:
-			/*
-			 * FXRTODO: Fake the transition from
-			 * POLL to INIT here by directly setting
-			 * the link state to INIT until we
-			 * have LNI in place.
-			 */
-		case HLS_UP_INIT:
-			ppd->lstate = IB_PORT_INIT;
-			break;
-		case HLS_UP_ARMED:
-			ppd->lstate = IB_PORT_ARMED;
-			break;
-		case HLS_UP_ACTIVE:
-			ppd->lstate = IB_PORT_ACTIVE;
-			break;
-		default:
-			ppd->lstate = IB_PORT_INIT;
-		}
-		return ret;
-	}
-
 	mutex_lock(&ppd->hls_lock);
 
 	ppd_dev_info(ppd, "%s(%d) -> %s(%d) %s\n",
@@ -2594,13 +2592,18 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 			ret = -EINVAL;
 			break;
 		}
+		ret = wait_physical_linkstate(ppd, PLS_DISABLED, 10000);
+		if (ret) {
+			dd_dev_err(ppd->dd,
+				   "%s: physical state did not change to DISABLED\n",
+				   __func__);
+				break;
+		}
 		ppd->host_link_state = HLS_DN_DISABLE;
 		mnh_shutdown(ppd);
-		ppd->lstate = IB_PORT_DOWN;
 		break;
 	case HLS_DN_DOWNDEF:
 		ppd->host_link_state = HLS_DN_DOWNDEF;
-		ppd->lstate = IB_PORT_DOWN;
 		break;
 	case HLS_DN_POLL:
 		if ((ppd->host_link_state == HLS_DN_DISABLE ||
@@ -2648,6 +2651,8 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		 */
 		if (ret)
 			goto_offline(ppd, 0);
+		else
+			log_physical_state(ppd, PLS_POLLING);
 		break;
 	case HLS_UP_INIT:
 		if (ppd->host_link_state == HLS_DN_POLL && quick_linkup) {
@@ -2663,6 +2668,18 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 			goto unexpected;
 		}
 
+		/* Wait for Link_Up physical state.
+		 * Physical and Logical states should already
+		 * be transitioned to LinkUp and LinkInit respectively.
+		 */
+		ret = wait_physical_linkstate(ppd, PLS_LINKUP, 1000);
+		if (ret) {
+			dd_dev_err(ppd->dd,
+				   "%s: physical state did not change to LINK-UP\n",
+				   __func__);
+			break;
+		}
+		ppd->host_link_state = HLS_UP_INIT;
 		ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_INIT, 1000);
 		if (ret) {
 			ppd_dev_err(ppd,
@@ -2680,14 +2697,12 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 			handle_linkup_change(ppd, 1);
 			ppd->host_link_state = HLS_UP_INIT;
 		}
-		ppd->lstate = IB_PORT_INIT;
 		break;
 	case HLS_UP_ARMED:
 		if (ppd->host_link_state != HLS_UP_INIT)
 			goto unexpected;
 
 		set_logical_state(ppd, LSTATE_ARMED);
-
 		ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_ARMED, 1000);
 		if (ret) {
 			ppd_dev_err(ppd,
@@ -2696,12 +2711,10 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 			break;
 		}
 		ppd->host_link_state = HLS_UP_ARMED;
-		ppd->lstate = IB_PORT_ARMED;
 		break;
 	case HLS_UP_ACTIVE:
 		if (ppd->host_link_state != HLS_UP_ARMED)
 			goto unexpected;
-
 		set_logical_state(ppd, LSTATE_ACTIVE);
 		ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_ACTIVE, 1000);
 		if (ret) {
@@ -2709,7 +2722,6 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 				    "%s: logical state did not change to ACTIVE\n",
 				    __func__);
 		} else {
-			ppd->lstate = IB_PORT_ACTIVE;
 			ppd->host_link_state = HLS_UP_ACTIVE;
 
 			/* Signal the IB layer that the port has went active */
@@ -2722,6 +2734,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		if (ppd->host_link_state != HLS_DN_POLL)
 			goto unexpected;
 		ppd->host_link_state = HLS_VERIFY_CAP;
+		log_physical_state(ppd, PLS_CONFIGPHY_VERIFYCAP);
 		break;
 	case HLS_GOING_UP:
 		if (ppd->host_link_state != HLS_VERIFY_CAP)

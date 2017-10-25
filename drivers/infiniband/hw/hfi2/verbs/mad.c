@@ -183,7 +183,7 @@ static void send_trap(struct hfi2_ibport *ibp, void *data, unsigned int len)
 		return;
 
 	/* o14-3.2.1 */
-	if (ppd->lstate != IB_PORT_ACTIVE)
+	if (ppd->host_link_state != HLS_UP_ACTIVE)
 		return;
 
 	/* o14-2 */
@@ -676,7 +676,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->pkey_10b = cpu_to_be16(ppd->pkey_10b);
 
 	pi->port_states.portphysstate_portstate =
-		(hfi_ibphys_portstate(ppd) << 4) | state;
+		(hfi_driver_pstate(ppd) << 4) | state;
 
 	pi->mkeyprotect_lmc = (ibp->rvp.mkeyprot << 6) | ppd->lmc;
 
@@ -845,7 +845,7 @@ static int __subn_get_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 		ppd->offline_disabled_reason;
 
 	psi->port_states.portphysstate_portstate =
-		(hfi_ibphys_portstate(ppd) << 4) | (lstate & 0xf);
+		(hfi_driver_pstate(ppd) << 4) | (lstate & 0xf);
 	psi->link_width_downgrade_tx_active =
 		cpu_to_be16(ppd->link_width_downgrade_tx_active);
 	psi->link_width_downgrade_rx_active =

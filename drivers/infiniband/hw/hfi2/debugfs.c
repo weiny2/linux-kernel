@@ -666,6 +666,21 @@ static ssize_t host_link_bounce(struct file *file, const char __user *ubuf,
 	return count;
 }
 
+static ssize_t lstate_read(struct file *file, char __user *ubuf, size_t count,
+			   loff_t *ppos)
+{
+	struct hfi_pportdata *ppd;
+	ssize_t rval;
+	u32 lstate;
+
+	ppd = private2ppd(file);
+
+	lstate = hfi_driver_lstate(ppd);
+	rval = simple_read_from_buffer(ubuf, count, ppos,
+				       &lstate, sizeof(lstate));
+	return rval;
+}
+
 static ssize_t lstate_write(struct file *file, const char __user *ubuf,
 			    size_t count, loff_t *ppos)
 {
@@ -697,7 +712,6 @@ FIRMWARE_READ(8051_cmd1, 8051, CRK_CRK8051_CFG_HOST_CMD_1)
 FIRMWARE_READ(logical_link, fzc, FZC_LCB_CFG_PORT)
 FIRMWARE_WRITE(logical_link, fzc, FZC_LCB_CFG_PORT)
 HOST_STATE_READ(host_link_state)
-HOST_STATE_READ(lstate)
 LINK_WIDTH_READ(local, VERIFY_CAP_LOCAL_LINK_WIDTH)
 LINK_WIDTH_READ(remote, VERIFY_CAP_REMOTE_LINK_WIDTH)
 static const struct firmware_info firmware_ops[] = {

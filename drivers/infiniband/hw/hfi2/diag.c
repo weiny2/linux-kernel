@@ -133,14 +133,13 @@ static int diagpkt_xmit(struct hfi_devdata *dd, void *buf,
 	int rc, slots;
 	struct hfi_eq *eq = HFI_EQ_NONE;
 
-	dd_dev_dbg(dd, "xmit lstate %d sc %d len %d pt %d pbc 0x%llx f %d\n",
-		   ppd->lstate, sc, dp->len, dp->port, dp->pbc, dp->flags);
-
+	dd_dev_dbg(dd, "xmit sc %d len %d pt %d pbc 0x%llx f %d\n",
+		   sc, dp->len, dp->port, dp->pbc, dp->flags);
 	/* Cannot send packets unless port is active or unless using SC15 */
-	if (ppd->lstate != IB_PORT_ACTIVE && sc != 15) {
+	if ((ppd->host_link_state != HLS_UP_ACTIVE) && sc != 15) {
 		rc = -ENODEV;
-		dd_dev_err(dd, "%s %d lstate not active %d\n",
-			   __func__, __LINE__, ppd->lstate);
+		dd_dev_err(dd, "%s %d port is not active\n",
+			   __func__, __LINE__);
 		goto done;
 	}
 

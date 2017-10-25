@@ -170,7 +170,6 @@ MODULE_PARM_DESC(iommu_hack, "Set to true if running on ZEBU");
 
 DEFINE_SPINLOCK(hfi2_unit_lock);
 static struct idr hfi2_unit_table;
-
 static void hfi_cmdq_head_config(struct hfi_devdata *dd, u16 cmdq_idx,
 				 void *head_base);
 static int obtain_boardname(struct hfi_devdata *dd);
@@ -3232,10 +3231,8 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 
 		if (no_mnh) {
 			if (opafm_disable) {
-				ppd->lstate = IB_PORT_ACTIVE;
 				ppd->host_link_state = HLS_UP_ACTIVE;
 			} else {
-				ppd->lstate = IB_PORT_INIT;
 				ppd->host_link_state = HLS_UP_INIT;
 				ppd->link_width_active = 0x8;
 				ppd->neighbor_normal = 1;
@@ -3245,7 +3242,6 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 			hfi2_fzc_init(ppd);
 			hfi_zebu_hack_vl_credits(ppd);
 		} else {
-			ppd->lstate = IB_PORT_DOWN;
 			ppd->host_link_state = HLS_DN_OFFLINE;
 		}
 		mutex_init(&ppd->hls_lock);

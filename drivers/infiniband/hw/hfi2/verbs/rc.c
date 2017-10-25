@@ -903,7 +903,7 @@ static void hfi2_send_rc_ack(struct rvt_qp *qp, bool is_fecn)
 	hwords = hfi2_make_rc_ack_tbl[qp_priv->hdr_type] (qp, &ph, is_fecn);
 
 	/* Don't try to send ACKs if the link isn't ACTIVE */
-	if (ibp->ppd->lstate != IB_PORT_ACTIVE)
+	if (ibp->ppd->host_link_state != HLS_UP_ACTIVE)
 		return;
 
 	dev_dbg(ibp->dev, "Send RC %s for PSN %u\n",

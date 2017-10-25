@@ -576,7 +576,6 @@ struct hfi_pend_cmd {
  * @lid: LID for this port
  * @max_lid: Maximum LID in the fabric this port is attached to
  * @ptc: per traffic class specific fields
- * @lstate: Logical link state
  * @lcb_sts_rtt: Cached link round trip time
  * @max_active_mtu: The max active MTU of all the VLs
  * @port_error_action: contains bit mask for various errors. The HFI
@@ -717,7 +716,6 @@ struct hfi_pportdata {
 	u32 tx_preset_noeq;
 
 	u32 host_link_state;
-	u32 lstate;
 	u64 lcb_sts_rtt;
 	u32 max_active_mtu;
 	u32 port_error_action;
@@ -1091,21 +1089,6 @@ struct cc_state *hfi_get_cc_state_protected(struct hfi_pportdata *ppd)
 /* Control LED state */
 inline void hfi_set_ext_led(struct hfi_pportdata *ppd, u32 on);
 
-/* return the driver's idea of the logical OPA port state */
-static inline u32 hfi_driver_lstate(struct hfi_pportdata *ppd)
-{
-	/*
-	 * The driver does some processing from the time the logical
-	 * link state is at INIT to the time the SM can be notified
-	 * as such. Return IB_PORT_DOWN until the software state
-	 * is ready.
-	 */
-	if (ppd->lstate == IB_PORT_INIT && !(ppd->host_link_state & HLS_UP))
-		return IB_PORT_DOWN;
-	else
-		return ppd->lstate;
-}
-
 void __init hfi_mod_init(void);
 void hfi_mod_deinit(void);
 
@@ -1380,6 +1363,8 @@ void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 void hfi_apply_link_downgrade_policy(struct hfi_pportdata *ppd,
 				     int refresh_widths);
 int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state);
+u32 hfi_driver_pstate(struct hfi_pportdata *ppd);
+u32 hfi_driver_lstate(struct hfi_pportdata *ppd);
 void hfi_ack_interrupt(struct hfi_irq_entry *me);
 u8 hfi_porttype(struct hfi_pportdata *ppd);
 int hfi_get_sl_for_mctc(struct hfi_pportdata *ppd, u8 mc, u8 tc, u8 *sl);

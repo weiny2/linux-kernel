@@ -301,7 +301,6 @@ u64 read_8051_csr(const struct hfi_pportdata *ppd, u32 offset);
 void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
 u64 read_misc_csr(const struct hfi_pportdata *ppd, u32 offset);
 void write_misc_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
-u8 hfi_ibphys_portstate(struct hfi_pportdata *ppd);
 void hfi_set_link_down_reason(struct hfi_pportdata *ppd, u8 lcl_reason,
 			      u8 neigh_reason, u8 rem_reason);
 int hfi2_wait_logical_linkstate(struct hfi_pportdata *ppd, u32 state,
