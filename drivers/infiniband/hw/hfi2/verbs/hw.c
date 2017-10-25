@@ -710,6 +710,8 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 		/* replace PSN with the last PSN of Middles */
 		qp_priv->bth2 = (qp_priv->bth2 & IB_BTH_REQ_ACK) |
 				mask_psn(qp_priv->lpsn - 1);
+		/* ack_rate controls when BTH.A bit is set in packet */
+		ack_rate = HFI2_PSN_CREDIT;
 	} else {
 		/* Test if we require IOVEC array */
 		ret = qp_max_iovs(ibp, qp, &num_iovs);
@@ -804,14 +806,14 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 	/* fill in rest of wqe_dma needed for send completion event */
 	wqe_dma->qp = qp;
 	if (qp_type == IB_QPT_RC) {
-		/* ack_rate controls when BTH.A bit is set in packet */
-		ack_rate = HFI2_PSN_CREDIT;
 		/* take over release of MR for RC responses */
 		wqe_dma->mr = qp->s_rdma_mr;
 		qp->s_rdma_mr = NULL;
 		wqe_dma->opcode = qp_priv->opcode;
 		wqe_dma->bth2 = qp_priv->bth2;
+		/* ack_rate set above if using Middle optimization */
 	} else {
+		ack_rate = 0; /* make sure BTH.A unset for UD/UC */
 		wqe_dma->wqe = qp->s_wqe;
 	}
 	wqe_dma->remaining_bytes = qp->s_len;
