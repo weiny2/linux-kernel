@@ -53,16 +53,6 @@
 
 #include "hfi_tx_base.h"
 
-#define FMT_VOSTLNP_HD(imm,mtype,sl,dst_qp)	(((uint64_t)(imm))<<32|\
-						((uint64_t)(mtype))<<31|\
-						((uint64_t)(sl))<<26|\
-						((uint64_t)(dst_qp))<<0)
-#define EXTRACT_HD_IMM_DATA(hd)		_hfi_extract(hd, 32, 0xffffffff00000000)
-#define EXTRACT_HD_SL(hd)		_hfi_extract(hd, 26, 0x000000007c000000)
-#define EXTRACT_HD_DST_QP(hd)		_hfi_extract(hd,  0, 0x0000000000ffffff)
-#define HFI_MTYPE_MR				0
-#define HFI_MTYPE_MW				1
-
 static inline
 int hfi_format_buff_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
 			    const void *start, hfi_size_t length,

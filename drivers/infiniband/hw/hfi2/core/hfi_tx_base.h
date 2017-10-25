@@ -284,4 +284,16 @@ void _hfi_format_put_flit_e2(struct hfi_ctx *ctx,
 	e->message_length	= length - 1;
 	e->resp_md_opts		= resp_md_options.val;
 }
+
+/* Encoding of Native Verbs HDR DATA */
+#define FMT_VOSTLNP_HD(imm, mtype, sl, dst_qp) (((uint64_t)(imm)) << 32 |   \
+						((uint64_t)(mtype)) << 31 | \
+						((uint64_t)(sl)) << 26 |    \
+						((uint64_t)(dst_qp)) << 0)
+#define EXTRACT_HD_IMM_DATA(hd)	_hfi_extract(hd, 32, 0xffffffff00000000)
+#define EXTRACT_HD_SL(hd)	_hfi_extract(hd, 26, 0x000000007c000000)
+#define EXTRACT_HD_DST_QP(hd)	_hfi_extract(hd,  0, 0x0000000000ffffff)
+#define HFI_MTYPE_MR		0
+#define HFI_MTYPE_MW		1
+
 #endif /* _HFI_TX_BASE_H */

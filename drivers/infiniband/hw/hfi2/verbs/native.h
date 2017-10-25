@@ -87,12 +87,26 @@ struct hfi_rq {
 	struct hfi_ks ded_me_ks;
 };
 
+struct hfi_rq_wc {
+	u64	done;
+	u64	wr_id;
+	union {
+		struct rvt_qp *qp;
+		struct hfi_rq *rq;
+	};
+	u16	list_handle;
+	u8	is_qp;
+	u8	padding[5];
+	struct hfi_iovec iov[0];
+} __aligned(16);
+
 struct hfi_swqe {
+	struct rvt_qp *qp;
 	u64	wr_id;
 	u32	length;
 	u8	num_iov;
 	u8	signal;
-	u8	padding[2];
+	u8	padding[10];
 	struct hfi_iovec iov[0];
 } __aligned(16);
 
@@ -209,6 +223,6 @@ int hfi2_native_recv(struct rvt_qp *qp, struct ib_recv_wr *wr,
 		     struct ib_recv_wr **bad_wr);
 int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 			 struct ib_recv_wr **bad_wr);
-int hfi2_native_poll_cq(struct rvt_cq *cq, int ne, struct ib_wc *wc);
+int hfi2_poll_cq(struct ib_cq *cq, int ne, struct ib_wc *wc);
 #endif
 #endif /* NATIVE_VERBS_H */

@@ -84,6 +84,62 @@
 #define BUILD_LKEY(index) \
 	(((u64)(index) & 0xffffff) << 8)
 
+/*
+ * Map HFI opcode for UD and RC to IB WC;
+ * Only works for UD because UD_SEND overlaps with RC_SEND_FIRST/MIDDLE
+ */
+const u8 hfi_rc_opcode_wc[14] = {
+	[PTL_UD_SEND] = IB_WC_SEND,
+	[PTL_UD_SEND_IMM] = IB_WC_SEND,
+	[PTL_RC_SEND_LAST] = IB_WC_SEND,
+	[PTL_RC_SEND_LAST_IMM] = IB_WC_SEND,
+	[PTL_RC_SEND_LAST_INV] = IB_WC_SEND,
+	[PTL_RC_RDMA_WR] = IB_WC_RDMA_WRITE,
+	[PTL_RC_RDMA_WR_LAST_IMM] = IB_WC_RDMA_WRITE,
+	[PTL_RC_RDMA_RD] = IB_WC_RDMA_READ,
+	[PTL_RC_RDMA_CMP_SWAP] = IB_WC_COMP_SWAP,
+	[PTL_RC_RDMA_FETCH_ADD] = IB_WC_FETCH_ADD,
+};
+
+/* Map RX atomic_op to wc opcode */
+const u8 hfi_rx_opcode_wc[14] = {
+	[PTL_UD_SEND] = IB_WC_RECV,
+	[PTL_UD_SEND_IMM] = IB_WC_RECV,
+	[PTL_RC_SEND_LAST] = IB_WC_RECV,
+	[PTL_RC_SEND_LAST_IMM] = IB_WC_RECV,
+	[PTL_RC_SEND_LAST_INV] = IB_WC_RECV,
+	[PTL_RC_RDMA_WR_LAST_IMM] = IB_WC_RECV_RDMA_WITH_IMM,
+};
+
+/* Map RX atomic_op to wc_flags */
+const u8 hfi_rx_wc_flags[14] = {
+	[PTL_UD_SEND] = 0,
+	[PTL_UD_SEND_IMM] = IB_WC_WITH_IMM,
+	[PTL_RC_SEND_LAST] = 0,
+	[PTL_RC_SEND_LAST_IMM] = IB_WC_WITH_IMM,
+	[PTL_RC_SEND_LAST_INV] = IB_WC_WITH_INVALIDATE,
+	[PTL_RC_RDMA_WR_LAST_IMM] = IB_WC_WITH_IMM,
+};
+
+/* Map fail_type to IB status - TODO - scrub table, need one for RX, TX? */
+const u8 hfi_ft_ib_status[19] = {
+	[PTL_NI_OK] = IB_WC_SUCCESS,
+	[PTL_NI_UNDELIVERABLE] = IB_WC_FATAL_ERR,
+	[PTL_NI_DROPPED] = IB_WC_FATAL_ERR,
+	[PTL_NI_CMD_FAILED] = IB_WC_FATAL_ERR,
+	[PTL_NI_INVALID_TARGET] = IB_WC_REM_INV_REQ_ERR,
+	[PTL_NI_PT_DISABLED] = IB_WC_FATAL_ERR,
+	[PTL_NI_PERM_VIOLATION] = IB_WC_REM_ACCESS_ERR,
+	[PTL_NI_OP_VIOLATION] = IB_WC_REM_OP_ERR,
+	[PTL_NI_SEGV] = IB_WC_FATAL_ERR,
+	[PTL_NI_NO_MATCH] = IB_WC_FATAL_ERR,
+	[PTL_NI_CANCELLED] = IB_WC_FATAL_ERR,
+	[PTL_NI_UNSUPPORTED] = IB_WC_REM_INV_REQ_ERR,
+	[PTL_NI_ACK_REFUSED] = IB_WC_FATAL_ERR,
+	[PTL_NI_CONNECT_FAILED] = IB_WC_FATAL_ERR,
+	[PTL_NI_UNREQUESTED] = IB_WC_FATAL_ERR
+};
+
 static int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx);
 
 /* Append new set of keys to LKEY and RKEY stacks */
@@ -609,11 +665,122 @@ qp_write_err:
  */
 static
 int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
-		    struct ib_recv_wr *wr)
+		    struct ib_recv_wr *wr, struct rvt_qp *qp)
 {
-	/* TODO port from user provider */
+	struct hfi_ibcontext *ctx = obj_to_ibctx(ibpd);
+	struct rvt_mregion *mr;
+	union hfi_process pt;
+	struct hfi_rq *hw_rq = rq->hw_rq;
+	struct hfi_rq_wc *rq_wc_p = NULL;
+	u32 list_handle, pd_handle, me_options;
+	u64 addr, length;
+	int ret, i;
+
+	/* TODO - how to set this? */
+	pd_handle = ibpd->uobject ?
+		    ibpd->uobject->user_handle : 0;
+
+	me_options = PTL_ME_NO_TRUNCATE | PTL_USE_ONCE | PTL_OP_PUT;
+	if (wr->num_sge > rq->max_sge) {
+		return -EINVAL;
+	} else if (wr->num_sge == 1) {
+		/* Compare MR to SGE */
+		mr = hfi2_chk_mr_sge(ctx, &wr->sg_list[0]);
+		if (!mr)
+			return -EINVAL;
+
+		/* Allocate USER_PTR */
+		rq_wc_p = kmalloc(sizeof(*rq_wc_p), GFP_KERNEL);
+		if (!rq_wc_p)
+			return -ENOMEM;
+
+		/* Setup Address/Length */
+		addr = wr->sg_list[0].addr;
+		length = wr->sg_list[0].length;
+	} else if (wr->num_sge == 0) {
+		/* Allocate USER_PTR */
+		rq_wc_p = kmalloc(sizeof(*rq_wc_p), GFP_KERNEL);
+		if (!rq_wc_p)
+			return -ENOMEM;
+
+		/* Setup Address/Length */
+		addr = 0;
+		length = 0;
+	} else {
+		/* Allocate USER_PTR + IOVEC Array */
+		rq_wc_p = kmalloc(sizeof(*rq_wc_p) +
+				  sizeof(struct hfi_iovec) * wr->num_sge,
+				  GFP_KERNEL);
+		if (!rq_wc_p)
+			return -ENOMEM;
+
+		/* Setup Address/Length */
+		addr = (u64)rq_wc_p->iov;
+		length = 0;
+		me_options |= PTL_IOVEC;
+
+		for (i = 0; i < wr->num_sge; ++i) {
+			/* Compare MR to SGE */
+			mr = hfi2_chk_mr_sge(ctx, &wr->sg_list[i]);
+			if (!mr) {
+				ret = -EINVAL;
+				goto rq_wc_cleanup;
+			}
+
+			/* Update Length + Populate IOVEC Entry */
+			length += wr->sg_list[i].length;
+			rq_wc_p->iov[i].addr = wr->sg_list[i].addr;
+			rq_wc_p->iov[i].length = wr->sg_list[i].length;
+			rq_wc_p->iov[i].flags = IOVEC_VALID;
+		}
+	}
+
+	/* Get Free ME */
+	list_handle = hfi2_pop_key(&hw_rq->ded_me_ks);
+	if (list_handle == INVALID_KEY) {
+		list_handle = hfi2_pop_key(hw_rq->hw_ctx->shr_me_ks);
+		if (list_handle == INVALID_KEY) {
+			ret = -ENOMEM;		// TODO - async thread
+			goto rq_wc_cleanup;
+		}
+	}
+
+	/* Setup USER_PTR */
+	rq_wc_p->done = 0;
+	rq_wc_p->wr_id = wr->wr_id;
+	rq_wc_p->list_handle = list_handle;
+	rq_wc_p->rq = hw_rq;
+	if (qp) {
+		rq_wc_p->qp = qp;
+		rq_wc_p->is_qp = 1;
+	} else {
+		rq_wc_p->rq = hw_rq;
+		rq_wc_p->is_qp = 0;
+	}
+
+	/* Receive Queue Append */
+	pt.phys.slid = PTL_LID_ANY;
+	pt.phys.ipid = PTL_PID_ANY;
+	ret = hfi_recvq_append(ctx->rx_cmdq, NATIVE_NI,
+			       (void *)addr, length,
+			       hw_rq->recvq_root, pt, PTL_UID_ANY,
+			       hw_rq->hw_ctx->pid, pd_handle, me_options,
+			       PTL_CT_NONE, (u64)rq_wc_p, list_handle);
+	if (ret != 0)
+		goto me_cleanup;
+
+	ret = hfi_eq_poll_cmd_complete(hw_rq->hw_ctx, &rq_wc_p->done);
+	if (ret != 0)
+		goto me_cleanup;
 
 	return 0;
+
+me_cleanup:
+	hfi2_push_key(&hw_rq->ded_me_ks, list_handle);
+
+rq_wc_cleanup:
+	kfree(rq_wc_p);
+	return ret;
 }
 
 int hfi2_native_recv(struct rvt_qp *qp, struct ib_recv_wr *wr,
@@ -623,7 +790,7 @@ int hfi2_native_recv(struct rvt_qp *qp, struct ib_recv_wr *wr,
 
 	/* Refill RX hardware buffers */
 	do {
-		ret = hfi2_do_rx_work(qp->ibqp.pd, &qp->r_rq, wr);
+		ret = hfi2_do_rx_work(qp->ibqp.pd, &qp->r_rq, wr, qp);
 		if (ret) {
 			*bad_wr = wr;
 			break;
@@ -664,7 +831,7 @@ int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 	/* Refill RX hardware buffers */
 	do {
 		ret = hfi2_do_rx_work(srq->ibsrq.pd, &srq->rq,
-				      wr);
+				      wr, NULL);
 		if (ret) {
 			*bad_wr = wr;
 			break;
@@ -674,9 +841,135 @@ int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 	return ret;
 }
 
-int hfi2_native_poll_cq(struct rvt_cq *cq, int ne, struct ib_wc *wc)
+/*
+ * TX EQ handler
+ *   IN:  EQ->user_ptr is a struct hfi_swqe
+ *   OUT: Returns 1 if user completion signaled, else 0
+ * TODO - can consider future optimization to use WR_ID here for
+ * user_ptr for the non-IOVEC case (if we steal a HDR_DATA bit).
+ * But it is very likely we need the hfi_swqe data structure for
+ * implementing initiator event ordering later.
+ */
+static
+int hfi2_process_tx_eq(union initiator_EQEntry *eq, struct ib_wc *wc)
 {
-	/* TODO port from user provider */
+	struct hfi_swqe *swqe = (struct hfi_swqe *)eq->user_ptr;
+	struct ib_qp *qp = NULL;
+	u64 wr_id = 0;
+	int signal = 0;
 
+	if (swqe) {
+		signal = swqe->signal;
+		wr_id = swqe->wr_id;
+		qp = &swqe->qp->ibqp;
+	}
+
+	if (signal) {
+		/* Setup WC */
+		wc->wr_id = wr_id;
+		wc->status = hfi_ft_ib_status[eq->fail_type];
+		wc->opcode = hfi_rc_opcode_wc[eq->opcode];
+		wc->vendor_err = eq->fail_type;
+		wc->qp = qp;
+		/* always set byte_len, but only needed for RDMA READ/ATOMIC */
+		wc->byte_len = eq->rlength;
+		wc->wc_flags = 0;
+	}
+
+	/* else we are only freeing IOVEC array */
+	kfree(swqe);
+	return signal;
+}
+
+static
+int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc)
+{
+	struct hfi_rq_wc *hfi_wc = (struct hfi_rq_wc *)eq->user_ptr;
+	struct hfi_rq *rq;
+	struct rvt_qp *qp;
+	union hfi_process pt;
+	int ret;
+
+	if (hfi_wc->is_qp) {
+		qp = hfi_wc->qp;
+		rq = qp->r_rq.hw_rq;
+	} else {
+		rq = hfi_wc->rq;
+		/* FIXME - SRQ
+		 * DEST_QPN lookup from EXTRACT_HD_DST_QP(eq->hdr_data)?
+		 */
+		qp = NULL;
+	}
+
+	/* Setup WC */
+	wc->wr_id = hfi_wc->wr_id;
+	wc->status = hfi_ft_ib_status[eq->fail_type];
+	wc->vendor_err = eq->fail_type;
+	wc->byte_len = eq->mlength;
+	wc->qp = &qp->ibqp;
+	wc->src_qp = eq->roffset;
+	wc->opcode = hfi_rx_opcode_wc[eq->atomic_op];
+	wc->wc_flags = hfi_rx_wc_flags[eq->atomic_op];
+	wc->ex.imm_data = EXTRACT_HD_IMM_DATA(eq->hdr_data);
+	wc->pkey_index = 0;  /* only QPN 0 and 1 set this */
+	wc->sl = EXTRACT_HD_SL(eq->hdr_data);
+	pt.phys.val = eq->initiator_id;
+	wc->slid = pt.phys.slid;
+	// FIXME - need DLID
+	//wc->dlid_path_bits = dlid & port_lmc_mask;
+
+	/* Reuse List Entry */
+	ret = hfi2_push_key(&rq->ded_me_ks, hfi_wc->list_handle);
+	if (ret != 0) {
+		ret = hfi2_push_key(rq->hw_ctx->shr_me_ks,
+				    hfi_wc->list_handle);
+		if (ret != 0)
+			return -EINVAL;
+	}
+
+	/* Free hfi_rq_wc */
+	kfree(hfi_wc);
 	return 0;
+}
+
+int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
+{
+	struct hfi_ibcontext *ctx = obj_to_ibctx(ibcq);
+	struct rvt_cq *cq = ibcq_to_rvtcq(ibcq);
+	struct hfi_eq *eq = cq->hw_cq;
+	u64 *eqe = NULL;
+	int kind, ret, i = 0;
+	bool dropped;
+
+	if (!ctx || !ctx->supports_native || !eq)
+		return rvt_poll_cq(ibcq, ne, wc);
+
+	while (i < ne) {
+		ret = hfi_eq_peek_nth(ctx->hw_ctx, eq, &eqe, 0, &dropped);
+		if (ret < 0)
+			return ret;
+		else if (ret == HFI_EQ_EMPTY)
+			return i;
+		kind = ((union target_EQEntry *)eqe)->event_kind;
+
+		switch (kind) {
+		case NON_PTL_EVENT_VERBS_RX:
+			hfi2_process_rx_eq((union target_EQEntry *)eqe,
+					   (wc + i));
+			i++;
+			break;
+		case NON_PTL_EVENT_VERBS_TX:
+			i += hfi2_process_tx_eq((union initiator_EQEntry *)eqe,
+						(wc + i));
+			break;
+		default:
+			pr_err("Unknown event kind %d\n", kind);
+			hfi_eq_advance(ctx->hw_ctx, eq, eqe);
+			return -EINVAL;
+		}
+
+		hfi_eq_advance(ctx->hw_ctx, eq, eqe);
+	}
+
+	return i;
 }

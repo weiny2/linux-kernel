@@ -138,6 +138,7 @@ struct hfi_swqe *hfi_prepare_swqe(struct rvt_qp *qp, struct ib_send_wr *wr,
 		iov[i].flags = IOVEC_VALID;
 		swqe->length += iov[i].length;
 	}
+	swqe->qp = qp;
 	swqe->wr_id = wr->wr_id;
 	swqe->num_iov = wr->num_sge;
 	swqe->signal = signal;
