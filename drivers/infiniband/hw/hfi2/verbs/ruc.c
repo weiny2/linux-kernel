@@ -519,8 +519,7 @@ static inline void hfi2_make_ruc_header_9B(struct hfi2_ibport *ibp,
 	hfi2_make_ib_hdr(&priv->s_hdr->ph.ibh, lrh0,
 			 qp->s_hdrwords + nwords,
 			 opa_get_lid(dlid, 9B),
-			 ibp->ppd->lid |
-			 rdma_ah_get_path_bits(&qp->remote_ah_attr));
+			 slid);
 }
 
 typedef void (*hfi2_make_ruc_hdr)(struct hfi2_ibport *ibp,

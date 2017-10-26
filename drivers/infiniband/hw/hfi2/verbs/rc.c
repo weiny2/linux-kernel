@@ -807,7 +807,8 @@ static u32 hfi2_make_rc_ack_9B(struct rvt_qp *qp,
 	hfi2_make_ib_hdr(hdr, lrh0, hwords + nwords,
 			 opa_get_lid(rdma_ah_get_dlid(&qp->remote_ah_attr), 9B),
 			 ibp->ppd->lid |
-			 rdma_ah_get_path_bits(&qp->remote_ah_attr));
+			 (rdma_ah_get_path_bits(&qp->remote_ah_attr) &
+			  ((1 << ibp->ppd->lmc) - 1)));
 
 	bth1 = qp->remote_qpn;
 	if (is_fecn)
@@ -859,7 +860,8 @@ static u32 hfi2_make_rc_ack_16B(struct rvt_qp *qp,
 		bth1 |= IB_16B_BTH_MIG_REQ;
 
 	sc5 = ibp->ppd->sl_to_sc[rdma_ah_get_sl(&qp->remote_ah_attr)];
-	slid = ibp->ppd->lid | rdma_ah_get_path_bits(&qp->remote_ah_attr);
+	slid = ibp->ppd->lid | (rdma_ah_get_path_bits(&qp->remote_ah_attr) &
+				((1 << ibp->ppd->lmc) - 1));
 	pkey = hfi2_get_pkey(ibp, qp->s_pkey_index);
 	qwords = (hwords + nwords) >> 1;
 	hfi2_make_16b_hdr(hdr, slid, opa_get_lid(dlid, 16B),
