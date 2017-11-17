@@ -11,8 +11,12 @@
 #include <linux/err.h>
 #include <crypto/algapi.h>
 #include <crypto/aes.h>
+#include <crypto/internal/skcipher.h>
+#include <crypto/internal/simd.h>
+#include <crypto/xts.h>
 #include <asm/cpu_device_id.h>
 #include <asm/fpu/api.h>
+#include <asm/simd.h>
 
 #ifdef CONFIG_X86_64
 #include <asm/crypto/glue_helper.h>
@@ -39,6 +43,15 @@ asmlinkage void __aeskl_enc1(const void *ctx, u8 *out, const u8 *in);
 asmlinkage void __aeskl_dec1(const void *ctx, u8 *out, const u8 *in);
 asmlinkage void aesni_enc(const void *ctx, u8 *out, const u8 *in);
 asmlinkage void aesni_dec(const void *ctx, u8 *out, const u8 *in);
+
+asmlinkage void __aeskl_ecb_enc(struct crypto_aes_ctx *ctx, u8 *out,
+				const u8 *in, unsigned int len);
+asmlinkage void __aeskl_ecb_dec(struct crypto_aes_ctx *ctx, u8 *out,
+				const u8 *in, unsigned int len);
+asmlinkage void aesni_ecb_enc(struct crypto_aes_ctx *ctx, u8 *out,
+			      const u8 *in, unsigned int len);
+asmlinkage void aesni_ecb_dec(struct crypto_aes_ctx *ctx, u8 *out,
+			      const u8 *in, unsigned int len);
 
 static inline struct crypto_aes_ctx *aes_ctx(void *raw_ctx)
 {
@@ -117,6 +130,87 @@ static void aeskl_decrypt(struct crypto_tfm *tfm, u8 *dst, const u8 *src)
 	kernel_fpu_end();
 }
 
+static int aeskl_skcipher_setkey(struct crypto_skcipher *tfm, const u8 *key,
+				unsigned int len)
+{
+	return aeskl_setkey_common(crypto_skcipher_tfm(tfm),
+				   crypto_skcipher_ctx(tfm), key, len);
+}
+
+static int ecb_encrypt(struct skcipher_request *req)
+{
+	struct crypto_skcipher *tfm;
+	struct crypto_aes_ctx *ctx;
+	struct skcipher_walk walk;
+	unsigned int nbytes;
+	int err;
+
+	tfm = crypto_skcipher_reqtfm(req);
+	ctx = aes_ctx(crypto_skcipher_ctx(tfm));
+
+	err = skcipher_walk_virt(&walk, req, true);
+	if (err)
+		return err;
+
+	while ((nbytes = walk.nbytes)) {
+		unsigned int len = nbytes & AES_BLOCK_MASK;
+		const u8 *src = walk.src.virt.addr;
+		u8 *dst = walk.dst.virt.addr;
+
+		kernel_fpu_begin();
+		if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+			aesni_ecb_enc(ctx, dst, src, len);
+		else
+			__aeskl_ecb_enc(ctx, dst, src, len);
+		kernel_fpu_end();
+
+		nbytes &= AES_BLOCK_SIZE - 1;
+
+		err = skcipher_walk_done(&walk, nbytes);
+		if (err)
+			return err;
+	}
+
+	return err;
+}
+
+static int ecb_decrypt(struct skcipher_request *req)
+{
+	struct crypto_skcipher *tfm;
+	struct crypto_aes_ctx *ctx;
+	struct skcipher_walk walk;
+	unsigned int nbytes;
+	int err;
+
+	tfm = crypto_skcipher_reqtfm(req);;
+	ctx = aes_ctx(crypto_skcipher_ctx(tfm));
+
+	err = skcipher_walk_virt(&walk, req, true);
+	if (err)
+		return err;
+
+	while ((nbytes = walk.nbytes)) {
+		unsigned int len = nbytes & AES_BLOCK_MASK;
+		const u8 *src = walk.src.virt.addr;
+		u8 *dst = walk.dst.virt.addr;
+
+		kernel_fpu_begin();
+		if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+			aesni_ecb_dec(ctx, dst, src, len);
+		else
+			__aeskl_ecb_dec(ctx, dst, src, len);
+		kernel_fpu_end();
+
+		nbytes &= AES_BLOCK_SIZE - 1;
+
+		err = skcipher_walk_done(&walk, nbytes);
+		if (err)
+			return err;
+	}
+
+	return err;
+}
+
 static struct crypto_alg aeskl_cipher_alg = {
 	.cra_name		= "aes",
 	.cra_driver_name	= "aes-aeskl",
@@ -136,6 +230,28 @@ static struct crypto_alg aeskl_cipher_alg = {
 	}
 };
 
+static struct skcipher_alg aeskl_skciphers[] = {
+	{
+		.base = {
+			.cra_name		= "__ecb(aes)",
+			.cra_driver_name	= "__ecb-aes-aeskl",
+			.cra_priority		= 400,
+			.cra_flags		= CRYPTO_ALG_INTERNAL,
+			.cra_blocksize		= AES_BLOCK_SIZE,
+			.cra_ctxsize		= CRYPTO_AES_CTX_SIZE,
+			.cra_module		= THIS_MODULE,
+		},
+		.min_keysize	= AES_MIN_KEY_SIZE,
+		.max_keysize	= AES_MAX_KEY_SIZE,
+		.setkey		= aeskl_skcipher_setkey,
+		.encrypt	= ecb_encrypt,
+		.decrypt	= ecb_decrypt,
+	}
+};
+
+static
+struct simd_skcipher_alg *aeskl_simd_skciphers[ARRAY_SIZE(aeskl_skciphers)];
+
 static int __init aeskl_init(void)
 {
 	u32 eax, ebx, ecx, edx;
@@ -151,19 +267,34 @@ static int __init aeskl_init(void)
 	 * Check the internal wrapping key support:
 	 *
 	 * ebx[0]: When 1, KeyLocker is fully enabled.
+	 * ebx[2]: When 1, the AES wide KeyLocker iinstructions are supported.
 	 */
-	if (!(ebx & BIT(0)))
+
+	if (!(ebx & BIT(0)) || !(ebx & BIT(2)))
 		return -ENODEV;
 
 	err = crypto_register_alg(&aeskl_cipher_alg);
 	if (err)
 		return err;
 
+	err = simd_register_skciphers_compat(aeskl_skciphers,
+					     ARRAY_SIZE(aeskl_skciphers),
+					     aeskl_simd_skciphers);
+	if (err)
+		goto unregister_algs;
+
 	return 0;
+
+unregister_algs:
+	crypto_unregister_alg(&aeskl_cipher_alg);
+
+	return err;
 }
 
 static void __exit aeskl_exit(void)
 {
+	simd_unregister_skciphers(aeskl_skciphers, ARRAY_SIZE(aeskl_skciphers),
+				  aeskl_simd_skciphers);
 	crypto_unregister_alg(&aeskl_cipher_alg);
 }
 

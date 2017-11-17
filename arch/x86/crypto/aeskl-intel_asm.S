@@ -164,3 +164,183 @@ SYM_FUNC_START(__aeskl_dec1)
 	ret
 SYM_FUNC_END(__aeskl_dec1)
 
+
+/*
+ * void __aeskl_ecb_enc(struct crypto_aes_ctx *ctx,
+ *			const u8 *dst,
+ *			u8 *src,
+ *			size_t len)
+ */
+SYM_FUNC_START(__aeskl_ecb_enc)
+	FRAME_BEGIN
+#ifndef __x86_64__
+	pushl LEN
+	pushl HANDLEP
+	pushl KLEN
+	movl (FRAME_OFFSET+16)(%esp), HANDLEP	# ctx
+	movl (FRAME_OFFSET+20)(%esp), OUTP	# dst
+	movl (FRAME_OFFSET+24)(%esp), INP	# src
+	movl (FRAME_OFFSET+28)(%esp), LEN	# len
+#endif
+	test LEN, LEN
+	jz .Lecb_enc_end
+	mov 480(HANDLEP), KLEN
+	cmp $16, LEN
+	jb .Lecb_enc_end
+	cmp $128, LEN
+	jb .Lecb_enc_loop1
+
+.align 4
+.Lecb_enc_loop8:
+	movdqu (INP), STATE1
+	movdqu 0x10(INP), STATE2
+	movdqu 0x20(INP), STATE3
+	movdqu 0x30(INP), STATE4
+	movdqu 0x40(INP), STATE5
+	movdqu 0x50(INP), STATE6
+	movdqu 0x60(INP), STATE7
+	movdqu 0x70(INP), STATE8
+
+	cmp $16, KLEN
+	je .Lecb_enc8_128
+	AESENCWIDE256KL HANDLEP
+	jmp .Lecb_enc8_end
+.Lecb_enc8_128:
+	AESENCWIDE128KL HANDLEP
+
+.Lecb_enc8_end:
+	movdqu STATE1, (OUTP)
+	movdqu STATE2, 0x10(OUTP)
+	movdqu STATE3, 0x20(OUTP)
+	movdqu STATE4, 0x30(OUTP)
+	movdqu STATE5, 0x40(OUTP)
+	movdqu STATE6, 0x50(OUTP)
+	movdqu STATE7, 0x60(OUTP)
+	movdqu STATE8, 0x70(OUTP)
+
+	sub $128, LEN
+	add $128, INP
+	add $128, OUTP
+	cmp $128, LEN
+	jge .Lecb_enc_loop8
+	cmp $16, LEN
+	jb .Lecb_enc_end
+
+.align 4
+.Lecb_enc_loop1:
+	movdqu (INP), STATE1
+	cmp $16, KLEN
+	je .Lecb_enc1_128
+	AESENC256KL HANDLEP, STATE
+	jmp .Lecb_enc1_end
+.Lecb_enc1_128:
+	AESENC128KL HANDLEP, STATE
+
+.Lecb_enc1_end:
+	movdqu STATE1, (OUTP)
+	sub $16, LEN
+	add $16, INP
+	add $16, OUTP
+	cmp $16, LEN
+	jge .Lecb_enc_loop1
+
+.Lecb_enc_end:
+#ifndef __x86_64__
+	popl KLEN
+	popl HANDLEP
+	popl LEN
+#endif
+	FRAME_END
+	ret
+SYM_FUNC_END(__aeskl_ecb_enc)
+
+/*
+ * void __aeskl_ecb_dec(struct crypto_aes_ctx *ctx,
+ *			const u8 *dst,
+ *			u8 *src,
+ *			size_t len);
+ */
+SYM_FUNC_START(__aeskl_ecb_dec)
+	FRAME_BEGIN
+#ifndef __x86_64__
+	pushl LEN
+	pushl HANDLEP
+	pushl KLEN
+	movl (FRAME_OFFSET+16)(%esp), HANDLEP	# ctx
+	movl (FRAME_OFFSET+20)(%esp), OUTP	# dst
+	movl (FRAME_OFFSET+24)(%esp), INP	# src
+	movl (FRAME_OFFSET+28)(%esp), LEN	# len
+#endif
+
+	test LEN, LEN
+	jz .Lecb_dec_end
+	mov 480(HANDLEP), KLEN
+	cmp $16, LEN
+	jb .Lecb_dec_end
+	cmp $128, LEN
+	jb .Lecb_dec1
+
+.align 4
+.Lecb_dec8:
+	movdqu (INP), STATE1
+	movdqu 0x10(INP), STATE2
+	movdqu 0x20(INP), STATE3
+	movdqu 0x30(INP), STATE4
+	movdqu 0x40(INP), STATE5
+	movdqu 0x50(INP), STATE6
+	movdqu 0x60(INP), STATE7
+	movdqu 0x70(INP), STATE8
+
+	cmp $16, KLEN
+	je .Lecb_dec8_128
+	AESDECWIDE256KL HANDLEP
+	jmp .Lecb_dec8_end
+.Lecb_dec8_128:
+	AESDECWIDE128KL HANDLEP
+
+.Lecb_dec8_end:
+	movdqu STATE1, (OUTP)
+	movdqu STATE2, 0x10(OUTP)
+	movdqu STATE3, 0x20(OUTP)
+	movdqu STATE4, 0x30(OUTP)
+	movdqu STATE5, 0x40(OUTP)
+	movdqu STATE6, 0x50(OUTP)
+	movdqu STATE7, 0x60(OUTP)
+	movdqu STATE8, 0x70(OUTP)
+
+	sub $128, LEN
+	add $128, INP
+	add $128, OUTP
+	cmp $128, LEN
+	jge .Lecb_dec8
+	cmp $16, LEN
+	jb .Lecb_dec_end
+
+.align 4
+.Lecb_dec1:
+	movdqu (INP), STATE1
+	cmp $16, KLEN
+	je .Lecb_dec1_128
+	AESDEC256KL HANDLEP, STATE
+	jmp .Lecb_dec1_end
+.Lecb_dec1_128:
+	AESDEC128KL HANDLEP, STATE
+
+.Lecb_dec1_end:
+	movdqu STATE1, (OUTP)
+	sub $16, LEN
+	add $16, INP
+	add $16, OUTP
+	cmp $16, LEN
+	jge .Lecb_dec1
+
+.Lecb_dec_end:
+#ifndef __x86_64__
+	popl KLEN
+	popl HANDLEP
+	popl LEN
+#endif
+	FRAME_END
+	ret
+SYM_FUNC_END(__aeskl_ecb_dec)
+
