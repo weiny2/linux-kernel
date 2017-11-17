@@ -689,4 +689,134 @@ SYM_FUNC_START(__aeskl_ctr_enc)
 	ret
 SYM_FUNC_END(__aeskl_ctr_enc)
 
+/*
+ * XTS implementation
+ */
+#define GF128MUL_MASK %xmm10
+
+#define __aeskl_gf128mul_x_ble() \
+	pshufd $0x13, IV, CTR; \
+	paddq IV, IV; \
+	psrad $31, CTR; \
+	pand GF128MUL_MASK, CTR; \
+	pxor CTR, IV;
+
+/*
+ * void __aeskl_xts_crypt8(const struct crypto_aes_ctx *ctx,
+ *			   const u8 *dst,
+ *			   u8 *src,
+ *			   bool enc,
+ *			   u8 *iv)
+ */
+SYM_FUNC_START(__aeskl_xts_crypt8)
+	FRAME_BEGIN
+
+	movdqa .Lgf128mul_x_ble_mask, GF128MUL_MASK
+	movdqu (IVP), IV
+
+	mov 480(HANDLEP), KLEN
+
+	movdqa IV, STATE1
+	movdqu (INP), INC
+	pxor INC, STATE1
+	movdqu IV, (OUTP)
+
+	__aeskl_gf128mul_x_ble()
+	movdqa IV, STATE2
+	movdqu 0x10(INP), INC
+	pxor INC, STATE2
+	movdqu IV, 0x10(OUTP)
+
+	__aeskl_gf128mul_x_ble()
+	movdqa IV, STATE3
+	movdqu 0x20(INP), INC
+	pxor INC, STATE3
+	movdqu IV, 0x20(OUTP)
+
+	__aeskl_gf128mul_x_ble()
+	movdqa IV, STATE4
+	movdqu 0x30(INP), INC
+	pxor INC, STATE4
+	movdqu IV, 0x30(OUTP)
+
+	__aeskl_gf128mul_x_ble()
+	movdqa IV, STATE5
+	movdqu 0x40(INP), INC
+	pxor INC, STATE5
+	movdqu IV, 0x40(OUTP)
+
+	__aeskl_gf128mul_x_ble()
+	movdqa IV, STATE6
+	movdqu 0x50(INP), INC
+	pxor INC, STATE6
+	movdqu IV, 0x50(OUTP)
+
+	__aeskl_gf128mul_x_ble()
+	movdqa IV, STATE7
+	movdqu 0x60(INP), INC
+	pxor INC, STATE7
+	movdqu IV, 0x60(OUTP)
+
+	__aeskl_gf128mul_x_ble()
+	movdqa IV, STATE8
+	movdqu 0x70(INP), INC
+	pxor INC, STATE8
+	movdqu IV, 0x70(OUTP)
+
+	cmpb $0, %cl
+	je  .Lxts_dec8
+	cmp $16, KLEN
+	je .Lxts_enc8_128
+	AESENCWIDE256KL %rdi
+	jmp .Lxts_crypt8_end
+.Lxts_enc8_128:
+	AESENCWIDE128KL %rdi
+	jmp .Lxts_crypt8_end
+.Lxts_dec8:
+	cmp $16, KLEN
+	je .Lxts_dec8_128
+	AESDECWIDE256KL %rdi
+	jmp .Lxts_crypt8_end
+.Lxts_dec8_128:
+	AESDECWIDE128KL %rdi
+.Lxts_crypt8_end:
+
+	movdqu 0x00(OUTP), INC
+	pxor INC, STATE1
+	movdqu STATE1, 0x00(OUTP)
+
+	movdqu 0x10(OUTP), INC
+	pxor INC, STATE2
+	movdqu STATE2, 0x10(OUTP)
+
+	movdqu 0x20(OUTP), INC
+	pxor INC, STATE3
+	movdqu STATE3, 0x20(OUTP)
+
+	movdqu 0x30(OUTP), INC
+	pxor INC, STATE4
+	movdqu STATE4, 0x30(OUTP)
+
+	movdqu 0x40(OUTP), INC
+	pxor INC, STATE5
+	movdqu STATE5, 0x40(OUTP)
+
+	movdqu 0x50(OUTP), INC
+	pxor INC, STATE6
+	movdqu STATE6, 0x50(OUTP)
+
+	movdqu 0x60(OUTP), INC
+	pxor INC, STATE7
+	movdqu STATE7, 0x60(OUTP)
+
+	movdqu 0x70(OUTP), INC
+	pxor INC, STATE8
+	movdqu STATE8, 0x70(OUTP)
+
+	__aeskl_gf128mul_x_ble()
+	movdqu IV, (IVP)
+	FRAME_END
+	ret
+SYM_FUNC_END(__aeskl_xts_crypt8)
+
 #endif

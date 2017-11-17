@@ -23,10 +23,20 @@
 #endif
 
 #define AESKL_ALIGN		16
+#define AESKL_ALIGN_ATTR	__aligned(AESKL_ALIGN)
 #define AES_BLOCK_MASK		(~(AES_BLOCK_SIZE - 1))
+#define RFC4106_HASH_SUBKEY_SZ	16
 #define AESKL_ALIGN_EXTRA 	((AESKL_ALIGN - 1) & ~(CRYPTO_MINALIGN - 1))
 #define CRYPTO_AES_CTX_SIZE \
 	(sizeof(struct crypto_aes_ctx) + AESKL_ALIGN_EXTRA)
+
+struct aeskl_xts_ctx {
+	u8 raw_tweak_ctx[sizeof(struct crypto_aes_ctx)] AESKL_ALIGN_ATTR;
+	u8 raw_crypt_ctx[sizeof(struct crypto_aes_ctx)] AESKL_ALIGN_ATTR;
+};
+
+#define XTS_AES_CTX_SIZE \
+	(sizeof(struct aeskl_xts_ctx) + AESKL_ALIGN_EXTRA)
 
 static const struct x86_cpu_id aes_keylocker_cpuid[] = {
 	X86_FEATURE_MATCH(X86_FEATURE_AES),
@@ -67,6 +77,12 @@ asmlinkage void __aeskl_ctr_enc(struct crypto_aes_ctx *ctx, u8 *out,
 				const u8 *in, unsigned int len, u8 *iv);
 asmlinkage void aesni_ctr_enc(struct crypto_aes_ctx *ctx, u8 *out,
 			      const u8 *in, unsigned int len, u8 *iv);
+
+asmlinkage void __aeskl_xts_crypt8(const struct crypto_aes_ctx *ctx,
+				   u8 *out, const u8 *in, bool enc,
+				   u8 *iv);
+asmlinkage void aesni_xts_crypt8(const struct crypto_aes_ctx *ctx,
+				 u8 *out, const u8 *in, bool enc, u8 *iv);
 #endif
 
 static inline struct crypto_aes_ctx *aes_ctx(void *raw_ctx)
@@ -359,6 +375,137 @@ static int ctr_crypt(struct skcipher_request *req)
 
 	return err;
 }
+
+static int aeskl_xts_setkey(struct crypto_skcipher *tfm, const u8 *key,
+			    unsigned int keylen)
+{
+	struct aeskl_xts_ctx *ctx = crypto_skcipher_ctx(tfm);
+	int err;
+
+	err = xts_verify_key(tfm, key, keylen);
+	if (err)
+		return err;
+
+	keylen /= 2;
+
+	/* first half of xts-key is for crypt */
+	err = aeskl_setkey_common(crypto_skcipher_tfm(tfm),
+				  ctx->raw_crypt_ctx, key, keylen);
+	if (err)
+		return err;
+
+	/* second half of xts-key is for tweak */
+	return aeskl_setkey_common(crypto_skcipher_tfm(tfm),
+				     ctx->raw_tweak_ctx,
+				     key + keylen, keylen);
+}
+
+
+static void aeskl_xts_tweak(const void *raw_ctx, u8 *out, const u8 *in)
+{
+	struct crypto_aes_ctx *ctx = aes_ctx((void *)raw_ctx);
+
+	if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+		aesni_enc(raw_ctx, out, in);
+	else
+		__aeskl_enc1(raw_ctx, out, in);
+}
+
+static void aeskl_xts_enc1(const void *raw_ctx, u8 *dst, const u8 *src, le128 *iv)
+{
+	struct crypto_aes_ctx *ctx = aes_ctx((void *)raw_ctx);
+	common_glue_func_t fn = __aeskl_enc1;
+
+	if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+		fn = aesni_enc;
+
+	glue_xts_crypt_128bit_one(raw_ctx, dst, src, iv, fn);
+}
+
+static void aeskl_xts_dec1(const void *raw_ctx, u8 *dst, const u8 *src, le128 *iv)
+{
+	struct crypto_aes_ctx *ctx = aes_ctx((void *)raw_ctx);
+	common_glue_func_t fn = __aeskl_dec1;
+
+	if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+		fn = aesni_dec;
+
+	glue_xts_crypt_128bit_one(raw_ctx, dst, src, iv, fn);
+}
+
+static void aeskl_xts_enc8(const void *raw_ctx, u8 *dst, const u8 *src, le128 *iv)
+{
+	struct crypto_aes_ctx *ctx = aes_ctx((void *)raw_ctx);
+
+	if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+		aesni_xts_crypt8(raw_ctx, dst, src, true, (u8 *)iv);
+	else
+		__aeskl_xts_crypt8(raw_ctx, dst, src, true, (u8 *)iv);
+}
+
+static void aeskl_xts_dec8(const void *raw_ctx, u8 *dst, const u8 *src, le128 *iv)
+{
+	struct crypto_aes_ctx *ctx = aes_ctx((void *)raw_ctx);
+
+	if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+		aesni_xts_crypt8(raw_ctx, dst, src, false, (u8 *)iv);
+	else
+		__aeskl_xts_crypt8(raw_ctx, dst, src, false, (u8 *)iv);
+}
+
+static const struct common_glue_ctx aeskl_xts_enc = {
+	.num_funcs = 2,
+	.fpu_blocks_limit = 1,
+
+	.funcs = { {
+		.num_blocks = 8,
+		.fn_u = { .xts = aeskl_xts_enc8 }
+	}, {
+		.num_blocks = 1,
+		.fn_u = { .xts = aeskl_xts_enc1 }
+	} }
+};
+
+static const struct common_glue_ctx aeskl_xts_dec = {
+	.num_funcs = 2,
+	.fpu_blocks_limit = 1,
+
+	.funcs = { {
+		.num_blocks = 8,
+		.fn_u = { .xts = aeskl_xts_dec8 }
+	}, {
+		.num_blocks = 1,
+		.fn_u = { .xts = aeskl_xts_dec1 }
+	} }
+};
+
+static int xts_crypt(struct skcipher_request *req, bool decrypt)
+{
+	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
+	struct aeskl_xts_ctx *ctx = crypto_skcipher_ctx(tfm);
+	const struct common_glue_ctx *gctx;
+
+	if (decrypt)
+		gctx = &aeskl_xts_dec;
+	else
+		gctx = &aeskl_xts_enc;
+
+	return glue_xts_req_128bit(gctx, req,
+				   aeskl_xts_tweak,
+				   aes_ctx(ctx->raw_tweak_ctx),
+				   aes_ctx(ctx->raw_crypt_ctx),
+				   decrypt);
+}
+
+static int xts_encrypt(struct skcipher_request *req)
+{
+	return xts_crypt(req, false);
+}
+
+static int xts_decrypt(struct skcipher_request *req)
+{
+	return xts_crypt(req, true);
+}
 #endif
 
 static struct crypto_alg aeskl_cipher_alg = {
@@ -430,6 +577,22 @@ static struct skcipher_alg aeskl_skciphers[] = {
 		.setkey		= aeskl_skcipher_setkey,
 		.encrypt	= ctr_crypt,
 		.decrypt	= ctr_crypt,
+	}, {
+		.base = {
+			.cra_name		= "__xts(aes)",
+			.cra_driver_name	= "__xts-aes-aeskl",
+			.cra_priority		= 401,
+			.cra_flags		= CRYPTO_ALG_INTERNAL,
+			.cra_blocksize		= AES_BLOCK_SIZE,
+			.cra_ctxsize		= XTS_AES_CTX_SIZE,
+			.cra_module		= THIS_MODULE,
+		},
+		.min_keysize	= 2 * AES_MIN_KEY_SIZE,
+		.max_keysize	= 2 * AES_MAX_KEY_SIZE,
+		.ivsize		= AES_BLOCK_SIZE,
+		.setkey		= aeskl_xts_setkey,
+		.encrypt	= xts_encrypt,
+		.decrypt	= xts_decrypt,
 #endif
 	}
 };
