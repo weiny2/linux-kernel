@@ -53,6 +53,15 @@ asmlinkage void aesni_ecb_enc(struct crypto_aes_ctx *ctx, u8 *out,
 asmlinkage void aesni_ecb_dec(struct crypto_aes_ctx *ctx, u8 *out,
 			      const u8 *in, unsigned int len);
 
+asmlinkage void __aeskl_cbc_enc(struct crypto_aes_ctx *ctx, u8 *out,
+				const u8 *in, unsigned int len, u8 *iv);
+asmlinkage void __aeskl_cbc_dec(struct crypto_aes_ctx *ctx, u8 *out,
+				const u8 *in, unsigned int len, u8 *iv);
+asmlinkage void aesni_cbc_enc(struct crypto_aes_ctx *ctx, u8 *out,
+			      const u8 *in, unsigned int len, u8 *iv);
+asmlinkage void aesni_cbc_dec(struct crypto_aes_ctx *ctx, u8 *out,
+			      const u8 *in, unsigned int len, u8 *iv);
+
 static inline struct crypto_aes_ctx *aes_ctx(void *raw_ctx)
 {
 	unsigned long addr = (unsigned long)raw_ctx;
@@ -211,6 +220,80 @@ static int ecb_decrypt(struct skcipher_request *req)
 	return err;
 }
 
+static int cbc_encrypt(struct skcipher_request *req)
+{
+	struct crypto_skcipher *tfm;
+	struct crypto_aes_ctx *ctx;
+	struct skcipher_walk walk;
+	unsigned int nbytes;
+	int err;
+
+	tfm = crypto_skcipher_reqtfm(req);
+	ctx = aes_ctx(crypto_skcipher_ctx(tfm));
+	err = skcipher_walk_virt(&walk, req, true);
+	if (err)
+		return err;
+
+	while ((nbytes = walk.nbytes)) {
+		unsigned int len = nbytes & AES_BLOCK_MASK;
+		const u8 *src = walk.src.virt.addr;
+		u8 *dst = walk.dst.virt.addr;
+		u8 *iv = walk.iv;
+
+		kernel_fpu_begin();
+		if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+			aesni_cbc_enc(ctx, dst, src, len, iv);
+		else
+			__aeskl_cbc_enc(ctx, dst, src, len, iv);
+		kernel_fpu_end();
+
+		nbytes &= AES_BLOCK_SIZE - 1;
+
+		err = skcipher_walk_done(&walk, nbytes);
+		if (err)
+			return err;
+	}
+
+	return err;
+}
+
+static int cbc_decrypt(struct skcipher_request *req)
+{
+	struct crypto_skcipher *tfm;
+	struct crypto_aes_ctx *ctx;
+	struct skcipher_walk walk;
+	unsigned int nbytes;
+	int err;
+
+	tfm = crypto_skcipher_reqtfm(req);
+	ctx = aes_ctx(crypto_skcipher_ctx(tfm));
+	err = skcipher_walk_virt(&walk, req, true);
+	if (err)
+		return err;
+
+	while ((nbytes = walk.nbytes)) {
+		unsigned int len = nbytes & AES_BLOCK_MASK;
+		const u8 *src = walk.src.virt.addr;
+		u8 *dst = walk.dst.virt.addr;
+		u8 *iv = walk.iv;
+
+		kernel_fpu_begin();
+		if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+			aesni_cbc_dec(ctx, dst, src, len, iv);
+		else
+			__aeskl_cbc_dec(ctx, dst, src, len, iv);
+		kernel_fpu_end();
+
+		nbytes &= AES_BLOCK_SIZE - 1;
+
+		err = skcipher_walk_done(&walk, nbytes);
+		if (err)
+			return err;
+	}
+
+	return err;
+}
+
 static struct crypto_alg aeskl_cipher_alg = {
 	.cra_name		= "aes",
 	.cra_driver_name	= "aes-aeskl",
@@ -246,6 +329,22 @@ static struct skcipher_alg aeskl_skciphers[] = {
 		.setkey		= aeskl_skcipher_setkey,
 		.encrypt	= ecb_encrypt,
 		.decrypt	= ecb_decrypt,
+	}, {
+		.base = {
+			.cra_name		= "__cbc(aes)",
+			.cra_driver_name	= "__cbc-aes-aeskl",
+			.cra_priority		= 400,
+			.cra_flags		= CRYPTO_ALG_INTERNAL,
+			.cra_blocksize		= AES_BLOCK_SIZE,
+			.cra_ctxsize		= CRYPTO_AES_CTX_SIZE,
+			.cra_module		= THIS_MODULE,
+		},
+		.min_keysize	= AES_MIN_KEY_SIZE,
+		.max_keysize	= AES_MAX_KEY_SIZE,
+		.ivsize		= AES_BLOCK_SIZE,
+		.setkey		= aeskl_skcipher_setkey,
+		.encrypt	= cbc_encrypt,
+		.decrypt	= cbc_decrypt,
 	}
 };
 

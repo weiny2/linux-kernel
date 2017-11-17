@@ -32,6 +32,8 @@
 #define IN7	%xmm14
 #define IN8	%xmm15
 #define IN	IN1
+#else
+#define IN	%xmm1
 #endif
 
 #ifdef __x86_64__
@@ -344,3 +346,182 @@ SYM_FUNC_START(__aeskl_ecb_dec)
 	ret
 SYM_FUNC_END(__aeskl_ecb_dec)
 
+
+
+/*
+ * void __aeskl_cbc_enc(struct crypto_aes_ctx *ctx,
+ *			const u8 *dst,
+ *			u8 *src,
+ *			size_t len,
+ *			u8 *iv)
+ */
+SYM_FUNC_START(__aeskl_cbc_enc)
+	FRAME_BEGIN
+#ifndef __x86_64__
+	pushl IVP
+	pushl LEN
+	pushl HANDLEP
+	pushl KLEN
+	movl (FRAME_OFFSET+20)(%esp), HANDLEP	# ctx
+	movl (FRAME_OFFSET+24)(%esp), OUTP	# dst
+	movl (FRAME_OFFSET+28)(%esp), INP	# src
+	movl (FRAME_OFFSET+32)(%esp), LEN	# len
+	movl (FRAME_OFFSET+36)(%esp), IVP	# iv
+#endif
+
+	cmp $16, LEN
+	jb .Lcbc_enc_end
+	mov 480(HANDLEP), KLEN
+	movdqu (IVP), STATE
+
+.align 4
+.Lcbc_enc1_loop:
+	movdqu (INP), IN
+	pxor IN, STATE
+
+	cmp $16, KLEN
+	je .Lcbc_enc1_128
+	AESENC256KL HANDLEP, STATE
+	jmp .Lcbc_enc1_end
+.Lcbc_enc1_128:
+	AESENC128KL HANDLEP, STATE
+
+.Lcbc_enc1_end:
+	movdqu STATE, (OUTP)
+	sub $16, LEN
+	add $16, INP
+	add $16, OUTP
+	cmp $16, LEN
+	jge .Lcbc_enc1_loop
+	movdqu STATE, (IVP)
+
+.Lcbc_enc_end:
+#ifndef __x86_64__
+	popl KLEN
+	popl HANDLEP
+	popl LEN
+	popl IVP
+#endif
+	FRAME_END
+	ret
+SYM_FUNC_END(__aeskl_cbc_enc)
+
+/*
+ * void __aeskl_cbc_dec(struct crypto_aes_ctx *ctx,
+ *			const u8 *dst,
+ *			u8 *src,
+ *			size_t len,
+ *			u8 *iv)
+ */
+SYM_FUNC_START(__aeskl_cbc_dec)
+	FRAME_BEGIN
+#ifndef __x86_64__
+	pushl IVP
+	pushl LEN
+	pushl HANDLEP
+	pushl KLEN
+	movl (FRAME_OFFSET+20)(%esp), HANDLEP	# ctx
+	movl (FRAME_OFFSET+24)(%esp), OUTP	# dst
+	movl (FRAME_OFFSET+28)(%esp), INP	# src
+	movl (FRAME_OFFSET+32)(%esp), LEN	# len
+	movl (FRAME_OFFSET+36)(%esp), IVP	# iv
+#endif
+
+	cmp $16, LEN
+	jb .Lcbc_dec_end
+	mov 480(HANDLEP), KLEN
+#ifdef __x86_64__
+	cmp $128, LEN
+	jb .Lcbc_dec1_begin
+
+.align 4
+.Lcbc_dec8_loop:
+	movdqu 0x0(INP), STATE1
+	movdqu 0x10(INP), STATE2
+	movdqu 0x20(INP), STATE3
+	movdqu 0x30(INP), STATE4
+	movdqu 0x40(INP), STATE5
+	movdqu 0x50(INP), STATE6
+	movdqu 0x60(INP), STATE7
+	movdqu 0x70(INP), STATE8
+
+	movdqu (IVP), IN1
+	movdqa STATE1, IN2
+	movdqa STATE2, IN3
+	movdqa STATE3, IN4
+	movdqa STATE4, IN5
+	movdqa STATE5, IN6
+	movdqa STATE6, IN7
+	movdqa STATE7, IN8
+	movdqu STATE8, (IVP)
+
+	cmp $16, KLEN
+	je .Lcbc_dec8_128
+	AESDECWIDE256KL HANDLEP
+	jmp .Lcbc_dec8_end
+.Lcbc_dec8_128:
+	AESDECWIDE128KL HANDLEP
+
+.Lcbc_dec8_end:
+	pxor IN1, STATE1
+	pxor IN2, STATE2
+	pxor IN3, STATE3
+	pxor IN4, STATE4
+	pxor IN5, STATE5
+	pxor IN6, STATE6
+	pxor IN7, STATE7
+	pxor IN8, STATE8
+
+	movdqu STATE1, 0x0(OUTP)
+	movdqu STATE2, 0x10(OUTP)
+	movdqu STATE3, 0x20(OUTP)
+	movdqu STATE4, 0x30(OUTP)
+	movdqu STATE5, 0x40(OUTP)
+	movdqu STATE6, 0x50(OUTP)
+	movdqu STATE7, 0x60(OUTP)
+	movdqu STATE8, 0x70(OUTP)
+
+	sub $128, LEN
+	add $128, INP
+	add $128, OUTP
+	cmp $128, LEN
+	jge .Lcbc_dec8_loop
+	cmp $16, LEN
+	jb .Lcbc_dec_end
+#endif
+
+.align 4
+.Lcbc_dec1_begin:
+	movdqu (IVP), STATE3
+.Lcbc_dec1_loop:
+	movdqu (INP), STATE2
+	movdqa STATE2, STATE1
+
+	cmp $16, KLEN
+	je .Lcbc_dec1_128
+	AESDEC256KL HANDLEP, STATE1
+	jmp .Lcbc_dec1_end
+.Lcbc_dec1_128:
+	AESDEC128KL HANDLEP, STATE1
+
+.Lcbc_dec1_end:
+	pxor STATE3, STATE1
+	movdqu STATE1, (OUTP)
+	movdqa STATE2, STATE3
+	sub $16, LEN
+	add $16, INP
+	add $16, OUTP
+	cmp $16, LEN
+	jge .Lcbc_dec1_loop
+	movdqu STATE3, (IVP)
+
+.Lcbc_dec_end:
+#ifndef __x86_64__
+	popl KLEN
+	popl HANDLEP
+	popl LEN
+	popl IVP
+#endif
+	FRAME_END
+	ret
+SYM_FUNC_END(__aeskl_cbc_dec)
