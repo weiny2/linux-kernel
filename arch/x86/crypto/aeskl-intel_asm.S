@@ -525,3 +525,168 @@ SYM_FUNC_START(__aeskl_cbc_dec)
 	FRAME_END
 	ret
 SYM_FUNC_END(__aeskl_cbc_dec)
+
+
+#ifdef __x86_64__
+
+/*
+ * CTR implementations
+ */
+
+.pushsection .rodata
+.align 16
+.Lbswap_mask:
+	.byte 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
+.popsection
+
+.section	.rodata.cst16.gf128mul_x_ble_mask, "aM", @progbits, 16
+.align 16
+.Lgf128mul_x_ble_mask:
+	.octa 0x00000000000000010000000000000087
+
+#define BSWAP_MASK	%xmm10
+#define CTR		%xmm11
+#define INC		%xmm12
+#define IV		%xmm13
+#define TCTR_LOW	%r11
+
+.text
+.align 4
+__aeskl_ctr_init:
+	movdqa .Lbswap_mask, BSWAP_MASK
+	movdqa IV, CTR
+	PSHUFB_XMM BSWAP_MASK CTR
+	mov $1, TCTR_LOW
+	MOVQ_R64_XMM TCTR_LOW INC
+	MOVQ_R64_XMM CTR TCTR_LOW
+	ret
+SYM_FUNC_END(__aeskl_ctr_init)
+
+.align 4
+__aeskl_ctr_inc:
+	paddq INC, CTR
+	add $1, TCTR_LOW
+	jnc .Lctr_inc_low
+	pslldq $8, INC
+	paddq INC, CTR
+	psrldq $8, INC
+.Lctr_inc_low:
+	movdqa CTR, IV
+	PSHUFB_XMM BSWAP_MASK IV
+	ret
+SYM_FUNC_END(__aeskl_ctr_inc)
+
+/*
+ * void __aeskl_ctr_enc(struct crypto_aes_ctx *ctx,
+ *			const u8 *dst,
+ *			u8 *src,
+ *			size_t len,
+ *			u8 *iv)
+ */
+SYM_FUNC_START(__aeskl_ctr_enc)
+	FRAME_BEGIN
+	cmp $16, LEN
+	jb .Lctr_enc_ret
+	mov 480(HANDLEP), KLEN
+	movdqu (IVP), IV
+	call __aeskl_ctr_init
+	cmp $128, LEN
+	jb .Lctr_enc1_loop
+
+.align 4
+.Lctr_enc8_loop:
+	movdqa IV, STATE1
+	call __aeskl_ctr_inc
+	movdqa IV, STATE2
+	call __aeskl_ctr_inc
+	movdqa IV, STATE3
+	call __aeskl_ctr_inc
+	movdqa IV, STATE4
+	call __aeskl_ctr_inc
+	movdqa IV, STATE5
+	call __aeskl_ctr_inc
+	movdqa IV, STATE6
+	call __aeskl_ctr_inc
+	movdqa IV, STATE7
+	call __aeskl_ctr_inc
+	movdqa IV, STATE8
+	call __aeskl_ctr_inc
+
+	cmp $16, KLEN
+	je .Lctr_enc8_128
+	AESENCWIDE256KL %rdi
+	jmp .Lctr_enc8_end
+.Lctr_enc8_128:
+	AESENCWIDE128KL %rdi
+.Lctr_enc8_end:
+
+	movdqu (INP), IN1
+	pxor IN1, STATE1
+	movdqu STATE1, (OUTP)
+
+	movdqu 0x10(INP), IN1
+	pxor IN1, STATE2
+	movdqu STATE2, 0x10(OUTP)
+
+	movdqu 0x20(INP), IN1
+	pxor IN1, STATE3
+	movdqu STATE3, 0x20(OUTP)
+
+	movdqu 0x30(INP), IN1
+	pxor IN1, STATE4
+	movdqu STATE4, 0x30(OUTP)
+
+	movdqu 0x40(INP), IN1
+	pxor IN1, STATE5
+	movdqu STATE5, 0x40(OUTP)
+
+	movdqu 0x50(INP), IN1
+	pxor IN1, STATE6
+	movdqu STATE6, 0x50(OUTP)
+
+	movdqu 0x60(INP), IN1
+	pxor IN1, STATE7
+	movdqu STATE7, 0x60(OUTP)
+
+	movdqu 0x70(INP), IN1
+	pxor IN1, STATE8
+	movdqu STATE8, 0x70(OUTP)
+
+	sub $128, LEN
+	add $128, INP
+	add $128, OUTP
+	cmp $128, LEN
+	jge .Lctr_enc8_loop
+	cmp $16, LEN
+	jb .Lctr_enc_end
+
+.align 4
+.Lctr_enc1_loop:
+	movdqa IV, STATE
+	call __aeskl_ctr_inc
+
+	cmp $16, KLEN
+	je .Lctr_enc1_128
+	AESENC256KL HANDLEP, STATE
+	jmp .Lctr_enc1_end
+.Lctr_enc1_128:
+	AESENC128KL HANDLEP, STATE
+
+.Lctr_enc1_end:
+	movdqu (INP), IN
+	pxor IN, STATE
+	movdqu STATE, (OUTP)
+	sub $16, LEN
+	add $16, INP
+	add $16, OUTP
+	cmp $16, LEN
+	jge .Lctr_enc1_loop
+
+.Lctr_enc_end:
+	movdqu IV, (IVP)
+.Lctr_enc_ret:
+	FRAME_END
+	ret
+SYM_FUNC_END(__aeskl_ctr_enc)
+
+#endif
