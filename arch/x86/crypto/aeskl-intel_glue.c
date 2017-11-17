@@ -63,6 +63,13 @@ asmlinkage int aesni_cbc_enc(struct crypto_aes_ctx *ctx, u8 *out,
 asmlinkage int aesni_cbc_dec(struct crypto_aes_ctx *ctx, u8 *out,
 			      const u8 *in, unsigned int len, u8 *iv);
 
+#ifdef CONFIG_X86_64
+asmlinkage int __aeskl_ctr_enc(struct crypto_aes_ctx *ctx, u8 *out,
+				const u8 *in, unsigned int len, u8 *iv);
+asmlinkage void aesni_ctr_enc(struct crypto_aes_ctx *ctx, u8 *out,
+			      const u8 *in, unsigned int len, u8 *iv);
+#endif
+
 static inline struct crypto_aes_ctx *aes_ctx(void *raw_ctx)
 {
 	unsigned long addr = (unsigned long)raw_ctx;
@@ -323,6 +330,76 @@ static int cbc_decrypt(struct skcipher_request *req)
 	return err;
 }
 
+#ifdef CONFIG_X86_64
+static int ctr_crypt(struct skcipher_request *req)
+{
+	struct crypto_skcipher *tfm;
+	struct crypto_aes_ctx *ctx;
+	struct skcipher_walk walk;
+	unsigned int nbytes;
+	int err;
+
+	tfm = crypto_skcipher_reqtfm(req);
+	ctx = aes_ctx(crypto_skcipher_ctx(tfm));
+
+	err = skcipher_walk_virt(&walk, req, true);
+	if (err)
+		return err;
+
+	while ((nbytes = walk.nbytes) >= AES_BLOCK_SIZE) {
+		unsigned int len = nbytes & AES_BLOCK_MASK;
+		const u8 *src = walk.src.virt.addr;
+		u8 *dst = walk.dst.virt.addr;
+		u8 *iv = walk.iv;
+
+		kernel_fpu_begin();
+		if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+			aesni_ctr_enc(ctx, dst, src, len, iv);
+		else
+			err = __aeskl_ctr_enc(ctx, dst, src, len, iv);
+		kernel_fpu_end();
+
+		if (err) {
+			pr_err("aes-keylocker (CTR): invalid handle\n");
+			return -EINVAL;
+		}
+
+		nbytes &= AES_BLOCK_SIZE - 1;
+
+		err = skcipher_walk_done(&walk, nbytes);
+		if (err)
+			return err;
+	}
+
+	if (nbytes) {
+		u8 keystream[AES_BLOCK_SIZE];
+		u8 *src = walk.src.virt.addr;
+		u8 *dst = walk.dst.virt.addr;
+		u8 *ctrblk = walk.iv;
+
+		kernel_fpu_begin();
+		if (unlikely(ctx->key_length == AES_KEYSIZE_192))
+			aesni_enc(ctx, keystream, ctrblk);
+		else
+			err = __aeskl_enc1(ctx, keystream, ctrblk);
+		kernel_fpu_end();
+
+		if (err) {
+			pr_err("aes-keylocker (CTR, a block): invalid handle\n");
+			return -EINVAL;
+		}
+
+		crypto_xor(keystream, src, nbytes);
+		memcpy(dst, keystream, nbytes);
+		crypto_inc(ctrblk, AES_BLOCK_SIZE);
+
+		err = skcipher_walk_done(&walk, 0);
+	}
+
+	return err;
+}
+#endif
+
 static struct crypto_alg aeskl_cipher_alg = {
 	.cra_name		= "aes",
 	.cra_driver_name	= "aes-aeskl",
@@ -374,6 +451,25 @@ static struct skcipher_alg aeskl_skciphers[] = {
 		.setkey		= aeskl_skcipher_setkey,
 		.encrypt	= cbc_encrypt,
 		.decrypt	= cbc_decrypt,
+#ifdef CONFIG_X86_64
+	}, {
+		.base = {
+			.cra_name		= "__ctr(aes)",
+			.cra_driver_name	= "__ctr-aes-aeskl",
+			.cra_priority		= 401,
+			.cra_flags		= CRYPTO_ALG_INTERNAL,
+			.cra_blocksize		= 1,
+			.cra_ctxsize		= CRYPTO_AES_CTX_SIZE,
+			.cra_module		= THIS_MODULE,
+		},
+		.min_keysize	= AES_MIN_KEY_SIZE,
+		.max_keysize	= AES_MAX_KEY_SIZE,
+		.ivsize		= AES_BLOCK_SIZE,
+		.chunksize	= AES_BLOCK_SIZE,
+		.setkey		= aeskl_skcipher_setkey,
+		.encrypt	= ctr_crypt,
+		.decrypt	= ctr_crypt,
+#endif
 	}
 };
 
