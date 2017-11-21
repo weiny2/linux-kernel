@@ -178,80 +178,6 @@ int hfi2_check_send_wqe(struct rvt_qp *qp,
 	return 1;
 }
 
-struct qp_iter {
-	struct hfi2_ibdev *dev;
-	struct rvt_qp *qp;
-	int specials;
-	int n;
-};
-
-struct qp_iter *qp_iter_init(struct hfi2_ibdev *dev)
-{
-	struct qp_iter *iter;
-
-	iter = kzalloc(sizeof(*iter), GFP_KERNEL);
-	if (!iter)
-		return NULL;
-
-	iter->dev = dev;
-	iter->specials = dev->rdi.ibdev.phys_port_cnt * 2;
-
-	return iter;
-}
-
-int qp_iter_next(struct qp_iter *iter)
-{
-	struct hfi2_ibdev *dev = iter->dev;
-	int n = iter->n;
-	int ret = 1;
-	struct rvt_qp *pqp = iter->qp;
-	struct rvt_qp *qp;
-
-	/*
-	 * The approach is to consider the special qps
-	 * as an additional table entries before the
-	 * real hash table.  Since the qp code sets
-	 * the qp->next hash link to NULL, this works just fine.
-	 *
-	 * iter->specials is 2 * # ports
-	 *
-	 * n = 0..iter->specials is the special qp indices
-	 *
-	 * n = iter->specials..dev->rdi.qp_dev->qp_table_size+iter->specials are
-	 * the potential hash bucket entries
-	 *
-	 */
-	for (; n <  dev->rdi.qp_dev->qp_table_size + iter->specials; n++) {
-		if (pqp) {
-			qp = rcu_dereference(pqp->next);
-		} else {
-			if (n < iter->specials) {
-				struct hfi2_ibport *ibp;
-				int pidx;
-
-				pidx = n % dev->rdi.ibdev.phys_port_cnt;
-				ibp = &dev->pport[pidx];
-
-				if (!(n & 1))
-					qp = rcu_dereference(ibp->rvp.qp[0]);
-				else
-					qp = rcu_dereference(ibp->rvp.qp[1]);
-			} else {
-				qp = rcu_dereference(
-					dev->rdi.qp_dev->qp_table[
-						(n - iter->specials)]);
-			}
-		}
-		pqp = qp;
-		if (qp) {
-			iter->qp = qp;
-			iter->n = n;
-			return 0;
-		}
-	}
-	return ret;
-}
-
 static const char * const qp_type_str[] = {
 	"SMI", "GSI", "RC", "UC", "UD",
 };
@@ -265,7 +191,7 @@ static int qp_idle(struct rvt_qp *qp)
 		qp->s_tail == qp->s_head;
 }
 
-void qp_iter_print(struct seq_file *s, struct qp_iter *iter)
+void qp_iter_print(struct seq_file *s, struct rvt_qp_iter *iter)
 {
 	struct rvt_swqe *wqe;
 	struct rvt_qp *qp = iter->qp;

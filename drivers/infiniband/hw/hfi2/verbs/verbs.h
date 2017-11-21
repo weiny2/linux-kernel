@@ -315,9 +315,7 @@ void hfi_return_cnp_bypass(struct hfi2_ib_packet *packet, u32 src_qpn,
 			   u16 pkey);
 
 /* callbacks registered with rdmavt */
-struct qp_iter *qp_iter_init(struct hfi2_ibdev *dev);
-int qp_iter_next(struct qp_iter *iter);
-void qp_iter_print(struct seq_file *s, struct qp_iter *iter);
+void qp_iter_print(struct seq_file *s, struct rvt_qp_iter *iter);
 void *qp_priv_alloc(struct rvt_dev_info *rdi, struct rvt_qp *qp);
 void qp_priv_free(struct rvt_dev_info *rdi, struct rvt_qp *qp);
 unsigned int free_all_qps(struct rvt_dev_info *rdi);
