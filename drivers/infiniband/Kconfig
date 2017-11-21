@@ -1,6 +1,7 @@
 menuconfig INFINIBAND
 	tristate "InfiniBand support"
 	depends on HAS_IOMEM && HAS_DMA
+	depends on PCI || BROKEN
 	depends on NET
 	depends on INET
 	depends on m || IPV6 != m
@@ -41,8 +42,6 @@ config INFINIBAND_EXP_USER_ACCESS
 	---help---
 	  IOCTL based ABI support for Infiniband. This allows userspace
 	  to invoke the experimental IOCTL based ABI.
-	  These commands are parsed via per-device parsing tree and
-	  enables per-device features.
 
 config INFINIBAND_USER_MEM
 	bool
@@ -101,6 +100,7 @@ source "drivers/infiniband/sw/rdmavt/Kconfig"
 source "drivers/infiniband/sw/rxe/Kconfig"
 
 source "drivers/infiniband/hw/hfi1/Kconfig"
+source "drivers/infiniband/hw/hfi2/Kconfig"
 
 source "drivers/infiniband/hw/qedr/Kconfig"
 

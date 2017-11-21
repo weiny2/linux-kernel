@@ -1,0 +1,113 @@
+#!/bin/bash
+#
+# Bring up/down the Omni-Path Gen2 drivers
+#
+# description: Loads/Unloads Omni-Path Gen2 kernel modules
+#
+
+. /etc/rc.d/init.d/functions
+
+# FXRTODO: The PCIe driver and VPD needs to be brought up first
+# before invoking any of the client modules. Force a load order
+# and an unload order for now. Eventually the VPD should be
+# merged with the PCIe driver to avoid this hack.
+hfi2_module="hfi2"
+hfi2_client_modules="opa_vnic hfi2_user"
+
+start ()
+{
+    local RC=0
+    module_params=$@
+
+    if [[ -n "$module_params" ]]; then
+        modprobe $hfi2_module $module_params
+    else
+        modprobe $hfi2_module
+    fi
+
+    modprobe -a $hfi2_client_modules
+
+    touch /var/lock/subsys/hfi2
+    [ $RC -eq 0 ] && echo_success || echo_failure
+    echo
+    return $RC
+}
+
+stop ()
+{
+    local RC=0
+
+    modprobe -r $hfi2_client_modules
+    modprobe -r $hfi2_module
+
+    rm -f /var/lock/subsys/hfi2
+    [ $RC -eq 0 ] && echo_success || echo_failure
+    echo
+    return $RC
+}
+
+restart ()
+{
+    stop
+    start
+}
+
+condrestart ()
+{
+    [ -e /var/lock/subsys/hfi2 ] && restart || return 0
+}
+
+function check_module {
+    module=$1
+    declare -i nmodules=0
+    nmodules=`lsmod | awk '{ print $1 }' | grep $module | wc -l`
+    if [ ${nmodules} -ge 1 ]; then
+            echo -e $module "module loaded"
+    else
+            echo -e $module "module not loaded"
+    fi
+}
+
+status ()
+{
+        local RC=0
+        declare -i nmodules=0
+        check_module hfi2_user
+	check_module opa_vnic
+        nmodules=`lsmod | awk '{ print $1 }' | grep -w hfi2 | wc -l`
+        if [ ${nmodules} -ge 1 ]; then
+                echo -e "hfi2 module loaded"
+        else
+                echo -e "hfi2 module not loaded"
+                RC=1
+        fi
+        [ $RC -eq 0 ] && echo_success || echo_failure
+        echo
+        return $RC
+}
+
+usage ()
+{
+    echo
+    echo "Usage: `basename $0` {start|stop|restart|condrestart|try-restart|force-reload|status}"
+    echo
+    return 2
+}
+
+case $1 in
+    start|stop|restart|condrestart|try-restart|force-reload)
+        [ `id -u` != "0" ] && exit 4 ;;
+esac
+
+case $1 in
+    start) start ${@:2}; RC=$? ;;
+    stop) stop; RC=$? ;;
+    restart) restart; RC=$? ;;
+    condrestart) condrestart; RC=$? ;;
+    try-restart) condrestart; RC=$? ;;
+    force-reload) condrestart; RC=$? ;;
+    status) status; RC=$? ;;
+    *) usage; RC=$? ;;
+esac
+
+exit $RC

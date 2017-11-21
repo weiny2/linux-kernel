@@ -1,0 +1,21 @@
+config INFINIBAND_HFI2
+	tristate "Intel OPA Gen2 support"
+	depends on X86_64 && INFINIBAND_RDMAVT && I2C
+	depends on INTEL_IOMMU_SVM
+	select CRC32
+	select I2C_ALGOBIT
+	---help---
+	This is a low-level driver for Intel OPA Gen2 adapter.
+config HFI2_VERBS_31BIT_PSN
+	bool "HFI2 enable 31 bit PSN"
+	depends on INFINIBAND_HFI2
+	default y
+	---help---
+	Setting this enables 31 BIT PSN
+	For verbs RC/UC
+config HFI2_STLNP
+	bool "HFI2 support for native transport protocol"
+	depends on INFINIBAND_HFI2
+	default y
+	---help---
+	Setting this enables HFI2 native transport protocol
