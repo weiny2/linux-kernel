@@ -164,6 +164,7 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 	struct hfi_event_args resp;
 	const struct uverbs_attr *uattr;
 	struct hfi_ctx *ctx;
+	struct ib_uobject *uobj;
 	u32 type;
 	int ret;
 
@@ -174,7 +175,7 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 		return ret;
 	}
 
-	uattr = uverbs_attr_get(attrs, HFI2_CTX_ATTACH_IDX);
+	uattr = uverbs_attr_get(attrs, HFI2_CTX_EVT_CTX_IDX);
 	if (unlikely(IS_ERR(uattr)))
 		return PTR_ERR(uattr);
 
@@ -319,6 +320,25 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 		break;
 	case HFI2_CMD_CT_ACK:
 		ret = hfi_ct_ack_event(ctx, cmd.idx1, cmd.count);
+		break;
+	case HFI2_CMD_IB_EQ_ARM:
+		uattr = uverbs_attr_get(attrs, HFI2_CTX_EVT_CQ_IDX);
+		if (unlikely(IS_ERR(uattr)))
+			return PTR_ERR(uattr);
+
+		uobj = uattr->obj_attr.uobject;
+		if (!uobj->object) {
+			ret = -EINVAL;
+			break;
+		}
+		ret = hfi_ib_eq_arm(ctx, cmd.idx1, uobj->object,
+				    &cmd.data0, &cmd.data1);
+		if (ret)
+			break;
+
+		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
+		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP, &resp,
+				     sizeof(resp));
 		break;
 	default:
 		ret = -EINVAL;
@@ -475,7 +495,10 @@ DECLARE_UVERBS_METHOD(hfi2_ctx_event_cmd, HFI2_CTX_EVENT_CMD,
 		      &UVERBS_ATTR_PTR_OUT(
 				HFI2_CTX_EVT_RESP,
 				struct hfi_event_args,
-				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_IDR(
+				HFI2_CTX_EVT_CQ_IDX, UVERBS_OBJECT_CQ,
+				UVERBS_ACCESS_READ));
 
 DECLARE_UVERBS_METHOD(hfi2_pt_update_lower, HFI2_PT_UPDATE_LOWER,
 		      hfi2_pt_update_lower_handler,

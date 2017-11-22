@@ -2786,7 +2786,7 @@ static int hfi_setup_becn_mnh_irq(struct hfi_devdata *dd, int irq)
 	}
 
 	INIT_LIST_HEAD(&me->irq_wait_head);
-	rwlock_init(&me->irq_wait_lock);
+	spin_lock_init(&me->irq_wait_lock);
 	me->dd = dd;
 	me->intr_src = irq;
 
@@ -2855,7 +2855,7 @@ static int hfi_setup_irqs(struct hfi_devdata *dd)
 
 		WARN_ON(me->arg);
 		INIT_LIST_HEAD(&me->irq_wait_head);
-		rwlock_init(&me->irq_wait_lock);
+		spin_lock_init(&me->irq_wait_lock);
 		me->dd = dd;
 		me->intr_src = i;
 

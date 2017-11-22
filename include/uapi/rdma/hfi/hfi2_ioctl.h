@@ -154,6 +154,7 @@ enum {
 	HFI2_CTX_EVT_CMD,
 	HFI2_CTX_EVT_RESP,
 	HFI2_CTX_EVT_TYPE,
+	HFI2_CTX_EVT_CQ_IDX,
 };
 
 /* Attributes for PT update lower */
@@ -235,6 +236,7 @@ enum {
 	HFI2_CMD_EC_SET_CT,
 	HFI2_CMD_CT_WAIT,
 	HFI2_CMD_CT_ACK,
+	HFI2_CMD_IB_EQ_ARM,
 };
 
 #endif /* _HFI2_IOCTL_H_ */

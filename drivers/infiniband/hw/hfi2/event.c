@@ -57,6 +57,7 @@
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
 #include <linux/sched/signal.h>
+#include <rdma/ib_verbs.h>
 #include "hfi2.h"
 #include "hfi_kclient.h"
 #include "trace.h"
@@ -68,6 +69,7 @@
 #define HFI_EC_MODE_CT		0x2
 #define HFI_EC_MODE_EQ_SELF	0x4
 #define HFI_EC_MODE_CT_SELF	0x8
+#define HFI_EC_MODE_IB		0x10
 
 /*
  * Kernel Event Channel (EC) entry.
@@ -100,6 +102,7 @@ struct hfi_ec_entry {
  * @cookie - kernel clients callback argument
  * @hfi_eq_desc - saved eq address and count/index
  * @user_handle - saved user space opaque handle data
+ * @ibcq - associated IB CQ (handler)
  */
 struct hfi_eq_mgmt {
 	wait_queue_head_t wq;
@@ -117,6 +120,7 @@ struct hfi_eq_mgmt {
 
 	struct hfi_eq desc;
 	u64 user_handle;
+	struct ib_cq *ibcq;
 };
 
 /**
@@ -140,7 +144,7 @@ static int hfi_eq_setup(struct hfi_ctx *ctx,
 static int hfi_eq_arm(struct hfi_ctx *ctx,
 		      struct hfi_eq_mgmt *eqm, u64 user_data);
 static int hfi_eq_disarm(struct hfi_ctx *ctx,
-			 struct hfi_eq_mgmt *eqm, u64 user_data);
+			 struct hfi_eq_mgmt *eqm, u64 user_data, bool wait);
 static int hfi_ec_remove(int ec_idx, void *idr_ptr, void *idr_ctx);
 static void hfi_eq_free_ctx(struct hfi_eq_ctx *eq_ctx);
 static void hfi_eq_unlink(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm);
@@ -358,9 +362,9 @@ static int hfi_ct_arm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm)
 
 	/* add EQ to list of IRQ waiters */
 	me = &dd->irq_entries[eqm->irq_vector];
-	write_lock_irqsave(&me->irq_wait_lock, flags);
+	spin_lock_irqsave(&me->irq_wait_lock, flags);
 	list_add(&eqm->irq_wait_chain, &me->irq_wait_head);
-	write_unlock_irqrestore(&me->irq_wait_lock, flags);
+	spin_unlock_irqrestore(&me->irq_wait_lock, flags);
 
 	return 0;
 }
@@ -380,9 +384,9 @@ static int hfi_ct_disarm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm)
 
 	/* remove CT from list of IRQ waiters */
 	me = &dd->irq_entries[eqm->irq_vector];
-	write_lock_irqsave(&me->irq_wait_lock, flags);
+	spin_lock_irqsave(&me->irq_wait_lock, flags);
 	list_del_init(&eqm->irq_wait_chain);
-	write_unlock_irqrestore(&me->irq_wait_lock, flags);
+	spin_unlock_irqrestore(&me->irq_wait_lock, flags);
 
 	return 0;
 }
@@ -680,9 +684,9 @@ int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		eqm->ec = (struct hfi_ec_entry *)eqm;
 
 		/* add EQ to list of IRQ waiters */
-		write_lock_irqsave(&me->irq_wait_lock, flags);
+		spin_lock_irqsave(&me->irq_wait_lock, flags);
 		list_add(&eqm->irq_wait_chain, &me->irq_wait_head);
-		write_unlock_irqrestore(&me->irq_wait_lock, flags);
+		spin_unlock_irqrestore(&me->irq_wait_lock, flags);
 	}
 
 	/* set EQ descriptor in host memory */
@@ -793,9 +797,9 @@ static void hfi_eq_unlink(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm)
 		struct hfi_irq_entry *me;
 
 		me = &ctx->devdata->irq_entries[eqm->irq_vector];
-		write_lock_irqsave(&me->irq_wait_lock, flags);
+		spin_lock_irqsave(&me->irq_wait_lock, flags);
 		list_del_init(&eqm->irq_wait_chain);
-		write_unlock_irqrestore(&me->irq_wait_lock, flags);
+		spin_unlock_irqrestore(&me->irq_wait_lock, flags);
 	}
 
 	/* check ec association */
@@ -1101,7 +1105,7 @@ int hfi_ev_wait_single(struct hfi_ctx *ctx, u16 eqflag,
 	    ctx->type != HFI_CTX_TYPE_KERNEL) {
 		/* turn off interrupt on this eq */
 		if (eqflag) { /* EQ */
-			ret = hfi_eq_disarm(ctx, eqm, *user_data1);
+			ret = hfi_eq_disarm(ctx, eqm, *user_data1, true);
 			if (!ret) {
 				/*
 				 * clear data1, user space will know this
@@ -1155,11 +1159,34 @@ static int hfi_ec_remove(int ec_idx, void *idr_ptr, void *idr_ctx)
 	return 0;
 }
 
+static void hfi_ib_eq_isr(struct hfi_eq_mgmt *eqm)
+{
+	struct hfi_ctx *ctx = eqm->cookie;
+	struct ib_cq *cq = eqm->ibcq;
+	int ret;
+
+	/*
+	 * TODO - this use of cq is unsafe until we hook into
+	 * destroy_cq.  It needs to call hfi_eq_unlink().
+	 */
+
+	/* notify user space */
+	if (cq && cq->comp_handler)
+		cq->comp_handler(cq, cq->cq_context);
+	eqm->ibcq = NULL;
+
+	/* disarm  interrupt */
+	ret = hfi_eq_disarm(ctx, eqm, eqm->user_handle, false);
+	if (ret)
+		dd_dev_warn(ctx->devdata, "hfi_eq_disarm non-zero ret %d\n",
+			    ret);
+}
+
 irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
 {
 	struct hfi_irq_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
-	struct hfi_eq_mgmt *eqm;
+	struct hfi_eq_mgmt *eqm, *next;
 
 	this_cpu_inc(*dd->int_counter);
 
@@ -1176,16 +1203,19 @@ irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
 	 *
 	 * If eqm is on IRQ list, it must have eqm->ec pointer.
 	 */
-	read_lock(&me->irq_wait_lock);
-	list_for_each_entry(eqm, &me->irq_wait_head, irq_wait_chain) {
-		if (eqm->isr_cb)
+	spin_lock(&me->irq_wait_lock);
+	list_for_each_entry_safe(eqm, next, &me->irq_wait_head,
+				 irq_wait_chain) {
+		if (eqm->mode == HFI_EC_MODE_IB)
+			hfi_ib_eq_isr(eqm);
+		else if (eqm->isr_cb)
 			eqm->isr_cb(&eqm->desc, eqm->cookie);
 		else if (eqm->ec->mode == HFI_EC_MODE_CT_SELF)
 			wake_up_interruptible_all(&eqm->ec->wq);
 		else
 			wake_up_interruptible(&eqm->ec->wq);
 	}
-	read_unlock(&me->irq_wait_lock);
+	spin_unlock(&me->irq_wait_lock);
 
 	return IRQ_HANDLED;
 }
@@ -1232,15 +1262,15 @@ static int hfi_eq_arm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm,
 	/* add EQ to list of IRQ waiters */
 	me = &dd->irq_entries[irq_idx];
 	eqm->irq_vector = irq_idx;
-	write_lock_irqsave(&me->irq_wait_lock, flags);
+	spin_lock_irqsave(&me->irq_wait_lock, flags);
 	list_add(&eqm->irq_wait_chain, &me->irq_wait_head);
-	write_unlock_irqrestore(&me->irq_wait_lock, flags);
+	spin_unlock_irqrestore(&me->irq_wait_lock, flags);
 
 	return ret;
 }
 
 static int hfi_eq_disarm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm,
-			 u64 user_data)
+			 u64 user_data, bool wait)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	struct hfi_irq_entry *me;
@@ -1256,8 +1286,12 @@ static int hfi_eq_disarm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm,
 				    eqm->desc.idx, -1, user_data, &cmd);
 
 	/* Queue write, wait for completion */
-	ret = hfi_pend_cq_queue_wait(&dd->pend_cq, &dd->priv_rx_cq, NULL, &cmd,
-				     slots);
+	if (wait)
+		ret = hfi_pend_cq_queue_wait(&dd->pend_cq, &dd->priv_rx_cq,
+					     NULL, &cmd, slots);
+	else
+		ret = hfi_pend_cq_queue(&dd->pend_cq, &dd->priv_rx_cq,
+					NULL, &cmd, slots, GFP_ATOMIC);
 	if (ret) {
 		dd_dev_err(dd, "%s: hfi_pend_cq_queue_wait failed %d\n",
 			   __func__, ret);
@@ -1274,9 +1308,13 @@ static int hfi_eq_disarm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm,
 	/* remove EQ to list of IRQ waiters */
 	me = &dd->irq_entries[eqm->irq_vector];
 	eqm->irq_vector = 0;
-	write_lock_irqsave(&me->irq_wait_lock, flags);
-	list_del_init(&eqm->irq_wait_chain);
-	write_unlock_irqrestore(&me->irq_wait_lock, flags);
+	if (eqm->mode != HFI_EC_MODE_IB) {
+		spin_lock_irqsave(&me->irq_wait_lock, flags);
+		list_del_init(&eqm->irq_wait_chain);
+		spin_unlock_irqrestore(&me->irq_wait_lock, flags);
+	} else {
+		list_del_init(&eqm->irq_wait_chain);
+	}
 
 	return ret;
 }
@@ -1313,7 +1351,7 @@ static bool hfi_ec_has_event(struct hfi_ctx *ctx,
 
 			/* turn off interrupt for this eq */
 			*ret = eqflag ?
-				hfi_eq_disarm(ctx, eqm, *user_data1) :
+				hfi_eq_disarm(ctx, eqm, *user_data1, true) :
 				hfi_ct_disarm(ctx, eqm);
 
 			/* disassociate eq/ct with event channel */
@@ -1336,6 +1374,46 @@ static bool hfi_ec_has_event(struct hfi_ctx *ctx,
 	mutex_unlock(&ctx->event_mutex);
 
 	return cond;
+}
+
+int hfi_ib_eq_arm(struct hfi_ctx *ctx, u16 eq_idx, struct ib_cq *ibcq,
+		  u64 *user_data0, u64 *user_data1)
+{
+	struct hfi_eq_mgmt *eqm;
+	int ret;
+
+	down_read(&ctx->ctx_rwsem);
+	mutex_lock(&ctx->event_mutex);
+
+	ret = hfi_eq_setup(ctx, eq_idx, &eqm);
+	if (ret)
+		goto idr_end;
+
+	/* associate eq with self event channel */
+	eqm->ec = (struct hfi_ec_entry *)eqm;
+	eqm->user_handle = *user_data1;
+	eqm->cookie = (void *)(ctx);
+	eqm->mode = HFI_EC_MODE_IB;
+	eqm->ibcq = ibcq;
+
+	if (ctx->type != HFI_CTX_TYPE_KERNEL) { /* user */
+		ret = hfi_eq_arm(ctx, eqm, *user_data0);
+		if (ret)
+			goto idr_end;
+
+		/*
+		 * clear data0, user space will know this
+		 * thread has setup the interrupt and
+		 * wait for completion.
+		 */
+		*user_data0 = 0;
+	}
+
+idr_end:
+	mutex_unlock(&ctx->event_mutex);
+	up_read(&ctx->ctx_rwsem);
+
+	return ret;
 }
 
 int hfi_ec_assign(struct hfi_ctx *ctx, u16 *ec_idx)
