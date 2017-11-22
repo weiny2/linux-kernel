@@ -116,10 +116,10 @@ void hfi2_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 	if ((attr_mask & IB_QP_TIMEOUT) && (simics || zebu) &&
 	    !ibd->rc_drop_enabled) {
 		/*
-		 * increase the timeout value by a factor of 4 to accommodate
+		 * increase the timeout value to maximum allowed, accommodate
 		 * for slower processing of acks on simics during heavy load
 		 */
-		qp->timeout = qp->timeout << HFI2_QP_TIMEOUT_SCALINGFACTOR;
+		qp->timeout = HFI2_QP_MAX_TIMEOUT;
 		qp->timeout_jiffies = rvt_timeout_to_jiffies(qp->timeout);
 	}
 }

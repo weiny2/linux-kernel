@@ -109,7 +109,7 @@
 #define GET_16B_NWORDS(hwords, data, extra_bytes) \
 	(((data) + (SIZE_OF_CRC << 2) + 1 + (extra_bytes)) >> 2)
 
-#define HFI2_QP_TIMEOUT_SCALINGFACTOR		2
+#define HFI2_QP_MAX_TIMEOUT		21
 extern __be64 hfi2_sys_guid;
 extern unsigned int hfi2_max_cqes;
 extern unsigned int hfi2_max_cqs;
