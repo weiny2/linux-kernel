@@ -232,6 +232,47 @@ static ssize_t devcntrs_read(struct file *file, char __user *buf,
 	return rval;
 }
 
+/* read the dc8051 memory */
+static ssize_t dc8051_memory_read(struct file *file, char __user *buf,
+				  size_t count, loff_t *ppos)
+{
+	struct hfi_pportdata *ppd = private2ppd(file);
+	ssize_t rval;
+	void *tmp;
+	loff_t start, end;
+
+	/* the checks below expect the position to be positive */
+	if (*ppos < 0)
+		return -EINVAL;
+
+	tmp = kzalloc(DC8051_DATA_MEM_SIZE, GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+
+	/*
+	 * Fill in the requested portion of the temporary buffer from the
+	 * 8051 memory.  The 8051 memory read is done in terms of 8 bytes.
+	 * Adjust start and end to fit.  Skip reading anything if out of
+	 * range.
+	 */
+	start = *ppos & ~0x7;	/* round down */
+	if (start < DC8051_DATA_MEM_SIZE) {
+		end = (*ppos + count + 7) & ~0x7; /* round up */
+		if (end > DC8051_DATA_MEM_SIZE)
+			end = DC8051_DATA_MEM_SIZE;
+		rval = hfi_read_8051_data(ppd, start, end - start,
+					  (u64 *)(tmp + start));
+		if (rval)
+			goto done;
+	}
+
+	rval = simple_read_from_buffer(buf, count, ppos, tmp,
+				       DC8051_DATA_MEM_SIZE);
+done:
+	kfree(tmp);
+	return rval;
+}
+
 #ifdef CONFIG_HFI2_STLNP
 static ssize_t ts_dbg_failover_reset_write(struct file *file,
 					   const char __user *buf,
@@ -323,6 +364,7 @@ static const struct counter_info cntr_ops[] = {
 
 static const struct counter_info port_cntr_ops[] = {
 	DEBUGFS_OPS("portcounters", portcntrs_read, NULL),
+	DEBUGFS_OPS("dc8051_memory", dc8051_memory_read, NULL),
 };
 
 #ifdef CONFIG_HFI2_STLNP

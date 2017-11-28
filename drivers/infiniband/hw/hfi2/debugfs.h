@@ -57,6 +57,11 @@
 
 #include <linux/debugfs.h>
 
+/*
+ * 8051 data memory size.
+ */
+#define DC8051_DATA_MEM_SIZE 0x1000
+
 #define DEBUGFS_SEQ_FILE_OPS(name) \
 static const struct seq_operations _##name##_seq_ops = { \
 	.start = _##name##_seq_start, \
