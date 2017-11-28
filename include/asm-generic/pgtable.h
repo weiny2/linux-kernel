@@ -1190,6 +1190,23 @@ static inline bool arch_has_pfn_modify_check(void)
 }
 #endif /* !_HAVE_ARCH_PFN_MODIFY_ALLOWED */
 
+#ifdef CONFIG_MMU
+#ifndef CONFIG_ARCH_HAS_SHSTK
+static inline bool arch_copy_pte_mapping(vm_flags_t vm_flags)
+{
+	return false;
+}
+
+static inline pte_t pte_set_vma_features(pte_t pte, struct vm_area_struct *vma)
+{
+	return pte;
+}
+#else
+bool arch_copy_pte_mapping(vm_flags_t vm_flags);
+pte_t pte_set_vma_features(pte_t pte, struct vm_area_struct *vma);
+#endif
+#endif /* CONFIG_MMU */
+
 /*
  * Architecture PAGE_KERNEL_* fallbacks
  *
