@@ -378,13 +378,7 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 
 	/* Send a request. */
 	wqe = rvt_get_swqe_ptr(qp, qp->s_cur);
-	/*
-	 * TODO: Remove this workaround once STL 28154 is closed
-	 */
-	if (unlikely(!rdma_ah_get_dlid(&qp->remote_ah_attr))) {
-		hfi2_send_complete(qp, wqe, IB_WC_GENERAL_ERR);
-		goto done;
-	}
+
 	switch (qp->s_state) {
 	default:
 		if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_NEXT_SEND_OK))

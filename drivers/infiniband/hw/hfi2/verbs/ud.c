@@ -455,14 +455,6 @@ static void hfi2_make_ud_req_16B(struct rvt_qp *qp,
 	/* Convert dwords to flits */
 	len = (qp->s_hdrwords + nwords) >> 1;
 
-	/*
-	 * TODO: Remove this workaround once STL 28154 is closed
-	 */
-	if (unlikely(!dlid)) {
-		hfi2_send_complete(qp, wqe, IB_WC_GENERAL_ERR);
-		return;
-	}
-
 	/* Setup the packet */
 	hfi2_make_16b_hdr(&priv->s_hdr->opah,
 			  slid, dlid, len, priv->pkey, 0, 0, l4, priv->s_sc);
@@ -522,14 +514,6 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 	ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	ppd = ibp->ppd;
 	ah_attr = &ibah_to_rvtah(wqe->ud_wr.ah)->attr;
-
-	/*
-	 * TODO: Remove this workaround once STL 28154 is closed
-	 */
-	if (unlikely(!rdma_ah_get_dlid(ah_attr))) {
-		hfi2_send_complete(qp, wqe, IB_WC_GENERAL_ERR);
-		goto done;
-	}
 	qp_priv->hdr_type = hfi2_get_hdr_type(ppd->lid, ah_attr);
 	if ((!hfi2_check_mcast(rdma_ah_get_dlid(ah_attr))) ||
 	    (rdma_ah_get_dlid(ah_attr) == be32_to_cpu(OPA_LID_PERMISSIVE))) {

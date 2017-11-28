@@ -76,8 +76,7 @@ int hfi2_check_ah(struct ib_device *ibdev, struct rdma_ah_attr *ah_attr)
 		return -EINVAL;
 	ppd = ibp->ppd;
 
-	if ((ppd->lstate == IB_PORT_ACTIVE) &&
-	    rdma_ah_get_dlid(ah_attr) == 0)
+	if (rdma_ah_get_dlid(ah_attr) == 0)
 		return -EINVAL;
 	num_sls = ARRAY_SIZE(ppd->sl_pairs);
 	if (rdma_ah_get_sl(ah_attr) >= num_sls ||
