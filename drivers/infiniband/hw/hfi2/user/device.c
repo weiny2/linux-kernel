@@ -100,9 +100,7 @@ static void hfi_misc_add(struct ib_device *ibdev)
 	hi->ibdev = ibdev;
 
 	INIT_IB_EVENT_HANDLER(&hi->eh, ibdev, hfi_event_notify);
-	ret = ib_register_event_handler(&hi->eh);
-	if (ret)
-		goto eh_error;
+	ib_register_event_handler(&hi->eh);
 
 	ret = hfi_user_add(hi);
 	if (ret)
@@ -113,7 +111,6 @@ static void hfi_misc_add(struct ib_device *ibdev)
 
 add_error:
 	ib_unregister_event_handler(&hi->eh);
-eh_error:
 	kfree(hi);
 exit:
 	dev_err(&ibdev->dev, "Failed to create /dev devices: %d\n", ret);

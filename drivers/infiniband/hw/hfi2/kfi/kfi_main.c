@@ -299,9 +299,7 @@ static void opa_kfi_probe(struct ib_device *ibdev)
 	dev->uc = (struct hfi_ibcontext *)ucontext;
 
 	INIT_IB_EVENT_HANDLER(&dev->eh, dev->ibdev, opa_kfi_event_notify);
-	rc = ib_register_event_handler(&dev->eh);
-	if (rc)
-		goto eh_err;
+	ib_register_event_handler(&dev->eh);
 
 	rc = opa_kfi_setup(dev);
 	if (rc)
@@ -312,7 +310,6 @@ static void opa_kfi_probe(struct ib_device *ibdev)
 
 setup_err:
 	ib_unregister_event_handler(&dev->eh);
-eh_err:
 	ibdev->dealloc_ucontext(ucontext);
 err:
 	kfree(dev);
