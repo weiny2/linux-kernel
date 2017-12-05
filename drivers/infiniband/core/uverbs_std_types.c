@@ -457,3 +457,4 @@ DECLARE_UVERBS_OBJECT_TREE(uverbs_default_objects,
 			   &uverbs_object_wq,
 			   &uverbs_object_rwq_ind_table,
 			   &uverbs_object_xrcd);
+EXPORT_SYMBOL(uverbs_default_objects);
