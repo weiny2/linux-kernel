@@ -1005,8 +1005,11 @@ static void hfi_set_pkey_table(struct hfi_pportdata *ppd)
  */
 void hfi_add_full_mgmt_pkey(struct hfi_pportdata *ppd)
 {
-	/* Sanity check - ppd->pkeys[2] should be 0 */
-	if (ppd->pkeys[2] != 0)
+	/*
+	 * Sanity check - ppd->pkeys[2] should be 0 or already
+	 * initialized
+	 */
+	if (!((ppd->pkeys[2] == 0) || (ppd->pkeys[2] == OPA_FULL_MGMT_PKEY)))
 		ppd_dev_err(ppd, "%s pkey[2] already set to 0x%x, resetting it to 0x%x\n",
 			    __func__, ppd->pkeys[2], OPA_FULL_MGMT_PKEY);
 	ppd->pkeys[2] = OPA_FULL_MGMT_PKEY;

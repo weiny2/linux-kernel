@@ -152,14 +152,6 @@ void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
 	write_csr(ppd->dd, offset, value);
 }
 
-static void read_mgmt_allowed(struct hfi_pportdata *ppd, u8 *mgmt_allowed)
-{
-	u32 frame;
-
-	hfi2_read_8051_config(ppd, REMOTE_LNI_INFO, GENERAL_CONFIG, &frame);
-	*mgmt_allowed = (frame >> MGMT_ALLOWED_SHIFT) & MGMT_ALLOWED_MASK;
-}
-
 static int write_local_device_id(struct hfi_pportdata *ppd, u16 device_id,
 				 u8 device_rev)
 {
@@ -420,6 +412,19 @@ static const char * const link_down_reason_strs[] = {
 	[OPA_LINKDOWN_REASON_SMA_DISABLED] = "SMA disabled",
 	[OPA_LINKDOWN_REASON_TRANSIENT] = "Transient"
 };
+
+static void set_mgmt_allowed(struct hfi_pportdata *ppd)
+{
+	u32 frame;
+
+	if (ppd->neighbor_type == NEIGHBOR_TYPE_HFI) {
+		ppd->mgmt_allowed = 1;
+	} else {
+		hfi2_read_8051_config(ppd, REMOTE_LNI_INFO, GENERAL_CONFIG, &frame);
+		ppd->mgmt_allowed = (frame >> MGMT_ALLOWED_SHIFT)
+		& MGMT_ALLOWED_MASK;
+	}
+}
 
 /* return the neighbor link down reason string */
 static const char *link_down_reason_str(u8 reason)
@@ -1658,6 +1663,15 @@ static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup)
 			ppd->neighbor_guid, ppd->neighbor_type,
 			ppd->mgmt_allowed, ppd->neighbor_fm_security);
 
+		/*
+		 * MgmtAllowed information, which is exchanged during
+		 * LNI, is available at this point
+		 */
+		set_mgmt_allowed(ppd);
+
+		if (ppd->mgmt_allowed)
+			hfi_add_full_mgmt_pkey(ppd);
+
 		/* physical link went up */
 #if 0 /* WFR legacy */
 		ppd->linkup = 1;
@@ -1839,11 +1853,6 @@ static void handle_verify_cap(struct work_struct *work)
 	read_vc_remote_link_width(ppd, &remote_max_rate, &link_widths);
 	read_remote_device_id(ppd, &device_id, &device_rev);
 
-	/*
-	 * And the 'MgmtAllowed' information, which is exchanged during
-	 * LNI, is also be available at this point.
-	 */
-	read_mgmt_allowed(ppd, &ppd->mgmt_allowed);
 #if 0
 	/* print the active widths */
 	get_link_widths(dd, &active_tx, &active_rx);
@@ -1981,9 +1990,6 @@ static void handle_verify_cap(struct work_struct *work)
 	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
 	set_8051_lcb_access(dd);
 #endif
-
-	if (ppd->mgmt_allowed)
-		hfi_add_full_mgmt_pkey(ppd);
 
 	/* tell the 8051 to go to LinkUp */
 	hfi_set_link_state(ppd, HLS_GOING_UP);

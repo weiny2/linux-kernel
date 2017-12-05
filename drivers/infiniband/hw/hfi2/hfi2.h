@@ -77,6 +77,9 @@
 /* don't care about this except printing */
 #define HFI2_CHIP_VERS_MIN 0U
 
+#define NEIGHBOR_TYPE_HFI	0
+#define NEIGHBOR_TYPE_SWITCH	1
+
 /*
  * There are 4 TCs, and one of them is used for management
  * traffic only (TC3). The other three will be used for
