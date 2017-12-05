@@ -864,7 +864,7 @@ struct opa_hfi_cong_log_event_internal {
 	u8 sl;
 	u8 svc_type;
 	u32 rlid;
-	s64 timestamp;
+	u64 timestamp;
 };
 
 struct opa_hfi_cong_log_event {

@@ -1207,7 +1207,7 @@ static int __subn_get_opa_hfi_cong_log(struct opa_smp *smp, u32 am, u8 *data,
 	struct hfi_devdata *dd = hfi_dd_from_ibdev(ibdev);
 	struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
 	struct opa_hfi_cong_log *cong_log = (struct opa_hfi_cong_log *)data;
-	s64 ts;
+	u64 ts;
 	int i;
 
 	if (am || smp_length_check(sizeof(*cong_log), max_len)) {
@@ -1225,7 +1225,7 @@ static int __subn_get_opa_hfi_cong_log(struct opa_smp *smp, u32 am, u8 *data,
 	       ppd->threshold_cong_event_map,
 	       sizeof(cong_log->threshold_cong_event_map));
 	/* keep timestamp in units of 1.024 usec */
-	ts = ktime_to_ns(ktime_get()) / 1024;
+	ts = ktime_get_ns() / 1024;
 	cong_log->current_time_stamp = cpu_to_be32(ts);
 	for (i = 0; i < OPA_CONG_LOG_ELEMS; i++) {
 		struct opa_hfi_cong_log_event_internal *cce =
@@ -1237,7 +1237,7 @@ static int __subn_get_opa_hfi_cong_log(struct opa_smp *smp, u32 am, u8 *data,
 		 * required to wrap the counter are supposed to
 		 * be zeroed (CA10-49 IBTA, release 1.2.1, V1).
 		 */
-		if ((u64)(ts - cce->timestamp) > (2 * UINT_MAX))
+		if ((ts - cce->timestamp) / 2 > U32_MAX)
 			continue;
 		memcpy(cong_log->events[i].local_qp_cn_entry, &cce->lqpn, 3);
 		memcpy(cong_log->events[i].remote_qp_number_cn_entry,

@@ -3043,7 +3043,7 @@ static void hfi_log_cca_event(struct hfi_pportdata *ppd, u8 sl)
 	cc_event->svc_type = 5;
 	cc_event->rlid = 0;
 	/* keep timestamp in units of 1.024 usec */
-	cc_event->timestamp = ktime_to_ns(ktime_get()) / 1024;
+	cc_event->timestamp = ktime_get_ns() / 1024;
 
 	spin_unlock_irqrestore(&ppd->cc_log_lock, flags);
 }
