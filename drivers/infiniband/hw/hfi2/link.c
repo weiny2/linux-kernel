@@ -2648,34 +2648,31 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 		if (ppd->host_link_state != HLS_UP_INIT)
 			goto unexpected;
 
-		ppd->host_link_state = HLS_UP_ARMED;
 		set_logical_state(ppd, LSTATE_ARMED);
 
 		ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_ARMED, 1000);
 		if (ret) {
-			/* logical state didn't change, stay at init */
-			ppd->host_link_state = HLS_UP_INIT;
 			ppd_dev_err(ppd,
 				    "%s: logical state did not change to ARMED\n",
 				    __func__);
+			break;
 		}
+		ppd->host_link_state = HLS_UP_ARMED;
 		ppd->lstate = IB_PORT_ARMED;
 		break;
 	case HLS_UP_ACTIVE:
 		if (ppd->host_link_state != HLS_UP_ARMED)
 			goto unexpected;
 
-		ppd->host_link_state = HLS_UP_ACTIVE;
 		set_logical_state(ppd, LSTATE_ACTIVE);
 		ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_ACTIVE, 1000);
 		if (ret) {
-			/* logical state didn't change, stay at armed */
-			ppd->host_link_state = HLS_UP_ARMED;
 			ppd_dev_err(ppd,
 				    "%s: logical state did not change to ACTIVE\n",
 				    __func__);
 		} else {
 			ppd->lstate = IB_PORT_ACTIVE;
+			ppd->host_link_state = HLS_UP_ACTIVE;
 
 			/* Signal the IB layer that the port has went active */
 			event.device = &ppd->dd->ibd->rdi.ibdev;
