@@ -693,7 +693,7 @@ static void apply_rx_amplitude_settings(struct hfi_pportdata *ppd,
 	hfi_qsfp_write(ppd, ppd->dd->hfi_id, (256 * 3) + 239, &rx_amp, 1);
 }
 
-static int set_qsfp_tx(struct hfi_pportdata *ppd, int on)
+int set_qsfp_tx(struct hfi_pportdata *ppd, int on)
 {
 	u8 tx_ctrl_byte = on ? 0x0 : 0xF;
 	int ret = 0;
@@ -906,7 +906,9 @@ static int hfi_configure_qsfp(struct hfi_pportdata *ppd)
 	 * through.
 	 */
 	if (ppd->qsfp_info.reset_needed) {
-		hfi_reset_qsfp(ppd);
+		ret = hfi_reset_qsfp(ppd);
+		if (ret)
+			return ret;
 		hfi_refresh_qsfp_cache(ppd, &ppd->qsfp_info);
 	} else {
 		ppd->qsfp_info.reset_needed = 1;

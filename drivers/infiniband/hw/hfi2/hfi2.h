@@ -1441,6 +1441,7 @@ struct net_device *hfi2_vnic_alloc_rn(struct ib_device *device,
 				      unsigned char name_assign_type,
 				      void (*setup)(struct net_device *));
 
+int set_qsfp_tx(struct hfi_pportdata *ppd, int on);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is

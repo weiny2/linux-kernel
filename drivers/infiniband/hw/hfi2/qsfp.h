@@ -258,7 +258,7 @@ int hfi_qsfp_write(struct hfi_pportdata *ppd, u32 target, int addr,
 		   void *bp, int len);
 int hfi_get_cable_info(struct hfi_devdata *dd, u32 port_num, u32 addr,
 		       u32 len, u8 *data);
-void hfi_reset_qsfp(struct hfi_pportdata *ppd);
+int hfi_reset_qsfp(struct hfi_pportdata *ppd);
 int hfi_test_qsfp_read(struct hfi_pportdata *ppd);
 int hfi_set_qsfp_high_power(struct hfi_pportdata *ppd);
 void hfi_wait_for_qsfp_init(struct hfi_pportdata *ppd);

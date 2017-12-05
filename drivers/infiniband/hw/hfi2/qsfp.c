@@ -930,7 +930,7 @@ void hfi_set_qsfp_int_n(struct hfi_pportdata *ppd, u8 enable)
 	write_misc_csr(ppd, MNH_MISC_QSFP_MASK, mask);
 }
 
-void hfi_reset_qsfp(struct hfi_pportdata *ppd)
+int hfi_reset_qsfp(struct hfi_pportdata *ppd)
 {
 	u64 mask, qsfp_mask;
 
@@ -956,6 +956,13 @@ void hfi_reset_qsfp(struct hfi_pportdata *ppd)
 	 * for alarms and warnings
 	 */
 	hfi_set_qsfp_int_n(ppd, 1);
+
+	/*
+	 * After the reset, AOC transmitters are enabled by default.
+	 * They need to be turned off to complete the QSFP setup before
+	 * they can be enabled again
+	 */
+	return set_qsfp_tx(ppd, 0);
 }
 
 int hfi_set_qsfp_high_power(struct hfi_pportdata *ppd)

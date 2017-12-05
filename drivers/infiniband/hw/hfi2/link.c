@@ -1267,6 +1267,9 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 	} else if (previous_state
 			& (HLS_DN_POLL | HLS_VERIFY_CAP | HLS_GOING_UP)) {
 		/* went down while attempting link up */
+
+		/* The QSFP does not need to be reset on LNI failure */
+		ppd->qsfp_info.reset_needed = 0;
 		/* byte 1 of last_*_state is the failure reason */
 		read_last_local_state(dd, &last_local_state);
 		read_last_remote_state(dd, &last_remote_state);
