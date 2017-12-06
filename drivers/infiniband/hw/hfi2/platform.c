@@ -1495,8 +1495,8 @@ void hfi_quiet_serdes(struct hfi_pportdata *ppd)
 	cancel_delayed_work_sync(&ppd->start_link_work);
 
 	ppd->offline_disabled_reason =
-			HFI_ODR_MASK(OPA_LINKDOWN_REASON_SMA_DISABLED);
-	set_link_down_reason(ppd, OPA_LINKDOWN_REASON_SMA_DISABLED, 0,
-			     OPA_LINKDOWN_REASON_SMA_DISABLED);
+			HFI_ODR_MASK(OPA_LINKDOWN_REASON_REBOOT);
+	set_link_down_reason(ppd, OPA_LINKDOWN_REASON_REBOOT, 0,
+			     OPA_LINKDOWN_REASON_REBOOT);
 	hfi_set_link_state(ppd, HLS_DN_OFFLINE);
 }
