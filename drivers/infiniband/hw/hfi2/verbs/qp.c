@@ -55,6 +55,49 @@
 #include "verbs.h"
 #include "packet.h"
 
+/**
+ * hfi2_qp_iter_cb - callback for iterator
+ * @qp - the qp
+ * @v - the sl in low bits of v
+ *
+ * This is called from the iterator callback to work
+ * on an individual qp.
+ */
+static void hfi2_qp_iter_cb(struct rvt_qp *qp, u64 v)
+{
+	int lastwqe;
+	struct ib_event ev;
+	struct ib_device *ibdev;
+	struct hfi2_ibport *ibp;
+	struct hfi_pportdata *ppd;
+	u8 sl = (u8)v;
+
+	ibdev = qp->ibqp.device;
+	ibp = to_hfi_ibp(ibdev, qp->port_num);
+	ppd = ibp->ppd;
+
+	if (qp->port_num != ppd->pnum ||
+	    (qp->ibqp.qp_type != IB_QPT_UC &&
+	     qp->ibqp.qp_type != IB_QPT_RC) ||
+	    rdma_ah_get_sl(&qp->remote_ah_attr) != sl ||
+	    !(ib_rvt_state_ops[qp->state] & RVT_POST_SEND_OK))
+		return;
+
+	spin_lock_irq(&qp->r_lock);
+	spin_lock(&qp->s_hlock);
+	spin_lock(&qp->s_lock);
+	lastwqe = rvt_error_qp(qp, IB_WC_WR_FLUSH_ERR);
+	spin_unlock(&qp->s_lock);
+	spin_unlock(&qp->s_hlock);
+	spin_unlock_irq(&qp->r_lock);
+	if (lastwqe) {
+		ev.device = qp->ibqp.device;
+		ev.element.qp = &qp->ibqp;
+		ev.event = IB_EVENT_QP_LAST_WQE_REACHED;
+		qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
+	}
+}
+
 /*
  * qp_set_16b - Set the hdr_type based on whether the slid or the
  * dlid in the connection is extended. Only applicable for RC and UC
@@ -451,44 +494,8 @@ void notify_error_qp(struct rvt_qp *qp)
  */
 void hfi2_error_port_qps(struct hfi_pportdata *ppd, u8 sl)
 {
-	struct rvt_qp *qp = NULL;
 	struct hfi_devdata *dd = ppd->dd;
 	struct hfi2_ibdev *dev = dd->ibd;
-	int n;
-	int lastwqe;
-	struct ib_event ev;
 
-	rcu_read_lock();
-
-	/* Deal only with RC/UC qps that use the given SL. */
-	for (n = 0; n < dev->rdi.qp_dev->qp_table_size; n++) {
-		for (qp = rcu_dereference(dev->rdi.qp_dev->qp_table[n]); qp;
-			qp = rcu_dereference(qp->next)) {
-			if (qp->port_num == ppd->pnum &&
-			    (qp->ibqp.qp_type == IB_QPT_UC ||
-			     qp->ibqp.qp_type == IB_QPT_RC) &&
-			    rdma_ah_get_sl(&qp->remote_ah_attr) == sl &&
-			    (ib_rvt_state_ops[qp->state] &
-			     RVT_POST_SEND_OK)) {
-				spin_lock_irq(&qp->r_lock);
-				spin_lock(&qp->s_hlock);
-				spin_lock(&qp->s_lock);
-				lastwqe = rvt_error_qp(qp,
-						       IB_WC_WR_FLUSH_ERR);
-				spin_unlock(&qp->s_lock);
-				spin_unlock(&qp->s_hlock);
-				spin_unlock_irq(&qp->r_lock);
-				if (lastwqe) {
-					ev.device = qp->ibqp.device;
-					ev.element.qp = &qp->ibqp;
-					ev.event =
-						IB_EVENT_QP_LAST_WQE_REACHED;
-					qp->ibqp.event_handler(&ev,
-						qp->ibqp.qp_context);
-				}
-			}
-		}
-	}
-
-	rcu_read_unlock();
+	rvt_qp_iter(&dev->rdi, sl, hfi2_qp_iter_cb);
 }
