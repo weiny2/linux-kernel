@@ -1057,6 +1057,9 @@ struct hfi_devdata {
 	u16 *scntrs;
 	/* implementation code */
 	u8 icode;
+
+	/* FXR Address Translation */
+	struct hfi_at *at;
 };
 
 /*
@@ -1138,10 +1141,15 @@ void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid);
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
 void hfi_tpid_enable(struct hfi_devdata *dd, u8 idx, u16 base, u32 ptl_uid);
 void hfi_tpid_disable(struct hfi_devdata *dd, u8 idx);
-int hfi_iommu_set_pasid(struct hfi_ctx *ctx);
-int hfi_iommu_clear_pasid(struct hfi_ctx *ctx);
 int hfi_alloc_spill_area(struct hfi_devdata *dd);
 void hfi_free_spill_area(struct hfi_devdata *dd);
+
+int hfi_at_is_pasid_valid(struct device *dev, int pasid);
+int hfi_at_set_pasid(struct hfi_ctx *ctx);
+int hfi_at_clear_pasid(struct hfi_ctx *ctx);
+int hfi_at_setup_irq(struct hfi_devdata *dd);
+int hfi_at_init(struct hfi_devdata *dd);
+void hfi_at_exit(struct hfi_devdata *dd);
 
 /* OPA core functions */
 int hfi_cmdq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table,

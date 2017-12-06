@@ -402,7 +402,7 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 err_kern_ctx:
 	hfi_errq_cleanup(ctx);
 	hfi_pcb_reset(dd, ptl_pid);
-	hfi_iommu_clear_pasid(ctx);
+	hfi_at_clear_pasid(ctx);
 err_pasid:
 	vfree(ctx->le_me_free_list);
 err_psb_vmalloc:
@@ -557,7 +557,7 @@ void hfi_ctx_cleanup(struct hfi_ctx *ctx)
 
 	/* stop pasid translation, but not for ZEBU: HSD 1209735086 */
 	if (!zebu)
-		hfi_iommu_clear_pasid(ctx);
+		hfi_at_clear_pasid(ctx);
 
 	/* free error queue */
 	hfi_errq_cleanup(ctx);

@@ -100,7 +100,7 @@ int hfi_set_pasid(struct hfi_devdata *dd, struct hfi_ctx *ctx, u16 ptl_pid)
 		hfi_iommu_zebu_set_pasid(dd, (ctx->type == HFI_CTX_TYPE_USER) ?
 					 current->mm : NULL, ptl_pid);
 	else
-		ret = hfi_iommu_set_pasid(ctx);
+		ret = hfi_at_set_pasid(ctx);
 
 	return ret;
 }
@@ -114,7 +114,7 @@ void hfi_clear_pasid(struct hfi_ctx *ctx, u16 ptl_pid)
 	if (iommu_hack)
 		hfi_iommu_zebu_clear_pasid(ctx->devdata, ptl_pid);
 	else
-		hfi_iommu_clear_pasid(ctx);
+		hfi_at_clear_pasid(ctx);
 }
 
 /* Missing from current definitions */

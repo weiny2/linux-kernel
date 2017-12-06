@@ -2613,6 +2613,11 @@ static int hfi_setup_irqs(struct hfi_devdata *dd)
 	struct pci_dev *pdev = dd->pdev;
 	int i, ret;
 
+	/* configure IRQs for Address Translation */
+	ret = hfi_at_setup_irq(dd);
+	if (ret)
+		return ret;
+
 	/* configure IRQ for MNH if enabled */
 	if (!no_mnh) {
 		ret = hfi_setup_becn_mnh_irq(dd, HFI_MNH_ERROR);
@@ -2804,6 +2809,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	}
 	hfi_pend_cq_info_free(&dd->pend_cq);
 	hfi_cleanup_interrupts(dd);
+	hfi_at_exit(dd);
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
@@ -3662,23 +3668,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
-	/* enable MSI-X or INTx */
-	ret = hfi_setup_interrupts(dd, HFI_NUM_INTERRUPTS);
-	if (ret)
-		goto err_post_alloc;
-	hfi_ack_all_interrupts(dd);
-
 	hfi_pend_cq_info_alloc(dd, &dd->pend_cq);
-
-	/* give unit a logical number 0-n */
-	idr_preload(GFP_KERNEL);
-	spin_lock_irqsave(&hfi2_unit_lock, flags);
-	ret = idr_alloc(&hfi2_unit_table, dd, 0, 0, GFP_NOWAIT);
-	spin_unlock_irqrestore(&hfi2_unit_lock, flags);
-	idr_preload_end();
-	if (ret < 0)
-		goto err_post_alloc;
-	dd->unit = ret;
 
 	/* per port init */
 	dd->num_pports = HFI_NUM_PPORTS;
@@ -3705,6 +3695,31 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (!zebu)
 		hfi_cmdq_config_all(dd);
 
+	/* give unit a logical number 0-n */
+	idr_preload(GFP_KERNEL);
+	spin_lock_irqsave(&hfi2_unit_lock, flags);
+	ret = idr_alloc(&hfi2_unit_table, dd, 0, 0, GFP_NOWAIT);
+	spin_unlock_irqrestore(&hfi2_unit_lock, flags);
+	idr_preload_end();
+	if (ret < 0)
+		goto err_post_alloc;
+	dd->unit = ret;
+
+	ret = hfi_at_init(dd);
+	if (ret)
+		goto err_post_alloc;
+
+	/* enable MSI-X or INTx */
+	ret = hfi_setup_interrupts(dd, HFI_NUM_INTERRUPTS);
+	if (ret)
+		goto err_post_alloc;
+	hfi_ack_all_interrupts(dd);
+
+	/* configure IRQs */
+	ret = hfi_setup_irqs(dd);
+	if (ret)
+		goto err_post_alloc;
+
 	/* configure system PID/PASID needed by privileged CMDQs */
 	ctx = &dd->priv_ctx;
 	hfi_ctx_init(ctx, dd);
@@ -3723,11 +3738,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 	ret = hfi_cmdq_map(ctx, cmdq_idx, &dd->priv_tx_cq, &dd->priv_rx_cq);
-	if (ret)
-		goto err_post_alloc;
-
-	/* configure IRQs */
-	ret = hfi_setup_irqs(dd);
 	if (ret)
 		goto err_post_alloc;
 
