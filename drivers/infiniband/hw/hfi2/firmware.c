@@ -1269,19 +1269,17 @@ static int load_8051_firmware(struct hfi_pportdata *ppd,
 	if (ret)
 		return ret;
 
-	/* clear all reset bits, releasing the 8051 */
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, 0ull);
-
 	/*
+	 * Clear all reset bits, releasing the 8051
 	 * MNH reset step 5. Wait for firmware to be ready to accept host
 	 * requests.
+	 * Then, set the host version bit
 	 */
-	ret = hfi_wait_firmware_ready(ppd, TIMEOUT_8051_START);
-	if (ret) { /* timed out */
-		ppd_dev_err(ppd, "8051 start timeout, current state 0x%x\n",
-			    get_firmware_state(ppd));
-		return -ETIMEDOUT;
-	}
+	mutex_lock(&ppd->crk8051_mutex);
+	ret = hfi2_release_and_wait_ready_8051_firmware(ppd);
+	mutex_unlock(&ppd->crk8051_mutex);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -1442,13 +1440,14 @@ static int write_host_interface_version(struct hfi_pportdata *ppd, u8 version)
 	u32 frame;
 	u32 mask;
 
+	lockdep_assert_held(&ppd->crk8051_mutex);
 	mask = (HOST_INTERFACE_VERSION_MASK << HOST_INTERFACE_VERSION_SHIFT);
 	hfi2_read_8051_config(ppd, RESERVED_REGISTERS, GENERAL_CONFIG, &frame);
 	/* Clear, then set field */
 	frame &= ~mask;
 	frame |= ((u32)version << HOST_INTERFACE_VERSION_SHIFT);
-	return load_8051_config(ppd, RESERVED_REGISTERS, GENERAL_CONFIG,
-				frame);
+	return _load_8051_config(ppd, RESERVED_REGISTERS, GENERAL_CONFIG,
+				 frame);
 }
 
 /*
@@ -1483,12 +1482,14 @@ int hfi2_load_firmware(struct hfi_devdata *dd)
 		}
 	}
 
-	read_misc_status(to_hfi_ppd(dd, 1), &ver_major, &ver_minor, &ver_patch);
+	ppd = to_hfi_ppd(dd, 1);
+	read_misc_status(ppd, &ver_major, &ver_minor, &ver_patch);
 	dd_dev_info(dd, "8051 firmware version %d.%d.%d\n",
 		    (int)ver_major, (int)ver_minor, (int)ver_patch);
 	dd->crk8051_ver = crk8051_ver(ver_major, ver_minor, ver_patch);
-	ret = write_host_interface_version(to_hfi_ppd(dd, 1),
-		HOST_INTERFACE_VERSION);
+	mutex_lock(&ppd->crk8051_mutex);
+	ret = write_host_interface_version(ppd, HOST_INTERFACE_VERSION);
+	mutex_unlock(&ppd->crk8051_mutex);
 	if (ret != HCMD_SUCCESS) {
 		dd_dev_err(dd,
 			   "Failed to set host interface version, return 0x%x\n",
@@ -1540,4 +1541,40 @@ void hfi2_dispose_firmware(struct hfi_devdata *dd)
 	if (no_mnh)
 		return;
 	dispose_firmware(dd);
+}
+
+/*
+ * Clear all reset bits, releasing the 8051.
+ * Wait for firmware to be ready to accept host requests.
+ * Then, set host version bit.
+ *
+ * This function executes even if the 8051 is in reset mode when
+ * ppd->mnh_shutdown == 1.
+ *
+ * Expects ppd->crk8051_mutex to be held.
+ */
+int hfi2_release_and_wait_ready_8051_firmware(struct hfi_pportdata *ppd)
+{
+	int ret;
+
+	lockdep_assert_held(&ppd->crk8051_mutex);
+	/* clear all reset bits, releaseing the 8051 */
+	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, 0ull);
+
+	/* wait for the firmware to be ready to accept requests */
+	ret = hfi_wait_firmware_ready(ppd, TIMEOUT_8051_START);
+	if (ret) {
+		ppd_dev_err(ppd, "%s: timeout starting the 8051 firmware\n",
+			    __func__);
+		return ret;
+	}
+
+	ret = write_host_interface_version(ppd, HOST_INTERFACE_VERSION);
+	if (ret != HCMD_SUCCESS) {
+		ppd_dev_err(ppd,
+			    "Failed to set host interface version, ret 0x%x\n",
+			    ret);
+		return -EIO;
+	}
+	return 0;
 }

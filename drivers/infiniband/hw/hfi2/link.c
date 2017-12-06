@@ -603,12 +603,9 @@ void _mnh_start(struct hfi_pportdata *ppd)
 	lockdep_assert_held(&ppd->crk8051_mutex);
 	if (!ppd->mnh_shutdown)
 		return;
-	/* Take the 8051 out of reset */
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, 0ull);
-	/* Wait until 8051 is ready */
-	if (hfi_wait_firmware_ready(ppd, TIMEOUT_8051_START))
-		ppd_dev_err(ppd, "%s: timeout starting 8051 firmware\n",
-			    __func__);
+	/* Take the 8051 out of reset, wait until 8051 is ready and set
+	 * host version bit*/
+	hfi2_release_and_wait_ready_8051_firmware(ppd);
 	/* turn on the LCB (turn off in lcb_shutdown). */
 	write_fzc_csr(ppd, FZC_LCB_CFG_RUN, FZC_LCB_CFG_RUN_EN_MASK);
 	/* lcb_shutdown() with abort=1 does not restore these */
@@ -787,19 +784,21 @@ static void set_logical_state(struct hfi_pportdata *ppd, u32 chip_lstate)
 }
 
 /*
+ * If the 8051 is in reset mode (ppd->mnh_shutdown == 1), this function
+ * will still continue executing
+ *
  * Returns:
  *	< 0 = Linux error, not able to get access
  *	> 0 = 8051 command RETURN_CODE
  */
-static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
+static int _do_8051_command(struct hfi_pportdata *ppd, u32 type,
 			   u64 in_data, u64 *out_data)
 {
 	u64 reg;
 	int return_code = 0;
 	unsigned long timeout;
 
-
-	mutex_lock(&&ppd->crk8051_mutex);
+	lockdep_assert_held(&ppd->crk8051_mutex);
 	/*
 	 * If an 8051 host command timed out previously, then the 8051 is
 	 * stuck.
@@ -878,10 +877,31 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 	write_8051_csr(ppd, CRK_CRK8051_CFG_HOST_CMD_0, 0);
 
 fail:
-	mutex_unlock(&ppd->crk8051_mutex);;
 	hfi2_cdbg(8051, "type %d, data in 0x%012llx, out 0x%012llx, ret = %d",
 		  type, in_data, out_data ? *out_data : 0, return_code);
 
+	return return_code;
+}
+
+/*
+ * Returns:
+ * 	< 0 = Linux error, not able to get access
+ * 	> 0 = 8051 command RETURN_CODE
+ */
+static int do_8051_command(struct hfi_pportdata *ppd, u32 type, u64 in_data,
+			   u64 *out_data)
+{
+	int return_code;
+
+	mutex_lock(&ppd->crk8051_mutex);
+	/* We can't send any commands to the 8051 if it is in reset */
+	if (ppd->mnh_shutdown){
+		return_code = -ENODEV;
+		goto fail;
+	}
+	return_code = _do_8051_command(ppd, type, in_data, out_data);
+fail:
+	mutex_unlock(&ppd->crk8051_mutex);
 	return return_code;
 }
 
@@ -890,22 +910,35 @@ static int set_physical_link_state(struct hfi_pportdata *ppd, u64 state)
 	return do_8051_command(ppd, HCMD_CHANGE_PHY_STATE, state, NULL);
 }
 
-int load_8051_config(struct hfi_pportdata *ppd, u8 field_id,
+int _load_8051_config(struct hfi_pportdata *ppd, u8 field_id,
 		     u8 lane_id, u32 config_data)
 {
 	u64 data;
 	int ret;
 
+	lockdep_assert_held(&ppd->crk8051_mutex);
 	data = (u64)field_id << LOAD_DATA_FIELD_ID_SHIFT
 		| (u64)lane_id << LOAD_DATA_LANE_ID_SHIFT
 		| (u64)config_data << LOAD_DATA_DATA_SHIFT;
-	ret = do_8051_command(ppd, HCMD_LOAD_CONFIG_DATA, data, NULL);
+	ret = _do_8051_command(ppd, HCMD_LOAD_CONFIG_DATA, data, NULL);
 	if (ret != HCMD_SUCCESS) {
 		ppd_dev_err(ppd,
 			    "load 8051 config: field id %d, lane %d, err %d\n",
 			    (int)field_id, (int)lane_id, ret);
 	}
 	return ret;
+}
+
+int load_8051_config(struct hfi_pportdata *ppd, u8 field_id,
+		     u8 lane_id, u32 config_data)
+{
+	int return_code;
+
+	mutex_lock(&ppd->crk8051_mutex);
+	return_code = _load_8051_config(ppd, field_id, lane_id, config_data);
+	mutex_unlock(&ppd->crk8051_mutex);
+
+	return return_code;
 }
 
 static void read_vc_local_link_width(struct hfi_pportdata *ppd, u8 *misc_bits,

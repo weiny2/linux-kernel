@@ -137,4 +137,7 @@ int hfi_wait_firmware_ready(const struct hfi_pportdata *ppd, u32 mstimeout);
 int hfi2_load_firmware(struct hfi_devdata *dd);
 int hfi_read_8051_data(struct hfi_pportdata *ppd, u32 addr,
 		       u32 len, u64 *result);
+int _load_8051_config(struct hfi_pportdata *ppd, u8 field_id,
+		     u8 lane_id, u32 config_data);
+int hfi2_release_and_wait_ready_8051_firmware(struct hfi_pportdata *ppd);
 #endif	/* _HFI_FIRMWARE_H */
