@@ -1087,6 +1087,10 @@ void tune_serdes(struct hfi_pportdata *ppd)
 	if (loopback != LOOPBACK_NONE ||
 	    ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
 		ppd->driver_link_ready = 1;
+		if (hfi_qsfp_mod_present(ppd)) {
+			/* TODO: Do we need locking here? */
+			hfi_refresh_qsfp_cache(ppd, &ppd->qsfp_info);
+		}
 		return;
 	}
 
