@@ -1558,8 +1558,7 @@ static void hfi_set_link_speed_enabled(struct hfi_pportdata *ppd, u32 s)
 }
 
 static int set_port_states(struct hfi_pportdata *ppd,
-			   struct opa_smp *smp, u32 lstate, u32 pstate,
-			   u8 suppress_idle_sma)
+			   struct opa_smp *smp, u32 lstate, u32 pstate)
 {
 	/* HFI driver clubs pstate and lstate to Host Link State (HLS) */
 	u32 hls;
@@ -1617,7 +1616,7 @@ static int set_port_states(struct hfi_pportdata *ppd,
 		break;
 	case IB_PORT_ARMED:
 		ret = hfi_set_link_state(ppd, HLS_UP_ARMED);
-		if ((ret == 0) && (suppress_idle_sma == 0))
+		if (!ret)
 			hfi_send_idle_sma(ppd, SMA_IDLE_ARM);
 		break;
 	case IB_PORT_ACTIVE:
@@ -1947,8 +1946,10 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 			if (ls_new == ls_old || (ls_new == IB_PORT_ARMED))
 				ppd->is_sm_config_started = 1;
 		} else if (ls_new == IB_PORT_ARMED) {
-			if (ppd->is_sm_config_started == 0)
+			if (ppd->is_sm_config_started == 0) {
+				smp->status |= IB_SMP_INVALID_FIELD;
 				invalid = 1;
+			}
 		}
 	}
 
@@ -1969,10 +1970,11 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	 * Changing the port physical state only makes sense if the link
 	 * is down or is being set to down.
 	 */
-
-	ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
-	if (ret)
-		return ret;
+	if (!invalid) {
+		ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
+		if (ret)
+			return ret;
+	}
 
 	ret = __subn_get_opa_portinfo(smp, am, data, ibdev, port, resp_len,
 				      max_len);
@@ -2348,17 +2350,18 @@ static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 			if (ls_new == ls_old || (ls_new == IB_PORT_ARMED))
 				ppd->is_sm_config_started = 1;
 		} else if (ls_new == IB_PORT_ARMED) {
-			if (ppd->is_sm_config_started == 0)
+			if (ppd->is_sm_config_started == 0) {
+				smp->status |= IB_SMP_INVALID_FIELD;
 				invalid = 1;
+			}
 		}
 	}
 
-	ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
-	if (ret)
-		return ret;
-
-	if (invalid)
-		smp->status |= IB_SMP_INVALID_FIELD;
+	if (!invalid) {
+		ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
+		if (ret)
+			return ret;
+	}
 
 	return __subn_get_opa_psi(smp, am, data, ibdev, port, resp_len,
 				  max_len);
