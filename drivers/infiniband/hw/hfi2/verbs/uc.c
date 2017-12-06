@@ -307,7 +307,7 @@ void hfi2_uc_rcv(struct hfi2_ib_packet *packet)
 	u8 extra_bytes = pad + packet->extra_byte + (SIZE_OF_CRC << 2);
 	bool is_16b = (packet->etype == RHF_RCV_TYPE_BYPASS);
 
-	if (hfi2_ruc_check_hdr(ibp, packet, qp)) {
+	if (hfi2_ruc_check_hdr(ibp, packet)) {
 		dev_dbg(ibp->dev, "header check failed\n");
 		return;
 	}

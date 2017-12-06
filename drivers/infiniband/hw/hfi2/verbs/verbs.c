@@ -121,21 +121,6 @@ module_param(rc_drop_enabled, bool, 0444);
 MODULE_PARM_DESC(rc_drop_enabled, "Enable random RC packet drops for stress testing");
 #endif
 
-static const char *get_unit_name(int unit)
-{
-	static char iname[16];
-
-	snprintf(iname, sizeof(iname), DRIVER_NAME "_%u", unit);
-	return iname;
-}
-
-static const char *get_card_name(struct rvt_dev_info *rdi)
-{
-	struct hfi_devdata *dd = hfi_dd_from_ibdev(&rdi->ibdev);
-
-	return get_unit_name(dd->unit);
-}
-
 static struct pci_dev *get_pci_dev(struct rvt_dev_info *rdi)
 {
 	struct hfi_devdata *dd = hfi_dd_from_ibdev(&rdi->ibdev);
@@ -437,7 +422,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	 * Fill in rvt info object.
 	 */
 	ibd->rdi.driver_f.port_callback = port_callback;
-	ibd->rdi.driver_f.get_card_name = get_card_name;
 	ibd->rdi.driver_f.get_pci_dev = get_pci_dev;
 
 	ibd->rdi.driver_f.query_port_state = hfi2_query_port;

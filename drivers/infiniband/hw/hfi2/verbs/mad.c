@@ -620,7 +620,6 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	pi->lid = cpu_to_be32(ppd->lid);
-	pi->max_lid = cpu_to_be32(ppd->max_lid);
 
 	/* Only return the mkey if the protection field allows it. */
 	if (!(smp->method == IB_MGMT_METHOD_GET &&
@@ -1971,7 +1970,7 @@ static int __subn_set_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	 * is down or is being set to down.
 	 */
 	if (!invalid) {
-		ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
+		ret = set_port_states(ppd, smp, ls_new, ps_new);
 		if (ret)
 			return ret;
 	}
@@ -2358,7 +2357,7 @@ static int __subn_set_opa_psi(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	if (!invalid) {
-		ret = set_port_states(ppd, smp, ls_new, ps_new, invalid);
+		ret = set_port_states(ppd, smp, ls_new, ps_new);
 		if (ret)
 			return ret;
 	}
@@ -2856,7 +2855,7 @@ static int opa_local_smp_check(struct hfi2_ibport *ibp,
 	 * It is okay to lose the upper 16 bits of LID on OPA devices as this
 	 * information is obtained elsewhere. Mask off the upper 16 bits.
 	 */
-	ingress_pkey_table_fail(ppd, pkey, ib_slid_cpu16(0xFFFF & in_wc->slid));
+	ingress_pkey_table_fail(ppd, pkey, ib_lid_cpu16(0xFFFF & in_wc->slid));
 	return 1;
 }
 

@@ -372,8 +372,7 @@ int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     u16 *out_mad_pkey_index);
 void hfi2_bad_pkey(struct hfi2_ibport *ibp, u32 key, u32 sl,
 		    u32 qp1, u32 qp2, u32 lid1, u32 lid2);
-int hfi2_ruc_check_hdr(struct hfi2_ibport *ibp, struct hfi2_ib_packet *packet,
-		       struct rvt_qp *qp);
+int hfi2_ruc_check_hdr(struct hfi2_ibport *ibp, struct hfi2_ib_packet *packet);
 void hfi2_rc_hdrerr(struct hfi2_ib_packet *packet);
 
 /* Device specific */

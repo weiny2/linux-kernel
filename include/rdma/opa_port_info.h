@@ -127,7 +127,13 @@
 #define OPA_LINK_WIDTH_3X            0x0004
 #define OPA_LINK_WIDTH_4X            0x0008
 
+/* reserved (1 << 15) */
+#define OPA_CAP_MASK3_IsSLPairsSupported	  (1 << 14)
 #define OPA_CAP_MASK3_IsEthOnFabricSupported      (1 << 13)
+#define OPA_CAP_MASK3_IsMAXLIDSupported		  (1 << 12)
+#define OPA_CAP_MASK3_IsTimeSyncSupported	  (1 << 10)
+/* reserved (1 << 9) */
+#define OPA_CAP_MASK3_IsBwMeterSupported	  (1 << 8)
 #define OPA_CAP_MASK3_IsSnoopSupported            (1 << 7)
 #define OPA_CAP_MASK3_IsAsyncSC2VLSupported       (1 << 6)
 #define OPA_CAP_MASK3_IsAddrRangeConfigSupported  (1 << 5)
@@ -250,6 +256,11 @@ enum port_info_field_masks {
 	OPA_PI_MASK_BUF_UNIT_CREDIT_ACK           = (0x00000003  <<  3),
 	OPA_PI_MASK_BUF_UNIT_BUF_ALLOC            = (0x00000003  <<  0),
 
+	/* timesync */
+	OPA_PI_MASK_TS_PERIODICITY		  = (0x000003FF  <<  4),
+	OPA_PI_MASK_TS_IS_ACTIVE_MASTER		  = (0x00000001  <<  3),
+	OPA_PI_MASK_TS_CLOCK_ID			  = (0x00000003  <<  0),
+
 	/* neigh_mtu.pvlx_to_mtu */
 	OPA_PI_MASK_NEIGH_MTU_PVL0                = 0xF0,
 	OPA_PI_MASK_NEIGH_MTU_PVL1                = 0x0F,
@@ -354,7 +365,7 @@ struct opa_port_info {
 		} preemption;
 	} flit_control;
 
-	__be32 reserved4;
+	__be32 max_lid;
 	__be32 port_error_action; /* bit field */
 
 	struct {
@@ -364,7 +375,8 @@ struct opa_port_info {
 	__be16 mkey_lease_period;
 	__be32 buffer_units;                     /* 9 res, 12, 5, 3, 3 */
 
-	__be32 reserved5;
+	__be16 tsync;
+	__be16 reserved5;
 	__be32 sm_lid;
 
 	__be64 mkey;
@@ -396,6 +408,7 @@ struct opa_port_info {
 	__be32 ib_cap_mask;
 	__be16 reserved9;                    /* was ib_cap_mask2 */
 	__be16 opa_cap_mask;
+
 
 	__be32 reserved10;                   /* was link_roundtrip_latency */
 	__be16 overall_buffer_space;

@@ -290,9 +290,9 @@ static int gid_ok(union ib_gid *gid, __be64 gid_prefix, __be64 id)
  * This should be called with the QP r_lock held.
  * The s_lock will be acquired around the hfi2_migrate_qp() call.
  */
-int hfi2_ruc_check_hdr(struct hfi2_ibport *ibp, struct hfi2_ib_packet *packet,
-		       struct rvt_qp *qp)
+int hfi2_ruc_check_hdr(struct hfi2_ibport *ibp, struct hfi2_ib_packet *packet)
 {
+	struct rvt_qp *qp = packet->qp;
 	struct hfi2_qp_priv *priv = qp->priv;
 	__be64 guid;
 	unsigned long flags;
@@ -323,34 +323,34 @@ int hfi2_ruc_check_hdr(struct hfi2_ibport *ibp, struct hfi2_ib_packet *packet,
 			if ((rdma_ah_get_ah_flags(&qp->alt_ah_attr)
 			     & IB_AH_GRH) &&
 			    packet->etype != RHF_RCV_TYPE_BYPASS)
-				goto err;
+				return 1;
 		} else {
 			const struct ib_global_route *grh;
 
 			if (!(rdma_ah_get_ah_flags(&qp->alt_ah_attr) &
 			      IB_AH_GRH))
-				goto err;
+				return 1;
 			grh = rdma_ah_read_grh(&qp->alt_ah_attr);
 			guid = get_sguid(ppd, grh->sgid_index);
 			if (!gid_ok(&packet->grh->dgid,
 				    ibp->rvp.gid_prefix, guid))
-				goto err;
+				return 1;
 			if (!gid_ok(
 				&packet->grh->sgid,
 				grh->dgid.global.subnet_prefix,
 				grh->dgid.global.interface_id))
-				goto err;
+				return 1;
 		}
 		if (unlikely(hfi_rcv_pkey_check(ibp->ppd, pkey,
 						sc5, slid))) {
 			hfi2_bad_pkey(ibp, pkey, sl,
 				      0, qp->ibqp.qp_num, slid, dlid);
-			goto err;
+			return 1;
 		}
 		/* Validate the SLID. See Ch. 9.6.1.5 and 17.2.8 */
 		if ((slid != rdma_ah_get_dlid(&qp->alt_ah_attr)) ||
 		    ibp->ppd->pnum != rdma_ah_get_port_num(&qp->alt_ah_attr))
-			goto err;
+			return 1;
 		spin_lock_irqsave(&qp->s_lock, flags);
 		hfi2_migrate_qp(qp);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
@@ -359,43 +359,40 @@ int hfi2_ruc_check_hdr(struct hfi2_ibport *ibp, struct hfi2_ib_packet *packet,
 			if ((rdma_ah_get_ah_flags(&qp->remote_ah_attr)
 			     & IB_AH_GRH) &&
 			    packet->etype != RHF_RCV_TYPE_BYPASS)
-				goto err;
+				return 1;
 		} else {
 			const struct ib_global_route *grh;
 
 			if (!(rdma_ah_get_ah_flags(&qp->remote_ah_attr) &
 			      IB_AH_GRH))
-				goto err;
+				return 1;
 			grh = rdma_ah_read_grh(&qp->remote_ah_attr);
 			guid = get_sguid(ppd, grh->sgid_index);
 			if (!gid_ok(&packet->grh->dgid,
 				    ibp->rvp.gid_prefix, guid))
-				goto err;
+				return 1;
 			if (!gid_ok(
 			     &packet->grh->sgid,
 			     grh->dgid.global.subnet_prefix,
 			     grh->dgid.global.interface_id))
-				goto err;
+				return 1;
 		}
 		if (unlikely(hfi_rcv_pkey_check(ibp->ppd, pkey,
 						sc5, slid))) {
 			hfi2_bad_pkey(ibp, pkey, sl,
 				      0, qp->ibqp.qp_num, slid, dlid);
-			goto err;
+			return 1;
 		}
 		/* Validate the SLID. See Ch. 9.6.1.5 */
 		if ((slid != rdma_ah_get_dlid(&qp->remote_ah_attr)) ||
 		    ibp->ppd->pnum != qp->port_num)
-			goto err;
+			return 1;
 		if (qp->s_mig_state == IB_MIG_REARM &&
 		    !migrated)
 			qp->s_mig_state = IB_MIG_ARMED;
 	}
 
 	return 0;
-
-err:
-	return 1;
 }
 
 static inline void hfi2_make_ruc_bth(struct rvt_qp *qp,

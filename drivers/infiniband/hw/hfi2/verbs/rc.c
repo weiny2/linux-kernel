@@ -822,7 +822,7 @@ static u32 hfi2_make_rc_ack_16B(struct rvt_qp *qp,
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	u32 hwords, nwords, slid, qwords;
 	u8 sc5, l4, extra_bytes;
-	u32 bth0, bth1;
+	u32 bth0, bth1 = 0;
 	u32 dlid = rdma_ah_get_dlid(&qp->remote_ah_attr);
 	u16 pkey;
 	struct ib_other_headers *ohdr;
@@ -2008,7 +2008,8 @@ void hfi2_rc_rcv(struct hfi2_ib_packet *packet)
 	u32 tlen = packet->tlen;
 	struct hfi2_ibport *ibp = packet->ibp;
 	struct ib_other_headers *ohdr = packet->ohdr;
-	u32 bth0, opcode;
+	u32 bth0;
+	u32 opcode = packet->opcode;
 	u32 hdrsize = packet->hlen;
 	u32 psn = ib_bth_get_psn(packet->ohdr);
 	struct ib_wc wc;
@@ -2024,8 +2025,7 @@ void hfi2_rc_rcv(struct hfi2_ib_packet *packet)
 	u8 extra_bytes = packet->pad + packet->extra_byte + (SIZE_OF_CRC << 2);
 
 	bth0 = be32_to_cpu(ohdr->bth[0]);
-	opcode = bth0 >> 24;
-	if (hfi2_ruc_check_hdr(ibp, packet, qp)) {
+	if (hfi2_ruc_check_hdr(ibp, packet)) {
 		dev_dbg(ibp->dev, "header check failed\n");
 		return;
 	}
@@ -2499,7 +2499,7 @@ void hfi2_rc_hdrerr(struct hfi2_ib_packet *packet)
 	u32 opcode;
 	u32 psn;
 
-	if (hfi2_ruc_check_hdr(ibp, packet, qp))
+	if (hfi2_ruc_check_hdr(ibp, packet))
 		return;
 
 	psn = ib_bth_get_psn(packet->ohdr);
