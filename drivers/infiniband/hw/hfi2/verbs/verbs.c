@@ -68,6 +68,8 @@
 #include "../link.h"
 #include "../counters.h"
 
+/* TODO: Enable verbs 2.0 later */
+#if 0
 DECLARE_UVERBS_TYPES(hfi2_object_types,
 		     ADD_UVERBS_TYPE(HFI2_TYPE_DEVICE, hfi2_type_device),
 		     ADD_UVERBS_TYPE(HFI2_TYPE_CTX, hfi2_type_ctx),
@@ -78,7 +80,7 @@ DECLARE_UVERBS_TYPES(hfi2_object_types,
 DECLARE_UVERBS_TYPES_GROUP(hfi2_root,
 			   &uverbs_common_types,
 			   &hfi2_object_types);
-
+#endif
 static void hfi2_uninit_port(struct hfi2_ibport *ibp);
 
 __be64 hfi2_sys_guid;
@@ -439,7 +441,10 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibd->rdi.driver_f.get_pci_dev = get_pci_dev;
 
 	ibd->rdi.driver_f.query_port_state = hfi2_query_port;
+	/* TODO: Enable verbs 2.0 later */
+#if 0
 	ibd->rdi.driver_f.mmap = hfi2_mmap;
+#endif
 #if 0
 	/* for query_guid, query_port, and modify_port */
 	ibd->rdi.driver_f.get_guid_be = hfi1_get_guid_be;
@@ -514,9 +519,11 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ret = rvt_register_device(&ibd->rdi);
 	if (ret)
 		goto err_reg;
+	/* TODO: Enable verbs 2.0 later */
+#if 0
 	/* Extended verbs root */
 	ibd->rdi.ibdev.specs_root = &hfi2_root;
-
+#endif
 	return ret;
 
 err_reg:
@@ -707,5 +714,7 @@ void hfi_verbs_dbg_init(struct hfi_devdata *dd)
 
 void hfi2_initialize_type_group(void)
 {
+#if 0
 	uverbs_initialize_type_group(&hfi2_object_types);
+#endif
 }

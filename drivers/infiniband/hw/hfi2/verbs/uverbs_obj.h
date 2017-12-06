@@ -52,7 +52,7 @@
  */
 #ifndef _UVERBS_OBJ_H_
 #define _UVERBS_OBJ_H_
-
+#if 0
 #include <rdma/uverbs_ioctl.h>
 #include <rdma/uverbs_std_types.h>
 #include "../core/hfi_cmd.h"
@@ -337,4 +337,5 @@ int hfi2_dlid_release(struct ib_device *ib_dev,
 		      size_t num);
 
 int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
+#endif
 #endif
