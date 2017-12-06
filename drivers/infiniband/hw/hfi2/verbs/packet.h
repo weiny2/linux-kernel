@@ -239,13 +239,8 @@ void wqe_iov_dma_cache_put(struct hfi2_ibdev *ibd,
  * necessarily be at least one bit less than
  * the container holding the PSN.
  */
-#ifndef CONFIG_HFI2_VERBS_31BIT_PSN
-#define PSN_MASK 0xFFFFFF
-#define PSN_SHIFT 8
-#else
 #define PSN_MASK 0x7FFFFFFF
 #define PSN_SHIFT 1
-#endif
 #define PSN_MODIFY_MASK 0xFFFFFF
 
 /*
