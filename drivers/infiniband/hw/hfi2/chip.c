@@ -3246,6 +3246,7 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 		/* initialize Manor Hill - mnh/8051 */
 		spin_lock_init(&ppd->crk8051_lock);
 		spin_lock_init(&ppd->qsfp_info.qsfp_lock);
+		mutex_init(&ppd->crk8051_mutex);
 		ppd->crk8051_timed_out = 0;
 		ppd->linkinit_reason = OPA_LINKINIT_REASON_LINKUP;
 		ppd->sm_trap_qp = OPA_DEFAULT_SM_TRAP_QP;

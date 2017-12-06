@@ -561,18 +561,17 @@ static void lcb_shutdown(struct hfi_pportdata *ppd, int abort)
  *
  * The expectation is that the caller of this routine would have taken
  * care of properly transitioning the link into the correct state.
+ *
+ * NOTE: the caller needs to acquire ppd->crk8051_mutex lock before
+ * calling this function
  */
-static void mnh_shutdown(struct hfi_pportdata *ppd)
+static void _mnh_shutdown(struct hfi_pportdata *ppd)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&ppd->crk8051_lock, flags);
-	if (ppd->mnh_shutdown) {
-		spin_unlock_irqrestore(&ppd->crk8051_lock, flags);
+	lockdep_assert_held(&ppd->crk8051_mutex);
+	if (ppd->mnh_shutdown)
 		return;
-	}
+
 	ppd->mnh_shutdown = 1;
-	spin_unlock_irqrestore(&ppd->crk8051_lock, flags);
 	/* Shutdown the LCB */
 	lcb_shutdown(ppd, 1);
 
@@ -584,35 +583,44 @@ static void mnh_shutdown(struct hfi_pportdata *ppd)
 	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, 0x1);
 }
 
-/* Calling this after the MNH has been brought out of reset. */
-void mnh_start(struct hfi_pportdata *ppd)
+static void mnh_shutdown(struct hfi_pportdata *ppd)
 {
-	int ret;
-	unsigned long flags;
+	mutex_lock(&ppd->crk8051_mutex);
+	_mnh_shutdown(ppd);
+	mutex_unlock(&ppd->crk8051_mutex);
+}
 
+/*
+ * Calling this after the MNH has been brought out of reset.
+ * NOTE: the caller needs to acquire the ppd->crk8051_mutex before
+ * calling this function
+ */
+void _mnh_start(struct hfi_pportdata *ppd)
+{
 	if (no_mnh)
 		return;
 
-	spin_lock_irqsave(&ppd->crk8051_lock, flags);
+	lockdep_assert_held(&ppd->crk8051_mutex);
 	if (!ppd->mnh_shutdown)
-		goto done;
-	spin_unlock_irqrestore(&ppd->crk8051_lock, flags);
+		return;
 	/* Take the 8051 out of reset */
 	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, 0ull);
 	/* Wait until 8051 is ready */
-	ret = hfi_wait_firmware_ready(ppd, TIMEOUT_8051_START);
-	if (ret) {
+	if (hfi_wait_firmware_ready(ppd, TIMEOUT_8051_START))
 		ppd_dev_err(ppd, "%s: timeout starting 8051 firmware\n",
 			    __func__);
-	}
 	/* turn on the LCB (turn off in lcb_shutdown). */
 	write_fzc_csr(ppd, FZC_LCB_CFG_RUN, FZC_LCB_CFG_RUN_EN_MASK);
 	/* lcb_shutdown() with abort=1 does not restore these */
 	write_fzc_csr(ppd, FZC_LCB_ERR_EN_HOST, ppd->lcb_err_en);
-	spin_lock_irqsave(&ppd->crk8051_lock, flags);
 	ppd->mnh_shutdown = 0;
-done:
-	spin_unlock_irqrestore(&ppd->crk8051_lock, flags);
+}
+
+void mnh_start(struct hfi_pportdata *ppd)
+{
+	mutex_lock(&ppd->crk8051_mutex);
+	_mnh_start(ppd);
+	mutex_unlock(&ppd->crk8051_mutex);
 }
 
 static void handle_link_bounce(struct work_struct *work)
@@ -788,11 +796,10 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 {
 	u64 reg;
 	int return_code = 0;
-	unsigned long flags;
 	unsigned long timeout;
 
-	spin_lock_irqsave(&ppd->crk8051_lock, flags);
 
+	mutex_lock(&&ppd->crk8051_mutex);
 	/*
 	 * If an 8051 host command timed out previously, then the 8051 is
 	 * stuck.
@@ -811,10 +818,8 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 			return_code = -ENXIO;
 			goto fail;
 		}
-		spin_unlock_irqrestore(&ppd->crk8051_lock, flags);
-		mnh_shutdown(ppd);
-		mnh_start(ppd);
-		spin_lock_irqsave(&ppd->crk8051_lock, flags);
+		_mnh_shutdown(ppd);
+		_mnh_start(ppd);
 	}
 
 	/*
@@ -873,8 +878,7 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type,
 	write_8051_csr(ppd, CRK_CRK8051_CFG_HOST_CMD_0, 0);
 
 fail:
-	spin_unlock_irqrestore(&ppd->crk8051_lock, flags);
-
+	mutex_unlock(&ppd->crk8051_mutex);;
 	hfi2_cdbg(8051, "type %d, data in 0x%012llx, out 0x%012llx, ret = %d",
 		  type, in_data, out_data ? *out_data : 0, return_code);
 

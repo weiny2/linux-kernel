@@ -824,6 +824,8 @@ struct hfi_pportdata {
 	spinlock_t crk8051_lock;
 	int crk8051_timed_out;	/* remember if the 8051 timed out */
 
+	struct mutex crk8051_mutex;
+
 	/*
 	 * workqueue which connects the upper half interrupt handler,
 	 * irq_mnh_handler() and bottom half interrupt handlers which are
