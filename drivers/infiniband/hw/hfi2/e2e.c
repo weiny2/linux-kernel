@@ -54,6 +54,7 @@
 
 #include <linux/kthread.h>
 #include <linux/sched/signal.h>
+#include <linux/radix-tree.h>
 #include "hfi2.h"
 #include "hfi_kclient.h"
 
@@ -93,19 +94,20 @@ static void hfi_e2e_cache_invalidate_rx(struct ida *cache, u32 lid)
  * Cache value stored in the IDR looks like:
  *
  * +----------------------------------------------------------------+
- * |XXXXXXXXXXXXXXXXXXXPPPPPPPPPPPPPPPPLLLLLLLLLLLLLLLLLLLLLLLLSSSSS|
+ * |XXXXXXXXXXXXXXXXXPPPPPPPPPPPPPPPPLLLLLLLLLLLLLLLLLLLLLLLLSSSSS10|
  * +----------------------------------------------------------------+
  * where:
  *   X: Unused
  *   P: PKey
  *   L: Source LID
  *   S: SC
+ *  10: Exceptional entry for IDR (not data pointer)
  */
-#define HFI_E2E_SLID_SHIFT		5ull
+#define HFI_E2E_SLID_SHIFT		7ull
 #define HFI_E2E_SLID_MASK		0xffffffull
-#define HFI_E2E_SL_SHIFT		0ull
+#define HFI_E2E_SL_SHIFT		2ull
 #define HFI_E2E_SL_MASK			0x1full
-#define HFI_E2E_PKEY_SHIFT		29ull
+#define HFI_E2E_PKEY_SHIFT		31ull
 #define HFI_E2E_PKEY_MASK		0xffffull
 
 inline u32 hfi_e2e_key_to_dlid(int key)
@@ -570,6 +572,7 @@ int hfi_e2e_ctrl(struct hfi_ibcontext *uc, struct hfi_e2e_conn *e2e)
 	cache_data = (sl & HFI_E2E_SL_MASK) << HFI_E2E_SL_SHIFT;
 	cache_data |= (e2e->slid & HFI_E2E_SLID_MASK) << HFI_E2E_SLID_SHIFT;
 	cache_data |= (e2e->pkey & HFI_E2E_PKEY_MASK) << HFI_E2E_PKEY_SHIFT;
+	cache_data |= RADIX_TREE_EXCEPTIONAL_ENTRY;
 
 	/* Check if a new entry can be inserted into the cache */
 	ret = idr_alloc(cache, (void *)cache_data, key, key + 1, GFP_KERNEL);
