@@ -52,6 +52,12 @@
 #include "chip/fxr_top_defs.h"
 #include "chip/fxr_linkmux_defs.h"
 
+/* Size of the platform config partition */
+#define MAX_PLATFORM_CONFIG_FILE_SIZE  4096
+
+/* size of the file of platform configuration encoded in format version 4 */
+#define PLATFORM_CONFIG_FORMAT_4_FILE_SIZE     528
+
 static char *platform_config_name = DEFAULT_PLATFORM_CONFIG_NAME;
 
 static const u32 platform_config_table_limits[PLATFORM_CONFIG_TABLE_MAX] = {
@@ -226,7 +232,7 @@ static int check_meta_version(struct hfi_devdata *dd, u32 *system_table)
 	ver_start /= 8;
 	meta_ver = *((u8 *)system_table + ver_start) & ((1 << ver_len) - 1);
 
-	if (meta_ver < 5) {
+	if (meta_ver < 4) {
 		dd_dev_info(
 			dd, "%s:Please update platform config\n", __func__);
 		return -EINVAL;
@@ -272,7 +278,22 @@ int hfi2_parse_platform_config(struct hfi_devdata *dd)
 
 	/* Field is file size in DWORDs */
 	file_length = (*ptr) * 4;
-	ptr++;
+
+	/*
+	 * Length can't be larget than the partition size. Assume
+	 * platform config format version 4 being used. Interpret the
+	 * file size field as the header instead by not moving the
+	 * pointer.
+	 */
+	if (file_length > MAX_PLATFORM_CONFIG_FILE_SIZE) {
+		dd_dev_info(dd,
+			    "%s: File length out of bounds, using alternate format\n",
+			     __func__);
+		file_length = PLATFORM_CONFIG_FORMAT_4_FILE_SIZE;
+
+	} else {
+		ptr++;
+	}
 
 	if (file_length > dd->platform_config.size) {
 		dd_dev_info(dd, "%s: File claims to be larger than read size\n",
@@ -287,7 +308,8 @@ int hfi2_parse_platform_config(struct hfi_devdata *dd)
 
 	/*
 	 * In both cases where we proceed, using the self-reported file length
-	 * is the safer option
+	 * is the safer option. In case of old format, a prefdefined
+	 * value is being used.
 	 */
 	while (ptr < (u32 *)(dd->platform_config.data + file_length)) {
 		header1 = *ptr;
