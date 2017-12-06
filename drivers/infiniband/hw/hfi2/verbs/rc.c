@@ -490,7 +490,7 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 		case IB_WR_RDMA_WRITE:
 			if (newreq && !(qp->s_flags & RVT_S_UNLIMITED_CREDIT))
 				qp->s_lsn++;
-			/* FALLTHROUGH */
+			goto no_flow_control;
 		case IB_WR_RDMA_WRITE_WITH_IMM:
 			/* If no credit, return. */
 			if (!(qp->s_flags & RVT_S_UNLIMITED_CREDIT) &&
@@ -498,6 +498,7 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 				qp->s_flags |= RVT_S_WAIT_SSN_CREDIT;
 				goto bail;
 			}
+no_flow_control:
 			put_ib_reth_vaddr(
 				wqe->rdma_wr.remote_addr,
 				 &ohdr->u.rc.reth);
