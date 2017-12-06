@@ -3434,6 +3434,7 @@ err:
 static int hfi_flr(struct hfi_devdata *dd, struct pci_dev *pdev)
 {
 	struct pci_saved_state *pci_saved_state = NULL;
+	int ret;
 
 	if (zebu) {
 		dd_dev_info(dd, "Skipping reset HFI with PCIe FLR\n");
@@ -3449,14 +3450,23 @@ static int hfi_flr(struct hfi_devdata *dd, struct pci_dev *pdev)
 	 *
 	 * Must save/restore PCIe registers around reset.
 	 */
-	pci_save_state(pdev);
+	ret = pci_save_state(pdev);
+	if (ret) {
+		dd_dev_err(dd, "Count not save PCI state\n");
+		return ret;
+	}
 	pci_saved_state = pci_store_saved_state(pdev);
 
-	__pci_reset_function_locked(pdev);
+	ret = __pci_reset_function_locked(pdev);
+	if (ret) {
+		dd_dev_err(dd, "Could not reset PCI function\n");
+		return ret;
+	}
 
-	if (pci_load_and_free_saved_state(pdev, &pci_saved_state)) {
+	ret = pci_load_and_free_saved_state(pdev, &pci_saved_state);
+	if (ret) {
 		dd_dev_err(dd, "Could not reload PCI state\n");
-		return -EINVAL;
+		return ret;
 	}
 
 	pci_restore_state(pdev);

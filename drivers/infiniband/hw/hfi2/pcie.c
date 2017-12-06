@@ -191,7 +191,10 @@ int hfi_enable_msix(struct hfi_devdata *dd, u32 *nent)
 	/* return vectors configured */
 	*nent = tabsize;
 
-	pcie_capability_read_word(dd->pdev, PCI_EXP_LNKSTA, &linkstat);
+	ret = pcie_capability_read_word(dd->pdev, PCI_EXP_LNKSTA, &linkstat);
+	if (ret)
+		goto read_error;
+
 	speed = linkstat & PCI_EXP_LNKSTA_CLS;
 	width = (linkstat & PCI_EXP_LNKSTA_NLW) >> PCI_EXP_LNKSTA_NLW_SHIFT;
 	dd->lbus_width = width;
@@ -210,4 +213,7 @@ int hfi_enable_msix(struct hfi_devdata *dd, u32 *nent)
 	}
 
 	return 0;
+read_error:
+	dd_dev_err(dd, "Unable to read from PCI config\n");
+	return ret;
 }
