@@ -68,6 +68,13 @@
 #include "uverbs_obj.h"
 #include "../link.h"
 #include "../counters.h"
+#include "native.h"
+
+static bool enable_native_verbs;
+
+static bool enable_lkey_callbacks = true;
+module_param(enable_lkey_callbacks, bool, 0444);
+MODULE_PARM_DESC(enable_lkey_callbacks, "Enable self-managed MR KEYs");
 
 DECLARE_UVERBS_OBJECT_TREE(hfi2_uverbs_objects,
 			   &hfi2_object_device,
@@ -344,11 +351,16 @@ static struct ib_ucontext *hfi2_alloc_ucontext(struct ib_device *ibdev,
 	/* Setup list to zap vmas on release */
 	INIT_LIST_HEAD(&uc->vma_head);
 
+	hfi2_native_alloc_ucontext(uc, enable_native_verbs);
 	return &uc->ibuc;
 }
 
-static int hfi2_dealloc_ucontext(struct ib_ucontext *uc)
+static int hfi2_dealloc_ucontext(struct ib_ucontext *ibuc)
 {
+	struct hfi_ibcontext *uc;
+
+	uc = container_of(ibuc, struct hfi_ibcontext, ibuc);
+	hfi2_native_dealloc_ucontext(uc);
 	kfree(uc);
 	return 0;
 }
@@ -542,6 +554,16 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibd->rdi.driver_f.schedule_send_no_lock = hfi2_schedule_send_no_lock;
 	ibd->rdi.driver_f.do_send = hfi2_do_send_from_rvt;
 	ibd->rdi.driver_f.check_send_wqe = hfi2_check_send_wqe;
+#ifdef CONFIG_HFI2_STLNP
+	if (enable_lkey_callbacks) {
+		/* custom LKEY/RKEY support */
+		ibd->rdi.dparms.lkey_table_size = 0;
+		ibd->rdi.driver_f.alloc_lkey = hfi2_alloc_lkey;
+		ibd->rdi.driver_f.free_lkey = hfi2_free_lkey;
+		ibd->rdi.driver_f.find_mr_from_lkey = hfi2_find_mr_from_lkey;
+		ibd->rdi.driver_f.find_mr_from_rkey = hfi2_find_mr_from_rkey;
+	}
+#endif
 
 	/* maintain shadow page table during mr management */
 	ibd->rdi.driver_f.reg_mr = hfi2_reg_mr;

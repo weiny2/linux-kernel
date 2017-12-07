@@ -95,6 +95,13 @@ typedef union host_rx_uh_rts_get_le	hfi_uh_t;
 
 struct hfi_devdata;
 
+struct hfi_ks {
+	struct mutex lock;
+	u32 num_keys;
+	u32 key_head;
+	u32 *free_keys;
+};
+
 /**
  * IB context allocated to IB core clients
  * @ibuc: IB ucontext state
@@ -102,6 +109,11 @@ struct hfi_devdata;
  * @priv: hfi2 private data
  * @vma_head: linked list head for vma's to zap on release
  * @vm_lock: mutex to update the list of vma's
+ * @support_native: boolean if this context is using native transport
+ * @lkey_only: boolean if this context has shared LKEY/RKEYs
+ * @rkey_ks: RKEYs stack
+ * @lkey_ks: LKEYs stack
+ * @mr: MR array for LKEYs
  */
 struct hfi_ibcontext {
 	struct ib_ucontext ibuc;
@@ -109,6 +121,11 @@ struct hfi_ibcontext {
 	struct hfi_devdata *priv;
 	struct list_head vma_head;
 	struct mutex vm_lock;
+	bool supports_native;
+	bool lkey_only;
+	struct hfi_ks rkey_ks;
+	struct hfi_ks lkey_ks;
+	struct rvt_mregion **lkey_mr;
 };
 
 /**
