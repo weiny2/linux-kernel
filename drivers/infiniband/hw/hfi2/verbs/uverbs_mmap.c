@@ -100,14 +100,7 @@ int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	bool add_to_vma_list = false;
 
 	if (!is_valid_mmap(token)) {
-	/*
-	 * TODO:Remove below in the next craff release when the rdmavt
-	 * patch that checks for -EACCES and not EACCES is included
-	 */
-#if 0
 		return -EACCES;
-#endif
-		return EACCES;
 	}
 
 	if (!(vma->vm_flags & VM_SHARED)) {
