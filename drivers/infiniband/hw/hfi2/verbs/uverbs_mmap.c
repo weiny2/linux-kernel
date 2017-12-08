@@ -212,7 +212,7 @@ int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 
 	if (mapio) {
 		phys_addr = (u64)remap_addr;
-		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 	} else {
 		/* align remap_addr as may be offset into PAGE */
 		kvaddr = (void *)((u64)remap_addr & PAGE_MASK);

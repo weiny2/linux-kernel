@@ -112,6 +112,7 @@
 #include "chip/fxr_perfmon_defs.h"
 
 #define HFI_DRIVER_RESET_RETRIES 10
+#define HFI_UC_RANGE_START	FXR_AT_CSRS
 
 uint loopback;
 module_param_named(loopback, loopback, uint, 0444);
@@ -2729,6 +2730,29 @@ static void hfi_pport_down(struct hfi_devdata *dd)
 	hfi2_dispose_firmware(dd);
 }
 
+static int hfi_cmdq_wc_map(struct hfi_devdata *dd)
+{
+	/* TX and RX command queues - fast path access */
+	dd->cmdq_tx_base = dd->physaddr + FXR_TX_CQ_ENTRY;
+	dd->cmdq_rx_base = dd->physaddr + FXR_RX_CQ_ENTRY;
+
+	dd->cmdq_tx_wc = ioremap_wc(dd->cmdq_tx_base, FXR_TX_CI_FAST_CSRS_SIZE);
+	dd->cmdq_rx_wc = ioremap_wc(dd->cmdq_rx_base, FXR_RX_CI_FAST_CSRS_SIZE);
+	if (!dd->cmdq_tx_wc || !dd->cmdq_rx_wc)
+		return -ENOMEM;
+	return 0;
+}
+
+static void hfi_cmdq_wc_unmap(struct hfi_devdata *dd)
+{
+	if (dd->cmdq_tx_wc)
+		iounmap(dd->cmdq_tx_wc);
+	if (dd->cmdq_rx_wc)
+		iounmap(dd->cmdq_rx_wc);
+	dd->cmdq_tx_wc = NULL;
+	dd->cmdq_rx_wc = NULL;
+}
+
 /*
  * Do HFI chip-specific and PCIe cleanup. Free dd memory.
  * This is called in error cleanup from hfi_pci_dd_init().
@@ -2799,6 +2823,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 		free_pages((unsigned long)dd->cmdq_head_base,
 			   get_order(dd->cmdq_head_size));
 
+	hfi_cmdq_wc_unmap(dd);
 	if (dd->kregbase)
 		iounmap((void __iomem *)dd->kregbase);
 
@@ -3538,10 +3563,6 @@ static void hfi_cmdq_config_all(struct hfi_devdata *dd)
 	/* now configure CMDQ head addresses */
 	for (i = 0; i < HFI_CMDQ_COUNT; i++)
 		hfi_cmdq_head_config(dd, i, dd->cmdq_head_base);
-
-	/* TX and RX command queues - fast path access */
-	dd->cmdq_tx_base = (void __iomem *)dd->physaddr + FXR_TX_CQ_ENTRY;
-	dd->cmdq_rx_base = (void __iomem *)dd->physaddr + FXR_RX_CQ_ENTRY;
 }
 
 /*
@@ -3602,16 +3623,20 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* FXR resources are on BAR0 (used for io_remap, etc.) */
 	addr = pci_resource_start(pdev, HFI_FXR_BAR);
 	len = pci_resource_len(pdev, HFI_FXR_BAR);
-	dd->kregbase = ioremap_nocache(addr, len);
+	/* wc_off excludes TX/RX cmdq'd and reserved regions */
+	dd->wc_off = HFI_UC_RANGE_START;
+	dd->kregbase = ioremap_nocache(addr + dd->wc_off, len - dd->wc_off);
 	if (!dd->kregbase) {
 		ret = -ENOMEM;
 		goto err_post_alloc;
 	}
-
-	dd->kregend = dd->kregbase + len;
+	dd->kregend = dd->kregbase + len - dd->wc_off;
 	dd->physaddr = addr;
 	dev_dbg(&pdev->dev, "BAR[%d] @ start 0x%lx len %lu\n",
 		HFI_FXR_BAR, (long)addr, len);
+	ret = hfi_cmdq_wc_map(dd);
+	if (ret)
+		goto err_post_alloc;
 
 	ret = reset_device(dd);
 	if (ret)
@@ -4116,7 +4141,7 @@ int hfi_ctx_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr,
 		    ssize_t *len)
 {
 	struct hfi_devdata *dd = ctx->devdata;
-	void *psb_base = NULL;
+	void *psb_base = NULL, *cmdq_addr;
 	struct hfi_ctx *cmdq_ctx;
 	unsigned long flags;
 	int ret = 0;
@@ -4146,13 +4171,22 @@ int hfi_ctx_hw_addr(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr,
 
 	switch (type) {
 	case TOK_CMDQ_TX:
-		/* mmio - RW */
-		*addr = (void *)HFI_CMDQ_TX_IDX_ADDR(dd->cmdq_tx_base, ctxt);
+		/*
+		 * TX/RX cmdq's are mapped WC but cmdq pa must be returned
+		 * for user contexts for use in mmap(). Kernel clients
+		 * directly use the ioremap'd va.
+		 */
+		/* ioremap_wc va/pa - RW */
+		cmdq_addr = (ctx->type == HFI_CTX_TYPE_KERNEL) ?
+			dd->cmdq_tx_wc : (void *)dd->cmdq_tx_base;
+		*addr = HFI_CMDQ_TX_IDX_ADDR(cmdq_addr, ctxt);
 		*len = HFI_CMDQ_TX_SIZE;
 		break;
 	case TOK_CMDQ_RX:
-		/* mmio - RW */
-		*addr = (void *)HFI_CMDQ_RX_IDX_ADDR(dd->cmdq_rx_base, ctxt);
+		/* ioremap_wc va/pa - RW */
+		cmdq_addr = (ctx->type == HFI_CTX_TYPE_KERNEL) ?
+			dd->cmdq_rx_wc : (void *)dd->cmdq_rx_base;
+		*addr = HFI_CMDQ_RX_IDX_ADDR(cmdq_addr, ctxt);
 		*len = PAGE_ALIGN(HFI_CMDQ_RX_SIZE);
 		break;
 	case TOK_CMDQ_HEAD:

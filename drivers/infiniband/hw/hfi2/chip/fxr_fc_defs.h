@@ -1732,7 +1732,7 @@
 * This register is used to enable interrupts for the associated error flag. See 
 * #%%#Section 21.4.50, 'LCB_ERR_STS'#%%# for error flag definitions.
 */
-#define FZC_LCB_ERR_EN_HOST								(FZC_LCB_CSRS + 0x000000000498)
+#define FZC_LCB_ERR_EN_HOST								(FXR_FZC_LCB0_CSRS + 0x000000000498)
 #define FZC_LCB_ERR_EN_HOST_RESETCSR							0x0000000000000000ull
 #define FZC_LCB_ERR_EN_HOST_UNUSED_63_33_SHIFT						33
 #define FZC_LCB_ERR_EN_HOST_UNUSED_63_33_MASK						0x7FFFFFFFull

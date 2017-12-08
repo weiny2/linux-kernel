@@ -325,18 +325,11 @@ int hfi_cmdq_map(struct hfi_ctx *ctx, u16 cmdq_idx,
 	if (rc)
 		goto err1;
 
-	tx->base = (void *)ioremap((u64)tx->base, tx->size);
-	if (!tx->base)
-		goto err1;
-
 	/* stash pointer to RX CMDQ */
 	rc = hfi_ctx_hw_addr(ctx, TOK_CMDQ_RX, cmdq_idx,
 			     &rx->base, (ssize_t *)&rx->size);
 	if (rc)
-		goto err2;
-	rx->base = (void *)ioremap((u64)rx->base, rx->size);
-	if (!rx->base)
-		goto err2;
+		goto err1;
 
 	tx->cmdq_idx = cmdq_idx;
 	tx->slots_total = HFI_CMDQ_TX_ENTRIES;
@@ -352,21 +345,12 @@ int hfi_cmdq_map(struct hfi_ctx *ctx, u16 cmdq_idx,
 	rx->sw_head_idx = rx->slot_idx;
 
 	return 0;
-
-err2:
-	iounmap((void __iomem *)tx->base);
 err1:
 	return rc;
 }
 
 void hfi_cmdq_unmap(struct hfi_cmdq *tx, struct hfi_cmdq *rx)
 {
-	if (tx->base)
-		iounmap((void __iomem *)tx->base);
-	if (rx->base)
-		iounmap((void __iomem *)rx->base);
-	tx->base = NULL;
-	rx->base = NULL;
 }
 
 int hfi_pt_update_lower(struct hfi_ctx *ctx, u8 ni, u32 pt_idx,

@@ -920,8 +920,9 @@ struct hfi_devdata {
 	int unit; /* unit # of this chip */
 	int node; /* home node of this chip */
 	/* mem-mapped pointer to base of chip regs */
-	u8 __iomem *kregbase;
+	u8 __iomem *kregbase; /* UC mapped */
 	u8 __iomem *kregend;
+	u32 wc_off;
 
 	/* IOMMU hack for ZEBU */
 	u8 __iomem *iommu_base;
@@ -959,10 +960,12 @@ struct hfi_devdata {
 	/* Command Queue State */
 	struct idr cmdq_pair;
 	spinlock_t cmdq_lock;
-	void __iomem *cmdq_tx_base;
-	void __iomem *cmdq_rx_base;
+	phys_addr_t cmdq_tx_base;
+	phys_addr_t cmdq_rx_base;
 	void *cmdq_head_base;
 	size_t cmdq_head_size;
+	void __iomem *cmdq_tx_wc;
+	void __iomem *cmdq_rx_wc;
 
 	/* PID Wait State */
 	struct idr pid_wait;
@@ -1503,8 +1506,13 @@ static inline u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 		WARN_ON(1);
 		return 0;
 	}
+	if (likely(offset >= dd->wc_off)) {
+		val = readq(dd->kregbase + offset - dd->wc_off);
+	} else {
+		WARN_ON(1);
+		return (u64)-1;
+	}
 
-	val = readq(dd->kregbase + offset);
 	return val;
 }
 
@@ -1521,7 +1529,13 @@ static inline void write_csr(const struct hfi_devdata *dd, u32 offset,
 		WARN_ON(1);
 		return;
 	}
-	writeq(value, dd->kregbase + offset);
+	if (likely(offset >= dd->wc_off)) {
+		writeq(value, dd->kregbase + offset - dd->wc_off);
+	} else {
+		WARN_ON(1);
+		return;
+	}
+
 	if (zebu)
 		read_csr(dd, offset);
 }
