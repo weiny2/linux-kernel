@@ -245,10 +245,14 @@ do {									\
 #define AT_STRIDE_SHIFT		(9)
 #define AT_STRIDE_MASK		(((u64)-1) << AT_STRIDE_SHIFT)
 
-#define AT_PTE_READ		(1)
-#define AT_PTE_WRITE		(2)
-#define AT_PTE_LARGE_PAGE	(1 << 7)
-#define AT_PTE_SNP		(1 << 11)
+#define AT_PTE_PRESENT    BIT(0)
+#define AT_PTE_WRITE      BIT(1)
+#define AT_PTE_USER       BIT(2)
+#define AT_PTE_ACCESSED   BIT(5)
+#define AT_PTE_DIRTY      BIT(6)
+#define AT_PTE_LARGE_PAGE BIT(7)
+#define AT_PTE_GLOBAL     BIT(8)
+#define AT_PTE_EXEC_DIS   BIT(63)
 
 #define CONTEXT_TT_MULTI_LEVEL	0
 #define CONTEXT_TT_DEV_IOTLB	1
@@ -399,6 +403,7 @@ enum {
 
 /* page table handling */
 #define LEVEL_STRIDE			(9)
+#define LEVEL_MASK			(((u64)1 << LEVEL_STRIDE) - 1)
 
 #define ROOT_SIZE			AT_PAGE_SIZE
 #define CONTEXT_SIZE			AT_PAGE_SIZE
@@ -486,9 +491,6 @@ struct hfi_at {
 	struct idr pasid_idr;
 	u32 pasid_max;
 
-	/* mm for system pasid */
-	struct mm_struct *system_mm;
-
 	/* FXR device info */
 	u8 bus;			/* PCI bus number */
 	u8 devfn;		/* PCI devfn number */
@@ -510,6 +512,10 @@ struct hfi_at {
 #define SVM_FLAG_PRIVATE_PASID		(1<<0)
 #define SVM_FLAG_SUPERVISOR_MODE	(1<<1)
 
+struct at_pte {
+	u64 val;
+};
+
 struct hfi_at_svm {
 	struct mmu_notifier notifier;
 	struct mm_struct *mm;
@@ -523,6 +529,10 @@ struct hfi_at_svm {
 
 	int users;
 	u16 did, sid, qdep;
+
+	struct at_pte *pgd;
+	struct task_struct *tsk;
+	spinlock_t lock; /* protect pgd access */
 };
 
 /*

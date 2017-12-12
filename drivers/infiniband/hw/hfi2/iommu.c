@@ -35,6 +35,7 @@
 #include "chip/fxr_at_defs.h"
 #include "hfi2.h"
 #include "at.h"
+#include "trace.h"
 
 /* AT interrupt handling. Most stuff are MSI-like. */
 enum faulttype {
@@ -317,20 +318,23 @@ restart:
 
 #define PRQ_RING_MASK ((0x1000 << PRQ_ORDER) - 0x10)
 
-static bool access_error(struct vm_area_struct *vma, struct page_req_dsc *req)
+static inline void *alloc_pgtable_page(int node)
 {
-	unsigned long requested = 0;
+	struct page *page;
+	void *vaddr = NULL;
 
-	if (req->exe_req)
-		requested |= VM_EXEC;
+	page = alloc_pages_node(node, GFP_KERNEL | __GFP_ZERO, 0);
+	if (page) {
+		vaddr = page_address(page);
+		hfi2_dbg("AT page alloc: %p\n", vaddr);
+	}
+	return vaddr;
+}
 
-	if (req->rd_req)
-		requested |= VM_READ;
-
-	if (req->wr_req)
-		requested |= VM_WRITE;
-
-	return (requested & ~vma->vm_flags) != 0;
+static inline void free_pgtable_page(void *vaddr)
+{
+	hfi2_dbg("AT page free: %p\n", vaddr);
+	free_page((unsigned long)vaddr);
 }
 
 static bool is_canonical_address(u64 addr)
@@ -339,6 +343,260 @@ static bool is_canonical_address(u64 addr)
 	long saddr = (long)addr;
 
 	return (((saddr << shift) >> shift) == saddr);
+}
+
+static u64 make_canonical_address(u64 addr)
+{
+	int shift = 64 - (__VIRTUAL_MASK_SHIFT + 1);
+	long saddr = (long)addr;
+
+	return (u64)((saddr << shift) >> shift);
+}
+
+#define __HFI_AT_MAX_PFN(gaw)  ((((u64)1) << (gaw - AT_PAGE_SHIFT)) - 1)
+#define HFI_AT_MAX_PFN(gaw)    ((unsigned long)min_t(u64, \
+				__HFI_AT_MAX_PFN(gaw), (unsigned long)-1))
+
+#define HFI_AT_DEFAULT_MAX_PFN   HFI_AT_MAX_PFN(DEFAULT_ADDRESS_WIDTH)
+
+#define AT_PFN(addr)    ((addr) >> AT_PAGE_SHIFT)
+
+/* Returns a number of AT pages, but aligned to MM page size */
+static inline unsigned long aligned_nrpages(unsigned long host_addr,
+					    size_t size)
+{
+	host_addr &= ~PAGE_MASK;
+	return PAGE_ALIGN(host_addr + size) >> AT_PAGE_SHIFT;
+}
+
+static inline int agaw_to_level(int agaw)
+{
+	return agaw + 2;
+}
+
+static inline int agaw_to_width(int agaw)
+{
+	return min_t(int, 30 + agaw * LEVEL_STRIDE, MAX_AGAW_WIDTH);
+}
+
+static inline int width_to_agaw(int width)
+{
+	return DIV_ROUND_UP(width - 30, LEVEL_STRIDE);
+}
+
+static inline unsigned int level_to_offset_bits(int level)
+{
+	return (level - 1) * LEVEL_STRIDE;
+}
+
+static inline int pfn_level_offset(unsigned long pfn, int level)
+{
+	return (pfn >> level_to_offset_bits(level)) & LEVEL_MASK;
+}
+
+static inline unsigned long level_mask(int level)
+{
+	return -1UL << level_to_offset_bits(level);
+}
+
+static inline unsigned long level_size(int level)
+{
+	return 1UL << level_to_offset_bits(level);
+}
+
+static inline void at_clear_pte(struct at_pte *pte)
+{
+	pte->val = 0;
+}
+
+static inline bool at_pte_superpage(struct at_pte *pte)
+{
+	return (pte->val & AT_PTE_LARGE_PAGE);
+}
+
+static inline int first_pte_in_page(struct at_pte *pte)
+{
+	return !((unsigned long)pte & ~AT_PAGE_MASK);
+}
+
+static inline bool at_pte_present(struct at_pte *pte)
+{
+	return (pte->val & AT_PTE_PRESENT) != 0;
+}
+
+static inline u64 at_pte_addr(struct at_pte *pte)
+{
+	return pte->val & AT_PAGE_MASK;
+}
+
+static inline unsigned long mm_to_at_pfn(unsigned long mm_pfn)
+{
+	return mm_pfn << (PAGE_SHIFT - AT_PAGE_SHIFT);
+}
+
+static inline u64 virt_to_at_pfn(void *p)
+{
+	return (u64)mm_to_at_pfn(page_to_pfn(virt_to_page(p)));
+}
+
+static inline void __at_flush_cache(struct hfi_at *at, void *addr, int size)
+{
+	if (!ecap_coherent(at->ecap))
+		clflush_cache_range(addr, size);
+}
+
+static struct at_pte *pfn_to_at_pte(struct hfi_at_svm *svm, unsigned long pfn,
+				    int *target_level, bool user)
+{
+	struct at_pte *parent = svm->pgd, *pte = NULL;
+	int level = agaw_to_level(svm->at->agaw);
+	int offset;
+
+	if (!parent)
+		return NULL;
+
+	while (1) {
+		void *tmp_page;
+
+		offset = pfn_level_offset(pfn, level);
+		pte = &parent[offset];
+		if (!*target_level &&
+		    (at_pte_superpage(pte) || !at_pte_present(pte)))
+			break;
+		if (level == *target_level)
+			break;
+
+		if (!at_pte_present(pte)) {
+			u64 pteval;
+
+			tmp_page = alloc_pgtable_page(svm->at->dd->node);
+
+			if (!tmp_page)
+				return NULL;
+
+			__at_flush_cache(svm->at, tmp_page, AT_PAGE_SIZE);
+			pteval = virt_to_at_pfn(tmp_page) << AT_PAGE_SHIFT;
+			pteval |= AT_PTE_ACCESSED | AT_PTE_DIRTY |
+				  AT_PTE_WRITE | AT_PTE_PRESENT;
+			if (user)
+				pteval |= AT_PTE_USER;
+
+			if (cmpxchg64(&pte->val, 0ULL, pteval))
+				/*
+				 * Someone else set it while we were thinking;
+				 * use theirs.
+				 */
+				free_pgtable_page(tmp_page);
+			else
+				__at_flush_cache(svm->at, pte, sizeof(*pte));
+		}
+		if (level == 1)
+			break;
+
+		parent = phys_to_virt(at_pte_addr(pte));
+		level--;
+	}
+
+	if (!*target_level)
+		*target_level = level;
+
+	return pte;
+}
+
+static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
+		      struct page *page, bool user)
+{
+	unsigned long phys_pfn;
+	struct at_pte *pte;
+	u64 pteval, prot;
+	int level = 1;
+
+	phys_pfn = mm_to_at_pfn(page_to_pfn(page));
+	pte = pfn_to_at_pte(svm, req->addr, &level, user);
+	if (!pte)
+		return -ENOMEM;
+
+	prot = AT_PTE_ACCESSED | AT_PTE_PRESENT;
+	if (req->wr_req)
+		prot |= AT_PTE_WRITE | AT_PTE_DIRTY;
+	if (user)
+		prot |= AT_PTE_USER;
+
+	pteval = ((phys_addr_t)phys_pfn << AT_PAGE_SHIFT) | prot;
+	if (cmpxchg64_local(&pte->val, 0ULL, pteval)) {
+		u64 tmp = pteval & ~(AT_PTE_WRITE | AT_PTE_DIRTY);
+
+		/* allow upgrade of access privilege */
+		if (cmpxchg64_local(&pte->val, tmp, pteval) != tmp)
+			pr_err("Mapping already set\n");
+	}
+	__at_flush_cache(svm->at, pte, sizeof(*pte));
+
+	/* TODO: investigate necessity of compound_head() call */
+	if (req->wr_req) {
+		struct page *head_page = compound_head(page);
+
+		set_page_dirty_lock(head_page);
+	}
+
+	return 0;
+}
+
+static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
+				    struct page_req_dsc *req)
+{
+	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
+	struct page *page = NULL;
+	int ret;
+
+	/* TODO: investigate mapping requests with null pgd */
+	if (!svm->pgd) {
+		dd_dev_err(svm->at->dd, "null pgd pasid %d\n", req->pasid);
+		return -ENOMEM;
+	}
+
+	hfi2_dbg("AT SPT map: pasid %d virt pfn 0x%lx prot %s\n",
+		 req->pasid, req->addr, req->wr_req ? "rw" : "r");
+
+	if (svm->mm) {
+		int wr;
+
+		/* If address is not canonical, return invalid response */
+		if (!is_canonical_address(address))
+			return -EINVAL;
+
+		/* TODO: Check whether we really need mmget here */
+		/* If the mm is already defunct, don't handle faults. */
+		if (!mmget_not_zero(svm->mm))
+			return -ENOMEM;
+
+		down_read(&svm->mm->mmap_sem);
+		wr = req->wr_req ? FOLL_WRITE | FOLL_FORCE : 0,
+		ret = get_user_pages_remote(svm->tsk, svm->mm,
+					    address & PAGE_MASK, 1,
+					    wr, &page, NULL, NULL);
+		if (ret != 1) {
+			dd_dev_err(svm->at->dd, "gup error %d\n", ret);
+			up_read(&svm->mm->mmap_sem);
+			mmput(svm->mm);
+			return -ENOMEM;
+		}
+
+		ret = hfi_at_map(svm, req, page, true);
+		put_page(page);
+		up_read(&svm->mm->mmap_sem);
+		mmput(svm->mm);
+	} else {
+		address = make_canonical_address(address);
+		if (is_vmalloc_addr((void *)address))
+			page = vmalloc_to_page((void *)address);
+		else
+			page = virt_to_page(address);
+
+		ret = hfi_at_map(svm, req, page, false);
+	}
+
+	return ret;
 }
 
 static irqreturn_t prq_event_thread(int irq, void *d)
@@ -357,7 +615,6 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 	tail = at_readq(at->reg + AT_PQT_REG) & PRQ_RING_MASK;
 	head = at_readq(at->reg + AT_PQH_REG) & PRQ_RING_MASK;
 	while (head != tail) {
-		struct vm_area_struct *vma;
 		struct page_req_dsc *req;
 		struct qi_desc resp;
 		int ret, result;
@@ -396,36 +653,16 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 			}
 		}
 
-		result = QI_RESP_INVALID;
-		/* we should never take any faults on kernel addresses. */
-		/* TODO: fix the borrowed page table problem */
-		if (!svm->mm)
+		/* TODO: investigate PRQ requests with null address */
+		if (!address) {
+			dd_dev_err(at->dd, "null address for pasid %d\n",
+				   req->pasid);
 			goto bad_req;
-		/* If the mm is already defunct, don't handle faults. */
-		if (!mmget_not_zero(svm->mm))
-			goto bad_req;
+		}
 
-		/* If address is not canonical, return invalid response */
-		if (!is_canonical_address(address))
-			goto bad_req;
+		ret = handle_at_spt_page_fault(svm, req);
+		result = ret ? QI_RESP_INVALID : QI_RESP_SUCCESS;
 
-		down_read(&svm->mm->mmap_sem);
-		vma = find_extend_vma(svm->mm, address);
-		if (!vma || address < vma->vm_start)
-			goto invalid;
-
-		if (access_error(vma, req))
-			goto invalid;
-
-		ret = handle_mm_fault(vma, address,
-				      req->wr_req ? FAULT_FLAG_WRITE : 0);
-		if (ret & VM_FAULT_ERROR)
-			goto invalid;
-
-		result = QI_RESP_SUCCESS;
-invalid:
-		up_read(&svm->mm->mmap_sem);
-		mmput(svm->mm);
 bad_req:
 		svm = NULL;
 no_pasid:
@@ -591,11 +828,6 @@ static void unmap_at(struct hfi_at *at)
 
 static void free_at(struct hfi_at *at)
 {
-	if (at->system_mm) {
-		mmdrop(at->system_mm);
-		at->system_mm = NULL;
-	}
-
 	if (at->qi) {
 		free_page((unsigned long)at->qi->desc);
 		kfree(at->qi->desc_status);
@@ -606,11 +838,6 @@ static void free_at(struct hfi_at *at)
 		unmap_at(at);
 
 	kfree(at);
-}
-
-static inline int width_to_agaw(int width)
-{
-	return DIV_ROUND_UP(width - 30, LEVEL_STRIDE);
 }
 
 static int __at_calculate_agaw(struct hfi_at *at, int max_gaw)
@@ -650,7 +877,6 @@ static u64 hfi_at_get_phyaddr(struct hfi_devdata *dd)
 static int alloc_at(struct hfi_devdata *dd)
 {
 	struct hfi_at *at;
-	struct task_struct *task;
 	u64 phyaddr;
 	u32 ver, sts;
 	int agaw = 0;
@@ -710,16 +936,6 @@ static int alloc_at(struct hfi_devdata *dd)
 	raw_spin_lock_init(&at->register_lock);
 	spin_lock_init(&at->lock);
 	dd->at = at;
-
-	/* get system_mm for system pasid */
-	task = get_pid_task(find_pid_ns(1, &init_pid_ns), PIDTYPE_PID);
-	if (!task || !task->mm) {
-		dd_dev_err(dd, "Failed to get system_mm\n");
-		goto err_unmap;
-	}
-	mmgrab(task->mm);
-	at->system_mm = task->mm;
-	put_task_struct(task);
 
 	return 0;
 
@@ -924,28 +1140,6 @@ static void at_disable_protect_mem_regions(struct hfi_at *at)
 		   readl, !(pmen & AT_PMEN_PRS), pmen);
 
 	raw_spin_unlock_irqrestore(&at->register_lock, flags);
-}
-
-static inline void *alloc_pgtable_page(int node)
-{
-	struct page *page;
-	void *vaddr = NULL;
-
-	page = alloc_pages_node(node, GFP_KERNEL | __GFP_ZERO, 0);
-	if (page)
-		vaddr = page_address(page);
-	return vaddr;
-}
-
-static inline void free_pgtable_page(void *vaddr)
-{
-	free_page((unsigned long)vaddr);
-}
-
-static inline void __at_flush_cache(struct hfi_at *at, void *addr, int size)
-{
-	if (!ecap_coherent(at->ecap))
-		clflush_cache_range(addr, size);
 }
 
 static int at_alloc_root_entry(struct hfi_at *at)
@@ -1291,7 +1485,7 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 	context_set_translation_type(context, translation);
 	context_set_fault_enable(context);
 	context_set_present(context);
-	clflush_cache_range(context, sizeof(*context));
+	__at_flush_cache(at, context, sizeof(*context));
 
 	/*
 	 * It's a non-present to present mapping. If hardware doesn't cache
@@ -1425,6 +1619,134 @@ static struct hfi_at *hfi_svm_device_to_at(struct device *dev)
 		return NULL;
 }
 
+static struct page *at_pte_list_pagetables(int level, struct at_pte *pte,
+					   struct page *freelist)
+{
+	struct page *pg;
+
+	pg = pfn_to_page(at_pte_addr(pte) >> PAGE_SHIFT);
+	pg->freelist = freelist;
+	freelist = pg;
+
+	if (level == 1)
+		return freelist;
+
+	pte = page_address(pg);
+	do {
+		if (at_pte_present(pte) && !at_pte_superpage(pte))
+			freelist = at_pte_list_pagetables(level - 1, pte,
+							  freelist);
+		pte++;
+	} while (!first_pte_in_page(pte));
+
+	return freelist;
+}
+
+static struct page *at_pte_clear_level(struct hfi_at_svm *svm, int level,
+				       struct at_pte *pte,
+				       unsigned long pfn,
+				       unsigned long start_pfn,
+				       unsigned long last_pfn,
+				       struct page *freelist)
+{
+	struct at_pte *first_pte = NULL, *last_pte = NULL;
+
+	pfn = max(start_pfn, pfn);
+	pte = &pte[pfn_level_offset(pfn, level)];
+
+	do {
+		unsigned long level_pfn;
+
+		if (!at_pte_present(pte))
+			goto next;
+
+		level_pfn = pfn & level_mask(level);
+		/* If range covers entire pagetable, free it */
+		if (start_pfn <= level_pfn &&
+		    last_pfn >= level_pfn + level_size(level) - 1) {
+			/*
+			 * These suborbinate page tables are going away.
+			 * Don't bother to clear them; we're just going
+			 * to *free* them.
+			 */
+			if (level > 1 && !at_pte_superpage(pte))
+				freelist = at_pte_list_pagetables(level - 1,
+								  pte,
+								  freelist);
+			at_clear_pte(pte);
+			if (!first_pte)
+				first_pte = pte;
+			last_pte = pte;
+		} else if (level > 1) {
+			struct at_pte *lower_pte;
+
+			/*
+			 * Recurse down into a level that isn't *entirely*
+			 * obsolete.
+			 */
+			lower_pte = phys_to_virt(at_pte_addr(pte));
+			freelist = at_pte_clear_level(svm, level - 1, lower_pte,
+						      level_pfn, start_pfn,
+						      last_pfn, freelist);
+		}
+next:
+		pfn += level_size(level);
+	} while (!first_pte_in_page(++pte) && pfn <= last_pfn);
+
+	++last_pte;
+	if (first_pte)
+		__at_flush_cache(svm->at, first_pte,
+				 (void *)last_pte - (void *)first_pte);
+
+	return freelist;
+}
+
+static struct page *hfi_at_unmap(struct hfi_at_svm *svm,
+				 unsigned long start_pfn,
+				 unsigned long last_pfn)
+{
+	struct page *freelist = NULL;
+	unsigned long flags;
+
+	if (start_pfn > last_pfn)
+		return NULL;
+
+	hfi2_dbg("AT SPT unmap: pasid %d start pfn 0x%lx last pfn 0x%lx\n",
+		 svm->pasid, start_pfn, last_pfn);
+
+	spin_lock_irqsave(&svm->lock, flags);
+	if (!svm->pgd)
+		goto unmap_done;
+
+	/* we don't need lock here; nobody else touches the iova range */
+	freelist = at_pte_clear_level(svm, agaw_to_level(svm->at->agaw),
+				      svm->pgd, 0, start_pfn, last_pfn,
+				      NULL);
+
+	/* free pgd */
+	if (start_pfn == 0 && last_pfn == HFI_AT_DEFAULT_MAX_PFN) {
+		struct page *pgd_page = virt_to_page(svm->pgd);
+
+		pgd_page->freelist = freelist;
+		freelist = pgd_page;
+		svm->pgd = NULL;
+	}
+
+unmap_done:
+	spin_unlock_irqrestore(&svm->lock, flags);
+	return freelist;
+}
+
+static void hfi_at_free_pagelist(struct page *freelist)
+{
+	struct page *pg;
+
+	while ((pg = freelist)) {
+		freelist = pg->freelist;
+		free_pgtable_page(page_address(pg));
+	}
+}
+
 static void hfi_flush_svm_range_dev(struct hfi_at_svm *svm,
 				    unsigned long address,
 				    unsigned long pages, int ih, int gl)
@@ -1487,6 +1809,9 @@ static void hfi_flush_svm_range_dev(struct hfi_at_svm *svm,
 static void hfi_flush_svm_range(struct hfi_at_svm *svm, unsigned long address,
 				unsigned long pages, int ih, int gl)
 {
+	unsigned long start_pfn, last_pfn, nrpages;
+	struct page *freelist;
+
 	/* Try deferred invalidate if available */
 	if (svm->at->pasid_state_table &&
 	    !cmpxchg64(&svm->at->pasid_state_table[svm->pasid].val,
@@ -1494,6 +1819,12 @@ static void hfi_flush_svm_range(struct hfi_at_svm *svm, unsigned long address,
 		return;
 
 	hfi_flush_svm_range_dev(svm, address, pages, ih, gl);
+
+	nrpages = aligned_nrpages(address, pages * PAGE_SIZE);
+	start_pfn = AT_PFN(address);
+	last_pfn = start_pfn + nrpages - 1;
+	freelist = hfi_at_unmap(svm, start_pfn, last_pfn);
+	hfi_at_free_pagelist(freelist);
 }
 
 static void hfi_at_change_pte(struct mmu_notifier *mn, struct mm_struct *mm,
@@ -1530,6 +1861,7 @@ static void hfi_flush_pasid_dev(struct hfi_at_svm *svm, int pasid)
 static void hfi_at_mm_release(struct mmu_notifier *mn, struct mm_struct *mm)
 {
 	struct hfi_at_svm *svm = container_of(mn, struct hfi_at_svm, notifier);
+	struct page *freelist;
 
 	/*
 	 * This might end up being called from exit_mmap(), *before* the page
@@ -1550,6 +1882,11 @@ static void hfi_at_mm_release(struct mmu_notifier *mn, struct mm_struct *mm)
 
 	hfi_flush_pasid_dev(svm, svm->pasid);
 	hfi_flush_svm_range_dev(svm, 0, -1, 0, !svm->mm);
+
+	if (svm->pgd) {
+		freelist = hfi_at_unmap(svm, 0,	HFI_AT_DEFAULT_MAX_PFN);
+		hfi_at_free_pagelist(freelist);
+	}
 }
 
 static const struct mmu_notifier_ops hfi_at_mmuops = {
@@ -1566,6 +1903,7 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 	struct hfi_at_svm *svm = NULL;
 	struct mm_struct *mm = NULL;
 	int pasid_max;
+	u64 pgdval;
 	int ret;
 
 	if (WARN_ON(!at))
@@ -1636,22 +1974,35 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 		kfree(svm);
 		goto out;
 	}
+	spin_lock_init(&svm->lock);
 	svm->pasid = ret;
 	svm->notifier.ops = &hfi_at_mmuops;
 	svm->mm = mm;
 	svm->flags = flags;
 	ret = -ENOMEM;
+
+	svm->tsk = current;
+	svm->pgd = (struct at_pte *)alloc_pgtable_page(at->dd->node);
+	if (!svm->pgd) {
+		idr_remove(&svm->at->pasid_idr, svm->pasid);
+		kfree(svm);
+		goto out;
+	}
+	__at_flush_cache(at, svm->pgd, AT_PAGE_SIZE);
+
+	pgdval = (u64)__pa(svm->pgd);
+	hfi2_dbg("AT SPT alloc: pasid %d\n", svm->pasid);
 	if (mm) {
 		ret = mmu_notifier_register(&svm->notifier, mm);
 		if (ret) {
+			free_pgtable_page(svm->pgd);
 			idr_remove(&svm->at->pasid_idr, svm->pasid);
 			kfree(svm);
 			goto out;
 		}
-		at->pasid_table[svm->pasid].val = (u64)__pa(mm->pgd) | 1;
+		at->pasid_table[svm->pasid].val = pgdval | 1;
 	} else {
-		at->pasid_table[svm->pasid].val =
-			(u64)__pa(at->system_mm->pgd) | 1 | (1ULL << 11);
+		at->pasid_table[svm->pasid].val = pgdval | 1 | (1ULL << 11);
 	}
 	/* barrier for page table setup */
 	wmb();
@@ -1712,6 +2063,14 @@ static int hfi_svm_unbind_mm(struct device *dev, int pasid)
 		idr_remove(&svm->at->pasid_idr, svm->pasid);
 		if (svm->mm)
 			mmu_notifier_unregister(&svm->notifier, svm->mm);
+
+		if (svm->pgd) {
+			struct page *freelist;
+
+			hfi2_dbg("AT SPT free: pasid %d\n", svm->pasid);
+			freelist = hfi_at_unmap(svm, 0, HFI_AT_DEFAULT_MAX_PFN);
+			hfi_at_free_pagelist(freelist);
+		}
 
 		/*
 		 * We mandate that no page faults may be outstanding
