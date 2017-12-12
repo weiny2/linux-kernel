@@ -488,6 +488,72 @@ err:
 	return ret;
 }
 
+int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
+			u64 user_ptr,  union hfi_rx_cq_command *cmd)
+{
+	union ptentry_verbs qp_state;
+	u32 pd_handle;
+	struct rvt_cq *cq = ibcq_to_rvtcq(ibqp->recv_cq);
+	struct hfi_eq *eq = cq ? cq->hw_cq : NULL;
+
+	/* TODO - how to set this? */
+	pd_handle = ibqp->pd->uobject ?
+		    ibqp->pd->uobject->user_handle : 0;
+	/* setup qp state */
+	qp_state.val[0] = 0;
+	qp_state.val[1] = 0;
+	qp_state.val[2] = 0;
+	qp_state.val[3] = 0;
+	qp_state.nack = 0;
+	qp_state.pd = pd_handle;
+	qp_state.slid = PTL_LID_ANY;		// FIXME
+	qp_state.enable = 1;
+	qp_state.ni = NATIVE_NI;
+	qp_state.v = 1;
+	qp_state.recvq_root = rq->recvq_root;
+	qp_state.tpid = rq->hw_ctx->pid;
+	qp_state.ipid = PTL_PID_ANY;		// FIXME
+	qp_state.eq_handle = eq ? eq->idx : 0;
+	qp_state.failed = 0;
+	qp_state.ud = (ibqp->qp_type == IB_QPT_UD);
+	qp_state.qp = 1;
+	qp_state.user_id = rq->hw_ctx->ptl_uid;
+	qp_state.qkey = ibqp_to_rvtqp(ibqp)->qkey;
+
+	cmd->verbs.flit0.p0            = qp_state.val[0];
+	cmd->verbs.flit0.p1	       = qp_state.val[1];
+	cmd->verbs.flit0.c.ptl_idx     = 0;
+	cmd->verbs.flit0.c.qp_num      = ibqp->qp_num;
+	cmd->verbs.flit0.d.ni          = NATIVE_NI;
+	cmd->verbs.flit0.d.ct_handle   = PTL_CT_NONE;
+	cmd->verbs.flit0.d.ncc         = HFI_GEN_CC;
+	cmd->verbs.flit0.d.command     = QP_WRITE;
+	cmd->verbs.flit0.d.cmd_len     = (sizeof(cmd->verbs) >> 5) - 1;
+
+	cmd->verbs.flit1.e.cmd_pid     = rq->hw_ctx->pid;
+	cmd->verbs.flit1.p2            = qp_state.val[2];
+	cmd->verbs.flit1.p3            = qp_state.val[3];
+	cmd->verbs.flit1.user_ptr      = user_ptr;
+
+	return 1;
+}
+
+static int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
+			    struct rvt_qp *qp, u64 user_ptr)
+{
+	struct ib_qp *ibqp = &qp->ibqp;
+	u32 nslots;
+	int rc;
+	union hfi_rx_cq_command rx_cmd;
+
+	nslots = hfi_format_qp_write(rq, ibqp, user_ptr,
+				     &rx_cmd);
+	do {
+		rc = hfi_rx_command(rx_cmdq, (u64 *)&rx_cmd, nslots);
+	} while (rc == -EAGAIN);
+	return rc;
+}
+
 int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 			  int attr_mask, struct ib_udata *udata)
 {
@@ -496,7 +562,6 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 	struct hfi_ibcontext *ctx = obj_to_ibctx(ibqp);
 	struct rvt_cq *cq;
 	int ret;
-	union ptentry_verbs qp_state;
 	u64 done = 0;
 
 	if (!ctx || !ctx->supports_native)
@@ -542,12 +607,6 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		struct hfi_e2e_conn conn;
 		struct opa_ev_assign eq_alloc = {0};
 		struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
-		struct hfi_eq *eq;
-		u32 pd_handle;
-
-		/* TODO - how to set this? */
-		pd_handle = ibqp->pd->uobject ?
-			    ibqp->pd->uobject->user_handle : 0;
 
 		/* create recv EQ if first use of CQ */
 		cq = ibcq_to_rvtcq(ibqp->recv_cq);
@@ -560,7 +619,6 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 				goto qp_write_err;
 			}
 		}
-		eq = cq->hw_cq;
 
 		/* alloc fence CT */
 		ret = hfi_ct_alloc(rq->hw_ctx, NATIVE_NI, &priv->fence_ct);
@@ -575,27 +633,10 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		priv->nfence_cnt = 0;
 
 		/*
-		 * setup qp state - TODO - move to driver
+		 * Associate QP with hardware context.
 		 * Per IBTA, QPs cannot process incoming messages until RTR.
 		 */
-		qp_state.nack = 0;
-		qp_state.pd = pd_handle;
-		qp_state.slid = PTL_LID_ANY;
-		qp_state.enable = 1;
-		qp_state.ni = NATIVE_NI;
-		qp_state.v = 1;
-		qp_state.recvq_root = rq->recvq_root;
-		qp_state.tpid = rq->hw_ctx->pid;
-		qp_state.ipid = PTL_PID_ANY;
-		qp_state.eq_handle = eq->idx;
-		qp_state.failed = 0;
-		qp_state.ud = (ibqp->qp_type == IB_QPT_UD);
-		qp_state.qp = 1;
-		qp_state.user_id = rq->hw_ctx->ptl_uid;
-		qp_state.qkey = rvtqp->qkey;
-		ret = hfi_qp_write(ctx->rx_cmdq, NATIVE_NI, rq->hw_ctx,
-				   ibqp->qp_num, (u64 *)&qp_state,
-				   (u64)&done);
+		ret = hfi_set_qp_state(ctx->rx_cmdq, rq, rvtqp, (u64)&done);
 		if (ret != 0)
 			goto qp_write_err;
 
