@@ -1065,7 +1065,7 @@ int hfi_ev_wait_single(struct hfi_ctx *ctx, u16 eqflag,
 	 * the function return 'long' value, otherwise,
 	 * 'stat' could become negative value on success.
 	 */
-	stat = wait_event_interruptible_timeout(
+	stat = wait_woken_event_interruptible_timeout(
 		eqm->wq,
 		hfi_has_event(ctx, eqm, &ret),
 		time_in_jiffies);
@@ -1456,7 +1456,7 @@ int hfi_ec_wait_event(struct hfi_ctx *ctx, u16 ec_idx,
 	 * the function return 'long' value, otherwise,
 	 * 'stat' could become negative value on success.
 	 */
-	stat = wait_event_interruptible_timeout(
+	stat = wait_woken_event_interruptible_timeout(
 		ec->wq,
 		hfi_ec_has_event(ctx, ec, user_data0, user_data1, &ret),
 		time_in_jiffies);

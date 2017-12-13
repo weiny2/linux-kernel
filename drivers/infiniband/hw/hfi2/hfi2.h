@@ -1550,4 +1550,45 @@ u64 read_fzc_csr(const struct hfi_pportdata *ppd, u32 offset);
 void write_fzc_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
 void hfi_zebu_hack_default_mtu(struct hfi_pportdata *ppd);
 
+/**
+ * wait_woken_event_interruptible_timeout - sleep until a condition
+ * gets true or a timeout elapses
+ * @wq: the waitqueue to wait on
+ * @condition: a C expression for the event to wait for
+ * @timeout: timeout, in jiffies
+ *
+ * Waits until the @condition evaluates to true or a signal is received.
+ * The @condition is checked each time the waitqueue @wq is woken up.
+ *
+ * wake_up() has to be called after changing any variable that could
+ * change the result of the wait condition.
+ *
+ * Returns:
+ * 0 if the @condition evaluated to %false after the @timeout elapsed,
+ * 1 if the @condition evaluated to %true after the @timeout elapsed,
+ * the remaining jiffies (at least 1) if the @condition evaluated
+ * to %true before the @timeout elapsed, or -%ERESTARTSYS if it was
+ * interrupted by a signal.
+ */
+
+#define wait_woken_event_interruptible_timeout(wq, condition, timeout) \
+({                                                                     \
+	long __ret = timeout;                                          \
+	bool __cond;						       \
+	DEFINE_WAIT_FUNC(wait, woken_wake_function);                   \
+	might_sleep();						       \
+	add_wait_queue(&wq, &wait);                                    \
+	while (!(__cond = condition) && (__ret > 0)) {		       \
+		if (signal_pending(current))                           \
+			__ret = -ERESTARTSYS;                          \
+		else                                                   \
+			__ret = wait_woken(&wait,                      \
+					   TASK_INTERRUPTIBLE, __ret); \
+	}                                                              \
+	remove_wait_queue(&wq, &wait);                                 \
+	if (__cond && !__ret)					       \
+		__ret = 1;					       \
+	__ret;                                                         \
+})
+
 #endif
