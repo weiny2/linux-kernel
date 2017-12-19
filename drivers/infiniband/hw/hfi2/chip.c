@@ -3732,14 +3732,14 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		goto err_post_alloc;
 	hfi_read_lm_link_state(to_hfi_ppd(dd, 1));
 
-	ret = hfi2_pport_link_init(dd);
-	if (ret)
-		goto err_post_alloc;
-
 	/* read platform_config to dd->platform_config */
 	hfi2_get_platform_config(dd);
 	/* dd->platform_config -> dd->pcfg_cache */
 	hfi2_parse_platform_config(dd);
+
+	ret = hfi2_pport_link_init(dd);
+	if (ret)
+		goto err_post_alloc;
 
 	hfi_read_lm_link_state(to_hfi_ppd(dd, 1));
 	obtain_boardname(dd); /* Set dd->boardname */
