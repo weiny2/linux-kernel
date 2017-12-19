@@ -3463,11 +3463,7 @@ static int hfi_flr(struct hfi_devdata *dd, struct pci_dev *pdev)
 	}
 	pci_saved_state = pci_store_saved_state(pdev);
 
-	ret = __pci_reset_function_locked(pdev);
-	if (ret) {
-		dd_dev_err(dd, "Could not reset PCI function\n");
-		return ret;
-	}
+	pcie_flr(pdev);
 
 	ret = pci_load_and_free_saved_state(pdev, &pci_saved_state);
 	if (ret) {
@@ -3515,6 +3511,14 @@ static int hfi_driver_reset(struct hfi_devdata *dd)
 		return -EINVAL;
 	}
 	return 0;
+}
+
+static int reset_device(struct hfi_devdata *dd)
+{
+	if (use_driver_reset)
+		return hfi_driver_reset(dd);
+	else
+		return hfi_flr(dd, dd->pdev);
 }
 
 void hfi_read_lm_link_state(const struct hfi_pportdata *ppd)
@@ -3607,20 +3611,15 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		ret = -ENOMEM;
 		goto err_post_alloc;
 	}
+
 	dd->kregend = dd->kregbase + len;
 	dd->physaddr = addr;
 	dev_dbg(&pdev->dev, "BAR[%d] @ start 0x%lx len %lu\n",
 		HFI_FXR_BAR, (long)addr, len);
 
-	if (use_driver_reset) {
-		ret = hfi_driver_reset(dd);
-		if (ret)
-			goto err_post_alloc;
-	} else {
-		ret = hfi_flr(dd, pdev);
-		if (ret)
-			goto err_post_alloc;
-	}
+	ret = reset_device(dd);
+	if (ret)
+		goto err_post_alloc;
 
 	ret = hfi_zebu_enable_ats(dd);
 	if (ret)
