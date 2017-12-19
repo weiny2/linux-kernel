@@ -207,7 +207,7 @@ int hfi_enable_msix(struct hfi_devdata *dd, u32 *nent)
 	case PCI_EXP_LNKSTA_CLS_5_0GB:
 		dd->lbus_speed = 5000; /* Gen 2, 5GHz */
 		break;
-	case 0x4: /* not defined in a kernel header */
+	case PCI_EXP_LNKSTA_CLS_8_0GB:
 		dd->lbus_speed = 8000; /* Gen 3, 8GHz */
 		break;
 	}
