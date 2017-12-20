@@ -499,6 +499,9 @@ struct hfi_at {
 	struct idr pasid_stats_idr;
 	u32 pasid_max;
 
+	/* mm for system pasid */
+	struct mm_struct *system_mm;
+
 	/* FXR device info */
 	u8 bus;			/* PCI bus number */
 	u8 devfn;		/* PCI devfn number */

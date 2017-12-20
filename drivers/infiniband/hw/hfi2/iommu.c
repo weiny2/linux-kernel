@@ -25,6 +25,7 @@
 #include <linux/kthread.h>
 #include <linux/types.h>
 #include <linux/delay.h>
+#include <linux/module.h>
 #include <linux/pci-ats.h>
 #include <linux/signal.h>
 #include <linux/sched/signal.h>
@@ -37,6 +38,15 @@
 #include "debugfs.h"
 #include "at.h"
 #include "trace.h"
+
+/* TODO: Do not upstream CPU Page Table (CPT) support */
+static bool use_kernel_cpt = true;
+module_param(use_kernel_cpt, bool, 0444);
+MODULE_PARM_DESC(use_kernel_cpt, "Use/Share kernel CPU page table");
+
+static bool use_user_cpt = true;
+module_param(use_user_cpt, bool, 0444);
+MODULE_PARM_DESC(use_user_cpt, "Use/Share user process CPU page tables");
 
 /* AT interrupt handling. Most stuff are MSI-like. */
 enum faulttype {
@@ -356,6 +366,22 @@ static u64 make_canonical_address(u64 addr)
 	return (u64)((saddr << shift) >> shift);
 }
 
+static bool access_error(struct vm_area_struct *vma, struct page_req_dsc *req)
+{
+	unsigned long requested = 0;
+
+	if (req->exe_req)
+		requested |= VM_EXEC;
+
+	if (req->rd_req)
+		requested |= VM_READ;
+
+	if (req->wr_req)
+		requested |= VM_WRITE;
+
+	return (requested & ~vma->vm_flags) != 0;
+}
+
 #define __HFI_AT_MAX_PFN(gaw)  ((((u64)1) << (gaw - AT_PAGE_SHIFT)) - 1)
 #define HFI_AT_MAX_PFN(gaw)    ((unsigned long)min_t(u64, \
 				__HFI_AT_MAX_PFN(gaw), (unsigned long)-1))
@@ -661,6 +687,41 @@ static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 	return 0;
 }
 
+static int handle_at_cpt_page_fault(struct hfi_at_svm *svm,
+				    struct page_req_dsc *req)
+{
+	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
+	struct vm_area_struct *vma;
+	int ret = -ENOMEM;
+
+	/* If address is not canonical, return invalid response */
+	if (!is_canonical_address(address))
+		return -EINVAL;
+
+	/* If the mm is already defunct, don't handle faults. */
+	if (!mmget_not_zero(svm->mm))
+		return -EINVAL;
+
+	down_read(&svm->mm->mmap_sem);
+	vma = find_extend_vma(svm->mm, address);
+	if (!vma || address < vma->vm_start)
+		goto invalid;
+
+	if (access_error(vma, req))
+		goto invalid;
+
+	ret = handle_mm_fault(vma, address,
+			      req->wr_req ? FAULT_FLAG_WRITE : 0);
+	if (ret & VM_FAULT_ERROR)
+		goto invalid;
+
+	ret = 0;
+invalid:
+	up_read(&svm->mm->mmap_sem);
+	mmput(svm->mm);
+	return ret;
+}
+
 static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
 				    struct page_req_dsc *req)
 {
@@ -734,6 +795,7 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 	tail = at_readq(at->reg + AT_PQT_REG) & PRQ_RING_MASK;
 	head = at_readq(at->reg + AT_PQH_REG) & PRQ_RING_MASK;
 	while (head != tail) {
+		bool use_cpt = use_user_cpt;
 		struct page_req_dsc *req;
 		struct qi_desc resp;
 		int ret, result;
@@ -779,8 +841,24 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 			goto bad_req;
 		}
 
+		/*
+		 * we should never take any faults on kernel addresses
+		 * when using kernel CPU page table.
+		 * TODO: fix the borrowed page table problem
+		 */
+		if (!svm->mm) {
+			use_cpt = use_kernel_cpt;
+
+			if (likely(use_cpt))
+				goto bad_req;
+		}
+
 		svm->stats->prq_cnt++;
-		ret = handle_at_spt_page_fault(svm, req);
+		if (use_cpt)
+			ret = handle_at_cpt_page_fault(svm, req);
+		else
+			ret = handle_at_spt_page_fault(svm, req);
+
 		if (unlikely(ret)) {
 			result = QI_RESP_INVALID;
 			svm->stats->prq_fail_cnt++;
@@ -952,6 +1030,11 @@ static void unmap_at(struct hfi_at *at)
 
 static void free_at(struct hfi_at *at)
 {
+	if (at->system_mm) {
+		mmdrop(at->system_mm);
+		at->system_mm = NULL;
+	}
+
 	if (at->qi) {
 		free_page((unsigned long)at->qi->desc);
 		kfree(at->qi->desc_status);
@@ -1060,6 +1143,20 @@ static int alloc_at(struct hfi_devdata *dd)
 	raw_spin_lock_init(&at->register_lock);
 	spin_lock_init(&at->lock);
 	dd->at = at;
+
+	/* get system_mm for system pasid */
+	if (use_kernel_cpt) {
+		struct task_struct *task;
+
+		task = get_pid_task(find_pid_ns(1, &init_pid_ns), PIDTYPE_PID);
+		if (!task || !task->mm) {
+			dd_dev_err(dd, "Failed to get system_mm\n");
+			goto err_unmap;
+		}
+		mmgrab(task->mm);
+		at->system_mm = task->mm;
+		put_task_struct(task);
+	}
 
 	return 0;
 
@@ -1947,11 +2044,13 @@ static void hfi_flush_svm_range(struct hfi_at_svm *svm, unsigned long address,
 
 	hfi_flush_svm_range_dev(svm, address, pages, ih, gl);
 
-	nrpages = aligned_nrpages(address, pages * PAGE_SIZE);
-	start_pfn = AT_PFN(address);
-	last_pfn = start_pfn + nrpages - 1;
-	freelist = hfi_at_unmap(svm, start_pfn, last_pfn);
-	hfi_at_free_pagelist(freelist);
+	if (svm->pgd) {
+		nrpages = aligned_nrpages(address, pages * PAGE_SIZE);
+		start_pfn = AT_PFN(address);
+		last_pfn = start_pfn + nrpages - 1;
+		freelist = hfi_at_unmap(svm, start_pfn, last_pfn);
+		hfi_at_free_pagelist(freelist);
+	}
 }
 
 static void hfi_at_change_pte(struct mmu_notifier *mn, struct mm_struct *mm,
@@ -2139,6 +2238,7 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 	struct hfi_at *at = hfi_svm_device_to_at(dev);
 	struct hfi_at_svm *svm = NULL;
 	struct mm_struct *mm = NULL;
+	bool use_cpt = use_kernel_cpt;
 	int pasid_max;
 	u64 pgdval;
 	int ret;
@@ -2159,6 +2259,7 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 			return -EINVAL;
 	} else if (pasid) {
 		mm = get_task_mm(current);
+		use_cpt = use_user_cpt;
 	}
 
 	mutex_lock(&pasid_mutex);
@@ -2225,21 +2326,28 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 		goto out;
 	}
 
-	svm->tsk = current;
-	svm->pgd = (struct at_pte *)alloc_pgtable_page(at->dd->node);
-	if (!svm->pgd) {
-		idr_remove(&svm->at->pasid_idr, svm->pasid);
-		kfree(svm);
-		goto out;
-	}
-	__at_flush_cache(at, svm->pgd, AT_PAGE_SIZE);
+	if (!use_cpt) {
+		svm->tsk = current;
+		svm->pgd = (struct at_pte *)alloc_pgtable_page(at->dd->node);
+		if (!svm->pgd) {
+			idr_remove(&svm->at->pasid_idr, svm->pasid);
+			kfree(svm);
+			goto out;
+		}
+		__at_flush_cache(at, svm->pgd, AT_PAGE_SIZE);
 
-	pgdval = (u64)__pa(svm->pgd);
-	hfi2_dbg("AT SPT alloc: pasid %d\n", svm->pasid);
+		pgdval = (u64)__pa(svm->pgd);
+		hfi2_dbg("AT SPT alloc: pasid %d\n", svm->pasid);
+	} else {
+		pgdval = (u64)(mm ? __pa(svm->mm->pgd) :
+				    __pa(at->system_mm->pgd));
+	}
+
 	if (mm) {
 		ret = mmu_notifier_register(&svm->notifier, mm);
 		if (ret) {
-			free_pgtable_page(svm->pgd);
+			if (svm->pgd)
+				free_pgtable_page(svm->pgd);
 			idr_remove(&svm->at->pasid_idr, svm->pasid);
 			kfree(svm);
 			goto out;
