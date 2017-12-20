@@ -2741,7 +2741,6 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	unsigned long flags;
 	int port;
 
-	hfi_vnic_uninit(dd);
 	/*
 	 * shutdown ports to notify OPA core clients.
 	 * FXRTODO: Check error handling if hfi_pci_dd_init fails early
@@ -2750,6 +2749,13 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	hfi_pport_down(dd);
 
 	hfi2_ib_remove(dd);
+	/*
+	 * hfi_vnic_uninit() must be after hfi2_ib_remove() because it uses
+	 * dd->vnic in hfi2_vnic_deinit() which is called from
+	 * hfi2_ib_remove().
+	 */
+	hfi_vnic_uninit(dd);
+
 	/* unregister from opa_core and IB first, before clear any portdata */
 	hfi_pport_uninit(dd);
 
