@@ -111,10 +111,11 @@ push_exit:
 }
 
 #ifndef CONFIG_HFI2_STLNP
-#define hfi2_native_alloc_ucontext(ctx, x)
+#define hfi2_native_alloc_ucontext(ctx, udata, is_enabled)
 #define hfi2_native_dealloc_ucontext(ctx)
 #else
-void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, bool is_enabled);
+void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, void *udata,
+				bool is_enabled);
 void hfi2_native_dealloc_ucontext(struct hfi_ibcontext *ctx);
 int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region);
 int hfi2_free_lkey(struct rvt_mregion *mr);

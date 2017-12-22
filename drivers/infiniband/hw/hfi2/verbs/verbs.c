@@ -351,7 +351,7 @@ static struct ib_ucontext *hfi2_alloc_ucontext(struct ib_device *ibdev,
 	/* Setup list to zap vmas on release */
 	INIT_LIST_HEAD(&uc->vma_head);
 
-	hfi2_native_alloc_ucontext(uc, enable_native_verbs);
+	hfi2_native_alloc_ucontext(uc, udata, enable_native_verbs);
 	return &uc->ibuc;
 }
 

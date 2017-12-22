@@ -152,10 +152,12 @@ static void hfi2_free_all_keys(struct hfi_ibcontext *ctx)
 	ctx->lkey_mr = NULL;
 }
 
-void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, bool is_enabled)
+void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, void *udata,
+				bool is_enabled)
 {
 	ctx->supports_native = is_enabled;
 	ctx->lkey_only = true;
+	ctx->is_user = !!udata;
 
 	/* Init key stacks */
 	ctx->rkey_ks.key_head = 0;

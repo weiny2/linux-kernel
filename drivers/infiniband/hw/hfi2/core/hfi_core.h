@@ -111,6 +111,7 @@ struct hfi_ks {
  * @vm_lock: mutex to update the list of vma's
  * @support_native: boolean if this context is using native transport
  * @lkey_only: boolean if this context has shared LKEY/RKEYs
+ * @is_user: boolean if this a user-space context
  * @rkey_ks: RKEYs stack
  * @lkey_ks: LKEYs stack
  * @mr: MR array for LKEYs
@@ -123,6 +124,7 @@ struct hfi_ibcontext {
 	struct mutex vm_lock;
 	bool supports_native;
 	bool lkey_only;
+	bool is_user;
 	struct hfi_ks rkey_ks;
 	struct hfi_ks lkey_ks;
 	struct rvt_mregion **lkey_mr;
