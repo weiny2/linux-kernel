@@ -465,6 +465,13 @@ struct context_entry {
 	u64 hi;
 };
 
+struct hfi_at_stats {
+	int pasid;
+	u64 prq_cnt;
+	u64 prq_dup_cnt;
+	u64 prq_fail_cnt;
+};
+
 struct hfi_at {
 	void __iomem	*reg; /* Pointer to hardware regs, virtual addr */
 	u64 		reg_phys; /* physical address of hw register set */
@@ -489,6 +496,7 @@ struct hfi_at {
 	struct pasid_entry *pasid_table;
 	struct pasid_state_entry *pasid_state_table;
 	struct idr pasid_idr;
+	struct idr pasid_stats_idr;
 	u32 pasid_max;
 
 	/* FXR device info */
@@ -533,6 +541,7 @@ struct hfi_at_svm {
 	struct at_pte *pgd;
 	struct task_struct *tsk;
 	spinlock_t lock; /* protect pgd access */
+	struct hfi_at_stats *stats;
 };
 
 /*

@@ -1150,6 +1150,7 @@ int hfi_at_clear_pasid(struct hfi_ctx *ctx);
 int hfi_at_setup_irq(struct hfi_devdata *dd);
 int hfi_at_init(struct hfi_devdata *dd);
 void hfi_at_exit(struct hfi_devdata *dd);
+void hfi_at_dbg_init(struct hfi_devdata *dd);
 
 /* OPA core functions */
 int hfi_cmdq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table,

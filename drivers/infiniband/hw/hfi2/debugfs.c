@@ -1052,6 +1052,7 @@ void hfi_dbg_dev_init(struct hfi_devdata *dd)
 	hfi_firmware_dbg_init(dd);
 	hfi_devcntrs_dbg_init(dd);
 	hfi_portcntrs_dbg_init(dd);
+	hfi_at_dbg_init(dd);
 	hfi_head_update_ctrl_dbg_init(dd);
 	hfi_verbs_dbg_init(dd);
 #ifdef CONFIG_HFI2_STLNP

@@ -34,6 +34,7 @@
 #include "chip/fxr_at_csrs.h"
 #include "chip/fxr_at_defs.h"
 #include "hfi2.h"
+#include "debugfs.h"
 #include "at.h"
 #include "trace.h"
 
@@ -60,6 +61,8 @@ static const char * const at_remap_fault_reasons[] = {
 	"non-zero reserved fields in PTE",
 	"PCE for translation request specifies blocking"
 };
+
+static void hfi_at_stats_cleanup(struct hfi_at *at);
 
 static const char *at_get_fault_reason(u8 fault_reason, int *fault_type)
 {
@@ -445,6 +448,118 @@ static inline void __at_flush_cache(struct hfi_at *at, void *addr, int size)
 		clflush_cache_range(addr, size);
 }
 
+static void __print_page_tbl(struct seq_file *s, struct at_pte *pte,
+			     u8 level, unsigned long pfn)
+{
+	char *lp, *lvl_prefix[4] = { "\t\t\t", "\t\t", "\t", "" };
+	int i = pfn ? pfn_level_offset(pfn, level) : 0;
+
+	if (!level || level > 4)
+		return;
+
+	lp = lvl_prefix[level - 1];
+	pte += i;
+	do {
+		if (at_pte_present(pte)) {
+			u64 pte_val = at_pte_addr(pte);
+
+			seq_printf(s, "%s0x%x: 0x%llx\n", lp, i, pte->val);
+			if (level > 1 && !at_pte_superpage(pte))
+				__print_page_tbl(s, phys_to_virt(pte_val),
+						 level - 1, pfn);
+		} else if (pfn) {
+			seq_printf(s, "%s0x%x: 0x%llx\n", lp, i, pte->val);
+		}
+
+		if (pfn)
+			break;
+
+		pte++;
+		i++;
+	} while (!first_pte_in_page(pte));
+}
+
+static void print_page_tbl(struct seq_file *s, struct hfi_at_svm *svm)
+{
+	__print_page_tbl(s, svm->pgd, agaw_to_level(svm->at->agaw), 0);
+}
+
+static bool bad_address(void *p)
+{
+	unsigned long dummy;
+
+	if (!p)
+		return true;
+
+	return probe_kernel_address((unsigned long *)p, dummy);
+}
+
+/* TODO: Check if tracing is enabled before walking page table */
+/* TODO: Probably we should avoid using CPU page table macros here */
+static void at_dump_pagetable(pgd_t *p, unsigned long address, char *prefix)
+{
+	pgd_t *base, *pgd;
+	bool pgd_v = false;
+	bool p4d_v = false;
+	bool pud_v = false;
+	bool pmd_v = false;
+	bool pte_v = false;
+	bool v = false;
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	base = p ? p : __va(read_cr3_pa());
+	pgd = base + pgd_index(address);
+	if (bad_address(pgd))
+		goto bad;
+
+	pgd_v = true;
+	if (!pgd_present(*pgd))
+		goto out;
+
+	p4d = p4d_offset(pgd, address);
+	if (bad_address(p4d))
+		goto bad;
+
+	p4d_v = true;
+	if (!p4d_present(*p4d) || p4d_large(*p4d))
+		goto out;
+
+	pud = pud_offset(p4d, address);
+	if (bad_address(pud))
+		goto bad;
+
+	pud_v = true;
+	if (!pud_present(*pud) || pud_large(*pud))
+		goto out;
+
+	pmd = pmd_offset(pud, address);
+	if (bad_address(pmd))
+		goto bad;
+
+	pmd_v = true;
+	if (!pmd_present(*pmd) || pmd_large(*pmd))
+		goto out;
+
+	pte = pte_offset_kernel(pmd, address);
+	if (bad_address(pte))
+		goto bad;
+
+	pte_v = true;
+out:
+	v = true;
+bad:
+	hfi2_dbg("%s %s addr 0x%lx PGD %03x:%12lx P4D %03x:%12lx PUD %03x:%12lx PMD %03x:%12lx PTE %03x:%12lx\n",
+		 prefix, v ? "" : "(ERROR)", address,
+		 pgd_index(address), pgd_v ? pgd_val(*pgd) : 0,
+		 p4d_index(address), p4d_v ? p4d_val(*p4d) : 0,
+		 pud_index(address), pud_v ? pud_val(*pud) : 0,
+		 pmd_index(address), pmd_v ? pmd_val(*pmd) : 0,
+		 pte_index(address), pte_v ? pte_val(*pte) : 0);
+}
+
 static struct at_pte *pfn_to_at_pte(struct hfi_at_svm *svm, unsigned long pfn,
 				    int *target_level, bool user)
 {
@@ -506,6 +621,7 @@ static struct at_pte *pfn_to_at_pte(struct hfi_at_svm *svm, unsigned long pfn,
 static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 		      struct page *page, bool user)
 {
+	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
 	unsigned long phys_pfn;
 	struct at_pte *pte;
 	u64 pteval, prot;
@@ -527,11 +643,14 @@ static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 		u64 tmp = pteval & ~(AT_PTE_WRITE | AT_PTE_DIRTY);
 
 		/* allow upgrade of access privilege */
-		if (cmpxchg64_local(&pte->val, tmp, pteval) != tmp)
-			pr_err("Mapping already set\n");
+		if (cmpxchg64_local(&pte->val, tmp, pteval) != tmp) {
+			pr_debug("Mapping already set\n");
+			svm->stats->prq_dup_cnt++;
+		}
 	}
 	__at_flush_cache(svm->at, pte, sizeof(*pte));
 
+	at_dump_pagetable((pgd_t *)svm->pgd, address, "SPT");
 	/* TODO: investigate necessity of compound_head() call */
 	if (req->wr_req) {
 		struct page *head_page = compound_head(page);
@@ -660,9 +779,14 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 			goto bad_req;
 		}
 
+		svm->stats->prq_cnt++;
 		ret = handle_at_spt_page_fault(svm, req);
-		result = ret ? QI_RESP_INVALID : QI_RESP_SUCCESS;
-
+		if (unlikely(ret)) {
+			result = QI_RESP_INVALID;
+			svm->stats->prq_fail_cnt++;
+		} else {
+			result = QI_RESP_SUCCESS;
+		}
 bad_req:
 		svm = NULL;
 no_pasid:
@@ -1288,6 +1412,7 @@ static int hfi_svm_alloc_pasid_tables(struct hfi_at *at)
 	}
 
 	idr_init(&at->pasid_idr);
+	idr_init(&at->pasid_stats_idr);
 
 	return 0;
 }
@@ -1308,6 +1433,8 @@ static int hfi_svm_free_pasid_tables(struct hfi_at *at)
 	}
 
 	idr_destroy(&at->pasid_idr);
+	hfi_at_stats_cleanup(at);
+	idr_destroy(&at->pasid_stats_idr);
 	return 0;
 }
 
@@ -1897,6 +2024,116 @@ static const struct mmu_notifier_ops hfi_at_mmuops = {
 
 static DEFINE_MUTEX(pasid_mutex);
 
+static void hfi_at_stats_cleanup(struct hfi_at *at)
+{
+	struct hfi_at_stats *stats;
+	int i;
+
+	mutex_lock(&pasid_mutex);
+	idr_for_each_entry(&at->pasid_stats_idr, stats, i) {
+		idr_remove(&at->pasid_stats_idr, i);
+		kfree(stats);
+	}
+	mutex_unlock(&pasid_mutex);
+}
+
+static int hfi_at_stats_show(struct seq_file *s, void *unused)
+{
+	struct hfi_devdata *dd = s->private;
+	struct hfi_at *at = dd->at;
+	struct hfi_at_stats *stats;
+	int i;
+
+	seq_puts(s, "pasid: requests duplicates failures\n");
+	mutex_lock(&pasid_mutex);
+	idr_for_each_entry(&at->pasid_stats_idr, stats, i)
+		seq_printf(s, "%d: %llu %llu %llu\n",
+			   stats->pasid, stats->prq_cnt, stats->prq_dup_cnt,
+			   stats->prq_fail_cnt);
+	mutex_unlock(&pasid_mutex);
+
+	return 0;
+}
+
+static ssize_t hfi_at_stats_write(struct file *file, const char __user *buf,
+				  size_t count, loff_t *ppos)
+{
+	struct hfi_devdata *dd = private2dd(file);
+	struct hfi_at *at = dd->at;
+	struct hfi_at_stats *stats;
+	int i;
+
+	mutex_lock(&pasid_mutex);
+	idr_for_each_entry(&at->pasid_stats_idr, stats, i) {
+		stats->prq_cnt = 0;
+		stats->prq_dup_cnt = 0;
+		stats->prq_fail_cnt = 0;
+	}
+	mutex_unlock(&pasid_mutex);
+
+	return count;
+}
+
+static int hfi_at_page_tbl_show(struct seq_file *s, void *unused)
+{
+	struct hfi_devdata *dd = s->private;
+	struct hfi_at *at = dd->at;
+	struct hfi_at_svm *svm;
+	int i;
+
+	mutex_lock(&pasid_mutex);
+	idr_for_each_entry(&at->pasid_idr, svm, i) {
+		if (svm->mm)
+			continue;
+
+		print_page_tbl(s, svm);
+		break;
+	}
+	mutex_unlock(&pasid_mutex);
+
+	return 0;
+}
+
+DEBUGFS_FILE_OPS_SINGLE_WITH_WRITE(at_stats);
+DEBUGFS_FILE_OPS_SINGLE(at_page_tbl);
+
+void hfi_at_dbg_init(struct hfi_devdata *dd)
+{
+	/* create files for each port */
+	debugfs_create_file("at_stats", 0644,
+			    dd->hfi_dev_dbg, dd,
+			    &hfi_at_stats_ops);
+	debugfs_create_file("at_page_tbl", 0444,
+			    dd->hfi_dev_dbg, dd,
+			    &hfi_at_page_tbl_ops);
+}
+
+static struct hfi_at_stats *hfi_at_alloc_stats(struct hfi_at_svm *svm)
+{
+	struct hfi_at_stats *stats;
+	int ret;
+
+	stats = idr_find(&svm->at->pasid_stats_idr, svm->pasid);
+	if (!stats) {
+		stats = kmalloc(sizeof(*stats), GFP_KERNEL);
+		if (!stats)
+			return NULL;
+
+		ret = idr_alloc(&svm->at->pasid_stats_idr, stats,
+				svm->pasid, svm->pasid + 1, GFP_KERNEL);
+		if (ret < 0) {
+			kfree(stats);
+			return NULL;
+		}
+	}
+	stats->prq_cnt = 0;
+	stats->prq_dup_cnt = 0;
+	stats->prq_fail_cnt = 0;
+	stats->pasid = svm->pasid;
+
+	return stats;
+}
+
 static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 {
 	struct hfi_at *at = hfi_svm_device_to_at(dev);
@@ -1981,6 +2218,13 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 	svm->flags = flags;
 	ret = -ENOMEM;
 
+	svm->stats = hfi_at_alloc_stats(svm);
+	if (!svm->stats) {
+		idr_remove(&at->pasid_idr, svm->pasid);
+		kfree(svm);
+		goto out;
+	}
+
 	svm->tsk = current;
 	svm->pgd = (struct at_pte *)alloc_pgtable_page(at->dd->node);
 	if (!svm->pgd) {
@@ -2061,6 +2305,11 @@ static int hfi_svm_unbind_mm(struct device *dev, int pasid)
 		hfi_flush_svm_range_dev(svm, 0, -1, 0, !svm->mm);
 
 		idr_remove(&svm->at->pasid_idr, svm->pasid);
+		if (!at->dd->hfi_dev_dbg) {
+			idr_remove(&at->pasid_stats_idr, svm->pasid);
+			kfree(svm->stats);
+		}
+
 		if (svm->mm)
 			mmu_notifier_unregister(&svm->notifier, svm->mm);
 
