@@ -554,7 +554,12 @@ static void init_csrs(struct hfi_devdata *dd)
 	RXET_CFG_EQD_t rxet_cfg_eqd;
 	TXCID_CFG_SENDBTHQP_t bth_qp = {.val = 0};
 	PCIM_INT_ITR_t pcim_itr = {.val = 0};
-	u64 reg;
+	u64 reg, cfg_ctl;
+
+	/* enable logging PMON counter overflow */
+	cfg_ctl = read_csr(dd, FXR_PMON_CFG_CONTROL);
+	cfg_ctl |= FXR_PMON_CFG_CONTROL_LOG_OVERFLOW_SMASK;
+	write_csr(dd, FXR_PMON_CFG_CONTROL, cfg_ctl);
 
 	/* enable PMON counter overflow interrupt */
 	reg = read_csr(dd, FXR_PMON_ERR_EN_HOST_1);
