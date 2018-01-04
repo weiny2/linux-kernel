@@ -48,6 +48,15 @@ static bool use_user_cpt = true;
 module_param(use_user_cpt, bool, 0444);
 MODULE_PARM_DESC(use_user_cpt, "Use/Share user process CPU page tables");
 
+/* TODO: Check whether we should only support page promotion method */
+static bool user_page_promo = true;
+module_param(user_page_promo, bool, 0444);
+MODULE_PARM_DESC(user_page_promo, "user page promotion");
+
+static bool kernel_page_promo = true;
+module_param(kernel_page_promo, bool, 0444);
+MODULE_PARM_DESC(kernel_page_promo, "kernel page promotion");
+
 /* AT interrupt handling. Most stuff are MSI-like. */
 enum faulttype {
 	AT_REMAP,
@@ -644,6 +653,64 @@ static struct at_pte *pfn_to_at_pte(struct hfi_at_svm *svm, unsigned long pfn,
 	return pte;
 }
 
+static unsigned long get_cpt_entry(pgd_t *pgdp, unsigned long address,
+				   int *target_level)
+{
+	unsigned long pteval = 0;
+	int level = 5;
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	pgd = pgdp + pgd_index(address);
+	if (bad_address(pgd) || !pgd_present(*pgd))
+		return 0;
+
+	level--;
+	p4d = p4d_offset(pgd, address);
+	if (bad_address(p4d) || !p4d_present(*p4d))
+		return 0;
+
+	if (p4d_large(*p4d)) {
+		pteval = p4d_val(*p4d);
+		goto out;
+	}
+
+	level--;
+	pud = pud_offset(p4d, address);
+	if (bad_address(pud) || !pud_present(*pud))
+		return 0;
+
+	if (pud_large(*pud)) {
+		pteval = pud_val(*pud);
+		goto out;
+	}
+
+	level--;
+	pmd = pmd_offset(pud, address);
+	if (bad_address(pmd) || !pmd_present(*pmd))
+		return 0;
+
+	if (pmd_large(*pmd)) {
+		pteval = pmd_val(*pmd);
+		goto out;
+	}
+
+	level--;
+	pte = pte_offset_kernel(pmd, address);
+	if (bad_address(pte) || !pte_present(*pte))
+		return 0;
+
+	pteval = pte_val(*pte);
+out:
+	if (target_level)
+		*target_level = level;
+
+	return pteval;
+}
+
 static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 		      struct page *page, bool user)
 {
@@ -684,6 +751,39 @@ static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 		set_page_dirty_lock(head_page);
 	}
 
+	return 0;
+}
+
+static int hfi_at_map_promo(struct hfi_at_svm *svm, struct page_req_dsc *req,
+			    bool user)
+{
+	pgd_t *pgd_ref = user ? svm->mm->pgd : svm->at->system_mm->pgd;
+	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
+	struct at_pte *pte;
+	u64 pteval;
+	int level;
+
+	pteval = get_cpt_entry(pgd_ref, address, &level);
+	if (!pteval)
+		return -EAGAIN;
+
+	pte = pfn_to_at_pte(svm, req->addr, &level, user);
+	if (!pte)
+		return -ENOMEM;
+
+	if (cmpxchg64_local(&pte->val, 0ULL, pteval)) {
+		u64 tmp = pteval & ~(AT_PTE_WRITE | AT_PTE_DIRTY);
+
+		/* TODO: seems like page promotion will have issues here */
+		/* allow upgrade of access privilege */
+		if (cmpxchg64_local(&pte->val, tmp, pteval) != tmp) {
+			pr_debug("Mapping already set\n");
+			svm->stats->prq_dup_cnt++;
+		}
+	}
+	__at_flush_cache(svm->at, pte, sizeof(*pte));
+	at_dump_pagetable((pgd_t *)svm->pgd, address, "SPT");
+	at_dump_pagetable(pgd_ref,  address, "CPT");
 	return 0;
 }
 
@@ -741,6 +841,14 @@ static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
 	if (svm->mm) {
 		int wr;
 
+		if (user_page_promo) {
+			ret = handle_at_cpt_page_fault(svm, req);
+			if (ret)
+				return ret;
+
+			return hfi_at_map_promo(svm, req, true);
+		}
+
 		/* If address is not canonical, return invalid response */
 		if (!is_canonical_address(address))
 			return -EINVAL;
@@ -768,6 +876,16 @@ static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
 		mmput(svm->mm);
 	} else {
 		address = make_canonical_address(address);
+		if (kernel_page_promo) {
+			req->addr = address >> AT_PAGE_SHIFT;
+			ret = hfi_at_map_promo(svm, req, false);
+
+			/* TODO: revisit later, needed for some vmalloc pages */
+			/* Upon -EAGAIN, fallback on manual mapping */
+			if (ret != -EAGAIN)
+				return ret;
+		}
+
 		if (is_vmalloc_addr((void *)address))
 			page = vmalloc_to_page((void *)address);
 		else
@@ -1145,7 +1263,7 @@ static int alloc_at(struct hfi_devdata *dd)
 	dd->at = at;
 
 	/* get system_mm for system pasid */
-	if (use_kernel_cpt) {
+	if (use_kernel_cpt || kernel_page_promo) {
 		struct task_struct *task;
 
 		task = get_pid_task(find_pid_ns(1, &init_pid_ns), PIDTYPE_PID);
