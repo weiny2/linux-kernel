@@ -68,17 +68,17 @@ static int uverbs_process_attr(struct ib_device *ibdev,
 
 	switch (spec->type) {
 	case UVERBS_ATTR_TYPE_PTR_IN:
-		if (uattr->len > spec->len &&
+		if (uattr->len > spec->ptr.len &&
 		    spec->flags & UVERBS_ATTR_SPEC_F_MIN_SZ_OR_ZERO &&
-		    !ib_is_buffer_cleared((__force const void __user *)uattr->data + spec->len,
-					  uattr->len - spec->len))
+		    !ib_is_buffer_cleared((__force const void __user *)uattr->data + spec->ptr.len,
+					  uattr->len - spec->ptr.len))
 			return -EOPNOTSUPP;
 
 	/* fall through */
 	case UVERBS_ATTR_TYPE_PTR_OUT:
-		if (uattr->len < spec->len ||
+		if (uattr->len < spec->ptr.len ||
 		    (!(spec->flags & UVERBS_ATTR_SPEC_F_MIN_SZ) &&
-		     uattr->len > spec->len))
+		     uattr->len > spec->ptr.len))
 			return -EINVAL;
 
 		e->ptr_attr.data = uattr->data;
