@@ -253,6 +253,7 @@ static int pvrdma_register_device(struct pvrdma_dev *dev)
 			      GFP_KERNEL);
 	if (!dev->qp_tbl)
 		goto err_cq_free;
+	dev->ib_dev.driver_id = RDMA_DRIVER_VMW_PVRDMA;
 	spin_lock_init(&dev->qp_tbl_lock);
 
 	/* Check if SRQ is supported by backend */

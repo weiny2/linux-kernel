@@ -4760,6 +4760,11 @@ static int mlx5_ib_stage_roce_init(struct mlx5_ib_dev *dev)
 			return err;
 	}
 
+	dev->ib_dev.driver_id = RDMA_DRIVER_MLX5;
+	err = init_node_data(dev);
+	if (err)
+		return err;
+
 	return 0;
 }
 
