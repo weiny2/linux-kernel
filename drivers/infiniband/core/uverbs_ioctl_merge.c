@@ -32,6 +32,7 @@
 
 #include <rdma/uverbs_ioctl.h>
 #include <rdma/rdma_user_ioctl.h>
+#include <rdma/ib_user_ioctl_cmds.h>
 #include <linux/bitops.h>
 #include "uverbs.h"
 

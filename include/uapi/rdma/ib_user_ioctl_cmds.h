@@ -30,41 +30,57 @@
  * SOFTWARE.
  */
 
-#ifndef IB_USER_IOCTL_VERBS_H
-#define IB_USER_IOCTL_VERBS_H
+#ifndef IB_USER_IOCTL_CMDS_H
+#define IB_USER_IOCTL_CMDS_H
 
-#ifdef __KERNEL__
+#define UVERBS_ID_NS_MASK 0xF000
+#define UVERBS_ID_NS_SHIFT 12
 
-#define RDMA_UAPI_PTR(_type, _name)	_type _name
+#define UVERBS_UDATA_DRIVER_DATA_NS	1
+#define UVERBS_UDATA_DRIVER_DATA_FLAG	(1UL << UVERBS_ID_NS_SHIFT)
 
-#define RDMA_UAPI_TYPE(_type)		ib_uverbs_ ## _type
-#define RDMA_UAPI_CONST(_const)		IB_UVERBS_ ## _const
-#else
+#include <rdma/ib_user_ioctl_verbs.h>
 
-#if UINTPTR_MAX == UINT64_MAX
-#define RDMA_UAPI_PTR(_type, _name)	_type _name
-#elif UINTPTR_MAX == UINT32_MAX
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define RDMA_UAPI_PTR(_type, _name) union {				\
-				       struct {_type _name;		\
-					       __u32 _name ##_reserved;	\
-				       };				\
-				       __u64 _name ## _dummy; }
-#else
-#define RDMA_UAPI_PTR(_type, _name) union {				\
-				       struct {__u32 _name ##_reserved;	\
-					       _type _name;		\
-				       };				\
-				       __u64 _name ## _dummy; }
+enum uverbs_default_objects {
+	UVERBS_OBJECT_DEVICE, /* No instances of DEVICE are allowed */
+	UVERBS_OBJECT_PD,
+	UVERBS_OBJECT_COMP_CHANNEL,
+	UVERBS_OBJECT_CQ,
+	UVERBS_OBJECT_QP,
+	UVERBS_OBJECT_SRQ,
+	UVERBS_OBJECT_AH,
+	UVERBS_OBJECT_MR,
+	UVERBS_OBJECT_MW,
+	UVERBS_OBJECT_FLOW,
+	UVERBS_OBJECT_XRCD,
+	UVERBS_OBJECT_RWQ_IND_TBL,
+	UVERBS_OBJECT_WQ,
+	UVERBS_OBJECT_LAST,
+};
+
+enum {
+	UVERBS_ATTR_UHW_IN = UVERBS_UDATA_DRIVER_DATA_FLAG,
+	UVERBS_ATTR_UHW_OUT,
+};
+
+enum uverbs_attrs_create_cq_cmd_attr_ids {
+	UVERBS_ATTR_CREATE_CQ_HANDLE,
+	UVERBS_ATTR_CREATE_CQ_CQE,
+	UVERBS_ATTR_CREATE_CQ_USER_HANDLE,
+	UVERBS_ATTR_CREATE_CQ_COMP_CHANNEL,
+	UVERBS_ATTR_CREATE_CQ_COMP_VECTOR,
+	UVERBS_ATTR_CREATE_CQ_FLAGS,
+	UVERBS_ATTR_CREATE_CQ_RESP_CQE,
+};
+
+enum uverbs_attrs_destroy_cq_cmd_attr_ids {
+	UVERBS_ATTR_DESTROY_CQ_HANDLE,
+	UVERBS_ATTR_DESTROY_CQ_RESP,
+};
+
+enum uverbs_methods_cq {
+	UVERBS_METHOD_CQ_CREATE,
+	UVERBS_METHOD_CQ_DESTROY,
+};
+
 #endif
-#else
-#error "Pointer size not supported"
-#endif
-
-#define RDMA_UAPI_TYPE(_type)		ibv_ ## _type
-#define RDMA_UAPI_CONST(_const)		IBV_ ## _const
-#endif
-
-
-#endif
-

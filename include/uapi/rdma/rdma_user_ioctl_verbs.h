@@ -1,5 +1,6 @@
+/* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-2-Clause) */
 /*
- * Copyright (c) 2017, Mellanox Technologies inc.  All rights reserved.
+ * Copyright (c) 2016 Mellanox Technologies, LTD. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,41 +31,39 @@
  * SOFTWARE.
  */
 
-#ifndef IB_USER_IOCTL_VERBS_H
-#define IB_USER_IOCTL_VERBS_H
+#ifndef _RDMA_USER_IOCTL_VERBS_
+#define _RDMA_USER_IOCTL_VERBS_
 
-#ifdef __KERNEL__
+/* Documentation/ioctl/ioctl-number.txt */
+#define RDMA_IOCTL_MAGIC	0x1b
+#define RDMA_VERBS_IOCTL \
+	_IOWR(RDMA_IOCTL_MAGIC, 1, struct ib_uverbs_ioctl_hdr)
 
-#define RDMA_UAPI_PTR(_type, _name)	_type _name
+enum {
+	/* User input */
+	UVERBS_ATTR_F_MANDATORY = 1U << 0,
+	/*
+	 * Valid output bit should be ignored and considered set in
+	 * mandatory fields. This bit is kernel output.
+	 */
+	UVERBS_ATTR_F_VALID_OUTPUT = 1U << 1,
+};
 
-#define RDMA_UAPI_TYPE(_type)		ib_uverbs_ ## _type
-#define RDMA_UAPI_CONST(_const)		IB_UVERBS_ ## _const
-#else
+struct ib_uverbs_attr {
+	__u16 attr_id;		/* command specific type attribute */
+	__u16 len;		/* only for pointers */
+	__u16 flags;		/* combination of UVERBS_ATTR_F_XXXX */
+	__u16 reserved;
+	__u64 data;		/* ptr to command, inline data or idr/fd */
+};
 
-#if UINTPTR_MAX == UINT64_MAX
-#define RDMA_UAPI_PTR(_type, _name)	_type _name
-#elif UINTPTR_MAX == UINT32_MAX
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define RDMA_UAPI_PTR(_type, _name) union {				\
-				       struct {_type _name;		\
-					       __u32 _name ##_reserved;	\
-				       };				\
-				       __u64 _name ## _dummy; }
-#else
-#define RDMA_UAPI_PTR(_type, _name) union {				\
-				       struct {__u32 _name ##_reserved;	\
-					       _type _name;		\
-				       };				\
-				       __u64 _name ## _dummy; }
+struct ib_uverbs_ioctl_hdr {
+	__u16 length;
+	__u16 object_id;
+	__u16 method_id;
+	__u16 num_attrs;
+	__u64 reserved;
+	struct ib_uverbs_attr  attrs[0];
+};
+
 #endif
-#else
-#error "Pointer size not supported"
-#endif
-
-#define RDMA_UAPI_TYPE(_type)		ibv_ ## _type
-#define RDMA_UAPI_CONST(_const)		IBV_ ## _const
-#endif
-
-
-#endif
-
