@@ -64,6 +64,8 @@ enum {
 	UVERBS_ATTR_SPEC_F_MANDATORY	= 1U << 0,
 	/* Support extending attributes by length */
 	UVERBS_ATTR_SPEC_F_MIN_SZ	= 1U << 1,
+	/* Validate that all unknown size is zeros */
+	UVERBS_ATTR_SPEC_F_MIN_SZ_OR_ZERO = 1U << 2 | UVERBS_ATTR_SPEC_F_MIN_SZ,
 };
 
 struct uverbs_attr_spec {
