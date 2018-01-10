@@ -51,6 +51,7 @@ enum uverbs_attr_type {
 	UVERBS_ATTR_TYPE_PTR_OUT,
 	UVERBS_ATTR_TYPE_IDR,
 	UVERBS_ATTR_TYPE_FD,
+	UVERBS_ATTR_TYPE_ENUM_IN,
 };
 
 enum uverbs_obj_access {
@@ -94,6 +95,13 @@ struct uverbs_attr_spec {
 			u16			obj_type;
 			u8			access;
 		} obj;
+		struct {
+			enum uverbs_attr_type		type;
+			/* Combination of bits from enum UVERBS_ATTR_SPEC_F_XXXX */
+			u8				flags;
+			u8				num_elems;
+			struct uverbs_attr_spec		*ids;
+		} enum_def;
 	};
 };
 
@@ -179,30 +187,37 @@ struct uverbs_object_tree_def {
 };
 
 #define UA_FLAGS(_flags)  .flags = _flags
-#define __UVERBS_ATTR0(_id, _len, _type, ...)                           \
+#define __UVERBS_ATTR0(_id, _attr, _type, _fld, ...)              \
 	((const struct uverbs_attr_def)				  \
-	 {.id = _id, .attr = {{.ptr = {.type = _type, .len = _len, .flags = 0, } }, } })
-#define __UVERBS_ATTR1(_id, _len, _type, _flags)                        \
+	 {.id = _id, .attr = {{._fld = {.type = _type, _attr, .flags = 0, } }, } })
+#define __UVERBS_ATTR1(_id, _attr, _type, _fld, _extra1, ...)      \
 	((const struct uverbs_attr_def)				  \
-	 {.id = _id, .attr = {{.ptr = {.type = _type, .len = _len, _flags } },} })
-#define __UVERBS_ATTR(_id, _len, _type, _flags, _n, ...)		\
-	__UVERBS_ATTR##_n(_id, _len, _type, _flags)
+	 {.id = _id, .attr = {{._fld = {.type = _type, _attr, _extra1 } },} })
+#define __UVERBS_ATTR2(_id, _attr, _type, _fld, _extra1, _extra2)    \
+	((const struct uverbs_attr_def)				  \
+	 {.id = _id, .attr = {{._fld = {.type = _type, _attr, _extra1, _extra2 } },} })
+#define __UVERBS_ATTR(_id, _attr, _type, _fld, _extra1, _extra2, _n, ...)	\
+	__UVERBS_ATTR##_n(_id, _attr, _type, _fld, _extra1, _extra2)
 /*
  * In new compiler, UVERBS_ATTR could be simplified by declaring it as
  * [_id] = {.type = _type, .len = _len, ##__VA_ARGS__}
  * But since we support older compilers too, we need the more complex code.
  */
-#define UVERBS_ATTR(_id, _len, _type, ...)				\
-	__UVERBS_ATTR(_id, _len, _type, ##__VA_ARGS__, 1, 0)
+#define UVERBS_ATTR(_id, _attr, _type, _fld, ...)			\
+	__UVERBS_ATTR(_id, _attr, _type, _fld, ##__VA_ARGS__, 2, 1, 0)
 #define UVERBS_ATTR_PTR_IN_SZ(_id, _len, ...)				\
-	UVERBS_ATTR(_id, _len, UVERBS_ATTR_TYPE_PTR_IN, ##__VA_ARGS__)
+	UVERBS_ATTR(_id, .len = _len, UVERBS_ATTR_TYPE_PTR_IN, ptr, ##__VA_ARGS__)
 /* If sizeof(_type) <= sizeof(u64), this will be inlined rather than a pointer */
 #define UVERBS_ATTR_PTR_IN(_id, _type, ...)				\
 	UVERBS_ATTR_PTR_IN_SZ(_id, sizeof(_type), ##__VA_ARGS__)
 #define UVERBS_ATTR_PTR_OUT_SZ(_id, _len, ...)				\
-	UVERBS_ATTR(_id, _len, UVERBS_ATTR_TYPE_PTR_OUT, ##__VA_ARGS__)
+	UVERBS_ATTR(_id, .len = _len, UVERBS_ATTR_TYPE_PTR_OUT, ptr, ##__VA_ARGS__)
 #define UVERBS_ATTR_PTR_OUT(_id, _type, ...)				\
 	UVERBS_ATTR_PTR_OUT_SZ(_id, sizeof(_type), ##__VA_ARGS__)
+#define UVERBS_ATTR_ENUM_IN(_id, _enum_arr, ...)			\
+	UVERBS_ATTR(_id, .ids = (_enum_arr),				\
+			 UVERBS_ATTR_TYPE_ENUM_IN, enum_def,		\
+			 .num_elems = ARRAY_SIZE(_enum_arr), ##__VA_ARGS__)
 
 /*
  * In new compiler, UVERBS_ATTR_IDR (and FD) could be simplified by declaring
@@ -242,6 +257,11 @@ struct uverbs_object_tree_def {
 #define DECLARE_UVERBS_ATTR_SPEC(_name, ...)				\
 	const struct uverbs_attr_def _name = __VA_ARGS__
 
+#define DECLARE_UVERBS_ENUM(_name, ...)					\
+	const struct uverbs_enum_spec _name = {				\
+		.len = ARRAY_SIZE(((struct uverbs_attr_spec[]){__VA_ARGS__})),\
+		.ids = {__VA_ARGS__},					\
+	}
 #define _UVERBS_METHOD_ATTRS_SZ(...)					\
 	(sizeof((const struct uverbs_attr_def * const []){__VA_ARGS__}) /\
 	 sizeof(const struct uverbs_attr_def *))
@@ -293,6 +313,7 @@ struct uverbs_ptr_attr {
 	u16		len;
 	/* Combination of bits from enum UVERBS_ATTR_F_XXXX */
 	u16		flags;
+	u8		enum_id;
 };
 
 struct uverbs_obj_attr {
@@ -358,6 +379,17 @@ static inline const struct uverbs_attr *uverbs_attr_get(const struct uverbs_attr
 		return ERR_PTR(-ENOENT);
 
 	return &attrs_bundle->hash[idx_bucket].attrs[idx & ~UVERBS_ID_NS_MASK];
+}
+
+static inline int uverbs_attr_get_enum_id(const struct uverbs_attr_bundle *attrs_bundle,
+					  u16 idx)
+{
+	const struct uverbs_attr *attr = uverbs_attr_get(attrs_bundle, idx);
+
+	if (IS_ERR(attr))
+		return PTR_ERR(attr);
+
+	return attr->ptr_attr.enum_id;
 }
 
 static inline int uverbs_copy_to(const struct uverbs_attr_bundle *attrs_bundle,

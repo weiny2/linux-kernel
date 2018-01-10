@@ -44,13 +44,11 @@ static int uverbs_process_attr(struct ib_device *ibdev,
 			       struct ib_uverbs_attr __user *uattr_ptr)
 {
 	const struct uverbs_attr_spec *spec;
+	const struct uverbs_attr_spec *val_spec;
 	struct uverbs_attr *e;
 	const struct uverbs_object_spec *object;
 	struct uverbs_obj_attr *o_attr;
 	struct uverbs_attr *elements = attr_bundle_h->attrs;
-
-	if (uattr->reserved)
-		return -EINVAL;
 
 	if (attr_id >= attr_spec_bucket->num_attrs) {
 		if (uattr->flags & UVERBS_ATTR_F_MANDATORY)
@@ -63,22 +61,42 @@ static int uverbs_process_attr(struct ib_device *ibdev,
 		return -EINVAL;
 
 	spec = &attr_spec_bucket->attrs[attr_id];
+	val_spec = spec;
 	e = &elements[attr_id];
 	e->uattr = uattr_ptr;
 
 	switch (spec->type) {
+	case UVERBS_ATTR_TYPE_ENUM_IN:
+		if (uattr->attr_data.enum_data.elem_id >= spec->enum_def.num_elems)
+			return -EOPNOTSUPP;
+
+		if (uattr->attr_data.enum_data.reserved)
+			return -EINVAL;
+
+		val_spec = &spec->enum_def.ids[uattr->attr_data.enum_data.elem_id];
+
+		/* Currently we only support PTR_IN based enums */
+		if (val_spec->type != UVERBS_ATTR_TYPE_PTR_IN)
+			return -EOPNOTSUPP;
+
+		e->ptr_attr.enum_id = uattr->attr_data.enum_data.elem_id;
+	/* fall through */
 	case UVERBS_ATTR_TYPE_PTR_IN:
-		if (uattr->len > spec->ptr.len &&
-		    spec->flags & UVERBS_ATTR_SPEC_F_MIN_SZ_OR_ZERO &&
-		    !ib_is_buffer_cleared((__force const void __user *)uattr->data + spec->ptr.len,
-					  uattr->len - spec->ptr.len))
+		if (uattr->len > val_spec->ptr.len &&
+		    val_spec->flags & UVERBS_ATTR_SPEC_F_MIN_SZ_OR_ZERO &&
+		    !ib_is_buffer_cleared((__force const void __user *)uattr->data + val_spec->ptr.len,
+					  uattr->len - val_spec->ptr.len))
 			return -EOPNOTSUPP;
 
 	/* fall through */
 	case UVERBS_ATTR_TYPE_PTR_OUT:
-		if (uattr->len < spec->ptr.len ||
-		    (!(spec->flags & UVERBS_ATTR_SPEC_F_MIN_SZ) &&
-		     uattr->len > spec->ptr.len))
+		if (uattr->len < val_spec->ptr.len ||
+		    (!(val_spec->flags & UVERBS_ATTR_SPEC_F_MIN_SZ) &&
+		     uattr->len > val_spec->ptr.len))
+			return -EINVAL;
+
+		if (spec->type != UVERBS_ATTR_TYPE_ENUM_IN &&
+		    uattr->attr_data.reserved)
 			return -EINVAL;
 
 		e->ptr_attr.data = uattr->data;
@@ -91,6 +109,9 @@ static int uverbs_process_attr(struct ib_device *ibdev,
 			return -EINVAL;
 	/* fall through */
 	case UVERBS_ATTR_TYPE_FD:
+		if (uattr->attr_data.reserved)
+			return -EINVAL;
+
 		if (uattr->len != 0 || !ucontext || uattr->data > INT_MAX)
 			return -EINVAL;
 
