@@ -70,7 +70,6 @@ static int uverbs_process_attr(struct ib_device *ibdev,
 	case UVERBS_ATTR_TYPE_PTR_IN:
 		if (uattr->len > spec->len &&
 		    spec->flags & UVERBS_ATTR_SPEC_F_MIN_SZ_OR_ZERO &&
-		    spec->len > sizeof(((struct ib_uverbs_attr *)0)->data) &&
 		    !ib_is_buffer_cleared((__force const void __user *)uattr->data + spec->len,
 					  uattr->len - spec->len))
 			return -EOPNOTSUPP;
