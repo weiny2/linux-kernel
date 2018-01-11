@@ -702,6 +702,12 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 	if (!ctx || !ctx->supports_native)
 		return 0;
 
+	if (ibqp->qp_type == IB_QPT_SMI || ibqp->qp_type == IB_QPT_GSI)
+		return 0;
+	/* TODO UD needs multicast enabled first and lower priority than RC */
+	if (ibqp->qp_type == IB_QPT_UD)
+		return 0;
+
 	if (attr_mask & IB_QP_STATE &&
 	    attr->qp_state == IB_QPS_INIT &&
 	    !rvtqp->r_rq.hw_rq) {

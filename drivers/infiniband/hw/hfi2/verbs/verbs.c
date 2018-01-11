@@ -71,6 +71,8 @@
 #include "native.h"
 
 static bool enable_native_verbs;
+module_param(enable_native_verbs, bool, 0444);
+MODULE_PARM_DESC(enable_native_verbs, "Enable use of Verbs over Native");
 
 static bool enable_lkey_callbacks = true;
 module_param(enable_lkey_callbacks, bool, 0444);
