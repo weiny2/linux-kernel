@@ -250,7 +250,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_cmdq_update_args cmdq_update;
 	struct hfi_cmdq_release_args cmdq_release;
 	struct hfi_event_args event_args;
-	struct hfi_dlid_assign_args dlid_assign;
+	struct hfi_dlid_assign_args dlid_assign = {0};
 	struct hfi_ctxt_attach_args ctxt_attach;
 	struct hfi_job_info job_info;
 	struct hfi_job_setup_args job_setup;

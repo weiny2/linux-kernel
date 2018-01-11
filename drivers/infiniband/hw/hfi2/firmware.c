@@ -1340,7 +1340,7 @@ static int
 authenticate_hdrpe(struct hfi_devdata *dd)
 {
 	int timeout;
-	u64 reg;
+	u64 reg = 0;
 
 	/* start authentication */
 	write_csr(dd, FXR_RXHP_CFG_HDR_PE,

@@ -1270,7 +1270,7 @@ static bool hfi_ec_has_event(struct hfi_ctx *ctx,
 						    + HFI_PSB_CT_OFFSET);
 	struct hfi_eq_mgmt *eqm;
 	bool eqflag = (ec->mode == HFI_EC_MODE_EQ);
-	bool cond;
+	bool cond = false;
 
 	mutex_lock(&ctx->event_mutex);
 
@@ -1414,7 +1414,7 @@ int hfi_ec_wait_event(struct hfi_ctx *ctx, u16 ec_idx,
 	struct hfi_ec_entry *ec;
 	int idr_max = HFI_NUM_NIS * HFI_NUM_EVENT_HANDLES;
 	long time_in_jiffies, stat;
-	int ret;
+	int ret = 0;
 
 	/* check input range */
 	if (ec_idx >= idr_max)

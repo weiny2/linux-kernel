@@ -967,6 +967,7 @@ static void hfi2_vnic_rx_isr_cb(struct hfi_eq *eq_rx, void *data)
 	struct sk_buff *skb;
 	struct hfi2_vnic_rx_queue *rxq;
 	u8 q_idx = ctx_i->q_idx;
+	unsigned char pad_i;
 
 retry:
 	skb = NULL;
@@ -1008,7 +1009,8 @@ retry:
 	len = rhf->pktlen << 2;
 
 	pad_info = buf + len - 1;
-	len -= *pad_info & 0x3f;
+	pad_i = *pad_info;
+	len -= pad_i & 0x3f;
 	len -= HFI2_VNIC_ICRC_TAIL_LEN;
 	/* only handle FECN for vnic packets*/
 	if (HFI2_VNIC_IS_FECN_SET(buf))
@@ -1044,7 +1046,7 @@ retry:
 	skb_queue_tail(&rxq->skbq, skb);
 	dd_dev_dbg(ndev->dd, "RX%d kind %d skb->len %4d flit_len %4d (pad & 0x3f) %d port %d egridx %d egroffset %d\n",
 		   q_idx, rhf->event_kind, skb->len, rhf->pktlen << 2,
-		   pad_info ? *pad_info & 0x3f : 0x0,
+		   pad_i & 0x3f,
 		   rhf->pt + 1,
 		   rhf->egrindex, rhf->egroffset);
 	if (napi_schedule_prep(&rxq->napi)) {

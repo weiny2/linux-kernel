@@ -63,7 +63,7 @@ int hfi2_cmdq_assign(struct ib_device *ib_dev,
 	struct ib_ucontext *ucontext = file->ucontext;
 	struct ib_ucmdq_object  *obj;
 	struct hfi2_cmdq_auth_table auth_table;
-	struct hfi_cmdq *cmdq;
+	struct hfi_cmdq *cmdq = NULL;
 	struct hfi_ctx *ctx;
 	u64 cmdq_head_token, cmdq_rx_token, cmdq_tx_token;
 	u16 tmp_cmdq_idx;

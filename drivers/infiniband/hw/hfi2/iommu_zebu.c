@@ -204,6 +204,9 @@ hfi_iommu_root_set_context(struct hfi_devdata *dd)
 	unsigned bus, dev_id;
 	struct page *desc_page;
 
+	r_entry.val[0] = 0;
+	r_entry.val[1] = 0;
+
 	if (!zebu || !iommu_hack)
 		return 0;
 

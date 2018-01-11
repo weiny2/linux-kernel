@@ -159,7 +159,7 @@ static void hfi_tx_nonptl_pio(struct hfi_cmdq *cq, void *hdr, size_t hdr_len,
 	size_t offset, remaining_head_slot_bytes;
 
 	remaining_head_slot_bytes = 64 - hdr_len;
-	if (remaining_head_slot_bytes) {
+	if (remaining_head_slot_bytes && start) {
 		/*
 		 * Copy portion of payload into buffer for first CMDQ slot.
 		 * The provided header memory is required to be padded to
@@ -646,7 +646,7 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 
 	return 0;
 err:
-	wqe_iov_dma_cache_put(ibp->ibd, (struct hfi2_wqe_dma *)wqe_iov);
+	wqe_iov_dma_cache_put(ibp->ibd, &wqe_iov->dma);
 	return ret;
 }
 
@@ -871,7 +871,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 
 	return 0;
 err:
-	wqe_iov_dma_cache_put(ibp->ibd, (struct hfi2_wqe_dma *)wqe_iov);
+	wqe_iov_dma_cache_put(ibp->ibd, wqe_dma);
 	return ret;
 }
 
@@ -898,7 +898,7 @@ void *hfi2_rcv_get_ebuf(struct hfi2_ibrcv *rcv, u16 idx, u32 offset)
 int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry)
 {
 	int rc;
-	bool dropped;
+	bool dropped = false;
 
 	rc = hfi_eq_wait_irq(rcv->ctx, &rcv->eq, -1,
 			     rhf_entry, &dropped);
