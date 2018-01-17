@@ -1593,9 +1593,9 @@ void hfi_set_ext_led(struct hfi_pportdata *ppd, u32 on)
 		write_fzc_csr(ppd, FZC_LCB_CFG_LED, 0x10);
 }
 
-static void hfi_run_led_override(unsigned long opaque)
+static void hfi_run_led_override(struct timer_list *t)
 {
-	struct hfi_pportdata *ppd = (struct hfi_pportdata *)opaque;
+	struct hfi_pportdata *ppd = from_timer(ppd, t, led_override_timer);
 	unsigned long timeout;
 	int phase_idx;
 
@@ -1636,8 +1636,8 @@ void hfi_start_led_override(struct hfi_pportdata *ppd, unsigned int time_on,
 	 * timeout so the handler will be called soon to look at our request.
 	 */
 	if (!timer_pending(&ppd->led_override_timer)) {
-		setup_timer(&ppd->led_override_timer, hfi_run_led_override,
-			    (unsigned long)ppd);
+		timer_setup(&ppd->led_override_timer, hfi_run_led_override,
+			    0);
 		ppd->led_override_timer.expires = jiffies + 1;
 		add_timer(&ppd->led_override_timer);
 		atomic_set(&ppd->led_override_timer_active, 1);
@@ -2827,7 +2827,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 
 		hfi_shutdown_led_override(ppd);
 
-		if (ppd->led_override_timer.data) {
+		if (ppd->led_override_timer.function) {
 			del_timer_sync(&ppd->led_override_timer);
 			atomic_set(&ppd->led_override_timer_active, 0);
 		}
