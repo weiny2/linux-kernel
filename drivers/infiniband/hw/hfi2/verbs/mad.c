@@ -2855,11 +2855,7 @@ static int opa_local_smp_check(struct hfi2_ibport *ibp,
 	 */
 	if (pkey == OPA_LIM_MGMT_PKEY || pkey == OPA_FULL_MGMT_PKEY)
 		return 0;
-	/*
-	 * It is okay to lose the upper 16 bits of LID on OPA devices as this
-	 * information is obtained elsewhere. Mask off the upper 16 bits.
-	 */
-	ingress_pkey_table_fail(ppd, pkey, ib_lid_cpu16(0xFFFF & in_wc->slid));
+	ingress_pkey_table_fail(ppd, pkey, in_wc->slid);
 	return 1;
 }
 

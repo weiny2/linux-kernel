@@ -1310,7 +1310,7 @@ static bool ingress_pkey_table_search(struct hfi_pportdata *ppd, u16 pkey)
  * ingress_pkey_table_fail - record a failure of ingress pkey validation,
  */
 static void ingress_pkey_table_fail(struct hfi_pportdata *ppd, u16 pkey,
-				    u16 slid)
+				    u32 slid)
 {
 	if (!(ppd->err_info_rcv_constraint.status & OPA_EI_STATUS_SMASK)) {
 		ppd->err_info_rcv_constraint.status |= OPA_EI_STATUS_SMASK;
