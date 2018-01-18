@@ -285,15 +285,32 @@ void _hfi_format_put_flit_e2(struct hfi_ctx *ctx,
 	e->resp_md_opts		= resp_md_options.val;
 }
 
-/* Encoding of Native Verbs HDR DATA */
-#define FMT_VOSTLNP_HD(imm, mtype, sl, dst_qp) (((uint64_t)(imm)) << 32 |   \
+/* Encoding of Native Verbs MB, ROFFSET, and HDR_DATA */
+#define MB_OC_OK				0
+#define MB_OC_TX_FLUSH				1
+#define MB_OC_RX_FLUSH				2
+#define MB_OC_LOCAL_INV				3
+#define MB_OC_BIND_MW				4
+#define MB_OC_QP_RESET				5
+#define FMT_VOSTLNP_MB(opcode, src_qp, l32)	(((uint64_t)(opcode)) << 56 | \
+						((uint64_t)(src_qp)) << 32 | \
+						((uint64_t)(l32)) << 0)
+#define EXTRACT_MB_SRC_QP(mb)		_hfi_extract(mb, 32, 0x00ffffff00000000)
+#define EXTRACT_MB_OPCODE(mb)		_hfi_extract(mb, 56, 0xff00000000000000)
+#define FMT_UD_REMOTE_OFFSET(dlid, sl, pkey, src_qp) \
+						(((uint64_t)(dlid)) << 45 | \
+						((uint64_t)(sl)) << 40 | \
+						((uint64_t)(pkey)) << 24 | \
+						((uint64_t)(src_qp)) << 0)
+#define EXTRACT_UD_DLID(ro)		_hfi_extract(ro, 45, 0x0000e00000000000)
+#define EXTRACT_UD_SL(ro)		_hfi_extract(ro, 40, 0x00001f0000000000)
+#define EXTRACT_UD_RKEY(ro)		_hfi_extract(ro, 24, 0x000000ffff000000)
+#define EXTRACT_UD_SRC_QP(ro)		_hfi_extract(ro, 0, 0x0000000000ffffff)
+#define FMT_VOSTLNP_HD(imm, mtype, s, dst_qp)	(((uint64_t)(imm)) << 32 | \
 						((uint64_t)(mtype)) << 31 | \
-						((uint64_t)(sl)) << 26 |    \
+						((uint64_t)(s)) << 24 | \
 						((uint64_t)(dst_qp)) << 0)
-#define EXTRACT_HD_IMM_DATA(hd)	_hfi_extract(hd, 32, 0xffffffff00000000)
-#define EXTRACT_HD_SL(hd)	_hfi_extract(hd, 26, 0x000000007c000000)
-#define EXTRACT_HD_DST_QP(hd)	_hfi_extract(hd,  0, 0x0000000000ffffff)
-#define HFI_MTYPE_MR		0
-#define HFI_MTYPE_MW		1
+#define EXTRACT_HD_IMM_DATA(hd)		_hfi_extract(hd, 32, 0xffffffff00000000)
+#define EXTRACT_HD_DST_QP(hd)		_hfi_extract(hd,  0, 0x0000000000ffffff)
 
 #endif /* _HFI_TX_BASE_H */

@@ -122,22 +122,16 @@ const u8 hfi_rx_wc_flags[14] = {
 };
 
 /* Map fail_type to IB status - TODO - scrub table, need one for RX, TX? */
-const u8 hfi_ft_ib_status[19] = {
+const u8 hfi_ft_ib_status[16] = {
 	[PTL_NI_OK] = IB_WC_SUCCESS,
 	[PTL_NI_UNDELIVERABLE] = IB_WC_FATAL_ERR,
 	[PTL_NI_DROPPED] = IB_WC_FATAL_ERR,
-	[PTL_NI_CMD_FAILED] = IB_WC_FATAL_ERR,
 	[PTL_NI_INVALID_TARGET] = IB_WC_REM_INV_REQ_ERR,
-	[PTL_NI_PT_DISABLED] = IB_WC_FATAL_ERR,
+	[PTL_NI_PT_DISABLED] = IB_WC_RNR_RETRY_EXC_ERR,
 	[PTL_NI_PERM_VIOLATION] = IB_WC_REM_ACCESS_ERR,
 	[PTL_NI_OP_VIOLATION] = IB_WC_REM_OP_ERR,
-	[PTL_NI_SEGV] = IB_WC_FATAL_ERR,
-	[PTL_NI_NO_MATCH] = IB_WC_FATAL_ERR,
-	[PTL_NI_CANCELLED] = IB_WC_FATAL_ERR,
-	[PTL_NI_UNSUPPORTED] = IB_WC_REM_INV_REQ_ERR,
-	[PTL_NI_ACK_REFUSED] = IB_WC_FATAL_ERR,
-	[PTL_NI_CONNECT_FAILED] = IB_WC_FATAL_ERR,
-	[PTL_NI_UNREQUESTED] = IB_WC_FATAL_ERR
+	[PTL_NI_SEGV] = IB_WC_REM_ABORT_ERR,
+	[PTL_NI_UNSUPPORTED] = IB_WC_REM_OP_ERR,
 };
 
 static int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx);
@@ -706,7 +700,8 @@ qp_write_err:
  */
 static
 int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
-		    struct ib_recv_wr *wr, struct rvt_qp *qp)
+		    struct ib_recv_wr *wr, struct rvt_qp *qp,
+		    bool last_wr)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(ibpd);
 	struct rvt_mregion *mr;
@@ -806,13 +801,17 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 			       (void *)addr, length,
 			       hw_rq->recvq_root, pt, PTL_UID_ANY,
 			       hw_rq->hw_ctx->pid, pd_handle, me_options,
-			       PTL_CT_NONE, (u64)rq_wc_p, list_handle);
+			       PTL_CT_NONE, (u64)rq_wc_p, list_handle,
+			       !last_wr);
 	if (ret != 0)
 		goto me_cleanup;
 
-	ret = hfi_eq_poll_cmd_complete(hw_rq->hw_ctx, &rq_wc_p->done);
-	if (ret != 0)
-		goto me_cleanup;
+	/* process the CMD_COMPLETE if this was the last WR */
+	if (last_wr) {
+		ret = hfi_eq_poll_cmd_complete(hw_rq->hw_ctx, &rq_wc_p->done);
+		if (ret != 0)
+			goto me_cleanup;
+	}
 
 	return 0;
 
@@ -831,7 +830,8 @@ int hfi2_native_recv(struct rvt_qp *qp, struct ib_recv_wr *wr,
 
 	/* Refill RX hardware buffers */
 	do {
-		ret = hfi2_do_rx_work(qp->ibqp.pd, &qp->r_rq, wr, qp);
+		ret = hfi2_do_rx_work(qp->ibqp.pd, &qp->r_rq, wr, qp,
+				      !wr->next);
 		if (ret) {
 			*bad_wr = wr;
 			break;
@@ -872,7 +872,7 @@ int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 	/* Refill RX hardware buffers */
 	do {
 		ret = hfi2_do_rx_work(srq->ibsrq.pd, &srq->rq,
-				      wr, NULL);
+				      wr, NULL, !wr->next);
 		if (ret) {
 			*bad_wr = wr;
 			break;
@@ -905,7 +905,8 @@ int hfi2_process_tx_eq(union initiator_EQEntry *eq, struct ib_wc *wc)
 		qp = &swqe->qp->ibqp;
 	}
 
-	if (signal) {
+	if (signal || eq->fail_type) {
+		signal = 1;
 		/* Setup WC */
 		wc->wr_id = wr_id;
 		wc->status = hfi_ft_ib_status[eq->fail_type];
@@ -915,6 +916,8 @@ int hfi2_process_tx_eq(union initiator_EQEntry *eq, struct ib_wc *wc)
 		/* always set byte_len, but only needed for RDMA READ/ATOMIC */
 		wc->byte_len = eq->rlength;
 		wc->wc_flags = 0;
+
+		/* TODO - port error handling from user provider */
 	}
 
 	/* else we are only freeing IOVEC array */
@@ -926,10 +929,11 @@ static
 int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc)
 {
 	struct hfi_rq_wc *hfi_wc = (struct hfi_rq_wc *)eq->user_ptr;
+	u8 mb_opcode = EXTRACT_MB_OPCODE(eq->match_bits);
 	struct hfi_rq *rq;
 	struct rvt_qp *qp;
 	union hfi_process pt;
-	int ret;
+	int ret, signal;
 
 	if (hfi_wc->is_qp) {
 		qp = hfi_wc->qp;
@@ -948,29 +952,31 @@ int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc)
 	wc->vendor_err = eq->fail_type;
 	wc->byte_len = eq->mlength;
 	wc->qp = &qp->ibqp;
-	wc->src_qp = eq->roffset;
+	wc->src_qp = EXTRACT_UD_SRC_QP(eq->roffset);
 	wc->opcode = hfi_rx_opcode_wc[eq->atomic_op];
 	wc->wc_flags = hfi_rx_wc_flags[eq->atomic_op];
 	wc->ex.imm_data = EXTRACT_HD_IMM_DATA(eq->hdr_data);
 	wc->pkey_index = 0;  /* only QPN 0 and 1 set this */
-	wc->sl = EXTRACT_HD_SL(eq->hdr_data);
+	wc->sl = EXTRACT_UD_SL(eq->roffset);
 	pt.phys.val = eq->initiator_id;
 	wc->slid = pt.phys.slid;
-	// FIXME - need DLID
-	//wc->dlid_path_bits = dlid & port_lmc_mask;
+	wc->dlid_path_bits = EXTRACT_UD_DLID(eq->roffset);
+
+	/* TODO - port error handling from user provider */
+	WARN_ON(mb_opcode);
+	signal = 1;
 
 	/* Reuse List Entry */
 	ret = hfi2_push_key(&rq->ded_me_ks, hfi_wc->list_handle);
 	if (ret != 0) {
 		ret = hfi2_push_key(rq->hw_ctx->shr_me_ks,
 				    hfi_wc->list_handle);
-		if (ret != 0)
-			return -EINVAL;
+		WARN_ON(ret != 0);
 	}
 
 	/* Free hfi_rq_wc */
 	kfree(hfi_wc);
-	return 0;
+	return signal;
 }
 
 int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
@@ -995,9 +1001,8 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 
 		switch (kind) {
 		case NON_PTL_EVENT_VERBS_RX:
-			hfi2_process_rx_eq((union target_EQEntry *)eqe,
-					   (wc + i));
-			i++;
+			i += hfi2_process_rx_eq((union target_EQEntry *)eqe,
+						(wc + i));
 			break;
 		case NON_PTL_EVENT_VERBS_TX:
 			i += hfi2_process_tx_eq((union initiator_EQEntry *)eqe,

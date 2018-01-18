@@ -57,10 +57,11 @@
 #define RKEY_PID(rkey)			_hfi_extract(rkey, 20, 0xfff00000)
 #define RKEY_LIST_HANDLE(rkey)		_hfi_extract(rkey, 8, 0x000fff00)
 #define RKEY_SALT(rkey)			_hfi_extract(rkey, 0, 0x000000ff)
-#define RKEY_MATCH_BITS(rkey,pd)	RKEY_SALT(rkey)<<24 | ((pd)&0xffffff)
+#define RKEY_MATCH_BITS(rkey, pd)	((RKEY_SALT(rkey) << 24) | \
+					 ((pd) & 0xffffff))
 
 #define RECVQ_IGNORE_BITS		0xffffffffff000000ull
-#define RECVQ_MATCH_BITS(pd)		((pd)&0xffffff)
+#define RECVQ_MATCH_BITS(pd)		((pd) & 0xffffff)
 
 /* Format an RX CQ command for a RKEY WRITE operation */
 static inline
@@ -80,7 +81,7 @@ int hfi_format_rkey_write(hfi_ni_t ni,
 	cmd->list.flit0.d.initiator_id   = match_id.val;
 	cmd->list.flit0.d.ct_handle   = ct_handle;
 	cmd->list.flit0.d.command     = ENTRY_WRITE;
-	cmd->list.flit0.d.cmd_len     = (sizeof(cmd->list) >> 5)-1;
+	cmd->list.flit0.d.cmd_len     = (sizeof(cmd->list) >> 5) - 1;
 	cmd->state.flit0.d.ncc        = ncc;
 
 	cmd->list.flit1.e.val         = 0;
@@ -94,7 +95,7 @@ int hfi_format_rkey_write(hfi_ni_t ni,
 	cmd->list.flit1.j.ni          = ni;
 	cmd->list.flit1.j.v           = valid;
 
-	return sizeof(cmd->list)>>6;
+	return sizeof(cmd->list) >> 6;
 }
 
 /* Format an RX CQ command for a receive queue APPEND operation */
@@ -116,7 +117,7 @@ int hfi_format_recvq_append(hfi_ni_t ni,
 	cmd->list.flit0.d.initiator_id   = match_id.val;
 	cmd->list.flit0.d.ct_handle   = ct_handle;
 	cmd->list.flit0.d.command     = RECVQ_APPEND;
-	cmd->list.flit0.d.cmd_len     = (sizeof(cmd->list) >> 5)-1;
+	cmd->list.flit0.d.cmd_len     = (sizeof(cmd->list) >> 5) - 1;
 	cmd->state.flit0.d.ncc         = ncc;
 
 	cmd->list.flit1.e.cmd_pid     = pid;
@@ -130,7 +131,7 @@ int hfi_format_recvq_append(hfi_ni_t ni,
 	cmd->list.flit1.j.ni          = ni;
 	cmd->list.flit1.j.v           = 1;
 
-	return sizeof(cmd->list)>>6;
+	return sizeof(cmd->list) >> 6;
 }
 
 static inline
@@ -194,7 +195,8 @@ int hfi_recvq_append(struct hfi_cmdq *rx, hfi_ni_t ni,
 		uint32_t pd,
 		hfi_me_options_t me_options,
 		hfi_ct_handle_t ct_handle,
-		hfi_user_ptr_t user_ptr, hfi_me_handle_t me_handle)
+		hfi_user_ptr_t user_ptr, hfi_me_handle_t me_handle,
+		uint8_t ncc)
 {
 	union hfi_rx_cq_command cmd;
 	int cmd_slots, rc;
@@ -206,7 +208,7 @@ int hfi_recvq_append(struct hfi_cmdq *rx, hfi_ni_t ni,
 			id, pid, pd,
 			me_options, ct_handle,
 			user_ptr,
-			me_handle, HFI_GEN_CC, &cmd);
+			me_handle, ncc, &cmd);
 
 	do {
 		/* Single slot command */
@@ -217,33 +219,21 @@ int hfi_recvq_append(struct hfi_cmdq *rx, hfi_ni_t ni,
 }
 
 static inline
-int hfi_qp_write(struct hfi_cmdq *rx, uint8_t ni, struct hfi_ctx *ctx,
-		 uint32_t qp_num, uint64_t *val, uint64_t user_ptr)
+void hfi_format_entry_read(struct hfi_ctx *ctx,
+			   uint8_t ni, uint16_t me_handle,
+			   union hfi_rx_cq_command *cmd,
+			   uint64_t user_ptr)
 {
-	union hfi_rx_cq_command cmd;
-	int rc;
+	memset(&cmd->list, 0, sizeof(cmd->list));
 
-	cmd.verbs.flit0.p0            = val[0];
-	cmd.verbs.flit0.p1	      = val[1];
-	cmd.verbs.flit0.c.ptl_idx     = 0;
-	cmd.verbs.flit0.c.qp_num      = qp_num;
-	cmd.verbs.flit0.d.ni          = ni;
-	cmd.verbs.flit0.d.ct_handle   = PTL_CT_NONE;
-	cmd.verbs.flit0.d.ncc         = HFI_GEN_CC;
-	cmd.verbs.flit0.d.command     = QP_WRITE;
-	cmd.verbs.flit0.d.cmd_len     = (sizeof(cmd.verbs) >> 5)-1;
-
-	cmd.verbs.flit1.e.cmd_pid     = ctx->pid;
-	cmd.verbs.flit1.p2            = val[2];
-	cmd.verbs.flit1.p3            = val[3];
-	cmd.verbs.flit1.user_ptr      = user_ptr;
-
-	do {
-		/* Single slot command */
-		rc = hfi_rx_command(rx, (uint64_t *)&cmd, sizeof(cmd.verbs)>>6);
-	} while (rc == -EAGAIN);
-
-	return rc;
+	/* Only need ME/LE handle, process ID, NI, and portal table index */
+	cmd->list.flit1.e.list_handle = me_handle;
+	cmd->list.flit1.e.cmd_pid     = ctx->pid;
+	cmd->list.flit1.j.ni          = ni;
+	cmd->list.flit0.d.ct_handle   = HFI_CT_NONE;
+	cmd->list.flit0.d.command     = ENTRY_READ;
+	cmd->list.flit0.d.cmd_len     = (sizeof(cmd->list) >> 5) - 1;
+	cmd->list.flit1.g	      = user_ptr;
 }
 
 static inline
@@ -257,7 +247,7 @@ int hfi_recvq_init(struct hfi_cmdq *rx, uint8_t ni, struct hfi_ctx *ctx,
 	cmd.list.flit0.d.ct_handle	= PTL_CT_NONE;
 	cmd.list.flit0.d.ncc		= HFI_GEN_CC;
 	cmd.list.flit0.d.command	= RECVQ_INIT;
-	cmd.list.flit0.d.cmd_len	= (sizeof(cmd.list) >> 5)-1;
+	cmd.list.flit0.d.cmd_len	= (sizeof(cmd.list) >> 5) - 1;
 
 	cmd.list.flit1.e.cmd_pid	= ctx->pid;
 	cmd.list.flit1.e.list_handle	= recvq_root;
@@ -265,7 +255,34 @@ int hfi_recvq_init(struct hfi_cmdq *rx, uint8_t ni, struct hfi_ctx *ctx,
 
 	do {
 		/* Single slot command */
-		rc = hfi_rx_command(rx, (uint64_t *)&cmd, sizeof(cmd.list)>>6);
+		rc = hfi_rx_command(rx, (uint64_t *)&cmd,
+				    sizeof(cmd.list) >> 6);
+	} while (rc == -EAGAIN);
+
+	return rc;
+}
+
+static inline
+int hfi_recvq_unlink(struct hfi_cmdq *rx, uint8_t ni, struct hfi_ctx *ctx,
+		     uint32_t recvq_root, uint64_t user_ptr)
+{
+	union hfi_rx_cq_command cmd;
+	int rc;
+
+	cmd.list.flit0.d.ct_handle	= PTL_CT_NONE;
+	cmd.list.flit0.d.ncc		= HFI_GEN_CC;
+	cmd.list.flit0.d.command	= RECVQ_UNLINK;
+	cmd.list.flit0.d.cmd_len	= (sizeof(cmd.list) >> 5) - 1;
+
+	cmd.list.flit1.e.cmd_pid	= ctx->pid;
+	cmd.list.flit1.e.min_free       = recvq_root;	// FIXME
+	cmd.list.flit1.g		= user_ptr;
+	cmd.list.flit1.j.ni             = ni;
+
+	do {
+		/* Single slot command */
+		rc = hfi_rx_command(rx, (uint64_t *)&cmd,
+				    sizeof(cmd.list) >> 6);
 	} while (rc == -EAGAIN);
 
 	return rc;
