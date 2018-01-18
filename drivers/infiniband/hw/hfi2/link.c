@@ -420,9 +420,10 @@ static void set_mgmt_allowed(struct hfi_pportdata *ppd)
 	if (ppd->neighbor_type == NEIGHBOR_TYPE_HFI) {
 		ppd->mgmt_allowed = 1;
 	} else {
-		hfi2_read_8051_config(ppd, REMOTE_LNI_INFO, GENERAL_CONFIG, &frame);
+		hfi2_read_8051_config(ppd, REMOTE_LNI_INFO, GENERAL_CONFIG,
+				      &frame);
 		ppd->mgmt_allowed = (frame >> MGMT_ALLOWED_SHIFT)
-		& MGMT_ALLOWED_MASK;
+				    & MGMT_ALLOWED_MASK;
 	}
 }
 
