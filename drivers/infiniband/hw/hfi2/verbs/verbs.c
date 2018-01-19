@@ -149,6 +149,7 @@ static void fill_device_attr(struct hfi2_ibdev *ibd)
 		IB_DEVICE_BAD_QKEY_CNTR | IB_DEVICE_SHUTDOWN_PORT |
 		IB_DEVICE_SYS_IMAGE_GUID | IB_DEVICE_RC_RNR_NAK_GEN |
 		IB_DEVICE_PORT_ACTIVE_EVENT | IB_DEVICE_SRQ_RESIZE |
+		IB_DEVICE_MEM_MGT_EXTENSIONS |
 		IB_DEVICE_RDMA_NETDEV_OPA_VNIC;
 	props->page_size_cap = PAGE_SIZE;
 #if 0
@@ -160,7 +161,8 @@ static void fill_device_attr(struct hfi2_ibdev *ibd)
 	props->vendor_part_id = dd->pdev->device;
 	props->hw_ver = dd->pdev->revision;
 	props->sys_image_guid = hfi2_sys_guid;
-	props->max_mr_size = ~0ULL;
+	props->max_mr_size = U64_MAX;
+	props->max_fast_reg_page_list_len = UINT_MAX;
 	props->max_qp = hfi2_max_qps;
 	props->max_qp_wr = hfi2_max_qp_wrs;
 	props->max_sge = hfi2_max_sges;
