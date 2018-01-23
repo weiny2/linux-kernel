@@ -58,32 +58,35 @@
 #define IB_REMOTE_FLAGS	(IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | \
 			 IB_ACCESS_REMOTE_ATOMIC)
 
-#define LKEY_TO_INDEX(lkey)	(((lkey) >> 8) & 0xFFFFFF)
-
 int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region)
 {
 	struct hfi_ibcontext *ctx = NULL;
+	struct rvt_mregion *lkey_mr;
 	u32 lkey, rkey;
+	bool need_reserved_rkey;
+
+	ctx = ibpd_to_ibctx(mr->pd);
+	if (!ctx) {
+		WARN_ON(!ctx);
+		return -EINVAL;
+	}
+
+	need_reserved_rkey = !ctx->is_user && !dma_region;
 
 	if (dma_region) {
 		/* Use a reserved LKEY for kernel DMA */
 		lkey = 0;
+		lkey_mr = NULL;
 	} else {
-		ctx = ibpd_to_ibctx(mr->pd);
-		if (!ctx) {
-			WARN_ON(!ctx);
-			return -EINVAL;
-		}
-
 		/* Allocate LKEY */
 		lkey = hfi2_pop_key(&ctx->lkey_ks);
 		if (lkey == INVALID_KEY)
 			return -ENOMEM;
+		lkey_mr = mr;
 	}
 
-	if (acc_flags & IB_REMOTE_FLAGS) {
-		/* TODO - doesn't yet support RKEY for DMA_MR */
-		if (!ctx || ctx->lkey_only) {
+	if (need_reserved_rkey || (acc_flags & IB_REMOTE_FLAGS)) {
+		if (ctx->lkey_only) {
 			rkey = lkey;
 		} else {
 			/* Allocate RKEY */
@@ -103,8 +106,8 @@ int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region)
 	mr->access_flags = acc_flags;
 	mr->lkey_published = 1;
 	/* TODO - review locking of lkey_mr[] */
-	if (ctx)
-		ctx->lkey_mr[LKEY_TO_INDEX(lkey)] = mr;
+	ctx->lkey_mr[LKEY_INDEX(lkey)] = lkey_mr;
+
 	return 0;
 }
 
@@ -113,37 +116,30 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 	struct hfi_ibcontext *ctx = ibpd_to_ibctx(mr->pd);
 	int ret;
 
-	if (!ctx) {
-		if (mr->lkey)
-			return -EINVAL;
-		/* This is the reserved LKEY for kernel DMA */
-		/* TODO - free RKEY when implemented */
-		goto done;
-	}
-
 	/* Check LKEY */
-	if (LKEY_TO_INDEX(mr->lkey) >= ctx->lkey_ks.num_keys)
+	if (!ctx || LKEY_INDEX(mr->lkey) >= ctx->lkey_ks.num_keys)
 		return -EINVAL;
 
 	/* Return RKEY */
-	if (!ctx->lkey_only && mr->rkey != INVALID_KEY) {
+	if (!ctx->lkey_only && !IS_INVALID_KEY(mr->rkey)) {
 		ret = hfi2_push_key(&ctx->rkey_ks, mr->rkey);
-		if (ret != 0)
-			return ret;
-		mr->rkey = INVALID_KEY;
+		/* If this fails we've somehow leaked an RKEY, but is freed */
+		WARN_ON(ret != 0);
 	}
 
-	/* Cannot find MR after this */
-	WARN_ON(!mr->lkey_published);
-	ctx->lkey_mr[LKEY_TO_INDEX(mr->lkey)] = NULL;
-	/* TODO - review locking of lkey_mr[] */
+	/* We skip free of the reserved LKEY for kernel DMA */
+	if (mr->lkey != 0) {
+		/* Cannot find MR after this */
+		WARN_ON(!mr->lkey_published);
+		ctx->lkey_mr[LKEY_INDEX(mr->lkey)] = NULL;
+		/* TODO - review locking of lkey_mr[] */
 
-	/* Return LKEY */
-	ret = hfi2_push_key(&ctx->lkey_ks, mr->lkey);
-	/* If this fails we've somehow leaked an LKEY, but is freed */
-	WARN_ON(ret != 0);
+		/* Return LKEY */
+		ret = hfi2_push_key(&ctx->lkey_ks, RESET_LKEY(mr->lkey));
+		/* If this fails we've somehow leaked an LKEY, but is freed */
+		WARN_ON(ret != 0);
+	}
 
-done:
 	/*
 	 * Mark MR free, note there is some delay before rdmavt frees
 	 * the MR completely, as it waits for refcount to reach 0.
@@ -160,40 +156,21 @@ done:
 struct rvt_mregion *hfi2_find_mr_from_lkey(struct rvt_pd *pd, u32 lkey)
 {
 	struct hfi_ibcontext *ctx = ibpd_to_ibctx(&pd->ibpd);
-	struct rvt_mregion *mr = NULL;
-	u32 key_idx;
 
-	if (lkey == 0) {
-		/* return MR for the reserved LKEY */
-		rcu_read_lock();
-		mr = rcu_dereference(ib_to_rvt(pd->ibpd.device)->dma_mr);
-		if (mr)
-			rvt_get_mr(mr);
-		rcu_read_unlock();
-	} else {
-		if (!ctx) {
-			WARN_ON(!ctx);
-			return NULL;
-		}
-		key_idx = LKEY_TO_INDEX(lkey);
-		if (key_idx >= ctx->lkey_ks.num_keys)
-			return NULL;
-		/* TODO - review locking of lkey_mr[] */
-		mr = ctx->lkey_mr[key_idx];
-		if (mr)
-			rvt_get_mr(mr);
-	}
-
-	return mr;
+	return _hfi2_find_mr_from_lkey(ctx, lkey, true);
 }
 
-struct rvt_mregion *hfi2_find_mr_from_rkey(struct rvt_pd *pd, u32 lkey)
+struct rvt_mregion *hfi2_find_mr_from_rkey(struct rvt_pd *pd, u32 rkey)
 {
 	struct hfi_ibcontext *ctx = ibpd_to_ibctx(&pd->ibpd);
 
-	/* TODO - don't yet support unique RKEY (from LKEY) */
-	if (!ctx || ctx->lkey_only)
-		return hfi2_find_mr_from_lkey(pd, lkey);
-	else
+	if (!ctx) {
+		WARN_ON(!ctx);
 		return NULL;
+	} else if (ctx->lkey_only) {
+		return hfi2_find_mr_from_lkey(pd, rkey);
+	}
+
+	/* TODO - don't yet support unique RKEY (from LKEY) */
+	return NULL;
 }

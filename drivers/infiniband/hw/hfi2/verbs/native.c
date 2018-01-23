@@ -52,8 +52,6 @@
  * Intel(R) OPA Gen2 Verbs over Native provider
  */
 
-#include "hfi2.h"
-#include "verbs.h"
 #include "native.h"
 
 /* TODO - move this to header with HW defines */
@@ -155,16 +153,32 @@ static void hfi2_free_all_keys(struct hfi_ibcontext *ctx)
 void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, void *udata,
 				bool is_enabled)
 {
-	ctx->supports_native = is_enabled;
-	ctx->lkey_only = true;
-	ctx->is_user = !!udata;
-
 	/* Init key stacks */
 	ctx->rkey_ks.key_head = 0;
 	ctx->lkey_ks.key_head = 0;
 	mutex_init(&ctx->rkey_ks.lock);
 	mutex_init(&ctx->lkey_ks.lock);
-	hfi2_add_keys(ctx, NULL);
+
+	ctx->is_user = !!udata;
+	/* Only enable native Verbs for kernel clients */
+	ctx->supports_native = is_enabled && !ctx->is_user;
+	if (ctx->supports_native) {
+#if 0 /* TODO */
+		/* Early memory registration needs HW context */
+		ret = hfi2_add_initial_hw_ctx(ctx);
+		/*
+		 * If error, we have run out of HW contexts.
+		 * So fallback to legacy transport.
+		 */
+		if (ret != 0)
+#endif
+			ctx->supports_native = false;
+	}
+
+	/* Use single key when not native Verbs */
+	ctx->lkey_only = !ctx->supports_native;
+	if (ctx->lkey_only)
+		hfi2_add_keys(ctx, NULL);
 }
 
 void hfi2_native_dealloc_ucontext(struct hfi_ibcontext *ctx)

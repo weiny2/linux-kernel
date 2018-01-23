@@ -57,15 +57,20 @@
 
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_vt.h>
+#include "verbs.h"
 
+#define RESET_LKEY(key)	((key) & 0xFFFFFF00)
+#define LKEY_INDEX(key)	(((key) >> 8) & 0xFFFFFF)
 #define INVALID_KEY	0xffffffff
+#define INVALID_KEY_IDX	0xffffff00
+#define IS_INVALID_KEY(key) (RESET_LKEY(key) == INVALID_KEY_IDX)
 
 static inline
 struct hfi_ibcontext *ibpd_to_ibctx(struct ib_pd *obj)
 {
-	if (obj->uobject)
-		return (struct hfi_ibcontext *)(obj->uobject->context);
-	return NULL;
+	return (struct hfi_ibcontext *)
+		(obj->uobject ? obj->uobject->context :
+				to_hfi_ibd(obj->device)->ibkc);
 }
 
 static inline
@@ -108,6 +113,57 @@ int hfi2_push_key(struct hfi_ks *ks, u32 key)
 push_exit:
 	mutex_unlock(&ks->lock);
 	return ret;
+}
+
+static inline
+struct rvt_mregion *_hfi2_find_mr_from_lkey(struct hfi_ibcontext *ctx, u32 lkey,
+					    bool inc)
+{
+	struct rvt_mregion *mr = NULL;
+	u32 key_idx;
+
+	if (lkey == 0) {
+		/* return MR for the reserved LKEY */
+		rcu_read_lock();
+		mr = rcu_dereference(ib_to_rvt(ctx->ibuc.device)->dma_mr);
+		if (mr && inc)
+			rvt_get_mr(mr);
+		rcu_read_unlock();
+	} else {
+		if (!ctx) {
+			WARN_ON(!ctx);
+			return NULL;
+		}
+		key_idx = LKEY_INDEX(lkey);
+		if (key_idx >= ctx->lkey_ks.num_keys)
+			return NULL;
+		/* TODO - review locking of lkey_mr[] */
+		mr = ctx->lkey_mr[key_idx];
+		if (mr && inc)
+			rvt_get_mr(mr);
+	}
+
+	return mr;
+}
+
+static inline
+struct rvt_mregion *hfi2_chk_mr_sge(struct hfi_ibcontext *ctx,
+				    struct ib_sge *sge)
+{
+	struct rvt_mregion *mr;
+
+	/* TODO - pass false for last argument.
+	 * Legacy QPs will reference count the MR, but this doesn't
+	 * seem necessary for native transport.... revisit.
+	 */
+	mr = _hfi2_find_mr_from_lkey(ctx, sge->lkey, false);
+#if 0
+	if (!mr || (mr->lkey != sge->lkey) ||
+	    (sge->addr < (u64)mr->user_base) ||
+	    (sge->addr + sge->length > ((u64)mr->user_base) + mr->length))
+		return NULL;
+#endif
+	return mr;
 }
 
 #ifndef CONFIG_HFI2_STLNP

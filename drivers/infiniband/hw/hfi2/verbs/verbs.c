@@ -72,7 +72,7 @@
 
 static bool enable_native_verbs;
 
-static bool enable_lkey_callbacks;
+static bool enable_lkey_callbacks = true;
 module_param(enable_lkey_callbacks, bool, 0444);
 MODULE_PARM_DESC(enable_lkey_callbacks, "Enable self-managed MR KEYs");
 
@@ -359,9 +359,11 @@ static int hfi2_dealloc_ucontext(struct ib_ucontext *ibuc)
 {
 	struct hfi_ibcontext *uc;
 
-	uc = container_of(ibuc, struct hfi_ibcontext, ibuc);
-	hfi2_native_dealloc_ucontext(uc);
-	kfree(uc);
+	if (ibuc) {
+		uc = container_of(ibuc, struct hfi_ibcontext, ibuc);
+		hfi2_native_dealloc_ucontext(uc);
+		kfree(uc);
+	}
 	return 0;
 }
 
@@ -562,6 +564,13 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 		ibd->rdi.driver_f.free_lkey = hfi2_free_lkey;
 		ibd->rdi.driver_f.find_mr_from_lkey = hfi2_find_mr_from_lkey;
 		ibd->rdi.driver_f.find_mr_from_rkey = hfi2_find_mr_from_rkey;
+
+		/* create IB context for kernel clients */
+		ibd->ibkc = hfi2_alloc_ucontext(ibdev, NULL);
+		if (IS_ERR(ibd->ibkc)) {
+			ret = PTR_ERR(ibd->ibkc);
+			goto err;
+		}
 	}
 #endif
 
@@ -596,6 +605,9 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 
 err_reg:
 	dd_dev_err(ibd->dd, "Failed to register with RDMAVT: %d\n", ret);
+	hfi2_dealloc_ucontext(ibd->ibkc);
+err:
+	ibd->ibkc = NULL;
 	return ret;
 }
 
@@ -603,8 +615,10 @@ static void hfi2_unregister_device(struct hfi2_ibdev *ibd)
 {
 	if (ibd->rdi.ibdev.specs_root)
 		uverbs_free_spec_tree(ibd->rdi.ibdev.specs_root);
-
 	rvt_unregister_device(&ibd->rdi);
+	if (ibd->ibkc)
+		hfi2_dealloc_ucontext(ibd->ibkc);
+	ibd->ibkc = NULL;
 }
 
 static int hfi2_init_port(struct hfi2_ibdev *ibd,

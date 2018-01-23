@@ -223,6 +223,7 @@ struct hfi2_ibdev {
 	bool rc_drop_enabled;
 	int assigned_node_id;
 	struct hfi2_ibport *pport;
+	struct ib_ucontext *ibkc;
 
 	/* per device cq worker */
 	struct kthread_worker *worker;
