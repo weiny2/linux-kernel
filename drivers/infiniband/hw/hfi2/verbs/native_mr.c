@@ -157,6 +157,10 @@ struct rvt_mregion *hfi2_find_mr_from_lkey(struct rvt_pd *pd, u32 lkey)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&pd->ibpd);
 
+	if (!ctx) {
+		WARN_ON(!ctx);
+		return NULL;
+	}
 	return _hfi2_find_mr_from_lkey(ctx, lkey, true);
 }
 
@@ -167,10 +171,24 @@ struct rvt_mregion *hfi2_find_mr_from_rkey(struct rvt_pd *pd, u32 rkey)
 	if (!ctx) {
 		WARN_ON(!ctx);
 		return NULL;
-	} else if (ctx->lkey_only) {
-		return hfi2_find_mr_from_lkey(pd, rkey);
 	}
 
-	/* TODO - don't yet support unique RKEY (from LKEY) */
-	return NULL;
+	if (ctx->lkey_only)
+		return _hfi2_find_mr_from_lkey(ctx, rkey, true);
+	else
+		return _hfi2_find_mr_from_rkey(ctx, rkey);
+}
+
+struct rvt_mregion *_hfi2_find_mr_from_rkey(struct hfi_ibcontext *ctx, u32 rkey)
+{
+	struct rvt_mregion *mr = NULL;
+	int i;
+
+	for (i = 0; i < ctx->rkey_ks.num_keys; i++)
+		if (ctx->lkey_mr[i] && ctx->lkey_mr[i]->rkey == rkey) {
+			mr = ctx->lkey_mr[i];
+			rvt_get_mr(mr);
+			break;
+		}
+	return mr;
 }

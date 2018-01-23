@@ -167,10 +167,6 @@ struct rvt_mregion *_hfi2_find_mr_from_lkey(struct hfi_ibcontext *ctx, u32 lkey,
 			rvt_get_mr(mr);
 		rcu_read_unlock();
 	} else {
-		if (!ctx) {
-			WARN_ON(!ctx);
-			return NULL;
-		}
 		key_idx = LKEY_INDEX(lkey);
 		if (key_idx >= ctx->lkey_ks.num_keys)
 			return NULL;
@@ -214,6 +210,8 @@ int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region);
 int hfi2_free_lkey(struct rvt_mregion *mr);
 struct rvt_mregion *hfi2_find_mr_from_lkey(struct rvt_pd *pd, u32 lkey);
 struct rvt_mregion *hfi2_find_mr_from_rkey(struct rvt_pd *pd, u32 rkey);
+struct rvt_mregion *_hfi2_find_mr_from_rkey(struct hfi_ibcontext *ctx,
+					    u32 rkey);
 int hfi2_native_modify_qp(struct rvt_qp *rvtqp,
 			  struct ib_qp_attr *attr, int attr_mask,
 			  struct ib_udata *udata);

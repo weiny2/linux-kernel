@@ -616,7 +616,19 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_rdma_wr *wr)
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
 	u64 done = 0;
 	int ret;
+	struct rvt_mregion *mr = NULL;
 
+	if (!wr->rkey || IS_INVALID_KEY(wr->rkey))
+		return 0;
+	mr = _hfi2_find_mr_from_rkey(ctx, wr->rkey);
+	if (!mr)
+		return 0;
+	if (atomic_read(&mr->lkey_invalid)) {
+		rvt_put_mr(mr);
+		return 0;
+	}
+	atomic_set(&mr->lkey_invalid, 1);
+	rvt_put_mr(mr);
 	ret = hfi_rkey_invalidate(ctx->rx_cmdq, wr->rkey,
 				  (u64)&done);
 	if (ret != 0)
@@ -675,6 +687,13 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 		hfi2_nfence(qp);
 		nslots = hfi2_do_local_inv(qp, rdma_wr(wr));
 		break;
+	case IB_WR_REG_MR:
+		ret = rvt_fast_reg_mr(qp,
+				      reg_wr(wr)->mr,
+				      reg_wr(wr)->key,
+				      reg_wr(wr)->access);
+		WARN_ONCE(signal, "need to send sw wc on REG_MR WR\n");
+		return ret;
 	default:
 		nslots = -EINVAL;
 		break;
