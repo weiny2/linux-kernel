@@ -4410,8 +4410,13 @@ void hfi_cmdq_config(struct hfi_ctx *ctx, u16 cmdq_idx,
 	tx_config |= (FXR_TXCID_CFG_CSR_PHYS_DLID_MASK &
 			 ctx->allow_phys_dlid) <<
 			 FXR_TXCID_CFG_CSR_PHYS_DLID_SHIFT;
-	/* Use enabled SLs from port 0. MC1 assumes all SLs are enabled */
-	if (ctx->pid == HFI_PID_SYSTEM)
+	/*
+	 * Use enabled SLs from port 0. MC1 assumes all SLs are enabled.
+	 * This is to properly restrict user-space selection of SL.
+	 * Kernel ULPs are trusted and might allocate resources before SL pairs
+	 * are configured, so allow any SL for kernel contexts.
+	 */
+	if (ctx->type == HFI_CTX_TYPE_KERNEL)
 		tx_config |= FXR_TXCID_CFG_CSR_SL_ENABLE_SMASK;
 	else if (IS_PID_BYPASS(ctx))
 		tx_config |= (FXR_TXCID_CFG_CSR_SL_ENABLE_MASK &
