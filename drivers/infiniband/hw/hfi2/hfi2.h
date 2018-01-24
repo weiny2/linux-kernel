@@ -921,6 +921,7 @@ struct hfi_pportdata {
 };
 
 struct hfi2_netdev;
+extern const struct pci_error_handlers hfi_pci_err_handler;
 
 struct hfi_i2c_bus {
 	struct hfi_pportdata *ppd;

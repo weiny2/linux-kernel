@@ -73,6 +73,7 @@ static struct pci_driver hfi_driver = {
 	.probe = hfi_pci_probe,
 	.remove = hfi_pci_remove,
 	.id_table = hfi_pci_tbl,
+	.err_handler = &hfi_pci_err_handler,
 };
 
 /*

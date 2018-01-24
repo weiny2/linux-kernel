@@ -79,6 +79,43 @@ static void hfi_enable_intx(struct pci_dev *pdev)
 }
 
 /*
+ * From here through hfi_pci_err_handler definition is invoked via
+ * PCI error infrastructure, registered via pci
+ */
+static pci_ers_result_t hfi_pci_error_detected(struct pci_dev *pdev,
+					       pci_channel_state_t state)
+{
+	return PCI_ERS_RESULT_RECOVERED;
+}
+
+static pci_ers_result_t hfi_pci_mmio_enabled(struct pci_dev *pdev)
+{
+	return PCI_ERS_RESULT_RECOVERED;
+}
+
+static pci_ers_result_t hfi_pci_slot_reset(struct pci_dev *pdev)
+{
+	struct hfi_devdata *dd = pci_get_drvdata(pdev);
+
+	dd_dev_info(dd, "HFI slot_reset function called, ignored\n");
+	return PCI_ERS_RESULT_CAN_RECOVER;
+}
+
+static void hfi_pci_resume(struct pci_dev *pdev)
+{
+	struct hfi_devdata *dd = pci_get_drvdata(pdev);
+
+	dd_dev_info(dd, "HFI resume function called\n");
+}
+
+const struct pci_error_handlers hfi_pci_err_handler = {
+	.error_detected = hfi_pci_error_detected,
+	.mmio_enabled = hfi_pci_mmio_enabled,
+	.slot_reset = hfi_pci_slot_reset,
+	.resume = hfi_pci_resume,
+};
+
+/*
  * Do all the common PCIe setup and initialization.
  * devdata is not yet allocated, and is not allocated until after this
  * routine returns success.  Therefore dd_dev_err() can't be used for error
