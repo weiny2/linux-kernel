@@ -1387,7 +1387,7 @@ static bool hfi_ec_has_event(struct hfi_ctx *ctx,
 }
 
 int hfi_ib_eq_arm(struct hfi_ctx *ctx, u16 eq_idx, struct ib_cq *ibcq,
-		  u64 *user_data0, u64 *user_data1)
+		  u64 user_data0, u64 user_data1)
 {
 	struct hfi_eq_mgmt *eqm;
 	int ret;
@@ -1397,29 +1397,17 @@ int hfi_ib_eq_arm(struct hfi_ctx *ctx, u16 eq_idx, struct ib_cq *ibcq,
 
 	ret = hfi_eq_setup(ctx, eq_idx, &eqm);
 	if (ret)
-		goto idr_end;
+		goto err;
 
 	/* associate eq with self event channel */
 	eqm->ec = (struct hfi_ec_entry *)eqm;
-	eqm->user_handle = *user_data1;
+	eqm->user_handle = user_data1;
 	eqm->cookie = (void *)(ctx);
 	eqm->mode = HFI_EC_MODE_IB;
 	eqm->ibcq = ibcq;
 
-	if (ctx->type != HFI_CTX_TYPE_KERNEL) { /* user */
-		ret = hfi_eq_arm(ctx, eqm, *user_data0);
-		if (ret)
-			goto idr_end;
-
-		/*
-		 * clear data0, user space will know this
-		 * thread has setup the interrupt and
-		 * wait for completion.
-		 */
-		*user_data0 = 0;
-	}
-
-idr_end:
+	ret = hfi_eq_arm(ctx, eqm, user_data0);
+err:
 	mutex_unlock(&ctx->event_mutex);
 	up_read(&ctx->ctx_rwsem);
 

@@ -548,6 +548,47 @@ static int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
 	return rc;
 }
 
+static int hfi_ib_eq_setup(struct hfi_rq *rq, struct rvt_cq *cq)
+{
+	struct opa_ev_assign eq_alloc = {0};
+	struct hfi_eq *eq;
+	int ret;
+
+	eq_alloc.ni = NATIVE_NI;
+	eq_alloc.count = adjust_cqe(cq->ibcq.cqe);
+	cq->hw_disarmed = 1;
+	cq->hw_cq = hfi_eq_alloc(rq->hw_ctx, &eq_alloc);
+	if (IS_ERR(cq->hw_cq)) {
+		ret = PTR_ERR(cq->hw_cq);
+		cq->hw_cq = NULL;
+		return ret;
+	}
+
+	if (cq->notify & IB_CQ_SOLICITED_MASK) {
+		u64 done = 0;
+
+		/* arm the HW event queue for interrupts */
+		eq = cq->hw_cq;
+		ret = hfi_ib_eq_arm(rq->hw_ctx, eq->idx, &cq->ibcq,
+				    (u64)&done, (u64)&cq->hw_disarmed);
+		if (ret)
+			goto eq_err;
+
+		/* wait completion to turn on interrupt */
+		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &done);
+		if (ret)
+			goto eq_err;
+		cq->hw_disarmed = 0; /* arming succeeded */
+	}
+
+	return 0;
+
+eq_err:
+	hfi_eq_free(rq->hw_ctx, eq);
+	cq->hw_cq =  NULL;
+	return ret;
+}
+
 int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 			  int attr_mask, struct ib_udata *udata)
 {
@@ -599,19 +640,14 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		   attr->qp_state == IB_QPS_RTR) {
 		struct hfi2_ibport *ibp;
 		struct hfi_e2e_conn conn;
-		struct opa_ev_assign eq_alloc = {0};
 		struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
 
 		/* create recv EQ if first use of CQ */
 		cq = ibcq_to_rvtcq(ibqp->recv_cq);
 		if (cq && !cq->hw_cq) {
-			eq_alloc.ni = NATIVE_NI;
-			eq_alloc.count = adjust_cqe(cq->ibcq.cqe);
-			cq->hw_cq = hfi_eq_alloc(rq->hw_ctx, &eq_alloc);
-			if (IS_ERR(cq->hw_cq)) {
-				ret = PTR_ERR(cq->hw_cq);
+			ret = hfi_ib_eq_setup(rq, cq);
+			if (ret != 0)
 				goto qp_write_err;
-			}
 		}
 
 		/* alloc fence CT */
@@ -667,16 +703,9 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		/* create send EQ if first use of CQ */
 		cq = ibcq_to_rvtcq(ibqp->send_cq);
 		if (cq && !cq->hw_cq) {
-			struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
-			struct opa_ev_assign eq_alloc = {0};
-
-			eq_alloc.ni = NATIVE_NI;
-			eq_alloc.count = adjust_cqe(cq->ibcq.cqe);
-			cq->hw_cq = hfi_eq_alloc(rq->hw_ctx, &eq_alloc);
-			if (IS_ERR(cq->hw_cq)) {
-				ret = PTR_ERR(cq->hw_cq);
+			ret = hfi_ib_eq_setup(rvtqp->r_rq.hw_rq, cq);
+			if (ret != 0)
 				goto qp_write_err;
-			}
 		}
 	}
 
@@ -1018,4 +1047,33 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 	}
 
 	return i;
+}
+
+int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
+{
+	struct hfi_ibcontext *ctx = obj_to_ibctx(ibcq);
+	struct rvt_cq *cq = ibcq_to_rvtcq(ibcq);
+	struct hfi_eq *eq = cq->hw_cq;
+	int ret;
+	u64 done = 0;
+
+	ret = rvt_req_notify_cq(ibcq, flags);
+	if (ret || !ctx->supports_native || !eq)
+		return ret;
+
+	/* check if already armed */
+	if (!cq->hw_disarmed)
+		return 0;
+
+	/* arm the HW event queue for interrupts */
+	ret = hfi_ib_eq_arm(ctx->hw_ctx, eq->idx, ibcq,
+			    (u64)&done, (u64)&cq->hw_disarmed);
+	if (!ret) {
+		/* wait completion to turn on interrupt */
+		ret = hfi_eq_poll_cmd_complete(ctx->hw_ctx, &done);
+		if (!ret)
+			cq->hw_disarmed = 0; /* arming succeeded */
+	}
+
+	return ret;
 }

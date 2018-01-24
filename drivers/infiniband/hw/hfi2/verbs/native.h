@@ -224,5 +224,6 @@ int hfi2_native_recv(struct rvt_qp *qp, struct ib_recv_wr *wr,
 int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 			 struct ib_recv_wr **bad_wr);
 int hfi2_poll_cq(struct ib_cq *cq, int ne, struct ib_wc *wc);
+int hfi2_req_notify_cq(struct ib_cq *cq, enum ib_cq_notify_flags flags);
 #endif
 #endif /* NATIVE_VERBS_H */

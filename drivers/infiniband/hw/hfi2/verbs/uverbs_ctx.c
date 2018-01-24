@@ -332,9 +332,16 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 			break;
 		}
 		ret = hfi_ib_eq_arm(ctx, cmd.idx1, uobj->object,
-				    &cmd.data0, &cmd.data1);
+				    cmd.data0, cmd.data1);
 		if (ret)
 			break;
+
+		/*
+		 * clear data0, user space will know this
+		 * thread has setup the interrupt and
+		 * wait for completion.
+		 */
+		cmd.data0 = 0;
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP, &resp,
