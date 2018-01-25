@@ -2723,7 +2723,6 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 				    __func__);
 		} else {
 			ppd->host_link_state = HLS_UP_ACTIVE;
-
 			/* Signal the IB layer that the port has went active */
 			event.device = &ppd->dd->ibd->rdi.ibdev;
 			event.element.port_num = ppd->pnum;
