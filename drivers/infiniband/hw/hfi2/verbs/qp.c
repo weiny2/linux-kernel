@@ -413,6 +413,9 @@ void notify_qp_reset(struct rvt_qp *qp)
 	priv = qp->priv;
 	qp->r_adefered = 0;
 	hfi2_ctx_release_qp(priv);
+#ifdef CONFIG_HFI2_STLNP
+	hfi2_native_reset_qp(qp);
+#endif
 	/*
 	 * pmtu unused for UD transport (unfragmented), so set to maximum here
 	 * as logic to write DMA commands uses this.

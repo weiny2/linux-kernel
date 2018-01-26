@@ -126,7 +126,7 @@ int hfi_ct_alloc(struct hfi_ctx *ctx, u8 ni, u16 *ct_handlep)
 }
 
 static inline
-int hfi_ct_free(struct hfi_ctx *ctx, u16 ct_handle, u64 flags)
+int hfi_ct_free(struct hfi_ctx *ctx, u16 ct_handle)
 {
 	union ptl_ct_event *ct_array;
 	int ret;

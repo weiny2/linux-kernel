@@ -217,6 +217,7 @@ struct rvt_mregion *hfi2_find_mr_from_rkey(struct rvt_pd *pd, u32 rkey);
 int hfi2_native_modify_qp(struct rvt_qp *rvtqp,
 			  struct ib_qp_attr *attr, int attr_mask,
 			  struct ib_udata *udata);
+void hfi2_native_reset_qp(struct rvt_qp *qp);
 int hfi2_native_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 		     struct ib_send_wr **bad_wr);
 int hfi2_native_recv(struct rvt_qp *qp, struct ib_recv_wr *wr,
@@ -225,5 +226,6 @@ int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 			 struct ib_recv_wr **bad_wr);
 int hfi2_poll_cq(struct ib_cq *cq, int ne, struct ib_wc *wc);
 int hfi2_req_notify_cq(struct ib_cq *cq, enum ib_cq_notify_flags flags);
+int hfi2_destroy_srq(struct ib_srq *ibsrq);
 #endif
 #endif /* NATIVE_VERBS_H */
