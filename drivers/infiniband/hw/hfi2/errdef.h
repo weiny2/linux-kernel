@@ -123,7 +123,7 @@ static struct hfi_error_csr hfi_fzc_error[] = {
 			},
 			{ /* bit 13 */
 				"ILLEGAL_FLIT_ENCODING",
-				" The only legal flits from the FPE are head, body, tail, Idle, CrdtRet, HeadBadPkt, BodyBadPkt, TailBadPkt and the architecturally hidden ForceIdle ([64:56] = 9'h002).",
+				" The only legal flits from the FPE are head, body, tail, Idle, CrdtRet, HeadBadPkt, BodyBadPkt, TailBadPkt, SPC, SCMrkr, and the architecturally hidden ForceIdle ([64:56] = 9'h002).",
 			},
 			{ /* bit 14 */
 				"FLIT_INPUT_BUF_OFLW",
@@ -198,131 +198,131 @@ static struct hfi_error_csr hfi_fzc_error[] = {
 				" Single bit error detected in a high priority DN stream MasterTime flit.",
 			},
 			{ /* bit 32 */
-				"Unused_63_32",
-				" Unused",
+				"FEC_ERR_CNT_HIT_LIMIT",
+				" Programmed using the LCB_CFG_FEC_INTERRUPT CSR.",
 			},
 			{ /* bit 33 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 34 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 35 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 36 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 37 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 38 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 39 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 40 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 41 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 42 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 43 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 44 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 45 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 46 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 47 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 48 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 49 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 50 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 51 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 52 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 53 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 54 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 55 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 56 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 57 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 58 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 59 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 60 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 61 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 62 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			},
 			{ /* bit 63 */
-				"Unused_63_32",
+				"Unused_63_33",
 				" Unused",
 			}
 		}
@@ -730,64 +730,64 @@ static struct hfi_error_csr hfi_otr_pkt_error[] = {
 				" Fragmentation Programmable Engine Program Memory SBE Error Flag. See txotr_pkt_err_info_fpe_prog_mem_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
 			},
 			{ /* bit 29 */
-				"fpe_rom_mem_mbe",
-				" Fragmentation Programmable Engine ROM MBE Error Flag. ERR_CATEGORY_HFI",
-			},
-			{ /* bit 30 */
-				"fpe_rom_mem_sbe",
-				" Fragmentation Programmable Engine ROM SBE Error Flag. ERR_CATEGORY_CORRECTABLE",
-			},
-			{ /* bit 31 */
 				"fpe_firmware",
 				" Fragmentation Programmable Engine Error Flag. See txotr_pkt_err_info_fpe_firmware CSR for error information. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 32 */
+			{ /* bit 30 */
 				"fpe_authen_err",
 				" Error while authenticating the firmware. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 33 */
+			{ /* bit 31 */
 				"hi_hdr_mbe",
 				" Multiple Bit Error in response state from Host Memory Error Flag. See txotr_pkt_err_info_hi_hdr_be CSR for error information. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 34 */
+			{ /* bit 32 */
 				"hi_hdr_sbe",
 				" Single Bit Error in response state from Host Memory Error Flag. See txotr_pkt_err_info_hi_hdr_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
 			},
-			{ /* bit 35 */
+			{ /* bit 33 */
 				"hi_data_mbe",
 				" Multiple Bit Error in response state from Host Memory Error Flag. See txotr_pkt_err_info_hi_data_be_0 & txotr_pkt_err_info_hi_data_be_1 CSR for error information. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 36 */
+			{ /* bit 34 */
 				"hi_data_sbe",
 				" Single Bit Error in response state from Host Memory Error Flag. See txotr_pkt_err_info_hi_data_be_0 & txotr_pkt_err_info_hi_data_be_1 CSR for error information. ERR_CATEGORY_CORRECTABLE",
 			},
-			{ /* bit 37 */
+			{ /* bit 35 */
 				"rx_hash_table_fifo_undflow",
 				" RX hash table fifo underflow. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 38 */
+			{ /* bit 36 */
 				"rx_hash_table_fifo_overflow",
 				" RX hash table fifo overflow. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 39 */
+			{ /* bit 37 */
 				"pktid_list_ren_fifo_undflow",
 				" PKTID list read enable fifo underflow. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 40 */
+			{ /* bit 38 */
 				"pktid_list_ren_fifo_overflow",
 				" PKTID list read enable fifo overflow. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 41 */
+			{ /* bit 39 */
 				"psn_state_fifo_undflow",
 				" PSN State FIFO underflow. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 42 */
+			{ /* bit 40 */
 				"psn_state_fifo_overflow",
 				" PSN State FIFO overflow. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 43 */
+			{ /* bit 41 */
 				"max_mtu_vio",
 				" Maximum MTU violation in the Packet Partition",
+			},
+			{ /* bit 42 */
+				"rx_pkt_status",
+				" Receive error status detected on the RxE2E interface. See txotr_pkt_err_info_ CSR for error information. ERR_CATEGORY_TRANSACTION",
+			},
+			{ /* bit 43 */
+				"about_to_timeout",
+				" Notify RXDMA through the OMB to drop the packet due to close to time-range. See txotr_pkt_err_info_ CSR for error information. ERR_CATEGORY_INFO",
 			},
 			{ /* bit 44 */
 				"Unused_63_44",
@@ -2126,7 +2126,7 @@ static struct hfi_error_csr hfi_txcid_error[] = {
 			},
 			{ /* bit 37 */
 				"lnh_vio_err",
-				" in case of the 9b packet LNH = 0 and 1 are illegal. following are legal combination. Now only 9B OFED DMA with GRH can contain GRH and hence come with LNH = 3 '9B OFED DMA' and LNH = 2 '9B OFED DMA with GRH' and LNH = 3 and privileged CQ '9B PSM PIO' and LNH = 2 '9B PSM DMA' and LNH = 2 The cq which encounterd this issue is flagged in txcid_err_info_other_error_1.kdeth_perm_vio_err_cq_num The transaction is failed",
+				" in case of the 9b packet LNH = 0 and 1 are illegal. following are legal combination. Now only 9B OFED DMA with GRH can contain GRH and hence come with LNH = 3 '9B OFED DMA' and LNH = 2 '9B OFED DMA with GRH' and LNH = 3 and privileged CQ '9B PSM PIO' and LNH = 2 '9B PSM DMA' and LNH = 2 The cq which encounters this issue is flagged in txcid_err_info_other_error_1.kdeth_perm_vio_err_cq_num ERROR_CATAGORY_TRANSACTION",
 			},
 			{ /* bit 38 */
 				"Reserved_63_38",
@@ -2303,7 +2303,7 @@ static struct hfi_error_csr hfi_txcic_error[] = {
 			},
 			{ /* bit 13 */
 				"ctxt_timeout",
-				" Command queue is timed out, The timeout infor will be automatically reset after all the slots of the timeout packet is received by the HFI. Once the last slot of the packet is received it will send the head update for the last slot. The error status can be reset after that. ERR_CATEGORY_OKEY",
+				" Command queue is timed out, The timeout infor will be automatically reset after all the slots of the timeout packet is received by the HFI. Once the last slot of the packet is received it will send the head update for the last slot. The error status can be reset after that. ERR_CATEGORY_INFO",
 			},
 			{ /* bit 14 */
 				"Reserved_63_14",
@@ -2731,51 +2731,51 @@ static struct hfi_error_csr hfi_otr_msg_error[] = {
 				" Buffer Programmable Engine Data Memory SBE Error Flag. See txotr_msg_err_info_bpe_data_mem_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
 			},
 			{ /* bit 52 */
-				"bpe_data_rom_mbe",
-				" Buffer Programmable Engine Data Memory MBE Error Flag. See txotr_msg_err_info_bpe_rom_mem_be CSR for error information. ERR_CATEGORY_HFI",
-			},
-			{ /* bit 53 */
-				"bpe_data_rom_sbe",
-				" Buffer Programmable Engine Data Memory SBE Error Flag. See txotr_msg_err_info_bpe_rom_mem_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
-			},
-			{ /* bit 54 */
 				"bpe_omb_mem_rd_mbe",
 				" Buffer Programmable Engine OMB Read MBE Error Flag.. See txotr_msg_err_info_bpe_omb_rd_be CSR for error information. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 55 */
+			{ /* bit 53 */
 				"bpe_omb_mem_rd_sbe",
 				" Buffer Programmable Engine OMB read SBE Error Flag. See txotr_msg_err_info_bpe_omb_rd_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
 			},
-			{ /* bit 56 */
+			{ /* bit 54 */
 				"bpe_opb_mem_rd_mbe",
 				" Buffer Programmable Engine OPB Read MBE Error Flag.. See txotr_msg_err_info_bpe_opb_rd_be CSR for error information. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 57 */
+			{ /* bit 55 */
 				"bpe_opb_mem_rd_sbe",
 				" Buffer Programmable Engine OPB read SBE Error Flag. See txotr_msg_err_info_bpe_opb_rd_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
 			},
-			{ /* bit 58 */
+			{ /* bit 56 */
 				"bpe_firmware",
 				" Buffer Programmable Engine Error Flag. See txotr_msg_err_info_bpe_firmware CSR for error information. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 59 */
+			{ /* bit 57 */
 				"fw_authen_err",
 				" Error while authenticating the firmware. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 60 */
+			{ /* bit 58 */
 				"ref_count_fifo_undflow",
 				" Reference count fifo underflow error. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 61 */
+			{ /* bit 59 */
 				"ref_count_fifo_overflow",
 				" Reference count fifo overflow error. ERR_CATEGORY_HFI",
 			},
-			{ /* bit 62 */
+			{ /* bit 60 */
 				"local_start_misaligned",
 				" Local start mis-aligned error. ERR_CATEGORY_TRANSACTION",
 			},
+			{ /* bit 61 */
+				"Unused_63_61",
+				" Unused",
+			},
+			{ /* bit 62 */
+				"Unused_63_61",
+				" Unused",
+			},
 			{ /* bit 63 */
-				"Unused_63",
+				"Unused_63_61",
 				" Unused",
 			}
 		}
@@ -2920,135 +2920,135 @@ static struct hfi_error_csr hfi_txdma_error[] = {
 				" Packet tracking memory encountered a uncorrectable error",
 			},
 			{ /* bit 31 */
-				"Reserved_63_31",
-				" Unused",
+				"mem_rsp_sts_err",
+				" Memory response contained a status error",
 			},
 			{ /* bit 32 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 33 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 34 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 35 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 36 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 37 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 38 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 39 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 40 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 41 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 42 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 43 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 44 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 45 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 46 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 47 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 48 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 49 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 50 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 51 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 52 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 53 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 54 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 55 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 56 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 57 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 58 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 59 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 60 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 61 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 62 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			},
 			{ /* bit 63 */
-				"Reserved_63_31",
+				"Reserved_63_32",
 				" Unused",
 			}
 		}
@@ -3347,83 +3347,83 @@ static struct hfi_error_csr hfi_rxe2e_error[] = {
 			},
 			{ /* bit 1 */
 				"mc0_lm_in_mbe",
-				" MC0 LINKMUX input mbe Error information: Section 29.13.4.11, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
+				" MC0 LINKMUX input mbe Error information: Section 29.13.3.32, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
 			},
 			{ /* bit 2 */
 				"mc0_lm_in_sbe",
-				" MC0 LINKMUX input sbe Error information: . Section 29.13.4.11, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
+				" MC0 LINKMUX input sbe Error information: . Section 29.13.3.32, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
 			},
 			{ /* bit 3 */
 				"mc1_lm_in_mbe",
-				" MC1 LINKMUX input mbe Error information: Section 29.13.4.12, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
+				" MC1 LINKMUX input mbe Error information: Section 29.13.3.33, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
 			},
 			{ /* bit 4 */
 				"mc1_lm_in_sbe",
-				" MC1 LINKMUX input sbe Error information: . Section 29.13.4.12, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
+				" MC1 LINKMUX input sbe Error information: . Section 29.13.3.33, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
 			},
 			{ /* bit 5 */
 				"mc0_input_fifo_mbe",
-				" MC0 input fifo mbe Error information: Section 29.13.4.16, 'RXE2E Error Info PSN Cache Tag MBE'",
+				" MC0 input fifo mbe Error information: Section 29.13.3.37, 'RXE2E Error Info PSN Cache Tag MBE'",
 			},
 			{ /* bit 6 */
 				"mc0_input_fifo_sbe",
-				" MC0 input fifo sbe Error information: . Section 29.13.4.16, 'RXE2E Error Info PSN Cache Tag MBE'",
+				" MC0 input fifo sbe Error information: . Section 29.13.3.37, 'RXE2E Error Info PSN Cache Tag MBE'",
 			},
 			{ /* bit 7 */
 				"mc1_input_fifo_mbe",
-				" MC1 input fifo mbe Error information: Section 29.13.4.13, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
+				" MC1 input fifo mbe Error information: Section 29.13.3.34, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
 			},
 			{ /* bit 8 */
 				"mc1_input_fifo_sbe",
-				" MC1 input fifo sbe Error information: . Section 29.13.4.13, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
+				" MC1 input fifo sbe Error information: . Section 29.13.3.34, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
 			},
 			{ /* bit 9 */
 				"psn_cache_tag_mbe",
-				" PSN Cache tag mbe Error information: Section 29.13.4.16, 'RXE2E Error Info PSN Cache Tag MBE' Note: these are fairly fatal as you don't know what connection is bad.",
+				" PSN Cache tag mbe Error information: Section 29.13.3.37, 'RXE2E Error Info PSN Cache Tag MBE' Note: these are fairly fatal as you don't know what connection is bad.",
 			},
 			{ /* bit 10 */
 				"psn_cache_tag_sbe",
-				" PSN Cache tag sbe Error information: . Section 29.13.4.15, 'RXE2E Error Info PSN Cache Tag SBE'",
+				" PSN Cache tag sbe Error information: . Section 29.13.3.36, 'RXE2E Error Info PSN Cache Tag SBE'",
 			},
 			{ /* bit 11 */
 				"psn_cache_data_mbe",
-				" PSN Cache data mbe Error information: Section 29.13.4.17, 'RXE2E Error Info PSN Cache Data SBE/MBE' Note: This will result in auto-disconnect for the connection. This may also remove a big scoreboard slot from being re-allocated as you can't rely on either the big_in_use bit or the big_scoreboard pointer in the data. So if a big scoreboard was in use, that slot will remain unavailabe for re-use until the next hard reset.",
+				" PSN Cache data mbe Error information: Section 29.13.3.38, 'RXE2E Error Info PSN Cache Data SBE/MBE' Note: This will result in auto-disconnect for the connection. This may also remove a big scoreboard slot from being re-allocated as you can't rely on either the big_in_use bit or the big_scoreboard pointer in the data. So if a big scoreboard was in use, that slot will remain unavailabe for re-use until the next hard reset.",
 			},
 			{ /* bit 12 */
 				"psn_cache_data_sbe",
-				" PSN Cache data sbe Error information: . Section 29.13.4.17, 'RXE2E Error Info PSN Cache Data SBE/MBE'",
+				" PSN Cache data sbe Error information: . Section 29.13.3.38, 'RXE2E Error Info PSN Cache Data SBE/MBE'",
 			},
 			{ /* bit 13 */
 				"MC0crc",
-				" CRC error on MC0 Error information: . Section 29.13.4.20, 'RXE2E Error Info CRC'",
+				" CRC error on MC0 Error information: . Section 29.13.3.41, 'RXE2E Error Info CRC'",
 			},
 			{ /* bit 14 */
 				"MC1crc",
-				" CRC error on MC1 Error information: . Section 29.13.4.20, 'RXE2E Error Info CRC'",
+				" CRC error on MC1 Error information: . Section 29.13.3.41, 'RXE2E Error Info CRC'",
 			},
 			{ /* bit 15 */
 				"big_scoreboard_mbe",
-				" big scoreboard mbe. Error information: Section 29.13.4.19, 'RXE2E Error Info Big Scoreboard MBE'",
+				" big scoreboard mbe. Error information: Section 29.13.3.40, 'RXE2E Error Info Big Scoreboard MBE'",
 			},
 			{ /* bit 16 */
 				"big_scoreboard_sbe",
-				" big scoreboard sbe. Error information: Section 29.13.4.18, 'RXE2E Error Info Big Scoreboard SBE'",
+				" big scoreboard sbe. Error information: Section 29.13.3.39, 'RXE2E Error Info Big Scoreboard SBE'",
 			},
 			{ /* bit 17 */
 				"any_mbe_cntr_max",
-				" Some mbe cntr is saturated (all 1's). Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
+				" Some mbe cntr is saturated (all 1's). Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'",
 			},
 			{ /* bit 18 */
 				"any_mbe_cntr_non_zero",
-				" Some mbe cntr is non-zero. Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
+				" Some mbe cntr is non-zero. Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'",
 			},
 			{ /* bit 19 */
 				"any_sbe_cntr_max",
-				" Some sbe cntr is saturated (all 1's). Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
+				" Some sbe cntr is saturated (all 1's). Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'",
 			},
 			{ /* bit 20 */
 				"any_sbe_cntr_non_zero",
-				" Some sbe cntr is non-zero. Error information: Section 29.13.4.10, 'RXE2E SBE/MBE Err Counter Summary Status'",
+				" Some sbe cntr is non-zero. Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'",
 			},
 			{ /* bit 21 */
 				"Reserved_63_21",
@@ -4166,35 +4166,35 @@ static struct hfi_error_csr hfi_rxet_error[] = {
 			},
 			{ /* bit 1 */
 				"eq_desc_cache_tag_mbe",
-				" EQ Desc Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.6.12, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_MBE - RXET Error Info EQ Desc Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
+				" EQ Desc Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.6.13, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_MBE - RXET Error Info EQ Desc Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
 			},
 			{ /* bit 2 */
 				"eq_desc_cache_tag_sbe",
-				" EQ Desc Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.11, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_SBE - RXET Error Info EQ Desc Cache Tag SBE'",
+				" EQ Desc Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.12, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_SBE - RXET Error Info EQ Desc Cache Tag SBE'",
 			},
 			{ /* bit 3 */
 				"eq_desc_cache_data_mbe",
-				" EQ Desc Cache data mbe. The 'or' of the 2 ecc domains. Error information: Section 29.16.6.13, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'",
+				" EQ Desc Cache data mbe. The 'or' of the 2 ecc domains. Error information: Section 29.16.6.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'",
 			},
 			{ /* bit 4 */
 				"eq_desc_cache_data_sbe",
-				" EQ Desc Cache data sbe. The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.13, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'",
+				" EQ Desc Cache data sbe. The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'",
 			},
 			{ /* bit 5 */
 				"trig_op_cache_tag_mbe",
-				" Trig Op Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.6.15, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_MBE - RXET Error Info Trig Op Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
+				" Trig Op Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.6.16, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_MBE - RXET Error Info Trig Op Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
 			},
 			{ /* bit 6 */
 				"trig_op_cache_tag_sbe",
-				" Trig Op Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.14, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_SBE - RXET Error Info Trig Op Cache Tag SBE'",
+				" Trig Op Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.15, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_SBE - RXET Error Info Trig Op Cache Tag SBE'",
 			},
 			{ /* bit 7 */
 				"trig_op_cache_data_mbe",
-				" Trig Op Cache data mbe. The 'or' of the 16 ecc domains. Error information: Section 29.16.6.16, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'",
+				" Trig Op Cache data mbe. The 'or' of the 16 ecc domains. Error information: Section 29.16.6.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'",
 			},
 			{ /* bit 8 */
 				"trig_op_cache_data_sbe",
-				" Trig Op Cache data sbe. The 'or' of the 16ecc domains. Error information: . Section 29.16.6.16, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'",
+				" Trig Op Cache data sbe. The 'or' of the 16ecc domains. Error information: . Section 29.16.6.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'",
 			},
 			{ /* bit 9 */
 				"toh_trig_out_overflow",
@@ -4241,12 +4241,12 @@ static struct hfi_error_csr hfi_rxet_error[] = {
 				" Overflow on TxOTR event interface FIFO - one event (2 flits)",
 			},
 			{ /* bit 20 */
-				"eb_addr_q_err_mbe",
-				" MBE detected on Event Address queue.",
+				"eq_full_err",
+				" EQ Full detected. Address of EQD in RXET_ERROR_INFO_1.",
 			},
 			{ /* bit 21 */
-				"eb_addr_q_err_sbe",
-				" SBE detected on Event Address queue.",
+				"eqd_cache_mbe",
+				" EQ Descriptor Cache MBE *or* NACK from RxHiArb. Address of EQD in RXET_ERROR_INFO_1.",
 			},
 			{ /* bit 22 */
 				"rsv_err_mbe",
@@ -4309,8 +4309,8 @@ static struct hfi_error_csr hfi_rxet_error[] = {
 				" Framing error on Event from TxOTR.",
 			},
 			{ /* bit 37 */
-				"eeh_evict_fifo_overflow",
-				" Overflow on RefetchThreshold evict FIFO - 8",
+				"trigop_cache_mbe",
+				" TrigOp Cache MBE *or* NACK from RxHiArb.",
 			},
 			{ /* bit 38 */
 				"Reserved_63_38",
@@ -4763,12 +4763,12 @@ static struct hfi_error_csr hfi_at_error[] = {
 				" Unexpected IOMMU Response. After coming out of FLR, this error may be raised as the OS continues to drain its request queue. It is safe to ignore/clear this error once it is guaranteed that the OS has completely drained its request queue. The device should not be enabled until this drain has occurred. The driver may use system software interfaces to initiate the page request/response drain. See section 7.11 of the IOMMU Specification for details.",
 			},
 			{ /* bit 14 */
-				"future_err0",
-				" Place Holder for new error event",
+				"incorrect_sid_err",
+				" Incorrect SID(Device ID) received from IOMMU",
 			},
 			{ /* bit 15 */
-				"future_err1",
-				" Place Holder for new error event",
+				"page_size_err",
+				" IOMMU Page Walk Response for a page size that is not configured for entry into the ExDTLB. Note: Translations will complete, per the response status, but these responses will not be filled in the ExDTLB.",
 			},
 			{ /* bit 16 */
 				"ptec_tag_mbe",
@@ -4839,127 +4839,127 @@ static struct hfi_error_csr hfi_at_error[] = {
 				" PTE Cache LRU 2M/4K State Table SBE",
 			},
 			{ /* bit 33 */
-				"Reserved_63_33",
-				" Reserved",
+				"iommu_parity_err",
+				" IOMMU register file parity error",
 			},
 			{ /* bit 34 */
-				"Reserved_63_33",
-				" Reserved",
+				"devtlb_id_err",
+				" The Device TLB ID, sent from IOMMU does not match BDF of this FXR device",
 			},
 			{ /* bit 35 */
-				"Reserved_63_33",
-				" Reserved",
+				"iommu_mem_type_err",
+				" Memory Type Error on IOMMU Host memory interface",
 			},
 			{ /* bit 36 */
-				"Reserved_63_33",
-				" Reserved",
+				"iommu_seq_msg_err",
+				" IOMMU Sequencer Interface message error",
 			},
 			{ /* bit 37 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 38 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 39 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 40 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 41 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 42 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 43 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 44 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 45 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 46 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 47 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 48 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 49 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 50 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 51 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 52 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 53 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 54 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 55 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 56 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 57 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 58 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 59 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 60 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 61 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 62 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			},
 			{ /* bit 63 */
-				"Reserved_63_33",
+				"Reserved_63_37",
 				" Reserved",
 			}
 		}
@@ -5365,147 +5365,147 @@ static struct hfi_error_csr hfi_rxcid_error[] = {
 				" Detected a HIFIS data SBE error for reads from the hifis fifo ERR_CATEGORY_CORRECTABLE",
 			},
 			{ /* bit 28 */
-				"Reserved_63_28",
-				" Unused",
+				"trig_opps_len_err",
+				" Detected a triggered opps length error. ERR_CATEGORY_COMMAND",
 			},
 			{ /* bit 29 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 30 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 31 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 32 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 33 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 34 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 35 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 36 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 37 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 38 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 39 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 40 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 41 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 42 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 43 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 44 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 45 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 46 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 47 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 48 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 49 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 50 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 51 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 52 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 53 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 54 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 55 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 56 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 57 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 58 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 59 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 60 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 61 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 62 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			},
 			{ /* bit 63 */
-				"Reserved_63_28",
+				"Reserved_63_29",
 				" Unused",
 			}
 		}
@@ -5800,227 +5800,227 @@ static struct hfi_error_csr hfi_fpc_error[] = {
 		{
 			{ /* bit 0 */
 				"spare_0",
-				" reserved",
+				" spare",
 			},
 			{ /* bit 1 */
 				"l2_err",
-				" Illegal L2 opcode",
+				" PortRcv_err.BadL2 Illegal L2 opcode",
 			},
 			{ /* bit 2 */
 				"sc_err",
-				" Unconfigured SC",
+				" PortRcv_err.BadSC Unconfigured SC",
 			},
 			{ /* bit 3 */
 				"headless_err",
-				" Unexpected Mid/Tail flit received ( headless )",
+				" PortRcv_err.Headless Unexpected Mid/Tail flit received ( headless )",
 			},
 			{ /* bit 4 */
 				"pkey_err",
-				" Pkey error",
+				" PortConstraint_err Pkey error",
 			},
 			{ /* bit 5 */
 				"preempt_same_vl_err",
-				" Preempting with same VL",
+				" PortRcv_err.PreemptError Preempting with same VL",
 			},
 			{ /* bit 6 */
 				"l2hdr_err",
-				" Received a sop or SC marker before previous sop was satisfied.",
+				" PortRcv_err.PreemptL2Header Received a sop/eop or SC marker before previous sop was satisfied.",
 			},
 			{ /* bit 7 */
 				"sc_mkr_err",
-				" SC Marker received for inactive VL",
+				" PortRcv_err.BadSCMarker SC Marker received for inactive VL",
 			},
 			{ /* bit 8 */
 				"unsup_vl_err",
-				" SC-VL table returned a VL of 9-14",
+				" FMConfig_err.UnsuportedVLMarker SC-VL table returned a VL of 9-14",
 			},
 			{ /* bit 9 */
 				"spare_9",
-				" reserved",
+				" spare",
 			},
 			{ /* bit 10 */
-				"lver_err",
-				" Illegal LVer in header",
+				"spare_10",
+				" spare",
 			},
 			{ /* bit 11 */
-				"ctrl_buf_unflow",
-				" control flit buffer under flow",
+				"spare_11",
+				" spare",
 			},
 			{ /* bit 12 */
-				"ctrl_buf_ovflow",
-				" Control flit buffer over flow",
+				"spare_12",
+				" spare",
 			},
 			{ /* bit 13 */
-				"uncorrectable_err",
-				" Received an un-correctable error.(MBE)",
+				"mbe_outbound",
+				" Uncorrectable Received an un-correctable error on outbound data path.(MBE)",
 			},
 			{ /* bit 14 */
 				"crdt_ack_err",
-				" Credit acks returned on illegal VL's, 8-14.",
+				" FMConfig_err.BadCrdtAck Credit acks returned on illegal VL's, 8-14.",
 			},
 			{ /* bit 15 */
 				"unsup_pkt_type",
-				" Received a packet type that was not configured.",
+				" PortRcv_err.BadL2 Received a packet type that was not configured.",
 			},
 			{ /* bit 16 */
 				"crdt_sb_parity_err",
-				" credit sideband parity error",
+				" Uncorrectable credit sideband parity error",
 			},
 			{ /* bit 17 */
-				"spare_17",
-				" ",
+				"mbe_inbound",
+				" Uncorrectable MBE on incoming data path. Inbound data path is locked down. A Link bounce is required.",
 			},
 			{ /* bit 18 */
 				"event_cntr_rollover_err",
-				" Event counter rollover.",
+				" Not mapped to portrcv nor fmconfig. Event counter rollover.",
 			},
 			{ /* bit 19 */
 				"link_err",
-				" Link went from INIT/ARM/ACTIVE to DOWN.",
+				" Not mapped to portrcv nor fmconfig. Link went from INIT/ARM/ACTIVE to DOWN.",
 			},
 			{ /* bit 20 */
-				"spare_20",
-				" reserved",
+				"mkr_dist_err",
+				" FMConfig_err.BadMarkerDist. SC Marker distance violation",
 			},
 			{ /* bit 21 */
 				"ctrl_dist_err",
-				" Control flit violation",
+				" FMConfig_err.BadCtrlDist. Congest or Credit flit distance violation.",
 			},
 			{ /* bit 22 */
 				"tail_dist_err",
-				" Tail distance violation",
+				" FMConfig_err.BadTailDist. Tail distance violation",
 			},
 			{ /* bit 23 */
 				"head_dist_err",
-				" Head distance violation",
+				" FMConfig_err.BadHeadDist. Head distance violation",
 			},
 			{ /* bit 24 */
 				"nonvl15_state_err",
-				" Received Non-VL15 Pkt when ink state ==Init.",
+				" PortRcv_err.BadSC Received Non-VL15 Pkt when ink state ==Init.",
 			},
 			{ /* bit 25 */
 				"vl15_multi_err",
-				" Pkt contained VL15 and multicast DLID",
+				" PortRcv_err.BadDLID Pkt contained VL15 and multicast DLID",
 			},
 			{ /* bit 26 */
 				"pkt_length_err",
-				" Packet length violated min length.",
+				" PortRcv_err.BadPktLen Packet length violated - min length.",
 			},
 			{ /* bit 27 */
 				"spare_27",
-				" reserved",
+				" spare",
 			},
 			{ /* bit 28 */
 				"perm_nvl15_err",
-				" Permissive SLID and SC!15",
+				" PortRcv_err.BadSC Permissive SLID and SC!15",
 			},
 			{ /* bit 29 */
 				"slid_zero_err",
-				" Pkt contained SLID == 0",
+				" PortRcv_err.BADSLID Pkt contained SLID == 0",
 			},
 			{ /* bit 30 */
 				"dlid_zero_err",
-				" Pkt contained DLID == 0",
+				" PortRcv_err.BadDLID Pkt contained DLID == 0",
 			},
 			{ /* bit 31 */
 				"length_mtu_err",
-				" Pkt contained LRH:Length > MTU_Cap",
+				" PortRcv_err.BadPktLen Pkt contained LRH:Length > MTU_Cap",
 			},
 			{ /* bit 32 */
 				"slid_sec_err",
-				" slid security error",
+				" PortConstraint_err slid security error",
 			},
 			{ /* bit 33 */
-				"early_drop_err",
-				" Flag indicates there was an early error on the packet and the packet was dropped.",
+				"spare_33",
+				" spare",
 			},
 			{ /* bit 34 */
 				"late_short_err",
-				" Actual Packet Length was less than LRH:Pkt_Length.",
+				" Portrcv_err.PktLenTooShort Actual Packet Length was less than LRH:Pkt_Length. If both late_long and late_short errors are both set in ERROR_FIRST, simultaneous errors occurred in the same cycle. To determine which error occurred first look ERR_INFO_HDR0. If this contains a tail ,short_err occurred first. If no tail then long occurred first.",
 			},
 			{ /* bit 35 */
 				"late_long_err",
-				" Actual Packet Length was greater than LRH:Pkt_Length.",
+				" PortRcv_err.PktLenTooLong Actual Packet Length was greater than LRH:Pkt_Length. If both late_long and late_short errors are set in ERROR_FIRST, simultaneous errors occurred in the same cycle. To determine which error occurred first look ERR_INFO_HDR0. If this contains a tail ,short_err occurred first. If no tail then long occurred first.",
 			},
 			{ /* bit 36 */
-				"late_ebp_err",
-				" Packet arriving contained EBP, marked EBP by remote device.",
+				"spare_36",
+				" spare",
 			},
 			{ /* bit 37 */
 				"ltp_buf_unflow",
-				" ltp buffer over flow",
+				" Uncorrectable ltp buffer over flow",
 			},
 			{ /* bit 38 */
 				"ltp_buf_ovflow",
-				" ltp buffer over flow",
+				" Uncorrectable ltp buffer over flow",
 			},
 			{ /* bit 39 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 40 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 41 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 42 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 43 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 44 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 45 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 46 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 47 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 48 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 49 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 50 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 51 */
-				"spare_53_39",
-				" reserved",
+				"spare_51_39",
+				" spare",
 			},
 			{ /* bit 52 */
-				"spare_53_39",
-				" reserved",
+				"portconstraint_err",
+				" [0] reserved [1] Pkey Violation [2] Slid Security Violation [3] Switch Port 0 Pkey Violation ( see rpipe error csrs) See Section 21.16.4.14, ' FPC_ERR_INFO_PORTRCVCONSTRAINT '",
 			},
 			{ /* bit 53 */
-				"spare_53_39",
-				" reserved",
+				"uncorrectable_err",
+				" [0] BadHead: uncorrectable error in head flit [1] BadBody: uncorrectable error in body flit [2] BadTail: uncorrectable error in tail flit [3] BadCtrl: uncorrectable error in credit flit. [4] Internal: Internal logic error , unrecoverable See Section 21.16.4.13, ' FPC_ERR_INFO_UNCORRECTABLE '",
 			},
 			{ /* bit 54 */
 				"fmconfig_err",
-				" One of the following errors occurred. [E0] BadHeadDist: Distance violation between two head flits [E1] BadTailDist: Distance violation between two tail flits [E2] BadCtrlDist: Distance violation between two credit control flits [E3] BadCrdtAck: Credits return for unsupported VL [4] UnsupportedVLMarker: SC Marker received for unsupported SC or when SC marker not enabled for port [5] BadPreempt: Exceeded the interleaving level or receive implicit interleaving sequence when only explicit interleaving is enabled. [6] BadControlFlit: unknown or reserved control flit received - Deprecated [7] ExceedMulticastLimit See the following CSR for additional error information. See",
+				" One of the following errors occurred. [E0] BadHeadDist: Distance violation between two head flits [E1] BadTailDist: Distance violation between two tail flits [E2] BadCtrlDist: Distance violation between two credit control flits [E3] BadCrdtAck: Credits return for unsupported VL [4] UnsupportedVLMarker: SC Marker received for unsupported SC or when SC marker not enabled for port [5] BadPreempt: Exceeded the interleaving level or receive implicit interleaving sequence when only explicit interleaving is enabled. [6] BadControlFlit: unknown or reserved control flit received - Deprecated [7] ExceedMulticastLimit [8] BadMarkerDist: Distance violation between two VL Markers, VL Marker and Head. See Section 21.16.4.11, ' FPC_ERR_INFO_FMCONFIG ' for additional error information.",
 			},
 			{ /* bit 55 */
 				"rcvport_err",
-				" One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] BadSC Marker: Inactive VL [E14] PreemptL2Header: Interleaving L2 header When this flag is asserted the following CSRs provide additional error information. Section 19.16.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 19.16.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 19.16.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A '",
+				" One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] BadSC Marker: Inactive VL [E14] PreemptL2Header: Interleaving L2 header When this flag is asserted the following CSRs provide additional error information. Section 21.16.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 21.16.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 21.16.4.8, ' FPC_ERR_INFO_PORTRCV_HDR0_B ' Section 21.16.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A ' Section 21.16.4.10, ' FPC_ERR_INFO_PORTRCV_HDR1_B '",
 			},
 			{ /* bit 56 */
 				"reserved_63_56",
@@ -6396,7 +6396,7 @@ static struct hfi_error_csr hfi_tp_error[] = {
 			},
 			{ /* bit 13 */
 				"dataq_overflow",
-				" TPORT data queue overflow. TBD, probably just discard flit --- - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If dataq_overflow is also set there are no EOP flits buffer",
+				" TPORT data queue overflow. probably just discard flit --- - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If dataq_overflow is also set there are no EOP flits buffer",
 			},
 			{ /* bit 14 */
 				"dataq_spill_underflow",
