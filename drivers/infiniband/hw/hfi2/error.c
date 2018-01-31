@@ -87,6 +87,7 @@
 struct hfi_error_event {
 	char *event_name;
 	char *event_desc;
+	u8    err_category;
 	/* we can add action routine here */
 	void (*action)(struct hfi_devdata *dd, u64 err_sts, char *name);
 };

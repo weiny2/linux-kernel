@@ -57,6 +57,21 @@
  * PLEASE GO THROUGH utils/errgen.sh SCRIPT
  */
 
+enum err_category_t {
+	ERR_CATEGORY_OKAY = 0,
+	ERR_CATEGORY_INFO,
+	ERR_CATEGORY_CORRECTABLE,
+	ERR_CATEGORY_TRANSACTION,
+	ERR_CATEGORY_PROCESS,
+	ERR_CATEGORY_HFI,
+	ERR_CATEGORY_NODE,
+	/*
+	 * FXRTODO: Software-only, this is to make sure all event bits get
+	 * assigned into one of the others
+	 */
+	ERR_CATEGORY_DEFAULT
+};
+
 static struct hfi_error_csr hfi_fzc_error[] = {
 /*
  * LCB_ERR_STS desc:
@@ -72,258 +87,322 @@ static struct hfi_error_csr hfi_fzc_error[] = {
 			{ /* bit 0 */
 				"RST_FOR_FAILED_DESKEW",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"ALL_LNS_FAILED_REINIT_TEST",
 				" All four lanes failed testing during reinit, triggers a reset.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"LOST_REINIT_STALL_OR_TOS",
 				" lost clock stall or turn on signal during reinit. Only active when just 1 lane operating on Rx side.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"TX_LESS_THAN_FOUR_LNS",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"RX_LESS_THAN_FOUR_LNS",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"SEQ_CRC_ERR",
 				" A sequential CRC error was encountered. This triggers a reinit sequence.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"REINIT_FROM_PEER",
 				" A reinit sequence was triggered by the peer.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"REINIT_FOR_LN_DEGRADE",
 				" A reinit sequence was triggered during which a lane was removed from operation.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"CRC_ERR_CNT_HIT_LIMIT",
 				" Programmed using the LCB_CFG_CRC_INTERRUPT CSR.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"RCLK_STOPPED",
 				" The (1 of 4) lane receive clock that is being used on the Rx side/pipe during LTP mode stopped toggling.This is catastrophic and will take down the link.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"UNEXPECTED_REPLAY_MARKER",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"UNEXPECTED_ROUND_TRIP_MARKER",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"ILLEGAL_NULL_LTP",
 				" link transfer LTPs",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"ILLEGAL_FLIT_ENCODING",
 				" The only legal flits from the FPE are head, body, tail, Idle, CrdtRet, HeadBadPkt, BodyBadPkt, TailBadPkt, SPC, SCMrkr, and the architecturally hidden ForceIdle ([64:56] = 9'h002).",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"FLIT_INPUT_BUF_OFLW",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"VL_ACK_INPUT_BUF_OFLW",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"VL_ACK_INPUT_PARITY_ERR",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"VL_ACK_INPUT_WRONG_CRC_MODE",
 				" VC ack input valid and not in 14 bit CRC mode",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"FLIT_INPUT_BUF_MBE",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"FLIT_INPUT_BUF_SBE",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"REPLAY_BUF_MBE",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"REPLAY_BUF_SBE",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"RST_FOR_LINK_TIMEOUT",
 				" A reinit sequence is triggered in a last ditch attempt at keeping the link up when the timer expires. If this succeeds the NEG_EDGE_LINK_TRANSFER_ACTIVE and HOLD_REINIT flags will remain clear.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"RST_FOR_INCOMPLT_RND_TRIP",
 				" A reinit sequence is triggered in a last ditch attempt at keeping the link up when a round trip marker fails to return. If this succeeds the NEG_EDGE_LINK_TRANSFER_ACTIVE and HOLD_REINIT flags will remain clear.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"HOLD_REINIT",
 				" This indicates the link will not come up. Useful when the link has never been up and the NEG_EDGE_LINK_TRANSFER_ACTIVE flag will be clear.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"NEG_EDGE_LINK_TRANSFER_ACTIVE",
 				" self explanatory",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"UNEXPECTED_MASTER_TIME_FLIT",
 				" MasterTime flits that arrive at a switch port that is not configured as an upstream port for the indicated clock tree are ignored, and an error is logged.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"QUARANTINE",
 				" KNH/FXR viral event to take down the link. Tied low in OC.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"CSR_CHAIN_PARITY_ERR",
 				" OC CSR chain parity error on the input request bus. Tied low on FZC.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"CSR_CPORT_ADDRESS_MISS",
 				" OC CSR address miss or timeout on a request from Cport. Tied low on FZC.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"PM_MBE",
 				" Multi bit error detected in a high priority DN stream MasterTime flit.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"PM_SBE",
 				" Single bit error detected in a high priority DN stream MasterTime flit.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"FEC_ERR_CNT_HIT_LIMIT",
 				" Programmed using the LCB_CFG_FEC_INTERRUPT CSR.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Unused_63_33",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -345,258 +424,322 @@ static struct hfi_error_csr hfi_otr_pkt_error[] = {
 			{ /* bit 0 */
 				"dlid_check_err",
 				" DLID failure check in command. See txotr_pkt_err_info_dlid_check CSR for error information. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 1 */
 				"invalid_msg_len_err",
 				" Message length is longer than expected for the packet to be generated. See txotr_pkt_err_info_length_check CSR for error information. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 2 */
 				"cmd_len_err",
 				" Malformed length packet from TXCI. OTR checks the cmd_length against the tail location. See txotr_pkt_err_info_length_check CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 3 */
 				"fp_fifo_mbe",
 				" Multiple BIt Error for reads from the Fast Path fifo Input Queue. See txotr_pkt_err_info_fp_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 4 */
 				"fp_fifo_sbe",
 				" Single BIt Error for reads from the Fast Path fifo Input Queue. See txotr_pkt_err_info_fp_fifo CSR for error information.ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 5 */
 				"fp_fifo_undflow",
 				" Fast Path fifo Input Queue under flow error. See txotr_pkt_err_info_fp_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 6 */
 				"fp_fifo_ovrflow",
 				" Fast Path fifo Input Queue over flow error. See txotr_pkt_err_info_fp_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 7 */
 				"retrans_fifo_mbe",
 				" Multiple BIt Error for reads from the Retransmit fifo. See txotr_pkt_err_info_retrans_fifo_0 & txotr_pkt_err_info_retrans_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 8 */
 				"retrans_fifo_sbe",
 				" Single BIt Error for reads from the Retransmit fifo. See txotr_pkt_err_info_retrans_fifo_0 & txotr_pkt_err_info_retrans_fifo_1 CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 9 */
 				"retrans_fifo_undflow",
 				" Retransmit fifo under flow error. See txotr_pkt_err_info_retrans_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 10 */
 				"retrans_fifo_ovrflow",
 				" Retransmit fifo over flow error. See txotr_pkt_err_info_retrans_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 11 */
 				"pre_frag_fifo_mbe",
 				" Multiple BIt Error for reads from the Pre-frag queue fifo. See txotr_pkt_err_info_prefrag_fifo_0 & txotr_pkt_err_info_prefrag_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 12 */
 				"pre_frag_fifo_sbe",
 				" Single BIt Error for reads from the Pre-frag queue fifo. See txotr_pkt_err_info_prefrag_fifo_0 & txotr_pkt_err_info_prefrag_fifo_1 CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 13 */
 				"pre_frag_fifo_undflow",
 				" Pre-frag queuet fifo under flow error. See txotr_pkt_err_info_prefrag_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 14 */
 				"pre_frag_fifo_ovrflow",
 				" Pre-frag queue fifo over flow error. See txotr_pkt_err_info_prefrag_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 15 */
 				"post_frag_fifo_mbe",
 				" Multiple BIt Error for reads from the Post-frag queue fifo. See txotr_pkt_err_info_postfrag_fifo_0 & txotr_pkt_err_info_postfrag_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 16 */
 				"post_frag_fifo_sbe",
 				" Single BIt Error for reads from the Post-frag queue fifo. See txotr_pkt_err_info_postfrag_fifo_0 & txotr_pkt_err_info_postfrag_fifo_1 CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 17 */
 				"post_frag_fifo_undflow",
 				" Post-frag queuet fifo under flow error. See txotr_pkt_err_info_postfrag_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 18 */
 				"post_frag_fifo_ovrflow",
 				" Post-frag queue fifo over flow error. See txotr_pkt_err_info_postfrag_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 19 */
 				"rx_rsp_fifo_mbe",
 				" Multiple BIt Error for reads from the RX RSP queue fifo for Reply/Acks received. See txotr_pkt_err_info_rx_rsp_fifo_0 & txotr_pkt_err_info_rx_rsp_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 20 */
 				"rx_rsp_fifo_sbe",
 				" Single BIt Error for reads from the RX RSP fifo for Reply/Acks received. See txotr_pkt_err_info_rx_rsp_fifo_0 & txotr_pkt_err_info_rx_rsp_fifo_1 CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 21 */
 				"rx_rsp_fifo_undflow",
 				" RX RSP FIFO underflow. See txotr_pkt_err_info_rx_rsp_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 22 */
 				"rx_rsp_fifo_overflow",
 				" RX RSP FIFO overflow. See txotr_pkt_err_info_rx_rsp_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 23 */
 				"opb_state_fifo_undflow",
 				" OPB state Fifo underflow. See txotr_pkt_err_info_opb_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 24 */
 				"opb_state_fifo_overflow",
 				" OPB state Fifo overflow. See txotr_pkt_err_info_opb_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 25 */
 				"opb_handle_fifo_undflow",
 				" OPB Handle fifo underflow. See txotr_pkt_err_info_opb_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 26 */
 				"opb_handle_fifo_overflow",
 				" OPB Handle fifo overflow. See txotr_pkt_err_info_opb_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 27 */
 				"opb_pkt_sts_fifo_undflow",
 				" OPB PKT Status fifo underflow. See txotr_pkt_err_info_opb_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 28 */
 				"opb_pkt_sts_fifo_overflow",
 				" OPB PKT Status fifo overflow. See txotr_pkt_err_info_opb_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 29 */
 				"pkt_done_undflow",
 				" Packet done fifo under flow error. See txotr_pkt_err_info_opb_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 30 */
 				"pkt_done_overflow",
 				" Packet done fifo over flow error. See txotr_pkt_err_info_opb_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 31 */
 				"mc1p_pktid_list_fifo_undflow",
 				" MC1P Packet ID List fifo under flow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 32 */
 				"mc1p_pktid_list_fifo_overflow",
 				" MC1P Packet ID List fifo over flow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 33 */
 				"tx_psn_hold_fifo_undflow",
 				" TX PSN hold fifo underflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 34 */
 				"tx_psn_hold_fifo_overflow",
 				" TX PSN hold fifo overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 35 */
 				"rx_psn_hold_fifo_undflow",
 				" RX PSN hold fifo underflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 36 */
 				"rx_psn_hold_fifo_overflow",
 				" RX PSN hold fifo overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 37 */
 				"psn_work_fifo_undflow",
 				" PSN work fifo underflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 38 */
 				"psn_work_fifo_overflow",
 				" PSN work fifo overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 39 */
 				"tx_psn_fifo_mbe",
 				" Multiple BIt Error for reads from the TX PSN FIFO. See txotr_pkt_err_info_tx_psn_fifo CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 40 */
 				"tx_psn_fifo_sbe",
 				" Single BIt Error for reads from the TX PSN FIFO. See txotr_pkt_err_info_tx_psn_fifo CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 41 */
 				"tx_psn_fifo_undflow",
 				" TX PSN FIFO under flow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 42 */
 				"tx_psn_fifo_ovrflow",
 				" TX PSN FIFO over flow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 43 */
 				"rx_psn_fifo_undflow",
 				" RX PSN fifo under flow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 44 */
 				"rx_psn_fifo_overflow",
 				" RX PSN fifo over flow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 45 */
 				"fpe_hi_rd_req_undflow",
 				" FPE HI request fifo under flow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 46 */
 				"fpe_hi_rd_req_overflow",
 				" FPE HI request fifo over flow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 47 */
 				"psn_hi_rd_req_undflow",
 				" PSN cache HI request fifo under flow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 48 */
 				"psn_hi_rd_req_overflow",
 				" PSN cache HI request fifo over flow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 49 */
 				"iovec_buff_mbe",
 				" IOVEC Buffer Space MBE Error Flag. See txotr_pkt_err_info_iovec_buff_be_0, txotr_pkt_err_info_iovec_buff_be_1 & txotr_pkt_err_info_iovec_buff_be_2 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 50 */
 				"iovec_buff_sbe",
 				" IOVEC Buffer Space SBE Error Flag. See txotr_pkt_err_info_iovec_buff_be_0, txotr_pkt_err_info_iovec_buff_be_1 & txotr_pkt_err_info_iovec_buff_be_2 CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 51 */
 				"otm_mbe",
 				" Outstanding Translation Memory MBE Error Flag. See txotr_pkt_err_info_otm_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 52 */
 				"otm_sbe",
 				" Outstanding Translation Memory SBE Error Flag. See txotr_pkt_err_info_otm_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 53 */
 				"opb_mbe",
 				" Outstanding Packet Buffer MBE Error Flag. See See txotr_pkt_err_info_opb_be_0 , txotr_pkt_err_info_opb_be_1 , txotr_pkt_err_info_opb_be_2, txotr_pkt_err_info_opb_be_3, txotr_pkt_err_info_opb_be_4, txotr_pkt_err_info_opb_be_5 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 54 */
 				"opb_sbe",
 				" Outstanding Packet Buffer SBE Error Flag. See See txotr_pkt_err_info_opb_be_0 , txotr_pkt_err_info_opb_be_1 , txotr_pkt_err_info_opb_be_2, txotr_pkt_err_info_opb_be_3, txotr_pkt_err_info_opb_be_4, txotr_pkt_err_info_opb_be_5 CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 55 */
 				"pktid_list_mbe",
 				" Packet Identifier List MBE Error Flag. See txotr_pkt_err_info_pktid_list_be_0, txotr_pkt_err_info_pktid_list_be_1, txotr_pkt_err_info_pktid_list_be_2, txotr_pkt_err_info_pktid_list_be_3, txotr_pkt_err_info_pktid_list_be_4, txotr_pkt_err_info_pktid_list_be_5 & txotr_pkt_err_info_pktid_list_be_6 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 56 */
 				"pktid_list_sbe",
 				" Packet Identifier List SBE Error Flag. See txotr_pkt_err_info_pktid_list_be_0, txotr_pkt_err_info_pktid_list_be_1, txotr_pkt_err_info_pktid_list_be_2, txotr_pkt_err_info_pktid_list_be_3, txotr_pkt_err_info_pktid_list_be_4, txotr_pkt_err_info_pktid_list_be_5 & txotr_pkt_err_info_pktid_list_be_6 CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 57 */
 				"tx_new_ls_tail_wen_fifo_undflow",
 				" TX New List Tail Write enable fifo underflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 58 */
 				"tx_new_ls_tail_wen_fifo_overflow",
 				" TX New List Tail Write enable fifo overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 59 */
 				"rx_update_fifo_undflow",
 				" RX update fifo underflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 60 */
 				"rx_update_fifo_overflow",
 				" RX update fifo overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 61 */
 				"hash_table_mbe",
 				" Hash Table MBE Error Flag. See txotr_pkt_err_info_hash_table_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 62 */
 				"Unused_63_62",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Unused_63_62",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -616,258 +759,322 @@ static struct hfi_error_csr hfi_otr_pkt_error[] = {
 			{ /* bit 0 */
 				"hash_table_sbe",
 				" Hash Table SBE Error Flag. See txotr_pkt_err_info_hash_table_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 1 */
 				"tx_old_ls_tail_wen_fifo_undflow",
 				" TX old List Tail Write enable fifo underflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 2 */
 				"tx_old_ls_tail_wen_fifo_overflow",
 				" TX old List Tail Write enable fifo overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 3 */
 				"tx_free_head_fifo_undflow",
 				" TX free head fifo undflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 4 */
 				"tx_free_head_fifo_overflow",
 				" TX free head fifo overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 5 */
 				"tx_local_sequence_fifo_overflow",
 				" TX local sequence fifo overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 6 */
 				"tx_local_sequence_fifo_undflow",
 				" TX local sequence fifo underflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 7 */
 				"psn_cache_tag_mbe",
 				" PSN Tag Cache MBE Error Flag. See txotr_pkt_err_info_psn_cache_tag_mbe CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 8 */
 				"psn_cache_tag_sbe",
 				" PSN Tag Cache SBE Error Flag. See txotr_pkt_err_info_psn_cache_tag_sbe CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 9 */
 				"psn_cache_data_mbe",
 				" PSN Data Cache MBE Error Flag. See txotr_pkt_err_info_psn_cache_data_sbe_mbe CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 10 */
 				"psn_cache_data_sbe",
 				" PSN Data Cache SBE Error Flag. See txotr_pkt_err_info_psn_cache_data_sbe_mbe CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 11 */
 				"psn_cache_client_fifo_undflow",
 				" PSN cache Client fifo underflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 12 */
 				"psn_cache_client_fifo_overflow",
 				" PSN cache Client fifo overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 13 */
 				"at_rsp_err",
 				" Address Translation response contains an error. See txotr_pkt_err_info_at_rsp CSR for error information. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 14 */
 				"hi_rsp_err",
 				" HI Response read errors. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 15 */
 				"unconnected_dlid",
 				" Attempt to send a command to an unconnected node (unconnected DLID). See txotr_pkt_err_info_unconnected_dlid CSR for error information. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 16 */
 				"pkt_done_itf",
 				" Error code in pkt_done response packet. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 17 */
 				"hash_timeout",
 				" Entry at the head of the Hash Table has experienced a timeout. See txotr_pkt_err_info_hash_timeout CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 18 */
 				"unknown_e2e_cmd_rcvd",
 				" Unknown packet type decoded on RXE2E interface. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 19 */
 				"psn_max_dist_vio_err",
 				" PSN maximum distance violation error. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 20 */
 				"oos_nack_rcvd",
 				" Received an OOS nack. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 21 */
 				"resource_nack_rcvd",
 				" Received an resource nack. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 22 */
 				"non_retransmt_nack_rcvd",
 				" Non-retransmit nack received. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 23 */
 				"tuple_mismatch",
 				" Packet received from RXE2E which does not match one or more of the tuple fields in OPB. See txotr_pkt_err_info_tupple_mismatch CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 24 */
 				"tuple_mismatch_opptmistic",
 				" Packet received from RXE2E which does not match one or more of the Tuple mismatch for opportunistic case. See txotr_pkt_err_info_tupple_mismatch CSR for error information.ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 25 */
 				"fpe_data_mem_mbe",
 				" Fragmentation Programmable Engine Data Memory MBE Error Flag. See txotr_pkt_err_info_fpe_data_mem_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 26 */
 				"fpe_data_mem_sbe",
 				" Fragmentation Programmable Engine Data Memory SBE Error Flag. See txotr_pkt_err_info_fpe_data_mem_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 27 */
 				"fpe_prog_mem_mbe",
 				" Fragmentation Programmable Engine Program Memory MBE Error Flag. See txotr_pkt_err_info_fpe_prog_mem_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 28 */
 				"fpe_prog_mem_sbe",
 				" Fragmentation Programmable Engine Program Memory SBE Error Flag. See txotr_pkt_err_info_fpe_prog_mem_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 29 */
 				"fpe_firmware",
 				" Fragmentation Programmable Engine Error Flag. See txotr_pkt_err_info_fpe_firmware CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 30 */
 				"fpe_authen_err",
 				" Error while authenticating the firmware. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 31 */
 				"hi_hdr_mbe",
 				" Multiple Bit Error in response state from Host Memory Error Flag. See txotr_pkt_err_info_hi_hdr_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 32 */
 				"hi_hdr_sbe",
 				" Single Bit Error in response state from Host Memory Error Flag. See txotr_pkt_err_info_hi_hdr_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 33 */
 				"hi_data_mbe",
 				" Multiple Bit Error in response state from Host Memory Error Flag. See txotr_pkt_err_info_hi_data_be_0 & txotr_pkt_err_info_hi_data_be_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 34 */
 				"hi_data_sbe",
 				" Single Bit Error in response state from Host Memory Error Flag. See txotr_pkt_err_info_hi_data_be_0 & txotr_pkt_err_info_hi_data_be_1 CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 35 */
 				"rx_hash_table_fifo_undflow",
 				" RX hash table fifo underflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 36 */
 				"rx_hash_table_fifo_overflow",
 				" RX hash table fifo overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 37 */
 				"pktid_list_ren_fifo_undflow",
 				" PKTID list read enable fifo underflow. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 38 */
 				"pktid_list_ren_fifo_overflow",
 				" PKTID list read enable fifo overflow. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 39 */
 				"psn_state_fifo_undflow",
 				" PSN State FIFO underflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 40 */
 				"psn_state_fifo_overflow",
 				" PSN State FIFO overflow. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 41 */
 				"max_mtu_vio",
 				" Maximum MTU violation in the Packet Partition",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"rx_pkt_status",
 				" Receive error status detected on the RxE2E interface. See txotr_pkt_err_info_ CSR for error information. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 43 */
 				"about_to_timeout",
 				" Notify RXDMA through the OMB to drop the packet due to close to time-range. See txotr_pkt_err_info_ CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 44 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Unused_63_44",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -889,258 +1096,322 @@ static struct hfi_error_csr hfi_hifis_error[] = {
 			{ /* bit 0 */
 				"pcim_q_err",
 				" Underflow/overflow of PCIM Request Queue. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 1 */
 				"imi_hdr_mbe",
 				" IMI Header MBE. See imi_hdr_synd in HIFIS Error Info . ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 2 */
 				"imi_hdr_sbe",
 				" IMI Header SBE. See imi_hdr_synd in HIFIS Error Info . ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 3 */
 				"adm_hdr_mbe",
 				" ADM Header MBE See adm_hdr_synd in HIFIS Error Info . ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 4 */
 				"adm_hdr_sbe",
 				" ADM Header SBE. See adm_hdr_synd in HIFIS Error Info . ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 5 */
 				"rx_req_inq_oflow",
 				" RX Request In Queue Overflow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 6 */
 				"tx_req_inq_oflow",
 				" TX Request In Queue Overflow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 7 */
 				"at_req_inq_oflow",
 				" AT Request In Queue Overflow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 8 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_8",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -1162,258 +1433,322 @@ static struct hfi_error_csr hfi_loca_error[] = {
 			{ /* bit 0 */
 				"hcc_idi_rsp_err",
 				" IDI Response Error (Go-Err). See LOCA Error Info14 . ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 1 */
 				"u2c_req_pe",
 				" U2C Request Parity Error. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 2 */
 				"u2c_rsp_opcode",
 				" U2C Response Opcode invalid for given pending request. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 3 */
 				"u2c_rsp_invalid",
 				" U2C Response is invalid. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 4 */
 				"u2c_rsp_go",
 				" U2C Response GO state error. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 5 */
 				"u2c_rsp_pe",
 				" U2C Response Parity Error. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 6 */
 				"dpb_snpq_err",
 				" Data Pull Buffer Snoop Queue Error (over/under flow). ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 7 */
 				"imi_req_que_err",
 				" IMI Request Queue Error (over/underflow). ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 8 */
 				"proq_g_mbe",
 				" PROQ Global tail pointer queue MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 9 */
 				"proq_f_mbe",
 				" PROQ Flow tail pointer queue MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 10 */
 				"proq_hl_mbe",
 				" PROQ hold queue MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 11 */
 				"conq_hdr_mbe",
 				" ConQ header MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 12 */
 				"iti_wp_mbe",
 				" IDI Target WP (UQB) MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 13 */
 				"u2c_data_mbe",
 				" U2C Data MBE. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 14 */
 				"u2c_poi_mbe",
 				" U2C Poison and ECC Valid bit queue MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 15 */
 				"u2c_dir_mbe",
 				" U2C L1DIR (detected in IMI) MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 16 */
 				"u2c_wp_mbe",
 				" U2C WritePull (USB) MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 17 */
 				"c2u_eqb_mbe",
 				" C2U Eviction Request (EQB) MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 18 */
 				"c2u_nqb_mbe",
 				" C2U New Request (NQB) MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 19 */
 				"c2u_snp_mbe",
 				" C2U DPB Snoop header MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 20 */
 				"c2u_wp_mbe",
 				" C2U DPB WritePull header MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 21 */
 				"c2u_data_mbe",
 				" C2U DPB Data MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 22 */
 				"imi_orb_cnf_mbe",
 				" IDI Master ORB CNF MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 23 */
 				"imi_orb_rsp_mbe",
 				" IDI Master ORB RSP MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 24 */
 				"imi_orb_sch_mbe",
 				" IDI Master ORB SCH MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 25 */
 				"mru_table_mbe",
 				" MRU Table MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 26 */
 				"pcam_mbe",
 				" PCAM data MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 27 */
 				"hcc_dcd_tag_mbe",
 				" HCC received MBE signaling with DCD tag data. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 28 */
 				"adm_cas_db_mbe",
 				" ADM Compare & Swap Delay Buffer MBE. ERR_CATEGTORY_TRANSACTION",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"adm_hdr_db_mbe",
 				" ADM Header Delay Buffer MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 30 */
 				"adm_paf_db_mbe",
 				" ADM PAF Delay Buffer MBE. ERR_CATEGTORY_TRANSACTION",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"adm_re_db_mbe",
 				" ADM RE Delay Buffer MBE. ERR_CATEGTORY_TRANSACTION",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"adm_sl_db_mbe",
 				" ADM ShortLoop Delay Buffer MBE. ERR_CATEGTORY_TRANSACTION",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"dcache_mbe",
 				" DataCache MBE. ERR_CATEGTORY_TRANSACTION",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"wrifill_mbe",
 				" WriteFill Buffer MBE. ERR_CATEGTORY_TRANSACTION",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"hcc_rpl_delay_perr",
 				" HCC Replay Delay RF Parity Error. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 36 */
 				"proq_g_sbe",
 				" PROQ global tail pointer queue SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 37 */
 				"proq_f_sbe",
 				" PROQ Flow tail pointer queue SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 38 */
 				"proq_hl_sbe",
 				" PROQ hold queue SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 39 */
 				"conq_hdr_sbe",
 				" ConQ header SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 40 */
 				"iti_wp_sbe",
 				" IDI Target WP (UQB) SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 41 */
 				"u2c_data_sbe",
 				" U2C Data SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 42 */
 				"u2c_poi_sbe",
 				" U2C Poison and ECC valid bit queue SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 43 */
 				"u2c_dir_sbe",
 				" U2C L1DIR (detected in IMI) SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 44 */
 				"u2c_wp_sbe",
 				" U2C WritePull (USB) SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 45 */
 				"c2u_eqb_sbe",
 				" C2U Eviction Request (EQB) SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 46 */
 				"c2u_nqb_sbe",
 				" C2U New Request (NQB) SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 47 */
 				"c2u_snp_sbe",
 				" C2U DPB Snoop header SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 48 */
 				"c2u_wp_sbe",
 				" C2U DPB WritePull header SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 49 */
 				"c2u_data_sbe",
 				" C2U DPB Data SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 50 */
 				"imi_orb_cnf_sbe",
 				" IDI Master ORB CNF SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 51 */
 				"imi_orb_rsp_sbe",
 				" IDI Master ORB RSP SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 52 */
 				"imi_orb_sch_sbe",
 				" IDI Master ORB SCH SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 53 */
 				"mru_table_sbe",
 				" MRU Table SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 54 */
 				"pcam_sbe",
 				" PCAM data SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 55 */
 				"hcc_replay_err",
 				" HCC Replay state consistency error. See hcc_replay_status . ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 56 */
 				"adm_cas_db_sbe",
 				" ADM Compare & Swap Delay Buffer SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 57 */
 				"adm_hdr_db_sbe",
 				" ADM Header Delay Buffer SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 58 */
 				"adm_paf_db_sbe",
 				" ADM PAF Delay Buffer SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 59 */
 				"adm_re_db_sbe",
 				" ADM RE Delay Buffer SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 60 */
 				"adm_sl_db_sbe",
 				" ADM ShortLoop Delay Buffer SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 61 */
 				"dcache_sbe",
 				" DataCache SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 62 */
 				"wrifill_sbe",
 				" WriteFill Buffer SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 63 */
 				"reserved_63",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -1433,258 +1768,322 @@ static struct hfi_error_csr hfi_loca_error[] = {
 			{ /* bit 0 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 1 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 2 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 3 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 4 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 5 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 6 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 7 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 8 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 9 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 10 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 11 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 12 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 13 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 14 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 15 */
 				"dcd_bank_mbe",
 				" DCD Bank level MBE. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 16 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 17 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 18 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 19 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 20 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 21 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 22 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 23 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 24 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 25 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 26 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 27 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 28 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 29 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 30 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 31 */
 				"dcd_bank_sbe",
 				" DCD Bank level SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 32 */
 				"conq_tail_mbe",
 				" ConQ Tail pointer MBE. See conq_tail_synd . ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 33 */
 				"hifis_hdr_mbe",
 				" HIFIS Header MBE. See hifis_hdr_synd . ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 34 */
 				"conq_tail_sbe",
 				" ConQ Tail pointer SBE. See conq_tail_synd . ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 35 */
 				"hifis_hdr_sbe",
 				" HIFIS Header SBE. See hifis_hdr_synd . ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 36 */
 				"pmon_rollover",
 				" Performance Monitor Rollover Event. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 37 */
 				"adm_malform_blen",
 				" Atomic operation with misaligned BLEN/ADT. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 38 */
 				"adm_malform_addr",
 				" Atomic operation with misaligned ADDR/ADT. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 39 */
 				"adm_malform_adt",
 				" Atomic operation with invalid ADT. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 40 */
 				"adm_malform_aso",
 				" Atomic operation with invalid ASOP. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 41 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"reserved_63_41",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -1706,258 +2105,322 @@ static struct hfi_error_csr hfi_pcim_error[] = {
 			{ /* bit 0 */
 				"itr_read_pe",
 				" ITR read parity error. See itr_rpe_entry . ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 1 */
 				"msix_addr_mbe",
 				" MISX Table Addr MBE. See msix_addr_synd info. Request dropped. ERR_CATEGORY_NODE. SW recovery possible with polling of INT_STS",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 2 */
 				"msix_data_mbe",
 				" MISX Table Data MBE. See msix_data_synd info. Request dropped. ERR_CATEGORY_NODE. SW recovery possible with polling of INT_STS",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 3 */
 				"msix_addr_sbe",
 				" MISX Table Addr SBE. See msix_addr_synd info. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 4 */
 				"msix_data_sbe",
 				" MISX Table Data SBE. See msix_data_synd info. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 5 */
 				"marb_cmp_hdr_uf",
 				" MARB Completion Header credit Underflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 6 */
 				"marb_cmp_hdr_of",
 				" MARB Completion Header credit Overflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 7 */
 				"marb_np_hdr_uf",
 				" MARB NonPosted Header credit Underflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 8 */
 				"marb_np_hdr_of",
 				" MARB NonPosted Header credit Overflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 9 */
 				"marb_p_hdr_uf",
 				" MARB Posted Header credit Underflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 10 */
 				"marb_p_hdr_of",
 				" MARB Posted Header credit Overflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 11 */
 				"marb_cmp_data_uf",
 				" MARB Completion Data credit Underflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 12 */
 				"marb_cmp_data_of",
 				" MARB Completion Data credit Overflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 13 */
 				"marb_np_data_uf",
 				" MARB NonPosted Data credit Underflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 14 */
 				"marb_np_data_of",
 				" MARB NonPosted Data credit Overflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 15 */
 				"marb_p_data_uf",
 				" MARB Posted Data credit Underflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 16 */
 				"marb_p_data_of",
 				" MARB Posted Data credit Overflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 17 */
 				"hpi_data_parity_err",
 				" HPI Data Parity Error. Request forwarded to CmdQs. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 18 */
 				"hpi_data_poison_err",
 				" HPI Data Poison Error. Request forwarded to CmdQs. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 19 */
 				"gpsb_error",
 				" GPSB Endpoint Error. Non-valid request format. Request dropped. Reset to recover. ERR_CATEGORY_NODE.",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 20 */
 				"p2sb_p_unsup_req",
 				" P2SB Posted Unsupported Request. Request dropped.Root Causes: Posted Unsupported Opcode Posted Illegal PCIe BEDual reported in unsup_req_err ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 21 */
 				"p2sb_np_unsup_req",
 				" P2SB NonPosted Unsupported Request. Request dropped with UR response. Root Causes: Non-Posted Unsupported Opcode Non-Posted Illegal PCIe BE Dual reported in unsup_req_err or advisory_nonfatal_err ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 22 */
 				"p2sb_np_addr_err",
 				" P2SB NonPosted request Address Error. Address did not hit an FXR BAR. Request dropped, UR response sent. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 23 */
 				"p2sb_unexp_cmp",
 				" P2SB Unexpected Completion. Response dropped.Dual reported in unexp_cpl_err or advisory_nonfatal_err ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 24 */
 				"p2sb_p_data_ep",
 				" P2SB Posted Data poison. Request dropped. Dual reported in poison_tlp_err ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 25 */
 				"p2sb_p_data_parity",
 				" P2SB Posted Data Parity error. Request dropped.Dual reported in poison_tlp_err ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 26 */
 				"p2sb_np_data_ep",
 				" P2SB NonPosted Data poison error on CFGWr . Request dropped, and error response returned. Dual reported in poison_tlp_err or advisory_nonfatal_err ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 27 */
 				"p2sb_np_data_parity",
 				" P2SB NonPosted Data Parity error on CFGWr . Request dropped, and error response returned. Dual reported in poison_tlp_err or advisory_nonfatal_err ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 28 */
 				"p2sb_p_addr_err",
 				" P2SB Posted request Address Error. Address did not hit an FXR BAR. Request dropped. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 29 */
 				"p2sb_data_len_err",
 				" P2SB Posted Data Length Error. Request dropped.Root Causes: Illegal Length on MWr Illegal Length on CfgWrDual reported in mal_tlp_err ERR_CATEGORY_HFI. example would be P2P request to FXR.",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 30 */
 				"p2sb_np_read_err",
 				" P2SB NonPosted read size error. CA response to IOSF-PRoot Causes: Illegal Length on CfgRd Illegal Length on MRdDual reported in cmpl_abort_err or advisory_nonfatal_err ERR_CATEGORY_HFI. example would be P2P request to FXR.",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 31 */
 				"p2sb_dataq0_mbe",
 				" P2SB Data Queue0 MBE. Request dropped. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 32 */
 				"p2sb_dataq0_sbe",
 				" P2SB Data Queue0 SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 33 */
 				"p2sb_dataq1_mbe",
 				" P2SB Data Queue1 MBE. Request dropped. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 34 */
 				"p2sb_dataq1_sbe",
 				" P2SB Data Queue1 SBE. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 35 */
 				"sb2p_unsup_pc_fmt",
 				" SB2P Unsupported Posted/Cmp Format. Transaction dropped. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 36 */
 				"sb2p_unsup_pc_opc",
 				" SB2P Unsupported Posted/Cmp Opcode. Transaction dropped. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 37 */
 				"sb2p_unsup_np_fmt",
 				" SB2P Unsupported NonPosted Format. UR response to IOSF-P ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 38 */
 				"sb2p_unsup_np_opc",
 				" SB2P Unsupported NonPosted Opcode. UR response to IOSF-P. ERR_CATEGORY_HFI.",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 39 */
 				"tarb_hdr_ep_error",
 				" TARB Request Header with EP (poison) set. ERR_CATEGORY_INFO. If target is CmdQ, gets reported there. If target it FXR-SB, gets reported in p2sb_p_data_ep .",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 40 */
 				"tarb_hdr_parity_error",
 				" TARB Request Header Parity Error. Dual reported in mal_tlp_err ERR_CATEGORY_HFI. Assert quarantine. Request continues as if no parity error detected.",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 41 */
 				"int_remap_rsp_of",
 				" Interrupt Remap Response FIFO Overflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 42 */
 				"int_remap_rsp_uf",
 				" Interrupt Remap Response FIFO Underflow. ERR_CATEGORY_NODE",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 43 */
 				"fxr_sb_timeout",
 				" IOSF-Sideband (FXR-SB) Request Timeout. Error response back to Primary. ERR_CATEGORY_HFI. Could be lowered if error response is fine.",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 44 */
 				"iosfp_timeout",
 				" IOSF-Primary Request Timeout. Locally complete request (ZBR).Dual reported in cmpl_timeout_err . ERR_CATEGORY_NODE. IOMMU initiated flush did not complete.",
+				ERR_CATEGORY_NODE,
 			},
 			{ /* bit 45 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_45",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -1979,258 +2442,322 @@ static struct hfi_error_csr hfi_txcid_error[] = {
 			{ /* bit 0 */
 				"dlid_perm_vio_err",
 				" DLID violation error ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 1 */
 				"kdeth_perm_vio_err",
 				" KDETH violation error kdeth permission violation error ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 2 */
 				"laddr_too_hi_err",
 				" Address too high error ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 3 */
 				"blk_ovflw_err",
 				" Block over flow error ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 4 */
 				"csr_dlid_table_err",
 				" CSR DLID table error, when config read is performed ACTION: Error reported syndrome reported ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 5 */
 				"dlid_csr_cfg_mbe_err",
 				" DLID CSR CFG MBE error ACTION: Error reported syndrome reported ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 6 */
 				"dlid_csr_cfg_sbe_err",
 				" DLID CSR CFG SBE error ACTION: Error reported syndrome reported ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 7 */
 				"dlid_table_size_err",
 				" DLID table size error ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 8 */
 				"laddr_ovflw_err",
 				" Address overflow error ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 9 */
 				"rpl_ovflw_err",
 				" Response overflow error ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 10 */
 				"table_mbe_err",
 				" Table MBE error, mbe in the DLID table memory ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 11 */
 				"table_sbe_err",
 				" Table SBE error, sbe in the DLID table memory ACTION: Error reported CQ_NUM reported ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 12 */
 				"txci_head_mbe_err",
 				" TXCI head MBE error, mbe detected in the head flit of the packet ACTION: Error reported CQ_NUM reported, packet dropped ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 13 */
 				"txci_head_sbe_err",
 				" TXCI head SBE error, sbe detected in the head flit of the packet ACTION: Error reported CQ_NUM reported ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 14 */
 				"low_overhead_inconsistent_2nd_pkt_err",
 				" Low overhead inconsistent 2nd packet error ACTION: Error reported CQ_NUM reported, packet Failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 15 */
 				"auth_mem_mbe",
 				" AUTH memory MBE error ACTION: Error reported CQ_NUM reported, packet dropped ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 16 */
 				"auth_mem_sbe",
 				" AUTH memory SBE error ACTION: Error reported CQ_NUM reported, ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 17 */
 				"length_odd_mbe",
 				" Length Odd memory MBE error ACTION: Error reported CQ_NUM reported, Nothing done to packet, the error will be caught later in the pipe. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 18 */
 				"length_odd_sbe",
 				" Length Odd memory SBE error ACTION: Error reported CQ_NUM reported, ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 19 */
 				"cq_cfg_mem_p1_mbe",
 				" CQ configuration memory P1 MBE error ACTION: Error reported CQ_NUM reported, packet dropped ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 20 */
 				"cq_cfg_mem_p1_sbe",
 				" CQ configuration memory P1 SBE error ACTION: Error reported CQ_NUM reported ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 21 */
 				"mad_pkt_perm_vio_err",
 				" MAD packet permission violation error ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 22 */
 				"pid_mtch_vio_err",
 				" PID match failed in non-privilege mode ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 23 */
 				"drop_due_to_sl_disable",
 				" drop packet due to SL disable ACTION: Error reported CQ_NUM reported, packet failed ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 24 */
 				"hifis_hdr_ecc_sbe_err",
 				" hifis req interface header sbe error ACTION: Error reported, syndrome reported ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 25 */
 				"hifis_hdr_ecc_mbe_err",
 				" hifis req interface data valid parity error Action Error reported. Packet dropped. No other information can be reported ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 26 */
 				"fxr_hifis_reqrsp_hval_par_err",
 				" hifis req interface data valid parity error Action Error reported. Packet dropped No other information can be reported ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 27 */
 				"fxr_hifis_reqrsp_tval_par_err",
 				" hifis req interface data valid parity error Action Error reported. Packet dropped No other information can be reported ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 28 */
 				"fxr_hifis_reqrsp_dval_par_err",
 				" hifis req interface data valid parity error Action Error reported. Packet dropped No other information can be reported ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 29 */
 				"hifis_rsp_2ds_any_sbe",
 				" hifis req interface sbe error at 2nd pipe ACTION: Error reported and CQ_NUM is flagged ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 30 */
 				"hifis_rsp_2ds_any_mbe",
 				" hifis req interface mbe error at 2nd pipe; this error will drop the write and hence the transaction for the CQ which got dropped will be hang. ACTION: WRITE DROPPED hence the CQ will be hang. Error reported and CQ_NUM is flagged ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 31 */
 				"jkey_mtch_err",
 				" if for the kdeth packet the masked job key extracted out of the auth index mismatches with the packet jkey. ACTIONS: Packet failed, Error flagged, CQ_NUM reported ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 32 */
 				"outofbound_error",
 				" In case of the single write occupy 2 credits this error is flagged ACTION: WRITE DROPPED hence the CQ will be hang. Error reported and CQ_NUM is flagged ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 33 */
 				"write_to_disabled_cq",
 				" Write happened to disabled cq and dropped ACTION: WRITE DROPPED hence the CQ will be hang error reported and CQ_NUM is flagged ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 34 */
 				"raw_hifis_rsp_2ds_any_sbe",
 				" hifis req interface sbe error at 2nd pipe ACTION: Error reported and CQ_NUM is flagged ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 35 */
 				"raw_hifis_rsp_2ds_any_mbe",
 				" hifis req interface mbe error at 2nd pipe; this error will drop the write and hence the transaction for the CQ which got dropped will be hang. ACTION: WRITE DROPPED hence the CQ will be hang. Error reported and CQ_NUM is flagged ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 36 */
 				"auth_index_err",
 				" illegal auth index used. the output of auth table is srank and user ID error is flagged when auth.srank == PTL_RANK_ANY & portal packet | auth.srank != PTL_RANK_ANY & psm packet. ACTION: PACKET FAIL, CQ number is flagged in JKEY_MTCH_ERR_CQ_NUM ERROR_CATAGORY_TRANSACTION",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"lnh_vio_err",
 				" in case of the 9b packet LNH = 0 and 1 are illegal. following are legal combination. Now only 9B OFED DMA with GRH can contain GRH and hence come with LNH = 3 '9B OFED DMA' and LNH = 2 '9B OFED DMA with GRH' and LNH = 3 and privileged CQ '9B PSM PIO' and LNH = 2 '9B PSM DMA' and LNH = 2 The cq which encounters this issue is flagged in txcid_err_info_other_error_1.kdeth_perm_vio_err_cq_num ERROR_CATAGORY_TRANSACTION",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_38",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -2252,258 +2779,322 @@ static struct hfi_error_csr hfi_txcic_error[] = {
 			{ /* bit 0 */
 				"vlf_txe_cfg_par_error",
 				" Length fifo parity error ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 1 */
 				"vlff_txe_cfg_sm_par_error",
 				" Length fifo fsm parity error ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 2 */
 				"timeout_sm_par_err",
 				" Timeout FSM parity error ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 3 */
 				"overflow_err",
 				" Overflow error ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 4 */
 				"pcc_head_sop_sbe",
 				" Head sop sbe error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"pcc_head_sop_mbe",
 				" Head sop mbe error ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 6 */
 				"vl_len_mem_arb_pcvlarb_q2_rdata_ecc_sbe",
 				" Length memory arbiter read data sbe error ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 7 */
 				"vl_len_mem_arb_pcvlarb_q2_rdata_ecc_mbe",
 				" Length memory arbiter read data mbe error ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 8 */
 				"pkt_ctrl_fifo_rdata_sbe",
 				" Packet fifo read data sbe error ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 9 */
 				"pkt_ctrl_fifo_rdata_mbe",
 				" Packet fifo read data mbe error ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 10 */
 				"inv_write_flush",
 				" A write occurred tio a CQ that was being drained. The write did not occur ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 11 */
 				"qword_cnt_err_mbe",
 				" QWORD Count memory tracking MBE error ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 12 */
 				"qword_cnt_err_sbe",
 				" QWORD Count memory tracking SBE errorERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 13 */
 				"ctxt_timeout",
 				" Command queue is timed out, The timeout infor will be automatically reset after all the slots of the timeout packet is received by the HFI. Once the last slot of the packet is received it will send the head update for the last slot. The error status can be reset after that. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 14 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_14",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -2525,258 +3116,322 @@ static struct hfi_error_csr hfi_otr_msg_error[] = {
 			{ /* bit 0 */
 				"tail_abort_err",
 				" Error indication received from TXCI for a PIO which has timed out while being written to a CQ. See txotr_msg_err_info_invalid_cmd CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 1 */
 				"tail_flit_miss_err",
 				" Multiple head flits with no tail between commands received from TXCI. See txotr_msg_err_info_invalid_cmd CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 2 */
 				"head_flit_miss_err",
 				" Multiple tail flits with no head between commands received from TXCI. See txotr_msg_err_info_invalid_cmd CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 3 */
 				"cmd_length_err",
 				" Malformed length packet from TXCI. OTR checks the cmd_length against the tail location. See txotr_msg_err_info_invalid_cmd CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 4 */
 				"cmd_mbe",
 				" Multiple BIt Error in command from TXCI or Buffer Programmable Engine Error Flag. See txotr_msg_err_info_txci_cmd_be_0 & txotr_msg_err_info_txci_cmd_be_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 5 */
 				"cmd_sbe",
 				" Single Bit Error in command from TXCI or Buffer Programmable Engine Error Flag. See txotr_msg_err_info_txci_cmd_be_0 & txotr_msg_err_info_txci_cmd_be_1 CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 6 */
 				"omb_fifo_mbe",
 				" Multi bIt Error for reads from the OMB fifo. See txotr_msg_err_info_omb_fifo_0 & txotr_msg_err_info_omb_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 7 */
 				"omb_fifo_sbe",
 				" Single bIt Error for reads from the OMB fifo. See txotr_msg_err_info_omb_fifo_0 & txotr_msg_err_info_omb_fifo_1 CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 8 */
 				"omb_fifo_undflow",
 				" OMB fifo under flow error See txotr_msg_err_info_omb_fifo_0 & txotr_msg_err_info_omb_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 9 */
 				"omb_fifo_ovrflow",
 				" OMB fifo over flow error See txotr_msg_err_info_omb_fifo_0 & txotr_msg_err_info_omb_fifo_1 CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 10 */
 				"rendz_fifo_mbe",
 				" Multiple BIt Error for reads from the Rendezous fifo. See txotr_msg_err_info_rendz_fifo_0 & txotr_msg_err_info_rendz_fifo_1 for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 11 */
 				"rendz_fifo_sbe",
 				" Single BIt Error for reads from the Rendezous fifo. See txotr_msg_err_info_rendz_fifo_0 & txotr_msg_err_info_rendz_fifo_1 for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 12 */
 				"rendz_fifo_undflow",
 				" Rendezous fifo under flow error See txotr_msg_err_info_rendz_fifo_0 & txotr_msg_err_info_rendz_fifo_1 for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 13 */
 				"rendz_fifo_ovrflow",
 				" Rendezous fifo over flow error See txotr_msg_err_info_rendz_fifo_0 & txotr_msg_err_info_rendz_fifo_1 for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 14 */
 				"msgid_mem_par",
 				" Parity Error for reads from the message ID memory. See txotr_msg_err_info_msgid_mem_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 15 */
 				"pkt_fail",
 				" Packet fail error. See txotr_msg_err_info_invalid_cmd CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 16 */
 				"omb_mbe",
 				" Outstanding Message Buffer MBE Error Flag. See txotr_msg_err_info_omb_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 17 */
 				"omb_sbe",
 				" Outstanding Message Buffer SBE Error Flag. See txotr_msg_err_info_omb_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 18 */
 				"rx_rsp_intf_mbe",
 				" Multiple BIt Error for reads from the RX response interface FIFO. See txotr_msg_err_info_rx_rsp_intf_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 19 */
 				"rx_rsp_intf_sbe",
 				" Single BIt Error for reads from the RX response interface FIFO See txotr_msg_err_info_rx_rsp_intf_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 20 */
 				"rx_rsp_ombctrl_mbe",
 				" Multiple BIt Error for reads from the OMB RX response control FIFO. See txotr_msg_err_info_rx_rsp_ombctrl_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 21 */
 				"rx_rsp_ombctrl_sbe",
 				" Single BIt Error for reads from the OMB RX response control FIFO. See txotr_msg_err_info_rx_rsp_ombctrl_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 22 */
 				"rx_rsp_ombctrl_undflow",
 				" OMB RX response control FIFO underflow. See txotr_msg_err_info_rx_rsp_ombctrl_be for error information ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 23 */
 				"rx_rsp_ombctrl_overflow",
 				" OMB RX response control FIFO over flow See txotr_msg_err_info_rx_rsp_ombctrl_be for error information ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 24 */
 				"rx_rsp_ombstate_undflow",
 				" OMB RX response state FIFO underflow See txotr_msg_err_info_rx_rsp_ombctrl_be for error information ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 25 */
 				"rx_rsp_ombstate_overflow",
 				" OMB RX response state FIFO over flow. See txotr_msg_err_info_rx_rsp_ombctrl_be for error information ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 26 */
 				"rx_rsp_rxdma_cmd_fifo_mbe",
 				" OMB RX RSP RXDMA command FIFO multi bit error.See txotr_msg_err_info_rx_rsp_rxdma_cmd_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 27 */
 				"rx_rsp_rxdma_cmd_fifo_sbe",
 				" OMB RX RSP RXDMA command FIFO single bit error. See txotr_msg_err_info_rx_rsp_rxdma_cmd_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 28 */
 				"rx_rsp_rxdma_cmd_fifo_undflow",
 				" OMB RX RSP RXDMA command FIFO under flow See txotr_msg_err_info_rx_rsp_rxdma_cmd CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 29 */
 				"rx_rsp_rxdma_cmd_fifo_overflow",
 				" OMB RX RSP RXDMA command FIFO over flow. See txotr_msg_err_info_rx_rsp_rxdma_cmd CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 30 */
 				"omb_rxet_fifo_undflow",
 				" OMB RXET FIFO underflow. See txotr_msg_err_info_rx_rsp_rxdma_cmd CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 31 */
 				"omb_rxet_fifo_overflow",
 				" OMB RXET FIFO over flow. See txotr_msg_err_info_rx_rsp_rxdma_cmd CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 32 */
 				"nr_bit_set_omb_rd",
 				" No retransmit bit is set in the OMB read when BPE issues a read of the OMB. See txotr_msg_err_info_nr_bit_set CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 33 */
 				"unknown_txci_cmd",
 				" Command received from TXCI was mapped to an unknown command type encoding. See txotr_msg_err_info_unknown_cmd CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 34 */
 				"rmsg_txci_cmd",
 				" RMessage (or REvent) received from TXCI interface See txotr_msg_err_info_rmessage_cmd CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 35 */
 				"unexpected_cmd",
 				" OTR receives a command on a message class which does not typically carry that command type See txotr_msg_err_info_rmessage_cmd CSR for error information. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 36 */
 				"cts_queue_mbe",
 				" Multi bit error in CTS queues in BPE. See txotr_msg_err_info_cts_queue_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 37 */
 				"cts_queue_sbe",
 				" Single bit error in CTS queues in BPE. See txotr_msg_err_info_cts_queue_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 38 */
 				"cts_queue_undflow",
 				" Under flow detected in the CTS queues in BPE. See txotr_msg_err_info_cts_queue_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 39 */
 				"cts_queue_overflow",
 				" Overflow detected in CTS queues in BPE. See txotr_msg_err_info_cts_queue_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 40 */
 				"timeout_queue_mbe",
 				" Multi bit error in Timeout queues. See txotr_msg_err_info_timeout_queue_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 41 */
 				"timeout_queue_sbe",
 				" Single bit error in Timeout queues. See txotr_msg_err_info_timeout_queue_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 42 */
 				"timeout_queue_undflow",
 				" Under flow detected in the Timeout queues. See txotr_msg_err_info_timeout_queue_be CSR for error information.ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 43 */
 				"timeout_queue_overflow",
 				" Overflow detected in Timeout queues. See txotr_msg_err_info_timeout_queue_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 44 */
 				"nack_oos_queue_mbe",
 				" Multi bit error in NACK OOS queues. See txotr_msg_err_info_nack_oos_queue_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 45 */
 				"nack_oos_queue_sbe",
 				" Single bit error in NACK OOS queues. See txotr_msg_err_info_nack_oos_queue_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 46 */
 				"nack_oos_queue_undflow",
 				" Under flow detected in the NACK OOS queues. See txotr_msg_err_info_nack_oos_queue_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 47 */
 				"nack_oos_queue_overflow",
 				" Overflow detected in NACK OOS queues. See txotr_msg_err_info_nack_oos_queue_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 48 */
 				"bpe_prog_mem_mbe",
 				" Buffer Programmable Engine Program Memory MBE Error Flag. See txotr_msg_err_info_bpe_prog_mem_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 49 */
 				"bpe_prog_mem_sbe",
 				" Buffer Programmable Engine Program Memory SBE Error Flag. See txotr_msg_err_info_bpe_prog_mem_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 50 */
 				"bpe_data_mem_mbe",
 				" Buffer Programmable Engine Data Memory MBE Error Flag. See txotr_msg_err_info_bpe_data_mem_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 51 */
 				"bpe_data_mem_sbe",
 				" Buffer Programmable Engine Data Memory SBE Error Flag. See txotr_msg_err_info_bpe_data_mem_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 52 */
 				"bpe_omb_mem_rd_mbe",
 				" Buffer Programmable Engine OMB Read MBE Error Flag.. See txotr_msg_err_info_bpe_omb_rd_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 53 */
 				"bpe_omb_mem_rd_sbe",
 				" Buffer Programmable Engine OMB read SBE Error Flag. See txotr_msg_err_info_bpe_omb_rd_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 54 */
 				"bpe_opb_mem_rd_mbe",
 				" Buffer Programmable Engine OPB Read MBE Error Flag.. See txotr_msg_err_info_bpe_opb_rd_be CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 55 */
 				"bpe_opb_mem_rd_sbe",
 				" Buffer Programmable Engine OPB read SBE Error Flag. See txotr_msg_err_info_bpe_opb_rd_be CSR for error information. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 56 */
 				"bpe_firmware",
 				" Buffer Programmable Engine Error Flag. See txotr_msg_err_info_bpe_firmware CSR for error information. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 57 */
 				"fw_authen_err",
 				" Error while authenticating the firmware. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 58 */
 				"ref_count_fifo_undflow",
 				" Reference count fifo underflow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 59 */
 				"ref_count_fifo_overflow",
 				" Reference count fifo overflow error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 60 */
 				"local_start_misaligned",
 				" Local start mis-aligned error. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
 			},
 			{ /* bit 61 */
 				"Unused_63_61",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Unused_63_61",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Unused_63_61",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -2798,258 +3453,322 @@ static struct hfi_error_csr hfi_txdma_error[] = {
 			{ /* bit 0 */
 				"pkt_desc_cor_sb_err",
 				" Packet descriptor from OTR contained a correctable sb error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"pkt_desc_unc_sb_err",
 				" Packet descriptor from OTR contained a uncorrectable sb error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"pkt_desc_cor_dat_err",
 				" Packet descriptor from OTR contained a correctable data error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"pkt_desc_unc_dat_err",
 				" Packet descriptor from OTR contained a uncorrectable data error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"pkt_desc_gen_err",
 				" Packet descriptor generation error received from OTR",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"inpq_cor_err",
 				" Input queue FIFO encountered a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"inpq_unc_err",
 				" Input queue FIFO encountered a uncorrectable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"xlateq_cor_err",
 				" Translation queue FIFO encountered a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"xlateq_unc_err",
 				" Translation queue FIFO encountered a uncorrectable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"inpq_overflow",
 				" Input queue FIFO overflowed",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"at_status_err",
 				" Translation status error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"timeout_err",
 				" Timeout error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"mem_rsp_hdr_cor_err",
 				" Memory response header contained a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"mem_rsp_hdr_unc_err",
 				" Memory response header contained a uncorrectable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"mem_rsp_dat_cor_err",
 				" Memory response data contained a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"mem_rsp_dat_unc_err",
 				" Memory response data contained a uncorrectable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"orb_cor_err",
 				" ORB memory encountered a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"orb_unc_err",
 				" ORB memory encountered a uncorrectable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"wce_cor_err",
 				" Write combining memory encountered a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"wce_unc_err",
 				" Write combining memory encountered a uncorrectable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"pkt_buf_cor_err",
 				" Packet buffer memory encountered a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"pkt_buf_unc_err",
 				" Packet buffer memory encountered a uncorrectable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"rspq_cor_err",
 				" Response queue FIFO encountered a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"rspq_unc_err",
 				" Response queue FIFO encountered a uncorrectable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"rspq_overflow",
 				" Response queue FIFO overflowed",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"lm0_credit_err",
 				" The credit acknowledge from LM0 contained a parity error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"lm1_credit_err",
 				" The credit acknowledge from LM1 contained a parity error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"buf_trk_cor_err",
 				" Buffer tracking memory encountered a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"buf_trk_unc_err",
 				" Buffer tracking memory encountered a uncorrectable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"pkt_trk_cor_err",
 				" Packet tracking memory encountered a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"pkt_trk_unc_err",
 				" Packet tracking memory encountered a uncorrectable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"mem_rsp_sts_err",
 				" Memory response contained a status error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_32",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -3071,258 +3790,322 @@ static struct hfi_error_csr hfi_lm_error[] = {
 			{ /* bit 0 */
 				"timeout_p0",
 				" Port 0 Link timeout",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"excessive_buffer_overrun",
 				" Excessive Buffer Overrun Errors. Activated whenever a INQ buffer overrun occurs. Count of overruns is in the Error Info register.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"rx_freelist_0_sbe",
 				" RX Free List 0 ECC SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"rx_freelist_1_sbe",
 				" RX Free List 1 ECC SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"rx_freelist_0_mbe",
 				" RX Free List 0 ECC MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"rx_freelist_1_mbe",
 				" RX Free List 1 ECC MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"rx_inq_sbe",
 				" RX Input Queue 0 ECC SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"rx_inq_mbe",
 				" RX Input Queue 1 ECC SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"rx_tracker_0_sbe",
 				" RX Tracker Array 0 ECC SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"rx_tracker_1_sbe",
 				" RX Tracker Array 1 ECC SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"rx_tracker_0_mbe",
 				" RX Tracker Array 0 ECC MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"rx_tracker_1_mbe",
 				" RX Tracker Array 1 ECC MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"Always_zero",
 				" Unused future expansion",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"payld_info_fifo_overflow_mc0",
 				" Payload info fifo overflow detected for any of the TC for MC0",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"payld_info_fifo_underflow_mc0",
 				" Payload info fifo underflow detected for any of the TC for MC0",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"bad_sc_map_mc0",
 				" sc15 not mapped to vl15 MC0",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"bad_sl_map_mc0",
 				" sc15 not pre translated is illegal MC0",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"drop_all_vl_packet_mc0",
 				" packet being dropped because all vl drop set MC0",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"payld_info_fifo_overflow_mc1",
 				" Payload info fifo overflow detected for any of the TC for MC1",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"payld_info_fifo_underflow_mc1",
 				" Payload info fifo underflow detected for any of the TC for MC1",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"bad_sc_map_mc1",
 				" sc15 not mapped to vl15 mc1",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"bad_sl_map_mc1",
 				" sc15 not pre translated is illegal mc1",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"drop_all_vl_packet_mc1",
 				" packet being dropped because all vl drop set mc1",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"any_vl_buf_underflow",
 				" any_vl_buffer underflow detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"any_vl_buf_overflow",
 				" any_vl_buffer overflow detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"prd_buff_underflow",
 				" prd_fifo underflow detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"prd_buff_overflow",
 				" prd_fifo overflow detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"rm_info_fifo_par_err",
 				" rm_info fifo pointer parity error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"rm_info_fifo_underflow",
 				" Rate matching info fifo underflow",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"rm_info_fifo_overflow",
 				" Rate matching info fifo overflow",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Dlid_error_mc0",
 				" Dlid error occurred in MC0",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Dlid_error_mc1",
 				" Dlid error occurred in MC1",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_51",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -3344,258 +4127,322 @@ static struct hfi_error_csr hfi_rxe2e_error[] = {
 			{ /* bit 0 */
 				"diagnostic",
 				" Diagnostic Error Flag",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"mc0_lm_in_mbe",
 				" MC0 LINKMUX input mbe Error information: Section 29.13.3.32, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"mc0_lm_in_sbe",
 				" MC0 LINKMUX input sbe Error information: . Section 29.13.3.32, 'RXE2E Error Info MC0 LM Input SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"mc1_lm_in_mbe",
 				" MC1 LINKMUX input mbe Error information: Section 29.13.3.33, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"mc1_lm_in_sbe",
 				" MC1 LINKMUX input sbe Error information: . Section 29.13.3.33, 'RXE2E Error Info MC1 LM Input SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"mc0_input_fifo_mbe",
 				" MC0 input fifo mbe Error information: Section 29.13.3.37, 'RXE2E Error Info PSN Cache Tag MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"mc0_input_fifo_sbe",
 				" MC0 input fifo sbe Error information: . Section 29.13.3.37, 'RXE2E Error Info PSN Cache Tag MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"mc1_input_fifo_mbe",
 				" MC1 input fifo mbe Error information: Section 29.13.3.34, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"mc1_input_fifo_sbe",
 				" MC1 input fifo sbe Error information: . Section 29.13.3.34, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"psn_cache_tag_mbe",
 				" PSN Cache tag mbe Error information: Section 29.13.3.37, 'RXE2E Error Info PSN Cache Tag MBE' Note: these are fairly fatal as you don't know what connection is bad.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"psn_cache_tag_sbe",
 				" PSN Cache tag sbe Error information: . Section 29.13.3.36, 'RXE2E Error Info PSN Cache Tag SBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"psn_cache_data_mbe",
 				" PSN Cache data mbe Error information: Section 29.13.3.38, 'RXE2E Error Info PSN Cache Data SBE/MBE' Note: This will result in auto-disconnect for the connection. This may also remove a big scoreboard slot from being re-allocated as you can't rely on either the big_in_use bit or the big_scoreboard pointer in the data. So if a big scoreboard was in use, that slot will remain unavailabe for re-use until the next hard reset.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"psn_cache_data_sbe",
 				" PSN Cache data sbe Error information: . Section 29.13.3.38, 'RXE2E Error Info PSN Cache Data SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"MC0crc",
 				" CRC error on MC0 Error information: . Section 29.13.3.41, 'RXE2E Error Info CRC'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"MC1crc",
 				" CRC error on MC1 Error information: . Section 29.13.3.41, 'RXE2E Error Info CRC'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"big_scoreboard_mbe",
 				" big scoreboard mbe. Error information: Section 29.13.3.40, 'RXE2E Error Info Big Scoreboard MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"big_scoreboard_sbe",
 				" big scoreboard sbe. Error information: Section 29.13.3.39, 'RXE2E Error Info Big Scoreboard SBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"any_mbe_cntr_max",
 				" Some mbe cntr is saturated (all 1's). Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"any_mbe_cntr_non_zero",
 				" Some mbe cntr is non-zero. Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"any_sbe_cntr_max",
 				" Some sbe cntr is saturated (all 1's). Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"any_sbe_cntr_non_zero",
 				" Some sbe cntr is non-zero. Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_21",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -3617,258 +4464,322 @@ static struct hfi_error_csr hfi_rxhp_error[] = {
 			{ /* bit 0 */
 				"pe_inst_sbe",
 				" PE instruction cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"pe_inst_sbe",
 				" PE instruction cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"pe_inst_sbe",
 				" PE instruction cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"pe_inst_sbe",
 				" PE instruction cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"pe_inst_sbe",
 				" PE instruction cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"pe_inst_sbe",
 				" PE instruction cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"pe_inst_sbe",
 				" PE instruction cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"pe_inst_sbe",
 				" PE instruction cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"pe_inst_mbe",
 				" PE instruction cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"pe_inst_mbe",
 				" PE instruction cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"pe_inst_mbe",
 				" PE instruction cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"pe_inst_mbe",
 				" PE instruction cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"pe_inst_mbe",
 				" PE instruction cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"pe_inst_mbe",
 				" PE instruction cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"pe_inst_mbe",
 				" PE instruction cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"pe_inst_mbe",
 				" PE instruction cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"pe_data_sbe",
 				" PE data cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"pe_data_sbe",
 				" PE data cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"pe_data_sbe",
 				" PE data cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"pe_data_sbe",
 				" PE data cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"pe_data_sbe",
 				" PE data cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"pe_data_sbe",
 				" PE data cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"pe_data_sbe",
 				" PE data cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"pe_data_sbe",
 				" PE data cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"pe_data_mbe",
 				" PE data cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"pe_data_mbe",
 				" PE data cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"pe_data_mbe",
 				" PE data cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"pe_data_mbe",
 				" PE data cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"pe_data_mbe",
 				" PE data cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"pe_data_mbe",
 				" PE data cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"pe_data_mbe",
 				" PE data cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"pe_data_mbe",
 				" PE data cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"diagnostic",
 				" Diagnostic Error Flag",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"pte_cache_tag_mbe",
 				" PTE Cache tag mbe Error information: Section 29.12.3.11, 'RXHP Error Info PTE Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"pte_cache_tag_sbe",
 				" PTE Cache tag sbe Error information: . Section 29.12.3.10, 'RXHP Error Info PTE Cache Tag SBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"pte_cache_data_mbe",
 				" PTE Cache data mbe Error information: Section 29.12.3.12, 'RXHP Error Info PTE Cache Data SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"pte_cache_data_sbe",
 				" PTE Cache data sbe Error information: . Section 29.12.3.12, 'RXHP Error Info PTE Cache Data SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"psc0_cache_mbe",
 				" PSC0 Cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"psc0_cache_sbe",
 				" PSC0 Cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"psc1_cache_mbe",
 				" PSC1 Cache mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"psc1_cache_sbe",
 				" PSC1 Cache sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"hiarb_data_sbe",
 				" hiarb interface sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"hiarb_data_mbe",
 				" hiarb interface mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"qmap_table_sbe",
 				" qmap table sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"qmap_table_mbe",
 				" qmap table mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"flit_data_sbe",
 				" flit data sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"flit_data_mbe",
 				" flit data mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"ci_data_sbe",
 				" command interface data sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"ci_data_mbe",
 				" command interface data mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"trigop_data_sbe",
 				" triggered op data sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"trigop_data_mbe",
 				" triggered op data mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"pkt_status_sbe",
 				" packet status sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"pkt_status_mbe",
 				" packet status mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"ptq_sbe",
 				" ptq sbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"ptq_mbe",
 				" ptq mbe",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_55",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_55",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_55",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_55",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_55",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_55",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_55",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_55",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_55",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -3890,258 +4801,322 @@ static struct hfi_error_csr hfi_rxdma_error[] = {
 			{ /* bit 0 */
 				"dq_write_err",
 				" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"dq_write_err",
 				" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"dq_write_err",
 				" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"dq_write_err",
 				" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"dq_write_err",
 				" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"dq_write_err",
 				" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"dq_write_err",
 				" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"dq_write_err",
 				" Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"dq_read_err",
 				" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"dq_read_err",
 				" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"dq_read_err",
 				" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"dq_read_err",
 				" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"dq_read_err",
 				" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"dq_read_err",
 				" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"dq_read_err",
 				" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"dq_read_err",
 				" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"dq_read_err",
 				" Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"dq_ll_parity_err",
 				" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"dq_ll_parity_err",
 				" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"dq_ll_parity_err",
 				" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"dq_ll_parity_err",
 				" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"dq_ll_parity_err",
 				" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"dq_ll_parity_err",
 				" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"dq_ll_parity_err",
 				" Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"dq_tail_sbe",
 				" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"dq_tail_sbe",
 				" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"dq_tail_sbe",
 				" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"dq_tail_sbe",
 				" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"dq_tail_sbe",
 				" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"dq_tail_sbe",
 				" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"dq_tail_sbe",
 				" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"dq_tail_sbe",
 				" Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"dq_tail_mbe",
 				" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"dq_tail_mbe",
 				" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"dq_tail_mbe",
 				" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"dq_tail_mbe",
 				" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"dq_tail_mbe",
 				" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"dq_tail_mbe",
 				" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"dq_tail_mbe",
 				" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"dq_tail_mbe",
 				" Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"ha_ecc_sbe",
 				" Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"ha_ecc_sbe",
 				" Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"ha_ecc_sbe",
 				" Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"ha_ecc_sbe",
 				" Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"ha_ecc_mbe",
 				" Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"ha_ecc_mbe",
 				" Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"ha_ecc_mbe",
 				" Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"ha_ecc_mbe",
 				" Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_48",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -4163,258 +5138,322 @@ static struct hfi_error_csr hfi_rxet_error[] = {
 			{ /* bit 0 */
 				"eb_cam_par_err",
 				" Parity error detected on event cam. This is fatal.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"eq_desc_cache_tag_mbe",
 				" EQ Desc Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.6.13, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_MBE - RXET Error Info EQ Desc Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"eq_desc_cache_tag_sbe",
 				" EQ Desc Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.12, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_SBE - RXET Error Info EQ Desc Cache Tag SBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"eq_desc_cache_data_mbe",
 				" EQ Desc Cache data mbe. The 'or' of the 2 ecc domains. Error information: Section 29.16.6.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"eq_desc_cache_data_sbe",
 				" EQ Desc Cache data sbe. The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"trig_op_cache_tag_mbe",
 				" Trig Op Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.6.16, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_MBE - RXET Error Info Trig Op Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"trig_op_cache_tag_sbe",
 				" Trig Op Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.15, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_SBE - RXET Error Info Trig Op Cache Tag SBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"trig_op_cache_data_mbe",
 				" Trig Op Cache data mbe. The 'or' of the 16 ecc domains. Error information: Section 29.16.6.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"trig_op_cache_data_sbe",
 				" Trig Op Cache data sbe. The 'or' of the 16ecc domains. Error information: . Section 29.16.6.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"toh_trig_out_overflow",
 				" Overflow on TrigOp response to RxDMA - 4",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"toh_cache_req_fifo_overflow",
 				" Overflow on TrigOp cache active requests - 8",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"toh_trig_in_fifo_overflow",
 				" Overflow in TrigOp holding FIFO - 4",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"eeh_eqd_req_fifo_overflow",
 				" Overflow on EQD active requests - 8",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"eeh_rsv_fifo_overflow",
 				" Overflow on EQD requests for reservations - 8",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"eeh_event_fifo_overflow",
 				" Overflow on EQD requests for events - 58",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"eb_rxdma_fifo_overflow",
 				" Overflow on RxDMA input requests FIFO - 9 requests",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"eb_event_hdr_q_overflow",
 				" Overflow on event header queue for event sideband info - 58 events",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"eb_addr_q_overflow",
 				" Overflow on event address FIFO for EQD cache request - 58",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"rxhp_event_overflow",
 				" Overflow on RxHP event interface FIFO - one event (2 flits)",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"txotr_event_overflow",
 				" Overflow on TxOTR event interface FIFO - one event (2 flits)",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"eq_full_err",
 				" EQ Full detected. Address of EQD in RXET_ERROR_INFO_1.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"eqd_cache_mbe",
 				" EQ Descriptor Cache MBE *or* NACK from RxHiArb. Address of EQD in RXET_ERROR_INFO_1.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"rsv_err_mbe",
 				" MBE detected on Event reservation input queue.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"rsv_err_sbe",
 				" SBE detected on Event reservation input queue.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"event_req_err_mbe",
 				" MBE detected on Event request input queue.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"event_req_err_sbe",
 				" SBE detected on Event request input queue.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"toa_err_mbe",
 				" MBE detected on TrigOp Append request TrigOp data. Checked on 8 processing stages so is *or* of all.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"toa_err_sbe",
 				" SBE detected on TrigOp Append request TrigOp data. Checked on 8 processing stages so is *or* of all.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"to_cache_resp_err",
 				" resp_err from HiArb for TrigOp cache request",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"to_cache_fr_err",
 				" Framing error on TrigOp cache response from HiArb.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"eq_cache_resp_err",
 				" resp_err from HiArb for EqDesc cache request",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"eq_cache_fr_err",
 				" Framing error on EqDesc cache response from HiArb.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"toa_err",
 				" TrigOp Append request error - CT response not written *or* CT from RxDMA with no matching TrigOp from RxHP *or* TOA received with no TO buffers available.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"eb_cam_write_err",
 				" New event with no empty slots in CAM/event buffer.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"eb_cam_match_err",
 				" No valid match in Event Buffer for request from RxDMA.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"rxhp_event_frame_err",
 				" Framing error on Event from RxHP.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"txotr_event_frame_err",
 				" Framing error on Event from TxOTR.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"trigop_cache_mbe",
 				" TrigOp Cache MBE *or* NACK from RxHiArb.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_38",
 				" Not used.",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -4436,258 +5475,322 @@ static struct hfi_error_csr hfi_rxhiarb_error[] = {
 			{ /* bit 0 */
 				"pcb_err_nval",
 				" PCB access to a non-valid entry. Indicates that the requester attempted to access an invalid entry in the PCB table.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"pcb_err_bvio",
 				" PCB boundary violation. Indicates that either a PCB entry has overlapping regions or that te address calculation for a specific region overlapped into the subsequent PCB region.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"pcb_err_addr_oflw",
 				" PCB address calculation overflow. Indicates that the requester attempted to access an address beyond the maximum supported address range (e.g. 57-bits for virtual address)",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"pcb_err_sbe",
 				" PCB table single bit error detected,",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"pcb_err_mbe",
 				" PCB table multiple bit error detected,",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"mtlb_err_at_rsp",
 				" Mini-TLB received an error response fro the AT while requesting a physical address.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"rxdma_err_frame",
 				" Framing error detected on the RxDMA interface. Indicates that a head/tail mismatch occurred during a request from the RxDMA.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"rxdma_err_sbe",
 				" Single bit error detected on the RxDMA interface.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"rxdma_err_mbe",
 				" Multiple bit error detected on the RxDMA interface.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"rxhp_err_frame",
 				" Framing error detected on the RxHP interface. Indicates that the length does not match the number of dval flits between req_valids.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"rxchp_err_sbe",
 				" Single bit error detected on the RxHP interface.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"rxchp_err_mbe",
 				" Multiple bit error detected on the RxHP interface.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"rxet_err_frame",
 				" Framing error detected on the RxET interface. Indicates that the length does not match the number of dval flits between req_valids.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"rxet_err_sbe",
 				" Single bit error detected on the RxET interface.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"rxet_err_mbe",
 				" Multiple bit error detected on the RxET interface.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"rxe2e_err_sbe",
 				" Single bit error detected on the RxE2E interface.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"rxe2e_err_mbe",
 				" Multiple bit error detected on the RxE2E interface.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"rxcid_err_sbe",
 				" Single bit error detected on the RxCID interface.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"rxcid_err_mbe",
 				" Multiple bit error detected on the RxCID interface.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"slrsp_err_sbe",
 				" Slow response queue single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"slrsp_err_mbe",
 				" Slow response queue multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"fpfifo_perr",
 				" Free pool FIFO parity error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"payld_err_sbe",
 				" Payload SRAM single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"payld_err_mbe",
 				" Payload SRAM multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"hque0_err_sbe",
 				" Holding queue 0 (MCTC=0) single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"hque0_err_mbe",
 				" Holding queue 0 (MCTC=0) multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"hque1_err_sbe",
 				" Holding queue 1(MCTC=1) single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"hque1_err_mbe",
 				" Holding queue 1(MCTC=1) multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"hque2_err_sbe",
 				" Holding queue 2 (MCTC=2) single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"hque2_err_mbe",
 				" Holding queue 2 (MCTC=2) multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"hque3_err_sbe",
 				" Holding queue 3 (MCTC=3) single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"hque3_err_mbe",
 				" Holding queue 3 (MCTC=3) multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"hque4_err_sbe",
 				" Holding queue 4 (MCTC=4) single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"hque4_err_mbe",
 				" Holding queue 4 (MCTC=4) multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"hque5_err_sbe",
 				" Holding queue 5 (MCTC=5) single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"hque5_err_mbe",
 				" Holding queue 5 (MCTC=5) multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"hque6_err_sbe",
 				" Holding queue 6 (MCTC=6) single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"hque6_err_mbe",
 				" Holding queue 6 (MCTC=6) multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"hque7_err_sbe",
 				" Holding queue 7 (MCTC=7) single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"hque7_err_mbe",
 				" Holding queue 7 (MCTC=7) multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"hque8_err_sbe",
 				" Holding queue 8 (misc) single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"hque8_err_mbe",
 				" Holding queue 8 (misc) multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"hque_vect_perr",
 				" Holding queues 0-8 present vector parity error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"mtlb_err_sbe",
 				" Mini-TLB single bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"mtlb_err_mbe",
 				" Mini-TLB multiple bit error detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"mtlb_vect_perr",
 				" Mini-TLB state vector parity error detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"atfifo_sbe",
 				" AT request FIFO single bit error detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"atfifo_mbe",
 				" AT request FIFO multiple bit error detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"hififo_sbe",
 				" HI request FIFO single bit error detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"hififo_mbe",
 				" HI request FIFO multiple bit error detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"hifi_err_frame",
 				" HIFIs interface framing error detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"hifi_err_sbe",
 				" HIFIs interface single bit error detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"hifi_err_mbe",
 				" HIFIs interface multiple bit error detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"nack_err_sbe",
 				" Nack queue single bit error detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"nack_err_mbe",
 				" Nack queue multiple bit error detected",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_55",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_55",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_55",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_55",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_55",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_55",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_55",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_55",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_55",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -4709,258 +5812,322 @@ static struct hfi_error_csr hfi_at_error[] = {
 			{ /* bit 0 */
 				"iommu_disabled",
 				" IOMMU disabled, no device PASID memory access",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"ats_disabled",
 				" Address Translation Disabled, no device PASID memory access",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"PASID_disabled",
 				" PASID access disabled, no device PASID memory access",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"PASID_map_fail",
 				" PID to PASID mapping failed. Invalid PASID entry",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"PASID_priv_fail",
 				" PID to PASID mapping failed. Request Privilege Level .NE. PASID Map Privilege Level",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"pf_pgr_disabled",
 				" page fault for request that could have initiated Page Group Request",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"pw_mem_type_err",
 				" Page Walk returned a memory type inconsistent with memory types supported by device.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"plmr_err",
 				" PLMR range check failed",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"phmr_err",
 				" PHMR range check failed",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"ltdpr_err",
 				" LTDPR range check failed",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"genprot_err",
 				" GenProt range check failed",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"pgr_rsp_err",
 				" PageGroup Response Error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"pgr_rsp_err_of",
 				" PageGroup Response Error Overflow",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"iommu_rsp_err",
 				" Unexpected IOMMU Response. After coming out of FLR, this error may be raised as the OS continues to drain its request queue. It is safe to ignore/clear this error once it is guaranteed that the OS has completely drained its request queue. The device should not be enabled until this drain has occurred. The driver may use system software interfaces to initiate the page request/response drain. See section 7.11 of the IOMMU Specification for details.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"incorrect_sid_err",
 				" Incorrect SID(Device ID) received from IOMMU",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"page_size_err",
 				" IOMMU Page Walk Response for a page size that is not configured for entry into the ExDTLB. Note: Translations will complete, per the response status, but these responses will not be filled in the ExDTLB.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"ptec_tag_mbe",
 				" PTEC Cache Tag MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"ptec_data_mbe",
 				" PTEC Cache Data MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"tr_mbe",
 				" Translation Request Buffer MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"pw_trid_mbe",
 				" Page Walk TRID Buffer MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"pw_trid_of_mbe",
 				" PageWalk TRID Overflow Buffer MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"pw_resp_mbe",
 				" PageWalk Response Buffer MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"pid_pasid_mbe",
 				" PID to PASID Look Up Table MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"pte_lru_2m4k_mbe",
 				" PTE Cache LRU 2M/4K State Table MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"pte_lru_1g_mbe",
 				" PTE Cache LRU 1G State Table MBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"ptec_tag_sbe",
 				" PTEC Cache Tag SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"ptec_data_sbe",
 				" PTEC Cache Data SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"tr_sbe",
 				" Translation Request Buffer SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"pw_trid_sbe",
 				" Page Walk TRID Buffer SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"pw_trid_of_sbe",
 				" PageWalk TRID Overflow Buffer SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"pw_resp_sbe",
 				" PageWalk Response Buffer SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"pid_pasid_sbe",
 				" PID to PASID Look Up Table SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"pte_lru_2m4k_sbe",
 				" PTE Cache LRU 2M/4K State Table SBE",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"iommu_parity_err",
 				" IOMMU register file parity error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"devtlb_id_err",
 				" The Device TLB ID, sent from IOMMU does not match BDF of this FXR device",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"iommu_mem_type_err",
 				" Memory Type Error on IOMMU Host memory interface",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"iommu_seq_msg_err",
 				" IOMMU Sequencer Interface message error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_37",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -4982,258 +6149,322 @@ static struct hfi_error_csr hfi_opio_error[] = {
 			{ /* bit 0 */
 				"ERROR",
 				" Physical layer detected an error (framing or training)",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"CERROR",
 				" Physical layer detected and fixed a correctable error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"TRAINERROR",
 				" Physical layer training failed",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Unused_63_3",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -5255,258 +6486,322 @@ static struct hfi_error_csr hfi_rxcid_error[] = {
 			{ /* bit 0 */
 				"inv_write_inactive",
 				" A CQ write occurred to a CQ that was inactive. ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 1 */
 				"cmdq_csr_err_mbe",
 				" Command queue MBE CSR error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 2 */
 				"cmdq_csr_err_sbe",
 				" Command queue SBE CSR error. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 3 */
 				"cq_mem_mbe_err",
 				" CQ memory MBE error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 4 */
 				"cq_mem_sbe_err",
 				" CQ memory SBE error. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 5 */
 				"out_of_bound_err",
 				" Detected a HIFIS write which crosses the 64byte boundary. ERR_CATEGORY_COMMAND",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 6 */
 				"pid_mismatch_err",
 				" Detected a PID mis match. ERR_CATEGORY_COMMAND",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 7 */
 				"csr_maddr_mbe_err",
 				" Detected a MADDR MBE error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 8 */
 				"csr_maddr_sbe_err",
 				" Detected a MADDR SBE error. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 9 */
 				"csr_tx_cnt_mbe_err",
 				" Detected a TX count MBE error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 10 */
 				"csr_tx_cnt_sbe_err",
 				" Detected a TX count SBE error. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 11 */
 				"csr_rx_cnt_mbe_err",
 				" Detected a RX count MBE error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 12 */
 				"csr_rx_cnt_sbe_err",
 				" Detected a RX count SBE error. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 13 */
 				"csr_tx_ptr_mbe_err",
 				" Detected a TX pointer MBE error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 14 */
 				"csr_tx_ptr_sbe_err",
 				" Detected a TX pointer SBE error. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 15 */
 				"csr_rx_ptr_mbe_err",
 				" Detected a RX pointer MBE error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 16 */
 				"csr_rx_ptr_sbe_err",
 				" Detected a RX pointer SBE error. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 17 */
 				"csr_req_fifo_mbe_err",
 				" Detected a Request FIFO MBE error. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 18 */
 				"csr_req_fifo_sbe_err",
 				" Detected a Request FIFO SBE error. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 19 */
 				"csr_tx_pend_inval_err",
 				" Detected a dropped TX updates due to a CQ with a non-valid CSR configuration head pointer memory address. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 20 */
 				"csr_rx_pend_inval_err",
 				" Detected a dropped RX updates due to a CQ with a non-valid CSR configuration head pointer memory address. ERR_CATEGORY_INFO",
+				ERR_CATEGORY_INFO,
 			},
 			{ /* bit 21 */
 				"hifis_hdr_ecc_mbe_err",
 				" Detected a HIFIS HDR MBE error for reads from the hifis fifo. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 22 */
 				"hifis_hdr_ecc_sbe_err",
 				" Detected a HIFIS HDR SBE error for reads from the hifis fifo. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 23 */
 				"hifis_reqrsp_dval_par_err",
 				" Detected a HIFIS dval parity error for reads from the hifis fifo. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 24 */
 				"hifis_reqrsp_tval_par_err",
 				" Detected a HIFIS tval parity error for reads from the hifis fifo. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 25 */
 				"hifis_reqrsp_hval_par_err",
 				" Detected a HIFIS hval parity error for reads from the hifis fifo. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 26 */
 				"cq_raw_cor255_192_mbe_err",
 				" Detected a HIFIS data MBE error for reads from the hifis fifo. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
 			},
 			{ /* bit 27 */
 				"cq_raw_cor255_192_sbe_err",
 				" Detected a HIFIS data SBE error for reads from the hifis fifo ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 28 */
 				"trig_opps_len_err",
 				" Detected a triggered opps length error. ERR_CATEGORY_COMMAND",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 29 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_29",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -5528,258 +6823,322 @@ static struct hfi_error_csr hfi_rxcic_error[] = {
 			{ /* bit 0 */
 				"inv_write_flush",
 				" A write occurred tio a CQ that was being drained. The write did not occur. ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 1 */
 				"qword_cnt_err_mbe",
 				" QWORD Count memory tracking MBE error.ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 2 */
 				"qword_cnt_err_sbe",
 				" QWORD Count memory tracking SBE error.ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
 			},
 			{ /* bit 3 */
 				"cqslot_full_vec_error",
 				" Parity error in the Slot full tracking logic. ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 4 */
 				"cqslot_len_vec_error",
 				" Parity error in the command length tracking logic. ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 5 */
 				"cq_timeout",
 				" CQ timeout has occurred. ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 6 */
 				"qword_cnt_ovrflw",
 				" QWORD count overflow. ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 7 */
 				"head_ptr_par_err",
 				" Head pointer parity error. ERR_CATEGORY_PROCESS",
+				ERR_CATEGORY_PROCESS,
 			},
 			{ /* bit 8 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_8",
 				" Unused",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -5801,258 +7160,322 @@ static struct hfi_error_csr hfi_fpc_error[] = {
 			{ /* bit 0 */
 				"spare_0",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"l2_err",
 				" PortRcv_err.BadL2 Illegal L2 opcode",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"sc_err",
 				" PortRcv_err.BadSC Unconfigured SC",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"headless_err",
 				" PortRcv_err.Headless Unexpected Mid/Tail flit received ( headless )",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"pkey_err",
 				" PortConstraint_err Pkey error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"preempt_same_vl_err",
 				" PortRcv_err.PreemptError Preempting with same VL",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"l2hdr_err",
 				" PortRcv_err.PreemptL2Header Received a sop/eop or SC marker before previous sop was satisfied.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"sc_mkr_err",
 				" PortRcv_err.BadSCMarker SC Marker received for inactive VL",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"unsup_vl_err",
 				" FMConfig_err.UnsuportedVLMarker SC-VL table returned a VL of 9-14",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"spare_9",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"spare_10",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"spare_11",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"spare_12",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"mbe_outbound",
 				" Uncorrectable Received an un-correctable error on outbound data path.(MBE)",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"crdt_ack_err",
 				" FMConfig_err.BadCrdtAck Credit acks returned on illegal VL's, 8-14.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"unsup_pkt_type",
 				" PortRcv_err.BadL2 Received a packet type that was not configured.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"crdt_sb_parity_err",
 				" Uncorrectable credit sideband parity error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"mbe_inbound",
 				" Uncorrectable MBE on incoming data path. Inbound data path is locked down. A Link bounce is required.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"event_cntr_rollover_err",
 				" Not mapped to portrcv nor fmconfig. Event counter rollover.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"link_err",
 				" Not mapped to portrcv nor fmconfig. Link went from INIT/ARM/ACTIVE to DOWN.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"mkr_dist_err",
 				" FMConfig_err.BadMarkerDist. SC Marker distance violation",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"ctrl_dist_err",
 				" FMConfig_err.BadCtrlDist. Congest or Credit flit distance violation.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"tail_dist_err",
 				" FMConfig_err.BadTailDist. Tail distance violation",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"head_dist_err",
 				" FMConfig_err.BadHeadDist. Head distance violation",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"nonvl15_state_err",
 				" PortRcv_err.BadSC Received Non-VL15 Pkt when ink state ==Init.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"vl15_multi_err",
 				" PortRcv_err.BadDLID Pkt contained VL15 and multicast DLID",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"pkt_length_err",
 				" PortRcv_err.BadPktLen Packet length violated - min length.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"spare_27",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"perm_nvl15_err",
 				" PortRcv_err.BadSC Permissive SLID and SC!15",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"slid_zero_err",
 				" PortRcv_err.BADSLID Pkt contained SLID == 0",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"dlid_zero_err",
 				" PortRcv_err.BadDLID Pkt contained DLID == 0",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"length_mtu_err",
 				" PortRcv_err.BadPktLen Pkt contained LRH:Length > MTU_Cap",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"slid_sec_err",
 				" PortConstraint_err slid security error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"spare_33",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"late_short_err",
 				" Portrcv_err.PktLenTooShort Actual Packet Length was less than LRH:Pkt_Length. If both late_long and late_short errors are both set in ERROR_FIRST, simultaneous errors occurred in the same cycle. To determine which error occurred first look ERR_INFO_HDR0. If this contains a tail ,short_err occurred first. If no tail then long occurred first.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"late_long_err",
 				" PortRcv_err.PktLenTooLong Actual Packet Length was greater than LRH:Pkt_Length. If both late_long and late_short errors are set in ERROR_FIRST, simultaneous errors occurred in the same cycle. To determine which error occurred first look ERR_INFO_HDR0. If this contains a tail ,short_err occurred first. If no tail then long occurred first.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"spare_36",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"ltp_buf_unflow",
 				" Uncorrectable ltp buffer over flow",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"ltp_buf_ovflow",
 				" Uncorrectable ltp buffer over flow",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"spare_51_39",
 				" spare",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"portconstraint_err",
 				" [0] reserved [1] Pkey Violation [2] Slid Security Violation [3] Switch Port 0 Pkey Violation ( see rpipe error csrs) See Section 21.16.4.14, ' FPC_ERR_INFO_PORTRCVCONSTRAINT '",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"uncorrectable_err",
 				" [0] BadHead: uncorrectable error in head flit [1] BadBody: uncorrectable error in body flit [2] BadTail: uncorrectable error in tail flit [3] BadCtrl: uncorrectable error in credit flit. [4] Internal: Internal logic error , unrecoverable See Section 21.16.4.13, ' FPC_ERR_INFO_UNCORRECTABLE '",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"fmconfig_err",
 				" One of the following errors occurred. [E0] BadHeadDist: Distance violation between two head flits [E1] BadTailDist: Distance violation between two tail flits [E2] BadCtrlDist: Distance violation between two credit control flits [E3] BadCrdtAck: Credits return for unsupported VL [4] UnsupportedVLMarker: SC Marker received for unsupported SC or when SC marker not enabled for port [5] BadPreempt: Exceeded the interleaving level or receive implicit interleaving sequence when only explicit interleaving is enabled. [6] BadControlFlit: unknown or reserved control flit received - Deprecated [7] ExceedMulticastLimit [8] BadMarkerDist: Distance violation between two VL Markers, VL Marker and Head. See Section 21.16.4.11, ' FPC_ERR_INFO_FMCONFIG ' for additional error information.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"rcvport_err",
 				" One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] BadSC Marker: Inactive VL [E14] PreemptL2Header: Interleaving L2 header When this flag is asserted the following CSRs provide additional error information. Section 21.16.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 21.16.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 21.16.4.8, ' FPC_ERR_INFO_PORTRCV_HDR0_B ' Section 21.16.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A ' Section 21.16.4.10, ' FPC_ERR_INFO_PORTRCV_HDR1_B '",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"reserved_63_56",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"reserved_63_56",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"reserved_63_56",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"reserved_63_56",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"reserved_63_56",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"reserved_63_56",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"reserved_63_56",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"reserved_63_56",
 				" reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -6074,258 +7497,322 @@ static struct hfi_error_csr hfi_tp_error[] = {
 			{ /* bit 0 */
 				"pkey_discard",
 				" Tx Pkey enable =1 and - Tx Pkey fail, discarded packet",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"tport_pkt_ebp",
 				" TPORT received packet not marked EBP and marked it EBP. - Error due to MBE, parity, or timeout. OR; TPORT received packet with a length error and marked it EBP. - Sets whether or not the packet from the crossbar was marked EBP.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"subsw_pkt_ebp",
 				" Tport received a packet from the Subsw marked EBP.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"short_pkt",
 				" TPORT received a packet that was shorter than the length in the associated tag. -Packet was marked with an EBP and the remaining credits were returned to the credit manager.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"long_pkt",
 				" TPORT received a packet that was longer than the length in the associated tag. Packet was clipped and marked with an EBP.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"short_grh_pkt",
 				" TPORT received a GRH packet that was shorter than 72 Bytes but the length field in the packet matched the packet length. Packet was marked with an EBP.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"tailless_pkt",
 				" Will a packet was in progress, Tport received a head of another packet before the tail of the currecnt packet.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"headless_pkt",
 				" Tport received a body of a packet and while the packet was not in progress, meaning there was a body before a head.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"drop_data_pkt",
 				" Non-VL15 Packet was dropped because link was not in Active/Send state.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"mtu_error",
 				" MTU error - drop packet Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"vlt_error",
 				" Packet received on a non-operational VLt, operational VLt's are set in Misc Control Registers . - drop packet Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"invalid_vlt",
 				" Packet SC was mapped to an invalid VLt, only 15,8:0 are valid - drop packet Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"l2_error",
 				" A packet with an L2 format not supported by neighbor. - drop packet Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"congested",
 				" TPORT entered a VL congestion state and a least 1 packet was marked.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"vlp_sc_error",
 				" VLp to VLt map table does not map the same as the SC to VLt map table",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"vlp_sc_error",
 				" VLp to VLt map table does not map the same as the SC to VLt map table",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"vlp_sc_error",
 				" VLp to VLt map table does not map the same as the SC to VLt map table",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"vlp_sc_error",
 				" VLp to VLt map table does not map the same as the SC to VLt map table",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"vlp_sc_error",
 				" VLp to VLt map table does not map the same as the SC to VLt map table",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"vlp_sc_error",
 				" VLp to VLt map table does not map the same as the SC to VLt map table",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"vlp_sc_error",
 				" VLp to VLt map table does not map the same as the SC to VLt map table",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"vlp_sc_error",
 				" VLp to VLt map table does not map the same as the SC to VLt map table",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"vlp_sc_error",
 				" VLp to VLt map table does not map the same as the SC to VLt map table",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"vlp_sc_error",
 				" VLp to VLt map table does not map the same as the SC to VLt map table",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"UNUSED_63_24",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -6345,258 +7832,322 @@ static struct hfi_error_csr hfi_tp_error[] = {
 			{ /* bit 0 */
 				"request_to",
 				" Tport packet timeout (wait>Request TO reg) detected. A packet is in progress from the Subsw but the tail has not been received, detect timeout when wait > Request_TO reg. - Insert EBP",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"subsw_sbe",
 				" Tport received a packet from the subsw with ECC error detected an SBE (Includes all VLs and CBUF's) - corrected error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"subsw_mbe",
 				" Tport received a packet from the subsw with ECC error detected an SBE (Includes all VLs and CBUF's) Head -discard entire packet Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"subsw_pe",
 				" Tport received sideband information from the subsw with parity error (Includes all VLs and CBUF's) Head -discard entire packet Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"rinfoq_sbe",
 				" Rinfo FIFO SBE - corrected error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"rinfoq_mbe",
 				" Rinfo FIFO mbe Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"rinfoq_underflow",
 				" TPORT route info queue underflow. - should never happen Note: If rinfoq_overflow is also set there are no EOP flits buffer.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"rinfoq_overflow",
 				" TPORT route info queue overflow. - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If rinfoq_overflow is also set there are no EOP flits buffer",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"rinfoq_spill_sbe",
 				" Rinfo Spill FIFO SBE - corrected error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"rinfoq_spill_mbe",
 				" Rinfo Spill FIFO mbe Body - insert bad tail flit, discard flits up to and including next good tail or next good head. Tail - insert bad tail flit",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"rinfoq_spill_underflow",
 				" TPORT route info queue underflow. - should never happen Note: If rinfoq_overflow is also set there are no EOP flits buffer.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"rinfoq_spill_overflow",
 				" TPORT route info queue overflow. - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If rinfoq_overflow is also set there are no EOP flits buffer",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"dataq_underflow",
 				" TPORT data queue underflow. - should never happen Note: If dataq_overflow is also set there are no EOP flits buffer.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"dataq_overflow",
 				" TPORT data queue overflow. probably just discard flit --- - SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If dataq_overflow is also set there are no EOP flits buffer",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"dataq_spill_underflow",
 				" TPORT route info queue overflow. - should never happen Note: If dataq_overflow is also set there are no EOP flits buffer.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"dataq_spill_overflow",
 				" TPORT Spill data queue overflow. T- SOP word: discard packet - Pkt Data, EOP word: terminate packet with EBP Note: If dataq_overflow is also set there are no EOP flits buffer",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"csr_addr_err",
 				" Tport received a CSR access to an invalid address or a write to an address that contains only Read-Only CSRs.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"credit_overflow",
 				" Detected a condition where the Transmitter's Consumed credit accounting exceeded programmed max.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"oc_credit_underflow",
 				" OC flow control counter underflow. Counter was at 0 and an ack was detected due to an ack from OC or a squashed flit.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"hoq_discard",
 				" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 28:19 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"hoq_discard",
 				" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 28:19 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"hoq_discard",
 				" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 28:19 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"hoq_discard",
 				" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 28:19 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"hoq_discard",
 				" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 28:19 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"hoq_discard",
 				" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 28:19 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"hoq_discard",
 				" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 28:19 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"hoq_discard",
 				" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 28:19 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"hoq_discard",
 				" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 28:19 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"hoq_discard",
 				" TPORT detected a Head of VL15, VL8:0 Queue timeout. bits 28:19 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"sll_timeout",
 				" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 38:29 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"sll_timeout",
 				" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 38:29 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"sll_timeout",
 				" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 38:29 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"sll_timeout",
 				" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 38:29 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"sll_timeout",
 				" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 38:29 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"sll_timeout",
 				" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 38:29 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"sll_timeout",
 				" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 38:29 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"sll_timeout",
 				" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 38:29 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"sll_timeout",
 				" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 38:29 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"sll_timeout",
 				" TPORT detected a VL15, VL8:0 Switch Lifetime Limit timeout. bits 38:29 = VL15,VL8:0 - Timed out packet tag generates a packet drop request. Bit set indicates error was detected.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"perf_cntr_perr",
 				" A performance counter parity error",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"perf_cntr_rollover",
 				" A performance counter rolled over",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"crdt_rtrn_illegal_vl",
 				" VL written into the Credit Return Table is not in range. Legal range is 15,8:0.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"crdt_rtrn_par_err",
 				" Credit return block detected a parity error on the credit flit acknowledge bus.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"crdt_rtrn_vl_err",
 				" Credit return block detected an illegal vl pointer on credit return from remote device.",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"UNUSED_63_44",
 				" ",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */
@@ -6618,258 +8169,322 @@ static struct hfi_error_csr hfi_pmon_error[] = {
 			{ /* bit 0 */
 				"diagnostic",
 				" Diagnostic Error Flag",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 1 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 2 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 3 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 4 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 5 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 6 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 7 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 8 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 9 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 10 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 11 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 12 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 13 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 14 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 15 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 16 */
 				"overflow",
 				" pmon group overflow. some counter[48] within a group of 32 went from 0 to 1. Error information: Section 28.19.4.10, 'PMON Error Info Overflow'",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 17 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 18 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 19 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 20 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 21 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 22 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 23 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 24 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 25 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 26 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 27 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 28 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 29 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 30 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 31 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 32 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 33 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 34 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 35 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 36 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 37 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 38 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 39 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 40 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 41 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 42 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 43 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 44 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 45 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 46 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 47 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 48 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 49 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 50 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 51 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 52 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 53 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 54 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 55 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 56 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 57 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 58 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 59 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 60 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 61 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 62 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			},
 			{ /* bit 63 */
 				"Reserved_63_17",
 				" Reserved",
+				ERR_CATEGORY_DEFAULT,
 			}
 		}
 /* CSR bits defined: 64 */

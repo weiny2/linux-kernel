@@ -100,6 +100,23 @@ echo " * PLEASE GO THROUGH utils/errgen.sh SCRIPT" >> errdef.h
 echo " */" >> errdef.h
 echo "" >> errdef.h
 
+echo "\
+enum err_category_t {
+	ERR_CATEGORY_OKAY = 0,
+	ERR_CATEGORY_INFO,
+	ERR_CATEGORY_CORRECTABLE,
+	ERR_CATEGORY_TRANSACTION,
+	ERR_CATEGORY_PROCESS,
+	ERR_CATEGORY_HFI,
+	ERR_CATEGORY_NODE,
+	/*
+	 * FXRTODO: Software-only, this is to make sure all event bits get
+	 * assigned into one of the others
+	 */
+	ERR_CATEGORY_DEFAULT
+};
+" >> errdef.h
+
 ################################################################
 
 #
