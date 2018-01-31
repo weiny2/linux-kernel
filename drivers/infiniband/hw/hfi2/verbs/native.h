@@ -202,6 +202,7 @@ struct rvt_mregion *hfi2_chk_mr_sge(struct hfi_ibcontext *ctx,
 #ifndef CONFIG_HFI2_STLNP
 #define hfi2_native_alloc_ucontext(ctx, udata, is_enabled)
 #define hfi2_native_dealloc_ucontext(ctx)
+#define hfi2_native_reg_mr(mr)	0
 #else
 void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, void *udata,
 				bool is_enabled);
@@ -212,6 +213,7 @@ struct rvt_mregion *hfi2_find_mr_from_lkey(struct rvt_pd *pd, u32 lkey);
 struct rvt_mregion *hfi2_find_mr_from_rkey(struct rvt_pd *pd, u32 rkey);
 struct rvt_mregion *_hfi2_find_mr_from_rkey(struct hfi_ibcontext *ctx,
 					    u32 rkey);
+int hfi2_native_reg_mr(struct rvt_mregion *mr);
 int hfi2_native_modify_qp(struct rvt_qp *rvtqp,
 			  struct ib_qp_attr *attr, int attr_mask,
 			  struct ib_udata *udata);

@@ -693,7 +693,9 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 				      reg_wr(wr)->key,
 				      reg_wr(wr)->access);
 		WARN_ONCE(signal, "need to send sw wc on REG_MR WR\n");
-		return ret;
+		if (ret)
+			return ret;
+		return hfi2_native_reg_mr(rvt_ibmr_to_mregion(reg_wr(wr)->mr));
 	default:
 		nslots = -EINVAL;
 		break;

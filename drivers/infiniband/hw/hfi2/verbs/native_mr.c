@@ -53,6 +53,9 @@
  */
 
 #include "hfi2.h"
+#include "hfi_kclient.h"
+#include "hfi_tx_base.h"
+#include "hfi_rx_vostlnp.h"
 #include "native.h"
 
 #define IB_REMOTE_FLAGS	(IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | \
@@ -115,6 +118,7 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(mr->pd);
 	int ret;
+	u64 done = 0;
 
 	/* Check LKEY */
 	if (!ctx || LKEY_INDEX(mr->lkey) >= ctx->lkey_ks.num_keys)
@@ -124,6 +128,12 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 	if (!ctx->lkey_only && !IS_INVALID_KEY(mr->rkey)) {
 		ret = hfi2_push_key(&ctx->rkey_ks, mr->rkey);
 		/* If this fails we've somehow leaked an RKEY, but is freed */
+		WARN_ON(ret != 0);
+
+		ret = hfi_rkey_invalidate(ctx->rx_cmdq, mr->rkey, (u64)&done);
+		WARN_ON(ret != 0);
+		/* TODO - extract hw_ctx based on RKEY_PID(rkey) */
+		ret = hfi_eq_poll_cmd_complete(ctx->hw_ctx, &done);
 		WARN_ON(ret != 0);
 	}
 
@@ -146,6 +156,53 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 	 */
 	mr->lkey_published = 0;
 	return 0;
+}
+
+int hfi2_native_reg_mr(struct rvt_mregion *mr)
+{
+	struct hfi_ibcontext *ctx = obj_to_ibctx(mr->pd);
+	struct hfi_ctx *hw_ctx;
+	union hfi_process pt;
+	int ret;
+	u32 me_options, pd_handle;
+	u64 done = 0;
+
+	if (!ctx || !ctx->supports_native || IS_INVALID_KEY(mr->rkey))
+		return 0;
+
+	/* for fast MR, wait until the work request */
+	if (atomic_read(&mr->lkey_invalid))
+		return 0;
+
+	if (!mr->mapsz)
+		return -EFAULT;
+
+	/* TODO - how to set this? */
+	pd_handle = 0;
+
+	me_options = PTL_ME_NO_TRUNCATE;
+	if (mr->access_flags & IB_ACCESS_REMOTE_WRITE)
+		me_options |= PTL_OP_PUT;
+	if (mr->access_flags & IB_ACCESS_REMOTE_READ)
+		me_options |= PTL_OP_GET;
+	if (!(mr->access_flags & IB_ACCESS_REMOTE_ATOMIC))
+		me_options |= PTL_NO_ATOMIC;
+	pt.phys.slid = PTL_LID_ANY;
+	pt.phys.ipid = PTL_PID_ANY;
+
+	/* TODO - extract hw_ctx based on RKEY_PID(rkey) */
+	hw_ctx = ctx->hw_ctx;
+
+	ret = hfi_rkey_write(ctx->rx_cmdq, NATIVE_NI,
+			     (const void *)mr->iova,
+			     mr->map[0]->segs[0].vaddr,
+			     mr->length, pt, hw_ctx->ptl_uid,
+			     pd_handle, mr->rkey, me_options,
+			     HFI_CT_NONE, (u64)&done);
+	if (ret)
+		return ret;
+
+	return hfi_eq_poll_cmd_complete(hw_ctx, &done);
 }
 
 /*

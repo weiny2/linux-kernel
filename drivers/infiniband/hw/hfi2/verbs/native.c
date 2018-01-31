@@ -143,7 +143,7 @@ static int hfi2_add_keys(struct hfi_ibcontext *ctx, struct hfi_ctx *hw_ctx)
 	u32 key_idx, extra_keys, *new_keys;
 	struct rvt_mregion **new_mr;
 
-	/* TODO - driver managed RKEYs not fully implemented yet */
+	/* TODO - driver managed RKEYs not fully implemented for legacy QPs */
 	if (hw_ctx && !ctx->lkey_only) {
 		/* Append new keys to RKEY Stack */
 		mutex_lock(&ctx->rkey_ks.lock);

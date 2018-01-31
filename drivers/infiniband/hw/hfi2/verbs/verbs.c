@@ -430,7 +430,7 @@ static int hfi2_reg_mr(struct rvt_dev_info *rdi, struct rvt_mregion *mr)
 		}
 	}
 
-	return 0;
+	return hfi2_native_reg_mr(mr);
 }
 
 static void hfi2_dereg_mr(struct rvt_dev_info *rdi, struct rvt_mregion *mr)

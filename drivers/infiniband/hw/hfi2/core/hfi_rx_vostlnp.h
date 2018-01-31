@@ -53,7 +53,8 @@
 
 #include "hfi_cmdq.h"
 
-#define RKEY_IGNORE_BITS		0xffffffff00000000ull
+#define RKEY_IGNORE_BITS()		(0xffffffff00000000ull)
+
 #define RKEY_PID(rkey)			_hfi_extract(rkey, 20, 0xfff00000)
 #define RKEY_LIST_HANDLE(rkey)		_hfi_extract(rkey, 8, 0x000fff00)
 #define RKEY_SALT(rkey)			_hfi_extract(rkey, 0, 0x000000ff)
@@ -66,27 +67,28 @@
 /* Format an RX CQ command for a RKEY WRITE operation */
 static inline
 int hfi_format_rkey_write(hfi_ni_t ni,
-			 const void *start, hfi_size_t length,
-			 hfi_process_t match_id, hfi_id_t id, uint32_t pd,
-			 uint32_t rkey, hfi_me_options_t me_options,
-			 hfi_ct_handle_t ct_handle,
-			 hfi_user_ptr_t user_ptr,
-			 uint8_t ncc, uint8_t valid,
-			 union hfi_rx_cq_command *cmd)
+			  const void *logical_addr,
+			  const void *start, hfi_size_t length,
+			  hfi_process_t match_id, hfi_id_t id, uint32_t pd,
+			  uint32_t rkey, hfi_me_options_t me_options,
+			  hfi_ct_handle_t ct_handle,
+			  hfi_user_ptr_t user_ptr,
+			  uint8_t ncc, uint8_t valid,
+			  union hfi_rx_cq_command *cmd)
 {
 	cmd->list.flit0.a             = RKEY_MATCH_BITS(rkey,pd);
-	cmd->list.flit0.b	      = RKEY_IGNORE_BITS;
+	cmd->list.flit0.b	      = RKEY_IGNORE_BITS();
 	cmd->list.flit0.c.user_id     = id;
 	cmd->list.flit0.c.me_options  = me_options;
-	cmd->list.flit0.d.initiator_id   = match_id.val;
+	cmd->list.flit0.d.initiator_id   = ((uint64_t)logical_addr);
 	cmd->list.flit0.d.ct_handle   = ct_handle;
 	cmd->list.flit0.d.command     = RKEY_WRITE;
 	cmd->list.flit0.d.cmd_len     = (sizeof(cmd->list) >> 5) - 1;
 	cmd->state.flit0.d.ncc        = ncc;
 
-	cmd->list.flit1.e.val         = 0;
 	cmd->list.flit1.e.cmd_pid     = RKEY_PID(rkey);
 	cmd->list.flit1.e.list_handle = RKEY_LIST_HANDLE(rkey);
+	cmd->list.flit1.e.min_free    = ((((uint64_t)logical_addr)>>36)&0x1fffffull);
 	cmd->list.flit1.f.length      = length;
 	cmd->list.flit1.g             = user_ptr;
 	cmd->list.flit1.j.val         = 0;
@@ -142,7 +144,7 @@ int hfi_rkey_invalidate(struct hfi_cmdq *rx, uint32_t rkey,
 	int cmd_slots, rc;
 	hfi_process_t pt;
 
-	cmd_slots = hfi_format_rkey_write(0,
+	cmd_slots = hfi_format_rkey_write(0, 0,
 			0, 0,
 			pt,
 			0, 0, rkey,
@@ -161,6 +163,7 @@ int hfi_rkey_invalidate(struct hfi_cmdq *rx, uint32_t rkey,
 
 static inline
 int hfi_rkey_write(struct hfi_cmdq *rx, hfi_ni_t ni,
+		const void *logical_addr,
 		const void *start, hfi_size_t length,
 		hfi_process_t match_id, hfi_id_t id,
 		uint32_t pd, uint32_t rkey,
@@ -172,10 +175,10 @@ int hfi_rkey_write(struct hfi_cmdq *rx, hfi_ni_t ni,
 	int cmd_slots, rc;
 
 	cmd_slots = hfi_format_rkey_write(ni,
-			start, length,
+			logical_addr, start, length,
 			match_id,
 			id, pd, rkey,
-			me_options, ct_handle,
+			me_options | PTL_MANAGE_LOCAL, ct_handle,
 			user_ptr,
 			HFI_GEN_CC, 1, &cmd);
 
