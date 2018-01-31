@@ -97,5 +97,10 @@ static inline struct rvt_cq *ibcq_to_rvtcq(struct ib_cq *ibcq)
 }
 
 void rvt_cq_enter(struct rvt_cq *cq, struct ib_wc *entry, bool solicited);
+int rvt_destroy_cq(struct ib_cq *ibcq);
+int rvt_req_notify_cq(struct ib_cq *ibcq,
+		      enum ib_cq_notify_flags flags);
+int rvt_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata);
+int rvt_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry);
 
 #endif          /* DEF_RDMAVT_INCCQH */

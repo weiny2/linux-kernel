@@ -354,3 +354,4 @@ int rvt_destroy_srq(struct ib_srq *ibsrq)
 
 	return 0;
 }
+EXPORT_SYMBOL(rvt_destroy_srq);

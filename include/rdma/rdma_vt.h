@@ -562,6 +562,7 @@ void rvt_dealloc_device(struct rvt_dev_info *rdi);
 int rvt_register_device(struct rvt_dev_info *rvd, u32 driver_id);
 void rvt_unregister_device(struct rvt_dev_info *rvd);
 int rvt_check_ah(struct ib_device *ibdev, struct rdma_ah_attr *ah_attr);
+int rvt_destroy_srq(struct ib_srq *ibsrq);
 int rvt_init_port(struct rvt_dev_info *rdi, struct rvt_ibport *port,
 		  int port_index, u16 *pkey_table);
 int rvt_fast_reg_mr(struct rvt_qp *qp, struct ib_mr *ibmr, u32 key,

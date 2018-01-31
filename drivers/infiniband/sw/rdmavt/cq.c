@@ -309,6 +309,7 @@ int rvt_destroy_cq(struct ib_cq *ibcq)
 
 	return 0;
 }
+EXPORT_SYMBOL(rvt_destroy_cq);
 
 /**
  * rvt_req_notify_cq - change the notification type for a completion queue
@@ -342,6 +343,7 @@ int rvt_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags notify_flags)
 
 	return ret;
 }
+EXPORT_SYMBOL(rvt_req_notify_cq);
 
 /**
  * rvt_resize_cq - change the size of the CQ
@@ -453,6 +455,7 @@ bail_free:
 	vfree(wc);
 	return ret;
 }
+EXPORT_SYMBOL(rvt_resize_cq);
 
 /**
  * rvt_poll_cq - poll for work completion entries
@@ -500,6 +503,7 @@ int rvt_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *entry)
 
 	return npolled;
 }
+EXPORT_SYMBOL(rvt_poll_cq);
 
 /**
  * rvt_driver_cq_init - Init cq resources on behalf of driver
