@@ -219,6 +219,11 @@ struct uverbs_object_tree_def {
 			 UVERBS_ATTR_TYPE_ENUM_IN, enum_def,		\
 			 .num_elems = ARRAY_SIZE(_enum_arr), ##__VA_ARGS__)
 
+#define UVERBS_CREATE_NS_INDEX(_object_idx, _ns_idx)			\
+	((_object_idx & ~UVERBS_ID_NS_MASK) |				\
+	 ((_ns_idx << UVERBS_ID_NS_SHIFT) &				\
+	  UVERBS_ID_NS_MASK))
+
 /*
  * In new compiler, UVERBS_ATTR_IDR (and FD) could be simplified by declaring
  * it as
