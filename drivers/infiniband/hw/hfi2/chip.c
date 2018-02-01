@@ -180,6 +180,12 @@ bool iommu_hack;
 module_param_named(iommu_hack, iommu_hack, bool, 0444);
 MODULE_PARM_DESC(iommu_hack, "Set to true if running on ZEBU");
 
+/* FXRTODO: Remove this once Silicon is stable */
+bool detect_uncat_errs = true;
+module_param_named(detect_uncat_errs, detect_uncat_errs, bool, 0444);
+MODULE_PARM_DESC(detect_uncat_errs,
+		 "Set to true to detect uncategorized error bits, false to detect undefined error bits generating spurious interrupts");
+
 DEFINE_SPINLOCK(hfi2_unit_lock);
 static struct idr hfi2_unit_table;
 static void hfi_cmdq_head_config(struct hfi_devdata *dd, u16 cmdq_idx,

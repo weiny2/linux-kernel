@@ -81,6 +81,8 @@
 #include "trace.h"
 #include "chip/fxr_pmon_csrs.h"
 
+extern bool detect_uncat_errs;
+
 /*
  * error domain and error event processing structure.
  */
@@ -122,13 +124,63 @@ struct hfi_error_entry {
 static void hfi_error_handler_hw_bug(struct hfi_devdata *dd, u64 reg,
 				     char *name)
 {
-	dd_dev_err(dd, "%s, undefined bit %lld fired, HW BUG\n", name, reg);
+	dd_dev_err(dd, "%s: %s undefined bit %lld fired, HW BUG\n",
+		   __func__, name, reg);
 }
 
 static void hfi_error_handler_unimpl(struct hfi_devdata *dd, u64 reg,
 				     char *name)
 {
-	dd_dev_info(dd, "%s bit %lld fired, unimpl\n", name, reg);
+	dd_dev_info(dd, "%s: %s bit %lld fired, unimpl\n", __func__,
+		    name, reg);
+}
+
+static void hfi_error_handler_ok(struct hfi_devdata *dd, u64 reg, char *name)
+{
+	dd_dev_info(dd, "%s: %s bit %lld fired, nothing to do\n",
+		    __func__, name, reg);
+}
+
+static void hfi_error_handler_info(struct hfi_devdata *dd, u64 reg, char *name)
+{
+	dd_dev_info(dd, "%s: %s bit %lld fired, information only\n",
+		    __func__, name, reg);
+}
+
+static void hfi_error_handler_corr(struct hfi_devdata *dd, u64 reg, char *name)
+{
+	dd_dev_info(dd, "%s: %s bit %lld fired, corrected, we should not get this?\n",
+		    __func__, name, reg);
+}
+
+static void hfi_error_handler_trans(struct hfi_devdata *dd, u64 reg, char *name)
+{
+	dd_dev_info(dd, "%s: %s bit %lld fired, transaction error\n",
+		    __func__, name, reg);
+}
+
+static void hfi_error_handler_proc(struct hfi_devdata *dd, u64 reg, char *name)
+{
+	dd_dev_info(dd, "%s: %s bit %lld fired, process error\n",
+		    __func__, name, reg);
+}
+
+static void hfi_error_handler_hfi(struct hfi_devdata *dd, u64 reg, char *name)
+{
+	dd_dev_info(dd, "%s: %s bit %lld fired, resetting the HFI\n",
+		    __func__, name, reg);
+}
+
+static void hfi_error_handler_node(struct hfi_devdata *dd, u64 reg, char *name)
+{
+	dd_dev_info(dd, "%s: %s bit %lld fired, node error\n",
+		    __func__, name, reg);
+}
+
+static void hfi_error_handler_def(struct hfi_devdata *dd, u64 reg, char *name)
+{
+	dd_dev_info(dd, "%s: %s bit %lld fired, bit not categorized\n",
+		    __func__, name, reg);
 }
 
 /*
@@ -404,10 +456,44 @@ int hfi_setup_errd_irq(struct hfi_devdata *dd)
 	for (i = 0; i < HFI_NUM_ERR_DOMAIN; i++) {
 		for (j = 0; j < 64; j++) {
 			ee_ptr = &hfi_error_domain[i].csr->events[j];
+
 			if (strstr(ee_ptr->event_desc, "Unused"))
 				ee_ptr->action = hfi_error_handler_hw_bug;
 			else
 				ee_ptr->action = hfi_error_handler_unimpl;
+
+			switch (ee_ptr->err_category) {
+			case ERR_CATEGORY_OKAY:
+				ee_ptr->action = hfi_error_handler_ok;
+				break;
+			case ERR_CATEGORY_INFO:
+				ee_ptr->action = hfi_error_handler_info;
+				break;
+			case ERR_CATEGORY_CORRECTABLE:
+				ee_ptr->action = hfi_error_handler_corr;
+				break;
+			case ERR_CATEGORY_TRANSACTION:
+				ee_ptr->action = hfi_error_handler_trans;
+				break;
+			case ERR_CATEGORY_PROCESS:
+				ee_ptr->action = hfi_error_handler_proc;
+				break;
+			case ERR_CATEGORY_HFI:
+				ee_ptr->action = hfi_error_handler_hfi;
+				break;
+			case ERR_CATEGORY_NODE:
+				ee_ptr->action = hfi_error_handler_node;
+				break;
+			case ERR_CATEGORY_DEFAULT:
+				/*
+				 * FXRTODO: Software-only, this is to make sure
+				 * all event bits get assigned into one of the
+				 * others
+				 */
+				if (detect_uncat_errs)
+					ee_ptr->action = hfi_error_handler_def;
+				break;
+			}
 		}
 	}
 
