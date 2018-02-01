@@ -6,7 +6,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright (c) 2017 Intel Corporation.
+ * Copyright (c) 2017-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
@@ -19,7 +19,7 @@
  *
  * BSD LICENSE
  *
- * Copyright (c) 2017 Intel Corporation.
+ * Copyright (c) 2017-2018 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -54,15 +54,14 @@
 #include "uverbs_obj.h"
 #include "verbs.h"
 
-int hfi2_ctx_attach(struct ib_device *ib_dev,
-		    struct ib_uverbs_file *file,
-		    struct uverbs_attr_array *attrs,
-		    size_t num)
+static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
+				   struct ib_uverbs_file *file,
+				   struct uverbs_attr_bundle *attrs)
 {
 	struct hfi_ctx_attach_cmd cmd;
 	struct hfi_ctx_attach_resp resp;
-	struct uverbs_attr_array *common = &attrs[0];
 	struct opa_ctx_assign ctx_assign = {0};
+	const struct uverbs_attr *uattr;
 	struct hfi_devdata *dd = hfi_dd_from_ibdev(ib_dev);
 	struct hfi_ctx *ctx;
 	struct ib_uctx_object *obj;
@@ -82,7 +81,7 @@ int hfi2_ctx_attach(struct ib_device *ib_dev,
 #endif
 	hfi_job_init(ctx);
 
-	ret = uverbs_copy_from(&cmd, common, HFI2_CTX_ATTACH_CMD);
+	ret = uverbs_copy_from(&cmd, attrs, HFI2_CTX_ATTACH_CMD);
 	if (ret)
 		goto err_attach;
 
@@ -130,19 +129,20 @@ int hfi2_ctx_attach(struct ib_device *ib_dev,
 	resp.pid_mode = ctx->mode;
 	resp.uid = ctx->ptl_uid;
 
-	obj = container_of(common->attrs[HFI2_CTX_ATTACH_IDX].obj_attr.uobject,
-			   typeof(*obj), uobject);
+	uattr = uverbs_attr_get(attrs, HFI2_CTX_ATTACH_IDX);
+	if (unlikely(IS_ERR(uattr)))
+		return PTR_ERR(uattr);
+
+	obj = container_of(uattr->obj_attr.uobject, typeof(*obj), uobject);
 	obj->verbs_file = ucontext->ufile;
 	obj->uobject.object = ctx;
 
 	ctx->uobject = &obj->uobject;
 
-	ret = uverbs_copy_to(common,
-			     HFI2_CTX_PTL_UID,
-			     &ctx->ptl_uid);
-	ret += uverbs_copy_to(common,
-			      HFI2_CTX_ATTACH_RESP,
-			      &resp);
+	ret = uverbs_copy_to(attrs, HFI2_CTX_PTL_UID,
+			     &ctx->ptl_uid, sizeof(ctx->ptl_uid));
+	ret += uverbs_copy_to(attrs, HFI2_CTX_ATTACH_RESP,
+			      &resp, sizeof(resp));
 	if (ret)
 		goto err_attach;
 
@@ -155,25 +155,32 @@ err_attach:
 
 int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 			       struct ib_uverbs_file *file,
-			       struct uverbs_attr_array *attrs,
-			       size_t num)
+			       struct uverbs_attr_bundle *attrs)
 {
 	struct opa_ev_assign ev_assign = {0};
 	struct hfi_event_args cmd;
 	struct hfi_event_args resp;
-	struct uverbs_attr_array *common = &attrs[0];
+	const struct uverbs_attr *uattr;
 	struct hfi_ctx *ctx;
 	u32 type;
 	int ret;
 
-	ret = uverbs_copy_from(&cmd, common, HFI2_CTX_EVT_CMD);
-	ret += uverbs_copy_from(&type, common, HFI2_CTX_EVT_TYPE);
+	ret = uverbs_copy_from(&cmd, attrs, HFI2_CTX_EVT_CMD);
+	ret += uverbs_copy_from(&type, attrs, HFI2_CTX_EVT_TYPE);
 	if (ret) {
 		pr_debug("%s: Error copying data, ret = %d\n", __func__, ret);
 		return ret;
 	}
 
-	ctx = common->attrs[HFI2_CTX_ATTACH_IDX].obj_attr.uobject->object;
+	uattr = uverbs_attr_get(attrs, HFI2_CTX_ATTACH_IDX);
+	if (unlikely(IS_ERR(uattr)))
+		return PTR_ERR(uattr);
+
+	ctx = uattr->obj_attr.uobject->object;
+	if (unlikely(!ctx)) {
+		pr_err("%s: Encountered a NULL hfi context\n", __func__);
+		return -ENOENT;
+	}
 
 	switch (type) {
 	case HFI2_CMD_EQ_ASSIGN:
@@ -193,7 +200,8 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 		resp.idx1 = ev_assign.ev_idx;
 
-		ret = uverbs_copy_to(common, HFI2_CTX_EVT_RESP, &resp);
+		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				     &resp, sizeof(resp));
 		break;
 	case HFI2_CMD_EQ_RELEASE:
 		ret = hfi_cteq_release(ctx, 0, cmd.idx1, cmd.data1);
@@ -210,7 +218,8 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 
-		ret = uverbs_copy_to(common, HFI2_CTX_EVT_RESP, &resp);
+		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				     &resp, sizeof(resp));
 		break;
 	case HFI2_CMD_EC_SET_EQ:
 		ret = hfi_ev_set_channel(ctx, cmd.idx0,
@@ -230,7 +239,8 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 
-		ret = uverbs_copy_to(common, HFI2_CTX_EVT_RESP, &resp);
+		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				     &resp, sizeof(resp));
 		break;
 	case HFI2_CMD_EQ_ACK:
 		ret = hfi_eq_ack_event(ctx, cmd.idx1, cmd.count);
@@ -240,7 +250,8 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 
-		ret = uverbs_copy_to(common, HFI2_CTX_EVT_RESP, &resp);
+		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				     &resp, sizeof(resp));
 		break;
 	case HFI2_CMD_EC_RELEASE:
 		ret = hfi_ec_release(ctx, cmd.idx0);
@@ -257,7 +268,8 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 		resp.idx1 = ev_assign.ev_idx;
-		ret = uverbs_copy_to(common, HFI2_CTX_EVT_RESP, &resp);
+		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				     &resp, sizeof(resp));
 		break;
 	case HFI2_CMD_CT_RELEASE:
 		ret = hfi_cteq_release(ctx, OPA_EV_MODE_COUNTER,
@@ -275,7 +287,8 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 
-		ret = uverbs_copy_to(common, HFI2_CTX_EVT_RESP, &resp);
+		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				     &resp, sizeof(resp));
 		break;
 	case HFI2_CMD_EC_SET_CT:
 		ret = hfi_ev_set_channel(ctx, cmd.idx0,
@@ -292,7 +305,8 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 		}
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 
-		ret = uverbs_copy_to(common, HFI2_CTX_EVT_RESP, &resp);
+		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				     &resp, sizeof(resp));
 		break;
 	case HFI2_CMD_CT_ACK:
 		ret = hfi_ct_ack_event(ctx, cmd.idx1, cmd.count);
@@ -305,22 +319,19 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 	return ret;
 }
 
-int hfi2_ctx_detach(struct ib_device *ib_dev,
-		    struct ib_uverbs_file *file,
-		    struct uverbs_attr_array *attrs,
-		    size_t num)
+static int hfi2_ctx_detach_handler(struct ib_device *ibdev,
+				   struct ib_uverbs_file *file,
+				   struct uverbs_attr_bundle *attrs)
 {
-	struct uverbs_attr_array *common = &attrs[0];
-	struct ib_uctx_object *obj;
+	const struct uverbs_attr *uattr;
 	struct ib_uobject *uobj;
 
-	uobj = common->attrs[HFI2_CTX_DETACH_IDX].obj_attr.uobject;
-	obj = container_of(uobj, struct ib_uctx_object, uobject);
+	uattr = uverbs_attr_get(attrs, HFI2_CTX_DETACH_IDX);
+	if (unlikely(IS_ERR(uattr)))
+		return PTR_ERR(uattr);
 
-#if 0
-	if (!(ib_dev->uverbs_cmd_mask & 1ULL << IB_USER_VERBS_CMD_DESTROY_CTXT))
-		return -EOPNOTSUPP;
-#endif
+	uobj = uattr->obj_attr.uobject;
+
 	/*
 	 * Since the caller has explicitly sent a command to detach the
 	 * ctx, we need to clean up the underlying ib_uobject
@@ -331,8 +342,38 @@ int hfi2_ctx_detach(struct ib_device *ib_dev,
 	return rdma_explicit_destroy(uobj);
 }
 
-int hfi2_ctx_free(struct ib_uobject *uobject,
-		  enum rdma_remove_reason why)
+int hfi2_pt_update_lower_handler(struct ib_device *ib_dev,
+				 struct ib_uverbs_file *file,
+				 struct uverbs_attr_bundle *attrs)
+{
+	struct hfi_ctx *ctx;
+	const struct uverbs_attr *uattr;
+	struct hfi_pt_update_lower_args pt_update_args;
+	int ret;
+
+	uattr = uverbs_attr_get(attrs, HFI2_PT_UPDATE_CTX_IDX);
+	if (unlikely(IS_ERR(uattr)))
+		return PTR_ERR(uattr);
+
+	ctx = uattr->obj_attr.uobject->object;
+	if (unlikely(!ctx)) {
+		pr_err("%s: Encountered a NULL hfi context\n", __func__);
+		return -ENOENT;
+	}
+
+	ret = uverbs_copy_from(&pt_update_args, attrs,
+			       HFI2_PT_UPDATE_LOWER_ARGS);
+	if (ret)
+		return ret;
+
+	return hfi_pt_update_lower(ctx, pt_update_args.ni,
+				   pt_update_args.pt_idx,
+				   pt_update_args.val,
+				   pt_update_args.user_data);
+}
+
+static int hfi2_ctx_free(struct ib_uobject *uobject,
+			 enum rdma_remove_reason why)
 {
 	struct hfi_ctx *ctx = uobject->object;
 
@@ -345,109 +386,74 @@ int hfi2_ctx_free(struct ib_uobject *uobject,
 	return 0;
 }
 
-int hfi2_pt_update_lower(struct ib_device *ib_dev,
-			 struct ib_uverbs_file *file,
-			 struct uverbs_attr_array *attrs,
-			 size_t num)
-{
-	struct uverbs_attr_array *common = &attrs[0];
-	struct hfi_ctx *ctx;
-	struct hfi_pt_update_lower_args pt_update_args;
-	int ret;
-
-	ctx = common->attrs[HFI2_PT_UPDATE_CTX_IDX].obj_attr.uobject->object;
-
-	ret = uverbs_copy_from(&pt_update_args, common,
-			       HFI2_PT_UPDATE_LOWER_ARGS);
-	if (ret)
-		return ret;
-
-	return hfi_pt_update_lower(ctx, pt_update_args.ni,
-				   pt_update_args.pt_idx,
-				   pt_update_args.val,
-				   pt_update_args.user_data);
-}
-
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_ctx_attach_spec,
-			UVERBS_ATTR_IDR(
-				 HFI2_CTX_ATTACH_IDX,
-				 UVERBS_CREATE_TYPE_INDEX(HFI2_TYPE_CTX,
-							  HFI2_OBJECT_TYPES),
-				 UVERBS_ACCESS_NEW,
-				 UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_IN(
+DECLARE_UVERBS_METHOD(hfi2_ctx_attach, HFI2_CTX_ATTACH,
+		      hfi2_ctx_attach_handler,
+		      &UVERBS_ATTR_IDR(
+				HFI2_CTX_ATTACH_IDX,
+				UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_CTX,
+						       HFI2_OBJECTS),
+				UVERBS_ACCESS_NEW,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_IN(
 				HFI2_CTX_ATTACH_CMD,
 				struct hfi_ctx_attach_cmd,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_OUT(
+		      &UVERBS_ATTR_PTR_OUT(
 				HFI2_CTX_ATTACH_RESP,
 				struct hfi_ctx_attach_resp,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_OUT(
+		      &UVERBS_ATTR_PTR_OUT(
 				HFI2_CTX_PTL_UID, u32,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_ctx_detach_spec,
-			UVERBS_ATTR_IDR(
+DECLARE_UVERBS_METHOD(hfi2_ctx_detach, HFI2_CTX_DETACH,
+		      hfi2_ctx_detach_handler,
+		      &UVERBS_ATTR_IDR(
 				HFI2_CTX_DETACH_IDX,
-				UVERBS_CREATE_TYPE_INDEX(HFI2_TYPE_CTX,
-							 HFI2_OBJECT_TYPES),
+				UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_CTX,
+						       HFI2_OBJECTS),
 				UVERBS_ACCESS_DESTROY,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_ctx_event_cmd_spec,
-			UVERBS_ATTR_IDR(
+DECLARE_UVERBS_METHOD(hfi2_ctx_event_cmd, HFI2_CTX_EVENT_CMD,
+		      hfi2_ctx_event_cmd_handler,
+		      &UVERBS_ATTR_IDR(
 				HFI2_CTX_EVT_CTX_IDX,
-				UVERBS_CREATE_TYPE_INDEX(HFI2_TYPE_CTX,
-							 HFI2_OBJECT_TYPES),
+				UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_CTX,
+						       HFI2_OBJECTS),
 				UVERBS_ACCESS_READ,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_IN(
+		      &UVERBS_ATTR_PTR_IN(
 				HFI2_CTX_EVT_CMD,
 				struct hfi_event_args,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_OUT(
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_CTX_EVT_TYPE,
+				u32, UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_OUT(
 				HFI2_CTX_EVT_RESP,
 				struct hfi_event_args,
-				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_IN(
-				HFI2_CTX_EVT_TYPE,
-				u32, UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_pt_update_lower_spec,
-			UVERBS_ATTR_IDR(
+DECLARE_UVERBS_METHOD(hfi2_pt_update_lower, HFI2_PT_UPDATE_LOWER,
+		      hfi2_pt_update_lower_handler,
+		      &UVERBS_ATTR_IDR(
 				HFI2_PT_UPDATE_CTX_IDX,
-				UVERBS_CREATE_TYPE_INDEX(HFI2_TYPE_CTX,
-							 HFI2_OBJECT_TYPES),
+				UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_CTX,
+						       HFI2_OBJECTS),
 				UVERBS_ACCESS_WRITE,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_IN(
+		      &UVERBS_ATTR_PTR_IN(
 				HFI2_PT_UPDATE_LOWER_ARGS,
 				struct hfi_pt_update_lower_args,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-/*
- * ib_uctx_object 'object' can contain info about uobject that can be used
- * after the underlying uobject is destroyed
- */
-DECLARE_UVERBS_TYPE(
-	hfi2_type_ctx,
-	&UVERBS_TYPE_ALLOC_IDR_SZ(sizeof(struct ib_uctx_object),
-				  0, hfi2_ctx_free),
-	&UVERBS_ACTIONS(
-		ADD_UVERBS_ACTION(HFI2_CTX_ATTACH,
-				  hfi2_ctx_attach,
-				  &hfi2_ctx_attach_spec),
-		ADD_UVERBS_ACTION(HFI2_CTX_DETACH,
-				  hfi2_ctx_detach,
-				  &hfi2_ctx_detach_spec),
-		ADD_UVERBS_ACTION(HFI2_CTX_EVENT_CMD,
-				  hfi2_ctx_event_cmd_handler,
-				  &hfi2_ctx_event_cmd_spec),
-		ADD_UVERBS_ACTION(HFI2_PT_UPDATE_LOWER,
-				  hfi2_pt_update_lower,
-				  &hfi2_pt_update_lower_spec)));
+DECLARE_UVERBS_OBJECT(hfi2_object_ctx,
+		      UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_CTX,
+					     HFI2_OBJECTS),
+		      &UVERBS_TYPE_ALLOC_IDR_SZ(sizeof(struct ib_uctx_object),
+						0, hfi2_ctx_free),
+		      &hfi2_ctx_attach,
+		      &hfi2_ctx_detach,
+		      &hfi2_ctx_event_cmd,
+		      &hfi2_pt_update_lower);

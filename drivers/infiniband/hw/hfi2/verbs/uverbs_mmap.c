@@ -6,7 +6,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright (c) 2017 Intel Corporation.
+ * Copyright (c) 2017-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
@@ -19,7 +19,7 @@
  *
  * BSD LICENSE
  *
- * Copyright (c) 2017 Intel Corporation.
+ * Copyright (c) 2017-2018 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -99,9 +99,8 @@ int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	u16 ctxt;
 	bool add_to_vma_list = false;
 
-	if (!is_valid_mmap(token)) {
+	if (!is_valid_mmap(token))
 		return -EACCES;
-	}
 
 	if (!(vma->vm_flags & VM_SHARED)) {
 		ret = -EINVAL;

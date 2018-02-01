@@ -165,9 +165,6 @@ static int __init hfi_init(void)
 {
 	int ret;
 
-	/* Initialize extended verbs types group */
-	hfi2_initialize_type_group();
-
 	hfi_dbg_init();
 	hfi_mod_init();
 

@@ -6,7 +6,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright (c) 2017 Intel Corporation.
+ * Copyright (c) 2017-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
@@ -19,7 +19,7 @@
  *
  * BSD LICENSE
  *
- * Copyright (c) 2017 Intel Corporation.
+ * Copyright (c) 2017-2018 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -53,6 +53,7 @@
 #include "uverbs_obj.h"
 #include "hfi2.h"
 #include "timesync.h"
+#include <rdma/uverbs_ioctl.h>
 
 static int hfi_e2e_conn(struct hfi_ibcontext *uc,
 			struct hfi_e2e_conn_args __user *e2e_args)
@@ -89,22 +90,24 @@ static int hfi_e2e_conn(struct hfi_ibcontext *uc,
 	return 0;
 }
 
-static int hfi2_e2e_connect(struct ib_device *ib_dev,
-			    struct ib_uverbs_file *file,
-			    struct uverbs_attr_array *attrs,
-			    size_t num)
+static int hfi2_e2e_connect_handler(struct ib_device *ib_dev,
+				    struct ib_uverbs_file *file,
+				    struct uverbs_attr_bundle *attrs)
 {
-	struct uverbs_attr *attr = &attrs->attrs[0];
+	const struct uverbs_attr *uattr = uverbs_attr_get(attrs,
+							  HFI2_DEV_E2E_CONNECT);
 
-	/* copy_from_user handled in hfi_e2e_conn */
+	if (unlikely(IS_ERR(uattr)))
+		return PTR_ERR(uattr);
+
+		/* copy_from_user handled in hfi_e2e_conn */
 	return hfi_e2e_conn((struct hfi_ibcontext *)file->ucontext,
-			    attr->ptr_attr.ptr);
+			    uattr->ptr_attr.ptr);
 }
 
-static int hfi2_check_sl_pair(struct ib_device *ib_dev,
-			      struct ib_uverbs_file *file,
-			      struct uverbs_attr_array *attrs,
-			      size_t num)
+static int hfi2_check_sl_pair_handler(struct ib_device *ib_dev,
+				      struct ib_uverbs_file *file,
+				      struct uverbs_attr_bundle *attrs)
 {
 	struct hfi_sl_pair slp;
 	int ret;
@@ -115,32 +118,29 @@ static int hfi2_check_sl_pair(struct ib_device *ib_dev,
 	return hfi_check_sl_pair((struct hfi_ibcontext *)file->ucontext, &slp);
 }
 
-static int hfi2_get_hw_limits(struct ib_device *ib_dev,
-			      struct ib_uverbs_file *file,
-			      struct uverbs_attr_array *attrs,
-			      size_t num)
+static int hfi2_get_hw_limits_handler(struct ib_device *ib_dev,
+				      struct ib_uverbs_file *file,
+				      struct uverbs_attr_bundle *attrs)
 {
-	struct uverbs_attr_array *common = &attrs[0];
 	struct hfi_hw_limit hwl;
 
 	hfi_get_hw_limits((struct hfi_ibcontext *)file->ucontext, &hwl);
 
-	return uverbs_copy_to(common, HFI2_GET_HW_LIMITS_RESP, &hwl);
+	return uverbs_copy_to(attrs, HFI2_GET_HW_LIMITS_RESP,
+			      &hwl, sizeof(hwl));
 }
 
-static int hfi2_ts_get_master(struct ib_device *ib_dev,
-			     struct ib_uverbs_file *file,
-			     struct uverbs_attr_array *attrs,
-			     size_t num)
+static int hfi2_ts_get_master_handler(struct ib_device *ib_dev,
+				      struct ib_uverbs_file *file,
+				      struct uverbs_attr_bundle *attrs)
 {
 #ifdef CONFIG_HFI2_STLNP
-	struct uverbs_attr_array *common = &attrs[0];
 	struct hfi_ts_master_regs master_ts;
 	struct hfi_ts_master_cmd cmd;
 	struct hfi_ts_master_resp resp;
 	int ret;
 
-	ret = uverbs_copy_from(&cmd, common, HFI2_GET_TS_MASTER_CMD);
+	ret = uverbs_copy_from(&cmd, attrs, HFI2_GET_TS_MASTER_CMD);
 	if (ret)
 		return ret;
 
@@ -155,24 +155,23 @@ static int hfi2_ts_get_master(struct ib_device *ib_dev,
 	resp.master = master_ts.master;
 	resp.timestamp = master_ts.timestamp;
 
-	return uverbs_copy_to(common, HFI2_GET_TS_MASTER_RESP, &resp);
+	return uverbs_copy_to(attrs, HFI2_GET_TS_MASTER_RESP,
+			      &resp, sizeof(resp));
 #endif
 	return 0;
 }
 
-static int hfi2_ts_get_fm(struct ib_device *ib_dev,
-			  struct ib_uverbs_file *file,
-			  struct uverbs_attr_array *attrs,
-			  size_t num)
+static int hfi2_ts_get_fm_handler(struct ib_device *ib_dev,
+				  struct ib_uverbs_file *file,
+				  struct uverbs_attr_bundle *attrs)
 {
 #ifdef CONFIG_HFI2_STLNP
-	struct uverbs_attr_array *common = &attrs[0];
 	struct hfi_ts_fm_data fm_data;
 	struct hfi_ts_fm_cmd cmd;
 	struct hfi_ts_fm_resp resp;
 	int ret;
 
-	ret = uverbs_copy_from(&cmd, common, HFI2_GET_TS_FM_CMD);
+	ret = uverbs_copy_from(&cmd, attrs, HFI2_GET_TS_FM_CMD);
 	if (ret)
 		return ret;
 
@@ -191,68 +190,61 @@ static int hfi2_ts_get_fm(struct ib_device *ib_dev,
 	resp.ptp_index = fm_data.ptp_index;
 	resp.is_active_master = fm_data.is_active_master;
 
-	return uverbs_copy_to(common, HFI2_GET_TS_FM_RESP, &resp);
+	return uverbs_copy_to(attrs, HFI2_GET_TS_FM_RESP,
+			      &resp, sizeof(resp));
 #endif
 	return 0;
 }
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_e2e_connect_spec,
-			UVERBS_ATTR_PTR_IN(
+DECLARE_UVERBS_METHOD(hfi2_e2e_connect, HFI2_DEV_E2E_CONNECT,
+		      hfi2_e2e_connect_handler,
+		      &UVERBS_ATTR_PTR_IN(
 				HFI2_E2E_CONN_ATTR,
 				struct hfi_e2e_conn_args,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_check_sl_pair_spec,
-			UVERBS_ATTR_PTR_IN(
+DECLARE_UVERBS_METHOD(hfi2_check_sl_pair, HFI2_DEV_CHK_SL_PAIR,
+		      hfi2_check_sl_pair_handler,
+		      &UVERBS_ATTR_PTR_IN(
 				HFI2_SL_PAIR_ATTR,
 				struct hfi_sl_pair,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_get_hw_limits_spec,
-			UVERBS_ATTR_PTR_OUT(
+DECLARE_UVERBS_METHOD(hfi2_get_hw_limits, HFI2_DEV_GET_HW_LIMITS,
+		      hfi2_get_hw_limits_handler,
+		      &UVERBS_ATTR_PTR_OUT(
 				HFI2_GET_HW_LIMITS_RESP,
 				struct hfi_hw_limit,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_ts_get_master_spec,
-			UVERBS_ATTR_PTR_IN(
+DECLARE_UVERBS_METHOD(hfi2_ts_get_master, HFI2_DEV_TS_GET_MASTER,
+		      hfi2_ts_get_master_handler,
+		      &UVERBS_ATTR_PTR_IN(
 				HFI2_GET_TS_MASTER_CMD,
 				struct hfi_ts_master_cmd,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_OUT(
+		      &UVERBS_ATTR_PTR_OUT(
 				HFI2_GET_TS_MASTER_RESP,
 				struct hfi_ts_master_resp,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_ts_get_fm_spec,
-			UVERBS_ATTR_PTR_IN(
+DECLARE_UVERBS_METHOD(hfi2_ts_get_fm, HFI2_DEV_TS_GET_FM,
+		      hfi2_ts_get_fm_handler,
+		      &UVERBS_ATTR_PTR_IN(
 				HFI2_GET_TS_FM_CMD,
 				struct hfi_ts_fm_cmd,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_OUT(
+		      &UVERBS_ATTR_PTR_OUT(
 				HFI2_GET_TS_FM_RESP,
 				struct hfi_ts_fm_resp,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-DECLARE_UVERBS_TYPE(hfi2_type_device, NULL,
-		    &UVERBS_ACTIONS(
-			ADD_UVERBS_ACTION(HFI2_DEV_E2E_CONNECT,
-					  hfi2_e2e_connect,
-					  &hfi2_e2e_connect_spec),
-			ADD_UVERBS_ACTION(HFI2_DEV_CHK_SL_PAIR,
-					  hfi2_check_sl_pair,
-					  &hfi2_check_sl_pair_spec),
-			ADD_UVERBS_ACTION(HFI2_DEV_GET_HW_LIMITS,
-					  hfi2_get_hw_limits,
-					  &hfi2_get_hw_limits_spec),
-			ADD_UVERBS_ACTION(HFI2_DEV_TS_GET_MASTER,
-					  hfi2_ts_get_master,
-					  &hfi2_ts_get_master_spec),
-			ADD_UVERBS_ACTION(HFI2_DEV_TS_GET_FM,
-					  hfi2_ts_get_fm,
-					  &hfi2_ts_get_fm_spec)));
+DECLARE_UVERBS_OBJECT(hfi2_object_device,
+		      UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_DEVICE,
+					     HFI2_OBJECTS),
+		      NULL,
+		      &hfi2_e2e_connect,
+		      &hfi2_check_sl_pair,
+		      &hfi2_get_hw_limits,
+		      &hfi2_ts_get_master,
+		      &hfi2_ts_get_fm);

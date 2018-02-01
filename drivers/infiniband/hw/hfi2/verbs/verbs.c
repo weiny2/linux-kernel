@@ -6,7 +6,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright (c) 2015 Intel Corporation.
+ * Copyright (c) 2015-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
@@ -19,7 +19,7 @@
  *
  * BSD LICENSE
  *
- * Copyright (c) 2015 Intel Corporation.
+ * Copyright (c) 2015-2018 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -54,6 +54,7 @@
 
 #include <rdma/ib_mad.h>
 #include <rdma/ib_user_verbs.h>
+#include <rdma/uverbs_std_types.h>
 #include <linux/debugfs.h>
 #include <linux/idr.h>
 #include <linux/module.h>
@@ -68,19 +69,17 @@
 #include "../link.h"
 #include "../counters.h"
 
-/* TODO: Enable verbs 2.0 later */
-#if 0
-DECLARE_UVERBS_TYPES(hfi2_object_types,
-		     ADD_UVERBS_TYPE(HFI2_TYPE_DEVICE, hfi2_type_device),
-		     ADD_UVERBS_TYPE(HFI2_TYPE_CTX, hfi2_type_ctx),
-		     ADD_UVERBS_TYPE(HFI2_TYPE_CMDQ, hfi2_type_cmdq),
-		     ADD_UVERBS_TYPE(HFI2_TYPE_JOB, hfi2_type_job),
-);
+DECLARE_UVERBS_OBJECT_TREE(hfi2_uverbs_objects,
+			   &hfi2_object_device,
+			   &hfi2_object_ctx,
+			   &hfi2_object_cmdq,
+			   &hfi2_object_job);
 
-DECLARE_UVERBS_TYPES_GROUP(hfi2_root,
-			   &uverbs_common_types,
-			   &hfi2_object_types);
-#endif
+static inline const struct uverbs_object_tree_def *hfi2_get_objects(void)
+{
+	return &hfi2_uverbs_objects;
+}
+
 static void hfi2_uninit_port(struct hfi2_ibport *ibp);
 
 __be64 hfi2_sys_guid;
@@ -375,6 +374,7 @@ static int hfi2_get_hw_stats(struct ib_device *ibdev,
 		count = num_dev_cntrs;
 	} else {
 		struct hfi2_ibport *ibp = to_hfi_ibp(ibdev, port);
+
 		hfi_read_portcntrs(ibp->ppd, &values);
 		count = num_port_cntrs;
 	}
@@ -440,6 +440,12 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	struct hfi2_ibport *ibp;
 	int i, ret;
 
+#if IS_ENABLED(CONFIG_INFINIBAND_EXP_USER_ACCESS)
+	const struct uverbs_object_tree_def *hfi2_root[] = {
+		uverbs_default_get_objects(),
+		hfi2_get_objects()
+	};
+#endif
 	strncpy(ibdev->node_desc, init_utsname()->nodename,
 		sizeof(ibdev->node_desc));
 	ibdev->node_guid = ibd->node_guid;
@@ -475,10 +481,7 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibd->rdi.driver_f.get_pci_dev = get_pci_dev;
 
 	ibd->rdi.driver_f.query_port_state = hfi2_query_port;
-	/* TODO: Enable verbs 2.0 later */
-#if 0
 	ibd->rdi.driver_f.mmap = hfi2_mmap;
-#endif
 #if 0
 	/* for query_guid, query_port, and modify_port */
 	ibd->rdi.driver_f.get_guid_be = hfi1_get_guid_be;
@@ -555,14 +558,13 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	for (i = 0; i < ibd->num_pports; i++, ibp++)
 		rvt_init_port(&ibd->rdi, &ibp->rvp, i, ibp->ppd->pkeys);
 
-	ret = rvt_register_device(&ibd->rdi);
+#if IS_ENABLED(CONFIG_INFINIBAND_EXP_USER_ACCESS)
+	/* Extended verbs root */
+	ibd->rdi.ibdev.specs_root = uverbs_alloc_spec_tree(2, hfi2_root);
+#endif
+	ret = rvt_register_device(&ibd->rdi, RDMA_DRIVER_HFI2);
 	if (ret)
 		goto err_reg;
-	/* TODO: Enable verbs 2.0 later */
-#if 0
-	/* Extended verbs root */
-	ibd->rdi.ibdev.specs_root = &hfi2_root;
-#endif
 	return ret;
 
 err_reg:
@@ -749,11 +751,4 @@ void hfi_verbs_dbg_init(struct hfi_devdata *dd)
 			    dd->hfi_dev_dbg, &dd->ibd->rc_drop_enabled);
 	debugfs_create_u8("rc_drop_max_rate", 0644,
 			  dd->hfi_dev_dbg, &dd->ibd->rc_drop_max_rate);
-}
-
-void hfi2_initialize_type_group(void)
-{
-#if 0
-	uverbs_initialize_type_group(&hfi2_object_types);
-#endif
 }

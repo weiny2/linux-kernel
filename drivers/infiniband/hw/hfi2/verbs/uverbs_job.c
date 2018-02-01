@@ -6,7 +6,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright (c) 2017 Intel Corporation.
+ * Copyright (c) 2017-2018 Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as
@@ -19,7 +19,7 @@
  *
  * BSD LICENSE
  *
- * Copyright (c) 2017 Intel Corporation.
+ * Copyright (c) 2017-2018 Intel Corporation.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -245,17 +245,16 @@ void hfi_job_free(struct hfi_ctx *ctx)
 #endif
 }
 
-int hfi2_job_setup(struct ib_device *ib_dev,
-		   struct ib_uverbs_file *file,
-		   struct uverbs_attr_array *attrs,
-		   size_t num)
+int hfi2_job_setup_handler(struct ib_device *ib_dev,
+			   struct ib_uverbs_file *file,
+			   struct uverbs_attr_bundle *attrs)
 {
-	struct uverbs_attr_array *common = &attrs[0];
 	struct hfi_ctx *ctx;
 	struct ib_ujob_object *obj;
 	struct ib_ucontext *ucontext = file->ucontext;
 	struct hfi_job_setup_args job_setup;
 	struct hfi_devdata *dd = hfi_dd_from_ibdev(ib_dev);
+	const struct uverbs_attr *uattr;
 	u16 pid_base;
 	int ret;
 
@@ -265,15 +264,19 @@ int hfi2_job_setup(struct ib_device *ib_dev,
 
 	hfi_ctx_init(ctx, dd);
 
-	obj = container_of(
-		common->attrs[HFI2_JOB_SETUP_CTX_IDX].obj_attr.uobject,
-		typeof(*obj), uobject);
+	uattr = uverbs_attr_get(attrs, HFI2_JOB_SETUP_CTX_IDX);
+	if (unlikely(IS_ERR(uattr)))
+		return PTR_ERR(uattr);
+
+	obj = container_of(uattr->obj_attr.uobject,
+			   typeof(*obj), uobject);
+
 	obj->verbs_file = ucontext->ufile;
 	obj->uobject.object = ctx;
 	ctx->uobject = &obj->uobject;
 	INIT_LIST_HEAD(&obj->obj_list);
 
-	ret = uverbs_copy_from(&job_setup, common, HFI2_JOB_SETUP_CMD);
+	ret = uverbs_copy_from(&job_setup, attrs, HFI2_JOB_SETUP_CMD);
 	if (ret)
 		goto err_job_setup;
 
@@ -288,7 +291,8 @@ int hfi2_job_setup(struct ib_device *ib_dev,
 	list_add(&obj->obj_list, &ib_ujob_objects);
 	up_write(&hfi_job_sem);
 
-	ret = uverbs_copy_to(common, HFI2_JOB_SETUP_PID_BASE, &pid_base);
+	ret = uverbs_copy_to(attrs, HFI2_JOB_SETUP_PID_BASE,
+			     &pid_base, sizeof(pid_base));
 	if (ret)
 		goto err_job_setup;
 
@@ -299,17 +303,16 @@ err_job_setup:
 	return ret;
 }
 
-int hfi2_job_info(struct ib_device *ib_dev,
-		  struct ib_uverbs_file *file,
-		  struct uverbs_attr_array *attrs,
-		  size_t num)
+int hfi2_job_info_handler(struct ib_device *ib_dev,
+			  struct ib_uverbs_file *file,
+			  struct uverbs_attr_bundle *attrs)
 {
-	struct uverbs_attr_array *common = &attrs[0];
 	struct hfi_job_info job_info = {0};
 
 	hfi_job_info(&job_info);
 
-	return uverbs_copy_to(common, HFI2_JOB_INFO_RESP, &job_info);
+	return uverbs_copy_to(attrs, HFI2_JOB_INFO_RESP,
+			      &job_info, sizeof(job_info));
 }
 
 int hfi2_job_free(struct ib_uobject *uobject,
@@ -330,22 +333,29 @@ int hfi2_job_free(struct ib_uobject *uobject,
 	return 0;
 }
 
-int hfi2_dlid_assign(struct ib_device *ib_dev,
-		     struct ib_uverbs_file *file,
-		     struct uverbs_attr_array *attrs,
-		     size_t num)
+int hfi2_dlid_assign_handler(struct ib_device *ib_dev,
+			     struct ib_uverbs_file *file,
+			     struct uverbs_attr_bundle *attrs)
 {
 #ifdef CONFIG_HFI2_STLNP
-	struct uverbs_attr_array *common = &attrs[0];
 	struct hfi_ctx *ctx;
 	struct hfi_dlid_assign_args dlid_assign;
+	const struct uverbs_attr *uattr;
 	u32 dlid_count;
 	u64 *dlid_ptr_user;
 	int ret;
 
-	ctx = common->attrs[HFI2_DLID_ASSIGN_CTX_IDX].obj_attr.uobject->object;
+	uattr = uverbs_attr_get(attrs, HFI2_DLID_ASSIGN_CTX_IDX);
+	if (unlikely(IS_ERR(uattr)))
+		return PTR_ERR(uattr);
 
-	ret = uverbs_copy_from(&dlid_assign, common, HFI2_DLID_ASSIGN_CMD);
+	ctx = uattr->obj_attr.uobject->object;
+	if (unlikely(!ctx)) {
+		pr_err("%s: Encuntered a NULL hfi context\n", __func__);
+		return -ENOENT;
+	}
+
+	ret = uverbs_copy_from(&dlid_assign, attrs, HFI2_DLID_ASSIGN_CMD);
 	if (ret)
 		return -EINVAL;
 
@@ -379,80 +389,80 @@ int hfi2_dlid_assign(struct ib_device *ib_dev,
 	return 0;
 }
 
-int hfi2_dlid_release(struct ib_device *ib_dev,
-		      struct ib_uverbs_file *file,
-		      struct uverbs_attr_array *attrs,
-		      size_t num)
+int hfi2_dlid_release_handler(struct ib_device *ib_dev,
+			      struct ib_uverbs_file *file,
+			      struct uverbs_attr_bundle *attrs)
 {
 #ifdef CONFIG_HFI2_STLNP
-	struct uverbs_attr_array *common = &attrs[0];
 	struct hfi_ctx *ctx;
+	const struct uverbs_attr *uattr;
 
-	ctx = common->attrs[HFI2_DLID_RELEASE_CTX_IDX].obj_attr.uobject->object;
+	uattr = uverbs_attr_get(attrs, HFI2_DLID_RELEASE_CTX_IDX);
+	if (unlikely(IS_ERR(uattr)))
+		return PTR_ERR(uattr);
+
+	ctx = uattr->obj_attr.uobject->object;
+	if (unlikely(!ctx)) {
+		pr_err("%s: Encountered a NULL hfi context\n", __func__);
+		return -ENOENT;
+	}
 
 	return hfi_dlid_release(ctx);
 #endif
 	return 0;
 }
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_job_setup_spec,
-			UVERBS_ATTR_IDR(
+DECLARE_UVERBS_METHOD(hfi2_job_setup, HFI2_JOB_SETUP,
+		      hfi2_job_setup_handler,
+		      &UVERBS_ATTR_IDR(
 				HFI2_JOB_SETUP_CTX_IDX,
-				UVERBS_CREATE_TYPE_INDEX(HFI2_TYPE_JOB,
-							 HFI2_OBJECT_TYPES),
+				UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_JOB,
+						       HFI2_OBJECTS),
 				UVERBS_ACCESS_NEW,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_IN(
+		      &UVERBS_ATTR_PTR_IN(
 				HFI2_JOB_SETUP_CMD,
 				struct hfi_job_setup_args,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_OUT(
-				HFI2_JOB_SETUP_PID_BASE, u16,
-				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_JOB_SETUP_PID_BASE,
+				u16, UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_job_info_spec,
-			UVERBS_ATTR_PTR_OUT(
+DECLARE_UVERBS_METHOD(hfi2_job_info, HFI2_JOB_INFO,
+		      hfi2_job_info_handler,
+		      &UVERBS_ATTR_PTR_OUT(
 				HFI2_JOB_INFO_RESP,
 				struct hfi_job_info,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_dlid_assign_spec,
-			UVERBS_ATTR_IDR(
+DECLARE_UVERBS_METHOD(hfi2_dlid_assign, HFI2_DLID_ASSIGN,
+		      hfi2_dlid_assign_handler,
+		      &UVERBS_ATTR_IDR(
 				HFI2_DLID_ASSIGN_CTX_IDX,
-				UVERBS_CREATE_TYPE_INDEX(HFI2_TYPE_JOB,
-							 HFI2_OBJECT_TYPES),
+				UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_JOB,
+						       HFI2_OBJECTS),
 				UVERBS_ACCESS_WRITE,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-			UVERBS_ATTR_PTR_IN(
+		      &UVERBS_ATTR_PTR_IN(
 				HFI2_DLID_ASSIGN_CMD,
 				struct hfi_dlid_assign_args,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-static DECLARE_UVERBS_ATTR_SPEC(
-			hfi2_dlid_release_spec,
-			UVERBS_ATTR_IDR(
+DECLARE_UVERBS_METHOD(hfi2_dlid_release, HFI2_DLID_RELEASE,
+		      hfi2_dlid_release_handler,
+		      &UVERBS_ATTR_IDR(
 				HFI2_DLID_RELEASE_CTX_IDX,
-				UVERBS_CREATE_TYPE_INDEX(HFI2_TYPE_JOB,
-							 HFI2_OBJECT_TYPES),
+				UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_JOB,
+						       HFI2_OBJECTS),
 				UVERBS_ACCESS_WRITE,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
-DECLARE_UVERBS_TYPE(hfi2_type_job,
-		    &UVERBS_TYPE_ALLOC_IDR_SZ(sizeof(struct ib_ujob_object),
-					      0, hfi2_job_free),
-		    &UVERBS_ACTIONS(
-			ADD_UVERBS_ACTION(HFI2_JOB_SETUP,
-					  hfi2_job_setup,
-					  &hfi2_job_setup_spec),
-			ADD_UVERBS_ACTION(HFI2_JOB_INFO,
-					  hfi2_job_info,
-					  &hfi2_job_info_spec),
-			ADD_UVERBS_ACTION(HFI2_DLID_ASSIGN,
-					  hfi2_dlid_assign,
-					  &hfi2_dlid_assign_spec),
-			ADD_UVERBS_ACTION(HFI2_DLID_RELEASE,
-					  hfi2_dlid_release,
-					  &hfi2_dlid_release_spec)));
+DECLARE_UVERBS_OBJECT(hfi2_object_job,
+		      UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_JOB,
+					     HFI2_OBJECTS),
+		      &UVERBS_TYPE_ALLOC_IDR_SZ(sizeof(struct ib_ujob_object),
+						0, hfi2_job_free),
+		      &hfi2_job_setup,
+		      &hfi2_job_info,
+		      &hfi2_dlid_assign,
+		      &hfi2_dlid_release);

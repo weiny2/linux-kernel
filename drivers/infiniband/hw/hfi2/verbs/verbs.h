@@ -410,7 +410,4 @@ void hfi2_restart_rc(struct rvt_qp *qp, u32 psn, int wait);
 
 u64 *hfi2_get_ibport_stats(struct hfi_pportdata *ppd);
 void hfi_verbs_dbg_init(struct hfi_devdata *dd);
-
-/* For extended verbs */
-void hfi2_initialize_type_group(void);
 #endif
