@@ -2351,6 +2351,53 @@ static struct hfi_at_stats *hfi_at_alloc_stats(struct hfi_at_svm *svm)
 	return stats;
 }
 
+static void hfi_at_drain_pasid(struct hfi_at_svm *svm, int pasid)
+{
+	struct hfi_devdata *dd = svm->at->dd;
+	u64 drain_pasid;
+	int time, ms;
+
+	if (dd->system_pasid == pasid)
+		write_csr(dd, FXR_AT_CFG_USE_SYSTEM_PASID, 0);
+
+	spin_lock(&dd->ptl_lock);
+
+	/* drain pasid before freeing it */
+	drain_pasid = ((FXR_AT_CFG_DRAIN_PASID_PASID_MASK & pasid) <<
+		       FXR_AT_CFG_DRAIN_PASID_PASID_SHIFT) |
+		FXR_AT_CFG_DRAIN_PASID_BUSY_SMASK;
+	write_csr(dd, FXR_AT_CFG_DRAIN_PASID, drain_pasid);
+
+	/* wait for completion, if timeout log a message */
+	ms = 1;
+	for (time = 0; time < HFI_PASID_DRAIN_TIMEOUT_MS; time += ms) {
+		drain_pasid = read_csr(dd, FXR_AT_CFG_DRAIN_PASID);
+
+		if (!(drain_pasid & FXR_AT_CFG_DRAIN_PASID_BUSY_SMASK))
+			break;
+
+		mdelay(ms);
+		ms *= 2;	/* double the waiting time */
+	}
+
+	if (time >= HFI_PASID_DRAIN_TIMEOUT_MS)
+		dd_dev_err(dd, "PASID draining not done after %dms, pasid %d\n",
+			   time, pasid);
+
+	/*
+	 * TODO - Check whether we really need this mini-TLB flush any more.
+	 * Write fake simics CSR to flush mini-TLB (AT interface TBD)
+	 * If mini-TLB is not invalidated it may lead to packet drops
+	 * or kernel crashes due to use of stale hardware addresses.
+	 * See simics src:
+	 *   constant HIARB_SIMICS_S_ADDR    =0x10010;
+	 *   register FLUSH_TLB size 8 @ (HIARB_SIMICS_S_ADDR+0x000)
+	 */
+	write_csr(dd, FXR_RX_HIARB_CSRS + 0x10010, 1);
+
+	spin_unlock(&dd->ptl_lock);
+}
+
 static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 {
 	struct hfi_at *at = hfi_svm_device_to_at(dev);
@@ -2518,6 +2565,8 @@ static int hfi_svm_unbind_mm(struct device *dev, int pasid)
 	ret = 0;
 	svm->users--;
 	if (!svm->users) {
+		hfi_at_drain_pasid(svm, pasid);
+
 		/*
 		 * Flush the PASID cache and IOTLB for this device.
 		 * Note that we do depend on the hardware *not* using
@@ -2756,42 +2805,10 @@ hfi_at_clear_pasid(struct hfi_ctx *ctx)
 	struct hfi_devdata *dd = ctx->devdata;
 	struct device *dev = &dd->pdev->dev;
 	u64 lut = 0;
-	u64 drain_pasid;
-	int time, ms;
 
 	/* disable pid->pasid translation */
 	lut &= ~FXR_AT_CFG_PASID_LUT_ENABLE_SMASK;
 	write_csr(dd, FXR_AT_CFG_PASID_LUT + (ctx->pid * 8), lut);
-
-	if (ctx->type != HFI_CTX_TYPE_USER) {
-		if (ctx->pid == HFI_PID_SYSTEM)
-			write_csr(dd, FXR_AT_CFG_USE_SYSTEM_PASID, 0);
-	}
-
-	spin_lock(&dd->ptl_lock);
-
-	/* drain pasid before freeing it */
-	drain_pasid = ((FXR_AT_CFG_DRAIN_PASID_PASID_MASK & ctx->pasid) <<
-			FXR_AT_CFG_DRAIN_PASID_PASID_SHIFT) |
-			FXR_AT_CFG_DRAIN_PASID_BUSY_SMASK;
-	write_csr(dd, FXR_AT_CFG_DRAIN_PASID, drain_pasid);
-
-	/* wait for completion, if timeout log a message */
-	ms = 1;
-	for (time = 0; time < HFI_PASID_DRAIN_TIMEOUT_MS; time += ms) {
-		drain_pasid = read_csr(dd, FXR_AT_CFG_DRAIN_PASID);
-
-		if (!(drain_pasid & FXR_AT_CFG_DRAIN_PASID_BUSY_SMASK))
-			break;
-
-		mdelay(ms);
-		ms *= 2;	/* double the waiting time */
-	}
-	if (time >= HFI_PASID_DRAIN_TIMEOUT_MS)
-		dd_dev_err(dd, "PASID draining not done after %dms, pid %d\n",
-			   time, ctx->pid);
-
-	spin_unlock(&dd->ptl_lock);
 
 	/* call into svm to free pasid */
 	return hfi_svm_unbind_mm(dev, ctx->pasid);

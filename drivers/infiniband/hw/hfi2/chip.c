@@ -3933,16 +3933,6 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 				   HFI_CACHE_INVALIDATION_TIMEOUT_MS);
 	}
 
-	/*
-	 * TODO - write fake simics CSR to flush mini-TLB (AT interface TBD)
-	 * If mini-TLB is not invalidated it may lead to packet drops
-	 * or kernel crashes due to use of stale hardware addresses.
-	 * See simics src:
-	 *   constant HIARB_SIMICS_S_ADDR    =0x10010;
-	 *   register FLUSH_TLB size 8 @ (HIARB_SIMICS_S_ADDR+0x000)
-	 */
-	write_csr(dd, FXR_RX_HIARB_CSRS + 0x10010, 1);
-
 	spin_unlock(&dd->ptl_lock);
 }
 
