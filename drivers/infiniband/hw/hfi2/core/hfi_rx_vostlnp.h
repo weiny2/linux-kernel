@@ -80,7 +80,7 @@ int hfi_format_rkey_write(hfi_ni_t ni,
 	cmd->list.flit0.c.me_options  = me_options;
 	cmd->list.flit0.d.initiator_id   = match_id.val;
 	cmd->list.flit0.d.ct_handle   = ct_handle;
-	cmd->list.flit0.d.command     = ENTRY_WRITE;
+	cmd->list.flit0.d.command     = RKEY_WRITE;
 	cmd->list.flit0.d.cmd_len     = (sizeof(cmd->list) >> 5) - 1;
 	cmd->state.flit0.d.ncc        = ncc;
 
@@ -118,7 +118,7 @@ int hfi_format_recvq_append(hfi_ni_t ni,
 	cmd->list.flit0.d.ct_handle   = ct_handle;
 	cmd->list.flit0.d.command     = RECVQ_APPEND;
 	cmd->list.flit0.d.cmd_len     = (sizeof(cmd->list) >> 5) - 1;
-	cmd->state.flit0.d.ncc         = ncc;
+	cmd->state.flit0.d.ncc        = ncc;
 
 	cmd->list.flit1.e.cmd_pid     = pid;
 	cmd->list.flit1.e.list_handle = me_handle;

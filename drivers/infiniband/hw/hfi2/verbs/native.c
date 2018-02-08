@@ -579,20 +579,19 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 		qp_state.qkey = ibqp_to_rvtqp(ibqp)->qkey;
 	}
 
-	cmd->verbs.flit0.p0            = qp_state.val[0];
-	cmd->verbs.flit0.p1	       = qp_state.val[1];
-	cmd->verbs.flit0.c.ptl_idx     = 0;
-	cmd->verbs.flit0.c.qp_num      = ibqp->qp_num;
-	cmd->verbs.flit0.d.ni          = NATIVE_NI;
-	cmd->verbs.flit0.d.ct_handle   = PTL_CT_NONE;
-	cmd->verbs.flit0.d.ncc         = HFI_GEN_CC;
-	cmd->verbs.flit0.d.command     = QP_WRITE;
-	cmd->verbs.flit0.d.cmd_len     = (sizeof(cmd->verbs) >> 5) - 1;
-
-	cmd->verbs.flit1.e.cmd_pid     = rq->hw_ctx->pid;
-	cmd->verbs.flit1.p2            = qp_state.val[2];
-	cmd->verbs.flit1.p3            = qp_state.val[3];
-	cmd->verbs.flit1.user_ptr      = user_ptr;
+	cmd->state_verbs.flit0.p0        = qp_state.val[0];
+	cmd->state_verbs.flit0.p1	 = qp_state.val[1];
+	cmd->state_verbs.flit0.c.ptl_idx = 0;
+	cmd->state_verbs.flit0.c.qp_num  = ibqp->qp_num;
+	cmd->state_verbs.flit0.d.ni      = NATIVE_NI;
+	cmd->state_verbs.flit0.d.ct_handle = PTL_CT_NONE;
+	cmd->state_verbs.flit0.d.ncc     = HFI_GEN_CC;
+	cmd->state_verbs.flit0.d.command = QP_WRITE;
+	cmd->state_verbs.flit0.d.cmd_len = (sizeof(cmd->state_verbs) >> 5) - 1;
+	cmd->state_verbs.flit1.e.cmd_pid = rq->hw_ctx->pid;
+	cmd->state_verbs.flit1.p2        = qp_state.val[2];
+	cmd->state_verbs.flit1.p3        = qp_state.val[3];
+	cmd->state_verbs.flit1.user_ptr  = user_ptr;
 
 	return 1;
 }
