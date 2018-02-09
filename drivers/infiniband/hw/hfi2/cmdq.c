@@ -336,6 +336,7 @@ int hfi_cmdq_map(struct hfi_ctx *ctx, u16 cmdq_idx,
 	tx->slots_avail = tx->slots_total - 1;
 	tx->slot_idx = (*tx->head_addr);
 	tx->sw_head_idx = tx->slot_idx;
+	spin_lock_init(&tx->lock);
 
 	rx->cmdq_idx = cmdq_idx;
 	rx->head_addr = tx->head_addr + 8;
@@ -343,6 +344,7 @@ int hfi_cmdq_map(struct hfi_ctx *ctx, u16 cmdq_idx,
 	rx->slots_avail = rx->slots_total - 1;
 	rx->slot_idx = (*rx->head_addr);
 	rx->sw_head_idx = rx->slot_idx;
+	spin_lock_init(&rx->lock);
 
 	return 0;
 err1:

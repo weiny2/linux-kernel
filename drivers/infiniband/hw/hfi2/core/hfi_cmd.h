@@ -213,9 +213,7 @@ struct hfi_cmdq {
 	size_t	size;
 
 	volatile __u8 *head_addr;
-#if (!defined(__KERNEL__) && !defined(EFIAPI))
-	pthread_spinlock_t thread_spin;
-#endif
+	spinlock_t lock;
 	__u8	slot_idx;
 	__u8	sw_head_idx;
 	__u8	slots_avail;

@@ -85,6 +85,7 @@ void hfi_ctx_init(struct hfi_ctx *ctx, struct hfi_devdata *dd)
 	idr_init(&ctx->ec_used);
 	mutex_init(&ctx->dlid_mutex);
 	mutex_init(&ctx->event_mutex);
+	mutex_init(&ctx->rx_mutex);
 	init_rwsem(&ctx->ctx_rwsem);
 }
 

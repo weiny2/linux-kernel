@@ -598,6 +598,7 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 	int retries = 10;
 	int ret, nslots;
 	bool signal, solicit, in_line;
+	unsigned long flags;
 
 	signal = !(qp->s_flags & RVT_S_SIGNAL_REQ_WR) ||
 		 (wr->send_flags & IB_SEND_SIGNALED);
@@ -638,7 +639,10 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 		return nslots;
 
 retry:
+	spin_lock_irqsave(&ctx->tx_cmdq->lock, flags);
 	ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)&cmd, nslots);
+	spin_unlock_irqrestore(&ctx->tx_cmdq->lock, flags);
+
 	if (ret == -EAGAIN && retries) {
 		/* TODO */
 		msleep(2000);
@@ -646,6 +650,13 @@ retry:
 		goto retry;
 	}
 	return ret;
+}
+
+static inline bool native_send_ok(struct rvt_qp *qp)
+{
+	if (unlikely(!(ib_rvt_state_ops[qp->state] & RVT_POST_SEND_OK)))
+		return false;
+	return true;
 }
 
 int hfi2_native_send(struct rvt_qp *qp, struct ib_send_wr *wr,
@@ -656,7 +667,8 @@ int hfi2_native_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	if (unlikely(qp->state != IB_QPS_RTS))
 		return -EINVAL;
 	/* TODO - need to implement SQD / SQE */
-
+	if (!native_send_ok(qp))
+		return -EINVAL;
 	/* Issue pending TX commands */
 	do {
 		ret = hfi2_do_tx_work(qp, wr);

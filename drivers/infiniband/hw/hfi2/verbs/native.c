@@ -425,6 +425,7 @@ void hfi_deinit_hw_rq(struct hfi_ibcontext *ctx, struct hfi_rq *rq)
 	u32 list_handle;
 	u64 result[2];
 	struct hfi_rq_wc *hfi_wc;
+	unsigned long flags;
 
 	/* Return dedicated MEs to shared pool */
 	list_handle = hfi2_pop_key(&rq->ded_me_ks);
@@ -441,14 +442,19 @@ void hfi_deinit_hw_rq(struct hfi_ibcontext *ctx, struct hfi_rq *rq)
 		result[0] = 0;
 
 		/* Unlink head of list */
-		/* TODO - locking */
+		mutex_lock(&rq->hw_ctx->rx_mutex);
+		spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 		ret = hfi_recvq_unlink(ctx->rx_cmdq, NATIVE_NI,
 				       rq->hw_ctx, rq->recvq_root,
 				       (u64)result);
-		if (ret != 0)
+		spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
+		if (ret != 0) {
+			mutex_unlock(&rq->hw_ctx->rx_mutex);
 			break;
+		}
 
 		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, result);
+		mutex_unlock(&rq->hw_ctx->rx_mutex);
 		if (ret != 0)
 			break;
 
@@ -483,6 +489,7 @@ int hfi_init_hw_rq(struct hfi_ibcontext *ctx, struct rvt_rq *rvtrq,
 	u32 list_handle, recvq_root;
 	u64 done = 0;
 	struct hfi_rq *rq;
+	unsigned long flags;
 
 	rq = kmalloc(sizeof(*rq), GFP_KERNEL);
 	if (!rq)
@@ -515,14 +522,21 @@ int hfi_init_hw_rq(struct hfi_ibcontext *ctx, struct rvt_rq *rvtrq,
 		hfi2_push_key(&rq->ded_me_ks, list_handle);
 	}
 
+	mutex_lock(&hw_ctx->rx_mutex);
+	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 	/* receive queue init */
 	ret = hfi_recvq_init(ctx->rx_cmdq, NATIVE_NI,
 			     rq->hw_ctx, recvq_root,
 			     (u64)&done);
-	if (ret != 0)
+	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
+
+	if (ret != 0) {
+		mutex_unlock(&hw_ctx->rx_mutex);
 		goto err;
+	}
 
 	ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &done);
+	mutex_unlock(&hw_ctx->rx_mutex);
 	if (ret != 0)
 		goto err;
 	rq->recvq_root = recvq_root;
@@ -602,18 +616,21 @@ static int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
 	struct ib_qp *ibqp = &qp->ibqp;
 	int ret, nslots;
 	u64 done = 0;
+	unsigned long flags;
 	union hfi_rx_cq_command rx_cmd;
 
 	nslots = hfi_format_qp_write(rq, ibqp, slid, ipid, (u64)&done,
 				     &rx_cmd);
+	mutex_lock(&rq->hw_ctx->rx_mutex);
+	spin_lock_irqsave(&rx_cmdq->lock, flags);
 	do {
 		ret = hfi_rx_command(rx_cmdq, (u64 *)&rx_cmd, nslots);
 	} while (ret == -EAGAIN);
-
+	spin_unlock_irqrestore(&rx_cmdq->lock, flags);
 	/* If no error, process completion of above RX command */
 	if (!ret)
 		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &done);
-
+	mutex_unlock(&rq->hw_ctx->rx_mutex);
 	return ret;
 }
 
@@ -638,6 +655,7 @@ static int hfi_ib_eq_setup(struct hfi_rq *rq, struct rvt_cq *cq)
 
 		/* arm the HW event queue for interrupts */
 		eq = cq->hw_cq;
+		mutex_lock(&rq->hw_ctx->rx_mutex);
 		ret = hfi_ib_eq_arm(rq->hw_ctx, eq->idx, &cq->ibcq,
 				    (u64)&done, (u64)&cq->hw_disarmed);
 		if (ret)
@@ -647,12 +665,14 @@ static int hfi_ib_eq_setup(struct hfi_rq *rq, struct rvt_cq *cq)
 		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &done);
 		if (ret)
 			goto eq_err;
+		mutex_unlock(&rq->hw_ctx->rx_mutex);
 		cq->hw_disarmed = 0; /* arming succeeded */
 	}
 
 	return 0;
 
 eq_err:
+	mutex_unlock(&rq->hw_ctx->rx_mutex);
 	hfi_eq_free(rq->hw_ctx, eq);
 	cq->hw_cq =  NULL;
 	return ret;
@@ -843,6 +863,7 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 	u32 list_handle, pd_handle, me_options;
 	u64 addr, length;
 	int ret, i;
+	unsigned long flags;
 
 	/* TODO - how to set this? */
 	pd_handle = ibpd->uobject ?
@@ -929,12 +950,16 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 	/* Receive Queue Append */
 	pt.phys.slid = PTL_LID_ANY;
 	pt.phys.ipid = PTL_PID_ANY;
+
+	mutex_lock(&hw_rq->hw_ctx->rx_mutex);
+	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 	ret = hfi_recvq_append(ctx->rx_cmdq, NATIVE_NI,
 			       (void *)addr, length,
 			       hw_rq->recvq_root, pt, PTL_UID_ANY,
 			       hw_rq->hw_ctx->pid, pd_handle, me_options,
 			       PTL_CT_NONE, (u64)rq_wc_p, list_handle,
 			       !last_wr);
+	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
 	if (ret != 0)
 		goto me_cleanup;
 
@@ -944,10 +969,11 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 		if (ret != 0)
 			goto me_cleanup;
 	}
-
+	mutex_unlock(&hw_rq->hw_ctx->rx_mutex);
 	return 0;
 
 me_cleanup:
+	mutex_unlock(&hw_rq->hw_ctx->rx_mutex);
 	hfi2_push_key(&hw_rq->ded_me_ks, list_handle);
 
 rq_wc_cleanup:
