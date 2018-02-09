@@ -784,6 +784,7 @@ struct hfi_pportdata {
 	u8 pnum;
 	u8 vls_supported;
 	u8 vls_operational;
+	u8 actual_vls_operational;
 	u8 neighbor_type;
 	u8 neighbor_normal;
 	u8 neighbor_fm_security;

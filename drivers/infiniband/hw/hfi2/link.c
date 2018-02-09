@@ -1773,6 +1773,7 @@ static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup)
 
 		/* if we are down, the neighbor is down */
 		ppd->neighbor_normal = 0;
+		ppd->actual_vls_operational = 0;
 
 		/* notify IB of the link change */
 		event.event = IB_EVENT_PORT_ERR;
@@ -2708,6 +2709,12 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 	case HLS_UP_ARMED:
 		if (ppd->host_link_state != HLS_UP_INIT)
 			goto unexpected;
+
+		if (ppd->actual_vls_operational == 0) {
+			ppd_dev_err(ppd,
+				    "%s: data VLs not operational\n", __func__);
+			goto unexpected;
+		}
 
 		set_logical_state(ppd, LSTATE_ARMED);
 		ret = hfi2_wait_logical_linkstate(ppd, IB_PORT_ARMED, 1000);

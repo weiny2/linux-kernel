@@ -1688,6 +1688,18 @@ int hfi_set_buffer_control(struct hfi_pportdata *ppd,
 	/* bracket the credit change with a total adjustment */
 	if (new_total < cur_total)
 		hfi_set_global_limit(ppd, new_total);
+
+	/*
+	 * Determine the actual number of operational VLs using the
+	 * number of dedicated and shared credits for each VL
+	 */
+	if (change_count > 0) {
+		ppd->actual_vls_operational = 0;
+		for (i = 0; i < HFI_NUM_DATA_VLS - 1; i++)
+			if (be16_to_cpu(new_bc->vl[i].dedicated) > 0 ||
+			    be16_to_cpu(new_bc->vl[i].shared) > 0)
+				ppd->actual_vls_operational++;
+	}
 	return 0;
 }
 
@@ -1830,7 +1842,7 @@ int hfi_get_ib_cfg(struct hfi_pportdata *ppd, int which, u32 val, void *data)
 
 	switch (which) {
 	case HFI_IB_CFG_OP_VLS:
-		ret = ppd->vls_operational;
+		ret = ppd->actual_vls_operational;
 		break;
 	case HFI_IB_CFG_BW_ARB:
 		hfi_get_bw_arb(ppd, val, data);
