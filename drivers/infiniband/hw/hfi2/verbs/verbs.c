@@ -439,10 +439,7 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	struct ib_device *ibdev = &ibd->rdi.ibdev;
 	struct hfi2_ibport *ibp;
 	int i, ret;
-	size_t lcpysz = IB_DEVICE_NAME_MAX;
 
-	lcpysz = strlcpy(ibdev->name, name, lcpysz);
-	strlcpy(ibdev->name + lcpysz, "_%d", IB_DEVICE_NAME_MAX - lcpysz);
 	strncpy(ibdev->node_desc, init_utsname()->nodename,
 		sizeof(ibdev->node_desc));
 	ibdev->node_guid = ibd->node_guid;
@@ -548,6 +545,7 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	/* completion queue */
 	snprintf(ibd->rdi.dparms.cq_name, sizeof(ibd->rdi.dparms.cq_name),
 		 "hfi2_cq%d", ibd->dd->unit);
+	rvt_set_ibdev_name(&ibd->rdi, "%s_%d", hfi_class_name(), ibd->dd->unit);
 	ibd->rdi.dparms.node = ibd->assigned_node_id;
 
 	ibd->rdi.dparms.nports = ibd->num_pports;
