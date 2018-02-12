@@ -613,7 +613,7 @@ int hfi2_rcv_wait(void *data)
 		}
 		/* Process any pending acks when there are no events pending */
 		if (pkt.numpkt && !hfi_eq_wait_condition(rcv->ctx, &rcv->eq)) {
-			process_rcv_qp_work(rcv);
+			process_rcv_qp_work(&pkt);
 			pkt.numpkt = 0;
 		}
 	}

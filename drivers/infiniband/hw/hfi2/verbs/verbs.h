@@ -405,7 +405,7 @@ void hfi2_node_desc_chg(struct hfi2_ibport *ibp);
 void hfi2_verbs_register_sysfs(struct device *dev);
 void hfi_send_cnp(struct hfi2_ibport *ibp, struct rvt_qp *qp, u8 sl,
 		  bool grh, bool use_16b);
-void process_rcv_qp_work(struct hfi2_ibrcv *rcv);
+void process_rcv_qp_work(struct hfi2_ib_packet *packet);
 void hfi2_restart_rc(struct rvt_qp *qp, u32 psn, int wait);
 
 u64 *hfi2_get_ibport_stats(struct hfi_pportdata *ppd);

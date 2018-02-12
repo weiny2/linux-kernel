@@ -764,10 +764,11 @@ static inline void hfi2_make_bth_aeth(struct rvt_qp *qp,
 	ohdr->bth[2] = cpu_to_be32(mask_psn(qp->r_ack_psn));
 }
 
-static u32 hfi2_make_rc_ack_9B(struct rvt_qp *qp,
+static u32 hfi2_make_rc_ack_9B(struct hfi2_ib_packet *packet,
 			       union hfi2_packet_header *ph,
 			       bool is_fecn)
 {
+	struct rvt_qp *qp = packet->qp;
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	u16 lrh0, sc5;
 	u32 bth0, bth1;
@@ -811,10 +812,11 @@ static u32 hfi2_make_rc_ack_9B(struct rvt_qp *qp,
 	return hwords;
 }
 
-static u32 hfi2_make_rc_ack_16B(struct rvt_qp *qp,
+static u32 hfi2_make_rc_ack_16B(struct hfi2_ib_packet *packet,
 				union hfi2_packet_header *ph,
 				bool is_fecn)
 {
+	struct rvt_qp *qp = packet->qp;
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	u32 hwords, nwords, slid, qwords;
 	u8 sc5, l4, extra_bytes;
@@ -864,7 +866,7 @@ static u32 hfi2_make_rc_ack_16B(struct rvt_qp *qp,
 	return hwords;
 }
 
-typedef u32 (*hfi2_make_rc_ack)(struct rvt_qp *qp,
+typedef u32 (*hfi2_make_rc_ack)(struct hfi2_ib_packet *packet,
 				 union hfi2_packet_header *ph,
 				 bool is_fecn);
 /* We support only two types - 9B and 16B for now */
@@ -882,8 +884,9 @@ static const hfi2_make_rc_ack hfi2_make_rc_ack_tbl[2] = {
  * Note that RDMA reads and atomics are handled in the
  * send side QP state and tasklet.
  */
-static void hfi2_send_rc_ack(struct rvt_qp *qp, bool is_fecn)
+static void hfi2_send_rc_ack(struct hfi2_ib_packet *packet, bool is_fecn)
 {
+	struct rvt_qp *qp = packet->qp;
 	struct hfi2_ibport *ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
 	union hfi2_packet_header ph;
 	struct hfi2_qp_priv *qp_priv = qp->priv;
@@ -900,7 +903,7 @@ static void hfi2_send_rc_ack(struct rvt_qp *qp, bool is_fecn)
 		goto queue_ack;
 
 	/* Make the appropriate header */
-	hwords = hfi2_make_rc_ack_tbl[qp_priv->hdr_type] (qp, &ph, is_fecn);
+	hwords = hfi2_make_rc_ack_tbl[qp_priv->hdr_type] (packet, &ph, is_fecn);
 
 	/* Don't try to send ACKs if the link isn't ACTIVE */
 	if (ibp->ppd->host_link_state != HLS_UP_ACTIVE)
@@ -928,9 +931,10 @@ unlock:
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 }
 
-void process_rcv_qp_work(struct hfi2_ibrcv *rcv)
+void process_rcv_qp_work(struct hfi2_ib_packet *packet)
 {
 	struct rvt_qp *qp, *nqp;
+	struct hfi2_ibrcv *rcv = packet->rcv_ctx;
 
 	/*
 	 * Iterate over all QPs waiting to respond.
@@ -940,7 +944,8 @@ void process_rcv_qp_work(struct hfi2_ibrcv *rcv)
 		list_del_init(&qp->rspwait);
 		if (qp->r_flags & RVT_R_RSP_NAK) {
 			qp->r_flags &= ~RVT_R_RSP_NAK;
-			hfi2_send_rc_ack(qp, 0);
+			packet->qp = qp;
+			hfi2_send_rc_ack(packet, 0);
 		}
 		if (qp->r_flags & RVT_R_RSP_SEND) {
 			unsigned long flags;
@@ -2480,7 +2485,7 @@ nack_acc:
 	qp->r_nak_state = IB_NAK_REMOTE_ACCESS_ERROR;
 	qp->r_ack_psn = qp->r_psn;
 send_ack:
-	hfi2_send_rc_ack(qp, is_fecn);
+	hfi2_send_rc_ack(packet, is_fecn);
 	return;
 drop:
 	dev_dbg(ibp->dev, "RC dropping packet\n");
