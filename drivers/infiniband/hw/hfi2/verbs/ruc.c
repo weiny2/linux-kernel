@@ -315,26 +315,14 @@ int hfi2_ruc_check_hdr(struct hfi2_ibport *ibp, struct hfi2_ib_packet *packet)
 	unsigned long flags;
 	struct hfi_pportdata *ppd = ibp->ppd;
 	u8 sc5 = ppd->sl_to_sc[rdma_ah_get_sl(&qp->remote_ah_attr)];
-	struct ib_other_headers *ohdr = packet->ohdr;
 	u32 dlid = packet->dlid;
 	u32 slid = packet->slid;
 	u32 sl = packet->sl;
-	int migrated;
-	u16 pkey;
+	bool migrated = packet->migrated;
+	u16 pkey = packet->pkey;
 
 	priv->ibrcv = packet->rcv_ctx;
 
-	if (packet->etype == RHF_RCV_TYPE_BYPASS) {
-		u32 bth1 = be32_to_cpu(ohdr->bth[1]);
-
-		pkey = hfi2_16B_get_pkey(packet->hdr);
-		migrated = bth1 & IB_16B_BTH_MIG_REQ;
-	} else {
-		u32 bth0 = be32_to_cpu(ohdr->bth[0]);
-
-		pkey = ib_bth_get_pkey(packet->ohdr);
-		migrated = bth0 & IB_BTH_MIG_REQ;
-	}
 	if (qp->s_mig_state == IB_MIG_ARMED && (migrated)) {
 		if (!packet->grh) {
 			if ((rdma_ah_get_ah_flags(&qp->alt_ah_attr)

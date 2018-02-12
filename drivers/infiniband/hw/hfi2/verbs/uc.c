@@ -312,15 +312,12 @@ void hfi2_uc_rcv(struct hfi2_ib_packet *packet)
 		return;
 	}
 	if (packet->fecn) {
-		u16 pkey;
+		u16 pkey = packet->pkey;
 
-		if (is_16b) {
-			pkey = hfi2_16B_get_pkey(packet->hdr);
+		if (is_16b)
 			hfi_return_cnp_bypass(packet, qp->remote_qpn, pkey);
-		} else {
-			pkey = ib_bth_get_pkey(ohdr);
+		else
 			hfi_return_cnp(packet, qp->remote_qpn, pkey);
-		}
 	}
 	psn = ib_bth_get_psn(ohdr);
 

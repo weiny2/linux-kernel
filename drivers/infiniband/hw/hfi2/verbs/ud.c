@@ -737,7 +737,7 @@ void hfi2_ud_rcv(struct hfi2_ib_packet *packet)
 	u32 qkey;
 	u32 src_qp;
 	u32 dlid = packet->dlid;
-	u16 pkey;
+	u16 pkey = packet->pkey;
 	int mgmt_pkey_idx = -1;
 	struct hfi2_ibport *ibp = packet->ibp;
 	struct hfi_pportdata *ppd = ibp->ppd;
@@ -761,12 +761,9 @@ void hfi2_ud_rcv(struct hfi2_ib_packet *packet)
 	if (is_16b) {
 		u32 permissive_lid =
 			opa_get_lid(be32_to_cpu(OPA_LID_PERMISSIVE), 16B);
-
-		pkey = hfi2_16B_get_pkey(packet->hdr);
 		dlid_is_permissive = (dlid == permissive_lid);
 		slid_is_permissive = (slid == permissive_lid);
 	} else {
-		pkey = ib_bth_get_pkey(ohdr);
 		dlid_is_permissive = (dlid == be16_to_cpu(IB_LID_PERMISSIVE));
 		slid_is_permissive = (slid == be16_to_cpu(IB_LID_PERMISSIVE));
 	}

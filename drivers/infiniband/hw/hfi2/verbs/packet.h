@@ -162,6 +162,7 @@ struct hfi2_ib_packet {
 	u16 tlen;
 	u16 hlen;
 	u16 hlen_9b;
+	u16 pkey;
 	u32 slid;
 	u32 dlid;
 	u8 pad;
@@ -172,6 +173,7 @@ struct hfi2_ib_packet {
 	bool becn;
 	bool fecn;
 	bool is_mcast;
+	bool migrated;
 };
 
 /*
@@ -772,5 +774,10 @@ static inline void hfi2_make_16b_hdr(struct hfi2_16b_header *hdr,
 	hdr->lrh[1] = lrh1;
 	hdr->lrh[2] = lrh2;
 	hdr->lrh[3] = lrh3;
+}
+
+static inline bool opa_bth_is_migration(struct ib_other_headers *ohdr)
+{
+	return (ohdr->bth[1] & cpu_to_be32(IB_16B_BTH_MIG_REQ));
 }
 #endif
