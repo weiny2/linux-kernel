@@ -170,7 +170,6 @@ struct hfi2_ib_packet {
 	u8 sl;
 	u8 sc;
 	u8 opcode;
-	bool becn;
 	bool fecn;
 	bool is_mcast;
 	bool migrated;
@@ -749,7 +748,7 @@ static inline void hfi2_make_ib_hdr(struct ib_header *hdr,
 static inline void hfi2_make_16b_hdr(struct hfi2_16b_header *hdr,
 				     u32 slid, u32 dlid,
 				     u16 len, u16 pkey,
-				     u8 becn, u8 fecn, u8 l4,
+				     bool becn, bool fecn, u8 l4,
 				     u8 sc)
 {
 	u32 lrh0 = 0;
