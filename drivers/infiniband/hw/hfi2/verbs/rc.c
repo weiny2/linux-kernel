@@ -2005,7 +2005,6 @@ void hfi2_rc_rcv(struct hfi2_ib_packet *packet)
 	u32 tlen = packet->tlen;
 	struct hfi2_ibport *ibp = packet->ibp;
 	struct ib_other_headers *ohdr = packet->ohdr;
-	u32 bth0;
 	u32 opcode = packet->opcode;
 	u32 hdrsize = packet->hlen;
 	u32 psn = ib_bth_get_psn(packet->ohdr);
@@ -2021,7 +2020,6 @@ void hfi2_rc_rcv(struct hfi2_ib_packet *packet)
 	struct hfi2_ibrcv *rcv = packet->rcv_ctx;
 	u8 extra_bytes = packet->pad + packet->extra_byte + (SIZE_OF_CRC << 2);
 
-	bth0 = be32_to_cpu(ohdr->bth[0]);
 	if (hfi2_ruc_check_hdr(ibp, packet)) {
 		dev_dbg(ibp->dev, "header check failed\n");
 		return;
@@ -2229,7 +2227,7 @@ send_last:
 		wc.port_num = 0;
 		/* Signal completion event if the solicited bit is set. */
 		rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc,
-			     (bth0 & IB_BTH_SOLICITED) != 0);
+			     ib_bth_is_solicited(ohdr));
 		break;
 
 	case OP(RDMA_WRITE_ONLY):
