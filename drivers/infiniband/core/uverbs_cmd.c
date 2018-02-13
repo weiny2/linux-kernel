@@ -2260,6 +2260,7 @@ ssize_t ib_uverbs_post_send(struct ib_uverbs_file *file,
 			next = &atomic->wr;
 		} else if (user_wr->opcode == IB_WR_SEND ||
 			   user_wr->opcode == IB_WR_SEND_WITH_IMM ||
+			   user_wr->opcode == IB_WR_LOCAL_INV ||
 			   user_wr->opcode == IB_WR_SEND_WITH_INV) {
 			next_size = sizeof(*next);
 			next = alloc_wr(next_size, user_wr->num_sge);
@@ -2276,7 +2277,8 @@ ssize_t ib_uverbs_post_send(struct ib_uverbs_file *file,
 		    user_wr->opcode == IB_WR_RDMA_WRITE_WITH_IMM) {
 			next->ex.imm_data =
 					(__be32 __force) user_wr->ex.imm_data;
-		} else if (user_wr->opcode == IB_WR_SEND_WITH_INV) {
+		} else if (user_wr->opcode == IB_WR_LOCAL_INV ||
+			   user_wr->opcode == IB_WR_SEND_WITH_INV) {
 			next->ex.invalidate_rkey = user_wr->ex.invalidate_rkey;
 		}
 
