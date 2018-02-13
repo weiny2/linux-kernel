@@ -464,6 +464,8 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	struct hfi_eq *send_eq = send_cq->hw_cq;
 	u8 op_req = hfi_wr_rc_opcode[wr->wr.opcode];
 	u8 becn = 0;
+	void *start = NULL;
+	u32 length = 0;
 	u32 md_opts = wr->wr.opcode != IB_WR_RDMA_READ ?
 		PTL_MD_EVENT_SUCCESS_DISABLE | PTL_MD_EVENT_CT_SEND :
 		PTL_MD_EVENT_SUCCESS_DISABLE | PTL_MD_EVENT_CT_REPLY;
@@ -490,6 +492,11 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 			return -EINVAL;
 	}
 
+	if (sge) {
+		start = (void *)sge->addr;
+		length = sge->length;
+	}
+
 	if (wr->wr.num_sge > 1) {
 		md_opts &= ~PTL_MD_EVENT_SUCCESS_DISABLE;
 		md_opts |= PTL_IOVEC;
@@ -511,10 +518,10 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 					swqe->num_iov, 0,
 					&cmd->dma_iovec);
 	} else if (wr->wr.opcode != IB_WR_RDMA_READ &&
-		   sge->length <= HFI_TX_MAX_BUFFERED) {
+		   length <= HFI_TX_MAX_BUFFERED) {
 		nslots = hfi_format_buff_rc_rdma(
 					rq->hw_ctx, NATIVE_NI,
-					(void *)sge->addr, sge->length,
+					start, length,
 					tpid, ah_attr->port_num - 1,
 					NATIVE_RC, ah_attr->sl,
 					becn, priv->pkey,
@@ -531,7 +538,7 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	} else {
 		nslots = hfi_format_dma_rc_rdma(
 					rq->hw_ctx, NATIVE_NI,
-					(void *)sge->addr, sge->length,
+					start, length,
 					tpid, ah_attr->port_num - 1,
 					NATIVE_RC, ah_attr->sl,
 					becn, priv->pkey,
@@ -637,7 +644,6 @@ retry:
 		retries--;
 		goto retry;
 	}
-
 	return ret;
 }
 
