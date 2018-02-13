@@ -350,6 +350,12 @@ struct rvt_driver_provided {
 
 	/* Driver specific mmap */
 	int (*mmap)(struct ib_ucontext *context, struct vm_area_struct *vma);
+
+	/* Driver managed LKEY/RKEY support */
+	int (*alloc_lkey)(struct rvt_mregion *mr, int acc_flags, bool dma);
+	int (*free_lkey)(struct rvt_mregion *mr);
+	struct rvt_mregion * (*find_mr_from_lkey)(struct rvt_pd *pd, u32 lkey);
+	struct rvt_mregion * (*find_mr_from_rkey)(struct rvt_pd *pd, u32 rkey);
 };
 
 struct rvt_dev_info {

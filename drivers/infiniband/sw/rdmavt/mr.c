@@ -53,6 +53,10 @@
 #include "mr.h"
 #include "trace.h"
 
+#define IB_ACCESS_REMOTE_FLAGS \
+		(IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | \
+		 IB_ACCESS_REMOTE_ATOMIC)
+
 /**
  * rvt_driver_mr_init - Init MR resources per driver
  * @rdi: rvt dev struct
@@ -72,7 +76,7 @@ int rvt_driver_mr_init(struct rvt_dev_info *rdi)
 	 * table.  The lower 8 bits can be owned by the user (copied from
 	 * the LKEY).  The remaining bits act as a generation number or tag.
 	 */
-	if (!lkey_table_size)
+	if (!lkey_table_size && !rdi->driver_f.alloc_lkey)
 		return -EINVAL;
 
 	spin_lock_init(&rdi->lkey_table.lock);
@@ -84,17 +88,20 @@ int rvt_driver_mr_init(struct rvt_dev_info *rdi)
 		rdi->dparms.lkey_table_size = RVT_MAX_LKEY_TABLE_BITS;
 		lkey_table_size = rdi->dparms.lkey_table_size;
 	}
-	rdi->lkey_table.max = 1 << lkey_table_size;
-	rdi->lkey_table.shift = 32 - lkey_table_size;
-	lk_tab_size = rdi->lkey_table.max * sizeof(*rdi->lkey_table.table);
-	rdi->lkey_table.table = (struct rvt_mregion __rcu **)
-			       vmalloc_node(lk_tab_size, rdi->dparms.node);
-	if (!rdi->lkey_table.table)
-		return -ENOMEM;
 
+	if (lkey_table_size) {
+		rdi->lkey_table.max = 1 << lkey_table_size;
+		rdi->lkey_table.shift = 32 - lkey_table_size;
+		lk_tab_size = rdi->lkey_table.max * sizeof(*rdi->lkey_table.table);
+		rdi->lkey_table.table = (struct rvt_mregion __rcu **)
+				       vmalloc_node(lk_tab_size, rdi->dparms.node);
+		if (!rdi->lkey_table.table)
+			return -ENOMEM;
+
+		for (i = 0; i < rdi->lkey_table.max; i++)
+			RCU_INIT_POINTER(rdi->lkey_table.table[i], NULL);
+	}
 	RCU_INIT_POINTER(rdi->dma_mr, NULL);
-	for (i = 0; i < rdi->lkey_table.max; i++)
-		RCU_INIT_POINTER(rdi->lkey_table.table[i], NULL);
 
 	return 0;
 }
@@ -164,6 +171,7 @@ bail:
 /**
  * rvt_alloc_lkey - allocate an lkey
  * @mr: memory region that this lkey protects
+ * @acc_flags: MR access flags
  * @dma_region: 0->normal key, 1->restricted DMA key
  *
  * Returns 0 if successful, otherwise returns -errno.
@@ -173,7 +181,8 @@ bail:
  * Sets the lkey field mr for non-dma regions.
  *
  */
-static int rvt_alloc_lkey(struct rvt_mregion *mr, int dma_region)
+static int rvt_alloc_lkey(struct rvt_mregion *mr, int acc_flags,
+			  bool dma_region)
 {
 	unsigned long flags;
 	u32 r;
@@ -183,12 +192,25 @@ static int rvt_alloc_lkey(struct rvt_mregion *mr, int dma_region)
 	struct rvt_lkey_table *rkt = &dev->lkey_table;
 
 	rvt_get_mr(mr);
-	spin_lock_irqsave(&rkt->lock, flags);
 
 	/* special case for dma_mr lkey == 0 */
 	if (dma_region) {
 		struct rvt_mregion *tmr;
 
+		if (dev->driver_f.alloc_lkey) {
+			ret = dev->driver_f.alloc_lkey(mr, acc_flags, dma_region);
+			if (ret) {
+				rvt_put_mr(mr);
+				goto out;
+			}
+			/* continue to update dev->dma_mr */
+		} else {
+			mr->lkey = 0;
+			mr->rkey = mr->lkey;
+			mr->access_flags = acc_flags;
+		}
+
+		spin_lock_irqsave(&rkt->lock, flags);
 		tmr = rcu_access_pointer(dev->dma_mr);
 		if (!tmr) {
 			mr->lkey_published = 1;
@@ -196,10 +218,20 @@ static int rvt_alloc_lkey(struct rvt_mregion *mr, int dma_region)
 			rcu_assign_pointer(dev->dma_mr, mr);
 			rvt_get_mr(mr);
 		}
-		goto success;
+		spin_unlock_irqrestore(&rkt->lock, flags);
+		goto out;
+	}
+
+	if (dev->driver_f.alloc_lkey) {
+		ret = dev->driver_f.alloc_lkey(mr, acc_flags, dma_region);
+		if (ret)
+			rvt_put_mr(mr);
+		/* if using driver allocated LKEY, we are finished */
+		goto out;
 	}
 
 	/* Find the next available LKEY */
+	spin_lock_irqsave(&rkt->lock, flags);
 	r = rkt->next;
 	n = r;
 	for (;;) {
@@ -225,10 +257,11 @@ static int rvt_alloc_lkey(struct rvt_mregion *mr, int dma_region)
 		mr->lkey |= 1 << 8;
 		rkt->gen++;
 	}
+	mr->access_flags = acc_flags;
+	mr->rkey = mr->lkey;
 	mr->lkey_published = 1;
 	/* Insure published written first */
 	rcu_assign_pointer(rkt->table[r], mr);
-success:
 	spin_unlock_irqrestore(&rkt->lock, flags);
 out:
 	return ret;
@@ -252,30 +285,38 @@ static void rvt_free_lkey(struct rvt_mregion *mr)
 	struct rvt_lkey_table *rkt = &dev->lkey_table;
 	int freed = 0;
 
-	spin_lock_irqsave(&rkt->lock, flags);
 	if (!lkey) {
+		if (dev->driver_f.free_lkey)
+			dev->driver_f.free_lkey(mr);
+
+		spin_lock_irqsave(&rkt->lock, flags);
 		if (mr->lkey_published) {
 			mr->lkey_published = 0;
 			/* insure published is written before pointer */
 			rcu_assign_pointer(dev->dma_mr, NULL);
 			rvt_put_mr(mr);
 		}
+		spin_unlock_irqrestore(&rkt->lock, flags);
+		freed++;
+	} else if (dev->driver_f.free_lkey) {
+		freed = dev->driver_f.free_lkey(mr) == 0;
 	} else {
-		if (!mr->lkey_published)
-			goto out;
-		r = lkey >> (32 - dev->dparms.lkey_table_size);
-		mr->lkey_published = 0;
-		/* insure published is written before pointer */
-		rcu_assign_pointer(rkt->table[r], NULL);
+		spin_lock_irqsave(&rkt->lock, flags);
+		if (mr->lkey_published) {
+			r = lkey >> (32 - dev->dparms.lkey_table_size);
+			mr->lkey_published = 0;
+			/* insure published is written before pointer */
+			rcu_assign_pointer(rkt->table[r], NULL);
+			freed++;
+		}
+		spin_unlock_irqrestore(&rkt->lock, flags);
 	}
-	freed++;
-out:
-	spin_unlock_irqrestore(&rkt->lock, flags);
+
 	if (freed)
 		percpu_ref_kill(&mr->refcount);
 }
 
-static struct rvt_mr *__rvt_alloc_mr(int count, struct ib_pd *pd)
+static struct rvt_mr *__rvt_alloc_mr(int count, struct ib_pd *pd, int acc)
 {
 	struct rvt_mr *mr;
 	int rval = -ENOMEM;
@@ -294,11 +335,11 @@ static struct rvt_mr *__rvt_alloc_mr(int count, struct ib_pd *pd)
 	 * ib_reg_phys_mr() will initialize mr->ibmr except for
 	 * lkey and rkey.
 	 */
-	rval = rvt_alloc_lkey(&mr->mr, 0);
+	rval = rvt_alloc_lkey(&mr->mr, acc, false);
 	if (rval)
 		goto bail_mregion;
 	mr->ibmr.lkey = mr->mr.lkey;
-	mr->ibmr.rkey = mr->mr.lkey;
+	mr->ibmr.rkey = mr->mr.rkey;
 done:
 	return mr;
 
@@ -347,22 +388,18 @@ struct ib_mr *rvt_get_dma_mr(struct ib_pd *pd, int acc)
 		goto bail;
 	}
 
-	rval = rvt_alloc_lkey(&mr->mr, 1);
+	rval = rvt_alloc_lkey(&mr->mr, acc, true);
 	if (rval) {
 		ret = ERR_PTR(rval);
 		goto bail_mregion;
 	}
-
-	mr->mr.access_flags = acc;
-	ret = &mr->ibmr;
-done:
-	return ret;
+	return &mr->ibmr;
 
 bail_mregion:
 	rvt_deinit_mregion(&mr->mr);
 bail:
 	kfree(mr);
-	goto done;
+	return ret;
 }
 
 /**
@@ -395,7 +432,7 @@ struct ib_mr *rvt_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 
 	n = umem->nmap;
 
-	mr = __rvt_alloc_mr(n, pd);
+	mr = __rvt_alloc_mr(n, pd, mr_access_flags);
 	if (IS_ERR(mr)) {
 		ret = (struct ib_mr *)mr;
 		goto bail_umem;
@@ -405,7 +442,6 @@ struct ib_mr *rvt_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 	mr->mr.iova = virt_addr;
 	mr->mr.length = length;
 	mr->mr.offset = ib_umem_offset(umem);
-	mr->mr.access_flags = mr_access_flags;
 	mr->umem = umem;
 
 	mr->mr.page_shift = umem->page_shift;
@@ -587,7 +623,8 @@ struct ib_mr *rvt_alloc_mr(struct ib_pd *pd,
 	if (mr_type != IB_MR_TYPE_MEM_REG)
 		return ERR_PTR(-EINVAL);
 
-	mr = __rvt_alloc_mr(max_num_sg, pd);
+	/* TODO is this LKEY only memory region? */
+	mr = __rvt_alloc_mr(max_num_sg, pd, 0);
 	if (IS_ERR(mr))
 		return (struct ib_mr *)mr;
 
@@ -659,6 +696,7 @@ int rvt_fast_reg_mr(struct rvt_qp *qp, struct ib_mr *ibmr, u32 key,
 		    int access)
 {
 	struct rvt_mr *mr = to_imr(ibmr);
+	u32 rkey;
 
 	if (qp->ibqp.pd != mr->mr.pd)
 		return -EACCES;
@@ -671,8 +709,14 @@ int rvt_fast_reg_mr(struct rvt_qp *qp, struct ib_mr *ibmr, u32 key,
 		return -EINVAL;
 
 	ibmr->lkey = key;
-	ibmr->rkey = key;
 	mr->mr.lkey = key;
+	/* TODO - review if this is correct update for RKEY */
+	/* Set RKEY based on access flags, preserve upper bits (index) */
+	if (access & IB_ACCESS_REMOTE_FLAGS) {
+		rkey = (mr->mr.rkey & ~0xFF) | (key & 0xFF);
+		ibmr->rkey = rkey;
+		mr->mr.rkey = rkey;
+	}
 	mr->mr.access_flags = access;
 	atomic_set(&mr->mr.lkey_invalid, 0);
 
@@ -690,25 +734,39 @@ EXPORT_SYMBOL(rvt_fast_reg_mr);
 int rvt_invalidate_rkey(struct rvt_qp *qp, u32 rkey)
 {
 	struct rvt_dev_info *dev = ib_to_rvt(qp->ibqp.device);
-	struct rvt_lkey_table *rkt = &dev->lkey_table;
 	struct rvt_mregion *mr;
 
-	if (rkey == 0)
-		return -EINVAL;
+	/* TODO - why mark LKEY and RKEY invalid below? */
 
-	rcu_read_lock();
-	mr = rcu_dereference(
-		rkt->table[(rkey >> (32 - dev->dparms.lkey_table_size))]);
-	if (unlikely(!mr || mr->lkey != rkey || qp->ibqp.pd != mr->pd))
-		goto bail;
+	if (dev->driver_f.find_mr_from_rkey) {
+		struct rvt_pd *pd = ibpd_to_rvtpd(qp->ibqp.pd);
 
-	atomic_set(&mr->lkey_invalid, 1);
-	rcu_read_unlock();
+		mr = dev->driver_f.find_mr_from_rkey(pd, rkey);
+		if (!mr)
+			return -EINVAL;
+		if (mr->lkey == 0) {
+			rvt_put_mr(mr);
+			return -EINVAL;
+		}
+		atomic_set(&mr->lkey_invalid, 1);
+		rvt_put_mr(mr);
+	} else {
+		struct rvt_lkey_table *rkt = &dev->lkey_table;
+
+		if (rkey == 0)
+			return -EINVAL;
+
+		rcu_read_lock();
+		mr = rcu_dereference(
+			rkt->table[(rkey >> (32 - dev->dparms.lkey_table_size))]);
+		if (unlikely(!mr || mr->lkey != rkey || qp->ibqp.pd != mr->pd)) {
+			rcu_read_unlock();
+			return -EINVAL;
+		}
+		atomic_set(&mr->lkey_invalid, 1);
+		rcu_read_unlock();
+	}
 	return 0;
-
-bail:
-	rcu_read_unlock();
-	return -EINVAL;
 }
 EXPORT_SYMBOL(rvt_invalidate_rkey);
 
@@ -743,16 +801,15 @@ struct ib_fmr *rvt_alloc_fmr(struct ib_pd *pd, int mr_access_flags,
 	 * ib_alloc_fmr() will initialize fmr->ibfmr except for lkey &
 	 * rkey.
 	 */
-	rval = rvt_alloc_lkey(&fmr->mr, 0);
+	rval = rvt_alloc_lkey(&fmr->mr, mr_access_flags, false);
 	if (rval)
 		goto bail_mregion;
-	fmr->ibfmr.rkey = fmr->mr.lkey;
+	fmr->ibfmr.rkey = fmr->mr.rkey;
 	fmr->ibfmr.lkey = fmr->mr.lkey;
 	/*
 	 * Resources are allocated but no valid mapping (RKEY can't be
 	 * used).
 	 */
-	fmr->mr.access_flags = mr_access_flags;
 	fmr->mr.max_segs = fmr_attr->max_pages;
 	fmr->mr.page_shift = fmr_attr->page_shift;
 
@@ -914,28 +971,46 @@ int rvt_lkey_ok(struct rvt_lkey_table *rkt, struct rvt_pd *pd,
 		struct rvt_sge *isge, struct rvt_sge *last_sge,
 		struct ib_sge *sge, int acc)
 {
+	struct rvt_dev_info *dev = ib_to_rvt(pd->ibpd.device);
 	struct rvt_mregion *mr;
 	unsigned n, m;
 	size_t off;
+
+	if (rvt_sge_adjacent(last_sge, sge))
+		return 0;
+
+	if (dev->driver_f.find_mr_from_lkey) {
+		mr = dev->driver_f.find_mr_from_lkey(pd, sge->lkey);
+		if (!mr)
+			goto bail;
+	} else if (sge->lkey == 0) {
+		if (pd->user)
+			return -EINVAL;
+		rcu_read_lock();
+		mr = rcu_dereference(dev->dma_mr);
+		if (!mr)
+			goto bail_rcu;
+		rvt_get_mr(mr);
+		rcu_read_unlock();
+	} else {
+		rcu_read_lock();
+		mr = rcu_dereference(rkt->table[sge->lkey >> rkt->shift]);
+		if (!mr)
+			goto bail_rcu;
+		rvt_get_mr(mr);
+		rcu_read_unlock();
+		if (!READ_ONCE(mr->lkey_published))
+			goto bail_unref;
+		if (unlikely(atomic_read(&mr->lkey_invalid) ||
+			     mr->lkey != sge->lkey || mr->pd != &pd->ibpd))
+			goto bail_unref;
+	}
 
 	/*
 	 * We use LKEY == zero for kernel virtual addresses
 	 * (see rvt_get_dma_mr() and dma_virt_ops).
 	 */
 	if (sge->lkey == 0) {
-		struct rvt_dev_info *dev = ib_to_rvt(pd->ibpd.device);
-
-		if (pd->user)
-			return -EINVAL;
-		if (rvt_sge_adjacent(last_sge, sge))
-			return 0;
-		rcu_read_lock();
-		mr = rcu_dereference(dev->dma_mr);
-		if (!mr)
-			goto bail;
-		rvt_get_mr(mr);
-		rcu_read_unlock();
-
 		isge->mr = mr;
 		isge->vaddr = (void *)sge->addr;
 		isge->length = sge->length;
@@ -944,26 +1019,12 @@ int rvt_lkey_ok(struct rvt_lkey_table *rkt, struct rvt_pd *pd,
 		isge->n = 0;
 		goto ok;
 	}
-	if (rvt_sge_adjacent(last_sge, sge))
-		return 0;
-	rcu_read_lock();
-	mr = rcu_dereference(rkt->table[sge->lkey >> rkt->shift]);
-	if (!mr)
-		goto bail;
-	rvt_get_mr(mr);
-	if (!READ_ONCE(mr->lkey_published))
-		goto bail_unref;
-
-	if (unlikely(atomic_read(&mr->lkey_invalid) ||
-		     mr->lkey != sge->lkey || mr->pd != &pd->ibpd))
-		goto bail_unref;
 
 	off = sge->addr - mr->user_base;
 	if (unlikely(sge->addr < mr->user_base ||
 		     off + sge->length > mr->length ||
 		     (mr->access_flags & acc) != acc))
 		goto bail_unref;
-	rcu_read_unlock();
 
 	off += mr->offset;
 	if (mr->page_shift) {
@@ -999,10 +1060,11 @@ int rvt_lkey_ok(struct rvt_lkey_table *rkt, struct rvt_pd *pd,
 ok:
 	trace_rvt_sge_new(isge, sge);
 	return 1;
+bail_rcu:
+	rcu_read_unlock();
 bail_unref:
 	rvt_put_mr(mr);
 bail:
-	rcu_read_unlock();
 	return -EINVAL;
 }
 EXPORT_SYMBOL(rvt_lkey_ok);
@@ -1029,23 +1091,44 @@ int rvt_rkey_ok(struct rvt_qp *qp, struct rvt_sge *sge,
 	unsigned n, m;
 	size_t off;
 
-	/*
-	 * We use RKEY == zero for kernel virtual addresses
-	 * (see rvt_get_dma_mr() and dma_virt_ops).
-	 */
-	rcu_read_lock();
-	if (rkey == 0) {
+	/* Lookup MR from rkey */
+	if (dev->driver_f.find_mr_from_rkey) {
 		struct rvt_pd *pd = ibpd_to_rvtpd(qp->ibqp.pd);
-		struct rvt_dev_info *rdi = ib_to_rvt(pd->ibpd.device);
+
+		mr = dev->driver_f.find_mr_from_rkey(pd, rkey);
+		if (!mr)
+			goto bail;
+	} else if (rkey == 0) {
+		struct rvt_pd *pd = ibpd_to_rvtpd(qp->ibqp.pd);
 
 		if (pd->user)
 			goto bail;
-		mr = rcu_dereference(rdi->dma_mr);
+		rcu_read_lock();
+		mr = rcu_dereference(dev->dma_mr);
 		if (!mr)
-			goto bail;
+			goto bail_rcu;
 		rvt_get_mr(mr);
 		rcu_read_unlock();
+	} else {
+		rcu_read_lock();
+		mr = rcu_dereference(rkt->table[rkey >> rkt->shift]);
+		if (!mr)
+			goto bail_rcu;
+		rvt_get_mr(mr);
+		rcu_read_unlock();
+		/* insure mr read is before test */
+		if (!READ_ONCE(mr->lkey_published))
+			goto bail_unref;
+		if (unlikely(atomic_read(&mr->lkey_invalid) ||
+			     mr->rkey != rkey || qp->ibqp.pd != mr->pd))
+			goto bail_unref;
+	}
 
+	/*
+	 * We use LKEY == zero for kernel virtual addresses
+	 * (see rvt_get_dma_mr() and dma_virt_ops).
+	 */
+	if (mr->lkey == 0) {
 		sge->mr = mr;
 		sge->vaddr = (void *)vaddr;
 		sge->length = len;
@@ -1055,22 +1138,10 @@ int rvt_rkey_ok(struct rvt_qp *qp, struct rvt_sge *sge,
 		goto ok;
 	}
 
-	mr = rcu_dereference(rkt->table[rkey >> rkt->shift]);
-	if (!mr)
-		goto bail;
-	rvt_get_mr(mr);
-	/* insure mr read is before test */
-	if (!READ_ONCE(mr->lkey_published))
-		goto bail_unref;
-	if (unlikely(atomic_read(&mr->lkey_invalid) ||
-		     mr->lkey != rkey || qp->ibqp.pd != mr->pd))
-		goto bail_unref;
-
 	off = vaddr - mr->iova;
 	if (unlikely(vaddr < mr->iova || off + len > mr->length ||
 		     (mr->access_flags & acc) == 0))
 		goto bail_unref;
-	rcu_read_unlock();
 
 	off += mr->offset;
 	if (mr->page_shift) {
@@ -1105,10 +1176,11 @@ int rvt_rkey_ok(struct rvt_qp *qp, struct rvt_sge *sge,
 	sge->n = n;
 ok:
 	return 1;
+bail_rcu:
+	rcu_read_unlock();
 bail_unref:
 	rvt_put_mr(mr);
 bail:
-	rcu_read_unlock();
 	return 0;
 }
 EXPORT_SYMBOL(rvt_rkey_ok);

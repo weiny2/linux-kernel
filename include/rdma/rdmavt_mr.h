@@ -76,6 +76,7 @@ struct rvt_mregion {
 	u64 iova;               /* IB start address of this region */
 	size_t length;
 	u32 lkey;
+	u32 rkey;
 	u32 offset;             /* offset (bytes) to start of region */
 	int access_flags;
 	u32 max_segs;           /* number of rvt_segs in all the arrays */
