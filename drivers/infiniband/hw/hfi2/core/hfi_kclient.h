@@ -58,6 +58,7 @@
 #include <linux/vmalloc.h>
 #include "hfi_core.h"
 #include "hfi_pt_bypass.h"
+#include "../hfi2.h"
 
 /*
  * An hfi_eq pointer can never be NULL (we don't want to NULL-check
@@ -199,8 +200,13 @@ int _hfi_eq_alloc(struct hfi_ctx *ctx,
 
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	rc = hfi_eq_poll_cmd_complete_timeout(ctx, &done);
+	if (rc < 0)
+		return rc;
 
-	return rc;
+	hfi_at_reg_range(ctx, (void *)eq_alloc->base,
+			 eq_alloc->count << width, NULL, true);
+
+	return 0;
 }
 
 static inline
@@ -233,6 +239,7 @@ void _hfi_eq_free(struct hfi_ctx *ctx, struct hfi_eq *eq)
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	hfi_eq_poll_cmd_complete_timeout(ctx, &done);
 
+	hfi_at_dereg_range(ctx, eq->base, eq->count << eq->width);
 	vfree(eq->base);
 	eq->base = NULL;
 }

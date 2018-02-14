@@ -121,14 +121,18 @@ struct hfi_eq_mgmt {
 
 /**
  * struct hfi_eq_ctx - page pinning information for an EQ buffer
- * @eq: pointer to the management eq when the eq is in block mode
+ * @ctx: hardware context associated with
+ * @eqm: pointer to the management eq when the eq is in block mode
  * @npages: number of pages pinned for this eq
  * @pages: array of struct page pointers used to pin the eq buffer
+ * @vaddr: user space page aligned virtual address of the EQ buffer
  */
 struct hfi_eq_ctx {
+	struct hfi_ctx *ctx;
 	struct hfi_eq_mgmt *eqm;
 	int npages;
 	struct page **pages;
+	unsigned long vaddr;
 };
 
 static int hfi_eq_setup(struct hfi_ctx *ctx,
@@ -490,26 +494,29 @@ static int hfi_eq_can_pin_pages(u32 npages)
  * be swapped during a transaction, causing a page fault over the fabric.
  * To avoid this, pin the EQ buffer pages by calling get_user_pages().
  */
-static int hfi_eq_pin_pages(unsigned long vaddr, size_t npages,
-			    bool writable, struct page **pages)
+static int hfi_eq_pin_pages(struct hfi_eq_ctx *eq_ctx)
 {
 	int ret, pinned;
 
-	ret = hfi_eq_can_pin_pages(npages);
+	ret = hfi_eq_can_pin_pages(eq_ctx->npages);
 	if (ret < 0)
 		return ret;
 
-	pinned = get_user_pages_fast(vaddr, npages, writable, pages);
+	pinned = get_user_pages_fast(eq_ctx->vaddr, eq_ctx->npages,
+				     true, eq_ctx->pages);
 	if (pinned < 0)
 		return -ENOMEM;
 
-	if (pinned != npages) {
+	if (pinned != eq_ctx->npages) {
 		size_t  i;
 
 		for (i = 0; i < pinned; i++)
-			put_page(pages[i]);
+			put_page(eq_ctx->pages[i]);
 		return -ENOMEM;
 	}
+
+	hfi_at_reg_range(eq_ctx->ctx, (void *)eq_ctx->vaddr,
+			 eq_ctx->npages * PAGE_SIZE, eq_ctx->pages, true);
 
 	down_write(&current->mm->mmap_sem);
 	current->mm->pinned_vm += pinned;
@@ -518,16 +525,19 @@ static int hfi_eq_pin_pages(unsigned long vaddr, size_t npages,
 	return 0;
 }
 
-static void hfi_eq_release_pages(struct page **pages, size_t npages)
+static void hfi_eq_release_pages(struct hfi_eq_ctx *eq_ctx)
 {
 	size_t i;
 
-	for (i = 0; i < npages; i++)
-		put_page(pages[i]);
+	hfi_at_dereg_range(eq_ctx->ctx, (void *)eq_ctx->vaddr,
+			   eq_ctx->npages * PAGE_SIZE);
+
+	for (i = 0; i < eq_ctx->npages; i++)
+		put_page(eq_ctx->pages[i]);
 
 	if (current->mm) { /* during close after signal, mm can be NULL */
 		down_write(&current->mm->mmap_sem);
-		current->mm->pinned_vm -= npages;
+		current->mm->pinned_vm -= eq_ctx->npages;
 		up_write(&current->mm->mmap_sem);
 	}
 }
@@ -583,6 +593,7 @@ int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 		return -ENOMEM;
 	}
 
+	eq_ctx->ctx = ctx;
 	eq_ctx->eqm = eqm;
 
 	down_read(&ctx->ctx_rwsem);
@@ -606,6 +617,8 @@ int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 			(eq_assign->count <<
 				(eq_assign->jumbo ? HFI_EQ_ENTRY_LOG2_JUMBO :
 						    HFI_EQ_ENTRY_LOG2)));
+		eq_ctx->vaddr = eq_assign->base & PAGE_MASK;
+
 		/* Array of struct page pointers needed for pinning */
 		eq_ctx->pages = kcalloc(eq_ctx->npages, sizeof(*eq_ctx->pages),
 					GFP_KERNEL);
@@ -615,8 +628,7 @@ int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 			kfree(eq_ctx);
 			return -ENOMEM;
 		}
-		ret = hfi_eq_pin_pages(eq_assign->base, eq_ctx->npages, true,
-				       eq_ctx->pages);
+		ret = hfi_eq_pin_pages(eq_ctx);
 		if (ret < 0) {
 			up_read(&ctx->ctx_rwsem);
 			kfree(eqm);
@@ -806,7 +818,7 @@ static void hfi_eq_free_ctx(struct hfi_eq_ctx *eq_ctx)
 	 * by the driver. EQ management object is freed separately.
 	 */
 	if (eq_ctx->pages) {
-		hfi_eq_release_pages(eq_ctx->pages, eq_ctx->npages);
+		hfi_eq_release_pages(eq_ctx);
 		kfree(eq_ctx->pages);
 	}
 	kfree(eq_ctx);

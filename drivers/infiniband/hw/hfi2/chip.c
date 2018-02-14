@@ -668,6 +668,7 @@ static int hfi_psn_init(struct hfi_pportdata *port, u32 max_lid)
 	for (i = 0; i < HFI_MAX_TC - 1; i++) {
 		struct hfi_ptcdata *tc = &port->ptc[i];
 
+		tc->psn_size = psn_size;
 		for (j = 0; j < HFI_MAX_PKEYS; j++) {
 			u32 psn_off = (4 * j + i) * 8;
 
@@ -676,6 +677,8 @@ static int hfi_psn_init(struct hfi_pportdata *port, u32 max_lid)
 				rc = -ENOMEM;
 				goto done;
 			}
+			hfi_at_reg_range(&dd->priv_ctx, tc->psn_base[j],
+					 psn_size, NULL, true);
 			tx_psn_base.field.address =
 				(u64)tc->psn_base >> PAGE_SHIFT;
 			rx_psn_base.field.address =
@@ -703,6 +706,9 @@ void hfi_psn_uninit(struct hfi_pportdata *port)
 			if (tc->psn_base[j]) {
 				u32 psn_off = (4 * j + i) * 8;
 
+				hfi_at_dereg_range(&dd->priv_ctx,
+						   tc->psn_base[j],
+						   tc->psn_size);
 				vfree(tc->psn_base[j]);
 				tc->psn_base[j] = NULL;
 				write_csr(dd, off_tx + psn_off, 0);
@@ -2879,6 +2885,7 @@ static struct opa_core_ops opa_core_ops = {
 	.pt_update_lower = hfi_pt_update_lower,
 	.get_hw_limits = hfi_get_hw_limits,
 	.get_async_error = hfi_get_async_error,
+	.mem_prefetch = hfi_at_mem_prefetch,
 #ifdef CONFIG_HFI2_STLNP
 	.check_sl_pair = hfi_check_sl_pair,
 	.ctx_set_allowed_uids = hfi_ctx_set_allowed_uids,

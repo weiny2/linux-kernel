@@ -155,8 +155,8 @@
 #define HFI_CMD_JOB_INFO          28
 #define HFI_CMD_JOB_SETUP         29
 #define HFI_CMD_CMDQ_UPDATE       30
-#define HFI_CMD_DELETED1          31
-#define HFI_CMD_DELETED2          32
+#define HFI_CMD_MEM_PREFETCH      31
+#define HFI_CMD_UNUSED            32
 #define HFI_CMD_CT_ASSIGN         33
 #define HFI_CMD_CT_RELEASE        34
 #define HFI_CMD_E2E_CONN          35
@@ -458,6 +458,18 @@ struct hfi_job_setup_args {
 	IN __u32 lid_count;
 	IN __u32 auth_uid[HFI_NUM_AUTH_TUPLES];
 	IN __u64 reserved;
+};
+
+/*
+ * struct hfi_mprefetch - memory prefetch for user buffers.
+ * @iovec: an array of 'struct iovec' structure
+ * @count: iovec count in the array
+ * @flags: additional info, currently only if writable
+ */
+struct hfi_mprefetch_args {
+	IN __u64 iovec;
+	IN __u32 count;
+	IN __u32 flags;
 };
 
 /**

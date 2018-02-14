@@ -81,6 +81,9 @@ static const char * const at_remap_fault_reasons[] = {
 	"PCE for translation request specifies blocking"
 };
 
+/* protect pasid idr code */
+static DEFINE_MUTEX(pasid_mutex);
+
 static void hfi_at_stats_cleanup(struct hfi_at *at);
 
 static const char *at_get_fault_reason(u8 fault_reason, int *fault_type)
@@ -823,10 +826,9 @@ invalid:
 }
 
 static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
-				    struct page_req_dsc *req)
+				    struct page_req_dsc *req, struct page *page)
 {
 	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
-	struct page *page = NULL;
 	int ret;
 
 	/* TODO: investigate mapping requests with null pgd */
@@ -852,6 +854,9 @@ static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
 		/* If address is not canonical, return invalid response */
 		if (!is_canonical_address(address))
 			return -EINVAL;
+
+		if (page)
+			return hfi_at_map(svm, req, page, true);
 
 		/* TODO: Check whether we really need mmget here */
 		/* If the mm is already defunct, don't handle faults. */
@@ -975,7 +980,7 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 		if (use_cpt)
 			ret = handle_at_cpt_page_fault(svm, req);
 		else
-			ret = handle_at_spt_page_fault(svm, req);
+			ret = handle_at_spt_page_fault(svm, req, NULL);
 
 		if (unlikely(ret)) {
 			result = QI_RESP_INVALID;
@@ -2089,6 +2094,92 @@ static void hfi_at_free_pagelist(struct page *freelist)
 	}
 }
 
+/*
+ * TODO: shadow page table construction can be called from
+ * multiple threads, we need to design a lock mechanizm to
+ * to avoid corrupting the shadow page table.
+ */
+void hfi_at_dereg_range(struct hfi_ctx *ctx, void *vaddr, u32 size)
+{
+	struct hfi_at *at = ctx->devdata->at;
+	struct hfi_at_svm *svm;
+	struct page *freelist;
+	unsigned long start_pfn, last_pfn, nrpages;
+
+	mutex_lock(&pasid_mutex);
+	svm = idr_find(&at->pasid_idr, ctx->pasid);
+	mutex_unlock(&pasid_mutex);
+	if (!svm || !svm->pgd)
+		return;
+
+	nrpages = aligned_nrpages((unsigned long)vaddr, size);
+	start_pfn = AT_PFN((unsigned long)vaddr);
+	last_pfn = start_pfn + nrpages - 1;
+	freelist = hfi_at_unmap(svm, start_pfn, last_pfn);
+	hfi_at_free_pagelist(freelist);
+}
+
+int hfi_at_reg_range(struct hfi_ctx *ctx, void *vaddr, u32 size,
+		     struct page **pages, bool write)
+{
+	struct hfi_at *at = ctx->devdata->at;
+	struct hfi_at_svm *svm;
+	struct page *page = NULL;
+	struct page_req_dsc req;
+	unsigned long pageaddr;
+	unsigned long nrpages;
+
+	mutex_lock(&pasid_mutex);
+	svm = idr_find(&at->pasid_idr, ctx->pasid);
+	mutex_unlock(&pasid_mutex);
+	if (!svm || !svm->pgd)
+		return -EINVAL;
+
+	req.pasid = svm->pasid;
+	req.wr_req = write;
+	pageaddr = ((unsigned long)vaddr & PAGE_MASK) >> AT_PAGE_SHIFT;
+	nrpages = aligned_nrpages((unsigned long)vaddr, size);
+
+	while (nrpages) {
+		int ret;
+
+		req.addr = pageaddr;
+		if (pages)
+			page = *(pages++);
+
+		svm->stats->prq_cnt++;
+		ret = handle_at_spt_page_fault(svm, &req, page);
+		if (ret) {
+			svm->stats->prq_fail_cnt++;
+			return ret;
+		}
+
+		pageaddr++;
+		nrpages--;
+	}
+
+	return 0;
+}
+
+int hfi_at_mem_prefetch(struct hfi_ctx *ctx, struct hfi_mprefetch_args *mpf)
+{
+	struct iovec iovec, *iovecp = (struct iovec *)mpf->iovec;
+	bool writable = mpf->flags ? true: false;
+
+	while (mpf->count) {
+		if (copy_from_user(&iovec, iovecp, sizeof(iovec)))
+			return -EFAULT;
+
+		hfi_at_reg_range(ctx, iovec.iov_base,
+				 iovec.iov_len, NULL, writable);
+
+		mpf->count--;
+		iovecp++;
+	}
+
+	return 0;
+}
+
 static void hfi_flush_svm_range_dev(struct hfi_at_svm *svm,
 				    unsigned long address,
 				    unsigned long pages, int ih, int gl)
@@ -2238,8 +2329,6 @@ static const struct mmu_notifier_ops hfi_at_mmuops = {
 	.change_pte = hfi_at_change_pte,
 	.invalidate_range = hfi_at_invalidate_range,
 };
-
-static DEFINE_MUTEX(pasid_mutex);
 
 static void hfi_at_stats_cleanup(struct hfi_at *at)
 {

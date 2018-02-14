@@ -309,6 +309,8 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		   __func__, __LINE__, trig_op_size, HFI_PSB_FIXED_TOTAL_MEM,
 		   le_me_size, unexp_size, psb_size, ctx->ptl_state_base);
 	ctx->ptl_state_size = psb_size;
+	hfi_at_reg_range(ctx, ctx->ptl_state_base, ctx->ptl_state_size, NULL, true);
+
 	ctx->le_me_addr = (void *)(ctx->ptl_state_base + le_me_off);
 	ctx->le_me_size = le_me_size;
 	ctx->le_me_count = ctx_assign->le_me_count;
@@ -405,6 +407,7 @@ err_kern_ctx:
 	hfi_pcb_reset(dd, ptl_pid);
 	vfree(ctx->le_me_free_list);
 err_psb_vmalloc:
+	hfi_at_dereg_range(ctx, ctx->ptl_state_base, ctx->ptl_state_size);
 	vfree(ctx->ptl_state_base);
 err_vmalloc:
 	hfi_at_clear_pasid(ctx);
@@ -565,6 +568,8 @@ void hfi_ctx_cleanup(struct hfi_ctx *ctx)
 	}
 
 	if (ctx->ptl_state_base) {
+		hfi_at_dereg_range(ctx, ctx->ptl_state_base,
+				   ctx->ptl_state_size);
 		vfree(ctx->ptl_state_base);
 		ctx->ptl_state_base = NULL;
 	}
@@ -629,6 +634,8 @@ int hfi_alloc_spill_area(struct hfi_devdata *dd)
 	if (!ptr)
 		return -ENOMEM;
 
+	hfi_at_reg_range(&dd->priv_ctx, ptr, size * 5, NULL, true);
+
 	dd->trig_op_spill_area = ptr;
 
 	for (i = 0; i < 5; i++)
@@ -646,5 +653,7 @@ void hfi_free_spill_area(struct hfi_devdata *dd)
 	for (i = 0; i < 5; i++)
 		__hfi_set_spill_area(dd, i, NULL, 0);
 
+	hfi_at_dereg_range(&dd->priv_ctx, dd->trig_op_spill_area,
+			   TRIGGER_OPS_SPILL_SIZE * 5);
 	vfree(dd->trig_op_spill_area);
 }

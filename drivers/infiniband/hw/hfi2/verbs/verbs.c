@@ -383,6 +383,57 @@ static int hfi2_get_hw_stats(struct ib_device *ibdev,
 	return count;
 }
 
+static int hfi2_reg_mr(struct rvt_dev_info *rdi, struct rvt_mregion *mr)
+{
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(&rdi->ibdev);
+	void *vaddr;
+	int m, n, i, list_len;
+	u32 ps;
+	bool writable;
+
+	/* TODO: only do the following operation in SPT mode */
+	writable = !!(mr->access_flags &
+		(IB_ACCESS_LOCAL_WRITE   | IB_ACCESS_REMOTE_WRITE |
+		 IB_ACCESS_REMOTE_ATOMIC | IB_ACCESS_MW_BIND));
+
+	ps = 1 << mr->page_shift;
+	list_len = mr->length / ps;
+	m = 0;
+	n = 0;
+	for (i = 0; i < list_len; i++) {
+		vaddr = mr->map[m]->segs[n].vaddr;
+		hfi_at_reg_range(&dd->priv_ctx, vaddr, ps, NULL, writable);
+		if (++n == RVT_SEGSZ) {
+			m++;
+			n = 0;
+		}
+	}
+
+	return 0;
+}
+
+static void hfi2_dereg_mr(struct rvt_dev_info *rdi, struct rvt_mregion *mr)
+{
+	struct hfi_devdata *dd = hfi_dd_from_ibdev(&rdi->ibdev);
+	void *vaddr;
+	int m, n, i, list_len;
+	u32 ps;
+
+	/* TODO: only do the following operation in SPT mode */
+	ps = 1 << mr->page_shift;
+	list_len = mr->length / ps;
+	m = 0;
+	n = 0;
+	for (i = 0; i < list_len; i++) {
+		vaddr = mr->map[m]->segs[n].vaddr;
+		hfi_at_dereg_range(&dd->priv_ctx, vaddr, ps);
+		if (++n == RVT_SEGSZ) {
+			m++;
+			n = 0;
+		}
+	}
+}
+
 static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 {
 	struct ib_device *ibdev = &ibd->rdi.ibdev;
@@ -486,6 +537,10 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibd->rdi.driver_f.schedule_send_no_lock = hfi2_schedule_send_no_lock;
 	ibd->rdi.driver_f.do_send = hfi2_do_send_from_rvt;
 	ibd->rdi.driver_f.check_send_wqe = hfi2_check_send_wqe;
+
+	/* maintain shadow page table during mr management */
+	ibd->rdi.driver_f.reg_mr = hfi2_reg_mr;
+	ibd->rdi.driver_f.dereg_mr = hfi2_dereg_mr;
 
 	/* post send table */
 	ibd->rdi.post_parms = hfi2_post_parms;

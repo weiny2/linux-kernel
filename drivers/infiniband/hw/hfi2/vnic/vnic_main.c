@@ -1078,6 +1078,9 @@ static void hfi2_free_rx_bufs(struct hfi2_ctx_info *ctx_i)
 
 	for (i = 0; i < HFI2_NET_NUM_RX_BUFS; i++) {
 		if (ctx_i->buf[i]) {
+			hfi_at_dereg_range(&ctx_i->ctx,
+					   ctx_i->buf[i],
+					   HFI2_NET_EAGER_SIZE);
 			vfree(ctx_i->buf[i]);
 			ctx_i->buf[i] = NULL;
 		}
@@ -1096,6 +1099,8 @@ static int hfi2_alloc_rx_bufs(struct hfi2_ctx_info *ctx_i)
 			goto err1;
 		}
 
+		hfi_at_reg_range(&ctx_i->ctx, ctx_i->buf[i],
+				 HFI2_NET_EAGER_SIZE, NULL, true);
 		rc = hfi2_vnic_append_skb(ctx_i, i);
 		if (rc)
 			goto err1;

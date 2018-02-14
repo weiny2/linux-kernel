@@ -513,6 +513,7 @@ struct hfi_irq_entry {
 
 /*
  * hfi_ptcdata - HFI traffic class specific information per port
+ * @psn_size: buffer size of psn_base below in bytes
  * @psn_base: packet sequence number buffer array used for TX/RX
  *	One buffer per pkey
  * @e2e_tx_state_cache: E2E connection TX state cache.
@@ -524,6 +525,7 @@ struct hfi_irq_entry {
  *	an ida is sufficient.
  */
 struct hfi_ptcdata {
+	int psn_size;
 	void *psn_base[HFI_MAX_PKEYS];
 	struct idr e2e_tx_state_cache;
 	struct ida e2e_rx_state_cache;
@@ -1150,6 +1152,10 @@ int hfi_at_clear_pasid(struct hfi_ctx *ctx);
 int hfi_at_setup_irq(struct hfi_devdata *dd);
 int hfi_at_init(struct hfi_devdata *dd);
 void hfi_at_exit(struct hfi_devdata *dd);
+int hfi_at_reg_range(struct hfi_ctx *ctx, void *addr, u32 size,
+		     struct page **pages, bool write);
+void hfi_at_dereg_range(struct hfi_ctx *ctx, void *addr, u32 size);
+int hfi_at_mem_prefetch(struct hfi_ctx *ctx, struct hfi_mprefetch_args *mpf);
 void hfi_at_dbg_init(struct hfi_devdata *dd);
 
 /* OPA core functions */

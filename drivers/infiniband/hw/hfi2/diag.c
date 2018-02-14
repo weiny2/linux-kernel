@@ -239,6 +239,8 @@ static ssize_t diagpkt_send(struct diag_pkt *dp, struct hfi_devdata *dd)
 		goto bail;
 	}
 
+	hfi_at_reg_range(diag->ctx, tmpbuf, dp->len, NULL, false);
+
 	if (copy_from_user(tmpbuf,
 			   (const void __user *)(unsigned long)dp->data,
 			   dp->len)) {
@@ -272,6 +274,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp, struct hfi_devdata *dd)
 
 	ret = diagpkt_xmit(dd, tmpbuf, dp, sc, l2);
 free:
+	hfi_at_dereg_range(diag->ctx, tmpbuf, dp->len);
 	vfree(tmpbuf);
 bail:
 	if (ret < 0 && dd)

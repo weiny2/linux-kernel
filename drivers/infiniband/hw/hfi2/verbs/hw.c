@@ -72,6 +72,7 @@ static bool disable_pio = true;
 #define HFI_IB_EAGER_COUNT_ORDER	(zebu ? 6 : 9)
 #define HFI_IB_EAGER_SIZE		(PAGE_SIZE * 8)
 #define HFI_IB_EAGER_PT_FLAGS	(PTL_MAY_ALIGN | PTL_MANAGE_LOCAL)
+#define HFI_IB_EAGER_BUFSIZE	(HFI_IB_EAGER_COUNT * HFI_IB_EAGER_SIZE)
 
 /*
  * PIO threshold in bytes - will use PIO if payload is less than this.
@@ -965,7 +966,7 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 	struct hfi_pt_alloc_eager_args pt_alloc = {0};
 	struct opa_ev_assign eq_alloc = {0};
 	union hfi_rx_cq_command rx_cmd;
-	u32 total_eager_size, rhq_count;
+	u32 rhq_count;
 	int ret, i, n_slots;
 
 	/* Revisit if we ever support multi-port device */
@@ -976,12 +977,11 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 	rcv->ibp = ibp;
 	rcv->ctx = ctx;
 
-	total_eager_size = HFI_IB_EAGER_COUNT * HFI_IB_EAGER_SIZE;
 	/*
 	 * size the RHQ as one event per 64 B of eager buffer; this prevents
 	 * RHQ overflow since payload consumes minimum of 64 B with MAY_ALIGN
 	 */
-	rhq_count = total_eager_size / 64;
+	rhq_count = HFI_IB_EAGER_BUFSIZE / 64;
 	if (unlikely(!is_power_of_2(rhq_count))) {
 		dev_err(ibp->dev, "%s: rhq_count %d not power of two\n",
 			__func__, rhq_count);
@@ -1016,9 +1016,12 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 		goto init_err;
 
 	rcv->egr_last_idx = 0;
-	rcv->egr_base = vzalloc(total_eager_size);
+	rcv->egr_base = vzalloc(HFI_IB_EAGER_BUFSIZE);
 	if (!rcv->egr_base)
 		goto init_err;
+
+	hfi_at_reg_range(ctx, rcv->egr_base,
+			 HFI_IB_EAGER_BUFSIZE, NULL, true);
 
 	pt_alloc.eq_handle = &rcv->eq;
 	pt_alloc.eager_order = HFI_IB_EAGER_COUNT_ORDER;
@@ -1115,6 +1118,8 @@ void hfi2_rcv_uninit(struct hfi2_ibrcv *rcv)
 	if (rcv->eq.base)
 		_hfi_eq_free(rcv->ctx, &rcv->eq);
 	if (rcv->egr_base) {
+		hfi_at_dereg_range(rcv->ctx, rcv->egr_base,
+				   HFI_IB_EAGER_BUFSIZE);
 		vfree(rcv->egr_base);
 		rcv->egr_base = NULL;
 	}
