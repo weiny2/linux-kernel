@@ -1403,6 +1403,7 @@ void hfi_clear_full_mgmt_pkey(struct hfi_pportdata *ppd);
 const char *hfi_class_name(void);
 int hfi_set_lid(struct hfi_pportdata *ppd, u32 lid, u8 lmc);
 int hfi_set_max_lid(struct hfi_pportdata *ppd, u32 lid);
+void hfi_psn_uninit(struct hfi_pportdata *port);
 void hfi_write_lm_fpc_csr(const struct hfi_pportdata *ppd,
 			  u32 offset, u64 value);
 void hfi_write_lm_tp_csr(const struct hfi_pportdata *ppd,

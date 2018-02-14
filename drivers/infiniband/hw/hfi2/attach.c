@@ -281,6 +281,11 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 			goto err_bypass;
 	}
 
+	/* allocate pasid for this context */
+	ret = hfi_set_pasid(dd, ctx, ptl_pid);
+	if (ret)
+		goto err_pasid;
+
 	/* compute total Portals State size, HW requires minimum of one page */
 	trig_op_size = ctx_assign->trig_op_count ?
 		PAGE_ALIGN(ctx_assign->trig_op_count * HFI_TRIG_OP_SIZE) :
@@ -326,10 +331,6 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	dd_dev_info(dd, "Portals PID %u assigned PCB:[%d, %d, %d, %d]\n",
 		    ptl_pid, psb_size, trig_op_size, le_me_size,
 		    unexp_size);
-
-	ret = hfi_set_pasid(dd, ctx, ptl_pid);
-	if (ret)
-		goto err_pasid;
 
 	/* write PCB (host memory) */
 	hfi_pcb_write(ctx, ptl_pid);
@@ -402,12 +403,12 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 err_kern_ctx:
 	hfi_errq_cleanup(ctx);
 	hfi_pcb_reset(dd, ptl_pid);
-	hfi_at_clear_pasid(ctx);
-err_pasid:
 	vfree(ctx->le_me_free_list);
 err_psb_vmalloc:
 	vfree(ctx->ptl_state_base);
 err_vmalloc:
+	hfi_at_clear_pasid(ctx);
+err_pasid:
 	hfi_ctx_clear_bypass(ctx);
 err_bypass:
 	ctx->pid = HFI_PID_NONE;
@@ -549,24 +550,14 @@ void hfi_ctx_cleanup(struct hfi_ctx *ctx)
 	/* first release any assigned CMDQs */
 	hfi_cmdq_cleanup(ctx);
 
-	/* disable default Bypass PID if used */
-	hfi_ctx_clear_bypass(ctx);
-
-	/* reset PCB, cancel OTR, flush caches */
-	hfi_pcb_reset(dd, ptl_pid);
-
-	/* stop pasid translation, but not for ZEBU: HSD 1209735086 */
-	if (!zebu)
-		hfi_at_clear_pasid(ctx);
+	/* release event resources: ct/eq/ec */
+	hfi_event_cleanup(ctx);
 
 	/* free error queue */
 	hfi_errq_cleanup(ctx);
 
-	/* release assigned PID */
-	hfi_pid_free(dd, ptl_pid);
-
-	/* release event resources: ct/eq/ec */
-	hfi_event_cleanup(ctx);
+	/* reset PCB, cancel OTR, flush caches */
+	hfi_pcb_reset(dd, ptl_pid);
 
 	if (ctx->le_me_free_list) {
 		vfree(ctx->le_me_free_list);
@@ -577,6 +568,16 @@ void hfi_ctx_cleanup(struct hfi_ctx *ctx)
 		vfree(ctx->ptl_state_base);
 		ctx->ptl_state_base = NULL;
 	}
+
+	/* stop pasid translation, but not for ZEBU: HSD 1209735086 */
+	if (!zebu)
+		hfi_at_clear_pasid(ctx);
+
+	/* disable default Bypass PID if used */
+	hfi_ctx_clear_bypass(ctx);
+
+	/* release assigned PID */
+	hfi_pid_free(dd, ptl_pid);
 
 	if (ctx->pid_count == 0) {
 		dd_dev_info(dd, "release PID singleton [%u]\n", ptl_pid);

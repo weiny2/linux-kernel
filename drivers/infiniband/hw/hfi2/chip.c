@@ -688,7 +688,7 @@ done:
 	return rc;
 }
 
-static void hfi_psn_uninit(struct hfi_pportdata *port)
+void hfi_psn_uninit(struct hfi_pportdata *port)
 {
 	int i, j;
 	struct hfi_devdata *dd = port->dd;
@@ -2819,8 +2819,6 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	for (port = 1; port <= dd->num_pports; port++) {
 		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
 
-		hfi_psn_uninit(ppd);
-
 		hfi_shutdown_led_override(ppd);
 
 		if (ppd->led_override_timer.data) {
@@ -3416,9 +3414,6 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 #ifdef CONFIG_HFI2_STLNP
 		hfi_e2e_init(ppd);
 #endif
-		if (opafm_disable)
-			hfi_set_max_lid(ppd, HFI_DEFAULT_MAX_LID_SUPP);
-
 		spin_lock_init(&ppd->cca_timer_lock);
 		for (i = 0; i < OPA_MAX_SLS; i++) {
 			hrtimer_init(&ppd->cca_timer[i].hrtimer,
@@ -3664,11 +3659,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	dd->vl15_pid = HFI_PID_NONE;
 	dd->mcast_pid = HFI_PID_NONE;
 
-	if (hfi_alloc_spill_area(dd)) {
-		ret = -ENOMEM;
-		goto err_post_alloc;
-	}
-
 	ret = hfi_iommu_root_set_context(dd);
 	if (ret)
 		goto err_post_alloc;
@@ -3733,6 +3723,12 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	ret = hfi_ctx_attach(ctx, &ctx_assign);
 	if (ret)
 		goto err_post_alloc;
+
+	/* setup spill area after context attachment */
+	if (hfi_alloc_spill_area(dd)) {
+		ret = -ENOMEM;
+		goto err_post_alloc;
+	}
 
 	/* For ZEBU currently we configure cmdq after ctx_init */
 	if (zebu)

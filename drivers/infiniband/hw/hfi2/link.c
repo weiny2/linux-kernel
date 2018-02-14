@@ -2472,6 +2472,7 @@ void hfi2_pport_link_uninit(struct hfi_devdata *dd)
 		if (ret)
 			dd_dev_err(dd, "can't disable MNH/8051 interrupt: %d\n",
 				   ret);
+		hfi_psn_uninit(ppd);
 	}
 }
 
@@ -2489,6 +2490,10 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
+
+		if (opafm_disable)
+			hfi_set_max_lid(ppd, HFI_DEFAULT_MAX_LID_SUPP);
+
 		/* configure workqueues */
 		INIT_WORK(&ppd->link_vc_work, handle_verify_cap);
 		INIT_WORK(&ppd->link_up_work, handle_link_up);
