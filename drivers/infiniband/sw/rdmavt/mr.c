@@ -416,6 +416,7 @@ struct ib_mr *rvt_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 			      u64 virt_addr, int mr_access_flags,
 			      struct ib_udata *udata)
 {
+	struct rvt_dev_info *rdi = ib_to_rvt(pd->device);
 	struct rvt_mr *mr;
 	struct ib_umem *umem;
 	struct scatterlist *sg;
@@ -465,6 +466,8 @@ struct ib_mr *rvt_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 			n = 0;
 		}
 	}
+	if (rdi->driver_f.reg_mr)
+		rdi->driver_f.reg_mr(rdi, &mr->mr);
 	return &mr->ibmr;
 
 bail_inval:
@@ -589,6 +592,7 @@ bool rvt_ss_has_lkey(struct rvt_sge_state *ss, u32 lkey)
  */
 int rvt_dereg_mr(struct ib_mr *ibmr)
 {
+	struct rvt_dev_info *rdi = ib_to_rvt(ibmr->pd->device);
 	struct rvt_mr *mr = to_imr(ibmr);
 	int ret;
 
@@ -598,6 +602,9 @@ int rvt_dereg_mr(struct ib_mr *ibmr)
 	ret = rvt_check_refs(&mr->mr, __func__);
 	if (ret)
 		goto out;
+
+	if (rdi->driver_f.dereg_mr)
+		rdi->driver_f.dereg_mr(rdi, &mr->mr);
 	rvt_deinit_mregion(&mr->mr);
 	if (mr->umem)
 		ib_umem_release(mr->umem);
@@ -675,12 +682,18 @@ static int rvt_set_page(struct ib_mr *ibmr, u64 addr)
 int rvt_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sg,
 		  int sg_nents, unsigned int *sg_offset)
 {
+	struct rvt_dev_info *rdi = ib_to_rvt(ibmr->pd->device);
 	struct rvt_mr *mr = to_imr(ibmr);
+	int ret;
 
 	mr->mr.length = 0;
 	mr->mr.page_shift = PAGE_SHIFT;
-	return ib_sg_to_pages(ibmr, sg, sg_nents, sg_offset,
+	ret = ib_sg_to_pages(ibmr, sg, sg_nents, sg_offset,
 			      rvt_set_page);
+	if (rdi->driver_f.reg_mr)
+		rdi->driver_f.reg_mr(rdi, &mr->mr);
+
+	return ret;
 }
 
 /**
@@ -872,6 +885,8 @@ int rvt_map_phys_fmr(struct ib_fmr *ibfmr, u64 *page_list,
 			n = 0;
 		}
 	}
+	if (rdi->driver_f.reg_mr)
+		rdi->driver_f.reg_mr(rdi, &fmr->mr);
 	spin_unlock_irqrestore(&rkt->lock, flags);
 	return 0;
 }
@@ -893,6 +908,8 @@ int rvt_unmap_fmr(struct list_head *fmr_list)
 		rdi = ib_to_rvt(fmr->ibfmr.device);
 		rkt = &rdi->lkey_table;
 		spin_lock_irqsave(&rkt->lock, flags);
+		if (rdi->driver_f.dereg_mr)
+			rdi->driver_f.dereg_mr(rdi, &fmr->mr);
 		fmr->mr.user_base = 0;
 		fmr->mr.iova = 0;
 		fmr->mr.length = 0;

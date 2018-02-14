@@ -368,6 +368,10 @@ struct rvt_driver_provided {
 	int (*free_lkey)(struct rvt_mregion *mr);
 	struct rvt_mregion * (*find_mr_from_lkey)(struct rvt_pd *pd, u32 lkey);
 	struct rvt_mregion * (*find_mr_from_rkey)(struct rvt_pd *pd, u32 rkey);
+
+	/* Driver specific MR operations */
+	int (*reg_mr)(struct rvt_dev_info *rdi, struct rvt_mregion *mr);
+	void (*dereg_mr)(struct rvt_dev_info *rdi, struct rvt_mregion *mr);
 };
 
 struct rvt_dev_info {
