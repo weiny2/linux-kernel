@@ -1162,7 +1162,8 @@ static int hfi_ec_remove(int ec_idx, void *idr_ptr, void *idr_ctx)
 static void hfi_ib_eq_isr(struct hfi_eq_mgmt *eqm)
 {
 	struct hfi_ctx *ctx = eqm->cookie;
-	struct ib_cq *cq = eqm->ibcq;
+	struct ib_cq *ibcq = eqm->ibcq;
+	struct rvt_cq *cq = ibcq_to_rvtcq(ibcq);
 	int ret;
 
 	/*
@@ -1170,16 +1171,25 @@ static void hfi_ib_eq_isr(struct hfi_eq_mgmt *eqm)
 	 * destroy_cq.  It needs to call hfi_eq_unlink().
 	 */
 
-	/* notify user space */
-	if (cq && cq->comp_handler)
-		cq->comp_handler(cq, cq->cq_context);
-	eqm->ibcq = NULL;
+	/* schedule work item to notify user space */
+	if (cq && ibcq->comp_handler && (cq->notify & IB_CQ_SOLICITED_MASK)) {
+		spin_lock(&cq->rdi->n_cqs_lock);
+		if (likely(cq->rdi->worker)) {
+			cq->notify = RVT_CQ_NONE;
+			cq->triggered++;
+			kthread_queue_work(cq->rdi->worker, &cq->comptask);
+		}
+		spin_unlock(&cq->rdi->n_cqs_lock);
+	}
 
-	/* disarm  interrupt */
-	ret = hfi_eq_disarm(ctx, eqm, eqm->user_handle, false);
-	if (ret)
-		dd_dev_warn(ctx->devdata, "hfi_eq_disarm non-zero ret %d\n",
-			    ret);
+	if (ctx->type == HFI_CTX_TYPE_USER) {
+		eqm->ibcq = NULL;
+		/* disarm  interrupt */
+		ret = hfi_eq_disarm(ctx, eqm, eqm->user_handle, false);
+		if (ret)
+			dd_dev_warn(ctx->devdata,
+				    "hfi_eq_disarm non-zero ret %d\n", ret);
+	}
 }
 
 irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
