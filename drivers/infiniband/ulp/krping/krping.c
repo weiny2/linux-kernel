@@ -710,8 +710,13 @@ static u32 krping_rdma_rkey(struct krping_cb *cb, u64 buf, int post_inv)
 	/*
 	 * Update the reg key.
 	 */
+#if 0
 	ib_update_fast_reg_key(cb->reg_mr, ++cb->key);
+	/*rdmavt compares this value with lkey */
 	cb->reg_mr_wr.key = cb->reg_mr->rkey;
+#else
+	cb->reg_mr_wr.key = cb->reg_mr->lkey;
+#endif
 
 	/*
 	 * Update the reg WR with new buf info.
@@ -785,9 +790,8 @@ static void krping_test_server(struct krping_cb *cb)
 		cb->rdma_sq_wr.rkey = cb->remote_rkey;
 		cb->rdma_sq_wr.remote_addr = cb->remote_addr;
 		cb->rdma_sq_wr.wr.sg_list->length = cb->remote_len;
-		cb->rdma_sgl.lkey = krping_rdma_rkey(cb, cb->rdma_dma_addr, !cb->read_inv);
+		cb->rdma_sgl.lkey = cb->reg_mr->lkey;
 		cb->rdma_sq_wr.wr.next = NULL;
-
 		/* Issue RDMA Read. */
 		if (cb->read_inv)
 			cb->rdma_sq_wr.wr.opcode = IB_WR_RDMA_READ_WITH_INV;
@@ -798,7 +802,7 @@ static void krping_test_server(struct krping_cb *cb)
 			 * Immediately follow the read with a
 			 * fenced LOCAL_INV.
 			 */
-			cb->rdma_sq_wr.wr.next = &inv;
+			cb->rdma_sq_wr.wr.next = NULL;//&inv;
 			memset(&inv, 0, sizeof inv);
 			inv.opcode = IB_WR_LOCAL_INV;
 			inv.ex.invalidate_rkey = cb->reg_mr->rkey;
@@ -862,7 +866,7 @@ static void krping_test_server(struct krping_cb *cb)
 		if (cb->local_dma_lkey)
 			cb->rdma_sgl.lkey = cb->pd->local_dma_lkey;
 		else
-			cb->rdma_sgl.lkey = krping_rdma_rkey(cb, cb->rdma_dma_addr, 0);
+			cb->rdma_sgl.lkey = cb->reg_mr->lkey;
 
 		DEBUG_LOG("rdma write from lkey %x laddr %llx len %d\n",
 			  cb->rdma_sq_wr.wr.sg_list->lkey,
@@ -1434,7 +1438,6 @@ static void krping_run_server(struct krping_cb *cb)
 {
 	struct ib_recv_wr *bad_wr;
 	int ret;
-
 	ret = krping_bind_server(cb);
 	if (ret)
 		return;
@@ -1471,6 +1474,7 @@ static void krping_run_server(struct krping_cb *cb)
 		krping_bw_test_server(cb);
 	else
 		krping_test_server(cb);
+
 	rdma_disconnect(cb->child_cm_id);
 err2:
 	krping_free_buffers(cb);
@@ -1962,6 +1966,7 @@ static void krping_run_client(struct krping_cb *cb)
 		krping_fr_test(cb);
 	else
 		krping_test_client(cb);
+
 	rdma_disconnect(cb->cm_id);
 err2:
 	krping_free_buffers(cb);
