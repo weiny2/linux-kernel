@@ -573,6 +573,7 @@ int rvt_rkey_ok(struct rvt_qp *qp, struct rvt_sge *sge,
 int rvt_lkey_ok(struct rvt_lkey_table *rkt, struct rvt_pd *pd,
 		struct rvt_sge *isge, struct rvt_sge *last_sge,
 		struct ib_sge *sge, int acc);
+struct rvt_mregion *rvt_ibmr_to_mregion(struct ib_mr *ibmr);
 struct rvt_mcast *rvt_mcast_find(struct rvt_ibport *ibp, union ib_gid *mgid,
 				 u16 lid);
 

@@ -1184,3 +1184,9 @@ bail:
 	return 0;
 }
 EXPORT_SYMBOL(rvt_rkey_ok);
+
+struct rvt_mregion *rvt_ibmr_to_mregion(struct ib_mr *ibmr)
+{
+	return &(to_imr(ibmr)->mr);
+}
+EXPORT_SYMBOL(rvt_ibmr_to_mregion);
