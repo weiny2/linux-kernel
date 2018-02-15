@@ -1084,13 +1084,17 @@ int hfi2_process_tx_eq(union initiator_EQEntry *eq, struct ib_wc *wc)
 }
 
 static
-int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc)
+int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc,
+		       struct rvt_cq *cq)
 {
 	struct hfi_rq_wc *hfi_wc = (struct hfi_rq_wc *)eq->user_ptr;
 	u8 mb_opcode = EXTRACT_MB_OPCODE(eq->match_bits);
 	struct hfi_rq *rq;
 	struct rvt_qp *qp;
 	union hfi_process pt;
+	int qp_num;
+	struct hfi2_ibdev *ibd;
+	struct hfi2_ibport *ibp;
 	int ret, signal;
 
 	if (hfi_wc->is_qp) {
@@ -1098,10 +1102,12 @@ int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc)
 		rq = qp->r_rq.hw_rq;
 	} else {
 		rq = hfi_wc->rq;
-		/* FIXME - SRQ
-		 * DEST_QPN lookup from EXTRACT_HD_DST_QP(eq->hdr_data)?
-		 */
-		qp = NULL;
+		ibd = to_hfi_ibd(cq->ibcq.device);
+		ibp = ibd->pport;
+		qp_num = EXTRACT_HD_DST_QP(eq->hdr_data);
+		rcu_read_lock();
+		qp = rvt_lookup_qpn(cq->rdi, &ibp->rvp, qp_num);
+		rcu_read_unlock();
 	}
 
 	/* Setup WC */
@@ -1124,6 +1130,7 @@ int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc)
 	WARN_ON(mb_opcode);
 	signal = 1;
 
+	WARN_ON(!wc->qp);
 	/* Reuse List Entry */
 	ret = hfi2_push_key(&rq->ded_me_ks, hfi_wc->list_handle);
 	if (ret != 0) {
@@ -1144,12 +1151,25 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 	struct hfi_eq *eq = cq->hw_cq;
 	u64 *eqe = NULL;
 	int kind, ret, i = 0;
+	struct rvt_cq_wc *rvt_wc;
 	bool dropped;
+	unsigned long flags;
+	u32 head, tail;
 
 	if (!ctx || !ctx->supports_native || !eq)
 		return rvt_poll_cq(ibcq, ne, wc);
 
 	while (i < ne) {
+		spin_lock_irqsave(&cq->lock, flags);
+		rvt_wc = cq->queue;
+		tail = rvt_wc->tail;
+		head = rvt_wc->head;
+		spin_unlock_irqrestore(&cq->lock, flags);
+		if (tail < head) {
+			i += rvt_poll_cq(ibcq, ne - i, (wc + i));
+			if (i == ne)
+				return i;
+		}
 		ret = hfi_eq_peek_nth(ctx->hw_ctx, eq, &eqe, 0, &dropped);
 		if (ret < 0)
 			return ret;
@@ -1160,7 +1180,7 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 		switch (kind) {
 		case NON_PTL_EVENT_VERBS_RX:
 			i += hfi2_process_rx_eq((union target_EQEntry *)eqe,
-						(wc + i));
+						(wc + i), cq);
 			break;
 		case NON_PTL_EVENT_VERBS_TX:
 			i += hfi2_process_tx_eq((union initiator_EQEntry *)eqe,
