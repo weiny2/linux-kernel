@@ -290,7 +290,7 @@ void _hfi_format_put_flit_e2(struct hfi_ctx *ctx,
 #define MB_OC_TX_FLUSH				1
 #define MB_OC_RX_FLUSH				2
 #define MB_OC_LOCAL_INV				3
-#define MB_OC_BIND_MW				4
+#define MB_OC_REG_MR				4
 #define MB_OC_QP_RESET				5
 #define FMT_VOSTLNP_MB(opcode, src_qp, l32)	(((uint64_t)(opcode)) << 56 | \
 						((uint64_t)(src_qp)) << 32 | \

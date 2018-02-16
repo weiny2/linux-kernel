@@ -1060,6 +1060,7 @@ int hfi2_process_tx_eq(union initiator_EQEntry *eq, struct ib_wc *wc)
 	struct ib_qp *qp = NULL;
 	u64 wr_id = 0;
 	int signal = 0;
+	u8 mb_opcode = EXTRACT_MB_OPCODE(eq->match_bits);
 
 	if (swqe) {
 		signal = swqe->signal;
@@ -1078,7 +1079,27 @@ int hfi2_process_tx_eq(union initiator_EQEntry *eq, struct ib_wc *wc)
 		/* always set byte_len, but only needed for RDMA READ/ATOMIC */
 		wc->byte_len = eq->rlength;
 		wc->wc_flags = 0;
-
+		/* handle errors + flow control */
+		if (unlikely(mb_opcode)) {
+			switch (mb_opcode) {
+			case MB_OC_LOCAL_INV:
+				if (ibqp_to_rvtqp(qp)->state >= IB_QPS_SQE)
+					wc->status = IB_WC_WR_FLUSH_ERR;
+				else
+					wc->status = IB_WC_SUCCESS;
+				wc->vendor_err = VERBS_OK;
+				wc->opcode = IB_WC_LOCAL_INV;
+				break;
+			case MB_OC_REG_MR:
+				if (ibqp_to_rvtqp(qp)->state >= IB_QPS_SQE)
+					wc->status = IB_WC_WR_FLUSH_ERR;
+				else
+					wc->status = IB_WC_SUCCESS;
+				wc->vendor_err = VERBS_OK;
+				wc->opcode = IB_WC_REG_MR;
+				break;
+			}
+		}
 		/* TODO - port error handling from user provider */
 	}
 

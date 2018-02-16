@@ -611,7 +611,84 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 }
 
 static
-inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_rdma_wr *wr)
+int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
+		     u8 mb_opcode, union hfi_tx_cq_command *cmd)
+{
+	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
+	struct rvt_cq *cq = ibcq_to_rvtcq(qp->ibqp.send_cq);
+	struct hfi_eq *eq = cq->hw_cq;
+	int nslots;
+	union hfi_process tpid = {.phys.slid = 0};
+	struct rdma_ah_attr *ah_attr;
+	struct hfi_ctx *hw_ctx = ctx->hw_ctx;
+	struct hfi_swqe *swqe = NULL;
+
+	if (qp->ibqp.qp_type == IB_QPT_UD)
+		ah_attr = &ibah_to_rvtah(ud_wr(wr)->ah)->attr;
+	else
+		ah_attr = &qp->remote_ah_attr;
+
+	switch (mb_opcode) {
+	case MB_OC_LOCAL_INV:
+	case MB_OC_REG_MR:
+		swqe = kmalloc(sizeof(*swqe), GFP_KERNEL);
+		if (!swqe)
+			return -ENOMEM;
+		swqe->wr_id = wr->wr_id;
+		swqe->num_iov = 0;
+		swqe->signal = 1;
+		swqe->qp = qp;
+#if 0
+		swqe->cidx = qp->current_cidx;
+#endif
+		break;
+	default:
+		/*TODO need to take some action */
+		pr_warn("mb opcode %d not valid", mb_opcode);
+		return -EINVAL;
+	}
+
+	nslots = hfi_format_buff_ud(
+				hw_ctx, NATIVE_NI,
+				0, 0,
+				tpid, ah_attr->port_num - 1,
+				NATIVE_RC, ah_attr->sl,
+				0, 0, 0,
+				NATIVE_AUTH_IDX,
+				(u64)swqe,
+				qp->ibqp.qp_num,
+				0, 0, 0,
+				PTL_MD_EVENT_CT_SEND, eq,
+				PTL_CT_NONE,
+				0, PTL_UD_SEND, 0, mb_opcode,
+				&cmd->buff_put_match);
+
+	return nslots;
+}
+
+static
+inline int hfi2_do_reg_mr(struct rvt_qp *qp, struct ib_reg_wr *wr,
+			       bool signal, union hfi_tx_cq_command *cmd)
+{
+	int ret;
+
+	ret = rvt_fast_reg_mr(qp, wr->mr, wr->key,
+			      wr->access);
+	if (ret)
+		return ret;
+	ret = hfi2_native_reg_mr(rvt_ibmr_to_mregion(wr->mr));
+	if (ret)
+		return ret;
+	/* returns err code or nslots required to post on tx_cmdq */
+	if (signal)
+		ret = hfi2_generate_wc(qp, &wr->wr, MB_OC_REG_MR,
+				       cmd);
+	return ret;
+}
+
+static
+inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_rdma_wr *wr,
+			     bool signal, union hfi_tx_cq_command *cmd)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
 	struct hfi_ctx  *hw_ctx;
@@ -647,10 +724,13 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_rdma_wr *wr)
 	mutex_unlock(&hw_ctx->rx_mutex);
 	if (ret != 0)
 		return ret;
-
+	/* returns err code or nslots required to post on tx_cmdq */
+	if (signal)
+		ret = hfi2_generate_wc(qp, &wr->wr, MB_OC_LOCAL_INV,
+				       cmd);
 	// TODO - SEND_FLAGS /w SIGNALED + WR_ID
 
-	return 0;
+	return ret;
 }
 
 /*
@@ -663,7 +743,7 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
 	union hfi_tx_cq_command cmd;
 	int retries = 10;
-	int ret, nslots;
+	int ret, nslots = 0;
 	bool signal, solicit, in_line;
 	unsigned long flags;
 
@@ -695,17 +775,11 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 		break;
 	case IB_WR_LOCAL_INV:
 		hfi2_nfence(qp);
-		nslots = hfi2_do_local_inv(qp, rdma_wr(wr));
+		nslots = hfi2_do_local_inv(qp, rdma_wr(wr), signal, &cmd);
 		break;
 	case IB_WR_REG_MR:
-		ret = rvt_fast_reg_mr(qp,
-				      reg_wr(wr)->mr,
-				      reg_wr(wr)->key,
-				      reg_wr(wr)->access);
-		WARN_ONCE(signal, "need to send sw wc on REG_MR WR\n");
-		if (ret)
-			return ret;
-		return hfi2_native_reg_mr(rvt_ibmr_to_mregion(reg_wr(wr)->mr));
+		nslots = hfi2_do_reg_mr(qp, reg_wr(wr), signal, &cmd);
+		break;
 	default:
 		nslots = -EINVAL;
 		break;
