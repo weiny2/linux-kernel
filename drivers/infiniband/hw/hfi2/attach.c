@@ -309,7 +309,9 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		   __func__, __LINE__, trig_op_size, HFI_PSB_FIXED_TOTAL_MEM,
 		   le_me_size, unexp_size, psb_size, ctx->ptl_state_base);
 	ctx->ptl_state_size = psb_size;
-	hfi_at_reg_range(ctx, ctx->ptl_state_base, ctx->ptl_state_size, NULL, true);
+	/* TODO: Take proper lock while updating priv_ctx SPT */
+	hfi_at_reg_range(&dd->priv_ctx, ctx->ptl_state_base,
+			 ctx->ptl_state_size, NULL, true);
 
 	ctx->le_me_addr = (void *)(ctx->ptl_state_base + le_me_off);
 	ctx->le_me_size = le_me_size;
@@ -407,7 +409,8 @@ err_kern_ctx:
 	hfi_pcb_reset(dd, ptl_pid);
 	vfree(ctx->le_me_free_list);
 err_psb_vmalloc:
-	hfi_at_dereg_range(ctx, ctx->ptl_state_base, ctx->ptl_state_size);
+	hfi_at_dereg_range(&dd->priv_ctx, ctx->ptl_state_base,
+			   ctx->ptl_state_size);
 	vfree(ctx->ptl_state_base);
 err_vmalloc:
 	hfi_at_clear_pasid(ctx);
@@ -568,7 +571,7 @@ void hfi_ctx_cleanup(struct hfi_ctx *ctx)
 	}
 
 	if (ctx->ptl_state_base) {
-		hfi_at_dereg_range(ctx, ctx->ptl_state_base,
+		hfi_at_dereg_range(&dd->priv_ctx, ctx->ptl_state_base,
 				   ctx->ptl_state_size);
 		vfree(ctx->ptl_state_base);
 		ctx->ptl_state_base = NULL;
