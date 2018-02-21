@@ -2126,7 +2126,7 @@ int hfi_at_reg_range(struct hfi_ctx *ctx, void *vaddr, u32 size,
 	struct hfi_at *at = ctx->devdata->at;
 	struct hfi_at_svm *svm;
 	struct page *page = NULL;
-	struct page_req_dsc req;
+	struct page_req_dsc req = { 0 };
 	unsigned long pageaddr;
 	unsigned long nrpages;
 
