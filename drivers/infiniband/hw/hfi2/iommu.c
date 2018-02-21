@@ -741,7 +741,7 @@ static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 		/* allow upgrade of access privilege */
 		if (cmpxchg64_local(&pte->val, tmp, pteval) != tmp) {
 			pr_debug("Mapping already set\n");
-			svm->stats->prq_dup_cnt++;
+			svm->stats->prq_dup++;
 		}
 	}
 	__at_flush_cache(svm->at, pte, sizeof(*pte));
@@ -781,7 +781,7 @@ static int hfi_at_map_promo(struct hfi_at_svm *svm, struct page_req_dsc *req,
 		/* allow upgrade of access privilege */
 		if (cmpxchg64_local(&pte->val, tmp, pteval) != tmp) {
 			pr_debug("Mapping already set\n");
-			svm->stats->prq_dup_cnt++;
+			svm->stats->prq_dup++;
 		}
 	}
 	__at_flush_cache(svm->at, pte, sizeof(*pte));
@@ -977,7 +977,7 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 				goto bad_req;
 		}
 
-		svm->stats->prq_cnt++;
+		svm->stats->prq++;
 		if (use_cpt)
 			ret = handle_at_cpt_page_fault(svm, req);
 		else
@@ -985,7 +985,7 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 
 		if (unlikely(ret)) {
 			result = QI_RESP_INVALID;
-			svm->stats->prq_fail_cnt++;
+			svm->stats->prq_fail++;
 		} else {
 			result = QI_RESP_SUCCESS;
 		}
@@ -2148,10 +2148,10 @@ int hfi_at_reg_range(struct hfi_ctx *ctx, void *vaddr, u32 size,
 		if (pages)
 			page = *(pages++);
 
-		svm->stats->prq_cnt++;
+		svm->stats->preg++;
 		ret = handle_at_spt_page_fault(svm, &req, page);
 		if (ret) {
-			svm->stats->prq_fail_cnt++;
+			svm->stats->preg_fail++;
 			return ret;
 		}
 
@@ -2351,12 +2351,12 @@ static int hfi_at_stats_show(struct seq_file *s, void *unused)
 	struct hfi_at_stats *stats;
 	int i;
 
-	seq_puts(s, "pasid: requests duplicates failures\n");
+	seq_puts(s, "pasid: prq duplicate fail pre_reg pre_reg_fail\n");
 	mutex_lock(&pasid_mutex);
 	idr_for_each_entry(&at->pasid_stats_idr, stats, i)
-		seq_printf(s, "%d: %llu %llu %llu\n",
-			   stats->pasid, stats->prq_cnt, stats->prq_dup_cnt,
-			   stats->prq_fail_cnt);
+		seq_printf(s, "%d: %llu %llu %llu %llu %llu\n",
+			   stats->pasid, stats->prq, stats->prq_dup,
+			   stats->prq_fail, stats->preg, stats->preg_fail);
 	mutex_unlock(&pasid_mutex);
 
 	return 0;
@@ -2372,9 +2372,11 @@ static ssize_t hfi_at_stats_write(struct file *file, const char __user *buf,
 
 	mutex_lock(&pasid_mutex);
 	idr_for_each_entry(&at->pasid_stats_idr, stats, i) {
-		stats->prq_cnt = 0;
-		stats->prq_dup_cnt = 0;
-		stats->prq_fail_cnt = 0;
+		stats->preg = 0;
+		stats->preg_fail = 0;
+		stats->prq = 0;
+		stats->prq_dup = 0;
+		stats->prq_fail = 0;
 	}
 	mutex_unlock(&pasid_mutex);
 
@@ -2434,9 +2436,11 @@ static struct hfi_at_stats *hfi_at_alloc_stats(struct hfi_at_svm *svm)
 			return NULL;
 		}
 	}
-	stats->prq_cnt = 0;
-	stats->prq_dup_cnt = 0;
-	stats->prq_fail_cnt = 0;
+	stats->preg = 0;
+	stats->preg_fail = 0;
+	stats->prq = 0;
+	stats->prq_dup = 0;
+	stats->prq_fail = 0;
 	stats->pasid = svm->pasid;
 
 	return stats;

@@ -467,9 +467,11 @@ struct context_entry {
 
 struct hfi_at_stats {
 	int pasid;
-	u64 prq_cnt;
-	u64 prq_dup_cnt;
-	u64 prq_fail_cnt;
+	u64 preg;
+	u64 preg_fail;
+	u64 prq;
+	u64 prq_dup;
+	u64 prq_fail;
 };
 
 struct hfi_at {
