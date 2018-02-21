@@ -869,7 +869,8 @@ static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
 					    address & PAGE_MASK, 1,
 					    wr, &page, NULL, NULL);
 		if (ret != 1) {
-			dd_dev_err(svm->at->dd, "gup error %d\n", ret);
+			dd_dev_err(svm->at->dd, "gup error %d addr 0x%llx\n",
+				   ret, address);
 			up_read(&svm->mm->mmap_sem);
 			mmput(svm->mm);
 			return -ENOMEM;
