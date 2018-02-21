@@ -2405,13 +2405,14 @@ DEBUGFS_FILE_OPS_SINGLE(at_page_tbl);
 
 void hfi_at_dbg_init(struct hfi_devdata *dd)
 {
-	/* create files for each port */
 	debugfs_create_file("at_stats", 0644,
 			    dd->hfi_dev_dbg, dd,
 			    &hfi_at_stats_ops);
-	debugfs_create_file("at_page_tbl", 0444,
-			    dd->hfi_dev_dbg, dd,
-			    &hfi_at_page_tbl_ops);
+
+	if (!use_kernel_cpt)
+		debugfs_create_file("at_page_tbl", 0444,
+				    dd->hfi_dev_dbg, dd,
+				    &hfi_at_page_tbl_ops);
 }
 
 static struct hfi_at_stats *hfi_at_alloc_stats(struct hfi_at_svm *svm)
