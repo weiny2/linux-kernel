@@ -690,7 +690,7 @@ int rvt_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sg,
 	mr->mr.page_shift = PAGE_SHIFT;
 	ret = ib_sg_to_pages(ibmr, sg, sg_nents, sg_offset,
 			      rvt_set_page);
-	if (rdi->driver_f.reg_mr)
+	if (ret > 0 && rdi->driver_f.reg_mr)
 		rdi->driver_f.reg_mr(rdi, &mr->mr);
 
 	return ret;
