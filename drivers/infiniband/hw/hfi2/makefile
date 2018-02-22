@@ -75,10 +75,14 @@ else
 KBUILD ?= /lib/modules/$(KVER)/build
 endif
 
-driver:
+.PHONY: rdmavt
+rdmavt:
+	$(MAKE) -C $(KBUILD) M=$(PWD)/rdmavt V=$(VERBOSE) MVERSION=$(MVERSION)
+
+driver: rdmavt
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION)
 
-driver-ifs:
+driver-ifs: rdmavt
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION) \
 	CONFIG_INFINIBAND_HFI2=m CONFIG_HFI2_STLNP=m
 
@@ -101,6 +105,7 @@ prep-debug:
 	$(MAKE) -C $(KBUILD) modules_prepare
 
 clean:
+	make -C $(KBUILD) M=${PWD}/../../sw/rdmavt clean
 	make -C $(KBUILD) M=${PWD} clean
 
 distclean: clean
@@ -125,7 +130,9 @@ endif
 dist: distclean $(NAME).spec
 	rm -rf /tmp/$(NAME)-$(VERSION)
 	mkdir -p /tmp/$(NAME)-$(VERSION)
+	mkdir -p /tmp/$(NAME)-$(VERSION)/rdmavt
 	cp -r . /tmp/$(NAME)-$(VERSION)
+	cp -r ../../sw/rdmavt /tmp/$(NAME)-$(VERSION)/
 	tar $(EXCLUDES) -C /tmp -zcvf $(PWD)/$(NAME)-$(VERSION).tgz ./$(NAME)-$(VERSION)
 	rm -rf /tmp/$(NAME)-$(VERSION)
 
@@ -136,6 +143,7 @@ install:
 	mkdir -p $(RPM_BUILD_ROOT)/etc/sysconfig
 	mkdir -p $(RPM_BUILD_ROOT)/etc/opa-fm
 	install hfi2.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	install rdmavt/rdmavt.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	# ignore errors when these two modules not built by using prep-verbs
 	-install user/hfi2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	-install kfi/kfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
