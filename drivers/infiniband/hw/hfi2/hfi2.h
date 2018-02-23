@@ -772,7 +772,7 @@ struct hfi_pportdata {
 	u32 sl_mask;
 	u32 req_sl_mask;
 	u8 qsfp_retry_count;
-	u64 per_vl_becn_count[OPA_MAX_VLS];
+	u64 per_sc_becn_count[OPA_MAX_SCS];
 	u16 vl_mtu[OPA_MAX_VLS];
 	struct hfi_link_down_reason local_link_down_reason;
 	struct hfi_link_down_reason neigh_link_down_reason;

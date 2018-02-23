@@ -3094,27 +3094,21 @@ static void hfi_log_cca_event(struct hfi_pportdata *ppd, u8 sl)
 	spin_unlock_irqrestore(&ppd->cc_log_lock, flags);
 }
 
-static u64 hfi_becn_rcvd(struct hfi_pportdata *ppd, int vl)
+static u64 hfi_becn_rcvd(struct hfi_pportdata *ppd, int sc)
 {
 	u64 new_becn_count, old_becn_count;
 	u64 becn_incr;
 
 	new_becn_count = hfi_read_lm_fpc_prf_per_vl_csr(
 				ppd,
-				FXR_FPC_PRF_PORT_VL_RCV_BECN,
-				vl);
-	old_becn_count = ppd->per_vl_becn_count[vl];
+				FXR_FPC_PRF_PORTRCV_SC_BECN,
+				sc);
+	old_becn_count = ppd->per_sc_becn_count[sc];
 	becn_incr = new_becn_count - old_becn_count;
 
-	/*
-	 * FXR TODO: add code to find out the SCs mapped
-	 * to the vl and check if the sc bit is set in the
-	 * mask and divide becns among them or use per SC
-	 * becn count.
-	 */
-	ppd_dev_dbg(ppd, "No. of BECNs received per vl: %llu\n",
+	ppd_dev_dbg(ppd, "No. of BECNs received per sc: %llu\n",
 		    becn_incr);
-	ppd->per_vl_becn_count[vl] = new_becn_count;
+	ppd->per_sc_becn_count[sc] = new_becn_count;
 	return becn_incr;
 }
 
@@ -3190,6 +3184,10 @@ irqreturn_t hfi_irq_becn_handler(int irq, void *dev_id)
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
 		becn_mask = hfi_read_lm_fpc_csr(ppd, FXR_FPC_STS_BECN_SC_RCVD);
+		/*
+		 * reset the sc mask
+		 */
+		hfi_write_lm_fpc_csr(ppd, FXR_FPC_STS_BECN_SC_RCVD, becn_mask);
 		ppd_dev_dbg(ppd, "becn_mask is 0x%llx\n", becn_mask);
 		for_each_set_bit(sc, (unsigned long *)&becn_mask,
 				 8 * sizeof(becn_mask)) {
@@ -3197,16 +3195,12 @@ irqreturn_t hfi_irq_becn_handler(int irq, void *dev_id)
 			vl = idx_from_vl(vl);
 			sl = ppd->sc_to_sl[sc];
 			ppd_dev_dbg(ppd, "sc:%u sl:%u vl:%u\n", sc, sl, vl);
-			becn_incr = hfi_becn_rcvd(ppd, vl);
+			becn_incr = hfi_becn_rcvd(ppd, sc);
 			if (becn_incr && vl != C_VL_15) {
 				hfi_decrease_bw(ppd, sl, becn_incr);
 				hfi_log_cca_event(ppd, sl);
 			}
 		}
-		/*
-		 * reset the sc mask
-		 */
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_STS_BECN_SC_RCVD, becn_mask);
 	}
 	return IRQ_HANDLED;
 }
@@ -3404,11 +3398,11 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 			ppd->sl_pairs[i] = HFI_INVALID_RESP_SL;
 		/* allow all SLs by default */
 		ppd->sl_mask = -1;
-		for (i = 0; i < ARRAY_SIZE(ppd->per_vl_becn_count); i++)
-			ppd->per_vl_becn_count[i] =
+		for (i = 0; i < ARRAY_SIZE(ppd->per_sc_becn_count); i++)
+			ppd->per_sc_becn_count[i] =
 				hfi_read_lm_fpc_prf_per_vl_csr(
 					ppd,
-					FXR_FPC_PRF_PORT_VL_RCV_BECN, i);
+					FXR_FPC_PRF_PORTRCV_SC_BECN, i);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_MCTC, 0, NULL);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SL_TO_SC, 0, NULL);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_RESP_SL, 0, ppd->sc_to_sl);
