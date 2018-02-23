@@ -63,6 +63,8 @@
 #include "chip/fxr_linkmux_fpc_defs.h"
 #include "chip/fxr_linkmux_tp_defs.h"
 #include "chip/fxr_fc_defs.h"
+#include "chip/fxr_tx_otr_pkt_top_csrs_defs.h"
+#include "chip/fxr_linkmux_defs.h"
 
 /* Maximum number of vnic ports per HFI ports */
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
@@ -3080,8 +3082,7 @@ static void hfi_get_ectrs(struct hfi_pportdata *ppd, __be64 *ectrs)
 					    FZC_LCB_ERR_INFO_RX_REPLAY_CNT));
 	*ectrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_PORTRCV_ERROR));
-	/*  FXRTODO: fill excessive buffer overrun error */
-	*ectrs++ = 0;
+	*ectrs++ = cpu_to_be64(hfi_read_lm_csr(ppd, FXR_LM_ERR_INFO3));
 	*ectrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
 						FXR_FPC_ERR_FMCONFIG_ERROR));
 }
@@ -3583,13 +3584,12 @@ static void pma_get_opa_port_ectrs(struct ib_device *ibdev,
 
 	dd = hfi_dd_from_ibdev(ibdev);
 	ppd = to_hfi_ppd(dd, port);
-	/* FXR TODO: replace with correct register reads */
 	rsp->port_xmit_constraint_errors = hfi_read_lm_tp_prf_csr(ppd,
 					   TP_ERR_XMIT_CONSTRAINT_ERROR) +
 					   ppd->xmit_constraint_errors;
 	rsp->port_xmit_discards = hfi_read_lm_tp_prf_csr(ppd,
 						TP_ERR_XMIT_DISCARD);
-	rsp->excessive_buffer_overruns = 0;
+	rsp->excessive_buffer_overruns = hfi_read_lm_csr(ppd, FXR_LM_ERR_INFO3);
 	rsp->port_rcv_constraint_errors = hfi_read_lm_fpc_csr(ppd,
 					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR);
 	rsp->port_rcv_remote_physical_errors = hfi_read_lm_fpc_csr(
@@ -3935,13 +3935,8 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 	if (counter_select & CS_PORT_RCV_ERRORS)
 		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_PORTRCV_ERROR, 0);
 
-	/*
-	 * FXRTODO: clear excessive_buffer_overrun register once the register
-	 * is implemented
-	 */
-#if 0
 	if (counter_select & CS_EXCESSIVE_BUFFER_OVERRUNS)
-#endif
+		hfi_write_lm_csr(ppd, FXR_LM_ERR_INFO3, 0);
 	if (counter_select & CS_FM_CONFIG_ERRORS)
 		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_FMCONFIG_ERROR, 0);
 	if (counter_select & CS_LINK_DOWNED)

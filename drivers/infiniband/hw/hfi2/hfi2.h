@@ -1418,6 +1418,8 @@ void hfi_write_lm_tp_prf_csr(const struct hfi_pportdata *ppd,
 			     u32 offset, u64 value);
 void hfi_write_lm_cm_csr(const struct hfi_pportdata *ppd,
 			 u32 offset, u64 value);
+void hfi_write_lm_csr(const struct hfi_pportdata *ppd,
+		      u32 offset, u64 value);
 void hfi_write_lm_fpc_prf_per_vl_csr(const struct hfi_pportdata *ppd,
 				     u32 offset, u32 index, u64 value);
 u64 hfi_read_lm_fpc_csr(const struct hfi_pportdata *ppd,
@@ -1430,6 +1432,8 @@ u64 hfi_read_lm_tp_prf_csr(const struct hfi_pportdata *ppd,
 			   u32 offset);
 u64 hfi_read_lm_cm_csr(const struct hfi_pportdata *ppd,
 		       u32 offset);
+u64 hfi_read_lm_csr(const struct hfi_pportdata *ppd,
+		    u32 offset);
 u64 hfi_read_pmon_csr(const struct hfi_devdata *dd,
 		      u32 index);
 int hfi_snoop_add(struct hfi_devdata *dd);

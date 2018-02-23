@@ -288,11 +288,6 @@ struct opa_port_status_rsp {
 		__be64 port_vl_rcv_bubble;
 		__be64 port_vl_mark_fecn;
 		__be64 port_vl_xmit_discards;
-	/*
-	 * FXRTODO: add STL2 specific fields after confirming with
-	 * hardware team. STL2 specific fields are not present in the mad
-	 * structre in the latest STL2 spec
-	 */
 	} vls[0]; /* real array size defined by # bits set in vl_select_mask */
 };
 

@@ -236,6 +236,13 @@ void hfi_write_lm_cm_csr(const struct hfi_pportdata *ppd,
 	write_csr(ppd->dd, offset, value);
 }
 
+void hfi_write_lm_csr(const struct hfi_pportdata *ppd,
+		      u32 offset, u64 value)
+{
+	offset += FXR_LM_CSRS;
+	write_csr(ppd->dd, offset, value);
+}
+
 u64 hfi_read_pmon_csr(const struct hfi_devdata *dd,
 		      u32 index)
 {
@@ -279,6 +286,13 @@ u64 hfi_read_lm_cm_csr(const struct hfi_pportdata *ppd,
 {
 	offset += FXR_LM_CM0_CSRS;
 
+	return read_csr(ppd->dd, offset);
+}
+
+u64 hfi_read_lm_csr(const struct hfi_pportdata *ppd,
+		    u32 offset)
+{
+	offset += FXR_LM_CSRS;
 	return read_csr(ppd->dd, offset);
 }
 
