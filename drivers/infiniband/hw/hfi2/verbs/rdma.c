@@ -509,9 +509,13 @@ static void rcv_hdrerr(struct hfi2_ib_packet *packet)
 	struct rvt_dev_info *rdi = &ibp->ibd->rdi;
 	u32 qp_num;
 
-	if (!(packet->rhf & RHF_TID_ERR))
+	if (!(packet->rhf & RHF_TID_ERR)) {
+		if (packet->rhf & RHF_LEN_ERR)
+			ibp->stats->sps_lenerrs++;
 		return;
+	}
 
+	ibp->stats->sps_buffull++;
 	/* Get the destination QP number. */
 	qp_num = ib_bth_get_qpn(packet->ohdr);
 	if (!packet->is_mcast) {
@@ -568,6 +572,7 @@ int hfi2_rcv_wait(void *data)
 		if (rc < 0) {
 			/* only likely error is DROPPED event */
 			dev_err(ibp->dev, "unexpected EQ wait error %d\n", rc);
+			ibp->stats->sps_hdrfull++;
 			break;
 		}
 		if (rc > 0) {
@@ -586,11 +591,11 @@ int hfi2_rcv_wait(void *data)
 			 * models.
 			 */
 			if (rhf_err && !(zebu && (rhf_err & RHF_IE_MASK))) {
-				ibp->stats.n_rhf_errors++;
+				ibp->stats->n_rhf_errors++;
 				dev_dbg(ibp->dev,
 					"PID %d: RHF error 0x%llx, %lld\n",
 					rcv->ctx->pid, rhf_err_flags(pkt.rhf),
-					ibp->stats.n_rhf_errors);
+					ibp->stats->n_rhf_errors);
 				/* Handle error if header is supported */
 				if (hdr_valid)
 					rcv_hdrerr(&pkt);

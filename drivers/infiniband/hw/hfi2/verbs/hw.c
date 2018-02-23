@@ -270,6 +270,7 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 	if (!(list_empty(&pq->pending) &&
 	      hfi_queue_ready(&ibp->cmdq_tx, cmd_slots, NULL))) {
 		spin_unlock_irqrestore(&pq->lock, flags);
+		ibp->stats->sps_nopiobufs++;
 		return -EAGAIN;
 	}
 
@@ -292,7 +293,7 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 	hfi_tx_nonptl_pio(&ibp->cmdq_tx, qp_priv->s_hdr, offset,
 			  (void *)start, length, cmd_slots);
 	spin_unlock_irqrestore(&pq->lock, flags);
-	ibp->stats.n_send_pio++;
+	ibp->stats->n_send_pio++;
 
 	/* if RC or last UD/UC packet, send complete */
 	if (qp->ibqp.qp_type == IB_QPT_RC) {
@@ -371,8 +372,10 @@ next_event:
 		 * Enabling this again would mean pushing changes upstream to
 		 * modify struct rvt_swqe.
 		 */
-		if (eq_entry->fail_type)
+		if (eq_entry->fail_type) {
 			wqe->pkt_errors++;
+			ibp->stats->sps_txerrs++;
+		}
 		pkt_errors = wqe->pkt_errors;
 #endif
 		/* if final UD/UC packet, call send_complete */
@@ -845,7 +848,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 					      ibp->ppd->lid,
 					      qp_priv->send_becn,
 					      ack_rate, dma_cmd);
-		ibp->stats.n_send_ib_dma++;
+		ibp->stats->n_send_ib_dma++;
 	} else {
 		cmd_ptr = &general_cmd;
 
@@ -858,7 +861,7 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 						  ibp->port_num, sl, 0,
 						  use_16b ? HDR_16B : HDR_EXT,
 						  dma_cmd, cmd_ptr);
-		ibp->stats.n_send_dma++;
+		ibp->stats->n_send_dma++;
 	}
 
 	/* Write command, don't wait. */

@@ -1005,6 +1005,14 @@ static const char * const hfi2_statnames[] = {
 	"SendDMA",
 	"SendIBDMA",
 	"SendPIO",
+	"ErrorIntr",
+	"TxErrs",
+	"RcvErrs",
+	"NoPIOBufs",
+	"CtxtsOpen",
+	"LenErrs",
+	"BufFull",
+	"HdrFull",
 };
 
 static void *_driver_stats_names_seq_start(struct seq_file *s, loff_t *pos)
@@ -1047,9 +1055,9 @@ DEBUGFS_FILE_OPS(driver_stats_names);
  */
 static int hfi_driver_stats_show(struct seq_file *s, void *v)
 {
-	struct hfi_pportdata *ppd = s->private;
+	struct hfi_devdata *dd = s->private;
 	int i;
-	u64 *stats = hfi2_get_ibport_stats(ppd);
+	u64 *stats = (u64 *)&dd->stats;
 
 	for (i = 0; i < ARRAY_SIZE(hfi2_statnames); i++)
 		seq_printf(s, "%s: %lld\n", hfi2_statnames[i],
@@ -1103,11 +1111,11 @@ void hfi_dbg_dev_init(struct hfi_devdata *dd)
 	for (j = 0, ppd = dd->pport; j < dd->num_pports; ppd++, j++) {
 		snprintf(name, sizeof(name), "port%d", ppd->pnum);
 		ppd->hfi_port_dbg = debugfs_create_dir(name, dd->hfi_dev_dbg);
-		debugfs_create_file("driver_stats", 0444, ppd->hfi_port_dbg,
-				    ppd, &hfi_driver_stats_ops);
 	}
 	debugfs_create_file("qp_stats", 0444, dd->hfi_dev_dbg, dd->ibd,
 			    &_qp_stats_file_ops);
+	debugfs_create_file("driver_stats", 0444, dd->hfi_dev_dbg, dd,
+			    &hfi_driver_stats_ops);
 
 	hfi_mgmt_dbg_init(dd);
 #ifdef CONFIG_HFI2_STLNP

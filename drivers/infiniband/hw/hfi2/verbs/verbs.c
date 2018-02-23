@@ -591,6 +591,7 @@ static int hfi2_init_port(struct hfi2_ibdev *ibd,
 	ibp->ibd = ibd;
 	ibp->dev = &ibd->rdi.ibdev.dev; /* for dev_info, etc. */
 	ibp->ppd = ppd;
+	ibp->stats = &ibd->dd->stats;
 	ibp->rvp.gid_prefix = IB_DEFAULT_GID_PREFIX;
 	ibp->rvp.sm_lid = 0;
 
@@ -739,14 +740,6 @@ void hfi2_ib_remove(struct hfi_devdata *dd)
 	hfi2_ctx_uninit(ibd);
 	rvt_dealloc_device(&ibd->rdi);
 	wqe_cache_destroy(ibd);
-}
-
-u64 *hfi2_get_ibport_stats(struct hfi_pportdata *ppd)
-{
-	int pidx = ppd->pnum - 1;
-	struct hfi2_ibport *ibp = &ppd->dd->ibd->pport[pidx];
-
-	return (u64 *)&ibp->stats;
 }
 
 void hfi_verbs_dbg_init(struct hfi_devdata *dd)

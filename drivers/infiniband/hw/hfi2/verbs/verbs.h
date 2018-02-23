@@ -162,23 +162,6 @@ struct hfi2_qp_priv {
 	u16 pkey;
 };
 
-/*
- * hfi2 specific port counters
- * @n_rc_ooo_comp: Number of send completions that were out of order
- * @n_rhf_errors: Number of HW errors reported via RHF
- * @n_send_dma: Number of commands sent using DMA
- * @n_send_ib_dma: Number of commands sent using optimized IB DMA
- * @n_send_pio: Number of commands sent using PIO
- * If adding here, update the names array in debugfs.c
- */
-struct hfi2_ibport_stats {
-	u64 n_rc_ooo_comp;
-	u64 n_rhf_errors;
-	u64 n_send_dma;
-	u64 n_send_ib_dma;
-	u64 n_send_pio;
-};
-
 struct hfi2_ibrcv {
 	struct hfi2_ibport *ibp;
 	struct hfi_ctx *ctx;
@@ -213,7 +196,7 @@ struct hfi2_ibport {
 	struct hfi2_ibrcv *qp_rcv[HFI2_IB_MAX_CTXTS];
 
 	/* Informational counters beyond what rdmavt provides */
-	struct hfi2_ibport_stats stats;
+	struct hfi2_ib_stats *stats;
 };
 
 typedef void (*rhf_rcv_function_ptr)(struct hfi2_ib_packet *packet);
@@ -406,6 +389,5 @@ void hfi_send_cnp(struct hfi2_ibport *ibp, struct rvt_qp *qp, u8 sl,
 void process_rcv_qp_work(struct hfi2_ib_packet *packet);
 void hfi2_restart_rc(struct rvt_qp *qp, u32 psn, int wait);
 
-u64 *hfi2_get_ibport_stats(struct hfi_pportdata *ppd);
 void hfi_verbs_dbg_init(struct hfi_devdata *dd);
 #endif

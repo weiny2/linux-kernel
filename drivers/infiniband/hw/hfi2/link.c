@@ -2118,6 +2118,7 @@ static void hfi_handle_8051_host_msg(struct hfi_pportdata *ppd, u64 msg)
 
 static void hfi_handle_8051_err(struct hfi_pportdata *ppd, u64 err)
 {
+	ppd->dd->stats.sps_errints++;
 	/* FXRTODO: Implement this */
 	if (err & FAILED_LNI) {
 		ppd_dev_dbg(ppd, "FAILED_LNI\n");
@@ -2169,6 +2170,7 @@ irqreturn_t hfi_irq_mnh_handler(int irq, void *dev_id)
 	struct hfi_devdata *dd = me->dd;
 	u8 port;
 
+	this_cpu_inc(*dd->int_counter);
 	trace_hfi2_irq_phy(me);
 
 	for (port = 1; port <= dd->num_pports; port++) {

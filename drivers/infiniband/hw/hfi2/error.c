@@ -336,6 +336,7 @@ irqreturn_t hfi_irq_errd_handler(int irq, void *dev_id)
 	int i, j;
 	u64 val;
 
+	this_cpu_inc(*dd->int_counter);
 	trace_hfi2_irq_err(me);
 
 	val = 0;

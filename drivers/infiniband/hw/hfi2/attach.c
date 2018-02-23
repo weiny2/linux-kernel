@@ -403,6 +403,8 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 		}
 	}
 
+	dd->stats.sps_ctxts++;
+
 	return 0;
 
 err_kern_ctx:
@@ -595,6 +597,8 @@ void hfi_ctx_cleanup(struct hfi_ctx *ctx)
 
 	/* clear last */
 	ctx->pid = HFI_PID_NONE;
+
+	dd->stats.sps_ctxts--;
 unlock:
 	up_write(&ctx->ctx_rwsem);
 	hfi_iommu_flush_iotlb(dd, ptl_pid);

@@ -1113,11 +1113,11 @@ static void reset_sending_psn(struct rvt_qp *qp, u32 psn)
 	 */
 	if (cmp_psn(psn, qp->s_sending_psn) < 0) {
 		ibp = to_hfi_ibp(qp->ibqp.device, qp->port_num);
-		ibp->stats.n_rc_ooo_comp++;
+		ibp->stats->n_rc_ooo_comp++;
 		dev_warn(ibp->dev,
 			 "Out of order send completion %d < %d, %d (total %lld)\n",
 			 mask_psn(psn), mask_psn(qp->s_sending_psn),
-			 mask_psn(qp->s_psn), ibp->stats.n_rc_ooo_comp);
+			 mask_psn(qp->s_psn), ibp->stats->n_rc_ooo_comp);
 		/*
 		 * TODO - just print a warning and continue.
 		 * There seems to be a software corner case that lands here
@@ -1779,6 +1779,7 @@ static noinline int rc_rcv_error(struct ib_other_headers *ohdr, void *data,
 	u8 i, prev;
 	int old_req;
 
+	ibp->stats->sps_rcverrs++;
 	trace_hfi2_rc_rcv_error(qp, psn);
 	if (diff > 0) {
 		/*

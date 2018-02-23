@@ -305,6 +305,42 @@ enum {
 /* In general, we want to enable TX bandwidth capping only in the CCA case */
 #define HFI_ENABLE_CAPPING true
 
+/*
+ * per driver stats, either not device nor port-specific,
+ * or summed over all of the devices and ports.
+ * If memebers are added or deleted, hfi2_statnames[] in debugfs.c
+ * must change to match.
+ * @n_rc_ooo_comp: Number of send completions that were out of order
+ * @n_rhf_errors: Number of HW errors reported via RHF
+ * @n_send_dma: Number of commands sent using DMA
+ * @n_send_ib_dma: Number of commands sent using optimized IB DMA
+ * @n_send_pio: Number of commands sent using PIO
+ * @sps_errints: Number of error interrupts
+ * @sps_txerrs: tx-related packet errors
+ * @sps_rcverrs: non-crc rcv packet errors
+ * @sps_nopiobufs: no pio bufs avail from kernel
+ * @sps_ctxts: number of contexts currently open
+ * @sps_lenerrs: number of kernel packets where RHF != LRH len
+ * @sps_buffull: number of packets dropped when rcv buff is full
+ * @sps_hdrfull: number of packets dropped when hdr is full
+ */
+
+struct hfi2_ib_stats {
+	__u64 n_rc_ooo_comp;
+	__u64 n_rhf_errors;
+	__u64 n_send_dma;
+	__u64 n_send_ib_dma;
+	__u64 n_send_pio;
+	__u64 sps_errints;
+	__u64 sps_txerrs;
+	__u64 sps_rcverrs;
+	__u64 sps_nopiobufs;
+	__u64 sps_ctxts;
+	__u64 sps_lenerrs;
+	__u64 sps_buffull;
+	__u64 sps_hdrfull;
+};
+
 extern uint loopback;
 extern int num_dev_cntrs;
 extern int num_port_cntrs;
@@ -1066,6 +1102,12 @@ struct hfi_devdata {
 
 	/* FXR Address Translation */
 	struct hfi_at *at;
+
+	/* number of interrupts handled per cpu*/
+	u64 __percpu *int_counter;
+
+	/* driver stats */
+	struct hfi2_ib_stats stats;
 };
 
 /*

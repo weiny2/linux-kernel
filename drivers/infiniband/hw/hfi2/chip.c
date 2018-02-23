@@ -3065,6 +3065,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 
 	rcu_barrier(); /* wait for rcu callbacks to complete */
 
+	free_percpu(dd->int_counter);
 	pci_set_drvdata(dd->pdev, NULL);
 
 	kfree(dd);
@@ -3394,6 +3395,8 @@ irqreturn_t hfi_irq_becn_handler(int irq, void *dev_id)
 
 	struct hfi_irq_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
+
+	this_cpu_inc(*dd->int_counter);
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
@@ -3757,6 +3760,10 @@ static int hfi_driver_reset(struct hfi_devdata *dd)
 
 static int reset_device(struct hfi_devdata *dd)
 {
+	/* cannot reset if there are any user/vnic contexts */
+	if (dd->stats.sps_ctxts)
+		return -EBUSY;
+
 	if (use_driver_reset)
 		return hfi_driver_reset(dd);
 	else
@@ -3837,6 +3844,12 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	idr_init(&dd->pid_wait);
 	mutex_init(&dd->e2e_lock);
 	dd->core_ops = &opa_core_ops;
+
+	dd->int_counter = alloc_percpu(u64);
+	if (!dd->int_counter) {
+		ret = -ENOMEM;
+		goto err_post_alloc;
+	}
 
 	/* List of context error queue to dispatch error to */
 	INIT_LIST_HEAD(&dd->error_dispatch_head);

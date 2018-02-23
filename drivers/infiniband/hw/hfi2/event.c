@@ -1155,7 +1155,10 @@ static int hfi_ec_remove(int ec_idx, void *idr_ptr, void *idr_ctx)
 irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
 {
 	struct hfi_irq_entry *me = dev_id;
+	struct hfi_devdata *dd = me->dd;
 	struct hfi_eq_mgmt *eqm;
+
+	this_cpu_inc(*dd->int_counter);
 
 	if (zebu)
 		mdelay(10);
