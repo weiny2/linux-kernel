@@ -467,7 +467,7 @@ static inline bool at_pte_present(struct at_pte *pte)
 
 static inline u64 at_pte_addr(struct at_pte *pte)
 {
-	return pte->val & AT_PAGE_MASK;
+	return pte->val & (AT_PAGE_MASK ^ AT_PTE_EXEC_DIS);
 }
 
 static inline unsigned long mm_to_at_pfn(unsigned long mm_pfn)
@@ -480,10 +480,29 @@ static inline u64 virt_to_at_pfn(void *p)
 	return (u64)mm_to_at_pfn(page_to_pfn(virt_to_page(p)));
 }
 
+static inline u64 iova_to_at_pfn(dma_addr_t iova)
+{
+	return (u64)mm_to_at_pfn(iova >> PAGE_SHIFT);
+}
+
 static inline void __at_flush_cache(struct hfi_at *at, void *addr, int size)
 {
 	if (!ecap_coherent(at->ecap))
 		clflush_cache_range(addr, size);
+}
+
+static inline int at_pte_get_promo(int level)
+{
+	int promo = 0;
+
+	if (level == 3)
+		promo = SZ_1G;
+	else if (level == 2)
+		promo = SZ_2M;
+	else if (level == 1)
+		promo = SZ_4K;
+
+	return promo;
 }
 
 static void __print_page_tbl(struct seq_file *s, struct at_pte *pte,
@@ -718,15 +737,25 @@ static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 		      struct page *page, bool user)
 {
 	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
+	struct hfi_devdata *dd = svm->at->dd;
 	unsigned long phys_pfn;
 	struct at_pte *pte;
 	u64 pteval, prot;
-	int level = 1;
+	dma_addr_t iova;
+	int dir, level = 1;
 
-	phys_pfn = mm_to_at_pfn(page_to_pfn(page));
+	/* TODO: is iova alignment guaranteed? */
+	dir = req->wr_req ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
+	iova = pci_map_page(dd->pdev, page, 0, PAGE_SIZE, dir);
+	if (unlikely(pci_dma_mapping_error(dd->pdev, iova)))
+		return -ENOSPC;
+
+	phys_pfn = iova_to_at_pfn(iova);
 	pte = pfn_to_at_pte(svm, req->addr, &level, user);
-	if (!pte)
+	if (!pte) {
+		pci_unmap_page(dd->pdev, iova, PAGE_SIZE, dir);
 		return -ENOMEM;
+	}
 
 	prot = AT_PTE_ACCESSED | AT_PTE_PRESENT;
 	if (req->wr_req)
@@ -762,18 +791,39 @@ static int hfi_at_map_promo(struct hfi_at_svm *svm, struct page_req_dsc *req,
 {
 	pgd_t *pgd_ref = user ? svm->mm->pgd : svm->at->system_mm->pgd;
 	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
+	struct hfi_devdata *dd = svm->at->dd;
+	u64 pteval, phys_address;
+	unsigned long phys_pfn;
+	int dir, promo, level;
 	struct at_pte *pte;
-	u64 pteval;
-	int level;
+	struct page *page;
+	dma_addr_t iova;
 
 	pteval = get_cpt_entry(pgd_ref, address, &level);
 	if (!pteval)
 		return -EAGAIN;
 
-	pte = pfn_to_at_pte(svm, req->addr, &level, user);
-	if (!pte)
-		return -ENOMEM;
+	promo = at_pte_get_promo(level);
+	if (!promo)
+		return -EINVAL;
 
+	/* TODO: is iova alignment guaranteed? */
+	phys_address = pteval & ~((promo - 1) | AT_PTE_EXEC_DIS);
+	page = pfn_to_page(phys_address >> PAGE_SHIFT);
+	dir = req->wr_req ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
+	iova = pci_map_page(dd->pdev, page, 0, promo, dir);
+	if (unlikely(pci_dma_mapping_error(dd->pdev, iova)))
+		return -ENOSPC;
+
+	phys_pfn = iova_to_at_pfn(iova);
+	pte = pfn_to_at_pte(svm, req->addr, &level, user);
+	if (!pte) {
+		pci_unmap_page(dd->pdev, iova, promo, dir);
+		return -ENOMEM;
+	}
+
+	pteval = ((phys_addr_t)phys_pfn << AT_PAGE_SHIFT) |
+		 (pteval & ((promo - 1) | AT_PTE_EXEC_DIS));
 	if (cmpxchg64_local(&pte->val, 0ULL, pteval)) {
 		u64 tmp = pteval & ~(AT_PTE_WRITE | AT_PTE_DIRTY);
 
@@ -1969,8 +2019,29 @@ static struct hfi_at *hfi_svm_device_to_at(struct device *dev)
 		return NULL;
 }
 
-static struct page *at_pte_list_pagetables(int level, struct at_pte *pte,
-					   struct page *freelist)
+static inline void at_pte_dma_unmap(struct hfi_at_svm *svm, struct at_pte *pte,
+				    int level)
+{
+	struct hfi_devdata *dd = svm->at->dd;
+	int promo, dir;
+
+	promo = at_pte_get_promo(level);
+	if (!promo) {
+		dd_dev_err(dd, "Inavlid promotion level %d\n", level);
+		return;
+	}
+
+	/*
+	 * TODO: Ensure mapping/unmapping same address
+	 * do not overlap.
+	 */
+	dir = (pte->val & AT_PTE_WRITE) ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
+	pci_unmap_page(dd->pdev, at_pte_addr(pte), promo, dir);
+}
+
+static struct page *at_pte_list_pgtbls(struct hfi_at_svm *svm, int level,
+				       struct at_pte *pte,
+				       struct page *freelist)
 {
 	struct page *pg;
 
@@ -1978,14 +2049,18 @@ static struct page *at_pte_list_pagetables(int level, struct at_pte *pte,
 	pg->freelist = freelist;
 	freelist = pg;
 
-	if (level == 1)
-		return freelist;
-
 	pte = page_address(pg);
 	do {
-		if (at_pte_present(pte) && !at_pte_superpage(pte))
-			freelist = at_pte_list_pagetables(level - 1, pte,
-							  freelist);
+		if (!at_pte_present(pte))
+			goto clear_next;
+
+		if (level > 1 && !at_pte_superpage(pte))
+			freelist = at_pte_list_pgtbls(svm, level - 1,
+						      pte, freelist);
+		else
+			at_pte_dma_unmap(svm, pte, level);
+
+clear_next:
 		pte++;
 	} while (!first_pte_in_page(pte));
 
@@ -2020,9 +2095,11 @@ static struct page *at_pte_clear_level(struct hfi_at_svm *svm, int level,
 			 * to *free* them.
 			 */
 			if (level > 1 && !at_pte_superpage(pte))
-				freelist = at_pte_list_pagetables(level - 1,
-								  pte,
-								  freelist);
+				freelist = at_pte_list_pgtbls(svm, level - 1,
+							      pte, freelist);
+			else
+				at_pte_dma_unmap(svm, pte, level);
+
 			at_clear_pte(pte);
 			if (!first_pte)
 				first_pte = pte;
