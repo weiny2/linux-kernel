@@ -709,7 +709,6 @@ int rvt_fast_reg_mr(struct rvt_qp *qp, struct ib_mr *ibmr, u32 key,
 		    int access)
 {
 	struct rvt_mr *mr = to_imr(ibmr);
-	u32 rkey;
 
 	if (qp->ibqp.pd != mr->mr.pd)
 		return -EACCES;
@@ -718,17 +717,12 @@ int rvt_fast_reg_mr(struct rvt_qp *qp, struct ib_mr *ibmr, u32 key,
 	if (!mr->mr.lkey || mr->umem)
 		return -EINVAL;
 
-	if ((key & 0xFFFFFF00) != (mr->mr.lkey & 0xFFFFFF00))
-		return -EINVAL;
-
-	ibmr->lkey = key;
-	mr->mr.lkey = key;
-	/* TODO - review if this is correct update for RKEY */
-	/* Set RKEY based on access flags, preserve upper bits (index) */
+	/* Set LKEY & RKEY based on access flags, preserve upper bits (index) */
+	ibmr->lkey =  (mr->mr.lkey & ~0xFF) | (key & 0xFF);
+	mr->mr.lkey = ibmr->lkey;
 	if (access & IB_ACCESS_REMOTE_FLAGS) {
-		rkey = (mr->mr.rkey & ~0xFF) | (key & 0xFF);
-		ibmr->rkey = rkey;
-		mr->mr.rkey = rkey;
+		ibmr->rkey = (mr->mr.rkey & ~0xFF) | (key & 0xFF);
+		mr->mr.rkey =  ibmr->rkey;
 	}
 	mr->mr.access_flags = access;
 	atomic_set(&mr->mr.lkey_invalid, 0);
