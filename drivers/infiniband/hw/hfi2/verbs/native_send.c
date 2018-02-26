@@ -614,6 +614,8 @@ static
 inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_rdma_wr *wr)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
+	struct hfi_ctx  *hw_ctx;
+	unsigned long flags;
 	u64 done = 0;
 	int ret;
 	struct rvt_mregion *mr = NULL;
@@ -629,12 +631,20 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_rdma_wr *wr)
 	}
 	atomic_set(&mr->lkey_invalid, 1);
 	rvt_put_mr(mr);
+
+	hw_ctx = ctx->hw_ctx;
+	mutex_lock(&hw_ctx->rx_mutex);
+	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 	ret = hfi_rkey_invalidate(ctx->rx_cmdq, wr->rkey,
 				  (u64)&done);
-	if (ret != 0)
+	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
+	if (ret != 0) {
+		mutex_unlock(&hw_ctx->rx_mutex);
 		return ret;
+	}
 
 	ret = hfi_eq_poll_cmd_complete(ctx->hw_ctx, &done);
+	mutex_unlock(&hw_ctx->rx_mutex);
 	if (ret != 0)
 		return ret;
 

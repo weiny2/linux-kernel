@@ -117,6 +117,8 @@ int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region)
 int hfi2_free_lkey(struct rvt_mregion *mr)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(mr->pd);
+	struct hfi_ctx *hw_ctx;
+	unsigned long flags;
 	int ret;
 	u64 done = 0;
 
@@ -129,11 +131,15 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 		ret = hfi2_push_key(&ctx->rkey_ks, mr->rkey);
 		/* If this fails we've somehow leaked an RKEY, but is freed */
 		WARN_ON(ret != 0);
-
+		hw_ctx = ctx->hw_ctx;
+		mutex_lock(&hw_ctx->rx_mutex);
+		spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 		ret = hfi_rkey_invalidate(ctx->rx_cmdq, mr->rkey, (u64)&done);
+		spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
 		WARN_ON(ret != 0);
 		/* TODO - extract hw_ctx based on RKEY_PID(rkey) */
 		ret = hfi_eq_poll_cmd_complete(ctx->hw_ctx, &done);
+		mutex_unlock(&hw_ctx->rx_mutex);
 		WARN_ON(ret != 0);
 	}
 
@@ -166,6 +172,7 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 	int ret;
 	u32 me_options, pd_handle;
 	u64 done = 0;
+	unsigned long flags;
 
 	if (!ctx || !ctx->supports_native || IS_INVALID_KEY(mr->rkey))
 		return 0;
@@ -193,16 +200,23 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 	/* TODO - extract hw_ctx based on RKEY_PID(rkey) */
 	hw_ctx = ctx->hw_ctx;
 
+	mutex_lock(&hw_ctx->rx_mutex);
+	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 	ret = hfi_rkey_write(ctx->rx_cmdq, NATIVE_NI,
 			     (const void *)mr->iova,
 			     mr->map[0]->segs[0].vaddr,
 			     mr->length, pt, hw_ctx->ptl_uid,
 			     pd_handle, mr->rkey, me_options,
 			     HFI_CT_NONE, (u64)&done);
-	if (ret)
+	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
+	if (ret) {
+		mutex_unlock(&hw_ctx->rx_mutex);
 		return ret;
+	}
 
-	return hfi_eq_poll_cmd_complete(hw_ctx, &done);
+	ret = hfi_eq_poll_cmd_complete(hw_ctx, &done);
+	mutex_unlock(&hw_ctx->rx_mutex);
+	return ret;
 }
 
 /*
