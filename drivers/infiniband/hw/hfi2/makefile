@@ -65,6 +65,7 @@ EXCLUDES := --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp
 
 PWD := $(shell pwd)
 VERBOSE := 0
+RDMA_PATH ?= $(PWD)/../../sw/rdmavt
 
 # if KVER not specified, set KBUILD for in-tree build
 ifeq (,$(KVER))
@@ -75,16 +76,16 @@ else
 KBUILD ?= /lib/modules/$(KVER)/build
 endif
 
-.PHONY: rdmavt
-rdmavt:
-	$(MAKE) -C $(KBUILD) M=$(PWD)/rdmavt V=$(VERBOSE) MVERSION=$(MVERSION)
-
 driver: rdmavt
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION)
 
 driver-ifs: rdmavt
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION) \
 	CONFIG_INFINIBAND_HFI2=m CONFIG_HFI2_STLNP=m
+
+.PHONY: rdmavt
+rdmavt:
+	$(MAKE) -C $(KBUILD) M=$(RDMA_PATH) V=$(VERBOSE) MVERSION=$(MVERSION)
 
 # these targets assume you have write permission to $(KBUILD)
 prep:
@@ -105,7 +106,7 @@ prep-debug:
 	$(MAKE) -C $(KBUILD) modules_prepare
 
 clean:
-	make -C $(KBUILD) M=${PWD}/../../sw/rdmavt clean
+	make -C $(KBUILD) M=${RDMA_PATH} clean
 	make -C $(KBUILD) M=${PWD} clean
 
 distclean: clean
