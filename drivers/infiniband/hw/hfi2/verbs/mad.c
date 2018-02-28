@@ -621,7 +621,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	pi->lid = cpu_to_be32(ppd->lid);
-
+	pi->max_lid = cpu_to_be32(ppd->max_lid);
 	/* Only return the mkey if the protection field allows it. */
 	if (!(smp->method == IB_MGMT_METHOD_GET &&
 	      ibp->rvp.mkey != smp->mkey &&
