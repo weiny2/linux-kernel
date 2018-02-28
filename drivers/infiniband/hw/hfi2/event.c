@@ -678,7 +678,7 @@ int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 
 		/* record info needed for hfi_eq_peek() */
 		eq_head_array = ctx->eq_head_addr;
-		hfi_set_eq(&eqm->desc, eq_assign, &eq_head_array[eq_idx]);
+		hfi_set_eq(ctx, &eqm->desc, eq_assign, &eq_head_array[eq_idx]);
 
 		/* setup self event channel */
 		eqm->ec = (struct hfi_ec_entry *)eqm;
@@ -764,7 +764,7 @@ int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 			return ret;
 		eq_head_array = ctx->eq_head_addr;
 		eq_head_addr = &eq_head_array[eq_assign.ev_idx];
-		hfi_set_eq(&ctx->eq_zero[ni], &eq_assign, eq_head_addr);
+		hfi_set_eq(ctx, &ctx->eq_zero[ni], &eq_assign, eq_head_addr);
 		/* Reset the EQ SW head */
 		*eq_head_addr = 0;
 	}
@@ -922,12 +922,12 @@ idr_end:
  * calls into the kernel. In this case, copy_from_user needs to be used
  * in order to prevent direct access into user space from kernel
  */
-static int hfi_eq_peek_u(struct hfi_ctx *ctx, struct hfi_eq *eq_handle)
+static int hfi_eq_peek_u(struct hfi_eq *eq_handle)
 {
 	u64 *eq_entry;
 	u64 tmp;
 
-	eq_entry = _hfi_eq_nth_entry(ctx, eq_handle, 0);
+	eq_entry = _hfi_eq_nth_entry(eq_handle, 0);
 
 	if (!eq_entry)
 		return -EINVAL;
@@ -954,9 +954,9 @@ static inline bool __hfi_eq_wait_condition(struct hfi_ctx *ctx,
 
 	/* call hfi_eq_peek_u in case of user space applicaiton */
 	if (ctx->type != HFI_CTX_TYPE_USER)
-		return hfi_eq_wait_condition(ctx, eq);
+		return hfi_eq_wait_condition(eq);
 
-	ret = hfi_eq_peek_u(ctx, eq);
+	ret = hfi_eq_peek_u(eq);
 
 	if (ret > 0)
 		return true;

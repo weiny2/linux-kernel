@@ -185,13 +185,13 @@ static int diagpkt_xmit(struct hfi_devdata *dd, void *buf,
 	if (eq == HFI_EQ_NONE)
 		goto unlock;
 
-	rc = hfi_eq_wait_timed(ctx, &diag->eq_tx, HFI2_DIAG_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(&diag->eq_tx, HFI2_DIAG_TIMEOUT_MS,
 			       &eq_entry);
 	if (!rc) {
 		txe = (union initiator_EQEntry *)eq_entry;
 		dd_dev_err(dd, "TX evt success %d L2 %lld txe->event_kind %d\n",
 			   rc, HFI_BYPASS_GET_L2_TYPE(buf), txe->event_kind);
-		hfi_eq_advance(ctx, &diag->eq_tx, eq_entry);
+		hfi_eq_advance(&diag->eq_tx, eq_entry);
 	} else {
 		dd_dev_err(dd, "TX event 1 failure, %d L2 %d\n", rc, l2);
 	}
@@ -367,7 +367,7 @@ void hfi2_diag_uninit(struct hfi_devdata *dd)
 	struct hfi2_diagpkt_data *diag = &dd->hfi2_diag;
 
 	if (diag->ctx)
-		_hfi_eq_free(diag->ctx, &diag->eq_tx);
+		_hfi_eq_free(&diag->eq_tx);
 }
 
 int hfi2_diag_add(void)

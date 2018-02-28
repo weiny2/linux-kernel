@@ -199,7 +199,7 @@ static int hfi_eq_zero_event_wait(struct hfi_ctx *ctx, u64 **eq_entry)
 	rc = hfi_ev_wait_single(ctx, 1, ctx->eq_zero[0].idx,
 				-1, NULL, NULL);
 	if (!rc)
-		rc = hfi_eq_peek(ctx, &ctx->eq_zero[0],
+		rc = hfi_eq_peek(&ctx->eq_zero[0],
 				 eq_entry, &dropped);
 
 	if (rc == -ETIME || rc == -ERESTARTSYS)
@@ -324,7 +324,7 @@ static int hfi_eq_zero_thread(void *data)
 		}
 
 		if (rxe->event_kind != PTL_CMD_COMPLETE)
-			hfi_eq_advance(ctx, &ctx->eq_zero[0], eq_entry);
+			hfi_eq_advance(&ctx->eq_zero[0], eq_entry);
 	}
 	return 0;
 }
@@ -351,7 +351,7 @@ static int hfi_e2e_eq_assign(struct hfi_ctx *ctx)
 		return ret;
 	eq_head_array = ctx->eq_head_addr;
 	eq_head_addr = &eq_head_array[eq_assign.ev_idx];
-	hfi_set_eq(&dd->e2e_eq, &eq_assign, eq_head_addr);
+	hfi_set_eq(ctx, &dd->e2e_eq, &eq_assign, eq_head_addr);
 	/* Reset the EQ SW head */
 	*eq_head_addr = 0;
 
@@ -499,7 +499,7 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 	if (op != PTL_SINGLE_CONNECT)
 		goto done;
 	/* Check on E2E EQ for a PTL_EVENT_INITIATOR_CONNECT event */
-	rc = hfi_eq_wait_timed(ctx, &dd->e2e_eq, HFI_TX_TIMEOUT_MS,
+	rc = hfi_eq_wait_timed(&dd->e2e_eq, HFI_TX_TIMEOUT_MS,
 			       &eq_entry);
 	if (!rc) {
 		union initiator_EQEntry *txe =
@@ -514,7 +514,7 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 				dd_dev_info(dd, "E2E EQ success kind %d\n",
 					    txe->event_kind);
 			}
-			hfi_eq_advance(ctx, &dd->e2e_eq, eq_entry);
+			hfi_eq_advance(&dd->e2e_eq, eq_entry);
 		} else {
 			rc = -EIO;
 			dd_dev_err(dd, "Invalid E2E event %d\n",

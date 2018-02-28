@@ -576,7 +576,7 @@ void prescan_rxq(struct hfi2_ibrcv *rcv)
 	packet->ibp = rcv->ibp;
 
 	/* loop until an invalid event is found */
-	while (hfi_eq_peek_nth(rcv->ctx, &rcv->eq, &rhf_entry, n++, &dropped)) {
+	while (hfi_eq_peek_nth(&rcv->eq, &rhf_entry, n++, &dropped)) {
 		packet->hdr = rhf_get_hdr(packet, rhf_entry);
 		hdr = packet->hdr;
 		packet->rhf = *rhf_entry;
@@ -743,7 +743,7 @@ int hfi2_rcv_wait(void *data)
 			hfi2_rcv_advance(rcv, rhf_entry);
 		}
 		/* Process any pending acks when there are no events pending */
-		if (pkt.numpkt && !hfi_eq_wait_condition(rcv->ctx, &rcv->eq)) {
+		if (pkt.numpkt && !hfi_eq_wait_condition(&rcv->eq)) {
 			process_rcv_qp_work(&pkt);
 			pkt.numpkt = 0;
 		}

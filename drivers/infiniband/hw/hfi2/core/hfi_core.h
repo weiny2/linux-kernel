@@ -166,6 +166,7 @@ struct hfi_ctx_error {
 
 /*
  * struct hfi_eq - Event Queue
+ * @ctx: hardware context containing this EQ
  * @base: base address of Event Buffer
  * @events_pending: counter of outstanding events to be delivered
  * @count: size of buffer, in number of events
@@ -174,6 +175,7 @@ struct hfi_ctx_error {
  * @head_addr: address where head pointer is stored
  */
 struct hfi_eq {
+	struct hfi_ctx *ctx;
 	void *base;
 	atomic_t events_pending;
 	u32 count;

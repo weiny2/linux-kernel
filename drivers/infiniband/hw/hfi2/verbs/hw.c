@@ -322,8 +322,7 @@ static void hfi2_send_event(struct hfi_eq *eq_tx, void *data)
 	int ret;
 
 next_event:
-	ret = hfi_eq_peek(ibp->ctx, eq_tx,
-			  (u64 **)&eq_entry, &dropped);
+	ret = hfi_eq_peek(eq_tx, (u64 **)&eq_entry, &dropped);
 	if (ret <= 0)
 		return;
 
@@ -392,7 +391,7 @@ dma_free:
 	wqe_iov_dma_cache_put(ibp->ibd, wqe_dma);
 
 eq_advance:
-	hfi_eq_advance(ibp->ctx, eq_tx, (u64 *)eq_entry);
+	hfi_eq_advance(eq_tx, (u64 *)eq_entry);
 
 	/*
 	 * eq_tx is not the same as send_eq - decrement events_pending
@@ -905,7 +904,7 @@ int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry)
 	int rc;
 	bool dropped = false;
 
-	rc = hfi_eq_wait_irq(rcv->ctx, &rcv->eq, -1,
+	rc = hfi_eq_wait_irq(&rcv->eq, -1,
 			     rhf_entry, &dropped);
 	if (rc == -ETIME || rc == -ERESTARTSYS) {
 		/* timeout or wait interrupted, not abnormal */
@@ -919,7 +918,7 @@ int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry)
 
 void hfi2_rcv_advance(struct hfi2_ibrcv *rcv, u64 *rhf_entry)
 {
-	hfi_eq_advance(rcv->ctx, &rcv->eq, rhf_entry);
+	hfi_eq_advance(&rcv->eq, rhf_entry);
 
 	/*
 	 * if either header queue or eager buffer has passed update threshold
@@ -1120,7 +1119,7 @@ void hfi2_rcv_uninit(struct hfi2_ibrcv *rcv)
 		dev_err(ibp->dev, "unexpected PT disable error %d\n", ret);
 
 	if (rcv->eq.base)
-		_hfi_eq_free(rcv->ctx, &rcv->eq);
+		_hfi_eq_free(&rcv->eq);
 	if (rcv->egr_base) {
 		hfi_at_dereg_range(rcv->ctx, rcv->egr_base,
 				   HFI_IB_EAGER_BUFSIZE);
@@ -1320,7 +1319,7 @@ void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp)
 		return;
 
 	if (ibp->send_eq.base)
-		_hfi_eq_free(ibp->ctx, &ibp->send_eq);
+		_hfi_eq_free(&ibp->send_eq);
 
 	for (i = 0; i < ibp->ibd->num_qp_ctxs; i++) {
 		if (ibp->qp_rcv[i]) {

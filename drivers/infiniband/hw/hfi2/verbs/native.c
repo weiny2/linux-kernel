@@ -673,7 +673,7 @@ static int hfi_ib_eq_setup(struct hfi_rq *rq, struct rvt_cq *cq)
 
 eq_err:
 	mutex_unlock(&rq->hw_ctx->rx_mutex);
-	hfi_eq_free(rq->hw_ctx, eq);
+	hfi_eq_free(eq);
 	cq->hw_cq =  NULL;
 	return ret;
 }
@@ -1170,7 +1170,7 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 			if (i == ne)
 				return i;
 		}
-		ret = hfi_eq_peek_nth(ctx->hw_ctx, eq, &eqe, 0, &dropped);
+		ret = hfi_eq_peek_nth(eq, &eqe, 0, &dropped);
 		if (ret < 0)
 			return ret;
 		else if (ret == HFI_EQ_EMPTY)
@@ -1188,11 +1188,11 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 			break;
 		default:
 			pr_err("Unknown event kind %d\n", kind);
-			hfi_eq_advance(ctx->hw_ctx, eq, eqe);
+			hfi_eq_advance(eq, eqe);
 			return -EINVAL;
 		}
 
-		hfi_eq_advance(ctx->hw_ctx, eq, eqe);
+		hfi_eq_advance(eq, eqe);
 	}
 
 	return i;
@@ -1215,11 +1215,11 @@ int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 		return 0;
 
 	/* arm the HW event queue for interrupts */
-	ret = hfi_ib_eq_arm(ctx->hw_ctx, eq->idx, ibcq,
+	ret = hfi_ib_eq_arm(eq->ctx, eq->idx, ibcq,
 			    (u64)&done, (u64)&cq->hw_disarmed);
 	if (!ret) {
 		/* wait completion to turn on interrupt */
-		ret = hfi_eq_poll_cmd_complete(ctx->hw_ctx, &done);
+		ret = hfi_eq_poll_cmd_complete(eq->ctx, &done);
 		if (!ret)
 			cq->hw_disarmed = 0; /* arming succeeded */
 	}

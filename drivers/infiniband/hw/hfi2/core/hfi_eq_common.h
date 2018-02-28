@@ -106,8 +106,7 @@ void hfi_eq_pending_dec(struct hfi_eq *eq)
 }
 
 static inline
-int hfi_eq_advance(struct hfi_ctx *ctx,
-		   struct hfi_eq *eq_handle, u64 *eq_entry)
+int hfi_eq_advance(struct hfi_eq *eq_handle, u64 *eq_entry)
 {
 	u32 eq_count;
 	u32 eq_head_idx, new_head_idx;
@@ -132,7 +131,7 @@ int hfi_eq_advance(struct hfi_ctx *ctx,
 }
 
 static inline
-int hfi_eq_advance_multiple(struct hfi_ctx *ctx, struct hfi_eq *eq_handle,
+int hfi_eq_advance_multiple(struct hfi_eq *eq_handle,
 			    u64 **eq_entry, size_t count)
 {
 	u32 eq_head_idx, new_head_idx;
@@ -161,8 +160,7 @@ int hfi_eq_advance_multiple(struct hfi_ctx *ctx, struct hfi_eq *eq_handle,
  * entries 0 through n-1 are valid.
  */
 static inline
-u64 *_hfi_eq_nth_entry(struct hfi_ctx *ctx,
-		       struct hfi_eq *eq_handle, int nth)
+u64 *_hfi_eq_nth_entry(struct hfi_eq *eq_handle, int nth)
 {
 	u32 eq_head_idx;
 
@@ -185,12 +183,12 @@ u64 *_hfi_eq_nth_entry(struct hfi_ctx *ctx,
 }
 
 static inline
-int hfi_eq_peek_nth(struct hfi_ctx *ctx, struct hfi_eq *eq_handle,
+int hfi_eq_peek_nth(struct hfi_eq *eq_handle,
 		    u64 **entry, int nth, bool *dropped)
 {
 	volatile u64 *eq_entry;
 
-	eq_entry = _hfi_eq_nth_entry(ctx, eq_handle, nth);
+	eq_entry = _hfi_eq_nth_entry(eq_handle, nth);
 	if (!eq_entry)
 		return -EINVAL;
 
@@ -209,8 +207,8 @@ int hfi_eq_peek_nth(struct hfi_ctx *ctx, struct hfi_eq *eq_handle,
 	return HFI_EQ_EMPTY;
 }
 
-#define hfi_eq_peek(ctx, eq_handle, entry, dropped) \
-	hfi_eq_peek_nth(ctx, eq_handle, entry, 0, dropped)
+#define hfi_eq_peek(eq_handle, entry, dropped) \
+	hfi_eq_peek_nth(eq_handle, entry, 0, dropped)
 
 /*
  * Peek multiple entries in the queue specified by eq_handle, starting in
@@ -227,7 +225,7 @@ int hfi_eq_peek_nth(struct hfi_ctx *ctx, struct hfi_eq *eq_handle,
  * entries in the entry vector should be ignored by the caller.
  */
 static inline
-int hfi_eq_peek_nth_multiple(struct hfi_ctx *ctx, struct hfi_eq *eq_handle,
+int hfi_eq_peek_nth_multiple(struct hfi_eq *eq_handle,
 			     u64 **entry, int nth, bool *dropped,
 			     size_t count)
 {
@@ -237,7 +235,7 @@ int hfi_eq_peek_nth_multiple(struct hfi_ctx *ctx, struct hfi_eq *eq_handle,
 
 	entry_count = 0;
 	do {
-		ret = hfi_eq_peek_nth(ctx, eq_handle, &peeked_entry,
+		ret = hfi_eq_peek_nth(eq_handle, &peeked_entry,
 				      nth + entry_count, dropped);
 
 		/*
@@ -275,7 +273,7 @@ int _hfi_eq_poll_cmd_complete(struct hfi_ctx *ctx, u64 *done)
 		union initiator_EQEntry *event;
 
 		do {
-			ret = hfi_eq_peek(ctx, HFI_EQ_ZERO(ctx, 0),
+			ret = hfi_eq_peek(HFI_EQ_ZERO(ctx, 0),
 					  &entry, &dropped);
 			if (ret < 0)
 				return ret;
@@ -301,7 +299,7 @@ int _hfi_eq_poll_cmd_complete(struct hfi_ctx *ctx, u64 *done)
 			*(u64 *)event->user_ptr =
 				(event->fail_type | (1ULL << 63));
 
-		ret = hfi_eq_advance(ctx, HFI_EQ_ZERO(ctx, 0), entry);
+		ret = hfi_eq_advance(HFI_EQ_ZERO(ctx, 0), entry);
 		if (unlikely(ret < 0))
 			return ret;
 	}

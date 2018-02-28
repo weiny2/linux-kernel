@@ -610,7 +610,6 @@ static void hfi2_vnic_tx_isr_cb(struct hfi_eq *eq_tx, void *data)
 {
 	struct hfi2_ctx_info *ctx_i = data;
 	struct hfi_eq *eq = &ctx_i->eq_tx;
-	struct hfi_ctx *ctx = &ctx_i->ctx;
 	struct hfi2_netdev *ndev = ctx_i->ndev;
 	struct hfi2_vnic_txreq *txreq;
 	union initiator_EQEntry *eq_entry;
@@ -618,7 +617,7 @@ static void hfi2_vnic_tx_isr_cb(struct hfi_eq *eq_tx, void *data)
 	int ret;
 
 next_event:
-	ret = hfi_eq_peek(ctx, eq, (uint64_t **)&eq_entry, &dropped);
+	ret = hfi_eq_peek(eq, (uint64_t **)&eq_entry, &dropped);
 	if (ret <= 0)
 		return;
 
@@ -637,7 +636,7 @@ next_event:
 	txreq_cache_put(ndev, txreq);
 
 eq_advance:
-	hfi_eq_advance(ctx, eq, (uint64_t *)eq_entry);
+	hfi_eq_advance(eq, (uint64_t *)eq_entry);
 	hfi_eq_pending_dec(eq);
 	if (atomic_read(&ctx_i->tx_notify_count))
 		tx_notify_list_process(ctx_i, false);
@@ -973,7 +972,7 @@ static void hfi2_vnic_rx_isr_cb(struct hfi_eq *eq_rx, void *data)
 
 retry:
 	skb = NULL;
-	err = hfi_eq_peek(ctx, eq_rx, &eq_entry, &dropped);
+	err = hfi_eq_peek(eq_rx, &eq_entry, &dropped);
 	if (err <= 0)
 		return;
 	rhf = (union rhf *)eq_entry;
@@ -1066,7 +1065,7 @@ pkt_drop:
 		 */
 		dd_dev_err(ndev->dd, "unexpected PT update error %d\n", err);
 	}
-	hfi_eq_advance(ctx, eq_rx, eq_entry);
+	hfi_eq_advance(eq_rx, eq_entry);
 
 	/* Check if there are more events */
 	goto retry;
@@ -1193,9 +1192,9 @@ err5:
 	hfi_pt_disable(ctx, rx, HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
 	spin_unlock_irqrestore(&ctx_i->rx_lock, flags);
 err4:
-	_hfi_eq_free(ctx, &ctx_i->eq_rx);
+	_hfi_eq_free(&ctx_i->eq_rx);
 err3:
-	_hfi_eq_free(ctx, &ctx_i->eq_tx);
+	_hfi_eq_free(&ctx_i->eq_tx);
 err2:
 	hfi_cmdq_unmap(&ctx_i->tx, &ctx_i->rx);
 err1:
@@ -1222,7 +1221,7 @@ static void hfi2_vnic_uninit_ctx(struct hfi2_vnic_vport_info *vinfo,
 	/* FXRTODO: Release EQ before disabling PT to prevent EQ ISR
 	 * firing while PT is being disabled
 	 */
-	_hfi_eq_free(ctx, &ctx_i->eq_rx);
+	_hfi_eq_free(&ctx_i->eq_rx);
 	spin_lock_irqsave(&ctx_i->rx_lock, flags);
 	hfi_pt_disable(ctx, rx, HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
 	spin_unlock_irqrestore(&ctx_i->rx_lock, flags);
@@ -1230,7 +1229,7 @@ static void hfi2_vnic_uninit_ctx(struct hfi2_vnic_vport_info *vinfo,
 	tx_notify_list_process(ctx_i, true);
 	hfi_cmdq_unmap(&ctx_i->tx, &ctx_i->rx);
 	hfi_cmdq_release(ctx, ctx_i->cmdq_idx);
-	_hfi_eq_free(ctx, &ctx_i->eq_tx);
+	_hfi_eq_free(&ctx_i->eq_tx);
 	hfi_ctx_cleanup(ctx);
 }
 

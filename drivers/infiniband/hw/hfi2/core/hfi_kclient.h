@@ -89,7 +89,8 @@ static struct hfi_eq __attribute__((unused)) eq_handle_none;
 #define HFI_EQ0_WAIT_TIMEOUT_MS		500
 
 static inline
-void hfi_set_eq(struct hfi_eq *eq, struct opa_ev_assign *eq_assign,
+void hfi_set_eq(struct hfi_ctx *ctx, struct hfi_eq *eq,
+		struct opa_ev_assign *eq_assign,
 		u32 *head_addr)
 {
 	eq->base = (void *)eq_assign->base;
@@ -98,6 +99,7 @@ void hfi_set_eq(struct hfi_eq *eq, struct opa_ev_assign *eq_assign,
 				       HFI_EQ_ENTRY_LOG2;
 	eq->idx = eq_assign->ev_idx;
 	eq->head_addr = head_addr;
+	eq->ctx = ctx;
 }
 
 /*
@@ -105,8 +107,7 @@ void hfi_set_eq(struct hfi_eq *eq, struct opa_ev_assign *eq_assign,
  * 0 on new event without error, otherwise negative error code.
  */
 static inline
-int hfi_eq_wait_timed(struct hfi_ctx *ctx,
-		      struct hfi_eq *eq, unsigned int timeout_ms,
+int hfi_eq_wait_timed(struct hfi_eq *eq, unsigned int timeout_ms,
 		      u64 **eq_entry)
 {
 	int ret;
@@ -115,7 +116,7 @@ int hfi_eq_wait_timed(struct hfi_ctx *ctx,
 			msecs_to_jiffies(timeout_ms);
 
 	while (1) {
-		ret = hfi_eq_peek(ctx, eq, eq_entry, &dropped);
+		ret = hfi_eq_peek(eq, eq_entry, &dropped);
 		if (ret != HFI_EQ_EMPTY)
 			break;
 		if (time_after(jiffies, exit_jiffies))
@@ -129,11 +130,11 @@ int hfi_eq_wait_timed(struct hfi_ctx *ctx,
 }
 
 static inline
-int hfi_eq_wait_irq(struct hfi_ctx *ctx,
-		    struct hfi_eq *eq_handle, unsigned int timeout_ms,
+int hfi_eq_wait_irq(struct hfi_eq *eq_handle, unsigned int timeout_ms,
 		    u64 **eq_entry, bool *dropped)
 {
 	int ret;
+	struct hfi_ctx *ctx = eq_handle->ctx;
 
 	/* when allocating this 'eq', it must be in blocking mode,
 	 * as OPA_EV_MODE_BLOCKING in _hfi_eq_alloc()
@@ -141,7 +142,7 @@ int hfi_eq_wait_irq(struct hfi_ctx *ctx,
 	ret = ctx->ops->ev_wait_single(ctx, 1, eq_handle->idx,
 				       timeout_ms, NULL, NULL);
 	if (!ret)
-		ret = hfi_eq_peek(ctx, eq_handle, eq_entry, dropped);
+		ret = hfi_eq_peek(eq_handle, eq_entry, dropped);
 	return ret;
 }
 
@@ -158,7 +159,7 @@ int hfi_eq_poll_cmd_complete_timeout(struct hfi_ctx *ctx, u64 *done)
 		union initiator_EQEntry *event;
 
 		do {
-			ret = hfi_eq_peek(ctx, HFI_EQ_ZERO(ctx, 0), &entry,
+			ret = hfi_eq_peek(HFI_EQ_ZERO(ctx, 0), &entry,
 					  &dropped);
 			if (ret < 0)
 				return ret;
@@ -181,7 +182,7 @@ int hfi_eq_poll_cmd_complete_timeout(struct hfi_ctx *ctx, u64 *done)
 			*(u64 *)event->user_ptr =
 				(event->fail_type | (1ULL << 63));
 
-		hfi_eq_advance(ctx, HFI_EQ_ZERO(ctx, 0), entry);
+		hfi_eq_advance(HFI_EQ_ZERO(ctx, 0), entry);
 	}
 
 	return 0;
@@ -213,7 +214,7 @@ int _hfi_eq_alloc(struct hfi_ctx *ctx,
 	/* Reset the EQ SW head */
 	eq_head_addr = &eq_head_array[eq_alloc->ev_idx];
 	*eq_head_addr = 0;
-	hfi_set_eq(eq, eq_alloc, eq_head_addr);
+	hfi_set_eq(ctx, eq, eq_alloc, eq_head_addr);
 
 	/* Check on EQ 0 NI 0 for a PTL_CMD_COMPLETE event */
 	rc = hfi_eq_poll_cmd_complete_timeout(ctx, &done);
@@ -242,14 +243,14 @@ struct hfi_eq *hfi_eq_alloc(struct hfi_ctx *ctx,
 		kfree(eq);
 		eq = ERR_PTR(ret);
 	}
-
 	return eq;
 }
 
 static inline
-void _hfi_eq_free(struct hfi_ctx *ctx, struct hfi_eq *eq)
+void _hfi_eq_free(struct hfi_eq *eq)
 {
 	u64 done = 0;
+	struct hfi_ctx *ctx = eq->ctx;
 
 	ctx->ops->ev_release(ctx, 0, eq->idx, (u64)&done);
 
@@ -262,21 +263,21 @@ void _hfi_eq_free(struct hfi_ctx *ctx, struct hfi_eq *eq)
 }
 
 static inline
-void hfi_eq_free(struct hfi_ctx *ctx, struct hfi_eq *eq)
+void hfi_eq_free(struct hfi_eq *eq)
 {
-	_hfi_eq_free(ctx, eq);
+	_hfi_eq_free(eq);
 	kfree(eq);
 }
 
 /* Returns true if there is a valid pending event and false otherwise */
 static inline
-bool hfi_eq_wait_condition(struct hfi_ctx *ctx, struct hfi_eq *eq)
+bool hfi_eq_wait_condition(struct hfi_eq *eq)
 {
 	u64 *entry;
 	bool dropped;
 	int ret;
 
-	ret = hfi_eq_peek(ctx, eq, &entry, &dropped);
+	ret = hfi_eq_peek(eq, &entry, &dropped);
 
 	if (ret > 0)
 		return true;
