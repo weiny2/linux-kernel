@@ -3633,6 +3633,16 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	INIT_LIST_HEAD(&dd->error_dispatch_head);
 	spin_lock_init(&dd->error_dispatch_lock);
 
+	/* give unit a logical number 0-n */
+	idr_preload(GFP_KERNEL);
+	spin_lock_irqsave(&hfi2_unit_lock, flags);
+	ret = idr_alloc(&hfi2_unit_table, dd, 0, 0, GFP_NOWAIT);
+	spin_unlock_irqrestore(&hfi2_unit_lock, flags);
+	idr_preload_end();
+	if (ret < 0)
+		goto err_post_alloc;
+	dd->unit = ret;
+
 	/* FXR resources are on BAR0 (used for io_remap, etc.) */
 	addr = pci_resource_start(pdev, HFI_FXR_BAR);
 	len = pci_resource_len(pdev, HFI_FXR_BAR);
@@ -3696,16 +3706,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* For ZEBU currently we configure cmdq after ctx_init */
 	if (!zebu)
 		hfi_cmdq_config_all(dd);
-
-	/* give unit a logical number 0-n */
-	idr_preload(GFP_KERNEL);
-	spin_lock_irqsave(&hfi2_unit_lock, flags);
-	ret = idr_alloc(&hfi2_unit_table, dd, 0, 0, GFP_NOWAIT);
-	spin_unlock_irqrestore(&hfi2_unit_lock, flags);
-	idr_preload_end();
-	if (ret < 0)
-		goto err_post_alloc;
-	dd->unit = ret;
 
 	ret = hfi_at_init(dd);
 	if (ret)
