@@ -464,7 +464,7 @@ static struct hfi2_wqe_iov *wqe_iov_cache_get(struct hfi2_ibdev *ibd,
 {
 	struct hfi2_wqe_iov *wqe_iov;
 
-	wqe_iov = kmem_cache_alloc(ibd->wqe_iov_cache, gfp);
+	wqe_iov = kmem_cache_alloc_node(ibd->wqe_iov_cache, gfp, ibd->dd->node);
 
 	if (!wqe_iov)
 		return NULL;
@@ -472,6 +472,7 @@ static struct hfi2_wqe_iov *wqe_iov_cache_get(struct hfi2_ibdev *ibd,
 	if (num_iov <= WQE_GDMA_IOV_CACHE_SIZE) {
 		wqe_iov->iov = wqe_iov->iov_cache;
 	} else {
+		/* FXRTODO: replace kcalloc with kcalloc_node */
 		/* More IOVs needed that we have in cache, alloc dynamically */
 		wqe_iov->iov = kcalloc(num_iov, sizeof(union base_iovec),
 				       gfp);
@@ -1016,7 +1017,7 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 		goto init_err;
 
 	rcv->egr_last_idx = 0;
-	rcv->egr_base = vzalloc(HFI_IB_EAGER_BUFSIZE);
+	rcv->egr_base = vzalloc_node(HFI_IB_EAGER_BUFSIZE, ctx->devdata->node);
 	if (!rcv->egr_base)
 		goto init_err;
 

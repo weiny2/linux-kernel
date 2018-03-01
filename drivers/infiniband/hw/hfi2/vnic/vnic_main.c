@@ -362,13 +362,15 @@ static struct hfi2_vnic_txreq *txreq_cache_get(struct hfi2_netdev *ndev,
 {
 	struct hfi2_vnic_txreq *txreq;
 
-	txreq = kmem_cache_alloc(ndev->txreq_cache, GFP_ATOMIC);
+	txreq = kmem_cache_alloc_node(ndev->txreq_cache, GFP_ATOMIC,
+				      ndev->dd->node);
 	if (!txreq)
 		return NULL;
 
 	if (num_iov <= VNIC_TXREQ_IOV_CACHE_SIZE) {
 		txreq->iov = &txreq->iov_cache[0];
 	} else {
+		/* FXRTODO: replace kcalloc with kcalloc_node */
 		/* More IOVs needed that we have in cache, alloc dynamically */
 		txreq->iov = kcalloc(num_iov, sizeof(*txreq->iov), GFP_KERNEL);
 		if (!txreq->iov) {
@@ -1093,7 +1095,8 @@ static int hfi2_alloc_rx_bufs(struct hfi2_ctx_info *ctx_i)
 	int i, rc = 0;
 
 	for (i = 0; i < HFI2_NET_NUM_RX_BUFS; i++) {
-		ctx_i->buf[i] = vzalloc(HFI2_NET_EAGER_SIZE);
+		ctx_i->buf[i] = vzalloc_node(HFI2_NET_EAGER_SIZE,
+					     ctx_i->ctx.devdata->node);
 		if (!ctx_i->buf[i]) {
 			rc = -ENOMEM;
 			goto err1;

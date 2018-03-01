@@ -740,9 +740,10 @@ int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 		eq_assign.ni = ni;
 		/* EQ is one page and meets 64B alignment */
 		eq_assign.count = 64;
-		eq_assign.base = (u64)kzalloc(eq_assign.count *
+		eq_assign.base = (u64)kzalloc_node(eq_assign.count *
 					      HFI_EQ_ENTRY_SIZE,
-					      GFP_KERNEL);
+					      GFP_KERNEL,
+					      ctx->devdata->node);
 		if (!eq_assign.base)
 			return -ENOMEM;
 		if ((ctx->pid == HFI_PID_SYSTEM) && !ni)

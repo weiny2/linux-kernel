@@ -183,7 +183,8 @@ int _hfi_eq_alloc(struct hfi_ctx *ctx,
 
 	eq_alloc->user_data = (u64)&done;
 	width = eq_alloc->jumbo ? HFI_EQ_ENTRY_LOG2_JUMBO : HFI_EQ_ENTRY_LOG2;
-	eq_alloc->base = (u64)vzalloc(eq_alloc->count << width);
+	eq_alloc->base = (u64)vzalloc_node(eq_alloc->count << width,
+				ctx->devdata->node);
 	if (!eq_alloc->base)
 		return -ENOMEM;
 	eq_alloc->mode = OPA_EV_MODE_BLOCKING;

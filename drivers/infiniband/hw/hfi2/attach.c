@@ -300,6 +300,7 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	psb_size = le_me_off + le_me_size + unexp_size;
 
 	/* vmalloc Portals State memory, will store in PCB */
+	/* FXRTODO: replace vmalloc_user with vmalloc_user_node */
 	ctx->ptl_state_base = vmalloc_user(psb_size);
 	if (!ctx->ptl_state_base) {
 		ret = -ENOMEM;
@@ -632,7 +633,7 @@ int hfi_alloc_spill_area(struct hfi_devdata *dd)
 	int i;
 	u64 size = TRIGGER_OPS_SPILL_SIZE;
 
-	ptr = vmalloc(size * 5);
+	ptr = vmalloc_node(size * 5, dd->node);
 
 	if (!ptr)
 		return -ENOMEM;

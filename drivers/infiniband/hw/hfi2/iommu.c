@@ -1077,7 +1077,8 @@ static int hfi_svm_enable_prq(struct hfi_at *at)
 {
 	struct page *pages;
 
-	pages = alloc_pages(GFP_KERNEL | __GFP_ZERO, PRQ_ORDER);
+	pages = alloc_pages_node(at->dd->node, GFP_KERNEL | __GFP_ZERO,
+				 PRQ_ORDER);
 	if (!pages) {
 		dd_dev_err(at->dd, "AT: %s: Failed to allocate page request queue\n",
 			   at->name);
@@ -1610,7 +1611,7 @@ static int hfi_svm_alloc_pasid_tables(struct hfi_at *at)
 		at->pasid_max = 0x1000;
 
 	order = get_order(sizeof(struct pasid_entry) * at->pasid_max);
-	pages = alloc_pages(GFP_KERNEL | __GFP_ZERO, order);
+	pages = alloc_pages_node(at->dd->node, GFP_KERNEL | __GFP_ZERO, order);
 	if (!pages) {
 		dd_dev_err(at->dd, "AT: %s: Failed to allocate PASID table\n",
 			   at->name);
@@ -1624,7 +1625,8 @@ static int hfi_svm_alloc_pasid_tables(struct hfi_at *at)
 		/* Just making it explicit... */
 		BUILD_BUG_ON(sizeof(struct pasid_entry) !=
 			     sizeof(struct pasid_state_entry));
-		pages = alloc_pages(GFP_KERNEL | __GFP_ZERO, order);
+		pages = alloc_pages_node(at->dd->node, GFP_KERNEL | __GFP_ZERO,
+					 order);
 		if (pages)
 			at->pasid_state_table = page_address(pages);
 		else

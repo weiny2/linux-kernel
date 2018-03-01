@@ -716,7 +716,7 @@ static int hfi_psn_init(struct hfi_pportdata *port, u32 max_lid)
 		for (j = 0; j < HFI_MAX_PKEYS; j++) {
 			u32 psn_off = (4 * j + i) * 8;
 
-			tc->psn_base[j] = vzalloc(psn_size);
+			tc->psn_base[j] = vzalloc_node(psn_size, dd->node);
 			if (!tc->psn_base[j]) {
 				rc = -ENOMEM;
 				goto done;
@@ -3751,6 +3751,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	int ret;
 	struct hfi_ctx *ctx;
 	u16 cmdq_idx;
+	struct page *page;
 	struct opa_ctx_assign ctx_assign = {0};
 
 	/* FXRTODO: Remove once silicon is stable */
@@ -3848,13 +3849,13 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 
 	/* CMDQ head (read) indices - 16 KB */
 	dd->cmdq_head_size = (HFI_CMDQ_COUNT * HFI_CMDQ_HEAD_OFFSET);
-	dd->cmdq_head_base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
-					get_order(dd->cmdq_head_size));
-	if (!dd->cmdq_head_base) {
+	page = alloc_pages_node(dd->node, GFP_KERNEL | __GFP_ZERO,
+				get_order(dd->cmdq_head_size));
+	if (!page) {
 		ret = -ENOMEM;
 		goto err_post_alloc;
 	}
-
+	dd->cmdq_head_base = page_address(page);
 	/* For ZEBU currently we configure cmdq after ctx_init */
 	if (!zebu)
 		hfi_cmdq_config_all(dd);
