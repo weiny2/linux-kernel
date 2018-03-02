@@ -113,32 +113,43 @@ void hfi2_nfence(struct rvt_qp *qp)
 	} while (true);
 }
 
+static inline
+void *mr_sge_addr(struct rvt_mregion *mr, struct ib_sge *sge)
+{
+	if (!mr->map[0] || !mr->lkey)
+		return (void *)sge->addr;
+	/* TODO - no support yet for potentially discontiguous mappings */
+	BUG_ON(sge->length > mr->map[0]->segs[0].length);
+	/* Should have been already checked */
+	BUG_ON(mr->user_base > sge->addr);
+	return (sge->addr - mr->user_base) + mr->map[0]->segs[0].vaddr;
+}
+
 /* Convert Send WR into state needed for send completion and hardware IOVEC */
 static
 struct hfi_swqe *hfi_prepare_swqe(struct rvt_qp *qp, struct ib_send_wr *wr,
-				  bool signal, int *ret)
+				  bool signal)
 {
-	int i;
+	int ret, i;
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
 	struct hfi_swqe *swqe;
 	struct hfi_iovec *iov;
 	struct rvt_mregion *mr;
 
 	swqe = kmalloc(sizeof(*swqe) + wr->num_sge * sizeof(*iov), GFP_KERNEL);
-	if (!swqe) {
-		*ret = -ENOMEM;
-		return NULL;
-	}
+	if (!swqe)
+		return ERR_PTR(-ENOMEM);
 	iov = swqe->iov;
 
+	swqe->length = 0;
 	for (i = 0; i < wr->num_sge; i++) {
 		mr = hfi2_chk_mr_sge(ctx, &wr->sg_list[i]);
 		if (!mr) {
-			*ret = -EINVAL;
+			ret = -EINVAL;
 			goto err;
 		}
 
-		iov[i].addr = wr->sg_list[i].addr;
+		iov[i].addr = (u64)mr_sge_addr(mr, &wr->sg_list[i]);
 		iov[i].length = wr->sg_list[i].length;
 		iov[i].flags = IOVEC_VALID;
 		swqe->length += iov[i].length;
@@ -152,7 +163,7 @@ struct hfi_swqe *hfi_prepare_swqe(struct rvt_qp *qp, struct ib_send_wr *wr,
 
 err:
 	kfree(swqe);
-	return NULL;
+	return ERR_PTR(ret);
 }
 
 /*
@@ -165,10 +176,11 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 		       bool signal, bool in_line, bool solicit,
 		       union hfi_tx_cq_command *cmd)
 {
-	int ret, nslots;
+	int nslots;
 	struct rvt_ah *ah = ibah_to_rvtah(wr->ah);
 	struct rdma_ah_attr *ah_attr = &ah->attr;
 	struct ib_sge *sge = wr->wr.sg_list;
+	struct rvt_mregion *mr;
 	struct hfi2_qp_priv *priv = qp->priv;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	struct rvt_cq *send_cq = ibcq_to_rvtcq(qp->ibqp.send_cq);
@@ -180,23 +192,32 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 	u16 tx_id = 0;
 	union hfi_process tpid = {.phys.slid = rdma_ah_get_dlid(ah_attr)};
 	struct hfi_swqe *swqe = NULL;
+	void *start = NULL;
+	u32 length = 0;
 
 	if (signal || wr->wr.num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
 		md_opts = PTL_MD_EVENT_CT_SEND;
-		swqe = hfi_prepare_swqe(qp, &wr->wr, signal, &ret);
-		if (!swqe)
-			return ret;
+		swqe = hfi_prepare_swqe(qp, &wr->wr, signal);
+		if (IS_ERR(swqe))
+			return PTR_ERR(swqe);
+		length = swqe->length;
+		if (length)
+			start = (void *)swqe->iov[0].addr;
 	} else if (wr->wr.num_sge) {
 		/* validate single SGE */
-		if (!in_line && !hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge))
+		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge);
+		if (!mr)
 			return -EINVAL;
+		start = mr_sge_addr(mr, sge);
+		length = sge->length;
 	}
 
 	qkey = !(wr->remote_qkey & QKEY_USE_LOCAL) ?
 	       wr->remote_qkey : qp->qkey;
 
 	if (wr->wr.num_sge > 1) {
+		WARN_ON(in_line);
 		md_opts = PTL_IOVEC | PTL_MD_EVENT_CT_SEND;
 		nslots = hfi_format_dma_iovec_ud(
 					rq->hw_ctx, NATIVE_NI,
@@ -217,7 +238,7 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 	} else if (sge->length <= HFI_TX_MAX_BUFFERED) {
 		nslots = hfi_format_buff_ud(
 					rq->hw_ctx, NATIVE_NI,
-					(void *)sge->addr, sge->length,
+					start, length,
 					tpid, 0,
 					NATIVE_RC, ah_attr->sl,
 					becn, priv->pkey,
@@ -231,9 +252,10 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 					tx_id, op_req, solicit, MB_OC_OK,
 					&cmd->buff_put_match);
 	} else {
+		WARN_ON(in_line);
 		nslots = hfi_format_dma_ud(
 					rq->hw_ctx, NATIVE_NI,
-					(void *)sge->addr, sge->length,
+					start, length,
 					tpid, 0,
 					NATIVE_RC, ah_attr->sl,
 					becn, priv->pkey,
@@ -266,9 +288,10 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 		       bool signal, bool in_line, bool solicit,
 		       union hfi_tx_cq_command *cmd)
 {
-	int ret, nslots;
+	int nslots;
 	struct rdma_ah_attr *ah_attr = &qp->remote_ah_attr;
 	struct ib_sge *sge = wr->sg_list;
+	struct rvt_mregion *mr;
 	struct hfi2_qp_priv *priv = qp->priv;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	struct rvt_cq *send_cq = ibcq_to_rvtcq(qp->ibqp.send_cq);
@@ -279,6 +302,8 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	u16 tx_id = 0;
 	union hfi_process tpid = {.phys.slid = rdma_ah_get_dlid(ah_attr)};
 	struct hfi_swqe *swqe = NULL;
+	void *start = NULL;
+	u32 length = 0;
 
 	if (qp->ibqp.qp_type == IB_QPT_UC &&
 	    wr->opcode == IB_WR_SEND_WITH_INV)
@@ -287,16 +312,23 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	if (signal || wr->num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
 		md_opts = PTL_MD_EVENT_CT_SEND;
-		swqe = hfi_prepare_swqe(qp, wr, signal, &ret);
-		if (!swqe)
-			return ret;
+		swqe = hfi_prepare_swqe(qp, wr, signal);
+		if (IS_ERR(swqe))
+			return PTR_ERR(swqe);
+		length = swqe->length;
+		if (length)
+			start = (void *)swqe->iov[0].addr;
 	} else if (wr->num_sge) {
 		/* validate single SGE */
-		if (!in_line && !hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge))
+		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge);
+		if (!mr)
 			return -EINVAL;
+		start = mr_sge_addr(mr, sge);
+		length = sge->length;
 	}
 
 	if (wr->num_sge > 1) {
+		WARN_ON(in_line);
 		md_opts = PTL_IOVEC | PTL_MD_EVENT_CT_SEND;
 		nslots = hfi_format_dma_iovec_rc_send(
 					rq->hw_ctx, NATIVE_NI,
@@ -317,7 +349,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	} else if (sge->length <= HFI_TX_MAX_BUFFERED) {
 		nslots = hfi_format_buff_rc_send(
 					rq->hw_ctx, NATIVE_NI,
-					(void *)sge->addr, sge->length,
+					start, length,
 					tpid, 0,
 					NATIVE_RC, ah_attr->sl,
 					becn, priv->pkey,
@@ -331,9 +363,10 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 					tx_id, op_req, solicit,
 					&cmd->buff_put_match);
 	} else {
+		WARN_ON(in_line);
 		nslots = hfi_format_dma_rc_send(
 					rq->hw_ctx, NATIVE_NI,
-					(void *)sge->addr, sge->length,
+					start, length,
 					// FIXME - user MTU
 					tpid, sge->length > 4096,
 					NATIVE_RC, ah_attr->sl,
@@ -388,9 +421,10 @@ int hfi_format_rc_rdma_atomic(struct rvt_qp *qp, struct ib_atomic_wr *wr,
 			      bool signal, bool in_line, bool solicit,
 			      union hfi_tx_cq_command *cmd)
 {
-	int ret, nslots;
+	int nslots;
 	struct rdma_ah_attr *ah_attr = &qp->remote_ah_attr;
 	struct ib_sge *sge = wr->wr.sg_list;
+	struct rvt_mregion *mr;
 	struct hfi2_qp_priv *priv = qp->priv;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	struct rvt_cq *send_cq = ibcq_to_rvtcq(qp->ibqp.send_cq);
@@ -401,47 +435,49 @@ int hfi_format_rc_rdma_atomic(struct rvt_qp *qp, struct ib_atomic_wr *wr,
 	u16 tx_id = 0;
 	union hfi_process tpid = {.phys.slid = rdma_ah_get_dlid(ah_attr)};
 	struct hfi_swqe *swqe = NULL;
+	void *start = NULL;
 
 	if (qp->ibqp.qp_type != IB_QPT_RC)
 		return -EINVAL;
 
-	if (wr->wr.num_sge == 1 && sge->length == 8) {
-		if (signal) {
-			md_opts = PTL_MD_EVENT_CT_SEND;
-			swqe = hfi_prepare_swqe(qp, &wr->wr, signal, &ret);
-			if (!swqe)
-				return ret;
-		} else if (!in_line &&
-			   !hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge)) {
-			return -EINVAL;
-		}
+	if (!(wr->wr.num_sge == 1 && sge->length == 8))
+		return -EINVAL;
 
-		nslots = hfi_format_buff_rc_rdma_atomic(
-					rq->hw_ctx, NATIVE_NI,
-					(void *)sge->addr,
-					tpid, 0,
-					NATIVE_RC, ah_attr->sl,
-					becn, priv->pkey,
-					rdma_ah_get_path_bits(ah_attr),
-					NATIVE_AUTH_IDX,
-					(u64)swqe,
-					qp->ibqp.qp_num,
-					qp->remote_qpn,
-					wr->wr.ex.imm_data, wr->rkey,
-					md_opts, send_eq, priv->fence_ct,
-					wr->remote_addr,
-					tx_id, op_req, solicit,
-					&wr->compare_add,
-					op_req == PTL_RC_RDMA_FETCH_ADD
-					? NULL : &wr->swap,
-					&cmd->buff_toa_fetch_match);
-		if (swqe && nslots <= 0)
-			kfree(swqe);
-		else
-			++priv->fence_cnt;
+	if (signal) {
+		md_opts = PTL_MD_EVENT_CT_SEND;
+		swqe = hfi_prepare_swqe(qp, &wr->wr, signal);
+		if (IS_ERR(swqe))
+			return PTR_ERR(swqe);
+		start = (void *)swqe->iov[0].addr;
 	} else {
-		nslots = -EINVAL;
+		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge);
+		if (!mr)
+			return -EINVAL;
+		start = mr_sge_addr(mr, sge);
 	}
+
+	nslots = hfi_format_buff_rc_rdma_atomic(
+				rq->hw_ctx, NATIVE_NI,
+				start, tpid, 0,
+				NATIVE_RC, ah_attr->sl,
+				becn, priv->pkey,
+				rdma_ah_get_path_bits(ah_attr),
+				NATIVE_AUTH_IDX,
+				(u64)swqe,
+				qp->ibqp.qp_num,
+				qp->remote_qpn,
+				wr->wr.ex.imm_data, wr->rkey,
+				md_opts, send_eq, priv->fence_ct,
+				wr->remote_addr,
+				tx_id, op_req, solicit,
+				&wr->compare_add,
+				op_req == PTL_RC_RDMA_FETCH_ADD
+				? NULL : &wr->swap,
+				&cmd->buff_toa_fetch_match);
+	if (swqe && nslots <= 0)
+		kfree(swqe);
+	else
+		++priv->fence_cnt;
 
 	return nslots;
 }
@@ -456,23 +492,24 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 		       bool signal, bool in_line, bool solicit,
 		       union hfi_tx_cq_command *cmd)
 {
-	int ret, nslots;
+	int nslots;
 	struct rdma_ah_attr *ah_attr = &qp->remote_ah_attr;
 	struct ib_sge *sge = wr->wr.sg_list;
+	struct rvt_mregion *mr;
 	struct hfi2_qp_priv *priv = qp->priv;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	struct rvt_cq *send_cq = ibcq_to_rvtcq(qp->ibqp.send_cq);
 	struct hfi_eq *send_eq = send_cq->hw_cq;
 	u8 op_req = hfi_wr_rc_opcode[wr->wr.opcode];
 	u8 becn = 0;
-	void *start = NULL;
-	u32 length = 0;
 	u32 md_opts = wr->wr.opcode != IB_WR_RDMA_READ ?
 		PTL_MD_EVENT_SUCCESS_DISABLE | PTL_MD_EVENT_CT_SEND :
 		PTL_MD_EVENT_SUCCESS_DISABLE | PTL_MD_EVENT_CT_REPLY;
 	u16 tx_id = 0;
 	union hfi_process tpid = {.phys.slid = rdma_ah_get_dlid(ah_attr)};
 	struct hfi_swqe *swqe = NULL;
+	void *start = NULL;
+	u32 length = 0;
 	hfi_ct_handle_t ct_handle = wr->wr.opcode != IB_WR_RDMA_READ ?
 		priv->nfence_ct : priv->fence_ct;
 
@@ -484,21 +521,23 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	if (signal || wr->wr.num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
 		md_opts &= ~PTL_MD_EVENT_SUCCESS_DISABLE;
-		swqe = hfi_prepare_swqe(qp, &wr->wr, signal, &ret);
-		if (!swqe)
-			return ret;
+		swqe = hfi_prepare_swqe(qp, &wr->wr, signal);
+		if (IS_ERR(swqe))
+			return PTR_ERR(swqe);
+		length = swqe->length;
+		if (length)
+			start = (void *)swqe->iov[0].addr;
 	} else if (wr->wr.num_sge) {
 		/* validate single SGE */
-		if (!in_line && !hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge))
+		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge);
+		if (!mr)
 			return -EINVAL;
-	}
-
-	if (sge) {
-		start = (void *)sge->addr;
+		start = mr_sge_addr(mr, sge);
 		length = sge->length;
 	}
 
 	if (wr->wr.num_sge > 1) {
+		WARN_ON(in_line);
 		md_opts &= ~PTL_MD_EVENT_SUCCESS_DISABLE;
 		md_opts |= PTL_IOVEC;
 		nslots = hfi_format_dma_iovec_rc_rdma(
@@ -537,6 +576,7 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 					tx_id, op_req, solicit,
 					&cmd->buff_put_match);
 	} else {
+		WARN_ON(in_line);
 		nslots = hfi_format_dma_rc_rdma(
 					rq->hw_ctx, NATIVE_NI,
 					start, length,
