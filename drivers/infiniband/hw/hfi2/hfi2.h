@@ -1047,6 +1047,8 @@ struct hfi_devdata {
 #ifdef CONFIG_DEBUG_FS
 	/* per HFI debugfs */
 	struct dentry *hfi_dev_dbg;
+	/* per HFI AT debugfs */
+	struct dentry *hfi_at_dbg;
 	/* per HFI symlinks to above */
 	struct dentry *hfi_dev_link;
 #endif

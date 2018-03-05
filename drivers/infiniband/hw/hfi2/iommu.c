@@ -2464,21 +2464,17 @@ static ssize_t hfi_at_stats_write(struct file *file, const char __user *buf,
 
 static int hfi_at_page_tbl_show(struct seq_file *s, void *unused)
 {
-	struct hfi_devdata *dd = s->private;
+	struct hfi_ctx *ctx = s->private;
+	struct hfi_devdata *dd = ctx->devdata;
 	struct hfi_at *at = dd->at;
 	struct hfi_at_svm *svm;
-	int i;
 
 	mutex_lock(&pasid_mutex);
-	idr_for_each_entry(&at->pasid_idr, svm, i) {
-		if (svm->mm)
-			continue;
-
+	svm = idr_find(&at->pasid_idr, ctx->pasid);
+	if (svm && svm->pgd)
 		print_page_tbl(s, svm);
-		break;
-	}
-	mutex_unlock(&pasid_mutex);
 
+	mutex_unlock(&pasid_mutex);
 	return 0;
 }
 
@@ -2487,14 +2483,24 @@ DEBUGFS_FILE_OPS_SINGLE(at_page_tbl);
 
 void hfi_at_dbg_init(struct hfi_devdata *dd)
 {
-	debugfs_create_file("at_stats", 0644,
-			    dd->hfi_dev_dbg, dd,
-			    &hfi_at_stats_ops);
+	dd->hfi_at_dbg = debugfs_create_dir("at", dd->hfi_dev_dbg);
 
-	if (!use_kernel_cpt)
-		debugfs_create_file("at_page_tbl", 0444,
-				    dd->hfi_dev_dbg, dd,
-				    &hfi_at_page_tbl_ops);
+	debugfs_create_file("stats", 0644, dd->hfi_at_dbg, dd,
+			    &hfi_at_stats_ops);
+}
+
+void hfi_at_ctx_dbg_init(struct hfi_ctx *ctx)
+{
+	struct hfi_devdata *dd = ctx->devdata;
+	bool use_cpt = (ctx->type == HFI_CTX_TYPE_USER) ? use_user_cpt :
+							  use_kernel_cpt;
+
+	if (use_cpt)
+		return;
+
+	ctx->dbg = debugfs_create_dir(ctx->pasid_str, dd->hfi_at_dbg);
+	debugfs_create_file("page_tbl", 0444, ctx->dbg,
+			    ctx, &hfi_at_page_tbl_ops);
 }
 
 static struct hfi_at_stats *hfi_at_alloc_stats(struct hfi_at_svm *svm)
@@ -2970,7 +2976,9 @@ hfi_at_set_pasid(struct hfi_ctx *ctx)
 
 	write_csr(dd, FXR_AT_CFG_PASID_LUT + (ctx->pid * 8), lut);
 
-	return ret;
+	sprintf(ctx->pasid_str, "%d", ctx->pasid);
+	hfi_at_ctx_dbg_init(ctx);
+	return 0;
 }
 
 int
@@ -2979,6 +2987,9 @@ hfi_at_clear_pasid(struct hfi_ctx *ctx)
 	struct hfi_devdata *dd = ctx->devdata;
 	struct device *dev = &dd->pdev->dev;
 	u64 lut = 0;
+
+	debugfs_remove_recursive(ctx->dbg);
+	memset(ctx->pasid_str, 0, ARRAY_SIZE(ctx->pasid_str));
 
 	/* disable pid->pasid translation */
 	lut &= ~FXR_AT_CFG_PASID_LUT_ENABLE_SMASK;

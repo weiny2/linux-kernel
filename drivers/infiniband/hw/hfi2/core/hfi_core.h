@@ -76,6 +76,9 @@
 #define HFI_LID_NONE	(__u32)(-1)
 #define HFI_PID_NONE	(__u16)(-1)
 
+/* Max PASID string '4096\0' */
+#define HFI_PASID_STR_SIZE   5
+
 /*
  * TODO - the subunions contain bitfields; kernel users of this
  * union should consider using alternate logic to set target id.
@@ -253,6 +256,9 @@ struct hfi_ctx {
 	struct rw_semaphore ctx_rwsem;
 
 	struct ib_uobject *uobject;
+
+	struct dentry *dbg;
+	char	pasid_str[HFI_PASID_STR_SIZE];
 };
 
 #define HFI_CTX_TYPE_KERNEL	1
