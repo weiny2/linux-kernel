@@ -417,11 +417,6 @@ static inline int agaw_to_level(int agaw)
 	return agaw + 2;
 }
 
-static inline int agaw_to_width(int agaw)
-{
-	return min_t(int, 30 + agaw * LEVEL_STRIDE, MAX_AGAW_WIDTH);
-}
-
 static inline int width_to_agaw(int width)
 {
 	return DIV_ROUND_UP(width - 30, LEVEL_STRIDE);
@@ -495,26 +490,18 @@ static inline void __at_flush_cache(struct hfi_at *at, void *addr, int size)
 
 static inline int at_pte_get_promo(int level)
 {
-	int promo = 0;
+	if (!level || level > MAX_PGTBL_LEVEL)
+		return 0;
 
-	if (level == 3)
-		promo = SZ_1G;
-	else if (level == 2)
-		promo = SZ_2M;
-	else if (level == 1)
-		promo = SZ_4K;
-
-	return promo;
+	return SZ_4K << ((level - 1) * LEVEL_STRIDE);
 }
 
 static void __print_page_tbl(struct seq_file *s, struct at_pte *pte,
 			     u8 level, unsigned long pfn)
 {
-	char *lp, *lvl_prefix[4] = { "\t\t\t", "\t\t", "\t", "" };
+	char *lp, *lvl_prefix[MAX_PGTBL_LEVEL] = { "\t\t\t\t", "\t\t\t",
+						   "\t\t", "\t", "" };
 	int i = pfn ? pfn_level_offset(pfn, level) : 0;
-
-	if (!level || level > 4)
-		return;
 
 	lp = lvl_prefix[level - 1];
 	pte += i;
@@ -680,8 +667,8 @@ static struct at_pte *pfn_to_at_pte(struct hfi_at_svm *svm, unsigned long pfn,
 static unsigned long get_cpt_entry(pgd_t *pgdp, unsigned long address,
 				   int *target_level)
 {
+	int level = MAX_PGTBL_LEVEL;
 	unsigned long pteval = 0;
-	int level = 5;
 	pgd_t *pgd;
 	p4d_t *p4d;
 	pud_t *pud;
@@ -1262,11 +1249,6 @@ static int at_calculate_agaw(struct hfi_at *at)
 	return __at_calculate_agaw(at, DEFAULT_ADDRESS_WIDTH);
 }
 
-static int at_calculate_max_sagaw(struct hfi_at *at)
-{
-	return __at_calculate_agaw(at, MAX_AGAW_WIDTH);
-}
-
 static u64 hfi_at_get_phyaddr(struct hfi_devdata *dd)
 {
 	if (dd->unit == 0)
@@ -1283,7 +1265,6 @@ static int alloc_at(struct hfi_devdata *dd)
 	u64 phyaddr;
 	u32 ver, sts;
 	int agaw = 0;
-	int msagaw = 0;
 	int err;
 
 	phyaddr = hfi_at_get_phyaddr(dd);
@@ -1305,20 +1286,14 @@ static int alloc_at(struct hfi_devdata *dd)
 	}
 
 	err = -EINVAL;
+	/* TODO: Do we need agaw? seems like it is only for SLPTPTR */
 	agaw = at_calculate_agaw(at);
 	if (agaw < 0) {
 		dd_dev_err(dd, "Cannot get a valid agaw for %s\n",
 			   at->name);
 		goto err_unmap;
 	}
-	msagaw = at_calculate_max_sagaw(at);
-	if (msagaw < 0) {
-		dd_dev_err(dd, "Cannot get a valid max agaw for %s\n",
-			   at->name);
-		goto err_unmap;
-	}
 	at->agaw = agaw;
-	at->msagaw = msagaw;
 
 	ver = readl(at->reg + AT_VER_REG);
 	dd_dev_info(dd, "%s: reg_base_addr %llx ver %d:%d cap %llx ecap %llx\n",
@@ -1900,7 +1875,7 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 	if (at->ats_supported)
 		translation = CONTEXT_TT_DEV_IOTLB;
 
-	/* we don't need to set second level page table */
+	/* TODO: we don't need to set second level page table */
 	context_set_address_width(context, at->agaw);
 
 	context_set_translation_type(context, translation);

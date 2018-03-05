@@ -401,7 +401,7 @@ enum {
 
 /* address width */
 #define DEFAULT_ADDRESS_WIDTH		48
-#define MAX_AGAW_WIDTH			64
+#define MAX_PGTBL_LEVEL			5
 
 /* page table handling */
 #define LEVEL_STRIDE			(9)
@@ -486,7 +486,6 @@ struct hfi_at {
 	raw_spinlock_t	register_lock; /* protect register handling */
 	int		seq_id;	/* sequence id of the AT */
 	int		agaw; /* agaw of this AT */
-	int		msagaw; /* max sagaw of this AT */
 	unsigned int	irq, pr_irq;
 	unsigned char	name[13];    /* Device Name */
 
