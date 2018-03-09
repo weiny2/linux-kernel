@@ -66,7 +66,7 @@
 #define OFFSET_STRIDE		(9)
 
 #define at_readq(a)		readq(a)
-#define at_writeq(a,v)		writeq(v,a)
+#define at_writeq(a, v)		writeq(v, a)
 
 #define AT_VER_MAJOR(v)		(((v) & 0xf0) >> 4)
 #define AT_VER_MINOR(v)		((v) & 0x0f)
@@ -99,7 +99,7 @@
 #define cap_plmr(c)		(((c) >> 5) & 1)
 #define cap_rwbf(c)		(((c) >> 4) & 1)
 #define cap_afl(c)		(((c) >> 3) & 1)
-#define cap_ndoms(c)		(((unsigned long)1) << (4 + 2 * ((c) & 0x7)))
+#define cap_ndoms(c)		(1 << (4 + 2 * ((c) & 0x7)))
 
 /*
  * Extended Capability Register
@@ -117,7 +117,7 @@
 #define ecap_nest(e)		((e >> 26) & 0x1)
 #define ecap_mts(e)		((e >> 25) & 0x1)
 #define ecap_ecs(e)		((e >> 24) & 0x1)
-#define ecap_iotlb_offset(e) 	((((e) >> 8) & 0x3ff) * 16)
+#define ecap_iotlb_offset(e)	((((e) >> 8) & 0x3ff) * 16)
 #define ecap_max_iotlb_offset(e) (ecap_iotlb_offset(e) + 16)
 #define ecap_coherent(e)	((e) & 0x1)
 #define ecap_qis(e)		((e) & 0x2)
@@ -155,8 +155,8 @@
 #define AT_ID_TLB_ADDR_MASK(mask)  (mask)
 
 /* PMEN_REG */
-#define AT_PMEN_EPM		(((u32)1)<<31)
-#define AT_PMEN_PRS		(((u32)1)<<0)
+#define AT_PMEN_EPM		(((u32)1) << 31)
+#define AT_PMEN_PRS		(((u32)1) << 0)
 
 /* GCMD_REG */
 #define AT_GCMD_TE		(((u32)1) << 31)
@@ -202,9 +202,9 @@
 /* FSTS_REG */
 #define AT_FSTS_PPF		((u32)2)
 #define AT_FSTS_PFO		((u32)1)
-#define AT_FSTS_IQE		(1 << 4)
-#define AT_FSTS_ICE		(1 << 5)
-#define AT_FSTS_ITE		(1 << 6)
+#define AT_FSTS_IQE		BIT(4)
+#define AT_FSTS_ICE		BIT(5)
+#define AT_FSTS_ITE		BIT(6)
 #define at_fsts_fault_record_index(s) (((s) >> 8) & 0xff)
 
 /* FRCD_REG, 32 bits access */
@@ -219,7 +219,7 @@
 #define AT_PRS_PPR		((u32)1)
 
 /* 10 seconds */
-#define AT_OPERATION_TIMEOUT	((cycles_t) tsc_khz*10*1000)
+#define AT_OPERATION_TIMEOUT	((cycles_t)tsc_khz * 10 * 1000)
 
 #define AT_WAIT_OP(at, offset, op, cond, sts)			\
 do {									\
@@ -238,7 +238,7 @@ do {									\
  * AT hardware uses 4KiB page size regardless of host page size.
  */
 #define AT_PAGE_SHIFT		(12)
-#define AT_PAGE_SIZE		(1UL << AT_PAGE_SHIFT)
+#define AT_PAGE_SIZE		BIT(AT_PAGE_SHIFT)
 #define AT_PAGE_MASK		(((u64)-1) << AT_PAGE_SHIFT)
 #define AT_PAGE_ALIGN(addr)	(((addr) + AT_PAGE_SIZE - 1) & AT_PAGE_MASK)
 
@@ -262,10 +262,10 @@ do {									\
 #define CONTEXT_TT_PT_PASID_DEV_IOTLB 5
 #define CONTEXT_TT_MASK		(7ULL << 2)
 
-#define CONTEXT_DINVE		(1ULL << 8)
-#define CONTEXT_PRS		(1ULL << 9)
-#define CONTEXT_NESTE		(1ULL << 10)
-#define CONTEXT_PASIDE		(1ULL << 11)
+#define CONTEXT_DINVE		BIT(8)
+#define CONTEXT_PRS		BIT(9)
+#define CONTEXT_NESTE		BIT(10)
+#define CONTEXT_PASIDE		BIT(11)
 
 /* Queued Invalidation */
 #define QI_LENGTH		256	/* queue length */
@@ -299,10 +299,10 @@ enum {
 #define QI_IWD_STATUS_DATA(d)	(((u64)d) << 32)
 #define QI_IWD_STATUS_WRITE	(((u64)1) << 5)
 
-#define QI_IOTLB_DID(did) 	(((u64)did) << 16)
-#define QI_IOTLB_DR(dr) 	(((u64)dr) << 7)
-#define QI_IOTLB_DW(dw) 	(((u64)dw) << 6)
-#define QI_IOTLB_GRAN(gran) 	(((u64)gran) >> (AT_TLB_FLUSH_GRANU_OFFSET-4))
+#define QI_IOTLB_DID(did)	(((u64)did) << 16)
+#define QI_IOTLB_DR(dr)		(((u64)dr) << 7)
+#define QI_IOTLB_DW(dw)		(((u64)dw) << 6)
+#define QI_IOTLB_GRAN(gran)	(((u64)gran) >> (AT_TLB_FLUSH_GRANU_OFFSET - 4))
 #define QI_IOTLB_ADDR(addr)	(((u64)addr) & AT_PAGE_MASK)
 #define QI_IOTLB_IH(ih)		(((u64)ih) << 6)
 #define QI_IOTLB_AM(am)		(((u8)am))
@@ -310,12 +310,13 @@ enum {
 #define QI_CC_FM(fm)		(((u64)fm) << 48)
 #define QI_CC_SID(sid)		(((u64)sid) << 32)
 #define QI_CC_DID(did)		(((u64)did) << 16)
-#define QI_CC_GRAN(gran)	(((u64)gran) >> (AT_CCMD_INVL_GRANU_OFFSET-4))
+#define QI_CC_GRAN(gran)	(((u64)gran) >> (AT_CCMD_INVL_GRANU_OFFSET - 4))
 
 #define QI_DEV_IOTLB_SID(sid)	((u64)((sid) & 0xffff) << 32)
 #define QI_DEV_IOTLB_QDEP(qdep)	(((qdep) & 0x1f) << 16)
 #define QI_DEV_IOTLB_ADDR(addr)	((u64)(addr) & AT_PAGE_MASK)
-#define QI_DEV_IOTLB_PFSID(pfsid) (((u64)(pfsid & 0xf) << 12) | ((u64)(pfsid & 0xff0) << 48))
+#define QI_DEV_IOTLB_PFSID(pfsid) (((u64)(pfsid & 0xf) << 12) | \
+				  ((u64)(pfsid & 0xff0) << 48))
 #define QI_DEV_IOTLB_SIZE	1
 #define QI_DEV_IOTLB_MAX_INVS	32
 
@@ -331,9 +332,9 @@ enum {
 #define QI_EIOTLB_GL(gl)	(((u64)gl) << 7)
 #define QI_EIOTLB_IH(ih)	(((u64)ih) << 6)
 #define QI_EIOTLB_AM(am)	(((u64)am))
-#define QI_EIOTLB_PASID(pasid) 	(((u64)pasid) << 32)
+#define QI_EIOTLB_PASID(pasid)	(((u64)pasid) << 32)
 #define QI_EIOTLB_DID(did)	(((u64)did) << 16)
-#define QI_EIOTLB_GRAN(gran) 	(((u64)gran) << 4)
+#define QI_EIOTLB_GRAN(gran)	(((u64)gran) << 4)
 
 /* QI Dev-IOTLB inv granu */
 #define QI_DEV_IOTLB_GRAN_ALL	0
@@ -345,7 +346,8 @@ enum {
 #define QI_DEV_EIOTLB_PASID(p)	(((u64)p) << 32)
 #define QI_DEV_EIOTLB_SID(sid)	((u64)((sid) & 0xffff) << 16)
 #define QI_DEV_EIOTLB_QDEP(qd)	((u64)((qd) & 0x1f) << 4)
-#define QI_DEV_EIOTLB_PFSID(pfsid) (((u64)(pfsid & 0xf) << 12) | ((u64)(pfsid & 0xff0) << 48))
+#define QI_DEV_EIOTLB_PFSID(pfsid) (((u64)(pfsid & 0xf) << 12) | \
+				   ((u64)(pfsid & 0xff0) << 48))
 #define QI_DEV_EIOTLB_MAX_INVS	32
 
 #define QI_PGRP_IDX(idx)	(((u64)(idx)) << 55)
@@ -394,8 +396,8 @@ enum {
 	MAX_SR_AT_REGS
 };
 
-#define AT_FLAG_TRANS_PRE_ENABLED	(1 << 0)
-#define AT_FLAG_IRQ_REMAP_PRE_ENABLED	(1 << 1)
+#define AT_FLAG_TRANS_PRE_ENABLED	BIT(0)
+#define AT_FLAG_IRQ_REMAP_PRE_ENABLED	BIT(1)
 
 /* address width */
 #define DEFAULT_ADDRESS_WIDTH		48
@@ -407,7 +409,7 @@ enum {
 
 #define ROOT_SIZE			AT_PAGE_SIZE
 #define CONTEXT_SIZE			AT_PAGE_SIZE
-#define ROOT_ENTRY_NR			(ROOT_SIZE/sizeof(struct root_entry))
+#define ROOT_ENTRY_NR			(ROOT_SIZE / sizeof(struct root_entry))
 
 /* page request queue size/order */
 #define PRQ_ORDER			0
@@ -476,7 +478,7 @@ struct hfi_at_stats {
 
 struct hfi_at {
 	void __iomem	*reg; /* Pointer to hardware regs, virtual addr */
-	u64 		reg_phys; /* physical address of hw register set */
+	u64		reg_phys; /* physical address of hw register set */
 	u64		reg_size; /* size of hw register set */
 	u64		cap;
 	u64		ecap;
@@ -485,8 +487,8 @@ struct hfi_at {
 	int		seq_id;	/* sequence id of the AT */
 	int		agaw; /* agaw of this AT */
 	int		msagaw; /* max sagaw of this AT */
-	unsigned int 	irq, pr_irq;
-	unsigned char 	name[13];    /* Device Name */
+	unsigned int	irq, pr_irq;
+	unsigned char	name[13];    /* Device Name */
 
 	spinlock_t	lock; /* protect context */
 	struct root_entry *root_entry; /* virtual address */
@@ -522,8 +524,8 @@ struct hfi_at {
 	struct task_struct *fault_thread;
 };
 
-#define SVM_FLAG_PRIVATE_PASID		(1<<0)
-#define SVM_FLAG_SUPERVISOR_MODE	(1<<1)
+#define SVM_FLAG_PRIVATE_PASID		BIT(0)
+#define SVM_FLAG_SUPERVISOR_MODE	BIT(1)
 
 struct at_pte {
 	u64 val;

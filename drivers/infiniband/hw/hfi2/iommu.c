@@ -2261,7 +2261,7 @@ int hfi_at_reg_range(struct hfi_ctx *ctx, void *vaddr, u32 size,
 int hfi_at_mem_prefetch(struct hfi_ctx *ctx, struct hfi_mprefetch_args *mpf)
 {
 	struct iovec iovec, *iovecp = (struct iovec *)mpf->iovec;
-	bool writable = mpf->flags ? true: false;
+	bool writable = mpf->flags ? true : false;
 
 	while (mpf->count) {
 		if (copy_from_user(&iovec, iovecp, sizeof(iovec)))
