@@ -85,6 +85,8 @@ static const char * const at_remap_fault_reasons[] = {
 static DEFINE_MUTEX(pasid_mutex);
 
 static void hfi_at_stats_cleanup(struct hfi_at *at);
+static void hfi_flush_svm_range(struct hfi_at_svm *svm, unsigned long address,
+				unsigned long pages, int ih, int gl);
 
 static const char *at_get_fault_reason(u8 fault_reason, int *fault_type)
 {
@@ -2183,8 +2185,6 @@ void hfi_at_dereg_range(struct hfi_ctx *ctx, void *vaddr, u32 size)
 {
 	struct hfi_at *at = ctx->devdata->at;
 	struct hfi_at_svm *svm;
-	struct page *freelist;
-	unsigned long start_pfn, last_pfn, nrpages;
 
 	mutex_lock(&pasid_mutex);
 	svm = idr_find(&at->pasid_idr, ctx->pasid);
@@ -2192,11 +2192,9 @@ void hfi_at_dereg_range(struct hfi_ctx *ctx, void *vaddr, u32 size)
 	if (!svm || !svm->pgd)
 		return;
 
-	nrpages = aligned_nrpages((unsigned long)vaddr, size);
-	start_pfn = AT_PFN((unsigned long)vaddr);
-	last_pfn = start_pfn + nrpages - 1;
-	freelist = hfi_at_unmap(svm, start_pfn, last_pfn);
-	hfi_at_free_pagelist(freelist);
+	hfi_flush_svm_range(svm, (unsigned long)vaddr,
+			    (size + PAGE_SIZE - 1) >> AT_PAGE_SHIFT,
+			    0, 0);
 }
 
 int hfi_at_reg_range(struct hfi_ctx *ctx, void *vaddr, u32 size,
