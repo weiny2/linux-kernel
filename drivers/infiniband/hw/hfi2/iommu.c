@@ -740,23 +740,28 @@ static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 {
 	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
 	struct hfi_devdata *dd = svm->at->dd;
-	unsigned long phys_pfn;
+	unsigned long phys_pfn, flags;
 	struct at_pte *pte;
 	u64 pteval, prot;
 	dma_addr_t iova;
-	int dir, level = 1;
+	int dir, level = 1, ret = 0;
+
+	spin_lock_irqsave(&svm->lock, flags);
 
 	/* TODO: is iova alignment guaranteed? */
 	dir = req->wr_req ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
 	iova = pci_map_page(dd->pdev, page, 0, PAGE_SIZE, dir);
-	if (unlikely(pci_dma_mapping_error(dd->pdev, iova)))
-		return -ENOSPC;
+	if (unlikely(pci_dma_mapping_error(dd->pdev, iova))) {
+		ret = -ENOSPC;
+		goto out;
+	}
 
 	phys_pfn = iova_to_at_pfn(iova);
 	pte = pfn_to_at_pte(svm, req->addr, &level, user);
 	if (!pte) {
 		pci_unmap_page(dd->pdev, iova, PAGE_SIZE, dir);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out;
 	}
 
 	prot = AT_PTE_ACCESSED | AT_PTE_PRESENT;
@@ -785,7 +790,9 @@ static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 		set_page_dirty_lock(head_page);
 	}
 
-	return 0;
+out:
+	spin_unlock_irqrestore(&svm->lock, flags);
+	return ret;
 }
 
 static int hfi_at_map_promo(struct hfi_at_svm *svm, struct page_req_dsc *req,
@@ -795,33 +802,42 @@ static int hfi_at_map_promo(struct hfi_at_svm *svm, struct page_req_dsc *req,
 	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
 	struct hfi_devdata *dd = svm->at->dd;
 	u64 pteval, phys_address;
-	unsigned long phys_pfn;
-	int dir, promo, level;
+	unsigned long phys_pfn, flags;
+	int dir, promo, level, ret = 0;
 	struct at_pte *pte;
 	struct page *page;
 	dma_addr_t iova;
 
+	spin_lock_irqsave(&svm->lock, flags);
+
 	pteval = get_cpt_entry(pgd_ref, address, &level);
-	if (!pteval)
-		return -EAGAIN;
+	if (!pteval) {
+		ret = -EAGAIN;
+		goto out;
+	}
 
 	promo = at_pte_get_promo(level);
-	if (!promo)
-		return -EINVAL;
+	if (!promo) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	/* TODO: is iova alignment guaranteed? */
 	phys_address = pteval & ~((promo - 1) | AT_PTE_EXEC_DIS);
 	page = pfn_to_page(phys_address >> PAGE_SHIFT);
 	dir = req->wr_req ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
 	iova = pci_map_page(dd->pdev, page, 0, promo, dir);
-	if (unlikely(pci_dma_mapping_error(dd->pdev, iova)))
-		return -ENOSPC;
+	if (unlikely(pci_dma_mapping_error(dd->pdev, iova))) {
+		ret = -ENOSPC;
+		goto out;
+	}
 
 	phys_pfn = iova_to_at_pfn(iova);
 	pte = pfn_to_at_pte(svm, req->addr, &level, user);
 	if (!pte) {
 		pci_unmap_page(dd->pdev, iova, promo, dir);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out;
 	}
 
 	pteval = ((phys_addr_t)phys_pfn << AT_PAGE_SHIFT) |
@@ -839,7 +855,10 @@ static int hfi_at_map_promo(struct hfi_at_svm *svm, struct page_req_dsc *req,
 	__at_flush_cache(svm->at, pte, sizeof(*pte));
 	at_dump_pagetable((pgd_t *)svm->pgd, address, "SPT");
 	at_dump_pagetable(pgd_ref,  address, "CPT");
-	return 0;
+
+out:
+	spin_unlock_irqrestore(&svm->lock, flags);
+	return ret;
 }
 
 static int handle_at_cpt_page_fault(struct hfi_at_svm *svm,
@@ -2176,11 +2195,6 @@ static void hfi_at_free_pagelist(struct page *freelist)
 	}
 }
 
-/*
- * TODO: shadow page table construction can be called from
- * multiple threads, we need to design a lock mechanizm to
- * to avoid corrupting the shadow page table.
- */
 void hfi_at_dereg_range(struct hfi_ctx *ctx, void *vaddr, u32 size)
 {
 	struct hfi_at *at = ctx->devdata->at;
@@ -2225,6 +2239,11 @@ int hfi_at_reg_range(struct hfi_ctx *ctx, void *vaddr, u32 size,
 		if (pages)
 			page = *(pages++);
 
+		/*
+		 * TODO: handle the counter change atomically,
+		 * or move the increasing down into locked
+		 * function hfi_at_map(), to make thread-safe.
+		 */
 		svm->stats->preg++;
 		ret = handle_at_spt_page_fault(svm, &req, page);
 		if (ret) {
