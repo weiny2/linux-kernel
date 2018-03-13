@@ -876,7 +876,8 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 		return -EINVAL;
 	} else if (wr->num_sge == 1) {
 		/* Compare MR to SGE */
-		mr = hfi2_chk_mr_sge(ctx, &wr->sg_list[0]);
+		mr = hfi2_chk_mr_sge(ctx, &wr->sg_list[0],
+				     IB_ACCESS_LOCAL_WRITE);
 		if (!mr)
 			return -EINVAL;
 
@@ -912,7 +913,8 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 
 		for (i = 0; i < wr->num_sge; ++i) {
 			/* Compare MR to SGE */
-			mr = hfi2_chk_mr_sge(ctx, &wr->sg_list[i]);
+			mr = hfi2_chk_mr_sge(ctx, &wr->sg_list[i],
+					     IB_ACCESS_LOCAL_WRITE);
 			if (!mr) {
 				ret = -EINVAL;
 				goto rq_wc_cleanup;

@@ -116,7 +116,7 @@ void hfi2_nfence(struct rvt_qp *qp)
 static inline
 void *mr_sge_addr(struct rvt_mregion *mr, struct ib_sge *sge)
 {
-	if (!mr->map[0] || !mr->lkey)
+	if (!mr->mapsz || !mr->lkey)
 		return (void *)sge->addr;
 	/* TODO - no support yet for potentially discontiguous mappings */
 	BUG_ON(sge->length > mr->map[0]->segs[0].length);
@@ -128,7 +128,7 @@ void *mr_sge_addr(struct rvt_mregion *mr, struct ib_sge *sge)
 /* Convert Send WR into state needed for send completion and hardware IOVEC */
 static
 struct hfi_swqe *hfi_prepare_swqe(struct rvt_qp *qp, struct ib_send_wr *wr,
-				  bool signal)
+				  bool signal, int acc)
 {
 	int ret, i;
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
@@ -143,7 +143,7 @@ struct hfi_swqe *hfi_prepare_swqe(struct rvt_qp *qp, struct ib_send_wr *wr,
 
 	swqe->length = 0;
 	for (i = 0; i < wr->num_sge; i++) {
-		mr = hfi2_chk_mr_sge(ctx, &wr->sg_list[i]);
+		mr = hfi2_chk_mr_sge(ctx, &wr->sg_list[i], acc);
 		if (!mr) {
 			ret = -EINVAL;
 			goto err;
@@ -198,7 +198,7 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 	if (signal || wr->wr.num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
 		md_opts = PTL_MD_EVENT_CT_SEND;
-		swqe = hfi_prepare_swqe(qp, &wr->wr, signal);
+		swqe = hfi_prepare_swqe(qp, &wr->wr, signal, 0);
 		if (IS_ERR(swqe))
 			return PTR_ERR(swqe);
 		length = swqe->length;
@@ -206,7 +206,7 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 			start = (void *)swqe->iov[0].addr;
 	} else if (wr->wr.num_sge) {
 		/* validate single SGE */
-		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge);
+		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge, 0);
 		if (!mr)
 			return -EINVAL;
 		start = mr_sge_addr(mr, sge);
@@ -312,7 +312,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	if (signal || wr->num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
 		md_opts = PTL_MD_EVENT_CT_SEND;
-		swqe = hfi_prepare_swqe(qp, wr, signal);
+		swqe = hfi_prepare_swqe(qp, wr, signal, 0);
 		if (IS_ERR(swqe))
 			return PTR_ERR(swqe);
 		length = swqe->length;
@@ -320,7 +320,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 			start = (void *)swqe->iov[0].addr;
 	} else if (wr->num_sge) {
 		/* validate single SGE */
-		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge);
+		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge, 0);
 		if (!mr)
 			return -EINVAL;
 		start = mr_sge_addr(mr, sge);
@@ -445,12 +445,14 @@ int hfi_format_rc_rdma_atomic(struct rvt_qp *qp, struct ib_atomic_wr *wr,
 
 	if (signal) {
 		md_opts = PTL_MD_EVENT_CT_SEND;
-		swqe = hfi_prepare_swqe(qp, &wr->wr, signal);
+		swqe = hfi_prepare_swqe(qp, &wr->wr, signal,
+					IB_ACCESS_LOCAL_WRITE);
 		if (IS_ERR(swqe))
 			return PTR_ERR(swqe);
 		start = (void *)swqe->iov[0].addr;
 	} else {
-		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge);
+		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge,
+				     IB_ACCESS_LOCAL_WRITE);
 		if (!mr)
 			return -EINVAL;
 		start = mr_sge_addr(mr, sge);
@@ -510,6 +512,7 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	struct hfi_swqe *swqe = NULL;
 	void *start = NULL;
 	u32 length = 0;
+	int acc;
 	hfi_ct_handle_t ct_handle = wr->wr.opcode != IB_WR_RDMA_READ ?
 		priv->nfence_ct : priv->fence_ct;
 
@@ -518,10 +521,12 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	     wr->wr.opcode == IB_WR_RDMA_READ))
 		return -EINVAL;
 
+	acc = wr->wr.opcode >= IB_WR_RDMA_READ ?
+		      IB_ACCESS_LOCAL_WRITE : 0;
 	if (signal || wr->wr.num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
 		md_opts &= ~PTL_MD_EVENT_SUCCESS_DISABLE;
-		swqe = hfi_prepare_swqe(qp, &wr->wr, signal);
+		swqe = hfi_prepare_swqe(qp, &wr->wr, signal, acc);
 		if (IS_ERR(swqe))
 			return PTR_ERR(swqe);
 		length = swqe->length;
@@ -529,7 +534,7 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 			start = (void *)swqe->iov[0].addr;
 	} else if (wr->wr.num_sge) {
 		/* validate single SGE */
-		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge);
+		mr = hfi2_chk_mr_sge(obj_to_ibctx(&qp->ibqp), sge, acc);
 		if (!mr)
 			return -EINVAL;
 		start = mr_sge_addr(mr, sge);

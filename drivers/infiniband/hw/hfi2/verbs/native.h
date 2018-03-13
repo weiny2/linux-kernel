@@ -185,7 +185,7 @@ struct rvt_mregion *_hfi2_find_mr_from_lkey(struct hfi_ibcontext *ctx, u32 lkey,
 
 static inline
 struct rvt_mregion *hfi2_chk_mr_sge(struct hfi_ibcontext *ctx,
-				    struct ib_sge *sge)
+				    struct ib_sge *sge, int acc)
 {
 	struct rvt_mregion *mr;
 
@@ -194,12 +194,12 @@ struct rvt_mregion *hfi2_chk_mr_sge(struct hfi_ibcontext *ctx,
 	 * seem necessary for native transport.... revisit.
 	 */
 	mr = _hfi2_find_mr_from_lkey(ctx, sge->lkey, false);
-#if 0
-	if (!mr || (mr->lkey != sge->lkey) ||
-	    (sge->addr < (u64)mr->user_base) ||
-	    (sge->addr + sge->length > ((u64)mr->user_base) + mr->length))
+
+	if (!mr || atomic_read(&mr->lkey_invalid) || (mr->lkey != sge->lkey) ||
+	    (sge->lkey && ((sge->addr < (u64)mr->user_base) ||
+	    (sge->addr + sge->length > ((u64)mr->user_base) + mr->length))) ||
+	    ((mr->access_flags & acc) != acc))
 		return NULL;
-#endif
 	return mr;
 }
 
