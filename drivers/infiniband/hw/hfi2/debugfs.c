@@ -619,12 +619,72 @@ static int hfi_bw_arb_show(struct seq_file *s, void *unused)
 	return 0;
 }
 
+static int hfi_hw_lm_pkey_show(struct seq_file *s, void *unused)
+{
+	struct hfi_pportdata *ppd = s->private;
+
+	seq_printf(s, "%d (%s)\n", ppd->hw_lm_pkey,
+		   ppd->hw_lm_pkey ? "Enabled" : "Disabled");
+	return 0;
+}
+
+static int hfi_hw_ptl_pkey_show(struct seq_file *s, void *unused)
+{
+	struct hfi_pportdata *ppd = s->private;
+
+	seq_printf(s, "%d (%s)\n", ppd->hw_ptl_pkey,
+		   ppd->hw_ptl_pkey ? "Enabled" : "Disabled");
+	return 0;
+}
+
+/*
+ * Enable/Disable HW LM Pkey checking, enabled by default.
+ * echo {0,1} > /sys/kernel/debug/hfi2/hfi20/port{1,..}/hw_lm_pkey
+ */
+static ssize_t hfi_hw_lm_pkey_write(struct file *f,
+				    const char __user *ubuf,
+				    size_t count, loff_t *ppos)
+{
+	struct hfi_pportdata *ppd = private2ppd(f);
+	u8 val;
+	int ret;
+
+	ret = kstrtou8_from_user(ubuf, count, 0, &val);
+	if (ret < 0)
+		return -EINVAL;
+
+	hfi_cfg_lm_pkey_check(ppd, val ? 1 : 0);
+	return count;
+}
+
+/*
+ * Enable/Disable HW PTL Pkey checking, enabled by default.
+ * echo {0,1} > /sys/kernel/debug/hfi2/hfi20/port{1,..}/hw_ptl_pkey
+ */
+static ssize_t hfi_hw_ptl_pkey_write(struct file *f,
+				     const char __user *ubuf,
+				     size_t count, loff_t *ppos)
+{
+	struct hfi_pportdata *ppd = private2ppd(f);
+	u8 val;
+	int ret;
+
+	ret = kstrtou8_from_user(ubuf, count, 0, &val);
+	if (ret < 0)
+		return -EINVAL;
+
+	hfi_cfg_ptl_pkey_check(ppd, val ? 1 : 0);
+	return count;
+}
+
 DEBUGFS_FILE_OPS_SINGLE(mgmt_allowed);
 DEBUGFS_FILE_OPS_SINGLE(fw_auth_bypass);
 DEBUGFS_FILE_OPS_SINGLE(neighbor_node_type);
 DEBUGFS_FILE_OPS_SINGLE(led_cfg);
 DEBUGFS_FILE_OPS_SINGLE(bw_arb);
 DEBUGFS_FILE_OPS_SINGLE(qos);
+DEBUGFS_FILE_OPS_SINGLE_WITH_WRITE(hw_lm_pkey);
+DEBUGFS_FILE_OPS_SINGLE_WITH_WRITE(hw_ptl_pkey);
 
 static void hfi_mgmt_dbg_init(struct hfi_devdata *dd)
 {
@@ -639,6 +699,10 @@ static void hfi_mgmt_dbg_init(struct hfi_devdata *dd)
 				    ppd, &hfi_led_cfg_ops);
 		debugfs_create_file("bw_arb", 0444, ppd->hfi_port_dbg,
 				    ppd, &hfi_bw_arb_ops);
+		debugfs_create_file("hw_ptl_pkey", 0644, ppd->hfi_port_dbg,
+				    ppd, &hfi_hw_ptl_pkey_ops);
+		debugfs_create_file("hw_lm_pkey", 0644, ppd->hfi_port_dbg,
+				    ppd, &hfi_hw_lm_pkey_ops);
 
 		ppd->hfi_neighbor_dbg = debugfs_create_dir("neighbor_mode",
 							   ppd->hfi_port_dbg);

@@ -870,6 +870,8 @@ struct hfi_pportdata {
 	struct err_info_constraint err_info_xmit_constraint;
 	u8 err_info_uncorrectable;
 	u8 err_info_fmconfig;
+	u8 hw_lm_pkey;
+	u8 hw_ptl_pkey;
 
 	/* PHY support */
 	struct qsfp_data qsfp_info;
@@ -1403,6 +1405,9 @@ int hfi_set_buffer_control(struct hfi_pportdata *ppd,
 			   struct buffer_control *new_bc);
 void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable);
 void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable);
+void hfi_cfg_lm_pkey_check(struct hfi_pportdata *ppd, u8 enable);
+void hfi_cfg_ptl_pkey_check(struct hfi_pportdata *ppd, u8 enable);
+void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable);
 void hfi_set_up_vl15(struct hfi_pportdata *ppd, u8 vau, u16 vl15buf);
 void hfi_assign_remote_cm_au_table(struct hfi_pportdata *ppd, u8 vcu);
 int neigh_is_hfi(struct hfi_pportdata *ppd);

@@ -961,6 +961,20 @@ void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PORT_CONFIG, fpc);
 }
 
+void hfi_cfg_lm_pkey_check(struct hfi_pportdata *ppd, u8 enable)
+{
+	ppd->hw_lm_pkey = enable;
+	hfi_cfg_in_pkey_check(ppd, enable);
+	hfi_cfg_out_pkey_check(ppd, enable);
+}
+
+void hfi_cfg_ptl_pkey_check(struct hfi_pportdata *ppd, u8 enable)
+{
+	ppd->hw_ptl_pkey = enable;
+	write_csr(ppd->dd, FXR_RXE2E_CFG_PTL_PKEY_CHECK_DISABLE, !enable);
+	write_csr(ppd->dd, FXR_TXOTR_PKT_PKEY_CHECK_DISABLE, !enable);
+}
+
 static void hfi_set_implicit_pkeys(struct hfi_pportdata *ppd,
 				   u16 *pkey_8b, u16 *pkey_10b)
 {
@@ -1026,22 +1040,13 @@ static void hfi_set_implicit_pkeys(struct hfi_pportdata *ppd,
 	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_PKEY_CTRL, in_pkey);
 }
 
-static void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
+void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 {
-	u64 ptl_dis;
-
-	hfi_cfg_out_pkey_check(ppd, enable);
-	hfi_cfg_in_pkey_check(ppd, enable);
+	/* Enable input/output LM checking */
+	hfi_cfg_lm_pkey_check(ppd, enable);
 
 	/* Always disable PTL_PKEY check in ZEBU until validated */
-	if (zebu)
-		ptl_dis = 1;
-	else
-		ptl_dis = enable ? 0 : 1;
-
-	/* Allow/disallow PTL pkey checks */
-	write_csr(ppd->dd, FXR_RXE2E_CFG_PTL_PKEY_CHECK_DISABLE, ptl_dis);
-	write_csr(ppd->dd, FXR_TXOTR_PKT_PKEY_CHECK_DISABLE, ptl_dis);
+	hfi_cfg_ptl_pkey_check(ppd, zebu ? 0 : enable);
 }
 
 #ifdef CONFIG_HFI2_STLNP
