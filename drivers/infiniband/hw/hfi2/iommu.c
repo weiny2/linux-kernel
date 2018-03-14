@@ -2104,6 +2104,13 @@ static struct page *at_pte_clear_level(struct hfi_at_svm *svm, int level,
 			struct at_pte *lower_pte;
 
 			/*
+			 * At any level, if the page is superpage,
+			 * we can't move down to next level.
+			 */
+			if (at_pte_superpage(pte))
+				goto next;
+
+			/*
 			 * Recurse down into a level that isn't *entirely*
 			 * obsolete.
 			 */
