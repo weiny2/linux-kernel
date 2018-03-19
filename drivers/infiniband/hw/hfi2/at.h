@@ -497,7 +497,6 @@ struct hfi_at {
 
 	/* pasid tables */
 	struct pasid_entry *pasid_table;
-	struct pasid_state_entry *pasid_state_table;
 	struct idr pasid_idr;
 	struct idr pasid_stats_idr;
 	u32 pasid_max;

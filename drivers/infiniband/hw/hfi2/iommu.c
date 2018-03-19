@@ -1667,19 +1667,6 @@ static int hfi_svm_alloc_pasid_tables(struct hfi_at *at)
 	dd_dev_info(at->dd, "%s: Allocated order %d PASID table.\n",
 		    at->name, order);
 
-	if (ecap_dis(at->ecap)) {
-		/* Just making it explicit... */
-		BUILD_BUG_ON(sizeof(struct pasid_entry) !=
-			     sizeof(struct pasid_state_entry));
-		pages = alloc_pages_node(at->dd->node, GFP_KERNEL | __GFP_ZERO,
-					 order);
-		if (pages)
-			at->pasid_state_table = page_address(pages);
-		else
-			dd_dev_err(at->dd, "AT: %s: Failed to allocate PASID state table\n",
-				   at->name);
-	}
-
 	idr_init(&at->pasid_idr);
 	idr_init(&at->pasid_stats_idr);
 
@@ -1695,11 +1682,6 @@ static int hfi_svm_free_pasid_tables(struct hfi_at *at)
 
 	free_pages((unsigned long)at->pasid_table, order);
 	at->pasid_table = NULL;
-
-	if (at->pasid_state_table) {
-		free_pages((unsigned long)at->pasid_state_table, order);
-		at->pasid_state_table = NULL;
-	}
 
 	idr_destroy(&at->pasid_idr);
 	hfi_at_stats_cleanup(at);
@@ -1906,8 +1888,6 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 	if (ctx_lo & CONTEXT_PASIDE)
 		return -EINVAL;
 
-	if (at->pasid_state_table)
-		context[1].hi = (u64)virt_to_phys(at->pasid_state_table);
 	context[1].lo = (u64)virt_to_phys(at->pasid_table) |
 			hfi_at_get_pts(at);
 
@@ -1932,8 +1912,6 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 			ctx_lo |= CONTEXT_TT_PT_PASID << 2;
 	}
 	ctx_lo |= CONTEXT_PASIDE;
-	if (at->pasid_state_table)
-		ctx_lo |= CONTEXT_DINVE;
 	if (at->pri_supported)
 		ctx_lo |= CONTEXT_PRS;
 	context[0].lo = ctx_lo;
@@ -2323,12 +2301,6 @@ static void hfi_flush_svm_range(struct hfi_at_svm *svm, unsigned long address,
 {
 	unsigned long start_pfn, last_pfn, nrpages;
 	struct page *freelist;
-
-	/* Try deferred invalidate if available */
-	if (svm->at->pasid_state_table &&
-	    !cmpxchg64(&svm->at->pasid_state_table[svm->pasid].val,
-	    0, 1ULL << 63))
-		return;
 
 	hfi_flush_svm_range_dev(svm, address, pages, ih, gl);
 
