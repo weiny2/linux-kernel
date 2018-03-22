@@ -200,8 +200,9 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 		resp.idx1 = ev_assign.ev_idx;
 
-		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
-				     &resp, sizeof(resp));
+		if (uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				   &resp, sizeof(resp)))
+			ret = -EFAULT;
 		break;
 	case HFI2_CMD_EQ_RELEASE:
 		ret = hfi_cteq_release(ctx, 0, cmd.idx1, cmd.data1);
@@ -218,8 +219,9 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 
-		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
-				     &resp, sizeof(resp));
+		if (uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				   &resp, sizeof(resp)))
+			ret = -EFAULT;
 		break;
 	case HFI2_CMD_EC_SET_EQ:
 		ret = hfi_ev_set_channel(ctx, cmd.idx0,
@@ -239,8 +241,9 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 
-		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
-				     &resp, sizeof(resp));
+		if (uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				   &resp, sizeof(resp)))
+			ret = -EFAULT;
 		break;
 	case HFI2_CMD_EQ_ACK:
 		ret = hfi_eq_ack_event(ctx, cmd.idx1, cmd.count);
@@ -250,8 +253,9 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 
-		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
-				     &resp, sizeof(resp));
+		if (uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				   &resp, sizeof(resp)))
+			ret = -EFAULT;
 		break;
 	case HFI2_CMD_EC_RELEASE:
 		ret = hfi_ec_release(ctx, cmd.idx0);
@@ -268,8 +272,9 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 		resp.idx1 = ev_assign.ev_idx;
-		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
-				     &resp, sizeof(resp));
+		if (uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				   &resp, sizeof(resp)))
+			ret = -EFAULT;
 		break;
 	case HFI2_CMD_CT_RELEASE:
 		ret = hfi_cteq_release(ctx, OPA_EV_MODE_COUNTER,
@@ -287,8 +292,9 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 
-		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
-				     &resp, sizeof(resp));
+		if (uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				   &resp, sizeof(resp)))
+			ret = -EFAULT;
 		break;
 	case HFI2_CMD_EC_SET_CT:
 		ret = hfi_ev_set_channel(ctx, cmd.idx0,
@@ -305,8 +311,9 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 		}
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 
-		ret = uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
-				     &resp, sizeof(resp));
+		if (uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
+				   &resp, sizeof(resp)))
+			ret = -EFAULT;
 		break;
 	case HFI2_CMD_CT_ACK:
 		ret = hfi_ct_ack_event(ctx, cmd.idx1, cmd.count);
