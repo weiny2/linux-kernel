@@ -383,14 +383,18 @@ static int hfi2_ctx_free(struct ib_uobject *uobject,
 			 enum rdma_remove_reason why)
 {
 	struct hfi_ctx *ctx = uobject->object;
+	int ret = 0;
 
 	if (!ctx)
 		return -EINVAL;
 
-	hfi_ctx_cleanup(ctx);
-	kfree(ctx);
+	ret = hfi_ctx_cleanup(ctx);
+	if (ret)
+		goto done;
 
-	return 0;
+	kfree(ctx);
+done:
+	return ret;
 }
 
 DECLARE_UVERBS_METHOD(hfi2_ctx_attach, HFI2_CTX_ATTACH,
@@ -454,12 +458,15 @@ DECLARE_UVERBS_METHOD(hfi2_pt_update_lower, HFI2_PT_UPDATE_LOWER,
 				HFI2_PT_UPDATE_LOWER_ARGS,
 				struct hfi_pt_update_lower_args,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
-
+/*
+ * Destroy order for hfi ctx is 1 so that the cmdqs are destroyed before
+ * the ctx
+ */
 DECLARE_UVERBS_OBJECT(hfi2_object_ctx,
 		      UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_CTX,
 					     HFI2_OBJECTS),
 		      &UVERBS_TYPE_ALLOC_IDR_SZ(sizeof(struct ib_uctx_object),
-						0, hfi2_ctx_free),
+						1, hfi2_ctx_free),
 		      &hfi2_ctx_attach,
 		      &hfi2_ctx_detach,
 		      &hfi2_ctx_event_cmd,

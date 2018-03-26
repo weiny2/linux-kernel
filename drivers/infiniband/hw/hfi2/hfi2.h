@@ -1235,7 +1235,7 @@ int hfi_ec_assign(struct hfi_ctx *ctx, u16 *ec_idx);
 int hfi_ec_release(struct hfi_ctx *ctx, u16 ec_idx);
 void hfi_ctx_init(struct hfi_ctx *ctx, struct hfi_devdata *dd);
 int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign);
-void hfi_ctx_cleanup(struct hfi_ctx *ctx);
+int hfi_ctx_cleanup(struct hfi_ctx *ctx);
 int hfi_ctx_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
 		    u16 flags);
 int hfi_get_hw_limits(struct hfi_ibcontext *uc, struct hfi_hw_limit *hwl);

@@ -529,11 +529,12 @@ static void hfi_pid_free(struct hfi_devdata *dd, u16 ptl_pid)
  * Release Portals PID resources.
  * Called during close() or explicitly via CMD_CTXT_DETACH.
  */
-void hfi_ctx_cleanup(struct hfi_ctx *ctx)
+int hfi_ctx_cleanup(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	struct hfi_ctx *idr_ctx;
 	u16 ptl_pid;
+	int ret = 0;
 
 	down_write(&ctx->ctx_rwsem);
 	ptl_pid = ctx->pid;
@@ -556,8 +557,11 @@ void hfi_ctx_cleanup(struct hfi_ctx *ctx)
 		goto unlock;
 	}
 
-	/* first release any assigned CMDQs */
-	hfi_cmdq_cleanup(ctx);
+	/* User needs to clean up cmdqs before cleaning up the context */
+	if (ctx->cmdq_pair_num_assigned) {
+		ret = -EINVAL;
+		goto unlock;
+	}
 
 	/* release event resources: ct/eq/ec */
 	hfi_event_cleanup(ctx);
@@ -602,6 +606,7 @@ void hfi_ctx_cleanup(struct hfi_ctx *ctx)
 unlock:
 	up_write(&ctx->ctx_rwsem);
 	hfi_iommu_flush_iotlb(dd, ptl_pid);
+	return ret;
 }
 
 /* returns number of hardware resources available to clients */

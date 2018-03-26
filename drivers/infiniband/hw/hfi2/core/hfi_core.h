@@ -434,7 +434,7 @@ struct opa_core_ops {
 	void (*ctx_init)(struct ib_device *ibdev, struct hfi_ctx *ctx);
 	int (*ctx_assign)(struct hfi_ctx *ctx,
 			  struct opa_ctx_assign *ctx_assign);
-	void (*ctx_release)(struct hfi_ctx *ctx);
+	int (*ctx_release)(struct hfi_ctx *ctx);
 	int (*ctx_reserve)(struct hfi_ctx *ctx, u16 *base, u16 count,
 			   u16 align, u16 flags);
 	void (*ctx_unreserve)(struct hfi_ctx *ctx);
