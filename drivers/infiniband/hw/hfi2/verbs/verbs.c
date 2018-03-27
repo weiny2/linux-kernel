@@ -339,6 +339,11 @@ static struct ib_ucontext *hfi2_alloc_ucontext(struct ib_device *ibdev,
 	uc->ibuc.device = ibdev;
 	uc->ops = dd->core_ops;
 	uc->priv = dd;
+
+	mutex_init(&uc->vm_lock);
+	/* Setup list to zap vmas on release */
+	INIT_LIST_HEAD(&uc->vma_head);
+
 	return &uc->ibuc;
 }
 

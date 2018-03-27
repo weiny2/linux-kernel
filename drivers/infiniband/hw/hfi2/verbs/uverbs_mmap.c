@@ -58,6 +58,68 @@ static uint psb_rw = 1;
 module_param(psb_rw, uint, 0444);
 MODULE_PARM_DESC(psb_rw, "PSB mmaps allow RW");
 
+void hfi_zap_vma_list(struct hfi_ibcontext *context, uint16_t cmdq_idx)
+{
+	struct list_head *pos, *temp;
+	struct hfi_vma *v;
+	struct vm_area_struct *vv;
+
+	mutex_lock(&context->vm_lock);
+	list_for_each_safe(pos, temp, &context->vma_head) {
+		v = list_entry(pos, struct hfi_vma, vma_list);
+		if (cmdq_idx == v->cmdq_idx) {
+			vv = v->vma;
+			zap_vma_ptes(vv, vv->vm_start,
+				     vv->vm_end - vv->vm_start);
+			list_del(pos);
+			kfree(v);
+		}
+	}
+	mutex_unlock(&context->vm_lock);
+}
+
+static int hfi_vma_list_add(struct hfi_ibcontext *context,
+			     struct vm_area_struct *vma,
+			     uint16_t cmdq_idx)
+{
+	struct hfi_vma *v;
+
+	v = kmalloc(sizeof(*v), GFP_KERNEL);
+
+	if (!v)
+		return -ENOMEM;
+
+	mutex_lock(&context->vm_lock);
+	list_add(&v->vma_list, &context->vma_head);
+	v->vma = vma;
+	v->cmdq_idx = cmdq_idx;
+	vma->vm_private_data = context;
+	mutex_unlock(&context->vm_lock);
+	return 0;
+}
+
+static void hfi_vma_list_remove(struct hfi_ibcontext *context,
+				struct vm_area_struct *vma,
+				uint16_t cmdq_idx)
+{
+	struct list_head *pos, *temp;
+	struct hfi_vma *v;
+	struct vm_area_struct *vv;
+
+	mutex_lock(&context->vm_lock);
+	list_for_each_safe(pos, temp, &context->vma_head) {
+		v = list_entry(pos, struct hfi_vma, vma_list);
+		vv = v->vma;
+		if (vv == vma && cmdq_idx == v->cmdq_idx) {
+			list_del(pos);
+			kfree(v);
+			vma->vm_private_data = NULL;
+			break;
+		}
+	}
+	mutex_unlock(&context->vm_lock);
+}
+
 /*
  * Convert kernel *virtual* addresses to physical addresses.
  * This handles vmalloc'ed or kmalloc'ed addresses.
@@ -98,6 +160,11 @@ int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	int ret = 0;
 	u16 ctxt;
 	bool add_to_vma_list = false;
+	struct hfi_ibcontext *hfi_context = container_of(context,
+							 struct hfi_ibcontext,
+							 ibuc);
+	if (!hfi_context)
+		return -EINVAL;
 
 	if (!is_valid_mmap(token))
 		return -EACCES;
@@ -164,11 +231,9 @@ int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	case TOK_CMDQ_HEAD:
 		/* Save vma for later zapping */
 		add_to_vma_list = true;
-#if 0		/* TODO: Revisit after finding a similar function in core */
-		ret = hfi_vma_list_add(ud, vma, ctxt);
+		ret = hfi_vma_list_add(hfi_context, vma, ctxt);
 		if (ret)
 			return ret;
-#endif
 		if (type == TOK_CMDQ_HEAD)
 			vm_ro = 1;
 		break;
@@ -239,11 +304,8 @@ int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	}
 
 	/* Something failed above -- remove vma from zap list */
-#if 0
-	/* TODO: Revisit after looking for a similar function in core */
 	if (ret && add_to_vma_list)
-		hfi_vma_list_remove(ud, vma, ctxt);
-#endif
+		hfi_vma_list_remove(hfi_context, vma, ctxt);
 done:
 	return ret;
 }

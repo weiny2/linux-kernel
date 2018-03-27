@@ -71,4 +71,5 @@ extern const struct uverbs_spec_root hfi2_root;
 
 int hfi_job_init(struct hfi_ctx *ctx);
 int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
+void hfi_zap_vma_list(struct hfi_ibcontext *context, uint16_t cmdq_idx);
 #endif

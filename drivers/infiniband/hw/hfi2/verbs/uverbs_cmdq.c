@@ -193,13 +193,21 @@ int hfi2_cmdq_free(struct ib_uobject *uobject,
 		   enum rdma_remove_reason why)
 {
 	struct hfi_cmdq *cmdq = uobject->object;
+	struct ib_ucontext *context = uobject->context;
+	struct hfi_ibcontext *hfi_context = container_of(context,
+							 struct hfi_ibcontext,
+							 ibuc);
 	int ret;
 
 	if (!cmdq)
 		return -EINVAL;
-#if 0
-	hfi_zap_vma_list();
-#endif
+
+	if (!hfi_context)
+		return -EINVAL;
+
+	if (why == RDMA_REMOVE_DESTROY)
+		hfi_zap_vma_list(hfi_context, cmdq->cmdq_idx);
+
 	ret = hfi_cmdq_release(cmdq->ctx, cmdq->cmdq_idx);
 
 	kfree(cmdq);

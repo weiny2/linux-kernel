@@ -236,6 +236,13 @@ struct hfi2_ibdev {
 	const struct uverbs_spec_root *hfi2_root;
 };
 
+/* List of vma pointers to zap on release */
+struct hfi_vma {
+	struct vm_area_struct *vma;
+	u16 cmdq_idx;
+	struct list_head vma_list;
+};
+
 #define to_hfi_ibd(ibdev)	container_of(ib_to_rvt(ibdev),\
 				struct hfi2_ibdev, rdi)
 
