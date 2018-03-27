@@ -687,7 +687,7 @@ inline int hfi2_do_reg_mr(struct rvt_qp *qp, struct ib_reg_wr *wr,
 }
 
 static
-inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_rdma_wr *wr,
+inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_send_wr *wr,
 			     bool signal, union hfi_tx_cq_command *cmd)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
@@ -696,10 +696,11 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	u64 done = 0;
 	int ret;
 	struct rvt_mregion *mr = NULL;
+	u32 key = wr->ex.invalidate_rkey;
 
-	if (!wr->rkey || IS_INVALID_KEY(wr->rkey))
+	if (!key || IS_INVALID_KEY(key))
 		return 0;
-	mr = _hfi2_find_mr_from_rkey(ctx, wr->rkey);
+	mr = _hfi2_find_mr_from_rkey(ctx, key);
 	if (!mr)
 		return 0;
 	if (atomic_read(&mr->lkey_invalid)) {
@@ -712,8 +713,7 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	hw_ctx = ctx->hw_ctx;
 	mutex_lock(&hw_ctx->rx_mutex);
 	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
-	ret = hfi_rkey_invalidate(ctx->rx_cmdq, wr->rkey,
-				  (u64)&done);
+	ret = hfi_rkey_invalidate(ctx->rx_cmdq, key, (u64)&done);
 	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
 	if (ret != 0) {
 		mutex_unlock(&hw_ctx->rx_mutex);
@@ -726,8 +726,7 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 		return ret;
 	/* returns err code or nslots required to post on tx_cmdq */
 	if (signal)
-		ret = hfi2_generate_wc(qp, &wr->wr, MB_OC_LOCAL_INV,
-				       cmd);
+		ret = hfi2_generate_wc(qp, wr, MB_OC_LOCAL_INV, cmd);
 	// TODO - SEND_FLAGS /w SIGNALED + WR_ID
 
 	return ret;
@@ -775,7 +774,7 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 		break;
 	case IB_WR_LOCAL_INV:
 		hfi2_nfence(qp);
-		nslots = hfi2_do_local_inv(qp, rdma_wr(wr), signal, &cmd);
+		nslots = hfi2_do_local_inv(qp, wr, signal, &cmd);
 		break;
 	case IB_WR_REG_MR:
 		nslots = hfi2_do_reg_mr(qp, reg_wr(wr), signal, &cmd);
