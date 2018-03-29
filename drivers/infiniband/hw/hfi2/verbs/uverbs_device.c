@@ -95,12 +95,12 @@ static int hfi2_e2e_connect_handler(struct ib_device *ib_dev,
 				    struct uverbs_attr_bundle *attrs)
 {
 	const struct uverbs_attr *uattr = uverbs_attr_get(attrs,
-							  HFI2_DEV_E2E_CONNECT);
+							  HFI2_E2E_CONN_ATTR);
 
 	if (unlikely(IS_ERR(uattr)))
 		return PTR_ERR(uattr);
 
-		/* copy_from_user handled in hfi_e2e_conn */
+	/* copy_from_user handled in hfi_e2e_conn */
 	return hfi_e2e_conn((struct hfi_ibcontext *)file->ucontext,
 			    uattr->ptr_attr.ptr);
 }
