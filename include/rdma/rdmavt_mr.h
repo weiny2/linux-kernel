@@ -60,7 +60,9 @@
  */
 struct rvt_seg {
 	void *vaddr;
-	size_t length;
+	u32 length;
+	u8 padding[3];
+	u8 flags;
 };
 
 /* The number of rvt_segs that fit in a page. */
@@ -81,6 +83,7 @@ struct rvt_mregion {
 	int access_flags;
 	u32 max_segs;           /* number of rvt_segs in all the arrays */
 	u32 mapsz;              /* size of the map array */
+	u32 segs_per_map;	/* number of continuous segs in map */
 	atomic_t lkey_invalid;	/* true if current lkey is invalid */
 	u8  page_shift;         /* 0 - non unform/non powerof2 sizes */
 	u8  lkey_published;     /* in global table */

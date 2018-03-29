@@ -200,14 +200,44 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 	/* TODO - extract hw_ctx based on RKEY_PID(rkey) */
 	hw_ctx = ctx->hw_ctx;
 
-	mutex_lock(&hw_ctx->rx_mutex);
-	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
-	ret = hfi_rkey_write(ctx->rx_cmdq, NATIVE_NI,
-			     (const void *)mr->iova,
-			     mr->map[0]->segs[0].vaddr,
-			     mr->length, pt, hw_ctx->ptl_uid,
-			     pd_handle, mr->rkey, me_options,
-			     HFI_CT_NONE, (u64)&done);
+	if ((mr->segs_per_map == mr->max_segs) &&
+	    mr->map[0]->segs[0].length < mr->length) {
+		int length = 0;
+		int m = 0, n = 0;
+
+		me_options |= PTL_IOVEC;
+		while (m < mr->mapsz) {
+			if (mr->map[m] && mr->map[m]->segs[n].vaddr) {
+				mr->map[m]->segs[n].flags = IOVEC_VALID;
+				length += mr->map[m]->segs[n].length;
+				n++;
+			}
+			if (length >= mr->length)
+				break;
+			if (n >= RVT_SEGSZ) {
+				m++;
+				n = 0;
+			}
+		}
+		mutex_lock(&hw_ctx->rx_mutex);
+		spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
+		ret = hfi_rkey_write(ctx->rx_cmdq, NATIVE_NI,
+				     (const void *)mr->iova,
+				     (struct hfi_iovec *)mr->map[0], mr->length,
+				     pt, hw_ctx->ptl_uid,
+				     pd_handle, mr->rkey, me_options,
+				     HFI_CT_NONE, (u64)&done);
+	} else {
+		WARN_ON(mr->map[0]->segs[0].length < mr->length);
+		mutex_lock(&hw_ctx->rx_mutex);
+		spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
+		ret = hfi_rkey_write(ctx->rx_cmdq, NATIVE_NI,
+				     (const void *)mr->iova,
+				     mr->map[0]->segs[0].vaddr,
+				     mr->length, pt, hw_ctx->ptl_uid,
+				     pd_handle, mr->rkey, me_options,
+				     HFI_CT_NONE, (u64)&done);
+	}
 	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
 	if (ret) {
 		mutex_unlock(&hw_ctx->rx_mutex);

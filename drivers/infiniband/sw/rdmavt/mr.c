@@ -125,8 +125,11 @@ static void rvt_deinit_mregion(struct rvt_mregion *mr)
 	int i = mr->mapsz;
 
 	mr->mapsz = 0;
-	while (i)
-		kfree(mr->map[--i]);
+	if (mr->segs_per_map == mr->max_segs)
+		kfree(mr->map[0]);
+	else
+		while (i)
+			kfree(mr->map[--i]);
 	percpu_ref_exit(&mr->refcount);
 }
 
@@ -146,12 +149,22 @@ static int rvt_init_mregion(struct rvt_mregion *mr, struct ib_pd *pd,
 
 	mr->mapsz = 0;
 	m = (count + RVT_SEGSZ - 1) / RVT_SEGSZ;
-	for (; i < m; i++) {
-		mr->map[i] = kzalloc_node(sizeof(*mr->map[0]), GFP_KERNEL,
-					  dev->dparms.node);
-		if (!mr->map[i])
-			goto bail;
-		mr->mapsz++;
+	mr->map[0] = kzalloc_node(m * sizeof(*mr->map[0]), GFP_KERNEL,
+				  dev->dparms.node);
+	if (ZERO_OR_NULL_PTR(mr->map[0])) {
+		for (; i < m; i++) {
+			mr->map[i] = kzalloc_node(sizeof(*mr->map[0]),
+						  GFP_KERNEL, dev->dparms.node);
+			if (!mr->map[i])
+				goto bail;
+			mr->mapsz++;
+		}
+		mr->segs_per_map = RVT_SEGSZ;
+	} else {
+		for (i = 1; i < m; i++)
+			mr->map[i] = mr->map[i - 1] + 1;
+		mr->segs_per_map = count;
+		mr->mapsz = m;
 	}
 	init_completion(&mr->comp);
 	/* count returning the ptr to user */
