@@ -480,6 +480,7 @@ struct opa_core_ops {
 	int (*get_ts_fm_data)(struct hfi_ibcontext *uc,
 			      struct hfi_ts_fm_data *fm_data);
 	int (*get_async_error)(struct hfi_ctx *ctx, void *ae, int timeout);
-	int (*mem_prefetch)(struct hfi_ctx *ctx, struct hfi_mprefetch_args *mpf);
+	int (*at_prefetch)(struct hfi_ctx *ctx,
+			   struct hfi_at_prefetch_args *atpf);
 };
 #endif /* _HFI_CORE_H_ */

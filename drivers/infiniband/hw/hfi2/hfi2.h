@@ -1201,7 +1201,8 @@ void hfi_at_exit(struct hfi_devdata *dd);
 int hfi_at_reg_range(struct hfi_ctx *ctx, void *addr, u32 size,
 		     struct page **pages, bool write);
 void hfi_at_dereg_range(struct hfi_ctx *ctx, void *addr, u32 size);
-int hfi_at_mem_prefetch(struct hfi_ctx *ctx, struct hfi_mprefetch_args *mpf);
+int hfi_at_prefetch(struct hfi_ctx *ctx,
+		    struct hfi_at_prefetch_args *atpf);
 void hfi_at_dbg_init(struct hfi_devdata *dd);
 
 /* OPA core functions */

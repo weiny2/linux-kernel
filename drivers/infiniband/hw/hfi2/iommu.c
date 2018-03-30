@@ -2218,19 +2218,20 @@ int hfi_at_reg_range(struct hfi_ctx *ctx, void *vaddr, u32 size,
 	return 0;
 }
 
-int hfi_at_mem_prefetch(struct hfi_ctx *ctx, struct hfi_mprefetch_args *mpf)
+int hfi_at_prefetch(struct hfi_ctx *ctx,
+		    struct hfi_at_prefetch_args *atpf)
 {
-	struct iovec iovec, *iovecp = (struct iovec *)mpf->iovec;
-	bool writable = mpf->flags ? true : false;
+	struct iovec iovec, *iovecp = (struct iovec *)atpf->iovec;
+	bool writable = (atpf->flags & HFI_AT_READWRITE) ? true : false;
 
-	while (mpf->count) {
+	while (atpf->count) {
 		if (copy_from_user(&iovec, iovecp, sizeof(iovec)))
 			return -EFAULT;
 
 		hfi_at_reg_range(ctx, iovec.iov_base,
 				 iovec.iov_len, NULL, writable);
 
-		mpf->count--;
+		atpf->count--;
 		iovecp++;
 	}
 

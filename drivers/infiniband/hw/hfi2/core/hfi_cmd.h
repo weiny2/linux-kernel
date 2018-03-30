@@ -155,7 +155,7 @@
 #define HFI_CMD_JOB_INFO          28
 #define HFI_CMD_JOB_SETUP         29
 #define HFI_CMD_CMDQ_UPDATE       30
-#define HFI_CMD_MEM_PREFETCH      31
+#define HFI_CMD_AT_PREFETCH       31
 #define HFI_CMD_UNUSED            32
 #define HFI_CMD_CT_ASSIGN         33
 #define HFI_CMD_CT_RELEASE        34
@@ -461,16 +461,19 @@ struct hfi_job_setup_args {
 };
 
 /*
- * struct hfi_mprefetch - memory prefetch for user buffers.
+ * struct hfi_at_prefetch - address translation prefetch for user buffers.
  * @iovec: an array of 'struct iovec' structure
  * @count: iovec count in the array
- * @flags: additional info, currently only if writable
+ * @flags: accessing info, readonly or readwrite
  */
-struct hfi_mprefetch_args {
+struct hfi_at_prefetch_args {
 	IN __u64 iovec;
 	IN __u32 count;
 	IN __u32 flags;
 };
+
+#define HFI_AT_READONLY		0x0
+#define HFI_AT_READWRITE	0x1
 
 /**
  * struct hfi_e2e_conn - An E2E connection request

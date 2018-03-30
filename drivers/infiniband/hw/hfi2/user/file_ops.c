@@ -262,7 +262,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_ts_fm_data fm_data;
 	struct hfi_async_error ae;
 	struct hfi_async_error_args ae_arg;
-	struct hfi_mprefetch_args mpf_arg;
+	struct hfi_at_prefetch_args atpf_arg;
 	int need_admin = 0;
 	ssize_t consumed = 0, copy_in = 0, copy_out = 0, ret = 0;
 	void *copy_ptr = NULL;
@@ -378,9 +378,9 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		copy_in = sizeof(ae_arg);
 		copy_ptr = &ae_arg;
 		break;
-	case HFI_CMD_MEM_PREFETCH:
-		copy_in = sizeof(mpf_arg);
-		copy_ptr = &mpf_arg;
+	case HFI_CMD_AT_PREFETCH:
+		copy_in = sizeof(atpf_arg);
+		copy_ptr = &atpf_arg;
 		break;
 	default:
 		ret = -EINVAL;
@@ -656,8 +656,8 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		copy_out = sizeof(ae);
 		ret = ops->get_async_error(&ud->ctx, copy_ptr, ae_arg.timeout);
 		break;
-	case HFI_CMD_MEM_PREFETCH:
-		ret = ops->mem_prefetch(&ud->ctx, &mpf_arg);
+	case HFI_CMD_AT_PREFETCH:
+		ret = ops->at_prefetch(&ud->ctx, &atpf_arg);
 		break;
 	default:
 		ret = -EINVAL;

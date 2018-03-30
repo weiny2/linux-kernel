@@ -3100,7 +3100,7 @@ static struct opa_core_ops opa_core_ops = {
 	.pt_update_lower = hfi_pt_update_lower,
 	.get_hw_limits = hfi_get_hw_limits,
 	.get_async_error = hfi_get_async_error,
-	.mem_prefetch = hfi_at_mem_prefetch,
+	.at_prefetch = hfi_at_prefetch,
 #ifdef CONFIG_HFI2_STLNP
 	.check_sl_pair = hfi_check_sl_pair,
 	.ctx_set_allowed_uids = hfi_ctx_set_allowed_uids,
