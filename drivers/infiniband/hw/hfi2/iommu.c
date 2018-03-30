@@ -664,6 +664,16 @@ static struct at_pte *pfn_to_at_pte(struct hfi_at_svm *svm, unsigned long pfn,
 	return pte;
 }
 
+static inline pgd_t *get_pti_user_pgdp(pgd_t *pgdp)
+{
+#ifdef CONFIG_PAGE_TABLE_ISOLATION
+	if (static_cpu_has(X86_FEATURE_PTI))
+		return kernel_to_user_pgdp(pgdp);
+#endif
+
+	return pgdp;
+}
+
 static unsigned long get_cpt_entry(pgd_t *pgdp, unsigned long address,
 				   int *target_level)
 {
@@ -785,7 +795,8 @@ out:
 static int hfi_at_map_promo(struct hfi_at_svm *svm, struct page_req_dsc *req,
 			    bool user)
 {
-	pgd_t *pgd_ref = user ? svm->mm->pgd : svm->at->system_mm->pgd;
+	pgd_t *pgd_ref = user ? get_pti_user_pgdp(svm->mm->pgd)
+			 : svm->at->system_mm->pgd;
 	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
 	struct hfi_devdata *dd = svm->at->dd;
 	u64 pteval, phys_address;
@@ -2656,8 +2667,10 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 		pgdval = (u64)__pa(svm->pgd);
 		hfi2_dbg("AT SPT alloc: pasid %d\n", svm->pasid);
 	} else {
-		pgdval = (u64)(mm ? __pa(svm->mm->pgd) :
-				    __pa(at->system_mm->pgd));
+		/* we only use PTI for user process */
+		pgdval = (u64)(mm ?
+			__pa(get_pti_user_pgdp(svm->mm->pgd)) :
+			__pa(at->system_mm->pgd));
 	}
 
 	if (mm) {
