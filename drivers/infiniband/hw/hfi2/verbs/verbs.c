@@ -579,6 +579,9 @@ err_reg:
 
 static void hfi2_unregister_device(struct hfi2_ibdev *ibd)
 {
+	if (ibd->rdi.ibdev.specs_root)
+		uverbs_free_spec_tree(ibd->rdi.ibdev.specs_root);
+
 	rvt_unregister_device(&ibd->rdi);
 }
 
