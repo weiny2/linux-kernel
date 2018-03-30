@@ -136,27 +136,25 @@ static int hfi2_ts_get_master_handler(struct ib_device *ib_dev,
 {
 #ifdef CONFIG_HFI2_STLNP
 	struct hfi_ts_master_regs master_ts;
-	struct hfi_ts_master_cmd cmd;
-	struct hfi_ts_master_resp resp;
 	int ret;
 
-	ret = uverbs_copy_from(&cmd, attrs, HFI2_GET_TS_MASTER_CMD);
+	ret = uverbs_copy_from(&master_ts.clkid, attrs,
+			       HFI2_GET_TS_MASTER_CLK_ID);
+	ret += uverbs_copy_from(&master_ts.port, attrs,
+				HFI2_GET_TS_MASTER_PORT);
 	if (ret)
 		return ret;
-
-	master_ts.clkid = cmd.clkid;
-	master_ts.port = cmd.port;
 
 	ret = hfi_get_ts_master_regs((struct hfi_ibcontext *)file->ucontext,
 				     &master_ts);
 	if (ret)
 		return ret;
 
-	resp.master = master_ts.master;
-	resp.timestamp = master_ts.timestamp;
-
-	return uverbs_copy_to(attrs, HFI2_GET_TS_MASTER_RESP,
-			      &resp, sizeof(resp));
+	ret = uverbs_copy_to(attrs, HFI2_GET_TS_MASTER_TIME,
+			     &master_ts.master, sizeof(uint64_t));
+	ret += uverbs_copy_to(attrs, HFI2_GET_TS_MASTER_TIMESTAMP,
+			      &master_ts.timestamp, sizeof(uint64_t));
+	return ret;
 #endif
 	return 0;
 }
@@ -167,31 +165,33 @@ static int hfi2_ts_get_fm_handler(struct ib_device *ib_dev,
 {
 #ifdef CONFIG_HFI2_STLNP
 	struct hfi_ts_fm_data fm_data;
-	struct hfi_ts_fm_cmd cmd;
-	struct hfi_ts_fm_resp resp;
 	int ret;
 
-	ret = uverbs_copy_from(&cmd, attrs, HFI2_GET_TS_FM_CMD);
+	ret = uverbs_copy_from(&fm_data.hack_timesync, attrs,
+			       HFI2_GET_TS_FM_HACK);
+	ret += uverbs_copy_from(&fm_data.port, attrs,
+				HFI2_GET_TS_FM_PORT);
 	if (ret)
 		return ret;
-
-	fm_data.hack_timesync = cmd.hack_timesync;
-	fm_data.port = cmd.port;
 
 	ret = hfi_get_ts_fm_data((struct hfi_ibcontext *)file->ucontext,
 				 &fm_data);
 	if (ret)
 		return ret;
 
-	resp.clock_offset = fm_data.clock_offset;
-	resp.clock_delay = fm_data.clock_delay;
-	resp.periodicity = fm_data.periodicity;
-	resp.current_clock_id = fm_data.current_clock_id;
-	resp.ptp_index = fm_data.ptp_index;
-	resp.is_active_master = fm_data.is_active_master;
-
-	return uverbs_copy_to(attrs, HFI2_GET_TS_FM_RESP,
-			      &resp, sizeof(resp));
+	ret = uverbs_copy_to(attrs, HFI2_GET_TS_FM_CLK_OFFSET,
+			     &fm_data.clock_offset, sizeof(uint64_t));
+	ret += uverbs_copy_to(attrs, HFI2_GET_TS_FM_CLK_DELAY,
+			      &fm_data.clock_delay, sizeof(uint16_t));
+	ret += uverbs_copy_to(attrs, HFI2_GET_TS_FM_PERIODICITY,
+			      &fm_data.periodicity, sizeof(uint16_t));
+	ret += uverbs_copy_to(attrs, HFI2_GET_TS_FM_CURRENT_CLK_ID,
+			      &fm_data.current_clock_id, sizeof(uint8_t));
+	ret += uverbs_copy_to(attrs, HFI2_GET_TS_FM_PTP_IDX,
+			      &fm_data.ptp_index, sizeof(uint8_t));
+	ret += uverbs_copy_to(attrs, HFI2_GET_TS_FM_IS_ACTIVE_MASTER,
+			      &fm_data.is_active_master, sizeof(uint8_t));
+	return ret;
 #endif
 	return 0;
 }
@@ -219,24 +219,44 @@ DECLARE_UVERBS_METHOD(hfi2_get_hw_limits, HFI2_DEV_GET_HW_LIMITS,
 
 DECLARE_UVERBS_METHOD(hfi2_ts_get_master, HFI2_DEV_TS_GET_MASTER,
 		      hfi2_ts_get_master_handler,
-		      &UVERBS_ATTR_PTR_IN(
-				HFI2_GET_TS_MASTER_CMD,
-				struct hfi_ts_master_cmd,
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_GET_TS_MASTER_TIME, uint64_t,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
 		      &UVERBS_ATTR_PTR_OUT(
-				HFI2_GET_TS_MASTER_RESP,
-				struct hfi_ts_master_resp,
+				HFI2_GET_TS_MASTER_TIMESTAMP, uint64_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_GET_TS_MASTER_CLK_ID, uint8_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_GET_TS_MASTER_PORT, uint8_t,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
 DECLARE_UVERBS_METHOD(hfi2_ts_get_fm, HFI2_DEV_TS_GET_FM,
 		      hfi2_ts_get_fm_handler,
 		      &UVERBS_ATTR_PTR_IN(
-				HFI2_GET_TS_FM_CMD,
-				struct hfi_ts_fm_cmd,
+				HFI2_GET_TS_FM_PORT, uint8_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_GET_TS_FM_HACK, uint64_t,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
 		      &UVERBS_ATTR_PTR_OUT(
-				HFI2_GET_TS_FM_RESP,
-				struct hfi_ts_fm_resp,
+				HFI2_GET_TS_FM_CLK_OFFSET, uint64_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_GET_TS_FM_CLK_DELAY, uint16_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_GET_TS_FM_PERIODICITY, uint16_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_GET_TS_FM_CURRENT_CLK_ID, uint8_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_GET_TS_FM_PTP_IDX, uint8_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_GET_TS_FM_IS_ACTIVE_MASTER, uint8_t,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
 DECLARE_UVERBS_OBJECT(hfi2_object_device,

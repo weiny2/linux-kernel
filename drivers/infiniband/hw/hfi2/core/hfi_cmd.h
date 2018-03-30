@@ -618,21 +618,6 @@ struct hfi_ts_master_regs {
 };
 
 /*
- * For extended verbs, the fields with IN permission and fields with
- * permission OUT should be a part of separate structs
- *
- */
-struct hfi_ts_master_cmd {
-	IN __u8 clkid;
-	IN __u8 port;
-};
-
-struct hfi_ts_master_resp {
-	OUT __u64 master;
-	OUT __u64 timestamp;
-};
-
-/*
  * struct hfi_ts_fm_data - Given a port number, return FM provided data
  *
  * @clock_offset: FM provided fabric time offset
@@ -652,25 +637,6 @@ struct hfi_ts_fm_data {
 	OUT __u8 is_active_master;
 	IN __u64 hack_timesync; /* Temporary Simics control */
 	IN __u8 port;
-};
-
-/*
- * For extended verbs, the fields with IN permission and fields with
- * permission OUT should be a part of separate structs
- *
- */
-struct hfi_ts_fm_cmd {
-	IN __u64 hack_timesync; /* Temporary Simics control */
-	IN __u8 port;
-};
-
-struct hfi_ts_fm_resp {
-	OUT __u64 clock_offset;
-	OUT __u16 clock_delay;
-	OUT __u16 periodicity;
-	OUT __u8 current_clock_id;
-	OUT __u8 ptp_index;
-	OUT __u8 is_active_master;
 };
 
 /*
