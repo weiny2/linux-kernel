@@ -161,6 +161,7 @@ struct rvt_driver_params {
 	 */
 	unsigned int lkey_table_size;
 	unsigned int qp_table_size;
+	int max_qpn;
 	int qpn_start;
 	int qpn_inc;
 	int qpn_res_start;

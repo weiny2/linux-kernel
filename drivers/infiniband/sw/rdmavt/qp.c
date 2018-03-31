@@ -143,9 +143,11 @@ static int init_qpn_table(struct rvt_dev_info *rdi, struct rvt_qpn_table *qpt)
 {
 	u32 offset, i;
 	struct rvt_qpn_map *map;
+	int max_qpn = rdi->dparms.max_qpn;
 	int ret = 0;
 
-	if (!(rdi->dparms.qpn_res_end >= rdi->dparms.qpn_res_start))
+	if (!(rdi->dparms.qpn_res_end >= rdi->dparms.qpn_res_start) ||
+	    max_qpn > RVT_QPN_MAX)
 		return -EINVAL;
 
 	spin_lock_init(&qpt->lock);
@@ -160,8 +162,14 @@ static int init_qpn_table(struct rvt_dev_info *rdi, struct rvt_qpn_table *qpt)
 	 * will pick from.
 	 */
 
-	/* Figure out number of bit maps needed before reserved range */
-	qpt->nmaps = rdi->dparms.qpn_res_start / RVT_BITS_PER_PAGE;
+	if (max_qpn <= rdi->dparms.qpn_res_start) {
+		qpt->nmaps = DIV_ROUND_UP(max_qpn, RVT_BITS_PER_PAGE);
+		/* No need to explicitly reserve in this case */
+		goto exit;
+	} else {
+		/* Figure out number of bit maps needed before reserved range */
+		qpt->nmaps = rdi->dparms.qpn_res_start / RVT_BITS_PER_PAGE;
+	}
 
 	/* This should always be zero */
 	offset = rdi->dparms.qpn_res_start & RVT_BITS_PER_PAGE_MASK;
@@ -188,6 +196,7 @@ static int init_qpn_table(struct rvt_dev_info *rdi, struct rvt_qpn_table *qpt)
 			offset = 0;
 		}
 	}
+exit:
 	return ret;
 }
 
@@ -346,7 +355,8 @@ static int alloc_qpn(struct rvt_dev_info *rdi, struct rvt_qpn_table *qpt,
 {
 	u32 i, offset, max_scan, qpn;
 	struct rvt_qpn_map *map;
-	u32 ret;
+	int ret, max_qpn = rdi->dparms.max_qpn;
+	u32 qpnmap_entries = DIV_ROUND_UP(max_qpn, RVT_BITS_PER_PAGE);
 
 	if (rdi->driver_f.alloc_qpn)
 		return rdi->driver_f.alloc_qpn(rdi, qpt, type, port_num);
@@ -366,7 +376,7 @@ static int alloc_qpn(struct rvt_dev_info *rdi, struct rvt_qpn_table *qpt,
 	}
 
 	qpn = qpt->last + qpt->incr;
-	if (qpn >= RVT_QPN_MAX)
+	if (qpn >= max_qpn)
 		qpn = qpt->incr | ((qpt->last & 1) ^ 1);
 	/* offset carries bit 0 */
 	offset = qpn & RVT_BITS_PER_PAGE_MASK;
@@ -390,19 +400,19 @@ static int alloc_qpn(struct rvt_dev_info *rdi, struct rvt_qpn_table *qpt,
 			 * That is OK.   It gets re-assigned below
 			 */
 			qpn = mk_qpn(qpt, map, offset);
-		} while (offset < RVT_BITS_PER_PAGE && qpn < RVT_QPN_MAX);
+		} while (offset < RVT_BITS_PER_PAGE && qpn < max_qpn);
 		/*
 		 * In order to keep the number of pages allocated to a
 		 * minimum, we scan the all existing pages before increasing
 		 * the size of the bitmap table.
 		 */
 		if (++i > max_scan) {
-			if (qpt->nmaps == RVT_QPNMAP_ENTRIES)
+			if (qpt->nmaps == qpnmap_entries)
 				break;
 			map = &qpt->map[qpt->nmaps++];
 			/* start at incr with current bit 0 */
 			offset = qpt->incr | (offset & 1);
-		} else if (map < &qpt->map[qpt->nmaps]) {
+		} else if (map < &qpt->map[qpt->nmaps - 1]) {
 			++map;
 			/* start at incr with current bit 0 */
 			offset = qpt->incr | (offset & 1);
@@ -411,8 +421,8 @@ static int alloc_qpn(struct rvt_dev_info *rdi, struct rvt_qpn_table *qpt,
 			/* wrap to first map page, invert bit 0 */
 			offset = qpt->incr | ((offset & 1) ^ 1);
 		}
-		/* there can be no set bits in low-order QoS bits */
-		WARN_ON(offset & (BIT(rdi->dparms.qos_shift) - 1));
+		/* Except bit 0, can't have set bits in low-order QoS bits */
+		WARN_ON(offset & (BIT(rdi->dparms.qos_shift) - 1) & ~BIT(0));
 		qpn = mk_qpn(qpt, map, offset);
 	}
 

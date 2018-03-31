@@ -544,6 +544,7 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 
 	/* queue pair parameters */
 	ibd->rdi.dparms.qp_table_size = hfi2_qp_table_size;
+	ibd->rdi.dparms.max_qpn = RVT_QPN_MAX;
 	ibd->rdi.dparms.qpn_start = 0;
 	ibd->rdi.dparms.qpn_inc = 1;
 	ibd->rdi.dparms.qos_shift = HFI2_QPN_QOS_SHIFT;

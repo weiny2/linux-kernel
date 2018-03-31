@@ -1904,6 +1904,7 @@ int hfi1_register_ib_device(struct hfi1_devdata *dd)
 
 	/* queue pair */
 	dd->verbs_dev.rdi.dparms.qp_table_size = hfi1_qp_table_size;
+	dd->verbs_dev.rdi.dparms.max_qpn = RVT_QPN_MAX;
 	dd->verbs_dev.rdi.dparms.qpn_start = 0;
 	dd->verbs_dev.rdi.dparms.qpn_inc = 1;
 	dd->verbs_dev.rdi.dparms.qos_shift = dd->qos_shift;

@@ -1617,6 +1617,7 @@ int qib_register_ib_device(struct qib_devdata *dd)
 	dd->verbs_dev.rdi.driver_f.get_guid_be = qib_get_guid_be;
 	dd->verbs_dev.rdi.dparms.lkey_table_size = qib_lkey_table_size;
 	dd->verbs_dev.rdi.dparms.qp_table_size = ib_qib_qp_table_size;
+	dd->verbs_dev.rdi.dparms.max_qpn = RVT_QPN_MAX;
 	dd->verbs_dev.rdi.dparms.qpn_start = 1;
 	dd->verbs_dev.rdi.dparms.qpn_res_start = QIB_KD_QP;
 	dd->verbs_dev.rdi.dparms.qpn_res_end = QIB_KD_QP; /* Reserve one QP */
