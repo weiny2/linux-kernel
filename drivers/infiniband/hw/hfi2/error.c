@@ -118,6 +118,18 @@ struct hfi_error_entry {
 	struct list_head list;	/* context queue */
 };
 
+static void hfi_error_handler_hw_bug(struct hfi_devdata *dd, u64 reg,
+				     char *name)
+{
+	dd_dev_err(dd, "%s, undefined bit %lld fired, HW BUG\n", name, reg);
+}
+
+static void hfi_error_handler_unimpl(struct hfi_devdata *dd, u64 reg,
+				     char *name)
+{
+	dd_dev_info(dd, "%s bit %lld fired, unimpl\n", name, reg);
+}
+
 /*
  * Each error csr definition.
  */
@@ -217,29 +229,26 @@ static void hfi_update_pmon_counters(struct hfi_devdata *dd,
 static void hfi_handle_pmon_overflow(struct hfi_devdata *dd,
 				     u64 err_sts, char *name)
 {
-	int i, j, cntr_idx, base_idx;
+	int i, cntr_idx, base_idx;
 	u64 overflow, cntr_addr, counter_value;
 
-	for (i = 1; i <= HFI_PMON_NUM_GROUPS; i++) {
-		if (err_sts & (1uLL << i)) {
-			overflow = read_csr(dd, FXR_PMON_ERR_INFO_OVERFLOW);
-			cntr_addr = overflow &
-				FXR_PMON_ERR_INFO_OVERFLOW_CNTR_ADDR_SMASK;
-			/* obtain the index of the first and
-			 * least significant counter to set overflow
-			 */
-			cntr_idx = (cntr_addr - FXR_PMON_ARRAY_OFFSET) / 8;
-			/* obtain the index of the counter within the group */
-			base_idx = cntr_idx & (HFI_PMON_NUM_CNTRS - 1);
-			for (j = base_idx; j <= HFI_PMON_NUM_CNTRS; j++) {
-				counter_value =
-					hfi_read_pmon_csr(dd, cntr_idx);
-				if (counter_value &
-					FXR_PMON_CFG_ARRAY_OVERFLOW_SMASK)
-					hfi_update_pmon_counters(dd, cntr_idx);
-				cntr_idx++;
-			}
-		}
+	overflow = read_csr(dd, FXR_PMON_ERR_INFO_OVERFLOW);
+	cntr_addr = overflow & FXR_PMON_ERR_INFO_OVERFLOW_CNTR_ADDR_SMASK;
+
+	/* obtain the index of the first and
+	 * least significant counter to set overflow
+	 */
+	cntr_idx = (cntr_addr - FXR_PMON_ARRAY_OFFSET) / 8;
+	/* obtain the index of the counter within the group */
+	base_idx = cntr_idx & (HFI_PMON_NUM_CNTRS - 1);
+
+	for (i = base_idx; i <= HFI_PMON_NUM_CNTRS; i++) {
+		counter_value = hfi_read_pmon_csr(dd, cntr_idx);
+
+		if (counter_value & FXR_PMON_CFG_ARRAY_OVERFLOW_SMASK)
+			hfi_update_pmon_counters(dd, cntr_idx);
+
+		cntr_idx++;
 	}
 }
 
@@ -359,8 +368,7 @@ irqreturn_t hfi_irq_errd_handler(int irq, void *dev_id)
 					   event->event_name,
 					   event->event_desc);
 				if (event->action)
-					event->action(dd, (1uLL << j),
-						      csr->csr_name);
+					event->action(dd, j, csr->csr_name);
 			}
 		}
 	}
@@ -389,6 +397,18 @@ int hfi_setup_errd_irq(struct hfi_devdata *dd)
 	int count, irq;
 	int i, j, ret;
 	u64 val;
+	struct hfi_error_event *ee_ptr = NULL;
+
+	/* Setup interrupt handler for each IRQ */
+	for (i = 0; i < HFI_NUM_ERR_DOMAIN; i++) {
+		for (j = 0; j < 64; j++) {
+			ee_ptr = &hfi_error_domain[i].csr->events[j];
+			if (strstr(ee_ptr->event_desc, "Unused"))
+				ee_ptr->action = hfi_error_handler_hw_bug;
+			else
+				ee_ptr->action = hfi_error_handler_unimpl;
+		}
+	}
 
 	/*
 	 * Set address translation error event handler:
@@ -409,8 +429,6 @@ int hfi_setup_errd_irq(struct hfi_devdata *dd)
 	for (i = 1; i <= HFI_PMON_NUM_GROUPS; i++)
 		hfi_pmon_error[0].events[i].action =
 				hfi_handle_pmon_overflow;
-
-	/* Setup interrupt handler for each IRQ */
 
 	/* set all bits */
 	val = ~0;
