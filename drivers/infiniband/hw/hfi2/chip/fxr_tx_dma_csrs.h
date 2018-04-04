@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_tx_dma_CSRS_H__
@@ -934,8 +934,8 @@ typedef union {
 // TXDMA_DBG_INPQ_PAYLOAD4 desc:
 typedef union {
     struct {
-        uint64_t                 Data  : 34; // Data
-        uint64_t       Reserved_63_34  : 30; // Unused
+        uint64_t                 Data  : 37; // Data
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } TXDMA_DBG_INPQ_PAYLOAD4_t;

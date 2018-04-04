@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_rx_hp_CSRS_H__
@@ -8,14 +8,15 @@
 // RXHP_CFG_CTL desc:
 typedef union {
     struct {
-        uint64_t DISABLE_VTPID_NONMATCHING  :  1; // Do not use the VTPID CAM for packets with NI = PTL_NONMATCHING_LOGICAL
-        uint64_t DISABLE_VTPID_MATCHING  :  1; // Do not use the VTPID CAM for packets with NI = PTL_MATCHING_LOGICAL
-        uint64_t          DMA_STALL_X  :  3; // This controls what is counted by the DMA_STALL_X performance counter. 0,1,2,3 are single TC, 4 is commands, 7 is all of them.
-        uint64_t          DMA_STALL_Y  :  3; // This controls what is counted by the DMA_STALL_Y performance counter. 0,1,2,3 are single TC, 4 is commands, 7 is all of them.
-        uint64_t           DFD_SELECT  :  3; // Select from 8 possible drivers of the DFD signals
-        uint64_t         Unused_31_11  : 21; // Spare bits for future use
-        uint64_t      DEFAULT_8B_PKEY  : 16; // Default Partition Key to use for promoting 8B headers to 16B headers.
-        uint64_t       Reserved_63_48  : 16; // 
+        uint64_t disable_vtpid_nonmatching  :  1; // Do not use the VTPID CAM for packets with NI = PTL_NONMATCHING_LOGICAL
+        uint64_t disable_vtpid_matching  :  1; // Do not use the VTPID CAM for packets with NI = PTL_MATCHING_LOGICAL
+        uint64_t          dma_stall_x  :  3; // This controls what is counted by the DMA_STALL_X performance counter. 0,1,2,3 are single TC, 4 is commands, 7 is all of them.
+        uint64_t          dma_stall_y  :  3; // This controls what is counted by the DMA_STALL_Y performance counter. 0,1,2,3 are single TC, 4 is commands, 7 is all of them.
+        uint64_t           dfd_select  :  3; // Select from 8 possible drivers of the DFD signals
+        uint64_t arb_golden_item_delay  :  3; // The forward progress mechanism engages after the oldest item in the main arbiter (packet or command) has been skipped over (2^(x+1))-1 times.
+        uint64_t       Reserved_31_14  : 18; // Unused
+        uint64_t      default_8b_pkey  : 16; // Default Partition Key to use for promoting 8B headers to 16B headers.
+        uint64_t            chint_map  : 16; // Map me hint to dma hint.
     } field;
     uint64_t val;
 } RXHP_CFG_CTL_t;
@@ -26,7 +27,7 @@ typedef union {
         uint64_t                  uid  : 32; // UID (CAM tag)
         uint64_t                valid  :  1; // The CAM entry is valid. If this is clear, the CAM entry must never match.
         uint64_t            tpid_base  : 12; // TPID base (CAM data)
-        uint64_t       Reserved_63_45  : 19; // 
+        uint64_t       Reserved_63_45  : 19; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_VTPID_CAM_t;
@@ -34,15 +35,15 @@ typedef union {
 // RXHP_CFG_HDR_PE desc:
 typedef union {
     struct {
-        uint64_t            PE_ENABLE  :  8; // Set bit to enable a PE for scheduling. A PE will start processing packets when enabled and authenticated.
-        uint64_t        SCHEDULE_MODE  :  1; // 0: Schedule packets to even/odd cluster based on PID[0]. 1: Schedule packets to even/odd clusters based on PID parity.
-        uint64_t USE_CONSERVATIVE_ENTRYPOINT  :  1; // Use non-optimized entry points where available.
+        uint64_t            pe_enable  :  8; // Set bit to enable a PE for scheduling. A PE will start processing packets when enabled and authenticated.
+        uint64_t        schedule_mode  :  1; // 0: Schedule packets to even/odd cluster based on PID[0]. 1: Schedule packets to even/odd clusters based on PID parity.
+        uint64_t use_conservative_entrypoint  :  1; // Use non-optimized entry points where available.
         uint64_t       Reserved_15_10  :  6; // Unused
-        uint64_t START_AUTHENTICATION  :  8; // Starts the authentication process when set. Should be reset by the user before writing to the PE rams. If it is not reset before writing to the rams, the authentication sequence will restart after every write.
-        uint64_t AUTHENTICATION_COMPLETE  :  8; // The authentication process has completed. Cleared by hardware when START_AUTHENTICATION is set or the hdr_pe rams are written.
-        uint64_t AUTHENTICATION_SUCCESS  :  8; // Authentication was successful, written by hardware when authentication is completed, cleared by hardware when hdr_pe rams are written or START_AUTHENTICATION is set.
-        uint64_t    PE_RAM_WRITE_MASK  :  8; // when a bit is cleared, writes to the rams for the corresponding PEs will be dropped. This allows the user to write different firmware images to each PE.
-        uint64_t    PE_RAM_RESET_MASK  :  8; // when a bit is cleared, soft reset will not deauthenticate the firmware. These bits must be set during a soft reset to allow the firmware image to be updated. Hard reset always deauthenticates the firmware.
+        uint64_t start_authentication  :  8; // Starts the authentication process when set. Should be reset by the user before writing to the PE rams. If it is not reset before writing to the rams, the authentication sequence will restart after every write.
+        uint64_t authentication_complete  :  8; // The authentication process has completed. Cleared by hardware when START_AUTHENTICATION is set or the hdr_pe rams are written.
+        uint64_t authentication_success  :  8; // Authentication was successful, written by hardware when authentication is completed, cleared by hardware when hdr_pe rams are written or START_AUTHENTICATION is set.
+        uint64_t    pe_ram_write_mask  :  8; // when a bit is cleared, writes to the rams for the corresponding PEs will be dropped. This allows the user to write different firmware images to each PE.
+        uint64_t    pe_ram_reset_mask  :  8; // when a bit is cleared, soft reset will not deauthenticate the firmware. These bits must be set during a soft reset to allow the firmware image to be updated. Hard reset always deauthenticates the firmware.
         uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
@@ -51,14 +52,14 @@ typedef union {
 // RXHP_CFG_E2E_CREDIT_FUND_MAX desc:
 typedef union {
     struct {
-        uint64_t TC0_HDR_FLIT_CRDT_FUND_MAX  :  6; // RXE2E TC0 Header flit Credit Fund Max
-        uint64_t TC1_HDR_FLIT_CRDT_FUND_MAX  :  6; // RXE2E TC1 Header flit Credit Fund Max
-        uint64_t TC2_HDR_FLIT_CRDT_FUND_MAX  :  6; // RXE2E TC2 Header flit Credit Fund Max
-        uint64_t TC3_HDR_FLIT_CRDT_FUND_MAX  :  6; // RXE2E TC3 Header flit Credit Fund Max
-        uint64_t TC0_PKT_STATUS_CRDT_FUND_MAX  :  6; // RXE2E TC0 Packet Status Credit Fund Max
-        uint64_t TC1_PKT_STATUS_CRDT_FUND_MAX  :  6; // RXE2E TC1 Packet Status Credit Fund Max
-        uint64_t TC2_PKT_STATUS_CRDT_FUND_MAX  :  6; // RXE2E TC2 Packet Status Credit Fund Max
-        uint64_t TC3_PKT_STATUS_CRDT_FUND_MAX  :  6; // RXE2E TC3 Packet Status Credit Fund Max
+        uint64_t tc0_hdr_flit_crdt_fund_max  :  6; // RXE2E TC0 Header flit Credit Fund Max
+        uint64_t tc1_hdr_flit_crdt_fund_max  :  6; // RXE2E TC1 Header flit Credit Fund Max
+        uint64_t tc2_hdr_flit_crdt_fund_max  :  6; // RXE2E TC2 Header flit Credit Fund Max
+        uint64_t tc3_hdr_flit_crdt_fund_max  :  6; // RXE2E TC3 Header flit Credit Fund Max
+        uint64_t tc0_pkt_status_crdt_fund_max  :  6; // RXE2E TC0 Packet Status Credit Fund Max
+        uint64_t tc1_pkt_status_crdt_fund_max  :  6; // RXE2E TC1 Packet Status Credit Fund Max
+        uint64_t tc2_pkt_status_crdt_fund_max  :  6; // RXE2E TC2 Packet Status Credit Fund Max
+        uint64_t tc3_pkt_status_crdt_fund_max  :  6; // RXE2E TC3 Packet Status Credit Fund Max
         uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
@@ -83,23 +84,24 @@ typedef union {
     uint64_t val;
 } RXHP_CFG_PTE_CACHE_CLIENT_DISABLE_t;
 
-// RXHP_CFG_PTE_CACHE_HASH_SELECT desc:
+// RXHP_CFG_CACHE_HASH_SELECT desc:
 typedef union {
     struct {
-        uint64_t          hash_select  :  2; // PTE cache address hash select.
-        uint64_t        Reserved_63_2  : 62; // Unused
+        uint64_t      pte_hash_select  :  2; // PTE cache address hash select.
+        uint64_t      psc_hash_select  :  2; // PSC address hash select.
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
-} RXHP_CFG_PTE_CACHE_HASH_SELECT_t;
+} RXHP_CFG_CACHE_HASH_SELECT_t;
 
 // RXHP_CFG_PTE_CACHE_ACCESS_CTL desc:
 typedef union {
     struct {
-        uint64_t              address  : 22; // The contents of this field differ based on cmd. pte_cache_addr_t for CACHE_CMD_RD, CACHE_CMD_WR,CACHE_CMD_INVALIDATE,CACHE_CMD_FLUSH_INVALID,CACHE_CMD_FLUSH_VALID. 11:0 used for CACHE_CMD_DATA_RD,CACHE_CMD_DATA_WR 9:0 used for CACHE_CMD_TAG_RD,CACHE_CMD_TAG_WR
-        uint64_t         mask_address  : 22; // cache cmd mask address. 1 bits are don't care. only used for CACHE_CMD_INVALIDATE, CACHE_CMD_FLUSH_INVALID, CACHE_CMD_FLUSH_VALID The form of this field is pte_cache_addr_t. initially all 1's. Note: If this field is 0, a normal single lookup is done. If non-zero, the entire cache tag memory is read and tag entries match/masked.
+        uint64_t              address  : 25; // The contents of this field differ based on cmd. pte_cache_addr_t for CACHE_CMD_RD, CACHE_CMD_WR,CACHE_CMD_INVALIDATE,CACHE_CMD_FLUSH_INVALID,CACHE_CMD_FLUSH_VALID. 11:0 used for CACHE_CMD_DATA_RD,CACHE_CMD_DATA_WR 9:0 used for CACHE_CMD_TAG_RD,CACHE_CMD_TAG_WR
+        uint64_t         mask_address  : 25; // cache cmd mask address. 1 bits are don't care. only used for CACHE_CMD_INVALIDATE, CACHE_CMD_FLUSH_INVALID, CACHE_CMD_FLUSH_VALID The form of this field is pte_cache_addr_t. initially all 1's. Note: If this field is 0, a normal single lookup is done. If non-zero, the entire cache tag memory is read and tag entries match/masked.
         uint64_t                  cmd  :  4; // cache cmd. see <blue text>Section A-7, 'Cache Command enumeration (Enum - fxr_cache_cmd_t) - 4bit' initially CACHE_CMD_INVALIDATE
         uint64_t                 busy  :  1; // SW sets busy when writing this csr. HW clears busy when cmd is complete. busy must be clear before writing this csr. If busy is set, HW is busy on a previous cmd. Coming out of reset, busy will be 1 so as to initiate the pte cache tag invalidation. Then in 2k clks or so, busy will go to 0.
-        uint64_t                  Rsv  : 15; // 
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_PTE_CACHE_ACCESS_CTL_t;
@@ -116,7 +118,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 data  : 11; // pte cache data[202:192]
-        uint64_t                  Rsv  : 53; // 
+        uint64_t       Reserved_63_11  : 53; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_PTE_CACHE_ACCESS_DATA3_t;
@@ -133,7 +135,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t           bit_enable  : 11; // pte cache wr data bit enable[202:192]. 1 bits are written.
-        uint64_t                  Rsv  : 53; // 
+        uint64_t       Reserved_63_11  : 53; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_PTE_CACHE_ACCESS_DATA_BIT_ENABLE3_t;
@@ -141,12 +143,12 @@ typedef union {
 // RXHP_CFG_PTE_CACHE_ACCESS_TAG desc:
 typedef union {
     struct {
-        uint64_t      tag_way_addr_lo  : 22; // pte cache tag way address, format is pte_cache_addr_t
+        uint64_t      tag_way_addr_lo  : 25; // pte cache tag way address, format is pte_cache_addr_t
         uint64_t     tag_way_valid_lo  :  1; // pte cache tag way valid
-        uint64_t           reserve_lo  :  9; // 
-        uint64_t      tag_way_addr_hi  : 22; // pte cache tag way address, format is pte_cache_addr_t
+        uint64_t           reserve_lo  :  6; // 
+        uint64_t      tag_way_addr_hi  : 25; // pte cache tag way address, format is pte_cache_addr_t
         uint64_t     tag_way_valid_hi  :  1; // pte cache tag way valid
-        uint64_t           reserve_hi  :  9; // 
+        uint64_t           reserve_hi  :  6; // 
     } field;
     uint64_t val;
 } RXHP_CFG_PTE_CACHE_ACCESS_TAG_t;
@@ -156,7 +158,7 @@ typedef union {
     struct {
         uint64_t   small_max_psn_dist  : 16; // Max PSN distance from expected unordered PSN that OTR is allowed to transmit before going into flow control. This is sent in the special ack when the connection is not currently using a big scoreboard and a big scoreboard is not available. RXHP uses this value in the special ack if rxe2e_mc0_packet_status.psn_non_e2e_ctl_connect_union.non_e2e_ctl_connect.big_scoreboard_available == 0.
         uint64_t     big_max_psn_dist  : 16; // Max PSN distance from expected unordered PSN that OTR is allowed to transmit before going into flow control. This is sent in the special ack when the connection is either currently using a big scoreboard or a big scoreboard is available. RXHP uses this value in the special ack if rxe2e_mc0_packet_status.psn_non_e2e_ctl_connect_union.non_e2e_ctl_connect.big_scoreboard_available == 1.
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_MAX_PSN_DISTANCE_t;
@@ -164,12 +166,12 @@ typedef union {
 // RXHP_CFG_NPTL_CTL desc:
 typedef union {
     struct {
-        uint64_t           Reserved_0  :  1; // Reserved
+        uint64_t           Reserved_0  :  1; // Unused
         uint64_t       RcvQPMapEnable  :  1; // When set, the QP mapping table is used for non-KDETH 9B packets. Otherwise non-KDETH 9B packets are delivered to context 0.
-        uint64_t         Reserved_3_2  :  2; // Reserved
+        uint64_t         Reserved_3_2  :  2; // Unused
         uint64_t      RcvBypassEnable  :  1; // When set receive of bypass packets is enabled, otherwise receive of bypass packets is disabled
         uint64_t         RcvRsmEnable  :  1; // When set the entire RSM mechanism is enabled, otherwise the RSM mechanism is disabled
-        uint64_t        Reserved_63_6  : 58; // Reserved
+        uint64_t        Reserved_63_6  : 58; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_NPTL_CTL_t;
@@ -177,8 +179,8 @@ typedef union {
 // RXHP_CFG_NPTL_MAX_CONTEXTS desc:
 typedef union {
     struct {
-        uint64_t                  Cnt  :  8; // Total number of receive contexts. This is a constant value for the FXR ASIC regardless of software configuration.
-        uint64_t        Reserved_63_8  : 56; // Reserved
+        uint64_t                  cnt  :  8; // Total number of receive contexts. This is a constant value for the FXR ASIC regardless of software configuration.
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_NPTL_MAX_CONTEXTS_t;
@@ -186,9 +188,9 @@ typedef union {
 // RXHP_CFG_NPTL_BTH_QP desc:
 typedef union {
     struct {
-        uint64_t        Reserved_15_0  : 16; // Reserved
-        uint64_t             KDETH_QP  :  8; // The value of QP[23:16] for KDETH packets. Note: a value of 0x00 must not be used since this will cause QP0/QP1 packets to be decoded as KDETH packets. Similarly, a value of 0xFF must not be used since this would cause multicast packets to be decoded as KDETH packets.
-        uint64_t       Reserved_63_24  : 40; // Reserved
+        uint64_t        Reserved_15_0  : 16; // Unused
+        uint64_t             kdeth_qp  :  8; // The value of QP[23:16] for KDETH packets. Note: a value of 0x00 must not be used since this will cause QP0/QP1 packets to be decoded as KDETH packets. Similarly, a value of 0xFF must not be used since this would cause multicast packets to be decoded as KDETH packets.
+        uint64_t       Reserved_63_24  : 40; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_NPTL_BTH_QP_t;
@@ -197,7 +199,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t     MulticastContext  :  8; // Receive context for multicast packets
-        uint64_t        Reserved_63_8  : 56; // Reserved
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_NPTL_MULTICAST_t;
@@ -206,9 +208,9 @@ typedef union {
 typedef union {
     struct {
         uint64_t        BypassContext  :  8; // Receive context for bypass packets
-        uint64_t        Reserved_15_8  :  8; // Reserved
+        uint64_t        Reserved_15_8  :  8; // Unused
         uint64_t              HdrSize  :  5; // Header size for bypass packets in DWs Minimum value is 0 DWs Maximum value is 31 DWs Note that all values are supported A setting of 0 means that the entirety of the bypass packet is delivered to the eager buffer, and zero bytes to the header queue (i.e. just the RHF value).
-        uint64_t       Reserved_63_21  : 43; // Reserved
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_NPTL_BYPASS_t;
@@ -217,7 +219,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t          VL15Context  :  8; // Receive context for VL15 packets
-        uint64_t        Reserved_63_8  : 56; // Reserved
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_NPTL_VL15_t;
@@ -241,7 +243,7 @@ typedef union {
         uint64_t                 tpid  : 12; // addr.tpid
         uint64_t               handle  : 16; // addr.handle
         uint64_t                valid  :  1; // cache entry is valid
-        uint64_t                  Rsv  :  2; // 
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t                 prev  : 16; // prev ptr
         uint64_t                 next  : 16; // next ptr
     } field;
@@ -263,7 +265,7 @@ typedef union {
         uint64_t                 tpid  : 12; // bit wr enable for addr.tpid
         uint64_t               handle  : 16; // bit wr enable for addr.handle
         uint64_t                valid  :  1; // bit wr enable for valid
-        uint64_t                  Rsv  :  2; // 
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t                 prev  : 16; // bit wr enable for prev ptr
         uint64_t                 next  : 16; // bit wr enable for next ptr
     } field;
@@ -281,10 +283,13 @@ typedef union {
 // RXHP_CFG_CHINTS desc:
 typedef union {
     struct {
-        uint64_t            ch_pte_rd  :  2; // PSN cache read
-        uint64_t      ch_pte_flush_wr  :  2; // PSN cache flush write
-        uint64_t     ch_pte_victim_wr  :  2; // PSN cache victim write
-        uint64_t        Reserved_63_6  : 58; // Unused
+        uint64_t            ch_pte_rd  :  2; // PTE cache read
+        uint64_t      ch_pte_flush_wr  :  2; // PTE cache flush write
+        uint64_t     ch_pte_victim_wr  :  2; // PTE cache victim write
+        uint64_t            ch_psc_rd  :  2; // PSC cache read
+        uint64_t      ch_psc_flush_wr  :  2; // PSC cache flush write
+        uint64_t     ch_psc_victim_wr  :  2; // PSC cache victim write
+        uint64_t       Reserved_63_12  : 52; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_CHINTS_t;
@@ -307,17 +312,17 @@ typedef union {
 // RXHP_CFG_NPTL_RSM_CFG desc:
 typedef union {
     struct {
-        uint64_t    EnableOrChainRsm0  :  1; // If this CSR is for RSM instance 0, this is the enable bit for RSM instance 0. Otherwise, this is a chain bit and indicates whether RSM0 is chained into this RSM instance.
-        uint64_t    EnableOrChainRsm1  :  1; // If this CSR is for RSM instance 1, this is the enable bit for RSM instance 1. Otherwise, this is a chain bit and indicates whether RSM1 is chained into this RSM instance.
-        uint64_t    EnableOrChainRsm2  :  1; // If this CSR is for RSM instance 2, this is the enable bit for RSM instance 2. Otherwise, this is a chain bit and indicates whether RSM2 is chained into this RSM instance.
-        uint64_t    EnableOrChainRsm3  :  1; // If this CSR is for RSM instance 3, this is the enable bit for RSM instance 3. Otherwise, this is a chain bit and indicates whether RSM3 is chained into this RSM instance.
-        uint64_t        Reserved_31_4  : 28; // Reserved
+        uint64_t    EnableOrChainRsm0  :  1; // This bit indicates that the RSM 0 is chained into this RSM instance. If this bit is not set in the CSR for RSM instance 0, RSM instance 0 is considered to be disabled.
+        uint64_t    EnableOrChainRsm1  :  1; // This bit indicates that the RSM 1 is chained into this RSM instance. If this bit is not set in the CSR for RSM instance 1, RSM instance 1 is considered to be disabled.
+        uint64_t    EnableOrChainRsm2  :  1; // This bit indicates that the RSM 2 is chained into this RSM instance. If this bit is not set in the CSR for RSM instance 2, RSM instance 2 is considered to be disabled.
+        uint64_t    EnableOrChainRsm3  :  1; // This bit indicates that the RSM 3 is chained into this RSM instance. If this bit is not set in the CSR for RSM instance 3, RSM instance 3 is considered to be disabled.
+        uint64_t        Reserved_31_4  : 28; // Unused
         uint64_t               Offset  :  8; // The offset for the calculated 8-bit RSM index into the RcvRsmMapTable.
-        uint64_t       Reserved_47_40  :  8; // Reserved
+        uint64_t       Reserved_47_40  :  8; // Unused
         uint64_t        BypassHdrSize  :  5; // Header size in DWs for bypass packets that match the RSM condition Minimum value is 0 DWs Maximum value is 31 DWs Note that all values are supported
-        uint64_t       Reserved_59_53  :  7; // Reserved
+        uint64_t       Reserved_59_53  :  7; // Unused
         uint64_t           PacketType  :  3; // Packet type for this match: - 0x0 = expected receive packet - 0x1 = eager receive packet - 0x2 = 9B packet - 0x3 = reserved (RSM of error packets is not supported) - 0x4 = bypass packet - 0x5 to 0x7 = reserved
-        uint64_t          Reserved_63  :  1; // Reserved
+        uint64_t          Reserved_63  :  1; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_NPTL_RSM_CFG_t;
@@ -326,14 +331,14 @@ typedef union {
 typedef union {
     struct {
         uint64_t         Field1Offset  :  9; // Selects start position of field 1 in the range of 0 to 511 bits relative to the beginning of the packet.
-        uint64_t        Reserved_15_9  :  7; // Reserved
+        uint64_t        Reserved_15_9  :  7; // Unused
         uint64_t         Field2Offset  :  9; // Selects start position of field 2 in the range of 0 to 511 bits relative to the beginning of the packet.
-        uint64_t       Reserved_31_25  :  7; // Reserved
+        uint64_t       Reserved_31_25  :  7; // Unused
         uint64_t         Index1Offset  :  9; // Selects start position of index 1 in the range of 0 to 511 bits relative to the beginning of the packet.
-        uint64_t       Reserved_43_41  :  3; // Reserved
+        uint64_t       Reserved_43_41  :  3; // Unused
         uint64_t          Index1Width  :  4; // Selects width of index 1 in range of 0 to 8 bits. Values 9 to 15 are reserved.
         uint64_t         Index2Offset  :  9; // Selects start position of index 2 in the range of 0 to 511 bits relative to the beginning of the packet.
-        uint64_t       Reserved_59_57  :  3; // Reserved
+        uint64_t       Reserved_59_57  :  3; // Unused
         uint64_t          Index2Width  :  4; // Selects width of index 2 in range of 0 to 8 bits. Values 9 to 15 are reserved.
     } field;
     uint64_t val;
@@ -346,7 +351,7 @@ typedef union {
         uint64_t               Value1  :  8; // 8-bit value for field 1 match
         uint64_t                Mask2  :  8; // 8-bit mask for field 2 match
         uint64_t               Value2  :  8; // 8-bit value for field 2 match
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_NPTL_RSM_MATCH_t;
@@ -369,7 +374,7 @@ typedef union {
 // RXHP_STS_NPTL_RCV_DROPPED_PKT_CNT desc:
 typedef union {
     struct {
-        uint64_t                Count  : 64; // Incremented by hardware when a packet is dropped.
+        uint64_t                count  : 64; // Incremented by hardware when a packet is dropped.
     } field;
     uint64_t val;
 } RXHP_STS_NPTL_RCV_DROPPED_PKT_CNT_t;
@@ -377,7 +382,7 @@ typedef union {
 // RXHP_STS_NPTL_RCV_INVALID_CONTEXT_CNT desc:
 typedef union {
     struct {
-        uint64_t                Count  : 64; // Incremented by hardware when a packet is dropped.
+        uint64_t                count  : 64; // Incremented by hardware when a packet is dropped.
     } field;
     uint64_t val;
 } RXHP_STS_NPTL_RCV_INVALID_CONTEXT_CNT_t;
@@ -385,7 +390,7 @@ typedef union {
 // RXHP_STS_NPTL_RCV_JKEY_MISMATCH_CNT desc:
 typedef union {
     struct {
-        uint64_t                Count  : 64; // Incremented by hardware when a packet is dropped.
+        uint64_t                count  : 64; // Incremented by hardware when a packet is dropped.
     } field;
     uint64_t val;
 } RXHP_STS_NPTL_RCV_JKEY_MISMATCH_CNT_t;
@@ -393,7 +398,7 @@ typedef union {
 // RXHP_STS_NPTL_RCV_DISABLED_CONTEXT_CNT desc:
 typedef union {
     struct {
-        uint64_t                Count  : 64; // Incremented by hardware when a packet is dropped.
+        uint64_t                count  : 64; // Incremented by hardware when a packet is dropped.
     } field;
     uint64_t val;
 } RXHP_STS_NPTL_RCV_DISABLED_CONTEXT_CNT_t;
@@ -401,10 +406,10 @@ typedef union {
 // RXHP_CFG_PID_FLUSH desc:
 typedef union {
     struct {
-        uint64_t                  PID  : 12; // The PID to block.
+        uint64_t                  pid  : 12; // The PID to block.
         uint64_t                valid  :  1; // Set this to flush the PID from rxhp and block all new commands and packets for the PID
         uint64_t                  ack  :  1; // This will be set once active packets and commands for the PID have completed. All new packets/commands will be dropped. Clear this whenever setting valid or changing the PID.
-        uint64_t       Reserved_63_14  : 50; // 
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_PID_FLUSH_t;
@@ -412,12 +417,12 @@ typedef union {
 // RXHP_CFG_TRANSMIT_DELAY_1 desc:
 typedef union {
     struct {
-        uint64_t       NS_PER_1KB_TC0  : 11; // Fixed point value to represent the number of nanoseconds per 1KB. In the form: xxxxxx.yyyyy Default to about 0.833ns/cycle * 32 cycles/1KB = 26.66 or 011010.10101
-        uint64_t     NS_PER_CYCLE_TC0  : 10; // Fixed point value to represent the number of nanoseconds per cycle (the decay rate of the bandwidth reservation). In the form: xx.yyyyyyyy Default to about 0.833ns = 00.11010101
-        uint64_t       NS_PER_1KB_TC1  : 11; // Fixed point value to represent the number of nanoseconds per 1KB. In the form: xxxxxx.yyyyy Default to about 0.833ns/cycle * 32 cycles/1KB = 26.66 or 011010.10101
-        uint64_t     NS_PER_CYCLE_TC1  : 10; // Fixed point value to represent the number of nanoseconds per cycle (the decay rate of the bandwidth reservation). In the form: xx.yyyyyyyy Default to about 0.833ns = 00.11010101
-        uint64_t             SHARE_BW  :  1; // Use a single transmit delay logic (TC0) for rendezvous scheduling for all TCs.
-        uint64_t       Reserved_63_43  : 21; // 
+        uint64_t       ns_per_1kb_tc0  : 11; // Fixed point value to represent the number of nanoseconds per 1KB. In the form: xxxxxx.yyyyy Default to about 0.833ns/cycle * 32 cycles/1KB = 26.66 or 011010.10101
+        uint64_t     ns_per_cycle_tc0  : 10; // Fixed point value to represent the number of nanoseconds per cycle (the decay rate of the bandwidth reservation). In the form: xx.yyyyyyyy Default to about 0.833ns = 00.11010101
+        uint64_t       ns_per_1kb_tc1  : 11; // Fixed point value to represent the number of nanoseconds per 1KB. In the form: xxxxxx.yyyyy Default to about 0.833ns/cycle * 32 cycles/1KB = 26.66 or 011010.10101
+        uint64_t     ns_per_cycle_tc1  : 10; // Fixed point value to represent the number of nanoseconds per cycle (the decay rate of the bandwidth reservation). In the form: xx.yyyyyyyy Default to about 0.833ns = 00.11010101
+        uint64_t             share_bw  :  1; // Use a single transmit delay logic (TC0) for rendezvous scheduling for all TCs.
+        uint64_t       Reserved_63_43  : 21; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_TRANSMIT_DELAY_1_t;
@@ -425,11 +430,11 @@ typedef union {
 // RXHP_CFG_TRANSMIT_DELAY_2 desc:
 typedef union {
     struct {
-        uint64_t       NS_PER_1KB_TC2  : 11; // Fixed point value to represent the number of nanoseconds per 1KB. In the form: xxxxxx.yyyyy Default to about 0.833ns/cycle * 32 cycles/1KB = 26.66 or 011010.10101
-        uint64_t     NS_PER_CYCLE_TC2  : 10; // Fixed point value to represent the number of nanoseconds per cycle (the decay rate of the bandwidth reservation). In the form: xx.yyyyyyyy Default to about 0.833ns = 00.11010101
-        uint64_t       NS_PER_1KB_TC3  : 11; // Fixed point value to represent the number of nanoseconds per 1KB. In the form: xxxxxx.yyyyy Default to about 0.833ns/cycle * 32 cycles/1KB = 26.66 or 011010.10101
-        uint64_t     NS_PER_CYCLE_TC3  : 10; // Fixed point value to represent the number of nanoseconds per cycle (the decay rate of the bandwidth reservation). In the form: xx.yyyyyyyy Default to about 0.833ns = 00.11010101
-        uint64_t       Reserved_63_42  : 22; // 
+        uint64_t       ns_per_1kb_tc2  : 11; // Fixed point value to represent the number of nanoseconds per 1KB. In the form: xxxxxx.yyyyy Default to about 0.833ns/cycle * 32 cycles/1KB = 26.66 or 011010.10101
+        uint64_t     ns_per_cycle_tc2  : 10; // Fixed point value to represent the number of nanoseconds per cycle (the decay rate of the bandwidth reservation). In the form: xx.yyyyyyyy Default to about 0.833ns = 00.11010101
+        uint64_t       ns_per_1kb_tc3  : 11; // Fixed point value to represent the number of nanoseconds per 1KB. In the form: xxxxxx.yyyyy Default to about 0.833ns/cycle * 32 cycles/1KB = 26.66 or 011010.10101
+        uint64_t     ns_per_cycle_tc3  : 10; // Fixed point value to represent the number of nanoseconds per cycle (the decay rate of the bandwidth reservation). In the form: xx.yyyyyyyy Default to about 0.833ns = 00.11010101
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_TRANSMIT_DELAY_2_t;
@@ -463,7 +468,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t              address  : 57; // Buffer start address.
-        uint64_t       Reserved_63_57  :  7; // 
+        uint64_t       Reserved_63_57  :  7; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_PORT_MIRROR_PAYLOAD_START_t;
@@ -472,7 +477,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t              address  : 57; // Buffer end address.
-        uint64_t       Reserved_63_57  :  7; // 
+        uint64_t       Reserved_63_57  :  7; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_PORT_MIRROR_PAYLOAD_END_t;
@@ -481,7 +486,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t              address  : 57; // Buffer start address.
-        uint64_t       Reserved_63_57  :  7; // 
+        uint64_t       Reserved_63_57  :  7; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_PORT_MIRROR_HEADER_START_t;
@@ -490,7 +495,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t              address  : 57; // Buffer start address.
-        uint64_t       Reserved_63_57  :  7; // 
+        uint64_t       Reserved_63_57  :  7; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_PORT_MIRROR_HEADER_END_t;
@@ -501,7 +506,7 @@ typedef union {
         uint64_t      PORT_MIRROR_PID  : 12; // Use this PID for Port Mirroring writes.
         uint64_t PORT_MIRROR_BUFFER_READY  :  4; // Set this to indicate that a buffer is available for port mirroring. Hardware will clear it when it is done writing to that buffer.
         uint64_t       PORT_MIRROR_EN  :  1; // Enable Port Mirroring Mode.
-        uint64_t       Reserved_63_17  : 47; // 
+        uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_PORT_MIRROR_t;
@@ -530,18 +535,18 @@ typedef union {
         uint64_t          pe_data_sbe  :  8; // PE data cache sbe
         uint64_t          pe_data_mbe  :  8; // PE data cache mbe
         uint64_t           diagnostic  :  1; // Diagnostic Error Flag
-        uint64_t    pte_cache_tag_mbe  :  1; // PTE Cache tag mbe Error information: Section 29.12.3.11, 'RXHP Error Info PTE Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
-        uint64_t    pte_cache_tag_sbe  :  1; // PTE Cache tag sbe Error information: . Section 29.12.3.10, 'RXHP Error Info PTE Cache Tag SBE'
-        uint64_t   pte_cache_data_mbe  :  1; // PTE Cache data mbe Error information: Section 29.12.3.12, 'RXHP Error Info PTE Cache Data SBE/MBE'
-        uint64_t   pte_cache_data_sbe  :  1; // PTE Cache data sbe Error information: . Section 29.12.3.12, 'RXHP Error Info PTE Cache Data SBE/MBE'
+        uint64_t    pte_cache_tag_mbe  :  1; // PTE Cache tag mbe Error information: Section 29.12.5.11, 'RXHP Error Info PTE Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
+        uint64_t    pte_cache_tag_sbe  :  1; // PTE Cache tag sbe Error information: . Section 29.12.5.10, 'RXHP Error Info PTE Cache Tag SBE'
+        uint64_t   pte_cache_data_mbe  :  1; // PTE Cache data mbe Error information: Section 29.12.5.12, 'RXHP Error Info PTE Cache Data SBE/MBE'
+        uint64_t   pte_cache_data_sbe  :  1; // PTE Cache data sbe Error information: . Section 29.12.5.12, 'RXHP Error Info PTE Cache Data SBE/MBE'
         uint64_t       psc0_cache_mbe  :  1; // PSC0 Cache mbe
         uint64_t       psc0_cache_sbe  :  1; // PSC0 Cache sbe
         uint64_t       psc1_cache_mbe  :  1; // PSC1 Cache mbe
         uint64_t       psc1_cache_sbe  :  1; // PSC1 Cache sbe
         uint64_t       hiarb_data_sbe  :  1; // hiarb interface sbe
         uint64_t       hiarb_data_mbe  :  1; // hiarb interface mbe
-        uint64_t       qmap_table_sbe  :  1; // qmap table sbe
-        uint64_t       qmap_table_mbe  :  1; // qmap table mbe
+        uint64_t              ptq_sbe  :  1; // ptq sbe
+        uint64_t              ptq_mbe  :  1; // ptq mbe
         uint64_t        flit_data_sbe  :  1; // flit data sbe
         uint64_t        flit_data_mbe  :  1; // flit data mbe
         uint64_t          ci_data_sbe  :  1; // command interface data sbe
@@ -550,9 +555,8 @@ typedef union {
         uint64_t      trigop_data_mbe  :  1; // triggered op data mbe
         uint64_t       pkt_status_sbe  :  1; // packet status sbe
         uint64_t       pkt_status_mbe  :  1; // packet status mbe
-        uint64_t              ptq_sbe  :  1; // ptq sbe
-        uint64_t              ptq_mbe  :  1; // ptq mbe
-        uint64_t       Reserved_63_55  :  9; // 
+        uint64_t received_response_pkt  :  1; // Rxhp dropped a response packet, probably due to incorrect configuration
+        uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_STS_1_t;
@@ -560,8 +564,8 @@ typedef union {
 // RXHP_ERR_CLR_1 desc:
 typedef union {
     struct {
-        uint64_t          events_54_0  : 55; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_55  :  9; // Reserved
+        uint64_t               events  : 54; // Write 1's to clear corresponding status bits.
+        uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_CLR_1_t;
@@ -569,8 +573,8 @@ typedef union {
 // RXHP_ERR_FRC_1 desc:
 typedef union {
     struct {
-        uint64_t          events_18_0  : 55; // Write 1's to set corresponding status bits.
-        uint64_t       Reserved_63_55  :  9; // Reserved
+        uint64_t               events  : 54; // Write 1's to set corresponding status bits.
+        uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_FRC_1_t;
@@ -578,8 +582,8 @@ typedef union {
 // RXHP_ERR_EN_HOST_1 desc:
 typedef union {
     struct {
-        uint64_t          events_54_0  : 55; // Enables corresponding status bits to generate host interrupt signal.
-        uint64_t       Reserved_63_55  :  9; // Reserved
+        uint64_t               events  : 54; // Enables corresponding status bits to generate host interrupt signal.
+        uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_EN_HOST_1_t;
@@ -587,8 +591,8 @@ typedef union {
 // RXHP_ERR_FIRST_HOST_1 desc:
 typedef union {
     struct {
-        uint64_t          events_54_0  : 55; // Snapshot of status bits when host interrupt signal transitions from 0 to 1.
-        uint64_t       Reserved_63_55  :  9; // Reserved
+        uint64_t               events  : 54; // Snapshot of status bits when host interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_FIRST_HOST_1_t;
@@ -596,8 +600,8 @@ typedef union {
 // RXHP_ERR_EN_BMC_1 desc:
 typedef union {
     struct {
-        uint64_t          events_54_0  : 55; // Enable corresponding status bits to generate BMC interrupt signal.
-        uint64_t       Reserved_63_55  :  9; // Reserved
+        uint64_t               events  : 54; // Enable corresponding status bits to generate BMC interrupt signal.
+        uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_EN_BMC_1_t;
@@ -605,8 +609,8 @@ typedef union {
 // RXHP_ERR_FIRST_BMC_1 desc:
 typedef union {
     struct {
-        uint64_t          events_54_0  : 55; // Snapshot of status bits when BMC interrupt signal transitions from 0 to 1.
-        uint64_t       Reserved_63_55  :  9; // Reserved
+        uint64_t               events  : 54; // Snapshot of status bits when BMC interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_FIRST_BMC_1_t;
@@ -614,8 +618,8 @@ typedef union {
 // RXHP_ERR_EN_QUAR_1 desc:
 typedef union {
     struct {
-        uint64_t          events_54_0  : 55; // Enable corresponding status bits to generate quarantine signal.
-        uint64_t       Reserved_63_55  :  9; // Reserved
+        uint64_t               events  : 54; // Enable corresponding status bits to generate quarantine signal.
+        uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_EN_QUAR_1_t;
@@ -623,8 +627,8 @@ typedef union {
 // RXHP_ERR_FIRST_QUAR_1 desc:
 typedef union {
     struct {
-        uint64_t          events_54_0  : 55; // Snapshot of status bits when quarantine signal transitions from 0 to 1.
-        uint64_t       Reserved_63_55  :  9; // Reserved
+        uint64_t          events_54_0  : 54; // Snapshot of status bits when quarantine signal transitions from 0 to 1.
+        uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_FIRST_QUAR_1_t;
@@ -636,8 +640,8 @@ typedef union {
         uint64_t      sbe_last_domain  :  1; // ecc domain of last least significant sbe
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of sbes. The increment signal is the 'or' of the 2 sbe signals.
-        uint64_t     sbe_last_address  : 10; // address of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t     sbe_last_address  : 13; // address of the last least significant ecc domain sbe
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PTE_CACHE_TAG_SBE_t;
@@ -649,8 +653,8 @@ typedef union {
         uint64_t      mbe_last_domain  :  1; // ecc domain of last least significant mbe
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            mbe_count  : 12; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe signals.
-        uint64_t     mbe_last_address  : 10; // address of the last least significant ecc domain mbe
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t     mbe_last_address  : 13; // address of the last least significant ecc domain mbe
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PTE_CACHE_TAG_MBE_t;
@@ -666,7 +670,7 @@ typedef union {
         uint64_t                  sbe  :  3; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of mbes.
         uint64_t      sbe_last_domain  :  2; // domain of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_42  : 22; // Reserved
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PTE_CACHE_DATA_SBE_MBE_t;
@@ -679,7 +683,7 @@ typedef union {
         uint64_t                  sbe  : 10; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of sbes. The increment signal is the 'or' of the sbe signals.
         uint64_t     sbe_last_address  : 29; // address of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_63  :  1; // Reserved
+        uint64_t       Reserved_63_63  :  1; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PSC0_CACHE_SBE_t;
@@ -692,7 +696,7 @@ typedef union {
         uint64_t                  mbe  : 10; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            mbe_count  : 12; // saturating counter of mbes. The increment signal is the 'or' of the mbe signals.
         uint64_t     mbe_last_address  : 29; // address of the last least significant ecc domain mbe
-        uint64_t       Reserved_63_63  :  1; // Reserved
+        uint64_t       Reserved_63_63  :  1; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PSC0_CACHE_MBE_t;
@@ -705,7 +709,7 @@ typedef union {
         uint64_t                  sbe  : 10; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of sbes. The increment signal is the 'or' of the sbe signals.
         uint64_t     sbe_last_address  : 29; // address of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_63  :  1; // Reserved
+        uint64_t       Reserved_63_63  :  1; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PSC1_CACHE_SBE_t;
@@ -718,7 +722,7 @@ typedef union {
         uint64_t                  mbe  : 10; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            mbe_count  : 12; // saturating counter of mbes. The increment signal is the 'or' of the mbe signals.
         uint64_t     mbe_last_address  : 29; // address of the last least significant ecc domain mbe
-        uint64_t       Reserved_63_63  :  1; // Reserved
+        uint64_t       Reserved_63_63  :  1; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PSC1_CACHE_MBE_t;
@@ -734,7 +738,7 @@ typedef union {
         uint64_t                  sbe  :  4; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of mbes.
         uint64_t      sbe_last_domain  :  2; // domain of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_44  : 20; // Reserved
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_FLIT_DATA_SBE_MBE_t;
@@ -748,7 +752,7 @@ typedef union {
         uint64_t    sbe_last_syndrome  :  8; // syndrome of the last least significant ecc domain sbe
         uint64_t                  sbe  :  1; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of mbes.
-        uint64_t       Reserved_63_34  : 30; // Reserved
+        uint64_t       Reserved_63_34  : 30; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PACKET_STATUS_SBE_MBE_t;
@@ -764,7 +768,7 @@ typedef union {
         uint64_t                  sbe  :  4; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of mbes.
         uint64_t      sbe_last_domain  :  2; // domain of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_44  : 20; // Reserved
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_TRIGOP_DATA_SBE_MBE_t;
@@ -780,7 +784,7 @@ typedef union {
         uint64_t                  sbe  :  4; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of mbes.
         uint64_t      sbe_last_domain  :  2; // domain of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_44  : 20; // Reserved
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_CI_DATA_SBE_MBE_t;
@@ -794,7 +798,7 @@ typedef union {
         uint64_t    sbe_last_syndrome  :  8; // syndrome of the last least significant ecc domain sbe
         uint64_t                  sbe  :  1; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of mbes.
-        uint64_t       Reserved_63_34  : 30; // Reserved
+        uint64_t       Reserved_63_34  : 30; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_HIARB_DATA_SBE_MBE_t;
@@ -812,26 +816,10 @@ typedef union {
         uint64_t            sbe_count  : 12; // saturating counter of mbes.
         uint64_t      sbe_last_domain  :  2; // domain of the last least significant ecc domain sbe
         uint64_t       sbe_last_index  :  5; // index of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_52  : 12; // Reserved
+        uint64_t       Reserved_63_52  : 12; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PTQ_SBE_MBE_t;
-
-// RXHP_ERR_INFO_QP_MAP_TABLE_SBE_MBE desc:
-typedef union {
-    struct {
-        uint64_t    mbe_last_syndrome  :  8; // syndrome of the last least significant ecc domain mbe
-        uint64_t                  mbe  :  1; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
-        uint64_t            mbe_count  :  4; // saturating counter of mbes.
-        uint64_t       mbe_last_index  :  5; // index of the last least significant ecc domain mbe
-        uint64_t    sbe_last_syndrome  :  8; // syndrome of the last least significant ecc domain sbe
-        uint64_t                  sbe  :  1; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
-        uint64_t            sbe_count  : 12; // saturating counter of mbes.
-        uint64_t       sbe_last_index  :  5; // index of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_44  : 20; // Reserved
-    } field;
-    uint64_t val;
-} RXHP_ERR_INFO_QP_MAP_TABLE_SBE_MBE_t;
 
 // RXHP_ERR_INFO_PE_INST_CACHE_SBE desc:
 typedef union {
@@ -841,7 +829,7 @@ typedef union {
         uint64_t                  sbe  :  8; // per core single bit set whenever an sbe occurs for that core. This helps find more significant sbe's when multiple cores have an sbe in the same clock and only the least significant core and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of sbes. The increment signal is the 'or' of the 2 sbe signals.
         uint64_t     sbe_last_address  : 12; // address of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_42  : 22; // Reserved
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PE_INST_CACHE_SBE_t;
@@ -854,7 +842,7 @@ typedef union {
         uint64_t                  mbe  :  8; // per core single bit set whenever an mbe occurs for that core. This helps find more significant mbe's when multiple cores have an mbe in the same clock and only the least significant core and syndrome is recorded.
         uint64_t            mbe_count  : 12; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe signals.
         uint64_t     mbe_last_address  : 12; // address of the last least significant ecc domain mbe
-        uint64_t       Reserved_63_42  : 22; // Reserved
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PE_INST_CACHE_MBE_t;
@@ -867,7 +855,7 @@ typedef union {
         uint64_t                  sbe  :  8; // per core single bit set whenever an sbe occurs for that core. This helps find more significant sbe's when multiple cores have an sbe in the same clock and only the least significant core and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of sbes. The increment signal is the 'or' of the 2 sbe signals.
         uint64_t     sbe_last_address  : 12; // address of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_43  : 21; // Reserved
+        uint64_t       Reserved_63_43  : 21; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PE_DATA_CACHE_SBE_t;
@@ -880,7 +868,7 @@ typedef union {
         uint64_t                  mbe  :  8; // per core single bit set whenever an mbe occurs for that core. This helps find more significant mbe's when multiple cores have an sbe in the same clock and only the least significant core and syndrome is recorded.
         uint64_t            mbe_count  : 12; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe signals.
         uint64_t     mbe_last_address  : 12; // address of the last least significant ecc domain mbe
-        uint64_t       Reserved_63_43  : 21; // Reserved
+        uint64_t       Reserved_63_43  : 21; // Unused
     } field;
     uint64_t val;
 } RXHP_ERR_INFO_PE_DATA_CACHE_MBE_t;
@@ -900,7 +888,7 @@ typedef union {
         uint64_t psc1_cache_err_inj_mask  :  8; // psc1_cache error inject mask
         uint64_t psc1_cache_err_inj_domain  :  4; // psc1_cache error inject domain. Which ecc domain to inject the error.
         uint64_t psc1_cache_err_inj_enable  :  1; // psc1_cache error inject enable.
-        uint64_t       Reserved_63_46  : 18; // Reserved
+        uint64_t       Reserved_63_46  : 18; // Unused
     } field;
     uint64_t val;
 } RXHP_CACHE_ERR_INJECT_SBE_MBE_t;
@@ -940,7 +928,7 @@ typedef union {
         uint64_t pe_dmem_err_inj_enable  :  1; // pe dmem error inject enable.
         uint64_t  qp_map_err_inj_mask  :  8; // qp map error inject mask
         uint64_t qp_map_err_inj_enable  :  1; // qp map error inject enable.
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } RXHP_CONFIG_ERR_INJECT_SBE_MBE_t;
@@ -950,10 +938,10 @@ typedef union {
     struct {
         uint64_t              address  : 12; // Address of Entry to be accessed
         uint64_t            write_cmd  :  1; // Write = 1, Read = 0.
-        uint64_t       Reserved_15_13  :  3; // 
+        uint64_t       Reserved_15_13  :  3; // Unused
         uint64_t         cmd_complete  :  1; // Set to one after a completed access
         uint64_t              new_cmd  :  1; // Indicated the command in this CSR is ready for hardware.
-        uint64_t       Reserved_63_18  : 46; // 
+        uint64_t       Reserved_63_18  : 46; // Unused
     } field;
     uint64_t val;
 } RXHP_DBG_PORTALS_TBL_ADDR_t;
@@ -981,7 +969,7 @@ typedef union {
         uint64_t            write_cmd  :  1; // Write = 1, Read = 0.
         uint64_t         cmd_complete  :  1; // Set to one after a completed access
         uint64_t              new_cmd  :  1; // Indicated the command in this CSR is ready for hardware.
-        uint64_t       Reserved_63_18  : 46; // 
+        uint64_t       Reserved_63_18  : 46; // Unused
     } field;
     uint64_t val;
 } RXHP_DBG_PORTALS_LIST_ADDR_t;
@@ -989,7 +977,7 @@ typedef union {
 // RXHP_DBG_PORTALS_LIST_DATA desc:
 typedef union {
     struct {
-        uint64_t                 Data  : 64; // 
+        uint64_t                 data  : 64; // 
     } field;
     uint64_t val;
 } RXHP_DBG_PORTALS_LIST_DATA_t;
@@ -997,7 +985,7 @@ typedef union {
 // RXHP_DBG_PORTALS_LIST_DATA_ECC1 desc:
 typedef union {
     struct {
-        uint64_t                 Data  : 48; // 
+        uint64_t                 data  : 48; // 
         uint64_t                  ecc  : 16; // 
     } field;
     uint64_t val;
@@ -1007,7 +995,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                  ecc  : 56; // 
-        uint64_t       Reserved_63_56  :  8; // 
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } RXHP_DBG_PORTALS_LIST_DATA_ECC2_t;
@@ -1016,7 +1004,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t           way_enable  :  4; // 1 bits enable, 0 bits disable PTE Cache Tag ways.
-        uint64_t        Reserved_63_4  : 60; // Reserved
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } RXHP_DBG_PTE_CACHE_TAG_WAY_ENABLE_t;

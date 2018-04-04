@@ -33,11 +33,11 @@
 #define DEF_FXR_RX_HIARB_SW_DEF
 
 #ifndef FXR_RX_HIARB_CSRS
-#define FXR_RX_HIARB_CSRS						0x000000000000ULL
+#define FXR_RX_HIARB_CSRS						0x000000000000
 #endif
-#define FXR_NUM_CONTEXTS						192
+#define FXR_NUM_CONTEXTS						256
 #define FXR_NUM_PIDS							4096
-#define FXR_MAX_CONTEXT							191
+#define FXR_MAX_CONTEXT							255
 #define FXR_TX_CONTEXT_ENTRIES						128
 #define FXR_TX_CONTEXT_MAX						127
 #define FXR_RX_CONTEXT_ENTRIES						16
@@ -199,7 +199,50 @@
 #define FXR_RXHIARB_CFG_PERF_MATCH_AT_DLY_MATCH_INDEX_MASK		0x7Full
 #define FXR_RXHIARB_CFG_PERF_MATCH_AT_DLY_MATCH_INDEX_SMASK		0x7Full
 /*
-* Table #8 of fxr_top - RXHIARB_STS_MAX_HI_STALL
+* Table #8 of fxr_top - RX_HIARB_CFG_QP_TABLE
+* The entries of this QP table are used for defining segments of memory being 
+* allocated for QPs. Each segment may hold 0-512K QPs. Table entry 0 corresponds 
+* to QPs 0 through 512K-1, entry 1 to QPs 512k through 1M-1, and so on... Note: 
+* since this table will reside within a hardware memory, logic will require 32 
+* clock cycles after the de-assertion of reset so to scrub the QP table to its 
+* reset values and initialize the ECC check bits.
+*/
+#define FXR_RX_HIARB_CFG_QP_TABLE					(FXR_RX_HIARB_CSRS + 0x000000010100)
+#define FXR_RX_HIARB_CFG_QP_TABLE_RESETCSR				0x0000000000000000ull
+#define FXR_RX_HIARB_CFG_QP_TABLE_RESERVED_63_46_SHIFT			46
+#define FXR_RX_HIARB_CFG_QP_TABLE_RESERVED_63_46_MASK			0x3FFFFull
+#define FXR_RX_HIARB_CFG_QP_TABLE_RESERVED_63_46_SMASK			0xFFFFC00000000000ull
+#define FXR_RX_HIARB_CFG_QP_TABLE_VALID_SHIFT				45
+#define FXR_RX_HIARB_CFG_QP_TABLE_VALID_MASK				0x1ull
+#define FXR_RX_HIARB_CFG_QP_TABLE_VALID_SMASK				0x200000000000ull
+#define FXR_RX_HIARB_CFG_QP_TABLE_QP_BASE_SHIFT				0
+#define FXR_RX_HIARB_CFG_QP_TABLE_QP_BASE_MASK				0x1FFFFFFFFFFFull
+#define FXR_RX_HIARB_CFG_QP_TABLE_QP_BASE_SMASK				0x1FFFFFFFFFFFull
+/*
+* Table #9 of fxr_top - RX_HIARB_CFG_QP_MAX
+* This CSR indicates the maximum number of QPs which may exist in memory. This 
+* value is used as a hardware check for guarding against any QPs exceeding this 
+* predefined maximum value - if a QP request violates this boundary, it will be 
+* dropped and flagged as an error. This value encompasses all valid segments 
+* defined in the QP table CSR (above) and assumes that segments will be 
+* allocated contiguously with segment 0 first, then segment 1, and so on for as 
+* many segments as required. This also assumes that if a given segment is valid, 
+* then all previous segments will be supporting 512K QPs each. For example, if 
+* memory is allocated to support 1.25M QPs (value in this CSR), segments 0-2 
+* will also need to be configured in the QP table and the hardware check will 
+* assume segments 0 and 1 will each hold 512K QPs and segment 2 will hold 0.25K 
+* QPs. 
+*/
+#define FXR_RX_HIARB_CFG_QP_MAX						(FXR_RX_HIARB_CSRS + 0x000000010200)
+#define FXR_RX_HIARB_CFG_QP_MAX_RESETCSR				0x0000000000000000ull
+#define FXR_RX_HIARB_CFG_QP_MAX_RESERVED_63_25_SHIFT			25
+#define FXR_RX_HIARB_CFG_QP_MAX_RESERVED_63_25_MASK			0x7FFFFFFFFFull
+#define FXR_RX_HIARB_CFG_QP_MAX_RESERVED_63_25_SMASK			0xFFFFFFFFFE000000ull
+#define FXR_RX_HIARB_CFG_QP_MAX_MAX_QP_SHIFT				0
+#define FXR_RX_HIARB_CFG_QP_MAX_MAX_QP_MASK				0x1FFFFFFull
+#define FXR_RX_HIARB_CFG_QP_MAX_MAX_QP_SMASK				0x1FFFFFFull
+/*
+* Table #10 of fxr_top - RXHIARB_STS_MAX_HI_STALL
 * Maximum number of cycles that the HI backpressures the HIARB logic. This is a 
 * free-running monitor that continuously tracks and records the maximum time 
 * that the HIARB has a request pending, but can't send it due to a lack of 
@@ -215,7 +258,7 @@
 #define FXR_RXHIARB_STS_MAX_HI_STALL_MAX_HI_STALL_MASK			0xFFFFull
 #define FXR_RXHIARB_STS_MAX_HI_STALL_MAX_HI_STALL_SMASK			0xFFFFull
 /*
-* Table #9 of fxr_top - RXHIARB_STS_MAX_AT_STALL
+* Table #11 of fxr_top - RXHIARB_STS_MAX_AT_STALL
 * Maximum number of cycles that  HIARB is waiting to send a request to AT but 
 * doesnlt have credits. To clear out value and start a new sampling period, 
 * software just needs to write zeroes to this CSR.
@@ -229,7 +272,7 @@
 #define FXR_RXHIARB_STS_MAX_AT_STALL_MAX_AT_STALL_MASK			0xFFFFull
 #define FXR_RXHIARB_STS_MAX_AT_STALL_MAX_AT_STALL_SMASK			0xFFFFull
 /*
-* Table #10 of fxr_top - RXHIARB_STS_RXDMA_IN_0_3
+* Table #12 of fxr_top - RXHIARB_STS_RXDMA_IN_0_3
 * Status of RxDMA input queues 0-3. Note that though there are 6 bits provided 
 * for counts, the number of locations vary between input clients and will not 
 * utilize all bits,
@@ -276,7 +319,7 @@
 #define FXR_RXHIARB_STS_RXDMA_IN_0_3_RXDMA_CNT0_MASK			0x3Full
 #define FXR_RXHIARB_STS_RXDMA_IN_0_3_RXDMA_CNT0_SMASK			0x3Full
 /*
-* Table #11 of fxr_top - RXHIARB_STS_RXDMA_IN_4_8
+* Table #13 of fxr_top - RXHIARB_STS_RXDMA_IN_4_8
 * Status of non-RxDMA input queues (RxHP, RxET, RxE2E, and RxCID).Note that 
 * though there are 6 bits provided for counts, the number of locations vary 
 * between input clients and will not utilize all bits,
@@ -332,7 +375,7 @@
 #define FXR_RXHIARB_STS_RXDMA_IN_4_8_RXDMA_CNT4_MASK			0x3Full
 #define FXR_RXHIARB_STS_RXDMA_IN_4_8_RXDMA_CNT4_SMASK			0x3Full
 /*
-* Table #12 of fxr_top - RXHIARB_STS_MISC_IN
+* Table #14 of fxr_top - RXHIARB_STS_MISC_IN
 * Status of RxHP, RxET, RxE2E, and RxCID input queues. Note that though there 
 * are 6 bits provided for counts, the number of locations vary between input 
 * clients and will not utilize all bits,
@@ -379,7 +422,7 @@
 #define FXR_RXHIARB_STS_MISC_IN_RXHP_CNT_MASK				0x3Full
 #define FXR_RXHIARB_STS_MISC_IN_RXHP_CNT_SMASK				0x3Full
 /*
-* Table #13 of fxr_top - RXHIARB_STS_AT_CRED
+* Table #15 of fxr_top - RXHIARB_STS_AT_CRED
 * Status of AT request port's credits. Note that though there are 8 bits 
 * provided for count, the number of credits vary by interface,
 */
@@ -395,7 +438,7 @@
 #define FXR_RXHIARB_STS_AT_CRED_AT_CRED_CNT_MASK			0xFFull
 #define FXR_RXHIARB_STS_AT_CRED_AT_CRED_CNT_SMASK			0xFFull
 /*
-* Table #14 of fxr_top - RXHIARB_STS_HI_CRED
+* Table #16 of fxr_top - RXHIARB_STS_HI_CRED
 * Status of HIFIs request port's credits. Note that though there are 8 bits 
 * provided for count, the number of credits vary by interface,
 */
@@ -411,14 +454,29 @@
 #define FXR_RXHIARB_STS_HI_CRED_HI_CRED_CNT_MASK			0xFFull
 #define FXR_RXHIARB_STS_HI_CRED_HI_CRED_CNT_SMASK			0xFFull
 /*
-* Table #15 of fxr_top - RXHIARB_ERR_STS_1
+* Table #17 of fxr_top - RXHIARB_ERR_STS_1
 * Error status register.
 */
 #define FXR_RXHIARB_ERR_STS_1						(FXR_RX_HIARB_CSRS + 0x000000030000)
 #define FXR_RXHIARB_ERR_STS_1_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_ERR_STS_1_RESERVED_63_55_SHIFT			55
-#define FXR_RXHIARB_ERR_STS_1_RESERVED_63_55_MASK			0x1FFull
-#define FXR_RXHIARB_ERR_STS_1_RESERVED_63_55_SMASK			0xFF80000000000000ull
+#define FXR_RXHIARB_ERR_STS_1_RESERVED_63_60_SHIFT			60
+#define FXR_RXHIARB_ERR_STS_1_RESERVED_63_60_MASK			0xFull
+#define FXR_RXHIARB_ERR_STS_1_RESERVED_63_60_SMASK			0xF000000000000000ull
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_MBE_SHIFT				59
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_MBE_MASK				0x1ull
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_MBE_SMASK				0x800000000000000ull
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_SBE_SHIFT				58
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_SBE_MASK				0x1ull
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_SBE_SMASK				0x400000000000000ull
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_ADDR_OFLW_SHIFT			57
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_ADDR_OFLW_MASK			0x1ull
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_ADDR_OFLW_SMASK			0x200000000000000ull
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_BVIO_SHIFT				56
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_BVIO_MASK				0x1ull
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_BVIO_SMASK				0x100000000000000ull
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_NVAL_SHIFT				55
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_NVAL_MASK				0x1ull
+#define FXR_RXHIARB_ERR_STS_1_QP_ERR_NVAL_SMASK				0x80000000000000ull
 #define FXR_RXHIARB_ERR_STS_1_NACK_ERR_MBE_SHIFT			54
 #define FXR_RXHIARB_ERR_STS_1_NACK_ERR_MBE_MASK				0x1ull
 #define FXR_RXHIARB_ERR_STS_1_NACK_ERR_MBE_SMASK			0x40000000000000ull
@@ -585,104 +643,104 @@
 #define FXR_RXHIARB_ERR_STS_1_PCB_ERR_NVAL_MASK				0x1ull
 #define FXR_RXHIARB_ERR_STS_1_PCB_ERR_NVAL_SMASK			0x1ull
 /*
-* Table #16 of fxr_top - RXHIARB_ERR_CLR_1
+* Table #18 of fxr_top - RXHIARB_ERR_CLR_1
 * Clear error by writing 1 to corresponding bit(s).
 */
 #define FXR_RXHIARB_ERR_CLR_1						(FXR_RX_HIARB_CSRS + 0x000000030008)
 #define FXR_RXHIARB_ERR_CLR_1_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_ERR_CLR_1_RESERVED_63_56_SHIFT			56
-#define FXR_RXHIARB_ERR_CLR_1_RESERVED_63_56_MASK			0xFFull
-#define FXR_RXHIARB_ERR_CLR_1_RESERVED_63_56_SMASK			0xFF00000000000000ull
+#define FXR_RXHIARB_ERR_CLR_1_RESERVED_63_60_SHIFT			60
+#define FXR_RXHIARB_ERR_CLR_1_RESERVED_63_60_MASK			0xFull
+#define FXR_RXHIARB_ERR_CLR_1_RESERVED_63_60_SMASK			0xF000000000000000ull
 #define FXR_RXHIARB_ERR_CLR_1_ERR_CLR_SHIFT				0
-#define FXR_RXHIARB_ERR_CLR_1_ERR_CLR_MASK				0xFFFFFFFFFFFFFFull
-#define FXR_RXHIARB_ERR_CLR_1_ERR_CLR_SMASK				0xFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_CLR_1_ERR_CLR_MASK				0xFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_CLR_1_ERR_CLR_SMASK				0xFFFFFFFFFFFFFFFull
 /*
-* Table #17 of fxr_top - RXHIARB_ERR_FRC_1
+* Table #19 of fxr_top - RXHIARB_ERR_FRC_1
 * Force error by writing 1 to corresponding bit(s)..
 */
 #define FXR_RXHIARB_ERR_FRC_1						(FXR_RX_HIARB_CSRS + 0x000000030010)
 #define FXR_RXHIARB_ERR_FRC_1_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_ERR_FRC_1_RESERVED_63_56_SHIFT			56
-#define FXR_RXHIARB_ERR_FRC_1_RESERVED_63_56_MASK			0xFFull
-#define FXR_RXHIARB_ERR_FRC_1_RESERVED_63_56_SMASK			0xFF00000000000000ull
+#define FXR_RXHIARB_ERR_FRC_1_RESERVED_63_60_SHIFT			60
+#define FXR_RXHIARB_ERR_FRC_1_RESERVED_63_60_MASK			0xFull
+#define FXR_RXHIARB_ERR_FRC_1_RESERVED_63_60_SMASK			0xF000000000000000ull
 #define FXR_RXHIARB_ERR_FRC_1_ERR_FRC_SHIFT				0
-#define FXR_RXHIARB_ERR_FRC_1_ERR_FRC_MASK				0xFFFFFFFFFFFFFFull
-#define FXR_RXHIARB_ERR_FRC_1_ERR_FRC_SMASK				0xFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_FRC_1_ERR_FRC_MASK				0xFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_FRC_1_ERR_FRC_SMASK				0xFFFFFFFFFFFFFFFull
 /*
-* Table #18 of fxr_top - RXHIARB_ERR_EN_HOST_1
+* Table #20 of fxr_top - RXHIARB_ERR_EN_HOST_1
 * Enable host interrupt by writing a 1 to the corresponding bit(s).
 */
 #define FXR_RXHIARB_ERR_EN_HOST_1					(FXR_RX_HIARB_CSRS + 0x000000030018)
 #define FXR_RXHIARB_ERR_EN_HOST_1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_ERR_EN_HOST_1_RESERVED_63_56_SHIFT			56
-#define FXR_RXHIARB_ERR_EN_HOST_1_RESERVED_63_56_MASK			0xFFull
-#define FXR_RXHIARB_ERR_EN_HOST_1_RESERVED_63_56_SMASK			0xFF00000000000000ull
+#define FXR_RXHIARB_ERR_EN_HOST_1_RESERVED_63_60_SHIFT			60
+#define FXR_RXHIARB_ERR_EN_HOST_1_RESERVED_63_60_MASK			0xFull
+#define FXR_RXHIARB_ERR_EN_HOST_1_RESERVED_63_60_SMASK			0xF000000000000000ull
 #define FXR_RXHIARB_ERR_EN_HOST_1_ERR_HOST_EN_SHIFT			0
-#define FXR_RXHIARB_ERR_EN_HOST_1_ERR_HOST_EN_MASK			0xFFFFFFFFFFFFFFull
-#define FXR_RXHIARB_ERR_EN_HOST_1_ERR_HOST_EN_SMASK			0xFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_EN_HOST_1_ERR_HOST_EN_MASK			0xFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_EN_HOST_1_ERR_HOST_EN_SMASK			0xFFFFFFFFFFFFFFFull
 /*
-* Table #19 of fxr_top - RXHIARB_ERR_FIRST_HOST_1
+* Table #21 of fxr_top - RXHIARB_ERR_FIRST_HOST_1
 * First error detected for host interrupt.
 */
 #define FXR_RXHIARB_ERR_FIRST_HOST_1					(FXR_RX_HIARB_CSRS + 0x000000030020)
 #define FXR_RXHIARB_ERR_FIRST_HOST_1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_ERR_FIRST_HOST_1_RESERVED_63_56_SHIFT		56
-#define FXR_RXHIARB_ERR_FIRST_HOST_1_RESERVED_63_56_MASK		0xFFull
-#define FXR_RXHIARB_ERR_FIRST_HOST_1_RESERVED_63_56_SMASK		0xFF00000000000000ull
+#define FXR_RXHIARB_ERR_FIRST_HOST_1_RESERVED_63_60_SHIFT		60
+#define FXR_RXHIARB_ERR_FIRST_HOST_1_RESERVED_63_60_MASK		0xFull
+#define FXR_RXHIARB_ERR_FIRST_HOST_1_RESERVED_63_60_SMASK		0xF000000000000000ull
 #define FXR_RXHIARB_ERR_FIRST_HOST_1_ERR_HOST_FIRST_SHIFT		0
-#define FXR_RXHIARB_ERR_FIRST_HOST_1_ERR_HOST_FIRST_MASK		0xFFFFFFFFFFFFFFull
-#define FXR_RXHIARB_ERR_FIRST_HOST_1_ERR_HOST_FIRST_SMASK		0xFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_FIRST_HOST_1_ERR_HOST_FIRST_MASK		0xFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_FIRST_HOST_1_ERR_HOST_FIRST_SMASK		0xFFFFFFFFFFFFFFFull
 /*
-* Table #20 of fxr_top - RXHIARB_ERR_EN_BMC_1
+* Table #22 of fxr_top - RXHIARB_ERR_EN_BMC_1
 * Enable BMC interrupt by writing a 1 to the corresponding bit(s).
 */
 #define FXR_RXHIARB_ERR_EN_BMC_1					(FXR_RX_HIARB_CSRS + 0x000000030028)
 #define FXR_RXHIARB_ERR_EN_BMC_1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_ERR_EN_BMC_1_RESERVED_63_56_SHIFT			56
-#define FXR_RXHIARB_ERR_EN_BMC_1_RESERVED_63_56_MASK			0xFFull
-#define FXR_RXHIARB_ERR_EN_BMC_1_RESERVED_63_56_SMASK			0xFF00000000000000ull
+#define FXR_RXHIARB_ERR_EN_BMC_1_RESERVED_63_60_SHIFT			60
+#define FXR_RXHIARB_ERR_EN_BMC_1_RESERVED_63_60_MASK			0xFull
+#define FXR_RXHIARB_ERR_EN_BMC_1_RESERVED_63_60_SMASK			0xF000000000000000ull
 #define FXR_RXHIARB_ERR_EN_BMC_1_ERR_HOST_EN_SHIFT			0
-#define FXR_RXHIARB_ERR_EN_BMC_1_ERR_HOST_EN_MASK			0xFFFFFFFFFFFFFFull
-#define FXR_RXHIARB_ERR_EN_BMC_1_ERR_HOST_EN_SMASK			0xFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_EN_BMC_1_ERR_HOST_EN_MASK			0xFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_EN_BMC_1_ERR_HOST_EN_SMASK			0xFFFFFFFFFFFFFFFull
 /*
-* Table #21 of fxr_top - RXHIARB_ERR_FIRST_BMC_1
+* Table #23 of fxr_top - RXHIARB_ERR_FIRST_BMC_1
 * First error detected for BMC interrupt.
 */
 #define FXR_RXHIARB_ERR_FIRST_BMC_1					(FXR_RX_HIARB_CSRS + 0x000000030030)
 #define FXR_RXHIARB_ERR_FIRST_BMC_1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_ERR_FIRST_BMC_1_RESERVED_63_56_SHIFT		56
-#define FXR_RXHIARB_ERR_FIRST_BMC_1_RESERVED_63_56_MASK			0xFFull
-#define FXR_RXHIARB_ERR_FIRST_BMC_1_RESERVED_63_56_SMASK		0xFF00000000000000ull
+#define FXR_RXHIARB_ERR_FIRST_BMC_1_RESERVED_63_60_SHIFT		60
+#define FXR_RXHIARB_ERR_FIRST_BMC_1_RESERVED_63_60_MASK			0xFull
+#define FXR_RXHIARB_ERR_FIRST_BMC_1_RESERVED_63_60_SMASK		0xF000000000000000ull
 #define FXR_RXHIARB_ERR_FIRST_BMC_1_ERR_HOST_FIRST_SHIFT		0
-#define FXR_RXHIARB_ERR_FIRST_BMC_1_ERR_HOST_FIRST_MASK			0xFFFFFFFFFFFFFFull
-#define FXR_RXHIARB_ERR_FIRST_BMC_1_ERR_HOST_FIRST_SMASK		0xFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_FIRST_BMC_1_ERR_HOST_FIRST_MASK			0xFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_FIRST_BMC_1_ERR_HOST_FIRST_SMASK		0xFFFFFFFFFFFFFFFull
 /*
-* Table #22 of fxr_top - RXHIARB_ERR_EN_QUAR_1
+* Table #24 of fxr_top - RXHIARB_ERR_EN_QUAR_1
 * Enable quarantine interrupt by writing a 1 to the corresponding 
 * bit(s).
 */
 #define FXR_RXHIARB_ERR_EN_QUAR_1					(FXR_RX_HIARB_CSRS + 0x000000030038)
 #define FXR_RXHIARB_ERR_EN_QUAR_1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_ERR_EN_QUAR_1_RESERVED_63_56_SHIFT			56
-#define FXR_RXHIARB_ERR_EN_QUAR_1_RESERVED_63_56_MASK			0xFFull
-#define FXR_RXHIARB_ERR_EN_QUAR_1_RESERVED_63_56_SMASK			0xFF00000000000000ull
+#define FXR_RXHIARB_ERR_EN_QUAR_1_RESERVED_63_60_SHIFT			60
+#define FXR_RXHIARB_ERR_EN_QUAR_1_RESERVED_63_60_MASK			0xFull
+#define FXR_RXHIARB_ERR_EN_QUAR_1_RESERVED_63_60_SMASK			0xF000000000000000ull
 #define FXR_RXHIARB_ERR_EN_QUAR_1_ERR_HOST_EN_SHIFT			0
-#define FXR_RXHIARB_ERR_EN_QUAR_1_ERR_HOST_EN_MASK			0xFFFFFFFFFFFFFFull
-#define FXR_RXHIARB_ERR_EN_QUAR_1_ERR_HOST_EN_SMASK			0xFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_EN_QUAR_1_ERR_HOST_EN_MASK			0xFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_EN_QUAR_1_ERR_HOST_EN_SMASK			0xFFFFFFFFFFFFFFFull
 /*
-* Table #23 of fxr_top - RXHIARB_ERR_FIRST_QUAR_1
+* Table #25 of fxr_top - RXHIARB_ERR_FIRST_QUAR_1
 * First error detected for quarantine interrupt.
 */
 #define FXR_RXHIARB_ERR_FIRST_QUAR_1					(FXR_RX_HIARB_CSRS + 0x000000030040)
 #define FXR_RXHIARB_ERR_FIRST_QUAR_1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_ERR_FIRST_QUAR_1_RESERVED_63_56_SHIFT		56
-#define FXR_RXHIARB_ERR_FIRST_QUAR_1_RESERVED_63_56_MASK		0xFFull
-#define FXR_RXHIARB_ERR_FIRST_QUAR_1_RESERVED_63_56_SMASK		0xFF00000000000000ull
+#define FXR_RXHIARB_ERR_FIRST_QUAR_1_RESERVED_63_60_SHIFT		60
+#define FXR_RXHIARB_ERR_FIRST_QUAR_1_RESERVED_63_60_MASK		0xFull
+#define FXR_RXHIARB_ERR_FIRST_QUAR_1_RESERVED_63_60_SMASK		0xF000000000000000ull
 #define FXR_RXHIARB_ERR_FIRST_QUAR_1_ERR_HOST_FIRST_SHIFT		0
-#define FXR_RXHIARB_ERR_FIRST_QUAR_1_ERR_HOST_FIRST_MASK		0xFFFFFFFFFFFFFFull
-#define FXR_RXHIARB_ERR_FIRST_QUAR_1_ERR_HOST_FIRST_SMASK		0xFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_FIRST_QUAR_1_ERR_HOST_FIRST_MASK		0xFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_FIRST_QUAR_1_ERR_HOST_FIRST_SMASK		0xFFFFFFFFFFFFFFFull
 /*
-* Table #24 of fxr_top - RXHIARB_ERR_INFO_PCB_NVAL
+* Table #26 of fxr_top - RXHIARB_ERR_INFO_PCB_NVAL
 * Captures information for the first non-valid entry PCB error.
 */
 #define FXR_RXHIARB_ERR_INFO_PCB_NVAL					(FXR_RX_HIARB_CSRS + 0x000000030100)
@@ -712,7 +770,7 @@
 #define FXR_RXHIARB_ERR_INFO_PCB_NVAL_HANDLE_MASK			0xFFFull
 #define FXR_RXHIARB_ERR_INFO_PCB_NVAL_HANDLE_SMASK			0xFFFull
 /*
-* Table #25 of fxr_top - RXHIARB_ERR_INFO_PCB_BVIO
+* Table #27 of fxr_top - RXHIARB_ERR_INFO_PCB_BVIO
 * Captures information for the first PCB boundary violation error. Boundary 
 * violations are checked when an address is calculated and it exceeds the 
 * maximum address range for the region being accessed. For example, if the PTE 
@@ -746,7 +804,7 @@
 #define FXR_RXHIARB_ERR_INFO_PCB_BVIO_HANDLE_MASK			0xFFFull
 #define FXR_RXHIARB_ERR_INFO_PCB_BVIO_HANDLE_SMASK			0xFFFull
 /*
-* Table #26 of fxr_top - RXHIARB_ERR_INFO_PCB_OFLW
+* Table #28 of fxr_top - RXHIARB_ERR_INFO_PCB_OFLW
 * Captures information for the first PCB address overflow error. This occurs if 
 * a PCB table is defined in the uppermost region of the address space and the 
 * address calculation causes an overflow of the maximu number of address bits 
@@ -779,7 +837,7 @@
 #define FXR_RXHIARB_ERR_INFO_PCB_OFLW_HANDLE_MASK			0xFFFull
 #define FXR_RXHIARB_ERR_INFO_PCB_OFLW_HANDLE_SMASK			0xFFFull
 /*
-* Table #27 of fxr_top - RXHIARB_ERR_INFO_PCB_ECC
+* Table #29 of fxr_top - RXHIARB_ERR_INFO_PCB_ECC
 * Captures information related to ECC errors within the PCB table. Errors are 
 * checked for 1 domain: PCB SRAM.
 */
@@ -810,7 +868,7 @@
 #define FXR_RXHIARB_ERR_INFO_PCB_ECC_MBE_FIRST_SYNDROME_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INFO_PCB_ECC_MBE_FIRST_SYNDROME_SMASK		0xFFull
 /*
-* Table #28 of fxr_top - RXHIARB_ERR_INJECT_PCB
+* Table #30 of fxr_top - RXHIARB_ERR_INJECT_PCB
 * Injects ECC errors on the PCB checkers. Errors are injected/checked for 4 
 * domains: PCB NVAL (domain 3), PCB BVIO (domain 2), PCB OVFLW (domain 1). and 
 * PCB ECC (domain 0). Since only one of the error domains is ECC protected, that 
@@ -837,7 +895,7 @@
 #define FXR_RXHIARB_ERR_INJECT_PCB_ERR_INJECT_ECC_MASK_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_PCB_ERR_INJECT_ECC_MASK_SMASK		0xFFull
 /*
-* Table #29 of fxr_top - RXHIARB_ERR_INFO_AT_RSP
+* Table #31 of fxr_top - RXHIARB_ERR_INFO_AT_RSP
 * Captures information for the first AT error response. Captures the response 
 * delivered by the AT during the error. See AT interface for descriptions of the 
 * fields. Since this is not a HIARB protected error, no injection will be 
@@ -865,7 +923,7 @@
 #define FXR_RXHIARB_ERR_INFO_AT_RSP_AT_TID_MASK				0x7Full
 #define FXR_RXHIARB_ERR_INFO_AT_RSP_AT_TID_SMASK			0x7Full
 /*
-* Table #30 of fxr_top - RXHIARB_ERR_INFO_RXDMA_FRAME
+* Table #32 of fxr_top - RXHIARB_ERR_INFO_RXDMA_FRAME
 * Captures information related to the first framing error on the RxDMA 
 * interface. Framing errors occur during head/tail mismatches or when the length 
 * does not correspond to the number of flits. They are monitored across 9 
@@ -895,7 +953,7 @@
 #define FXR_RXHIARB_ERR_INFO_RXDMA_FRAME_TID_MASK			0xFFull
 #define FXR_RXHIARB_ERR_INFO_RXDMA_FRAME_TID_SMASK			0xFFull
 /*
-* Table #31 of fxr_top - RXHIARB_ERR_INFO_RXDMA_ECC
+* Table #33 of fxr_top - RXHIARB_ERR_INFO_RXDMA_ECC
 * Captures information related to ECC errors on the RxDMA interface. Errors are 
 * only checked for the 9 header domains (one domain per MCTC queue)
 */
@@ -932,7 +990,7 @@
 #define FXR_RXHIARB_ERR_INFO_RXDMA_ECC_MBE_FIRST_SYNDROME_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INFO_RXDMA_ECC_MBE_FIRST_SYNDROME_SMASK		0xFFull
 /*
-* Table #32 of fxr_top - RXHIARB_ERR_INJECT_RXDMA_0_3
+* Table #34 of fxr_top - RXHIARB_ERR_INJECT_RXDMA_0_3
 * Injects ECC errors on the RxDMA inpur queue checkers for queues 0-3. Errors 
 * are only injected/checked for the header domain.
 */
@@ -969,7 +1027,7 @@
 #define FXR_RXHIARB_ERR_INJECT_RXDMA_0_3_ERR_INJECT_MASK0_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_RXDMA_0_3_ERR_INJECT_MASK0_SMASK		0xFFull
 /*
-* Table #33 of fxr_top - RXHIARB_ERR_INJECT_RXDMA_4_7
+* Table #35 of fxr_top - RXHIARB_ERR_INJECT_RXDMA_4_7
 * Injects ECC errors on the RxDMA inpur queue checkers for queues 3-7. Errors 
 * are only injected/checked for the header domain.
 */
@@ -1006,7 +1064,7 @@
 #define FXR_RXHIARB_ERR_INJECT_RXDMA_4_7_ERR_INJECT_MASK4_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_RXDMA_4_7_ERR_INJECT_MASK4_SMASK		0xFFull
 /*
-* Table #34 of fxr_top - RXHIARB_ERR_INJECT_RXDMA_8F
+* Table #36 of fxr_top - RXHIARB_ERR_INJECT_RXDMA_8F
 * Injects errors on the RxDMA inpur queue checkers for queue 8. Errors are only 
 * injected/checked for the header ECC domain. Since framing errors are not 
 * detected via ECC, there is no mask associated with it,
@@ -1026,7 +1084,7 @@
 #define FXR_RXHIARB_ERR_INJECT_RXDMA_8F_ERR_INJECT_MASK8_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_RXDMA_8F_ERR_INJECT_MASK8_SMASK		0xFFull
 /*
-* Table #35 of fxr_top - RXHIARB_ERR_INFO_RXHP_FRAME
+* Table #37 of fxr_top - RXHIARB_ERR_INFO_RXHP_FRAME
 * Captures information related to the first framing error on the RxHP interface. 
 * Framing errors occur when the length does not correspond to the number of 
 * flits.
@@ -1043,7 +1101,7 @@
 #define FXR_RXHIARB_ERR_INFO_RXHP_FRAME_TID_MASK			0xFFull
 #define FXR_RXHIARB_ERR_INFO_RXHP_FRAME_TID_SMASK			0xFFull
 /*
-* Table #36 of fxr_top - RXHIARB_ERR_INFO_RXHP_ECC
+* Table #38 of fxr_top - RXHIARB_ERR_INFO_RXHP_ECC
 * Captures information related to ECC errors on the RxHP interface. Errors are 
 * only checked for the header domain,
 */
@@ -1068,7 +1126,7 @@
 #define FXR_RXHIARB_ERR_INFO_RXHP_ECC_MBE_FIRST_SYNDROME_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INFO_RXHP_ECC_MBE_FIRST_SYNDROME_SMASK		0xFFull
 /*
-* Table #37 of fxr_top - RXHIARB_ERR_INJECT_RXHP
+* Table #39 of fxr_top - RXHIARB_ERR_INJECT_RXHP
 * Injects errors on the RXHP input queue checker. Errors are only 
 * injected/checked for the header ECC domain. Since framing errors are not 
 * checked via ECC, there is no mask associated with it.
@@ -1088,7 +1146,7 @@
 #define FXR_RXHIARB_ERR_INJECT_RXHP_ERR_INJECT_ECC_MASK_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_RXHP_ERR_INJECT_ECC_MASK_SMASK		0xFFull
 /*
-* Table #38 of fxr_top - RXHIARB_ERR_INFO_RXET_FRAME
+* Table #40 of fxr_top - RXHIARB_ERR_INFO_RXET_FRAME
 * Captures information related to the first framing error on the RxET interface. 
 * Framing errors occur when the length does not correspond to the number of 
 * flits.
@@ -1105,7 +1163,7 @@
 #define FXR_RXHIARB_ERR_INFO_RXET_FRAME_TID_MASK			0xFFull
 #define FXR_RXHIARB_ERR_INFO_RXET_FRAME_TID_SMASK			0xFFull
 /*
-* Table #39 of fxr_top - RXHIARB_ERR_INFO_RXET_ECC
+* Table #41 of fxr_top - RXHIARB_ERR_INFO_RXET_ECC
 * Captures information related to ECC errors on the RxET interface. Errors are 
 * only checked for the header domain.
 */
@@ -1130,7 +1188,7 @@
 #define FXR_RXHIARB_ERR_INFO_RXET_ECC_MBE_FIRST_SYNDROME_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INFO_RXET_ECC_MBE_FIRST_SYNDROME_SMASK		0xFFull
 /*
-* Table #40 of fxr_top - RXHIARB_ERR_INJECT_RXET
+* Table #42 of fxr_top - RXHIARB_ERR_INJECT_RXET
 * Injects errors on the RXET input queue checker. Errors are only 
 * injected/checked for the ECC header domain, Since framing errors are not 
 * checked via ECC, there is no mask associated with it.
@@ -1150,7 +1208,7 @@
 #define FXR_RXHIARB_ERR_INJECT_RXET_ERR_INJECT_ECC_MASK_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_RXET_ERR_INJECT_ECC_MASK_SMASK		0xFFull
 /*
-* Table #41 of fxr_top - RXHIARB_ERR_INFO_RXE2E_ECC
+* Table #43 of fxr_top - RXHIARB_ERR_INFO_RXE2E_ECC
 * Captures information related to ECC errors on the RxE2E interface. Errors are 
 * only checked for the header domain.
 */
@@ -1175,7 +1233,7 @@
 #define FXR_RXHIARB_ERR_INFO_RXE2E_ECC_MBE_FIRST_SYNDROME_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INFO_RXE2E_ECC_MBE_FIRST_SYNDROME_SMASK		0xFFull
 /*
-* Table #42 of fxr_top - RXHIARB_ERR_INJECT_RXE2E
+* Table #44 of fxr_top - RXHIARB_ERR_INJECT_RXE2E
 * Injects ECC errors on the RXE2E input queue checker. Errors are only 
 * injected/checked for the header domain.
 */
@@ -1191,7 +1249,7 @@
 #define FXR_RXHIARB_ERR_INJECT_RXE2E_ERR_INJECT_MASK_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_RXE2E_ERR_INJECT_MASK_SMASK		0xFFull
 /*
-* Table #43 of fxr_top - RXHIARB_ERR_INFO_RXCID_ECC
+* Table #45 of fxr_top - RXHIARB_ERR_INFO_RXCID_ECC
 * Captures information related to ECC errors on the RxCID interface. Errors are 
 * only checked for the header domains.
 */
@@ -1216,7 +1274,7 @@
 #define FXR_RXHIARB_ERR_INFO_RXCID_ECC_MBE_FIRST_SYNDROME_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INFO_RXCID_ECC_MBE_FIRST_SYNDROME_SMASK		0xFFull
 /*
-* Table #44 of fxr_top - RXHIARB_ERR_INJECT_RXCID
+* Table #46 of fxr_top - RXHIARB_ERR_INJECT_RXCID
 * Injects ECC errors on the RXCID input queue checker. Errors are only 
 * injected/checked for the header domain.
 */
@@ -1232,7 +1290,7 @@
 #define FXR_RXHIARB_ERR_INJECT_RXCID_ERR_INJECT_MASK_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_RXCID_ERR_INJECT_MASK_SMASK		0xFFull
 /*
-* Table #45 of fxr_top - RXHIARB_ERR_INFO_SLRSP_ECC
+* Table #47 of fxr_top - RXHIARB_ERR_INFO_SLRSP_ECC
 * Captures information related to ECC errors within the slow response queue 
 * (used for capturing responses to RxHP and RxET). Errors are only checked for 
 * the header domain.
@@ -1264,7 +1322,7 @@
 #define FXR_RXHIARB_ERR_INFO_SLRSP_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_SLRSP_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #46 of fxr_top - RXHIARB_ERR_INJECT_SLRSP
+* Table #48 of fxr_top - RXHIARB_ERR_INJECT_SLRSP
 * Injects ECC errors on the Slow Response queue checker. Errors are only 
 * injected/checked for the header domain.
 */
@@ -1283,7 +1341,7 @@
 #define FXR_RXHIARB_ERR_INJECT_SLRSP_ERR_INJECT_MASK_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INJECT_SLRSP_ERR_INJECT_MASK_SMASK		0x3Full
 /*
-* Table #47 of fxr_top - RXHIARB_ERR_INFO_FPFIFO_PERR
+* Table #49 of fxr_top - RXHIARB_ERR_INFO_FPFIFO_PERR
 * Captures information related to parity errors within the free pool queue (used 
 * for holding free internal IDs).
 */
@@ -1296,7 +1354,7 @@
 #define FXR_RXHIARB_ERR_INFO_FPFIFO_PERR_PERR_COUNT_MASK		0x7Full
 #define FXR_RXHIARB_ERR_INFO_FPFIFO_PERR_PERR_COUNT_SMASK		0x7Full
 /*
-* Table #48 of fxr_top - RXHIARB_ERR_INJECT_FPFIFO
+* Table #50 of fxr_top - RXHIARB_ERR_INJECT_FPFIFO
 * Injects parity errors on the HID free pool checker..
 */
 #define FXR_RXHIARB_ERR_INJECT_FPFIFO					(FXR_RX_HIARB_CSRS + 0x0000000301C0)
@@ -1308,7 +1366,7 @@
 #define FXR_RXHIARB_ERR_INJECT_FPFIFO_ERR_INJECT_EN_MASK		0x1ull
 #define FXR_RXHIARB_ERR_INJECT_FPFIFO_ERR_INJECT_EN_SMASK		0x1ull
 /*
-* Table #49 of fxr_top - RXHIARB_ERR_INFO_PYLD_ECC
+* Table #51 of fxr_top - RXHIARB_ERR_INFO_PYLD_ECC
 * Captures information related to ECC errors for header domain in the payload 
 * buffer..
 */
@@ -1345,7 +1403,7 @@
 #define FXR_RXHIARB_ERR_INFO_PYLD_ECC_MBE_FIRST_SYNDROME_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INFO_PYLD_ECC_MBE_FIRST_SYNDROME_SMASK		0xFFull
 /*
-* Table #50 of fxr_top - RXHIARB_ERR_INJECT_PYLD
+* Table #52 of fxr_top - RXHIARB_ERR_INJECT_PYLD
 * Injects ECC errors on the Slow Response queue checker. Errors are only 
 * injected/checked for the header domain.
 */
@@ -1361,7 +1419,7 @@
 #define FXR_RXHIARB_ERR_INJECT_PYLD_ERR_INJECT_MASK_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_PYLD_ERR_INJECT_MASK_SMASK		0xFFull
 /*
-* Table #51 of fxr_top - RXHIARB_ERR_INFO_HQUE0_ECC
+* Table #53 of fxr_top - RXHIARB_ERR_INFO_HQUE0_ECC
 * Captures information related to ECC errors within the holding queue 0 
 * memories. Errors are checked for 2 domains: HID-index queue (domain 1) and 
 * LADDR/MTLB-index queue (domain 0).
@@ -1405,7 +1463,7 @@
 #define FXR_RXHIARB_ERR_INFO_HQUE0_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_HQUE0_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #52 of fxr_top - RXHIARB_ERR_INFO_HQUE1_ECC
+* Table #54 of fxr_top - RXHIARB_ERR_INFO_HQUE1_ECC
 * Captures information related to ECC errors within the holding queue 1 
 * memories. Errors are checked for 2 domains: HID-index queue (domain 1) and 
 * LADDR/MTLB-index queue (domain 0).
@@ -1449,7 +1507,7 @@
 #define FXR_RXHIARB_ERR_INFO_HQUE1_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_HQUE1_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #53 of fxr_top - RXHIARB_ERR_INFO_HQUE2_ECC
+* Table #55 of fxr_top - RXHIARB_ERR_INFO_HQUE2_ECC
 * Captures information related to ECC errors within the holding queue 2 
 * memories. Errors are checked for 2 domains: HID-index queue (domain 1) and 
 * LADDR/MTLB-index queue (domain 0).
@@ -1493,7 +1551,7 @@
 #define FXR_RXHIARB_ERR_INFO_HQUE2_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_HQUE2_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #54 of fxr_top - RXHIARB_ERR_INFO_HQUE3_ECC
+* Table #56 of fxr_top - RXHIARB_ERR_INFO_HQUE3_ECC
 * Captures information related to ECC errors within the holding queue 3 
 * memories. Errors are checked for 2 domains: HID-index queue (domain 1) and 
 * LADDR/MTLB-index queue (domain 0).
@@ -1537,7 +1595,7 @@
 #define FXR_RXHIARB_ERR_INFO_HQUE3_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_HQUE3_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #55 of fxr_top - RXHIARB_ERR_INFO_HQUE4_ECC
+* Table #57 of fxr_top - RXHIARB_ERR_INFO_HQUE4_ECC
 * Captures information related to ECC errors within the holding queue 4 
 * memories. Errors are checked for 2 domains: HID-index queue (domain 1) and 
 * LADDR/MTLB-index queue (domain 0).
@@ -1581,7 +1639,7 @@
 #define FXR_RXHIARB_ERR_INFO_HQUE4_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_HQUE4_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #56 of fxr_top - RXHIARB_ERR_INFO_HQUE5_ECC
+* Table #58 of fxr_top - RXHIARB_ERR_INFO_HQUE5_ECC
 * Captures information related to ECC errors within the holding queue 5 
 * memories. Errors are checked for 2 domains: HID-index queue (domain 1) and 
 * LADDR/MTLB-index queue (domain 0).
@@ -1625,7 +1683,7 @@
 #define FXR_RXHIARB_ERR_INFO_HQUE5_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_HQUE5_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #57 of fxr_top - RXHIARB_ERR_INFO_HQUE6_ECC
+* Table #59 of fxr_top - RXHIARB_ERR_INFO_HQUE6_ECC
 * Captures information related to ECC errors within the holding queue 6 
 * memories. Errors are checked for 2 domains: HID-index queue (domain 1) and 
 * LADDR/MTLB-index queue (domain 0).
@@ -1669,7 +1727,7 @@
 #define FXR_RXHIARB_ERR_INFO_HQUE6_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_HQUE6_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #58 of fxr_top - RXHIARB_ERR_INFO_HQUE7_ECC
+* Table #60 of fxr_top - RXHIARB_ERR_INFO_HQUE7_ECC
 * Captures information related to ECC errors within the holding queue 7 
 * memories. Errors are checked for 2 domains: HID-index queue (domain 1) and 
 * LADDR/MTLB-index queue (domain 0).
@@ -1713,7 +1771,7 @@
 #define FXR_RXHIARB_ERR_INFO_HQUE7_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_HQUE7_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #59 of fxr_top - RXHIARB_ERR_INFO_HQUE8_ECC
+* Table #61 of fxr_top - RXHIARB_ERR_INFO_HQUE8_ECC
 * Captures information related to ECC errors within the holding queue 8 
 * memories. Errors are checked for 2 domains: HID-index queue (domain 1) and 
 * LADDR/MTLB-index queue (domain 0).
@@ -1757,7 +1815,7 @@
 #define FXR_RXHIARB_ERR_INFO_HQUE8_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_HQUE8_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #60 of fxr_top - RXHIARB_ERR_INJECT_HQUE_0_3
+* Table #62 of fxr_top - RXHIARB_ERR_INJECT_HQUE_0_3
 * Injects ECC errors on the holding queue checkers for queues 0-3. Errors are 
 * injected/checked for 2 domains per queue (LADDR AND HID).
 */
@@ -1790,35 +1848,32 @@
 #define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID0_EN_SHIFT	48
 #define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID0_EN_MASK		0x1ull
 #define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID0_EN_SMASK	0x1000000000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_RESERVED_47_44_SHIFT		44
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_RESERVED_47_44_MASK		0xFull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_RESERVED_47_44_SMASK		0xF00000000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR3_MASK_SHIFT	38
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR3_MASK_SHIFT	42
 #define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR3_MASK_MASK	0x3Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR3_MASK_SMASK	0xFC000000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID3_MASK_SHIFT	33
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID3_MASK_MASK	0x1Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID3_MASK_SMASK	0x3E00000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR2_MASK_SHIFT	27
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR3_MASK_SMASK	0xFC0000000000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID3_MASK_SHIFT	36
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID3_MASK_MASK	0x3Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID3_MASK_SMASK	0x3F000000000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR2_MASK_SHIFT	30
 #define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR2_MASK_MASK	0x3Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR2_MASK_SMASK	0x1F8000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID2_MASK_SHIFT	22
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID2_MASK_MASK	0x1Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID2_MASK_SMASK	0x7C00000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR1_MASK_SHIFT	16
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR2_MASK_SMASK	0xFC0000000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID2_MASK_SHIFT	24
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID2_MASK_MASK	0x3Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID2_MASK_SMASK	0x3F000000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR1_MASK_SHIFT	18
 #define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR1_MASK_MASK	0x3Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR1_MASK_SMASK	0x3F0000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID1_MASK_SHIFT	11
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID1_MASK_MASK	0x1Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID1_MASK_SMASK	0xF800ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR0_MASK_SHIFT	5
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR1_MASK_SMASK	0xFC0000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID1_MASK_SHIFT	12
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID1_MASK_MASK	0x3Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID1_MASK_SMASK	0x3F000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR0_MASK_SHIFT	6
 #define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR0_MASK_MASK	0x3Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR0_MASK_SMASK	0x7E0ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_LADDR0_MASK_SMASK	0xFC0ull
 #define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID0_MASK_SHIFT	0
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID0_MASK_MASK	0x1Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID0_MASK_SMASK	0x1Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID0_MASK_MASK	0x3Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_0_3_ERR_INJECT_HID0_MASK_SMASK	0x3Full
 /*
-* Table #61 of fxr_top - RXHIARB_ERR_INJECT_HQUE_4_7
+* Table #63 of fxr_top - RXHIARB_ERR_INJECT_HQUE_4_7
 * Injects ECC errors on the holding queue checkers for queues 4-7. Errors are 
 * injected/checked for 2 domains per queue (LADDR AND HID).
 */
@@ -1851,35 +1906,32 @@
 #define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID4_EN_SHIFT	48
 #define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID4_EN_MASK		0x1ull
 #define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID4_EN_SMASK	0x1000000000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_RESERVED_47_44_SHIFT		44
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_RESERVED_47_44_MASK		0xFull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_RESERVED_47_44_SMASK		0xF00000000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR7_MASK_SHIFT	38
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR7_MASK_SHIFT	42
 #define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR7_MASK_MASK	0x3Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR7_MASK_SMASK	0xFC000000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID7_MASK_SHIFT	33
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID7_MASK_MASK	0x1Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID7_MASK_SMASK	0x3E00000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR6_MASK_SHIFT	27
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR7_MASK_SMASK	0xFC0000000000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID7_MASK_SHIFT	36
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID7_MASK_MASK	0x3Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID7_MASK_SMASK	0x3F000000000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR6_MASK_SHIFT	30
 #define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR6_MASK_MASK	0x3Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR6_MASK_SMASK	0x1F8000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID6_MASK_SHIFT	22
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID6_MASK_MASK	0x1Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID6_MASK_SMASK	0x7C00000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR5_MASK_SHIFT	16
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR6_MASK_SMASK	0xFC0000000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID6_MASK_SHIFT	24
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID6_MASK_MASK	0x3Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID6_MASK_SMASK	0x3F000000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR5_MASK_SHIFT	18
 #define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR5_MASK_MASK	0x3Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR5_MASK_SMASK	0x3F0000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID5_MASK_SHIFT	11
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID5_MASK_MASK	0x1Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID5_MASK_SMASK	0xF800ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR4_MASK_SHIFT	5
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR5_MASK_SMASK	0xFC0000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID5_MASK_SHIFT	12
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID5_MASK_MASK	0x3Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID5_MASK_SMASK	0x3F000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR4_MASK_SHIFT	6
 #define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR4_MASK_MASK	0x3Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR4_MASK_SMASK	0x7E0ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_LADDR4_MASK_SMASK	0xFC0ull
 #define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID4_MASK_SHIFT	0
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID4_MASK_MASK	0x1Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID4_MASK_SMASK	0x1Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID4_MASK_MASK	0x3Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_4_7_ERR_INJECT_HID4_MASK_SMASK	0x3Full
 /*
-* Table #62 of fxr_top - RXHIARB_ERR_INJECT_HQUE_8
+* Table #64 of fxr_top - RXHIARB_ERR_INJECT_HQUE_8
 * Injects ECC errors on the holding queue checkers for queue 8. Errors are 
 * injected/checked for 2 domains per queue (LADDR AND HID).
 */
@@ -1894,17 +1946,17 @@
 #define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_HID8_EN_SHIFT		48
 #define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_HID8_EN_MASK		0x1ull
 #define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_HID8_EN_SMASK		0x1000000000000ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_8_RESERVED_47_11_SHIFT		11
-#define FXR_RXHIARB_ERR_INJECT_HQUE_8_RESERVED_47_11_MASK		0x1FFFFFFFFFull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_8_RESERVED_47_11_SMASK		0xFFFFFFFFF800ull
-#define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_LADDR8_MASK_SHIFT	5
+#define FXR_RXHIARB_ERR_INJECT_HQUE_8_RESERVED_47_12_SHIFT		12
+#define FXR_RXHIARB_ERR_INJECT_HQUE_8_RESERVED_47_12_MASK		0xFFFFFFFFFull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_8_RESERVED_47_12_SMASK		0xFFFFFFFFF000ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_LADDR8_MASK_SHIFT	6
 #define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_LADDR8_MASK_MASK	0x3Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_LADDR8_MASK_SMASK	0x7E0ull
+#define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_LADDR8_MASK_SMASK	0xFC0ull
 #define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_HID8_MASK_SHIFT	0
-#define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_HID8_MASK_MASK		0x1Full
-#define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_HID8_MASK_SMASK	0x1Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_HID8_MASK_MASK		0x3Full
+#define FXR_RXHIARB_ERR_INJECT_HQUE_8_ERR_INJECT_HID8_MASK_SMASK	0x3Full
 /*
-* Table #63 of fxr_top - RXHIARB_ERR_INFO_HQUE_PVECT
+* Table #65 of fxr_top - RXHIARB_ERR_INFO_HQUE_PVECT
 * Captures information related to parity errors within the HQUE present state 
 * vectors. Errors are checked for 9 domains: one domain per HQUE 0-8 (domains 
 * 0-8). Since these vectors are accessed in a parallel fashion, there is no way 
@@ -1926,7 +1978,7 @@
 #define FXR_RXHIARB_ERR_INFO_HQUE_PVECT_VERR_FIRST_DOMAIN_MASK		0xFull
 #define FXR_RXHIARB_ERR_INFO_HQUE_PVECT_VERR_FIRST_DOMAIN_SMASK		0xFull
 /*
-* Table #64 of fxr_top - RXHIARB_ERR_INJECT_HQUE_PVECT
+* Table #66 of fxr_top - RXHIARB_ERR_INJECT_HQUE_PVECT
 * Injects partity errors on the holding queue's state vectors checkers. Errors 
 * are injected/checked for 9 domains (one per holding queue).
 */
@@ -1963,7 +2015,7 @@
 #define FXR_RXHIARB_ERR_INJECT_HQUE_PVECT_ERR_INJECT_VECT0_EN_MASK	0x1ull
 #define FXR_RXHIARB_ERR_INJECT_HQUE_PVECT_ERR_INJECT_VECT0_EN_SMASK	0x1ull
 /*
-* Table #65 of fxr_top - RXHIARB_ERR_INFO_MTLB_ECC
+* Table #67 of fxr_top - RXHIARB_ERR_INFO_MTLB_ECC
 * Captures information related to ECC errors within the Mini-TLB. Errors are 
 * checked for 4 domains: Tags (domain 3), Counters (domains 1 and 2) and HPA 
 * Data (domain 0). Note that the Tag is parity protected instead of ECC, so the 
@@ -2023,7 +2075,7 @@
 #define FXR_RXHIARB_ERR_INFO_MTLB_ECC_MBE_FIRST_SYNDROME_MASK		0x7Full
 #define FXR_RXHIARB_ERR_INFO_MTLB_ECC_MBE_FIRST_SYNDROME_SMASK		0x7Full
 /*
-* Table #66 of fxr_top - RXHIARB_ERR_INFO_MTLB_VECTS
+* Table #68 of fxr_top - RXHIARB_ERR_INFO_MTLB_VECTS
 * Captures information related to parity errors within the Mini-TLB state 
 * vectors. Errors are checked for 5 domains: valid (domain 4), present (domain 
 * 3), zero (domain 2), cbad (domain 1) and fbad (domain 0). Since these vectors 
@@ -2043,7 +2095,7 @@
 #define FXR_RXHIARB_ERR_INFO_MTLB_VECTS_VERR_MASK			0x1Full
 #define FXR_RXHIARB_ERR_INFO_MTLB_VECTS_VERR_SMASK			0x1Full
 /*
-* Table #67 of fxr_top - RXHIARB_ERR_INJECT_MTLB
+* Table #69 of fxr_top - RXHIARB_ERR_INJECT_MTLB
 * Injects ECC errors on the PCB checkers. Errors are injected for 9 domains: 
 * valid vector (domain 8), present vector (domain 7), zero vector (domain 6), 
 * cbad vector (domain 5) and fbad vector (domain 5). Tags (domain 3), Counters 
@@ -2102,7 +2154,7 @@
 #define FXR_RXHIARB_ERR_INJECT_MTLB_ERR_INJECT_HPA_MASK_MASK		0x7Full
 #define FXR_RXHIARB_ERR_INJECT_MTLB_ERR_INJECT_HPA_MASK_SMASK		0x7Full
 /*
-* Table #68 of fxr_top - RXHIARB_ERR_INFO_ATFIFO_ECC
+* Table #70 of fxr_top - RXHIARB_ERR_INFO_ATFIFO_ECC
 * Captures information related to ECC errors within the AT request FIFO. Errors 
 * are checked for 1 domain: AT FIFO.
 */
@@ -2127,7 +2179,7 @@
 #define FXR_RXHIARB_ERR_INFO_ATFIFO_ECC_MBE_FIRST_SYNDROME_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INFO_ATFIFO_ECC_MBE_FIRST_SYNDROME_SMASK	0xFFull
 /*
-* Table #69 of fxr_top - RXHIARB_ERR_INJECT_ATFIFO
+* Table #71 of fxr_top - RXHIARB_ERR_INJECT_ATFIFO
 * Injects ECC errors on the PCB checkers. Errors are injected for 1 domain: AT 
 * FIFO.
 */
@@ -2143,7 +2195,7 @@
 #define FXR_RXHIARB_ERR_INJECT_ATFIFO_ERR_INJECT_MASK_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_ATFIFO_ERR_INJECT_MASK_SMASK		0xFFull
 /*
-* Table #70 of fxr_top - RXHIARB_ERR_INFO_HIFIFO_ECC
+* Table #72 of fxr_top - RXHIARB_ERR_INFO_HIFIFO_ECC
 * Captures information related to ECC errors within the HI request FIFO. Errors 
 * are checked for 1 domain: HI FIFO.
 */
@@ -2168,7 +2220,7 @@
 #define FXR_RXHIARB_ERR_INFO_HIFIFO_ECC_MBE_FIRST_SYNDROME_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INFO_HIFIFO_ECC_MBE_FIRST_SYNDROME_SMASK	0xFFull
 /*
-* Table #71 of fxr_top - RXHIARB_ERR_INJECT_HIFIFO
+* Table #73 of fxr_top - RXHIARB_ERR_INJECT_HIFIFO
 * Injects ECC errors on the ECC checkers. Errors are injected for 1 domain: 
 * Header.
 */
@@ -2184,7 +2236,7 @@
 #define FXR_RXHIARB_ERR_INJECT_HIFIFO_ERR_INJECT_MASK_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_HIFIFO_ERR_INJECT_MASK_SMASK		0xFFull
 /*
-* Table #72 of fxr_top - RXHIARB_ERR_INFO_HIFIS_ECC
+* Table #74 of fxr_top - RXHIARB_ERR_INFO_HIFIS_ECC
 * Captures information related to ECC errors within the header flit on HIFIs 
 * responses/requests. Errors are checked for 1 domain: HIFIs header 
 * flit.
@@ -2210,7 +2262,7 @@
 #define FXR_RXHIARB_ERR_INFO_HIFIS_ECC_MBE_FIRST_SYNDROME_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INFO_HIFIS_ECC_MBE_FIRST_SYNDROME_SMASK		0xFFull
 /*
-* Table #73 of fxr_top - RXHIARB_ERR_INFO_HIFIS_FRAME
+* Table #75 of fxr_top - RXHIARB_ERR_INFO_HIFIS_FRAME
 * Captures information related to the first framing error on the HIFIs 
 * interface. Framing errors only occur during head-less tails (where tail-less 
 * heads are assumed to be checked by RxDMA since it is impossible to drop the 
@@ -2226,7 +2278,7 @@
 #define FXR_RXHIARB_ERR_INFO_HIFIS_FRAME_COUNT_MASK			0xFFull
 #define FXR_RXHIARB_ERR_INFO_HIFIS_FRAME_COUNT_SMASK			0xFFull
 /*
-* Table #74 of fxr_top - RXHIARB_ERR_INJECT_HIFIS
+* Table #76 of fxr_top - RXHIARB_ERR_INJECT_HIFIS
 * Injects errors on the HIFIs interface checkers. Errors are injected for 
 * 2domain: Header (domain 0) and framing (domain1). Since there is no ECC check 
 * bits for the framing error, there are no mask bits for it. 
@@ -2246,7 +2298,7 @@
 #define FXR_RXHIARB_ERR_INJECT_HIFIS_ERR_INJECT_MASK_MASK		0xFFull
 #define FXR_RXHIARB_ERR_INJECT_HIFIS_ERR_INJECT_MASK_SMASK		0xFFull
 /*
-* Table #75 of fxr_top - RXHIARB_ERR_INFO_NACK_ECC
+* Table #77 of fxr_top - RXHIARB_ERR_INFO_NACK_ECC
 * Captures information related to ECC errors within the header flit on HIFIs 
 * responses/requests. Errors are checked for 1 domain: Nack queue.
 */
@@ -2277,7 +2329,7 @@
 #define FXR_RXHIARB_ERR_INFO_NACK_ECC_MBE_FIRST_SYNDROME_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INFO_NACK_ECC_MBE_FIRST_SYNDROME_SMASK		0x3Full
 /*
-* Table #76 of fxr_top - RXHIARB_ERR_INJECT_NACK
+* Table #78 of fxr_top - RXHIARB_ERR_INJECT_NACK
 * Injects ECC errors on the ECC checkers. Errors are injected for 1 domain: Nack 
 * queue.
 */
@@ -2296,7 +2348,130 @@
 #define FXR_RXHIARB_ERR_INJECT_NACK_ERR_INJECT_MASK_MASK		0x3Full
 #define FXR_RXHIARB_ERR_INJECT_NACK_ERR_INJECT_MASK_SMASK		0x3Full
 /*
-* Table #77 of fxr_top - RXHIARB_DBG_PYLD_HDR0
+* Table #79 of fxr_top - RXHIARB_ERR_INFO_QP_NVAL
+* Captures information for the first non-valid entry QP error.
+*/
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL					(FXR_RX_HIARB_CSRS + 0x0000000302A8)
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_RESETCSR				0x0000000000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_RESERVED_63_40_SHIFT		40
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_RESERVED_63_40_MASK		0xFFFFFFull
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_RESERVED_63_40_SMASK		0xFFFFFF0000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_COUNT_SHIFT			32
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_COUNT_MASK				0xFFull
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_COUNT_SMASK			0xFF00000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_RESERVED_31_24_SHIFT		24
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_RESERVED_31_24_MASK		0xFFull
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_RESERVED_31_24_SMASK		0xFF000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_QP_NIMBER_SHIFT			0
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_QP_NIMBER_MASK			0xFFFFFFull
+#define FXR_RXHIARB_ERR_INFO_QP_NVAL_QP_NIMBER_SMASK			0xFFFFFFull
+/*
+* Table #80 of fxr_top - RXHIARB_ERR_INFO_QP_BVIO
+* Captures information for the first QP boundary violation error. Boundary 
+* violations are checked to ensure that the QP number being sent falls within 
+* the maxQP (CSR configured maximum allowable QPs).
+*/
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO					(FXR_RX_HIARB_CSRS + 0x0000000302B0)
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_RESETCSR				0x0000000000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_RESERVED_63_40_SHIFT		40
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_RESERVED_63_40_MASK		0xFFFFFFull
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_RESERVED_63_40_SMASK		0xFFFFFF0000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_COUNT_SHIFT			32
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_COUNT_MASK				0xFFull
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_COUNT_SMASK			0xFF00000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_RESERVED_31_24_SHIFT		24
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_RESERVED_31_24_MASK		0xFFull
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_RESERVED_31_24_SMASK		0xFF000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_QP_NIMBER_SHIFT			0
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_QP_NIMBER_MASK			0xFFFFFFull
+#define FXR_RXHIARB_ERR_INFO_QP_BVIO_QP_NIMBER_SMASK			0xFFFFFFull
+/*
+* Table #81 of fxr_top - RXHIARB_ERR_INFO_QP_OFLW
+* Captures information for the first QP address overflow error. This occurs if a 
+* QP table is defined in the uppermost region of the address space and the 
+* address calculation causes an overflow of the maximum number of address bits 
+* allowed.
+*/
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW					(FXR_RX_HIARB_CSRS + 0x0000000302B8)
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_RESETCSR				0x0000000000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_RESERVED_63_40_SHIFT		40
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_RESERVED_63_40_MASK		0xFFFFFFull
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_RESERVED_63_40_SMASK		0xFFFFFF0000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_COUNT_SHIFT			32
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_COUNT_MASK				0xFFull
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_COUNT_SMASK			0xFF00000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_RESERVED_31_24_SHIFT		24
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_RESERVED_31_24_MASK		0xFFull
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_RESERVED_31_24_SMASK		0xFF000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_QP_NIMBER_SHIFT			0
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_QP_NIMBER_MASK			0xFFFFFFull
+#define FXR_RXHIARB_ERR_INFO_QP_OFLW_QP_NIMBER_SMASK			0xFFFFFFull
+/*
+* Table #82 of fxr_top - RXHIARB_ERR_INFO_QP_ECC
+* Captures information related to ECC errors within the QP table. Errors are 
+* checked for 1 domain: QP memory.
+*/
+#define FXR_RXHIARB_ERR_INFO_QP_ECC					(FXR_RX_HIARB_CSRS + 0x0000000302C0)
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESETCSR				0x0000000000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_SBE_COUNT_SHIFT			56
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_SBE_COUNT_MASK			0xFFull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_SBE_COUNT_SMASK			0xFF00000000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_55_45_SHIFT		45
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_55_45_MASK			0x7FFull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_55_45_SMASK		0xFFE00000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_SBE_FIRST_INDEX_SHIFT		40
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_SBE_FIRST_INDEX_MASK		0x1Full
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_SBE_FIRST_INDEX_SMASK		0x1F0000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_39_SHIFT			39
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_39_MASK			0x1ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_39_SMASK			0x8000000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_SBE_FIRST_SYNDROME_SHIFT		32
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_SBE_FIRST_SYNDROME_MASK		0x7Full
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_SBE_FIRST_SYNDROME_SMASK		0x7F00000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_MBE_COUNT_SHIFT			24
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_MBE_COUNT_MASK			0xFFull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_MBE_COUNT_SMASK			0xFF000000ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_23_13_SHIFT		13
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_23_13_MASK			0x7FFull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_23_13_SMASK		0xFFE000ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_MBE_FIRST_INDEX_SHIFT		8
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_MBE_FIRST_INDEX_MASK		0x1Full
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_MBE_FIRST_INDEX_SMASK		0x1F00ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_7_SHIFT			7
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_7_MASK			0x1ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_RESERVED_7_SMASK			0x80ull
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_MBE_FIRST_SYNDROME_SHIFT		0
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_MBE_FIRST_SYNDROME_MASK		0x7Full
+#define FXR_RXHIARB_ERR_INFO_QP_ECC_MBE_FIRST_SYNDROME_SMASK		0x7Full
+/*
+* Table #83 of fxr_top - RXHIARB_ERR_INJECT_QP
+* Injects ECC errors on the QP checkers. Errors are injected/checked for 4 
+* domains: QP NVAL (domain 3), QP BVIO (domain 2), QP OVFLW (domain 1). and QP 
+* ECC (domain 0). Since only one of the error domains is ECC protected, that is 
+* the only error which contains a mask.
+*/
+#define FXR_RXHIARB_ERR_INJECT_QP					(FXR_RX_HIARB_CSRS + 0x0000000302C8)
+#define FXR_RXHIARB_ERR_INJECT_QP_RESETCSR				0x0000000000000000ull
+#define FXR_RXHIARB_ERR_INJECT_QP_RESERVED_63_11_SHIFT			11
+#define FXR_RXHIARB_ERR_INJECT_QP_RESERVED_63_11_MASK			0x1FFFFFFFFFFFFFull
+#define FXR_RXHIARB_ERR_INJECT_QP_RESERVED_63_11_SMASK			0xFFFFFFFFFFFFF800ull
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_NVAL_EN_SHIFT		10
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_NVAL_EN_MASK		0x1ull
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_NVAL_EN_SMASK		0x400ull
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_BVIO_EN_SHIFT		9
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_BVIO_EN_MASK		0x1ull
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_BVIO_EN_SMASK		0x200ull
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_OVFLW_EN_SHIFT		8
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_OVFLW_EN_MASK		0x1ull
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_OVFLW_EN_SMASK		0x100ull
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_ECC_EN_SHIFT		7
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_ECC_EN_MASK		0x1ull
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_ECC_EN_SMASK		0x80ull
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_ECC_MASK_SHIFT		0
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_ECC_MASK_MASK		0x7Full
+#define FXR_RXHIARB_ERR_INJECT_QP_ERR_INJECT_ECC_MASK_SMASK		0x7Full
+/*
+* Table #84 of fxr_top - RXHIARB_DBG_PYLD_HDR0
 * This CSR initiates the read/write operations to the payload buffer. This CSR 
 * contains half of the payload buffer's header fields. When this CSR is read, 
 * the entire wide word is read out of the buffer with half of header fields 
@@ -2313,27 +2488,27 @@
 */
 #define FXR_RXHIARB_DBG_PYLD_HDR0					(FXR_RX_HIARB_CSRS + 0x000000040000)
 #define FXR_RXHIARB_DBG_PYLD_HDR0_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_RESERVED_63_54_SHIFT			54
-#define FXR_RXHIARB_DBG_PYLD_HDR0_RESERVED_63_54_MASK			0x3FFull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_RESERVED_63_54_SMASK			0xFFC0000000000000ull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_RX_SRC_ID_SHIFT			50
+#define FXR_RXHIARB_DBG_PYLD_HDR0_RESERVED_63_59_SHIFT			59
+#define FXR_RXHIARB_DBG_PYLD_HDR0_RESERVED_63_59_MASK			0x1Full
+#define FXR_RXHIARB_DBG_PYLD_HDR0_RESERVED_63_59_SMASK			0xF800000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR0_RX_SRC_ID_SHIFT			55
 #define FXR_RXHIARB_DBG_PYLD_HDR0_RX_SRC_ID_MASK			0xFull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_RX_SRC_ID_SMASK			0x3C000000000000ull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TC_SHIFT			46
+#define FXR_RXHIARB_DBG_PYLD_HDR0_RX_SRC_ID_SMASK			0x780000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TC_SHIFT			51
 #define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TC_MASK				0xFull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TC_SMASK			0x3C00000000000ull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TID_SHIFT			34
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TC_SMASK			0x78000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TID_SHIFT			39
 #define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TID_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TID_SMASK			0x3FFC00000000ull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_LEN_SHIFT			27
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_LEN_MASK			0x7Full
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_LEN_SMASK			0x3F8000000ull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TMOD_SHIFT			19
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TMOD_SMASK			0x7F80000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TID_SMASK			0x7FF8000000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_LEN_SHIFT			30
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_LEN_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_LEN_SMASK			0x7FC0000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TMOD_SHIFT			21
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_TMOD_SMASK			0x3FE00000ull
 #define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_CHINT_SHIFT			17
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_CHINT_SMASK			0x60000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_CHINT_SMASK			0x1E0000ull
 #define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_PID_SHIFT			5
 #define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_PID_MASK			0xFFFull
 #define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_PID_SMASK			0x1FFE0ull
@@ -2347,8 +2522,8 @@
 #define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_HVAL_MASK			0x1ull
 #define FXR_RXHIARB_DBG_PYLD_HDR0_PAYLD_HVAL_SMASK			0x1ull
 /*
-* Table #78 of fxr_top - RXHIARB_DBG_PYLD_HDR1_CREG
-* Captures header fields during pauload accesses. When payload header 0 CSR is 
+* Table #85 of fxr_top - RXHIARB_DBG_PYLD_HDR1_CREG
+* Captures header fields during payload accesses. When payload header 0 CSR is 
 * read, this captures the reminder of the corresponding header information. 
 * During writes, this data is written in conjunction with the header 0 fields, 
 * Note that this register also captures the data valid bits as 
@@ -2356,9 +2531,27 @@
 */
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG					(FXR_RX_HIARB_CSRS + 0x000000040400)
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_63_34_SHIFT		34
-#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_63_34_MASK		0x3FFFFFFFull
-#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_63_34_SMASK		0xFFFFFFFC00000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_63_40_SHIFT		40
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_63_40_MASK		0xFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_63_40_SMASK		0xFFFFFF0000000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL7_SHIFT		39
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL7_MASK			0x1ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL7_SMASK		0x8000000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL6_SHIFT		38
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL6_MASK			0x1ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL6_SMASK		0x4000000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL5_SHIFT		37
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL5_MASK			0x1ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL5_SMASK		0x2000000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL4_SHIFT		36
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL4_MASK			0x1ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL4_SMASK		0x1000000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL3_SHIFT		35
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL3_MASK			0x1ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL3_SMASK		0x800000000ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL2_SHIFT		34
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL2_MASK			0x1ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL2_SMASK		0x400000000ull
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL1_SHIFT		33
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL1_MASK			0x1ull
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_DVAL1_SMASK		0x200000000ull
@@ -2371,12 +2564,9 @@
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_HECC_SHIFT			16
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_HECC_MASK			0xFFull
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_HECC_SMASK			0xFF0000ull
-#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_15_11_SHIFT		11
-#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_15_11_MASK		0x1Full
-#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_15_11_SMASK		0xF800ull
-#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_ART_SHIFT			10
-#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_ART_MASK			0x1ull
-#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_ART_SMASK			0x400ull
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_15_10_SHIFT		10
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_15_10_MASK		0x3Full
+#define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_RESERVED_15_10_SMASK		0xFC00ull
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_ADT_SHIFT			5
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_ADT_MASK			0x1Full
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_ADT_SMASK			0x3E0ull
@@ -2384,8 +2574,8 @@
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_ASOP_MASK			0x1Full
 #define FXR_RXHIARB_DBG_PYLD_HDR1_CREG_PAYLD_ASOP_SMASK			0x1Full
 /*
-* Table #79 of fxr_top - RXHIARB_DBG_PYLD_DAT0_CREG
-* Captures a slice of the data fields during pauload accesses. When payload 
+* Table #86 of fxr_top - RXHIARB_DBG_PYLD_DAT0_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
 * header 0 CSR is read, this captures its corresponding slice of the read data. 
 * During writes, this data is written in conjunction with the headers. This data 
 * slice maps to data[63:0] of the first data flit.
@@ -2396,8 +2586,8 @@
 #define FXR_RXHIARB_DBG_PYLD_DAT0_CREG_PAYLD_DATA0_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_PYLD_DAT0_CREG_PAYLD_DATA0_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #80 of fxr_top - RXHIARB_DBG_PYLD_DAT1_CREG
-* Captures a slice of the data fields during pauload accesses. When payload 
+* Table #87 of fxr_top - RXHIARB_DBG_PYLD_DAT1_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
 * header 0 CSR is read, this captures its corresponding slice of the read data. 
 * During writes, this data is written in conjunction with the headers. This data 
 * slice maps to data[127:64] of the first data flit.
@@ -2408,8 +2598,8 @@
 #define FXR_RXHIARB_DBG_PYLD_DAT1_CREG_PAYLD_DATA1_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_PYLD_DAT1_CREG_PAYLD_DATA1_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #81 of fxr_top - RXHIARB_DBG_PYLD_DAT2_CREG
-* Captures a slice of the data fields during pauload accesses. When payload 
+* Table #88 of fxr_top - RXHIARB_DBG_PYLD_DAT2_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
 * header 0 CSR is read, this captures its corresponding slice of the read data. 
 * During writes, this data is written in conjunction with the headers. This data 
 * slice maps to data[191:128] of the first data flit.
@@ -2420,8 +2610,8 @@
 #define FXR_RXHIARB_DBG_PYLD_DAT2_CREG_PAYLD_DATA2_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_PYLD_DAT2_CREG_PAYLD_DATA2_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #82 of fxr_top - RXHIARB_DBG_PYLD_DAT3_CREG
-* Captures a slice of the data fields during pauload accesses. When payload 
+* Table #89 of fxr_top - RXHIARB_DBG_PYLD_DAT3_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
 * header 0 CSR is read, this captures its corresponding slice of the read data. 
 * During writes, this data is written in conjunction with the headers. This data 
 * slice maps to data[255:192] of the first data flit.
@@ -2432,8 +2622,8 @@
 #define FXR_RXHIARB_DBG_PYLD_DAT3_CREG_PAYLD_DATA3_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_PYLD_DAT3_CREG_PAYLD_DATA3_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #83 of fxr_top - RXHIARB_DBG_PYLD_DAT4_CREG
-* Captures a slice of the data fields during pauload accesses. When payload 
+* Table #90 of fxr_top - RXHIARB_DBG_PYLD_DAT4_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
 * header 0 CSR is read, this captures its corresponding slice of the read data. 
 * During writes, this data is written in conjunction with the headers. This data 
 * slice maps to data[63:0] of the second data flit.
@@ -2444,8 +2634,8 @@
 #define FXR_RXHIARB_DBG_PYLD_DAT4_CREG_PAYLD_DATA4_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_PYLD_DAT4_CREG_PAYLD_DATA4_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #84 of fxr_top - RXHIARB_DBG_PYLD_DAT5_CREG
-* Captures a slice of the data fields during pauload accesses. When payload 
+* Table #91 of fxr_top - RXHIARB_DBG_PYLD_DAT5_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
 * header 0 CSR is read, this captures its corresponding slice of the read data. 
 * During writes, this data is written in conjunction with the headers. This data 
 * slice maps to data[128:64] of the second data flit.
@@ -2456,8 +2646,8 @@
 #define FXR_RXHIARB_DBG_PYLD_DAT5_CREG_PAYLD_DATA5_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_PYLD_DAT5_CREG_PAYLD_DATA5_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #85 of fxr_top - RXHIARB_DBG_PYLD_DAT6_CREG
-* Captures a slice of the data fields during pauload accesses. When payload 
+* Table #92 of fxr_top - RXHIARB_DBG_PYLD_DAT6_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
 * header 0 CSR is read, this captures its corresponding slice of the read data. 
 * During writes, this data is written in conjunction with the headers. This data 
 * slice maps to data[191:128] of the second data flit.
@@ -2468,8 +2658,8 @@
 #define FXR_RXHIARB_DBG_PYLD_DAT6_CREG_PAYLD_DATA6_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_PYLD_DAT6_CREG_PAYLD_DATA6_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #86 of fxr_top - RXHIARB_DBG_PYLD_DAT7_CREG
-* Captures a slice of the data fields during pauload accesses. When payload 
+* Table #93 of fxr_top - RXHIARB_DBG_PYLD_DAT7_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
 * header 0 CSR is read, this captures its corresponding slice of the read data. 
 * During writes, this data is written in conjunction with the headers. This data 
 * slice maps to data[255:192] of the second data flit.
@@ -2480,8 +2670,8 @@
 #define FXR_RXHIARB_DBG_PYLD_DAT7_CREG_PAYLD_DATA7_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_PYLD_DAT7_CREG_PAYLD_DATA7_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #87 of fxr_top - RXHIARB_DBG_PYLD_DAT8_CREG
-* Captures the data ECC fields during pauload accesses. When payload header 0 
+* Table #94 of fxr_top - RXHIARB_DBG_PYLD_DAT8_CREG
+* Captures the data ECC fields during payload accesses. When payload header 0 
 * CSR is read, this captures its corresponding read data ECC fields. During 
 * writes, this data is written in conjunction with the headers. This ECC slices 
 * map to both data flits, where each 8-bit ECC corresponds to a 64-bit data 
@@ -2496,7 +2686,343 @@
 #define FXR_RXHIARB_DBG_PYLD_DAT8_CREG_PAYLD_DECC0_MASK			0xFFFFFFFFull
 #define FXR_RXHIARB_DBG_PYLD_DAT8_CREG_PAYLD_DECC0_SMASK		0xFFFFFFFFull
 /*
-* Table #88 of fxr_top - RXHIARB_DBG_MTLB_TAG
+* Table #95 of fxr_top - RXHIARB_DBG_PYLD_DAT9_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[63:0] of the third data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT9_CREG					(FXR_RX_HIARB_CSRS + 0x000000040450)
+#define FXR_RXHIARB_DBG_PYLD_DAT9_CREG_RESETCSR				0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT9_CREG_PAYLD_DATA8_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT9_CREG_PAYLD_DATA8_MASK			0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT9_CREG_PAYLD_DATA8_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #96 of fxr_top - RXHIARB_DBG_PYLD_DAT10_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[127:64] of the third data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT10_CREG					(FXR_RX_HIARB_CSRS + 0x000000040458)
+#define FXR_RXHIARB_DBG_PYLD_DAT10_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT10_CREG_PAYLD_DATA9_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT10_CREG_PAYLD_DATA9_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT10_CREG_PAYLD_DATA9_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #97 of fxr_top - RXHIARB_DBG_PYLD_DAT11_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[191:128] of the third data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT11_CREG					(FXR_RX_HIARB_CSRS + 0x000000040460)
+#define FXR_RXHIARB_DBG_PYLD_DAT11_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT11_CREG_PAYLD_DATA10_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT11_CREG_PAYLD_DATA10_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT11_CREG_PAYLD_DATA10_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #98 of fxr_top - RXHIARB_DBG_PYLD_DAT12_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[255:192] of the third data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT12_CREG					(FXR_RX_HIARB_CSRS + 0x000000040468)
+#define FXR_RXHIARB_DBG_PYLD_DAT12_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT12_CREG_PAYLD_DATA11_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT12_CREG_PAYLD_DATA11_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT12_CREG_PAYLD_DATA11_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #99 of fxr_top - RXHIARB_DBG_PYLD_DAT13_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[63:0] of the forth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT13_CREG					(FXR_RX_HIARB_CSRS + 0x000000040470)
+#define FXR_RXHIARB_DBG_PYLD_DAT13_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT13_CREG_PAYLD_DATA12_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT13_CREG_PAYLD_DATA12_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT13_CREG_PAYLD_DATA12_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #100 of fxr_top - RXHIARB_DBG_PYLD_DAT14_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[127:64] of the forth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT14_CREG					(FXR_RX_HIARB_CSRS + 0x000000040478)
+#define FXR_RXHIARB_DBG_PYLD_DAT14_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT14_CREG_PAYLD_DATA13_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT14_CREG_PAYLD_DATA13_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT14_CREG_PAYLD_DATA13_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #101 of fxr_top - RXHIARB_DBG_PYLD_DAT15_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[191:128] of the forth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT15_CREG					(FXR_RX_HIARB_CSRS + 0x000000040480)
+#define FXR_RXHIARB_DBG_PYLD_DAT15_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT15_CREG_PAYLD_DATA14_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT15_CREG_PAYLD_DATA14_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT15_CREG_PAYLD_DATA14_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #102 of fxr_top - RXHIARB_DBG_PYLD_DAT16_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[255:192] of the forth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT16_CREG					(FXR_RX_HIARB_CSRS + 0x000000040488)
+#define FXR_RXHIARB_DBG_PYLD_DAT16_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT16_CREG_PAYLD_DATA15_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT16_CREG_PAYLD_DATA15_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT16_CREG_PAYLD_DATA15_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #103 of fxr_top - RXHIARB_DBG_PYLD_DAT17_CREG
+* Captures the data ECC fields during payload accesses. When payload header 0 
+* CSR is read, this captures its corresponding read data ECC fields. During 
+* writes, this data is written in conjunction with the headers. This ECC slices 
+* map to both data flits, where each 8-bit ECC corresponds to a 64-bit data 
+* field.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT17_CREG					(FXR_RX_HIARB_CSRS + 0x000000040490)
+#define FXR_RXHIARB_DBG_PYLD_DAT17_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT17_CREG_PAYLD_DECC3_SHIFT		32
+#define FXR_RXHIARB_DBG_PYLD_DAT17_CREG_PAYLD_DECC3_MASK		0xFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT17_CREG_PAYLD_DECC3_SMASK		0xFFFFFFFF00000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT17_CREG_PAYLD_DECC2_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT17_CREG_PAYLD_DECC2_MASK		0xFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT17_CREG_PAYLD_DECC2_SMASK		0xFFFFFFFFull
+/*
+* Table #104 of fxr_top - RXHIARB_DBG_PYLD_DAT18_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[63:0] of the fifth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT18_CREG					(FXR_RX_HIARB_CSRS + 0x000000040498)
+#define FXR_RXHIARB_DBG_PYLD_DAT18_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT18_CREG_PAYLD_DATA16_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT18_CREG_PAYLD_DATA16_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT18_CREG_PAYLD_DATA16_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #105 of fxr_top - RXHIARB_DBG_PYLD_DAT19_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[127:64] of the fifth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT19_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404A0)
+#define FXR_RXHIARB_DBG_PYLD_DAT19_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT19_CREG_PAYLD_DATA17_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT19_CREG_PAYLD_DATA17_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT19_CREG_PAYLD_DATA17_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #106 of fxr_top - RXHIARB_DBG_PYLD_DAT20_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[191:128] of the fifth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT20_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404A8)
+#define FXR_RXHIARB_DBG_PYLD_DAT20_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT20_CREG_PAYLD_DATA18_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT20_CREG_PAYLD_DATA18_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT20_CREG_PAYLD_DATA18_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #107 of fxr_top - RXHIARB_DBG_PYLD_DAT21_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[255:192] of the fifth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT21_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404B0)
+#define FXR_RXHIARB_DBG_PYLD_DAT21_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT21_CREG_PAYLD_DATA19_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT21_CREG_PAYLD_DATA19_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT21_CREG_PAYLD_DATA19_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #108 of fxr_top - RXHIARB_DBG_PYLD_DAT22_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[63:0] of the sixth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT22_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404B8)
+#define FXR_RXHIARB_DBG_PYLD_DAT22_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT22_CREG_PAYLD_DATA20_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT22_CREG_PAYLD_DATA20_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT22_CREG_PAYLD_DATA20_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #109 of fxr_top - RXHIARB_DBG_PYLD_DAT23_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[127:64] of the sixth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT23_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404C0)
+#define FXR_RXHIARB_DBG_PYLD_DAT23_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT23_CREG_PAYLD_DATA21_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT23_CREG_PAYLD_DATA21_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT23_CREG_PAYLD_DATA21_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #110 of fxr_top - RXHIARB_DBG_PYLD_DAT24_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[191:128] of the sixth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT24_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404C8)
+#define FXR_RXHIARB_DBG_PYLD_DAT24_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT24_CREG_PAYLD_DATA22_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT24_CREG_PAYLD_DATA22_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT24_CREG_PAYLD_DATA22_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #111 of fxr_top - RXHIARB_DBG_PYLD_DAT25_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[255:192] of the sixth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT25_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404D0)
+#define FXR_RXHIARB_DBG_PYLD_DAT25_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT25_CREG_PAYLD_DATA23_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT25_CREG_PAYLD_DATA23_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT25_CREG_PAYLD_DATA23_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #112 of fxr_top - RXHIARB_DBG_PYLD_DAT26_CREG
+* Captures the data ECC fields during payload accesses. When payload header 0 
+* CSR is read, this captures its corresponding read data ECC fields. During 
+* writes, this data is written in conjunction with the headers. This ECC slices 
+* map to both data flits, where each 8-bit ECC corresponds to a 64-bit data 
+* field.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT26_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404D8)
+#define FXR_RXHIARB_DBG_PYLD_DAT26_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT26_CREG_PAYLD_DECC5_SHIFT		32
+#define FXR_RXHIARB_DBG_PYLD_DAT26_CREG_PAYLD_DECC5_MASK		0xFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT26_CREG_PAYLD_DECC5_SMASK		0xFFFFFFFF00000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT26_CREG_PAYLD_DECC4_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT26_CREG_PAYLD_DECC4_MASK		0xFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT26_CREG_PAYLD_DECC4_SMASK		0xFFFFFFFFull
+/*
+* Table #113 of fxr_top - RXHIARB_DBG_PYLD_DAT27_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[63:0] of the seventh data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT27_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404E0)
+#define FXR_RXHIARB_DBG_PYLD_DAT27_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT27_CREG_PAYLD_DATA24_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT27_CREG_PAYLD_DATA24_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT27_CREG_PAYLD_DATA24_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #114 of fxr_top - RXHIARB_DBG_PYLD_DAT28_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[127:64] of the seventh data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT28_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404E8)
+#define FXR_RXHIARB_DBG_PYLD_DAT28_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT28_CREG_PAYLD_DATA25_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT28_CREG_PAYLD_DATA25_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT28_CREG_PAYLD_DATA25_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #115 of fxr_top - RXHIARB_DBG_PYLD_DAT29_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[191:128] of the seventh data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT29_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404F0)
+#define FXR_RXHIARB_DBG_PYLD_DAT29_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT29_CREG_PAYLD_DATA26_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT29_CREG_PAYLD_DATA26_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT29_CREG_PAYLD_DATA26_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #116 of fxr_top - RXHIARB_DBG_PYLD_DAT30_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[255:192] of the seventh data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT30_CREG					(FXR_RX_HIARB_CSRS + 0x0000000404F8)
+#define FXR_RXHIARB_DBG_PYLD_DAT30_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT30_CREG_PAYLD_DATA27_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT30_CREG_PAYLD_DATA27_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT30_CREG_PAYLD_DATA27_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #117 of fxr_top - RXHIARB_DBG_PYLD_DAT31_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[63:0] of the eighth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT31_CREG					(FXR_RX_HIARB_CSRS + 0x000000040500)
+#define FXR_RXHIARB_DBG_PYLD_DAT31_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT31_CREG_PAYLD_DATA28_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT31_CREG_PAYLD_DATA28_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT31_CREG_PAYLD_DATA28_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #118 of fxr_top - RXHIARB_DBG_PYLD_DAT32_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[127:64] of the eighth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT32_CREG					(FXR_RX_HIARB_CSRS + 0x000000040508)
+#define FXR_RXHIARB_DBG_PYLD_DAT32_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT32_CREG_PAYLD_DATA29_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT32_CREG_PAYLD_DATA29_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT32_CREG_PAYLD_DATA29_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #119 of fxr_top - RXHIARB_DBG_PYLD_DAT33_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[191:128] of the eighth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT33_CREG					(FXR_RX_HIARB_CSRS + 0x000000040510)
+#define FXR_RXHIARB_DBG_PYLD_DAT33_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT33_CREG_PAYLD_DATA30_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT33_CREG_PAYLD_DATA30_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT33_CREG_PAYLD_DATA30_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #120 of fxr_top - RXHIARB_DBG_PYLD_DAT34_CREG
+* Captures a slice of the data fields during payload accesses. When payload 
+* header 0 CSR is read, this captures its corresponding slice of the read data. 
+* During writes, this data is written in conjunction with the headers. This data 
+* slice maps to data[255:192] of the eighth data flit.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT34_CREG					(FXR_RX_HIARB_CSRS + 0x000000040518)
+#define FXR_RXHIARB_DBG_PYLD_DAT34_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT34_CREG_PAYLD_DATA31_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT34_CREG_PAYLD_DATA31_MASK		0xFFFFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT34_CREG_PAYLD_DATA31_SMASK		0xFFFFFFFFFFFFFFFFull
+/*
+* Table #121 of fxr_top - RXHIARB_DBG_PYLD_DAT35_CREG
+* Captures the data ECC fields during payload accesses. When payload header 0 
+* CSR is read, this captures its corresponding read data ECC fields. During 
+* writes, this data is written in conjunction with the headers. This ECC slices 
+* map to both data flits, where each 8-bit ECC corresponds to a 64-bit data 
+* field.
+*/
+#define FXR_RXHIARB_DBG_PYLD_DAT35_CREG					(FXR_RX_HIARB_CSRS + 0x000000040520)
+#define FXR_RXHIARB_DBG_PYLD_DAT35_CREG_RESETCSR			0x0000000000000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT35_CREG_PAYLD_DECC7_SHIFT		32
+#define FXR_RXHIARB_DBG_PYLD_DAT35_CREG_PAYLD_DECC7_MASK		0xFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT35_CREG_PAYLD_DECC7_SMASK		0xFFFFFFFF00000000ull
+#define FXR_RXHIARB_DBG_PYLD_DAT35_CREG_PAYLD_DECC6_SHIFT		0
+#define FXR_RXHIARB_DBG_PYLD_DAT35_CREG_PAYLD_DECC6_MASK		0xFFFFFFFFull
+#define FXR_RXHIARB_DBG_PYLD_DAT35_CREG_PAYLD_DECC6_SMASK		0xFFFFFFFFull
+/*
+* Table #122 of fxr_top - RXHIARB_DBG_MTLB_TAG
 * Provides debug access into Mini-TLB's tag CAM. Note that byte-wise operations 
 * are not supported by logic. 
 */
@@ -2524,7 +3050,7 @@
 #define FXR_RXHIARB_DBG_MTLB_TAG_VA_MASK				0x1FFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_TAG_VA_SMASK				0x1FFFFFFFFFFFull
 /*
-* Table #89 of fxr_top - RXHIARB_DBG_MTLB_DATA
+* Table #123 of fxr_top - RXHIARB_DBG_MTLB_DATA
 * Provides debug access into Mini-TLB's data. Note that byte-wise operations are 
 * not supported by logic.
 */
@@ -2543,7 +3069,7 @@
 #define FXR_RXHIARB_DBG_MTLB_DATA_PA_MASK				0xFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_DATA_PA_SMASK				0xFFFFFFFFFFull
 /*
-* Table #90 of fxr_top - RXHIARB_DBG_MTLB_VVECT_LOW
+* Table #124 of fxr_top - RXHIARB_DBG_MTLB_VVECT_LOW
 * Provides debug access into the lower half of the mini-TLB valid state vector. 
 * Note that byte-wise operations are not supported by logic.
 */
@@ -2553,7 +3079,7 @@
 #define FXR_RXHIARB_DBG_MTLB_VVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_VVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #91 of fxr_top - RXHIARB_DBG_MTLB_VVECT_HIGH
+* Table #125 of fxr_top - RXHIARB_DBG_MTLB_VVECT_HIGH
 * Provides debug access into the upper half of the mini-TLB valid state vector. 
 * Note that byte-wise operations are not supported by logic.
 */
@@ -2563,7 +3089,7 @@
 #define FXR_RXHIARB_DBG_MTLB_VVECT_HIGH_VECT_HIGH_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_VVECT_HIGH_VECT_HIGH_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #92 of fxr_top - RXHIARB_DBG_MTLB_PVECT_LOW
+* Table #126 of fxr_top - RXHIARB_DBG_MTLB_PVECT_LOW
 * Provides debug access into the lower half of the mini-TLB present state 
 * vector. Note that byte-wise operations are not supported by logic.
 */
@@ -2573,7 +3099,7 @@
 #define FXR_RXHIARB_DBG_MTLB_PVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_PVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #93 of fxr_top - RXHIARB_DBG_MTLB_PVECT_HIGH
+* Table #127 of fxr_top - RXHIARB_DBG_MTLB_PVECT_HIGH
 * Provides debug access into the upper half of the mini-TLB present state 
 * vector. Note that byte-wise operations are not supported by logic.
 */
@@ -2583,7 +3109,7 @@
 #define FXR_RXHIARB_DBG_MTLB_PVECT_HIGH_VECT_HIGH_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_PVECT_HIGH_VECT_HIGH_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #94 of fxr_top - RXHIARB_DBG_MTLB_ZVECT_LOW
+* Table #128 of fxr_top - RXHIARB_DBG_MTLB_ZVECT_LOW
 * Provides debug access into the lower half of the mini-TLB zero state vector. 
 * Note that byte-wise operations are not supported by logic.
 */
@@ -2593,7 +3119,7 @@
 #define FXR_RXHIARB_DBG_MTLB_ZVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_ZVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #95 of fxr_top - RXHIARB_DBG_MTLB_ZVECT_HIGH
+* Table #129 of fxr_top - RXHIARB_DBG_MTLB_ZVECT_HIGH
 * Provides debug access into the upper half of the mini-TLB zero state vector. 
 * Note that byte-wise operations are not supported by logic.
 */
@@ -2603,7 +3129,7 @@
 #define FXR_RXHIARB_DBG_MTLB_ZVECT_HIGH_VECT_HIGH_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_ZVECT_HIGH_VECT_HIGH_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #96 of fxr_top - RXHIARB_DBG_MTLB_CVECT_LOW
+* Table #130 of fxr_top - RXHIARB_DBG_MTLB_CVECT_LOW
 * Provides debug access into the lower half of the mini-TLB corrupt state vector 
 * Bits in this vector indicate either a PCB error during a miss or a parity 
 * error on tag rd during flush. Note that byte-wise operations are not supported 
@@ -2615,7 +3141,7 @@
 #define FXR_RXHIARB_DBG_MTLB_CVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_CVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #97 of fxr_top - RXHIARB_DBG_MTLB_CVECT_HIGH
+* Table #131 of fxr_top - RXHIARB_DBG_MTLB_CVECT_HIGH
 * Provides debug access into the upper half of the mini-TLB corrupt state 
 * vector.Bits in this vector indicate either a PCB error during a miss or a 
 * parity error on tag rd during flush. Note that byte-wise operations are not 
@@ -2627,7 +3153,7 @@
 #define FXR_RXHIARB_DBG_MTLB_CVECT_HIGH_VECT_HIGH_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_CVECT_HIGH_VECT_HIGH_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #98 of fxr_top - RXHIARB_DBG_MTLB_FVECT_LOW
+* Table #132 of fxr_top - RXHIARB_DBG_MTLB_FVECT_LOW
 * Provides debug access into the lower half of the mini-TLB untranslated state 
 * vector Bits in this vector indicate that a fill error occurred during an AT 
 * translation. Note that byte-wise operations are not supported by logic. 
@@ -2639,7 +3165,7 @@
 #define FXR_RXHIARB_DBG_MTLB_FVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_FVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #99 of fxr_top - RXHIARB_DBG_MTLB_FVECT_HIGH
+* Table #133 of fxr_top - RXHIARB_DBG_MTLB_FVECT_HIGH
 * Provides debug access into the upper half of the mini-TLB untranslated state 
 * vector Bits in this vector indicate that a fill error occurred during an AT 
 * translation. Note that byte-wise operations are not supported by 
@@ -2651,7 +3177,7 @@
 #define FXR_RXHIARB_DBG_MTLB_FVECT_HIGH_VECT_HIGH_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_FVECT_HIGH_VECT_HIGH_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #100 of fxr_top - RXHIARB_DBG_MTLB_DISABLE
+* Table #134 of fxr_top - RXHIARB_DBG_MTLB_DISABLE
 * Provides debug access to disable the mini-TLB cache. Asserting this bit is for 
 * debug purposes only and will throttle the performance of the HIARB 
 * significantly. Asserting the disable bit forces every request in the address 
@@ -2668,7 +3194,7 @@
 #define FXR_RXHIARB_DBG_MTLB_DISABLE_CACHE_DISABLE_MASK			0x1ull
 #define FXR_RXHIARB_DBG_MTLB_DISABLE_CACHE_DISABLE_SMASK		0x1ull
 /*
-* Table #101 of fxr_top - RXHIARB_DBG_MTLB_CNT
+* Table #135 of fxr_top - RXHIARB_DBG_MTLB_CNT
 * Provides debug access into Mini-TLB's counters. Note that byte-wise operations 
 * are not supported by logic.
 */
@@ -2684,7 +3210,7 @@
 #define FXR_RXHIARB_DBG_MTLB_CNT_COUNT_MASK				0xFFull
 #define FXR_RXHIARB_DBG_MTLB_CNT_COUNT_SMASK				0xFFull
 /*
-* Table #102 of fxr_top - RXHIARB_DBG_MTLB_FLSH
+* Table #136 of fxr_top - RXHIARB_DBG_MTLB_FLSH
 * Provides read-only debug access, allowing some insight into the flush 
 * state.
 */
@@ -2703,7 +3229,7 @@
 #define FXR_RXHIARB_DBG_MTLB_FLSH_FLUSH_BUSY_MASK			0x1ull
 #define FXR_RXHIARB_DBG_MTLB_FLSH_FLUSH_BUSY_SMASK			0x1ull
 /*
-* Table #103 of fxr_top - RXHIARB_DBG_MTLB_RVECT_LOW
+* Table #137 of fxr_top - RXHIARB_DBG_MTLB_RVECT_LOW
 * Provides debug access into the lower half of the mini-TLB state vector Bits in 
 * this vector indicate that the corrsponding mini-TLB index is being refetched 
 * due to a flush. Note that byte-wise operations are not supported by 
@@ -2715,7 +3241,7 @@
 #define FXR_RXHIARB_DBG_MTLB_RVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_RVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #104 of fxr_top - RXHIARB_DBG_MTLB_RVECT_HIGH
+* Table #138 of fxr_top - RXHIARB_DBG_MTLB_RVECT_HIGH
 * Provides debug access into the lower half of the mini-TLB state vector Bits in 
 * this vector indicate that the corrsponding mini-TLB index is being refetched 
 * due to a flush. Note that byte-wise operations are not supported by 
@@ -2727,286 +3253,259 @@
 #define FXR_RXHIARB_DBG_MTLB_RVECT_HIGH_VECT_HIGH_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_MTLB_RVECT_HIGH_VECT_HIGH_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #105 of fxr_top - RXHIARB_DBG_HQUE0
+* Table #139 of fxr_top - RXHIARB_DBG_HQUE0
 * Provides debug access into the head of holding queue 0. Note that byte-wise 
 * operations are not supported by logic.
 */
 #define FXR_RXHIARB_DBG_HQUE0						(FXR_RX_HIARB_CSRS + 0x000000042418)
 #define FXR_RXHIARB_DBG_HQUE0_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_DBG_HQUE0_RESERVED_63_42_SHIFT			42
-#define FXR_RXHIARB_DBG_HQUE0_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXHIARB_DBG_HQUE0_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
-#define FXR_RXHIARB_DBG_HQUE0_PRES_OUT_SHIFT				41
+#define FXR_RXHIARB_DBG_HQUE0_RESERVED_63_47_SHIFT			47
+#define FXR_RXHIARB_DBG_HQUE0_RESERVED_63_47_MASK			0x1FFFFull
+#define FXR_RXHIARB_DBG_HQUE0_RESERVED_63_47_SMASK			0xFFFF800000000000ull
+#define FXR_RXHIARB_DBG_HQUE0_PRES_OUT_SHIFT				46
 #define FXR_RXHIARB_DBG_HQUE0_PRES_OUT_MASK				0x1ull
-#define FXR_RXHIARB_DBG_HQUE0_PRES_OUT_SMASK				0x20000000000ull
-#define FXR_RXHIARB_DBG_HQUE0_LADDR_TLB_INDEX_ECC_SHIFT			35
+#define FXR_RXHIARB_DBG_HQUE0_PRES_OUT_SMASK				0x400000000000ull
+#define FXR_RXHIARB_DBG_HQUE0_LADDR_TLB_INDEX_ECC_SHIFT			40
 #define FXR_RXHIARB_DBG_HQUE0_LADDR_TLB_INDEX_ECC_MASK			0x3Full
-#define FXR_RXHIARB_DBG_HQUE0_LADDR_TLB_INDEX_ECC_SMASK			0x1F800000000ull
-#define FXR_RXHIARB_DBG_HQUE0_TLB_INDEX_SHIFT				28
+#define FXR_RXHIARB_DBG_HQUE0_LADDR_TLB_INDEX_ECC_SMASK			0x3F0000000000ull
+#define FXR_RXHIARB_DBG_HQUE0_TLB_INDEX_SHIFT				33
 #define FXR_RXHIARB_DBG_HQUE0_TLB_INDEX_MASK				0x7Full
-#define FXR_RXHIARB_DBG_HQUE0_TLB_INDEX_SMASK				0x7F0000000ull
-#define FXR_RXHIARB_DBG_HQUE0_LADDR_SHIFT				16
+#define FXR_RXHIARB_DBG_HQUE0_TLB_INDEX_SMASK				0xFE00000000ull
+#define FXR_RXHIARB_DBG_HQUE0_LADDR_SHIFT				21
 #define FXR_RXHIARB_DBG_HQUE0_LADDR_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_HQUE0_LADDR_SMASK				0xFFF0000ull
-#define FXR_RXHIARB_DBG_HQUE0_RESERVED_15_13_SHIFT			13
-#define FXR_RXHIARB_DBG_HQUE0_RESERVED_15_13_MASK			0x7ull
-#define FXR_RXHIARB_DBG_HQUE0_RESERVED_15_13_SMASK			0xE000ull
-#define FXR_RXHIARB_DBG_HQUE0_HID_ECC_SHIFT				8
-#define FXR_RXHIARB_DBG_HQUE0_HID_ECC_MASK				0x1Full
-#define FXR_RXHIARB_DBG_HQUE0_HID_ECC_SMASK				0x1F00ull
+#define FXR_RXHIARB_DBG_HQUE0_LADDR_SMASK				0x1FFE00000ull
+#define FXR_RXHIARB_DBG_HQUE0_HID_ECC_SHIFT				15
+#define FXR_RXHIARB_DBG_HQUE0_HID_ECC_MASK				0x3Full
+#define FXR_RXHIARB_DBG_HQUE0_HID_ECC_SMASK				0x1F8000ull
 #define FXR_RXHIARB_DBG_HQUE0_HID_SHIFT					0
-#define FXR_RXHIARB_DBG_HQUE0_HID_MASK					0xFFull
-#define FXR_RXHIARB_DBG_HQUE0_HID_SMASK					0xFFull
+#define FXR_RXHIARB_DBG_HQUE0_HID_MASK					0x7FFFull
+#define FXR_RXHIARB_DBG_HQUE0_HID_SMASK					0x7FFFull
 /*
-* Table #106 of fxr_top - RXHIARB_DBG_HQUE1
+* Table #140 of fxr_top - RXHIARB_DBG_HQUE1
 * Provides debug access into the head of holding queue 1. Note that byte-wise 
 * operations are not supported by logic.
 */
 #define FXR_RXHIARB_DBG_HQUE1						(FXR_RX_HIARB_CSRS + 0x000000042420)
 #define FXR_RXHIARB_DBG_HQUE1_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_DBG_HQUE1_RESERVED_63_42_SHIFT			42
-#define FXR_RXHIARB_DBG_HQUE1_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXHIARB_DBG_HQUE1_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
-#define FXR_RXHIARB_DBG_HQUE1_PRES_OUT_SHIFT				41
+#define FXR_RXHIARB_DBG_HQUE1_RESERVED_63_47_SHIFT			47
+#define FXR_RXHIARB_DBG_HQUE1_RESERVED_63_47_MASK			0x1FFFFull
+#define FXR_RXHIARB_DBG_HQUE1_RESERVED_63_47_SMASK			0xFFFF800000000000ull
+#define FXR_RXHIARB_DBG_HQUE1_PRES_OUT_SHIFT				46
 #define FXR_RXHIARB_DBG_HQUE1_PRES_OUT_MASK				0x1ull
-#define FXR_RXHIARB_DBG_HQUE1_PRES_OUT_SMASK				0x20000000000ull
-#define FXR_RXHIARB_DBG_HQUE1_LADDR_TLB_INDEX_ECC_SHIFT			35
+#define FXR_RXHIARB_DBG_HQUE1_PRES_OUT_SMASK				0x400000000000ull
+#define FXR_RXHIARB_DBG_HQUE1_LADDR_TLB_INDEX_ECC_SHIFT			40
 #define FXR_RXHIARB_DBG_HQUE1_LADDR_TLB_INDEX_ECC_MASK			0x3Full
-#define FXR_RXHIARB_DBG_HQUE1_LADDR_TLB_INDEX_ECC_SMASK			0x1F800000000ull
-#define FXR_RXHIARB_DBG_HQUE1_TLB_INDEX_SHIFT				28
+#define FXR_RXHIARB_DBG_HQUE1_LADDR_TLB_INDEX_ECC_SMASK			0x3F0000000000ull
+#define FXR_RXHIARB_DBG_HQUE1_TLB_INDEX_SHIFT				33
 #define FXR_RXHIARB_DBG_HQUE1_TLB_INDEX_MASK				0x7Full
-#define FXR_RXHIARB_DBG_HQUE1_TLB_INDEX_SMASK				0x7F0000000ull
-#define FXR_RXHIARB_DBG_HQUE1_LADDR_SHIFT				16
+#define FXR_RXHIARB_DBG_HQUE1_TLB_INDEX_SMASK				0xFE00000000ull
+#define FXR_RXHIARB_DBG_HQUE1_LADDR_SHIFT				21
 #define FXR_RXHIARB_DBG_HQUE1_LADDR_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_HQUE1_LADDR_SMASK				0xFFF0000ull
-#define FXR_RXHIARB_DBG_HQUE1_RESERVED_15_13_SHIFT			13
-#define FXR_RXHIARB_DBG_HQUE1_RESERVED_15_13_MASK			0x7ull
-#define FXR_RXHIARB_DBG_HQUE1_RESERVED_15_13_SMASK			0xE000ull
-#define FXR_RXHIARB_DBG_HQUE1_HID_ECC_SHIFT				8
-#define FXR_RXHIARB_DBG_HQUE1_HID_ECC_MASK				0x1Full
-#define FXR_RXHIARB_DBG_HQUE1_HID_ECC_SMASK				0x1F00ull
+#define FXR_RXHIARB_DBG_HQUE1_LADDR_SMASK				0x1FFE00000ull
+#define FXR_RXHIARB_DBG_HQUE1_HID_ECC_SHIFT				15
+#define FXR_RXHIARB_DBG_HQUE1_HID_ECC_MASK				0x3Full
+#define FXR_RXHIARB_DBG_HQUE1_HID_ECC_SMASK				0x1F8000ull
 #define FXR_RXHIARB_DBG_HQUE1_HID_SHIFT					0
-#define FXR_RXHIARB_DBG_HQUE1_HID_MASK					0xFFull
-#define FXR_RXHIARB_DBG_HQUE1_HID_SMASK					0xFFull
+#define FXR_RXHIARB_DBG_HQUE1_HID_MASK					0x7FFFull
+#define FXR_RXHIARB_DBG_HQUE1_HID_SMASK					0x7FFFull
 /*
-* Table #107 of fxr_top - RXHIARB_DBG_HQUE2
+* Table #141 of fxr_top - RXHIARB_DBG_HQUE2
 * Provides debug access into the head of holding queue 2. Note that byte-wise 
 * operations are not supported by logic.
 */
 #define FXR_RXHIARB_DBG_HQUE2						(FXR_RX_HIARB_CSRS + 0x000000042428)
 #define FXR_RXHIARB_DBG_HQUE2_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_DBG_HQUE2_RESERVED_63_42_SHIFT			42
-#define FXR_RXHIARB_DBG_HQUE2_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXHIARB_DBG_HQUE2_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
-#define FXR_RXHIARB_DBG_HQUE2_PRES_OUT_SHIFT				41
+#define FXR_RXHIARB_DBG_HQUE2_RESERVED_63_47_SHIFT			47
+#define FXR_RXHIARB_DBG_HQUE2_RESERVED_63_47_MASK			0x1FFFFull
+#define FXR_RXHIARB_DBG_HQUE2_RESERVED_63_47_SMASK			0xFFFF800000000000ull
+#define FXR_RXHIARB_DBG_HQUE2_PRES_OUT_SHIFT				46
 #define FXR_RXHIARB_DBG_HQUE2_PRES_OUT_MASK				0x1ull
-#define FXR_RXHIARB_DBG_HQUE2_PRES_OUT_SMASK				0x20000000000ull
-#define FXR_RXHIARB_DBG_HQUE2_LADDR_TLB_INDEX_ECC_SHIFT			35
+#define FXR_RXHIARB_DBG_HQUE2_PRES_OUT_SMASK				0x400000000000ull
+#define FXR_RXHIARB_DBG_HQUE2_LADDR_TLB_INDEX_ECC_SHIFT			40
 #define FXR_RXHIARB_DBG_HQUE2_LADDR_TLB_INDEX_ECC_MASK			0x3Full
-#define FXR_RXHIARB_DBG_HQUE2_LADDR_TLB_INDEX_ECC_SMASK			0x1F800000000ull
-#define FXR_RXHIARB_DBG_HQUE2_TLB_INDEX_SHIFT				28
+#define FXR_RXHIARB_DBG_HQUE2_LADDR_TLB_INDEX_ECC_SMASK			0x3F0000000000ull
+#define FXR_RXHIARB_DBG_HQUE2_TLB_INDEX_SHIFT				33
 #define FXR_RXHIARB_DBG_HQUE2_TLB_INDEX_MASK				0x7Full
-#define FXR_RXHIARB_DBG_HQUE2_TLB_INDEX_SMASK				0x7F0000000ull
-#define FXR_RXHIARB_DBG_HQUE2_LADDR_SHIFT				16
+#define FXR_RXHIARB_DBG_HQUE2_TLB_INDEX_SMASK				0xFE00000000ull
+#define FXR_RXHIARB_DBG_HQUE2_LADDR_SHIFT				21
 #define FXR_RXHIARB_DBG_HQUE2_LADDR_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_HQUE2_LADDR_SMASK				0xFFF0000ull
-#define FXR_RXHIARB_DBG_HQUE2_RESERVED_15_13_SHIFT			13
-#define FXR_RXHIARB_DBG_HQUE2_RESERVED_15_13_MASK			0x7ull
-#define FXR_RXHIARB_DBG_HQUE2_RESERVED_15_13_SMASK			0xE000ull
-#define FXR_RXHIARB_DBG_HQUE2_HID_ECC_SHIFT				8
-#define FXR_RXHIARB_DBG_HQUE2_HID_ECC_MASK				0x1Full
-#define FXR_RXHIARB_DBG_HQUE2_HID_ECC_SMASK				0x1F00ull
+#define FXR_RXHIARB_DBG_HQUE2_LADDR_SMASK				0x1FFE00000ull
+#define FXR_RXHIARB_DBG_HQUE2_HID_ECC_SHIFT				15
+#define FXR_RXHIARB_DBG_HQUE2_HID_ECC_MASK				0x3Full
+#define FXR_RXHIARB_DBG_HQUE2_HID_ECC_SMASK				0x1F8000ull
 #define FXR_RXHIARB_DBG_HQUE2_HID_SHIFT					0
-#define FXR_RXHIARB_DBG_HQUE2_HID_MASK					0xFFull
-#define FXR_RXHIARB_DBG_HQUE2_HID_SMASK					0xFFull
+#define FXR_RXHIARB_DBG_HQUE2_HID_MASK					0x7FFFull
+#define FXR_RXHIARB_DBG_HQUE2_HID_SMASK					0x7FFFull
 /*
-* Table #108 of fxr_top - RXHIARB_DBG_HQUE3
+* Table #142 of fxr_top - RXHIARB_DBG_HQUE3
 * Provides debug access into the head of holding queue 3. Note that byte-wise 
 * operations are not supported by logic.
 */
 #define FXR_RXHIARB_DBG_HQUE3						(FXR_RX_HIARB_CSRS + 0x000000042430)
 #define FXR_RXHIARB_DBG_HQUE3_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_DBG_HQUE3_RESERVED_63_42_SHIFT			42
-#define FXR_RXHIARB_DBG_HQUE3_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXHIARB_DBG_HQUE3_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
-#define FXR_RXHIARB_DBG_HQUE3_PRES_OUT_SHIFT				41
+#define FXR_RXHIARB_DBG_HQUE3_RESERVED_63_47_SHIFT			47
+#define FXR_RXHIARB_DBG_HQUE3_RESERVED_63_47_MASK			0x1FFFFull
+#define FXR_RXHIARB_DBG_HQUE3_RESERVED_63_47_SMASK			0xFFFF800000000000ull
+#define FXR_RXHIARB_DBG_HQUE3_PRES_OUT_SHIFT				46
 #define FXR_RXHIARB_DBG_HQUE3_PRES_OUT_MASK				0x1ull
-#define FXR_RXHIARB_DBG_HQUE3_PRES_OUT_SMASK				0x20000000000ull
-#define FXR_RXHIARB_DBG_HQUE3_LADDR_TLB_INDEX_ECC_SHIFT			35
+#define FXR_RXHIARB_DBG_HQUE3_PRES_OUT_SMASK				0x400000000000ull
+#define FXR_RXHIARB_DBG_HQUE3_LADDR_TLB_INDEX_ECC_SHIFT			40
 #define FXR_RXHIARB_DBG_HQUE3_LADDR_TLB_INDEX_ECC_MASK			0x3Full
-#define FXR_RXHIARB_DBG_HQUE3_LADDR_TLB_INDEX_ECC_SMASK			0x1F800000000ull
-#define FXR_RXHIARB_DBG_HQUE3_TLB_INDEX_SHIFT				28
+#define FXR_RXHIARB_DBG_HQUE3_LADDR_TLB_INDEX_ECC_SMASK			0x3F0000000000ull
+#define FXR_RXHIARB_DBG_HQUE3_TLB_INDEX_SHIFT				33
 #define FXR_RXHIARB_DBG_HQUE3_TLB_INDEX_MASK				0x7Full
-#define FXR_RXHIARB_DBG_HQUE3_TLB_INDEX_SMASK				0x7F0000000ull
-#define FXR_RXHIARB_DBG_HQUE3_LADDR_SHIFT				16
+#define FXR_RXHIARB_DBG_HQUE3_TLB_INDEX_SMASK				0xFE00000000ull
+#define FXR_RXHIARB_DBG_HQUE3_LADDR_SHIFT				21
 #define FXR_RXHIARB_DBG_HQUE3_LADDR_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_HQUE3_LADDR_SMASK				0xFFF0000ull
-#define FXR_RXHIARB_DBG_HQUE3_RESERVED_15_13_SHIFT			13
-#define FXR_RXHIARB_DBG_HQUE3_RESERVED_15_13_MASK			0x7ull
-#define FXR_RXHIARB_DBG_HQUE3_RESERVED_15_13_SMASK			0xE000ull
-#define FXR_RXHIARB_DBG_HQUE3_HID_ECC_SHIFT				8
-#define FXR_RXHIARB_DBG_HQUE3_HID_ECC_MASK				0x1Full
-#define FXR_RXHIARB_DBG_HQUE3_HID_ECC_SMASK				0x1F00ull
+#define FXR_RXHIARB_DBG_HQUE3_LADDR_SMASK				0x1FFE00000ull
+#define FXR_RXHIARB_DBG_HQUE3_HID_ECC_SHIFT				15
+#define FXR_RXHIARB_DBG_HQUE3_HID_ECC_MASK				0x3Full
+#define FXR_RXHIARB_DBG_HQUE3_HID_ECC_SMASK				0x1F8000ull
 #define FXR_RXHIARB_DBG_HQUE3_HID_SHIFT					0
-#define FXR_RXHIARB_DBG_HQUE3_HID_MASK					0xFFull
-#define FXR_RXHIARB_DBG_HQUE3_HID_SMASK					0xFFull
+#define FXR_RXHIARB_DBG_HQUE3_HID_MASK					0x7FFFull
+#define FXR_RXHIARB_DBG_HQUE3_HID_SMASK					0x7FFFull
 /*
-* Table #109 of fxr_top - RXHIARB_DBG_HQUE4
+* Table #143 of fxr_top - RXHIARB_DBG_HQUE4
 * Provides debug access into the head of holding queue 4. Note that byte-wise 
 * operations are not supported by logic.
 */
 #define FXR_RXHIARB_DBG_HQUE4						(FXR_RX_HIARB_CSRS + 0x000000042438)
 #define FXR_RXHIARB_DBG_HQUE4_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_DBG_HQUE4_RESERVED_63_42_SHIFT			42
-#define FXR_RXHIARB_DBG_HQUE4_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXHIARB_DBG_HQUE4_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
-#define FXR_RXHIARB_DBG_HQUE4_PRES_OUT_SHIFT				41
+#define FXR_RXHIARB_DBG_HQUE4_RESERVED_63_47_SHIFT			47
+#define FXR_RXHIARB_DBG_HQUE4_RESERVED_63_47_MASK			0x1FFFFull
+#define FXR_RXHIARB_DBG_HQUE4_RESERVED_63_47_SMASK			0xFFFF800000000000ull
+#define FXR_RXHIARB_DBG_HQUE4_PRES_OUT_SHIFT				46
 #define FXR_RXHIARB_DBG_HQUE4_PRES_OUT_MASK				0x1ull
-#define FXR_RXHIARB_DBG_HQUE4_PRES_OUT_SMASK				0x20000000000ull
-#define FXR_RXHIARB_DBG_HQUE4_LADDR_TLB_INDEX_ECC_SHIFT			35
+#define FXR_RXHIARB_DBG_HQUE4_PRES_OUT_SMASK				0x400000000000ull
+#define FXR_RXHIARB_DBG_HQUE4_LADDR_TLB_INDEX_ECC_SHIFT			40
 #define FXR_RXHIARB_DBG_HQUE4_LADDR_TLB_INDEX_ECC_MASK			0x3Full
-#define FXR_RXHIARB_DBG_HQUE4_LADDR_TLB_INDEX_ECC_SMASK			0x1F800000000ull
-#define FXR_RXHIARB_DBG_HQUE4_TLB_INDEX_SHIFT				28
+#define FXR_RXHIARB_DBG_HQUE4_LADDR_TLB_INDEX_ECC_SMASK			0x3F0000000000ull
+#define FXR_RXHIARB_DBG_HQUE4_TLB_INDEX_SHIFT				33
 #define FXR_RXHIARB_DBG_HQUE4_TLB_INDEX_MASK				0x7Full
-#define FXR_RXHIARB_DBG_HQUE4_TLB_INDEX_SMASK				0x7F0000000ull
-#define FXR_RXHIARB_DBG_HQUE4_LADDR_SHIFT				16
+#define FXR_RXHIARB_DBG_HQUE4_TLB_INDEX_SMASK				0xFE00000000ull
+#define FXR_RXHIARB_DBG_HQUE4_LADDR_SHIFT				21
 #define FXR_RXHIARB_DBG_HQUE4_LADDR_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_HQUE4_LADDR_SMASK				0xFFF0000ull
-#define FXR_RXHIARB_DBG_HQUE4_RESERVED_15_13_SHIFT			13
-#define FXR_RXHIARB_DBG_HQUE4_RESERVED_15_13_MASK			0x7ull
-#define FXR_RXHIARB_DBG_HQUE4_RESERVED_15_13_SMASK			0xE000ull
-#define FXR_RXHIARB_DBG_HQUE4_HID_ECC_SHIFT				8
-#define FXR_RXHIARB_DBG_HQUE4_HID_ECC_MASK				0x1Full
-#define FXR_RXHIARB_DBG_HQUE4_HID_ECC_SMASK				0x1F00ull
+#define FXR_RXHIARB_DBG_HQUE4_LADDR_SMASK				0x1FFE00000ull
+#define FXR_RXHIARB_DBG_HQUE4_HID_ECC_SHIFT				15
+#define FXR_RXHIARB_DBG_HQUE4_HID_ECC_MASK				0x3Full
+#define FXR_RXHIARB_DBG_HQUE4_HID_ECC_SMASK				0x1F8000ull
 #define FXR_RXHIARB_DBG_HQUE4_HID_SHIFT					0
-#define FXR_RXHIARB_DBG_HQUE4_HID_MASK					0xFFull
-#define FXR_RXHIARB_DBG_HQUE4_HID_SMASK					0xFFull
+#define FXR_RXHIARB_DBG_HQUE4_HID_MASK					0x7FFFull
+#define FXR_RXHIARB_DBG_HQUE4_HID_SMASK					0x7FFFull
 /*
-* Table #110 of fxr_top - RXHIARB_DBG_HQUE5
+* Table #144 of fxr_top - RXHIARB_DBG_HQUE5
 * Provides debug access into the head of holding queue 5. Note that byte-wise 
 * operations are not supported by logic.
 */
 #define FXR_RXHIARB_DBG_HQUE5						(FXR_RX_HIARB_CSRS + 0x000000042440)
 #define FXR_RXHIARB_DBG_HQUE5_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_DBG_HQUE5_RESERVED_63_42_SHIFT			42
-#define FXR_RXHIARB_DBG_HQUE5_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXHIARB_DBG_HQUE5_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
-#define FXR_RXHIARB_DBG_HQUE5_PRES_OUT_SHIFT				41
+#define FXR_RXHIARB_DBG_HQUE5_RESERVED_63_47_SHIFT			47
+#define FXR_RXHIARB_DBG_HQUE5_RESERVED_63_47_MASK			0x1FFFFull
+#define FXR_RXHIARB_DBG_HQUE5_RESERVED_63_47_SMASK			0xFFFF800000000000ull
+#define FXR_RXHIARB_DBG_HQUE5_PRES_OUT_SHIFT				46
 #define FXR_RXHIARB_DBG_HQUE5_PRES_OUT_MASK				0x1ull
-#define FXR_RXHIARB_DBG_HQUE5_PRES_OUT_SMASK				0x20000000000ull
-#define FXR_RXHIARB_DBG_HQUE5_LADDR_TLB_INDEX_ECC_SHIFT			35
+#define FXR_RXHIARB_DBG_HQUE5_PRES_OUT_SMASK				0x400000000000ull
+#define FXR_RXHIARB_DBG_HQUE5_LADDR_TLB_INDEX_ECC_SHIFT			40
 #define FXR_RXHIARB_DBG_HQUE5_LADDR_TLB_INDEX_ECC_MASK			0x3Full
-#define FXR_RXHIARB_DBG_HQUE5_LADDR_TLB_INDEX_ECC_SMASK			0x1F800000000ull
-#define FXR_RXHIARB_DBG_HQUE5_TLB_INDEX_SHIFT				28
+#define FXR_RXHIARB_DBG_HQUE5_LADDR_TLB_INDEX_ECC_SMASK			0x3F0000000000ull
+#define FXR_RXHIARB_DBG_HQUE5_TLB_INDEX_SHIFT				33
 #define FXR_RXHIARB_DBG_HQUE5_TLB_INDEX_MASK				0x7Full
-#define FXR_RXHIARB_DBG_HQUE5_TLB_INDEX_SMASK				0x7F0000000ull
-#define FXR_RXHIARB_DBG_HQUE5_LADDR_SHIFT				16
+#define FXR_RXHIARB_DBG_HQUE5_TLB_INDEX_SMASK				0xFE00000000ull
+#define FXR_RXHIARB_DBG_HQUE5_LADDR_SHIFT				21
 #define FXR_RXHIARB_DBG_HQUE5_LADDR_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_HQUE5_LADDR_SMASK				0xFFF0000ull
-#define FXR_RXHIARB_DBG_HQUE5_RESERVED_15_13_SHIFT			13
-#define FXR_RXHIARB_DBG_HQUE5_RESERVED_15_13_MASK			0x7ull
-#define FXR_RXHIARB_DBG_HQUE5_RESERVED_15_13_SMASK			0xE000ull
-#define FXR_RXHIARB_DBG_HQUE5_HID_ECC_SHIFT				8
-#define FXR_RXHIARB_DBG_HQUE5_HID_ECC_MASK				0x1Full
-#define FXR_RXHIARB_DBG_HQUE5_HID_ECC_SMASK				0x1F00ull
+#define FXR_RXHIARB_DBG_HQUE5_LADDR_SMASK				0x1FFE00000ull
+#define FXR_RXHIARB_DBG_HQUE5_HID_ECC_SHIFT				15
+#define FXR_RXHIARB_DBG_HQUE5_HID_ECC_MASK				0x3Full
+#define FXR_RXHIARB_DBG_HQUE5_HID_ECC_SMASK				0x1F8000ull
 #define FXR_RXHIARB_DBG_HQUE5_HID_SHIFT					0
-#define FXR_RXHIARB_DBG_HQUE5_HID_MASK					0xFFull
-#define FXR_RXHIARB_DBG_HQUE5_HID_SMASK					0xFFull
+#define FXR_RXHIARB_DBG_HQUE5_HID_MASK					0x7FFFull
+#define FXR_RXHIARB_DBG_HQUE5_HID_SMASK					0x7FFFull
 /*
-* Table #111 of fxr_top - RXHIARB_DBG_HQUE6
+* Table #145 of fxr_top - RXHIARB_DBG_HQUE6
 * Provides debug access into the head of holding queue 6. Note that byte-wise 
 * operations are not supported by logic.
 */
 #define FXR_RXHIARB_DBG_HQUE6						(FXR_RX_HIARB_CSRS + 0x000000042448)
 #define FXR_RXHIARB_DBG_HQUE6_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_DBG_HQUE6_RESERVED_63_42_SHIFT			42
-#define FXR_RXHIARB_DBG_HQUE6_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXHIARB_DBG_HQUE6_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
-#define FXR_RXHIARB_DBG_HQUE6_PRES_OUT_SHIFT				41
+#define FXR_RXHIARB_DBG_HQUE6_RESERVED_63_47_SHIFT			47
+#define FXR_RXHIARB_DBG_HQUE6_RESERVED_63_47_MASK			0x1FFFFull
+#define FXR_RXHIARB_DBG_HQUE6_RESERVED_63_47_SMASK			0xFFFF800000000000ull
+#define FXR_RXHIARB_DBG_HQUE6_PRES_OUT_SHIFT				46
 #define FXR_RXHIARB_DBG_HQUE6_PRES_OUT_MASK				0x1ull
-#define FXR_RXHIARB_DBG_HQUE6_PRES_OUT_SMASK				0x20000000000ull
-#define FXR_RXHIARB_DBG_HQUE6_LADDR_TLB_INDEX_ECC_SHIFT			35
+#define FXR_RXHIARB_DBG_HQUE6_PRES_OUT_SMASK				0x400000000000ull
+#define FXR_RXHIARB_DBG_HQUE6_LADDR_TLB_INDEX_ECC_SHIFT			40
 #define FXR_RXHIARB_DBG_HQUE6_LADDR_TLB_INDEX_ECC_MASK			0x3Full
-#define FXR_RXHIARB_DBG_HQUE6_LADDR_TLB_INDEX_ECC_SMASK			0x1F800000000ull
-#define FXR_RXHIARB_DBG_HQUE6_TLB_INDEX_SHIFT				28
+#define FXR_RXHIARB_DBG_HQUE6_LADDR_TLB_INDEX_ECC_SMASK			0x3F0000000000ull
+#define FXR_RXHIARB_DBG_HQUE6_TLB_INDEX_SHIFT				33
 #define FXR_RXHIARB_DBG_HQUE6_TLB_INDEX_MASK				0x7Full
-#define FXR_RXHIARB_DBG_HQUE6_TLB_INDEX_SMASK				0x7F0000000ull
-#define FXR_RXHIARB_DBG_HQUE6_LADDR_SHIFT				16
+#define FXR_RXHIARB_DBG_HQUE6_TLB_INDEX_SMASK				0xFE00000000ull
+#define FXR_RXHIARB_DBG_HQUE6_LADDR_SHIFT				21
 #define FXR_RXHIARB_DBG_HQUE6_LADDR_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_HQUE6_LADDR_SMASK				0xFFF0000ull
-#define FXR_RXHIARB_DBG_HQUE6_RESERVED_15_13_SHIFT			13
-#define FXR_RXHIARB_DBG_HQUE6_RESERVED_15_13_MASK			0x7ull
-#define FXR_RXHIARB_DBG_HQUE6_RESERVED_15_13_SMASK			0xE000ull
-#define FXR_RXHIARB_DBG_HQUE6_HID_ECC_SHIFT				8
-#define FXR_RXHIARB_DBG_HQUE6_HID_ECC_MASK				0x1Full
-#define FXR_RXHIARB_DBG_HQUE6_HID_ECC_SMASK				0x1F00ull
+#define FXR_RXHIARB_DBG_HQUE6_LADDR_SMASK				0x1FFE00000ull
+#define FXR_RXHIARB_DBG_HQUE6_HID_ECC_SHIFT				15
+#define FXR_RXHIARB_DBG_HQUE6_HID_ECC_MASK				0x3Full
+#define FXR_RXHIARB_DBG_HQUE6_HID_ECC_SMASK				0x1F8000ull
 #define FXR_RXHIARB_DBG_HQUE6_HID_SHIFT					0
-#define FXR_RXHIARB_DBG_HQUE6_HID_MASK					0xFFull
-#define FXR_RXHIARB_DBG_HQUE6_HID_SMASK					0xFFull
+#define FXR_RXHIARB_DBG_HQUE6_HID_MASK					0x7FFFull
+#define FXR_RXHIARB_DBG_HQUE6_HID_SMASK					0x7FFFull
 /*
-* Table #112 of fxr_top - RXHIARB_DBG_HQUE7
+* Table #146 of fxr_top - RXHIARB_DBG_HQUE7
 * Provides debug access into the head of holding queue 7. Note that byte-wise 
 * operations are not supported by logic. 
 */
 #define FXR_RXHIARB_DBG_HQUE7						(FXR_RX_HIARB_CSRS + 0x000000042450)
 #define FXR_RXHIARB_DBG_HQUE7_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_DBG_HQUE7_RESERVED_63_42_SHIFT			42
-#define FXR_RXHIARB_DBG_HQUE7_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXHIARB_DBG_HQUE7_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
-#define FXR_RXHIARB_DBG_HQUE7_PRES_OUT_SHIFT				41
+#define FXR_RXHIARB_DBG_HQUE7_RESERVED_63_47_SHIFT			47
+#define FXR_RXHIARB_DBG_HQUE7_RESERVED_63_47_MASK			0x1FFFFull
+#define FXR_RXHIARB_DBG_HQUE7_RESERVED_63_47_SMASK			0xFFFF800000000000ull
+#define FXR_RXHIARB_DBG_HQUE7_PRES_OUT_SHIFT				46
 #define FXR_RXHIARB_DBG_HQUE7_PRES_OUT_MASK				0x1ull
-#define FXR_RXHIARB_DBG_HQUE7_PRES_OUT_SMASK				0x20000000000ull
-#define FXR_RXHIARB_DBG_HQUE7_LADDR_TLB_INDEX_ECC_SHIFT			35
+#define FXR_RXHIARB_DBG_HQUE7_PRES_OUT_SMASK				0x400000000000ull
+#define FXR_RXHIARB_DBG_HQUE7_LADDR_TLB_INDEX_ECC_SHIFT			40
 #define FXR_RXHIARB_DBG_HQUE7_LADDR_TLB_INDEX_ECC_MASK			0x3Full
-#define FXR_RXHIARB_DBG_HQUE7_LADDR_TLB_INDEX_ECC_SMASK			0x1F800000000ull
-#define FXR_RXHIARB_DBG_HQUE7_TLB_INDEX_SHIFT				28
+#define FXR_RXHIARB_DBG_HQUE7_LADDR_TLB_INDEX_ECC_SMASK			0x3F0000000000ull
+#define FXR_RXHIARB_DBG_HQUE7_TLB_INDEX_SHIFT				33
 #define FXR_RXHIARB_DBG_HQUE7_TLB_INDEX_MASK				0x7Full
-#define FXR_RXHIARB_DBG_HQUE7_TLB_INDEX_SMASK				0x7F0000000ull
-#define FXR_RXHIARB_DBG_HQUE7_LADDR_SHIFT				16
+#define FXR_RXHIARB_DBG_HQUE7_TLB_INDEX_SMASK				0xFE00000000ull
+#define FXR_RXHIARB_DBG_HQUE7_LADDR_SHIFT				21
 #define FXR_RXHIARB_DBG_HQUE7_LADDR_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_HQUE7_LADDR_SMASK				0xFFF0000ull
-#define FXR_RXHIARB_DBG_HQUE7_RESERVED_15_13_SHIFT			13
-#define FXR_RXHIARB_DBG_HQUE7_RESERVED_15_13_MASK			0x7ull
-#define FXR_RXHIARB_DBG_HQUE7_RESERVED_15_13_SMASK			0xE000ull
-#define FXR_RXHIARB_DBG_HQUE7_HID_ECC_SHIFT				8
-#define FXR_RXHIARB_DBG_HQUE7_HID_ECC_MASK				0x1Full
-#define FXR_RXHIARB_DBG_HQUE7_HID_ECC_SMASK				0x1F00ull
+#define FXR_RXHIARB_DBG_HQUE7_LADDR_SMASK				0x1FFE00000ull
+#define FXR_RXHIARB_DBG_HQUE7_HID_ECC_SHIFT				15
+#define FXR_RXHIARB_DBG_HQUE7_HID_ECC_MASK				0x3Full
+#define FXR_RXHIARB_DBG_HQUE7_HID_ECC_SMASK				0x1F8000ull
 #define FXR_RXHIARB_DBG_HQUE7_HID_SHIFT					0
-#define FXR_RXHIARB_DBG_HQUE7_HID_MASK					0xFFull
-#define FXR_RXHIARB_DBG_HQUE7_HID_SMASK					0xFFull
+#define FXR_RXHIARB_DBG_HQUE7_HID_MASK					0x7FFFull
+#define FXR_RXHIARB_DBG_HQUE7_HID_SMASK					0x7FFFull
 /*
-* Table #113 of fxr_top - RXHIARB_DBG_HQUE8
+* Table #147 of fxr_top - RXHIARB_DBG_HQUE8
 * Provides debug access into the head of holding queue 8. Note that byte-wise 
 * operations are not supported by logic.
 */
 #define FXR_RXHIARB_DBG_HQUE8						(FXR_RX_HIARB_CSRS + 0x000000042458)
 #define FXR_RXHIARB_DBG_HQUE8_RESETCSR					0x0000000000000000ull
-#define FXR_RXHIARB_DBG_HQUE8_RESERVED_63_42_SHIFT			42
-#define FXR_RXHIARB_DBG_HQUE8_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXHIARB_DBG_HQUE8_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
-#define FXR_RXHIARB_DBG_HQUE8_PRES_OUT_SHIFT				41
+#define FXR_RXHIARB_DBG_HQUE8_RESERVED_63_47_SHIFT			47
+#define FXR_RXHIARB_DBG_HQUE8_RESERVED_63_47_MASK			0x1FFFFull
+#define FXR_RXHIARB_DBG_HQUE8_RESERVED_63_47_SMASK			0xFFFF800000000000ull
+#define FXR_RXHIARB_DBG_HQUE8_PRES_OUT_SHIFT				46
 #define FXR_RXHIARB_DBG_HQUE8_PRES_OUT_MASK				0x1ull
-#define FXR_RXHIARB_DBG_HQUE8_PRES_OUT_SMASK				0x20000000000ull
-#define FXR_RXHIARB_DBG_HQUE8_LADDR_TLB_INDEX_ECC_SHIFT			35
+#define FXR_RXHIARB_DBG_HQUE8_PRES_OUT_SMASK				0x400000000000ull
+#define FXR_RXHIARB_DBG_HQUE8_LADDR_TLB_INDEX_ECC_SHIFT			40
 #define FXR_RXHIARB_DBG_HQUE8_LADDR_TLB_INDEX_ECC_MASK			0x3Full
-#define FXR_RXHIARB_DBG_HQUE8_LADDR_TLB_INDEX_ECC_SMASK			0x1F800000000ull
-#define FXR_RXHIARB_DBG_HQUE8_TLB_INDEX_SHIFT				28
+#define FXR_RXHIARB_DBG_HQUE8_LADDR_TLB_INDEX_ECC_SMASK			0x3F0000000000ull
+#define FXR_RXHIARB_DBG_HQUE8_TLB_INDEX_SHIFT				33
 #define FXR_RXHIARB_DBG_HQUE8_TLB_INDEX_MASK				0x7Full
-#define FXR_RXHIARB_DBG_HQUE8_TLB_INDEX_SMASK				0x7F0000000ull
-#define FXR_RXHIARB_DBG_HQUE8_LADDR_SHIFT				16
+#define FXR_RXHIARB_DBG_HQUE8_TLB_INDEX_SMASK				0xFE00000000ull
+#define FXR_RXHIARB_DBG_HQUE8_LADDR_SHIFT				21
 #define FXR_RXHIARB_DBG_HQUE8_LADDR_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_HQUE8_LADDR_SMASK				0xFFF0000ull
-#define FXR_RXHIARB_DBG_HQUE8_RESERVED_15_13_SHIFT			13
-#define FXR_RXHIARB_DBG_HQUE8_RESERVED_15_13_MASK			0x7ull
-#define FXR_RXHIARB_DBG_HQUE8_RESERVED_15_13_SMASK			0xE000ull
-#define FXR_RXHIARB_DBG_HQUE8_HID_ECC_SHIFT				8
-#define FXR_RXHIARB_DBG_HQUE8_HID_ECC_MASK				0x1Full
-#define FXR_RXHIARB_DBG_HQUE8_HID_ECC_SMASK				0x1F00ull
+#define FXR_RXHIARB_DBG_HQUE8_LADDR_SMASK				0x1FFE00000ull
+#define FXR_RXHIARB_DBG_HQUE8_HID_ECC_SHIFT				15
+#define FXR_RXHIARB_DBG_HQUE8_HID_ECC_MASK				0x3Full
+#define FXR_RXHIARB_DBG_HQUE8_HID_ECC_SMASK				0x1F8000ull
 #define FXR_RXHIARB_DBG_HQUE8_HID_SHIFT					0
-#define FXR_RXHIARB_DBG_HQUE8_HID_MASK					0xFFull
-#define FXR_RXHIARB_DBG_HQUE8_HID_SMASK					0xFFull
+#define FXR_RXHIARB_DBG_HQUE8_HID_MASK					0x7FFFull
+#define FXR_RXHIARB_DBG_HQUE8_HID_SMASK					0x7FFFull
 /*
-* Table #114 of fxr_top - RXHIARB_DBG_HQUE0_PVECT_LOW
+* Table #148 of fxr_top - RXHIARB_DBG_HQUE0_PVECT_LOW
 * Provides debug access into the lower half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3019,7 +3518,7 @@
 #define FXR_RXHIARB_DBG_HQUE0_PVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE0_PVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #115 of fxr_top - RXHIARB_DBG_HQUE0_PVECT_HIGH
+* Table #149 of fxr_top - RXHIARB_DBG_HQUE0_PVECT_HIGH
 * Provides debug access into the upper half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3032,7 +3531,7 @@
 #define FXR_RXHIARB_DBG_HQUE0_PVECT_HIGH_VECT_HI_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE0_PVECT_HIGH_VECT_HI_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #116 of fxr_top - RXHIARB_DBG_HQUE1_PVECT_LOW
+* Table #150 of fxr_top - RXHIARB_DBG_HQUE1_PVECT_LOW
 * Provides debug access into the lower half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3045,7 +3544,7 @@
 #define FXR_RXHIARB_DBG_HQUE1_PVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE1_PVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #117 of fxr_top - RXHIARB_DBG_HQUE1_PVECT_HIGH
+* Table #151 of fxr_top - RXHIARB_DBG_HQUE1_PVECT_HIGH
 * Provides debug access into the upper half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3058,7 +3557,7 @@
 #define FXR_RXHIARB_DBG_HQUE1_PVECT_HIGH_VECT_HI_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE1_PVECT_HIGH_VECT_HI_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #118 of fxr_top - RXHIARB_DBG_HQUE2_PVECT_LOW
+* Table #152 of fxr_top - RXHIARB_DBG_HQUE2_PVECT_LOW
 * Provides debug access into the lower half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3071,7 +3570,7 @@
 #define FXR_RXHIARB_DBG_HQUE2_PVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE2_PVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #119 of fxr_top - RXHIARB_DBG_HQUE2_PVECT_HIGH
+* Table #153 of fxr_top - RXHIARB_DBG_HQUE2_PVECT_HIGH
 * Provides debug access into the upper half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3084,7 +3583,7 @@
 #define FXR_RXHIARB_DBG_HQUE2_PVECT_HIGH_VECT_HI_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE2_PVECT_HIGH_VECT_HI_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #120 of fxr_top - RXHIARB_DBG_HQUE3_PVECT_LOW
+* Table #154 of fxr_top - RXHIARB_DBG_HQUE3_PVECT_LOW
 * Provides debug access into the lower half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3097,7 +3596,7 @@
 #define FXR_RXHIARB_DBG_HQUE3_PVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE3_PVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #121 of fxr_top - RXHIARB_DBG_HQUE3_PVECT_HIGH
+* Table #155 of fxr_top - RXHIARB_DBG_HQUE3_PVECT_HIGH
 * Provides debug access into the upper half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3110,7 +3609,7 @@
 #define FXR_RXHIARB_DBG_HQUE3_PVECT_HIGH_VECT_HI_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE3_PVECT_HIGH_VECT_HI_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #122 of fxr_top - RXHIARB_DBG_HQUE4_PVECT_LOW
+* Table #156 of fxr_top - RXHIARB_DBG_HQUE4_PVECT_LOW
 * Provides debug access into the lower half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3123,7 +3622,7 @@
 #define FXR_RXHIARB_DBG_HQUE4_PVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE4_PVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #123 of fxr_top - RXHIARB_DBG_HQUE4_PVECT_HIGH
+* Table #157 of fxr_top - RXHIARB_DBG_HQUE4_PVECT_HIGH
 * Provides debug access into the upper half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3136,7 +3635,7 @@
 #define FXR_RXHIARB_DBG_HQUE4_PVECT_HIGH_VECT_HI_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE4_PVECT_HIGH_VECT_HI_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #124 of fxr_top - RXHIARB_DBG_HQUE5_PVECT_LOW
+* Table #158 of fxr_top - RXHIARB_DBG_HQUE5_PVECT_LOW
 * Provides debug access into the lower half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3149,7 +3648,7 @@
 #define FXR_RXHIARB_DBG_HQUE5_PVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE5_PVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #125 of fxr_top - RXHIARB_DBG_HQUE5_PVECT_HIGH
+* Table #159 of fxr_top - RXHIARB_DBG_HQUE5_PVECT_HIGH
 * Provides debug access into the upper half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3162,7 +3661,7 @@
 #define FXR_RXHIARB_DBG_HQUE5_PVECT_HIGH_VECT_HI_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE5_PVECT_HIGH_VECT_HI_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #126 of fxr_top - RXHIARB_DBG_HQUE6_PVECT_LOW
+* Table #160 of fxr_top - RXHIARB_DBG_HQUE6_PVECT_LOW
 * Provides debug access into the lower half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3175,7 +3674,7 @@
 #define FXR_RXHIARB_DBG_HQUE6_PVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE6_PVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #127 of fxr_top - RXHIARB_DBG_HQUE6_PVECT_HIGH
+* Table #161 of fxr_top - RXHIARB_DBG_HQUE6_PVECT_HIGH
 * Provides debug access into the upper half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3188,7 +3687,7 @@
 #define FXR_RXHIARB_DBG_HQUE6_PVECT_HIGH_VECT_HI_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE6_PVECT_HIGH_VECT_HI_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #128 of fxr_top - RXHIARB_DBG_HQUE7_PVECT_LOW
+* Table #162 of fxr_top - RXHIARB_DBG_HQUE7_PVECT_LOW
 * Provides debug access into the lower half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3201,7 +3700,7 @@
 #define FXR_RXHIARB_DBG_HQUE7_PVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE7_PVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #129 of fxr_top - RXHIARB_DBG_HQUE7_PVECT_HIGH
+* Table #163 of fxr_top - RXHIARB_DBG_HQUE7_PVECT_HIGH
 * Provides debug access into the upper half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3214,7 +3713,7 @@
 #define FXR_RXHIARB_DBG_HQUE7_PVECT_HIGH_VECT_HI_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE7_PVECT_HIGH_VECT_HI_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #130 of fxr_top - RXHIARB_DBG_HQUE8_PVECT_LOW
+* Table #164 of fxr_top - RXHIARB_DBG_HQUE8_PVECT_LOW
 * Provides debug access into the lower half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3227,7 +3726,7 @@
 #define FXR_RXHIARB_DBG_HQUE8_PVECT_LOW_VECT_LOW_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE8_PVECT_LOW_VECT_LOW_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #131 of fxr_top - RXHIARB_DBG_HQUE8_PVECT_HIGH
+* Table #165 of fxr_top - RXHIARB_DBG_HQUE8_PVECT_HIGH
 * Provides debug access into the upper half of the hque present state vector. 
 * Note that byte-wise operations are not supported by logic. Note that this is 
 * not in complete sync with the MTLB's pvect since it only needs to be accurate 
@@ -3240,7 +3739,7 @@
 #define FXR_RXHIARB_DBG_HQUE8_PVECT_HIGH_VECT_HI_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_HQUE8_PVECT_HIGH_VECT_HI_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #132 of fxr_top - RXHIARB_DBG_ARB_IN_STATE
+* Table #166 of fxr_top - RXHIARB_DBG_ARB_IN_STATE
 * Provides read-only debug access, allowing some insight into queue state in 
 * case a lockup condition occurs.
 */
@@ -3286,7 +3785,7 @@
 #define FXR_RXHIARB_DBG_ARB_IN_STATE_DMA_ARB_REQ_MASK			0x1FFull
 #define FXR_RXHIARB_DBG_ARB_IN_STATE_DMA_ARB_REQ_SMASK			0x1FFull
 /*
-* Table #133 of fxr_top - RXHIARB_DBG_ARB_IN_HQUE_LVL_0_3
+* Table #167 of fxr_top - RXHIARB_DBG_ARB_IN_HQUE_LVL_0_3
 * Provides read-only debug access, allowing some insight into current holding 
 * queue state.
 */
@@ -3329,7 +3828,7 @@
 #define FXR_RXHIARB_DBG_ARB_IN_HQUE_LVL_0_3_HQUE_DEPTH0_MASK		0xFFull
 #define FXR_RXHIARB_DBG_ARB_IN_HQUE_LVL_0_3_HQUE_DEPTH0_SMASK		0xFFull
 /*
-* Table #134 of fxr_top - RXHIARB_DBG_ARB_IN_HQUE_LVL_4_7
+* Table #168 of fxr_top - RXHIARB_DBG_ARB_IN_HQUE_LVL_4_7
 * Provides read-only debug access, allowing some insight into current holding 
 * queue state.
 */
@@ -3372,7 +3871,7 @@
 #define FXR_RXHIARB_DBG_ARB_IN_HQUE_LVL_4_7_HQUE_DEPTH4_MASK		0xFFull
 #define FXR_RXHIARB_DBG_ARB_IN_HQUE_LVL_4_7_HQUE_DEPTH4_SMASK		0xFFull
 /*
-* Table #135 of fxr_top - RXHIARB_DBG_ARB_IN_HQUE_LVL_8M
+* Table #169 of fxr_top - RXHIARB_DBG_ARB_IN_HQUE_LVL_8M
 * Provides read-only debug access, allowing some insight into current holding 
 * queue state..
 */
@@ -3400,7 +3899,7 @@
 #define FXR_RXHIARB_DBG_ARB_IN_HQUE_LVL_8M_HQUE_DEPTH8_MASK		0xFFull
 #define FXR_RXHIARB_DBG_ARB_IN_HQUE_LVL_8M_HQUE_DEPTH8_SMASK		0xFFull
 /*
-* Table #136 of fxr_top - RXHIARB_DBG_ARB_OUT_STATE
+* Table #170 of fxr_top - RXHIARB_DBG_ARB_OUT_STATE
 * Provides read-only debug access, allowing some insight into the output arbiter 
 * state.
 */
@@ -3421,12 +3920,12 @@
 #define FXR_RXHIARB_DBG_ARB_OUT_STATE_NACK_STALL_SHIFT			40
 #define FXR_RXHIARB_DBG_ARB_OUT_STATE_NACK_STALL_MASK			0x1ull
 #define FXR_RXHIARB_DBG_ARB_OUT_STATE_NACK_STALL_SMASK			0x10000000000ull
-#define FXR_RXHIARB_DBG_ARB_OUT_STATE_RESERVED_39_38_SHIFT		38
-#define FXR_RXHIARB_DBG_ARB_OUT_STATE_RESERVED_39_38_MASK		0x3ull
-#define FXR_RXHIARB_DBG_ARB_OUT_STATE_RESERVED_39_38_SMASK		0xC000000000ull
+#define FXR_RXHIARB_DBG_ARB_OUT_STATE_RESERVED_39_SHIFT			39
+#define FXR_RXHIARB_DBG_ARB_OUT_STATE_RESERVED_39_MASK			0x1ull
+#define FXR_RXHIARB_DBG_ARB_OUT_STATE_RESERVED_39_SMASK			0x8000000000ull
 #define FXR_RXHIARB_DBG_ARB_OUT_STATE_HI_FIFO_CNT_SHIFT			33
-#define FXR_RXHIARB_DBG_ARB_OUT_STATE_HI_FIFO_CNT_MASK			0x1Full
-#define FXR_RXHIARB_DBG_ARB_OUT_STATE_HI_FIFO_CNT_SMASK			0x3E00000000ull
+#define FXR_RXHIARB_DBG_ARB_OUT_STATE_HI_FIFO_CNT_MASK			0x3Full
+#define FXR_RXHIARB_DBG_ARB_OUT_STATE_HI_FIFO_CNT_SMASK			0x7E00000000ull
 #define FXR_RXHIARB_DBG_ARB_OUT_STATE_HI_FIFO_STALL_SHIFT		32
 #define FXR_RXHIARB_DBG_ARB_OUT_STATE_HI_FIFO_STALL_MASK		0x1ull
 #define FXR_RXHIARB_DBG_ARB_OUT_STATE_HI_FIFO_STALL_SMASK		0x100000000ull
@@ -3443,7 +3942,7 @@
 #define FXR_RXHIARB_DBG_ARB_OUT_STATE_ARB_REQ_MASK			0x1FFull
 #define FXR_RXHIARB_DBG_ARB_OUT_STATE_ARB_REQ_SMASK			0x1FFull
 /*
-* Table #137 of fxr_top - RXHIARB_DBG_SLRSP_STATE
+* Table #171 of fxr_top - RXHIARB_DBG_SLRSP_STATE
 * Provides read-only debug access, allowing some insight into the slow response 
 * path's state.
 */
@@ -3462,7 +3961,7 @@
 #define FXR_RXHIARB_DBG_SLRSP_STATE_SLOW_CNT_MASK			0x3Full
 #define FXR_RXHIARB_DBG_SLRSP_STATE_SLOW_CNT_SMASK			0x3Full
 /*
-* Table #138 of fxr_top - RXHIARB_DBG_AT_REQ_STATE
+* Table #172 of fxr_top - RXHIARB_DBG_AT_REQ_STATE
 * Provides read-only debug access, allowing some insight into the slow response 
 * path's state.
 */
@@ -3481,7 +3980,7 @@
 #define FXR_RXHIARB_DBG_AT_REQ_STATE_AT_FIFO_CNT_MASK			0x1Full
 #define FXR_RXHIARB_DBG_AT_REQ_STATE_AT_FIFO_CNT_SMASK			0x1Full
 /*
-* Table #139 of fxr_top - RXHIARB_DBG_XTRIG_CTRL
+* Table #173 of fxr_top - RXHIARB_DBG_XTRIG_CTRL
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. The triggering is 
 * used in conjunction with the primary DFD triggering by providing a single 
@@ -3552,7 +4051,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_CTRL_HI_IN_HOLD_MASK			0x1ull
 #define FXR_RXHIARB_DBG_XTRIG_CTRL_HI_IN_HOLD_SMASK			0x1ull
 /*
-* Table #140 of fxr_top - RXHIARB_DBG_XTRIG_CNT
+* Table #174 of fxr_top - RXHIARB_DBG_XTRIG_CNT
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. The count value 
 * indicates the number of times an event must occur prior to asserting the match 
@@ -3589,7 +4088,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_CNT_HI_IN_CNT_MASK			0xFFull
 #define FXR_RXHIARB_DBG_XTRIG_CNT_HI_IN_CNT_SMASK			0xFFull
 /*
-* Table #141 of fxr_top - RXHIARB_DBG_XTRIG_DMA_IN0
+* Table #175 of fxr_top - RXHIARB_DBG_XTRIG_DMA_IN0
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the RxDMA input interface. 
@@ -3617,7 +4116,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN0_OPCODE_MASK			0x7ull
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN0_OPCODE_SMASK			0x7ull
 /*
-* Table #142 of fxr_top - RXHIARB_DBG_XTRIG_DMA_IN1
+* Table #176 of fxr_top - RXHIARB_DBG_XTRIG_DMA_IN1
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the RxDMA input interface. 
@@ -3626,38 +4125,35 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN1					(FXR_RX_HIARB_CSRS + 0x00000004A018)
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_RESERVED_63_52_SHIFT		52
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_RESERVED_63_52_MASK		0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_RESERVED_63_52_SMASK		0xFFF0000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ASOP_SHIFT			47
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_RESERVED_63_58_SHIFT		58
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_RESERVED_63_58_MASK		0x3Full
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_RESERVED_63_58_SMASK		0xFC00000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ASOP_SHIFT			53
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ASOP_MASK				0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ASOP_SMASK			0xF800000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ADT_SHIFT				42
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ASOP_SMASK			0x3E0000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ADT_SHIFT				48
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ADT_MASK				0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ADT_SMASK				0x7C0000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ART_SHIFT				41
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ART_MASK				0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ART_SMASK				0x20000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TMOD_SHIFT			33
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TMOD_MASK				0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TMOD_SMASK			0x1FE00000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_CHINT_SHIFT			31
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_CHINT_SMASK			0x180000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_LEN_SHIFT				24
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_LEN_MASK				0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_LEN_SMASK				0x7F000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_PID_SHIFT				12
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_ADT_SMASK				0x1F000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TMOD_SHIFT			39
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TMOD_MASK				0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TMOD_SMASK			0xFF8000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_CHINT_SHIFT			35
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_CHINT_SMASK			0x7800000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_LEN_SHIFT				26
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_LEN_MASK				0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_LEN_SMASK				0x7FC000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_PID_SHIFT				14
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_PID_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_PID_SMASK				0xFFF000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_PID_SMASK				0x3FFC000ull
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TID_SHIFT				4
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TID_MASK				0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TID_SMASK				0xFF0ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TID_MASK				0x3FFull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TID_SMASK				0x3FF0ull
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TC_SHIFT				0
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TC_MASK				0xFull
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN1_TC_SMASK				0xFull
 /*
-* Table #143 of fxr_top - RXHIARB_DBG_XTRIG_DMA_IN_MSK0
+* Table #177 of fxr_top - RXHIARB_DBG_XTRIG_DMA_IN_MSK0
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the RxDMA input interface. 
@@ -3687,7 +4183,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK0_OPCODE_MASK			0x7ull
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK0_OPCODE_SMASK			0x7ull
 /*
-* Table #144 of fxr_top - RXHIARB_DBG_XTRIG_DMA_IN_MSK1
+* Table #178 of fxr_top - RXHIARB_DBG_XTRIG_DMA_IN_MSK1
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the RxDMA input interface. 
@@ -3698,38 +4194,35 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1				(FXR_RX_HIARB_CSRS + 0x00000004A028)
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_RESETCSR			0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_RESERVED_63_52_SHIFT		52
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_RESERVED_63_52_MASK		0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_RESERVED_63_52_SMASK		0xFFF0000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ASOP_SHIFT			47
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_RESERVED_63_58_SHIFT		58
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_RESERVED_63_58_MASK		0x3Full
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_RESERVED_63_58_SMASK		0xFC00000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ASOP_SHIFT			53
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ASOP_MASK			0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ASOP_SMASK			0xF800000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ADT_SHIFT			42
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ASOP_SMASK			0x3E0000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ADT_SHIFT			48
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ADT_MASK			0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ADT_SMASK			0x7C0000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ART_SHIFT			41
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ART_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ART_SMASK			0x20000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TMOD_SHIFT			33
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TMOD_SMASK			0x1FE00000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_CHINT_SHIFT			31
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_CHINT_SMASK			0x180000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_LEN_SHIFT			24
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_LEN_MASK			0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_LEN_SMASK			0x7F000000ull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_PID_SHIFT			12
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_ADT_SMASK			0x1F000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TMOD_SHIFT			39
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TMOD_SMASK			0xFF8000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_CHINT_SHIFT			35
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_CHINT_SMASK			0x7800000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_LEN_SHIFT			26
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_LEN_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_LEN_SMASK			0x7FC000000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_PID_SHIFT			14
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_PID_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_PID_SMASK			0xFFF000ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_PID_SMASK			0x3FFC000ull
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TID_SHIFT			4
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TID_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TID_SMASK			0xFF0ull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TID_MASK			0x3FFull
+#define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TID_SMASK			0x3FF0ull
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TC_SHIFT			0
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TC_MASK			0xFull
 #define FXR_RXHIARB_DBG_XTRIG_DMA_IN_MSK1_TC_SMASK			0xFull
 /*
-* Table #145 of fxr_top - RXHIARB_DBG_XTRIG_CID_IN0
+* Table #179 of fxr_top - RXHIARB_DBG_XTRIG_CID_IN0
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the RxCID input interface. 
@@ -3751,7 +4244,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN0_REQ_TID_MASK			0xFFull
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN0_REQ_TID_SMASK			0xFFull
 /*
-* Table #146 of fxr_top - RXHIARB_DBG_XTRIG_CID_IN1
+* Table #180 of fxr_top - RXHIARB_DBG_XTRIG_CID_IN1
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the RxCID input interface. 
@@ -3760,23 +4253,23 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN1					(FXR_RX_HIARB_CSRS + 0x00000004A038)
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_RESERVED_63_23_SHIFT		23
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_RESERVED_63_23_MASK		0x1FFFFFFFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_RESERVED_63_23_SMASK		0xFFFFFFFFFF800000ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_PID_SHIFT			11
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_RESERVED_63_26_SHIFT		26
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_RESERVED_63_26_MASK		0x3FFFFFFFFFull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_RESERVED_63_26_SMASK		0xFFFFFFFFFC000000ull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_PID_SHIFT			14
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_PID_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_PID_SMASK			0x7FF800ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_TMOD_SHIFT			3
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_TMOD_SMASK			0x7F8ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_PRIV_LEVEL_SHIFT		2
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_PID_SMASK			0x3FFC000ull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_TMOD_SHIFT			5
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_TMOD_SMASK			0x3FE0ull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_PRIV_LEVEL_SHIFT		4
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_PRIV_LEVEL_MASK		0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_PRIV_LEVEL_SMASK		0x4ull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_PRIV_LEVEL_SMASK		0x10ull
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_CHINT_SHIFT			0
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_CHINT_SMASK			0x3ull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN1_REQ_CHINT_SMASK			0xFull
 /*
-* Table #147 of fxr_top - RXHIARB_DBG_XTRIG_CID_IN_MSK0
+* Table #181 of fxr_top - RXHIARB_DBG_XTRIG_CID_IN_MSK0
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the RxCID input interface. 
@@ -3800,7 +4293,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK0_REQ_TID_MASK			0xFFull
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK0_REQ_TID_SMASK			0xFFull
 /*
-* Table #148 of fxr_top - RXHIARB_DBG_XTRIG_CID_IN_MSK1
+* Table #182 of fxr_top - RXHIARB_DBG_XTRIG_CID_IN_MSK1
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the RxCID input interface. 
@@ -3811,23 +4304,23 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1				(FXR_RX_HIARB_CSRS + 0x00000004A048)
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_RESETCSR			0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_RESERVED_63_23_SHIFT		23
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_RESERVED_63_23_MASK		0x1FFFFFFFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_RESERVED_63_23_SMASK		0xFFFFFFFFFF800000ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_PID_SHIFT			11
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_RESERVED_63_26_SHIFT		26
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_RESERVED_63_26_MASK		0x3FFFFFFFFFull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_RESERVED_63_26_SMASK		0xFFFFFFFFFC000000ull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_PID_SHIFT			14
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_PID_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_PID_SMASK			0x7FF800ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_TMOD_SHIFT		3
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_TMOD_SMASK		0x7F8ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_PRIV_LEVEL_SHIFT		2
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_PID_SMASK			0x3FFC000ull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_TMOD_SHIFT		5
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_TMOD_SMASK		0x3FE0ull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_PRIV_LEVEL_SHIFT		4
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_PRIV_LEVEL_MASK		0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_PRIV_LEVEL_SMASK		0x4ull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_PRIV_LEVEL_SMASK		0x10ull
 #define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_CHINT_SHIFT		0
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_CHINT_MASK		0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_CHINT_SMASK		0x3ull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_CHINT_MASK		0xFull
+#define FXR_RXHIARB_DBG_XTRIG_CID_IN_MSK1_REQ_CHINT_SMASK		0xFull
 /*
-* Table #149 of fxr_top - RXHIARB_DBG_XTRIG_HP_IN
+* Table #183 of fxr_top - RXHIARB_DBG_XTRIG_HP_IN
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the RxHP input interface. 
@@ -3835,44 +4328,41 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN					(FXR_RX_HIARB_CSRS + 0x00000004A050)
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_RESERVED_63_61_SHIFT		61
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_RESERVED_63_61_MASK			0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_RESERVED_63_61_SMASK		0xE000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_VALID_SHIFT			60
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_VALID_SHIFT			63
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_VALID_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_VALID_SMASK			0x1000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_DVAL_SHIFT			59
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_DVAL_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_DVAL_SMASK			0x800000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_HANDLE_SHIFT			47
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_VALID_SMASK			0x8000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_NOP_SHIFT			62
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_NOP_MASK			0x1ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_NOP_SMASK			0x4000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_HANDLE_SHIFT			50
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_HANDLE_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_HANDLE_SMASK			0x7FF800000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_ELEMENT_SHIFT			31
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_HANDLE_SMASK			0x3FFC000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_ELEMENT_SHIFT			34
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_ELEMENT_MASK			0xFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_ELEMENT_SMASK			0x7FFF80000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_OPCODE_SHIFT			30
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_ELEMENT_SMASK			0x3FFFC00000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_OPCODE_SHIFT			33
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_OPCODE_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_OPCODE_SMASK			0x40000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TMOD_SHIFT			22
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TMOD_SMASK			0x3FC00000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_LEN_SHIFT			15
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_OPCODE_SMASK			0x200000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TMOD_SHIFT			24
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TMOD_SMASK			0x1FF000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_LEN_SHIFT			17
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_LEN_MASK			0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_LEN_SMASK			0x3F8000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TID_SHIFT			7
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_LEN_SMASK			0xFE0000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TID_SHIFT			9
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TID_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TID_SMASK			0x7F80ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_NI_SHIFT			5
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_TID_SMASK			0x1FE00ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_NI_SHIFT			7
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_NI_MASK				0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_NI_SMASK			0x60ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_REGION_SHIFT			2
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_NI_SMASK			0x180ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_REGION_SHIFT			4
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_REGION_MASK			0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_REGION_SMASK			0x1Cull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_REGION_SMASK			0x70ull
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_CHINT_SHIFT			0
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_CHINT_SMASK			0x3ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_REQ_CHINT_SMASK			0xFull
 /*
-* Table #150 of fxr_top - RXHIARB_DBG_XTRIG_HP_IN_MSK
+* Table #184 of fxr_top - RXHIARB_DBG_XTRIG_HP_IN_MSK
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the RxHP input interface. A 
@@ -3882,44 +4372,41 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK					(FXR_RX_HIARB_CSRS + 0x00000004A058)
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_RESETCSR			0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_RESERVED_63_61_SHIFT		61
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_RESERVED_63_61_MASK		0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_RESERVED_63_61_SMASK		0xE000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_VALID_SHIFT			60
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_VALID_SHIFT			63
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_VALID_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_VALID_SMASK			0x1000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_DVAL_SHIFT			59
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_DVAL_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_DVAL_SMASK			0x800000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_HANDLE_SHIFT		47
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_VALID_SMASK			0x8000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_NOP_SHIFT			62
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_NOP_MASK			0x1ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_NOP_SMASK			0x4000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_HANDLE_SHIFT		50
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_HANDLE_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_HANDLE_SMASK		0x7FF800000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_ELEMENT_SHIFT		31
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_HANDLE_SMASK		0x3FFC000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_ELEMENT_SHIFT		34
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_ELEMENT_MASK		0xFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_ELEMENT_SMASK		0x7FFF80000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_OPCODE_SHIFT		30
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_ELEMENT_SMASK		0x3FFFC00000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_OPCODE_SHIFT		33
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_OPCODE_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_OPCODE_SMASK		0x40000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TMOD_SHIFT			22
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TMOD_SMASK			0x3FC00000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_LEN_SHIFT			15
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_OPCODE_SMASK		0x200000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TMOD_SHIFT			24
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TMOD_SMASK			0x1FF000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_LEN_SHIFT			17
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_LEN_MASK			0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_LEN_SMASK			0x3F8000ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TID_SHIFT			7
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_LEN_SMASK			0xFE0000ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TID_SHIFT			9
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TID_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TID_SMASK			0x7F80ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_NI_SHIFT			5
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_TID_SMASK			0x1FE00ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_NI_SHIFT			7
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_NI_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_NI_SMASK			0x60ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_REGION_SHIFT		2
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_NI_SMASK			0x180ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_REGION_SHIFT		4
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_REGION_MASK			0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_REGION_SMASK		0x1Cull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_REGION_SMASK		0x70ull
 #define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_CHINT_SHIFT			0
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_CHINT_SMASK			0x3ull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_HP_IN_MSK_REQ_CHINT_SMASK			0xFull
 /*
-* Table #151 of fxr_top - RXHIARB_DBG_XTRIG_ET_IN
+* Table #185 of fxr_top - RXHIARB_DBG_XTRIG_ET_IN
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the RxET input interface. 
@@ -3927,44 +4414,41 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN					(FXR_RX_HIARB_CSRS + 0x00000004A060)
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_RESERVED_63_61_SHIFT		61
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_RESERVED_63_61_MASK			0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_RESERVED_63_61_SMASK		0xE000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_VALID_SHIFT			60
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_VALID_SHIFT			63
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_VALID_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_VALID_SMASK			0x1000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_DVAL_SHIFT			59
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_DVAL_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_DVAL_SMASK			0x800000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_HANDLE_SHIFT			47
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_VALID_SMASK			0x8000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_NOP_SHIFT			62
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_NOP_MASK			0x1ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_NOP_SMASK			0x4000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_HANDLE_SHIFT			50
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_HANDLE_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_HANDLE_SMASK			0x7FF800000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_ELEMENT_SHIFT			31
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_HANDLE_SMASK			0x3FFC000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_ELEMENT_SHIFT			34
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_ELEMENT_MASK			0xFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_ELEMENT_SMASK			0x7FFF80000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_OPCODE_SHIFT			30
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_ELEMENT_SMASK			0x3FFFC00000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_OPCODE_SHIFT			33
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_OPCODE_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_OPCODE_SMASK			0x40000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TMOD_SHIFT			22
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TMOD_SMASK			0x3FC00000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_LEN_SHIFT			15
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_OPCODE_SMASK			0x200000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TMOD_SHIFT			24
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TMOD_SMASK			0x1FF000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_LEN_SHIFT			17
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_LEN_MASK			0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_LEN_SMASK			0x3F8000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TID_SHIFT			7
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_LEN_SMASK			0xFE0000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TID_SHIFT			9
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TID_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TID_SMASK			0x7F80ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_NI_SHIFT			5
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_TID_SMASK			0x1FE00ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_NI_SHIFT			7
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_NI_MASK				0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_NI_SMASK			0x60ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_REGION_SHIFT			2
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_NI_SMASK			0x180ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_REGION_SHIFT			4
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_REGION_MASK			0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_REGION_SMASK			0x1Cull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_REGION_SMASK			0x70ull
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_CHINT_SHIFT			0
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_CHINT_SMASK			0x3ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_REQ_CHINT_SMASK			0xFull
 /*
-* Table #152 of fxr_top - RXHIARB_DBG_XTRIG_ET_IN_MSK
+* Table #186 of fxr_top - RXHIARB_DBG_XTRIG_ET_IN_MSK
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the RxET input interface. A 
@@ -3974,44 +4458,41 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK					(FXR_RX_HIARB_CSRS + 0x00000004A068)
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_RESETCSR			0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_RESERVED_63_61_SHIFT		61
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_RESERVED_63_61_MASK		0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_RESERVED_63_61_SMASK		0xE000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_VALID_SHIFT			60
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_VALID_SHIFT			63
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_VALID_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_VALID_SMASK			0x1000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_DVAL_SHIFT			59
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_DVAL_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_DVAL_SMASK			0x800000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_HANDLE_SHIFT		47
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_VALID_SMASK			0x8000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_NOP_SHIFT			62
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_NOP_MASK			0x1ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_NOP_SMASK			0x4000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_HANDLE_SHIFT		50
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_HANDLE_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_HANDLE_SMASK		0x7FF800000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_ELEMENT_SHIFT		31
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_HANDLE_SMASK		0x3FFC000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_ELEMENT_SHIFT		34
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_ELEMENT_MASK		0xFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_ELEMENT_SMASK		0x7FFF80000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_OPCODE_SHIFT		30
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_ELEMENT_SMASK		0x3FFFC00000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_OPCODE_SHIFT		33
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_OPCODE_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_OPCODE_SMASK		0x40000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TMOD_SHIFT			22
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TMOD_SMASK			0x3FC00000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_LEN_SHIFT			15
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_OPCODE_SMASK		0x200000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TMOD_SHIFT			24
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TMOD_SMASK			0x1FF000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_LEN_SHIFT			17
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_LEN_MASK			0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_LEN_SMASK			0x3F8000ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TID_SHIFT			7
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_LEN_SMASK			0xFE0000ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TID_SHIFT			9
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TID_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TID_SMASK			0x7F80ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_NI_SHIFT			5
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_TID_SMASK			0x1FE00ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_NI_SHIFT			7
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_NI_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_NI_SMASK			0x60ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_REGION_SHIFT		2
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_NI_SMASK			0x180ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_REGION_SHIFT		4
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_REGION_MASK			0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_REGION_SMASK		0x1Cull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_REGION_SMASK		0x70ull
 #define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_CHINT_SHIFT			0
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_CHINT_SMASK			0x3ull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_ET_IN_MSK_REQ_CHINT_SMASK			0xFull
 /*
-* Table #153 of fxr_top - RXHIARB_DBG_XTRIG_E2E_IN
+* Table #187 of fxr_top - RXHIARB_DBG_XTRIG_E2E_IN
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the RxE2E input interface. 
@@ -4022,20 +4503,23 @@
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_VALID_SHIFT			63
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_VALID_MASK			0x1ull
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_VALID_SMASK			0x8000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_ADDRESS_SHIFT			9
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_ADDRESS_MASK			0x3FFFFFFFFFFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_ADDRESS_SMASK			0x7FFFFFFFFFFFFE00ull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_READ_SHIFT			8
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_NOP_SHIFT			62
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_NOP_MASK			0x1ull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_NOP_SMASK			0x4000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_ADDRESS_SHIFT			11
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_ADDRESS_MASK			0x7FFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_ADDRESS_SMASK			0x3FFFFFFFFFFFF800ull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_READ_SHIFT			10
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_READ_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_READ_SMASK			0x100ull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_TID_SHIFT			2
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_READ_SMASK			0x400ull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_TID_SHIFT			4
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_TID_MASK			0x3Full
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_TID_SMASK			0xFCull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_TID_SMASK			0x3F0ull
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_CHINT_SHIFT			0
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_CHINT_SMASK			0x3ull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_REQ_CHINT_SMASK			0xFull
 /*
-* Table #154 of fxr_top - RXHIARB_DBG_XTRIG_E2E_IN_MSK
+* Table #188 of fxr_top - RXHIARB_DBG_XTRIG_E2E_IN_MSK
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the RxE2E input interface. 
@@ -4048,20 +4532,23 @@
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_VALID_SHIFT		63
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_VALID_MASK			0x1ull
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_VALID_SMASK		0x8000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_ADDRESS_SHIFT		9
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_ADDRESS_MASK		0x3FFFFFFFFFFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_ADDRESS_SMASK		0x7FFFFFFFFFFFFE00ull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_READ_SHIFT			8
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_NOP_SHIFT			62
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_NOP_MASK			0x1ull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_NOP_SMASK			0x4000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_ADDRESS_SHIFT		11
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_ADDRESS_MASK		0x7FFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_ADDRESS_SMASK		0x3FFFFFFFFFFFF800ull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_READ_SHIFT			10
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_READ_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_READ_SMASK			0x100ull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_TID_SHIFT			2
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_READ_SMASK			0x400ull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_TID_SHIFT			4
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_TID_MASK			0x3Full
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_TID_SMASK			0xFCull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_TID_SMASK			0x3F0ull
 #define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_CHINT_SHIFT		0
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_CHINT_SMASK		0x3ull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_E2E_IN_MSK_REQ_CHINT_SMASK		0xFull
 /*
-* Table #155 of fxr_top - RXHIARB_DBG_XTRIG_ARBMUX0
+* Table #189 of fxr_top - RXHIARB_DBG_XTRIG_ARBMUX0
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the ARB MUX internal 
@@ -4071,9 +4558,9 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX0					(FXR_RX_HIARB_CSRS + 0x00000004A080)
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_RESERVED_63_61_SHIFT		61
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_RESERVED_63_61_MASK		0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_RESERVED_63_61_SMASK		0xE000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_OPCODE_SHIFT			61
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_OPCODE_MASK			0x7ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_OPCODE_SMASK			0xE000000000000000ull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_HVAL_SHIFT			60
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_HVAL_MASK				0x1ull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_HVAL_SMASK			0x1000000000000000ull
@@ -4090,7 +4577,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_ADDR_MASK				0x1FFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX0_ADDR_SMASK			0x1FFFFFFFFFFFFFFull
 /*
-* Table #156 of fxr_top - RXHIARB_DBG_XTRIG_ARBMUX1
+* Table #190 of fxr_top - RXHIARB_DBG_XTRIG_ARBMUX1
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the ARB MUX internal 
@@ -4100,33 +4587,24 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1					(FXR_RX_HIARB_CSRS + 0x00000004A088)
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_RESERVED_63_SHIFT			63
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_RESERVED_63_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_RESERVED_63_SMASK			0x8000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_PID_SHIFT				51
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_PID_SHIFT				52
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_PID_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_PID_SMASK				0x7FF8000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_OPCODE_SHIFT			48
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_OPCODE_MASK			0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_OPCODE_SMASK			0x7000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ASOP_SHIFT			43
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_PID_SMASK				0xFFF0000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ASOP_SHIFT			47
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ASOP_MASK				0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ASOP_SMASK			0xF80000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ADT_SHIFT				38
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ASOP_SMASK			0xF800000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ADT_SHIFT				42
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ADT_MASK				0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ADT_SMASK				0x7C000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ART_SHIFT				37
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ART_MASK				0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ART_SMASK				0x2000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_TMOD_SHIFT			29
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_TMOD_MASK				0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_TMOD_SMASK			0x1FE0000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_CHINT_SHIFT			27
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_CHINT_SMASK			0x18000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_ADT_SMASK				0x7C0000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_TMOD_SHIFT			33
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_TMOD_MASK				0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_TMOD_SMASK			0x3FE00000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_CHINT_SHIFT			29
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_CHINT_SMASK			0x1E0000000ull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_LEN_SHIFT				20
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_LEN_MASK				0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_LEN_SMASK				0x7F00000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_LEN_MASK				0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_LEN_SMASK				0x1FF00000ull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_TID_SHIFT				8
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_TID_MASK				0xFFFull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_TID_SMASK				0xFFF00ull
@@ -4137,7 +4615,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_RX_SRC_ID_MASK			0xFull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX1_RX_SRC_ID_SMASK			0xFull
 /*
-* Table #157 of fxr_top - RXHIARB_DBG_XTRIG_ARBMUX_MSK0
+* Table #191 of fxr_top - RXHIARB_DBG_XTRIG_ARBMUX_MSK0
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the ARB MUX internal 
@@ -4148,9 +4626,9 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0				(FXR_RX_HIARB_CSRS + 0x00000004A090)
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_RESETCSR			0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_RESERVED_63_61_SHIFT		61
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_RESERVED_63_61_MASK		0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_RESERVED_63_61_SMASK		0xE000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_OPCODE_SHIFT			61
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_OPCODE_MASK			0x7ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_OPCODE_SMASK			0xE000000000000000ull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_HVAL_SHIFT			60
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_HVAL_MASK			0x1ull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_HVAL_SMASK			0x1000000000000000ull
@@ -4167,7 +4645,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_ADDR_MASK			0x1FFFFFFFFFFFFFFull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK0_ADDR_SMASK			0x1FFFFFFFFFFFFFFull
 /*
-* Table #158 of fxr_top - RXHIARB_DBG_XTRIG_ARBMUX_MSK1
+* Table #192 of fxr_top - RXHIARB_DBG_XTRIG_ARBMUX_MSK1
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the ARB MUX internal 
@@ -4178,33 +4656,24 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1				(FXR_RX_HIARB_CSRS + 0x00000004A098)
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_RESETCSR			0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_RESERVED_63_SHIFT		63
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_RESERVED_63_MASK		0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_RESERVED_63_SMASK		0x8000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_PID_SHIFT			51
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_PID_SHIFT			52
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_PID_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_PID_SMASK			0x7FF8000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_OPCODE_SHIFT			48
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_OPCODE_MASK			0x7ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_OPCODE_SMASK			0x7000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ASOP_SHIFT			43
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_PID_SMASK			0xFFF0000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ASOP_SHIFT			47
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ASOP_MASK			0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ASOP_SMASK			0xF80000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ADT_SHIFT			38
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ASOP_SMASK			0xF800000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ADT_SHIFT			42
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ADT_MASK			0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ADT_SMASK			0x7C000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ART_SHIFT			37
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ART_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ART_SMASK			0x2000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_TMOD_SHIFT			29
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_TMOD_SMASK			0x1FE0000000ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_CHINT_SHIFT			27
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_CHINT_SMASK			0x18000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_ADT_SMASK			0x7C0000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_TMOD_SHIFT			33
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_TMOD_SMASK			0x3FE00000000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_CHINT_SHIFT			29
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_CHINT_SMASK			0x1E0000000ull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_LEN_SHIFT			20
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_LEN_MASK			0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_LEN_SMASK			0x7F00000ull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_LEN_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_LEN_SMASK			0x1FF00000ull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_TID_SHIFT			8
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_TID_MASK			0xFFFull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_TID_SMASK			0xFFF00ull
@@ -4215,7 +4684,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_RX_SRC_ID_MASK		0xFull
 #define FXR_RXHIARB_DBG_XTRIG_ARBMUX_MSK1_RX_SRC_ID_SMASK		0xFull
 /*
-* Table #159 of fxr_top - RXHIARB_DBG_XTRIG_HI_OUT0
+* Table #193 of fxr_top - RXHIARB_DBG_XTRIG_HI_OUT0
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the HIFIs output 
@@ -4225,29 +4694,26 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT0					(FXR_RX_HIARB_CSRS + 0x00000004A0A0)
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_RESERVED_63_59_SHIFT		59
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_RESERVED_63_59_MASK		0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_RESERVED_63_59_SMASK		0xF800000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_HVAL_SHIFT			58
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_HVAL_SHIFT			63
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_HVAL_MASK				0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_HVAL_SMASK			0x400000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TVAL_SHIFT			57
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_HVAL_SMASK			0x8000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TVAL_SHIFT			62
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TVAL_MASK				0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TVAL_SMASK			0x200000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_DVAL_SHIFT			56
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TVAL_SMASK			0x4000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_DVAL_SHIFT			61
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_DVAL_MASK				0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_DVAL_SMASK			0x100000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TTYPE_SHIFT			55
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_DVAL_SMASK			0x2000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TTYPE_SHIFT			60
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TTYPE_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TTYPE_SMASK			0x80000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TTYPE_SMASK			0x1000000000000000ull
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_ADDR_SHIFT			3
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_ADDR_MASK				0xFFFFFFFFFFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_ADDR_SMASK			0x7FFFFFFFFFFFF8ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_ADDR_MASK				0x1FFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_ADDR_SMASK			0xFFFFFFFFFFFFFF8ull
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TOP_SHIFT				0
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TOP_MASK				0x7ull
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT0_TOP_SMASK				0x7ull
 /*
-* Table #160 of fxr_top - RXHIARB_DBG_XTRIG_HI_OUT1
+* Table #194 of fxr_top - RXHIARB_DBG_XTRIG_HI_OUT1
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the HIFIs output 
@@ -4257,32 +4723,29 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT1					(FXR_RX_HIARB_CSRS + 0x00000004A0A8)
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_RESERVED_63_40_SHIFT		40
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_RESERVED_63_40_MASK		0xFFFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_RESERVED_63_40_SMASK		0xFFFFFF0000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TID_SHIFT				28
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_RESERVED_63_44_SHIFT		44
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_RESERVED_63_44_MASK		0xFFFFFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_RESERVED_63_44_SMASK		0xFFFFF00000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TID_SHIFT				32
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TID_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TID_SMASK				0xFFF0000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TMOD_SHIFT			20
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TMOD_MASK				0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TMOD_SMASK			0xFF00000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_CHINT_SHIFT			18
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_CHINT_SMASK			0xC0000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_BLEN_SHIFT			11
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_BLEN_MASK				0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_BLEN_SMASK			0x3F800ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ASOP_SHIFT			6
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TID_SMASK				0xFFF00000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TMOD_SHIFT			23
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TMOD_MASK				0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_TMOD_SMASK			0xFF800000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_CHINT_SHIFT			19
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_CHINT_SMASK			0x780000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_BLEN_SHIFT			10
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_BLEN_MASK				0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_BLEN_SMASK			0x7FC00ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ASOP_SHIFT			5
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ASOP_MASK				0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ASOP_SMASK			0x7C0ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ADT_SHIFT				1
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ASOP_SMASK			0x3E0ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ADT_SHIFT				0
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ADT_MASK				0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ADT_SMASK				0x3Eull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ART_SHIFT				0
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ART_MASK				0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ART_SMASK				0x1ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT1_ADT_SMASK				0x1Full
 /*
-* Table #161 of fxr_top - RXHIARB_DBG_XTRIG_HI_OUT_MSK0
+* Table #195 of fxr_top - RXHIARB_DBG_XTRIG_HI_OUT_MSK0
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the HIFIs output interface. 
@@ -4293,29 +4756,26 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0				(FXR_RX_HIARB_CSRS + 0x00000004A0B0)
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_RESETCSR			0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_RESERVED_63_59_SHIFT		59
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_RESERVED_63_59_MASK		0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_RESERVED_63_59_SMASK		0xF800000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_HVAL_SHIFT			58
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_HVAL_SHIFT			63
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_HVAL_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_HVAL_SMASK			0x400000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TVAL_SHIFT			57
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_HVAL_SMASK			0x8000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TVAL_SHIFT			62
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TVAL_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TVAL_SMASK			0x200000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_DVAL_SHIFT			56
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TVAL_SMASK			0x4000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_DVAL_SHIFT			61
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_DVAL_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_DVAL_SMASK			0x100000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TTYPE_SHIFT			55
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_DVAL_SMASK			0x2000000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TTYPE_SHIFT			60
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TTYPE_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TTYPE_SMASK			0x80000000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TTYPE_SMASK			0x1000000000000000ull
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_ADDR_SHIFT			3
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_ADDR_MASK			0xFFFFFFFFFFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_ADDR_SMASK			0x7FFFFFFFFFFFF8ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_ADDR_MASK			0x1FFFFFFFFFFFFFFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_ADDR_SMASK			0xFFFFFFFFFFFFFF8ull
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TOP_SHIFT			0
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TOP_MASK			0x7ull
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK0_TOP_SMASK			0x7ull
 /*
-* Table #162 of fxr_top - RXHIARB_DBG_XTRIG_HI_OUT_MSK1
+* Table #196 of fxr_top - RXHIARB_DBG_XTRIG_HI_OUT_MSK1
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the HIFIs output interface. 
@@ -4326,32 +4786,29 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1				(FXR_RX_HIARB_CSRS + 0x00000004A0B8)
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_RESETCSR			0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_RESERVED_63_40_SHIFT		40
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_RESERVED_63_40_MASK		0xFFFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_RESERVED_63_40_SMASK		0xFFFFFF0000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TID_SHIFT			28
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_RESERVED_63_44_SHIFT		44
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_RESERVED_63_44_MASK		0xFFFFFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_RESERVED_63_44_SMASK		0xFFFFF00000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TID_SHIFT			32
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TID_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TID_SMASK			0xFFF0000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TMOD_SHIFT			20
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TMOD_SMASK			0xFF00000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_CHINT_SHIFT			18
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_CHINT_SMASK			0xC0000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_BLEN_SHIFT			11
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_BLEN_MASK			0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_BLEN_SMASK			0x3F800ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ASOP_SHIFT			6
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TID_SMASK			0xFFF00000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TMOD_SHIFT			23
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_TMOD_SMASK			0xFF800000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_CHINT_SHIFT			19
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_CHINT_SMASK			0x780000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_BLEN_SHIFT			10
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_BLEN_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_BLEN_SMASK			0x7FC00ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ASOP_SHIFT			5
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ASOP_MASK			0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ASOP_SMASK			0x7C0ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ADT_SHIFT			1
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ASOP_SMASK			0x3E0ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ADT_SHIFT			0
 #define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ADT_MASK			0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ADT_SMASK			0x3Eull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ART_SHIFT			0
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ART_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ART_SMASK			0x1ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_OUT_MSK1_ADT_SMASK			0x1Full
 /*
-* Table #163 of fxr_top - RXHIARB_DBG_XTRIG_HI_IN0
+* Table #197 of fxr_top - RXHIARB_DBG_XTRIG_HI_IN0
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the HIFIs input interface. 
@@ -4383,7 +4840,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN0_TOP_MASK				0x7ull
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN0_TOP_SMASK				0x7ull
 /*
-* Table #164 of fxr_top - RXHIARB_DBG_XTRIG_HI_IN1
+* Table #198 of fxr_top - RXHIARB_DBG_XTRIG_HI_IN1
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * value that will be compared against when monitoring the HIFIs input interface. 
@@ -4393,32 +4850,29 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN1					(FXR_RX_HIARB_CSRS + 0x00000004A0C8)
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN1_RESETCSR				0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_RESERVED_63_40_SHIFT		40
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_RESERVED_63_40_MASK		0xFFFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_RESERVED_63_40_SMASK		0xFFFFFF0000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TID_SHIFT				28
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_RESERVED_63_44_SHIFT		44
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_RESERVED_63_44_MASK		0xFFFFFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_RESERVED_63_44_SMASK		0xFFFFF00000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TID_SHIFT				32
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TID_MASK				0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TID_SMASK				0xFFF0000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TMOD_SHIFT				20
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TMOD_MASK				0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TMOD_SMASK				0xFF00000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_CHINT_SHIFT			18
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_CHINT_MASK				0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_CHINT_SMASK			0xC0000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_BLEN_SHIFT				11
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_BLEN_MASK				0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_BLEN_SMASK				0x3F800ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ASOP_SHIFT				6
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TID_SMASK				0xFFF00000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TMOD_SHIFT				23
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TMOD_MASK				0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_TMOD_SMASK				0xFF800000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_CHINT_SHIFT			19
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_CHINT_MASK				0xFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_CHINT_SMASK			0x780000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_BLEN_SHIFT				10
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_BLEN_MASK				0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_BLEN_SMASK				0x7FC00ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ASOP_SHIFT				5
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ASOP_MASK				0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ASOP_SMASK				0x7C0ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ADT_SHIFT				1
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ASOP_SMASK				0x3E0ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ADT_SHIFT				0
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ADT_MASK				0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ADT_SMASK				0x3Eull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ART_SHIFT				0
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ART_MASK				0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ART_SMASK				0x1ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN1_ADT_SMASK				0x1Full
 /*
-* Table #165 of fxr_top - RXHIARB_DBG_XTRIG_HI_IN_MSK0
+* Table #199 of fxr_top - RXHIARB_DBG_XTRIG_HI_IN_MSK0
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the HIFIs input interface. 
@@ -4451,7 +4905,7 @@
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK0_TOP_MASK			0x7ull
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK0_TOP_SMASK			0x7ull
 /*
-* Table #166 of fxr_top - RXHIARB_DBG_XTRIG_HI_IN_MSK1
+* Table #200 of fxr_top - RXHIARB_DBG_XTRIG_HI_IN_MSK1
 * Provides extended triggering capabilities to the DFD logic by allowing for 
 * more precise triggering without consuming too many bits. This provides the 
 * mask that will be compared against when monitoring the HIFIs input interface. 
@@ -4462,29 +4916,26 @@
 */
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1				(FXR_RX_HIARB_CSRS + 0x00000004A0D8)
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_RESETCSR			0x0000000000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_RESERVED_63_40_SHIFT		40
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_RESERVED_63_40_MASK		0xFFFFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_RESERVED_63_40_SMASK		0xFFFFFF0000000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TID_SHIFT			28
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_RESERVED_63_44_SHIFT		44
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_RESERVED_63_44_MASK		0xFFFFFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_RESERVED_63_44_SMASK		0xFFFFF00000000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TID_SHIFT			32
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TID_MASK			0xFFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TID_SMASK			0xFFF0000000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TMOD_SHIFT			20
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TMOD_MASK			0xFFull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TMOD_SMASK			0xFF00000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_CHINT_SHIFT			18
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_CHINT_MASK			0x3ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_CHINT_SMASK			0xC0000ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_BLEN_SHIFT			11
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_BLEN_MASK			0x7Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_BLEN_SMASK			0x3F800ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ASOP_SHIFT			6
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TID_SMASK			0xFFF00000000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TMOD_SHIFT			23
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TMOD_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_TMOD_SMASK			0xFF800000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_CHINT_SHIFT			19
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_CHINT_MASK			0xFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_CHINT_SMASK			0x780000ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_BLEN_SHIFT			10
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_BLEN_MASK			0x1FFull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_BLEN_SMASK			0x7FC00ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ASOP_SHIFT			5
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ASOP_MASK			0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ASOP_SMASK			0x7C0ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ADT_SHIFT			1
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ASOP_SMASK			0x3E0ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ADT_SHIFT			0
 #define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ADT_MASK			0x1Full
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ADT_SMASK			0x3Eull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ART_SHIFT			0
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ART_MASK			0x1ull
-#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ART_SMASK			0x1ull
+#define FXR_RXHIARB_DBG_XTRIG_HI_IN_MSK1_ADT_SMASK			0x1Full
 
 #endif 		/* DEF_FXR_RX_HIARB_SW_DEF */

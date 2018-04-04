@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_rx_ci_cic_CSRS_H__
@@ -29,9 +29,9 @@ typedef union {
 // RXCIC_CFG_TO_LIMIT desc:
 typedef union {
     struct {
-        uint64_t                  rsv  : 20; // Reserved, timeout value is limited to increments of one million
-        uint64_t             to_limit  : 17; // Timeout value, in number of FXR clock ticks
-        uint64_t               rsv_63  : 27; // Reserved
+        uint64_t       to_limit_fixed  : 20; // Fixed portion of the timeout value.
+        uint64_t             to_limit  : 17; // Configurable portion of the timeout value. Timeout will happen when the total packet is not completed for {to_limit, to_limit_fixed} FXR clock ticks. The defalult represents 0x104000 (1M + 16k) clocks.
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } RXCIC_CFG_TO_LIMIT_t;
@@ -39,9 +39,9 @@ typedef union {
 // RXCIC_STS_CQ_TAIL desc:
 typedef union {
     struct {
-        uint64_t                 tail  :  4; // Command queue tail slot
-        uint64_t                 head  :  4; // Command queue head slot
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t                 tail  :  5; // Command queue tail slot
+        uint64_t                 head  :  5; // Command queue head slot
+        uint64_t       Reserved_63_10  : 54; // Unused
     } field;
     uint64_t val;
 } RXCIC_STS_CQ_TAIL_t;

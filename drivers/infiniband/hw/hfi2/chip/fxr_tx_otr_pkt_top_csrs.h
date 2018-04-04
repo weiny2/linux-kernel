@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Tue May 30 21:13:24 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_tx_otr_pkt_top_CSRS_H__
@@ -8,14 +8,14 @@
 // TXOTR_PKT_CFG_RXE2E_CRDTS desc:
 typedef union {
     struct {
-        uint64_t                  TC0  :  5; // TC0 Input Queue Credits
-        uint64_t           UNUSED_7_5  :  3; // Unused
-        uint64_t                  TC1  :  5; // TC1 Input Queue Credits
-        uint64_t         UNUSED_15_13  :  3; // Unused
-        uint64_t                  TC2  :  5; // TC2 Input Queue Credits
-        uint64_t         UNUSED_23_21  :  3; // Unused
-        uint64_t                  TC3  :  5; // TC3 Input Queue Credits
-        uint64_t         UNUSED_63_29  : 35; // Unused
+        uint64_t                  tc0  :  5; // TC0 Input Queue Credits
+        uint64_t         Reserved_7_5  :  3; // Unused
+        uint64_t                  tc1  :  5; // TC1 Input Queue Credits
+        uint64_t       Reserved_15_13  :  3; // Unused
+        uint64_t                  tc2  :  5; // TC2 Input Queue Credits
+        uint64_t       Reserved_23_21  :  3; // Unused
+        uint64_t                  tc3  :  5; // TC3 Input Queue Credits
+        uint64_t       Reserved_63_29  : 35; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_RXE2E_CRDTS_t;
@@ -23,23 +23,23 @@ typedef union {
 // TXOTR_PKT_CFG_MEMORY_SCHEDULER desc:
 typedef union {
     struct {
-        uint64_t      TXCI_RSP_RSPACK  :  6; // TXCI to TXOTR Response Response ACK
-        uint64_t           UNUSED_7_6  :  2; // Unused
-        uint64_t      TXCI_RSP_REQACK  :  6; // TXCI to TXOTR Response Request ACK
-        uint64_t         UNUSED_23_14  : 10; // Unused
-        uint64_t     TXDMA_REQ_RSPACK  :  4; // TXDMA to TXOTR Request Response ACK
-        uint64_t     TXDMA_REQ_REQACK  :  4; // TXDMA to TXOTR Request Request ACK
-        uint64_t            FPE_CHINT  :  2; // Cache hints for Fragmentation Programmable Engine reads from Host Memory.
-        uint64_t     FPE_GLOBALFLOWID  :  1; // Global Flow ID hint for Fragmentation Programmable Engine reads from Host Memory.
-        uint64_t               FPE_SO  :  1; // Strongly Ordered hint for Fragmentation Programmable Engine reads from Host Memory.
-        uint64_t         PSN_CHINT_RD  :  2; // Cache hints for PSN Cache reads to Host Memory.
-        uint64_t   PSN_CHINT_FLUSH_WR  :  2; // Cache hints for PSN Cache flush writes to Host Memory.
-        uint64_t  PSN_CHINT_VICTIM_WR  :  2; // Cache hints for PSN Cache victim writes to Host Memory.
-        uint64_t     PSN_GLOBALFLOWID  :  1; // Global Flow ID hint for PSN Cache reads from Host Memory.
-        uint64_t               PSN_SO  :  1; // Strongly Ordered hint for PSN Cache reads from Host Memory.
-        uint64_t                  PID  : 12; // This is the PID inserted into Address Translation Requests from the PSN Cache
-        uint64_t           PRIV_LEVEL  :  1; // The privilege level inserted into the Address Translation Requests from the PSN Cache. 0 = privileged, 1 = user
-        uint64_t         UNUSED_63_57  :  7; // Unused
+        uint64_t      txci_rsp_rspack  :  6; // TXCI to TXOTR Response Response ACK
+        uint64_t         Reserved_7_6  :  2; // Unused
+        uint64_t      txci_rsp_reqack  :  6; // TXCI to TXOTR Response Request ACK
+        uint64_t       Reserved_23_14  : 10; // Unused
+        uint64_t     txdma_req_rspack  :  4; // TXDMA to TXOTR Request Response ACK
+        uint64_t     txdma_req_reqack  :  4; // TXDMA to TXOTR Request Request ACK
+        uint64_t            fpe_chint  :  2; // Cache hints for Fragmentation Programmable Engine reads from Host Memory.
+        uint64_t     fpe_globalflowid  :  1; // Global Flow ID hint for Fragmentation Programmable Engine reads from Host Memory.
+        uint64_t               fpe_so  :  1; // Strongly Ordered hint for Fragmentation Programmable Engine reads from Host Memory.
+        uint64_t         psn_chint_rd  :  2; // Cache hints for PSN Cache reads to Host Memory.
+        uint64_t   psn_chint_flush_wr  :  2; // Cache hints for PSN Cache flush writes to Host Memory.
+        uint64_t  psn_chint_victim_wr  :  2; // Cache hints for PSN Cache victim writes to Host Memory.
+        uint64_t     psn_globalflowid  :  1; // Global Flow ID hint for PSN Cache reads from Host Memory.
+        uint64_t               psn_so  :  1; // Strongly Ordered hint for PSN Cache reads from Host Memory.
+        uint64_t                  pid  : 12; // This is the PID inserted into Address Translation Requests from the PSN Cache
+        uint64_t           priv_level  :  1; // The privilege level inserted into the Address Translation Requests from the PSN Cache. 0 = privileged, 1 = user
+        uint64_t       Reserved_63_57  :  7; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_MEMORY_SCHEDULER_t;
@@ -47,15 +47,15 @@ typedef union {
 // TXOTR_PKT_CFG_PKTID_1 desc:
 typedef union {
     struct {
-        uint64_t         RSVD_MC0_TC0  :  7; // The number of MC0/TC0 Reserved Packet Identifiers
-        uint64_t         RSVD_MC0_TC1  :  7; // The number of MC0/TC1 Reserved Packet Identifiers
-        uint64_t         RSVD_MC0_TC2  :  7; // The number of MC0/TC2 Reserved Packet Identifiers
-        uint64_t         RSVD_MC0_TC3  :  7; // The number of MC0/TC3 Reserved Packet Identifiers
-        uint64_t         RSVD_MC1_TC0  :  7; // The number of MC1/TC0 Reserved Packet Identifiers
-        uint64_t         RSVD_MC1_TC1  :  7; // The number of MC1/TC1 Reserved Packet Identifiers
-        uint64_t         RSVD_MC1_TC2  :  7; // The number of MC1/TC2 Reserved Packet Identifiers
-        uint64_t         RSVD_MC1_TC3  :  7; // The number of MC1/TC3 Reserved Packet Identifiers
-        uint64_t         UNUSED_63_56  :  8; // Unused
+        uint64_t         rsvd_mc0_tc0  :  7; // The number of MC0/TC0 Reserved Packet Identifiers
+        uint64_t         rsvd_mc0_tc1  :  7; // The number of MC0/TC1 Reserved Packet Identifiers
+        uint64_t         rsvd_mc0_tc2  :  7; // The number of MC0/TC2 Reserved Packet Identifiers
+        uint64_t         rsvd_mc0_tc3  :  7; // The number of MC0/TC3 Reserved Packet Identifiers
+        uint64_t         rsvd_mc1_tc0  :  7; // The number of MC1/TC0 Reserved Packet Identifiers
+        uint64_t         rsvd_mc1_tc1  :  7; // The number of MC1/TC1 Reserved Packet Identifiers
+        uint64_t         rsvd_mc1_tc2  :  7; // The number of MC1/TC2 Reserved Packet Identifiers
+        uint64_t         rsvd_mc1_tc3  :  7; // The number of MC1/TC3 Reserved Packet Identifiers
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_PKTID_1_t;
@@ -63,8 +63,8 @@ typedef union {
 // TXOTR_PKT_CFG_PKTID_2 desc:
 typedef union {
     struct {
-        uint64_t               SHARED  : 14; // The number of Shared Packet Identifiers
-        uint64_t         UNUSED_63_14  : 50; // Unused
+        uint64_t               shared  : 14; // The number of Shared Packet Identifiers
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_PKTID_2_t;
@@ -74,7 +74,7 @@ typedef union {
     struct {
         uint64_t  retransmit_priority  :  1; // If set, Retransmitted packets get priority over all other packets being transmitted, including Pending ACKs
         uint64_t pending_ack_priority  :  1; // If set, Pending ACK packets get priority over all other packets being transmitted, except for Retransmitted packets.
-        uint64_t          UNUSED_63_2  : 62; // TODO
+        uint64_t        Reserved_63_2  : 62; // TODO
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_GEN_ARB_t;
@@ -82,22 +82,22 @@ typedef union {
 // TXOTR_PKT_CFG_PKT_DONE_CRDTS desc:
 typedef union {
     struct {
-        uint64_t               MC0TC0  :  4; // Configured credits for MC0TC0
-        uint64_t           UNUSED_7_4  :  4; // Unused
-        uint64_t               MC0TC1  :  4; // Configured credits for MC0TC1
-        uint64_t         UNUSED_15_12  :  4; // Unused
-        uint64_t               MC0TC2  :  4; // Configured credits for MC0TC2
-        uint64_t         UNUSED_23_20  :  4; // Unused
-        uint64_t               MC0TC3  :  4; // Configured credits for MC0TC3
-        uint64_t         UNUSED_31_28  :  4; // Unused
-        uint64_t               MC1TC0  :  4; // Configured credits for MC1TC0
-        uint64_t         UNUSED_39_36  :  4; // Unused
-        uint64_t               MC1TC1  :  4; // Configured credits for MC1TC1
-        uint64_t         UNUSED_47_44  :  4; // Unused
-        uint64_t               MC1TC2  :  4; // Configured credits for MC1TC2
-        uint64_t         UNUSED_55_52  :  4; // Unused
-        uint64_t               MC1TC3  :  4; // Configured credits for MC1TC3
-        uint64_t         UNUSED_63_60  :  4; // Unused
+        uint64_t               mc0tc0  :  4; // Configured credits for MC0TC0
+        uint64_t         Reserved_7_4  :  4; // Unused
+        uint64_t               mc0tc1  :  4; // Configured credits for MC0TC1
+        uint64_t       Reserved_15_12  :  4; // Unused
+        uint64_t               mc0tc2  :  4; // Configured credits for MC0TC2
+        uint64_t       Reserved_23_20  :  4; // Unused
+        uint64_t               mc0tc3  :  4; // Configured credits for MC0TC3
+        uint64_t       Reserved_31_28  :  4; // Unused
+        uint64_t               mc1tc0  :  4; // Configured credits for MC1TC0
+        uint64_t       Reserved_39_36  :  4; // Unused
+        uint64_t               mc1tc1  :  4; // Configured credits for MC1TC1
+        uint64_t       Reserved_47_44  :  4; // Unused
+        uint64_t               mc1tc2  :  4; // Configured credits for MC1TC2
+        uint64_t       Reserved_55_52  :  4; // Unused
+        uint64_t               mc1tc3  :  4; // Configured credits for MC1TC3
+        uint64_t       Reserved_63_60  :  4; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_PKT_DONE_CRDTS_t;
@@ -105,10 +105,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC0_t;
@@ -116,10 +116,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC1 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC1_t;
@@ -127,10 +127,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC2 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC2_t;
@@ -138,10 +138,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC3 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC0TC3_t;
@@ -149,10 +149,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC1TC0 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC1TC0_t;
@@ -160,10 +160,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC1TC1 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC1TC1_t;
@@ -171,10 +171,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC1TC2 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC1TC2_t;
@@ -182,10 +182,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC1TC3 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_FP_MC1TC3_t;
@@ -193,10 +193,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC0_t;
@@ -204,10 +204,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC1 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC1_t;
@@ -215,10 +215,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC2 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC2_t;
@@ -226,10 +226,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC3 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC0TC3_t;
@@ -237,10 +237,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC1TC0 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC1TC0_t;
@@ -248,10 +248,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC1TC1 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC1TC1_t;
@@ -259,10 +259,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC1TC2 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC1TC2_t;
@@ -270,10 +270,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC1TC3 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_PF_MC1TC3_t;
@@ -281,10 +281,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC0_t;
@@ -292,10 +292,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC1 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC1_t;
@@ -303,10 +303,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC2 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC2_t;
@@ -314,10 +314,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC3 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_MC0TC3_t;
@@ -325,10 +325,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_MC1TC0 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_MC1TC0_t;
@@ -336,10 +336,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_MC1TC1 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_MC1TC1_t;
@@ -347,10 +347,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_MC1TC2 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_MC1TC2_t;
@@ -358,10 +358,10 @@ typedef union {
 // TXOTR_PKT_CFG_OPB_FIFO_ARB_MC1TC3 desc:
 typedef union {
     struct {
-        uint64_t             BW_LIMIT  : 16; // Bandwidth limit
-        uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
-        uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_63_27  : 37; // Unused
+        uint64_t             bw_limit  : 16; // Bandwidth limit
+        uint64_t        leak_fraction  :  8; // Fractional portion of leak amount
+        uint64_t         leak_integer  :  3; // Integral portion of leak amount
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_OPB_FIFO_ARB_MC1TC3_t;
@@ -369,9 +369,9 @@ typedef union {
 // TXOTR_PKT_CFG_MAX_SEQ_DIST desc:
 typedef union {
     struct {
-        uint64_t   THRESHOLD_DISTANCE  : 16; // Threshold Distance. Any Maximum Sequence Distance greater than or equal to THRESHOLD_DISTANCE is considered to be a 'large transmit window.' Any Maximum Sequence Distance less than THRESHOLD_DISTANCE is considered to be a 'small transmit window.'
-        uint64_t        SKID_DISTANCE  :  8; // Skid Distance. This is the maximum length of the pipeline in OTR between when traffic is stalled due to a Maximum Sequence Distance violation and when the Maximum Sequence Distance violation is checked.
-        uint64_t         UNUSED_63_24  : 40; // Unused
+        uint64_t   threshold_distance  : 16; // Threshold Distance. Any Maximum Sequence Distance greater than or equal to threshold_distance is considered to be a 'large transmit window.' Any Maximum Sequence Distance less than threshold_distance is considered to be a 'small transmit window.'
+        uint64_t        skid_distance  :  8; // Skid Distance. This is the maximum length of the pipeline in OTR between when traffic is stalled due to a Maximum Sequence Distance violation and when the Maximum Sequence Distance violation is checked.
+        uint64_t       Reserved_63_24  : 40; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_MAX_SEQ_DIST_t;
@@ -379,7 +379,7 @@ typedef union {
 // TXOTR_PKT_CFG_FORCE_RETRANS_PENDING desc:
 typedef union {
     struct {
-        uint64_t       LOCAL_SEQUENCE  : 64; // Force Local Sequences to be marked as Pending
+        uint64_t       local_sequence  : 64; // Force Local Sequences to be marked as Pending
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_FORCE_RETRANS_PENDING_t;
@@ -388,21 +388,21 @@ typedef union {
 typedef union {
     struct {
         uint64_t            rendz_tc0  :  3; // Rendezvous TC 0 Routing Control Bits
-        uint64_t             UNUSED_3  :  1; // Unused
+        uint64_t           Reserved_3  :  1; // Unused
         uint64_t            rendz_tc1  :  3; // Rendezvous TC 1 Routing Control Bits
-        uint64_t             UNUSED_7  :  1; // Unused
+        uint64_t           Reserved_7  :  1; // Unused
         uint64_t            rendz_tc2  :  3; // Rendezvous TC 2 Routing Control Bits
-        uint64_t            UNUSED_11  :  1; // Unused
+        uint64_t          Reserved_11  :  1; // Unused
         uint64_t            rendz_tc3  :  3; // Rendezvous TC 3 Routing Control Bits
-        uint64_t            UNUSED_15  :  1; // Unused
+        uint64_t          Reserved_15  :  1; // Unused
         uint64_t             mc1p_tc0  :  3; // MC1p TC 0 Routing Control Bits
-        uint64_t            UNUSED_19  :  1; // Unused
+        uint64_t          Reserved_19  :  1; // Unused
         uint64_t             mc1p_tc1  :  3; // MC1p TC 1 Routing Control Bits
-        uint64_t            UNUSED_23  :  1; // Unused
+        uint64_t          Reserved_23  :  1; // Unused
         uint64_t             mc1p_tc2  :  3; // MC1p TC 2 Routing Control Bits
-        uint64_t            UNUSED_27  :  1; // Unused
+        uint64_t          Reserved_27  :  1; // Unused
         uint64_t             mc1p_tc3  :  3; // MC1p TC 3 Routing Control Bits
-        uint64_t         UNUSED_63_31  : 33; // Unused
+        uint64_t       Reserved_63_31  : 33; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_MC1P_RC_t;
@@ -410,12 +410,12 @@ typedef union {
 // TXOTR_PKT_CFG_TIMEOUT desc:
 typedef union {
     struct {
-        uint64_t               SCALER  : 32; // This register selects the rate at which the TXOTR Timeout Counter increments. If set to 32'd0, the counter is disabled. If set to 1, the counter increments once per clock cycle. If set to 2, the counter increments once every other clock cycle. Et cetera.
-        uint64_t          MAX_RETRIES  :  4; // Maximum number of retries allowed for a packet allocated in the Outstanding Packet Buffer. Note that setting this value to 4'd15 disables initial transmits of packets which exceed the Maximum Sequence Distance for a destination since those packets can be stored in the OPB with a max_retry value set to one greater than the configured value of MAX_RETRIES .
-        uint64_t              TIMEOUT  : 12; // Timeout comparison value. A timeout has occurred when the difference between the time stamp in a given Hash Table entry and the time current time stamp has exceeded this value.
-        uint64_t DISABLE_RETRANS_LIMIT_UNCONNECTED  :  1; // Disable setting a connection state to Unconnected when a retransmit limit is reached.
-        uint64_t     ABOUT_TO_TIMEOUT  :  7; // Start dropping ACK/Reply for the entries which are about to timeout. Programmed value defines how many clock cycles before the timeout is considered as about to timeout. This value should be always be less than SCALER
-        uint64_t         UNUSED_63_56  :  8; // Unused
+        uint64_t               scaler  : 32; // This register selects the rate at which the TXOTR Timeout Counter increments. If set to 32'd0, the counter is disabled. If set to 1, the counter increments once per clock cycle. If set to 2, the counter increments once every other clock cycle. Et cetera.
+        uint64_t          max_retries  :  4; // Maximum number of retries allowed for a packet allocated in the Outstanding Packet Buffer. Note that setting this value to 4'd15 disables initial transmits of packets which exceed the Maximum Sequence Distance for a destination since those packets can be stored in the OPB with a max_retry value set to one greater than the configured value of max_retries .
+        uint64_t              timeout  : 12; // Timeout comparison value. A timeout has occurred when the difference between the time stamp in a given Hash Table entry and the time current time stamp has exceeded this value.
+        uint64_t disable_retrans_limit_unconnected  :  1; // Disable setting a connection state to Unconnected when a retransmit limit is reached.
+        uint64_t     about_to_timeout  :  7; // Start dropping ACK/Reply for the entries which are about to timeout. Programmed value defines how many clock cycles before the timeout is considered as about to timeout. This value should be always be less than SCALER
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_TIMEOUT_t;
@@ -423,8 +423,8 @@ typedef union {
 // TXOTR_PKT_CFG_SLID_PT0 desc:
 typedef union {
     struct {
-        uint64_t                 BASE  : 24; // Source Local Identifier Base
-        uint64_t         UNUSED_63_24  : 40; // Unused
+        uint64_t                 base  : 24; // Source Local Identifier Base
+        uint64_t       Reserved_63_24  : 40; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_SLID_PT0_t;
@@ -441,15 +441,15 @@ typedef union {
 // TXOTR_PKT_CFG_FRAG_ENG desc:
 typedef union {
     struct {
-        uint64_t          UNUSED_15_0  : 16; // Unused
-        uint64_t     MAX_DMA_PREFETCH  : 16; // The maximum number of DMA Prefetches that can be issued by FPE.
-        uint64_t     MSG_ORDERING_OFF  :  1; // If this bit is set, do not check OMB Msg order fields against those of Msg's already in flight before sending it to Fragmentation Engine
-        uint64_t       POST_FRAG_PRIO  :  1; // If this bit is set, give priority to flits from the standard Post-fragmentation queues over the Post-fragmentation Retransmission queues.
-        uint64_t START_AUTHENTICATION  :  1; // Set this bit to start firmware image authentication. Clear it before writing to the firmware CSR.
-        uint64_t AUTHENTICATION_COMPLETE  :  1; // Indicates that authentication completed on the current firmware image.
-        uint64_t AUTHENTICATION_SUCCESSFUL  :  1; // Indicates that authentication was successful on the current firmware image.
-        uint64_t          PD_RST_MASK  :  1; // A value of zero mask off the freset assertion to the PD authentication logic. If this bit is set to '1' every assertion of 'freset' would need a PD re-authentication.
-        uint64_t         UNUSED_63_38  : 26; // Unused
+        uint64_t        Reserved_15_0  : 16; // Unused
+        uint64_t     max_dma_prefetch  : 16; // The maximum number of DMA Prefetches that can be issued by FPE.
+        uint64_t     msg_ordering_off  :  1; // If this bit is set, do not check OMB Msg order fields against those of Msg's already in flight before sending it to Fragmentation Engine
+        uint64_t       post_frag_prio  :  1; // If this bit is set, give priority to flits from the standard Post-fragmentation queues over the Post-fragmentation Retransmission queues.
+        uint64_t start_authentication  :  1; // Set this bit to start firmware image authentication. Clear it before writing to the firmware CSR.
+        uint64_t authentication_complete  :  1; // Indicates that authentication completed on the current firmware image.
+        uint64_t authentication_successful  :  1; // Indicates that authentication was successful on the current firmware image.
+        uint64_t          pd_rst_mask  :  1; // A value of zero mask off the freset assertion to the PD authentication logic. If this bit is set to '1' every assertion of 'freset' would need a PD re-authentication.
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_FRAG_ENG_t;
@@ -457,9 +457,9 @@ typedef union {
 // TXOTR_PKT_CFG_VALID_TC_DLID desc:
 typedef union {
     struct {
-        uint64_t          max_dlid_p0  : 24; // Port 0 max valid dlid, incoming packets with dlid > than this are dropped and no PSN cache lookup is done. Note: dlid > max_dlid_p0 will abort CACHE_CMD_RD, CACHE_CMD_WR in txotr_pkt_cfg_psn_cache_access_ctl and set bad_addr field in txotr_pkt_cfg_psn_cache_access_ctl
-        uint64_t          tc_valid_p0  :  4; // Port 0 TC valid bits, 1 bit per TC, invalid incoming TC packets are dropped and no PSN cache lookup is done. Note: Invalid tc will abort CACHE_CMD_RD, CACHE_CMD_WR in txotr_pkt_cfg_psn_cache_access_ctl and set bad_addr field in txotr_pkt_cfg_psn_cache_access_ctl
-        uint64_t       Reserved_63_28  : 36; // Reserved
+        uint64_t          max_dlid_p0  : 24; // Port 0 max valid dlid, incoming packets with dlid > than this are dropped and no PSN cache lookup is done. Note: dlid > max_dlid_p0 will abort CACHE_CMD_RD, CACHE_CMD_WR in TXOTR_PKT_CFG_PSN_CACHE_ACCESS_CTL and set bad_addr field in TXOTR_PKT_CFG_PSN_CACHE_ACCESS_CTL
+        uint64_t          tc_valid_p0  :  4; // Port 0 TC valid bits, 1 bit per TC, invalid incoming TC packets are dropped and no PSN cache lookup is done. Note: Invalid tc will abort CACHE_CMD_RD, CACHE_CMD_WR in TXOTR_PKT_CFG_PSN_CACHE_ACCESS_CTL and set bad_addr field in TXOTR_PKT_CFG_PSN_CACHE_ACCESS_CTL
+        uint64_t       Reserved_63_28  : 36; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_VALID_TC_DLID_t;
@@ -485,10 +485,10 @@ typedef union {
 // TXOTR_PKT_CFG_PSN_CACHE_ACCESS_CTL desc:
 typedef union {
     struct {
-        uint64_t              address  : 34; // The contents of this field differ based on cmd. psn_cache_addr_t for CACHE_CMD_RD, CACHE_CMD_WR,CACHE_CMD_INVALIDATE,CACHE_CMD_FLUSH* 10:0 used for CACHE_CMD_TAG_RD,CACHE_CMD_TAG_WR 14:0 used for CACHE_CMD_DATA_RD, CACHE_CMD_DATA_WR Note: See <blue text>Section 7.1.2.2.3, 'Packet Sequence Number Table Structures' for how client addresses are formed.
+        uint64_t              address  : 34; // The contents of this field differ based on cmd. psn_cache_addr_t for CACHE_CMD_RD, CACHE_CMD_WR,CACHE_CMD_INVALIDATE,CACHE_CMD_FLUSH* 10:0 used for CACHE_CMD_TAG_RD,CACHE_CMD_TAG_WR 14:0 used for CACHE_CMD_DATA_RD, CACHE_CMD_DATA_WR
         uint64_t                  cmd  :  4; // cache cmd. see <blue text>Section A.1.1, 'FXR Cache Cmd enums' initially CACHE_CMD_INVALIDATE
         uint64_t                 busy  :  1; // SW sets busy when writing this csr. HW clears busy when cmd is complete. busy must be clear before writing this csr. If busy is set, HW is busy on a previous cmd. Coming out of reset, busy will be 1 so as to initiate the psn cache tag invalidation. Then in 2k clks or so, it will go to 0.
-        uint64_t             bad_addr  :  1; // if cmd == CACHE_CMD_RD or CACHE_CMD_WR, the address.tc is checked for valid and address.lid is checked for in range. See txotr_pkt_cfg_valid_tc_dlid . The port used is address.port anded with use_port_in_psn_state field in txotr_pkt_cfg_valid_tc_dlid . No other cache_cmd sets this bit. If the check fails, no psn cache lookup occurs and this bit gets set.
+        uint64_t             bad_addr  :  1; // if cmd == CACHE_CMD_RD or CACHE_CMD_WR, the address.tc is checked for valid and address.lid is checked for in range. See TXOTR_PKT_CFG_VALID_TC_DLID . The port used is address.port anded with use_port_in_psn_state field in TXOTR_PKT_CFG_VALID_TC_DLID . No other cache_cmd sets this bit. If the check fails, no psn cache lookup occurs and this bit gets set.
         uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
@@ -565,8 +565,8 @@ typedef union {
 // TXOTR_PKT_CFG_LPSN_MAX_DIST desc:
 typedef union {
     struct {
-        uint64_t             MAX_DIST  : 16; // This register determines the maximum distance between the oldest Local Packet Sequence Number and the current Local Packet Sequence Number. Under normal operating conditions, this field should never be set to a value greater than 16'd32768.
-        uint64_t         UNUSED_63_16  : 48; // Unused
+        uint64_t             max_dist  : 16; // This register determines the maximum distance between the oldest Local Packet Sequence Number and the current Local Packet Sequence Number. Under normal operating conditions, this field should never be set to a value greater than 16'd32768.
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_LPSN_MAX_DIST_t;
@@ -589,7 +589,7 @@ typedef union {
         uint64_t            basic_ack  :  1; // Basic ACK or Extended ACK
         uint64_t                  cts  :  1; // CTS or ECTS
         uint64_t             e2e_ctrl  :  1; // E2E Control
-        uint64_t         UNUSED_63_15  : 49; // Unused
+        uint64_t       Reserved_63_15  : 49; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_FORCE_MSG_TO_FPE_t;
@@ -644,8 +644,8 @@ typedef union {
 // TXOTR_PKT_CFG_MLID_MASK desc:
 typedef union {
     struct {
-        uint64_t        MLID_MASK_16B  :  7; // Multi cast LID Mask
-        uint64_t          UNUSED_63_7  : 57; // Unused
+        uint64_t        mlid_mask_16b  :  7; // Multi cast LID Mask
+        uint64_t        Reserved_63_7  : 57; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_MLID_MASK_t;
@@ -655,7 +655,7 @@ typedef union {
     struct {
         uint64_t                 pkey  : 15; // PKEY value
         uint64_t           membership  :  1; // Membership indicator
-        uint64_t         UNUSED_63_16  : 48; // Unused
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_PKEY_8B_t;
@@ -669,8 +669,8 @@ typedef union {
         uint64_t           Reserved_7  :  1; // Unused
         uint64_t                  tc2  :  3; // The MTU for TC2
         uint64_t          Reserved_11  :  1; // Unused
-        uint64_t                  tc3  :  3; // The MTU for TC3. 0: no packets allowed. 1: 'd384. 2: 'd640. 3: 'd1152. 4: 'd2176. 5:4224. 6:8320. 7:10368.
-        uint64_t         UNUSED_63_15  : 49; // Unused
+        uint64_t                  tc3  :  3; // The MTU for TC3. 0: no packets allowed. 1: 384. 2: 640. 3: 1152. 4: 2176. 5: 4224. 6: 8320. 7: 10368.
+        uint64_t       Reserved_63_15  : 49; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_MTU_t;
@@ -679,7 +679,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t   pkey_check_disable  :  1; // PKEY check is disabled when set. The pkey index is always 0
-        uint64_t          UNUSED_63_1  : 63; // Unused
+        uint64_t        Reserved_63_1  : 63; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PKEY_CHECK_DISABLE_t;
@@ -689,25 +689,17 @@ typedef union {
     struct {
         uint64_t                 pkey  : 15; // PKEY value
         uint64_t           membership  :  1; // Membership indicator
-        uint64_t         UNUSED_63_16  : 48; // Unused
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_PTL_PKEY_TABLE_t;
 
-// TXOTR_PKT_CFG_SVEN_ADDR desc:
-typedef union {
-    struct {
-        uint64_t              address  : 64; // Address to used for ISOF transactions
-    } field;
-    uint64_t val;
-} TXOTR_PKT_CFG_SVEN_ADDR_t;
-
 // TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC desc:
 typedef union {
     struct {
-        uint64_t        Reserved_11_0  : 12; // Reserved
+        uint64_t        Reserved_11_0  : 12; // Unused
         uint64_t              address  : 45; // Host Memory Base Address, aligned to page boundary
-        uint64_t       Reserved_63_57  :  7; // Reserved
+        uint64_t       Reserved_63_57  :  7; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_PSN_BASE_ADDR_P0_TC_t;
@@ -777,7 +769,7 @@ typedef union {
         uint64_t rx_update_fifo_undflow  :  1; // RX update fifo underflow. ERR_CATEGORY_HFI
         uint64_t rx_update_fifo_overflow  :  1; // RX update fifo overflow. ERR_CATEGORY_HFI
         uint64_t       hash_table_mbe  :  1; // Hash Table MBE Error Flag. See txotr_pkt_err_info_hash_table_be CSR for error information. ERR_CATEGORY_HFI
-        uint64_t         Unused_63_62  :  2; // Reserved
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_STS_0_t;
@@ -786,7 +778,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 62; // Write 1's to clear corresponding status bits.
-        uint64_t         Unused_63_62  :  2; // Reserved
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_CLR_0_t;
@@ -795,7 +787,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 62; // Write 1 to set corresponding status bits.
-        uint64_t         Unused_63_62  :  2; // Reserved
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_FRC_0_t;
@@ -804,7 +796,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 62; // Enables corresponding status bits to generate host interrupt signal.
-        uint64_t         Unused_63_62  :  2; // Reserved
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_EN_HOST_0_t;
@@ -813,7 +805,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 62; // Snapshot of status bits when host interrupt signal transitions from 0 to 1.
-        uint64_t         Unused_63_62  :  2; // Reserved
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_FIRST_HOST_0_t;
@@ -822,7 +814,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 62; // Enables corresponding status bits to generate quarantine interrupt signal.
-        uint64_t         Unused_63_62  :  2; // Reserved
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_EN_BMC_0_t;
@@ -831,7 +823,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 62; // Snapshot of status bits when BMC interrupt signal transitions from 0 to 1.
-        uint64_t         Unused_63_62  :  2; // Reserved
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_FIRST_BMC_0_t;
@@ -840,7 +832,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 62; // Enables corresponding status bits to generate BMC interrupt signal.
-        uint64_t         Unused_63_62  :  2; // Reserved
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_EN_QUAR_0_t;
@@ -849,7 +841,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 62; // Snapshot of status bits when quarantine interrupt signal transitions from 0 to 1.
-        uint64_t         Unused_63_62  :  2; // Reserved
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_FIRST_QUAR_0_t;
@@ -901,7 +893,7 @@ typedef union {
         uint64_t          max_mtu_vio  :  1; // Maximum MTU violation in the Packet Partition
         uint64_t        rx_pkt_status  :  1; // Receive error status detected on the RxE2E interface. See txotr_pkt_err_info_ CSR for error information. ERR_CATEGORY_TRANSACTION
         uint64_t     about_to_timeout  :  1; // Notify RXDMA through the OMB to drop the packet due to close to time-range. See txotr_pkt_err_info_ CSR for error information. ERR_CATEGORY_INFO
-        uint64_t         Unused_63_44  : 20; // Reserved
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_STS_1_t;
@@ -909,8 +901,8 @@ typedef union {
 // TXOTR_PKT_ERR_CLR_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 42; // Write 1's to clear corresponding status bits.
-        uint64_t         Unused_63_44  : 20; // Reserved
+        uint64_t               events  : 44; // Write 1's to clear corresponding status bits.
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_CLR_1_t;
@@ -918,8 +910,8 @@ typedef union {
 // TXOTR_PKT_ERR_FRC_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 42; // Write 1 to set corresponding status bits.
-        uint64_t         UNUSED_63_44  : 20; // Unused
+        uint64_t               events  : 44; // Write 1 to set corresponding status bits.
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_FRC_1_t;
@@ -927,8 +919,8 @@ typedef union {
 // TXOTR_PKT_ERR_EN_HOST_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 42; // Enables corresponding status bits to generate host interrupt signal.
-        uint64_t         UNUSED_63_44  : 20; // Unused
+        uint64_t               events  : 44; // Enables corresponding status bits to generate host interrupt signal.
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_EN_HOST_1_t;
@@ -936,8 +928,8 @@ typedef union {
 // TXOTR_PKT_ERR_FIRST_HOST_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 42; // Snapshot of status bits when host interrupt signal transitions from 0 to 1.
-        uint64_t         UNUSED_63_44  : 20; // Unused
+        uint64_t               events  : 44; // Snapshot of status bits when host interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_FIRST_HOST_1_t;
@@ -945,8 +937,8 @@ typedef union {
 // TXOTR_PKT_ERR_EN_BMC_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 42; // Enables corresponding status bits to generate quarantine interrupt signal.
-        uint64_t         UNUSED_63_44  : 20; // Unused
+        uint64_t               events  : 44; // Enables corresponding status bits to generate quarantine interrupt signal.
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_EN_BMC_1_t;
@@ -954,8 +946,8 @@ typedef union {
 // TXOTR_PKT_ERR_FIRST_BMC_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 42; // Snapshot of status bits when BMC interrupt signal transitions from 0 to 1.
-        uint64_t         UNUSED_63_44  : 20; // Unused
+        uint64_t               events  : 44; // Snapshot of status bits when BMC interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_FIRST_BMC_1_t;
@@ -963,8 +955,8 @@ typedef union {
 // TXOTR_PKT_ERR_EN_QUAR_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 42; // Enables corresponding status bits to generate BMC interrupt signal.
-        uint64_t         UNUSED_63_44  : 20; // Unused
+        uint64_t               events  : 44; // Enables corresponding status bits to generate BMC interrupt signal.
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_EN_QUAR_1_t;
@@ -972,8 +964,8 @@ typedef union {
 // TXOTR_PKT_ERR_FIRST_QUAR_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 42; // Snapshot of status bits when quarantine interrupt signal transitions from 0 to 1.
-        uint64_t         UNUSED_63_44  : 20; // Unused
+        uint64_t               events  : 44; // Snapshot of status bits when quarantine interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_FIRST_QUAR_1_t;
@@ -983,7 +975,7 @@ typedef union {
     struct {
         uint64_t                 mctc  :  4; // MCTC value on which this error was detected
         uint64_t             encoding  :  3; // Encoding for the dlid error Bit 0 - Uninitialized DLID Bit 1 - Permissive DLID Bit 2 - Multicast DLID
-        uint64_t          UNUSED_63_7  : 57; // Unused
+        uint64_t        Reserved_63_7  : 57; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_DLID_CHECK_t;
@@ -992,9 +984,9 @@ typedef union {
 typedef union {
     struct {
         uint64_t mctc_invalid_msg_len  :  4; // MCTC value on which this error was detected
-        uint64_t          UNUSED_31_4  : 28; // Unused
+        uint64_t        Reserved_31_4  : 28; // Unused
         uint64_t         mctc_cmd_len  :  4; // MCTC value on which this error was detected
-        uint64_t         UNUSED_63_36  : 28; // Unused
+        uint64_t       Reserved_63_36  : 28; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_LENGTH_CHECK_t;
@@ -1023,7 +1015,7 @@ typedef union {
         uint64_t             mctc_mbe  :  4; // MCTC for the captured MBE error
         uint64_t      domain_overflow  :  4; // MCTC for the captured overflow
         uint64_t     domain_underflow  :  4; // MCTC for the captured underflow
-        uint64_t         Unused_63_24  : 40; // Unused
+        uint64_t       Reserved_63_24  : 40; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_FP_FIFO_1_t;
@@ -1052,7 +1044,7 @@ typedef union {
         uint64_t             mctc_mbe  :  3; // MCTC for the captured MBE error
         uint64_t      domain_overflow  :  4; // MCTC for the captured overflow
         uint64_t     domain_underflow  :  4; // MCTC for the captured underflow
-        uint64_t         Unused_63_22  : 42; // Unused
+        uint64_t       Reserved_63_22  : 42; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_RETRANS_FIFO_1_t;
@@ -1081,7 +1073,7 @@ typedef union {
         uint64_t             mctc_mbe  :  3; // MCTC for the captured MBE error
         uint64_t      domain_overflow  :  4; // MCTC for the captured overflow
         uint64_t     domain_underflow  :  4; // MCTC for the captured underflow
-        uint64_t         Unused_63_22  : 42; // Unused
+        uint64_t       Reserved_63_22  : 42; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PREFRAG_FIFO_1_t;
@@ -1110,7 +1102,7 @@ typedef union {
         uint64_t             mctc_mbe  :  4; // MCTC for the captured MBE error
         uint64_t      domain_overflow  :  4; // MCTC for the captured overflow
         uint64_t     domain_underflow  :  4; // MCTC for the captured underflow
-        uint64_t         Unused_63_24  : 40; // Unused
+        uint64_t       Reserved_63_24  : 40; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_POSTFRAG_FIFO_1_t;
@@ -1139,7 +1131,7 @@ typedef union {
         uint64_t               tc_mbe  :  2; // TC for the captured MBE error
         uint64_t      domain_overflow  :  2; // TC for the captured overflow
         uint64_t     domain_underflow  :  2; // TC for the captured underflow
-        uint64_t         Unused_63_16  : 48; // Unused
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_RX_RSP_FIFO_1_t;
@@ -1155,7 +1147,7 @@ typedef union {
         uint64_t  opb_handle_overflow  :  4; // Domain for the captured overflow error
         uint64_t  opb_state_underflow  :  4; // Domain for the captured underflow error
         uint64_t   opb_state_overflow  :  4; // Domain for the captured overflow error
-        uint64_t         Unused_63_40  : 24; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_OPB_FIFO_t;
@@ -1180,7 +1172,7 @@ typedef union {
     struct {
         uint64_t           domain_sbe  :  4; // Domain for the captured SBE error
         uint64_t           domain_mbe  :  4; // Domain for the captured MBE error
-        uint64_t          Unused_63_8  : 56; // Unused
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_TX_PSN_FIFO_1_t;
@@ -1222,7 +1214,7 @@ typedef union {
         uint64_t           domain_mbe  :  8; // Domain for the captured MBE error
         uint64_t             addr_sbe  :  5; // Memory Address for the captured SBE error
         uint64_t             addr_mbe  :  5; // Memory Address for the captured MBE error
-        uint64_t         Unused_63_26  : 38; // Unused
+        uint64_t       Reserved_63_26  : 38; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_t;
@@ -1232,10 +1224,10 @@ typedef union {
     struct {
         uint64_t          address_sbe  :  7; // Address for the captured SBE error
         uint64_t          address_mbe  :  7; // Address for the captured MBE error
-        uint64_t         UNUSED_15_14  :  2; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t         syndrome_sbe  :  9; // Syndrome for the captured SBE error
         uint64_t         syndrome_mbe  :  9; // Syndrome for the captured MBE error
-        uint64_t         UNUSED_63_34  : 30; // Unused
+        uint64_t       Reserved_63_34  : 30; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_OTM_BE_t;
@@ -1243,14 +1235,12 @@ typedef union {
 // TXOTR_PKT_ERR_INFO_OPB_BE_0 desc:
 typedef union {
     struct {
-        uint64_t       syndrome_mbe_0  :  9; // Syndrome for domain 0
-        uint64_t       syndrome_mbe_1  :  9; // Syndrome for domain 1
-        uint64_t       syndrome_mbe_2  :  9; // Syndrome for domain 2
-        uint64_t       syndrome_mbe_3  :  9; // Syndrome for domain 3
-        uint64_t       syndrome_mbe_4  :  9; // Syndrome for domain 4
-        uint64_t       syndrome_mbe_5  :  9; // Syndrome for domain 5
-        uint64_t       syndrome_mbe_6  :  9; // Syndrome for domain 6
-        uint64_t            UNUSED_63  :  1; // UNUSED
+        uint64_t       syndrome_mbe_0  :  8; // Syndrome for domain 0
+        uint64_t       syndrome_mbe_1  :  8; // Syndrome for domain 1
+        uint64_t       syndrome_mbe_2  :  8; // Syndrome for domain 2
+        uint64_t       syndrome_mbe_3  :  8; // Syndrome for domain 3
+        uint64_t       syndrome_mbe_4  :  8; // Syndrome for domain 4
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_OPB_BE_0_t;
@@ -1258,14 +1248,12 @@ typedef union {
 // TXOTR_PKT_ERR_INFO_OPB_BE_1 desc:
 typedef union {
     struct {
-        uint64_t       syndrome_sbe_0  :  9; // Syndrome for domain 0
-        uint64_t       syndrome_sbe_1  :  9; // Syndrome for domain 1
-        uint64_t       syndrome_sbe_2  :  9; // Syndrome for domain 2
-        uint64_t       syndrome_sbe_3  :  9; // Syndrome for domain 3
-        uint64_t       syndrome_sbe_4  :  9; // Syndrome for domain 4
-        uint64_t       syndrome_sbe_5  :  9; // Syndrome for domain 5
-        uint64_t       syndrome_sbe_6  :  9; // Syndrome for domain 6
-        uint64_t            UNUSED_63  :  1; // UNUSED
+        uint64_t       syndrome_sbe_0  :  8; // Syndrome for domain 0
+        uint64_t       syndrome_sbe_1  :  8; // Syndrome for domain 1
+        uint64_t       syndrome_sbe_2  :  8; // Syndrome for domain 2
+        uint64_t       syndrome_sbe_3  :  8; // Syndrome for domain 3
+        uint64_t       syndrome_sbe_4  :  8; // Syndrome for domain 4
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_OPB_BE_1_t;
@@ -1273,11 +1261,9 @@ typedef union {
 // TXOTR_PKT_ERR_INFO_OPB_BE_2 desc:
 typedef union {
     struct {
-        uint64_t       syndrome_sbe_7  :  9; // Syndrome for domain 7
-        uint64_t       syndrome_mbe_7  :  9; // Syndrome for domain 7
-        uint64_t           domain_sbe  :  8; // Domain for the captured SBE error
-        uint64_t           domain_mbe  :  8; // Domain for the captured MBE error
-        uint64_t         UNUSED_63_34  : 30; // UNUSED
+        uint64_t           domain_sbe  : 20; // Domain for the captured SBE error
+        uint64_t           domain_mbe  : 20; // Domain for the captured MBE error
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_OPB_BE_2_t;
@@ -1289,7 +1275,7 @@ typedef union {
         uint64_t           info_sbe_1  : 14; // Info captured for bank 1
         uint64_t           info_sbe_2  : 14; // Info captured for bank 2
         uint64_t           info_sbe_3  : 14; // Info captured for bank 3
-        uint64_t         UNUSED_63_56  :  8; // UNUSED
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_OPB_BE_3_t;
@@ -1301,7 +1287,7 @@ typedef union {
         uint64_t           info_mbe_1  : 14; // Info captured for bank 1
         uint64_t           info_mbe_2  : 14; // Info captured for bank 2
         uint64_t           info_mbe_3  : 14; // Info captured for bank 3
-        uint64_t         UNUSED_63_56  :  8; // UNUSED
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_OPB_BE_4_t;
@@ -1328,7 +1314,7 @@ typedef union {
         uint64_t       syndrome_sbe_5  :  6; // Syndrome for domain 5
         uint64_t       syndrome_sbe_6  :  6; // Syndrome for domain 6
         uint64_t       syndrome_sbe_7  :  6; // Syndrome for domain 7
-        uint64_t         UNUSED_63_48  : 16; // Unused
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_0_t;
@@ -1344,7 +1330,7 @@ typedef union {
         uint64_t       syndrome_mbe_5  :  6; // Syndrome for domain 5
         uint64_t       syndrome_mbe_6  :  6; // Syndrome for domain 6
         uint64_t       syndrome_mbe_7  :  6; // Syndrome for domain 7
-        uint64_t         UNUSED_63_48  : 16; // Unused
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_1_t;
@@ -1354,7 +1340,7 @@ typedef union {
     struct {
         uint64_t           domain_sbe  :  8; // Domain for the captured SBE error
         uint64_t           domain_mbe  :  8; // Domain for the captured MBE error
-        uint64_t         UNUSED_63_16  : 48; // Unused
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_2_t;
@@ -1366,7 +1352,7 @@ typedef union {
         uint64_t        address_sbe_1  : 14; // Address for the captured SBE
         uint64_t        address_sbe_2  : 14; // Address for the captured SBE
         uint64_t        address_sbe_3  : 14; // Address for the captured SBE
-        uint64_t         UNUSED_63_56  :  8; // Unused
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_3_t;
@@ -1378,7 +1364,7 @@ typedef union {
         uint64_t        address_sbe_5  : 14; // Address for the captured SBE
         uint64_t        address_sbe_6  : 14; // Address for the captured SBE
         uint64_t        address_sbe_7  : 14; // Address for the captured SBE
-        uint64_t         UNUSED_63_56  :  8; // Unused
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_4_t;
@@ -1390,7 +1376,7 @@ typedef union {
         uint64_t        address_mbe_1  : 14; // Address for the captured SBE
         uint64_t        address_mbe_2  : 14; // Address for the captured SBE
         uint64_t        address_mbe_3  : 14; // Address for the captured SBE
-        uint64_t         UNUSED_63_56  :  8; // Unused
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_5_t;
@@ -1402,7 +1388,7 @@ typedef union {
         uint64_t        address_mbe_5  : 14; // Address for the captured SBE
         uint64_t        address_mbe_6  : 14; // Address for the captured SBE
         uint64_t        address_mbe_7  : 14; // Address for the captured SBE
-        uint64_t         UNUSED_63_56  :  8; // Unused
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_6_t;
@@ -1414,7 +1400,7 @@ typedef union {
         uint64_t          address_mbe  :  8; // Address for the captured MBE error
         uint64_t         syndrome_sbe  :  8; // Syndrome for the captured SBE error
         uint64_t         syndrome_mbe  :  8; // Syndrome for the captured SBE error
-        uint64_t         UNUSED_63_32  : 32; // Unused
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_HASH_TABLE_BE_t;
@@ -1427,7 +1413,7 @@ typedef union {
         uint64_t                  mbe  :  8; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            mbe_count  :  4; // saturating counter of mbes. The increment signal is the 'or' of the 8 mbe signals.
         uint64_t     mbe_last_address  : 11; // address of the last least significant ecc domain mbe
-        uint64_t       Reserved_63_34  : 30; // Reserved
+        uint64_t       Reserved_63_34  : 30; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PSN_CACHE_TAG_MBE_t;
@@ -1440,7 +1426,7 @@ typedef union {
         uint64_t                  sbe  :  8; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of sbes. The increment signal is the 'or' of the 8 sbe signals.
         uint64_t     sbe_last_address  : 11; // address of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_42  : 22; // Reserved
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PSN_CACHE_TAG_SBE_t;
@@ -1452,7 +1438,7 @@ typedef union {
         uint64_t            mbe_count  :  4; // saturating counter of mbes.
         uint64_t    sbe_last_syndrome  :  8; // syndrome of the last least significant ecc domain sbe
         uint64_t            sbe_count  : 12; // saturating counter of sbes.
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PSN_CACHE_DATA_SBE_MBE_t;
@@ -1462,7 +1448,7 @@ typedef union {
     struct {
         uint64_t             encoding  :  4; // Error encoding
         uint64_t                  tid  : 10; // TID value captured for the transaction
-        uint64_t       Reserved_63_14  : 50; // Reserved
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_AT_RSP_t;
@@ -1472,7 +1458,7 @@ typedef union {
     struct {
         uint64_t             encoding  :  4; // Error encoding
         uint64_t                  tid  : 12; // TID value captured for the transaction
-        uint64_t       Reserved_63_16  : 48; // Reserved
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_HI_RSP_t;
@@ -1482,7 +1468,7 @@ typedef union {
     struct {
         uint64_t                 MCTC  :  4; // Captured MCTC value
         uint64_t                 DLID  : 24; // Captured DLID value
-        uint64_t       Reserved_63_28  : 36; // Reserved
+        uint64_t       Reserved_63_28  : 36; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_UNCONNECTED_DLID_t;
@@ -1493,7 +1479,7 @@ typedef union {
         uint64_t                 MCTC  :  3; // MCTC value
         uint64_t             encoding  :  4; // Error encoding
         uint64_t                pktid  : 16; // Packet Id
-        uint64_t       Reserved_63_23  : 41; // Reserved
+        uint64_t       Reserved_63_23  : 41; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_PKT_DONE_t;
@@ -1503,7 +1489,7 @@ typedef union {
     struct {
         uint64_t                 addr  :  8; // Hash Table Address
         uint64_t                pktid  : 16; // Packet Id
-        uint64_t       Reserved_63_24  : 40; // Reserved
+        uint64_t       Reserved_63_24  : 40; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_HASH_TIMEOUT_t;
@@ -1521,7 +1507,7 @@ typedef union {
         uint64_t   unknown_e2e_cmd_tc  :  2; // TC value capture
         uint64_t pktid_list_ren_fifo_undflow_tc  :  2; // TC value capture
         uint64_t pktid_list_ren_fifo_overflow_tc  :  2; // TC value capture
-        uint64_t          Reserved_63  :  1; // Reserved
+        uint64_t          Reserved_63  :  1; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_TC_PKTID_CAPTURE_t;
@@ -1533,7 +1519,7 @@ typedef union {
         uint64_t tuple_mismatch_opp_mctc  :  3; // MCTC value capture
         uint64_t tuple_mismatch_pktid  : 16; // Packet ID capture
         uint64_t  tuple_mismatch_mctc  :  3; // MCTC value capture
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_TUPPLE_MISMATCH_t;
@@ -1545,7 +1531,7 @@ typedef union {
         uint64_t          address_mbe  : 10; // Address capture for the MBE error
         uint64_t         syndrome_sbe  :  8; // Syndrome capture for the SBE error
         uint64_t         syndrome_mbe  :  8; // Syndrome capture for the MBE error
-        uint64_t         UNUSED_63_36  : 28; // Unused
+        uint64_t       Reserved_63_36  : 28; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_FPE_DATA_MEM_BE_t;
@@ -1557,7 +1543,7 @@ typedef union {
         uint64_t          address_mbe  : 13; // Address capture for the MBE error
         uint64_t         syndrome_sbe  :  7; // Syndrome capture for the SBE error
         uint64_t         syndrome_mbe  :  7; // Syndrome capture for the MBE error
-        uint64_t         UNUSED_63_40  : 24; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_FPE_PROG_MEM_BE_t;
@@ -1567,9 +1553,9 @@ typedef union {
     struct {
         uint64_t             encoding  :  8; // Error encoding. TODO - delineate encodings - Read or write of an invalid address
         uint64_t                 ctxt  :  5; // Context from which the error originated
-        uint64_t         UNUSED_15_13  :  3; // Unused
+        uint64_t       Reserved_15_13  :  3; // Unused
         uint64_t               msg_id  : 16; // Message Identifier of the command associated with the error
-        uint64_t         UNUSED_62_32  : 31; // Unused
+        uint64_t       Reserved_62_32  : 31; // Unused
         uint64_t         firmware_err  :  1; // Indicates a firmware error
     } field;
     uint64_t val;
@@ -1581,7 +1567,7 @@ typedef union {
         uint64_t              tid_sbe  : 12; // TID captured for SBE errors
         uint64_t         syndrome_sbe  :  8; // Syndrome capture for SBE error
         uint64_t         syndrome_mbe  :  8; // Syndrome capture for MBE error
-        uint64_t         UNUSED_63_28  : 36; // Unused
+        uint64_t       Reserved_63_28  : 36; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_HI_HDR_BE_t;
@@ -1606,7 +1592,7 @@ typedef union {
     struct {
         uint64_t           domain_sbe  :  4; // Domain captured for SBE errors
         uint64_t           domain_mbe  :  4; // Domain captured for MBE errors
-        uint64_t          UNUSED_63_8  : 56; // Unused
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_HI_DATA_BE_1_t;
@@ -1619,7 +1605,7 @@ typedef union {
         uint64_t psn_cache_tag_err_inj_enable  :  1; // psn_cache_tag error inject enable.
         uint64_t psn_cache_data_err_inj_mask  :  8; // psn_cache_data error inject mask
         uint64_t psn_cache_data_err_inj_enable  :  1; // psn_cache_data error inject enable.
-        uint64_t       Reserved_63_21  : 43; // Reserved
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_PSN_CACHE_SBE_MBE_t;
@@ -1630,29 +1616,29 @@ typedef union {
         uint64_t                   tc  :  2; // Captured TC for the Maximum MTU violation
         uint64_t        packet_length  : 12; // Captured packet length for the Maximum MTU violation
         uint64_t                 dlid  : 24; // Captured dlid for the Maximum MTU violation
-        uint64_t         UNUSED_63_38  : 26; // Unused
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INFO_MAX_MTU_t;
 
-// TXOTR_PKT_ERR_INFO_RXE2E_STTAUS_TO_TIMOUT desc:
+// TXOTR_PKT_ERR_INFO_RXE2E_STATUS_TO_TIMEOUT desc:
 typedef union {
     struct {
         uint64_t rx_status_rxe2e_pktid  : 16; // Packet ID capture
         uint64_t rx_status_rxe2e_mctc  :  3; // MCTC value capture
         uint64_t about_to_timeout_pktid  : 16; // Packet ID capture
         uint64_t about_to_timeout_mctc  :  3; // MCTC value capture
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
-} TXOTR_PKT_ERR_INFO_RXE2E_STTAUS_TO_TIMOUT_t;
+} TXOTR_PKT_ERR_INFO_RXE2E_STATUS_TO_TIMEOUT_t;
 
 // TXOTR_PKT_ERR_INJECT_0 desc:
 typedef union {
     struct {
         uint64_t  fp_fifo_inject_mask  : 32; // Error injection Mask
         uint64_t    fp_fifo_inject_en  :  4; // Error inject enable.
-        uint64_t       Reserved_63_36  : 28; // Reserved
+        uint64_t       Reserved_63_36  : 28; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_0_t;
@@ -1662,7 +1648,7 @@ typedef union {
     struct {
         uint64_t pre_frag_fifo_inject_mask  : 32; // Error injection Mask
         uint64_t pre_frag_fifo_inject_en  :  4; // Error inject enable.
-        uint64_t       Reserved_63_36  : 28; // Reserved
+        uint64_t       Reserved_63_36  : 28; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_1_t;
@@ -1672,7 +1658,7 @@ typedef union {
     struct {
         uint64_t post_frag_fifo_inject_mask  : 32; // Error injection Mask
         uint64_t post_frag_fifo_inject_en  :  4; // Error inject enable.
-        uint64_t       Reserved_63_36  : 28; // Reserved
+        uint64_t       Reserved_63_36  : 28; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_2_t;
@@ -1680,12 +1666,12 @@ typedef union {
 // TXOTR_PKT_ERR_INJECT_3 desc:
 typedef union {
     struct {
-        uint64_t           Unused_7_0  :  8; // Reserved
+        uint64_t         Reserved_7_0  :  8; // Unused
         uint64_t fpe_prog_inject_mask  :  7; // Error injection Mask
         uint64_t   fpe_prog_inject_en  :  1; // Error inject enable.
         uint64_t fpe_data_inject_mask  :  8; // Error injection Mask
         uint64_t   fpe_data_inject_en  :  1; // Error inject enable.
-        uint64_t       Reserved_63_25  : 39; // Reserved
+        uint64_t       Reserved_63_25  : 39; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_3_t;
@@ -1695,7 +1681,7 @@ typedef union {
     struct {
         uint64_t retrans_fifo_inject_mask  : 32; // Error injection Mask
         uint64_t retrans_fifo_inject_en  :  4; // Error inject enable.
-        uint64_t       Reserved_63_36  : 28; // Reserved
+        uint64_t       Reserved_63_36  : 28; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_4_t;
@@ -1707,7 +1693,7 @@ typedef union {
         uint64_t tx_psn_fifo_inject_en  :  4; // Error inject enable.
         uint64_t hash_table_inject_mask  :  8; // Error injection Mask
         uint64_t hash_table_inject_en  :  1; // Error inject enable.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t       Reserved_63_45  : 19; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_5_t;
@@ -1717,28 +1703,10 @@ typedef union {
     struct {
         uint64_t pktid_list_inject_mask  : 48; // Error injection Mask
         uint64_t pktid_list_inject_en  :  8; // Error inject enable.
-        uint64_t       Reserved_63_56  :  8; // Reserved
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_6_t;
-
-// TXOTR_PKT_ERR_INJECT_7 desc:
-typedef union {
-    struct {
-        uint64_t opb_inject_mask_71_64  :  8; // Error injection Mask
-        uint64_t        opb_inject_en  :  8; // Error inject enable.
-        uint64_t       Reserved_63_16  : 48; // Reserved
-    } field;
-    uint64_t val;
-} TXOTR_PKT_ERR_INJECT_7_t;
-
-// TXOTR_PKT_ERR_INJECT_8 desc:
-typedef union {
-    struct {
-        uint64_t opb_inject_mask_63_0  : 64; // Error injection Mask
-    } field;
-    uint64_t val;
-} TXOTR_PKT_ERR_INJECT_8_t;
 
 // TXOTR_PKT_ERR_INJECT_9 desc:
 typedef union {
@@ -1747,7 +1715,7 @@ typedef union {
         uint64_t   rsp_fifo_inject_en  :  4; // Error inject enable.
         uint64_t   hi_hdr_inject_mask  :  8; // Error injection Mask
         uint64_t     hi_hdr_inject_en  :  1; // Error inject enable.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t       Reserved_63_45  : 19; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_9_t;
@@ -1757,7 +1725,7 @@ typedef union {
     struct {
         uint64_t  hi_data_inject_mask  : 32; // Error injection Mask
         uint64_t    hi_data_inject_en  :  4; // Error inject enable.
-        uint64_t       Reserved_63_36  : 28; // Reserved
+        uint64_t       Reserved_63_36  : 28; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_10_t;
@@ -1768,7 +1736,7 @@ typedef union {
         uint64_t iovec_buff_inject_en  :  8; // Error injection enable
         uint64_t  opb_otm_inject_mask  :  9; // Error injection Mask
         uint64_t    opb_otm_inject_en  :  1; // Error inject enable.
-        uint64_t       Reserved_63_18  : 46; // Reserved
+        uint64_t       Reserved_63_18  : 46; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_11_t;
@@ -1781,28 +1749,60 @@ typedef union {
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_12_t;
 
+// TXOTR_PKT_ERR_INJECT_13 desc:
+typedef union {
+    struct {
+        uint64_t opb_inject_mask_39_0  : 40; // Error injection Mask
+        uint64_t        opb_inject_en  :  5; // Error inject enable.
+        uint64_t       Reserved_63_45  : 19; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_ERR_INJECT_13_t;
+
+// TXOTR_PKT_ERR_INJECT_14 desc:
+typedef union {
+    struct {
+        uint64_t opb_inject_mask_39_0  : 40; // Error injection Mask
+        uint64_t        opb_inject_en  :  5; // Error inject enable.
+        uint64_t       Reserved_63_45  : 19; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_ERR_INJECT_14_t;
+
+// TXOTR_PKT_ERR_INJECT_15 desc:
+typedef union {
+    struct {
+        uint64_t opb_inject_mask_39_0  : 40; // Error injection Mask
+        uint64_t        opb_inject_en  :  5; // Error inject enable.
+        uint64_t       Reserved_63_45  : 19; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_ERR_INJECT_15_t;
+
+// TXOTR_PKT_ERR_INJECT_16 desc:
+typedef union {
+    struct {
+        uint64_t opb_inject_mask_39_0  : 40; // Error injection Mask
+        uint64_t        opb_inject_en  :  5; // Error inject enable.
+        uint64_t       Reserved_63_45  : 19; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_ERR_INJECT_16_t;
+
 // TXOTR_PKT_ERR_MBE_SAT_COUNT desc:
 typedef union {
     struct {
         uint64_t        mbe_sat_count  : 16; // MBE saturation count
-        uint64_t         Unused_63_16  : 48; // Unused
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_MBE_SAT_COUNT_t;
-
-// TXOTR_NPK_BASE desc:
-typedef union {
-    struct {
-        uint64_t             NPK_BASE  : 64; // NPK Base address
-    } field;
-    uint64_t val;
-} TXOTR_NPK_BASE_t;
 
 // TXOTR_PKT_DBG_PSN_CACHE_TAG_WAY_ENABLE desc:
 typedef union {
     struct {
         uint64_t           WAY_ENABLE  : 16; // 1 bits enable, 0 bits disable PSN Cache Tag Ways.
-        uint64_t       Reserved_63_16  : 48; // Reserved
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_PSN_CACHE_TAG_WAY_ENABLE_t;
@@ -1856,8 +1856,7 @@ typedef union {
 // TXOTR_PKT_DBG_OPB_PAYLOAD4 desc:
 typedef union {
     struct {
-        uint64_t                 Data  : 24; // Data[279:256]
-        uint64_t       Reserved_63_24  : 40; // Unused
+        uint64_t                 Data  : 64; // Data[319:256]
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_OPB_PAYLOAD4_t;
@@ -2050,7 +2049,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 Data  : 32; // Data[31:0]
-        uint64_t         Unused_63_32  : 32; // Unused
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_FPE_PROG_MEM_PAYLOAD0_t;
@@ -2080,10 +2079,10 @@ typedef union {
     struct {
         uint64_t           FAST_EMPTY  : 12; // Empty bits of Fast Path Queues, 1 bit per queue
         uint64_t            FAST_FULL  : 12; // Full bits of Fast Path Queues, 1 bit per queue
-        uint64_t         UNUSED_31_24  :  8; // Unused
+        uint64_t       Reserved_31_24  :  8; // Unused
         uint64_t            PRE_EMPTY  :  8; // Empty bits of Pre-Fragmentation Queues, 1 bit per queue
         uint64_t             PRE_FULL  :  8; // Full bits of Pre-Fragmentation Queues, 1 bit per queue
-        uint64_t         UNUSED_63_48  : 16; // Unused
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_FP_PRE_FRAG_FULL_EMPTY_t;
@@ -2093,10 +2092,10 @@ typedef union {
     struct {
         uint64_t           POST_EMPTY  :  8; // Empty bits of Post-Fragmentation Queues, 1 bit per queue
         uint64_t            POST_FULL  :  8; // Full bits of Post-Fragmentation Queues, 1 bit per queue
-        uint64_t         UNUSED_31_16  : 16; // Unused
+        uint64_t       Reserved_31_16  : 16; // Unused
         uint64_t       POST_RET_EMPTY  :  8; // Empty bits of Post-Frag Retransmission Queues, 1 bit per queue
         uint64_t        POST_RET_FULL  :  8; // Full bits of Post-Frag Retransmission Queues, 1 bit per 8 queues
-        uint64_t         UNUSED_63_48  : 16; // Unused
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_POST_FRAG_RET_FULL_EMPTY_t;
@@ -2105,7 +2104,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                  FPE  : 32; // Context-Available Register of FPE
-        uint64_t         UNUSED_63_32  : 32; // Unused
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_FPE_CONTEXT_AVAILABLE_REG_t;
@@ -2170,13 +2169,13 @@ typedef union {
 typedef union {
     struct {
         uint64_t               head_0  : 14; // Head Pointer array 0
-        uint64_t         UNUSED_15_14  :  2; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t               tail_0  : 14; // Tail Pointer array 0
-        uint64_t         UNUSED_31_30  :  2; // Unused
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t               head_1  : 14; // Head Pointer array 1
-        uint64_t         UNUSED_47_46  :  2; // Unused
+        uint64_t       Reserved_47_46  :  2; // Unused
         uint64_t               tail_1  : 14; // Tail Pointer array 1
-        uint64_t         UNUSED_63_62  :  2; // Unused
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_PKTID_LIST_SHARED_POINTERS_t;
@@ -2185,13 +2184,13 @@ typedef union {
 typedef union {
     struct {
         uint64_t             mc0_head  : 14; // MC0 Head Pointer
-        uint64_t         UNUSED_15_14  :  2; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t             mc0_tail  : 14; // MC0 Tail Pointer
-        uint64_t         UNUSED_31_30  :  2; // Unused
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t             mc1_head  : 14; // MC1 Head Pointer
-        uint64_t         UNUSED_47_46  :  2; // Unused
+        uint64_t       Reserved_47_46  :  2; // Unused
         uint64_t             mc1_tail  : 14; // MC1 Tail Pointer
-        uint64_t         UNUSED_63_62  :  2; // Unused
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS00_t;
@@ -2200,13 +2199,13 @@ typedef union {
 typedef union {
     struct {
         uint64_t             mc0_head  : 14; // MC0 Head Pointer
-        uint64_t         UNUSED_15_14  :  2; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t             mc0_tail  : 14; // MC0 Tail Pointer
-        uint64_t         UNUSED_31_30  :  2; // Unused
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t             mc1_head  : 14; // MC1 Head Pointer
-        uint64_t         UNUSED_47_46  :  2; // Unused
+        uint64_t       Reserved_47_46  :  2; // Unused
         uint64_t             mc1_tail  : 14; // MC1 Tail Pointer
-        uint64_t         UNUSED_63_62  :  2; // Unused
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS01_t;
@@ -2215,13 +2214,13 @@ typedef union {
 typedef union {
     struct {
         uint64_t             mc0_head  : 14; // MC0 Head Pointer
-        uint64_t         UNUSED_15_14  :  2; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t             mc0_tail  : 14; // MC0 Tail Pointer
-        uint64_t         UNUSED_31_30  :  2; // Unused
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t             mc1_head  : 14; // MC1 Head Pointer
-        uint64_t         UNUSED_47_46  :  2; // Unused
+        uint64_t       Reserved_47_46  :  2; // Unused
         uint64_t             mc1_tail  : 14; // MC1 Tail Pointer
-        uint64_t         UNUSED_63_62  :  2; // Unused
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS10_t;
@@ -2230,13 +2229,13 @@ typedef union {
 typedef union {
     struct {
         uint64_t             mc0_head  : 14; // MC0 Head Pointer
-        uint64_t         UNUSED_15_14  :  2; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t             mc0_tail  : 14; // MC0 Tail Pointer
-        uint64_t         UNUSED_31_30  :  2; // Unused
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t             mc1_head  : 14; // MC1 Head Pointer
-        uint64_t         UNUSED_47_46  :  2; // Unused
+        uint64_t       Reserved_47_46  :  2; // Unused
         uint64_t             mc1_tail  : 14; // MC1 Tail Pointer
-        uint64_t         UNUSED_63_62  :  2; // Unused
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS11_t;
@@ -2245,13 +2244,13 @@ typedef union {
 typedef union {
     struct {
         uint64_t             mc0_head  : 14; // MC0 Head Pointer
-        uint64_t         UNUSED_15_14  :  2; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t             mc0_tail  : 14; // MC0 Tail Pointer
-        uint64_t         UNUSED_31_30  :  2; // Unused
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t             mc1_head  : 14; // MC1 Head Pointer
-        uint64_t         UNUSED_47_46  :  2; // Unused
+        uint64_t       Reserved_47_46  :  2; // Unused
         uint64_t             mc1_tail  : 14; // MC1 Tail Pointer
-        uint64_t         UNUSED_63_62  :  2; // Unused
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS20_t;
@@ -2260,13 +2259,13 @@ typedef union {
 typedef union {
     struct {
         uint64_t             mc0_head  : 14; // MC0 Head Pointer
-        uint64_t         UNUSED_15_14  :  2; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t             mc0_tail  : 14; // MC0 Tail Pointer
-        uint64_t         UNUSED_31_30  :  2; // Unused
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t             mc1_head  : 14; // MC1 Head Pointer
-        uint64_t         UNUSED_47_46  :  2; // Unused
+        uint64_t       Reserved_47_46  :  2; // Unused
         uint64_t             mc1_tail  : 14; // MC1 Tail Pointer
-        uint64_t         UNUSED_63_62  :  2; // Unused
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS21_t;
@@ -2275,13 +2274,13 @@ typedef union {
 typedef union {
     struct {
         uint64_t             mc0_head  : 14; // MC0 Head Pointer
-        uint64_t         UNUSED_15_14  :  2; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t             mc0_tail  : 14; // MC0 Tail Pointer
-        uint64_t         UNUSED_31_30  :  2; // Unused
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t             mc1_head  : 14; // MC1 Head Pointer
-        uint64_t         UNUSED_47_46  :  2; // Unused
+        uint64_t       Reserved_47_46  :  2; // Unused
         uint64_t             mc1_tail  : 14; // MC1 Tail Pointer
-        uint64_t         UNUSED_63_62  :  2; // Unused
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS30_t;
@@ -2290,13 +2289,13 @@ typedef union {
 typedef union {
     struct {
         uint64_t             mc0_head  : 14; // MC0 Head Pointer
-        uint64_t         UNUSED_15_14  :  2; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t             mc0_tail  : 14; // MC0 Tail Pointer
-        uint64_t         UNUSED_31_30  :  2; // Unused
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t             mc1_head  : 14; // MC1 Head Pointer
-        uint64_t         UNUSED_47_46  :  2; // Unused
+        uint64_t       Reserved_47_46  :  2; // Unused
         uint64_t             mc1_tail  : 14; // MC1 Tail Pointer
-        uint64_t         UNUSED_63_62  :  2; // Unused
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS31_t;
@@ -2350,7 +2349,7 @@ typedef union {
         uint64_t          mc1tc1_rsvd  :  1; // MC1TC1 Dedicated Context
         uint64_t          mc1tc2_rsvd  :  1; // MC1TC2 Dedicated Context
         uint64_t          mc1tc3_rsvd  :  1; // MC1TC3 Dedicated Context
-        uint64_t         UNUSED_63_24  : 40; // Unused
+        uint64_t       Reserved_63_24  : 40; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_FPE_CONTEXT_ENABLE_t;
@@ -2389,7 +2388,7 @@ typedef union {
         uint64_t          mc1tc1_rsvd  :  4; // See below
         uint64_t          mc1tc2_rsvd  :  4; // See below
         uint64_t          mc1tc3_rsvd  :  4; // See below
-        uint64_t         UNUSED_63_32  : 32; // Unused
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_FPE_CONTEXT_MCTC_MAP1_t;
@@ -2421,7 +2420,7 @@ typedef union {
     struct {
         uint64_t                index  :  8; // Index into the mask. Attempts to write values larger than 131 are ignored.
         uint64_t               enable  :  1; // Enable. Software must clear this bit when it wishes to issue another write to the mask.
-        uint64_t          UNUSED_63_9  : 55; // Unused
+        uint64_t        Reserved_63_9  : 55; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKG_DBG_TO_NACK_MASK_t;
@@ -2431,7 +2430,7 @@ typedef union {
     struct {
         uint64_t                index  :  6; // Index into the sidecar.
         uint64_t               enable  :  1; // Enable. Software must clear this bit when it wishes to issue another write to the sidecar.
-        uint64_t          UNUSED_63_7  : 57; // Unused
+        uint64_t        Reserved_63_7  : 57; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKG_DBG_PENDING_RETRANSMIT_t;
@@ -2441,7 +2440,7 @@ typedef union {
     struct {
         uint64_t                index  :  6; // Index into the mask.
         uint64_t               enable  :  1; // Enable. Software must clear this bit when it wishes to issue another write to the mask.
-        uint64_t          UNUSED_63_7  : 57; // Unused
+        uint64_t        Reserved_63_7  : 57; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKG_DBG_OOS_NACK_MASK_t;
@@ -2451,7 +2450,7 @@ typedef union {
     struct {
         uint64_t                index  :  8; // Index into the sidecar. Attempts to write values larger than 131 are ignored.
         uint64_t               enable  :  1; // Enable. Software must clear this bit when it wishes to issue another write to the sidecar.
-        uint64_t          UNUSED_63_9  : 55; // Unused
+        uint64_t        Reserved_63_9  : 55; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKG_DBG_HEAD_PENDING_t;
@@ -2460,7 +2459,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 MCTC  :  4; // 4'd15-4'd11 - Reserved 4'd10 - Any MC 4'd9 - Any MC1 4'd8 - Any MC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
-        uint64_t          UNUSED_63_4  : 60; // Unused
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_STALL_OPB_ENTRIES_X_t;
@@ -2469,7 +2468,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 MCTC  :  4; // 4'd15-4'd11 - Reserved 4'd10 - Any MC 4'd9 - Any MC1 4'd8 - Any MC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
-        uint64_t          UNUSED_63_4  : 60; // Unused
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_STALL_OPB_ENTRIES_Y_t;
@@ -2478,7 +2477,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 MCTC  :  4; // 4'd15-4'd11 - Reserved 4'd10 - Any MC 4'd9 - Any MC1 4'd8 - Any MC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
-        uint64_t          UNUSED_63_4  : 60; // Unused
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_X_t;
@@ -2487,7 +2486,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 MCTC  :  4; // 4'd15-4'd11 - Reserved 4'd10 - Any MC 4'd9 - Any MC1 4'd8 - Any MC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
-        uint64_t          UNUSED_63_4  : 60; // Unused
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_Y_t;
@@ -2496,7 +2495,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 MCTC  :  3; // 3'd7-3'd5 - Reserved 3'd4 - Any MC1 3'd3 - MC1TC3 3'd2 - MC1TC2 3'd1 - MC1TC1 3'd0 - MC1TC0
-        uint64_t          UNUSED_63_3  : 61; // Unused
+        uint64_t        Reserved_63_3  : 61; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_X_t;
@@ -2505,7 +2504,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 MCTC  :  3; // 3'd7 - 3'd5 - Reserved 3'd4 - Any MC1 2'd3 - MC1TC3 2'd2 - MC1TC2 2'd1 - MC1TC1 2'd0 - MC1TC0
-        uint64_t          UNUSED_63_3  : 61; // Unused
+        uint64_t        Reserved_63_3  : 61; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_Y_t;
@@ -2517,7 +2516,7 @@ typedef union {
         uint64_t                B_MAX  : 12; // Upper bound of second lowest latency bin. Response latencies greater than A_MAX but less than or equal to B_MAX increment bin B. This value should always be less than C_MAX .
         uint64_t                C_MAX  : 12; // Upper bound of third lowest latency bin.Response latencies greater than B_MAX but less than or equal to C_MAX increment bin B. This value should always be less than D_MAX .
         uint64_t                D_MAX  : 12; // Upper bound of fourth lowest latency bin.Response latencies greater than C_MAX but less than or equal to D_MAX increment bin B. Response latencies greater than D_MAX increment bin E.
-        uint64_t         UNUSED_63_48  : 16; // Unused
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_LATENCY_t;
@@ -2526,7 +2525,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 MCTC  :  4; // 4'd15-4'd11 - Reserved 4'd10 - Any MC 4'd9 - Any MC1 4'd8 - Any MC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
-        uint64_t          UNUSED_63_4  : 60; // Unused
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_PKTS_OPENED_X_t;
@@ -2535,7 +2534,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 MCTC  :  4; // 4'd15-4'd11 - Reserved 4'd10 - Any MC 4'd9 - Any MC1 4'd8 - Any MC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
-        uint64_t          UNUSED_63_4  : 60; // Unused
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_PKTS_CLOSED_X_t;
@@ -2544,7 +2543,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                   TC  :  3; // 3'd7-3'd5 - Reserved 3'd4 - Any TC 3'd3 - TC3 3'd2 - TC2 3'd1 - TC1 3'd0 - TC0
-        uint64_t          UNUSED_63_3  : 61; // Unused
+        uint64_t        Reserved_63_3  : 61; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_RETRANS_LIMIT_RCHD_X_t;
@@ -2553,7 +2552,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 MCTC  :  4; // 4'd15-4'd11 - Reserved 4'd10 - Any MC 4'd9 - Any MC1 4'd8 - Any MC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
-        uint64_t          UNUSED_63_4  : 60; // Unused
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_PRF_LOCAL_SEQ_STALL_X_t;

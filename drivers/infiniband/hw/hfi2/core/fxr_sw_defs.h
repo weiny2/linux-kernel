@@ -32,8 +32,8 @@
 #ifndef DEF_FXR_SW_SW_DEF
 #define DEF_FXR_SW_SW_DEF
 
-#define PTL_RANK_ANY						0xffffffffUL
-#define PTL_UID_ANY						0xffffffffUL
+#define PTL_RANK_ANY						4294967295
+#define PTL_UID_ANY						4294967295
 #define PTL_PID_ANY						4095
 #define PTL_LID_ANY						16777215
 #define PTL_NO_ACK_REQ						0
@@ -61,7 +61,8 @@
 #define PTL_OP_PUT						65536
 #define PTL_OP_GET						131072
 #define PTL_MAY_ALIGN						262144
-#define PTL_IS_ACCESSIBLE					524288
+#define PTL_EVENT_CT_LINK					524288
+#define PTL_IS_ACCESSIBLE					1048576
 #define PTL_MD_EVENT_SUCCESS_DISABLE				1
 #define PTL_MD_EVENT_CT_BYTES					2
 #define PTL_MD_EVENT_CT_REPLY					4
@@ -95,9 +96,6 @@
 #define NONPTL_RCV_DISABLED_CTX_CNT				3
 #define NONPTL_RCV_TID_GEN_MISMATCH_CNT				4
 #define NONPTL_RCV_TID_SEQ_MISMATCH_CNT				5
-#define PMEM_START						8388608
-#define PMEM_SIZE						8388608
-#define PMEM_END						16777215
 #define BOOT_ROM_START						0
 #define BOOT_ROM_SIZE						8192
 #define BOOT_ROM_END						8191
@@ -107,6 +105,9 @@
 #define FW_RAM_START						32768
 #define FW_RAM_SIZE						32768
 #define FW_RAM_END						65535
+#define PMEM_START						8388608
+#define PMEM_SIZE						8388608
+#define PMEM_END						16777215
 #define IO_START						0
 #define IO_SIZE							4096
 #define IO_END							4095
@@ -154,7 +155,7 @@
 #define CC_PERM_OP_VIOL_BIT_POS					2
 #define CC_PERM_ID_VIOL_BIT_POS					3
 #define CC_UNLINK_BIT_POS					4
-#define CC_PKT_COMPL_BIT_POS					5
+#define CC_INST_ERROR_BIT_POS					5
 #define CC_PKT_GOOD_BIT_POS					6
 #define CC_EVENT_COMM_DISABLE_BIT_POS				7
 #define CC_EVENT_SUCCESS_DISABLE_BIT_POS			8
@@ -173,8 +174,9 @@
 #define RXHP_LIST_ENTRY_START					512
 #define RXHP_LIST_ENTRY_END					1023
 #define RXHP_JMP_TBL_START					1024
-#define RXHP_JMP_TBL_END					1151
 #define RXHP_JMP_TBL_ENTRIES					32
+#define RXHP_JMP_TBL_ENTRY_SIZE					8
+#define RXHP_JMP_TBL_END					1280
 #define RXHP_HDR_DEC_START					1280
 #define RXHP_HDR_DEC_END					1343
 #define RXHP_HDR_MATCH_BITS_ADDR				1280
@@ -238,11 +240,11 @@
 #define RXHP_PTL_MATCHED					6
 #define RXHP_PTL_RESERVED1					7
 #define RXHP_PTL_E2E_CTRL					8
-#define RXHP_GEN1_KDETH_EAGER					9
-#define RXHP_GEN1_KDETH_EXPECTED				10
-#define RXHP_GEN1_IB						11
-#define RXHP_GEN1_ERROR						12
-#define RXHP_GEN1_BYPASS					13
+#define RXHP_PTL_RDMA                                           9
+#define RXHP_PTL_SEND                                           10
+#define RXHP_GEN1_KDETH_EXPECTED				11
+#define RXHP_GEN1_EAGER					        12
+#define RXHP_GEN1_ERROR						13
 #define RXHP_OTR_DECREMENT_REFCOUNT				14
 #define RXHP_CMD_APPEND_OVERFLOW				15
 #define RXHP_CMD_APPEND_PRIORITY_UHZ				16
@@ -255,7 +257,7 @@
 #define RXHP_CMD_EQD						23
 #define RXHP_CMD_PD_CLEANUP					24
 #define RXHP_CMD_ERROR						25
-#define RXHP_CMD_DO_STUFF2					26
+#define RXHP_CMD_RECVQ_APPEND					26
 #define RXHP_CMD_DO_STUFF3					27
 #define RXHP_CMD_DO_STUFF4					28
 #define RXHP_CMD_DO_STUFF5					29
@@ -286,33 +288,37 @@
 #define POST_FRAG_CONTEXT_MASK					15
 #define POST_FRAG_CONTEXT_ADDR_WIDTH				4
 #define POST_FRAG_ADDR_MASK					127
-#define POST_FRAG_SB_LIMIT					21440
-#define OTR_IOVEC_DESC_ADDR					21440
+#define POST_FRAG_SB_LIMIT					20704
+#define OTR_IOVEC_DESC_ADDR					20704
 #define OTR_IOVEC_FLIT_SIZE					32
 #define OTR_IOVEC_FLIT_COUNT					4
 #define OTR_IOVEC_DESC_ADDR_MASK				3
-#define OTR_IOVEC_DESC_LIMIT					21568
-#define POST_FRAG_CREDIT_ADDR					21568
+#define OTR_IOVEC_DESC_LIMIT					20832
+#define POST_FRAG_CREDIT_ADDR					20832
 #define POST_FRAG_CREDIT_CONTEXTS				16
-#define POST_FRAG_CREDIT_LIMIT					21696
-#define POST_FRAG_IOVEC_DESC_SB_ADDR				21696
-#define POST_FRAG_IOVEC_DESC_SB_LIMIT				21728
-#define FRAG_JMP_TBL_ADDR					21728
-#define FRAG_JMP_TBL_ENTRIES					32
-#define FRAG_JMP_TBL_LIMIT					21856
-#define OTR_LOCAL_CTXT_AVAIL_ADDR				21856
-#define OTR_LOCAL_CTXT_AVAIL_LIMIT				21864
-#define OTR_MCTC_IS_SAFE_VEC_ADDR				21864
-#define OTR_MCTC_IS_SAFE_VEC_LIMIT				21872
-#define OTR_CTXT_BLOCKING_MCTC_ADDR				21872
+#define POST_FRAG_CREDIT_LIMIT					20960
+#define POST_FRAG_IOVEC_DESC_SB_ADDR				20960
+#define POST_FRAG_IOVEC_DESC_SB_LIMIT				20992
+#define FRAG_JMP_TBL_ADDR					20992
+#define FRAG_JMP_TBL_ENTRIES					128
+#define FRAG_JMP_TBL_ENTRY_SIZE					8
+#define FRAG_JMP_TBL_LIMIT					22016
+#define OTR_LOCAL_CTXT_AVAIL_ADDR				22016
+#define OTR_LOCAL_CTXT_AVAIL_LIMIT				22024
+#define OTR_MCTC_IS_SAFE_VEC_ADDR				22024
+#define OTR_MCTC_IS_SAFE_VEC_LIMIT				22032
+#define OTR_CTXT_BLOCKING_MCTC_ADDR				22032
 #define OTR_CTXT_BLOCKING_MCTC_ENTRIES				8
-#define OTR_CTXT_BLOCKING_MCTC_LIMIT				21936
-#define OTR_CURR_FRAG_CTXT_ADDR					21936
-#define OTR_CURR_FRAG_CTXT_LIMIT				21944
-#define OTR_SWIZZLE_CONTROLS_ADDR				21944
-#define OTR_SWIZZLE_CONTROLS_LIMIT				21952
+#define OTR_CTXT_BLOCKING_MCTC_LIMIT				22096
+#define OTR_CURR_FRAG_CTXT_ADDR					22096
+#define OTR_CURR_FRAG_CTXT_LIMIT				22104
+#define OTR_SWIZZLE_CONTROLS_ADDR				22104
+#define OTR_SWIZZLE_CONTROLS_LIMIT				22112
+#define OTR_MAX_IOVEC_PER_PKT_ADDR				22112
+#define OTR_MAX_IOVEC_PER_PKT_LIMIT				22120
 #define FRAG_CTXT_AVAIL_CSR_ADDR				256
 #define FRAG_IOBUFF_READ_DONE_CSR_ADDR				264
+#define FRAG_ERROR_CSR_ADDR					272
 #define BUFF_INPUT_BASE_ADDR					20480
 #define BUFF_INPUT_CONTEXT_COUNT				4
 #define BUFF_INPUT_CONTEXT_SIZE					64
@@ -332,7 +338,7 @@
 #define BUFF_OPB_DATA_LIMIT					21056
 #define BUFF_OMB_DATA_WIDTH					512
 #define BUFF_OMB_LD_SB_WIDTH					16
-#define BUFF_OPB_DATA_WIDTH					280
+#define BUFF_OPB_DATA_WIDTH					320
 #define BUFF_OPB_TIMESTAMP_WIDTH				12
 #define BUFF_TO_BASE_ADDR					21056
 #define BUFF_TO_CONTEXT_COUNT					8
@@ -340,36 +346,36 @@
 #define BUFF_TO_LIMIT						21184
 #define BUFF_JMP_TBL_BASE_ADDR					21184
 #define BUFF_JMP_TBL_ENTRIES					32
-#define BUFF_JMP_TBL_ENTRY_SIZE					4
-#define BUFF_JMP_TBL_LIMIT					21312
-#define BUFF_OUTPUT_SB_BASE_ADDR				21312
+#define BUFF_JMP_TBL_ENTRY_SIZE					8
+#define BUFF_JMP_TBL_LIMIT					21440
+#define BUFF_OUTPUT_SB_BASE_ADDR				21440
 #define BUFF_OUTPUT_SB_SIZE					8
 #define BUFF_OUTPUT_SB_COUNT					4
-#define BUFF_OUTPUT_SB_LIMIT					21344
-#define BUFF_INPUT_SB_BASE_ADDR					21344
+#define BUFF_OUTPUT_SB_LIMIT					21472
+#define BUFF_INPUT_SB_BASE_ADDR					21472
 #define BUFF_INPUT_SB_SIZE					8
 #define BUFF_INPUT_SB_COUNT					4
-#define BUFF_INPUT_SB_LIMIT					21376
-#define BUFF_CREDIT_BASE_ADDR					21376
+#define BUFF_INPUT_SB_LIMIT					21504
+#define BUFF_CREDIT_BASE_ADDR					21504
 #define BUFF_CREDIT_CONTEXT_COUNT				16
 #define BUFF_CREDIT_CONTEXT_MASK				15
 #define BUFF_DECR_CREDIT_BIT_POS				16
-#define BUFF_CREDIT_LIMIT					21504
-#define BUFF_OMB_LD_SB_BASE_ADDR				21504
-#define BUFF_OMB_LD_SB_LIMIT					21520
+#define BUFF_CREDIT_LIMIT					21632
+#define BUFF_OMB_LD_SB_BASE_ADDR				21632
+#define BUFF_OMB_LD_SB_LIMIT					21648
 #define BUFF_NACK_CONTEXT_COUNT					4
 #define BUFF_NACK_SIZE						16
-#define BUFF_NACK_BASE_ADDR					21520
-#define BUFF_NACK_LIMIT						21584
+#define BUFF_NACK_BASE_ADDR					21648
+#define BUFF_NACK_LIMIT						21712
 #define BUFF_TRANS_DELAY_SIZE					8
-#define BUFF_TRANS_DELAY_BASE_ADDR				21584
-#define BUFF_TRANS_DELAY_LIMIT					21592
-#define BUFF_LOCAL_CTXT_AVAIL_ADDR				21592
+#define BUFF_TRANS_DELAY_BASE_ADDR				21712
+#define BUFF_TRANS_DELAY_LIMIT					21720
+#define BUFF_LOCAL_CTXT_AVAIL_ADDR				21720
 #define BUFF_LOCAL_CTXT_AVAIL_SIZE				8
-#define BUFF_LOCAL_CTXT_AVAIL_LIMIT				21600
-#define BUFF_LINK_LIST_CTXT_AVAIL_ADDR				21600
+#define BUFF_LOCAL_CTXT_AVAIL_LIMIT				21728
+#define BUFF_LINK_LIST_CTXT_AVAIL_ADDR				21728
 #define BUFF_LINK_LIST_CTXT_AVAIL_SIZE				8
-#define BUFF_LINK_LIST_CTXT_AVAIL_LIMIT				21608
+#define BUFF_LINK_LIST_CTXT_AVAIL_LIMIT				21736
 #define BUFF_CTXT_AVAIL_CSR_ADDR				256
 #define BUFF_TIMEOUT_CTXT_AVAIL_CSR_ADDR			264
 #define BUFF_NACK_CTXT_AVAIL_CSR_ADDR				272
@@ -465,13 +471,15 @@ enum l4 {
                   PTL_REND_EVENT = 242,         /* Portals Rendezvous Event */
                 PTL_E2E_CTRL_REQ = 243,         /* Portals E2E Control Request. Ordering rules dependent on OPCODE. */
                PTL_E2E_CTRL_RESP = 244,         /* Portals E2E Control Response. */
+                    PTL_VERBS_RC = 245,         /* Reserved */
                      PTL_REQUEST = 248,         /* Portals Request (Put/Atomic/Get) */
                PTL_FETCH_REQUEST = 249,         /* Portals Fetching Request (FetchAtomic/TwoOperand Atomics) */
                     PTL_RESPONSE = 250,         /* Portals Reply / Portal Full ACK / E2E Extended ACK */
-              PTL_E2E_BASIC_ACK0 = 252,         /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=00b */
-              PTL_E2E_BASIC_ACK1 = 253,         /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=01b */
-              PTL_E2E_BASIC_ACK2 = 254,         /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=10b */
-              PTL_E2E_BASIC_ACK3 = 255          /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=11b */
+                          PTL_UD = 251,         /* Reserved */
+              PTL_E2E_BASIC_ACK0 = 252,         /* Portals E2E Basic ACK, pkt_id[15:14]=00b */
+              PTL_E2E_BASIC_ACK1 = 253,         /* Portals E2E Basic ACK, pkt_id[15:14]=01b */
+              PTL_E2E_BASIC_ACK2 = 254,         /* Portals E2E Basic ACK, pkt_id[15:14]=10b */
+              PTL_E2E_BASIC_ACK3 = 255          /* Portals E2E Basic ACK, pkt_id[15:14]=11b */
 };
 
 #else
@@ -486,13 +494,15 @@ enum l4 {
 #define           PTL_REND_EVENT   242          /* Portals Rendezvous Event */
 #define         PTL_E2E_CTRL_REQ   243          /* Portals E2E Control Request. Ordering rules dependent on OPCODE. */
 #define        PTL_E2E_CTRL_RESP   244          /* Portals E2E Control Response. */
+#define             PTL_VERBS_RC   245          /* Reserved */
 #define              PTL_REQUEST   248          /* Portals Request (Put/Atomic/Get) */
 #define        PTL_FETCH_REQUEST   249          /* Portals Fetching Request (FetchAtomic/TwoOperand Atomics) */
 #define             PTL_RESPONSE   250          /* Portals Reply / Portal Full ACK / E2E Extended ACK */
-#define       PTL_E2E_BASIC_ACK0   252          /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=00b */
-#define       PTL_E2E_BASIC_ACK1   253          /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=01b */
-#define       PTL_E2E_BASIC_ACK2   254          /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=10b */
-#define       PTL_E2E_BASIC_ACK3   255           /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=11b */
+#define                   PTL_UD   251          /* Reserved */
+#define       PTL_E2E_BASIC_ACK0   252          /* Portals E2E Basic ACK, pkt_id[15:14]=00b */
+#define       PTL_E2E_BASIC_ACK1   253          /* Portals E2E Basic ACK, pkt_id[15:14]=01b */
+#define       PTL_E2E_BASIC_ACK2   254          /* Portals E2E Basic ACK, pkt_id[15:14]=10b */
+#define       PTL_E2E_BASIC_ACK3   255           /* Portals E2E Basic ACK, pkt_id[15:14]=11b */
 
 #endif
 
@@ -623,58 +633,118 @@ enum ptl_fetch_op_req {
 #endif
 
 
+/* Enumeration from Table titled: OPCODE Assignments for Verbs RC Requests (Enum - ptl_op_rc_t) - 5 bits
+*                        In File: 020_TOC
+*/
+#if defined(__STDC__)
+
+enum ptl_op_rc {
+               PTL_RC_SEND_FIRST = 0,           /* The first packet in a multi-packet send. A message with a first packet must have a last packet. */
+              PTL_RC_SEND_MIDDLE = 1,           /* Any packets that are not the first or last packet in a multi packet message. A message with a middle packet must also have a first and last packet. */
+                PTL_RC_SEND_LAST = 2,           /* The last packet in a message. A single packet message will only have a last packet. */
+            PTL_RC_SEND_LAST_IMM = 3,           /* The last packet in a message that contains immediate data. A single packet message will only have a last packet. */
+            PTL_RC_SEND_LAST_INV = 4,           /* The last packet in a message that contains an RKEY to be invalidated. A single packet message will only have a last packet. */
+               PTL_RC_LAST_ERROR = 5,           /* An in-flight message caused an error at the initiator as is terminating. This is used to terminate a SEND operation or an RDMA with Immediate operation. */
+                  PTL_RC_RDMA_WR = 8,           /* An RDMA packet. May be the first, middle, or last packet for a standard RDMA write. May be any packet other than the first or last packet for an RDMA write with immediate. */
+        PTL_RC_RDMA_WR_FIRST_IMM = 9,           /* The first packet in an RDMA Write with immediate. A message with a first packet must also have a last packet. */
+         PTL_RC_RDMA_WR_LAST_IMM = 10,          /* The last packet in an RDMA Write with immediate. A message with a last packet may be a single packet message, or may have a first packet and 0 or more RDMA_WR packets. */
+                  PTL_RC_RDMA_RD = 11,          /* An RDMA read request. An RDMA read request is generated for each packet of response that is needed. */
+            PTL_RC_RDMA_CMP_SWAP = 12,          /* A single packet, compare and swap operation */
+           PTL_RC_RDMA_FETCH_ADD = 13,          /* A single packet, fetch and add operation. */
+                PTL_RC_EXCEPTION = 16           /* An exception packet that is used for software to software control. This is a single packet message only. */
+};
+
+#else
+
+#define        PTL_RC_SEND_FIRST   0            /* The first packet in a multi-packet send. A message with a first packet must have a last packet. */
+#define       PTL_RC_SEND_MIDDLE   1            /* Any packets that are not the first or last packet in a multi packet message. A message with a middle packet must also have a first and last packet. */
+#define         PTL_RC_SEND_LAST   2            /* The last packet in a message. A single packet message will only have a last packet. */
+#define     PTL_RC_SEND_LAST_IMM   3            /* The last packet in a message that contains immediate data. A single packet message will only have a last packet. */
+#define     PTL_RC_SEND_LAST_INV   4            /* The last packet in a message that contains an RKEY to be invalidated. A single packet message will only have a last packet. */
+#define        PTL_RC_LAST_ERROR   5            /* An in-flight message caused an error at the initiator as is terminating. This is used to terminate a SEND operation or an RDMA with Immediate operation. */
+#define           PTL_RC_RDMA_WR   8            /* An RDMA packet. May be the first, middle, or last packet for a standard RDMA write. May be any packet other than the first or last packet for an RDMA write with immediate. */
+#define PTL_RC_RDMA_WR_FIRST_IMM   9            /* The first packet in an RDMA Write with immediate. A message with a first packet must also have a last packet. */
+#define  PTL_RC_RDMA_WR_LAST_IMM   10           /* The last packet in an RDMA Write with immediate. A message with a last packet may be a single packet message, or may have a first packet and 0 or more RDMA_WR packets. */
+#define           PTL_RC_RDMA_RD   11           /* An RDMA read request. An RDMA read request is generated for each packet of response that is needed. */
+#define     PTL_RC_RDMA_CMP_SWAP   12           /* A single packet, compare and swap operation */
+#define    PTL_RC_RDMA_FETCH_ADD   13           /* A single packet, fetch and add operation. */
+#define         PTL_RC_EXCEPTION   16            /* An exception packet that is used for software to software control. This is a single packet message only. */
+
+#endif
+
+
+/* Enumeration from Table titled: OPCODE Assignments for UD Requests (Enum - ptl_op_ud_t) - 5 bits
+*                        In File: 020_TOC
+*/
+#if defined(__STDC__)
+
+enum ptl_op_ud {
+             PTL_UD_SEND = 0,           /* UD Send for Verbs */
+         PTL_UD_SEND_IMM = 1,           /* UD Send with Immediate for Verbs */
+        PTL_UD_EXCEPTION = 2            /* An exception packet that is used for software to software control. This is a single packet message only. */
+};
+
+#else
+
+#define      PTL_UD_SEND   0            /* UD Send for Verbs */
+#define  PTL_UD_SEND_IMM   1            /* UD Send with Immediate for Verbs */
+#define PTL_UD_EXCEPTION   2             /* An exception packet that is used for software to software control. This is a single packet message only. */
+
+#endif
+
+
 /* Enumeration from Table titled: OPCODE Assignments for Portals Responses (Enum - ptl_op_response_t) - 5 bits
 *                        In File: 020_TOC
 */
 #if defined(__STDC__)
 
 enum ptl_op_response {
-                                 PTL_ACK = 0,           /* Normal Portals ACK */
+                                 PTL_ACK = 0,           /* Normal Portals ACKVerbs: Normal ACK */
                          PTL_ACK_REFUSED = 1,           /* Portals ACK was refused by the target process. The stateful response is needed to convey to the initiator side implementation that a PTL_EVENT_ACK should not be delivered for this operation. This allows the initiator to free resources that might be reserved for the purpose. PTL_ACK_REFUSED may be generated in cases where the message does not match any buffer at the target or in cases where the target has explicitly indicated that the buffer should not generate an ACK. */
                                PTL_REPLY = 2,           /* Normal Portals Reply */
                           PTL_REPLY_ECTS = 3,           /* A Portals reply to a PTL_REQ_GET_ECTS. These packets receive an acknowledgement, but do not retransmit and do not notify the target of an error. Errors are returned to the initiator, which notifies the target in the Event message.Note for posterity: this could have been stateless; however, implementation oriented decisions caused this to be set as stateful. */
                          PTL_SHORT_REPLY = 4,           /* Portals Reply (response to a Get/Swap/Fetching Atomic operation) with only enough information for an OC event. This enables a smaller packet format. */
-                        PTL_NACK_PTE_DIS = 5,           /* The Portals operation encountered a disabled PT Entry, or the operation caused a PT Entry to become disabled. This NACK frequently occurs as the result of a flow-control error. */
-                          PTL_NACK_PERMV = 6,           /* The Portals operation failed the permissions check at the target */
-                            PTL_NACK_OPV = 7,           /* The Portals operation specified an invalid operation (Put/Get) for the ME or LE it resolved to */
-                           PTL_NACK_SEGV = 8,           /* The Portals operation resolved to a virtual address that would have caused a segmentation fault. */
-                        PTL_NACK_INV_TGT = 9,           /* The Portals operation specified an invalid target PID or target PT Index. */
+                        PTL_NACK_PTE_DIS = 5,           /* The Portals operation encountered a disabled PT Entry, or the operation caused a PT Entry to become disabled. This NACK frequently occurs as the result of a flow-control error.Verbs: Flow control was invoked */
+                          PTL_NACK_PERMV = 6,           /* The Portals operation failed the permissions check at the targetVerbs: Permissions violation on the QP or RKey. */
+                            PTL_NACK_OPV = 7,           /* The Portals operation specified an invalid operation (Put/Get) for the ME or LE it resolved toVerbs: Illegal operation (Read/Write/Atomic) at the target. */
+                           PTL_NACK_SEGV = 8,           /* The Portals operation resolved to a virtual address that would have caused a segmentation fault.Verbs: Memory access encountered a segmentation fault. */
+                        PTL_NACK_INV_TGT = 9,           /* The Portals operation specified an invalid target PID or target PT Index. Verbs: Invalid QP or Invalid RKey at target */
                     PTL_NACK_UNSUPPORTED = 10,          /* Indicates that an unsupported operation was attempted. */
                   PTL_NACK_UNCORRECTABLE = 11,          /* Indicates that an uncorrectable error was detected after the E2E sequence number checks. Promoted from PTL_ACK, PTL_ACK_REFUSED, PTL_REPLY, or PTL_SHORT_REPLY. */
                         PTL_E2E_ONLY_ACK = 16,          /* Used for an E2E extended ACK format */
                PTL_E2E_ONLY_ACK_DISTANCE = 17,          /* A distance adjusting acknowledgment */
           PTL_E2E_ONLY_ACK_UNCORRECTABLE = 18,          /* Indicates that an uncorrectable error was detected after the E2E sequence number checks. Promoted from PTL_E2E_ONLY_ACK. Because this is not stateful, this is best effort delivery only and could be interpreted as a simple ack. */
-                   PTL_E2E_ONLY_NACK_OOS = 19,          /* A packet was received out-of-sequence. The most recently received sequence number is indicated in the ACK_PSN. */
+                   PTL_E2E_ONLY_NACK_OOS = 19,          /* A packet was received out-of-sequence. The next expected sequence number is indicated in the Expected PSN field. An echo of the request PSN is contained in ACK_PSN. */
                     PTL_E2E_ONLY_NACK_NC = 21,          /* A packet was received, but the local sequence table indicates that the nodes are not connected for this traffic class. The packet is not retransmitted and is treated as completed by the initiator (e.g. failed). This failure tears down the connection at the initiator. */
               PTL_E2E_ONLY_NACK_RESOURCE = 22,          /* A packet was received, but local reliability resource exhaustion (e.g. resources for handling out-of-order packets) prevented accepting it. */
                                  PTL_CTS = 24,          /* The initiator may send the data and does not need to include an event message after completing the data. */
                                 PTL_ECTS = 25,          /* The target was unable to allocate state to track completion for this message. The initiator must track completion and send and event message after all acknowledgments for the rendezvous operation have been received. */
-          PTL_E2E_ONLY_ACK_OPPORTUNISTIC = 26           /* Indictates that an tuple mistmatch was detected in the OTR, Results in an Opportunistic Ack being generated back to the target */
+          PTL_E2E_ONLY_ACK_OPPORTUNISTIC = 26           /* INTERNAL ONLY: This is a reserved opcode for a known internal HFI condition. It indicates that a tuple mismatch was detected in the end-to-end reliability logic and is used in internal loopback paths, This results in an Ack being generated back to the target opportunistically (specifically designed to prevent a known protocol deadlock case). */
 };
 
 #else
 
-#define                          PTL_ACK   0            /* Normal Portals ACK */
+#define                          PTL_ACK   0            /* Normal Portals ACKVerbs: Normal ACK */
 #define                  PTL_ACK_REFUSED   1            /* Portals ACK was refused by the target process. The stateful response is needed to convey to the initiator side implementation that a PTL_EVENT_ACK should not be delivered for this operation. This allows the initiator to free resources that might be reserved for the purpose. PTL_ACK_REFUSED may be generated in cases where the message does not match any buffer at the target or in cases where the target has explicitly indicated that the buffer should not generate an ACK. */
 #define                        PTL_REPLY   2            /* Normal Portals Reply */
 #define                   PTL_REPLY_ECTS   3            /* A Portals reply to a PTL_REQ_GET_ECTS. These packets receive an acknowledgement, but do not retransmit and do not notify the target of an error. Errors are returned to the initiator, which notifies the target in the Event message.Note for posterity: this could have been stateless; however, implementation oriented decisions caused this to be set as stateful. */
 #define                  PTL_SHORT_REPLY   4            /* Portals Reply (response to a Get/Swap/Fetching Atomic operation) with only enough information for an OC event. This enables a smaller packet format. */
-#define                 PTL_NACK_PTE_DIS   5            /* The Portals operation encountered a disabled PT Entry, or the operation caused a PT Entry to become disabled. This NACK frequently occurs as the result of a flow-control error. */
-#define                   PTL_NACK_PERMV   6            /* The Portals operation failed the permissions check at the target */
-#define                     PTL_NACK_OPV   7            /* The Portals operation specified an invalid operation (Put/Get) for the ME or LE it resolved to */
-#define                    PTL_NACK_SEGV   8            /* The Portals operation resolved to a virtual address that would have caused a segmentation fault. */
-#define                 PTL_NACK_INV_TGT   9            /* The Portals operation specified an invalid target PID or target PT Index. */
+#define                 PTL_NACK_PTE_DIS   5            /* The Portals operation encountered a disabled PT Entry, or the operation caused a PT Entry to become disabled. This NACK frequently occurs as the result of a flow-control error.Verbs: Flow control was invoked */
+#define                   PTL_NACK_PERMV   6            /* The Portals operation failed the permissions check at the targetVerbs: Permissions violation on the QP or RKey. */
+#define                     PTL_NACK_OPV   7            /* The Portals operation specified an invalid operation (Put/Get) for the ME or LE it resolved toVerbs: Illegal operation (Read/Write/Atomic) at the target. */
+#define                    PTL_NACK_SEGV   8            /* The Portals operation resolved to a virtual address that would have caused a segmentation fault.Verbs: Memory access encountered a segmentation fault. */
+#define                 PTL_NACK_INV_TGT   9            /* The Portals operation specified an invalid target PID or target PT Index. Verbs: Invalid QP or Invalid RKey at target */
 #define             PTL_NACK_UNSUPPORTED   10           /* Indicates that an unsupported operation was attempted. */
 #define           PTL_NACK_UNCORRECTABLE   11           /* Indicates that an uncorrectable error was detected after the E2E sequence number checks. Promoted from PTL_ACK, PTL_ACK_REFUSED, PTL_REPLY, or PTL_SHORT_REPLY. */
 #define                 PTL_E2E_ONLY_ACK   16           /* Used for an E2E extended ACK format */
 #define        PTL_E2E_ONLY_ACK_DISTANCE   17           /* A distance adjusting acknowledgment */
 #define   PTL_E2E_ONLY_ACK_UNCORRECTABLE   18           /* Indicates that an uncorrectable error was detected after the E2E sequence number checks. Promoted from PTL_E2E_ONLY_ACK. Because this is not stateful, this is best effort delivery only and could be interpreted as a simple ack. */
-#define            PTL_E2E_ONLY_NACK_OOS   19           /* A packet was received out-of-sequence. The most recently received sequence number is indicated in the ACK_PSN. */
+#define            PTL_E2E_ONLY_NACK_OOS   19           /* A packet was received out-of-sequence. The next expected sequence number is indicated in the Expected PSN field. An echo of the request PSN is contained in ACK_PSN. */
 #define             PTL_E2E_ONLY_NACK_NC   21           /* A packet was received, but the local sequence table indicates that the nodes are not connected for this traffic class. The packet is not retransmitted and is treated as completed by the initiator (e.g. failed). This failure tears down the connection at the initiator. */
 #define       PTL_E2E_ONLY_NACK_RESOURCE   22           /* A packet was received, but local reliability resource exhaustion (e.g. resources for handling out-of-order packets) prevented accepting it. */
 #define                          PTL_CTS   24           /* The initiator may send the data and does not need to include an event message after completing the data. */
 #define                         PTL_ECTS   25           /* The target was unable to allocate state to track completion for this message. The initiator must track completion and send and event message after all acknowledgments for the rendezvous operation have been received. */
-#define   PTL_E2E_ONLY_ACK_OPPORTUNISTIC   26            /* Indictates that an tuple mistmatch was detected in the OTR, Results in an Opportunistic Ack being generated back to the target */
+#define   PTL_E2E_ONLY_ACK_OPPORTUNISTIC   26            /* INTERNAL ONLY: This is a reserved opcode for a known internal HFI condition. It indicates that a tuple mismatch was detected in the end-to-end reliability logic and is used in internal loopback paths, This results in an Ack being generated back to the target opportunistically (specifically designed to prevent a known protocol deadlock case). */
 
 #endif
 
@@ -687,7 +757,7 @@ enum ptl_op_response {
 enum ptl_op_e2e_ctrl {
               PTL_SINGLE_CONNECT = 0,           /* Establish a new connection between nodes for a specific traffic class. Because only one connection request is allowed to be pending at one time, the endpoint may choose to make these messages ordered or unordered (based on the RC). */
               PTL_SINGLE_DESTROY = 1,           /* Remove an existing connection between a pair of nodes for a specific traffic class. Destroy messages are one-way, fire and forget operations. Because only one connection request is allowed to be pending at one time, the endpoint may choose to make these messages ordered or unordered (based on the RC). */
-                  PTL_E2E_FILLER = 2,           /* Replaces a deleted packet to maintain the sequence number space. PSN field is used to update the ordered or unordered sequence number space based on the routing code - just as it is with a standard packet.PTL_E2E_FILLER packets must inherit the RC (and, hence, ordering constraints) from the packet they replace. */
+                  PTL_E2E_FILLER = 2,           /* Replaces a deleted packet to maintain the sequence number space. PSN field is used to update the ordered or unordered sequence number space based on the routing code - just as it is with a standard packet.PTL_E2E_FILLER packets must inherit the RC (and, hence, ordering constraints) from the packet they replace.PTL_E2E_FILLER packets may also be used at any time the initiator needs to advance the sequence number space or to cause an E2E Ack of a previously sent packet. */
                    PTL_E2E_ESTAB = 3,           /* A new connection has been established (or re-established) using the sequence numbers included. These messages are unordered. */
                     PTL_E2E_NACK = 4,           /* The new connection establishment failed (e.g. was out of range for the DLID or TC, encountered an uncorrectable error, etc). A PTL_E2E_STATUS_REQ may also receive a PTL_E2E_NACK if the nodes are not connected. This would also be generated in response to E2E requests if the node was not booted. These messages are unordered. */
               PTL_E2E_STATUS_REQ = 5,           /* Requests the current status of the target (receive) side of the connection for a given <SLID, DLID, TC> tuple. Generates a PTL_E2E_STATUS_RESP. Because the usage model for these messages is likely to be unresolved corner cases, the endpoint is allowed to set the RC to choose ordered or unordered operation. */
@@ -723,7 +793,7 @@ enum ptl_op_e2e_ctrl {
 
 #define       PTL_SINGLE_CONNECT   0            /* Establish a new connection between nodes for a specific traffic class. Because only one connection request is allowed to be pending at one time, the endpoint may choose to make these messages ordered or unordered (based on the RC). */
 #define       PTL_SINGLE_DESTROY   1            /* Remove an existing connection between a pair of nodes for a specific traffic class. Destroy messages are one-way, fire and forget operations. Because only one connection request is allowed to be pending at one time, the endpoint may choose to make these messages ordered or unordered (based on the RC). */
-#define           PTL_E2E_FILLER   2            /* Replaces a deleted packet to maintain the sequence number space. PSN field is used to update the ordered or unordered sequence number space based on the routing code - just as it is with a standard packet.PTL_E2E_FILLER packets must inherit the RC (and, hence, ordering constraints) from the packet they replace. */
+#define           PTL_E2E_FILLER   2            /* Replaces a deleted packet to maintain the sequence number space. PSN field is used to update the ordered or unordered sequence number space based on the routing code - just as it is with a standard packet.PTL_E2E_FILLER packets must inherit the RC (and, hence, ordering constraints) from the packet they replace.PTL_E2E_FILLER packets may also be used at any time the initiator needs to advance the sequence number space or to cause an E2E Ack of a previously sent packet. */
 #define            PTL_E2E_ESTAB   3            /* A new connection has been established (or re-established) using the sequence numbers included. These messages are unordered. */
 #define             PTL_E2E_NACK   4            /* The new connection establishment failed (e.g. was out of range for the DLID or TC, encountered an uncorrectable error, etc). A PTL_E2E_STATUS_REQ may also receive a PTL_E2E_NACK if the nodes are not connected. This would also be generated in response to E2E requests if the node was not booted. These messages are unordered. */
 #define       PTL_E2E_STATUS_REQ   5            /* Requests the current status of the target (receive) side of the connection for a given <SLID, DLID, TC> tuple. Generates a PTL_E2E_STATUS_RESP. Because the usage model for these messages is likely to be unresolved corner cases, the endpoint is allowed to set the RC to choose ordered or unordered operation. */
@@ -950,7 +1020,7 @@ enum ptl_datatype {
 
 enum ptl_status {
                       PTL_MSG_OK = 0,           /* The operation completed successfully */
-           PTL_MSG_UNCORRECTABLE = 1,           /* An uncorrectable error was encountered for this message. The connection may not be in a known state. */
+           PTL_MSG_UNCORRECTABLE = 1,           /* An uncorrectable error was encountered for this message. The connection may not be in a known state. This includes cases where the original packets may have timed out. */
               PTL_MSG_TERMINATED = 2,           /* The message was terminated in a controlled manner. This can include things such as tear down operations. */
                     PTL_MSG_SEGV = 3            /* A segmentation fault was encountered during the processing of the message. */
 };
@@ -958,7 +1028,7 @@ enum ptl_status {
 #else
 
 #define               PTL_MSG_OK   0            /* The operation completed successfully */
-#define    PTL_MSG_UNCORRECTABLE   1            /* An uncorrectable error was encountered for this message. The connection may not be in a known state. */
+#define    PTL_MSG_UNCORRECTABLE   1            /* An uncorrectable error was encountered for this message. The connection may not be in a known state. This includes cases where the original packets may have timed out. */
 #define       PTL_MSG_TERMINATED   2            /* The message was terminated in a controlled manner. This can include things such as tear down operations. */
 #define             PTL_MSG_SEGV   3             /* A segmentation fault was encountered during the processing of the message. */
 
@@ -975,11 +1045,13 @@ enum tx_ctype {
              RDV_REQUEST = 1,           /* Portals Basic Rendezvous Request (Put/Atomic/Get) */
                RDV_EVENT = 2,           /* Portals Basic Rendezvous Event */
                 E2E_CTRL = 3,           /* Portals E2E Control */
+                 VoNP_RC = 5,           /* Verbs over Native Protocol for reliable connections */
            NonPortalsMsg = 6,           /* Generate one of the non-Portals message types (some variants are privileged) */
             LocalCommand = 7,           /* Issue a command to the local HFI, including state modification and connection state control. The Local Command type uses the non_portals_cmd_t encoding for local commands. */
                  REQUEST = 8,           /* Portals Basic Request (Put/Atomic/Get) */
         FETCHING_REQUEST = 9,           /* Portals Fetching Request (FetchAtomic/Two Operand Atomics) */
                 Response = 10,          /* Portals Reply / Portal Full ACK */
+                      UD = 11,          /* Unreliable Datagrams (will cover all future unreliable datagrams) */
               BASIC_ACK0 = 12,          /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=00b */
               BASIC_ACK1 = 13,          /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=01b */
               BASIC_ACK2 = 14,          /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=10b */
@@ -992,11 +1064,13 @@ enum tx_ctype {
 #define      RDV_REQUEST   1            /* Portals Basic Rendezvous Request (Put/Atomic/Get) */
 #define        RDV_EVENT   2            /* Portals Basic Rendezvous Event */
 #define         E2E_CTRL   3            /* Portals E2E Control */
+#define          VoNP_RC   5            /* Verbs over Native Protocol for reliable connections */
 #define    NonPortalsMsg   6            /* Generate one of the non-Portals message types (some variants are privileged) */
 #define     LocalCommand   7            /* Issue a command to the local HFI, including state modification and connection state control. The Local Command type uses the non_portals_cmd_t encoding for local commands. */
 #define          REQUEST   8            /* Portals Basic Request (Put/Atomic/Get) */
 #define FETCHING_REQUEST   9            /* Portals Fetching Request (FetchAtomic/Two Operand Atomics) */
 #define         Response   10           /* Portals Reply / Portal Full ACK */
+#define               UD   11           /* Unreliable Datagrams (will cover all future unreliable datagrams) */
 #define       BASIC_ACK0   12           /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=00b */
 #define       BASIC_ACK1   13           /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=01b */
 #define       BASIC_ACK2   14           /* Portals E2E Basic ACK, pkt_hdr_id[15:14]=10b */
@@ -1143,6 +1217,50 @@ enum flag {
 #endif
 
 
+/* Enumeration from Table titled: Verbs NACK Reason Codes (Enum - nack_reason_t) - 6 bits
+*                        In File: 020_TOC
+*/
+#if defined(__STDC__)
+
+enum nack_reason {
+                VERBS_OK = 0,           /* No Error. */
+            FLOW_CONTROL = 1,           /* Flow control was encountered. PTE is disabled. */
+              INVALID_QP = 2,           /* QP encountered was invalid */
+            INVALID_RKEY = 3,           /* RKEY was invalid */
+             PERMISSIONS = 4,           /* Permissions were denied on the receive queue or RKey */
+                     OPV = 5,           /* Disallowed operation attempted at target */
+                    SEGV = 6,           /* Memory access encountered a segmentation fault */
+             UNSUPPORTED = 7,           /* Unsupported operation attempted */
+           UNCORRECTABLE = 8,           /* Uncorrectable error encountered */
+               TOO_SHORT = 9,           /* The target receive queue entry was too short for the message. */
+         INITIATOR_ERROR = 10,          /* Initiator encountered an error and sent PTL_RC_LAST_ERROR */
+        INV_INVALID_RKEY = 11,          /* A send with invalidate was received for an invalid RKEY */
+                 EQ_FULL = 12,          /* The EQ was full when it was time to post an event. */
+               MR_IN_USE = 13,          /* This will not be stored in QP state. It is used for local signaling only. */
+          QP_PERMISSIONS = 14           /* This will not be stored in the QP state. It is used for local signaling only. */
+};
+
+#else
+
+#define         VERBS_OK   0            /* No Error. */
+#define     FLOW_CONTROL   1            /* Flow control was encountered. PTE is disabled. */
+#define       INVALID_QP   2            /* QP encountered was invalid */
+#define     INVALID_RKEY   3            /* RKEY was invalid */
+#define      PERMISSIONS   4            /* Permissions were denied on the receive queue or RKey */
+#define              OPV   5            /* Disallowed operation attempted at target */
+#define             SEGV   6            /* Memory access encountered a segmentation fault */
+#define      UNSUPPORTED   7            /* Unsupported operation attempted */
+#define    UNCORRECTABLE   8            /* Uncorrectable error encountered */
+#define        TOO_SHORT   9            /* The target receive queue entry was too short for the message. */
+#define  INITIATOR_ERROR   10           /* Initiator encountered an error and sent PTL_RC_LAST_ERROR */
+#define INV_INVALID_RKEY   11           /* A send with invalidate was received for an invalid RKEY */
+#define          EQ_FULL   12           /* The EQ was full when it was time to post an event. */
+#define        MR_IN_USE   13           /* This will not be stored in QP state. It is used for local signaling only. */
+#define   QP_PERMISSIONS   14            /* This will not be stored in the QP state. It is used for local signaling only. */
+
+#endif
+
+
 /* Enumeration from Table titled: Receive CQ Command (Enum - rx_cq_cmd_t) - 12 bits
 *                        In File: 020_TOC
 */
@@ -1167,14 +1285,21 @@ enum rx_cq_cmd {
                      ENTRY_WRITE = 70,          /* Write a 'backward compatibility' ME/LE entry. */
                     REFCOUNT_DEC = 71,          /* Decrement the ME/LE refcount as the result of a reply to a Get completing. NB: This is an internal command that will only be issued by the OTR logic. */
                       ENTRY_READ = 72,          /* Generate an event containing the contents of the ME. The event can store the next/previous and 56 bytes of the ME as shown in the entry read event format. */
-                      SCRUB_PEER = 73,          /* Invoke scrubbing of the peer identified by INITIATOR_ID and USER_ID in the context of the PID indicated by CMD_PID. This enables software to start a specific clean-up of resources related to that peer. Tracking entries associated with that peer are eliminated and refcounts are decremented appropriately.Wildcard options can be used when specifying both the INITIATOR_ID and USER_ID selection criteria. */
+                      SCRUB_PEER = 73,          /* Invoke scrubbing of the peer identified by INITIATOR_ID and USER_ID in the context of the PID (CMD_PID), PTL_IDX, and NI indicated in the command. This enables software to start a specific clean-up of resources related to that peer. Rendezvous tracking entries associated with that peer are eliminated and refcounts are decremented appropriately. Entries that would have delivered an event on completion deliver that event.Wildcard options can be used when specifying both the INITIATOR_ID and USER_ID selection criteria.When SCRUB_PEER has delivered all of the events associated with terminated messages, it delivers a PTL_CMD_COMPLETE (if requested) */
+                      RECVQ_INIT = 74,          /* Initialize a receive queue. Set the next and previous pointers to invalid. Set other fields to match items in command (to keep it consistent and provide flexibility). Do not perform a PTE lookup. The ME handle of the receive queue is placed in the lower 16 bits of the min free field. This is illustrated in Figure 19-36. */
+                    RECVQ_APPEND = 75,          /* Add an entry to the receive queue. Command PID is the PID for the receive queue. ME Handle contains the new ME handle to use. The ME handle of the receive queue is placed in the lower 16 bits of the min free field. This is illustrated in Figure 19-36. */
+                        QP_WRITE = 76,          /* Write to the queue pair state of a queue pair. */
+                    RECVQ_UNLINK = 77,          /* Remove first unused entry from the receive queue. Command PID is the PID for the receive queue. The ME Handle of the receive queue is placed in the lower 16 bits of the min free field. This is illustrated in Figure 19-36.Completion of the RECVQ_UNLINK generates a PTL_CMD_COMPLETE event. In addition to the typical command complete event fields, it places the USER_PTR from the ME that is unlinked into the space typically used by HDR_DATA. The ptl_ni_fail_t in the event will be set to PTL_NI_CANCELLED. */
+                      RKEY_WRITE = 78,          /* Write to an RKey location in unexpected header (UH) space. The MEHandle becomes the handle into UH space. This semantically matches an ENTRY_WRITE, except that it writes to UH space and is privileged. */
+                       RKEY_FREE = 79,          /* Set the F (Free) bit in a Memory Region / Memory Window. Generate a command complete. if the ref count is 0, use a success encoding. If not, use the 'RKEY INVALID' failure coding. */
                 TRIGGERED_APPEND = 80,          /* Insert a triggered operation into the list. This command will cause hardware to insert a Triggered Operation in the proper position in the list, according to the threshold. Hardware will walk the list until the correct position is found, so this command will perform slowly if many entries must be walked. For commands that have the same threshold, the insert will occur after all commands with the same threshold. */
              ORDERED_TRIG_APPEND = 81,          /* Append a triggered operation to the end of the list. This command variant must have a threshold greater than or equal to the last item in the list in order to maintain an ordered list. Hardware will not enforce list ordering for this command, so it is left to software to ensure the list remains ordered when using this command. */
                TRIGGERED_DISABLE = 82,          /* Remove all triggered ops pending on a CT. The logic will clear the PT (pending triggered) bit in the CT so that any triggered ops hanging from it are unlinked. The triggered ops themselves become orphaned (still valid but not linked to any CT). Other fields are unmodified/uninitialized until PT transitions from 0 to 1 via a new TO append, so the old threshold and head/tail pointers are preserved. The head/tail pointers could potentially be used to reclaim the orphaned TOs; however, this is probably better handled through the existing garbage collecting scheme. */
                           CT_SET = 96,          /* Set the value of a counting event (needed to insure that the Triggered Operation Unit gets a copy of the update) using the low 16 bytes of the write command. Only changes the success and failure counts. Masks do not exist for this command format. */
-                  CT_INC_SUCCESS = 97,          /* Increment the value of the success field of a counting event by a specified amount (needed to insure that the Triggered Operation Unit gets a copy of the update). The mask is not applied to this operation, since it implies increment semantics. The low 8 bytes of the command are used for the increment value. Software may increment by a negative value by placing a signed 64 bit integer in this field. */
-                  CT_INC_FAILURE = 98,          /* Increment the value of the failure field of a counting event by a specified amount (needed to insure that the Triggered Operation Unit gets a copy of the update). The mask is not applied to this operation, since it implies increment semantics. Bytes 8 to 15 of the command are used for the increment value. Software may increment by a negative value by placing a signed 64 bit integer in this field. */
+                  CT_INC_SUCCESS = 97,          /* Increment the value of the success field of a counting event by a specified amount (needed to insure that the Triggered Operation Unit gets a copy of the update). The mask is not applied to this operation, since it implies increment semantics. The low 8 bytes of the command are used for the increment value. Software may increment by a negative value by placing a signed 64 bit integer in this field. Strictly speaking, this relies on two's complement formats that are not required by C. Instead, software should view this as 'increment by a large number and cause wrap-around'. For example, increment by INT_MAX should be the same as 'subtract 1'. */
+                  CT_INC_FAILURE = 98,          /* Increment the value of the failure field of a counting event by a specified amount (needed to insure that the Triggered Operation Unit gets a copy of the update). The mask is not applied to this operation, since it implies increment semantics. Bytes 8 to 15 of the command are used for the increment value. Software may increment by a negative value by placing a signed 64 bit integer in this field. Strictly speaking, this relies on two's complement formats that are not required by C. Instead, software should view this as 'increment by a large number and cause wrap-around'. For example, increment by INT_MAX should be the same as 'subtract 1'. */
                 CT_SET_THRESHOLD = 99,          /* Sets the threshold associated with the CT using the low 8 bytes of the write command. Does not impact the success or failure count. The success and threshold field are evaluated to determine if the triggering logic should be invoked. */
+                       CT_UPDATE = 100,         /* Update the top two bytes of the counting event under mask. The fields in this range are V, I, NI, and IRQ (see Figure 19-53). The lower two bytes of the mask/payload in the command are used. */
                       PD_CLEANUP = 128,         /* Cleanup state for a given PD instance. */
                     PD_DO_STUFF1 = 129,         /* Reserved opcode with unique firmware entry point to enable future hardware/software interaction expansion. Yes, this is the CYA opcode. */
                     PD_DO_STUFF2 = 130,         /* Reserved opcode with unique firmware entry point to enable future hardware/software interaction expansion. Yes, this is the CYA opcode. */
@@ -1205,14 +1330,21 @@ enum rx_cq_cmd {
 #define              ENTRY_WRITE   70           /* Write a 'backward compatibility' ME/LE entry. */
 #define             REFCOUNT_DEC   71           /* Decrement the ME/LE refcount as the result of a reply to a Get completing. NB: This is an internal command that will only be issued by the OTR logic. */
 #define               ENTRY_READ   72           /* Generate an event containing the contents of the ME. The event can store the next/previous and 56 bytes of the ME as shown in the entry read event format. */
-#define               SCRUB_PEER   73           /* Invoke scrubbing of the peer identified by INITIATOR_ID and USER_ID in the context of the PID indicated by CMD_PID. This enables software to start a specific clean-up of resources related to that peer. Tracking entries associated with that peer are eliminated and refcounts are decremented appropriately.Wildcard options can be used when specifying both the INITIATOR_ID and USER_ID selection criteria. */
+#define               SCRUB_PEER   73           /* Invoke scrubbing of the peer identified by INITIATOR_ID and USER_ID in the context of the PID (CMD_PID), PTL_IDX, and NI indicated in the command. This enables software to start a specific clean-up of resources related to that peer. Rendezvous tracking entries associated with that peer are eliminated and refcounts are decremented appropriately. Entries that would have delivered an event on completion deliver that event.Wildcard options can be used when specifying both the INITIATOR_ID and USER_ID selection criteria.When SCRUB_PEER has delivered all of the events associated with terminated messages, it delivers a PTL_CMD_COMPLETE (if requested) */
+#define               RECVQ_INIT   74           /* Initialize a receive queue. Set the next and previous pointers to invalid. Set other fields to match items in command (to keep it consistent and provide flexibility). Do not perform a PTE lookup. The ME handle of the receive queue is placed in the lower 16 bits of the min free field. This is illustrated in Figure 19-36. */
+#define             RECVQ_APPEND   75           /* Add an entry to the receive queue. Command PID is the PID for the receive queue. ME Handle contains the new ME handle to use. The ME handle of the receive queue is placed in the lower 16 bits of the min free field. This is illustrated in Figure 19-36. */
+#define                 QP_WRITE   76           /* Write to the queue pair state of a queue pair. */
+#define             RECVQ_UNLINK   77           /* Remove first unused entry from the receive queue. Command PID is the PID for the receive queue. The ME Handle of the receive queue is placed in the lower 16 bits of the min free field. This is illustrated in Figure 19-36.Completion of the RECVQ_UNLINK generates a PTL_CMD_COMPLETE event. In addition to the typical command complete event fields, it places the USER_PTR from the ME that is unlinked into the space typically used by HDR_DATA. The ptl_ni_fail_t in the event will be set to PTL_NI_CANCELLED. */
+#define               RKEY_WRITE   78           /* Write to an RKey location in unexpected header (UH) space. The MEHandle becomes the handle into UH space. This semantically matches an ENTRY_WRITE, except that it writes to UH space and is privileged. */
+#define                RKEY_FREE   79           /* Set the F (Free) bit in a Memory Region / Memory Window. Generate a command complete. if the ref count is 0, use a success encoding. If not, use the 'RKEY INVALID' failure coding. */
 #define         TRIGGERED_APPEND   80           /* Insert a triggered operation into the list. This command will cause hardware to insert a Triggered Operation in the proper position in the list, according to the threshold. Hardware will walk the list until the correct position is found, so this command will perform slowly if many entries must be walked. For commands that have the same threshold, the insert will occur after all commands with the same threshold. */
 #define      ORDERED_TRIG_APPEND   81           /* Append a triggered operation to the end of the list. This command variant must have a threshold greater than or equal to the last item in the list in order to maintain an ordered list. Hardware will not enforce list ordering for this command, so it is left to software to ensure the list remains ordered when using this command. */
 #define        TRIGGERED_DISABLE   82           /* Remove all triggered ops pending on a CT. The logic will clear the PT (pending triggered) bit in the CT so that any triggered ops hanging from it are unlinked. The triggered ops themselves become orphaned (still valid but not linked to any CT). Other fields are unmodified/uninitialized until PT transitions from 0 to 1 via a new TO append, so the old threshold and head/tail pointers are preserved. The head/tail pointers could potentially be used to reclaim the orphaned TOs; however, this is probably better handled through the existing garbage collecting scheme. */
 #define                   CT_SET   96           /* Set the value of a counting event (needed to insure that the Triggered Operation Unit gets a copy of the update) using the low 16 bytes of the write command. Only changes the success and failure counts. Masks do not exist for this command format. */
-#define           CT_INC_SUCCESS   97           /* Increment the value of the success field of a counting event by a specified amount (needed to insure that the Triggered Operation Unit gets a copy of the update). The mask is not applied to this operation, since it implies increment semantics. The low 8 bytes of the command are used for the increment value. Software may increment by a negative value by placing a signed 64 bit integer in this field. */
-#define           CT_INC_FAILURE   98           /* Increment the value of the failure field of a counting event by a specified amount (needed to insure that the Triggered Operation Unit gets a copy of the update). The mask is not applied to this operation, since it implies increment semantics. Bytes 8 to 15 of the command are used for the increment value. Software may increment by a negative value by placing a signed 64 bit integer in this field. */
+#define           CT_INC_SUCCESS   97           /* Increment the value of the success field of a counting event by a specified amount (needed to insure that the Triggered Operation Unit gets a copy of the update). The mask is not applied to this operation, since it implies increment semantics. The low 8 bytes of the command are used for the increment value. Software may increment by a negative value by placing a signed 64 bit integer in this field. Strictly speaking, this relies on two's complement formats that are not required by C. Instead, software should view this as 'increment by a large number and cause wrap-around'. For example, increment by INT_MAX should be the same as 'subtract 1'. */
+#define           CT_INC_FAILURE   98           /* Increment the value of the failure field of a counting event by a specified amount (needed to insure that the Triggered Operation Unit gets a copy of the update). The mask is not applied to this operation, since it implies increment semantics. Bytes 8 to 15 of the command are used for the increment value. Software may increment by a negative value by placing a signed 64 bit integer in this field. Strictly speaking, this relies on two's complement formats that are not required by C. Instead, software should view this as 'increment by a large number and cause wrap-around'. For example, increment by INT_MAX should be the same as 'subtract 1'. */
 #define         CT_SET_THRESHOLD   99           /* Sets the threshold associated with the CT using the low 8 bytes of the write command. Does not impact the success or failure count. The success and threshold field are evaluated to determine if the triggering logic should be invoked. */
+#define                CT_UPDATE   100          /* Update the top two bytes of the counting event under mask. The fields in this range are V, I, NI, and IRQ (see Figure 19-53). The lower two bytes of the mask/payload in the command are used. */
 #define               PD_CLEANUP   128          /* Cleanup state for a given PD instance. */
 #define             PD_DO_STUFF1   129          /* Reserved opcode with unique firmware entry point to enable future hardware/software interaction expansion. Yes, this is the CYA opcode. */
 #define             PD_DO_STUFF2   130          /* Reserved opcode with unique firmware entry point to enable future hardware/software interaction expansion. Yes, this is the CYA opcode. */
@@ -1280,10 +1412,10 @@ enum ptl_event_kind {
                                            PTL_EVENT_ACK = 32,          /* An acknowledgment was received. This event is logged when the acknowledgment is received. Receipt of a PTL_EVENT_ACK indicates remote completion of the operation. Remote completion indicates that local completion has also occurred. */
                                       PTL_EVENT_SEND_ACK = 33,          /* A combined PTL_EVENT_SEND and PTL_EVENT_ACK */
                                          PTL_EVENT_ERROR = 34,          /* An error occurred that is not specified or cannot return all of the required fields in a valid error type. PTL_EVENT_ERROR is intended to be used in cases where unspecified errors may e deductible and recoverable by the application. For example, file systems may be able to recover from errors that cannot be fully described by the Portals implementation. */
-                                        PTL_CMD_COMPLETE = 35,          /* A command that was issue to the HFI has completed. PTL_CMD_COMPLETE always posts onto EQ=0 for NI=0 regardless of which NI it was issued on. */
-                             PTL_EVENT_INITIATOR_CONNECT = 36,          /* A connection has been completed. This event can be delivered at the initiator using the simplified event format (Figure 19-53), where only the event type, fail type, PTL_IDX (containing the Protocol Version requested) and user pointer are valid. This event is delivered to the EQ and NI specified in the command that initiated the connection. */
-                                PTL_EVENT_TARGET_CONNECT = 37,          /* A connection has been completed. This event can be delivered at the target using the target event format (Figure 19-52), where only the event type, port, fail type, LID field of the initiator and user pointer are valid. The TC is placed in the lower order bits of the user pointer. These events are hard-coded to go to EQ=0 / NI=NONMATCHING_LOGICAL */
-                                    PTL_EVENT_DISCONNECT = 38,          /* A disconnection has been completed. This event can be delivered at the target using the target event format (Figure 19-52), where only the event type, fail type, LID field of the initiator and user pointer are valid. The TC is placed in the lower order bits of the user pointer. */
+                                        PTL_CMD_COMPLETE = 35,          /* A command that was issue to the HFI has completed. PTL_CMD_COMPLETE always posts onto EQ=0 for NI=0 regardless of which NI it was issued on. This event can be delivered at the target using the simplified event format (Figure 19-57), where only the event type, fail type, PTL_IDX and user pointer are valid. */
+                             PTL_EVENT_INITIATOR_CONNECT = 36,          /* A connection has been completed. This event can be delivered at the initiator using the simplified event format (Figure 19-57), where only the event type, fail type, PTL_IDX (containing the Protocol Version requested) and user pointer are valid. This event is delivered to the EQ and NI specified in the command that initiated the connection. */
+                                PTL_EVENT_TARGET_CONNECT = 37,          /* A connection has been completed. This event can be delivered at the target using the target event format (Figure 19-56), where only the event type, port, fail type, LID field of the initiator and user pointer are valid. The TC is placed in the lower order bits of the user pointer. These events are hard-coded to go to EQ=0 / NI=NONMATCHING_LOGICAL */
+                                    PTL_EVENT_DISCONNECT = 38,          /* A disconnection has been completed. This event can be delivered at the target using the target event format (Figure 19-56), where only the event type, fail type, LID field of the initiator and user pointer are valid. The TC is placed in the lower order bits of the user pointer. */
                                        PTL_EVENT_PT_READ = 39,          /* An event containing the Portal Table Entry being read. */
                                        PTL_EVENT_ME_READ = 40,          /* An event containing the ME that is being read */
                                   NON_PTL_EVENT_RX_TYPE0 = 48,          /* WFR Compatible RcvType0 */
@@ -1294,7 +1426,8 @@ enum ptl_event_kind {
                                   NON_PTL_EVENT_RX_TYPE5 = 53,          /* WFR Compatible RcvType5 */
                                   NON_PTL_EVENT_RX_TYPE6 = 54,          /* WFR Compatible RcvType6 */
                                   NON_PTL_EVENT_RX_TYPE7 = 55,          /* WFR Compatible RcvType7 */
-                          NON_PTL_EVENT_RX_INACTIVE_FLOW = 56,          /* Received a backward compatibility expected packet to an inactive flow. The payload was suppressed. */
+                                  NON_PTL_EVENT_VERBS_RX = 56,          /* Verbs receive side completion */
+                                  NON_PTL_EVENT_VERBS_TX = 62,          /* Verbs transmit side completion */
                                NON_PTL_EVENT_TX_COMPLETE = 63           /* Completion of a Non Portals transmit DMA operation. */
 };
 
@@ -1331,10 +1464,10 @@ enum ptl_event_kind {
 #define                                    PTL_EVENT_ACK   32           /* An acknowledgment was received. This event is logged when the acknowledgment is received. Receipt of a PTL_EVENT_ACK indicates remote completion of the operation. Remote completion indicates that local completion has also occurred. */
 #define                               PTL_EVENT_SEND_ACK   33           /* A combined PTL_EVENT_SEND and PTL_EVENT_ACK */
 #define                                  PTL_EVENT_ERROR   34           /* An error occurred that is not specified or cannot return all of the required fields in a valid error type. PTL_EVENT_ERROR is intended to be used in cases where unspecified errors may e deductible and recoverable by the application. For example, file systems may be able to recover from errors that cannot be fully described by the Portals implementation. */
-#define                                 PTL_CMD_COMPLETE   35           /* A command that was issue to the HFI has completed. PTL_CMD_COMPLETE always posts onto EQ=0 for NI=0 regardless of which NI it was issued on. */
-#define                      PTL_EVENT_INITIATOR_CONNECT   36           /* A connection has been completed. This event can be delivered at the initiator using the simplified event format (Figure 19-53), where only the event type, fail type, PTL_IDX (containing the Protocol Version requested) and user pointer are valid. This event is delivered to the EQ and NI specified in the command that initiated the connection. */
-#define                         PTL_EVENT_TARGET_CONNECT   37           /* A connection has been completed. This event can be delivered at the target using the target event format (Figure 19-52), where only the event type, port, fail type, LID field of the initiator and user pointer are valid. The TC is placed in the lower order bits of the user pointer. These events are hard-coded to go to EQ=0 / NI=NONMATCHING_LOGICAL */
-#define                             PTL_EVENT_DISCONNECT   38           /* A disconnection has been completed. This event can be delivered at the target using the target event format (Figure 19-52), where only the event type, fail type, LID field of the initiator and user pointer are valid. The TC is placed in the lower order bits of the user pointer. */
+#define                                 PTL_CMD_COMPLETE   35           /* A command that was issue to the HFI has completed. PTL_CMD_COMPLETE always posts onto EQ=0 for NI=0 regardless of which NI it was issued on. This event can be delivered at the target using the simplified event format (Figure 19-57), where only the event type, fail type, PTL_IDX and user pointer are valid. */
+#define                      PTL_EVENT_INITIATOR_CONNECT   36           /* A connection has been completed. This event can be delivered at the initiator using the simplified event format (Figure 19-57), where only the event type, fail type, PTL_IDX (containing the Protocol Version requested) and user pointer are valid. This event is delivered to the EQ and NI specified in the command that initiated the connection. */
+#define                         PTL_EVENT_TARGET_CONNECT   37           /* A connection has been completed. This event can be delivered at the target using the target event format (Figure 19-56), where only the event type, port, fail type, LID field of the initiator and user pointer are valid. The TC is placed in the lower order bits of the user pointer. These events are hard-coded to go to EQ=0 / NI=NONMATCHING_LOGICAL */
+#define                             PTL_EVENT_DISCONNECT   38           /* A disconnection has been completed. This event can be delivered at the target using the target event format (Figure 19-56), where only the event type, fail type, LID field of the initiator and user pointer are valid. The TC is placed in the lower order bits of the user pointer. */
 #define                                PTL_EVENT_PT_READ   39           /* An event containing the Portal Table Entry being read. */
 #define                                PTL_EVENT_ME_READ   40           /* An event containing the ME that is being read */
 #define                           NON_PTL_EVENT_RX_TYPE0   48           /* WFR Compatible RcvType0 */
@@ -1345,7 +1478,8 @@ enum ptl_event_kind {
 #define                           NON_PTL_EVENT_RX_TYPE5   53           /* WFR Compatible RcvType5 */
 #define                           NON_PTL_EVENT_RX_TYPE6   54           /* WFR Compatible RcvType6 */
 #define                           NON_PTL_EVENT_RX_TYPE7   55           /* WFR Compatible RcvType7 */
-#define                   NON_PTL_EVENT_RX_INACTIVE_FLOW   56           /* Received a backward compatibility expected packet to an inactive flow. The payload was suppressed. */
+#define                           NON_PTL_EVENT_VERBS_RX   56           /* Verbs receive side completion */
+#define                           NON_PTL_EVENT_VERBS_TX   62           /* Verbs transmit side completion */
 #define                        NON_PTL_EVENT_TX_COMPLETE   63            /* Completion of a Non Portals transmit DMA operation. */
 
 #endif
@@ -1366,13 +1500,14 @@ enum ptl_ni_fail {
               PTL_NI_PT_DISABLED = 9,           /* Indicates that the portal table entry at the target was disabled and did not process the operation, either because the entry was disabled with PtlPTDisable() or because the entry provides flow control and a resource has been exhausted. This failure type should only be returned on initiator events. */
            PTL_NI_PERM_VIOLATION = 10,          /* Indicates that the remote Portals addressing has indicated a permissions violation for the operation that caused this event. This failure type should only be returned on initiator events. */
              PTL_NI_OP_VIOLATION = 11,          /* Indicates that the remote Portals addressing has indicated an operation violation for the operation that caused this event. This failure type should only be returned on initiator events. */
-                     PTL_NI_SEGV = 12,          /* Indicates that the message associated with this full event failed because it would have caused a segmentation fault (address translation failure). There are some situations where a segmentation fault happens for operations related to a message, but the failureor the failure reason is not known by the time the event is generated. See Table 19-136 for details on how segmentation faults at different stages of the protocol are reported. */
+                     PTL_NI_SEGV = 12,          /* Indicates that the message associated with this full event failed because it would have caused a segmentation fault (address translation failure). There are some situations where a segmentation fault happens for operations related to a message, but the failureor the failure reason is not known by the time the event is generated. See Table 19-145 for details on how segmentation faults at different stages of the protocol are reported. */
                  PTL_NI_NO_MATCH = 13,          /* On a PTL_EVENT_SEARCH, this indicates that a match was not found. This is only generated when querying local list state. */
                 PTL_NI_CANCELLED = 14,          /* Indicates that the event is the result of canceling a message. This failure type should only be returned on initiator events. */
               PTL_NI_UNSUPPORTED = 15,          /* An unsupported operation was attempted. This is delivered at the initiator when a PTL_NACK_UNSUPPORTED is received or an unsupported operation is detected locally and prevented. As an example, a Put with IOVEC or an MEAppend with IOVEC could have a pointer to the IOVEC that is not aligned. */
               PTL_NI_ACK_REFUSED = 16,          /* Failure type provided when OTR is configured to enable events after a PTL_ACK_REFUSED. This failure type should only be returned on initiator events. */
            PTL_NI_CONNECT_FAILED = 17,          /* A connection attempt failed. Only the initiator indicates a connection failure. */
-              PTL_NI_UNREQUESTED = 18           /* This event was not requested by software, but was delivered anyway. This is for use in any scenario where an event is being delivered that the software configured off. Specifically, overflow entries will always deliver an even for any incoming network operation. For example, if PTL_EVENT_PUT in an overflow entry, the overflow entry will deliver at least one event. If no request was requested for the scenario, the delivered event will have a PTL_NI_UNREQUESTED failure type. PTL_NI_UNREQUESTED will never be used for a 'combined' event. */
+              PTL_NI_UNREQUESTED = 18,          /* This event was not requested by software, but was delivered anyway. This is for use in any scenario where an event is being delivered that the software configured off. Specifically, overflow entries will always deliver an even for any incoming network operation. For example, if PTL_EVENT_PUT in an overflow entry, the overflow entry will deliver at least one event. If no request was requested for the scenario, the delivered event will have a PTL_NI_UNREQUESTED failure type. PTL_NI_UNREQUESTED will never be used for a 'combined' event. */
+                  PTL_NI_TX_SEGV = 28           /* Indicates that the message associated with this full event failed because it would have caused a segmentation fault (address translation failure). There are some situations where a segmentation fault happens for operations related to a message, but the failureor the failure reason is not known by the time the event is generated. See Table 19-145 for details on how segmentation faults at different stages of the protocol are reported. */
 };
 
 #else
@@ -1386,13 +1521,14 @@ enum ptl_ni_fail {
 #define       PTL_NI_PT_DISABLED   9            /* Indicates that the portal table entry at the target was disabled and did not process the operation, either because the entry was disabled with PtlPTDisable() or because the entry provides flow control and a resource has been exhausted. This failure type should only be returned on initiator events. */
 #define    PTL_NI_PERM_VIOLATION   10           /* Indicates that the remote Portals addressing has indicated a permissions violation for the operation that caused this event. This failure type should only be returned on initiator events. */
 #define      PTL_NI_OP_VIOLATION   11           /* Indicates that the remote Portals addressing has indicated an operation violation for the operation that caused this event. This failure type should only be returned on initiator events. */
-#define              PTL_NI_SEGV   12           /* Indicates that the message associated with this full event failed because it would have caused a segmentation fault (address translation failure). There are some situations where a segmentation fault happens for operations related to a message, but the failureor the failure reason is not known by the time the event is generated. See Table 19-136 for details on how segmentation faults at different stages of the protocol are reported. */
+#define              PTL_NI_SEGV   12           /* Indicates that the message associated with this full event failed because it would have caused a segmentation fault (address translation failure). There are some situations where a segmentation fault happens for operations related to a message, but the failureor the failure reason is not known by the time the event is generated. See Table 19-145 for details on how segmentation faults at different stages of the protocol are reported. */
 #define          PTL_NI_NO_MATCH   13           /* On a PTL_EVENT_SEARCH, this indicates that a match was not found. This is only generated when querying local list state. */
 #define         PTL_NI_CANCELLED   14           /* Indicates that the event is the result of canceling a message. This failure type should only be returned on initiator events. */
 #define       PTL_NI_UNSUPPORTED   15           /* An unsupported operation was attempted. This is delivered at the initiator when a PTL_NACK_UNSUPPORTED is received or an unsupported operation is detected locally and prevented. As an example, a Put with IOVEC or an MEAppend with IOVEC could have a pointer to the IOVEC that is not aligned. */
 #define       PTL_NI_ACK_REFUSED   16           /* Failure type provided when OTR is configured to enable events after a PTL_ACK_REFUSED. This failure type should only be returned on initiator events. */
 #define    PTL_NI_CONNECT_FAILED   17           /* A connection attempt failed. Only the initiator indicates a connection failure. */
-#define       PTL_NI_UNREQUESTED   18            /* This event was not requested by software, but was delivered anyway. This is for use in any scenario where an event is being delivered that the software configured off. Specifically, overflow entries will always deliver an even for any incoming network operation. For example, if PTL_EVENT_PUT in an overflow entry, the overflow entry will deliver at least one event. If no request was requested for the scenario, the delivered event will have a PTL_NI_UNREQUESTED failure type. PTL_NI_UNREQUESTED will never be used for a 'combined' event. */
+#define       PTL_NI_UNREQUESTED   18           /* This event was not requested by software, but was delivered anyway. This is for use in any scenario where an event is being delivered that the software configured off. Specifically, overflow entries will always deliver an even for any incoming network operation. For example, if PTL_EVENT_PUT in an overflow entry, the overflow entry will deliver at least one event. If no request was requested for the scenario, the delivered event will have a PTL_NI_UNREQUESTED failure type. PTL_NI_UNREQUESTED will never be used for a 'combined' event. */
+#define           PTL_NI_TX_SEGV   28            /* Indicates that the message associated with this full event failed because it would have caused a segmentation fault (address translation failure). There are some situations where a segmentation fault happens for operations related to a message, but the failureor the failure reason is not known by the time the event is generated. See Table 19-145 for details on how segmentation faults at different stages of the protocol are reported. */
 
 #endif
 
@@ -1554,13 +1690,13 @@ enum perf_counter {
                         txci_stall_otr_credits_y = 11,          
                         txci_stall_otr_credits_z = 12,          
                             otr_rsp_special_acks = 15,          /* This counter counts the special ACKs received by the OTR on any TC */
-                         otr_stall_omb_entries_x = 16,          /* The OTR is stalled waiting for OMB entries. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.3.102, 'Stall OMB Entries X Performance CSR'Cross Reference to Y: Section 29.8.3.103, 'Stall OMB Entries Y Performance CSR' */
+                         otr_stall_omb_entries_x = 16,          /* The OTR is stalled waiting for OMB entries. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.9.1, 'Stall OMB Entries X Performance CSR'Cross Reference to Y: Section 29.8.9.2, 'Stall OMB Entries Y Performance CSR' */
                          otr_stall_omb_entries_y = 17,          
-                         otr_stall_opb_entries_x = 18,          /* The OTR is stalled waiting for OPB entries. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.3.204, 'Stall OPB Entries X Performance CSR'Cross Reference to Y: Section 29.7.3.205, 'Stall OMB Entries Y Performance CSR' */
+                         otr_stall_opb_entries_x = 18,          /* The OTR is stalled waiting for OPB entries. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.3.205, 'Stall OPB Entries X Performance CSR'Cross Reference to Y: Section 29.7.9.2, 'Stall OMB Entries Y Performance CSR' */
                          otr_stall_opb_entries_y = 19,          
-                       otr_stall_txdma_credits_x = 20,          /* The OTR is stalled waiting for credits to the TXDMA block. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.3.206, 'Stall TXDMA Credits X Performance CSR'Cross Reference to Y: Section 29.7.3.207, 'Stall TXDMA Credits Y Performance CSR' */
+                       otr_stall_txdma_credits_x = 20,          /* The OTR is stalled waiting for credits to the TXDMA block. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.9.3, 'Stall TXDMA Credits X Performance CSR'Cross Reference to Y: Section 29.7.9.4, 'Stall TXDMA Credits Y Performance CSR' */
                        otr_stall_txdma_credits_y = 21,          
-                       otr_stall_rxdma_credits_x = 22,          /* The OTR is stalled waiting for credits to the RXDMA block. The TC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.3.104, 'Stall RXDMA Credits X Performance CSR'Cross Reference to Y: Section 29.8.3.105, 'Stall RXDMA Credits Y Performance CSR' */
+                       otr_stall_rxdma_credits_x = 22,          /* The OTR is stalled waiting for credits to the RXDMA block. The TC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.9.3, 'Stall RXDMA Credits X Performance CSR'Cross Reference to Y: Section 29.8.9.4, 'Stall RXDMA Credits Y Performance CSR' */
                        otr_stall_rxdma_credits_y = 23,          
                                    otr_stall_cts = 24,          /* The CTS queue within OTR has stalled for lack of credits. */
                        otr_opb_stall_mem_credits = 25,          /* The OTR/OPB engine has stalled due to not having credits available for requests to memory. */
@@ -1569,11 +1705,11 @@ enum perf_counter {
                         otr_opb_stall_at_credits = 28,          /* The OTR/OPB engine has stalled due to a lack of available AT credits */
                      otr_opb_stall_at_rsp_events = 29,          /* The OTR/OPB engine is waiting on AT responses and had no other work to do. */
                      otr_opb_stall_at_rsp_cycles = 30,          /* The OTR/OPB engine is waiting on AT responses and had no other work to do. */
-                      otr_m_to_p_stall_credits_x = 31,          /* The OMB to OPB queues are stalled waiting on credits. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.3.106, 'Stall Message Partition to Packet Partition Credits X Performance CSR'Cross Reference to Y: Section 29.8.3.107, 'Stall Message Partition to Packet Partition Credits Y Performance CSR' */
+                      otr_m_to_p_stall_credits_x = 31,          /* The OMB to OPB queues are stalled waiting on credits. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.9.5, 'Stall Message Partition to Packet Partition Credits X Performance CSR'Cross Reference to Y: Section 29.8.9.6, 'Stall Message Partition to Packet Partition Credits Y Performance CSR' */
                       otr_m_to_p_stall_credits_y = 32,          
-                      otr_p_to_m_stall_credits_x = 33,          /* The OPB to OMB queues are stalled waiting on credits. The TC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.3.208, 'Stall Packet Partition to Message Partition Credits X Performance CSR'Cross Reference to Y: Section 29.7.3.209, 'Stall Packet Partition to Message Partition Credits Y Performance CSR' */
+                      otr_p_to_m_stall_credits_x = 33,          /* The OPB to OMB queues are stalled waiting on credits. The TC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.9.5, 'Stall Packet Partition to Message Partition Credits X Performance CSR'Cross Reference to Y: Section 29.7.9.6, 'Stall Packet Partition to Message Partition Credits Y Performance CSR' */
                       otr_p_to_m_stall_credits_y = 34,          
-                     otr_prefrag_stall_credits_x = 35,          /* The pre-fragmentation queue is stalled waiting for access to the fragmentation PE. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.3.108, 'Stall Pre-Fragmentation Credits X Performance CSR'Cross Reference to Y: Section 29.8.3.109, 'Stall Pre-Fragmentation Credits Y Performance CSR' */
+                     otr_prefrag_stall_credits_x = 35,          /* The pre-fragmentation queue is stalled waiting for access to the fragmentation PE. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.9.7, 'Stall Pre-Fragmentation Credits X Performance CSR'Cross Reference to Y: Section 29.8.9.8, 'Stall Pre-Fragmentation Credits Y Performance CSR' */
                      otr_prefrag_stall_credits_y = 36,          
                                 otr_fastpath_req = 37,          /* Number of requests generated into the fastpath in OTR. */
                                   otr_fragpe_req = 38,          /* Number of requests generated into the fragmentation path in OTR. */
@@ -1583,10 +1719,10 @@ enum perf_counter {
                             otr_packets_opened_x = 42,          /* Total number of packets generated by OTR. Total packets is the sum of the fastpath packets and the fragmentation PE packets. This reflects the number of OPB entries allocated. The TC/MC is selected in the OTR block.Cross Reference to X: */
                             otr_packets_closed_x = 43,          /* Total number of packets completed by OTR. Total packets is the sum of the fastpath packets and the fragmentation PE packets. This represents the number of OPB entries closed. The TC/MC is selected in the OTR block.Cross Reference to X: */
                              otr_packets_retrans = 44,          /* Total number of retransmitted packets.Separate types? NACK-based, timeout, etc. Or count NACKs coming back. Update: Add counter for timeouts. TOtal retransmit minus timeouts equals NACK based (with KU bonus). Latest Update: Max sequence distance updates take this path too! */
-                                 otr_latency_0_a = 45,          /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was A or less.Note: granularity of the time is likely to be at least 1 millisecond.Cross Reference to A: Section 29.7.3.210, 'Latency Performance CSR'Clarify whether a ACK w/o piggy-backed E2E does or doesn't increment */
-                                 otr_latency_a_b = 46,          /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than A and less than or equal to B.Cross Reference to B: Section 29.7.3.210, 'Latency Performance CSR' */
-                                 otr_latency_b_c = 47,          /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than B and less than or equal to C.Cross Reference to C: Section 29.7.3.210, 'Latency Performance CSR' */
-                                 otr_latency_c_d = 48,          /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than C and less than or equal to D.Cross Reference to D: Section 29.7.3.210, 'Latency Performance CSR' */
+                                 otr_latency_0_a = 45,          /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was A or less.Note: granularity of the time is likely to be at least 1 millisecond.Cross Reference to A: Section 29.7.9.7, 'Latency Performance CSR'Clarify whether a ACK w/o piggy-backed E2E does or doesn't increment */
+                                 otr_latency_a_b = 46,          /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than A and less than or equal to B.Cross Reference to B: Section 29.7.9.7, 'Latency Performance CSR' */
+                                 otr_latency_b_c = 47,          /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than B and less than or equal to C.Cross Reference to C: Section 29.7.9.7, 'Latency Performance CSR' */
+                                 otr_latency_c_d = 48,          /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than C and less than or equal to D.Cross Reference to D: Section 29.7.9.7, 'Latency Performance CSR' */
                                otr_latency_d_max = 49,          /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than D. */
                                   txdma_tx_reads = 50,          /* Total read accesses done over the TX interface to memory. */
                          txdma_mc1_packet_match0 = 51,          /* A packet ,match triggered on MC1 */
@@ -1758,6 +1894,7 @@ enum perf_counter {
                                    lm_byp_wait_x = 379,         /* MCTC counter increment signal for the bypass send to self, the MCTC data available but fifo is full.Cross Reference to X: xrefCross Reference to Y: yrefCross Reference to z: zref */
                                    lm_byp_wait_y = 380,         
                                    lm_byp_wait_z = 381,         
+                               lm_xmit_multicast = 382,         /* Count the Multicast Packets being transmitted. */
                                  at_tlb_accesses = 384,         /* Number of total translation requests */
                                      at_tlb_miss = 385,         /* Number of Misses in the TLB cache */
                                       at_tlb_hit = 386,         /* Number of Hits in the TLB cache f */
@@ -1825,13 +1962,13 @@ enum perf_counter {
 #define                 txci_stall_otr_credits_y   11           
 #define                 txci_stall_otr_credits_z   12           
 #define                     otr_rsp_special_acks   15           /* This counter counts the special ACKs received by the OTR on any TC */
-#define                  otr_stall_omb_entries_x   16           /* The OTR is stalled waiting for OMB entries. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.3.102, 'Stall OMB Entries X Performance CSR'Cross Reference to Y: Section 29.8.3.103, 'Stall OMB Entries Y Performance CSR' */
+#define                  otr_stall_omb_entries_x   16           /* The OTR is stalled waiting for OMB entries. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.9.1, 'Stall OMB Entries X Performance CSR'Cross Reference to Y: Section 29.8.9.2, 'Stall OMB Entries Y Performance CSR' */
 #define                  otr_stall_omb_entries_y   17           
-#define                  otr_stall_opb_entries_x   18           /* The OTR is stalled waiting for OPB entries. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.3.204, 'Stall OPB Entries X Performance CSR'Cross Reference to Y: Section 29.7.3.205, 'Stall OMB Entries Y Performance CSR' */
+#define                  otr_stall_opb_entries_x   18           /* The OTR is stalled waiting for OPB entries. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.3.205, 'Stall OPB Entries X Performance CSR'Cross Reference to Y: Section 29.7.9.2, 'Stall OMB Entries Y Performance CSR' */
 #define                  otr_stall_opb_entries_y   19           
-#define                otr_stall_txdma_credits_x   20           /* The OTR is stalled waiting for credits to the TXDMA block. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.3.206, 'Stall TXDMA Credits X Performance CSR'Cross Reference to Y: Section 29.7.3.207, 'Stall TXDMA Credits Y Performance CSR' */
+#define                otr_stall_txdma_credits_x   20           /* The OTR is stalled waiting for credits to the TXDMA block. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.9.3, 'Stall TXDMA Credits X Performance CSR'Cross Reference to Y: Section 29.7.9.4, 'Stall TXDMA Credits Y Performance CSR' */
 #define                otr_stall_txdma_credits_y   21           
-#define                otr_stall_rxdma_credits_x   22           /* The OTR is stalled waiting for credits to the RXDMA block. The TC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.3.104, 'Stall RXDMA Credits X Performance CSR'Cross Reference to Y: Section 29.8.3.105, 'Stall RXDMA Credits Y Performance CSR' */
+#define                otr_stall_rxdma_credits_x   22           /* The OTR is stalled waiting for credits to the RXDMA block. The TC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.9.3, 'Stall RXDMA Credits X Performance CSR'Cross Reference to Y: Section 29.8.9.4, 'Stall RXDMA Credits Y Performance CSR' */
 #define                otr_stall_rxdma_credits_y   23           
 #define                            otr_stall_cts   24           /* The CTS queue within OTR has stalled for lack of credits. */
 #define                otr_opb_stall_mem_credits   25           /* The OTR/OPB engine has stalled due to not having credits available for requests to memory. */
@@ -1840,11 +1977,11 @@ enum perf_counter {
 #define                 otr_opb_stall_at_credits   28           /* The OTR/OPB engine has stalled due to a lack of available AT credits */
 #define              otr_opb_stall_at_rsp_events   29           /* The OTR/OPB engine is waiting on AT responses and had no other work to do. */
 #define              otr_opb_stall_at_rsp_cycles   30           /* The OTR/OPB engine is waiting on AT responses and had no other work to do. */
-#define               otr_m_to_p_stall_credits_x   31           /* The OMB to OPB queues are stalled waiting on credits. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.3.106, 'Stall Message Partition to Packet Partition Credits X Performance CSR'Cross Reference to Y: Section 29.8.3.107, 'Stall Message Partition to Packet Partition Credits Y Performance CSR' */
+#define               otr_m_to_p_stall_credits_x   31           /* The OMB to OPB queues are stalled waiting on credits. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.9.5, 'Stall Message Partition to Packet Partition Credits X Performance CSR'Cross Reference to Y: Section 29.8.9.6, 'Stall Message Partition to Packet Partition Credits Y Performance CSR' */
 #define               otr_m_to_p_stall_credits_y   32           
-#define               otr_p_to_m_stall_credits_x   33           /* The OPB to OMB queues are stalled waiting on credits. The TC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.3.208, 'Stall Packet Partition to Message Partition Credits X Performance CSR'Cross Reference to Y: Section 29.7.3.209, 'Stall Packet Partition to Message Partition Credits Y Performance CSR' */
+#define               otr_p_to_m_stall_credits_x   33           /* The OPB to OMB queues are stalled waiting on credits. The TC for this counter is selected in the OTR block.Cross Reference to X: Section 29.7.9.5, 'Stall Packet Partition to Message Partition Credits X Performance CSR'Cross Reference to Y: Section 29.7.9.6, 'Stall Packet Partition to Message Partition Credits Y Performance CSR' */
 #define               otr_p_to_m_stall_credits_y   34           
-#define              otr_prefrag_stall_credits_x   35           /* The pre-fragmentation queue is stalled waiting for access to the fragmentation PE. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.3.108, 'Stall Pre-Fragmentation Credits X Performance CSR'Cross Reference to Y: Section 29.8.3.109, 'Stall Pre-Fragmentation Credits Y Performance CSR' */
+#define              otr_prefrag_stall_credits_x   35           /* The pre-fragmentation queue is stalled waiting for access to the fragmentation PE. The TC/MC for this counter is selected in the OTR block.Cross Reference to X: Section 29.8.9.7, 'Stall Pre-Fragmentation Credits X Performance CSR'Cross Reference to Y: Section 29.8.9.8, 'Stall Pre-Fragmentation Credits Y Performance CSR' */
 #define              otr_prefrag_stall_credits_y   36           
 #define                         otr_fastpath_req   37           /* Number of requests generated into the fastpath in OTR. */
 #define                           otr_fragpe_req   38           /* Number of requests generated into the fragmentation path in OTR. */
@@ -1854,10 +1991,10 @@ enum perf_counter {
 #define                     otr_packets_opened_x   42           /* Total number of packets generated by OTR. Total packets is the sum of the fastpath packets and the fragmentation PE packets. This reflects the number of OPB entries allocated. The TC/MC is selected in the OTR block.Cross Reference to X: */
 #define                     otr_packets_closed_x   43           /* Total number of packets completed by OTR. Total packets is the sum of the fastpath packets and the fragmentation PE packets. This represents the number of OPB entries closed. The TC/MC is selected in the OTR block.Cross Reference to X: */
 #define                      otr_packets_retrans   44           /* Total number of retransmitted packets.Separate types? NACK-based, timeout, etc. Or count NACKs coming back. Update: Add counter for timeouts. TOtal retransmit minus timeouts equals NACK based (with KU bonus). Latest Update: Max sequence distance updates take this path too! */
-#define                          otr_latency_0_a   45           /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was A or less.Note: granularity of the time is likely to be at least 1 millisecond.Cross Reference to A: Section 29.7.3.210, 'Latency Performance CSR'Clarify whether a ACK w/o piggy-backed E2E does or doesn't increment */
-#define                          otr_latency_a_b   46           /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than A and less than or equal to B.Cross Reference to B: Section 29.7.3.210, 'Latency Performance CSR' */
-#define                          otr_latency_b_c   47           /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than B and less than or equal to C.Cross Reference to C: Section 29.7.3.210, 'Latency Performance CSR' */
-#define                          otr_latency_c_d   48           /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than C and less than or equal to D.Cross Reference to D: Section 29.7.3.210, 'Latency Performance CSR' */
+#define                          otr_latency_0_a   45           /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was A or less.Note: granularity of the time is likely to be at least 1 millisecond.Cross Reference to A: Section 29.7.9.7, 'Latency Performance CSR'Clarify whether a ACK w/o piggy-backed E2E does or doesn't increment */
+#define                          otr_latency_a_b   46           /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than A and less than or equal to B.Cross Reference to B: Section 29.7.9.7, 'Latency Performance CSR' */
+#define                          otr_latency_b_c   47           /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than B and less than or equal to C.Cross Reference to C: Section 29.7.9.7, 'Latency Performance CSR' */
+#define                          otr_latency_c_d   48           /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than C and less than or equal to D.Cross Reference to D: Section 29.7.9.7, 'Latency Performance CSR' */
 #define                        otr_latency_d_max   49           /* Number of packets where the acknowledgement was received when the difference between the timestamp in the OPB and the current timestamp was greater than D. */
 #define                           txdma_tx_reads   50           /* Total read accesses done over the TX interface to memory. */
 #define                  txdma_mc1_packet_match0   51           /* A packet ,match triggered on MC1 */
@@ -2029,6 +2166,7 @@ enum perf_counter {
 #define                            lm_byp_wait_x   379          /* MCTC counter increment signal for the bypass send to self, the MCTC data available but fifo is full.Cross Reference to X: xrefCross Reference to Y: yrefCross Reference to z: zref */
 #define                            lm_byp_wait_y   380          
 #define                            lm_byp_wait_z   381          
+#define                        lm_xmit_multicast   382          /* Count the Multicast Packets being transmitted. */
 #define                          at_tlb_accesses   384          /* Number of total translation requests */
 #define                              at_tlb_miss   385          /* Number of Misses in the TLB cache */
 #define                               at_tlb_hit   386          /* Number of Hits in the TLB cache f */

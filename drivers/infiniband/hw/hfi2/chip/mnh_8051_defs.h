@@ -33,7 +33,7 @@
 #define DEF_MNH_8051_SW_DEF
 
 #ifndef CRK_8051_CSRS
-#define CRK_8051_CSRS								0x000000000000ULL
+#define CRK_8051_CSRS								0x000000000000
 #endif
 /*
 * Table #2 of 146_8051_Registers.xml - CRK8051_CFG_RAM_ACCESS_SETUP

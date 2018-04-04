@@ -552,8 +552,6 @@ union inv_wait_dsc_t {
     uint64_t val[2];
 };
 
-/* We don't use this for anything right now, and conflicts with iommu_zebu.c */
-#if 0
 // page_req_dsc
 union page_req_dsc_t {
     struct {
@@ -568,8 +566,8 @@ union page_req_dsc_t {
         uint64_t PRGI		: 9;
     };
     struct {
-        uint64_t READ		: 1;
-        uint64_t WRITE		: 1;
+        uint64_t read		: 1;
+        uint64_t write		: 1;
         uint64_t EXEC		: 1;
         uint64_t PRIV		: 1;
         uint64_t DevFunc	: 8;
@@ -578,7 +576,6 @@ union page_req_dsc_t {
     } __attribute__ ((__packed__));
     uint64_t val[2];
 };
-#endif
 
 // page_grp_resp_dsc
 union page_grp_resp_dsc_t {

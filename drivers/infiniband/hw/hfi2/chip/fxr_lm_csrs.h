@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_lm_CSRS_H__
@@ -10,7 +10,8 @@ typedef union {
     struct {
         uint64_t NEAR_LOOPBACK_DISABLE  :  1; // Disables the DLID checking for near loopback
         uint64_t       FORCE_LOOPBACK  :  1; // When set, forces all traffic to loopback (bypassing DLID and PKEY checks)
-        uint64_t        Reserved_63_2  : 62; // Reserved
+        uint64_t   Drain_all_incoming  :  1; // When activated, all incoming traffic will be drained from all VL's. This bit should remain active until empty status is indicated by LM_STS_INQ_EMPTY .
+        uint64_t        Reserved_63_3  : 61; // Reserved
     } field;
     uint64_t val;
 } LM_CFG_CONFIG_t;
@@ -379,13 +380,15 @@ typedef union {
         uint64_t    rx_freelist_1_sbe  :  1; // RX Free List 1 ECC SBE
         uint64_t    rx_freelist_0_mbe  :  1; // RX Free List 0 ECC MBE
         uint64_t    rx_freelist_1_mbe  :  1; // RX Free List 1 ECC MBE
-        uint64_t           rx_inq_sbe  :  1; // RX Input Queue 0 ECC SBE
-        uint64_t           rx_inq_mbe  :  1; // RX Input Queue 1 ECC SBE
+        uint64_t         rx_inq_sbe_0  :  1; // RX Input Queue Banks 0-7 ECC SBE
+        uint64_t         rx_inq_sbe_1  :  1; // RX Input Queue Banks 8-15 ECC SBE
+        uint64_t         rx_inq_mbe_0  :  1; // RX Input Queue Banks 0-7 ECC MBE
+        uint64_t         rx_inq_mbe_1  :  1; // RX Input Queue Banks 8-15 ECC MBE
         uint64_t     rx_tracker_0_sbe  :  1; // RX Tracker Array 0 ECC SBE
         uint64_t     rx_tracker_1_sbe  :  1; // RX Tracker Array 1 ECC SBE
         uint64_t     rx_tracker_0_mbe  :  1; // RX Tracker Array 0 ECC MBE
         uint64_t     rx_tracker_1_mbe  :  1; // RX Tracker Array 1 ECC MBE
-        uint64_t          Always_zero  : 20; // Unused future expansion
+        uint64_t          Always_zero  : 18; // Unused future expansion
         uint64_t payld_info_fifo_overflow_mc0  :  1; // Payload info fifo overflow detected for any of the TC for MC0
         uint64_t payld_info_fifo_underflow_mc0  :  1; // Payload info fifo underflow detected for any of the TC for MC0
         uint64_t       bad_sc_map_mc0  :  1; // sc15 not mapped to vl15 MC0

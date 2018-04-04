@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_rx_et_CSRS_H__
@@ -10,7 +10,7 @@ typedef union {
     struct {
         uint64_t  rxdma_to_credit_max  :  4; // Credit max for RxDMA TrigOp request
         uint64_t   rxhp_to_credit_max  :  4; // Credit max for RxHP TrigOp Insert/Append
-        uint64_t        Reserved_63_8  : 56; // Reserved
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } RXET_CFG_CREDITS_t;
@@ -19,8 +19,8 @@ typedef union {
 typedef union {
     struct {
         uint64_t  head_refetch_thresh  : 22; // Number of slots threshold to trigger refetch of EQ head
-        uint64_t       unreserved_min  : 22; // Number of EQ slots to save for unreserved events.. Must be >=2.
-        uint64_t       Reserved_63_44  : 20; // Reserved
+        uint64_t       unreserved_min  : 22; // Number of EQ slots to save for unreserved events. Must be >=2.
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } RXET_CFG_EQD_t;
@@ -64,7 +64,7 @@ typedef union {
         uint64_t         mask_address  : 25; // cache cmd mask address. 1 bits are don't care. only used for CACHE_CMD_INVALIDATE, CACHE_CMD_FLUSH_INVALID, CACHE_CMD_FLUSH_STAY The form of this field is eq_desc_cache_addr_t. initially all 1's. Note: If this field is 0, a normal single lookup is done. If non-zero, the entire cache tag memory is read and tag entries match/masked.
         uint64_t                  cmd  :  4; // cache cmd. see <blue text>Section A.1.1, 'FXR Cache Cmd enums' initially CACHE_CMD_INVALIDATE
         uint64_t                 busy  :  1; // SW sets busy when writing this csr. HW clears busy when cmd is complete. busy must be clear before writing this csr. Ifbusy is set, HW is busy on a previous cmd. Coming out of reset, busy will be 1 so as to initiate the eq desc cache tag invalidation. Then in 2k clks or so, it will go to 0.
-        uint64_t                  Rsv  :  9; // 
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_t;
@@ -90,10 +90,10 @@ typedef union {
     struct {
         uint64_t      tag_way_addr_lo  : 25; // eq desc cache tag way address, format is eq_desc_cache_addr_t
         uint64_t     tag_way_valid_lo  :  1; // eq desc cache tag way valid
-        uint64_t           reserve_lo  :  6; // 
+        uint64_t       Reserved_31_26  :  6; // Unused
         uint64_t      tag_way_addr_hi  : 25; // eq desc cache tag way address, format is eq_desc_cache_addr_t
         uint64_t     tag_way_valid_hi  :  1; // eq desc cache tag way valid
-        uint64_t           reserve_hi  :  6; // 
+        uint64_t       Reserved_63_58  :  6; // Unused
     } field;
     uint64_t val;
 } RXET_CFG_EQ_DESC_CACHE_ACCESS_TAG_t;
@@ -123,7 +123,7 @@ typedef union {
         uint64_t         mask_address  : 28; // cache cmd mask address. 1 bits are don't care. only used for CACHE_CMD_INVALIDATE, CACHE_CMD_FLUSH_INVALID, CACHE_CMD_FLUSH_VALID The form of this field is trig_op_cache_addr_t. initially all 1's. Note: If this field is 0, a normal single lookup is done. If non-zero, the entire cache tag memory is read and tag entries match/masked.
         uint64_t                  cmd  :  4; // cache cmd. see <blue text>Section A.1.1, 'FXR Cache Cmd enums' initially CACHE_CMD_INVALIDATE
         uint64_t                 busy  :  1; // SW sets busy when writing this csr. HW clears busy when cmd is complete. busy must be clear before writing this csr. If busy is set, HW is busy on a previous cmd. Coming out of reset, this will be 1 so as to initiate the Trig Op cache tag invalidation. Then in 256 clks or so, it will go to 0.
-        uint64_t                  Rsv  :  3; // 
+        uint64_t       Reserved_63_61  :  3; // Unused
     } field;
     uint64_t val;
 } RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_t;
@@ -150,11 +150,11 @@ typedef union {
         uint64_t      tag_way_addr_lo  : 28; // Trig Op cache tag way address, format is eq_desc_cache_addr_t
         uint64_t     tag_way_dirty_lo  :  1; // Trig Op cache tag way dirty
         uint64_t     tag_way_valid_lo  :  1; // Trig Op cache tag way valid
-        uint64_t           reserve_lo  :  2; // 
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t      tag_way_addr_hi  : 28; // Trig Op cache tag way address, format is eq_desc_cache_addr_t
         uint64_t     tag_way_dirty_hi  :  1; // Trig Op cache tag way dirty
         uint64_t     tag_way_valid_hi  :  1; // Trig Op cache tag way valid
-        uint64_t           reserve_hi  :  2; // 
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } RXET_CFG_TRIG_OP_CACHE_ACCESS_TAG_t;
@@ -163,7 +163,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t   hiarb_credit_count  :  5; // Credit count for RxHiArb
-        uint64_t        Reserved_63_5  : 59; // Not used
+        uint64_t        Reserved_63_5  : 59; // Unused
     } field;
     uint64_t val;
 } RXET_STS_CREDITS_t;
@@ -172,7 +172,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t     eb_event_hdr_val  : 58; // Vector of occupied locations in Event Header queue
-        uint64_t       Reserved_63_58  :  6; // Not used
+        uint64_t       Reserved_63_58  :  6; // Unused
     } field;
     uint64_t val;
 } RXET_DBG_EVENT_HDR_VALID_t;
@@ -181,7 +181,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t          eb_cm_valid  : 58; // Vector of occupied locations in CAM and Event Buffer.
-        uint64_t       Reserved_63_58  :  6; // Not used
+        uint64_t       Reserved_63_58  :  6; // Unused
     } field;
     uint64_t val;
 } RXET_DBG_CAM_VALID_t;
@@ -199,14 +199,14 @@ typedef union {
         uint64_t toh_trig_out_fifo_empty  :  1; // TrigOp response to RxDMA FIFO empty
         uint64_t toh_cache_issue_fifo_empty  :  1; // TrigOp cache read issuer tag FIFO empty
         uint64_t toh_trig_in_fifo_empty  :  1; // TrigOp requests from RxDMA empty
-        uint64_t       Reserved_15_10  :  6; // Not used
+        uint64_t       Reserved_15_10  :  6; // Unused
         uint64_t toh_trig_to_proc_valid  :  4; // TrigOp in process stage valid
         uint64_t        toh_need_read  :  4; // TrigOp in process needs read
         uint64_t  toh_need_invalidate  :  4; // TrigOp in process needs invalidate
         uint64_t    toh_need_response  :  4; // TrigOp in process needs response
         uint64_t       toh_needs_trig  :  4; // TripOp stage needs or will need trig
         uint64_t        toh_load_trig  :  4; // TrigOp stage to load from input queue
-        uint64_t       Reserved_63_40  : 24; // Not used
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXET_DBG_EB_EEH_TOH_STATE_t;
@@ -221,7 +221,7 @@ typedef union {
         uint64_t        toah_wrp_sent  :  8; // Write prev is done
         uint64_t       toah_wrto_sent  :  8; // TrigOp has been written
         uint64_t          toah_walked  :  8; // Insert: successful walk complete; Append: immediately valid
-        uint64_t       Reserved_63_56  :  8; // Not used
+        uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
 } RXET_DBG_TOA_STATE_t;
@@ -230,7 +230,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t           way_enable  :  4; // 1 bits enable, 0 bits disable EQ Desc Cache Tag ways.
-        uint64_t        Reserved_63_4  : 60; // Reserved
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } RXET_DBG_EQ_DESC_CACHE_TAG_WAY_ENABLE_t;
@@ -239,7 +239,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t           way_enable  :  4; // 1 bits enable, 0 bits disable Trig Op Cache Tag ways.
-        uint64_t        Reserved_63_4  : 60; // Reserved
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } RXET_DBG_TRIG_OP_CACHE_TAG_WAY_ENABLE_t;
@@ -248,14 +248,14 @@ typedef union {
 typedef union {
     struct {
         uint64_t       eb_cam_par_err  :  1; // Parity error detected on event cam. This is fatal.
-        uint64_t eq_desc_cache_tag_mbe  :  1; // EQ Desc Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.6.13, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_MBE - RXET Error Info EQ Desc Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
-        uint64_t eq_desc_cache_tag_sbe  :  1; // EQ Desc Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.12, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_SBE - RXET Error Info EQ Desc Cache Tag SBE'
-        uint64_t eq_desc_cache_data_mbe  :  1; // EQ Desc Cache data mbe. The 'or' of the 2 ecc domains. Error information: Section 29.16.6.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'
-        uint64_t eq_desc_cache_data_sbe  :  1; // EQ Desc Cache data sbe. The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'
-        uint64_t trig_op_cache_tag_mbe  :  1; // Trig Op Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.6.16, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_MBE - RXET Error Info Trig Op Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
-        uint64_t trig_op_cache_tag_sbe  :  1; // Trig Op Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.6.15, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_SBE - RXET Error Info Trig Op Cache Tag SBE'
-        uint64_t trig_op_cache_data_mbe  :  1; // Trig Op Cache data mbe. The 'or' of the 16 ecc domains. Error information: Section 29.16.6.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'
-        uint64_t trig_op_cache_data_sbe  :  1; // Trig Op Cache data sbe. The 'or' of the 16ecc domains. Error information: . Section 29.16.6.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'
+        uint64_t eq_desc_cache_tag_mbe  :  1; // EQ Desc Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.7.13, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_MBE - RXET Error Info EQ Desc Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
+        uint64_t eq_desc_cache_tag_sbe  :  1; // EQ Desc Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.7.12, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_SBE - RXET Error Info EQ Desc Cache Tag SBE'
+        uint64_t eq_desc_cache_data_mbe  :  1; // EQ Desc Cache data mbe. The 'or' of the 2 ecc domains. Error information: Section 29.16.7.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'
+        uint64_t eq_desc_cache_data_sbe  :  1; // EQ Desc Cache data sbe. The 'or' of the 2 ecc domains. Error information: . Section 29.16.7.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'
+        uint64_t trig_op_cache_tag_mbe  :  1; // Trig Op Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.7.16, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_MBE - RXET Error Info Trig Op Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
+        uint64_t trig_op_cache_tag_sbe  :  1; // Trig Op Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.7.15, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_SBE - RXET Error Info Trig Op Cache Tag SBE'
+        uint64_t trig_op_cache_data_mbe  :  1; // Trig Op Cache data mbe. The 'or' of the 16 ecc domains. Error information: Section 29.16.7.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'
+        uint64_t trig_op_cache_data_sbe  :  1; // Trig Op Cache data sbe. The 'or' of the 16ecc domains. Error information: . Section 29.16.7.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'
         uint64_t toh_trig_out_overflow  :  1; // Overflow on TrigOp response to RxDMA - 4
         uint64_t toh_cache_req_fifo_overflow  :  1; // Overflow on TrigOp cache active requests - 8
         uint64_t toh_trig_in_fifo_overflow  :  1; // Overflow in TrigOp holding FIFO - 4
@@ -285,7 +285,7 @@ typedef union {
         uint64_t rxhp_event_frame_err  :  1; // Framing error on Event from RxHP.
         uint64_t txotr_event_frame_err  :  1; // Framing error on Event from TxOTR.
         uint64_t     trigop_cache_mbe  :  1; // TrigOp Cache MBE *or* NACK from RxHiArb.
-        uint64_t       Reserved_63_38  : 26; // Not used.
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_STS_t;
@@ -294,7 +294,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t            error_clr  : 38; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_CLR_t;
@@ -303,7 +303,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t            force_err  : 38; // Write 1's to set corresponding status bits.
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_FRC_t;
@@ -312,7 +312,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t          err_host_en  : 38; // Enables corresponding status bits to generate host interrupt signal.
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_EN_HOST_t;
@@ -321,7 +321,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t           first_host  : 38; // Snapshot of status bits when host interrupt signal transitions from 0 to 1.
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_FIRST_HOST_t;
@@ -330,7 +330,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               bmc_en  : 38; // Enabe corresponding status bits to generate BMC interrupt signal.
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_EN_BMC_t;
@@ -339,7 +339,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t            first_bmc  : 38; // Snapshot of status bits when BMC interrupt signal transitions from 0 to 1.
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_FIRST_BMC_t;
@@ -348,7 +348,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t              quar_en  : 38; // Enable corresponding status bits to generate quarantine signal.
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_EN_QUAR_t;
@@ -357,7 +357,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t           first_quar  : 38; // Snapshot of status bits when quarantine signal transitions from 0 to 1.
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_FIRST_QUAR_t;
@@ -378,7 +378,7 @@ typedef union {
     struct {
         uint64_t eq_full_eqd_cache_addr  : 25; // EQD cache address {pid, ni, eq_handle} for full EQ. Contains address for most recent EQ full.
         uint64_t   mbe_eqd_cache_addr  : 25; // EQD cache address {pid, ni, eq_handle} when cache returns mbe. This could indicate an mbe - or - a NACK returned by RxHiArb. Contains address for most recent error.
-        uint64_t       Reserved_63_50  : 14; // Not used
+        uint64_t       Reserved_63_50  : 14; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_INFO_1_t;
@@ -391,7 +391,7 @@ typedef union {
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of sbes. The increment signal is the 'or' of the 2 sbe signals.
         uint64_t     sbe_last_address  :  9; // address of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_31  : 33; // Reserved
+        uint64_t       Reserved_63_31  : 33; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_INFO_EQ_DESC_CACHE_TAG_SBE_t;
@@ -404,7 +404,7 @@ typedef union {
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            mbe_count  : 12; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe signals.
         uint64_t     mbe_last_address  :  9; // address of the last least significant ecc domain mbe
-        uint64_t       Reserved_63_31  : 33; // Reserved
+        uint64_t       Reserved_63_31  : 33; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_INFO_EQ_DESC_CACHE_TAG_MBE_t;
@@ -420,7 +420,7 @@ typedef union {
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of sbes.
         uint64_t      sbe_last_domain  :  1; // domain of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t       Reserved_63_38  : 26; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE_t;
@@ -433,7 +433,7 @@ typedef union {
         uint64_t                  sbe  :  2; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of sbes. The increment signal is the 'or' of the 2 sbe signals.
         uint64_t     sbe_last_address  :  8; // address of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_31  : 33; // Reserved
+        uint64_t       Reserved_63_31  : 33; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_INFO_TRIG_OP_CACHE_TAG_SBE_t;
@@ -446,7 +446,7 @@ typedef union {
         uint64_t                  mbe  :  2; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            mbe_count  : 12; // saturating counter of mbes. The increment signal is the 'or' of the 2 mbe signals.
         uint64_t     mbe_last_address  :  8; // address of the last least significant ecc domain mbe
-        uint64_t       Reserved_63_31  : 33; // Reserved
+        uint64_t       Reserved_63_31  : 33; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_INFO_TRIG_OP_CACHE_TAG_MBE_t;
@@ -458,7 +458,7 @@ typedef union {
         uint64_t                  sbe  : 16; // per domain single bit set whenever an sbe occurs for that domain. This helps find more significant sbe's when multiple domains have an sbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            sbe_count  : 12; // saturating counter of sbes.
         uint64_t      sbe_last_domain  :  4; // domain of the last least significant ecc domain sbe
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE_t;
@@ -470,7 +470,7 @@ typedef union {
         uint64_t                  mbe  : 16; // per domain single bit set whenever an mbe occurs for that domain. This helps find more significant mbe's when multiple domains have an mbe in the same clock and only the least significant domain and syndrome is recorded.
         uint64_t            mbe_count  : 12; // saturating counter of mbes.
         uint64_t      mbe_last_domain  :  4; // domain of the last least significant ecc domain mbe
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXET_ERR_INFO_TRIG_OP_CACHE_DATA_MBE_t;
@@ -490,7 +490,7 @@ typedef union {
         uint64_t trig_op_cache_data_err_inj_mask  :  8; // trig_op_cache_data error inject mask
         uint64_t trig_op_cache_data_err_inj_domain  :  4; // trig_op_cache_data error inject domain. Which ecc domain to inject the error.
         uint64_t trig_op_cache_data_err_inj_enable  :  1; // trig_op_cache_data error inject enable.
-        uint64_t       Reserved_63_42  : 22; // Reserved
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXET_CACHE_ERR_INJECT_SBE_MBE_t;

@@ -1710,7 +1710,7 @@ static int hfi_svm_free_pasid_tables(struct hfi_at *at)
 	idr_destroy(&at->pasid_stats_idr);
 	return 0;
 }
-
+#if 0
 static void at_enable_dev_iotlb(struct hfi_at *at)
 {
 	struct pci_dev *pdev = at->dd->pdev;
@@ -1753,7 +1753,7 @@ static void at_disable_dev_iotlb(struct hfi_at *at)
 		at->pasid_enabled = 0;
 	}
 }
-
+#endif
 #define MAX_NR_PASID_BITS (20)
 static inline unsigned long hfi_at_get_pts(struct hfi_at *at)
 {
@@ -1904,7 +1904,7 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 		at_flush_write_buffer(at);
 	}
 
-	at_enable_dev_iotlb(at);
+//	at_enable_dev_iotlb(at);
 
 	ctx_lo = context[0].lo;
 	if (ctx_lo & CONTEXT_PASIDE)
@@ -1975,7 +1975,7 @@ static void at_context_clear(struct hfi_at *at)
 
 static void disable_at_context(struct hfi_at *at)
 {
-	at_disable_dev_iotlb(at);
+//	at_disable_dev_iotlb(at);
 	at_context_clear(at);
 
 	if (at->gcmd & AT_GCMD_TE)
@@ -2585,7 +2585,8 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 	if (WARN_ON(!at))
 		return -EINVAL;
 
-	if (dev_is_pci(dev)) {
+//	if (dev_is_pci(dev)) {
+	if (0) {
 		pasid_max = pci_max_pasids(to_pci_dev(dev));
 		if (pasid_max < 0)
 			return -EINVAL;

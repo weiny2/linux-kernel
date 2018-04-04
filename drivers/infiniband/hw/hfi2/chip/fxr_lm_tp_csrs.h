@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_lm_tp_CSRS_H__
@@ -28,7 +28,7 @@ typedef union {
         uint64_t     vl15_arb_disable  :  1; // Disable VL15 to the transmit arbitration logic. Packet tags will accumulate in the VL15 fifo.
         uint64_t      disable_all_vls  :  1; // TPort software link disable mode. Packets from all ports will be discarded at TPORT. Drop request's issued VL15, VL8:0.
         uint64_t          wormhole_en  :  1; // If set enables wormhole crediting (1 credit per flit), else use VCT crediting (use length field at head time). FW must set Au to 16 bytes and crdt_updt_threshold to 10.
-        uint64_t disable_clock_gating  :  1; // Disables logic additional logic added for clock gating. TODO: Set default to 0
+        uint64_t disable_clock_gating  :  1; // Disables logic additional logic added for clock gating.
         uint64_t        rx_device_sel  :  1; // Set to 0 if connected to a Gen2 device. Set to 1 if connected to a Gen1 device, FW must set max nesting levels to 0 There is no tx_device_sel, when connected to LWEG FW must set WH mode and SB credit return mode
         uint64_t       operational_vl  : 10; // Virtual Lanes (VLt) Operational on this port. Bits 45:36 = VL_Mask[15,8:0] operational_vl is a bit enable mask for which VLt's are operational. Packets received on VLt's that are not operational are discarded.
         uint64_t        distance_mode  :  1; // Set to 0 for mode 2, set to 1 for mode 1 Mode 2 Head <-> SC Mrkr = 4, Ctrl = 8 Mode 1 Head <-> SC Mrkr = 8, Ctrl = 24

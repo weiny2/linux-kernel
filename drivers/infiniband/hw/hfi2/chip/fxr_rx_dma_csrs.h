@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_rx_dma_CSRS_H__
@@ -70,9 +70,9 @@ typedef union {
         uint64_t             BW_LIMIT  : 16; // Bandwidth limit
         uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
         uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_31_27  :  5; // Unused
+        uint64_t       Reserved_31_27  :  5; // Unused
         uint64_t         METER_CONFIG  :  8; // Meter Configuration
-        uint64_t         UNUSED_63_40  : 24; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXDMA_CFG_BW_SHAPE_B0_t;
@@ -83,9 +83,9 @@ typedef union {
         uint64_t             BW_LIMIT  : 16; // Bandwidth limit
         uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
         uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_31_27  :  5; // Unused
+        uint64_t       Reserved_31_27  :  5; // Unused
         uint64_t         METER_CONFIG  :  8; // Meter Configuration
-        uint64_t         UNUSED_63_40  : 24; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXDMA_CFG_BW_SHAPE_B1_t;
@@ -96,9 +96,9 @@ typedef union {
         uint64_t             BW_LIMIT  : 16; // Bandwidth limit
         uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
         uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_31_27  :  5; // Unused
+        uint64_t       Reserved_31_27  :  5; // Unused
         uint64_t         METER_CONFIG  :  8; // Meter Configuration
-        uint64_t         UNUSED_63_40  : 24; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXDMA_CFG_BW_SHAPE_B2_t;
@@ -109,9 +109,9 @@ typedef union {
         uint64_t             BW_LIMIT  : 16; // Bandwidth limit
         uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
         uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_31_27  :  5; // Unused
+        uint64_t       Reserved_31_27  :  5; // Unused
         uint64_t         METER_CONFIG  :  8; // Meter Configuration
-        uint64_t         UNUSED_63_40  : 24; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXDMA_CFG_BW_SHAPE_B3_t;
@@ -122,9 +122,9 @@ typedef union {
         uint64_t             BW_LIMIT  : 16; // Bandwidth limit
         uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
         uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_31_27  :  5; // Unused
+        uint64_t       Reserved_31_27  :  5; // Unused
         uint64_t         METER_CONFIG  :  8; // Meter Configuration
-        uint64_t         UNUSED_63_40  : 24; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXDMA_CFG_BW_SHAPE_B4_t;
@@ -135,9 +135,9 @@ typedef union {
         uint64_t             BW_LIMIT  : 16; // Bandwidth limit
         uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
         uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_31_27  :  5; // Unused
+        uint64_t       Reserved_31_27  :  5; // Unused
         uint64_t         METER_CONFIG  :  8; // Meter Configuration
-        uint64_t         UNUSED_63_40  : 24; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXDMA_CFG_BW_SHAPE_B5_t;
@@ -148,9 +148,9 @@ typedef union {
         uint64_t             BW_LIMIT  : 16; // Bandwidth limit
         uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
         uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_31_27  :  5; // Unused
+        uint64_t       Reserved_31_27  :  5; // Unused
         uint64_t         METER_CONFIG  :  8; // Meter Configuration
-        uint64_t         UNUSED_63_40  : 24; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXDMA_CFG_BW_SHAPE_B6_t;
@@ -161,9 +161,9 @@ typedef union {
         uint64_t             BW_LIMIT  : 16; // Bandwidth limit
         uint64_t        LEAK_FRACTION  :  8; // Fractional portion of leak amount
         uint64_t         LEAK_INTEGER  :  3; // Integral portion of leak amount
-        uint64_t         UNUSED_31_27  :  5; // Unused
+        uint64_t       Reserved_31_27  :  5; // Unused
         uint64_t         METER_CONFIG  :  8; // Meter Configuration
-        uint64_t         UNUSED_63_40  : 24; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXDMA_CFG_BW_SHAPE_B7_t;
@@ -268,6 +268,61 @@ typedef union {
     uint64_t val;
 } RXDMA_CFG_TO_BOUNDS_HP_t;
 
+// RXDMA_CFG_CT_CACHE desc:
+typedef union {
+    struct {
+        uint64_t client_ct_cache_request_disable  :  1; // Client CT cache request disable.
+        uint64_t         Reserved_7_1  :  7; // Unused
+        uint64_t          hash_select  :  2; // CT cache address hash select.
+        uint64_t       Reserved_15_10  :  6; // Unused
+        uint64_t      tag_way_enables  :  4; // Enable the Tag Ways
+        uint64_t       Reserved_29_20  : 10; // Unused
+        uint64_t        scrub_on_idle  :  1; // Enable Scrubbing a CT Cache Entry when HIArb is Idle.
+        uint64_t    scrub_on_interval  :  1; // Enable Scrubbing a CT Cache Entry when interval is reached
+        uint64_t       scrub_inverval  : 32; // Number of clocks between scrubs
+    } field;
+    uint64_t val;
+} RXDMA_CFG_CT_CACHE_t;
+
+// RXDMA_CFG_CT_CACHE_ACCESS_CTL desc:
+typedef union {
+    struct {
+        uint64_t              address  : 28; // The contents of this field differ based on cmd. ct_cache_addr_t for CACHE_CMD_RD, CACHE_CMD_WR,CACHE_CMD_INVALIDATE,CACHE_CMD_FLUSH_INVALID,CACHE_CMD_FLUSH_VALID. 9:0 used for CACHE_CMD_DATA_RD,CACHE_CMD_DATA_WR 7:0 used for CACHE_CMD_TAG_RD,CACHE_CMD_TAG_WR
+        uint64_t         mask_address  : 28; // cache cmd mask address. 1 bits are don't care. only used for CACHE_CMD_INVALIDATE, CACHE_CMD_FLUSH_INVALID, CACHE_CMD_FLUSH_VALID The form of this field is ct_cache_addr_t. It resets to 1 which is the value required by the CACHE_CMD_INVALIDATE command to initialize the cache.
+        uint64_t                  cmd  :  4; // cache cmd. see <blue text>Section A.1.1, 'FXR Cache Cmd enums' initially CACHE_CMD_INVALIDATE
+        uint64_t                 busy  :  1; // SW sets busy when writing this csr. HW clears busy when cmd is complete. busy must be clear before writing this csr. If busy is set, HW is busy on a previous cmd. Coming out of reset, this will be 1 so as to initiate the CT cache tag invalidation. Then in 256 clks or so, it will go to 0.
+        uint64_t       Reserved_63_61  :  3; // Unused
+    } field;
+    uint64_t val;
+} RXDMA_CFG_CT_CACHE_ACCESS_CTL_t;
+
+// RXDMA_CFG_CT_CACHE_ACCESS_DATA desc:
+typedef union {
+    struct {
+        uint64_t                 data  : 64; // CT cache data[255:0]
+    } field;
+    uint64_t val;
+} RXDMA_CFG_CT_CACHE_ACCESS_DATA_t;
+
+// RXDMA_CFG_CT_CACHE_ACCESS_DATA_BIT_ENABLE desc:
+typedef union {
+    struct {
+        uint64_t           bit_enable  : 64; // CT cache wr data bit enable[255:0]. 1 bits are written.
+    } field;
+    uint64_t val;
+} RXDMA_CFG_CT_CACHE_ACCESS_DATA_BIT_ENABLE_t;
+
+// RXDMA_CFG_CT_CACHE_ACCESS_TAG desc:
+typedef union {
+    struct {
+        uint64_t      tag_way_addr_lo  : 26; // CT cache tag way address, format is eq_desc_cache_addr_t
+        uint64_t       Reserved_31_26  :  6; // Unused
+        uint64_t      tag_way_addr_hi  : 26; // CT cache tag way address, format is eq_desc_cache_addr_t
+        uint64_t       Reserved_63_58  :  6; // Unused
+    } field;
+    uint64_t val;
+} RXDMA_CFG_CT_CACHE_ACCESS_TAG_t;
+
 // RXDMA_CFG_PORT_MIRROR desc:
 typedef union {
     struct {
@@ -294,7 +349,7 @@ typedef union {
         uint64_t         tx_ci_mctc_y  :  4; // Select the MCTC for the RXDMA_STALL_NO_TXCI_CRED_Y Events. 0-11 allowed.
         uint64_t         tx_ci_mctc_x  :  4; // Select the MCTC for the RXDMA_STALL_NO_TXCI_CRED_X Events. 0-11 allowed.
         uint64_t        no_cmd_mctc_y  :  4; // Select the MCTC for the RXDMA_STALL_NO_CMD_Y Event. 0-8 allowed.
-        uint64_t        no_cmd_mctc_x  :  4; // Select the MCTC for the RXDMA_STALL_NO_CMD_Y Event. 0-8 allowed.
+        uint64_t        no_cmd_mctc_x  :  4; // Select the MCTC for the RXDMA_STALL_NO_CMD_X Event. 0-8 allowed.
         uint64_t       Reserved_63_56  :  8; // Unused
     } field;
     uint64_t val;
@@ -371,7 +426,7 @@ typedef union {
         uint64_t                 data  :  8; // Data to be written, or data read from access
         uint64_t              lparity  :  1; // Parity for data [3:0] being written
         uint64_t              hparity  :  1; // Parity for data [7:4] being written
-        uint64_t       Reserved_63_10  : 54; // 
+        uint64_t       Reserved_63_10  : 54; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_LINKED_LIST_t;
@@ -381,7 +436,7 @@ typedef union {
     struct {
         uint64_t                 tail  :  8; // Tail pointer for the head location accessed.
         uint64_t                  ecc  :  5; // ECC for data being written, or parity read from access
-        uint64_t       Reserved_63_13  : 51; // 
+        uint64_t       Reserved_63_13  : 51; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_TAIL_LIST_t;
@@ -392,7 +447,7 @@ typedef union {
         uint64_t              address  : 49; // Address of DMA Buffer location to be accessed
         uint64_t                 mctc  :  3; // Message Class and Traffic Class being accessed {MC,TC}
         uint64_t         payload_regs  :  8; // Constant indicating number of payload registers used for the data.
-        uint64_t       Reserved_61_60  :  2; // 
+        uint64_t       Reserved_61_60  :  2; // Unused
         uint64_t                write  :  1; // 0=Read, 1=Write
         uint64_t                Valid  :  1; // Set by Software to start command, cleared by Hardware when complete
     } field;
@@ -435,7 +490,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 Data  : 32; // 
-        uint64_t       Reserved_63_32  : 32; // 
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_BUFFER_DATA4_t;
@@ -443,11 +498,14 @@ typedef union {
 // RXDMA_DBG_TID_ACK_CNT desc:
 typedef union {
     struct {
-        uint64_t         acks_alloced  :  8; // Acks allocated now.
-        uint64_t         tids_alloced  :  8; // TIDs allocated now.
-        uint64_t              ack_max  :  8; // Max Ack allocation set.
-        uint64_t              tid_max  :  8; // Max TID allocation set.
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t         acks_alloced  : 10; // Acks allocated now.
+        uint64_t       Reserved_15_10  :  6; // Unused
+        uint64_t         tids_alloced  : 10; // TIDs allocated now.
+        uint64_t       Reserved_31_26  :  6; // Unused
+        uint64_t              ack_max  : 10; // Total Acks available.
+        uint64_t       Reserved_47_42  :  6; // Unused
+        uint64_t              tid_max  : 10; // Total TIDs available.
+        uint64_t       Reserved_63_58  :  6; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_TID_ACK_CNT_t;
@@ -455,14 +513,16 @@ typedef union {
 // RXDMA_DBG_MUX_SELECT desc:
 typedef union {
     struct {
-        uint64_t           tid_select  :  8; // TID number to display in TID_DATA CSR.
-        uint64_t           ack_select  :  8; // Ack to display in ACK_DATA CSR
-        uint64_t        tid_sel_valid  :  1; // Allow this TID select to update the data CSRs
-        uint64_t        ack_sel_valid  :  1; // Allow this Ack select to update the data CSRs
-        uint64_t       Reserved_19_18  :  2; // Reserved
+        uint64_t           tid_select  : 10; // TID number to display in TID_DATA CSR.
+        uint64_t     tid_qk_sel_valid  :  1; // Read the TID Quick Array. Will be cleared when read is done.
+        uint64_t     tid_go_sel_valid  :  1; // Read the TID GO Array. Will be cleared when read is done.
+        uint64_t       Reserved_15_12  :  4; // Unused
+        uint64_t           ack_select  : 10; // Ack to display in ACK_DATA CSR
+        uint64_t        ack_sel_valid  :  1; // Read the Ack Array. Will be cleared when read is done.
+        uint64_t       Reserved_31_27  :  5; // Unused
         uint64_t          cntx_select  :  4; // Select the context for cntx CSR debug data
         uint64_t       cntx_sel_valid  :  1; // Allow this cntx select to update the data CSRs
-        uint64_t       Reserved_63_25  : 39; // Reserved
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_MUX_SELECT_t;
@@ -471,12 +531,11 @@ typedef union {
 typedef union {
     struct {
         uint64_t            tid_valid  :  1; // This TID is Valid.
-        uint64_t         tid_all_sent  :  1; // All Commands for this TID have been sent.
-        uint64_t         Reserved_3_2  :  2; // Reserved
-        uint64_t            tid_error  :  4; // Error Responses for this TID. [3]=AT Error, [2]=Timeout, [1]=Mem Error, [0]=Poison.
-        uint64_t              tid_ack  :  8; // Pointer to the ACK for this TID. 0=No Ack
-        uint64_t            tid_count  :  8; // Number of outstanding responses needed for this TID
-        uint64_t       Reserved_63_24  : 40; // Reserved
+        uint64_t            tid_error  :  2; // Error Responses for this TID. [1]=AT Error, [0]=Host Error.
+        uint64_t         Reserved_7_3  :  5; // Unused
+        uint64_t          tid_go_data  : 22; // TID GO Data {ECC[5:0],Count[5:0],Ack[9:0]}
+        uint64_t       Reserved_31_30  :  2; // Unused
+        uint64_t       tid_quick_data  : 32; // TID Quick Data {ECC[5:0],Count[5:0],WAR_type[1:0],WAR_ptr[9:0],WAR_Shift[7:0]}
     } field;
     uint64_t val;
 } RXDMA_DBG_TID_DATA_t;
@@ -490,15 +549,15 @@ typedef union {
         uint64_t        ack_tail_type  :  1; // Tail Type of Ack 0=PTL, 1=CTS
         uint64_t             ack_mctc  :  4; // Error Responses for this TID. [3]=AT Error, [2]=Timeout, [1]=Mem Error, [0]=Poison.
         uint64_t              ack_big  :  1; // This is a two cycle Ack
-        uint64_t        Reserved_15_9  :  7; // Reserved
+        uint64_t        Reserved_15_9  :  7; // Unused
         uint64_t            doing_ack  :  1; // We are trying to push an Ack out the TxDMA or TxCI interface.
         uint64_t       doing_fast_ack  :  1; // We are trying to push a fast Ack out the TxDMA or TxCI interface.
         uint64_t      ack_good_credit  :  1; // This MCTC has enough credits for this ack.
         uint64_t          ack_to_txci  :  1; // We are trying to push this Ack out the TxCI interface.
-        uint64_t       Reserved_23_20  :  4; // Reserved
+        uint64_t       Reserved_23_20  :  4; // Unused
         uint64_t              ack_tid  :  8; // TID of the Ack we are trying to send.
         uint64_t           ack_handle  :  8; // Handle of the Ack we are trying to send
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_ACK_DATA_t;
@@ -507,10 +566,10 @@ typedef union {
 typedef union {
     struct {
         uint64_t              cmd_req  :  9; // Contexts requesting HIArb arbitration.
-        uint64_t           Reserved_9  :  1; // Reserved
+        uint64_t           Reserved_9  :  1; // Unused
         uint64_t              cmd_sel  : 10; // Selected Context in HIArb. [9]=eq
-        uint64_t           ack_handle  :  8; // cmd_muxed_q4: Ack Handle
-        uint64_t               req_tc  :  4; // cmd_muxed_q4: MCTC
+        uint64_t           ack_handle  : 10; // cmd_muxed_q4: Ack Handle
+        uint64_t       Reserved_31_30  :  2; // Unused
         uint64_t             addr_low  : 32; // cmd_muxed_q4: Lower 32 bits of virtual address
     } field;
     uint64_t val;
@@ -523,17 +582,16 @@ typedef union {
         uint64_t           req_opcode  :  3; // cmd_muxed_q4: req_opcode
         uint64_t             req_spec  :  1; // cmd_muxed_q4: req_spec
         uint64_t               req_ct  :  1; // cmd_muxed_q4: req_ct
-        uint64_t              req_art  :  1; // cmd_muxed_q4: req_art
         uint64_t              req_eop  :  1; // cmd_muxed_q4: req_eop
         uint64_t              req_sop  :  1; // cmd_muxed_q4: req_sop
         uint64_t             req_asop  :  5; // cmd_muxed_q4: req_asop
         uint64_t              req_adt  :  5; // cmd_muxed_q4: req_adt
         uint64_t            req_fetch  :  1; // cmd_muxed_q4: req_fetch
-        uint64_t          Reserved_31  :  1; // Reserved
         uint64_t              req_len  : 14; // cmd_muxed_q4: req_len
-        uint64_t            req_chint  :  2; // cmd_muxed_q4: req_chint
-        uint64_t             req_tmod  :  8; // cmd_muxed_q4: req_tmod
-        uint64_t       Reserved_63_56  :  8; // Reserved
+        uint64_t            req_chint  :  4; // cmd_muxed_q4: req_chint
+        uint64_t             req_tmod  :  9; // cmd_muxed_q4: req_tmod
+        uint64_t               req_tc  :  4; // cmd_muxed_q4: MCTC
+        uint64_t       Reserved_63_61  :  3; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_HIARB_DATA1_t;
@@ -548,14 +606,14 @@ typedef union {
         uint64_t             ack_done  :  1; // Context Cmd ack_done
         uint64_t            cmd_valid  :  1; // Context Cmd cmd_valid to HIArb
         uint64_t           needs_data  :  1; // Context Cmd data needed to HIArb
-        uint64_t           Reserved_7  :  1; // Reserved
+        uint64_t           Reserved_7  :  1; // Unused
         uint64_t               opcode  :  3; // Context Cmd opcode
-        uint64_t          Reserved_11  :  1; // Reserved
+        uint64_t          Reserved_11  :  1; // Unused
         uint64_t                  len  : 14; // Context Cmd len
-        uint64_t       Reserved_27_26  :  2; // Reserved
+        uint64_t       Reserved_27_26  :  2; // Unused
         uint64_t           data_valid  :  1; // Context Cmd data valid
         uint64_t            data_tail  :  1; // Context Cmd data tail
-        uint64_t          Reserved_30  :  1; // Reserved
+        uint64_t          Reserved_30  :  1; // Unused
         uint64_t             cmd_hold  :  1; // command hold from the HIArb
         uint64_t                 addr  : 32; // Lower 32 bits of Context Address
     } field;
@@ -566,20 +624,20 @@ typedef union {
 typedef union {
     struct {
         uint64_t           pkt_handle  : 10; // FIFO Cmd packet handle
-        uint64_t       Reserved_11_10  :  2; // Reserved
+        uint64_t       Reserved_11_10  :  2; // Unused
         uint64_t                 mctc  :  3; // FIFO Cmd mctc
-        uint64_t          Reserved_15  :  1; // Reserved
+        uint64_t          Reserved_15  :  1; // Unused
         uint64_t                  pid  : 12; // FIFO Cmd PID
         uint64_t                   ni  :  2; // FIFO Cmd NI
-        uint64_t          Reserved_30  :  1; // Reserved
+        uint64_t          Reserved_30  :  1; // Unused
         uint64_t                  eop  :  1; // FIFO Cmd EOP
         uint64_t             ack_info  :  6; // Ack_info[197:192]
-        uint64_t       Reserved_43_38  :  6; // Reserved
+        uint64_t       Reserved_43_38  :  6; // Unused
         uint64_t                atype  :  1; // Ack_info.atype
         uint64_t                 tail  :  1; // Ack_info.tail
         uint64_t                 head  :  1; // Ack_info.head
         uint64_t                valid  :  1; // Ack_info.valid
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_CNTX_FIFO_PKT_t;
@@ -594,11 +652,11 @@ typedef union {
         uint64_t                  art  :  1; // Context op_info.art
         uint64_t                fetch  :  1; // Context op_info.fetch
         uint64_t                iovec  :  1; // Context op_info.iovec
-        uint64_t       Reserved_31_17  : 15; // Reserved
+        uint64_t       Reserved_31_17  : 15; // Unused
         uint64_t                start  : 14; // Context op_info.start
-        uint64_t       Reserved_47_46  :  2; // Reserved
+        uint64_t       Reserved_47_46  :  2; // Unused
         uint64_t                count  : 14; // Context op_info.count
-        uint64_t       Reserved_63_62  :  2; // Reserved
+        uint64_t       Reserved_63_62  :  2; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_CNTX_FIFO_OP0_t;
@@ -607,7 +665,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t                vaddr  : 57; // Context op_info.vaddr
-        uint64_t       Reserved_63_57  :  7; // Reserved
+        uint64_t       Reserved_63_57  :  7; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_CNTX_FIFO_OP1_t;
@@ -617,14 +675,14 @@ typedef union {
     struct {
         uint64_t                valid  :  1; // Context cteq_info.vaddr
         uint64_t                   ct  :  1; // Context cteq_info.vaddr
-        uint64_t         Reserved_3_2  :  2; // Reserved
+        uint64_t         Reserved_3_2  :  2; // Unused
         uint64_t               handle  : 11; // Context cteq_info.vaddr
-        uint64_t          Reserved_15  :  1; // Reserved
+        uint64_t          Reserved_15  :  1; // Unused
         uint64_t           ct_failure  :  1; // Context cteq_info.vaddr
         uint64_t         handle_valid  :  1; // Context cteq_info.vaddr
-        uint64_t       Reserved_19_18  :  2; // Reserved
+        uint64_t       Reserved_19_18  :  2; // Unused
         uint64_t            eq_handle  : 11; // Context cteq_info.vaddr
-        uint64_t          Reserved_31  :  1; // Reserved
+        uint64_t          Reserved_31  :  1; // Unused
         uint64_t             ct_count  : 32; // Context cteq_info.vaddr
     } field;
     uint64_t val;
@@ -750,7 +808,14 @@ typedef union {
         uint64_t      inj_otr_pkt_cmd  :  1; // Inject error into pkt_info and cteq_info cmd from OTR
         uint64_t        inj_hp_op_cmd  :  1; // Inject error into op_info cmd from RxHP
         uint64_t       inj_otr_op_cmd  :  1; // Inject error into op_info cmd from OTR
-        uint64_t       Reserved_63_36  : 28; // Unused
+        uint64_t       Reserved_39_36  :  4; // Unused
+        uint64_t ct_cache_tag_err_inj_enable  :  1; // Inject error into CT Cache Tag
+        uint64_t ct_cache_tag_err_inj_domain  :  1; // Inject error into CT Cache Tag
+        uint64_t ct_cache_tag_err_inj_mask  :  7; // Inject error into CT Cache Tag
+        uint64_t ct_cache_data_err_inj_enable  :  1; // Inject error into CT Cache Data
+        uint64_t ct_cache_data_err_inj_domain  :  2; // Inject error into CT Cache Data
+        uint64_t ct_cache_data_err_inj_mask  :  8; // Inject error into CT Cache Data
+        uint64_t       Reserved_63_60  :  4; // Unused
     } field;
     uint64_t val;
 } RXDMA_DBG_ERR_INJ_t;
@@ -765,7 +830,7 @@ typedef union {
         uint64_t          dq_tail_mbe  :  8; // Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7
         uint64_t           ha_ecc_sbe  :  4; // Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.
         uint64_t           ha_ecc_mbe  :  4; // Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_STS_1_t;
@@ -774,7 +839,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t            error_clr  : 48; // Clear the Error
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_CLR_1_t;
@@ -783,7 +848,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t            force_err  : 48; // Force an error
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FRC_1_t;
@@ -792,7 +857,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t              host_en  : 48; // 
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_EN_HOST_1_t;
@@ -801,7 +866,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t           first_host  : 48; // 
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FIRST_HOST_1_t;
@@ -810,7 +875,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               bmc_en  : 48; // 
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_EN_BMC_1_t;
@@ -819,7 +884,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t            first_bmc  : 48; // 
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FIRST_BMC_1_t;
@@ -828,7 +893,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t              quar_en  : 48; // 
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_EN_QUAR_1_t;
@@ -837,7 +902,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t           first_quar  : 48; // 
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FIRST_QUAR_1_t;
@@ -861,9 +926,11 @@ typedef union {
         uint64_t    otr_pool_cteq_mbe  :  1; // Uncorrectable Error on a read from the OTR Pool CTEQ Array
         uint64_t           to_pkt_sbe  :  1; // Correctable Error on a Triggered Op from the RxET
         uint64_t           to_pkt_mbe  :  1; // Uncorrectable Error on a Triggered Op from the RxET
+        uint64_t          eq_data_sbe  :  1; // Correctable Error on the EQ Data being delivered from the RxET.
+        uint64_t          eq_data_mbe  :  1; // Uncorrectable Error on the EQ Data being delivered from the RxET.
+        uint64_t           eq_hdr_mbe  :  1; // The EQ being delivered from the RxET has a header MBE. The EQ was dropped.
         uint64_t      mc0_dropped_cmd  :  1; // RxDMA Command from RxHP was dropped because command pool was full.
         uint64_t      mc1_dropped_cmd  :  1; // RxDMA Command from RxOTR was dropped because command pool was full.
-        uint64_t           eq_hdr_mbe  :  1; // The EQ being delivered from the RxET has a header MBE. The EQ was dropped.
         uint64_t       gen1_write_err  :  1; // The Gen1 EQ being delivered from the RxET has a header MBE or the data queue read had an error or the RxHP Gen1 EQ command requested more than 120 bytes.
         uint64_t             to_error  :  1; // The Triggered Op being delivered from the RxET had an Error. This TO was dropped.
         uint64_t      to_queue_wr_err  :  5; // A Write to the Triggered Op Ptr Queue caused an overflow. [3:0]=>TC3-0, [4]=>HP
@@ -871,7 +938,7 @@ typedef union {
         uint64_t        to_size_error  :  1; // A Triggered Op aimed for the HP is not 64 bytes in size, or a TO aimed for the TXCI is not 32 or 64 bytes in size.
         uint64_t         iovec_rd_err  :  1; // An error on the IOVEC read from the HIArb was seen.
         uint64_t        ct_data_error  :  1; // Data Returned for a Counting Event had an error reported by the HIArb. This is not an ECC error.
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_STS_2_t;
@@ -879,8 +946,8 @@ typedef union {
 // RXDMA_ERR_CLR_2 desc:
 typedef union {
     struct {
-        uint64_t            error_clr  : 39; // Clear the Error
-        uint64_t       Reserved_63_39  : 25; // Reserved
+        uint64_t            error_clr  : 42; // Clear the Error
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_CLR_2_t;
@@ -888,8 +955,8 @@ typedef union {
 // RXDMA_ERR_FRC_2 desc:
 typedef union {
     struct {
-        uint64_t            force_err  : 40; // Force an error
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t            force_err  : 42; // Force an error
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FRC_2_t;
@@ -897,8 +964,8 @@ typedef union {
 // RXDMA_ERR_EN_HOST_2 desc:
 typedef union {
     struct {
-        uint64_t              host_en  : 40; // 
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t              host_en  : 42; // 
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_EN_HOST_2_t;
@@ -906,8 +973,8 @@ typedef union {
 // RXDMA_ERR_FIRST_HOST_2 desc:
 typedef union {
     struct {
-        uint64_t           first_host  : 40; // 
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t           first_host  : 42; // 
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FIRST_HOST_2_t;
@@ -915,8 +982,8 @@ typedef union {
 // RXDMA_ERR_EN_BMC_2 desc:
 typedef union {
     struct {
-        uint64_t               bmc_en  : 40; // 
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t               bmc_en  : 42; // 
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_EN_BMC_2_t;
@@ -924,8 +991,8 @@ typedef union {
 // RXDMA_ERR_FIRST_BMC_2 desc:
 typedef union {
     struct {
-        uint64_t            first_bmc  : 40; // 
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t            first_bmc  : 42; // 
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FIRST_BMC_2_t;
@@ -933,8 +1000,8 @@ typedef union {
 // RXDMA_ERR_EN_QUAR_2 desc:
 typedef union {
     struct {
-        uint64_t              quar_en  : 40; // 
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t              quar_en  : 42; // 
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_EN_QUAR_2_t;
@@ -942,8 +1009,8 @@ typedef union {
 // RXDMA_ERR_FIRST_QUAR_2 desc:
 typedef union {
     struct {
-        uint64_t           first_quar  : 40; // 
-        uint64_t       Reserved_63_40  : 24; // Reserved
+        uint64_t           first_quar  : 42; // 
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FIRST_QUAR_2_t;
@@ -952,11 +1019,11 @@ typedef union {
 typedef union {
     struct {
         uint64_t         dq_tail_synd  :  5; // Syndrome of the last MBE or SBE of a DQ Tail Read
-        uint64_t         Reserved_7_5  :  3; // Reserved
+        uint64_t         Reserved_7_5  :  3; // Unused
         uint64_t    read_error_pkt_id  :  8; // Packet ID of the last DQ Read Error seen.
         uint64_t          dq_err_addr  :  8; // The address of the last DQ MBE or ll parity error.
         uint64_t              addr_dq  :  3; // DQ of the address in dq_err_addr
-        uint64_t       Reserved_31_27  :  5; // Reserved
+        uint64_t       Reserved_31_27  :  5; // Unused
         uint64_t           hp_op_synd  :  8; // Syndrome of the last MBE or SBE of an HP Pool OP Read
         uint64_t         hp_cteq_synd  :  8; // Syndrome of the last MBE or SBE of an HP Pool CTEQ Read
         uint64_t          otr_op_synd  :  8; // Syndrome of the last MBE or SBE of an OTR Pool OP Read
@@ -976,7 +1043,7 @@ typedef union {
         uint64_t        ack_head_synd  :  8; // Syndrome of the last MBE or SBE for an Ack Head Read
         uint64_t            ha_ecc_dq  :  3; // On HA MBE or SBE, point to failing DQ
         uint64_t              to_synd  :  8; // Syndrome of the last MBE or SBE for a TO Pkt
-        uint64_t       Reserved_63_59  :  5; // Reserved
+        uint64_t       Reserved_63_59  :  5; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_INFO_2_t;
@@ -1008,7 +1075,7 @@ typedef union {
     struct {
         uint64_t   otr_pkt_op_sbe_cnt  : 16; // Count of SBE's for Pkt and Op commands from OTR
         uint64_t   otr_pkt_op_mbe_cnt  : 16; // Count of MBE's for Pkt and Op commands from OTR
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_INFO_5_t;

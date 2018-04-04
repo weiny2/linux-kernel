@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_rx_ci_cid_CSRS_H__
@@ -16,6 +16,15 @@ typedef union {
     uint64_t val;
 } RXCID_CFG_CNTRL_t;
 
+// RXCID_CFG_PID_MASK desc:
+typedef union {
+    struct {
+        uint64_t             pid_mask  : 12; // Process ID mask associated with this command queue. Default is to allow only a single Process ID for the command queue. See note in CSR description regarding the symmetrical pairing requirements between this and the Tx.
+        uint64_t       Reserved_63_12  : 52; // Unused
+    } field;
+    uint64_t val;
+} RXCID_CFG_PID_MASK_t;
+
 // RXCID_CFG_HEAD_UPDATE_ADDR desc:
 typedef union {
     struct {
@@ -30,7 +39,7 @@ typedef union {
 // RXCID_CFG_HEAD_UPDATE_CNTRL desc:
 typedef union {
     struct {
-        uint64_t            rate_ctrl  :  3; // Head pointer update frequency control. This register sets the number of head pointer increments that must occur before a head pointer update is scheduled. If multiple updates are scheduled before the update write is sent, they are combined. When the update write occurs, the current value of the head pointer is used, which may be more recent than the value that caused the update to be scheduled. Values of 0, 1, 2, 3, and 4 correspond to updating on increments of 1, 2, 4, 8, and 16. Values 5-7 are reserved for future use and the hardware currently interprets them the same as 4 to prevent undefined behavior.
+        uint64_t            rate_ctrl  :  3; // Head pointer update frequency control. This register sets the number of head pointer increments that must occur before a head pointer update is scheduled. If multiple updates are scheduled before the update write is sent, they are combined. When the update write occurs, the current value of the head pointer is used, which may be more recent than the value that caused the update to be scheduled. Values of 0, 1, 2, 3, 4 and 5 correspond to updating on increments of 1, 2, 4, 8, 16 and 32. Values 6-7 are reserved for future use and the hardware currently interprets them the same as 5 to prevent undefined behavior.
         uint64_t                chint  :  2; // chint[1] = allocating indicator (table default value = 1) chint[0] = temporal indicator (table default value = 1)
         uint64_t        Reserved_63_5  : 59; // Unused
     } field;
@@ -150,8 +159,8 @@ typedef union {
 // RXCID_CFG_MAX_CONTEXTS desc:
 typedef union {
     struct {
-        uint64_t      fxr_max_context  :  8; // Maximum number of CQ's supported by FXR
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t      fxr_max_context  :  9; // Maximum number of CQ's supported by FXR
+        uint64_t        Reserved_63_9  : 55; // Unused
     } field;
     uint64_t val;
 } RXCID_CFG_MAX_CONTEXTS_t;
@@ -187,7 +196,7 @@ typedef union {
         uint64_t hifis_reqrsp_hval_par_err  :  1; // Detected a HIFIS hval parity error for reads from the hifis fifo. ERR_CATEGORY_HFI
         uint64_t cq_raw_cor255_192_mbe_err  :  1; // Detected a HIFIS data MBE error for reads from the hifis fifo. ERR_CATEGORY_HFI
         uint64_t cq_raw_cor255_192_sbe_err  :  1; // Detected a HIFIS data SBE error for reads from the hifis fifo ERR_CATEGORY_CORRECTABLE
-        uint64_t    trig_opps_len_err  :  1; // Detected a triggered opps length error. ERR_CATEGORY_COMMAND
+        uint64_t    trig_opps_len_err  :  1; // Detected a triggered opps length error. ERR_CATEGORY_COMMAND IF command is TRIGGERED_APPEND or ORDERED_TRIG_APPEND and the command is RX_TRIG, the CMD_LEN can be 2'b10 (96 bytes) or less - Command dropped if the length is 2'b11. IF command is TRIGGERED_DISABLE, the CMD_LEN can be 2'b01 (64bytes) or less - CMD dropped if the length is 2'b10 or 2'b11.
         uint64_t       Reserved_63_29  : 35; // Unused
     } field;
     uint64_t val;
@@ -287,13 +296,13 @@ typedef union {
         uint64_t syndrome_csr_maddr_sbe  :  7; // Syndrome of the last SBE of MADDR CSR
         uint64_t  syndrome_tx_cnt_mbe  :  5; // Syndrome of last MBE for the TX count
         uint64_t  syndrome_tx_cnt_sbe  :  5; // Syndrome of last SBE for the TX count
-        uint64_t  syndrome_rx_cnt_mbe  :  4; // Syndrome of last MBE for the RX count
-        uint64_t  syndrome_rx_cnt_sbe  :  4; // Syndrome of last SBE for the RX count
+        uint64_t  syndrome_rx_cnt_mbe  :  5; // Syndrome of last MBE for the RX count
+        uint64_t  syndrome_rx_cnt_sbe  :  5; // Syndrome of last SBE for the RX count
         uint64_t  syndrome_tx_ptr_mbe  :  5; // Syndrome of last MBE for the TX pointer
         uint64_t  syndrome_tx_ptr_sbe  :  5; // Syndrome of last SBE for the TX pointer
-        uint64_t  syndrome_rx_ptr_mbe  :  4; // Syndrome of last MBE for the RX pointer
-        uint64_t  syndrome_rx_ptr_sbe  :  4; // Syndrome of last SBE for the RX pointer
-        uint64_t       Reserved_63_50  : 14; // Unused
+        uint64_t  syndrome_rx_ptr_mbe  :  5; // Syndrome of last MBE for the RX pointer
+        uint64_t  syndrome_rx_ptr_sbe  :  5; // Syndrome of last SBE for the RX pointer
+        uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;
 } RXCID_ERR_INFO_SBE_MBE_1_t;
@@ -366,15 +375,15 @@ typedef union {
         uint64_t     inject_maddr_err  :  1; // Error injection enable for MADDR ECC error
         uint64_t   inject_tx_cnt_mask  :  5; // Error injection mask for TX count ECC error
         uint64_t    inject_tx_cnt_err  :  1; // Error injection enable for TX count ECC error
-        uint64_t   inject_rx_cnt_mask  :  4; // Error injection mask for RX count ECC error
+        uint64_t   inject_rx_cnt_mask  :  5; // Error injection mask for RX count ECC error
         uint64_t    inject_rx_cnt_err  :  1; // Error injection enable for RX count ECC error
         uint64_t   inject_tx_ptr_mask  :  5; // Error injection mask for TX pointer ECC error
         uint64_t    inject_tx_ptr_err  :  1; // Error injection enable for TX pointer ECC error
-        uint64_t   inject_rx_ptr_mask  :  4; // Error injection mask for RX pointer ECC error
+        uint64_t   inject_rx_ptr_mask  :  5; // Error injection mask for RX pointer ECC error
         uint64_t    inject_rx_ptr_err  :  1; // Error injection enable for RX pointer ECC error
         uint64_t inject_req_fifo_mask  :  8; // Error injection mask for Request FIFO ECC error
         uint64_t  inject_req_fifo_err  :  1; // Error injection enable for Request FIFO ECC error
-        uint64_t       Reserved_63_55  :  9; // Unused
+        uint64_t       Reserved_63_57  :  7; // Unused
     } field;
     uint64_t val;
 } RXCID_DBG_ERR_INJECT_t;

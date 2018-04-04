@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_rx_e2e_CSRS_H__
@@ -85,7 +85,7 @@ typedef union {
 // RXE2E_CFG_RC_ORDERED_MAP desc:
 typedef union {
     struct {
-        uint64_t              ordered  :  8; // 1 bit = ordered packet 0 bit = unordered packet rc mapping to ordered
+        uint64_t              ordered  :  8; // 1 bit = ordered packet 0 bit = unordered packet RC mapping to ordered
         uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
@@ -199,7 +199,7 @@ typedef union {
     struct {
         uint64_t         tag_way_addr  : 34; // psn cache tag way address, format is psn_cache_addr_t
         uint64_t        tag_way_valid  :  1; // psn cache tag way valid
-        uint64_t              reserve  : 29; // 
+        uint64_t       Reserved_63_35  : 29; // 
     } field;
     uint64_t val;
 } RXE2E_CFG_PSN_CACHE_ACCESS_TAG_t;
@@ -237,26 +237,26 @@ typedef union {
 typedef union {
     struct {
         uint64_t           diagnostic  :  1; // Diagnostic Error Flag
-        uint64_t        mc0_lm_in_mbe  :  1; // MC0 LINKMUX input mbe Error information: Section 29.13.3.32, 'RXE2E Error Info MC0 LM Input SBE/MBE'
-        uint64_t        mc0_lm_in_sbe  :  1; // MC0 LINKMUX input sbe Error information: . Section 29.13.3.32, 'RXE2E Error Info MC0 LM Input SBE/MBE'
-        uint64_t        mc1_lm_in_mbe  :  1; // MC1 LINKMUX input mbe Error information: Section 29.13.3.33, 'RXE2E Error Info MC1 LM Input SBE/MBE'
-        uint64_t        mc1_lm_in_sbe  :  1; // MC1 LINKMUX input sbe Error information: . Section 29.13.3.33, 'RXE2E Error Info MC1 LM Input SBE/MBE'
-        uint64_t   mc0_input_fifo_mbe  :  1; // MC0 input fifo mbe Error information: Section 29.13.3.37, 'RXE2E Error Info PSN Cache Tag MBE'
-        uint64_t   mc0_input_fifo_sbe  :  1; // MC0 input fifo sbe Error information: . Section 29.13.3.37, 'RXE2E Error Info PSN Cache Tag MBE'
-        uint64_t   mc1_input_fifo_mbe  :  1; // MC1 input fifo mbe Error information: Section 29.13.3.34, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'
-        uint64_t   mc1_input_fifo_sbe  :  1; // MC1 input fifo sbe Error information: . Section 29.13.3.34, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'
-        uint64_t    psn_cache_tag_mbe  :  1; // PSN Cache tag mbe Error information: Section 29.13.3.37, 'RXE2E Error Info PSN Cache Tag MBE' Note: these are fairly fatal as you don't know what connection is bad.
-        uint64_t    psn_cache_tag_sbe  :  1; // PSN Cache tag sbe Error information: . Section 29.13.3.36, 'RXE2E Error Info PSN Cache Tag SBE'
-        uint64_t   psn_cache_data_mbe  :  1; // PSN Cache data mbe Error information: Section 29.13.3.38, 'RXE2E Error Info PSN Cache Data SBE/MBE' Note: This will result in auto-disconnect for the connection. This may also remove a big scoreboard slot from being re-allocated as you can't rely on either the big_in_use bit or the big_scoreboard pointer in the data. So if a big scoreboard was in use, that slot will remain unavailabe for re-use until the next hard reset.
-        uint64_t   psn_cache_data_sbe  :  1; // PSN Cache data sbe Error information: . Section 29.13.3.38, 'RXE2E Error Info PSN Cache Data SBE/MBE'
-        uint64_t               MC0crc  :  1; // CRC error on MC0 Error information: . Section 29.13.3.41, 'RXE2E Error Info CRC'
-        uint64_t               MC1crc  :  1; // CRC error on MC1 Error information: . Section 29.13.3.41, 'RXE2E Error Info CRC'
-        uint64_t   big_scoreboard_mbe  :  1; // big scoreboard mbe. Error information: Section 29.13.3.40, 'RXE2E Error Info Big Scoreboard MBE'
-        uint64_t   big_scoreboard_sbe  :  1; // big scoreboard sbe. Error information: Section 29.13.3.39, 'RXE2E Error Info Big Scoreboard SBE'
-        uint64_t     any_mbe_cntr_max  :  1; // Some mbe cntr is saturated (all 1's). Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'
-        uint64_t any_mbe_cntr_non_zero  :  1; // Some mbe cntr is non-zero. Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'
-        uint64_t     any_sbe_cntr_max  :  1; // Some sbe cntr is saturated (all 1's). Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'
-        uint64_t any_sbe_cntr_non_zero  :  1; // Some sbe cntr is non-zero. Error information: Section 29.13.3.31, 'RXE2E SBE/MBE Err Counter Summary Status'
+        uint64_t        mc0_lm_in_mbe  :  1; // MC0 LINKMUX input mbe Error information: Section 30.13.6.11, 'RXE2E Error Info MC0 LM Input SBE/MBE'
+        uint64_t        mc0_lm_in_sbe  :  1; // MC0 LINKMUX input sbe Error information: . Section 30.13.6.11, 'RXE2E Error Info MC0 LM Input SBE/MBE'
+        uint64_t        mc1_lm_in_mbe  :  1; // MC1 LINKMUX input mbe Error information: Section 30.13.6.12, 'RXE2E Error Info MC1 LM Input SBE/MBE'
+        uint64_t        mc1_lm_in_sbe  :  1; // MC1 LINKMUX input sbe Error information: . Section 30.13.6.12, 'RXE2E Error Info MC1 LM Input SBE/MBE'
+        uint64_t   mc0_input_fifo_mbe  :  1; // MC0 input fifo mbe Error information: Section 30.13.6.16, 'RXE2E Error Info PSN Cache Tag MBE'
+        uint64_t   mc0_input_fifo_sbe  :  1; // MC0 input fifo sbe Error information: . Section 30.13.6.16, 'RXE2E Error Info PSN Cache Tag MBE'
+        uint64_t   mc1_input_fifo_mbe  :  1; // MC1 input fifo mbe Error information: Section 30.13.6.13, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'
+        uint64_t   mc1_input_fifo_sbe  :  1; // MC1 input fifo sbe Error information: . Section 30.13.6.13, 'RXE2E Error Info MC0 Input Fifo SBE/MBE'
+        uint64_t    psn_cache_tag_mbe  :  1; // PSN Cache tag mbe Error information: Section 30.13.6.16, 'RXE2E Error Info PSN Cache Tag MBE' Note: these are fairly fatal as you don't know what connection is bad.
+        uint64_t    psn_cache_tag_sbe  :  1; // PSN Cache tag sbe Error information: . Section 30.13.6.15, 'RXE2E Error Info PSN Cache Tag SBE'
+        uint64_t   psn_cache_data_mbe  :  1; // PSN Cache data mbe Error information: Section 30.13.6.17, 'RXE2E Error Info PSN Cache Data SBE/MBE' Note: This will result in auto-disconnect for the connection. This may also remove a big scoreboard slot from being re-allocated as you can't rely on either the big_in_use bit or the big_scoreboard pointer in the data. So if a big scoreboard was in use, that slot will remain unavailabe for re-use until the next hard reset.
+        uint64_t   psn_cache_data_sbe  :  1; // PSN Cache data sbe Error information: . Section 30.13.6.17, 'RXE2E Error Info PSN Cache Data SBE/MBE'
+        uint64_t               MC0crc  :  1; // CRC error on MC0 Error information: . Section 30.13.6.20, 'RXE2E Error Info CRC'
+        uint64_t               MC1crc  :  1; // CRC error on MC1 Error information: . Section 30.13.6.20, 'RXE2E Error Info CRC'
+        uint64_t   big_scoreboard_mbe  :  1; // big scoreboard mbe. Error information: Section 30.13.6.19, 'RXE2E Error Info Big Scoreboard MBE'
+        uint64_t   big_scoreboard_sbe  :  1; // big scoreboard sbe. Error information: Section 30.13.6.18, 'RXE2E Error Info Big Scoreboard SBE'
+        uint64_t     any_mbe_cntr_max  :  1; // Some mbe cntr is saturated (all 1's). Error information: Section 30.13.6.10, 'RXE2E SBE/MBE Err Counter Summary Status'
+        uint64_t any_mbe_cntr_non_zero  :  1; // Some mbe cntr is non-zero. Error information: Section 30.13.6.10, 'RXE2E SBE/MBE Err Counter Summary Status'
+        uint64_t     any_sbe_cntr_max  :  1; // Some sbe cntr is saturated (all 1's). Error information: Section 30.13.6.10, 'RXE2E SBE/MBE Err Counter Summary Status'
+        uint64_t any_sbe_cntr_non_zero  :  1; // Some sbe cntr is non-zero. Error information: Section 30.13.6.10, 'RXE2E SBE/MBE Err Counter Summary Status'
         uint64_t       Reserved_63_21  : 43; // Reserved
     } field;
     uint64_t val;
@@ -528,7 +528,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t           way_enable  : 16; // 1 bits enable, 0 bits disable PSN Cache Tag ways.
-        uint64_t       Reserved_63_16  : 48; // Reserved
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } RXE2E_DBG_PSN_CACHE_TAG_WAY_ENABLE_t;
@@ -537,7 +537,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t              address  : 10; // Address of Big Scoreboard location to be accessed
-        uint64_t       Reserved_61_10  : 52; // 
+        uint64_t       Reserved_61_10  : 52; // Unused
         uint64_t                write  :  1; // 0=Read, 1=Write
         uint64_t                 busy  :  1; // Set by Software to start command, cleared by Hardware when complete
     } field;
@@ -664,7 +664,7 @@ typedef union {
         uint64_t         flit_index_2  :  2; // flit index to match/mask on for pkt cntr 2. only can match on flits 0-3.
         uint64_t         flit_index_3  :  2; // flit index to match/mask on for pkt cntr 3. only can match on flits 0-3.
         uint64_t         pkt_cntr_ctl  :  3; // 0,5,6,7: counters are all independent 1: 0,1 are ganged (0 enabling 1) and 2,3 are independent 2: 0,1 are ganged (0 enabling 1) and 2,3 are ganged (2 enabling 3) 3: 0,1,2 are ganged (0 enabling 1, 1 enabling 2) and 3 is independent 4: 0,1,2,3 are ganged (0 enabling 1, 1 enabling 2, 2 enabling 3)
-        uint64_t       reserved_63_27  : 37; // unused
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } RXE2E_DBG_MC0_PKT_CNTR_CTL_t;
@@ -679,7 +679,7 @@ typedef union {
         uint64_t         flit_index_0  :  2; // flit index to match/mask on for pkt cntr 0. only can match on flits 0-3.
         uint64_t         flit_index_1  :  2; // flit index to match/mask on for pkt cntr 1. only can match on flits 0-3.
         uint64_t         pkt_cntr_ctl  :  1; // 0: counters are both independent 1: 0,1 are ganged (0 enabling 1)
-        uint64_t       reserved_63_13  : 51; // unused
+        uint64_t       Reserved_63_13  : 51; // Unused
     } field;
     uint64_t val;
 } RXE2E_DBG_MC1_PKT_CNTR_CTL_t;

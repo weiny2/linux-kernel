@@ -33,7 +33,7 @@
 #define DEF_MNH_MISC_SW_DEF
 
 #ifndef MNH_MISC_CSRS
-#define MNH_MISC_CSRS						0x000000000000ULL
+#define MNH_MISC_CSRS						0x000000000000
 #endif
 #define MISC_OFFSET						0
 /*

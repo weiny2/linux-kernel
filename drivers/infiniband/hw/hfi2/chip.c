@@ -130,7 +130,7 @@ MODULE_PARM_DESC(loopback,
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
 #define HFI_LM_BECN_EVENT	255
-#define HFI_MNH_ERROR		256
+#define HFI_8051_DOMAIN		281
 /*
  * set the ITR delay for IRQ 255 -BECN event to 125 usec optimal rate at
  * which driver should process interrupt is 8000 per sec and hence delay
@@ -2789,7 +2789,7 @@ static irqreturn_t hfi_irq_intx_handler(int irq, void *dev_id)
 				hfi_irq_eq_handler(irq, me);
 			else if (irq_bit == 255)
 				hfi_irq_becn_handler(irq, me);
-			else if (irq_bit == 256)
+			else if (irq_bit == 281)
 				hfi_irq_mnh_handler(irq, me);
 			else
 				hfi_irq_errd_handler(irq, me);
@@ -2833,7 +2833,7 @@ static int hfi_setup_becn_mnh_irq(struct hfi_devdata *dd, int irq)
 				  hfi_irq_becn_handler, 0,
 				  "hfi_irq_becn", me);
 		break;
-	case HFI_MNH_ERROR:
+	case HFI_8051_DOMAIN:
 		ret = request_irq(pci_irq_vector(dd->pdev, irq),
 				  hfi_irq_mnh_handler, 0,
 				  "hfi_irq_mnh", me);
@@ -2863,7 +2863,7 @@ static int hfi_setup_irqs(struct hfi_devdata *dd)
 
 	/* configure IRQ for MNH if enabled */
 	if (!no_mnh) {
-		ret = hfi_setup_becn_mnh_irq(dd, HFI_MNH_ERROR);
+		ret = hfi_setup_becn_mnh_irq(dd, HFI_8051_DOMAIN);
 		if (ret)
 			return ret;
 	}

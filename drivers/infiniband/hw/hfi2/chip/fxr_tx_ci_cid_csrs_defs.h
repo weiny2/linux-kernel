@@ -33,11 +33,11 @@
 #define DEF_FXR_TX_CI_CID_CSRS_SW_DEF
 
 #ifndef FXR_TX_CI_CID_CSRS
-#define FXR_TX_CI_CID_CSRS									0x000000000000ULL
+#define FXR_TX_CI_CID_CSRS									0x000000000000
 #endif
-#define FXR_NUM_CONTEXTS									192
+#define FXR_NUM_CONTEXTS									256
 #define FXR_NUM_PIDS										4096
-#define FXR_MAX_CONTEXT										191
+#define FXR_MAX_CONTEXT										255
 #define FXR_TX_CONTEXT_ENTRIES									128
 #define FXR_TX_CONTEXT_MAX									127
 #define FXR_RX_CONTEXT_ENTRIES									16
@@ -49,27 +49,28 @@
 #define TXCID_AUTH_ENTRIES									8
 #define TXCID_CSR_OFFSET									0
 #define TXCID_CQ_AUTH_OFFSET									0
-#define TXCID_CQ_CONFIG_OFFSET									12288
-#define TXCID_SL0_TO_TC_OFFSET									13824
-#define TXCID_SL1_TO_TC_OFFSET									13832
-#define TXCID_MAD_TO_TC_OFFSET									13840
-#define TXCID_TO_LIMIT_OFFSET									13848
-#define TXCID_DLID_GRAN_OFFSET									17944
+#define TXCID_CQ_CONFIG_OFFSET									16384
+#define TXCID_PID_MASK_OFFSET									32768
+#define TXCID_SL0_TO_TC_OFFSET									34816
+#define TXCID_SL1_TO_TC_OFFSET									34824
+#define TXCID_MAD_TO_TC_OFFSET									34832
+#define TXCID_TO_LIMIT_OFFSET									34840
+#define TXCID_DLID_GRAN_OFFSET									38936
 #define TXCID_ERROR_BASE									24576
-#define TXCID_ERROR_GENERAL_OFFSET								17980
-#define TXCID_ERR_CQ_GENERAL_OFFSET								17994
-#define TXCID_ERR_MBE_OFFSET									18008
-#define TXCID_ERR_CQ_MBE_OFFSET									18016
-#define TXCID_ERR_ST_MBE_OFFSET									18030
-#define TXCID_CQ_ERR_DLID_MBE_OFFSET								18044
+#define TXCID_ERROR_GENERAL_OFFSET								38972
+#define TXCID_ERR_CQ_GENERAL_OFFSET								38986
+#define TXCID_ERR_MBE_OFFSET									39000
+#define TXCID_ERR_CQ_MBE_OFFSET									39008
+#define TXCID_ERR_ST_MBE_OFFSET									39022
+#define TXCID_CQ_ERR_DLID_MBE_OFFSET								39036
 #define TXCID_CQ_OFFSET										1048576
 #define TXCID_RT_OFFSET										3145728
 #define TXCIC_CSR_OFFSET									0
 #define TXCIC_DRAIN_RESET_OFFSET								0
 #define TXCIC_UPDATE_CNTRL_OFFSET								8
 #define TXCIC_CQ_TAIL_OFFSET									2048
-#define TXCIC_ARBITRATION_DISABLE_OFFSET							3584
-#define TXCIC_CFG_TO_LIMIT_OFFSET								3592
+#define TXCIC_ARBITRATION_DISABLE_OFFSET							4096
+#define TXCIC_CFG_TO_LIMIT_OFFSET								4104
 #define TXCIC_ERROR_BASE									24576
 #define TXCIC_ERR_PER_CQ_GENERAL_OFFSET								24832
 #define TXCIC_DBG_ERR_INJECT_OFFSET								28672
@@ -92,11 +93,11 @@
 * This is a per command queue CSR that controls how the CQ operates. Note that 
 * some of the values applied to this CSR must match the corresponding values 
 * used in the RxCI (see RxCID's chapter 'Receive CQ configuration CSRs'). The 
-* symmetric pairing of enables, privilege levels, and PIDs for a given CQ's 
+* symmetric pairing of enables, privilege levels, and PIDs for a gge iven CQ's 
 * Rx/Tx pair is an architecture requirement and violating this by setting them 
 * to different values will result in unexpected behavior and errors.
 */
-#define FXR_TXCID_CFG_CSR									(FXR_TX_CI_CID_CSRS + 0x000000003000)
+#define FXR_TXCID_CFG_CSR									(FXR_TX_CI_CID_CSRS + 0x000000004000)
 #define FXR_TXCID_CFG_CSR_RESETCSR								0x0000000000000000ull
 #define FXR_TXCID_CFG_CSR_SL_ENABLE_SHIFT							32
 #define FXR_TXCID_CFG_CSR_SL_ENABLE_MASK							0xFFFFFFFFull
@@ -120,11 +121,30 @@
 #define FXR_TXCID_CFG_CSR_PID_MASK								0xFFFull
 #define FXR_TXCID_CFG_CSR_PID_SMASK								0xFFFull
 /*
-* Table #6 of fxr_tx_ci_cid_csrs - TXCID_CFG_SL0_TO_TC
+* Table #6 of fxr_tx_ci_cid_csrs - TXCID_CFG_PID_MASK
+* This is a per command queue CSR that contains the process ID mask which allows 
+* one CQ to be associated with multiple PIDs. Setting a PID mask bit to 1 causes 
+* the corresponding PID bit in TXCID_CFG_CNTRL to be ignored. Note that the 
+* values applied to this CSR must match the corresponding values used in the 
+* RxCI (see TxCID's chapter 'Transmit CQ configuration CSRs'). The symmetric 
+* pairing of PID makss for a given CQ's Rx/Tx pair is an architecture 
+* requirement and violating this by setting them to different values will result 
+* in unexpected behavior and errors.
+*/
+#define FXR_TXCID_CFG_PID_MASK									(FXR_TX_CI_CID_CSRS + 0x000000008000)
+#define FXR_TXCID_CFG_PID_MASK_RESETCSR								0x0000000000000000ull
+#define FXR_TXCID_CFG_PID_MASK_RESERVED_63_12_SHIFT						12
+#define FXR_TXCID_CFG_PID_MASK_RESERVED_63_12_MASK						0xFFFFFFFFFFFFFull
+#define FXR_TXCID_CFG_PID_MASK_RESERVED_63_12_SMASK						0xFFFFFFFFFFFFF000ull
+#define FXR_TXCID_CFG_PID_MASK_PID_MASK_SHIFT							0
+#define FXR_TXCID_CFG_PID_MASK_PID_MASK_MASK							0xFFFull
+#define FXR_TXCID_CFG_PID_MASK_PID_MASK_SMASK							0xFFFull
+/*
+* Table #7 of fxr_tx_ci_cid_csrs - TXCID_CFG_SL0_TO_TC
 * For port 0, this CSR maps service levels 0-15 to a message and traffic 
 * class.
 */
-#define FXR_TXCID_CFG_SL0_TO_TC									(FXR_TX_CI_CID_CSRS + 0x000000003600)
+#define FXR_TXCID_CFG_SL0_TO_TC									(FXR_TX_CI_CID_CSRS + 0x000000008800)
 #define FXR_TXCID_CFG_SL0_TO_TC_RESETCSR							0x0000000000000000ull
 #define FXR_TXCID_CFG_SL0_TO_TC_RSV_63_SHIFT							63
 #define FXR_TXCID_CFG_SL0_TO_TC_RSV_63_MASK							0x1ull
@@ -271,11 +291,11 @@
 #define FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_MASK							0x3ull
 #define FXR_TXCID_CFG_SL0_TO_TC_SL0_P0_TC_SMASK							0x3ull
 /*
-* Table #7 of fxr_tx_ci_cid_csrs - TXCID_CFG_SL1_TO_TC
+* Table #8 of fxr_tx_ci_cid_csrs - TXCID_CFG_SL1_TO_TC
 * For port 0, this CSR maps service levels 16-31 to a message and traffic 
 * class.
 */
-#define FXR_TXCID_CFG_SL1_TO_TC									(FXR_TX_CI_CID_CSRS + 0x000000003608)
+#define FXR_TXCID_CFG_SL1_TO_TC									(FXR_TX_CI_CID_CSRS + 0x000000008808)
 #define FXR_TXCID_CFG_SL1_TO_TC_RESETCSR							0x0000000000000000ull
 #define FXR_TXCID_CFG_SL1_TO_TC_RSV_63_SHIFT							63
 #define FXR_TXCID_CFG_SL1_TO_TC_RSV_63_MASK							0x1ull
@@ -422,11 +442,11 @@
 #define FXR_TXCID_CFG_SL1_TO_TC_SL16_P0_TC_MASK							0x3ull
 #define FXR_TXCID_CFG_SL1_TO_TC_SL16_P0_TC_SMASK						0x3ull
 /*
-* Table #8 of fxr_tx_ci_cid_csrs - TXCID_CFG_MAD_TO_TC
+* Table #9 of fxr_tx_ci_cid_csrs - TXCID_CFG_MAD_TO_TC
 * For commands that generate management packets, this CSR specifies a message 
 * and traffic class.
 */
-#define FXR_TXCID_CFG_MAD_TO_TC									(FXR_TX_CI_CID_CSRS + 0x000000003610)
+#define FXR_TXCID_CFG_MAD_TO_TC									(FXR_TX_CI_CID_CSRS + 0x000000008810)
 #define FXR_TXCID_CFG_MAD_TO_TC_RESETCSR							0x0000000000000000ull
 #define FXR_TXCID_CFG_MAD_TO_TC_RESERVED_63_3_SHIFT						3
 #define FXR_TXCID_CFG_MAD_TO_TC_RESERVED_63_3_MASK						0x1FFFFFFFFFFFFFFFull
@@ -438,11 +458,11 @@
 #define FXR_TXCID_CFG_MAD_TO_TC_TC_MASK								0x3ull
 #define FXR_TXCID_CFG_MAD_TO_TC_TC_SMASK							0x3ull
 /*
-* Table #9 of fxr_tx_ci_cid_csrs - TXCID_CREDITS_TO_RX
+* Table #10 of fxr_tx_ci_cid_csrs - TXCID_CREDITS_TO_RX
 * This CSR contains the configuration parameters necessary to configure the 
 * number of credits in the RX Input Queues.
 */
-#define FXR_TXCID_CREDITS_TO_RX									(FXR_TX_CI_CID_CSRS + 0x000000003620)
+#define FXR_TXCID_CREDITS_TO_RX									(FXR_TX_CI_CID_CSRS + 0x000000008820)
 #define FXR_TXCID_CREDITS_TO_RX_RESETCSR							0x0000CCCCCCCCCCCCull
 #define FXR_TXCID_CREDITS_TO_RX_UNUSED_63_48_SHIFT						48
 #define FXR_TXCID_CREDITS_TO_RX_UNUSED_63_48_MASK						0xFFFFull
@@ -484,11 +504,11 @@
 #define FXR_TXCID_CREDITS_TO_RX_MC0TC0_MASK							0xFull
 #define FXR_TXCID_CREDITS_TO_RX_MC0TC0_SMASK							0xFull
 /*
-* Table #10 of fxr_tx_ci_cid_csrs - TXCID_CFG_RX_MC0_CRDTS
+* Table #11 of fxr_tx_ci_cid_csrs - TXCID_CFG_RX_MC0_CRDTS
 * This CSR contains the configuration parameters necessary to configure the 
 * number of credits refunded to RX for MC0 after reset.
 */
-#define FXR_TXCID_CFG_RX_MC0_CRDTS								(FXR_TX_CI_CID_CSRS + 0x000000003630)
+#define FXR_TXCID_CFG_RX_MC0_CRDTS								(FXR_TX_CI_CID_CSRS + 0x000000008830)
 #define FXR_TXCID_CFG_RX_MC0_CRDTS_RESETCSR							0x0000000010101010ull
 #define FXR_TXCID_CFG_RX_MC0_CRDTS_UNUSED_63_29_SHIFT						29
 #define FXR_TXCID_CFG_RX_MC0_CRDTS_UNUSED_63_29_MASK						0x7FFFFFFFFull
@@ -515,11 +535,11 @@
 #define FXR_TXCID_CFG_RX_MC0_CRDTS_TC0_MASK							0x1Full
 #define FXR_TXCID_CFG_RX_MC0_CRDTS_TC0_SMASK							0x1Full
 /*
-* Table #11 of fxr_tx_ci_cid_csrs - TXCID_CFG_RX_MC1_CRDTS
+* Table #12 of fxr_tx_ci_cid_csrs - TXCID_CFG_RX_MC1_CRDTS
 * This CSR contains the configuration parameters necessary to configure the 
 * number of credits refunded to RXfor MC1 after reset.
 */
-#define FXR_TXCID_CFG_RX_MC1_CRDTS								(FXR_TX_CI_CID_CSRS + 0x000000003638)
+#define FXR_TXCID_CFG_RX_MC1_CRDTS								(FXR_TX_CI_CID_CSRS + 0x000000008838)
 #define FXR_TXCID_CFG_RX_MC1_CRDTS_RESETCSR							0x0000000010101010ull
 #define FXR_TXCID_CFG_RX_MC1_CRDTS_UNUSED_63_29_SHIFT						29
 #define FXR_TXCID_CFG_RX_MC1_CRDTS_UNUSED_63_29_MASK						0x7FFFFFFFFull
@@ -546,11 +566,11 @@
 #define FXR_TXCID_CFG_RX_MC1_CRDTS_TC0_MASK							0x1Full
 #define FXR_TXCID_CFG_RX_MC1_CRDTS_TC0_SMASK							0x1Full
 /*
-* Table #12 of fxr_tx_ci_cid_csrs - TXCID_CFG_RX_MC1P_CRDTS
+* Table #13 of fxr_tx_ci_cid_csrs - TXCID_CFG_RX_MC1P_CRDTS
 * This CSR contains the configuration parameters necessary to configure the 
 * number of credits refunded to RXfor MC1' after reset.
 */
-#define FXR_TXCID_CFG_RX_MC1P_CRDTS								(FXR_TX_CI_CID_CSRS + 0x000000003640)
+#define FXR_TXCID_CFG_RX_MC1P_CRDTS								(FXR_TX_CI_CID_CSRS + 0x000000008840)
 #define FXR_TXCID_CFG_RX_MC1P_CRDTS_RESETCSR							0x0000000010101010ull
 #define FXR_TXCID_CFG_RX_MC1P_CRDTS_UNUSED_63_29_SHIFT						29
 #define FXR_TXCID_CFG_RX_MC1P_CRDTS_UNUSED_63_29_MASK						0x7FFFFFFFFull
@@ -577,11 +597,11 @@
 #define FXR_TXCID_CFG_RX_MC1P_CRDTS_TC0_MASK							0x1Full
 #define FXR_TXCID_CFG_RX_MC1P_CRDTS_TC0_SMASK							0x1Full
 /*
-* Table #13 of fxr_tx_ci_cid_csrs - TXCID_CFG_MAX_CONTEXTS
+* Table #14 of fxr_tx_ci_cid_csrs - TXCID_CFG_MAX_CONTEXTS
 * This read only CSR contains the number of command queues available to 
 * software.
 */
-#define FXR_TXCID_CFG_MAX_CONTEXTS								(FXR_TX_CI_CID_CSRS + 0x000000003648)
+#define FXR_TXCID_CFG_MAX_CONTEXTS								(FXR_TX_CI_CID_CSRS + 0x000000008848)
 #define FXR_TXCID_CFG_MAX_CONTEXTS_RESETCSR							0x00000000000000C0ull
 #define FXR_TXCID_CFG_MAX_CONTEXTS_UNUSED_63_8_SHIFT						8
 #define FXR_TXCID_CFG_MAX_CONTEXTS_UNUSED_63_8_MASK						0xFFFFFFFFFFFFFFull
@@ -590,12 +610,12 @@
 #define FXR_TXCID_CFG_MAX_CONTEXTS_COUNT_MASK							0xFFull
 #define FXR_TXCID_CFG_MAX_CONTEXTS_COUNT_SMASK							0xFFull
 /*
-* Table #14 of fxr_tx_ci_cid_csrs - TXCID_CFG_SENDBTHQP
-* KDETH check on incoming messages. On error, message will be thrown away and an 
-* error flag will be set along with the cq number that contained the 
+* Table #15 of fxr_tx_ci_cid_csrs - TXCID_CFG_SENDBTHQP
+* KDEITH check on incoming messages. On error, message will be thrown away and 
+* an error flag will be set along with the cq number that contained the 
 * message.
 */
-#define FXR_TXCID_CFG_SENDBTHQP									(FXR_TX_CI_CID_CSRS + 0x000000003650)
+#define FXR_TXCID_CFG_SENDBTHQP									(FXR_TX_CI_CID_CSRS + 0x000000008850)
 #define FXR_TXCID_CFG_SENDBTHQP_RESETCSR							0x00000000000000C0ull
 #define FXR_TXCID_CFG_SENDBTHQP_UNUSED_63_9_SHIFT						9
 #define FXR_TXCID_CFG_SENDBTHQP_UNUSED_63_9_MASK						0x7FFFFFFFFFFFFFull
@@ -607,12 +627,12 @@
 #define FXR_TXCID_CFG_SENDBTHQP_SEND_BTH_QP_MASK						0xFFull
 #define FXR_TXCID_CFG_SENDBTHQP_SEND_BTH_QP_SMASK						0xFFull
 /*
-* Table #15 of fxr_tx_ci_cid_csrs - TXCID_CFG_STALL_OTR_CREDITS_W
+* Table #16 of fxr_tx_ci_cid_csrs - TXCID_CFG_STALL_OTR_CREDITS_W
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of OTR credits. See more details in Performance Counters Specification, 
-* page #%%#503#%%#.
+* page #%%#616#%%#.
 */
-#define FXR_TXCID_CFG_STALL_OTR_CREDITS_W							(FXR_TX_CI_CID_CSRS + 0x000000003658)
+#define FXR_TXCID_CFG_STALL_OTR_CREDITS_W							(FXR_TX_CI_CID_CSRS + 0x000000008858)
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_W_RESETCSR						0x000000000000000Full
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_W_UNUSED_63_4_SHIFT					4
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_W_UNUSED_63_4_MASK					0xFFFFFFFFFFFFFFFull
@@ -621,12 +641,12 @@
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_W_MCTC_MASK						0xFull
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_W_MCTC_SMASK						0xFull
 /*
-* Table #16 of fxr_tx_ci_cid_csrs - TXCID_CFG_STALL_OTR_CREDITS_X
+* Table #17 of fxr_tx_ci_cid_csrs - TXCID_CFG_STALL_OTR_CREDITS_X
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of OTR credits. See more details in Performance Counters Specification, 
-* page #%%#503#%%#.
+* page #%%#616#%%#.
 */
-#define FXR_TXCID_CFG_STALL_OTR_CREDITS_X							(FXR_TX_CI_CID_CSRS + 0x000000003660)
+#define FXR_TXCID_CFG_STALL_OTR_CREDITS_X							(FXR_TX_CI_CID_CSRS + 0x000000008860)
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_X_RESETCSR						0x000000000000000Cull
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_X_UNUSED_63_4_SHIFT					4
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_X_UNUSED_63_4_MASK					0xFFFFFFFFFFFFFFFull
@@ -635,12 +655,12 @@
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_X_MCTC_MASK						0xFull
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_X_MCTC_SMASK						0xFull
 /*
-* Table #17 of fxr_tx_ci_cid_csrs - TXCID_CFG_STALL_OTR_CREDITS_Y
+* Table #18 of fxr_tx_ci_cid_csrs - TXCID_CFG_STALL_OTR_CREDITS_Y
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of OTR credits. See more details in Performance Counters Specification, 
-* page #%%#503#%%#.
+* page #%%#616#%%#.
 */
-#define FXR_TXCID_CFG_STALL_OTR_CREDITS_Y							(FXR_TX_CI_CID_CSRS + 0x000000003668)
+#define FXR_TXCID_CFG_STALL_OTR_CREDITS_Y							(FXR_TX_CI_CID_CSRS + 0x000000008868)
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_Y_RESETCSR						0x000000000000000Dull
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_Y_UNUSED_63_4_SHIFT					4
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_Y_UNUSED_63_4_MASK					0xFFFFFFFFFFFFFFFull
@@ -649,12 +669,12 @@
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_Y_MCTC_MASK						0xFull
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_Y_MCTC_SMASK						0xFull
 /*
-* Table #18 of fxr_tx_ci_cid_csrs - TXCID_CFG_STALL_OTR_CREDITS_Z
+* Table #19 of fxr_tx_ci_cid_csrs - TXCID_CFG_STALL_OTR_CREDITS_Z
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of OTR credits. See more details in Performance Counters Specification, 
-* page #%%#503#%%#.
+* page #%%#616#%%#.
 */
-#define FXR_TXCID_CFG_STALL_OTR_CREDITS_Z							(FXR_TX_CI_CID_CSRS + 0x000000003670)
+#define FXR_TXCID_CFG_STALL_OTR_CREDITS_Z							(FXR_TX_CI_CID_CSRS + 0x000000008870)
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_Z_RESETCSR						0x000000000000000Eull
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_Z_UNUSED_63_4_SHIFT					4
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_Z_UNUSED_63_4_MASK					0xFFFFFFFFFFFFFFFull
@@ -663,7 +683,7 @@
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_Z_MCTC_MASK						0xFull
 #define FXR_TXCID_CFG_STALL_OTR_CREDITS_Z_MCTC_SMASK						0xFull
 /*
-* Table #19 of fxr_tx_ci_cid_csrs - TXCID_CFG_RC_REMAP
+* Table #20 of fxr_tx_ci_cid_csrs - TXCID_CFG_RC_REMAP
 * RC is a three bit 'routing control' field present in every command. An 8-entry 
 * RC-to-RC remapping table exists in the Transmit logic CSR state. All Portals 
 * commands from non-privileged command queues undergo RC-to-RC remapping to 
@@ -671,7 +691,7 @@
 * default mapping is unity (entry 0 is 0, entry 1 is 1, etc.). Remapping will 
 * always succeed (there is no failure for this stage).
 */
-#define FXR_TXCID_CFG_RC_REMAP									(FXR_TX_CI_CID_CSRS + 0x000000003678)
+#define FXR_TXCID_CFG_RC_REMAP									(FXR_TX_CI_CID_CSRS + 0x000000008878)
 #define FXR_TXCID_CFG_RC_REMAP_RESETCSR								0x0000000076543210ull
 #define FXR_TXCID_CFG_RC_REMAP_RSV_SHIFT							31
 #define FXR_TXCID_CFG_RC_REMAP_RSV_MASK								0x1FFFFFFFFull
@@ -722,13 +742,13 @@
 #define FXR_TXCID_CFG_RC_REMAP_REMAP_VAL_0_MASK							0x7ull
 #define FXR_TXCID_CFG_RC_REMAP_REMAP_VAL_0_SMASK						0x7ull
 /*
-* Table #20 of fxr_tx_ci_cid_csrs - TXCID_CFG_DLID_GRANULARITY
+* Table #21 of fxr_tx_ci_cid_csrs - TXCID_CFG_DLID_GRANULARITY
 * Specifies the DLID relocation table per entry block size. For systems that use 
 * 16 or fewer bits for LID addresses, the granularity should be set to 0. For 
 * greater than 16 bit LID addressing, the granularity should be set to the 
 * number of LID addresses - 16.
 */
-#define FXR_TXCID_CFG_DLID_GRANULARITY								(FXR_TX_CI_CID_CSRS + 0x000000004618)
+#define FXR_TXCID_CFG_DLID_GRANULARITY								(FXR_TX_CI_CID_CSRS + 0x000000009818)
 #define FXR_TXCID_CFG_DLID_GRANULARITY_RESETCSR							0x0000000000000000ull
 #define FXR_TXCID_CFG_DLID_GRANULARITY_RSV_SHIFT						4
 #define FXR_TXCID_CFG_DLID_GRANULARITY_RSV_MASK							0xFFFFFFFFFFFFFFFull
@@ -737,7 +757,7 @@
 #define FXR_TXCID_CFG_DLID_GRANULARITY_GRANULARITY_MASK						0xFull
 #define FXR_TXCID_CFG_DLID_GRANULARITY_GRANULARITY_SMASK					0xFull
 /*
-* Table #21 of fxr_tx_ci_cid_csrs - TXCID_CFG_DLID_RT_ADDR
+* Table #22 of fxr_tx_ci_cid_csrs - TXCID_CFG_DLID_RT_ADDR
 * This CSR allows indirect access to the Transmit DLID Relocation Table. These 
 * arrays can not be written to during normal operation. This register is for 
 * debug use only. TLB Tag entries are 61 bits, with 65,535 entries. The data for 
@@ -761,7 +781,7 @@
 #define FXR_TXCID_CFG_DLID_RT_ADDR_ADDRESS_MASK							0xFFFFFFFFFFFFFull
 #define FXR_TXCID_CFG_DLID_RT_ADDR_ADDRESS_SMASK						0xFFFFFFFFFFFFFull
 /*
-* Table #22 of fxr_tx_ci_cid_csrs - TXCID_CFG_DLID_RT_DATA
+* Table #23 of fxr_tx_ci_cid_csrs - TXCID_CFG_DLID_RT_DATA
 * This is the data for bits of the Transmit DLID Table being accessed with the 
 * #%%#TXCID_CFG_DLID_RT_ADDR#%%# register. The data from this CSR is written to 
 * the Transmit DLID Table if the write bit is active in that CSR, or this data 
@@ -788,7 +808,7 @@
 #define FXR_TXCID_CFG_DLID_RT_DATA_BLK_PHYS_DLID_MASK						0xFFFFFFull
 #define FXR_TXCID_CFG_DLID_RT_DATA_BLK_PHYS_DLID_SMASK						0xFFFFFFull
 /*
-* Table #23 of fxr_tx_ci_cid_csrs - TXCID_STS_CQ_RW_CSR
+* Table #24 of fxr_tx_ci_cid_csrs - TXCID_STS_CQ_RW_CSR
 * This CSR is used to describe the address region that is mapped to the transmit 
 * command queues and uses the CSR access path.
 */
@@ -798,7 +818,7 @@
 #define FXR_TXCID_STS_CQ_RW_CSR_TXCI_QWORD_MASK							0xFFFFFFFFFFFFFFFFull
 #define FXR_TXCID_STS_CQ_RW_CSR_TXCI_QWORD_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #24 of fxr_tx_ci_cid_csrs - TXCID_ERR_STS
+* Table #25 of fxr_tx_ci_cid_csrs - TXCID_ERR_STS
 * This is the Error Status CSR. Bits are set by hardware or by writing to the 
 * TXCI_ERR_FRC CSR. Bits are cleared by writing to the TXCI_ERR_CLR CSR. Before 
 * clearing the error status, it is required that reason of error is cleared. If 
@@ -925,7 +945,7 @@
 #define FXR_TXCID_ERR_STS_DLID_PERM_VIO_ERR_MASK						0x1ull
 #define FXR_TXCID_ERR_STS_DLID_PERM_VIO_ERR_SMASK						0x1ull
 /*
-* Table #25 of fxr_tx_ci_cid_csrs - TXCID_ERR_CLR
+* Table #26 of fxr_tx_ci_cid_csrs - TXCID_ERR_CLR
 * This is the Error Clear CSR. Writing a 1 to a valid bit will clear the 
 * corresponding bit in the TXCI_ERR_STS CSR.
 */
@@ -938,20 +958,20 @@
 #define FXR_TXCID_ERR_CLR_VALUE_MASK								0x3FFFFFFFFFull
 #define FXR_TXCID_ERR_CLR_VALUE_SMASK								0x3FFFFFFFFFull
 /*
-* Table #26 of fxr_tx_ci_cid_csrs - TXCID_ERR_FRC
+* Table #27 of fxr_tx_ci_cid_csrs - TXCID_ERR_FRC
 * This is the Error Force CSR. Writing a 1 to a valid bit will set the 
 * corresponding bit in the TXCI_ERR_STS CSR.
 */
 #define FXR_TXCID_ERR_FRC									(FXR_TX_CI_CID_CSRS + 0x000000006010)
 #define FXR_TXCID_ERR_FRC_RESETCSR								0x0000000000000000ull
-#define FXR_TXCID_ERR_FRC_RESERVED_63_38_SHIFT							38
-#define FXR_TXCID_ERR_FRC_RESERVED_63_38_MASK							0x3FFFFFFull
-#define FXR_TXCID_ERR_FRC_RESERVED_63_38_SMASK							0xFFFFFFC000000000ull
+#define FXR_TXCID_ERR_FRC_RESERVED_63_37_SHIFT							37
+#define FXR_TXCID_ERR_FRC_RESERVED_63_37_MASK							0x7FFFFFFull
+#define FXR_TXCID_ERR_FRC_RESERVED_63_37_SMASK							0xFFFFFFE000000000ull
 #define FXR_TXCID_ERR_FRC_VALUE_SHIFT								0
-#define FXR_TXCID_ERR_FRC_VALUE_MASK								0x3FFFFFFFFFull
-#define FXR_TXCID_ERR_FRC_VALUE_SMASK								0x3FFFFFFFFFull
+#define FXR_TXCID_ERR_FRC_VALUE_MASK								0x1FFFFFFFFFull
+#define FXR_TXCID_ERR_FRC_VALUE_SMASK								0x1FFFFFFFFFull
 /*
-* Table #27 of fxr_tx_ci_cid_csrs - TXCID_ERR_EN_HOST
+* Table #28 of fxr_tx_ci_cid_csrs - TXCID_ERR_EN_HOST
 * This is the Error Enable for the Host Interrupt. If a bit is set, the 
 * corresponding error bit in TXCI_ERR_STS will cause an interrupt on the HOST 
 * interrupt signal.
@@ -965,21 +985,21 @@
 #define FXR_TXCID_ERR_EN_HOST_VALUE_MASK							0x3FFFFFFFFFull
 #define FXR_TXCID_ERR_EN_HOST_VALUE_SMASK							0x3FFFFFFFFFull
 /*
-* Table #28 of fxr_tx_ci_cid_csrs - TXCID_ERR_FIRST_HOST
+* Table #29 of fxr_tx_ci_cid_csrs - TXCID_ERR_FIRST_HOST
 * This is the First Error CSR for the Host Interrupt. When this CSR is clear, it 
 * will capture the next TXCI_ERR_STS value when a new HOST Interrupt 
 * occurs.
 */
 #define FXR_TXCID_ERR_FIRST_HOST								(FXR_TX_CI_CID_CSRS + 0x000000006020)
 #define FXR_TXCID_ERR_FIRST_HOST_RESETCSR							0x0000000000000000ull
-#define FXR_TXCID_ERR_FIRST_HOST_RESERVED_63_38_SHIFT						38
-#define FXR_TXCID_ERR_FIRST_HOST_RESERVED_63_38_MASK						0x3FFFFFFull
-#define FXR_TXCID_ERR_FIRST_HOST_RESERVED_63_38_SMASK						0xFFFFFFC000000000ull
+#define FXR_TXCID_ERR_FIRST_HOST_RESERVED_63_37_SHIFT						37
+#define FXR_TXCID_ERR_FIRST_HOST_RESERVED_63_37_MASK						0x7FFFFFFull
+#define FXR_TXCID_ERR_FIRST_HOST_RESERVED_63_37_SMASK						0xFFFFFFE000000000ull
 #define FXR_TXCID_ERR_FIRST_HOST_VALUE_SHIFT							0
-#define FXR_TXCID_ERR_FIRST_HOST_VALUE_MASK							0x3FFFFFFFFFull
-#define FXR_TXCID_ERR_FIRST_HOST_VALUE_SMASK							0x3FFFFFFFFFull
+#define FXR_TXCID_ERR_FIRST_HOST_VALUE_MASK							0x1FFFFFFFFFull
+#define FXR_TXCID_ERR_FIRST_HOST_VALUE_SMASK							0x1FFFFFFFFFull
 /*
-* Table #29 of fxr_tx_ci_cid_csrs - TXCID_ERR_EN_BMC
+* Table #30 of fxr_tx_ci_cid_csrs - TXCID_ERR_EN_BMC
 * This is the Error Enable for the BMC Interrupt. If a bit is set, the 
 * corresponding error bit in TXCI_ERR_STS will cause an interrupt on the BMC 
 * interrupt signal.
@@ -993,7 +1013,7 @@
 #define FXR_TXCID_ERR_EN_BMC_VALUE_MASK								0x3FFFFFFFFFull
 #define FXR_TXCID_ERR_EN_BMC_VALUE_SMASK							0x3FFFFFFFFFull
 /*
-* Table #30 of fxr_tx_ci_cid_csrs - TXCID_ERR_FIRST_BMC
+* Table #31 of fxr_tx_ci_cid_csrs - TXCID_ERR_FIRST_BMC
 * This is the First Error CSR for the BMC Interrupt. When this CSR is clear, it 
 * will capture the next TXCI_ERR_STS value when a new BMC Interrupt 
 * occurs.
@@ -1007,7 +1027,7 @@
 #define FXR_TXCID_ERR_FIRST_BMC_VALUE_MASK							0x3FFFFFFFFFull
 #define FXR_TXCID_ERR_FIRST_BMC_VALUE_SMASK							0x3FFFFFFFFFull
 /*
-* Table #31 of fxr_tx_ci_cid_csrs - TXCID_ERR_EN_QUAR
+* Table #32 of fxr_tx_ci_cid_csrs - TXCID_ERR_EN_QUAR
 * This is the Error Enable for the Quarantine Interrupt. If a bit is set, the 
 * corresponding error bit in TXCI_ERR_STS will cause an interrupt on the QUAR 
 * interrupt signal.
@@ -1021,7 +1041,7 @@
 #define FXR_TXCID_ERR_EN_QUAR_VALUE_MASK							0x3FFFFFFFFFull
 #define FXR_TXCID_ERR_EN_QUAR_VALUE_SMASK							0x3FFFFFFFFFull
 /*
-* Table #32 of fxr_tx_ci_cid_csrs - TXCID_ERR_FIRST_QUAR
+* Table #33 of fxr_tx_ci_cid_csrs - TXCID_ERR_FIRST_QUAR
 * This is the First Error CSR for the Quarantine Interrupt. When this CSR is 
 * clear, it will capture the next TXCI_ERR_STS value when a new QUAR Interrupt 
 * occurs.
@@ -1035,7 +1055,7 @@
 #define FXR_TXCID_ERR_FIRST_QUAR_VALUE_MASK							0x3FFFFFFFFFull
 #define FXR_TXCID_ERR_FIRST_QUAR_VALUE_SMASK							0x3FFFFFFFFFull
 /*
-* Table #33 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_SBE_MBE
+* Table #34 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_SBE_MBE
 * Error Info for the #%%#mbe#%%# and #%%#sbe#%%# events. (There may be many 
 * Error Info Registers.)
 */
@@ -1066,7 +1086,7 @@
 #define FXR_TXCID_ERR_INFO_SBE_MBE_SYNDROME_DLID_CSR_CFG_SBE_MASK				0xFFull
 #define FXR_TXCID_ERR_INFO_SBE_MBE_SYNDROME_DLID_CSR_CFG_SBE_SMASK				0xFFull
 /*
-* Table #34 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_SBE_MBE1
+* Table #35 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_SBE_MBE1
 * Error Info for the #%%#mbe#%%# and #%%#sbe#%%# events. (There may be many 
 * Error Info Registers.)
 */
@@ -1088,7 +1108,7 @@
 #define FXR_TXCID_ERR_INFO_SBE_MBE1_HIFIS_HEADER_SBE_SYNDROME_MASK				0xFFull
 #define FXR_TXCID_ERR_INFO_SBE_MBE1_HIFIS_HEADER_SBE_SYNDROME_SMASK				0xFFull
 /*
-* Table #35 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_OTHER_ERROR_1
+* Table #36 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_OTHER_ERROR_1
 * Multiple other errors require cq number logging. Those are logged in these 
 * registers
 */
@@ -1113,7 +1133,7 @@
 #define FXR_TXCID_ERR_INFO_OTHER_ERROR_1_DLID_PERM_VIO_ERR_CQ_NUM_MASK				0xFFull
 #define FXR_TXCID_ERR_INFO_OTHER_ERROR_1_DLID_PERM_VIO_ERR_CQ_NUM_SMASK				0xFFull
 /*
-* Table #36 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_OTHER_ERROR_2
+* Table #37 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_OTHER_ERROR_2
 * Multiple other errors require cq number logging. Those are logged in these 
 * registers
 */
@@ -1141,7 +1161,7 @@
 #define FXR_TXCID_ERR_INFO_OTHER_ERROR_2_LADDR_OVFLW_ERR_CQ_NUM_MASK				0xFFull
 #define FXR_TXCID_ERR_INFO_OTHER_ERROR_2_LADDR_OVFLW_ERR_CQ_NUM_SMASK				0xFFull
 /*
-* Table #37 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_OTHER_ERROR_3
+* Table #38 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_OTHER_ERROR_3
 * Multiple other errors require cq number logging. Those are logged in these 
 * registers
 */
@@ -1172,7 +1192,7 @@
 #define FXR_TXCID_ERR_INFO_OTHER_ERROR_3_AUTH_MEM_SBE_CQ_NUM_MASK				0xFFull
 #define FXR_TXCID_ERR_INFO_OTHER_ERROR_3_AUTH_MEM_SBE_CQ_NUM_SMASK				0xFFull
 /*
-* Table #38 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_OTHER_ERROR_4
+* Table #39 of fxr_tx_ci_cid_csrs - TXCID_ERR_INFO_OTHER_ERROR_4
 * Multiple other errors require cq number logging. Those are logged in these 
 * registers
 */
@@ -1203,7 +1223,7 @@
 #define FXR_TXCID_ERR_INFO_OTHER_ERROR_4_HIFIS_RSP_2DS_ANY_SBE_CQ_NUM_MASK			0xFFull
 #define FXR_TXCID_ERR_INFO_OTHER_ERROR_4_HIFIS_RSP_2DS_ANY_SBE_CQ_NUM_SMASK			0xFFull
 /*
-* Table #39 of fxr_tx_ci_cid_csrs - TXCID_DBG_ERR_INJECT
+* Table #40 of fxr_tx_ci_cid_csrs - TXCID_DBG_ERR_INJECT
 * TXCIC_CQ_ERROR_INJECT
 */
 #define FXR_TXCID_DBG_ERR_INJECT								(FXR_TX_CI_CID_CSRS + 0x000000006100)
@@ -1248,7 +1268,7 @@
 #define FXR_TXCID_DBG_ERR_INJECT_INJECT_TABLE_RDATA_ERR_MASK_MASK				0xFFull
 #define FXR_TXCID_DBG_ERR_INJECT_INJECT_TABLE_RDATA_ERR_MASK_SMASK				0xFFull
 /*
-* Table #40 of fxr_tx_ci_cid_csrs - TXCID_DBG_ERR_INJECT1
+* Table #41 of fxr_tx_ci_cid_csrs - TXCID_DBG_ERR_INJECT1
 * TXCIC_CQ_ERROR_INJECT 1
 */
 #define FXR_TXCID_DBG_ERR_INJECT1								(FXR_TX_CI_CID_CSRS + 0x000000006108)
@@ -1269,7 +1289,7 @@
 #define FXR_TXCID_DBG_ERR_INJECT1_HIFIS_HDR_ERRINJ_MASK_MASK					0xFFull
 #define FXR_TXCID_DBG_ERR_INJECT1_HIFIS_HDR_ERRINJ_MASK_SMASK					0xFFull
 /*
-* Table #41 of fxr_tx_ci_cid_csrs - TXCID_DBG_VISA_MON_TC
+* Table #42 of fxr_tx_ci_cid_csrs - TXCID_DBG_VISA_MON_TC
 * TXCIC_CQ_ERROR_INJECT 1
 */
 #define FXR_TXCID_DBG_VISA_MON_TC								(FXR_TX_CI_CID_CSRS + 0x000000006110)

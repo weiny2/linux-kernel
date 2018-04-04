@@ -977,16 +977,16 @@ retry:
 	if (err <= 0)
 		return;
 	rhf = (union rhf *)eq_entry;
-	dd_dev_dbg(ndev->dd, "kind %d flit_len %4d port %d egridx %d egroffset %d\n",
+	dd_dev_dbg(ndev->dd, "kind %d flit_len %4d egridx %d egroffset %d\n",
 		rhf->event_kind, rhf->pktlen,
-		rhf->pt + 1, rhf->egrindex, rhf->egroffset);
+		rhf->egrindex, rhf->egroffset);
 
 	buf = ctx_i->buf[rhf->egrindex];
 	l4_type = HFI2_VNIC_GET_L4_TYPE(buf);
 	if (l4_type == HFI2_VNIC_L4_ETHR) {
 		id = hfi2_vnic_get_vesw_id(buf);
 		/* FXRTODO: Check performance impact of idr_find */
-		vinfo = idr_find(&ndev->vesw_idr[rhf->pt], id);
+		vinfo = idr_find(&ndev->vesw_idr[0], id);
 
 		/*
 		 * In case of invalid vesw id, update the rx_bad_veswid
@@ -997,7 +997,7 @@ retry:
 			int id_tmp = 0;
 
 			spin_lock_irqsave(&ndev->stats_lock, sflags);
-			vinfo_tmp = idr_get_next(&ndev->vesw_idr[rhf->pt],
+			vinfo_tmp = idr_get_next(&ndev->vesw_idr[0],
 						 &id_tmp);
 			if (vinfo_tmp)
 				vinfo_tmp->stats[0].netstats.rx_nohandler++;
@@ -1046,10 +1046,9 @@ retry:
 	memcpy(skb->data, buf, len);
 	skb_put(skb, len);
 	skb_queue_tail(&rxq->skbq, skb);
-	dd_dev_dbg(ndev->dd, "RX%d kind %d skb->len %4d flit_len %4d (pad & 0x3f) %d port %d egridx %d egroffset %d\n",
+	dd_dev_dbg(ndev->dd, "RX%d kind %d skb->len %4d flit_len %4d (pad & 0x3f) %d egridx %d egroffset %d\n",
 		   q_idx, rhf->event_kind, skb->len, rhf->pktlen << 2,
 		   pad_i & 0x3f,
-		   rhf->pt + 1,
 		   rhf->egrindex, rhf->egroffset);
 	if (napi_schedule_prep(&rxq->napi)) {
 		dd_dev_dbg(vinfo->dd, "napi %d scheduling\n", q_idx);

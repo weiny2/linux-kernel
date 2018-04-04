@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_pcim_CSRS_H__
@@ -8,22 +8,22 @@
 // PCIM_CFG desc:
 typedef union {
     struct {
-        uint64_t           ITR_ECOUNT  :  8; // ITR Entry Count (max entries used-1)
-        uint64_t           ITR_PERIOD  : 11; // ITR update period (minus 1). Clock cycle countdown counter to control time period between ITR updates. Default setting is 1us period with a 1.2Ghz clock.
-        uint64_t       Reserved_23_19  :  5; // Reserved
-        uint64_t     REMAP_REQ_THRESH  :  3; // Remap Request Credit threshold. Max number of interrupt remap request credits used by PCIM.Max allowed value is 4'h4.
-        uint64_t          Reserved_27  :  1; // Reserved
-        uint64_t      ENA_PCIERROR_CA  :  1; // Enable PCIError signaling for p2sb_np_unsup_req event
-        uint64_t      ENA_PCIERROR_UR  :  1; // Enable PCIError signaling for p2sb_p_unsup_req event
-        uint64_t    ENA_PCIERROR_CMPL  :  1; // Enable PCIError signaling for p2sb_np_addr_err event
-        uint64_t          Reserved_31  :  1; // Reserved
-        uint64_t       MIN_FLR_PERIOD  : 10; // Minimum FLR Period. Defines the minimum period in 1.2Ghz clocks that Driver Reset or FLR reset is asserted to HW.
-        uint64_t       Reserved_43_42  :  2; // Reserved
-        uint64_t            GPSB_WAKE  :  1; // GPSB Wake status. Wake signaling from GPSB Agent to Power Management. Indicates Agent has pending transactions to issue over GPSB.
-        uint64_t           IOSFP_WAKE  :  1; // IOSF-P Wake status. Wake signaling from IOSF-P Agent to Power Management. Indicates Agent has pending transactions to issue over IOSF-P.
-        uint64_t           HIFIS_IDLE  :  1; // HIFIS Idle status. Idle signaling from HIFIS block indicates there are no responses pending the Rx/Tx. Note, Idle status does not include pending AT responses.
-        uint64_t       Reserved_62_47  : 16; // Reserved
-        uint64_t         DRIVER_RESET  :  1; // Driver Reset. A write of 1 initiates Driver Level Reset to FXR. HW clears this bit when Driver Reset is complete.
+        uint64_t           itr_ecount  :  8; // ITR Entry Count (max entries used-1)
+        uint64_t           itr_period  : 11; // ITR update period (minus 1). Clock cycle countdown counter to control time period between ITR updates. Default setting is 1us period with a 1.2Ghz clock.
+        uint64_t       Reserved_23_19  :  5; // Unused
+        uint64_t     remap_req_thresh  :  3; // Remap Request Credit threshold. Max number of interrupt remap request credits used by PCIM.Max allowed value is 4'h4.
+        uint64_t          Reserved_27  :  1; // Unused
+        uint64_t      ena_pcierror_ca  :  1; // Enable PCIError signaling for p2sb_np_unsup_req event
+        uint64_t      ena_pcierror_ur  :  1; // Enable PCIError signaling for p2sb_p_unsup_req event
+        uint64_t    ena_pcierror_cmpl  :  1; // Enable PCIError signaling for p2sb_np_addr_err event
+        uint64_t          Reserved_31  :  1; // Unused
+        uint64_t       min_flr_period  : 10; // Minimum FLR Period. Defines the minimum period in 1.2Ghz clocks that Driver Reset or FLR reset is asserted to HW.
+        uint64_t       Reserved_43_42  :  2; // Unused
+        uint64_t            gpsb_wake  :  1; // GPSB Wake status. Wake signaling from GPSB Agent to Power Management. Indicates Agent has pending transactions to issue over GPSB.
+        uint64_t           iosfp_wake  :  1; // IOSF-P Wake status. Wake signaling from IOSF-P Agent to Power Management. Indicates Agent has pending transactions to issue over IOSF-P.
+        uint64_t           hifis_idle  :  1; // HIFIS Idle status. Idle signaling from HIFIS block indicates there are no responses pending the Rx/Tx. Note, Idle status does not include pending AT responses.
+        uint64_t       Reserved_62_47  : 16; // Unused
+        uint64_t         driver_reset  :  1; // Driver Reset. A write of 1 initiates Driver Level Reset to FXR. HW clears this bit when Driver Reset is complete.
     } field;
     uint64_t val;
 } PCIM_CFG_t;
@@ -31,11 +31,11 @@ typedef union {
 // PCIM_CFG_TARB desc:
 typedef union {
     struct {
-        uint64_t       POSTED_CREDITS  :  8; // TARB Posted Credits
-        uint64_t    NONPOSTED_CREDITS  :  8; // TARB NonPosted Credits
-        uint64_t   COMPLETION_CREDITS  :  8; // TARB Completion Credits
-        uint64_t        TOTAL_CREDITS  :  8; // TARB Total Credits
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t       posted_credits  :  8; // TARB Posted Credits
+        uint64_t    nonposted_credits  :  8; // TARB NonPosted Credits
+        uint64_t   completion_credits  :  8; // TARB Completion Credits
+        uint64_t        total_credits  :  8; // TARB Total Credits
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } PCIM_CFG_TARB_t;
@@ -43,18 +43,18 @@ typedef union {
 // PCIM_CFG_MARB0 desc:
 typedef union {
     struct {
-        uint64_t      HEAD_CMP_THRESH  :  6; // Completion Header threshold
-        uint64_t         Reserved_7_6  :  2; // Reserved
-        uint64_t       HEAD_NP_THRESH  :  6; // Non-Posted Header threshold
-        uint64_t       Reserved_15_14  :  2; // Reserved
-        uint64_t        HEAD_P_THRESH  :  6; // Posted Header threshold
-        uint64_t       Reserved_23_22  :  2; // Reserved
-        uint64_t      DATA_CMP_THRESH  :  6; // Completion Data threshold
-        uint64_t       Reserved_31_30  :  2; // Reserved
-        uint64_t       DATA_NP_THRESH  :  6; // Non-Posted Data threshold
-        uint64_t       Reserved_39_38  :  2; // Reserved
-        uint64_t        DATA_P_THRESH  :  6; // Posted Data threshold
-        uint64_t       Reserved_63_46  : 18; // Reserved
+        uint64_t      head_cmp_thresh  :  6; // Completion Header threshold
+        uint64_t         Reserved_7_6  :  2; // Unused
+        uint64_t       head_np_thresh  :  6; // Non-Posted Header threshold
+        uint64_t       Reserved_15_14  :  2; // Unused
+        uint64_t        head_p_thresh  :  6; // Posted Header threshold
+        uint64_t       Reserved_23_22  :  2; // Unused
+        uint64_t      data_cmp_thresh  :  6; // Completion Data threshold
+        uint64_t       Reserved_31_30  :  2; // Unused
+        uint64_t       data_np_thresh  :  6; // Non-Posted Data threshold
+        uint64_t       Reserved_39_38  :  2; // Unused
+        uint64_t        data_p_thresh  :  6; // Posted Data threshold
+        uint64_t       Reserved_63_46  : 18; // Unused
     } field;
     uint64_t val;
 } PCIM_CFG_MARB0_t;
@@ -62,8 +62,8 @@ typedef union {
 // PCIM_CFG_MARB1 desc:
 typedef union {
     struct {
-        uint64_t         ARB_PRIORITY  : 48; // Arbitration Priority
-        uint64_t       Reserved_63_48  : 16; // Reserved
+        uint64_t         arb_priority  : 48; // Arbitration Priority
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } PCIM_CFG_MARB1_t;
@@ -71,10 +71,10 @@ typedef union {
 // PCIM_CFG_HPI desc:
 typedef union {
     struct {
-        uint64_t       TARB_FC_THRESH  :  5; // TARB Flow control threshold
-        uint64_t         Reserved_7_5  :  3; // Reserved
-        uint64_t     HIFIS_CREDIT_ENA  :  1; // Enable HIFIS credit control
-        uint64_t        Reserved_63_9  : 55; // Reserved
+        uint64_t       tarb_fc_thresh  :  5; // TARB Flow control threshold
+        uint64_t         Reserved_7_5  :  3; // Unused
+        uint64_t     hifis_credit_ena  :  1; // Enable HIFIS credit control
+        uint64_t        Reserved_63_9  : 55; // Unused
     } field;
     uint64_t val;
 } PCIM_CFG_HPI_t;
@@ -82,8 +82,8 @@ typedef union {
 // PCIM_STS_HPI desc:
 typedef union {
     struct {
-        uint64_t        HIFIS_CREDITS  :  5; // Current HIFIS credits
-        uint64_t        Reserved_63_5  : 59; // Reserved
+        uint64_t        hifis_credits  :  5; // Current HIFIS credits
+        uint64_t        Reserved_63_5  : 59; // Unused
     } field;
     uint64_t val;
 } PCIM_STS_HPI_t;
@@ -91,19 +91,19 @@ typedef union {
 // PCIM_CFG_P2SB desc:
 typedef union {
     struct {
-        uint64_t        HEADER_THRESH  :  5; // Header Queue Full Threshold
-        uint64_t         Reserved_7_5  :  3; // Reserved
-        uint64_t     NP_HEADER_THRESH  :  5; // Non-Posted Header Queue Full Threshold
-        uint64_t       Reserved_15_13  :  3; // Reserved
-        uint64_t        P_DATA_THRESH  :  5; // Posted Data Queue Full Threshold
-        uint64_t       Reserved_23_21  :  3; // Reserved
-        uint64_t       NP_DATA_THRESH  :  5; // Non-Posted Data Queue Full threshold
-        uint64_t       Reserved_31_29  :  3; // Reserved
-        uint64_t      CMP_DATA_THRESH  :  5; // Completion Data Queue Full Threshold
-        uint64_t       Reserved_39_37  :  3; // Reserved
-        uint64_t         CSR_REQ_TYPE  :  1; // CSR Access type: 1-Memory Mapped, 0-Control Register
-        uint64_t           SB_SAI_ENA  :  1; // Enable SAI signaling on FXR-SB
-        uint64_t       Reserved_63_42  : 22; // Reserved
+        uint64_t        header_thresh  :  5; // Header Queue Full Threshold
+        uint64_t         Reserved_7_5  :  3; // Unused
+        uint64_t     np_header_thresh  :  5; // Non-Posted Header Queue Full Threshold
+        uint64_t       Reserved_15_13  :  3; // Unused
+        uint64_t        p_data_thresh  :  5; // Posted Data Queue Full Threshold
+        uint64_t       Reserved_23_21  :  3; // Unused
+        uint64_t       np_data_thresh  :  5; // Non-Posted Data Queue Full threshold
+        uint64_t       Reserved_31_29  :  3; // Unused
+        uint64_t      cmp_data_thresh  :  5; // Completion Data Queue Full Threshold
+        uint64_t       Reserved_39_37  :  3; // Unused
+        uint64_t         csr_req_type  :  1; // CSR Access type: 1-Memory Mapped, 0-Control Register
+        uint64_t           sb_sai_ena  :  1; // Enable SAI signaling on FXR-SB
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } PCIM_CFG_P2SB_t;
@@ -111,9 +111,9 @@ typedef union {
 // PCIM_CFG_SBTO desc:
 typedef union {
     struct {
-        uint64_t         Reserved_7_0  :  8; // Reserved
-        uint64_t                COUNT  : 24; // FXR-SB timeout count (x256 clocks)
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t         Reserved_7_0  :  8; // Unused
+        uint64_t                count  : 24; // FXR-SB timeout count (x256 clocks)
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } PCIM_CFG_SBTO_t;
@@ -124,7 +124,7 @@ typedef union {
         uint64_t     iosf_function_id  :  3; // IOSF defined Function ID (strap input)
         uint64_t       iosf_device_id  :  5; // IOSF defined Device ID (strap input)
         uint64_t          iosf_bus_id  :  8; // IOSF defined Bus ID (captured)
-        uint64_t       Reserved_31_16  : 16; // Reserved
+        uint64_t       Reserved_31_16  : 16; // Unused
         uint64_t         ltr_dest_pid  :  8; // Dest Port ID for FXR sourced LTR msg on GPSB (strap)
         uint64_t        intx_dest_pid  :  8; // Dest Port ID for FXR sourced INTx msg on GPSB (strap)
         uint64_t     pci_err_dest_pid  :  8; // Dest Port ID for FXR sourced PCIError msg on GPSB (strap)
@@ -136,8 +136,8 @@ typedef union {
 // PCIM_CFG_WAKE desc:
 typedef union {
     struct {
-        uint64_t     GPSB_HOLD_PERIOD  : 32; // GPSB Wake Hold Period (clks). Defines the number of 1.2Ghz clocks that PCIM will hold the GPSB WAKE signaling to Power Management after going idle at the GPSB interface. Dampens signaling so that WAKE is de-asserted only after N consecutive clocks of being Idle. The default value of 1200 equates to a 1us period.
-        uint64_t     IOSF_HOLD_PERIOD  : 32; // IOSF Wake Hold Period (clks). Defines the number of 1.2Ghz clocks that PCIM will hold the IOSF WAKE signaling to Power Management after going idle at the IOSF-P interface. Dampens signaling so that WAKE is de-asserted only after N consecutive clocks of being Idle. The default value of 1200 equates to a 1us period.
+        uint64_t     gpsb_hold_period  : 32; // GPSB Wake Hold Period (clks). Defines the number of 1.2Ghz clocks that PCIM will hold the GPSB WAKE signaling to Power Management after going idle at the GPSB interface. Dampens signaling so that WAKE is de-asserted only after N consecutive clocks of being Idle. The default value of 1200 equates to a 1us period.
+        uint64_t     iosf_hold_period  : 32; // IOSF Wake Hold Period (clks). Defines the number of 1.2Ghz clocks that PCIM will hold the IOSF WAKE signaling to Power Management after going idle at the IOSF-P interface. Dampens signaling so that WAKE is de-asserted only after N consecutive clocks of being Idle. The default value of 1200 equates to a 1us period.
     } field;
     uint64_t val;
 } PCIM_CFG_WAKE_t;
@@ -190,7 +190,9 @@ typedef union {
         uint64_t     int_remap_rsp_uf  :  1; // Interrupt Remap Response FIFO Underflow. ERR_CATEGORY_NODE
         uint64_t       fxr_sb_timeout  :  1; // IOSF-Sideband (FXR-SB) Request Timeout. Error response back to Primary. ERR_CATEGORY_HFI. Could be lowered if error response is fine.
         uint64_t        iosfp_timeout  :  1; // IOSF-Primary Request Timeout. Locally complete request (ZBR).Dual reported in cmpl_timeout_err . ERR_CATEGORY_NODE. IOMMU initiated flush did not complete.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t      remap_dma_fault  :  1; // Remap DMA Fault. An error response was received for an interrupt DMA remap request. The associated MSIX request is dropped, and the associated MSIX table entry ID is captured in remap_rsp_tid .ERR_CATEGORY_INFO
+        uint64_t      remap_int_fault  :  1; // Remap Interrupt Fault. An error response was received for an interrupt remap request. The associated MSIX request is dropped, and the associated MSIX table entry ID is captured in remap_rsp_tid .ERR_CATEGORY_INFO
+        uint64_t       Reserved_63_47  : 17; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_STS_t;
@@ -198,8 +200,8 @@ typedef union {
 // PCIM_ERR_CLR desc:
 typedef union {
     struct {
-        uint64_t               events  : 45; // Write 1's to clear corresponding PCIM_ERR_STS bits.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t               events  : 47; // Write 1's to clear corresponding PCIM_ERR_STS bits.
+        uint64_t       Reserved_63_47  : 17; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_CLR_t;
@@ -207,8 +209,8 @@ typedef union {
 // PCIM_ERR_FRC desc:
 typedef union {
     struct {
-        uint64_t               events  : 45; // Write 1 to set corresponding PCIM_ERR_STS bits.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t               events  : 47; // Write 1 to set corresponding PCIM_ERR_STS bits.
+        uint64_t       Reserved_63_47  : 17; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_FRC_t;
@@ -216,8 +218,8 @@ typedef union {
 // PCIM_ERR_EN_HOST desc:
 typedef union {
     struct {
-        uint64_t               events  : 45; // Enables corresponding PCIM_ERR_STS bits to generate host interrupt signal.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t               events  : 47; // Enables corresponding PCIM_ERR_STS bits to generate host interrupt signal.
+        uint64_t       Reserved_63_47  : 17; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_EN_HOST_t;
@@ -225,8 +227,8 @@ typedef union {
 // PCIM_ERR_FIRST_HOST desc:
 typedef union {
     struct {
-        uint64_t               events  : 45; // Snapshot of PCIM_ERR_STS bits when host interrupt signal transitions from 0 to 1.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t               events  : 47; // Snapshot of PCIM_ERR_STS bits when host interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_47  : 17; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_FIRST_HOST_t;
@@ -234,8 +236,8 @@ typedef union {
 // PCIM_ERR_EN_BMC desc:
 typedef union {
     struct {
-        uint64_t               events  : 45; // Enable corresponding PCIM_ERR_STS bits to generate BMC interrupt signal.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t               events  : 47; // Enable corresponding PCIM_ERR_STS bits to generate BMC interrupt signal.
+        uint64_t       Reserved_63_47  : 17; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_EN_BMC_t;
@@ -243,8 +245,8 @@ typedef union {
 // PCIM_ERR_FIRST_BMC desc:
 typedef union {
     struct {
-        uint64_t               events  : 45; // Snapshot of PCIM_ERR_STS bits when BMC interrupt signal transitions from 0 to 1.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t               events  : 47; // Snapshot of PCIM_ERR_STS bits when BMC interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_47  : 17; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_FIRST_BMC_t;
@@ -252,8 +254,8 @@ typedef union {
 // PCIM_ERR_EN_QUAR desc:
 typedef union {
     struct {
-        uint64_t               events  : 45; // Enable corresponding PCIM_ERR_STS bits to generate quarantine signal.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t               events  : 47; // Enable corresponding PCIM_ERR_STS bits to generate quarantine signal.
+        uint64_t       Reserved_63_47  : 17; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_EN_QUAR_t;
@@ -261,8 +263,8 @@ typedef union {
 // PCIM_ERR_FIRST_QUAR desc:
 typedef union {
     struct {
-        uint64_t               events  : 45; // Snapshot of PCIM_ERR_STS bits when quarantine signal transitions from 0 to 1.
-        uint64_t       Reserved_63_45  : 19; // Reserved
+        uint64_t               events  : 47; // Snapshot of PCIM_ERR_STS bits when quarantine signal transitions from 0 to 1.
+        uint64_t       Reserved_63_47  : 17; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_FIRST_QUAR_t;
@@ -272,12 +274,12 @@ typedef union {
     struct {
         uint64_t       msix_addr_synd  :  8; // MSIX Table Address syndrome associated with msix_addr_sbe / msix_addr_mbe
         uint64_t       msix_data_synd  :  7; // MSIX Table Data syndrome associated with msix_data_sbe / msix_data_mbe
-        uint64_t          reserved_15  :  1; // Reserved
+        uint64_t          Reserved_15  :  1; // Unused
         uint64_t           p2sb_synd1  :  7; // P2SB Data1 syndrome associated with p2sb_dataq1_sbe / p2sb_dataq1_mbe
-        uint64_t          reserved_23  :  1; // Reserved
+        uint64_t          Reserved_23  :  1; // Unused
         uint64_t           p2sb_synd0  :  9; // P2SB Data0 syndrome associated with p2sb_dataq0_sbe / p2sb_dataq0_mbe
         uint64_t        remap_rsp_tid  :  9; // MISX entry ID associated with remap_dma_fault / remap_int_fault
-        uint64_t       Reserved_63_42  : 22; // Reserved
+        uint64_t       Reserved_63_42  : 22; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_INFO_t;
@@ -334,7 +336,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t        itr_rpe_entry  :  8; // ITR Read Parity Error Entry ID. Valid when itr_read_pe is set
-        uint64_t        reserved_63_8  : 56; // Reserved
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_INFO7_t;
@@ -373,7 +375,7 @@ typedef union {
         uint64_t         LM_FPC_ERROR  :  1; // LM FPC Domain Error
         uint64_t          LM_TP_ERROR  :  1; // LM TP Domain Error
         uint64_t      PMON_CORE_ERROR  :  1; // PMON CORE (1.2Ghz) Domain Error
-        uint64_t       reserved_63_23  : 41; // Reserved
+        uint64_t       Reserved_63_23  : 41; // Unused
     } field;
     uint64_t val;
 } PCIM_BMC_STS_t;
@@ -382,7 +384,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 23; // Write 1's to clear corresponding PCIM_BMC_STS bits.
-        uint64_t       Reserved_63_23  : 41; // Reserved
+        uint64_t       Reserved_63_23  : 41; // Unused
     } field;
     uint64_t val;
 } PCIM_BMC_CLR_t;
@@ -391,7 +393,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 23; // Write 1's to set corresponding PCIM_BMC_STS bits.
-        uint64_t       Reserved_63_23  : 41; // Reserved
+        uint64_t       Reserved_63_23  : 41; // Unused
     } field;
     uint64_t val;
 } PCIM_BMC_FRC_t;
@@ -400,7 +402,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 23; // Enables corresponding PCIM_BMC_STS bits to generate BMC interrupt signal.
-        uint64_t       Reserved_63_23  : 41; // Reserved
+        uint64_t       Reserved_63_23  : 41; // Unused
     } field;
     uint64_t val;
 } PCIM_BMC_ENA_t;
@@ -409,7 +411,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 23; // Snapshot of PCIM_BMC_STS bits when BMC interrupt signal transitions from 0 to 1.
-        uint64_t       Reserved_63_23  : 41; // Reserved
+        uint64_t       Reserved_63_23  : 41; // Unused
     } field;
     uint64_t val;
 } PCIM_BMC_FIRST_t;
@@ -417,7 +419,7 @@ typedef union {
 // PCIM_INT_STS desc:
 typedef union {
     struct {
-        uint64_t              INT_STS  : 64; // FXR Interrupt Status (see Table 29-38 )
+        uint64_t              int_sts  : 64; // FXR Interrupt Status (see Table 29-37 )
     } field;
     uint64_t val;
 } PCIM_INT_STS_t;
@@ -425,7 +427,7 @@ typedef union {
 // PCIM_INT_CLR desc:
 typedef union {
     struct {
-        uint64_t              INT_CLR  : 64; // Clear INT_STS
+        uint64_t              int_clr  : 64; // Clear INT_STS
     } field;
     uint64_t val;
 } PCIM_INT_CLR_t;
@@ -433,7 +435,7 @@ typedef union {
 // PCIM_INT_FRC desc:
 typedef union {
     struct {
-        uint64_t              INT_FRC  : 64; // Force INT_STS
+        uint64_t              int_frc  : 64; // Force INT_STS
     } field;
     uint64_t val;
 } PCIM_INT_FRC_t;
@@ -441,11 +443,11 @@ typedef union {
 // PCIM_INT_ITR desc:
 typedef union {
     struct {
-        uint64_t            INT_DELAY  : 16; // INT Delay. Setting the Delay to a non-zero value enables ITR throttling function for the associated event interrupt. The Delay value represents the minimum time enforced by HW between signaled interrupts for the associated event. The ITR Delay and counter granularity is 1us (be default). Note: the minimum delay delivered by the HW is the programed INT_DELAY value +/- 1us (or the ITR_PERIOD ). Small Delay values yield higher messages rates, large Delay values yield lower message rates. Ex: A Delay value of 1 allows up to 1M signaled messages/sec. A Delay value 100 allows up to 10,000 messages/sec. A Delay value of 0 disables the throttling function to allow the max possible signaling rate.
-        uint64_t            ITR_TIMER  : 16; // ITR Timer. Timer is set to INT_DELAY value when the associated interrupt is signaled. Timer is periodically (1us) decremented by HW if count is non-zero.
-        uint64_t              ITR_ENA  :  1; // ITR Enabled. Set by HW when ITR_TIMER reaches zero to enable a pending event or the next received event to signal the associated interrupt. Cleared by HW when the associated interrupt is signaled and INT_DELAY is non-zero value, or with SW write of non-zero value to INT_DELAY field.
-        uint64_t              ITR_PAR  :  1; // Parity bit for HW use only
-        uint64_t       Reserved_63_34  : 30; // Reserved
+        uint64_t            int_delay  : 16; // INT Delay. Setting the Delay to a non-zero value enables ITR throttling function for the associated event interrupt. The Delay value represents the minimum time enforced by HW between signaled interrupts for the associated event. The ITR Delay and counter granularity is 1us (be default). Note: the minimum delay delivered by the HW is the programed INT_DELAY value +/- 1us (or the itr_period ). Small Delay values yield higher messages rates, large Delay values yield lower message rates. Ex: A Delay value of 1 allows up to 1M signaled messages/sec. A Delay value 100 allows up to 10,000 messages/sec. A Delay value of 0 disables the throttling function to allow the max possible signaling rate.
+        uint64_t            itr_timer  : 16; // ITR Timer. Timer is set to int_delay value when the associated interrupt is signaled. Timer is periodically (1us) decremented by HW if count is non-zero.
+        uint64_t              itr_ena  :  1; // ITR Enabled. Set by HW when itr_timer reaches zero to enable a pending event or the next received event to signal the associated interrupt. Cleared by HW when the associated interrupt is signaled and int_delay is non-zero value, or with SW write of non-zero value to int_delay field.
+        uint64_t              itr_par  :  1; // Parity bit for HW use only
+        uint64_t       Reserved_63_34  : 30; // Unused
     } field;
     uint64_t val;
 } PCIM_INT_ITR_t;
@@ -453,7 +455,7 @@ typedef union {
 // PCIM_MSIX_ADDR desc:
 typedef union {
     struct {
-        uint64_t             MSG_ADDR  : 64; // MSIX Message Address
+        uint64_t             msg_addr  : 64; // MSIX Message Address
     } field;
     uint64_t val;
 } PCIM_MSIX_ADDR_t;
@@ -461,9 +463,9 @@ typedef union {
 // PCIM_MSIX_DATACTL desc:
 typedef union {
     struct {
-        uint64_t             MSG_DATA  : 32; // MSIX Message Data
-        uint64_t             MSG_MASK  :  1; // MSIX Message Mask Control
-        uint64_t       Reserved_63_33  : 31; // Reserved
+        uint64_t             msg_data  : 32; // MSIX Message Data
+        uint64_t             msg_mask  :  1; // MSIX Message Mask Control
+        uint64_t       Reserved_63_33  : 31; // Unused
     } field;
     uint64_t val;
 } PCIM_MSIX_DATACTL_t;
@@ -471,7 +473,7 @@ typedef union {
 // PCIM_MSIX_PBA desc:
 typedef union {
     struct {
-        uint64_t             MSIX_PBA  : 64; // MSIX entry PBA bits [64N+63 : 64N]
+        uint64_t             msix_pba  : 64; // MSIX entry PBA bits [64N+63 : 64N]
     } field;
     uint64_t val;
 } PCIM_MSIX_PBA_t;

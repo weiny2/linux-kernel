@@ -33,11 +33,11 @@
 #define DEF_FXR_AT_SW_DEF
 
 #ifndef FXR_AT_CSRS
-#define FXR_AT_CSRS						0x000000000000ULL
+#define FXR_AT_CSRS						0x000000000000
 #endif
-#define FXR_NUM_CONTEXTS					192
+#define FXR_NUM_CONTEXTS					256
 #define FXR_NUM_PIDS						4096
-#define FXR_MAX_CONTEXT						191
+#define FXR_MAX_CONTEXT						255
 #define FXR_TX_CONTEXT_ENTRIES					128
 #define FXR_TX_CONTEXT_MAX					127
 #define FXR_RX_CONTEXT_ENTRIES					16
@@ -63,7 +63,7 @@
 * sum to 16 or less.
 */
 #define FXR_AT_CFG_CACHE					(FXR_AT_CSRS + 0x000000000000)
-#define FXR_AT_CFG_CACHE_RESETCSR				0x0000000000001001ull
+#define FXR_AT_CFG_CACHE_RESETCSR				0x0000000001000F01ull
 #define FXR_AT_CFG_CACHE_RESERVED_63_26_SHIFT			26
 #define FXR_AT_CFG_CACHE_RESERVED_63_26_MASK			0x3FFFFFFFFFull
 #define FXR_AT_CFG_CACHE_RESERVED_63_26_SMASK			0xFFFFFFFFFC000000ull
@@ -89,21 +89,39 @@
 #define FXR_AT_CFG_CACHE_CACHE_SEG_MODE_MASK			0x1ull
 #define FXR_AT_CFG_CACHE_CACHE_SEG_MODE_SMASK			0x1ull
 /*
-* Table #5 of fxr_top - FXR_AT_CFG_PW_ALLOC
-* The Address Translation block has a limit of 128 concurrent Page Walks. This 
-* configuration register prevents starvation of page walk resources between 
-* clients. All client requests can allocate a page walk resource until a 
-* limit(128-(SHARED_PW_POOL*4)) is reached, then each client is limited to one 
-* fourth of the remaining Page Walk resources.
+* Table #5 of fxr_top - FXR_AT_CFG_REQ_MAX
+* The Address Translation block has a limit of 128 concurrent Page Walks, with 4 
+* concurrent Page Walk entries are dedicated to PCIM, for Interrupt Remapping, 
+* or legacy GPA Write translations. The remaining 124 concurrent Page Walk 
+* entries can be divided between the three Translation, with PASID, clients: 
+* TXDMA, RXDMA, and TXOTR. The intent of this configuration register is to 
+* prevent starvation of page walk resources between clients. All client requests 
+* can allocate a page walk resource until a configuration limit is reached, then 
+* credits are returned to clients, only as responses to previous translation 
+* requests, take that clients outstanding request count below the configured 
+* maximum. The default for each client is 124, so in the default configuration, 
+* there is no throttling of a given clients request stream. 
 */
-#define FXR_AT_CFG_PW_ALLOC					(FXR_AT_CSRS + 0x000000000008)
-#define FXR_AT_CFG_PW_ALLOC_RESETCSR				0x000000000000001Full
-#define FXR_AT_CFG_PW_ALLOC_RESERVED_63_5_SHIFT			5
-#define FXR_AT_CFG_PW_ALLOC_RESERVED_63_5_MASK			0x7FFFFFFFFFFFFFFull
-#define FXR_AT_CFG_PW_ALLOC_RESERVED_63_5_SMASK			0xFFFFFFFFFFFFFFE0ull
-#define FXR_AT_CFG_PW_ALLOC_SHARED_PW_POOL_SHIFT		0
-#define FXR_AT_CFG_PW_ALLOC_SHARED_PW_POOL_MASK			0x1Full
-#define FXR_AT_CFG_PW_ALLOC_SHARED_PW_POOL_SMASK		0x1Full
+#define FXR_AT_CFG_REQ_MAX					(FXR_AT_CSRS + 0x000000000008)
+#define FXR_AT_CFG_REQ_MAX_RESETCSR				0x00000000007C7C7Cull
+#define FXR_AT_CFG_REQ_MAX_RESERVED_63_23_SHIFT			23
+#define FXR_AT_CFG_REQ_MAX_RESERVED_63_23_MASK			0x1FFFFFFFFFFull
+#define FXR_AT_CFG_REQ_MAX_RESERVED_63_23_SMASK			0xFFFFFFFFFF800000ull
+#define FXR_AT_CFG_REQ_MAX_RXDMA_REQ_MAX_SHIFT			16
+#define FXR_AT_CFG_REQ_MAX_RXDMA_REQ_MAX_MASK			0x7Full
+#define FXR_AT_CFG_REQ_MAX_RXDMA_REQ_MAX_SMASK			0x7F0000ull
+#define FXR_AT_CFG_REQ_MAX_RESERVED_15_SHIFT			15
+#define FXR_AT_CFG_REQ_MAX_RESERVED_15_MASK			0x1ull
+#define FXR_AT_CFG_REQ_MAX_RESERVED_15_SMASK			0x8000ull
+#define FXR_AT_CFG_REQ_MAX_TXOTR_REQ_MAX_SHIFT			8
+#define FXR_AT_CFG_REQ_MAX_TXOTR_REQ_MAX_MASK			0x7Full
+#define FXR_AT_CFG_REQ_MAX_TXOTR_REQ_MAX_SMASK			0x7F00ull
+#define FXR_AT_CFG_REQ_MAX_RESERVED_7_SHIFT			7
+#define FXR_AT_CFG_REQ_MAX_RESERVED_7_MASK			0x1ull
+#define FXR_AT_CFG_REQ_MAX_RESERVED_7_SMASK			0x80ull
+#define FXR_AT_CFG_REQ_MAX_TXDMA_REQ_MAX_SHIFT			0
+#define FXR_AT_CFG_REQ_MAX_TXDMA_REQ_MAX_MASK			0x7Full
+#define FXR_AT_CFG_REQ_MAX_TXDMA_REQ_MAX_SMASK			0x7Full
 /*
 * Table #6 of fxr_top - FXR_AT_CFG_INPUT_CREDIT
 * Client request credits for input request queues. Hardware has storage for a 
@@ -781,7 +799,7 @@
 /*
 * Table #35 of fxr_top - FXR_AT_DBG_TREQ_BUF_ADDR
 * This is an AT debug CSR. It allows indirect access to the AT Request Buffer. 
-* These arrays can not be written to during normal operation. This register is 
+* These arrays cannot be written to during normal operation. This register is 
 * for debug use only. Request Buffer entries are 88 bits, with 128 entries. The 
 * data for the read or write to this register is contained in the next two 
 * CSR's
@@ -829,19 +847,19 @@
 */
 #define FXR_AT_DBG_TREQ_BUF_DATA1				(FXR_AT_CSRS + 0x000000010010)
 #define FXR_AT_DBG_TREQ_BUF_DATA1_RESETCSR			0x0000000000000000ull
-#define FXR_AT_DBG_TREQ_BUF_DATA1_RESERVED_63_24_SHIFT		24
-#define FXR_AT_DBG_TREQ_BUF_DATA1_RESERVED_63_24_MASK		0xFFFFFFFFFFull
-#define FXR_AT_DBG_TREQ_BUF_DATA1_RESERVED_63_24_SMASK		0xFFFFFFFFFF000000ull
-#define FXR_AT_DBG_TREQ_BUF_DATA1_ECC_SHIFT			16
+#define FXR_AT_DBG_TREQ_BUF_DATA1_RESERVED_63_28_SHIFT		28
+#define FXR_AT_DBG_TREQ_BUF_DATA1_RESERVED_63_28_MASK		0xFFFFFFFFFull
+#define FXR_AT_DBG_TREQ_BUF_DATA1_RESERVED_63_28_SMASK		0xFFFFFFFFF0000000ull
+#define FXR_AT_DBG_TREQ_BUF_DATA1_ECC_SHIFT			20
 #define FXR_AT_DBG_TREQ_BUF_DATA1_ECC_MASK			0xFFull
-#define FXR_AT_DBG_TREQ_BUF_DATA1_ECC_SMASK			0xFF0000ull
+#define FXR_AT_DBG_TREQ_BUF_DATA1_ECC_SMASK			0xFF00000ull
 #define FXR_AT_DBG_TREQ_BUF_DATA1_DATA_SHIFT			0
-#define FXR_AT_DBG_TREQ_BUF_DATA1_DATA_MASK			0xFFFFull
-#define FXR_AT_DBG_TREQ_BUF_DATA1_DATA_SMASK			0xFFFFull
+#define FXR_AT_DBG_TREQ_BUF_DATA1_DATA_MASK			0xFFFFFull
+#define FXR_AT_DBG_TREQ_BUF_DATA1_DATA_SMASK			0xFFFFFull
 /*
 * Table #38 of fxr_top - FXR_AT_DBG_PW_RSP_BUF_ADDR
 * This is an AT debug CSR. It allows indirect access to the AT Page Walk 
-* Response Buffer. These arrays can not be written to during normal operation. 
+* Response Buffer. These arrays cannot be written to during normal operation. 
 * This register is for debug use only. Note that this register is 88 bits, with 
 * 128 entries. The data for the read or write to this register is contained in 
 * the next two CSR's
@@ -901,7 +919,7 @@
 /*
 * Table #41 of fxr_top - FXR_AT_DBG_LRU2M4K_SETS_ADDR
 * This is an AT debug CSR. It allows indirect access to the 2M/4K Page Entry LRU 
-* state array. These arrays can not be written to during normal operation. This 
+* state array. These arrays cannot be written to during normal operation. This 
 * register is for debug use only. Note that this register is 80 bits, with 4096 
 * entries. The data for the read or write to this register is contained in the 
 * next two CSR's
@@ -961,10 +979,10 @@
 /*
 * Table #44 of fxr_top - FXR_AT_DBG_TLB_TAG_ADDR
 * This is an AT debug CSR. It allows indirect access to the AT Translation 
-* Lookup Buffer(TLB). These arrays can not be written to during normal 
-* operation. This register is for debug use only. TLB Tag entries are 72 bits, 
-* with 4096 entries per way, with 16 ways. The data for the read or write to 
-* this register is contained in the next two CSR's
+* Lookup Buffer(TLB). These arrays cannot be written to during normal operation. 
+* This register is for debug use only. TLB Tag entries are 72 bits, with 4096 
+* entries per way, with 16 ways. The data for the read or write to this register 
+* is contained in the next two CSR's
 */
 #define FXR_AT_DBG_TLB_TAG_ADDR					(FXR_AT_CSRS + 0x000000010300)
 #define FXR_AT_DBG_TLB_TAG_ADDR_RESETCSR			0x0020000000000000ull
@@ -1024,7 +1042,7 @@
 /*
 * Table #47 of fxr_top - FXR_AT_DBG_TLB_DATA
 * This is an AT debug CSR.It allows access to the TLB Data storage. These arrays 
-* can not be written to during normal operation. This register is for debug use 
+* cannot be written to during normal operation. This register is for debug use 
 * only. TLB Data entries are 64 bits, with 4096 entries per way, with 16 
 * ways
 */
@@ -1036,7 +1054,7 @@
 /*
 * Table #48 of fxr_top - FXR_AT_DBG_PW_ID_BUF
 * This is an AT debug CSR.It allows access to the Address Translation Request 
-* Page Walk Transaction ID Buffer. These arrays can not be written to during 
+* Page Walk Transaction ID Buffer. These arrays cannot be written to during 
 * normal operation. This register is for debug use only. PageWalk Transaction ID 
 * Buffer entries are 8 bits, with 1024 entries.
 */
@@ -1051,7 +1069,7 @@
 /*
 * Table #49 of fxr_top - FXR_AT_DBG_PW_ID_OF_BUF
 * This is an AT debug CSR.It allows access to the Address Translation PageWalk 
-* Transaction ID Overflow Buffer. These arrays can not be written to during 
+* Transaction ID Overflow Buffer. These arrays cannot be written to during 
 * normal operation. This register is for debug use only.  Page Walk Transaction 
 * ID Overflow Buffer entries are 8 bits, with 128 entries.
 */

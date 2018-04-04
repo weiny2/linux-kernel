@@ -33,7 +33,7 @@
 #define DEF_MNH_BCC_SW_DEF
 
 #ifndef CRK_BCC_CSRS
-#define CRK_BCC_CSRS							0x000000000000ULL
+#define CRK_BCC_CSRS							0x000000000000
 #endif
 #define CRKBCC_OFFSET							0
 /*

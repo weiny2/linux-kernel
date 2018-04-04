@@ -33,7 +33,7 @@
 #define DEF_MNH_SNUP_SW_DEF
 
 #ifndef MNH_SNUP_CSRS
-#define MNH_SNUP_CSRS								0x000000000000ULL
+#define MNH_SNUP_CSRS								0x000000000000
 #endif
 #define MNH_SNUP_CSRS_BASE							0
 #define MNH_DP_UPSTRM_CFG_OFFSET						0

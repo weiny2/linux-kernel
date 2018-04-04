@@ -33,7 +33,7 @@
 #define DEF_FXR_FC_SW_DEF
 
 #ifndef FZC_LCB_CSRS
-#define FZC_LCB_CSRS									0x000000000000ULL
+#define FZC_LCB_CSRS									0x000000000000
 #endif
 #define CRK_LCB_CSRS_BASE								256
 #define CRK_LCB_CFG_OFFSET								256
@@ -65,7 +65,7 @@
 * fifo.
 */
 #define FZC_CFG_TX_FIFOS_RADR								(FZC_LCB_CSRS + 0x000000000008)
-#define FZC_CFG_TX_FIFOS_RADR_RESETCSR							0x0000000000000007ull
+#define FZC_CFG_TX_FIFOS_RADR_RESETCSR							0x0000000000000006ull
 #define FZC_CFG_TX_FIFOS_RADR_UNUSED_63_5_SHIFT						5
 #define FZC_CFG_TX_FIFOS_RADR_UNUSED_63_5_MASK						0x7FFFFFFFFFFFFFFull
 #define FZC_CFG_TX_FIFOS_RADR_UNUSED_63_5_SMASK						0xFFFFFFFFFFFFFFE0ull
@@ -255,8 +255,7 @@
 #define FZC_STS_ART_COPY_3_VAL_SMASK							0xFFFFFFFFull
 /*
 * Table #1 of fzc_lcb_csrs - LCB_CFG_RESET_FROM_CSR
-* Set this to reset everything in the LCB including this CSR which will cause it 
-* to auto clear.
+* Set this to reset everything in the LCB.
 */
 #define FZC_LCB_CFG_RESET_FROM_CSR							(FZC_LCB_CSRS + 0x000000000100)
 #define FZC_LCB_CFG_RESET_FROM_CSR_RESETCSR						0x0000000000000000ull
@@ -457,7 +456,7 @@
 * training pattern.
 */
 #define FZC_LCB_CFG_CRC_MODE								(FZC_LCB_CSRS + 0x000000000158)
-#define FZC_LCB_CFG_CRC_MODE_RESETCSR							0x0000000000000000ull
+#define FZC_LCB_CFG_CRC_MODE_RESETCSR							0x0000000000000101ull
 #define FZC_LCB_CFG_CRC_MODE_UNUSED_63_13_SHIFT						13
 #define FZC_LCB_CFG_CRC_MODE_UNUSED_63_13_MASK						0x7FFFFFFFFFFFFull
 #define FZC_LCB_CFG_CRC_MODE_UNUSED_63_13_SMASK						0xFFFFFFFFFFFFE000ull
@@ -503,9 +502,12 @@
 #define FZC_LCB_CFG_LN_DCLK_INVERT_SAMPLE_SMASK						0x1ull
 /*
 * Table #14 of fzc_lcb_csrs - LCB_CFG_LN_TEST_TIME_TO_PASS
-* This register sets the time for a lane to pass framing after the first lane 
-* passes. If exceeded, lane is dropped unless forced to participate by 
-* lcb_cfg_misc.force_ln_en.
+* This register sets the time for remaining lanes to align, frame, exchange lane 
+* ID's, and pass testing after a first lane completes testing. If a lane does 
+* not pass testing within the timeout interval it is dropped unless forced to 
+* participate via lcb_cfg_misc.force_ln_en. If the first lane to complete 
+* testing did not pass, it is dropped. In cases where no lanes pass the 
+* lcb_err_sts.all_lns_failed_reinit_flag is set.
 */
 #define FZC_LCB_CFG_LN_TEST_TIME_TO_PASS						(FZC_LCB_CSRS + 0x000000000168)
 #define FZC_LCB_CFG_LN_TEST_TIME_TO_PASS_RESETCSR					0x0000000000000400ull
@@ -571,10 +573,16 @@
 * inserted on each cycle through the replay buffer.
 */
 #define FZC_LCB_CFG_NULLS_REQUIRED_BASE							(FZC_LCB_CSRS + 0x000000000188)
-#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_RESETCSR					0x0000000753333333ull
-#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_UNUSED_63_36_SHIFT				36
-#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_UNUSED_63_36_MASK				0xFFFFFFFull
-#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_UNUSED_63_36_SMASK				0xFFFFFFF000000000ull
+#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_RESETCSR					0x0000080F53333333ull
+#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_UNUSED_63_44_SHIFT				44
+#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_UNUSED_63_44_MASK				0xFFFFFull
+#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_UNUSED_63_44_SMASK				0xFFFFF00000000000ull
+#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_BIG_FEC_SHIFT					40
+#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_BIG_FEC_MASK					0xFull
+#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_BIG_FEC_SMASK					0xF0000000000ull
+#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_SMALL_FEC_SHIFT					36
+#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_SMALL_FEC_MASK					0xFull
+#define FZC_LCB_CFG_NULLS_REQUIRED_BASE_SMALL_FEC_SMASK					0xF000000000ull
 #define FZC_LCB_CFG_NULLS_REQUIRED_BASE_VAL8_SHIFT					32
 #define FZC_LCB_CFG_NULLS_REQUIRED_BASE_VAL8_MASK					0xFull
 #define FZC_LCB_CFG_NULLS_REQUIRED_BASE_VAL8_SMASK					0xF00000000ull
@@ -605,11 +613,13 @@
 /*
 * Table #19 of fzc_lcb_csrs - LCB_CFG_REINITS_BEFORE_LINK_LOW
 * This register sets the number of last ditch reinit attempts before the link 
-* goes down. These are triggered when the link times out or a incomplete round 
-* trip occurs. The corresponding error flags are set.
+* goes down. These are triggered when the link times (see LCB_CFG_LINK_TIMER_MAX) 
+* out or an incomplete round trip occurs. The corresponding error flags are set. 
+* If set to 0x0, no REINIT attempts are allowed when the link times 
+* out.
 */
 #define FZC_LCB_CFG_REINITS_BEFORE_LINK_LOW						(FZC_LCB_CSRS + 0x000000000190)
-#define FZC_LCB_CFG_REINITS_BEFORE_LINK_LOW_RESETCSR					0x0000000000000000ull
+#define FZC_LCB_CFG_REINITS_BEFORE_LINK_LOW_RESETCSR					0x0000000000000001ull
 #define FZC_LCB_CFG_REINITS_BEFORE_LINK_LOW_UNUSED_63_2_SHIFT				2
 #define FZC_LCB_CFG_REINITS_BEFORE_LINK_LOW_UNUSED_63_2_MASK				0x3FFFFFFFFFFFFFFFull
 #define FZC_LCB_CFG_REINITS_BEFORE_LINK_LOW_UNUSED_63_2_SMASK				0xFFFFFFFFFFFFFFFCull
@@ -732,7 +742,13 @@
 #define FZC_LCB_CFG_LINK_TIMER_DISABLE_VAL_SMASK					0x1ull
 /*
 * Table #27 of fzc_lcb_csrs - LCB_CFG_LINK_TIMER_MAX
-* This register sets the link timer maximum value.
+* This register sets the link transfer active timer maximum value. Lack of 
+* forward progress or exit from the Rx Tossing State initiates a series of 
+* REINIT attempts (LCB_CFG_REINITS_BEFORE_LINK_LOW). Each expiration of the link 
+* timer decrements the REINIT counter, resets the link timer to LINK_TIMER_MAX, 
+* and begins a new REINIT cycle. Link transfer active is taken low if the REINIT 
+* attempts are exhausted. If lcb_cfg_reinits_before_low is set to '0, link 
+* transfer active is cleared without additional REINITs.
 */
 #define FZC_LCB_CFG_LINK_TIMER_MAX							(FZC_LCB_CSRS + 0x0000000001D0)
 #define FZC_LCB_CFG_LINK_TIMER_MAX_RESETCSR						0x00000000000FFFFFull
@@ -745,13 +761,20 @@
 /*
 * Table #28 of fzc_lcb_csrs - LCB_CFG_DESKEW
 * This register can be used to disable deskew altogether or just the deskew 
-* timer.
+* timer. If the deskew time to complete threshold is reached, LCB_ERR_STS.rst_for_failed_deskew 
+* is set, and a Reinit reset is executed.
 */
 #define FZC_LCB_CFG_DESKEW								(FZC_LCB_CSRS + 0x0000000001D8)
 #define FZC_LCB_CFG_DESKEW_RESETCSR							0x00000000000007FFull
-#define FZC_LCB_CFG_DESKEW_UNUSED_63_21_SHIFT						21
-#define FZC_LCB_CFG_DESKEW_UNUSED_63_21_MASK						0x7FFFFFFFFFFull
-#define FZC_LCB_CFG_DESKEW_UNUSED_63_21_SMASK						0xFFFFFFFFFFE00000ull
+#define FZC_LCB_CFG_DESKEW_UNUSED_63_36_SHIFT						36
+#define FZC_LCB_CFG_DESKEW_UNUSED_63_36_MASK						0xFFFFFFFull
+#define FZC_LCB_CFG_DESKEW_UNUSED_63_36_SMASK						0xFFFFFFF000000000ull
+#define FZC_LCB_CFG_DESKEW_FRAMED_DELAY_SHIFT						24
+#define FZC_LCB_CFG_DESKEW_FRAMED_DELAY_MASK						0xFFFull
+#define FZC_LCB_CFG_DESKEW_FRAMED_DELAY_SMASK						0xFFF000000ull
+#define FZC_LCB_CFG_DESKEW_UNUSED_23_21_SHIFT						21
+#define FZC_LCB_CFG_DESKEW_UNUSED_23_21_MASK						0x7ull
+#define FZC_LCB_CFG_DESKEW_UNUSED_23_21_SMASK						0xE00000ull
 #define FZC_LCB_CFG_DESKEW_TIMER_DISABLE_SHIFT						20
 #define FZC_LCB_CFG_DESKEW_TIMER_DISABLE_MASK						0x1ull
 #define FZC_LCB_CFG_DESKEW_TIMER_DISABLE_SMASK						0x100000ull
@@ -858,10 +881,34 @@
 * CSR.
 */
 #define FZC_LCB_CFG_MISC								(FZC_LCB_CSRS + 0x000000000200)
-#define FZC_LCB_CFG_MISC_RESETCSR							0x0000000001917000ull
-#define FZC_LCB_CFG_MISC_UNUSED_63_25_SHIFT						25
-#define FZC_LCB_CFG_MISC_UNUSED_63_25_MASK						0x7FFFFFFFFFull
-#define FZC_LCB_CFG_MISC_UNUSED_63_25_SMASK						0xFFFFFFFFFE000000ull
+#define FZC_LCB_CFG_MISC_RESETCSR							0x0000080011917000ull
+#define FZC_LCB_CFG_MISC_UNUSED_63_44_SHIFT						44
+#define FZC_LCB_CFG_MISC_UNUSED_63_44_MASK						0xFFFFFull
+#define FZC_LCB_CFG_MISC_UNUSED_63_44_SMASK						0xFFFFF00000000000ull
+#define FZC_LCB_CFG_MISC_CORRECT_NSYMBOLS_SHIFT						40
+#define FZC_LCB_CFG_MISC_CORRECT_NSYMBOLS_MASK						0xFull
+#define FZC_LCB_CFG_MISC_CORRECT_NSYMBOLS_SMASK						0xF0000000000ull
+#define FZC_LCB_CFG_MISC_UNUSED_39_37_SHIFT						37
+#define FZC_LCB_CFG_MISC_UNUSED_39_37_MASK						0x7ull
+#define FZC_LCB_CFG_MISC_UNUSED_39_37_SMASK						0xE000000000ull
+#define FZC_LCB_CFG_MISC_FEC_Q_FULL_STOP_Q_SHIFT					36
+#define FZC_LCB_CFG_MISC_FEC_Q_FULL_STOP_Q_MASK						0x1ull
+#define FZC_LCB_CFG_MISC_FEC_Q_FULL_STOP_Q_SMASK					0x1000000000ull
+#define FZC_LCB_CFG_MISC_UNUSED_35_33_SHIFT						33
+#define FZC_LCB_CFG_MISC_UNUSED_35_33_MASK						0x7ull
+#define FZC_LCB_CFG_MISC_UNUSED_35_33_SMASK						0xE00000000ull
+#define FZC_LCB_CFG_MISC_HOLD_FEC_LTP_MODE_SHIFT					32
+#define FZC_LCB_CFG_MISC_HOLD_FEC_LTP_MODE_MASK						0x1ull
+#define FZC_LCB_CFG_MISC_HOLD_FEC_LTP_MODE_SMASK					0x100000000ull
+#define FZC_LCB_CFG_MISC_UNUSED_31_29_SHIFT						29
+#define FZC_LCB_CFG_MISC_UNUSED_31_29_MASK						0x7ull
+#define FZC_LCB_CFG_MISC_UNUSED_31_29_SMASK						0xE0000000ull
+#define FZC_LCB_CFG_MISC_CORRECT_1SYMBOL_SHIFT						28
+#define FZC_LCB_CFG_MISC_CORRECT_1SYMBOL_MASK						0x1ull
+#define FZC_LCB_CFG_MISC_CORRECT_1SYMBOL_SMASK						0x10000000ull
+#define FZC_LCB_CFG_MISC_UNUSED_27_25_SHIFT						25
+#define FZC_LCB_CFG_MISC_UNUSED_27_25_MASK						0x7ull
+#define FZC_LCB_CFG_MISC_UNUSED_27_25_SMASK						0xE000000ull
 #define FZC_LCB_CFG_MISC_REQUIRED_STALL_CNT_SHIFT					20
 #define FZC_LCB_CFG_MISC_REQUIRED_STALL_CNT_MASK					0x1Full
 #define FZC_LCB_CFG_MISC_REQUIRED_STALL_CNT_SMASK					0x1F00000ull
@@ -945,7 +992,7 @@
 * Table #36 of fzc_lcb_csrs - LCB_CFG_LINK_KILL_EN
 * This register controls whether a particular error condition will take the link 
 * down. It has a 1:1 correspondence with the error flags. See #%%#Section 
-* 21.4.50, 'LCB_ERR_STS'#%%# for error flag definitions.
+* 30.28.50, 'LCB_ERR_STS'#%%# for error flag definitions.
 */
 #define FZC_LCB_CFG_LINK_KILL_EN							(FZC_LCB_CSRS + 0x000000000218)
 #define FZC_LCB_CFG_LINK_KILL_EN_RESETCSR						0x000000000B14DE00ull
@@ -1094,13 +1141,19 @@
 * Gen2.
 */
 #define FZC_LCB_CFG_LINK_PARTNER_GEN							(FZC_LCB_CSRS + 0x000000000230)
-#define FZC_LCB_CFG_LINK_PARTNER_GEN_RESETCSR						0x0000000000001111ull
-#define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_63_13_SHIFT					13
-#define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_63_13_MASK					0x7FFFFFFFFFFFFull
-#define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_63_13_SMASK					0xFFFFFFFFFFFFE000ull
-#define FZC_LCB_CFG_LINK_PARTNER_GEN_PQRS_SHIFT						12
-#define FZC_LCB_CFG_LINK_PARTNER_GEN_PQRS_MASK						0x1ull
-#define FZC_LCB_CFG_LINK_PARTNER_GEN_PQRS_SMASK						0x1000ull
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_RESETCSR						0x0000000000011111ull
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_63_17_SHIFT					17
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_63_17_MASK					0x7FFFFFFFFFFFull
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_63_17_SMASK					0xFFFFFFFFFFFE0000ull
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_GRAY_SHIFT						16
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_GRAY_MASK						0x1ull
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_GRAY_SMASK						0x10000ull
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_15_13_SHIFT					13
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_15_13_MASK					0x7ull
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_15_13_SMASK					0xE000ull
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_PRQS_SHIFT						12
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_PRQS_MASK						0x1ull
+#define FZC_LCB_CFG_LINK_PARTNER_GEN_PRQS_SMASK						0x1000ull
 #define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_11_9_SHIFT					9
 #define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_11_9_MASK					0x7ull
 #define FZC_LCB_CFG_LINK_PARTNER_GEN_UNUSED_11_9_SMASK					0xE00ull
@@ -1190,7 +1243,9 @@
 #define FZC_LCB_CFG_PORT_MIRROR_TX_LUT_NE_SMASK						0x1ull
 /*
 * Table #42 of fzc_lcb_csrs - LCB_CFG_TIME_SYNC_0
-* Configure the time sync function. 
+* Configure the time sync function. See #%%#Section 30.28.41, 'LCB_CFG_PORT_MIRROR'#%%# 
+* for a description of how the mirror buses are connected to each 
+* port.
 */
 #define FZC_LCB_CFG_TIME_SYNC_0								(FZC_LCB_CSRS + 0x000000000248)
 #define FZC_LCB_CFG_TIME_SYNC_0_RESETCSR						0x0000000000100072ull
@@ -1297,9 +1352,15 @@
 */
 #define FZC_LCB_CFG_FEC_MODE								(FZC_LCB_CSRS + 0x000000000268)
 #define FZC_LCB_CFG_FEC_MODE_RESETCSR							0x0000000000000000ull
-#define FZC_LCB_CFG_FEC_MODE_UNUSED_63_13_SHIFT						13
-#define FZC_LCB_CFG_FEC_MODE_UNUSED_63_13_MASK						0x7FFFFFFFFFFFFull
-#define FZC_LCB_CFG_FEC_MODE_UNUSED_63_13_SMASK						0xFFFFFFFFFFFFE000ull
+#define FZC_LCB_CFG_FEC_MODE_UNUSED_63_17_SHIFT						17
+#define FZC_LCB_CFG_FEC_MODE_UNUSED_63_17_MASK						0x7FFFFFFFFFFFull
+#define FZC_LCB_CFG_FEC_MODE_UNUSED_63_17_SMASK						0xFFFFFFFFFFFE0000ull
+#define FZC_LCB_CFG_FEC_MODE_UCERR_FEC_CTRS_SHIFT					16
+#define FZC_LCB_CFG_FEC_MODE_UCERR_FEC_CTRS_MASK					0x1ull
+#define FZC_LCB_CFG_FEC_MODE_UCERR_FEC_CTRS_SMASK					0x10000ull
+#define FZC_LCB_CFG_FEC_MODE_UNUSED_15_13_SHIFT						13
+#define FZC_LCB_CFG_FEC_MODE_UNUSED_15_13_MASK						0x7ull
+#define FZC_LCB_CFG_FEC_MODE_UNUSED_15_13_SMASK						0xE000ull
 #define FZC_LCB_CFG_FEC_MODE_DISABLE_DEC_ERR_SHIFT					12
 #define FZC_LCB_CFG_FEC_MODE_DISABLE_DEC_ERR_MASK					0x1ull
 #define FZC_LCB_CFG_FEC_MODE_DISABLE_DEC_ERR_SMASK					0x1000ull
@@ -1342,10 +1403,10 @@
 /*
 * Table #48 of fzc_lcb_csrs - LCB_CFG_FEC_LN_DEGRADE
 * This register is used to configure lane degrade(s) that can be triggered by 
-* the FEC per lane error event counters.
+* the FEC per lane error event counters. 
 */
 #define FZC_LCB_CFG_FEC_LN_DEGRADE							(FZC_LCB_CSRS + 0x000000000278)
-#define FZC_LCB_CFG_FEC_LN_DEGRADE_RESETCSR						0xFFFFFFFF1000FFF2ull
+#define FZC_LCB_CFG_FEC_LN_DEGRADE_RESETCSR						0x00004000100000D2ull
 #define FZC_LCB_CFG_FEC_LN_DEGRADE_WIN_LIM_SHIFT					32
 #define FZC_LCB_CFG_FEC_LN_DEGRADE_WIN_LIM_MASK						0xFFFFFFFFull
 #define FZC_LCB_CFG_FEC_LN_DEGRADE_WIN_LIM_SMASK					0xFFFFFFFF00000000ull
@@ -1372,10 +1433,16 @@
 * CSR.
 */
 #define FZC_LCB_CFG_MISCA								(FZC_LCB_CSRS + 0x000000000280)
-#define FZC_LCB_CFG_MISCA_RESETCSR							0x00000001050A0C08ull
-#define FZC_LCB_CFG_MISCA_UNUSED_63_33_SHIFT						33
-#define FZC_LCB_CFG_MISCA_UNUSED_63_33_MASK						0x7FFFFFFFull
-#define FZC_LCB_CFG_MISCA_UNUSED_63_33_SMASK						0xFFFFFFFE00000000ull
+#define FZC_LCB_CFG_MISCA_RESETCSR							0x000000A1050A0C08ull
+#define FZC_LCB_CFG_MISCA_UNUSED_63_41_SHIFT						41
+#define FZC_LCB_CFG_MISCA_UNUSED_63_41_MASK						0x7FFFFFull
+#define FZC_LCB_CFG_MISCA_UNUSED_63_41_SMASK						0xFFFFFE0000000000ull
+#define FZC_LCB_CFG_MISCA_REQUIRED_STALL_KILL_CNT_SHIFT					36
+#define FZC_LCB_CFG_MISCA_REQUIRED_STALL_KILL_CNT_MASK					0x1Full
+#define FZC_LCB_CFG_MISCA_REQUIRED_STALL_KILL_CNT_SMASK					0x1F000000000ull
+#define FZC_LCB_CFG_MISCA_UNUSED_35_33_SHIFT						33
+#define FZC_LCB_CFG_MISCA_UNUSED_35_33_MASK						0x7ull
+#define FZC_LCB_CFG_MISCA_UNUSED_35_33_SMASK						0xE00000000ull
 #define FZC_LCB_CFG_MISCA_LENIENT_FRAMING_SHIFT						32
 #define FZC_LCB_CFG_MISCA_LENIENT_FRAMING_MASK						0x1ull
 #define FZC_LCB_CFG_MISCA_LENIENT_FRAMING_SMASK						0x100000000ull
@@ -1730,9 +1797,9 @@
 /*
 * Table #53 of fzc_lcb_csrs - LCB_ERR_EN_HOST
 * This register is used to enable interrupts for the associated error flag. See 
-* #%%#Section 21.4.50, 'LCB_ERR_STS'#%%# for error flag definitions.
+* #%%#Section 30.28.50, 'LCB_ERR_STS'#%%# for error flag definitions.
 */
-#define FZC_LCB_ERR_EN_HOST								(FXR_FZC_LCB0_CSRS + 0x000000000498)
+#define FZC_LCB_ERR_EN_HOST								(FZC_LCB_CSRS + 0x000000000498)
 #define FZC_LCB_ERR_EN_HOST_RESETCSR							0x0000000000000000ull
 #define FZC_LCB_ERR_EN_HOST_UNUSED_63_33_SHIFT						33
 #define FZC_LCB_ERR_EN_HOST_UNUSED_63_33_MASK						0x7FFFFFFFull
@@ -1838,8 +1905,9 @@
 #define FZC_LCB_ERR_EN_HOST_RST_FOR_FAILED_DESKEW_SMASK					0x1ull
 /*
 * Table #54 of fzc_lcb_csrs - LCB_ERR_FIRST_HOST
-* This is a CSR description. See #%%#Section 21.4.50, 'LCB_ERR_STS'#%%# for 
-* error flag definitions.
+* This is a CSR description. See #%%#Section 30.28.50, 'LCB_ERR_STS'#%%# for 
+* error flag definitions. The first error to occur will set the appropriate 
+* field in this register, if it was interrupt enabled via LCB_ERR_EN_HOST.
 */
 #define FZC_LCB_ERR_FIRST_HOST								(FZC_LCB_CSRS + 0x0000000004A0)
 #define FZC_LCB_ERR_FIRST_HOST_RESETCSR							0x0000000000000000ull
@@ -2014,12 +2082,12 @@
 #define FZC_LCB_DBG_ERRINJ_ECC_CLR_ECC_ERR_CNTS_SHIFT					56
 #define FZC_LCB_DBG_ERRINJ_ECC_CLR_ECC_ERR_CNTS_MASK					0x1ull
 #define FZC_LCB_DBG_ERRINJ_ECC_CLR_ECC_ERR_CNTS_SMASK					0x100000000000000ull
-#define FZC_LCB_DBG_ERRINJ_ECC_UNUSED_55_54_SHIFT					54
-#define FZC_LCB_DBG_ERRINJ_ECC_UNUSED_55_54_MASK					0x3ull
-#define FZC_LCB_DBG_ERRINJ_ECC_UNUSED_55_54_SMASK					0xC0000000000000ull
+#define FZC_LCB_DBG_ERRINJ_ECC_UNUSED_55_53_SHIFT					53
+#define FZC_LCB_DBG_ERRINJ_ECC_UNUSED_55_53_MASK					0x7ull
+#define FZC_LCB_DBG_ERRINJ_ECC_UNUSED_55_53_SMASK					0xE0000000000000ull
 #define FZC_LCB_DBG_ERRINJ_ECC_REPLAY_BUF_ADDRESS_SHIFT					44
-#define FZC_LCB_DBG_ERRINJ_ECC_REPLAY_BUF_ADDRESS_MASK					0x3FFull
-#define FZC_LCB_DBG_ERRINJ_ECC_REPLAY_BUF_ADDRESS_SMASK					0x3FF00000000000ull
+#define FZC_LCB_DBG_ERRINJ_ECC_REPLAY_BUF_ADDRESS_MASK					0x1FFull
+#define FZC_LCB_DBG_ERRINJ_ECC_REPLAY_BUF_ADDRESS_SMASK					0x1FF00000000000ull
 #define FZC_LCB_DBG_ERRINJ_ECC_UNUSED_43_41_SHIFT					41
 #define FZC_LCB_DBG_ERRINJ_ECC_UNUSED_43_41_MASK					0x7ull
 #define FZC_LCB_DBG_ERRINJ_ECC_UNUSED_43_41_SMASK					0xE0000000000ull
@@ -2290,11 +2358,18 @@
 #define FZC_LCB_DBG_INIT_STATE_2_DESKEW_COMPLETE_SMASK					0x1ull
 /*
 * Table #62 of fzc_lcb_csrs - LCB_DBG_CFG_GOOD_BAD_DATA
-* This register is used to control the good, bad and scrambled LTP 
-* data.
+* This register is used to control the good, bad and scrambled LTP data. This 
+* feature is supported in four lane mode only for CRC-16/48. When used with the 
+* state tables in the Otter Creek MAS, this feature allows capture of bad LTPs, 
+* and the replayed version of that same LTP. Comparing the bits of the 'good' 
+* and 'bad' LTPs, produces the error pattern detected by the channel receiver. 
+* The captured scrambled data is the actual transmitted data pattern on the wire 
+* that experienced the error. The captured scrambled data is valid in CRC-only 
+* modes. When FEC is enabled valid good/bad data captures are not aligned with 
+* the captured scrambled data.
 */
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA							(FZC_LCB_CSRS + 0x000000000338)
-#define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_RESETCSR						0x00000000F0000000ull
+#define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_RESETCSR						0x00000000F0000030ull
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_UNUSED_63_37_SHIFT				37
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_UNUSED_63_37_MASK					0x7FFFFFFull
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_UNUSED_63_37_SMASK				0xFFFFFFE000000000ull
@@ -2328,9 +2403,12 @@
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_SAVE_MULTIPLE_ONLY_SHIFT				12
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_SAVE_MULTIPLE_ONLY_MASK				0x1ull
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_SAVE_MULTIPLE_ONLY_SMASK				0x1000ull
+#define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_UNUSED_11_SHIFT					11
+#define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_UNUSED_11_MASK					0x1ull
+#define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_UNUSED_11_SMASK					0x800ull
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_ADDR_SHIFT					8
-#define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_ADDR_MASK						0xFull
-#define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_ADDR_SMASK					0xF00ull
+#define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_ADDR_MASK						0x7ull
+#define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_ADDR_SMASK					0x700ull
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_UNUSED_7_6_SHIFT					6
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_UNUSED_7_6_MASK					0x3ull
 #define FZC_LCB_DBG_CFG_GOOD_BAD_DATA_UNUSED_7_6_SMASK					0xC0ull
@@ -2346,7 +2424,10 @@
 /*
 * Table #63 of fzc_lcb_csrs - LCB_DBG_STS_GOOD_BAD_DATA
 * This register is used to observe status associated with the good, bad and 
-* scrambled LTP data.
+* scrambled LTP data. Each captured LTP has a number or type that represents how 
+* it is formated in memory. Each LTP number is defined in the Good Bad Replay 
+* state tables, in the OC MAS. Firmware can use the formated data to extract LTP 
+* payload, flits, CRC field, and lane XFR units.
 */
 #define FZC_LCB_DBG_STS_GOOD_BAD_DATA							(FZC_LCB_CSRS + 0x000000000340)
 #define FZC_LCB_DBG_STS_GOOD_BAD_DATA_RESETCSR						0x0000000000000000ull
@@ -2438,10 +2519,13 @@
 * Used to configure error injection into transmit lane 0
 */
 #define FZC_LCB_DBG_CFG_FEC_LN_0							(FZC_LCB_CSRS + 0x000000000370)
-#define FZC_LCB_DBG_CFG_FEC_LN_0_RESETCSR						0x0000000000000000ull
-#define FZC_LCB_DBG_CFG_FEC_LN_0_UNUSED_63_59_SHIFT					59
-#define FZC_LCB_DBG_CFG_FEC_LN_0_UNUSED_63_59_MASK					0x1Full
-#define FZC_LCB_DBG_CFG_FEC_LN_0_UNUSED_63_59_SMASK					0xF800000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_0_RESETCSR						0x1800000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_0_UNUSED_63_62_SHIFT					62
+#define FZC_LCB_DBG_CFG_FEC_LN_0_UNUSED_63_62_MASK					0x3ull
+#define FZC_LCB_DBG_CFG_FEC_LN_0_UNUSED_63_62_SMASK					0xC000000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_0_LFSR_SEED_SHIFT					59
+#define FZC_LCB_DBG_CFG_FEC_LN_0_LFSR_SEED_MASK						0x7ull
+#define FZC_LCB_DBG_CFG_FEC_LN_0_LFSR_SEED_SMASK					0x3800000000000000ull
 #define FZC_LCB_DBG_CFG_FEC_LN_0_INJ_RATE_SHIFT						54
 #define FZC_LCB_DBG_CFG_FEC_LN_0_INJ_RATE_MASK						0x1Full
 #define FZC_LCB_DBG_CFG_FEC_LN_0_INJ_RATE_SMASK						0x7C0000000000000ull
@@ -2468,10 +2552,13 @@
 * Used to configure error injection into transmit lane 1
 */
 #define FZC_LCB_DBG_CFG_FEC_LN_1							(FZC_LCB_CSRS + 0x000000000378)
-#define FZC_LCB_DBG_CFG_FEC_LN_1_RESETCSR						0x0000000000000000ull
-#define FZC_LCB_DBG_CFG_FEC_LN_1_UNUSED_63_59_SHIFT					59
-#define FZC_LCB_DBG_CFG_FEC_LN_1_UNUSED_63_59_MASK					0x1Full
-#define FZC_LCB_DBG_CFG_FEC_LN_1_UNUSED_63_59_SMASK					0xF800000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_1_RESETCSR						0x2800000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_1_UNUSED_63_62_SHIFT					62
+#define FZC_LCB_DBG_CFG_FEC_LN_1_UNUSED_63_62_MASK					0x3ull
+#define FZC_LCB_DBG_CFG_FEC_LN_1_UNUSED_63_62_SMASK					0xC000000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_1_LFSR_SEED_SHIFT					59
+#define FZC_LCB_DBG_CFG_FEC_LN_1_LFSR_SEED_MASK						0x7ull
+#define FZC_LCB_DBG_CFG_FEC_LN_1_LFSR_SEED_SMASK					0x3800000000000000ull
 #define FZC_LCB_DBG_CFG_FEC_LN_1_INJ_RATE_SHIFT						54
 #define FZC_LCB_DBG_CFG_FEC_LN_1_INJ_RATE_MASK						0x1Full
 #define FZC_LCB_DBG_CFG_FEC_LN_1_INJ_RATE_SMASK						0x7C0000000000000ull
@@ -2498,10 +2585,13 @@
 * Used to configure error injection into transmit lane 2
 */
 #define FZC_LCB_DBG_CFG_FEC_LN_2							(FZC_LCB_CSRS + 0x000000000380)
-#define FZC_LCB_DBG_CFG_FEC_LN_2_RESETCSR						0x0000000000000000ull
-#define FZC_LCB_DBG_CFG_FEC_LN_2_UNUSED_63_59_SHIFT					59
-#define FZC_LCB_DBG_CFG_FEC_LN_2_UNUSED_63_59_MASK					0x1Full
-#define FZC_LCB_DBG_CFG_FEC_LN_2_UNUSED_63_59_SMASK					0xF800000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_2_RESETCSR						0x3000000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_2_UNUSED_63_62_SHIFT					62
+#define FZC_LCB_DBG_CFG_FEC_LN_2_UNUSED_63_62_MASK					0x3ull
+#define FZC_LCB_DBG_CFG_FEC_LN_2_UNUSED_63_62_SMASK					0xC000000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_2_LFSR_SEED_SHIFT					59
+#define FZC_LCB_DBG_CFG_FEC_LN_2_LFSR_SEED_MASK						0x7ull
+#define FZC_LCB_DBG_CFG_FEC_LN_2_LFSR_SEED_SMASK					0x3800000000000000ull
 #define FZC_LCB_DBG_CFG_FEC_LN_2_INJ_RATE_SHIFT						54
 #define FZC_LCB_DBG_CFG_FEC_LN_2_INJ_RATE_MASK						0x1Full
 #define FZC_LCB_DBG_CFG_FEC_LN_2_INJ_RATE_SMASK						0x7C0000000000000ull
@@ -2528,10 +2618,13 @@
 * Used to configure error injection into transmit lane 3
 */
 #define FZC_LCB_DBG_CFG_FEC_LN_3							(FZC_LCB_CSRS + 0x000000000388)
-#define FZC_LCB_DBG_CFG_FEC_LN_3_RESETCSR						0x0000000000000000ull
-#define FZC_LCB_DBG_CFG_FEC_LN_3_UNUSED_63_59_SHIFT					59
-#define FZC_LCB_DBG_CFG_FEC_LN_3_UNUSED_63_59_MASK					0x1Full
-#define FZC_LCB_DBG_CFG_FEC_LN_3_UNUSED_63_59_SMASK					0xF800000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_3_RESETCSR						0x3800000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_3_UNUSED_63_62_SHIFT					62
+#define FZC_LCB_DBG_CFG_FEC_LN_3_UNUSED_63_62_MASK					0x3ull
+#define FZC_LCB_DBG_CFG_FEC_LN_3_UNUSED_63_62_SMASK					0xC000000000000000ull
+#define FZC_LCB_DBG_CFG_FEC_LN_3_LFSR_SEED_SHIFT					59
+#define FZC_LCB_DBG_CFG_FEC_LN_3_LFSR_SEED_MASK						0x7ull
+#define FZC_LCB_DBG_CFG_FEC_LN_3_LFSR_SEED_SMASK					0x3800000000000000ull
 #define FZC_LCB_DBG_CFG_FEC_LN_3_INJ_RATE_SHIFT						54
 #define FZC_LCB_DBG_CFG_FEC_LN_3_INJ_RATE_MASK						0x1Full
 #define FZC_LCB_DBG_CFG_FEC_LN_3_INJ_RATE_SMASK						0x7C0000000000000ull
@@ -2555,8 +2648,14 @@
 #define FZC_LCB_DBG_CFG_FEC_LN_3_ROW_SMASK						0x1FFFFFFFFull
 /*
 * Table #73 of fzc_lcb_csrs - LCB_DBG_CFG_ERRINJ_FEC
-* This register is used to enable FEC error injection on a per lane 
-* basis.
+* This register is used to enable FEC error injection on a per lane and per 
+* codeword basis. When used with the FEC symbol map tables available in the 
+* Volume 1 architecture specification, errors can be precisely injected into 
+* codewords, to systemically test error correction and detection capability. The 
+* four lane symbol map tables directly correlate with the row and column 
+* organization of the configuration registers. Degraded lane modes are not fully 
+* supported, however, the symbol map tables can be used to provide limited 
+* testing.
 */
 #define FZC_LCB_DBG_CFG_ERRINJ_FEC							(FZC_LCB_CSRS + 0x000000000390)
 #define FZC_LCB_DBG_CFG_ERRINJ_FEC_RESETCSR						0x0000000000000000ull
@@ -2576,7 +2675,20 @@
 #define FZC_LCB_DBG_CFG_ERRINJ_FEC_LANE_EN0_MASK					0x1ull
 #define FZC_LCB_DBG_CFG_ERRINJ_FEC_LANE_EN0_SMASK					0x1ull
 /*
-* Table #74 of fzc_lcb_csrs - LCB_ERR_INFO_TOTAL_CRC_ERR
+* Table #74 of fzc_lcb_csrs - LCB_DBG_ERRINJ_CRC_2
+* This register is used to provide CRC error injection stimulus for 
+* debug.
+*/
+#define FZC_LCB_DBG_ERRINJ_CRC_2							(FZC_LCB_CSRS + 0x000000000398)
+#define FZC_LCB_DBG_ERRINJ_CRC_2_RESETCSR						0x00000000FFFFFFFFull
+#define FZC_LCB_DBG_ERRINJ_CRC_2_UNUSED_63_32_SHIFT					32
+#define FZC_LCB_DBG_ERRINJ_CRC_2_UNUSED_63_32_MASK					0xFFFFFFFFull
+#define FZC_LCB_DBG_ERRINJ_CRC_2_UNUSED_63_32_SMASK					0xFFFFFFFF00000000ull
+#define FZC_LCB_DBG_ERRINJ_CRC_2_CRC_ERR_BIT_EN_SHIFT					0
+#define FZC_LCB_DBG_ERRINJ_CRC_2_CRC_ERR_BIT_EN_MASK					0xFFFFFFFFull
+#define FZC_LCB_DBG_ERRINJ_CRC_2_CRC_ERR_BIT_EN_SMASK					0xFFFFFFFFull
+/*
+* Table #75 of fzc_lcb_csrs - LCB_ERR_INFO_TOTAL_CRC_ERR
 * This register is used to report the total number of Rx side LTPs with a CRC 
 * error.
 */
@@ -2586,7 +2698,7 @@
 #define FZC_LCB_ERR_INFO_TOTAL_CRC_ERR_CNT_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_TOTAL_CRC_ERR_CNT_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #75 of fzc_lcb_csrs - LCB_ERR_INFO_CRC_ERR_LN0
+* Table #76 of fzc_lcb_csrs - LCB_ERR_INFO_CRC_ERR_LN0
 * This register is used to report the total number of Rx side LTPs with a CRC 
 * error with lane 0 identified as the culprit.
 */
@@ -2596,7 +2708,7 @@
 #define FZC_LCB_ERR_INFO_CRC_ERR_LN0_CNT_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_CRC_ERR_LN0_CNT_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #76 of fzc_lcb_csrs - LCB_ERR_INFO_CRC_ERR_LN1
+* Table #77 of fzc_lcb_csrs - LCB_ERR_INFO_CRC_ERR_LN1
 * This register is used to report the total number of Rx side LTPs with a CRC 
 * error with lane 1 identified as the culprit.
 */
@@ -2606,7 +2718,7 @@
 #define FZC_LCB_ERR_INFO_CRC_ERR_LN1_CNT_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_CRC_ERR_LN1_CNT_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #77 of fzc_lcb_csrs - LCB_ERR_INFO_CRC_ERR_LN2
+* Table #78 of fzc_lcb_csrs - LCB_ERR_INFO_CRC_ERR_LN2
 * This register is used to report the total number of Rx side LTPs with a CRC 
 * error with lane 2 identified as the culprit.
 */
@@ -2616,7 +2728,7 @@
 #define FZC_LCB_ERR_INFO_CRC_ERR_LN2_CNT_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_CRC_ERR_LN2_CNT_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #78 of fzc_lcb_csrs - LCB_ERR_INFO_CRC_ERR_LN3
+* Table #79 of fzc_lcb_csrs - LCB_ERR_INFO_CRC_ERR_LN3
 * This register is used to report the total number of Rx side LTPs with a CRC 
 * error with lane 3 identified as the culprit.
 */
@@ -2626,7 +2738,7 @@
 #define FZC_LCB_ERR_INFO_CRC_ERR_LN3_CNT_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_CRC_ERR_LN3_CNT_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #79 of fzc_lcb_csrs - LCB_ERR_INFO_CRC_ERR_MULTI_LN
+* Table #80 of fzc_lcb_csrs - LCB_ERR_INFO_CRC_ERR_MULTI_LN
 * This register is used to report the total number of Rx side LTPs with a CRC 
 * error with more than one lane identified as the culprit.
 */
@@ -2639,9 +2751,10 @@
 #define FZC_LCB_ERR_INFO_CRC_ERR_MULTI_LN_CNT_MASK					0xFFFFFull
 #define FZC_LCB_ERR_INFO_CRC_ERR_MULTI_LN_CNT_SMASK					0xFFFFFull
 /*
-* Table #80 of fzc_lcb_csrs - LCB_ERR_INFO_TX_REPLAY_CNT
+* Table #81 of fzc_lcb_csrs - LCB_ERR_INFO_TX_REPLAY_CNT
 * This register is used to report the total number of Tx side retransmission 
-* sequences.
+* sequences. Each time the Tx enters the replay state this counter is 
+* incremented.
 */
 #define FZC_LCB_ERR_INFO_TX_REPLAY_CNT							(FZC_LCB_CSRS + 0x000000000530)
 #define FZC_LCB_ERR_INFO_TX_REPLAY_CNT_RESETCSR						0x0000000000000000ull
@@ -2649,9 +2762,10 @@
 #define FZC_LCB_ERR_INFO_TX_REPLAY_CNT_VAL_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_TX_REPLAY_CNT_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #81 of fzc_lcb_csrs - LCB_ERR_INFO_RX_REPLAY_CNT
+* Table #82 of fzc_lcb_csrs - LCB_ERR_INFO_RX_REPLAY_CNT
 * This register is used to report the total number of Rx side retransmission 
-* sequences.
+* sequences. Each time the Rx sends a RetryReqLTP this counter 
+* increments.
 */
 #define FZC_LCB_ERR_INFO_RX_REPLAY_CNT							(FZC_LCB_CSRS + 0x000000000538)
 #define FZC_LCB_ERR_INFO_RX_REPLAY_CNT_RESETCSR						0x0000000000000000ull
@@ -2659,7 +2773,7 @@
 #define FZC_LCB_ERR_INFO_RX_REPLAY_CNT_VAL_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_RX_REPLAY_CNT_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #82 of fzc_lcb_csrs - LCB_ERR_INFO_SEQ_CRC_CNT
+* Table #83 of fzc_lcb_csrs - LCB_ERR_INFO_SEQ_CRC_CNT
 * This register is used to report the total number of Rx side sequential CRC 
 * error count.
 */
@@ -2672,7 +2786,7 @@
 #define FZC_LCB_ERR_INFO_SEQ_CRC_CNT_VAL_MASK						0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_SEQ_CRC_CNT_VAL_SMASK						0xFFFFFFFFull
 /*
-* Table #83 of fzc_lcb_csrs - LCB_ERR_INFO_ESCAPE_0_ONLY_CNT
+* Table #84 of fzc_lcb_csrs - LCB_ERR_INFO_ESCAPE_0_ONLY_CNT
 * This register is used to report the total number of poly 0 only false positive 
 * 12 bit CRC checks in 48 bit CRC mode when four lanes are active.
 */
@@ -2685,7 +2799,7 @@
 #define FZC_LCB_ERR_INFO_ESCAPE_0_ONLY_CNT_VAL_MASK					0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_ESCAPE_0_ONLY_CNT_VAL_SMASK					0xFFFFFFFFull
 /*
-* Table #84 of fzc_lcb_csrs - LCB_ERR_INFO_ESCAPE_0_PLUS1_CNT
+* Table #85 of fzc_lcb_csrs - LCB_ERR_INFO_ESCAPE_0_PLUS1_CNT
 * This register is used to report the total number of simultaneous poly 0 and 
 * any of the other 3 polys (just 1) false positive 12 bit CRC checks in 48 bit 
 * CRC mode when four lanes are active.
@@ -2699,7 +2813,7 @@
 #define FZC_LCB_ERR_INFO_ESCAPE_0_PLUS1_CNT_VAL_MASK					0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_ESCAPE_0_PLUS1_CNT_VAL_SMASK					0xFFFFFFFFull
 /*
-* Table #85 of fzc_lcb_csrs - LCB_ERR_INFO_ESCAPE_0_PLUS2_CNT
+* Table #86 of fzc_lcb_csrs - LCB_ERR_INFO_ESCAPE_0_PLUS2_CNT
 * This register is used to report the total number of simultaneous poly 0 and 
 * any two of the other 3 polys (just 2) false positive 12 bit CRC checks in 48 
 * bit CRC mode when four lanes are active.
@@ -2713,7 +2827,7 @@
 #define FZC_LCB_ERR_INFO_ESCAPE_0_PLUS2_CNT_VAL_MASK					0xFFFFull
 #define FZC_LCB_ERR_INFO_ESCAPE_0_PLUS2_CNT_VAL_SMASK					0xFFFFull
 /*
-* Table #86 of fzc_lcb_csrs - LCB_ERR_INFO_REINIT_FROM_PEER_CNT
+* Table #87 of fzc_lcb_csrs - LCB_ERR_INFO_REINIT_FROM_PEER_CNT
 * This register is used to report the total number of reinit sequences triggered 
 * from the peer.
 */
@@ -2726,7 +2840,7 @@
 #define FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT_VAL_MASK					0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT_VAL_SMASK					0xFFFFFFFFull
 /*
-* Table #87 of fzc_lcb_csrs - LCB_ERR_INFO_SBE_CNT
+* Table #88 of fzc_lcb_csrs - LCB_ERR_INFO_SBE_CNT
 * This register is used to count ECC SBE errors in the input buffer and replay 
 * buffer.
 */
@@ -2751,7 +2865,7 @@
 #define FZC_LCB_ERR_INFO_SBE_CNT_INPUT_BUFFER_MASK					0xFFull
 #define FZC_LCB_ERR_INFO_SBE_CNT_INPUT_BUFFER_SMASK					0xFFull
 /*
-* Table #88 of fzc_lcb_csrs - LCB_ERR_INFO_MISC_FLG_CNT
+* Table #89 of fzc_lcb_csrs - LCB_ERR_INFO_MISC_FLG_CNT
 * This register is used to count error flag events that are informational and 
 * not necessarily catastrophic and would tend to occur only at very high BER. 
 * The logic attempts to ride through these events.
@@ -2774,7 +2888,7 @@
 #define FZC_LCB_ERR_INFO_MISC_FLG_CNT_RST_FOR_FAILED_DESKEW_MASK			0xFFull
 #define FZC_LCB_ERR_INFO_MISC_FLG_CNT_RST_FOR_FAILED_DESKEW_SMASK			0xFFull
 /*
-* Table #89 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_INPUT_BUF
+* Table #90 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_INPUT_BUF
 * This register is used to report ECC errors in the input buffer 
 * RAMs.
 */
@@ -2799,7 +2913,7 @@
 #define FZC_LCB_ERR_INFO_ECC_INPUT_BUF_CHK_MASK						0xFFull
 #define FZC_LCB_ERR_INFO_ECC_INPUT_BUF_CHK_SMASK					0xFFull
 /*
-* Table #90 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_INPUT_BUF_FLIT_DATA_UPPER_33BITS
+* Table #91 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_INPUT_BUF_FLIT_DATA_UPPER_33BITS
 * This register is used to report ECC errors in the input buffer 
 * RAMs.
 */
@@ -2812,7 +2926,7 @@
 #define FZC_LCB_ERR_INFO_ECC_INPUT_BUF_FLIT_DATA_UPPER_33BITS_DATA_MASK			0x1FFFFFFFFull
 #define FZC_LCB_ERR_INFO_ECC_INPUT_BUF_FLIT_DATA_UPPER_33BITS_DATA_SMASK		0x1FFFFFFFFull
 /*
-* Table #91 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_INPUT_BUF_FLIT_DATA_LOWER_32BITS
+* Table #92 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_INPUT_BUF_FLIT_DATA_LOWER_32BITS
 * This register is used to report ECC errors in the input buffer 
 * RAMs.
 */
@@ -2825,7 +2939,7 @@
 #define FZC_LCB_ERR_INFO_ECC_INPUT_BUF_FLIT_DATA_LOWER_32BITS_DATA_MASK			0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_ECC_INPUT_BUF_FLIT_DATA_LOWER_32BITS_DATA_SMASK		0xFFFFFFFFull
 /*
-* Table #92 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_REPLAY_BUF
+* Table #93 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_REPLAY_BUF
 * This register is used to report ECC errors in the replay buffer 
 * RAMs.
 */
@@ -2850,7 +2964,7 @@
 #define FZC_LCB_ERR_INFO_ECC_REPLAY_BUF_CHK_MASK					0xFFull
 #define FZC_LCB_ERR_INFO_ECC_REPLAY_BUF_CHK_SMASK					0xFFull
 /*
-* Table #93 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_REPLAY_BUF_FLIT_DATA_UPPER_33BITS
+* Table #94 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_REPLAY_BUF_FLIT_DATA_UPPER_33BITS
 * This register is used to report ECC errors in the replay buffer 
 * RAMs.
 */
@@ -2863,7 +2977,7 @@
 #define FZC_LCB_ERR_INFO_ECC_REPLAY_BUF_FLIT_DATA_UPPER_33BITS_DATA_MASK		0x1FFFFFFFFull
 #define FZC_LCB_ERR_INFO_ECC_REPLAY_BUF_FLIT_DATA_UPPER_33BITS_DATA_SMASK		0x1FFFFFFFFull
 /*
-* Table #94 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_REPLAY_BUF_FLIT_DATA_LOWER_32BITS
+* Table #95 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_REPLAY_BUF_FLIT_DATA_LOWER_32BITS
 * This register is used to report ECC errors in the replay buffer 
 * RAMs.
 */
@@ -2876,24 +2990,21 @@
 #define FZC_LCB_ERR_INFO_ECC_REPLAY_BUF_FLIT_DATA_LOWER_32BITS_DATA_MASK		0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_ECC_REPLAY_BUF_FLIT_DATA_LOWER_32BITS_DATA_SMASK		0xFFFFFFFFull
 /*
-* Table #95 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_PM_TIME
+* Table #96 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_PM_TIME
 * This register is used to report ECC errors in the replay buffer 
 * RAMs.
 */
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME							(FZC_LCB_CSRS + 0x0000000005A8)
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_RESETCSR						0x0000000000000000ull
-#define FZC_LCB_ERR_INFO_ECC_PM_TIME_UNUSED_63_21_SHIFT					21
-#define FZC_LCB_ERR_INFO_ECC_PM_TIME_UNUSED_63_21_MASK					0x7FFFFFFFFFFull
-#define FZC_LCB_ERR_INFO_ECC_PM_TIME_UNUSED_63_21_SMASK					0xFFFFFFFFFFE00000ull
-#define FZC_LCB_ERR_INFO_ECC_PM_TIME_CSR_CREATED_SHIFT					20
+#define FZC_LCB_ERR_INFO_ECC_PM_TIME_UNUSED_63_25_SHIFT					25
+#define FZC_LCB_ERR_INFO_ECC_PM_TIME_UNUSED_63_25_MASK					0x7FFFFFFFFFull
+#define FZC_LCB_ERR_INFO_ECC_PM_TIME_UNUSED_63_25_SMASK					0xFFFFFFFFFE000000ull
+#define FZC_LCB_ERR_INFO_ECC_PM_TIME_CSR_CREATED_SHIFT					24
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_CSR_CREATED_MASK					0x1ull
-#define FZC_LCB_ERR_INFO_ECC_PM_TIME_CSR_CREATED_SMASK					0x100000ull
-#define FZC_LCB_ERR_INFO_ECC_PM_TIME_UNUSED_19_18_SHIFT					18
-#define FZC_LCB_ERR_INFO_ECC_PM_TIME_UNUSED_19_18_MASK					0x3ull
-#define FZC_LCB_ERR_INFO_ECC_PM_TIME_UNUSED_19_18_SMASK					0xC0000ull
+#define FZC_LCB_ERR_INFO_ECC_PM_TIME_CSR_CREATED_SMASK					0x1000000ull
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_LOCATION_SHIFT					16
-#define FZC_LCB_ERR_INFO_ECC_PM_TIME_LOCATION_MASK					0x3ull
-#define FZC_LCB_ERR_INFO_ECC_PM_TIME_LOCATION_SMASK					0x30000ull
+#define FZC_LCB_ERR_INFO_ECC_PM_TIME_LOCATION_MASK					0xFFull
+#define FZC_LCB_ERR_INFO_ECC_PM_TIME_LOCATION_SMASK					0xFF0000ull
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_SYNDROME_SHIFT					8
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_SYNDROME_MASK					0xFFull
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_SYNDROME_SMASK					0xFF00ull
@@ -2901,7 +3012,7 @@
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_CHK_MASK						0xFFull
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_CHK_SMASK						0xFFull
 /*
-* Table #96 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_PM_TIME_FLIT_DATA_UPPER_33BITS
+* Table #97 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_PM_TIME_FLIT_DATA_UPPER_33BITS
 * This register is used to report ECC errors in the replay buffer 
 * RAMs.
 */
@@ -2914,7 +3025,7 @@
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_FLIT_DATA_UPPER_33BITS_DATA_MASK			0x1FFFFFFFFull
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_FLIT_DATA_UPPER_33BITS_DATA_SMASK			0x1FFFFFFFFull
 /*
-* Table #97 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_PM_TIME_FLIT_DATA_LOWER_32BITS
+* Table #98 of fzc_lcb_csrs - LCB_ERR_INFO_ECC_PM_TIME_FLIT_DATA_LOWER_32BITS
 * This register is used to report ECC errors in high priority MasterTime sync 
 * flits when sending off of port mirror bus and onto the wire. These high 
 * priority flits bypass the FIFO and are sent directly to the physical layer 
@@ -2929,7 +3040,7 @@
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_FLIT_DATA_LOWER_32BITS_DATA_MASK			0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_ECC_PM_TIME_FLIT_DATA_LOWER_32BITS_DATA_SMASK			0xFFFFFFFFull
 /*
-* Table #98 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_1
+* Table #99 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_1
 * This register is one of an eight register set that counts corrected symbol 
 * errors in each received code word. If one symbol error is corrected in a 
 * received code word this register increments. This register is active for both 
@@ -2944,7 +3055,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_1_DATA_MASK					0xFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_1_DATA_SMASK					0xFFFFFFFFFFFFull
 /*
-* Table #99 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_2
+* Table #100 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_2
 * This register is one of an eight register set that counts corrected symbol 
 * errors in each received code word. If two symbol errors are corrected in a 
 * received code word this register increments. This register is active for both 
@@ -2959,7 +3070,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_2_DATA_MASK					0xFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_2_DATA_SMASK					0xFFFFFFFFFFFFull
 /*
-* Table #100 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_3
+* Table #101 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_3
 * This register is one of an eight register set that counts corrected symbol 
 * errors in each received code word. If three symbol errors are corrected in a 
 * received code word this register increments. This register is active for 
@@ -2974,7 +3085,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_3_DATA_MASK					0xFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_3_DATA_SMASK					0xFFFFFFFFFFFFull
 /*
-* Table #101 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_4
+* Table #102 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_4
 * This register is one of an eight register set that counts corrected symbol 
 * errors in each received code word. If four symbol errors are corrected in a 
 * received code word this register increments. This register is active for 
@@ -2989,7 +3100,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_4_DATA_MASK					0xFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_4_DATA_SMASK					0xFFFFFFFFFFFFull
 /*
-* Table #102 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_5
+* Table #103 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_5
 * This register is one of an eight register set that counts corrected symbol 
 * errors in each received code word. If five symbol errors are corrected in a 
 * received code word this register increments. This register is active for 
@@ -3004,7 +3115,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_5_DATA_MASK					0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_5_DATA_SMASK					0xFFFFFFFFull
 /*
-* Table #103 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_6
+* Table #104 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_6
 * This register is one of an eight register set that counts corrected symbol 
 * errors in each received code word. If six symbol errors are corrected in a 
 * received code word this register increments. This register is active for 
@@ -3019,7 +3130,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_6_DATA_MASK					0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_6_DATA_SMASK					0xFFFFFFFFull
 /*
-* Table #104 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_7
+* Table #105 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_7
 * This register is one of an eight register set that counts corrected symbol 
 * errors in each received code word. If seven symbol errors are corrected in a 
 * received code word this register increments. This register is active for 
@@ -3034,7 +3145,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_7_DATA_MASK					0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_7_DATA_SMASK					0xFFFFFFFFull
 /*
-* Table #105 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_8
+* Table #106 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_CNT_8
 * This register is one of an eight register set that counts corrected symbol 
 * errors in each received code word. If eight symbol errors are corrected in a 
 * received code word this register increments. This register is active for 
@@ -3049,19 +3160,21 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_8_DATA_MASK					0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_CNT_8_DATA_SMASK					0xFFFFFFFFull
 /*
-* Table #106 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_UERR_CNT
+* Table #107 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_UERR_CNT
 * This register counts the number of uncorrected code words detected by the FEC 
 * decoder. If the FEC decoder detects an uncorrectable error in a code word this 
 * register increments. This register is active for both RS(132,128) and 
 * RS(528,512). For RS(132,128) this register increments if there are more than 
 * t=2 symbol errors. For RS(528,512) this register increments if there are more 
-* than t=8 symbol errors. In both cases, if there are more that 2t symbol errors 
+* than t=8 symbol errors. In both cases, if there are more than 2t symbol errors 
 * in a code word, the FEC decoder detects the uncorrectable error state with 
 * probability ~(1-1/t!), and increments this counter. A replay request is 
-* generated when an uncorrectable error is detected, and is aligned with the 
-* first LTP associated with the bad code word. The bad code word is delivered to 
-* the CRC check engine undisturbed. A subsequent sequential CRC error generates 
-* a recovery, in lieu of the replay. CRC errors are counted normally.
+* generated when an uncorrectable error is detected. The replay starts from the 
+* first LTP (or earlier) associated with the bad code word. The bad code word is 
+* delivered to the CRC check engine with a maximum of e+t symbol errors, where e 
+* > t, is the number of symbol errors at the decoder input. A subsequent 
+* sequential CRC error generates a recovery, in lieu of the replay. CRC errors 
+* are counted normally.
 */
 #define FZC_LCB_ERR_INFO_FEC_UERR_CNT							(FZC_LCB_CSRS + 0x000000000600)
 #define FZC_LCB_ERR_INFO_FEC_UERR_CNT_RESETCSR						0x0000000000000000ull
@@ -3072,7 +3185,7 @@
 #define FZC_LCB_ERR_INFO_FEC_UERR_CNT_DATA_MASK						0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_UERR_CNT_DATA_SMASK					0xFFFFFFFFull
 /*
-* Table #107 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_0
+* Table #108 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_0
 * This register is one of a five register set used to monitor the decoder's 
 * error correction vector. With RS(528,512) all five are used to capture a 320b 
 * error vector. With RS(132,128) the four lower registers capture a 256b error 
@@ -3093,7 +3206,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_0_DATA_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_0_DATA_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #108 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_1
+* Table #109 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_1
 * This register is one of a five register set used to monitor the decoder's 
 * error correction vector. With RS(528,512) all five are used to capture a 320b 
 * error vector. With RS(132,128) the four lower registers capture a 256b error 
@@ -3114,7 +3227,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_1_DATA_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_1_DATA_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #109 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_2
+* Table #110 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_2
 * This register is one of a five register set used to monitor the decoder's 
 * error correction vector. With RS(528,512) all five are used to capture a 320b 
 * error vector. With RS(132,128) the four lower registers capture a 256b error 
@@ -3135,7 +3248,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_2_DATA_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_2_DATA_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #110 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_3
+* Table #111 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_3
 * This register is one of a five register set used to monitor the decoder's 
 * error correction vector. With RS(528,512) all five are used to capture a 320b 
 * error vector. With RS(132,128) the four lower registers capture a 256b error 
@@ -3156,7 +3269,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_3_DATA_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_3_DATA_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #111 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_4
+* Table #112 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_4
 * This register is one of a five register set used to monitor the decoder's 
 * error correction vector. With RS(528,512) all five are used to capture a 320b 
 * error vector. With RS(132,128) the four lower registers capture a 256b error 
@@ -3177,19 +3290,34 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_4_DATA_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_4_DATA_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #112 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_VLD
+* Table #113 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_VLD
 * Data valid bit for LCB_ERR_INFO_CERR_MASK_*
 */
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD						(FZC_LCB_CSRS + 0x000000000630)
-#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_RESETCSR					0x0000000000000000ull
-#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_63_1_SHIFT				1
-#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_63_1_MASK				0x7FFFFFFFFFFFFFFFull
-#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_63_1_SMASK				0xFFFFFFFFFFFFFFFEull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_RESETCSR					0x000000000003FF30ull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_63_18_SHIFT				18
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_63_18_MASK				0x3FFFFFFFFFFFull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_63_18_SMASK				0xFFFFFFFFFFFC0000ull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_FEC_DEC_STATE_SHIFT				12
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_FEC_DEC_STATE_MASK				0x3Full
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_FEC_DEC_STATE_SMASK				0x3F000ull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_STATE_NUM_SHIFT				8
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_STATE_NUM_MASK				0xFull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_STATE_NUM_SMASK				0xF00ull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_7_6_SHIFT				6
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_7_6_MASK				0x3ull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_7_6_SMASK				0xC0ull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_FEC_3LN_SHIFT_SHIFT				4
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_FEC_3LN_SHIFT_MASK				0x3ull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_FEC_3LN_SHIFT_SMASK				0x30ull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_3_1_SHIFT				1
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_3_1_MASK				0x7ull
+#define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_UNUSED_3_1_SMASK				0xEull
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_VAL_SHIFT					0
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_VAL_MASK					0x1ull
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_VLD_VAL_SMASK					0x1ull
 /*
-* Table #113 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_MISS_CNT
+* Table #114 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_CERR_MASK_MISS_CNT
 * Number of missed error mask captures. If LCB_ERR_INFO_FEC_CERR_MASK_* and the 
 * error mask queue are full while a request for a capture is active, the error 
 * vector is dropped, and this counter increments.
@@ -3203,7 +3331,7 @@
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_MISS_CNT_DATA_MASK				0xFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_CERR_MASK_MISS_CNT_DATA_SMASK				0xFFFFFFFFull
 /*
-* Table #114 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_ERR_LN0
+* Table #115 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_ERR_LN0
 * The data in LCB_ERR_INFO_FEC_CERR_MASK is presented as 4 lanes x lane width 
 * (64 or 80 bits), and is used to generate an error event count for each 
 * physical lane. Each time the lane specific error vector from the FEC decoder 
@@ -3220,7 +3348,7 @@
 #define FZC_LCB_ERR_INFO_FEC_ERR_LN0_DATA_MASK						0xFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_ERR_LN0_DATA_SMASK						0xFFFFFFFFFFFFull
 /*
-* Table #115 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_ERR_LN1
+* Table #116 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_ERR_LN1
 * The data in LCB_ERR_INFO_FEC_CERR_MASK is presented as 4 lanes x lane width 
 * (64 or 80 bits), and is used to generate an error event count for each 
 * physical lane. Each time the lane specific error vector from the FEC decoder 
@@ -3237,7 +3365,7 @@
 #define FZC_LCB_ERR_INFO_FEC_ERR_LN1_DATA_MASK						0xFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_ERR_LN1_DATA_SMASK						0xFFFFFFFFFFFFull
 /*
-* Table #116 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_ERR_LN2
+* Table #117 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_ERR_LN2
 * The data in LCB_ERR_INFO_FEC_CERR_MASK is presented as 4 lanes x lane width 
 * (64 or 80 bits), and is used to generate an error event count for each 
 * physical lane. Each time the lane specific error vector from the FEC decoder 
@@ -3254,7 +3382,7 @@
 #define FZC_LCB_ERR_INFO_FEC_ERR_LN2_DATA_MASK						0xFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_ERR_LN2_DATA_SMASK						0xFFFFFFFFFFFFull
 /*
-* Table #117 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_ERR_LN3
+* Table #118 of fzc_lcb_csrs - LCB_ERR_INFO_FEC_ERR_LN3
 * The data in LCB_ERR_INFO_FEC_CERR_MASK is presented as 4 lanes x lane width 
 * (64 or 80 bits), and is used to generate an error event count for each 
 * physical lane. Each time the lane specific error vector from the FEC decoder 
@@ -3271,7 +3399,17 @@
 #define FZC_LCB_ERR_INFO_FEC_ERR_LN3_DATA_MASK						0xFFFFFFFFFFFFull
 #define FZC_LCB_ERR_INFO_FEC_ERR_LN3_DATA_SMASK						0xFFFFFFFFFFFFull
 /*
-* Table #118 of fzc_lcb_csrs - LCB_PRF_GOOD_LTP_CNT
+* Table #119 of fzc_lcb_csrs - LCB_ERR_INFO_RX_RESYNC_CNT
+* This register reports the total number of ReSyncRetry requests. Each time the 
+* Rx sends a ReSyncRetryReq this counter increments.
+*/
+#define FZC_LCB_ERR_INFO_RX_RESYNC_CNT							(FZC_LCB_CSRS + 0x000000000660)
+#define FZC_LCB_ERR_INFO_RX_RESYNC_CNT_RESETCSR						0x0000000000000000ull
+#define FZC_LCB_ERR_INFO_RX_RESYNC_CNT_DATA_SHIFT					0
+#define FZC_LCB_ERR_INFO_RX_RESYNC_CNT_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FZC_LCB_ERR_INFO_RX_RESYNC_CNT_DATA_SMASK					0xFFFFFFFFFFFFFFFFull
+/*
+* Table #120 of fzc_lcb_csrs - LCB_PRF_GOOD_LTP_CNT
 * This register is used to report the LTP count with a good CRC. This will 
 * assist with BER calculations. The TOTAL_CRC_ERR_CNT / (GOOD_LTP_CNT + 
 * TOTAL_CRC_ERR_CNT) is the event error rate (EER). The BER will equal the 
@@ -3284,7 +3422,7 @@
 #define FZC_LCB_PRF_GOOD_LTP_CNT_VAL_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PRF_GOOD_LTP_CNT_VAL_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #119 of fzc_lcb_csrs - LCB_PRF_ACCEPTED_LTP_CNT
+* Table #121 of fzc_lcb_csrs - LCB_PRF_ACCEPTED_LTP_CNT
 * This register is used to report the LTP count with a good CRC accepted into 
 * the receive buffer. This will assist with performance monitor calculations. 
 * GOOD_LTP_CNT + TOTAL_CRC_ERR_CNT is the total LTP count. The ACCEPTED_LTP_CNT 
@@ -3299,7 +3437,7 @@
 #define FZC_LCB_PRF_ACCEPTED_LTP_CNT_VAL_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PRF_ACCEPTED_LTP_CNT_VAL_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #120 of fzc_lcb_csrs - LCB_PRF_TX_RELIABLE_LTP_CNT
+* Table #122 of fzc_lcb_csrs - LCB_PRF_TX_RELIABLE_LTP_CNT
 * This register is used to report the first time reliable LTP count on the Tx 
 * side when a replay is not in progress. This counts the number of LTPs written 
 * into the replay buffer.
@@ -3310,7 +3448,7 @@
 #define FZC_LCB_PRF_TX_RELIABLE_LTP_CNT_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PRF_TX_RELIABLE_LTP_CNT_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #121 of fzc_lcb_csrs - LCB_PRF_RX_FLIT_CNT
+* Table #123 of fzc_lcb_csrs - LCB_PRF_RX_FLIT_CNT
 * This register counts the flits on the lower side of the output 
 * bus.
 */
@@ -3323,7 +3461,7 @@
 #define FZC_LCB_PRF_RX_FLIT_CNT_VAL_MASK						0xFFFFFFFFFFFFFull
 #define FZC_LCB_PRF_RX_FLIT_CNT_VAL_SMASK						0xFFFFFFFFFFFFFull
 /*
-* Table #122 of fzc_lcb_csrs - LCB_PRF_TX_FLIT_CNT
+* Table #124 of fzc_lcb_csrs - LCB_PRF_TX_FLIT_CNT
 * This register counts the flits on the lower side of the input 
 * bus.
 */
@@ -3336,7 +3474,7 @@
 #define FZC_LCB_PRF_TX_FLIT_CNT_VAL_MASK						0xFFFFFFFFFFFFFull
 #define FZC_LCB_PRF_TX_FLIT_CNT_VAL_SMASK						0xFFFFFFFFFFFFFull
 /*
-* Table #123 of fzc_lcb_csrs - LCB_PRF_CLK_CNTR
+* Table #125 of fzc_lcb_csrs - LCB_PRF_CLK_CNTR
 * This register is used to report various clk counts. The clk being monitored is 
 * set by CFG_CLK_CNTR.
 */
@@ -3352,7 +3490,7 @@
 #define FZC_LCB_PRF_CLK_CNTR_CNT_MASK							0xFFFFFFFFFFFFull
 #define FZC_LCB_PRF_CLK_CNTR_CNT_SMASK							0xFFFFFFFFFFFFull
 /*
-* Table #124 of fzc_lcb_csrs - LCB_PRF_GOOD_FECCW_CNT
+* Table #126 of fzc_lcb_csrs - LCB_PRF_GOOD_FECCW_CNT
 * This register reports the number of good received FEC code words, without 
 * correctable or uncorrectable errors. Used in conjunction with the error 
 * information registers for FEC codewords, corrected code word error ratios, 
@@ -3365,7 +3503,7 @@
 #define FZC_LCB_PRF_GOOD_FECCW_CNT_CNT_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PRF_GOOD_FECCW_CNT_CNT_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #125 of fzc_lcb_csrs - LCB_STS_LINK_PAUSE_ACTIVE
+* Table #127 of fzc_lcb_csrs - LCB_STS_LINK_PAUSE_ACTIVE
 * This will be set after a LCB_CFG_REINIT_PAUSE_TX_MODE and LCB_CFG_FORCE_RECOVER_SEQUENCE 
 * is used. See also LCB_CFG_REINIT_AS_SLAVE. This does not report anything when 
 * using only LCB_CFG_REINIT_PAUSE_RX_MODE.
@@ -3379,7 +3517,7 @@
 #define FZC_LCB_STS_LINK_PAUSE_ACTIVE_VAL_MASK						0x1ull
 #define FZC_LCB_STS_LINK_PAUSE_ACTIVE_VAL_SMASK						0x1ull
 /*
-* Table #126 of fzc_lcb_csrs - LCB_STS_LINK_TRANSFER_ACTIVE
+* Table #128 of fzc_lcb_csrs - LCB_STS_LINK_TRANSFER_ACTIVE
 * This will be set if the link is up.
 */
 #define FZC_LCB_STS_LINK_TRANSFER_ACTIVE						(FZC_LCB_CSRS + 0x000000000788)
@@ -3391,7 +3529,7 @@
 #define FZC_LCB_STS_LINK_TRANSFER_ACTIVE_VAL_MASK					0x1ull
 #define FZC_LCB_STS_LINK_TRANSFER_ACTIVE_VAL_SMASK					0x1ull
 /*
-* Table #127 of fzc_lcb_csrs - LCB_STS_LN_DEGRADE
+* Table #129 of fzc_lcb_csrs - LCB_STS_LN_DEGRADE
 * This is used to monitor the lane degrade logic.
 */
 #define FZC_LCB_STS_LN_DEGRADE								(FZC_LCB_CSRS + 0x000000000790)
@@ -3421,7 +3559,7 @@
 #define FZC_LCB_STS_LN_DEGRADE_EXHAUSTED_MASK						0x1ull
 #define FZC_LCB_STS_LN_DEGRADE_EXHAUSTED_SMASK						0x1ull
 /*
-* Table #128 of fzc_lcb_csrs - LCB_STS_TX_LTP_MODE
+* Table #130 of fzc_lcb_csrs - LCB_STS_TX_LTP_MODE
 * This register is used to monitor the status of the Tx side LTP 
 * mode.
 */
@@ -3434,7 +3572,7 @@
 #define FZC_LCB_STS_TX_LTP_MODE_VAL_MASK						0x1ull
 #define FZC_LCB_STS_TX_LTP_MODE_VAL_SMASK						0x1ull
 /*
-* Table #129 of fzc_lcb_csrs - LCB_STS_RX_LTP_MODE
+* Table #131 of fzc_lcb_csrs - LCB_STS_RX_LTP_MODE
 * This register is used to monitor the status of the Rx side LTP 
 * mode.
 */
@@ -3447,7 +3585,7 @@
 #define FZC_LCB_STS_RX_LTP_MODE_VAL_MASK						0x1ull
 #define FZC_LCB_STS_RX_LTP_MODE_VAL_SMASK						0x1ull
 /*
-* Table #130 of fzc_lcb_csrs - LCB_STS_RX_CRC_FEC_MODE
+* Table #132 of fzc_lcb_csrs - LCB_STS_RX_CRC_FEC_MODE
 * This register is used to monitor the status of the Rx side CRC and FEC 
 * modes.
 */
@@ -3466,7 +3604,7 @@
 #define FZC_LCB_STS_RX_CRC_FEC_MODE_CRC_MODE_MASK					0x3ull
 #define FZC_LCB_STS_RX_CRC_FEC_MODE_CRC_MODE_SMASK					0x3ull
 /*
-* Table #131 of fzc_lcb_csrs - LCB_STS_RX_LOGICAL_ID
+* Table #133 of fzc_lcb_csrs - LCB_STS_RX_LOGICAL_ID
 * This register reports the Rx logical ID (Peers Tx physical ID) for each 
 * lane.
 */
@@ -3497,7 +3635,7 @@
 #define FZC_LCB_STS_RX_LOGICAL_ID_LN0_MASK						0x7ull
 #define FZC_LCB_STS_RX_LOGICAL_ID_LN0_SMASK						0x7ull
 /*
-* Table #132 of fzc_lcb_csrs - LCB_STS_RX_SHIFTED_LN_NUM
+* Table #134 of fzc_lcb_csrs - LCB_STS_RX_SHIFTED_LN_NUM
 * This register reports the Rx logical ID (Peers Tx physical ID) for each 
 * lane.
 */
@@ -3528,7 +3666,7 @@
 #define FZC_LCB_STS_RX_SHIFTED_LN_NUM_LN0_MASK						0x7ull
 #define FZC_LCB_STS_RX_SHIFTED_LN_NUM_LN0_SMASK						0x7ull
 /*
-* Table #133 of fzc_lcb_csrs - LCB_STS_RX_PHY_LN_EN
+* Table #135 of fzc_lcb_csrs - LCB_STS_RX_PHY_LN_EN
 * This register reports the Rx side physical lane enable.
 */
 #define FZC_LCB_STS_RX_PHY_LN_EN							(FZC_LCB_CSRS + 0x0000000007C0)
@@ -3549,19 +3687,22 @@
 #define FZC_LCB_STS_RX_PHY_LN_EN_COMBINED_MASK						0xFull
 #define FZC_LCB_STS_RX_PHY_LN_EN_COMBINED_SMASK						0xFull
 /*
-* Table #134 of fzc_lcb_csrs - LCB_STS_TX_PHY_LN_EN
+* Table #136 of fzc_lcb_csrs - LCB_STS_TX_PHY_LN_EN
 * This register reports the Tx side physical lane enable.
 */
 #define FZC_LCB_STS_TX_PHY_LN_EN							(FZC_LCB_CSRS + 0x0000000007C8)
 #define FZC_LCB_STS_TX_PHY_LN_EN_RESETCSR						0x0000000000000000ull
-#define FZC_LCB_STS_TX_PHY_LN_EN_UNUSED_63_4_SHIFT					4
-#define FZC_LCB_STS_TX_PHY_LN_EN_UNUSED_63_4_MASK					0xFFFFFFFFFFFFFFFull
-#define FZC_LCB_STS_TX_PHY_LN_EN_UNUSED_63_4_SMASK					0xFFFFFFFFFFFFFFF0ull
+#define FZC_LCB_STS_TX_PHY_LN_EN_UNUSED_63_5_SHIFT					5
+#define FZC_LCB_STS_TX_PHY_LN_EN_UNUSED_63_5_MASK					0x7FFFFFFFFFFFFFFull
+#define FZC_LCB_STS_TX_PHY_LN_EN_UNUSED_63_5_SMASK					0xFFFFFFFFFFFFFFE0ull
+#define FZC_LCB_STS_TX_PHY_LN_EN_TX_TON_SHIFT						4
+#define FZC_LCB_STS_TX_PHY_LN_EN_TX_TON_MASK						0x1ull
+#define FZC_LCB_STS_TX_PHY_LN_EN_TX_TON_SMASK						0x10ull
 #define FZC_LCB_STS_TX_PHY_LN_EN_VAL_SHIFT						0
 #define FZC_LCB_STS_TX_PHY_LN_EN_VAL_MASK						0xFull
 #define FZC_LCB_STS_TX_PHY_LN_EN_VAL_SMASK						0xFull
 /*
-* Table #135 of fzc_lcb_csrs - LCB_STS_ROUND_TRIP_LTP_CNT
+* Table #137 of fzc_lcb_csrs - LCB_STS_ROUND_TRIP_LTP_CNT
 * This register reports the link round trip time in terms of a LTP transmit 
 * time.
 */
@@ -3574,7 +3715,7 @@
 #define FZC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_MASK						0xFFFFull
 #define FZC_LCB_STS_ROUND_TRIP_LTP_CNT_VAL_SMASK					0xFFFFull
 /*
-* Table #136 of fzc_lcb_csrs - LCB_STS_NULLS_REQUIRED
+* Table #138 of fzc_lcb_csrs - LCB_STS_NULLS_REQUIRED
 * This register reports the number of null LTPs that are required before reusing 
 * a replay buffer location. This is necessary to prevent replay buffer overrun 
 * when the link round trip is larger than the depth of the replay 
@@ -3589,7 +3730,7 @@
 #define FZC_LCB_STS_NULLS_REQUIRED_CNT_MASK						0xFFFFull
 #define FZC_LCB_STS_NULLS_REQUIRED_CNT_SMASK						0xFFFFull
 /*
-* Table #137 of fzc_lcb_csrs - LCB_STS_FLIT_QUIET_CNTR
+* Table #139 of fzc_lcb_csrs - LCB_STS_FLIT_QUIET_CNTR
 * This register reports the number of replay buffer cycles that have transpired 
 * since the last valid flit was passed up to the core.
 */
@@ -3602,7 +3743,7 @@
 #define FZC_LCB_STS_FLIT_QUIET_CNTR_VAL_MASK						0x7ull
 #define FZC_LCB_STS_FLIT_QUIET_CNTR_VAL_SMASK						0x7ull
 /*
-* Table #138 of fzc_lcb_csrs - LCB_STS_RCV_SMA_MSG
+* Table #140 of fzc_lcb_csrs - LCB_STS_RCV_SMA_MSG
 * This register is used by the subnet management agent (SMA) to receive a 
 * message from the peer SMA. The SMA software protocol must provide a means to 
 * indicate a new message has been received.
@@ -3616,7 +3757,7 @@
 #define FZC_LCB_STS_RCV_SMA_MSG_VAL_MASK						0xFFFFFFFFFFFFull
 #define FZC_LCB_STS_RCV_SMA_MSG_VAL_SMASK						0xFFFFFFFFFFFFull
 /*
-* Table #139 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_LOW_0
+* Table #141 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_LOW_0
 * When a MasterTimeLow flit, with an ID of 0, arrives at a port that supports a 
 * Local Clock the Local Clock value is captured in a LocalTime register, and the 
 * Master Clock ID and low 40 bits of the Master Time are captured in a 
@@ -3637,7 +3778,7 @@
 #define FZC_LCB_STS_MASTER_TIME_LOW_0_VAL_MASK						0xFFFFFFFFFFull
 #define FZC_LCB_STS_MASTER_TIME_LOW_0_VAL_SMASK						0xFFFFFFFFFFull
 /*
-* Table #140 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_HIGH_0
+* Table #142 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_HIGH_0
 * When a MasterTimeHigh flit, with an ID of 0, arrives at a port that supports a 
 * Local Clock, the high 32 bits of the Master Time are captured in a 
 * MasterTimeHigh register. For a debug HFI FZC in port mirroring mode capture 
@@ -3654,7 +3795,7 @@
 #define FZC_LCB_STS_MASTER_TIME_HIGH_0_VAL_MASK						0xFFFFFFFFull
 #define FZC_LCB_STS_MASTER_TIME_HIGH_0_VAL_SMASK					0xFFFFFFFFull
 /*
-* Table #141 of fzc_lcb_csrs - LCB_STS_SNAPPED_LOCAL_TIME_0
+* Table #143 of fzc_lcb_csrs - LCB_STS_SNAPPED_LOCAL_TIME_0
 * When a MasterTimeLow flit, with an ID of 0, arrives at a port that supports a 
 * Local Clock the Local Clock value is captured in a LocalTime register. The 
 * LocalTime register is not changed when the MasterTimeHigh flit arrives. For a 
@@ -3668,7 +3809,7 @@
 #define FZC_LCB_STS_SNAPPED_LOCAL_TIME_0_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_STS_SNAPPED_LOCAL_TIME_0_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #142 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_LOW_1
+* Table #144 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_LOW_1
 * When a MasterTimeLow flit, with an ID of 1, arrives at a port that supports a 
 * Local Clock the Local Clock value is captured in a LocalTime register, and the 
 * Master Clock ID and low 40 bits of the Master Time are captured in a 
@@ -3689,7 +3830,7 @@
 #define FZC_LCB_STS_MASTER_TIME_LOW_1_VAL_MASK						0xFFFFFFFFFFull
 #define FZC_LCB_STS_MASTER_TIME_LOW_1_VAL_SMASK						0xFFFFFFFFFFull
 /*
-* Table #143 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_HIGH_1
+* Table #145 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_HIGH_1
 * When a MasterTimeHigh flit, with an ID of 1, arrives at a port that supports a 
 * Local Clock, the high 32 bits of the Master Time are captured in a 
 * MasterTimeHigh register. For a debug HFI FZC in port mirroring mode capture 
@@ -3706,7 +3847,7 @@
 #define FZC_LCB_STS_MASTER_TIME_HIGH_1_VAL_MASK						0xFFFFFFFFull
 #define FZC_LCB_STS_MASTER_TIME_HIGH_1_VAL_SMASK					0xFFFFFFFFull
 /*
-* Table #144 of fzc_lcb_csrs - LCB_STS_SNAPPED_LOCAL_TIME_1
+* Table #146 of fzc_lcb_csrs - LCB_STS_SNAPPED_LOCAL_TIME_1
 * When a MasterTimeLow flit, with an ID of 1, arrives at a port that supports a 
 * Local Clock the Local Clock value is captured in a LocalTime register. The 
 * LocalTime register is not changed when the MasterTimeHigh flit arrives. For a 
@@ -3720,7 +3861,7 @@
 #define FZC_LCB_STS_SNAPPED_LOCAL_TIME_1_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_STS_SNAPPED_LOCAL_TIME_1_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #145 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_LOW_2
+* Table #147 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_LOW_2
 * When a MasterTimeLow flit, with an ID of 2, arrives at a port that supports a 
 * Local Clock the Local Clock value is captured in a LocalTime register, and the 
 * Master Clock ID and low 40 bits of the Master Time are captured in a 
@@ -3741,7 +3882,7 @@
 #define FZC_LCB_STS_MASTER_TIME_LOW_2_VAL_MASK						0xFFFFFFFFFFull
 #define FZC_LCB_STS_MASTER_TIME_LOW_2_VAL_SMASK						0xFFFFFFFFFFull
 /*
-* Table #146 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_HIGH_2
+* Table #148 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_HIGH_2
 * When a MasterTimeHigh flit, with an ID of 2, arrives at a port that supports a 
 * Local Clock, the high 32 bits of the Master Time are captured in a 
 * MasterTimeHigh register. For a debug HFI FZC in port mirroring mode capture 
@@ -3758,7 +3899,7 @@
 #define FZC_LCB_STS_MASTER_TIME_HIGH_2_VAL_MASK						0xFFFFFFFFull
 #define FZC_LCB_STS_MASTER_TIME_HIGH_2_VAL_SMASK					0xFFFFFFFFull
 /*
-* Table #147 of fzc_lcb_csrs - LCB_STS_SNAPPED_LOCAL_TIME_2
+* Table #149 of fzc_lcb_csrs - LCB_STS_SNAPPED_LOCAL_TIME_2
 * When a MasterTimeLow flit, with an ID of 2, arrives at a port that supports a 
 * Local Clock the Local Clock value is captured in a LocalTime register. The 
 * LocalTime register is not changed when the MasterTimeHigh flit arrives. For a 
@@ -3772,7 +3913,7 @@
 #define FZC_LCB_STS_SNAPPED_LOCAL_TIME_2_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_STS_SNAPPED_LOCAL_TIME_2_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #148 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_LOW_3
+* Table #150 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_LOW_3
 * When a MasterTimeLow flit, with an ID of 3, arrives at a port that supports a 
 * Local Clock the Local Clock value is captured in a LocalTime register, and the 
 * Master Clock ID and low 40 bits of the Master Time are captured in a 
@@ -3793,7 +3934,7 @@
 #define FZC_LCB_STS_MASTER_TIME_LOW_3_VAL_MASK						0xFFFFFFFFFFull
 #define FZC_LCB_STS_MASTER_TIME_LOW_3_VAL_SMASK						0xFFFFFFFFFFull
 /*
-* Table #149 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_HIGH_3
+* Table #151 of fzc_lcb_csrs - LCB_STS_MASTER_TIME_HIGH_3
 * When a MasterTimeHigh flit, with an ID of 3, arrives at a port that supports a 
 * Local Clock the high 32 bits of the Master Time are captured in a 
 * MasterTimeHigh register. For a debug HFI FZC in port mirroring mode capture 
@@ -3810,7 +3951,7 @@
 #define FZC_LCB_STS_MASTER_TIME_HIGH_3_VAL_MASK						0xFFFFFFFFull
 #define FZC_LCB_STS_MASTER_TIME_HIGH_3_VAL_SMASK					0xFFFFFFFFull
 /*
-* Table #150 of fzc_lcb_csrs - LCB_STS_SNAPPED_LOCAL_TIME_3
+* Table #152 of fzc_lcb_csrs - LCB_STS_SNAPPED_LOCAL_TIME_3
 * When a MasterTimeLow flit, with an ID of 3, arrives at a port that supports a 
 * Local Clock the Local Clock value is captured in a LocalTime register. The 
 * LocalTime register is not changed when the MasterTimeHigh flit arrives. For a 
@@ -3824,7 +3965,7 @@
 #define FZC_LCB_STS_SNAPPED_LOCAL_TIME_3_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_STS_SNAPPED_LOCAL_TIME_3_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #151 of fzc_lcb_csrs - LCB_STS_UPPER_LOCAL_TIME
+* Table #153 of fzc_lcb_csrs - LCB_STS_UPPER_LOCAL_TIME
 * The upper 64 bits (NS bits) of the local time.
 */
 #define FZC_LCB_STS_UPPER_LOCAL_TIME							(FZC_LCB_CSRS + 0x000000000850)
@@ -3833,7 +3974,7 @@
 #define FZC_LCB_STS_UPPER_LOCAL_TIME_VAL_MASK						0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_STS_UPPER_LOCAL_TIME_VAL_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #152 of fzc_lcb_csrs - LCB_STS_LOWER_LOCAL_TIME
+* Table #154 of fzc_lcb_csrs - LCB_STS_LOWER_LOCAL_TIME
 * The lower 32 bits (sub-NS bits) of the local time.
 */
 #define FZC_LCB_STS_LOWER_LOCAL_TIME							(FZC_LCB_CSRS + 0x000000000858)
@@ -3845,7 +3986,7 @@
 #define FZC_LCB_STS_LOWER_LOCAL_TIME_VAL_MASK						0xFFFFFFFFull
 #define FZC_LCB_STS_LOWER_LOCAL_TIME_VAL_SMASK						0xFFFFFFFFull
 /*
-* Table #153 of fzc_lcb_csrs - LCB_PG_CFG_RUN
+* Table #155 of fzc_lcb_csrs - LCB_PG_CFG_RUN
 * This register steers the LCB input mux between the BIST pattern generator and 
 * the real mission mode inputs. When this register is set, bubble squashing is 
 * disabled.
@@ -3859,7 +4000,7 @@
 #define FZC_LCB_PG_CFG_RUN_EN_MASK							0x1ull
 #define FZC_LCB_PG_CFG_RUN_EN_SMASK							0x1ull
 /*
-* Table #154 of fzc_lcb_csrs - LCB_PG_CFG_RX_RUN
+* Table #156 of fzc_lcb_csrs - LCB_PG_CFG_RX_RUN
 * The receive run enable register is the control for starting and stopping 
 * receive side flit and virtual channel acknowledge generation. This bit must be 
 * enabled whenever the transmit run bit is enabled in the pattern generator at 
@@ -3874,7 +4015,7 @@
 #define FZC_LCB_PG_CFG_RX_RUN_EN_MASK							0x1ull
 #define FZC_LCB_PG_CFG_RX_RUN_EN_SMASK							0x1ull
 /*
-* Table #155 of fzc_lcb_csrs - LCB_PG_CFG_TX_RUN
+* Table #157 of fzc_lcb_csrs - LCB_PG_CFG_TX_RUN
 * The transmit run enable register is the control for starting and stopping 
 * transmit side flit and virtual channel acknowledge verification. This bit must 
 * be enabled only when the receive run bit is enabled in the pattern generator 
@@ -3889,7 +4030,7 @@
 #define FZC_LCB_PG_CFG_TX_RUN_EN_MASK							0x1ull
 #define FZC_LCB_PG_CFG_TX_RUN_EN_SMASK							0x1ull
 /*
-* Table #156 of fzc_lcb_csrs - LCB_PG_CFG_CAPTURE_DELAY
+* Table #158 of fzc_lcb_csrs - LCB_PG_CFG_CAPTURE_DELAY
 * The capture delay register sets the length in flits between the occurrence of 
 * a the miscompare error flag and the hold of the capture buffer.
 */
@@ -3902,7 +4043,7 @@
 #define FZC_LCB_PG_CFG_CAPTURE_DELAY_VAL_MASK						0xFull
 #define FZC_LCB_PG_CFG_CAPTURE_DELAY_VAL_SMASK						0xFull
 /*
-* Table #157 of fzc_lcb_csrs - LCB_PG_CFG_CAPTURE_RADR
+* Table #159 of fzc_lcb_csrs - LCB_PG_CFG_CAPTURE_RADR
 * The register controls the capture RAMs read address.
 */
 #define FZC_LCB_PG_CFG_CAPTURE_RADR							(FZC_LCB_CSRS + 0x0000000008A0)
@@ -3917,7 +4058,7 @@
 #define FZC_LCB_PG_CFG_CAPTURE_RADR_VAL_MASK						0xFull
 #define FZC_LCB_PG_CFG_CAPTURE_RADR_VAL_SMASK						0xFull
 /*
-* Table #158 of fzc_lcb_csrs - LCB_PG_CFG_CRDTS_LCB
+* Table #160 of fzc_lcb_csrs - LCB_PG_CFG_CRDTS_LCB
 * The initial LCB credits register sets the number of LCB flit credits assumed 
 * by the flit generator at reset. The LCB credits represents the space available 
 * in the LCB input buffer. This value may be decreased to throttle the flit 
@@ -3932,7 +4073,7 @@
 #define FZC_LCB_PG_CFG_CRDTS_LCB_VAL_MASK						0xFFull
 #define FZC_LCB_PG_CFG_CRDTS_LCB_VAL_SMASK						0xFFull
 /*
-* Table #159 of fzc_lcb_csrs - LCB_PG_CFG_LEN
+* Table #161 of fzc_lcb_csrs - LCB_PG_CFG_LEN
 * This register controls how long testing occurs.
 */
 #define FZC_LCB_PG_CFG_LEN								(FZC_LCB_CSRS + 0x0000000008B0)
@@ -3947,7 +4088,7 @@
 #define FZC_LCB_PG_CFG_LEN_VAL_MASK							0xFFFFFFFFFFFFFull
 #define FZC_LCB_PG_CFG_LEN_VAL_SMASK							0xFFFFFFFFFFFFFull
 /*
-* Table #160 of fzc_lcb_csrs - LCB_PG_CFG_SEED
+* Table #162 of fzc_lcb_csrs - LCB_PG_CFG_SEED
 * The random seed register sets the initial value of all PG LFSRs. Each 
 * individual LFSR uniquely alters the seed value such that each LFSR creates a 
 * unique sequence. The seed itself need not be random, this determines where in 
@@ -3963,7 +4104,7 @@
 #define FZC_LCB_PG_CFG_SEED_VAL_MASK							0x7FFFFFFFFFFFFFull
 #define FZC_LCB_PG_CFG_SEED_VAL_SMASK							0x7FFFFFFFFFFFFFull
 /*
-* Table #161 of fzc_lcb_csrs - LCB_PG_CFG_FLIT
+* Table #163 of fzc_lcb_csrs - LCB_PG_CFG_FLIT
 * The flit parameters register controls the random selection of flit type and 
 * content.
 */
@@ -3982,7 +4123,7 @@
 #define FZC_LCB_PG_CFG_FLIT_CONTENT_MASK						0x3ull
 #define FZC_LCB_PG_CFG_FLIT_CONTENT_SMASK						0x3ull
 /*
-* Table #162 of fzc_lcb_csrs - LCB_PG_CFG_IDLE_INJECT
+* Table #164 of fzc_lcb_csrs - LCB_PG_CFG_IDLE_INJECT
 * The idle injection register controls the rate at which idles are injected into 
 * the transmitted flit stream. These idles are inserted before flit throttling 
 * is taken into consideration. These idles are also the idles that can contain 
@@ -3997,7 +4138,7 @@
 #define FZC_LCB_PG_CFG_IDLE_INJECT_THRESHOLD_MASK					0xFFFFull
 #define FZC_LCB_PG_CFG_IDLE_INJECT_THRESHOLD_SMASK					0xFFFFull
 /*
-* Table #163 of fzc_lcb_csrs - LCB_PG_CFG_ERR
+* Table #165 of fzc_lcb_csrs - LCB_PG_CFG_ERR
 * The error parameters register controls the rate of SBEs and MBEs injected into 
 * flits.
 */
@@ -4016,7 +4157,7 @@
 #define FZC_LCB_PG_CFG_ERR_SBE_THRESHOLD_MASK						0xFFFFFFFFull
 #define FZC_LCB_PG_CFG_ERR_SBE_THRESHOLD_SMASK						0xFFFFFFFFull
 /*
-* Table #164 of fzc_lcb_csrs - LCB_PG_CFG_MISCOMPARE
+* Table #166 of fzc_lcb_csrs - LCB_PG_CFG_MISCOMPARE
 * This register controls the enables for each miscompare type.
 */
 #define FZC_LCB_PG_CFG_MISCOMPARE							(FZC_LCB_CSRS + 0x0000000008D8)
@@ -4028,7 +4169,7 @@
 #define FZC_LCB_PG_CFG_MISCOMPARE_EN_MASK						0x1Full
 #define FZC_LCB_PG_CFG_MISCOMPARE_EN_SMASK						0x1Full
 /*
-* Table #165 of fzc_lcb_csrs - LCB_PG_CFG_PATTERN
+* Table #167 of fzc_lcb_csrs - LCB_PG_CFG_PATTERN
 * The transmit canned flit pattern register supplies the data pattern used when 
 * canned data content is selected in the flit configuration register.
 */
@@ -4041,7 +4182,7 @@
 #define FZC_LCB_PG_CFG_PATTERN_DATA_MASK						0xFFFFFFFFFFFFFFull
 #define FZC_LCB_PG_CFG_PATTERN_DATA_SMASK						0xFFFFFFFFFFFFFFull
 /*
-* Table #166 of fzc_lcb_csrs - LCB_PG_DBG_FLIT_CRDTS_CNT
+* Table #168 of fzc_lcb_csrs - LCB_PG_DBG_FLIT_CRDTS_CNT
 * This The LCB credit debug register contains the current number of LCB credits 
 * in use waiting for acknowledgement. This represents the amount of the LCB 
 * input FIFO in use.
@@ -4055,7 +4196,7 @@
 #define FZC_LCB_PG_DBG_FLIT_CRDTS_CNT_VAL_MASK						0xFFull
 #define FZC_LCB_PG_DBG_FLIT_CRDTS_CNT_VAL_SMASK						0xFFull
 /*
-* Table #167 of fzc_lcb_csrs - LCB_PG_ERR_INFO_MISCOMPARE_CNT
+* Table #169 of fzc_lcb_csrs - LCB_PG_ERR_INFO_MISCOMPARE_CNT
 * The miscompare count register reports the number of flits received that do not 
 * match the expected flit.
 */
@@ -4068,7 +4209,7 @@
 #define FZC_LCB_PG_ERR_INFO_MISCOMPARE_CNT_VAL_MASK					0xFFull
 #define FZC_LCB_PG_ERR_INFO_MISCOMPARE_CNT_VAL_SMASK					0xFFull
 /*
-* Table #168 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_ACTUAL_DAT0
+* Table #170 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_ACTUAL_DAT0
 * This register is used to retrieve the data from the actual capture 
 * RAM.
 */
@@ -4078,7 +4219,7 @@
 #define FZC_LCB_PG_STS_CAPTURE_ACTUAL_DAT0_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PG_STS_CAPTURE_ACTUAL_DAT0_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #169 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_ACTUAL_DAT1
+* Table #171 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_ACTUAL_DAT1
 * This register is used to retrieve the data from the actual capture 
 * RAM.
 */
@@ -4088,7 +4229,7 @@
 #define FZC_LCB_PG_STS_CAPTURE_ACTUAL_DAT1_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PG_STS_CAPTURE_ACTUAL_DAT1_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #170 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_ACTUAL_DAT2
+* Table #172 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_ACTUAL_DAT2
 * This register is used to retrieve the data from the actual capture 
 * RAM.
 */
@@ -4098,7 +4239,7 @@
 #define FZC_LCB_PG_STS_CAPTURE_ACTUAL_DAT2_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PG_STS_CAPTURE_ACTUAL_DAT2_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #171 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_ACTUAL_DAT3
+* Table #173 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_ACTUAL_DAT3
 * This register is used to retrieve the data from the actual capture 
 * RAM.
 */
@@ -4108,7 +4249,7 @@
 #define FZC_LCB_PG_STS_CAPTURE_ACTUAL_DAT3_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PG_STS_CAPTURE_ACTUAL_DAT3_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #172 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_ACTUAL_MISC
+* Table #174 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_ACTUAL_MISC
 * This register is used to retrieve the data from the actual capture 
 * RAM.
 */
@@ -4145,7 +4286,7 @@
 #define FZC_LCB_PG_STS_CAPTURE_ACTUAL_MISC_B64_0_MASK					0x1ull
 #define FZC_LCB_PG_STS_CAPTURE_ACTUAL_MISC_B64_0_SMASK					0x1ull
 /*
-* Table #173 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_EXPECT_DAT0
+* Table #175 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_EXPECT_DAT0
 * This register is used to retrieve the data from the expect capture 
 * RAM.
 */
@@ -4155,7 +4296,7 @@
 #define FZC_LCB_PG_STS_CAPTURE_EXPECT_DAT0_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PG_STS_CAPTURE_EXPECT_DAT0_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #174 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_EXPECT_DAT1
+* Table #176 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_EXPECT_DAT1
 * This register is used to retrieve the data from the expect capture 
 * RAM.
 */
@@ -4165,7 +4306,7 @@
 #define FZC_LCB_PG_STS_CAPTURE_EXPECT_DAT1_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PG_STS_CAPTURE_EXPECT_DAT1_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #175 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_EXPECT_DAT2
+* Table #177 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_EXPECT_DAT2
 * This register is used to retrieve the data from the expect capture 
 * RAM.
 */
@@ -4175,7 +4316,7 @@
 #define FZC_LCB_PG_STS_CAPTURE_EXPECT_DAT2_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PG_STS_CAPTURE_EXPECT_DAT2_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #176 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_EXPECT_DAT3
+* Table #178 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_EXPECT_DAT3
 * This register is used to retrieve the data from the expect capture 
 * RAM.
 */
@@ -4185,7 +4326,7 @@
 #define FZC_LCB_PG_STS_CAPTURE_EXPECT_DAT3_VAL_MASK					0xFFFFFFFFFFFFFFFFull
 #define FZC_LCB_PG_STS_CAPTURE_EXPECT_DAT3_VAL_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #177 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_EXPECT_MISC
+* Table #179 of fzc_lcb_csrs - LCB_PG_STS_CAPTURE_EXPECT_MISC
 * This register is used to retrieve the data from the expect capture 
 * RAM.
 */
@@ -4210,7 +4351,7 @@
 #define FZC_LCB_PG_STS_CAPTURE_EXPECT_MISC_B64_0_MASK					0x1ull
 #define FZC_LCB_PG_STS_CAPTURE_EXPECT_MISC_B64_0_SMASK					0x1ull
 /*
-* Table #178 of fzc_lcb_csrs - LCB_PG_STS_FLG
+* Table #180 of fzc_lcb_csrs - LCB_PG_STS_FLG
 * The PG status flags register monitors for errors and the first occurrence of 
 * some interesting conditions.
 */
@@ -4256,7 +4397,7 @@
 #define FZC_LCB_PG_STS_FLG_UNUSED_3_0_MASK						0xFull
 #define FZC_LCB_PG_STS_FLG_UNUSED_3_0_SMASK						0xFull
 /*
-* Table #179 of fzc_lcb_csrs - LCB_PG_STS_PAUSE_COMPLETE_CNT
+* Table #181 of fzc_lcb_csrs - LCB_PG_STS_PAUSE_COMPLETE_CNT
 * The transmit pause complete count register reports the number of successful 
 * pause cycles.
 */
@@ -4269,7 +4410,7 @@
 #define FZC_LCB_PG_STS_PAUSE_COMPLETE_CNT_VAL_MASK					0xFFFFull
 #define FZC_LCB_PG_STS_PAUSE_COMPLETE_CNT_VAL_SMASK					0xFFFFull
 /*
-* Table #180 of fzc_lcb_csrs - LCB_PG_STS_TX_SBE_CNT
+* Table #182 of fzc_lcb_csrs - LCB_PG_STS_TX_SBE_CNT
 * The transmit single bit error count register reports the number of flits sent 
 * to the LCB with a single bit error.
 */
@@ -4282,7 +4423,7 @@
 #define FZC_LCB_PG_STS_TX_SBE_CNT_VAL_MASK						0xFFFFull
 #define FZC_LCB_PG_STS_TX_SBE_CNT_VAL_SMASK						0xFFFFull
 /*
-* Table #181 of fzc_lcb_csrs - LCB_PG_STS_TX_MBE_CNT
+* Table #183 of fzc_lcb_csrs - LCB_PG_STS_TX_MBE_CNT
 * The transmit multiple bit error count register reports the number of flits 
 * sent to the LCB with a multiple bit error.
 */

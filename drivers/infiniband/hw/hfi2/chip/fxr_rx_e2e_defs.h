@@ -33,11 +33,11 @@
 #define DEF_FXR_RX_E2E_SW_DEF
 
 #ifndef FXR_RX_E2E_CSRS
-#define FXR_RX_E2E_CSRS									0x000000000000ULL
+#define FXR_RX_E2E_CSRS									0x000000000000
 #endif
-#define FXR_NUM_CONTEXTS								192
+#define FXR_NUM_CONTEXTS								256
 #define FXR_NUM_PIDS									4096
-#define FXR_MAX_CONTEXT									191
+#define FXR_MAX_CONTEXT									255
 #define FXR_TX_CONTEXT_ENTRIES								128
 #define FXR_TX_CONTEXT_MAX								127
 #define FXR_RX_CONTEXT_ENTRIES								16
@@ -409,9 +409,9 @@
 */
 #define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG						(FXR_RX_E2E_CSRS + 0x000000000900)
 #define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG_RESETCSR					0x0000000000000000ull
-#define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG_RESERVE_SHIFT				35
-#define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG_RESERVE_MASK					0x1FFFFFFFull
-#define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG_RESERVE_SMASK				0xFFFFFFF800000000ull
+#define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG_RESERVED_63_35_SHIFT				35
+#define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG_RESERVED_63_35_MASK				0x1FFFFFFFull
+#define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG_RESERVED_63_35_SMASK				0xFFFFFFF800000000ull
 #define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG_TAG_WAY_VALID_SHIFT				34
 #define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG_TAG_WAY_VALID_MASK				0x1ull
 #define FXR_RXE2E_CFG_PSN_CACHE_ACCESS_TAG_TAG_WAY_VALID_SMASK				0x400000000ull
@@ -1119,7 +1119,7 @@
 #define FXR_RXE2E_DBG_BIG_SCOREBOARD_ACCESS_ADDR_ADDRESS_SMASK				0x3FFull
 /*
 * Table #49 of fxr_top - RXE2E_DBG_BIG_SCOREBOARD_ACCESS_DATA
-* This is an RXE2E debug CSR. It allows indirect access to the Big Scoreboard.  
+* This is an RXE2E debug CSR. It allows indirect access to the Big Scoreboard. 
 * This register is for debug use only. Note that this register is 1023 bits 
 * wide. This register is written before doing a write and read after doing a 
 * read as defined by #%%#RXE2E_DBG_BIG_SCOREBOARD_ACCESS_ADDR#%%#. Note 

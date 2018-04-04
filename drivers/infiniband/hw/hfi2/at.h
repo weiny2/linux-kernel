@@ -552,7 +552,7 @@ struct hfi_at_svm {
 /*
  * irq vector for at
  */
-#define HFI_AT_PRQ_IRQ			279
-#define HFI_AT_FAULT_IRQ		280
+#define HFI_AT_PRQ_IRQ			256
+#define HFI_AT_FAULT_IRQ		273
 
 #endif

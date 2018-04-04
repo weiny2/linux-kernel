@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_tx_ci_cid_CSRS_H__
@@ -27,6 +27,15 @@ typedef union {
     } field;
     uint64_t val;
 } TXCID_CFG_CSR_t;
+
+// TXCID_CFG_PID_MASK desc:
+typedef union {
+    struct {
+        uint64_t             pid_mask  : 12; // Process ID mask associated with this command queue. Default is to allow only a single Process ID for the command queue. See note in CSR description regarding the symmetrical pairing requirements between this and the Rx.
+        uint64_t       Reserved_63_12  : 52; // Unused
+    } field;
+    uint64_t val;
+} TXCID_CFG_PID_MASK_t;
 
 // TXCID_CFG_SL0_TO_TC desc:
 typedef union {
@@ -235,7 +244,7 @@ typedef union {
 // TXCID_CFG_STALL_OTR_CREDITS_W desc:
 typedef union {
     struct {
-        uint64_t                 MCTC  :  4; // 4'd15 - Any MC 4'd14 - Any MC1p 4'd13 - Any MC1 4'd12 - Any MC0 4'd11 - MC1pTC3 4'd10 - MC1pTC2 4'd9 - MC1pTC1 4'd8 - MC1pTC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
+        uint64_t                 MCTC  :  4; // 3'd15 - Any MC 3'd14 - Any MC1p 3'd13 - Any MC1 3'd12 - Any MC0 3'd11 - MC1pTC3 3'd10 - MC1pTC2 3'd9 - MC1pTC1 3'd8 - MC1pTC0 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
         uint64_t          UNUSED_63_4  : 60; // Unused
     } field;
     uint64_t val;
@@ -244,7 +253,7 @@ typedef union {
 // TXCID_CFG_STALL_OTR_CREDITS_X desc:
 typedef union {
     struct {
-        uint64_t                 MCTC  :  4; // 4'd15 - Any MC 4'd14 - Any MC1p 4'd13 - Any MC1 4'd12 - Any MC0 4'd11 - MC1pTC3 4'd10 - MC1pTC2 4'd9 - MC1pTC1 4'd8 - MC1pTC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
+        uint64_t                 MCTC  :  4; // 3'd15 - Any MC 3'd14 - Any MC1p 3'd13 - Any MC1 3'd12 - Any MC0 3'd11 - MC1pTC3 3'd10 - MC1pTC2 3'd9 - MC1pTC1 3'd8 - MC1pTC0 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
         uint64_t          UNUSED_63_4  : 60; // Unused
     } field;
     uint64_t val;
@@ -253,7 +262,7 @@ typedef union {
 // TXCID_CFG_STALL_OTR_CREDITS_Y desc:
 typedef union {
     struct {
-        uint64_t                 MCTC  :  4; // 4'd15 - Any MC 4'd14 - Any MC1p 4'd13 - Any MC1 4'd12 - Any MC0 4'd11 - MC1pTC3 4'd10 - MC1pTC2 4'd9 - MC1pTC1 4'd8 - MC1pTC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
+        uint64_t                 MCTC  :  4; // 3'd15 - Any MC 3'd14 - Any MC1p 3'd13 - Any MC1 3'd12 - Any MC0 3'd11 - MC1pTC3 3'd10 - MC1pTC2 3'd9 - MC1pTC1 3'd8 - MC1pTC0 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
         uint64_t          UNUSED_63_4  : 60; // Unused
     } field;
     uint64_t val;
@@ -262,7 +271,7 @@ typedef union {
 // TXCID_CFG_STALL_OTR_CREDITS_Z desc:
 typedef union {
     struct {
-        uint64_t                 MCTC  :  4; // 4'd15 - Any MC 4'd14 - Any MC1p 4'd13 - Any MC1 4'd12 - Any MC0 4'd11 - MC1pTC3 4'd10 - MC1pTC2 4'd9 - MC1pTC1 4'd8 - MC1pTC0 4'd7 - MC1TC3 4'd6 - MC1TC2 4'd5 - MC1TC1 4'd4 - MC1TC0 4'd3 - MC0TC3 4'd2 - MC0TC2 4'd1 - MC0TC1 4'd0 - MC0TC0
+        uint64_t                 MCTC  :  4; // 3'd15 - Any MC 3'd14 - Any MC1p 3'd13 - Any MC1 3'd12 - Any MC0 3'd11 - MC1pTC3 3'd10 - MC1pTC2 3'd9 - MC1pTC1 3'd8 - MC1pTC0 3'd7 - MC1TC3 3'd6 - MC1TC2 3'd5 - MC1TC1 3'd4 - MC1TC0 3'd3 - MC0TC3 3'd2 - MC0TC2 3'd1 - MC0TC1 3'd0 - MC0TC0
         uint64_t          UNUSED_63_4  : 60; // Unused
     } field;
     uint64_t val;
@@ -391,8 +400,8 @@ typedef union {
 // TXCID_ERR_FRC desc:
 typedef union {
     struct {
-        uint64_t                value  : 38; // error force value
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t                value  : 37; // error force value
+        uint64_t       Reserved_63_37  : 27; // Reserved
     } field;
     uint64_t val;
 } TXCID_ERR_FRC_t;
@@ -409,8 +418,8 @@ typedef union {
 // TXCID_ERR_FIRST_HOST desc:
 typedef union {
     struct {
-        uint64_t                value  : 38; // err first host
-        uint64_t       Reserved_63_38  : 26; // Reserved
+        uint64_t                value  : 37; // err first host
+        uint64_t       Reserved_63_37  : 27; // Reserved
     } field;
     uint64_t val;
 } TXCID_ERR_FIRST_HOST_t;

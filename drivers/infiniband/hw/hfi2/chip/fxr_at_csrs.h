@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_at_CSRS_H__
@@ -9,37 +9,41 @@
 typedef union {
     struct {
         uint64_t       cache_seg_mode  :  1; // 0=Segment by page size, 1=Combine 4k/2m entries in same cache segment
-        uint64_t         Reserved_7_1  :  7; // Reserved
+        uint64_t         Reserved_7_1  :  7; // Unused
         uint64_t          num_4k_ways  :  5; // This is the number of ways that should be reserved for 4K pages. It has a range of 0 to 16.If CACHE_SEG_MODE=1, this parameter is used for the number of 4k/2m entry ways.
-        uint64_t       Reserved_15_13  :  3; // Reserved
+        uint64_t       Reserved_15_13  :  3; // Unused
         uint64_t          num_2m_ways  :  5; // This is the number of ways that should be reserved for 2M pages. It has a range of 0 to 16.If CACHE_SEG_MODE=1, this parameter is ignored
-        uint64_t       Reserved_23_21  :  3; // Reserved
+        uint64_t       Reserved_23_21  :  3; // Unused
         uint64_t          num_1g_ways  :  2; // This is the number of ways that should be reserved for 1 GB pages. It has a range of 0 to 2
-        uint64_t       Reserved_63_26  : 38; // Reserved
+        uint64_t       Reserved_63_26  : 38; // Unused
     } field;
     uint64_t val;
 } FXR_AT_CFG_CACHE_t;
 
-// FXR_AT_CFG_PW_ALLOC desc:
+// FXR_AT_CFG_REQ_MAX desc:
 typedef union {
     struct {
-        uint64_t       shared_pw_pool  :  5; // The number of Page Walks shared between AT clients
-        uint64_t        Reserved_63_5  : 59; // Reserved
+        uint64_t        txdma_req_max  :  7; // The number of outstanding requests for TXDMA
+        uint64_t           Reserved_7  :  1; // Unused
+        uint64_t        txotr_req_max  :  7; // The number of outstanding requests for TXOTR
+        uint64_t          Reserved_15  :  1; // Unused
+        uint64_t        rxdma_req_max  :  7; // The number of Page Walks shared between AT clients
+        uint64_t       Reserved_63_23  : 41; // Unused
     } field;
     uint64_t val;
-} FXR_AT_CFG_PW_ALLOC_t;
+} FXR_AT_CFG_REQ_MAX_t;
 
 // FXR_AT_CFG_INPUT_CREDIT desc:
 typedef union {
     struct {
         uint64_t    txdma_req_credits  :  4; // The number of input request buffers for TX OTR Address Translation requests. It has a range of 0 to 4
-        uint64_t         Reserved_7_4  :  4; // Reserved
+        uint64_t         Reserved_7_4  :  4; // Unused
         uint64_t    txotr_req_credits  :  4; // The number of input request buffers for TX OTR Address Translation requests. It has a range of 0 to 4
-        uint64_t       Reserved_15_12  :  4; // Reserved
+        uint64_t       Reserved_15_12  :  4; // Unused
         uint64_t  rxhiarb_req_credits  :  4; // The number of input request buffers for RX HIARB Address Translation requests. It has a range of 0 to 4
-        uint64_t       Reserved_23_20  :  4; // Reserved
+        uint64_t       Reserved_23_20  :  4; // Unused
         uint64_t     pcim_req_credits  :  3; // The number of input request buffers for PCIM Interrupt Remapping requests. It has a range of 0 to 4
-        uint64_t       Reserved_63_27  : 37; // Reserved
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } FXR_AT_CFG_INPUT_CREDIT_t;
@@ -49,7 +53,7 @@ typedef union {
     struct {
         uint64_t               enable  :  1; // Enable use of System PASID
         uint64_t         system_pasid  : 20; // System PASID
-        uint64_t       Reserved_63_21  : 43; // Reserved
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } FXR_AT_CFG_USE_SYSTEM_PASID_t;
@@ -59,7 +63,7 @@ typedef union {
     struct {
         uint64_t                 busy  :  1; // SW sets when writing the PASID field. HW clears when all page requests have been serviced. SW polls for it to be clear before considering the PASID drained.
         uint64_t                pasid  : 20; // The PASID to drain.
-        uint64_t       Reserved_63_21  : 43; // Reserved
+        uint64_t       Reserved_63_21  : 43; // Unused
     } field;
     uint64_t val;
 } FXR_AT_CFG_DRAIN_PASID_t;
@@ -67,14 +71,14 @@ typedef union {
 // FXR_AT_CFG_LTDPR desc:
 typedef union {
     struct {
-        uint64_t           Reserved_0  :  1; // Reserved
+        uint64_t           Reserved_0  :  1; // Unused
         uint64_t           ProtPegSts  :  1; // Protected Region Status - 1=Protected, 0=Not Protected
         uint64_t           CommandBit  :  1; // 1=enable protection, 0=disable protection
-        uint64_t           Reserved_3  :  1; // Reserved
+        uint64_t           Reserved_3  :  1; // Unused
         uint64_t                 Size  :  8; // DMA Protected Range Size - Max. 255MB
-        uint64_t       Reserved_19_12  :  8; // Reserved
+        uint64_t       Reserved_19_12  :  8; // Unused
         uint64_t             TopOfDPR  : 12; // Top Address + 1 of the DMA Protected Region
-        uint64_t       Reserved_63_32  : 32; // Reserved
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } FXR_AT_CFG_LTDPR_t;
@@ -82,9 +86,9 @@ typedef union {
 // FXR_AT_CFG_GENPROT_BASE desc:
 typedef union {
     struct {
-        uint64_t        Reserved_15_0  : 16; // Reserved
+        uint64_t        Reserved_15_0  : 16; // Unused
         uint64_t                 ADDR  : 36; // Base Address [51:16] of generic memory address range that needs to be protected from inbound dma accesses. The protected memory range can be anywhere in the memory space addressable by the processor. Addresses that fall in this range i.e. GenProtRange.Base[63:16] <= Address [63:16] <= GenProtRange.Limit [63:16], are completer aborted by IIO. Setting the Protected range base address greater than the limit address disables the protected memory region. Note that this range is orthogonal to VT-d spec defined protected address range. Since this register provides for a generic range, it can be used to protect any system dram region or MMIO region from DMA accesses. But the expected usage for this range is to abort all PCIe accesses to the PCI-Segments region.
-        uint64_t       Reserved_63_52  : 12; // Reserved
+        uint64_t       Reserved_63_52  : 12; // Unused
     } field;
     uint64_t val;
 } FXR_AT_CFG_GENPROT_BASE_t;
@@ -92,9 +96,9 @@ typedef union {
 // FXR_AT_CFG_GENPROT_LIMIT desc:
 typedef union {
     struct {
-        uint64_t        Reserved_15_0  : 16; // Reserved
+        uint64_t        Reserved_15_0  : 16; // Unused
         uint64_t                 ADDR  : 36; // Limit Address [51:16] of generic memory address range that needs to be protected from inbound dma accesses. The protected memory range can be anywhere in the memory space addressable by the processor. Addresses that fall in this range i.e. GenProtRange.Base[63:16] <= Address [63:16] <= GenProtRange.Limit [63:16], are completer aborted by IIO. Setting the Protected range base address greater than the limit address disables the protected memory region. Note that this range is orthogonal to VT-d spec defined protected address range. Since this register provides for a generic range, it can be used to protect any system dram region or MMIO region from DMA accesses. But the expected usage for this range is to abort all PCIe accesses to the PCI-Segments region.
-        uint64_t       Reserved_63_52  : 12; // Reserved
+        uint64_t       Reserved_63_52  : 12; // Unused
     } field;
     uint64_t val;
 } FXR_AT_CFG_GENPROT_LIMIT_t;
@@ -113,7 +117,7 @@ typedef union {
         uint64_t               enable  :  1; // Enable PID to PASID mapping for this PID
         uint64_t      privilege_level  :  1; // Privilege Level (0 = Supervisor, 1 = User)
         uint64_t                pasid  : 20; // PASID associated with this PID
-        uint64_t       reserved_63_22  : 42; // Data read or to be written to the AT PASID LUT entry
+        uint64_t       Reserved_63_22  : 42; // Unused
     } field;
     uint64_t val;
 } FXR_AT_CFG_PASID_LUT_t;
@@ -158,7 +162,7 @@ typedef union {
         uint64_t        devtlb_id_err  :  1; // The Device TLB ID, sent from IOMMU does not match BDF of this FXR device
         uint64_t   iommu_mem_type_err  :  1; // Memory Type Error on IOMMU Host memory interface
         uint64_t    iommu_seq_msg_err  :  1; // IOMMU Sequencer Interface message error
-        uint64_t       Reserved_63_37  : 27; // Reserved
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_STS_1_t;
@@ -167,7 +171,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Reserved
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_CLR_1_t;
@@ -176,7 +180,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Reserved
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_FRC_1_t;
@@ -184,8 +188,8 @@ typedef union {
 // FXR_AT_ERR_EN_HOST_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Reserved
+        uint64_t               events  : 37; // Write 1's to enable interrupt.
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_EN_HOST_1_t;
@@ -194,7 +198,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Reserved
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_FIRST_HOST_1_t;
@@ -202,8 +206,8 @@ typedef union {
 // FXR_AT_ERR_EN_BMC_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Reserved
+        uint64_t               events  : 37; // Write 1's to enable interrupt.
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_EN_BMC_1_t;
@@ -212,7 +216,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Reserved
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_FIRST_BMC_1_t;
@@ -220,8 +224,8 @@ typedef union {
 // FXR_AT_ERR_EN_QUAR_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Reserved
+        uint64_t               events  : 37; // Write 1's to enable interrupt.
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_EN_QUAR_1_t;
@@ -230,7 +234,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Reserved
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_FIRST_QUAR_1_t;
@@ -299,7 +303,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t     lru_1g_mbe_count  :  8; // PTE Cache LRU 1G State Table MBE saturating count
-        uint64_t        reserved_63_8  : 56; // reserved
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_INFO_1E_t;
@@ -308,9 +312,9 @@ typedef union {
 typedef union {
     struct {
         uint64_t      pgr_error_pasid  : 20; // PASID of Page Group Request Error
-        uint64_t       reserved_31_20  : 12; // reserved
+        uint64_t       Reserved_31_20  : 12; // Unused
         uint64_t     pgr_error_client  :  3; // Requesting Client ID of Page Group Request Error. 001=TXDMA 010=TXOTR 100=RXDMA
-        uint64_t       reserved_63_35  : 29; // reserved
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_INFO_1F_t;
@@ -318,13 +322,13 @@ typedef union {
 // FXR_AT_ERR_INFO_1G desc:
 typedef union {
     struct {
-        uint64_t           reserved_0  :  1; // reserved
+        uint64_t           Reserved_0  :  1; // Unused
         uint64_t          pgr_error_r  :  1; // Read Access of Page Group Request Error
         uint64_t          pgr_error_w  :  1; // Write Access of Page Group Request Error
         uint64_t         pgr_error_pa  :  1; // Privilege Access of Page Group Request Error
-        uint64_t        reserved_11_4  :  8; // reserved
+        uint64_t        Reserved_11_4  :  8; // Unused
         uint64_t         pgr_error_va  : 40; // Virtual Address of Page Group Request Error
-        uint64_t       reserved_63_52  : 12; // reserved
+        uint64_t       Reserved_63_52  : 12; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_INFO_1G_t;
@@ -333,9 +337,9 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 pmen  :  1; // Protected Memory Region Checking Enabled
-        uint64_t        reserved_19_1  : 19; // reserved
+        uint64_t        Reserved_19_1  : 19; // Unused
         uint64_t            plmr_base  : 12; // PLMR Base
-        uint64_t       reserved_63_32  : 32; // reserved
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } FXR_AT_STS_PLMR_BASE_t;
@@ -343,9 +347,9 @@ typedef union {
 // FXR_AT_STS_PLMR_LIMIT desc:
 typedef union {
     struct {
-        uint64_t        reserved_19_0  : 20; // reserved
+        uint64_t        Reserved_19_0  : 20; // Unused
         uint64_t           plmr_limit  : 12; // PLMR Limit
-        uint64_t       reserved_63_32  : 32; // reserved
+        uint64_t       Reserved_63_32  : 32; // Unused
     } field;
     uint64_t val;
 } FXR_AT_STS_PLMR_LIMIT_t;
@@ -353,9 +357,9 @@ typedef union {
 // FXR_AT_STS_PHMR_BASE desc:
 typedef union {
     struct {
-        uint64_t        reserved_19_0  : 20; // reserved
+        uint64_t        Reserved_19_0  : 20; // Unused
         uint64_t            phmr_base  : 28; // PHMR Base
-        uint64_t       reserved_63_48  : 16; // reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } FXR_AT_STS_PHMR_BASE_t;
@@ -363,9 +367,9 @@ typedef union {
 // FXR_AT_STS_PHMR_LIMIT desc:
 typedef union {
     struct {
-        uint64_t        reserved_19_0  : 20; // reserved
+        uint64_t        Reserved_19_0  : 20; // Unused
         uint64_t           phmr_limit  : 28; // PHMR Limit
-        uint64_t       reserved_63_48  : 16; // reserved
+        uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
 } FXR_AT_STS_PHMR_LIMIT_t;
@@ -375,9 +379,9 @@ typedef union {
     struct {
         uint64_t       available_reqs  :  8; // Available Translation Request slots
         uint64_t           pw_rsp_fsm  :  3; // PW RSP FSM states
-        uint64_t          reserved_11  :  1; // reserved
+        uint64_t          Reserved_11  :  1; // Unused
         uint64_t        inval_cmd_fsm  :  3; // Inval Cmd FSM states
-        uint64_t       reserved_63_15  : 49; // reserved
+        uint64_t       Reserved_63_15  : 49; // Unused
     } field;
     uint64_t val;
 } FXR_AT_STS_GENERAL_1_t;
@@ -387,7 +391,7 @@ typedef union {
     struct {
         uint64_t              address  : 52; // Address of Translation Request to be accessed
         uint64_t         payload_regs  :  8; // Constant indicating number of payload registers used for the data.
-        uint64_t          Reserved_60  :  1; // 
+        uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0=read/write raw data 1=generate ECC on write, correct data on read
         uint64_t                write  :  1; // 0=Read, 1=Write
         uint64_t                Valid  :  1; // Set by Software to start command, cleared by Hardware when complete
@@ -406,9 +410,9 @@ typedef union {
 // FXR_AT_DBG_TREQ_BUF_DATA1 desc:
 typedef union {
     struct {
-        uint64_t                 data  : 16; // Data read or to be written to the Translation Request entry
+        uint64_t                 data  : 20; // Data read or to be written to the Translation Request entry
         uint64_t                  ECC  :  8; // Error Correction Code read or to be written for the Translation Request entry
-        uint64_t       reserved_63_24  : 40; // Reserved
+        uint64_t       Reserved_63_28  : 36; // Unused
     } field;
     uint64_t val;
 } FXR_AT_DBG_TREQ_BUF_DATA1_t;
@@ -418,7 +422,7 @@ typedef union {
     struct {
         uint64_t              address  : 52; // Address of 2M/4Kentry to be accessed
         uint64_t         payload_regs  :  8; // Constant indicating number of payload registers used for the data.
-        uint64_t          Reserved_60  :  1; // 
+        uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0=read/write raw data 1=generate ECC on write, correct data on read
         uint64_t                write  :  1; // 0=Read, 1=Write
         uint64_t                Valid  :  1; // Set by Software to start command, cleared by Hardware when complete
@@ -439,7 +443,7 @@ typedef union {
     struct {
         uint64_t                 data  : 16; // Data read or to be written to the Cache 2M/4K page LRU entry
         uint64_t                  ECC  :  8; // Error Correction Code read or to be written for the Translation Request entry
-        uint64_t       reserved_63_24  : 40; // Reserved
+        uint64_t       Reserved_63_24  : 40; // Unused
     } field;
     uint64_t val;
 } FXR_AT_DBG_PW_RSP_BUF_DATA1_t;
@@ -449,7 +453,7 @@ typedef union {
     struct {
         uint64_t              address  : 52; // Address of 2M/4Kentry to be accessed
         uint64_t         payload_regs  :  8; // Constant indicating number of payload registers used for the data.
-        uint64_t          Reserved_60  :  1; // 
+        uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0=read/write raw data 1=generate ECC on write, correct data on read
         uint64_t                write  :  1; // 0=Read, 1=Write
         uint64_t                Valid  :  1; // Set by Software to start command, cleared by Hardware when complete
@@ -470,7 +474,7 @@ typedef union {
     struct {
         uint64_t                 data  : 16; // Data read or to be written to the Cache 2M/4K page LRU entry
         uint64_t                  ECC  :  8; // Error Correction Code read or to be written for the Translation Request entry
-        uint64_t       reserved_63_24  : 40; // Reserved
+        uint64_t       Reserved_63_24  : 40; // Unused
     } field;
     uint64_t val;
 } FXR_AT_DBG_LRU2M4K_SETS_DATA1_t;
@@ -481,7 +485,7 @@ typedef union {
         uint64_t              address  : 48; // Address of the TLB Tag to be accessed
         uint64_t                  way  :  4; // Way index to be accessed
         uint64_t         payload_regs  :  8; // Constant indicating number of payload registers used for the data.
-        uint64_t          Reserved_60  :  1; // 
+        uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0=read/write raw data 1=generate ECC on write, correct data on read
         uint64_t                write  :  1; // 0=Read, 1=Write
         uint64_t                Valid  :  1; // Set by Software to start command, cleared by Hardware when complete
@@ -502,7 +506,7 @@ typedef union {
     struct {
         uint64_t                 data  :  8; // Data read or to be written to the TLB Tag entry
         uint64_t                  ECC  :  8; // Error Correction Code read or to be written for the Translation Request entry
-        uint64_t       reserved_63_16  : 48; // Reserved
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } FXR_AT_DBG_TLB_TAG_DATA1_t;
@@ -519,7 +523,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t          pw_id_entry  :  8; // Page Walk TRID buffer entry
-        uint64_t        Reserved_63_8  : 56; // Reserved
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } FXR_AT_DBG_PW_ID_BUF_t;
@@ -528,7 +532,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t       pw_id_of_entry  :  8; // Page Walk TRID Overflow buffer entry
-        uint64_t        Reserved_63_8  : 56; // Reserved
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } FXR_AT_DBG_PW_ID_OF_BUF_t;
@@ -537,7 +541,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t          lru1g_entry  :  8; // Cache 1G page LRU state entry(max 2 way config).
-        uint64_t        Reserved_63_8  : 56; // Reserved
+        uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } FXR_AT_DBG_LRU1G_SETS_t;

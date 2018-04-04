@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Fri May 26 13:04:25 2017
+// Created on: Thu Mar 29 15:03:56 2018
 //
 
 #ifndef ___FXR_lm_fpc_CSRS_H__
@@ -48,10 +48,10 @@ typedef union {
         uint64_t       ltp_buf_unflow  :  1; // Uncorrectable ltp buffer over flow
         uint64_t       ltp_buf_ovflow  :  1; // Uncorrectable ltp buffer over flow
         uint64_t          spare_51_39  : 13; // spare
-        uint64_t   portconstraint_err  :  1; // [0] reserved [1] Pkey Violation [2] Slid Security Violation [3] Switch Port 0 Pkey Violation ( see rpipe error csrs) See Section 21.16.4.14, ' FPC_ERR_INFO_PORTRCVCONSTRAINT '
-        uint64_t    uncorrectable_err  :  1; // [0] BadHead: uncorrectable error in head flit [1] BadBody: uncorrectable error in body flit [2] BadTail: uncorrectable error in tail flit [3] BadCtrl: uncorrectable error in credit flit. [4] Internal: Internal logic error , unrecoverable See Section 21.16.4.13, ' FPC_ERR_INFO_UNCORRECTABLE '
-        uint64_t         fmconfig_err  :  1; // One of the following errors occurred. [E0] BadHeadDist: Distance violation between two head flits [E1] BadTailDist: Distance violation between two tail flits [E2] BadCtrlDist: Distance violation between two credit control flits [E3] BadCrdtAck: Credits return for unsupported VL [4] UnsupportedVLMarker: SC Marker received for unsupported SC or when SC marker not enabled for port [5] BadPreempt: Exceeded the interleaving level or receive implicit interleaving sequence when only explicit interleaving is enabled. [6] BadControlFlit: unknown or reserved control flit received - Deprecated [7] ExceedMulticastLimit [8] BadMarkerDist: Distance violation between two VL Markers, VL Marker and Head. See Section 21.16.4.11, ' FPC_ERR_INFO_FMCONFIG ' for additional error information.
-        uint64_t          rcvport_err  :  1; // One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] BadSC Marker: Inactive VL [E14] PreemptL2Header: Interleaving L2 header When this flag is asserted the following CSRs provide additional error information. Section 21.16.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 21.16.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 21.16.4.8, ' FPC_ERR_INFO_PORTRCV_HDR0_B ' Section 21.16.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A ' Section 21.16.4.10, ' FPC_ERR_INFO_PORTRCV_HDR1_B '
+        uint64_t   portconstraint_err  :  1; // [0] reserved [1] Pkey Violation [2] Slid Security Violation [3] Switch Port 0 Pkey Violation ( see rpipe error csrs) See Section 29.25.4.14, ' FPC_ERR_INFO_PORTRCVCONSTRAINT '
+        uint64_t    uncorrectable_err  :  1; // [0] BadHead: uncorrectable error in head flit [1] BadBody: uncorrectable error in body flit [2] BadTail: uncorrectable error in tail flit [3] BadCtrl: uncorrectable error in credit flit. [4] Internal: Internal logic error , unrecoverable See Section 29.25.4.13, ' FPC_ERR_INFO_UNCORRECTABLE '
+        uint64_t         fmconfig_err  :  1; // One of the following errors occurred. [E0] BadHeadDist: Distance violation between two head flits [E1] BadTailDist: Distance violation between two tail flits [E2] BadCtrlDist: Distance violation between two credit control flits [E3] BadCrdtAck: Credits return for unsupported VL [4] UnsupportedVLMarker: SC Marker received for unsupported SC or when SC marker not enabled for port [5] BadPreempt: Exceeded the interleaving level or receive implicit interleaving sequence when only explicit interleaving is enabled. [6] BadControlFlit: unknown or reserved control flit received - Deprecated [7] ExceedMulticastLimit [8] BadMarkerDist: Distance violation between two VL Markers, VL Marker and Head. See Section 29.25.4.11, ' FPC_ERR_INFO_FMCONFIG ' for additional error information.
+        uint64_t          rcvport_err  :  1; // One of the following errors occurred. [E0] Reserved [E1] BadPktLen: Illegal PktLen [E2] PktLenTooLong: Packet longer than PktLen [E3] PktLenTooShort: Packet shorter than PktLen with normal tail [E4] BadSLID: Illegal SLID (0, using multicast as SLID. Does not include security validation of SLID) [E5] BadDLID: Illegal DLID (0, doesn't match HFI) [E6] BadL2: Illegal L2 opcode [E7] BadSC: Unsupported SC [E8] Reserved [E9] Headless: Tail or Body before Head. [E10] Reserved [E11] PreemptError: Preempting with same VL [E12] PreemptVL15: Preempting a VL15 packet [E13] BadSC Marker: Inactive VL [E14] PreemptL2Header: Interleaving L2 header When this flag is asserted the following CSRs provide additional error information. Section 29.25.4.6, ' FPC_ERR_INFO_PORTRCV ' Section 29.25.4.7, ' FPC_ERR_INFO_PORTRCV_HDR0_A ' Section 29.25.4.8, ' FPC_ERR_INFO_PORTRCV_HDR0_B ' Section 29.25.4.9, ' FPC_ERR_INFO_PORTRCV_HDR1_A ' Section 29.25.4.10, ' FPC_ERR_INFO_PORTRCV_HDR1_B '
         uint64_t       reserved_63_56  :  8; // reserved
     } field;
     uint64_t val;
@@ -427,6 +427,14 @@ typedef union {
     } field;
     uint64_t val;
 } FPC_DBG_ERROR_INJECTION_t;
+
+// FPC_PRF_EVENT_COUNTERS desc:
+typedef union {
+    struct {
+        uint64_t                  cnt  : 64; // 
+    } field;
+    uint64_t val;
+} FPC_PRF_EVENT_COUNTERS_t;
 
 // FPC_ERR_PORTRCV_ERROR desc:
 typedef union {

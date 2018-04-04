@@ -191,7 +191,7 @@ static void hfi_error_handler_def(struct hfi_devdata *dd, u64 reg, char *name)
 /*
  * Interrupts assignment for each error domains.
  */
-#define HFI_FZC_IRQ		257
+//#define HFI_FZC_IRQ		257
 #define HFI_OTR_PKT_IRQ		258
 #define HFI_HIFIS_IRQ		259
 #define HFI_LOCA_IRQ		260
@@ -207,7 +207,7 @@ static void hfi_error_handler_def(struct hfi_devdata *dd, u64 reg, char *name)
 #define HFI_RXET_IRQ		270
 #define HFI_RXHIARB_IRQ		271
 #define HFI_AT_IRQ		272
-#define HFI_OPIO_IRQ		273
+//#define HFI_OPIO_IRQ		273
 #define HFI_RXCID_IRQ		274
 #define HFI_RXCIC_IRQ		275
 #define HFI_FPC_IRQ		276
@@ -215,7 +215,7 @@ static void hfi_error_handler_def(struct hfi_devdata *dd, u64 reg, char *name)
 #define HFI_PMON_IRQ		278
 
 /* Number of error domains */
-#define HFI_NUM_ERR_DOMAIN      22
+#define HFI_NUM_ERR_DOMAIN      20
 
 /* macros for error bits in FPC_ERR_STS reg */
 /* UnCorrectable Error */
@@ -240,7 +240,7 @@ static void hfi_error_handler_def(struct hfi_devdata *dd, u64 reg, char *name)
 	{e, sizeof(e) / sizeof(struct hfi_error_csr), irq }
 
 static struct hfi_error_domain hfi_error_domain[] = {
-	HFI_MAKE_DOMAIN(hfi_fzc_error, HFI_FZC_IRQ),
+//	HFI_MAKE_DOMAIN(hfi_fzc_error, HFI_FZC_IRQ),
 	HFI_MAKE_DOMAIN(hfi_otr_pkt_error, HFI_OTR_PKT_IRQ),
 	HFI_MAKE_DOMAIN(hfi_hifis_error, HFI_HIFIS_IRQ),
 	HFI_MAKE_DOMAIN(hfi_loca_error, HFI_LOCA_IRQ),
@@ -256,7 +256,7 @@ static struct hfi_error_domain hfi_error_domain[] = {
 	HFI_MAKE_DOMAIN(hfi_rxet_error, HFI_RXET_IRQ),
 	HFI_MAKE_DOMAIN(hfi_rxhiarb_error, HFI_RXHIARB_IRQ),
 	HFI_MAKE_DOMAIN(hfi_at_error, HFI_AT_IRQ),
-	HFI_MAKE_DOMAIN(hfi_opio_error, HFI_OPIO_IRQ),
+//	HFI_MAKE_DOMAIN(hfi_opio_error, HFI_OPIO_IRQ),
 	HFI_MAKE_DOMAIN(hfi_rxcid_error, HFI_RXCID_IRQ),
 	HFI_MAKE_DOMAIN(hfi_rxcic_error, HFI_RXCIC_IRQ),
 	HFI_MAKE_DOMAIN(hfi_fpc_error, HFI_FPC_IRQ),

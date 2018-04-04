@@ -35,9 +35,9 @@
 #ifndef FXR_HIFIS_CSRS
 #define FXR_HIFIS_CSRS						0x000000000000ULL
 #endif
-#define FXR_NUM_CONTEXTS					192
+#define FXR_NUM_CONTEXTS					256
 #define FXR_NUM_PIDS						4096
-#define FXR_MAX_CONTEXT						191
+#define FXR_MAX_CONTEXT						255
 #define FXR_TX_CONTEXT_ENTRIES					128
 #define FXR_TX_CONTEXT_MAX					127
 #define FXR_RX_CONTEXT_ENTRIES					16
