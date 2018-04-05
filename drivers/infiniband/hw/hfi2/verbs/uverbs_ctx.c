@@ -68,6 +68,10 @@ static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
 	struct ib_ucontext *ucontext = file->ucontext;
 	int ret = 0;
 
+	uattr = uverbs_attr_get(attrs, HFI2_CTX_ATTACH_IDX);
+	if (unlikely(IS_ERR(uattr)))
+		return PTR_ERR(uattr);
+
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
@@ -129,10 +133,6 @@ static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
 	resp.pid_mode = ctx->mode;
 	resp.uid = ctx->ptl_uid;
 
-	uattr = uverbs_attr_get(attrs, HFI2_CTX_ATTACH_IDX);
-	if (unlikely(IS_ERR(uattr)))
-		return PTR_ERR(uattr);
-
 	obj = container_of(uattr->obj_attr.uobject, typeof(*obj), uobject);
 	obj->verbs_file = ucontext->ufile;
 	obj->uobject.object = ctx;
@@ -144,10 +144,12 @@ static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
 	ret += uverbs_copy_to(attrs, HFI2_CTX_ATTACH_RESP,
 			      &resp, sizeof(resp));
 	if (ret)
-		goto err_attach;
+		goto err_copy_to;
 
 	return 0;
 
+err_copy_to:
+	hfi_ctx_cleanup(ctx);
 err_attach:
 	kfree(ctx);
 	return ret;
@@ -397,6 +399,35 @@ done:
 	return ret;
 }
 
+int hfi2_at_prefetch_handler(struct ib_device *ib_dev,
+			     struct ib_uverbs_file *file,
+			     struct uverbs_attr_bundle *attrs)
+{
+	struct hfi_ctx *ctx;
+	const struct uverbs_attr *uattr;
+	struct hfi_at_prefetch_args atpf_args;
+	int ret;
+
+	uattr = uverbs_attr_get(attrs, HFI2_AT_PREFETCH_CTX_IDX);
+	if (unlikely(IS_ERR(uattr)))
+		return PTR_ERR(uattr);
+
+	ctx = uattr->obj_attr.uobject->object;
+	if (unlikely(!ctx))
+		return -ENOENT;
+
+	ret = uverbs_copy_from(&atpf_args.iovec,
+			       attrs, HFI2_AT_PREFETCH_IOVEC);
+	ret += uverbs_copy_from(&atpf_args.count,
+				attrs, HFI2_AT_PREFETCH_COUNT);
+	ret += uverbs_copy_from(&atpf_args.flags,
+				attrs, HFI2_AT_PREFETCH_FLAGS);
+	if (ret)
+		return -EINVAL;
+
+	return hfi_at_prefetch(ctx, &atpf_args);
+}
+
 DECLARE_UVERBS_METHOD(hfi2_ctx_attach, HFI2_CTX_ATTACH,
 		      hfi2_ctx_attach_handler,
 		      &UVERBS_ATTR_IDR(
@@ -458,6 +489,24 @@ DECLARE_UVERBS_METHOD(hfi2_pt_update_lower, HFI2_PT_UPDATE_LOWER,
 				HFI2_PT_UPDATE_LOWER_ARGS,
 				struct hfi_pt_update_lower_args,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
+
+DECLARE_UVERBS_METHOD(hfi2_at_prefetch, HFI2_AT_PREFETCH,
+		      hfi2_at_prefetch_handler,
+		      &UVERBS_ATTR_IDR(
+				HFI2_AT_PREFETCH_CTX_IDX,
+				UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_CTX,
+						       HFI2_OBJECTS),
+				UVERBS_ACCESS_WRITE,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_AT_PREFETCH_IOVEC, uint64_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_AT_PREFETCH_COUNT, uint32_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_AT_PREFETCH_FLAGS, uint32_t,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 /*
  * Destroy order for hfi ctx is 1 so that the cmdqs are destroyed before
  * the ctx
@@ -470,4 +519,5 @@ DECLARE_UVERBS_OBJECT(hfi2_object_ctx,
 		      &hfi2_ctx_attach,
 		      &hfi2_ctx_detach,
 		      &hfi2_ctx_event_cmd,
-		      &hfi2_pt_update_lower);
+		      &hfi2_pt_update_lower,
+		      &hfi2_at_prefetch);

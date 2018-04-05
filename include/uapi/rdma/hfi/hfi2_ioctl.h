@@ -112,6 +112,7 @@ enum {
 	HFI2_CTX_DETACH,
 	HFI2_CTX_EVENT_CMD,
 	HFI2_PT_UPDATE_LOWER,
+	HFI2_AT_PREFETCH,
 };
 
 /* Actions for device object*/
@@ -208,6 +209,14 @@ enum {
 enum {
 	HFI2_DLID_ASSIGN_CTX_IDX,
 	HFI2_DLID_ASSIGN_CMD,
+};
+
+/* Attributes for AT Prefetch */
+enum {
+	HFI2_AT_PREFETCH_CTX_IDX,
+	HFI2_AT_PREFETCH_IOVEC,
+	HFI2_AT_PREFETCH_COUNT,
+	HFI2_AT_PREFETCH_FLAGS,
 };
 
 /* Commands */

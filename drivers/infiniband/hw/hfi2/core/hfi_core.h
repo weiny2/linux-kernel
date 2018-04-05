@@ -100,12 +100,13 @@ struct hfi_devdata;
  * @ibuc: IB ucontext state
  * @ops: hfi2 ops table
  * @priv: hfi2 private data
+ * @vma_head: linked list head for vma's to zap on release
+ * @vm_lock: mutex to update the list of vma's
  */
 struct hfi_ibcontext {
 	struct ib_ucontext ibuc;
 	struct opa_core_ops *ops;
 	struct hfi_devdata *priv;
-	/* Put vma_head here */
 	struct list_head vma_head;
 	struct mutex vm_lock;
 };
