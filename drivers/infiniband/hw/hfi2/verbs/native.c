@@ -52,6 +52,7 @@
  * Intel(R) OPA Gen2 Verbs over Native provider
  */
 
+#include <linux/sched/signal.h>
 #include "hfi_kclient.h"
 #include "hfi_ct.h"
 #include "hfi_tx_base.h"
@@ -135,6 +136,19 @@ const u8 hfi_ft_ib_status[16] = {
 };
 
 static int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx);
+
+static
+int hfi2_create_qp_sync(struct hfi_ibcontext *ctx, struct hfi_ctx *hw_ctx)
+{
+	ctx->tx_qp_flow_ctl = kcalloc(HFI2_MAX_QPS_PER_PID,
+				      sizeof(u64), GFP_KERNEL);
+	if (!ctx->sync_task)
+		ctx->sync_task = kthread_run(hfi2_qp_sync_thread,
+					     ctx, "hfi2_qp_async");
+	if (IS_ERR_OR_NULL(ctx->sync_task))
+		return PTR_ERR(ctx->sync_task);
+	return 0;
+}
 
 /* Append new set of keys to LKEY and RKEY stacks */
 static int hfi2_add_keys(struct hfi_ibcontext *ctx, struct hfi_ctx *hw_ctx)
@@ -263,6 +277,12 @@ void hfi2_native_dealloc_ucontext(struct hfi_ibcontext *ctx)
 		ctx->tx_cmdq = NULL;
 		ctx->rx_cmdq = NULL;
 	}
+	if (ctx->sync_task) {
+		send_sig(SIGINT, ctx->sync_task, 1);
+		kthread_stop(ctx->sync_task);
+		ctx->sync_task = NULL;
+		kfree(ctx->tx_qp_flow_ctl);
+	}
 	hfi2_free_all_keys(ctx);
 	if (ctx->hw_ctx) {
 		hfi2_remove_hw_context(ctx->hw_ctx);
@@ -346,6 +366,7 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 {
 	struct opa_ctx_assign attach = {0};
 	struct hfi_ctx *hw_ctx = NULL;
+	struct opa_ev_assign eq_alloc;
 	int ret;
 
 	/* TODO - only support single context now */
@@ -374,6 +395,19 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 	if (ret < 0)
 		goto err_post_attach;
 
+	memset(&eq_alloc, 0, sizeof(eq_alloc));
+	eq_alloc.ni = NATIVE_NI;
+	eq_alloc.count = HFI2_MAX_QPS_PER_PID;
+	ret = _hfi_eq_alloc(hw_ctx, &eq_alloc, &hw_ctx->sync_eq);
+	if (ret < 0) {
+		pr_err("error on sync eq alloc %d\n", ret);
+		goto err_sync_eq;
+	}
+	if ((hw_ctx->sync_eq.idx & 0x7ff) != 1) {
+		pr_err("not valid sync eq allocated %d\n", hw_ctx->sync_eq.idx);
+		ret = -EFAULT;
+		goto err_sync_eq;
+	}
 	/*
 	 * Store pointer to the hardware context state
 	 * TODO - update here for multiple PIDs
@@ -383,6 +417,8 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 
 	return hw_ctx;
 
+err_sync_eq:
+	hfi_eq_free(&hw_ctx->sync_eq);
 err_post_attach:
 	pr_info("native: Error %d after HW attach, detaching PID %d\n",
 		ret, hw_ctx->pid);
@@ -401,10 +437,13 @@ static int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx)
 		mutex_lock(&ctx->ctx_lock);
 		if (!ctx->num_ctx) {
 			hw_ctx = hfi2_add_hw_context(ctx);
-			if (IS_ERR(hw_ctx))
+			if (IS_ERR(hw_ctx)) {
 				ret = PTR_ERR(hw_ctx);
-			else
+			} else {
+				/* create QP Sync  */
+				ret = hfi2_create_qp_sync(ctx, hw_ctx);
 				ret = hfi2_add_cmdq(ctx);
+			}
 		}
 		mutex_unlock(&ctx->ctx_lock);
 	}
@@ -610,9 +649,9 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 	return 1;
 }
 
-static int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
-			    struct rvt_qp *qp, u32 slid, u16 ipid,
-			    u8 state, bool failed)
+int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
+		     struct rvt_qp *qp, u32 slid, u16 ipid,
+		     u8 state, bool failed)
 {
 	struct ib_qp *ibqp = &qp->ibqp;
 	int ret, nslots;
@@ -784,7 +823,28 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 	    attr->qp_state == IB_QPS_INIT &&
 	    !rvtqp->r_rq.hw_rq) {
 		struct hfi_ctx *hw_ctx;
+		struct hfi2_qp_priv *priv = rvtqp->priv;
 
+		priv->current_cidx = 0;
+		priv->current_eidx = 0;
+		priv->fc_cidx = 0;
+		priv->fc_eidx = 0;
+
+		/* Malloc retransmit command / backpressure state */
+		if (!priv->cmd) {
+			priv->cmd = kmalloc_array(
+					sizeof(union hfi_tx_cq_command),
+					rvtqp->s_size, GFP_KERNEL);
+			if (!priv->cmd)
+				goto qp_write_err;
+		}
+		if (!priv->wc) {
+			priv->wc = kcalloc(rvtqp->s_size,
+					   sizeof(struct hfi_tx_wc),
+					   GFP_KERNEL);
+			if (!priv->wc)
+				goto qp_write_err;
+		}
 		/* Create initial resources when first QP enters RTR */
 		ret = hfi2_add_initial_hw_ctx(ctx);
 		if (ret != 0)

@@ -68,11 +68,46 @@
 
 #define IOVEC_VALID	0x80
 #define NATIVE_NI	PTL_MATCHING_PHYSICAL
+#define HFI2_MAX_QPS_PER_PID	64
+
+/* These marcos are used for the TX WC reordering buffer. The valid bit
+ * indicates the WC has been received for this command index. The solicit bit
+ * indicaets that this WC needs to be delivered to the user. The fc (flow
+ * control) bit indicates that command slot has seen a flow control event.
+ */
+#define INIT_QP_EQ_VALID_SIGNAL(qp_priv, cidx, signal) \
+	(qp_priv->wc[cidx % qp->s_size].flags = (signal << 0x1))
+#define SET_QP_EQ_VALID(qp_priv, cidx, qp) \
+	(qp_priv->wc[cidx % qp->s_size].flags |= 0x1)
+#define SET_QP_EQ_SIGNAL(qp_priv, cidx, qp) \
+	(qp_priv->wc[cidx % qp->s_size].flags |= 0x2)
+#define SET_QP_FC_SEEN(qp_priv, cidx, qp) \
+	(qp_priv->wc[cidx % qp->s_size].flags |= 0x4)
+#define CLR_QP_EQ_VALID(qp_priv, cidx, qp) \
+	(qp_priv->wc[cidx % qp->s_size].flags &= ~0x1)
+#define CLR_QP_EQ_SIGNAL(qp_priv, cidx, qp) \
+	(qp_priv->wc[cidx % qp->s_size].flags &= ~0x2)
+#define CLR_QP_FC_SEEN(qp_priv, cidx, qp) \
+	(qp_priv->wc[cidx % qp->s_size].flags &= ~0x4)
+#define QP_EQ_VALID(qp_priv, eidx)		(qp_priv->wc[eidx].flags & 0x1)
+#define QP_EQ_SIGNAL(qp_priv, eidx)		(qp_priv->wc[eidx].flags & 0x2)
+#define QP_EQ_FC_SEEN(qp_priv, eidx)		(qp_priv->wc[eidx].flags & 0x4)
+#define IS_NON_IOVEC_SWQE(v) !(__virt_addr_valid((unsigned long)v))
+#define NON_IOVEC_SWQE_CIDX(v, qp)      (((u64)v) % (qp->s_size * 2))
+#define IS_FLOW_CTL(f, n)        (f[n / 64] & (0x1ull << (n % 64)))
+#define CLEAR_FLOW_CTL(f, n)     (f[n / 64] &= ~(0x1ull << (n % 64)))
+#define SET_FLOW_CTL(f, n)       (f[n / 64] |= (0x1ull << (n % 64)))
 
 #define obj_to_ibctx(obj) \
 	((struct hfi_ibcontext *)			\
 	  ((obj)->uobject ? (obj)->uobject->context :	\
 			    to_hfi_ibd((obj)->device)->ibkc))
+
+#define IS_CIDX_LESS_THAN(c0, c1, qp)\
+	(((c0 < c1) && ((c1-c0) <= qp->s_size)) \
+	|| ((c0 > c1) && ((c0-c1) > qp->s_size)))
+
+union hfi_tx_cq_command;
 
 struct hfi_iovec {
 	u64	addr;
@@ -104,9 +139,10 @@ struct hfi_swqe {
 	struct rvt_qp *qp;
 	u64	wr_id;
 	u32	length;
+	u32	cidx;
 	u8	num_iov;
 	u8	signal;
-	u8	padding[10];
+	u8	padding[6];
 	struct hfi_iovec iov[0];
 } __aligned(16);
 
@@ -227,5 +263,9 @@ int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 int hfi2_poll_cq(struct ib_cq *cq, int ne, struct ib_wc *wc);
 int hfi2_req_notify_cq(struct ib_cq *cq, enum ib_cq_notify_flags flags);
 int hfi2_destroy_srq(struct ib_srq *ibsrq);
+int hfi2_qp_sync_thread(void *data);
+int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
+		     struct rvt_qp *qp, u32 slid, u16 ipid,
+		     u8 state, bool failed);
 #endif
 #endif /* NATIVE_VERBS_H */

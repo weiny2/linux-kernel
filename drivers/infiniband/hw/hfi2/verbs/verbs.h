@@ -129,6 +129,11 @@ extern const enum ib_wc_opcode ib_hfi2_wc_opcode[];
 extern const struct rvt_operation_params hfi2_post_parms[];
 extern const u8 ib_hdr_len_by_opcode[];
 
+struct hfi_tx_wc {
+	struct ib_wc		ib_wc;
+	u8			flags;
+};
+
 /*
  * hfi2 specific QP state which is hidden from rvt after queue pair created,
  * used for hfi2 driver specific interactions with hardware device.
@@ -171,6 +176,12 @@ struct hfi2_qp_priv {
 	u16 nfence_ct;
 	u64 fence_cnt;
 	u64 nfence_cnt;
+	union hfi_tx_cq_command *cmd;
+	struct hfi_tx_wc        *wc;
+	int current_cidx;
+	int current_eidx;
+	int fc_cidx;
+	int fc_eidx;
 };
 
 struct hfi2_ibrcv {
