@@ -475,7 +475,7 @@ int hfi_setup_errd_irq(struct hfi_devdata *dd)
 	struct hfi_irq_entry *me;
 	struct hfi_error_csr *csr;
 	int count, irq;
-	int i, j, ret;
+	int i, j, k, ret;
 	u64 val;
 	struct hfi_error_event *ee_ptr = NULL;
 
@@ -484,45 +484,59 @@ int hfi_setup_errd_irq(struct hfi_devdata *dd)
 
 	/* Setup interrupt handler for each IRQ */
 	for (i = 0; i < HFI_NUM_ERR_DOMAIN; i++) {
-		for (j = 0; j < 64; j++) {
-			ee_ptr = &hfi_error_domain[i].csr->events[j];
+		count = hfi_error_domain[i].count;
+		for (j = 0; j < count; j++) {
+			csr = &hfi_error_domain[i].csr[j];
+			for (k = 0; k < 64; k++) {
+				ee_ptr = &csr->events[k];
 
-			if (strstr(ee_ptr->event_desc, "Unused"))
-				ee_ptr->action = hfi_error_handler_hw_bug;
-			else
-				ee_ptr->action = hfi_error_handler_unimpl;
+				if (strstr(ee_ptr->event_desc, "Unused"))
+					ee_ptr->action =
+						hfi_error_handler_hw_bug;
+				else
+					ee_ptr->action =
+						hfi_error_handler_unimpl;
 
-			switch (ee_ptr->err_category) {
-			case ERR_CATEGORY_OKAY:
-				ee_ptr->action = hfi_error_handler_ok;
-				break;
-			case ERR_CATEGORY_INFO:
-				ee_ptr->action = hfi_error_handler_info;
-				break;
-			case ERR_CATEGORY_CORRECTABLE:
-				ee_ptr->action = hfi_error_handler_corr;
-				break;
-			case ERR_CATEGORY_TRANSACTION:
-				ee_ptr->action = hfi_error_handler_trans;
-				break;
-			case ERR_CATEGORY_PROCESS:
-				ee_ptr->action = hfi_error_handler_proc;
-				break;
-			case ERR_CATEGORY_HFI:
-				ee_ptr->action = hfi_error_handler_hfi;
-				break;
-			case ERR_CATEGORY_NODE:
-				ee_ptr->action = hfi_error_handler_node;
-				break;
-			case ERR_CATEGORY_DEFAULT:
-				/*
-				 * FXRTODO: Software-only, this is to make sure
-				 * all event bits get assigned into one of the
-				 * others
-				 */
-				if (detect_uncat_errs)
-					ee_ptr->action = hfi_error_handler_def;
-				break;
+				switch (ee_ptr->err_category) {
+				case ERR_CATEGORY_OKAY:
+					ee_ptr->action =
+						hfi_error_handler_ok;
+					break;
+				case ERR_CATEGORY_INFO:
+					ee_ptr->action =
+						hfi_error_handler_info;
+					break;
+				case ERR_CATEGORY_CORRECTABLE:
+					ee_ptr->action =
+						hfi_error_handler_corr;
+					break;
+				case ERR_CATEGORY_TRANSACTION:
+					ee_ptr->action =
+						hfi_error_handler_trans;
+					break;
+				case ERR_CATEGORY_PROCESS:
+					ee_ptr->action =
+						hfi_error_handler_proc;
+					break;
+				case ERR_CATEGORY_HFI:
+					ee_ptr->action =
+						hfi_error_handler_hfi;
+					break;
+				case ERR_CATEGORY_NODE:
+					ee_ptr->action =
+						hfi_error_handler_node;
+					break;
+				case ERR_CATEGORY_DEFAULT:
+					/*
+					 * FXRTODO: Software-only, this is to
+					 * make sure all event bits get
+					 * assigned into one of the others
+					 */
+					if (detect_uncat_errs)
+						ee_ptr->action =
+							hfi_error_handler_def;
+					break;
+				}
 			}
 		}
 	}
