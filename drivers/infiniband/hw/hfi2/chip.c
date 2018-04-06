@@ -470,38 +470,18 @@ static void hfi_init_rate_control(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_RXCID_CFG_HEAD_UPDATE_CNTRL, rx_reg);
 }
 
-static int hfi_qp_state_alloc(struct hfi_devdata *dd)
+void hfi_write_qp_state_csrs(struct hfi_devdata *dd, void *qp_state_base,
+			     u32 max_qpn)
 {
-	RXHIARB_CFG_QP_TABLE_t addr = {.val = 0};
-	RXHIARB_CFG_QP_MAX_t max = {.val = 0};
+	u64 addr, max;
 
-	dd->max_qp = HFI2_MAX_QPS << HFI2_QPN_QOS_SHIFT;
-	dd->qp_state_base = vzalloc(dd->max_qp * FXR_PTE_SIZE);
-	if (!dd->qp_state_base)
-		return -ENOMEM;
+	addr = (u64)!!qp_state_base << FXR_RXHIARB_CFG_QP_TABLE_VALID_SHIFT;
+	addr |= ((u64)qp_state_base >> PAGE_SHIFT) &
+		FXR_RXHIARB_CFG_QP_TABLE_QP_BASE_MASK;
+	write_csr(dd, FXR_RXHIARB_CFG_QP_TABLE, addr);
 
-	addr.field.valid = 1;
-	addr.field.qp_base = ((u64)dd->qp_state_base >> PAGE_SHIFT);
-	write_csr(dd, FXR_RXHIARB_CFG_QP_TABLE, addr.val);
-
-	max.field.max_qp = dd->max_qp;
-	write_csr(dd, FXR_RXHIARB_CFG_QP_MAX, max.val);
-
-	/* TODO - at_reg */
-
-	return 0;
-}
-
-static void hfi_qp_state_free(struct hfi_devdata *dd)
-{
-	if (dd->qp_state_base) {
-		vfree(dd->qp_state_base);
-		dd->qp_state_base = 0;
-	}
-
-	/* TODO - at_dereg */
-	write_csr(dd, FXR_RXHIARB_CFG_QP_TABLE, 0);
-	write_csr(dd, FXR_RXHIARB_CFG_QP_MAX, 0);
+	max = max_qpn & FXR_RXHIARB_CFG_QP_MAX_MAX_QP_MASK;
+	write_csr(dd, FXR_RXHIARB_CFG_QP_MAX, max);
 }
 
 static void hfi_read_guid(struct hfi_devdata *dd)
@@ -3013,9 +2993,6 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	hfi_disable_interrupts(dd);
 	hfi_free_spill_area(dd);
 
-	/* free QP state */
-	hfi_qp_state_free(dd);
-
 	/* release system context and any privileged CMDQs */
 	if (dd->priv_ctx.devdata) {
 #ifdef CONFIG_HFI2_STLNP
@@ -3947,11 +3924,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	ctx_assign.pid = HFI_PID_SYSTEM;
 	ctx_assign.le_me_count = 0;
 	ret = hfi_ctx_attach(ctx, &ctx_assign);
-	if (ret)
-		goto err_post_alloc;
-
-	/* allocate QP state */
-	ret = hfi_qp_state_alloc(dd);
 	if (ret)
 		goto err_post_alloc;
 

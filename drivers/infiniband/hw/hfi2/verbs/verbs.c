@@ -695,6 +695,33 @@ static void hfi2_uninit_port(struct hfi2_ibport *ibp)
 	free_percpu(ibp->rvp.rc_delayed_comp);
 }
 
+static int hfi_qp_state_alloc(struct hfi_devdata *dd)
+{
+	dd->max_qp = HFI2_MAX_QPS << HFI2_QPN_QOS_SHIFT;
+	dd->qp_state_base = vzalloc(dd->max_qp * FXR_PTE_SIZE);
+	if (!dd->qp_state_base)
+		return -ENOMEM;
+
+	hfi_at_reg_range(&dd->priv_ctx, dd->qp_state_base,
+			 dd->max_qp * FXR_PTE_SIZE, NULL, true);
+
+	hfi_write_qp_state_csrs(dd, dd->qp_state_base, dd->max_qp);
+	return 0;
+}
+
+static void hfi_qp_state_free(struct hfi_devdata *dd)
+{
+	hfi_write_qp_state_csrs(dd, 0, 0);
+
+	if (!dd->qp_state_base)
+		return;
+
+	hfi_at_dereg_range(&dd->priv_ctx, dd->qp_state_base,
+			   dd->max_qp * FXR_PTE_SIZE);
+	vfree(dd->qp_state_base);
+	dd->qp_state_base = 0;
+}
+
 int hfi2_ib_add(struct hfi_devdata *dd)
 {
 	int i, ret;
@@ -730,6 +757,11 @@ int hfi2_ib_add(struct hfi_devdata *dd)
 	ibd->send_wqe = hfi2_send_wqe;
 	ibd->send_ack = hfi2_send_ack;
 
+	/* allocate QP state */
+	ret = hfi_qp_state_alloc(dd);
+	if (ret)
+		goto alloc_err;
+
 	/* Allocate HFI Contexts */
 	ret = hfi2_ctx_init(ibd, HFI2_IB_DEF_CTXTS);
 	if (ret)
@@ -750,7 +782,7 @@ int hfi2_ib_add(struct hfi_devdata *dd)
 
 	ret = wqe_cache_create(ibd);
 	if (ret)
-		goto ib_reg_err;
+		goto cache_err;
 
 	ret = hfi2_register_device(ibd, hfi_class_name());
 	if (ret)
@@ -758,11 +790,15 @@ int hfi2_ib_add(struct hfi_devdata *dd)
 
 	return ret;
 ib_reg_err:
+	wqe_cache_destroy(ibd);
+cache_err:
 	for (i = 0; i < num_ports; i++)
 		hfi2_uninit_port(&ibd->pport[i]);
 port_err:
 	hfi2_ctx_uninit(ibd);
 ctx_err:
+	hfi_qp_state_free(dd);
+alloc_err:
 	rvt_dealloc_device(&ibd->rdi);
 exit:
 	/* must clear dd->ibd so state is sane during error cleanup */
@@ -779,13 +815,14 @@ void hfi2_ib_remove(struct hfi_devdata *dd)
 	if (!dd->ibd)
 		return;
 
-	dd->ibd = NULL;
 	hfi2_unregister_device(ibd);
+	wqe_cache_destroy(ibd);
 	for (i = 0; i < ibd->num_pports; i++)
 		hfi2_uninit_port(&ibd->pport[i]);
 	hfi2_ctx_uninit(ibd);
+	hfi_qp_state_free(dd);
 	rvt_dealloc_device(&ibd->rdi);
-	wqe_cache_destroy(ibd);
+	dd->ibd = NULL;
 }
 
 void hfi_verbs_dbg_init(struct hfi_devdata *dd)
