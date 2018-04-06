@@ -441,6 +441,33 @@ irqreturn_t hfi_irq_errd_handler(int irq, void *dev_id)
 }
 
 /*
+ * error domain status reset
+ */
+void hfi_reset_errd_sts(struct hfi_devdata *dd)
+{
+	struct hfi_error_csr *csr;
+	int i, j, count;
+	u64 val;
+
+	for (i = 0; i < HFI_NUM_ERR_DOMAIN; i++) {
+		csr = hfi_error_domain[i].csr;
+		count = hfi_error_domain[i].count;
+
+		for (j = 0; j < count; j++) {
+			val = 0;
+			/* disable interrupt */
+			write_csr(dd, csr[j].err_en_host, val);
+			/* clear first host status */
+			write_csr(dd, csr[j].err_first_host, val);
+
+			/* clear error domain status */
+			val = ~0;
+			write_csr(dd, csr[j].err_clr, val);
+		}
+	}
+}
+
+/*
  * configure and setup driver to receive error domain interrupt.
  */
 int hfi_setup_errd_irq(struct hfi_devdata *dd)
@@ -451,6 +478,9 @@ int hfi_setup_errd_irq(struct hfi_devdata *dd)
 	int i, j, ret;
 	u64 val;
 	struct hfi_error_event *ee_ptr = NULL;
+
+	/* reset all error domain statuses first */
+	hfi_reset_errd_sts(dd);
 
 	/* Setup interrupt handler for each IRQ */
 	for (i = 0; i < HFI_NUM_ERR_DOMAIN; i++) {
