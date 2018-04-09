@@ -811,9 +811,12 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 static int hfi_user_cleanup(struct hfi_userdata *ud)
 {
 	struct opa_core_ops *ops = ud->uc->ops;
+	int rc;
 
 	/* release Portals resources acquired by the HFI user */
-	ops->ctx_release(&ud->ctx);
+	rc = ops->ctx_release(&ud->ctx);
+	if (rc)
+		pr_warn("%s: Could not release ctx\n", __func__);
 	/* release any held PID reservations */
 	hfi_job_free(ud);
 

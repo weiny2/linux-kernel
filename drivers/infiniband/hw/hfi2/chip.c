@@ -3097,7 +3097,7 @@ static void core_ctx_init(struct ib_device *ibdev, struct hfi_ctx *ctx)
 static struct opa_core_ops opa_core_ops = {
 	.ctx_init = core_ctx_init,
 	.ctx_assign = hfi_ctx_attach,
-	.ctx_release = hfi_ctx_cleanup,
+	.ctx_release = hfi_ctx_release,
 	.ctx_reserve = hfi_ctx_reserve,
 	.ctx_unreserve = hfi_ctx_unreserve,
 	.ctx_addr = hfi_ctx_hw_addr,

@@ -270,10 +270,13 @@ static void opa_kfi_cleanup(struct opa_kfi *dev)
 {
 	struct hfi_ctx *ctx = &dev->ctx;
 	struct opa_core_ops *ops = dev->uc->ops;
+	int rc;
 
 	ops->cmdq_unmap(&dev->tx, &dev->rx);
 	ops->cmdq_release(ctx, dev->cmdq_idx);
-	ops->ctx_release(ctx);
+	rc = ops->ctx_release(ctx);
+	if (rc)
+		dev_warn(&dev->ibdev->dev, "Unable to release ctx\n");
 }
 
 static void opa_kfi_probe(struct ib_device *ibdev)

@@ -609,6 +609,12 @@ unlock:
 	return ret;
 }
 
+int hfi_ctx_release(struct hfi_ctx *ctx)
+{
+	hfi_cmdq_cleanup(ctx);
+	return hfi_ctx_cleanup(ctx);
+}
+
 /* returns number of hardware resources available to clients */
 int hfi_get_hw_limits(struct hfi_ibcontext *uc, struct hfi_hw_limit *hwl)
 {
