@@ -275,6 +275,7 @@ free:
 	uverbs_uobject_put(uobj);
 	return ERR_PTR(ret);
 }
+EXPORT_SYMBOL(rdma_lookup_get_uobject);
 
 static struct ib_uobject *alloc_begin_idr_uobject(const struct uverbs_obj_type *type,
 						  struct ib_ucontext *ucontext)
@@ -594,6 +595,7 @@ void rdma_lookup_put_uobject(struct ib_uobject *uobj, bool exclusive)
 
 	uverbs_uobject_put(uobj);
 }
+EXPORT_SYMBOL(rdma_lookup_put_uobject);
 
 const struct uverbs_obj_type_class uverbs_idr_class = {
 	.alloc_begin = alloc_begin_idr_uobject,
