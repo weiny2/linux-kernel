@@ -40,13 +40,13 @@ NAME := hfi2
 TOP_SRC=$(PWD)/../../../../
 
 # The desired version number comes from the most recent tag starting with "v"
-VERSION := $(shell if [ -e $(TOP_SRC)/.git ] ; then  git describe --tags --abbrev=0 --match="*fxr_v*" | sed -e 's/^fxr_v//' -e 's/-/_/'; else echo "version" ; fi)
+VERSION := $(shell if [ -e $(TOP_SRC)/.git ] ; then  git describe --tags --first-parent --abbrev=0 --match="*fxr_v*" | sed -e 's/^fxr_v//' -e 's/-/_/'; else echo "version" ; fi)
 ifeq (,$(VERSION))
 VERSION := 0
 endif
 # The desired release number comes the git describe following the version which
 # is the number of commits since the version tag was planted suffixed by the g<commitid>
-RELEASE := $(shell if [ -e $(TOP_SRC)/.git ] ; then git describe --tags --long --match="*fxr_v*" | sed -e 's/fxr_v[0-9.]*-\([0-9]*\)/\1/' | sed 's/-g.*$$//'; else echo "release" ; fi)
+RELEASE := $(shell if [ -e $(TOP_SRC)/.git ] ; then git describe --tags --first-parent --long --match="*fxr_v*" | sed -e 's/fxr_v[0-9.]*-\([0-9]*\)/\1/' | sed 's/-g.*$$//'; else echo "release" ; fi)
 ifeq (,$(RELEASE))
 RELEASE := 0
 endif
@@ -76,10 +76,10 @@ else
 KBUILD ?= /lib/modules/$(KVER)/build
 endif
 
-driver: rdmavt
+hfi2:
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION)
 
-driver-ifs: rdmavt
+hfi2-ifs:
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION) \
 	CONFIG_INFINIBAND_HFI2=m CONFIG_HFI2_STLNP=m
 
@@ -150,6 +150,10 @@ install:
 	-install kfi/kfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install -m=644 build/80-hfi2.rules $(RPM_BUILD_ROOT)/usr/lib/udev/rules.d/
 	install build/$(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
+
+# these targets used by rpm specfile to package hfi2 + rdmavt
+driver: hfi2 rdmavt
+driver-ifs: hfi2-ifs rdmavt
 
 rpm: dist
 	mkdir -p rpmbuild/SOURCES
