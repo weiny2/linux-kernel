@@ -69,6 +69,39 @@ extern const struct uverbs_object_tree_def hfi2_uverbs_objects;
 extern const struct uverbs_type_group hfi2_object_types;
 extern const struct uverbs_spec_root hfi2_root;
 
+struct ib_uverbs_file {
+	struct kref				ref;
+	struct mutex				mutex;
+	struct mutex                            cleanup_mutex;
+	struct ib_uverbs_device		       *device;
+	struct ib_ucontext		       *ucontext;
+	struct ib_event_handler			event_handler;
+	struct ib_uverbs_async_event_file       *async_file;
+	struct list_head			list;
+	int					is_closed;
+	struct idr		idr;
+	/* spinlock protects write access to idr */
+	spinlock_t		idr_lock;
+};
+
+struct ib_uctx_object {
+	struct ib_uobject uobject;
+	struct ib_uverbs_file *verbs_file;
+};
+
+struct ib_ucmdq_object {
+	struct ib_uobject uobject;
+	struct ib_uverbs_file *verbs_file;
+};
+
+struct ib_ujob_object {
+	struct ib_uobject uobject;
+	struct ib_uverbs_file *verbs_file;
+	struct list_head obj_list;
+	u16 job_res_mode;
+	u16 sid;
+};
+
 int hfi_job_init(struct hfi_ctx *ctx);
 int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
 void hfi_zap_vma_list(struct hfi_ibcontext *context, uint16_t cmdq_idx);

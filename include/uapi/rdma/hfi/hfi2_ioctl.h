@@ -65,36 +65,8 @@
 #define HFI2_DLID_RELEASE_CTX_IDX	0
 #define HFI2_GET_HW_LIMITS_RESP		0
 
-struct ib_uverbs_file {
-	struct kref				ref;
-	struct mutex				mutex;
-	struct mutex                            cleanup_mutex;
-	struct ib_uverbs_device		       *device;
-	struct ib_ucontext		       *ucontext;
-	struct ib_event_handler			event_handler;
-	struct ib_uverbs_async_event_file       *async_file;
-	struct list_head			list;
-	int					is_closed;
-	struct idr		idr;
-	/* spinlock protects write access to idr */
-	spinlock_t		idr_lock;
-};
-
 struct hfi2_cmdq_auth_table {
 	struct hfi_auth_tuple auth_table[HFI_NUM_AUTH_TUPLES];
-};
-
-struct ib_ucmdq_object {
-	struct ib_uobject uobject;
-	struct ib_uverbs_file *verbs_file;
-};
-
-struct ib_ujob_object {
-	struct ib_uobject uobject;
-	struct ib_uverbs_file *verbs_file;
-	struct list_head obj_list;
-	u16 job_res_mode;
-	u16 sid;
 };
 
 struct hfi_ctx_attach_cmd {
@@ -119,11 +91,6 @@ struct hfi_ctx_attach_resp {
 	u64 le_me_unlink_token;
 	u64 unexpected_token;
 	u64 trig_op_token;
-};
-
-struct ib_uctx_object {
-	struct ib_uobject uobject;
-	struct ib_uverbs_file *verbs_file;
 };
 
 enum {
