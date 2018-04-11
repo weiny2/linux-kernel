@@ -62,11 +62,8 @@
 #include "chip/fxr_linkmux_fpc_defs.h"
 #include "chip/fxr_linkmux_tp_defs.h"
 #include "chip/fxr_linkmux_defs.h"
-#include "chip/mnh_opio_defs.h"
-#include "chip/mnh_snup_defs.h"
-#include "chip/mnh_sndn_defs.h"
-#include "chip/fxr_fc_defs.h"
-#include "chip/mnh_8051_defs.h"
+#include "chip/fxr_oc_defs.h"
+#include "chip/fxr_8051_defs.h"
 #include "hfi2.h"
 #include "link.h"
 #include "firmware.h"
@@ -86,70 +83,6 @@ MODULE_PARM_DESC(quick_linkup, "quick linkup, i.e. skip Verifycap and goes to In
 static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup);
 static u32 read_physical_state(const struct hfi_pportdata *ppd);
 static void get_linkup_link_widths(struct hfi_pportdata *ppd);
-
-/*
- * read FZC registers
- */
-u64 read_fzc_csr(const struct hfi_pportdata *ppd, u32 offset)
-{
-	offset += FXR_FZC_LCB0_CSRS;
-
-	ppd_dev_dbg(ppd, "FZC read access offset 0x%x\n", offset);
-	return read_csr(ppd->dd, offset);
-}
-
-/*
- * write FZC registers
- */
-void write_fzc_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
-{
-	offset += FXR_FZC_LCB0_CSRS;
-
-	ppd_dev_dbg(ppd, "FZC write access offset 0x%x\n", offset);
-	write_csr(ppd->dd, offset, value);
-}
-
-/*
- * read 8051/MNH registers
- */
-u64 read_8051_csr(const struct hfi_pportdata *ppd, u32 offset)
-{
-	offset += FXR_MNH_S0_8051_CSRS;
-
-	ppd_dev_dbg(ppd, "8051 read access offset 0x%x\n", offset);
-	return read_csr(ppd->dd, offset);
-}
-
-/*
- * write misc partition registers
- */
-void write_misc_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
-{
-	offset += FXR_MNH_MISC_CSRS;
-
-	return write_csr(ppd->dd, offset, value);
-}
-
-/*
- * read misc partition registers
- */
-u64 read_misc_csr(const struct hfi_pportdata *ppd, u32 offset)
-{
-	offset += FXR_MNH_MISC_CSRS;
-
-	return read_csr(ppd->dd, offset);
-}
-
-/*
- * write 8051/MNH registers
- */
-void write_8051_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
-{
-	offset += FXR_MNH_S0_8051_CSRS;
-
-	ppd_dev_dbg(ppd, "8051 write access offset 0x%x\n", offset);
-	write_csr(ppd->dd, offset, value);
-}
 
 static int write_local_device_id(struct hfi_pportdata *ppd, u16 device_id,
 				 u8 device_rev)
@@ -622,30 +555,30 @@ static void lcb_shutdown(struct hfi_pportdata *ppd, int abort)
 {
 	u64 lcb_reg, fpc_reg;
 
-	/* clear lcb run: FZC_LCB_CFG_RUN.EN = 0 */
-	write_fzc_csr(ppd, FZC_LCB_CFG_RUN, 0);
-	/* set tx fifo reset: FZC_LCB_CFG_TX_FIFOS_RESET.VAL = 1 */
-	write_fzc_csr(ppd, FZC_LCB_CFG_TX_FIFOS_RESET,
-		      1ull << FZC_LCB_CFG_TX_FIFOS_RESET_VAL_SHIFT);
-	/* set fzc reset csr: FZC_LCB_CFG_RESET_FROM_CSR.{reset_lcb} = 1 */
-	ppd->lcb_err_en = read_fzc_csr(ppd, FZC_LCB_ERR_EN_HOST);
-	lcb_reg = read_fzc_csr(ppd, FZC_LCB_CFG_RESET_FROM_CSR);
-	write_fzc_csr(ppd, FZC_LCB_CFG_RESET_FROM_CSR, lcb_reg |
-		  (1ull << FZC_LCB_CFG_RESET_FROM_CSR_EN_SHIFT));
+	/* clear lcb run: OC_LCB_CFG_RUN.EN = 0 */
+	write_csr(ppd->dd, OC_LCB_CFG_RUN, 0);
+	/* set tx fifo reset: OC_LCB_CFG_TX_FIFOS_RESET.VAL = 1 */
+	write_csr(ppd->dd, OC_LCB_CFG_TX_FIFOS_RESET,
+		      1ull << OC_LCB_CFG_TX_FIFOS_RESET_VAL_SHIFT);
+	/* set fzc reset csr: OC_LCB_CFG_RESET_FROM_CSR.{reset_lcb} = 1 */
+	ppd->lcb_err_en = read_csr(ppd->dd, OC_LCB_ERR_EN_HOST);
+	lcb_reg = read_csr(ppd->dd, OC_LCB_CFG_RESET_FROM_CSR);
+	write_csr(ppd->dd, OC_LCB_CFG_RESET_FROM_CSR, lcb_reg |
+		  (1ull << OC_LCB_CFG_RESET_FROM_CSR_EN_SHIFT));
 	/* make sure the write completed */
-	(void)read_fzc_csr(ppd, FZC_LCB_CFG_RESET_FROM_CSR);
+	(void)read_csr(ppd->dd, OC_LCB_CFG_RESET_FROM_CSR);
 
 	/* Do the same again for the FPC (Fabric Protocol Block) */
-	fpc_reg = hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_RESET);
-	hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_RESET, fpc_reg |
+	fpc_reg = read_csr(ppd->dd, FXR_FPC_CFG_RESET);
+	write_csr(ppd->dd, FXR_FPC_CFG_RESET, fpc_reg |
 		  (1ull << FXR_FPC_CFG_RESET_BLK_RESET_SHIFT));
 	/* make sure the write completed */
-	(void)hfi_read_lm_fpc_csr(ppd, FXR_FPC_CFG_RESET);
+	(void)read_csr(ppd->dd, FXR_FPC_CFG_RESET);
 	if (!abort) {
 		udelay(1);    /* must hold for the longer of 16cclks or 20ns */
-		write_fzc_csr(ppd, FZC_LCB_CFG_RESET_FROM_CSR, lcb_reg);
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_CFG_RESET, fpc_reg);
-		write_fzc_csr(ppd, FZC_LCB_ERR_EN_HOST, ppd->lcb_err_en);
+		write_csr(ppd->dd, OC_LCB_CFG_RESET_FROM_CSR, lcb_reg);
+		write_csr(ppd->dd, FXR_FPC_CFG_RESET, fpc_reg);
+		write_csr(ppd->dd, OC_LCB_ERR_EN_HOST, ppd->lcb_err_en);
 	}
 }
 
@@ -675,7 +608,7 @@ static void _mnh_shutdown(struct hfi_pportdata *ppd)
 	 * SerDes into reset already. Just need to shut down the 8051,
 	 * itself.
 	 */
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, 0x1);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RST, 0x1);
 }
 
 static void mnh_shutdown(struct hfi_pportdata *ppd)
@@ -702,9 +635,9 @@ void _mnh_start(struct hfi_pportdata *ppd)
 	 * host version bit*/
 	hfi2_release_and_wait_ready_8051_firmware(ppd);
 	/* turn on the LCB (turn off in lcb_shutdown). */
-	write_fzc_csr(ppd, FZC_LCB_CFG_RUN, FZC_LCB_CFG_RUN_EN_MASK);
+	write_csr(ppd->dd, OC_LCB_CFG_RUN, OC_LCB_CFG_RUN_EN_MASK);
 	/* lcb_shutdown() with abort=1 does not restore these */
-	write_fzc_csr(ppd, FZC_LCB_ERR_EN_HOST, ppd->lcb_err_en);
+	write_csr(ppd->dd, OC_LCB_ERR_EN_HOST, ppd->lcb_err_en);
 	ppd->mnh_shutdown = 0;
 }
 
@@ -750,8 +683,8 @@ static void handle_link_up(struct work_struct *work)
 	mutex_unlock(&ppd->hls_lock);
 	hfi_set_link_state(ppd, HLS_UP_INIT);
 
-	/* cache the read of FZC_LCB_STS_ROUND_TRIP_LTP_CNT */
-	ppd->lcb_sts_rtt = read_fzc_csr(ppd, FZC_LCB_STS_ROUND_TRIP_LTP_CNT);
+	/* cache the read of OC_LCB_STS_ROUND_TRIP_LTP_CNT */
+	ppd->lcb_sts_rtt = read_csr(ppd->dd, OC_LCB_STS_ROUND_TRIP_LTP_CNT);
 
 #if 0 /* WFR legacy */
 	/*
@@ -871,11 +804,11 @@ static void set_logical_state(struct hfi_pportdata *ppd, u32 chip_lstate)
 {
 	u64 reg;
 
-	reg = read_fzc_csr(ppd, FZC_LCB_CFG_PORT);
+	reg = read_csr(ppd->dd, OC_LCB_CFG_PORT);
 	/* clear current state, set new state */
-	reg &= ~FZC_LCB_CFG_PORT_LINK_STATE_SMASK;
-	reg |= (u64)chip_lstate << FZC_LCB_CFG_PORT_LINK_STATE_SHIFT;
-	write_fzc_csr(ppd, FZC_LCB_CFG_PORT, reg);
+	reg &= ~OC_LCB_CFG_PORT_LINK_STATE_SMASK;
+	reg |= (u64)chip_lstate << OC_LCB_CFG_PORT_LINK_STATE_SHIFT;
+	write_csr(ppd->dd, OC_LCB_CFG_PORT, reg);
 }
 
 /*
@@ -929,14 +862,14 @@ static int _do_8051_command(struct hfi_pportdata *ppd, u32 type,
 			<< CRK_CRK8051_CFG_HOST_CMD_0_REQ_TYPE_SHIFT
 		| (in_data & CRK_CRK8051_CFG_HOST_CMD_0_REQ_DATA_MASK)
 			<< CRK_CRK8051_CFG_HOST_CMD_0_REQ_DATA_SHIFT;
-	write_8051_csr(ppd, CRK_CRK8051_CFG_HOST_CMD_0, reg);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_HOST_CMD_0, reg);
 	reg |= CRK_CRK8051_CFG_HOST_CMD_0_REQ_NEW_SMASK;
-	write_8051_csr(ppd, CRK_CRK8051_CFG_HOST_CMD_0, reg);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_HOST_CMD_0, reg);
 
 	/* wait for completion, alternate: interrupt */
 	timeout = jiffies + msecs_to_jiffies(CRK8051_COMMAND_TIMEOUT);
 	while (1) {
-		reg = read_8051_csr(ppd, CRK_CRK8051_CFG_HOST_CMD_1);
+		reg = read_csr(ppd->dd, CRK_CRK8051_CFG_HOST_CMD_1);
 		if (reg & CRK_CRK8051_CFG_HOST_CMD_1_COMPLETED_SMASK)
 			break;
 		if (time_after(jiffies, timeout)) {
@@ -957,7 +890,7 @@ static int _do_8051_command(struct hfi_pportdata *ppd, u32 type,
 		if (type == HCMD_READ_LCB_CSR) {
 			/* top 16 bits are in a different register */
 			*out_data |=
-			  (read_8051_csr(ppd, CRK_CRK8051_CFG_EXT_DEV_1) &
+			  (read_csr(ppd->dd, CRK_CRK8051_CFG_EXT_DEV_1) &
 			  CRK_CRK8051_CFG_EXT_DEV_1_REQ_DATA_SMASK) <<
 			  (48 - CRK_CRK8051_CFG_EXT_DEV_1_REQ_DATA_SHIFT);
 		}
@@ -969,7 +902,7 @@ static int _do_8051_command(struct hfi_pportdata *ppd, u32 type,
 	/*
 	 * Clear command for next user.
 	 */
-	write_8051_csr(ppd, CRK_CRK8051_CFG_HOST_CMD_0, 0);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_HOST_CMD_0, 0);
 
 fail:
 	hfi2_cdbg(8051, "type %d, data in 0x%012llx, out 0x%012llx, ret = %d",
@@ -1278,7 +1211,7 @@ static u32 read_physical_state(const struct hfi_pportdata *ppd)
 {
 	u64 reg;
 
-	reg = read_8051_csr(ppd, CRK_CRK8051_STS_CUR_STATE);
+	reg = read_csr(ppd->dd, CRK_CRK8051_STS_CUR_STATE);
 	return (reg >> CRK_CRK8051_STS_CUR_STATE_PORT_SHIFT)
 				& CRK_CRK8051_STS_CUR_STATE_PORT_MASK;
 }
@@ -1287,9 +1220,9 @@ static u32 read_logical_state(const struct hfi_pportdata *ppd)
 {
 	u64 reg;
 
-	reg = read_fzc_csr(ppd, FZC_LCB_CFG_PORT);
-	return (reg >> FZC_LCB_CFG_PORT_LINK_STATE_SHIFT)
-				& FZC_LCB_CFG_PORT_LINK_STATE_MASK;
+	reg = read_csr(ppd->dd, OC_LCB_CFG_PORT);
+	return (reg >> OC_LCB_CFG_PORT_LINK_STATE_SHIFT)
+				& OC_LCB_CFG_PORT_LINK_STATE_MASK;
 }
 
 /*
@@ -1341,7 +1274,7 @@ static int goto_offline(struct hfi_pportdata *ppd, u8 rem_reason)
 	 * offline.quiet and before host_link_state is changed.
 	 */
 #if 0 /* WFR legacy */
-	write_fzc_csr(ppd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
+	write_csr(ppd->dd, DC_LCB_ERR_EN, ~0ull); /* watch LCB errors */
 #endif
 	ppd->host_link_state = HLS_LINK_COOLDOWN; /* LCB access allowed */
 
@@ -1481,7 +1414,7 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 #endif
-	write_8051_csr(ppd, CRK_CRK8051_CFG_LOCAL_PORT_NO,
+	write_csr(ppd->dd, CRK_CRK8051_CFG_LOCAL_PORT_NO,
 		       ppd->pnum & CRK_CRK8051_CFG_LOCAL_PORT_NO_VAL_MASK);
 
 	/* z=1 in the next call: AU of 0 is not supported by the hardware */
@@ -1667,13 +1600,13 @@ static inline void add_rcvctrl(struct hfi_devdata *dd, u64 add)
 
 static void handle_quick_linkup(struct hfi_pportdata *ppd)
 {
-	ppd->neighbor_guid = read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_GUID);
+	ppd->neighbor_guid = read_csr(ppd->dd, CRK_CRK8051_STS_REMOTE_GUID);
 	ppd->neighbor_type =
-		read_8051_csr(ppd,
+		read_csr(ppd->dd,
 			      CRK_CRK8051_STS_REMOTE_NODE_TYPE) &
 			      CRK_CRK8051_STS_REMOTE_NODE_TYPE_VAL_SMASK;
 	ppd->neighbor_port_number =
-		read_8051_csr(ppd,
+		read_csr(ppd->dd,
 			      CRK_CRK8051_STS_REMOTE_PORT_NO) &
 			      CRK_CRK8051_STS_REMOTE_PORT_NO_VAL_SMASK;
 	dd_dev_info(ppd->dd, "Neighbor GUID: %llx Neighbor type %d\n",
@@ -1710,24 +1643,24 @@ static void handle_linkup_change(struct hfi_pportdata *ppd, u32 linkup)
 		 */
 		if (quick_linkup) {
 			hfi_set_up_vl15(ppd, ppd->vau, ppd->vl15_init);
-			write_fzc_csr(ppd, FZC_LCB_CFG_CRC_MODE,
+			write_csr(ppd->dd, OC_LCB_CFG_CRC_MODE,
 				      HFI_LCB_CRC_14B <<
-				      FZC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
+				      OC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 			hfi_assign_remote_cm_au_table(ppd, ppd->vcu);
 			handle_quick_linkup(ppd);
 			hfi_add_full_mgmt_pkey(ppd);
 		}
 
 		ppd->neighbor_guid =
-			read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_GUID);
+			read_csr(ppd->dd, CRK_CRK8051_STS_REMOTE_GUID);
 		ppd->neighbor_port_number =
-			read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_PORT_NO) &
+			read_csr(ppd->dd, CRK_CRK8051_STS_REMOTE_PORT_NO) &
 				CRK_CRK8051_STS_REMOTE_PORT_NO_VAL_SMASK;
 		ppd->neighbor_type =
-			read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_NODE_TYPE) &
+			read_csr(ppd->dd, CRK_CRK8051_STS_REMOTE_NODE_TYPE) &
 				CRK_CRK8051_STS_REMOTE_NODE_TYPE_VAL_SMASK;
 		ppd->neighbor_fm_security =
-			read_8051_csr(ppd, CRK_CRK8051_STS_REMOTE_FM_SECURITY) &
+			read_csr(ppd->dd, CRK_CRK8051_STS_REMOTE_FM_SECURITY) &
 				CRK_CRK8051_STS_REMOTE_FM_SECURITY_DISABLED_SMASK;
 
 		ppd_dev_info(ppd,
@@ -1974,8 +1907,8 @@ static void handle_verify_cap(struct work_struct *work)
 		crc_val = HFI_LCB_CRC_16B;
 
 	ppd_dev_info(ppd, "Final LCB CRC mode: %d\n", (int)crc_val);
-	write_fzc_csr(ppd, FZC_LCB_CFG_CRC_MODE,
-		      (u64)crc_val << FZC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
+	write_csr(ppd->dd, OC_LCB_CFG_CRC_MODE,
+		      (u64)crc_val << OC_LCB_CFG_CRC_MODE_TX_VAL_SHIFT);
 #if 0
 	/* set (14b only) or clear sideband credit */
 	reg = read_csr(dd, SEND_CM_CTRL);
@@ -2140,7 +2073,7 @@ static void hfi_handle_host_irq(struct hfi_pportdata *ppd)
 {
 	u64 reg, msg, err;
 
-	reg = read_8051_csr(ppd, CRK_CRK8051_DBG_ERR_INFO_SET_BY_8051);
+	reg = read_csr(ppd->dd, CRK_CRK8051_DBG_ERR_INFO_SET_BY_8051);
 	msg = HFI_SET_BY_8051_SPLIT(reg, HOST_MSG);
 	err = HFI_SET_BY_8051_SPLIT(reg, ERROR);
 
@@ -2159,7 +2092,7 @@ static void hfi_handle_host_irq(struct hfi_pportdata *ppd)
 	if (!err && !msg)
 		ppd_dev_err(ppd, "Unhandled 8051 interrupt!\n");
 
-	write_8051_csr(ppd, CRK_CRK8051_ERR_CLR,
+	write_csr(ppd->dd, CRK_CRK8051_ERR_CLR,
 		       CRK_CRK8051_ERR_CLR_SET_BY_8051_SMASK);
 
 	/* TODO: take care other interrupts */
@@ -2245,7 +2178,7 @@ void hfi_handle_fpc_uncorrectable_error(struct hfi_devdata *dd, u64 reg,
 	ppd = to_hfi_ppd(dd, 1);
 	if (!(ppd->err_info_uncorrectable &
 		OPA_EI_STATUS_SMASK)) {
-		info = hfi_read_lm_fpc_csr(ppd,
+		info = read_csr(ppd->dd,
 					   FXR_FPC_ERR_INFO_UNCORRECTABLE);
 		/* save the error code and set the status bit */
 		ppd->err_info_uncorrectable = info
@@ -2277,7 +2210,7 @@ void hfi_handle_fpc_fmconfig_error(struct hfi_devdata *dd, u64 reg,
 	int do_bounce = 0;
 
 	ppd = to_hfi_ppd(dd, 1);
-	info = hfi_read_lm_fpc_csr(ppd, FXR_FPC_ERR_INFO_FMCONFIG);
+	info = read_csr(ppd->dd, FXR_FPC_ERR_INFO_FMCONFIG);
 	if (!(ppd->err_info_fmconfig & OPA_EI_STATUS_SMASK)) {
 		ppd->err_info_fmconfig = info & OPA_EI_CODE_SMASK;
 		ppd->err_info_fmconfig |= OPA_EI_STATUS_SMASK;
@@ -2341,11 +2274,11 @@ void hfi_handle_fpc_rcvport_error(struct hfi_devdata *dd, u64 reg,
 	int do_bounce = 0;
 
 	ppd = to_hfi_ppd(dd, 1);
-	info = hfi_read_lm_fpc_csr(ppd,
+	info = read_csr(ppd->dd,
 				   FXR_FPC_ERR_INFO_PORTRCV);
-	hdr0 = hfi_read_lm_fpc_csr(ppd,
+	hdr0 = read_csr(ppd->dd,
 				   FXR_FPC_ERR_INFO_PORTRCV_HDR0_A);
-	hdr1 = hfi_read_lm_fpc_csr(ppd,
+	hdr1 = read_csr(ppd->dd,
 				   FXR_FPC_ERR_INFO_PORTRCV_HDR1_A);
 	if (!(ppd->err_info_rcvport.status_and_code &
 		OPA_EI_STATUS_SMASK)) {
@@ -2418,11 +2351,11 @@ int hfi2_enable_8051_intr(struct hfi_pportdata *ppd)
 		goto _return;
 
 	/* enable 8051 interrupt */
-	reg = read_8051_csr(ppd, CRK_CRK8051_ERR_EN_HOST);
-	write_8051_csr(ppd, CRK_CRK8051_ERR_EN_HOST, reg |
+	reg = read_csr(ppd->dd, CRK_CRK8051_ERR_EN_HOST);
+	write_csr(ppd->dd, CRK_CRK8051_ERR_EN_HOST, reg |
 		CRK_CRK8051_ERR_EN_HOST_SET_BY_8051_SMASK);
-	reg = read_8051_csr(ppd, CRK_CRK8051_ERR_CLR);
-	write_8051_csr(ppd,
+	reg = read_csr(ppd->dd, CRK_CRK8051_ERR_CLR);
+	write_csr(ppd->dd,
 		       CRK_CRK8051_ERR_CLR, reg |
 		       CRK_CRK8051_ERR_CLR_SET_BY_8051_SMASK);
  _return:
@@ -2445,8 +2378,8 @@ int hfi2_disable_8051_intr(struct hfi_pportdata *ppd)
 		goto _return;
 
 	/* disable 8051 interrupt */
-	reg = read_8051_csr(ppd, CRK_CRK8051_ERR_EN_HOST);
-	write_8051_csr(ppd, CRK_CRK8051_ERR_EN_HOST, reg &
+	reg = read_csr(ppd->dd, CRK_CRK8051_ERR_EN_HOST);
+	write_csr(ppd->dd, CRK_CRK8051_ERR_EN_HOST, reg &
 		~CRK_CRK8051_ERR_EN_HOST_SET_BY_8051_SMASK);
  _return:
 	return ret;
@@ -2619,7 +2552,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 			mnh_start(ppd);
 
 		/* Hand LED control to the HW */
-		write_fzc_csr(ppd, FZC_LCB_CFG_LED, 0);
+		write_csr(ppd->dd, OC_LCB_CFG_LED, 0);
 
 		if (ppd->host_link_state != HLS_DN_OFFLINE) {
 			ret = goto_offline(ppd, ppd->remote_link_down_reason);

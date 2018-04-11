@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_tx_otr_msg_top_CSRS_H__
@@ -291,7 +291,8 @@ typedef union {
     struct {
         uint64_t               ENABLE  :  1; // Enable small headers. If set to 1'b1, small headers are enabled. If set to 1'b0, all packets are forced to use long header formats.
         uint64_t              PKEY_8B  : 16; // Pkey value for enabling the Small Header usage in the Portals packets. Small Header can only be used if the PKEY in the command matches the configured PKEY_8B CSR field, else packets would be forced to use the 16B Headers.
-        uint64_t       Reserved_63_17  : 47; // Unused
+        uint64_t              EXT_ACK  :  1; // Forces 8B Basic ACKs to be extended to 16B Extended ACK. If set to 1'b1, OTR will turn 8B ACK requests to RXDMA into 16B ACK requests.
+        uint64_t       Reserved_63_18  : 46; // Unused
     } field;
     uint64_t val;
 } TXOTR_MSG_CFG_SMALL_HEADER_t;
@@ -398,7 +399,7 @@ typedef union {
         uint64_t   cts_queue_overflow  :  1; // Overflow detected in CTS queues in BPE. See TXOTR_MSG_ERR_INFO_CTS_QUEUE_BE CSR for error information. ERR_CATEGORY_HFI
         uint64_t    timeout_queue_mbe  :  1; // Multi bit error in Timeout queues. See TXOTR_MSG_ERR_INFO_TIMEOUT_QUEUE_BE CSR for error information. ERR_CATEGORY_HFI
         uint64_t    timeout_queue_sbe  :  1; // Single bit error in Timeout queues. See TXOTR_MSG_ERR_INFO_TIMEOUT_QUEUE_BE CSR for error information. ERR_CATEGORY_CORRECTABLE
-        uint64_t timeout_queue_undflow  :  1; // Under flow detected in the Timeout queues. See TXOTR_MSG_ERR_INFO_TIMEOUT_QUEUE_BE CSR for error information.ERR_CATEGORY_HFI
+        uint64_t timeout_queue_undflow  :  1; // Under flow detected in the Timeout queues. See TXOTR_MSG_ERR_INFO_TIMEOUT_QUEUE_BE CSR for error information. ERR_CATEGORY_HFI
         uint64_t timeout_queue_overflow  :  1; // Overflow detected in Timeout queues. See TXOTR_MSG_ERR_INFO_TIMEOUT_QUEUE_BE CSR for error information. ERR_CATEGORY_HFI
         uint64_t   nack_oos_queue_mbe  :  1; // Multi bit error in NACK OOS queues. See TXOTR_MSG_ERR_INFO_NACK_OOS_QUEUE_BE CSR for error information. ERR_CATEGORY_HFI
         uint64_t   nack_oos_queue_sbe  :  1; // Single bit error in NACK OOS queues. See TXOTR_MSG_ERR_INFO_NACK_OOS_QUEUE_BE CSR for error information. ERR_CATEGORY_CORRECTABLE
@@ -564,9 +565,13 @@ typedef union {
 // TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1 desc:
 typedef union {
     struct {
-        uint64_t                  mbe  :  4; // ECC domain containing the bit error
-        uint64_t                  sbe  :  4; // ECC domain containing the bit error
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t              cmd_mbe  :  4; // ECC domain containing the bit error
+        uint64_t              cmd_sbe  :  4; // ECC domain containing the bit error
+        uint64_t               sb_mbe  :  1; // MBE flag for TXCI SB
+        uint64_t               sb_sbe  :  1; // SBE flag for TXCI SB
+        uint64_t      sb_syndrome_sbe  :  8; // Syndrome captured for sb for a detected SBE
+        uint64_t      sb_syndrome_mbe  :  8; // Syndrome captured for sb for a detected MBE
+        uint64_t       Reserved_63_26  : 38; // Unused
     } field;
     uint64_t val;
 } TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_t;
@@ -966,7 +971,9 @@ typedef union {
     struct {
         uint64_t      cmd_inject_mask  : 32; // Error injection Mask
         uint64_t        cmd_inject_en  :  4; // Error inject enable.
-        uint64_t       Reserved_63_36  : 28; // Unused
+        uint64_t  txci_sb_inject_mask  :  8; // Error injection Mask.
+        uint64_t    txci_sb_inject_en  :  1; // Error inject enable.
+        uint64_t       Reserved_63_45  : 19; // Unused
     } field;
     uint64_t val;
 } TXOTR_MSG_ERR_INJECT_1_t;

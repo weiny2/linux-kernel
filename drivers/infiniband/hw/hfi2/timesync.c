@@ -55,13 +55,12 @@
 #include "link.h"
 #include "timesync.h"
 
-#define HACK_TIMESYNC_1 0x2000040
-#define HACK_TIMESYNC_2 0x2004040
+#define HACK_TIMESYNC_1 (FXR_CRK_LCB_CSRS + 0x70)
 
-#define TS_FAILOVER_0	0x2000048
-#define TS_FAILOVER_1	0x2000050
-#define TS_FAILOVER_2	0x2000058
-#define TS_FAILOVER_3	0x2000060
+#define TS_FAILOVER_0	(FXR_CRK_LCB_CSRS + 0x78)
+#define TS_FAILOVER_1	(FXR_CRK_LCB_CSRS + 0x80)
+#define TS_FAILOVER_2	(FXR_CRK_LCB_CSRS + 0x88)
+#define TS_FAILOVER_3	(FXR_CRK_LCB_CSRS + 0x90)
 
 static int last_clock_id = -1;
 static u64 saved_hack_timesync;
@@ -87,7 +86,7 @@ static void hfi_read_local_time(struct hfi_pportdata *ppd,
 {
 	u64 ns;
 
-	ns = read_fzc_csr(ppd, FZC_LCB_STS_UPPER_LOCAL_TIME);
+	ns = read_csr(ppd->dd, OC_LCB_STS_UPPER_LOCAL_TIME);
 	*ts = ns_to_timespec64(ns);
 }
 
@@ -105,7 +104,7 @@ static void hfi_write_local_time(struct hfi_pportdata *ppd,
 {
 	u64 ns = timespec64_to_ns(ts);
 
-	write_fzc_csr(ppd, FZC_LCB_STS_UPPER_LOCAL_TIME, ns);
+	write_csr(ppd->dd, OC_LCB_STS_UPPER_LOCAL_TIME, ns);
 }
 
 /*
@@ -315,8 +314,8 @@ static int hfi_adjfreq(struct ptp_clock_info *ptp, s32 ppb)
 		}
 	}
 
-	write_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_1, adj &
-		      FZC_LCB_CFG_TIME_SYNC_1_TSYN_INC_MASK);
+	write_csr(ppd->dd, OC_LCB_CFG_TIME_SYNC_1, adj &
+		      OC_LCB_CFG_TIME_SYNC_1_TSYN_INC_MASK);
 	return 0;
 }
 
@@ -538,25 +537,25 @@ static int hfi_read_one_master_reg(struct hfi_pportdata *ppd,
 		 * below to verify that master_low and master_high are from the
 		 * same sample.
 		 */
-		reg = read_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_0);
-		reg |= 0x1L << (FZC_LCB_CFG_TIME_SYNC_0_DISABLE_SNAPS_SHIFT +
+		reg = read_csr(ppd->dd, OC_LCB_CFG_TIME_SYNC_0);
+		reg |= 0x1L << (OC_LCB_CFG_TIME_SYNC_0_DISABLE_SNAPS_SHIFT +
 				3 - master_ts->clkid);
-		write_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_0, reg);
+		write_csr(ppd->dd, OC_LCB_CFG_TIME_SYNC_0, reg);
 
-		master_low = read_fzc_csr(ppd, FZC_LCB_STS_MASTER_TIME_LOW_0 +
+		master_low = read_csr(ppd->dd, OC_LCB_STS_MASTER_TIME_LOW_0 +
 					  0x18 * master_ts->clkid) &
-			FZC_LCB_STS_MASTER_TIME_LOW_0_VAL_SMASK;
-		master_high = read_fzc_csr(ppd, FZC_LCB_STS_MASTER_TIME_HIGH_0 +
+			OC_LCB_STS_MASTER_TIME_LOW_0_VAL_SMASK;
+		master_high = read_csr(ppd->dd, OC_LCB_STS_MASTER_TIME_HIGH_0 +
 					   0x18 * master_ts->clkid) &
-			FZC_LCB_STS_MASTER_TIME_HIGH_0_VAL_SMASK;
-		master_ts->timestamp = read_fzc_csr(ppd,
-				       FZC_LCB_STS_SNAPPED_LOCAL_TIME_0 +
+			OC_LCB_STS_MASTER_TIME_HIGH_0_VAL_SMASK;
+		master_ts->timestamp = read_csr(ppd->dd,
+				       OC_LCB_STS_SNAPPED_LOCAL_TIME_0 +
 						    0x18 * master_ts->clkid);
 		/* temp hack */
-		ns = read_fzc_csr(ppd, FZC_LCB_STS_UPPER_LOCAL_TIME);
+		ns = read_csr(ppd->dd, OC_LCB_STS_UPPER_LOCAL_TIME);
 		/* Enable snaps again */
-		reg &= ~FZC_LCB_CFG_TIME_SYNC_0_DISABLE_SNAPS_SMASK;
-		write_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_0, reg);
+		reg &= ~OC_LCB_CFG_TIME_SYNC_0_DISABLE_SNAPS_SMASK;
+		write_csr(ppd->dd, OC_LCB_CFG_TIME_SYNC_0, reg);
 		/* See if low and high are from the same sample */
 		if ((master_high & 0xff) == (master_low >> 32)) {
 			master_ts->master = (master_high << 32) |
@@ -670,7 +669,7 @@ int hfi_get_ts_master_regs(struct hfi_ibcontext *uc,
 
 static void simics_hack_write_local_time(struct hfi_pportdata *ppd, u64 ns)
 {
-	write_fzc_csr(ppd, FZC_LCB_STS_UPPER_LOCAL_TIME, ns);
+	write_csr(ppd->dd, OC_LCB_STS_UPPER_LOCAL_TIME, ns);
 }
 
 /*
@@ -729,7 +728,7 @@ static void simics_hack_timesync(struct hfi_pportdata *ppd, u64 hack_timesync,
 	master_ts.clkid = clock_id;
 
 	/*
-	 * write_fzc_csr(ppd, FZC_LCB_CFG_TIME_SYNC_1, 0xd5555555);
+	 * write_csr(ppd->dd, OC_LCB_CFG_TIME_SYNC_1, 0xd5555555);
 	 * Don't reset freq register here as ptp subsystem tracks it.
 	 * Use clock_adjtime call.
 	 */

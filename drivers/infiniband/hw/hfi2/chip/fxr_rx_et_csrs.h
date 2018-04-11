@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_rx_et_CSRS_H__
@@ -10,7 +10,8 @@ typedef union {
     struct {
         uint64_t  rxdma_to_credit_max  :  4; // Credit max for RxDMA TrigOp request
         uint64_t   rxhp_to_credit_max  :  4; // Credit max for RxHP TrigOp Insert/Append
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t rxdma_to_inv_credit_max  :  4; // Credit max for RxDMA TrigOp Invalidate request
+        uint64_t       Reserved_63_12  : 52; // Unused
     } field;
     uint64_t val;
 } RXET_CFG_CREDITS_t;
@@ -247,15 +248,15 @@ typedef union {
 // RXET_ERR_STS desc:
 typedef union {
     struct {
-        uint64_t       eb_cam_par_err  :  1; // Parity error detected on event cam. This is fatal.
-        uint64_t eq_desc_cache_tag_mbe  :  1; // EQ Desc Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.7.13, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_MBE - RXET Error Info EQ Desc Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
-        uint64_t eq_desc_cache_tag_sbe  :  1; // EQ Desc Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.7.12, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_SBE - RXET Error Info EQ Desc Cache Tag SBE'
-        uint64_t eq_desc_cache_data_mbe  :  1; // EQ Desc Cache data mbe. The 'or' of the 2 ecc domains. Error information: Section 29.16.7.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'
-        uint64_t eq_desc_cache_data_sbe  :  1; // EQ Desc Cache data sbe. The 'or' of the 2 ecc domains. Error information: . Section 29.16.7.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'
-        uint64_t trig_op_cache_tag_mbe  :  1; // Trig Op Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 29.16.7.16, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_MBE - RXET Error Info Trig Op Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
-        uint64_t trig_op_cache_tag_sbe  :  1; // Trig Op Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 29.16.7.15, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_SBE - RXET Error Info Trig Op Cache Tag SBE'
-        uint64_t trig_op_cache_data_mbe  :  1; // Trig Op Cache data mbe. The 'or' of the 16 ecc domains. Error information: Section 29.16.7.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'
-        uint64_t trig_op_cache_data_sbe  :  1; // Trig Op Cache data sbe. The 'or' of the 16ecc domains. Error information: . Section 29.16.7.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'
+        uint64_t           Reserved_0  :  1; // Unused
+        uint64_t eq_desc_cache_tag_mbe  :  1; // EQ Desc Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 32.16.7.13, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_MBE - RXET Error Info EQ Desc Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
+        uint64_t eq_desc_cache_tag_sbe  :  1; // EQ Desc Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 32.16.7.12, ' RXET_ERR_INFO_EQ_DESC_CACHE_TAG_SBE - RXET Error Info EQ Desc Cache Tag SBE'
+        uint64_t eq_desc_cache_data_mbe  :  1; // EQ Desc Cache data mbe. The 'or' of the 2 ecc domains. Error information: Section 32.16.7.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'
+        uint64_t eq_desc_cache_data_sbe  :  1; // EQ Desc Cache data sbe. The 'or' of the 2 ecc domains. Error information: . Section 32.16.7.14, ' RXET_ERR_INFO_EQ_DESC_CACHE_DATA_SBE_MBE - RXET Error Info EQ Desc Cache Data SBE/MBE'
+        uint64_t trig_op_cache_tag_mbe  :  1; // Trig Op Cache tag mbe.The 'or' of the 2 ecc domains. Error information: Section 32.16.7.16, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_MBE - RXET Error Info Trig Op Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
+        uint64_t trig_op_cache_tag_sbe  :  1; // Trig Op Cache tag sbe.The 'or' of the 2 ecc domains. Error information: . Section 32.16.7.15, ' RXET_ERR_INFO_TRIG_OP_CACHE_TAG_SBE - RXET Error Info Trig Op Cache Tag SBE'
+        uint64_t trig_op_cache_data_mbe  :  1; // Trig Op Cache data mbe. The 'or' of the 16 ecc domains. Error information: Section 32.16.7.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'
+        uint64_t trig_op_cache_data_sbe  :  1; // Trig Op Cache data sbe. The 'or' of the 16ecc domains. Error information: . Section 32.16.7.17, ' RXET_ERR_INFO_TRIG_OP_CACHE_DATA_SBE - RXET Error Info Trig Op Cache Data SBE'
         uint64_t toh_trig_out_overflow  :  1; // Overflow on TrigOp response to RxDMA - 4
         uint64_t toh_cache_req_fifo_overflow  :  1; // Overflow on TrigOp cache active requests - 8
         uint64_t toh_trig_in_fifo_overflow  :  1; // Overflow in TrigOp holding FIFO - 4
@@ -276,9 +277,9 @@ typedef union {
         uint64_t          toa_err_mbe  :  1; // MBE detected on TrigOp Append request TrigOp data. Checked on 8 processing stages so is *or* of all.
         uint64_t          toa_err_sbe  :  1; // SBE detected on TrigOp Append request TrigOp data. Checked on 8 processing stages so is *or* of all.
         uint64_t    to_cache_resp_err  :  1; // resp_err from HiArb for TrigOp cache request
-        uint64_t      to_cache_fr_err  :  1; // Framing error on TrigOp cache response from HiArb.
+        uint64_t          Reserved_29  :  1; // Unused
         uint64_t    eq_cache_resp_err  :  1; // resp_err from HiArb for EqDesc cache request
-        uint64_t      eq_cache_fr_err  :  1; // Framing error on EqDesc cache response from HiArb.
+        uint64_t toh_trig_invalidate_fifo_overflow  :  1; // Overflow in TrigOp Invalidate holding FIFO - 8
         uint64_t              toa_err  :  1; // TrigOp Append request error - CT response not written *or* CT from RxDMA with no matching TrigOp from RxHP *or* TOA received with no TO buffers available.
         uint64_t     eb_cam_write_err  :  1; // New event with no empty slots in CAM/event buffer.
         uint64_t     eb_cam_match_err  :  1; // No valid match in Event Buffer for request from RxDMA.

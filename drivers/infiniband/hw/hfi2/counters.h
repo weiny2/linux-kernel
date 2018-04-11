@@ -54,7 +54,7 @@
 #include "hfi2.h"
 #include "chip/fxr_linkmux_fpc_defs.h"
 #include "chip/fxr_linkmux_tp_defs.h"
-#include "chip/fxr_fc_defs.h"
+#include "chip/fxr_oc_defs.h"
 
 #define CNTR_NORMAL	0x0
 #define CNTR_VL		0x1

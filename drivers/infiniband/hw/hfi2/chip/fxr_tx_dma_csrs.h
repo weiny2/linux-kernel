@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_tx_dma_CSRS_H__
@@ -176,39 +176,42 @@ typedef union {
 // TXDMA_ERR_STS desc:
 typedef union {
     struct {
-        uint64_t  pkt_desc_cor_sb_err  :  1; // Packet descriptor from OTR contained a correctable sb error
-        uint64_t  pkt_desc_unc_sb_err  :  1; // Packet descriptor from OTR contained a uncorrectable sb error
-        uint64_t pkt_desc_cor_dat_err  :  1; // Packet descriptor from OTR contained a correctable data error
-        uint64_t pkt_desc_unc_dat_err  :  1; // Packet descriptor from OTR contained a uncorrectable data error
-        uint64_t     pkt_desc_gen_err  :  1; // Packet descriptor generation error received from OTR
-        uint64_t         inpq_cor_err  :  1; // Input queue FIFO encountered a correctable error
-        uint64_t         inpq_unc_err  :  1; // Input queue FIFO encountered a uncorrectable error
-        uint64_t       xlateq_cor_err  :  1; // Translation queue FIFO encountered a correctable error
-        uint64_t       xlateq_unc_err  :  1; // Translation queue FIFO encountered a uncorrectable error
-        uint64_t        inpq_overflow  :  1; // Input queue FIFO overflowed
-        uint64_t        at_status_err  :  1; // Translation status error
-        uint64_t          timeout_err  :  1; // Timeout error
-        uint64_t  mem_rsp_hdr_cor_err  :  1; // Memory response header contained a correctable error
-        uint64_t  mem_rsp_hdr_unc_err  :  1; // Memory response header contained a uncorrectable error
-        uint64_t  mem_rsp_dat_cor_err  :  1; // Memory response data contained a correctable error
-        uint64_t  mem_rsp_dat_unc_err  :  1; // Memory response data contained a uncorrectable error
-        uint64_t          orb_cor_err  :  1; // ORB memory encountered a correctable error
-        uint64_t          orb_unc_err  :  1; // ORB memory encountered a uncorrectable error
-        uint64_t          wce_cor_err  :  1; // Write combining memory encountered a correctable error
-        uint64_t          wce_unc_err  :  1; // Write combining memory encountered a uncorrectable error
-        uint64_t      pkt_buf_cor_err  :  1; // Packet buffer memory encountered a correctable error
-        uint64_t      pkt_buf_unc_err  :  1; // Packet buffer memory encountered a uncorrectable error
-        uint64_t         rspq_cor_err  :  1; // Response queue FIFO encountered a correctable error
-        uint64_t         rspq_unc_err  :  1; // Response queue FIFO encountered a uncorrectable error
-        uint64_t        rspq_overflow  :  1; // Response queue FIFO overflowed
-        uint64_t       lm0_credit_err  :  1; // The credit acknowledge from LM0 contained a parity error
-        uint64_t       lm1_credit_err  :  1; // The credit acknowledge from LM1 contained a parity error
-        uint64_t      buf_trk_cor_err  :  1; // Buffer tracking memory encountered a correctable error
-        uint64_t      buf_trk_unc_err  :  1; // Buffer tracking memory encountered a uncorrectable error
-        uint64_t      pkt_trk_cor_err  :  1; // Packet tracking memory encountered a correctable error
-        uint64_t      pkt_trk_unc_err  :  1; // Packet tracking memory encountered a uncorrectable error
-        uint64_t      mem_rsp_sts_err  :  1; // Memory response contained a status error
-        uint64_t       Reserved_63_32  : 32; // Unused
+        uint64_t  pkt_desc_cor_sb_err  :  1; // Packet descriptor from OTR contained a correctable sb error ERR_CATEGORY_CORRECTABLE
+        uint64_t  pkt_desc_unc_sb_err  :  1; // Packet descriptor from OTR contained a uncorrectable sb error ERR_CATEGORY_TRANSACTION
+        uint64_t pkt_desc_cor_dat_err  :  1; // Packet descriptor from OTR contained a correctable data error ERR_CATEGORY_CORRECTABLE
+        uint64_t pkt_desc_unc_dat_err  :  1; // Packet descriptor from OTR contained a uncorrectable data error ERR_CATEGORY_TRANSACTION
+        uint64_t     pkt_desc_gen_err  :  1; // Packet descriptor generation error received from OTR ERR_CATEGORY_TRANSACTION
+        uint64_t         inpq_cor_err  :  1; // Input queue FIFO encountered a correctable error ERR_CATEGORY_CORRECTABLE
+        uint64_t         inpq_unc_err  :  1; // Input queue FIFO encountered a uncorrectable error ERR_CATEGORY_HFI
+        uint64_t       xlateq_cor_err  :  1; // Translation queue FIFO encountered a correctable error ERR_CATEGORY_CORRECTABLE
+        uint64_t       xlateq_unc_err  :  1; // Translation queue FIFO encountered a uncorrectable error ERR_CATEGORY_HFI
+        uint64_t        inpq_overflow  :  1; // Input queue FIFO overflowed ERR_CATEGORY_HFI
+        uint64_t        at_status_err  :  1; // Translation status error ERR_CATEGORY_INFO
+        uint64_t          timeout_err  :  1; // Timeout error ERR_CATEGORY_TRANSACTION
+        uint64_t  mem_rsp_hdr_cor_err  :  1; // Memory response header contained a correctable error ERR_CATEGORY_CORRECTABLE
+        uint64_t  mem_rsp_hdr_unc_err  :  1; // Memory response header contained a uncorrectable error ERR_CATEGORY_TRANSACTION
+        uint64_t  mem_rsp_dat_cor_err  :  1; // Memory response data contained a correctable error ERR_CATEGORY_CORRECTABLE
+        uint64_t  mem_rsp_dat_unc_err  :  1; // Memory response data contained a uncorrectable error ERR_CATEGORY_TRANSACTION
+        uint64_t          orb_cor_err  :  1; // ORB memory encountered a correctable error ERR_CATEGORY_CORRECTABLE
+        uint64_t          orb_unc_err  :  1; // ORB memory encountered a uncorrectable error ERR_CATEGORY_HFI
+        uint64_t          hdr_cor_err  :  1; // Header FIFO encountered a correctable error ERR_CATEGORY_CORRECTABLE
+        uint64_t          hdr_unc_err  :  1; // Header FIFO encountered a uncorrectable error ERR_CATEGORY_HFI
+        uint64_t      pkt_buf_cor_err  :  1; // Packet buffer memory encountered a correctable error ERR_CATEGORY_CORRECTABLE
+        uint64_t      pkt_buf_unc_err  :  1; // Packet buffer memory encountered a uncorrectable error ERR_CATEGORY_TRANSACTION
+        uint64_t         rspq_cor_err  :  1; // Response queue FIFO encountered a correctable error ERR_CATEGORY_CORRECTABLE
+        uint64_t         rspq_unc_err  :  1; // Response queue FIFO encountered a uncorrectable error ERR_CATEGORY_TRANSACTION
+        uint64_t        rspq_overflow  :  1; // Response queue FIFO overflowed ERR_CATEGORY_HFI
+        uint64_t       lm0_credit_err  :  1; // The credit acknowledge from LM0 contained a parity error ERR_CATEGORY_HFI
+        uint64_t       lm1_credit_err  :  1; // The credit acknowledge from LM1 contained a parity error ERR_CATEGORY_HFI
+        uint64_t      buf_trk_cor_err  :  1; // Buffer tracking memory encountered a correctable error ERR_CATEGORY_CORRECTABLE
+        uint64_t      buf_trk_unc_err  :  1; // Buffer tracking memory encountered a uncorrectable error ERR_CATEGORY_HFI
+        uint64_t      pkt_trk_cor_err  :  1; // Packet tracking memory encountered a correctable error ERR_CATEGORY_CORRECTABLE
+        uint64_t      pkt_trk_unc_err  :  1; // Packet tracking memory encountered a uncorrectable error ERR_CATEGORY_HFI
+        uint64_t      mem_rsp_sts_err  :  1; // Memory response contained a status error ERR_CATEGORY_TRANSACTION
+        uint64_t   mem_tid_parity_err  :  1; // Memory request TID tracking encountered a parity error ERR_CATEGORY_HFI
+        uint64_t   pkt_trk_parity_err  :  1; // Packet tracking structure encountered a parity error ERR_CATEGORY_HFI
+        uint64_t      inpq_parity_err  :  1; // Packing control input queue encountered a parity error ERR_CATEGORY_HFI
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_STS_t;
@@ -216,8 +219,8 @@ typedef union {
 // TXDMA_ERR_CLR desc:
 typedef union {
     struct {
-        uint64_t            error_clr  : 32; // Clear the error
-        uint64_t       Reserved_63_32  : 32; // Unused
+        uint64_t            error_clr  : 35; // Clear the error
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_CLR_t;
@@ -225,8 +228,8 @@ typedef union {
 // TXDMA_ERR_FRC desc:
 typedef union {
     struct {
-        uint64_t            force_err  : 32; // Force an error
-        uint64_t       Reserved_63_32  : 32; // Unused
+        uint64_t            force_err  : 35; // Force an error
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_FRC_t;
@@ -234,8 +237,8 @@ typedef union {
 // TXDMA_ERR_EN_HOST desc:
 typedef union {
     struct {
-        uint64_t              host_en  : 32; // Enable host interrupt
-        uint64_t       Reserved_63_32  : 32; // Unused
+        uint64_t              host_en  : 35; // Enable host interrupt
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_EN_HOST_t;
@@ -243,8 +246,8 @@ typedef union {
 // TXDMA_ERR_FIRST_HOST desc:
 typedef union {
     struct {
-        uint64_t           first_host  : 32; // First host error
-        uint64_t       Reserved_63_32  : 32; // Unused
+        uint64_t           first_host  : 35; // First host error
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_FIRST_HOST_t;
@@ -252,8 +255,8 @@ typedef union {
 // TXDMA_ERR_EN_BMC desc:
 typedef union {
     struct {
-        uint64_t               bmc_en  : 32; // BMC interrupt enable
-        uint64_t       Reserved_63_32  : 32; // Unused
+        uint64_t               bmc_en  : 35; // BMC interrupt enable
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_EN_BMC_t;
@@ -261,8 +264,8 @@ typedef union {
 // TXDMA_ERR_FIRST_BMC desc:
 typedef union {
     struct {
-        uint64_t            first_bmc  : 32; // First BMC error
-        uint64_t       Reserved_63_32  : 32; // Unused
+        uint64_t            first_bmc  : 35; // First BMC error
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_FIRST_BMC_t;
@@ -270,8 +273,8 @@ typedef union {
 // TXDMA_ERR_EN_QUAR desc:
 typedef union {
     struct {
-        uint64_t              quar_en  : 32; // Quarantine interrupt enable
-        uint64_t       Reserved_63_32  : 32; // Unused
+        uint64_t              quar_en  : 35; // Quarantine interrupt enable
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_EN_QUAR_t;
@@ -279,8 +282,8 @@ typedef union {
 // TXDMA_ERR_FIRST_QUAR desc:
 typedef union {
     struct {
-        uint64_t           first_quar  : 32; // First quarantine error
-        uint64_t       Reserved_63_32  : 32; // Unused
+        uint64_t           first_quar  : 35; // First quarantine error
+        uint64_t       Reserved_63_35  : 29; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_FIRST_QUAR_t;
@@ -388,8 +391,8 @@ typedef union {
 // TXDMA_ERR_INFO_TIMEOUT desc:
 typedef union {
     struct {
-        uint64_t                  TID  :  8; // The TID which timed out
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t                  TID  :  9; // The TID which timed out
+        uint64_t        Reserved_63_9  : 55; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_INFO_TIMEOUT_t;
@@ -435,9 +438,9 @@ typedef union {
 // TXDMA_ERR_INFO_ORB_COR desc:
 typedef union {
     struct {
-        uint64_t              address  :  8; // Address of the error
+        uint64_t              address  :  9; // Address of the error
         uint64_t             syndrome  :  8; // Syndrome of the error
-        uint64_t       Reserved_63_16  : 48; // Unused
+        uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_INFO_ORB_COR_t;
@@ -445,42 +448,42 @@ typedef union {
 // TXDMA_ERR_INFO_ORB_UNC desc:
 typedef union {
     struct {
-        uint64_t              address  :  8; // Address of the error
+        uint64_t              address  :  9; // Address of the error
         uint64_t             syndrome  :  8; // Syndrome of the error
-        uint64_t       Reserved_63_16  : 48; // Unused
+        uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_INFO_ORB_UNC_t;
 
-// TXDMA_ERR_INFO_WCE_COR desc:
+// TXDMA_ERR_INFO_HDR_COR desc:
 typedef union {
     struct {
-        uint64_t              address  :  8; // Address corresponding to the lowest bit set in domain
-        uint64_t               domain  :  5; // Mask of the domains which encountered an error
-        uint64_t             syndrome  :  8; // Syndrome corresponding to the lowest bits set in domain
-        uint64_t       Reserved_63_21  : 43; // Unused
+        uint64_t              address  :  5; // Address corresponding to the lowest bit set in domain
+        uint64_t               domain  :  1; // FIFO which encountered an error
+        uint64_t             syndrome  :  7; // Syndrome corresponding to the lowest bits set in domain
+        uint64_t       Reserved_63_13  : 51; // Unused
     } field;
     uint64_t val;
-} TXDMA_ERR_INFO_WCE_COR_t;
+} TXDMA_ERR_INFO_HDR_COR_t;
 
-// TXDMA_ERR_INFO_WCE_UNC desc:
+// TXDMA_ERR_INFO_HDR_UNC desc:
 typedef union {
     struct {
-        uint64_t              address  :  8; // Address corresponding to the lowest bit set in domain
-        uint64_t               domain  :  5; // Mask of error domains which encountered an error
-        uint64_t             syndrome  :  8; // Syndrome corresponding to the lowest bit set in domain
-        uint64_t       Reserved_63_21  : 43; // Unused
+        uint64_t              address  :  5; // Address corresponding to the lowest bit set in domain
+        uint64_t               domain  :  1; // FIFO which encountered an error
+        uint64_t             syndrome  :  7; // Syndrome corresponding to the lowest bit set in domain
+        uint64_t       Reserved_63_13  : 51; // Unused
     } field;
     uint64_t val;
-} TXDMA_ERR_INFO_WCE_UNC_t;
+} TXDMA_ERR_INFO_HDR_UNC_t;
 
 // TXDMA_ERR_INFO_PKT_BUF_COR desc:
 typedef union {
     struct {
-        uint64_t              address  : 12; // Address corresponding to the lowest bit set in domain
+        uint64_t              address  : 14; // Address corresponding to the lowest bit set in domain
         uint64_t               domain  :  4; // Mask of the domains which contained an error
         uint64_t             syndrome  :  8; // Syndrome corresponding to the lowest bit set in domain
-        uint64_t       Reserved_63_24  : 40; // Unused
+        uint64_t       Reserved_63_26  : 38; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_INFO_PKT_BUF_COR_t;
@@ -488,10 +491,10 @@ typedef union {
 // TXDMA_ERR_INFO_PKT_BUF_UNC desc:
 typedef union {
     struct {
-        uint64_t              address  : 12; // Address corresponding to the lowest bit set in domain
+        uint64_t              address  : 14; // Address corresponding to the lowest bit set in domain
         uint64_t               domain  :  4; // Mask of the domains which contained an error
         uint64_t             syndrome  :  8; // Syndrome corresponding to the lowest bit set in domain
-        uint64_t       Reserved_63_24  : 40; // Unused
+        uint64_t       Reserved_63_26  : 38; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_INFO_PKT_BUF_UNC_t;
@@ -548,9 +551,9 @@ typedef union {
 // TXDMA_ERR_INFO_BUF_TRK_COR desc:
 typedef union {
     struct {
-        uint64_t              address  : 12; // Address of the error
-        uint64_t             syndrome  :  5; // Syndrome of the error
-        uint64_t       Reserved_63_17  : 47; // Unused
+        uint64_t              address  : 14; // Address of the error
+        uint64_t             syndrome  :  6; // Syndrome of the error
+        uint64_t       Reserved_63_20  : 44; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_INFO_BUF_TRK_COR_t;
@@ -558,9 +561,9 @@ typedef union {
 // TXDMA_ERR_INFO_BUF_TRK_UNC desc:
 typedef union {
     struct {
-        uint64_t              address  : 12; // Address of the error
-        uint64_t             syndrome  :  5; // Syndrome of the error
-        uint64_t       Reserved_63_17  : 47; // Unused
+        uint64_t              address  : 14; // Address of the error
+        uint64_t             syndrome  :  6; // Syndrome of the error
+        uint64_t       Reserved_63_20  : 44; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_INFO_BUF_TRK_UNC_t;
@@ -568,9 +571,9 @@ typedef union {
 // TXDMA_ERR_INFO_PKT_TRK_COR desc:
 typedef union {
     struct {
-        uint64_t              address  :  7; // Address of the error
-        uint64_t             syndrome  :  6; // Syndrome of the error
-        uint64_t       Reserved_63_13  : 51; // Unused
+        uint64_t              address  :  8; // Address of the error
+        uint64_t             syndrome  :  7; // Syndrome of the error
+        uint64_t       Reserved_63_15  : 49; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_INFO_PKT_TRK_COR_t;
@@ -578,9 +581,9 @@ typedef union {
 // TXDMA_ERR_INFO_PKT_TRK_UNC desc:
 typedef union {
     struct {
-        uint64_t              address  :  7; // Address of the error
-        uint64_t             syndrome  :  6; // Syndrome of the error
-        uint64_t       Reserved_63_13  : 51; // Unused
+        uint64_t              address  :  8; // Address of the error
+        uint64_t             syndrome  :  7; // Syndrome of the error
+        uint64_t       Reserved_63_15  : 49; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_INFO_PKT_TRK_UNC_t;
@@ -589,8 +592,8 @@ typedef union {
 typedef union {
     struct {
         uint64_t                  tid  :  9; // Memory response tid which contained the error
-        uint64_t               status  :  8; // Status that was returned with memory response
-        uint64_t       Reserved_63_17  : 47; // Unused
+        uint64_t               status  :  9; // Status that was returned with memory response
+        uint64_t       Reserved_63_18  : 46; // Unused
     } field;
     uint64_t val;
 } TXDMA_ERR_INFO_MEM_RSP_STATUS_t;
@@ -659,12 +662,12 @@ typedef union {
         uint64_t      inpq_fill_count  :  6; // Number of descriptor flits being held in input queue FIFO
         uint64_t        inpq_va_count  :  3; // Input queues count of virtual addresses in xlate FIFO
         uint64_t     xlate_fill_count  :  3; // Xlate blocks count of virtual addresses in xlate FIFO
-        uint64_t         slots_in_use  : 10; // Count of slots allocated
+        uint64_t         slots_in_use  : 12; // Count of slots allocated
         uint64_t       packet_fill_ip  :  1; // A packet is being assembled from memory
         uint64_t     packet_egress_ip  :  1; // A packet is being sent from the packet buffer to the LM
         uint64_t        packet_enable  :  1; // The packet at the head of the packet buffer is enabled to send to the LM
         uint64_t            slot_full  :  1; // The slot at the head of the packet buffer is full
-        uint64_t       Reserved_63_26  : 38; // Unused
+        uint64_t       Reserved_63_28  : 36; // Unused
     } field;
     uint64_t val;
 } TXDMA_STS_MC0_TC0_t;
@@ -675,12 +678,12 @@ typedef union {
         uint64_t      inpq_fill_count  :  6; // Number of descriptor flits being held in input queue FIFO
         uint64_t        inpq_va_count  :  3; // Input queues count of virtual addresses in xlate FIFO
         uint64_t     xlate_fill_count  :  3; // Xlate blocks count of virtual addresses in xlate FIFO
-        uint64_t         slots_in_use  : 10; // Count of slots allocated
+        uint64_t         slots_in_use  : 12; // Count of slots allocated
         uint64_t       packet_fill_ip  :  1; // A packet is being assembled from memory
         uint64_t     packet_egress_ip  :  1; // A packet is being sent from the packet buffer to the LM
         uint64_t        packet_enable  :  1; // The packet at the head of the packet buffer is enabled to send to the LM
         uint64_t            slot_full  :  1; // The slot at the head of the packet buffer is full
-        uint64_t       Reserved_63_26  : 38; // Unused
+        uint64_t       Reserved_63_28  : 36; // Unused
     } field;
     uint64_t val;
 } TXDMA_STS_MC0_TC1_t;
@@ -691,12 +694,12 @@ typedef union {
         uint64_t      inpq_fill_count  :  6; // Number of descriptor flits being held in input queue FIFO
         uint64_t        inpq_va_count  :  3; // Input queues count of virtual addresses in xlate FIFO
         uint64_t     xlate_fill_count  :  3; // Xlate blocks count of virtual addresses in xlate FIFO
-        uint64_t         slots_in_use  : 10; // Count of slots allocated
+        uint64_t         slots_in_use  : 12; // Count of slots allocated
         uint64_t       packet_fill_ip  :  1; // A packet is being assembled from memory
         uint64_t     packet_egress_ip  :  1; // A packet is being sent from the packet buffer to the LM
         uint64_t        packet_enable  :  1; // The packet at the head of the packet buffer is enabled to send to the LM
         uint64_t            slot_full  :  1; // The slot at the head of the packet buffer is full
-        uint64_t       Reserved_63_26  : 38; // Unused
+        uint64_t       Reserved_63_28  : 36; // Unused
     } field;
     uint64_t val;
 } TXDMA_STS_MC0_TC2_t;
@@ -707,12 +710,12 @@ typedef union {
         uint64_t      inpq_fill_count  :  6; // Number of descriptor flits being held in input queue FIFO
         uint64_t        inpq_va_count  :  3; // Input queues count of virtual addresses in xlate FIFO
         uint64_t     xlate_fill_count  :  3; // Xlate blocks count of virtual addresses in xlate FIFO
-        uint64_t         slots_in_use  : 10; // Count of slots allocated
+        uint64_t         slots_in_use  : 12; // Count of slots allocated
         uint64_t       packet_fill_ip  :  1; // A packet is being assembled from memory
         uint64_t     packet_egress_ip  :  1; // A packet is being sent from the packet buffer to the LM
         uint64_t        packet_enable  :  1; // The packet at the head of the packet buffer is enabled to send to the LM
         uint64_t            slot_full  :  1; // The slot at the head of the packet buffer is full
-        uint64_t       Reserved_63_26  : 38; // Unused
+        uint64_t       Reserved_63_28  : 36; // Unused
     } field;
     uint64_t val;
 } TXDMA_STS_MC0_TC3_t;
@@ -723,13 +726,13 @@ typedef union {
         uint64_t      inpq_fill_count  :  6; // Number of descriptor flits being held in input queue FIFO
         uint64_t        inpq_va_count  :  3; // Input queues count of virtual addresses in xlate FIFO
         uint64_t     xlate_fill_count  :  3; // Xlate blocks count of virtual addresses in xlate FIFO
-        uint64_t         slots_in_use  : 10; // Count of slots allocated
+        uint64_t         slots_in_use  : 12; // Count of slots allocated
         uint64_t       packet_fill_ip  :  1; // A packet is being assembled from memory
         uint64_t     packet_egress_ip  :  1; // A packet is being sent from the packet buffer to the LM
         uint64_t        packet_enable  :  1; // The packet at the head of the packet buffer is enabled to send to the LM
         uint64_t            slot_full  :  1; // The slot at the head of the packet buffer is full
         uint64_t         ack_fill_cnt  :  5; // Count of acknowledge packets in FIFO
-        uint64_t       Reserved_63_31  : 33; // Unused
+        uint64_t       Reserved_63_33  : 31; // Unused
     } field;
     uint64_t val;
 } TXDMA_STS_MC1_TC0_t;
@@ -740,13 +743,13 @@ typedef union {
         uint64_t      inpq_fill_count  :  6; // Number of descriptor flits being held in input queue FIFO
         uint64_t        inpq_va_count  :  3; // Input queues count of virtual addresses in xlate FIFO
         uint64_t     xlate_fill_count  :  3; // Xlate blocks count of virtual addresses in xlate FIFO
-        uint64_t         slots_in_use  : 10; // Count of slots allocated
+        uint64_t         slots_in_use  : 12; // Count of slots allocated
         uint64_t       packet_fill_ip  :  1; // A packet is being assembled from memory
         uint64_t     packet_egress_ip  :  1; // A packet is being sent from the packet buffer to the LM
         uint64_t        packet_enable  :  1; // The packet at the head of the packet buffer is enabled to send to the LM
         uint64_t            slot_full  :  1; // The slot at the head of the packet buffer is full
         uint64_t         ack_fill_cnt  :  5; // Count of acknowledge packets in FIFO
-        uint64_t       Reserved_63_31  : 33; // Unused
+        uint64_t       Reserved_63_33  : 31; // Unused
     } field;
     uint64_t val;
 } TXDMA_STS_MC1_TC1_t;
@@ -757,13 +760,13 @@ typedef union {
         uint64_t      inpq_fill_count  :  6; // Number of descriptor flits being held in input queue FIFO
         uint64_t        inpq_va_count  :  3; // Input queues count of virtual addresses in xlate FIFO
         uint64_t     xlate_fill_count  :  3; // Xlate blocks count of virtual addresses in xlate FIFO
-        uint64_t         slots_in_use  : 10; // Count of slots allocated
+        uint64_t         slots_in_use  : 12; // Count of slots allocated
         uint64_t       packet_fill_ip  :  1; // A packet is being assembled from memory
         uint64_t     packet_egress_ip  :  1; // A packet is being sent from the packet buffer to the LM
         uint64_t        packet_enable  :  1; // The packet at the head of the packet buffer is enabled to send to the LM
         uint64_t            slot_full  :  1; // The slot at the head of the packet buffer is full
         uint64_t         ack_fill_cnt  :  5; // Count of acknowledge packets in FIFO
-        uint64_t       Reserved_63_31  : 33; // Unused
+        uint64_t       Reserved_63_33  : 31; // Unused
     } field;
     uint64_t val;
 } TXDMA_STS_MC1_TC2_t;
@@ -774,13 +777,13 @@ typedef union {
         uint64_t      inpq_fill_count  :  6; // Number of descriptor flits being held in input queue FIFO
         uint64_t        inpq_va_count  :  3; // Input queues count of virtual addresses in xlate FIFO
         uint64_t     xlate_fill_count  :  3; // Xlate blocks count of virtual addresses in xlate FIFO
-        uint64_t         slots_in_use  : 10; // Count of slots allocated
+        uint64_t         slots_in_use  : 12; // Count of slots allocated
         uint64_t       packet_fill_ip  :  1; // A packet is being assembled from memory
         uint64_t     packet_egress_ip  :  1; // A packet is being sent from the packet buffer to the LM
         uint64_t        packet_enable  :  1; // The packet at the head of the packet buffer is enabled to send to the LM
         uint64_t            slot_full  :  1; // The slot at the head of the packet buffer is full
         uint64_t         ack_fill_cnt  :  5; // Count of acknowledge packets in FIFO
-        uint64_t       Reserved_63_31  : 33; // Unused
+        uint64_t       Reserved_63_33  : 31; // Unused
     } field;
     uint64_t val;
 } TXDMA_STS_MC1_TC3_t;
@@ -800,6 +803,22 @@ typedef union {
     } field;
     uint64_t val;
 } TXDMA_STS_PKT_IDX1_t;
+
+// TXDMA_STS_PKT_IDX2 desc:
+typedef union {
+    struct {
+        uint64_t      pkt_idx_val_msk  : 64; // Bits 191:128 of the packet index valid mask.
+    } field;
+    uint64_t val;
+} TXDMA_STS_PKT_IDX2_t;
+
+// TXDMA_STS_PKT_IDX3 desc:
+typedef union {
+    struct {
+        uint64_t      pkt_idx_val_msk  : 64; // Bits 255:192 of the packet index valid mask.
+    } field;
+    uint64_t val;
+} TXDMA_STS_PKT_IDX3_t;
 
 // TXDMA_STS_WCE0 desc:
 typedef union {
@@ -833,6 +852,38 @@ typedef union {
     uint64_t val;
 } TXDMA_STS_WCE3_t;
 
+// TXDMA_STS_WCE4 desc:
+typedef union {
+    struct {
+        uint64_t          wce_val_msk  : 64; // Bits 319:256 of the write combining entry valid mask.
+    } field;
+    uint64_t val;
+} TXDMA_STS_WCE4_t;
+
+// TXDMA_STS_WCE5 desc:
+typedef union {
+    struct {
+        uint64_t          wce_val_msk  : 64; // Bits 383:320 of the write combining entry valid mask.
+    } field;
+    uint64_t val;
+} TXDMA_STS_WCE5_t;
+
+// TXDMA_STS_WCE6 desc:
+typedef union {
+    struct {
+        uint64_t          wce_val_msk  : 64; // Bits 447:384 of the write combining entry valid mask.
+    } field;
+    uint64_t val;
+} TXDMA_STS_WCE6_t;
+
+// TXDMA_STS_WCE7 desc:
+typedef union {
+    struct {
+        uint64_t          wce_val_msk  : 64; // Bits 511:448 of the write combining entry valid mask.
+    } field;
+    uint64_t val;
+} TXDMA_STS_WCE7_t;
+
 // TXDMA_STS_MEM_REQ_TID0 desc:
 typedef union {
     struct {
@@ -864,6 +915,14 @@ typedef union {
     } field;
     uint64_t val;
 } TXDMA_STS_MEM_REQ_TID3_t;
+
+// TXDMA_STS_MEM_REQ_TID4 desc:
+typedef union {
+    struct {
+        uint64_t          tid_val_msk  : 64; // Bits 319:256 of the memory request TID valid mask.
+    } field;
+    uint64_t val;
+} TXDMA_STS_MEM_REQ_TID4_t;
 
 // TXDMA_STS_PA_ID desc:
 typedef union {
@@ -934,8 +993,8 @@ typedef union {
 // TXDMA_DBG_INPQ_PAYLOAD4 desc:
 typedef union {
     struct {
-        uint64_t                 Data  : 37; // Data
-        uint64_t       Reserved_63_37  : 27; // Unused
+        uint64_t                 Data  : 44; // Data
+        uint64_t       Reserved_63_44  : 20; // Unused
     } field;
     uint64_t val;
 } TXDMA_DBG_INPQ_PAYLOAD4_t;
@@ -947,7 +1006,7 @@ typedef union {
         uint64_t                 ECC1  :  8; // ECC for data[127:64]
         uint64_t                 ECC2  :  8; // ECC for data[191:128]
         uint64_t                 ECC3  :  8; // ECC for data[255:192]
-        uint64_t                 ECC4  :  7; // ECC for data[294:256]
+        uint64_t                 ECC4  :  7; // ECC for data[299:256]
         uint64_t       Reserved_63_39  : 25; // Unused
     } field;
     uint64_t val;
@@ -956,7 +1015,7 @@ typedef union {
 // TXDMA_DBG_XLATE_CTRL desc:
 typedef union {
     struct {
-        uint64_t              Address  :  5; // Address for read or write, bits 5:3 are decoded as {MC,TC}
+        uint64_t              Address  :  5; // Address for read or write, bits 4:2 are decoded as {MC,TC}
         uint64_t        Reserved_51_5  : 47; // Unused
         uint64_t         Payload_regs  :  8; // Number of payload registers which follow
         uint64_t          Reserved_60  :  1; // Unused
@@ -978,17 +1037,25 @@ typedef union {
 // TXDMA_DBG_XLATE_PAYLOAD1 desc:
 typedef union {
     struct {
-        uint64_t                 Data  : 63; // Data
-        uint64_t          Reserved_63  :  1; // Unused
+        uint64_t                 Data  : 64; // Data
     } field;
     uint64_t val;
 } TXDMA_DBG_XLATE_PAYLOAD1_t;
 
+// TXDMA_DBG_XLATE_PAYLOAD2 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  :  5; // Data
+        uint64_t        Reserved_63_5  : 59; // Unused
+    } field;
+    uint64_t val;
+} TXDMA_DBG_XLATE_PAYLOAD2_t;
+
 // TXDMA_DBG_XLATE_ECC desc:
 typedef union {
     struct {
-        uint64_t                 ECC0  :  8; // ECC for data[63:0]
-        uint64_t                 ECC1  :  8; // ECC for data[126:64]
+        uint64_t                 ECC0  :  8; // ECC for data[66:0]
+        uint64_t                 ECC1  :  8; // ECC for data[132:67]
         uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
@@ -997,8 +1064,8 @@ typedef union {
 // TXDMA_DBG_ORB_CTRL desc:
 typedef union {
     struct {
-        uint64_t              Address  :  8; // Address for read or write
-        uint64_t        Reserved_51_8  : 44; // Unused
+        uint64_t              Address  :  9; // Address for read or write
+        uint64_t        Reserved_51_9  : 43; // Unused
         uint64_t         Payload_regs  :  8; // Number of payload registers which follow
         uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0=read/write raw data 1=generate ECC on write, correct data on read
@@ -1016,29 +1083,20 @@ typedef union {
     uint64_t val;
 } TXDMA_DBG_ORB_PAYLOAD0_t;
 
-// TXDMA_DBG_ORB_PAYLOAD1 desc:
-typedef union {
-    struct {
-        uint64_t                 Data  :  3; // Data
-        uint64_t        Reserved_63_3  : 61; // Unused
-    } field;
-    uint64_t val;
-} TXDMA_DBG_ORB_PAYLOAD1_t;
-
 // TXDMA_DBG_ORB_ECC desc:
 typedef union {
     struct {
-        uint64_t                  ECC  :  8; // ECC for data[65:0]
+        uint64_t                  ECC  :  8; // ECC for data[63:0]
         uint64_t        Reserved_63_8  : 56; // Unused
     } field;
     uint64_t val;
 } TXDMA_DBG_ORB_ECC_t;
 
-// TXDMA_DBG_WCE_CTRL desc:
+// TXDMA_DBG_HDR_CTRL desc:
 typedef union {
     struct {
-        uint64_t              Address  :  8; // Address for read or write
-        uint64_t        Reserved_51_8  : 44; // Unused
+        uint64_t              Address  :  6; // Address for read or write
+        uint64_t        Reserved_51_6  : 46; // Unused
         uint64_t         Payload_regs  :  8; // Number of payload registers which follow
         uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0=read/write raw data 1=generate ECC on write, correct data on read
@@ -1046,67 +1104,67 @@ typedef union {
         uint64_t                Valid  :  1; // Set by software, cleared by hardware when complete
     } field;
     uint64_t val;
-} TXDMA_DBG_WCE_CTRL_t;
+} TXDMA_DBG_HDR_CTRL_t;
 
-// TXDMA_DBG_WCE_PAYLOAD0 desc:
+// TXDMA_DBG_HDR_PAYLOAD0 desc:
 typedef union {
     struct {
         uint64_t                 Data  : 64; // Data
     } field;
     uint64_t val;
-} TXDMA_DBG_WCE_PAYLOAD0_t;
+} TXDMA_DBG_HDR_PAYLOAD0_t;
 
-// TXDMA_DBG_WCE_PAYLOAD1 desc:
+// TXDMA_DBG_HDR_PAYLOAD1 desc:
 typedef union {
     struct {
         uint64_t                 Data  : 64; // Data
     } field;
     uint64_t val;
-} TXDMA_DBG_WCE_PAYLOAD1_t;
+} TXDMA_DBG_HDR_PAYLOAD1_t;
 
-// TXDMA_DBG_WCE_PAYLOAD2 desc:
+// TXDMA_DBG_HDR_PAYLOAD2 desc:
 typedef union {
     struct {
         uint64_t                 Data  : 64; // Data
     } field;
     uint64_t val;
-} TXDMA_DBG_WCE_PAYLOAD2_t;
+} TXDMA_DBG_HDR_PAYLOAD2_t;
 
-// TXDMA_DBG_WCE_PAYLOAD3 desc:
+// TXDMA_DBG_HDR_PAYLOAD3 desc:
 typedef union {
     struct {
         uint64_t                 Data  : 64; // Data
     } field;
     uint64_t val;
-} TXDMA_DBG_WCE_PAYLOAD3_t;
+} TXDMA_DBG_HDR_PAYLOAD3_t;
 
-// TXDMA_DBG_WCE_PAYLOAD4 desc:
+// TXDMA_DBG_HDR_PAYLOAD4 desc:
 typedef union {
     struct {
-        uint64_t                 Data  : 18; // Data
-        uint64_t       Reserved_63_18  : 46; // Unused
+        uint64_t                 Data  : 46; // Data
+        uint64_t       Reserved_63_46  : 18; // Unused
     } field;
     uint64_t val;
-} TXDMA_DBG_WCE_PAYLOAD4_t;
+} TXDMA_DBG_HDR_PAYLOAD4_t;
 
-// TXDMA_DBG_WCE_ECC desc:
+// TXDMA_DBG_HDR_ECC desc:
 typedef union {
     struct {
         uint64_t                 ECC0  :  8; // ECC for data[63:0]
         uint64_t                 ECC1  :  8; // ECC for data[127:64]
         uint64_t                 ECC2  :  8; // ECC for data[191:128]
         uint64_t                 ECC3  :  8; // ECC for data[255:192]
-        uint64_t                 ECC4  :  6; // ECC for data[270:256]
-        uint64_t       Reserved_63_38  : 26; // Unused
+        uint64_t                 ECC4  :  7; // ECC for data[301:256]
+        uint64_t       Reserved_63_39  : 25; // Unused
     } field;
     uint64_t val;
-} TXDMA_DBG_WCE_ECC_t;
+} TXDMA_DBG_HDR_ECC_t;
 
 // TXDMA_DBG_PKT_CTRL desc:
 typedef union {
     struct {
-        uint64_t              Address  : 12; // Address for read or write, bits 11:9 decode as {MC,TC}
-        uint64_t       Reserved_51_12  : 40; // Unused
+        uint64_t              Address  : 14; // Address for read or write, bits 13:11 decode as {MC,TC}
+        uint64_t       Reserved_51_14  : 38; // Unused
         uint64_t         Payload_regs  :  8; // Number of payload registers which follow
         uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0=read/write raw data 1=generate ECC on write, correct data on read
@@ -1221,8 +1279,8 @@ typedef union {
 // TXDMA_DBG_BTRK_CTRL desc:
 typedef union {
     struct {
-        uint64_t              Address  : 12; // Address for read or write
-        uint64_t       Reserved_51_12  : 40; // Unused
+        uint64_t              Address  : 14; // Address for read or write
+        uint64_t       Reserved_51_14  : 38; // Unused
         uint64_t         Payload_regs  :  8; // Number of payload registers which follow
         uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0=read/write raw data 1=generate ECC on write, correct data on read
@@ -1235,8 +1293,8 @@ typedef union {
 // TXDMA_DBG_BTRK_PAYLOAD0 desc:
 typedef union {
     struct {
-        uint64_t                 Data  : 11; // Data
-        uint64_t       Reserved_63_11  : 53; // Unused
+        uint64_t                 Data  : 16; // Data
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } TXDMA_DBG_BTRK_PAYLOAD0_t;
@@ -1244,8 +1302,8 @@ typedef union {
 // TXDMA_DBG_BTRK_ECC desc:
 typedef union {
     struct {
-        uint64_t                  ECC  :  5; // ECC
-        uint64_t        Reserved_63_5  : 59; // Unused
+        uint64_t                  ECC  :  6; // ECC
+        uint64_t        Reserved_63_6  : 58; // Unused
     } field;
     uint64_t val;
 } TXDMA_DBG_BTRK_ECC_t;
@@ -1253,8 +1311,8 @@ typedef union {
 // TXDMA_DBG_PTRK_CTRL desc:
 typedef union {
     struct {
-        uint64_t              Address  :  7; // Address for read or write
-        uint64_t        Reserved_51_7  : 45; // Unused
+        uint64_t              Address  :  8; // Address for read or write
+        uint64_t        Reserved_51_8  : 44; // Unused
         uint64_t         Payload_regs  :  8; // Number of payload registers which follow
         uint64_t          Reserved_60  :  1; // Unused
         uint64_t                  ECC  :  1; // 0=read/write raw data 1=generate ECC on write, correct data on read
@@ -1267,8 +1325,8 @@ typedef union {
 // TXDMA_DBG_PTRK_PAYLOAD0 desc:
 typedef union {
     struct {
-        uint64_t                 Data  : 21; // Data
-        uint64_t       Reserved_63_21  : 43; // Unused
+        uint64_t                 Data  : 27; // Data
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } TXDMA_DBG_PTRK_PAYLOAD0_t;
@@ -1276,8 +1334,8 @@ typedef union {
 // TXDMA_DBG_PTRK_ECC desc:
 typedef union {
     struct {
-        uint64_t                  ECC  :  6; // ECC
-        uint64_t        Reserved_63_6  : 58; // Unused
+        uint64_t                  ECC  :  7; // ECC
+        uint64_t        Reserved_63_7  : 57; // Unused
     } field;
     uint64_t val;
 } TXDMA_DBG_PTRK_ECC_t;
@@ -1325,7 +1383,7 @@ typedef union {
 // TXDMA_DBG_MC0_0_PKT_CNTR_FLIT_MASK desc:
 typedef union {
     struct {
-        uint64_t                 Mask  : 64; // Flit mask bits for packet counter
+        uint64_t                 Mask  : 64; // Flit mask bits for packet counter, set bits are don't care
     } field;
     uint64_t val;
 } TXDMA_DBG_MC0_0_PKT_CNTR_FLIT_MASK_t;
@@ -1341,7 +1399,7 @@ typedef union {
 // TXDMA_DBG_MC0_1_PKT_CNTR_FLIT_MASK desc:
 typedef union {
     struct {
-        uint64_t                 Mask  : 64; // Flit mask bits for packet counter
+        uint64_t                 Mask  : 64; // Flit mask bits for packet counter, set bits are don't care
     } field;
     uint64_t val;
 } TXDMA_DBG_MC0_1_PKT_CNTR_FLIT_MASK_t;
@@ -1357,7 +1415,7 @@ typedef union {
 // TXDMA_DBG_MC0_2_PKT_CNTR_FLIT_MASK desc:
 typedef union {
     struct {
-        uint64_t                 Mask  : 64; // Flit mask bits for packet counter
+        uint64_t                 Mask  : 64; // Flit mask bits for packet counter, set bits are don't care
     } field;
     uint64_t val;
 } TXDMA_DBG_MC0_2_PKT_CNTR_FLIT_MASK_t;
@@ -1373,7 +1431,7 @@ typedef union {
 // TXDMA_DBG_MC0_3_PKT_CNTR_FLIT_MASK desc:
 typedef union {
     struct {
-        uint64_t                 Mask  : 64; // Flit mask bits for packet counter
+        uint64_t                 Mask  : 64; // Flit mask bits for packet counter, set bits are don't care
     } field;
     uint64_t val;
 } TXDMA_DBG_MC0_3_PKT_CNTR_FLIT_MASK_t;
@@ -1389,7 +1447,7 @@ typedef union {
 // TXDMA_DBG_MC1_0_PKT_CNTR_FLIT_MASK desc:
 typedef union {
     struct {
-        uint64_t                 Mask  : 64; // Flit mask bits for packet counter
+        uint64_t                 Mask  : 64; // Flit mask bits for packet counter, set bits are don't care
     } field;
     uint64_t val;
 } TXDMA_DBG_MC1_0_PKT_CNTR_FLIT_MASK_t;
@@ -1405,7 +1463,7 @@ typedef union {
 // TXDMA_DBG_MC1_1_PKT_CNTR_FLIT_MASK desc:
 typedef union {
     struct {
-        uint64_t                 Mask  : 64; // Flit mask bits for packet counter
+        uint64_t                 Mask  : 64; // Flit mask bits for packet counter, set bits are don't care
     } field;
     uint64_t val;
 } TXDMA_DBG_MC1_1_PKT_CNTR_FLIT_MASK_t;

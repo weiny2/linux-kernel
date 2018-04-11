@@ -456,7 +456,7 @@ static u64 hfi_port_access_fpc_csr(const struct cntr_entry *entry,
 		return hfi_read_lm_fpc_prf_per_vl_csr(ppd,
 		csr, idx_from_vl(vl));
 	} else {
-		return hfi_read_lm_fpc_csr(ppd, csr);
+		return read_csr(ppd->dd, csr);
 	}
 }
 

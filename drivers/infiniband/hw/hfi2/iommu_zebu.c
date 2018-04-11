@@ -342,7 +342,7 @@ hfi_iommu_root_set_context(struct hfi_devdata *dd)
 	pr_err("iommu_root_tbl 0x%llx c_tbl 0x%llx p_tbl 0x%llx ver 0x%x BDF 0x%llx cap 0x%llx ecap 0x%llx\n",
 	       virt_to_phys(iommu_root_tbl), virt_to_phys(c_tbl),
 	       virt_to_phys(p_tbl), read_iommu_csr32(dd, VER_REG_0_0_0_VTDBAR_OFFSET),
-	       read_csr(dd, FXR_PCIM_STS_BDF),
+	       read_csr(dd, HFI_PCIM_STS_BDF),
 	       read_iommu_csr(dd, CAP_REG_0_0_0_VTDBAR_OFFSET),
 	       read_iommu_csr(dd, ECAP_REG_0_0_0_VTDBAR_OFFSET));
 #if 0

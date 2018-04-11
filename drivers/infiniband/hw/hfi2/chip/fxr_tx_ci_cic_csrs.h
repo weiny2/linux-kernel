@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_tx_ci_cic_CSRS_H__
@@ -21,7 +21,7 @@ typedef union {
 typedef union {
     struct {
         uint64_t            rate_ctrl  :  3; // Head pointer update frequency control. This register sets the number of head pointer increments that must occur before a head pointer update is scheduled. If multiple updates are scheduled before the update write is sent, they are combined. When the update write occurs, the current value of the head pointer is used, which may be more recent than the value that caused the update to be scheduled. Values of 0, 1, 2, 3, 4, 5, 6, and 7 correspond to updating on increments of 1, 2, 4, 8, 16, 32, 64, and 128.
-        uint64_t                  rsv  : 61; // Reserved
+        uint64_t        Reserved_63_3  : 61; // Unused
     } field;
     uint64_t val;
 } TXCIC_CFG_HEAD_UPDATE_CNTRL_t;
@@ -30,9 +30,9 @@ typedef union {
 typedef union {
     struct {
         uint64_t                 tail  :  7; // Command queue tail slot
-        uint64_t                  rsv  :  1; // Reserved
+        uint64_t           Reserved_7  :  1; // Unused
         uint64_t                 head  :  7; // Command queue head slot
-        uint64_t               rsv_63  : 49; // Reserved
+        uint64_t       Reserved_63_15  : 49; // Unused
     } field;
     uint64_t val;
 } TXCIC_STS_TAIL_t;
@@ -40,8 +40,8 @@ typedef union {
 // TXCIC_ARBITRATION_DISABLE desc:
 typedef union {
     struct {
-        uint64_t           disable_tc  :  4; // Disable TC 3:0 arbitration
-        uint64_t                  rsv  : 60; // Reserved
+        uint64_t           disable_tc  :  4; // Disable TC 3:0 arbitration. Bit[x] = 1 TCx will not participate in arbitration (X =0, 1, 2, 3)
+        uint64_t        Reserved_63_4  : 60; // Unused
     } field;
     uint64_t val;
 } TXCIC_ARBITRATION_DISABLE_t;
@@ -49,9 +49,9 @@ typedef union {
 // TXCIC_CFG_TO_LIMIT desc:
 typedef union {
     struct {
-        uint64_t                  rsv  : 20; // Reserved, timeout value is limited to increments of one million
-        uint64_t             to_limit  : 17; // Timeout value, in number of FXR clock ticks
-        uint64_t               rsv_63  : 27; // Reserved
+        uint64_t       to_limit_fixed  : 20; // Fixed portion of the timeout value.
+        uint64_t             to_limit  : 17; // Configurable portion of the timeout value. Timeout will happen when the total packet is not completed for {to_limit, to_limit_fixed} FXR clock ticks. The defalult represents 0x104000 (1M + 16k) clocks.
+        uint64_t       Reserved_63_37  : 27; // Unused
     } field;
     uint64_t val;
 } TXCIC_CFG_TO_LIMIT_t;
@@ -63,7 +63,7 @@ typedef union {
         uint64_t vlff_txe_cfg_sm_par_error  :  1; // Length fifo fsm parity error ERR_CATEGORY_PROCESS
         uint64_t   timeout_sm_par_err  :  1; // Timeout FSM parity error ERR_CATEGORY_PROCESS
         uint64_t         overflow_err  :  1; // Overflow error ERR_CATEGORY_PROCESS
-        uint64_t     pcc_head_sop_sbe  :  1; // Head sop sbe error
+        uint64_t     pcc_head_sop_sbe  :  1; // Head sop sbe error ERR_CATEGORY_CORRECTABLE
         uint64_t     pcc_head_sop_mbe  :  1; // Head sop mbe error ERR_CATEGORY_PROCESS
         uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_sbe  :  1; // Length memory arbiter read data sbe error ERR_CATEGORY_CORRECTABLE
         uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_mbe  :  1; // Length memory arbiter read data mbe error ERR_CATEGORY_PROCESS
@@ -71,11 +71,11 @@ typedef union {
         uint64_t pkt_ctrl_fifo_rdata_mbe  :  1; // Packet fifo read data mbe error ERR_CATEGORY_PROCESS
         uint64_t      inv_write_flush  :  1; // A write occurred tio a CQ that was being drained. The write did not occur ERR_CATEGORY_INFO
         uint64_t    qword_cnt_err_mbe  :  1; // QWORD Count memory tracking MBE error ERR_CATEGORY_PROCESS
-        uint64_t    qword_cnt_err_sbe  :  1; // QWORD Count memory tracking SBE errorERR_CATEGORY_CORRECTABLE
+        uint64_t    qword_cnt_err_sbe  :  1; // QWORD Count memory tracking SBE error ERR_CATEGORY_CORRECTABLE
         uint64_t         ctxt_timeout  :  1; // Command queue is timed out, The timeout infor will be automatically reset after all the slots of the timeout packet is received by the HFI. Once the last slot of the packet is received it will send the head update for the last slot. The error status can be reset after that. ERR_CATEGORY_INFO
         uint64_t       cmdq_valid_sbe  :  1; // Command queue valid sbe ERR_CATEGORY_CORRECTABLE
-        uint64_t       cmdq_valid_mbe  :  1; // Command queue valid mbe ERR_CATEGORY_PROCESS
-        uint64_t cmdq_valid_input_fifo_overflow  :  1; // Command queue valid input fifo overflow ERR_CATEGORY_PROCESS
+        uint64_t       cmdq_valid_mbe  :  1; // Command queue valid mbe ERR_CATEGORY_HFI
+        uint64_t cmdq_valid_input_fifo_overflow  :  1; // Command queue valid input fifo overflow ERR_CATEGORY_HFI
         uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
@@ -84,23 +84,7 @@ typedef union {
 // TXCIC_ERR_CLR desc:
 typedef union {
     struct {
-        uint64_t vlf_txe_cfg_par_error  :  1; // Length fifo parity error
-        uint64_t vlff_txe_cfg_sm_par_error  :  1; // Length fifo fsm parity error
-        uint64_t   timeout_sm_par_err  :  1; // Timeout FSM parity error
-        uint64_t         overflow_err  :  1; // Overflow error
-        uint64_t     pcc_head_sop_sbe  :  1; // Head sop sbe error
-        uint64_t     pcc_head_sop_mbe  :  1; // Head sop mbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_sbe  :  1; // Length memory arbiter read data sbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_mbe  :  1; // Length memory arbiter read data mbe error
-        uint64_t pkt_ctrl_fifo_rdata_sbe  :  1; // Packet fifo read data sbe error
-        uint64_t pkt_ctrl_fifo_rdata_mbe  :  1; // Packet fifo read data mbe error
-        uint64_t      inv_write_flush  :  1; // A write occurred tio a CQ that was being drained. The write did not occur
-        uint64_t    qword_cnt_err_mbe  :  1; // QWORD Count memory tracking MBE error
-        uint64_t    qword_cnt_err_sbe  :  1; // QWORD Count memory tracking SBE error
-        uint64_t         ctxt_timeout  :  1; // Command queue is timed out
-        uint64_t       cmdq_valid_sbe  :  1; // Command queue valid sbe
-        uint64_t       cmdq_valid_mbe  :  1; // Command queue valid mbe
-        uint64_t cmdq_valid_input_fifo_overflow  :  1; // Command queue valid input fifo overflow
+        uint64_t                value  : 17; // error clear value
         uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
@@ -109,23 +93,7 @@ typedef union {
 // TXCIC_ERR_FRC desc:
 typedef union {
     struct {
-        uint64_t vlf_txe_cfg_par_error  :  1; // Length fifo parity error
-        uint64_t vlff_txe_cfg_sm_par_error  :  1; // Length fifo fsm parity error
-        uint64_t   timeout_sm_par_err  :  1; // Timeout FSM parity error
-        uint64_t         overflow_err  :  1; // Overflow error
-        uint64_t     pcc_head_sop_sbe  :  1; // Head sop sbe error
-        uint64_t     pcc_head_sop_mbe  :  1; // Head sop mbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_sbe  :  1; // Length memory arbiter read data sbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_mbe  :  1; // Length memory arbiter read data mbe error
-        uint64_t pkt_ctrl_fifo_rdata_sbe  :  1; // Packet fifo read data sbe error
-        uint64_t pkt_ctrl_fifo_rdata_mbe  :  1; // Packet fifo read data mbe error
-        uint64_t      inv_write_flush  :  1; // A write occurred tio a CQ that was being drained. The write did not occur
-        uint64_t    qword_cnt_err_mbe  :  1; // QWORD Count memory tracking MBE error
-        uint64_t    qword_cnt_err_sbe  :  1; // QWORD Count memory tracking SBE error
-        uint64_t         ctxt_timeout  :  1; // Command queue is timed out
-        uint64_t       cmdq_valid_sbe  :  1; // Command queue valid sbe
-        uint64_t       cmdq_valid_mbe  :  1; // Command queue valid mbe
-        uint64_t cmdq_valid_input_fifo_overflow  :  1; // Command queue valid input fifo overflow
+        uint64_t                value  : 17; // error force value
         uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
@@ -134,23 +102,7 @@ typedef union {
 // TXCIC_ERR_EN_HOST desc:
 typedef union {
     struct {
-        uint64_t vlf_txe_cfg_par_error  :  1; // Length fifo parity error
-        uint64_t vlff_txe_cfg_sm_par_error  :  1; // Length fifo fsm parity error
-        uint64_t   timeout_sm_par_err  :  1; // Timeout FSM parity error
-        uint64_t         overflow_err  :  1; // Overflow error
-        uint64_t     pcc_head_sop_sbe  :  1; // Head sop sbe error
-        uint64_t     pcc_head_sop_mbe  :  1; // Head sop mbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_sbe  :  1; // Length memory arbiter read data sbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_mbe  :  1; // Length memory arbiter read data mbe error
-        uint64_t pkt_ctrl_fifo_rdata_sbe  :  1; // Packet fifo read data sbe error
-        uint64_t pkt_ctrl_fifo_rdata_mbe  :  1; // Packet fifo read data mbe error
-        uint64_t      inv_write_flush  :  1; // A write occurred tio a CQ that was being drained. The write did not occur
-        uint64_t    qword_cnt_err_mbe  :  1; // QWORD Count memory tracking MBE error
-        uint64_t    qword_cnt_err_sbe  :  1; // QWORD Count memory tracking SBE error
-        uint64_t         ctxt_timeout  :  1; // Command queue is timed out
-        uint64_t       cmdq_valid_sbe  :  1; // Command queue valid sbe
-        uint64_t       cmdq_valid_mbe  :  1; // Command queue valid mbe
-        uint64_t cmdq_valid_input_fifo_overflow  :  1; // Command queue valid input fifo overflow
+        uint64_t                value  : 17; // error enable host value
         uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
@@ -159,23 +111,7 @@ typedef union {
 // TXCIC_ERR_FIRST_HOST desc:
 typedef union {
     struct {
-        uint64_t vlf_txe_cfg_par_error  :  1; // Length fifo parity error
-        uint64_t vlff_txe_cfg_sm_par_error  :  1; // Length fifo fsm parity error
-        uint64_t   timeout_sm_par_err  :  1; // Timeout FSM parity error
-        uint64_t         overflow_err  :  1; // Overflow error
-        uint64_t     pcc_head_sop_sbe  :  1; // Head sop sbe error
-        uint64_t     pcc_head_sop_mbe  :  1; // Head sop mbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_sbe  :  1; // Length memory arbiter read data sbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_mbe  :  1; // Length memory arbiter read data mbe error
-        uint64_t pkt_ctrl_fifo_rdata_sbe  :  1; // Packet fifo read data sbe error
-        uint64_t pkt_ctrl_fifo_rdata_mbe  :  1; // Packet fifo read data mbe error
-        uint64_t      inv_write_flush  :  1; // A write occurred tio a CQ that was being drained. The write did not occur
-        uint64_t    qword_cnt_err_mbe  :  1; // QWORD Count memory tracking MBE error
-        uint64_t    qword_cnt_err_sbe  :  1; // QWORD Count memory tracking SBE error
-        uint64_t         ctxt_timeout  :  1; // Command queue is timed out
-        uint64_t       cmdq_valid_sbe  :  1; // Command queue valid sbe
-        uint64_t       cmdq_valid_mbe  :  1; // Command queue valid mbe
-        uint64_t cmdq_valid_input_fifo_overflow  :  1; // Command queue valid input fifo overflow
+        uint64_t                value  : 17; // Error first host value
         uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
@@ -184,23 +120,7 @@ typedef union {
 // TXCIC_ERR_EN_BMC desc:
 typedef union {
     struct {
-        uint64_t vlf_txe_cfg_par_error  :  1; // Length fifo parity error
-        uint64_t vlff_txe_cfg_sm_par_error  :  1; // Length fifo fsm parity error
-        uint64_t   timeout_sm_par_err  :  1; // Timeout FSM parity error
-        uint64_t         overflow_err  :  1; // Overflow error
-        uint64_t     pcc_head_sop_sbe  :  1; // Head sop sbe error
-        uint64_t     pcc_head_sop_mbe  :  1; // Head sop mbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_sbe  :  1; // Length memory arbiter read data sbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_mbe  :  1; // Length memory arbiter read data mbe error
-        uint64_t pkt_ctrl_fifo_rdata_sbe  :  1; // Packet fifo read data sbe error
-        uint64_t pkt_ctrl_fifo_rdata_mbe  :  1; // Packet fifo read data mbe error
-        uint64_t      inv_write_flush  :  1; // A write occurred tio a CQ that was being drained. The write did not occur
-        uint64_t    qword_cnt_err_mbe  :  1; // QWORD Count memory tracking MBE error
-        uint64_t    qword_cnt_err_sbe  :  1; // QWORD Count memory tracking SBE error
-        uint64_t         ctxt_timeout  :  1; // Command queue is timed out
-        uint64_t       cmdq_valid_sbe  :  1; // Command queue valid sbe
-        uint64_t       cmdq_valid_mbe  :  1; // Command queue valid mbe
-        uint64_t cmdq_valid_input_fifo_overflow  :  1; // Command queue valid input fifo overflow
+        uint64_t                value  : 17; // Error enable bmc value
         uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
@@ -209,23 +129,7 @@ typedef union {
 // TXCIC_ERR_FIRST_BMC desc:
 typedef union {
     struct {
-        uint64_t vlf_txe_cfg_par_error  :  1; // Length fifo parity error
-        uint64_t vlff_txe_cfg_sm_par_error  :  1; // Length fifo fsm parity error
-        uint64_t   timeout_sm_par_err  :  1; // Timeout FSM parity error
-        uint64_t         overflow_err  :  1; // Overflow error
-        uint64_t     pcc_head_sop_sbe  :  1; // Head sop sbe error
-        uint64_t     pcc_head_sop_mbe  :  1; // Head sop mbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_sbe  :  1; // Length memory arbiter read data sbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_mbe  :  1; // Length memory arbiter read data mbe error
-        uint64_t pkt_ctrl_fifo_rdata_sbe  :  1; // Packet fifo read data sbe error
-        uint64_t pkt_ctrl_fifo_rdata_mbe  :  1; // Packet fifo read data mbe error
-        uint64_t      inv_write_flush  :  1; // A write occurred tio a CQ that was being drained. The write did not occur
-        uint64_t    qword_cnt_err_mbe  :  1; // QWORD Count memory tracking MBE error
-        uint64_t    qword_cnt_err_sbe  :  1; // QWORD Count memory tracking SBE error
-        uint64_t         ctxt_timeout  :  1; // Command queue is timed out
-        uint64_t       cmdq_valid_sbe  :  1; // Command queue valid sbe
-        uint64_t       cmdq_valid_mbe  :  1; // Command queue valid mbe
-        uint64_t cmdq_valid_input_fifo_overflow  :  1; // Command queue valid input fifo overflow
+        uint64_t                value  : 17; // error first bmc value
         uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
@@ -234,23 +138,7 @@ typedef union {
 // TXCIC_ERR_EN_QUAR desc:
 typedef union {
     struct {
-        uint64_t vlf_txe_cfg_par_error  :  1; // Length fifo parity error
-        uint64_t vlff_txe_cfg_sm_par_error  :  1; // Length fifo fsm parity error
-        uint64_t   timeout_sm_par_err  :  1; // Timeout FSM parity error
-        uint64_t         overflow_err  :  1; // Overflow error
-        uint64_t     pcc_head_sop_sbe  :  1; // Head sop sbe error
-        uint64_t     pcc_head_sop_mbe  :  1; // Head sop mbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_sbe  :  1; // Length memory arbiter read data sbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_mbe  :  1; // Length memory arbiter read data mbe error
-        uint64_t pkt_ctrl_fifo_rdata_sbe  :  1; // Packet fifo read data sbe error
-        uint64_t pkt_ctrl_fifo_rdata_mbe  :  1; // Packet fifo read data mbe error
-        uint64_t      inv_write_flush  :  1; // A write occurred tio a CQ that was being drained. The write did not occur
-        uint64_t    qword_cnt_err_mbe  :  1; // QWORD Count memory tracking MBE error
-        uint64_t    qword_cnt_err_sbe  :  1; // QWORD Count memory tracking SBE error
-        uint64_t         ctxt_timeout  :  1; // Command queue is timed out
-        uint64_t       cmdq_valid_sbe  :  1; // Command queue valid sbe
-        uint64_t       cmdq_valid_mbe  :  1; // Command queue valid mbe
-        uint64_t cmdq_valid_input_fifo_overflow  :  1; // Command queue valid input fifo overflow
+        uint64_t                value  : 17; // Error enable quarantine value
         uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
@@ -259,23 +147,7 @@ typedef union {
 // TXCIC_ERR_FIRST_QUAR desc:
 typedef union {
     struct {
-        uint64_t vlf_txe_cfg_par_error  :  1; // Length fifo parity error
-        uint64_t vlff_txe_cfg_sm_par_error  :  1; // Length fifo fsm parity error
-        uint64_t   timeout_sm_par_err  :  1; // Timeout FSM parity error
-        uint64_t         overflow_err  :  1; // Overflow error
-        uint64_t     pcc_head_sop_sbe  :  1; // Head sop sbe error
-        uint64_t     pcc_head_sop_mbe  :  1; // Head sop mbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_sbe  :  1; // Length memory arbiter read data sbe error
-        uint64_t vl_len_mem_arb_pcvlarb_q2_rdata_ecc_mbe  :  1; // Length memory arbiter read data mbe error
-        uint64_t pkt_ctrl_fifo_rdata_sbe  :  1; // Packet fifo read data sbe error
-        uint64_t pkt_ctrl_fifo_rdata_mbe  :  1; // Packet fifo read data mbe error
-        uint64_t      inv_write_flush  :  1; // A write occurred tio a CQ that was being drained. The write did not occur
-        uint64_t    qword_cnt_err_mbe  :  1; // QWORD Count memory tracking MBE error
-        uint64_t    qword_cnt_err_sbe  :  1; // QWORD Count memory tracking SBE error
-        uint64_t         ctxt_timeout  :  1; // Command queue is timed out
-        uint64_t       cmdq_valid_sbe  :  1; // Command queue valid sbe
-        uint64_t       cmdq_valid_mbe  :  1; // Command queue valid mbe
-        uint64_t cmdq_valid_input_fifo_overflow  :  1; // Command queue valid input fifo overflow
+        uint64_t                value  : 17; // Error first quarantine value
         uint64_t       Reserved_63_17  : 47; // Unused
     } field;
     uint64_t val;
@@ -322,8 +194,8 @@ typedef union {
     struct {
         uint64_t syndrome_pkt_ctrl_fifo_rdata_sbe_0  :  6; // Syndrome of the first SBE for the packet control fifo read data for TC 0
         uint64_t syndrome_pkt_ctrl_fifo_rdata_sbe_1  :  6; // Syndrome of the first SBE for the packet control fifo read data for TC 1
-        uint64_t syndrome_pkt_ctrl_fifo_rdata_sbe_2  :  6; // Syndrome of the first SBE for the packet control fifo read data for TC 0
-        uint64_t syndrome_pkt_ctrl_fifo_rdata_sbe_3  :  6; // Syndrome of the first SBE for the packet control fifo read data for TC 0
+        uint64_t syndrome_pkt_ctrl_fifo_rdata_sbe_2  :  6; // Syndrome of the first SBE for the packet control fifo read data for TC 2
+        uint64_t syndrome_pkt_ctrl_fifo_rdata_sbe_3  :  6; // Syndrome of the first SBE for the packet control fifo read data for TC 3
         uint64_t  syndrome_cmdq_valid  :  8; // Syndrome of the first sbe/mbe in command valid queue
         uint64_t       Reserved_63_32  : 32; // Unused
     } field;

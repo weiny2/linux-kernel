@@ -33,7 +33,7 @@
 #define DEF_FXR_PERFMON_SW_DEF
 
 #ifndef FXR_PMON_CSRS
-#define FXR_PMON_CSRS					0x000000000000
+#define FXR_PMON_CSRS					0x000000000000ULL
 #endif
 #define FXR_NUM_CONTEXTS				256
 #define FXR_NUM_PIDS					4096

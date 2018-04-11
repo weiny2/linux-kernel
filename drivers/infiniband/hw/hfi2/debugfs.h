@@ -119,7 +119,7 @@ static const struct file_operations hfi_##name##_ops = { \
 	.release = single_release \
 }
 
-#define FIRMWARE_READ(name, subsystem, address) \
+#define FIRMWARE_READ(name, address) \
 static ssize_t _##name##_read(struct file *file, char __user *buf,\
 			      size_t count, loff_t *ppos)\
 { \
@@ -127,13 +127,13 @@ static ssize_t _##name##_read(struct file *file, char __user *buf,\
 	ssize_t ret = 0;\
 	u64 state;\
 	ppd = private2ppd(file);\
-	state = read_##subsystem##_csr(ppd, address);\
+	state = read_csr(ppd->dd, address);\
 	ret =  simple_read_from_buffer(buf, count, ppos, &state,\
 					sizeof(state));\
 	return ret;\
 }
 
-#define FIRMWARE_WRITE(name, subsystem, address) \
+#define FIRMWARE_WRITE(name, address) \
 static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
 			   size_t count, loff_t *ppos)\
 { \
@@ -145,7 +145,7 @@ static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
 	ret = kstrtou64_from_user(ubuf, count, 0, &reg);\
 	if (ret < 0)\
 		goto _return;\
-	write_##subsystem##_csr(ppd, address, reg);\
+	write_csr(ppd->dd, address, reg);\
 	ret = count;\
  _return:\
 	rcu_read_unlock();\

@@ -57,10 +57,7 @@
 #include "hfi2.h"
 #include "chip/fxr_linkmux_tp_defs.h"
 #include "chip/fxr_linkmux_defs.h"
-#include "chip/mnh_opio_defs.h"
-#include "chip/mnh_snup_defs.h"
-#include "chip/mnh_sndn_defs.h"
-#include "chip/fxr_fc_defs.h"
+#include "chip/fxr_oc_defs.h"
 #include "chip/fxr_rx_hp_csrs.h"
 #include "chip/fxr_rx_hp_defs.h"
 
@@ -120,72 +117,6 @@ void hfi_clear_pasid(struct hfi_ctx *ctx, u16 ptl_pid)
 /* Missing from current definitions */
 #define FXR_FZC_LPHY 0x2010000
 
-/*
- * read FZC LPHY registers
- */
-u64 read_fzc_lphy_csr(const struct hfi_pportdata *ppd, u32 offset)
-{
-	offset += FXR_FZC_LPHY;
-
-	ppd_dev_dbg(ppd, "FZC LPHY OPIO read access offset 0x%x\n", offset);
-	return read_csr(ppd->dd, offset);
-}
-
-/*
- * read MNH LPHY registers
- */
-u64 read_mnh_lphy_csr(const struct hfi_pportdata *ppd, u32 offset)
-{
-	offset += FXR_MNH_LPHY;
-
-	ppd_dev_dbg(ppd, "MNH LPHY OPIO read access offset 0x%x\n", offset);
-	return read_csr(ppd->dd, offset);
-}
-
-/*
- * read FZC OPIO registers
- */
-u64 read_fzc_opio_csr(const struct hfi_pportdata *ppd, u32 offset)
-{
-	offset += FXR_FZC_OPIO_CSRS;
-
-	ppd_dev_dbg(ppd, "FZC OPIO read access offset 0x%x\n", offset);
-	return read_csr(ppd->dd, offset);
-}
-
-/*
- * read MNH OPIO registers
- */
-u64 read_mnh_opio_csr(const struct hfi_pportdata *ppd, u32 offset)
-{
-	offset += FXR_MNH_OPIO_CSRS;
-
-	ppd_dev_dbg(ppd, "MNH OPIO read access offset 0x%x\n", offset);
-	return read_csr(ppd->dd, offset);
-}
-
-/*
- * write FZC OPIO registers
- */
-void write_fzc_opio_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
-{
-	offset += FXR_FZC_OPIO_CSRS;
-
-	ppd_dev_dbg(ppd, "FZC OPIO write access offset 0x%x\n", offset);
-	write_csr(ppd->dd, offset, value);
-}
-
-/*
- * write MNH OPIO registers
- */
-void write_mnh_opio_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
-{
-	offset += FXR_MNH_OPIO_CSRS;
-
-	ppd_dev_dbg(ppd, "MNH OPIO write access offset 0x%x\n", offset);
-	write_csr(ppd->dd, offset, value);
-}
-
 #define FZC_LPHY_LSTS_LSMS_SMASK (0xffff << 16)
 #define FZC_LPHY_LSTS_ACTIVE     (0x9)
 #define FZC_LPHY_LSTS_SCF_SMASK  (BIT(4))
@@ -196,9 +127,10 @@ void write_mnh_opio_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value)
 	((((v) & FZC_LPHY_LSTS_LSMS_SMASK) == FZC_LPHY_LSTS_ACTIVE) && \
 		(!((v) & FZC_LPHY_LSTS_SCF_SMASK)))
 
-/* MNH_OPIO_PHY_CFG_RESET_APHY_WAKE_SMASK */
+/* FIXME - How does this work with no MNH?  */
 static int hfi2_fzc_init_half_rate(const struct hfi_pportdata *ppd)
 {
+#if 0
 	u64 val = 0;
 	int i;
 	bool fzc_up = false, mnh_up = false;
@@ -245,6 +177,7 @@ static int hfi2_fzc_init_half_rate(const struct hfi_pportdata *ppd)
 
 half_rate_done:
 	ppd_dev_info(ppd, "Link trained to half-rate\n");
+#endif
 	return 0;
 }
 
@@ -256,61 +189,19 @@ static int hfi2_fzc_lcb_init(const struct hfi_pportdata *ppd)
 	/* Still uses MNH to init half rate */
 	if (loopback != LOOPBACK_LCB)
 		return 0;
-	ppd_dev_dbg(ppd, "MNH_DWNSTRM_CFG_FRAMING_RESET offset 0x%llx 0x%llx\n",
-		    FXR_MNH_OPIO_CSRS + MNH_DWNSTRM_CFG_FRAMING_RESET,
-		    read_mnh_opio_csr(ppd, MNH_DWNSTRM_CFG_FRAMING_RESET));
-	ppd_dev_dbg(ppd, "MNH_SNP_UPSTRM_CFG_FRAMING_RESET offset 0x%llx 0x%llx\n",
-		    FXR_MNH_S0_SNUP_CSRS + MNH_SNP_UPSTRM_CFG_FRAMING_RESET,
-		    read_csr(ppd->dd, FXR_MNH_S0_SNUP_CSRS+ MNH_SNP_UPSTRM_CFG_FRAMING_RESET));
-	ppd_dev_dbg(ppd, "MNH_SNP_DWNSTRM_CFG_FRAMING_RESET offset 0x%llx 0x%llx\n",
-		    FXR_MNH_S0_SNDN_CSRS + MNH_SNP_DWNSTRM_CFG_FRAMING_RESET,
-		    read_csr(ppd->dd, FXR_MNH_S0_SNDN_CSRS + MNH_SNP_DWNSTRM_CFG_FRAMING_RESET));
-	ppd_dev_dbg(ppd, "MNH_SNP_DWNSTRM_CFG_FIFOS_RADR offset 0x%llx 0x%llx\n",
-		    FXR_MNH_S0_SNDN_CSRS + MNH_SNP_DWNSTRM_CFG_FIFOS_RADR,
-		    read_csr(ppd->dd, FXR_MNH_S0_SNDN_CSRS + MNH_SNP_DWNSTRM_CFG_FIFOS_RADR));
-	ppd_dev_dbg(ppd, "MNH_DP_UPSTRM_CFG_FIFOS_RESET offset 0x%llx 0x%llx\n",
-		    FXR_MNH_S0_SNUP_CSRS + MNH_DP_UPSTRM_CFG_FIFOS_RESET,
-		    read_csr(ppd->dd, FXR_MNH_S0_SNUP_CSRS + MNH_DP_UPSTRM_CFG_FIFOS_RESET));
-
-	write_mnh_opio_csr(ppd, MNH_DWNSTRM_CFG_FRAMING_RESET, 0x0);
-	mdelay(64);
-	write_csr(ppd->dd, FXR_MNH_S0_SNUP_CSRS + MNH_SNP_UPSTRM_CFG_FRAMING_RESET, 0x0);
-	mdelay(64);
-	write_csr(ppd->dd, FXR_MNH_S0_SNDN_CSRS + MNH_SNP_DWNSTRM_CFG_FRAMING_RESET, 0x0);
-	mdelay(64);
-	write_csr(ppd->dd, FXR_MNH_S0_SNUP_CSRS + MNH_DP_UPSTRM_CFG_FIFOS_RESET, 0);
-	mdelay(64);
-	write_csr(ppd->dd, FXR_MNH_S0_SNDN_CSRS + MNH_SNP_DWNSTRM_CFG_FIFOS_RADR, 0xcb9);
-	mdelay(64);
-
-	ppd_dev_dbg(ppd, "MNH_DWNSTRM_CFG_FRAMING_RESET offset 0x%llx 0x%llx\n",
-		    FXR_MNH_OPIO_CSRS + MNH_DWNSTRM_CFG_FRAMING_RESET,
-		    read_mnh_opio_csr(ppd, MNH_DWNSTRM_CFG_FRAMING_RESET));
-	ppd_dev_dbg(ppd, "MNH_SNP_UPSTRM_CFG_FRAMING_RESET offset 0x%llx 0x%llx\n",
-		    FXR_MNH_S0_SNUP_CSRS + MNH_SNP_UPSTRM_CFG_FRAMING_RESET,
-		    read_csr(ppd->dd, FXR_MNH_S0_SNUP_CSRS+ MNH_SNP_UPSTRM_CFG_FRAMING_RESET));
-	ppd_dev_dbg(ppd, "MNH_SNP_DWNSTRM_CFG_FRAMING_RESET offset 0x%llx 0x%llx\n",
-		    FXR_MNH_S0_SNDN_CSRS + MNH_SNP_DWNSTRM_CFG_FRAMING_RESET,
-		    read_csr(ppd->dd, FXR_MNH_S0_SNDN_CSRS + MNH_SNP_DWNSTRM_CFG_FRAMING_RESET));
-	ppd_dev_dbg(ppd, "MNH_SNP_DWNSTRM_CFG_FIFOS_RADR offset 0x%llx 0x%llx\n",
-		    FXR_MNH_S0_SNDN_CSRS + MNH_SNP_DWNSTRM_CFG_FIFOS_RADR,
-		    read_csr(ppd->dd, FXR_MNH_S0_SNDN_CSRS + MNH_SNP_DWNSTRM_CFG_FIFOS_RADR));
-	ppd_dev_dbg(ppd, "MNH_DP_UPSTRM_CFG_FIFOS_RESET offset 0x%llx 0x%llx\n",
-		    FXR_MNH_S0_SNUP_CSRS + MNH_DP_UPSTRM_CFG_FIFOS_RESET,
-		    read_csr(ppd->dd, FXR_MNH_S0_SNUP_CSRS + MNH_DP_UPSTRM_CFG_FIFOS_RESET));
 
 	read_csr(ppd->dd, FXR_LM_CFG_FP_TIMER_PORT0);
-	//write_fzc_csr(ppd, FZC_LCB_CFG_LOOPBACK, 2);
-	write_fzc_csr(ppd, FZC_LCB_CFG_TX_FIFOS_RESET, 0);
+	//write_csr(ppd->dd, OC_LCB_CFG_LOOPBACK, 2);
+	write_csr(ppd->dd, OC_LCB_CFG_TX_FIFOS_RESET, 0);
 
 	ndelay(64);
 
-	write_fzc_csr(ppd, FZC_LCB_CFG_RUN, FZC_LCB_CFG_RUN_EN_SMASK);
+	write_csr(ppd->dd, OC_LCB_CFG_RUN, OC_LCB_CFG_RUN_EN_SMASK);
 
 	for (i = 0; i < 1000; i++) {
-		val = read_fzc_csr(ppd, FZC_LCB_STS_LINK_TRANSFER_ACTIVE);
+		val = read_csr(ppd->dd, OC_LCB_STS_LINK_TRANSFER_ACTIVE);
 		ppd_dev_info(ppd, "LCB_STS LTA: i %d %llx\n", i, val);
-		if (val & FZC_LCB_STS_LINK_TRANSFER_ACTIVE_VAL_SMASK)
+		if (val & OC_LCB_STS_LINK_TRANSFER_ACTIVE_VAL_SMASK)
 			goto link_transfer_active;
 
 		msleep(10000);
@@ -323,31 +214,31 @@ static int hfi2_fzc_lcb_init(const struct hfi_pportdata *ppd)
 	return -ETIMEDOUT;
 
 link_transfer_active:
-	write_fzc_csr(ppd, FZC_LCB_CFG_ALLOW_LINK_UP,
-		      FZC_LCB_CFG_ALLOW_LINK_UP_VAL_SMASK);
+	write_csr(ppd->dd, OC_LCB_CFG_ALLOW_LINK_UP,
+		      OC_LCB_CFG_ALLOW_LINK_UP_VAL_SMASK);
 
 	/* 100MHz clock, 200 cycle delay */
 	usleep_range(2, 3);
 
-	ppd_dev_dbg(ppd, "%s %d FZC_LCB_CFG_ALLOW_LINK_UP 0x%llx\n",
-		    __func__, __LINE__, read_fzc_csr(ppd, FZC_LCB_CFG_ALLOW_LINK_UP));
+	ppd_dev_dbg(ppd, "%s %d OC_LCB_CFG_ALLOW_LINK_UP 0x%llx\n",
+		    __func__, __LINE__, read_csr(ppd->dd, OC_LCB_CFG_ALLOW_LINK_UP));
 
 	/* turn on the LCB (turn off in lcb_shutdown). */
-	write_fzc_csr(ppd, FZC_LCB_CFG_RUN, FZC_LCB_CFG_RUN_EN_MASK);
+	write_csr(ppd->dd, OC_LCB_CFG_RUN, OC_LCB_CFG_RUN_EN_MASK);
 
-	ppd_dev_dbg(ppd, "%s %d FZC_LCB_CFG_RUN 0x%llx\n",
-		    __func__, __LINE__, read_fzc_csr(ppd, FZC_LCB_CFG_RUN));
+	ppd_dev_dbg(ppd, "%s %d OC_LCB_CFG_RUN 0x%llx\n",
+		    __func__, __LINE__, read_csr(ppd->dd, OC_LCB_CFG_RUN));
 
 	/* 100MHz clock, 200 cycle delay */
 	usleep_range(2, 3);
 
 	hfi_read_lm_link_state(ppd);
 
-	write_fzc_csr(ppd, FZC_LCB_CFG_PORT, 0x3);
+	write_csr(ppd->dd, OC_LCB_CFG_PORT, 0x3);
 
 	hfi_read_lm_link_state(ppd);
 
-	write_fzc_csr(ppd, FZC_LCB_CFG_PORT, 0x4);
+	write_csr(ppd->dd, OC_LCB_CFG_PORT, 0x4);
 
 	hfi_read_lm_link_state(ppd);
 

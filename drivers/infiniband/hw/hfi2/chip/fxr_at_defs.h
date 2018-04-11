@@ -33,7 +33,7 @@
 #define DEF_FXR_AT_SW_DEF
 
 #ifndef FXR_AT_CSRS
-#define FXR_AT_CSRS						0x000000000000
+#define FXR_AT_CSRS						0x000000000000ULL
 #endif
 #define FXR_NUM_CONTEXTS					256
 #define FXR_NUM_PIDS						4096
@@ -189,37 +189,7 @@
 #define FXR_AT_CFG_DRAIN_PASID_BUSY_MASK			0x1ull
 #define FXR_AT_CFG_DRAIN_PASID_BUSY_SMASK			0x1ull
 /*
-* Table #9 of fxr_top - FXR_AT_CFG_LTDPR
-* This CSR configures the LT DMA Protected Range check.
-*/
-#define FXR_AT_CFG_LTDPR					(FXR_AT_CSRS + 0x000000000028)
-#define FXR_AT_CFG_LTDPR_RESETCSR				0x0000000000000000ull
-#define FXR_AT_CFG_LTDPR_RESERVED_63_32_SHIFT			32
-#define FXR_AT_CFG_LTDPR_RESERVED_63_32_MASK			0xFFFFFFFFull
-#define FXR_AT_CFG_LTDPR_RESERVED_63_32_SMASK			0xFFFFFFFF00000000ull
-#define FXR_AT_CFG_LTDPR_TOP_OF_DPR_SHIFT			20
-#define FXR_AT_CFG_LTDPR_TOP_OF_DPR_MASK			0xFFFull
-#define FXR_AT_CFG_LTDPR_TOP_OF_DPR_SMASK			0xFFF00000ull
-#define FXR_AT_CFG_LTDPR_RESERVED_19_12_SHIFT			12
-#define FXR_AT_CFG_LTDPR_RESERVED_19_12_MASK			0xFFull
-#define FXR_AT_CFG_LTDPR_RESERVED_19_12_SMASK			0xFF000ull
-#define FXR_AT_CFG_LTDPR_SIZE_SHIFT				4
-#define FXR_AT_CFG_LTDPR_SIZE_MASK				0xFFull
-#define FXR_AT_CFG_LTDPR_SIZE_SMASK				0xFF0ull
-#define FXR_AT_CFG_LTDPR_RESERVED_3_SHIFT			3
-#define FXR_AT_CFG_LTDPR_RESERVED_3_MASK			0x1ull
-#define FXR_AT_CFG_LTDPR_RESERVED_3_SMASK			0x8ull
-#define FXR_AT_CFG_LTDPR_COMMAND_BIT_SHIFT			2
-#define FXR_AT_CFG_LTDPR_COMMAND_BIT_MASK			0x1ull
-#define FXR_AT_CFG_LTDPR_COMMAND_BIT_SMASK			0x4ull
-#define FXR_AT_CFG_LTDPR_PROT_PEG_STS_SHIFT			1
-#define FXR_AT_CFG_LTDPR_PROT_PEG_STS_MASK			0x1ull
-#define FXR_AT_CFG_LTDPR_PROT_PEG_STS_SMASK			0x2ull
-#define FXR_AT_CFG_LTDPR_RESERVED_0_SHIFT			0
-#define FXR_AT_CFG_LTDPR_RESERVED_0_MASK			0x1ull
-#define FXR_AT_CFG_LTDPR_RESERVED_0_SMASK			0x1ull
-/*
-* Table #10 of fxr_top - FXR_AT_CFG_GENPROT_BASE
+* Table #9 of fxr_top - FXR_AT_CFG_GENPROT_BASE
 * This CSR configures the Generic Protected Memory Range check base 
 * address.
 */
@@ -235,7 +205,7 @@
 #define FXR_AT_CFG_GENPROT_BASE_RESERVED_15_0_MASK		0xFFFFull
 #define FXR_AT_CFG_GENPROT_BASE_RESERVED_15_0_SMASK		0xFFFFull
 /*
-* Table #11 of fxr_top - FXR_AT_CFG_GENPROT_LIMIT
+* Table #10 of fxr_top - FXR_AT_CFG_GENPROT_LIMIT
 * This CSR configures the Generic Protected Memory Range check limit 
 * address.
 */
@@ -251,23 +221,7 @@
 #define FXR_AT_CFG_GENPROT_LIMIT_RESERVED_15_0_MASK		0xFFFFull
 #define FXR_AT_CFG_GENPROT_LIMIT_RESERVED_15_0_SMASK		0xFFFFull
 /*
-* Table #12 of fxr_top - FXR_AT_CFG_IOMMU_DEFEATURE
-* This is an AT configuration CSR.It allows access to the IOMMU Defeature 
-* registers as an array of four 64 bit registers. These arrays CANNOT be written 
-* to during normal operation. This will corrupt the Address Translation state, 
-* and possibly lock up the Address Translation block. Each 64 bit register 
-* contains two 32 bit Defeature Registers. This requires a Read-Modify-Write, to 
-* establish the current defeature settings, for two 32 bit registers, and to 
-* modify to new settings. This should only be modified by a knowledgeable BIOS 
-* Agent.
-*/
-#define FXR_AT_CFG_IOMMU_DEFEATURE				(FXR_AT_CSRS + 0x000000000100)
-#define FXR_AT_CFG_IOMMU_DEFEATURE_RESETCSR			0x0000000000000000ull
-#define FXR_AT_CFG_IOMMU_DEFEATURE_IOMMU_DEFEATURES_SHIFT	0
-#define FXR_AT_CFG_IOMMU_DEFEATURE_IOMMU_DEFEATURES_MASK	0xFFFFFFFFFFFFFFFFull
-#define FXR_AT_CFG_IOMMU_DEFEATURE_IOMMU_DEFEATURES_SMASK	0xFFFFFFFFFFFFFFFFull
-/*
-* Table #13 of fxr_top - FXR_AT_CFG_PASID_LUT
+* Table #11 of fxr_top - FXR_AT_CFG_PASID_LUT
 * This is an AT configuration CSR.It allows access to the Address Translation 
 * PID to PASID Look Up Table. These arrays can be written to during normal 
 * operation, with the exception that any entry written, changing the PID to 
@@ -290,109 +244,79 @@
 #define FXR_AT_CFG_PASID_LUT_ENABLE_MASK			0x1ull
 #define FXR_AT_CFG_PASID_LUT_ENABLE_SMASK			0x1ull
 /*
-* Table #14 of fxr_top - FXR_AT_ERR_STS_1
+* Table #12 of fxr_top - FXR_AT_ERR_STS_1
 * This is the Error Status CSR. Bits are set by hardware or by writing to the 
 * #%%#FXR_AT_ERR_FRC_1#%%# CSR. Bits are cleared by writing to the 
 * #%%#FXR_AT_ERR_CLR_1#%%# CSR.
 */
 #define FXR_AT_ERR_STS_1					(FXR_AT_CSRS + 0x000000004000)
 #define FXR_AT_ERR_STS_1_RESETCSR				0x0000000000000000ull
-#define FXR_AT_ERR_STS_1_RESERVED_63_37_SHIFT			37
-#define FXR_AT_ERR_STS_1_RESERVED_63_37_MASK			0x7FFFFFFull
-#define FXR_AT_ERR_STS_1_RESERVED_63_37_SMASK			0xFFFFFFE000000000ull
-#define FXR_AT_ERR_STS_1_IOMMU_SEQ_MSG_ERR_SHIFT		36
-#define FXR_AT_ERR_STS_1_IOMMU_SEQ_MSG_ERR_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_IOMMU_SEQ_MSG_ERR_SMASK		0x1000000000ull
-#define FXR_AT_ERR_STS_1_IOMMU_MEM_TYPE_ERR_SHIFT		35
-#define FXR_AT_ERR_STS_1_IOMMU_MEM_TYPE_ERR_MASK		0x1ull
-#define FXR_AT_ERR_STS_1_IOMMU_MEM_TYPE_ERR_SMASK		0x800000000ull
-#define FXR_AT_ERR_STS_1_DEVTLB_ID_ERR_SHIFT			34
-#define FXR_AT_ERR_STS_1_DEVTLB_ID_ERR_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_DEVTLB_ID_ERR_SMASK			0x400000000ull
-#define FXR_AT_ERR_STS_1_IOMMU_PARITY_ERR_SHIFT			33
-#define FXR_AT_ERR_STS_1_IOMMU_PARITY_ERR_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_IOMMU_PARITY_ERR_SMASK			0x200000000ull
-#define FXR_AT_ERR_STS_1_PTE_LRU_2M4K_SBE_SHIFT			32
+#define FXR_AT_ERR_STS_1_RESERVED_63_27_SHIFT			27
+#define FXR_AT_ERR_STS_1_RESERVED_63_27_MASK			0x1FFFFFFFFFull
+#define FXR_AT_ERR_STS_1_RESERVED_63_27_SMASK			0xFFFFFFFFF8000000ull
+#define FXR_AT_ERR_STS_1_PTE_LRU_2M4K_SBE_SHIFT			26
 #define FXR_AT_ERR_STS_1_PTE_LRU_2M4K_SBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PTE_LRU_2M4K_SBE_SMASK			0x100000000ull
-#define FXR_AT_ERR_STS_1_PID_PASID_SBE_SHIFT			31
+#define FXR_AT_ERR_STS_1_PTE_LRU_2M4K_SBE_SMASK			0x4000000ull
+#define FXR_AT_ERR_STS_1_PID_PASID_SBE_SHIFT			25
 #define FXR_AT_ERR_STS_1_PID_PASID_SBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PID_PASID_SBE_SMASK			0x80000000ull
-#define FXR_AT_ERR_STS_1_PW_RESP_SBE_SHIFT			30
+#define FXR_AT_ERR_STS_1_PID_PASID_SBE_SMASK			0x2000000ull
+#define FXR_AT_ERR_STS_1_PW_RESP_SBE_SHIFT			24
 #define FXR_AT_ERR_STS_1_PW_RESP_SBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PW_RESP_SBE_SMASK			0x40000000ull
-#define FXR_AT_ERR_STS_1_PW_TRID_OF_SBE_SHIFT			29
+#define FXR_AT_ERR_STS_1_PW_RESP_SBE_SMASK			0x1000000ull
+#define FXR_AT_ERR_STS_1_PW_TRID_OF_SBE_SHIFT			23
 #define FXR_AT_ERR_STS_1_PW_TRID_OF_SBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PW_TRID_OF_SBE_SMASK			0x20000000ull
-#define FXR_AT_ERR_STS_1_PW_TRID_SBE_SHIFT			28
+#define FXR_AT_ERR_STS_1_PW_TRID_OF_SBE_SMASK			0x800000ull
+#define FXR_AT_ERR_STS_1_PW_TRID_SBE_SHIFT			22
 #define FXR_AT_ERR_STS_1_PW_TRID_SBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PW_TRID_SBE_SMASK			0x10000000ull
-#define FXR_AT_ERR_STS_1_TR_SBE_SHIFT				27
+#define FXR_AT_ERR_STS_1_PW_TRID_SBE_SMASK			0x400000ull
+#define FXR_AT_ERR_STS_1_TR_SBE_SHIFT				21
 #define FXR_AT_ERR_STS_1_TR_SBE_MASK				0x1ull
-#define FXR_AT_ERR_STS_1_TR_SBE_SMASK				0x8000000ull
-#define FXR_AT_ERR_STS_1_PTEC_DATA_SBE_SHIFT			26
+#define FXR_AT_ERR_STS_1_TR_SBE_SMASK				0x200000ull
+#define FXR_AT_ERR_STS_1_PTEC_DATA_SBE_SHIFT			20
 #define FXR_AT_ERR_STS_1_PTEC_DATA_SBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PTEC_DATA_SBE_SMASK			0x4000000ull
-#define FXR_AT_ERR_STS_1_PTEC_TAG_SBE_SHIFT			25
+#define FXR_AT_ERR_STS_1_PTEC_DATA_SBE_SMASK			0x100000ull
+#define FXR_AT_ERR_STS_1_PTEC_TAG_SBE_SHIFT			19
 #define FXR_AT_ERR_STS_1_PTEC_TAG_SBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PTEC_TAG_SBE_SMASK			0x2000000ull
-#define FXR_AT_ERR_STS_1_PTE_LRU_1G_MBE_SHIFT			24
+#define FXR_AT_ERR_STS_1_PTEC_TAG_SBE_SMASK			0x80000ull
+#define FXR_AT_ERR_STS_1_PTE_LRU_1G_MBE_SHIFT			18
 #define FXR_AT_ERR_STS_1_PTE_LRU_1G_MBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PTE_LRU_1G_MBE_SMASK			0x1000000ull
-#define FXR_AT_ERR_STS_1_PTE_LRU_2M4K_MBE_SHIFT			23
+#define FXR_AT_ERR_STS_1_PTE_LRU_1G_MBE_SMASK			0x40000ull
+#define FXR_AT_ERR_STS_1_PTE_LRU_2M4K_MBE_SHIFT			17
 #define FXR_AT_ERR_STS_1_PTE_LRU_2M4K_MBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PTE_LRU_2M4K_MBE_SMASK			0x800000ull
-#define FXR_AT_ERR_STS_1_PID_PASID_MBE_SHIFT			22
+#define FXR_AT_ERR_STS_1_PTE_LRU_2M4K_MBE_SMASK			0x20000ull
+#define FXR_AT_ERR_STS_1_PID_PASID_MBE_SHIFT			16
 #define FXR_AT_ERR_STS_1_PID_PASID_MBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PID_PASID_MBE_SMASK			0x400000ull
-#define FXR_AT_ERR_STS_1_PW_RESP_MBE_SHIFT			21
+#define FXR_AT_ERR_STS_1_PID_PASID_MBE_SMASK			0x10000ull
+#define FXR_AT_ERR_STS_1_PW_RESP_MBE_SHIFT			15
 #define FXR_AT_ERR_STS_1_PW_RESP_MBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PW_RESP_MBE_SMASK			0x200000ull
-#define FXR_AT_ERR_STS_1_PW_TRID_OF_MBE_SHIFT			20
+#define FXR_AT_ERR_STS_1_PW_RESP_MBE_SMASK			0x8000ull
+#define FXR_AT_ERR_STS_1_PW_TRID_OF_MBE_SHIFT			14
 #define FXR_AT_ERR_STS_1_PW_TRID_OF_MBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PW_TRID_OF_MBE_SMASK			0x100000ull
-#define FXR_AT_ERR_STS_1_PW_TRID_MBE_SHIFT			19
+#define FXR_AT_ERR_STS_1_PW_TRID_OF_MBE_SMASK			0x4000ull
+#define FXR_AT_ERR_STS_1_PW_TRID_MBE_SHIFT			13
 #define FXR_AT_ERR_STS_1_PW_TRID_MBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PW_TRID_MBE_SMASK			0x80000ull
-#define FXR_AT_ERR_STS_1_TR_MBE_SHIFT				18
+#define FXR_AT_ERR_STS_1_PW_TRID_MBE_SMASK			0x2000ull
+#define FXR_AT_ERR_STS_1_TR_MBE_SHIFT				12
 #define FXR_AT_ERR_STS_1_TR_MBE_MASK				0x1ull
-#define FXR_AT_ERR_STS_1_TR_MBE_SMASK				0x40000ull
-#define FXR_AT_ERR_STS_1_PTEC_DATA_MBE_SHIFT			17
+#define FXR_AT_ERR_STS_1_TR_MBE_SMASK				0x1000ull
+#define FXR_AT_ERR_STS_1_PTEC_DATA_MBE_SHIFT			11
 #define FXR_AT_ERR_STS_1_PTEC_DATA_MBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PTEC_DATA_MBE_SMASK			0x20000ull
-#define FXR_AT_ERR_STS_1_PTEC_TAG_MBE_SHIFT			16
+#define FXR_AT_ERR_STS_1_PTEC_DATA_MBE_SMASK			0x800ull
+#define FXR_AT_ERR_STS_1_PTEC_TAG_MBE_SHIFT			10
 #define FXR_AT_ERR_STS_1_PTEC_TAG_MBE_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PTEC_TAG_MBE_SMASK			0x10000ull
-#define FXR_AT_ERR_STS_1_PAGE_SIZE_ERR_SHIFT			15
-#define FXR_AT_ERR_STS_1_PAGE_SIZE_ERR_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PAGE_SIZE_ERR_SMASK			0x8000ull
-#define FXR_AT_ERR_STS_1_INCORRECT_SID_ERR_SHIFT		14
-#define FXR_AT_ERR_STS_1_INCORRECT_SID_ERR_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_INCORRECT_SID_ERR_SMASK		0x4000ull
-#define FXR_AT_ERR_STS_1_IOMMU_RSP_ERR_SHIFT			13
+#define FXR_AT_ERR_STS_1_PTEC_TAG_MBE_SMASK			0x400ull
+#define FXR_AT_ERR_STS_1_IOMMU_RSP_ERR_SHIFT			9
 #define FXR_AT_ERR_STS_1_IOMMU_RSP_ERR_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_IOMMU_RSP_ERR_SMASK			0x2000ull
-#define FXR_AT_ERR_STS_1_PGR_RSP_ERR_OF_SHIFT			12
+#define FXR_AT_ERR_STS_1_IOMMU_RSP_ERR_SMASK			0x200ull
+#define FXR_AT_ERR_STS_1_PGR_RSP_ERR_OF_SHIFT			8
 #define FXR_AT_ERR_STS_1_PGR_RSP_ERR_OF_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PGR_RSP_ERR_OF_SMASK			0x1000ull
-#define FXR_AT_ERR_STS_1_PGR_RSP_ERR_SHIFT			11
+#define FXR_AT_ERR_STS_1_PGR_RSP_ERR_OF_SMASK			0x100ull
+#define FXR_AT_ERR_STS_1_PGR_RSP_ERR_SHIFT			7
 #define FXR_AT_ERR_STS_1_PGR_RSP_ERR_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PGR_RSP_ERR_SMASK			0x800ull
-#define FXR_AT_ERR_STS_1_GENPROT_ERR_SHIFT			10
+#define FXR_AT_ERR_STS_1_PGR_RSP_ERR_SMASK			0x80ull
+#define FXR_AT_ERR_STS_1_GENPROT_ERR_SHIFT			6
 #define FXR_AT_ERR_STS_1_GENPROT_ERR_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_GENPROT_ERR_SMASK			0x400ull
-#define FXR_AT_ERR_STS_1_LTDPR_ERR_SHIFT			9
-#define FXR_AT_ERR_STS_1_LTDPR_ERR_MASK				0x1ull
-#define FXR_AT_ERR_STS_1_LTDPR_ERR_SMASK			0x200ull
-#define FXR_AT_ERR_STS_1_PHMR_ERR_SHIFT				8
-#define FXR_AT_ERR_STS_1_PHMR_ERR_MASK				0x1ull
-#define FXR_AT_ERR_STS_1_PHMR_ERR_SMASK				0x100ull
-#define FXR_AT_ERR_STS_1_PLMR_ERR_SHIFT				7
-#define FXR_AT_ERR_STS_1_PLMR_ERR_MASK				0x1ull
-#define FXR_AT_ERR_STS_1_PLMR_ERR_SMASK				0x80ull
-#define FXR_AT_ERR_STS_1_PW_MEM_TYPE_ERR_SHIFT			6
-#define FXR_AT_ERR_STS_1_PW_MEM_TYPE_ERR_MASK			0x1ull
-#define FXR_AT_ERR_STS_1_PW_MEM_TYPE_ERR_SMASK			0x40ull
+#define FXR_AT_ERR_STS_1_GENPROT_ERR_SMASK			0x40ull
 #define FXR_AT_ERR_STS_1_PF_PGR_DISABLED_SHIFT			5
 #define FXR_AT_ERR_STS_1_PF_PGR_DISABLED_MASK			0x1ull
 #define FXR_AT_ERR_STS_1_PF_PGR_DISABLED_SMASK			0x20ull
@@ -412,117 +336,117 @@
 #define FXR_AT_ERR_STS_1_IOMMU_DISABLED_MASK			0x1ull
 #define FXR_AT_ERR_STS_1_IOMMU_DISABLED_SMASK			0x1ull
 /*
-* Table #15 of fxr_top - FXR_AT_ERR_CLR_1
+* Table #13 of fxr_top - FXR_AT_ERR_CLR_1
 * This is the Error Clear CSR. Writing a 1 to a valid bit will clear the 
 * corresponding bit in the #%%#FXR_AT_ERR_STS_1#%%# CSR.
 */
 #define FXR_AT_ERR_CLR_1					(FXR_AT_CSRS + 0x000000004008)
 #define FXR_AT_ERR_CLR_1_RESETCSR				0x0000000000000000ull
-#define FXR_AT_ERR_CLR_1_RESERVED_63_37_SHIFT			37
-#define FXR_AT_ERR_CLR_1_RESERVED_63_37_MASK			0x7FFFFFFull
-#define FXR_AT_ERR_CLR_1_RESERVED_63_37_SMASK			0xFFFFFFE000000000ull
+#define FXR_AT_ERR_CLR_1_RESERVED_63_27_SHIFT			27
+#define FXR_AT_ERR_CLR_1_RESERVED_63_27_MASK			0x1FFFFFFFFFull
+#define FXR_AT_ERR_CLR_1_RESERVED_63_27_SMASK			0xFFFFFFFFF8000000ull
 #define FXR_AT_ERR_CLR_1_EVENTS_SHIFT				0
-#define FXR_AT_ERR_CLR_1_EVENTS_MASK				0x1FFFFFFFFFull
-#define FXR_AT_ERR_CLR_1_EVENTS_SMASK				0x1FFFFFFFFFull
+#define FXR_AT_ERR_CLR_1_EVENTS_MASK				0x7FFFFFFull
+#define FXR_AT_ERR_CLR_1_EVENTS_SMASK				0x7FFFFFFull
 /*
-* Table #16 of fxr_top - FXR_AT_ERR_FRC_1
+* Table #14 of fxr_top - FXR_AT_ERR_FRC_1
 * This is the Error Force CSR. Writing a 1 to a valid bit will set the 
 * corresponding bit in the #%%#FXR_AT_ERR_STS_1#%%# CSR.
 */
 #define FXR_AT_ERR_FRC_1					(FXR_AT_CSRS + 0x000000004010)
 #define FXR_AT_ERR_FRC_1_RESETCSR				0x0000000000000000ull
-#define FXR_AT_ERR_FRC_1_RESERVED_63_37_SHIFT			37
-#define FXR_AT_ERR_FRC_1_RESERVED_63_37_MASK			0x7FFFFFFull
-#define FXR_AT_ERR_FRC_1_RESERVED_63_37_SMASK			0xFFFFFFE000000000ull
+#define FXR_AT_ERR_FRC_1_RESERVED_63_27_SHIFT			27
+#define FXR_AT_ERR_FRC_1_RESERVED_63_27_MASK			0x1FFFFFFFFFull
+#define FXR_AT_ERR_FRC_1_RESERVED_63_27_SMASK			0xFFFFFFFFF8000000ull
 #define FXR_AT_ERR_FRC_1_EVENTS_SHIFT				0
-#define FXR_AT_ERR_FRC_1_EVENTS_MASK				0x1FFFFFFFFFull
-#define FXR_AT_ERR_FRC_1_EVENTS_SMASK				0x1FFFFFFFFFull
+#define FXR_AT_ERR_FRC_1_EVENTS_MASK				0x7FFFFFFull
+#define FXR_AT_ERR_FRC_1_EVENTS_SMASK				0x7FFFFFFull
 /*
-* Table #17 of fxr_top - FXR_AT_ERR_EN_HOST_1
+* Table #15 of fxr_top - FXR_AT_ERR_EN_HOST_1
 * This is the Error Enable for the Host Interrupt. If a bit is set, the 
 * corresponding error bit in #%%#FXR_AT_ERR_STS_1#%%# will cause an interrupt on 
 * the HOST interrupt signal.
 */
 #define FXR_AT_ERR_EN_HOST_1					(FXR_AT_CSRS + 0x000000004018)
 #define FXR_AT_ERR_EN_HOST_1_RESETCSR				0x0000000000000000ull
-#define FXR_AT_ERR_EN_HOST_1_RESERVED_63_37_SHIFT		37
-#define FXR_AT_ERR_EN_HOST_1_RESERVED_63_37_MASK		0x7FFFFFFull
-#define FXR_AT_ERR_EN_HOST_1_RESERVED_63_37_SMASK		0xFFFFFFE000000000ull
+#define FXR_AT_ERR_EN_HOST_1_RESERVED_63_27_SHIFT		27
+#define FXR_AT_ERR_EN_HOST_1_RESERVED_63_27_MASK		0x1FFFFFFFFFull
+#define FXR_AT_ERR_EN_HOST_1_RESERVED_63_27_SMASK		0xFFFFFFFFF8000000ull
 #define FXR_AT_ERR_EN_HOST_1_EVENTS_SHIFT			0
-#define FXR_AT_ERR_EN_HOST_1_EVENTS_MASK			0x1FFFFFFFFFull
-#define FXR_AT_ERR_EN_HOST_1_EVENTS_SMASK			0x1FFFFFFFFFull
+#define FXR_AT_ERR_EN_HOST_1_EVENTS_MASK			0x7FFFFFFull
+#define FXR_AT_ERR_EN_HOST_1_EVENTS_SMASK			0x7FFFFFFull
 /*
-* Table #18 of fxr_top - FXR_AT_ERR_FIRST_HOST_1
+* Table #16 of fxr_top - FXR_AT_ERR_FIRST_HOST_1
 * This is the First Error CSR for the Host Interrupt. When this CSR is clear, it 
 * will capture the next #%%#FXR_AT_ERR_STS_1#%%# value when a new HOST Interrupt 
 * occurs.
 */
 #define FXR_AT_ERR_FIRST_HOST_1					(FXR_AT_CSRS + 0x000000004020)
 #define FXR_AT_ERR_FIRST_HOST_1_RESETCSR			0x0000000000000000ull
-#define FXR_AT_ERR_FIRST_HOST_1_RESERVED_63_37_SHIFT		37
-#define FXR_AT_ERR_FIRST_HOST_1_RESERVED_63_37_MASK		0x7FFFFFFull
-#define FXR_AT_ERR_FIRST_HOST_1_RESERVED_63_37_SMASK		0xFFFFFFE000000000ull
+#define FXR_AT_ERR_FIRST_HOST_1_RESERVED_63_27_SHIFT		27
+#define FXR_AT_ERR_FIRST_HOST_1_RESERVED_63_27_MASK		0x1FFFFFFFFFull
+#define FXR_AT_ERR_FIRST_HOST_1_RESERVED_63_27_SMASK		0xFFFFFFFFF8000000ull
 #define FXR_AT_ERR_FIRST_HOST_1_EVENTS_SHIFT			0
-#define FXR_AT_ERR_FIRST_HOST_1_EVENTS_MASK			0x1FFFFFFFFFull
-#define FXR_AT_ERR_FIRST_HOST_1_EVENTS_SMASK			0x1FFFFFFFFFull
+#define FXR_AT_ERR_FIRST_HOST_1_EVENTS_MASK			0x7FFFFFFull
+#define FXR_AT_ERR_FIRST_HOST_1_EVENTS_SMASK			0x7FFFFFFull
 /*
-* Table #19 of fxr_top - FXR_AT_ERR_EN_BMC_1
+* Table #17 of fxr_top - FXR_AT_ERR_EN_BMC_1
 * This is the Error Enable for the BMC Interrupt. If a bit is set, the 
 * corresponding error bit in #%%#FXR_AT_ERR_STS_1#%%# will cause an interrupt on 
 * the BMC interrupt signal.
 */
 #define FXR_AT_ERR_EN_BMC_1					(FXR_AT_CSRS + 0x000000004028)
 #define FXR_AT_ERR_EN_BMC_1_RESETCSR				0x0000000000000000ull
-#define FXR_AT_ERR_EN_BMC_1_RESERVED_63_37_SHIFT		37
-#define FXR_AT_ERR_EN_BMC_1_RESERVED_63_37_MASK			0x7FFFFFFull
-#define FXR_AT_ERR_EN_BMC_1_RESERVED_63_37_SMASK		0xFFFFFFE000000000ull
+#define FXR_AT_ERR_EN_BMC_1_RESERVED_63_27_SHIFT		27
+#define FXR_AT_ERR_EN_BMC_1_RESERVED_63_27_MASK			0x1FFFFFFFFFull
+#define FXR_AT_ERR_EN_BMC_1_RESERVED_63_27_SMASK		0xFFFFFFFFF8000000ull
 #define FXR_AT_ERR_EN_BMC_1_EVENTS_SHIFT			0
-#define FXR_AT_ERR_EN_BMC_1_EVENTS_MASK				0x1FFFFFFFFFull
-#define FXR_AT_ERR_EN_BMC_1_EVENTS_SMASK			0x1FFFFFFFFFull
+#define FXR_AT_ERR_EN_BMC_1_EVENTS_MASK				0x7FFFFFFull
+#define FXR_AT_ERR_EN_BMC_1_EVENTS_SMASK			0x7FFFFFFull
 /*
-* Table #20 of fxr_top - FXR_AT_ERR_FIRST_BMC_1
+* Table #18 of fxr_top - FXR_AT_ERR_FIRST_BMC_1
 * This is the First Error CSR for the BMC Interrupt. When this CSR is clear, it 
 * will capture the next #%%#FXR_AT_ERR_STS_1#%%# value when a new BMC Interrupt 
 * occurs.
 */
 #define FXR_AT_ERR_FIRST_BMC_1					(FXR_AT_CSRS + 0x000000004030)
 #define FXR_AT_ERR_FIRST_BMC_1_RESETCSR				0x0000000000000000ull
-#define FXR_AT_ERR_FIRST_BMC_1_RESERVED_63_37_SHIFT		37
-#define FXR_AT_ERR_FIRST_BMC_1_RESERVED_63_37_MASK		0x7FFFFFFull
-#define FXR_AT_ERR_FIRST_BMC_1_RESERVED_63_37_SMASK		0xFFFFFFE000000000ull
+#define FXR_AT_ERR_FIRST_BMC_1_RESERVED_63_27_SHIFT		27
+#define FXR_AT_ERR_FIRST_BMC_1_RESERVED_63_27_MASK		0x1FFFFFFFFFull
+#define FXR_AT_ERR_FIRST_BMC_1_RESERVED_63_27_SMASK		0xFFFFFFFFF8000000ull
 #define FXR_AT_ERR_FIRST_BMC_1_EVENTS_SHIFT			0
-#define FXR_AT_ERR_FIRST_BMC_1_EVENTS_MASK			0x1FFFFFFFFFull
-#define FXR_AT_ERR_FIRST_BMC_1_EVENTS_SMASK			0x1FFFFFFFFFull
+#define FXR_AT_ERR_FIRST_BMC_1_EVENTS_MASK			0x7FFFFFFull
+#define FXR_AT_ERR_FIRST_BMC_1_EVENTS_SMASK			0x7FFFFFFull
 /*
-* Table #21 of fxr_top - FXR_AT_ERR_EN_QUAR_1
+* Table #19 of fxr_top - FXR_AT_ERR_EN_QUAR_1
 * This is the Error Enable for the Quarantine Interrupt. If a bit is set, the 
 * corresponding error bit in #%%#FXR_AT_ERR_STS_1#%%# will cause an interrupt on 
 * the QUAR interrupt signal.
 */
 #define FXR_AT_ERR_EN_QUAR_1					(FXR_AT_CSRS + 0x000000004038)
 #define FXR_AT_ERR_EN_QUAR_1_RESETCSR				0x0000000000000000ull
-#define FXR_AT_ERR_EN_QUAR_1_RESERVED_63_37_SHIFT		37
-#define FXR_AT_ERR_EN_QUAR_1_RESERVED_63_37_MASK		0x7FFFFFFull
-#define FXR_AT_ERR_EN_QUAR_1_RESERVED_63_37_SMASK		0xFFFFFFE000000000ull
+#define FXR_AT_ERR_EN_QUAR_1_RESERVED_63_27_SHIFT		27
+#define FXR_AT_ERR_EN_QUAR_1_RESERVED_63_27_MASK		0x1FFFFFFFFFull
+#define FXR_AT_ERR_EN_QUAR_1_RESERVED_63_27_SMASK		0xFFFFFFFFF8000000ull
 #define FXR_AT_ERR_EN_QUAR_1_EVENTS_SHIFT			0
-#define FXR_AT_ERR_EN_QUAR_1_EVENTS_MASK			0x1FFFFFFFFFull
-#define FXR_AT_ERR_EN_QUAR_1_EVENTS_SMASK			0x1FFFFFFFFFull
+#define FXR_AT_ERR_EN_QUAR_1_EVENTS_MASK			0x7FFFFFFull
+#define FXR_AT_ERR_EN_QUAR_1_EVENTS_SMASK			0x7FFFFFFull
 /*
-* Table #22 of fxr_top - FXR_AT_ERR_FIRST_QUAR_1
+* Table #20 of fxr_top - FXR_AT_ERR_FIRST_QUAR_1
 * This is the First Error CSR for the Quarantine Interrupt. When this CSR is 
 * clear, it will capture the next #%%#FXR_AT_ERR_STS_1#%%# value when a new QUAR 
 * Interrupt occurs.
 */
 #define FXR_AT_ERR_FIRST_QUAR_1					(FXR_AT_CSRS + 0x000000004040)
 #define FXR_AT_ERR_FIRST_QUAR_1_RESETCSR			0x0000000000000000ull
-#define FXR_AT_ERR_FIRST_QUAR_1_RESERVED_63_37_SHIFT		37
-#define FXR_AT_ERR_FIRST_QUAR_1_RESERVED_63_37_MASK		0x7FFFFFFull
-#define FXR_AT_ERR_FIRST_QUAR_1_RESERVED_63_37_SMASK		0xFFFFFFE000000000ull
+#define FXR_AT_ERR_FIRST_QUAR_1_RESERVED_63_27_SHIFT		27
+#define FXR_AT_ERR_FIRST_QUAR_1_RESERVED_63_27_MASK		0x1FFFFFFFFFull
+#define FXR_AT_ERR_FIRST_QUAR_1_RESERVED_63_27_SMASK		0xFFFFFFFFF8000000ull
 #define FXR_AT_ERR_FIRST_QUAR_1_EVENTS_SHIFT			0
-#define FXR_AT_ERR_FIRST_QUAR_1_EVENTS_MASK			0x1FFFFFFFFFull
-#define FXR_AT_ERR_FIRST_QUAR_1_EVENTS_SMASK			0x1FFFFFFFFFull
+#define FXR_AT_ERR_FIRST_QUAR_1_EVENTS_MASK			0x7FFFFFFull
+#define FXR_AT_ERR_FIRST_QUAR_1_EVENTS_SMASK			0x7FFFFFFull
 /*
-* Table #23 of fxr_top - FXR_AT_ERR_INFO_1A
+* Table #21 of fxr_top - FXR_AT_ERR_INFO_1A
 * Error Info for the #%%#mbe#%%# and #%%#sbe#%%# events. (There may be many 
 * Error Info Registers.)
 */
@@ -553,7 +477,7 @@
 #define FXR_AT_ERR_INFO_1A_PTEC_TAG_MBE_COUNT_MASK		0xFFull
 #define FXR_AT_ERR_INFO_1A_PTEC_TAG_MBE_COUNT_SMASK		0xFFull
 /*
-* Table #24 of fxr_top - FXR_AT_ERR_INFO_1B
+* Table #22 of fxr_top - FXR_AT_ERR_INFO_1B
 * Error Info for the #%%#mbe#%%# and #%%#sbe#%%# events. (There may be many 
 * Error Info Registers.)
 */
@@ -584,7 +508,7 @@
 #define FXR_AT_ERR_INFO_1B_TRBUF_MBE_COUNT_MASK			0xFFull
 #define FXR_AT_ERR_INFO_1B_TRBUF_MBE_COUNT_SMASK		0xFFull
 /*
-* Table #25 of fxr_top - FXR_AT_ERR_INFO_1C
+* Table #23 of fxr_top - FXR_AT_ERR_INFO_1C
 * Error Info for the #%%#mbe#%%# and #%%#sbe#%%# events. (There may be many 
 * Error Info Registers.)
 */
@@ -615,7 +539,7 @@
 #define FXR_AT_ERR_INFO_1C_PW_OF_MBE_COUNT_MASK			0xFFull
 #define FXR_AT_ERR_INFO_1C_PW_OF_MBE_COUNT_SMASK		0xFFull
 /*
-* Table #26 of fxr_top - FXR_AT_ERR_INFO_1D
+* Table #24 of fxr_top - FXR_AT_ERR_INFO_1D
 * Error Info for the #%%#mbe#%%# and #%%#sbe#%%# events. (There may be many 
 * Error Info Registers.)
 */
@@ -646,7 +570,7 @@
 #define FXR_AT_ERR_INFO_1D_PID_PASID_MBE_COUNT_MASK		0xFFull
 #define FXR_AT_ERR_INFO_1D_PID_PASID_MBE_COUNT_SMASK		0xFFull
 /*
-* Table #27 of fxr_top - FXR_AT_ERR_INFO_1E
+* Table #25 of fxr_top - FXR_AT_ERR_INFO_1E
 * Error Info for the #%%#mbe#%%# and #%%#sbe#%%# events. (There may be many 
 * Error Info Registers.)
 */
@@ -659,7 +583,7 @@
 #define FXR_AT_ERR_INFO_1E_LRU_1G_MBE_COUNT_MASK		0xFFull
 #define FXR_AT_ERR_INFO_1E_LRU_1G_MBE_COUNT_SMASK		0xFFull
 /*
-* Table #28 of fxr_top - FXR_AT_ERR_INFO_1F
+* Table #26 of fxr_top - FXR_AT_ERR_INFO_1F
 * Error Info for Page Group Request Errors
 */
 #define FXR_AT_ERR_INFO_1F					(FXR_AT_CSRS + 0x000000004070)
@@ -677,7 +601,7 @@
 #define FXR_AT_ERR_INFO_1F_PGR_ERROR_PASID_MASK			0xFFFFFull
 #define FXR_AT_ERR_INFO_1F_PGR_ERROR_PASID_SMASK		0xFFFFFull
 /*
-* Table #29 of fxr_top - FXR_AT_ERR_INFO_1G
+* Table #27 of fxr_top - FXR_AT_ERR_INFO_1G
 * Error Info for Page Group Request Errors
 */
 #define FXR_AT_ERR_INFO_1G					(FXR_AT_CSRS + 0x000000004078)
@@ -704,78 +628,7 @@
 #define FXR_AT_ERR_INFO_1G_RESERVED_0_MASK			0x1ull
 #define FXR_AT_ERR_INFO_1G_RESERVED_0_SMASK			0x1ull
 /*
-* Table #30 of fxr_top - FXR_AT_STS_PLMR_BASE
-* FXR_AT working copy of the PLMR base register, written by an IOMMU Sequencer 
-* Message, used to check all translated addresses for Protected Low Memory 
-* Region access violations.
-*/
-#define FXR_AT_STS_PLMR_BASE					(FXR_AT_CSRS + 0x000000004100)
-#define FXR_AT_STS_PLMR_BASE_RESETCSR				0x0000000000000000ull
-#define FXR_AT_STS_PLMR_BASE_RESERVED_63_32_SHIFT		32
-#define FXR_AT_STS_PLMR_BASE_RESERVED_63_32_MASK		0xFFFFFFFFull
-#define FXR_AT_STS_PLMR_BASE_RESERVED_63_32_SMASK		0xFFFFFFFF00000000ull
-#define FXR_AT_STS_PLMR_BASE_PLMR_BASE_SHIFT			20
-#define FXR_AT_STS_PLMR_BASE_PLMR_BASE_MASK			0xFFFull
-#define FXR_AT_STS_PLMR_BASE_PLMR_BASE_SMASK			0xFFF00000ull
-#define FXR_AT_STS_PLMR_BASE_RESERVED_19_1_SHIFT		1
-#define FXR_AT_STS_PLMR_BASE_RESERVED_19_1_MASK			0x7FFFFull
-#define FXR_AT_STS_PLMR_BASE_RESERVED_19_1_SMASK		0xFFFFEull
-#define FXR_AT_STS_PLMR_BASE_PMEN_SHIFT				0
-#define FXR_AT_STS_PLMR_BASE_PMEN_MASK				0x1ull
-#define FXR_AT_STS_PLMR_BASE_PMEN_SMASK				0x1ull
-/*
-* Table #31 of fxr_top - FXR_AT_STS_PLMR_LIMIT
-* FXR_AT working copy of the PLMR limit register, written by an IOMMU Sequencer 
-* Message, used to check all translated addresses for Protected Low Memory 
-* Region access violations.
-*/
-#define FXR_AT_STS_PLMR_LIMIT					(FXR_AT_CSRS + 0x000000004108)
-#define FXR_AT_STS_PLMR_LIMIT_RESETCSR				0x0000000000000000ull
-#define FXR_AT_STS_PLMR_LIMIT_RESERVED_63_32_SHIFT		32
-#define FXR_AT_STS_PLMR_LIMIT_RESERVED_63_32_MASK		0xFFFFFFFFull
-#define FXR_AT_STS_PLMR_LIMIT_RESERVED_63_32_SMASK		0xFFFFFFFF00000000ull
-#define FXR_AT_STS_PLMR_LIMIT_PLMR_LIMIT_SHIFT			20
-#define FXR_AT_STS_PLMR_LIMIT_PLMR_LIMIT_MASK			0xFFFull
-#define FXR_AT_STS_PLMR_LIMIT_PLMR_LIMIT_SMASK			0xFFF00000ull
-#define FXR_AT_STS_PLMR_LIMIT_RESERVED_19_0_SHIFT		0
-#define FXR_AT_STS_PLMR_LIMIT_RESERVED_19_0_MASK		0xFFFFFull
-#define FXR_AT_STS_PLMR_LIMIT_RESERVED_19_0_SMASK		0xFFFFFull
-/*
-* Table #32 of fxr_top - FXR_AT_STS_PHMR_BASE
-* FXR_AT working copy of the PHMR base register, written by an IOMMU Sequencer 
-* Message, used to check all translated addresses for Protected High Memory 
-* Region access violations.
-*/
-#define FXR_AT_STS_PHMR_BASE					(FXR_AT_CSRS + 0x000000004110)
-#define FXR_AT_STS_PHMR_BASE_RESETCSR				0x0000000000000000ull
-#define FXR_AT_STS_PHMR_BASE_RESERVED_63_48_SHIFT		48
-#define FXR_AT_STS_PHMR_BASE_RESERVED_63_48_MASK		0xFFFFull
-#define FXR_AT_STS_PHMR_BASE_RESERVED_63_48_SMASK		0xFFFF000000000000ull
-#define FXR_AT_STS_PHMR_BASE_PHMR_BASE_SHIFT			20
-#define FXR_AT_STS_PHMR_BASE_PHMR_BASE_MASK			0xFFFFFFFull
-#define FXR_AT_STS_PHMR_BASE_PHMR_BASE_SMASK			0xFFFFFFF00000ull
-#define FXR_AT_STS_PHMR_BASE_RESERVED_19_0_SHIFT		0
-#define FXR_AT_STS_PHMR_BASE_RESERVED_19_0_MASK			0xFFFFFull
-#define FXR_AT_STS_PHMR_BASE_RESERVED_19_0_SMASK		0xFFFFFull
-/*
-* Table #33 of fxr_top - FXR_AT_STS_PHMR_LIMIT
-* FXR_AT working copy of the PHMR limit register, written by an IOMMU Sequencer 
-* Message, used to check all translated addresses for Protected High Memory 
-* Region access violations.
-*/
-#define FXR_AT_STS_PHMR_LIMIT					(FXR_AT_CSRS + 0x000000004118)
-#define FXR_AT_STS_PHMR_LIMIT_RESETCSR				0x0000000000000000ull
-#define FXR_AT_STS_PHMR_LIMIT_RESERVED_63_48_SHIFT		48
-#define FXR_AT_STS_PHMR_LIMIT_RESERVED_63_48_MASK		0xFFFFull
-#define FXR_AT_STS_PHMR_LIMIT_RESERVED_63_48_SMASK		0xFFFF000000000000ull
-#define FXR_AT_STS_PHMR_LIMIT_PHMR_LIMIT_SHIFT			20
-#define FXR_AT_STS_PHMR_LIMIT_PHMR_LIMIT_MASK			0xFFFFFFFull
-#define FXR_AT_STS_PHMR_LIMIT_PHMR_LIMIT_SMASK			0xFFFFFFF00000ull
-#define FXR_AT_STS_PHMR_LIMIT_RESERVED_19_0_SHIFT		0
-#define FXR_AT_STS_PHMR_LIMIT_RESERVED_19_0_MASK		0xFFFFFull
-#define FXR_AT_STS_PHMR_LIMIT_RESERVED_19_0_SMASK		0xFFFFFull
-/*
-* Table #34 of fxr_top - FXR_AT_STS_GENERAL_1
+* Table #28 of fxr_top - FXR_AT_STS_GENERAL_1
 * FXR_AT General status of important state(i.e. FSM states, open request slots, 
 * etc.)
 */
@@ -797,7 +650,7 @@
 #define FXR_AT_STS_GENERAL_1_AVAILABLE_REQS_MASK		0xFFull
 #define FXR_AT_STS_GENERAL_1_AVAILABLE_REQS_SMASK		0xFFull
 /*
-* Table #35 of fxr_top - FXR_AT_DBG_TREQ_BUF_ADDR
+* Table #29 of fxr_top - FXR_AT_DBG_TREQ_BUF_ADDR
 * This is an AT debug CSR. It allows indirect access to the AT Request Buffer. 
 * These arrays cannot be written to during normal operation. This register is 
 * for debug use only. Request Buffer entries are 88 bits, with 128 entries. The 
@@ -825,7 +678,7 @@
 #define FXR_AT_DBG_TREQ_BUF_ADDR_ADDRESS_MASK			0xFFFFFFFFFFFFFull
 #define FXR_AT_DBG_TREQ_BUF_ADDR_ADDRESS_SMASK			0xFFFFFFFFFFFFFull
 /*
-* Table #36 of fxr_top - FXR_AT_DBG_TREQ_BUF_DATA0
+* Table #30 of fxr_top - FXR_AT_DBG_TREQ_BUF_DATA0
 * This is an AT debug CSR. This is the data for bits [63:0] of the AT Request 
 * Buffer being accessed with the AT_DBG_TREQ_BUF_ADDR register. The data from 
 * this CSR is written to the AT Request Buffer array if the write bit is active 
@@ -838,7 +691,7 @@
 #define FXR_AT_DBG_TREQ_BUF_DATA0_DATA_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_AT_DBG_TREQ_BUF_DATA0_DATA_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #37 of fxr_top - FXR_AT_DBG_TREQ_BUF_DATA1
+* Table #31 of fxr_top - FXR_AT_DBG_TREQ_BUF_DATA1
 * This is an AT debug CSR. This is the data for bits [79:64] of the AT Request 
 * Buffer being accessed with the AT_DBG_TREQ_BUF_ADDR register. The data from 
 * this CSR is written to the AT Request Buffer array if the write bit is active 
@@ -857,7 +710,7 @@
 #define FXR_AT_DBG_TREQ_BUF_DATA1_DATA_MASK			0xFFFFFull
 #define FXR_AT_DBG_TREQ_BUF_DATA1_DATA_SMASK			0xFFFFFull
 /*
-* Table #38 of fxr_top - FXR_AT_DBG_PW_RSP_BUF_ADDR
+* Table #32 of fxr_top - FXR_AT_DBG_PW_RSP_BUF_ADDR
 * This is an AT debug CSR. It allows indirect access to the AT Page Walk 
 * Response Buffer. These arrays cannot be written to during normal operation. 
 * This register is for debug use only. Note that this register is 88 bits, with 
@@ -885,7 +738,7 @@
 #define FXR_AT_DBG_PW_RSP_BUF_ADDR_ADDRESS_MASK			0xFFFFFFFFFFFFFull
 #define FXR_AT_DBG_PW_RSP_BUF_ADDR_ADDRESS_SMASK		0xFFFFFFFFFFFFFull
 /*
-* Table #39 of fxr_top - FXR_AT_DBG_PW_RSP_BUF_DATA0
+* Table #33 of fxr_top - FXR_AT_DBG_PW_RSP_BUF_DATA0
 * This is an AT debug CSR. This is the data for bits [63:0] of the AT Page Walk 
 * Response Buffer being accessed with the AT_DBG_PW_RSP_BUF_ADDR register. The 
 * data from this CSR is written to the AT Page Walk Response Buffer array if the 
@@ -898,7 +751,7 @@
 #define FXR_AT_DBG_PW_RSP_BUF_DATA0_DATA_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_AT_DBG_PW_RSP_BUF_DATA0_DATA_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #40 of fxr_top - FXR_AT_DBG_PW_RSP_BUF_DATA1
+* Table #34 of fxr_top - FXR_AT_DBG_PW_RSP_BUF_DATA1
 * This is an AT debug CSR. This is the data for bits [79:64] of the AT Page Walk 
 * Response Buffer being accessed with the AT_DBG_PW_RSP_BUF_ADDR register. The 
 * data from this CSR is written to the AT Page Walk Response Buffer array if the 
@@ -917,7 +770,7 @@
 #define FXR_AT_DBG_PW_RSP_BUF_DATA1_DATA_MASK			0xFFFFull
 #define FXR_AT_DBG_PW_RSP_BUF_DATA1_DATA_SMASK			0xFFFFull
 /*
-* Table #41 of fxr_top - FXR_AT_DBG_LRU2M4K_SETS_ADDR
+* Table #35 of fxr_top - FXR_AT_DBG_LRU2M4K_SETS_ADDR
 * This is an AT debug CSR. It allows indirect access to the 2M/4K Page Entry LRU 
 * state array. These arrays cannot be written to during normal operation. This 
 * register is for debug use only. Note that this register is 80 bits, with 4096 
@@ -945,7 +798,7 @@
 #define FXR_AT_DBG_LRU2M4K_SETS_ADDR_ADDRESS_MASK		0xFFFFFFFFFFFFFull
 #define FXR_AT_DBG_LRU2M4K_SETS_ADDR_ADDRESS_SMASK		0xFFFFFFFFFFFFFull
 /*
-* Table #42 of fxr_top - FXR_AT_DBG_LRU2M4K_SETS_DATA0
+* Table #36 of fxr_top - FXR_AT_DBG_LRU2M4K_SETS_DATA0
 * This is an AT debug CSR. This is the data for bits [63:0] of the 2M/4K Page 
 * Entry LRU state being accessed with the AT_DBG_LRU2M4K_SETS_ADDR register. The 
 * data from this CSR is written to the 2M/4K Page Entry LRU state array if the 
@@ -958,7 +811,7 @@
 #define FXR_AT_DBG_LRU2M4K_SETS_DATA0_DATA_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_AT_DBG_LRU2M4K_SETS_DATA0_DATA_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #43 of fxr_top - FXR_AT_DBG_LRU2M4K_SETS_DATA1
+* Table #37 of fxr_top - FXR_AT_DBG_LRU2M4K_SETS_DATA1
 * This is an AT debug CSR. This is the data for bits [79:64] of the 2M/4K Page 
 * Entry LRU state being accessed with the AT_DBG_LRU2M4K_SETS_ADDR register. The 
 * data from this CSR is written to the 2M/4K Page Entry LRU state array if the 
@@ -977,7 +830,7 @@
 #define FXR_AT_DBG_LRU2M4K_SETS_DATA1_DATA_MASK			0xFFFFull
 #define FXR_AT_DBG_LRU2M4K_SETS_DATA1_DATA_SMASK		0xFFFFull
 /*
-* Table #44 of fxr_top - FXR_AT_DBG_TLB_TAG_ADDR
+* Table #38 of fxr_top - FXR_AT_DBG_TLB_TAG_ADDR
 * This is an AT debug CSR. It allows indirect access to the AT Translation 
 * Lookup Buffer(TLB). These arrays cannot be written to during normal operation. 
 * This register is for debug use only. TLB Tag entries are 72 bits, with 4096 
@@ -1008,7 +861,7 @@
 #define FXR_AT_DBG_TLB_TAG_ADDR_ADDRESS_MASK			0xFFFFFFFFFFFFull
 #define FXR_AT_DBG_TLB_TAG_ADDR_ADDRESS_SMASK			0xFFFFFFFFFFFFull
 /*
-* Table #45 of fxr_top - FXR_AT_DBG_TLB_TAG_DATA0
+* Table #39 of fxr_top - FXR_AT_DBG_TLB_TAG_DATA0
 * This is an AT debug CSR. This is the data for bits [63:0] of the AT Request 
 * Buffer being accessed with the AT_DBG_TLB_TAG_ADDR register. The data from 
 * this CSR is written to the TLB Tag array if the write bit is active in that 
@@ -1021,7 +874,7 @@
 #define FXR_AT_DBG_TLB_TAG_DATA0_DATA_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_AT_DBG_TLB_TAG_DATA0_DATA_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #46 of fxr_top - FXR_AT_DBG_TLB_TAG_DATA1
+* Table #40 of fxr_top - FXR_AT_DBG_TLB_TAG_DATA1
 * This is an AT debug CSR. This is the data for bits [79:64] of the AT Request 
 * Buffer being accessed with the AT_DBG_TLB_TAG_ADDR register. The data from 
 * this CSR is written to the TLB Tag array if the write bit is active in that 
@@ -1040,7 +893,7 @@
 #define FXR_AT_DBG_TLB_TAG_DATA1_DATA_MASK			0xFFull
 #define FXR_AT_DBG_TLB_TAG_DATA1_DATA_SMASK			0xFFull
 /*
-* Table #47 of fxr_top - FXR_AT_DBG_TLB_DATA
+* Table #41 of fxr_top - FXR_AT_DBG_TLB_DATA
 * This is an AT debug CSR.It allows access to the TLB Data storage. These arrays 
 * cannot be written to during normal operation. This register is for debug use 
 * only. TLB Data entries are 64 bits, with 4096 entries per way, with 16 
@@ -1052,7 +905,7 @@
 #define FXR_AT_DBG_TLB_DATA_DATA_MASK				0xFFFFFFFFFFFFFFFFull
 #define FXR_AT_DBG_TLB_DATA_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
-* Table #48 of fxr_top - FXR_AT_DBG_PW_ID_BUF
+* Table #42 of fxr_top - FXR_AT_DBG_PW_ID_BUF
 * This is an AT debug CSR.It allows access to the Address Translation Request 
 * Page Walk Transaction ID Buffer. These arrays cannot be written to during 
 * normal operation. This register is for debug use only. PageWalk Transaction ID 
@@ -1067,7 +920,7 @@
 #define FXR_AT_DBG_PW_ID_BUF_PW_ID_ENTRY_MASK			0xFFull
 #define FXR_AT_DBG_PW_ID_BUF_PW_ID_ENTRY_SMASK			0xFFull
 /*
-* Table #49 of fxr_top - FXR_AT_DBG_PW_ID_OF_BUF
+* Table #43 of fxr_top - FXR_AT_DBG_PW_ID_OF_BUF
 * This is an AT debug CSR.It allows access to the Address Translation PageWalk 
 * Transaction ID Overflow Buffer. These arrays cannot be written to during 
 * normal operation. This register is for debug use only.  Page Walk Transaction 
@@ -1082,7 +935,7 @@
 #define FXR_AT_DBG_PW_ID_OF_BUF_PW_ID_OF_ENTRY_MASK		0xFFull
 #define FXR_AT_DBG_PW_ID_OF_BUF_PW_ID_OF_ENTRY_SMASK		0xFFull
 /*
-* Table #50 of fxr_top - FXR_AT_DBG_LRU1G_SETS
+* Table #44 of fxr_top - FXR_AT_DBG_LRU1G_SETS
 * This CSR is used to describe the address region that is mapped to the Address 
 * Translation Cache 1G page entry LRU state storage RF(Register File) and uses 
 * the CSR access path. LRU state entries for 1G pages contain state for 2 of 
@@ -1098,5 +951,28 @@
 #define FXR_AT_DBG_LRU1G_SETS_LRU1G_ENTRY_SHIFT			0
 #define FXR_AT_DBG_LRU1G_SETS_LRU1G_ENTRY_MASK			0xFFull
 #define FXR_AT_DBG_LRU1G_SETS_LRU1G_ENTRY_SMASK			0xFFull
+/*
+* Table #45 of fxr_top - FXR_AT_DBG_ERROR_MODES
+* This CSR is used to force Page Fault Errors for client(RXHIARB, TXOTR, TXDMA) 
+* translation requests. THree modes are available: force all translation 
+* requests to generate Page Fault responses, force any translation request with 
+* priv_level access requested, to generate a Page Fault Response, or any request 
+* that receives a recoverable page fault response, from IOMMU, which would 
+* attempt a Page Group Request, generates a Page Fault instead.
+*/
+#define FXR_AT_DBG_ERROR_MODES					(FXR_AT_CSRS + 0x000000111000)
+#define FXR_AT_DBG_ERROR_MODES_RESETCSR				0x0000000000000000ull
+#define FXR_AT_DBG_ERROR_MODES_RESERVED_63_3_SHIFT		3
+#define FXR_AT_DBG_ERROR_MODES_RESERVED_63_3_MASK		0x1FFFFFFFFFFFFFFFull
+#define FXR_AT_DBG_ERROR_MODES_RESERVED_63_3_SMASK		0xFFFFFFFFFFFFFFF8ull
+#define FXR_AT_DBG_ERROR_MODES_PGR_REQ_FAULT_EN_SHIFT		2
+#define FXR_AT_DBG_ERROR_MODES_PGR_REQ_FAULT_EN_MASK		0x1ull
+#define FXR_AT_DBG_ERROR_MODES_PGR_REQ_FAULT_EN_SMASK		0x4ull
+#define FXR_AT_DBG_ERROR_MODES_PRIV_LVL_REQ_FAULT_EN_SHIFT	1
+#define FXR_AT_DBG_ERROR_MODES_PRIV_LVL_REQ_FAULT_EN_MASK	0x1ull
+#define FXR_AT_DBG_ERROR_MODES_PRIV_LVL_REQ_FAULT_EN_SMASK	0x2ull
+#define FXR_AT_DBG_ERROR_MODES_ALL_REQ_FAULT_EN_SHIFT		0
+#define FXR_AT_DBG_ERROR_MODES_ALL_REQ_FAULT_EN_MASK		0x1ull
+#define FXR_AT_DBG_ERROR_MODES_ALL_REQ_FAULT_EN_SMASK		0x1ull
 
 #endif 		/* DEF_FXR_AT_SW_DEF */

@@ -33,10 +33,10 @@
 #define DEF_FXR_TX_OTR_MSG_TOP_CSRS_SW_DEF
 
 #ifndef FXR_TX_OTR_PKT_TOP_CSRS
-#define FXR_TX_OTR_PKT_TOP_CSRS							0x000000000000
+#define FXR_TX_OTR_PKT_TOP_CSRS							0x000000000000ULL
 #endif
 #ifndef FXR_TX_OTR_MSG_TOP_CSRS
-#define FXR_TX_OTR_MSG_TOP_CSRS							0x000000000000
+#define FXR_TX_OTR_MSG_TOP_CSRS							0x000000000000ULL
 #endif
 #define FXR_NUM_CONTEXTS							256
 #define FXR_NUM_PIDS								4096
@@ -451,7 +451,7 @@
 /*
 * Table #18 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_CFG_FORCE_MSG_TO_FPE
 * This CSR is used to force Fast Path messages to the Fragmentation Programmable 
-* Engine. This CSR must be configured identically to #%%#Section 30.7.3.49, 
+* Engine. This CSR must be configured identically to #%%#Section 32.7.3.49, 
 * 'Force Message to Fragmentation Programmable Engine Configuration 
 * CSR'#%%#.
 */
@@ -524,7 +524,7 @@
 * This CSR is used to configure the Rendezvous Fragment Size (RFS) per MC/TC. A 
 * setting of 3'd7 is not valid and defaults to 8KB. Values in this CSR should be 
 * configured to be equal to or less than the MTU (on a per MC/TC basis), as 
-* configured in #%%#Section 30.7.3.57, 'Maximum Transfer Unit for Packet 
+* configured in #%%#Section 32.7.3.57, 'Maximum Transfer Unit for Packet 
 * Partition'#%%#.
 */
 #define FXR_TXOTR_MSG_CFG_RFS							(FXR_TX_OTR_MSG_TOP_CSRS + 0x0000000000A0)
@@ -668,9 +668,12 @@
 */
 #define FXR_TXOTR_MSG_CFG_SMALL_HEADER						(FXR_TX_OTR_MSG_TOP_CSRS + 0x0000000000B8)
 #define FXR_TXOTR_MSG_CFG_SMALL_HEADER_RESETCSR					0x0000000000000001ull
-#define FXR_TXOTR_MSG_CFG_SMALL_HEADER_RESERVED_63_17_SHIFT			17
-#define FXR_TXOTR_MSG_CFG_SMALL_HEADER_RESERVED_63_17_MASK			0x7FFFFFFFFFFFull
-#define FXR_TXOTR_MSG_CFG_SMALL_HEADER_RESERVED_63_17_SMASK			0xFFFFFFFFFFFE0000ull
+#define FXR_TXOTR_MSG_CFG_SMALL_HEADER_RESERVED_63_18_SHIFT			18
+#define FXR_TXOTR_MSG_CFG_SMALL_HEADER_RESERVED_63_18_MASK			0x3FFFFFFFFFFFull
+#define FXR_TXOTR_MSG_CFG_SMALL_HEADER_RESERVED_63_18_SMASK			0xFFFFFFFFFFFC0000ull
+#define FXR_TXOTR_MSG_CFG_SMALL_HEADER_EXT_ACK_SHIFT				17
+#define FXR_TXOTR_MSG_CFG_SMALL_HEADER_EXT_ACK_MASK				0x1ull
+#define FXR_TXOTR_MSG_CFG_SMALL_HEADER_EXT_ACK_SMASK				0x20000ull
 #define FXR_TXOTR_MSG_CFG_SMALL_HEADER_PKEY_8B_SHIFT				1
 #define FXR_TXOTR_MSG_CFG_SMALL_HEADER_PKEY_8B_MASK				0xFFFFull
 #define FXR_TXOTR_MSG_CFG_SMALL_HEADER_PKEY_8B_SMASK				0x1FFFEull
@@ -694,7 +697,7 @@
 * Table #25 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_CFG_RC_ORDERED_MAP
 * This CSR contains the mapping of the packet Routing Control (rc[2:0]) field to 
 * ordered needed for message ordering. This configuration of this CSR must be 
-* identical to the configuration of #%%#Section 30.7.3.46, 'Routing Control 
+* identical to the configuration of #%%#Section 32.7.3.46, 'Routing Control 
 * Ordered Mapping Configuration CSR'#%%# in the packet CSRs. 
 */
 #define FXR_TXOTR_MSG_CFG_RC_ORDERED_MAP					(FXR_TX_OTR_MSG_TOP_CSRS + 0x0000000000C8)
@@ -1207,21 +1210,34 @@
 #define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_0_SYNDROME_MBE_0_SMASK		0xFFull
 /*
 * Table #44 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1
-* This is the error information CSR for a bit error occurring in a command from 
-* TXCI. State in this CSR is updated when #%%#cmd_mbe#%%# or #%%#cmd_sbe#%%# 
-* error flags are set.
+* Lower bits contain the error information CSR for a bit error occurring in a 
+* command from TXCI. State in this CSR is updated when #%%#cmd_mbe#%%# or 
+* #%%#cmd_sbe#%%# error flags are set. Upper bits contain error information for 
+* a bit error occurring in the TXCI 
 */
 #define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1					(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000002078)
 #define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_RESETCSR				0x0000000000000000ull
-#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_RESERVED_63_8_SHIFT		8
-#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_RESERVED_63_8_MASK			0xFFFFFFFFFFFFFFull
-#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_RESERVED_63_8_SMASK		0xFFFFFFFFFFFFFF00ull
-#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SBE_SHIFT				4
-#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SBE_MASK				0xFull
-#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SBE_SMASK				0xF0ull
-#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_MBE_SHIFT				0
-#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_MBE_MASK				0xFull
-#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_MBE_SMASK				0xFull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_RESERVED_63_26_SHIFT		26
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_RESERVED_63_26_MASK		0x3FFFFFFFFFull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_RESERVED_63_26_SMASK		0xFFFFFFFFFC000000ull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_SYNDROME_MBE_SHIFT		18
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_SYNDROME_MBE_MASK		0xFFull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_SYNDROME_MBE_SMASK		0x3FC0000ull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_SYNDROME_SBE_SHIFT		10
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_SYNDROME_SBE_MASK		0xFFull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_SYNDROME_SBE_SMASK		0x3FC00ull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_SBE_SHIFT			9
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_SBE_MASK			0x1ull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_SBE_SMASK			0x200ull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_MBE_SHIFT			8
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_MBE_MASK			0x1ull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_SB_MBE_SMASK			0x100ull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_CMD_SBE_SHIFT			4
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_CMD_SBE_MASK			0xFull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_CMD_SBE_SMASK			0xF0ull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_CMD_MBE_SHIFT			0
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_CMD_MBE_MASK			0xFull
+#define FXR_TXOTR_MSG_ERR_INFO_TXCI_CMD_BE_1_CMD_MBE_SMASK			0xFull
 /*
 * Table #45 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_ERR_INFO_INVALID_CMD
 * This is the error information CSR for an invalid or malformed command received 
@@ -2042,9 +2058,15 @@
 */
 #define FXR_TXOTR_MSG_ERR_INJECT_1						(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000002208)
 #define FXR_TXOTR_MSG_ERR_INJECT_1_RESETCSR					0x0000000000000000ull
-#define FXR_TXOTR_MSG_ERR_INJECT_1_RESERVED_63_36_SHIFT				36
-#define FXR_TXOTR_MSG_ERR_INJECT_1_RESERVED_63_36_MASK				0xFFFFFFFull
-#define FXR_TXOTR_MSG_ERR_INJECT_1_RESERVED_63_36_SMASK				0xFFFFFFF000000000ull
+#define FXR_TXOTR_MSG_ERR_INJECT_1_RESERVED_63_45_SHIFT				45
+#define FXR_TXOTR_MSG_ERR_INJECT_1_RESERVED_63_45_MASK				0x7FFFFull
+#define FXR_TXOTR_MSG_ERR_INJECT_1_RESERVED_63_45_SMASK				0xFFFFE00000000000ull
+#define FXR_TXOTR_MSG_ERR_INJECT_1_TXCI_SB_INJECT_EN_SHIFT			44
+#define FXR_TXOTR_MSG_ERR_INJECT_1_TXCI_SB_INJECT_EN_MASK			0x1ull
+#define FXR_TXOTR_MSG_ERR_INJECT_1_TXCI_SB_INJECT_EN_SMASK			0x100000000000ull
+#define FXR_TXOTR_MSG_ERR_INJECT_1_TXCI_SB_INJECT_MASK_SHIFT			36
+#define FXR_TXOTR_MSG_ERR_INJECT_1_TXCI_SB_INJECT_MASK_MASK			0xFFull
+#define FXR_TXOTR_MSG_ERR_INJECT_1_TXCI_SB_INJECT_MASK_SMASK			0xFF000000000ull
 #define FXR_TXOTR_MSG_ERR_INJECT_1_CMD_INJECT_EN_SHIFT				32
 #define FXR_TXOTR_MSG_ERR_INJECT_1_CMD_INJECT_EN_MASK				0xFull
 #define FXR_TXOTR_MSG_ERR_INJECT_1_CMD_INJECT_EN_SMASK				0xF00000000ull
@@ -2283,7 +2305,7 @@
 #define FXR_TXOTR_MSG_DBG_OMB_ACCESS_ADDRESS_SMASK				0x3FFFull
 /*
 * Table #84 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_OMB_PAYLOAD0
-* This CSR is the payload register related to #%%#Section 30.8.7.1, 'Outstanding 
+* This CSR is the payload register related to #%%#Section 32.8.7.1, 'Outstanding 
 * Message Buffer Access Debug CSR'#%%# for bits 63:0 of the buffer 
 * entry.
 */
@@ -2294,7 +2316,7 @@
 #define FXR_TXOTR_MSG_DBG_OMB_PAYLOAD0_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
 * Table #85 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_OMB_PAYLOAD1
-* This CSR is the payload register related to #%%#Section 30.8.7.1, 'Outstanding 
+* This CSR is the payload register related to #%%#Section 32.8.7.1, 'Outstanding 
 * Message Buffer Access Debug CSR'#%%# for bits 127:64 of the buffer 
 * entry.
 */
@@ -2305,7 +2327,7 @@
 #define FXR_TXOTR_MSG_DBG_OMB_PAYLOAD1_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
 * Table #86 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_OMB_PAYLOAD2
-* This CSR is the payload register related to #%%#Section 30.8.7.1, 'Outstanding 
+* This CSR is the payload register related to #%%#Section 32.8.7.1, 'Outstanding 
 * Message Buffer Access Debug CSR'#%%# for bits 191:128 of the buffer 
 * entry.
 */
@@ -2316,7 +2338,7 @@
 #define FXR_TXOTR_MSG_DBG_OMB_PAYLOAD2_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
 * Table #87 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_OMB_PAYLOAD3
-* This CSR is the payload register related to #%%#Section 30.8.7.1, 'Outstanding 
+* This CSR is the payload register related to #%%#Section 32.8.7.1, 'Outstanding 
 * Message Buffer Access Debug CSR'#%%# for bits 255:192 of the buffer 
 * entry.
 */
@@ -2327,7 +2349,7 @@
 #define FXR_TXOTR_MSG_DBG_OMB_PAYLOAD3_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
 * Table #88 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_OMB_PAYLOAD4
-* This CSR is the payload register related to #%%#Section 30.8.7.1, 'Outstanding 
+* This CSR is the payload register related to #%%#Section 32.8.7.1, 'Outstanding 
 * Message Buffer Access Debug CSR'#%%# for bits 319:256 of the buffer 
 * entry.
 */
@@ -2338,7 +2360,7 @@
 #define FXR_TXOTR_MSG_DBG_OMB_PAYLOAD4_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
 * Table #89 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_OMB_PAYLOAD5
-* This CSR is the payload register related to #%%#Section 30.8.7.1, 'Outstanding 
+* This CSR is the payload register related to #%%#Section 32.8.7.1, 'Outstanding 
 * Message Buffer Access Debug CSR'#%%# for bits 383:320 of the buffer 
 * entry.
 */
@@ -2349,7 +2371,7 @@
 #define FXR_TXOTR_MSG_DBG_OMB_PAYLOAD5_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
 * Table #90 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_OMB_PAYLOAD6
-* This CSR is the payload register related to #%%#Section 30.8.7.1, 'Outstanding 
+* This CSR is the payload register related to #%%#Section 32.8.7.1, 'Outstanding 
 * Message Buffer Access Debug CSR'#%%# for bits 447:384 of the buffer 
 * entry.
 */
@@ -2360,7 +2382,7 @@
 #define FXR_TXOTR_MSG_DBG_OMB_PAYLOAD6_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
 * Table #91 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_OMB_PAYLOAD7
-* This CSR is the payload register related to #%%#Section 30.8.7.1, 'Outstanding 
+* This CSR is the payload register related to #%%#Section 32.8.7.1, 'Outstanding 
 * Message Buffer Access Debug CSR'#%%# for bits 511:448 of the buffer 
 * entry.
 */
@@ -2393,7 +2415,7 @@
 #define FXR_TXOTR_MSG_DBG_MSGID_ACCESS_ADDRESS_SMASK				0xFFull
 /*
 * Table #93 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_MSGID_PAYLOAD0
-* This CSR is the payload register related to #%%#Section 30.8.7.10, 'Message 
+* This CSR is the payload register related to #%%#Section 32.8.7.10, 'Message 
 * Identifier Memory access Debug CSR'#%%# for bits 63:0 of the buffer 
 * entry.
 */
@@ -2431,7 +2453,7 @@
 #define FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_ACCESS_ADDRESS_SMASK			0xFFFull
 /*
 * Table #95 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_BPE_PROG_MEM_PAYLOAD0
-* This CSR is the payload register related to #%%#Section 30.8.7.12, 'BPE 
+* This CSR is the payload register related to #%%#Section 32.8.7.12, 'BPE 
 * Program Memory Access Debug CSR'#%%# for bits 31:0 of the buffer 
 * entry.
 */
@@ -2472,7 +2494,7 @@
 #define FXR_TXOTR_MSG_DBG_BPE_DATA_MEM_ACCESS_ADDRESS_SMASK			0x3FFull
 /*
 * Table #97 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_BPE_DATA_MEM_PAYLOAD0
-* This CSR is the payload register related to #%%#Section 30.8.7.14, 'BPE Data 
+* This CSR is the payload register related to #%%#Section 32.8.7.14, 'BPE Data 
 * Memory Access Debug CSR'#%%# for bits 63:0 of the buffer entry.
 */
 #define FXR_TXOTR_MSG_DBG_BPE_DATA_MEM_PAYLOAD0					(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000006668)
@@ -2608,7 +2630,7 @@
 * Table #108 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_PRF_STALL_OMB_ENTRIES_X
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of OMB entries. See more details in Performance Counters Specification, 
-* page #%%#524#%%#.
+* page #%%#666#%%#.
 */
 #define FXR_TXOTR_MSG_PRF_STALL_OMB_ENTRIES_X					(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000008000)
 #define FXR_TXOTR_MSG_PRF_STALL_OMB_ENTRIES_X_RESETCSR				0x000000000000000Aull
@@ -2622,7 +2644,7 @@
 * Table #109 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_PRF_STALL_OMB_ENTRIES_Y
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of OMB entries. See more details in Performance Counters Specification, 
-* page #%%#524#%%#.
+* page #%%#666#%%#.
 */
 #define FXR_TXOTR_MSG_PRF_STALL_OMB_ENTRIES_Y					(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000008008)
 #define FXR_TXOTR_MSG_PRF_STALL_OMB_ENTRIES_Y_RESETCSR				0x0000000000000008ull
@@ -2636,7 +2658,7 @@
 * Table #110 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_PRF_STALL_RXDMA_CREDITS_X
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of RXDMA Credits. See more details in Performance Counters Specification, 
-* page #%%#524#%%#.
+* page #%%#666#%%#.
 */
 #define FXR_TXOTR_MSG_PRF_STALL_RXDMA_CREDITS_X					(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000008010)
 #define FXR_TXOTR_MSG_PRF_STALL_RXDMA_CREDITS_X_RESETCSR			0x0000000000000004ull
@@ -2650,7 +2672,7 @@
 * Table #111 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_PRF_STALL_RXDMA_CREDITS_Y
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of RXDMA credits. See more details in Performance Counters Specification, 
-* page #%%#524#%%#.
+* page #%%#666#%%#.
 */
 #define FXR_TXOTR_MSG_PRF_STALL_RXDMA_CREDITS_Y					(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000008018)
 #define FXR_TXOTR_MSG_PRF_STALL_RXDMA_CREDITS_Y_RESETCSR			0x0000000000000000ull
@@ -2664,7 +2686,7 @@
 * Table #112 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_PRF_STALL_M_TO_P_CREDITS_X
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of Message Partition to Packet Partition Credits. See more details in 
-* Performance Counters Specification, page #%%#525#%%#.
+* Performance Counters Specification, page #%%#666#%%#.
 */
 #define FXR_TXOTR_MSG_PRF_STALL_M_TO_P_CREDITS_X				(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000008020)
 #define FXR_TXOTR_MSG_PRF_STALL_M_TO_P_CREDITS_X_RESETCSR			0x000000000000000Full
@@ -2678,7 +2700,7 @@
 * Table #113 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_PRF_STALL_M_TO_P_CREDITS_Y
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of Message Partition to Packet Partition credits. See more details in 
-* Performance Counters Specification, page #%%#525#%%#.
+* Performance Counters Specification, page #%%#666#%%#.
 */
 #define FXR_TXOTR_MSG_PRF_STALL_M_TO_P_CREDITS_Y				(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000008028)
 #define FXR_TXOTR_MSG_PRF_STALL_M_TO_P_CREDITS_Y_RESETCSR			0x000000000000000Eull
@@ -2692,7 +2714,7 @@
 * Table #114 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_PRF_STALL_PREFRAG_CREDITS_X
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of Pre-fragmentation Credits. See more details in Performance Counters 
-* Specification, page #%%#525#%%#.
+* Specification, page #%%#666#%%#.
 */
 #define FXR_TXOTR_MSG_PRF_STALL_PREFRAG_CREDITS_X				(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000008030)
 #define FXR_TXOTR_MSG_PRF_STALL_PREFRAG_CREDITS_X_RESETCSR			0x0000000000000008ull
@@ -2706,7 +2728,7 @@
 * Table #115 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_PRF_STALL_PREFRAG_CREDITS_Y
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of Message Partition to Packet Partition credits. See more details in 
-* Performance Counters Specification, page #%%#525#%%#.
+* Performance Counters Specification, page #%%#666#%%#.
 */
 #define FXR_TXOTR_MSG_PRF_STALL_PREFRAG_CREDITS_Y				(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000008038)
 #define FXR_TXOTR_MSG_PRF_STALL_PREFRAG_CREDITS_Y_RESETCSR			0x000000000000000Aull
@@ -2720,7 +2742,7 @@
 * Table #116 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_PRF_MSGS_OPENED_X
 * This CSR configures the performance registers used to track the number of 
 * messages generated by TXOTR. See more details in Performance Counters 
-* Specification, page #%%#526#%%#.
+* Specification, page #%%#666#%%#.
 */
 #define FXR_TXOTR_MSG_PRF_MSGS_OPENED_X						(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000008040)
 #define FXR_TXOTR_MSG_PRF_MSGS_OPENED_X_RESETCSR				0x0000000000000008ull
@@ -2734,7 +2756,7 @@
 * Table #117 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_PRF_MSGS_CLOSED_X
 * This CSR configures the performance registers used to track the number of 
 * messages completed by TXOTR. See more details in Performance Counters 
-* Specification, page #%%#526#%%#.
+* Specification, page #%%#666#%%#.
 */
 #define FXR_TXOTR_MSG_PRF_MSGS_CLOSED_X						(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000008048)
 #define FXR_TXOTR_MSG_PRF_MSGS_CLOSED_X_RESETCSR				0x0000000000000008ull

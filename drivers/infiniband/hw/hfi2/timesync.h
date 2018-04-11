@@ -58,7 +58,7 @@
 #include <linux/errno.h>
 #include <linux/module.h>
 #include "hfi2.h"
-#include "chip/fxr_fc_defs.h"
+#include "chip/fxr_oc_defs.h"
 
 void hfi_timesync_init(struct hfi_pportdata *ppd);
 void hfi_timesync_stop(struct hfi_pportdata *ppd);

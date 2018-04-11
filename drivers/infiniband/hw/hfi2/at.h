@@ -478,8 +478,6 @@ struct hfi_at_stats {
 
 struct hfi_at {
 	void __iomem	*reg; /* Pointer to hardware regs, virtual addr */
-	u64		reg_phys; /* physical address of hw register set */
-	u64		reg_size; /* size of hw register set */
 	u64		cap;
 	u64		ecap;
 	u32		gcmd;

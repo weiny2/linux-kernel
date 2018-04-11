@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_rx_hiarb_CSRS_H__
@@ -65,7 +65,7 @@ typedef union {
     uint64_t val;
 } RXHIARB_CFG_PERF_MATCH_t;
 
-// RX_HIARB_CFG_QP_TABLE desc:
+// RXHIARB_CFG_QP_TABLE desc:
 typedef union {
     struct {
         uint64_t              qp_base  : 45; // QP base address. This is a 4k aligned address (addr [56:12[) describing the base of the this segment in memory
@@ -73,16 +73,16 @@ typedef union {
         uint64_t       Reserved_63_46  : 18; // Unused
     } field;
     uint64_t val;
-} RX_HIARB_CFG_QP_TABLE_t;
+} RXHIARB_CFG_QP_TABLE_t;
 
-// RX_HIARB_CFG_QP_MAX desc:
+// RXHIARB_CFG_QP_MAX desc:
 typedef union {
     struct {
         uint64_t               max_qp  : 25; // Maximum QP - indicates the maximum number of QPs in which memory is configured. Legal values are 0-16M
         uint64_t       Reserved_63_25  : 39; // Unused
     } field;
     uint64_t val;
-} RX_HIARB_CFG_QP_MAX_t;
+} RXHIARB_CFG_QP_MAX_t;
 
 // RXHIARB_STS_MAX_HI_STALL desc:
 typedef union {
@@ -188,66 +188,66 @@ typedef union {
 // RXHIARB_ERR_STS_1 desc:
 typedef union {
     struct {
-        uint64_t         pcb_err_nval  :  1; // PCB access to a non-valid entry. Indicates that the requester attempted to access an invalid entry in the PCB table.
-        uint64_t         pcb_err_bvio  :  1; // PCB boundary violation. Indicates that either a PCB entry has overlapping regions or that te address calculation for a specific region overlapped into the subsequent PCB region.
-        uint64_t    pcb_err_addr_oflw  :  1; // PCB address calculation overflow. Indicates that the requester attempted to access an address beyond the maximum supported address range (e.g. 57-bits for virtual address)
-        uint64_t          pcb_err_sbe  :  1; // PCB table single bit error detected,
-        uint64_t          pcb_err_mbe  :  1; // PCB table multiple bit error detected,
-        uint64_t      mtlb_err_at_rsp  :  1; // Mini-TLB received an error response fro the AT while requesting a physical address.
-        uint64_t      rxdma_err_frame  :  1; // Framing error detected on the RxDMA interface. Indicates that a head/tail mismatch occurred during a request from the RxDMA.
-        uint64_t        rxdma_err_sbe  :  1; // Single bit error detected on the RxDMA interface.
-        uint64_t        rxdma_err_mbe  :  1; // Multiple bit error detected on the RxDMA interface.
-        uint64_t       rxhp_err_frame  :  1; // Framing error detected on the RxHP interface. Indicates that the length does not match the number of dval flits between req_valids.
-        uint64_t        rxchp_err_sbe  :  1; // Single bit error detected on the RxHP interface.
-        uint64_t        rxchp_err_mbe  :  1; // Multiple bit error detected on the RxHP interface.
-        uint64_t       rxet_err_frame  :  1; // Framing error detected on the RxET interface. Indicates that the length does not match the number of dval flits between req_valids.
-        uint64_t         rxet_err_sbe  :  1; // Single bit error detected on the RxET interface.
-        uint64_t         rxet_err_mbe  :  1; // Multiple bit error detected on the RxET interface.
-        uint64_t        rxe2e_err_sbe  :  1; // Single bit error detected on the RxE2E interface.
-        uint64_t        rxe2e_err_mbe  :  1; // Multiple bit error detected on the RxE2E interface.
-        uint64_t        rxcid_err_sbe  :  1; // Single bit error detected on the RxCID interface.
-        uint64_t        rxcid_err_mbe  :  1; // Multiple bit error detected on the RxCID interface.
-        uint64_t        slrsp_err_sbe  :  1; // Slow response queue single bit error detected.
-        uint64_t        slrsp_err_mbe  :  1; // Slow response queue multiple bit error detected.
-        uint64_t          fpfifo_perr  :  1; // Free pool FIFO parity error detected.
-        uint64_t        payld_err_sbe  :  1; // Payload SRAM single bit error detected.
-        uint64_t        payld_err_mbe  :  1; // Payload SRAM multiple bit error detected.
-        uint64_t        hque0_err_sbe  :  1; // Holding queue 0 (MCTC=0) single bit error detected.
-        uint64_t        hque0_err_mbe  :  1; // Holding queue 0 (MCTC=0) multiple bit error detected.
-        uint64_t        hque1_err_sbe  :  1; // Holding queue 1(MCTC=1) single bit error detected.
-        uint64_t        hque1_err_mbe  :  1; // Holding queue 1(MCTC=1) multiple bit error detected.
-        uint64_t        hque2_err_sbe  :  1; // Holding queue 2 (MCTC=2) single bit error detected.
-        uint64_t        hque2_err_mbe  :  1; // Holding queue 2 (MCTC=2) multiple bit error detected.
-        uint64_t        hque3_err_sbe  :  1; // Holding queue 3 (MCTC=3) single bit error detected.
-        uint64_t        hque3_err_mbe  :  1; // Holding queue 3 (MCTC=3) multiple bit error detected.
-        uint64_t        hque4_err_sbe  :  1; // Holding queue 4 (MCTC=4) single bit error detected.
-        uint64_t        hque4_err_mbe  :  1; // Holding queue 4 (MCTC=4) multiple bit error detected.
-        uint64_t        hque5_err_sbe  :  1; // Holding queue 5 (MCTC=5) single bit error detected.
-        uint64_t        hque5_err_mbe  :  1; // Holding queue 5 (MCTC=5) multiple bit error detected.
-        uint64_t        hque6_err_sbe  :  1; // Holding queue 6 (MCTC=6) single bit error detected.
-        uint64_t        hque6_err_mbe  :  1; // Holding queue 6 (MCTC=6) multiple bit error detected.
-        uint64_t        hque7_err_sbe  :  1; // Holding queue 7 (MCTC=7) single bit error detected.
-        uint64_t        hque7_err_mbe  :  1; // Holding queue 7 (MCTC=7) multiple bit error detected.
-        uint64_t        hque8_err_sbe  :  1; // Holding queue 8 (misc) single bit error detected.
-        uint64_t        hque8_err_mbe  :  1; // Holding queue 8 (misc) multiple bit error detected.
-        uint64_t       hque_vect_perr  :  1; // Holding queues 0-8 present vector parity error
-        uint64_t         mtlb_err_sbe  :  1; // Mini-TLB single bit error detected.
-        uint64_t         mtlb_err_mbe  :  1; // Mini-TLB multiple bit error detected.
-        uint64_t       mtlb_vect_perr  :  1; // Mini-TLB state vector parity error detected
-        uint64_t           atfifo_sbe  :  1; // AT request FIFO single bit error detected
-        uint64_t           atfifo_mbe  :  1; // AT request FIFO multiple bit error detected
-        uint64_t           hififo_sbe  :  1; // HI request FIFO single bit error detected
-        uint64_t           hififo_mbe  :  1; // HI request FIFO multiple bit error detected
-        uint64_t       hifi_err_frame  :  1; // HIFIs interface framing error detected
-        uint64_t         hifi_err_sbe  :  1; // HIFIs interface single bit error detected
-        uint64_t         hifi_err_mbe  :  1; // HIFIs interface multiple bit error detected
-        uint64_t         nack_err_sbe  :  1; // Nack queue single bit error detected
-        uint64_t         nack_err_mbe  :  1; // Nack queue multiple bit error detected
-        uint64_t          qp_err_nval  :  1; // QP access to a non-valid entry. Indicates that the requester attempted to access an invalid entry in the QP table.
-        uint64_t          qp_err_bvio  :  1; // QP boundary violation. Indicates that either a QP number has exceeded the maxQP setting.
-        uint64_t     qp_err_addr_oflw  :  1; // QP address calculation overflow. Indicates that the requester attempted to access an address beyond the maximum supported address range (e.g. 57-bits for virtual address)
-        uint64_t           qp_err_sbe  :  1; // QP table single bit error detected,
-        uint64_t           qp_err_mbe  :  1; // QP table multiple bit error detected,
+        uint64_t         pcb_err_nval  :  1; // PCB access to a non-valid entry. Indicates that the requester attempted to access an invalid entry in the PCB table. ERR_CATEGORY_INFO
+        uint64_t         pcb_err_bvio  :  1; // PCB boundary violation. Indicates that either a PCB entry has overlapping regions or that te address calculation for a specific region overlapped into the subsequent PCB region. ERR_CATEGORY_INFO
+        uint64_t    pcb_err_addr_oflw  :  1; // PCB address calculation overflow. Indicates that the requester attempted to access an address beyond the maximum supported address range (e.g. 57-bits for virtual address) ERR_CATEGORY_INFO
+        uint64_t          pcb_err_sbe  :  1; // PCB table single bit error detected ERR_CATEGORY_CORRECTABLE
+        uint64_t          pcb_err_mbe  :  1; // PCB table multiple bit error detected ERR_CATEGORY_HFI
+        uint64_t      mtlb_err_at_rsp  :  1; // Mini-TLB received an error response fro the AT while requesting a physical address. ERR_CATEGORY_INFO
+        uint64_t      rxdma_err_frame  :  1; // Framing error detected on the RxDMA interface. Indicates that a head/tail mismatch occurred during a request from the RxDMA. ERR_CATEGORY_HFI
+        uint64_t        rxdma_err_sbe  :  1; // Single bit error detected on the RxDMA interface. ERR_CATEGORY_CORRECTABLE
+        uint64_t        rxdma_err_mbe  :  1; // Multiple bit error detected on the RxDMA interface. ERR_CATEGORY_HFI
+        uint64_t       rxhp_err_frame  :  1; // Framing error detected on the RxHP interface. Indicates that the length does not match the number of dval flits between req_valids. ERR_CATEGORY_HFI
+        uint64_t        rxchp_err_sbe  :  1; // Single bit error detected on the RxHP interface. ERR_CATEGORY_CORRECTABLE
+        uint64_t        rxchp_err_mbe  :  1; // Multiple bit error detected on the RxHP interface. ERR_CATEGORY_HFI
+        uint64_t       rxet_err_frame  :  1; // Framing error detected on the RxET interface. Indicates that the length does not match the number of dval flits between req_valids. ERR_CATEGORY_HFI
+        uint64_t         rxet_err_sbe  :  1; // Single bit error detected on the RxET interface. ERR_CATEGORY_CORRECTABLE
+        uint64_t         rxet_err_mbe  :  1; // Multiple bit error detected on the RxET interface. ERR_CATEGORY_HFI
+        uint64_t        rxe2e_err_sbe  :  1; // Single bit error detected on the RxE2E interface. ERR_CATEGORY_CORRECTABLE
+        uint64_t        rxe2e_err_mbe  :  1; // Multiple bit error detected on the RxE2E interface. ERR_CATEGORY_HFI
+        uint64_t        rxcid_err_sbe  :  1; // Single bit error detected on the RxCID interface. ERR_CATEGORY_CORRECTABLE
+        uint64_t        rxcid_err_mbe  :  1; // Multiple bit error detected on the RxCID interface. ERR_CATEGORY_HFI
+        uint64_t        slrsp_err_sbe  :  1; // Slow response queue single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        slrsp_err_mbe  :  1; // Slow response queue multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t          fpfifo_perr  :  1; // Free pool FIFO parity error detected. ERR_CATEGORY_HFI
+        uint64_t        payld_err_sbe  :  1; // Payload SRAM single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        payld_err_mbe  :  1; // Payload SRAM multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t        hque0_err_sbe  :  1; // Holding queue 0 (MCTC=0) single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        hque0_err_mbe  :  1; // Holding queue 0 (MCTC=0) multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t        hque1_err_sbe  :  1; // Holding queue 1(MCTC=1) single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        hque1_err_mbe  :  1; // Holding queue 1(MCTC=1) multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t        hque2_err_sbe  :  1; // Holding queue 2 (MCTC=2) single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        hque2_err_mbe  :  1; // Holding queue 2 (MCTC=2) multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t        hque3_err_sbe  :  1; // Holding queue 3 (MCTC=3) single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        hque3_err_mbe  :  1; // Holding queue 3 (MCTC=3) multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t        hque4_err_sbe  :  1; // Holding queue 4 (MCTC=4) single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        hque4_err_mbe  :  1; // Holding queue 4 (MCTC=4) multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t        hque5_err_sbe  :  1; // Holding queue 5 (MCTC=5) single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        hque5_err_mbe  :  1; // Holding queue 5 (MCTC=5) multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t        hque6_err_sbe  :  1; // Holding queue 6 (MCTC=6) single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        hque6_err_mbe  :  1; // Holding queue 6 (MCTC=6) multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t        hque7_err_sbe  :  1; // Holding queue 7 (MCTC=7) single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        hque7_err_mbe  :  1; // Holding queue 7 (MCTC=7) multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t        hque8_err_sbe  :  1; // Holding queue 8 (misc) single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t        hque8_err_mbe  :  1; // Holding queue 8 (misc) multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t       hque_vect_perr  :  1; // Holding queues 0-8 present vector parity error ERR_CATEGORY_HFI
+        uint64_t         mtlb_err_sbe  :  1; // Mini-TLB single bit error detected. ERR_CATEGORY_CORRECTABLE
+        uint64_t         mtlb_err_mbe  :  1; // Mini-TLB multiple bit error detected. ERR_CATEGORY_HFI
+        uint64_t       mtlb_vect_perr  :  1; // Mini-TLB state vector parity error detected ERR_CATEGORY_HFI
+        uint64_t           atfifo_sbe  :  1; // AT request FIFO single bit error detected ERR_CATEGORY_CORRECTABLE
+        uint64_t           atfifo_mbe  :  1; // AT request FIFO multiple bit error detected ERR_CATEGORY_HFI
+        uint64_t           hififo_sbe  :  1; // HI request FIFO single bit error detected ERR_CATEGORY_CORRECTABLE
+        uint64_t           hififo_mbe  :  1; // HI request FIFO multiple bit error detected ERR_CATEGORY_HFI
+        uint64_t       hifi_err_frame  :  1; // HIFIs interface framing error detected ERR_CATEGORY_HFI
+        uint64_t         hifi_err_sbe  :  1; // HIFIs interface single bit error detected ERR_CATEGORY_CORRECTABLE
+        uint64_t         hifi_err_mbe  :  1; // HIFIs interface multiple bit error detected ERR_CATEGORY_HFI
+        uint64_t         nack_err_sbe  :  1; // Nack queue single bit error detected ERR_CATEGORY_CORRECTABLE
+        uint64_t         nack_err_mbe  :  1; // Nack queue multiple bit error detected ERR_CATEGORY_HFI
+        uint64_t          qp_err_nval  :  1; // QP access to a non-valid entry. Indicates that the requester attempted to access an invalid entry in the QP table. ERR_CATEGORY_INFO
+        uint64_t          qp_err_bvio  :  1; // QP boundary violation. Indicates that either a QP number has exceeded the maxQP setting. ERR_CATEGORY_INFO
+        uint64_t     qp_err_addr_oflw  :  1; // QP address calculation overflow. Indicates that the requester attempted to access an address beyond the maximum supported address range (e.g. 57-bits for virtual address) ERR_CATEGORY_INFO
+        uint64_t           qp_err_sbe  :  1; // QP table single bit error detected ERR_CATEGORY_CORRECTABLE
+        uint64_t           qp_err_mbe  :  1; // QP table multiple bit error detected ERR_CATEGORY_HFI
         uint64_t       Reserved_63_60  :  4; // Unused
     } field;
     uint64_t val;
@@ -414,9 +414,9 @@ typedef union {
 // RXHIARB_ERR_INFO_RXDMA_FRAME desc:
 typedef union {
     struct {
-        uint64_t                  tid  :  8; // first transaction ID.
+        uint64_t                  tid  : 10; // first transaction ID.
         uint64_t               domain  :  4; // first domain
-        uint64_t       Reserved_15_12  :  4; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t                 ferr  :  9; // framing error domain bit vector - 1 bit per domain.
         uint64_t       Reserved_31_25  :  7; // Unused
         uint64_t                count  :  8; // Saturating count of ferr, The increment signal is the 'or' of the 9 domain ferr signals.
@@ -1096,7 +1096,7 @@ typedef union {
 // RXHIARB_ERR_INFO_QP_NVAL desc:
 typedef union {
     struct {
-        uint64_t            qp_nimber  : 24; // QP number of the first error.
+        uint64_t            qp_number  : 24; // QP number of the first error.
         uint64_t       Reserved_31_24  :  8; // Unused
         uint64_t                count  :  8; // Saturating count QP nval errors
         uint64_t       Reserved_63_40  : 24; // Unused
@@ -1107,7 +1107,7 @@ typedef union {
 // RXHIARB_ERR_INFO_QP_BVIO desc:
 typedef union {
     struct {
-        uint64_t            qp_nimber  : 24; // QP number of the first error.
+        uint64_t            qp_number  : 24; // QP number of the first error.
         uint64_t       Reserved_31_24  :  8; // Unused
         uint64_t                count  :  8; // Saturating count QP bvio errors
         uint64_t       Reserved_63_40  : 24; // Unused
@@ -1118,7 +1118,7 @@ typedef union {
 // RXHIARB_ERR_INFO_QP_OFLW desc:
 typedef union {
     struct {
-        uint64_t            qp_nimber  : 24; // QP number of the first error.
+        uint64_t            qp_number  : 24; // QP number of the first error.
         uint64_t       Reserved_31_24  :  8; // Unused
         uint64_t                count  :  8; // Saturating count QP overflow errors
         uint64_t       Reserved_63_40  : 24; // Unused

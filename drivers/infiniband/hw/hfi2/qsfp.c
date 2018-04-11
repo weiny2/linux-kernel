@@ -48,6 +48,7 @@
 #include <linux/delay.h>
 #include <linux/pci.h>
 #include <linux/vmalloc.h>
+#include "chip/fxr_gbl_defs.h"
 #include "hfi2.h"
 #include "link.h"
 
@@ -160,7 +161,7 @@ static void hfi_setsda(void *data, int state)
 	struct hfi_pportdata *ppd = bus->ppd;
 	u64 reg;
 
-	reg = read_misc_csr(ppd, MNH_MISC_QSFP_OE);
+	reg = read_csr(ppd->dd, FXR_ASIC_QSFP_OE);
 
 	/*
 	 * The OE bit value is inverted and connected to the pin.  When
@@ -172,10 +173,10 @@ static void hfi_setsda(void *data, int state)
 		reg &= ~QSFP_HFI_I2CDAT;
 	else
 		reg |= QSFP_HFI_I2CDAT;
-	write_misc_csr(ppd, MNH_MISC_QSFP_OE, reg);
+	write_csr(ppd->dd, FXR_ASIC_QSFP_OE, reg);
 
 	/* do a read to force the write into the chip */
-	(void)read_misc_csr(ppd, MNH_MISC_QSFP_OE);
+	(void)read_csr(ppd->dd, FXR_ASIC_QSFP_OE);
 }
 
 static void hfi_setscl(void *data, int state)
@@ -184,7 +185,7 @@ static void hfi_setscl(void *data, int state)
 	struct hfi_pportdata *ppd = bus->ppd;
 	u64 reg;
 
-	reg = read_misc_csr(ppd, MNH_MISC_QSFP_OE);
+	reg = read_csr(ppd->dd, FXR_ASIC_QSFP_OE);
 
 	/*
 	 * The OE bit value is inverted and connected to the pin.  When
@@ -196,10 +197,10 @@ static void hfi_setscl(void *data, int state)
 		reg &= ~QSFP_HFI_I2CCLK;
 	else
 		reg |= QSFP_HFI_I2CCLK;
-	write_misc_csr(ppd, MNH_MISC_QSFP_OE, reg);
+	write_csr(ppd->dd, FXR_ASIC_QSFP_OE, reg);
 
 	/* do a read to force the write into the chip */
-	(void)read_misc_csr(ppd, MNH_MISC_QSFP_OE);
+	(void)read_csr(ppd->dd, FXR_ASIC_QSFP_OE);
 }
 
 static int hfi_getsda(void *data)
@@ -210,7 +211,7 @@ static int hfi_getsda(void *data)
 	hfi_setsda(data, 1);	/* clear OE so we do not pull line down */
 	udelay(2);		/* 1us pull up + 250ns hold */
 
-	reg = read_misc_csr(bus->ppd, MNH_MISC_QSFP_IN);
+	reg = read_csr(bus->ppd->dd, FXR_ASIC_QSFP_IN);
 	return !!(reg & QSFP_HFI_I2CDAT);
 }
 
@@ -222,7 +223,7 @@ static int hfi_getscl(void *data)
 	hfi_setscl(data, 1);	/* clear OE so we do not pull line down */
 	udelay(2);		/* 1us pull up + 250ns hold */
 
-	reg = read_misc_csr(bus->ppd, MNH_MISC_QSFP_IN);
+	reg = read_csr(bus->ppd->dd, FXR_ASIC_QSFP_IN);
 	return !!(reg & QSFP_HFI_I2CCLK);
 }
 
@@ -687,7 +688,7 @@ int hfi_qsfp_mod_present(struct hfi_pportdata *ppd)
 #if 0
 	u64 reg;
 
-	reg = read_misc_csr(ppd, MNH_MISC_QSFP_IN);
+	reg = read_csr(ppd->dd, FXR_ASIC_QSFP_IN);
 	return !(reg & QSFP_HFI_MODPRST_N);
 #endif
 	if (test_qsfp) {
@@ -899,7 +900,7 @@ void hfi_wait_for_qsfp_init(struct hfi_pportdata *ppd)
 	 */
 	timeout = jiffies + msecs_to_jiffies(2000);
 	while (1) {
-		mask = read_misc_csr(ppd, MNH_MISC_QSFP_IN);
+		mask = read_csr(ppd->dd, FXR_ASIC_QSFP_IN);
 		if (!(mask & QSFP_HFI_INT_N))
 			break;
 		if (time_after(jiffies, timeout)) {
@@ -916,18 +917,18 @@ void hfi_set_qsfp_int_n(struct hfi_pportdata *ppd, u8 enable)
 {
 	u64 mask;
 
-	mask = read_misc_csr(ppd, MNH_MISC_QSFP_MASK);
+	mask = read_csr(ppd->dd, FXR_ASIC_QSFP_MASK);
 	if (enable) {
 		/*
 		 * Clear the status register to avoid an immediate interrupt
 		 * when we re-enable the IntN pin
 		 */
-		write_misc_csr(ppd, MNH_MISC_QSFP_CLEAR, QSFP_HFI_INT_N);
+		write_csr(ppd->dd, FXR_ASIC_QSFP_CLEAR, QSFP_HFI_INT_N);
 		mask |= (u64)QSFP_HFI_INT_N;
 	} else {
 		mask &= ~(u64)QSFP_HFI_INT_N;
 	}
-	write_misc_csr(ppd, MNH_MISC_QSFP_MASK, mask);
+	write_csr(ppd->dd, FXR_ASIC_QSFP_MASK, mask);
 }
 
 int hfi_reset_qsfp(struct hfi_pportdata *ppd)
@@ -940,14 +941,14 @@ int hfi_reset_qsfp(struct hfi_pportdata *ppd)
 	/* Reset the QSFP */
 	mask = (u64)QSFP_HFI_RESET_N;
 
-	qsfp_mask = read_misc_csr(ppd, MNH_MISC_QSFP_OUT);
+	qsfp_mask = read_csr(ppd->dd, FXR_ASIC_QSFP_OUT);
 	qsfp_mask &= ~mask;
-	write_misc_csr(ppd, MNH_MISC_QSFP_OUT, qsfp_mask);
+	write_csr(ppd->dd, FXR_ASIC_QSFP_OUT, qsfp_mask);
 
 	usleep_range(10, 20);
 
 	qsfp_mask |= mask;
-	write_misc_csr(ppd, MNH_MISC_QSFP_OUT, qsfp_mask);
+	write_csr(ppd->dd, FXR_ASIC_QSFP_OUT, qsfp_mask);
 
 	hfi_wait_for_qsfp_init(ppd);
 
@@ -1030,15 +1031,15 @@ void hfi_init_qsfp_int(struct hfi_devdata *dd)
 
 	qsfp_mask = (u64)(QSFP_HFI_INT_N | QSFP_HFI_MODPRST_N);
 	/* Clear current status to avoid spurious interrupts */
-	write_csr(dd, MNH_MISC_QSFP_CLEAR, qsfp_mask);
-	write_csr(dd, MNH_MISC_QSFP_MASK, qsfp_mask);
+	write_csr(dd, FXR_ASIC_QSFP_CLEAR, qsfp_mask);
+	write_csr(dd, FXR_ASIC_QSFP_MASK, qsfp_mask);
 
 	hfi_set_qsfp_int_n(ppd, 0);
 
 	/* Handle active low nature of INT_N and MODPRST_N pins */
 	if (hfi_qsfp_mod_present(ppd))
 		qsfp_mask &= ~(u64)QSFP_HFI_MODPRST_N;
-	write_csr(dd, MNH_MISC_QSFP_INVERT, qsfp_mask);
+	write_csr(dd, FXR_ASIC_QSFP_INVERT, qsfp_mask);
 }
 
 /*

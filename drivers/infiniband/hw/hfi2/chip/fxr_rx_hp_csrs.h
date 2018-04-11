@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_rx_hp_CSRS_H__
@@ -283,13 +283,13 @@ typedef union {
 // RXHP_CFG_CHINTS desc:
 typedef union {
     struct {
-        uint64_t            ch_pte_rd  :  2; // PTE cache read
-        uint64_t      ch_pte_flush_wr  :  2; // PTE cache flush write
-        uint64_t     ch_pte_victim_wr  :  2; // PTE cache victim write
-        uint64_t            ch_psc_rd  :  2; // PSC cache read
-        uint64_t      ch_psc_flush_wr  :  2; // PSC cache flush write
-        uint64_t     ch_psc_victim_wr  :  2; // PSC cache victim write
-        uint64_t       Reserved_63_12  : 52; // Unused
+        uint64_t            ch_pte_rd  :  4; // PTE cache read
+        uint64_t      ch_pte_flush_wr  :  4; // PTE cache flush write
+        uint64_t     ch_pte_victim_wr  :  4; // PTE cache victim write
+        uint64_t            ch_psc_rd  :  4; // PSC cache read
+        uint64_t      ch_psc_flush_wr  :  4; // PSC cache flush write
+        uint64_t     ch_psc_victim_wr  :  4; // PSC cache victim write
+        uint64_t       Reserved_63_24  : 40; // Unused
     } field;
     uint64_t val;
 } RXHP_CFG_CHINTS_t;
@@ -530,32 +530,32 @@ typedef union {
 // RXHP_ERR_STS_1 desc:
 typedef union {
     struct {
-        uint64_t          pe_inst_sbe  :  8; // PE instruction cache sbe
-        uint64_t          pe_inst_mbe  :  8; // PE instruction cache mbe
-        uint64_t          pe_data_sbe  :  8; // PE data cache sbe
-        uint64_t          pe_data_mbe  :  8; // PE data cache mbe
-        uint64_t           diagnostic  :  1; // Diagnostic Error Flag
-        uint64_t    pte_cache_tag_mbe  :  1; // PTE Cache tag mbe Error information: Section 29.12.5.11, 'RXHP Error Info PTE Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad.
-        uint64_t    pte_cache_tag_sbe  :  1; // PTE Cache tag sbe Error information: . Section 29.12.5.10, 'RXHP Error Info PTE Cache Tag SBE'
-        uint64_t   pte_cache_data_mbe  :  1; // PTE Cache data mbe Error information: Section 29.12.5.12, 'RXHP Error Info PTE Cache Data SBE/MBE'
-        uint64_t   pte_cache_data_sbe  :  1; // PTE Cache data sbe Error information: . Section 29.12.5.12, 'RXHP Error Info PTE Cache Data SBE/MBE'
-        uint64_t       psc0_cache_mbe  :  1; // PSC0 Cache mbe
-        uint64_t       psc0_cache_sbe  :  1; // PSC0 Cache sbe
-        uint64_t       psc1_cache_mbe  :  1; // PSC1 Cache mbe
-        uint64_t       psc1_cache_sbe  :  1; // PSC1 Cache sbe
-        uint64_t       hiarb_data_sbe  :  1; // hiarb interface sbe
-        uint64_t       hiarb_data_mbe  :  1; // hiarb interface mbe
-        uint64_t              ptq_sbe  :  1; // ptq sbe
-        uint64_t              ptq_mbe  :  1; // ptq mbe
-        uint64_t        flit_data_sbe  :  1; // flit data sbe
-        uint64_t        flit_data_mbe  :  1; // flit data mbe
-        uint64_t          ci_data_sbe  :  1; // command interface data sbe
-        uint64_t          ci_data_mbe  :  1; // command interface data mbe
-        uint64_t      trigop_data_sbe  :  1; // triggered op data sbe
-        uint64_t      trigop_data_mbe  :  1; // triggered op data mbe
-        uint64_t       pkt_status_sbe  :  1; // packet status sbe
-        uint64_t       pkt_status_mbe  :  1; // packet status mbe
-        uint64_t received_response_pkt  :  1; // Rxhp dropped a response packet, probably due to incorrect configuration
+        uint64_t          pe_inst_sbe  :  8; // PE instruction cache sbe ERR_CATEGORY_CORRECTABLE
+        uint64_t          pe_inst_mbe  :  8; // PE instruction cache mbe ERR_CATEGORY_HFI
+        uint64_t          pe_data_sbe  :  8; // PE data cache sbe ERR_CATEGORY_CORRECTABLE
+        uint64_t          pe_data_mbe  :  8; // PE data cache mbe ERR_CATEGORY_HFI
+        uint64_t           diagnostic  :  1; // Diagnostic Error Flag ERR_CATEGORY_INFO
+        uint64_t    pte_cache_tag_mbe  :  1; // PTE Cache tag mbe Error information: Section 29.12.5.11, 'RXHP Error Info PTE Cache Tag MBE' Note: these are fairly fatal as you don't know what entry is bad. ERR_CATEGORY_HFI
+        uint64_t    pte_cache_tag_sbe  :  1; // PTE Cache tag sbe Error information: . Section 29.12.5.10, 'RXHP Error Info PTE Cache Tag SBE' ERR_CATEGORY_CORRECTABLE
+        uint64_t   pte_cache_data_mbe  :  1; // PTE Cache data mbe Error information: Section 29.12.5.12, 'RXHP Error Info PTE Cache Data SBE/MBE' ERR_CATEGORY_PROCESS
+        uint64_t   pte_cache_data_sbe  :  1; // PTE Cache data sbe Error information: . Section 29.12.5.12, 'RXHP Error Info PTE Cache Data SBE/MBE' ERR_CATEGORY_CORRECTABLE
+        uint64_t       psc0_cache_mbe  :  1; // PSC0 Cache mbe ERR_CATEGORY_HFI
+        uint64_t       psc0_cache_sbe  :  1; // PSC0 Cache sbe ERR_CATEGORY_CORRECTABLE
+        uint64_t       psc1_cache_mbe  :  1; // PSC1 Cache mbe ERR_CATEGORY_PROCESS
+        uint64_t       psc1_cache_sbe  :  1; // PSC1 Cache sbe ERR_CATEGORY_CORRECTABLE
+        uint64_t       hiarb_data_sbe  :  1; // hiarb interface sbe ERR_CATEGORY_CORRECTABLE
+        uint64_t       hiarb_data_mbe  :  1; // hiarb interface mbe ERR_CATEGORY_INFO
+        uint64_t              ptq_sbe  :  1; // ptq sbe ERR_CATEGORY_CORRECTABLE
+        uint64_t              ptq_mbe  :  1; // ptq mbe ERR_CATEGORY_PROCESS
+        uint64_t        flit_data_sbe  :  1; // flit data sbe ERR_CATEGORY_CORRECTABLE
+        uint64_t        flit_data_mbe  :  1; // flit data mbe The message is dropped. E2E retransmit will not correct this error. This error may be more severe (affecting the whole process), depending on the programming model. ERR_CATEGORY_MESSAGE
+        uint64_t          ci_data_sbe  :  1; // command interface data sbe ERR_CATEGORY_CORRECTABLE
+        uint64_t          ci_data_mbe  :  1; // command interface data mbe The command is dropped. E2E retransmit will not correct this error. This error may be more severe (affecting the whole process), depending on the programming model. ERR_CATEGORY_MESSAGE
+        uint64_t      trigop_data_sbe  :  1; // triggered op data sbe ERR_CATEGORY_CORRECTABLE
+        uint64_t      trigop_data_mbe  :  1; // triggered op data mbe The triggered message is dropped. E2E retransmit will not correct this error. This error may be more severe (affecting the whole process), depending on the programming model. ERR_CATEGORY_MESSAGE
+        uint64_t       pkt_status_sbe  :  1; // packet status sbe ERR_CATEGORY_CORRECTABLE
+        uint64_t       pkt_status_mbe  :  1; // packet status mbe The message is dropped. E2E retransmit will not correct this error. This error may be more severe (affecting the whole process), depending on the programming model. ERR_CATEGORY_MESSAGE
+        uint64_t received_response_pkt  :  1; // Rxhp dropped a response packet, probably due to incorrect configuration ERR_CATEGORY_CORRECTABLE
         uint64_t       Reserved_63_54  : 10; // Unused
     } field;
     uint64_t val;

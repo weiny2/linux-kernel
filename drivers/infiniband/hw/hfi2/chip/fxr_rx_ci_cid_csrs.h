@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_rx_ci_cid_CSRS_H__
@@ -40,8 +40,8 @@ typedef union {
 typedef union {
     struct {
         uint64_t            rate_ctrl  :  3; // Head pointer update frequency control. This register sets the number of head pointer increments that must occur before a head pointer update is scheduled. If multiple updates are scheduled before the update write is sent, they are combined. When the update write occurs, the current value of the head pointer is used, which may be more recent than the value that caused the update to be scheduled. Values of 0, 1, 2, 3, 4 and 5 correspond to updating on increments of 1, 2, 4, 8, 16 and 32. Values 6-7 are reserved for future use and the hardware currently interprets them the same as 5 to prevent undefined behavior.
-        uint64_t                chint  :  2; // chint[1] = allocating indicator (table default value = 1) chint[0] = temporal indicator (table default value = 1)
-        uint64_t        Reserved_63_5  : 59; // Unused
+        uint64_t                chint  :  4; // chint[1] = allocating indicator (table default value = 1) chint[0] = temporal indicator (table default value = 1)
+        uint64_t        Reserved_63_7  : 57; // Unused
     } field;
     uint64_t val;
 } RXCID_CFG_HEAD_UPDATE_CNTRL_t;

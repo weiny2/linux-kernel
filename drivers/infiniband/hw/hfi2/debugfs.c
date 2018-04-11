@@ -62,8 +62,8 @@
 #include "counters.h"
 #include "timesync.h"
 #include "verbs/verbs.h"
-#include "chip/mnh_8051_defs.h"
-#include "chip/fxr_fc_defs.h"
+#include "chip/fxr_8051_defs.h"
+#include "chip/fxr_oc_defs.h"
 #include "chip/fxr_tx_ci_cic_csrs_defs.h"
 #include "chip/fxr_rx_ci_cid_csrs_defs.h"
 #include <chip/fxr_tx_dma_csrs.h>
@@ -456,11 +456,11 @@ static int hfi_led_cfg_show(struct seq_file *s, void *unused)
 
 	seq_printf(s, "beaconing: %s\n", beaconing ? "active" : "inactive");
 
-	val = read_fzc_csr(ppd, FZC_LCB_CFG_LED);
+	val = read_csr(ppd->dd, OC_LCB_CFG_LED);
 
 	hw_ctrl = (val & (1 << 4)) == 0;
 	seq_printf(s, "controlled by: %s\n", hw_ctrl ? "HW" : "SW");
-	seq_printf(s, "FZC_LCB_CFG_LED: 0x%llx\n", val);
+	seq_printf(s, "OC_LCB_CFG_LED: 0x%llx\n", val);
 
 	return 0;
 }
@@ -769,12 +769,12 @@ done:
 }
 
 /* link negotiation and initialization */
-FIRMWARE_READ(8051_state, 8051, CRK_CRK8051_STS_CUR_STATE)
-FIRMWARE_READ(8051_cmd0, 8051, CRK_CRK8051_CFG_HOST_CMD_0)
-FIRMWARE_WRITE(8051_cmd0, 8051, CRK_CRK8051_CFG_HOST_CMD_0)
-FIRMWARE_READ(8051_cmd1, 8051, CRK_CRK8051_CFG_HOST_CMD_1)
-FIRMWARE_READ(logical_link, fzc, FZC_LCB_CFG_PORT)
-FIRMWARE_WRITE(logical_link, fzc, FZC_LCB_CFG_PORT)
+FIRMWARE_READ(8051_state, CRK_CRK8051_STS_CUR_STATE)
+FIRMWARE_READ(8051_cmd0, CRK_CRK8051_CFG_HOST_CMD_0)
+FIRMWARE_WRITE(8051_cmd0, CRK_CRK8051_CFG_HOST_CMD_0)
+FIRMWARE_READ(8051_cmd1, CRK_CRK8051_CFG_HOST_CMD_1)
+FIRMWARE_READ(logical_link, OC_LCB_CFG_PORT)
+FIRMWARE_WRITE(logical_link, OC_LCB_CFG_PORT)
 HOST_STATE_READ(host_link_state)
 LINK_WIDTH_READ(local, VERIFY_CAP_LOCAL_LINK_WIDTH)
 LINK_WIDTH_READ(remote, VERIFY_CAP_REMOTE_LINK_WIDTH)

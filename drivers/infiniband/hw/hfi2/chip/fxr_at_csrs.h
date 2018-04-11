@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_at_CSRS_H__
@@ -68,21 +68,6 @@ typedef union {
     uint64_t val;
 } FXR_AT_CFG_DRAIN_PASID_t;
 
-// FXR_AT_CFG_LTDPR desc:
-typedef union {
-    struct {
-        uint64_t           Reserved_0  :  1; // Unused
-        uint64_t           ProtPegSts  :  1; // Protected Region Status - 1=Protected, 0=Not Protected
-        uint64_t           CommandBit  :  1; // 1=enable protection, 0=disable protection
-        uint64_t           Reserved_3  :  1; // Unused
-        uint64_t                 Size  :  8; // DMA Protected Range Size - Max. 255MB
-        uint64_t       Reserved_19_12  :  8; // Unused
-        uint64_t             TopOfDPR  : 12; // Top Address + 1 of the DMA Protected Region
-        uint64_t       Reserved_63_32  : 32; // Unused
-    } field;
-    uint64_t val;
-} FXR_AT_CFG_LTDPR_t;
-
 // FXR_AT_CFG_GENPROT_BASE desc:
 typedef union {
     struct {
@@ -103,14 +88,6 @@ typedef union {
     uint64_t val;
 } FXR_AT_CFG_GENPROT_LIMIT_t;
 
-// FXR_AT_CFG_IOMMU_DEFEATURE desc:
-typedef union {
-    struct {
-        uint64_t     iommu_defeatures  : 64; // Data read or to be written to the IOMMU Defeature registers
-    } field;
-    uint64_t val;
-} FXR_AT_CFG_IOMMU_DEFEATURE_t;
-
 // FXR_AT_CFG_PASID_LUT desc:
 typedef union {
     struct {
@@ -125,44 +102,34 @@ typedef union {
 // FXR_AT_ERR_STS_1 desc:
 typedef union {
     struct {
-        uint64_t       iommu_disabled  :  1; // IOMMU disabled, no device PASID memory access
-        uint64_t         ats_disabled  :  1; // Address Translation Disabled, no device PASID memory access
-        uint64_t       PASID_disabled  :  1; // PASID access disabled, no device PASID memory access
-        uint64_t       PASID_map_fail  :  1; // PID to PASID mapping failed. Invalid PASID entry
-        uint64_t      PASID_priv_fail  :  1; // PID to PASID mapping failed. Request Privilege Level .NE. PASID Map Privilege Level
-        uint64_t      pf_pgr_disabled  :  1; // page fault for request that could have initiated Page Group Request
-        uint64_t      pw_mem_type_err  :  1; // Page Walk returned a memory type inconsistent with memory types supported by device.
-        uint64_t             plmr_err  :  1; // PLMR range check failed
-        uint64_t             phmr_err  :  1; // PHMR range check failed
-        uint64_t            ltdpr_err  :  1; // LTDPR range check failed
-        uint64_t          genprot_err  :  1; // GenProt range check failed
-        uint64_t          pgr_rsp_err  :  1; // PageGroup Response Error
-        uint64_t       pgr_rsp_err_of  :  1; // PageGroup Response Error Overflow
-        uint64_t        iommu_rsp_err  :  1; // Unexpected IOMMU Response. After coming out of FLR, this error may be raised as the OS continues to drain its request queue. It is safe to ignore/clear this error once it is guaranteed that the OS has completely drained its request queue. The device should not be enabled until this drain has occurred. The driver may use system software interfaces to initiate the page request/response drain. See section 7.11 of the IOMMU Specification for details.
-        uint64_t    incorrect_sid_err  :  1; // Incorrect SID(Device ID) received from IOMMU
-        uint64_t        page_size_err  :  1; // IOMMU Page Walk Response for a page size that is not configured for entry into the ExDTLB. Note: Translations will complete, per the response status, but these responses will not be filled in the ExDTLB.
-        uint64_t         ptec_tag_mbe  :  1; // PTEC Cache Tag MBE
-        uint64_t        ptec_data_mbe  :  1; // PTEC Cache Data MBE
-        uint64_t               tr_mbe  :  1; // Translation Request Buffer MBE
-        uint64_t          pw_trid_mbe  :  1; // Page Walk TRID Buffer MBE
-        uint64_t       pw_trid_of_mbe  :  1; // PageWalk TRID Overflow Buffer MBE
-        uint64_t          pw_resp_mbe  :  1; // PageWalk Response Buffer MBE
-        uint64_t        pid_pasid_mbe  :  1; // PID to PASID Look Up Table MBE
-        uint64_t     pte_lru_2m4k_mbe  :  1; // PTE Cache LRU 2M/4K State Table MBE
-        uint64_t       pte_lru_1g_mbe  :  1; // PTE Cache LRU 1G State Table MBE
-        uint64_t         ptec_tag_sbe  :  1; // PTEC Cache Tag SBE
-        uint64_t        ptec_data_sbe  :  1; // PTEC Cache Data SBE
-        uint64_t               tr_sbe  :  1; // Translation Request Buffer SBE
-        uint64_t          pw_trid_sbe  :  1; // Page Walk TRID Buffer SBE
-        uint64_t       pw_trid_of_sbe  :  1; // PageWalk TRID Overflow Buffer SBE
-        uint64_t          pw_resp_sbe  :  1; // PageWalk Response Buffer SBE
-        uint64_t        pid_pasid_sbe  :  1; // PID to PASID Look Up Table SBE
-        uint64_t     pte_lru_2m4k_sbe  :  1; // PTE Cache LRU 2M/4K State Table SBE
-        uint64_t     iommu_parity_err  :  1; // IOMMU register file parity error
-        uint64_t        devtlb_id_err  :  1; // The Device TLB ID, sent from IOMMU does not match BDF of this FXR device
-        uint64_t   iommu_mem_type_err  :  1; // Memory Type Error on IOMMU Host memory interface
-        uint64_t    iommu_seq_msg_err  :  1; // IOMMU Sequencer Interface message error
-        uint64_t       Reserved_63_37  : 27; // Unused
+        uint64_t       iommu_disabled  :  1; // IOMMU disabled, no device PASID memory access ERR_CATEGORY_INFO
+        uint64_t         ats_disabled  :  1; // Address Translation Disabled, no device PASID memory access ERR_CATEGORY_INFO
+        uint64_t       PASID_disabled  :  1; // PASID access disabled, no device PASID memory access ERR_CATEGORY_INFO
+        uint64_t       PASID_map_fail  :  1; // PID to PASID mapping failed. Invalid PASID entry ERR_CATEGORY_INFO
+        uint64_t      PASID_priv_fail  :  1; // PID to PASID mapping failed. Request Privilege Level .NE. PASID Map Privilege Level ERR_CATEGORY_INFO
+        uint64_t      pf_pgr_disabled  :  1; // page fault for request that could have initiated Page Group Request ERR_CATEGORY_INFO
+        uint64_t          genprot_err  :  1; // GenProt range check failed ERR_CATEGORY_INFO
+        uint64_t          pgr_rsp_err  :  1; // PageGroup Response Error ERR_CATEGORY_INFO
+        uint64_t       pgr_rsp_err_of  :  1; // PageGroup Response Error Overflow ERR_CATEGORY_HFI
+        uint64_t        iommu_rsp_err  :  1; // Unexpected IOMMU Response. After coming out of FLR, this error may be raised as the OS continues to drain its request queue. It is safe to ignore/clear this error once it is guaranteed that the OS has completely drained its request queue. The device should not be enabled until this drain has occurred. The driver may use system software interfaces to initiate the page request/response drain. See section 7.11 of the IOMMU Specification for details. ERR_CATEGORY_INFO
+        uint64_t         ptec_tag_mbe  :  1; // PTEC Cache Tag MBE ERR_CATEGORY_CORRECTABLE
+        uint64_t        ptec_data_mbe  :  1; // PTEC Cache Data MBE ERR_CATEGORY_CORRECTABLE
+        uint64_t               tr_mbe  :  1; // Translation Request Buffer MBE ERR_CATEGORY_HFI
+        uint64_t          pw_trid_mbe  :  1; // Page Walk TRID Buffer MBE ERR_CATEGORY_HFI
+        uint64_t       pw_trid_of_mbe  :  1; // PageWalk TRID Overflow Buffer MBE ERR_CATEGORY_HFI
+        uint64_t          pw_resp_mbe  :  1; // PageWalk Response Buffer MBE ERR_CATEGORY_HFI
+        uint64_t        pid_pasid_mbe  :  1; // PID to PASID Look Up Table MBE ERR_CATEGORY_HFI
+        uint64_t     pte_lru_2m4k_mbe  :  1; // PTE Cache LRU 2M/4K State Table MBE ERR_CATEGORY_HFI
+        uint64_t       pte_lru_1g_mbe  :  1; // PTE Cache LRU 1G State Table MBE ERR_CATEGORY_CORRECTABLE
+        uint64_t         ptec_tag_sbe  :  1; // PTEC Cache Tag SBE ERR_CATEGORY_CORRECTABLE
+        uint64_t        ptec_data_sbe  :  1; // PTEC Cache Data SBE ERR_CATEGORY_CORRECTABLE
+        uint64_t               tr_sbe  :  1; // Translation Request Buffer SBE ERR_CATEGORY_CORRECTABLE
+        uint64_t          pw_trid_sbe  :  1; // Page Walk TRID Buffer SBE ERR_CATEGORY_CORRECTABLE
+        uint64_t       pw_trid_of_sbe  :  1; // PageWalk TRID Overflow Buffer SBE ERR_CATEGORY_CORRECTABLE
+        uint64_t          pw_resp_sbe  :  1; // PageWalk Response Buffer SBE ERR_CATEGORY_CORRECTABLE
+        uint64_t        pid_pasid_sbe  :  1; // PID to PASID Look Up Table SBE ERR_CATEGORY_CORRECTABLE
+        uint64_t     pte_lru_2m4k_sbe  :  1; // PTE Cache LRU 2M/4K State Table SBE ERR_CATEGORY_CORRECTABLE
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_STS_1_t;
@@ -170,8 +137,8 @@ typedef union {
 // FXR_AT_ERR_CLR_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Unused
+        uint64_t               events  : 27; // Write 1's to clear corresponding status bits.
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_CLR_1_t;
@@ -179,8 +146,8 @@ typedef union {
 // FXR_AT_ERR_FRC_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Unused
+        uint64_t               events  : 27; // Write 1's to clear corresponding status bits.
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_FRC_1_t;
@@ -188,8 +155,8 @@ typedef union {
 // FXR_AT_ERR_EN_HOST_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to enable interrupt.
-        uint64_t       Reserved_63_37  : 27; // Unused
+        uint64_t               events  : 27; // Write 1's to enable interrupt.
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_EN_HOST_1_t;
@@ -197,8 +164,8 @@ typedef union {
 // FXR_AT_ERR_FIRST_HOST_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Unused
+        uint64_t               events  : 27; // Write 1's to clear corresponding status bits.
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_FIRST_HOST_1_t;
@@ -206,8 +173,8 @@ typedef union {
 // FXR_AT_ERR_EN_BMC_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to enable interrupt.
-        uint64_t       Reserved_63_37  : 27; // Unused
+        uint64_t               events  : 27; // Write 1's to enable interrupt.
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_EN_BMC_1_t;
@@ -215,8 +182,8 @@ typedef union {
 // FXR_AT_ERR_FIRST_BMC_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Unused
+        uint64_t               events  : 27; // Write 1's to clear corresponding status bits.
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_FIRST_BMC_1_t;
@@ -224,8 +191,8 @@ typedef union {
 // FXR_AT_ERR_EN_QUAR_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to enable interrupt.
-        uint64_t       Reserved_63_37  : 27; // Unused
+        uint64_t               events  : 27; // Write 1's to enable interrupt.
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_EN_QUAR_1_t;
@@ -233,8 +200,8 @@ typedef union {
 // FXR_AT_ERR_FIRST_QUAR_1 desc:
 typedef union {
     struct {
-        uint64_t               events  : 37; // Write 1's to clear corresponding status bits.
-        uint64_t       Reserved_63_37  : 27; // Unused
+        uint64_t               events  : 27; // Write 1's to clear corresponding status bits.
+        uint64_t       Reserved_63_27  : 37; // Unused
     } field;
     uint64_t val;
 } FXR_AT_ERR_FIRST_QUAR_1_t;
@@ -332,47 +299,6 @@ typedef union {
     } field;
     uint64_t val;
 } FXR_AT_ERR_INFO_1G_t;
-
-// FXR_AT_STS_PLMR_BASE desc:
-typedef union {
-    struct {
-        uint64_t                 pmen  :  1; // Protected Memory Region Checking Enabled
-        uint64_t        Reserved_19_1  : 19; // Unused
-        uint64_t            plmr_base  : 12; // PLMR Base
-        uint64_t       Reserved_63_32  : 32; // Unused
-    } field;
-    uint64_t val;
-} FXR_AT_STS_PLMR_BASE_t;
-
-// FXR_AT_STS_PLMR_LIMIT desc:
-typedef union {
-    struct {
-        uint64_t        Reserved_19_0  : 20; // Unused
-        uint64_t           plmr_limit  : 12; // PLMR Limit
-        uint64_t       Reserved_63_32  : 32; // Unused
-    } field;
-    uint64_t val;
-} FXR_AT_STS_PLMR_LIMIT_t;
-
-// FXR_AT_STS_PHMR_BASE desc:
-typedef union {
-    struct {
-        uint64_t        Reserved_19_0  : 20; // Unused
-        uint64_t            phmr_base  : 28; // PHMR Base
-        uint64_t       Reserved_63_48  : 16; // Unused
-    } field;
-    uint64_t val;
-} FXR_AT_STS_PHMR_BASE_t;
-
-// FXR_AT_STS_PHMR_LIMIT desc:
-typedef union {
-    struct {
-        uint64_t        Reserved_19_0  : 20; // Unused
-        uint64_t           phmr_limit  : 28; // PHMR Limit
-        uint64_t       Reserved_63_48  : 16; // Unused
-    } field;
-    uint64_t val;
-} FXR_AT_STS_PHMR_LIMIT_t;
 
 // FXR_AT_STS_GENERAL_1 desc:
 typedef union {
@@ -545,5 +471,16 @@ typedef union {
     } field;
     uint64_t val;
 } FXR_AT_DBG_LRU1G_SETS_t;
+
+// FXR_AT_DBG_ERROR_MODES desc:
+typedef union {
+    struct {
+        uint64_t     all_req_fault_en  :  1; // All Translation requests generate Page Fault responses
+        uint64_t priv_lvl_req_fault_en  :  1; // All Translation requests, with priv_level=1, generate Page Fault responses
+        uint64_t     pgr_req_fault_en  :  1; // Translation requests, receiving a recoverable page fault response, from IOMMU, generate a Page Fault, rather than attempting a Page Group Request.
+        uint64_t        Reserved_63_3  : 61; // Unused
+    } field;
+    uint64_t val;
+} FXR_AT_DBG_ERROR_MODES_t;
 
 #endif /* ___FXR_at_CSRS_H__ */

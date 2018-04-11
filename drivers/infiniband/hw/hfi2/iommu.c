@@ -1188,51 +1188,6 @@ static int hfi_svm_finish_prq(struct hfi_at *at)
 	return 0;
 }
 
-static int map_at(struct hfi_at *at, u64 phys_addr)
-{
-	int err = 0;
-
-	at->reg_phys = phys_addr;
-	at->reg_size = AT_PAGE_SIZE;
-
-	if (!request_mem_region(at->reg_phys, at->reg_size, at->name)) {
-		dd_dev_err(at->dd, "Can't reserve memory\n");
-		err = -EBUSY;
-		goto out;
-	}
-
-	at->reg = ioremap(at->reg_phys, at->reg_size);
-	if (!at->reg) {
-		dd_dev_err(at->dd, "Can't map the region\n");
-		err = -ENOMEM;
-		goto release;
-	}
-
-	at->cap = at_readq(at->reg + AT_CAP_REG);
-	at->ecap = at_readq(at->reg + AT_ECAP_REG);
-
-	if (at->cap == (u64)-1 && at->ecap == (u64)-1) {
-		dd_dev_err(at->dd, "AT cap/ecap return all ones\n");
-		err = -EINVAL;
-		goto unmap;
-	}
-
-	goto out;
-
-unmap:
-	iounmap(at->reg);
-release:
-	release_mem_region(at->reg_phys, at->reg_size);
-out:
-	return err;
-}
-
-static void unmap_at(struct hfi_at *at)
-{
-	iounmap(at->reg);
-	release_mem_region(at->reg_phys, at->reg_size);
-}
-
 static void free_at(struct hfi_at *at)
 {
 	if (at->system_mm) {
@@ -1245,9 +1200,6 @@ static void free_at(struct hfi_at *at)
 		kfree(at->qi->desc_status);
 		kfree(at->qi);
 	}
-
-	if (at->reg)
-		unmap_at(at);
 
 	kfree(at);
 }
@@ -1271,27 +1223,12 @@ static int at_calculate_agaw(struct hfi_at *at)
 	return __at_calculate_agaw(at, DEFAULT_ADDRESS_WIDTH);
 }
 
-static u64 hfi_at_get_phyaddr(struct hfi_devdata *dd)
-{
-	if (dd->unit == 0)
-		return 0xfed15000;
-	else if (dd->unit == 1)
-		return 0xfed16000;
-	else
-		return 0x0;
-}
-
 static int alloc_at(struct hfi_devdata *dd)
 {
 	struct hfi_at *at;
-	u64 phyaddr;
 	u32 ver, sts;
 	int agaw = 0;
 	int err;
-
-	phyaddr = hfi_at_get_phyaddr(dd);
-	if (!phyaddr)
-		return -EINVAL;
 
 	at = kzalloc(sizeof(*at), GFP_KERNEL);
 	if (!at)
@@ -1300,30 +1237,31 @@ static int alloc_at(struct hfi_devdata *dd)
 	at->seq_id = dd->unit;
 	sprintf(at->name, "hfi-at-%d", dd->unit);
 	at->dd = dd;
+	at->reg = dd->kregbase + 0x1681000 - dd->wc_off;
 
-	err = map_at(at, phyaddr);
-	if (err) {
-		dd_dev_err(dd, "Failed to map %s\n", at->name);
+	err = -EINVAL;
+	at->cap = at_readq(at->reg + AT_CAP_REG);
+	at->ecap = at_readq(at->reg + AT_ECAP_REG);
+	if (at->cap == (u64)-1 && at->ecap == (u64)-1) {
+		dd_dev_err(at->dd, "AT cap/ecap return all ones\n");
 		goto error;
 	}
 
-	err = -EINVAL;
+	ver = readl(at->reg + AT_VER_REG);
+	dd_dev_info(dd, "%s: ver %d:%d cap %llx ecap %llx\n",
+		    at->name,
+		    AT_VER_MAJOR(ver), AT_VER_MINOR(ver),
+		    (unsigned long long)at->cap,
+		    (unsigned long long)at->ecap);
+
 	/* TODO: Do we need agaw? seems like it is only for SLPTPTR */
 	agaw = at_calculate_agaw(at);
 	if (agaw < 0) {
 		dd_dev_err(dd, "Cannot get a valid agaw for %s\n",
 			   at->name);
-		goto err_unmap;
+		goto error;
 	}
 	at->agaw = agaw;
-
-	ver = readl(at->reg + AT_VER_REG);
-	dd_dev_info(dd, "%s: reg_base_addr %llx ver %d:%d cap %llx ecap %llx\n",
-		    at->name,
-		    (unsigned long long)phyaddr,
-		    AT_VER_MAJOR(ver), AT_VER_MINOR(ver),
-		    (unsigned long long)at->cap,
-		    (unsigned long long)at->ecap);
 
 	sts = readl(at->reg + AT_GSTS_REG);
 	if (sts & AT_GSTS_IRES)
@@ -1344,7 +1282,7 @@ static int alloc_at(struct hfi_devdata *dd)
 		task = get_pid_task(find_pid_ns(1, &init_pid_ns), PIDTYPE_PID);
 		if (!task || !task->mm) {
 			dd_dev_err(dd, "Failed to get system_mm\n");
-			goto err_unmap;
+			goto error;
 		}
 		mmgrab(task->mm);
 		at->system_mm = task->mm;
@@ -1353,8 +1291,6 @@ static int alloc_at(struct hfi_devdata *dd)
 
 	return 0;
 
-err_unmap:
-	unmap_at(at);
 error:
 	kfree(at);
 	return err;
@@ -1845,7 +1781,7 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 
 	at->bus = pdev->bus->number;
 	at->devfn = pdev->devfn;
-	at->ats_supported = at->pasid_supported = at->pri_supported = 0;
+	at->ats_supported = at->pasid_supported = at->pri_supported = 1;
 	at->ats_enabled = at->pasid_enabled = at->pri_enabled = 0;
 	at->ats_qdep = 0;
 
@@ -2831,8 +2767,10 @@ hfi_at_init(struct hfi_devdata *dd)
 	struct hfi_at *at;
 
 	ret = alloc_at(dd);
-	if (ret)
+	if (ret) {
+		dd_dev_err(dd, "alloc_at() failed\n");
 		return ret;
+	}
 
 	at = dd->at;
 	if (translation_status(at)) {

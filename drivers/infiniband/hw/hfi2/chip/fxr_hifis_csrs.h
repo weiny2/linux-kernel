@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_hifis_CSRS_H__
@@ -18,9 +18,9 @@ typedef union {
 typedef union {
     struct {
         uint64_t        Reserved_31_0  : 32; // Unused
-        uint64_t at_hifis_pkt_credit_max  :  5; // AT to HIFIS interface Packet Credits. Packet credits on AT-to-HI interface
-        uint64_t tx_hifis_pkt_credit_max  :  5; // TX to HIFIS interface Packet Credits. Packet credits on TX-to-HI interface
-        uint64_t rx_hifis_pkt_credit_max  :  5; // RX to HIFIS interface Packet Credits. Packet credits on RX-to-HI interface
+        uint64_t at_hifis_pkt_credit_max  :  5; // AT to HIFIS interface Packet Credits. Packet credits on AT-to-HI interface. The Maximum value supported by HIFIS is 16 credits.
+        uint64_t tx_hifis_pkt_credit_max  :  5; // TX to HIFIS interface Packet Credits. Packet credits on TX-to-HI interface. The Maximum value supported by HIFIS is 16 credits.
+        uint64_t rx_hifis_pkt_credit_max  :  5; // RX to HIFIS interface Packet Credits. Packet credits on RX-to-HI interface. The Maximum value supported by HIFIS is 16 credits.
         uint64_t       Reserved_63_47  : 17; // Unused
     } field;
     uint64_t val;
@@ -39,7 +39,8 @@ typedef union {
         uint64_t credits_avail_rx_rsp  :  6; // RX interface Packet Credits. Packet credits available on HI-to-RX response interface.
         uint64_t credits_avail_rx_req  :  6; // RX interface Packet Credits. Packet credits available on HI-to-RX request interface.
         uint64_t         credit_en_rx  :  1; // Enable Credit Counter on HIFIS to AT INERFACE.
-        uint64_t       Reserved_63_56  :  8; // Unused
+        uint64_t     port_arb_credits  :  7; // Credits for leaky arbitration.
+        uint64_t          Reserved_63  :  1; // Unused
     } field;
     uint64_t val;
 } HIFIS_OUT_CFG1_t;
@@ -66,7 +67,13 @@ typedef union {
         uint64_t     rx_req_inq_oflow  :  1; // RX Request In Queue Overflow error. ERR_CATEGORY_HFI
         uint64_t     tx_req_inq_oflow  :  1; // TX Request In Queue Overflow error. ERR_CATEGORY_HFI
         uint64_t     at_req_inq_oflow  :  1; // AT Request In Queue Overflow error. ERR_CATEGORY_HFI
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t        at_in_hdr_mbe  :  1; // AT in Header MBE ERR_CATEGORY_HFI
+        uint64_t        at_in_hdr_sbe  :  1; // AT in Header SBE. ERR_CATEGORY_CORRECTABLE
+        uint64_t        tx_in_hdr_mbe  :  1; // TX in Header MBE ERR_CATEGORY_HFI
+        uint64_t        tx_in_hdr_sbe  :  1; // TX in Header SBE. ERR_CATEGORY_CORRECTABLE
+        uint64_t        rx_in_hdr_mbe  :  1; // RX in Header MBE ERR_CATEGORY_HFI
+        uint64_t        rx_in_hdr_sbe  :  1; // RX in Header SBE. ERR_CATEGORY_CORRECTABLE
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } HIFIS_ERR_STS_t;
@@ -74,8 +81,8 @@ typedef union {
 // HIFIS_ERR_CLR desc:
 typedef union {
     struct {
-        uint64_t               events  :  8; // Write 1's to clear corresponding HIFIS_ERR_STS bits.
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t               events  : 14; // Write 1's to clear corresponding HIFIS_ERR_STS bits.
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } HIFIS_ERR_CLR_t;
@@ -83,8 +90,8 @@ typedef union {
 // HIFIS_ERR_FRC desc:
 typedef union {
     struct {
-        uint64_t               events  :  8; // Write 1 to set corresponding HIFIS_ERR_STS bits.
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t               events  : 14; // Write 1 to set corresponding HIFIS_ERR_STS bits.
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } HIFIS_ERR_FRC_t;
@@ -92,8 +99,8 @@ typedef union {
 // HIFIS_ERR_EN_HOST desc:
 typedef union {
     struct {
-        uint64_t               events  :  8; // Enables associated HIFIS_ERR_STS bits to generate host interrupt signal.
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t               events  : 14; // Enables associated HIFIS_ERR_STS bits to generate host interrupt signal.
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } HIFIS_ERR_EN_HOST_t;
@@ -101,8 +108,8 @@ typedef union {
 // HIFIS_ERR_FIRST_HOST desc:
 typedef union {
     struct {
-        uint64_t               events  :  8; // Snapshot of HIFIS_ERR_STS bits when host interrupt signal transitions from 0 to 1.
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t               events  : 14; // Snapshot of HIFIS_ERR_STS bits when host interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } HIFIS_ERR_FIRST_HOST_t;
@@ -110,8 +117,8 @@ typedef union {
 // HIFIS_ERR_EN_BMC desc:
 typedef union {
     struct {
-        uint64_t               events  :  8; // Enables associated HIFIS_ERR_STS bits to generate BMC interrupt signal.
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t               events  : 14; // Enables associated HIFIS_ERR_STS bits to generate BMC interrupt signal.
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } HIFIS_ERR_EN_BMC_t;
@@ -119,8 +126,8 @@ typedef union {
 // HIFIS_ERR_FIRST_BMC desc:
 typedef union {
     struct {
-        uint64_t               events  :  8; // Snapshot of status bits when BMC interrupt signal transitions from 0 to 1.
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t               events  : 14; // Snapshot of status bits when BMC interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } HIFIS_ERR_FIRST_BMC_t;
@@ -128,8 +135,8 @@ typedef union {
 // HIFIS_ERR_EN_QUAR desc:
 typedef union {
     struct {
-        uint64_t               events  :  8; // Enables associated HIFIS_ERR_STS bits to generate quarantine signal.
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t               events  : 14; // Enables associated HIFIS_ERR_STS bits to generate quarantine signal.
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } HIFIS_ERR_EN_QUAR_t;
@@ -137,8 +144,8 @@ typedef union {
 // HIFIS_ERR_FIRST_QUAR desc:
 typedef union {
     struct {
-        uint64_t               events  :  8; // Snapshot of status bits when quarantine signal transitions from 0 to 1.
-        uint64_t        Reserved_63_8  : 56; // Unused
+        uint64_t               events  : 14; // Snapshot of status bits when quarantine signal transitions from 0 to 1.
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } HIFIS_ERR_FIRST_QUAR_t;
@@ -146,9 +153,12 @@ typedef union {
 // HIFIS_ERR_INFO desc:
 typedef union {
     struct {
-        uint64_t         imi_hdr_synd  :  8; // MSIX Table Address syndrome associated with imi_hdr_sbe / imi_hdr_mbe
-        uint64_t         adm_hdr_synd  :  8; // MSIX Table Data syndrome associated with adm_hdr_sbe / adm_hdr_mbe
-        uint64_t       Reserved_63_16  : 48; // Unused
+        uint64_t         imi_hdr_synd  :  8; // Header syndrome associated with imi_hdr_sbe / imi_hdr_mbe
+        uint64_t         adm_hdr_synd  :  8; // Header syndrome associated with adm_hdr_sbe / adm_hdr_mbe
+        uint64_t       at_in_hdr_synd  :  8; // Header syndrome associated with at_in_hdr_sbe/at_in_hdr_mbe
+        uint64_t       tx_in_hdr_synd  :  8; // Header syndrome associated with tx_in_hdr_sbe/tx_in_hdr_mbe
+        uint64_t       rx_in_hdr_synd  :  8; // Header syndrome associated with rx_in_hdr_sbe/rx_in_hdr_mbe
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } HIFIS_ERR_INFO_t;

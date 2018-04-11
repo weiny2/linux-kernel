@@ -67,9 +67,9 @@
 #include "link.h"
 #include "platform.h"
 #include "firmware.h"
-#include "chip/mnh_8051_defs.h"
-#include "chip/fxr_fc_defs.h"
-#include "chip/mnh_misc_defs.h"
+#include "chip/fxr_8051_defs.h"
+#include "chip/fxr_oc_defs.h"
+#include "chip/fxr_fw_defs.h"
 #include "chip/fxr_rx_hp_defs.h"
 #include "chip/fxr_tx_otr_pkt_top_csrs.h"
 #include "chip/fxr_tx_otr_msg_top_csrs.h"
@@ -327,11 +327,11 @@ static int __read_8051_data(struct hfi_pportdata *ppd, u32 addr, u64 *result)
 	reg = ((addr & CRK_CRK8051_CFG_RAM_ACCESS_CTRL_ADDRESS_MASK)
 			<< CRK_CRK8051_CFG_RAM_ACCESS_CTRL_ADDRESS_SHIFT)
 		| CRK_CRK8051_CFG_RAM_ACCESS_CTRL_READ_ENA_SMASK;
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_CTRL, reg);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_CTRL, reg);
 
 	/* wait until ACCESS_COMPLETED is set */
 	count = 0;
-	while ((read_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_STATUS)
+	while ((read_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_STATUS)
 		    & CRK_CRK8051_CFG_RAM_ACCESS_STATUS_ACCESS_COMPLETED_SMASK)
 		    == 0) {
 		count++;
@@ -343,7 +343,7 @@ static int __read_8051_data(struct hfi_pportdata *ppd, u32 addr, u64 *result)
 	}
 
 	/* gather the data */
-	*result = read_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_RD_DATA);
+	*result = read_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_RD_DATA);
 
 	return 0;
 }
@@ -362,7 +362,7 @@ int hfi_read_8051_data(struct hfi_pportdata *ppd, u32 addr,
 	spin_lock_irqsave(&ppd->crk8051_lock, flags);
 
 	/* data read set-up, no auto-increment */
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_SETUP, 0);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_SETUP, 0);
 
 	for (done = 0; done < len; addr += 8, done += 8, result++) {
 		ret = __read_8051_data(ppd, addr, result);
@@ -371,7 +371,7 @@ int hfi_read_8051_data(struct hfi_pportdata *ppd, u32 addr,
 	}
 
 	/* turn off read enable */
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_CTRL, 0);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_CTRL, 0);
 
 	spin_unlock_irqrestore(&ppd->crk8051_lock, flags);
 
@@ -394,12 +394,12 @@ static int write_8051(struct hfi_pportdata *ppd, int code, u32 start,
 	/* write set-up */
 	reg = (code ? CRK_CRK8051_CFG_RAM_ACCESS_SETUP_RAM_SEL_SMASK : 0ull)
 		| CRK_CRK8051_CFG_RAM_ACCESS_SETUP_AUTO_INCR_ADDR_SMASK;
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_SETUP, reg);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_SETUP, reg);
 
 	reg = ((start & CRK_CRK8051_CFG_RAM_ACCESS_CTRL_ADDRESS_MASK)
 			<< CRK_CRK8051_CFG_RAM_ACCESS_CTRL_ADDRESS_SHIFT)
 		| CRK_CRK8051_CFG_RAM_ACCESS_CTRL_WRITE_ENA_SMASK;
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_CTRL, reg);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_CTRL, reg);
 
 	/* write */
 	for (offset = 0; offset < len; offset += 8) {
@@ -413,11 +413,11 @@ static int write_8051(struct hfi_pportdata *ppd, int code, u32 start,
 		} else {
 			memcpy(&reg, &data[offset], 8);
 		}
-		write_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_WR_DATA, reg);
+		write_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_WR_DATA, reg);
 
 		/* wait until ACCESS_COMPLETED is set */
 		count = 0;
-		while ((read_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_STATUS)
+		while ((read_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_STATUS)
 		    & CRK_CRK8051_CFG_RAM_ACCESS_STATUS_ACCESS_COMPLETED_SMASK)
 		    == 0) {
 			count++;
@@ -430,8 +430,8 @@ static int write_8051(struct hfi_pportdata *ppd, int code, u32 start,
 	}
 
 	/* turn off write access, auto increment (also sets to data access) */
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_CTRL, 0);
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RAM_ACCESS_SETUP, 0);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_CTRL, 0);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_SETUP, 0);
 
 	return 0;
 }
@@ -889,19 +889,19 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 	int ret = 0;
 
 	/* write the signature */
-	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_SIGNATURE,
+	write_rsa_data(dd, FXR_FW_MSC_RSA_SIGNATURE,
 		       signature, KEY_SIZE);
 
 	/* initialize RSA */
-	write_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_CMD, RSA_CMD_INIT);
+	write_csr(dd, FXR_FW_MSC_RSA_CMD, RSA_CMD_INIT);
 
 	/*
 	 * Make sure the engine is idle and insert a delay between the two
-	 * writes to MNH_MISC_MSC_RSA_CMD.
+	 * writes to FXR_FW_MSC_RSA_CMD.
 	 */
-	status = (read_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_STS_FW)
-			   & MNH_MISC_STS_FW_RSA_STATUS_SMASK)
-			     >> MNH_MISC_STS_FW_RSA_STATUS_SHIFT;
+	status = (read_csr(dd, FXR_FW_STS_FW)
+			   & FXR_FW_STS_FW_RSA_STATUS_SMASK)
+			     >> FXR_FW_STS_FW_RSA_STATUS_SHIFT;
 	if (status != RSA_STATUS_IDLE) {
 		ppd_dev_err(ppd, "%s security engine not idle - giving up\n",
 			    who);
@@ -909,7 +909,7 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 	}
 
 	/* start RSA */
-	write_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_CMD, RSA_CMD_START);
+	write_csr(dd, FXR_FW_MSC_RSA_CMD, RSA_CMD_START);
 
 	/*
 	 * Look for the result.
@@ -934,9 +934,9 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 	 */
 	timeout = msecs_to_jiffies(RSA_ENGINE_TIMEOUT) + jiffies;
 	while (1) {
-		status = (read_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_STS_FW)
-			   & MNH_MISC_STS_FW_RSA_STATUS_SMASK)
-			     >> MNH_MISC_STS_FW_RSA_STATUS_SHIFT;
+		status = (read_csr(dd, FXR_FW_STS_FW)
+			   & FXR_FW_STS_FW_RSA_STATUS_SMASK)
+			     >> FXR_FW_STS_FW_RSA_STATUS_SHIFT;
 		if (status == RSA_STATUS_IDLE) {
 			/* should not happen */
 			ppd_dev_err(ppd, "%s firmware security bad idle state\n",
@@ -973,11 +973,11 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 	 * Print failure details if any.
 	 */
 	if (ret) {
-		reg = read_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_STS_FW);
-		if (reg & MNH_MISC_STS_FW_FW_AUTH_FAILED_SMASK)
+		reg = read_csr(dd, FXR_FW_STS_FW);
+		if (reg & FXR_FW_STS_FW_FW_AUTH_FAILED_SMASK)
 			ppd_dev_err(ppd, "%s firmware authorization failed\n",
 				    who);
-		if (reg & MNH_MISC_STS_FW_KEY_MISMATCH_SMASK)
+		if (reg & FXR_FW_STS_FW_KEY_MISMATCH_SMASK)
 			ppd_dev_err(ppd, "%s firmware key mismatch\n", who);
 	}
 
@@ -988,17 +988,16 @@ static void load_security_variables(struct hfi_devdata *dd,
 				    struct firmware_details *fdet)
 {
 	/* Security variables a.  Write the modulus */
-	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_MODULUS,
+	write_rsa_data(dd, FXR_FW_MSC_RSA_MODULUS,
 		       fdet->modulus, KEY_SIZE);
 	/* Security variables b.  Write the r2 */
-	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_R2,
+	write_rsa_data(dd, FXR_FW_MSC_RSA_R2,
 		       fdet->r2, KEY_SIZE);
 	/* Security variables c.  Write the mu */
-	write_rsa_data(dd, FXR_MNH_MISC_CSRS + MNH_MISC_MSC_RSA_MU,
+	write_rsa_data(dd, FXR_FW_MSC_RSA_MU,
 		       fdet->mu, MU_SIZE);
 	/* Security variables d.  Write the header */
-	write_streamed_rsa_data(dd, FXR_MNH_MISC_CSRS +
-				MNH_MISC_MSC_SHA_PRELOAD,
+	write_streamed_rsa_data(dd, FXR_FW_MSC_SHA_PRELOAD,
 				(u8 *)fdet->css_header,
 				sizeof(struct css_header));
 }
@@ -1006,7 +1005,7 @@ static void load_security_variables(struct hfi_devdata *dd,
 /* return the 8051 firmware state */
 static inline u32 get_firmware_state(const struct hfi_pportdata *ppd)
 {
-	u64 reg = read_8051_csr(ppd, CRK_CRK8051_STS_CUR_STATE);
+	u64 reg = read_csr(ppd->dd, CRK_CRK8051_STS_CUR_STATE);
 
 	return (reg >> CRK_CRK8051_STS_CUR_STATE_FIRMWARE_SHIFT)
 				& CRK_CRK8051_STS_CUR_STATE_FIRMWARE_MASK;
@@ -1223,7 +1222,7 @@ static int load_8051_firmware(struct hfi_pportdata *ppd,
 		| CRK_CRK8051_CFG_RST_DRAM_SMASK
 		| CRK_CRK8051_CFG_RST_IRAM_SMASK
 		| CRK_CRK8051_CFG_RST_SFR_SMASK;
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, reg);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RST, reg);
 
 	/*
 	 * MNH reset step 2 (optional): Load 8051 data memory with link
@@ -1235,15 +1234,15 @@ static int load_8051_firmware(struct hfi_pportdata *ppd,
 	 */
 	/* release all but the core reset */
 	reg = CRK_CRK8051_CFG_RST_M8051W_SMASK;
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, reg);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RST, reg);
 
 	/* Firmware load step 1 */
 	load_security_variables(dd, fdet);
 
 	/*
-	 * Firmware load step 2.  Clear MNH_MISC_CFG_FW_CTRL.FW_8051_LOADED
+	 * Firmware load step 2.  Clear FXR_FW_CFG_FW_CTRL.FW_8051_LOADED
 	 */
-	write_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_CFG_FW_CTRL, 0);
+	write_csr(dd, FXR_FW_CFG_FW_CTRL, 0);
 
 	/* Firmware load steps 3-5 */
 	ret = write_8051(ppd, 1/*code*/, 0, fdet->firmware_ptr,
@@ -1255,14 +1254,14 @@ static int load_8051_firmware(struct hfi_pportdata *ppd,
 	 * MNH reset step 4. Host starts the 8051 firmware
 	 */
 	/*
-	 * Firmware load step 6.  Set MNH_MISC_CFG_FW_CTRL.FW_8051_LOADED
+	 * Firmware load step 6.  Set FXR_FW_CFG_FW_CTRL.FW_8051_LOADED
 	 * There is simpler way where pnum is 1 or 2 as its prerequisite.
 	 * But I prefer the way to remove prerequisite.
 	 */
 	reg = 0x01;
 
-	write_csr(dd, FXR_MNH_MISC_CSRS + MNH_MISC_CFG_FW_CTRL,
-		  reg << MNH_MISC_CFG_FW_CTRL_FW_8051_LOADED_SHIFT);
+	write_csr(dd, FXR_FW_CFG_FW_CTRL,
+		  reg << FXR_FW_CFG_FW_CTRL_FW_8051_LOADED_SHIFT);
 
 	/* Firmware load steps 7-10 */
 	ret = run_rsa(ppd, "8051", fdet->signature);
@@ -1559,7 +1558,7 @@ int hfi2_release_and_wait_ready_8051_firmware(struct hfi_pportdata *ppd)
 
 	lockdep_assert_held(&ppd->crk8051_mutex);
 	/* clear all reset bits, releaseing the 8051 */
-	write_8051_csr(ppd, CRK_CRK8051_CFG_RST, 0ull);
+	write_csr(ppd->dd, CRK_CRK8051_CFG_RST, 0ull);
 
 	/* wait for the firmware to be ready to accept requests */
 	ret = hfi_wait_firmware_ready(ppd, TIMEOUT_8051_START);

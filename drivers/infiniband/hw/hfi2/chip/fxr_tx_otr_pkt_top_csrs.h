@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_tx_otr_pkt_top_CSRS_H__
@@ -26,17 +26,17 @@ typedef union {
         uint64_t      txci_rsp_rspack  :  6; // TXCI to TXOTR Response Response ACK
         uint64_t         Reserved_7_6  :  2; // Unused
         uint64_t      txci_rsp_reqack  :  6; // TXCI to TXOTR Response Request ACK
-        uint64_t       Reserved_23_14  : 10; // Unused
+        uint64_t       Reserved_15_14  :  2; // Unused
         uint64_t     txdma_req_rspack  :  4; // TXDMA to TXOTR Request Response ACK
         uint64_t     txdma_req_reqack  :  4; // TXDMA to TXOTR Request Request ACK
-        uint64_t            fpe_chint  :  2; // Cache hints for Fragmentation Programmable Engine reads from Host Memory.
+        uint64_t            fpe_chint  :  4; // CH-RDCUR - Cache hints for Fragmentation Programmable Engine reads from Host Memory.
         uint64_t     fpe_globalflowid  :  1; // Global Flow ID hint for Fragmentation Programmable Engine reads from Host Memory.
-        uint64_t               fpe_so  :  1; // Strongly Ordered hint for Fragmentation Programmable Engine reads from Host Memory.
-        uint64_t         psn_chint_rd  :  2; // Cache hints for PSN Cache reads to Host Memory.
-        uint64_t   psn_chint_flush_wr  :  2; // Cache hints for PSN Cache flush writes to Host Memory.
-        uint64_t  psn_chint_victim_wr  :  2; // Cache hints for PSN Cache victim writes to Host Memory.
+        uint64_t               fpe_so  :  1; // DEPRECATED - NO LONGER USED - Strongly Ordered hint for Fragmentation Programmable Engine reads from Host Memory.
+        uint64_t         psn_chint_rd  :  4; // CH-FILL - Cache hints for PSN Cache reads to Host Memory.
+        uint64_t   psn_chint_flush_wr  :  4; // CH-FLUSH - Cache hints for PSN Cache flush writes/nops and Translation Drain nops to Host Memory.
+        uint64_t  psn_chint_victim_wr  :  4; // CH-VICTIM - Cache hints for PSN Cache victim writes to Host Memory.
         uint64_t     psn_globalflowid  :  1; // Global Flow ID hint for PSN Cache reads from Host Memory.
-        uint64_t               psn_so  :  1; // Strongly Ordered hint for PSN Cache reads from Host Memory.
+        uint64_t               psn_so  :  1; // DEPRECATED - NO LONGER USED - Strongly Ordered hint for PSN Cache reads from Host Memory.
         uint64_t                  pid  : 12; // This is the PID inserted into Address Translation Requests from the PSN Cache
         uint64_t           priv_level  :  1; // The privilege level inserted into the Address Translation Requests from the PSN Cache. 0 = privileged, 1 = user
         uint64_t       Reserved_63_57  :  7; // Unused
@@ -608,8 +608,9 @@ typedef union {
 // TXOTR_PKT_CFG_TC0 desc:
 typedef union {
     struct {
-        uint64_t            max_bytes  : 63; // Maximum number of bytes allowed to be outstanding on this traffic class. The current outstanding for a traffic class is allowed to exceed the configured value by one MTU size
-        uint64_t               enable  :  1; // Outstanding Maximum bytes tracking is enabled for this traffic class
+        uint64_t            max_bytes  : 48; // Maximum number of bytes allowed to be outstanding on this traffic class. The current outstanding for a traffic class is allowed to exceed the configured value by one MTU size
+        uint64_t       Reserved_62_48  : 15; // Unused
+        uint64_t               enable  :  1; // Outstanding maximum bytes tracking is enabled for this traffic class. If this bit is set to 1, traffic on this traffic class is stalled if the number of bytes currently outstanding on this traffic class is greater than or equal to max_bytes. NOTE - The number of bytes outstanding is calculated as the sum of header bytes and payload bytes.
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_TC0_t;
@@ -617,8 +618,9 @@ typedef union {
 // TXOTR_PKT_CFG_TC1 desc:
 typedef union {
     struct {
-        uint64_t            max_bytes  : 63; // Maximum number of bytes allowed to be outstanding on this traffic class. The current outstanding for a traffic class is allowed to exceed the configured value by one MTU size
-        uint64_t               enable  :  1; // Outstanding Maximum bytes tracking is enabled for this traffic class
+        uint64_t            max_bytes  : 48; // Maximum number of bytes allowed to be outstanding on this traffic class. The current outstanding for a traffic class is allowed to exceed the configured value by one MTU size
+        uint64_t       Reserved_62_48  : 15; // Unused
+        uint64_t               enable  :  1; // Outstanding maximum bytes tracking is enabled for this traffic class. If this bit is set to 1, traffic on this traffic class is stalled if the number of bytes currently outstanding on this traffic class is greater than or equal to max_bytes. NOTE - The number of bytes outstanding is calculated as the sum of header bytes and payload bytes.
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_TC1_t;
@@ -626,8 +628,9 @@ typedef union {
 // TXOTR_PKT_CFG_TC2 desc:
 typedef union {
     struct {
-        uint64_t            max_bytes  : 63; // Maximum number of bytes allowed to be outstanding on this traffic class. The current outstanding for a traffic class is allowed to exceed the configured value by one MTU size
-        uint64_t               enable  :  1; // traffic class is enabled
+        uint64_t            max_bytes  : 48; // Maximum number of bytes allowed to be outstanding on this traffic class. The current outstanding for a traffic class is allowed to exceed the configured value by one MTU size
+        uint64_t       Reserved_62_48  : 15; // Unused
+        uint64_t               enable  :  1; // Outstanding maximum bytes tracking is enabled for this traffic class. If this bit is set to 1, traffic on this traffic class is stalled if the number of bytes currently outstanding on this traffic class is greater than or equal to max_bytes. NOTE - The number of bytes outstanding is calculated as the sum of header bytes and payload bytes.
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_TC2_t;
@@ -635,8 +638,9 @@ typedef union {
 // TXOTR_PKT_CFG_TC3 desc:
 typedef union {
     struct {
-        uint64_t            max_bytes  : 63; // Maximum number of bytes allowed to be outstanding on this traffic class. The current outstanding for a traffic class is allowed to exceed the configured value by one MTU size
-        uint64_t               enable  :  1; // Outstanding Maximum bytes tracking is enabled for this traffic class
+        uint64_t            max_bytes  : 48; // Maximum number of bytes allowed to be outstanding on this traffic class. The current outstanding for a traffic class is allowed to exceed the configured value by one MTU size
+        uint64_t       Reserved_62_48  : 15; // Unused
+        uint64_t               enable  :  1; // Outstanding maximum bytes tracking is enabled for this traffic class. If this bit is set to 1, traffic on this traffic class is stalled if the number of bytes currently outstanding on this traffic class is greater than or equal to max_bytes. NOTE - The number of bytes outstanding is calculated as the sum of header bytes and payload bytes.
     } field;
     uint64_t val;
 } TXOTR_PKT_CFG_TC3_t;
@@ -711,7 +715,7 @@ typedef union {
         uint64_t  invalid_msg_len_err  :  1; // Message length is longer than expected for the packet to be generated. See txotr_pkt_err_info_length_check CSR for error information. ERR_CATEGORY_TRANSACTION
         uint64_t          cmd_len_err  :  1; // Malformed length packet from TXCI. OTR checks the cmd_length against the tail location. See txotr_pkt_err_info_length_check CSR for error information. ERR_CATEGORY_HFI
         uint64_t          fp_fifo_mbe  :  1; // Multiple BIt Error for reads from the Fast Path fifo Input Queue. See txotr_pkt_err_info_fp_fifo CSR for error information. ERR_CATEGORY_HFI
-        uint64_t          fp_fifo_sbe  :  1; // Single BIt Error for reads from the Fast Path fifo Input Queue. See txotr_pkt_err_info_fp_fifo CSR for error information.ERR_CATEGORY_CORRECTABLE
+        uint64_t          fp_fifo_sbe  :  1; // Single BIt Error for reads from the Fast Path fifo Input Queue. See txotr_pkt_err_info_fp_fifo CSR for error information. ERR_CATEGORY_CORRECTABLE
         uint64_t      fp_fifo_undflow  :  1; // Fast Path fifo Input Queue under flow error. See txotr_pkt_err_info_fp_fifo CSR for error information. ERR_CATEGORY_HFI
         uint64_t      fp_fifo_ovrflow  :  1; // Fast Path fifo Input Queue over flow error. See txotr_pkt_err_info_fp_fifo CSR for error information. ERR_CATEGORY_HFI
         uint64_t     retrans_fifo_mbe  :  1; // Multiple BIt Error for reads from the Retransmit fifo. See txotr_pkt_err_info_retrans_fifo_0 & txotr_pkt_err_info_retrans_fifo_1 CSR for error information. ERR_CATEGORY_HFI
@@ -873,7 +877,7 @@ typedef union {
         uint64_t   resource_nack_rcvd  :  1; // Received an resource nack. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_INFO
         uint64_t non_retransmt_nack_rcvd  :  1; // Non-retransmit nack received. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_INFO
         uint64_t       tuple_mismatch  :  1; // Packet received from RXE2E which does not match one or more of the tuple fields in OPB. See txotr_pkt_err_info_tupple_mismatch CSR for error information. ERR_CATEGORY_INFO
-        uint64_t tuple_mismatch_opptmistic  :  1; // Packet received from RXE2E which does not match one or more of the Tuple mismatch for opportunistic case. See txotr_pkt_err_info_tupple_mismatch CSR for error information.ERR_CATEGORY_INFO
+        uint64_t tuple_mismatch_opptmistic  :  1; // Packet received from RXE2E which does not match one or more of the Tuple mismatch for opportunistic case. See txotr_pkt_err_info_tupple_mismatch CSR for error information. ERR_CATEGORY_INFO
         uint64_t     fpe_data_mem_mbe  :  1; // Fragmentation Programmable Engine Data Memory MBE Error Flag. See txotr_pkt_err_info_fpe_data_mem_be CSR for error information. ERR_CATEGORY_HFI
         uint64_t     fpe_data_mem_sbe  :  1; // Fragmentation Programmable Engine Data Memory SBE Error Flag. See txotr_pkt_err_info_fpe_data_mem_be CSR for error information. ERR_CATEGORY_CORRECTABLE
         uint64_t     fpe_prog_mem_mbe  :  1; // Fragmentation Programmable Engine Program Memory MBE Error Flag. See txotr_pkt_err_info_fpe_prog_mem_be CSR for error information. ERR_CATEGORY_HFI
@@ -890,7 +894,7 @@ typedef union {
         uint64_t pktid_list_ren_fifo_overflow  :  1; // PKTID list read enable fifo overflow. See txotr_pkt_err_info_tc_pktid_capture CSR for error information. ERR_CATEGORY_HFI
         uint64_t psn_state_fifo_undflow  :  1; // PSN State FIFO underflow. ERR_CATEGORY_HFI
         uint64_t psn_state_fifo_overflow  :  1; // PSN State FIFO overflow. ERR_CATEGORY_HFI
-        uint64_t          max_mtu_vio  :  1; // Maximum MTU violation in the Packet Partition
+        uint64_t          max_mtu_vio  :  1; // Maximum MTU violation in the Packet Partition ERR_CATEGORY_TRANSACTION
         uint64_t        rx_pkt_status  :  1; // Receive error status detected on the RxE2E interface. See txotr_pkt_err_info_ CSR for error information. ERR_CATEGORY_TRANSACTION
         uint64_t     about_to_timeout  :  1; // Notify RXDMA through the OMB to drop the packet due to close to time-range. See txotr_pkt_err_info_ CSR for error information. ERR_CATEGORY_INFO
         uint64_t       Reserved_63_44  : 20; // Unused
@@ -1195,6 +1199,21 @@ typedef union {
 // TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1 desc:
 typedef union {
     struct {
+        uint64_t       syndrome_sbe_8  :  8; // Syndrome for domain 8
+        uint64_t       syndrome_sbe_9  :  8; // Syndrome for domain 9
+        uint64_t      syndrome_sbe_10  :  8; // Syndrome for domain 10
+        uint64_t      syndrome_sbe_11  :  8; // Syndrome for domain 11
+        uint64_t      syndrome_sbe_12  :  8; // Syndrome for domain 12
+        uint64_t      syndrome_sbe_13  :  8; // Syndrome for domain 13
+        uint64_t      syndrome_sbe_14  :  8; // Syndrome for domain 14
+        uint64_t      syndrome_sbe_15  :  8; // Syndrome for domain 15
+    } field;
+    uint64_t val;
+} TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_t;
+
+// TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2 desc:
+typedef union {
+    struct {
         uint64_t       syndrome_mbe_0  :  8; // Syndrome for domain 0
         uint64_t       syndrome_mbe_1  :  8; // Syndrome for domain 1
         uint64_t       syndrome_mbe_2  :  8; // Syndrome for domain 2
@@ -1205,19 +1224,34 @@ typedef union {
         uint64_t       syndrome_mbe_7  :  8; // Syndrome for domain 7
     } field;
     uint64_t val;
-} TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_t;
+} TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_t;
 
-// TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2 desc:
+// TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3 desc:
 typedef union {
     struct {
-        uint64_t           domain_sbe  :  8; // Domain for the captured SBE error
-        uint64_t           domain_mbe  :  8; // Domain for the captured MBE error
-        uint64_t             addr_sbe  :  5; // Memory Address for the captured SBE error
-        uint64_t             addr_mbe  :  5; // Memory Address for the captured MBE error
-        uint64_t       Reserved_63_26  : 38; // Unused
+        uint64_t       syndrome_mbe_8  :  8; // Syndrome for domain 8
+        uint64_t       syndrome_mbe_9  :  8; // Syndrome for domain 9
+        uint64_t      syndrome_mbe_10  :  8; // Syndrome for domain 10
+        uint64_t      syndrome_mbe_11  :  8; // Syndrome for domain 11
+        uint64_t      syndrome_mbe_12  :  8; // Syndrome for domain 12
+        uint64_t      syndrome_mbe_13  :  8; // Syndrome for domain 13
+        uint64_t      syndrome_mbe_14  :  8; // Syndrome for domain 14
+        uint64_t      syndrome_mbe_15  :  8; // Syndrome for domain 15
     } field;
     uint64_t val;
-} TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_t;
+} TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_t;
+
+// TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4 desc:
+typedef union {
+    struct {
+        uint64_t           domain_sbe  : 16; // Domain for the captured SBE error
+        uint64_t           domain_mbe  : 16; // Domain for the captured MBE error
+        uint64_t             addr_sbe  :  5; // Memory Address for the captured SBE error
+        uint64_t             addr_mbe  :  5; // Memory Address for the captured MBE error
+        uint64_t       Reserved_63_42  : 22; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_t;
 
 // TXOTR_PKT_ERR_INFO_OTM_BE desc:
 typedef union {
@@ -1733,10 +1767,10 @@ typedef union {
 // TXOTR_PKT_ERR_INJECT_11 desc:
 typedef union {
     struct {
-        uint64_t iovec_buff_inject_en  :  8; // Error injection enable
+        uint64_t iovec_buff_inject_en  : 16; // Error injection enable
         uint64_t  opb_otm_inject_mask  :  9; // Error injection Mask
         uint64_t    opb_otm_inject_en  :  1; // Error inject enable.
-        uint64_t       Reserved_63_18  : 46; // Unused
+        uint64_t       Reserved_63_26  : 38; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_11_t;
@@ -1744,7 +1778,7 @@ typedef union {
 // TXOTR_PKT_ERR_INJECT_12 desc:
 typedef union {
     struct {
-        uint64_t iovec_buff_inject_mask  : 64; // Error injection Mask
+        uint64_t iovec_buff_inject_mask_63_0  : 64; // Error injection Mask
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_12_t;
@@ -1752,9 +1786,7 @@ typedef union {
 // TXOTR_PKT_ERR_INJECT_13 desc:
 typedef union {
     struct {
-        uint64_t opb_inject_mask_39_0  : 40; // Error injection Mask
-        uint64_t        opb_inject_en  :  5; // Error inject enable.
-        uint64_t       Reserved_63_45  : 19; // Unused
+        uint64_t iovec_buff_inject_mask_127_64  : 64; // Error injection Mask
     } field;
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_13_t;
@@ -1789,6 +1821,16 @@ typedef union {
     uint64_t val;
 } TXOTR_PKT_ERR_INJECT_16_t;
 
+// TXOTR_PKT_ERR_INJECT_17 desc:
+typedef union {
+    struct {
+        uint64_t opb_inject_mask_39_0  : 40; // Error injection Mask
+        uint64_t        opb_inject_en  :  5; // Error inject enable.
+        uint64_t       Reserved_63_45  : 19; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_ERR_INJECT_17_t;
+
 // TXOTR_PKT_ERR_MBE_SAT_COUNT desc:
 typedef union {
     struct {
@@ -1810,7 +1852,7 @@ typedef union {
 // TXOTR_PKT_DBG_OPB_ACCESS desc:
 typedef union {
     struct {
-        uint64_t              address  : 16; // Address for Read or Write. Valid address are from 0 to 12287. For FXR, bits 15:14 are ignored. No read or write is performed for an address value between 12288 and 16383.
+        uint64_t              address  : 16; // Address for Read or Write. Valid address are from 0 to 0x2fff. For FXR, bits 15:14 are ignored. No read or write is performed for an address value between 0x3000 and 0x3fff.
         uint64_t       Reserved_51_16  : 36; // Unused
         uint64_t         Payload_regs  :  8; // Constant indicating number of payload registers follow
         uint64_t          Reserved_60  :  1; // Unused
@@ -1864,7 +1906,7 @@ typedef union {
 // TXOTR_PKT_DBG_PKTID_LIST_ACCESS desc:
 typedef union {
     struct {
-        uint64_t              address  : 16; // Address for Read. Valid address are from 0 to 12287. For FXR, bits 15:14 are ignored. No read or write is performed for an address value between 12288 and 16383.
+        uint64_t              address  : 16; // Address for Read. Valid address are from 0 to 0x2fff. For FXR, bits 15:14 are ignored. No read or write is performed for an address value between 0x3000 and 0x3fff.
         uint64_t       Reserved_51_16  : 36; // Unused
         uint64_t         Payload_regs  :  8; // Constant indicating number of payload registers follow
         uint64_t          Reserved_60  :  1; // Unused
@@ -1919,7 +1961,7 @@ typedef union {
 // TXOTR_PKT_DBG_OTM_ACCESS desc:
 typedef union {
     struct {
-        uint64_t              address  :  7; // Address for Read. Valid address are from 0 to 127.
+        uint64_t              address  :  7; // Address for Read. Valid address are from 0 to 0x7f.
         uint64_t        Reserved_51_7  : 45; // Unused
         uint64_t         Payload_regs  :  8; // Constant indicating number of payload registers follow
         uint64_t          Reserved_60  :  1; // Unused
@@ -1949,94 +1991,16 @@ typedef union {
 // TXOTR_PKT_DBG_OTM_PAYLOAD2 desc:
 typedef union {
     struct {
-        uint64_t                 Data  : 11; // Data
-        uint64_t       Reserved_63_11  : 53; // Unused
+        uint64_t                 Data  : 14; // Data
+        uint64_t       Reserved_63_14  : 50; // Unused
     } field;
     uint64_t val;
 } TXOTR_PKT_DBG_OTM_PAYLOAD2_t;
 
-// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS desc:
-typedef union {
-    struct {
-        uint64_t              address  :  5; // Address for Read. Valid address are from 0 to 32.
-        uint64_t        Reserved_51_5  : 47; // Unused
-        uint64_t         Payload_regs  :  8; // Constant indicating number of payload registers follow
-        uint64_t          Reserved_60  :  1; // Unused
-        uint64_t                  ECC  :  1; // 0 = Read Raw Data 1 = Correct Data on Read
-        uint64_t          Reserved_62  :  1; // Unused
-        uint64_t                Valid  :  1; // Set by software, cleared by hardware when complete.
-    } field;
-    uint64_t val;
-} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_t;
-
-// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0 desc:
-typedef union {
-    struct {
-        uint64_t                 Data  : 64; // Data[63:0]
-    } field;
-    uint64_t val;
-} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0_t;
-
-// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1 desc:
-typedef union {
-    struct {
-        uint64_t                 Data  : 64; // Data[127:64]
-    } field;
-    uint64_t val;
-} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1_t;
-
-// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2 desc:
-typedef union {
-    struct {
-        uint64_t                 Data  : 64; // Data[191:128]
-    } field;
-    uint64_t val;
-} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2_t;
-
-// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3 desc:
-typedef union {
-    struct {
-        uint64_t                 Data  : 64; // Data[255:192]
-    } field;
-    uint64_t val;
-} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3_t;
-
-// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4 desc:
-typedef union {
-    struct {
-        uint64_t                 Data  : 64; // Data[319:256]
-    } field;
-    uint64_t val;
-} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4_t;
-
-// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5 desc:
-typedef union {
-    struct {
-        uint64_t                 Data  : 64; // Data[383:320]
-    } field;
-    uint64_t val;
-} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5_t;
-
-// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6 desc:
-typedef union {
-    struct {
-        uint64_t                 Data  : 64; // Data[447:384]
-    } field;
-    uint64_t val;
-} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6_t;
-
-// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7 desc:
-typedef union {
-    struct {
-        uint64_t                 Data  : 64; // Data[511:448]
-    } field;
-    uint64_t val;
-} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7_t;
-
 // TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS desc:
 typedef union {
     struct {
-        uint64_t              address  : 13; // Address for Write. Valid address are from 0 to 8191.
+        uint64_t              address  : 13; // Address for Write. Valid address are from 0 to 0x1fff.
         uint64_t       Reserved_51_13  : 39; // Unused
         uint64_t         Payload_regs  :  8; // Constant indicating number of payload registers follow
         uint64_t       Reserved_62_60  :  3; // Unused
@@ -2454,6 +2418,158 @@ typedef union {
     } field;
     uint64_t val;
 } TXOTR_PKG_DBG_HEAD_PENDING_t;
+
+// TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0 desc:
+typedef union {
+    struct {
+        uint64_t                count  : 48; // Outstanding byte count
+        uint64_t               status  :  2; // Status bits
+        uint64_t       Reserved_63_50  : 14; // Unused
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS desc:
+typedef union {
+    struct {
+        uint64_t              address  :  5; // Address for Read. Valid address are from 0 to 32.
+        uint64_t        Reserved_51_5  : 47; // Unused
+        uint64_t         Payload_regs  :  8; // Constant indicating number of payload registers follow
+        uint64_t          Reserved_60  :  1; // Unused
+        uint64_t                  ECC  :  1; // 0 = Read Raw Data 1 = Correct Data on Read
+        uint64_t          Reserved_62  :  1; // Unused
+        uint64_t                Valid  :  1; // Set by software, cleared by hardware when complete.
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[63:0]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[127:64]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[191:128]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[255:192]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[319:256]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[383:320]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[447:384]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[511:448]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD8 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[575:512]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD8_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD9 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[639:576]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD9_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD10 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[703:640]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD10_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD11 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[767:704]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD11_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD12 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[831:768]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD12_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD13 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[895:832]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD13_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD14 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[959:896]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD14_t;
+
+// TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD15 desc:
+typedef union {
+    struct {
+        uint64_t                 Data  : 64; // Data[1023:960]
+    } field;
+    uint64_t val;
+} TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD15_t;
 
 // TXOTR_PKT_PRF_STALL_OPB_ENTRIES_X desc:
 typedef union {

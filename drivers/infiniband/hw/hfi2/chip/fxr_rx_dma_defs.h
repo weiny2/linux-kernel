@@ -33,7 +33,7 @@
 #define DEF_FXR_RX_DMA_SW_DEF
 
 #ifndef FXR_RX_DMA_CSRS
-#define FXR_RX_DMA_CSRS							0x000000000000
+#define FXR_RX_DMA_CSRS							0x000000000000ULL
 #endif
 #define FXR_NUM_CONTEXTS						256
 #define FXR_NUM_PIDS							4096
@@ -178,7 +178,20 @@
 #define FXR_RXDMA_CFG_CH_CTRL_CH_PUT_MASK				0x3ull
 #define FXR_RXDMA_CFG_CH_CTRL_CH_PUT_SMASK				0x3ull
 /*
-* Table #8 of fxr_top - RXDMA_CFG_BW_SHAPE_B0
+* Table #8 of fxr_top - RXDMA_CFG_MISC_CTRL
+* This RX DMA configuration CSR holds various configuration fields not contained 
+* in other CSRs.
+*/
+#define FXR_RXDMA_CFG_MISC_CTRL						(FXR_RX_DMA_CSRS + 0x000000000058)
+#define FXR_RXDMA_CFG_MISC_CTRL_RESETCSR				0x0000000000000008ull
+#define FXR_RXDMA_CFG_MISC_CTRL_RESERVED_63_16_SHIFT			16
+#define FXR_RXDMA_CFG_MISC_CTRL_RESERVED_63_16_MASK			0xFFFFFFFFFFFFull
+#define FXR_RXDMA_CFG_MISC_CTRL_RESERVED_63_16_SMASK			0xFFFFFFFFFFFF0000ull
+#define FXR_RXDMA_CFG_MISC_CTRL_IOVEC_BLANK_CNT_SHIFT			0
+#define FXR_RXDMA_CFG_MISC_CTRL_IOVEC_BLANK_CNT_MASK			0xFFFFull
+#define FXR_RXDMA_CFG_MISC_CTRL_IOVEC_BLANK_CNT_SMASK			0xFFFFull
+/*
+* Table #9 of fxr_top - RXDMA_CFG_BW_SHAPE_B0
 * This is an RX DMA configuration CSR for a bucket used in the bandwidth 
 * shaping. Software can control the LeakAmount which control the percentage of 
 * bandwidth allowed through this bucket and BW_LIMIT which controls how many 
@@ -205,7 +218,7 @@
 #define FXR_RXDMA_CFG_BW_SHAPE_B0_BW_LIMIT_MASK				0xFFFFull
 #define FXR_RXDMA_CFG_BW_SHAPE_B0_BW_LIMIT_SMASK			0xFFFFull
 /*
-* Table #9 of fxr_top - RXDMA_CFG_BW_SHAPE_B1
+* Table #10 of fxr_top - RXDMA_CFG_BW_SHAPE_B1
 * This is an RX DMA configuration CSR for a bucket used in the bandwidth 
 * shaping. Software can control the LeakAmount which control the percentage of 
 * bandwidth allowed through this bucket and BW_LIMIT which controls how many 
@@ -232,7 +245,7 @@
 #define FXR_RXDMA_CFG_BW_SHAPE_B1_BW_LIMIT_MASK				0xFFFFull
 #define FXR_RXDMA_CFG_BW_SHAPE_B1_BW_LIMIT_SMASK			0xFFFFull
 /*
-* Table #10 of fxr_top - RXDMA_CFG_BW_SHAPE_B2
+* Table #11 of fxr_top - RXDMA_CFG_BW_SHAPE_B2
 * This is an RX DMA configuration CSR for a bucket used in the bandwidth 
 * shaping. Software can control the LeakAmount which control the percentage of 
 * bandwidth allowed through this bucket and BW_LIMIT which controls how many 
@@ -259,7 +272,7 @@
 #define FXR_RXDMA_CFG_BW_SHAPE_B2_BW_LIMIT_MASK				0xFFFFull
 #define FXR_RXDMA_CFG_BW_SHAPE_B2_BW_LIMIT_SMASK			0xFFFFull
 /*
-* Table #11 of fxr_top - RXDMA_CFG_BW_SHAPE_B3
+* Table #12 of fxr_top - RXDMA_CFG_BW_SHAPE_B3
 * This is an RX DMA configuration CSR for a bucket used in the bandwidth 
 * shaping. Software can control the LeakAmount which control the percentage of 
 * bandwidth allowed through this bucket and BW_LIMIT which controls how many 
@@ -286,7 +299,7 @@
 #define FXR_RXDMA_CFG_BW_SHAPE_B3_BW_LIMIT_MASK				0xFFFFull
 #define FXR_RXDMA_CFG_BW_SHAPE_B3_BW_LIMIT_SMASK			0xFFFFull
 /*
-* Table #12 of fxr_top - RXDMA_CFG_BW_SHAPE_B4
+* Table #13 of fxr_top - RXDMA_CFG_BW_SHAPE_B4
 * This is an RX DMA configuration CSR for a bucket used in the bandwidth 
 * shaping. Software can control the LeakAmount which control the percentage of 
 * bandwidth allowed through this bucket and BW_LIMIT which controls how many 
@@ -313,7 +326,7 @@
 #define FXR_RXDMA_CFG_BW_SHAPE_B4_BW_LIMIT_MASK				0xFFFFull
 #define FXR_RXDMA_CFG_BW_SHAPE_B4_BW_LIMIT_SMASK			0xFFFFull
 /*
-* Table #13 of fxr_top - RXDMA_CFG_BW_SHAPE_B5
+* Table #14 of fxr_top - RXDMA_CFG_BW_SHAPE_B5
 * This is an RX DMA configuration CSR for a bucket used in the bandwidth 
 * shaping. Software can control the LeakAmount which control the percentage of 
 * bandwidth allowed through this bucket and BW_LIMIT which controls how many 
@@ -340,7 +353,7 @@
 #define FXR_RXDMA_CFG_BW_SHAPE_B5_BW_LIMIT_MASK				0xFFFFull
 #define FXR_RXDMA_CFG_BW_SHAPE_B5_BW_LIMIT_SMASK			0xFFFFull
 /*
-* Table #14 of fxr_top - RXDMA_CFG_BW_SHAPE_B6
+* Table #15 of fxr_top - RXDMA_CFG_BW_SHAPE_B6
 * This is an RX DMA configuration CSR for a bucket used in the bandwidth 
 * shaping. Software can control the LeakAmount which control the percentage of 
 * bandwidth allowed through this bucket and BW_LIMIT which controls how many 
@@ -367,7 +380,7 @@
 #define FXR_RXDMA_CFG_BW_SHAPE_B6_BW_LIMIT_MASK				0xFFFFull
 #define FXR_RXDMA_CFG_BW_SHAPE_B6_BW_LIMIT_SMASK			0xFFFFull
 /*
-* Table #15 of fxr_top - RXDMA_CFG_BW_SHAPE_B7
+* Table #16 of fxr_top - RXDMA_CFG_BW_SHAPE_B7
 * This is an RX DMA configuration CSR for a bucket used in the bandwidth 
 * shaping. Software can control the LeakAmount which control the percentage of 
 * bandwidth allowed through this bucket and BW_LIMIT which controls how many 
@@ -394,7 +407,7 @@
 #define FXR_RXDMA_CFG_BW_SHAPE_B7_BW_LIMIT_MASK				0xFFFFull
 #define FXR_RXDMA_CFG_BW_SHAPE_B7_BW_LIMIT_SMASK			0xFFFFull
 /*
-* Table #16 of fxr_top - RXDMA_CFG_TO_BASE_TC0
+* Table #17 of fxr_top - RXDMA_CFG_TO_BASE_TC0
 * Pointer to the Base of the user memory space used by the Trigger Op logic to 
 * hold pointers to triggered operations that couldn't be executed due to back 
 * pressure from the TX interface. Pointers are stored here until the back 
@@ -414,7 +427,7 @@
 #define FXR_RXDMA_CFG_TO_BASE_TC0_CL_BYTES_MASK				0x3Full
 #define FXR_RXDMA_CFG_TO_BASE_TC0_CL_BYTES_SMASK			0x3Full
 /*
-* Table #17 of fxr_top - RXDMA_CFG_TO_BOUNDS_TC0
+* Table #18 of fxr_top - RXDMA_CFG_TO_BOUNDS_TC0
 * Pointer to the end of the user memory space used by the Trigger Op logic to 
 * hold pointers to triggered operations that couldn't be executed due to back 
 * pressure from the TX interface. This CSR holds the Virtual Address of the end 
@@ -432,7 +445,7 @@
 #define FXR_RXDMA_CFG_TO_BOUNDS_TC0_CL_BYTES_MASK			0x3Full
 #define FXR_RXDMA_CFG_TO_BOUNDS_TC0_CL_BYTES_SMASK			0x3Full
 /*
-* Table #18 of fxr_top - RXDMA_CFG_TO_BASE_TC1
+* Table #19 of fxr_top - RXDMA_CFG_TO_BASE_TC1
 * Pointer to the Base of the user memory space used by the Trigger Op logic to 
 * hold pointers to triggered operations that couldn't be executed due to back 
 * pressure from the TX interface. Pointers are stored here until the back 
@@ -452,7 +465,7 @@
 #define FXR_RXDMA_CFG_TO_BASE_TC1_CL_BYTES_MASK				0x3Full
 #define FXR_RXDMA_CFG_TO_BASE_TC1_CL_BYTES_SMASK			0x3Full
 /*
-* Table #19 of fxr_top - RXDMA_CFG_TO_BOUNDS_TC1
+* Table #20 of fxr_top - RXDMA_CFG_TO_BOUNDS_TC1
 * Pointer to the end of the user memory space used by the Trigger Op logic to 
 * hold pointers to triggered operations that couldn't be executed due to back 
 * pressure from the TX interface. This CSR holds the Virtual Address of the end 
@@ -470,7 +483,7 @@
 #define FXR_RXDMA_CFG_TO_BOUNDS_TC1_CL_BYTES_MASK			0x3Full
 #define FXR_RXDMA_CFG_TO_BOUNDS_TC1_CL_BYTES_SMASK			0x3Full
 /*
-* Table #20 of fxr_top - RXDMA_CFG_TO_BASE_TC2
+* Table #21 of fxr_top - RXDMA_CFG_TO_BASE_TC2
 * Pointer to the Base of the user memory space used by the Trigger Op logic to 
 * hold pointers to triggered operations that couldn't be executed due to back 
 * pressure from the TX interface. Pointers are stored here until the back 
@@ -490,7 +503,7 @@
 #define FXR_RXDMA_CFG_TO_BASE_TC2_CL_BYTES_MASK				0x3Full
 #define FXR_RXDMA_CFG_TO_BASE_TC2_CL_BYTES_SMASK			0x3Full
 /*
-* Table #21 of fxr_top - RXDMA_CFG_TO_BOUNDS_TC2
+* Table #22 of fxr_top - RXDMA_CFG_TO_BOUNDS_TC2
 * Pointer to the end of the user memory space used by the Trigger Op logic to 
 * hold pointers to triggered operations that couldn't be executed due to back 
 * pressure from the TX interface. This CSR holds the Virtual Address of the end 
@@ -508,7 +521,7 @@
 #define FXR_RXDMA_CFG_TO_BOUNDS_TC2_CL_BYTES_MASK			0x3Full
 #define FXR_RXDMA_CFG_TO_BOUNDS_TC2_CL_BYTES_SMASK			0x3Full
 /*
-* Table #22 of fxr_top - RXDMA_CFG_TO_BASE_TC3
+* Table #23 of fxr_top - RXDMA_CFG_TO_BASE_TC3
 * Pointer to the Base of the user memory space used by the Trigger Op logic to 
 * hold pointers to triggered operations that couldn't be executed due to back 
 * pressure from the TX interface. Pointers are stored here until the back 
@@ -528,7 +541,7 @@
 #define FXR_RXDMA_CFG_TO_BASE_TC3_CL_BYTES_MASK				0x3Full
 #define FXR_RXDMA_CFG_TO_BASE_TC3_CL_BYTES_SMASK			0x3Full
 /*
-* Table #23 of fxr_top - RXDMA_CFG_TO_BOUNDS_TC3
+* Table #24 of fxr_top - RXDMA_CFG_TO_BOUNDS_TC3
 * Pointer to the end of the user memory space used by the Trigger Op logic to 
 * hold pointers to triggered operations that couldn't be executed due to back 
 * pressure from the TX interface. This CSR holds the Virtual Address of the end 
@@ -546,7 +559,7 @@
 #define FXR_RXDMA_CFG_TO_BOUNDS_TC3_CL_BYTES_MASK			0x3Full
 #define FXR_RXDMA_CFG_TO_BOUNDS_TC3_CL_BYTES_SMASK			0x3Full
 /*
-* Table #24 of fxr_top - RXDMA_CFG_TO_BASE_HP
+* Table #25 of fxr_top - RXDMA_CFG_TO_BASE_HP
 * Pointer to the Base of the user memory space used by the Trigger Op logic to 
 * hold pointers to triggered operations that couldn't be executed due to back 
 * pressure from the RxHP interface. Pointers are stored here until the back 
@@ -567,7 +580,7 @@
 #define FXR_RXDMA_CFG_TO_BASE_HP_CL_BYTES_MASK				0x3Full
 #define FXR_RXDMA_CFG_TO_BASE_HP_CL_BYTES_SMASK				0x3Full
 /*
-* Table #25 of fxr_top - RXDMA_CFG_TO_BOUNDS_HP
+* Table #26 of fxr_top - RXDMA_CFG_TO_BOUNDS_HP
 * Pointer to the end of the user memory space used by the Trigger Op logic to 
 * hold pointers to triggered operations that couldn't be executed due to back 
 * pressure from the RxHP interface. This CSR holds the Virtual Address of the 
@@ -586,14 +599,14 @@
 #define FXR_RXDMA_CFG_TO_BOUNDS_HP_CL_BYTES_MASK			0x3Full
 #define FXR_RXDMA_CFG_TO_BOUNDS_HP_CL_BYTES_SMASK			0x3Full
 /*
-* Table #26 of fxr_top - RXDMA_CFG_CT_CACHE
+* Table #27 of fxr_top - RXDMA_CFG_CT_CACHE
 * This CSR is used to configure the CT Cache parameters. This will select an 
 * address hash function for the CT Cache from a set of 4 pre-defined hash 
 * functions optimized for different traffic patterns and configure the number of 
 * active ways for the cache as the scrubbing methods. 
 */
 #define FXR_RXDMA_CFG_CT_CACHE						(FXR_RX_DMA_CSRS + 0x000000000100)
-#define FXR_RXDMA_CFG_CT_CACHE_RESETCSR					0x00000064800F0000ull
+#define FXR_RXDMA_CFG_CT_CACHE_RESETCSR					0x00000064C00F0000ull
 #define FXR_RXDMA_CFG_CT_CACHE_SCRUB_INVERVAL_SHIFT			32
 #define FXR_RXDMA_CFG_CT_CACHE_SCRUB_INVERVAL_MASK			0xFFFFFFFFull
 #define FXR_RXDMA_CFG_CT_CACHE_SCRUB_INVERVAL_SMASK			0xFFFFFFFF00000000ull
@@ -622,7 +635,7 @@
 #define FXR_RXDMA_CFG_CT_CACHE_CLIENT_CT_CACHE_REQUEST_DISABLE_MASK	0x1ull
 #define FXR_RXDMA_CFG_CT_CACHE_CLIENT_CT_CACHE_REQUEST_DISABLE_SMASK	0x1ull
 /*
-* Table #27 of fxr_top - RXDMA_CFG_CT_CACHE_ACCESS_CTL
+* Table #28 of fxr_top - RXDMA_CFG_CT_CACHE_ACCESS_CTL
 * The CT Cache access control can be used to write or read, CT cache data and 
 * tag memories as well as invalidate tag entries and flush cache data to host 
 * memory. For reads, if the requested address is not in cache, a fill request is 
@@ -648,7 +661,7 @@
 #define FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_ADDRESS_MASK			0xFFFFFFFull
 #define FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_ADDRESS_SMASK			0xFFFFFFFull
 /*
-* Table #28 of fxr_top - RXDMA_CFG_CT_CACHE_ACCESS_DATA
+* Table #29 of fxr_top - RXDMA_CFG_CT_CACHE_ACCESS_DATA
 * This csr is used to read, write (warmup/teardown) the CT Cache. See 
 * #%%#RXDMA_CFG_CT_CACHE_ACCESS_CTL#%%# for proper technique. .
 */
@@ -658,7 +671,7 @@
 #define FXR_RXDMA_CFG_CT_CACHE_ACCESS_DATA_DATA_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXDMA_CFG_CT_CACHE_ACCESS_DATA_DATA_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #29 of fxr_top - RXDMA_CFG_CT_CACHE_ACCESS_DATA_BIT_ENABLE
+* Table #30 of fxr_top - RXDMA_CFG_CT_CACHE_ACCESS_DATA_BIT_ENABLE
 * This csr is used for bit enable writes to the CT Cache. This csr is only used 
 * with CACHE_CMD_WR. If this csr is all 1's, no read or fill is necessary. If 
 * this csr is not all 1's, we need to do a read-modify-write which may require a 
@@ -671,7 +684,7 @@
 #define FXR_RXDMA_CFG_CT_CACHE_ACCESS_DATA_BIT_ENABLE_BIT_ENABLE_MASK	0xFFFFFFFFFFFFFFFFull
 #define FXR_RXDMA_CFG_CT_CACHE_ACCESS_DATA_BIT_ENABLE_BIT_ENABLE_SMASK	0xFFFFFFFFFFFFFFFFull
 /*
-* Table #30 of fxr_top - RXDMA_CFG_CT_CACHE_ACCESS_TAG
+* Table #31 of fxr_top - RXDMA_CFG_CT_CACHE_ACCESS_TAG
 * This is the CT cache tag data CSR. This CSR is used to read, write the CT 
 * Cache Tag. See #%%#RXDMA_CFG_CT_CACHE_ACCESS_CTL#%%# for proper technique. 
 * This layout is for two ways. There are 2 of these regs for a total of 4 
@@ -692,7 +705,7 @@
 #define FXR_RXDMA_CFG_CT_CACHE_ACCESS_TAG_TAG_WAY_ADDR_LO_MASK		0x3FFFFFFull
 #define FXR_RXDMA_CFG_CT_CACHE_ACCESS_TAG_TAG_WAY_ADDR_LO_SMASK		0x3FFFFFFull
 /*
-* Table #31 of fxr_top - RXDMA_CFG_PORT_MIRROR
+* Table #32 of fxr_top - RXDMA_CFG_PORT_MIRROR
 * Valid Bit and Time Stamp for Port Mirroring. Turn on this bit when this node 
 * is in Port Mirroring Mode. Timestamp can be cleared by software. Otherwise it 
 * is a free running timestamp active when the valid bit is active. It is used in 
@@ -710,7 +723,7 @@
 #define FXR_RXDMA_CFG_PORT_MIRROR_TIME_STAMP_MASK			0xFFFFFFFFull
 #define FXR_RXDMA_CFG_PORT_MIRROR_TIME_STAMP_SMASK			0xFFFFFFFFull
 /*
-* Table #32 of fxr_top - RXDMA_CFG_PERFMON_CTRL0
+* Table #33 of fxr_top - RXDMA_CFG_PERFMON_CTRL0
 * Select the MCTC used for the various Performance Monitor Events and 
 * Counts.
 */
@@ -762,7 +775,7 @@
 #define FXR_RXDMA_CFG_PERFMON_CTRL0_WAR_MCTC_Y_MASK			0xFull
 #define FXR_RXDMA_CFG_PERFMON_CTRL0_WAR_MCTC_Y_SMASK			0xFull
 /*
-* Table #33 of fxr_top - RXDMA_CFG_PERFMON_CTRL1
+* Table #34 of fxr_top - RXDMA_CFG_PERFMON_CTRL1
 * Select the MCTC used for the various Performance Monitor Events and 
 * Counts.
 */
@@ -796,7 +809,7 @@
 #define FXR_RXDMA_CFG_PERFMON_CTRL1_NO_CREDITS_MCTC_Y_MASK		0xFull
 #define FXR_RXDMA_CFG_PERFMON_CTRL1_NO_CREDITS_MCTC_Y_SMASK		0xFull
 /*
-* Table #34 of fxr_top - RXDMA_STS_HOST_CREDITS
+* Table #35 of fxr_top - RXDMA_STS_HOST_CREDITS
 * This CSR contains the existing credit count to the HIArb. There is a credit 
 * counter for each of the nine MCTC's. The ninth MCTC is for commands from the 
 * RxCI to the Host Interface.
@@ -834,7 +847,7 @@
 #define FXR_RXDMA_STS_HOST_CREDITS_MC0_TC0_CRED_MASK			0x7Full
 #define FXR_RXDMA_STS_HOST_CREDITS_MC0_TC0_CRED_SMASK			0x7Full
 /*
-* Table #35 of fxr_top - RXDMA_STS_CI_ACK_CREDITS
+* Table #36 of fxr_top - RXDMA_STS_CI_ACK_CREDITS
 * This CSR contains the existing credit count for the TxCI Interface. There is a 
 * credit counter for each MCTC's. The TxCI has four counts for each of MC0, MC1 
 * and MC1'. All are five bits.
@@ -881,7 +894,7 @@
 #define FXR_RXDMA_STS_CI_ACK_CREDITS_CI_MC0_TC0_CRED_MASK		0x1Full
 #define FXR_RXDMA_STS_CI_ACK_CREDITS_CI_MC0_TC0_CRED_SMASK		0x1Full
 /*
-* Table #36 of fxr_top - RXDMA_STS_DMA_ACK_CREDITS
+* Table #37 of fxr_top - RXDMA_STS_DMA_ACK_CREDITS
 * This CSR contains the existing credit count for the TxDMA Interface. There is 
 * a credit counter for each MCTC's. The RxDMA has four counts for MC1 
 * only.
@@ -904,7 +917,7 @@
 #define FXR_RXDMA_STS_DMA_ACK_CREDITS_DMA_TC0_CRED_MASK			0x1Full
 #define FXR_RXDMA_STS_DMA_ACK_CREDITS_DMA_TC0_CRED_SMASK		0x1Full
 /*
-* Table #37 of fxr_top - RXDMA_DBG_LINKED_LIST
+* Table #38 of fxr_top - RXDMA_DBG_LINKED_LIST
 * This is an RX DMA debug CSR. It allows access to all of the linked list DMA 
 * queue arrays. These arrays can not be written to during normal operation. This 
 * register is for debug use, and for initialization of the linked list if 
@@ -926,7 +939,7 @@
 #define FXR_RXDMA_DBG_LINKED_LIST_DATA_MASK				0xFFull
 #define FXR_RXDMA_DBG_LINKED_LIST_DATA_SMASK				0xFFull
 /*
-* Table #38 of fxr_top - RXDMA_DBG_TAIL_LIST
+* Table #39 of fxr_top - RXDMA_DBG_TAIL_LIST
 * 
 */
 #define FXR_RXDMA_DBG_TAIL_LIST						(FXR_RX_DMA_CSRS + 0x000000008000)
@@ -941,7 +954,7 @@
 #define FXR_RXDMA_DBG_TAIL_LIST_TAIL_MASK				0xFFull
 #define FXR_RXDMA_DBG_TAIL_LIST_TAIL_SMASK				0xFFull
 /*
-* Table #39 of fxr_top - RXDMA_DBG_BUFFER_ADDR
+* Table #40 of fxr_top - RXDMA_DBG_BUFFER_ADDR
 * This is an RX DMA debug CSR. It allows indirect access to all of the DMA 
 * buffer arrays. These arrays can not be written to during normal operation. 
 * This register is for debug use only. Note that this register is 288 bits wide. 
@@ -969,7 +982,7 @@
 #define FXR_RXDMA_DBG_BUFFER_ADDR_ADDRESS_MASK				0x1FFFFFFFFFFFFull
 #define FXR_RXDMA_DBG_BUFFER_ADDR_ADDRESS_SMASK				0x1FFFFFFFFFFFFull
 /*
-* Table #40 of fxr_top - RXDMA_DBG_BUFFER_DATA0
+* Table #41 of fxr_top - RXDMA_DBG_BUFFER_DATA0
 * This is an RX DMA debug CSR. This is the data for bits [63:0] of the RX DMA 
 * buffer being accessed with the RXDMA_DBG_BUFFER_ADDR register. The data from 
 * this CSR is written to the DMA buffer if the write bit is active in that CSR, 
@@ -982,7 +995,7 @@
 #define FXR_RXDMA_DBG_BUFFER_DATA0_DATA_MASK				0xFFFFFFFFFFFFFFFFull
 #define FXR_RXDMA_DBG_BUFFER_DATA0_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
-* Table #41 of fxr_top - RXDMA_DBG_BUFFER_DATA1
+* Table #42 of fxr_top - RXDMA_DBG_BUFFER_DATA1
 * This is an RX DMA debug CSR. This is the data for bits [127:64] of the RX DMA 
 * buffer being accessed with the RXDMA_DBG_BUFFER_ADDR register. The data from 
 * this CSR is written to the DMA buffer if the write bit is active in that CSR, 
@@ -995,7 +1008,7 @@
 #define FXR_RXDMA_DBG_BUFFER_DATA1_DATA_MASK				0xFFFFFFFFFFFFFFFFull
 #define FXR_RXDMA_DBG_BUFFER_DATA1_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
-* Table #42 of fxr_top - RXDMA_DBG_BUFFER_DATA2
+* Table #43 of fxr_top - RXDMA_DBG_BUFFER_DATA2
 * This is an RX DMA debug CSR. This is the data for bits [191:128] of the RX DMA 
 * buffer being accessed with the RXDMA_DBG_BUFFER_ADDR register. The data from 
 * this CSR is written to the DMA buffer if the write bit is active in that CSR, 
@@ -1008,7 +1021,7 @@
 #define FXR_RXDMA_DBG_BUFFER_DATA2_DATA_MASK				0xFFFFFFFFFFFFFFFFull
 #define FXR_RXDMA_DBG_BUFFER_DATA2_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
-* Table #43 of fxr_top - RXDMA_DBG_BUFFER_DATA3
+* Table #44 of fxr_top - RXDMA_DBG_BUFFER_DATA3
 * This is an RX DMA debug CSR. This is the data for bits [255:192] of the RX DMA 
 * buffer being accessed with the RXDMA_DBG_BUFFER_ADDR register. The data from 
 * this CSR is written to the DMA buffer if the write bit is active in that CSR, 
@@ -1021,7 +1034,7 @@
 #define FXR_RXDMA_DBG_BUFFER_DATA3_DATA_MASK				0xFFFFFFFFFFFFFFFFull
 #define FXR_RXDMA_DBG_BUFFER_DATA3_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
-* Table #44 of fxr_top - RXDMA_DBG_BUFFER_DATA4
+* Table #45 of fxr_top - RXDMA_DBG_BUFFER_DATA4
 * This is an RX DMA debug CSR. This is the data for bits [287:256] of the RX DMA 
 * buffer being accessed with the RXDMA_DBG_BUFFER_ADDR register. The data from 
 * this CSR is written to the DMA buffer if the write bit is active in that CSR, 
@@ -1037,7 +1050,7 @@
 #define FXR_RXDMA_DBG_BUFFER_DATA4_DATA_MASK				0xFFFFFFFFull
 #define FXR_RXDMA_DBG_BUFFER_DATA4_DATA_SMASK				0xFFFFFFFFull
 /*
-* Table #45 of fxr_top - RXDMA_DBG_TID_ACK_CNT
+* Table #46 of fxr_top - RXDMA_DBG_TID_ACK_CNT
 * Number of TIDs allocated and the number of Acks allocated along with the Max 
 * number of each seen since reset. Max TIDs should be 220 or less. Max Acks 
 * should be 160 or less.
@@ -1069,7 +1082,7 @@
 #define FXR_RXDMA_DBG_TID_ACK_CNT_ACKS_ALLOCED_MASK			0x3FFull
 #define FXR_RXDMA_DBG_TID_ACK_CNT_ACKS_ALLOCED_SMASK			0x3FFull
 /*
-* Table #46 of fxr_top - RXDMA_DBG_MUX_SELECT
+* Table #47 of fxr_top - RXDMA_DBG_MUX_SELECT
 * Select Context, TID and ACK to display in the next CSRs for debug 
 * purposes.
 */
@@ -1106,24 +1119,24 @@
 #define FXR_RXDMA_DBG_MUX_SELECT_TID_SELECT_MASK			0x3FFull
 #define FXR_RXDMA_DBG_MUX_SELECT_TID_SELECT_SMASK			0x3FFull
 /*
-* Table #47 of fxr_top - RXDMA_DBG_TID_DATA
+* Table #48 of fxr_top - RXDMA_DBG_TID_DATA
 * Display the information for the TID selected in the TID_ACK_SELECT 
 * CSR.
 */
 #define FXR_RXDMA_DBG_TID_DATA						(FXR_RX_DMA_CSRS + 0x000000011010)
 #define FXR_RXDMA_DBG_TID_DATA_RESETCSR					0x0000000000000000ull
-#define FXR_RXDMA_DBG_TID_DATA_TID_QUICK_DATA_SHIFT			32
-#define FXR_RXDMA_DBG_TID_DATA_TID_QUICK_DATA_MASK			0xFFFFFFFFull
-#define FXR_RXDMA_DBG_TID_DATA_TID_QUICK_DATA_SMASK			0xFFFFFFFF00000000ull
-#define FXR_RXDMA_DBG_TID_DATA_RESERVED_31_30_SHIFT			30
-#define FXR_RXDMA_DBG_TID_DATA_RESERVED_31_30_MASK			0x3ull
-#define FXR_RXDMA_DBG_TID_DATA_RESERVED_31_30_SMASK			0xC0000000ull
-#define FXR_RXDMA_DBG_TID_DATA_TID_GO_DATA_SHIFT			8
+#define FXR_RXDMA_DBG_TID_DATA_TID_QUICK_DATA_SHIFT			28
+#define FXR_RXDMA_DBG_TID_DATA_TID_QUICK_DATA_MASK			0xFFFFFFFFFull
+#define FXR_RXDMA_DBG_TID_DATA_TID_QUICK_DATA_SMASK			0xFFFFFFFFF0000000ull
+#define FXR_RXDMA_DBG_TID_DATA_RESERVED_27_26_SHIFT			26
+#define FXR_RXDMA_DBG_TID_DATA_RESERVED_27_26_MASK			0x3ull
+#define FXR_RXDMA_DBG_TID_DATA_RESERVED_27_26_SMASK			0xC000000ull
+#define FXR_RXDMA_DBG_TID_DATA_TID_GO_DATA_SHIFT			4
 #define FXR_RXDMA_DBG_TID_DATA_TID_GO_DATA_MASK				0x3FFFFFull
-#define FXR_RXDMA_DBG_TID_DATA_TID_GO_DATA_SMASK			0x3FFFFF00ull
-#define FXR_RXDMA_DBG_TID_DATA_RESERVED_7_3_SHIFT			3
-#define FXR_RXDMA_DBG_TID_DATA_RESERVED_7_3_MASK			0x1Full
-#define FXR_RXDMA_DBG_TID_DATA_RESERVED_7_3_SMASK			0xF8ull
+#define FXR_RXDMA_DBG_TID_DATA_TID_GO_DATA_SMASK			0x3FFFFF0ull
+#define FXR_RXDMA_DBG_TID_DATA_RESERVED_3_SHIFT				3
+#define FXR_RXDMA_DBG_TID_DATA_RESERVED_3_MASK				0x1ull
+#define FXR_RXDMA_DBG_TID_DATA_RESERVED_3_SMASK				0x8ull
 #define FXR_RXDMA_DBG_TID_DATA_TID_ERROR_SHIFT				1
 #define FXR_RXDMA_DBG_TID_DATA_TID_ERROR_MASK				0x3ull
 #define FXR_RXDMA_DBG_TID_DATA_TID_ERROR_SMASK				0x6ull
@@ -1131,7 +1144,7 @@
 #define FXR_RXDMA_DBG_TID_DATA_TID_VALID_MASK				0x1ull
 #define FXR_RXDMA_DBG_TID_DATA_TID_VALID_SMASK				0x1ull
 /*
-* Table #48 of fxr_top - RXDMA_DBG_ACK_DATA
+* Table #49 of fxr_top - RXDMA_DBG_ACK_DATA
 * Display the information for the Ack selected in the TID_ACK_SELECT CSR. Also 
 * display information on the Ack we are trying to send to the TxDMA or TxCI 
 * interfaces.
@@ -1184,7 +1197,7 @@
 #define FXR_RXDMA_DBG_ACK_DATA_ACK_VALID_MASK				0x1ull
 #define FXR_RXDMA_DBG_ACK_DATA_ACK_VALID_SMASK				0x1ull
 /*
-* Table #49 of fxr_top - RXDMA_DBG_HIARB_DATA0
+* Table #50 of fxr_top - RXDMA_DBG_HIARB_DATA0
 * Debug data from the HIArb module.
 */
 #define FXR_RXDMA_DBG_HIARB_DATA0					(FXR_RX_DMA_CSRS + 0x000000011020)
@@ -1208,7 +1221,7 @@
 #define FXR_RXDMA_DBG_HIARB_DATA0_CMD_REQ_MASK				0x1FFull
 #define FXR_RXDMA_DBG_HIARB_DATA0_CMD_REQ_SMASK				0x1FFull
 /*
-* Table #50 of fxr_top - RXDMA_DBG_HIARB_DATA1
+* Table #51 of fxr_top - RXDMA_DBG_HIARB_DATA1
 * Additional debug data from the HIArb.
 */
 #define FXR_RXDMA_DBG_HIARB_DATA1					(FXR_RX_DMA_CSRS + 0x000000011028)
@@ -1256,7 +1269,7 @@
 #define FXR_RXDMA_DBG_HIARB_DATA1_REQ_PID_MASK				0xFFFull
 #define FXR_RXDMA_DBG_HIARB_DATA1_REQ_PID_SMASK				0xFFFull
 /*
-* Table #51 of fxr_top - RXDMA_DBG_CNTX_CMD_DATA
+* Table #52 of fxr_top - RXDMA_DBG_CNTX_CMD_DATA
 * Select TID and ACK to display in the next CSRs for debug purposes.
 */
 #define FXR_RXDMA_DBG_CNTX_CMD_DATA					(FXR_RX_DMA_CSRS + 0x000000011030)
@@ -1313,7 +1326,7 @@
 #define FXR_RXDMA_DBG_CNTX_CMD_DATA_CMD_EMPTY_MASK			0x1ull
 #define FXR_RXDMA_DBG_CNTX_CMD_DATA_CMD_EMPTY_SMASK			0x1ull
 /*
-* Table #52 of fxr_top - RXDMA_DBG_CNTX_FIFO_PKT
+* Table #53 of fxr_top - RXDMA_DBG_CNTX_FIFO_PKT
 * FIFO command from muxed context. This is the command being executed now, or 
 * next.
 */
@@ -1365,7 +1378,7 @@
 #define FXR_RXDMA_DBG_CNTX_FIFO_PKT_PKT_HANDLE_MASK			0x3FFull
 #define FXR_RXDMA_DBG_CNTX_FIFO_PKT_PKT_HANDLE_SMASK			0x3FFull
 /*
-* Table #53 of fxr_top - RXDMA_DBG_CNTX_FIFO_OP0
+* Table #54 of fxr_top - RXDMA_DBG_CNTX_FIFO_OP0
 * Debug data from the Context. FIFO Cmd OP Info.
 */
 #define FXR_RXDMA_DBG_CNTX_FIFO_OP0					(FXR_RX_DMA_CSRS + 0x000000011040)
@@ -1407,7 +1420,7 @@
 #define FXR_RXDMA_DBG_CNTX_FIFO_OP0_VALID_MASK				0x1ull
 #define FXR_RXDMA_DBG_CNTX_FIFO_OP0_VALID_SMASK				0x1ull
 /*
-* Table #54 of fxr_top - RXDMA_DBG_CNTX_FIFO_OP1
+* Table #55 of fxr_top - RXDMA_DBG_CNTX_FIFO_OP1
 * Debug data from the Context. FIFO Cmd OP Info.
 */
 #define FXR_RXDMA_DBG_CNTX_FIFO_OP1					(FXR_RX_DMA_CSRS + 0x000000011048)
@@ -1419,7 +1432,7 @@
 #define FXR_RXDMA_DBG_CNTX_FIFO_OP1_VADDR_MASK				0x1FFFFFFFFFFFFFFull
 #define FXR_RXDMA_DBG_CNTX_FIFO_OP1_VADDR_SMASK				0x1FFFFFFFFFFFFFFull
 /*
-* Table #55 of fxr_top - RXDMA_DBG_CNTX_FIFO_CTEQ
+* Table #56 of fxr_top - RXDMA_DBG_CNTX_FIFO_CTEQ
 * Debug data from the Context. FIFO Cmd CTEQ data.
 */
 #define FXR_RXDMA_DBG_CNTX_FIFO_CTEQ					(FXR_RX_DMA_CSRS + 0x000000011050)
@@ -1458,7 +1471,7 @@
 #define FXR_RXDMA_DBG_CNTX_FIFO_CTEQ_VALID_MASK				0x1ull
 #define FXR_RXDMA_DBG_CNTX_FIFO_CTEQ_VALID_SMASK			0x1ull
 /*
-* Table #56 of fxr_top - RXDMA_DBG_CNTX_FIFO_ACK0
+* Table #57 of fxr_top - RXDMA_DBG_CNTX_FIFO_ACK0
 * Debug data from the Context. FIFO Cmd Ack Info[63:0].
 */
 #define FXR_RXDMA_DBG_CNTX_FIFO_ACK0					(FXR_RX_DMA_CSRS + 0x000000011058)
@@ -1467,7 +1480,7 @@
 #define FXR_RXDMA_DBG_CNTX_FIFO_ACK0_ACK_INFO_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXDMA_DBG_CNTX_FIFO_ACK0_ACK_INFO_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #57 of fxr_top - RXDMA_DBG_CNTX_FIFO_ACK1
+* Table #58 of fxr_top - RXDMA_DBG_CNTX_FIFO_ACK1
 * Debug data from the Context. FIFO Cmd Ack Info[127:64].
 */
 #define FXR_RXDMA_DBG_CNTX_FIFO_ACK1					(FXR_RX_DMA_CSRS + 0x000000011060)
@@ -1476,7 +1489,7 @@
 #define FXR_RXDMA_DBG_CNTX_FIFO_ACK1_ACK_INFO_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXDMA_DBG_CNTX_FIFO_ACK1_ACK_INFO_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #58 of fxr_top - RXDMA_DBG_CNTX_FIFO_ACK2
+* Table #59 of fxr_top - RXDMA_DBG_CNTX_FIFO_ACK2
 * Debug data from the Context. FIFO Cmd Ack Info[191:128].
 */
 #define FXR_RXDMA_DBG_CNTX_FIFO_ACK2					(FXR_RX_DMA_CSRS + 0x000000011068)
@@ -1485,7 +1498,7 @@
 #define FXR_RXDMA_DBG_CNTX_FIFO_ACK2_ACK_INFO_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_RXDMA_DBG_CNTX_FIFO_ACK2_ACK_INFO_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #59 of fxr_top - RXDMA_DBG_WAR_VALID
+* Table #60 of fxr_top - RXDMA_DBG_WAR_VALID
 * Mask showing the valid WAR Buffer entries. Bit 0 corresponds to WAR buffer 
 * address 0.
 */
@@ -1495,7 +1508,7 @@
 #define FXR_RXDMA_DBG_WAR_VALID_VALIDS_MASK				0xFFFFFFFFFFFFFFFFull
 #define FXR_RXDMA_DBG_WAR_VALID_VALIDS_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
-* Table #60 of fxr_top - RXDMA_DBG_DQ_FREE_PTR
+* Table #61 of fxr_top - RXDMA_DBG_DQ_FREE_PTR
 * The Head of the Free List for each DQ. FREE_LIST_PTR in the logic.
 */
 #define FXR_RXDMA_DBG_DQ_FREE_PTR					(FXR_RX_DMA_CSRS + 0x000000011110)
@@ -1525,7 +1538,7 @@
 #define FXR_RXDMA_DBG_DQ_FREE_PTR_DQ0_MASK				0xFFull
 #define FXR_RXDMA_DBG_DQ_FREE_PTR_DQ0_SMASK				0xFFull
 /*
-* Table #61 of fxr_top - RXDMA_DBG_DQ_END_PTR
+* Table #62 of fxr_top - RXDMA_DBG_DQ_END_PTR
 * End of the Free List for each DQ. FREE_LIST_END in the logic.
 */
 #define FXR_RXDMA_DBG_DQ_END_PTR					(FXR_RX_DMA_CSRS + 0x000000011118)
@@ -1555,7 +1568,7 @@
 #define FXR_RXDMA_DBG_DQ_END_PTR_DQ0_MASK				0xFFull
 #define FXR_RXDMA_DBG_DQ_END_PTR_DQ0_SMASK				0xFFull
 /*
-* Table #62 of fxr_top - RXDMA_DBG_DQ_LAST_PKT
+* Table #63 of fxr_top - RXDMA_DBG_DQ_LAST_PKT
 * Last Packet Handle received from a command to this DQ. HP_PKT_HANDLE in the 
 * logic.
 */
@@ -1586,7 +1599,7 @@
 #define FXR_RXDMA_DBG_DQ_LAST_PKT_DQ0_MASK				0xFFull
 #define FXR_RXDMA_DBG_DQ_LAST_PKT_DQ0_SMASK				0xFFull
 /*
-* Table #63 of fxr_top - RXDMA_DBG_NEXT_HANDLE
+* Table #64 of fxr_top - RXDMA_DBG_NEXT_HANDLE
 * Next Handles to be used by each DQ. NXT_HANDLE in the logic.
 */
 #define FXR_RXDMA_DBG_NEXT_HANDLE					(FXR_RX_DMA_CSRS + 0x000000011128)
@@ -1616,7 +1629,7 @@
 #define FXR_RXDMA_DBG_NEXT_HANDLE_DQ0_MASK				0xFFull
 #define FXR_RXDMA_DBG_NEXT_HANDLE_DQ0_SMASK				0xFFull
 /*
-* Table #64 of fxr_top - RXDMA_DBG_PKT_CNT
+* Table #65 of fxr_top - RXDMA_DBG_PKT_CNT
 * Number of Valid Packets in each DQ.
 */
 #define FXR_RXDMA_DBG_PKT_CNT						(FXR_RX_DMA_CSRS + 0x000000011130)
@@ -1646,7 +1659,7 @@
 #define FXR_RXDMA_DBG_PKT_CNT_DQ0_MASK					0xFFull
 #define FXR_RXDMA_DBG_PKT_CNT_DQ0_SMASK					0xFFull
 /*
-* Table #65 of fxr_top - RXDMA_DBG_ERR_INJ
+* Table #66 of fxr_top - RXDMA_DBG_ERR_INJ
 * Inject .
 */
 #define FXR_RXDMA_DBG_ERR_INJ						(FXR_RX_DMA_CSRS + 0x000000011138)
@@ -1706,7 +1719,7 @@
 #define FXR_RXDMA_DBG_ERR_INJ_INJ_MASK_MASK				0xFFull
 #define FXR_RXDMA_DBG_ERR_INJ_INJ_MASK_SMASK				0xFFull
 /*
-* Table #66 of fxr_top - RXDMA_ERR_STS_1
+* Table #67 of fxr_top - RXDMA_ERR_STS_1
 * MBE error counts from the DMA buffers in each Message Class. All errors from a 
 * single message class are accumulated into one register.
 */
@@ -1737,7 +1750,7 @@
 #define FXR_RXDMA_ERR_STS_1_DQ_WRITE_ERR_MASK				0xFFull
 #define FXR_RXDMA_ERR_STS_1_DQ_WRITE_ERR_SMASK				0xFFull
 /*
-* Table #67 of fxr_top - RXDMA_ERR_CLR_1
+* Table #68 of fxr_top - RXDMA_ERR_CLR_1
 * Clear the error by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_CLR_1						(FXR_RX_DMA_CSRS + 0x000000018008)
@@ -1749,7 +1762,7 @@
 #define FXR_RXDMA_ERR_CLR_1_ERROR_CLR_MASK				0xFFFFFFFFFFFFull
 #define FXR_RXDMA_ERR_CLR_1_ERROR_CLR_SMASK				0xFFFFFFFFFFFFull
 /*
-* Table #68 of fxr_top - RXDMA_ERR_FRC_1
+* Table #69 of fxr_top - RXDMA_ERR_FRC_1
 * Force the error by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_FRC_1						(FXR_RX_DMA_CSRS + 0x000000018010)
@@ -1761,7 +1774,7 @@
 #define FXR_RXDMA_ERR_FRC_1_FORCE_ERR_MASK				0xFFFFFFFFFFFFull
 #define FXR_RXDMA_ERR_FRC_1_FORCE_ERR_SMASK				0xFFFFFFFFFFFFull
 /*
-* Table #69 of fxr_top - RXDMA_ERR_EN_HOST_1
+* Table #70 of fxr_top - RXDMA_ERR_EN_HOST_1
 * Enable interrupt by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_EN_HOST_1						(FXR_RX_DMA_CSRS + 0x000000018018)
@@ -1773,7 +1786,7 @@
 #define FXR_RXDMA_ERR_EN_HOST_1_HOST_EN_MASK				0xFFFFFFFFFFFFull
 #define FXR_RXDMA_ERR_EN_HOST_1_HOST_EN_SMASK				0xFFFFFFFFFFFFull
 /*
-* Table #70 of fxr_top - RXDMA_ERR_FIRST_HOST_1
+* Table #71 of fxr_top - RXDMA_ERR_FIRST_HOST_1
 * Fist error seen by Host interrupt.
 */
 #define FXR_RXDMA_ERR_FIRST_HOST_1					(FXR_RX_DMA_CSRS + 0x000000018020)
@@ -1785,7 +1798,7 @@
 #define FXR_RXDMA_ERR_FIRST_HOST_1_FIRST_HOST_MASK			0xFFFFFFFFFFFFull
 #define FXR_RXDMA_ERR_FIRST_HOST_1_FIRST_HOST_SMASK			0xFFFFFFFFFFFFull
 /*
-* Table #71 of fxr_top - RXDMA_ERR_EN_BMC_1
+* Table #72 of fxr_top - RXDMA_ERR_EN_BMC_1
 * Enable interrupt by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_EN_BMC_1						(FXR_RX_DMA_CSRS + 0x000000018028)
@@ -1797,7 +1810,7 @@
 #define FXR_RXDMA_ERR_EN_BMC_1_BMC_EN_MASK				0xFFFFFFFFFFFFull
 #define FXR_RXDMA_ERR_EN_BMC_1_BMC_EN_SMASK				0xFFFFFFFFFFFFull
 /*
-* Table #72 of fxr_top - RXDMA_ERR_FIRST_BMC_1
+* Table #73 of fxr_top - RXDMA_ERR_FIRST_BMC_1
 * Fist error seen by BMC interrupt.
 */
 #define FXR_RXDMA_ERR_FIRST_BMC_1					(FXR_RX_DMA_CSRS + 0x000000018030)
@@ -1809,7 +1822,7 @@
 #define FXR_RXDMA_ERR_FIRST_BMC_1_FIRST_BMC_MASK			0xFFFFFFFFFFFFull
 #define FXR_RXDMA_ERR_FIRST_BMC_1_FIRST_BMC_SMASK			0xFFFFFFFFFFFFull
 /*
-* Table #73 of fxr_top - RXDMA_ERR_EN_QUAR_1
+* Table #74 of fxr_top - RXDMA_ERR_EN_QUAR_1
 * Enable interrupt by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_EN_QUAR_1						(FXR_RX_DMA_CSRS + 0x000000018038)
@@ -1821,7 +1834,7 @@
 #define FXR_RXDMA_ERR_EN_QUAR_1_QUAR_EN_MASK				0xFFFFFFFFFFFFull
 #define FXR_RXDMA_ERR_EN_QUAR_1_QUAR_EN_SMASK				0xFFFFFFFFFFFFull
 /*
-* Table #74 of fxr_top - RXDMA_ERR_FIRST_QUAR_1
+* Table #75 of fxr_top - RXDMA_ERR_FIRST_QUAR_1
 * Force the error by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_FIRST_QUAR_1					(FXR_RX_DMA_CSRS + 0x000000018040)
@@ -1833,17 +1846,44 @@
 #define FXR_RXDMA_ERR_FIRST_QUAR_1_FIRST_QUAR_MASK			0xFFFFFFFFFFFFull
 #define FXR_RXDMA_ERR_FIRST_QUAR_1_FIRST_QUAR_SMASK			0xFFFFFFFFFFFFull
 /*
-* Table #75 of fxr_top - RXDMA_ERR_STS_2
+* Table #76 of fxr_top - RXDMA_ERR_STS_2
 * Additional Errors from the RxDMA. Non Data Queue Related Errors.
 */
 #define FXR_RXDMA_ERR_STS_2						(FXR_RX_DMA_CSRS + 0x000000018100)
 #define FXR_RXDMA_ERR_STS_2_RESETCSR					0x0000000000000000ull
-#define FXR_RXDMA_ERR_STS_2_RESERVED_63_42_SHIFT			42
-#define FXR_RXDMA_ERR_STS_2_RESERVED_63_42_MASK				0x3FFFFFull
-#define FXR_RXDMA_ERR_STS_2_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
-#define FXR_RXDMA_ERR_STS_2_CT_DATA_ERROR_SHIFT				41
-#define FXR_RXDMA_ERR_STS_2_CT_DATA_ERROR_MASK				0x1ull
-#define FXR_RXDMA_ERR_STS_2_CT_DATA_ERROR_SMASK				0x20000000000ull
+#define FXR_RXDMA_ERR_STS_2_RESERVED_63_55_SHIFT			55
+#define FXR_RXDMA_ERR_STS_2_RESERVED_63_55_MASK				0x1FFull
+#define FXR_RXDMA_ERR_STS_2_RESERVED_63_55_SMASK			0xFF80000000000000ull
+#define FXR_RXDMA_ERR_STS_2_CT_ARRAY_MBE_SHIFT				54
+#define FXR_RXDMA_ERR_STS_2_CT_ARRAY_MBE_MASK				0x1ull
+#define FXR_RXDMA_ERR_STS_2_CT_ARRAY_MBE_SMASK				0x40000000000000ull
+#define FXR_RXDMA_ERR_STS_2_CT_ARRAY_SBE_SHIFT				53
+#define FXR_RXDMA_ERR_STS_2_CT_ARRAY_SBE_MASK				0x1ull
+#define FXR_RXDMA_ERR_STS_2_CT_ARRAY_SBE_SMASK				0x20000000000000ull
+#define FXR_RXDMA_ERR_STS_2_GO_TID_MBE_SHIFT				52
+#define FXR_RXDMA_ERR_STS_2_GO_TID_MBE_MASK				0x1ull
+#define FXR_RXDMA_ERR_STS_2_GO_TID_MBE_SMASK				0x10000000000000ull
+#define FXR_RXDMA_ERR_STS_2_GO_TID_SBE_SHIFT				51
+#define FXR_RXDMA_ERR_STS_2_GO_TID_SBE_MASK				0x1ull
+#define FXR_RXDMA_ERR_STS_2_GO_TID_SBE_SMASK				0x8000000000000ull
+#define FXR_RXDMA_ERR_STS_2_QUICK_TID_MBE_SHIFT				50
+#define FXR_RXDMA_ERR_STS_2_QUICK_TID_MBE_MASK				0x1ull
+#define FXR_RXDMA_ERR_STS_2_QUICK_TID_MBE_SMASK				0x4000000000000ull
+#define FXR_RXDMA_ERR_STS_2_QUICK_TID_SBE_SHIFT				49
+#define FXR_RXDMA_ERR_STS_2_QUICK_TID_SBE_MASK				0x1ull
+#define FXR_RXDMA_ERR_STS_2_QUICK_TID_SBE_SMASK				0x2000000000000ull
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_DATA_MBE_SHIFT			47
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_DATA_MBE_MASK			0x3ull
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_DATA_MBE_SMASK			0x1800000000000ull
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_DATA_SBE_SHIFT			45
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_DATA_SBE_MASK			0x3ull
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_DATA_SBE_SMASK			0x600000000000ull
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_TAG_MBE_SHIFT			43
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_TAG_MBE_MASK			0x3ull
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_TAG_MBE_SMASK			0x180000000000ull
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_TAG_SBE_SHIFT			41
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_TAG_SBE_MASK			0x3ull
+#define FXR_RXDMA_ERR_STS_2_CT_CACHE_TAG_SBE_SMASK			0x60000000000ull
 #define FXR_RXDMA_ERR_STS_2_IOVEC_RD_ERR_SHIFT				40
 #define FXR_RXDMA_ERR_STS_2_IOVEC_RD_ERR_MASK				0x1ull
 #define FXR_RXDMA_ERR_STS_2_IOVEC_RD_ERR_SMASK				0x10000000000ull
@@ -1926,103 +1966,103 @@
 #define FXR_RXDMA_ERR_STS_2_HOST_ECC_SBE_MASK				0xFull
 #define FXR_RXDMA_ERR_STS_2_HOST_ECC_SBE_SMASK				0xFull
 /*
-* Table #76 of fxr_top - RXDMA_ERR_CLR_2
+* Table #77 of fxr_top - RXDMA_ERR_CLR_2
 * Clear the error by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_CLR_2						(FXR_RX_DMA_CSRS + 0x000000018108)
 #define FXR_RXDMA_ERR_CLR_2_RESETCSR					0x0000000000000000ull
-#define FXR_RXDMA_ERR_CLR_2_RESERVED_63_42_SHIFT			42
-#define FXR_RXDMA_ERR_CLR_2_RESERVED_63_42_MASK				0x3FFFFFull
-#define FXR_RXDMA_ERR_CLR_2_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
+#define FXR_RXDMA_ERR_CLR_2_RESERVED_63_55_SHIFT			55
+#define FXR_RXDMA_ERR_CLR_2_RESERVED_63_55_MASK				0x1FFull
+#define FXR_RXDMA_ERR_CLR_2_RESERVED_63_55_SMASK			0xFF80000000000000ull
 #define FXR_RXDMA_ERR_CLR_2_ERROR_CLR_SHIFT				0
-#define FXR_RXDMA_ERR_CLR_2_ERROR_CLR_MASK				0x3FFFFFFFFFFull
-#define FXR_RXDMA_ERR_CLR_2_ERROR_CLR_SMASK				0x3FFFFFFFFFFull
+#define FXR_RXDMA_ERR_CLR_2_ERROR_CLR_MASK				0x7FFFFFFFFFFFFFull
+#define FXR_RXDMA_ERR_CLR_2_ERROR_CLR_SMASK				0x7FFFFFFFFFFFFFull
 /*
-* Table #77 of fxr_top - RXDMA_ERR_FRC_2
+* Table #78 of fxr_top - RXDMA_ERR_FRC_2
 * Force the error by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_FRC_2						(FXR_RX_DMA_CSRS + 0x000000018110)
 #define FXR_RXDMA_ERR_FRC_2_RESETCSR					0x0000000000000000ull
-#define FXR_RXDMA_ERR_FRC_2_RESERVED_63_42_SHIFT			42
-#define FXR_RXDMA_ERR_FRC_2_RESERVED_63_42_MASK				0x3FFFFFull
-#define FXR_RXDMA_ERR_FRC_2_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
+#define FXR_RXDMA_ERR_FRC_2_RESERVED_63_55_SHIFT			55
+#define FXR_RXDMA_ERR_FRC_2_RESERVED_63_55_MASK				0x1FFull
+#define FXR_RXDMA_ERR_FRC_2_RESERVED_63_55_SMASK			0xFF80000000000000ull
 #define FXR_RXDMA_ERR_FRC_2_FORCE_ERR_SHIFT				0
-#define FXR_RXDMA_ERR_FRC_2_FORCE_ERR_MASK				0x3FFFFFFFFFFull
-#define FXR_RXDMA_ERR_FRC_2_FORCE_ERR_SMASK				0x3FFFFFFFFFFull
+#define FXR_RXDMA_ERR_FRC_2_FORCE_ERR_MASK				0x7FFFFFFFFFFFFFull
+#define FXR_RXDMA_ERR_FRC_2_FORCE_ERR_SMASK				0x7FFFFFFFFFFFFFull
 /*
-* Table #78 of fxr_top - RXDMA_ERR_EN_HOST_2
+* Table #79 of fxr_top - RXDMA_ERR_EN_HOST_2
 * Enable interrupt by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_EN_HOST_2						(FXR_RX_DMA_CSRS + 0x000000018118)
 #define FXR_RXDMA_ERR_EN_HOST_2_RESETCSR				0x0000000000000000ull
-#define FXR_RXDMA_ERR_EN_HOST_2_RESERVED_63_42_SHIFT			42
-#define FXR_RXDMA_ERR_EN_HOST_2_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXDMA_ERR_EN_HOST_2_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
+#define FXR_RXDMA_ERR_EN_HOST_2_RESERVED_63_55_SHIFT			55
+#define FXR_RXDMA_ERR_EN_HOST_2_RESERVED_63_55_MASK			0x1FFull
+#define FXR_RXDMA_ERR_EN_HOST_2_RESERVED_63_55_SMASK			0xFF80000000000000ull
 #define FXR_RXDMA_ERR_EN_HOST_2_HOST_EN_SHIFT				0
-#define FXR_RXDMA_ERR_EN_HOST_2_HOST_EN_MASK				0x3FFFFFFFFFFull
-#define FXR_RXDMA_ERR_EN_HOST_2_HOST_EN_SMASK				0x3FFFFFFFFFFull
+#define FXR_RXDMA_ERR_EN_HOST_2_HOST_EN_MASK				0x7FFFFFFFFFFFFFull
+#define FXR_RXDMA_ERR_EN_HOST_2_HOST_EN_SMASK				0x7FFFFFFFFFFFFFull
 /*
-* Table #79 of fxr_top - RXDMA_ERR_FIRST_HOST_2
+* Table #80 of fxr_top - RXDMA_ERR_FIRST_HOST_2
 * Fist error seen by Host interrupt.
 */
 #define FXR_RXDMA_ERR_FIRST_HOST_2					(FXR_RX_DMA_CSRS + 0x000000018120)
 #define FXR_RXDMA_ERR_FIRST_HOST_2_RESETCSR				0x0000000000000000ull
-#define FXR_RXDMA_ERR_FIRST_HOST_2_RESERVED_63_42_SHIFT			42
-#define FXR_RXDMA_ERR_FIRST_HOST_2_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXDMA_ERR_FIRST_HOST_2_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
+#define FXR_RXDMA_ERR_FIRST_HOST_2_RESERVED_63_55_SHIFT			55
+#define FXR_RXDMA_ERR_FIRST_HOST_2_RESERVED_63_55_MASK			0x1FFull
+#define FXR_RXDMA_ERR_FIRST_HOST_2_RESERVED_63_55_SMASK			0xFF80000000000000ull
 #define FXR_RXDMA_ERR_FIRST_HOST_2_FIRST_HOST_SHIFT			0
-#define FXR_RXDMA_ERR_FIRST_HOST_2_FIRST_HOST_MASK			0x3FFFFFFFFFFull
-#define FXR_RXDMA_ERR_FIRST_HOST_2_FIRST_HOST_SMASK			0x3FFFFFFFFFFull
+#define FXR_RXDMA_ERR_FIRST_HOST_2_FIRST_HOST_MASK			0x7FFFFFFFFFFFFFull
+#define FXR_RXDMA_ERR_FIRST_HOST_2_FIRST_HOST_SMASK			0x7FFFFFFFFFFFFFull
 /*
-* Table #80 of fxr_top - RXDMA_ERR_EN_BMC_2
+* Table #81 of fxr_top - RXDMA_ERR_EN_BMC_2
 * Enable interrupt by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_EN_BMC_2						(FXR_RX_DMA_CSRS + 0x000000018128)
 #define FXR_RXDMA_ERR_EN_BMC_2_RESETCSR					0x0000000000000000ull
-#define FXR_RXDMA_ERR_EN_BMC_2_RESERVED_63_42_SHIFT			42
-#define FXR_RXDMA_ERR_EN_BMC_2_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXDMA_ERR_EN_BMC_2_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
+#define FXR_RXDMA_ERR_EN_BMC_2_RESERVED_63_55_SHIFT			55
+#define FXR_RXDMA_ERR_EN_BMC_2_RESERVED_63_55_MASK			0x1FFull
+#define FXR_RXDMA_ERR_EN_BMC_2_RESERVED_63_55_SMASK			0xFF80000000000000ull
 #define FXR_RXDMA_ERR_EN_BMC_2_BMC_EN_SHIFT				0
-#define FXR_RXDMA_ERR_EN_BMC_2_BMC_EN_MASK				0x3FFFFFFFFFFull
-#define FXR_RXDMA_ERR_EN_BMC_2_BMC_EN_SMASK				0x3FFFFFFFFFFull
+#define FXR_RXDMA_ERR_EN_BMC_2_BMC_EN_MASK				0x7FFFFFFFFFFFFFull
+#define FXR_RXDMA_ERR_EN_BMC_2_BMC_EN_SMASK				0x7FFFFFFFFFFFFFull
 /*
-* Table #81 of fxr_top - RXDMA_ERR_FIRST_BMC_2
+* Table #82 of fxr_top - RXDMA_ERR_FIRST_BMC_2
 * Fist error seen by BMC interrupt.
 */
 #define FXR_RXDMA_ERR_FIRST_BMC_2					(FXR_RX_DMA_CSRS + 0x000000018130)
 #define FXR_RXDMA_ERR_FIRST_BMC_2_RESETCSR				0x0000000000000000ull
-#define FXR_RXDMA_ERR_FIRST_BMC_2_RESERVED_63_42_SHIFT			42
-#define FXR_RXDMA_ERR_FIRST_BMC_2_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXDMA_ERR_FIRST_BMC_2_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
+#define FXR_RXDMA_ERR_FIRST_BMC_2_RESERVED_63_55_SHIFT			55
+#define FXR_RXDMA_ERR_FIRST_BMC_2_RESERVED_63_55_MASK			0x1FFull
+#define FXR_RXDMA_ERR_FIRST_BMC_2_RESERVED_63_55_SMASK			0xFF80000000000000ull
 #define FXR_RXDMA_ERR_FIRST_BMC_2_FIRST_BMC_SHIFT			0
-#define FXR_RXDMA_ERR_FIRST_BMC_2_FIRST_BMC_MASK			0x3FFFFFFFFFFull
-#define FXR_RXDMA_ERR_FIRST_BMC_2_FIRST_BMC_SMASK			0x3FFFFFFFFFFull
+#define FXR_RXDMA_ERR_FIRST_BMC_2_FIRST_BMC_MASK			0x7FFFFFFFFFFFFFull
+#define FXR_RXDMA_ERR_FIRST_BMC_2_FIRST_BMC_SMASK			0x7FFFFFFFFFFFFFull
 /*
-* Table #82 of fxr_top - RXDMA_ERR_EN_QUAR_2
+* Table #83 of fxr_top - RXDMA_ERR_EN_QUAR_2
 * Enable interrupt by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_EN_QUAR_2						(FXR_RX_DMA_CSRS + 0x000000018138)
 #define FXR_RXDMA_ERR_EN_QUAR_2_RESETCSR				0x0000000000000000ull
-#define FXR_RXDMA_ERR_EN_QUAR_2_RESERVED_63_42_SHIFT			42
-#define FXR_RXDMA_ERR_EN_QUAR_2_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXDMA_ERR_EN_QUAR_2_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
+#define FXR_RXDMA_ERR_EN_QUAR_2_RESERVED_63_55_SHIFT			55
+#define FXR_RXDMA_ERR_EN_QUAR_2_RESERVED_63_55_MASK			0x1FFull
+#define FXR_RXDMA_ERR_EN_QUAR_2_RESERVED_63_55_SMASK			0xFF80000000000000ull
 #define FXR_RXDMA_ERR_EN_QUAR_2_QUAR_EN_SHIFT				0
-#define FXR_RXDMA_ERR_EN_QUAR_2_QUAR_EN_MASK				0x3FFFFFFFFFFull
-#define FXR_RXDMA_ERR_EN_QUAR_2_QUAR_EN_SMASK				0x3FFFFFFFFFFull
+#define FXR_RXDMA_ERR_EN_QUAR_2_QUAR_EN_MASK				0x7FFFFFFFFFFFFFull
+#define FXR_RXDMA_ERR_EN_QUAR_2_QUAR_EN_SMASK				0x7FFFFFFFFFFFFFull
 /*
-* Table #83 of fxr_top - RXDMA_ERR_FIRST_QUAR_2
+* Table #84 of fxr_top - RXDMA_ERR_FIRST_QUAR_2
 * Force the error by writing a one to the appropriate bit.
 */
 #define FXR_RXDMA_ERR_FIRST_QUAR_2					(FXR_RX_DMA_CSRS + 0x000000018140)
 #define FXR_RXDMA_ERR_FIRST_QUAR_2_RESETCSR				0x0000000000000000ull
-#define FXR_RXDMA_ERR_FIRST_QUAR_2_RESERVED_63_42_SHIFT			42
-#define FXR_RXDMA_ERR_FIRST_QUAR_2_RESERVED_63_42_MASK			0x3FFFFFull
-#define FXR_RXDMA_ERR_FIRST_QUAR_2_RESERVED_63_42_SMASK			0xFFFFFC0000000000ull
+#define FXR_RXDMA_ERR_FIRST_QUAR_2_RESERVED_63_55_SHIFT			55
+#define FXR_RXDMA_ERR_FIRST_QUAR_2_RESERVED_63_55_MASK			0x1FFull
+#define FXR_RXDMA_ERR_FIRST_QUAR_2_RESERVED_63_55_SMASK			0xFF80000000000000ull
 #define FXR_RXDMA_ERR_FIRST_QUAR_2_FIRST_QUAR_SHIFT			0
-#define FXR_RXDMA_ERR_FIRST_QUAR_2_FIRST_QUAR_MASK			0x3FFFFFFFFFFull
-#define FXR_RXDMA_ERR_FIRST_QUAR_2_FIRST_QUAR_SMASK			0x3FFFFFFFFFFull
+#define FXR_RXDMA_ERR_FIRST_QUAR_2_FIRST_QUAR_MASK			0x7FFFFFFFFFFFFFull
+#define FXR_RXDMA_ERR_FIRST_QUAR_2_FIRST_QUAR_SMASK			0x7FFFFFFFFFFFFFull
 /*
-* Table #84 of fxr_top - RXDMA_ERR_INFO_1
+* Table #85 of fxr_top - RXDMA_ERR_INFO_1
 * Other errors not related to the above parity and error correction code 
 * errors.
 */
@@ -2059,7 +2099,7 @@
 #define FXR_RXDMA_ERR_INFO_1_DQ_TAIL_SYND_MASK				0x1Full
 #define FXR_RXDMA_ERR_INFO_1_DQ_TAIL_SYND_SMASK				0x1Full
 /*
-* Table #85 of fxr_top - RXDMA_ERR_INFO_2
+* Table #86 of fxr_top - RXDMA_ERR_INFO_2
 * Other errors not related to the above parity and error correction code 
 * errors.
 */
@@ -2093,7 +2133,7 @@
 #define FXR_RXDMA_ERR_INFO_2_HA_ECC_SYND_SBE_MASK			0xFFull
 #define FXR_RXDMA_ERR_INFO_2_HA_ECC_SYND_SBE_SMASK			0xFFull
 /*
-* Table #86 of fxr_top - RXDMA_ERR_INFO_3
+* Table #87 of fxr_top - RXDMA_ERR_INFO_3
 * SBE and MBE counts for Data to and from the HIArb. All counts are saturating 
 * counts.
 */
@@ -2112,7 +2152,7 @@
 #define FXR_RXDMA_ERR_INFO_3_HI_SBE_CNT_MASK				0xFFFFull
 #define FXR_RXDMA_ERR_INFO_3_HI_SBE_CNT_SMASK				0xFFFFull
 /*
-* Table #87 of fxr_top - RXDMA_ERR_INFO_4
+* Table #88 of fxr_top - RXDMA_ERR_INFO_4
 * SBE and MBE counts for Commands from the HP. All counts are saturating 
 * counts.
 */
@@ -2131,7 +2171,7 @@
 #define FXR_RXDMA_ERR_INFO_4_HP_PKT_OP_SBE_CNT_MASK			0xFFFFull
 #define FXR_RXDMA_ERR_INFO_4_HP_PKT_OP_SBE_CNT_SMASK			0xFFFFull
 /*
-* Table #88 of fxr_top - RXDMA_ERR_INFO_5
+* Table #89 of fxr_top - RXDMA_ERR_INFO_5
 * SBE and MBE counts for Commands from the OTR. All counts are saturating 
 * counts.
 */
@@ -2147,7 +2187,7 @@
 #define FXR_RXDMA_ERR_INFO_5_OTR_PKT_OP_SBE_CNT_MASK			0xFFFFull
 #define FXR_RXDMA_ERR_INFO_5_OTR_PKT_OP_SBE_CNT_SMASK			0xFFFFull
 /*
-* Table #89 of fxr_top - RXDMA_ERR_INFO_6
+* Table #90 of fxr_top - RXDMA_ERR_INFO_6
 * SBE and MBE counts for Data Queue Tail and Triggered Ops. All counts are 
 * saturating counts.
 */
@@ -2165,5 +2205,91 @@
 #define FXR_RXDMA_ERR_INFO_6_DQ_TAIL_SBE_CNT_SHIFT			0
 #define FXR_RXDMA_ERR_INFO_6_DQ_TAIL_SBE_CNT_MASK			0xFFFFull
 #define FXR_RXDMA_ERR_INFO_6_DQ_TAIL_SBE_CNT_SMASK			0xFFFFull
+/*
+* Table #91 of fxr_top - RXDMA_ERR_INFO_7
+* Other errors not related to the above parity and error correction code 
+* errors.
+*/
+#define FXR_RXDMA_ERR_INFO_7						(FXR_RX_DMA_CSRS + 0x000000018230)
+#define FXR_RXDMA_ERR_INFO_7_RESETCSR					0x0000000000000000ull
+#define FXR_RXDMA_ERR_INFO_7_GO_ECC_SYND_MBE_SHIFT			48
+#define FXR_RXDMA_ERR_INFO_7_GO_ECC_SYND_MBE_MASK			0xFFFFull
+#define FXR_RXDMA_ERR_INFO_7_GO_ECC_SYND_MBE_SMASK			0xFFFF000000000000ull
+#define FXR_RXDMA_ERR_INFO_7_GO_ECC_SYND_SBE_SHIFT			32
+#define FXR_RXDMA_ERR_INFO_7_GO_ECC_SYND_SBE_MASK			0xFFFFull
+#define FXR_RXDMA_ERR_INFO_7_GO_ECC_SYND_SBE_SMASK			0xFFFF00000000ull
+#define FXR_RXDMA_ERR_INFO_7_QK_ECC_SYND_MBE_SHIFT			16
+#define FXR_RXDMA_ERR_INFO_7_QK_ECC_SYND_MBE_MASK			0xFFFFull
+#define FXR_RXDMA_ERR_INFO_7_QK_ECC_SYND_MBE_SMASK			0xFFFF0000ull
+#define FXR_RXDMA_ERR_INFO_7_QK_ECC_SYND_SBE_SHIFT			0
+#define FXR_RXDMA_ERR_INFO_7_QK_ECC_SYND_SBE_MASK			0xFFFFull
+#define FXR_RXDMA_ERR_INFO_7_QK_ECC_SYND_SBE_SMASK			0xFFFFull
+/*
+* Table #92 of fxr_top - RXDMA_ERR_INFO_8
+* Other errors not related to the above parity and error correction code 
+* errors.
+*/
+#define FXR_RXDMA_ERR_INFO_8						(FXR_RX_DMA_CSRS + 0x000000018238)
+#define FXR_RXDMA_ERR_INFO_8_RESETCSR					0x0000000000000000ull
+#define FXR_RXDMA_ERR_INFO_8_RESERVED_63_16_SHIFT			16
+#define FXR_RXDMA_ERR_INFO_8_RESERVED_63_16_MASK			0xFFFFFFFFFFFFull
+#define FXR_RXDMA_ERR_INFO_8_RESERVED_63_16_SMASK			0xFFFFFFFFFFFF0000ull
+#define FXR_RXDMA_ERR_INFO_8_CT_ECC_SYND_MBE_SHIFT			8
+#define FXR_RXDMA_ERR_INFO_8_CT_ECC_SYND_MBE_MASK			0xFFull
+#define FXR_RXDMA_ERR_INFO_8_CT_ECC_SYND_MBE_SMASK			0xFF00ull
+#define FXR_RXDMA_ERR_INFO_8_CT_ECC_SYND_SBE_SHIFT			0
+#define FXR_RXDMA_ERR_INFO_8_CT_ECC_SYND_SBE_MASK			0xFFull
+#define FXR_RXDMA_ERR_INFO_8_CT_ECC_SYND_SBE_SMASK			0xFFull
+/*
+* Table #93 of fxr_top - RXDMA_ERR_INFO_CT_CACHE_ECC
+* SBE and MBE information from the CT Cache.
+*/
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC					(FXR_RX_DMA_CSRS + 0x000000018240)
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_RESETCSR			0x0000000000000000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_SBE_SYNDROME_SHIFT	56
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_SBE_SYNDROME_MASK	0xFFull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_SBE_SYNDROME_SMASK	0xFF00000000000000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_RESERVED_55_50_SHIFT		50
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_RESERVED_55_50_MASK		0x3Full
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_RESERVED_55_50_SMASK		0xFC000000000000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_SBE_DOMAIN_SHIFT	48
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_SBE_DOMAIN_MASK	0x3ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_SBE_DOMAIN_SMASK	0x3000000000000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_MBE_SYNDROME_SHIFT	40
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_MBE_SYNDROME_MASK	0xFFull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_MBE_SYNDROME_SMASK	0xFF0000000000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_MBE_DOMAIN_SHIFT	36
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_MBE_DOMAIN_MASK	0x3ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_MBE_DOMAIN_SMASK	0x3000000000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_SBE_SHIFT		34
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_SBE_MASK		0x3ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_SBE_SMASK		0xC00000000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_MBE_SHIFT		32
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_MBE_MASK		0x3ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_DATA_MBE_SMASK		0x300000000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_RESERVED_31_29_SHIFT		29
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_RESERVED_31_29_MASK		0x7ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_RESERVED_31_29_SMASK		0xE0000000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_ADDR_SHIFT		20
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_ADDR_MASK		0x1FFull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_ADDR_SMASK		0x1FF00000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_SBE_SYNDROME_SHIFT	13
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_SBE_SYNDROME_MASK	0x7Full
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_SBE_SYNDROME_SMASK	0xFE000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_SBE_DOMAIN_SHIFT	12
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_SBE_DOMAIN_MASK	0x1ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_SBE_DOMAIN_SMASK	0x1000ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_MBE_SYNDROME_SHIFT	5
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_MBE_SYNDROME_MASK	0x7Full
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_MBE_SYNDROME_SMASK	0xFE0ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_MBE_DOMAIN_SHIFT	4
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_MBE_DOMAIN_MASK	0x1ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_MBE_DOMAIN_SMASK	0x10ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_SBE_SHIFT		2
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_SBE_MASK		0x3ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_SBE_SMASK		0xCull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_MBE_SHIFT		0
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_MBE_MASK		0x3ull
+#define FXR_RXDMA_ERR_INFO_CT_CACHE_ECC_CACHE_TAG_MBE_SMASK		0x3ull
 
 #endif 		/* DEF_FXR_RX_DMA_SW_DEF */

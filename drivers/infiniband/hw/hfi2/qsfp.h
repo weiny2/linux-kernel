@@ -48,8 +48,6 @@
 #ifndef _HFI2_QSFP_H
 #define _HFI2_QSFP_H
 
-#include "chip/mnh_misc_defs.h"
-
 /* QSFP support common definitions, for hfi driver */
 
 #define QSFP_DEV 0xA0

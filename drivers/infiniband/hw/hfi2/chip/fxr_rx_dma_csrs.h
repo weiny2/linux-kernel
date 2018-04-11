@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_rx_dma_CSRS_H__
@@ -63,6 +63,15 @@ typedef union {
     } field;
     uint64_t val;
 } RXDMA_CFG_CH_CTRL_t;
+
+// RXDMA_CFG_MISC_CTRL desc:
+typedef union {
+    struct {
+        uint64_t      iovec_blank_cnt  : 16; // Maximum number of blank IOVEC cache lines allowed before an error is thrown.
+        uint64_t       Reserved_63_16  : 48; // Unused
+    } field;
+    uint64_t val;
+} RXDMA_CFG_MISC_CTRL_t;
 
 // RXDMA_CFG_BW_SHAPE_B0 desc:
 typedef union {
@@ -532,10 +541,10 @@ typedef union {
     struct {
         uint64_t            tid_valid  :  1; // This TID is Valid.
         uint64_t            tid_error  :  2; // Error Responses for this TID. [1]=AT Error, [0]=Host Error.
-        uint64_t         Reserved_7_3  :  5; // Unused
+        uint64_t           Reserved_3  :  1; // Unused
         uint64_t          tid_go_data  : 22; // TID GO Data {ECC[5:0],Count[5:0],Ack[9:0]}
-        uint64_t       Reserved_31_30  :  2; // Unused
-        uint64_t       tid_quick_data  : 32; // TID Quick Data {ECC[5:0],Count[5:0],WAR_type[1:0],WAR_ptr[9:0],WAR_Shift[7:0]}
+        uint64_t       Reserved_27_26  :  2; // Unused
+        uint64_t       tid_quick_data  : 36; // TID Quick Data {ECC[5:0],Count[5:0],Fetching_Atomic,TO_TID, WAR_type[2:0],WAR_ptr[9:0],WAR_Shift[7:0]}
     } field;
     uint64_t val;
 } RXDMA_DBG_TID_DATA_t;
@@ -823,13 +832,13 @@ typedef union {
 // RXDMA_ERR_STS_1 desc:
 typedef union {
     struct {
-        uint64_t         dq_write_err  :  8; // Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7
-        uint64_t          dq_read_err  :  9; // Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7
-        uint64_t     dq_ll_parity_err  :  7; // Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7
-        uint64_t          dq_tail_sbe  :  8; // Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7
-        uint64_t          dq_tail_mbe  :  8; // Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7
-        uint64_t           ha_ecc_sbe  :  4; // Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.
-        uint64_t           ha_ecc_mbe  :  4; // Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register.
+        uint64_t         dq_write_err  :  8; // Write error to the RxDMA Data Queues. Tail with no head or Two heads with no tail. One bit for each Data Queue. [0]=DQ0...[7]=DQ7 ERR_CATEGORY_HFI
+        uint64_t          dq_read_err  :  9; // Read Error from the RxDMA Data Queues. Tried to Read or Discard a packet with a packet handle of 0xff, count>16250 or start >16320 or reading to a section of the packet already discarded or reading past the end of a packet or starting a new packet before discarding the last packet read. One bit for each Data Queue. [8]=DQ0...[16]=DQ7 ERR_CATEGORY_HFI
+        uint64_t     dq_ll_parity_err  :  7; // Parity Error on the Data Queue Linked List array. One bit for each Data Queue. [17]=DQ0...[23]=DQ7 ERR_CATEGORY_HFI
+        uint64_t          dq_tail_sbe  :  8; // Correctable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7 ERR_CATEGORY_CORRECTABLE
+        uint64_t          dq_tail_mbe  :  8; // Uncorrectable Error on the Data Queue Tail array. One bit for each Data Queue. [24]=DQ0...[31]=DQ7 ERR_CATEGORY_HFI
+        uint64_t           ha_ecc_sbe  :  4; // Correctable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register. ERR_CATEGORY_CORRECTABLE
+        uint64_t           ha_ecc_mbe  :  4; // Uncorrectable Error out of the Data Queue. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. Source DQ set in error info register. ERR_CATEGORY_HFI
         uint64_t       Reserved_63_48  : 16; // Unused
     } field;
     uint64_t val;
@@ -910,35 +919,44 @@ typedef union {
 // RXDMA_ERR_STS_2 desc:
 typedef union {
     struct {
-        uint64_t         host_ecc_sbe  :  4; // Correctable Error on data from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.
-        uint64_t         host_ecc_mbe  :  4; // Uncorrectable Error on data from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter.
-        uint64_t         ack_tail_sbe  :  1; // Correctable Error on a read from the TailAck Array
-        uint64_t         ack_tail_mbe  :  1; // Uncorrectable Error on a read from the Tail Ack Array
-        uint64_t         ack_head_sbe  :  1; // Correctable Error on a read from the Head Ack Array
-        uint64_t         ack_head_mbe  :  1; // Uncorrectable Error on a read from the Head Ack Array
-        uint64_t       hp_pool_op_sbe  :  1; // Correctable Error on a read from the HP Pool OP Array
-        uint64_t       hp_pool_op_mbe  :  1; // Uncorrectable Error on a read from the HP Pool OP Array
-        uint64_t     hp_pool_cteq_sbe  :  1; // Correctable Error on a read from the HP Pool CTEQ Array
-        uint64_t     hp_pool_cteq_mbe  :  1; // Uncorrectable Error on a read from the HP Pool CTEQ Array
-        uint64_t      otr_pool_op_sbe  :  1; // Correctable Error on a read from the OTR Pool OP Array
-        uint64_t      otr_pool_op_mbe  :  1; // Uncorrectable Error on a read from the OTR Pool OP Array
-        uint64_t    otr_pool_cteq_sbe  :  1; // Correctable Error on a read from the OTR Pool CTEQ Array
-        uint64_t    otr_pool_cteq_mbe  :  1; // Uncorrectable Error on a read from the OTR Pool CTEQ Array
-        uint64_t           to_pkt_sbe  :  1; // Correctable Error on a Triggered Op from the RxET
-        uint64_t           to_pkt_mbe  :  1; // Uncorrectable Error on a Triggered Op from the RxET
-        uint64_t          eq_data_sbe  :  1; // Correctable Error on the EQ Data being delivered from the RxET.
-        uint64_t          eq_data_mbe  :  1; // Uncorrectable Error on the EQ Data being delivered from the RxET.
-        uint64_t           eq_hdr_mbe  :  1; // The EQ being delivered from the RxET has a header MBE. The EQ was dropped.
-        uint64_t      mc0_dropped_cmd  :  1; // RxDMA Command from RxHP was dropped because command pool was full.
-        uint64_t      mc1_dropped_cmd  :  1; // RxDMA Command from RxOTR was dropped because command pool was full.
-        uint64_t       gen1_write_err  :  1; // The Gen1 EQ being delivered from the RxET has a header MBE or the data queue read had an error or the RxHP Gen1 EQ command requested more than 120 bytes.
-        uint64_t             to_error  :  1; // The Triggered Op being delivered from the RxET had an Error. This TO was dropped.
-        uint64_t      to_queue_wr_err  :  5; // A Write to the Triggered Op Ptr Queue caused an overflow. [3:0]=>TC3-0, [4]=>HP
-        uint64_t      to_queue_rd_err  :  5; // A Read to an empty Triggered Op Ptr Queue or one with Base=0. [3:0]=>TC3-0, [4]=>HP
-        uint64_t        to_size_error  :  1; // A Triggered Op aimed for the HP is not 64 bytes in size, or a TO aimed for the TXCI is not 32 or 64 bytes in size.
-        uint64_t         iovec_rd_err  :  1; // An error on the IOVEC read from the HIArb was seen.
-        uint64_t        ct_data_error  :  1; // Data Returned for a Counting Event had an error reported by the HIArb. This is not an ECC error.
-        uint64_t       Reserved_63_42  : 22; // Unused
+        uint64_t         host_ecc_sbe  :  4; // Correctable Error on data from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. ERR_CATEGORY_CORRECTABLE
+        uint64_t         host_ecc_mbe  :  4; // Uncorrectable Error on data from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. ERR_CATEGORY_HFI
+        uint64_t         ack_tail_sbe  :  1; // Correctable Error on a read from the TailAck Array ERR_CATEGORY_CORRECTABLE
+        uint64_t         ack_tail_mbe  :  1; // Uncorrectable Error on a read from the Tail Ack Array ERR_CATEGORY_HFI
+        uint64_t         ack_head_sbe  :  1; // Correctable Error on a read from the Head Ack Array ERR_CATEGORY_CORRECTABLE
+        uint64_t         ack_head_mbe  :  1; // Uncorrectable Error on a read from the Head Ack Array ERR_CATEGORY_HFI
+        uint64_t       hp_pool_op_sbe  :  1; // Correctable Error on a read from the HP Pool OP Array ERR_CATEGORY_CORRECTABLE
+        uint64_t       hp_pool_op_mbe  :  1; // Uncorrectable Error on a read from the HP Pool OP Array ERR_CATEGORY_HFI
+        uint64_t     hp_pool_cteq_sbe  :  1; // Correctable Error on a read from the HP Pool CTEQ Array ERR_CATEGORY_CORRECTABLE
+        uint64_t     hp_pool_cteq_mbe  :  1; // Uncorrectable Error on a read from the HP Pool CTEQ Array ERR_CATEGORY_HFI
+        uint64_t      otr_pool_op_sbe  :  1; // Correctable Error on a read from the OTR Pool OP Array ERR_CATEGORY_CORRECTABLE
+        uint64_t      otr_pool_op_mbe  :  1; // Uncorrectable Error on a read from the OTR Pool OP Array ERR_CATEGORY_HFI
+        uint64_t    otr_pool_cteq_sbe  :  1; // Correctable Error on a read from the OTR Pool CTEQ Array ERR_CATEGORY_CORRECTABLE
+        uint64_t    otr_pool_cteq_mbe  :  1; // Uncorrectable Error on a read from the OTR Pool CTEQ Array ERR_CATEGORY_HFI
+        uint64_t           to_pkt_sbe  :  1; // Correctable Error on a Triggered Op from the RxET ERR_CATEGORY_CORRECTABLE
+        uint64_t           to_pkt_mbe  :  1; // Uncorrectable Error on a Triggered Op from the RxET ERR_CATEGORY_HFI
+        uint64_t          eq_data_sbe  :  1; // Correctable Error on the EQ Data being delivered from the RxET. ERR_CATEGORY_CORRECTABLE
+        uint64_t          eq_data_mbe  :  1; // Uncorrectable Error on the EQ Data being delivered from the RxET. ERR_CATEGORY_HFI
+        uint64_t           eq_hdr_mbe  :  1; // The EQ being delivered from the RxET has a header MBE. The EQ was dropped. ERR_CATEGORY_HFI
+        uint64_t      mc0_dropped_cmd  :  1; // RxDMA Command from RxHP was dropped because command pool was full. ERR_CATEGORY_HFI
+        uint64_t      mc1_dropped_cmd  :  1; // RxDMA Command from RxOTR was dropped because command pool was full. ERR_CATEGORY_HFI
+        uint64_t       gen1_write_err  :  1; // The Gen1 EQ being delivered from the RxET has a header MBE or the data queue read had an error or the RxHP Gen1 EQ command requested more than 120 bytes. ERR_CATEGORY_HFI
+        uint64_t             to_error  :  1; // The Triggered Op being delivered from the RxET had an Error. This TO was dropped. ERR_CATEGORY_HFI
+        uint64_t      to_queue_wr_err  :  5; // A Write to the Triggered Op Ptr Queue caused an overflow. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI
+        uint64_t      to_queue_rd_err  :  5; // A Read to an empty Triggered Op Ptr Queue or one with Base=0. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI
+        uint64_t        to_size_error  :  1; // A Triggered Op aimed for the HP is not 64 bytes in size, or a TO aimed for the TXCI is not 32 or 64 bytes in size. ERR_CATEGORY_TRANSACTION
+        uint64_t         iovec_rd_err  :  1; // An error on the IOVEC read from the HIArb was seen. ERR_CATEGORY_TRANSACTION
+        uint64_t     ct_cache_tag_sbe  :  2; // Correctable error on the CT Cache Tag. ERR_CATEGORY_CORRECTABLE
+        uint64_t     ct_cache_tag_mbe  :  2; // Uncorrectable error on the CT Cache Tag. ERR_CATEGORY_HFI
+        uint64_t    ct_cache_data_sbe  :  2; // Correctable error on the CT Cache Data. ERR_CATEGORY_CORRECTABLE
+        uint64_t    ct_cache_data_mbe  :  2; // Uncorrectable error on the CT Cache Data. ERR_CATEGORY_HFI
+        uint64_t        quick_tid_sbe  :  1; // Correctable error on the Quick Reply TID Array. ERR_CATEGORY_CORRECTABLE
+        uint64_t        quick_tid_mbe  :  1; // Uncorrectable error on the Quick Reply TID Array. ERR_CATEGORY_HFI
+        uint64_t           go_tid_sbe  :  1; // Correctable error on the GO Reply TID Array. ERR_CATEGORY_CORRECTABLE
+        uint64_t           go_tid_mbe  :  1; // Uncorrectable error on the GO Reply TID Array. ERR_CATEGORY_HFI
+        uint64_t         ct_array_sbe  :  1; // Correctable error on the CT Hold Array. ERR_CATEGORY_CORRECTABLE
+        uint64_t         ct_array_mbe  :  1; // Uncorrectable error on the CT Hold Array. ERR_CATEGORY_HFI
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_STS_2_t;
@@ -946,8 +964,8 @@ typedef union {
 // RXDMA_ERR_CLR_2 desc:
 typedef union {
     struct {
-        uint64_t            error_clr  : 42; // Clear the Error
-        uint64_t       Reserved_63_42  : 22; // Unused
+        uint64_t            error_clr  : 55; // Clear the Error
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_CLR_2_t;
@@ -955,8 +973,8 @@ typedef union {
 // RXDMA_ERR_FRC_2 desc:
 typedef union {
     struct {
-        uint64_t            force_err  : 42; // Force an error
-        uint64_t       Reserved_63_42  : 22; // Unused
+        uint64_t            force_err  : 55; // Force an error
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FRC_2_t;
@@ -964,8 +982,8 @@ typedef union {
 // RXDMA_ERR_EN_HOST_2 desc:
 typedef union {
     struct {
-        uint64_t              host_en  : 42; // 
-        uint64_t       Reserved_63_42  : 22; // Unused
+        uint64_t              host_en  : 55; // 
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_EN_HOST_2_t;
@@ -973,8 +991,8 @@ typedef union {
 // RXDMA_ERR_FIRST_HOST_2 desc:
 typedef union {
     struct {
-        uint64_t           first_host  : 42; // 
-        uint64_t       Reserved_63_42  : 22; // Unused
+        uint64_t           first_host  : 55; // 
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FIRST_HOST_2_t;
@@ -982,8 +1000,8 @@ typedef union {
 // RXDMA_ERR_EN_BMC_2 desc:
 typedef union {
     struct {
-        uint64_t               bmc_en  : 42; // 
-        uint64_t       Reserved_63_42  : 22; // Unused
+        uint64_t               bmc_en  : 55; // 
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_EN_BMC_2_t;
@@ -991,8 +1009,8 @@ typedef union {
 // RXDMA_ERR_FIRST_BMC_2 desc:
 typedef union {
     struct {
-        uint64_t            first_bmc  : 42; // 
-        uint64_t       Reserved_63_42  : 22; // Unused
+        uint64_t            first_bmc  : 55; // 
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FIRST_BMC_2_t;
@@ -1000,8 +1018,8 @@ typedef union {
 // RXDMA_ERR_EN_QUAR_2 desc:
 typedef union {
     struct {
-        uint64_t              quar_en  : 42; // 
-        uint64_t       Reserved_63_42  : 22; // Unused
+        uint64_t              quar_en  : 55; // 
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_EN_QUAR_2_t;
@@ -1009,8 +1027,8 @@ typedef union {
 // RXDMA_ERR_FIRST_QUAR_2 desc:
 typedef union {
     struct {
-        uint64_t           first_quar  : 42; // 
-        uint64_t       Reserved_63_42  : 22; // Unused
+        uint64_t           first_quar  : 55; // 
+        uint64_t       Reserved_63_55  :  9; // Unused
     } field;
     uint64_t val;
 } RXDMA_ERR_FIRST_QUAR_2_t;
@@ -1090,5 +1108,48 @@ typedef union {
     } field;
     uint64_t val;
 } RXDMA_ERR_INFO_6_t;
+
+// RXDMA_ERR_INFO_7 desc:
+typedef union {
+    struct {
+        uint64_t      qk_ecc_synd_sbe  : 16; // Syndrome of the last SBE to the Host Arb.
+        uint64_t      qk_ecc_synd_mbe  : 16; // Syndrome of the last MBE to the Host Arb.
+        uint64_t      go_ecc_synd_sbe  : 16; // Syndrome of the last SBE from the HIArb.
+        uint64_t      go_ecc_synd_mbe  : 16; // Syndrome of the last MBE from the HIArb.
+    } field;
+    uint64_t val;
+} RXDMA_ERR_INFO_7_t;
+
+// RXDMA_ERR_INFO_8 desc:
+typedef union {
+    struct {
+        uint64_t      ct_ecc_synd_sbe  :  8; // Syndrome of the last SBE to the CT Hold Array.
+        uint64_t      ct_ecc_synd_mbe  :  8; // Syndrome of the last MBE to the CT Hold Array.
+        uint64_t       Reserved_63_16  : 48; // Unused
+    } field;
+    uint64_t val;
+} RXDMA_ERR_INFO_8_t;
+
+// RXDMA_ERR_INFO_CT_CACHE_ECC desc:
+typedef union {
+    struct {
+        uint64_t        cache_tag_mbe  :  2; // One bit per double way
+        uint64_t        cache_tag_sbe  :  2; // One bit per double way
+        uint64_t cache_tag_mbe_domain  :  1; // MBE Domain
+        uint64_t cache_tag_mbe_syndrome  :  7; // MBE syndrome
+        uint64_t cache_tag_sbe_domain  :  1; // SBE Domain
+        uint64_t cache_tag_sbe_syndrome  :  7; // SBE syndrome
+        uint64_t       cache_tag_addr  :  9; // Cache Tag Address
+        uint64_t       Reserved_31_29  :  3; // Unused
+        uint64_t       cache_data_mbe  :  2; // One bit per double way
+        uint64_t       cache_data_sbe  :  2; // One bit per double way
+        uint64_t cache_data_mbe_domain  :  2; // MBE Domain
+        uint64_t cache_data_mbe_syndrome  :  8; // MBE syndrome
+        uint64_t cache_data_sbe_domain  :  2; // SBE Domain
+        uint64_t       Reserved_55_50  :  6; // Unused
+        uint64_t cache_data_sbe_syndrome  :  8; // SBE syndrome
+    } field;
+    uint64_t val;
+} RXDMA_ERR_INFO_CT_CACHE_ECC_t;
 
 #endif /* ___FXR_rx_dma_CSRS_H__ */

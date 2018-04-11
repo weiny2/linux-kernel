@@ -33,7 +33,7 @@
 #define DEF_FXR_TX_CI_CID_CSRS_SW_DEF
 
 #ifndef FXR_TX_CI_CID_CSRS
-#define FXR_TX_CI_CID_CSRS									0x000000000000
+#define FXR_TX_CI_CID_CSRS									0x000000000000ULL
 #endif
 #define FXR_NUM_CONTEXTS									256
 #define FXR_NUM_PIDS										4096

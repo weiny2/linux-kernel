@@ -1463,30 +1463,14 @@ const char *hfi_class_name(void);
 int hfi_set_lid(struct hfi_pportdata *ppd, u32 lid, u8 lmc);
 int hfi_set_max_lid(struct hfi_pportdata *ppd, u32 lid);
 void hfi_psn_uninit(struct hfi_pportdata *port);
-void hfi_write_lm_fpc_csr(const struct hfi_pportdata *ppd,
-			  u32 offset, u64 value);
-void hfi_write_lm_tp_csr(const struct hfi_pportdata *ppd,
-			 u32 offset, u64 value);
 void hfi_write_lm_tp_prf_csr(const struct hfi_pportdata *ppd,
 			     u32 offset, u64 value);
-void hfi_write_lm_cm_csr(const struct hfi_pportdata *ppd,
-			 u32 offset, u64 value);
-void hfi_write_lm_csr(const struct hfi_pportdata *ppd,
-		      u32 offset, u64 value);
 void hfi_write_lm_fpc_prf_per_vl_csr(const struct hfi_pportdata *ppd,
 				     u32 offset, u32 index, u64 value);
-u64 hfi_read_lm_fpc_csr(const struct hfi_pportdata *ppd,
-			u32 offset);
 u64 hfi_read_lm_fpc_prf_per_vl_csr(const struct hfi_pportdata *ppd,
 				   u32 offset, u32 index);
-u64 hfi_read_lm_tp_csr(const struct hfi_pportdata *ppd,
-		       u32 offset);
 u64 hfi_read_lm_tp_prf_csr(const struct hfi_pportdata *ppd,
 			   u32 offset);
-u64 hfi_read_lm_cm_csr(const struct hfi_pportdata *ppd,
-		       u32 offset);
-u64 hfi_read_lm_csr(const struct hfi_pportdata *ppd,
-		    u32 offset);
 u64 hfi_read_pmon_csr(const struct hfi_devdata *dd,
 		      u32 index);
 int hfi_snoop_add(struct hfi_devdata *dd);
@@ -1569,16 +1553,6 @@ static inline u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
 	u64 val;
 
-	/*
-	 * FXRTODO: Do not touch MNH CSRs if MNH is not available
-	 * for early bring up
-	 */
-	if (!simics && (loopback != LOOPBACK_LCB) && no_mnh &&
-	    offset >= FXR_MNH_LPHY && offset < FXR_MNH_FUSE_AGG) {
-		dd_dev_err(dd, "%s MNH offset 0x%x\n", __func__, offset);
-		WARN_ON(1);
-		return 0;
-	}
 	if (likely(offset >= dd->wc_off)) {
 		val = readq(dd->kregbase + offset - dd->wc_off);
 	} else {
@@ -1592,16 +1566,6 @@ static inline u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 static inline void write_csr(const struct hfi_devdata *dd, u32 offset,
 			     u64 value)
 {
-	/*
-	 * FXRTODO: Do not touch MNH CSRs if MNH is not available
-	 * for early bring up
-	 */
-	if (!simics && (loopback != LOOPBACK_LCB) && no_mnh &&
-	    offset >= FXR_MNH_LPHY && offset < FXR_MNH_FUSE_AGG) {
-		dd_dev_err(dd, "%s MNH offset 0x%x\n", __func__, offset);
-		WARN_ON(1);
-		return;
-	}
 	if (likely(offset >= dd->wc_off)) {
 		writeq(value, dd->kregbase + offset - dd->wc_off);
 	} else {
@@ -1618,8 +1582,6 @@ int hfi_zebu_enable_ats(const struct hfi_devdata *dd);
 int hfi_set_pasid(struct hfi_devdata *dd, struct hfi_ctx *ctx, u16 ptl_pid);
 void hfi_clear_pasid(struct hfi_ctx *ctx, u16 ptl_pid);
 void hfi_read_lm_link_state(const struct hfi_pportdata *ppd);
-u64 read_fzc_csr(const struct hfi_pportdata *ppd, u32 offset);
-void write_fzc_csr(const struct hfi_pportdata *ppd, u32 offset, u64 value);
 void hfi_zebu_hack_default_mtu(struct hfi_pportdata *ppd);
 
 /**

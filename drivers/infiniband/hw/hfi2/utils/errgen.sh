@@ -8,34 +8,23 @@ cc -g -o CSR.x lex.yy.c
 cat ../chip/* | ./CSR.x
 
 #
-# OPIO name correction
+# The prefix used to be FXR on these defines, now OC.
 #
-cat OPIO_PHY.CSR | sed -e 's/FXR_OPIO_/MNH_OPIO_/g' > tmp
-mv tmp OPIO_PHY.CSR
-
-#
-# The prefix used to be FXR on these defines, now FZC.
-#
-cat LCB.CSR | sed -e 's/FXR_LCB_/FZC_LCB_/g' > tmp
+cat LCB.CSR | sed -e 's/FXR_LCB_/OC_LCB_/g' > tmp
 mv tmp LCB.CSR
 
 #
-# Change TP defines to use correct base, this is a hardware
-# header files issue that will be fixed later.
-# TP uses more than one register for its error domain because
-# it has more than 64 bits (errors).
+# The prefix used to be FXR on these defines, now HFI.
 #
-cat TP_0.CSR | sed -E -e "s/FXR_TP_([^,]*),/FXR_LM_TP0_CSRS + FXR_TP_\1,/g" > tmp
-mv tmp TP_0.CSR
-cat TP_1.CSR | sed -E -e "s/FXR_TP_([^,]*),/FXR_LM_TP0_CSRS + FXR_TP_\1,/g" > tmp
-mv tmp TP_1.CSR
+cat PCIM.CSR | sed -e 's/FXR_PCIM_/HFI_PCIM_/g' > tmp
+mv tmp PCIM.CSR
+cat HIFIS.CSR | sed -e 's/FXR_HIFIS_/HFI_HIFIS_/g' > tmp
+mv tmp HIFIS.CSR
+cat LOCA0.CSR | sed -e 's/FXR_LOCA0_/HFI_LOCA0_/g' > tmp
+mv tmp LOCA0.CSR
+cat LOCA1.CSR | sed -e 's/FXR_LOCA1_/HFI_LOCA1_/g' > tmp
+mv tmp LOCA1.CSR
 
-#
-# Change FPC defines to use correct base, this is a hardware
-# header files issue that will be fixed later.
-#
-cat FPC.CSR | sed -E -e "s/FXR_FPC_([^,]*),/FXR_LM_FPC0_CSRS + FXR_FPC_\1,/g" > tmp
-mv tmp FPC.CSR
 
 ################################################################
 
@@ -122,7 +111,7 @@ enum err_category_t {
 #
 # FZC domain CSRs
 #
-echo "static struct hfi_error_csr hfi_fzc_error[] = {" >> errdef.h
+echo "static struct hfi_error_csr hfi_oc_error[] = {" >> errdef.h
 cat LCB.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
@@ -248,14 +237,6 @@ echo "" >> errdef.h
 #
 echo "static struct hfi_error_csr hfi_at_error[] = {" >> errdef.h
 cat AT_1.CSR >> errdef.h
-echo "};" >> errdef.h
-echo "" >> errdef.h
-
-#
-# OPIO domain CSRs
-#
-echo "static struct hfi_error_csr hfi_opio_error[] = {" >> errdef.h
-cat OPIO_PHY.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 

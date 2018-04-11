@@ -62,7 +62,7 @@
 #include "../hfi2.h"
 #include "chip/fxr_linkmux_fpc_defs.h"
 #include "chip/fxr_linkmux_tp_defs.h"
-#include "chip/fxr_fc_defs.h"
+#include "chip/fxr_oc_defs.h"
 #include "chip/fxr_tx_otr_pkt_top_csrs_defs.h"
 #include "chip/fxr_linkmux_defs.h"
 
@@ -3230,21 +3230,21 @@ static void hfi_get_perf_ctrs(struct hfi_pportdata *ppd, __be64 *perf_cntrs,
 {
 	*perf_cntrs++ = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 						     TP_PRF_XMIT_DATA));
-	*perf_cntrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
+	*perf_cntrs++ = cpu_to_be64(read_csr(ppd->dd,
 						FXR_FPC_PRF_PORTRCV_DATA_CNT));
 	*perf_cntrs++ = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 							TP_PRF_XMIT_PKTS));
-	*perf_cntrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
+	*perf_cntrs++ = cpu_to_be64(read_csr(ppd->dd,
 						FXR_FPC_PRF_PORTRCV_PKT_CNT));
 	*perf_cntrs++ = cpu_to_be64(hfi_read_lm_tp_prf_csr(
 					ppd, TP_PRF_MULTICAST_XMIT_PKTS));
-	*perf_cntrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
+	*perf_cntrs++ = cpu_to_be64(read_csr(ppd->dd,
 					FXR_FPC_PRF_PORTRCV_MCAST_PKT_CNT));
 	if (set_ltps) {
-		*perf_cntrs++ = cpu_to_be64(read_fzc_csr(ppd,
-					FZC_LCB_PRF_TX_RELIABLE_LTP_CNT));
-		*perf_cntrs++ = cpu_to_be64(read_fzc_csr(ppd,
-					FZC_LCB_PRF_ACCEPTED_LTP_CNT));
+		*perf_cntrs++ = cpu_to_be64(read_csr(ppd->dd,
+					OC_LCB_PRF_TX_RELIABLE_LTP_CNT));
+		*perf_cntrs++ = cpu_to_be64(read_csr(ppd->dd,
+					OC_LCB_PRF_ACCEPTED_LTP_CNT));
 	}
 	*perf_cntrs = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 							TP_PRF_XMIT_WAIT));
@@ -3252,9 +3252,9 @@ static void hfi_get_perf_ctrs(struct hfi_pportdata *ppd, __be64 *perf_cntrs,
 
 static void hfi_get_cong_ctrs(struct hfi_pportdata *ppd, __be64 *cong_ctrs)
 {
-	*cong_ctrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
+	*cong_ctrs++ = cpu_to_be64(read_csr(ppd->dd,
 						FXR_FPC_PRF_PORTRCV_FECN));
-	*cong_ctrs = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
+	*cong_ctrs = cpu_to_be64(read_csr(ppd->dd,
 						FXR_FPC_PRF_PORTRCV_BECN));
 }
 
@@ -3264,13 +3264,13 @@ static void hfi_get_bubble_ctrs(struct hfi_pportdata *ppd, __be64 *cntrs)
 						      TP_PRF_XMIT_WASTED_BW));
 	*cntrs++ = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 						      TP_PRF_XMIT_WAIT_DATA));
-	*cntrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
+	*cntrs++ = cpu_to_be64(read_csr(ppd->dd,
 						FXR_FPC_PRF_PORTRCV_BUBBLE));
 }
 
 static void hfi_get_ectrs(struct hfi_pportdata *ppd, __be64 *ectrs)
 {
-	*ectrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
+	*ectrs++ = cpu_to_be64(read_csr(ppd->dd,
 					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR));
 	*ectrs++ = 0;
 	*ectrs++ = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
@@ -3278,14 +3278,14 @@ static void hfi_get_ectrs(struct hfi_pportdata *ppd, __be64 *ectrs)
 	*ectrs++ = cpu_to_be64(hfi_read_lm_tp_prf_csr(ppd,
 						TP_ERR_XMIT_CONSTRAINT_ERROR)) +
 						ppd->xmit_constraint_errors;
-	*ectrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
+	*ectrs++ = cpu_to_be64(read_csr(ppd->dd,
 					FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR));
-	*ectrs++ = cpu_to_be64(read_fzc_csr(ppd,
-					    FZC_LCB_ERR_INFO_RX_REPLAY_CNT));
-	*ectrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
+	*ectrs++ = cpu_to_be64(read_csr(ppd->dd,
+					    OC_LCB_ERR_INFO_RX_REPLAY_CNT));
+	*ectrs++ = cpu_to_be64(read_csr(ppd->dd,
 						FXR_FPC_ERR_PORTRCV_ERROR));
-	*ectrs++ = cpu_to_be64(hfi_read_lm_csr(ppd, FXR_LM_ERR_INFO3));
-	*ectrs++ = cpu_to_be64(hfi_read_lm_fpc_csr(ppd,
+	*ectrs++ = cpu_to_be64(read_csr(ppd->dd, FXR_LM_ERR_INFO3));
+	*ectrs++ = cpu_to_be64(read_csr(ppd->dd,
 						FXR_FPC_ERR_FMCONFIG_ERROR));
 }
 
@@ -3379,12 +3379,12 @@ static int pma_get_opa_portstatus(struct opa_pma_mad *pmp,
 	hfi_get_bubble_ctrs(ppd, &rsp->port_xmit_wasted_bw);
 	/* populate response with error counters*/
 	hfi_get_ectrs(ppd, &rsp->port_rcv_constraint_errors);
-	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
-	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
+	tmp = read_csr(ppd->dd, OC_LCB_ERR_INFO_SEQ_CRC_CNT);
+	tmp2 = read_csr(ppd->dd, OC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
 	rsp->link_error_recovery = hfi_max_u32_or_sum(tmp, tmp2);
 	hfi_read_link_quality(ppd, &rsp->link_quality_indicator);
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
-	rsp->uncorrectable_errors = CAP_U8(hfi_read_lm_fpc_csr(ppd,
+	rsp->uncorrectable_errors = CAP_U8(read_csr(ppd->dd,
 					FXR_FPC_ERR_UNCORRECTABLE_ERROR));
 	vlinfo = &rsp->vls[0];
 	for_each_set_bit(vl, (unsigned long *)&vl_select_mask,
@@ -3415,34 +3415,34 @@ static u64 get_infrequent_counters_summary(struct ib_device *ibdev, u8 port,
 
 	dd = hfi_dd_from_ibdev(ibdev);
 	ppd = to_hfi_ppd(dd, port);
-	infrequent_counters_summary += hfi_read_lm_fpc_csr(ppd,
+	infrequent_counters_summary += read_csr(ppd->dd,
 						FXR_FPC_PRF_PORTRCV_FECN);
-	infrequent_counters_summary += hfi_read_lm_fpc_csr(ppd,
+	infrequent_counters_summary += read_csr(ppd->dd,
 						FXR_FPC_PRF_PORTRCV_BECN);
-	infrequent_counters_summary += hfi_read_lm_fpc_csr(ppd,
+	infrequent_counters_summary += read_csr(ppd->dd,
 					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR);
 	infrequent_counters_summary += hfi_read_lm_tp_prf_csr(ppd,
 					TP_ERR_XMIT_DISCARD);
 	infrequent_counters_summary += hfi_read_lm_tp_prf_csr(ppd,
 					TP_ERR_XMIT_CONSTRAINT_ERROR) +
 					ppd->xmit_constraint_errors;
-	infrequent_counters_summary += hfi_read_lm_fpc_csr(ppd,
+	infrequent_counters_summary += read_csr(ppd->dd,
 					FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR);
-	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
+	tmp = read_csr(ppd->dd, OC_LCB_ERR_INFO_RX_REPLAY_CNT);
 	infrequent_counters_summary += (tmp >> res_lli);
-	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
-	tmp += read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
+	tmp = read_csr(ppd->dd, OC_LCB_ERR_INFO_SEQ_CRC_CNT);
+	tmp += read_csr(ppd->dd, OC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
 	infrequent_counters_summary += (tmp >> res_ler);
-	infrequent_counters_summary += hfi_read_lm_fpc_csr(ppd,
+	infrequent_counters_summary += read_csr(ppd->dd,
 						FXR_FPC_ERR_PORTRCV_ERROR);
 	/*
 	 * FXRTODO: Add Excessive Buffer Overrun error
 	 * once register is available
 	 */
-	infrequent_counters_summary += hfi_read_lm_fpc_csr(ppd,
+	infrequent_counters_summary += read_csr(ppd->dd,
 						FXR_FPC_ERR_FMCONFIG_ERROR);
 	infrequent_counters_summary += ppd->link_downed;
-	infrequent_counters_summary += hfi_read_lm_fpc_csr(ppd,
+	infrequent_counters_summary += read_csr(ppd->dd,
 					FXR_FPC_ERR_UNCORRECTABLE_ERROR);
 	return infrequent_counters_summary;
 }
@@ -3552,11 +3552,11 @@ static int pma_get_opa_infrequent_counters(struct opa_pma_mad *pmp,
 	resp->vl_select_mask = cpu_to_be32(vl_select_mask);
 	hfi_get_cong_ctrs(ppd, &rsp->port_rcv_fecn);
 	hfi_get_ectrs(ppd, &rsp->port_rcv_constraint_errors);
-	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
-	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
+	tmp = read_csr(ppd->dd, OC_LCB_ERR_INFO_SEQ_CRC_CNT);
+	tmp2 = read_csr(ppd->dd, OC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
 	rsp->link_error_recovery = hfi_max_u32_or_sum(tmp, tmp2);
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
-	rsp->uncorrectable_errors = CAP_U8(hfi_read_lm_fpc_csr(ppd,
+	rsp->uncorrectable_errors = CAP_U8(read_csr(ppd->dd,
 					FXR_FPC_ERR_UNCORRECTABLE_ERROR));
 
 	vlinfo = &rsp->vls[0];
@@ -3624,12 +3624,12 @@ static int pma_get_opa_all_counters(struct opa_pma_mad *pmp,
 	hfi_get_bubble_ctrs(ppd, &rsp->port_xmit_wasted_bw);
 	/* populate response with error counters*/
 	hfi_get_ectrs(ppd, &rsp->port_rcv_constraint_errors);
-	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
-	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
+	tmp = read_csr(ppd->dd, OC_LCB_ERR_INFO_SEQ_CRC_CNT);
+	tmp2 = read_csr(ppd->dd, OC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
 	rsp->link_error_recovery = hfi_max_u32_or_sum(tmp, tmp2);
 	hfi_read_link_quality(ppd, &rsp->link_quality_indicator);
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
-	rsp->uncorrectable_errors = CAP_U8(hfi_read_lm_fpc_csr(ppd,
+	rsp->uncorrectable_errors = CAP_U8(read_csr(ppd->dd,
 					FXR_FPC_ERR_UNCORRECTABLE_ERROR));
 	vlinfo = &rsp->vls[0];
 	for_each_set_bit(vl, (unsigned long *)&vl_select_mask,
@@ -3661,32 +3661,32 @@ static u64 get_error_counter_summary(struct ib_device *ibdev, u8 port,
 	dd = hfi_dd_from_ibdev(ibdev);
 	ppd = to_hfi_ppd(dd, port);
 
-	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
+	error_counter_summary += read_csr(ppd->dd,
 					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR);
 	error_counter_summary += hfi_read_lm_tp_prf_csr(ppd,
 					TP_ERR_XMIT_DISCARD);
 	error_counter_summary += hfi_read_lm_tp_prf_csr(ppd,
 					TP_ERR_XMIT_CONSTRAINT_ERROR) +
 					ppd->xmit_constraint_errors;
-	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
+	error_counter_summary += read_csr(ppd->dd,
 					FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR);
-	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
+	tmp = read_csr(ppd->dd, OC_LCB_ERR_INFO_RX_REPLAY_CNT);
 	error_counter_summary += (tmp >> res_lli);
 
-	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
-	tmp += read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
+	tmp = read_csr(ppd->dd, OC_LCB_ERR_INFO_SEQ_CRC_CNT);
+	tmp += read_csr(ppd->dd, OC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
 	error_counter_summary += (tmp >> res_ler);
 
 	/*
 	 * FXR TODO: Add Excessive Buffer Overrun error once
 	 * register is available
 	 */
-	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
+	error_counter_summary += read_csr(ppd->dd,
 						FXR_FPC_ERR_PORTRCV_ERROR);
-	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
+	error_counter_summary += read_csr(ppd->dd,
 						FXR_FPC_ERR_FMCONFIG_ERROR);
 	error_counter_summary += ppd->link_downed;
-	error_counter_summary += hfi_read_lm_fpc_csr(ppd,
+	error_counter_summary += read_csr(ppd->dd,
 					FXR_FPC_ERR_UNCORRECTABLE_ERROR);
 	return error_counter_summary;
 }
@@ -3791,21 +3791,21 @@ static void pma_get_opa_port_ectrs(struct ib_device *ibdev,
 					   ppd->xmit_constraint_errors;
 	rsp->port_xmit_discards = hfi_read_lm_tp_prf_csr(ppd,
 						TP_ERR_XMIT_DISCARD);
-	rsp->excessive_buffer_overruns = hfi_read_lm_csr(ppd, FXR_LM_ERR_INFO3);
-	rsp->port_rcv_constraint_errors = hfi_read_lm_fpc_csr(ppd,
+	rsp->excessive_buffer_overruns = read_csr(ppd->dd, FXR_LM_ERR_INFO3);
+	rsp->port_rcv_constraint_errors = read_csr(ppd->dd,
 					FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR);
-	rsp->port_rcv_remote_physical_errors = hfi_read_lm_fpc_csr(
-				ppd, FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR);
-	rsp->local_link_integrity_errors = read_fzc_csr(ppd,
-					FZC_LCB_ERR_INFO_RX_REPLAY_CNT);
-	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
-	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
+	rsp->port_rcv_remote_physical_errors = read_csr(
+				ppd->dd, FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR);
+	rsp->local_link_integrity_errors = read_csr(ppd->dd,
+					OC_LCB_ERR_INFO_RX_REPLAY_CNT);
+	tmp = read_csr(ppd->dd, OC_LCB_ERR_INFO_SEQ_CRC_CNT);
+	tmp2 = read_csr(ppd->dd, OC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
 	rsp->link_error_recovery = be32_to_cpu(hfi_max_u32_or_sum(tmp, tmp2));
-	rsp->port_rcv_errors = hfi_read_lm_fpc_csr(ppd,
+	rsp->port_rcv_errors = read_csr(ppd->dd,
 						FXR_FPC_ERR_PORTRCV_ERROR);
 	rsp->link_downed = ppd->link_downed;
 	rsp->port_rcv_switch_relay_errors =
-		hfi_read_lm_fpc_csr(ppd,
+		read_csr(ppd->dd,
 				    FXR_FPC_ERR_PORTRCV_SWITCH_RELAY_ERROR);
 }
 
@@ -3867,13 +3867,12 @@ static int pma_get_opa_porterrors(struct opa_pma_mad *pmp,
 	memset(rsp, 0, sizeof(*rsp));
 	rsp->port_number = (u8)port_num;
 	hfi_get_ectrs(ppd, &rsp->port_rcv_constraint_errors);
-	tmp = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT);
-	tmp2 = read_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
+	tmp = read_csr(ppd->dd, OC_LCB_ERR_INFO_SEQ_CRC_CNT);
+	tmp2 = read_csr(ppd->dd, OC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT);
 	rsp->link_error_recovery = hfi_max_u32_or_sum(tmp, tmp2);
 	rsp->link_downed = cpu_to_be32(ppd->link_downed);
 	rsp->uncorrectable_errors = CAP_U8(
-		hfi_read_lm_fpc_csr(
-			ppd,
+		read_csr(ppd->dd,
 			FXR_FPC_ERR_UNCORRECTABLE_ERROR));
 
 	vlinfo = (struct _vls_ectrs *)&rsp->vls[0];
@@ -4090,61 +4089,61 @@ static int pma_set_opa_portstatus(struct opa_pma_mad *pmp,
 		hfi_write_lm_tp_prf_csr(ppd, TP_PRF_XMIT_DATA, 0);
 
 	if (counter_select & CS_PORT_RCV_DATA)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_DATA_CNT, 0);
+		write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_DATA_CNT, 0);
 
 	if (counter_select & CS_PORT_XMIT_PKTS)
 		hfi_write_lm_tp_prf_csr(ppd, TP_PRF_XMIT_PKTS, 0);
 
 	if (counter_select & CS_PORT_RCV_PKTS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_PKT_CNT, 0);
+		write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_PKT_CNT, 0);
 
 	if (counter_select & CS_PORT_MCAST_XMIT_PKTS)
 		hfi_write_lm_tp_prf_csr(ppd, TP_PRF_MULTICAST_XMIT_PKTS, 0);
 
 	if (counter_select & CS_PORT_MCAST_RCV_PKTS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_MCAST_PKT_CNT, 0);
+		write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_MCAST_PKT_CNT, 0);
 
 	if (counter_select & CS_PORT_XMIT_WAIT)
 		hfi_write_lm_tp_prf_csr(ppd, TP_PRF_XMIT_WAIT, 0);
 
 	if (counter_select & CS_PORT_RCV_FECN)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_FECN, 0);
+		write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_FECN, 0);
 
 	if (counter_select & CS_PORT_RCV_BECN)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_BECN, 0);
+		write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_BECN, 0);
 
 	if (counter_select & CS_PORT_RCV_BUBBLE)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_PRF_PORTRCV_BUBBLE, 0);
+		write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_BUBBLE, 0);
 
 	if (counter_select & CS_PORT_RCV_CONSTRAINT_ERRORS)
-		hfi_write_lm_fpc_csr(ppd,
+		write_csr(ppd->dd,
 				     FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR, 0);
 
 	if (counter_select & CS_PORT_RCV_REMOTE_PHYSICAL_ERRORS)
-		hfi_write_lm_fpc_csr(ppd,
+		write_csr(ppd->dd,
 				     FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR, 0);
 
 	if (counter_select & CS_LOCAL_LINK_INTEGRITY_ERRORS) {
-		write_fzc_csr(ppd, FZC_LCB_ERR_INFO_TX_REPLAY_CNT, 0);
-		write_fzc_csr(ppd, FZC_LCB_ERR_INFO_RX_REPLAY_CNT, 0);
+		write_csr(ppd->dd, OC_LCB_ERR_INFO_TX_REPLAY_CNT, 0);
+		write_csr(ppd->dd, OC_LCB_ERR_INFO_RX_REPLAY_CNT, 0);
 	}
 
 	if (counter_select & CS_LINK_ERROR_RECOVERY) {
-		write_fzc_csr(ppd, FZC_LCB_ERR_INFO_SEQ_CRC_CNT, 0);
-		write_fzc_csr(ppd, FZC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT, 0);
+		write_csr(ppd->dd, OC_LCB_ERR_INFO_SEQ_CRC_CNT, 0);
+		write_csr(ppd->dd, OC_LCB_ERR_INFO_REINIT_FROM_PEER_CNT, 0);
 	}
 
 	if (counter_select & CS_PORT_RCV_ERRORS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_PORTRCV_ERROR, 0);
+		write_csr(ppd->dd, FXR_FPC_ERR_PORTRCV_ERROR, 0);
 
 	if (counter_select & CS_EXCESSIVE_BUFFER_OVERRUNS)
-		hfi_write_lm_csr(ppd, FXR_LM_ERR_INFO3, 0);
+		write_csr(ppd->dd, FXR_LM_ERR_INFO3, 0);
 	if (counter_select & CS_FM_CONFIG_ERRORS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_FMCONFIG_ERROR, 0);
+		write_csr(ppd->dd, FXR_FPC_ERR_FMCONFIG_ERROR, 0);
 	if (counter_select & CS_LINK_DOWNED)
 		ppd->link_downed = 0;
 	if (counter_select & CS_UNCORRECTABLE_ERRORS)
-		hfi_write_lm_fpc_csr(ppd, FXR_FPC_ERR_UNCORRECTABLE_ERROR, 0);
+		write_csr(ppd->dd, FXR_FPC_ERR_UNCORRECTABLE_ERROR, 0);
 
 	for_each_set_bit(vl, (unsigned long *)&(vl_select_mask),
 			 8 * sizeof(vl_select_mask)) {

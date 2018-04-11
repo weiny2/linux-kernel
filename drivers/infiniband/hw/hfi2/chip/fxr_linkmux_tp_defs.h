@@ -33,7 +33,7 @@
 #define DEF_FXR_LINKMUX_TP_SW_DEF
 
 #ifndef FXR_LM_TP_CSRS
-#define FXR_LM_TP_CSRS							0x000000000000
+#define FXR_LM_TP_CSRS							0x000000000000ULL
 #endif
 #define FXR_NUM_CONTEXTS						256
 #define FXR_NUM_PIDS							4096

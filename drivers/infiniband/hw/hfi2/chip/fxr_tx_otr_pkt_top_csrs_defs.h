@@ -33,10 +33,10 @@
 #define DEF_FXR_TX_OTR_PKT_TOP_CSRS_SW_DEF
 
 #ifndef FXR_TX_OTR_PKT_TOP_CSRS
-#define FXR_TX_OTR_PKT_TOP_CSRS									0x000000000000
+#define FXR_TX_OTR_PKT_TOP_CSRS									0x000000000000ULL
 #endif
 #ifndef FXR_TX_OTR_MSG_TOP_CSRS
-#define FXR_TX_OTR_MSG_TOP_CSRS									0x000000000000
+#define FXR_TX_OTR_MSG_TOP_CSRS									0x000000000000ULL
 #endif
 #define FXR_NUM_CONTEXTS									256
 #define FXR_NUM_PIDS										4096
@@ -98,7 +98,7 @@
 * TXCI.
 */
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000000030)
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESETCSR						0x0000060488002020ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESETCSR						0x000004C010882020ull
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESERVED_63_57_SHIFT					57
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESERVED_63_57_MASK					0x7Full
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESERVED_63_57_SMASK					0xFE00000000000000ull
@@ -114,33 +114,33 @@
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_GLOBALFLOWID_SHIFT				42
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_GLOBALFLOWID_MASK				0x1ull
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_GLOBALFLOWID_SMASK				0x40000000000ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_VICTIM_WR_SHIFT				40
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_VICTIM_WR_MASK				0x3ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_VICTIM_WR_SMASK				0x30000000000ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_FLUSH_WR_SHIFT				38
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_FLUSH_WR_MASK				0x3ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_FLUSH_WR_SMASK				0xC000000000ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_RD_SHIFT					36
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_RD_MASK					0x3ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_RD_SMASK					0x3000000000ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_SO_SHIFT						35
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_VICTIM_WR_SHIFT				38
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_VICTIM_WR_MASK				0xFull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_VICTIM_WR_SMASK				0x3C000000000ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_FLUSH_WR_SHIFT				34
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_FLUSH_WR_MASK				0xFull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_FLUSH_WR_SMASK				0x3C00000000ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_RD_SHIFT					30
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_RD_MASK					0xFull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_PSN_CHINT_RD_SMASK					0x3C0000000ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_SO_SHIFT						29
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_SO_MASK						0x1ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_SO_SMASK						0x800000000ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_GLOBALFLOWID_SHIFT				34
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_SO_SMASK						0x20000000ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_GLOBALFLOWID_SHIFT				28
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_GLOBALFLOWID_MASK				0x1ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_GLOBALFLOWID_SMASK				0x400000000ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_CHINT_SHIFT					32
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_CHINT_MASK					0x3ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_CHINT_SMASK					0x300000000ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXDMA_REQ_REQACK_SHIFT				28
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_GLOBALFLOWID_SMASK				0x10000000ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_CHINT_SHIFT					24
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_CHINT_MASK					0xFull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_FPE_CHINT_SMASK					0xF000000ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXDMA_REQ_REQACK_SHIFT				20
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXDMA_REQ_REQACK_MASK				0xFull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXDMA_REQ_REQACK_SMASK				0xF0000000ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXDMA_REQ_RSPACK_SHIFT				24
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXDMA_REQ_REQACK_SMASK				0xF00000ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXDMA_REQ_RSPACK_SHIFT				16
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXDMA_REQ_RSPACK_MASK				0xFull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXDMA_REQ_RSPACK_SMASK				0xF000000ull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESERVED_23_14_SHIFT					14
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESERVED_23_14_MASK					0x3FFull
-#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESERVED_23_14_SMASK					0xFFC000ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXDMA_REQ_RSPACK_SMASK				0xF0000ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESERVED_15_14_SHIFT					14
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESERVED_15_14_MASK					0x3ull
+#define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_RESERVED_15_14_SMASK					0xC000ull
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXCI_RSP_REQACK_SHIFT				8
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXCI_RSP_REQACK_MASK					0x3Full
 #define FXR_TXOTR_PKT_CFG_MEMORY_SCHEDULER_TXCI_RSP_REQACK_SMASK				0x3F00ull
@@ -187,7 +187,10 @@
 /*
 * Table #7 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_CFG_PKTID_2
 * This CSR contains the configuration parameters necessary to set the total 
-* shared Packet Identifiers that can be allocated simultaneously.
+* shared Packet Identifiers that can be allocated simultaneously. This register 
+* saturates at a value of 12288 minus the total number of reserved PKT_IDs 
+* (configured in #%%#TXOTR_PKT_CFG_PKTID_1#%%#) when written with values greater 
+* than 12288. 
 */
 #define FXR_TXOTR_PKT_CFG_PKTID_2								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000000040)
 #define FXR_TXOTR_PKT_CFG_PKTID_2_RESETCSR							0x0000000000002E00ull
@@ -217,7 +220,8 @@
 /*
 * Table #9 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_CFG_PKT_DONE_CRDTS
 * This CSR contains the configuration parameters necessary to configure the OPB 
-* packet Done Credit value.
+* packet Done Credit value. Values greater than the reset value could result in 
+* overflow. A value of zero results in a stall.
 */
 #define FXR_TXOTR_PKT_CFG_PKT_DONE_CRDTS							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000000050)
 #define FXR_TXOTR_PKT_CFG_PKT_DONE_CRDTS_RESETCSR						0x0C0C0C0C0C0C0C0Cull
@@ -869,7 +873,7 @@
 * into a packet is determined using the following formula: SLID = (BASE & 
 * ~(2N-1)) | (SLID_LOW & (2N-1)) where SLID_LOW is a 24-bit field derived by 
 * zero-extending SLID[1:0] or SLID[2:0] contained in the corresponding command 
-* and N is the lmc contained in #%%#Section 30.7.3.36, 'LID Mask Control 
+* and N is the lmc contained in #%%#Section 32.7.3.36, 'LID Mask Control 
 * Configuration CSR'#%%#.
 */
 #define FXR_TXOTR_PKT_CFG_SLID_PT0								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000000148)
@@ -1084,7 +1088,7 @@
 * Table #49 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_CFG_RC_ORDERED_MAP
 * This CSR contains the mapping of the packet Routing Control (rc[2:0]) field to 
 * ordered needed for Packet Sequence Number (PSN) checking. This configuration 
-* of this CSR must be identical to the configuration of #%%#Section 30.8.3.22, 
+* of this CSR must be identical to the configuration of #%%#Section 32.8.3.22, 
 * 'Routing Control Ordered Mapping Configuration CSR'#%%# in the message CSRs. 
 * 
 */
@@ -1149,7 +1153,7 @@
 /*
 * Table #52 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_CFG_FORCE_MSG_TO_FPE
 * This CSR is used to force Fast Path messages to the Fragmentation Programmable 
-* Engine. This CSR must be configured identically to #%%#Section 30.8.3.15, 
+* Engine. This CSR must be configured identically to #%%#Section 32.8.3.15, 
 * 'Force Message to Fragmentation Programmable Engine Configuration 
 * CSR'#%%#.
 */
@@ -1228,52 +1232,64 @@
 * allowed to be outstanding on this traffic class.
 */
 #define FXR_TXOTR_PKT_CFG_TC0									(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000000270)
-#define FXR_TXOTR_PKT_CFG_TC0_RESETCSR								0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC0_RESETCSR								0x80007FFFFFFFFFFFull
 #define FXR_TXOTR_PKT_CFG_TC0_ENABLE_SHIFT							63
 #define FXR_TXOTR_PKT_CFG_TC0_ENABLE_MASK							0x1ull
 #define FXR_TXOTR_PKT_CFG_TC0_ENABLE_SMASK							0x8000000000000000ull
+#define FXR_TXOTR_PKT_CFG_TC0_RESERVED_62_48_SHIFT						48
+#define FXR_TXOTR_PKT_CFG_TC0_RESERVED_62_48_MASK						0x7FFFull
+#define FXR_TXOTR_PKT_CFG_TC0_RESERVED_62_48_SMASK						0x7FFF000000000000ull
 #define FXR_TXOTR_PKT_CFG_TC0_MAX_BYTES_SHIFT							0
-#define FXR_TXOTR_PKT_CFG_TC0_MAX_BYTES_MASK							0x7FFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_CFG_TC0_MAX_BYTES_SMASK							0x7FFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC0_MAX_BYTES_MASK							0xFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC0_MAX_BYTES_SMASK							0xFFFFFFFFFFFFull
 /*
 * Table #55 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_CFG_TC1
 * This CSR is used to enable TC1 and configure the maximum number of bytes 
 * allowed to be outstanding on this traffic class.
 */
 #define FXR_TXOTR_PKT_CFG_TC1									(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000000278)
-#define FXR_TXOTR_PKT_CFG_TC1_RESETCSR								0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC1_RESETCSR								0x80007FFFFFFFFFFFull
 #define FXR_TXOTR_PKT_CFG_TC1_ENABLE_SHIFT							63
 #define FXR_TXOTR_PKT_CFG_TC1_ENABLE_MASK							0x1ull
 #define FXR_TXOTR_PKT_CFG_TC1_ENABLE_SMASK							0x8000000000000000ull
+#define FXR_TXOTR_PKT_CFG_TC1_RESERVED_62_48_SHIFT						48
+#define FXR_TXOTR_PKT_CFG_TC1_RESERVED_62_48_MASK						0x7FFFull
+#define FXR_TXOTR_PKT_CFG_TC1_RESERVED_62_48_SMASK						0x7FFF000000000000ull
 #define FXR_TXOTR_PKT_CFG_TC1_MAX_BYTES_SHIFT							0
-#define FXR_TXOTR_PKT_CFG_TC1_MAX_BYTES_MASK							0x7FFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_CFG_TC1_MAX_BYTES_SMASK							0x7FFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC1_MAX_BYTES_MASK							0xFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC1_MAX_BYTES_SMASK							0xFFFFFFFFFFFFull
 /*
 * Table #56 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_CFG_TC2
 * This CSR is used to enable TC2 and configure the maximum number of bytes 
 * allowed to be outstanding on this traffic class.
 */
 #define FXR_TXOTR_PKT_CFG_TC2									(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000000280)
-#define FXR_TXOTR_PKT_CFG_TC2_RESETCSR								0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC2_RESETCSR								0x80007FFFFFFFFFFFull
 #define FXR_TXOTR_PKT_CFG_TC2_ENABLE_SHIFT							63
 #define FXR_TXOTR_PKT_CFG_TC2_ENABLE_MASK							0x1ull
 #define FXR_TXOTR_PKT_CFG_TC2_ENABLE_SMASK							0x8000000000000000ull
+#define FXR_TXOTR_PKT_CFG_TC2_RESERVED_62_48_SHIFT						48
+#define FXR_TXOTR_PKT_CFG_TC2_RESERVED_62_48_MASK						0x7FFFull
+#define FXR_TXOTR_PKT_CFG_TC2_RESERVED_62_48_SMASK						0x7FFF000000000000ull
 #define FXR_TXOTR_PKT_CFG_TC2_MAX_BYTES_SHIFT							0
-#define FXR_TXOTR_PKT_CFG_TC2_MAX_BYTES_MASK							0x7FFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_CFG_TC2_MAX_BYTES_SMASK							0x7FFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC2_MAX_BYTES_MASK							0xFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC2_MAX_BYTES_SMASK							0xFFFFFFFFFFFFull
 /*
 * Table #57 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_CFG_TC3
 * This CSR is used to enable TC3 and configure the maximum number of bytes 
 * allowed to be outstanding on this traffic class.
 */
 #define FXR_TXOTR_PKT_CFG_TC3									(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000000288)
-#define FXR_TXOTR_PKT_CFG_TC3_RESETCSR								0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC3_RESETCSR								0x80007FFFFFFFFFFFull
 #define FXR_TXOTR_PKT_CFG_TC3_ENABLE_SHIFT							63
 #define FXR_TXOTR_PKT_CFG_TC3_ENABLE_MASK							0x1ull
 #define FXR_TXOTR_PKT_CFG_TC3_ENABLE_SMASK							0x8000000000000000ull
+#define FXR_TXOTR_PKT_CFG_TC3_RESERVED_62_48_SHIFT						48
+#define FXR_TXOTR_PKT_CFG_TC3_RESERVED_62_48_MASK						0x7FFFull
+#define FXR_TXOTR_PKT_CFG_TC3_RESERVED_62_48_SMASK						0x7FFF000000000000ull
 #define FXR_TXOTR_PKT_CFG_TC3_MAX_BYTES_SHIFT							0
-#define FXR_TXOTR_PKT_CFG_TC3_MAX_BYTES_MASK							0x7FFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_CFG_TC3_MAX_BYTES_SMASK							0x7FFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC3_MAX_BYTES_MASK							0xFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_CFG_TC3_MAX_BYTES_SMASK							0xFFFFFFFFFFFFull
 /*
 * Table #58 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_CFG_MLID_MASK
 * This CSR contains the configuration values for MLID Mask.
@@ -1305,7 +1321,7 @@
 * Table #60 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_CFG_MTU
 * This CSR contains the configuration MTU value for the packet Partition. Values 
 * in this CSR should be configured to be greater than or equal to the RFS (on a 
-* per MC0/TC basis), as configured in #%%#Section 30.8.3.17, 'Rendezvous 
+* per MC0/TC basis), as configured in #%%#Section 32.8.3.17, 'Rendezvous 
 * Fragment Size Configuration CSR'#%%#.
 */
 #define FXR_TXOTR_PKT_CFG_MTU									(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000002A0)
@@ -2399,65 +2415,129 @@
 /*
 * Table #98 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1
 * This is the error information CSR for a bit error occurring in the IOVEC 
-* Buffer Space. State in this CSR is updated when #%%#iovec_buff_mbe#%%# error 
+* Buffer Space. State in this CSR is updated when #%%#iovec_buff_sbe#%%# error 
 * flags are set.
 */
 #define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002318)
 #define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_RESETCSR						0x0000000000000000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_7_SHIFT				56
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_7_MASK				0xFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_7_SMASK				0xFF00000000000000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_6_SHIFT				48
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_6_MASK				0xFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_6_SMASK				0xFF000000000000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_5_SHIFT				40
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_5_MASK				0xFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_5_SMASK				0xFF0000000000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_4_SHIFT				32
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_4_MASK				0xFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_4_SMASK				0xFF00000000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_3_SHIFT				24
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_3_MASK				0xFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_3_SMASK				0xFF000000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_2_SHIFT				16
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_2_MASK				0xFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_2_SMASK				0xFF0000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_1_SHIFT				8
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_1_MASK				0xFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_1_SMASK				0xFF00ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_0_SHIFT				0
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_0_MASK				0xFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_MBE_0_SMASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_15_SHIFT				56
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_15_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_15_SMASK				0xFF00000000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_14_SHIFT				48
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_14_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_14_SMASK				0xFF000000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_13_SHIFT				40
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_13_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_13_SMASK				0xFF0000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_12_SHIFT				32
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_12_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_12_SMASK				0xFF00000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_11_SHIFT				24
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_11_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_11_SMASK				0xFF000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_10_SHIFT				16
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_10_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_10_SMASK				0xFF0000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_9_SHIFT				8
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_9_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_9_SMASK				0xFF00ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_8_SHIFT				0
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_8_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_1_SYNDROME_SBE_8_SMASK				0xFFull
 /*
 * Table #99 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2
+* This is the error information CSR for a bit error occurring in the IOVEC 
+* Buffer Space. State in this CSR is updated when #%%#iovec_buff_mbe#%%# error 
+* flags are set.
+*/
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002320)
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_RESETCSR						0x0000000000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_7_SHIFT				56
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_7_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_7_SMASK				0xFF00000000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_6_SHIFT				48
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_6_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_6_SMASK				0xFF000000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_5_SHIFT				40
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_5_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_5_SMASK				0xFF0000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_4_SHIFT				32
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_4_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_4_SMASK				0xFF00000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_3_SHIFT				24
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_3_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_3_SMASK				0xFF000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_2_SHIFT				16
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_2_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_2_SMASK				0xFF0000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_1_SHIFT				8
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_1_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_1_SMASK				0xFF00ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_0_SHIFT				0
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_0_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_SYNDROME_MBE_0_SMASK				0xFFull
+/*
+* Table #100 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3
+* This is the error information CSR for a bit error occurring in the IOVEC 
+* Buffer Space. State in this CSR is updated when #%%#iovec_buff_mbe#%%# error 
+* flags are set.
+*/
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002328)
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_RESETCSR						0x0000000000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_15_SHIFT				56
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_15_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_15_SMASK				0xFF00000000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_14_SHIFT				48
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_14_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_14_SMASK				0xFF000000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_13_SHIFT				40
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_13_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_13_SMASK				0xFF0000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_12_SHIFT				32
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_12_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_12_SMASK				0xFF00000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_11_SHIFT				24
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_11_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_11_SMASK				0xFF000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_10_SHIFT				16
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_10_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_10_SMASK				0xFF0000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_9_SHIFT				8
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_9_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_9_SMASK				0xFF00ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_8_SHIFT				0
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_8_MASK				0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_3_SYNDROME_MBE_8_SMASK				0xFFull
+/*
+* Table #101 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4
 * This is the error information CSR for a bit error occurring in the IOVEC 
 * Buffer Space. State in this CSR is updated when #%%#iovec_buff_mbe#%%# or 
 * #%%#iovec_buff_sbe#%%# error flags are set.
 */
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002320)
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_RESETCSR						0x0000000000000000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_RESERVED_63_26_SHIFT				26
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_RESERVED_63_26_MASK				0x3FFFFFFFFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_RESERVED_63_26_SMASK				0xFFFFFFFFFC000000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_ADDR_MBE_SHIFT					21
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_ADDR_MBE_MASK					0x1Full
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_ADDR_MBE_SMASK					0x3E00000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_ADDR_SBE_SHIFT					16
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_ADDR_SBE_MASK					0x1Full
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_ADDR_SBE_SMASK					0x1F0000ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_DOMAIN_MBE_SHIFT					8
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_DOMAIN_MBE_MASK					0xFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_DOMAIN_MBE_SMASK					0xFF00ull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_DOMAIN_SBE_SHIFT					0
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_DOMAIN_SBE_MASK					0xFFull
-#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_2_DOMAIN_SBE_SMASK					0xFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002330)
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_RESETCSR						0x0000000000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_RESERVED_63_42_SHIFT				42
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_RESERVED_63_42_MASK				0x3FFFFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_RESERVED_63_42_SMASK				0xFFFFFC0000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_ADDR_MBE_SHIFT					37
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_ADDR_MBE_MASK					0x1Full
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_ADDR_MBE_SMASK					0x3E000000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_ADDR_SBE_SHIFT					32
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_ADDR_SBE_MASK					0x1Full
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_ADDR_SBE_SMASK					0x1F00000000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_DOMAIN_MBE_SHIFT					16
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_DOMAIN_MBE_MASK					0xFFFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_DOMAIN_MBE_SMASK					0xFFFF0000ull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_DOMAIN_SBE_SHIFT					0
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_DOMAIN_SBE_MASK					0xFFFFull
+#define FXR_TXOTR_PKT_ERR_INFO_IOVEC_BUFF_BE_4_DOMAIN_SBE_SMASK					0xFFFFull
 /*
-* Table #100 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OTM_BE
+* Table #102 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OTM_BE
 * This is the error information CSR for a bit error occurring in the OTM. State 
 * in this CSR is updated when #%%#otm_mbe#%%# or #%%#otm_sbe#%%# error flags are 
 * set.
 */
-#define FXR_TXOTR_PKT_ERR_INFO_OTM_BE								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002328)
+#define FXR_TXOTR_PKT_ERR_INFO_OTM_BE								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002338)
 #define FXR_TXOTR_PKT_ERR_INFO_OTM_BE_RESETCSR							0x0000000000000000ull
 #define FXR_TXOTR_PKT_ERR_INFO_OTM_BE_RESERVED_63_34_SHIFT					34
 #define FXR_TXOTR_PKT_ERR_INFO_OTM_BE_RESERVED_63_34_MASK					0x3FFFFFFFull
@@ -2478,12 +2558,12 @@
 #define FXR_TXOTR_PKT_ERR_INFO_OTM_BE_ADDRESS_SBE_MASK						0x7Full
 #define FXR_TXOTR_PKT_ERR_INFO_OTM_BE_ADDRESS_SBE_SMASK						0x7Full
 /*
-* Table #101 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_0
+* Table #103 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_0
 * This is the error information CSR for a bit error occurring in the OPB. State 
 * in this CSR is updated when #%%#opb_mbe#%%# or #%%#opb_sbe#%%# error flags are 
 * set.
 */
-#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_0								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002330)
+#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_0								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002340)
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_0_RESETCSR						0x0000000000000000ull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_0_RESERVED_63_40_SHIFT					40
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_0_RESERVED_63_40_MASK					0xFFFFFFull
@@ -2504,12 +2584,12 @@
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_0_SYNDROME_MBE_0_MASK					0xFFull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_0_SYNDROME_MBE_0_SMASK					0xFFull
 /*
-* Table #102 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_1
+* Table #104 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_1
 * This is the error information CSR for a bit error occurring in the OPB. State 
 * in this CSR is updated when #%%#opb_mbe#%%# or #%%#opb_sbe#%%# error flags are 
 * set.
 */
-#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_1								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002338)
+#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_1								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002348)
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_1_RESETCSR						0x0000000000000000ull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_1_RESERVED_63_40_SHIFT					40
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_1_RESERVED_63_40_MASK					0xFFFFFFull
@@ -2530,12 +2610,12 @@
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_1_SYNDROME_SBE_0_MASK					0xFFull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_1_SYNDROME_SBE_0_SMASK					0xFFull
 /*
-* Table #103 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_2
+* Table #105 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_2
 * This is the error information CSR for a bit error occurring in the OPB. State 
 * in this CSR is updated when #%%#opb_mbe#%%# or #%%#opb_sbe#%%# error flags are 
 * set.
 */
-#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_2								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002340)
+#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_2								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002350)
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_2_RESETCSR						0x0000000000000000ull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_2_RESERVED_63_40_SHIFT					40
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_2_RESERVED_63_40_MASK					0xFFFFFFull
@@ -2547,12 +2627,12 @@
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_2_DOMAIN_SBE_MASK						0xFFFFFull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_2_DOMAIN_SBE_SMASK					0xFFFFFull
 /*
-* Table #104 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_3
+* Table #106 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_3
 * This is the error information CSR for a bit error occurring in the OPB. State 
 * in this CSR is updated when #%%#opb_mbe#%%# or #%%#opb_sbe#%%# error flags are 
 * set.
 */
-#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_3								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002348)
+#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_3								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002358)
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_3_RESETCSR						0x0000000000000000ull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_3_RESERVED_63_56_SHIFT					56
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_3_RESERVED_63_56_MASK					0xFFull
@@ -2570,12 +2650,12 @@
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_3_INFO_SBE_0_MASK						0x3FFFull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_3_INFO_SBE_0_SMASK					0x3FFFull
 /*
-* Table #105 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_4
+* Table #107 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_4
 * This is the error information CSR for a bit error occurring in the OPB. State 
 * in this CSR is updated when #%%#opb_mbe#%%# or #%%#opb_sbe#%%# error flags are 
 * set.
 */
-#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_4								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002350)
+#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_4								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002360)
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_4_RESETCSR						0x0000000000000000ull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_4_RESERVED_63_56_SHIFT					56
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_4_RESERVED_63_56_MASK					0xFFull
@@ -2593,12 +2673,12 @@
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_4_INFO_MBE_0_MASK						0x3FFFull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_4_INFO_MBE_0_SMASK					0x3FFFull
 /*
-* Table #106 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_5
+* Table #108 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_OPB_BE_5
 * This is the error information CSR for a bit error occurring in the OPB. State 
 * in this CSR is updated when #%%#opb_mbe#%%# or #%%#opb_sbe#%%# error flags are 
 * set.
 */
-#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_5								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002358)
+#define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_5								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002368)
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_5_RESETCSR						0x0000000000000000ull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_5_MSGID_SBE_3_SHIFT					48
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_5_MSGID_SBE_3_MASK					0xFFFFull
@@ -2613,7 +2693,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_5_MSGID_SBE_0_MASK					0xFFFFull
 #define FXR_TXOTR_PKT_ERR_INFO_OPB_BE_5_MSGID_SBE_0_SMASK					0xFFFFull
 /*
-* Table #107 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_0
+* Table #109 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_0
 * This is the error information CSR for a bit error occurring in the Packet ID 
 * Linked List. State in this CSR is updated when #%%#pktid_list_mbe#%%# or 
 * #%%#pktid_list_sbe#%%# error flags are set.
@@ -2648,7 +2728,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_0_SYNDROME_SBE_0_MASK				0x3Full
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_0_SYNDROME_SBE_0_SMASK				0x3Full
 /*
-* Table #108 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_1
+* Table #110 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_1
 * This is the error information CSR for a bit error occurring in the Packet ID 
 * Linked List. State in this CSR is updated when #%%#pktid_list_mbe#%%# or 
 * #%%#pktid_list_sbe#%%# error flags are set.
@@ -2683,7 +2763,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_1_SYNDROME_MBE_0_MASK				0x3Full
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_1_SYNDROME_MBE_0_SMASK				0x3Full
 /*
-* Table #109 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_2
+* Table #111 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_2
 * This is the error information CSR for a bit error occurring in the Packet ID 
 * Linked List. State in this CSR is updated when #%%#pktid_list_mbe#%%# or 
 * #%%#pktid_list_sbe#%%# error flags are set.
@@ -2700,7 +2780,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_2_DOMAIN_SBE_MASK					0xFFull
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_2_DOMAIN_SBE_SMASK					0xFFull
 /*
-* Table #110 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_3
+* Table #112 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_3
 * This is the error information CSR for a bit error occurring in the Packet ID 
 * Linked List. State in this CSR is updated when #%%#pktid_list_mbe#%%# or 
 * #%%#pktid_list_sbe#%%# error flags are set.
@@ -2723,7 +2803,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_3_ADDRESS_SBE_0_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_3_ADDRESS_SBE_0_SMASK				0x3FFFull
 /*
-* Table #111 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_4
+* Table #113 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_4
 * This is the error information CSR for a bit error occurring in the Packet ID 
 * Linked List. State in this CSR is updated when #%%#pktid_list_mbe#%%# or 
 * #%%#pktid_list_sbe#%%# error flags are set.
@@ -2746,7 +2826,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_4_ADDRESS_SBE_4_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_4_ADDRESS_SBE_4_SMASK				0x3FFFull
 /*
-* Table #112 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_5
+* Table #114 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_5
 * This is the error information CSR for a bit error occurring in the Packet ID 
 * Linked List. State in this CSR is updated when #%%#pktid_list_mbe#%%# or 
 * #%%#pktid_list_sbe#%%# error flags are set.
@@ -2769,7 +2849,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_5_ADDRESS_MBE_0_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_5_ADDRESS_MBE_0_SMASK				0x3FFFull
 /*
-* Table #113 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_6
+* Table #115 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_6
 * This is the error information CSR for a bit error occurring in the Packet ID 
 * Linked List. State in this CSR is updated when #%%#pktid_list_mbe#%%# or 
 * #%%#pktid_list_sbe#%%# error flags are set.
@@ -2792,7 +2872,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_6_ADDRESS_MBE_4_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_ERR_INFO_PKTID_LIST_BE_6_ADDRESS_MBE_4_SMASK				0x3FFFull
 /*
-* Table #114 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HASH_TABLE_BE
+* Table #116 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HASH_TABLE_BE
 * This is the error information CSR for a bit error occurring in the Hash Table. 
 * State in this CSR is updated when #%%#hash_table_mbe#%%# or #%%#hash_table_sbe#%%# 
 * error flags are set.
@@ -2815,7 +2895,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_HASH_TABLE_BE_ADDRESS_SBE_MASK					0xFFull
 #define FXR_TXOTR_PKT_ERR_INFO_HASH_TABLE_BE_ADDRESS_SBE_SMASK					0xFFull
 /*
-* Table #115 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PSN_CACHE_TAG_MBE
+* Table #117 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PSN_CACHE_TAG_MBE
 * Error Info for the PSN Cache tag #%%#psn_cache_tag_mbe#%%# events. There are 8 
 * ecc domains each domain covers two tag ways. tag_mem[543:0] = 
 * {tag_ecc[7:0][7:0],tag_way_data[7:0][1:0][29:0]}
@@ -2841,7 +2921,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PSN_CACHE_TAG_MBE_MBE_LAST_SYNDROME_MASK				0xFFull
 #define FXR_TXOTR_PKT_ERR_INFO_PSN_CACHE_TAG_MBE_MBE_LAST_SYNDROME_SMASK			0xFFull
 /*
-* Table #116 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PSN_CACHE_TAG_SBE
+* Table #118 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PSN_CACHE_TAG_SBE
 * Error Info for the PSN Cache tag #%%#psn_cache_tag_sbe#%%# events. There are 8 
 * ecc domains each domain covers two tag ways. tag_mem[543:0] = 
 * {tag_ecc[7:0][7:0],tag_way_data[7:0][1:0][29:0]}
@@ -2867,7 +2947,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PSN_CACHE_TAG_SBE_SBE_LAST_SYNDROME_MASK				0xFFull
 #define FXR_TXOTR_PKT_ERR_INFO_PSN_CACHE_TAG_SBE_SBE_LAST_SYNDROME_SMASK			0xFFull
 /*
-* Table #117 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PSN_CACHE_DATA_SBE_MBE
+* Table #119 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PSN_CACHE_DATA_SBE_MBE
 * Error Info for the PSN Cache Data #%%#psn_cache_data_mbe#%%# and 
 * #%%#psn_cache_data_sbe#%%# events. There is no address associated with these. 
 * 
@@ -2890,7 +2970,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PSN_CACHE_DATA_SBE_MBE_MBE_LAST_SYNDROME_MASK			0xFFull
 #define FXR_TXOTR_PKT_ERR_INFO_PSN_CACHE_DATA_SBE_MBE_MBE_LAST_SYNDROME_SMASK			0xFFull
 /*
-* Table #118 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_AT_RSP
+* Table #120 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_AT_RSP
 * This is the error information CSR for a error detected in the AT response 
 * Interface. 
 */
@@ -2906,7 +2986,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_AT_RSP_ENCODING_MASK						0xFull
 #define FXR_TXOTR_PKT_ERR_INFO_AT_RSP_ENCODING_SMASK						0xFull
 /*
-* Table #119 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HI_RSP
+* Table #121 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HI_RSP
 * This is the error information CSR for a error detected in the HI response 
 * Interface. 
 */
@@ -2922,7 +3002,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_HI_RSP_ENCODING_MASK						0xFull
 #define FXR_TXOTR_PKT_ERR_INFO_HI_RSP_ENCODING_SMASK						0xFull
 /*
-* Table #120 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_UNCONNECTED_DLID
+* Table #122 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_UNCONNECTED_DLID
 * This is the error information CSR for error related to unconnected DLID 
 * checks. 
 */
@@ -2938,7 +3018,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_UNCONNECTED_DLID_MCTC_MASK					0xFull
 #define FXR_TXOTR_PKT_ERR_INFO_UNCONNECTED_DLID_MCTC_SMASK					0xFull
 /*
-* Table #121 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKT_DONE
+* Table #123 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_PKT_DONE
 * This is the error information CSR for error related to Packet done interface. 
 * 
 */
@@ -2957,7 +3037,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_PKT_DONE_MCTC_MASK						0x7ull
 #define FXR_TXOTR_PKT_ERR_INFO_PKT_DONE_MCTC_SMASK						0x7ull
 /*
-* Table #122 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HASH_TIMEOUT
+* Table #124 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HASH_TIMEOUT
 * This is the error information CSR for an entry in the Hash Table which has 
 * experienced a timeout. State in this CSR is updated when #%%#hash_timeout#%%# 
 * error flag is set.
@@ -2974,7 +3054,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_HASH_TIMEOUT_ADDR_MASK						0xFFull
 #define FXR_TXOTR_PKT_ERR_INFO_HASH_TIMEOUT_ADDR_SMASK						0xFFull
 /*
-* Table #123 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_TC_PKTID_CAPTURE
+* Table #125 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_TC_PKTID_CAPTURE
 * This is the error information CSR for capturing the Message Class, Traffic 
 * class & packet ID values related to unknown_e2e_cmd_rcvd, psn_max_dist_vio_err, 
 * oos_nack_rcvd, resource_nack_rcvd & non_retransmt_nack_rcvd errors.
@@ -3015,7 +3095,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_TC_PKTID_CAPTURE_NON_RETRANS_NACK_RCVD_PKTID_MASK		0xFFFFull
 #define FXR_TXOTR_PKT_ERR_INFO_TC_PKTID_CAPTURE_NON_RETRANS_NACK_RCVD_PKTID_SMASK		0xFFFFull
 /*
-* Table #124 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_TUPPLE_MISMATCH
+* Table #126 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_TUPPLE_MISMATCH
 * This is the error information CSR for capturing the MCTC & packet ID values 
 * related to tuple mismatch & tuple mismatch opportunistic checks.
 */
@@ -3037,7 +3117,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_TUPPLE_MISMATCH_TUPLE_MISMATCH_OPP_PKTID_MASK			0xFFFFull
 #define FXR_TXOTR_PKT_ERR_INFO_TUPPLE_MISMATCH_TUPLE_MISMATCH_OPP_PKTID_SMASK			0xFFFFull
 /*
-* Table #125 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_FPE_DATA_MEM_BE
+* Table #127 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_FPE_DATA_MEM_BE
 * This is the error information CSR for a bit error occurring in the FPE Data 
 * Memory. State in this CSR is updated when #%%#fpe_data_mem_mbe#%%# or 
 * #%%#fpe_data_mem_sbe#%%# error flags are set.
@@ -3060,7 +3140,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_FPE_DATA_MEM_BE_ADDRESS_SBE_MASK					0x3FFull
 #define FXR_TXOTR_PKT_ERR_INFO_FPE_DATA_MEM_BE_ADDRESS_SBE_SMASK				0x3FFull
 /*
-* Table #126 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_FPE_PROG_MEM_BE
+* Table #128 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_FPE_PROG_MEM_BE
 * This is the error information CSR for a bit error occurring in the FPE Program 
 * Memory. State in this CSR is updated when #%%#fpe_prog_mem_mbe#%%# or 
 * #%%#fpe_prog_mem_sbe#%%# error flags are set.
@@ -3083,7 +3163,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_FPE_PROG_MEM_BE_ADDRESS_SBE_MASK					0x1FFFull
 #define FXR_TXOTR_PKT_ERR_INFO_FPE_PROG_MEM_BE_ADDRESS_SBE_SMASK				0x1FFFull
 /*
-* Table #127 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_FPE_FIRMWARE
+* Table #129 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_FPE_FIRMWARE
 * This is the error information CSR for an error occurring in the firmware of 
 * the Fragmentation Programmable Engine. State in this CSR is updated when 
 * #%%#fpe_firmware#%%# error flag is set.
@@ -3109,7 +3189,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_FPE_FIRMWARE_ENCODING_MASK					0xFFull
 #define FXR_TXOTR_PKT_ERR_INFO_FPE_FIRMWARE_ENCODING_SMASK					0xFFull
 /*
-* Table #128 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HI_HDR_BE
+* Table #130 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HI_HDR_BE
 * This is the error information CSR for a bit error occurring in a Host 
 * Interface response. State in this CSR is updated when #%%#hi_hdr_mbe#%%# or 
 * #%%#hi_hdr_sbe#%%# error flags are set.
@@ -3129,7 +3209,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_HI_HDR_BE_TID_SBE_MASK						0xFFFull
 #define FXR_TXOTR_PKT_ERR_INFO_HI_HDR_BE_TID_SBE_SMASK						0xFFFull
 /*
-* Table #129 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HI_DATA_BE_0
+* Table #131 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HI_DATA_BE_0
 * This is the error information CSR for a bit error occurring in a Host 
 * Interface response. State in this CSR is updated when #%%#hi_data_mbe#%%# or 
 * #%%#hi_data_sbe#%%# error flags are set.
@@ -3161,7 +3241,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_HI_DATA_BE_0_SYNDROME_SBE_0_MASK					0xFFull
 #define FXR_TXOTR_PKT_ERR_INFO_HI_DATA_BE_0_SYNDROME_SBE_0_SMASK				0xFFull
 /*
-* Table #130 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HI_DATA_BE_1
+* Table #132 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_HI_DATA_BE_1
 * This is the error information CSR for a bit error occurring in a Host 
 * Interface response. State in this CSR is updated when #%%#hi_data_mbe#%%# or 
 * #%%#hi_data_sbe#%%# error flags are set.
@@ -3178,7 +3258,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_HI_DATA_BE_1_DOMAIN_SBE_MASK					0xFull
 #define FXR_TXOTR_PKT_ERR_INFO_HI_DATA_BE_1_DOMAIN_SBE_SMASK					0xFull
 /*
-* Table #131 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_PSN_CACHE_SBE_MBE
+* Table #133 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_PSN_CACHE_SBE_MBE
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3208,7 +3288,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_PSN_CACHE_SBE_MBE_PSN_CACHE_TAG_ERR_INJ_MASK_MASK		0xFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_PSN_CACHE_SBE_MBE_PSN_CACHE_TAG_ERR_INJ_MASK_SMASK		0xFFull
 /*
-* Table #132 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_MAX_MTU
+* Table #134 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_MAX_MTU
 * This is the error information CSR for a Maximum MTU violation error occurring 
 * in the Packet Partition. State in this CSR is updated when max_mtu_vio error 
 * flags is set.
@@ -3228,7 +3308,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_MAX_MTU_TC_MASK							0x3ull
 #define FXR_TXOTR_PKT_ERR_INFO_MAX_MTU_TC_SMASK							0x3ull
 /*
-* Table #133 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_RXE2E_STATUS_TO_TIMEOUT
+* Table #135 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INFO_RXE2E_STATUS_TO_TIMEOUT
 * This is the error information CSR for capturing the MCTC & packet ID values 
 * related to RxE2E received Error status and about to timeout checks.
 */
@@ -3250,7 +3330,7 @@
 #define FXR_TXOTR_PKT_ERR_INFO_RXE2E_STATUS_TO_TIMEOUT_RX_STATUS_RXE2E_PKTID_MASK		0xFFFFull
 #define FXR_TXOTR_PKT_ERR_INFO_RXE2E_STATUS_TO_TIMEOUT_RX_STATUS_RXE2E_PKTID_SMASK		0xFFFFull
 /*
-* Table #134 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_0
+* Table #136 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_0
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3271,7 +3351,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_0_FP_FIFO_INJECT_MASK_MASK					0xFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_0_FP_FIFO_INJECT_MASK_SMASK					0xFFFFFFFFull
 /*
-* Table #135 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_1
+* Table #137 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_1
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3292,7 +3372,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_1_PRE_FRAG_FIFO_INJECT_MASK_MASK				0xFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_1_PRE_FRAG_FIFO_INJECT_MASK_SMASK				0xFFFFFFFFull
 /*
-* Table #136 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_2
+* Table #138 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_2
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3313,7 +3393,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_2_POST_FRAG_FIFO_INJECT_MASK_MASK				0xFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_2_POST_FRAG_FIFO_INJECT_MASK_SMASK				0xFFFFFFFFull
 /*
-* Table #137 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_3
+* Table #139 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_3
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3343,7 +3423,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_3_RESERVED_7_0_MASK						0xFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_3_RESERVED_7_0_SMASK						0xFFull
 /*
-* Table #138 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_4
+* Table #140 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_4
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3364,7 +3444,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_4_RETRANS_FIFO_INJECT_MASK_MASK				0xFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_4_RETRANS_FIFO_INJECT_MASK_SMASK				0xFFFFFFFFull
 /*
-* Table #139 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_5
+* Table #141 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_5
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3391,7 +3471,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_5_TX_PSN_FIFO_INJECT_MASK_MASK					0xFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_5_TX_PSN_FIFO_INJECT_MASK_SMASK				0xFFFFFFFFull
 /*
-* Table #140 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_6
+* Table #142 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_6
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3412,7 +3492,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_6_PKTID_LIST_INJECT_MASK_MASK					0xFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_6_PKTID_LIST_INJECT_MASK_SMASK					0xFFFFFFFFFFFFull
 /*
-* Table #141 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_9
+* Table #143 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_9
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3439,7 +3519,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_9_RSP_FIFO_INJECT_MASK_MASK					0xFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_9_RSP_FIFO_INJECT_MASK_SMASK					0xFFFFFFFFull
 /*
-* Table #142 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_10
+* Table #144 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_10
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3460,7 +3540,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_10_HI_DATA_INJECT_MASK_MASK					0xFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_10_HI_DATA_INJECT_MASK_SMASK					0xFFFFFFFFull
 /*
-* Table #143 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_11
+* Table #145 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_11
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3471,20 +3551,20 @@
 */
 #define FXR_TXOTR_PKT_ERR_INJECT_11								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002558)
 #define FXR_TXOTR_PKT_ERR_INJECT_11_RESETCSR							0x0000000000000000ull
-#define FXR_TXOTR_PKT_ERR_INJECT_11_RESERVED_63_18_SHIFT					18
-#define FXR_TXOTR_PKT_ERR_INJECT_11_RESERVED_63_18_MASK						0x3FFFFFFFFFFFull
-#define FXR_TXOTR_PKT_ERR_INJECT_11_RESERVED_63_18_SMASK					0xFFFFFFFFFFFC0000ull
-#define FXR_TXOTR_PKT_ERR_INJECT_11_OPB_OTM_INJECT_EN_SHIFT					17
+#define FXR_TXOTR_PKT_ERR_INJECT_11_RESERVED_63_26_SHIFT					26
+#define FXR_TXOTR_PKT_ERR_INJECT_11_RESERVED_63_26_MASK						0x3FFFFFFFFFull
+#define FXR_TXOTR_PKT_ERR_INJECT_11_RESERVED_63_26_SMASK					0xFFFFFFFFFC000000ull
+#define FXR_TXOTR_PKT_ERR_INJECT_11_OPB_OTM_INJECT_EN_SHIFT					25
 #define FXR_TXOTR_PKT_ERR_INJECT_11_OPB_OTM_INJECT_EN_MASK					0x1ull
-#define FXR_TXOTR_PKT_ERR_INJECT_11_OPB_OTM_INJECT_EN_SMASK					0x20000ull
-#define FXR_TXOTR_PKT_ERR_INJECT_11_OPB_OTM_INJECT_MASK_SHIFT					8
+#define FXR_TXOTR_PKT_ERR_INJECT_11_OPB_OTM_INJECT_EN_SMASK					0x2000000ull
+#define FXR_TXOTR_PKT_ERR_INJECT_11_OPB_OTM_INJECT_MASK_SHIFT					16
 #define FXR_TXOTR_PKT_ERR_INJECT_11_OPB_OTM_INJECT_MASK_MASK					0x1FFull
-#define FXR_TXOTR_PKT_ERR_INJECT_11_OPB_OTM_INJECT_MASK_SMASK					0x1FF00ull
+#define FXR_TXOTR_PKT_ERR_INJECT_11_OPB_OTM_INJECT_MASK_SMASK					0x1FF0000ull
 #define FXR_TXOTR_PKT_ERR_INJECT_11_IOVEC_BUFF_INJECT_EN_SHIFT					0
-#define FXR_TXOTR_PKT_ERR_INJECT_11_IOVEC_BUFF_INJECT_EN_MASK					0xFFull
-#define FXR_TXOTR_PKT_ERR_INJECT_11_IOVEC_BUFF_INJECT_EN_SMASK					0xFFull
+#define FXR_TXOTR_PKT_ERR_INJECT_11_IOVEC_BUFF_INJECT_EN_MASK					0xFFFFull
+#define FXR_TXOTR_PKT_ERR_INJECT_11_IOVEC_BUFF_INJECT_EN_SMASK					0xFFFFull
 /*
-* Table #144 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_12
+* Table #146 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_12
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3495,11 +3575,11 @@
 */
 #define FXR_TXOTR_PKT_ERR_INJECT_12								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002560)
 #define FXR_TXOTR_PKT_ERR_INJECT_12_RESETCSR							0x0000000000000000ull
-#define FXR_TXOTR_PKT_ERR_INJECT_12_IOVEC_BUFF_INJECT_MASK_SHIFT				0
-#define FXR_TXOTR_PKT_ERR_INJECT_12_IOVEC_BUFF_INJECT_MASK_MASK					0xFFFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_ERR_INJECT_12_IOVEC_BUFF_INJECT_MASK_SMASK				0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_ERR_INJECT_12_IOVEC_BUFF_INJECT_MASK_63_0_SHIFT				0
+#define FXR_TXOTR_PKT_ERR_INJECT_12_IOVEC_BUFF_INJECT_MASK_63_0_MASK				0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_ERR_INJECT_12_IOVEC_BUFF_INJECT_MASK_63_0_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
-* Table #145 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_13
+* Table #147 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_13
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3510,17 +3590,11 @@
 */
 #define FXR_TXOTR_PKT_ERR_INJECT_13								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002568)
 #define FXR_TXOTR_PKT_ERR_INJECT_13_RESETCSR							0x0000000000000000ull
-#define FXR_TXOTR_PKT_ERR_INJECT_13_RESERVED_63_45_SHIFT					45
-#define FXR_TXOTR_PKT_ERR_INJECT_13_RESERVED_63_45_MASK						0x7FFFFull
-#define FXR_TXOTR_PKT_ERR_INJECT_13_RESERVED_63_45_SMASK					0xFFFFE00000000000ull
-#define FXR_TXOTR_PKT_ERR_INJECT_13_OPB_INJECT_EN_SHIFT						40
-#define FXR_TXOTR_PKT_ERR_INJECT_13_OPB_INJECT_EN_MASK						0x1Full
-#define FXR_TXOTR_PKT_ERR_INJECT_13_OPB_INJECT_EN_SMASK						0x1F0000000000ull
-#define FXR_TXOTR_PKT_ERR_INJECT_13_OPB_INJECT_MASK_39_0_SHIFT					0
-#define FXR_TXOTR_PKT_ERR_INJECT_13_OPB_INJECT_MASK_39_0_MASK					0xFFFFFFFFFFull
-#define FXR_TXOTR_PKT_ERR_INJECT_13_OPB_INJECT_MASK_39_0_SMASK					0xFFFFFFFFFFull
+#define FXR_TXOTR_PKT_ERR_INJECT_13_IOVEC_BUFF_INJECT_MASK_127_64_SHIFT				0
+#define FXR_TXOTR_PKT_ERR_INJECT_13_IOVEC_BUFF_INJECT_MASK_127_64_MASK				0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_ERR_INJECT_13_IOVEC_BUFF_INJECT_MASK_127_64_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
-* Table #146 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_14
+* Table #148 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_14
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3541,7 +3615,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_14_OPB_INJECT_MASK_39_0_MASK					0xFFFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_14_OPB_INJECT_MASK_39_0_SMASK					0xFFFFFFFFFFull
 /*
-* Table #147 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_15
+* Table #149 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_15
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3562,7 +3636,7 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_15_OPB_INJECT_MASK_39_0_MASK					0xFFFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_15_OPB_INJECT_MASK_39_0_SMASK					0xFFFFFFFFFFull
 /*
-* Table #148 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_16
+* Table #150 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_16
 * Error Injection for the various sbe/mbe fields. Setting a single bit will 
 * cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
 * will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
@@ -3583,9 +3657,29 @@
 #define FXR_TXOTR_PKT_ERR_INJECT_16_OPB_INJECT_MASK_39_0_MASK					0xFFFFFFFFFFull
 #define FXR_TXOTR_PKT_ERR_INJECT_16_OPB_INJECT_MASK_39_0_SMASK					0xFFFFFFFFFFull
 /*
-* Table #149 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_MBE_SAT_COUNT
-* This CSR keeps a track of the MBE errors detected in the Packet 
-* partition.
+* Table #151 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_INJECT_17
+* Error Injection for the various sbe/mbe fields. Setting a single bit will 
+* cause an sbe in the ecc field and cause that bit to be flipped, no data bits 
+* will be flipped. Setting 2 bits will cause an mbe. An even number of bits > 2 
+* may or may not cause an mbe. Setting an odd number of bits that is a legal 
+* syndrome for that data width will cause an sbe and the corresponding data bit 
+* to be flipped. See shrtl_ecc_correct.sv for legal syndromes for each data 
+* width.
+*/
+#define FXR_TXOTR_PKT_ERR_INJECT_17								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002588)
+#define FXR_TXOTR_PKT_ERR_INJECT_17_RESETCSR							0x0000000000000000ull
+#define FXR_TXOTR_PKT_ERR_INJECT_17_RESERVED_63_45_SHIFT					45
+#define FXR_TXOTR_PKT_ERR_INJECT_17_RESERVED_63_45_MASK						0x7FFFFull
+#define FXR_TXOTR_PKT_ERR_INJECT_17_RESERVED_63_45_SMASK					0xFFFFE00000000000ull
+#define FXR_TXOTR_PKT_ERR_INJECT_17_OPB_INJECT_EN_SHIFT						40
+#define FXR_TXOTR_PKT_ERR_INJECT_17_OPB_INJECT_EN_MASK						0x1Full
+#define FXR_TXOTR_PKT_ERR_INJECT_17_OPB_INJECT_EN_SMASK						0x1F0000000000ull
+#define FXR_TXOTR_PKT_ERR_INJECT_17_OPB_INJECT_MASK_39_0_SHIFT					0
+#define FXR_TXOTR_PKT_ERR_INJECT_17_OPB_INJECT_MASK_39_0_MASK					0xFFFFFFFFFFull
+#define FXR_TXOTR_PKT_ERR_INJECT_17_OPB_INJECT_MASK_39_0_SMASK					0xFFFFFFFFFFull
+/*
+* Table #152 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_ERR_MBE_SAT_COUNT
+* This CSR counts the MBE errors detected in the Packet partition.
 */
 #define FXR_TXOTR_PKT_ERR_MBE_SAT_COUNT								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000002700)
 #define FXR_TXOTR_PKT_ERR_MBE_SAT_COUNT_RESETCSR						0x0000000000000000ull
@@ -3596,7 +3690,7 @@
 #define FXR_TXOTR_PKT_ERR_MBE_SAT_COUNT_MBE_SAT_COUNT_MASK					0xFFFFull
 #define FXR_TXOTR_PKT_ERR_MBE_SAT_COUNT_MBE_SAT_COUNT_SMASK					0xFFFFull
 /*
-* Table #150 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PSN_CACHE_TAG_WAY_ENABLE
+* Table #153 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PSN_CACHE_TAG_WAY_ENABLE
 * These bits enable the 16 PSN Cache Tag Ways for filling and evicting. Set bits 
 * to 0 to remove them from
 */
@@ -3609,7 +3703,7 @@
 #define FXR_TXOTR_PKT_DBG_PSN_CACHE_TAG_WAY_ENABLE_WAY_ENABLE_MASK				0xFFFFull
 #define FXR_TXOTR_PKT_DBG_PSN_CACHE_TAG_WAY_ENABLE_WAY_ENABLE_SMASK				0xFFFFull
 /*
-* Table #151 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_ACCESS
+* Table #154 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_ACCESS
 * This CSR grants read access to the Outstanding Packet Buffer 
 * (OPB).
 */
@@ -3637,9 +3731,9 @@
 #define FXR_TXOTR_PKT_DBG_OPB_ACCESS_ADDRESS_MASK						0xFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_ACCESS_ADDRESS_SMASK						0xFFFFull
 /*
-* Table #152 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PAYLOAD0
-* This CSR is the payload register related to #%%#Section 30.7.7.2, 'Outstanding 
-* Packet Buffer Access Debug CSR'#%%# for bits 63:0 of the buffer 
+* Table #155 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PAYLOAD0
+* This CSR is the read data register related to #%%#Section 32.7.7.2, 
+* 'Outstanding Packet Buffer Access Debug CSR'#%%# for bits 63:0 of the buffer 
 * entry.
 */
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD0								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006010)
@@ -3648,9 +3742,9 @@
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD0_DATA_MASK						0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD0_DATA_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #153 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PAYLOAD1
-* This CSR is the payload register related to #%%#Section 30.7.7.2, 'Outstanding 
-* Packet Buffer Access Debug CSR'#%%# for bits 127:64 of the buffer 
+* Table #156 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PAYLOAD1
+* This CSR is the read data register related to #%%#Section 32.7.7.2, 
+* 'Outstanding Packet Buffer Access Debug CSR'#%%# for bits 127:64 of the buffer 
 * entry.
 */
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD1								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006018)
@@ -3659,10 +3753,10 @@
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD1_DATA_MASK						0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD1_DATA_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #154 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PAYLOAD2
-* This CSR is the payload register related to #%%#Section 30.7.7.2, 'Outstanding 
-* Packet Buffer Access Debug CSR'#%%# for bits 191:128 of the buffer 
-* entry.
+* Table #157 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PAYLOAD2
+* This CSR is the read data register related to #%%#Section 32.7.7.2, 
+* 'Outstanding Packet Buffer Access Debug CSR'#%%# for bits 191:128 of the 
+* buffer entry.
 */
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD2								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006020)
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD2_RESETCSR							0x0000000000000000ull
@@ -3670,10 +3764,10 @@
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD2_DATA_MASK						0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD2_DATA_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #155 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PAYLOAD3
-* This CSR is the payload register related to #%%#Section 30.7.7.2, 'Outstanding 
-* Packet Buffer Access Debug CSR'#%%# for bits 255:192 of the buffer 
-* entry.
+* Table #158 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PAYLOAD3
+* This CSR is the read data register related to #%%#Section 32.7.7.2, 
+* 'Outstanding Packet Buffer Access Debug CSR'#%%# for bits 255:192 of the 
+* buffer entry.
 */
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD3								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006028)
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD3_RESETCSR							0x0000000000000000ull
@@ -3681,10 +3775,10 @@
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD3_DATA_MASK						0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD3_DATA_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #156 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PAYLOAD4
-* This CSR is the payload register related to #%%#Section 30.7.7.2, 'Outstanding 
-* Packet Buffer Access Debug CSR'#%%# for bits 319:256 of the buffer 
-* entry.
+* Table #159 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PAYLOAD4
+* This CSR is the read data register related to #%%#Section 32.7.7.2, 
+* 'Outstanding Packet Buffer Access Debug CSR'#%%# for bits 319:256 of the 
+* buffer entry.
 */
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD4								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006030)
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD4_RESETCSR							0x0000000000000000ull
@@ -3692,7 +3786,7 @@
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD4_DATA_MASK						0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_PAYLOAD4_DATA_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #157 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_ACCESS
+* Table #160 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_ACCESS
 * This CSR grants read access to the Packet Identifier List.
 */
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_ACCESS							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006038)
@@ -3719,7 +3813,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_ACCESS_ADDRESS_MASK					0xFFFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_ACCESS_ADDRESS_SMASK					0xFFFFull
 /*
-* Table #158 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_PAYLOAD
+* Table #161 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_PAYLOAD
 * This CSR is the payload register used in conjunction with #%%#TXOTR_PKT_DBG_PKTID_LIST_ACCESS#%%# 
 * CSR to read and write the OTR Packet Identifier List.
 */
@@ -3735,7 +3829,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_PAYLOAD_DATA0_MASK						0x3FFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_PAYLOAD_DATA0_SMASK					0x3FFFull
 /*
-* Table #159 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_HASH_TABLE_ACCESS
+* Table #162 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_HASH_TABLE_ACCESS
 * This CSR grants read access to the Hash Table.
 */
 #define FXR_TXOTR_PKT_DBG_HASH_TABLE_ACCESS							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006048)
@@ -3762,7 +3856,7 @@
 #define FXR_TXOTR_PKT_DBG_HASH_TABLE_ACCESS_ADDRESS_MASK					0x3Full
 #define FXR_TXOTR_PKT_DBG_HASH_TABLE_ACCESS_ADDRESS_SMASK					0x3Full
 /*
-* Table #160 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_HASH_TABLE_PAYLOAD0
+* Table #163 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_HASH_TABLE_PAYLOAD0
 * This CSR is the payload register used in conjunction with #%%#TXOTR_PKT_DBG_HASH_TABLE_ACCESS#%%# 
 * CSR to read the OTR Hash Table bits 63:0.
 */
@@ -3772,7 +3866,7 @@
 #define FXR_TXOTR_PKT_DBG_HASH_TABLE_PAYLOAD0_DATA_MASK						0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_HASH_TABLE_PAYLOAD0_DATA_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #161 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_HASH_TABLE_PAYLOAD1
+* Table #164 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_HASH_TABLE_PAYLOAD1
 * This CSR is the payload register used in conjunction with #%%#TXOTR_PKT_DBG_HASH_TABLE_ACCESS#%%# 
 * CSR to read the OTR Hash Table bits 75:64.
 */
@@ -3785,7 +3879,7 @@
 #define FXR_TXOTR_PKT_DBG_HASH_TABLE_PAYLOAD1_DATA_MASK						0xFFFull
 #define FXR_TXOTR_PKT_DBG_HASH_TABLE_PAYLOAD1_DATA_SMASK					0xFFFull
 /*
-* Table #162 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OTM_ACCESS
+* Table #165 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OTM_ACCESS
 * This CSR grants read access to the Outstanding Translation Memory 
 * (OTM).
 */
@@ -3813,7 +3907,7 @@
 #define FXR_TXOTR_PKT_DBG_OTM_ACCESS_ADDRESS_MASK						0x7Full
 #define FXR_TXOTR_PKT_DBG_OTM_ACCESS_ADDRESS_SMASK						0x7Full
 /*
-* Table #163 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OTM_PAYLOAD0
+* Table #166 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OTM_PAYLOAD0
 * This CSR is the payload register used in conjunction with #%%#TXOTR_PKT_DBG_OTM_ACCESS#%%# 
 * CSR to read the OTR Outstanding Translation Memory bits 63:0.
 */
@@ -3823,7 +3917,7 @@
 #define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD0_DATA_MASK						0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD0_DATA_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #164 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OTM_PAYLOAD1
+* Table #167 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OTM_PAYLOAD1
 * This CSR is the payload register used in conjunction with #%%#TXOTR_PKT_DBG_OTM_ACCESS#%%# 
 * CSR to read the OTR Outstanding Translation Memory bits 127:64.
 */
@@ -3833,135 +3927,20 @@
 #define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD1_DATA_MASK						0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD1_DATA_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #165 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OTM_PAYLOAD2
+* Table #168 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OTM_PAYLOAD2
 * This CSR is the payload register used in conjunction with #%%#TXOTR_PKT_DBG_OTM_ACCESS#%%# 
-* CSR to read the OTR Outstanding Translation Memory bits 136:128.
+* CSR to read the OTR Outstanding Translation Memory bits 141:128.
 */
 #define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006078)
 #define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_RESETCSR							0x0000000000000000ull
-#define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_RESERVED_63_11_SHIFT					11
-#define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_RESERVED_63_11_MASK					0x1FFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_RESERVED_63_11_SMASK					0xFFFFFFFFFFFFF800ull
+#define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_RESERVED_63_14_SHIFT					14
+#define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_RESERVED_63_14_MASK					0x3FFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_RESERVED_63_14_SMASK					0xFFFFFFFFFFFFC000ull
 #define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_DATA_SHIFT						0
-#define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_DATA_MASK						0x7FFull
-#define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_DATA_SMASK						0x7FFull
+#define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_DATA_MASK						0x3FFFull
+#define FXR_TXOTR_PKT_DBG_OTM_PAYLOAD2_DATA_SMASK						0x3FFFull
 /*
-* Table #166 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS
-* This CSR grants read access to the IOVEC Buffer Space.
-*/
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006080)
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESETCSR					0x0080000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_VALID_SHIFT					63
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_VALID_MASK					0x1ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_VALID_SMASK					0x8000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_62_SHIFT				62
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_62_MASK				0x1ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_62_SMASK				0x4000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ECC_SHIFT					61
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ECC_MASK					0x1ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ECC_SMASK					0x2000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_60_SHIFT				60
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_60_MASK				0x1ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_60_SMASK				0x1000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_PAYLOAD_REGS_SHIFT				52
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_PAYLOAD_REGS_MASK				0xFFull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_PAYLOAD_REGS_SMASK				0xFF0000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_51_5_SHIFT				5
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_51_5_MASK				0x7FFFFFFFFFFFull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_51_5_SMASK				0xFFFFFFFFFFFE0ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ADDRESS_SHIFT				0
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ADDRESS_MASK				0x1Full
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ADDRESS_SMASK				0x1Full
-/*
-* Table #167 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0
-* This CSR is the payload register related to #%%#Section 30.7.7.17, 'IOVEC 
-* Buffer Space Access Debug CSR'#%%# for bits 63:0 of the buffer 
-* entry.
-*/
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006088)
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0_RESETCSR					0x0000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0_DATA_SHIFT				0
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0_DATA_MASK					0xFFFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
-/*
-* Table #168 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1
-* This CSR is the payload register related to #%%#Section 30.7.7.17, 'IOVEC 
-* Buffer Space Access Debug CSR'#%%# for bits 127:64 of the buffer 
-* entry.
-*/
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006090)
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1_RESETCSR					0x0000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1_DATA_SHIFT				0
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1_DATA_MASK					0xFFFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
-/*
-* Table #169 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2
-* This CSR is the payload register related to #%%#Section 30.7.7.17, 'IOVEC 
-* Buffer Space Access Debug CSR'#%%# for bits 191:128 of the buffer 
-* entry.
-*/
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006098)
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2_RESETCSR					0x0000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2_DATA_SHIFT				0
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2_DATA_MASK					0xFFFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
-/*
-* Table #170 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3
-* This CSR is the payload register related to #%%#Section 30.7.7.17, 'IOVEC 
-* Buffer Space Access Debug CSR'#%%# for bits 255:192 of the buffer 
-* entry.
-*/
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000060A0)
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3_RESETCSR					0x0000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3_DATA_SHIFT				0
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3_DATA_MASK					0xFFFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
-/*
-* Table #171 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4
-* This CSR is the payload register related to #%%#Section 30.7.7.17, 'IOVEC 
-* Buffer Space Access Debug CSR'#%%# for bits 319:256 of the buffer 
-* entry.
-*/
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000060A8)
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4_RESETCSR					0x0000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4_DATA_SHIFT				0
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4_DATA_MASK					0xFFFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
-/*
-* Table #172 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5
-* This CSR is the payload register related to #%%#Section 30.7.7.17, 'IOVEC 
-* Buffer Space Access Debug CSR'#%%# for bits 383:320 of the buffer 
-* entry.
-*/
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000060B0)
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5_RESETCSR					0x0000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5_DATA_SHIFT				0
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5_DATA_MASK					0xFFFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
-/*
-* Table #173 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6
-* This CSR is the payload register related to #%%#Section 30.7.7.17, 'IOVEC 
-* Buffer Space Access Debug CSR'#%%# for bits 447:384 of the buffer 
-* entry.
-*/
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000060B8)
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6_RESETCSR					0x0000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6_DATA_SHIFT				0
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6_DATA_MASK					0xFFFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
-/*
-* Table #174 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7
-* This CSR is the payload register related to #%%#Section 30.7.7.17, 'IOVEC 
-* Buffer Space Access Debug CSR'#%%# for bits 511:448 of the buffer 
-* entry.
-*/
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000060C0)
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7_RESETCSR					0x0000000000000000ull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7_DATA_SHIFT				0
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7_DATA_MASK					0xFFFFFFFFFFFFFFFFull
-#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
-/*
-* Table #175 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS
+* Table #169 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS
 * This CSR grants write access to the FPE Program Memory.
 */
 #define FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS							(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000060C8)
@@ -3982,8 +3961,8 @@
 #define FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_ADDRESS_MASK					0x1FFFull
 #define FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_ADDRESS_SMASK					0x1FFFull
 /*
-* Table #176 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_PROG_MEM_PAYLOAD0
-* This CSR is the payload register related to #%%#Section 30.7.7.26, 'FPE 
+* Table #170 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_PROG_MEM_PAYLOAD0
+* This CSR is the read data register related to #%%#Section 32.7.7.17, 'FPE 
 * Program Memory Access Debug CSR'#%%# for bits 31:0 of the buffer 
 * entry.
 */
@@ -3996,7 +3975,7 @@
 #define FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_PAYLOAD0_DATA_MASK					0xFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_PAYLOAD0_DATA_SMASK					0xFFFFFFFFull
 /*
-* Table #177 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_DATA_MEM_ACCESS
+* Table #171 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_DATA_MEM_ACCESS
 * This CSR grants write access to the FPE Data Memory.
 */
 #define FXR_TXOTR_PKT_DBG_FPE_DATA_MEM_ACCESS							(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000060D8)
@@ -4017,8 +3996,8 @@
 #define FXR_TXOTR_PKT_DBG_FPE_DATA_MEM_ACCESS_ADDRESS_MASK					0x3FFull
 #define FXR_TXOTR_PKT_DBG_FPE_DATA_MEM_ACCESS_ADDRESS_SMASK					0x3FFull
 /*
-* Table #178 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_DATA_MEM_PAYLOAD0
-* This CSR is the payload register related to #%%#Section 30.7.7.28, 'FPE Data 
+* Table #172 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_DATA_MEM_PAYLOAD0
+* This CSR is the read data register related to #%%#Section 32.7.7.19, 'FPE Data 
 * Memory Access Debug CSR'#%%# for bits 63:0 of the buffer entry.
 */
 #define FXR_TXOTR_PKT_DBG_FPE_DATA_MEM_PAYLOAD0							(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000060E0)
@@ -4027,7 +4006,7 @@
 #define FXR_TXOTR_PKT_DBG_FPE_DATA_MEM_PAYLOAD0_DATA_MASK					0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_FPE_DATA_MEM_PAYLOAD0_DATA_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #179 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FP_PRE_FRAG_FULL_EMPTY
+* Table #173 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FP_PRE_FRAG_FULL_EMPTY
 * This CSR reads the full and empty bits for the Fast-Path and Pre-Fragmentation 
 * Queues. 
 */
@@ -4052,7 +4031,7 @@
 #define FXR_TXOTR_PKT_DBG_FP_PRE_FRAG_FULL_EMPTY_FAST_EMPTY_MASK				0xFFFull
 #define FXR_TXOTR_PKT_DBG_FP_PRE_FRAG_FULL_EMPTY_FAST_EMPTY_SMASK				0xFFFull
 /*
-* Table #180 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_POST_FRAG_RET_FULL_EMPTY
+* Table #174 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_POST_FRAG_RET_FULL_EMPTY
 * This CSR reads the full and empty bits for the Post-Fragmentation and 
 * Post-Fragmentaiton Retransmission Queues. 
 */
@@ -4077,7 +4056,7 @@
 #define FXR_TXOTR_PKT_DBG_POST_FRAG_RET_FULL_EMPTY_POST_EMPTY_MASK				0xFFull
 #define FXR_TXOTR_PKT_DBG_POST_FRAG_RET_FULL_EMPTY_POST_EMPTY_SMASK				0xFFull
 /*
-* Table #181 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_CONTEXT_AVAILABLE_REG
+* Table #175 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_CONTEXT_AVAILABLE_REG
 * This CSR reads the context-available registers of the FPE. 
 */
 #define FXR_TXOTR_PKT_DBG_FPE_CONTEXT_AVAILABLE_REG						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000060F8)
@@ -4089,7 +4068,7 @@
 #define FXR_TXOTR_PKT_DBG_FPE_CONTEXT_AVAILABLE_REG_FPE_MASK					0xFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_FPE_CONTEXT_AVAILABLE_REG_FPE_SMASK					0xFFFFFFFFull
 /*
-* Table #182 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_FP_MSG_COUNT
+* Table #176 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_FP_MSG_COUNT
 * This CSR tracks the number of messages received in the OPB fast path input 
 * queues from the message-level partition. 
 */
@@ -4099,7 +4078,7 @@
 #define FXR_TXOTR_PKT_DBG_OPB_FP_MSG_COUNT_COUNT_MASK						0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_FP_MSG_COUNT_COUNT_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #183 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PRE_FRAG_MSG_COUNT
+* Table #177 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PRE_FRAG_MSG_COUNT
 * This CSR tracks the number of messages received in the OPB pre-fragmentation 
 * input queues from the message-level partition. 
 */
@@ -4109,7 +4088,7 @@
 #define FXR_TXOTR_PKT_DBG_OPB_PRE_FRAG_MSG_COUNT_COUNT_MASK					0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_PRE_FRAG_MSG_COUNT_COUNT_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #184 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_RETRANS_PRE_FRAG_MSG_COUNT
+* Table #178 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_RETRANS_PRE_FRAG_MSG_COUNT
 * This CSR tracks the number of messages received in the OPB pre-fragmentation 
 * retransmission input queues from BPE. 
 */
@@ -4119,7 +4098,7 @@
 #define FXR_TXOTR_PKT_DBG_OPB_RETRANS_PRE_FRAG_MSG_COUNT_COUNT_MASK				0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_RETRANS_PRE_FRAG_MSG_COUNT_COUNT_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
-* Table #185 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_RETRANS_POST_FRAG_MSG_COUNT
+* Table #179 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_RETRANS_POST_FRAG_MSG_COUNT
 * This CSR tracks the number of messages received in the OPB post-fragmentation 
 * retransmission input queues from FPE. 
 */
@@ -4129,7 +4108,7 @@
 #define FXR_TXOTR_PKT_DBG_OPB_RETRANS_POST_FRAG_MSG_COUNT_COUNT_MASK				0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_RETRANS_POST_FRAG_MSG_COUNT_COUNT_SMASK				0xFFFFFFFFFFFFFFFFull
 /*
-* Table #186 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_POST_FRAG_PKT_COUNT
+* Table #180 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_POST_FRAG_PKT_COUNT
 * This CSR tracks the number of messages received in the OPB post-fragmentation 
 * input queues from FPE. 
 */
@@ -4139,7 +4118,7 @@
 #define FXR_TXOTR_PKT_DBG_OPB_POST_FRAG_PKT_COUNT_COUNT_MASK					0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_POST_FRAG_PKT_COUNT_COUNT_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #187 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PKT_COUNT
+* Table #181 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_PKT_COUNT
 * This CSR counts the total number of packets sent through the packet-level 
 * partition. 
 */
@@ -4149,7 +4128,7 @@
 #define FXR_TXOTR_PKT_DBG_OPB_PKT_COUNT_COUNT_MASK						0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_PKT_COUNT_COUNT_SMASK						0xFFFFFFFFFFFFFFFFull
 /*
-* Table #188 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_REPLY_PKT_COUNT
+* Table #182 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OPB_REPLY_PKT_COUNT
 * This CSR counts the total number of reply packets received from 
 * RXE2E.
 */
@@ -4159,7 +4138,7 @@
 #define FXR_TXOTR_PKT_DBG_OPB_REPLY_PKT_COUNT_COUNT_MASK					0xFFFFFFFFFFFFFFFFull
 #define FXR_TXOTR_PKT_DBG_OPB_REPLY_PKT_COUNT_COUNT_SMASK					0xFFFFFFFFFFFFFFFFull
 /*
-* Table #189 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_SHARED_POINTERS
+* Table #183 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_SHARED_POINTERS
 * This CSR shows the current values of the Packet Identifier List shared 
 * pointers.
 */
@@ -4190,7 +4169,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_SHARED_POINTERS_HEAD_0_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_SHARED_POINTERS_HEAD_0_SMASK				0x3FFFull
 /*
-* Table #190 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS00
+* Table #184 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS00
 * This CSR shows the current values of the Packet Identifier List reserved 
 * pointers for TC0.
 */
@@ -4221,7 +4200,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS00_MC0_HEAD_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS00_MC0_HEAD_SMASK				0x3FFFull
 /*
-* Table #191 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS01
+* Table #185 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS01
 * This CSR shows the current values of the Packet Identifier List reserved 
 * pointers for TC0.
 */
@@ -4252,7 +4231,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS01_MC0_HEAD_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS01_MC0_HEAD_SMASK				0x3FFFull
 /*
-* Table #192 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS10
+* Table #186 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS10
 * This CSR shows the current values of the Packet Identifier List reserved 
 * pointers for TC1.
 */
@@ -4283,7 +4262,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS10_MC0_HEAD_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS10_MC0_HEAD_SMASK				0x3FFFull
 /*
-* Table #193 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS11
+* Table #187 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS11
 * This CSR shows the current values of the Packet Identifier List reserved 
 * pointers for TC1.
 */
@@ -4314,7 +4293,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS11_MC0_HEAD_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS11_MC0_HEAD_SMASK				0x3FFFull
 /*
-* Table #194 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS20
+* Table #188 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS20
 * This CSR shows the current values of the Packet Identifier List reserved 
 * pointers for TC2.
 */
@@ -4345,7 +4324,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS20_MC0_HEAD_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS20_MC0_HEAD_SMASK				0x3FFFull
 /*
-* Table #195 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS21
+* Table #189 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS21
 * This CSR shows the current values of the Packet Identifier List reserved 
 * pointers for TC2.
 */
@@ -4376,7 +4355,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS21_MC0_HEAD_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS21_MC0_HEAD_SMASK				0x3FFFull
 /*
-* Table #196 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS30
+* Table #190 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS30
 * This CSR shows the current values of the Packet Identifier List reserved 
 * pointers for TC3.
 */
@@ -4407,7 +4386,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS30_MC0_HEAD_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS30_MC0_HEAD_SMASK				0x3FFFull
 /*
-* Table #197 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS31
+* Table #191 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS31
 * This CSR shows the current values of the Packet Identifier List reserved 
 * pointers for TC3.
 */
@@ -4438,7 +4417,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS31_MC0_HEAD_MASK				0x3FFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_RSVD_POINTERS31_MC0_HEAD_SMASK				0x3FFFull
 /*
-* Table #198 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_PENDING_POINTERS0
+* Table #192 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_PENDING_POINTERS0
 * This CSR shows the current values of the Packet Identifier List Pending ACK 
 * pointers for TC0 and TC1.
 */
@@ -4457,7 +4436,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_PENDING_POINTERS0_TC0_HEAD_MASK				0xFFFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_PENDING_POINTERS0_TC0_HEAD_SMASK				0xFFFFull
 /*
-* Table #199 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_PENDING_POINTERS1
+* Table #193 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_PKTID_LIST_PENDING_POINTERS1
 * This CSR shows the current values of the Packet Identifier List Pending ACK 
 * pointers for TC2 and TC3.
 */
@@ -4476,7 +4455,7 @@
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_PENDING_POINTERS1_TC2_HEAD_MASK				0xFFFFull
 #define FXR_TXOTR_PKT_DBG_PKTID_LIST_PENDING_POINTERS1_TC2_HEAD_SMASK				0xFFFFull
 /*
-* Table #200 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_CONTEXT_ENABLE
+* Table #194 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_CONTEXT_ENABLE
 * This CSR enables access to specific context within the fragmentation engine 
 * (FPE). 
 */
@@ -4558,7 +4537,7 @@
 #define FXR_TXOTR_PKT_DBG_FPE_CONTEXT_ENABLE_MC0TC0_MASK					0x1ull
 #define FXR_TXOTR_PKT_DBG_FPE_CONTEXT_ENABLE_MC0TC0_SMASK					0x1ull
 /*
-* Table #201 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_CONTEXT_MCTC_MAP0
+* Table #195 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_CONTEXT_MCTC_MAP0
 * This CSR indicates which MCTC is occupying a specific FPE context. 
 * 
 */
@@ -4613,7 +4592,7 @@
 #define FXR_TXOTR_PKT_DBG_FPE_CONTEXT_MCTC_MAP0_MC0TC0_MASK					0xFull
 #define FXR_TXOTR_PKT_DBG_FPE_CONTEXT_MCTC_MAP0_MC0TC0_SMASK					0xFull
 /*
-* Table #202 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_CONTEXT_MCTC_MAP1
+* Table #196 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_FPE_CONTEXT_MCTC_MAP1
 * This CSR indicates which MCTC is occupying a specific FPE context. 
 * 
 */
@@ -4647,7 +4626,7 @@
 #define FXR_TXOTR_PKT_DBG_FPE_CONTEXT_MCTC_MAP1_MC0TC0_RSVD_MASK				0xFull
 #define FXR_TXOTR_PKT_DBG_FPE_CONTEXT_MCTC_MAP1_MC0TC0_RSVD_SMASK				0xFull
 /*
-* Table #203 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_MC0_OUTSTANDING_PKT_CNT
+* Table #197 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_MC0_OUTSTANDING_PKT_CNT
 * This CSR keeps a count of the number of outstanding packets for MC0. 
 * 
 */
@@ -4666,7 +4645,7 @@
 #define FXR_TXOTR_PKG_DBG_MC0_OUTSTANDING_PKT_CNT_TC0_MASK					0xFFFFull
 #define FXR_TXOTR_PKG_DBG_MC0_OUTSTANDING_PKT_CNT_TC0_SMASK					0xFFFFull
 /*
-* Table #204 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_MC1_OUTSTANDING_PKT_CNT
+* Table #198 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_MC1_OUTSTANDING_PKT_CNT
 * This CSR keeps a count of the number of outstanding packets for MC1. 
 * 
 */
@@ -4685,7 +4664,7 @@
 #define FXR_TXOTR_PKG_DBG_MC1_OUTSTANDING_PKT_CNT_TC0_MASK					0xFFFFull
 #define FXR_TXOTR_PKG_DBG_MC1_OUTSTANDING_PKT_CNT_TC0_SMASK					0xFFFFull
 /*
-* Table #205 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_TO_NACK_MASK
+* Table #199 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_TO_NACK_MASK
 * This CSR can be used to clear a bit in the Timeout NACK Mask. Hardware detects 
 * a write of one to the #%%#enable#%%# bit and sets the corresponding bit in the 
 * mask (as indicated by #%%#index#%%#) to zero. 
@@ -4702,7 +4681,7 @@
 #define FXR_TXOTR_PKG_DBG_TO_NACK_MASK_INDEX_MASK						0xFFull
 #define FXR_TXOTR_PKG_DBG_TO_NACK_MASK_INDEX_SMASK						0xFFull
 /*
-* Table #206 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_PENDING_RETRANSMIT
+* Table #200 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_PENDING_RETRANSMIT
 * This CSR can be used to clear a bit in the Pending Retransmit Sidecar. 
 * Hardware detects a write of one to the #%%#enable#%%# bit and sets the 
 * corresponding bit in the mask (as indicated by #%%#index#%%#) to zero. 
@@ -4720,7 +4699,7 @@
 #define FXR_TXOTR_PKG_DBG_PENDING_RETRANSMIT_INDEX_MASK						0x3Full
 #define FXR_TXOTR_PKG_DBG_PENDING_RETRANSMIT_INDEX_SMASK					0x3Full
 /*
-* Table #207 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_OOS_NACK_MASK
+* Table #201 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_OOS_NACK_MASK
 * This CSR can be used to clear a bit in the Out-of-Sequence NACK Mask. Hardware 
 * detects a write of one to the #%%#enable#%%# bit and sets the corresponding 
 * bit in the mask (as indicated by #%%#index#%%#) to zero. 
@@ -4737,7 +4716,7 @@
 #define FXR_TXOTR_PKG_DBG_OOS_NACK_MASK_INDEX_MASK						0x3Full
 #define FXR_TXOTR_PKG_DBG_OOS_NACK_MASK_INDEX_SMASK						0x3Full
 /*
-* Table #208 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_HEAD_PENDING
+* Table #202 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKG_DBG_HEAD_PENDING
 * This CSR can be used to clear a bit in the Head Pending Sidecar. Hardware 
 * detects a write of one to the #%%#enable#%%# bit and sets the corresponding 
 * bit in the mask (as indicated by #%%#index#%%#) to zero. 
@@ -4754,10 +4733,228 @@
 #define FXR_TXOTR_PKG_DBG_HEAD_PENDING_INDEX_MASK						0xFFull
 #define FXR_TXOTR_PKG_DBG_HEAD_PENDING_INDEX_SMASK						0xFFull
 /*
-* Table #209 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_OPB_ENTRIES_X
+* Table #203 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0
+* This CSR can be used to read the outstanding byte count for TC0.
+*/
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006358)
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_RESERVED_63_50_SHIFT				50
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_RESERVED_63_50_MASK				0x3FFFull
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_RESERVED_63_50_SMASK				0xFFFC000000000000ull
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_STATUS_SHIFT					48
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_STATUS_MASK					0x3ull
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_STATUS_SMASK					0x3000000000000ull
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_COUNT_SHIFT					0
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_COUNT_MASK					0xFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_OUTSTANDING_BYTE_CNT0_COUNT_SMASK					0xFFFFFFFFFFFFull
+/*
+* Table #204 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS
+* This CSR grants read access to the IOVEC Buffer Space.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006360)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESETCSR					0x0100000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_VALID_SHIFT					63
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_VALID_MASK					0x1ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_VALID_SMASK					0x8000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_62_SHIFT				62
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_62_MASK				0x1ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_62_SMASK				0x4000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ECC_SHIFT					61
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ECC_MASK					0x1ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ECC_SMASK					0x2000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_60_SHIFT				60
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_60_MASK				0x1ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_60_SMASK				0x1000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_PAYLOAD_REGS_SHIFT				52
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_PAYLOAD_REGS_MASK				0xFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_PAYLOAD_REGS_SMASK				0xFF0000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_51_5_SHIFT				5
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_51_5_MASK				0x7FFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_RESERVED_51_5_SMASK				0xFFFFFFFFFFFE0ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ADDRESS_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ADDRESS_MASK				0x1Full
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_ACCESS_ADDRESS_SMASK				0x1Full
+/*
+* Table #205 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 63:0 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006368)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD0_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #206 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 127:64 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006370)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD1_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #207 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 191:128 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006378)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD2_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #208 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 255:192 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006380)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD3_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #209 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 319:256 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006388)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD4_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #210 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 383:320 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006390)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD5_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #211 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 447:384 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000006398)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD6_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #212 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 511:448 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000063A0)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD7_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #213 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD8
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 575:512 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD8						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000063A8)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD8_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD8_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD8_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD8_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #214 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD9
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 639:576 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD9						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000063B0)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD9_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD9_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD9_DATA_MASK					0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD9_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #215 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD10
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 703:640 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD10						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000063B8)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD10_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD10_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD10_DATA_MASK				0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD10_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #216 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD11
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 767:704 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD11						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000063C0)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD11_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD11_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD11_DATA_MASK				0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD11_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #217 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD12
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 831:768 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD12						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000063C8)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD12_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD12_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD12_DATA_MASK				0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD12_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #218 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD13
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 895:832of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD13						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000063D0)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD13_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD13_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD13_DATA_MASK				0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD13_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #219 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD14
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 959:896 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD14						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000063D8)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD14_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD14_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD14_DATA_MASK				0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD14_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #220 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD15
+* This CSR is the read data register related to #%%#Section 32.7.7.52, 'IOVEC 
+* Buffer Space Access Debug CSR'#%%# for bits 1023:960 of the buffer 
+* entry.
+*/
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD15						(FXR_TX_OTR_PKT_TOP_CSRS + 0x0000000063E0)
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD15_RESETCSR					0x0000000000000000ull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD15_DATA_SHIFT				0
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD15_DATA_MASK				0xFFFFFFFFFFFFFFFFull
+#define FXR_TXOTR_PKT_DBG_IOVEC_BUFFER_SPACE_PAYLOAD15_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
+/*
+* Table #221 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_OPB_ENTRIES_X
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of OPB entries. See more details in Performance Counters Specification, 
-* page #%%#524#%%#.
+* page #%%#667#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_STALL_OPB_ENTRIES_X							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008000)
 #define FXR_TXOTR_PKT_PRF_STALL_OPB_ENTRIES_X_RESETCSR						0x0000000000000008ull
@@ -4768,10 +4965,10 @@
 #define FXR_TXOTR_PKT_PRF_STALL_OPB_ENTRIES_X_MCTC_MASK						0xFull
 #define FXR_TXOTR_PKT_PRF_STALL_OPB_ENTRIES_X_MCTC_SMASK					0xFull
 /*
-* Table #210 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_OPB_ENTRIES_Y
+* Table #222 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_OPB_ENTRIES_Y
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of OPB entries. See more details in Performance Counters Specification, 
-* page #%%#524#%%#.
+* page #%%#667#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_STALL_OPB_ENTRIES_Y							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008008)
 #define FXR_TXOTR_PKT_PRF_STALL_OPB_ENTRIES_Y_RESETCSR						0x000000000000000Aull
@@ -4782,10 +4979,10 @@
 #define FXR_TXOTR_PKT_PRF_STALL_OPB_ENTRIES_Y_MCTC_MASK						0xFull
 #define FXR_TXOTR_PKT_PRF_STALL_OPB_ENTRIES_Y_MCTC_SMASK					0xFull
 /*
-* Table #211 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_X
+* Table #223 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_X
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of TXDMA credits. See more details in Performance Counters Specification, 
-* page #%%#524#%%#.
+* page #%%#667#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_X							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008010)
 #define FXR_TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_X_RESETCSR					0x0000000000000008ull
@@ -4796,10 +4993,10 @@
 #define FXR_TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_X_MCTC_MASK					0xFull
 #define FXR_TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_X_MCTC_SMASK					0xFull
 /*
-* Table #212 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_Y
+* Table #224 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_Y
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of TXDMA credits. See more details in Performance Counters Specification, 
-* page #%%#524#%%#.
+* page #%%#667#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_Y							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008018)
 #define FXR_TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_Y_RESETCSR					0x000000000000000Aull
@@ -4810,10 +5007,10 @@
 #define FXR_TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_Y_MCTC_MASK					0xFull
 #define FXR_TXOTR_PKT_PRF_STALL_TXDMA_CREDITS_Y_MCTC_SMASK					0xFull
 /*
-* Table #213 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_X
+* Table #225 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_X
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of Packet Partition to Message Partition credits. See more details in 
-* Performance Counters Specification, page #%%#525#%%#.
+* Performance Counters Specification, page #%%#667#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_X						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008020)
 #define FXR_TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_X_RESETCSR					0x0000000000000004ull
@@ -4824,10 +5021,10 @@
 #define FXR_TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_X_MCTC_MASK					0x7ull
 #define FXR_TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_X_MCTC_SMASK					0x7ull
 /*
-* Table #214 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_Y
+* Table #226 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_Y
 * This CSR configures the performance registers used to track stalling due to a 
 * lack of Packet Partition to Message Partition credits. See more details in 
-* Performance Counters Specification, page #%%#525#%%#.
+* Performance Counters Specification, page #%%#667#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_Y						(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008028)
 #define FXR_TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_Y_RESETCSR					0x0000000000000000ull
@@ -4838,11 +5035,11 @@
 #define FXR_TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_Y_MCTC_MASK					0x7ull
 #define FXR_TXOTR_PKT_PRF_STALL_P_TO_M_CREDITS_Y_MCTC_SMASK					0x7ull
 /*
-* Table #215 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_LATENCY
+* Table #227 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_LATENCY
 * This CSR configures the latency buckets for responses from the network. There 
 * are five buckets into which response latencies can be binned: A, B, C, D, and 
 * E. See more details in Performance Counters Specification, page 
-* #%%#526#%%#.
+* #%%#668#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_LATENCY								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008030)
 #define FXR_TXOTR_PKT_PRF_LATENCY_RESETCSR							0x0000CCC999666333ull
@@ -4862,10 +5059,10 @@
 #define FXR_TXOTR_PKT_PRF_LATENCY_A_MAX_MASK							0xFFFull
 #define FXR_TXOTR_PKT_PRF_LATENCY_A_MAX_SMASK							0xFFFull
 /*
-* Table #216 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_PKTS_OPENED_X
+* Table #228 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_PKTS_OPENED_X
 * This CSR configures the performance registers used to track the number of 
 * packets generated by TXOTR. See more details in Performance Counters 
-* Specification, page #%%#526#%%#.
+* Specification, page #%%#668#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_PKTS_OPENED_X								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008038)
 #define FXR_TXOTR_PKT_PRF_PKTS_OPENED_X_RESETCSR						0x0000000000000008ull
@@ -4876,10 +5073,10 @@
 #define FXR_TXOTR_PKT_PRF_PKTS_OPENED_X_MCTC_MASK						0xFull
 #define FXR_TXOTR_PKT_PRF_PKTS_OPENED_X_MCTC_SMASK						0xFull
 /*
-* Table #217 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_PKTS_CLOSED_X
+* Table #229 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_PKTS_CLOSED_X
 * This CSR configures the performance registers used to track the number of 
 * packets completed by TXOTR. See more details in Performance Counters 
-* Specification, page #%%#526#%%#.
+* Specification, page #%%#668#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_PKTS_CLOSED_X								(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008040)
 #define FXR_TXOTR_PKT_PRF_PKTS_CLOSED_X_RESETCSR						0x0000000000000008ull
@@ -4890,10 +5087,10 @@
 #define FXR_TXOTR_PKT_PRF_PKTS_CLOSED_X_MCTC_MASK						0xFull
 #define FXR_TXOTR_PKT_PRF_PKTS_CLOSED_X_MCTC_SMASK						0xFull
 /*
-* Table #218 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_RETRANS_LIMIT_RCHD_X
+* Table #230 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_RETRANS_LIMIT_RCHD_X
 * This CSR configures the performance registers used to detect the 
 * retransmission limit reached condition. See more details in Performance 
-* Counters Specification, page #%%#526#%%#.
+* Counters Specification, page #%%#668#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_RETRANS_LIMIT_RCHD_X							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008048)
 #define FXR_TXOTR_PKT_PRF_RETRANS_LIMIT_RCHD_X_RESETCSR						0x0000000000000004ull
@@ -4904,10 +5101,10 @@
 #define FXR_TXOTR_PKT_PRF_RETRANS_LIMIT_RCHD_X_TC_MASK						0x7ull
 #define FXR_TXOTR_PKT_PRF_RETRANS_LIMIT_RCHD_X_TC_SMASK						0x7ull
 /*
-* Table #219 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_LOCAL_SEQ_STALL_X
+* Table #231 of fxr_tx_otr_pkt_top_csrs - TXOTR_PKT_PRF_LOCAL_SEQ_STALL_X
 * This CSR configures the performance registers used to detect the local 
 * sequence stall condition. See more details in Performance Counters 
-* Specification, page #%%#526#%%#.
+* Specification, page #%%#668#%%#.
 */
 #define FXR_TXOTR_PKT_PRF_LOCAL_SEQ_STALL_X							(FXR_TX_OTR_PKT_TOP_CSRS + 0x000000008050)
 #define FXR_TXOTR_PKT_PRF_LOCAL_SEQ_STALL_X_RESETCSR						0x0000000000000008ull

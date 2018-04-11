@@ -1,9 +1,138 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
-#ifndef ___FZC_lcb_CSRS_H__
-#define ___FZC_lcb_CSRS_H__
+#ifndef ___OC_lcb_CSRS_H__
+#define ___OC_lcb_CSRS_H__
+
+// OC_CFG_TX_FIFOS_RADR desc:
+typedef union {
+    struct {
+        uint64_t              RST_VAL  :  3; // 2 not functional 3 not functional 4 functional. 5 less latency than4 6 functional with min latency
+        uint64_t             Unused_3  :  1; // Unused
+        uint64_t            ON_REINIT  :  1; // Enables TX_FIFOS_RESET on neg edge of tx_ltp_mode
+        uint64_t          Unused_63_5  : 59; // Unused
+    } field;
+    uint64_t val;
+} OC_CFG_TX_FIFOS_RADR_t;
+
+// OC_CFG_RX_FIFOS_RADR desc:
+typedef union {
+    struct {
+        uint64_t              RST_VAL  :  4; // reset value. Increase toward 0xf to reduce latency (this will cause bad crcs), decrease to add latency. 0xc: will be tested post Silicon for functionality to minimize latency 0xb: min latency, radr follows wadr with min delay 0xa: more latency than 0xb 9: more latency than 10 0 - 8 & 0xd - 0xf: Undefined
+        uint64_t       OK_TO_JUMP_VAL  :  4; // Obsolete feature that is removed from Otter Creek
+        uint64_t      DO_NOT_JUMP_VAL  :  4; // Obsolete feature that is removed from Otter Creek
+        uint64_t         Unused_63_12  : 52; // Unused
+    } field;
+    uint64_t val;
+} OC_CFG_RX_FIFOS_RADR_t;
+
+// OC_CFG_LM_MUXSEL_0 desc:
+typedef union {
+    struct {
+        uint64_t               SELECT  :  1; // Logic monitor Mux select all of OC 1: Select this OC for logic monitoring 0: Bypass. This OC is not selected for logic monitoring
+        uint64_t            OC_SELECT  :  3; // Logic monitor Mux select for OC modules 7-5: No connect 4: LWEG 3: 8051 2: BCC 1: No connect 0: LCB
+        uint64_t     CSR_CHAIN_SELECT  :  3; // Logic monitor Mux select for CSR Chain 7-0: unused
+        uint64_t           BCC_SELECT  :  4; // F-9: No connect 8: {q_newft, nrzsrx, lrbrx, xfm1, xfo, xfop1, offerror, xfgem1, startdet, nlrbge168, newfrmsync, newfslost, delnrzsrx, frmptr46, parerror, stoperror, zerror, starterror, failtest, q_nrzsrxlrb, q_nrzsrxlrb_d, q_nrzsrxprb, q_rxparity, q_frmsync_d, q_nfail, q_xfercnt, q_offset, q_fstry, q_fsgood, q_n1, q_frmptr, q_nlrb, q_frame, q_totfsfail, q_nver, q_frmerrcnt_en} 7: {i_crk8051_bcc_addr, i_crk8051_bcc_data, i_crk8051_bcc_lrw, o_bcc_crk8051_data, o_bcc_crk8051_newfrm, o_bcc_crk8051_rdwr_ack, lanematch, 0, 0, newwetx, newretx, newwerx, newrerx, q_txfrmvalid, frmvalidset, frmvalidclr, 0, 0, q_remote_node_type, q_remote_fwvrfy_dsbld, q_remote_portno, q_guid_to_8051} 6: {ccabsval, q_abfilt, norq_delnrzs, selcnt, nxtcnt, o_q_errcnt, delnrzs, q_cumcnt, errcntt, errcntc, diffc, difft} 5: {delnrzs, q_cumcnt, errcntt, errcntc, xpnewc, xpnewt, rxinn, q_rxin_relay} 4: {q_newft, nrzsrx, lrbrx, xfm1, xfo, xfop1, offerror, xfgem1, startdet, nlrbge168, newfrmsync, newfslost, delnrzsrx, frmptr46, parerror, stoperror, zerror, starterror, failtest, q_nrzsrxlrb, q_nrzsrxlrb_d, q_nrzsrxprb, q_rxparity, q_frmsync_d, q_nfail, q_xfercnt, q_offset, q_fstry, q_fsgood, q_n1, q_frmptr, q_nlrb, q_frame, q_totfsfail, q_nver, q_frmerrcnt_en} 3: {flip_bunch_of_bits_on_this_xfer, q_xfer_cnt, q_xfer_cnt_2, q_xfer_cnt_3, flip_entire_xfers_for_a_while, flip_entire_xfers, q_enable_flip_entire_xfers_cnt, i_crk8051_bcc_addr, i_crk8051_bcc_data[7:4]} 2: {frmtx[28:0], q_frmtx, frmaddr, q_txfrmno, txgen_out, frmrxread, q_frmrxread, 0, q_newft, q_type_match_on_rxfrm_loading, q_data_match_on_rxfrm_loading, 0, goodframe, frmrx[4], frmrx[3], frmrx[2], frmrx[1], frmrx[0]} 1: {lrb, xfgem1, prbs31, frame, xfm1, q_nrzstx, q_parity, q_nlrb, q_xfercnt} 0: {nrzsrx, lrbrx, xfm1, xfo, xfop1, offerror, xfgem1, startdet, nlrbge168, newfrmsync, newfslost, delnrzsrx, frmptr46, parerror, stoperror, zerror, starterror, failtest, q_nrzsrxlrb, q_nrzsrxlrb_d, q_nrzsrxprb, q_rxparity, q_frmsync_d, q_nfail, q_xfercnt, q_offset, q_fstry, q_fsgood, q_n1, q_frmptr, q_nlrb, q_frame, q_totfsfail, q_nver, q_frmerrcnt_en}
+        uint64_t      BCC_INST_SELECT  :  2; // Logic monitor Mux select for BCC instance. Select which BCC instance (0-3) to monitor. 3: BCC3 2: BCC2 1: BCC1 0: BCC0
+        uint64_t       CRK8051_SELECT  :  3; // Logic monitor Mux select for 8051 7-1: unused 0: 8051 logic monitor bundle (q_proc_halt_flg, q_heartbeat_track_cnt[18:0], q_heartbeat_track_prv[7:0], q_ext_dev_req_state[1:0], q_host_cmd_state[1:0], w_csr_ram_acc_dbg_st_auto_incr_wt[1:0], w_dram_o_dbg_csr_access_state[4:0], w_proc_o_destin_a[7:0], w_proc_o_destin_do[7:0], q_lm_pd_relay_w_proc_o_source_a[7:0], w_dram_o_proc_access_data_out[7:0], w_dram_i_proc_access_data_in[7:0], 1'b0, w_esfr_i_rd_ena, w_dram_i_proc_access_rd_ena, w_dram_i_proc_access_wt_ena, w_dram_i_proc_access_address[11:0], w_esfr_i_din[7:0], w_esfr_o_dout[7:0], w_esfr_i_wt_ena, w_esfr_i_rd_addr[6:0], w_cram_i_proc_access_rd_ena, w_esfr_i_wt_addr[6:0], q_cram_o_proc_access_data_out[7:0], q_proc_o_proga[15:0])
+        uint64_t           LCB_SELECT  :  4; // Logic monitor Mux select for 8051 F : unused E: FEC rx_data_from_lane_unscrambling_to_fec D: FEC rx_fec_errorvalue[319:160] C: FEC rx_fec_errorvalue[159:0] B: FEC fec_symbols A: RX MISC1 (send_RndTripMrkrLTP, rxfifo_wadr_at0, rxfifo_radr) 9: RX MISC0 (rx_ltp_mode, rcvd_RndTripMrkrLTP, rcvd_RetryReqLTPptr, rcvd_RetryReqLTP, lcb_sts_flit_quiet_cntr, lcb_err_sts_unexpected_round_trip_marker, lcb_err_sts_unexpected_replay_marker, lcb_err_sts_seq_crc_err, lcb_err_sts_rst_for_incomplt_rnd_trip, lcb_err_sts_rst_for_failed_deskew, lcb_err_sts_lost_reinit_stall_or_tos, lcb_err_sts_illegal_null_ltp, lcb_err_sts_all_lns_failed_reinit_test, lcb_pg_sts_flg_miscompare, rx_pipe_lcb_fpc_vl_ack_dat, rx_pipe_good_crc, rx_pipe_bad_crc) 8: RX_FLITS 7: RX_LANE lanes 3and 2 6: RX_LANE lanes 1 and 0 5: TX MISC (tx_qflit_ack, send_reinit_null_signals, q_tossing, illegal_null_ltp, illegal_flit_encoding, flit_input_buf_sbe, flit_input_buf_oflw, flit_input_buf_mbe, multi_cclk_wide_tx_cclk, lcb_fpc_side_ack, input_buf_full, input_buf_empty, fpc_lcb_vl_ack) 4: LCB ERROR FLAGS, input_buf_wadr, input_buf_radr 3: TX_PIPE lanes 3, 2, 1, and 0 2: TX_FIFO lanes 3and 2 1: TX_FIFO lanes 1 and 0 0: TX_FLITS
+        uint64_t         Unused_63_20  : 44; // Unused
+    } field;
+    uint64_t val;
+} OC_CFG_LM_MUXSEL_0_t;
+
+// OC_CFG_LM_MUXSEL_1 desc:
+typedef union {
+    struct {
+        uint64_t               SELECT  :  1; // Logic monitor Mux select all of OC 1: Select this OC for logic monitoring 0: Bypass. This OC is not selected for logic monitoring
+        uint64_t            OC_SELECT  :  3; // Logic monitor Mux select for OC modules 7-5: No connect 4: LWEG 3: 8051 2: BCC 1: No connect 0: LCB
+        uint64_t     CSR_CHAIN_SELECT  :  3; // Logic monitor Mux select for CSR Chain 7-0: unused
+        uint64_t           BCC_SELECT  :  4; // F-9: No connect 8: {q_newft, nrzsrx, lrbrx, xfm1, xfo, xfop1, offerror, xfgem1, startdet, nlrbge168, newfrmsync, newfslost, delnrzsrx, frmptr46, parerror, stoperror, zerror, starterror, failtest, q_nrzsrxlrb, q_nrzsrxlrb_d, q_nrzsrxprb, q_rxparity, q_frmsync_d, q_nfail, q_xfercnt, q_offset, q_fstry, q_fsgood, q_n1, q_frmptr, q_nlrb, q_frame, q_totfsfail, q_nver, q_frmerrcnt_en} 7: {i_crk8051_bcc_addr, i_crk8051_bcc_data, i_crk8051_bcc_lrw, o_bcc_crk8051_data, o_bcc_crk8051_newfrm, o_bcc_crk8051_rdwr_ack, lanematch, 0, 0, newwetx, newretx, newwerx, newrerx, q_txfrmvalid, frmvalidset, frmvalidclr, 0, 0, q_remote_node_type, q_remote_fwvrfy_dsbld, q_remote_portno, q_guid_to_8051} 6: {ccabsval, q_abfilt, norq_delnrzs, selcnt, nxtcnt, o_q_errcnt, delnrzs, q_cumcnt, errcntt, errcntc, diffc, difft} 5: {delnrzs, q_cumcnt, errcntt, errcntc, xpnewc, xpnewt, rxinn, q_rxin_relay} 4: {q_newft, nrzsrx, lrbrx, xfm1, xfo, xfop1, offerror, xfgem1, startdet, nlrbge168, newfrmsync, newfslost, delnrzsrx, frmptr46, parerror, stoperror, zerror, starterror, failtest, q_nrzsrxlrb, q_nrzsrxlrb_d, q_nrzsrxprb, q_rxparity, q_frmsync_d, q_nfail, q_xfercnt, q_offset, q_fstry, q_fsgood, q_n1, q_frmptr, q_nlrb, q_frame, q_totfsfail, q_nver, q_frmerrcnt_en} 3: {flip_bunch_of_bits_on_this_xfer, q_xfer_cnt, q_xfer_cnt_2, q_xfer_cnt_3, flip_entire_xfers_for_a_while, flip_entire_xfers, q_enable_flip_entire_xfers_cnt, i_crk8051_bcc_addr, i_crk8051_bcc_data[7:4]} 2: {frmtx[28:0], q_frmtx, frmaddr, q_txfrmno, txgen_out, frmrxread, q_frmrxread, 0, q_newft, q_type_match_on_rxfrm_loading, q_data_match_on_rxfrm_loading, 0, goodframe, frmrx[4], frmrx[3], frmrx[2], frmrx[1], frmrx[0]} 1: {lrb, xfgem1, prbs31, frame, xfm1, q_nrzstx, q_parity, q_nlrb, q_xfercnt} 0: {nrzsrx, lrbrx, xfm1, xfo, xfop1, offerror, xfgem1, startdet, nlrbge168, newfrmsync, newfslost, delnrzsrx, frmptr46, parerror, stoperror, zerror, starterror, failtest, q_nrzsrxlrb, q_nrzsrxlrb_d, q_nrzsrxprb, q_rxparity, q_frmsync_d, q_nfail, q_xfercnt, q_offset, q_fstry, q_fsgood, q_n1, q_frmptr, q_nlrb, q_frame, q_totfsfail, q_nver, q_frmerrcnt_en}
+        uint64_t      BCC_INST_SELECT  :  2; // Logic monitor Mux select for BCC instance. Select which BCC instance (0-3) to monitor. 3: BCC3 2: BCC2 1: BCC1 0: BCC0
+        uint64_t       CRK8051_SELECT  :  3; // Logic monitor Mux select for 8051 7-1: unused 0: 8051 logic monitor bundle (q_proc_halt_flg, q_heartbeat_track_cnt[18:0], q_heartbeat_track_prv[7:0], q_ext_dev_req_state[1:0], q_host_cmd_state[1:0], w_csr_ram_acc_dbg_st_auto_incr_wt[1:0], w_dram_o_dbg_csr_access_state[4:0], w_proc_o_destin_a[7:0], w_proc_o_destin_do[7:0], q_lm_pd_relay_w_proc_o_source_a[7:0], w_dram_o_proc_access_data_out[7:0], w_dram_i_proc_access_data_in[7:0], 1'b0, w_esfr_i_rd_ena, w_dram_i_proc_access_rd_ena, w_dram_i_proc_access_wt_ena, w_dram_i_proc_access_address[11:0], w_esfr_i_din[7:0], w_esfr_o_dout[7:0], w_esfr_i_wt_ena, w_esfr_i_rd_addr[6:0], w_cram_i_proc_access_rd_ena, w_esfr_i_wt_addr[6:0], q_cram_o_proc_access_data_out[7:0], q_proc_o_proga[15:0])
+        uint64_t           LCB_SELECT  :  4; // Logic monitor Mux select for 8051 F : unused E: FEC rx_data_from_lane_unscrambling_to_fec D: FEC rx_fec_errorvalue[319:160] C: FEC rx_fec_errorvalue[159:0] B: FEC fec_symbols A: RX MISC1 (send_RndTripMrkrLTP, rxfifo_wadr_at0, rxfifo_radr) 9: RX MISC0 (rx_ltp_mode, rcvd_RndTripMrkrLTP, rcvd_RetryReqLTPptr, rcvd_RetryReqLTP, lcb_sts_flit_quiet_cntr, lcb_err_sts_unexpected_round_trip_marker, lcb_err_sts_unexpected_replay_marker, lcb_err_sts_seq_crc_err, lcb_err_sts_rst_for_incomplt_rnd_trip, lcb_err_sts_rst_for_failed_deskew, lcb_err_sts_lost_reinit_stall_or_tos, lcb_err_sts_illegal_null_ltp, lcb_err_sts_all_lns_failed_reinit_test, lcb_pg_sts_flg_miscompare, rx_pipe_lcb_fpc_vl_ack_dat, rx_pipe_good_crc, rx_pipe_bad_crc) 8: RX_FLITS 7: RX_LANE lanes 3and 2 6: RX_LANE lanes 1 and 0 5: TX MISC (tx_qflit_ack, send_reinit_null_signals, q_tossing, illegal_null_ltp, illegal_flit_encoding, flit_input_buf_sbe, flit_input_buf_oflw, flit_input_buf_mbe, multi_cclk_wide_tx_cclk, lcb_fpc_side_ack, input_buf_full, input_buf_empty, fpc_lcb_vl_ack) 4: LCB ERROR FLAGS, input_buf_wadr, input_buf_radr 3: TX_PIPE lanes 3, 2, 1, and 0 2: TX_FIFO lanes 3and 2 1: TX_FIFO lanes 1 and 0 0: TX_FLITS
+        uint64_t         Unused_63_20  : 44; // Unused
+    } field;
+    uint64_t val;
+} OC_CFG_LM_MUXSEL_1_t;
+
+// OC_LCB_CFG_LWEG_MODE desc:
+typedef union {
+    struct {
+        uint64_t                   EN  :  1; // Define whether or not OC is in LWEG mode.
+        uint64_t           Unused_3_1  :  3; // Unused
+        uint64_t             RESET_TX  :  1; // Set then Clear this to reset the Tx FIFO pointers using OC_CFG_TX_FIFOS_RADR
+        uint64_t           Unused_7_5  :  3; // Unused
+        uint64_t             RESET_RX  :  1; // Set then Clear this to reset the Rx FIFO pointers using OC_CFG_RX_FIFOS_RADR
+        uint64_t          Unused_63_9  : 55; // Unused
+    } field;
+    uint64_t val;
+} OC_LCB_CFG_LWEG_MODE_t;
+
+// OC_LCB_CFG_BCC_RESET desc:
+typedef union {
+    struct {
+        uint64_t                   EN  :  1; // Set then clear this bit to reset everything in the BCC.
+        uint64_t          Unused_63_1  : 63; // Unused
+    } field;
+    uint64_t val;
+} OC_LCB_CFG_BCC_RESET_t;
+
+// OC_LCB_CFG_8051_RESET desc:
+typedef union {
+    struct {
+        uint64_t                   EN  :  1; // Set then clearn this bit to reset everything in the 8051.
+        uint64_t          Unused_63_1  : 63; // Unused
+    } field;
+    uint64_t val;
+} OC_LCB_CFG_8051_RESET_t;
+
+// OC_LCB_CFG_PUSH desc:
+typedef union {
+    struct {
+        uint64_t                  DIR  :  1; // Default bit flow direction is south and east. For Apple River: - physical ports 1-16, 25-32 and 41-48 should leave this bit as 0. - physical ports 17-24, 33-40 and 49-64 should set this bit to 1.
+        uint64_t          Unused_63_1  : 63; // Unused
+    } field;
+    uint64_t val;
+} OC_LCB_CFG_PUSH_t;
+
+// OC_LCB_CFG_BCC_MODE desc:
+typedef union {
+    struct {
+        uint64_t                  VAL  :  1; // Set this to put the LCB into BCC support mode
+        uint64_t           Unused_3_1  :  3; // Unused
+        uint64_t             RESET_TX  :  1; // Set then Clear this to reset the Tx FIFO pointers using OC_CFG_TX_FIFOS_RADR
+        uint64_t           Unused_7_5  :  3; // Unused
+        uint64_t             RESET_RX  :  1; // Set then Clear this to reset the Rx FIFO pointers using OC_CFG_RX_FIFOS_RADR
+        uint64_t          Unused_63_9  : 55; // Unused
+    } field;
+    uint64_t val;
+} OC_LCB_CFG_BCC_MODE_t;
+
+// OC_LCB_CSR_CHAIN_ERR_STATUS desc:
+typedef union {
+    struct {
+        uint64_t         parity_error  :  1; // parity error is detected on CSR chain request
+        uint64_t         read_timeout  :  1; // it times out while CSR chain is waiting for read response
+        uint64_t        write_timeout  :  1; // it times out while CSR chain is waiting for write complete
+        uint64_t            read_miss  :  1; // read miss happens
+        uint64_t           write_miss  :  1; // write miss happens
+        uint64_t         buf_overflow  :  1; // request buffer overflow
+        uint64_t         reserved_7_6  :  2; // reserved
+        uint64_t        error_address  : 22; // associated CSR address that an error is detected to access
+        uint64_t         UNUSED_63_30  : 34; // 
+    } field;
+    uint64_t val;
+} OC_LCB_CSR_CHAIN_ERR_STATUS_t;
+
+// OC_LCB_SCRATCH desc:
+typedef union {
+    struct {
+        uint64_t              SCRATCH  : 64; // scratch area for val
+    } field;
+    uint64_t val;
+} OC_LCB_SCRATCH_t;
 
 // LCB_CFG_RESET_FROM_CSR desc:
 typedef union {
@@ -2176,4 +2305,4 @@ typedef union {
     uint64_t val;
 } LCB_PG_STS_TX_MBE_CNT_t;
 
-#endif /* ___FZC_lcb_CSRS_H__ */
+#endif /* ___OC_lcb_CSRS_H__ */

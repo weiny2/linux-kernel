@@ -1,5 +1,5 @@
 // This file had been gnerated by ./src/gen_csr_hdr.py
-// Created on: Thu Mar 29 15:03:56 2018
+// Created on: Wed Apr 11 12:49:08 2018
 //
 
 #ifndef ___FXR_pcim_CSRS_H__
@@ -121,14 +121,10 @@ typedef union {
 // PCIM_STS_BDF desc:
 typedef union {
     struct {
-        uint64_t     iosf_function_id  :  3; // IOSF defined Function ID (strap input)
-        uint64_t       iosf_device_id  :  5; // IOSF defined Device ID (strap input)
-        uint64_t          iosf_bus_id  :  8; // IOSF defined Bus ID (captured)
-        uint64_t       Reserved_31_16  : 16; // Unused
-        uint64_t         ltr_dest_pid  :  8; // Dest Port ID for FXR sourced LTR msg on GPSB (strap)
-        uint64_t        intx_dest_pid  :  8; // Dest Port ID for FXR sourced INTx msg on GPSB (strap)
-        uint64_t     pci_err_dest_pid  :  8; // Dest Port ID for FXR sourced PCIError msg on GPSB (strap)
-        uint64_t         fxr_gpsb_pid  :  8; // FXR Port ID on GPSB (strap)
+        uint64_t     pcie_function_id  :  3; // PCIe Function ID
+        uint64_t       pcie_device_id  :  5; // PCIe Device ID
+        uint64_t          pcie_bus_id  :  8; // PCIe Bus ID
+        uint64_t       Reserved_63_16  : 48; // Unused
     } field;
     uint64_t val;
 } PCIM_STS_BDF_t;
@@ -142,6 +138,35 @@ typedef union {
     uint64_t val;
 } PCIM_CFG_WAKE_t;
 
+// PCIM_PTM_CTL desc:
+typedef union {
+    struct {
+        uint64_t               sample  :  1; // Sample control for PCIM_CLK_SMPL and PCIM_PTM_SMPL CSRs. This bit is set by SW and cleared by HW. Setting this bit will force a HW update to the associated CSRs. HW clears this bit with the HW sample.
+        uint64_t    ptm_context_valid  :  1; // When set, the PTM Local Clock from PCIC is valid for sampling.
+        uint64_t    ptm_clock_updated  :  1; // This bit is set by HW on the rising edge of PTM_CLOCK_UPDATED status from the PCIC block. SW can clear and poll this bit to confirm the completion of a recent update to the PTM_LOCAL_CLOCK value from the PCIC block.
+        uint64_t      ptm_auto_update  :  1; // When set, enables periodic auto-updates to the PTM_LOCAL_CLOCK by the PCIC block. Note this functionality can also be enabled via VSEC CGF space CSR implemented in the PCIC block.
+        uint64_t    ptm_manual_update  :  1; // Set by SW, cleared by HW. Setting this bit forces an update to the PTM_LOCAL_CLOCK by the PCIC block. Note this functionality can also be enabled via VSEC CFG space CSR implemented in the PCIC block.
+        uint64_t        Reserved_63_5  : 59; // Unused
+    } field;
+    uint64_t val;
+} PCIM_PTM_CTL_t;
+
+// PCIM_CLK_SMPL desc:
+typedef union {
+    struct {
+        uint64_t                value  : 64; // Sample value of the PCIM Free run Counter. The sample is controlled by the PCIM_PTM_CTL CSR
+    } field;
+    uint64_t val;
+} PCIM_CLK_SMPL_t;
+
+// PCIM_PTM_SMPL desc:
+typedef union {
+    struct {
+        uint64_t                value  : 64; // Sample value of the PTM_LOCAL_CLOCK value from the PCIC block. The sample is controlled by the PCIM_PTM_CTL CSR
+    } field;
+    uint64_t val;
+} PCIM_PTM_SMPL_t;
+
 // PCIM_ERR_STS desc:
 typedef union {
     struct {
@@ -150,21 +175,19 @@ typedef union {
         uint64_t        msix_data_mbe  :  1; // MISX Table Data MBE. See msix_data_synd info. Request dropped. ERR_CATEGORY_NODE. SW recovery possible with polling of INT_STS
         uint64_t        msix_addr_sbe  :  1; // MISX Table Addr SBE. See msix_addr_synd info. ERR_CATEGORY_CORRECTABLE
         uint64_t        msix_data_sbe  :  1; // MISX Table Data SBE. See msix_data_synd info. ERR_CATEGORY_CORRECTABLE
-        uint64_t      marb_cmp_hdr_uf  :  1; // MARB Completion Header credit Underflow. ERR_CATEGORY_NODE
-        uint64_t      marb_cmp_hdr_of  :  1; // MARB Completion Header credit Overflow. ERR_CATEGORY_NODE
-        uint64_t       marb_np_hdr_uf  :  1; // MARB NonPosted Header credit Underflow. ERR_CATEGORY_NODE
-        uint64_t       marb_np_hdr_of  :  1; // MARB NonPosted Header credit Overflow. ERR_CATEGORY_NODE
-        uint64_t        marb_p_hdr_uf  :  1; // MARB Posted Header credit Underflow. ERR_CATEGORY_NODE
-        uint64_t        marb_p_hdr_of  :  1; // MARB Posted Header credit Overflow. ERR_CATEGORY_NODE
-        uint64_t     marb_cmp_data_uf  :  1; // MARB Completion Data credit Underflow. ERR_CATEGORY_NODE
-        uint64_t     marb_cmp_data_of  :  1; // MARB Completion Data credit Overflow. ERR_CATEGORY_NODE
-        uint64_t      marb_np_data_uf  :  1; // MARB NonPosted Data credit Underflow. ERR_CATEGORY_NODE
-        uint64_t      marb_np_data_of  :  1; // MARB NonPosted Data credit Overflow. ERR_CATEGORY_NODE
-        uint64_t       marb_p_data_uf  :  1; // MARB Posted Data credit Underflow. ERR_CATEGORY_NODE
-        uint64_t       marb_p_data_of  :  1; // MARB Posted Data credit Overflow. ERR_CATEGORY_NODE
+        uint64_t          tcb_buff_of  :  1; // Target Completion Buffer overflow. ERR_CATEGORY_HFI
+        uint64_t          tcb_buff_uf  :  1; // Target Completion Buffer underflow. ERR_CATEGORY_HFI
+        uint64_t          tcb_hdr_sbe  :  1; // Target Completion Buffer SBE. ERR_CATEGORY_CORRECTABLE
+        uint64_t          tcb_hdr_mbe  :  1; // Target Completion Buffer MBE. ERR_CATEGORY_HFI.
+        uint64_t          tqb_buff_of  :  1; // Target Request Buffer overflow. ERR_CATEGORY_HFI
+        uint64_t    tqb_async_buff_uf  :  1; // Target Request Async Buffer underflow. ERR_CATEGORY_HFI
+        uint64_t          tqb_hdr_sbe  :  1; // Target Request Header SBE. ERR_CATEGORY_CORRECTABLE
+        uint64_t          tqb_hdr_mbe  :  1; // Target Request Header MBE. ERR_CATEGORY_HFI
+        uint64_t         tqb_data_sbe  :  1; // Target Request Data SBE. ERR_CATEGORY_CORRECTABLE
+        uint64_t         tqb_data_mbe  :  1; // Target Request Data MBE. ERR_CATEGORY_HFI
         uint64_t  hpi_data_parity_err  :  1; // HPI Data Parity Error. Request forwarded to CmdQs. ERR_CATEGORY_INFO
         uint64_t  hpi_data_poison_err  :  1; // HPI Data Poison Error. Request forwarded to CmdQs. ERR_CATEGORY_INFO
-        uint64_t           gpsb_error  :  1; // GPSB Endpoint Error. Non-valid request format. Request dropped. Reset to recover. ERR_CATEGORY_NODE.
+        uint64_t          Reserved_17  :  1; // Unused
         uint64_t     p2sb_p_unsup_req  :  1; // P2SB Posted Unsupported Request. Request dropped.Root Causes: Posted Unsupported Opcode Posted Illegal PCIe BEDual reported in unsup_req_err ERR_CATEGORY_HFI
         uint64_t    p2sb_np_unsup_req  :  1; // P2SB NonPosted Unsupported Request. Request dropped with UR response. Root Causes: Non-Posted Unsupported Opcode Non-Posted Illegal PCIe BE Dual reported in unsup_req_err or advisory_nonfatal_err ERR_CATEGORY_HFI
         uint64_t     p2sb_np_addr_err  :  1; // P2SB NonPosted request Address Error. Address did not hit an FXR BAR. Request dropped, UR response sent. ERR_CATEGORY_INFO
@@ -186,13 +209,8 @@ typedef union {
         uint64_t    sb2p_unsup_np_opc  :  1; // SB2P Unsupported NonPosted Opcode. UR response to IOSF-P. ERR_CATEGORY_HFI.
         uint64_t    tarb_hdr_ep_error  :  1; // TARB Request Header with EP (poison) set. ERR_CATEGORY_INFO. If target is CmdQ, gets reported there. If target it FXR-SB, gets reported in p2sb_p_data_ep .
         uint64_t tarb_hdr_parity_error  :  1; // TARB Request Header Parity Error. Dual reported in mal_tlp_err ERR_CATEGORY_HFI. Assert quarantine. Request continues as if no parity error detected.
-        uint64_t     int_remap_rsp_of  :  1; // Interrupt Remap Response FIFO Overflow. ERR_CATEGORY_NODE
-        uint64_t     int_remap_rsp_uf  :  1; // Interrupt Remap Response FIFO Underflow. ERR_CATEGORY_NODE
         uint64_t       fxr_sb_timeout  :  1; // IOSF-Sideband (FXR-SB) Request Timeout. Error response back to Primary. ERR_CATEGORY_HFI. Could be lowered if error response is fine.
-        uint64_t        iosfp_timeout  :  1; // IOSF-Primary Request Timeout. Locally complete request (ZBR).Dual reported in cmpl_timeout_err . ERR_CATEGORY_NODE. IOMMU initiated flush did not complete.
-        uint64_t      remap_dma_fault  :  1; // Remap DMA Fault. An error response was received for an interrupt DMA remap request. The associated MSIX request is dropped, and the associated MSIX table entry ID is captured in remap_rsp_tid .ERR_CATEGORY_INFO
-        uint64_t      remap_int_fault  :  1; // Remap Interrupt Fault. An error response was received for an interrupt remap request. The associated MSIX request is dropped, and the associated MSIX table entry ID is captured in remap_rsp_tid .ERR_CATEGORY_INFO
-        uint64_t       Reserved_63_47  : 17; // Unused
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_STS_t;
@@ -200,8 +218,8 @@ typedef union {
 // PCIM_ERR_CLR desc:
 typedef union {
     struct {
-        uint64_t               events  : 47; // Write 1's to clear corresponding PCIM_ERR_STS bits.
-        uint64_t       Reserved_63_47  : 17; // Unused
+        uint64_t               events  : 40; // Write 1's to clear corresponding PCIM_ERR_STS bits.
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_CLR_t;
@@ -209,8 +227,8 @@ typedef union {
 // PCIM_ERR_FRC desc:
 typedef union {
     struct {
-        uint64_t               events  : 47; // Write 1 to set corresponding PCIM_ERR_STS bits.
-        uint64_t       Reserved_63_47  : 17; // Unused
+        uint64_t               events  : 40; // Write 1 to set corresponding PCIM_ERR_STS bits.
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_FRC_t;
@@ -218,8 +236,8 @@ typedef union {
 // PCIM_ERR_EN_HOST desc:
 typedef union {
     struct {
-        uint64_t               events  : 47; // Enables corresponding PCIM_ERR_STS bits to generate host interrupt signal.
-        uint64_t       Reserved_63_47  : 17; // Unused
+        uint64_t               events  : 40; // Enables corresponding PCIM_ERR_STS bits to generate host interrupt signal.
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_EN_HOST_t;
@@ -227,8 +245,8 @@ typedef union {
 // PCIM_ERR_FIRST_HOST desc:
 typedef union {
     struct {
-        uint64_t               events  : 47; // Snapshot of PCIM_ERR_STS bits when host interrupt signal transitions from 0 to 1.
-        uint64_t       Reserved_63_47  : 17; // Unused
+        uint64_t               events  : 40; // Snapshot of PCIM_ERR_STS bits when host interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_FIRST_HOST_t;
@@ -236,8 +254,8 @@ typedef union {
 // PCIM_ERR_EN_BMC desc:
 typedef union {
     struct {
-        uint64_t               events  : 47; // Enable corresponding PCIM_ERR_STS bits to generate BMC interrupt signal.
-        uint64_t       Reserved_63_47  : 17; // Unused
+        uint64_t               events  : 40; // Enable corresponding PCIM_ERR_STS bits to generate BMC interrupt signal.
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_EN_BMC_t;
@@ -245,8 +263,8 @@ typedef union {
 // PCIM_ERR_FIRST_BMC desc:
 typedef union {
     struct {
-        uint64_t               events  : 47; // Snapshot of PCIM_ERR_STS bits when BMC interrupt signal transitions from 0 to 1.
-        uint64_t       Reserved_63_47  : 17; // Unused
+        uint64_t               events  : 40; // Snapshot of PCIM_ERR_STS bits when BMC interrupt signal transitions from 0 to 1.
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_FIRST_BMC_t;
@@ -254,8 +272,8 @@ typedef union {
 // PCIM_ERR_EN_QUAR desc:
 typedef union {
     struct {
-        uint64_t               events  : 47; // Enable corresponding PCIM_ERR_STS bits to generate quarantine signal.
-        uint64_t       Reserved_63_47  : 17; // Unused
+        uint64_t               events  : 40; // Enable corresponding PCIM_ERR_STS bits to generate quarantine signal.
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_EN_QUAR_t;
@@ -263,8 +281,8 @@ typedef union {
 // PCIM_ERR_FIRST_QUAR desc:
 typedef union {
     struct {
-        uint64_t               events  : 47; // Snapshot of PCIM_ERR_STS bits when quarantine signal transitions from 0 to 1.
-        uint64_t       Reserved_63_47  : 17; // Unused
+        uint64_t               events  : 40; // Snapshot of PCIM_ERR_STS bits when quarantine signal transitions from 0 to 1.
+        uint64_t       Reserved_63_40  : 24; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_FIRST_QUAR_t;
@@ -278,8 +296,10 @@ typedef union {
         uint64_t           p2sb_synd1  :  7; // P2SB Data1 syndrome associated with p2sb_dataq1_sbe / p2sb_dataq1_mbe
         uint64_t          Reserved_23  :  1; // Unused
         uint64_t           p2sb_synd0  :  9; // P2SB Data0 syndrome associated with p2sb_dataq0_sbe / p2sb_dataq0_mbe
-        uint64_t        remap_rsp_tid  :  9; // MISX entry ID associated with remap_dma_fault / remap_int_fault
-        uint64_t       Reserved_63_42  : 22; // Unused
+        uint64_t       Reserved_35_33  :  3; // Unused
+        uint64_t             tcb_synd  :  8; // Target Completion Buffer syndrome associated with tcb_hdr_sbe / tcb_hdr_mbe
+        uint64_t             tqb_synd  :  8; // Target Request syndrome associated with tqb_hdr_sbe / tqb_hdr_mbe / tqb_data_sbe / tqb_data_mbe
+        uint64_t       Reserved_63_52  : 12; // Unused
     } field;
     uint64_t val;
 } PCIM_ERR_INFO_t;
@@ -419,7 +439,7 @@ typedef union {
 // PCIM_INT_STS desc:
 typedef union {
     struct {
-        uint64_t              int_sts  : 64; // FXR Interrupt Status (see Table 29-37 )
+        uint64_t              int_sts  : 64; // FXR Interrupt Status (see Table 30-38 )
     } field;
     uint64_t val;
 } PCIM_INT_STS_t;
