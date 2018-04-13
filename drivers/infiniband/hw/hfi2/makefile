@@ -39,14 +39,20 @@ NAME := hfi2
 
 TOP_SRC=$(PWD)/../../../../
 
+# Newer Git has faster tag lookup
+GIT_VERSION := $(shell git --version | cut -b 13)
+ifeq (2,$(GIT_VERSION))
+GIT_EXTRA_FLAGS="--first-parent"
+endif
+
 # The desired version number comes from the most recent tag starting with "v"
-VERSION := $(shell if [ -e $(TOP_SRC)/.git ] ; then  git describe --tags --first-parent --abbrev=0 --match="*fxr_v*" | sed -e 's/^fxr_v//' -e 's/-/_/'; else echo "version" ; fi)
+VERSION := $(shell if [ -e $(TOP_SRC)/.git ] ; then git describe --tags $(GIT_EXTRA_FLAGS) --abbrev=0 --match="*fxr_v*" | sed -e 's/^fxr_v//' -e 's/-/_/'; else echo "version" ; fi)
 ifeq (,$(VERSION))
 VERSION := 0
 endif
 # The desired release number comes the git describe following the version which
 # is the number of commits since the version tag was planted suffixed by the g<commitid>
-RELEASE := $(shell if [ -e $(TOP_SRC)/.git ] ; then git describe --tags --first-parent --long --match="*fxr_v*" | sed -e 's/fxr_v[0-9.]*-\([0-9]*\)/\1/' | sed 's/-g.*$$//'; else echo "release" ; fi)
+RELEASE := $(shell if [ -e $(TOP_SRC)/.git ] ; then git describe --tags $(GIT_EXTRA_FLAGS) --long --match="*fxr_v*" | sed -e 's/fxr_v[0-9.]*-\([0-9]*\)/\1/' | sed 's/-g.*$$//'; else echo "release" ; fi)
 ifeq (,$(RELEASE))
 RELEASE := 0
 endif
@@ -165,6 +171,7 @@ rpm: dist
 		hfi2.spec
 
 version:
+	@echo git $(GIT_VERSION) $(GIT_EXTRA_FLAGS)
 	@echo $(KVER) $(KBUILD)
 	@echo $(NAME) $(MVERSION)
 
