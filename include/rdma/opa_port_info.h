@@ -412,7 +412,11 @@ struct opa_port_info {
 
 	__be32 reserved10;                   /* was link_roundtrip_latency */
 	__be16 overall_buffer_space;
-	__be16 reserved11;                   /* was max_credit_hint */
+
+	struct {
+		u8 buffer;
+		u8 wire;
+	} replay_depth_h;
 
 	__be16 diag_code;
 	struct {

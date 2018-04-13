@@ -804,7 +804,7 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	u32 num_ports = OPA_AM_NPORT(am);
 	u32 start_of_sm_config = OPA_AM_START_SM_CFG(am);
 	u32 buffer_units;
-	u16 tsync;
+	u16 tsync, depth;
 
 	if (num_ports != 1 || smp_length_check(sizeof(*pi), max_len)) {
 		hfi_invalid_attr(smp);
@@ -994,20 +994,17 @@ static int __subn_get_opa_portinfo(struct opa_smp *smp, u32 am, u8 *data,
 	pi->collectivemask_multicastmask = ((OPA_COLLECTIVE_NR & 0x7)
 					    << 3 | (OPA_MCAST_NR & 0x7));
 
-	/*
-	 * HFI2 supports a replay buffer 256 LTPs in size. Currently the
-	 * SMA value is only 8 bits. Set to 255 as a workaround. Bugzilla
-	 * 136909 tracks this change.
-	 */
-	pi->replay_depth.buffer = 255;
+	/* HFI2 supports a replay buffer of 256 LTPs in size */
+	depth = 256;
+	pi->replay_depth_h.buffer = depth >> 8; /* upper byte */
+	pi->replay_depth.buffer = depth & 0xff; /* lower byte */
 
-	/*
-	 * This counter is 16 bits wide stored in u64, but the
-	 * replay_depth.wire field is only 8 bits
-	 */
-	pi->replay_depth.wire = (u8)min_t(u64, 0xff, ppd->lcb_sts_rtt);
-	ppd_dev_dbg(ppd, "replay depth buffer: %u wire: %u, cached: %llu\n",
-		    pi->replay_depth.buffer, pi->replay_depth.wire,
+	depth = (u16)min_t(u64, 0xffff, ppd->lcb_sts_rtt);
+	pi->replay_depth_h.wire = depth >> 8; /* upper byte */
+	pi->replay_depth.wire = depth & 0xff; /* lower byte */
+	ppd_dev_dbg(ppd, "replay depth buf %u:%u wire %u:%u, cached: %llu\n",
+		    pi->replay_depth_h.buffer, pi->replay_depth.buffer,
+		    pi->replay_depth_h.wire, pi->replay_depth.wire,
 		    ppd->lcb_sts_rtt);
 
 	if (resp_len)
