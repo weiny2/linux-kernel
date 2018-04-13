@@ -859,12 +859,33 @@ out:
 	return ret;
 }
 
-static int handle_at_cpt_page_fault(struct hfi_at_svm *svm,
-				    struct page_req_dsc *req)
+static int cpt_page_faultin(struct hfi_at_svm *svm,
+			    struct page_req_dsc *req)
 {
 	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
 	struct vm_area_struct *vma;
 	int ret = -ENOMEM;
+
+	vma = find_extend_vma(svm->mm, address);
+	if (!vma || address < vma->vm_start)
+		return ret;
+
+	if (access_error(vma, req))
+		return ret;
+
+	ret = handle_mm_fault(vma, address,
+			      req->wr_req ? FAULT_FLAG_WRITE : 0);
+	if (ret & VM_FAULT_ERROR)
+		return ret;
+
+	return 0;
+}
+
+static int handle_at_cpt_page_fault(struct hfi_at_svm *svm,
+				    struct page_req_dsc *req)
+{
+	u64 address = (u64)req->addr << AT_PAGE_SHIFT;
+	int ret;
 
 	/* If address is not canonical, return invalid response */
 	if (!is_canonical_address(address))
@@ -873,22 +894,10 @@ static int handle_at_cpt_page_fault(struct hfi_at_svm *svm,
 	/* If the mm is already defunct, don't handle faults. */
 	if (!mmget_not_zero(svm->mm))
 		return -EINVAL;
-
 	down_read(&svm->mm->mmap_sem);
-	vma = find_extend_vma(svm->mm, address);
-	if (!vma || address < vma->vm_start)
-		goto invalid;
 
-	if (access_error(vma, req))
-		goto invalid;
+	ret = cpt_page_faultin(svm, req);
 
-	ret = handle_mm_fault(vma, address,
-			      req->wr_req ? FAULT_FLAG_WRITE : 0);
-	if (ret & VM_FAULT_ERROR)
-		goto invalid;
-
-	ret = 0;
-invalid:
 	up_read(&svm->mm->mmap_sem);
 	mmput(svm->mm);
 	return ret;
@@ -912,27 +921,28 @@ static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
 	if (svm->mm) {
 		int wr;
 
-		if (user_page_promo) {
-			ret = handle_at_cpt_page_fault(svm, req);
-			if (ret)
-				return ret;
-
-			return hfi_at_map_promo(svm, req, true);
-		}
-
 		/* If address is not canonical, return invalid response */
 		if (!is_canonical_address(address))
 			return -EINVAL;
 
-		if (page)
+		/* No promotion and page is pinned */
+		if (!user_page_promo && page)
 			return hfi_at_map(svm, req, page, true);
 
 		/* TODO: Check whether we really need mmget here */
 		/* If the mm is already defunct, don't handle faults. */
 		if (!mmget_not_zero(svm->mm))
 			return -ENOMEM;
-
 		down_read(&svm->mm->mmap_sem);
+
+		if (user_page_promo) {
+			ret = cpt_page_faultin(svm, req);
+			if (!ret)
+				ret = hfi_at_map_promo(svm, req, true);
+
+			goto unlock;
+		}
+
 		wr = req->wr_req ? FOLL_WRITE | FOLL_FORCE : 0,
 		ret = get_user_pages_remote(svm->tsk, svm->mm,
 					    address & PAGE_MASK, 1,
@@ -940,13 +950,14 @@ static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
 		if (ret != 1) {
 			dd_dev_err(svm->at->dd, "gup error %d addr 0x%llx\n",
 				   ret, address);
-			up_read(&svm->mm->mmap_sem);
-			mmput(svm->mm);
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto unlock;
 		}
 
 		ret = hfi_at_map(svm, req, page, true);
 		put_page(page);
+
+unlock:
 		up_read(&svm->mm->mmap_sem);
 		mmput(svm->mm);
 	} else {
