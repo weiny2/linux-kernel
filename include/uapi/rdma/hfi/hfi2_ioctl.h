@@ -149,6 +149,7 @@ enum {
 	HFI2_JOB_INFO,
 	HFI2_DLID_ASSIGN,
 	HFI2_DLID_RELEASE,
+	HFI2_JOB_ATTACH,
 };
 
 /* Attributes for ctx attach */
@@ -216,6 +217,12 @@ enum {
 	HFI2_JOB_SETUP_CTX_IDX,
 	HFI2_JOB_SETUP_CMD,
 	HFI2_JOB_SETUP_PID_BASE,
+};
+
+/* Attributes for job attach */
+enum {
+	HFI2_JOB_ATTACH_MODE,
+	HFI2_JOB_ATTACH_COOKIE,
 };
 
 /* Attributes for DLID assign */

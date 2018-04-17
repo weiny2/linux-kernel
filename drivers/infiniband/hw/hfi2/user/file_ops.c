@@ -200,8 +200,8 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	/* default Portals UID */
 	ud->ctx.ptl_uid = current_uid().val;
 
-	/* inherit PID reservation if present */
-	hfi_job_init(ud);
+	/* inherit SID-based job reservation if present */
+	hfi_job_init(ud, HFI_JOB_RES_SESSION, 0);
 
 	return 0;
 }

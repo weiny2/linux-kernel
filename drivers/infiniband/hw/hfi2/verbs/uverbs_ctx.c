@@ -65,7 +65,7 @@ static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
 	struct hfi_devdata *dd = hfi_dd_from_ibdev(ib_dev);
 	struct hfi_ctx *ctx;
 	struct ib_uctx_object *obj;
-	struct ib_ucontext *ucontext = file->ucontext;
+	struct hfi_ibcontext *uc = (struct hfi_ibcontext *)file->ucontext;
 	int ret = 0;
 
 	uattr = uverbs_attr_get(attrs, HFI2_CTX_ATTACH_IDX);
@@ -80,10 +80,8 @@ static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
 	ctx->type = HFI_CTX_TYPE_USER;
 	ctx->ptl_uid = current_uid().val;
 
-#if 0
-	INIT_LIST_HEAD(ctx->vma_head);
-#endif
-	hfi_job_init(ctx);
+	/* inherit a configured job reservation if present */
+	hfi_job_init(ctx, uc->job_res_mode, uc->job_res_cookie);
 
 	ret = uverbs_copy_from(&cmd, attrs, HFI2_CTX_ATTACH_CMD);
 	if (ret)
@@ -134,7 +132,7 @@ static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
 	resp.uid = ctx->ptl_uid;
 
 	obj = container_of(uattr->obj_attr.uobject, typeof(*obj), uobject);
-	obj->verbs_file = ucontext->ufile;
+	obj->verbs_file = uc->ibuc.ufile;
 	obj->uobject.object = ctx;
 
 	ctx->uobject = &obj->uobject;

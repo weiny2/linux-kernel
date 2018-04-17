@@ -99,11 +99,12 @@ struct ib_ujob_object {
 	struct ib_uobject uobject;
 	struct ib_uverbs_file *verbs_file;
 	struct list_head obj_list;
-	u16 job_res_mode;
 	u16 sid;
+	u16 job_res_mode;
+	u64 job_res_cookie;
 };
 
-int hfi_job_init(struct hfi_ctx *ctx);
+bool hfi_job_init(struct hfi_ctx *ctx, u16 res_mode, u64 cookie);
 int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
 void hfi_zap_vma_list(struct hfi_ibcontext *context, uint16_t cmdq_idx);
 #endif

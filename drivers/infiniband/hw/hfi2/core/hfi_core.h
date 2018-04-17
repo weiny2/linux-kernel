@@ -113,6 +113,8 @@ struct hfi_ks {
  * @lkey_only: boolean if this context has shared LKEY/RKEYs
  * @is_user: boolean if this a user-space context
  * @num_ctx: number of associated hfi_ctx
+ * @job_res_mode: mode for job_attach to lookup job reservation
+ * @job_res_cookie: cookie for lookup of job reservation
  * @hw_ctx: primary hfi_ctx
  * @tx_cmdq: TX command queue
  * @rx_cmdq: RX command queue
@@ -132,6 +134,8 @@ struct hfi_ibcontext {
 	bool lkey_only;
 	bool is_user;
 	u16 num_ctx;
+	u16 job_res_mode;
+	u64 job_res_cookie;
 	struct hfi_ctx	*hw_ctx;
 	struct hfi_cmdq	*tx_cmdq;
 	struct hfi_cmdq	*rx_cmdq;

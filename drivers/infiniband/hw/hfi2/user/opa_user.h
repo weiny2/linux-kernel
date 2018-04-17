@@ -85,6 +85,7 @@ struct hfi_userdata {
 	/* Per PID Portals State */
 	struct hfi_ctx ctx;
 	u16 job_res_mode;
+	u64 job_res_cookie;
 	struct list_head job_list;
 	/* List of vma's to zap on release */
 	struct list_head vma_head;
@@ -92,7 +93,7 @@ struct hfi_userdata {
 	struct mutex lock;
 };
 
-void hfi_job_init(struct hfi_userdata *ud);
+bool hfi_job_init(struct hfi_userdata *ud, u16 res_mode, u64 cookie);
 int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info *job_info);
 int hfi_job_setup(struct hfi_userdata *ud,
 		  struct hfi_job_setup_args *job_setup);

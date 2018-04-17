@@ -417,8 +417,11 @@ struct hfi_job_info {
 	__u32   auth_uid[HFI_NUM_AUTH_TUPLES];
 };
 
-#define HFI_JOB_RES_SESSION 0x1
-#define HFI_JOB_RES_CGROUP  0x2
+#define HFI_JOB_RES_SESSION	0x1
+#define HFI_JOB_RES_CGROUP	0x2
+#define HFI_JOB_RES_USER_COOKIE	0x3
+
+#define HFI_JOB_MAKE_COOKIE(uid, lo)	(((u64)(uid) << 32) | (u32)(lo))
 
 /*
  * struct hfi_job_setup - reserve resources for the current job,
@@ -434,6 +437,7 @@ struct hfi_job_info {
  * @lid_offset: Logical LID of the caller
  * @lid_count: Number of LIDs for this job
  * @auth_uid: Portals UIDs allowed for this job
+ * @res_cookie: Cookie for reservation lookup (depends on @res_mode)
  */
 struct hfi_job_setup_args {
 	IN __u64 pid_total;
@@ -445,7 +449,7 @@ struct hfi_job_setup_args {
 	IN __u32 lid_offset;
 	IN __u32 lid_count;
 	IN __u32 auth_uid[HFI_NUM_AUTH_TUPLES];
-	IN __u64 reserved;
+	IN __u64 res_cookie;
 };
 
 /*

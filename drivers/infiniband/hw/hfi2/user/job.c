@@ -58,30 +58,35 @@
 static LIST_HEAD(hfi_job_list);
 static DECLARE_RWSEM(hfi_job_sem);
 
-void hfi_job_init(struct hfi_userdata *ud)
+bool hfi_job_init(struct hfi_userdata *ud, u16 res_mode, u64 cookie)
 {
+	bool inherit = false;
 	struct hfi_userdata *job_info;
-	u16 res_mode;
 
 	ud->ctx.dlid_base = HFI_LID_NONE;
 	ud->ctx.pid_base = HFI_PID_NONE;
 	INIT_LIST_HEAD(&ud->job_list);
 
 	/* search job_list for PID reservation to inherit */
-	/* TODO - need to implement reference count */
+	/* TODO - may need to implement reference count */
 	down_read(&hfi_job_sem);
 	list_for_each_entry(job_info, &hfi_job_list, job_list) {
-		res_mode = job_info->job_res_mode;
-		if (res_mode != HFI_JOB_RES_SESSION) {
-			/*
-			 * not one of supported modes to inherit Portals
-			 * reservation
-			 */
+		if (res_mode != job_info->job_res_mode) {
+			/* unsupported mode to inherit Job reservation */
 			continue;
 		}
 
 		if ((res_mode == HFI_JOB_RES_SESSION) &&
-		    (ud->sid == job_info->sid)) {
+		    (ud->sid == job_info->sid))
+			inherit = true;
+		else if ((res_mode == HFI_JOB_RES_USER_COOKIE) &&
+			 (HFI_JOB_MAKE_COOKIE(ud->ctx.ptl_uid, cookie) ==
+			  job_info->job_res_cookie))
+			inherit = true;
+		else
+			inherit = false;
+
+		if (inherit) {
 			ud->ctx.dlid_base = job_info->ctx.dlid_base;
 			ud->ctx.lid_offset = job_info->ctx.lid_offset;
 			ud->ctx.lid_count = job_info->ctx.lid_count;
@@ -101,6 +106,7 @@ void hfi_job_init(struct hfi_userdata *ud)
 				ud->ctx.pid_base,
 				ud->ctx.pid_base + ud->ctx.pid_count - 1,
 				job_info->sid, ud->ctx.ptl_uid);
+			break;
 		} else {
 			pr_info("skipped PID group [%u - %u] tag (%u,%u) != (%u,%u)\n",
 				ud->ctx.pid_base,
@@ -110,6 +116,8 @@ void hfi_job_init(struct hfi_userdata *ud)
 		}
 	}
 	up_read(&hfi_job_sem);
+
+	return inherit;
 }
 
 int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info *job_info)
@@ -168,6 +176,7 @@ int hfi_job_setup(struct hfi_userdata *ud, struct hfi_job_setup_args *job_setup)
 
 	/* insert into job_list (active job state) */
 	ud->job_res_mode = job_setup->res_mode;
+	ud->job_res_cookie = job_setup->res_cookie;
 	down_write(&hfi_job_sem);
 	list_add(&ud->job_list, &hfi_job_list);
 	up_write(&hfi_job_sem);

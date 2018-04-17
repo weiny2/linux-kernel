@@ -61,32 +61,37 @@
 static LIST_HEAD(ib_ujob_objects);
 static DECLARE_RWSEM(hfi_job_sem);
 
-int hfi_job_init(struct hfi_ctx *ctx)
+bool hfi_job_init(struct hfi_ctx *ctx, u16 res_mode, u64 cookie)
 {
+	bool inherit = false;
 	struct hfi_ctx *tmp_ctx;
 	struct ib_ujob_object *tmp_obj;
-	u16 res_mode;
 	u16 sid = task_session_vnr(current);
 
 	ctx->dlid_base = HFI_LID_NONE;
 	ctx->pid_base = HFI_PID_NONE;
 
 	/* search job_list for PID reservation to inherit */
-	/* TODO - need to implement reference count */
+	/* TODO - may need to implement reference count */
 	down_read(&hfi_job_sem);
 	list_for_each_entry(tmp_obj, &ib_ujob_objects, obj_list) {
 		tmp_ctx = tmp_obj->uobject.object;
-		res_mode = tmp_obj->job_res_mode;
-		if (res_mode != HFI_JOB_RES_SESSION) {
-			/*
-			 * not one of supported modes to inherit Portals
-			 * reservation
-			 */
+		if (res_mode != tmp_obj->job_res_mode) {
+			/* unsupported mode to inherit Job reservation */
 			continue;
 		}
 
 		if ((res_mode == HFI_JOB_RES_SESSION) &&
-		    (sid == tmp_obj->sid)) {
+		    (sid == tmp_obj->sid))
+			inherit = true;
+		else if ((res_mode == HFI_JOB_RES_USER_COOKIE) &&
+			 (HFI_JOB_MAKE_COOKIE(ctx->ptl_uid, cookie) ==
+			  tmp_obj->job_res_cookie))
+			inherit = true;
+		else
+			inherit = false;
+
+		if (inherit) {
 			ctx->dlid_base = tmp_ctx->dlid_base;
 			ctx->lid_offset = tmp_ctx->lid_offset;
 			ctx->lid_count = tmp_ctx->lid_count;
@@ -106,10 +111,27 @@ int hfi_job_init(struct hfi_ctx *ctx)
 				tmp_ctx->pid_base,
 				tmp_ctx->pid_base + tmp_ctx->pid_count - 1,
 				sid, ctx->ptl_uid);
+			break;
 		}
 	}
 	up_read(&hfi_job_sem);
-	return 0;
+	return inherit;
+}
+
+int hfi_job_attach(struct hfi_ibcontext *uc, int mode, u64 cookie)
+{
+	/*
+	 * Only allow JOB_RES_USER_COOKIE for manual job_attach.
+	 * Set conditions to find job reservation during ctx_attach.
+	 */
+	switch (mode) {
+	case HFI_JOB_RES_USER_COOKIE:
+		uc->job_res_mode = mode;
+		uc->job_res_cookie = cookie;
+		return 0;
+	default:
+		return -EINVAL;
+	}
 }
 
 int hfi_job_info(struct hfi_job_info *job_info)
@@ -118,8 +140,10 @@ int hfi_job_info(struct hfi_job_info *job_info)
 	struct ib_ujob_object *tmp_obj;
 	u16 res_mode;
 
-	/* search job_list for PID reservation to inherit */
-	/* TODO - need to implement reference count */
+	/*
+	 * search job_list for PID reservation to inherit
+	 * TODO - may need to implement reference count
+	 */
 	down_read(&hfi_job_sem);
 	list_for_each_entry(tmp_obj, &ib_ujob_objects, obj_list) {
 		tmp_ctx = tmp_obj->uobject.object;
@@ -196,6 +220,7 @@ int hfi_job_setup(struct hfi_ctx *ctx, struct hfi_job_setup_args *job_setup)
 	ctx->lid_count = job_setup->lid_count;
 
 	obj->job_res_mode = job_setup->res_mode;
+	obj->job_res_cookie = job_setup->res_cookie;
 	obj->sid = task_session_vnr(current);
 
 	pr_info("created PID group [%u - %u] UID [%u] tag (%u:%u,%u)\n",
@@ -301,6 +326,22 @@ int hfi2_job_setup_handler(struct ib_device *ib_dev,
 err_job_setup:
 	kfree(ctx);
 	return ret;
+}
+
+int hfi2_job_attach_handler(struct ib_device *ib_dev,
+			    struct ib_uverbs_file *file,
+			    struct uverbs_attr_bundle *attrs)
+{
+	struct hfi_ibcontext *uc = (struct hfi_ibcontext *)file->ucontext;
+	u16 mode;
+	u64 cookie;
+	int ret;
+
+	ret = uverbs_copy_from(&mode, attrs, HFI2_JOB_ATTACH_MODE);
+	ret += uverbs_copy_from(&cookie, attrs, HFI2_JOB_ATTACH_COOKIE);
+	if (ret)
+		return ret;
+	return hfi_job_attach(uc, mode, cookie);
 }
 
 int hfi2_job_info_handler(struct ib_device *ib_dev,
@@ -457,6 +498,15 @@ DECLARE_UVERBS_METHOD(hfi2_dlid_release, HFI2_DLID_RELEASE,
 				UVERBS_ACCESS_WRITE,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
+DECLARE_UVERBS_METHOD(hfi2_job_attach, HFI2_JOB_ATTACH,
+		      hfi2_job_attach_handler,
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_JOB_ATTACH_MODE,
+				u16, UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_JOB_ATTACH_COOKIE,
+				u64, UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
+
 DECLARE_UVERBS_OBJECT(hfi2_object_job,
 		      UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_JOB,
 					     HFI2_OBJECTS),
@@ -465,4 +515,5 @@ DECLARE_UVERBS_OBJECT(hfi2_object_job,
 		      &hfi2_job_setup,
 		      &hfi2_job_info,
 		      &hfi2_dlid_assign,
-		      &hfi2_dlid_release);
+		      &hfi2_dlid_release,
+		      &hfi2_job_attach);

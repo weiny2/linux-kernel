@@ -353,6 +353,9 @@ static struct ib_ucontext *hfi2_alloc_ucontext(struct ib_device *ibdev,
 	/* Setup list to zap vmas on release */
 	INIT_LIST_HEAD(&uc->vma_head);
 
+	/* Default is to lookup job reservations by SID */
+	uc->job_res_mode = HFI_JOB_RES_SESSION;
+
 	hfi2_native_alloc_ucontext(uc, udata, enable_native_verbs);
 	return &uc->ibuc;
 }
