@@ -656,7 +656,9 @@ static int hfi_ib_eq_setup(struct hfi_rq *rq, struct rvt_cq *cq)
 		/* arm the HW event queue for interrupts */
 		eq = cq->hw_cq;
 		mutex_lock(&rq->hw_ctx->rx_mutex);
-		ret = hfi_ib_eq_arm(rq->hw_ctx, eq->idx, &cq->ibcq,
+		ret = hfi_ib_eq_arm(rq->hw_ctx, eq->idx,
+				    (cq->notify & IB_CQ_SOLICITED_MASK)
+				    == IB_CQ_SOLICITED, &cq->ibcq,
 				    (u64)&done, (u64)&cq->hw_disarmed);
 		if (ret)
 			goto eq_err;
@@ -1215,8 +1217,9 @@ int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 		return 0;
 
 	/* arm the HW event queue for interrupts */
-	ret = hfi_ib_eq_arm(eq->ctx, eq->idx, ibcq,
-			    (u64)&done, (u64)&cq->hw_disarmed);
+	ret = hfi_ib_eq_arm(eq->ctx, eq->idx,
+			    (flags & IB_CQ_SOLICITED_MASK) == IB_CQ_SOLICITED,
+			    ibcq, (u64)&done, (u64)&cq->hw_disarmed);
 	if (!ret) {
 		/* wait completion to turn on interrupt */
 		ret = hfi_eq_poll_cmd_complete(eq->ctx, &done);

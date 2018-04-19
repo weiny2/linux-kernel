@@ -142,7 +142,7 @@ struct hfi_eq_ctx {
 static int hfi_eq_setup(struct hfi_ctx *ctx,
 			u16 eq_idx, struct hfi_eq_mgmt **peqm);
 static int hfi_eq_arm(struct hfi_ctx *ctx,
-		      struct hfi_eq_mgmt *eqm, u64 user_data);
+		      struct hfi_eq_mgmt *eqm, u64 user_data, u8 solicit);
 static int hfi_eq_disarm(struct hfi_ctx *ctx,
 			 struct hfi_eq_mgmt *eqm, u64 user_data, bool wait);
 static int hfi_ec_remove(int ec_idx, void *idr_ptr, void *idr_ctx);
@@ -1051,7 +1051,7 @@ int hfi_ev_wait_single(struct hfi_ctx *ctx, u16 eqflag,
 
 		if (ctx->type != HFI_CTX_TYPE_KERNEL) { /* user */
 			if (eqflag) { /* EQ */
-				ret = hfi_eq_arm(ctx, eqm, *user_data0);
+				ret = hfi_eq_arm(ctx, eqm, *user_data0, 0);
 				if (ret)
 					goto idr_end;
 
@@ -1231,7 +1231,7 @@ irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
 }
 
 static int hfi_eq_arm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm,
-		      u64 user_data)
+		      u64 user_data, u8 solicit)
 {
 	struct hfi_devdata *dd = ctx->devdata;
 	struct hfi_irq_entry *me;
@@ -1267,6 +1267,7 @@ static int hfi_eq_arm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm,
 	eq_desc.val[0] = eq_desc_base[eq_idx].val[0];
 	eq_desc.irq = irq_idx;
 	eq_desc.i = 1;
+	eq_desc.s = solicit;
 	eq_desc_base[eq_idx].val[0] = eq_desc.val[0];
 
 	/* add EQ to list of IRQ waiters */
@@ -1386,8 +1387,8 @@ static bool hfi_ec_has_event(struct hfi_ctx *ctx,
 	return cond;
 }
 
-int hfi_ib_eq_arm(struct hfi_ctx *ctx, u16 eq_idx, struct ib_cq *ibcq,
-		  u64 user_data0, u64 user_data1)
+int hfi_ib_eq_arm(struct hfi_ctx *ctx, u16 eq_idx, u8 solicit,
+		  struct ib_cq *ibcq, u64 user_data0, u64 user_data1)
 {
 	struct hfi_eq_mgmt *eqm;
 	int ret;
@@ -1406,7 +1407,7 @@ int hfi_ib_eq_arm(struct hfi_ctx *ctx, u16 eq_idx, struct ib_cq *ibcq,
 	eqm->mode = HFI_EC_MODE_IB;
 	eqm->ibcq = ibcq;
 
-	ret = hfi_eq_arm(ctx, eqm, user_data0);
+	ret = hfi_eq_arm(ctx, eqm, user_data0, solicit);
 err:
 	mutex_unlock(&ctx->event_mutex);
 	up_read(&ctx->ctx_rwsem);
@@ -1706,7 +1707,7 @@ int hfi_ev_set_channel(struct hfi_ctx *ctx, u16 ec_idx,
 	eqm->user_handle = eq_handle;
 
 	ret = eq_handle ?
-		hfi_eq_arm(ctx, eqm, user_data) :
+		hfi_eq_arm(ctx, eqm, user_data, 0) :
 		hfi_ct_arm(ctx, eqm);
 
 idr_end:

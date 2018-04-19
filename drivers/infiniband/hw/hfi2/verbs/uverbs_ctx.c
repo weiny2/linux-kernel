@@ -331,7 +331,7 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 			ret = -EINVAL;
 			break;
 		}
-		ret = hfi_ib_eq_arm(ctx, cmd.idx1, uobj->object,
+		ret = hfi_ib_eq_arm(ctx, cmd.idx1, cmd.count, uobj->object,
 				    cmd.data0, cmd.data1);
 		if (ret)
 			break;
