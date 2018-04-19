@@ -1519,9 +1519,7 @@ static void at_set_root_entry(struct hfi_at *at)
 	u32 sts;
 	unsigned long flag;
 
-	addr = virt_to_phys(at->root_entry);
-	if (ecap_ecs(at->ecap))
-		addr |= AT_RTADDR_RTT;
+	addr = virt_to_phys(at->root_entry) | AT_RTADDR_RTT;
 
 	raw_spin_lock_irqsave(&at->register_lock, flag);
 	at_writeq(at->reg + AT_RTADDR_REG, addr);
@@ -1547,13 +1545,12 @@ static inline struct context_entry *at_context_addr(struct hfi_at *at,
 
 	root = &at->root_entry[bus];
 	entry = &root->lo;
-	if (ecap_ecs(at->ecap)) {
-		if (devfn >= 0x80) {
-			devfn -= 0x80;
-			entry = &root->hi;
-		}
-		devfn *= 2;
+	if (devfn >= 0x80) {
+		devfn -= 0x80;
+		entry = &root->hi;
 	}
+	devfn *= 2;
+
 	if (*entry & 1) {
 		context = phys_to_virt(*entry & AT_PAGE_MASK);
 	} else {
@@ -1588,9 +1585,6 @@ static void free_context_table(struct hfi_at *at)
 		context = at_context_addr(at, i, 0, 0);
 		if (context)
 			free_pgtable_page(context);
-
-		if (!ecap_ecs(at->ecap))
-			continue;
 
 		context = at_context_addr(at, i, 0x80, 0);
 		if (context)
@@ -1646,50 +1640,7 @@ static int hfi_svm_free_pasid_tables(struct hfi_at *at)
 	idr_destroy(&at->pasid_stats_idr);
 	return 0;
 }
-#if 0
-static void at_enable_dev_iotlb(struct hfi_at *at)
-{
-	struct pci_dev *pdev = at->dd->pdev;
 
-	/*
-	 * The PCIe spec, in its wisdom, declares that the behaviour of
-	 * the device if you enable PASID support after ATS support is
-	 * undefined. So always enable PASID support on devices which
-	 * have it, even if we can't yet know if we're ever going to
-	 * use it.
-	 */
-	if (at->pasid_supported &&
-	    !pci_enable_pasid(pdev, at->pasid_supported & ~1))
-		at->pasid_enabled = 1;
-
-	if (at->pri_supported &&
-	    !pci_reset_pri(pdev) && !pci_enable_pri(pdev, 32))
-		at->pri_enabled = 1;
-
-	if (at->ats_supported && !pci_enable_ats(pdev, AT_PAGE_SHIFT)) {
-		at->ats_enabled = 1;
-		at->ats_qdep = pci_ats_queue_depth(pdev);
-	}
-}
-
-static void at_disable_dev_iotlb(struct hfi_at *at)
-{
-	struct pci_dev *pdev = at->dd->pdev;
-
-	if (at->ats_enabled) {
-		pci_disable_ats(pdev);
-		at->ats_enabled = 0;
-	}
-	if (at->pri_enabled) {
-		pci_disable_pri(pdev);
-		at->pri_enabled = 0;
-	}
-	if (at->pasid_enabled) {
-		pci_disable_pasid(pdev);
-		at->pasid_enabled = 0;
-	}
-}
-#endif
 #define MAX_NR_PASID_BITS (20)
 static inline unsigned long hfi_at_get_pts(struct hfi_at *at)
 {
@@ -1777,30 +1728,10 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 	struct pci_dev *pdev = dd->pdev;
 	struct context_entry *context;
 	u64 ctx_lo;
-	int translation = CONTEXT_TT_MULTI_LEVEL;
 
 	at->bus = pdev->bus->number;
 	at->devfn = pdev->devfn;
-	at->ats_supported = at->pasid_supported = at->pri_supported = 1;
-	at->ats_enabled = at->pasid_enabled = at->pri_enabled = 0;
-	at->ats_qdep = 0;
-
-	if (ecap_dev_iotlb_support(at->ecap) &&
-	    pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ATS))
-		at->ats_supported = 1;
-
-	if (ecap_ecs(at->ecap)) {
-		if (ecap_pasid(at->ecap)) {
-			int features = pci_pasid_features(pdev);
-
-			if (features >= 0)
-				at->pasid_supported = features | 1;
-		}
-
-		if (at->ats_supported && ecap_prs(at->ecap) &&
-		    pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_PRI))
-			at->pri_supported = 1;
-	}
+	at->ats_qdep = HFI_ATS_MAX_QDEP;
 
 	context = at_context_addr(at, at->bus, at->devfn, 1);
 	if (!context)
@@ -1812,13 +1743,10 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 	context_clear_entry(context);
 	context_set_domain_id(context, at->seq_id);
 
-	if (at->ats_supported)
-		translation = CONTEXT_TT_DEV_IOTLB;
-
 	/* TODO: we don't need to set second level page table */
 	context_set_address_width(context, at->agaw);
 
-	context_set_translation_type(context, translation);
+	context_set_translation_type(context, CONTEXT_TT_DEV_IOTLB);
 	context_set_fault_enable(context);
 	context_set_present(context);
 	__at_flush_cache(at, context, sizeof(*context));
@@ -1840,8 +1768,6 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 		at_flush_write_buffer(at);
 	}
 
-//	at_enable_dev_iotlb(at);
-
 	ctx_lo = context[0].lo;
 	if (ctx_lo & CONTEXT_PASIDE)
 		return -EINVAL;
@@ -1851,27 +1777,12 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 
 	/* barrier context[1] entry */
 	wmb();
-	/*
-	 * CONTEXT_TT_MULTI_LEVEL and CONTEXT_TT_DEV_IOTLB are both
-	 * extended to permit requests-with-PASID if the PASIDE bit
-	 * is set. which makes sense. For CONTEXT_TT_PASS_THROUGH,
-	 * however, the PASIDE bit is ignored and requests-with-PASID
-	 * are unconditionally blocked. Which makes less sense.
-	 * So convert from CONTEXT_TT_PASS_THROUGH to one of the new
-	 * "guest mode" translation types depending on whether ATS
-	 * is available or not. Annoyingly, we can't use the new
-	 * modes *unless* PASIDE is set.
-	 */
 	if ((ctx_lo & CONTEXT_TT_MASK) == (CONTEXT_TT_PASS_THROUGH << 2)) {
 		ctx_lo &= ~CONTEXT_TT_MASK;
-		if (at->ats_supported)
-			ctx_lo |= CONTEXT_TT_PT_PASID_DEV_IOTLB << 2;
-		else
-			ctx_lo |= CONTEXT_TT_PT_PASID << 2;
+		ctx_lo |= CONTEXT_TT_PT_PASID_DEV_IOTLB << 2;
 	}
 	ctx_lo |= CONTEXT_PASIDE;
-	if (at->pri_supported)
-		ctx_lo |= CONTEXT_PRS;
+	ctx_lo |= CONTEXT_PRS;
 	context[0].lo = ctx_lo;
 
 	/* barrier context[0] entry */
@@ -1911,7 +1822,6 @@ static void at_context_clear(struct hfi_at *at)
 
 static void disable_at_context(struct hfi_at *at)
 {
-//	at_disable_dev_iotlb(at);
 	at_context_clear(at);
 
 	if (at->gcmd & AT_GCMD_TE)
@@ -1923,22 +1833,17 @@ static void free_at_context(struct hfi_at *at)
 	/* free context mapping */
 	free_context_table(at);
 
-	if (ecap_pasid(at->ecap)) {
-		if (ecap_prs(at->ecap))
-			hfi_svm_finish_prq(at);
-		hfi_svm_free_pasid_tables(at);
-	}
+	hfi_svm_finish_prq(at);
+	hfi_svm_free_pasid_tables(at);
 }
 
 static void hfi_at_enable_svm(struct hfi_at *at, struct hfi_at_svm *svm)
 {
 	svm->did = at->seq_id;
 	svm->sid = PCI_DEVID(at->bus, at->devfn);
-	if (at->ats_enabled) {
-		svm->qdep = at->ats_qdep;
-		if (svm->qdep >= QI_DEV_EIOTLB_MAX_INVS)
-			svm->qdep = 0;
-	}
+	svm->qdep = at->ats_qdep;
+	if (svm->qdep >= QI_DEV_EIOTLB_MAX_INVS)
+		svm->qdep = 0;
 }
 
 static struct hfi_at *hfi_svm_device_to_at(struct device *dev)
@@ -2514,21 +2419,11 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 	struct hfi_at_svm *svm = NULL;
 	struct mm_struct *mm = NULL;
 	bool use_cpt = use_kernel_cpt;
-	int pasid_max;
 	u64 pgdval;
 	int ret;
 
 	if (WARN_ON(!at))
 		return -EINVAL;
-
-//	if (dev_is_pci(dev)) {
-	if (0) {
-		pasid_max = pci_max_pasids(to_pci_dev(dev));
-		if (pasid_max < 0)
-			return -EINVAL;
-	} else {
-		pasid_max = 1 << 20;
-	}
 
 	if ((flags & SVM_FLAG_SUPERVISOR_MODE)) {
 		if (!ecap_srs(at->ecap))
@@ -2546,14 +2441,6 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 			if (svm->mm != mm ||
 			    (svm->flags & SVM_FLAG_PRIVATE_PASID))
 				continue;
-
-			if (svm->pasid >= pasid_max) {
-				dev_warn(dev,
-					 "Limited PASID width. Cannot use existing PASID %d\n",
-					 svm->pasid);
-				ret = -ENOSPC;
-				goto out;
-			}
 
 			svm->users++;
 			goto success;
@@ -2577,13 +2464,10 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 	svm->users = 1;
 	hfi_at_enable_svm(at, svm);
 
-	if (pasid_max > at->pasid_max)
-		pasid_max = at->pasid_max;
-
 	/* Do not use PASID 0 in caching mode (virtualised AT) */
 	ret = idr_alloc(&at->pasid_idr, svm,
 			!!cap_caching_mode(at->cap),
-			pasid_max - 1, GFP_KERNEL);
+			at->pasid_max - 1, GFP_KERNEL);
 	if (ret < 0) {
 		kfree(svm);
 		goto out;
@@ -2773,6 +2657,11 @@ hfi_at_init(struct hfi_devdata *dd)
 	}
 
 	at = dd->at;
+	if (!ecap_ecs(at->ecap)) {
+		dd_dev_err(dd, "AT: extended capability not supported\n");
+		goto free_at;
+	}
+
 	if (translation_status(at)) {
 		dd_dev_err(dd, "AT: translation already enabled.\n");
 		goto free_at;
@@ -2781,6 +2670,11 @@ hfi_at_init(struct hfi_devdata *dd)
 	ret = hfi_at_init_qi(at);
 	if (ret)
 		goto free_at;
+
+	if (!ecap_dev_iotlb_support(at->ecap)) {
+		dd_dev_err(dd, "AT: DEVTLB not supported\n");
+		goto free_at;
+	}
 
 	ret = at_alloc_root_entry(at);
 	if (ret)

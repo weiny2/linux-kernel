@@ -414,6 +414,8 @@ enum {
 /* page request queue size/order */
 #define PRQ_ORDER			0
 
+#define HFI_ATS_MAX_QDEP		0x20
+
 struct pasid_entry {
 	u64 val;
 };
@@ -505,12 +507,6 @@ struct hfi_at {
 	/* FXR device info */
 	u8 bus;			/* PCI bus number */
 	u8 devfn;		/* PCI devfn number */
-	u8 pasid_supported:3;
-	u8 pasid_enabled:1;
-	u8 pri_supported:1;
-	u8 pri_enabled:1;
-	u8 ats_supported:1;
-	u8 ats_enabled:1;
 	u8 ats_qdep;
 
 	struct hfi_devdata *dd; /* for backward reference */
