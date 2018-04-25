@@ -3934,7 +3934,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
-	hfi_pend_cq_info_alloc(dd, &dd->pend_cq);
+	hfi_pend_cq_info_alloc(dd, &dd->pend_cq, "sys");
 
 	/* per port init */
 	dd->num_pports = HFI_NUM_PPORTS;

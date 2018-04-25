@@ -91,6 +91,9 @@
  */
 #define HFI2_IB_MAX_CTXTS 8
 #define HFI2_IB_DEF_CTXTS (zebu ? 1 : 2)
+/* Send contexts is really TX command queues (per port) */
+#define HFI2_IB_MAX_SEND_CTXTS 2
+#define HFI2_IB_DEF_SEND_CTXTS 2
 
 /*
  * QP numbering defines
@@ -168,7 +171,7 @@ struct hfi_tx_wc {
 struct hfi2_qp_priv {
 	struct rvt_qp *owner;
 	union hfi2_ib_dma_header *s_hdr;
-	struct hfi_ctx *s_ctx;
+	struct hfi2_ibtx *s_ctx;
 	struct hfi2_ibrcv *ibrcv;
 	u32 bth2;
 	u16 pkey;
@@ -199,9 +202,20 @@ struct hfi2_qp_priv {
 	u32 pidex_qpn;
 };
 
+struct hfi2_ibtx {
+	struct hfi2_ibport *ibp;
+	struct hfi_ctx *ctx;
+	struct hfi_cmdq cmdq_tx;
+	struct hfi_cmdq cmdq_rx;
+	struct hfi_pend_queue pend_cq;
+	struct hfi_eq send_eq;
+};
+
 struct hfi2_ibrcv {
 	struct hfi2_ibport *ibp;
 	struct hfi_ctx *ctx;
+	struct hfi_cmdq *cmdq_rx;
+	struct hfi_pend_queue *pend_cq;
 	struct hfi_eq eq;
 	u32 rhq_update_mask;
 	u16 egr_last_idx;
@@ -217,12 +231,7 @@ struct hfi2_ibport {
 	struct device *dev; /* from IB's ib_device */
 	struct hfi_pportdata *ppd;
 	u8 port_num;
-	struct hfi_ctx *ctx;
-	struct hfi_cmdq cmdq_tx;
-	struct hfi_cmdq cmdq_rx;
-	struct hfi_pend_queue pend_cq;
-
-	struct hfi_eq send_eq;
+	struct hfi2_ibtx port_tx[HFI2_IB_MAX_SEND_CTXTS];
 	/*
 	 * hfi2_ibrcv structs contain eager receive resources and
 	 * are placed here in hfi2_ibport as setup requires using the
@@ -254,6 +263,7 @@ struct hfi2_ibdev {
 	u8 oui[3];
 	u8 rsm_mask;
 	u8 rc_drop_max_rate;
+	u8 num_send_cmdqs;
 	u8 num_qp_ctxs;
 	bool rc_drop_enabled;
 	int assigned_node_id;
@@ -422,9 +432,9 @@ void *hfi2_rcv_get_ebuf_ptr(struct hfi2_ibrcv *rcv, u16 idx, u32 offset);
 void hfi2_rcv_advance(struct hfi2_ibrcv *rcv, u64 *rhf_entry);
 int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry);
 int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
-		  struct hfi2_ibrcv *rcv);
+		  struct hfi2_ibrcv *rcv, int cmdq_idx);
 void hfi2_rcv_uninit(struct hfi2_ibrcv *rcv);
-int hfi2_ctx_init(struct hfi2_ibdev *ibd, int num_ctxs);
+int hfi2_ctx_init(struct hfi2_ibdev *ibd, int num_ctxs, int num_cmdqs);
 void hfi2_ctx_uninit(struct hfi2_ibdev *ibd);
 int hfi2_ctx_init_port(struct hfi2_ibport *ibp);
 void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp);

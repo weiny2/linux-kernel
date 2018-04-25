@@ -319,14 +319,15 @@ static void hfi_stop_pend_cq_thread(struct hfi_pend_queue *pq)
 	pq->thread = NULL;
 }
 
-int hfi_pend_cq_info_alloc(struct hfi_devdata *dd, struct hfi_pend_queue *pq)
+int hfi_pend_cq_info_alloc(struct hfi_devdata *dd, struct hfi_pend_queue *pq,
+			   char *name)
 {
 	init_waitqueue_head(&pq->event);
 	INIT_LIST_HEAD(&pq->pending);
 	spin_lock_init(&pq->lock);
 
 	pq->thread = kthread_run(hfi_pend_cq_thread, pq,
-				 "hfi_pend_cq%d", dd->unit);
+				 "hfi2_cmdq%d-%s", dd->unit, name);
 	if (IS_ERR(pq->thread)) {
 		int ret = PTR_ERR(pq->thread);
 

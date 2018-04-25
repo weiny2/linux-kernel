@@ -421,13 +421,14 @@ int hfi_pte_cache_read(struct hfi_devdata *dd)
 #if 0
 static int hfi2_send_wait(void *data)
 {
-	struct hfi2_ibport *ibp = data;
+	struct hfi2_ibtx *ibtx = data;
+	struct hfi2_ibport *ibp = ibtx->ibp;
 
 	dev_info(ibp->dev, "TX kthread %d starting\n",
 		 ibp->port_num);
 	allow_signal(SIGINT);
 	while (!kthread_should_stop()) {
-		hfi2_send_event(&ibp->send_eq, ibp);
+		hfi2_send_event(&ibtx->send_eq, ibtx);
 		msleep(10);
 	}
 	dev_info(ibp->dev, "TX kthread %d stopping\n",

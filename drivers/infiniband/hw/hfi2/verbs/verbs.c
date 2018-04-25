@@ -688,10 +688,6 @@ static int hfi2_init_port(struct hfi2_ibdev *ibd,
 	RCU_INIT_POINTER(ibp->rvp.qp[1], NULL);
 	spin_lock_init(&ibp->rvp.lock);
 
-	ret = hfi_pend_cq_info_alloc(ibp->ibd->dd, &ibp->pend_cq);
-	if (ret < 0)
-		goto err;
-
 	ret = hfi2_ctx_init_port(ibp);
 	if (ret < 0)
 		goto err;
@@ -710,7 +706,6 @@ err:
 static void hfi2_uninit_port(struct hfi2_ibport *ibp)
 {
 	hfi2_ctx_uninit_port(ibp);
-	hfi_pend_cq_info_free(&ibp->pend_cq);
 	free_percpu(ibp->rvp.rc_acks);
 	free_percpu(ibp->rvp.rc_qacks);
 	free_percpu(ibp->rvp.rc_delayed_comp);
@@ -784,7 +779,9 @@ int hfi2_ib_add(struct hfi_devdata *dd)
 		goto alloc_err;
 
 	/* Allocate HFI Contexts */
-	ret = hfi2_ctx_init(ibd, HFI2_IB_DEF_CTXTS);
+	BUILD_BUG_ON(!is_power_of_2(HFI2_IB_DEF_CTXTS));
+	BUILD_BUG_ON(!is_power_of_2(HFI2_IB_DEF_SEND_CTXTS));
+	ret = hfi2_ctx_init(ibd, HFI2_IB_DEF_CTXTS, HFI2_IB_DEF_SEND_CTXTS);
 	if (ret)
 		goto ctx_err;
 

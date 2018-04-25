@@ -285,7 +285,7 @@ void qp_iter_print(struct seq_file *s, struct rvt_qp_iter *iter)
 		   qp->s_retry_cnt,
 		   qp->s_rnr_retry_cnt,
 		   priv->ibrcv ? priv->ibrcv->ctx->pid : 0,
-		   priv->s_ctx ? priv->s_ctx->pid : 0,
+		   priv->s_ctx ? priv->s_ctx->ctx->pid : 0,
 		   ibcq_to_rvtcq(qp->ibqp.send_cq)->queue->head,
 		   ibcq_to_rvtcq(qp->ibqp.send_cq)->queue->tail,
 		   qp->pid);

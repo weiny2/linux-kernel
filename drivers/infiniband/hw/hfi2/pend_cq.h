@@ -75,7 +75,8 @@ struct hfi_pend_queue {
 	struct hfi_devdata *dd;
 };
 
-int hfi_pend_cq_info_alloc(struct hfi_devdata *dd, struct hfi_pend_queue *pq);
+int hfi_pend_cq_info_alloc(struct hfi_devdata *dd, struct hfi_pend_queue *pq,
+			   char *name);
 void hfi_pend_cq_info_free(struct hfi_pend_queue *pq);
 
 /**

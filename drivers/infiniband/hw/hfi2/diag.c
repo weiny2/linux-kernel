@@ -330,7 +330,6 @@ static const struct file_operations diagpkt_file_ops = {
 int hfi2_diag_init(struct hfi_devdata *dd)
 {
 	struct hfi2_diagpkt_data *diag = &dd->hfi2_diag;
-	struct hfi_ctx *ctx;
 	struct opa_ev_assign eq_alloc_tx = {0};
 	/*
 	 * The HW resources are shared with VPD's port 0. The CMDQ can be used
@@ -338,14 +337,14 @@ int hfi2_diag_init(struct hfi_devdata *dd)
 	 * An optimization is to use the per port VPD resources to perform
 	 * the transfers if this becomes a bottleneck.
 	 */
-	struct hfi2_ibport *ibp = &dd->ibd->pport[0];
+	struct hfi2_ibtx *ibtx = &dd->ibd->pport[0].port_tx[0];
+	struct hfi_ctx *ctx = ibtx->ctx;
 	int rc;
 
 	/* Reuse verbs context and command queue for diag */
-	ctx = &dd->ibd->sm_ctx;
-	diag->cmdq_tx = &ibp->cmdq_tx;
-	diag->cmdq_rx = &ibp->cmdq_rx;
-	diag->pend_cq = &ibp->pend_cq;
+	diag->cmdq_tx = &ibtx->cmdq_tx;
+	diag->cmdq_rx = &ibtx->cmdq_rx;
+	diag->pend_cq = &ibtx->pend_cq;
 
 	spin_lock_init(&diag->cmdq_tx_lock);
 
