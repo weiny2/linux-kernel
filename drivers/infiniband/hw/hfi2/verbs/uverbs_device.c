@@ -102,7 +102,7 @@ static int hfi2_e2e_connect_handler(struct ib_device *ib_dev,
 
 	/* copy_from_user handled in hfi_e2e_conn */
 	return hfi_e2e_conn((struct hfi_ibcontext *)file->ucontext,
-			    uattr->ptr_attr.ptr);
+			    u64_to_user_ptr(uattr->ptr_attr.data));
 }
 
 static int hfi2_check_sl_pair_handler(struct ib_device *ib_dev,
