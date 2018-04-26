@@ -1093,8 +1093,11 @@ int hfi_ev_wait_single(struct hfi_ctx *ctx, u16 eqflag,
 	 *    or a successful event return. In either case,
 	 *    we want to turn off the EQ/CT interrupt, and
 	 *    dis-associate the self event channel.
+	 * Note that the kref count is 1 on opening and drops to 0 on closing.
+	 * Each waiting thread inc/dec count during the operation, so "<=2"
+	 * means I am the only waiting thread.
 	 */
-	if (!ret && !wq_has_sleeper(&eqm->wq) &&
+	if (!ret && kref_read(&eqm->refcount) <= 2 &&
 	    ctx->type != HFI_CTX_TYPE_KERNEL) {
 		/* turn off interrupt on this eq */
 		if (eqflag) { /* EQ */
