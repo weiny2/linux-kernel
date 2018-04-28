@@ -197,6 +197,13 @@ struct hfi2_ibport {
 
 	/* Informational counters beyond what rdmavt provides */
 	struct hfi2_ib_stats *stats;
+
+	/*
+	 * prescan_9B/16B: indicates if verbs CCA prescan is turned on
+	 * for 9B/16B
+	 */
+	bool prescan_9B;
+	bool prescan_16B;
 };
 
 typedef void (*rhf_rcv_function_ptr)(struct hfi2_ib_packet *packet);

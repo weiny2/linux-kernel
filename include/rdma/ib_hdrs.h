@@ -318,6 +318,11 @@ static inline bool ib_bth_get_becn(struct ib_other_headers *ohdr)
 	return (ohdr->bth[1]) & cpu_to_be32(IB_BECN_SMASK);
 }
 
+static inline void ib_bth_clear_fecn(struct ib_other_headers *ohdr)
+{
+	(ohdr->bth[1]) &= ~(cpu_to_be32(IB_FECN_SMASK));
+}
+
 static inline bool ib_bth_get_fecn(struct ib_other_headers *ohdr)
 {
 	return (ohdr->bth[1]) & cpu_to_be32(IB_FECN_SMASK);

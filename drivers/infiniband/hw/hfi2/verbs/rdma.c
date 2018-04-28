@@ -364,6 +364,8 @@ static int hfi2_setup_9B_packet(struct hfi2_ib_packet *packet)
 	packet->pad = ib_bth_get_pad(packet->ohdr);
 	packet->extra_byte = 0;
 	packet->fecn = ib_bth_get_fecn(packet->ohdr);
+	if (packet->fecn)
+		packet->ibp->prescan_9B = true;
 	packet->pkey = ib_bth_get_pkey(packet->ohdr);
 	packet->migrated = ib_bth_is_migration(packet->ohdr);
 	return 0;
@@ -429,6 +431,8 @@ static int hfi2_setup_bypass_packet(struct hfi2_ib_packet *packet)
 	packet->pad = hfi2_16B_bth_get_pad(packet->ohdr);
 	packet->extra_byte = SIZE_OF_LT;
 	packet->fecn = hfi2_16B_get_fecn(packet->hdr);
+	if (packet->fecn)
+		packet->ibp->prescan_16B = true;
 	packet->pkey = hfi2_16B_get_pkey(packet->hdr);
 	packet->migrated = opa_bth_is_migration(packet->ohdr);
 	return 0;
@@ -549,6 +553,122 @@ static void rcv_hdrerr(struct hfi2_ib_packet *packet)
 }
 
 /*
+ * prescan_rxq is called when FECNs are being received due to congestion
+ * This function looks ahead at all the valid events in the event queue and
+ * sends a CNP if a FECN is set. It essentially does a prescan to send a
+ * CNP as soon as possible instead of going through the normal receive
+ * processing pipeline. This helps react to congestion quickly.
+ */
+void prescan_rxq(struct hfi2_ibrcv *rcv)
+{
+	struct hfi2_ib_packet packet_data;
+	struct rvt_qp *qp;
+	struct ib_header *hdr;
+	struct hfi2_ibport *ibp = rcv->ibp;
+	struct hfi2_ib_packet *packet = &packet_data;
+	bool dropped = false;
+	int n = 0;
+	u8 lnh;
+	u32 src_qp, qp_num;
+	u16 pkey, idx = 0, off = 0;
+	u64 *rhf_entry;
+
+	packet->ibp = rcv->ibp;
+
+	/* loop until an invalid event is found */
+	while (hfi_eq_peek_nth(rcv->ctx, &rcv->eq, &rhf_entry, n++, &dropped)) {
+		packet->hdr = rhf_get_hdr(packet, rhf_entry);
+		hdr = packet->hdr;
+		packet->rhf = *rhf_entry;
+
+		if (rhf_rcv_type(*rhf_entry) == RHF_RCV_TYPE_IB) {
+			lnh = ib_get_lnh(packet->hdr);
+			if (lnh == HFI1_LRH_BTH) {
+				packet->ohdr = &hdr->u.oth;
+				packet->grh = NULL;
+			} else if (lnh == HFI1_LRH_GRH) {
+				packet->ohdr = &hdr->u.l.oth;
+				packet->grh = &hdr->u.l.grh;
+			} else {
+				continue;
+			}
+			if (ib_bth_get_fecn(packet->ohdr)) {
+				packet->slid = ib_get_slid(packet->hdr);
+				packet->dlid = ib_get_dlid(packet->hdr);
+				packet->sc = hfi2_9B_get_sc5(hdr, packet->rhf);
+				src_qp = ib_get_sqpn(packet->ohdr);
+				pkey = ib_bth_get_pkey(packet->ohdr);
+				qp_num = ib_bth_get_qpn(packet->ohdr);
+				rcu_read_lock();
+				qp = rvt_lookup_qpn(&ibp->ibd->rdi,
+						    &ibp->rvp, qp_num);
+				if (!qp) {
+					rcu_read_unlock();
+					continue;
+				}
+				packet->qp = qp;
+				hfi_return_cnp(packet, src_qp, pkey);
+				rcu_read_unlock();
+				/*
+				 * clear the FECN bit to avoid CNP being sent
+				 * twice while the packet in processed by the
+				 * packet receive handler
+				 */
+				ib_bth_clear_fecn(packet->ohdr);
+			}
+		} else if (rhf_rcv_type(*rhf_entry) == RHF_RCV_TYPE_BYPASS) {
+			u8 l4;
+
+			if (OPA_BYPASS_GET_L2_TYPE(packet->hdr) !=
+					OPA_BYPASS_HDR_16B)
+				continue;
+			if (!(bool)rhf_use_egr_bfr(*rhf_entry))
+				continue;
+			idx = rhf_egr_index(*rhf_entry);
+			off = rhf_egr_buf_offset(*rhf_entry);
+			packet->ebuf = hfi2_rcv_get_ebuf(rcv, idx, off);
+			l4 = hfi2_16B_get_l4(packet->hdr);
+			if (l4 == HFI1_L4_IB_LOCAL) {
+				packet->ohdr = packet->ebuf;
+				packet->grh = NULL;
+			} else if (l4 == HFI1_L4_IB_GLOBAL) {
+				packet->ohdr = packet->ebuf +
+					       sizeof(struct ib_grh);
+				packet->grh = packet->ebuf;
+			} else {
+				continue;
+			}
+			if (hfi2_16B_get_fecn(packet->hdr)) {
+				packet->slid = hfi2_16B_get_slid(packet->hdr);
+				packet->dlid = hfi2_16B_get_dlid(packet->hdr);
+				packet->sc = hfi2_16B_get_sc(packet->hdr);
+				pkey = hfi2_16B_get_pkey(packet->hdr);
+				src_qp = ib_get_sqpn(packet->ohdr);
+				qp_num = ib_bth_get_qpn(packet->ohdr);
+				rcu_read_lock();
+				qp = rvt_lookup_qpn(&ibp->ibd->rdi, &ibp->rvp,
+						    qp_num);
+				if (!packet->qp) {
+					rcu_read_unlock();
+					continue;
+				}
+				packet->qp = qp;
+				hfi_return_cnp_bypass(packet, src_qp, pkey);
+				rcu_read_unlock();
+				/*
+				 * clear the FECN bit to avoid CNP being sent
+				 * twice while the packet in processed by the
+				 * packet receive handler
+				 */
+				hfi2_16B_clear_fecn(packet->hdr);
+			}
+		}
+	}
+	ibp->prescan_9B = false;
+	ibp->prescan_16B = false;
+}
+
+/*
  * This is the RX kthread function, created per Receive Header Queue (RHQ).
  */
 int hfi2_rcv_wait(void *data)
@@ -579,6 +699,14 @@ int hfi2_rcv_wait(void *data)
 			/* First parse packet header */
 			hdr_valid = process_rcv_packet(ibp, rcv,
 						       rhf_entry, &pkt);
+			/*
+			 * As long as there are FECNs being received, look
+			 * ahead for FECNs by calling prescan
+			 */
+			if (ibp->prescan_9B || ibp->prescan_16B) {
+				prescan_rxq(rcv);
+				pkt.fecn = false;
+			}
 
 			/*
 			 * Test for error bits in RHF. If none, then call the

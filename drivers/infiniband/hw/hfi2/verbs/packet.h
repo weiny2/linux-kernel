@@ -703,6 +703,11 @@ static inline u8 hfi2_16B_get_fecn(struct hfi2_16b_header *hdr)
 	return (u8)((hdr->lrh[1] & OPA_16B_FECN_MASK) >> OPA_16B_FECN_SHIFT);
 }
 
+static inline void hfi2_16B_clear_fecn(struct hfi2_16b_header *hdr)
+{
+	hdr->lrh[1] &= ~OPA_16B_FECN_MASK;
+}
+
 static inline u8 hfi2_16B_get_l2(struct hfi2_16b_header *hdr)
 {
 	return (u8)((hdr->lrh[1] & OPA_16B_L2_MASK) >> OPA_16B_L2_SHIFT);
