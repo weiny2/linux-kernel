@@ -5121,6 +5121,341 @@ static struct hfi_error_csr hfi_rxdma_error[] = {
 		}
 /* CSR bits defined: 64 */
 	}
+	,
+/*
+ * RXDMA_ERR_STS_2 desc:
+ */
+	{
+		"RXDMA_2",
+		FXR_RXDMA_ERR_EN_HOST_2,
+		FXR_RXDMA_ERR_FIRST_HOST_2,
+		FXR_RXDMA_ERR_STS_2,
+		FXR_RXDMA_ERR_CLR_2,
+		FXR_RXDMA_ERR_FRC_2,
+		{
+			{ /* bit 0 */
+				"host_ecc_sbe",
+				" Correctable Error on data from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 1 */
+				"host_ecc_sbe",
+				" Correctable Error on data from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 2 */
+				"host_ecc_sbe",
+				" Correctable Error on data from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 3 */
+				"host_ecc_sbe",
+				" Correctable Error on data from the Host interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 4 */
+				"host_ecc_mbe",
+				" Uncorrectable Error on data from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 5 */
+				"host_ecc_mbe",
+				" Uncorrectable Error on data from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 6 */
+				"host_ecc_mbe",
+				" Uncorrectable Error on data from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 7 */
+				"host_ecc_mbe",
+				" Uncorrectable Error on data from the Host Interface. One bit for each 8 bytes of the 32 bytes going to the Host Arbiter. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 8 */
+				"ack_tail_sbe",
+				" Correctable Error on a read from the TailAck Array ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 9 */
+				"ack_tail_mbe",
+				" Uncorrectable Error on a read from the Tail Ack Array ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 10 */
+				"ack_head_sbe",
+				" Correctable Error on a read from the Head Ack Array ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 11 */
+				"ack_head_mbe",
+				" Uncorrectable Error on a read from the Head Ack Array ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 12 */
+				"hp_pool_op_sbe",
+				" Correctable Error on a read from the HP Pool OP Array ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 13 */
+				"hp_pool_op_mbe",
+				" Uncorrectable Error on a read from the HP Pool OP Array ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 14 */
+				"hp_pool_cteq_sbe",
+				" Correctable Error on a read from the HP Pool CTEQ Array ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 15 */
+				"hp_pool_cteq_mbe",
+				" Uncorrectable Error on a read from the HP Pool CTEQ Array ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 16 */
+				"otr_pool_op_sbe",
+				" Correctable Error on a read from the OTR Pool OP Array ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 17 */
+				"otr_pool_op_mbe",
+				" Uncorrectable Error on a read from the OTR Pool OP Array ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 18 */
+				"otr_pool_cteq_sbe",
+				" Correctable Error on a read from the OTR Pool CTEQ Array ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 19 */
+				"otr_pool_cteq_mbe",
+				" Uncorrectable Error on a read from the OTR Pool CTEQ Array ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 20 */
+				"to_pkt_sbe",
+				" Correctable Error on a Triggered Op from the RxET ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 21 */
+				"to_pkt_mbe",
+				" Uncorrectable Error on a Triggered Op from the RxET ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 22 */
+				"eq_data_sbe",
+				" Correctable Error on the EQ Data being delivered from the RxET. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 23 */
+				"eq_data_mbe",
+				" Uncorrectable Error on the EQ Data being delivered from the RxET. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 24 */
+				"eq_hdr_mbe",
+				" The EQ being delivered from the RxET has a header MBE. The EQ was dropped. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 25 */
+				"mc0_dropped_cmd",
+				" RxDMA Command from RxHP was dropped because command pool was full. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 26 */
+				"mc1_dropped_cmd",
+				" RxDMA Command from RxOTR was dropped because command pool was full. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 27 */
+				"gen1_write_err",
+				" The Gen1 EQ being delivered from the RxET has a header MBE or the data queue read had an error or the RxHP Gen1 EQ command requested more than 120 bytes. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 28 */
+				"to_error",
+				" The Triggered Op being delivered from the RxET had an Error. This TO was dropped. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 29 */
+				"to_queue_wr_err",
+				" A Write to the Triggered Op Ptr Queue caused an overflow. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 30 */
+				"to_queue_wr_err",
+				" A Write to the Triggered Op Ptr Queue caused an overflow. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 31 */
+				"to_queue_wr_err",
+				" A Write to the Triggered Op Ptr Queue caused an overflow. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 32 */
+				"to_queue_wr_err",
+				" A Write to the Triggered Op Ptr Queue caused an overflow. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 33 */
+				"to_queue_wr_err",
+				" A Write to the Triggered Op Ptr Queue caused an overflow. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 34 */
+				"to_queue_rd_err",
+				" A Read to an empty Triggered Op Ptr Queue or one with Base=0. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 35 */
+				"to_queue_rd_err",
+				" A Read to an empty Triggered Op Ptr Queue or one with Base=0. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 36 */
+				"to_queue_rd_err",
+				" A Read to an empty Triggered Op Ptr Queue or one with Base=0. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 37 */
+				"to_queue_rd_err",
+				" A Read to an empty Triggered Op Ptr Queue or one with Base=0. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 38 */
+				"to_queue_rd_err",
+				" A Read to an empty Triggered Op Ptr Queue or one with Base=0. [3:0]=>TC3-0, [4]=>HP ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 39 */
+				"to_size_error",
+				" A Triggered Op aimed for the HP is not 64 bytes in size, or a TO aimed for the TXCI is not 32 or 64 bytes in size. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
+			},
+			{ /* bit 40 */
+				"iovec_rd_err",
+				" An error on the IOVEC read from the HIArb was seen. ERR_CATEGORY_TRANSACTION",
+				ERR_CATEGORY_TRANSACTION,
+			},
+			{ /* bit 41 */
+				"ct_cache_tag_sbe",
+				" Correctable error on the CT Cache Tag. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 42 */
+				"ct_cache_tag_sbe",
+				" Correctable error on the CT Cache Tag. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 43 */
+				"ct_cache_tag_mbe",
+				" Uncorrectable error on the CT Cache Tag. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 44 */
+				"ct_cache_tag_mbe",
+				" Uncorrectable error on the CT Cache Tag. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 45 */
+				"ct_cache_data_sbe",
+				" Correctable error on the CT Cache Data. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 46 */
+				"ct_cache_data_sbe",
+				" Correctable error on the CT Cache Data. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 47 */
+				"ct_cache_data_mbe",
+				" Uncorrectable error on the CT Cache Data. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 48 */
+				"ct_cache_data_mbe",
+				" Uncorrectable error on the CT Cache Data. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 49 */
+				"quick_tid_sbe",
+				" Correctable error on the Quick Reply TID Array. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 50 */
+				"quick_tid_mbe",
+				" Uncorrectable error on the Quick Reply TID Array. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 51 */
+				"go_tid_sbe",
+				" Correctable error on the GO Reply TID Array. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 52 */
+				"go_tid_mbe",
+				" Uncorrectable error on the GO Reply TID Array. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 53 */
+				"ct_array_sbe",
+				" Correctable error on the CT Hold Array. ERR_CATEGORY_CORRECTABLE",
+				ERR_CATEGORY_CORRECTABLE,
+			},
+			{ /* bit 54 */
+				"ct_array_mbe",
+				" Uncorrectable error on the CT Hold Array. ERR_CATEGORY_HFI",
+				ERR_CATEGORY_HFI,
+			},
+			{ /* bit 55 */
+				"Reserved_63_55",
+				" Unused",
+				ERR_CATEGORY_DEFAULT,
+			},
+			{ /* bit 56 */
+				"Reserved_63_55",
+				" Unused",
+				ERR_CATEGORY_DEFAULT,
+			},
+			{ /* bit 57 */
+				"Reserved_63_55",
+				" Unused",
+				ERR_CATEGORY_DEFAULT,
+			},
+			{ /* bit 58 */
+				"Reserved_63_55",
+				" Unused",
+				ERR_CATEGORY_DEFAULT,
+			},
+			{ /* bit 59 */
+				"Reserved_63_55",
+				" Unused",
+				ERR_CATEGORY_DEFAULT,
+			},
+			{ /* bit 60 */
+				"Reserved_63_55",
+				" Unused",
+				ERR_CATEGORY_DEFAULT,
+			},
+			{ /* bit 61 */
+				"Reserved_63_55",
+				" Unused",
+				ERR_CATEGORY_DEFAULT,
+			},
+			{ /* bit 62 */
+				"Reserved_63_55",
+				" Unused",
+				ERR_CATEGORY_DEFAULT,
+			},
+			{ /* bit 63 */
+				"Reserved_63_55",
+				" Unused",
+				ERR_CATEGORY_DEFAULT,
+			}
+		}
+/* CSR bits defined: 64 */
+	}
 };
 
 static struct hfi_error_csr hfi_rxet_error[] = {

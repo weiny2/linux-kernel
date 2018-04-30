@@ -213,6 +213,8 @@ echo "" >> errdef.h
 #
 echo "static struct hfi_error_csr hfi_rxdma_error[] = {" >> errdef.h
 cat RXDMA_1.CSR >> errdef.h
+echo "	," >> errdef.h
+cat RXDMA_2.CSR >> errdef.h
 echo "};" >> errdef.h
 echo "" >> errdef.h
 
