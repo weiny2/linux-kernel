@@ -380,12 +380,14 @@ struct qi_desc {
 };
 
 struct q_inval {
-	raw_spinlock_t  q_lock;
-	struct qi_desc  *desc;          /* invalidation queue */
-	int             *desc_status;   /* desc status */
-	int             free_head;      /* first free entry */
-	int             free_tail;      /* last free entry */
-	int             free_cnt;
+	raw_spinlock_t   q_lock;
+	struct qi_desc  *desc;            /* invalidation queue */
+	dma_addr_t       desc_dma;        /* invalidation queue dma address */
+	int             *desc_status;     /* desc status */
+	dma_addr_t       desc_status_dma; /* desc status dma address */
+	int              free_head;       /* first free entry */
+	int              free_tail;       /* last free entry */
+	int              free_cnt;
 };
 
 enum {
@@ -493,6 +495,7 @@ struct hfi_at {
 	struct root_entry *root_entry; /* virtual address */
 	struct q_inval  *qi;            /* Queued invalidation info */
 	struct page_req_dsc *prq;
+	dma_addr_t prq_dma;
 	unsigned char prq_name[16];    /* Name for PRQ interrupt */
 
 	/* pasid tables */

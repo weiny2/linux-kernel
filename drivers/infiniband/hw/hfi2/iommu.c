@@ -302,7 +302,8 @@ restart:
 
 	wait_desc.low = QI_IWD_STATUS_DATA(QI_DONE) |
 			QI_IWD_STATUS_WRITE | QI_IWD_TYPE;
-	wait_desc.high = virt_to_phys(&qi->desc_status[wait_index]);
+	wait_desc.high = (unsigned long)qi->desc_status_dma +
+			 (wait_index * sizeof(int));
 
 	hw[wait_index] = wait_desc;
 
@@ -1155,20 +1156,18 @@ int hfi_at_setup_irq(struct hfi_devdata *dd)
 
 static int hfi_svm_enable_prq(struct hfi_at *at)
 {
-	struct page *pages;
-
-	pages = alloc_pages_node(at->dd->node, GFP_KERNEL | __GFP_ZERO,
-				 PRQ_ORDER);
-	if (!pages) {
+	/* TODO: is alignment guaranteed? */
+	at->prq = pci_zalloc_consistent(at->dd->pdev, PAGE_SIZE << PRQ_ORDER,
+					&at->prq_dma);
+	if (!at->prq) {
 		dd_dev_err(at->dd, "AT: %s: Failed to allocate page request queue\n",
 			   at->name);
 		return -ENOMEM;
 	}
-	at->prq = page_address(pages);
 
 	at_writeq(at->reg + AT_PQH_REG, 0ULL);
 	at_writeq(at->reg + AT_PQT_REG, 0ULL);
-	at_writeq(at->reg + AT_PQA_REG, virt_to_phys(at->prq) | PRQ_ORDER);
+	at_writeq(at->reg + AT_PQA_REG, at->prq_dma | PRQ_ORDER);
 
 	return 0;
 }
@@ -1182,7 +1181,8 @@ static int hfi_svm_finish_prq(struct hfi_at *at)
 	at_writeq(at->reg + AT_PQT_REG, 0ULL);
 	at_writeq(at->reg + AT_PQA_REG, 0ULL);
 
-	free_pages((unsigned long)at->prq, PRQ_ORDER);
+	pci_free_consistent(at->dd->pdev, PAGE_SIZE << PRQ_ORDER,
+			    at->prq, at->prq_dma);
 	at->prq = NULL;
 
 	return 0;
@@ -1190,15 +1190,21 @@ static int hfi_svm_finish_prq(struct hfi_at *at)
 
 static void free_at(struct hfi_at *at)
 {
+	struct q_inval *qi = at->qi;
+
 	if (at->system_mm) {
 		mmdrop(at->system_mm);
 		at->system_mm = NULL;
 	}
 
-	if (at->qi) {
-		free_page((unsigned long)at->qi->desc);
-		kfree(at->qi->desc_status);
-		kfree(at->qi);
+	if (qi) {
+		int status_size = QI_LENGTH * sizeof(int);
+
+		pci_free_consistent(at->dd->pdev, PAGE_SIZE,
+				    qi->desc, qi->desc_dma);
+		pci_free_consistent(at->dd->pdev, status_size,
+				    qi->desc_status, qi->desc_status_dma);
+		kfree(qi);
 	}
 
 	kfree(at);
@@ -1313,7 +1319,7 @@ static void __at_enable_qi(struct hfi_at *at)
 	/* write zero to the tail reg */
 	writel(0, at->reg + AT_IQT_REG);
 
-	at_writeq(at->reg + AT_IQA_REG, virt_to_phys(qi->desc));
+	at_writeq(at->reg + AT_IQA_REG, qi->desc_dma);
 
 	at->gcmd |= AT_GCMD_QIE;
 	writel(at->gcmd, at->reg + AT_GCMD_REG);
@@ -1330,7 +1336,6 @@ static void __at_enable_qi(struct hfi_at *at)
 static int at_enable_qi(struct hfi_at *at)
 {
 	struct q_inval *qi;
-	struct page *desc_page;
 	int status_size = QI_LENGTH * sizeof(int);
 
 	at->qi = kmalloc(sizeof(*qi), GFP_KERNEL);
@@ -1339,18 +1344,19 @@ static int at_enable_qi(struct hfi_at *at)
 
 	qi = at->qi;
 
-	desc_page = alloc_pages_node(at->dd->node, GFP_KERNEL | __GFP_ZERO, 0);
-	if (!desc_page) {
+	qi->desc = pci_zalloc_consistent(at->dd->pdev, PAGE_SIZE,
+					 &qi->desc_dma);
+	if (!qi->desc) {
 		kfree(qi);
 		at->qi = NULL;
 		return -ENOMEM;
 	}
 
-	qi->desc = page_address(desc_page);
-
-	qi->desc_status = kzalloc(status_size, GFP_KERNEL);
+	qi->desc_status = pci_zalloc_consistent(at->dd->pdev, status_size,
+						&qi->desc_status_dma);
 	if (!qi->desc_status) {
-		free_page((unsigned long)qi->desc);
+		pci_free_consistent(at->dd->pdev, PAGE_SIZE,
+				    qi->desc, qi->desc_dma);
 		kfree(qi);
 		at->qi = NULL;
 		return -ENOMEM;
