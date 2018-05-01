@@ -71,8 +71,6 @@
 #include "chip/fxr_oc_defs.h"
 #include "chip/fxr_fw_defs.h"
 #include "chip/fxr_rx_hp_defs.h"
-#include "chip/fxr_tx_otr_pkt_top_csrs.h"
-#include "chip/fxr_tx_otr_msg_top_csrs.h"
 #include "chip/fxr_tx_otr_pkt_top_csrs_defs.h"
 #include "chip/fxr_tx_otr_msg_top_csrs_defs.h"
 

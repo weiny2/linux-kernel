@@ -68,7 +68,6 @@
 #include "verbs/verbs.h"
 #include "verbs/packet.h"
 #include "trace.h"
-#include "chip/fxr_lm_csrs.h"
 #include "chip/fxr_linkmux_defs.h"
 
 #undef pr_fmt

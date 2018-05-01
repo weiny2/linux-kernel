@@ -34,7 +34,6 @@
 #include <linux/sched/mm.h>
 #include <asm/cacheflush.h>
 #include "chip/fxr_top_defs.h"
-#include "chip/fxr_at_csrs.h"
 #include "chip/fxr_at_defs.h"
 #include "chip/fxr_at_iommu_defs.h"
 #include "chip/fxr_pcim_structs_defs.h"

@@ -65,39 +65,23 @@
 #include "chip/fxr_tx_ci_cid_csrs_defs.h"
 #include "chip/fxr_rx_ci_cic_csrs_defs.h"
 #include "chip/fxr_rx_ci_cid_csrs_defs.h"
-#include "chip/fxr_tx_ci_cic_csrs.h"
-#include "chip/fxr_tx_ci_cid_csrs.h"
-#include "chip/fxr_rx_ci_cic_csrs.h"
-#include "chip/fxr_rx_ci_cid_csrs.h"
 #include "chip/fxr_rx_et_defs.h"
-#include "chip/fxr_rx_et_csrs.h"
 #include "chip/fxr_rx_hiarb_defs.h"
-#include "chip/fxr_rx_hiarb_csrs.h"
 #include "chip/fxr_rx_hp_defs.h"
-#include "chip/fxr_rx_hp_csrs.h"
-#include "chip/fxr_rx_e2e_csrs.h"
 #include "chip/fxr_rx_e2e_defs.h"
 #include "chip/fxr_linkmux_defs.h"
 #include "chip/fxr_linkmux_tp_defs.h"
 #include "chip/fxr_linkmux_cm_defs.h"
 #include "chip/fxr_linkmux_fpc_defs.h"
-#include "chip/fxr_lm_csrs.h"
-#include "chip/fxr_lm_tp_csrs.h"
-#include "chip/fxr_lm_cm_csrs.h"
-#include "chip/fxr_lm_fpc_csrs.h"
 #include "chip/fxr_oc_defs.h"
 #include "chip/fxr_tx_otr_pkt_top_csrs_defs.h"
-#include "chip/fxr_tx_otr_pkt_top_csrs.h"
 #include "chip/fxr_tx_otr_msg_top_csrs_defs.h"
-#include "chip/fxr_tx_otr_msg_top_csrs.h"
-#include "chip/fxr_tx_dma_csrs.h"
 #include "chip/fxr_tx_dma_defs.h"
 #include "chip/fxr_rx_dma_defs.h"
-#include "chip/fxr_rx_dma_csrs.h"
 #include "chip/fxr_pcim_defs.h"
-#include "chip/fxr_pcim_csrs.h"
 #include "chip/fxr_8051_defs.h"
 #include "chip/fxr_loca_defs.h"
+#include "chip/fxr_perfmon_defs.h"
 #include "hfi2.h"
 #include "link.h"
 #include "firmware.h"
@@ -111,7 +95,6 @@
 #include "counters.h"
 #include "trace.h"
 #include "pend_cmdq.h"
-#include "chip/fxr_perfmon_defs.h"
 
 #define HFI_DRIVER_RESET_RETRIES 10
 #define HFI_UC_RANGE_START	FXR_AT_CSRS
@@ -359,7 +342,7 @@ static u16 hfi_get_smallest_mtu(const struct hfi_devdata *dd)
 
 static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 {
-	TP_CFG_VL_MTU_t vlmtu;
+	u64 vlmtu = 0;
 	int i, port;
 	u8 mtu_id = opa_mtu_to_enum(mtu);
 
@@ -370,9 +353,8 @@ static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 
 	hfi_set_rfs(dd, mtu);
 
-	vlmtu.val = 0;
 	for (i = 0; i < HFI_NUM_DATA_VLS; i++)
-		vlmtu.val |= (u64)mtu_id << (i * 4);
+		vlmtu |= (u64)mtu_id << (i * 4);
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
@@ -380,7 +362,7 @@ static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 		for (i = 0; i < HFI_NUM_DATA_VLS; i++)
 			ppd->vl_mtu[i] = mtu;
 
-		write_csr(ppd->dd, FXR_TP_CFG_VL_MTU, vlmtu.val);
+		write_csr(ppd->dd, FXR_TP_CFG_VL_MTU, vlmtu);
 	}
 }
 
@@ -1417,7 +1399,7 @@ static u16 hfi_get_shared_crdt(struct hfi_pportdata *ppd, int vl_idx)
 void hfi_get_buffer_control(struct hfi_pportdata *ppd,
 			    struct buffer_control *bc, u16 *overall_limit)
 {
-	TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT_t reg;
+	u64 reg, lim;
 	int i;
 
 	/* not all entries are filled in */
@@ -1432,10 +1414,14 @@ void hfi_get_buffer_control(struct hfi_pportdata *ppd,
 		vll->shared = cpu_to_be16(hfi_get_shared_crdt(ppd, i));
 	}
 
-	reg.val = read_csr(ppd->dd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
-	bc->overall_shared_limit = cpu_to_be16(reg.field.Shared);
+	reg = read_csr(ppd->dd, FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT);
+	lim = reg & FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT_SHARED_MASK;
+	bc->overall_shared_limit = cpu_to_be16(lim);
+
+	lim = (reg >> FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT_TOTAL_CREDIT_LIMIT_SHIFT) &
+	      FXR_TP_CFG_CM_GLOBAL_SHRD_CRDT_LIMIT_TOTAL_CREDIT_LIMIT_MASK;
 	if (overall_limit)
-		*overall_limit = reg.field.Total_Credit_Limit;
+		*overall_limit = lim;
 }
 
 static void hfi_nonzero_msg(struct hfi_devdata *dd, int idx, const char *what,

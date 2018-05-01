@@ -66,11 +66,8 @@
 #include "chip/fxr_oc_defs.h"
 #include "chip/fxr_tx_ci_cic_csrs_defs.h"
 #include "chip/fxr_rx_ci_cid_csrs_defs.h"
-#include <chip/fxr_tx_dma_csrs.h>
 #include <chip/fxr_tx_dma_defs.h>
-#include <chip/fxr_rx_dma_csrs.h>
 #include <chip/fxr_rx_dma_defs.h>
-#include <chip/fxr_tx_otr_pkt_top_csrs.h>
 #include <chip/fxr_tx_otr_pkt_top_csrs_defs.h>
 
 #define HFI_TXCFG_BW_LIMIT_SMASK \

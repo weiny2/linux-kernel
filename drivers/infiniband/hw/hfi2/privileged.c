@@ -55,7 +55,6 @@
 #include <linux/kernel.h>
 #include "hfi2.h"
 #include "hfi_cmdq.h"
-#include "chip/fxr_tx_ci_cid_csrs.h"
 #include "chip/fxr_tx_ci_cid_csrs_defs.h"
 
 /*
@@ -69,7 +68,7 @@
 union hfi_tx_dlid_reloctable_update_t {
 	struct {
 		union tx_cq_a1	a;
-		TXCID_CFG_DLID_RT_DATA_t payload[HFI_MAX_DLIDRELOC_CMD_LEN];
+		u64 payload[HFI_MAX_DLIDRELOC_CMD_LEN];
 	} __attribute__ ((__packed__));
 	u64	command[HFI_MAX_DLIDRELOC_CMD_LEN + 1];
 } __aligned(64);
@@ -127,7 +126,7 @@ static int hfi_write_dlid_reloc_cmd(struct hfi_ctx *ctx,
 				if (hfi_dlid_reloc_check_entry(*p))
 					return -EINVAL;
 
-				dlid_reloc_cmd.payload[index].val = *p;
+				dlid_reloc_cmd.payload[index] = *p;
 				p++;
 			}
 		}

@@ -78,7 +78,6 @@
 #include "chip/fxr_linkmux_fpc_defs.h"
 #include "chip/fxr_linkmux_cm_defs.h"
 #include "trace.h"
-#include "chip/fxr_pmon_csrs.h"
 
 extern bool detect_uncat_errs;
 
