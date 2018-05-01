@@ -492,7 +492,9 @@ struct hfi_at {
 
 	spinlock_t	lock; /* protect context */
 	struct root_entry *root_entry; /* virtual address */
+	dma_addr_t root_entry_dma;     /* dma address */
 	struct context_entry *context;
+	dma_addr_t context_dma;
 	struct q_inval  *qi;            /* Queued invalidation info */
 	struct page_req_dsc *prq;
 	dma_addr_t prq_dma;
@@ -500,6 +502,7 @@ struct hfi_at {
 
 	/* pasid tables */
 	struct pasid_entry *pasid_table;
+	dma_addr_t pasid_table_dma;
 	struct idr pasid_idr;
 	struct idr pasid_stats_idr;
 	u32 pasid_max;

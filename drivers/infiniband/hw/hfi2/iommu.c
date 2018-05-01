@@ -1500,20 +1500,20 @@ static void at_disable_protect_mem_regions(struct hfi_at *at)
 
 static int at_alloc_root_entry(struct hfi_at *at)
 {
-	struct root_entry *root;
+	struct hfi_devdata *dd = at->dd;
 	unsigned long flags;
 
-	root = (struct root_entry *)alloc_pgtable_page(at->dd->node);
-	if (!root) {
-		dd_dev_err(at->dd, "Allocating root entry for %s failed\n",
+	spin_lock_irqsave(&at->lock, flags);
+	at->root_entry = pci_zalloc_consistent(dd->pdev, ROOT_SIZE,
+					       &at->root_entry_dma);
+	if (!at->root_entry) {
+		spin_unlock_irqrestore(&at->lock, flags);
+		dd_dev_err(dd, "Allocating root entry for %s failed\n",
 			   at->name);
 		return -ENOMEM;
 	}
 
-	__at_flush_cache(at, root, ROOT_SIZE);
-
-	spin_lock_irqsave(&at->lock, flags);
-	at->root_entry = root;
+	__at_flush_cache(at, at->root_entry, ROOT_SIZE);
 	spin_unlock_irqrestore(&at->lock, flags);
 
 	return 0;
@@ -1525,7 +1525,7 @@ static void at_set_root_entry(struct hfi_at *at)
 	u32 sts;
 	unsigned long flag;
 
-	addr = virt_to_phys(at->root_entry) | AT_RTADDR_RTT;
+	addr = at->root_entry_dma | AT_RTADDR_RTT;
 
 	raw_spin_lock_irqsave(&at->register_lock, flag);
 	at_writeq(at->reg + AT_RTADDR_REG, addr);
@@ -1545,6 +1545,7 @@ static inline struct context_entry *at_context_addr(struct hfi_at *at,
 	struct root_entry *root;
 	struct context_entry *context;
 	unsigned long phy_addr;
+	dma_addr_t context_dma;
 	u8 devfn = at->devfn;
 	u64 *entry;
 
@@ -1565,13 +1566,15 @@ static inline struct context_entry *at_context_addr(struct hfi_at *at,
 	if (!alloc)
 		return NULL;
 
-	context = alloc_pgtable_page(at->dd->node);
+	context = pci_zalloc_consistent(at->dd->pdev, CONTEXT_SIZE,
+					&context_dma);
 	if (!context)
 		return NULL;
 
 	at->context = context;
+	at->context_dma = context_dma;
 	__at_flush_cache(at, (void *)context, CONTEXT_SIZE);
-	phy_addr = virt_to_phys((void *)context);
+	phy_addr = context_dma;
 	*entry = phy_addr | 1;
 	__at_flush_cache(at, entry, sizeof(*entry));
 
@@ -1587,9 +1590,11 @@ static void free_context_table(struct hfi_at *at)
 		goto out;
 
 	if (at->context)
-		free_pgtable_page(at->context);
+		pci_free_consistent(at->dd->pdev, CONTEXT_SIZE,
+				    at->context, at->context_dma);
 
-	free_pgtable_page(at->root_entry);
+	pci_free_consistent(at->dd->pdev, ROOT_SIZE,
+			    at->root_entry, at->root_entry_dma);
 	at->root_entry = NULL;
 out:
 	spin_unlock_irqrestore(&at->lock, flags);
@@ -1597,7 +1602,7 @@ out:
 
 static int hfi_svm_alloc_pasid_tables(struct hfi_at *at)
 {
-	struct page *pages;
+	struct hfi_devdata *dd = at->dd;
 	int order;
 
 	/* Start at 2 because it's defined as 2^(1+PSS) */
@@ -1608,14 +1613,14 @@ static int hfi_svm_alloc_pasid_tables(struct hfi_at *at)
 		at->pasid_max = 0x1000;
 
 	order = get_order(sizeof(struct pasid_entry) * at->pasid_max);
-	pages = alloc_pages_node(at->dd->node, GFP_KERNEL | __GFP_ZERO, order);
-	if (!pages) {
-		dd_dev_err(at->dd, "AT: %s: Failed to allocate PASID table\n",
+	at->pasid_table = pci_zalloc_consistent(dd->pdev, PAGE_SIZE << order,
+						&at->pasid_table_dma);
+	if (!at->pasid_table) {
+		dd_dev_err(dd, "AT: %s: Failed to allocate PASID table\n",
 			   at->name);
 		return -ENOMEM;
 	}
-	at->pasid_table = page_address(pages);
-	dd_dev_info(at->dd, "%s: Allocated order %d PASID table.\n",
+	dd_dev_info(dd, "%s: Allocated order %d PASID table.\n",
 		    at->name, order);
 
 	idr_init(&at->pasid_idr);
@@ -1631,7 +1636,8 @@ static int hfi_svm_free_pasid_tables(struct hfi_at *at)
 	if (!at->pasid_table)
 		return 0;
 
-	free_pages((unsigned long)at->pasid_table, order);
+	pci_free_consistent(at->dd->pdev, PAGE_SIZE << order,
+			    at->pasid_table, at->pasid_table_dma);
 	at->pasid_table = NULL;
 
 	idr_destroy(&at->pasid_idr);
@@ -1771,8 +1777,7 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 	if (ctx_lo & CONTEXT_PASIDE)
 		return -EINVAL;
 
-	context[1].lo = (u64)virt_to_phys(at->pasid_table) |
-			hfi_at_get_pts(at);
+	context[1].lo = (u64)at->pasid_table_dma | hfi_at_get_pts(at);
 
 	/* barrier context[1] entry */
 	wmb();
