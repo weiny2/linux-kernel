@@ -1540,16 +1540,18 @@ static void at_set_root_entry(struct hfi_at *at)
 }
 
 static inline struct context_entry *at_context_addr(struct hfi_at *at,
-						    u8 bus, u8 devfn, int alloc)
+						    int alloc)
 {
 	struct root_entry *root;
 	struct context_entry *context;
+	unsigned long phy_addr;
+	u8 devfn = at->devfn;
 	u64 *entry;
 
 	if (!at->root_entry)
 		return NULL;
 
-	root = &at->root_entry[bus];
+	root = &at->root_entry[at->bus];
 	entry = &root->lo;
 	if (devfn >= 0x80) {
 		devfn -= 0x80;
@@ -1557,45 +1559,36 @@ static inline struct context_entry *at_context_addr(struct hfi_at *at,
 	}
 	devfn *= 2;
 
-	if (*entry & 1) {
-		context = phys_to_virt(*entry & AT_PAGE_MASK);
-	} else {
-		unsigned long phy_addr;
+	if (at->context)
+		return &at->context[devfn];
 
-		if (!alloc)
-			return NULL;
+	if (!alloc)
+		return NULL;
 
-		context = alloc_pgtable_page(at->dd->node);
-		if (!context)
-			return NULL;
+	context = alloc_pgtable_page(at->dd->node);
+	if (!context)
+		return NULL;
 
-		__at_flush_cache(at, (void *)context, CONTEXT_SIZE);
-		phy_addr = virt_to_phys((void *)context);
-		*entry = phy_addr | 1;
-		__at_flush_cache(at, entry, sizeof(*entry));
-	}
+	at->context = context;
+	__at_flush_cache(at, (void *)context, CONTEXT_SIZE);
+	phy_addr = virt_to_phys((void *)context);
+	*entry = phy_addr | 1;
+	__at_flush_cache(at, entry, sizeof(*entry));
+
 	return &context[devfn];
 }
 
 static void free_context_table(struct hfi_at *at)
 {
-	int i;
 	unsigned long flags;
-	struct context_entry *context;
 
 	spin_lock_irqsave(&at->lock, flags);
 	if (!at->root_entry)
 		goto out;
 
-	for (i = 0; i < ROOT_ENTRY_NR; i++) {
-		context = at_context_addr(at, i, 0, 0);
-		if (context)
-			free_pgtable_page(context);
+	if (at->context)
+		free_pgtable_page(at->context);
 
-		context = at_context_addr(at, i, 0x80, 0);
-		if (context)
-			free_pgtable_page(context);
-	}
 	free_pgtable_page(at->root_entry);
 	at->root_entry = NULL;
 out:
@@ -1739,7 +1732,7 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 	at->devfn = pdev->devfn;
 	at->ats_qdep = HFI_ATS_MAX_QDEP;
 
-	context = at_context_addr(at, at->bus, at->devfn, 1);
+	context = at_context_addr(at, 1);
 	if (!context)
 		return -ENOMEM;
 
@@ -1808,7 +1801,7 @@ static void at_context_clear(struct hfi_at *at)
 	u16 did_old;
 
 	spin_lock_irqsave(&at->lock, flags);
-	context = at_context_addr(at, at->bus, at->devfn, 0);
+	context = at_context_addr(at, 0);
 	if (!context) {
 		spin_unlock_irqrestore(&at->lock, flags);
 		return;

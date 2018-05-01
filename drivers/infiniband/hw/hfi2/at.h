@@ -411,7 +411,6 @@ enum {
 
 #define ROOT_SIZE			AT_PAGE_SIZE
 #define CONTEXT_SIZE			AT_PAGE_SIZE
-#define ROOT_ENTRY_NR			(ROOT_SIZE / sizeof(struct root_entry))
 
 /* page request queue size/order */
 #define PRQ_ORDER			0
@@ -493,6 +492,7 @@ struct hfi_at {
 
 	spinlock_t	lock; /* protect context */
 	struct root_entry *root_entry; /* virtual address */
+	struct context_entry *context;
 	struct q_inval  *qi;            /* Queued invalidation info */
 	struct page_req_dsc *prq;
 	dma_addr_t prq_dma;
