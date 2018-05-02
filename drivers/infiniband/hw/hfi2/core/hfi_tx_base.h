@@ -251,6 +251,77 @@ void _hfi_format_base_put_flit0(struct hfi_ctx *ctx, hfi_ni_t ni,
 	flit0->d.ni 		= ni;
 }
 
+/* Format the common TX CQ command flit0 for Verbs commands */
+static inline
+void _hfi_format_verb_put_flit0(union tx_cq_base_put_flit0 *flit0,
+				hfi_cmd_t cmd, hfi_tx_ctype_t ctype,
+				uint16_t cmd_length,
+				hfi_process_t target_id, hfi_port_t port,
+				hfi_rc_t rc, hfi_service_level_t sl,
+				hfi_pkey_t pkey,
+				hfi_slid_low_t slid_low,
+				hfi_auth_idx_t auth_idx,
+				hfi_user_ptr_t user_ptr,
+				hfi_md_options_t md_options,
+				hfi_eq_handle_t eq_handle,
+				hfi_ct_handle_t ct_handle,
+				hfi_size_t remote_offset,
+				hfi_tx_handle_t tx_handle,
+				uint32_t qp)
+{
+	flit0->a.val 		= 0;
+	flit0->a.pt		= port;
+	flit0->a.cmd		= cmd.val;
+	flit0->a.ptl_idx 	= (qp & 0xff);
+	flit0->a.rc		= rc;
+	flit0->a.sl		= sl;
+	flit0->a.b		= 0;
+	flit0->a.sh		= 1; /* Always request a short header - let HW decide */
+	flit0->a.ctype		= ctype;
+	flit0->a.cmd_length 	= cmd_length;
+	flit0->a.dlid 		= target_id.phys.slid;
+
+	flit0->b.val 		= 0;
+	flit0->b.md_handle 	= tx_handle;
+	flit0->b.slid_low	= slid_low;
+	flit0->b.auth_idx	= auth_idx;
+	flit0->b.pkey		= pkey;
+	flit0->b.eq_handle	= eq_handle->idx;
+	flit0->b.ct_handle	= ct_handle;
+	flit0->b.md_options 	= md_options;
+
+	flit0->b.pd		= 1; /* always physical LID */
+	flit0->b.hd		= 1;
+
+	flit0->c	 	= user_ptr;
+
+	flit0->d.val 		= 0; /* TODO do we need to do this ? */
+	flit0->d.remote_offset 	= remote_offset;
+	flit0->d.ack_req 	= PTL_FULL_ACK_REQ;
+	flit0->d.ni 		= PTL_MATCHING_PHYSICAL;
+}
+
+/* Update common TX CQ command flit0 for Verbs commands */
+static inline
+void _hfi_update_verb_put_flit0(union tx_cq_base_put_flit0 *flit0,
+				hfi_cmd_t cmd, uint16_t cmd_length,
+				hfi_process_t target_id, uint32_t pt_index,
+				hfi_user_ptr_t user_ptr,
+				hfi_size_t remote_offset,
+				hfi_tx_handle_t tx_handle)
+{
+	flit0->a.cmd		= cmd.val;
+	flit0->a.ptl_idx 	= pt_index;
+	flit0->a.cmd_length 	= cmd_length;
+	flit0->a.dlid 		= target_id.phys.slid;
+
+	flit0->b.md_handle 	= tx_handle;
+
+	flit0->c	 	= user_ptr;
+
+	flit0->d.remote_offset 	= remote_offset;
+}
+
 static inline
 void _hfi_format_put_flit_e1(struct hfi_ctx *ctx,
 			     union tx_cq_e1 *e,
@@ -262,6 +333,13 @@ void _hfi_format_put_flit_e1(struct hfi_ctx *ctx,
 	e->tpid			= tpid;
 	e->ipid			= ctx->pid;
 	e->atomic_dtype		= atomic_dtype;
+	e->message_length	= length;
+}
+
+static inline
+void _hfi_update_put_flit_e1(union tx_cq_e1 *e,
+			     hfi_size_t length)
+{
 	e->message_length	= length;
 }
 
@@ -285,6 +363,13 @@ void _hfi_format_put_flit_e2(struct hfi_ctx *ctx,
 	e->resp_md_opts		= resp_md_options.val;
 }
 
+static inline
+void _hfi_update_put_flit_e2(union tx_cq_e2 *e,
+			     hfi_size_t length)
+{
+	e->message_length	= length - 1;
+}
+
 /* Encoding of Native Verbs MB, ROFFSET, and HDR_DATA */
 #define MB_OC_OK				0
 #define MB_OC_TX_FLUSH				1
@@ -292,11 +377,15 @@ void _hfi_format_put_flit_e2(struct hfi_ctx *ctx,
 #define MB_OC_LOCAL_INV				3
 #define MB_OC_REG_MR				4
 #define MB_OC_QP_RESET				5
+#define MB_OC_EXCEPTION				6
+
 #define FMT_VOSTLNP_MB(opcode, src_qp, l32)	(((uint64_t)(opcode)) << 56 | \
 						((uint64_t)(src_qp)) << 32 | \
 						((uint64_t)(l32)) << 0)
+#define EXTRACT_MB_QKEY(mb)		_hfi_extract(mb, 0, 0x00000000ffffffff)
 #define EXTRACT_MB_SRC_QP(mb)		_hfi_extract(mb, 32, 0x00ffffff00000000)
 #define EXTRACT_MB_OPCODE(mb)		_hfi_extract(mb, 56, 0xff00000000000000)
+
 #define FMT_UD_REMOTE_OFFSET(dlid, sl, pkey, src_qp) \
 						(((uint64_t)(dlid)) << 45 | \
 						((uint64_t)(sl)) << 40 | \
@@ -304,10 +393,10 @@ void _hfi_format_put_flit_e2(struct hfi_ctx *ctx,
 						((uint64_t)(src_qp)) << 0)
 #define EXTRACT_UD_DLID(ro)		_hfi_extract(ro, 45, 0x0000e00000000000)
 #define EXTRACT_UD_SL(ro)		_hfi_extract(ro, 40, 0x00001f0000000000)
-#define EXTRACT_UD_RKEY(ro)		_hfi_extract(ro, 24, 0x000000ffff000000)
+#define EXTRACT_UD_PKEY(ro)		_hfi_extract(ro, 24, 0x000000ffff000000)
 #define EXTRACT_UD_SRC_QP(ro)		_hfi_extract(ro, 0, 0x0000000000ffffff)
-#define FMT_VOSTLNP_HD(imm, mtype, s, dst_qp)	(((uint64_t)(imm)) << 32 | \
-						((uint64_t)(mtype)) << 31 | \
+
+#define FMT_VOSTLNP_HD(imm, s, dst_qp)		(((uint64_t)(imm)) << 32 | \
 						((uint64_t)(s)) << 24 | \
 						((uint64_t)(dst_qp)) << 0)
 #define EXTRACT_HD_IMM_DATA(hd)		_hfi_extract(hd, 32, 0xffffffff00000000)

@@ -59,41 +59,22 @@
 #include "hfi_rx_vostlnp.h"
 #include "native.h"
 
-#define NATIVE_AUTH_IDX         0
-#define NATIVE_NI               PTL_MATCHING_PHYSICAL
-#define NATIVE_RC               0
-
 /* SYNC_EQ HDR_DATA defines */
 #define PID_EXCHANGE		0
 #define PID_SYNC		1
 #define RNR_TX_ENTER		2
 #define RNR_RX_EXIT		3
 #define RNR_TX_EXIT		4
-#define FMT_SYNC_EQ_HD(opcode, ipid, src_qpn, dst_qpn)\
-	((((u64)opcode & 0xf) << 60) |\
-	(((u64)ipid & 0xfff) << 48) |\
-	(((u64)src_qpn & 0xffffff) << 24) |\
-	((dst_qpn & 0xffffff) << 0))
-#define SYNC_EQ_OPCODE(hdr_data)	((hdr_data >> 60) & 0xf)
-#define SYNC_EQ_IPID(hdr_data)		((hdr_data >> 48) & 0xfff)
-#define SYNC_EQ_SRC_QPN(hdr_data)	((hdr_data >> 24) & 0xffffff)
-
-static struct hfi_eq __attribute__((unused)) eq_handle_dummy = {
-	.idx = PTL_EQ_NONE
-};
 
 #define BUILD_SYNC_EQ_CMD(qp, t, cmd)	\
 	hfi_format_buff_sync_eq(((struct hfi_rq *)(qp)->r_rq.hw_rq)->hw_ctx, \
-				NATIVE_NI, pt,\
-				(qp)->remote_ah_attr.port_num - 1, \
-				NATIVE_RC, (qp)->remote_ah_attr.sl, 0, \
+				rdma_ah_get_dlid(&(qp)->remote_ah_attr), \
+				NATIVE_RC, (qp)->remote_ah_attr.sl, \
 				((struct hfi2_qp_priv *)(qp)->priv)->pkey, \
 				rdma_ah_get_path_bits(&(qp)->remote_ah_attr), \
-				NATIVE_AUTH_IDX, (hfi_user_ptr_t)NULL,\
-				FMT_SYNC_EQ_HD(t,\
-				((struct hfi_rq *)qp->r_rq.hw_rq)->hw_ctx->pid,\
-				qp->ibqp.qp_num, qp->remote_qpn), 0,\
-				&eq_handle_dummy, PTL_CT_NONE, \
+				NATIVE_AUTH_IDX, (hfi_user_ptr_t)NULL, \
+				(qp)->ibqp.qp_num, (qp)->remote_qpn, (t), \
+				ibcq_to_rvtcq((qp)->ibqp.send_cq)->hw_cq, \
 				0, PTL_RC_EXCEPTION, \
 				&(cmd)->buff_put_match)
 #define PTL_EVENT_KIND_SHIFT       56
@@ -140,7 +121,6 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	struct rvt_cq *cq;
 	int limit = 0;
 	unsigned long flags;
-	union hfi_process pt;
 
 	rcu_read_lock();
 	qp = rvt_lookup_qpn(&ibd->rdi, &ibp->rvp, qp_num);
@@ -149,8 +129,6 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	if (!qp)
 		return 0;
 
-	pt.phys.slid = rdma_ah_get_dlid(&qp->remote_ah_attr);
-	pt.phys.ipid = PTL_PID_ANY;
 	priv = (struct hfi2_qp_priv *)qp->priv;
 	/* Check State */
 	if (qp->state != IB_QPS_RTS)
@@ -248,7 +226,6 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	struct hfi_rq *rq;
 	union hfi_tx_cq_command cmd __aligned(64);
 	int qp_num = EXTRACT_HD_DST_QP(teq->hdr_data);
-	union hfi_process pt;
 	u32 pd_handle;
 	struct ib_qp *ibqp;
 
@@ -258,9 +235,6 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	/* Bad QP */
 	if (!qp)
 		return 0;
-	pt.phys.slid = rdma_ah_get_dlid(&qp->remote_ah_attr);
-	pt.phys.ipid = PTL_PID_ANY;
-
 	ibqp = &qp->ibqp;
 
 	/* Check State */
@@ -355,7 +329,6 @@ int hfi2_enter_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	union hfi_tx_cq_command cmd __aligned(64);
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ctx->ibuc.device);
 	struct hfi2_ibport *ibp = ibd->pport;
-	union hfi_process pt;
 
 	rcu_read_lock();
 	qp = rvt_lookup_qpn(&ibd->rdi, &ibp->rvp, qp_num);
@@ -363,9 +336,6 @@ int hfi2_enter_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	/* Bad QP */
 	if (!qp)
 		return 0;
-
-	pt.phys.slid = rdma_ah_get_dlid(&qp->remote_ah_attr);
-	pt.phys.ipid = PTL_PID_ANY;
 
 	qp->r_flags |= RVT_S_WAIT_RNR;
 	/* Signal initiator to enter flow control */

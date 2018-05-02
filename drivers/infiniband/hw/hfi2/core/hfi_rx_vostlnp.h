@@ -53,8 +53,7 @@
 
 #include "hfi_cmdq.h"
 
-#define RKEY_IGNORE_BITS()		(0xffffffff00000000ull)
-
+#define RKEY_IGNORE_BITS		0xffffffff00000000ull
 #define RKEY_PID(rkey)			_hfi_extract(rkey, 20, 0xfff00000)
 #define RKEY_LIST_HANDLE(rkey)		_hfi_extract(rkey, 8, 0x000fff00)
 #define RKEY_SALT(rkey)			_hfi_extract(rkey, 0, 0x000000ff)
@@ -77,10 +76,10 @@ int hfi_format_rkey_write(hfi_ni_t ni,
 			  union hfi_rx_cq_command *cmd)
 {
 	cmd->list.flit0.a             = RKEY_MATCH_BITS(rkey,pd);
-	cmd->list.flit0.b	      = RKEY_IGNORE_BITS();
+	cmd->list.flit0.b	      = RKEY_IGNORE_BITS;
 	cmd->list.flit0.c.user_id     = id;
 	cmd->list.flit0.c.me_options  = me_options;
-	cmd->list.flit0.d.initiator_id   = ((uint64_t)logical_addr);
+	cmd->list.flit0.d.initiator_id  = ((uint64_t)logical_addr);
 	cmd->list.flit0.d.ct_handle   = ct_handle;
 	cmd->list.flit0.d.command     = RKEY_WRITE;
 	cmd->list.flit0.d.cmd_len     = (sizeof(cmd->list) >> 5) - 1;
@@ -137,10 +136,33 @@ int hfi_format_recvq_append(hfi_ni_t ni,
 }
 
 static inline
+int hfi_rkey_free(struct hfi_cmdq *rx, uint32_t rkey,
+		  hfi_user_ptr_t user_ptr)
+{
+	union hfi_rx_cq_command cmd __aligned(64);
+	int rc;
+
+	cmd.list.flit0.d.command	= RKEY_FREE;
+	cmd.list.flit0.d.cmd_len	= (sizeof(cmd.list) >> 5)-1;
+	cmd.state.flit0.d.ncc		= HFI_GEN_CC;
+
+	cmd.list.flit1.e.cmd_pid	= RKEY_PID(rkey);
+	cmd.list.flit1.e.list_handle	= RKEY_LIST_HANDLE(rkey);
+	cmd.list.flit1.g		= user_ptr;
+
+	do {
+		/* Single slot command */
+		rc = hfi_rx_command(rx, (uint64_t *)&cmd, sizeof(cmd.list)>>6);
+	} while (rc == -EAGAIN);
+
+	return rc;
+}
+
+static inline
 int hfi_rkey_invalidate(struct hfi_cmdq *rx, uint32_t rkey,
 			hfi_user_ptr_t user_ptr)
 {
-	union hfi_rx_cq_command cmd;
+	union hfi_rx_cq_command cmd __aligned(64);
 	int cmd_slots, rc;
 	hfi_process_t pt;
 
@@ -160,7 +182,6 @@ int hfi_rkey_invalidate(struct hfi_cmdq *rx, uint32_t rkey,
 	return rc;
 }
 
-
 static inline
 int hfi_rkey_write(struct hfi_cmdq *rx, hfi_ni_t ni,
 		const void *logical_addr,
@@ -171,14 +192,14 @@ int hfi_rkey_write(struct hfi_cmdq *rx, hfi_ni_t ni,
 		hfi_ct_handle_t ct_handle,
 		hfi_user_ptr_t user_ptr)
 {
-	union hfi_rx_cq_command cmd;
+	union hfi_rx_cq_command cmd __aligned(64);
 	int cmd_slots, rc;
 
 	cmd_slots = hfi_format_rkey_write(ni,
 			logical_addr, start, length,
 			match_id,
 			id, pd, rkey,
-			me_options | PTL_MANAGE_LOCAL, ct_handle,
+			me_options, ct_handle,
 			user_ptr,
 			HFI_GEN_CC, 1, &cmd);
 
@@ -201,7 +222,7 @@ int hfi_recvq_append(struct hfi_cmdq *rx, hfi_ni_t ni,
 		hfi_user_ptr_t user_ptr, hfi_me_handle_t me_handle,
 		uint8_t ncc)
 {
-	union hfi_rx_cq_command cmd;
+	union hfi_rx_cq_command cmd __aligned(64);
 	int cmd_slots, rc;
 
 	cmd_slots = hfi_format_recvq_append(ni,
@@ -243,7 +264,7 @@ static inline
 int hfi_recvq_init(struct hfi_cmdq *rx, uint8_t ni, struct hfi_ctx *ctx,
 		   uint32_t recvq_root, uint64_t user_ptr)
 {
-	union hfi_rx_cq_command cmd;
+	union hfi_rx_cq_command cmd __aligned(64);
 	int rc;
 
 	cmd.state.flit0.d.ni		= ni;
@@ -269,7 +290,7 @@ static inline
 int hfi_recvq_unlink(struct hfi_cmdq *rx, uint8_t ni, struct hfi_ctx *ctx,
 		     uint32_t recvq_root, uint64_t user_ptr)
 {
-	union hfi_rx_cq_command cmd;
+	union hfi_rx_cq_command cmd __aligned(64);
 	int rc;
 
 	cmd.list.flit0.d.ct_handle	= PTL_CT_NONE;

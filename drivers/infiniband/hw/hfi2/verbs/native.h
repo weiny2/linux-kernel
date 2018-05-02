@@ -68,6 +68,8 @@
 
 #define IOVEC_VALID	0x80
 #define NATIVE_NI	PTL_MATCHING_PHYSICAL
+#define NATIVE_AUTH_IDX	0
+#define NATIVE_RC	0
 #define HFI2_MAX_QPS_PER_PID	64
 
 /* These marcos are used for the TX WC reordering buffer. The valid bit
@@ -243,6 +245,10 @@ struct rvt_mregion *hfi2_chk_mr_sge(struct hfi_ibcontext *ctx,
 void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, void *udata,
 				bool is_enabled);
 void hfi2_native_dealloc_ucontext(struct hfi_ibcontext *ctx);
+void hfi_preformat_rc(struct hfi_ctx *ctx, u32 dlid, u8 rc,
+		      u8 sl, u16 pkey, u8 slid_low, u8 auth_idx,
+		      struct hfi_eq *eq_handle, u32 qpn,
+		      union hfi_tx_cq_command *command);
 int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region);
 int hfi2_free_lkey(struct rvt_mregion *mr);
 struct rvt_mregion *hfi2_find_mr_from_lkey(struct rvt_pd *pd, u32 lkey);

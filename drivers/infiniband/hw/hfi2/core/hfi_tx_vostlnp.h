@@ -53,16 +53,46 @@
 
 #include "hfi_tx_base.h"
 
-#define HFI_MTYPE_MR	0
-#define HFI_MTYPE_MW	1
+#define FMT_SYNC_EQ_HD(opcode, ipid, src_qpn, dst_qp) \
+	((((u64)opcode & 0xf) << 60) | \
+	(((u64)ipid & 0xfff) << 48) | \
+	(((u64)src_qpn & 0xffffff) << 24) | \
+	((dst_qp & 0xffffff) << 0))
+#define SYNC_EQ_OPCODE(hdr_data)	((hdr_data >> 60) & 0xf)
+#define SYNC_EQ_IPID(hdr_data)		((hdr_data >> 48) & 0xfff)
+#define SYNC_EQ_SRC_QPN(hdr_data)	((hdr_data >> 24) & 0xffffff)
+
+/* Update the common TX CQ command flit0 */
+static inline
+void _hfi_update_verb_flit0_rc(union tx_cq_base_put_flit0 *flit0,
+				hfi_cmd_t cmd,
+				u16 cmd_length,
+				u8 force_frag,
+				hfi_rc_t rc,
+				hfi_user_ptr_t user_ptr,
+				hfi_md_options_t md_options,
+				hfi_ct_handle_t ct_handle,
+				hfi_size_t remote_offset,
+				hfi_tx_handle_t tx_handle)
+{
+	flit0->a.pt		= force_frag;
+	flit0->a.cmd		= cmd.val;
+	flit0->a.rc		= rc;
+	flit0->a.cmd_length 	= cmd_length;
+	flit0->b.md_handle 	= tx_handle;
+	flit0->b.ct_handle	= ct_handle;
+	flit0->b.md_options 	= md_options;
+	flit0->c	 	= user_ptr;
+	flit0->d.remote_offset 	= remote_offset;
+}
 
 static inline
-int hfi_format_buff_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_buff_vostlnp(struct hfi_ctx *ctx,
 			    const void *start, hfi_size_t length,
 			    hfi_tx_ctype_t ctype,
-			    hfi_process_t target_id, u8 force_frag,
+			    u32 dlid, u8 force_frag,
 			    hfi_rc_t rc,
-			    hfi_service_level_t sl, hfi_becn_t becn,
+			    hfi_service_level_t sl,
 			    hfi_pkey_t pkey, hfi_slid_low_t slid_low,
 			    hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
 			    hfi_match_bits_t match_bits,
@@ -73,22 +103,23 @@ int hfi_format_buff_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
 			    hfi_size_t remote_offset,
 			    hfi_tx_handle_t tx_handle,
 			    hfi_op_req_t op,
+			    u32 dst_qp,
 			    union hfi_tx_cq_buff_put_match *command)
 {
-	uint16_t cmd_length = _HFI_CMD_LENGTH(length, offsetof(hfi_tx_cq_buff_put_match_t, flit1.p0));
-	uint16_t cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
+	union hfi_process target_id = {.phys.slid = dlid};
+	u16 cmd_length = _HFI_CMD_LENGTH(length, offsetof(hfi_tx_cq_buff_put_match_t, flit1.p0));
+	u16 cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
 	hfi_cmd_t cmd;
 	cmd.ptl_opcode_low = op;
 	cmd.ttype = BUFFERED;
 
-	_hfi_format_base_put_flit0(ctx, ni,
-				   &command->flit0, cmd, ctype, cmd_length,
-				   target_id, force_frag, 0 /*pt_index*/, rc, sl, becn,
-				   pkey, slid_low, auth_idx, user_ptr, (hfi_flag_t) 1 /*hd*/,
-				   PTL_FULL_ACK_REQ, md_options, eq_handle, ct_handle,
-				   remote_offset, tx_handle);
+	_hfi_format_verb_put_flit0(&command->flit0, cmd, ctype, cmd_length,
+				   target_id, force_frag, rc, sl,
+				   pkey, slid_low, auth_idx, user_ptr,
+				   md_options, eq_handle, ct_handle,
+				   remote_offset, tx_handle, dst_qp);
 
-	_hfi_format_put_flit_e1(ctx, &command->flit1.e, target_id.phys.ipid, PTL_UINT64_T, length);
+	_hfi_format_put_flit_e1(ctx, &command->flit1.e, (dst_qp>>8), PTL_UINT64_T, length);
 
 	command->flit1.mb = match_bits;
 	command->flit1.hd = hdr_data;
@@ -100,136 +131,170 @@ int hfi_format_buff_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
 }
 
 static inline
-int hfi_format_buff_ud(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_update_buff_rc(struct hfi_ctx *ctx,
 		       const void *start, hfi_size_t length,
-		       hfi_process_t target_id, u8 force_frag,
+		       u8 force_frag,
 		       hfi_rc_t rc,
-		       hfi_service_level_t sl, hfi_becn_t becn,
+		       hfi_user_ptr_t user_ptr,
+		       hfi_match_bits_t match_bits,
+		       hfi_hdr_data_t hdr_data,
+		       hfi_md_options_t md_options,
+		       hfi_ct_handle_t ct_handle,
+		       hfi_size_t remote_offset,
+		       hfi_tx_handle_t tx_handle,
+		       hfi_op_req_t op,
+		       u32 qp,
+		       union hfi_tx_cq_buff_put_match *command)
+{
+	u16 cmd_length = _HFI_CMD_LENGTH(length, offsetof(hfi_tx_cq_buff_put_match_t, flit1.p0));
+	u16 cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
+	hfi_cmd_t cmd;
+	cmd.ptl_opcode_low = op;
+	cmd.ttype = BUFFERED;
+
+	_hfi_update_verb_flit0_rc(&command->flit0, cmd, cmd_length,
+				  force_frag, rc, user_ptr,
+				  md_options, ct_handle,
+				  remote_offset, tx_handle);
+
+	_hfi_update_put_flit_e1(&command->flit1.e, length);
+
+	command->flit1.mb = match_bits;
+	command->flit1.hd = hdr_data;
+
+	/* Copy the user payload into the command */
+	_hfi_memcpy(&command->flit1.p0, start, length);
+
+	return cmd_slots;
+}
+
+static inline
+int hfi_format_buff_ud(struct hfi_ctx *ctx,
+		       const void *start, hfi_size_t length,
+		       u32 dlid, u8 force_frag,
+		       hfi_rc_t rc,
+		       hfi_service_level_t sl,
 		       hfi_pkey_t pkey, hfi_slid_low_t slid_low,
 		       hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-		       uint32_t src_qp,
-		       uint32_t dst_qp,
-		       uint32_t imm,
-		       uint32_t qkey,
+		       u32 src_qp,
+		       u32 dst_qp,
+		       u32 imm,
+		       u32 qkey,
 		       hfi_md_options_t md_options,
 		       hfi_eq_handle_t eq_handle,
 		       hfi_ct_handle_t ct_handle,
 		       hfi_tx_handle_t tx_handle,
 		       hfi_op_req_t op,
-		       uint8_t solicit, uint8_t mb_opcode,
+		       u8 solicit, u8 mb_opcode,
 		       union hfi_tx_cq_buff_put_match *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(mb_opcode, src_qp, qkey);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	uint64_t remote_offset = FMT_UD_REMOTE_OFFSET(target_id.phys.slid, sl,
-						      pkey, src_qp);
-	return hfi_format_buff_vostlnp(ctx, ni, start, length,
-				       (hfi_tx_ctype_t)UD, target_id,
-				       force_frag, rc, sl, becn, pkey, slid_low,
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+	u64 remote_offset = FMT_UD_REMOTE_OFFSET(dlid, sl, pkey, src_qp);
+
+	return hfi_format_buff_vostlnp(ctx, start, length,
+				       (hfi_tx_ctype_t)UD, dlid,
+				       force_frag, rc, sl, pkey, slid_low,
 				       auth_idx, user_ptr, match_bits, hdr_data,
 				       md_options, eq_handle, ct_handle,
 				       (hfi_size_t)remote_offset, tx_handle, op,
-				       command);
+				       dst_qp, command);
 }
 
 static inline
-int hfi_format_buff_sync_eq(struct hfi_ctx *ctx, hfi_ni_t ni,
-			    hfi_process_t target_id, u8 force_frag,
+int hfi_format_buff_sync_eq(struct hfi_ctx *ctx,
+			    u32 dlid,
 			    hfi_rc_t rc,
-			    hfi_service_level_t sl, hfi_becn_t becn,
+			    hfi_service_level_t sl,
 			    hfi_pkey_t pkey, hfi_slid_low_t slid_low,
-			    hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-			    hfi_hdr_data_t hdr_data,
-			    hfi_md_options_t md_options,
+			    hfi_auth_idx_t auth_idx,
+			    hfi_user_ptr_t user_ptr,
+			    u32 src_qp,
+			    u32 dst_qp,
+			    u8 hd_opcode,
 			    hfi_eq_handle_t eq_handle,
-			    hfi_ct_handle_t ct_handle,
 			    hfi_tx_handle_t tx_handle,
 			    hfi_op_req_t op,
 			    union hfi_tx_cq_buff_put_match *command)
 {
-	return hfi_format_buff_vostlnp(ctx, ni, (void *)0, 0,
-				       (hfi_tx_ctype_t)VoNP_RC, target_id,
-				       force_frag, rc, sl, becn, pkey, slid_low,
-				       auth_idx, user_ptr, 0, hdr_data,
-				       md_options, eq_handle, ct_handle,
-				       (hfi_size_t)0, tx_handle, op, command);
+	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_EXCEPTION, src_qp, 0);
+	hfi_hdr_data_t hdr_data = FMT_SYNC_EQ_HD(hd_opcode, ctx->pid,
+						 src_qp, dst_qp);
+
+	/* TODO should be using PTL_MD_EVENT_SUCCESS_DISABLE here */
+	return hfi_format_buff_vostlnp(ctx, (void*)0, 0,
+				       (hfi_tx_ctype_t)VoNP_RC, dlid,
+				       0, rc, sl, pkey, slid_low,
+				       auth_idx, user_ptr,
+				       match_bits, hdr_data,
+				       PTL_EVENT_SUCCESS_DISABLE,
+				       eq_handle, PTL_CT_NONE,
+				       (hfi_size_t)0, tx_handle, op,
+				       dst_qp, command);
 }
 
 static inline
-int hfi_format_buff_rc_send(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_buff_rc_send(struct hfi_ctx *ctx,
 			    const void *start, hfi_size_t length,
-			    hfi_process_t target_id, u8 force_frag,
+			    u8 force_frag,
 			    hfi_rc_t rc,
-			    hfi_service_level_t sl, hfi_becn_t becn,
-			    hfi_pkey_t pkey, hfi_slid_low_t slid_low,
-			    hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-			    uint32_t src_qp,
-			    uint32_t dst_qp,
-			    uint32_t imm,
+			    hfi_user_ptr_t user_ptr,
+			    u32 src_qp,
+			    u32 dst_qp,
+			    u32 imm,
 			    hfi_md_options_t md_options,
-			    hfi_eq_handle_t eq_handle,
 			    hfi_ct_handle_t ct_handle,
 			    hfi_tx_handle_t tx_handle,
 			    hfi_op_req_t op,
-			    uint8_t solicit,
+			    u8 solicit,
 			    union hfi_tx_cq_buff_put_match *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, imm);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	return hfi_format_buff_vostlnp(ctx, ni, start, length,
-				       (hfi_tx_ctype_t)VoNP_RC, target_id,
-				       force_frag, rc, sl, becn, pkey, slid_low,
-				       auth_idx, user_ptr, match_bits, hdr_data,
-				       md_options, eq_handle, ct_handle,
-				       (hfi_size_t)0, tx_handle, op, command);
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+
+	return hfi_update_buff_rc(ctx, start, length,
+				  force_frag, rc,
+				  user_ptr, match_bits, hdr_data,
+				  md_options, ct_handle,
+				  (hfi_size_t)0, tx_handle, op, src_qp,
+				  command);
 }
 
 static inline
-int hfi_format_buff_rc_rdma_atomic(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_buff_rc_rdma_atomic(struct hfi_ctx *ctx,
 			    const void *start,
-			    hfi_process_t target_id, u8 force_frag,
+			    u8 force_frag,
 			    hfi_rc_t rc,
-			    hfi_service_level_t sl, hfi_becn_t becn,
-			    hfi_pkey_t pkey, hfi_slid_low_t slid_low,
-			    hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-			    uint32_t src_qp,
-			    uint32_t dst_qp,
-			    uint32_t imm,
-			    uint32_t rkey,
+			    hfi_user_ptr_t user_ptr,
+			    u32 src_qp,
+			    u32 dst_qp,
+			    u32 imm,
+			    u32 rkey,
 			    hfi_md_options_t md_options,
-			    hfi_eq_handle_t eq_handle,
 			    hfi_ct_handle_t ct_handle,
 			    hfi_size_t remote_offset,
 			    hfi_tx_handle_t tx_handle,
 			    hfi_op_req_t op,
-			    uint8_t solicit,
+			    u8 solicit,
 			    const void *operand0,
 			    const void *operand1,
 			    hfi_tx_cq_buff_toa_fetch_match_t *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, rkey);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	uint16_t cmd_length = _HFI_CMD_LENGTH(operand1 ? 16 : 8,
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+	u16 cmd_length = _HFI_CMD_LENGTH(operand1 ? 16 : 8,
 					      offsetof(hfi_tx_cq_buff_toa_fetch_match_t, payload));
-	uint16_t cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
-	struct hfi_eq eq_handle_dummy = { .idx = PTL_EQ_NONE };
-	hfi_resp_md_options_t resp_md_options = { .val = 0 };
+	u16 cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
 	hfi_cmd_t cmd;
 	cmd.ptl_opcode_low = op;
 	cmd.ttype = BUFFERED;
 
-	_hfi_format_base_put_flit0(ctx, ni,
-				   &command->flit0, cmd, VoNP_RC, cmd_length,
-				   target_id, force_frag, 0 /*pt_index*/, rc, sl, becn,
-				   pkey, slid_low, auth_idx, user_ptr, (hfi_flag_t) 1 /*hd*/,
-				   PTL_FULL_ACK_REQ, md_options, eq_handle, ct_handle,
-				   remote_offset, tx_handle);
-	_hfi_format_put_flit_e2(ctx, (union tx_cq_e2 *)&command->flit1.e,
-				target_id.phys.ipid, PTL_UINT64_T, 8, &eq_handle_dummy,
-				0, resp_md_options);
+	_hfi_update_verb_flit0_rc(&command->flit0, cmd, cmd_length,
+				  force_frag, rc, user_ptr,
+				  md_options, ct_handle,
+				  remote_offset, tx_handle);
+
+	_hfi_update_put_flit_e2((union tx_cq_e2*)&command->flit1.e, 8);
 
 	command->flit1.f.val = (uintptr_t)start; /* Just zero extend local_start to 64-bits  */
 
@@ -239,7 +304,7 @@ int hfi_format_buff_rc_rdma_atomic(struct hfi_ctx *ctx, hfi_ni_t ni,
 	if (operand1) {
 		/* The Operand comes before the regular Payload if this is a TOA */
 		_hfi_memcpy(&command->payload, operand0, 8);
-		_hfi_memcpy((uint64_t *)((uintptr_t)&command->payload + 8), operand1, 8);
+		_hfi_memcpy((u64 *)((uintptr_t)&command->payload + 8), operand1, 8);
 	} else {
 		/* Copy the Payload into the command */
 		_hfi_memcpy(&command->payload, operand0, 8);
@@ -249,44 +314,41 @@ int hfi_format_buff_rc_rdma_atomic(struct hfi_ctx *ctx, hfi_ni_t ni,
 }
 
 static inline
-int hfi_format_buff_rc_rdma(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_buff_rc_rdma(struct hfi_ctx *ctx,
 			    const void *start, hfi_size_t length,
-			    hfi_process_t target_id, u8 force_frag,
+			    u8 force_frag,
 			    hfi_rc_t rc,
-			    hfi_service_level_t sl, hfi_becn_t becn,
-			    hfi_pkey_t pkey, hfi_slid_low_t slid_low,
-			    hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-			    uint32_t src_qp,
-			    uint32_t dst_qp,
-			    uint32_t imm,
-			    uint32_t rkey,
+			    hfi_user_ptr_t user_ptr,
+			    u32 src_qp,
+			    u32 dst_qp,
+			    u32 imm,
+			    u32 rkey,
 			    hfi_md_options_t md_options,
-			    hfi_eq_handle_t eq_handle,
 			    hfi_ct_handle_t ct_handle,
 			    hfi_size_t remote_offset,
 			    hfi_tx_handle_t tx_handle,
 			    hfi_op_req_t op,
-			    uint8_t solicit,
+			    u8 solicit,
 			    union hfi_tx_cq_buff_put_match *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, rkey);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	return hfi_format_buff_vostlnp(ctx, ni, start, length,
-				       (hfi_tx_ctype_t)VoNP_RC, target_id,
-				       force_frag, rc, sl, becn, pkey, slid_low,
-				       auth_idx, user_ptr, match_bits, hdr_data,
-				       md_options, eq_handle, ct_handle,
-				       remote_offset, tx_handle, op, command);
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+
+	return hfi_update_buff_rc(ctx, start, length,
+				  force_frag, rc,
+				  user_ptr, match_bits, hdr_data,
+				  md_options, ct_handle,
+				  remote_offset, tx_handle, op, src_qp,
+				  command);
 }
 
 static inline
-int hfi_format_pio_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_pio_vostlnp(struct hfi_ctx *ctx,
 			   void *start, hfi_size_t length,
 			   hfi_tx_ctype_t ctype,
-			   hfi_process_t target_id, u8 force_frag,
+			   u32 dlid, u8 force_frag,
 			   hfi_rc_t rc,
-			   hfi_service_level_t sl, hfi_becn_t becn,
+			   hfi_service_level_t sl,
 			   hfi_pkey_t pkey, hfi_slid_low_t slid_low,
 			   hfi_auth_idx_t auth_idx,
 			   hfi_user_ptr_t user_ptr,
@@ -298,23 +360,24 @@ int hfi_format_pio_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
 			   hfi_size_t remote_offset,
 			   hfi_tx_handle_t tx_handle,
 			   hfi_op_req_t op_req,
+			   u32 dst_qp,
 			   hfi_tx_cq_pio_put_match_t *command)
 {
-	uint16_t cmd_length = _HFI_CMD_LENGTH(length, sizeof(hfi_tx_cq_pio_put_match_t));
-	uint16_t cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
+	union hfi_process target_id = {.phys.slid = dlid};
+	u16 cmd_length = _HFI_CMD_LENGTH(length, sizeof(hfi_tx_cq_pio_put_match_t));
+	u16 cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
 	hfi_cmd_t cmd;
 	cmd.ptl_opcode_low = op_req;
 	cmd.ttype = PIO;
 
-	_hfi_format_base_put_flit0(ctx, ni,
-				   &command->flit0, cmd, ctype, cmd_length,
-				   target_id, force_frag, 0/*pt_index*/, rc, sl, becn,
-				   pkey, slid_low, auth_idx, user_ptr, (hfi_flag_t) 1 /*hd*/,
-				   PTL_FULL_ACK_REQ, md_options, eq_handle, ct_handle,
-				   remote_offset, tx_handle);
+	_hfi_format_verb_put_flit0(&command->flit0, cmd, ctype, cmd_length,
+				   target_id, force_frag, rc, sl,
+				   pkey, slid_low, auth_idx, user_ptr,
+				   md_options, eq_handle, ct_handle,
+				   remote_offset, tx_handle, dst_qp);
 
 	_hfi_format_put_flit_e1(ctx, &command->flit1.e,
-				target_id.phys.ipid, PTL_UINT64_T, length);
+				(dst_qp>>8), PTL_UINT64_T, length);
 
 	command->flit1.f.val = (uintptr_t)start; /* Just zero extend local_start to 64-bits  */
 
@@ -325,113 +388,110 @@ int hfi_format_pio_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
 }
 
 static inline
-int hfi_format_pio_ud(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_pio_ud(struct hfi_ctx *ctx,
 		      void *start, hfi_size_t length,
-		      hfi_process_t target_id, u8 force_frag,
+		      u32 dlid, u8 force_frag,
 		      hfi_rc_t rc,
-		      hfi_service_level_t sl, hfi_becn_t becn,
+		      hfi_service_level_t sl,
 		      hfi_pkey_t pkey, hfi_slid_low_t slid_low,
 		      hfi_auth_idx_t auth_idx,
 		      hfi_user_ptr_t user_ptr,
-		      uint32_t src_qp,
-		      uint32_t dst_qp,
-		      uint32_t imm,
-		      uint32_t qkey,
+		      u32 src_qp,
+		      u32 dst_qp,
+		      u32 imm,
+		      u32 qkey,
 		      hfi_md_options_t md_options,
 		      hfi_eq_handle_t eq_handle,
 		      hfi_ct_handle_t ct_handle,
 		      hfi_tx_handle_t tx_handle,
 		      hfi_op_req_t op_req,
-		      uint8_t solicit,
+		      u8 solicit,
 		      hfi_tx_cq_pio_put_match_t *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, qkey);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	uint64_t remote_offset = FMT_UD_REMOTE_OFFSET(target_id.phys.slid, sl,
-						      pkey, src_qp);
-	return hfi_format_pio_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)UD, target_id, force_frag,
-				      rc, sl, becn, pkey,
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+	u64 remote_offset = FMT_UD_REMOTE_OFFSET(dlid, sl, pkey, src_qp);
+
+	return hfi_format_pio_vostlnp(ctx, start, length,
+				      (hfi_tx_ctype_t)UD, dlid, force_frag,
+				      rc, sl, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,
 				      ct_handle, (hfi_size_t)remote_offset,
-				      tx_handle, op_req, command);
+				      tx_handle, op_req, dst_qp, command);
 }
 
 static inline
-int hfi_format_pio_rc_send(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_pio_rc_send(struct hfi_ctx *ctx,
 			   void *start, hfi_size_t length,
-			   hfi_process_t target_id, u8 force_frag,
+			   u32 dlid, u8 force_frag,
 			   hfi_rc_t rc,
-			   hfi_service_level_t sl, hfi_becn_t becn,
+			   hfi_service_level_t sl,
 			   hfi_pkey_t pkey, hfi_slid_low_t slid_low,
 			   hfi_auth_idx_t auth_idx,
 			   hfi_user_ptr_t user_ptr,
-			   uint32_t src_qp,
-			   uint32_t dst_qp,
-			   uint32_t imm,
+			   u32 src_qp,
+			   u32 dst_qp,
+			   u32 imm,
 			   hfi_md_options_t md_options,
 			   hfi_eq_handle_t eq_handle,
 			   hfi_ct_handle_t ct_handle,
 			   hfi_tx_handle_t tx_handle,
 			   hfi_op_req_t op_req,
-			   uint8_t solicit,
+			   u8 solicit,
 			   hfi_tx_cq_pio_put_match_t *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, imm);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	return hfi_format_pio_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VoNP_RC, target_id, force_frag,
-				      rc, sl, becn, pkey,
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+	return hfi_format_pio_vostlnp(ctx, start, length,
+				      (hfi_tx_ctype_t)VoNP_RC, dlid, force_frag,
+				      rc, sl, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,
 				      ct_handle, (hfi_size_t)0, tx_handle,
-				      op_req, command);
+				      op_req, dst_qp, command);
 }
 
 static inline
-int hfi_format_pio_rc_rdma(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_pio_rc_rdma(struct hfi_ctx *ctx,
 			   void *start, hfi_size_t length,
-			   hfi_process_t target_id, u8 force_frag,
+			   u32 dlid, u8 force_frag,
 			   hfi_rc_t rc,
-			   hfi_service_level_t sl, hfi_becn_t becn,
+			   hfi_service_level_t sl,
 			   hfi_pkey_t pkey, hfi_slid_low_t slid_low,
 			   hfi_auth_idx_t auth_idx,
 			   hfi_user_ptr_t user_ptr,
-			   uint32_t src_qp,
-			   uint32_t dst_qp,
-			   uint32_t imm,
-			   uint32_t rkey,
+			   u32 src_qp,
+			   u32 dst_qp,
+			   u32 imm,
+			   u32 rkey,
 			   hfi_md_options_t md_options,
 			   hfi_eq_handle_t eq_handle,
 			   hfi_ct_handle_t ct_handle,
 			   hfi_size_t remote_offset,
 			   hfi_tx_handle_t tx_handle,
 			   hfi_op_req_t op_req,
-			   uint8_t solicit,
+			   u8 solicit,
 			   hfi_tx_cq_pio_put_match_t *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, rkey);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	return hfi_format_pio_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VoNP_RC, target_id, force_frag,
-				      rc, sl, becn, pkey,
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+	return hfi_format_pio_vostlnp(ctx, start, length,
+				      (hfi_tx_ctype_t)VoNP_RC, dlid, force_frag,
+				      rc, sl, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,
 				      ct_handle, remote_offset, tx_handle,
-				      op_req, command);
+				      op_req, dst_qp, command);
 }
 
 static inline
-int hfi_format_dma_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_dma_vostlnp(struct hfi_ctx *ctx,
 			   void *start, hfi_size_t length,
 			   hfi_tx_ctype_t ctype,
-			   hfi_process_t target_id, u8 force_frag,
+			   u32 dlid, u8 force_frag,
 			   hfi_rc_t rc,
-			   hfi_service_level_t sl, hfi_becn_t becn,
+			   hfi_service_level_t sl,
 			   hfi_pkey_t pkey, hfi_slid_low_t slid_low,
 			   hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
 			   hfi_match_bits_t match_bits,
@@ -442,24 +502,25 @@ int hfi_format_dma_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
 			   hfi_size_t remote_offset,
 			   hfi_tx_handle_t tx_handle,
 			   hfi_op_req_t op_req,
+			   u32 dst_qp,
 			   union hfi_tx_cq_dma *command)
 {
-	uint16_t cmd_length = _HFI_CMD_LENGTH(0, sizeof(union hfi_tx_cq_dma));
-	uint16_t cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
+	union hfi_process target_id = {.phys.slid = dlid};
+	u16 cmd_length = _HFI_CMD_LENGTH(0, sizeof(union hfi_tx_cq_dma));
+	u16 cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
 	hfi_cmd_t cmd;
 
 	cmd.ptl_opcode_low = op_req;
 	cmd.ttype = DMA;
 
-	_hfi_format_base_put_flit0(ctx, ni,
-				   &command->flit0, cmd, ctype, cmd_length,
-				   target_id, force_frag, 0/*pt_index*/, rc, sl, becn,
-				   pkey, slid_low, auth_idx, user_ptr, (hfi_flag_t) 1 /*hd*/,
-				   PTL_FULL_ACK_REQ, md_options, eq_handle, ct_handle,
-				   remote_offset, tx_handle);
+	_hfi_format_verb_put_flit0(&command->flit0, cmd, ctype, cmd_length,
+				   target_id, force_frag, rc, sl,
+				   pkey, slid_low, auth_idx, user_ptr,
+				   md_options, eq_handle, ct_handle,
+				   remote_offset, tx_handle, dst_qp);
 
 	_hfi_format_put_flit_e1(ctx, &command->flit1.e,
-				target_id.phys.ipid, PTL_UINT64_T, length);
+				(dst_qp>>8), PTL_UINT64_T, length);
 
 	command->flit1.f.val = (uintptr_t)start; /* Just zero extend local_start to 64-bits  */
 
@@ -470,110 +531,137 @@ int hfi_format_dma_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
 }
 
 static inline
-int hfi_format_dma_ud(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_update_dma_rc(struct hfi_ctx *ctx,
 		      void *start, hfi_size_t length,
-		      hfi_process_t target_id, u8 force_frag,
+		      u8 force_frag,
 		      hfi_rc_t rc,
-		      hfi_service_level_t sl, hfi_becn_t becn,
+		      hfi_user_ptr_t user_ptr,
+		      hfi_match_bits_t match_bits,
+		      hfi_hdr_data_t hdr_data,
+		      hfi_md_options_t md_options,
+		      hfi_ct_handle_t ct_handle,
+		      hfi_size_t remote_offset,
+		      hfi_tx_handle_t tx_handle,
+		      hfi_op_req_t op_req,
+		      u32 qp,
+		      union hfi_tx_cq_dma *command)
+{
+	u16 cmd_length = _HFI_CMD_LENGTH(0, sizeof(union hfi_tx_cq_dma));
+	u16 cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
+	hfi_cmd_t cmd;
+
+	cmd.ptl_opcode_low = op_req;
+	cmd.ttype = DMA;
+
+	_hfi_update_verb_flit0_rc(&command->flit0, cmd, cmd_length,
+				  force_frag, rc, user_ptr,
+				  md_options, ct_handle,
+				  remote_offset, tx_handle);
+
+	_hfi_update_put_flit_e1(&command->flit1.e, length);
+
+	command->flit1.f.val = (uintptr_t)start; /* Just zero extend local_start to 64-bits  */
+
+	command->flit1.mb = match_bits;
+	command->flit1.hd = hdr_data;
+
+	return cmd_slots;
+}
+
+static inline
+int hfi_format_dma_ud(struct hfi_ctx *ctx,
+		      void *start, hfi_size_t length,
+		      u32 dlid, u8 force_frag,
+		      hfi_rc_t rc,
+		      hfi_service_level_t sl,
 		      hfi_pkey_t pkey, hfi_slid_low_t slid_low,
 		      hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-		      uint32_t src_qp,
-		      uint32_t dst_qp,
-		      uint32_t imm,
-		      uint32_t qkey,
+		      u32 src_qp,
+		      u32 dst_qp,
+		      u32 imm,
+		      u32 qkey,
 		      hfi_md_options_t md_options,
 		      hfi_eq_handle_t eq_handle,
 		      hfi_ct_handle_t ct_handle,
 		      hfi_tx_handle_t tx_handle,
 		      hfi_op_req_t op_req,
-		      uint8_t solicit,
+		      u8 solicit,
 		      union hfi_tx_cq_dma *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, qkey);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	uint64_t remote_offset = FMT_UD_REMOTE_OFFSET(target_id.phys.slid, sl,
-						      pkey, src_qp);
-	return hfi_format_dma_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)UD, target_id, force_frag,
-				      rc, sl, becn, pkey,
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+	u64 remote_offset = FMT_UD_REMOTE_OFFSET(dlid, sl, pkey, src_qp);
+
+	return hfi_format_dma_vostlnp(ctx, start, length,
+				      (hfi_tx_ctype_t)UD, dlid, force_frag,
+				      rc, sl, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,
 				      ct_handle, (hfi_size_t)remote_offset,
-				      tx_handle, op_req, command);
+				      tx_handle, op_req, dst_qp, command);
 }
 
 static inline
-int hfi_format_dma_rc_send(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_dma_rc_send(struct hfi_ctx *ctx,
 			   void *start, hfi_size_t length,
-			   hfi_process_t target_id, u8 force_frag,
+			   u8 force_frag,
 			   hfi_rc_t rc,
-			   hfi_service_level_t sl, hfi_becn_t becn,
-			   hfi_pkey_t pkey, hfi_slid_low_t slid_low,
-			   hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-			   uint32_t src_qp,
-			   uint32_t dst_qp,
-			   uint32_t imm,
+			   hfi_user_ptr_t user_ptr,
+			   u32 src_qp,
+			   u32 dst_qp,
+			   u32 imm,
 			   hfi_md_options_t md_options,
-			   hfi_eq_handle_t eq_handle,
 			   hfi_ct_handle_t ct_handle,
 			   hfi_tx_handle_t tx_handle,
 			   hfi_op_req_t op_req,
-			   uint8_t solicit,
+			   u8 solicit,
 			   union hfi_tx_cq_dma *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, imm);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	return hfi_format_dma_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VoNP_RC, target_id, force_frag,
-				      rc, sl, becn, pkey,
-				      slid_low, auth_idx, user_ptr, match_bits,
-				      hdr_data, md_options, eq_handle,
-				      ct_handle, (hfi_size_t)0, tx_handle,
-				      op_req, command);
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+
+	return hfi_update_dma_rc(ctx, start, length, force_frag,
+				 rc, user_ptr, match_bits,
+				 hdr_data, md_options,
+				 ct_handle, (hfi_size_t)0, tx_handle,
+				 op_req, src_qp, command);
 }
 
 static inline
-int hfi_format_dma_rc_rdma(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_dma_rc_rdma(struct hfi_ctx *ctx,
 			   void *start, hfi_size_t length,
-			   hfi_process_t target_id, u8 force_frag,
+			   u8 force_frag,
 			   hfi_rc_t rc,
-			   hfi_service_level_t sl, hfi_becn_t becn,
-			   hfi_pkey_t pkey, hfi_slid_low_t slid_low,
-			   hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-			   uint32_t src_qp,
-			   uint32_t dst_qp,
-			   uint32_t imm,
-			   uint32_t rkey,
+			   hfi_user_ptr_t user_ptr,
+			   u32 src_qp,
+			   u32 dst_qp,
+			   u32 imm,
+			   u32 rkey,
 			   hfi_md_options_t md_options,
-			   hfi_eq_handle_t eq_handle,
 			   hfi_ct_handle_t ct_handle,
 			   hfi_size_t remote_offset,
 			   hfi_tx_handle_t tx_handle,
 			   hfi_op_req_t op_req,
-			   uint8_t solicit,
+			   u8 solicit,
 			   union hfi_tx_cq_dma *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, rkey);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	return hfi_format_dma_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VoNP_RC, target_id, force_frag,
-				      rc, sl, becn, pkey,
-				      slid_low, auth_idx, user_ptr, match_bits,
-				      hdr_data, md_options, eq_handle,
-				      ct_handle, remote_offset, tx_handle,
-				      op_req, command);
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+
+	return hfi_update_dma_rc(ctx, start, length, force_frag,
+				 rc, user_ptr, match_bits,
+				 hdr_data, md_options,
+				 ct_handle, remote_offset, tx_handle,
+				 op_req, dst_qp, command);
 }
 
 static inline
-int hfi_format_dma_iovec_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_dma_iovec_vostlnp(struct hfi_ctx *ctx,
 				 void *start, hfi_size_t length,
 				 hfi_tx_ctype_t ctype,
-				 hfi_process_t target_id, u8 force_frag,
+				 u32 dlid, u8 force_frag,
 				 hfi_rc_t rc,
-				 hfi_service_level_t sl, hfi_becn_t becn,
+				 hfi_service_level_t sl,
 				 hfi_pkey_t pkey, hfi_slid_low_t slid_low,
 				 hfi_auth_idx_t auth_idx,
 				 hfi_user_ptr_t user_ptr,
@@ -585,28 +673,29 @@ int hfi_format_dma_iovec_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
 				 hfi_size_t remote_offset,
 				 hfi_tx_handle_t tx_handle,
 				 hfi_op_req_t op_req,
-				 uint64_t iov_count, uint64_t iov_offset,
+				 u64 iov_count, u64 iov_offset,
+				 u64 dst_qp,
 				 union hfi_tx_cq_dma_iovec *command)
 {
+	union hfi_process target_id = {.phys.slid = dlid};
 	/* CMD length for Triggered OPs is 9 QWORDS */
 	/* however, true CMD length due to reserved bits is 12 QWORDS*/
 	/* TODO: change back to using _HFI_CMD_LENGTH once >9 size is allowed*/
-	uint16_t cmd_length = 9;
-	uint16_t cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
+	u16 cmd_length = 9;
+	u16 cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
 	hfi_cmd_t cmd;
 
 	cmd.ptl_opcode_low = op_req;
 	cmd.ttype = DMA;
 
-	_hfi_format_base_put_flit0(ctx, ni,
-				   &command->flit0, cmd, ctype, cmd_length,
-				   target_id, force_frag, 0/*pt_index*/, rc, sl, becn,
-				   pkey, slid_low, auth_idx, user_ptr, (hfi_flag_t) 1 /*hd*/,
-				   PTL_FULL_ACK_REQ, md_options, eq_handle, ct_handle,
-				   remote_offset, tx_handle);
+	_hfi_format_verb_put_flit0(&command->flit0, cmd, ctype, cmd_length,
+				   target_id, force_frag, rc, sl,
+				   pkey, slid_low, auth_idx, user_ptr,
+				   md_options, eq_handle, ct_handle,
+				   remote_offset, tx_handle, dst_qp);
 
 	_hfi_format_put_flit_e1(ctx, &command->flit1.e,
-				target_id.phys.ipid, PTL_UINT64_T, length);
+				(dst_qp>>8), PTL_UINT64_T, length);
 
 	command->flit1.f.val = (uintptr_t)start; /* Just zero extend local_start to 64-bits  */
 
@@ -618,105 +707,140 @@ int hfi_format_dma_iovec_vostlnp(struct hfi_ctx *ctx, hfi_ni_t ni,
 }
 
 static inline
-int hfi_format_dma_iovec_ud(struct hfi_ctx *ctx, hfi_ni_t ni,
-			      void *start, hfi_size_t length,
-			      hfi_process_t target_id, u8 force_frag,
-			      hfi_rc_t rc,
-			      hfi_service_level_t sl, hfi_becn_t becn,
-			      hfi_pkey_t pkey, hfi_slid_low_t slid_low,
-			      hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-			      uint32_t src_qp,
-			      uint32_t dst_qp,
-			      uint32_t imm,
-			      uint32_t qkey,
-			      hfi_md_options_t md_options,
-			      hfi_eq_handle_t eq_handle,
-			      hfi_ct_handle_t ct_handle,
-			      hfi_tx_handle_t tx_handle,
-			      hfi_op_req_t op_req,
-			      uint8_t solicit,
-			      uint64_t iov_count, uint64_t iov_offset,
-			      union hfi_tx_cq_dma_iovec *command)
+int hfi_update_dma_iovec_rc(struct hfi_ctx *ctx,
+			    void *start, hfi_size_t length,
+			    u8 force_frag,
+			    hfi_rc_t rc,
+			    hfi_user_ptr_t user_ptr,
+			    hfi_match_bits_t match_bits,
+			    hfi_hdr_data_t hdr_data,
+			    hfi_md_options_t md_options,
+			    hfi_ct_handle_t ct_handle,
+			    hfi_size_t remote_offset,
+			    hfi_tx_handle_t tx_handle,
+			    hfi_op_req_t op_req,
+			    u64 iov_count, u64 iov_offset,
+			    u32 qp,
+			    union hfi_tx_cq_dma_iovec *command)
+{
+	/* CMD length for Triggered OPs is 9 QWORDS */
+	/* however, true CMD length due to reserved bits is 12 QWORDS*/
+	/* TODO: change back to using _HFI_CMD_LENGTH once >9 size is allowed*/
+	u16 cmd_length = 9;
+	u16 cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
+	hfi_cmd_t cmd;
+
+	cmd.ptl_opcode_low = op_req;
+	cmd.ttype = DMA;
+
+	_hfi_update_verb_flit0_rc(&command->flit0, cmd, cmd_length,
+				  force_frag, rc, user_ptr,
+				  md_options, ct_handle,
+				  remote_offset, tx_handle);
+
+	_hfi_update_put_flit_e1(&command->flit1.e, length);
+
+	command->flit1.f.val = (uintptr_t)start; /* Just zero extend local_start to 64-bits  */
+
+	command->flit1.mb = match_bits;
+	command->flit1.hd = hdr_data;
+
+	command->flit2.l.iov_entries = iov_count;
+	command->flit2.l.iov_offset = iov_offset;
+	return cmd_slots;
+}
+
+static inline
+int hfi_format_dma_iovec_ud(struct hfi_ctx *ctx,
+			    void *start, hfi_size_t length,
+			    u32 dlid, u8 force_frag,
+			    hfi_rc_t rc,
+			    hfi_service_level_t sl,
+			    hfi_pkey_t pkey, hfi_slid_low_t slid_low,
+			    hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
+			    u32 src_qp,
+			    u32 dst_qp,
+			    u32 imm,
+			    u32 qkey,
+			    hfi_md_options_t md_options,
+			    hfi_eq_handle_t eq_handle,
+			    hfi_ct_handle_t ct_handle,
+			    hfi_tx_handle_t tx_handle,
+			    hfi_op_req_t op_req,
+			    u8 solicit,
+			    u64 iov_count, u64 iov_offset,
+			    union hfi_tx_cq_dma_iovec *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, qkey);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	uint64_t remote_offset = FMT_UD_REMOTE_OFFSET(target_id.phys.slid, sl,
-						      pkey, src_qp);
-	return hfi_format_dma_iovec_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)UD, target_id, force_frag,
-				      rc, sl, becn, pkey,
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+	u64 remote_offset = FMT_UD_REMOTE_OFFSET(dlid, sl, pkey, src_qp);
+
+	return hfi_format_dma_iovec_vostlnp(ctx, start, length,
+				      (hfi_tx_ctype_t)UD, dlid, force_frag,
+				      rc, sl, pkey,
 				      slid_low, auth_idx, user_ptr, match_bits,
 				      hdr_data, md_options, eq_handle,
 				      ct_handle, (hfi_size_t)remote_offset,
 				      tx_handle, op_req, iov_count, iov_offset,
-				      command);
+				      dst_qp, command);
 }
 
 static inline
-int hfi_format_dma_iovec_rc_send(struct hfi_ctx *ctx, hfi_ni_t ni,
-			      void *start, hfi_size_t length,
-			      hfi_process_t target_id, u8 force_frag,
-			      hfi_rc_t rc,
-			      hfi_service_level_t sl, hfi_becn_t becn,
-			      hfi_pkey_t pkey, hfi_slid_low_t slid_low,
-			      hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-			      uint32_t src_qp,
-			      uint32_t dst_qp,
-			      uint32_t imm,
-			      hfi_md_options_t md_options,
-			      hfi_eq_handle_t eq_handle,
-			      hfi_ct_handle_t ct_handle,
-			      hfi_tx_handle_t tx_handle,
-			      hfi_op_req_t op_req,
-			      uint8_t solicit,
-			      uint64_t iov_count, uint64_t iov_offset,
-			      union hfi_tx_cq_dma_iovec *command)
+int hfi_format_dma_iovec_rc_send(struct hfi_ctx *ctx,
+				 void *start, hfi_size_t length,
+				 u8 force_frag,
+				 hfi_rc_t rc,
+				 hfi_user_ptr_t user_ptr,
+				 u32 src_qp,
+				 u32 dst_qp,
+				 u32 imm,
+				 hfi_md_options_t md_options,
+				 hfi_ct_handle_t ct_handle,
+				 hfi_tx_handle_t tx_handle,
+				 hfi_op_req_t op_req,
+				 u8 solicit,
+				 u64 iov_count, u64 iov_offset,
+				 union hfi_tx_cq_dma_iovec *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, imm);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	return hfi_format_dma_iovec_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VoNP_RC, target_id, force_frag,
-				      rc, sl, becn, pkey,
-				      slid_low, auth_idx, user_ptr, match_bits,
-				      hdr_data, md_options, eq_handle,
-				      ct_handle, (hfi_size_t)0, tx_handle,
-				      op_req, iov_count, iov_offset, command);
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+
+	return hfi_update_dma_iovec_rc(ctx, start, length, force_frag,
+				       rc, user_ptr, match_bits,
+				       hdr_data, md_options,
+				       ct_handle, (hfi_size_t)0, tx_handle,
+				       op_req, iov_count, iov_offset, src_qp,
+				       command);
 }
 
 static inline
-int hfi_format_dma_iovec_rc_rdma(struct hfi_ctx *ctx, hfi_ni_t ni,
+int hfi_format_dma_iovec_rc_rdma(struct hfi_ctx *ctx,
 			      void *start, hfi_size_t length,
-			      hfi_process_t target_id, u8 force_frag,
+			      u8 force_frag,
 			      hfi_rc_t rc,
-			      hfi_service_level_t sl, hfi_becn_t becn,
-			      hfi_pkey_t pkey, hfi_slid_low_t slid_low,
-			      hfi_auth_idx_t auth_idx, hfi_user_ptr_t user_ptr,
-			      uint32_t src_qp,
-			      uint32_t dst_qp,
-			      uint32_t imm,
-			      uint32_t rkey,
+			      hfi_user_ptr_t user_ptr,
+			      u32 src_qp,
+			      u32 dst_qp,
+			      u32 imm,
+			      u32 rkey,
 			      hfi_md_options_t md_options,
-			      hfi_eq_handle_t eq_handle,
 			      hfi_ct_handle_t ct_handle,
 			      hfi_size_t remote_offset,
 			      hfi_tx_handle_t tx_handle,
 			      hfi_op_req_t op_req,
-			      uint8_t solicit,
-			      uint64_t iov_count, uint64_t iov_offset,
+			      u8 solicit,
+			      u64 iov_count, u64 iov_offset,
 			      union hfi_tx_cq_dma_iovec *command)
 {
 	hfi_match_bits_t match_bits = FMT_VOSTLNP_MB(MB_OC_OK, src_qp, rkey);
-	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, HFI_MTYPE_MR, solicit,
-						 dst_qp);
-	return hfi_format_dma_iovec_vostlnp(ctx, ni, start, length,
-				      (hfi_tx_ctype_t)VoNP_RC, target_id, force_frag,
-				      rc, sl, becn, pkey,
-				      slid_low, auth_idx, user_ptr, match_bits,
-				      hdr_data, md_options, eq_handle,
-				      ct_handle, remote_offset, tx_handle,
-				      op_req, iov_count, iov_offset, command);
+	hfi_hdr_data_t hdr_data = FMT_VOSTLNP_HD(imm, solicit, dst_qp);
+
+	return hfi_update_dma_iovec_rc(ctx, start, length, force_frag,
+				       rc, user_ptr, match_bits,
+				       hdr_data, md_options,
+				       ct_handle, remote_offset, tx_handle,
+				       op_req, iov_count, iov_offset, src_qp,
+				       command);
 }
 
 #endif /* _HFI_TX_VOSTLNP_H */

@@ -808,7 +808,7 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 	struct hfi_ibcontext *ctx = obj_to_ibctx(ibqp);
 	struct rvt_cq *cq;
 	u64 result[2];
-	int ret;
+	int i, ret;
 
 	if (!ctx || !ctx->supports_native)
 		return 0;
@@ -880,6 +880,17 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		struct hfi_e2e_conn conn;
 		struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
 
+		/*
+		 * Create send EQ if first use of CQ, need to create at RTR
+		 * for responding to RNR with exception packet.
+		 */
+		cq = ibcq_to_rvtcq(ibqp->send_cq);
+		if (cq && !cq->hw_cq) {
+			ret = hfi_ib_eq_setup(rvtqp->r_rq.hw_rq, cq);
+			if (ret != 0)
+				goto qp_write_err;
+		}
+
 		/* create recv EQ if first use of CQ */
 		cq = ibcq_to_rvtcq(ibqp->recv_cq);
 		if (cq && !cq->hw_cq) {
@@ -935,12 +946,21 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 
 	} else if ((attr_mask & IB_QP_STATE) &&
 		   (attr->qp_state == IB_QPS_RTS)) {
-		/* create send EQ if first use of CQ */
-		cq = ibcq_to_rvtcq(ibqp->send_cq);
-		if (cq && !cq->hw_cq) {
-			ret = hfi_ib_eq_setup(rvtqp->r_rq.hw_rq, cq);
-			if (ret != 0)
-				goto qp_write_err;
+		if (ibqp->qp_type != IB_QPT_UD) {
+			struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
+			struct rdma_ah_attr *ah_attr = &rvtqp->remote_ah_attr;
+
+			/* loop and preformat qp->cmd with connection state */
+			cq = ibcq_to_rvtcq(ibqp->send_cq);
+			for (i = 0; i < rvtqp->s_size; i++)
+				hfi_preformat_rc(rq->hw_ctx,
+						 rdma_ah_get_dlid(ah_attr),
+						 NATIVE_RC, ah_attr->sl,
+						 priv->pkey,
+						 rdma_ah_get_path_bits(ah_attr),
+						 NATIVE_AUTH_IDX, cq->hw_cq,
+						 ibqp->qp_num,
+						 &priv->cmd[i]);
 		}
 	} else if ((attr_mask & IB_QP_STATE) &&
 		   (attr->qp_state == IB_QPS_SQD)) {
@@ -952,7 +972,7 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		    (attr->qp_state == IB_QPS_ERR ||
 		     attr->qp_state == IB_QPS_RESET)) {
 		struct hfi_rq_wc *hfi_wc;
-		struct hfi_rq *rq = (struct hfi_rq *)rvtqp->r_rq.hw_rq;
+		struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
 		unsigned long flags;
 		struct hfi_ctx *hw_ctx;
 		int dlid = rdma_ah_get_dlid(&rvtqp->remote_ah_attr);
