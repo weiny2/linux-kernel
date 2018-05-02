@@ -381,7 +381,8 @@ static void krping_cq_event_handler(struct ib_cq *cq, void *ctx)
 				goto error;
 			}
 		}
-
+		printk("%s:%d KRPING received completeion %d\n", __func__,
+			__LINE__, wc.opcode);
 		switch (wc.opcode) {
 		case IB_WC_SEND:
 			DEBUG_LOG("send completion\n");
@@ -790,6 +791,7 @@ static void krping_test_server(struct krping_cb *cb)
 		cb->rdma_sq_wr.rkey = cb->remote_rkey;
 		cb->rdma_sq_wr.remote_addr = cb->remote_addr;
 		cb->rdma_sq_wr.wr.sg_list->length = cb->remote_len;
+		krping_rdma_rkey(cb, cb->rdma_dma_addr, !cb->read_inv);
 		cb->rdma_sgl.lkey = cb->reg_mr->lkey;
 		cb->rdma_sq_wr.wr.next = NULL;
 		/* Issue RDMA Read. */
@@ -811,12 +813,14 @@ static void krping_test_server(struct krping_cb *cb)
 
 		ret = ib_post_send(cb->qp, &cb->rdma_sq_wr.wr, &bad_wr);
 		if (ret) {
-			printk(KERN_ERR PFX "post send error %d\n", ret);
+			printk(KERN_ERR PFX "%s:%d post send error %d\n",
+					     __func__, __LINE__, ret);
 			break;
 		}
 		cb->rdma_sq_wr.wr.next = NULL;
 
-		DEBUG_LOG("server posted rdma read req \n");
+		DEBUG_LOG("%s:%d server posted rdma read req \n",
+			  __func__, __LINE__);
 
 		/* Wait for read completion */
 		wait_event_interruptible(cb->sem,
@@ -827,7 +831,8 @@ static void krping_test_server(struct krping_cb *cb)
 			       cb->state);
 			break;
 		}
-		DEBUG_LOG("server received read complete\n");
+		DEBUG_LOG("%s:%d server received read complete\n",
+			  __func__, __LINE__);
 
 		/* Display data in recv buf */
 		if (cb->verbose)
@@ -865,8 +870,10 @@ static void krping_test_server(struct krping_cb *cb)
 		cb->rdma_sq_wr.wr.sg_list->length = strlen(cb->rdma_buf) + 1;
 		if (cb->local_dma_lkey)
 			cb->rdma_sgl.lkey = cb->pd->local_dma_lkey;
-		else
+		else {
+			krping_rdma_rkey(cb, cb->rdma_dma_addr, 0);
 			cb->rdma_sgl.lkey = cb->reg_mr->lkey;
+		}
 
 		DEBUG_LOG("rdma write from lkey %x laddr %llx len %d\n",
 			  cb->rdma_sq_wr.wr.sg_list->lkey,
@@ -1034,7 +1041,6 @@ static void wlat_test(struct krping_cb *cb)
 	cb->rdma_sq_wr.rkey = cb->remote_rkey;
 	cb->rdma_sq_wr.remote_addr = cb->remote_addr;
 	cb->rdma_sq_wr.wr.sg_list->length = cb->size;
-
 	if (cycle_iters > iters)
 		cycle_iters = iters;
 	do_gettimeofday(&start_tv);
@@ -1176,7 +1182,7 @@ static void bw_test(struct krping_cb *cb)
 	cb->rdma_sq_wr.rkey = cb->remote_rkey;
 	cb->rdma_sq_wr.remote_addr = cb->remote_addr;
 	cb->rdma_sq_wr.wr.sg_list->length = cb->size;
-
+	krping_rdma_rkey(cb, cb->rdma_sgl.addr, 1);
 	if (cycle_iters > iters)
 		cycle_iters = iters;
 	do_gettimeofday(&start_tv);
@@ -1220,7 +1226,7 @@ static void bw_test(struct krping_cb *cb)
 			}
 			if (wc.status != IB_WC_SUCCESS) {
 				printk(KERN_ERR PFX
-					"Completion wth error at %s:\n",
+					"[%s:%d]Completion wth error at %s:\n", __func__, __LINE__,
 					cb->server ? "server" : "client");
 				printk(KERN_ERR PFX
 					"Failed status %d: wr_id %d\n",
@@ -2104,7 +2110,7 @@ int krping_doit(char *cmd)
 	}
 	if (ret)
 		goto out;
-
+#if 0
 	if (cb->server == -1) {
 		printk(KERN_ERR PFX "must be either client or server\n");
 		ret = -EINVAL;
@@ -2128,7 +2134,7 @@ int krping_doit(char *cmd)
 		ret = -EINVAL;
 		goto out;
 	}
-
+#endif
 	cb->cm_id = rdma_create_id(&init_net, krping_cma_event_handler, cb, RDMA_PS_TCP, IB_QPT_RC);
 	if (IS_ERR(cb->cm_id)) {
 		ret = PTR_ERR(cb->cm_id);
@@ -2136,7 +2142,6 @@ int krping_doit(char *cmd)
 		goto out;
 	}
 	DEBUG_LOG("created cm_id %p\n", cb->cm_id);
-
 	if (cb->server)
 		krping_run_server(cb);
 	else
