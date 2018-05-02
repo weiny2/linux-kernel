@@ -25,6 +25,7 @@
 #include <linux/kthread.h>
 #include <linux/types.h>
 #include <linux/delay.h>
+#include <linux/iommu.h>
 #include <linux/module.h>
 #include <linux/pci-ats.h>
 #include <linux/signal.h>
@@ -346,22 +347,37 @@ restart:
 
 #define PRQ_RING_MASK ((0x1000 << PRQ_ORDER) - 0x10)
 
-static inline void *alloc_pgtable_page(int node)
+static inline void *alloc_pgtable_page(struct hfi_at *at,
+				       dma_addr_t *dma_handle)
 {
+	struct hfi_devdata *dd = at->dd;
 	struct page *page;
-	void *vaddr = NULL;
+	dma_addr_t iova;
+	void *vaddr;
 
-	page = alloc_pages_node(node, GFP_KERNEL | __GFP_ZERO, 0);
-	if (page) {
-		vaddr = page_address(page);
-		hfi2_dbg("AT page alloc: %p\n", vaddr);
+	page = alloc_pages_node(dd->node, GFP_KERNEL | __GFP_ZERO, 0);
+	if (!page)
+		return NULL;
+
+	vaddr = page_address(page);
+	iova = pci_map_page(dd->pdev, page, 0, PAGE_SIZE, DMA_TO_DEVICE);
+	if (unlikely(pci_dma_mapping_error(dd->pdev, iova))) {
+		free_page((unsigned long)vaddr);
+		return NULL;
 	}
+
+	*dma_handle = iova;
+	hfi2_dbg("AT page alloc: %p\n", vaddr);
 	return vaddr;
 }
 
-static inline void free_pgtable_page(void *vaddr)
+static inline void free_pgtable_page(struct hfi_at *at, void *vaddr,
+				     dma_addr_t dma_handle)
 {
+	struct hfi_devdata *dd = at->dd;
+
 	hfi2_dbg("AT page free: %p\n", vaddr);
+	pci_unmap_page(dd->pdev, dma_handle, PAGE_SIZE, DMA_TO_DEVICE);
 	free_page((unsigned long)vaddr);
 }
 
@@ -497,22 +513,56 @@ static inline int at_pte_get_promo(int level)
 	return SZ_4K << ((level - 1) * LEVEL_STRIDE);
 }
 
+/* TODO: its a hack; iommu driver should export the domain */
+static inline struct iommu_domain *get_iommu_domain(struct device *dev)
+{
+	void *info1 = dev->archdata.iommu + 0x38;
+	void *info2 = (void *)*((u64 *)info1);
+	struct iommu_domain *domain = (info2 + 0xa90);
+
+	return domain;
+}
+
+/* TODO: iommu_iova_to_phys() can be used if domain->ops is defined */
+static inline phys_addr_t at_pte_phys_addr(struct hfi_at *at,
+					   struct at_pte *pte)
+{
+	const struct iommu_ops *ops = at->dd->pdev->dev.bus->iommu_ops;
+	dma_addr_t pte_dma = at_pte_addr(pte);
+	phys_addr_t pte_phys = pte_dma;
+	struct iommu_domain *domain;
+
+	if (ops) {
+		domain = get_iommu_domain(&at->dd->pdev->dev);
+		if (domain)
+			pte_phys = ops->iova_to_phys(domain, pte_dma);
+	}
+
+	return pte_phys;
+}
+
+static inline void *at_pte_virt_addr(struct hfi_at *at, struct at_pte *pte)
+{
+	return phys_to_virt(at_pte_phys_addr(at, pte));
+}
+
 static void __print_page_tbl(struct seq_file *s, struct at_pte *pte,
 			     u8 level, unsigned long pfn)
 {
 	char *lp, *lvl_prefix[MAX_PGTBL_LEVEL] = { "\t\t\t\t", "\t\t\t",
 						   "\t\t", "\t", "" };
 	int i = pfn ? pfn_level_offset(pfn, level) : 0;
+	struct hfi_ctx *ctx = s->private;
+	struct hfi_devdata *dd = ctx->devdata;
 
 	lp = lvl_prefix[level - 1];
 	pte += i;
 	do {
 		if (at_pte_present(pte)) {
-			u64 pte_val = at_pte_addr(pte);
-
 			seq_printf(s, "%s0x%x: 0x%llx\n", lp, i, pte->val);
 			if (level > 1 && !at_pte_superpage(pte))
-				__print_page_tbl(s, phys_to_virt(pte_val),
+				__print_page_tbl(s,
+						 at_pte_virt_addr(dd->at, pte),
 						 level - 1, pfn);
 		} else if (pfn) {
 			seq_printf(s, "%s0x%x: 0x%llx\n", lp, i, pte->val);
@@ -630,14 +680,14 @@ static struct at_pte *pfn_to_at_pte(struct hfi_at_svm *svm, unsigned long pfn,
 
 		if (!at_pte_present(pte)) {
 			u64 pteval;
+			dma_addr_t tmp_dma;
 
-			tmp_page = alloc_pgtable_page(svm->at->dd->node);
-
+			tmp_page = alloc_pgtable_page(svm->at, &tmp_dma);
 			if (!tmp_page)
 				return NULL;
 
 			__at_flush_cache(svm->at, tmp_page, AT_PAGE_SIZE);
-			pteval = virt_to_at_pfn(tmp_page) << AT_PAGE_SHIFT;
+			pteval = (u64)tmp_dma;
 			pteval |= AT_PTE_ACCESSED | AT_PTE_DIRTY |
 				  AT_PTE_WRITE | AT_PTE_PRESENT;
 			if (user)
@@ -648,14 +698,14 @@ static struct at_pte *pfn_to_at_pte(struct hfi_at_svm *svm, unsigned long pfn,
 				 * Someone else set it while we were thinking;
 				 * use theirs.
 				 */
-				free_pgtable_page(tmp_page);
+				free_pgtable_page(svm->at, tmp_page, tmp_dma);
 			else
 				__at_flush_cache(svm->at, pte, sizeof(*pte));
 		}
 		if (level == 1)
 			break;
 
-		parent = phys_to_virt(at_pte_addr(pte));
+		parent = at_pte_virt_addr(svm->at, pte);
 		level--;
 	}
 
@@ -1880,17 +1930,20 @@ static inline void at_pte_dma_unmap(struct hfi_at_svm *svm, struct at_pte *pte,
 	pci_unmap_page(dd->pdev, at_pte_addr(pte), promo, dir);
 }
 
-static struct page *at_pte_list_pgtbls(struct hfi_at_svm *svm, int level,
-				       struct at_pte *pte,
-				       struct page *freelist)
+static dma_addr_t at_pte_list_pgtbls(struct hfi_at_svm *svm, int level,
+				     struct at_pte *pte,
+				     dma_addr_t freelist)
 {
+	phys_addr_t base_phys = at_pte_phys_addr(svm->at, pte);
+	struct at_pte *base_pte = phys_to_virt(base_phys);
+	dma_addr_t base_pte_dma = at_pte_addr(pte);
 	struct page *pg;
 
-	pg = pfn_to_page(at_pte_addr(pte) >> PAGE_SHIFT);
-	pg->freelist = freelist;
-	freelist = pg;
+	pg = pfn_to_page(base_phys >> PAGE_SHIFT);
+	pg->freelist = (void *)freelist;
+	freelist = base_pte_dma;
 
-	pte = page_address(pg);
+	pte = base_pte;
 	do {
 		if (!at_pte_present(pte))
 			goto clear_next;
@@ -1908,12 +1961,12 @@ clear_next:
 	return freelist;
 }
 
-static struct page *at_pte_clear_level(struct hfi_at_svm *svm, int level,
-				       struct at_pte *pte,
-				       unsigned long pfn,
-				       unsigned long start_pfn,
-				       unsigned long last_pfn,
-				       struct page *freelist)
+static dma_addr_t at_pte_clear_level(struct hfi_at_svm *svm, int level,
+				     struct at_pte *pte,
+				     unsigned long pfn,
+				     unsigned long start_pfn,
+				     unsigned long last_pfn,
+				     dma_addr_t freelist)
 {
 	struct at_pte *first_pte = NULL, *last_pte = NULL;
 
@@ -1959,7 +2012,7 @@ static struct page *at_pte_clear_level(struct hfi_at_svm *svm, int level,
 			 * Recurse down into a level that isn't *entirely*
 			 * obsolete.
 			 */
-			lower_pte = phys_to_virt(at_pte_addr(pte));
+			lower_pte = at_pte_virt_addr(svm->at, pte);
 			freelist = at_pte_clear_level(svm, level - 1, lower_pte,
 						      level_pfn, start_pfn,
 						      last_pfn, freelist);
@@ -1976,15 +2029,15 @@ next:
 	return freelist;
 }
 
-static struct page *hfi_at_unmap(struct hfi_at_svm *svm,
-				 unsigned long start_pfn,
-				 unsigned long last_pfn)
+static dma_addr_t hfi_at_unmap(struct hfi_at_svm *svm,
+			       unsigned long start_pfn,
+			       unsigned long last_pfn)
 {
-	struct page *freelist = NULL;
+	dma_addr_t freelist = 0;
 	unsigned long flags;
 
 	if (start_pfn > last_pfn)
-		return NULL;
+		return freelist;
 
 	hfi2_dbg("AT SPT unmap: pasid %d start pfn 0x%lx last pfn 0x%lx\n",
 		 svm->pasid, start_pfn, last_pfn);
@@ -1996,14 +2049,14 @@ static struct page *hfi_at_unmap(struct hfi_at_svm *svm,
 	/* we don't need lock here; nobody else touches the iova range */
 	freelist = at_pte_clear_level(svm, agaw_to_level(svm->at->agaw),
 				      svm->pgd, 0, start_pfn, last_pfn,
-				      NULL);
+				      freelist);
 
 	/* free pgd */
 	if (start_pfn == 0 && last_pfn == HFI_AT_DEFAULT_MAX_PFN) {
 		struct page *pgd_page = virt_to_page(svm->pgd);
 
-		pgd_page->freelist = freelist;
-		freelist = pgd_page;
+		pgd_page->freelist = (void *)freelist;
+		freelist = svm->pgd_dma;
 		svm->pgd = NULL;
 	}
 
@@ -2012,13 +2065,20 @@ unmap_done:
 	return freelist;
 }
 
-static void hfi_at_free_pagelist(struct page *freelist)
+static void hfi_at_free_pagelist(struct hfi_at_svm *svm,
+				 dma_addr_t freelist)
 {
-	struct page *pg;
+	struct at_pte *pte = (struct at_pte *)&freelist;
+	phys_addr_t phys = at_pte_phys_addr(svm->at, pte);
+	struct page *pg = pfn_to_page(phys >> PAGE_SHIFT);
 
-	while ((pg = freelist)) {
-		freelist = pg->freelist;
-		free_pgtable_page(page_address(pg));
+	while (freelist) {
+		dma_addr_t tmp_freelist = (dma_addr_t)pg->freelist;
+
+		free_pgtable_page(svm->at, page_address(pg), at_pte_addr(pte));
+		freelist = tmp_freelist;
+		phys = at_pte_phys_addr(svm->at, pte);
+		pg = pfn_to_page(phys >> PAGE_SHIFT);
 	}
 }
 
@@ -2168,7 +2228,7 @@ static void hfi_flush_svm_range(struct hfi_at_svm *svm, unsigned long address,
 				unsigned long pages, int ih, int gl)
 {
 	unsigned long start_pfn, last_pfn, nrpages;
-	struct page *freelist;
+	dma_addr_t freelist;
 
 	hfi_flush_svm_range_dev(svm, address, pages, ih, gl);
 
@@ -2177,7 +2237,7 @@ static void hfi_flush_svm_range(struct hfi_at_svm *svm, unsigned long address,
 		start_pfn = AT_PFN(address);
 		last_pfn = start_pfn + nrpages - 1;
 		freelist = hfi_at_unmap(svm, start_pfn, last_pfn);
-		hfi_at_free_pagelist(freelist);
+		hfi_at_free_pagelist(svm, freelist);
 	}
 }
 
@@ -2215,7 +2275,7 @@ static void hfi_flush_pasid_dev(struct hfi_at_svm *svm, int pasid)
 static void hfi_at_mm_release(struct mmu_notifier *mn, struct mm_struct *mm)
 {
 	struct hfi_at_svm *svm = container_of(mn, struct hfi_at_svm, notifier);
-	struct page *freelist;
+	dma_addr_t freelist;
 
 	/*
 	 * This might end up being called from exit_mmap(), *before* the page
@@ -2239,7 +2299,7 @@ static void hfi_at_mm_release(struct mmu_notifier *mn, struct mm_struct *mm)
 
 	if (svm->pgd) {
 		freelist = hfi_at_unmap(svm, 0,	HFI_AT_DEFAULT_MAX_PFN);
-		hfi_at_free_pagelist(freelist);
+		hfi_at_free_pagelist(svm, freelist);
 	}
 }
 
@@ -2492,7 +2552,7 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 
 	if (!use_cpt) {
 		svm->tsk = current;
-		svm->pgd = (struct at_pte *)alloc_pgtable_page(at->dd->node);
+		svm->pgd = alloc_pgtable_page(at, &svm->pgd_dma);
 		if (!svm->pgd) {
 			idr_remove(&svm->at->pasid_idr, svm->pasid);
 			kfree(svm);
@@ -2500,7 +2560,7 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 		}
 		__at_flush_cache(at, svm->pgd, AT_PAGE_SIZE);
 
-		pgdval = (u64)__pa(svm->pgd);
+		pgdval = (u64)svm->pgd_dma;
 		hfi2_dbg("AT SPT alloc: pasid %d\n", svm->pasid);
 	} else {
 		/* we only use PTI for user process */
@@ -2513,7 +2573,8 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 		ret = mmu_notifier_register(&svm->notifier, mm);
 		if (ret) {
 			if (svm->pgd)
-				free_pgtable_page(svm->pgd);
+				free_pgtable_page(at, svm->pgd, svm->pgd_dma);
+
 			idr_remove(&svm->at->pasid_idr, svm->pasid);
 			kfree(svm);
 			goto out;
@@ -2590,11 +2651,11 @@ static int hfi_svm_unbind_mm(struct device *dev, int pasid)
 			mmu_notifier_unregister(&svm->notifier, svm->mm);
 
 		if (svm->pgd) {
-			struct page *freelist;
+			dma_addr_t freelist;
 
 			hfi2_dbg("AT SPT free: pasid %d\n", svm->pasid);
 			freelist = hfi_at_unmap(svm, 0, HFI_AT_DEFAULT_MAX_PFN);
-			hfi_at_free_pagelist(freelist);
+			hfi_at_free_pagelist(svm, freelist);
 		}
 
 		/*

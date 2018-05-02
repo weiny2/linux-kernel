@@ -544,6 +544,7 @@ struct hfi_at_svm {
 	u16 did, sid, qdep;
 
 	struct at_pte *pgd;
+	dma_addr_t pgd_dma;
 	struct task_struct *tsk;
 	spinlock_t lock; /* protect pgd access */
 	struct hfi_at_stats *stats;
