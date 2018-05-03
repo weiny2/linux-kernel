@@ -82,7 +82,7 @@ static struct hfi_eq __attribute__((unused)) eq_handle_dummy = {
 	.idx = PTL_EQ_NONE
 };
 
-#define BUILD_SYNC_EQ_CMD(qp, t)	\
+#define BUILD_SYNC_EQ_CMD(qp, t, cmd)	\
 	hfi_format_buff_sync_eq(((struct hfi_rq *)(qp)->r_rq.hw_rq)->hw_ctx, \
 				NATIVE_NI, pt,\
 				(qp)->remote_ah_attr.port_num - 1, \
@@ -106,36 +106,19 @@ int hfi_event_kind(u64 *eqe)
 	return (*eqe & PTL_EVENT_KIND_SMASK) >> PTL_EVENT_KIND_SHIFT;
 }
 
-static
-inline void hfi2_advance_rnr_qp_state(struct rvt_qp *qp)
+static inline
+bool hfi2_recvq_root_in_flow_ctl(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
 {
-	struct hfi2_qp_priv *priv = (struct hfi2_qp_priv *)qp->priv;
-
-	CLR_QP_EQ_SIGNAL(priv, priv->current_cidx, qp);
-	if ((priv->current_cidx % qp->s_size) == priv->current_eidx)
-		priv->current_eidx = (priv->current_eidx + 1) % qp->s_size;
-	else
-		SET_QP_EQ_VALID(priv, priv->current_cidx, qp);
-	priv->current_cidx = (priv->current_cidx + 1) % (qp->s_size * 2);
-}
-
-static
-inline bool hfi2_recvq_root_in_flow_ctl(struct hfi_ibcontext *ctx,
-					struct rvt_qp *qp)
-{
+	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	union meread_EQEntry meread = {.val[0] = 0};
-	union hfi_rx_cq_command cmd;
+	union hfi_rx_cq_command cmd __aligned(64);
 
-	hfi_format_entry_read(((struct hfi_rq *)qp->r_rq.hw_rq)->hw_ctx,
-			      NATIVE_NI,
-			      ((struct hfi_rq *)qp->r_rq.hw_rq)->recvq_root,
+	hfi_format_entry_read(rq->hw_ctx, NATIVE_NI, rq->recvq_root,
 			      &cmd, (u64)&meread);
 
-	hfi_rx_command(ctx->rx_cmdq, (u64 *)&cmd,
-		       sizeof(cmd.list) >> 6);
+	hfi_rx_command(ctx->rx_cmdq, (u64 *)&cmd, sizeof(cmd.list) >> 6);
 
-	hfi_eq_poll_cmd_complete(((struct hfi_rq *)qp->r_rq.hw_rq)->hw_ctx,
-				 (u64 *)&meread);
+	hfi_eq_poll_cmd_complete(rq->hw_ctx, (u64 *)&meread);
 	return (meread.next == 0);
 }
 
@@ -146,7 +129,7 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	union initiator_EQEntry *ieq;
 	int qp_num = EXTRACT_HD_DST_QP(teq->hdr_data);
 	struct rvt_qp *qp;
-	union hfi_tx_cq_command *cmd;
+	union hfi_tx_cq_command cmd __aligned(64);
 	int nslots, ret, i, cidx, outstanding_cmd = 0;
 	bool dropped;
 	u64 *eq_p = NULL;
@@ -244,15 +227,12 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 			priv->fc_eidx = (cidx + 1) % (qp->s_size * 2);
 		}
 	}
-
-	cmd = &priv->cmd[priv->current_cidx % qp->s_size];
-	hfi2_advance_rnr_qp_state(qp);
 	spin_unlock(&qp->s_lock);
 	spin_unlock_irqrestore(&cq->lock, flags);
 
 	/* Signal target to exit flow control */
-	nslots = BUILD_SYNC_EQ_CMD(qp, RNR_RX_EXIT);
-	hfi_tx_command(ctx->tx_cmdq, (u64 *)cmd, nslots);
+	nslots = BUILD_SYNC_EQ_CMD(qp, RNR_RX_EXIT, &cmd);
+	hfi_tx_command(ctx->tx_cmdq, (u64 *)&cmd, nslots);
 
 	return 0;
 }
@@ -266,12 +246,11 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ctx->ibuc.device);
 	struct hfi2_ibport *ibp = ibd->pport;
 	struct hfi_rq *rq;
-	union hfi_tx_cq_command *cmd;
+	union hfi_tx_cq_command cmd __aligned(64);
 	int qp_num = EXTRACT_HD_DST_QP(teq->hdr_data);
 	union hfi_process pt;
 	u32 pd_handle;
 	struct ib_qp *ibqp;
-	struct hfi2_qp_priv *priv;
 
 	rcu_read_lock();
 	qp = rvt_lookup_qpn(&ibd->rdi, &ibp->rvp, qp_num);
@@ -282,9 +261,7 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	pt.phys.slid = rdma_ah_get_dlid(&qp->remote_ah_attr);
 	pt.phys.ipid = PTL_PID_ANY;
 
-	priv = (struct hfi2_qp_priv *)qp->priv;
 	ibqp = &qp->ibqp;
-	priv = qp->priv;
 
 	/* Check State */
 	if (qp->state != IB_QPS_RTS)
@@ -308,15 +285,9 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 			       rdma_ah_get_dlid(&qp->remote_ah_attr),
 			       PTL_PID_ANY, VERBS_OK, false);
 
-	/* Get Command Slot + Advance State */
-	spin_lock(&qp->s_lock);
-	cmd = &priv->cmd[priv->current_cidx % qp->s_size];
-	hfi2_advance_rnr_qp_state(qp);
-	spin_unlock(&qp->s_lock);
-
 	/* Signal initiator to exit flow control */
-	nslots = BUILD_SYNC_EQ_CMD(qp, RNR_TX_EXIT);
-	hfi_tx_command(ctx->tx_cmdq, (u64 *)cmd, nslots);
+	nslots = BUILD_SYNC_EQ_CMD(qp, RNR_TX_EXIT, &cmd);
+	hfi_tx_command(ctx->tx_cmdq, (u64 *)&cmd, nslots);
 
 	return ret;
 }
@@ -381,10 +352,9 @@ int hfi2_enter_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	int qp_num = EXTRACT_HD_DST_QP(teq->hdr_data);
 	struct rvt_qp *qp;
 	int nslots;
-	union hfi_tx_cq_command *cmd;
+	union hfi_tx_cq_command cmd __aligned(64);
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ctx->ibuc.device);
 	struct hfi2_ibport *ibp = ibd->pport;
-	struct hfi2_qp_priv *priv;
 	union hfi_process pt;
 
 	rcu_read_lock();
@@ -394,20 +364,13 @@ int hfi2_enter_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	if (!qp)
 		return 0;
 
-	priv = (struct hfi2_qp_priv *)qp->priv;
-	/* Get Command Slot + Advance State */
-	spin_lock(&qp->s_lock);
-	cmd = &priv->cmd[priv->current_cidx % qp->s_size];
-	hfi2_advance_rnr_qp_state(qp);
-	spin_unlock(&qp->s_lock);
-
 	pt.phys.slid = rdma_ah_get_dlid(&qp->remote_ah_attr);
 	pt.phys.ipid = PTL_PID_ANY;
 
 	qp->r_flags |= RVT_S_WAIT_RNR;
 	/* Signal initiator to enter flow control */
-	nslots = BUILD_SYNC_EQ_CMD(qp, RNR_TX_ENTER);
-	hfi_tx_command(ctx->tx_cmdq, (u64 *)cmd, nslots);
+	nslots = BUILD_SYNC_EQ_CMD(qp, RNR_TX_ENTER, &cmd);
+	hfi_tx_command(ctx->tx_cmdq, (u64 *)&cmd, nslots);
 
 	return 0;
 }

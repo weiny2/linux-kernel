@@ -741,7 +741,8 @@ static
 int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
-	union hfi_tx_cq_command cmd;
+	struct hfi2_qp_priv *priv = (struct hfi2_qp_priv *)qp->priv;
+	union hfi_tx_cq_command *cmd;
 	int retries = 10;
 	int ret, nslots = 0;
 	bool signal, solicit, in_line;
@@ -755,42 +756,49 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 	if (wr->send_flags & IB_SEND_FENCE)
 		hfi2_fence(qp);
 
+	spin_lock_irqsave(&qp->s_lock, flags);
+	cmd = &priv->cmd[priv->current_cidx % qp->s_size];
+
 	switch (wr->opcode) {
 	case IB_WR_SEND:
 	case IB_WR_SEND_WITH_IMM:
 	case IB_WR_SEND_WITH_INV:
 		nslots = hfi_format_send_wr(qp, wr, signal, in_line,
-					    solicit, &cmd);
+					    solicit, cmd);
 		break;
 	case IB_WR_RDMA_WRITE:
 	case IB_WR_RDMA_WRITE_WITH_IMM:
 	case IB_WR_RDMA_READ:
 		nslots = hfi_format_rc_rdma(qp, rdma_wr(wr), signal, in_line,
-					    solicit, &cmd);
+					    solicit, cmd);
 		break;
 	case IB_WR_ATOMIC_CMP_AND_SWP:
 	case IB_WR_ATOMIC_FETCH_AND_ADD:
 		nslots = hfi_format_rc_rdma_atomic(qp, atomic_wr(wr), signal,
-						   in_line, solicit, &cmd);
+						   in_line, solicit, cmd);
 		break;
 	case IB_WR_LOCAL_INV:
 		hfi2_nfence(qp);
-		nslots = hfi2_do_local_inv(qp, wr, signal, &cmd);
+		nslots = hfi2_do_local_inv(qp, wr, signal, cmd);
 		break;
 	case IB_WR_REG_MR:
-		nslots = hfi2_do_reg_mr(qp, reg_wr(wr), signal, &cmd);
+		nslots = hfi2_do_reg_mr(qp, reg_wr(wr), signal, cmd);
 		break;
 	default:
 		nslots = -EINVAL;
 		break;
 	}
 
-	if (nslots <= 0)
+	if (nslots <= 0) {
+		spin_unlock_irqrestore(&qp->s_lock, flags);
 		return nslots;
+	}
+	priv->current_cidx = (priv->current_cidx + 1) % qp->s_size;
+	spin_unlock_irqrestore(&qp->s_lock, flags);
 
 retry:
 	spin_lock_irqsave(&ctx->tx_cmdq->lock, flags);
-	ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)&cmd, nslots);
+	ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)cmd, nslots);
 	spin_unlock_irqrestore(&ctx->tx_cmdq->lock, flags);
 
 	if (ret == -EAGAIN && retries) {
