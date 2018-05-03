@@ -16,6 +16,9 @@ struct cet_status {
 	unsigned long	shstk_size;
 	unsigned int	locked:1;
 	unsigned int	shstk_enabled:1;
+	unsigned int	ibt_enabled:1;
+	unsigned int	ibt_bitmap_used:1;
+	unsigned long	ibt_bitmap_base;
 };
 
 #ifdef CONFIG_X86_INTEL_CET
@@ -26,6 +29,8 @@ int cet_alloc_shstk(unsigned long *arg);
 void cet_disable_free_shstk(struct task_struct *p);
 int cet_restore_signal(bool ia32, struct sc_ext *sc);
 int cet_setup_signal(bool ia32, unsigned long rstor, struct sc_ext *sc);
+int cet_setup_ibt(void);
+void cet_disable_ibt(void);
 #else
 static inline int prctl_cet(int option, unsigned long arg2) { return -EINVAL; }
 static inline int cet_setup_thread_shstk(struct task_struct *p) { return 0; }
