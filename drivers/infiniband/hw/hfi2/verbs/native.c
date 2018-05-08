@@ -1315,10 +1315,6 @@ int hfi2_process_tx_eq(union initiator_EQEntry *eq, struct ib_wc *wc)
 		/* handle errors + flow control */
 		if (unlikely(mb_opcode)) {
 			switch (mb_opcode) {
-			case MB_OC_TX_FLUSH:
-				// FIXME - opcode?
-				wc->status = IB_WC_WR_FLUSH_ERR;
-				break;
 			case MB_OC_RX_FLUSH:
 				wc->opcode = IB_WC_RECV;
 				wc->status = IB_WC_WR_FLUSH_ERR;
@@ -1341,6 +1337,7 @@ int hfi2_process_tx_eq(union initiator_EQEntry *eq, struct ib_wc *wc)
 				wc->opcode = IB_WC_REG_MR;
 				break;
 			case MB_OC_QP_RESET:
+			default:
 				signal = 0;
 				break;
 			}

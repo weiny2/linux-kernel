@@ -60,6 +60,20 @@
 
 #define QKEY_USE_LOCAL		0x80000000
 
+/* Map IB WR opcodes to IB WC opcodes */
+const u8 hfi_wr_wc_opcode[13] = {
+	[IB_WR_RDMA_WRITE] = IB_WC_RDMA_WRITE,
+	[IB_WR_RDMA_WRITE_WITH_IMM] = IB_WC_RDMA_WRITE,
+	[IB_WR_SEND] = IB_WC_SEND,
+	[IB_WR_SEND_WITH_IMM] = IB_WC_SEND,
+	[IB_WR_RDMA_READ] = IB_WC_RDMA_READ,
+	[IB_WR_ATOMIC_CMP_AND_SWP] = IB_WC_COMP_SWAP,
+	[IB_WR_ATOMIC_FETCH_AND_ADD] = IB_WC_FETCH_ADD,
+	[IB_WR_LOCAL_INV] = IB_WC_LOCAL_INV,
+	[IB_WR_SEND_WITH_INV] = IB_WC_SEND,
+	[IB_WR_REG_MR] = IB_WC_REG_MR,
+};
+
 /* Map IB opcodes to native opcodes */
 const u8 hfi_wr_ud_opcode[4] = {
 	[IB_WR_SEND] = PTL_UD_SEND,
@@ -602,7 +616,6 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 		ah_attr = &qp->remote_ah_attr;
 
 	switch (mb_opcode) {
-	case MB_OC_TX_FLUSH:
 	case MB_OC_RX_FLUSH:
 	case MB_OC_LOCAL_INV:
 	case MB_OC_REG_MR:
@@ -788,33 +801,25 @@ static
 int hfi2_flush_wr(struct rvt_qp *qp, struct ib_send_wr *wr,
 		  struct ib_send_wr **bad_wr)
 {
-	int ret;
-	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
-	union hfi_tx_cq_command cmd;
-	int nslots;
 	unsigned long flags;
 
-	spin_lock(&qp->s_lock);
+	spin_lock_irqsave(&qp->s_lock, flags);
 
-	/* Send UD to nowhere (DLID == 0) to generate flush event */
 	do {
-		nslots = hfi2_generate_wc(qp, wr, MB_OC_TX_FLUSH, &cmd);
-		if (nslots <= 0) {
-			*bad_wr = wr;
-			ret = nslots;
-			break;
-		}
+		struct ib_wc wc;
+		struct ib_qp *ibqp = &qp->ibqp;
 
-		spin_lock_irqsave(&ctx->tx_cmdq->lock, flags);
-		ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)&cmd, nslots);
-		spin_unlock_irqrestore(&ctx->tx_cmdq->lock, flags);
-
-		/* TODO Add retry logic with STL-34421 */
+		memset(&wc, 0, sizeof(wc));
+		wc.qp = ibqp;
+		wc.opcode = hfi_wr_wc_opcode[wr->opcode];
+		wc.wr_id = wr->wr_id;
+		wc.status = IB_WC_WR_FLUSH_ERR;
+		rvt_cq_enter(ibcq_to_rvtcq(ibqp->send_cq), &wc, 1);
 	} while ((wr = wr->next));
 
-	spin_unlock(&qp->s_lock);
+	spin_unlock_irqrestore(&qp->s_lock, flags);
 
-	return ret;
+	return 0;
 }
 
 static
