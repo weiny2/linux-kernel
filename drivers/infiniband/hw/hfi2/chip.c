@@ -2949,7 +2949,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 {
 	unsigned long flags;
 	int port;
-
+	int ret = 0;
 	/*
 	 * shutdown ports to notify OPA core clients.
 	 * FXRTODO: Check error handling if hfi_pci_dd_init fails early
@@ -2986,7 +2986,11 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 #endif
 		hfi_eq_zero_release(&dd->priv_ctx);
 		hfi_cmdq_unmap(&dd->priv_tx_cq, &dd->priv_rx_cq);
-		hfi_ctx_cleanup(&dd->priv_ctx);
+		hfi_cmdq_cleanup(&dd->priv_ctx);
+		ret = hfi_ctx_cleanup(&dd->priv_ctx);
+		if (ret)
+			dd_dev_warn(dd, "hfi_ctx_cleanup returned %d\n",
+				    ret);
 	}
 	hfi_pend_cq_info_free(&dd->pend_cq);
 	hfi_cleanup_interrupts(dd);
