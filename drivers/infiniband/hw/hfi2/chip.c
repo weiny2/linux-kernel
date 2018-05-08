@@ -3923,6 +3923,13 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (zebu)
 		hfi_cmdq_config_all(dd);
 
+	/*
+	 * prefetch into shadow page table.
+	 * unbinding system-pasid will remove it
+	 */
+	hfi_at_reg_range(ctx, dd->cmdq_head_base,
+			 dd->cmdq_head_size, NULL, true);
+
 	/* assign one CMDQ for privileged commands (DLID, EQ_DESC_WRITE) */
 	ret = hfi_cmdq_assign_privileged(ctx, &cmdq_idx);
 	if (ret)
