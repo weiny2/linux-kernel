@@ -725,22 +725,11 @@ void hfi2_native_reset_qp(struct rvt_qp *qp)
 {
 	int ret;
 	struct ib_qp *ibqp = &qp->ibqp;
-	struct hfi2_qp_priv *priv = qp->priv;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	struct hfi_ibcontext *ctx;
 
 	if (!rq)
 		return;
-
-	if (priv->fence_ct != HFI_CT_NONE) {
-		hfi_ct_free(rq->hw_ctx, priv->fence_ct);
-		priv->fence_ct = HFI_CT_NONE;
-	}
-
-	if (priv->nfence_ct != HFI_CT_NONE) {
-		hfi_ct_free(rq->hw_ctx, priv->nfence_ct);
-		priv->nfence_ct = HFI_CT_NONE;
-	}
 
 	/* Clear the QPN to PID mapping */
 	ctx = obj_to_ibctx(ibqp);
@@ -831,6 +820,8 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		priv->fc_cidx = 0;
 		priv->fc_eidx = 0;
 		priv->ctx = ctx;
+		priv->outstanding_cnt = 0;
+		priv->outstanding_rd_cnt = 0;
 
 		/* Malloc retransmit command / backpressure state */
 		if (!priv->cmd) {
@@ -900,18 +891,6 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 			if (ret != 0)
 				goto qp_write_err;
 		}
-
-		/* alloc fence CT */
-		ret = hfi_ct_alloc(rq->hw_ctx, NATIVE_NI, &priv->fence_ct);
-		if (ret != 0)
-			goto qp_write_err;
-		priv->fence_cnt = 0;
-
-		/* alloc non-fence CT */
-		ret = hfi_ct_alloc(rq->hw_ctx, NATIVE_NI, &priv->nfence_ct);
-		if (ret != 0)
-			goto qp_write_err;
-		priv->nfence_cnt = 0;
 
 		/*
 		 * Associate QP with hardware context.
@@ -1330,7 +1309,7 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 	if (eq->fail_type != PTL_NI_PT_DISABLED &&
 	    mb_opcode != MB_OC_QP_RESET) {
 		spin_lock_irqsave(&rvtqp->s_lock, flags);
-		if ((cidx % rvtqp->s_size) == qp_priv->current_eidx) {
+		if (wc && (cidx % rvtqp->s_size) == qp_priv->current_eidx) {
 			qp_priv->current_eidx = ((qp_priv->current_eidx + 1) %
 						 rvtqp->s_size);
 			if (QP_EQ_VALID(qp_priv, qp_priv->current_eidx) &&
@@ -1349,6 +1328,9 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 			wc = &qp_priv->wc[cidx % rvtqp->s_size].ib_wc;
 			in_order = false;
 		}
+		if (eq->opcode >= PTL_RC_RDMA_RD)
+			--qp_priv->outstanding_rd_cnt;
+		--qp_priv->outstanding_cnt;
 		spin_unlock_irqrestore(&rvtqp->s_lock, flags);
 	}
 	if (!signal && !swqe->signal)
@@ -1521,6 +1503,63 @@ int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc,
 	/* Free hfi_rq_wc */
 	kfree(hfi_wc);
 	return signal;
+}
+
+int hfi2_fence(struct hfi_ibcontext *ctx, struct rvt_qp *qp, u32 *fence_value)
+{
+	struct rvt_cq *cq = ibcq_to_rvtcq(qp->ibqp.recv_cq);
+	struct hfi_eq *eq = cq->hw_cq;
+	u64 *eqe = NULL;
+	int kind, ret;
+	bool dropped;
+	unsigned long flags;
+	struct ib_wc wc;
+
+start:
+	if (*fence_value == 0)
+		return 0;
+
+	while (true) {
+		spin_lock_irqsave(&cq->lock, flags);
+		ret = hfi_eq_peek_nth(eq, &eqe, 0, &dropped);
+		if (ret < 0) {
+			spin_unlock_irqrestore(&cq->lock, flags);
+			return ret;
+		} else if (ret == HFI_EQ_EMPTY) {
+			spin_unlock_irqrestore(&cq->lock, flags);
+			cpu_relax();
+			goto start;
+		}
+		kind = ((union target_EQEntry *)eqe)->event_kind;
+
+		switch (kind) {
+		case NON_PTL_EVENT_VERBS_RX:
+			ret = hfi2_process_rx_eq((union target_EQEntry *)eq,
+						 &wc, cq);
+			if (ret < 0) {
+				spin_unlock_irqrestore(&cq->lock, flags);
+				return ret;
+			}
+			rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.send_cq), &wc, 1);
+			break;
+		case NON_PTL_EVENT_VERBS_TX:
+			hfi2_process_tx_eq(ctx, (union initiator_EQEntry *)eq,
+					   NULL);
+			break;
+		default:
+			pr_err("Unknown event kind %d\n", kind);
+			spin_unlock_irqrestore(&cq->lock, flags);
+			hfi_eq_advance(eq, eqe);
+			return -EINVAL;
+		}
+		spin_unlock_irqrestore(&cq->lock, flags);
+		hfi_eq_advance(eq, eqe);
+
+		if (*fence_value == 0)
+			return 0;
+	}
+
+	return 0;
 }
 
 static

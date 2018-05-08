@@ -152,12 +152,10 @@ struct hfi_tx_wc {
  * @hdr_type: describes packet type for next packet
  * @pkey: pkey corresponding to pkey_index in next packet
  * Below are for Verbs over native provider:
- * @fence_ct: CT of operations that need to be included in a FENCE
- * @nfence_ct: CT for pending non-fenced operations
- * @fence_cnt: Target value to wait for fence_ct to equal when using FENCE
- * @nfence_cnt: Target value to wait for nfence_ct to equal before local_ops
  * @ctx: context associated with this qp
  * @poll_qp: to be part of list for tx wc
+ * @outstanding_cnt: total number of outsanding commands
+ * @outstanding_rd_cnt: total number of read or atomic commands
  */
 struct hfi2_qp_priv {
 	struct rvt_qp *owner;
@@ -174,10 +172,8 @@ struct hfi2_qp_priv {
 	u32 lpsn;
 	u8 hdr_type;
 	u16 pkey;
-	u16 fence_ct;
-	u16 nfence_ct;
-	u64 fence_cnt;
-	u64 nfence_cnt;
+	u32 outstanding_cnt;
+	u32 outstanding_rd_cnt;
 	union hfi_tx_cq_command *cmd;
 	struct hfi_tx_wc        *wc;
 	int current_cidx;

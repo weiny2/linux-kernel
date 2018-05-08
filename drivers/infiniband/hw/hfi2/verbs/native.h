@@ -273,5 +273,6 @@ int hfi2_qp_sync_thread(void *data);
 int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
 		     struct rvt_qp *qp, u32 slid, u16 ipid,
 		     u8 state, bool failed);
+int hfi2_fence(struct hfi_ibcontext *ctx, struct rvt_qp *qp, u32 *fence_value);
 #endif
 #endif /* NATIVE_VERBS_H */
