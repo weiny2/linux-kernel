@@ -88,6 +88,7 @@ struct rvt_cq {
 	struct rvt_cq_wc *queue;
 	struct rvt_mmap_info *ip;
 	void *hw_cq;
+	struct list_head poll_qp;
 	u64 hw_disarmed;
 };
 

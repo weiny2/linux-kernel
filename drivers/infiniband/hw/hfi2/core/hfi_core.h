@@ -141,6 +141,7 @@ struct hfi_ibcontext {
 	struct rvt_mregion **lkey_mr;
 	u64	*tx_qp_flow_ctl;
 	struct task_struct *sync_task;
+	spinlock_t flow_ctl_lock;
 };
 
 /**

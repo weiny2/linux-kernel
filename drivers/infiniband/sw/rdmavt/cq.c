@@ -268,6 +268,7 @@ struct ib_cq *rvt_create_cq(struct ib_device *ibdev,
 	cq->ibcq.cqe = entries;
 	cq->notify = RVT_CQ_NONE;
 	spin_lock_init(&cq->lock);
+	INIT_LIST_HEAD(&cq->poll_qp);
 	kthread_init_work(&cq->comptask, send_complete);
 	cq->queue = wc;
 

@@ -192,9 +192,9 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 		if (!IS_FLOW_CTL(ctx->tx_qp_flow_ctl, qp_num)) {
 			priv->fc_cidx = cidx;
 			priv->fc_eidx = (cidx + 1) % (qp->s_size * 2);
-			mutex_lock(&ctx->ctx_lock);
+			spin_lock(&ctx->flow_ctl_lock);
 			SET_FLOW_CTL(ctx->tx_qp_flow_ctl, qp_num);
-			mutex_unlock(&ctx->ctx_lock);
+			spin_unlock(&ctx->flow_ctl_lock);
 		} else if (IS_FLOW_CTL(ctx->tx_qp_flow_ctl, qp_num) &&
 			   IS_CIDX_LESS_THAN(cidx, priv->fc_cidx, qp)) {
 			priv->fc_cidx = cidx;
@@ -247,6 +247,7 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	 * linked list in the RQ and when the next append happens the main
 	 * thread updates the QP and signals back to initiator?
 	 */
+	/* TODO define & use RVT_R_WAIT_RNR */
 	while (hfi2_recvq_root_in_flow_ctl(ctx, qp) &&
 	       qp->r_flags & RVT_S_WAIT_RNR)
 		mdelay(5);
@@ -277,6 +278,7 @@ int hfi2_exit_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ctx->ibuc.device);
 	struct hfi2_ibport *ibp = ibd->pport;
 	struct hfi2_qp_priv *priv;
+	unsigned long flags;
 
 	rcu_read_lock();
 	qp = rvt_lookup_qpn(&ibd->rdi, &ibp->rvp, qp_num);
@@ -290,7 +292,7 @@ int hfi2_exit_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 		return 0;
 
 	/* Lock QP  */
-	spin_lock(&qp->s_lock);
+	spin_lock_irqsave(&qp->s_lock, flags);
 
 	cidx = priv->fc_cidx;
 	/* Retransmit commands */
@@ -309,12 +311,12 @@ int hfi2_exit_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	} while (cidx != priv->fc_eidx);
 
 	/* Exit flow control */
-	mutex_lock(&ctx->ctx_lock);
+	spin_lock(&ctx->flow_ctl_lock);
 	CLEAR_FLOW_CTL(ctx->tx_qp_flow_ctl, qp_num);
-	mutex_unlock(&ctx->ctx_lock);
+	spin_unlock(&ctx->flow_ctl_lock);
 
 	/* Unlock QP  */
-	spin_unlock(&qp->s_lock);
+	spin_unlock_irqrestore(&qp->s_lock, flags);
 	qp->s_flags &= ~RVT_S_WAIT_RNR;
 	return 0;
 }

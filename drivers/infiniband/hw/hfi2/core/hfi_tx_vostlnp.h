@@ -221,13 +221,12 @@ int hfi_format_buff_sync_eq(struct hfi_ctx *ctx,
 	hfi_hdr_data_t hdr_data = FMT_SYNC_EQ_HD(hd_opcode, ctx->pid,
 						 src_qp, dst_qp);
 
-	/* TODO should be using PTL_MD_EVENT_SUCCESS_DISABLE here */
 	return hfi_format_buff_vostlnp(ctx, (void*)0, 0,
 				       (hfi_tx_ctype_t)VoNP_RC, dlid,
 				       0, rc, sl, pkey, slid_low,
 				       auth_idx, user_ptr,
 				       match_bits, hdr_data,
-				       PTL_EVENT_SUCCESS_DISABLE,
+				       PTL_MD_EVENT_SUCCESS_DISABLE,
 				       eq_handle, PTL_CT_NONE,
 				       (hfi_size_t)0, tx_handle, op,
 				       dst_qp, command);

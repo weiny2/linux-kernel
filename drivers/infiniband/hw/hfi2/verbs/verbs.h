@@ -156,6 +156,8 @@ struct hfi_tx_wc {
  * @nfence_ct: CT for pending non-fenced operations
  * @fence_cnt: Target value to wait for fence_ct to equal when using FENCE
  * @nfence_cnt: Target value to wait for nfence_ct to equal before local_ops
+ * @ctx: context associated with this qp
+ * @poll_qp: to be part of list for tx wc
  */
 struct hfi2_qp_priv {
 	struct rvt_qp *owner;
@@ -182,6 +184,8 @@ struct hfi2_qp_priv {
 	int current_eidx;
 	int fc_cidx;
 	int fc_eidx;
+	struct hfi_ibcontext *ctx;
+	struct list_head poll_qp;
 };
 
 struct hfi2_ibrcv {

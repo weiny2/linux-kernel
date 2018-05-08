@@ -166,6 +166,7 @@ struct hfi_swqe *hfi_prepare_swqe(struct rvt_qp *qp, struct ib_send_wr *wr,
 	struct hfi_swqe *swqe;
 	struct hfi_iovec *iov;
 	struct rvt_mregion *mr;
+	struct hfi2_qp_priv *qp_priv = (struct hfi2_qp_priv *)qp->priv;
 
 	swqe = kmalloc(sizeof(*swqe) + wr->num_sge * sizeof(*iov), GFP_KERNEL);
 	if (!swqe)
@@ -189,6 +190,7 @@ struct hfi_swqe *hfi_prepare_swqe(struct rvt_qp *qp, struct ib_send_wr *wr,
 	swqe->wr_id = wr->wr_id;
 	swqe->num_iov = wr->num_sge;
 	swqe->signal = signal;
+	swqe->cidx = qp_priv->current_cidx;
 
 	return swqe;
 
@@ -225,6 +227,8 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 	void *start = NULL;
 	u32 length = 0;
 
+	INIT_QP_EQ_VALID_SIGNAL(priv, priv->current_cidx, signal);
+
 	if (signal || wr->wr.num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
 		md_opts = PTL_MD_EVENT_CT_SEND;
@@ -241,6 +245,9 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 			return -EINVAL;
 		start = mr_sge_addr(mr, sge);
 		length = sge->length;
+		swqe = priv->current_cidx;
+		priv->wc[priv->current_cidx & (qp->s_size - 1)].ib_wc.wr_id =
+			wr->wr.wr_id;
 	}
 
 	qkey = !(wr->remote_qkey & QKEY_USE_LOCAL) ?
@@ -321,7 +328,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	int nslots;
 	struct ib_sge *sge = wr->sg_list;
 	struct rvt_mregion *mr;
-	struct hfi2_qp_priv *priv = qp->priv;
+	struct hfi2_qp_priv *qp_priv = qp->priv;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	u8 op_req = hfi_wr_rc_opcode[wr->opcode];
 	u32 md_opts = PTL_MD_EVENT_SUCCESS_DISABLE | PTL_MD_EVENT_CT_SEND;
@@ -333,6 +340,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	if (qp->ibqp.qp_type == IB_QPT_UC &&
 	    wr->opcode == IB_WR_SEND_WITH_INV)
 		return -EINVAL;
+	INIT_QP_EQ_VALID_SIGNAL(qp_priv, qp_priv->current_cidx, signal);
 
 	if (signal || wr->num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
@@ -350,8 +358,10 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 			return -EINVAL;
 		start = mr_sge_addr(mr, sge);
 		length = sge->length;
+		swqe = qp_priv->current_cidx;
+		qp_priv->wc[qp_priv->current_cidx & (qp->s_size - 1)].ib_wc.wr_id =
+			wr->wr_id;
 	}
-
 	if (wr->num_sge > 1) {
 		WARN_ON(in_line);
 		md_opts = PTL_IOVEC | PTL_MD_EVENT_CT_SEND;
@@ -363,7 +373,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 					qp->ibqp.qp_num,
 					qp->remote_qpn,
 					wr->ex.imm_data,
-					md_opts, priv->nfence_ct,
+					md_opts, qp_priv->nfence_ct,
 					tx_id, op_req, solicit,
 					swqe->num_iov, 0,
 					&cmd->dma_iovec);
@@ -376,7 +386,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 					qp->ibqp.qp_num,
 					qp->remote_qpn,
 					wr->ex.imm_data,
-					md_opts, priv->nfence_ct,
+					md_opts, qp_priv->nfence_ct,
 					tx_id, op_req, solicit,
 					&cmd->buff_put_match);
 	} else {
@@ -390,7 +400,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 					qp->ibqp.qp_num,
 					qp->remote_qpn,
 					wr->ex.imm_data,
-					md_opts, priv->nfence_ct,
+					md_opts, qp_priv->nfence_ct,
 					tx_id, op_req, solicit,
 					&cmd->dma);
 	}
@@ -398,7 +408,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	if (swqe && nslots <= 0)
 		kfree(swqe);
 	else
-		++priv->nfence_cnt;
+		++qp_priv->nfence_cnt;
 
 	return nslots;
 }
@@ -450,7 +460,7 @@ int hfi_format_rc_rdma_atomic(struct rvt_qp *qp, struct ib_atomic_wr *wr,
 
 	if (!(wr->wr.num_sge == 1 && sge->length == 8))
 		return -EINVAL;
-
+	INIT_QP_EQ_VALID_SIGNAL(priv, priv->current_cidx, signal);
 	if (signal) {
 		md_opts = PTL_MD_EVENT_CT_SEND;
 		swqe = hfi_prepare_swqe(qp, &wr->wr, signal,
@@ -464,6 +474,9 @@ int hfi_format_rc_rdma_atomic(struct rvt_qp *qp, struct ib_atomic_wr *wr,
 		if (!mr)
 			return -EINVAL;
 		start = mr_sge_addr(mr, sge);
+		swqe = priv->current_cidx;
+		priv->wc[priv->current_cidx & (qp->s_size - 1)].ib_wc.wr_id =
+			wr->wr.wr_id;
 	}
 
 	nslots = hfi_format_buff_rc_rdma_atomic(
@@ -520,7 +533,7 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	    (qp->ibqp.qp_type == IB_QPT_UC &&
 	     wr->wr.opcode == IB_WR_RDMA_READ))
 		return -EINVAL;
-
+	INIT_QP_EQ_VALID_SIGNAL(priv, priv->current_cidx, signal);
 	acc = wr->wr.opcode >= IB_WR_RDMA_READ ?
 		      IB_ACCESS_LOCAL_WRITE : 0;
 	if (signal || wr->wr.num_sge > 1) {
@@ -539,6 +552,8 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 			return -EINVAL;
 		start = mr_sge_addr(mr, sge);
 		length = sge->length;
+		priv->wc[priv->current_cidx & (qp->s_size - 1)].ib_wc.wr_id =
+			wr->wr.wr_id;
 	}
 
 	if (wr->wr.num_sge > 1) {
@@ -602,61 +617,62 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 		     u8 mb_opcode, union hfi_tx_cq_command *cmd)
 {
-	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
 	struct rvt_cq *cq = ibcq_to_rvtcq(qp->ibqp.send_cq);
-	struct hfi_eq *eq = cq->hw_cq;
-	int nslots;
-	struct rdma_ah_attr *ah_attr;
-	struct hfi_ctx *hw_ctx = ctx->hw_ctx;
-	struct hfi_swqe *swqe = NULL;
+	struct ib_wc *wc = NULL;
+	struct hfi2_qp_priv *qp_priv = (struct hfi2_qp_priv *)qp->priv;
+	int ret = 0;
 
-	if (qp->ibqp.qp_type == IB_QPT_UD)
-		ah_attr = &ibah_to_rvtah(ud_wr(wr)->ah)->attr;
-	else
-		ah_attr = &qp->remote_ah_attr;
+	if (mb_opcode != MB_OC_RX_FLUSH) {
+		/* TX events, have to be ordered so use internal buffer */
+		wc = &qp_priv->wc[qp_priv->current_cidx % qp->s_size].ib_wc;
+		SET_QP_EQ_VALID(qp_priv, qp_priv->current_cidx, qp);
+		SET_QP_EQ_SIGNAL(qp_priv, qp_priv->current_cidx, qp);
 
+		if (((qp_priv->current_cidx % qp->s_size) ==
+		     qp_priv->current_eidx) &&
+		    list_empty(&qp_priv->poll_qp))
+			list_add_tail(&qp_priv->poll_qp, &cq->poll_qp);
+
+		qp_priv->current_cidx =
+			(qp_priv->current_cidx + 1) % (qp->s_size * 2);
+	}
+
+	wc->wr_id = wr->wr_id;
+	wc->vendor_err = 0;
+	wc->qp = &qp->ibqp;
+	wc->byte_len = 0;
+	wc->wc_flags = 0;
 	switch (mb_opcode) {
 	case MB_OC_RX_FLUSH:
+		wc->opcode = IB_WC_RECV;
+		wc->status = IB_WC_WR_FLUSH_ERR;
+		break;
 	case MB_OC_LOCAL_INV:
+		if (qp->state >= IB_QPS_SQE)
+			wc->status = IB_WC_WR_FLUSH_ERR;
+		else
+			wc->status = IB_WC_SUCCESS;
+		wc->vendor_err = VERBS_OK;
+		wc->opcode = IB_WC_LOCAL_INV;
+		break;
 	case MB_OC_REG_MR:
-		swqe = kmalloc(sizeof(*swqe), GFP_KERNEL);
-		if (!swqe)
-			return -ENOMEM;
-		swqe->wr_id = wr->wr_id;
-		swqe->num_iov = 0;
-		swqe->signal = 1;
-		swqe->qp = qp;
-#if 0
-		swqe->cidx = qp->current_cidx;
-#endif
+		if (qp->state >= IB_QPS_SQE)
+			wc->status = IB_WC_WR_FLUSH_ERR;
+		else
+			wc->status = IB_WC_SUCCESS;
+		wc->vendor_err = VERBS_OK;
+		wc->opcode = IB_WC_REG_MR;
 		break;
 	default:
 		/*TODO need to take some action */
 		pr_warn("mb opcode %d not valid", mb_opcode);
-		return -EINVAL;
 	}
-
-	nslots = hfi_format_buff_ud(
-				hw_ctx,
-				0, 0,
-				0, ah_attr->port_num - 1,
-				NATIVE_RC, ah_attr->sl,
-				0, 0,
-				NATIVE_AUTH_IDX,
-				(u64)swqe,
-				qp->ibqp.qp_num,
-				0, 0, 0,
-				PTL_MD_EVENT_CT_SEND, eq,
-				PTL_CT_NONE,
-				0, PTL_UD_SEND, 0, mb_opcode,
-				&cmd->buff_put_match);
-
-	return nslots;
+	return ret;
 }
 
 static
 inline int hfi2_do_reg_mr(struct rvt_qp *qp, struct ib_reg_wr *wr,
-			       bool signal, union hfi_tx_cq_command *cmd)
+			  bool signal, union hfi_tx_cq_command *cmd)
 {
 	int ret;
 
@@ -728,7 +744,7 @@ static
 int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
-	struct hfi2_qp_priv *priv = (struct hfi2_qp_priv *)qp->priv;
+	struct hfi2_qp_priv *qp_priv = (struct hfi2_qp_priv *)qp->priv;
 	union hfi_tx_cq_command *cmd;
 	int retries = 10;
 	int ret, nslots = 0;
@@ -744,8 +760,9 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 		hfi2_fence(qp);
 
 	spin_lock_irqsave(&qp->s_lock, flags);
-	cmd = &priv->cmd[priv->current_cidx % qp->s_size];
-
+	if (unlikely(IS_FLOW_CTL(ctx->tx_qp_flow_ctl, qp->ibqp.qp_num)))
+		goto flow_ctl;
+	cmd = &qp_priv->cmd[qp_priv->current_cidx % qp->s_size];
 	switch (wr->opcode) {
 	case IB_WR_SEND:
 	case IB_WR_SEND_WITH_IMM:
@@ -780,14 +797,13 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 		return nslots;
 	}
-	priv->current_cidx = (priv->current_cidx + 1) % qp->s_size;
+	qp_priv->current_cidx = (qp_priv->current_cidx + 1) % (qp->s_size * 2);
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 
 retry:
 	spin_lock_irqsave(&ctx->tx_cmdq->lock, flags);
 	ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)cmd, nslots);
 	spin_unlock_irqrestore(&ctx->tx_cmdq->lock, flags);
-
 	if (ret == -EAGAIN && retries) {
 		/* TODO */
 		msleep(2000);
@@ -795,6 +811,9 @@ retry:
 		goto retry;
 	}
 	return ret;
+flow_ctl:
+	spin_unlock_irqrestore(&qp->s_lock, flags);
+	return -EBUSY;
 }
 
 static
