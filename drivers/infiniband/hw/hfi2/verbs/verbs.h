@@ -142,6 +142,8 @@ struct hfi_tx_wc {
  * @s_ctx: hardware send context used for sending next packet
  * @ibrcv: receive context and receive buffer state
  * @bth2: last 4 bytes of BTH field in CPU endianness
+ * @pkey: pkey corresponding to pkey_index in next packet
+ * @hdr_type: describes packet type for next packet
  * @opcode: BTH.opcode field in CPU endianness
  * @s_sc: the SC value for next packet to send
  * @s_sl: the SL value for next packet to send
@@ -149,8 +151,6 @@ struct hfi_tx_wc {
  * @s_iowait: iowait structure for SDMA/PIO draining on hfi1 (TODO for hfi2)
  * @middle_len: size of all middle packets if optimizing Middles
  * @lpsn: last psn in current wr
- * @hdr_type: describes packet type for next packet
- * @pkey: pkey corresponding to pkey_index in next packet
  * Below are for Verbs over native provider:
  * @outstanding_cnt: total number of outsanding commands
  * @outstanding_rd_cnt: total number of read or atomic commands
@@ -160,6 +160,9 @@ struct hfi_tx_wc {
  * @current_eidx: index into event buffer (@wc)
  * @fc_cidx: flow control command index
  * @fc_eidx: flow control event index
+ * @recvq_root: ME root for RQ descriptors
+ * @tpid: connected QP's remote PID
+ * @rq_ctx: hardware context for RQ
  * @poll_qp: list for TX work completion processing in poll_cq
  */
 struct hfi2_qp_priv {
@@ -168,6 +171,8 @@ struct hfi2_qp_priv {
 	struct hfi_ctx *s_ctx;
 	struct hfi2_ibrcv *ibrcv;
 	u32 bth2;
+	u16 pkey;
+	u8 hdr_type;
 	u8 opcode;
 	u8 s_sc;
 	u8 s_sl;
@@ -175,8 +180,6 @@ struct hfi2_qp_priv {
 	struct iowait s_iowait;
 	u32 middle_len;
 	u32 lpsn;
-	u8 hdr_type;
-	u16 pkey;
 	u32 outstanding_cnt;
 	u32 outstanding_rd_cnt;
 	union hfi_tx_cq_command *cmd;
@@ -185,6 +188,9 @@ struct hfi2_qp_priv {
 	int current_eidx;
 	int fc_cidx;
 	int fc_eidx;
+	u16 tpid;
+	u32 recvq_root;
+	struct hfi_ctx *rq_ctx;
 	struct list_head poll_qp;
 };
 

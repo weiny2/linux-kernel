@@ -598,10 +598,12 @@ err:
  * Most inputs for the QP_STATE entry come from the passed in RQ and QP.
  * If caller passes slid = zero, this formats command to clear the entry.
  */
-int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
+int hfi_format_qp_write(struct rvt_qp *qp,
 			u32 slid, u16 ipid, u64 user_ptr, u8 state, bool failed,
 			union hfi_rx_cq_command *cmd)
 {
+	struct ib_qp *ibqp = &qp->ibqp;
+	struct hfi2_qp_priv *qp_priv = qp->priv;
 	union ptentry_verbs qp_state;
 	u32 pd_handle;
 	struct rvt_cq *cq = ibcq_to_rvtcq(ibqp->recv_cq);
@@ -621,14 +623,14 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 		qp_state.enable = 1;
 		qp_state.ni = NATIVE_NI;
 		qp_state.v = 1;
-		qp_state.recvq_root = rq->recvq_root;
-		qp_state.tpid = rq->hw_ctx->pid;
+		qp_state.recvq_root = qp_priv->recvq_root;
+		qp_state.tpid = qp_priv->rq_ctx->pid;
 		qp_state.ipid = ipid;
 		qp_state.eq_handle = eq ? eq->eq.idx : 0;
 		qp_state.failed = failed;
 		qp_state.ud = (ibqp->qp_type == IB_QPT_UD);
 		qp_state.qp = 1;
-		qp_state.user_id = rq->hw_ctx->ptl_uid;
+		qp_state.user_id = qp_priv->rq_ctx->ptl_uid;
 		qp_state.qkey = ibqp_to_rvtqp(ibqp)->qkey;
 	}
 
@@ -641,7 +643,7 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 	cmd->state_verbs.flit0.d.ncc     = HFI_GEN_CC;
 	cmd->state_verbs.flit0.d.command = QP_WRITE;
 	cmd->state_verbs.flit0.d.cmd_len = (sizeof(cmd->state_verbs) >> 5) - 1;
-	cmd->state_verbs.flit1.e.cmd_pid = rq->hw_ctx->pid;
+	cmd->state_verbs.flit1.e.cmd_pid = qp_priv->rq_ctx->pid;
 	cmd->state_verbs.flit1.p2        = qp_state.val[2];
 	cmd->state_verbs.flit1.p3        = qp_state.val[3];
 	cmd->state_verbs.flit1.user_ptr  = user_ptr;
@@ -649,19 +651,22 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 	return 1;
 }
 
-int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
+int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq,
 		     struct rvt_qp *qp, u32 slid, u16 ipid,
 		     u8 state, bool failed)
 {
-	struct ib_qp *ibqp = &qp->ibqp;
+	struct hfi2_qp_priv *qp_priv = qp->priv;
 	int ret, nslots;
 	u64 done = 0;
 	unsigned long flags;
 	union hfi_rx_cq_command rx_cmd;
 
-	nslots = hfi_format_qp_write(rq, ibqp, slid, ipid, (u64)&done,
+	if (!qp_priv->rq_ctx)
+		return 0;
+
+	nslots = hfi_format_qp_write(qp, slid, ipid, (u64)&done,
 				     state, failed, &rx_cmd);
-	mutex_lock(&rq->hw_ctx->rx_mutex);
+	mutex_lock(&qp_priv->rq_ctx->rx_mutex);
 	spin_lock_irqsave(&rx_cmdq->lock, flags);
 	do {
 		ret = hfi_rx_command(rx_cmdq, (u64 *)&rx_cmd, nslots);
@@ -669,8 +674,8 @@ int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
 	spin_unlock_irqrestore(&rx_cmdq->lock, flags);
 	/* If no error, process completion of above RX command */
 	if (!ret)
-		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &done);
-	mutex_unlock(&rq->hw_ctx->rx_mutex);
+		ret = hfi_eq_poll_cmd_complete(qp_priv->rq_ctx, &done);
+	mutex_unlock(&qp_priv->rq_ctx->rx_mutex);
 	return ret;
 }
 
@@ -729,7 +734,7 @@ void hfi2_native_reset_qp(struct rvt_qp *qp)
 
 	/* Clear the QPN to PID mapping */
 	ctx = obj_to_ibctx(ibqp);
-	ret = hfi_set_qp_state(ctx->rx_cmdq, rq, qp, 0, 0, VERBS_OK, false);
+	ret = hfi_set_qp_state(ctx->rx_cmdq, qp, 0, 0, VERBS_OK, false);
 	/* TODO */
 	WARN_ON(ret != 0);
 
@@ -794,8 +799,8 @@ int hfi2_sqd_async_event(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
 	return hfi2_fence(ctx, qp, &priv->outstanding_cnt);
 }
 
-int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
-			  int attr_mask, struct ib_udata *udata)
+int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
+			       int attr_mask)
 {
 	struct ib_qp *ibqp = &rvtqp->ibqp;
 	struct hfi2_qp_priv *priv = rvtqp->priv;
@@ -807,17 +812,11 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 	if (!ctx || !ctx->supports_native)
 		return 0;
 
-	if (ibqp->qp_type == IB_QPT_SMI || ibqp->qp_type == IB_QPT_GSI)
-		return 0;
-	/* TODO UD needs multicast enabled first and lower priority than RC */
-	if (ibqp->qp_type == IB_QPT_UD)
-		return 0;
-
 	if (attr_mask & IB_QP_STATE &&
 	    attr->qp_state == IB_QPS_INIT &&
 	    !rvtqp->r_rq.hw_rq) {
 		struct hfi_ctx *hw_ctx;
-		struct hfi2_qp_priv *priv = rvtqp->priv;
+		struct hfi_rq *rq;
 
 		priv->current_cidx = 0;
 		priv->current_eidx = 0;
@@ -868,6 +867,9 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 			}
 			rvtqp->r_rq.hw_rq = srq->rq.hw_rq;
 		}
+		rq = rvtqp->r_rq.hw_rq;
+		priv->recvq_root = rq->recvq_root;
+		priv->rq_ctx = hw_ctx;
 		/* Per IBTA, we can start enqueuing to RQ at INIT */
 
 	} else if (attr_mask & IB_QP_STATE &&
@@ -894,15 +896,6 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 			if (ret != 0)
 				goto qp_write_err;
 		}
-
-		/*
-		 * Associate QP with hardware context.
-		 * Per IBTA, QPs cannot process incoming messages until RTR.
-		 */
-		ret = hfi_set_qp_state(ctx->rx_cmdq, rq, rvtqp, PTL_LID_ANY,
-				       PTL_PID_ANY, VERBS_OK, false);
-		if (ret != 0)
-			goto qp_write_err;
 
 		/* store pkey for native_post_send */
 		ibp = to_hfi_ibp(ibqp->device, rvtqp->port_num);
@@ -962,14 +955,6 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		struct hfi_rq_wc *hfi_wc;
 		struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
 		unsigned long flags;
-		struct hfi_ctx *hw_ctx;
-		int dlid = rdma_ah_get_dlid(&rvtqp->remote_ah_attr);
-
-		ret = hfi_set_qp_state(ctx->rx_cmdq, rvtqp->r_rq.hw_rq,
-				       rvtqp, dlid, PTL_PID_ANY,
-				       UNCORRECTABLE, true);
-		if (ret != 0)
-			goto qp_write_err;
 
 		while (!ibqp->srq) {
 			result[0] = 0;
@@ -999,6 +984,8 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 			hfi_wc = (struct hfi_rq_wc *)result[1];
 
 			if (!hfi_wc->is_qp) {
+				struct hfi_ctx *hw_ctx;
+
 				hw_ctx = hfi_wc->rq->hw_ctx;
 				ret = hfi2_push_key(&hfi_wc->rq->ded_me_ks,
 						    hfi_wc->list_handle);
@@ -1050,6 +1037,74 @@ qp_write_err:
 	/* TODO */
 	ctx->supports_native = false;
 	return -EIO;
+}
+
+int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
+			  int attr_mask, struct ib_udata *udata)
+{
+	struct ib_qp *ibqp = &rvtqp->ibqp;
+	struct hfi2_qp_priv *qp_priv = rvtqp->priv;
+	struct hfi_ibcontext *ctx = obj_to_ibctx(ibqp);
+	struct hfi_cmdq *rx_cmdq = NULL;
+	int ret = 0;
+
+	/* kernel and user QPs use different RX CMDQ */
+	if (!udata) {
+		if (ibqp->qp_type == IB_QPT_SMI || ibqp->qp_type == IB_QPT_GSI)
+			return 0;
+		/* TODO UD needs multicast enabled, lower priority than RC */
+		if (ibqp->qp_type == IB_QPT_UD)
+			return 0;
+
+		rx_cmdq = ctx->rx_cmdq;
+	}
+#if 0
+	else
+		rx_cmdq = &ibp->cmdq_rx;
+#endif
+
+	if (rx_cmdq && qp_priv->tpid &&
+	    attr_mask & IB_QP_STATE &&
+	    (attr->qp_state == IB_QPS_ERR ||
+	     attr->qp_state == IB_QPS_RESET)) {
+		ret = hfi_set_qp_state(rx_cmdq, rvtqp,
+				       rdma_ah_get_dlid(&rvtqp->remote_ah_attr),
+				       qp_priv->tpid, UNCORRECTABLE, true);
+		if (ret)
+			return ret;
+	}
+
+	/* For kernel provider, configure hardware QP and CQ resources */
+	if (!udata) {
+		ret = hfi2_native_modify_kern_qp(rvtqp, attr, attr_mask);
+		if (ret)
+			return ret;
+	}
+
+	if ((ibqp->qp_type == IB_QPT_RC || ibqp->qp_type == IB_QPT_UC) &&
+	    rx_cmdq && attr_mask & IB_QP_STATE &&
+	    attr->qp_state == IB_QPS_INIT) {
+		/* Initialize QP to accept PID exchange */
+		/* TODO - limit to IPID=0 */
+		ret = hfi_set_qp_state(rx_cmdq, rvtqp, PTL_LID_ANY,
+				       PTL_PID_ANY, VERBS_OK, false);
+	} else if (rx_cmdq && attr_mask & IB_QP_STATE &&
+		   attr->qp_state == IB_QPS_RTR) {
+		/*
+		 * Associate QP with hardware context and mark QP enabled.
+		 * Per IBTA, QPs can process incoming messages at RTR.
+		 * TODO this should be QPT_UD only, rework with pid exchange.
+		 */
+		ret = hfi_set_qp_state(rx_cmdq, rvtqp, PTL_LID_ANY,
+				       PTL_PID_ANY, VERBS_OK, false);
+	}
+
+	/*
+	 * TODO - need updates for PID exchange,
+	 * store qp_priv->tpid and write qp_state
+	 */
+
+	return ret;
 }
 
 /*
@@ -1415,25 +1470,19 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 		signal = false;
 		suppress_free = true;
 	} else if (unlikely(wc->vendor_err != VERBS_OK)) {
-		struct ib_qp_attr attr;
-		int attr_mask = IB_QP_STATE;
-		struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
-		struct hfi_ibcontext *ctx = obj_to_ibctx(ibqp);
-		int dlid;
+		struct ib_qp_attr attr = {0};
 
 		switch (ibqp->qp_type) {
 		case IB_QPT_RC:
-			dlid = rdma_ah_get_dlid(&rvtqp->remote_ah_attr);
 			attr.qp_state = IB_QPS_ERR;
-			hfi_set_qp_state(ctx->rx_cmdq, rq, rvtqp, dlid,
-					 PTL_PID_ANY, UNCORRECTABLE, true);
+			/* QP_STATE updated in ib_modify_qp */
 			break;
 		default:
 			attr.qp_state = IB_QPS_SQE;
 			break;
 		}
 
-		ib_modify_qp(ibqp, &attr, attr_mask);
+		ib_modify_qp(ibqp, &attr, IB_QP_STATE);
 	}
 
 done:

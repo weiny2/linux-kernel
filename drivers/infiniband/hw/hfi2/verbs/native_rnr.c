@@ -228,7 +228,6 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	int ret, nslots;
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ctx->ibuc.device);
 	struct hfi2_ibport *ibp = ibd->pport;
-	struct hfi_rq *rq;
 	union hfi_tx_cq_command cmd __aligned(64);
 	int qp_num = EXTRACT_HD_DST_QP(teq->hdr_data);
 	struct ib_qp *ibqp;
@@ -256,8 +255,7 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	       qp->r_flags & RVT_S_WAIT_RNR)
 		mdelay(5);
 
-	rq = (struct hfi_rq *)qp->r_rq.hw_rq;
-	ret = hfi_set_qp_state(ctx->rx_cmdq, rq, qp,
+	ret = hfi_set_qp_state(ctx->rx_cmdq, qp,
 			       rdma_ah_get_dlid(&qp->remote_ah_attr),
 			       PTL_PID_ANY, VERBS_OK, false);
 
