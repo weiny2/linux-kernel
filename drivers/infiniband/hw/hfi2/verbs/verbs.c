@@ -639,6 +639,8 @@ static int hfi2_init_port(struct hfi2_ibdev *ibd,
 	if (ret < 0)
 		goto err;
 
+	ibp->prescan_9B = false;
+	ibp->prescan_16B = false;
 	/* start RX processing, call this last after no errors */
 	hfi2_ctx_start_port(ibp);
 	return 0;

@@ -703,7 +703,7 @@ int hfi2_rcv_wait(void *data)
 			 * As long as there are FECNs being received, look
 			 * ahead for FECNs by calling prescan
 			 */
-			if (ibp->prescan_9B || ibp->prescan_16B) {
+			if (ibp->prescan_9B) {
 				prescan_rxq(rcv);
 				pkt.fecn = false;
 			}
