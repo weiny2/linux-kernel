@@ -1328,7 +1328,6 @@ static int alloc_at(struct hfi_devdata *dd)
 		at->gcmd |= AT_GCMD_QIE;
 
 	raw_spin_lock_init(&at->register_lock);
-	spin_lock_init(&at->lock);
 	dd->at = at;
 
 	/* get system_mm for system pasid */
@@ -1551,20 +1550,16 @@ static void at_disable_protect_mem_regions(struct hfi_at *at)
 static int at_alloc_root_entry(struct hfi_at *at)
 {
 	struct hfi_devdata *dd = at->dd;
-	unsigned long flags;
 
-	spin_lock_irqsave(&at->lock, flags);
 	at->root_entry = pci_zalloc_consistent(dd->pdev, ROOT_SIZE,
 					       &at->root_entry_dma);
 	if (!at->root_entry) {
-		spin_unlock_irqrestore(&at->lock, flags);
 		dd_dev_err(dd, "Allocating root entry for %s failed\n",
 			   at->name);
 		return -ENOMEM;
 	}
 
 	__at_flush_cache(at, at->root_entry, ROOT_SIZE);
-	spin_unlock_irqrestore(&at->lock, flags);
 
 	return 0;
 }
@@ -1633,11 +1628,8 @@ static inline struct context_entry *at_context_addr(struct hfi_at *at,
 
 static void free_context_table(struct hfi_at *at)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&at->lock, flags);
 	if (!at->root_entry)
-		goto out;
+		return;
 
 	if (at->context)
 		pci_free_consistent(at->dd->pdev, CONTEXT_SIZE,
@@ -1646,8 +1638,6 @@ static void free_context_table(struct hfi_at *at)
 	pci_free_consistent(at->dd->pdev, ROOT_SIZE,
 			    at->root_entry, at->root_entry_dma);
 	at->root_entry = NULL;
-out:
-	spin_unlock_irqrestore(&at->lock, flags);
 }
 
 static int hfi_svm_alloc_pasid_tables(struct hfi_at *at)
@@ -1851,20 +1841,17 @@ static int at_setup_device_context(struct hfi_devdata *dd)
 
 static void at_context_clear(struct hfi_at *at)
 {
-	unsigned long flags;
 	struct context_entry *context;
 	u16 did_old;
 
-	spin_lock_irqsave(&at->lock, flags);
 	context = at_context_addr(at, 0);
-	if (!context) {
-		spin_unlock_irqrestore(&at->lock, flags);
+	if (!context)
 		return;
-	}
+
 	did_old = context_domain_id(context);
 	context_clear_entry(context);
 	__at_flush_cache(at, context, sizeof(*context));
-	spin_unlock_irqrestore(&at->lock, flags);
+
 	qi_flush_context(at,
 			 did_old,
 			 (((u16)at->bus) << 8) | at->devfn,

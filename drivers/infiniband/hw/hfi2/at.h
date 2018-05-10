@@ -490,7 +490,6 @@ struct hfi_at {
 	unsigned int	irq, pr_irq;
 	unsigned char	name[13];    /* Device Name */
 
-	spinlock_t	lock; /* protect context */
 	struct root_entry *root_entry; /* virtual address */
 	dma_addr_t root_entry_dma;     /* dma address */
 	struct context_entry *context;
