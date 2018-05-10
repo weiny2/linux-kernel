@@ -72,7 +72,7 @@
 
 static bool enable_native_verbs;
 
-static bool enable_lkey_callbacks = true;
+static bool enable_lkey_callbacks;
 module_param(enable_lkey_callbacks, bool, 0444);
 MODULE_PARM_DESC(enable_lkey_callbacks, "Enable self-managed MR KEYs");
 
