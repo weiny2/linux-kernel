@@ -589,13 +589,16 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 }
 
 int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
-		     u8 mb_opcode, union hfi_tx_cq_command *cmd)
+		     u8 mb_opcode)
 {
 	struct rvt_cq *cq = ibcq_to_rvtcq(qp->ibqp.send_cq);
 	struct ib_wc *wc = NULL;
 	struct hfi2_qp_priv *qp_priv = (struct hfi2_qp_priv *)qp->priv;
 	int ret = 0;
+	unsigned long flags;
 
+	spin_lock_irqsave(&cq->lock, flags);
+	spin_lock(&qp->s_lock);
 	/* TX events, have to be ordered so use internal buffer */
 	wc = &qp_priv->wc[qp_priv->current_cidx % qp->s_size].ib_wc;
 
@@ -623,6 +626,8 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 		break;
 	default:
 		pr_warn("mb opcode %d not valid", mb_opcode);
+		spin_unlock(&qp->s_lock);
+		spin_unlock_irqrestore(&cq->lock, flags);
 		return -EINVAL;
 	}
 
@@ -630,19 +635,33 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 	SET_QP_EQ_SIGNAL(qp_priv, qp_priv->current_cidx, qp);
 
 	if (((qp_priv->current_cidx % qp->s_size) == qp_priv->current_eidx) &&
-	    list_empty(&qp_priv->poll_qp)) {
+	    list_empty(&qp_priv->poll_qp))
 		list_add_tail(&qp_priv->poll_qp, &cq->poll_qp);
-	}
 
 	qp_priv->current_cidx =
 		(qp_priv->current_cidx + 1) % (qp->s_size * 2);
-
+	spin_unlock(&qp->s_lock);
+	if (cq->hw_disarmed == 0 && (cq->notify == IB_CQ_NEXT_COMP ||
+				     cq->notify == IB_CQ_SOLICITED)) {
+		/*
+		 * This will cause send_complete() to be called in
+		 * another thread.
+		 */
+		spin_lock(&cq->rdi->n_cqs_lock);
+		if (likely(cq->rdi->worker)) {
+			cq->notify = RVT_CQ_NONE;
+			cq->triggered++;
+			kthread_queue_work(cq->rdi->worker, &cq->comptask);
+		}
+		spin_unlock(&cq->rdi->n_cqs_lock);
+	}
+	spin_unlock_irqrestore(&cq->lock, flags);
 	return ret;
 }
 
 static
 inline int hfi2_do_reg_mr(struct rvt_qp *qp, struct ib_reg_wr *wr,
-			  bool signal, union hfi_tx_cq_command *cmd)
+			  bool signal)
 {
 	int ret;
 
@@ -655,14 +674,13 @@ inline int hfi2_do_reg_mr(struct rvt_qp *qp, struct ib_reg_wr *wr,
 		return ret;
 	/* returns err code or nslots required to post on tx_cmdq */
 	if (signal)
-		ret = hfi2_generate_wc(qp, &wr->wr, MB_OC_REG_MR,
-				       cmd);
+		ret = hfi2_generate_wc(qp, &wr->wr, MB_OC_REG_MR);
 	return ret;
 }
 
 static
 inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_send_wr *wr,
-			     bool signal, union hfi_tx_cq_command *cmd)
+			     bool signal)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
 	struct hfi_ctx  *hw_ctx;
@@ -700,7 +718,7 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_send_wr *wr,
 		return ret;
 	/* returns err code or nslots required to post on tx_cmdq */
 	if (signal)
-		ret = hfi2_generate_wc(qp, wr, MB_OC_LOCAL_INV, cmd);
+		ret = hfi2_generate_wc(qp, wr, MB_OC_LOCAL_INV);
 	// TODO - SEND_FLAGS /w SIGNALED + WR_ID
 
 	return ret;
@@ -756,11 +774,13 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 						   in_line, solicit, cmd);
 		break;
 	case IB_WR_LOCAL_INV:
-		nslots = hfi2_do_local_inv(qp, wr, signal, cmd);
-		break;
+		spin_unlock_irqrestore(&qp->s_lock, flags);
+		nslots = hfi2_do_local_inv(qp, wr, signal);
+		return nslots;
 	case IB_WR_REG_MR:
-		nslots = hfi2_do_reg_mr(qp, reg_wr(wr), signal, cmd);
-		break;
+		spin_unlock_irqrestore(&qp->s_lock, flags);
+		nslots = hfi2_do_reg_mr(qp, reg_wr(wr), signal);
+		return nslots;
 	default:
 		nslots = -EINVAL;
 		break;
