@@ -152,10 +152,15 @@ struct hfi_tx_wc {
  * @hdr_type: describes packet type for next packet
  * @pkey: pkey corresponding to pkey_index in next packet
  * Below are for Verbs over native provider:
- * @ctx: context associated with this qp
- * @poll_qp: to be part of list for tx wc
  * @outstanding_cnt: total number of outsanding commands
  * @outstanding_rd_cnt: total number of read or atomic commands
+ * @cmd: array of TX commands sized based on SQ length
+ * @wc: array of work completions pending to be delivered
+ * @current_cidx: index into command buffer (@cmd)
+ * @current_eidx: index into event buffer (@wc)
+ * @fc_cidx: flow control command index
+ * @fc_eidx: flow control event index
+ * @poll_qp: list for TX work completion processing in poll_cq
  */
 struct hfi2_qp_priv {
 	struct rvt_qp *owner;
@@ -180,7 +185,6 @@ struct hfi2_qp_priv {
 	int current_eidx;
 	int fc_cidx;
 	int fc_eidx;
-	struct hfi_ibcontext *ctx;
 	struct list_head poll_qp;
 };
 

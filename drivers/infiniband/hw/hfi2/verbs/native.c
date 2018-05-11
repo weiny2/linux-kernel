@@ -790,6 +790,15 @@ int hfi2_flush_cq(struct rvt_qp *qp, struct ib_cq *ibcq)
 	return 0;
 }
 
+static
+int hfi2_sqd_async_event(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
+{
+	struct hfi2_qp_priv *priv = qp->priv;
+
+	/* TODO - Deliver Async Event */
+	return hfi2_fence(ctx, qp, &priv->outstanding_cnt);
+}
+
 int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 			  int attr_mask, struct ib_udata *udata)
 {
@@ -819,7 +828,6 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		priv->current_eidx = 0;
 		priv->fc_cidx = 0;
 		priv->fc_eidx = 0;
-		priv->ctx = ctx;
 		priv->outstanding_cnt = 0;
 		priv->outstanding_rd_cnt = 0;
 
@@ -945,10 +953,10 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		}
 	} else if ((attr_mask & IB_QP_STATE) &&
 		   (attr->qp_state == IB_QPS_SQD)) {
-		/* TODO Need to handle case QPS_SQD */
-		/* FIXME - How to ensure triggered slots not leaked */
-		pr_warn("generate wc? QPN 0x%x state = %d\n",
-			ibqp->qp_num, rvtqp->state);
+		/* TODO consider async worker thread */
+		ret = hfi2_sqd_async_event(ctx, rvtqp);
+		if (ret != 0)
+			goto qp_write_err;
 	} else if (attr_mask & IB_QP_STATE &&
 		    (attr->qp_state == IB_QPS_ERR ||
 		     attr->qp_state == IB_QPS_RESET)) {
@@ -1274,14 +1282,13 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 		       struct ib_wc *wc)
 {
 	struct hfi_swqe *swqe = (struct hfi_swqe *)eq->user_ptr;
-	struct ib_qp *ibqp = NULL;
-	struct rvt_qp *rvtqp = NULL;
-	struct rvt_cq *cq = NULL;
-	int signal = 0;
+	struct ib_qp *ibqp;
+	struct rvt_qp *rvtqp;
+	struct rvt_cq *cq;
 	u8 mb_opcode = EXTRACT_MB_OPCODE(eq->match_bits);
-	bool suppress_free = false;
+	bool signal, suppress_free = false;
 	bool in_order = true;
-	struct hfi2_qp_priv *qp_priv = NULL;
+	struct hfi2_qp_priv *qp_priv;
 	int cidx;
 	int src_qpn = EXTRACT_MB_SRC_QP(eq->match_bits);
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ctx->ibuc.device);
@@ -1295,17 +1302,17 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 	} else {
 		rvtqp = swqe->qp;
 	}
-	ibqp = &swqe->qp->ibqp;
-	qp_priv = (struct hfi2_qp_priv *)rvtqp->priv;
-	signal = (IS_NON_IOVEC_SWQE(swqe) ?
-			QP_EQ_SIGNAL(qp_priv,
-				     (NON_IOVEC_SWQE_CIDX(swqe, rvtqp) %
-				      rvtqp->s_size))
-			: swqe->signal) || eq->fail_type;
-	cq = ibcq_to_rvtcq(rvtqp->ibqp.send_cq);
-       /* Check Ordering */
+	ibqp = &rvtqp->ibqp;
+	qp_priv = rvtqp->priv;
+	cq = ibcq_to_rvtcq(ibqp->send_cq);
+
 	cidx = IS_NON_IOVEC_SWQE(swqe) ? NON_IOVEC_SWQE_CIDX(swqe, rvtqp)
 		: swqe->cidx;
+	signal = (IS_NON_IOVEC_SWQE(swqe) ?
+		  QP_EQ_SIGNAL(qp_priv, (cidx % rvtqp->s_size))
+		  : swqe->signal) || eq->fail_type;
+
+       /* Check Ordering */
 	if (eq->fail_type != PTL_NI_PT_DISABLED &&
 	    mb_opcode != MB_OC_QP_RESET) {
 		spin_lock_irqsave(&rvtqp->s_lock, flags);
@@ -1333,7 +1340,7 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 		--qp_priv->outstanding_cnt;
 		spin_unlock_irqrestore(&rvtqp->s_lock, flags);
 	}
-	if (!signal && !swqe->signal)
+	if (!signal)
 		goto done;
 
 	/* Setup WC */
@@ -1371,18 +1378,12 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 			break;
 		case MB_OC_QP_RESET:
 		default:
-			signal = 0;
+			signal = false;
 			break;
 		}
 	} else if (unlikely(rvtqp->state >= IB_QPS_SQE)) {
 		wc->status = IB_WC_WR_FLUSH_ERR;
 	} else if (unlikely(wc->vendor_err == PTL_NI_PT_DISABLED)) {
-		int cidx = IS_NON_IOVEC_SWQE(swqe) ?
-					NON_IOVEC_SWQE_CIDX(swqe, rvtqp)
-					: swqe->cidx;
-		struct hfi2_qp_priv *qp_priv = (struct hfi2_qp_priv *)rvtqp->priv;
-		struct hfi_ibcontext *ctx = qp_priv->ctx;
-
 		spin_lock_irqsave(&rvtqp->s_lock, flags);
 		/*
 		 * Update command index flow control state - indicate to RNR
@@ -1414,7 +1415,8 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 		eq->match_bits = FMT_VOSTLNP_MB(MB_OC_QP_RESET,
 						ibqp->qp_num, 0);
 
-		signal = 0;
+		signal = false;
+		suppress_free = true;
 	} else if (unlikely(wc->vendor_err != VERBS_OK)) {
 		struct ib_qp_attr attr;
 		int attr_mask = IB_QP_STATE;
@@ -1436,9 +1438,10 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 
 		ib_modify_qp(ibqp, &attr, attr_mask);
 	}
+
 done:
 	if (!IS_NON_IOVEC_SWQE(swqe) && !suppress_free) {
-	/* else we are only freeing IOVEC array */
+		/* else we are only freeing IOVEC array */
 		kfree(swqe);
 	}
 	return signal && in_order;

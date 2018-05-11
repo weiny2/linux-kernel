@@ -596,20 +596,8 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 	struct hfi2_qp_priv *qp_priv = (struct hfi2_qp_priv *)qp->priv;
 	int ret = 0;
 
-	if (mb_opcode != MB_OC_RX_FLUSH) {
-		/* TX events, have to be ordered so use internal buffer */
-		wc = &qp_priv->wc[qp_priv->current_cidx % qp->s_size].ib_wc;
-		SET_QP_EQ_VALID(qp_priv, qp_priv->current_cidx, qp);
-		SET_QP_EQ_SIGNAL(qp_priv, qp_priv->current_cidx, qp);
-
-		if (((qp_priv->current_cidx % qp->s_size) ==
-		     qp_priv->current_eidx) &&
-		    list_empty(&qp_priv->poll_qp))
-			list_add_tail(&qp_priv->poll_qp, &cq->poll_qp);
-
-		qp_priv->current_cidx =
-			(qp_priv->current_cidx + 1) % (qp->s_size * 2);
-	}
+	/* TX events, have to be ordered so use internal buffer */
+	wc = &qp_priv->wc[qp_priv->current_cidx % qp->s_size].ib_wc;
 
 	wc->wr_id = wr->wr_id;
 	wc->vendor_err = 0;
@@ -617,10 +605,6 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 	wc->byte_len = 0;
 	wc->wc_flags = 0;
 	switch (mb_opcode) {
-	case MB_OC_RX_FLUSH:
-		wc->opcode = IB_WC_RECV;
-		wc->status = IB_WC_WR_FLUSH_ERR;
-		break;
 	case MB_OC_LOCAL_INV:
 		if (qp->state >= IB_QPS_SQE)
 			wc->status = IB_WC_WR_FLUSH_ERR;
@@ -638,9 +622,21 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 		wc->opcode = IB_WC_REG_MR;
 		break;
 	default:
-		/*TODO need to take some action */
 		pr_warn("mb opcode %d not valid", mb_opcode);
+		return -EINVAL;
 	}
+
+	SET_QP_EQ_VALID(qp_priv, qp_priv->current_cidx, qp);
+	SET_QP_EQ_SIGNAL(qp_priv, qp_priv->current_cidx, qp);
+
+	if (((qp_priv->current_cidx % qp->s_size) == qp_priv->current_eidx) &&
+	    list_empty(&qp_priv->poll_qp)) {
+		list_add_tail(&qp_priv->poll_qp, &cq->poll_qp);
+	}
+
+	qp_priv->current_cidx =
+		(qp_priv->current_cidx + 1) % (qp->s_size * 2);
+
 	return ret;
 }
 
