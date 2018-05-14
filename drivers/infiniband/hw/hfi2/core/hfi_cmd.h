@@ -52,7 +52,7 @@
 #define _HFI_CMD_H
 
 #include <linux/types.h>
-
+#include <uapi/rdma/hfi/hfi2_ioctl.h>
 /*
  * This version number is given to the driver by the user code during
  * early initialization sequence.
@@ -116,7 +116,6 @@
 /* Command Queues */
 #define HFI_CMDQ_TX_ENTRIES	128
 #define HFI_CMDQ_RX_ENTRIES	16
-#define HFI_NUM_AUTH_TUPLES	8
 
 /* Defines for backwards compat transports */
 #define HFI_NI_BYPASS		0x3
@@ -194,16 +193,6 @@ struct hfi_cmd {
 #define IN    /* input argument */
 #define INOUT /* input and output argument */
 #define OUT   /* output argument */
-
-/*
- * struct hfi_auth_tuple - authentication tuples for TX command queue
- * @uid: Portals UID (protection domain) for members of this job
- * @srank: Portals SRANK for use in destination matching criteria
- */
-struct hfi_auth_tuple {
-	__u32	uid;
-	__u32	srank;
-};
 
 /*
  * struct hfi_cmdq - Command Queue attributes

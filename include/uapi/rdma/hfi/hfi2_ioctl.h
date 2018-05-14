@@ -54,8 +54,6 @@
 #ifndef _HFI2_IOCTL_H_
 #define _HFI2_IOCTL_H_
 
-#include "../core/hfi_core.h"
-
 /* Single attribute per action */
 #define HFI2_E2E_CONN_ATTR		0
 #define HFI2_SL_PAIR_ATTR		0
@@ -64,6 +62,19 @@
 #define HFI2_JOB_INFO_RESP		0
 #define HFI2_DLID_RELEASE_CTX_IDX	0
 #define HFI2_GET_HW_LIMITS_RESP		0
+
+/* For command queues */
+#define HFI_NUM_AUTH_TUPLES	8
+
+/*
+ * struct hfi_auth_tuple - authentication tuples for TX command queue
+ * @uid: Portals UID (protection domain) for members of this job
+ * @srank: Portals SRANK for use in destination matching criteria
+ */
+struct hfi_auth_tuple {
+	__u32	uid;
+	__u32	srank;
+};
 
 struct hfi2_cmdq_auth_table {
 	struct hfi_auth_tuple auth_table[HFI_NUM_AUTH_TUPLES];

@@ -56,6 +56,7 @@
 #include <rdma/uverbs_ioctl.h>
 #include <rdma/uverbs_std_types.h>
 #include <uapi/rdma/hfi/hfi2_ioctl.h>
+#include "../core/hfi_core.h"
 
 #define HFI_MMAP_PSB_TOKEN(type, ptl_ctxt, size)  \
 	HFI_MMAP_TOKEN((type), ptl_ctxt, 0, size)
