@@ -1091,8 +1091,6 @@ struct hfi_devdata {
 #ifdef CONFIG_DEBUG_FS
 	/* per HFI debugfs */
 	struct dentry *hfi_dev_dbg;
-	/* per HFI AT debugfs */
-	struct dentry *hfi_at_dbg;
 	/* per HFI symlinks to above */
 	struct dentry *hfi_dev_link;
 #endif
@@ -1209,7 +1207,6 @@ int hfi_at_reg_range(struct hfi_ctx *ctx, void *addr, u32 size,
 void hfi_at_dereg_range(struct hfi_ctx *ctx, void *addr, u32 size);
 int hfi_at_prefetch(struct hfi_ctx *ctx,
 		    struct hfi_at_prefetch_args *atpf);
-void hfi_at_dbg_init(struct hfi_devdata *dd);
 
 /* OPA core functions */
 int hfi_cmdq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table,

@@ -1767,10 +1767,9 @@ static inline void context_clear_entry(struct context_entry *context)
 	context->hi = 0;
 }
 
-static int at_setup_device_context(struct hfi_devdata *dd)
+static int at_setup_device_context(struct hfi_at *at)
 {
-	struct hfi_at *at = dd->at;
-	struct pci_dev *pdev = dd->pdev;
+	struct pci_dev *pdev = at->dd->pdev;
 	struct context_entry *context;
 	u64 ctx_lo;
 
@@ -2311,8 +2310,7 @@ static void hfi_at_stats_cleanup(struct hfi_at *at)
 
 static int hfi_at_stats_show(struct seq_file *s, void *unused)
 {
-	struct hfi_devdata *dd = s->private;
-	struct hfi_at *at = dd->at;
+	struct hfi_at *at = s->private;
 	struct hfi_at_stats *stats;
 	int i;
 
@@ -2330,8 +2328,7 @@ static int hfi_at_stats_show(struct seq_file *s, void *unused)
 static ssize_t hfi_at_stats_write(struct file *file, const char __user *buf,
 				  size_t count, loff_t *ppos)
 {
-	struct hfi_devdata *dd = private2dd(file);
-	struct hfi_at *at = dd->at;
+	struct hfi_at *at = private2at(file);
 	struct hfi_at_stats *stats;
 	int i;
 
@@ -2350,43 +2347,55 @@ static ssize_t hfi_at_stats_write(struct file *file, const char __user *buf,
 
 static int hfi_at_page_tbl_show(struct seq_file *s, void *unused)
 {
-	struct hfi_ctx *ctx = s->private;
-	struct hfi_devdata *dd = ctx->devdata;
-	struct hfi_at *at = dd->at;
-	struct hfi_at_svm *svm;
+	struct hfi_at_svm *svm = s->private;
 
-	mutex_lock(&pasid_mutex);
-	svm = idr_find(&at->pasid_idr, ctx->pasid);
 	if (svm && svm->pgd)
 		print_page_tbl(s, svm);
 
-	mutex_unlock(&pasid_mutex);
 	return 0;
 }
 
 DEBUGFS_FILE_OPS_SINGLE_WITH_WRITE(at_stats);
 DEBUGFS_FILE_OPS_SINGLE(at_page_tbl);
 
-void hfi_at_dbg_init(struct hfi_devdata *dd)
+static void hfi_at_dbg_init(struct hfi_at *at)
 {
-	dd->hfi_at_dbg = debugfs_create_dir("at", dd->hfi_dev_dbg);
+#ifdef CONFIG_DEBUG_FS
+	at->hfi_at_dbg = debugfs_create_dir("at", at->dd->hfi_dev_dbg);
 
-	debugfs_create_file("stats", 0644, dd->hfi_at_dbg, dd,
+	debugfs_create_file("stats", 0644, at->hfi_at_dbg, at,
 			    &hfi_at_stats_ops);
+#endif
 }
 
-void hfi_at_ctx_dbg_init(struct hfi_ctx *ctx)
+static inline void hfi_at_dbg_exit(struct hfi_at *at)
 {
-	struct hfi_devdata *dd = ctx->devdata;
-	bool use_cpt = (ctx->type == HFI_CTX_TYPE_USER) ? use_user_cpt :
-							  use_kernel_cpt;
+#ifdef CONFIG_DEBUG_FS
+	debugfs_remove_recursive(at->hfi_at_dbg);
+#endif
+}
+
+static void hfi_at_svm_dbg_init(struct hfi_at_svm *svm)
+{
+#ifdef CONFIG_DEBUG_FS
+	bool use_cpt = svm->mm ? use_user_cpt : use_kernel_cpt;
 
 	if (use_cpt)
 		return;
 
-	ctx->dbg = debugfs_create_dir(ctx->pasid_str, dd->hfi_at_dbg);
-	debugfs_create_file("page_tbl", 0444, ctx->dbg,
-			    ctx, &hfi_at_page_tbl_ops);
+	sprintf(svm->pasid_str, "%d", svm->pasid);
+	svm->dbg = debugfs_create_dir(svm->pasid_str, svm->at->hfi_at_dbg);
+	debugfs_create_file("page_tbl", 0444, svm->dbg, svm,
+			    &hfi_at_page_tbl_ops);
+#endif
+}
+
+static inline void hfi_at_svm_dbg_exit(struct hfi_at_svm *svm)
+{
+#ifdef CONFIG_DEBUG_FS
+	debugfs_remove_recursive(svm->dbg);
+	memset(svm->pasid_str, 0, ARRAY_SIZE(svm->pasid_str));
+#endif
 }
 
 static struct hfi_at_stats *hfi_at_alloc_stats(struct hfi_at_svm *svm)
@@ -2586,6 +2595,8 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 	if (cap_caching_mode(at->cap))
 		hfi_flush_pasid_dev(svm, 0);
 
+	hfi_at_svm_dbg_init(svm);
+
  success:
 	*pasid = svm->pasid;
 	ret = 0;
@@ -2615,6 +2626,8 @@ static int hfi_svm_unbind_mm(struct device *dev, int pasid)
 	svm->users--;
 	if (!svm->users) {
 		hfi_at_drain_pasid(svm, pasid);
+
+		hfi_at_svm_dbg_exit(svm);
 
 		/*
 		 * Flush the PASID cache and IOTLB for this device.
@@ -2766,9 +2779,11 @@ hfi_at_init(struct hfi_devdata *dd)
 	 */
 	at_disable_protect_mem_regions(at);
 
-	ret = at_setup_device_context(dd);
+	ret = at_setup_device_context(at);
 	if (ret)
 		goto free_at;
+
+	hfi_at_dbg_init(at);
 
 	return 0;
 
@@ -2788,6 +2803,7 @@ hfi_at_exit(struct hfi_devdata *dd)
 	if (!at)
 		return;
 
+	hfi_at_dbg_exit(at);
 	at_cleanup(at);
 	dd->at = NULL;
 }
@@ -2857,8 +2873,6 @@ hfi_at_set_pasid(struct hfi_ctx *ctx)
 
 	write_csr(dd, FXR_AT_CFG_PASID_LUT + (ctx->pid * 8), lut);
 
-	sprintf(ctx->pasid_str, "%d", ctx->pasid);
-	hfi_at_ctx_dbg_init(ctx);
 	return 0;
 }
 
@@ -2868,9 +2882,6 @@ hfi_at_clear_pasid(struct hfi_ctx *ctx)
 	struct hfi_devdata *dd = ctx->devdata;
 	struct device *dev = &dd->pdev->dev;
 	u64 lut = 0;
-
-	debugfs_remove_recursive(ctx->dbg);
-	memset(ctx->pasid_str, 0, ARRAY_SIZE(ctx->pasid_str));
 
 	/* disable pid->pasid translation */
 	lut &= ~FXR_AT_CFG_PASID_LUT_ENABLE_SMASK;

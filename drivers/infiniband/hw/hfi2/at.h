@@ -516,13 +516,17 @@ struct hfi_at {
 
 	struct hfi_devdata *dd; /* for backward reference */
 
-	/* temp threads */
-	struct task_struct *prq_thread;
-	struct task_struct *fault_thread;
+#ifdef CONFIG_DEBUG_FS
+	/* per HFI AT debugfs */
+	struct dentry *hfi_at_dbg;
+#endif
 };
 
 #define SVM_FLAG_PRIVATE_PASID		BIT(0)
 #define SVM_FLAG_SUPERVISOR_MODE	BIT(1)
+
+/* Max PASID string '4096\0' */
+#define HFI_PASID_STR_SIZE   5
 
 struct at_pte {
 	u64 val;
@@ -547,6 +551,11 @@ struct hfi_at_svm {
 	struct task_struct *tsk;
 	spinlock_t lock; /* protect pgd access */
 	struct hfi_at_stats *stats;
+
+#ifdef CONFIG_DEBUG_FS
+	struct dentry *dbg;
+	char    pasid_str[HFI_PASID_STR_SIZE];
+#endif
 };
 
 /*

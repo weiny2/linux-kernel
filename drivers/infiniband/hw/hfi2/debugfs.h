@@ -152,6 +152,7 @@ static ssize_t _##name##_write(struct file *file, const char __user *ubuf,\
 	return ret;\
 }
 
+#define private2at(file) (file_inode(file)->i_private)
 #define private2dd(file) (file_inode(file)->i_private)
 #define private2ppd(file) (file_inode(file)->i_private)
 
@@ -204,6 +205,7 @@ extern struct dentry *hfi_dbg_root;
 void __init hfi_dbg_init(void);
 void hfi_dbg_exit(void);
 
+void hfi_dbg_dev_early_init(struct hfi_devdata *dd);
 void hfi_dbg_dev_init(struct hfi_devdata *dd);
 void hfi_dbg_dev_exit(struct hfi_devdata *dd);
 

@@ -100,6 +100,7 @@
 #include "hfi2.h"
 #include "link.h"
 #include "firmware.h"
+#include "debugfs.h"
 #ifdef CONFIG_HFI2_STLNP
 #include "timesync.h"
 #endif
@@ -3871,6 +3872,9 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* vl15 and mcast PIDs set by hfi2_ib_add */
 	dd->vl15_pid = HFI_PID_NONE;
 	dd->mcast_pid = HFI_PID_NONE;
+
+	/* early init dd->hfi_dev_dbg */
+	hfi_dbg_dev_early_init(dd);
 
 	ret = hfi_iommu_root_set_context(dd);
 	if (ret)

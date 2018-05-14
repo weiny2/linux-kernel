@@ -1085,11 +1085,10 @@ void hfi_dbg_exit(void)
 	hfi_dbg_root = NULL;
 }
 
-void hfi_dbg_dev_init(struct hfi_devdata *dd)
+void hfi_dbg_dev_early_init(struct hfi_devdata *dd)
 {
-	struct hfi_pportdata *ppd;
 	char name[32], link[10];
-	int unit = dd->unit, j;
+	int unit = dd->unit;
 
 	/* create /sys/kernel/debug/hfi2/hfiN and .../N */
 	snprintf(name, sizeof(name), "%s%d", hfi_class_name(), unit);
@@ -1106,6 +1105,13 @@ void hfi_dbg_dev_init(struct hfi_devdata *dd)
 		pr_warn("can't create symlink: %s\n", name);
 		return;
 	}
+}
+
+void hfi_dbg_dev_init(struct hfi_devdata *dd)
+{
+	struct hfi_pportdata *ppd;
+	char name[32];
+	int j;
 
 	/* create a directory for each port, and a neighbor_mode directory */
 	for (j = 0, ppd = dd->pport; j < dd->num_pports; ppd++, j++) {
@@ -1124,7 +1130,6 @@ void hfi_dbg_dev_init(struct hfi_devdata *dd)
 	hfi_firmware_dbg_init(dd);
 	hfi_devcntrs_dbg_init(dd);
 	hfi_portcntrs_dbg_init(dd);
-	hfi_at_dbg_init(dd);
 	hfi_head_update_ctrl_dbg_init(dd);
 	hfi_verbs_dbg_init(dd);
 #ifdef CONFIG_HFI2_STLNP
@@ -1140,6 +1145,7 @@ void hfi_dbg_dev_exit(struct hfi_devdata *dd)
 #else
 void __init hfi_dbg_init(void) {}
 void hfi_dbg_exit(void) {}
+void hfi_dbg_dev_early_init(struct hfi_devdata *dd) {}
 void hfi_dbg_dev_init(struct hfi_devdata *dd) {}
 void hfi_dbg_dev_exit(struct hfi_devdata *dd) {}
 #endif
