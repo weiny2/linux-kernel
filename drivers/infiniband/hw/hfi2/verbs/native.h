@@ -112,6 +112,15 @@
 	(((c0 < c1) && ((c1-c0) <= qp->s_size)) \
 	|| ((c0 > c1) && ((c0-c1) > qp->s_size)))
 
+#define QP_STATE_INIT           0
+#define QP_STATE_PID_RECV       1
+#define QP_STATE_PID_SENT       2
+#define QP_STATE_RTR            3
+#define QP_STATE_RTS            4
+
+#define INITIATOR_ID_LID(i)     ((i) & 0xffffff)
+#define INITIATOR_ID_PID(i)     ((i) >> 24)
+
 union hfi_tx_cq_command;
 
 struct hfi_iovec {
@@ -277,6 +286,7 @@ int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq,
 		     struct rvt_qp *qp, u32 slid, u16 ipid,
 		     u8 state, bool failed);
 int hfi2_fence(struct hfi_ibcontext *ctx, struct rvt_qp *qp, u32 *fence_value);
+int hfi2_qp_exchange_pid(struct hfi_ibcontext *ctx, struct rvt_qp *qp);
 int hfi2_destroy_cq(struct ib_cq *ibcq);
 #endif
 #endif /* NATIVE_VERBS_H */

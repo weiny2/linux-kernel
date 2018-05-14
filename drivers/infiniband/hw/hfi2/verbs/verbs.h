@@ -192,6 +192,11 @@ struct hfi2_qp_priv {
 	u32 recvq_root;
 	struct hfi_ctx *rq_ctx;
 	struct list_head poll_qp;
+	struct completion pid_xchg_completion;
+	u8 state;
+	u8 pidex_hdr_type;
+	u32 pidex_slid;
+	u32 pidex_qpn;
 };
 
 struct hfi2_ibrcv {

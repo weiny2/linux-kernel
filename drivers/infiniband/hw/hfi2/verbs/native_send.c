@@ -847,8 +847,12 @@ int hfi2_queue_wr(struct rvt_qp *qp, struct ib_send_wr *wr,
 
 static inline bool native_send_ok(struct rvt_qp *qp)
 {
+	struct hfi2_qp_priv *qp_priv = qp->priv;
+
 	if (unlikely(!(ib_rvt_state_ops[qp->state] & RVT_POST_SEND_OK)))
 		return false;
+	if (!qp_priv->tpid && qp->ibqp.qp_type != IB_QPT_UD)
+		wait_for_completion(&qp_priv->pid_xchg_completion);
 	return true;
 }
 

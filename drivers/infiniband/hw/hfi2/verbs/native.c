@@ -809,9 +809,6 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 	u64 result[2];
 	int i, ret;
 
-	if (!ctx || !ctx->supports_native)
-		return 0;
-
 	if (attr_mask & IB_QP_STATE &&
 	    attr->qp_state == IB_QPS_INIT &&
 	    !rvtqp->r_rq.hw_rq) {
@@ -920,7 +917,6 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 
 		pr_info("native: QPN %d at RTR and enabled for Portals\n",
 			ibqp->qp_num);
-
 	} else if ((attr_mask & IB_QP_STATE) &&
 		   (attr->qp_state == IB_QPS_RTS)) {
 		if (ibqp->qp_type != IB_QPT_UD) {
@@ -1056,6 +1052,8 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		if (ibqp->qp_type == IB_QPT_UD)
 			return 0;
 
+		if (!ctx || !ctx->supports_native)
+			return 0;
 		rx_cmdq = ctx->rx_cmdq;
 	}
 #if 0
@@ -1093,17 +1091,16 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		/*
 		 * Associate QP with hardware context and mark QP enabled.
 		 * Per IBTA, QPs can process incoming messages at RTR.
-		 * TODO this should be QPT_UD only, rework with pid exchange.
 		 */
-		ret = hfi_set_qp_state(rx_cmdq, rvtqp, PTL_LID_ANY,
-				       PTL_PID_ANY, VERBS_OK, false);
+		if (ibqp->qp_type == IB_QPT_UD)
+			ret = hfi_set_qp_state(rx_cmdq, rvtqp, PTL_LID_ANY,
+					       PTL_PID_ANY, VERBS_OK, false);
+		else if (ibqp->qp_type == IB_QPT_RC ||
+			 ibqp->qp_type == IB_QPT_UC)
+			ret = hfi2_qp_exchange_pid(ctx, rvtqp);
+		if (ret < 0)
+			return ret;
 	}
-
-	/*
-	 * TODO - need updates for PID exchange,
-	 * store qp_priv->tpid and write qp_state
-	 */
-
 	return ret;
 }
 
