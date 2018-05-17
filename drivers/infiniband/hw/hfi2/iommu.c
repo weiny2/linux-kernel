@@ -430,16 +430,6 @@ static inline unsigned long aligned_nrpages(unsigned long host_addr,
 	return PAGE_ALIGN(host_addr + size) >> AT_PAGE_SHIFT;
 }
 
-static inline int agaw_to_level(int agaw)
-{
-	return agaw + 2;
-}
-
-static inline int width_to_agaw(int width)
-{
-	return DIV_ROUND_UP(width - 30, LEVEL_STRIDE);
-}
-
 static inline unsigned int level_to_offset_bits(int level)
 {
 	return (level - 1) * LEVEL_STRIDE;
@@ -578,7 +568,7 @@ static void __print_page_tbl(struct seq_file *s, struct at_pte *pte,
 
 static void print_page_tbl(struct seq_file *s, struct hfi_at_svm *svm)
 {
-	__print_page_tbl(s, svm->pgd, agaw_to_level(svm->at->agaw), 0);
+	__print_page_tbl(s, svm->pgd, svm->at->level, 0);
 }
 
 static bool bad_address(void *p)
@@ -661,7 +651,7 @@ static struct at_pte *pfn_to_at_pte(struct hfi_at_svm *svm, unsigned long pfn,
 				    int *target_level, bool user)
 {
 	struct at_pte *parent = svm->pgd, *pte = NULL;
-	int level = agaw_to_level(svm->at->agaw);
+	int level = svm->at->level;
 	int offset;
 
 	if (!parent)
@@ -1260,30 +1250,10 @@ static void free_at(struct hfi_at *at)
 	kfree(at);
 }
 
-static int __at_calculate_agaw(struct hfi_at *at, int max_gaw)
-{
-	unsigned long sagaw;
-	int agaw = -1;
-
-	sagaw = cap_sagaw(at->cap);
-	for (agaw = width_to_agaw(max_gaw); agaw >= 0; agaw--) {
-		if (test_bit(agaw, &sagaw))
-			break;
-	}
-
-	return agaw;
-}
-
-static int at_calculate_agaw(struct hfi_at *at)
-{
-	return __at_calculate_agaw(at, DEFAULT_ADDRESS_WIDTH);
-}
-
 static int alloc_at(struct hfi_devdata *dd)
 {
 	struct hfi_at *at;
 	u32 ver, sts;
-	int agaw = 0;
 	int err;
 
 	at = kzalloc(sizeof(*at), GFP_KERNEL);
@@ -1309,15 +1279,6 @@ static int alloc_at(struct hfi_devdata *dd)
 		    AT_VER_MAJOR(ver), AT_VER_MINOR(ver),
 		    (unsigned long long)at->cap,
 		    (unsigned long long)at->ecap);
-
-	/* TODO: Do we need agaw? seems like it is only for SLPTPTR */
-	agaw = at_calculate_agaw(at);
-	if (agaw < 0) {
-		dd_dev_err(dd, "Cannot get a valid agaw for %s\n",
-			   at->name);
-		goto error;
-	}
-	at->agaw = agaw;
 
 	sts = readl(at->reg + AT_GSTS_REG);
 	if (sts & AT_GSTS_IRES)
@@ -1744,12 +1705,6 @@ static inline void context_set_translation_type(struct context_entry *context,
 	context->lo |= (value & 3) << 2;
 }
 
-static inline void context_set_address_width(struct context_entry *context,
-					     unsigned long value)
-{
-	context->hi |= value & 7;
-}
-
 static inline void context_set_domain_id(struct context_entry *context,
 					 unsigned long value)
 {
@@ -1786,9 +1741,6 @@ static int at_setup_device_context(struct hfi_at *at)
 
 	context_clear_entry(context);
 	context_set_domain_id(context, at->seq_id);
-
-	/* TODO: we don't need to set second level page table */
-	context_set_address_width(context, at->agaw);
 
 	context_set_translation_type(context, CONTEXT_TT_DEV_IOTLB);
 	context_set_fault_enable(context);
@@ -2033,9 +1985,8 @@ static dma_addr_t hfi_at_unmap(struct hfi_at_svm *svm,
 		goto unmap_done;
 
 	/* we don't need lock here; nobody else touches the iova range */
-	freelist = at_pte_clear_level(svm, agaw_to_level(svm->at->agaw),
-				      svm->pgd, 0, start_pfn, last_pfn,
-				      freelist);
+	freelist = at_pte_clear_level(svm, svm->at->level, svm->pgd, 0,
+				      start_pfn, last_pfn, freelist);
 
 	/* free pgd */
 	if (start_pfn == 0 && last_pfn == HFI_AT_DEFAULT_MAX_PFN) {
@@ -2746,6 +2697,7 @@ hfi_at_init(struct hfi_devdata *dd)
 		maw = 1;
 	}
 	write_csr(dd, FXR_AT_IOMMU_CFG_MAW, maw);
+	at->level = maw ? 5 : 4;
 
 	ret = hfi_at_init_qi(at);
 	if (ret)

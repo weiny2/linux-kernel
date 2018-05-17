@@ -491,7 +491,7 @@ struct hfi_at {
 	u32		gcmd;
 	raw_spinlock_t	register_lock; /* protect register handling */
 	int		seq_id;	/* sequence id of the AT */
-	int		agaw; /* agaw of this AT */
+	int		level; /* highest page table level */
 	unsigned int	irq, pr_irq;
 	unsigned char	name[13];    /* Device Name */
 
