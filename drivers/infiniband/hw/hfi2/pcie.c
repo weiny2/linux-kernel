@@ -123,6 +123,7 @@ const struct pci_error_handlers hfi_pci_err_handler = {
  */
 int hfi_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
+	unsigned int mgaw;
 	int ret;
 
 	ret = pci_enable_device(pdev);
@@ -153,11 +154,12 @@ int hfi_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_pci;
 	}
 
-	ret = pci_set_dma_mask(pdev, DMA_BIT_MASK(64));
+	mgaw = cpu_feature_enabled(X86_FEATURE_LA57) ? 52 : 46;
+	ret = pci_set_dma_mask(pdev, DMA_BIT_MASK(mgaw));
 	if (ret) {
 		/*
-		 * If the 64 bit setup fails, try 32 bit.  Some systems
-		 * do not setup 64 bit maps on systems with 2GB or less
+		 * If the mgaw bit setup fails, try 32 bit.  Some systems
+		 * do not setup >32 bit maps on systems with 2GB or less
 		 * memory installed.
 		 */
 		ret = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
@@ -168,7 +170,7 @@ int hfi_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 		}
 		ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
 	} else {
-		ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(64));
+		ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(mgaw));
 	}
 	if (ret) {
 		dev_err(&pdev->dev,

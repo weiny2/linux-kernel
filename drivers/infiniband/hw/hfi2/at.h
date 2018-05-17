@@ -74,6 +74,7 @@
 /*
  * Decoding Capability Register
  */
+#define cap_5lp_support(c)	(((c) >> 60) & 1)
 #define cap_pi_support(c)	(((c) >> 59) & 1)
 #define cap_read_drain(c)	(((c) >> 55) & 1)
 #define cap_write_drain(c)	(((c) >> 54) & 1)
@@ -402,7 +403,7 @@ enum {
 #define AT_FLAG_IRQ_REMAP_PRE_ENABLED	BIT(1)
 
 /* address width */
-#define DEFAULT_ADDRESS_WIDTH		48
+#define DEFAULT_ADDRESS_WIDTH		57
 #define MAX_PGTBL_LEVEL			5
 
 /* page table handling */
@@ -416,6 +417,10 @@ enum {
 #define PRQ_ORDER			0
 
 #define HFI_ATS_MAX_QDEP		0x20
+
+#define PASID_ENTRY_P			BIT_ULL(0)
+#define PASID_ENTRY_FLPM_5LP		BIT_ULL(9)
+#define PASID_ENTRY_SRE			BIT_ULL(11)
 
 struct pasid_entry {
 	u64 val;

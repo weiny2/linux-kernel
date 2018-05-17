@@ -35,6 +35,7 @@
 #include "chip/fxr_top_defs.h"
 #include "chip/fxr_at_csrs.h"
 #include "chip/fxr_at_defs.h"
+#include "chip/fxr_at_iommu_defs.h"
 #include "hfi2.h"
 #include "debugfs.h"
 #include "at.h"
@@ -2574,10 +2575,15 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 			kfree(svm);
 			goto out;
 		}
-		at->pasid_table[svm->pasid].val = pgdval | 1;
+		pgdval |= PASID_ENTRY_P;
 	} else {
-		at->pasid_table[svm->pasid].val = pgdval | 1 | (1ULL << 11);
+		pgdval |= PASID_ENTRY_P | PASID_ENTRY_SRE;
 	}
+
+	if (cpu_feature_enabled(X86_FEATURE_LA57))
+		pgdval |= PASID_ENTRY_FLPM_5LP;
+
+	at->pasid_table[svm->pasid].val = pgdval;
 	/* barrier for page table setup */
 	wmb();
 	/*
@@ -2713,6 +2719,7 @@ hfi_at_init(struct hfi_devdata *dd)
 {
 	int ret;
 	struct hfi_at *at;
+	u64 maw = 0;
 
 	ret = alloc_at(dd);
 	if (ret) {
@@ -2730,6 +2737,15 @@ hfi_at_init(struct hfi_devdata *dd)
 		dd_dev_err(dd, "AT: translation already enabled.\n");
 		goto free_at;
 	}
+
+	if (cpu_feature_enabled(X86_FEATURE_LA57)) {
+		if (!cap_5lp_support(at->cap)) {
+			dd_dev_err(dd, "AT: 5-level page tbl not supported\n");
+			goto free_at;
+		}
+		maw = 1;
+	}
+	write_csr(dd, FXR_AT_IOMMU_CFG_MAW, maw);
 
 	ret = hfi_at_init_qi(at);
 	if (ret)
