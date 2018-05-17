@@ -552,8 +552,7 @@ static void __print_page_tbl(struct seq_file *s, struct at_pte *pte,
 	char *lp, *lvl_prefix[MAX_PGTBL_LEVEL] = { "\t\t\t\t", "\t\t\t",
 						   "\t\t", "\t", "" };
 	int i = pfn ? pfn_level_offset(pfn, level) : 0;
-	struct hfi_ctx *ctx = s->private;
-	struct hfi_devdata *dd = ctx->devdata;
+	struct hfi_at_svm *svm = s->private;
 
 	lp = lvl_prefix[level - 1];
 	pte += i;
@@ -562,7 +561,7 @@ static void __print_page_tbl(struct seq_file *s, struct at_pte *pte,
 			seq_printf(s, "%s0x%x: 0x%llx\n", lp, i, pte->val);
 			if (level > 1 && !at_pte_superpage(pte))
 				__print_page_tbl(s,
-						 at_pte_virt_addr(dd->at, pte),
+						 at_pte_virt_addr(svm->at, pte),
 						 level - 1, pfn);
 		} else if (pfn) {
 			seq_printf(s, "%s0x%x: 0x%llx\n", lp, i, pte->val);
