@@ -1137,9 +1137,18 @@ void hfi_dbg_dev_init(struct hfi_devdata *dd)
 #endif
 }
 
+void hfi_dbg_dev_late_exit(struct hfi_devdata *dd)
+{
+	debugfs_remove(dd->hfi_dev_link);
+	dd->hfi_dev_link = NULL;
+
+	debugfs_remove_recursive(dd->hfi_dev_dbg);
+	dd->hfi_dev_dbg = NULL;
+}
+
 void hfi_dbg_dev_exit(struct hfi_devdata *dd)
 {
-	dd->hfi_dev_dbg = NULL;
+	/* TODO: revert operations in hfi_dbg_dev_init() */
 }
 
 #else
@@ -1147,5 +1156,6 @@ void __init hfi_dbg_init(void) {}
 void hfi_dbg_exit(void) {}
 void hfi_dbg_dev_early_init(struct hfi_devdata *dd) {}
 void hfi_dbg_dev_init(struct hfi_devdata *dd) {}
+void hfi_dbg_dev_late_exit(struct hfi_devdata *dd) {}
 void hfi_dbg_dev_exit(struct hfi_devdata *dd) {}
 #endif

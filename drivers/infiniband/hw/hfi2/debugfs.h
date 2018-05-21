@@ -207,6 +207,7 @@ void hfi_dbg_exit(void);
 
 void hfi_dbg_dev_early_init(struct hfi_devdata *dd);
 void hfi_dbg_dev_init(struct hfi_devdata *dd);
+void hfi_dbg_dev_late_exit(struct hfi_devdata *dd);
 void hfi_dbg_dev_exit(struct hfi_devdata *dd);
 
 #endif	/* _HFI_DEBUGFS_H */

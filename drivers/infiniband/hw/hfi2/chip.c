@@ -3027,6 +3027,9 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 		free_pages((unsigned long)dd->cmdq_head_base,
 			   get_order(dd->cmdq_head_size));
 
+	/* late exit init dd->hfi_dev_dbg */
+	hfi_dbg_dev_late_exit(dd);
+
 	hfi_cmdq_wc_unmap(dd);
 	if (dd->kregbase)
 		iounmap((void __iomem *)dd->kregbase);
