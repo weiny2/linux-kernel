@@ -26,6 +26,7 @@
 #include <linux/types.h>
 #include <linux/delay.h>
 #include <linux/iommu.h>
+#include <linux/dma_remapping.h>
 #include <linux/module.h>
 #include <linux/pci-ats.h>
 #include <linux/signal.h>
@@ -42,15 +43,14 @@
 #include "trace.h"
 
 /* TODO: Do not upstream CPU Page Table (CPT) support */
-static bool use_kernel_cpt = true;
-module_param(use_kernel_cpt, bool, 0444);
-MODULE_PARM_DESC(use_kernel_cpt, "Use/Share kernel CPU page table");
+static bool force_kernel_spt;
+module_param(force_kernel_spt, bool, 0444);
+MODULE_PARM_DESC(force_kernel_spt, "force to use kernel shadow page table");
 
-static bool use_user_cpt = true;
-module_param(use_user_cpt, bool, 0444);
-MODULE_PARM_DESC(use_user_cpt, "Use/Share user process CPU page tables");
+static bool force_user_spt;
+module_param(force_user_spt, bool, 0444);
+MODULE_PARM_DESC(force_user_spt, "force to use process shadow page tables");
 
-/* TODO: Check whether we should only support page promotion method */
 static bool user_page_promo = true;
 module_param(user_page_promo, bool, 0444);
 MODULE_PARM_DESC(user_page_promo, "user page promotion");
@@ -1040,7 +1040,6 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 	tail = at_readq(at->reg + AT_PQT_REG) & PRQ_RING_MASK;
 	head = at_readq(at->reg + AT_PQH_REG) & PRQ_RING_MASK;
 	while (head != tail) {
-		bool use_cpt = use_user_cpt;
 		struct page_req_dsc *req;
 		struct qi_desc resp;
 		int ret, result;
@@ -1092,14 +1091,12 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 		 * TODO: fix the borrowed page table problem
 		 */
 		if (!svm->mm) {
-			use_cpt = use_kernel_cpt;
-
-			if (likely(use_cpt))
+			if (likely(!svm->pgd))
 				goto bad_req;
 		}
 
 		svm->stats->prq++;
-		if (use_cpt)
+		if (!svm->pgd)
 			ret = handle_at_cpt_page_fault(svm, req);
 		else
 			ret = handle_at_spt_page_fault(svm, req, NULL);
@@ -1292,7 +1289,7 @@ static int alloc_at(struct hfi_devdata *dd)
 	dd->at = at;
 
 	/* get system_mm for system pasid */
-	if (use_kernel_cpt || kernel_page_promo) {
+	if (!force_kernel_spt || kernel_page_promo) {
 		struct task_struct *task;
 
 		task = get_pid_task(find_pid_ns(1, &init_pid_ns), PIDTYPE_PID);
@@ -1742,7 +1739,7 @@ static int at_setup_device_context(struct hfi_at *at)
 	context_clear_entry(context);
 	context_set_domain_id(context, at->seq_id);
 
-	context_set_translation_type(context, CONTEXT_TT_DEV_IOTLB);
+	context_set_translation_type(context, AT_CONTEXT_TT_DEV_IOTLB);
 	context_set_fault_enable(context);
 	context_set_present(context);
 	__at_flush_cache(at, context, sizeof(*context));
@@ -1765,19 +1762,20 @@ static int at_setup_device_context(struct hfi_at *at)
 	}
 
 	ctx_lo = context[0].lo;
-	if (ctx_lo & CONTEXT_PASIDE)
+	if (ctx_lo & AT_CONTEXT_PASIDE)
 		return -EINVAL;
 
 	context[1].lo = (u64)at->pasid_table_dma | hfi_at_get_pts(at);
 
 	/* barrier context[1] entry */
 	wmb();
-	if ((ctx_lo & CONTEXT_TT_MASK) == (CONTEXT_TT_PASS_THROUGH << 2)) {
-		ctx_lo &= ~CONTEXT_TT_MASK;
-		ctx_lo |= CONTEXT_TT_PT_PASID_DEV_IOTLB << 2;
+	if ((ctx_lo & AT_CONTEXT_TT_MASK) ==
+	    (AT_CONTEXT_TT_PASS_THROUGH << 2)) {
+		ctx_lo &= ~AT_CONTEXT_TT_MASK;
+		ctx_lo |= AT_CONTEXT_TT_PT_PASID_DEV_IOTLB << 2;
 	}
-	ctx_lo |= CONTEXT_PASIDE;
-	ctx_lo |= CONTEXT_PRS;
+	ctx_lo |= AT_CONTEXT_PASIDE;
+	ctx_lo |= AT_CONTEXT_PRS;
 	context[0].lo = ctx_lo;
 
 	/* barrier context[0] entry */
@@ -2329,9 +2327,7 @@ static inline void hfi_at_dbg_exit(struct hfi_at *at)
 static void hfi_at_svm_dbg_init(struct hfi_at_svm *svm)
 {
 #ifdef CONFIG_DEBUG_FS
-	bool use_cpt = svm->mm ? use_user_cpt : use_kernel_cpt;
-
-	if (use_cpt)
+	if (!svm->pgd)
 		return;
 
 	sprintf(svm->pasid_str, "%d", svm->pasid);
@@ -2429,7 +2425,7 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 	struct hfi_at *at = hfi_svm_device_to_at(dev);
 	struct hfi_at_svm *svm = NULL;
 	struct mm_struct *mm = NULL;
-	bool use_cpt = use_kernel_cpt;
+	bool use_spt = force_kernel_spt;
 	u64 pgdval;
 	int ret;
 
@@ -2441,7 +2437,7 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 			return -EINVAL;
 	} else if (pasid) {
 		mm = get_task_mm(current);
-		use_cpt = use_user_cpt;
+		use_spt = force_user_spt;
 	}
 
 	mutex_lock(&pasid_mutex);
@@ -2497,7 +2493,7 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 		goto out;
 	}
 
-	if (!use_cpt) {
+	if (use_spt) {
 		svm->tsk = current;
 		svm->pgd = alloc_pgtable_page(at, &svm->pgd_dma);
 		if (!svm->pgd) {
@@ -2671,6 +2667,12 @@ hfi_at_init(struct hfi_devdata *dd)
 	int ret;
 	struct hfi_at *at;
 	u64 maw = 0;
+
+	/* check system iommu */
+	if (intel_iommu_enabled) {
+		force_kernel_spt = true;
+		force_user_spt = true;
+	}
 
 	ret = alloc_at(dd);
 	if (ret) {

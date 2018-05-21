@@ -255,18 +255,18 @@ do {									\
 #define AT_PTE_GLOBAL     BIT(8)
 #define AT_PTE_EXEC_DIS   BIT(63)
 
-#define CONTEXT_TT_MULTI_LEVEL	0
-#define CONTEXT_TT_DEV_IOTLB	1
-#define CONTEXT_TT_PASS_THROUGH 2
+#define AT_CONTEXT_TT_MULTI_LEVEL	0
+#define AT_CONTEXT_TT_DEV_IOTLB		1
+#define AT_CONTEXT_TT_PASS_THROUGH	2
 /* Extended context entry types */
-#define CONTEXT_TT_PT_PASID	4
-#define CONTEXT_TT_PT_PASID_DEV_IOTLB 5
-#define CONTEXT_TT_MASK		(7ULL << 2)
+#define AT_CONTEXT_TT_PT_PASID		4
+#define AT_CONTEXT_TT_PT_PASID_DEV_IOTLB 5
+#define AT_CONTEXT_TT_MASK		(7ULL << 2)
 
-#define CONTEXT_DINVE		BIT(8)
-#define CONTEXT_PRS		BIT(9)
-#define CONTEXT_NESTE		BIT(10)
-#define CONTEXT_PASIDE		BIT(11)
+#define AT_CONTEXT_DINVE		BIT(8)
+#define AT_CONTEXT_PRS			BIT(9)
+#define AT_CONTEXT_NESTE		BIT(10)
+#define AT_CONTEXT_PASIDE		BIT(11)
 
 /* Queued Invalidation */
 #define QI_LENGTH		256	/* queue length */
