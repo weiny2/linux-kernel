@@ -525,9 +525,9 @@ static int hfi_read_one_master_reg(struct hfi_pportdata *ppd,
 	u64 master_low;		/* 40 bits with 8 bits of overlap */
 	u64 master_high;
 	u64 reg;
-	u64 ns;
 	int ret = -EAGAIN;
 	int ctr = 2;
+	u32 enable, time_inc_shift, snap_freq;
 
 	do {
 		/*
@@ -538,24 +538,26 @@ static int hfi_read_one_master_reg(struct hfi_pportdata *ppd,
 		 * same sample.
 		 */
 		reg = read_csr(ppd->dd, OC_LCB_CFG_TIME_SYNC_0);
-		reg |= 0x1L << (OC_LCB_CFG_TIME_SYNC_0_DISABLE_SNAPS_SHIFT +
-				3 - master_ts->clkid);
+		reg |= 0x1LL << (OC_LCB_CFG_TIME_SYNC_0_DISABLE_SNAPS_SHIFT +
+				 master_ts->clkid);
 		write_csr(ppd->dd, OC_LCB_CFG_TIME_SYNC_0, reg);
 
 		master_low = read_csr(ppd->dd, OC_LCB_STS_MASTER_TIME_LOW_0 +
-					  0x18 * master_ts->clkid) &
+				      0x18 * master_ts->clkid) &
 			OC_LCB_STS_MASTER_TIME_LOW_0_VAL_SMASK;
 		master_high = read_csr(ppd->dd, OC_LCB_STS_MASTER_TIME_HIGH_0 +
-					   0x18 * master_ts->clkid) &
+				       0x18 * master_ts->clkid) &
 			OC_LCB_STS_MASTER_TIME_HIGH_0_VAL_SMASK;
 		master_ts->timestamp = read_csr(ppd->dd,
-				       OC_LCB_STS_SNAPPED_LOCAL_TIME_0 +
-						    0x18 * master_ts->clkid);
-		/* temp hack */
-		ns = read_csr(ppd->dd, OC_LCB_STS_UPPER_LOCAL_TIME);
+					      OC_LCB_STS_SNAPPED_LOCAL_TIME_0 +
+					      0x18 * master_ts->clkid);
 		/* Enable snaps again */
 		reg &= ~OC_LCB_CFG_TIME_SYNC_0_DISABLE_SNAPS_SMASK;
 		write_csr(ppd->dd, OC_LCB_CFG_TIME_SYNC_0, reg);
+		/* Tell Simics to restart this clock_id */
+		simics_decode(&enable, &time_inc_shift, &snap_freq);
+		simics_update_hack_timesync(ppd, enable, master_ts->clkid,
+					    time_inc_shift, snap_freq);
 		/* See if low and high are from the same sample */
 		if ((master_high & 0xff) == (master_low >> 32)) {
 			master_ts->master = (master_high << 32) |
