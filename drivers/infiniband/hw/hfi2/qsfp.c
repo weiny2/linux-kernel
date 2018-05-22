@@ -48,6 +48,7 @@
 #include <linux/delay.h>
 #include <linux/pci.h>
 #include <linux/vmalloc.h>
+#include "chip/fxr_top_defs.h"
 #include "chip/fxr_gbl_defs.h"
 #include "hfi2.h"
 #include "link.h"

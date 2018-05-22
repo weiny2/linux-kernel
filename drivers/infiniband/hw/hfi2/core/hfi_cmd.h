@@ -116,7 +116,7 @@
 #define HFI_SR_INDEX(NI, SR)	(((NI) * HFI_NUM_CT_RESERVED) + (SR))
 /* Command Queues */
 #define HFI_CMDQ_TX_ENTRIES	128
-#define HFI_CMDQ_RX_ENTRIES	16
+#define HFI_CMDQ_RX_ENTRIES	32
 
 /* Defines for backwards compat transports */
 #define HFI_NI_BYPASS		0x3
