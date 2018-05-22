@@ -610,7 +610,6 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	return nslots;
 }
 
-static
 int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 		     u8 mb_opcode, union hfi_tx_cq_command *cmd)
 {
@@ -629,6 +628,8 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 		ah_attr = &qp->remote_ah_attr;
 
 	switch (mb_opcode) {
+	case MB_OC_TX_FLUSH:
+	case MB_OC_RX_FLUSH:
 	case MB_OC_LOCAL_INV:
 	case MB_OC_REG_MR:
 		swqe = kmalloc(sizeof(*swqe), GFP_KERNEL);
@@ -801,6 +802,47 @@ retry:
 	return ret;
 }
 
+static
+int hfi2_flush_wr(struct rvt_qp *qp, struct ib_send_wr *wr,
+		  struct ib_send_wr **bad_wr)
+{
+	int ret;
+	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
+	union hfi_tx_cq_command cmd;
+	int nslots;
+	unsigned long flags;
+
+	spin_lock(&qp->s_lock);
+
+	/* Send UD to nowhere (DLID == 0) to generate flush event */
+	do {
+		nslots = hfi2_generate_wc(qp, wr, MB_OC_TX_FLUSH, &cmd);
+		if (nslots <= 0) {
+			*bad_wr = wr;
+			ret = nslots;
+			break;
+		}
+
+		spin_lock_irqsave(&ctx->tx_cmdq->lock, flags);
+		ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)&cmd, nslots);
+		spin_unlock_irqrestore(&ctx->tx_cmdq->lock, flags);
+
+		/* TODO Add retry logic with STL-34421 */
+	} while ((wr = wr->next));
+
+	spin_unlock(&qp->s_lock);
+
+	return ret;
+}
+
+static
+int hfi2_queue_wr(struct rvt_qp *qp, struct ib_send_wr *wr,
+		  struct ib_send_wr **bad_wr)
+{
+	/* TODO implement QP in SQD state */
+	return 0;
+}
+
 static inline bool native_send_ok(struct rvt_qp *qp)
 {
 	if (unlikely(!(ib_rvt_state_ops[qp->state] & RVT_POST_SEND_OK)))
@@ -813,8 +855,14 @@ int hfi2_native_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 {
 	int ret;
 
-	if (unlikely(qp->state != IB_QPS_RTS))
+	if (unlikely(qp->state != IB_QPS_RTS)) {
+		if (qp->state >= IB_QPS_SQE)
+			return hfi2_flush_wr(qp, wr, bad_wr);
+		else if (qp->state == IB_QPS_SQD)
+			return hfi2_queue_wr(qp, wr, bad_wr);
+		*bad_wr = wr;
 		return -EINVAL;
+	}
 	/* TODO - need to implement SQD / SQE */
 	if (!native_send_ok(qp))
 		return -EINVAL;

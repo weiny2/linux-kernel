@@ -559,7 +559,7 @@ err:
  * If caller passes slid = zero, this formats command to clear the entry.
  */
 int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
-			u32 slid, u16 ipid, u64 user_ptr,
+			u32 slid, u16 ipid, u64 user_ptr, u8 state, bool failed,
 			union hfi_rx_cq_command *cmd)
 {
 	union ptentry_verbs qp_state;
@@ -576,7 +576,7 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 	qp_state.val[2] = 0;
 	qp_state.val[3] = 0;
 	if (slid) {
-		qp_state.nack = 0;
+		qp_state.nack = state;
 		qp_state.pd = pd_handle;
 		qp_state.slid = slid;
 		qp_state.enable = 1;
@@ -586,7 +586,7 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 		qp_state.tpid = rq->hw_ctx->pid;
 		qp_state.ipid = ipid;
 		qp_state.eq_handle = eq ? eq->idx : 0;
-		qp_state.failed = 0;
+		qp_state.failed = failed;
 		qp_state.ud = (ibqp->qp_type == IB_QPT_UD);
 		qp_state.qp = 1;
 		qp_state.user_id = rq->hw_ctx->ptl_uid;
@@ -611,7 +611,8 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 }
 
 static int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
-			    struct rvt_qp *qp, u32 slid, u16 ipid)
+			    struct rvt_qp *qp, u32 slid, u16 ipid,
+			    u8 state, bool failed)
 {
 	struct ib_qp *ibqp = &qp->ibqp;
 	int ret, nslots;
@@ -620,7 +621,7 @@ static int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
 	union hfi_rx_cq_command rx_cmd;
 
 	nslots = hfi_format_qp_write(rq, ibqp, slid, ipid, (u64)&done,
-				     &rx_cmd);
+				     state, failed, &rx_cmd);
 	mutex_lock(&rq->hw_ctx->rx_mutex);
 	spin_lock_irqsave(&rx_cmdq->lock, flags);
 	do {
@@ -703,13 +704,61 @@ void hfi2_native_reset_qp(struct rvt_qp *qp)
 
 	/* Clear the QPN to PID mapping */
 	ctx = obj_to_ibctx(ibqp);
-	ret = hfi_set_qp_state(ctx->rx_cmdq, rq, qp, 0, 0);
+	ret = hfi_set_qp_state(ctx->rx_cmdq, rq, qp, 0, 0, VERBS_OK, false);
 	/* TODO */
 	WARN_ON(ret != 0);
 
 	if (!ibqp->srq)
 		hfi_deinit_hw_rq(ctx, rq);
 	qp->r_rq.hw_rq = NULL;
+}
+
+static
+int hfi2_flush_cq(struct rvt_qp *qp, struct ib_cq *ibcq)
+{
+	struct rvt_cq *cq = ibcq_to_rvtcq(ibcq);
+	struct hfi_eq *eq = cq->hw_cq;
+	int kind, i, ret;
+	u64 *eqe = NULL;
+	union target_EQEntry *teq;
+	union target_EQEntry *ieq;
+	bool dropped;
+	unsigned long flags;
+	int qp_num;
+
+	spin_lock_irqsave(&cq->lock, flags);
+	for (i = 0;; ++i) {
+		ret = hfi_eq_peek_nth(eq, &eqe, i, &dropped);
+		if (ret < 0) {
+			spin_unlock_irqrestore(&cq->lock, flags);
+			return ret;
+		} else if (ret == HFI_EQ_EMPTY) {
+			spin_unlock_irqrestore(&cq->lock, flags);
+			return i;
+		}
+		kind = ((union target_EQEntry *)eqe)->event_kind;
+		qp_num = qp->ibqp.qp_num;
+		switch (kind) {
+		case NON_PTL_EVENT_VERBS_RX:
+			teq = (union target_EQEntry *)eq;
+			if (qp_num == EXTRACT_HD_DST_QP(teq->hdr_data)) {
+				teq->match_bits = FMT_VOSTLNP_MB(MB_OC_QP_RESET,
+								 qp_num, 0);
+			}
+			break;
+		case NON_PTL_EVENT_VERBS_TX:
+			ieq = (union target_EQEntry *)eq;
+			if (qp_num == EXTRACT_MB_SRC_QP(ieq->match_bits)) {
+				ieq->match_bits = FMT_VOSTLNP_MB(MB_OC_QP_RESET,
+								 qp_num, 0);
+			}
+			break;
+		default:
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&cq->lock, flags);
+	return 0;
 }
 
 int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
@@ -719,6 +768,7 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 	struct hfi2_qp_priv *priv = rvtqp->priv;
 	struct hfi_ibcontext *ctx = obj_to_ibctx(ibqp);
 	struct rvt_cq *cq;
+	u64 result[2];
 	int ret;
 
 	if (!ctx || !ctx->supports_native)
@@ -795,7 +845,7 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		 * Per IBTA, QPs cannot process incoming messages until RTR.
 		 */
 		ret = hfi_set_qp_state(ctx->rx_cmdq, rq, rvtqp, PTL_LID_ANY,
-				       PTL_PID_ANY);
+				       PTL_PID_ANY, VERBS_OK, false);
 		if (ret != 0)
 			goto qp_write_err;
 
@@ -823,14 +873,102 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		pr_info("native: QPN %d at RTR and enabled for Portals\n",
 			ibqp->qp_num);
 
-	} else if (attr_mask & IB_QP_STATE &&
-		   attr->qp_state == IB_QPS_RTS) {
+	} else if ((attr_mask & IB_QP_STATE) &&
+		   (attr->qp_state == IB_QPS_RTS)) {
 		/* create send EQ if first use of CQ */
 		cq = ibcq_to_rvtcq(ibqp->send_cq);
 		if (cq && !cq->hw_cq) {
 			ret = hfi_ib_eq_setup(rvtqp->r_rq.hw_rq, cq);
 			if (ret != 0)
 				goto qp_write_err;
+		}
+	} else if ((attr_mask & IB_QP_STATE) &&
+		   (attr->qp_state == IB_QPS_SQD)) {
+		/* TODO Need to handle case QPS_SQD */
+		/* FIXME - How to ensure triggered slots not leaked */
+		pr_warn("generate wc? QPN 0x%x state = %d\n",
+			ibqp->qp_num, rvtqp->state);
+	} else if (attr_mask & IB_QP_STATE &&
+		    (attr->qp_state == IB_QPS_ERR ||
+		     attr->qp_state == IB_QPS_RESET)) {
+		struct hfi_rq_wc *hfi_wc;
+		struct hfi_rq *rq = (struct hfi_rq *)rvtqp->r_rq.hw_rq;
+		unsigned long flags;
+		struct hfi_ctx *hw_ctx;
+		int dlid = rdma_ah_get_dlid(&rvtqp->remote_ah_attr);
+
+		ret = hfi_set_qp_state(ctx->rx_cmdq, rvtqp->r_rq.hw_rq,
+				       rvtqp, dlid, PTL_PID_ANY,
+				       UNCORRECTABLE, true);
+		if (ret != 0)
+			goto qp_write_err;
+
+		while (!ibqp->srq) {
+			result[0] = 0;
+			/* Unlink head of list */
+			mutex_lock(&ctx->hw_ctx->rx_mutex);
+			spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
+			ret = hfi_recvq_unlink(ctx->rx_cmdq, NATIVE_NI,
+					       rq->hw_ctx,
+					       rq->recvq_root,
+					       (u64)result);
+			spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
+			if (ret != 0) {
+				mutex_unlock(&ctx->hw_ctx->rx_mutex);
+				goto qp_write_err;
+			}
+
+			ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, result);
+			mutex_unlock(&ctx->hw_ctx->rx_mutex);
+			if (ret != 0)
+				goto qp_write_err;
+
+			/* Check fail type */
+			if (result[0] & 0x7fffffffffffffffull)
+				break;
+
+			/* Reuse List Entry */
+			hfi_wc = (struct hfi_rq_wc *)result[1];
+
+			if (!hfi_wc->is_qp) {
+				hw_ctx = hfi_wc->rq->hw_ctx;
+				ret = hfi2_push_key(&hfi_wc->rq->ded_me_ks,
+						    hfi_wc->list_handle);
+				if (ret != 0)
+					ret = hfi2_push_key(hw_ctx->shr_me_ks,
+							    hfi_wc->list_handle);
+				if (ret != 0)
+					goto qp_write_err;
+			}
+
+			/* Generate Flush Event */
+			if (attr->qp_state != IB_QPS_RESET) {
+				struct ib_wc wc;
+
+				memset(&wc, 0, sizeof(wc));
+				wc.qp = ibqp;
+				wc.opcode = IB_WC_RECV;
+				wc.wr_id = hfi_wc->wr_id;
+				wc.status = IB_WC_WR_FLUSH_ERR;
+				rvt_cq_enter(ibcq_to_rvtcq(ibqp->recv_cq),
+					     &wc, 1);
+			}
+			/* Free hfi_rq_wc */
+			kfree(hfi_wc);
+		};
+
+		if (attr->qp_state == IB_QPS_RESET) {
+			ret = hfi2_flush_cq(rvtqp, rvtqp->ibqp.send_cq);
+			if (ret != 0)
+				goto qp_write_err;
+
+			if (rvtqp->ibqp.send_cq !=
+			    rvtqp->ibqp.recv_cq) {
+				ret = hfi2_flush_cq(rvtqp,
+						    rvtqp->ibqp.recv_cq);
+				if (ret != 0)
+					goto qp_write_err;
+			}
 		}
 	}
 
@@ -866,6 +1004,8 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 	u64 addr, length;
 	int ret, i;
 	unsigned long flags;
+	int qp_err_flush = (qp && qp->state == IB_QPS_ERR) &&
+			    !qp->ibqp.srq;
 
 	/* TODO - how to set this? */
 	pd_handle = ibpd->uobject ?
@@ -926,6 +1066,19 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 			rq_wc_p->iov[i].length = wr->sg_list[i].length;
 			rq_wc_p->iov[i].flags = IOVEC_VALID;
 		}
+	}
+
+	if (unlikely(qp_err_flush)) {
+		struct ib_wc wc;
+
+		memset(&wc, 0, sizeof(wc));
+		wc.qp = &qp->ibqp;
+		wc.opcode = IB_WC_RECV;
+		wc.wr_id = wr->wr_id;
+		wc.status = IB_WC_WR_FLUSH_ERR;
+		rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.recv_cq), &wc, 1);
+		kfree(rq_wc_p);
+		return 0;
 	}
 
 	/* Get Free ME */
@@ -1082,6 +1235,15 @@ int hfi2_process_tx_eq(union initiator_EQEntry *eq, struct ib_wc *wc)
 		/* handle errors + flow control */
 		if (unlikely(mb_opcode)) {
 			switch (mb_opcode) {
+			case MB_OC_TX_FLUSH:
+				// FIXME - opcode?
+				wc->status = IB_WC_WR_FLUSH_ERR;
+				break;
+			case MB_OC_RX_FLUSH:
+				wc->opcode = IB_WC_RECV;
+				wc->status = IB_WC_WR_FLUSH_ERR;
+				wc->src_qp = EXTRACT_HD_DST_QP(eq->hdr_data);
+				break;
 			case MB_OC_LOCAL_INV:
 				if (ibqp_to_rvtqp(qp)->state >= IB_QPS_SQE)
 					wc->status = IB_WC_WR_FLUSH_ERR;
@@ -1098,9 +1260,42 @@ int hfi2_process_tx_eq(union initiator_EQEntry *eq, struct ib_wc *wc)
 				wc->vendor_err = VERBS_OK;
 				wc->opcode = IB_WC_REG_MR;
 				break;
+			case MB_OC_QP_RESET:
+				signal = 0;
+				break;
 			}
+
+		} else if (qp && unlikely(ibqp_to_rvtqp(qp)->state >=
+					  IB_QPS_SQE)) {
+			wc->status = IB_WC_WR_FLUSH_ERR;
+		} else if (qp && unlikely(wc->vendor_err ==
+					  PTL_NI_PT_DISABLED)) {
+			/*TODO */
+			pr_warn("Need to handle the PT_DISABLED case");
+			WARN_ON(1);
+		} else if (qp && unlikely(wc->vendor_err != VERBS_OK)) {
+			struct ib_qp_attr attr;
+			int attr_mask = IB_QP_STATE;
+			struct rvt_qp *rvtqp = ibqp_to_rvtqp(qp);
+			struct hfi_rq *rq = (struct hfi_rq *)rvtqp->r_rq.hw_rq;
+			struct hfi_ibcontext *ctx = obj_to_ibctx(qp);
+			int dlid;
+
+			switch (qp->qp_type) {
+			case IB_QPT_RC:
+				dlid = rdma_ah_get_dlid(&rvtqp->remote_ah_attr);
+				attr.qp_state = IB_QPS_ERR;
+				hfi_set_qp_state(ctx->rx_cmdq, rq, rvtqp,
+						 dlid, PTL_PID_ANY,
+						 UNCORRECTABLE, true);
+				break;
+			default:
+				attr.qp_state = IB_QPS_SQE;
+				break;
+			}
+
+			ib_modify_qp(qp, &attr, attr_mask);
 		}
-		/* TODO - port error handling from user provider */
 	}
 
 	/* else we are only freeing IOVEC array */

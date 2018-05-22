@@ -288,16 +288,29 @@ int _hfi_eq_poll_cmd_complete(struct hfi_ctx *ctx, u64 *done)
 		    event->fail_type, event->user_ptr);
 
 		/* Check that the completion event makes sense */
-		if (unlikely(event->event_kind != PTL_CMD_COMPLETE) || dropped)
+		if (unlikely(event->event_kind != PTL_CMD_COMPLETE &&
+			     event->event_kind != PTL_EVENT_ME_READ) || dropped)
 			return -EIO;
 
 		/*
 		 * Update the caller's 'done' flag
 		 * and return the Event fail_type (NB: must be a non-zero value)
 		 */
-		if (event->user_ptr)
-			*(u64 *)event->user_ptr =
-				(event->fail_type | (1ULL << 63));
+		if (event->user_ptr) {
+			if (unlikely(event->event_kind == PTL_EVENT_ME_READ)) {
+				memcpy((void *)event->user_ptr, (void *)event,
+				       sizeof(*event));
+				*(u64 *)event->user_ptr |= (1ULL << 63);
+			} else if (unlikely(event->fail_type ==
+					    PTL_NI_CANCELLED)) {
+				((u64 *)event->user_ptr)[0] = (1ULL << 63);
+				((u64 *)event->user_ptr)[1] = event->hdr_data;
+			} else {
+				*(u64 *)event->user_ptr =
+						(event->fail_type |
+						 (1ULL << 63));
+			}
+		}
 
 		ret = hfi_eq_advance(HFI_EQ_ZERO(ctx, 0), entry);
 		if (unlikely(ret < 0))
