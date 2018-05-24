@@ -124,6 +124,7 @@ enum {
 	HFI2_CTX_EVENT_CMD,
 	HFI2_PT_UPDATE_LOWER,
 	HFI2_AT_PREFETCH,
+	HFI2_CTX_SET_QP,
 };
 
 /* Actions for device object*/
@@ -189,6 +190,16 @@ enum {
 enum {
 	HFI2_PT_UPDATE_CTX_IDX,
 	HFI2_PT_UPDATE_LOWER_ARGS,
+};
+
+/* Attributes for SET QP */
+enum {
+	HFI2_SET_QP_CTX_IDX,
+	HFI2_SET_QP_IDX,
+	HFI2_SET_QP_RECV_EQ_IDX,
+	HFI2_SET_QP_RECVQ_ROOT,
+	HFI2_SET_QP_TPID,
+	HFI2_SET_QP_USER_PTR,
 };
 
 /* Attributes for cmdq assign */
