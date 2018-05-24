@@ -232,6 +232,66 @@ static ssize_t devcntrs_read(struct file *file, char __user *buf,
 	return rval;
 }
 
+/*
+ * Reset PMON counters.
+ * echo 1 > /sys/kernel/debug/hfi2/0/reset_pmon_counters
+ */
+static ssize_t reset_pmon_counters(struct file *f,
+				   const char __user *ubuf,
+				   size_t count, loff_t *ppos)
+{
+	struct hfi_devdata *dd = private2dd(f);
+	u8 val;
+	int ret;
+
+	ret = kstrtou8_from_user(ubuf, count, 0, &val);
+	if (ret < 0)
+		return -EINVAL;
+
+	hfi_cfg_reset_pmon_cntrs(dd);
+	return count;
+}
+
+/*
+ * Reset PMA perf counters.
+ * echo 1 > /sys/kernel/debug/hfi2/0/port1/reset_pma_perf_counters
+ */
+static ssize_t reset_pma_perf_counters(struct file *f,
+				       const char __user *ubuf,
+				       size_t count, loff_t *ppos)
+{
+	struct hfi_pportdata *ppd = private2ppd(f);
+	u8 val;
+	int ret;
+
+	ret = kstrtou8_from_user(ubuf, count, 0, &val);
+	if (ret < 0)
+		return -EINVAL;
+
+	hfi_reset_pma_perf_cntrs(ppd);
+	return count;
+}
+
+/*
+ * Reset PMA error counters.
+ * echo 1 > /sys/kernel/debug/hfi2/0/port1/reset_pma_error_counters
+ */
+static ssize_t reset_pma_error_counters(struct file *f,
+					const char __user *ubuf,
+					size_t count, loff_t *ppos)
+{
+	struct hfi_pportdata *ppd = private2ppd(f);
+	u8 val;
+	int ret;
+
+	ret = kstrtou8_from_user(ubuf, count, 0, &val);
+	if (ret < 0)
+		return -EINVAL;
+
+	hfi_reset_pma_error_cntrs(ppd);
+	return count;
+}
+
 /* read the dc8051 memory */
 static ssize_t dc8051_memory_read(struct file *file, char __user *buf,
 				  size_t count, loff_t *ppos)
@@ -359,12 +419,15 @@ static ssize_t ts_dbg_failover_reg3_write(struct file *f,
 static const struct counter_info cntr_ops[] = {
 	DEBUGFS_OPS("portcounter_names", portcntrnames_read, NULL),
 	DEBUGFS_OPS("devcounter_names", devcntrnames_read, NULL),
-	DEBUGFS_OPS("devcounters", devcntrs_read, NULL)
+	DEBUGFS_OPS("devcounters", devcntrs_read, NULL),
+	DEBUGFS_OPS("reset_pmon_counters", NULL, reset_pmon_counters)
 };
 
 static const struct counter_info port_cntr_ops[] = {
 	DEBUGFS_OPS("portcounters", portcntrs_read, NULL),
 	DEBUGFS_OPS("dc8051_memory", dc8051_memory_read, NULL),
+	DEBUGFS_OPS("reset_pma_perf_counters", NULL, reset_pma_perf_counters),
+	DEBUGFS_OPS("reset_pma_error_counters", NULL, reset_pma_error_counters)
 };
 
 #ifdef CONFIG_HFI2_STLNP
@@ -1122,7 +1185,6 @@ void hfi_dbg_dev_init(struct hfi_devdata *dd)
 			    &_qp_stats_file_ops);
 	debugfs_create_file("driver_stats", 0444, dd->hfi_dev_dbg, dd,
 			    &hfi_driver_stats_ops);
-
 	hfi_mgmt_dbg_init(dd);
 #ifdef CONFIG_HFI2_STLNP
 	hfi_e2e_dbg_init(dd);

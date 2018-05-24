@@ -114,6 +114,7 @@
 
 #define HFI_DRIVER_RESET_RETRIES 10
 #define HFI_UC_RANGE_START	FXR_AT_CSRS
+#define HFI_VL_COUNT	10
 
 #define PKEY_DISABLE_SMASK \
 	FXR_RXE2E_CFG_PTL_PKEY_CHECK_DISABLE_PTL_PKEY_CHECK_DISABLE_SMASK
@@ -879,6 +880,65 @@ static void hfi_set_send_length(struct hfi_pportdata *ppd)
 	smallest_mtu = hfi_get_smallest_mtu(ppd->dd);
 
 	hfi_set_rfs(ppd->dd, smallest_mtu);
+}
+
+void hfi_cfg_reset_pmon_cntrs(struct hfi_devdata *dd)
+{
+	u64 cfg_ctl;
+
+	cfg_ctl = read_csr(dd, FXR_PMON_CFG_CONTROL);
+	cfg_ctl |= FXR_PMON_CFG_CONTROL_RESET_CTRS_SMASK;
+	write_csr(dd, FXR_PMON_CFG_CONTROL, cfg_ctl);
+}
+
+void hfi_reset_pma_perf_cntrs(struct hfi_pportdata *ppd)
+{
+	int i;
+
+	hfi_write_lm_tp_prf_csr(ppd, TP_PRF_XMIT_DATA, 0);
+	write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_DATA_CNT, 0);
+	hfi_write_lm_tp_prf_csr(ppd, TP_PRF_XMIT_PKTS, 0);
+	write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_PKT_CNT, 0);
+	hfi_write_lm_tp_prf_csr(ppd, TP_PRF_MULTICAST_XMIT_PKTS, 0);
+	write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_MCAST_PKT_CNT, 0);
+	hfi_write_lm_tp_prf_csr(ppd, TP_PRF_XMIT_WAIT, 0);
+	write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_FECN, 0);
+	write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_BECN, 0);
+	write_csr(ppd->dd, FXR_FPC_PRF_PORTRCV_BUBBLE, 0);
+
+	for (i = 0; i < HFI_VL_COUNT; i++) {
+		hfi_write_lm_tp_prf_csr(ppd, TP_PRF_XMIT_DATA + i + 1, 0);
+		hfi_write_lm_fpc_prf_per_vl_csr(ppd,
+						FXR_FPC_PRF_PORT_VL_RCV_DATA_CNT
+						, i, 0);
+		hfi_write_lm_tp_prf_csr(ppd, TP_PRF_XMIT_PKTS + i + 1, 0);
+		hfi_write_lm_fpc_prf_per_vl_csr(ppd,
+						FXR_FPC_PRF_PORT_VL_RCV_PKT_CNT,
+						i, 0);
+		hfi_write_lm_tp_prf_csr(ppd, TP_PRF_XMIT_WAIT + i + 1, 0);
+		hfi_write_lm_fpc_prf_per_vl_csr(ppd,
+						FXR_FPC_PRF_PORT_VL_RCV_FECN, i,
+						0);
+		hfi_write_lm_fpc_prf_per_vl_csr(ppd,
+						FXR_FPC_PRF_PORT_VL_RCV_BECN, i,
+						0);
+		hfi_write_lm_fpc_prf_per_vl_csr(ppd,
+						FXR_FPC_PRF_PORT_VL_RCV_BUBBLE,
+						i, 0);
+		hfi_write_lm_tp_prf_csr(ppd, TP_ERR_XMIT_DISCARD + i + 1, 0);
+	}
+}
+
+void hfi_reset_pma_error_cntrs(struct hfi_pportdata *ppd)
+{
+	write_csr(ppd->dd, FXR_FPC_ERR_PORTRCV_CONSTRAINT_ERROR, 0);
+	write_csr(ppd->dd, FXR_FPC_ERR_PORTRCV_PHY_REMOTE_ERROR, 0);
+	write_csr(ppd->dd, OC_LCB_ERR_INFO_TX_REPLAY_CNT, 0);
+	write_csr(ppd->dd, OC_LCB_ERR_INFO_RX_REPLAY_CNT, 0);
+	write_csr(ppd->dd, FXR_FPC_ERR_PORTRCV_ERROR, 0);
+	write_csr(ppd->dd, FXR_LM_ERR_INFO3, 0);
+	write_csr(ppd->dd, FXR_FPC_ERR_FMCONFIG_ERROR, 0);
+	write_csr(ppd->dd, FXR_FPC_ERR_UNCORRECTABLE_ERROR, 0);
 }
 
 void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable)

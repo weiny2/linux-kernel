@@ -1454,6 +1454,9 @@ int hfi_set_buffer_control(struct hfi_pportdata *ppd,
 			   struct buffer_control *new_bc);
 void hfi_write_qp_state_csrs(struct hfi_devdata *dd, void *qp_state_base,
 			     u32 max_qpn);
+void hfi_cfg_reset_pmon_cntrs(struct hfi_devdata *dd);
+void hfi_reset_pma_perf_cntrs(struct hfi_pportdata *ppd);
+void hfi_reset_pma_error_cntrs(struct hfi_pportdata *ppd);
 void hfi_cfg_out_pkey_check(struct hfi_pportdata *ppd, u8 enable);
 void hfi_cfg_in_pkey_check(struct hfi_pportdata *ppd, u8 enable);
 void hfi_cfg_lm_pkey_check(struct hfi_pportdata *ppd, u8 enable);
