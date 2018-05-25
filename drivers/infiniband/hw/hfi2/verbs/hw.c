@@ -879,6 +879,11 @@ err:
 	return ret;
 }
 
+void *hfi2_rcv_get_ebuf_ptr(struct hfi2_ibrcv *rcv, u16 idx, u32 offset)
+{
+	return rcv->egr_base + (idx * HFI_IB_EAGER_SIZE) + offset;
+}
+
 void *hfi2_rcv_get_ebuf(struct hfi2_ibrcv *rcv, u16 idx, u32 offset)
 {
 	/*
@@ -890,7 +895,7 @@ void *hfi2_rcv_get_ebuf(struct hfi2_ibrcv *rcv, u16 idx, u32 offset)
 	rcv->egr_pending_update += !!(rcv->egr_last_idx != idx);
 
 	rcv->egr_last_idx = idx;
-	return rcv->egr_base + (idx * HFI_IB_EAGER_SIZE) + offset;
+	return hfi2_rcv_get_ebuf_ptr(rcv, idx, offset);
 }
 
 /*

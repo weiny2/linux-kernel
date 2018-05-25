@@ -626,7 +626,7 @@ void prescan_rxq(struct hfi2_ibrcv *rcv)
 				continue;
 			idx = rhf_egr_index(*rhf_entry);
 			off = rhf_egr_buf_offset(*rhf_entry);
-			packet->ebuf = hfi2_rcv_get_ebuf(rcv, idx, off);
+			packet->ebuf = hfi2_rcv_get_ebuf_ptr(rcv, idx, off);
 			l4 = hfi2_16B_get_l4(packet->hdr);
 			if (l4 == HFI1_L4_IB_LOCAL) {
 				packet->ohdr = packet->ebuf;
@@ -648,7 +648,7 @@ void prescan_rxq(struct hfi2_ibrcv *rcv)
 				rcu_read_lock();
 				qp = rvt_lookup_qpn(&ibp->ibd->rdi, &ibp->rvp,
 						    qp_num);
-				if (!packet->qp) {
+				if (!qp) {
 					rcu_read_unlock();
 					continue;
 				}

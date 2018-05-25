@@ -392,6 +392,7 @@ bool hfi2_is_verbs_resp_sl(struct hfi_pportdata *ppd, u8 sl);
 int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 		  union hfi2_packet_header *ph, size_t hwords);
 void *hfi2_rcv_get_ebuf(struct hfi2_ibrcv *rcv, u16 idx, u32 offset);
+void *hfi2_rcv_get_ebuf_ptr(struct hfi2_ibrcv *rcv, u16 idx, u32 offset);
 void hfi2_rcv_advance(struct hfi2_ibrcv *rcv, u64 *rhf_entry);
 int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry);
 int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
