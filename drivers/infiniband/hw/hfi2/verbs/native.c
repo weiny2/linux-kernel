@@ -605,7 +605,8 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 	union ptentry_verbs qp_state;
 	u32 pd_handle;
 	struct rvt_cq *cq = ibcq_to_rvtcq(ibqp->recv_cq);
-	struct hfi_eq *eq = cq ? cq->hw_cq : NULL;
+	struct hfi_ibeq *eq = cq ? list_first_entry(&cq->hw_cq, struct hfi_ibeq,
+						    hw_cq) : NULL;
 
 	pd_handle = to_pd_handle(ibqp->pd);
 	/* setup qp state */
@@ -623,7 +624,7 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 		qp_state.recvq_root = rq->recvq_root;
 		qp_state.tpid = rq->hw_ctx->pid;
 		qp_state.ipid = ipid;
-		qp_state.eq_handle = eq ? eq->idx : 0;
+		qp_state.eq_handle = eq ? eq->eq.idx : 0;
 		qp_state.failed = failed;
 		qp_state.ud = (ibqp->qp_type == IB_QPT_UD);
 		qp_state.qp = 1;
@@ -676,46 +677,43 @@ int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq, struct hfi_rq *rq,
 static int hfi_ib_eq_setup(struct hfi_rq *rq, struct rvt_cq *cq)
 {
 	struct opa_ev_assign eq_alloc = {0};
-	struct hfi_eq *eq;
+	struct hfi_ibeq *ibeq;
 	int ret;
 
 	eq_alloc.ni = NATIVE_NI;
 	eq_alloc.count = adjust_cqe(cq->ibcq.cqe);
-	cq->hw_disarmed = 1;
-	cq->hw_cq = hfi_eq_alloc(rq->hw_ctx, &eq_alloc);
-	if (IS_ERR(cq->hw_cq)) {
-		ret = PTR_ERR(cq->hw_cq);
-		cq->hw_cq = NULL;
+	ibeq = hfi_ibeq_alloc(rq->hw_ctx, &eq_alloc);
+	if (IS_ERR(ibeq)) {
+		ret = PTR_ERR(ibeq);
 		return ret;
 	}
 
-	if (cq->notify & IB_CQ_SOLICITED_MASK) {
-		u64 done = 0;
+	list_add_tail(&ibeq->hw_cq, &cq->hw_cq);
 
+	if (cq->notify & IB_CQ_SOLICITED_MASK) {
 		/* arm the HW event queue for interrupts */
-		eq = cq->hw_cq;
+		ibeq->hw_armed = 0;
 		mutex_lock(&rq->hw_ctx->rx_mutex);
-		ret = hfi_ib_eq_arm(rq->hw_ctx, eq->idx,
+		ret = hfi_ib_cq_arm(rq->hw_ctx, &cq->ibcq,
 				    (cq->notify & IB_CQ_SOLICITED_MASK)
-				    == IB_CQ_SOLICITED, &cq->ibcq,
-				    (u64)&done, (u64)&cq->hw_disarmed);
+				    == IB_CQ_SOLICITED);
 		if (ret)
 			goto eq_err;
 
 		/* wait completion to turn on interrupt */
-		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &done);
+		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &ibeq->hw_armed);
 		if (ret)
 			goto eq_err;
+		ibeq->hw_disarmed = 0; /* arming succeeded */
 		mutex_unlock(&rq->hw_ctx->rx_mutex);
-		cq->hw_disarmed = 0; /* arming succeeded */
 	}
 
 	return 0;
 
 eq_err:
 	mutex_unlock(&rq->hw_ctx->rx_mutex);
-	hfi_eq_free(eq);
-	cq->hw_cq =  NULL;
+	list_del(&ibeq->hw_cq);
+	hfi_eq_free((struct hfi_eq *)&ibeq);
 	return ret;
 }
 
@@ -744,7 +742,8 @@ static
 int hfi2_flush_cq(struct rvt_qp *qp, struct ib_cq *ibcq)
 {
 	struct rvt_cq *cq = ibcq_to_rvtcq(ibcq);
-	struct hfi_eq *eq = cq->hw_cq;
+	struct hfi_ibeq *ibeq = list_first_entry(&cq->hw_cq, struct hfi_ibeq,
+						 hw_cq);
 	int kind, i, ret;
 	u64 *eqe = NULL;
 	union target_EQEntry *teq;
@@ -755,7 +754,7 @@ int hfi2_flush_cq(struct rvt_qp *qp, struct ib_cq *ibcq)
 
 	spin_lock_irqsave(&cq->lock, flags);
 	for (i = 0;; ++i) {
-		ret = hfi_eq_peek_nth(eq, &eqe, i, &dropped);
+		ret = hfi_eq_peek_nth(&ibeq->eq, &eqe, i, &dropped);
 		if (ret < 0) {
 			spin_unlock_irqrestore(&cq->lock, flags);
 			return ret;
@@ -767,18 +766,16 @@ int hfi2_flush_cq(struct rvt_qp *qp, struct ib_cq *ibcq)
 		qp_num = qp->ibqp.qp_num;
 		switch (kind) {
 		case NON_PTL_EVENT_VERBS_RX:
-			teq = (union target_EQEntry *)eq;
-			if (qp_num == EXTRACT_HD_DST_QP(teq->hdr_data)) {
+			teq = (union target_EQEntry *)eqe;
+			if (qp_num == EXTRACT_HD_DST_QP(teq->hdr_data))
 				teq->match_bits = FMT_VOSTLNP_MB(MB_OC_QP_RESET,
 								 qp_num, 0);
-			}
 			break;
 		case NON_PTL_EVENT_VERBS_TX:
-			ieq = (union target_EQEntry *)eq;
-			if (qp_num == EXTRACT_MB_SRC_QP(ieq->match_bits)) {
+			ieq = (union target_EQEntry *)eqe;
+			if (qp_num == EXTRACT_MB_SRC_QP(ieq->match_bits))
 				ieq->match_bits = FMT_VOSTLNP_MB(MB_OC_QP_RESET,
 								 qp_num, 0);
-			}
 			break;
 		default:
 			break;
@@ -884,7 +881,7 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		 * for responding to RNR with exception packet.
 		 */
 		cq = ibcq_to_rvtcq(ibqp->send_cq);
-		if (cq && !cq->hw_cq) {
+		if (cq && list_empty(&cq->hw_cq)) {
 			ret = hfi_ib_eq_setup(rvtqp->r_rq.hw_rq, cq);
 			if (ret != 0)
 				goto qp_write_err;
@@ -892,7 +889,7 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 
 		/* create recv EQ if first use of CQ */
 		cq = ibcq_to_rvtcq(ibqp->recv_cq);
-		if (cq && !cq->hw_cq) {
+		if (cq && list_empty(&cq->hw_cq)) {
 			ret = hfi_ib_eq_setup(rq, cq);
 			if (ret != 0)
 				goto qp_write_err;
@@ -945,7 +942,11 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 						 NATIVE_RC, ah_attr->sl,
 						 priv->pkey,
 						 rdma_ah_get_path_bits(ah_attr),
-						 NATIVE_AUTH_IDX, cq->hw_cq,
+						 NATIVE_AUTH_IDX,
+						 (struct hfi_eq *)
+						 list_first_entry(&cq->hw_cq,
+								  struct hfi_ibeq,
+								  hw_cq),
 						 ibqp->qp_num,
 						 &priv->cmd[i]);
 		}
@@ -1507,7 +1508,8 @@ int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc,
 int hfi2_fence(struct hfi_ibcontext *ctx, struct rvt_qp *qp, u32 *fence_value)
 {
 	struct rvt_cq *cq = ibcq_to_rvtcq(qp->ibqp.recv_cq);
-	struct hfi_eq *eq = cq->hw_cq;
+	struct hfi_ibeq *ibeq = list_first_entry(&cq->hw_cq, struct hfi_ibeq,
+						 hw_cq);
 	u64 *eqe = NULL;
 	int kind, ret;
 	bool dropped;
@@ -1520,7 +1522,7 @@ start:
 
 	while (true) {
 		spin_lock_irqsave(&cq->lock, flags);
-		ret = hfi_eq_peek_nth(eq, &eqe, 0, &dropped);
+		ret = hfi_eq_peek_nth(&ibeq->eq, &eqe, 0, &dropped);
 		if (ret < 0) {
 			spin_unlock_irqrestore(&cq->lock, flags);
 			return ret;
@@ -1533,7 +1535,7 @@ start:
 
 		switch (kind) {
 		case NON_PTL_EVENT_VERBS_RX:
-			ret = hfi2_process_rx_eq((union target_EQEntry *)eq,
+			ret = hfi2_process_rx_eq((union target_EQEntry *)eqe,
 						 &wc, cq);
 			if (ret < 0) {
 				spin_unlock_irqrestore(&cq->lock, flags);
@@ -1542,17 +1544,17 @@ start:
 			rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.send_cq), &wc, 1);
 			break;
 		case NON_PTL_EVENT_VERBS_TX:
-			hfi2_process_tx_eq(ctx, (union initiator_EQEntry *)eq,
+			hfi2_process_tx_eq(ctx, (union initiator_EQEntry *)eqe,
 					   NULL);
 			break;
 		default:
 			pr_err("Unknown event kind %d\n", kind);
 			spin_unlock_irqrestore(&cq->lock, flags);
-			hfi_eq_advance(eq, eqe);
+			hfi_eq_advance(&ibeq->eq, eqe);
 			return -EINVAL;
 		}
 		spin_unlock_irqrestore(&cq->lock, flags);
-		hfi_eq_advance(eq, eqe);
+		hfi_eq_advance(&ibeq->eq, eqe);
 
 		if (*fence_value == 0)
 			return 0;
@@ -1593,7 +1595,7 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(ibcq);
 	struct rvt_cq *cq = ibcq_to_rvtcq(ibcq);
-	struct hfi_eq *eq = cq->hw_cq;
+	struct hfi_ibeq *ibeq;
 	u64 *eqe = NULL;
 	int kind, ret, i = 0;
 	struct rvt_cq_wc *rvt_wc;
@@ -1601,8 +1603,10 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 	unsigned long flags;
 	u32 head, tail;
 
-	if (!ctx || !ctx->supports_native || !eq)
+	if (!ctx || !ctx->supports_native || list_empty(&cq->hw_cq))
 		return rvt_poll_cq(ibcq, ne, wc);
+
+	ibeq = list_first_entry(&cq->hw_cq, struct hfi_ibeq, hw_cq);
 
 	while (i < ne) {
 		spin_lock_irqsave(&cq->lock, flags);
@@ -1624,7 +1628,7 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 				return i;
 		}
 		spin_lock_irqsave(&cq->lock, flags);
-		ret = hfi_eq_peek_nth(eq, &eqe, 0, &dropped);
+		ret = hfi_eq_peek_nth(&ibeq->eq, &eqe, 0, &dropped);
 		if (ret < 0) {
 			spin_unlock_irqrestore(&cq->lock, flags);
 			return ret;
@@ -1646,11 +1650,11 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 			break;
 		default:
 			pr_err("Unknown event kind %d\n", kind);
-			hfi_eq_advance(eq, eqe);
+			hfi_eq_advance(&ibeq->eq, eqe);
 			spin_unlock_irqrestore(&cq->lock, flags);
 			return -EINVAL;
 		}
-		hfi_eq_advance(eq, eqe);
+		hfi_eq_advance(&ibeq->eq, eqe);
 		spin_unlock_irqrestore(&cq->lock, flags);
 	}
 
@@ -1661,27 +1665,40 @@ int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(ibcq);
 	struct rvt_cq *cq = ibcq_to_rvtcq(ibcq);
-	struct hfi_eq *eq = cq->hw_cq;
+	struct hfi_ibeq *ibeq;
 	int ret;
-	u64 done = 0;
 
 	ret = rvt_req_notify_cq(ibcq, flags);
-	if (ret || !ctx->supports_native || !eq)
+	if (ret || !ctx->supports_native || list_empty(&cq->hw_cq))
 		return ret;
 
+	ibeq = list_first_entry(&cq->hw_cq, struct hfi_ibeq, hw_cq);
+
 	/* check if already armed */
-	if (!cq->hw_disarmed)
+	if (hfi_ib_cq_armed(ibcq))
 		return 0;
+	/* check if this the first interrupt call */
+	if (cq->eqm) {
+		/* wait completion to turn off interrupt */
+		mutex_lock(&ibeq->eq.ctx->rx_mutex);
+		ret = hfi_eq_poll_cmd_complete(ibeq->eq.ctx,
+					       &ibeq->hw_disarmed);
+		if (ret)
+			return ret;
+		mutex_unlock(&ibeq->eq.ctx->rx_mutex);
+	}
+	ibeq->hw_armed = 0;
 
 	/* arm the HW event queue for interrupts */
-	ret = hfi_ib_eq_arm(eq->ctx, eq->idx,
-			    (flags & IB_CQ_SOLICITED_MASK) == IB_CQ_SOLICITED,
-			    ibcq, (u64)&done, (u64)&cq->hw_disarmed);
+	ret = hfi_ib_cq_arm(ibeq->eq.ctx, ibcq,
+			    (flags & IB_CQ_SOLICITED_MASK) == IB_CQ_SOLICITED);
 	if (!ret) {
 		/* wait completion to turn on interrupt */
-		ret = hfi_eq_poll_cmd_complete(eq->ctx, &done);
+		mutex_lock(&ibeq->eq.ctx->rx_mutex);
+		ret = hfi_eq_poll_cmd_complete(ibeq->eq.ctx, &ibeq->hw_armed);
 		if (!ret)
-			cq->hw_disarmed = 0; /* arming succeeded */
+			ibeq->hw_disarmed = 0; /* arming succeeded */
+		mutex_unlock(&ibeq->eq.ctx->rx_mutex);
 	}
 
 	return ret;
@@ -1696,4 +1713,29 @@ int hfi2_destroy_srq(struct ib_srq *ibsrq)
 		srq->rq.hw_rq = NULL;
 	}
 	return rvt_destroy_srq(ibsrq);
+}
+
+int hfi2_destroy_cq(struct ib_cq *ibcq)
+{
+	struct rvt_cq *rcq = rcq = ibcq_to_rvtcq(ibcq);
+	struct hfi_ibeq *ibeq, *next;
+	int ret;
+	unsigned long flags;
+
+	ret = hfi_ib_cq_disarm_irq(ibcq);
+	if (ret)
+		return ret;
+
+	spin_lock_irqsave(&rcq->lock, flags);
+	if (!list_empty(&rcq->hw_cq)) {
+		list_for_each_entry_safe(ibeq, next, &rcq->hw_cq, hw_cq) {
+			if (ibeq->eq.ctx->type == HFI_CTX_TYPE_KERNEL)
+				hfi_eq_free((struct hfi_eq *)ibeq);
+			else
+				kfree(ibeq);
+		}
+	}
+	spin_unlock_irqrestore(&rcq->lock, flags);
+
+	return rvt_destroy_cq(ibcq);
 }

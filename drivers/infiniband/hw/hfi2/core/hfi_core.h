@@ -188,6 +188,20 @@ struct hfi_eq {
 	u32 *head_addr;
 };
 
+/*
+ * struct hfi_ibeq - IB Event Queue
+ * @eq: Event Queue
+ * @hw_armed: used by kernel IB CQ to signal interrupt arming command completed
+ * @hw_disarmed: used by kernel IB CQ to signal disarming command completed
+ * @hw_cq: if EQ is an IB CQ points to next EQ associated with IB CQ
+ */
+struct hfi_ibeq {
+	struct hfi_eq eq;
+	u64 hw_armed;
+	u64 hw_disarmed;
+	struct list_head hw_cq;
+};
+
 /**
  * struct hfi_ctx - state for HFI resources assigned to this context
  * @devdata: HFI device specific data, private to the hardware driver

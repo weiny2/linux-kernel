@@ -271,6 +271,7 @@ struct ib_cq *rvt_create_cq(struct ib_device *ibdev,
 	INIT_LIST_HEAD(&cq->poll_qp);
 	kthread_init_work(&cq->comptask, send_complete);
 	cq->queue = wc;
+	INIT_LIST_HEAD(&cq->hw_cq);
 
 	ret = &cq->ibcq;
 
@@ -307,6 +308,7 @@ int rvt_destroy_cq(struct ib_cq *ibcq)
 		kref_put(&cq->ip->ref, rvt_release_mmap_info);
 	else
 		vfree(cq->queue);
+	kfree(cq->eqm);
 	kfree(cq);
 
 	return 0;

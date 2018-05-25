@@ -74,7 +74,9 @@
 				rdma_ah_get_path_bits(&(qp)->remote_ah_attr), \
 				NATIVE_AUTH_IDX, (hfi_user_ptr_t)NULL, \
 				(qp)->ibqp.qp_num, (qp)->remote_qpn, (t), \
-				ibcq_to_rvtcq((qp)->ibqp.send_cq)->hw_cq, \
+				(struct hfi_eq *) \
+				list_first_entry(&ibcq_to_rvtcq((qp)->ibqp.send_cq)->hw_cq,\
+						 struct hfi_ibeq, hw_cq),\
 				0, PTL_RC_EXCEPTION, \
 				&(cmd)->buff_put_match)
 #define PTL_EVENT_KIND_SHIFT       56
@@ -151,7 +153,10 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	/* Walk EQs to find all commands that need to be retransmitted */
 	for (i = 0; outstanding_cmd; ++i) {
 		do {
-			ret = hfi_eq_peek_nth((struct hfi_eq *)cq->hw_cq,
+			ret = hfi_eq_peek_nth((struct hfi_eq *)
+					      list_first_entry(&cq->hw_cq,
+							       struct hfi_ibeq,
+							       hw_cq),
 					      &eq_p, i,
 					      &dropped);
 			if (ret < 0) {

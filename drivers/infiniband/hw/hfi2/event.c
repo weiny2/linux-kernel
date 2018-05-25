@@ -65,10 +65,10 @@
 /*
  * Event Channel Operation Mode
  */
-#define HFI_EC_MODE_EQ		0x1
-#define HFI_EC_MODE_CT		0x2
-#define HFI_EC_MODE_EQ_SELF	0x4
-#define HFI_EC_MODE_CT_SELF	0x8
+#define HFI_EC_MODE_EQ		0x01
+#define HFI_EC_MODE_CT		0x02
+#define HFI_EC_MODE_EQ_SELF	0x04
+#define HFI_EC_MODE_CT_SELF	0x08
 #define HFI_EC_MODE_IB		0x10
 
 /*
@@ -130,6 +130,7 @@ struct hfi_eq_mgmt {
  * @npages: number of pages pinned for this eq
  * @pages: array of struct page pointers used to pin the eq buffer
  * @vaddr: user space page aligned virtual address of the EQ buffer
+ * @ibeq: pointer to user space hfi_ibeq structure allocated for native verbs
  */
 struct hfi_eq_ctx {
 	struct hfi_ctx *ctx;
@@ -137,6 +138,7 @@ struct hfi_eq_ctx {
 	int npages;
 	struct page **pages;
 	unsigned long vaddr;
+	struct hfi_ibeq *ibeq;
 };
 
 static int hfi_eq_setup(struct hfi_ctx *ctx,
@@ -151,10 +153,10 @@ static void hfi_eq_unlink(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm);
 
 static
 int _hfi_eq_update_intr(struct hfi_ctx *ctx, struct hfi_cmdq *rx_cq,
-			u16 eq_idx, int irq, u64 user_ptr,
+			u16 eq_idx, int irq, u8 solicit, u64 user_ptr,
 			union hfi_rx_cq_command *cmd)
 {
-	u64 payload0, mask0;
+	u64 payload0, payload1, mask0, mask1;
 	int cmd_slots;
 
 	/*
@@ -167,9 +169,16 @@ int _hfi_eq_update_intr(struct hfi_ctx *ctx, struct hfi_cmdq *rx_cq,
 	if (irq < 0) {
 		payload0 = 0;
 		mask0 = EQD_I_MASK;
+		payload1 = 0;
+		mask1 = EQD_S_MASK;
 	} else {
 		payload0 = EQD_I_MASK | (((u64)irq & 0xFF) << EQD_IRQ_LSB);
 		mask0 = EQD_I_MASK | EQD_IRQ_MASK;
+		if (solicit)
+			payload1 = EQD_S_MASK;
+		else
+			payload1 = 0;
+		mask1 = EQD_S_MASK;
 	}
 	cmd_slots = hfi_format_rx_update64(ctx,
 					   eq_idx >> RX_D5_CT_HANDLE_WIDTH,
@@ -181,11 +190,11 @@ int _hfi_eq_update_intr(struct hfi_ctx *ctx, struct hfi_cmdq *rx_cq,
 						/* truncated to 11-bits */
 					   payload0,
 						/* payload0 */
-					   0x0000000000000000,
+					   payload1,
 						/* payload1 */
 					   mask0,
 						/* mask0 */
-					   0x0000000000000000,
+					   mask1,
 						/* mask1 */
 					   user_ptr,
 						/* user_ptr */
@@ -655,7 +664,6 @@ int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	}
 	/* set index to return to user */
 	eq_assign->ev_idx = eq_idx;
-
 	if (eqm) {
 		struct hfi_irq_entry *me;
 		u32 *eq_head_array;
@@ -1159,12 +1167,16 @@ static int hfi_ec_remove(int ec_idx, void *idr_ptr, void *idr_ctx)
 	return 0;
 }
 
-static void hfi_ib_eq_isr(struct hfi_eq_mgmt *eqm)
+static void hfi_ib_cq_isr(struct hfi_eq_mgmt *eqm)
 {
-	struct hfi_ctx *ctx = eqm->cookie;
 	struct ib_cq *ibcq = eqm->ibcq;
 	struct rvt_cq *cq = ibcq_to_rvtcq(ibcq);
-	int ret;
+	struct hfi_devdata *dd;
+	union eqd *eq_desc_base;
+	union eqd eq_desc;
+	union hfi_rx_cq_command cmd;
+	int ret, slots;
+	struct hfi_ibeq *ibeq;
 
 	/*
 	 * TODO - this use of cq is unsafe until we hook into
@@ -1182,14 +1194,44 @@ static void hfi_ib_eq_isr(struct hfi_eq_mgmt *eqm)
 		spin_unlock(&cq->rdi->n_cqs_lock);
 	}
 
-	if (ctx->type == HFI_CTX_TYPE_USER) {
-		eqm->ibcq = NULL;
-		/* disarm  interrupt */
-		ret = hfi_eq_disarm(ctx, eqm, eqm->user_handle, false);
-		if (ret)
-			dd_dev_warn(ctx->devdata,
-				    "hfi_eq_disarm non-zero ret %d\n", ret);
+	spin_lock(&cq->lock);
+	eqm->ibcq = NULL;
+	if (!list_empty(&cq->hw_cq)) {
+		list_for_each_entry(ibeq, &cq->hw_cq, hw_cq) {
+			eq_desc_base = (void *)(ibeq->eq.ctx->ptl_state_base +
+						HFI_PSB_EQ_DESC_OFFSET);
+			dd = ibeq->eq.ctx->devdata;
+
+			/* setup interrupt for this EQ */
+			/* issue write to privileged CMDQ to complete */
+			slots = _hfi_eq_update_intr(ibeq->eq.ctx,
+						    &dd->priv_rx_cq,
+						    ibeq->eq.idx, -1, 0,
+						    (ibeq->eq.ctx->type == HFI_CTX_TYPE_USER) ?
+						    ibeq->hw_disarmed : (u64)&ibeq->hw_disarmed,
+						    &cmd);
+
+			/* Queue write, no wait */
+			ret = hfi_pend_cq_queue(&dd->pend_cq, &dd->priv_rx_cq,
+						NULL, &cmd, slots, GFP_ATOMIC);
+			if (ret) {
+				dd_dev_err(dd, "%s: hfi_pend_cq_queue failed %d\n",
+					   __func__, ret);
+			}
+
+			/* update host memory EQD copy */
+			eq_desc.val[0] = eq_desc_base[ibeq->eq.idx].val[0];
+			eq_desc.irq = 0;
+			eq_desc.i = 0;
+			eq_desc.s = 0;
+			eq_desc_base[ibeq->eq.idx].val[0] = eq_desc.val[0];
+		}
 	}
+	spin_unlock(&cq->lock);
+
+	/* remove EQ to list of IRQ waiters */
+	eqm->irq_vector = 0;
+	list_del_init(&eqm->irq_wait_chain);
 }
 
 irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
@@ -1217,7 +1259,7 @@ irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
 	list_for_each_entry_safe(eqm, next, &me->irq_wait_head,
 				 irq_wait_chain) {
 		if (eqm->mode == HFI_EC_MODE_IB)
-			hfi_ib_eq_isr(eqm);
+			hfi_ib_cq_isr(eqm);
 		else if (eqm->isr_cb)
 			eqm->isr_cb(&eqm->desc, eqm->cookie);
 		else if (eqm->ec->mode == HFI_EC_MODE_CT_SELF)
@@ -1250,7 +1292,7 @@ static int hfi_eq_arm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm,
 	/* setup interrupt for this EQ */
 	/* issue write to privileged CMDQ to complete */
 	slots = _hfi_eq_update_intr(ctx, &dd->priv_rx_cq,
-				    eqm->desc.idx, irq_idx,
+				    eqm->desc.idx, irq_idx, 0,
 				    user_data, &cmd);
 
 	/* Queue write, wait for completion */
@@ -1294,7 +1336,7 @@ static int hfi_eq_disarm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm,
 
 	/* remove interrupt for this EQ */
 	slots = _hfi_eq_update_intr(ctx, &dd->priv_rx_cq,
-				    eqm->desc.idx, -1, user_data, &cmd);
+				    eqm->desc.idx, -1, 0, user_data, &cmd);
 
 	/* Queue write, wait for completion */
 	if (wait)
@@ -1387,32 +1429,99 @@ static bool hfi_ec_has_event(struct hfi_ctx *ctx,
 	return cond;
 }
 
-int hfi_ib_eq_arm(struct hfi_ctx *ctx, u16 eq_idx, u8 solicit,
-		  struct ib_cq *ibcq, u64 user_data0, u64 user_data1)
+int hfi_ib_cq_arm(struct hfi_ctx *ctx, struct ib_cq *ibcq, u8 solicit)
 {
+	struct rvt_cq *rcq = rcq = ibcq_to_rvtcq(ibcq);
 	struct hfi_eq_mgmt *eqm;
-	int ret;
+	struct hfi_irq_entry *me;
+	unsigned long flags;
+	int irq_idx;
+	struct hfi_devdata *dd;
+	struct hfi_ibeq *ibeq;
+	union eqd *eq_desc_base;
+	int ret, slots;
+	union eqd eq_desc;
+	union hfi_rx_cq_command cmd;
 
-	down_read(&ctx->ctx_rwsem);
-	mutex_lock(&ctx->event_mutex);
+	if (!rcq)
+		return 0;
 
-	ret = hfi_eq_setup(ctx, eq_idx, &eqm);
-	if (ret)
-		goto err;
+	if (!rcq->eqm) {
+		eqm = kzalloc(sizeof(*eqm), GFP_KERNEL);
+		if (!eqm)
+			return -ENOMEM;
+		rcq->eqm = eqm;
 
-	/* associate eq with self event channel */
-	eqm->ec = (struct hfi_ec_entry *)eqm;
-	eqm->user_handle = user_data1;
-	eqm->cookie = (void *)(ctx);
+		/* initialize EQM state */
+		INIT_LIST_HEAD(&eqm->irq_wait_chain);
+		INIT_LIST_HEAD(&eqm->ec_wait_chain);
+		init_waitqueue_head(&eqm->wq);
+		kref_init(&eqm->refcount);
+	} else {
+		eqm = rcq->eqm;
+	}
+
 	eqm->mode = HFI_EC_MODE_IB;
 	eqm->ibcq = ibcq;
+	eqm->ec = (struct hfi_ec_entry *)eqm;
+	dd = ctx->devdata;
+	eqm->cookie = (void *)dd;
+	/* for now just do round-robin assignment */
+	irq_idx = atomic_inc_return(&dd->irq_eq_next) %
+		   dd->num_eq_irqs;
 
-	ret = hfi_eq_arm(ctx, eqm, user_data0, solicit);
-err:
-	mutex_unlock(&ctx->event_mutex);
-	up_read(&ctx->ctx_rwsem);
+	spin_lock_irqsave(&rcq->lock, flags);
+	if (ctx->type == HFI_CTX_TYPE_USER) {
+		if (solicit)
+			rcq->notify = IB_CQ_SOLICITED;
+		else
+			rcq->notify = IB_CQ_NEXT_COMP;
+	}
+	if (!list_empty(&rcq->hw_cq)) {
+		list_for_each_entry(ibeq, &rcq->hw_cq, hw_cq) {
+			eq_desc_base = (void *)(ibeq->eq.ctx->ptl_state_base +
+						HFI_PSB_EQ_DESC_OFFSET);
 
-	return ret;
+			/* setup interrupt for this EQ */
+			/* issue write to privileged CMDQ to complete */
+			slots = _hfi_eq_update_intr(ibeq->eq.ctx,
+						    &dd->priv_rx_cq,
+						    ibeq->eq.idx, irq_idx,
+						    solicit,
+						    (ibeq->eq.ctx->type == HFI_CTX_TYPE_USER) ?
+						    ibeq->hw_armed : (u64)&ibeq->hw_armed,
+						    &cmd);
+
+			/* Queue write, no wait */
+			ret = hfi_pend_cq_queue(&dd->pend_cq,
+						&dd->priv_rx_cq,
+						NULL, &cmd, slots,
+						GFP_KERNEL);
+			if (ret) {
+				dd_dev_err(dd, "%s: hfi_pend_cq_queue failed %d\n",
+					   __func__, ret);
+				kfree(eqm);
+				return ret;
+			}
+
+			/* update host memory EQD copy */
+			eq_desc.val[0] = eq_desc_base[ibeq->eq.idx].val[0];
+			eq_desc.irq = irq_idx;
+			eq_desc.i = 1;
+			eq_desc.s = solicit;
+			eq_desc_base[ibeq->eq.idx].val[0] = eq_desc.val[0];
+		}
+	}
+	spin_unlock_irqrestore(&rcq->lock, flags);
+
+	/* add EQ to list of IRQ waiters */
+	me = &dd->irq_entries[irq_idx];
+	eqm->irq_vector = irq_idx;
+	spin_lock_irqsave(&me->irq_wait_lock, flags);
+	list_add(&eqm->irq_wait_chain, &me->irq_wait_head);
+	spin_unlock_irqrestore(&me->irq_wait_lock, flags);
+
+	return 0;
 }
 
 int hfi_ec_assign(struct hfi_ctx *ctx, u16 *ec_idx)
@@ -1756,4 +1865,156 @@ int hfi_cteq_release(struct hfi_ctx *ctx, u16 ev_mode,
 		return hfi_ct_release(ctx, ev_idx);
 	else
 		return hfi_eq_release(ctx, ev_idx, user_data);
+}
+
+int hfi_ib_cq_armed(struct ib_cq *ibcq)
+{
+	struct rvt_cq *rcq = rcq = ibcq_to_rvtcq(ibcq);
+	struct hfi_eq_mgmt *eqm = rcq->eqm;
+
+	if (eqm && eqm->ibcq)
+		return 1;
+	else
+		return 0;
+}
+
+int hfi_ib_cq_disarm_irq(struct ib_cq *ibcq)
+{
+	struct rvt_cq *rcq = rcq = ibcq_to_rvtcq(ibcq);
+	struct hfi_eq_mgmt *eqm = rcq->eqm;
+	unsigned long flags;
+
+	if (hfi_ib_cq_armed(ibcq)) {
+		struct hfi_devdata *dd = eqm->cookie;
+		struct hfi_irq_entry *me = &dd->irq_entries[eqm->irq_vector];
+
+		spin_lock_irqsave(&me->irq_wait_lock, flags);
+		if (hfi_ib_cq_armed(ibcq))
+			list_del_init(&eqm->irq_wait_chain);
+		spin_unlock_irqrestore(&me->irq_wait_lock, flags);
+	}
+
+	return 0;
+}
+
+int hfi_ib_eq_release(struct hfi_ctx *ctx, struct ib_cq *cq, u16 eq_idx)
+{
+	struct hfi_eq_ctx *eq_ctx;
+	unsigned long flags;
+	struct hfi_ibeq *ibeq, *next;
+	struct rvt_cq *rcq;
+	int ret = 0;
+
+	down_read(&ctx->ctx_rwsem);
+	mutex_lock(&ctx->event_mutex);
+
+	eq_ctx = idr_find(&ctx->eq_used, eq_idx);
+	if (!eq_ctx) {
+		ret = -EINVAL;
+		goto idr_end;
+	}
+
+	if (eq_ctx->ibeq) {
+		if (!cq) {
+			ret = -EINVAL;
+			goto idr_end;
+		}
+
+		rcq = ibcq_to_rvtcq(cq);
+		spin_lock_irqsave(&rcq->lock, flags);
+		if (!list_empty(&rcq->hw_cq)) {
+			list_for_each_entry_safe(ibeq, next,
+						 &rcq->hw_cq, hw_cq) {
+				if (ibeq->eq.ctx == ctx &&
+				    ibeq->eq.idx == eq_idx) {
+					list_del(&ibeq->hw_cq);
+					kfree(ibeq);
+					goto found;
+				}
+			}
+			ret = -EINVAL;
+		}
+found:
+		spin_unlock_irqrestore(&rcq->lock, flags);
+	} else if (cq) {
+		ret = -EINVAL;
+	}
+
+idr_end:
+	mutex_unlock(&ctx->event_mutex);
+	up_read(&ctx->ctx_rwsem);
+
+	return ret;
+}
+
+int hfi_ib_eq_add(struct hfi_ctx *ctx, struct ib_cq *cq, u64 disarm_done,
+		  u64 arm_done, u16 eq_idx)
+{
+	struct rvt_cq *rcq = ibcq_to_rvtcq(cq);
+	struct hfi_ibeq *ibeq;
+	union hfi_rx_cq_command cmd;
+	unsigned long flags;
+	union eqd *eq_desc_base;
+	union eqd eq_desc;
+	int slots, ret = 0, irq_idx;
+	struct hfi_eq_ctx *eq_ctx;
+
+	ibeq = kmalloc(sizeof(*ibeq), GFP_KERNEL);
+	if (!ibeq)
+		return -ENOMEM;
+
+	ibeq->eq.ctx = ctx;
+	ibeq->hw_disarmed = disarm_done;
+	ibeq->hw_armed = arm_done;
+	ibeq->eq.idx = eq_idx;
+
+	down_read(&ctx->ctx_rwsem);
+	mutex_lock(&ctx->event_mutex);
+
+	eq_ctx = idr_find(&ctx->eq_used, eq_idx);
+	if (!eq_ctx) {
+		kfree(ibeq);
+		ret = -EINVAL;
+		goto idr_end;
+	}
+	eq_ctx->ibeq = ibeq;
+
+	spin_lock_irqsave(&rcq->lock, flags);
+	list_add_tail(&ibeq->hw_cq, &rcq->hw_cq);
+	if (hfi_ib_cq_armed(cq)) {
+		eq_desc_base = (void *)(ctx->ptl_state_base +
+					HFI_PSB_EQ_DESC_OFFSET);
+		irq_idx = ((struct hfi_eq_mgmt *)rcq->eqm)->irq_vector;
+
+		/* setup interrupt for this EQ */
+		/* issue write to privileged CMDQ to complete */
+		slots = _hfi_eq_update_intr(ctx, &ctx->devdata->priv_rx_cq,
+					    ibeq->eq.idx, irq_idx,
+					    (rcq->notify == IB_CQ_NEXT_COMP),
+					    ibeq->hw_armed,
+					    &cmd);
+
+		/* Queue write, no wait */
+		ret = hfi_pend_cq_queue(&ctx->devdata->pend_cq,
+					&ctx->devdata->priv_rx_cq,
+					NULL, &cmd, slots, GFP_KERNEL);
+		if (ret) {
+			dd_dev_err(ctx->devdata, "%s: hfi_pend_cq_queue failed %d\n",
+				   __func__, ret);
+		}
+
+		/* update host memory EQD copy */
+		eq_desc.val[0] = eq_desc_base[ibeq->eq.idx].val[0];
+		eq_desc.irq = irq_idx;
+		eq_desc.i = 1;
+		eq_desc.s = 0;
+		eq_desc_base[ibeq->eq.idx].val[0] = eq_desc.val[0];
+	}
+	spin_unlock_irqrestore(&rcq->lock, flags);
+
+idr_end:
+	mutex_unlock(&ctx->event_mutex);
+	up_read(&ctx->ctx_rwsem);
+
+	return ret;
 }

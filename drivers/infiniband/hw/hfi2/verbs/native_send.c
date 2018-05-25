@@ -184,7 +184,7 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 	struct hfi2_qp_priv *priv = qp->priv;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	struct rvt_cq *send_cq = ibcq_to_rvtcq(qp->ibqp.send_cq);
-	struct hfi_eq *send_eq = send_cq->hw_cq;
+	struct hfi_eq *send_eq;
 	u8 op_req = hfi_wr_ud_opcode[wr->wr.opcode];
 	u32 dlid = rdma_ah_get_dlid(ah_attr);
 	u32 qkey, md_opts = 0;
@@ -194,6 +194,8 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 	u32 length = 0;
 
 	INIT_QP_EQ_VALID_SIGNAL(priv, priv->current_cidx, signal);
+	send_eq = (struct hfi_eq *)list_first_entry(&send_cq->hw_cq,
+						    struct hfi_ibeq, hw_cq);
 
 	if (wr->wr.num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
@@ -641,8 +643,8 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 	qp_priv->current_cidx =
 		(qp_priv->current_cidx + 1) % (qp->s_size * 2);
 	spin_unlock(&qp->s_lock);
-	if (cq->hw_disarmed == 0 && (cq->notify == IB_CQ_NEXT_COMP ||
-				     cq->notify == IB_CQ_SOLICITED)) {
+	if (hfi_ib_cq_armed(qp->ibqp.send_cq) &&
+	    (cq->notify == IB_CQ_NEXT_COMP || cq->notify == IB_CQ_SOLICITED)) {
 		/*
 		 * This will cause send_complete() to be called in
 		 * another thread.
@@ -654,6 +656,7 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 			kthread_queue_work(cq->rdi->worker, &cq->comptask);
 		}
 		spin_unlock(&cq->rdi->n_cqs_lock);
+		// TODO - Disarm all EQs associated with IB CQ
 	}
 	spin_unlock_irqrestore(&cq->lock, flags);
 	return ret;

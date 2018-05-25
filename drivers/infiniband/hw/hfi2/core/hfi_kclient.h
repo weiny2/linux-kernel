@@ -228,6 +228,25 @@ int _hfi_eq_alloc(struct hfi_ctx *ctx,
 }
 
 static inline
+struct hfi_ibeq *hfi_ibeq_alloc(struct hfi_ctx *ctx,
+				struct opa_ev_assign *eq_alloc)
+{
+	int ret;
+	struct hfi_ibeq *ibeq;
+
+	ibeq = kmalloc(sizeof(*ibeq), GFP_KERNEL);
+	if (!ibeq)
+		return ERR_PTR(-ENOMEM);
+
+	ret = _hfi_eq_alloc(ctx, eq_alloc, &ibeq->eq);
+	if (ret) {
+		kfree(ibeq);
+		ibeq = ERR_PTR(ret);
+	}
+	return ibeq;
+}
+
+static inline
 struct hfi_eq *hfi_eq_alloc(struct hfi_ctx *ctx,
 			    struct opa_ev_assign *eq_alloc)
 {

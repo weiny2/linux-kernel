@@ -165,7 +165,9 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 	const struct uverbs_attr *uattr;
 	struct hfi_ctx *ctx;
 	struct ib_uobject *uobj;
+	struct ib_cq *cq = NULL;
 	u32 type;
+	u64 arm_done;
 	int ret;
 
 	ret = uverbs_copy_from(&cmd, attrs, HFI2_CTX_EVT_CMD);
@@ -187,6 +189,22 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 
 	switch (type) {
 	case HFI2_CMD_EQ_ASSIGN:
+		uattr = uverbs_attr_get(attrs, HFI2_CTX_EVT_CQ_IDX);
+		if (!IS_ERR(uattr)) {
+			uobj = uattr->obj_attr.uobject;
+			if (uobj->object) {
+				ret = uverbs_copy_from(&arm_done, attrs,
+						       HFI2_CTX_EVT_ARM_DONE);
+				if (ret) {
+					pr_debug("%s: Error copying data, ret = %d\n",
+						 __func__, ret);
+					return ret;
+				}
+
+				cq = uobj->object;
+			}
+		}
+
 		ev_assign.ni = cmd.idx0;
 		ev_assign.base = cmd.data0;
 		ev_assign.count = cmd.count;
@@ -203,11 +221,29 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 		memcpy(&resp, &cmd, sizeof(struct hfi_event_args));
 		resp.idx1 = ev_assign.ev_idx;
 
+		if (cq) {
+			ret = hfi_ib_eq_add(ctx, cq, ev_assign.user_data,
+					    arm_done, ev_assign.ev_idx);
+			if (ret)
+				hfi_cteq_release(ctx, 0, ev_assign.ev_idx,
+						 cmd.data1);
+		}
+
 		if (uverbs_copy_to(attrs, HFI2_CTX_EVT_RESP,
 				   &resp, sizeof(resp)))
 			ret = -EFAULT;
 		break;
 	case HFI2_CMD_EQ_RELEASE:
+		uattr = uverbs_attr_get(attrs, HFI2_CTX_EVT_CQ_IDX);
+		if (!IS_ERR(uattr)) {
+			uobj = uattr->obj_attr.uobject;
+			if (uobj->object)
+				cq = uobj->object;
+		}
+
+		ret = hfi_ib_eq_release(ctx, cq, cmd.idx1);
+		if (ret)
+			break;
 		ret = hfi_cteq_release(ctx, 0, cmd.idx1, cmd.data1);
 		break;
 	case HFI2_CMD_EC_WAIT_EQ:
@@ -331,8 +367,8 @@ int hfi2_ctx_event_cmd_handler(struct ib_device *ib_dev,
 			ret = -EINVAL;
 			break;
 		}
-		ret = hfi_ib_eq_arm(ctx, cmd.idx1, cmd.count, uobj->object,
-				    cmd.data0, cmd.data1);
+
+		ret = hfi_ib_cq_arm(ctx, uobj->object, cmd.count);
 		if (ret)
 			break;
 
@@ -499,6 +535,9 @@ DECLARE_UVERBS_METHOD(hfi2_ctx_event_cmd, HFI2_CTX_EVENT_CMD,
 		      &UVERBS_ATTR_PTR_IN(
 				HFI2_CTX_EVT_TYPE,
 				u32, UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_CTX_EVT_ARM_DONE,
+				u64),
 		      &UVERBS_ATTR_PTR_OUT(
 				HFI2_CTX_EVT_RESP,
 				struct hfi_event_args,

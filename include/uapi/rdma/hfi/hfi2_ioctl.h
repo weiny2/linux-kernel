@@ -166,6 +166,7 @@ enum {
 	HFI2_CTX_EVT_RESP,
 	HFI2_CTX_EVT_TYPE,
 	HFI2_CTX_EVT_CQ_IDX,
+	HFI2_CTX_EVT_ARM_DONE,
 };
 
 /* Attributes for PT update lower */

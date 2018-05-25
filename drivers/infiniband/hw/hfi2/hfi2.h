@@ -1283,8 +1283,7 @@ int hfi_ev_set_channel(struct hfi_ctx *ctx, u16 ec_idx, u16 ev_idx,
 		       u64 eq_handle, u64 user_data);
 int hfi_ec_wait_event(struct hfi_ctx *ctx, u16 ec_idx, int timeout,
 		      u64 *user_data0, u64 *user_data1);
-int hfi_ib_eq_arm(struct hfi_ctx *ctx, u16 eq_idx, u8 solicit,
-		  struct ib_cq *ibcq, u64 user_data0, u64 user_data1);
+int hfi_ib_cq_arm(struct hfi_ctx *ctx, struct ib_cq *ibcq, u8 solicit);
 int hfi_eq_ack_event(struct hfi_ctx *ctx, u16 eq_idx, u32 nevents);
 int hfi_ct_ack_event(struct hfi_ctx *ctx, u16 ct_idx, u32 nevents);
 int hfi_ec_assign(struct hfi_ctx *ctx, u16 *ec_idx);
@@ -1548,6 +1547,11 @@ struct net_device *hfi2_vnic_alloc_rn(struct ib_device *device,
 				      void (*setup)(struct net_device *));
 
 int set_qsfp_tx(struct hfi_pportdata *ppd, int on);
+int hfi_ib_cq_disarm_irq(struct ib_cq *ibcq);
+int hfi_ib_cq_armed(struct ib_cq *ibcq);
+int hfi_ib_eq_add(struct hfi_ctx *ctx, struct ib_cq *cq, u64 disarm_done,
+		  u64 arm_done, u16 eq_idx);
+int hfi_ib_eq_release(struct hfi_ctx *ctx, struct ib_cq *cq, u16 eq_idx);
 
 /*
  * dev_err can be used (only!) to print early errors before devdata is
