@@ -100,8 +100,9 @@ static inline void hfi_invalid_attr(struct opa_smp *smp)
 
 static inline __be32 hfi_max_u32_or_sum(u64 tmp, u64 tmp2)
 {
-	tmp2 += tmp;
-	if (tmp2 < tmp)
+	u64 tmp3 = tmp + tmp2;
+
+	if (tmp > U32_MAX || tmp2 > U32_MAX || tmp3 > U32_MAX)
 		return cpu_to_be32(~0);
 	else
 		return cpu_to_be32(tmp2);
