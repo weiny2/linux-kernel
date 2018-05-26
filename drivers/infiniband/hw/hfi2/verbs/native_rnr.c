@@ -226,7 +226,6 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	struct hfi_rq *rq;
 	union hfi_tx_cq_command cmd __aligned(64);
 	int qp_num = EXTRACT_HD_DST_QP(teq->hdr_data);
-	u32 pd_handle;
 	struct ib_qp *ibqp;
 
 	rcu_read_lock();
@@ -252,9 +251,6 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	       qp->r_flags & RVT_S_WAIT_RNR)
 		mdelay(5);
 
-	/* TODO - how to set this? */
-	pd_handle = ibqp->pd->uobject ?
-		    ibqp->pd->uobject->user_handle : 0;
 	rq = (struct hfi_rq *)qp->r_rq.hw_rq;
 	ret = hfi_set_qp_state(ctx->rx_cmdq, rq, qp,
 			       rdma_ah_get_dlid(&qp->remote_ah_attr),

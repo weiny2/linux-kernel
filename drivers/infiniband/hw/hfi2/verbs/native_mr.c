@@ -184,8 +184,7 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 	if (!mr->mapsz)
 		return -EFAULT;
 
-	/* TODO - how to set this? */
-	pd_handle = 0;
+	pd_handle = to_pd_handle(mr->pd);
 
 	me_options = PTL_ME_NO_TRUNCATE;
 	if (mr->access_flags & IB_ACCESS_REMOTE_WRITE)

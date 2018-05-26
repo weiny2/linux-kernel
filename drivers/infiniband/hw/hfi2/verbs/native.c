@@ -607,9 +607,7 @@ int hfi_format_qp_write(struct hfi_rq *rq, struct ib_qp *ibqp,
 	struct rvt_cq *cq = ibcq_to_rvtcq(ibqp->recv_cq);
 	struct hfi_eq *eq = cq ? cq->hw_cq : NULL;
 
-	/* TODO - how to set this? */
-	pd_handle = ibqp->pd->uobject ?
-		    ibqp->pd->uobject->user_handle : 0;
+	pd_handle = to_pd_handle(ibqp->pd);
 	/* setup qp state */
 	qp_state.val[0] = 0;
 	qp_state.val[1] = 0;
@@ -1076,9 +1074,7 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 	int qp_err_flush = (qp && qp->state == IB_QPS_ERR) &&
 			    !qp->ibqp.srq;
 
-	/* TODO - how to set this? */
-	pd_handle = ibpd->uobject ?
-		    ibpd->uobject->user_handle : 0;
+	pd_handle = to_pd_handle(ibpd);
 
 	me_options = PTL_ME_NO_TRUNCATE | PTL_USE_ONCE | PTL_OP_PUT;
 	if (wr->num_sge > rq->max_sge) {

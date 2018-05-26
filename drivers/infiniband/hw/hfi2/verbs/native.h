@@ -100,6 +100,9 @@
 #define CLEAR_FLOW_CTL(f, n)     (f[n / 64] &= ~(0x1ull << (n % 64)))
 #define SET_FLOW_CTL(f, n)       (f[n / 64] |= (0x1ull << (n % 64)))
 
+#define to_pd_handle(pd) \
+	((pd)->uobject ? (pd)->uobject->user_handle : (u64)(pd))
+
 #define obj_to_ibctx(obj) \
 	((struct hfi_ibcontext *)			\
 	  ((obj)->uobject ? (obj)->uobject->context :	\
