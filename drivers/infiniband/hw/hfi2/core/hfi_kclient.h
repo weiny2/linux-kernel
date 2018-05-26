@@ -189,9 +189,10 @@ int hfi_eq_poll_cmd_complete_timeout(struct hfi_ctx *ctx, u64 *done)
 }
 
 static inline
-int _hfi_eq_alloc(struct hfi_ctx *ctx,
-		  struct opa_ev_assign *eq_alloc,
-		  struct hfi_eq *eq)
+int _hfi_eq_alloc_mode(struct hfi_ctx *ctx,
+		       struct opa_ev_assign *eq_alloc,
+		       struct hfi_eq *eq,
+		       u16 mode)
 {
 	u16 width;
 	u32 *eq_head_array, *eq_head_addr;
@@ -204,7 +205,7 @@ int _hfi_eq_alloc(struct hfi_ctx *ctx,
 				ctx->devdata->node);
 	if (!eq_alloc->base)
 		return -ENOMEM;
-	eq_alloc->mode = OPA_EV_MODE_BLOCKING;
+	eq_alloc->mode = mode;
 	rc = ctx->ops->ev_assign(ctx, eq_alloc);
 	if (rc < 0) {
 		vfree((void *)eq_alloc->base);
@@ -227,6 +228,9 @@ int _hfi_eq_alloc(struct hfi_ctx *ctx,
 	return 0;
 }
 
+#define _hfi_eq_alloc(ctx, eq_alloc, eq) \
+	_hfi_eq_alloc_mode(ctx, eq_alloc, eq, OPA_EV_MODE_BLOCKING)
+
 static inline
 struct hfi_ibeq *hfi_ibeq_alloc(struct hfi_ctx *ctx,
 				struct opa_ev_assign *eq_alloc)
@@ -238,7 +242,7 @@ struct hfi_ibeq *hfi_ibeq_alloc(struct hfi_ctx *ctx,
 	if (!ibeq)
 		return ERR_PTR(-ENOMEM);
 
-	ret = _hfi_eq_alloc(ctx, eq_alloc, &ibeq->eq);
+	ret = _hfi_eq_alloc_mode(ctx, eq_alloc, &ibeq->eq, 0);
 	if (ret) {
 		kfree(ibeq);
 		ibeq = ERR_PTR(ret);
