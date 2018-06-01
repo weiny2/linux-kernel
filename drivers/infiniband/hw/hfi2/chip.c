@@ -3232,8 +3232,8 @@ static void hfi_set_leak_amt(struct hfi_pportdata *ppd, u8 sl, u16 shift,
 	 * is same as explained in hfi_set_bw_group. The only change
 	 * is the additional BW percentage factored in to change the
 	 * leak rate to introduce the IPG. the formula for additional
-	 * BW perc is derived as Ts/(Ts+IPG).
-	 * the IBTA spec specifies the IPG to be ( Ts >> shift) * mult
+	 * BW perc is derived as Tp/(Tp+IPG) where Tp is the packet time
+	 * the IBTA spec specifies the IPG to be ( Tp >> shift) * mult
 	 * where shift and mult are obtained from CCT.
 	 * Substituing for IPG in the above formula, we calculate the
 	 * additional BW perc to be (2^shift)/(mult + 2^shift)
