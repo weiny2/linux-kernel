@@ -2044,7 +2044,7 @@ void hfi_at_dereg_range(struct hfi_ctx *ctx, void *vaddr, u32 size)
 	mutex_lock(&pasid_mutex);
 	svm = idr_find(&at->pasid_idr, ctx->pasid);
 	mutex_unlock(&pasid_mutex);
-	if (!svm || !svm->pgd)
+	if (!svm)
 		return;
 
 	hfi_at_unmap(svm, (unsigned long)vaddr,
