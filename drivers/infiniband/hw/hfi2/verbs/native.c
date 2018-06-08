@@ -1715,7 +1715,7 @@ int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 	int ret;
 
 	ret = rvt_req_notify_cq(ibcq, flags);
-	if (ret || !ctx->supports_native || list_empty(&cq->hw_cq))
+	if (ret || !ctx || !ctx->supports_native || list_empty(&cq->hw_cq))
 		return ret;
 
 	ibeq = list_first_entry(&cq->hw_cq, struct hfi_ibeq, hw_cq);
