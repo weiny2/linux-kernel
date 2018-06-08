@@ -59,8 +59,6 @@
 #include "hfi_rx_vostlnp.h"
 #include "native.h"
 
-#define INVALID_PID     0xffff
-
 /* SYNC_EQ HDR_DATA defines */
 #define PID_EXCHANGE		0
 #define PID_SYNC		1
@@ -353,8 +351,8 @@ int hfi2_update_qp_sync(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
 {
 	union hfi_tx_cq_command cmd __aligned(64);
 	struct hfi2_qp_priv *qp_priv = qp->priv;
-	int nslots;
-	int ret = 0;
+	int dlid = rdma_ah_get_dlid(&qp->remote_ah_attr);
+	int nslots, ret = 0;
 
 	/*
 	 * TODO: unless QP state is RTR we do not know  which remote
@@ -362,32 +360,25 @@ int hfi2_update_qp_sync(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
 	 * received PID EXCHANGE request in INIT state and
 	 * update HW QP state.
 	 */
-	if ((rdma_ah_get_dlid(&qp->remote_ah_attr) ==
-		    qp_priv->pidex_slid) &&
-	    qp_priv->pidex_qpn == qp->remote_qpn) {
-		struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
-		struct hfi_cmdq *rx_cmdq = NULL;
-		int dlid = rdma_ah_get_dlid(&qp->remote_ah_attr);
-
-		if (ctx)
-			rx_cmdq = ctx->rx_cmdq;
+	if (dlid == qp_priv->pidex_slid &&
+	    qp->remote_qpn == qp_priv->pidex_qpn) {
 		if (qp_priv->pidex_hdr_type == PID_SYNC) {
 			qp_priv->state = QP_STATE_RTS;
+			complete(&qp_priv->pid_xchg_comp);
 			// TODO - If QP using SRQ + in RTR deliver
 			// IBV_EVENT_COMM_EST
 		} else if (qp_priv->pidex_hdr_type == PID_EXCHANGE) {
-			nslots = BUILD_SYNC_EQ_CMD(qp, PID_SYNC, &cmd);
-			ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)&cmd, nslots);
+			ret = hfi_set_qp_state(ctx->rx_cmdq,
+					       qp, dlid,
+					       qp_priv->tpid, VERBS_OK, false);
 			if (ret < 0)
 				return ret;
+
+			nslots = BUILD_SYNC_EQ_CMD(qp, PID_SYNC, &cmd);
+			ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)&cmd, nslots);
 		}
-		ret = hfi_set_qp_state(rx_cmdq,
-				       qp, dlid,
-				       qp_priv->tpid, VERBS_OK, false);
-		if (ret < 0)
-			return ret;
 	}
-	complete(&qp_priv->pid_xchg_completion);
+
 	return ret;
 }
 
@@ -402,6 +393,13 @@ int hfi2_handle_pid_exchange(struct hfi_ibcontext *ctx, uint64_t *eq)
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ctx->ibuc.device);
 	struct hfi2_ibport *ibp = ibd->pport;
 
+#if 0
+	/* TODO need to rework use of BUILD_SYNC_EQ_CMD */
+	/* ignore events not from system PID */
+	if (INITIATOR_ID_PID(teq->initiator_id) != 0)
+		return 0;
+#endif
+
 	rcu_read_lock();
 	qp = rvt_lookup_qpn(&ibd->rdi, &ibp->rvp, qp_num);
 	rcu_read_unlock();
@@ -410,7 +408,7 @@ int hfi2_handle_pid_exchange(struct hfi_ibcontext *ctx, uint64_t *eq)
 		return -EINVAL;
 	qp_priv = qp->priv;
 	if ((SYNC_EQ_OPCODE(teq->hdr_data) == PID_EXCHANGE) &&
-	    !qp_priv->tpid)
+	    qp_priv->tpid)
 		pr_warn("Unexpected pid exchange pkt received\n");
 	qp_priv->pidex_qpn = SYNC_EQ_SRC_QPN(teq->hdr_data);
 	qp_priv->pidex_slid = INITIATOR_ID_LID(teq->initiator_id);
@@ -528,12 +526,12 @@ int hfi2_qp_exchange_pid(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
 	union hfi_tx_cq_command cmd __aligned(64);
 	struct hfi2_qp_priv *qp_priv = qp->priv;
 
-	/* Send IPID to target - TODO - Move this into driver */
+	/* Send IPID to target */
 	nslots = BUILD_SYNC_EQ_CMD(qp, PID_EXCHANGE, &cmd);
 	ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)&cmd, nslots);
-
 	if (ret < 0)
 		return ret;
+
 	/* Advance QP State */
 	if (qp_priv->state == QP_STATE_PID_RECV) {
 		qp_priv->state = QP_STATE_RTR;
