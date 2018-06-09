@@ -997,7 +997,7 @@ static void wlat_test(struct krping_cb *cb)
 {
 	int ccnt, scnt, rcnt;
 	int iters=cb->count;
-	volatile char *poll_buf = (char *) cb->start_buf;
+	volatile char *poll_buf = (char *) cb->rdma_buf;
 	char *buf = (char *)cb->rdma_buf;
 	struct timeval start_tv, stop_tv;
 	cycles_t *post_cycles_start, *post_cycles_stop;
@@ -1041,6 +1041,7 @@ static void wlat_test(struct krping_cb *cb)
 	cb->rdma_sq_wr.rkey = cb->remote_rkey;
 	cb->rdma_sq_wr.remote_addr = cb->remote_addr;
 	cb->rdma_sq_wr.wr.sg_list->length = cb->size;
+	krping_rdma_rkey(cb, cb->rdma_sgl.addr, 1);
 	if (cycle_iters > iters)
 		cycle_iters = iters;
 	do_gettimeofday(&start_tv);
@@ -1307,7 +1308,7 @@ static void krping_wlat_test_server(struct krping_cb *cb)
 	}
 
 	/* Send STAG/TO/Len to client */
-	krping_format_send(cb, cb->start_dma_addr);
+	krping_format_send(cb, (u64)cb->rdma_buf);
 	ret = ib_post_send(cb->qp, &cb->sq_wr, &bad_wr);
 	if (ret) {
 		printk(KERN_ERR PFX "post send error %d\n", ret);
@@ -1324,7 +1325,6 @@ static void krping_wlat_test_server(struct krping_cb *cb)
 		printk(KERN_ERR PFX "send completiong error %d\n", wc.status);
 		return;
 	}
-
 	wlat_test(cb);
 	wait_event_interruptible(cb->sem, cb->state == ERROR);
 }
@@ -1341,7 +1341,7 @@ static void krping_bw_test_server(struct krping_cb *cb)
 	}
 
 	/* Send STAG/TO/Len to client */
-	krping_format_send(cb, cb->start_dma_addr);
+	krping_format_send(cb, (u64)cb->rdma_buf);
 	ret = ib_post_send(cb->qp, &cb->sq_wr, &bad_wr);
 	if (ret) {
 		printk(KERN_ERR PFX "post send error %d\n", ret);
@@ -1664,7 +1664,7 @@ static void krping_wlat_test_client(struct krping_cb *cb)
 	cb->state = RDMA_READ_ADV;
 
 	/* Send STAG/TO/Len to client */
-	krping_format_send(cb, cb->start_dma_addr);
+	krping_format_send(cb, (u64)cb->rdma_buf);
 	if (cb->state == ERROR) {
 		printk(KERN_ERR PFX "krping_format_send failed\n");
 		return;
