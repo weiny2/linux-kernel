@@ -1429,6 +1429,48 @@ static bool hfi_ec_has_event(struct hfi_ctx *ctx,
 	return cond;
 }
 
+int hfi_ib_eq_arm(struct hfi_ctx *ctx, struct ib_cq *ibcq,
+		  struct hfi_ibeq *ibeq, u8 solicit)
+{
+	struct rvt_cq *rcq = rcq = ibcq_to_rvtcq(ibcq);
+	union hfi_rx_cq_command cmd;
+	union eqd *eq_desc_base;
+	union eqd eq_desc;
+	int slots, ret = 0, irq_idx;
+
+	eq_desc_base = (void *)(ibeq->eq.ctx->ptl_state_base +
+				HFI_PSB_EQ_DESC_OFFSET);
+	irq_idx = ((struct hfi_eq_mgmt *)rcq->eqm)->irq_vector;
+
+	/* setup interrupt for this EQ */
+	/* issue write to privileged CMDQ to complete */
+	slots = _hfi_eq_update_intr(ibeq->eq.ctx,
+				    &ctx->devdata->priv_rx_cq,
+				    ibeq->eq.idx, irq_idx,
+				    solicit,
+				    (ibeq->eq.ctx->type == HFI_CTX_TYPE_USER) ?
+				    ibeq->hw_armed : (u64)&ibeq->hw_armed,
+				    &cmd);
+
+	/* Queue write, no wait */
+	ret = hfi_pend_cq_queue(&ctx->devdata->pend_cq,
+				&ctx->devdata->priv_rx_cq,
+				NULL, &cmd, slots, GFP_KERNEL);
+	if (ret) {
+		dd_dev_err(ctx->devdata, "%s: hfi_pend_cq_queue failed %d\n",
+			   __func__, ret);
+	}
+
+	/* update host memory EQD copy */
+	eq_desc.val[0] = eq_desc_base[ibeq->eq.idx].val[0];
+	eq_desc.irq = irq_idx;
+	eq_desc.i = 1;
+	eq_desc.s = solicit;
+	eq_desc_base[ibeq->eq.idx].val[0] = eq_desc.val[0];
+
+	return 0;
+}
+
 int hfi_ib_cq_arm(struct hfi_ctx *ctx, struct ib_cq *ibcq, u8 solicit)
 {
 	struct rvt_cq *rcq = rcq = ibcq_to_rvtcq(ibcq);
@@ -1469,6 +1511,7 @@ int hfi_ib_cq_arm(struct hfi_ctx *ctx, struct ib_cq *ibcq, u8 solicit)
 	/* for now just do round-robin assignment */
 	irq_idx = atomic_inc_return(&dd->irq_eq_next) %
 		   dd->num_eq_irqs;
+	eqm->irq_vector = irq_idx;
 
 	spin_lock_irqsave(&rcq->lock, flags);
 	if (ctx->type == HFI_CTX_TYPE_USER) {
@@ -1479,44 +1522,17 @@ int hfi_ib_cq_arm(struct hfi_ctx *ctx, struct ib_cq *ibcq, u8 solicit)
 	}
 	if (!list_empty(&rcq->hw_cq)) {
 		list_for_each_entry(ibeq, &rcq->hw_cq, hw_cq) {
-			eq_desc_base = (void *)(ibeq->eq.ctx->ptl_state_base +
-						HFI_PSB_EQ_DESC_OFFSET);
-
-			/* setup interrupt for this EQ */
-			/* issue write to privileged CMDQ to complete */
-			slots = _hfi_eq_update_intr(ibeq->eq.ctx,
-						    &dd->priv_rx_cq,
-						    ibeq->eq.idx, irq_idx,
-						    solicit,
-						    (ibeq->eq.ctx->type == HFI_CTX_TYPE_USER) ?
-						    ibeq->hw_armed : (u64)&ibeq->hw_armed,
-						    &cmd);
-
-			/* Queue write, no wait */
-			ret = hfi_pend_cq_queue(&dd->pend_cq,
-						&dd->priv_rx_cq,
-						NULL, &cmd, slots,
-						GFP_KERNEL);
+			ret = hfi_ib_eq_arm(ctx, ibcq, ibeq, solicit);
 			if (ret) {
-				dd_dev_err(dd, "%s: hfi_pend_cq_queue failed %d\n",
-					   __func__, ret);
-				kfree(eqm);
+				spin_unlock_irqrestore(&rcq->lock, flags);
 				return ret;
 			}
-
-			/* update host memory EQD copy */
-			eq_desc.val[0] = eq_desc_base[ibeq->eq.idx].val[0];
-			eq_desc.irq = irq_idx;
-			eq_desc.i = 1;
-			eq_desc.s = solicit;
-			eq_desc_base[ibeq->eq.idx].val[0] = eq_desc.val[0];
 		}
 	}
 	spin_unlock_irqrestore(&rcq->lock, flags);
 
 	/* add EQ to list of IRQ waiters */
 	me = &dd->irq_entries[irq_idx];
-	eqm->irq_vector = irq_idx;
 	spin_lock_irqsave(&me->irq_wait_lock, flags);
 	list_add(&eqm->irq_wait_chain, &me->irq_wait_head);
 	spin_unlock_irqrestore(&me->irq_wait_lock, flags);
@@ -1990,7 +2006,7 @@ int hfi_ib_eq_add(struct hfi_ctx *ctx, struct ib_cq *cq, u64 disarm_done,
 		/* issue write to privileged CMDQ to complete */
 		slots = _hfi_eq_update_intr(ctx, &ctx->devdata->priv_rx_cq,
 					    ibeq->eq.idx, irq_idx,
-					    (rcq->notify == IB_CQ_NEXT_COMP),
+					    (rcq->notify == IB_CQ_SOLICITED),
 					    ibeq->hw_armed,
 					    &cmd);
 
@@ -2007,7 +2023,7 @@ int hfi_ib_eq_add(struct hfi_ctx *ctx, struct ib_cq *cq, u64 disarm_done,
 		eq_desc.val[0] = eq_desc_base[ibeq->eq.idx].val[0];
 		eq_desc.irq = irq_idx;
 		eq_desc.i = 1;
-		eq_desc.s = 0;
+		eq_desc.s = (rcq->notify == IB_CQ_SOLICITED);
 		eq_desc_base[ibeq->eq.idx].val[0] = eq_desc.val[0];
 	}
 	spin_unlock_irqrestore(&rcq->lock, flags);
