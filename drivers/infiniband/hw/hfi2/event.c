@@ -1480,10 +1480,7 @@ int hfi_ib_cq_arm(struct hfi_ctx *ctx, struct ib_cq *ibcq, u8 solicit)
 	int irq_idx;
 	struct hfi_devdata *dd;
 	struct hfi_ibeq *ibeq;
-	union eqd *eq_desc_base;
-	int ret, slots;
-	union eqd eq_desc;
-	union hfi_rx_cq_command cmd;
+	int ret;
 
 	if (!rcq)
 		return 0;

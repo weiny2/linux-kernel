@@ -67,11 +67,23 @@ int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region)
 	struct rvt_mregion *lkey_mr;
 	u32 lkey, rkey;
 	bool need_reserved_rkey;
+	int ret;
 
 	ctx = obj_to_ibctx(mr->pd);
 	if (!ctx) {
 		WARN_ON(!ctx);
 		return -EINVAL;
+	}
+
+	if (ctx->supports_native) {
+		/* Early memory registration needs HW context */
+		ret = hfi2_add_initial_hw_ctx(ctx);
+		/*
+		 * If error, we have run out of HW contexts.
+		 * So fallback to legacy transport.
+		 */
+		if (ret != 0)
+			ctx->supports_native = false;
 	}
 
 	need_reserved_rkey = !ctx->is_user && !dma_region;

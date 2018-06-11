@@ -434,90 +434,97 @@ exit:
 	return ret;
 }
 
-/*
- * Block for an EQ event interrupt, return value:
- * <0: on error, including dropped,
- *  0: no new event,
- *  1. get new event,
- */
 static
-int _hfi2_native_wait(struct hfi_ibcontext *ctx, u64 **rhf_entry)
+int _hfi2_process_sync_cq(struct hfi_ibcontext *ctx, struct rvt_cq *cq)
 {
-	int rc;
-	bool dropped = false;
-
-	rc = hfi_eq_wait_irq(&ctx->hw_ctx->sync_eq, -1,
-			     rhf_entry, &dropped);
-	if (rc == -ETIME || rc == -ERESTARTSYS) {
-		/* timeout or wait interrupted, not abnormal */
-		rc = 0;
-	} else if (rc > 0 && dropped) {
-		/* driver bug with EQ sizing */
-		rc = -EIO;
-	}
-	return rc;
-}
-
-int hfi2_qp_sync_thread(void *data)
-{
-	struct hfi_ibcontext *ctx = data;
+	struct hfi_ibeq *ibeq;
 	union target_EQEntry *teq;
 	u64 *eq = NULL;
 	int ret, ret2;
+	bool dropped;
+	unsigned long flags;
 
-	allow_signal(SIGINT);
-	while (!kthread_should_stop()) {
-		ret = _hfi2_native_wait(ctx, &eq);
-		if (ret < 0)
-			return ret;
-		else if (!ret)
-			continue;
+	spin_lock_irqsave(&cq->lock, flags);
 
-		ret2 = 0;
-		teq = (union target_EQEntry *)eq;
-		switch (hfi_event_kind(eq)) {
-		case NON_PTL_EVENT_VERBS_TX:
-			/*TODO Handle asynchronous events */
-#if 0
-			ret2 = hfi2_async_event(ctx, eq);
-#endif
-			break;
-		case NON_PTL_EVENT_VERBS_RX:
-			switch (SYNC_EQ_OPCODE(teq->hdr_data)) {
-			case PID_EXCHANGE:
-			case PID_SYNC:
-				ret2 = hfi2_handle_pid_exchange(ctx, eq);
-				break;
-			case RNR_TX_ENTER:
-				ret2 = hfi2_enter_tx_flow_ctl(ctx, eq);
-				break;
-			case RNR_RX_EXIT:
-				ret2 = hfi2_exit_rx_flow_ctl(ctx, eq);
-				break;
-			case RNR_TX_EXIT:
-				ret2 = hfi2_exit_tx_flow_ctl(ctx, eq);
-				break;
-			default:
-				pr_err("unregisted event %d\n",
-				       (int)SYNC_EQ_OPCODE(teq->hdr_data));
+	list_for_each_entry(ibeq, &cq->hw_cq, hw_cq) {
+		while (true) {
+			ret = hfi_eq_peek_nth(&ibeq->eq, &eq, 0, &dropped);
+			if (ret < 0) {
+				spin_unlock_irqrestore(&cq->lock, flags);
+				return ret;
+			} else if (ret == HFI_EQ_EMPTY) {
 				break;
 			}
-			break;
-		case PTL_EVENT_PT_DISABLED:
-			ret2 = hfi2_enter_rx_flow_ctl(ctx, eq);
-			break;
-		default:
-			break;
-		}
-		if (ret2 != 0)
-			goto thread_exit;
-		hfi_eq_advance(&ctx->hw_ctx->sync_eq, eq);
-	}
-	return 0;
 
-thread_exit:
-	pr_warn("%s exited with %d", __func__, ret2);
-	return ret2;
+			ret2 = 0;
+			teq = (union target_EQEntry *)eq;
+			switch (hfi_event_kind(eq)) {
+			case NON_PTL_EVENT_VERBS_TX:
+				/*TODO Handle asynchronous events */
+#if 0
+				ret2 = hfi2_async_event(ctx, eq);
+#endif
+				break;
+			case NON_PTL_EVENT_VERBS_RX:
+				switch (SYNC_EQ_OPCODE(teq->hdr_data)) {
+				case PID_EXCHANGE:
+				case PID_SYNC:
+					ret2 = hfi2_handle_pid_exchange(ctx, eq);
+					break;
+				case RNR_TX_ENTER:
+					ret2 = hfi2_enter_tx_flow_ctl(ctx, eq);
+					break;
+				case RNR_RX_EXIT:
+					ret2 = hfi2_exit_rx_flow_ctl(ctx, eq);
+					break;
+				case RNR_TX_EXIT:
+					ret2 = hfi2_exit_tx_flow_ctl(ctx, eq);
+					break;
+				default:
+					pr_err("unregisted event %d\n",
+					       (int)SYNC_EQ_OPCODE(teq->hdr_data));
+					break;
+				}
+				break;
+			case PTL_EVENT_PT_DISABLED:
+				ret2 = hfi2_enter_rx_flow_ctl(ctx, eq);
+				break;
+			default:
+				break;
+			}
+			if (ret2 != 0) {
+				spin_unlock_irqrestore(&cq->lock, flags);
+				return ret2;
+			}
+
+			hfi_eq_advance((struct hfi_eq *)ibeq, eq);
+		}
+	}
+
+	spin_unlock_irqrestore(&cq->lock, flags);
+	return 0;
+}
+
+void hfi2_qp_sync_comp_handler(struct ib_cq *cq, void *cq_context)
+{
+	struct hfi_ibcontext *ctx = obj_to_ibctx(cq);
+	int ret;
+
+	ret = _hfi2_process_sync_cq(ctx, ibcq_to_rvtcq(cq));
+	if (ret < 0)
+		goto comp_handler_exit;
+
+	ret = ib_req_notify_cq(cq, IB_CQ_NEXT_COMP);
+	if (ret < 0)
+		goto comp_handler_exit;
+
+	ret = _hfi2_process_sync_cq(ctx, ibcq_to_rvtcq(cq));
+	if (ret < 0)
+		goto comp_handler_exit;
+	return;
+
+comp_handler_exit:
+	pr_warn("%s exited with %d", __func__, ret);
 }
 
 int hfi2_qp_exchange_pid(struct hfi_ibcontext *ctx, struct rvt_qp *qp)

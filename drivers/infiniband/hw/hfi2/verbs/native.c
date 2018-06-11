@@ -135,19 +135,106 @@ const u8 hfi_ft_ib_status[16] = {
 	[PTL_NI_UNSUPPORTED] = IB_WC_REM_OP_ERR,
 };
 
-static int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx);
+static int hfi_ib_eq_setup(struct hfi_ctx *hw_ctx, struct rvt_cq *cq)
+{
+	struct opa_ev_assign eq_alloc = {0};
+	struct hfi_ibeq *ibeq;
+	int ret;
+	unsigned long flags;
+
+	eq_alloc.ni = NATIVE_NI;
+	eq_alloc.count = adjust_cqe(cq->ibcq.cqe);
+	ibeq = hfi_ibeq_alloc(hw_ctx, &eq_alloc);
+	if (IS_ERR(ibeq)) {
+		ret = PTR_ERR(ibeq);
+		return ret;
+	}
+
+	spin_lock_irqsave(&cq->lock, flags);
+	list_add_tail(&ibeq->hw_cq, &cq->hw_cq);
+
+	if (hfi_ib_cq_armed(&cq->ibcq)) {
+		/* arm the HW event queue for interrupts - CQ already armed */
+		ibeq->hw_armed = 0;
+		ibeq->hw_disarmed = 0;
+		ret = hfi_ib_eq_arm(hw_ctx, &cq->ibcq, ibeq,
+				    (cq->notify & IB_CQ_SOLICITED_MASK)
+				    == IB_CQ_SOLICITED);
+		spin_unlock_irqrestore(&cq->lock, flags);
+		if (ret)
+			goto arm_err;
+
+		/* wait completion to turn on interrupt */
+		mutex_lock(&hw_ctx->rx_mutex);
+		ret = hfi_eq_poll_cmd_complete(hw_ctx, &ibeq->hw_armed);
+		if (ret)
+			goto eq_err;
+		mutex_unlock(&hw_ctx->rx_mutex);
+	} else if (cq->notify & IB_CQ_SOLICITED_MASK) {
+		/* arm the HW event queue for interrupts - first time arming */
+		ibeq->hw_armed = 0;
+		ibeq->hw_disarmed = 0;
+		spin_unlock_irqrestore(&cq->lock, flags);
+		ret = hfi_ib_cq_arm(hw_ctx, &cq->ibcq,
+				    (cq->notify & IB_CQ_SOLICITED_MASK)
+				    == IB_CQ_SOLICITED);
+		if (ret)
+			goto arm_err;
+
+		/* wait completion to turn on interrupt */
+		mutex_lock(&hw_ctx->rx_mutex);
+		ret = hfi_eq_poll_cmd_complete(hw_ctx, &ibeq->hw_armed);
+		if (ret)
+			goto eq_err;
+		mutex_unlock(&hw_ctx->rx_mutex);
+	} else {
+		spin_unlock_irqrestore(&cq->lock, flags);
+	}
+
+	return 0;
+
+eq_err:
+	mutex_unlock(&hw_ctx->rx_mutex);
+arm_err:
+	spin_lock_irqsave(&cq->lock, flags);
+	list_del(&ibeq->hw_cq);
+	spin_unlock_irqrestore(&cq->lock, flags);
+	hfi_eq_free((struct hfi_eq *)&ibeq);
+	return ret;
+}
 
 static
 int hfi2_create_qp_sync(struct hfi_ibcontext *ctx, struct hfi_ctx *hw_ctx)
 {
+	struct ib_cq *ibcq;
+	int ret;
+	struct ib_cq_init_attr attr;
+
 	ctx->tx_qp_flow_ctl = kcalloc(HFI2_MAX_QPS_PER_PID,
 				      sizeof(u64), GFP_KERNEL);
-	if (!ctx->sync_task)
-		ctx->sync_task = kthread_run(hfi2_qp_sync_thread,
-					     ctx, "hfi2_qp_async");
-	if (IS_ERR_OR_NULL(ctx->sync_task))
-		return PTR_ERR(ctx->sync_task);
+	if (!ctx->tx_qp_flow_ctl)
+		return -ENOMEM;
+
+	attr.cqe = 0x10000;
+	attr.comp_vector = 0;
+	ibcq = ib_create_cq(ctx->ibuc.device, hfi2_qp_sync_comp_handler, NULL,
+			    &ctx->ibuc, &attr);
+	if (!ibcq)
+		return -ENOMEM;
+	ret = hfi_ib_eq_setup(hw_ctx, ibcq_to_rvtcq(ibcq));
+	if (ret != 0)
+		goto err_sync_cq;
+	ret = ib_req_notify_cq(ibcq, IB_CQ_NEXT_COMP);
+	if (ret < 0)
+		goto err_sync_cq;
+	ctx->sync_cq = ibcq_to_rvtcq(ibcq);
+
 	return 0;
+
+err_sync_cq:
+	ib_destroy_cq(ibcq);
+
+	return ret;
 }
 
 /* Append new set of keys to LKEY and RKEY stacks */
@@ -236,8 +323,6 @@ static void hfi2_remove_hw_context(struct hfi_ctx *hw_ctx)
 void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, void *udata,
 				bool is_enabled)
 {
-	int ret;
-
 	ctx->num_ctx = 0;
 	mutex_init(&ctx->ctx_lock);
 	spin_lock_init(&ctx->flow_ctl_lock);
@@ -250,16 +335,6 @@ void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, void *udata,
 	ctx->is_user = !!udata;
 	/* Only enable native Verbs for kernel clients */
 	ctx->supports_native = is_enabled && !ctx->is_user;
-	if (ctx->supports_native) {
-		/* Early memory registration needs HW context */
-		ret = hfi2_add_initial_hw_ctx(ctx);
-		/*
-		 * If error, we have run out of HW contexts.
-		 * So fallback to legacy transport.
-		 */
-		if (ret != 0)
-			ctx->supports_native = false;
-	}
 
 	/* Use single key when not native Verbs */
 	ctx->lkey_only = !ctx->supports_native;
@@ -278,11 +353,13 @@ void hfi2_native_dealloc_ucontext(struct hfi_ibcontext *ctx)
 		ctx->tx_cmdq = NULL;
 		ctx->rx_cmdq = NULL;
 	}
-	if (ctx->sync_task) {
-		send_sig(SIGINT, ctx->sync_task, 1);
-		kthread_stop(ctx->sync_task);
-		ctx->sync_task = NULL;
+	if (ctx->sync_cq) {
+		ib_destroy_cq(&ctx->sync_cq->ibcq);
+		ctx->sync_cq = NULL;
+	}
+	if (ctx->tx_qp_flow_ctl) {
 		kfree(ctx->tx_qp_flow_ctl);
+		ctx->tx_qp_flow_ctl = NULL;
 	}
 	hfi2_free_all_keys(ctx);
 	if (ctx->hw_ctx) {
@@ -367,7 +444,6 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 {
 	struct opa_ctx_assign attach = {0};
 	struct hfi_ctx *hw_ctx = NULL;
-	struct opa_ev_assign eq_alloc;
 	int ret;
 
 	/* TODO - only support single context now */
@@ -396,19 +472,6 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 	if (ret < 0)
 		goto err_post_attach;
 
-	memset(&eq_alloc, 0, sizeof(eq_alloc));
-	eq_alloc.ni = NATIVE_NI;
-	eq_alloc.count = HFI2_MAX_QPS_PER_PID;
-	ret = _hfi_eq_alloc(hw_ctx, &eq_alloc, &hw_ctx->sync_eq);
-	if (ret < 0) {
-		pr_err("error on sync eq alloc %d\n", ret);
-		goto err_sync_eq;
-	}
-	if ((hw_ctx->sync_eq.idx & 0x7ff) != 1) {
-		pr_err("not valid sync eq allocated %d\n", hw_ctx->sync_eq.idx);
-		ret = -EFAULT;
-		goto err_sync_eq;
-	}
 	/*
 	 * Store pointer to the hardware context state
 	 * TODO - update here for multiple PIDs
@@ -418,8 +481,6 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 
 	return hw_ctx;
 
-err_sync_eq:
-	hfi_eq_free(&hw_ctx->sync_eq);
 err_post_attach:
 	pr_info("native: Error %d after HW attach, detaching PID %d\n",
 		ret, hw_ctx->pid);
@@ -429,7 +490,7 @@ err_attach:
 	return ERR_PTR(ret);
 }
 
-static int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx)
+int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx)
 {
 	struct hfi_ctx *hw_ctx;
 	int ret = 0;
@@ -442,8 +503,8 @@ static int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx)
 				ret = PTR_ERR(hw_ctx);
 			} else {
 				/* create QP Sync  */
-				ret = hfi2_create_qp_sync(ctx, hw_ctx);
 				ret = hfi2_add_cmdq(ctx);
+				ret = hfi2_create_qp_sync(ctx, hw_ctx);
 			}
 		}
 		mutex_unlock(&ctx->ctx_lock);
@@ -679,74 +740,6 @@ int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq,
 	return ret;
 }
 
-static int hfi_ib_eq_setup(struct hfi_rq *rq, struct rvt_cq *cq)
-{
-	struct opa_ev_assign eq_alloc = {0};
-	struct hfi_ibeq *ibeq;
-	int ret;
-	unsigned long flags;
-
-	eq_alloc.ni = NATIVE_NI;
-	eq_alloc.count = adjust_cqe(cq->ibcq.cqe);
-	ibeq = hfi_ibeq_alloc(rq->hw_ctx, &eq_alloc);
-	if (IS_ERR(ibeq)) {
-		ret = PTR_ERR(ibeq);
-		return ret;
-	}
-
-	spin_lock_irqsave(&cq->lock, flags);
-	list_add_tail(&ibeq->hw_cq, &cq->hw_cq);
-
-	if (hfi_ib_cq_armed(&cq->ibcq)) {
-		/* arm the HW event queue for interrupts - CQ already armed */
-		ibeq->hw_armed = 0;
-		ibeq->hw_disarmed = 0;
-		ret = hfi_ib_eq_arm(rq->hw_ctx, &cq->ibcq, ibeq,
-				    (cq->notify & IB_CQ_SOLICITED_MASK)
-				    == IB_CQ_SOLICITED);
-		spin_unlock_irqrestore(&cq->lock, flags);
-		if (ret)
-			goto arm_err;
-
-		/* wait completion to turn on interrupt */
-		mutex_lock(&rq->hw_ctx->rx_mutex);
-		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &ibeq->hw_armed);
-		if (ret)
-			goto eq_err;
-		mutex_unlock(&rq->hw_ctx->rx_mutex);
-	} else if (cq->notify & IB_CQ_SOLICITED_MASK) {
-		/* arm the HW event queue for interrupts - first time arming */
-		ibeq->hw_armed = 0;
-		ibeq->hw_disarmed = 0;
-		spin_unlock_irqrestore(&cq->lock, flags);
-		ret = hfi_ib_cq_arm(rq->hw_ctx, &cq->ibcq,
-				    (cq->notify & IB_CQ_SOLICITED_MASK)
-				    == IB_CQ_SOLICITED);
-		if (ret)
-			goto arm_err;
-
-		/* wait completion to turn on interrupt */
-		mutex_lock(&rq->hw_ctx->rx_mutex);
-		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &ibeq->hw_armed);
-		if (ret)
-			goto eq_err;
-		mutex_unlock(&rq->hw_ctx->rx_mutex);
-	} else {
-		spin_unlock_irqrestore(&cq->lock, flags);
-	}
-
-	return 0;
-
-eq_err:
-	mutex_unlock(&rq->hw_ctx->rx_mutex);
-arm_err:
-	spin_lock_irqsave(&cq->lock, flags);
-	list_del(&ibeq->hw_cq);
-	spin_unlock_irqrestore(&cq->lock, flags);
-	hfi_eq_free((struct hfi_eq *)&ibeq);
-	return ret;
-}
-
 void hfi2_native_reset_qp(struct rvt_qp *qp)
 {
 	int ret;
@@ -906,7 +899,7 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		 */
 		cq = ibcq_to_rvtcq(ibqp->send_cq);
 		if (cq && list_empty(&cq->hw_cq)) {
-			ret = hfi_ib_eq_setup(rvtqp->r_rq.hw_rq, cq);
+			ret = hfi_ib_eq_setup(rq->hw_ctx, cq);
 			if (ret != 0)
 				goto qp_write_err;
 		}
@@ -914,7 +907,7 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		/* create recv EQ if first use of CQ */
 		cq = ibcq_to_rvtcq(ibqp->recv_cq);
 		if (cq && list_empty(&cq->hw_cq)) {
-			ret = hfi_ib_eq_setup(rq, cq);
+			ret = hfi_ib_eq_setup(rq->hw_ctx, cq);
 			if (ret != 0)
 				goto qp_write_err;
 		}

@@ -122,7 +122,6 @@ struct hfi_ks {
  * @rkey_ks: RKEYs stack
  * @lkey_ks: LKEYs stack
  * @mr: MR array for LKEYs
- * @sync_task: kthread waiting for async events including RNR events
  */
 struct hfi_ibcontext {
 	struct ib_ucontext ibuc;
@@ -144,8 +143,8 @@ struct hfi_ibcontext {
 	struct hfi_ks	lkey_ks;
 	struct rvt_mregion **lkey_mr;
 	u64	*tx_qp_flow_ctl;
-	struct task_struct *sync_task;
 	spinlock_t flow_ctl_lock;
+	struct rvt_cq *sync_cq;
 };
 
 /**
@@ -258,7 +257,6 @@ struct hfi_ibeq {
  * resources concurrently
  * @shr_me_ks: ME key stack for use with native Verbs provider
  * @rx_mutex: mutex used for provider RX command processing
- * @sync_eq: eq for RNR events
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
@@ -316,7 +314,6 @@ struct hfi_ctx {
 	struct rw_semaphore ctx_rwsem;
 	struct hfi_ks	*shr_me_ks;
 	struct mutex rx_mutex;
-	struct hfi_eq   sync_eq;
 
 	struct ib_uobject *uobject;
 };

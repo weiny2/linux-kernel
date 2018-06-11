@@ -281,12 +281,13 @@ int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 int hfi2_poll_cq(struct ib_cq *cq, int ne, struct ib_wc *wc);
 int hfi2_req_notify_cq(struct ib_cq *cq, enum ib_cq_notify_flags flags);
 int hfi2_destroy_srq(struct ib_srq *ibsrq);
-int hfi2_qp_sync_thread(void *data);
+void hfi2_qp_sync_comp_handler(struct ib_cq *cq, void *cq_context);
 int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq,
 		     struct rvt_qp *qp, u32 slid, u16 ipid,
 		     u8 state, bool failed);
 int hfi2_fence(struct hfi_ibcontext *ctx, struct rvt_qp *qp, u32 *fence_value);
 int hfi2_qp_exchange_pid(struct hfi_ibcontext *ctx, struct rvt_qp *qp);
 int hfi2_destroy_cq(struct ib_cq *ibcq);
+int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx);
 #endif
 #endif /* NATIVE_VERBS_H */
