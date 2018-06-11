@@ -49,7 +49,8 @@
 BuildRequires: kernel-devel = %(echo %{kver}|sed -e 's/-/_/g')
 %endif
 
-%define rdma_path "$(pwd)/rdmavt"
+%define rdmavt_path "$(pwd)/rdmavt"
+%define krping_path "$(pwd)/krping"
 
 %if 0%{!?build_src_rpm:1}
 %define relext _%(echo %{kver}|sed -e 's/-/_/g')
@@ -75,7 +76,7 @@ hfi2 provides the driver for Intel Omni-Path HFI 2nd generation cards
 %setup -q
 
 %build
-make %{?_smp_mflags} VERSION=%version KVER=%kver KBUILD=%kdir RELEASE=%release RDMA_PATH=%rdma_path %mtarget
+make %{?_smp_mflags} VERSION=%version KVER=%kver KBUILD=%kdir RELEASE=%release RDMAVT_PATH=%rdmavt_path KRPING_PATH=%krping_path %mtarget
 
 %install
 make VERSION=%version KVER=%kver RELEASE=%release DESTDIR=${RPM_BUILD_ROOT} install

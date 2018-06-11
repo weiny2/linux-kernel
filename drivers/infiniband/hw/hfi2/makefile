@@ -71,7 +71,8 @@ EXCLUDES := --exclude-vcs --exclude-backups --exclude='*.patch' --exclude='*.swp
 
 PWD := $(shell pwd)
 VERBOSE := 0
-RDMA_PATH ?= $(PWD)/../../sw/rdmavt
+RDMAVT_PATH ?= $(PWD)/../../sw/rdmavt
+KRPING_PATH ?= $(PWD)/../../ulp/krping
 
 # if KVER not specified, set KBUILD for in-tree build
 ifeq (,$(KVER))
@@ -89,9 +90,11 @@ hfi2-ifs:
 	$(MAKE) -C $(KBUILD) M=$(PWD) V=$(VERBOSE) MVERSION=$(MVERSION) \
 	CONFIG_INFINIBAND_HFI2=m CONFIG_HFI2_STLNP=m
 
-.PHONY: rdmavt
+.PHONY: rdmavt krping
 rdmavt:
-	$(MAKE) -C $(KBUILD) M=$(RDMA_PATH) V=$(VERBOSE) MVERSION=$(MVERSION)
+	$(MAKE) -C $(KBUILD) M=$(RDMAVT_PATH) V=$(VERBOSE) MVERSION=$(MVERSION)
+krping:
+	$(MAKE) -C $(KBUILD) M=$(KRPING_PATH) V=$(VERBOSE) MVERSION=$(MVERSION)
 
 # these targets assume you have write permission to $(KBUILD)
 prep:
@@ -112,7 +115,8 @@ prep-debug:
 	$(MAKE) -C $(KBUILD) modules_prepare
 
 clean:
-	make -C $(KBUILD) M=${RDMA_PATH} clean
+	make -C $(KBUILD) M=${RDMAVT_PATH} clean
+	make -C $(KBUILD) M=${KRPING_PATH} clean
 	make -C $(KBUILD) M=${PWD} clean
 
 distclean: clean
@@ -138,8 +142,10 @@ dist: distclean $(NAME).spec
 	rm -rf /tmp/$(NAME)-$(VERSION)
 	mkdir -p /tmp/$(NAME)-$(VERSION)
 	mkdir -p /tmp/$(NAME)-$(VERSION)/rdmavt
+	mkdir -p /tmp/$(NAME)-$(VERSION)/krping
 	cp -r . /tmp/$(NAME)-$(VERSION)
-	cp -r ../../sw/rdmavt /tmp/$(NAME)-$(VERSION)/
+	cp -r $(RDMAVT_PATH) /tmp/$(NAME)-$(VERSION)/
+	cp -r $(KRPING_PATH) /tmp/$(NAME)-$(VERSION)/
 	tar $(EXCLUDES) -C /tmp -zcvf $(PWD)/$(NAME)-$(VERSION).tgz ./$(NAME)-$(VERSION)
 	rm -rf /tmp/$(NAME)-$(VERSION)
 
@@ -154,11 +160,12 @@ install:
 	# ignore errors when these two modules not built by using prep-verbs
 	-install user/hfi2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	-install kfi/kfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
+	-install krping/rdma_krping.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	install -m=644 build/80-hfi2.rules $(RPM_BUILD_ROOT)/usr/lib/udev/rules.d/
 	install build/$(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
 
 # these targets used by rpm specfile to package hfi2 + rdmavt
-driver: hfi2 rdmavt
+driver: hfi2 rdmavt krping
 driver-ifs: hfi2-ifs rdmavt
 
 rpm: dist
