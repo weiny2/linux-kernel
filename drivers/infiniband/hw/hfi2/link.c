@@ -1366,6 +1366,7 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 	u8 enable_lane_tx;
 	u8 tx_polarity_inversion;
 	u8 rx_polarity_inversion;
+	u8 local_tx_rate;
 #endif
 	int ret;
 
@@ -1376,31 +1377,16 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 	/* set the local tx rate - need to read-modify-write */
 	ret = read_tx_settings(
 		dd, &enable_lane_tx, &tx_polarity_inversion,
-		&rx_polarity_inversion, &ppd->local_tx_rate);
+		&rx_polarity_inversion, &local_tx_rate);
 	if (ret)
 		goto set_local_link_attributes_fail;
-#endif
 
 	/* set the tx rate to all enabled */
-	ppd->local_tx_rate = 0;
-	switch (ppd->link_speed_enabled) {
-	case OPA_LINK_SPEED_32G: /* fall through */
-		ppd->local_tx_rate |= HFI2_LINK_SPEED_32G;
-	case OPA_LINK_SPEED_25G: /* fall through */
-		ppd->local_tx_rate |= HFI2_LINK_SPEED_25G;
-	case OPA_LINK_SPEED_12_5G:
-		ppd->local_tx_rate |= HFI2_LINK_SPEED_12_5G;
-		break;
-	default:
-		ppd_dev_err(ppd, "invalid link_speed_enabled: %d",
-			    ppd->link_speed_enabled);
-		return -EINVAL;
-	}
+	local_tx_rate = ppd->link_speed_enabled;
 
-#if 0 /* WFR legacy */
 	enable_lane_tx = 0xF; /* enable all four lanes */
 	ret = write_tx_settings(dd, enable_lane_tx, tx_polarity_inversion,
-				rx_polarity_inversion, ppd->local_tx_rate);
+				rx_polarity_inversion, local_tx_rate);
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
@@ -1413,8 +1399,8 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 #endif
-	write_csr(ppd->dd, CRK_CRK8051_CFG_LOCAL_PORT_NO,
-		       ppd->pnum & CRK_CRK8051_CFG_LOCAL_PORT_NO_VAL_MASK);
+	write_csr(dd, CRK_CRK8051_CFG_LOCAL_PORT_NO,
+		  ppd->pnum & CRK_CRK8051_CFG_LOCAL_PORT_NO_VAL_MASK);
 
 	if (dd->emulation) {
 		ret = write_vc_local_fabric(ppd, ppd->vau, 0, ppd->vcu,
@@ -1954,29 +1940,27 @@ static void handle_verify_cap(struct work_struct *work)
 	/* actual rate is highest bit of the ANDed rates */
 	rate = 0;
 	switch (remote_max_rate) {
-	case 0: /* 32G */
-		rate |= HFI2_LINK_SPEED_32G; /* fall through */
-	case 1: /* 25G */
-		rate |= HFI2_LINK_SPEED_25G | HFI2_LINK_SPEED_12_5G;
-		break;
 	default:
-		ppd_dev_err(ppd, "invalid remote max rate %d, set up to 32G",
+		ppd_dev_err(ppd, "invalid remote max rate %d, set up to 50G",
 			    remote_max_rate);
-		rate = HFI2_LINK_SPEED_32G | HFI2_LINK_SPEED_25G |
-			HFI2_LINK_SPEED_12_5G;
+		/* fall through */
+	case 0: /* 50G */
+		rate |= OPA_LINK_SPEED_50G; /* fall through */
+	case 1: /* 25G */
+		rate |= OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
 		break;
 	}
-	rate &= ppd->local_tx_rate;
-	if (rate & HFI2_LINK_SPEED_32G) {
-		ppd->link_speed_active = OPA_LINK_SPEED_32G;
-	} else if (rate & HFI2_LINK_SPEED_25G) {
+	rate &= ppd->link_speed_enabled;
+	if (rate & OPA_LINK_SPEED_50G) {
+		ppd->link_speed_active = OPA_LINK_SPEED_50G;
+	} else if (rate & OPA_LINK_SPEED_25G) {
 		ppd->link_speed_active = OPA_LINK_SPEED_25G;
-	} else if (rate & HFI2_LINK_SPEED_12_5G) {
+	} else if (rate & OPA_LINK_SPEED_12_5G) {
 		ppd->link_speed_active = OPA_LINK_SPEED_12_5G;
 	} else {
-		ppd_dev_err(ppd, "no common speed with remote: 0x%x, set up 32Gb\n",
+		ppd_dev_err(ppd, "no common speed with remote: 0x%x, set up 50Gb\n",
 			    rate);
-		ppd->link_speed_active = OPA_LINK_SPEED_32G;
+		ppd->link_speed_active = OPA_LINK_SPEED_50G;
 	}
 
 	/*

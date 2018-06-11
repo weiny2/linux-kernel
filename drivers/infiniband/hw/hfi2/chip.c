@@ -3639,11 +3639,8 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 		ppd->link_width_downgrade_enabled =
 					ppd->link_width_downgrade_supported;
 
-		/*
-		 * FXRTODO: FXR supports 32Gb/s. This needs to be added to
-		 * opa_port_info.h
-		 */
-		ppd->link_speed_supported = OPA_LINK_SPEED_25G;
+		ppd->link_speed_supported = OPA_LINK_SPEED_50G |
+					    OPA_LINK_SPEED_25G;
 		ppd->link_speed_enabled = ppd->link_speed_supported;
 		/* give a reasonable active value, will be set on link up */
 		ppd->link_speed_active = OPA_LINK_SPEED_25G;

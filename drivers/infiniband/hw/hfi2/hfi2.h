@@ -713,7 +713,6 @@ struct hfi_pend_cmd {
  *	messages
  * @is_vl_marker_enabled: If 1, indicates that explicit interleaving is enabled.
  *      Thus enabling preemption matrix setup by the FM
- * @local_tx_rate: rate given to 8051 firmware
  * @mgmt_allowed: Indicates if neighbor is allowing this node to be a mgmt node
  *	(information received via LNI)
  * @part_enforce: Partition enforcement flags
@@ -845,7 +844,6 @@ struct hfi_pportdata {
 	u8 is_active_optimize_enabled;
 	u8 driver_link_ready;
 	u8 is_vl_marker_enabled;
-	u8 local_tx_rate;
 	u8 mgmt_allowed;
 	u8 part_enforce;
 	u8 sl_to_sc[OPA_MAX_SLS];
