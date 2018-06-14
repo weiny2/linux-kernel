@@ -179,7 +179,8 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	 * until user calls close(), see ib_uverbs_open and review STL-3033
 	 * about earlier race here.
 	 */
-	ucontext = hi->ibdev->alloc_ucontext(hi->ibdev, NULL);
+	/* Pass in ud so hfi2 understands this is a user-space context */
+	ucontext = hi->ibdev->alloc_ucontext(hi->ibdev, ud);
 	if (IS_ERR(ucontext)) {
 		kfree(ud);
 		return PTR_ERR(ucontext);
