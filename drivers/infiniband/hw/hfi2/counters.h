@@ -62,7 +62,7 @@
 #define CNTR_MODE_W	0x0
 #define CNTR_MODE_R	0x1
 
-#define NUM_DEV_CNTRS	267
+#define NUM_DEV_CNTRS	494
 
 enum {
 	XMIT_DATA = 0,
