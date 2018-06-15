@@ -1258,6 +1258,39 @@ static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
 static inline void ptep_set_wrprotect(struct mm_struct *mm,
 				      unsigned long addr, pte_t *ptep)
 {
+	/*
+	 * Some processors can start a write, but end up seeing a read-only
+	 * PTE by the time they get to the Dirty bit.  In this case, they
+	 * will set the Dirty bit, leaving a read-only, Dirty PTE which
+	 * looks like a Shadow Stack PTE.
+	 *
+	 * However, this behavior has been improved and will not occur on
+	 * processors supporting Shadow Stack.  Without this guarantee, a
+	 * transition to a non-present PTE and flush the TLB would be
+	 * needed.
+	 *
+	 * When changing a writable PTE to read-only and if the PTE has
+	 * _PAGE_DIRTY_HW set, we move that bit to _PAGE_DIRTY_SW so that
+	 * the PTE is not a valid Shadow Stack PTE.
+	 */
+#ifdef CONFIG_X86_64
+	if (static_cpu_has(X86_FEATURE_SHSTK)) {
+		pte_t new_pte, pte = READ_ONCE(*ptep);
+
+		do {
+			/*
+			 * This is the same as moving _PAGE_DIRTY_HW
+			 * to _PAGE_DIRTY_SW.
+			 */
+			new_pte = pte_wrprotect(pte);
+			new_pte.pte |= (new_pte.pte & _PAGE_DIRTY_HW) >>
+					_PAGE_BIT_DIRTY_HW << _PAGE_BIT_DIRTY_SW;
+			new_pte.pte &= ~_PAGE_DIRTY_HW;
+		} while (!try_cmpxchg(&ptep->pte, &pte.pte, new_pte.pte));
+
+		return;
+	}
+#endif
 	clear_bit(_PAGE_BIT_RW, (unsigned long *)&ptep->pte);
 }
 
@@ -1308,6 +1341,39 @@ static inline pud_t pudp_huge_get_and_clear(struct mm_struct *mm,
 static inline void pmdp_set_wrprotect(struct mm_struct *mm,
 				      unsigned long addr, pmd_t *pmdp)
 {
+	/*
+	 * Some processors can start a write, but end up seeing a read-only
+	 * PMD by the time they get to the Dirty bit.  In this case, they
+	 * will set the Dirty bit, leaving a read-only, Dirty PMD which
+	 * looks like a Shadow Stack PMD.
+	 *
+	 * However, this behavior has been improved and will not occur on
+	 * processors supporting Shadow Stack.  Without this guarantee, a
+	 * transition to a non-present PMD and flush the TLB would be
+	 * needed.
+	 *
+	 * When changing a writable PMD to read-only and if the PMD has
+	 * _PAGE_DIRTY_HW set, we move that bit to _PAGE_DIRTY_SW so that
+	 * the PMD is not a valid Shadow Stack PMD.
+	 */
+#ifdef CONFIG_X86_64
+	if (static_cpu_has(X86_FEATURE_SHSTK)) {
+		pmd_t new_pmd, pmd = READ_ONCE(*pmdp);
+
+		do {
+			/*
+			 * This is the same as moving _PAGE_DIRTY_HW
+			 * to _PAGE_DIRTY_SW.
+			 */
+			new_pmd = pmd_wrprotect(pmd);
+			new_pmd.pmd |= (new_pmd.pmd & _PAGE_DIRTY_HW) >>
+					_PAGE_BIT_DIRTY_HW << _PAGE_BIT_DIRTY_SW;
+			new_pmd.pmd &= ~_PAGE_DIRTY_HW;
+		} while (!try_cmpxchg(&pmdp->pmd, &pmd.pmd, new_pmd.pmd));
+
+		return;
+	}
+#endif
 	clear_bit(_PAGE_BIT_RW, (unsigned long *)pmdp);
 }
 
