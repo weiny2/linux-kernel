@@ -700,6 +700,7 @@ static int hfi_ib_eq_setup(struct hfi_rq *rq, struct rvt_cq *cq)
 	if (hfi_ib_cq_armed(&cq->ibcq)) {
 		/* arm the HW event queue for interrupts - CQ already armed */
 		ibeq->hw_armed = 0;
+		ibeq->hw_disarmed = 0;
 		ret = hfi_ib_eq_arm(rq->hw_ctx, &cq->ibcq, ibeq,
 				    (cq->notify & IB_CQ_SOLICITED_MASK)
 				    == IB_CQ_SOLICITED);
@@ -712,11 +713,11 @@ static int hfi_ib_eq_setup(struct hfi_rq *rq, struct rvt_cq *cq)
 		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &ibeq->hw_armed);
 		if (ret)
 			goto eq_err;
-		ibeq->hw_disarmed = 0; /* arming succeeded */
 		mutex_unlock(&rq->hw_ctx->rx_mutex);
 	} else if (cq->notify & IB_CQ_SOLICITED_MASK) {
 		/* arm the HW event queue for interrupts - first time arming */
 		ibeq->hw_armed = 0;
+		ibeq->hw_disarmed = 0;
 		spin_unlock_irqrestore(&cq->lock, flags);
 		ret = hfi_ib_cq_arm(rq->hw_ctx, &cq->ibcq,
 				    (cq->notify & IB_CQ_SOLICITED_MASK)
@@ -729,7 +730,6 @@ static int hfi_ib_eq_setup(struct hfi_rq *rq, struct rvt_cq *cq)
 		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &ibeq->hw_armed);
 		if (ret)
 			goto eq_err;
-		ibeq->hw_disarmed = 0; /* arming succeeded */
 		mutex_unlock(&rq->hw_ctx->rx_mutex);
 	} else {
 		spin_unlock_irqrestore(&cq->lock, flags);
@@ -1775,11 +1775,12 @@ int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 			mutex_lock(&ibeq->eq.ctx->rx_mutex);
 			ret = hfi_eq_poll_cmd_complete(ibeq->eq.ctx,
 						       &ibeq->hw_disarmed);
+			mutex_unlock(&ibeq->eq.ctx->rx_mutex);
 			if (ret)
 				return ret;
-			mutex_unlock(&ibeq->eq.ctx->rx_mutex);
 		}
 		ibeq->hw_armed = 0;
+		ibeq->hw_disarmed = 0;
 	}
 	spin_unlock_irqrestore(&cq->lock, lock_flags);
 
@@ -1794,9 +1795,9 @@ int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 			mutex_lock(&ibeq->eq.ctx->rx_mutex);
 			ret = hfi_eq_poll_cmd_complete(ibeq->eq.ctx,
 						       &ibeq->hw_armed);
-			if (!ret)
-				ibeq->hw_disarmed = 0; /* arming succeeded */
 			mutex_unlock(&ibeq->eq.ctx->rx_mutex);
+			if (unlikely(ret))
+				break;
 		}
 		spin_unlock_irqrestore(&cq->lock, lock_flags);
 	}
