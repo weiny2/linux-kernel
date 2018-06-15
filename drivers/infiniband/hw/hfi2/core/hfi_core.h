@@ -256,7 +256,8 @@ struct hfi_ibeq {
  * @ctx_rwsem: protect multiple threads of same context from attaching/freeing
  * resources concurrently
  * @shr_me_ks: ME key stack for use with native Verbs provider
- * @rx_mutex: mutex used for provider RX command processing
+ * @eq_lock: spin lock used for provider RX command processing
+ * @sync_eq: eq for RNR events
  */
 struct hfi_ctx {
 	struct hfi_devdata *devdata;
@@ -313,7 +314,8 @@ struct hfi_ctx {
 
 	struct rw_semaphore ctx_rwsem;
 	struct hfi_ks	*shr_me_ks;
-	struct mutex rx_mutex;
+	spinlock_t eq_lock;
+	struct hfi_eq   sync_eq;
 
 	struct ib_uobject *uobject;
 };

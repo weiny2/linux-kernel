@@ -706,17 +706,13 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_send_wr *wr,
 	rvt_put_mr(mr);
 
 	hw_ctx = ctx->hw_ctx;
-	mutex_lock(&hw_ctx->rx_mutex);
 	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 	ret = hfi_rkey_invalidate(ctx->rx_cmdq, key, (u64)&done);
 	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
-	if (ret != 0) {
-		mutex_unlock(&hw_ctx->rx_mutex);
+	if (ret != 0)
 		return ret;
-	}
 
 	ret = hfi_eq_poll_cmd_complete(ctx->hw_ctx, &done);
-	mutex_unlock(&hw_ctx->rx_mutex);
 	if (ret != 0)
 		return ret;
 	/* returns err code or nslots required to post on tx_cmdq */

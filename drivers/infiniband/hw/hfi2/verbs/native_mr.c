@@ -144,14 +144,12 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 		/* If this fails we've somehow leaked an RKEY, but is freed */
 		WARN_ON(ret != 0);
 		hw_ctx = ctx->hw_ctx;
-		mutex_lock(&hw_ctx->rx_mutex);
 		spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 		ret = hfi_rkey_invalidate(ctx->rx_cmdq, mr->rkey, (u64)&done);
 		spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
 		WARN_ON(ret != 0);
 		/* TODO - extract hw_ctx based on RKEY_PID(rkey) */
 		ret = hfi_eq_poll_cmd_complete(ctx->hw_ctx, &done);
-		mutex_unlock(&hw_ctx->rx_mutex);
 		WARN_ON(ret != 0);
 	}
 
@@ -230,7 +228,6 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 				n = 0;
 			}
 		}
-		mutex_lock(&hw_ctx->rx_mutex);
 		spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 		ret = hfi_rkey_write(ctx->rx_cmdq, NATIVE_NI,
 				     (const void *)mr->iova,
@@ -240,7 +237,6 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 				     HFI_CT_NONE, (u64)&done);
 	} else {
 		WARN_ON(mr->map[0]->segs[0].length < mr->length);
-		mutex_lock(&hw_ctx->rx_mutex);
 		spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 		ret = hfi_rkey_write(ctx->rx_cmdq, NATIVE_NI,
 				     (const void *)mr->iova,
@@ -250,13 +246,10 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 				     HFI_CT_NONE, (u64)&done);
 	}
 	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
-	if (ret) {
-		mutex_unlock(&hw_ctx->rx_mutex);
+	if (ret)
 		return ret;
-	}
 
 	ret = hfi_eq_poll_cmd_complete(hw_ctx, &done);
-	mutex_unlock(&hw_ctx->rx_mutex);
 	return ret;
 }
 

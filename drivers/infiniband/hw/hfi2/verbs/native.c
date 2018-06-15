@@ -165,11 +165,9 @@ static int hfi_ib_eq_setup(struct hfi_ctx *hw_ctx, struct rvt_cq *cq)
 			goto arm_err;
 
 		/* wait completion to turn on interrupt */
-		mutex_lock(&hw_ctx->rx_mutex);
 		ret = hfi_eq_poll_cmd_complete(hw_ctx, &ibeq->hw_armed);
 		if (ret)
-			goto eq_err;
-		mutex_unlock(&hw_ctx->rx_mutex);
+			goto arm_err;
 	} else if (cq->notify & IB_CQ_SOLICITED_MASK) {
 		/* arm the HW event queue for interrupts - first time arming */
 		ibeq->hw_armed = 0;
@@ -182,19 +180,15 @@ static int hfi_ib_eq_setup(struct hfi_ctx *hw_ctx, struct rvt_cq *cq)
 			goto arm_err;
 
 		/* wait completion to turn on interrupt */
-		mutex_lock(&hw_ctx->rx_mutex);
 		ret = hfi_eq_poll_cmd_complete(hw_ctx, &ibeq->hw_armed);
 		if (ret)
-			goto eq_err;
-		mutex_unlock(&hw_ctx->rx_mutex);
+			goto arm_err;
 	} else {
 		spin_unlock_irqrestore(&cq->lock, flags);
 	}
 
 	return 0;
 
-eq_err:
-	mutex_unlock(&hw_ctx->rx_mutex);
 arm_err:
 	spin_lock_irqsave(&cq->lock, flags);
 	list_del(&ibeq->hw_cq);
@@ -543,19 +537,16 @@ void hfi_deinit_hw_rq(struct hfi_ibcontext *ctx, struct hfi_rq *rq)
 		result[0] = 0;
 
 		/* Unlink head of list */
-		mutex_lock(&rq->hw_ctx->rx_mutex);
 		spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 		ret = hfi_recvq_unlink(ctx->rx_cmdq, NATIVE_NI,
 				       rq->hw_ctx, rq->recvq_root,
 				       (u64)result);
 		spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
 		if (ret != 0) {
-			mutex_unlock(&rq->hw_ctx->rx_mutex);
 			break;
 		}
 
 		ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, result);
-		mutex_unlock(&rq->hw_ctx->rx_mutex);
 		if (ret != 0)
 			break;
 
@@ -623,7 +614,6 @@ int hfi_init_hw_rq(struct hfi_ibcontext *ctx, struct rvt_rq *rvtrq,
 		hfi2_push_key(&rq->ded_me_ks, list_handle);
 	}
 
-	mutex_lock(&hw_ctx->rx_mutex);
 	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 	/* receive queue init */
 	ret = hfi_recvq_init(ctx->rx_cmdq, NATIVE_NI,
@@ -632,12 +622,10 @@ int hfi_init_hw_rq(struct hfi_ibcontext *ctx, struct rvt_rq *rvtrq,
 	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
 
 	if (ret != 0) {
-		mutex_unlock(&hw_ctx->rx_mutex);
 		goto err;
 	}
 
 	ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, &done);
-	mutex_unlock(&hw_ctx->rx_mutex);
 	if (ret != 0)
 		goto err;
 	rq->recvq_root = recvq_root;
@@ -727,7 +715,6 @@ int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq,
 
 	nslots = hfi_format_qp_write(qp, slid, ipid, (u64)&done,
 				     state, failed, &rx_cmd);
-	mutex_lock(&qp_priv->rq_ctx->rx_mutex);
 	spin_lock_irqsave(&rx_cmdq->lock, flags);
 	do {
 		ret = hfi_rx_command(rx_cmdq, (u64 *)&rx_cmd, nslots);
@@ -736,7 +723,6 @@ int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq,
 	/* If no error, process completion of above RX command */
 	if (!ret)
 		ret = hfi_eq_poll_cmd_complete(qp_priv->rq_ctx, &done);
-	mutex_unlock(&qp_priv->rq_ctx->rx_mutex);
 	return ret;
 }
 
@@ -973,7 +959,6 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		while (!ibqp->srq) {
 			result[0] = 0;
 			/* Unlink head of list */
-			mutex_lock(&ctx->hw_ctx->rx_mutex);
 			spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 			ret = hfi_recvq_unlink(ctx->rx_cmdq, NATIVE_NI,
 					       rq->hw_ctx,
@@ -981,12 +966,10 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 					       (u64)result);
 			spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
 			if (ret != 0) {
-				mutex_unlock(&ctx->hw_ctx->rx_mutex);
 				goto qp_write_err;
 			}
 
 			ret = hfi_eq_poll_cmd_complete(rq->hw_ctx, result);
-			mutex_unlock(&ctx->hw_ctx->rx_mutex);
 			if (ret != 0)
 				goto qp_write_err;
 
@@ -1244,7 +1227,6 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 	pt.phys.slid = PTL_LID_ANY;
 	pt.phys.ipid = PTL_PID_ANY;
 
-	mutex_lock(&hw_rq->hw_ctx->rx_mutex);
 	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
 	ret = hfi_recvq_append(ctx->rx_cmdq, NATIVE_NI,
 			       (void *)addr, length,
@@ -1262,13 +1244,11 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 		if (ret != 0)
 			goto me_cleanup;
 	}
-	mutex_unlock(&hw_rq->hw_ctx->rx_mutex);
 	if (qp)
 		qp->r_flags &= ~RVT_S_WAIT_RNR;
 	return 0;
 
 me_cleanup:
-	mutex_unlock(&hw_rq->hw_ctx->rx_mutex);
 	hfi2_push_key(&hw_rq->ded_me_ks, list_handle);
 
 rq_wc_cleanup:
@@ -1765,10 +1745,8 @@ int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 		/* check if this the first interrupt call */
 		if (cq->eqm) {
 			/* wait completion to turn off interrupt */
-			mutex_lock(&ibeq->eq.ctx->rx_mutex);
 			ret = hfi_eq_poll_cmd_complete(ibeq->eq.ctx,
 						       &ibeq->hw_disarmed);
-			mutex_unlock(&ibeq->eq.ctx->rx_mutex);
 			if (ret)
 				return ret;
 		}
@@ -1785,10 +1763,8 @@ int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 		spin_lock_irqsave(&cq->lock, lock_flags);
 		list_for_each_entry(ibeq, &cq->hw_cq, hw_cq) {
 			/* wait completion to turn on interrupt */
-			mutex_lock(&ibeq->eq.ctx->rx_mutex);
 			ret = hfi_eq_poll_cmd_complete(ibeq->eq.ctx,
 						       &ibeq->hw_armed);
-			mutex_unlock(&ibeq->eq.ctx->rx_mutex);
 			if (unlikely(ret))
 				break;
 		}

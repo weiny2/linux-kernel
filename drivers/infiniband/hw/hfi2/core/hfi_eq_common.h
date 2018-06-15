@@ -329,9 +329,9 @@ int hfi_eq_poll_cmd_complete(struct hfi_ctx *ctx, u64 *done)
 {
 	int ret;
 
-	HFI_TS_MUTEX_LOCK(ctx);
+	spin_lock(&ctx->eq_lock);
 	ret = _hfi_eq_poll_cmd_complete(ctx, done);
-	HFI_TS_MUTEX_UNLOCK(ctx);
+	spin_unlock(&ctx->eq_lock);
 	return ret;
 }
 
