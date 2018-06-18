@@ -93,34 +93,68 @@ static void hfi2_uninit_port(struct hfi2_ibport *ibp);
 
 __be64 hfi2_sys_guid;
 
-/* Maximum number of protection domains to support */
-static unsigned int hfi2_max_pds = 0xFFFF;
-/* Maximum number of address handles to support */
-static unsigned int hfi2_max_ahs = 0xFFFF;
-/* Maximum number of completion queue entries to support */
-unsigned int hfi2_max_cqes = 0x2FFFF;
-/* Maximum number of completion queues to support */
-unsigned int hfi2_max_cqs = 0x1FFFF;
-/* Maximum number of QP WRs to support */
-unsigned int hfi2_max_qp_wrs = 0x3FFF;
-/* Maximum number of QPs to support */
+static unsigned int hfi2_max_pds = HFI2_MAX_PDS;
+module_param_named(max_pds, hfi2_max_pds, uint, 0444);
+MODULE_PARM_DESC(max_pds, "Maximum number of protection domains to support");
+
+static unsigned int hfi2_max_ahs = HFI2_MAX_AHS;
+module_param_named(max_ahs, hfi2_max_ahs, uint, 0444);
+MODULE_PARM_DESC(max_ahs, "Maximum number of address handles to support");
+
+unsigned int hfi2_max_cqes = HFI2_MAX_CQES;
+module_param_named(max_cqes, hfi2_max_cqes, uint, 0444);
+MODULE_PARM_DESC(max_cqes, "Maximum number of completion queue entries to support");
+
+unsigned int hfi2_max_cqs = HFI2_MAX_CQS;
+module_param_named(max_cqs, hfi2_max_cqs, uint, 0444);
+MODULE_PARM_DESC(max_cqs, "Maximum number of completion queues to support");
+
+unsigned int hfi2_max_qp_wrs = HFI2_MAX_QP_WRS;
+module_param_named(max_qp_wrs, hfi2_max_qp_wrs, uint, 0444);
+MODULE_PARM_DESC(max_qp_wrs, "Maximum number of QP WRs to support");
+
 unsigned int hfi2_max_qps = HFI2_MAX_QPS;
-/* Maximum number of SGEs to support */
-unsigned int hfi2_max_sges = 0x60;
-/* Maximum number of multicast groups to support */
-unsigned int hfi2_max_mcast_grps = 16384;
-/* Maximum number of attached QPs to support */
-unsigned int hfi2_max_mcast_qp_attached = 16;
-/* Maximum number of SRQs to support */
-static unsigned int hfi2_max_srqs = 1024;
-/* Maximum number of SRQ SGEs to support */
-static unsigned int hfi2_max_srq_sges = 128;
-/* Maximum number of SRQ WRs support */
-static unsigned int hfi2_max_srq_wrs = 0x1FFFF;
-/* LKEY table size in bits (2^n, 1 <= n <= 23) */
-unsigned int hfi2_lkey_table_size = 16;
-/* Size of QP hash table */
-static unsigned int hfi2_qp_table_size = 256;
+module_param_named(max_qps, hfi2_max_qps, uint, 0444);
+MODULE_PARM_DESC(max_qps, "Maximum number of QPs to support");
+
+unsigned int hfi2_max_sges = HFI2_MAX_SGES;
+module_param_named(max_sges, hfi2_max_sges, uint, 0444);
+MODULE_PARM_DESC(max_sqes, "Maximum number of SGEs to support");
+
+unsigned int hfi2_max_mcast_grps = HFI2_MAX_MCAST_GRPS;
+module_param_named(max_mcast_grps, hfi2_max_mcast_grps, uint, 0444);
+MODULE_PARM_DESC(max_mcast_grps,
+	"Maximum number of multicast groups to support");
+
+unsigned int hfi2_max_mcast_qp_attached = HFI2_MAX_MCAST_QP_ATTACHED;
+module_param_named(max_mcast_qp_attached, hfi2_max_mcast_qp_attached, uint, 0444);
+MODULE_PARM_DESC(max_mcast_qp_attached,
+	"Maximum number of attached QPs to support");
+
+static unsigned int hfi2_max_srqs = HFI2_MAX_SRQS;
+module_param_named(max_srqs, hfi2_max_srqs, uint, 0444);
+MODULE_PARM_DESC(max_srqs, "Maximum number of SRQs to support");
+
+static unsigned int hfi2_max_srq_sges = HFI2_MAX_SRQ_SGES;
+module_param_named(max_srq_sges, hfi2_max_srq_sges, uint, 0444);
+MODULE_PARM_DESC(max_srq_sges, "Maximum number of SRQ SGEs to support");
+
+static unsigned int hfi2_max_srq_wrs = HFI2_MAX_SRQ_WRS;
+module_param_named(max_srq_wrs, hfi2_max_srq_wrs, uint, 0444);
+MODULE_PARM_DESC(max_srq_wrs, "Maximum number of SRQ WRs support");
+
+unsigned int hfi2_lkey_table_size = HFI2_LKEY_TABLE_SIZE;
+module_param_named(lkey_table_size, hfi2_lkey_table_size, uint, 0444);
+MODULE_PARM_DESC(lkey_table_size,
+	"LKEY table size in bits (2^n, 1 <= n <= 23)");
+
+static unsigned int hfi2_qp_table_size = HFI2_QP_TABLE_SIZE;
+module_param_named(qp_table_size, hfi2_qp_table_size, uint, 0444);
+MODULE_PARM_DESC(qp_table_size, "Size of QP hash table");
+
+unsigned int hfi2_kdeth_qp = HFI2_QPN_KDETH_PREFIX;
+module_param_named(kdeth_qp, hfi2_kdeth_qp, uint, 0444);
+MODULE_PARM_DESC(kdeth_qp, "Set the KDETH queue pair prefix");
 
 #ifdef HFI_VERBS_TEST
 /* TODO: temporary module parameter for packet drop, will not be upstreamed */
@@ -552,7 +586,7 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibd->rdi.dparms.qpn_start = 0;
 	ibd->rdi.dparms.qpn_inc = 1;
 	ibd->rdi.dparms.qos_shift = HFI2_QPN_QOS_SHIFT;
-	ibd->rdi.dparms.qpn_res_start = HFI2_QPN_KDETH_BASE;
+	ibd->rdi.dparms.qpn_res_start = hfi2_kdeth_qp << 16;
 	ibd->rdi.dparms.qpn_res_end = ibd->rdi.dparms.qpn_res_start +
 				      HFI2_QPN_KDETH_SIZE;
 
@@ -741,12 +775,44 @@ static void hfi_qp_state_free(struct hfi_devdata *dd)
 	dd->qp_state_base = 0;
 }
 
+static void hfi2_validate_param(void)
+{
+	if (hfi2_max_pds < HFI2_MAX_PDS)
+		hfi2_max_pds = HFI2_MAX_PDS;
+	if (hfi2_max_ahs < HFI2_MAX_AHS)
+		hfi2_max_ahs = HFI2_MAX_AHS;
+	if (hfi2_max_cqes < HFI2_MAX_CQES)
+		hfi2_max_cqes = HFI2_MAX_CQES;
+	if (hfi2_max_cqs < HFI2_MAX_CQS)
+		hfi2_max_cqs = HFI2_MAX_CQS;
+	if (hfi2_max_qp_wrs < HFI2_MAX_QP_WRS)
+		hfi2_max_qp_wrs = HFI2_MAX_QP_WRS;
+	if (hfi2_max_qps < 16)
+		hfi2_max_qps = 16;
+	if (hfi2_max_sges < HFI2_MAX_SGES)
+		hfi2_max_sges = HFI2_MAX_SGES;
+	if (hfi2_max_mcast_grps < HFI2_MAX_MCAST_GRPS)
+		hfi2_max_mcast_grps = HFI2_MAX_MCAST_GRPS;
+	if (hfi2_max_mcast_qp_attached < HFI2_MAX_MCAST_QP_ATTACHED)
+		hfi2_max_mcast_qp_attached = HFI2_MAX_MCAST_QP_ATTACHED;
+	if (hfi2_max_srqs < HFI2_MAX_SRQS)
+		hfi2_max_srqs = HFI2_MAX_SRQS;
+	if (hfi2_max_srq_sges < HFI2_MAX_SRQ_SGES)
+		hfi2_max_srq_sges = HFI2_MAX_SGES;
+	if (hfi2_max_srq_wrs < HFI2_MAX_SRQ_WRS)
+		hfi2_max_srq_wrs = HFI2_MAX_SRQ_WRS;
+	if (hfi2_lkey_table_size > 23)
+		hfi2_lkey_table_size = 23;
+}
+
 int hfi2_ib_add(struct hfi_devdata *dd)
 {
 	int i, ret;
 	u8 num_ports;
 	struct hfi2_ibdev *ibd;
 	struct hfi2_ibport *ibp;
+
+	hfi2_validate_param();
 
 	num_ports = dd->num_pports;
 	ibd = (struct hfi2_ibdev *)rvt_alloc_device(sizeof(*ibd) +

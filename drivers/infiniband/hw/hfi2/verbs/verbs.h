@@ -101,11 +101,29 @@
  * QPNs (lower 16 bits = 64K QPNs).
  * RDMAVT manages QPN allocation.
  */
-#define HFI2_QPN_KDETH_BASE	BIT(23) /* Gen1 default */
-#define HFI2_QPN_KDETH_SIZE	0xFFFF
-#define HFI2_QPN_MAP_MAX	BIT(8)	/* 8-bits to map to Recv Context */
-#define HFI2_QPN_QOS_SHIFT	1
-#define HFI2_MAX_QPS		16384	/* maximum SW will allocate */
+#define HFI2_QPN_KDETH_PREFIX		BIT(7)	/* Gen1 default */
+#define HFI2_QPN_KDETH_SIZE		0xFFFF
+#define HFI2_QPN_MAP_MAX		BIT(8)	/* 8-bits to map to Recv Context */
+#define HFI2_QPN_QOS_SHIFT		1
+#define HFI2_MAX_QPS			16384	/* maximum SW will allocate */
+#define HFI2_MAX_QP_WRS			0x3FFF	/* default maximum QP WRs */
+
+/*
+ * Module parameter defaults
+ */
+#define HFI2_MAX_PDS			0xFFFF  /* max protection domains */
+#define HFI2_MAX_AHS			0xFFFF  /* max address handles */
+#define HFI2_MAX_CQES			0x2FFFF /* max completion queue entries */
+#define HFI2_MAX_CQS			0x1FFFF /* max completion queues */
+#define HFI2_MAX_SGES			0x60	/* max SGEs */
+#define HFI2_MAX_MCAST_GRPS		16384   /* max multicast groups */
+#define HFI2_MAX_MCAST_QP_ATTACHED	16	/* max attached QPs */
+#define HFI2_MAX_SRQS			1024	/* max SRQs */
+#define HFI2_MAX_SRQ_SGES		128	/* max SRQ SGEs */
+#define HFI2_MAX_SRQ_WRS		0x1FFFF /* max SRQ WRs */
+#define HFI2_LKEY_TABLE_SIZE		16	/* LKEY table size */
+#define HFI2_QP_TABLE_SIZE		256	/* Size of QP hash table */
+
 
 #define HFI2_RHF_RCV_TYPES      8
 
@@ -124,6 +142,7 @@ extern unsigned int hfi2_max_sges;
 extern unsigned int hfi2_lkey_table_size;
 extern unsigned int hfi2_max_mcast_grps;
 extern unsigned int hfi2_max_mcast_qp_attached;
+extern unsigned int hfi2_kdeth_qp;
 
 struct hfi2_ib_packet;
 union hfi2_packet_header;

@@ -567,12 +567,12 @@ static void init_csrs(struct hfi_devdata *dd)
 
 	write_csr(dd, FXR_RXHP_CFG_NPTL_CTL, nptl_ctl);
 	kdeth_qp = (FXR_RXHP_CFG_NPTL_BTH_QP_KDETH_QP_MASK &
-		   (HFI2_QPN_KDETH_BASE >> 16)) <<
+		   hfi2_kdeth_qp) <<
 		   FXR_RXHP_CFG_NPTL_BTH_QP_KDETH_QP_SHIFT;
 	write_csr(dd, FXR_RXHP_CFG_NPTL_BTH_QP, kdeth_qp);
 
 	bth_qp = (FXR_TXCID_CFG_SENDBTHQP_SEND_BTH_QP_MASK &
-		 (HFI2_QPN_KDETH_BASE >> 16)) <<
+		 hfi2_kdeth_qp) <<
 		 FXR_TXCID_CFG_SENDBTHQP_SEND_BTH_QP_SHIFT;
 	write_csr(dd, FXR_TXCID_CFG_SENDBTHQP, bth_qp);
 
