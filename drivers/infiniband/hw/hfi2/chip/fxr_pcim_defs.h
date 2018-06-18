@@ -60,13 +60,19 @@
 * PCIM block Configuration bits
 */
 #define HFI_PCIM_CFG					(HFI_PCIM_CSRS + 0x000000000000)
-#define HFI_PCIM_CFG_RESETCSR				0x000040207403E7FFull
+#define HFI_PCIM_CFG_RESETCSR				0x0001C0207403E7FFull
 #define HFI_PCIM_CFG_DRIVER_RESET_SHIFT			63
 #define HFI_PCIM_CFG_DRIVER_RESET_MASK			0x1ull
 #define HFI_PCIM_CFG_DRIVER_RESET_SMASK			0x8000000000000000ull
-#define HFI_PCIM_CFG_RESERVED_62_47_SHIFT		47
-#define HFI_PCIM_CFG_RESERVED_62_47_MASK		0xFFFFull
-#define HFI_PCIM_CFG_RESERVED_62_47_SMASK		0x7FFF800000000000ull
+#define HFI_PCIM_CFG_RESERVED_62_49_SHIFT		49
+#define HFI_PCIM_CFG_RESERVED_62_49_MASK		0x3FFFull
+#define HFI_PCIM_CFG_RESERVED_62_49_SMASK		0x7FFE000000000000ull
+#define HFI_PCIM_CFG_MAX_READ_REQ_128_SHIFT		48
+#define HFI_PCIM_CFG_MAX_READ_REQ_128_MASK		0x1ull
+#define HFI_PCIM_CFG_MAX_READ_REQ_128_SMASK		0x1000000000000ull
+#define HFI_PCIM_CFG_MAX_PAYLOAD_128_SHIFT		47
+#define HFI_PCIM_CFG_MAX_PAYLOAD_128_MASK		0x1ull
+#define HFI_PCIM_CFG_MAX_PAYLOAD_128_SMASK		0x800000000000ull
 #define HFI_PCIM_CFG_HIFIS_IDLE_SHIFT			46
 #define HFI_PCIM_CFG_HIFIS_IDLE_MASK			0x1ull
 #define HFI_PCIM_CFG_HIFIS_IDLE_SMASK			0x400000000000ull
@@ -715,17 +721,7 @@
 #define HFI_PCIM_ERR_INFO7_ITR_RPE_ENTRY_MASK		0xFFull
 #define HFI_PCIM_ERR_INFO7_ITR_RPE_ENTRY_SMASK		0xFFull
 /*
-* Table #34 of fxr_top - PCIM_SAI_BOOTW
-* HW register for SAI_BOOT_W Policy Group. Generates WAC/RAC/CP for use by CFG 
-* space controller.
-*/
-#define HFI_PCIM_SAI_BOOTW				(HFI_PCIM_CSRS + 0x0000000002F0)
-#define HFI_PCIM_SAI_BOOTW_RESETCSR			0x0000000000000000ull
-#define HFI_PCIM_SAI_BOOTW_SPARE_SHIFT			0
-#define HFI_PCIM_SAI_BOOTW_SPARE_MASK			0xFFFFFFFFFFFFFFFFull
-#define HFI_PCIM_SAI_BOOTW_SPARE_SMASK			0xFFFFFFFFFFFFFFFFull
-/*
-* Table #35 of fxr_top - PCIM_BMC_STS
+* Table #34 of fxr_top - PCIM_BMC_STS
 * This is the Error Status CSR. Bits are set by hardware or by writing to the 
 * #%%#PCIM_BMC_FRC#%%# CSR. Bits are cleared by writing to the 
 * #%%#PCIM_BMC_CLR#%%# CSR.
@@ -832,7 +828,7 @@
 #define HFI_PCIM_BMC_STS_IOMMU_PRQ_EVENT_MASK		0x1ull
 #define HFI_PCIM_BMC_STS_IOMMU_PRQ_EVENT_SMASK		0x1ull
 /*
-* Table #36 of fxr_top - PCIM_BMC_CLR
+* Table #35 of fxr_top - PCIM_BMC_CLR
 * This is the BMC Clear CSR. Writing a 1 to a valid bit will clear the 
 * corresponding bit in the #%%#PCIM_BMC_STS#%%# CSR.
 */
@@ -845,7 +841,7 @@
 #define HFI_PCIM_BMC_CLR_EVENTS_MASK			0xFFFFFFFFull
 #define HFI_PCIM_BMC_CLR_EVENTS_SMASK			0xFFFFFFFFull
 /*
-* Table #37 of fxr_top - PCIM_BMC_FRC
+* Table #36 of fxr_top - PCIM_BMC_FRC
 * This is the BMC Force CSR. Writing a 1 to a valid bit will set the 
 * corresponding bit in the #%%#PCIM_BMC_STS#%%# CSR.
 */
@@ -858,7 +854,7 @@
 #define HFI_PCIM_BMC_FRC_EVENTS_MASK			0xFFFFFFFFull
 #define HFI_PCIM_BMC_FRC_EVENTS_SMASK			0xFFFFFFFFull
 /*
-* Table #38 of fxr_top - PCIM_BMC_ENA
+* Table #37 of fxr_top - PCIM_BMC_ENA
 * This is the Enable CSR for the BMC Interrupt. If a bit is set, the 
 * corresponding error bit in #%%#PCIM_BMC_STS#%%# will cause an interrupt to the 
 * BMC.
@@ -872,7 +868,7 @@
 #define HFI_PCIM_BMC_ENA_EVENTS_MASK			0xFFFFFFFFull
 #define HFI_PCIM_BMC_ENA_EVENTS_SMASK			0xFFFFFFFFull
 /*
-* Table #39 of fxr_top - PCIM_BMC_FIRST
+* Table #38 of fxr_top - PCIM_BMC_FIRST
 * This is the First BMC CSR for the BMC Interrupt. When BMC interrupt is clear, 
 * it will capture the next #%%#PCIM_BMC_STS#%%# value when a new BMC Interrupt 
 * occurs.
@@ -886,7 +882,7 @@
 #define HFI_PCIM_BMC_FIRST_EVENTS_MASK			0xFFFFFFFFull
 #define HFI_PCIM_BMC_FIRST_EVENTS_SMASK			0xFFFFFFFFull
 /*
-* Table #40 of fxr_top - PCIM_INT_STS
+* Table #39 of fxr_top - PCIM_INT_STS
 * 320 Interrupt Status bits implemented in five 64-bit CSRs. Each bit represents 
 * an interrupt source. A bit is set to 1 whenever the corresponding event is 
 * signaled (rising edge triggered) or if the bit is explicitly set by software 
@@ -901,7 +897,7 @@
 #define HFI_PCIM_INT_STS_INT_STS_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_PCIM_INT_STS_INT_STS_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #42 of fxr_top - PCIM_INT_CLR
+* Table #41 of fxr_top - PCIM_INT_CLR
 * One for one mapping to #%%#PCIM_INT_STS#%%# registers to clear status bits. 
 * Writing a 1 clears the bit. Writing 0 has no effect. Reads return 
 * 0.
@@ -912,7 +908,7 @@
 #define HFI_PCIM_INT_CLR_INT_CLR_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_PCIM_INT_CLR_INT_CLR_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #43 of fxr_top - PCIM_INT_FRC
+* Table #42 of fxr_top - PCIM_INT_FRC
 * One for one mapping to #%%#PCIM_INT_STS#%%# registers to set status bits. 
 * Writing a 1 sets the bit. Writing 0 has no effect. Reads return 
 * 0.
@@ -923,7 +919,7 @@
 #define HFI_PCIM_INT_FRC_INT_FRC_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_PCIM_INT_FRC_INT_FRC_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #44 of fxr_top - PCIM_PBA_CLR
+* Table #43 of fxr_top - PCIM_PBA_CLR
 * One for one mapping to #%%#PCIM_MSIX_PBA#%%# registers to clear associated 
 * #%%#msix_pba#%%# bits. Writing a 1 clears the bit. Writing 0 has no effect. 
 * Reads return 0.
@@ -934,7 +930,7 @@
 #define HFI_PCIM_PBA_CLR_PBA_CLR_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_PCIM_PBA_CLR_PBA_CLR_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #45 of fxr_top - PCIM_PBA_FRC
+* Table #44 of fxr_top - PCIM_PBA_FRC
 * One for one mapping to #%%#PCIM_MSIX_PBA#%%# registers to set associated 
 * #%%#msix_pba#%%# bits. Writing a 1 sets the bit. Writing 0 has no effect. 
 * Reads return 0.
@@ -945,7 +941,7 @@
 #define HFI_PCIM_PBA_FRC_PBA_FRC_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_PCIM_PBA_FRC_PBA_FRC_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #46 of fxr_top - PCIM_INT_ITR
+* Table #45 of fxr_top - PCIM_INT_ITR
 * ITR is used to shape (throttle) #%%#PCIM_MSIX_PBA#%%#[3:0] CSR events (IRQs 
 * and LM_BECN_EVENT). Each #%%#PCIM_MSIX_PBA#%%# bit has an associated ITR to 
 * limit the max signaling rate for that event. ITR can be disabled by setting 
@@ -970,7 +966,7 @@
 #define HFI_PCIM_INT_ITR_INT_DELAY_MASK			0xFFFFull
 #define HFI_PCIM_INT_ITR_INT_DELAY_SMASK		0xFFFFull
 /*
-* Table #47 of fxr_top - PCIM_MSIX_ADDR
+* Table #46 of fxr_top - PCIM_MSIX_ADDR
 * 320 MSIX Table entries containing MSIX Message Address. Each 
 * #%%#PCIM_MSIX_PBA#%%# event is direct mapped to a MSIX Table entry. 
 * #%%#PCIM_MSIX_PBA#%%# bit event 0 maps to MSIX Table entry 0, 
@@ -983,7 +979,7 @@
 #define HFI_PCIM_MSIX_ADDR_MSG_ADDR_MASK		0xFFFFFFFFFFFFFFFFull
 #define HFI_PCIM_MSIX_ADDR_MSG_ADDR_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #48 of fxr_top - PCIM_MSIX_DATACTL
+* Table #47 of fxr_top - PCIM_MSIX_DATACTL
 * 320 MSIX Table entries containing MSIX Message Data and Control. Each 
 * #%%#PCIM_MSIX_PBA#%%# event is direct mapped to a MSIX Table entry. 
 * #%%#PCIM_MSIX_PBA#%%# bit event 0 maps to MSIX Table entry 0, 
@@ -1002,7 +998,7 @@
 #define HFI_PCIM_MSIX_DATACTL_MSG_DATA_MASK		0xFFFFFFFFull
 #define HFI_PCIM_MSIX_DATACTL_MSG_DATA_SMASK		0xFFFFFFFFull
 /*
-* Table #49 of fxr_top - PCIM_MSIX_PBA
+* Table #48 of fxr_top - PCIM_MSIX_PBA
 * MSIX Pending Bit Array. Five total QWARDs (0 to 4). Each QWORD contains 
 * Pending Bits for 64 entries in the MSIX Table. QWORD N contains PBA bits for 
 * MSIX Table entries [64N+63 : 64N] for a total of 320 PBA bits. Each of the 320 
@@ -1018,7 +1014,7 @@
 #define HFI_PCIM_MSIX_PBA_MSIX_PBA_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_PCIM_MSIX_PBA_MSIX_PBA_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #50 of fxr_top - PCIM_REMAP_TBL
+* Table #49 of fxr_top - PCIM_REMAP_TBL
 * 320 #%%#PCIM_REMAP_TBL#%%# entries containing an 8-bit encoding of an 
 * associated bit in the #%%#PCIM_MSIX_PBA#%%#. Each #%%#PCIM_INT_STS#%%# bit 
 * event is direct mapped to an entry in the #%%#PCIM_REMAP_TBL#%%#. 

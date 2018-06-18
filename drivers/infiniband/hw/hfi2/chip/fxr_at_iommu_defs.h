@@ -47,7 +47,11 @@
 #define FXR_AT_IOMMU_BASE					0
 /*
 * Table #4 of fxr_top - FXR_AT_IOMMU_CFG_MAW
-* 
+* This Configuration CSR must to be written, prior to IOMMU initialization. This 
+* configuration setting modifies IOMMU Defeature register state, and the AT 
+* (Address Translation Block) functionality. If IOMMU is enabled, or AT is 
+* accepting Address Translation Requests, and this configuration setting is 
+* changed, undefined behavior will result.
 */
 #define FXR_AT_IOMMU_CFG_MAW					(FXR_AT_IOMMU_CSRS + 0x000000000000)
 #define FXR_AT_IOMMU_CFG_MAW_RESETCSR				0x0000000000000000ull

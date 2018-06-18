@@ -458,7 +458,44 @@
 #define FXR_FW_STS_DBI_RD_DOUT_DATA_MASK			0xFFFFFFFFull
 #define FXR_FW_STS_DBI_RD_DOUT_DATA_SMASK			0xFFFFFFFFull
 /*
-* Table #29 of fxr_top - FW_CFG_BSM_SCRATCH
+* Table #29 of fxr_top - FW_CFG_BOOT
+* Miscellaneous boot-related config.
+*/
+#define FXR_FW_CFG_BOOT						(FXR_FW_CSRS + 0x000000001100)
+#define FXR_FW_CFG_BOOT_RESETCSR				0x0000000000000000ull
+#define FXR_FW_CFG_BOOT_RESERVED_63_21_SHIFT			21
+#define FXR_FW_CFG_BOOT_RESERVED_63_21_MASK			0x7FFFFFFFFFFull
+#define FXR_FW_CFG_BOOT_RESERVED_63_21_SMASK			0xFFFFFFFFFFE00000ull
+#define FXR_FW_CFG_BOOT_SCRUB_PERIOD_SHIFT			4
+#define FXR_FW_CFG_BOOT_SCRUB_PERIOD_MASK			0x1FFFFull
+#define FXR_FW_CFG_BOOT_SCRUB_PERIOD_SMASK			0x1FFFF0ull
+#define FXR_FW_CFG_BOOT_SPI_PULL_DISABLE_SHIFT			3
+#define FXR_FW_CFG_BOOT_SPI_PULL_DISABLE_MASK			0x1ull
+#define FXR_FW_CFG_BOOT_SPI_PULL_DISABLE_SMASK			0x8ull
+#define FXR_FW_CFG_BOOT_BSM_FW_ERR_SHIFT			2
+#define FXR_FW_CFG_BOOT_BSM_FW_ERR_MASK				0x1ull
+#define FXR_FW_CFG_BOOT_BSM_FW_ERR_SMASK			0x4ull
+#define FXR_FW_CFG_BOOT_BSM_HW_INT_ENABLE_SHIFT			1
+#define FXR_FW_CFG_BOOT_BSM_HW_INT_ENABLE_MASK			0x1ull
+#define FXR_FW_CFG_BOOT_BSM_HW_INT_ENABLE_SMASK			0x2ull
+#define FXR_FW_CFG_BOOT_DINIT_ROM_WAIT_DONE_SHIFT		0
+#define FXR_FW_CFG_BOOT_DINIT_ROM_WAIT_DONE_MASK		0x1ull
+#define FXR_FW_CFG_BOOT_DINIT_ROM_WAIT_DONE_SMASK		0x1ull
+/*
+* Table #30 of fxr_top - FW_STS_SERDES_RESET
+* Captures current state of serdes_reset signal, which drives RESET_N input to 
+* PCIe SerDes macros.
+*/
+#define FXR_FW_STS_SERDES_RESET					(FXR_FW_CSRS + 0x000000001108)
+#define FXR_FW_STS_SERDES_RESET_RESETCSR			0x0000000000000000ull
+#define FXR_FW_STS_SERDES_RESET_RESERVED_63_1_SHIFT		1
+#define FXR_FW_STS_SERDES_RESET_RESERVED_63_1_MASK		0x7FFFFFFFFFFFFFFFull
+#define FXR_FW_STS_SERDES_RESET_RESERVED_63_1_SMASK		0xFFFFFFFFFFFFFFFEull
+#define FXR_FW_STS_SERDES_RESET_SERDES_RESET_SHIFT		0
+#define FXR_FW_STS_SERDES_RESET_SERDES_RESET_MASK		0x1ull
+#define FXR_FW_STS_SERDES_RESET_SERDES_RESET_SMASK		0x1ull
+/*
+* Table #31 of fxr_top - FW_CFG_BSM_SCRATCH
 * Available for general scratch memory use.
 */
 #define FXR_FW_CFG_BSM_SCRATCH					(FXR_FW_CSRS + 0x000000004000)
@@ -467,7 +504,7 @@
 #define FXR_FW_CFG_BSM_SCRATCH_DATA_MASK			0xFFFFFFFFFFFFFFFFull
 #define FXR_FW_CFG_BSM_SCRATCH_DATA_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #30 of fxr_top - FW_CFG_BSM_CTRL
+* Table #32 of fxr_top - FW_CFG_BSM_CTRL
 * 
 */
 #define FXR_FW_CFG_BSM_CTRL					(FXR_FW_CSRS + 0x000000006000)
@@ -494,7 +531,7 @@
 #define FXR_FW_CFG_BSM_CTRL_COMMAND_MASK			0xFull
 #define FXR_FW_CFG_BSM_CTRL_COMMAND_SMASK			0xFull
 /*
-* Table #31 of fxr_top - FW_CFG_BSM_ARGS
+* Table #33 of fxr_top - FW_CFG_BSM_ARGS
 * Defines extra data to be used for BSM_CTRL commands.
 */
 #define FXR_FW_CFG_BSM_ARGS					(FXR_FW_CSRS + 0x000000006008)
@@ -506,7 +543,7 @@
 #define FXR_FW_CFG_BSM_ARGS_DATA_MASK				0xFFFFFFFFull
 #define FXR_FW_CFG_BSM_ARGS_DATA_SMASK				0xFFFFFFFFull
 /*
-* Table #32 of fxr_top - FW_CFG_BSM_ADDR_OFFSET
+* Table #34 of fxr_top - FW_CFG_BSM_ADDR_OFFSET
 * Configurable base address for BSM. Index 0 is unused. There are 3 programmable 
 * offsets: BSM_ADDR_OFFSET[1..3]. BSM_ADDR_OFFSET[0] is read-only and always 
 * treated as 0x0.
@@ -520,7 +557,7 @@
 #define FXR_FW_CFG_BSM_ADDR_OFFSET_OFFSET_MASK			0xFFFFFFull
 #define FXR_FW_CFG_BSM_ADDR_OFFSET_OFFSET_SMASK			0xFFFFFFull
 /*
-* Table #33 of fxr_top - FW_CFG_BSM_COUNTER
+* Table #35 of fxr_top - FW_CFG_BSM_COUNTER
 * 
 */
 #define FXR_FW_CFG_BSM_COUNTER					(FXR_FW_CSRS + 0x000000006040)
@@ -532,7 +569,7 @@
 #define FXR_FW_CFG_BSM_COUNTER_COUNTER_MASK			0xFFFFull
 #define FXR_FW_CFG_BSM_COUNTER_COUNTER_SMASK			0xFFFFull
 /*
-* Table #34 of fxr_top - FW_CFG_SPI_TX_DATA
+* Table #36 of fxr_top - FW_CFG_SPI_TX_DATA
 * Contains the data to send to attached SPI device.
 */
 #define FXR_FW_CFG_SPI_TX_DATA					(FXR_FW_CSRS + 0x000000006130)
@@ -544,7 +581,7 @@
 #define FXR_FW_CFG_SPI_TX_DATA_DATA_MASK			0xFFFFFFFFull
 #define FXR_FW_CFG_SPI_TX_DATA_DATA_SMASK			0xFFFFFFFFull
 /*
-* Table #35 of fxr_top - FW_STS_SPI_RX_DATA
+* Table #37 of fxr_top - FW_STS_SPI_RX_DATA
 * Contains the data received from attached SPI device.
 */
 #define FXR_FW_STS_SPI_RX_DATA					(FXR_FW_CSRS + 0x000000006138)
@@ -556,7 +593,7 @@
 #define FXR_FW_STS_SPI_RX_DATA_DATA_MASK			0xFFFFFFFFull
 #define FXR_FW_STS_SPI_RX_DATA_DATA_SMASK			0xFFFFFFFFull
 /*
-* Table #36 of fxr_top - FW_CFG_SPI_HEADER
+* Table #38 of fxr_top - FW_CFG_SPI_HEADER
 * Contains the header to send to the device. Typically include a one byte 
 * instruction and possibly a 3-byte
 */
@@ -569,7 +606,7 @@
 #define FXR_FW_CFG_SPI_HEADER_DATA_MASK				0xFFFFFFFFull
 #define FXR_FW_CFG_SPI_HEADER_DATA_SMASK			0xFFFFFFFFull
 /*
-* Table #37 of fxr_top - FW_CFG_SPI_CTRL
+* Table #39 of fxr_top - FW_CFG_SPI_CTRL
 * Control access to SPI device. All values can be set simultaneously with the 
 * command.
 */
@@ -615,7 +652,7 @@
 #define FXR_FW_CFG_SPI_CTRL_FREQ_MASK				0x3FFull
 #define FXR_FW_CFG_SPI_CTRL_FREQ_SMASK				0x3FFull
 /*
-* Table #38 of fxr_top - FW_DBG_SPI_FSM_DEBUG
+* Table #40 of fxr_top - FW_DBG_SPI_FSM_DEBUG
 * DEBUG ONLY. Reserved in normal operation.
 */
 #define FXR_FW_DBG_SPI_FSM_DEBUG				(FXR_FW_CSRS + 0x000000006150)

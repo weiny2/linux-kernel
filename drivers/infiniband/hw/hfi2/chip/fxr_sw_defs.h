@@ -345,40 +345,49 @@
 #define BUFF_OPB_TIMESTAMP_WIDTH				12
 #define BUFF_TO_BASE_ADDR					21056
 #define BUFF_TO_CONTEXT_COUNT					8
-#define BUFF_TO_SIZE						16
-#define BUFF_TO_LIMIT						21184
-#define BUFF_JMP_TBL_BASE_ADDR					21184
+#define BUFF_TO_SIZE						8
+#define BUFF_TO_LIMIT						21120
+#define BUFF_JMP_TBL_BASE_ADDR					21120
 #define BUFF_JMP_TBL_ENTRIES					32
 #define BUFF_JMP_TBL_ENTRY_SIZE					8
-#define BUFF_JMP_TBL_LIMIT					21440
-#define BUFF_OUTPUT_SB_BASE_ADDR				21440
+#define BUFF_JMP_TBL_LIMIT					21376
+#define BUFF_OUTPUT_SB_BASE_ADDR				21376
 #define BUFF_OUTPUT_SB_SIZE					8
 #define BUFF_OUTPUT_SB_COUNT					4
-#define BUFF_OUTPUT_SB_LIMIT					21472
-#define BUFF_INPUT_SB_BASE_ADDR					21472
+#define BUFF_OUTPUT_SB_LIMIT					21408
+#define BUFF_INPUT_SB_BASE_ADDR					21408
 #define BUFF_INPUT_SB_SIZE					8
 #define BUFF_INPUT_SB_COUNT					4
-#define BUFF_INPUT_SB_LIMIT					21504
-#define BUFF_CREDIT_BASE_ADDR					21504
+#define BUFF_INPUT_SB_LIMIT					21440
+#define BUFF_CREDIT_BASE_ADDR					21440
 #define BUFF_CREDIT_CONTEXT_COUNT				16
 #define BUFF_CREDIT_CONTEXT_MASK				15
 #define BUFF_DECR_CREDIT_BIT_POS				16
-#define BUFF_CREDIT_LIMIT					21632
-#define BUFF_OMB_LD_SB_BASE_ADDR				21632
-#define BUFF_OMB_LD_SB_LIMIT					21648
+#define BUFF_CREDIT_LIMIT					21568
+#define BUFF_OMB_LD_SB_BASE_ADDR				21568
+#define BUFF_OMB_LD_SB_LIMIT					21584
 #define BUFF_NACK_CONTEXT_COUNT					4
 #define BUFF_NACK_SIZE						16
-#define BUFF_NACK_BASE_ADDR					21648
-#define BUFF_NACK_LIMIT						21712
+#define BUFF_NACK_BASE_ADDR					21584
+#define BUFF_NACK_LIMIT						21648
 #define BUFF_TRANS_DELAY_SIZE					8
-#define BUFF_TRANS_DELAY_BASE_ADDR				21712
-#define BUFF_TRANS_DELAY_LIMIT					21720
-#define BUFF_LOCAL_CTXT_AVAIL_ADDR				21720
+#define BUFF_TRANS_DELAY_BASE_ADDR				21648
+#define BUFF_TRANS_DELAY_LIMIT					21656
+#define BUFF_LOCAL_CTXT_AVAIL_ADDR				21656
 #define BUFF_LOCAL_CTXT_AVAIL_SIZE				8
-#define BUFF_LOCAL_CTXT_AVAIL_LIMIT				21728
-#define BUFF_LINK_LIST_CTXT_AVAIL_ADDR				21728
+#define BUFF_LOCAL_CTXT_AVAIL_LIMIT				21664
+#define BUFF_LINK_LIST_CTXT_AVAIL_ADDR				21664
 #define BUFF_LINK_LIST_CTXT_AVAIL_SIZE				8
-#define BUFF_LINK_LIST_CTXT_AVAIL_LIMIT				21736
+#define BUFF_LINK_LIST_CTXT_AVAIL_LIMIT				21672
+#define BUFF_PENDING_LIST_PTR_INFO_ADDR				21672
+#define BUFF_PENDING_LIST_PTR_INFO_SIZE				8
+#define BUFF_PENDING_LIST_PTR_INFO_LIMIT			21704
+#define BUFF_SCHED_LIST_PTR_INFO_ADDR				21704
+#define BUFF_SCHED_LIST_PTR_INFO_SIZE				16
+#define BUFF_SCHED_LIST_PTR_INFO_LIMIT				21768
+#define BUFF_CURRENT_LIST_ADDR					21768
+#define BUFF_CURRENT_LIST_SIZE					8
+#define BUFF_CURRENT_LIST_LIMIT					21800
 #define BUFF_CTS_CTXT_AVAIL_CSR_ADDR				256
 #define BUFF_TIMEOUT_CTXT_AVAIL_CSR_ADDR			264
 #define BUFF_NACK_CTXT_AVAIL_CSR_ADDR				272
@@ -1844,58 +1853,58 @@ enum perf_counter {
                                 rxe2e_reserved_i = 157,         /* Reserved */
                                 rxe2e_reserved_j = 158,         /* Reserved */
                                 rxe2e_reserved_k = 159,         /* Reserved */
-                     rxci_stall_otr_empty_events = 160,         /* Command queue (Refcount Decrement) from OTR to RX are stalled because the command queue isempty. Event is counted once per event (i.e. CQ was not empty and then was empty). */
-                                    rxhp_fp_ects = 161,         /* Total number of ECTS packets issued by the RXHP fastpath. */
-                                     rxhp_pe_cts = 162,         /* Total number of CTS packets issued by the RXHP programmable engines. */
-                                    rxhp_pe_ects = 163,         /* Total number of ECTS packets issued by the RXHP programmable engines. */
-                                   rxhp_fastpath = 164,         /* Number of requests entering the RXHP fastpath */
-                                        rxhp_pe0 = 165,         /* Number of requests entering the RXHP PE0 pipeline */
-                                        rxhp_pe1 = 166,         /* Number of requests entering the RXHP PE1 pipeline */
-                                        rxhp_pe2 = 167,         /* Number of requests entering the RXHP PE2 pipeline */
-                                        rxhp_pe3 = 168,         /* Number of requests entering the RXHP PE3 pipeline */
-                                        rxhp_pe4 = 169,         /* Number of requests entering the RXHP PE4 pipeline */
-                                        rxhp_pe5 = 170,         /* Number of requests entering the RXHP PE5 pipeline */
-                                        rxhp_pe6 = 171,         /* Number of requests entering the RXHP PE6 pipeline */
-                                        rxhp_pe7 = 172,         /* Number of requests entering the RXHP PE7 pipeline */
-                                   rxhp_pe0_idle = 173,         /* Number of idle cycles for the RXHP PE0 pipeline */
-                                   rxhp_pe1_idle = 174,         /* Number of idle cycles for the RXHP PE1 pipeline */
-                                   rxhp_pe2_idle = 175,         /* Number of idle cycles for the RXHP PE2 pipeline */
-                                   rxhp_pe3_idle = 176,         /* Number of idle cycles for the RXHP PE3 pipeline */
-                                   rxhp_pe4_idle = 177,         /* Number of idle cycles for the RXHP PE4 pipeline */
-                                   rxhp_pe5_idle = 178,         /* Number of idle cycles for the RXHP PE5 pipeline */
-                                   rxhp_pe6_idle = 179,         /* Number of idle cycles forthe RXHP PE6 pipeline */
-                                   rxhp_pe7_idle = 180,         /* Number of idle cycles for the RXHP PE7 pipeline */
-                                        rxhp_ni0 = 181,         /* Number of requests entering the RXHP pipeline for NI0 */
-                                        rxhp_ni1 = 182,         /* Number of requests entering the RXHP pipeline for NI1 */
-                                        rxhp_ni2 = 183,         /* Number of requests entering the RXHP pipeline for NI2 */
-                                        rxhp_ni3 = 184,         /* Number of requests entering the RXHP pipeline for NI3 */
-                                        rxhp_put = 185,         /* Number of Put operations handled by RXHP */
-                                        rxhp_get = 186,         /* Number of Get operations handled by RXHP (fetching operations also increment the Get count) */
-                                     rxhp_atomic = 187,         /* Number of Atomic (fetching and non-fetching) operations handled by RXHP. Vector atomics increment this once per message. */
-                      rxhp_stall_rxdma_credits_x = 188,         /* Header processing stalls due to insufficient credits to issue RXDMA commands. The TC is selected in RXHP.Cross Reference to X: xrefCross Reference to Y: xref */
-                      rxhp_stall_rxdma_credits_y = 189,         
-                         rxhp_pid_conflict_stall = 190,         /* Header processing pipeline is stalled due to PID conflicts. This event only counts if the next packet is able to issue based on RXDMA credits. */
-                              rxhp_pe_busy_stall = 191,         /* Header processing pipeline is stalled due to all PEs being busy. This event only counts if the next packet is able to issue (no RXDMA credit stalls, no PID conflicts) */
-                             rxhp_psc0_req_stall = 192,         /* More than one request is arbitrating for PSC0 pipeline. This event counts how many total cycles the conflicting requests are delayed. */
-                             rxhp_psc1_req_stall = 193,         /* More than one request is arbitrating for PSC1 pipeline. This event counts how many total cycles the conflicting requests are delayed. */
-                                  pte_cache_hits = 194,         /* Number of hits in the Portal Table Entry (PTE) cache */
-                                  pte_cache_miss = 195,         /* Number of misses in the Portal Table Entry (PTE) cache */
-                            pte_cache_fill_stall = 196,         /* Number of stall cycles due to the fill FIFO in the Portal Table Entry (PTE) cache being full */
-                           pte_cache_evict_stall = 197,         /* Number of stall cycles due to the evict FIFO in the Portal Table Entry (PTE) cache being full */
-                                pte_cache_evicts = 198,         /* Number of Portal Table Entry (PTE) cache evictions (capacity only, not CSR-based evictions) */
-                          pte_cache_membus_stall = 199,         /* Number of stall cycles due to the memory access port in the Portal Table Entry (PTE) cache being busy */
-                                 psc0_cache_hits = 200,         /* Number of hits in the Portals State Cache (PSC) Bank 0 */
-                                 psc0_cache_miss = 201,         /* Number of misses in the Portals State Cache (PSC) Bank 0 */
-                           psc0_cache_fill_stall = 202,         /* Number of stall cycles due to the fill FIFO in the Portals State Cache (PSC) Bank 0 being full */
-                          psc0_cache_evict_stall = 203,         /* Number of stall cycles due to the evict FIFO in the Portals State Cache (PSC) Bank 0 being full */
-                               psc0_cache_evicts = 204,         /* Number of Portals State Cache (PSC) Bank 0 evictions (capacity only, not CSR-based evictions) */
-                         psc0_cache_membus_stall = 205,         /* Number of stall cycles due to the memory access port in the Portals State Cache (PSC) Bank 0 being busy */
-                                 psc1_cache_hits = 206,         /* Number of hits in the Portals State Cache (PSC) Bank 1 */
-                                 psc1_cache_miss = 207,         /* Number of misses in the Portals State Cache (PSC) Bank 1 */
-                           psc1_cache_fill_stall = 208,         /* Number of stall cycles due to the fill FIFO in the Portals State Cache (PSC) Bank 1 being full */
-                          psc1_cache_evict_stall = 209,         /* Number of stall cycles due to the evict FIFO in the Portals State Cache (PSC) Bank 1 being full */
-                               psc1_cache_evicts = 210,         /* Number of Portals State Cache (PSC) Bank 1 evictions (capacity only, not CSR-based evictions) */
-                         psc1_cache_membus_stall = 211,         /* Number of stall cycles due to the memory access port in the Portals State Cache (PSC) Bank 1 being busy */
+                                   rxhp_fastpath = 160,         /* Number of requests entering the RXHP fastpath */
+                                    rxhp_rpc0_t0 = 161,         /* Number of requests utilizing RPC0 thread 0 */
+                                    rxhp_rpc0_t1 = 162,         /* Number of requests utilizing RPC0 thread 1 */
+                                    rxhp_rpc0_t2 = 163,         /* Number of requests utilizing RPC0 thread 2 */
+                                    rxhp_rpc0_t3 = 164,         /* Number of requests utilizing RPC0 thread 3 */
+                                    rxhp_rpc1_t0 = 165,         /* Number of requests utilizing RPC1 thread 0 */
+                                    rxhp_rpc1_t1 = 166,         /* Number of requests utilizing RPC1 thread 1 */
+                                    rxhp_rpc1_t2 = 167,         /* Number of requests utilizing RPC1 thread 2 */
+                                    rxhp_rpc1_t3 = 168,         /* Number of requests utilizing RPC1 thread 3 */
+                                        rxhp_pe0 = 169,         /* Number of requests for the RXHP PE0 pipeline */
+                                        rxhp_pe1 = 170,         /* Number of requests for the RXHP PE1 pipeline */
+                                        rxhp_pe2 = 171,         /* Number of requests for the RXHP PE2 pipeline */
+                                        rxhp_pe3 = 172,         /* Number of requests for the RXHP PE3 pipeline */
+                                        rxhp_put = 173,         /* Number of Put operations handled by RXHP */
+                                        rxhp_get = 174,         /* Number of Get operations handled by RXHP (fetchingoperations also increment the Get count) */
+                                     rxhp_atomic = 175,         /* Number of Atomic operations handled by RXHP. Vector atomics increment this once permessage. */
+                                        rxhp_vop = 176,         /* Number of Verbs over Portals operations handled by RXHP */
+                                       rxhp_gen1 = 177,         /* Number of PSM/OFED operations handled by RXHP */
+                                         rxhp_to = 178,         /* Number of triggered operations handled by the RXHP */
+                                        rxhp_rts = 179,         /* Number of Request-to-send operations handled by the RXHP */
+                      rxhp_stall_rxdma_credits_x = 180,         /* Header processing stalls due to insufficient credits toissue RXDMA commands. The TC is selected in RXHP.Cross Reference to X: xref */
+                      rxhp_stall_rxdma_credits_y = 181,         /* Cross Reference to Y: xref */
+                             rxhp_et_resrv_stall = 182,         /* Number of cycles an input into RXHP arbiter was stalled due to an ET reservation stall condition */
+                         rxhp_pid_conflict_stall = 183,         /* Header processing pipeline is stalled due to PID conflicts.This event only counts if the next packet is able to issuebased on RXDMA credits. */
+                              rxhp_pe_busy_stall = 184,         /* Header processing pipeline is stalled due to all PEs beingbusy. This event only counts if the next packet is able toissue (no RXDMA credit stalls, no PID conflicts) */
+                       rxhp_pkt_status_rpc_stall = 185,         /* RPC pipeline is stalled due a lack of status good from RXE2E */
+                        rxhp_pkt_status_fp_stall = 186,         /* FP pipeline is stalled due a lack of status good from RXE2E */
+                             rxhp_rpc_busy_stall = 187,         /* RPC pipeline is stalled due to all RPCs beingbusy. This event only counts if the next packet is able toissue (no RXDMA credit stalls, no PID conflicts) */
+                              rxhp_psc_req_stall = 188,         /* More than one request is arbitrating for PSC pipeline.This event counts how many total cycles the conflictingrequests are delayed. */
+                              rxhp_psc_rsp_stall = 189,         /* More than one response is arbitrating from the PSC pipeline.This event counts how many total cycles the conflictingrequests are delayed. */
+                                  pte_cache_hits = 190,         /* Number of hits in the PTE cache */
+                                  pte_cache_miss = 191,         /* Number of misses in the PTE cache */
+                            pte_cache_fill_stall = 192,         /* Number of stall cycles due to the fill FIFO in the PortalTable Entry (PTE) cache being full */
+                           pte_cache_evict_stall = 193,         /* Number of stall cycles due to the evict FIFO in the PortalTable Entry (PTE) cache being full */
+                                pte_cache_evicts = 194,         /* Number of Portal Table Entry (PTE) cache evictions(capacity only, not CSR-based evictions) */
+                          pte_cache_membus_stall = 195,         /* Number of stall cycles due to the memory access port inthe Portal Table Entry (PTE) cache being busy */
+                                  psc_cache_hits = 196,         /* Number of hits in the Portals State Cache (PSC) per bank path (prim and sec) */
+                                  psc_cache_miss = 197,         /* Number of misses in the Portals State Cache (PSC) per bank path (prim and sec) */
+                            psc_cache_fill_stall = 198,         /* Number of stall cycles due to the fill FIFO in the PortalsState Cache (PSC) being full */
+                           psc_cache_evict_stall = 199,         /* Number of stall cycles due to the evict FIFO in the PortalsState Cache (PSC) being full */
+                                psc_cache_evicts = 200,         /* Number of Portals State Cache (PSC) evictions(capacity only, not CSR-based evictions) */
+                          psc_cache_membus_stall = 201,         /* Number of stall cycles due to the memory access port inthe Portals State Cache (PSC) being busy */
+                           psc_cache_cmd_port0_x = 202,         /* Count of PSC cache commands by command type X on port 0.  Cross Reference to X: xref */
+                           psc_cache_cmd_port1_x = 203,         /* Count of PSC cache commands by command type X on port 1. Cross Reference to X: xref */
+                           psc_cache_cmd_bank0_x = 204,         /* Count of PSC cache commands by command type X on bank 0. Cross Reference to X: xref */
+                           psc_cache_cmd_bank1_x = 205,         /* Count of PSC cache commands by command type X on bank 1. Cross Reference to X: xref */
+                       rxhp_digest_matches_port0 = 206,         /* Number of times the digest filter was not sufficient (hence it matches) to allow the walker to skip reading the full entry on port 0 */
+                       rxhp_digest_matches_port1 = 207,         /* Number of times the digest filter was not sufficient (hence it matches) to allow the walker to skip reading the full entry on port 1 */
+                                rxhp_cmd_q_empty = 208,         /* Number of cycles the command queue into the RXHP arbiter is empty */
+                              rxhp_req_q_empty_x = 209,         /* Number of cycles the X TC request queue into the RXHP arbiter is empty. Cross Reference to X: xref */
+                              rxhp_mem_lat_count = 210,         /* Number of memory requests that we have tracked latency for.  (Divide RXHP_MEM_LAT_CYCLES by this counter to get average round trip memory latency for the caches). */
+                             rxhp_mem_lat_cycles = 211,         /* Number of cycles all tracked memory requests from PSC or PTE spent outstanding */
                                  rxhp_reserved_a = 212,         /* Reserved */
                                  rxhp_reserved_b = 213,         /* Reserved */
                                  rxhp_reserved_c = 214,         /* Reserved */
@@ -2050,134 +2059,134 @@ enum perf_counter {
                                  pcim_reserved_i = 381,         /* Reserved */
                                  pcim_reserved_j = 382,         /* Reserved */
                                  pcim_reserved_k = 383,         /* Reserved */
-                      hi_loca_conq_issue_req_cnt = 384,         /* Total number of conq replay requests */
-                        hi_loca_conq_new_req_cnt = 385,         /* Total number of requests added to CONQ */
-                             hi_loca_ccache_hits = 386,         /* Total number of Collective cache hits */
-                             hi_loca_ccache_miss = 387,         /* Total number of Collective cache misses */
-                       hi_loca_ccache_fill_stall = 388,         /* Total number of stalls due to Collective cache fills */
-                      hi_loca_ccache_evict_stall = 389,         /* Total number of stalls due to Collective cache evictions */
-                           hi_loca_ccache_evicts = 390,         /* Total number of Collective cache evicts */
-                    hi_loca_hfifo_adm_rate_match = 391,         /* Total cycles when HFIFO has a multi cycle request flowing through the ADM */
-                          hi_loca_hcc_new_tx_req = 392,         /* New Tx sourced request count. Enabled by tx_cnt_ena. */
-                          hi_loca_hcc_new_rx_req = 393,         /* New Rx sourced request count. Enabled by rx_cnt_ena. */
-                          hi_loca_hcc_new_at_req = 394,         /* New AT sourced request count. Enabled by at_cnt_ena. */
-                         hi_loca_hcc_new_get_req = 395,         /* New GET request count. Enabled by one or more of(tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                         hi_loca_hcc_new_put_req = 396,         /* New PUT request count. Enabled by one or more of(tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                      hi_loca_hcc_new_atomic_req = 397,         /* New ATOMIC request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                         hi_loca_hcc_new_zbr_req = 398,         /* New ZBR request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                         hi_loca_hcc_new_irq_req = 399,         /* New IRQ request count. Enabled by one or more of(tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                         hi_loca_hcc_new_nop_req = 400,         /* New NOP request count. Enabled by one or more of(tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                         hi_loca_hcc_new_fid_req = 401,         /* New FID request count. The GID/FID counted is selectedby the fid_cnt_id and fid_cnt_msk fields. Enabled by oneor more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                      hi_loca_hcc_fill_chain_req = 402,         /* Service a fill chain request */
-                    hi_loca_hcc_replay_chain_req = 403,         /* Service a replay chain request */
-                            hi_loca_hcc_fast_ack = 404,         /* Number of Fast acks sent from HI */
-                       hi_loca_parb_new_amo1_req = 405,         /* New non-vector Atomic request count. Enabled by one ormore of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                       hi_loca_parb_new_amo2_req = 406,         /* New 2-flit vector Atomic request count. Enabled by oneor more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                       hi_loca_parb_new_amo3_req = 407,         /* New 3-flit vector Atomic request count. Enabled by oneor more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                       hi_loca_parb_new_amo4_req = 408,         /* New 4-flit vector Atomic request count. Enabled by oneor more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                    hi_loca_parb_addr_replay_req = 409,         /* Address enabled Replay request count. */
-                   hi_loca_parb_order_replay_req = 410,         /* Order enabled Replay request count. */
-                           hi_loca_parb_fill_req = 411,         /* Fill request count. */
-                              hi_loca_parb_va_fc = 412,         /* Clock cycle count of Vector Atomic cycles in Pipe. */
-                             hi_loca_parb_irq_fc = 413,         /* Clock cycle count of IRQ buffer flow control signaling. */
-                            hi_loca_parb_proq_fc = 414,         /* Clock cycle count of PROQ flow control signaling due tolack of PROQ entries. */
-                            hi_loca_parb_conq_fc = 415,         /* Clock cycle count of ConQ flow control signaling due tolack of ConQ entries. */
-                             hi_loca_parb_new_fc = 416,         /* Clock cycle count of New/Replay Request flow controlsignaling due to lack of TIDs. */
-                           hi_loca_parb_hifis_fc = 417,         /* Clock cycle count of HIFIS flow control signaling. */
-                              hi_loca_parb_go_fc = 418,         /* Clock cycle count of GO flow control signaling due to go block (full fifo, generation wrap, etc) */
-                  hi_loca_parb_new_timeout_stall = 419,         /* New request timeout cycles stalled by a New hazard. */
-                        hi_loca_parb_new_timeout = 420,         /* New request timeout cycles at PARB head. */
-               hi_loca_parb_replay_timeout_stall = 421,         /* Replay request timeout cycles stalled by a Replay hazard. */
-                     hi_loca_parb_replay_timeout = 422,         /* Replay request timeout cycles at PARB head. */
-                 hi_loca_parb_emec_timeout_stall = 423,         /* EMEC request timeout cycles stalled by a EMEC hazard. */
-                       hi_loca_parb_emec_timeout = 424,         /* EMEC request timeout cycles at PARB head. */
-                       hi_loca_parb_new_fc_stall = 425,         /* New request cycles stalled by flow control. */
-                       hi_loca_parb_new_ic_stall = 426,         /* New request cycles stalled by PMI CAM hazard. */
-                       hi_loca_parb_new_pc_stall = 427,         /* New request cycles stalled by Pipe CAM hazard. */
-                        hi_loca_parb_new_req_cyc = 428,         /* New request cycles count at PARB head. */
-                    hi_loca_parb_replay_fc_stall = 429,         /* Replay request cycles stalled by flow control. */
-                    hi_loca_parb_replay_pc_stall = 430,         /* Replay request cycles stalled by Pipe CAM hazard. */
-                     hi_loca_parb_replay_req_cyc = 431,         /* Replay request cycles count at PARB head. */
-                      hi_loca_parb_fill_fc_stall = 432,         /* Fill request cycles stalled by flow control. */
-                      hi_loca_parb_fill_ic_stall = 433,         /* Fill request cycles stalled by IMI CAM hazard. */
-                      hi_loca_parb_fill_pc_stall = 434,         /* Fill request cycles stalled by Pipe CAM hazard. */
-                       hi_loca_parb_fill_req_cyc = 435,         /* Fill request cycles count at PARB head. */
-                      hi_loca_parb_emec_fc_stall = 436,         /* EMEC request cycles stalled by flow control. */
-                      hi_loca_parb_emec_ic_stall = 437,         /* EMEC request cycles stalled by IMI CAM hazard. */
-                      hi_loca_parb_emec_pc_stall = 438,         /* EMEC request cycles stalled by Pipe CAM hazard. */
-                       hi_loca_parb_emec_req_cyc = 439,         /* EMEC request cycles count at PARB head. */
-                              hi_loca_pmi_np_req = 440,         /* Sent a non-posted memory request */
-                               hi_loca_pmi_p_req = 441,         /* Sent a posted memory request */
-                             hi_loca_pmi_cpl_rsp = 442,         /* Received a completion response for a previous request */
-                        hi_loca_pmi_np_req_stall = 443,         /* Sent a non-posted memory request */
-                         hi_loca_pmi_p_req_stall = 444,         /* Sent a posted memory request */
-                       hi_loca_pmi_cpl_rsp_stall = 445,         /* Received a completion response for a previous request */
-                              hi_loca_pmi_go_ack = 446,         /* Number of GO acks sent from HI */
-                                    loca_stub_63 = 447,         
-                                    loca_stub_64 = 448,         
-                                    loca_stub_65 = 449,         
-                                    loca_stub_66 = 450,         
-                                    loca_stub_67 = 451,         
-                                    loca_stub_68 = 452,         
-                                    loca_stub_69 = 453,         
-                                    loca_stub_70 = 454,         
-                                    loca_stub_71 = 455,         
-                                    loca_stub_72 = 456,         
-                                    loca_stub_73 = 457,         
-                                    loca_stub_74 = 458,         
-                                    loca_stub_75 = 459,         
-                                    loca_stub_76 = 460,         
-                                    loca_stub_77 = 461,         
-                                    loca_stub_78 = 462,         
-                                    loca_stub_79 = 463,         
-                                    loca_stub_80 = 464,         
-                                    loca_stub_81 = 465,         
-                                    loca_stub_82 = 466,         
-                                    loca_stub_83 = 467,         
-                                    loca_stub_84 = 468,         
-                                    loca_stub_85 = 469,         
-                                    loca_stub_86 = 470,         
-                                    loca_stub_87 = 471,         
-                                    loca_stub_88 = 472,         
-                                    loca_stub_89 = 473,         
-                                    loca_stub_90 = 474,         
-                                    loca_stub_91 = 475,         
-                                    loca_stub_92 = 476,         
-                                    loca_stub_93 = 477,         
-                                    loca_stub_94 = 478,         
-                                    loca_stub_95 = 479,         
-                                    loca_stub_96 = 480,         
-                                    loca_stub_97 = 481,         
-                                    loca_stub_98 = 482,         
-                                    loca_stub_99 = 483,         
-                                   loca_stub_100 = 484,         
-                                   loca_stub_101 = 485,         
-                                   loca_stub_102 = 486,         
-                                   loca_stub_103 = 487,         
-                                   loca_stub_104 = 488,         
-                                   loca_stub_105 = 489,         
-                                   loca_stub_106 = 490,         
-                                   loca_stub_107 = 491,         
-                                   loca_stub_108 = 492,         
-                                   loca_stub_109 = 493,         
-                                   loca_stub_110 = 494,         
-                                   loca_stub_111 = 495,         
-                                   loca_stub_112 = 496,         
-                                   loca_stub_113 = 497,         
-                                   loca_stub_114 = 498,         
-                                   loca_stub_115 = 499,         
-                                   loca_stub_116 = 500,         
-                                   loca_stub_117 = 501,         
-                                   loca_stub_118 = 502,         
-                                   loca_stub_119 = 503,         
-                                   loca_stub_120 = 504,         
-                                   loca_stub_121 = 505,         
-                                   loca_stub_122 = 506,         
-                                   loca_stub_123 = 507,         
-                                   loca_stub_124 = 508,         
-                                   loca_stub_125 = 509,         
-                                   loca_stub_126 = 510,         
-                                   loca_stub_127 = 511          
+                          hi_loca_hcc_new_tx_req = 384,         /* New Tx sourced request count. Enabled by tx_cnt_ena. */
+                          hi_loca_hcc_new_rx_req = 385,         /* New Rx sourced request count. Enabled by rx_cnt_ena. */
+                          hi_loca_hcc_new_at_req = 386,         /* New AT sourced request count. Enabled by at_cnt_ena. */
+                         hi_loca_hcc_new_get_req = 387,         /* New GET request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                         hi_loca_hcc_new_put_req = 388,         /* New PUT request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                      hi_loca_hcc_new_atomic_req = 389,         /* New ATOMIC request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                     hi_loca_hcc_new_fatomic_req = 390,         /* New FATOMIC request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                         hi_loca_hcc_new_zbr_req = 391,         /* New ZBR request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                         hi_loca_hcc_new_irq_req = 392,         /* New IRQ request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                         hi_loca_hcc_new_nop_req = 393,         /* New NOP request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                         hi_loca_hcc_new_fid_req = 394,         /* New FID request count. The GID/FID counted is selectedby the fid_cnt_id and fid_cnt_msk fields. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                        hi_loca_hcc_new_conq_req = 395,         /* Total number of New requests pushed to CONQ */
+                    hi_loca_parb_addr_replay_req = 396,         /* Address enabled Replay request count. */
+                   hi_loca_parb_order_replay_req = 397,         /* Order enabled Replay request count. */
+                        hi_loca_hcc_replay_abort = 398,         /* Total number of aborted replay requests */
+                           hi_loca_parb_fill_req = 399,         /* Fill request count. */
+                      hi_loca_hcc_fill_chain_req = 400,         /* Fill Pass request that temporally allocates a line in the cache for subsequent chaining with delayed requests */
+                              hi_loca_hcc_0b_req = 401,         /* New 0 Byte request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                              hi_loca_hcc_sm_req = 402,         /* New (Small) request count with blen between 1-63 Bytes. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                             hi_loca_hcc_64b_req = 403,         /* New 64 Byte request count with blen equal 64B. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                            hi_loca_hcc_128b_req = 404,         /* New request count with blen between 65-128 Bytes. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                            hi_loca_hcc_256b_req = 405,         /* New request count with blen between 129-256 Bytes. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                             hi_loca_addr_range0 = 406,         /* Request match for ADDR Range 0. Enabled by upper_addr_range and lower_addr_range. */
+                             hi_loca_addr_range1 = 407,         /* Request match for ADDR Range 1. Enabled by upper_addr_range and lower_addr_range. */
+                             hi_loca_addr_range2 = 408,         /* Request match for ADDR Range 2. Enabled by upper_addr_range and lower_addr_range. */
+                             hi_loca_addr_range3 = 409,         /* Request match for ADDR Range 3. Enabled by upper_addr_range and lower_addr_range. */
+                            hi_loca_parb_proq_fc = 410,         /* Clock cycle count of PROQ flow control signaling due tolack of PROQ entries. */
+                            hi_loca_parb_conq_fc = 411,         /* Clock cycle count of ConQ flow control signaling due tolack of ConQ entries. */
+                             hi_loca_parb_new_fc = 412,         /* Clock cycle count of New/Replay Request flow controlsignaling due to lack of TIDs. */
+                           hi_loca_parb_hifis_fc = 413,         /* Clock cycle count of HIFIS flow control signaling. */
+                  hi_loca_parb_new_timeout_stall = 414,         /* New request timeout cycles stalled by a New hazard. */
+                        hi_loca_parb_new_timeout = 415,         /* New request timeout cycles at PARB head. */
+               hi_loca_parb_replay_timeout_stall = 416,         /* Replay request timeout cycles stalled by a Replay hazard. */
+                     hi_loca_parb_replay_timeout = 417,         /* Replay request timeout cycles at PARB head. */
+                 hi_loca_parb_fill_timeout_stall = 418,         /* Fill request timeout cycles stalled by a New hazard. */
+                       hi_loca_parb_fill_timeout = 419,         /* Fill request timeout cycles at PARB head. */
+                 hi_loca_parb_emec_timeout_stall = 420,         /* EMEC request timeout cycles stalled by a EMEC hazard. */
+                       hi_loca_parb_emec_timeout = 421,         /* EMEC request timeout cycles at PARB head. */
+                       hi_loca_parb_new_fc_stall = 422,         /* New request cycles stalled by flow control. */
+                       hi_loca_parb_new_ic_stall = 423,         /* New request cycles stalled by PMI CAM hazard. */
+                       hi_loca_parb_new_pc_stall = 424,         /* New request cycles stalled by Pipe CAM hazard. */
+                        hi_loca_parb_new_req_cyc = 425,         /* New request cycles count at PARB head. */
+                    hi_loca_parb_replay_fc_stall = 426,         /* Replay request cycles stalled by flow control. */
+                    hi_loca_parb_replay_ic_stall = 427,         /* Replay request cycles stalled by IMI CAM hazard. */
+                    hi_loca_parb_replay_pc_stall = 428,         /* Replay request cycles stalled by Pipe CAM hazard. */
+                     hi_loca_parb_replay_req_cyc = 429,         /* Replay request cycles count at PARB head. */
+                      hi_loca_parb_fill_fc_stall = 430,         /* Fill request cycles stalled by flow control. */
+                      hi_loca_parb_fill_ic_stall = 431,         /* Fill request cycles stalled by IMI CAM hazard. */
+                      hi_loca_parb_fill_pc_stall = 432,         /* Fill request cycles stalled by Pipe CAM hazard. */
+                       hi_loca_parb_fill_req_cyc = 433,         /* Fill request cycles count at PARB head. */
+                      hi_loca_parb_emec_fc_stall = 434,         /* EMEC request cycles stalled by flow control. */
+                      hi_loca_parb_emec_ic_stall = 435,         /* EMEC request cycles stalled by IMI CAM hazard. */
+                      hi_loca_parb_emec_pc_stall = 436,         /* EMEC request cycles stalled by Pipe CAM hazard. */
+                       hi_loca_parb_emec_req_cyc = 437,         /* EMEC request cycles count at PARB head. */
+                           hi_loca_dcache_pmi_fc = 438,         /* LOCA Pipeline stall due to PMI back-pressure */
+                            hi_loca_dcache_go_fc = 439,         /* LOCA Pipeline stall due to GO block back-pressure */
+                           hi_loca_dcache_raw_fc = 440,         /* LOCA Pipeline stall due to Read-After-Write hazard */
+                           hi_loca_dcache_ava_fc = 441,         /* LOCA Pipeline stall due to multi-cycle execution of a Vector Atomic request. */
+                           hi_loca_dcache_alr_fc = 442,         /* LOCA Pipeline stall due to multi-cycle execution of a Large (>64B) GET or PUT request. */
+                           hi_loca_pmi_req_stall = 443,         /* Valid PMI request stalled on Client IF to PCIC */
+                       hi_loca_hcc_alloc_get_req = 444,         /* Allocating GET request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                       hi_loca_hcc_alloc_get_hit = 445,         /* Allocating GET request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                       hi_loca_hcc_alloc_put_req = 446,         /* Allocating PUT request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                       hi_loca_hcc_alloc_put_hit = 447,         /* Allocating PUT request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                    hi_loca_hcc_alloc_atomic_req = 448,         /* Allocating Atomic (fetching or not) request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                    hi_loca_hcc_alloc_atomic_hit = 449,         /* Allocating Atomic (fetching/not) request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                    hi_loca_hcc_nonalloc_get_req = 450,         /* Non-Allocating GET request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                    hi_loca_hcc_nonalloc_get_hit = 451,         /* Non-Allocating GET request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                    hi_loca_hcc_nonalloc_put_req = 452,         /* Non-Allocating PUT request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                    hi_loca_hcc_nonalloc_put_hit = 453,         /* Non-Allocating PUT request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                 hi_loca_hcc_nonalloc_atomic_req = 454,         /* Non-Allocating Atomic (fetching or not) request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                 hi_loca_hcc_nonalloc_atomic_hit = 455,         /* Non-Allocating Atomic (fetching/not) request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+                        hi_loca_hcc_alloc_dc_hit = 456,         /* Allocating Request Hit Count. All allocating requests */
+                        hi_loca_hcc_alloc_dc_req = 457,         /* Allocating Request Count. */
+                          hi_loca_hcc_all_dc_hit = 458,         /* All Request Hit Count. All requests (alloc or not) */
+                          hi_loca_hcc_all_dc_req = 459,         /* All Request Count. */
+                          hi_loca_hcc_fid_dc_hit = 460,         /* Flow ID based Request Hit Count. Enabled by fid_cnt_id/fid_cnt_msk */
+                          hi_loca_hcc_fid_dc_req = 461,         /* Flow ID based Request Count. Enabled byfid_cnt_id/fid_cnt_msk */
+                    hi_loca_hcc_replay_chain_hit = 462,         /* Replay request that hits a chained cache line. Compare with HI_LOCA_HCC_FILL_CHAIN_REQ for Chain hit opportunities. */
+                            hi_loca_pmi_read_req = 463,         /* Sampled PCIe Read requests count. */
+                        hi_loca_pmi_read_latency = 464,         /* Sampled PCIe Read requests latency. Divide by HI_LOCA_PMI_READ_REQ to get average data response latency (in cclks). */
+                         hi_loca_pmi_rxwrite_req = 465,         /* Sampled PCIe RX Write requests count. */
+                        hi_loca_pmi_rxgo_latency = 466,         /* Sampled PCIe RX Write request latency to GO response. Divide by HI_LOCA_PMI_RXWRITE_REQ to get average GO latency (in cclks). */
+                             hi_loca_dcache_read = 467,         /* DCache read cycles */
+                            hi_loca_dcache_write = 468,         /* DCache Write cycles */
+                            hi_loca_reserved_1d5 = 469,         
+                            hi_loca_reserved_1d6 = 470,         
+                            hi_loca_reserved_1d7 = 471,         
+                            hi_loca_reserved_1d8 = 472,         
+                            hi_loca_reserved_1d9 = 473,         
+                            hi_loca_reserved_1da = 474,         
+                            hi_loca_reserved_1db = 475,         
+                            hi_loca_reserved_1dc = 476,         
+                            hi_loca_reserved_1dd = 477,         
+                            hi_loca_reserved_1de = 478,         
+                            hi_loca_reserved_1df = 479,         
+                            hi_loca_reserved_1e0 = 480,         
+                            hi_loca_reserved_1e1 = 481,         
+                            hi_loca_reserved_1e2 = 482,         
+                            hi_loca_reserved_1e3 = 483,         
+                            hi_loca_reserved_1e4 = 484,         
+                            hi_loca_reserved_1e5 = 485,         
+                            hi_loca_reserved_1e6 = 486,         
+                            hi_loca_reserved_1e7 = 487,         
+                            hi_loca_reserved_1e8 = 488,         
+                            hi_loca_reserved_1e9 = 489,         
+                            hi_loca_reserved_1ea = 490,         
+                            hi_loca_reserved_1eb = 491,         
+                            hi_loca_reserved_1ec = 492,         
+                            hi_loca_reserved_1ed = 493,         
+                            hi_loca_reserved_1ee = 494,         
+                            hi_loca_reserved_1ef = 495,         
+                            hi_loca_reserved_1f0 = 496,         
+                            hi_loca_reserved_1f1 = 497,         
+                            hi_loca_reserved_1f2 = 498,         
+                            hi_loca_reserved_1f3 = 499,         
+                            hi_loca_reserved_1f4 = 500,         
+                            hi_loca_reserved_1f5 = 501,         
+                            hi_loca_reserved_1f6 = 502,         
+                            hi_loca_reserved_1f7 = 503,         
+                            hi_loca_reserved_1f8 = 504,         
+                            hi_loca_reserved_1f9 = 505,         
+                            hi_loca_reserved_1fa = 506,         
+                            hi_loca_reserved_1fb = 507,         
+                            hi_loca_reserved_1fc = 508,         
+                            hi_loca_reserved_1fd = 509,         
+                            hi_loca_reserved_1fe = 510,         
+                            hi_loca_reserved_1ff = 511          
 };
 
 #else
@@ -2342,58 +2351,58 @@ enum perf_counter {
 #define                         rxe2e_reserved_i   157          /* Reserved */
 #define                         rxe2e_reserved_j   158          /* Reserved */
 #define                         rxe2e_reserved_k   159          /* Reserved */
-#define              rxci_stall_otr_empty_events   160          /* Command queue (Refcount Decrement) from OTR to RX are stalled because the command queue isempty. Event is counted once per event (i.e. CQ was not empty and then was empty). */
-#define                             rxhp_fp_ects   161          /* Total number of ECTS packets issued by the RXHP fastpath. */
-#define                              rxhp_pe_cts   162          /* Total number of CTS packets issued by the RXHP programmable engines. */
-#define                             rxhp_pe_ects   163          /* Total number of ECTS packets issued by the RXHP programmable engines. */
-#define                            rxhp_fastpath   164          /* Number of requests entering the RXHP fastpath */
-#define                                 rxhp_pe0   165          /* Number of requests entering the RXHP PE0 pipeline */
-#define                                 rxhp_pe1   166          /* Number of requests entering the RXHP PE1 pipeline */
-#define                                 rxhp_pe2   167          /* Number of requests entering the RXHP PE2 pipeline */
-#define                                 rxhp_pe3   168          /* Number of requests entering the RXHP PE3 pipeline */
-#define                                 rxhp_pe4   169          /* Number of requests entering the RXHP PE4 pipeline */
-#define                                 rxhp_pe5   170          /* Number of requests entering the RXHP PE5 pipeline */
-#define                                 rxhp_pe6   171          /* Number of requests entering the RXHP PE6 pipeline */
-#define                                 rxhp_pe7   172          /* Number of requests entering the RXHP PE7 pipeline */
-#define                            rxhp_pe0_idle   173          /* Number of idle cycles for the RXHP PE0 pipeline */
-#define                            rxhp_pe1_idle   174          /* Number of idle cycles for the RXHP PE1 pipeline */
-#define                            rxhp_pe2_idle   175          /* Number of idle cycles for the RXHP PE2 pipeline */
-#define                            rxhp_pe3_idle   176          /* Number of idle cycles for the RXHP PE3 pipeline */
-#define                            rxhp_pe4_idle   177          /* Number of idle cycles for the RXHP PE4 pipeline */
-#define                            rxhp_pe5_idle   178          /* Number of idle cycles for the RXHP PE5 pipeline */
-#define                            rxhp_pe6_idle   179          /* Number of idle cycles forthe RXHP PE6 pipeline */
-#define                            rxhp_pe7_idle   180          /* Number of idle cycles for the RXHP PE7 pipeline */
-#define                                 rxhp_ni0   181          /* Number of requests entering the RXHP pipeline for NI0 */
-#define                                 rxhp_ni1   182          /* Number of requests entering the RXHP pipeline for NI1 */
-#define                                 rxhp_ni2   183          /* Number of requests entering the RXHP pipeline for NI2 */
-#define                                 rxhp_ni3   184          /* Number of requests entering the RXHP pipeline for NI3 */
-#define                                 rxhp_put   185          /* Number of Put operations handled by RXHP */
-#define                                 rxhp_get   186          /* Number of Get operations handled by RXHP (fetching operations also increment the Get count) */
-#define                              rxhp_atomic   187          /* Number of Atomic (fetching and non-fetching) operations handled by RXHP. Vector atomics increment this once per message. */
-#define               rxhp_stall_rxdma_credits_x   188          /* Header processing stalls due to insufficient credits to issue RXDMA commands. The TC is selected in RXHP.Cross Reference to X: xrefCross Reference to Y: xref */
-#define               rxhp_stall_rxdma_credits_y   189          
-#define                  rxhp_pid_conflict_stall   190          /* Header processing pipeline is stalled due to PID conflicts. This event only counts if the next packet is able to issue based on RXDMA credits. */
-#define                       rxhp_pe_busy_stall   191          /* Header processing pipeline is stalled due to all PEs being busy. This event only counts if the next packet is able to issue (no RXDMA credit stalls, no PID conflicts) */
-#define                      rxhp_psc0_req_stall   192          /* More than one request is arbitrating for PSC0 pipeline. This event counts how many total cycles the conflicting requests are delayed. */
-#define                      rxhp_psc1_req_stall   193          /* More than one request is arbitrating for PSC1 pipeline. This event counts how many total cycles the conflicting requests are delayed. */
-#define                           pte_cache_hits   194          /* Number of hits in the Portal Table Entry (PTE) cache */
-#define                           pte_cache_miss   195          /* Number of misses in the Portal Table Entry (PTE) cache */
-#define                     pte_cache_fill_stall   196          /* Number of stall cycles due to the fill FIFO in the Portal Table Entry (PTE) cache being full */
-#define                    pte_cache_evict_stall   197          /* Number of stall cycles due to the evict FIFO in the Portal Table Entry (PTE) cache being full */
-#define                         pte_cache_evicts   198          /* Number of Portal Table Entry (PTE) cache evictions (capacity only, not CSR-based evictions) */
-#define                   pte_cache_membus_stall   199          /* Number of stall cycles due to the memory access port in the Portal Table Entry (PTE) cache being busy */
-#define                          psc0_cache_hits   200          /* Number of hits in the Portals State Cache (PSC) Bank 0 */
-#define                          psc0_cache_miss   201          /* Number of misses in the Portals State Cache (PSC) Bank 0 */
-#define                    psc0_cache_fill_stall   202          /* Number of stall cycles due to the fill FIFO in the Portals State Cache (PSC) Bank 0 being full */
-#define                   psc0_cache_evict_stall   203          /* Number of stall cycles due to the evict FIFO in the Portals State Cache (PSC) Bank 0 being full */
-#define                        psc0_cache_evicts   204          /* Number of Portals State Cache (PSC) Bank 0 evictions (capacity only, not CSR-based evictions) */
-#define                  psc0_cache_membus_stall   205          /* Number of stall cycles due to the memory access port in the Portals State Cache (PSC) Bank 0 being busy */
-#define                          psc1_cache_hits   206          /* Number of hits in the Portals State Cache (PSC) Bank 1 */
-#define                          psc1_cache_miss   207          /* Number of misses in the Portals State Cache (PSC) Bank 1 */
-#define                    psc1_cache_fill_stall   208          /* Number of stall cycles due to the fill FIFO in the Portals State Cache (PSC) Bank 1 being full */
-#define                   psc1_cache_evict_stall   209          /* Number of stall cycles due to the evict FIFO in the Portals State Cache (PSC) Bank 1 being full */
-#define                        psc1_cache_evicts   210          /* Number of Portals State Cache (PSC) Bank 1 evictions (capacity only, not CSR-based evictions) */
-#define                  psc1_cache_membus_stall   211          /* Number of stall cycles due to the memory access port in the Portals State Cache (PSC) Bank 1 being busy */
+#define                            rxhp_fastpath   160          /* Number of requests entering the RXHP fastpath */
+#define                             rxhp_rpc0_t0   161          /* Number of requests utilizing RPC0 thread 0 */
+#define                             rxhp_rpc0_t1   162          /* Number of requests utilizing RPC0 thread 1 */
+#define                             rxhp_rpc0_t2   163          /* Number of requests utilizing RPC0 thread 2 */
+#define                             rxhp_rpc0_t3   164          /* Number of requests utilizing RPC0 thread 3 */
+#define                             rxhp_rpc1_t0   165          /* Number of requests utilizing RPC1 thread 0 */
+#define                             rxhp_rpc1_t1   166          /* Number of requests utilizing RPC1 thread 1 */
+#define                             rxhp_rpc1_t2   167          /* Number of requests utilizing RPC1 thread 2 */
+#define                             rxhp_rpc1_t3   168          /* Number of requests utilizing RPC1 thread 3 */
+#define                                 rxhp_pe0   169          /* Number of requests for the RXHP PE0 pipeline */
+#define                                 rxhp_pe1   170          /* Number of requests for the RXHP PE1 pipeline */
+#define                                 rxhp_pe2   171          /* Number of requests for the RXHP PE2 pipeline */
+#define                                 rxhp_pe3   172          /* Number of requests for the RXHP PE3 pipeline */
+#define                                 rxhp_put   173          /* Number of Put operations handled by RXHP */
+#define                                 rxhp_get   174          /* Number of Get operations handled by RXHP (fetchingoperations also increment the Get count) */
+#define                              rxhp_atomic   175          /* Number of Atomic operations handled by RXHP. Vector atomics increment this once permessage. */
+#define                                 rxhp_vop   176          /* Number of Verbs over Portals operations handled by RXHP */
+#define                                rxhp_gen1   177          /* Number of PSM/OFED operations handled by RXHP */
+#define                                  rxhp_to   178          /* Number of triggered operations handled by the RXHP */
+#define                                 rxhp_rts   179          /* Number of Request-to-send operations handled by the RXHP */
+#define               rxhp_stall_rxdma_credits_x   180          /* Header processing stalls due to insufficient credits toissue RXDMA commands. The TC is selected in RXHP.Cross Reference to X: xref */
+#define               rxhp_stall_rxdma_credits_y   181          /* Cross Reference to Y: xref */
+#define                      rxhp_et_resrv_stall   182          /* Number of cycles an input into RXHP arbiter was stalled due to an ET reservation stall condition */
+#define                  rxhp_pid_conflict_stall   183          /* Header processing pipeline is stalled due to PID conflicts.This event only counts if the next packet is able to issuebased on RXDMA credits. */
+#define                       rxhp_pe_busy_stall   184          /* Header processing pipeline is stalled due to all PEs beingbusy. This event only counts if the next packet is able toissue (no RXDMA credit stalls, no PID conflicts) */
+#define                rxhp_pkt_status_rpc_stall   185          /* RPC pipeline is stalled due a lack of status good from RXE2E */
+#define                 rxhp_pkt_status_fp_stall   186          /* FP pipeline is stalled due a lack of status good from RXE2E */
+#define                      rxhp_rpc_busy_stall   187          /* RPC pipeline is stalled due to all RPCs beingbusy. This event only counts if the next packet is able toissue (no RXDMA credit stalls, no PID conflicts) */
+#define                       rxhp_psc_req_stall   188          /* More than one request is arbitrating for PSC pipeline.This event counts how many total cycles the conflictingrequests are delayed. */
+#define                       rxhp_psc_rsp_stall   189          /* More than one response is arbitrating from the PSC pipeline.This event counts how many total cycles the conflictingrequests are delayed. */
+#define                           pte_cache_hits   190          /* Number of hits in the PTE cache */
+#define                           pte_cache_miss   191          /* Number of misses in the PTE cache */
+#define                     pte_cache_fill_stall   192          /* Number of stall cycles due to the fill FIFO in the PortalTable Entry (PTE) cache being full */
+#define                    pte_cache_evict_stall   193          /* Number of stall cycles due to the evict FIFO in the PortalTable Entry (PTE) cache being full */
+#define                         pte_cache_evicts   194          /* Number of Portal Table Entry (PTE) cache evictions(capacity only, not CSR-based evictions) */
+#define                   pte_cache_membus_stall   195          /* Number of stall cycles due to the memory access port inthe Portal Table Entry (PTE) cache being busy */
+#define                           psc_cache_hits   196          /* Number of hits in the Portals State Cache (PSC) per bank path (prim and sec) */
+#define                           psc_cache_miss   197          /* Number of misses in the Portals State Cache (PSC) per bank path (prim and sec) */
+#define                     psc_cache_fill_stall   198          /* Number of stall cycles due to the fill FIFO in the PortalsState Cache (PSC) being full */
+#define                    psc_cache_evict_stall   199          /* Number of stall cycles due to the evict FIFO in the PortalsState Cache (PSC) being full */
+#define                         psc_cache_evicts   200          /* Number of Portals State Cache (PSC) evictions(capacity only, not CSR-based evictions) */
+#define                   psc_cache_membus_stall   201          /* Number of stall cycles due to the memory access port inthe Portals State Cache (PSC) being busy */
+#define                    psc_cache_cmd_port0_x   202          /* Count of PSC cache commands by command type X on port 0.  Cross Reference to X: xref */
+#define                    psc_cache_cmd_port1_x   203          /* Count of PSC cache commands by command type X on port 1. Cross Reference to X: xref */
+#define                    psc_cache_cmd_bank0_x   204          /* Count of PSC cache commands by command type X on bank 0. Cross Reference to X: xref */
+#define                    psc_cache_cmd_bank1_x   205          /* Count of PSC cache commands by command type X on bank 1. Cross Reference to X: xref */
+#define                rxhp_digest_matches_port0   206          /* Number of times the digest filter was not sufficient (hence it matches) to allow the walker to skip reading the full entry on port 0 */
+#define                rxhp_digest_matches_port1   207          /* Number of times the digest filter was not sufficient (hence it matches) to allow the walker to skip reading the full entry on port 1 */
+#define                         rxhp_cmd_q_empty   208          /* Number of cycles the command queue into the RXHP arbiter is empty */
+#define                       rxhp_req_q_empty_x   209          /* Number of cycles the X TC request queue into the RXHP arbiter is empty. Cross Reference to X: xref */
+#define                       rxhp_mem_lat_count   210          /* Number of memory requests that we have tracked latency for.  (Divide RXHP_MEM_LAT_CYCLES by this counter to get average round trip memory latency for the caches). */
+#define                      rxhp_mem_lat_cycles   211          /* Number of cycles all tracked memory requests from PSC or PTE spent outstanding */
 #define                          rxhp_reserved_a   212          /* Reserved */
 #define                          rxhp_reserved_b   213          /* Reserved */
 #define                          rxhp_reserved_c   214          /* Reserved */
@@ -2548,134 +2557,134 @@ enum perf_counter {
 #define                          pcim_reserved_i   381          /* Reserved */
 #define                          pcim_reserved_j   382          /* Reserved */
 #define                          pcim_reserved_k   383          /* Reserved */
-#define               hi_loca_conq_issue_req_cnt   384          /* Total number of conq replay requests */
-#define                 hi_loca_conq_new_req_cnt   385          /* Total number of requests added to CONQ */
-#define                      hi_loca_ccache_hits   386          /* Total number of Collective cache hits */
-#define                      hi_loca_ccache_miss   387          /* Total number of Collective cache misses */
-#define                hi_loca_ccache_fill_stall   388          /* Total number of stalls due to Collective cache fills */
-#define               hi_loca_ccache_evict_stall   389          /* Total number of stalls due to Collective cache evictions */
-#define                    hi_loca_ccache_evicts   390          /* Total number of Collective cache evicts */
-#define             hi_loca_hfifo_adm_rate_match   391          /* Total cycles when HFIFO has a multi cycle request flowing through the ADM */
-#define                   hi_loca_hcc_new_tx_req   392          /* New Tx sourced request count. Enabled by tx_cnt_ena. */
-#define                   hi_loca_hcc_new_rx_req   393          /* New Rx sourced request count. Enabled by rx_cnt_ena. */
-#define                   hi_loca_hcc_new_at_req   394          /* New AT sourced request count. Enabled by at_cnt_ena. */
-#define                  hi_loca_hcc_new_get_req   395          /* New GET request count. Enabled by one or more of(tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define                  hi_loca_hcc_new_put_req   396          /* New PUT request count. Enabled by one or more of(tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define               hi_loca_hcc_new_atomic_req   397          /* New ATOMIC request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define                  hi_loca_hcc_new_zbr_req   398          /* New ZBR request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define                  hi_loca_hcc_new_irq_req   399          /* New IRQ request count. Enabled by one or more of(tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define                  hi_loca_hcc_new_nop_req   400          /* New NOP request count. Enabled by one or more of(tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define                  hi_loca_hcc_new_fid_req   401          /* New FID request count. The GID/FID counted is selectedby the fid_cnt_id and fid_cnt_msk fields. Enabled by oneor more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define               hi_loca_hcc_fill_chain_req   402          /* Service a fill chain request */
-#define             hi_loca_hcc_replay_chain_req   403          /* Service a replay chain request */
-#define                     hi_loca_hcc_fast_ack   404          /* Number of Fast acks sent from HI */
-#define                hi_loca_parb_new_amo1_req   405          /* New non-vector Atomic request count. Enabled by one ormore of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define                hi_loca_parb_new_amo2_req   406          /* New 2-flit vector Atomic request count. Enabled by oneor more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define                hi_loca_parb_new_amo3_req   407          /* New 3-flit vector Atomic request count. Enabled by oneor more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define                hi_loca_parb_new_amo4_req   408          /* New 4-flit vector Atomic request count. Enabled by oneor more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define             hi_loca_parb_addr_replay_req   409          /* Address enabled Replay request count. */
-#define            hi_loca_parb_order_replay_req   410          /* Order enabled Replay request count. */
-#define                    hi_loca_parb_fill_req   411          /* Fill request count. */
-#define                       hi_loca_parb_va_fc   412          /* Clock cycle count of Vector Atomic cycles in Pipe. */
-#define                      hi_loca_parb_irq_fc   413          /* Clock cycle count of IRQ buffer flow control signaling. */
-#define                     hi_loca_parb_proq_fc   414          /* Clock cycle count of PROQ flow control signaling due tolack of PROQ entries. */
-#define                     hi_loca_parb_conq_fc   415          /* Clock cycle count of ConQ flow control signaling due tolack of ConQ entries. */
-#define                      hi_loca_parb_new_fc   416          /* Clock cycle count of New/Replay Request flow controlsignaling due to lack of TIDs. */
-#define                    hi_loca_parb_hifis_fc   417          /* Clock cycle count of HIFIS flow control signaling. */
-#define                       hi_loca_parb_go_fc   418          /* Clock cycle count of GO flow control signaling due to go block (full fifo, generation wrap, etc) */
-#define           hi_loca_parb_new_timeout_stall   419          /* New request timeout cycles stalled by a New hazard. */
-#define                 hi_loca_parb_new_timeout   420          /* New request timeout cycles at PARB head. */
-#define        hi_loca_parb_replay_timeout_stall   421          /* Replay request timeout cycles stalled by a Replay hazard. */
-#define              hi_loca_parb_replay_timeout   422          /* Replay request timeout cycles at PARB head. */
-#define          hi_loca_parb_emec_timeout_stall   423          /* EMEC request timeout cycles stalled by a EMEC hazard. */
-#define                hi_loca_parb_emec_timeout   424          /* EMEC request timeout cycles at PARB head. */
-#define                hi_loca_parb_new_fc_stall   425          /* New request cycles stalled by flow control. */
-#define                hi_loca_parb_new_ic_stall   426          /* New request cycles stalled by PMI CAM hazard. */
-#define                hi_loca_parb_new_pc_stall   427          /* New request cycles stalled by Pipe CAM hazard. */
-#define                 hi_loca_parb_new_req_cyc   428          /* New request cycles count at PARB head. */
-#define             hi_loca_parb_replay_fc_stall   429          /* Replay request cycles stalled by flow control. */
-#define             hi_loca_parb_replay_pc_stall   430          /* Replay request cycles stalled by Pipe CAM hazard. */
-#define              hi_loca_parb_replay_req_cyc   431          /* Replay request cycles count at PARB head. */
-#define               hi_loca_parb_fill_fc_stall   432          /* Fill request cycles stalled by flow control. */
-#define               hi_loca_parb_fill_ic_stall   433          /* Fill request cycles stalled by IMI CAM hazard. */
-#define               hi_loca_parb_fill_pc_stall   434          /* Fill request cycles stalled by Pipe CAM hazard. */
-#define                hi_loca_parb_fill_req_cyc   435          /* Fill request cycles count at PARB head. */
-#define               hi_loca_parb_emec_fc_stall   436          /* EMEC request cycles stalled by flow control. */
-#define               hi_loca_parb_emec_ic_stall   437          /* EMEC request cycles stalled by IMI CAM hazard. */
-#define               hi_loca_parb_emec_pc_stall   438          /* EMEC request cycles stalled by Pipe CAM hazard. */
-#define                hi_loca_parb_emec_req_cyc   439          /* EMEC request cycles count at PARB head. */
-#define                       hi_loca_pmi_np_req   440          /* Sent a non-posted memory request */
-#define                        hi_loca_pmi_p_req   441          /* Sent a posted memory request */
-#define                      hi_loca_pmi_cpl_rsp   442          /* Received a completion response for a previous request */
-#define                 hi_loca_pmi_np_req_stall   443          /* Sent a non-posted memory request */
-#define                  hi_loca_pmi_p_req_stall   444          /* Sent a posted memory request */
-#define                hi_loca_pmi_cpl_rsp_stall   445          /* Received a completion response for a previous request */
-#define                       hi_loca_pmi_go_ack   446          /* Number of GO acks sent from HI */
-#define                             loca_stub_63   447          
-#define                             loca_stub_64   448          
-#define                             loca_stub_65   449          
-#define                             loca_stub_66   450          
-#define                             loca_stub_67   451          
-#define                             loca_stub_68   452          
-#define                             loca_stub_69   453          
-#define                             loca_stub_70   454          
-#define                             loca_stub_71   455          
-#define                             loca_stub_72   456          
-#define                             loca_stub_73   457          
-#define                             loca_stub_74   458          
-#define                             loca_stub_75   459          
-#define                             loca_stub_76   460          
-#define                             loca_stub_77   461          
-#define                             loca_stub_78   462          
-#define                             loca_stub_79   463          
-#define                             loca_stub_80   464          
-#define                             loca_stub_81   465          
-#define                             loca_stub_82   466          
-#define                             loca_stub_83   467          
-#define                             loca_stub_84   468          
-#define                             loca_stub_85   469          
-#define                             loca_stub_86   470          
-#define                             loca_stub_87   471          
-#define                             loca_stub_88   472          
-#define                             loca_stub_89   473          
-#define                             loca_stub_90   474          
-#define                             loca_stub_91   475          
-#define                             loca_stub_92   476          
-#define                             loca_stub_93   477          
-#define                             loca_stub_94   478          
-#define                             loca_stub_95   479          
-#define                             loca_stub_96   480          
-#define                             loca_stub_97   481          
-#define                             loca_stub_98   482          
-#define                             loca_stub_99   483          
-#define                            loca_stub_100   484          
-#define                            loca_stub_101   485          
-#define                            loca_stub_102   486          
-#define                            loca_stub_103   487          
-#define                            loca_stub_104   488          
-#define                            loca_stub_105   489          
-#define                            loca_stub_106   490          
-#define                            loca_stub_107   491          
-#define                            loca_stub_108   492          
-#define                            loca_stub_109   493          
-#define                            loca_stub_110   494          
-#define                            loca_stub_111   495          
-#define                            loca_stub_112   496          
-#define                            loca_stub_113   497          
-#define                            loca_stub_114   498          
-#define                            loca_stub_115   499          
-#define                            loca_stub_116   500          
-#define                            loca_stub_117   501          
-#define                            loca_stub_118   502          
-#define                            loca_stub_119   503          
-#define                            loca_stub_120   504          
-#define                            loca_stub_121   505          
-#define                            loca_stub_122   506          
-#define                            loca_stub_123   507          
-#define                            loca_stub_124   508          
-#define                            loca_stub_125   509          
-#define                            loca_stub_126   510          
-#define                            loca_stub_127   511           
+#define                   hi_loca_hcc_new_tx_req   384          /* New Tx sourced request count. Enabled by tx_cnt_ena. */
+#define                   hi_loca_hcc_new_rx_req   385          /* New Rx sourced request count. Enabled by rx_cnt_ena. */
+#define                   hi_loca_hcc_new_at_req   386          /* New AT sourced request count. Enabled by at_cnt_ena. */
+#define                  hi_loca_hcc_new_get_req   387          /* New GET request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                  hi_loca_hcc_new_put_req   388          /* New PUT request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define               hi_loca_hcc_new_atomic_req   389          /* New ATOMIC request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define              hi_loca_hcc_new_fatomic_req   390          /* New FATOMIC request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                  hi_loca_hcc_new_zbr_req   391          /* New ZBR request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                  hi_loca_hcc_new_irq_req   392          /* New IRQ request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                  hi_loca_hcc_new_nop_req   393          /* New NOP request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                  hi_loca_hcc_new_fid_req   394          /* New FID request count. The GID/FID counted is selectedby the fid_cnt_id and fid_cnt_msk fields. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                 hi_loca_hcc_new_conq_req   395          /* Total number of New requests pushed to CONQ */
+#define             hi_loca_parb_addr_replay_req   396          /* Address enabled Replay request count. */
+#define            hi_loca_parb_order_replay_req   397          /* Order enabled Replay request count. */
+#define                 hi_loca_hcc_replay_abort   398          /* Total number of aborted replay requests */
+#define                    hi_loca_parb_fill_req   399          /* Fill request count. */
+#define               hi_loca_hcc_fill_chain_req   400          /* Fill Pass request that temporally allocates a line in the cache for subsequent chaining with delayed requests */
+#define                       hi_loca_hcc_0b_req   401          /* New 0 Byte request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                       hi_loca_hcc_sm_req   402          /* New (Small) request count with blen between 1-63 Bytes. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                      hi_loca_hcc_64b_req   403          /* New 64 Byte request count with blen equal 64B. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                     hi_loca_hcc_128b_req   404          /* New request count with blen between 65-128 Bytes. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                     hi_loca_hcc_256b_req   405          /* New request count with blen between 129-256 Bytes. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                      hi_loca_addr_range0   406          /* Request match for ADDR Range 0. Enabled by upper_addr_range and lower_addr_range. */
+#define                      hi_loca_addr_range1   407          /* Request match for ADDR Range 1. Enabled by upper_addr_range and lower_addr_range. */
+#define                      hi_loca_addr_range2   408          /* Request match for ADDR Range 2. Enabled by upper_addr_range and lower_addr_range. */
+#define                      hi_loca_addr_range3   409          /* Request match for ADDR Range 3. Enabled by upper_addr_range and lower_addr_range. */
+#define                     hi_loca_parb_proq_fc   410          /* Clock cycle count of PROQ flow control signaling due tolack of PROQ entries. */
+#define                     hi_loca_parb_conq_fc   411          /* Clock cycle count of ConQ flow control signaling due tolack of ConQ entries. */
+#define                      hi_loca_parb_new_fc   412          /* Clock cycle count of New/Replay Request flow controlsignaling due to lack of TIDs. */
+#define                    hi_loca_parb_hifis_fc   413          /* Clock cycle count of HIFIS flow control signaling. */
+#define           hi_loca_parb_new_timeout_stall   414          /* New request timeout cycles stalled by a New hazard. */
+#define                 hi_loca_parb_new_timeout   415          /* New request timeout cycles at PARB head. */
+#define        hi_loca_parb_replay_timeout_stall   416          /* Replay request timeout cycles stalled by a Replay hazard. */
+#define              hi_loca_parb_replay_timeout   417          /* Replay request timeout cycles at PARB head. */
+#define          hi_loca_parb_fill_timeout_stall   418          /* Fill request timeout cycles stalled by a New hazard. */
+#define                hi_loca_parb_fill_timeout   419          /* Fill request timeout cycles at PARB head. */
+#define          hi_loca_parb_emec_timeout_stall   420          /* EMEC request timeout cycles stalled by a EMEC hazard. */
+#define                hi_loca_parb_emec_timeout   421          /* EMEC request timeout cycles at PARB head. */
+#define                hi_loca_parb_new_fc_stall   422          /* New request cycles stalled by flow control. */
+#define                hi_loca_parb_new_ic_stall   423          /* New request cycles stalled by PMI CAM hazard. */
+#define                hi_loca_parb_new_pc_stall   424          /* New request cycles stalled by Pipe CAM hazard. */
+#define                 hi_loca_parb_new_req_cyc   425          /* New request cycles count at PARB head. */
+#define             hi_loca_parb_replay_fc_stall   426          /* Replay request cycles stalled by flow control. */
+#define             hi_loca_parb_replay_ic_stall   427          /* Replay request cycles stalled by IMI CAM hazard. */
+#define             hi_loca_parb_replay_pc_stall   428          /* Replay request cycles stalled by Pipe CAM hazard. */
+#define              hi_loca_parb_replay_req_cyc   429          /* Replay request cycles count at PARB head. */
+#define               hi_loca_parb_fill_fc_stall   430          /* Fill request cycles stalled by flow control. */
+#define               hi_loca_parb_fill_ic_stall   431          /* Fill request cycles stalled by IMI CAM hazard. */
+#define               hi_loca_parb_fill_pc_stall   432          /* Fill request cycles stalled by Pipe CAM hazard. */
+#define                hi_loca_parb_fill_req_cyc   433          /* Fill request cycles count at PARB head. */
+#define               hi_loca_parb_emec_fc_stall   434          /* EMEC request cycles stalled by flow control. */
+#define               hi_loca_parb_emec_ic_stall   435          /* EMEC request cycles stalled by IMI CAM hazard. */
+#define               hi_loca_parb_emec_pc_stall   436          /* EMEC request cycles stalled by Pipe CAM hazard. */
+#define                hi_loca_parb_emec_req_cyc   437          /* EMEC request cycles count at PARB head. */
+#define                    hi_loca_dcache_pmi_fc   438          /* LOCA Pipeline stall due to PMI back-pressure */
+#define                     hi_loca_dcache_go_fc   439          /* LOCA Pipeline stall due to GO block back-pressure */
+#define                    hi_loca_dcache_raw_fc   440          /* LOCA Pipeline stall due to Read-After-Write hazard */
+#define                    hi_loca_dcache_ava_fc   441          /* LOCA Pipeline stall due to multi-cycle execution of a Vector Atomic request. */
+#define                    hi_loca_dcache_alr_fc   442          /* LOCA Pipeline stall due to multi-cycle execution of a Large (>64B) GET or PUT request. */
+#define                    hi_loca_pmi_req_stall   443          /* Valid PMI request stalled on Client IF to PCIC */
+#define                hi_loca_hcc_alloc_get_req   444          /* Allocating GET request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                hi_loca_hcc_alloc_get_hit   445          /* Allocating GET request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                hi_loca_hcc_alloc_put_req   446          /* Allocating PUT request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                hi_loca_hcc_alloc_put_hit   447          /* Allocating PUT request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define             hi_loca_hcc_alloc_atomic_req   448          /* Allocating Atomic (fetching or not) request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define             hi_loca_hcc_alloc_atomic_hit   449          /* Allocating Atomic (fetching/not) request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define             hi_loca_hcc_nonalloc_get_req   450          /* Non-Allocating GET request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define             hi_loca_hcc_nonalloc_get_hit   451          /* Non-Allocating GET request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define             hi_loca_hcc_nonalloc_put_req   452          /* Non-Allocating PUT request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define             hi_loca_hcc_nonalloc_put_hit   453          /* Non-Allocating PUT request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define          hi_loca_hcc_nonalloc_atomic_req   454          /* Non-Allocating Atomic (fetching or not) request count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define          hi_loca_hcc_nonalloc_atomic_hit   455          /* Non-Allocating Atomic (fetching/not) request cache Hit count. Enabled by one or more of rx_cnt_ena,tx_cnt_ena,at_cnt_ena. */
+#define                 hi_loca_hcc_alloc_dc_hit   456          /* Allocating Request Hit Count. All allocating requests */
+#define                 hi_loca_hcc_alloc_dc_req   457          /* Allocating Request Count. */
+#define                   hi_loca_hcc_all_dc_hit   458          /* All Request Hit Count. All requests (alloc or not) */
+#define                   hi_loca_hcc_all_dc_req   459          /* All Request Count. */
+#define                   hi_loca_hcc_fid_dc_hit   460          /* Flow ID based Request Hit Count. Enabled by fid_cnt_id/fid_cnt_msk */
+#define                   hi_loca_hcc_fid_dc_req   461          /* Flow ID based Request Count. Enabled byfid_cnt_id/fid_cnt_msk */
+#define             hi_loca_hcc_replay_chain_hit   462          /* Replay request that hits a chained cache line. Compare with HI_LOCA_HCC_FILL_CHAIN_REQ for Chain hit opportunities. */
+#define                     hi_loca_pmi_read_req   463          /* Sampled PCIe Read requests count. */
+#define                 hi_loca_pmi_read_latency   464          /* Sampled PCIe Read requests latency. Divide by HI_LOCA_PMI_READ_REQ to get average data response latency (in cclks). */
+#define                  hi_loca_pmi_rxwrite_req   465          /* Sampled PCIe RX Write requests count. */
+#define                 hi_loca_pmi_rxgo_latency   466          /* Sampled PCIe RX Write request latency to GO response. Divide by HI_LOCA_PMI_RXWRITE_REQ to get average GO latency (in cclks). */
+#define                      hi_loca_dcache_read   467          /* DCache read cycles */
+#define                     hi_loca_dcache_write   468          /* DCache Write cycles */
+#define                     hi_loca_reserved_1d5   469          
+#define                     hi_loca_reserved_1d6   470          
+#define                     hi_loca_reserved_1d7   471          
+#define                     hi_loca_reserved_1d8   472          
+#define                     hi_loca_reserved_1d9   473          
+#define                     hi_loca_reserved_1da   474          
+#define                     hi_loca_reserved_1db   475          
+#define                     hi_loca_reserved_1dc   476          
+#define                     hi_loca_reserved_1dd   477          
+#define                     hi_loca_reserved_1de   478          
+#define                     hi_loca_reserved_1df   479          
+#define                     hi_loca_reserved_1e0   480          
+#define                     hi_loca_reserved_1e1   481          
+#define                     hi_loca_reserved_1e2   482          
+#define                     hi_loca_reserved_1e3   483          
+#define                     hi_loca_reserved_1e4   484          
+#define                     hi_loca_reserved_1e5   485          
+#define                     hi_loca_reserved_1e6   486          
+#define                     hi_loca_reserved_1e7   487          
+#define                     hi_loca_reserved_1e8   488          
+#define                     hi_loca_reserved_1e9   489          
+#define                     hi_loca_reserved_1ea   490          
+#define                     hi_loca_reserved_1eb   491          
+#define                     hi_loca_reserved_1ec   492          
+#define                     hi_loca_reserved_1ed   493          
+#define                     hi_loca_reserved_1ee   494          
+#define                     hi_loca_reserved_1ef   495          
+#define                     hi_loca_reserved_1f0   496          
+#define                     hi_loca_reserved_1f1   497          
+#define                     hi_loca_reserved_1f2   498          
+#define                     hi_loca_reserved_1f3   499          
+#define                     hi_loca_reserved_1f4   500          
+#define                     hi_loca_reserved_1f5   501          
+#define                     hi_loca_reserved_1f6   502          
+#define                     hi_loca_reserved_1f7   503          
+#define                     hi_loca_reserved_1f8   504          
+#define                     hi_loca_reserved_1f9   505          
+#define                     hi_loca_reserved_1fa   506          
+#define                     hi_loca_reserved_1fb   507          
+#define                     hi_loca_reserved_1fc   508          
+#define                     hi_loca_reserved_1fd   509          
+#define                     hi_loca_reserved_1fe   510          
+#define                     hi_loca_reserved_1ff   511           
 
 #endif
 

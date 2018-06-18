@@ -59,7 +59,6 @@
 #define LOCA_PMI_ORB0_BASE					16384
 #define LOCA_PMI_ORB1_BASE					16392
 #define LOCA_PMI_ORBVAL_BASE					24576
-#define LOCA_PMI_ORBHOLD_BASE					24640
 #define LOCA_CONQ_TAILVAL_BASE					24960
 #define LOCA_CONQ_PSRRPL					25024
 #define LOCA_CONQ_HEADER0_BASE					28672
@@ -132,7 +131,7 @@
 * Pipeline Blocks.
 */
 #define HFI_LOCA_CFG_PIPE2					(HFI_LOCA_CSRS + 0x000000000008)
-#define HFI_LOCA_CFG_PIPE2_RESETCSR				0x0000000000509100ull
+#define HFI_LOCA_CFG_PIPE2_RESETCSR				0x0000000000009100ull
 #define HFI_LOCA_CFG_PIPE2_RESERVED_63_49_SHIFT			49
 #define HFI_LOCA_CFG_PIPE2_RESERVED_63_49_MASK			0x7FFFull
 #define HFI_LOCA_CFG_PIPE2_RESERVED_63_49_SMASK			0xFFFE000000000000ull
@@ -142,12 +141,9 @@
 #define HFI_LOCA_CFG_PIPE2_MRU_PEND_INIT_SHIFT			32
 #define HFI_LOCA_CFG_PIPE2_MRU_PEND_INIT_MASK			0xFFFFull
 #define HFI_LOCA_CFG_PIPE2_MRU_PEND_INIT_SMASK			0xFFFF00000000ull
-#define HFI_LOCA_CFG_PIPE2_RESERVED_31_25_SHIFT			25
-#define HFI_LOCA_CFG_PIPE2_RESERVED_31_25_MASK			0x7Full
-#define HFI_LOCA_CFG_PIPE2_RESERVED_31_25_SMASK			0xFE000000ull
-#define HFI_LOCA_CFG_PIPE2_IRQ_SYNC_THRESH_SHIFT		20
-#define HFI_LOCA_CFG_PIPE2_IRQ_SYNC_THRESH_MASK			0x1Full
-#define HFI_LOCA_CFG_PIPE2_IRQ_SYNC_THRESH_SMASK		0x1F00000ull
+#define HFI_LOCA_CFG_PIPE2_RESERVED_31_20_SHIFT			20
+#define HFI_LOCA_CFG_PIPE2_RESERVED_31_20_MASK			0xFFFull
+#define HFI_LOCA_CFG_PIPE2_RESERVED_31_20_SMASK			0xFFF00000ull
 #define HFI_LOCA_CFG_PIPE2_CONQ_FC_THRESH_SHIFT			12
 #define HFI_LOCA_CFG_PIPE2_CONQ_FC_THRESH_MASK			0xFFull
 #define HFI_LOCA_CFG_PIPE2_CONQ_FC_THRESH_SMASK			0xFF000ull
@@ -1390,73 +1386,17 @@
 */
 #define HFI_LOCA_PMON_INFO					(HFI_LOCA_CSRS + 0x000000000398)
 #define HFI_LOCA_PMON_INFO_RESETCSR				0x0000000000000000ull
-#define HFI_LOCA_PMON_INFO_RESERVED_63_60_SHIFT			60
-#define HFI_LOCA_PMON_INFO_RESERVED_63_60_MASK			0xFull
-#define HFI_LOCA_PMON_INFO_RESERVED_63_60_SMASK			0xF000000000000000ull
-#define HFI_LOCA_PMON_INFO_MAX_MEMPUSHWR_LATENCY_SHIFT		40
-#define HFI_LOCA_PMON_INFO_MAX_MEMPUSHWR_LATENCY_MASK		0xFFFFFull
-#define HFI_LOCA_PMON_INFO_MAX_MEMPUSHWR_LATENCY_SMASK		0xFFFFF0000000000ull
-#define HFI_LOCA_PMON_INFO_MAX_WBMTOI_LATENCY_SHIFT		20
-#define HFI_LOCA_PMON_INFO_MAX_WBMTOI_LATENCY_MASK		0xFFFFFull
-#define HFI_LOCA_PMON_INFO_MAX_WBMTOI_LATENCY_SMASK		0xFFFFF00000ull
-#define HFI_LOCA_PMON_INFO_MAX_WBSTOI_LATENCY_SHIFT		0
-#define HFI_LOCA_PMON_INFO_MAX_WBSTOI_LATENCY_MASK		0xFFFFFull
-#define HFI_LOCA_PMON_INFO_MAX_WBSTOI_LATENCY_SMASK		0xFFFFFull
+#define HFI_LOCA_PMON_INFO_RESERVED_63_40_SHIFT			40
+#define HFI_LOCA_PMON_INFO_RESERVED_63_40_MASK			0xFFFFFFull
+#define HFI_LOCA_PMON_INFO_RESERVED_63_40_SMASK			0xFFFFFF0000000000ull
+#define HFI_LOCA_PMON_INFO_MAX_RXGO_LATENCY_SHIFT		20
+#define HFI_LOCA_PMON_INFO_MAX_RXGO_LATENCY_MASK		0xFFFFFull
+#define HFI_LOCA_PMON_INFO_MAX_RXGO_LATENCY_SMASK		0xFFFFF00000ull
+#define HFI_LOCA_PMON_INFO_MAX_READ_LATENCY_SHIFT		0
+#define HFI_LOCA_PMON_INFO_MAX_READ_LATENCY_MASK		0xFFFFFull
+#define HFI_LOCA_PMON_INFO_MAX_READ_LATENCY_SMASK		0xFFFFFull
 /*
-* Table #51 of fxr_top - LOCA_PMON_INFO1
-* This INFO register records the maximum latency values measured from sampled 
-* PCIe transactions
-*/
-#define HFI_LOCA_PMON_INFO1					(HFI_LOCA_CSRS + 0x0000000003A0)
-#define HFI_LOCA_PMON_INFO1_RESETCSR				0x0000000000000000ull
-#define HFI_LOCA_PMON_INFO1_RESERVED_63_60_SHIFT		60
-#define HFI_LOCA_PMON_INFO1_RESERVED_63_60_MASK			0xFull
-#define HFI_LOCA_PMON_INFO1_RESERVED_63_60_SMASK		0xF000000000000000ull
-#define HFI_LOCA_PMON_INFO1_MAX_RFO_LATENCY_SHIFT		40
-#define HFI_LOCA_PMON_INFO1_MAX_RFO_LATENCY_MASK		0xFFFFFull
-#define HFI_LOCA_PMON_INFO1_MAX_RFO_LATENCY_SMASK		0xFFFFF0000000000ull
-#define HFI_LOCA_PMON_INFO1_MAX_DRD_LATENCY_SHIFT		20
-#define HFI_LOCA_PMON_INFO1_MAX_DRD_LATENCY_MASK		0xFFFFFull
-#define HFI_LOCA_PMON_INFO1_MAX_DRD_LATENCY_SMASK		0xFFFFF00000ull
-#define HFI_LOCA_PMON_INFO1_MAX_RDCURR_LATENCY_SHIFT		0
-#define HFI_LOCA_PMON_INFO1_MAX_RDCURR_LATENCY_MASK		0xFFFFFull
-#define HFI_LOCA_PMON_INFO1_MAX_RDCURR_LATENCY_SMASK		0xFFFFFull
-/*
-* Table #52 of fxr_top - LOCA_PMON_INFO2
-* This INFO register records the maximum latency values measured from sampled 
-* PCIe transactions
-*/
-#define HFI_LOCA_PMON_INFO2					(HFI_LOCA_CSRS + 0x0000000003A8)
-#define HFI_LOCA_PMON_INFO2_RESETCSR				0x0000000000000000ull
-#define HFI_LOCA_PMON_INFO2_RESERVED_63_40_SHIFT		40
-#define HFI_LOCA_PMON_INFO2_RESERVED_63_40_MASK			0xFFFFFFull
-#define HFI_LOCA_PMON_INFO2_RESERVED_63_40_SMASK		0xFFFFFF0000000000ull
-#define HFI_LOCA_PMON_INFO2_MAX_ITOM_LATENCY_SHIFT		20
-#define HFI_LOCA_PMON_INFO2_MAX_ITOM_LATENCY_MASK		0xFFFFFull
-#define HFI_LOCA_PMON_INFO2_MAX_ITOM_LATENCY_SMASK		0xFFFFF00000ull
-#define HFI_LOCA_PMON_INFO2_MAX_SPECITOM_LATENCY_SHIFT		0
-#define HFI_LOCA_PMON_INFO2_MAX_SPECITOM_LATENCY_MASK		0xFFFFFull
-#define HFI_LOCA_PMON_INFO2_MAX_SPECITOM_LATENCY_SMASK		0xFFFFFull
-/*
-* Table #53 of fxr_top - LOCA_PMON_CNTR
-* Performance Monitor Counters are configured with the #%%#LOCA_PMON_CFG#%%# 
-* CSR. The mapping of counting events to counter index is provided in #%%#Table 
-* 33-34#%%# below. Note for rate calculations, clock cycle counts are based on a 
-* 1.5Ghz clock. 
-*/
-#define HFI_LOCA_PMON_CNTR					(HFI_LOCA_CSRS + 0x000000000400)
-#define HFI_LOCA_PMON_CNTR_RESETCSR				0x0000000000000000ull
-#define HFI_LOCA_PMON_CNTR_RESERVED_63_49_SHIFT			49
-#define HFI_LOCA_PMON_CNTR_RESERVED_63_49_MASK			0x7FFFull
-#define HFI_LOCA_PMON_CNTR_RESERVED_63_49_SMASK			0xFFFE000000000000ull
-#define HFI_LOCA_PMON_CNTR_OVERFLOW_SHIFT			48
-#define HFI_LOCA_PMON_CNTR_OVERFLOW_MASK			0x1ull
-#define HFI_LOCA_PMON_CNTR_OVERFLOW_SMASK			0x1000000000000ull
-#define HFI_LOCA_PMON_CNTR_COUNT_SHIFT				0
-#define HFI_LOCA_PMON_CNTR_COUNT_MASK				0xFFFFFFFFFFFFull
-#define HFI_LOCA_PMON_CNTR_COUNT_SMASK				0xFFFFFFFFFFFFull
-/*
-* Table #55 of fxr_top - LOCA_DBG_CACHE_CLN
+* Table #51 of fxr_top - LOCA_DBG_CACHE_CLN
 * This register controls various cache clean operations in the Data Cache. A 
 * cache clean operation evicts modified lines to the uncore and invalidates 
 * clean lines. Clean data eviction notification will be signaled to the uncore 
@@ -1483,7 +1423,7 @@
 #define HFI_LOCA_DBG_CACHE_CLN_CC_ADDR_MASK			0x1ull
 #define HFI_LOCA_DBG_CACHE_CLN_CC_ADDR_SMASK			0x1ull
 /*
-* Table #56 of fxr_top - LOCA_DBG_ERRINJECT
+* Table #52 of fxr_top - LOCA_DBG_ERRINJECT
 * This register enables error injection into the DCache Read Data..
 */
 #define HFI_LOCA_DBG_ERRINJECT					(HFI_LOCA_CSRS + 0x000000000108)
@@ -1498,7 +1438,7 @@
 #define HFI_LOCA_DBG_ERRINJECT_MASK_MASK			0xFFull
 #define HFI_LOCA_DBG_ERRINJECT_MASK_SMASK			0xFFull
 /*
-* Table #57 of fxr_top - LOCA_DBG_PROBE_ADDR
+* Table #53 of fxr_top - LOCA_DBG_PROBE_ADDR
 * Writes to this CSR will probe the DCache Directory and Data for cache hit, 
 * line status and data contents. The write data provides the physical cache line 
 * address used by the probe operation and a Valid bit to initiate the probe 
@@ -1522,7 +1462,7 @@
 #define HFI_LOCA_DBG_PROBE_ADDR_GO_MASK				0x1ull
 #define HFI_LOCA_DBG_PROBE_ADDR_GO_SMASK			0x1ull
 /*
-* Table #58 of fxr_top - LOCA_DBG_PROBE_DIR
+* Table #54 of fxr_top - LOCA_DBG_PROBE_DIR
 * This CSR contains the Data Cache Directory State from a Data Cache Probe 
 * operation. See #%%#LOCA_DBG_PROBE_ADDR#%%# for details 
 */
@@ -1577,7 +1517,7 @@
 #define HFI_LOCA_DBG_PROBE_DIR_VALID_MASK			0x1ull
 #define HFI_LOCA_DBG_PROBE_DIR_VALID_SMASK			0x1ull
 /*
-* Table #59 of fxr_top - LOCA_DBG_PROBE_DATA
+* Table #55 of fxr_top - LOCA_DBG_PROBE_DATA
 * These 8 CSRs provide the Data Cache contents resulting from a Cache Probe 
 * operation. See #%%#LOCA_DBG_PROBE_ADDR#%%# for details on initiating a probe 
 * request. The contents of these CSRs are valid when the #%%#LOCA_DBG_PROBE_DIR#%%#.VALID 
@@ -1592,7 +1532,7 @@
 #define HFI_LOCA_DBG_PROBE_DATA_DATA_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_PROBE_DATA_DATA_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #60 of fxr_top - LOCA_DBG_PCAM_ADDR
+* Table #56 of fxr_top - LOCA_DBG_PCAM_ADDR
 * Register access to the 320 entry Pending CAM (PCAM) Address content. Each 
 * entry provides entry valid bit and the physical cache line address ([51:6]) 
 * associated with that entry. 
@@ -1612,7 +1552,7 @@
 #define HFI_LOCA_DBG_PCAM_ADDR_EVALID_MASK			0x1ull
 #define HFI_LOCA_DBG_PCAM_ADDR_EVALID_SMASK			0x1ull
 /*
-* Table #61 of fxr_top - LOCA_DBG_PCAM_DATA
+* Table #57 of fxr_top - LOCA_DBG_PCAM_DATA
 * Register access to the 320 entry Pending CAM (PCAM) Data content. Each entry 
 * provides state, flags and request information about the pending request. Note: 
 * writes to #%%#LOCA_DBG_PCAM_DATA#%%# will not mark the PCAM entry valid. See 
@@ -1658,7 +1598,7 @@
 #define HFI_LOCA_DBG_PCAM_DATA_STATE_MASK			0xFull
 #define HFI_LOCA_DBG_PCAM_DATA_STATE_SMASK			0xFull
 /*
-* Table #62 of fxr_top - LOCA_DBG_MRU
+* Table #58 of fxr_top - LOCA_DBG_MRU
 * Register access to the 512 entry Data Cache Directory MRU Table. Each entry 
 * provides 16-bits of Pending, Valid and MRU state. One bit for each way (bank) 
 * in the indexed set. The entry also describes which bank will be victimized by 
@@ -1691,7 +1631,7 @@
 #define HFI_LOCA_DBG_MRU_PENDING_MASK				0xFFull
 #define HFI_LOCA_DBG_MRU_PENDING_SMASK				0xFFull
 /*
-* Table #63 of fxr_top - LOCA_DBG_PROQ_FID_STATE
+* Table #59 of fxr_top - LOCA_DBG_PROQ_FID_STATE
 * Register access to the state of the 33 Flow IDs queues implemented in PROQ. 
 * FlowID[32] is the Global ID queue. Entry contents are defined 
 * below
@@ -1726,7 +1666,7 @@
 #define HFI_LOCA_DBG_PROQ_FID_STATE_HLD_MASK			0x1ull
 #define HFI_LOCA_DBG_PROQ_FID_STATE_HLD_SMASK			0x1ull
 /*
-* Table #64 of fxr_top - LOCA_DBG_PROQ_CMPLT
+* Table #60 of fxr_top - LOCA_DBG_PROQ_CMPLT
 * Register access to the 512 complete state bits in the PROQ. The 8 registers 
 * (64 bits each) in total provide all 512 completion bits in the PROQ, one bit 
 * for each PROQ entry. Register N provides completion bits for PROQ entries 
@@ -1738,7 +1678,7 @@
 #define HFI_LOCA_DBG_PROQ_CMPLT_COMPLETE_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_PROQ_CMPLT_COMPLETE_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #65 of fxr_top - LOCA_DBG_PROQ_GLOBAL
+* Table #61 of fxr_top - LOCA_DBG_PROQ_GLOBAL
 * Register access to the 512 Global ID state bits in the PROQ. The 8 registers 
 * (64 bits each) in total provide all 512 global bits in the PROQ, one bit for 
 * each PROQ entry. Register N provides global bits for PROQ entries [64N+63:64N] 
@@ -1750,7 +1690,7 @@
 #define HFI_LOCA_DBG_PROQ_GLOBAL_GLOBAL_ID_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_PROQ_GLOBAL_GLOBAL_ID_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #66 of fxr_top - LOCA_DBG_PROQ_CONQVAL
+* Table #62 of fxr_top - LOCA_DBG_PROQ_CONQVAL
 * Register access to the 512 ConQ valid state bits in the PROQ. The 8 registers 
 * (64 bits each) in total provide all 512 ConQ bits in the PROQ, one bit for 
 * each PROQ entry. Register N provides ConQ bits for PROQ entries [64N+63:64N] 
@@ -1762,7 +1702,7 @@
 #define HFI_LOCA_DBG_PROQ_CONQVAL_CONQVAL_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_PROQ_CONQVAL_CONQVAL_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #67 of fxr_top - LOCA_DBG_PMI_ORB0
+* Table #63 of fxr_top - LOCA_DBG_PMI_ORB0
 * Register access to the 320 PMI ORB entries. One CSR per entry. ORB State0 bits 
 * are presented here. ORB State1 bits are described in #%%#Section 33.18.7.14, 
 * 'PMI ORB State1 Debug'
@@ -1773,7 +1713,7 @@
 #define HFI_LOCA_DBG_PMI_ORB0_ORB0_MASK				0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_PMI_ORB0_ORB0_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #68 of fxr_top - LOCA_DBG_PMI_ORB1
+* Table #64 of fxr_top - LOCA_DBG_PMI_ORB1
 * Register access to the 320 PMI ORB entries. One CSR per entry. ORB State0 bits 
 * are presented here. ORB State0 bits are described in #%%#Section 33.18.7.13, 
 * 'PMI ORB State0 Debug' 
@@ -1784,7 +1724,7 @@
 #define HFI_LOCA_DBG_PMI_ORB1_ORB1_MASK				0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_PMI_ORB1_ORB1_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #69 of fxr_top - LOCA_DBG_PMI_ORBVAL
+* Table #65 of fxr_top - LOCA_DBG_PMI_ORBVAL
 * Register access to the 320 PMI ORB Vaild bits. Total of 5 CSRs with 64 Valid 
 * bits per CSR entry. Register N provides Valid bits for ORB entries 
 * [64N+63:64N]. 
@@ -1795,18 +1735,7 @@
 #define HFI_LOCA_DBG_PMI_ORBVAL_VALID_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_PMI_ORBVAL_VALID_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #70 of fxr_top - LOCA_DBG_PMI_ORBHOLD
-* Register access to the 320 PMI ORB Hold bits. Total of 4 CSRs with 64 Hold 
-* bits per CSR entry. Register N provides Hold bits for ORB entries 
-* [64N+63:64N]. 
-*/
-#define HFI_LOCA_DBG_PMI_ORBHOLD				(HFI_LOCA_CSRS + 0x000000006040)
-#define HFI_LOCA_DBG_PMI_ORBHOLD_RESETCSR			0x0000000000000000ull
-#define HFI_LOCA_DBG_PMI_ORBHOLD_HOLD_SHIFT			0
-#define HFI_LOCA_DBG_PMI_ORBHOLD_HOLD_MASK			0xFFFFFFFFFFFFFFFFull
-#define HFI_LOCA_DBG_PMI_ORBHOLD_HOLD_SMASK			0xFFFFFFFFFFFFFFFFull
-/*
-* Table #71 of fxr_top - LOCA_DBG_CONQ_TAILVAL
+* Table #66 of fxr_top - LOCA_DBG_CONQ_TAILVAL
 * Register access to the Tail Valid state of the 256 ConQ entries. Each CSR 
 * provides 64 Tail Valid bits. Register N provides Tail Valid bits for ConQ 
 * entries [64N+63:64N] 
@@ -1817,7 +1746,7 @@
 #define HFI_LOCA_DBG_CONQ_TAILVAL_TAIL_VALID_MASK		0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_CONQ_TAILVAL_TAIL_VALID_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #72 of fxr_top - LOCA_DBG_CONQ_PSRRPLY
+* Table #67 of fxr_top - LOCA_DBG_CONQ_PSRRPLY
 * Register access to the PSR Replay state of the 256 ConQ entries. Each CSR 
 * provides 64 PSR Replay bits. Register N provides PSR Replay bits for ConQ 
 * entries [64N+63:64N] 
@@ -1828,9 +1757,9 @@
 #define HFI_LOCA_DBG_CONQ_PSRRPLY_PSR_REPLAY_MASK		0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_CONQ_PSRRPLY_PSR_REPLAY_SMASK		0xFFFFFFFFFFFFFFFFull
 /*
-* Table #73 of fxr_top - LOCA_DBG_CONQ_HEADER0
+* Table #68 of fxr_top - LOCA_DBG_CONQ_HEADER0
 * Register access to the 256 ConQ Request Header0. One CSR per entry. Header0 
-* bits are presented here. Header1 bits are described in #%%#Section 33.18.7.20, 
+* bits are presented here. Header1 bits are described in #%%#Section 33.18.7.19, 
 * 'ConQ Header1 Debug'
 */
 #define HFI_LOCA_DBG_CONQ_HEADER0				(HFI_LOCA_CSRS + 0x000000007000)
@@ -1839,9 +1768,9 @@
 #define HFI_LOCA_DBG_CONQ_HEADER0_HEADER0_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_CONQ_HEADER0_HEADER0_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #74 of fxr_top - LOCA_DBG_CONQ_HEADER1
+* Table #69 of fxr_top - LOCA_DBG_CONQ_HEADER1
 * Register access to the 256 ConQ Request Header1. One CSR per entry. Header1 
-* bits are presented here. Header0 bits are described in #%%#Section 33.18.7.19, 
+* bits are presented here. Header0 bits are described in #%%#Section 33.18.7.18, 
 * 'ConQ Header0 Debug' 
 */
 #define HFI_LOCA_DBG_CONQ_HEADER1				(HFI_LOCA_CSRS + 0x000000007008)
@@ -1850,7 +1779,7 @@
 #define HFI_LOCA_DBG_CONQ_HEADER1_HEADER1_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_CONQ_HEADER1_HEADER1_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #75 of fxr_top - LOCA_DBG_CONQ_LINKS
+* Table #70 of fxr_top - LOCA_DBG_CONQ_LINKS
 * Register access to the 256 ConQ Request Links state. One CSR per 
 * entry.
 */
@@ -1860,7 +1789,7 @@
 #define HFI_LOCA_DBG_CONQ_LINKS_LINKS_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_CONQ_LINKS_LINKS_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #76 of fxr_top - LOCA_DBG_DCD0
+* Table #71 of fxr_top - LOCA_DBG_DCD0
 * Register access to the 1K entry Data Cache Directory0. Each entry provides the 
 * 64 bit Byte Valid vector for the cached line. DCD entry is mapped as 
 * follows:Register Address Bits [13:11] - DCD way (bank)Register Address Bits 
@@ -1872,7 +1801,7 @@
 #define HFI_LOCA_DBG_DCD0_BYTE_VALID_MASK			0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_DCD0_BYTE_VALID_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
-* Table #77 of fxr_top - LOCA_DBG_DCD1
+* Table #72 of fxr_top - LOCA_DBG_DCD1
 * Register access to the 1K entry Data Cache Directory1. Each entry provides the 
 * 44 bit TAG and Entry Valid bit for the cached line.DCD entry is mapped as 
 * follows:Register Address Bits [13:11] - DCD way (bank)Register Address Bits 
@@ -1902,7 +1831,7 @@
 #define HFI_LOCA_DBG_DCD1_WAY_MASK				0x7ull
 #define HFI_LOCA_DBG_DCD1_WAY_SMASK				0x7ull
 /*
-* Table #78 of fxr_top - LOCA_DBG_GO_CPORB
+* Table #73 of fxr_top - LOCA_DBG_GO_CPORB
 * Register access to the 320 entry Completion ORB.
 */
 #define HFI_LOCA_DBG_GO_CPORB					(HFI_LOCA_CSRS + 0x000000018000)
@@ -1923,7 +1852,7 @@
 #define HFI_LOCA_DBG_GO_CPORB_WRR_PTR_MASK			0x1FFull
 #define HFI_LOCA_DBG_GO_CPORB_WRR_PTR_SMASK			0x1FFull
 /*
-* Table #79 of fxr_top - LOCA_DBG_GO_WRR
+* Table #74 of fxr_top - LOCA_DBG_GO_WRR
 * Register access to the 512 entry Write RR FIFO.
 */
 #define HFI_LOCA_DBG_GO_WRR					(HFI_LOCA_CSRS + 0x000000019000)
@@ -1935,7 +1864,7 @@
 #define HFI_LOCA_DBG_GO_WRR_HFI_TID_MASK			0xFFFull
 #define HFI_LOCA_DBG_GO_WRR_HFI_TID_SMASK			0xFFFull
 /*
-* Table #80 of fxr_top - LOCA_DBG_DCACHE
+* Table #75 of fxr_top - LOCA_DBG_DCACHE
 * Register access to the 64MB Data Cache. Each entry provides 8B of raw DCache 
 * access for a total of 8K entries. Entries are addressed as follows:
 */
@@ -1944,255 +1873,5 @@
 #define HFI_LOCA_DBG_DCACHE_DATA_SHIFT				0
 #define HFI_LOCA_DBG_DCACHE_DATA_MASK				0xFFFFFFFFFFFFFFFFull
 #define HFI_LOCA_DBG_DCACHE_DATA_SMASK				0xFFFFFFFFFFFFFFFFull
-
-/*
-*  Enumerations from tables
-*/
-/* Enumeration from Table titled: LOCA Performance counter names (Enum - loca_perf_counter_t) - 7 bits
-*                        In File: fxr_top
-*/
-#if defined(__STDC__)
-
-enum loca_perf_counter {
-                  pm_wrifill_sbe = 127,         /* WriteFill Buffer SBE. */
-                   pm_dcache_sbe = 126,         /* DataCache SBE. */
-                pm_adm_sl_db_sbe = 125,         /* ADM ShortLoop Delay Buffer SBE. */
-                pm_adm_re_db_sbe = 124,         /* ADM RE Delay Buffer SBE. */
-               pm_adm_paf_db_sbe = 123,         /* ADM PAF Delay Buffer SBE. */
-               pm_adm_hdr_db_sbe = 122,         /* ADM Header Delay Buffer SBE. . */
-               pm_adm_cas_db_sbe = 121,         /* ADM Compare & Swap Delay Buffer SBE. */
-                     pm_pcam_sbe = 120,         /* PCAM data SBE. */
-                pm_mru_table_sbe = 119,         /* MRU Table SBE. */
-                 pm_c2u_data_sbe = 115,         /* C2U DPB Data SBE. */
-                   pm_c2u_wp_sbe = 114,         /* C2U DPB WritePull header SBE. */
-                  pm_c2u_nqb_sbe = 112,         /* C2U New Request (NQB) SBE. */
-                  pm_u2c_dir_sbe = 109,         /* PCAM Read SBE detected in PMI. */
-                  pm_u2c_poi_sbe = 108,         /* U2C Poison and ECC valid bit queue SBE. */
-                 pm_u2c_data_sbe = 107,         /* U2C Data SBE. */
-                 pm_conq_hdr_sbe = 105,         /* ConQ header SBE. */
-                  pm_proq_hl_sbe = 104,         /* PROQ hold queue SBE. */
-                  pm_proq_gf_sbe = 103,         /* PROQ global or Flow tail pointer queue SBE. */
-                pm_hifis_hdr_sbe = 102,         /* HIFIS Header SBE. */
-                pm_conq_tail_sbe = 101,         /* ConQ Tail pointer SBE. */
-                 pm_dcd_bank_sbe = 100,         /* Data Cache Directory Bank SBE. */
-                  pm_dcache_read = 99,          /* DCache reads. */
-                 pm_dcache_write = 98,          /* DCache writes. */
-                 pm_idi_u2c_data = 97,          /* IDI U2C Data Flit. */
-                  pm_idi_u2c_rsp = 96,          /* IDI U2C Response Flit. */
-                 pm_idi_c2u_data = 94,          /* IDI C2U Data Flit. */
-                  pm_idi_c2u_req = 92,          /* IDI C2U Request Flit. */
-           pm_no_c2u_req_credits = 91,          /* Clock cycles with No C2U Request Credits. */
-          pm_no_c2u_data_credits = 90,          /* Clock cycles with No C2U Data Credits. */
-             pm_snp_prefetch_hit = 88,          /* Snoop request that hits a pre-fetched line in the DCache. */
-                 pm_prefetch_req = 87,          /* Pre-fetch to memory for a request with ordering conflict */
-                  pm_addr_range3 = 86,          /* Address Range 3 request count. Enabled by upper_addr_range and lower_addr_range. */
-                  pm_addr_range2 = 85,          /* Address Range 2 request count. Enabled by upper_addr_range and lower_addr_range. */
-                  pm_addr_range1 = 84,          /* Address Range 1 request count. Enabled by upper_addr_range and lower_addr_range. */
-                  pm_addr_range0 = 83,          /* Address Range 0 request count. Enabled by upper_addr_range and lower_addr_range. */
-                   pm_new_tx_req = 82,          /* New Tx sourced request count. Enabled by tx_cnt_ena. */
-                   pm_new_rx_req = 81,          /* New Rx sourced request count. Enabled by rx_cnt_ena. */
-                   pm_new_at_req = 80,          /* New AT sourced request count. Enabled by at_cnt_ena. */
-                  pm_new_get_req = 79,          /* New GET request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                  pm_new_put_req = 78,          /* New PUT request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                 pm_new_amo1_req = 77,          /* New non-vector Atomic request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                 pm_new_amo2_req = 76,          /* New 2-flit vector Atomic request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                 pm_new_amo3_req = 75,          /* New 3-flit vector Atomic request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                 pm_new_amo4_req = 74,          /* New 4-flit vector Atomic request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                  pm_new_irq_req = 73,          /* New IRQ request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                  pm_new_nop_req = 72,          /* New NOP request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-                  pm_new_fid_req = 71,          /* New FID request count. The GID/FID counted is selected by the fid_cnt_id and fid_cnt_msk fields. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-              pm_addr_replay_req = 70,          /* Address enabled Replay request count. */
-             pm_order_replay_req = 69,          /* Order enabled Replay request count. */
-                     pm_fill_req = 68,          /* Fill request count. */
-                      pm_snp_req = 67,          /* Snoop request count. */
-                        pm_va_fc = 66,          /* Clock cycle count of Vector Atomic cycles in Pipe. */
-                       pm_irq_fc = 65,          /* Clock cycle count of IRQ buffer flow control signaling. */
-                       pm_awp_fc = 64,          /* Clock cycle count of All Ways Pending condition in one or more DCache Directory sets. */
-                      pm_lock_fc = 63,          /* Clock cycle count of IDI Lock flow control signaling. */
-                      pm_proq_fc = 62,          /* Clock cycle count of PROQ flow control signaling due to lack of PROQ entries. */
-                      pm_conq_fc = 61,          /* Clock cycle count of ConQ flow control signaling due to lack of ConQ entries. */
-                       pm_new_fc = 60,          /* Clock cycle count of New/Replay Request flow control signaling due to lack of TIDs. */
-                       pm_nqb_fc = 57,          /* Clock cycle count of PMI New Request Buffer flow control signaling. */
-                     pm_hifis_fc = 56,          /* Clock cycle count of HIFIS flow control signaling. */
-              pm_new_timeout_haz = 55,          /* New request timeout cycles stalled by a New hazard. */
-                  pm_new_timeout = 54,          /* New request timeout cycles at PARB head. */
-           pm_replay_timeout_haz = 53,          /* Replay request timeout cycles stalled by a Replay hazard. */
-               pm_replay_timeout = 52,          /* Replay request timeout cycles at PARB head. */
-             pm_fill_timeout_haz = 51,          /* Fill request timeout cycles stalled by a Fill hazard. */
-                 pm_fill_timeout = 50,          /* Fill request timeout cycles at PARB head. */
-                   pm_new_fc_haz = 49,          /* New request cycles stalled by flow control. */
-                   pm_new_ic_haz = 48,          /* New request cycles stalled by PMI CAM hazard. */
-                   pm_new_pc_haz = 47,          /* New request cycles stalled by Pipe CAM hazard. */
-                  pm_new_req_cyc = 46,          /* New request cycles count at PARB head. */
-                pm_replay_fc_haz = 45,          /* Replay request cycles stalled by flow control. */
-                pm_replay_ic_haz = 44,          /* Replay request cycles stalled by PMI CAM hazard. */
-                pm_replay_pc_haz = 43,          /* Replay request cycles stalled by Pipe CAM hazard. */
-               pm_replay_req_cyc = 42,          /* Replay request cycles count at PARB head. */
-                  pm_fill_fc_haz = 41,          /* Fill request cycles stalled by flow control. */
-                  pm_fill_ic_haz = 40,          /* Fill request cycles stalled by PMI CAM hazard. */
-                  pm_fill_pc_haz = 39,          /* Fill request cycles stalled by Pipe CAM hazard. */
-                 pm_fill_req_cyc = 38,          /* Fill request cycles count at PARB head. */
-                   pm_snp_fc_haz = 37,          /* Snoop request cycles stalled by flow control. */
-                   pm_snp_ic_haz = 36,          /* Snoop request cycles stalled by PMI CAM hazard. */
-                   pm_snp_pc_haz = 35,          /* Snoop request cycles stalled by Pipe CAM hazard. */
-                  pm_snp_req_cyc = 34,          /* Snoop request cycles count at PARB head. */
-                   pm_wbstoi_req = 33,          /* Sampled WbStoI requests count. */
-               pm_wbstoi_latency = 32,          /* Sampled WbStoI requests latency. Divide by pm_wbstoi_req to get average latency (in hclks). */
-                   pm_wbmtoi_req = 31,          /* Sampled WbMtoI requests count.. */
-               pm_wbmtoi_latency = 30,          /* Sampled WbMtoI requests latency. Divide by pm_wbmtoi_req to get average latency (in hclks). */
-                pm_mempushwr_req = 29,          /* Sampled MemPushWr requests count. . */
-            pm_mempushwr_latency = 28,          /* Sampled MemPushWr requests latency. Divide by pm_mempushwr_req to get average latency (in hclks). */
-                   pm_rdcurr_req = 27,          /* Sampled RdCurr requests count. Enabled by latency_ctl. */
-               pm_rdcurr_latency = 26,          /* Sampled RdCurr requests latency. Divide by pm_rdcurr_req to get average latency (in hclks). Enabled by latency_ctl. */
-                      pm_drd_req = 25,          /* Sampled DRd_Opt requests count. Enabled by latency_ctl. */
-                  pm_drd_latency = 24,          /* Sampled DRd_Opt requests latency. Divide by pm_drd_req to get average latency (in hclks). Enabled by latency_ctl. */
-                      pm_rfo_req = 23,          /* Sampled RFO requests count. Enabled by latency_ctl. */
-                  pm_rfo_latency = 22,          /* Sampled RFO requests latency. Divide by pm_rfo_req to get average latency (in hclks). Enabled by latency_ctl. */
-                 pm_specitom_req = 21,          /* Sampled SpecItoM requests count. */
-             pm_specitom_latency = 20,          /* Sampled SpecItoM requests latency. Divide by pm_specitom_req to get average latency (in hclks). */
-                     pm_itom_req = 19,          /* Sampled ItoM requests count. */
-                 pm_itom_latency = 18,          /* Sampled ItoM requests latency. Divide by pm_itom_req to get average latency (in hclks). */
-                  pm_snp_dc_dhit = 17,          /* Snoop Request Hit with Data Forward Count. */
-                   pm_snp_dc_hit = 16,          /* Snoop Request Hit Count. */
-                   pm_snp_dc_req = 15,          /* Snoop Request Count. */
-                   pm_fid_dc_hit = 14,          /* Flow ID based Request Hit Count. Enabled by fid_cnt_id/fid_cnt_msk */
-                   pm_fid_dc_req = 13,          /* Flow ID based Request Count. Enabled by fid_cnt_id/fid_cnt_msk */
-                pm_atomic_dc_hit = 12,          /* ATOMIC opcode Request Hit Count. Enabled byalloc_opcode_ena */
-                pm_atomic_dc_req = 11,          /* ATOMIC opcode Request Count. Enabled by alloc_opcode_ena */
-                   pm_put_dc_hit = 10,          /* PUT opcode Dcache Requests Hit Count. Enabled by alloc_opcode_ena */
-                   pm_put_dc_req = 9,           /* PUT opcode Request Count. Enabled by alloc_opcode_ena */
-                   pm_get_dc_hit = 8,           /* GET opcode Request Hit Count. Enabled by alloc_opcode_ena */
-                   pm_get_dc_req = 7,           /* GET opcode Request Count. Enabled by alloc_opcode_ena */
-              pm_alloc_dc_devict = 6,           /* Allocating Request w/ Data Eviction Count. */
-               pm_alloc_dc_evict = 5,           /* Allocating Request w/ line Eviction Count. */
-                 pm_alloc_dc_hit = 4,           /* Allocating Request Hit Count. */
-                 pm_alloc_dc_req = 3,           /* Allocating Request Count. */
-                   pm_all_dc_hit = 2,           /* All Request Hit Count. */
-                   pm_all_dc_req = 1,           /* All Request Count. */
-                      pm_mperiod = 0            /* Measurement Period. May be used by SW to calculate rates associated with other count values. */
-};
-
-#else
-
-#define           pm_wrifill_sbe   127          /* WriteFill Buffer SBE. */
-#define            pm_dcache_sbe   126          /* DataCache SBE. */
-#define         pm_adm_sl_db_sbe   125          /* ADM ShortLoop Delay Buffer SBE. */
-#define         pm_adm_re_db_sbe   124          /* ADM RE Delay Buffer SBE. */
-#define        pm_adm_paf_db_sbe   123          /* ADM PAF Delay Buffer SBE. */
-#define        pm_adm_hdr_db_sbe   122          /* ADM Header Delay Buffer SBE. . */
-#define        pm_adm_cas_db_sbe   121          /* ADM Compare & Swap Delay Buffer SBE. */
-#define              pm_pcam_sbe   120          /* PCAM data SBE. */
-#define         pm_mru_table_sbe   119          /* MRU Table SBE. */
-#define          pm_c2u_data_sbe   115          /* C2U DPB Data SBE. */
-#define            pm_c2u_wp_sbe   114          /* C2U DPB WritePull header SBE. */
-#define           pm_c2u_nqb_sbe   112          /* C2U New Request (NQB) SBE. */
-#define           pm_u2c_dir_sbe   109          /* PCAM Read SBE detected in PMI. */
-#define           pm_u2c_poi_sbe   108          /* U2C Poison and ECC valid bit queue SBE. */
-#define          pm_u2c_data_sbe   107          /* U2C Data SBE. */
-#define          pm_conq_hdr_sbe   105          /* ConQ header SBE. */
-#define           pm_proq_hl_sbe   104          /* PROQ hold queue SBE. */
-#define           pm_proq_gf_sbe   103          /* PROQ global or Flow tail pointer queue SBE. */
-#define         pm_hifis_hdr_sbe   102          /* HIFIS Header SBE. */
-#define         pm_conq_tail_sbe   101          /* ConQ Tail pointer SBE. */
-#define          pm_dcd_bank_sbe   100          /* Data Cache Directory Bank SBE. */
-#define           pm_dcache_read   99           /* DCache reads. */
-#define          pm_dcache_write   98           /* DCache writes. */
-#define          pm_idi_u2c_data   97           /* IDI U2C Data Flit. */
-#define           pm_idi_u2c_rsp   96           /* IDI U2C Response Flit. */
-#define          pm_idi_c2u_data   94           /* IDI C2U Data Flit. */
-#define           pm_idi_c2u_req   92           /* IDI C2U Request Flit. */
-#define    pm_no_c2u_req_credits   91           /* Clock cycles with No C2U Request Credits. */
-#define   pm_no_c2u_data_credits   90           /* Clock cycles with No C2U Data Credits. */
-#define      pm_snp_prefetch_hit   88           /* Snoop request that hits a pre-fetched line in the DCache. */
-#define          pm_prefetch_req   87           /* Pre-fetch to memory for a request with ordering conflict */
-#define           pm_addr_range3   86           /* Address Range 3 request count. Enabled by upper_addr_range and lower_addr_range. */
-#define           pm_addr_range2   85           /* Address Range 2 request count. Enabled by upper_addr_range and lower_addr_range. */
-#define           pm_addr_range1   84           /* Address Range 1 request count. Enabled by upper_addr_range and lower_addr_range. */
-#define           pm_addr_range0   83           /* Address Range 0 request count. Enabled by upper_addr_range and lower_addr_range. */
-#define            pm_new_tx_req   82           /* New Tx sourced request count. Enabled by tx_cnt_ena. */
-#define            pm_new_rx_req   81           /* New Rx sourced request count. Enabled by rx_cnt_ena. */
-#define            pm_new_at_req   80           /* New AT sourced request count. Enabled by at_cnt_ena. */
-#define           pm_new_get_req   79           /* New GET request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define           pm_new_put_req   78           /* New PUT request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define          pm_new_amo1_req   77           /* New non-vector Atomic request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define          pm_new_amo2_req   76           /* New 2-flit vector Atomic request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define          pm_new_amo3_req   75           /* New 3-flit vector Atomic request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define          pm_new_amo4_req   74           /* New 4-flit vector Atomic request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define           pm_new_irq_req   73           /* New IRQ request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define           pm_new_nop_req   72           /* New NOP request count. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define           pm_new_fid_req   71           /* New FID request count. The GID/FID counted is selected by the fid_cnt_id and fid_cnt_msk fields. Enabled by one or more of (tx_cnt_ena, rx_cnt_ena, at_cnt_ena). */
-#define       pm_addr_replay_req   70           /* Address enabled Replay request count. */
-#define      pm_order_replay_req   69           /* Order enabled Replay request count. */
-#define              pm_fill_req   68           /* Fill request count. */
-#define               pm_snp_req   67           /* Snoop request count. */
-#define                 pm_va_fc   66           /* Clock cycle count of Vector Atomic cycles in Pipe. */
-#define                pm_irq_fc   65           /* Clock cycle count of IRQ buffer flow control signaling. */
-#define                pm_awp_fc   64           /* Clock cycle count of All Ways Pending condition in one or more DCache Directory sets. */
-#define               pm_lock_fc   63           /* Clock cycle count of IDI Lock flow control signaling. */
-#define               pm_proq_fc   62           /* Clock cycle count of PROQ flow control signaling due to lack of PROQ entries. */
-#define               pm_conq_fc   61           /* Clock cycle count of ConQ flow control signaling due to lack of ConQ entries. */
-#define                pm_new_fc   60           /* Clock cycle count of New/Replay Request flow control signaling due to lack of TIDs. */
-#define                pm_nqb_fc   57           /* Clock cycle count of PMI New Request Buffer flow control signaling. */
-#define              pm_hifis_fc   56           /* Clock cycle count of HIFIS flow control signaling. */
-#define       pm_new_timeout_haz   55           /* New request timeout cycles stalled by a New hazard. */
-#define           pm_new_timeout   54           /* New request timeout cycles at PARB head. */
-#define    pm_replay_timeout_haz   53           /* Replay request timeout cycles stalled by a Replay hazard. */
-#define        pm_replay_timeout   52           /* Replay request timeout cycles at PARB head. */
-#define      pm_fill_timeout_haz   51           /* Fill request timeout cycles stalled by a Fill hazard. */
-#define          pm_fill_timeout   50           /* Fill request timeout cycles at PARB head. */
-#define            pm_new_fc_haz   49           /* New request cycles stalled by flow control. */
-#define            pm_new_ic_haz   48           /* New request cycles stalled by PMI CAM hazard. */
-#define            pm_new_pc_haz   47           /* New request cycles stalled by Pipe CAM hazard. */
-#define           pm_new_req_cyc   46           /* New request cycles count at PARB head. */
-#define         pm_replay_fc_haz   45           /* Replay request cycles stalled by flow control. */
-#define         pm_replay_ic_haz   44           /* Replay request cycles stalled by PMI CAM hazard. */
-#define         pm_replay_pc_haz   43           /* Replay request cycles stalled by Pipe CAM hazard. */
-#define        pm_replay_req_cyc   42           /* Replay request cycles count at PARB head. */
-#define           pm_fill_fc_haz   41           /* Fill request cycles stalled by flow control. */
-#define           pm_fill_ic_haz   40           /* Fill request cycles stalled by PMI CAM hazard. */
-#define           pm_fill_pc_haz   39           /* Fill request cycles stalled by Pipe CAM hazard. */
-#define          pm_fill_req_cyc   38           /* Fill request cycles count at PARB head. */
-#define            pm_snp_fc_haz   37           /* Snoop request cycles stalled by flow control. */
-#define            pm_snp_ic_haz   36           /* Snoop request cycles stalled by PMI CAM hazard. */
-#define            pm_snp_pc_haz   35           /* Snoop request cycles stalled by Pipe CAM hazard. */
-#define           pm_snp_req_cyc   34           /* Snoop request cycles count at PARB head. */
-#define            pm_wbstoi_req   33           /* Sampled WbStoI requests count. */
-#define        pm_wbstoi_latency   32           /* Sampled WbStoI requests latency. Divide by pm_wbstoi_req to get average latency (in hclks). */
-#define            pm_wbmtoi_req   31           /* Sampled WbMtoI requests count.. */
-#define        pm_wbmtoi_latency   30           /* Sampled WbMtoI requests latency. Divide by pm_wbmtoi_req to get average latency (in hclks). */
-#define         pm_mempushwr_req   29           /* Sampled MemPushWr requests count. . */
-#define     pm_mempushwr_latency   28           /* Sampled MemPushWr requests latency. Divide by pm_mempushwr_req to get average latency (in hclks). */
-#define            pm_rdcurr_req   27           /* Sampled RdCurr requests count. Enabled by latency_ctl. */
-#define        pm_rdcurr_latency   26           /* Sampled RdCurr requests latency. Divide by pm_rdcurr_req to get average latency (in hclks). Enabled by latency_ctl. */
-#define               pm_drd_req   25           /* Sampled DRd_Opt requests count. Enabled by latency_ctl. */
-#define           pm_drd_latency   24           /* Sampled DRd_Opt requests latency. Divide by pm_drd_req to get average latency (in hclks). Enabled by latency_ctl. */
-#define               pm_rfo_req   23           /* Sampled RFO requests count. Enabled by latency_ctl. */
-#define           pm_rfo_latency   22           /* Sampled RFO requests latency. Divide by pm_rfo_req to get average latency (in hclks). Enabled by latency_ctl. */
-#define          pm_specitom_req   21           /* Sampled SpecItoM requests count. */
-#define      pm_specitom_latency   20           /* Sampled SpecItoM requests latency. Divide by pm_specitom_req to get average latency (in hclks). */
-#define              pm_itom_req   19           /* Sampled ItoM requests count. */
-#define          pm_itom_latency   18           /* Sampled ItoM requests latency. Divide by pm_itom_req to get average latency (in hclks). */
-#define           pm_snp_dc_dhit   17           /* Snoop Request Hit with Data Forward Count. */
-#define            pm_snp_dc_hit   16           /* Snoop Request Hit Count. */
-#define            pm_snp_dc_req   15           /* Snoop Request Count. */
-#define            pm_fid_dc_hit   14           /* Flow ID based Request Hit Count. Enabled by fid_cnt_id/fid_cnt_msk */
-#define            pm_fid_dc_req   13           /* Flow ID based Request Count. Enabled by fid_cnt_id/fid_cnt_msk */
-#define         pm_atomic_dc_hit   12           /* ATOMIC opcode Request Hit Count. Enabled byalloc_opcode_ena */
-#define         pm_atomic_dc_req   11           /* ATOMIC opcode Request Count. Enabled by alloc_opcode_ena */
-#define            pm_put_dc_hit   10           /* PUT opcode Dcache Requests Hit Count. Enabled by alloc_opcode_ena */
-#define            pm_put_dc_req   9            /* PUT opcode Request Count. Enabled by alloc_opcode_ena */
-#define            pm_get_dc_hit   8            /* GET opcode Request Hit Count. Enabled by alloc_opcode_ena */
-#define            pm_get_dc_req   7            /* GET opcode Request Count. Enabled by alloc_opcode_ena */
-#define       pm_alloc_dc_devict   6            /* Allocating Request w/ Data Eviction Count. */
-#define        pm_alloc_dc_evict   5            /* Allocating Request w/ line Eviction Count. */
-#define          pm_alloc_dc_hit   4            /* Allocating Request Hit Count. */
-#define          pm_alloc_dc_req   3            /* Allocating Request Count. */
-#define            pm_all_dc_hit   2            /* All Request Hit Count. */
-#define            pm_all_dc_req   1            /* All Request Count. */
-#define               pm_mperiod   0             /* Measurement Period. May be used by SW to calculate rates associated with other count values. */
-
-#endif
-
-
 
 #endif 		/* DEF_FXR_LOCA_SW_DEF */

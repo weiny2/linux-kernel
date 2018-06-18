@@ -2580,7 +2580,7 @@
 #define FXR_TXOTR_MSG_DBG_FIRMWARE_FPE_ADDR_TRACE_ADDRESS_SMASK			0xFFFFFFFFFFFFFFFFull
 /*
 * Table #109 of fxr_tx_otr_msg_top_csrs - TXOTR_MSG_DBG_BPE_POST_DATA
-* This CSR contains the Power on Self Test (POST) data for BPE..
+* This CSR contains the Power on Self Test (POST) data for BPE.
 */
 #define FXR_TXOTR_MSG_DBG_BPE_POST_DATA						(FXR_TX_OTR_MSG_TOP_CSRS + 0x000000006960)
 #define FXR_TXOTR_MSG_DBG_BPE_POST_DATA_RESETCSR				0x0000000000000000ull

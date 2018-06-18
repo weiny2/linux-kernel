@@ -69,6 +69,10 @@
 #define FXR_DLINK_CAPABILITY_PNTR					716
 #define FXR_PTM_CAPABILITY_PNTR						728
 #define FXR_PTM_REQ_CAPABILITY_PNTR					740
+#define FXR_CFG_SPI_TX_DATA						3840
+#define FXR_STS_SPI_RX_DATA						3844
+#define FXR_CFG_SPI_HEADER						3848
+#define FXR_CFG_SPI_CTRL						3852
 /*
 * Table #4 of fxr_top - FXR_CFG_DEVICE_VENDOR_ID
 * Device ID and Vendor ID Registers
@@ -3273,5 +3277,77 @@
 #define FXR_PTM_REQ_RX_LATENCY_RESERVED_31_12_SHIFT			12
 #define FXR_PTM_REQ_RX_LATENCY_RESERVED_31_12_MASK			0xFFFFFull
 #define FXR_PTM_REQ_RX_LATENCY_RESERVED_31_12_SMASK			0xFFFFF000ull
+/*
+* Table #132 of fxr_top - FXR_CFG_SPI_TX_DATA
+* Contains the data to send to attached SPI device. Not accessible via 
+* DBI
+*/
+#define FXR_CFG_SPI_TX_DATA_RESETCSR					0x00000000ull
+#define FXR_CFG_SPI_TX_DATA_DATA_SHIFT					0
+#define FXR_CFG_SPI_TX_DATA_DATA_MASK					0xFFFFFFFFull
+#define FXR_CFG_SPI_TX_DATA_DATA_SMASK					0xFFFFFFFFull
+/*
+* Table #133 of fxr_top - FXR_STS_SPI_RX_DATA
+* Contains the data received from attached SPI device.Not accessible via 
+* DBI
+*/
+#define FXR_STS_SPI_RX_DATA_RESETCSR					0x00000000ull
+#define FXR_STS_SPI_RX_DATA_DATA_SHIFT					0
+#define FXR_STS_SPI_RX_DATA_DATA_MASK					0xFFFFFFFFull
+#define FXR_STS_SPI_RX_DATA_DATA_SMASK					0xFFFFFFFFull
+/*
+* Table #134 of fxr_top - FXR_CFG_SPI_HEADER
+* Contains the header to send to the device. Typically include a one byte 
+* instruction and possibly a 3-byte
+*/
+#define FXR_CFG_SPI_HEADER_RESETCSR					0x00000000ull
+#define FXR_CFG_SPI_HEADER_DATA_SHIFT					0
+#define FXR_CFG_SPI_HEADER_DATA_MASK					0xFFFFFFFFull
+#define FXR_CFG_SPI_HEADER_DATA_SMASK					0xFFFFFFFFull
+/*
+* Table #135 of fxr_top - FXR_CFG_SPI_CTRL
+* Control access to SPI device. All values can be set simultaneously with the 
+* command.
+*/
+#define FXR_CFG_SPI_CTRL_RESETCSR					0x00000031ull
+#define FXR_CFG_SPI_CTRL_RESERVED_31_27_SHIFT				27
+#define FXR_CFG_SPI_CTRL_RESERVED_31_27_MASK				0x1Full
+#define FXR_CFG_SPI_CTRL_RESERVED_31_27_SMASK				0xF8000000ull
+#define FXR_CFG_SPI_CTRL_PIN_IO3_SHIFT					26
+#define FXR_CFG_SPI_CTRL_PIN_IO3_MASK					0x1ull
+#define FXR_CFG_SPI_CTRL_PIN_IO3_SMASK					0x4000000ull
+#define FXR_CFG_SPI_CTRL_PIN_IO2_SHIFT					25
+#define FXR_CFG_SPI_CTRL_PIN_IO2_MASK					0x1ull
+#define FXR_CFG_SPI_CTRL_PIN_IO2_SMASK					0x2000000ull
+#define FXR_CFG_SPI_CTRL_DIR_IO3_SHIFT					24
+#define FXR_CFG_SPI_CTRL_DIR_IO3_MASK					0x1ull
+#define FXR_CFG_SPI_CTRL_DIR_IO3_SMASK					0x1000000ull
+#define FXR_CFG_SPI_CTRL_DIR_IO2_SHIFT					23
+#define FXR_CFG_SPI_CTRL_DIR_IO2_MASK					0x1ull
+#define FXR_CFG_SPI_CTRL_DIR_IO2_SMASK					0x800000ull
+#define FXR_CFG_SPI_CTRL_SELECTED_SHIFT					22
+#define FXR_CFG_SPI_CTRL_SELECTED_MASK					0x1ull
+#define FXR_CFG_SPI_CTRL_SELECTED_SMASK					0x400000ull
+#define FXR_CFG_SPI_CTRL_BUSY_SHIFT					21
+#define FXR_CFG_SPI_CTRL_BUSY_MASK					0x1ull
+#define FXR_CFG_SPI_CTRL_BUSY_SMASK					0x200000ull
+#define FXR_CFG_SPI_CTRL_DATA_SHIFT_METHOD_SHIFT			19
+#define FXR_CFG_SPI_CTRL_DATA_SHIFT_METHOD_MASK				0x3ull
+#define FXR_CFG_SPI_CTRL_DATA_SHIFT_METHOD_SMASK			0x180000ull
+#define FXR_CFG_SPI_CTRL_DATA_SIZE_SHIFT				17
+#define FXR_CFG_SPI_CTRL_DATA_SIZE_MASK					0x3ull
+#define FXR_CFG_SPI_CTRL_DATA_SIZE_SMASK				0x60000ull
+#define FXR_CFG_SPI_CTRL_HEADER_SIZE_SHIFT				15
+#define FXR_CFG_SPI_CTRL_HEADER_SIZE_MASK				0x3ull
+#define FXR_CFG_SPI_CTRL_HEADER_SIZE_SMASK				0x18000ull
+#define FXR_CFG_SPI_CTRL_COMMAND_SHIFT					11
+#define FXR_CFG_SPI_CTRL_COMMAND_MASK					0xFull
+#define FXR_CFG_SPI_CTRL_COMMAND_SMASK					0x7800ull
+#define FXR_CFG_SPI_CTRL_ENABLE_SHIFT					10
+#define FXR_CFG_SPI_CTRL_ENABLE_MASK					0x1ull
+#define FXR_CFG_SPI_CTRL_ENABLE_SMASK					0x400ull
+#define FXR_CFG_SPI_CTRL_FREQ_SHIFT					0
+#define FXR_CFG_SPI_CTRL_FREQ_MASK					0x3FFull
+#define FXR_CFG_SPI_CTRL_FREQ_SMASK					0x3FFull
 
 #endif 		/* DEF_FXR_CONFIG_SW_DEF */
