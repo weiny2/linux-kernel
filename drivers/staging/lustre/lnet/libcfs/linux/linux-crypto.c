@@ -408,6 +408,7 @@ EXPORT_SYMBOL(cfs_crypto_hash_speed);
  * \retval	0 on success
  * \retval	-ENOMEM if no memory is available for test buffer
  */
+__attribute__((unused))
 static int cfs_crypto_test_hashes(void)
 {
 	enum cfs_crypto_hash_alg hash_alg;
@@ -431,8 +432,34 @@ int cfs_crypto_register(void)
 
 	adler32 = cfs_crypto_adler32_register();
 
+#if 1
+	{ // XXX simics hack alert
+		int pre_computed[CFS_HASH_ALG_MAX] =
+			{-1,493,-1,187,89,33,42,42,3860};
+		int i;
+		for (i = 0; i < CFS_HASH_ALG_MAX; i++)
+			cfs_crypto_hash_speeds[i] = pre_computed[i];
+	}
+	// simics take > 10 mins to compute hash alg times... sigh.
+#else
 	/* check all algorithms and do performance test */
 	cfs_crypto_test_hashes();
+#endif
+
+#if 0
+{ // XXX simics hack alert - dump the hash MB/sec values for above hard-coded
+	int i;
+	char *cp, *buf = kzalloc(2048, GFP_KERNEL);
+
+	cp = buf;
+	cp += snprintf(buf,2048,"cfs_crypto_hash_speed[idx] val\n");
+	for (i = 0; i < CFS_HASH_ALG_MAX; i++)
+		cp += snprintf(cp, (&buf[2048] - cp), "%d         %d\n",i,
+				cfs_crypto_hash_speed(i));
+	printk(KERN_ALERT "%s\n", buf);
+	kfree(buf);
+}
+#endif
 	return 0;
 }
 
