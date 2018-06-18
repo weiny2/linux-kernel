@@ -852,7 +852,7 @@ static inline bool native_send_ok(struct rvt_qp *qp)
 	if (unlikely(!(ib_rvt_state_ops[qp->state] & RVT_POST_SEND_OK)))
 		return false;
 	/* TODO - may be atomic, remove below with STL-37655 */
-	if (!qp_priv->tpid && qp->ibqp.qp_type != IB_QPT_UD)
+	if (qp->ibqp.qp_type != IB_QPT_UD && qp_priv->state != QP_STATE_RTS)
 		wait_for_completion_interruptible(&qp_priv->pid_xchg_comp);
 	return true;
 }
