@@ -73,7 +73,7 @@
 #include "trace.h"
 #include "qsfp.h"
 
-#define WAIT_TILL_8051_LINKUP 1000
+#define WAIT_TILL_8051_LINKUP 10000
 
 /* TODO: delete all module parameters when possible */
 bool quick_linkup; /* skip VerifyCap and Config* state. */
@@ -593,13 +593,13 @@ static void lcb_shutdown(struct hfi_pportdata *ppd, int abort)
  * NOTE: the caller needs to acquire ppd->crk8051_mutex lock before
  * calling this function
  */
-static void _mnh_shutdown(struct hfi_pportdata *ppd)
+static void _oc_shutdown(struct hfi_pportdata *ppd)
 {
 	lockdep_assert_held(&ppd->crk8051_mutex);
-	if (ppd->mnh_shutdown)
+	if (ppd->oc_shutdown)
 		return;
 
-	ppd->mnh_shutdown = 1;
+	ppd->oc_shutdown = 1;
 	/* Shutdown the LCB */
 	lcb_shutdown(ppd, 1);
 
@@ -611,10 +611,10 @@ static void _mnh_shutdown(struct hfi_pportdata *ppd)
 	write_csr(ppd->dd, CRK_CRK8051_CFG_RST, 0x1);
 }
 
-static void mnh_shutdown(struct hfi_pportdata *ppd)
+static void oc_shutdown(struct hfi_pportdata *ppd)
 {
 	mutex_lock(&ppd->crk8051_mutex);
-	_mnh_shutdown(ppd);
+	_oc_shutdown(ppd);
 	mutex_unlock(&ppd->crk8051_mutex);
 }
 
@@ -623,13 +623,13 @@ static void mnh_shutdown(struct hfi_pportdata *ppd)
  * NOTE: the caller needs to acquire the ppd->crk8051_mutex before
  * calling this function
  */
-void _mnh_start(struct hfi_pportdata *ppd)
+void _oc_start(struct hfi_pportdata *ppd)
 {
 	if (no_mnh)
 		return;
 
 	lockdep_assert_held(&ppd->crk8051_mutex);
-	if (!ppd->mnh_shutdown)
+	if (!ppd->oc_shutdown)
 		return;
 	/* Take the 8051 out of reset, wait until 8051 is ready and set
 	 * host version bit*/
@@ -638,13 +638,13 @@ void _mnh_start(struct hfi_pportdata *ppd)
 	write_csr(ppd->dd, OC_LCB_CFG_RUN, OC_LCB_CFG_RUN_EN_MASK);
 	/* lcb_shutdown() with abort=1 does not restore these */
 	write_csr(ppd->dd, OC_LCB_ERR_EN_HOST, ppd->lcb_err_en);
-	ppd->mnh_shutdown = 0;
+	ppd->oc_shutdown = 0;
 }
 
-void mnh_start(struct hfi_pportdata *ppd)
+void oc_start(struct hfi_pportdata *ppd)
 {
 	mutex_lock(&ppd->crk8051_mutex);
-	_mnh_start(ppd);
+	_oc_start(ppd);
 	mutex_unlock(&ppd->crk8051_mutex);
 }
 
@@ -672,11 +672,12 @@ static void handle_link_up(struct work_struct *work)
 	/* transit to Init only from Going_Up. */
 	if (ppd->host_link_state != HLS_GOING_UP) {
 		u32 reg_8051_port = read_physical_state(ppd);
-
-		ppd_dev_info(ppd, "False interrupt on %s(): %s(%d) 0x%x",
-			     __func__,
-			     link_state_name(ppd->host_link_state),
-			     ilog2(ppd->host_link_state), reg_8051_port);
+		if (!ppd->dd->emulation)
+			ppd_dev_info(ppd, "False interrupt on %s(): %s(%d) 0x%x",
+				     __func__,
+				     link_state_name(ppd->host_link_state),
+				     ilog2(ppd->host_link_state),
+				     reg_8051_port);
 		mutex_unlock(&ppd->hls_lock);
 		return;
 	}
@@ -795,7 +796,7 @@ static void handle_link_down(struct work_struct *work)
 	 * start the link bring up.
 	 */
 	if (!hfi_qsfp_mod_present(ppd))
-		mnh_shutdown(ppd);
+		oc_shutdown(ppd);
 	else
 		hfi_start_link(ppd);
 }
@@ -812,7 +813,7 @@ static void set_logical_state(struct hfi_pportdata *ppd, u32 chip_lstate)
 }
 
 /*
- * If the 8051 is in reset mode (ppd->mnh_shutdown == 1), this function
+ * If the 8051 is in reset mode (ppd->oc_shutdown == 1), this function
  * will still continue executing
  *
  * Returns:
@@ -845,8 +846,8 @@ static int _do_8051_command(struct hfi_pportdata *ppd, u32 type,
 			return_code = -ENXIO;
 			goto fail;
 		}
-		_mnh_shutdown(ppd);
-		_mnh_start(ppd);
+		_oc_shutdown(ppd);
+		_oc_start(ppd);
 	}
 
 	/*
@@ -923,12 +924,10 @@ static int do_8051_command(struct hfi_pportdata *ppd, u32 type, u64 in_data,
 
 	mutex_lock(&ppd->crk8051_mutex);
 	/* We can't send any commands to the 8051 if it is in reset */
-	if (ppd->mnh_shutdown){
+	if (ppd->oc_shutdown)
 		return_code = -ENODEV;
-		goto fail;
-	}
-	return_code = _do_8051_command(ppd, type, in_data, out_data);
-fail:
+	else
+		return_code = _do_8051_command(ppd, type, in_data, out_data);
 	mutex_unlock(&ppd->crk8051_mutex);
 	return return_code;
 }
@@ -2045,8 +2044,7 @@ static void hfi_handle_8051_host_msg(struct hfi_pportdata *ppd, u64 msg)
 		ppd_dev_dbg(ppd, "LINK_WIDTH_DOWNGRADED\n");
 		msg &= ~LINK_WIDTH_DOWNGRADED;
 	}
-
-	if (msg)
+	if (msg && !ppd->dd->emulation)
 		ppd_dev_warn(ppd, "Unhandled host message 0x%llx\n", msg);
 }
 
@@ -2065,7 +2063,7 @@ static void hfi_handle_8051_err(struct hfi_pportdata *ppd, u64 err)
 		err &= ~UNKNOWN_FRAME;
 	}
 
-	if (err)
+	if (err && !ppd->dd->emulation)
 		ppd_dev_warn(ppd, "Unhandled 8051 error 0x%llx\n", err);
 }
 
@@ -2082,14 +2080,13 @@ static void hfi_handle_host_irq(struct hfi_pportdata *ppd)
 
 	if (msg)
 		hfi_handle_8051_host_msg(ppd, msg);
-
 	/*
 	 * FXRTODO: Needs follow up. This generally should not happen,
 	 * but it does. We still need to clear the SET_BY_8051 bit. It
 	 * may be an issue with Simics. For now, just print an error
 	 * and clear the bit regardless.
 	 */
-	if (!err && !msg)
+	if (!err && !msg && !ppd->dd->emulation)
 		ppd_dev_err(ppd, "Unhandled 8051 interrupt!\n");
 
 	write_csr(ppd->dd, CRK_CRK8051_ERR_CLR,
@@ -2098,7 +2095,7 @@ static void hfi_handle_host_irq(struct hfi_pportdata *ppd)
 	/* TODO: take care other interrupts */
 }
 
-irqreturn_t hfi_irq_mnh_handler(int irq, void *dev_id)
+irqreturn_t hfi_irq_oc_handler(int irq, void *dev_id)
 {
 	struct hfi_irq_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
@@ -2394,9 +2391,12 @@ void hfi2_pport_link_uninit(struct hfi_devdata *dd)
 	struct hfi_pportdata *ppd;
 	int ret;
 
+	if (no_mnh)
+		return;
+
 	/*
 	 * Make both port1 and 2 to Offline state then disable both ports'
-	 * interrupt. Otherwise irq_mnh_handle() produces spurious interrupt.
+	 * interrupt. Otherwise irq_oc_handle() produces spurious interrupt.
 	 */
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
@@ -2412,6 +2412,24 @@ void hfi2_pport_link_uninit(struct hfi_devdata *dd)
 	}
 }
 
+static int hfi2_8051_task(void *data)
+{
+	struct hfi_devdata *dd = data;
+	int port;
+
+	dd_dev_info(dd, "8051 kthread starting\n");
+	while (!kthread_should_stop()) {
+		for (port = 1; port <= dd->num_pports; port++) {
+			struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+
+			hfi_handle_host_irq(ppd);
+		}
+		msleep(20);
+		schedule();
+	}
+	return 0;
+}
+
 /*
  * initialize ports
  */
@@ -2420,15 +2438,16 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 	int ret = 0;
 	u8 port;
 	struct hfi_pportdata *ppd;
-
-	if (no_mnh)
-		return 0;
+	struct task_struct *task;
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
 
 		if (opafm_disable)
 			hfi_set_max_lid(ppd, HFI_DEFAULT_MAX_LID_SUPP);
+
+		if (no_mnh)
+			continue;
 
 		/* configure workqueues */
 		INIT_WORK(&ppd->link_vc_work, handle_verify_cap);
@@ -2438,20 +2457,32 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 		INIT_WORK(&ppd->sma_message_work, handle_sma_message);
 		INIT_DELAYED_WORK(&ppd->start_link_work, handle_start_link);
 
+		if (ppd->dd->emulation) {
+			/* FXRTODO: Need to destroy kthread during uninit */
+			task = kthread_run(hfi2_8051_task, dd, "hfi2_8051");
+			if (IS_ERR(task)) {
+				ret = PTR_ERR(task);
+				goto _return;
+			}
+		}
+
 		 /* configure interrupt registers of MNH/8051 */
 		ret = hfi2_enable_8051_intr(ppd);
 		if (ret) {
-			dd_dev_err(dd,
-				   "Can't configure interrupt regs of MNH/8051: %d\n",
+			dd_dev_err(dd, "Can't configure 8051 interrupts: %d\n",
 				   ret);
 			goto _return;
 		}
 		spin_lock_init(&ppd->cc_log_lock);
 	}
+
+	if (no_mnh)
+		return 0;
+
 	/*
 	 * The following code has to be separated from above "for" loop because
 	 * hfi_start_link(ppd) induces VerifyCap interrupt and its interrupt
-	 * service routine,irq_mnh_handler() scans both ports.
+	 * service routine,irq_oc_handler() scans both ports.
 	 */
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
@@ -2507,7 +2538,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 	switch (state) {
 	case HLS_DN_OFFLINE:
 		if (ppd->host_link_state == HLS_DN_DISABLE)
-			mnh_start(ppd);
+			oc_start(ppd);
 
 		/* allow any state to transition to offline */
 		ret = goto_offline(ppd, ppd->remote_link_down_reason);
@@ -2541,7 +2572,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 				break;
 		}
 		ppd->host_link_state = HLS_DN_DISABLE;
-		mnh_shutdown(ppd);
+		oc_shutdown(ppd);
 		break;
 	case HLS_DN_DOWNDEF:
 		ppd->host_link_state = HLS_DN_DOWNDEF;
@@ -2549,7 +2580,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 	case HLS_DN_POLL:
 		if ((ppd->host_link_state == HLS_DN_DISABLE ||
 		     ppd->host_link_state == HLS_DN_OFFLINE))
-			mnh_start(ppd);
+			oc_start(ppd);
 
 		/* Hand LED control to the HW */
 		write_csr(ppd->dd, OC_LCB_CFG_LED, 0);

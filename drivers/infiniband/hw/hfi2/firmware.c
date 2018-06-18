@@ -82,14 +82,15 @@
  * but not necessarily something a user would ever need to use.
  */
 /* FXRTODO: replace with correct fw names once they are available */
-#define DEFAULT_FW_8051_NAME_FPGA "hfi_dc8051.bin"
+#define DEFAULT_FW_8051_NAME_FPGA "hfi_oc8051.bin"
+#define DEFAULT_FW_8051_NAME_OLD "hfi_dc8051.bin"
 #define DEFAULT_HDRPE_FW_NAME "rxhp_main_ram_hdl_signed.bin"
 #define DEFAULT_FRAGPE_FW_NAME "otr_frag_contents_prog_mem_signed.bin"
 #define DEFAULT_BUFPE_FW_NAME "otr_buff_contents_prog_mem_signed.bin"
-#define ALT_FW_8051_NAME_ASIC "hfi1_dc8051_d.fw"
-#define ALT_HDRPE_FW_NAME "hfi_dc8051_d.fw"
-#define ALT_FRAGPE_FW_NAME "hfi_dc8051_d.fw"
-#define ALT_BUFPE_FW_NAME "hfi_dc8051_d.fw"
+#define ALT_FW_8051_NAME_ASIC "hfi1_oc8051_d.fw"
+#define ALT_HDRPE_FW_NAME "rxhp_main_ram_hdl_signed_d.fw"
+#define ALT_FRAGPE_FW_NAME "otr_frag_contents_prog_mem_signed_d.fw"
+#define ALT_BUFPE_FW_NAME "otr_buff_contents_prog_mem_signed_d.fw"
 
 #define HOST_INTERFACE_VERSION 1
 
@@ -145,7 +146,7 @@ struct firmware_file {
 /* pe authentication timeout */
 /* Simics: 10ms = 1000 * udelay(10) */
 /* ZEBU: 100ms = 10000 * udelay(10) */
-#define PE_TIMEOUT (zebu ? 10000 : 1000)
+#define PE_TIMEOUT 10000
 
 static void hfi_write_bufpe_prog_mem(struct hfi_devdata *dd, u8 *data,
 				     u32 off, u64 mem)
@@ -169,7 +170,6 @@ static void hfi_write_bufpe_prog_mem(struct hfi_devdata *dd, u8 *data,
 	/* FXRTODO: uncomment after valid field checking is
 	 * implemented
 	 */
-
 	/*count = 0;
 	 *do {
 	 *	count ++;
@@ -407,6 +407,8 @@ static int write_8051(struct hfi_pportdata *ppd, int code, u32 start,
 		} else {
 			memcpy(&reg, &data[offset], 8);
 		}
+		dd_dev_dbg(ppd->dd, "Writing byte %d of 0x%llx to 8051\n",
+			   offset / 8, reg);
 		write_csr(ppd->dd, CRK_CRK8051_CFG_RAM_ACCESS_WR_DATA, reg);
 
 		/* wait until ACCESS_COMPLETED is set */
@@ -488,7 +490,8 @@ static void obtain_default_fw_name(struct hfi_devdata *dd, enum fw_type fw)
 {
 	switch (fw) {
 	case FW_8051:
-		dd->fw_name = DEFAULT_FW_8051_NAME_FPGA;
+		dd->fw_name = dd->emulation ? DEFAULT_FW_8051_NAME_FPGA :
+					      DEFAULT_FW_8051_NAME_OLD;
 		break;
 	case FW_HDRPE:
 		dd->fw_name = DEFAULT_HDRPE_FW_NAME;
@@ -575,83 +578,95 @@ static int obtain_one_firmware(struct hfi_devdata *dd, const char *name,
 		    fdet->fw->size - sizeof(struct firmware_file));
 
 	/*
-	 * If the file does not have a valid CSS header, fail.
-	 * Otherwise, check the CSS size field for an expected size.
-	 * The augmented file has r2 and mu inserted after the header
-	 * was generated, so there will be a known difference between
-	 * the CSS header size and the actual file size.  Use this
-	 * difference to identify an augmented file.
+	 * If the file does not have a valid CSS header, assume it is
+	 * a raw binary. Otherwise, check the CSS size field for an
+	 * expected size. The augmented file has r2 and mu inserted
+	 * after the header was generated, so there will be a known
+	 * difference between the CSS header size and the actual file
+	 * size. Use this difference to identify an augmented file.
 	 *
 	 * Note: css->size is in DWORDs, multiply by 4 to get bytes.
 	 */
 	ret = verify_css_header(dd, css);
 	if (ret) {
-		dd_dev_info(dd, "Invalid CSS header for \"%s\"\n", name);
-	} else {
-		if ((css->size * 4) == fdet->fw->size) {
-			/* non-augmented firmware file */
-			struct firmware_file *ff = (struct firmware_file *)
-						   fdet->fw->data;
+		/* assume this is a raw binary, with no CSS header */
+		dd_dev_info(dd,
+			"Invalid CSS header for \"%s\" - assuming raw binary, turning off validation\n",
+			name);
+		ret = 0; /* OK for now */
+		/*
+		 * Assign fields from the dummy header in case we go down the
+		 * wrong path.
+		 */
+		fdet->css_header = css;
+		fdet->modulus = fdet->dummy_header.modulus;
+		fdet->exponent = fdet->dummy_header.exponent;
+		fdet->signature = fdet->dummy_header.signature;
+		fdet->r2 = fdet->dummy_header.r2;
+		fdet->mu = fdet->dummy_header.mu;
+		fdet->firmware_ptr = (u8 *)fdet->fw->data;
+		fdet->firmware_len = fdet->fw->size;
+	} else if ((css->size * 4) == fdet->fw->size) {
+		/* non-augmented firmware file */
+		struct firmware_file *ff = (struct firmware_file *)
+					   fdet->fw->data;
 
-			/* make sure there are bytes in the payload */
-			ret = payload_check(dd, name, fdet->fw->size,
-					    sizeof(struct firmware_file));
-			if (ret == 0) {
-				fdet->css_header = css;
-				fdet->modulus = ff->modulus;
-				fdet->exponent = ff->exponent;
-				fdet->signature = ff->signature;
-				/* use dummy space */
-				fdet->r2 = fdet->dummy_header.r2;
-				/* use dummy space */
-				fdet->mu = fdet->dummy_header.mu;
-				fdet->firmware_ptr = ff->firmware;
-				fdet->firmware_len = fdet->fw->size -
-				sizeof(struct firmware_file);
-				/*
-				 * Header does not include r2 and mu -
-				 * generate here.
-				 * For now, fail.
-				 */
-				if (fw == FW_8051) {
-					dd_dev_err(dd, "driver cannot validate fw w/o r2 and mu\n");
-					ret = -EINVAL;
-				}
-			}
-		} else {
-			if ((css->size * 4) + AUGMENT_SIZE == fdet->fw->size) {
-				/* augmented firmware file */
-				struct augmented_firmware_file *aff =
-				(struct augmented_firmware_file *)
-				fdet->fw->data;
-
-				/* make sure there are bytes in the payload */
-				ret = payload_check(dd, name, fdet->fw->size,
-						    sizeof
-						    (struct
-						     augmented_firmware_file));
-				if (ret == 0) {
-					fdet->css_header = css;
-					fdet->modulus = aff->modulus;
-					fdet->exponent = aff->exponent;
-					fdet->signature = aff->signature;
-					fdet->r2 = aff->r2;
-					fdet->mu = aff->mu;
-					fdet->firmware_ptr = aff->firmware;
-					fdet->firmware_len = fdet->fw->size -
-					sizeof(struct augmented_firmware_file);
-				}
-			} else {
-				/* css->size check failed */
-				dd_dev_err(dd,
-					   "invalid firmware header field size: expected 0x%lx or 0x%lx, actual 0x%x\n",
-					   fdet->fw->size / 4,
-					   (fdet->fw->size - AUGMENT_SIZE) / 4,
-					   css->size);
-
+		/* make sure there are bytes in the payload */
+		ret = payload_check(dd, name, fdet->fw->size,
+				    sizeof(struct firmware_file));
+		if (ret == 0) {
+			fdet->css_header = css;
+			fdet->modulus = ff->modulus;
+			fdet->exponent = ff->exponent;
+			fdet->signature = ff->signature;
+			/* use dummy space */
+			fdet->r2 = fdet->dummy_header.r2;
+			/* use dummy space */
+			fdet->mu = fdet->dummy_header.mu;
+			fdet->firmware_ptr = ff->firmware;
+			fdet->firmware_len = fdet->fw->size -
+			sizeof(struct firmware_file);
+			/*
+			 * Header does not include r2 and mu -
+			 * generate here. For now, fail.
+			 */
+			if (fw == FW_8051 &&
+			    dd->icode != ICODE_FPGA_EMULATION) {
+				dd_dev_err(dd, "Cannot validate fw w/o r2 and mu\n");
 				ret = -EINVAL;
 			}
 		}
+	} else if ((css->size * 4) + AUGMENT_SIZE == fdet->fw->size) {
+		/* augmented firmware file */
+		struct augmented_firmware_file *aff =
+		(struct augmented_firmware_file *)
+		fdet->fw->data;
+
+		/* make sure there are bytes in the payload */
+		ret = payload_check(dd, name, fdet->fw->size,
+				    sizeof
+				    (struct
+				     augmented_firmware_file));
+		if (ret == 0) {
+			fdet->css_header = css;
+			fdet->modulus = aff->modulus;
+			fdet->exponent = aff->exponent;
+			fdet->signature = aff->signature;
+			fdet->r2 = aff->r2;
+			fdet->mu = aff->mu;
+			fdet->firmware_ptr = aff->firmware;
+			fdet->firmware_len = fdet->fw->size -
+			sizeof(struct augmented_firmware_file);
+		}
+	} else {
+		/* css->size check failed */
+		dd_dev_err(dd,
+			   "invalid firmware header field size: expected 0x%lx or 0x%lx, actual 0x%x\n",
+			   fdet->fw->size / 4,
+			   (fdet->fw->size - AUGMENT_SIZE) / 4,
+			   css->size);
+
+		ret = -EINVAL;
 	}
 
 done:
@@ -882,6 +897,9 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 	u32 status;
 	int ret = 0;
 
+	if (dd->emulation)
+		return 0;	/* done with no error if not validating */
+
 	/* write the signature */
 	write_rsa_data(dd, FXR_FW_MSC_RSA_SIGNATURE,
 		       signature, KEY_SIZE);
@@ -981,6 +999,9 @@ static int run_rsa(struct hfi_pportdata *ppd, const char *who,
 static void load_security_variables(struct hfi_devdata *dd,
 				    struct firmware_details *fdet)
 {
+	if (dd->icode == ICODE_FPGA_EMULATION)
+		return;	/* nothing to do */
+
 	/* Security variables a.  Write the modulus */
 	write_rsa_data(dd, FXR_FW_MSC_RSA_MODULUS,
 		       fdet->modulus, KEY_SIZE);
@@ -1000,6 +1021,9 @@ static void load_security_variables(struct hfi_devdata *dd,
 static inline u32 get_firmware_state(const struct hfi_pportdata *ppd)
 {
 	u64 reg = read_csr(ppd->dd, CRK_CRK8051_STS_CUR_STATE);
+
+	dd_dev_info(ppd->dd, "%s: CRK_CRK8051_STS_CUR_STATE: 0x%llx\n",
+		    __func__, reg);
 
 	return (reg >> CRK_CRK8051_STS_CUR_STATE_FIRMWARE_SHIFT)
 				& CRK_CRK8051_STS_CUR_STATE_FIRMWARE_MASK;
@@ -1216,6 +1240,7 @@ static int load_8051_firmware(struct hfi_pportdata *ppd,
 		| CRK_CRK8051_CFG_RST_DRAM_SMASK
 		| CRK_CRK8051_CFG_RST_IRAM_SMASK
 		| CRK_CRK8051_CFG_RST_SFR_SMASK;
+	dd_dev_info(dd, "Resettting 8051, CRK_CRK8051_CFG_RST: 0x%llx\n", reg);
 	write_csr(ppd->dd, CRK_CRK8051_CFG_RST, reg);
 
 	/*
@@ -1228,6 +1253,7 @@ static int load_8051_firmware(struct hfi_pportdata *ppd,
 	 */
 	/* release all but the core reset */
 	reg = CRK_CRK8051_CFG_RST_M8051W_SMASK;
+	dd_dev_info(dd, "Resetting 8051, CRK_CRK8051_CFG_RST: 0x%llx\n", reg);
 	write_csr(ppd->dd, CRK_CRK8051_CFG_RST, reg);
 
 	/* Firmware load step 1 */
@@ -1236,9 +1262,11 @@ static int load_8051_firmware(struct hfi_pportdata *ppd,
 	/*
 	 * Firmware load step 2.  Clear FXR_FW_CFG_FW_CTRL.FW_8051_LOADED
 	 */
+	dd_dev_info(dd, "Clear FXR_FW_CFG_FW_CTRL.FW_8051_LOADED\n");
 	write_csr(dd, FXR_FW_CFG_FW_CTRL, 0);
 
 	/* Firmware load steps 3-5 */
+	dd_dev_info(dd, "Call write_8051\n");
 	ret = write_8051(ppd, 1/*code*/, 0, fdet->firmware_ptr,
 			 fdet->firmware_len);
 	if (ret)
@@ -1254,10 +1282,13 @@ static int load_8051_firmware(struct hfi_pportdata *ppd,
 	 */
 	reg = 0x01;
 
+	dd_dev_info(dd, "Set FXR_FW_CFG_FW_CTRL.FW_8051_LOADED 0x%llx\n",
+		reg << FXR_FW_CFG_FW_CTRL_FW_8051_LOADED_SHIFT);
 	write_csr(dd, FXR_FW_CFG_FW_CTRL,
 		  reg << FXR_FW_CFG_FW_CTRL_FW_8051_LOADED_SHIFT);
 
 	/* Firmware load steps 7-10 */
+	dd_dev_info(dd, "Call run_rsa\n");
 	ret = run_rsa(ppd, "8051", fdet->signature);
 	if (ret)
 		return ret;
@@ -1268,6 +1299,7 @@ static int load_8051_firmware(struct hfi_pportdata *ppd,
 	 * requests.
 	 * Then, set the host version bit
 	 */
+	dd_dev_info(dd, "Waiting for firmware to come back with ready\n");
 	mutex_lock(&ppd->crk8051_mutex);
 	ret = hfi2_release_and_wait_ready_8051_firmware(ppd);
 	mutex_unlock(&ppd->crk8051_mutex);
@@ -1334,15 +1366,26 @@ authenticate_hdrpe(struct hfi_devdata *dd)
 {
 	int timeout;
 	u64 reg = 0;
+	u64 start_authentication_smask =
+		FXR_RXHP_CFG_HDR_PE_START_AUTHENTICATION_SMASK;
+	u64 authentication_complete_smask =
+		FXR_RXHP_CFG_HDR_PE_AUTHENTICATION_COMPLETE_SMASK;
+	u64 authentication_success_smask =
+		FXR_RXHP_CFG_HDR_PE_AUTHENTICATION_SUCCESS_SMASK;
+	u64 pe_enable_smask =
+		FXR_RXHP_CFG_HDR_PE_PE_ENABLE_SMASK;
 
+	/* Use firmware for 9B paths. See 2204045629 */
+	if (dd->emulation)
+		start_authentication_smask |=
+			(0x3E00ULL << FXR_RXHP_CFG_HDR_PE_USE_FIRMWARE_SHIFT);
 	/* start authentication */
-	write_csr(dd, FXR_RXHP_CFG_HDR_PE,
-		  FXR_RXHP_CFG_HDR_PE_START_AUTHENTICATION_SMASK);
+	write_csr(dd, FXR_RXHP_CFG_HDR_PE, start_authentication_smask);
 
 	/* wait until finish authentication */
 	for (timeout = 0; timeout++ < PE_TIMEOUT; ) {
 		reg = read_csr(dd, FXR_RXHP_CFG_HDR_PE);
-		if (reg & FXR_RXHP_CFG_HDR_PE_AUTHENTICATION_COMPLETE_SMASK)
+		if (reg & authentication_complete_smask)
 			break;
 		usleep_range(10, 20);
 	}
@@ -1351,14 +1394,19 @@ authenticate_hdrpe(struct hfi_devdata *dd)
 			   reg);
 		return -ENXIO;
 	}
-	if (!(reg & FXR_RXHP_CFG_HDR_PE_AUTHENTICATION_SUCCESS_SMASK)) {
+	if (!(reg & authentication_success_smask)) {
 		dd_dev_err(dd, "authenticate hdrpe fail: 0x%llx",
 			   reg);
 		return -ENXIO;
 	}
+
+	/* Use firmware for 9B paths. See 2204045629 */
+	if (dd->emulation)
+		pe_enable_smask |=
+			(0x3E00ULL << FXR_RXHP_CFG_HDR_PE_USE_FIRMWARE_SHIFT);
+
 	/* enable PE */
-	write_csr(dd, FXR_RXHP_CFG_HDR_PE,
-		  FXR_RXHP_CFG_HDR_PE_PE_ENABLE_SMASK);
+	write_csr(dd, FXR_RXHP_CFG_HDR_PE, pe_enable_smask);
 
 	return 0;
 }
@@ -1491,9 +1539,14 @@ int hfi2_load_firmware(struct hfi_devdata *dd)
 	}
 
 skip_8051:
-	if (no_pe_fw)
-		goto skip_pe_fw;
-	if (zebu)
+	/*
+	 * Zebu currently pushes the firmware directly into the imem.
+	 * The irom contents are pre-loaded with a sequence which bypasses
+	 * validation. Starting in ww19c, the FPGA builds are expected
+	 * to perform this same sequence. So do not push the firmware
+	 * images into the PE firmware CSRs for Zebu or FPGA.
+	 */
+	if (dd->emulation)
 		goto skip_pe_fw_load;
 	for (fw = FW_HDRPE; fw <= FW_BUFPE; fw++) {
 		dd->fw_state = FW_EMPTY;
@@ -1525,7 +1578,6 @@ skip_pe_fw_load:
 		dd_dev_err(dd, "can't authenticate fragpe");
 		return ret;
 	}
-skip_pe_fw:
 	return 0;
 }
 
@@ -1542,23 +1594,29 @@ void hfi2_dispose_firmware(struct hfi_devdata *dd)
  * Then, set host version bit.
  *
  * This function executes even if the 8051 is in reset mode when
- * ppd->mnh_shutdown == 1.
+ * ppd->oc_shutdown == 1.
  *
  * Expects ppd->crk8051_mutex to be held.
  */
 int hfi2_release_and_wait_ready_8051_firmware(struct hfi_pportdata *ppd)
 {
 	int ret;
+	u32 timeout = TIMEOUT_8051_START;
+
+	if (ppd->dd->emulation)
+		timeout *= 3;
 
 	lockdep_assert_held(&ppd->crk8051_mutex);
 	/* clear all reset bits, releaseing the 8051 */
 	write_csr(ppd->dd, CRK_CRK8051_CFG_RST, 0ull);
 
 	/* wait for the firmware to be ready to accept requests */
-	ret = hfi_wait_firmware_ready(ppd, TIMEOUT_8051_START);
+	ret = hfi_wait_firmware_ready(ppd, timeout);
 	if (ret) {
 		ppd_dev_err(ppd, "%s: timeout starting the 8051 firmware\n",
 			    __func__);
+		if (ppd->dd->emulation)
+			msleep(100);
 		return ret;
 	}
 

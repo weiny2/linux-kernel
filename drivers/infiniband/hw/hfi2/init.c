@@ -169,10 +169,6 @@ static int __init hfi_init(void)
 	hfi_dbg_init();
 	hfi_mod_init();
 
-	ret = hfi_iommu_root_alloc();
-	if (ret < 0)
-		goto iommu_err;
-
 	hfi2_diag_add();
 
 	ret = pci_register_driver(&hfi_driver);
@@ -183,9 +179,7 @@ static int __init hfi_init(void)
 	return 0;
 
 pci_err:
-	hfi_iommu_root_free();
 	hfi2_diag_remove();
-iommu_err:
 	hfi_mod_deinit();
 	hfi_dbg_exit();
 	return ret;
@@ -195,7 +189,6 @@ module_init(hfi_init);
 static void hfi_cleanup(void)
 {
 	pci_unregister_driver(&hfi_driver);
-	hfi_iommu_root_free();
 	hfi2_diag_remove();
 	hfi_mod_deinit();
 	hfi_dbg_exit();

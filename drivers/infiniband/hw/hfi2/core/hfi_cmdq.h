@@ -52,11 +52,7 @@
 #define _HFI_CMDQ_H
 
 #define HFI_TX_MAX_BUFFERED	64
-#ifdef ZEBU
-#define HFI_TX_MAX_PIO		2048
-#else
 #define HFI_TX_MAX_PIO		4096
-#endif
 
 /* TODO - cleanup usage of this */
 #define _HFI_DBG_PRINTF(FMT, args...)

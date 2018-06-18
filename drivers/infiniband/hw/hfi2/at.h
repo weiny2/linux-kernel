@@ -53,6 +53,10 @@
 #define AT_IQ_SHIFT	4	/* Invalidation queue head/tail shift */
 #define AT_IQA_REG	0x90	/* Invalidation queue addr register */
 #define AT_ICS_REG	0x9c	/* Invalidation complete status register */
+#define AT_IECTL_REG	0xa0	/* Invalidation event control register */
+#define AT_IEDATA_REG	0xa4	/* Invalidation event interrupt data register */
+#define AT_IEADDR_REG	0xa8	/* Invalidation event interrupt addr register */
+#define AT_IEUADDR_REG	0xac	/* Invalidation event interrupt addr upper register */
 #define AT_IRTA_REG	0xb8    /* Interrupt remapping table addr register */
 #define AT_PQH_REG	0xc0	/* Page request queue head register */
 #define AT_PQT_REG	0xc8	/* Page request queue tail register */
@@ -299,6 +303,11 @@ enum {
 
 #define QI_IWD_STATUS_DATA(d)	(((u64)d) << 32)
 #define QI_IWD_STATUS_WRITE	(((u64)1) << 5)
+#define QI_IWD_INTERRUPT_FLAG	(((u64)1) << 4)
+
+#define QI_IECTL_INTERRUPT_MASK	(((u32)1) << 31)
+
+#define QI_ICS_IWC		((u32)1)
 
 #define QI_IOTLB_DID(did)	(((u64)did) << 16)
 #define QI_IOTLB_DR(dr)		(((u64)dr) << 7)
@@ -494,6 +503,12 @@ struct hfi_at {
 	int		level; /* highest page table level */
 	unsigned int	irq, pr_irq;
 	unsigned char	name[13];    /* Device Name */
+	/*
+	 * FXRTODO: 18ww21c requires setting the agaw or address translation
+	 * fails. HSD needs to be filed for clarification from HW team
+	 * since agaw should only apply to SLPTPTR
+	 */
+	int		agaw;
 
 	struct root_entry *root_entry; /* virtual address */
 	dma_addr_t root_entry_dma;     /* dma address */

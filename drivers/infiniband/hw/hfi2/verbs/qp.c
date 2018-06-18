@@ -158,7 +158,7 @@ void hfi2_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 	if (qp->state == IB_QPS_INIT)
 		hfi2_ctx_assign_qp(qp->priv, udata);
 
-	if ((attr_mask & IB_QP_TIMEOUT) && (simics || zebu) &&
+	if ((attr_mask & IB_QP_TIMEOUT) && (simics || ibd->dd->emulation) &&
 	    !ibd->rc_drop_enabled) {
 		/*
 		 * increase the timeout value to maximum allowed, accommodate

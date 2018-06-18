@@ -742,8 +742,7 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 	case TOK_TRIG_OP:
 	case TOK_LE_ME:
 	case TOK_UNEXPECTED:
-		/* ZEBU needs this mapped rw for now */
-		if (!zebu && !psb_rw)
+		if (!psb_rw)
 			vm_ro = 1;
 		break;
 	case TOK_EVENTS_EQ_HEAD:
@@ -784,11 +783,10 @@ static int hfi_mmap(struct file *fp, struct vm_area_struct *vma)
 
 	vma->vm_flags = flags;
 
-	if (!zebu)
-		pr_debug("%s: %u type:%u io/h:%d/%d, addr:0x%llx, len:%lu(%lu), flags:0x%lx\n",
-			 __func__, ctxt, type, mapio, high,
-			 phys_addr, memlen, vma->vm_end - vma->vm_start,
-			 vma->vm_flags);
+	pr_debug("%s: %u type:%u io/h:%d/%d, addr:0x%llx, len:%lu(%lu), flags:0x%lx\n",
+		 __func__, ctxt, type, mapio, high,
+		 phys_addr, memlen, vma->vm_end - vma->vm_start,
+		 vma->vm_flags);
 
 	pfn = (unsigned long)(phys_addr >> PAGE_SHIFT);
 	if (mapio) {

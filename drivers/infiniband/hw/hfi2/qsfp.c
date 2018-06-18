@@ -378,8 +378,8 @@ static int hfi_i2c_bus_read(struct hfi_devdata *dd, struct hfi_i2c_bus *bus,
 		for (i = 0; i < 127; i++)
 			cable_info[i] = i;
 
-		dd_dev_info(dd, "address offset: 0x%x, length: 0x%x\n",
-			    offset, len);
+		dd_dev_dbg(dd, "address offset: 0x%x, length: 0x%x\n",
+			   offset, len);
 
 		memcpy(data, &cable_info[offset], len);
 
@@ -1064,7 +1064,7 @@ void hfi_qsfp_event(struct work_struct *work)
 	 * Turn MNH back on after cable has been re-inserted. Up until
 	 * now, the MNH has been in reset to save power.
 	 */
-	mnh_start(ppd);
+	oc_start(ppd);
 
 	if (qd->cache_refresh_required) {
 		hfi_set_qsfp_int_n(ppd, 0);

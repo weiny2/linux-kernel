@@ -59,11 +59,11 @@
 #include "verbs/packet.h"
 
 #define HFI2_MAX_NUM_VNIC_CTXT 4
-#define HFI2_NUM_VNIC_CTXT (zebu ? 1 : 4)
+#define HFI2_NUM_VNIC_CTXT 4
 #define HFI2_MAX_NUM_PORTS 1
 #define HFI2_NET_RX_POLL_MS 1
 #define HFI2_MAX_NET_NUM_RX_BUFS 2048
-#define HFI2_NET_NUM_RX_BUFS (zebu ? 256 : 2048)
+#define HFI2_NET_NUM_RX_BUFS 2048
 #define HFI2_NET_EAGER_SIZE (PAGE_SIZE * 4)
 
 #define HFI2_VNIC_ICRC_LEN   4

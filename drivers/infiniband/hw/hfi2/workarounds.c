@@ -60,59 +60,10 @@
 #include "chip/fxr_oc_defs.h"
 #include "chip/fxr_rx_hp_csrs.h"
 #include "chip/fxr_rx_hp_defs.h"
-
-#define E2E_HACK 0
-
-int hfi_zebu_enable_ats(const struct hfi_devdata *dd)
-{
-	int ret;
-
-	if (!zebu || !iommu_hack)
-		return 0;
-
-	ret = pci_enable_pasid(dd->pdev, PCI_PASID_CAP_PRIV);
-	if (ret) {
-		dd_dev_err(dd, "%s %d pci_enable_pasid  rc %d\n",
-			__func__, __LINE__, ret);
-		return ret;
-	}
-	ret = pci_enable_ats(dd->pdev, PAGE_SHIFT);
-	if (ret) {
-		dd_dev_err(dd, "%s %d pci_enable_ats  rc %d\n",
-			   __func__, __LINE__, ret);
-		return ret;
-	}
-	/* ZEBU TODO Required on ZEBU to enable the FXR IOMMU bar */
-	pci_write_config_dword(dd->pdev, 0xf0, 0x11000001);
-
-	return 0;
-}
-
-int hfi_set_pasid(struct hfi_devdata *dd, struct hfi_ctx *ctx, u16 ptl_pid)
-{
-	int ret = 0;
-
-	/* set PASID entry for w/PASID translations */
-	if (iommu_hack)
-		hfi_iommu_zebu_set_pasid(dd, (ctx->type == HFI_CTX_TYPE_USER) ?
-					 current->mm : NULL, ptl_pid);
-	else
-		ret = hfi_at_set_pasid(ctx);
-
-	return ret;
-}
-
-void hfi_clear_pasid(struct hfi_ctx *ctx, u16 ptl_pid)
-{
-	/* Currently ZEBU does not clear PASID */
-	if (zebu)
-		return;
-
-	if (iommu_hack)
-		hfi_iommu_zebu_clear_pasid(ctx->devdata, ptl_pid);
-	else
-		hfi_at_clear_pasid(ctx);
-}
+#include "chip/fxr_rx_e2e_csrs.h"
+#include "chip/fxr_tx_otr_pkt_top_csrs.h"
+#include "chip/fxr_rx_e2e_defs.h"
+#include "chip/fxr_tx_otr_pkt_top_csrs_defs.h"
 
 /* Missing from current definitions */
 #define FXR_FZC_LPHY 0x2010000
@@ -128,12 +79,12 @@ void hfi_clear_pasid(struct hfi_ctx *ctx, u16 ptl_pid)
 		(!((v) & FZC_LPHY_LSTS_SCF_SMASK)))
 
 /* FIXME - How does this work with no MNH?  */
-static int hfi2_fzc_init_half_rate(const struct hfi_pportdata *ppd)
+static int hfi2_oc_init_half_rate(const struct hfi_pportdata *ppd)
 {
 #if 0
 	u64 val = 0;
 	int i;
-	bool fzc_up = false, mnh_up = false;
+	bool oc_up = false, mnh_up = false;
 
 
 	/* Still uses MNH to init half rate */
@@ -142,9 +93,9 @@ static int hfi2_fzc_init_half_rate(const struct hfi_pportdata *ppd)
 
 	read_csr(ppd->dd, FXR_LM_CFG_FP_TIMER_PORT0);
 
-	val = read_fzc_opio_csr(ppd, MNH_OPIO_PHY_CFG_RESETA);
+	val = read_oc_opio_csr(ppd, MNH_OPIO_PHY_CFG_RESETA);
 	val |= MNH_OPIO_PHY_CFG_RESETA_APHY_PLL_EN_SMASK;
-	write_fzc_opio_csr(ppd, MNH_OPIO_PHY_CFG_RESETA, val);
+	write_oc_opio_csr(ppd, MNH_OPIO_PHY_CFG_RESETA, val);
 
 	val = read_mnh_opio_csr(ppd, MNH_OPIO_PHY_CFG_RESETA);
 	val |= MNH_OPIO_PHY_CFG_RESETA_APHY_PLL_EN_SMASK;
@@ -152,10 +103,10 @@ static int hfi2_fzc_init_half_rate(const struct hfi_pportdata *ppd)
 
 	/* Retry up to 100 times */
 	for (i = 0; i < 100; i++) {
-		if (!fzc_up) {
-			val = read_fzc_lphy_csr(ppd, FZC_LPHY_LSTS);
+		if (!oc_up) {
+			val = read_oc_lphy_csr(ppd, FZC_LPHY_LSTS);
 			if (HFI2_LSTS_ACTIVE(val))
-				fzc_up = true;
+				oc_up = true;
 		}
 
 		if (!mnh_up) {
@@ -164,7 +115,7 @@ static int hfi2_fzc_init_half_rate(const struct hfi_pportdata *ppd)
 				mnh_up = true;
 		}
 
-		if (mnh_up && fzc_up)
+		if (mnh_up && oc_up)
 			goto half_rate_done;
 
 		/* 100MHz clock, 4000 cycle delay */
@@ -181,7 +132,7 @@ half_rate_done:
 	return 0;
 }
 
-static int hfi2_fzc_lcb_init(const struct hfi_pportdata *ppd)
+static int hfi2_oc_lcb_init(const struct hfi_pportdata *ppd)
 {
 	u64 val;
 	int i;
@@ -191,7 +142,8 @@ static int hfi2_fzc_lcb_init(const struct hfi_pportdata *ppd)
 		return 0;
 
 	read_csr(ppd->dd, FXR_LM_CFG_FP_TIMER_PORT0);
-	//write_csr(ppd->dd, OC_LCB_CFG_LOOPBACK, 2);
+	write_csr(ppd->dd, OC_LCB_CFG_LOOPBACK, 2);
+	write_csr(ppd->dd, OC_LCB_CFG_LINK_PARTNER_GEN, 0x101);
 	write_csr(ppd->dd, OC_LCB_CFG_TX_FIFOS_RESET, 0);
 
 	ndelay(64);
@@ -245,11 +197,11 @@ link_transfer_active:
 	return 0;
 }
 
-int hfi2_fzc_init(const struct hfi_pportdata *ppd)
+int hfi2_oc_init(const struct hfi_pportdata *ppd)
 {
 	int ret;
 
-	ret = hfi2_fzc_init_half_rate(ppd);
+	ret = hfi2_oc_init_half_rate(ppd);
 	if (ret) {
 		ppd_dev_err(ppd, "%s: Unable to init half rate %d\n",
 			    __func__, ret);
@@ -258,7 +210,7 @@ int hfi2_fzc_init(const struct hfi_pportdata *ppd)
 
 	/* FXRTODO: Init to full rate */
 
-	ret = hfi2_fzc_lcb_init(ppd);
+	ret = hfi2_oc_lcb_init(ppd);
 	if (ret) {
 		ppd_dev_err(ppd, "%s: Unable to bring up LCB %d\n",
 			    __func__, ret);
@@ -329,8 +281,7 @@ void hfi_pt_cache_fill(struct hfi_devdata *dd, struct hfi_ctx *ctx, int pt_idx)
 	}
 }
 
-#if E2E_HACK
-static void hfi_psn_cache_fill(struct hfi_devdata *dd)
+void hfi_psn_cache_fill(struct hfi_devdata *dd)
 {
 	RXE2E_CFG_PSN_CACHE_ACCESS_CTL_t rx_ctl = {.val = 0};
 	RXE2E_CFG_PSN_CACHE_ACCESS_DATA_t rx_data = {.val = 0};
@@ -344,7 +295,6 @@ static void hfi_psn_cache_fill(struct hfi_devdata *dd)
 			psn_cache.lid = lid;
 			psn_cache.this_end_lid = slid;
 			psn_cache.tc = 0;
-			psn_cache.port = 0;
 
 			pr_err("%s psn_cache.lid %d psn_cache.this_end_lid %d\n",
 				__func__, psn_cache.lid, psn_cache.this_end_lid);
@@ -396,7 +346,6 @@ static void hfi_psn_cache_fill(struct hfi_devdata *dd)
 		}
 	}
 }
-#endif
 
 int hfi_pte_cache_read(struct hfi_devdata *dd)
 {

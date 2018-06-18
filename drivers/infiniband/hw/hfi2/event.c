@@ -707,8 +707,11 @@ int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	eq_desc.sz = eq_assign->jumbo;
 	eq_desc.start = (eq_assign->base >> PAGE_SHIFT);
 	eq_desc.ni = eq_assign->ni;
-	eq_desc.irq = irq_idx;
-	eq_desc.i = (eq_assign->mode & OPA_EV_MODE_BLOCKING);
+	/* Disable all interrupts for event queues to workaround 1407227170 */
+	if (!dd->emulation) {
+		eq_desc.irq = irq_idx;
+		eq_desc.i = (eq_assign->mode & OPA_EV_MODE_BLOCKING);
+	}
 	eq_desc.v = 1;
 	eq_desc_base[eq_idx].val[1] = eq_desc.val[1];
 	wmb();  /* barrier before writing Valid */
@@ -758,6 +761,7 @@ int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 					      ctx->devdata->node);
 		if (!eq_assign.base)
 			return -ENOMEM;
+
 		if ((ctx->pid == HFI_PID_SYSTEM) && !ni)
 			/*
 			 * system PID EQ 0 needs to handle
@@ -1242,7 +1246,12 @@ irqreturn_t hfi_irq_eq_handler(int irq, void *dev_id)
 
 	this_cpu_inc(*dd->int_counter);
 
-	if (zebu)
+	/*
+	 * FXRTODO: Revisit if this delay is required with FXR PCIe
+	 * It was required to prevent a race between interrupt and data
+	 * over IDI and IOSF legacy FXR data paths.
+	 */
+	if (dd->emulation)
 		mdelay(10);
 
 	trace_hfi2_irq_eq(me);

@@ -176,30 +176,37 @@ enum {
 #define HFI_MC_SHIFT		2
 
 /* Maximum number of unicast LIDs supported by default */
-#define HFI_DEFAULT_MAX_LID_SUPP	(zebu ? 0xbfff : 0x103ff)
+#define HFI_DEFAULT_MAX_LID_SUPP	0x103ff
+// TODO: Fix for ZEBU/FPGA #define HFI_DEFAULT_MAX_LID_SUPP	(zebu ? 0xbfff : 0x103ff)
 
 /* TX timeout for E2E control messages */
-#define HFI_TX_TIMEOUT_MS	(zebu ? 10000 : 100)
+#define HFI_TX_TIMEOUT_MS	100
+#define HFI_TX_TIMEOUT_MS_ZEBU	1000
 
 /* per-VL status clear, in ms */
 #define HFI_VL_STATUS_CLEAR_TIMEOUT	5000
 
 /* timeout for ctxt cleanup */
-#define HFI_CMDQ_RESET_TIMEOUT_MS		(zebu ? 1000 : 10)
+#define HFI_CMDQ_RESET_TIMEOUT_MS		10
+#define HFI_CMDQ_RESET_TIMEOUT_MS_ZEBU		1000
 #define HFI_CMDQ_DRAIN_RESET_TIMEOUT_MS		2000
 #define HFI_OTR_CANCELLATION_TIMEOUT_MS		1
-#define HFI_CACHE_INVALIDATION_TIMEOUT_MS	(zebu ? 2000 : 10)
+#define HFI_CACHE_INVALIDATION_TIMEOUT_MS	10
+#define HFI_CACHE_INVALIDATION_TIMEOUT_MS_ZEBU	2000
 #define HFI_PASID_DRAIN_TIMEOUT_MS		2000
 
 /* timeout for privileged CMDQ writes */
 #define HFI_PRIV_CMDQ_TIMEOUT_MS		5000
 
 /* use this MTU size if none other is given */
-#define HFI_DEFAULT_ACTIVE_MTU	(zebu ? 4096 : 10240)
+#define HFI_DEFAULT_ACTIVE_MTU	10240
+// TODO: Fix for ZEBU/FPGA #define HFI_DEFAULT_ACTIVE_MTU	(zebu ? 4096 : 10240)
 /* use this MTU size as the default maximum */
-#define HFI_DEFAULT_MAX_MTU	(zebu ? 4096 : 10240)
+#define HFI_DEFAULT_MAX_MTU	10240
+// TODO: Fix for ZEBU/FPGA #define HFI_DEFAULT_MAX_MTU	(zebu ? 4096 : 10240)
 /* for Verbs, the maximum MTU supported by rdmavt is 8K */
-#define HFI_VERBS_MAX_MTU	(zebu ? 4096 : 8192)
+#define HFI_VERBS_MAX_MTU	8192
+// TODO: Fix for ZEBU/FPGA #define HFI_VERBS_MAX_MTU	(zebu ? 4096 : 8192)
 /* The largest MAD packet size. */
 #define HFI_MIN_VL_15_MTU	2048
 /* Number of Data VLs supported */
@@ -757,7 +764,7 @@ struct hfi_pend_cmd {
  * @crk8051_lock: for exclusive access to 8051
  * @crk8051_timed_out: remember if the 8051 timed out
  * @hfi_wq: workqueue which connects the upper half interrupt handler,
- *		irq_mnh_handler() and bottom half interrupt handlers which are
+ *		irq_oc_handler() and bottom half interrupt handlers which are
  *		queued by each work_struct.
  * @link_vc_work: for VerifyCap -> GoingUp/ConfigLT
  * @link_up_work: for GoingUp/ConfigLT -> LinkUp/Init
@@ -867,7 +874,7 @@ struct hfi_pportdata {
 	struct buffer_control bct;
 	u8 remote_link_down_reason;
 	u64 link_downed;
-	u8 mnh_shutdown;
+	u8 oc_shutdown;
 
 	/* Used to override LED behavior for things like maintenance beaconing*/
 	unsigned long led_override_vals[2];
@@ -916,7 +923,7 @@ struct hfi_pportdata {
 
 	/*
 	 * workqueue which connects the upper half interrupt handler,
-	 * irq_mnh_handler() and bottom half interrupt handlers which are
+	 * irq_oc_handler() and bottom half interrupt handlers which are
 	 * queued by each work_struct.
 	 */
 	struct workqueue_struct *hfi_wq;
@@ -1154,6 +1161,7 @@ struct hfi_devdata {
 	u16 *scntrs;
 	/* implementation code */
 	u8 icode;
+	bool emulation;
 
 	/* FXR Address Translation */
 	struct hfi_at *at;
@@ -1240,6 +1248,7 @@ void hfi_cmdq_config(struct hfi_ctx *ctx, u16 cmdq_idx,
 void hfi_cmdq_config_tuples(struct hfi_ctx *ctx, u16 cmdq_idx,
 			    struct hfi_auth_tuple *auth_table);
 void hfi_cmdq_disable(struct hfi_devdata *dd, u16 cmdq_idx);
+void __hfi_cmdq_config_all(struct  hfi_devdata *dd);
 void hfi_pcb_write(struct hfi_ctx *ctx, u16 ptl_pid);
 void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid);
 void hfi_tpid_enable(struct hfi_devdata *dd, u8 idx, u16 base, u32 ptl_uid);
@@ -1331,15 +1340,6 @@ int hfi_rsm_set_rule(struct hfi_devdata *dd, struct hfi_rsm_rule *rule,
 		     struct hfi_ctx *rx_ctx[], u16 num_contexts);
 int hfi_vnic_init(struct hfi_devdata *dd);
 void hfi_vnic_uninit(struct hfi_devdata *dd);
-
-int hfi_iommu_root_alloc(void);
-void hfi_iommu_root_free(void);
-int hfi_iommu_root_set_context(struct hfi_devdata *dd);
-void hfi_iommu_root_clear_context(struct hfi_devdata *dd);
-void hfi_iommu_zebu_set_pasid(struct hfi_devdata *dd,
-			      struct mm_struct *user_mm, u16 pasid);
-void hfi_iommu_zebu_clear_pasid(struct hfi_devdata *dd, u16 pasid);
-void hfi_iommu_flush_iotlb(struct hfi_devdata *dd, u16 pasid);
 
 static inline struct hfi_pportdata *to_hfi_ppd(const struct hfi_devdata *dd,
 					       u8 port)
@@ -1609,10 +1609,9 @@ int hfi_ib_eq_release(struct hfi_ctx *ctx, struct ib_cq *cq, u16 eq_idx);
 extern bool quick_linkup;
 extern bool no_mnh;
 extern bool no_pe_fw;
-extern bool zebu;
 extern bool simics;
-extern bool iommu_hack;
 extern bool opafm_disable;
+extern bool no_interrupts;
 
 static inline u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
@@ -1638,16 +1637,42 @@ static inline void write_csr(const struct hfi_devdata *dd, u32 offset,
 		return;
 	}
 
-	if (zebu)
+	if (dd->emulation)
 		read_csr(dd, offset);
 }
 
 /* ZEBU specific workarounds. These should be deleted as necessary */
 int hfi_zebu_enable_ats(const struct hfi_devdata *dd);
 int hfi_set_pasid(struct hfi_devdata *dd, struct hfi_ctx *ctx, u16 ptl_pid);
-void hfi_clear_pasid(struct hfi_ctx *ctx, u16 ptl_pid);
 void hfi_read_lm_link_state(const struct hfi_pportdata *ppd);
 void hfi_zebu_hack_default_mtu(struct hfi_pportdata *ppd);
+
+void hfi_psn_cache_fill(struct hfi_devdata *dd);
+
+/* FXRTODO: Can be removed once HSD 1407227170 is verified */
+static inline void msix_addr_test(const struct hfi_devdata *dd)
+{
+	u32 offset = 0x1a82000;
+
+	msleep(100);
+
+	pr_err("initial value of HFI_PCIM_MSIX_ADDR offset 0x%x \
+		value 0x%x offset 0x%x value 0x%x\n",
+		offset,
+		readl(dd->kregbase + offset - dd->wc_off),
+		offset + 4,
+		readl(dd->kregbase + offset + 4 - dd->wc_off));
+
+	writel(0xFEE00000, dd->kregbase + offset - dd->wc_off);
+	writel(0x0, dd->kregbase + offset + 4 - dd->wc_off);
+
+	pr_err("after writing 0xabcd to offset 0x%x value 0x%x \
+		offset 0x%x value 0x%x\n",
+		offset,
+		readl(dd->kregbase + offset - dd->wc_off),
+		offset + 4,
+		readl(dd->kregbase + offset + 4 - dd->wc_off));
+}
 
 /**
  * wait_woken_event_interruptible_timeout - sleep until a condition

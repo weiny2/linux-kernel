@@ -21,7 +21,6 @@ hfi2-y += link.o
 hfi2-y += init.o
 hfi2-y += intr.o
 hfi2-y += iommu.o
-hfi2-y += iommu_zebu.o
 hfi2-y += pcie.o
 hfi2-y += snoop.o
 hfi2-y += diag.o

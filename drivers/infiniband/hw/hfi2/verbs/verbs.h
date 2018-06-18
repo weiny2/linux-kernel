@@ -90,7 +90,7 @@
  * FXRTODO: default to just use 2, need to make tunable.
  */
 #define HFI2_IB_MAX_CTXTS 8
-#define HFI2_IB_DEF_CTXTS (zebu ? 1 : 2)
+#define HFI2_IB_DEF_CTXTS 2
 /* Send contexts is really TX command queues (per port) */
 #define HFI2_IB_MAX_SEND_CTXTS 2
 #define HFI2_IB_DEF_SEND_CTXTS 2
@@ -143,6 +143,8 @@ extern unsigned int hfi2_lkey_table_size;
 extern unsigned int hfi2_max_mcast_grps;
 extern unsigned int hfi2_max_mcast_qp_attached;
 extern unsigned int hfi2_kdeth_qp;
+
+extern bool no_verbs;
 
 struct hfi2_ib_packet;
 union hfi2_packet_header;

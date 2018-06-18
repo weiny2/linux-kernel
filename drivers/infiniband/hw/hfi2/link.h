@@ -309,7 +309,7 @@ int hfi_start_link(struct hfi_pportdata *ppd);
 u16 hfi_cap_to_port_ltp(u16 cap);
 u16 hfi_port_ltp_to_cap(u16 port_ltp);
 void hfi_read_link_quality(struct hfi_pportdata *ppd, u8 *link_quality);
-irqreturn_t hfi_irq_mnh_handler(int irq, void *dev_id);
+irqreturn_t hfi_irq_oc_handler(int irq, void *dev_id);
 void hfi_handle_fpc_uncorrectable_error(struct hfi_devdata *dd, u64 reg,
 					char *name);
 void hfi_handle_fpc_link_error(struct hfi_devdata *dd, u64 reg, char *name);
@@ -323,7 +323,7 @@ int load_8051_config(struct hfi_pportdata *ppd, u8 field_id,
 		     u8 lane_id, u32 config_data);
 void handle_start_link(struct work_struct *work);
 void try_start_link(struct hfi_pportdata *ppd);
-void mnh_start(struct hfi_pportdata *ppd);
+void oc_start(struct hfi_pportdata *ppd);
 
-int hfi2_fzc_init(const struct hfi_pportdata *ppd);
+int hfi2_oc_init(const struct hfi_pportdata *ppd);
 #endif /* _LINK_H */

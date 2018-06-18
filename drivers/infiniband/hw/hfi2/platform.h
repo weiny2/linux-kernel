@@ -172,13 +172,22 @@ struct hfi_pportdata;
 
 #define OPA_INVALID_INDEX		0xFFF
 
-/*
- * Chip implementation codes.
- */
-#define ICODE_RTL_SILICON		0x00
-#define ICODE_RTL_VCS_SIMULATION	0x01
-#define ICODE_FPGA_EMULATION		0x02
-#define ICODE_FUNCTIONAL_SIMULATOR	0x03
+/* chip revision offsets */
+#define HFI2_PCI_REVISION_ICODE_SHIFT	1
+#define HFI2_PCI_REVISION_ICODE_SMASK	0x6UL
+#define HFI2_PCI_REVISION_REV_SHIFT	3
+#define HFI2_PCI_REVISION_REV_SMASK	0xF8UL
+
+/* chip implementation codes */
+#define ICODE_RTL_SILICON		0x0
+#define ICODE_FPGA_EMULATION		0x1
+#define ICODE_ZEBU_EMULATION		0x2
+#define ICODE_FUNCTIONAL_SIMULATOR	0x3
+#define ICODE_EMULATION(icode) \
+	(((icode) & ICODE_FPGA_EMULATION) | ((icode) & ICODE_ZEBU_EMULATION))
+
+/* chip steppings */
+#define HFI2_REVISION_A0		0x0
 
 /*
  * FXRTODO: The fields in the enums below are subject to change based on

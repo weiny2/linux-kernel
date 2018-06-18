@@ -396,8 +396,10 @@ irqreturn_t hfi_irq_errd_handler(int irq, void *dev_id)
 	int i, j;
 	u64 val;
 
-	this_cpu_inc(*dd->int_counter);
-	trace_hfi2_irq_err(me);
+	if (!dd->emulation) {
+		this_cpu_inc(*dd->int_counter);
+		trace_hfi2_irq_err(me);
+	}
 
 	val = 0;
 
@@ -565,7 +567,7 @@ int hfi_setup_errd_irq(struct hfi_devdata *dd)
 		(HFI_NUM_ERR_DOMAIN * sizeof(struct hfi_error_domain)));
 
 	/* Currently don't enable error domains on ZEBU */
-	if (zebu)
+	if (dd->emulation)
 		return 0;
 
 	for (i = 0; i < HFI_NUM_ERR_DOMAIN; i++) {

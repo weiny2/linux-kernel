@@ -224,21 +224,36 @@ static int hfi_eq_zero_thread(void *data)
 	struct hfi_ptcdata *ptc;
 	struct ida *cache_rx;
 	struct idr *cache_tx;
+	u32 tx_timeout = dd->emulation ?
+		HFI_TX_TIMEOUT_MS_ZEBU : HFI_TX_TIMEOUT_MS;
 
 	allow_signal(SIGINT);
 
 	while (!kthread_should_stop()) {
 		eq_entry = NULL;
-		rc = hfi_eq_zero_event_wait(ctx, &eq_entry);
-		if (rc < 0) {
-			/* only likely error is DROPPED event */
-			dd_dev_err(dd, "%s unexpected EQ wait error %d\n",
-				   __func__, rc);
-			break;
-		}
-		if (!rc)
-			continue;
 
+		if (!dd->emulation) {
+			rc = hfi_eq_zero_event_wait(ctx, &eq_entry);
+			if (rc < 0) {
+				/* only likely error is DROPPED event */
+				dd_dev_err(dd,
+					   "%s unexpected EQ wait error %d\n",
+					   __func__, rc);
+				break;
+			}
+			if (!rc)
+				continue;
+		} else {
+			/* TODO: Disable interrupts to workaround 1407227170 */
+			rc = hfi_eq_wait_timed(&ctx->eq_zero[0], tx_timeout,
+					       &eq_entry);
+			if (rc) {
+				schedule();
+				cpu_relax();
+				msleep(1000);
+				continue;
+			}
+		}
 		rxe = (union target_EQEntry *)eq_entry;
 		port = rxe->pt;
 		tc = HFI_GET_TC(rxe->user_ptr);

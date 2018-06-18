@@ -97,6 +97,7 @@
 #include "chip/fxr_pcim_defs.h"
 #include "chip/fxr_pcim_csrs.h"
 #include "chip/fxr_8051_defs.h"
+#include "chip/fxr_loca_defs.h"
 #include "hfi2.h"
 #include "link.h"
 #include "firmware.h"
@@ -127,7 +128,7 @@
 uint loopback;
 module_param_named(loopback, loopback, uint, 0444);
 MODULE_PARM_DESC(loopback,
-		 "Put into loopback mode (1 = serdes, 3 = external cable");
+		 "Put into loopback mode (1 = serdes, 3 = external cable, 4 = internal loopback");
 
 /* TODO - should come from HW headers */
 #define FXR_CACHE_CMD_INVALIDATE 0x8
@@ -158,35 +159,36 @@ MODULE_PARM_DESC(opafm_disable, "0 - driver needs opafm to work, 1 - driver work
 /* FXRTODO: Remove this once MNH is available on all Pre-Si setups */
 bool no_mnh;
 module_param_named(no_mnh, no_mnh, bool, 0444);
-MODULE_PARM_DESC(mnh_avail, "Set to true if MNH is not available");
+MODULE_PARM_DESC(no_mnh, "Set to true if MNH is not available");
 
 /* FXRTODO: Remove this once PE FW is always available */
 bool no_pe_fw;
 module_param_named(no_pe_fw, no_pe_fw, bool, 0444);
-MODULE_PARM_DESC(mnh_avail, "Set to true if PE FW is not available");
-
-/* FXRTODO: Remove this once Silicon is stable */
-bool zebu;
-module_param_named(zebu, zebu, bool, 0444);
-MODULE_PARM_DESC(zebu, "Set to true if running on ZEBU");
-
-/* Export so that hfi2_user can see it */
-EXPORT_SYMBOL(zebu);
+MODULE_PARM_DESC(no_pe_fw, "Set to true if PE FW is not available");
 
 bool simics = true;
 module_param_named(simics, simics, bool, 0444);
 MODULE_PARM_DESC(simics, "Set to true if running on Simics");
 
 /* FXRTODO: Remove this once Silicon is stable */
-bool iommu_hack;
-module_param_named(iommu_hack, iommu_hack, bool, 0444);
-MODULE_PARM_DESC(iommu_hack, "Set to true if running on ZEBU");
-
-/* FXRTODO: Remove this once Silicon is stable */
 bool detect_uncat_errs = true;
 module_param_named(detect_uncat_errs, detect_uncat_errs, bool, 0444);
 MODULE_PARM_DESC(detect_uncat_errs,
 		 "Set to true to detect uncategorized error bits, false to detect undefined error bits generating spurious interrupts");
+
+/* FXRTODO: Remove this once Silicon is stable */
+bool no_interrupts;
+module_param_named(no_interrupts, no_interrupts, bool, 0444);
+MODULE_PARM_DESC(no_interrupts, "Set to true if not using interrupts");
+
+/* FXRTODO: Remove this once Silicon is stable */
+bool use_psn_cache;
+module_param_named(use_psn_cache, use_psn_cache, bool, 0444);
+MODULE_PARM_DESC(use_psn_cache, "Set to true if using psn cache instead of E2E");
+
+bool no_verbs;
+module_param_named(no_verbs, no_verbs, bool, 0444);
+MODULE_PARM_DESC(no_verbs, "Set to false to load driver without verbs support");
 
 DEFINE_SPINLOCK(hfi2_unit_lock);
 static struct idr hfi2_unit_table;
@@ -302,10 +304,10 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 		   FXR_RXE2E_CFG_VALID_TC_SLID_TC_VALID_P0_SHIFT;
 	write_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID, tc_slid);
 
-	if (zebu) {
+	/* FXRTODO: Disable Pkey checks since DV has not validated it */
+	if (dd->emulation)
 		write_csr(dd, FXR_RXE2E_CFG_PTL_PKEY_CHECK_DISABLE,
 			  PKEY_DISABLE_SMASK);
-	}
 }
 
 static void hfi_set_rfs(const struct hfi_devdata *dd, u16 mtu)
@@ -422,12 +424,10 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 
 	hfi_init_tx_otr_mtu(dd, HFI_DEFAULT_MAX_MTU);
 
-	if (zebu) {
+	if (dd->emulation) {
+		/* FXRTODO: Why is this emulation specific? */
 		write_csr(dd, FXR_TXOTR_MSG_CFG_RENDEZVOUS_RC, 0x0);
-		pr_err("%s %d FXR_TXOTR_MSG_CFG_RENDEZVOUS_RC 0x%llx\n",
-		       __func__, __LINE__,
-		       read_csr(dd, FXR_TXOTR_MSG_CFG_RENDEZVOUS_RC));
-
+		/* FXRTODO: Disable Pkey checks since DV has not validated it */
 		write_csr(dd, FXR_TXOTR_PKT_PKEY_CHECK_DISABLE,
 			  PKEY_DISABLE_SMASK);
 	}
@@ -549,6 +549,21 @@ static void init_csrs(struct hfi_devdata *dd)
 	u64 bth_qp = 0;
 	u64 pcim_itr = 0;
 	u64 reg, cfg_ctl;
+	void *zbr_ptr = NULL;
+
+	if (dd->emulation) {
+		/*
+		 * TODO: Need to confirm this value with the hardware team
+		 * since it is lower than the power on reset value of
+		 * 0x40000. Sudeep suggested we set this to 0xff00, so
+		 * keeping this line here and commented for now.
+		 */
+		/* TODO: In the ww16g RTL, HFI_PCIM_CFG_SBTO has a new offset */
+		write_csr(dd, (HFI_PCIM_CSRS + 0x000000000040), 0xff0000);
+		dd_dev_info(dd, "Maximizing side-band timeout: 0x%llx\n",
+			    read_csr(dd, (HFI_PCIM_CSRS + 0x000000000040)));
+		msleep(100);
+	}
 
 	/* enable logging PMON counter overflow */
 	cfg_ctl = read_csr(dd, FXR_PMON_CFG_CONTROL);
@@ -607,7 +622,8 @@ static void init_csrs(struct hfi_devdata *dd)
 	 */
 	rxet_cfg_eqd = read_csr(dd, FXR_RXET_CFG_EQD);
 	rxet_cfg_eqd &= ~FXR_RXET_CFG_EQD_HEAD_REFETCH_THRESH_SMASK;
-	if (zebu)
+	/* FXRTODO: See HSD 1209668060 */
+	if (dd->emulation)
 		rxet_cfg_eqd |= (EQD_THRESH_MASK & 2) <<
 				FXR_RXET_CFG_EQD_HEAD_REFETCH_THRESH_SHIFT;
 	else
@@ -617,12 +633,13 @@ static void init_csrs(struct hfi_devdata *dd)
 	write_csr(dd, FXR_RXET_CFG_EQD, rxet_cfg_eqd);
 
 	/* FXRTODO: tune the ITR_DELAY after we receive the silicon */
-
 	pcim_itr = read_csr(dd, HFI_PCIM_INT_ITR + HFI_ITR_BECN_INDEX);
 	pcim_itr &= ~HFI_PCIM_INT_ITR_INT_DELAY_SMASK;
 	pcim_itr |= (HFI_PCIM_INT_ITR_INT_DELAY_MASK & HFI_ITR_DELAY_BECN) <<
 		     HFI_PCIM_INT_ITR_INT_DELAY_SHIFT;
-	write_csr(dd, HFI_PCIM_INT_ITR + HFI_ITR_BECN_INDEX, pcim_itr);
+	/* FXRTODO: See HSD 2204032747 */
+	if (!dd->emulation)
+		write_csr(dd, HFI_PCIM_INT_ITR + HFI_ITR_BECN_INDEX, pcim_itr);
 
 	/*
 	 * Set the SLID based on the hostname to enable back to back
@@ -651,8 +668,20 @@ static void init_csrs(struct hfi_devdata *dd)
 	hfi_init_rx_e2e_csrs(dd);
 	hfi_init_tx_otr_csrs(dd);
 	hfi_init_tx_cid_csrs(dd);
-	if (!zebu)
+	/* For emulation debug, CQ pointers should not be rate controlled */
+	if (!dd->emulation)
 		hfi_init_rate_control(dd);
+
+	/* FXRTODO: See HSD 2203689085 */
+	if (dd->emulation) {
+		/*
+		 * FXRTODO: Perhaps point zbr_ptr to dd or other data structure
+		 * instead of new allocation. Also need to free this memory
+		 */
+		zbr_ptr = kmalloc(sizeof(u64), GFP_DMA);
+		if (zbr_ptr)
+			write_csr(dd, HFI_LOCA_CFG_ZBR, virt_to_phys(zbr_ptr));
+	}
 }
 
 static int hfi_psn_init(struct hfi_pportdata *port, u32 max_lid)
@@ -1064,8 +1093,11 @@ void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 	/* Enable input/output LM checking */
 	hfi_cfg_lm_pkey_check(ppd, enable);
 
-	/* Always disable PTL_PKEY check in ZEBU until validated */
-	hfi_cfg_ptl_pkey_check(ppd, zebu ? 0 : enable);
+	/* Always disable PTL_PKEY check in ZEBU and FPGA until validated */
+	if (ppd->dd->emulation)
+		hfi_cfg_ptl_pkey_check(ppd, 0);
+	else
+		hfi_cfg_ptl_pkey_check(ppd, enable);
 }
 
 #ifdef CONFIG_HFI2_STLNP
@@ -1073,7 +1105,7 @@ void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 static void hfi_set_ptl_pkey_entry(struct hfi_devdata *dd, u16 pkey, u8 id)
 {
 	/* Disable on ZEBU for now until known-working */
-	if (zebu)
+	if (dd->emulation)
 		return;
 
 	write_csr(dd, FXR_TXOTR_PKT_CFG_PTL_PKEY_TABLE + 8 * id, pkey);
@@ -1211,7 +1243,7 @@ static void hfi_set_sc_to_vlr(struct hfi_pportdata *ppd, u8 *t)
 	 * the tables reported by that call needs to hold
 	 * a lock. Design decision pending.
 	 */
-	if (zebu)
+	if (ppd->dd->emulation)
 		t[1] = 1;
 	/*
 	 * We modify the table below, so keep a copy before modification.
@@ -1256,7 +1288,7 @@ static void hfi_set_sc_to_vlt(struct hfi_pportdata *ppd, u8 *t)
 	 * the tables reported by that call needs to hold
 	 * a lock. Design decision pending.
 	 */
-	if (zebu)
+	if (ppd->dd->emulation)
 		t[1] = 1;
 
 	/*
@@ -1721,7 +1753,7 @@ static void hfi_set_sc_to_vlnt(struct hfi_pportdata *ppd, u8 *t)
 	int i, j, sc_num;
 	u64 reg_val;
 
-	if (zebu)
+	if (ppd->dd->emulation)
 		t[1] = 1;
 	/* 2 registers, 16 entries per register, 4 bit per entry */
 	for (i = 0, sc_num = 0; i < 2; i++) {
@@ -2625,7 +2657,7 @@ int hfi_set_max_lid(struct hfi_pportdata *ppd, u32 lid)
 		 * FXRTODO: On ZEBU, we hack the link state to Active early
 		 * on so it is okay to change the PSN state for now.
 		 */
-		if (!zebu &&
+		if (!dd->emulation &&
 		    (ppd->host_link_state == HLS_UP_ARMED ||
 		     ppd->host_link_state == HLS_UP_ACTIVE)) {
 			rc = -EINVAL;
@@ -2639,6 +2671,9 @@ int hfi_set_max_lid(struct hfi_pportdata *ppd, u32 lid)
 		if (!rc) {
 			ppd->max_lid = lid;
 			hfi_init_max_lid_csrs(ppd);
+			/* Workaround used when E2E connections do not work */
+			if (use_psn_cache)
+				hfi_psn_cache_fill(dd);
 			ppd_dev_dbg(ppd, "IB%u:%u max_lid 0x%x\n",
 				    dd->unit, ppd->pnum, lid);
 		} else {
@@ -2794,7 +2829,7 @@ static irqreturn_t hfi_irq_intx_handler(int irq, void *dev_id)
 			else if (irq_bit == 255)
 				hfi_irq_becn_handler(irq, me);
 			else if (irq_bit == 281)
-				hfi_irq_mnh_handler(irq, me);
+				hfi_irq_oc_handler(irq, me);
 			else
 				hfi_irq_errd_handler(irq, me);
 		}
@@ -2806,7 +2841,7 @@ static irqreturn_t hfi_irq_intx_handler(int irq, void *dev_id)
 /*
  * configure IRQs for BECN/MNH
  */
-static int hfi_setup_becn_mnh_irq(struct hfi_devdata *dd, int irq)
+static int hfi_setup_becn_oc_irq(struct hfi_devdata *dd, int irq)
 {
 	struct hfi_irq_entry *me = &dd->irq_entries[irq];
 	int ret = 0;
@@ -2839,7 +2874,7 @@ static int hfi_setup_becn_mnh_irq(struct hfi_devdata *dd, int irq)
 		break;
 	case HFI_8051_DOMAIN:
 		ret = request_irq(pci_irq_vector(dd->pdev, irq),
-				  hfi_irq_mnh_handler, 0,
+				  hfi_irq_oc_handler, 0,
 				  "hfi_irq_mnh", me);
 		break;
 	default:
@@ -2867,7 +2902,7 @@ static int hfi_setup_irqs(struct hfi_devdata *dd)
 
 	/* configure IRQ for MNH if enabled */
 	if (!no_mnh) {
-		ret = hfi_setup_becn_mnh_irq(dd, HFI_8051_DOMAIN);
+		ret = hfi_setup_becn_oc_irq(dd, HFI_8051_DOMAIN);
 		if (ret)
 			return ret;
 	}
@@ -2877,7 +2912,7 @@ static int hfi_setup_irqs(struct hfi_devdata *dd)
 	if (ret)
 		return ret;
 
-	ret = hfi_setup_becn_mnh_irq(dd, HFI_LM_BECN_EVENT);
+	ret = hfi_setup_becn_oc_irq(dd, HFI_LM_BECN_EVENT);
 	if (ret)
 		return ret;
 
@@ -3042,7 +3077,8 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 #ifdef CONFIG_HFI2_STLNP
 	hfi_e2e_destroy_all(dd);
 #endif
-	hfi_disable_interrupts(dd);
+	if (!no_interrupts)
+		hfi_disable_interrupts(dd);
 	hfi_free_spill_area(dd);
 
 	/* release system context and any privileged CMDQs */
@@ -3453,7 +3489,7 @@ irqreturn_t hfi_irq_becn_handler(int irq, void *dev_id)
 
 static void hfi_zebu_hack_vl_credits(struct hfi_pportdata *ppd)
 {
-	if (!zebu)
+	if (!ppd->dd->emulation)
 		return;
 
 	/*
@@ -3520,7 +3556,8 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 				ppd->pkeys[2] = 0xffff;
 			}
 
-			hfi2_fzc_init(ppd);
+			/* Required since Zebu skips full LNI */
+			hfi2_oc_init(ppd);
 			hfi_zebu_hack_vl_credits(ppd);
 		} else {
 			ppd->host_link_state = HLS_DN_OFFLINE;
@@ -3620,7 +3657,7 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 		ppd->port_ltp_crc_mode |= hfi_cap_to_port_ltp(
 					HFI_SUPPORTED_CRCS) <<
 					HFI_LTP_CRC_ENABLED_SHIFT;
-		if (zebu) {
+		if (dd->emulation) {
 			hfi_zebu_hack_default_mtu(ppd);
 			ppd->mgmt_allowed = 1;
 		}
@@ -3654,7 +3691,8 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_RESP_SL, 0, ppd->sc_to_sl);
 		hfi_set_ib_cfg(ppd, HFI_IB_CFG_SC_TO_MCTC, 0, ppd->sc_to_sl);
 		hfi_init_bw_arb_caches(ppd);
-		if (zebu)
+		/* Required since Zebu does not enable an FM */
+		if (dd->emulation)
 			hfi_zebu_hack_sl_tables(ppd);
 
 		hfi_init_sc_to_vl_tables(ppd);
@@ -3690,6 +3728,9 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 
 		/* Turn the LED to off */
 		hfi_set_ext_led(ppd, 0);
+		/* Required since Zebu does not enable an FM */
+		if (dd->emulation)
+			hfi_set_small_headers(ppd);
 	}
 
 	ret = hfi2_load_firmware(dd);
@@ -3716,7 +3757,8 @@ static int hfi_flr(struct hfi_devdata *dd, struct pci_dev *pdev)
 	struct pci_saved_state *pci_saved_state = NULL;
 	int ret;
 
-	if (zebu) {
+	/* FXRTODO: Reset has not been validated by DV */
+	if (dd->emulation) {
 		dd_dev_info(dd, "Skipping reset HFI with PCIe FLR\n");
 		return 0;
 	}
@@ -3762,7 +3804,8 @@ static int hfi_driver_reset(struct hfi_devdata *dd)
 	int i;
 	u64 reg = 0;
 
-	if (zebu) {
+	/* FXRTODO: Reset has not been validated by DV */
+	if (dd->emulation) {
 		dd_dev_info(dd, "Skipping DRIVER_RESET\n");
 		return 0;
 	}
@@ -3803,7 +3846,7 @@ void hfi_read_lm_link_state(const struct hfi_pportdata *ppd)
 {
 	u64 val;
 
-	if ((loopback != LOOPBACK_LCB) || !zebu)
+	if (loopback != LOOPBACK_LCB || !ppd->dd->emulation)
 		return;
 
 	val = read_csr(ppd->dd, FXR_TP_STS_STATE) &
@@ -3817,6 +3860,7 @@ static void hfi_cmdq_config_all(struct hfi_devdata *dd)
 {
 	int i;
 
+	__hfi_cmdq_config_all(dd);
 	/* now configure CMDQ head addresses */
 	for (i = 0; i < HFI_CMDQ_COUNT; i++)
 		hfi_cmdq_head_config(dd, i, dd->cmdq_head_base);
@@ -3845,13 +3889,13 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	u16 cmdq_idx;
 	struct page *page;
 	struct opa_ctx_assign ctx_assign = {0};
+	static const char * const inames[] = { /* implementation names */
+		"RTL silicon",
+		"RTL FPGA emulation",
+		"RTL Zebu emulation",
+		"Functional simulator"
+	};
 
-	/* FXRTODO: Remove once silicon is stable */
-	if (zebu) {
-		if (!simics && !loopback)
-			loopback = LOOPBACK_HFI;
-		no_mnh = true;
-	}
 	dd = hfi_alloc_devdata(pdev);
 	if (IS_ERR(dd))
 		return dd;
@@ -3912,11 +3956,38 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
-	ret = reset_device(dd);
-	if (ret)
-		goto err_post_alloc;
+	dd->icode = (dd->pdev->revision & HFI2_PCI_REVISION_ICODE_SMASK) >>
+		    HFI2_PCI_REVISION_ICODE_SHIFT;
+	dd->minrev = (dd->pdev->revision & HFI2_PCI_REVISION_REV_SMASK) >>
+		     HFI2_PCI_REVISION_REV_SHIFT;
+	dd->emulation = dd->icode == ICODE_FPGA_EMULATION ||
+			dd->icode == ICODE_ZEBU_EMULATION;
 
-	ret = hfi_zebu_enable_ats(dd);
+	dd_dev_info(dd, "Implementation: %s, revision 0x%x\n",
+		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
+		(int)dd->pdev->revision);
+
+	/*
+	 * Workaround for https://hsdes.intel.com/appstore/article/#/2202720924.
+	 * MSI-X interrupts are not currently supported on FPGA emulation
+	 *
+	 * Workaround for https://sid-jira.pdx.intel.com/browse/STL-36858.
+	 * Do not load PE firmware until backdoor mechanism is in place or
+	 * FPGAs can handle firmware download from /lib/firmware.
+	 */
+	if (dd->icode == ICODE_FPGA_EMULATION)
+		no_interrupts = true;
+
+	if (dd->emulation) {
+		loopback = 4;
+		opafm_disable = true;
+		no_mnh = true;
+	}
+
+	if (no_interrupts)
+		no_verbs = true;
+
+	ret = reset_device(dd);
 	if (ret)
 		goto err_post_alloc;
 
@@ -3929,10 +4000,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 
 	/* early init dd->hfi_dev_dbg */
 	hfi_dbg_dev_early_init(dd);
-
-	ret = hfi_iommu_root_set_context(dd);
-	if (ret)
-		goto err_post_alloc;
 
 	hfi_pend_cq_info_alloc(dd, &dd->pend_cq, "sys");
 
@@ -3958,23 +4025,27 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	}
 	dd->cmdq_head_base = page_address(page);
 	/* For ZEBU currently we configure cmdq after ctx_init */
-	if (!zebu)
+	if (!dd->emulation)
 		hfi_cmdq_config_all(dd);
 
 	ret = hfi_at_init(dd);
 	if (ret)
 		goto err_post_alloc;
 
-	/* enable MSI-X or INTx */
-	ret = hfi_setup_interrupts(dd, HFI_NUM_INTERRUPTS);
-	if (ret)
-		goto err_post_alloc;
-	hfi_ack_all_interrupts(dd);
+	if (!no_interrupts) {
+		/* enable MSI-X or INTx */
+		ret = hfi_setup_interrupts(dd, HFI_NUM_INTERRUPTS);
+		if (ret)
+			goto err_post_alloc;
+		hfi_ack_all_interrupts(dd);
 
-	/* configure IRQs */
-	ret = hfi_setup_irqs(dd);
-	if (ret)
-		goto err_post_alloc;
+		/* configure IRQs */
+		ret = hfi_setup_irqs(dd);
+		if (ret)
+			goto err_post_alloc;
+	} else {
+		dd_dev_info(dd, "Skipping MSI-X setup\n");
+	}
 
 	/* configure system PID/PASID needed by privileged CMDQs */
 	ctx = &dd->priv_ctx;
@@ -3992,7 +4063,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	}
 
 	/* For ZEBU currently we configure cmdq after ctx_init */
-	if (zebu)
+	if (dd->emulation)
 		hfi_cmdq_config_all(dd);
 
 	/*
@@ -4016,21 +4087,22 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		goto err_post_alloc;
 
 #ifdef CONFIG_HFI2_STLNP
-	/*
-	 * assign EQ for initiator E2E events and spawn thread to
-	 * monitor E2E events on EQ zero
-	 */
-	ret = hfi_e2e_start(ctx);
-	if (ret)
-		goto err_post_alloc;
+	/* Initialize E2E only if psn cache is not being warmed */
+	if (!use_psn_cache) {
+		/*
+		 * assign EQ for initiator E2E events and spawn thread to
+		 * monitor E2E events on EQ zero
+		 */
+		ret = hfi_e2e_start(ctx);
+		if (ret)
+			goto err_post_alloc;
+	}
 #endif
 
 	hfi_init_cntrs(dd);
-	hfi_read_lm_link_state(to_hfi_ppd(dd, 1));
 	ret = hfi2_ib_add(dd);
 	if (ret)
 		goto err_post_alloc;
-	hfi_read_lm_link_state(to_hfi_ppd(dd, 1));
 
 	/* read platform_config to dd->platform_config */
 	hfi2_get_platform_config(dd);
@@ -4041,18 +4113,17 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	if (ret)
 		goto err_post_alloc;
 
-	hfi_read_lm_link_state(to_hfi_ppd(dd, 1));
 	obtain_boardname(dd); /* Set dd->boardname */
 	ret = hfi_vnic_init(dd);
 	if (ret)
 		goto err_post_alloc;
-	hfi_read_lm_link_state(to_hfi_ppd(dd, 1));
 
 	return dd;
 
 err_post_alloc:
 	dev_err(&pdev->dev, "%s %d FAILED ret %d\n", __func__, __LINE__, ret);
-	hfi_pci_dd_free(dd);
+	if (!dd->emulation)
+		hfi_pci_dd_free(dd);
 
 	return ERR_PTR(ret);
 }
@@ -4096,6 +4167,9 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	union trig_op_cache_addr trig_op_cache_tag;
 	union psc_cache_addr me_le_uh_cache_tag;
 	int time;
+	int cache_inval_timeout = dd->emulation ?
+		HFI_CACHE_INVALIDATION_TIMEOUT_MS_ZEBU :
+		HFI_CACHE_INVALIDATION_TIMEOUT_MS;
 
 	/* write PCB_LOW first to clear valid bit */
 	write_csr(dd, FXR_RXHIARB_CFG_PCB_LOW + (ptl_pid * 8), 0);
@@ -4106,7 +4180,7 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	 */
 	spin_lock(&dd->ptl_lock);
 
-	if (!zebu)
+	if (!dd->emulation)
 		hfi_cancel_pending_otr(dd, ptl_pid);
 
 	/* invalidate cached host memory in HFI for Portals Tables by PID */
@@ -4200,19 +4274,19 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 			break;
 		mdelay(1);
 	}
-	if (time >= HFI_CACHE_INVALIDATION_TIMEOUT_MS) {
+	if (time >= cache_inval_timeout) {
 		if (pte & FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_BUSY_SMASK)
 			dd_dev_err(dd, "PTE cache invalidation not done after %dms\n",
-				   HFI_CACHE_INVALIDATION_TIMEOUT_MS);
+				   cache_inval_timeout);
 		if (eq & FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_BUSY_SMASK)
 			dd_dev_err(dd, "EQ cache invalidation not done after %dms\n",
-				   HFI_CACHE_INVALIDATION_TIMEOUT_MS);
+				   cache_inval_timeout);
 		if (trig & FXR_RXET_CFG_TRIG_OP_CACHE_ACCESS_CTL_BUSY_SMASK)
 			dd_dev_err(dd, "trig_op cache invalidation not done after %dms\n",
-				   HFI_CACHE_INVALIDATION_TIMEOUT_MS);
+				   cache_inval_timeout);
 		if (me_le_uh & FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_BUSY_SMASK)
 			dd_dev_err(dd, "ME/LE/UH cache invalidation not done after %dms\n",
-				   HFI_CACHE_INVALIDATION_TIMEOUT_MS);
+				   cache_inval_timeout);
 	}
 
 	spin_unlock(&dd->ptl_lock);
@@ -4262,8 +4336,15 @@ static void hfi_cmdq_head_config(struct hfi_devdata *dd, u16 cmdq_idx,
 	/* disable CMDQ head before reset, as no assigned PASID */
 	write_csr(dd, head_offset, 0);
 
-	/* reset CMDQ state, as CMDQ head starts at 0 */
-	hfi_cmdq_disable(dd, cmdq_idx);
+	/*
+	 * reset CMDQ state, as CMDQ head starts at 0
+	 *
+	 * TODO: for FPGA, TX CMDQ size is reduced. Some issues seen
+	 * reducing the TX CMDQ size. Until those issues are resolved,
+	 * skip the initial CMDQ reset sequence.
+	 */
+	if (!dd->emulation)
+		hfi_cmdq_disable(dd, cmdq_idx);
 
 	/* set CQ head, should be set after CQ reset */
 	cq_head = FXR_RXCID_CFG_HEAD_UPDATE_ADDR_VALID_SMASK;
@@ -4284,6 +4365,8 @@ void hfi_cmdq_disable(struct hfi_devdata *dd, u16 cmdq_idx)
 	u64 rx = 0;
 	int time;
 	int timeout = HFI_CMDQ_DRAIN_RESET_TIMEOUT_MS;
+	int cmdq_reset_timeout = dd->emulation ?
+		HFI_CMDQ_RESET_TIMEOUT_MS_ZEBU : HFI_CMDQ_RESET_TIMEOUT_MS;
 
 	/* reset CQ state, as CQ head starts at 0 */
 	tx = (FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_CQ_MASK & cmdq_idx) <<
@@ -4314,21 +4397,21 @@ retry_reset:
 		if (!(tx & FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK) &&
 		    !(rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK))
 			break;
-		if (zebu)
+		if (dd->emulation)
 			mdelay(1);
 	}
-	if (!zebu && time >= timeout) {
+	if (!dd->emulation && time >= timeout) {
 		if ((tx & FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_SMASK) ||
 		    (rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_SMASK)) {
 			if (tx & FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK) {
 				tx &= ~FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_SMASK;
 				dd_dev_err(dd, "TX CQ reset and drain are not done after %dms..trying only reset\n",
-					   HFI_CMDQ_RESET_TIMEOUT_MS);
+					   cmdq_reset_timeout);
 			}
 			if (rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK) {
 				rx &= ~FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_SMASK;
 				dd_dev_err(dd, "RX CQ reset and drain are not done after %dms..trying only reset\n",
-					   HFI_CMDQ_RESET_TIMEOUT_MS);
+					   cmdq_reset_timeout);
 			}
 			/*
 			 * FXRTODO revisit retry mechanism after design team
@@ -4350,15 +4433,15 @@ retry_reset:
 			       FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SHIFT) &
 			       FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_MASK)) <<
 			       FXR_RXCIC_CFG_CQ_DRAIN_RESET_RESET_SHIFT;
-			timeout = HFI_CMDQ_RESET_TIMEOUT_MS;
+			timeout = cmdq_reset_timeout;
 			goto retry_reset;
 		}
 		if (tx & FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK)
 			dd_dev_err(dd, "TX CQ reset not done after %dms\n",
-				   HFI_CMDQ_RESET_TIMEOUT_MS);
+				   cmdq_reset_timeout);
 		if (rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK)
 			dd_dev_err(dd, "RX CQ reset not done after %dms\n",
-				   HFI_CMDQ_RESET_TIMEOUT_MS);
+				   cmdq_reset_timeout);
 	}
 }
 
@@ -4457,6 +4540,13 @@ void hfi_cmdq_config(struct hfi_ctx *ctx, u16 cmdq_idx,
 				FXR_TXCID_CFG_CSR_SL_ENABLE_SHIFT;
 	offset = FXR_TXCID_CFG_CSR + (cmdq_idx * 8);
 	write_csr(dd, offset, tx_config);
+
+#if 0
+	/* FXRTODO: Need to program the pkey to be used for a CQ */
+	offset = FXR_TXCID_CFG_EXT_CSR + (cmdq_idx * 8);
+	tx_config = (0x2 << FXR_TXCID_CFG_EXT_CSR_PKEY_SHIFT);
+	write_csr(dd, offset, tx_config);
+#endif
 
 	/* set RX CQ config, enable */
 	rx_config = FXR_RXCID_CFG_CNTRL_ENABLE_SMASK;

@@ -61,7 +61,7 @@
 #include "hfi_tx_bypass.h"
 
 #define HFI2_NUM_DIAGPKT_EVT 2048
-#define HFI2_DIAG_TIMEOUT_MS (zebu ? -1 : 100)
+#define HFI2_DIAG_TIMEOUT_MS 100
 #define HFI2_DIAG_DEFAULT_MTU 8192
 #define PBC_DCINFO_SHIFT 30
 #define PBC_DCINFO_MASK   1
@@ -337,10 +337,15 @@ int hfi2_diag_init(struct hfi_devdata *dd)
 	 * An optimization is to use the per port VPD resources to perform
 	 * the transfers if this becomes a bottleneck.
 	 */
-	struct hfi2_ibtx *ibtx = &dd->ibd->pport[0].port_tx[0];
-	struct hfi_ctx *ctx = ibtx->ctx;
+	struct hfi2_ibtx *ibtx;
+	struct hfi_ctx *ctx;
 	int rc;
 
+	if (no_verbs)
+		return 0;
+
+	ibtx = &dd->ibd->pport[0].port_tx[0];
+	ctx = ibtx->ctx;
 	/* Reuse verbs context and command queue for diag */
 	diag->cmdq_tx = &ibtx->cmdq_tx;
 	diag->cmdq_rx = &ibtx->cmdq_rx;

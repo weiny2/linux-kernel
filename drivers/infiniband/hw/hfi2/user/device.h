@@ -67,6 +67,4 @@ struct hfi_info {
 int hfi_user_add(struct hfi_info *hi);
 void hfi_user_remove(struct hfi_info *hi);
 
-extern bool zebu;
-
 #endif /* _HFI_DEVICE_H */

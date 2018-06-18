@@ -485,9 +485,9 @@ static bool process_rcv_packet(struct hfi2_ibport *ibp,
 	}
 
 	dev_dbg(ibp->dev,
-		"PT %d: RX type 0x%x hlen %d tlen %d egr %d %d %d ebuf %p\n",
+		"PT %d: RX type 0x%x hlen %d tlen %d egr %d %d %d ebuf %p flags 0x%llx rhf 0x%llx\n",
 		packet->port, packet->etype, packet->hlen, packet->tlen,
-		have_egr_buf, idx, off, packet->ebuf);
+		have_egr_buf, idx, off, packet->ebuf, rhf_err_flags(rhf), rhf);
 
 	trace_hfi2_rx_packet(packet->ibp->ppd->dd,
 			     (u64)(packet->rcv_ctx->ctx),
@@ -713,12 +713,7 @@ int hfi2_rcv_wait(void *data)
 			 * IB receive logic.
 			 */
 			rhf_err = rhf_err_flags(pkt.rhf);
-			/*
-			 * TODO check for ICRC RHF error in Zebu is required
-			 * for the ww13b model. This can be removed for future
-			 * models.
-			 */
-			if (rhf_err && !(zebu && (rhf_err & RHF_IE_MASK))) {
+			if (rhf_err) {
 				ibp->stats->n_rhf_errors++;
 				dev_dbg(ibp->dev,
 					"PID %d: RHF error 0x%llx, %lld\n",
@@ -741,6 +736,12 @@ int hfi2_rcv_wait(void *data)
 
 			/* mark RHF entry as processed */
 			hfi2_rcv_advance(rcv, rhf_entry);
+		} else {
+			if (ibp->ppd->dd->emulation) {
+				cpu_relax();
+				schedule();
+				msleep(20);
+			}
 		}
 		/* Process any pending acks when there are no events pending */
 		if (pkt.numpkt && !hfi_eq_wait_condition(&rcv->eq)) {

@@ -276,7 +276,9 @@ int hfi_cmdq_release(struct hfi_ctx *ctx, u16 cmdq_idx)
 	if (idr_find(&dd->cmdq_pair, cmdq_idx) != ctx) {
 		ret = -EINVAL;
 	} else {
-		hfi_cmdq_disable(dd, cmdq_idx);
+		/* FXRTODO: Do not reuse a CQ till DV has validated CQ reuse */
+		if (!dd->emulation)
+			hfi_cmdq_disable(dd, cmdq_idx);
 		idr_remove(&dd->cmdq_pair, cmdq_idx);
 		ctx->cmdq_pair_num_assigned--;
 		dd->cmdq_pair_num_assigned--;
@@ -297,7 +299,9 @@ void hfi_cmdq_cleanup(struct hfi_ctx *ctx)
 	spin_lock_irqsave(&dd->cmdq_lock, flags);
 	idr_for_each_entry(&dd->cmdq_pair, cmdq_ctx, i) {
 		if (cmdq_ctx == ctx) {
-			hfi_cmdq_disable(dd, i);
+			/* FXRTODO: Do not reuse a CQ till DV has validated */
+			if (!dd->emulation)
+				hfi_cmdq_disable(dd, i);
 			idr_remove(&dd->cmdq_pair, i);
 			ctx->cmdq_pair_num_assigned--;
 			dd->cmdq_pair_num_assigned--;
@@ -401,4 +405,11 @@ int hfi_pt_update_lower(struct hfi_ctx *ctx, u8 ni, u32 pt_idx,
 			       (u64 *)&cmd, cmd_slots, GFP_KERNEL);
 
 	return rc;
+}
+
+void __hfi_cmdq_config_all(struct hfi_devdata *dd)
+{
+	/* FXRTODO: Do not reuse a CQ till DV has validated CQ reuse */
+	if (dd->emulation)
+		cq_alloc_cyclic = 1;
 }

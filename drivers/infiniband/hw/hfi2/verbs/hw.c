@@ -67,12 +67,12 @@ static bool disable_pio = true;
 #define HFI_IB_CMDQ_FULL_RETRIES	10
 #define HFI_IB_CMDQ_FULL_DELAY_MS	1
 /* minimum Eager entries */
-#define HFI_IB_EAGER_COUNT		(zebu ? 256 : 2048)
+#define HFI_IB_EAGER_COUNT		2048
 /* log2 of EAGER_COUNT - 2 */
-#define HFI_IB_EAGER_COUNT_ORDER	(zebu ? 6 : 9)
+#define HFI_IB_EAGER_COUNT_ORDER	9
 #define HFI_IB_EAGER_SIZE		(PAGE_SIZE * 8)
-#define HFI_IB_EAGER_PT_FLAGS	(PTL_MAY_ALIGN | PTL_MANAGE_LOCAL)
-#define HFI_IB_EAGER_BUFSIZE	(HFI_IB_EAGER_COUNT * HFI_IB_EAGER_SIZE)
+#define HFI_IB_EAGER_PT_FLAGS		(PTL_MAY_ALIGN | PTL_MANAGE_LOCAL)
+#define HFI_IB_EAGER_BUFSIZE		(HFI_IB_EAGER_COUNT * HFI_IB_EAGER_SIZE)
 
 /*
  * PIO threshold in bytes - will use PIO if payload is less than this.
@@ -86,8 +86,8 @@ static bool disable_pio = true;
  * this macro defines the times to update PT for a
  * full RHQ processing, must be power of 2 value.
  */
-#define HFI_IB_PT_UPDATE_RATE     4
-#define HFI_IB_EAGER_UPDATE_COUNT (HFI_IB_EAGER_COUNT / HFI_IB_PT_UPDATE_RATE)
+#define HFI_IB_PT_UPDATE_RATE		4
+#define HFI_IB_EAGER_UPDATE_COUNT	(HFI_IB_EAGER_COUNT / HFI_IB_PT_UPDATE_RATE)
 
 /*
  * The header argument must point to memory that is padded to a full
@@ -922,7 +922,7 @@ int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry)
 	int rc;
 	bool dropped = false;
 
-	rc = hfi_eq_wait_irq(&rcv->eq, -1,
+	rc = hfi_eq_wait_irq(&rcv->eq, rcv->eq.ctx->devdata->emulation ? 1 : -1,
 			     rhf_entry, &dropped);
 	if (rc == -ETIME || rc == -ERESTARTSYS) {
 		/* timeout or wait interrupted, not abnormal */
@@ -1161,6 +1161,9 @@ int hfi2_ctx_init(struct hfi2_ibdev *ibd, int num_ctxs, int num_cmdqs)
 	struct hfi_ctx *qp_ctx;
 	struct hfi_ctx *rcv_ctx[HFI2_IB_MAX_CTXTS];
 
+	if (no_verbs)
+		return 0;
+
 	if (num_ctxs > HFI2_IB_MAX_CTXTS ||
 	    !is_power_of_2(num_ctxs))
 		return -EINVAL;
@@ -1254,6 +1257,9 @@ void hfi2_ctx_uninit(struct hfi2_ibdev *ibd)
 {
 	int i;
 
+	if (no_verbs)
+		return;
+
 	for (i = 0; i < HFI_NUM_RSM_RULES; i++)
 		if (ibd->rsm_mask & (1 << i))
 			hfi_rsm_clear_rule(ibd->dd, i);
@@ -1266,6 +1272,19 @@ void hfi2_ctx_uninit(struct hfi2_ibdev *ibd)
 		}
 	}
 	hfi_ctx_cleanup(&ibd->sm_ctx);
+}
+
+static int hfi2_send_wait(void *data)
+{
+	struct hfi2_ibtx *ibtx = data;
+
+	allow_signal(SIGINT);
+	while (!kthread_should_stop()) {
+		hfi2_send_event(&ibtx->send_eq, data);
+		msleep(20);
+		schedule();
+	}
+	return 0;
 }
 
 static int hfi2_ibtx_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
@@ -1289,6 +1308,17 @@ static int hfi2_ibtx_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 	ret = _hfi_eq_alloc(ctx, &eq_alloc, &ibtx->send_eq);
 	if (ret < 0)
 		goto tx_eq_err;
+
+	if (ibp->ibd->dd->emulation) {
+		struct task_struct *send_task;
+		/* FXRTODO: Need to destroy this kthread during uninit */
+		/* kthread create and wait for TX events! */
+		send_task = kthread_run(hfi2_send_wait, ibtx, "hfi2_ibsend");
+		if (IS_ERR(send_task)) {
+			ret = PTR_ERR(send_task);
+			goto tx_eq_err;
+		}
+	}
 
 	/* Obtain a pair of command queues for this send context. */
 	ret = hfi_cmdq_assign(ctx, NULL, &cmdq_idx);
@@ -1340,6 +1370,9 @@ int hfi2_ctx_init_port(struct hfi2_ibport *ibp)
 	struct hfi2_ibdev *ibd = ibp->ibd;
 	int i, ret;
 
+	if (no_verbs)
+		return 0;
+
 	/* allocate pool of send contexts (command queues) */
 	for (i = 0; i < ibd->num_send_cmdqs; i++) {
 		ret = hfi2_ibtx_init(ibp, &ibd->sm_ctx, &ibp->port_tx[i], i);
@@ -1367,6 +1400,9 @@ ctx_init_err:
 void hfi2_ctx_uninit_port(struct hfi2_ibport *ibp)
 {
 	int i;
+
+	if (no_verbs)
+		return;
 
 	for (i = 0; i < ibp->ibd->num_qp_ctxs; i++) {
 		if (ibp->qp_rcv[i]) {
