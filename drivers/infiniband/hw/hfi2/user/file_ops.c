@@ -180,7 +180,7 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	 * about earlier race here.
 	 */
 	/* Pass in ud so hfi2 understands this is a user-space context */
-	ucontext = hi->ibdev->alloc_ucontext(hi->ibdev, ud);
+	ucontext = hi->ibdev->alloc_ucontext(hi->ibdev, (void *)ud);
 	if (IS_ERR(ucontext)) {
 		kfree(ud);
 		return PTR_ERR(ucontext);
