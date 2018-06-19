@@ -316,23 +316,45 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 			 ctx->ptl_state_size, NULL, true);
 
 	ctx->le_me_addr = (void *)(ctx->ptl_state_base + le_me_off);
-	ctx->le_me_size = le_me_size;
 	ctx->le_me_count = ctx_assign->le_me_count;
-	/* Initialize ME/LE pool used by hfi_me_alloc/free */
-	ctx->le_me_free_index = 0;
-	if (ctx->le_me_count && ctx->type == HFI_CTX_TYPE_KERNEL) {
-		ctx->le_me_free_list = vzalloc(sizeof(u16) *
-					       (ctx->le_me_count - 1));
-		if (!ctx->le_me_free_list)
-			goto err_psb_vmalloc;
-
-		for (i = 0; i < ctx->le_me_count - 1; i++)
-			/* Entry 0 is reserved, so start from 1. */
-			ctx->le_me_free_list[i] = i + 1;
-	}
-
+	ctx->le_me_size = le_me_size;
 	ctx->unexpected_size = unexp_size;
 	ctx->trig_op_size = trig_op_size;
+
+	/* Initialize the Unexpected Free List */
+	hfi_uh_init(ctx, ctx_assign->unexpected_count);
+
+	/*
+	 * Initialize ME/LE pool used by hfi_me_alloc/free,
+	 * only needed for native transport.
+	 */
+	ctx->le_me_free_index = 0;
+	ctx->le_me_free_list = NULL;
+	if (ctx->type == HFI_CTX_TYPE_KERNEL &&
+	    !(ctx->mode & HFI_CTX_MODE_USE_BYPASS)) {
+		if (ctx->le_me_count > 1) {
+			ctx->le_me_free_list = vzalloc(sizeof(u16) *
+						       (ctx->le_me_count - 1));
+			if (!ctx->le_me_free_list)
+				goto err_le_me;
+
+			for (i = 0; i < ctx->le_me_count - 1; i++)
+				/* Entry 0 is reserved, so start from 1. */
+				ctx->le_me_free_list[i] = i + 1;
+		}
+
+		/* Initialize PT pool used by hfi_pt_(fast_)alloc/free */
+		for (ni = 0; ni < HFI_NUM_NIS; ni++) {
+			ctx->pt_free_index[ni] = 0;
+			/*
+			 * Place high valued entries so they are allocated
+			 * first by HFI_PT_ANY.
+			 */
+			for (i = 0; i < HFI_NUM_PT_ENTRIES; i++)
+				ctx->pt_free_list[ni][i] =
+					HFI_NUM_PT_ENTRIES - i - 1;
+		}
+	}
 
 	dd_dev_info(dd, "Portals PID %u assigned PCB:[%d, %d, %d, %d]\n",
 		    ptl_pid, psb_size, trig_op_size, le_me_size,
@@ -353,9 +375,6 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 			&ctx->eq_head_addr, &ctx->eq_head_size);
 	hfi_ctx_hw_addr(ctx, TOK_PORTALS_TABLE, ctx->pid,
 			&ctx->pt_addr, &ctx->pt_size);
-
-	/* Initialize the Unexpected Free List */
-	hfi_uh_init(ctx, ctx_assign->unexpected_count);
 
 	/* Initialize the erorr queue if requested */
 	hfi_setup_errq(ctx, ctx_assign);
@@ -390,18 +409,6 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 			if (ret < 0)
 				goto err_kern_ctx;
 		}
-
-		/* Initialize PT pool used by hfi_pt_(fast_)alloc/free */
-		for (ni = 0; ni < HFI_NUM_NIS; ni++) {
-			ctx->pt_free_index[ni] = 0;
-			/*
-			 * Place high valued entries so they are allocated
-			 * first by HFI_PT_ANY.
-			 */
-			for (i = 0; i < HFI_NUM_PT_ENTRIES; i++)
-				ctx->pt_free_list[ni][i] =
-					HFI_NUM_PT_ENTRIES - i - 1;
-		}
 	}
 
 	dd->stats.sps_ctxts++;
@@ -412,7 +419,7 @@ err_kern_ctx:
 	hfi_errq_cleanup(ctx);
 	hfi_pcb_reset(dd, ptl_pid);
 	vfree(ctx->le_me_free_list);
-err_psb_vmalloc:
+err_le_me:
 	hfi_at_dereg_range(&dd->priv_ctx, ctx->ptl_state_base,
 			   ctx->ptl_state_size);
 	vfree(ctx->ptl_state_base);
