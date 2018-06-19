@@ -4513,12 +4513,12 @@ void hfi_cmdq_config(struct hfi_ctx *ctx, u16 cmdq_idx,
 			 FXR_TXCID_CFG_CSR_PID_SHIFT;
 	tx_config |= (FXR_TXCID_CFG_CSR_PRIV_LEVEL_MASK & user_priv) <<
 			 FXR_TXCID_CFG_CSR_PRIV_LEVEL_SHIFT;
-	if (ctx->lid_count)
+	if (ctx->res.lid_count)
 		tx_config |= (FXR_TXCID_CFG_CSR_DLID_BASE_MASK &
-				 ctx->dlid_base) <<
+				 ctx->res.dlid_base) <<
 				 FXR_TXCID_CFG_CSR_DLID_BASE_SHIFT;
 	tx_config |= (FXR_TXCID_CFG_CSR_PHYS_DLID_MASK &
-			 ctx->allow_phys_dlid) <<
+			 ctx->res.allow_phys_dlid) <<
 			 FXR_TXCID_CFG_CSR_PHYS_DLID_SHIFT;
 	/*
 	 * Use enabled SLs from port 0. MC1 assumes all SLs are enabled.

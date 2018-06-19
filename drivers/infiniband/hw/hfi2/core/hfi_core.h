@@ -207,12 +207,43 @@ struct hfi_ibeq {
 };
 
 /**
+ * struct hfi_job_res - set of HFI resources reserved by Resource Manager
+ * @allow_phys_dlid: Physical LIDs allowed in commands (vs virtual LIDs)
+ * @auth_mask: Mask of enabled Protection Domains in @auth_uid
+ * @tpid_idx: Index into virtual target PID CAM
+ * @mode: Describes if PIDs or LIDs are virtualized or not
+ * @auth_uid: Table of allowed Protection Domains for Command Queues
+ * @dlid_base: Base virtual DLID (if DLID table is used)
+ * @lid_count: Number of LIDs (fabric endpoints)
+ * @lid_offset: LID offset from base for this context (if contiguous LIDs)
+ * @pid_base: Base of contiguous assigned PIDs on this LID
+ * @pid_count: Number of PIDs assigned on this LID
+ * @pid_total: Number of PIDs across all LIDs of the application
+ * @res_mutex: mutex to protect updates of reserved resources
+ */
+struct hfi_job_res {
+	u8	allow_phys_dlid;
+	u8	auth_mask;
+	u8	tpid_idx;
+	u16	mode;
+	u32	auth_uid[HFI_NUM_AUTH_TUPLES];
+	u32	dlid_base;
+	u32	lid_count;
+	u32	lid_offset;
+	u16	pid_base;
+	u16	pid_count;
+	u64	pid_total;
+	struct mutex res_mutex;
+};
+
+/**
  * struct hfi_ctx - state for HFI resources assigned to this context
  * @devdata: HFI device specific data, private to the hardware driver
  * @ops: OPA_CORE device operations
  * @type: kernel or user context
  * @rsm_mask: associated RSM rules, if non-portals context
  * @mode: Describes if PIDs or LIDs are virtualized or not
+ * @cmdq_pair_num_assigned: Counter of assigned Command Queues
  * @pid: Assigned Portals Process ID
  * @pasid: Assigned Process Address Space ID
  * @ptl_uid: Assigned Protection Domain ID
@@ -223,18 +254,6 @@ struct hfi_ibeq {
  * @le_me_size: Size of ME/LE buffer
  * @unexpected_size: Size of unexpected header buffer
  * @trig_op_size: Size of triggered ops buffer
- * @tpid_idx: Index into virtual target PID CAM
- * @allow_phys_dlid: Physical LIDs allowed in commands (vs virtual LIDs)
- * @auth_mask: Mask of enabled Protection Domains in @auth_uid
- * @auth_uid: Table of allowed Protection Domains for Command Queues
- * @dlid_mutex: mutex to protect dlid assignment
- * @dlid_base: Base virtual DLID (if DLID table is used)
- * @lid_count: Number of LIDs (fabric endpoints)
- * @lid_offset: LID offset from base for this context (if contiguous LIDs)
- * @pid_base: Base of contiguous assigned PIDs on this LID
- * @pid_count: Number of PIDs assigned on this LID
- * @pid_total: Number of PIDs across all LIDs of the application
- * @cmdq_pair_num_assigned: Counter of assigned Command Queues
  * @ct_used: IDR table of allocated Event Counters (CTs)
  * @eq_used: IDR table of allocated Events Queues
  * @ec_used: IDR table of allocated Events Channels
@@ -266,6 +285,7 @@ struct hfi_ctx {
 	u8	type;
 	u8	rsm_mask;
 	u16	mode;
+	u16	cmdq_pair_num_assigned;
 	u16	pid;
 	u32	pasid;
 	u32	ptl_uid;
@@ -276,19 +296,7 @@ struct hfi_ctx {
 	u32	le_me_size;
 	u32	unexpected_size;
 	u32	trig_op_size;
-	u8	tpid_idx;
-	u8	allow_phys_dlid;
-	u8	auth_mask;
-	u32	auth_uid[HFI_NUM_AUTH_TUPLES];
-
-	struct mutex dlid_mutex;
-	u32	dlid_base;
-	u32	lid_count;
-	u32	lid_offset;
-	u16	pid_base;
-	u16	pid_count;
-	u64	pid_total;
-	u16	cmdq_pair_num_assigned;
+	struct hfi_job_res res;
 
 	struct idr ct_used;
 	struct idr eq_used;

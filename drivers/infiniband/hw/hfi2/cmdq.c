@@ -97,8 +97,9 @@ union ptentry_fp0_bc1 {
  * On success, @auth_table must contain valid values as driver will
  * write them into the CMDQ configuration register.
  */
-static int hfi_cmdq_validate_tuples(struct hfi_ctx *ctx,
-				    struct hfi_auth_tuple *auth_table)
+static int hfi_cmdq_validate_tuples(struct hfi_job_res *res,
+				    struct hfi_auth_tuple *auth_table,
+				    bool is_kdeth)
 {
 	int i, j;
 	u32 auth_uid;
@@ -106,10 +107,10 @@ static int hfi_cmdq_validate_tuples(struct hfi_ctx *ctx,
 
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
 		/*
-		 * If bypass PID, SRANK must be RANK_ANY to note that the
-		 * UID field contains a KDETH job_key;
+		 * If using KDETH, SRANK must be RANK_ANY to note that
+		 * the UID field contains a KDETH job_key;
 		 */
-		if (IS_PID_BYPASS(ctx)) {
+		if (is_kdeth) {
 			auth_table[i].srank = PTL_RANK_ANY;
 			auth_table[i].uid = HFI_JKEY_MASK_SMASK |
 					    hfi_generate_jkey();
@@ -129,15 +130,15 @@ static int hfi_cmdq_validate_tuples(struct hfi_ctx *ctx,
 		if (auth_table[i].uid == HFI_UID_ANY ||
 		    auth_table[i].uid == 0) {
 			/* set to appropriate default UID and continue */
-			if (ctx->auth_uid[0])
-				auth_table[i].uid = ctx->auth_uid[0];
+			if (res->auth_uid[0])
+				auth_table[i].uid = res->auth_uid[0];
 			else
 				auth_table[i].uid = HFI_DEFAULT_PTL_UID;
 			continue;
 		}
 
 		/* if RM didn't set UIDs, require default */
-		if (!ctx->auth_mask) {
+		if (!res->auth_mask) {
 			if (auth_table[i].uid != HFI_DEFAULT_PTL_UID)
 				return -EINVAL;
 			continue;
@@ -152,7 +153,7 @@ static int hfi_cmdq_validate_tuples(struct hfi_ctx *ctx,
 		if (auth_uid == last_job_uid)
 			continue;
 		for (j = 0; j < HFI_NUM_AUTH_TUPLES; j++) {
-			if (auth_uid == ctx->auth_uid[j]) {
+			if (auth_uid == res->auth_uid[j]) {
 				last_job_uid = auth_uid;
 				break;
 			}
@@ -216,7 +217,8 @@ int hfi_cmdq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table,
 	 * if no auth_table, driver will set all to default
 	 */
 	if (auth_table) {
-		ret = hfi_cmdq_validate_tuples(ctx, auth_table);
+		ret = hfi_cmdq_validate_tuples(&ctx->res, auth_table,
+					       IS_PID_BYPASS(ctx));
 		if (ret)
 			goto unlock;
 	}
@@ -267,7 +269,8 @@ int hfi_cmdq_update(struct hfi_ctx *ctx, u16 cmdq_idx,
 	 * 'cmdq_lock' required because two threads may
 	 * come here with the same 'cmdq_idx'.
 	 */
-	ret = hfi_cmdq_validate_tuples(ctx, auth_table);
+	ret = hfi_cmdq_validate_tuples(&ctx->res, auth_table,
+				       IS_PID_BYPASS(ctx));
 	if (!ret)
 		/* write CMDQ tuple config in HFI CSRs */
 		hfi_cmdq_config_tuples(ctx, cmdq_idx, auth_table);

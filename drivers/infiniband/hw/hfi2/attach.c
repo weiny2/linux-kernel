@@ -75,18 +75,19 @@ void hfi_ctx_init(struct hfi_ctx *ctx, struct hfi_devdata *dd)
 	ctx->ops = dd->core_ops;
 	ctx->type = HFI_CTX_TYPE_KERNEL;
 	ctx->mode = 0;
-	ctx->allow_phys_dlid = 1;
 	ctx->pid = HFI_PID_NONE;
-	ctx->pid_count = 0;
 	/* UID=0 reserved for kernel clients */
 	ctx->ptl_uid = HFI_DEFAULT_PTL_UID;
 	idr_init(&ctx->ct_used);
 	idr_init(&ctx->eq_used);
 	idr_init(&ctx->ec_used);
-	mutex_init(&ctx->dlid_mutex);
 	mutex_init(&ctx->event_mutex);
 	spin_lock_init(&ctx->eq_lock);
 	init_rwsem(&ctx->ctx_rwsem);
+	/* below used by resource reservations */
+	ctx->res.allow_phys_dlid = 1;
+	ctx->res.pid_count = 0;
+	mutex_init(&ctx->res.res_mutex);
 }
 
 /*
@@ -166,7 +167,7 @@ int hfi_ctx_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
 	int ret;
 
 	/* only one PID reservation */
-	if (ctx->pid_count)
+	if (ctx->res.pid_count)
 		return -EPERM;
 
 	/* If requested, use non-portals PID reservation (for PSM) */
@@ -179,8 +180,8 @@ int hfi_ctx_reserve(struct hfi_ctx *ctx, u16 *base, u16 count, u16 align,
 	if (ret)
 		return ret;
 
-	ctx->pid_base = *base;
-	ctx->pid_count = count;
+	ctx->res.pid_base = *base;
+	ctx->res.pid_count = count;
 
 #ifdef CONFIG_HFI2_STLNP
 	if (flags & HFI_CTX_FLAG_SET_VIRTUAL_PIDS) {
@@ -216,16 +217,16 @@ static void __hfi_ctx_unreserve(struct hfi_devdata *dd, u16 base, u16 count)
 void hfi_ctx_unreserve(struct hfi_ctx *ctx)
 {
 	struct hfi_devdata *dd = ctx->devdata;
+	struct hfi_job_res *res = &ctx->res;
 
 #ifdef CONFIG_HFI2_STLNP
-	if (IS_PID_VIRTUALIZED(ctx))
-		hfi_ctx_unset_virtual_pid_range(ctx);
+	hfi_ctx_unset_virtual_pid_range(dd, res);
 #endif
 
-	if (ctx->pid_count)
-		__hfi_ctx_unreserve(dd, ctx->pid_base, ctx->pid_count);
-	ctx->pid_base = -1;
-	ctx->pid_count = 0;
+	if (res->pid_count)
+		__hfi_ctx_unreserve(dd, res->pid_base, res->pid_count);
+	res->pid_base = -1;
+	res->pid_count = 0;
 }
 
 /* Initialize the Unexpected Free List */
@@ -441,7 +442,7 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 flags, u16 *assigned_pid)
 	struct hfi_devdata *dd = ctx->devdata;
 	u16 start, end, ptl_pid = *assigned_pid;
 
-	if (ctx->pid_count) {
+	if (ctx->res.pid_count) {
 		/*
 		 * Here there is already a PID reservation set by the job
 		 * launcher (contiguous set of PIDs) with ops->ctx_reserve.
@@ -451,20 +452,20 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 flags, u16 *assigned_pid)
 		 * reserved set of PIDs.
 		 */
 		if (!IS_PID_ANY(ptl_pid) &&
-		    (ptl_pid >= ctx->pid_count))
+		    (ptl_pid >= ctx->res.pid_count))
 			return -EINVAL;
 
 		if (IS_PID_ANY(ptl_pid)) {
 			/* get first available PID within the reservation */
-			start = ctx->pid_base;
-			end = ctx->pid_base + ctx->pid_count;
+			start = ctx->res.pid_base;
+			end = ctx->res.pid_base + ctx->res.pid_count;
 		} else {
 			/*
 			 * attempt to assign specific PID offset in
 			 * reservation
 			 */
-			start = ctx->pid_base + ptl_pid;
-			end = ctx->pid_base + ptl_pid + 1;
+			start = ctx->res.pid_base + ptl_pid;
+			end = ctx->res.pid_base + ptl_pid + 1;
 		}
 	} else {
 		u16 offset = 0, size = HFI_NUM_USABLE_PIDS;
@@ -514,10 +515,8 @@ static int hfi_pid_alloc(struct hfi_ctx *ctx, u16 flags, u16 *assigned_pid)
 		 * there is PID state corruption due to a driver bug, hence
 		 * the WARN_ON here. Release reservation and return error.
 		 */
-		if (!ctx->pid_count) {
-			WARN_ON(!ctx->pid_count);
+		if (WARN_ON(!ctx->res.pid_count))
 			__hfi_ctx_unreserve(dd, ptl_pid, 1);
-		}
 		return ret;
 	}
 	*assigned_pid = ret;
@@ -615,7 +614,7 @@ int hfi_ctx_cleanup(struct hfi_ctx *ctx)
 		/* release assigned PID */
 		hfi_pid_free(dd, ptl_pid);
 
-		if (ctx->pid_count == 0) {
+		if (!ctx->res.pid_count) {
 			dd_dev_info(dd, "release PID singleton [%u]\n",
 				    ptl_pid);
 			__hfi_ctx_unreserve(dd, ptl_pid, 1);

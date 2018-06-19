@@ -57,6 +57,10 @@
 #include "hfi_cmdq.h"
 #include "chip/fxr_tx_ci_cid_csrs_defs.h"
 
+#define IS_PID_VIRTUALIZED(res) \
+	((res)->mode & (HFI_CTX_MODE_VTPID_MATCHING | \
+			HFI_CTX_MODE_VTPID_NONMATCHING))
+
 /*
  * For writing TPID_CAM.UID, policy is to use first UID value provided
  * from resource manager.   This value is inherited by the application during
@@ -64,7 +68,7 @@
  * Future work could allow multiple TPID_CAM entries per job reservation, but
  * we only allow one today.
  */
-#define TPID_UID(ctx)	((ctx)->auth_uid[0])
+#define TPID_UID(ctx)	((ctx)->res.auth_uid[0])
 
 /*
  * When added to the 8 Bytes required for the DLID relocation command,
@@ -93,11 +97,10 @@ int hfi_dlid_reloc_check_entry(u64 val)
 }
 
 /* Format DLID relocation table message and write it to the command queue */
-static int hfi_write_dlid_reloc_cmd(struct hfi_ctx *ctx,
+static int hfi_write_dlid_reloc_cmd(struct hfi_devdata *dd,
 				    u32 dlid_base, u32 count,
 				    u64 *dlid_entries_ptr)
 {
-	struct hfi_devdata *dd = ctx->devdata;
 	union hfi_tx_dlid_reloctable_update_t dlid_reloc_cmd;
 	u16 num_entries;
 	u16 cmd_slots;
@@ -169,10 +172,10 @@ int hfi_dlid_assign(struct hfi_ctx *ctx,
 
 	WARN_ON(!capable(CAP_SYS_ADMIN));
 
-	mutex_lock(&ctx->dlid_mutex);
+	mutex_lock(&ctx->res.res_mutex);
 
 	/* can only write DLID mapping once */
-	if (ctx->dlid_base != HFI_LID_NONE) {
+	if (ctx->res.dlid_base != HFI_LID_NONE) {
 		ret = -EPERM;
 		goto unlock;
 	}
@@ -184,52 +187,54 @@ int hfi_dlid_assign(struct hfi_ctx *ctx,
 	if (dlid_assign->dlid_base == HFI_LID_ANY) {
 		u32 lid_part_size = HFI_DLID_TABLE_SIZE / HFI_TPID_ENTRIES;
 
-		if (!IS_PID_VIRTUALIZED(ctx) ||
+		if (!IS_PID_VIRTUALIZED(&ctx->res) ||
 		    dlid_assign->count > lid_part_size) {
 			ret = -EINVAL;
 			goto unlock;
 		}
-		dlid_assign->dlid_base = ctx->tpid_idx * lid_part_size;
+		dlid_assign->dlid_base = ctx->res.tpid_idx * lid_part_size;
 	}
 
 	/* write DLID relocation table */
-	ret = hfi_write_dlid_reloc_cmd(ctx, dlid_assign->dlid_base,
+	ret = hfi_write_dlid_reloc_cmd(ctx->devdata, dlid_assign->dlid_base,
 				       dlid_assign->count,
 				       dlid_assign->dlid_entries_ptr);
 	if (ret < 0)
 		goto unlock;
 
-	ctx->dlid_base = dlid_assign->dlid_base;
-	ctx->mode |= HFI_CTX_MODE_LID_VIRTUALIZED;
+	ctx->res.dlid_base = dlid_assign->dlid_base;
+	ctx->res.mode |= HFI_CTX_MODE_LID_VIRTUALIZED;
 
 unlock:
-	mutex_unlock(&ctx->dlid_mutex);
+	mutex_unlock(&ctx->res.res_mutex);
 	return ret;
 }
 
 int hfi_dlid_release(struct hfi_ctx *ctx)
 {
+	struct hfi_devdata *dd = ctx->devdata;
+	struct hfi_job_res *res = &ctx->res;
 	int ret;
 
 	WARN_ON(!capable(CAP_SYS_ADMIN));
 
-	mutex_lock(&ctx->dlid_mutex);
+	mutex_lock(&res->res_mutex);
 
-	if (ctx->dlid_base == HFI_LID_NONE) {
+	if (res->dlid_base == HFI_LID_NONE) {
 		ret = -EINVAL;
 		goto unlock;
 	}
 
-	ret = hfi_write_dlid_reloc_cmd(ctx, ctx->dlid_base,
-				       ctx->lid_count, NULL);
+	ret = hfi_write_dlid_reloc_cmd(dd, res->dlid_base,
+				       res->lid_count, NULL);
 	if (ret < 0)
 		goto unlock;
 
-	ctx->dlid_base = HFI_LID_NONE;
-	ctx->mode &= ~HFI_CTX_MODE_LID_VIRTUALIZED;
+	res->dlid_base = HFI_LID_NONE;
+	res->mode &= ~HFI_CTX_MODE_LID_VIRTUALIZED;
 
 unlock:
-	mutex_unlock(&ctx->dlid_mutex);
+	mutex_unlock(&res->res_mutex);
 	return ret;
 }
 
@@ -263,21 +268,21 @@ int hfi_ctx_set_allowed_uids(struct hfi_ctx *ctx, u32 *auth_uid,
 	if (ret < 0)
 		return ret;
 
-	ctx->auth_mask = 0;
+	ctx->res.auth_mask = 0;
 	/* store AUTH UIDs in hfi_ctx, ensure unused ones are cleared */
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
 		if (i < num_uids && auth_uid[i]) {
-			ctx->auth_mask |= (1 << i);
-			ctx->auth_uid[i] = auth_uid[i];
+			ctx->res.auth_mask |= (1 << i);
+			ctx->res.auth_uid[i] = auth_uid[i];
 		} else {
-			ctx->auth_uid[i] = 0;
+			ctx->res.auth_uid[i] = 0;
 		}
 	}
 
 	/* policy is that first UID must be set if UIDs are supplied */
-	if (ctx->auth_mask && !ctx->auth_uid[0]) {
-		ctx->auth_mask = 0;
-		memset(&ctx->auth_uid, 0, sizeof(ctx->auth_uid));
+	if (ctx->res.auth_mask && !ctx->res.auth_uid[0]) {
+		ctx->res.auth_mask = 0;
+		memset(&ctx->res.auth_uid, 0, sizeof(ctx->res.auth_uid));
 		return -EINVAL;
 	}
 
@@ -291,7 +296,7 @@ int hfi_ctx_set_virtual_pid_range(struct hfi_ctx *ctx)
 	int tpid_idx, i, ret = 0;
 
 	/* RM must have set at least one UID in order to program VTPID */
-	if (!ctx->auth_mask)
+	if (!ctx->res.auth_mask)
 		return -EINVAL;
 
 	/* Find if we have available TPID_CAM entry, first verify is unique */
@@ -315,30 +320,29 @@ idr_done:
 		return ret;
 
 	/* program TPID_CAM for our reserved PID range */
-	hfi_tpid_enable(dd, tpid_idx, ctx->pid_base, TPID_UID(ctx));
-	ctx->tpid_idx = tpid_idx;
+	hfi_tpid_enable(dd, tpid_idx, ctx->res.pid_base, TPID_UID(ctx));
+	ctx->res.tpid_idx = tpid_idx;
 	/*
 	 * inform user which NIs are enabled for TPID_CAM
 	 * TODO - driver doesn't yet allow disabling for a given NI
 	 */
-	ctx->mode |= HFI_CTX_MODE_VTPID_MATCHING;
-	ctx->mode |= HFI_CTX_MODE_VTPID_NONMATCHING;
+	ctx->res.mode |= HFI_CTX_MODE_VTPID_MATCHING;
+	ctx->res.mode |= HFI_CTX_MODE_VTPID_NONMATCHING;
 
 	return 0;
 }
 
-void hfi_ctx_unset_virtual_pid_range(struct hfi_ctx *ctx)
+void hfi_ctx_unset_virtual_pid_range(struct hfi_devdata *dd,
+				     struct hfi_job_res *res)
 {
-	struct hfi_devdata *dd = ctx->devdata;
-
-	if (!IS_PID_VIRTUALIZED(ctx))
+	if (!IS_PID_VIRTUALIZED(res))
 		return;
 
-	hfi_tpid_disable(dd, ctx->tpid_idx);
+	hfi_tpid_disable(dd, res->tpid_idx);
 
 	spin_lock(&dd->ptl_lock);
-	idr_remove(&dd->ptl_tpid, ctx->tpid_idx);
+	idr_remove(&dd->ptl_tpid, res->tpid_idx);
 	spin_unlock(&dd->ptl_lock);
-	ctx->mode &= ~HFI_CTX_MODE_VTPID_MATCHING;
-	ctx->mode &= ~HFI_CTX_MODE_VTPID_NONMATCHING;
+	res->mode &= ~HFI_CTX_MODE_VTPID_MATCHING;
+	res->mode &= ~HFI_CTX_MODE_VTPID_NONMATCHING;
 }

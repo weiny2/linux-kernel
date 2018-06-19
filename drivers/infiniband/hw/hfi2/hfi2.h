@@ -159,10 +159,6 @@ enum {
 	 ((ctx)->pid >= HFI_PID_BYPASS_BASE) && \
 	 ((ctx)->pid < HFI_PID_BYPASS_BASE + HFI_NUM_BYPASS_PIDS))
 
-#define IS_PID_VIRTUALIZED(ctx) \
-	((ctx)->mode & (HFI_CTX_MODE_VTPID_MATCHING | \
-			HFI_CTX_MODE_VTPID_NONMATCHING))
-
 /* FXRTODO: based on 16bit (9B) LID */
 #define HFI_MULTICAST_LID_BASE	0xC000
 /* Maximum number of traffic and message classes supported */
@@ -1317,7 +1313,8 @@ void hfi_ctx_set_qp_table(struct hfi_devdata *dd, struct hfi_ctx *rx_ctx[],
 #ifdef CONFIG_HFI2_STLNP
 int hfi_ctx_set_allowed_uids(struct hfi_ctx *ctx, u32 *auth_uid, u8 num_uids);
 int hfi_ctx_set_virtual_pid_range(struct hfi_ctx *ctx);
-void hfi_ctx_unset_virtual_pid_range(struct hfi_ctx *ctx);
+void hfi_ctx_unset_virtual_pid_range(struct hfi_devdata *dd,
+				     struct hfi_job_res *res);
 int hfi_dlid_assign(struct hfi_ctx *ctx,
 		    struct hfi_dlid_assign_args *dlid_assign);
 int hfi_dlid_release(struct hfi_ctx *ctx);

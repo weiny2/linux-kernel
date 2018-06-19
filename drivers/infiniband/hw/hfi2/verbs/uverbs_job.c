@@ -68,8 +68,8 @@ bool hfi_job_init(struct hfi_ctx *ctx, u16 res_mode, u64 cookie)
 	struct ib_ujob_object *tmp_obj;
 	u16 sid = task_session_vnr(current);
 
-	ctx->dlid_base = HFI_LID_NONE;
-	ctx->pid_base = HFI_PID_NONE;
+	ctx->res.dlid_base = HFI_LID_NONE;
+	ctx->res.pid_base = HFI_PID_NONE;
 
 	/* search job_list for PID reservation to inherit */
 	/* TODO - may need to implement reference count */
@@ -92,26 +92,27 @@ bool hfi_job_init(struct hfi_ctx *ctx, u16 res_mode, u64 cookie)
 			inherit = false;
 
 		if (inherit) {
-			ctx->dlid_base = tmp_ctx->dlid_base;
-			ctx->lid_offset = tmp_ctx->lid_offset;
-			ctx->lid_count = tmp_ctx->lid_count;
-			ctx->pid_base = tmp_ctx->pid_base;
-			ctx->pid_count = tmp_ctx->pid_count;
-			ctx->pid_total = tmp_ctx->pid_total;
-			ctx->mode = tmp_ctx->mode;
-			memcpy(ctx->auth_uid, tmp_ctx->auth_uid,
-			       sizeof(ctx->auth_uid));
-			ctx->auth_mask = tmp_ctx->auth_mask;
+			ctx->res.dlid_base = tmp_ctx->res.dlid_base;
+			ctx->res.lid_offset = tmp_ctx->res.lid_offset;
+			ctx->res.lid_count = tmp_ctx->res.lid_count;
+			ctx->res.pid_base = tmp_ctx->res.pid_base;
+			ctx->res.pid_count = tmp_ctx->res.pid_count;
+			ctx->res.pid_total = tmp_ctx->res.pid_total;
+			ctx->mode = tmp_ctx->res.mode;
+			memcpy(ctx->res.auth_uid, tmp_ctx->res.auth_uid,
+			       sizeof(ctx->res.auth_uid));
+			ctx->res.auth_mask = tmp_ctx->res.auth_mask;
 			/*
 			 * If auth UIDs are set by the resource manager, we
 			 * replace the default UID (ctx->ptl_uid) with the
 			 * first UID from this set.
 			 */
-			if (ctx->auth_mask)
-				ctx->ptl_uid = ctx->auth_uid[0];
+			if (ctx->res.auth_mask)
+				ctx->ptl_uid = ctx->res.auth_uid[0];
 			pr_info("joined PID group [%u - %u] tag (%u) UID %d\n",
-				tmp_ctx->pid_base,
-				tmp_ctx->pid_base + tmp_ctx->pid_count - 1,
+				tmp_ctx->res.pid_base,
+				tmp_ctx->res.pid_base +
+				tmp_ctx->res.pid_count - 1,
 				sid, ctx->ptl_uid);
 			break;
 		}
@@ -160,14 +161,14 @@ int hfi_job_info(struct hfi_job_info *job_info)
 
 		if ((res_mode == HFI_JOB_RES_SESSION) &&
 		    (task_session_vnr(current) == tmp_obj->sid)) {
-			job_info->dlid_base = tmp_ctx->dlid_base;
-			job_info->lid_offset = tmp_ctx->lid_offset;
-			job_info->lid_count = tmp_ctx->lid_count;
-			job_info->pid_base = tmp_ctx->pid_base;
-			job_info->pid_count = tmp_ctx->pid_count;
-			job_info->pid_total = tmp_ctx->pid_total;
-			job_info->pid_mode = tmp_ctx->mode;
-			memcpy(job_info->auth_uid, tmp_ctx->auth_uid,
+			job_info->dlid_base = tmp_ctx->res.dlid_base;
+			job_info->lid_offset = tmp_ctx->res.lid_offset;
+			job_info->lid_count = tmp_ctx->res.lid_count;
+			job_info->pid_base = tmp_ctx->res.pid_base;
+			job_info->pid_count = tmp_ctx->res.pid_count;
+			job_info->pid_total = tmp_ctx->res.pid_total;
+			job_info->pid_mode = tmp_ctx->res.mode;
+			memcpy(job_info->auth_uid, tmp_ctx->res.auth_uid,
 			       sizeof(job_info->auth_uid));
 		}
 	}
@@ -182,8 +183,8 @@ int hfi_job_setup(struct hfi_ctx *ctx, struct hfi_job_setup_args *job_setup)
 	int ret;
 	u16 pid_base;
 
-	ctx->dlid_base = HFI_LID_NONE;
-	ctx->pid_base = HFI_PID_NONE;
+	ctx->res.dlid_base = HFI_LID_NONE;
+	ctx->res.pid_base = HFI_PID_NONE;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
@@ -209,25 +210,25 @@ int hfi_job_setup(struct hfi_ctx *ctx, struct hfi_job_setup_args *job_setup)
 			      job_setup->pid_align, job_setup->flags);
 	if (ret)
 		goto done;
-	ctx->pid_base = pid_base;
-	ctx->pid_count = job_setup->pid_count;
+	ctx->res.pid_base = pid_base;
+	ctx->res.pid_count = job_setup->pid_count;
 
 	/*
 	 * Store other resource manager parameters
 	 * These are to assist the application in computing hfi_process_t
 	 * for target endpoints when LIDs and PIDs are virtualized.
 	 */
-	ctx->pid_total = job_setup->pid_total;
-	ctx->lid_offset = job_setup->lid_offset;
-	ctx->lid_count = job_setup->lid_count;
+	ctx->res.pid_total = job_setup->pid_total;
+	ctx->res.lid_offset = job_setup->lid_offset;
+	ctx->res.lid_count = job_setup->lid_count;
 
 	obj->job_res_mode = job_setup->res_mode;
 	obj->job_res_cookie = job_setup->res_cookie;
 	obj->sid = task_session_vnr(current);
 
 	pr_info("created PID group [%u - %u] UID [%u] tag (%u:%u)\n",
-		ctx->pid_base, ctx->pid_base + ctx->pid_count - 1,
-		ctx->auth_uid[0], obj->job_res_mode, obj->sid);
+		ctx->res.pid_base, ctx->res.pid_base + ctx->res.pid_count - 1,
+		ctx->res.auth_uid[0], obj->job_res_mode, obj->sid);
 done:
 	return ret;
 #endif
@@ -251,9 +252,9 @@ void hfi_job_free(struct hfi_ctx *ctx)
 	obj = container_of(ctx->uobject, typeof(*obj), uobject);
 	if (!list_empty(&obj->obj_list)) {
 		pr_info("release PID group [%u - %u] count %u tag (%u,%u)\n",
-			ctx->pid_base,
-			ctx->pid_base + ctx->pid_count - 1,
-			ctx->pid_count, obj->sid, ctx->pid);
+			ctx->res.pid_base,
+			ctx->res.pid_base + ctx->res.pid_count - 1,
+			ctx->res.pid_count, obj->sid, ctx->pid);
 
 		/* release PID reservation */
 		down_write(&hfi_job_sem);
@@ -263,11 +264,11 @@ void hfi_job_free(struct hfi_ctx *ctx)
 
 		/* clear DLID entries */
 		hfi_dlid_release(ctx);
-	} else if (ctx->pid_count) {
+	} else if (ctx->res.pid_count) {
 		/* not reservation owner, just cleanup */
-		ctx->pid_base = HFI_PID_NONE;
-		ctx->pid_count = 0;
-		ctx->dlid_base = HFI_LID_NONE;
+		ctx->res.pid_base = HFI_PID_NONE;
+		ctx->res.pid_count = 0;
+		ctx->res.dlid_base = HFI_LID_NONE;
 	}
 #endif
 }
@@ -314,7 +315,7 @@ int hfi2_job_setup_handler(struct ib_device *ib_dev,
 	if (ret)
 		goto err_job_setup;
 
-	pid_base = ctx->pid_base;
+	pid_base = ctx->res.pid_base;
 
 	down_write(&hfi_job_sem);
 	/* insert into job_list (active job state) */
@@ -408,7 +409,7 @@ int hfi2_dlid_assign_handler(struct ib_device *ib_dev,
 	if (ret)
 		return -EINVAL;
 
-	if (dlid_assign.count != ctx->lid_count)
+	if (dlid_assign.count != ctx->res.lid_count)
 		return -EINVAL;
 
 	dlid_ptr_user = dlid_assign.dlid_entries_ptr;

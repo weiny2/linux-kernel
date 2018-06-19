@@ -125,8 +125,8 @@ static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
 				   ctx->pid,
 				   ctx->trig_op_size);
 	resp.pid = ctx->pid;
-	resp.pid_base = ctx->pid_base;
-	resp.pid_count = ctx->pid_count;
+	resp.pid_base = ctx->res.pid_base;
+	resp.pid_count = ctx->res.pid_count;
 	resp.pid_mode = ctx->mode;
 	if (IS_PID_BYPASS(ctx))
 		/* For PSM, return JKEY to the user */
