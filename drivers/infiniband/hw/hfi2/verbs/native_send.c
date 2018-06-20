@@ -691,7 +691,7 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_send_wr *wr,
 			     bool signal)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
-	struct hfi_ctx  *hw_ctx;
+	struct hfi_ctx *rkey_ctx;
 	unsigned long flags;
 	u64 done = 0;
 	int ret;
@@ -700,6 +700,11 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_send_wr *wr,
 
 	if (!key || IS_INVALID_KEY(key))
 		return 0;
+
+	rkey_ctx = hfi2_rkey_to_hw_ctx(ctx, key);
+	if (!rkey_ctx)
+		return -EINVAL;
+
 	mr = _hfi2_find_mr_from_rkey(ctx, key);
 	if (!mr)
 		return 0;
@@ -710,14 +715,13 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_send_wr *wr,
 	atomic_set(&mr->lkey_invalid, 1);
 	rvt_put_mr(mr);
 
-	hw_ctx = ctx->hw_ctx;
 	spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
 	ret = hfi_rkey_invalidate(&ctx->cmdq->rx, key, (u64)&done);
 	spin_unlock_irqrestore(&ctx->cmdq->rx.lock, flags);
 	if (ret != 0)
 		return ret;
 
-	ret = hfi_eq_poll_cmd_complete(ctx->hw_ctx, &done);
+	ret = hfi_eq_poll_cmd_complete(rkey_ctx, &done);
 	if (ret != 0)
 		return ret;
 	/* returns err code or nslots required to post on tx_cmdq */

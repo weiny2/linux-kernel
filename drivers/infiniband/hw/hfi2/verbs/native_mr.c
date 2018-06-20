@@ -61,6 +61,22 @@
 #define IB_REMOTE_FLAGS	(IB_ACCESS_REMOTE_WRITE | IB_ACCESS_REMOTE_READ | \
 			 IB_ACCESS_REMOTE_ATOMIC)
 
+/* TODO - Consider implementing new data structure to optimize this */
+struct hfi_ctx *
+hfi2_rkey_to_hw_ctx(struct hfi_ibcontext *ctx, uint32_t rkey)
+{
+	struct hfi_ctx *hw_ctx = NULL;
+	int i;
+
+	for (i = 0; i < ctx->num_ctx; i++) {
+		if (RKEY_PID(rkey) == ctx->hw_ctx[i]->pid) {
+			hw_ctx = ctx->hw_ctx[i];
+			break;
+		}
+	}
+	return hw_ctx;
+}
+
 int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region)
 {
 	struct hfi_ibcontext *ctx = NULL;
@@ -129,7 +145,7 @@ int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region)
 int hfi2_free_lkey(struct rvt_mregion *mr)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(mr->pd);
-	struct hfi_ctx *hw_ctx;
+	struct hfi_ctx *rkey_ctx = NULL;
 	unsigned long flags;
 	int ret;
 	u64 done = 0;
@@ -139,17 +155,19 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 		return -EINVAL;
 
 	/* Return RKEY */
-	if (!ctx->lkey_only && !IS_INVALID_KEY(mr->rkey)) {
+	if (!ctx->lkey_only && !IS_INVALID_KEY(mr->rkey))
+		rkey_ctx = hfi2_rkey_to_hw_ctx(ctx, mr->rkey);
+	if (rkey_ctx) {
 		ret = hfi2_push_key(&ctx->rkey_ks, mr->rkey);
 		/* If this fails we've somehow leaked an RKEY, but is freed */
 		WARN_ON(ret != 0);
-		hw_ctx = ctx->hw_ctx;
+
 		spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
 		ret = hfi_rkey_invalidate(&ctx->cmdq->rx, mr->rkey, (u64)&done);
 		spin_unlock_irqrestore(&ctx->cmdq->rx.lock, flags);
 		WARN_ON(ret != 0);
-		/* TODO - extract hw_ctx based on RKEY_PID(rkey) */
-		ret = hfi_eq_poll_cmd_complete(ctx->hw_ctx, &done);
+
+		ret = hfi_eq_poll_cmd_complete(rkey_ctx, &done);
 		WARN_ON(ret != 0);
 	}
 
@@ -177,7 +195,7 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 int hfi2_native_reg_mr(struct rvt_mregion *mr)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(mr->pd);
-	struct hfi_ctx *hw_ctx;
+	struct hfi_ctx *rkey_ctx;
 	union hfi_process pt;
 	int ret;
 	u32 me_options, pd_handle;
@@ -206,8 +224,9 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 	pt.phys.slid = PTL_LID_ANY;
 	pt.phys.ipid = PTL_PID_ANY;
 
-	/* TODO - extract hw_ctx based on RKEY_PID(rkey) */
-	hw_ctx = ctx->hw_ctx;
+	rkey_ctx = hfi2_rkey_to_hw_ctx(ctx, mr->rkey);
+	if (!rkey_ctx)
+		return -EINVAL;
 
 	if ((mr->segs_per_map == mr->max_segs) &&
 	    mr->map[0]->segs[0].length < mr->length) {
@@ -232,7 +251,7 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 		ret = hfi_rkey_write(&ctx->cmdq->rx, NATIVE_NI,
 				     (const void *)mr->iova,
 				     (struct hfi_iovec *)mr->map[0], mr->length,
-				     pt, hw_ctx->ptl_uid,
+				     pt, rkey_ctx->ptl_uid,
 				     pd_handle, mr->rkey, me_options,
 				     HFI_CT_NONE, (u64)&done);
 	} else {
@@ -241,7 +260,7 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 		ret = hfi_rkey_write(&ctx->cmdq->rx, NATIVE_NI,
 				     (const void *)mr->iova,
 				     mr->map[0]->segs[0].vaddr,
-				     mr->length, pt, hw_ctx->ptl_uid,
+				     mr->length, pt, rkey_ctx->ptl_uid,
 				     pd_handle, mr->rkey, me_options,
 				     HFI_CT_NONE, (u64)&done);
 	}
@@ -249,7 +268,7 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 	if (ret)
 		return ret;
 
-	ret = hfi_eq_poll_cmd_complete(hw_ctx, &done);
+	ret = hfi_eq_poll_cmd_complete(rkey_ctx, &done);
 	return ret;
 }
 

@@ -135,6 +135,26 @@ const u8 hfi_ft_ib_status[16] = {
 	[PTL_NI_UNSUPPORTED] = IB_WC_REM_OP_ERR,
 };
 
+/* TODO - implement QP to PID mapping algorithm for the two functions below.
+ *        One idea is to just dynamically assign a new PID on-demand as
+ *        we exhaust MEs that will be needed for the RQ/SRQ.
+ */
+static struct hfi_ctx *
+hfi2_assign_hw_ctx_to_rq(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
+{
+	if (hfi2_add_initial_hw_ctx(ctx))
+		return NULL;
+	return ctx->hw_ctx[0];
+}
+
+static struct hfi_ctx *
+hfi2_assign_hw_ctx_to_srq(struct hfi_ibcontext *ctx, struct rvt_srq *srq)
+{
+	if (hfi2_add_initial_hw_ctx(ctx))
+		return NULL;
+	return ctx->hw_ctx[0];
+}
+
 static int hfi_ib_eq_setup(struct hfi_ctx *hw_ctx, struct rvt_cq *cq,
 			   struct hfi_ibeq **hw_eq)
 {
@@ -343,6 +363,8 @@ void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, void *udata,
 /* Free all CMDQs, HW contexts, and KEY stacks. */
 void hfi2_native_dealloc_ucontext(struct hfi_ibcontext *ctx)
 {
+	int i;
+
 	if (ctx->cmdq) {
 		hfi_cmdq_unmap(ctx->cmdq);
 		hfi_cmdq_release(ctx->cmdq);
@@ -358,10 +380,11 @@ void hfi2_native_dealloc_ucontext(struct hfi_ibcontext *ctx)
 		ctx->tx_qp_flow_ctl = NULL;
 	}
 	hfi2_free_all_keys(ctx);
-	if (ctx->hw_ctx) {
-		hfi2_remove_hw_context(ctx->hw_ctx);
-		ctx->hw_ctx = NULL;
+	for (i = 0; i < ctx->num_ctx; i++) {
+		hfi2_remove_hw_context(ctx->hw_ctx[i]);
+		ctx->hw_ctx[i] = NULL;
 	}
+	ctx->num_ctx = 0;
 }
 
 static int hfi2_create_me_pool(struct hfi_ctx *hw_ctx)
@@ -404,7 +427,8 @@ static int hfi2_add_cmdq(struct hfi_ibcontext *ctx)
 	if (!cmdq)
 		return -ENOMEM;
 
-	ret = hfi_cmdq_assign(cmdq, ctx->hw_ctx, NULL);
+	/* TODO - need PID_MASK integration to remove ctx->hw_ctx[0] usage */
+	ret = hfi_cmdq_assign(cmdq, ctx->hw_ctx[0], NULL);
 	if (ret < 0)
 		goto err;
 	ctx->cmdq = cmdq;
@@ -432,8 +456,7 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 	struct hfi_ctx *hw_ctx = NULL;
 	int ret;
 
-	/* TODO - only support single context now */
-	if (ctx->num_ctx != 0)
+	if (ctx->num_ctx >= HFI_MAX_IB_HW_CONTEXTS)
 		return NULL;
 
 	hw_ctx = kzalloc(sizeof(*hw_ctx), GFP_KERNEL);
@@ -459,11 +482,11 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 		goto err_post_attach;
 
 	/*
-	 * Store pointer to the hardware context state
-	 * TODO - update here for multiple PIDs
+	 * Store pointer to the hardware context state,
+	 * this should be last so that teardown works correctly.
+	 * Callers currently hold ctx->ctx_lock.
 	 */
-	ctx->num_ctx = 1;
-	ctx->hw_ctx = hw_ctx;
+	ctx->hw_ctx[ctx->num_ctx++] = hw_ctx;
 
 	return hw_ctx;
 
@@ -901,13 +924,14 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 			if (!priv->wc)
 				goto qp_write_err;
 		}
-		/* Create initial resources when first QP enters RTR */
-		ret = hfi2_add_initial_hw_ctx(ctx);
-		if (ret != 0)
-			goto qp_write_err;
 
-		/* TODO add multiple PID support here */
-		hw_ctx = ctx->hw_ctx;
+		/*
+		 * Create initial HW resources if not done, and
+		 * assign a PID to allocate RQ resources from.
+		 */
+		hw_ctx = hfi2_assign_hw_ctx_to_rq(ctx, rvtqp);
+		if (!hw_ctx)
+			goto qp_write_err;
 
 		/* setup receive queue dedicated pool + recvq_root */
 		if (!ibqp->srq) {
@@ -934,7 +958,8 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		/* Per IBTA, we can start enqueuing to RQ at INIT */
 
 	} else if (attr_mask & IB_QP_STATE &&
-		   attr->qp_state == IB_QPS_RTR) {
+		   attr->qp_state == IB_QPS_RTR &&
+		   rvtqp->r_rq.hw_rq) {
 		struct hfi2_ibport *ibp;
 		struct hfi_e2e_conn conn;
 		struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
@@ -993,7 +1018,8 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		pr_info("native: QPN %d at RTR and enabled for Portals\n",
 			ibqp->qp_num);
 	} else if ((attr_mask & IB_QP_STATE) &&
-		   (attr->qp_state == IB_QPS_RTS)) {
+		   (attr->qp_state == IB_QPS_RTS) &&
+		   rvtqp->r_rq.hw_rq) {
 		if (ibqp->qp_type != IB_QPT_UD) {
 			struct rdma_ah_attr *ah_attr = &rvtqp->remote_ah_attr;
 			struct hfi_eq *eq = ibcq_to_rvtcq(ibqp->send_cq)->hw_send;
@@ -1010,14 +1036,16 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 						 &priv->cmd[i]);
 		}
 	} else if ((attr_mask & IB_QP_STATE) &&
-		   (attr->qp_state == IB_QPS_SQD)) {
+		   (attr->qp_state == IB_QPS_SQD) &&
+		   rvtqp->r_rq.hw_rq) {
 		/* TODO consider async worker thread */
 		ret = hfi2_sqd_async_event(ctx, rvtqp);
 		if (ret != 0)
 			goto qp_write_err;
 	} else if (attr_mask & IB_QP_STATE &&
 		    (attr->qp_state == IB_QPS_ERR ||
-		     attr->qp_state == IB_QPS_RESET)) {
+		     attr->qp_state == IB_QPS_RESET) &&
+		    rvtqp->r_rq.hw_rq) {
 		struct hfi_rq_wc *hfi_wc;
 		struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
 		unsigned long flags;
@@ -1354,17 +1382,19 @@ int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 	 */
 	if (!srq->rq.hw_rq) {
 		struct hfi_ibcontext *ctx = obj_to_ibctx(&srq->ibsrq);
+		struct hfi_ctx *hw_ctx;
 
 		/* if context doesn't support native SRQ, use legacy SRQ */
 		if (!ctx || !ctx->supports_native)
 			return -EACCES;
 
-		ret = hfi2_add_initial_hw_ctx(ctx);
-		if (ret != 0)
-			return ret;
+		hw_ctx = hfi2_assign_hw_ctx_to_srq(ctx, srq);
+		/* TODO - on error, fallback to legacy? */
+		if (!hw_ctx)
+			return -EBUSY;
 
 		/* TODO - could use SRQ max_wr attribute */
-		ret = hfi_init_hw_rq(ctx, &srq->rq, ctx->hw_ctx,
+		ret = hfi_init_hw_rq(ctx, &srq->rq, hw_ctx,
 				     DEDICATED_RQ_POOL_SIZE);
 		if (ret != 0)
 			return ret;

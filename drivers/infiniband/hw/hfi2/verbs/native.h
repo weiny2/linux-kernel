@@ -269,6 +269,7 @@ struct rvt_mregion *hfi2_find_mr_from_lkey(struct rvt_pd *pd, u32 lkey);
 struct rvt_mregion *hfi2_find_mr_from_rkey(struct rvt_pd *pd, u32 rkey);
 struct rvt_mregion *_hfi2_find_mr_from_rkey(struct hfi_ibcontext *ctx,
 					    u32 rkey);
+struct hfi_ctx *hfi2_rkey_to_hw_ctx(struct hfi_ibcontext *ctx, uint32_t rkey);
 int hfi2_native_reg_mr(struct rvt_mregion *mr);
 int hfi2_native_modify_qp(struct rvt_qp *rvtqp,
 			  struct ib_qp_attr *attr, int attr_mask,

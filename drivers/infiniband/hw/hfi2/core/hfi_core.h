@@ -73,6 +73,9 @@
 #define HFI_TS_MUTEX_LOCK(ctx)
 #define HFI_TS_MUTEX_UNLOCK(ctx)
 
+/* TODO - may remove this when supporting multiple PIDs */
+#define HFI_MAX_IB_HW_CONTEXTS	1
+
 #define HFI_LID_NONE	(__u32)(-1)
 #define HFI_PID_NONE	(__u16)(-1)
 
@@ -115,7 +118,7 @@ struct hfi_ks {
  * @num_ctx: number of associated hfi_ctx
  * @job_res_mode: mode for job_attach to lookup job reservation
  * @job_res_cookie: cookie for lookup of job reservation
- * @hw_ctx: primary hfi_ctx
+ * @hw_ctx: assigned HW contexts
  * @cmdq: Command Queues (TX and RX)
  * @ctx_lock: lock for adding/removing resources
  * @rkey_ks: RKEYs stack
@@ -134,7 +137,7 @@ struct hfi_ibcontext {
 	u16 num_ctx;
 	u16 job_res_mode;
 	u64 job_res_cookie;
-	struct hfi_ctx	*hw_ctx;
+	struct hfi_ctx	*hw_ctx[HFI_MAX_IB_HW_CONTEXTS];
 	struct hfi_cmdq_pair *cmdq;
 	struct mutex	ctx_lock;
 	struct hfi_ks	rkey_ks;
