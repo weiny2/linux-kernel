@@ -135,7 +135,8 @@ const u8 hfi_ft_ib_status[16] = {
 	[PTL_NI_UNSUPPORTED] = IB_WC_REM_OP_ERR,
 };
 
-static int hfi_ib_eq_setup(struct hfi_ctx *hw_ctx, struct rvt_cq *cq)
+static int hfi_ib_eq_setup(struct hfi_ctx *hw_ctx, struct rvt_cq *cq,
+			   struct hfi_ibeq **hw_eq)
 {
 	struct opa_ev_assign eq_alloc = {0};
 	struct hfi_ibeq *ibeq;
@@ -187,6 +188,9 @@ static int hfi_ib_eq_setup(struct hfi_ctx *hw_ctx, struct rvt_cq *cq)
 		spin_unlock_irqrestore(&cq->lock, flags);
 	}
 
+	if (hw_eq)
+		*hw_eq = ibeq;
+
 	return 0;
 
 arm_err:
@@ -215,7 +219,7 @@ int hfi2_create_qp_sync(struct hfi_ibcontext *ctx, struct hfi_ctx *hw_ctx)
 			    &ctx->ibuc, &attr);
 	if (!ibcq)
 		return -ENOMEM;
-	ret = hfi_ib_eq_setup(hw_ctx, ibcq_to_rvtcq(ibcq));
+	ret = hfi_ib_eq_setup(hw_ctx, ibcq_to_rvtcq(ibcq), NULL);
 	if (ret != 0)
 		goto err_sync_cq;
 	ret = ib_req_notify_cq(ibcq, IB_CQ_NEXT_COMP);
@@ -655,9 +659,7 @@ int hfi_format_qp_write(struct rvt_qp *qp,
 	struct hfi2_qp_priv *qp_priv = qp->priv;
 	union ptentry_verbs qp_state;
 	u32 pd_handle;
-	struct rvt_cq *cq = ibcq_to_rvtcq(ibqp->recv_cq);
-	struct hfi_ibeq *eq = cq ? list_first_entry(&cq->hw_cq, struct hfi_ibeq,
-						    hw_cq) : NULL;
+	struct hfi_ibeq *eq = qp_priv->recv_eq;
 
 	pd_handle = to_pd_handle(ibqp->pd);
 	/* setup qp state */
@@ -803,6 +805,32 @@ int hfi2_sqd_async_event(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
 	return hfi2_fence(ctx, qp, &priv->outstanding_cnt);
 }
 
+static inline
+void *hfi2_recv_cq_find_eq(struct rvt_qp *qp, struct rvt_cq *cq)
+{
+	struct hfi_ibeq *ibeq;
+	struct hfi_rq *rq = qp->r_rq.hw_rq;
+	void *ret = NULL;
+	unsigned long flags;
+
+	spin_lock_irqsave(&cq->lock, flags);
+
+	if (list_empty(&cq->hw_cq))
+		goto exit;
+
+	list_for_each_entry(ibeq, &cq->hw_cq, hw_cq) {
+		if (ibeq != cq->hw_send && ibeq->eq.ctx == rq->hw_ctx) {
+			ret = ibeq;
+			goto exit;
+		}
+	}
+
+exit:
+	spin_unlock_irqrestore(&cq->lock, flags);
+
+	return ret;
+}
+
 int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 			       int attr_mask)
 {
@@ -884,18 +912,23 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		 * for responding to RNR with exception packet.
 		 */
 		cq = ibcq_to_rvtcq(ibqp->send_cq);
-		if (cq && list_empty(&cq->hw_cq)) {
-			ret = hfi_ib_eq_setup(rq->hw_ctx, cq);
+		if (cq && !cq->hw_send) {
+			ret = hfi_ib_eq_setup(rq->hw_ctx, cq,
+					      (struct hfi_ibeq **)&cq->hw_send);
 			if (ret != 0)
 				goto qp_write_err;
 		}
 
 		/* create recv EQ if first use of CQ */
 		cq = ibcq_to_rvtcq(ibqp->recv_cq);
-		if (cq && list_empty(&cq->hw_cq)) {
-			ret = hfi_ib_eq_setup(rq->hw_ctx, cq);
-			if (ret != 0)
-				goto qp_write_err;
+		if (cq) {
+			priv->recv_eq = hfi2_recv_cq_find_eq(rvtqp, cq);
+			if (!priv->recv_eq) {
+				ret = hfi_ib_eq_setup(rq->hw_ctx, cq,
+						      &priv->recv_eq);
+				if (ret != 0)
+					goto qp_write_err;
+			}
 		}
 
 		/* store pkey for native_post_send */
@@ -924,22 +957,17 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 	} else if ((attr_mask & IB_QP_STATE) &&
 		   (attr->qp_state == IB_QPS_RTS)) {
 		if (ibqp->qp_type != IB_QPT_UD) {
-			struct hfi_rq *rq = rvtqp->r_rq.hw_rq;
 			struct rdma_ah_attr *ah_attr = &rvtqp->remote_ah_attr;
+			struct hfi_eq *eq = ibcq_to_rvtcq(ibqp->send_cq)->hw_send;
 
 			/* loop and preformat qp->cmd with connection state */
-			cq = ibcq_to_rvtcq(ibqp->send_cq);
 			for (i = 0; i < rvtqp->s_size; i++)
-				hfi_preformat_rc(rq->hw_ctx,
+				hfi_preformat_rc(eq->ctx,
 						 rdma_ah_get_dlid(ah_attr),
 						 NATIVE_RC, ah_attr->sl,
 						 priv->pkey,
 						 rdma_ah_get_path_bits(ah_attr),
-						 NATIVE_AUTH_IDX,
-						 (struct hfi_eq *)
-						 list_first_entry(&cq->hw_cq,
-								  struct hfi_ibeq,
-								  hw_cq),
+						 NATIVE_AUTH_IDX, eq,
 						 ibqp->qp_num,
 						 &priv->cmd[i]);
 		}

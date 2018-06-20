@@ -90,6 +90,7 @@ struct rvt_cq {
 	void *eqm;
 	struct list_head poll_qp;
 	struct list_head hw_cq;
+	void *hw_send;
 };
 
 static inline struct rvt_cq *ibcq_to_rvtcq(struct ib_cq *ibcq)

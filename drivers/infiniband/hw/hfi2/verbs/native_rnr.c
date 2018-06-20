@@ -121,6 +121,7 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	struct hfi2_ibport *ibp = ibd->pport;
 	struct hfi2_qp_priv *priv;
 	struct rvt_cq *cq;
+	struct hfi_ibeq *ibeq;
 	int limit = 0;
 	unsigned long flags;
 
@@ -138,6 +139,7 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 
 	cq = ibcq_to_rvtcq(qp->ibqp.send_cq);
 	spin_lock_irqsave(&cq->lock, flags);
+	ibeq = cq->hw_send;
 
 	/* Lock QP  */
 	spin_lock(&qp->s_lock);
@@ -153,11 +155,7 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	/* Walk EQs to find all commands that need to be retransmitted */
 	for (i = 0; outstanding_cmd; ++i) {
 		do {
-			ret = hfi_eq_peek_nth((struct hfi_eq *)
-					      list_first_entry(&cq->hw_cq,
-							       struct hfi_ibeq,
-							       hw_cq),
-					      &eq_p, i,
+			ret = hfi_eq_peek_nth(&ibeq->eq, &eq_p, i,
 					      &dropped);
 			if (ret < 0) {
 				spin_unlock(&qp->s_lock);

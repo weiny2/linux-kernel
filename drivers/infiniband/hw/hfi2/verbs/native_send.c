@@ -182,9 +182,7 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 	struct ib_sge *sge = wr->wr.sg_list;
 	struct rvt_mregion *mr;
 	struct hfi2_qp_priv *priv = qp->priv;
-	struct hfi_rq *rq = qp->r_rq.hw_rq;
-	struct rvt_cq *send_cq = ibcq_to_rvtcq(qp->ibqp.send_cq);
-	struct hfi_eq *send_eq;
+	struct hfi_eq *eq = ibcq_to_rvtcq(qp->ibqp.send_cq)->hw_send;
 	u8 op_req = hfi_wr_ud_opcode[wr->wr.opcode];
 	u32 dlid = rdma_ah_get_dlid(ah_attr);
 	u32 qkey, md_opts = 0;
@@ -194,8 +192,6 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 	u32 length = 0;
 
 	INIT_QP_EQ_VALID_SIGNAL(priv, priv->current_cidx, signal);
-	send_eq = (struct hfi_eq *)list_first_entry(&send_cq->hw_cq,
-						    struct hfi_ibeq, hw_cq);
 
 	if (wr->wr.num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
@@ -231,7 +227,7 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 		WARN_ON(in_line);
 		md_opts = PTL_IOVEC;
 		nslots = hfi_format_dma_iovec_ud(
-					rq->hw_ctx,
+					eq->ctx,
 					(void *)swqe->iov, swqe->length,
 					dlid, 1,
 					NATIVE_RC, ah_attr->sl,
@@ -242,13 +238,13 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 					qp->ibqp.qp_num,
 					wr->remote_qpn,
 					wr->wr.ex.imm_data, qkey,
-					md_opts, send_eq, PTL_CT_NONE,
+					md_opts, eq, PTL_CT_NONE,
 					tx_id, op_req, solicit,
 					swqe->num_iov, 0,
 					&cmd->dma_iovec);
 	} else if (sge->length <= HFI_TX_MAX_BUFFERED) {
 		nslots = hfi_format_buff_ud(
-					rq->hw_ctx,
+					eq->ctx,
 					start, length,
 					dlid, 0,
 					NATIVE_RC, ah_attr->sl,
@@ -259,13 +255,13 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 					qp->ibqp.qp_num,
 					wr->remote_qpn,
 					wr->wr.ex.imm_data, qkey,
-					md_opts, send_eq, PTL_CT_NONE,
+					md_opts, eq, PTL_CT_NONE,
 					tx_id, op_req, solicit, MB_OC_OK,
 					&cmd->buff_put_match);
 	} else {
 		WARN_ON(in_line);
 		nslots = hfi_format_dma_ud(
-					rq->hw_ctx,
+					eq->ctx,
 					start, length,
 					dlid, 0,
 					NATIVE_RC, ah_attr->sl,
@@ -276,7 +272,7 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 					qp->ibqp.qp_num,
 					wr->remote_qpn,
 					wr->wr.ex.imm_data, qkey,
-					md_opts, send_eq, PTL_CT_NONE,
+					md_opts, eq, PTL_CT_NONE,
 					tx_id, op_req, solicit,
 					&cmd->dma);
 	}

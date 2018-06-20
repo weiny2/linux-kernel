@@ -200,6 +200,7 @@ struct hfi2_qp_priv {
 	u8 pidex_hdr_type;
 	u32 pidex_slid;
 	u32 pidex_qpn;
+	struct hfi_ibeq *recv_eq;
 };
 
 struct hfi2_ibtx {
