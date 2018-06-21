@@ -162,11 +162,7 @@ struct hfi2_vnic_rx_queue {
  * struct hfi2_ctx_info - HFI context specific fields
  *
  * @ctx: HFI context
- * @tx_lock: Lock to synchronize access to the TX CMDQ
- * @rx_lock: Lock to synchronize access to the RX CMDQ
- * @cmdq_idx: command queue index
- * @tx: TX command queue
- * @rx: RX command queue
+ * @cmdq: TX and RX command queues
  * @buf: Array of receive buffers
  * @eq_tx: TX event handle
  * @eq_rx: RX event handle
@@ -177,11 +173,7 @@ struct hfi2_vnic_rx_queue {
  */
 struct hfi2_ctx_info {
 	struct hfi_ctx			ctx;
-	spinlock_t			tx_lock;
-	spinlock_t			rx_lock;
-	u16				cmdq_idx;
-	struct hfi_cmdq			tx;
-	struct hfi_cmdq			rx;
+	struct hfi_cmdq_pair		cmdq;
 	void				*buf[HFI2_MAX_NET_NUM_RX_BUFS];
 	struct hfi_eq			eq_tx;
 	struct hfi_eq			eq_rx;
@@ -279,7 +271,7 @@ static int hfi2_vnic_append_skb(struct hfi2_ctx_info *ctx_i, int idx)
 {
 	struct hfi2_netdev *ndev = ctx_i->ndev;
 	struct hfi_ctx *ctx = &ctx_i->ctx;
-	struct hfi_cmdq *rx = &ctx_i->rx;
+	struct hfi_cmdq *rx = &ctx_i->cmdq.rx;
 	union hfi_rx_cq_command rx_cmd;
 	int n_slots, rc;
 	u64 done = 0;
@@ -295,9 +287,9 @@ static int hfi2_vnic_append_skb(struct hfi2_ctx_info *ctx_i, int idx)
 				       (u64)&done,
 				       idx, HFI_GEN_CC, &rx_cmd);
 
-	spin_lock_irqsave(&ctx_i->rx_lock, sflags);
+	spin_lock_irqsave(&rx->lock, sflags);
 	rc = hfi_rx_command(rx, (uint64_t *)&rx_cmd, n_slots);
-	spin_unlock_irqrestore(&ctx_i->rx_lock, sflags);
+	spin_unlock_irqrestore(&rx->lock, sflags);
 	if (rc < 0) {
 		dd_dev_err(ndev->dd, "%s rc %d\n", __func__, rc);
 		return rc;
@@ -565,14 +557,14 @@ static void tx_notify_list_process(struct hfi2_ctx_info *ctx_i, bool deinit)
 {
 	unsigned long sflags;
 
-	spin_lock_irqsave(&ctx_i->tx_lock, sflags);
+	spin_lock_irqsave(&ctx_i->cmdq.tx.lock, sflags);
 	/*
 	 * Wait until there are at least 32 available slots in CMDQ before
 	 * sending notifications. Note that due to HW cq head update limiting
 	 * we might end up waiting for up to 64 available slots.
 	 * TODO: Optimize for best performance on real HW
 	 */
-	if (deinit || hfi_queue_ready(&ctx_i->tx, 32, &ctx_i->eq_tx)) {
+	if (deinit || hfi_queue_ready(&ctx_i->cmdq.tx, 32, &ctx_i->eq_tx)) {
 		while (!list_empty(&ctx_i->tx_notify_list)) {
 			struct hfi2_vnic_txreq *txreq;
 
@@ -586,7 +578,7 @@ static void tx_notify_list_process(struct hfi2_ctx_info *ctx_i, bool deinit)
 			atomic_dec(&ctx_i->tx_notify_count);
 		}
 	}
-	spin_unlock_irqrestore(&ctx_i->tx_lock, sflags);
+	spin_unlock_irqrestore(&ctx_i->cmdq.tx.lock, sflags);
 }
 
 /* Add (vdev,queue) to list of outstanding notifications */
@@ -653,9 +645,9 @@ static void hfi2_vnic_maybe_stop_tx(struct hfi2_vnic_vport_info *vinfo,
 
 	ctx_i = &ndev->eth_ctx[q_idx];
 	netif_stop_subqueue(vinfo->netdev, q_idx);
-	spin_lock_irqsave(&ctx_i->tx_lock, sflags);
-	write_avail = hfi_queue_ready(&ctx_i->tx, 1, &ctx_i->eq_tx);
-	spin_unlock_irqrestore(&ctx_i->tx_lock, sflags);
+	spin_lock_irqsave(&ctx_i->cmdq.tx.lock, sflags);
+	write_avail = hfi_queue_ready(&ctx_i->cmdq.tx, 1, &ctx_i->eq_tx);
+	spin_unlock_irqrestore(&ctx_i->cmdq.tx.lock, sflags);
 
 	if (!write_avail)
 		return;
@@ -676,7 +668,7 @@ static netdev_tx_t hfi2_netdev_start_xmit(struct sk_buff *skb,
 	struct hfi_pportdata *ppd = to_hfi_ppd(dd, vinfo->port_num);
 	struct hfi2_ctx_info *ctx_i;
 	struct hfi_ctx *ctx;
-	struct hfi_cmdq *cq;
+	struct hfi_cmdq *tx;
 	struct hfi_eq *eq;
 	unsigned long sflags;
 	struct opa_vnic_skb_mdata *mdata =
@@ -715,7 +707,7 @@ static netdev_tx_t hfi2_netdev_start_xmit(struct sk_buff *skb,
 	if (pad_len)
 		pad_len = 8 - pad_len;
 	ctx = &ctx_i->ctx;
-	cq = &ctx_i->tx;
+	tx = &ctx_i->cmdq.tx;
 	eq = &ctx_i->eq_tx;
 
 	skb_get(skb);
@@ -762,18 +754,18 @@ static netdev_tx_t hfi2_netdev_start_xmit(struct sk_buff *skb,
 					  sl, ppd->lid, HDR_16B,
 					  GENERAL_DMA, &cmd);
 	WARN_ON_ONCE(slots != 1);
-	spin_lock_irqsave(&ctx_i->tx_lock, sflags);
-	if (!hfi_queue_ready(cq, slots, eq)) {
+	spin_lock_irqsave(&tx->lock, sflags);
+	if (!hfi_queue_ready(tx, slots, eq)) {
 		dd_dev_dbg(dd, "TX send queue %d full\n", q_idx);
 		tx_notify_list_add(ctx_i, txreq, vinfo, q_idx);
 		vinfo->stats[q_idx].netstats.tx_fifo_errors++;
-		spin_unlock_irqrestore(&ctx_i->tx_lock, sflags);
+		spin_unlock_irqrestore(&tx->lock, sflags);
 		err = -EBUSY;
 	}
 	txreq->skb = skb;
 	hfi_eq_pending_inc(eq);
-	_hfi_command(cq, (u64 *)&cmd, HFI_CMDQ_TX_ENTRIES);
-	spin_unlock_irqrestore(&ctx_i->tx_lock, sflags);
+	_hfi_command(tx, (u64 *)&cmd, HFI_CMDQ_TX_ENTRIES);
+	spin_unlock_irqrestore(&tx->lock, sflags);
 	if (unlikely(err && !is_cnp_pkt)) {
 		if (err == -ENOMEM)
 			vinfo->stats[q_idx].netstats.tx_fifo_errors++;
@@ -962,7 +954,7 @@ static void hfi2_vnic_rx_isr_cb(struct hfi_eq *eq_rx, void *data)
 	struct hfi2_vnic_vport_info *vinfo = NULL;
 	void *buf;
 	unsigned long sflags;
-	struct hfi_cmdq *rx = &ctx_i->rx;
+	struct hfi_cmdq *rx = &ctx_i->cmdq.rx;
 	int len, err;
 	unsigned char *pad_info = NULL;
 	struct sk_buff *skb;
@@ -989,7 +981,7 @@ retry:
 
 		/*
 		 * In case of invalid vesw id, update the rx_bad_veswid
-		 * error count of first available vinfo.
+		 * error count of first available vinfo
 		 */
 		if (unlikely(!vinfo)) {
 			struct hfi2_vnic_vport_info *vinfo_tmp;
@@ -1055,9 +1047,9 @@ retry:
 	}
 
 pkt_drop:
-	spin_lock_irqsave(&ctx_i->rx_lock, sflags);
+	spin_lock_irqsave(&rx->lock, sflags);
 	err = hfi_pt_update_eager(ctx, rx, rhf->egrindex);
-	spin_unlock_irqrestore(&ctx_i->rx_lock, sflags);
+	spin_unlock_irqrestore(&rx->lock, sflags);
 	if (err < 0) {
 		/*
 		 * only potential error is DROPPED event on EQ0 to
@@ -1131,9 +1123,6 @@ static int hfi2_vnic_init_ctx(struct hfi2_vnic_vport_info *vinfo, int ctx_num)
 	ctx_i->ndev = vinfo->dd->vnic;
 	ctx_i->q_idx = ctx_num;
 	ctx = &ctx_i->ctx;
-	rx = &ctx_i->rx;
-	spin_lock_init(&ctx_i->tx_lock);
-	spin_lock_init(&ctx_i->rx_lock);
 	INIT_LIST_HEAD(&ctx_i->tx_notify_list);
 	hfi_ctx_init(ctx, vinfo->dd);
 	/* EEPH requires default bypass context whereas STLEEP uses RSM */
@@ -1151,12 +1140,13 @@ static int hfi2_vnic_init_ctx(struct hfi2_vnic_vport_info *vinfo, int ctx_num)
 	 * separate CMDQs for each port for scalability reasons as a
 	 * potential future performance optimization.
 	 */
-	rc = hfi_cmdq_assign(ctx, NULL, &ctx_i->cmdq_idx);
+	rc = hfi_cmdq_assign(&ctx_i->cmdq, ctx, NULL);
 	if (rc)
 		goto err;
-	rc = hfi_cmdq_map(ctx, ctx_i->cmdq_idx, &ctx_i->tx, rx);
+	rc = hfi_cmdq_map(&ctx_i->cmdq);
 	if (rc)
 		goto err1;
+	rx = &ctx_i->cmdq.rx;
 
 	/* TX EQ can be allocated per netdev */
 	eq_alloc_tx.ni = HFI_NI_BYPASS;
@@ -1176,9 +1166,9 @@ static int hfi2_vnic_init_ctx(struct hfi2_vnic_vport_info *vinfo, int ctx_num)
 	pt_alloc.eager_order = ilog2(HFI2_NET_NUM_RX_BUFS) - 2;
 	pt_alloc.eq_handle = &ctx_i->eq_rx;
 
-	spin_lock_irqsave(&ctx_i->rx_lock, flags);
+	spin_lock_irqsave(&rx->lock, flags);
 	rc = hfi_pt_alloc_eager(ctx, rx, &pt_alloc);
-	spin_unlock_irqrestore(&ctx_i->rx_lock, flags);
+	spin_unlock_irqrestore(&rx->lock, flags);
 	if (rc < 0)
 		goto err4;
 
@@ -1188,17 +1178,17 @@ static int hfi2_vnic_init_ctx(struct hfi2_vnic_vport_info *vinfo, int ctx_num)
 
 	return 0;
 err5:
-	spin_lock_irqsave(&ctx_i->rx_lock, flags);
+	spin_lock_irqsave(&rx->lock, flags);
 	hfi_pt_disable(ctx, rx, HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
-	spin_unlock_irqrestore(&ctx_i->rx_lock, flags);
+	spin_unlock_irqrestore(&rx->lock, flags);
 err4:
 	_hfi_eq_free(&ctx_i->eq_rx);
 err3:
 	_hfi_eq_free(&ctx_i->eq_tx);
 err2:
-	hfi_cmdq_unmap(&ctx_i->tx, &ctx_i->rx);
+	hfi_cmdq_unmap(&ctx_i->cmdq);
 err1:
-	hfi_cmdq_release(ctx, ctx_i->cmdq_idx);
+	hfi_cmdq_release(&ctx_i->cmdq);
 err:
 	hfi_ctx_cleanup(ctx);
 	dd_dev_err(vinfo->dd, "%s rc %d\n", __func__, rc);
@@ -1217,18 +1207,18 @@ static void hfi2_vnic_uninit_ctx(struct hfi2_vnic_vport_info *vinfo,
 
 	ctx_i = &ndev->eth_ctx[ctx_num];
 	ctx = &ctx_i->ctx;
-	rx = &ctx_i->rx;
+	rx = &ctx_i->cmdq.rx;
 	/* FXRTODO: Release EQ before disabling PT to prevent EQ ISR
 	 * firing while PT is being disabled
 	 */
 	_hfi_eq_free(&ctx_i->eq_rx);
-	spin_lock_irqsave(&ctx_i->rx_lock, flags);
+	spin_lock_irqsave(&rx->lock, flags);
 	hfi_pt_disable(ctx, rx, HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
-	spin_unlock_irqrestore(&ctx_i->rx_lock, flags);
+	spin_unlock_irqrestore(&rx->lock, flags);
 	hfi2_free_rx_bufs(ctx_i);
 	tx_notify_list_process(ctx_i, true);
-	hfi_cmdq_unmap(&ctx_i->tx, &ctx_i->rx);
-	hfi_cmdq_release(ctx, ctx_i->cmdq_idx);
+	hfi_cmdq_unmap(&ctx_i->cmdq);
+	hfi_cmdq_release(&ctx_i->cmdq);
 	_hfi_eq_free(&ctx_i->eq_tx);
 	hfi_ctx_cleanup(ctx);
 }

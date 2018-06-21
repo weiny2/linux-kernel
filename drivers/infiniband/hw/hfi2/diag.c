@@ -348,8 +348,7 @@ int hfi2_diag_init(struct hfi_devdata *dd)
 	ibtx = &dd->ibd->pport[0].port_tx[0];
 	ctx = ibtx->ctx;
 	/* Reuse verbs context and command queue for diag */
-	diag->cmdq_tx = &ibtx->cmdq_tx;
-	diag->cmdq_rx = &ibtx->cmdq_rx;
+	diag->cmdq_tx = &ibtx->cmdq.tx;
 	diag->pend_cmdq = &ibtx->pend_cmdq;
 
 	spin_lock_init(&diag->cmdq_tx_lock);

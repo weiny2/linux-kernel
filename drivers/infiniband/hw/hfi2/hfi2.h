@@ -436,7 +436,6 @@ struct hfi1_snoop_data {
  * @miscdev: MISC device for diagnostic packet transmission
  * @ctx: Pointer to HFI context
  * @cmdq_tx: Pointer to TX Command Queue
- * @cmdq_rx: Pointer to RX Command Queue
  * @eq_tx: Event queue used for tracking sent packets
  * @cmdq_tx_lock: Lock to prevent multiple writers
  * @pend_cmdq: Pending CMDQ queueing struct. Shared with verbs
@@ -444,7 +443,6 @@ struct hfi1_snoop_data {
 struct hfi2_diagpkt_data {
 	struct hfi_ctx *ctx;
 	struct hfi_cmdq *cmdq_tx;
-	struct hfi_cmdq *cmdq_rx;
 	struct hfi_eq eq_tx;
 	/* Prevents multiple writers */
 	spinlock_t cmdq_tx_lock;
@@ -1049,8 +1047,7 @@ struct hfi_devdata {
 	u16 bypass_pid;
 	spinlock_t ptl_lock;
 	struct hfi_ctx priv_ctx;
-	struct hfi_cmdq priv_tx_cq;
-	struct hfi_cmdq priv_rx_cq;
+	struct hfi_cmdq_pair priv_cmdq;
 
 	/* Command Queue State */
 	struct idr cmdq_pair;
@@ -1230,7 +1227,7 @@ void hfi_start_led_override(struct hfi_pportdata *ppd, unsigned int time_on,
 void hfi_shutdown_led_override(struct hfi_pportdata *ppd);
 
 /* HFI specific functions */
-int hfi_cmdq_assign_privileged(struct hfi_ctx *ctx, u16 *cmdq_idx);
+int hfi_cmdq_assign_privileged(struct hfi_cmdq_pair *cmdq, struct hfi_ctx *ctx);
 int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign);
 int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx, u64 user_data);
 int hfi_eq_zero_assign(struct hfi_ctx *ctx);
@@ -1264,20 +1261,15 @@ int hfi_at_prefetch(struct hfi_ctx *ctx,
 		    struct hfi_at_prefetch_args *atpf);
 
 /* OPA core functions */
-int hfi_cmdq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table,
-		    u16 *cmdq_idx);
-int hfi_cmdq_update(struct hfi_ctx *ctx, u16 cmdq_idx,
+int hfi_cmdq_assign(struct hfi_cmdq_pair *cmdq, struct hfi_ctx *ctx,
 		    struct hfi_auth_tuple *auth_table);
+int hfi_cmdq_update(struct hfi_cmdq_pair *cmdq,
+		    struct hfi_auth_tuple *auth_table);
+int hfi_cmdq_release(struct hfi_cmdq_pair *cmdq);
+int hfi_cmdq_map(struct hfi_cmdq_pair *cmdq);
+void hfi_cmdq_unmap(struct hfi_cmdq_pair *cmdq);
 int hfi_pt_update_lower(struct hfi_ctx *ctx, u8 ni, u32 pt_idx,
 			u64 *val, u64 user_data);
-int hfi_cmdq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table,
-		    u16 *cmdq_idx);
-int hfi_cmdq_update(struct hfi_ctx *ctx, u16 cmdq_idx,
-		    struct hfi_auth_tuple *auth_table);
-int hfi_cmdq_release(struct hfi_ctx *ctx, u16 cmdq_idx);
-int hfi_cmdq_map(struct hfi_ctx *ctx, u16 cmdq_idx,
-		 struct hfi_cmdq *tx, struct hfi_cmdq *rx);
-void hfi_cmdq_unmap(struct hfi_cmdq *tx, struct hfi_cmdq *rx);
 int hfi_cteq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign);
 int hfi_cteq_release(struct hfi_ctx *ctx, u16 eq_mode, u16 eq_idx,
 		     u64 user_data);

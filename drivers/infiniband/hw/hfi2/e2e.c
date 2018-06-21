@@ -193,7 +193,7 @@ static void hfi_e2e_cache_invalidate_tx(struct idr *cache, u32 lid)
 static int hfi_eq_zero_event_wait(struct hfi_ctx *ctx, u64 **eq_entry)
 {
 	int rc;
-	bool dropped;
+	bool dropped = false;
 
 	/* event queue must be in blocking mode */
 	rc = hfi_ev_wait_single(ctx, 1, ctx->eq_zero[0].idx,
@@ -505,7 +505,7 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 
 	/* Queue it to be written, don't wait for completion */
 	rc = hfi_pend_cmd_queue(&dd->pend_cmdq,
-				&dd->priv_tx_cq,
+				&dd->priv_cmdq.tx,
 				&dd->e2e_eq,
 				&e2e_cmd.command,
 				cmd_slots, GFP_KERNEL);

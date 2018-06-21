@@ -3077,7 +3077,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 		hfi_e2e_stop(&dd->priv_ctx);
 #endif
 		hfi_eq_zero_release(&dd->priv_ctx);
-		hfi_cmdq_unmap(&dd->priv_tx_cq, &dd->priv_rx_cq);
+		hfi_cmdq_unmap(&dd->priv_cmdq);
 		hfi_cmdq_cleanup(&dd->priv_ctx);
 		ret = hfi_ctx_cleanup(&dd->priv_ctx);
 		if (ret)
@@ -3886,7 +3886,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	resource_size_t addr;
 	int ret;
 	struct hfi_ctx *ctx;
-	u16 cmdq_idx;
 	struct page *page;
 	struct opa_ctx_assign ctx_assign = {0};
 	static const char * const inames[] = { /* implementation names */
@@ -4072,10 +4071,10 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 			 dd->cmdq_head_size, NULL, true);
 
 	/* assign one CMDQ for privileged commands (DLID, EQ_DESC_WRITE) */
-	ret = hfi_cmdq_assign_privileged(ctx, &cmdq_idx);
+	ret = hfi_cmdq_assign_privileged(&dd->priv_cmdq, ctx);
 	if (ret)
 		goto err_post_alloc;
-	ret = hfi_cmdq_map(ctx, cmdq_idx, &dd->priv_tx_cq, &dd->priv_rx_cq);
+	ret = hfi_cmdq_map(&dd->priv_cmdq);
 	if (ret)
 		goto err_post_alloc;
 

@@ -205,19 +205,33 @@ struct hfi_cmd {
  * @sw_head_idx: first slot waiting for device to consume
  * @slots_avail: number of slots available (before tail meets head)
  * @slots_total: total Command Queue slots
- * @auth_table: table of configured hfi_auth_tuples
  */
 struct hfi_cmdq {
 	__u16	cmdq_idx;
 	void	*base;
 	size_t	size;
-
 	volatile __u8 *head_addr;
 	spinlock_t lock;
 	__u8	slot_idx;
 	__u8	sw_head_idx;
 	__u8	slots_avail;
 	__u8	slots_total;
+};
+
+/*
+ * struct hfi_cmdq_pair - State for TX and RX Command Queue pair
+ * @tx: Transmit CMDQ
+ * @rx: Receive CMDQ
+ * @idx: hardware index of assigned CMDQ
+ * @auth_table: table of configured hfi_auth_tuples
+ * @device: associated IB device
+ * @uobject: associated uverbs object
+ * @ctx: associated hardware context
+ */
+struct hfi_cmdq_pair {
+	struct hfi_cmdq tx;
+	struct hfi_cmdq rx;
+	__u16 idx;
 	struct hfi_auth_tuple auth_table[HFI_NUM_AUTH_TUPLES];
 	struct ib_device *device;
 	struct ib_uobject *uobject;

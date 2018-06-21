@@ -343,13 +343,11 @@ void hfi2_native_alloc_ucontext(struct hfi_ibcontext *ctx, void *udata,
 /* Free all CMDQs, HW contexts, and KEY stacks. */
 void hfi2_native_dealloc_ucontext(struct hfi_ibcontext *ctx)
 {
-	if (ctx->tx_cmdq) {
-		hfi_cmdq_unmap(ctx->tx_cmdq, ctx->rx_cmdq);
-		hfi_cmdq_release(ctx->hw_ctx, ctx->tx_cmdq->cmdq_idx);
-		kfree(ctx->tx_cmdq);
-		kfree(ctx->rx_cmdq);
-		ctx->tx_cmdq = NULL;
-		ctx->rx_cmdq = NULL;
+	if (ctx->cmdq) {
+		hfi_cmdq_unmap(ctx->cmdq);
+		hfi_cmdq_release(ctx->cmdq);
+		kfree(ctx->cmdq);
+		ctx->cmdq = NULL;
 	}
 	if (ctx->sync_cq) {
 		ib_destroy_cq(&ctx->sync_cq->ibcq);
@@ -396,44 +394,34 @@ static int hfi2_create_me_pool(struct hfi_ctx *hw_ctx)
 static int hfi2_add_cmdq(struct hfi_ibcontext *ctx)
 {
 	int ret;
-	struct hfi_cmdq *cmdq;
-	u16 cmdq_idx;
+	struct hfi_cmdq_pair *cmdq;
 
 	/* TODO - only support single command queue now */
-	if (ctx->tx_cmdq)
+	if (ctx->cmdq)
 		return 0;
 
-	ret = hfi_cmdq_assign(ctx->hw_ctx, NULL, &cmdq_idx);
+	cmdq = kzalloc(sizeof(*cmdq), GFP_KERNEL);
+	if (!cmdq)
+		return -ENOMEM;
+
+	ret = hfi_cmdq_assign(cmdq, ctx->hw_ctx, NULL);
 	if (ret < 0)
-		return ret;
-
-	cmdq = kmalloc(sizeof(*cmdq), GFP_KERNEL);
-	if (!cmdq) {
-		ret = -ENOMEM;
 		goto err;
-	}
-	ctx->tx_cmdq = cmdq;
+	ctx->cmdq = cmdq;
 
-	cmdq = kmalloc(sizeof(*cmdq), GFP_KERNEL);
-	if (!cmdq) {
-		ret = -ENOMEM;
-		goto err;
-	}
-	ctx->rx_cmdq = cmdq;
-
-	ret = hfi_cmdq_map(ctx->hw_ctx, cmdq_idx, ctx->tx_cmdq, ctx->rx_cmdq);
+	ret = hfi_cmdq_map(ctx->cmdq);
 	if (ret < 0)
 		goto err;
 
-	pr_info("native: Got CMDQ index %d\n", cmdq_idx);
+	pr_info("native: Got CMDQ index %d\n", cmdq->idx);
 	return 0;
 
 err:
-	kfree(ctx->tx_cmdq);
-	ctx->tx_cmdq = NULL;
-	kfree(ctx->rx_cmdq);
-	ctx->rx_cmdq = NULL;
-	hfi_cmdq_release(ctx->hw_ctx, cmdq_idx);
+	if (ctx->cmdq) {
+		hfi_cmdq_release(ctx->cmdq);
+		ctx->cmdq = NULL;
+	}
+	kfree(cmdq);
 	return ret;
 }
 
@@ -541,11 +529,11 @@ void hfi_deinit_hw_rq(struct hfi_ibcontext *ctx, struct hfi_rq *rq)
 		result[0] = 0;
 
 		/* Unlink head of list */
-		spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
-		ret = hfi_recvq_unlink(ctx->rx_cmdq, NATIVE_NI,
+		spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
+		ret = hfi_recvq_unlink(&ctx->cmdq->rx, NATIVE_NI,
 				       rq->hw_ctx, rq->recvq_root,
 				       (u64)result);
-		spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
+		spin_unlock_irqrestore(&ctx->cmdq->rx.lock, flags);
 		if (ret != 0) {
 			break;
 		}
@@ -618,12 +606,12 @@ int hfi_init_hw_rq(struct hfi_ibcontext *ctx, struct rvt_rq *rvtrq,
 		hfi2_push_key(&rq->ded_me_ks, list_handle);
 	}
 
-	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
+	spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
 	/* receive queue init */
-	ret = hfi_recvq_init(ctx->rx_cmdq, NATIVE_NI,
+	ret = hfi_recvq_init(&ctx->cmdq->rx, NATIVE_NI,
 			     rq->hw_ctx, recvq_root,
 			     (u64)&done);
-	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
+	spin_unlock_irqrestore(&ctx->cmdq->rx.lock, flags);
 
 	if (ret != 0) {
 		goto err;
@@ -778,7 +766,7 @@ void hfi2_native_reset_qp(struct rvt_qp *qp)
 
 	/* Clear the QPN to PID mapping */
 	ctx = obj_to_ibctx(ibqp);
-	ret = hfi_set_qp_state(ctx->rx_cmdq, qp, 0, 0, VERBS_OK, false);
+	ret = hfi_set_qp_state(&ctx->cmdq->rx, qp, 0, 0, VERBS_OK, false);
 	/* TODO */
 	WARN_ON(ret != 0);
 
@@ -1037,12 +1025,12 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		while (!ibqp->srq) {
 			result[0] = 0;
 			/* Unlink head of list */
-			spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
-			ret = hfi_recvq_unlink(ctx->rx_cmdq, NATIVE_NI,
+			spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
+			ret = hfi_recvq_unlink(&ctx->cmdq->rx, NATIVE_NI,
 					       rq->hw_ctx,
 					       rq->recvq_root,
 					       (u64)result);
-			spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
+			spin_unlock_irqrestore(&ctx->cmdq->rx.lock, flags);
 			if (ret != 0) {
 				goto qp_write_err;
 			}
@@ -1133,7 +1121,7 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 
 		if (!ctx || !ctx->supports_native)
 			return 0;
-		rx_cmdq = ctx->rx_cmdq;
+		rx_cmdq = ctx->cmdq ? &ctx->cmdq->rx : NULL;
 	}
 #if 0
 	else
@@ -1156,6 +1144,8 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		ret = hfi2_native_modify_kern_qp(rvtqp, attr, attr_mask);
 		if (ret)
 			return ret;
+		/* For kernel QPs entering INIT, CMDQ created above */
+		rx_cmdq = ctx->cmdq ? &ctx->cmdq->rx : NULL;
 	}
 
 	if ((ibqp->qp_type == IB_QPT_RC || ibqp->qp_type == IB_QPT_UC) &&
@@ -1305,14 +1295,14 @@ int hfi2_do_rx_work(struct ib_pd *ibpd, struct rvt_rq *rq,
 	pt.phys.slid = PTL_LID_ANY;
 	pt.phys.ipid = PTL_PID_ANY;
 
-	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
-	ret = hfi_recvq_append(ctx->rx_cmdq, NATIVE_NI,
+	spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
+	ret = hfi_recvq_append(&ctx->cmdq->rx, NATIVE_NI,
 			       (void *)addr, length,
 			       hw_rq->recvq_root, pt, PTL_UID_ANY,
 			       hw_rq->hw_ctx->pid, pd_handle, me_options,
 			       PTL_CT_NONE, (u64)rq_wc_p, list_handle,
 			       !last_wr);
-	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
+	spin_unlock_irqrestore(&ctx->cmdq->rx.lock, flags);
 	if (ret != 0)
 		goto me_cleanup;
 
@@ -1819,13 +1809,13 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 				nslots = hfi_format_qp_update_recv_eq(priv->owner,
 								     (u64)&done,
 								     &cmd);
-				spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
+				spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
 				do {
-					ret = hfi_rx_command(ctx->rx_cmdq,
+					ret = hfi_rx_command(&ctx->cmdq->rx,
 							     (u64 *)&cmd,
 							     nslots);
 				} while (ret == -EAGAIN);
-				spin_unlock_irqrestore(&ctx->rx_cmdq->lock,
+				spin_unlock_irqrestore(&ctx->cmdq->rx.lock,
 						       flags);
 				if (unlikely(ret)) {
 					spin_unlock_irqrestore(&cq->lock,

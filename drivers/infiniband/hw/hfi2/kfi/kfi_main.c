@@ -72,18 +72,14 @@ static struct ib_client opa_kfi_clnt = {
  * @ibdev - IB device
  * @uc - IB ucontext
  * @ctx - HFI context
- * @cmdq_idx - command queue index
- * @tx - TX command queue
- * @rx - RX command queue
+ * @cmdq - Pair of command queues (TX and RX)
  * @eh - registers IB event handler callback
  */
 struct opa_kfi {
 	struct ib_device	*ibdev;
 	struct hfi_ibcontext	*uc;
 	struct hfi_ctx		ctx;
-	u16			cmdq_idx;
-	struct hfi_cmdq		tx;
-	struct hfi_cmdq		rx;
+	struct hfi_cmdq_pair	cmdq;
 	struct ib_event_handler eh;
 };
 
@@ -106,8 +102,8 @@ static int opa_xfer_test(struct opa_kfi *dev)
 {
 	struct opa_core_ops *ops = dev->uc->ops;
 	struct hfi_ctx *ctx = &dev->ctx;
-	struct hfi_cmdq *tx = &dev->tx;
-	struct hfi_cmdq *rx = &dev->rx;
+	struct hfi_cmdq *tx = &dev->cmdq.tx;
+	struct hfi_cmdq *rx = &dev->cmdq.rx;
 	struct ib_device *ibdev = dev->ibdev;
 	struct ib_port_attr port_attr;
 	int rc;
@@ -246,10 +242,10 @@ static int opa_kfi_setup(struct opa_kfi *dev)
 		return rc;
 
 	/* Obtain a pair of command queues and setup */
-	rc = ops->cmdq_assign(ctx, NULL, &dev->cmdq_idx);
+	rc = ops->cmdq_assign(&dev->cmdq, ctx, NULL);
 	if (rc)
 		goto err;
-	rc = ops->cmdq_map(ctx, dev->cmdq_idx, &dev->tx, &dev->rx);
+	rc = ops->cmdq_map(&dev->cmdq);
 	if (rc)
 		goto err1;
 
@@ -258,9 +254,9 @@ static int opa_kfi_setup(struct opa_kfi *dev)
 		goto err2;
 	return 0;
 err2:
-	ops->cmdq_unmap(&dev->tx, &dev->rx);
+	ops->cmdq_unmap(&dev->cmdq);
 err1:
-	ops->cmdq_release(ctx, dev->cmdq_idx);
+	ops->cmdq_release(&dev->cmdq);
 err:
 	ops->ctx_release(ctx);
 	return rc;
@@ -268,13 +264,12 @@ err:
 
 static void opa_kfi_cleanup(struct opa_kfi *dev)
 {
-	struct hfi_ctx *ctx = &dev->ctx;
 	struct opa_core_ops *ops = dev->uc->ops;
 	int rc;
 
-	ops->cmdq_unmap(&dev->tx, &dev->rx);
-	ops->cmdq_release(ctx, dev->cmdq_idx);
-	rc = ops->ctx_release(ctx);
+	ops->cmdq_unmap(&dev->cmdq);
+	ops->cmdq_release(&dev->cmdq);
+	rc = ops->ctx_release(&dev->ctx);
 	if (rc)
 		dev_warn(&dev->ibdev->dev, "Unable to release ctx\n");
 }

@@ -116,8 +116,7 @@ struct hfi_ks {
  * @job_res_mode: mode for job_attach to lookup job reservation
  * @job_res_cookie: cookie for lookup of job reservation
  * @hw_ctx: primary hfi_ctx
- * @tx_cmdq: TX command queue
- * @rx_cmdq: RX command queue
+ * @cmdq: Command Queues (TX and RX)
  * @ctx_lock: lock for adding/removing resources
  * @rkey_ks: RKEYs stack
  * @lkey_ks: LKEYs stack
@@ -136,8 +135,7 @@ struct hfi_ibcontext {
 	u16 job_res_mode;
 	u64 job_res_cookie;
 	struct hfi_ctx	*hw_ctx;
-	struct hfi_cmdq	*tx_cmdq;
-	struct hfi_cmdq	*rx_cmdq;
+	struct hfi_cmdq_pair *cmdq;
 	struct mutex	ctx_lock;
 	struct hfi_ks	rkey_ks;
 	struct hfi_ks	lkey_ks;
@@ -510,14 +508,13 @@ struct opa_core_ops {
 				    u8 num_uids);
 	int (*ctx_addr)(struct hfi_ctx *ctx, int type, u16 ctxt, void **addr,
 			ssize_t *len);
-	int (*cmdq_assign)(struct hfi_ctx *ctx,
-			   struct hfi_auth_tuple *auth_table, u16 *cmdq_idx);
-	int (*cmdq_update)(struct hfi_ctx *ctx, u16 cmdq_idx,
+	int (*cmdq_assign)(struct hfi_cmdq_pair *cmdq, struct hfi_ctx *ctx,
 			   struct hfi_auth_tuple *auth_table);
-	int (*cmdq_release)(struct hfi_ctx *ctx, u16 cmdq_idx);
-	int (*cmdq_map)(struct hfi_ctx *ctx,  u16 cmdq_idx,
-			struct hfi_cmdq *tx_cq, struct hfi_cmdq *rx_cq);
-	void (*cmdq_unmap)(struct hfi_cmdq *tx_cq, struct hfi_cmdq *rx_cq);
+	int (*cmdq_update)(struct hfi_cmdq_pair *cmdq,
+			   struct hfi_auth_tuple *auth_table);
+	int (*cmdq_release)(struct hfi_cmdq_pair *cmdq);
+	int (*cmdq_map)(struct hfi_cmdq_pair *cmdq);
+	void (*cmdq_unmap)(struct hfi_cmdq_pair *cmdq);
 
 	int (*ev_assign)(struct hfi_ctx *ctx, struct opa_ev_assign *ev_assign);
 	int (*ev_release)(struct hfi_ctx *ctx, u16 ev_mode, u16 ev_idx,

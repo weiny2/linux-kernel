@@ -711,9 +711,9 @@ inline int hfi2_do_local_inv(struct rvt_qp *qp, struct ib_send_wr *wr,
 	rvt_put_mr(mr);
 
 	hw_ctx = ctx->hw_ctx;
-	spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
-	ret = hfi_rkey_invalidate(ctx->rx_cmdq, key, (u64)&done);
-	spin_unlock_irqrestore(&ctx->rx_cmdq->lock, flags);
+	spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
+	ret = hfi_rkey_invalidate(&ctx->cmdq->rx, key, (u64)&done);
+	spin_unlock_irqrestore(&ctx->cmdq->rx.lock, flags);
 	if (ret != 0)
 		return ret;
 
@@ -798,9 +798,9 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 	spin_unlock_irqrestore(&qp->s_lock, flags);
 
 retry:
-	spin_lock_irqsave(&ctx->tx_cmdq->lock, flags);
-	ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)cmd, nslots);
-	spin_unlock_irqrestore(&ctx->tx_cmdq->lock, flags);
+	spin_lock_irqsave(&ctx->cmdq->tx.lock, flags);
+	ret = hfi_tx_command(&ctx->cmdq->tx, (u64 *)cmd, nslots);
+	spin_unlock_irqrestore(&ctx->cmdq->tx.lock, flags);
 	if (ret == -EAGAIN && retries) {
 		/* TODO */
 		msleep(2000);

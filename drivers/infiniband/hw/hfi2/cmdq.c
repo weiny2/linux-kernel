@@ -194,8 +194,8 @@ static int __hfi_cmdq_assign(struct hfi_ctx *ctx, u16 *cmdq_idx)
 	return 0;
 }
 
-int hfi_cmdq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table,
-		    u16 *cmdq_idx)
+int hfi_cmdq_assign(struct hfi_cmdq_pair *cmdq, struct hfi_ctx *ctx,
+		    struct hfi_auth_tuple *auth_table)
 {
 	int ret;
 	bool priv;
@@ -224,16 +224,18 @@ int hfi_cmdq_assign(struct hfi_ctx *ctx, struct hfi_auth_tuple *auth_table,
 	}
 
 	/* thread-safe because threads get different 'cmdq_idx' */
-	ret = __hfi_cmdq_assign(ctx, cmdq_idx);
-	if (!ret)
-		hfi_cmdq_config(ctx, *cmdq_idx, auth_table, !priv);
+	ret = __hfi_cmdq_assign(ctx, &cmdq->idx);
+	if (!ret) {
+		hfi_cmdq_config(ctx, cmdq->idx, auth_table, !priv);
+		cmdq->ctx = ctx;
+	}
 
 unlock:
 	up_read(&ctx->ctx_rwsem);
 	return ret;
 }
 
-int hfi_cmdq_assign_privileged(struct hfi_ctx *ctx, u16 *cmdq_idx)
+int hfi_cmdq_assign_privileged(struct hfi_cmdq_pair *cmdq, struct hfi_ctx *ctx)
 {
 	int ret;
 
@@ -241,15 +243,18 @@ int hfi_cmdq_assign_privileged(struct hfi_ctx *ctx, u16 *cmdq_idx)
 	if (ctx->pid != HFI_PID_SYSTEM)
 		return -EPERM;
 
-	ret = __hfi_cmdq_assign(ctx, cmdq_idx);
-	if (!ret)
-		hfi_cmdq_config(ctx, *cmdq_idx, NULL, 0);
+	ret = __hfi_cmdq_assign(ctx, &cmdq->idx);
+	if (!ret) {
+		hfi_cmdq_config(ctx, cmdq->idx, NULL, 0);
+		cmdq->ctx = ctx;
+	}
 	return ret;
 }
 
-int hfi_cmdq_update(struct hfi_ctx *ctx, u16 cmdq_idx,
+int hfi_cmdq_update(struct hfi_cmdq_pair *cmdq,
 		    struct hfi_auth_tuple *auth_table)
 {
+	struct hfi_ctx *ctx = cmdq->ctx;
 	struct hfi_devdata *dd = ctx->devdata;
 	struct hfi_ctx *cmdq_ctx;
 	unsigned long flags;
@@ -259,7 +264,7 @@ int hfi_cmdq_update(struct hfi_ctx *ctx, u16 cmdq_idx,
 	spin_lock_irqsave(&dd->cmdq_lock, flags);
 
 	/* verify we own specified CMDQ */
-	cmdq_ctx = idr_find(&dd->cmdq_pair, cmdq_idx);
+	cmdq_ctx = idr_find(&dd->cmdq_pair, cmdq->idx);
 	if (cmdq_ctx != ctx) {
 		ret = -EINVAL;
 		goto unlock;
@@ -273,7 +278,7 @@ int hfi_cmdq_update(struct hfi_ctx *ctx, u16 cmdq_idx,
 				       IS_PID_BYPASS(ctx));
 	if (!ret)
 		/* write CMDQ tuple config in HFI CSRs */
-		hfi_cmdq_config_tuples(ctx, cmdq_idx, auth_table);
+		hfi_cmdq_config_tuples(ctx, cmdq->idx, auth_table);
 
 unlock:
 	spin_unlock_irqrestore(&dd->cmdq_lock, flags);
@@ -282,8 +287,9 @@ unlock:
 	return ret;
 }
 
-int hfi_cmdq_release(struct hfi_ctx *ctx, u16 cmdq_idx)
+int hfi_cmdq_release(struct hfi_cmdq_pair *cmdq)
 {
+	struct hfi_ctx *ctx = cmdq->ctx;
 	struct hfi_devdata *dd = ctx->devdata;
 	int ret = 0;
 	unsigned long flags;
@@ -291,13 +297,13 @@ int hfi_cmdq_release(struct hfi_ctx *ctx, u16 cmdq_idx)
 	down_read(&ctx->ctx_rwsem);
 
 	spin_lock_irqsave(&dd->cmdq_lock, flags);
-	if (idr_find(&dd->cmdq_pair, cmdq_idx) != ctx) {
+	if (idr_find(&dd->cmdq_pair, cmdq->idx) != ctx) {
 		ret = -EINVAL;
 	} else {
 		/* FXRTODO: Do not reuse a CQ till DV has validated CQ reuse */
 		if (!dd->emulation)
-			hfi_cmdq_disable(dd, cmdq_idx);
-		idr_remove(&dd->cmdq_pair, cmdq_idx);
+			hfi_cmdq_disable(dd, cmdq->idx);
+		idr_remove(&dd->cmdq_pair, cmdq->idx);
 		ctx->cmdq_pair_num_assigned--;
 		dd->cmdq_pair_num_assigned--;
 	}
@@ -329,38 +335,39 @@ void hfi_cmdq_cleanup(struct hfi_ctx *ctx)
 	spin_unlock_irqrestore(&dd->cmdq_lock, flags);
 }
 
-int hfi_cmdq_map(struct hfi_ctx *ctx, u16 cmdq_idx,
-		 struct hfi_cmdq *tx, struct hfi_cmdq *rx)
+int hfi_cmdq_map(struct hfi_cmdq_pair *cmdq)
 {
+	struct hfi_cmdq *tx = &cmdq->tx;
+	struct hfi_cmdq *rx = &cmdq->rx;
 	ssize_t head_size;
 	int rc;
 
 	/* stash pointer to CMDQ HEAD */
-	rc = hfi_ctx_hw_addr(ctx, TOK_CMDQ_HEAD, cmdq_idx,
+	rc = hfi_ctx_hw_addr(cmdq->ctx, TOK_CMDQ_HEAD, cmdq->idx,
 			     (void **)&tx->head_addr, &head_size);
 	if (rc)
 		goto err1;
 
 	/* stash pointer to TX CMDQ */
-	rc = hfi_ctx_hw_addr(ctx, TOK_CMDQ_TX, cmdq_idx,
+	rc = hfi_ctx_hw_addr(cmdq->ctx, TOK_CMDQ_TX, cmdq->idx,
 			     &tx->base, (ssize_t *)&tx->size);
 	if (rc)
 		goto err1;
 
 	/* stash pointer to RX CMDQ */
-	rc = hfi_ctx_hw_addr(ctx, TOK_CMDQ_RX, cmdq_idx,
+	rc = hfi_ctx_hw_addr(cmdq->ctx, TOK_CMDQ_RX, cmdq->idx,
 			     &rx->base, (ssize_t *)&rx->size);
 	if (rc)
 		goto err1;
 
-	tx->cmdq_idx = cmdq_idx;
+	tx->cmdq_idx = cmdq->idx;
 	tx->slots_total = HFI_CMDQ_TX_ENTRIES;
 	tx->slots_avail = tx->slots_total - 1;
 	tx->slot_idx = (*tx->head_addr);
 	tx->sw_head_idx = tx->slot_idx;
 	spin_lock_init(&tx->lock);
 
-	rx->cmdq_idx = cmdq_idx;
+	rx->cmdq_idx = cmdq->idx;
 	rx->head_addr = tx->head_addr + 8;
 	rx->slots_total = HFI_CMDQ_RX_ENTRIES;
 	rx->slots_avail = rx->slots_total - 1;
@@ -373,7 +380,7 @@ err1:
 	return rc;
 }
 
-void hfi_cmdq_unmap(struct hfi_cmdq *tx, struct hfi_cmdq *rx)
+void hfi_cmdq_unmap(struct hfi_cmdq_pair *cmdq)
 {
 }
 
@@ -419,9 +426,8 @@ int hfi_pt_update_lower(struct hfi_ctx *ctx, u8 ni, u32 pt_idx,
 					  HFI_GEN_CC,
 					  &cmd);
 
-	rc = hfi_pend_cmd_queue(&dd->pend_cmdq, &dd->priv_rx_cq, NULL,
+	rc = hfi_pend_cmd_queue(&dd->pend_cmdq, &dd->priv_cmdq.rx, NULL,
 				(u64 *)&cmd, cmd_slots, GFP_KERNEL);
-
 	return rc;
 }
 

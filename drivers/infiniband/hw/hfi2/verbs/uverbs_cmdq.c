@@ -61,11 +61,10 @@ int hfi2_cmdq_assign_handler(struct ib_device *ib_dev,
 	struct ib_ucontext *ucontext = file->ucontext;
 	struct ib_ucmdq_object  *obj;
 	struct hfi2_cmdq_auth_table auth_table;
-	struct hfi_cmdq *cmdq = NULL;
+	struct hfi_cmdq_pair *cmdq = NULL;
 	struct hfi_ctx *ctx;
 	const struct uverbs_attr *uattr;
 	u64 cmdq_head_token, cmdq_rx_token, cmdq_tx_token;
-	u16 tmp_cmdq_idx;
 	ssize_t toff, tlen;
 	int ret;
 
@@ -74,7 +73,7 @@ int hfi2_cmdq_assign_handler(struct ib_device *ib_dev,
 	if (ret)
 		goto err_cmdq_assign;
 
-	cmdq = kzalloc(sizeof(struct hfi_cmdq), GFP_KERNEL);
+	cmdq = kzalloc(sizeof(*cmdq), GFP_KERNEL);
 	if (!cmdq) {
 		ret = -ENOMEM;
 		goto err_cmdq_mem;
@@ -90,20 +89,20 @@ int hfi2_cmdq_assign_handler(struct ib_device *ib_dev,
 		return -ENOENT;
 	}
 
-	ret = hfi_cmdq_assign(ctx, &auth_table.auth_table[0], &tmp_cmdq_idx);
+	ret = hfi_cmdq_assign(cmdq, ctx, &auth_table.auth_table[0]);
 	if (ret)
 		goto err_cmdq_assign;
 
-	ret = hfi_ctx_hw_addr(ctx, TOK_CMDQ_HEAD, tmp_cmdq_idx,
+	ret = hfi_ctx_hw_addr(ctx, TOK_CMDQ_HEAD, cmdq->idx,
 			      (void *)&toff, &tlen);
 	if (ret)
 		goto err_ctx_hw_addr;
 
-	cmdq_head_token = HFI_MMAP_TOKEN(TOK_CMDQ_HEAD, tmp_cmdq_idx,
+	cmdq_head_token = HFI_MMAP_TOKEN(TOK_CMDQ_HEAD, cmdq->idx,
 					 toff, tlen);
-	cmdq_tx_token = HFI_MMAP_TOKEN(TOK_CMDQ_TX, tmp_cmdq_idx, 0,
+	cmdq_tx_token = HFI_MMAP_TOKEN(TOK_CMDQ_TX, cmdq->idx, 0,
 				       HFI_CMDQ_TX_SIZE);
-	cmdq_rx_token = HFI_MMAP_TOKEN(TOK_CMDQ_RX, tmp_cmdq_idx, 0,
+	cmdq_rx_token = HFI_MMAP_TOKEN(TOK_CMDQ_RX, cmdq->idx, 0,
 				       PAGE_ALIGN(HFI_CMDQ_RX_SIZE));
 
 	uattr = uverbs_attr_get(attrs, HFI2_ASSIGN_CMDQ_IDX);
@@ -115,8 +114,6 @@ int hfi2_cmdq_assign_handler(struct ib_device *ib_dev,
 
 	cmdq->device = ib_dev;
 	cmdq->uobject = &obj->uobject;
-	cmdq->cmdq_idx = tmp_cmdq_idx;
-	cmdq->ctx = ctx;
 	obj->uobject.object = cmdq;
 
 	ret = uverbs_copy_to(attrs, HFI2_ASSIGN_CMDQ_TX_TOKEN,
@@ -131,7 +128,7 @@ int hfi2_cmdq_assign_handler(struct ib_device *ib_dev,
 	return 0;
 
 err_ctx_hw_addr:
-	hfi_cmdq_release(ctx, tmp_cmdq_idx);
+	hfi_cmdq_release(cmdq);
 err_cmdq_assign:
 	kfree(cmdq);
 err_cmdq_mem:
@@ -144,7 +141,7 @@ int hfi2_cmdq_update_handler(struct ib_device *ib_dev,
 {
 	struct hfi2_cmdq_auth_table auth_table;
 	const struct uverbs_attr *uattr;
-	struct hfi_cmdq *cmdq;
+	struct hfi_cmdq_pair *cmdq;
 	int ret;
 
 	uattr = uverbs_attr_get(attrs, HFI2_UPDATE_CMDQ_IDX);
@@ -162,8 +159,7 @@ int hfi2_cmdq_update_handler(struct ib_device *ib_dev,
 	if (ret)
 		return ret;
 
-	return hfi_cmdq_update(cmdq->ctx, cmdq->cmdq_idx,
-			       &auth_table.auth_table[0]);
+	return hfi_cmdq_update(cmdq, &auth_table.auth_table[0]);
 }
 
 int hfi2_cmdq_release_handler(struct ib_device *ib_dev,
@@ -192,7 +188,7 @@ int hfi2_cmdq_release_handler(struct ib_device *ib_dev,
 int hfi2_cmdq_free(struct ib_uobject *uobject,
 		   enum rdma_remove_reason why)
 {
-	struct hfi_cmdq *cmdq = uobject->object;
+	struct hfi_cmdq_pair *cmdq = uobject->object;
 	struct ib_ucontext *context = uobject->context;
 	struct hfi_ibcontext *hfi_context = container_of(context,
 							 struct hfi_ibcontext,
@@ -206,9 +202,9 @@ int hfi2_cmdq_free(struct ib_uobject *uobject,
 		return -EINVAL;
 
 	if (why == RDMA_REMOVE_DESTROY)
-		hfi_zap_vma_list(hfi_context, cmdq->cmdq_idx);
+		hfi_zap_vma_list(hfi_context, cmdq->idx);
 
-	ret = hfi_cmdq_release(cmdq->ctx, cmdq->cmdq_idx);
+	ret = hfi_cmdq_release(cmdq);
 
 	kfree(cmdq);
 

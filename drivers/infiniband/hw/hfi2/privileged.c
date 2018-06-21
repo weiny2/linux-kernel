@@ -147,7 +147,7 @@ static int hfi_write_dlid_reloc_cmd(struct hfi_devdata *dd,
 
 		/* Queue it to be written, wait for completion */
 		rc = hfi_pend_cmd_queue_wait(&dd->pend_cmdq,
-					     &dd->priv_tx_cq,
+					     &dd->priv_cmdq.tx,
 					     NULL,
 					     &dlid_reloc_cmd.command,
 					     cmd_slots);

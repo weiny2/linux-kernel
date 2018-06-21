@@ -240,7 +240,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_userdata *ud;
 	const struct hfi_cmd __user *ucmd;
 	struct hfi_cmd cmd;
-
+	struct hfi_cmdq_pair cmdq_pair;
 	struct hfi_pt_update_lower_args pt_update_lower;
 	struct hfi_cmdq_assign_args cmdq_assign;
 	struct hfi_cmdq_update_args cmdq_update;
@@ -262,7 +262,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	void __user *user_data = NULL;
 	struct opa_core_ops *ops;
 	ssize_t toff, tlen;
-	u16 tmp_cmdq_idx;
 
 	if (count < sizeof(cmd)) {
 		ret = -EINVAL;
@@ -391,35 +390,39 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 
 	switch (cmd.type) {
 	case HFI_CMD_CMDQ_ASSIGN:
-		ret = ops->cmdq_assign(&ud->ctx, cmdq_assign.auth_table,
-				     &tmp_cmdq_idx);
+		ret = ops->cmdq_assign(&cmdq_pair, &ud->ctx,
+				       cmdq_assign.auth_table);
 		if (ret)
 			break;
 
 		/* return mmap tokens of CMDQ items */
-		ret = ops->ctx_addr(&ud->ctx, TOK_CMDQ_HEAD, tmp_cmdq_idx,
+		ret = ops->ctx_addr(&ud->ctx, TOK_CMDQ_HEAD, cmdq_pair.idx,
 				    (void *)&toff, &tlen);
 		if (ret) {
-			ops->cmdq_release(&ud->ctx, tmp_cmdq_idx);
+			ops->cmdq_release(&cmdq_pair);
 			break;
 		}
 		cmdq_assign.cmdq_head_token =
-			HFI_MMAP_TOKEN(TOK_CMDQ_HEAD, tmp_cmdq_idx, toff, tlen);
+			HFI_MMAP_TOKEN(TOK_CMDQ_HEAD, cmdq_pair.idx, toff,
+				       tlen);
 		cmdq_assign.cmdq_tx_token =
-			HFI_MMAP_TOKEN(TOK_CMDQ_TX, tmp_cmdq_idx, 0,
+			HFI_MMAP_TOKEN(TOK_CMDQ_TX, cmdq_pair.idx, 0,
 				       HFI_CMDQ_TX_SIZE);
 		cmdq_assign.cmdq_rx_token =
-			HFI_MMAP_TOKEN(TOK_CMDQ_RX, tmp_cmdq_idx, 0,
+			HFI_MMAP_TOKEN(TOK_CMDQ_RX, cmdq_pair.idx, 0,
 				       PAGE_ALIGN(HFI_CMDQ_RX_SIZE));
-		cmdq_assign.cmdq_idx = tmp_cmdq_idx;
+		cmdq_assign.cmdq_idx = cmdq_pair.idx;
 		break;
 	case HFI_CMD_CMDQ_UPDATE:
-		ret = ops->cmdq_update(&ud->ctx, cmdq_update.cmdq_idx,
-				     cmdq_update.auth_table);
+		cmdq_pair.ctx = &ud->ctx;
+		cmdq_pair.idx = cmdq_update.cmdq_idx;
+		ret = ops->cmdq_update(&cmdq_pair, cmdq_update.auth_table);
 		break;
 	case HFI_CMD_CMDQ_RELEASE:
 		hfi_zap_vma_list(ud, cmdq_release.cmdq_idx);
-		ret = ops->cmdq_release(&ud->ctx, cmdq_release.cmdq_idx);
+		cmdq_pair.ctx = &ud->ctx;
+		cmdq_pair.idx = cmdq_release.cmdq_idx;
+		ret = ops->cmdq_release(&cmdq_pair);
 		break;
 
 	case HFI_CMD_CT_ASSIGN:
