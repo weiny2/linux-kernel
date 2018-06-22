@@ -222,6 +222,8 @@ struct hfi2_qp_priv {
 	u32 pidex_slid;
 	u32 pidex_qpn;
 	struct hfi_ibeq *recv_eq;
+	struct list_head send_qp_ll;
+	struct list_head recv_qp_ll;
 };
 
 struct hfi2_ibtx {

@@ -530,6 +530,7 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibdev->alloc_rdma_netdev = hfi2_vnic_alloc_rn;
 #ifdef CONFIG_HFI2_STLNP
 	ibdev->poll_cq = hfi2_poll_cq;
+	ibdev->resize_cq = hfi2_resize_cq;
 	ibdev->destroy_cq = hfi2_destroy_cq;
 	ibdev->req_notify_cq = hfi2_req_notify_cq;
 	ibdev->destroy_srq = hfi2_destroy_srq;

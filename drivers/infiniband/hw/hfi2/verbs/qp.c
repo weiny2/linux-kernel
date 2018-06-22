@@ -309,6 +309,8 @@ void *qp_priv_alloc(struct rvt_dev_info *rdi, struct rvt_qp *qp)
 	qp->priv = priv;
 	iowait_init(&priv->s_iowait, 1, hfi2_do_work);
 	INIT_LIST_HEAD(&priv->poll_qp);
+	INIT_LIST_HEAD(&priv->send_qp_ll);
+	INIT_LIST_HEAD(&priv->recv_qp_ll);
 	init_completion(&priv->pid_xchg_comp);
 	notify_qp_reset(qp);
 	return priv;

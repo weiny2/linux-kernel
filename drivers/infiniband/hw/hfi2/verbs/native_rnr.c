@@ -304,6 +304,8 @@ int hfi2_exit_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 		spin_lock_irqsave(&ctx->tx_cmdq->lock, flags);
 		ret = hfi_tx_command(ctx->tx_cmdq, (u64 *)cmd, nslots);
 		spin_unlock_irqrestore(&ctx->tx_cmdq->lock, flags);
+		hfi_eq_pending_inc((struct hfi_eq *)
+				   ibcq_to_rvtcq(qp->ibqp.send_cq)->hw_send);
 		cidx = (cidx + 1) % (qp->s_size * 2);
 	} while (cidx != priv->fc_eidx);
 

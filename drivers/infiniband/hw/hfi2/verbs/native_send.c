@@ -279,8 +279,10 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 
 	if (swqe && nslots <= 0)
 		kfree(swqe);
-	else
+	else {
+		hfi_eq_pending_inc(eq);
 		++priv->outstanding_cnt;
+	}
 
 	return nslots;
 }
@@ -299,6 +301,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 	struct ib_sge *sge = wr->sg_list;
 	struct rvt_mregion *mr;
 	struct hfi2_qp_priv *priv = qp->priv;
+	struct hfi_eq *eq = ibcq_to_rvtcq(qp->ibqp.send_cq)->hw_send;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	u8 op_req = hfi_wr_rc_opcode[wr->opcode];
 	u32 md_opts = 0;
@@ -383,8 +386,10 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 
 	if (swqe && nslots <= 0)
 		kfree(swqe);
-	else
+	else {
+		hfi_eq_pending_inc(eq);
 		++priv->outstanding_cnt;
+	}
 
 	return nslots;
 }
@@ -424,6 +429,7 @@ int hfi_format_rc_rdma_atomic(struct rvt_qp *qp, struct ib_atomic_wr *wr,
 	struct ib_sge *sge = wr->wr.sg_list;
 	struct rvt_mregion *mr;
 	struct hfi2_qp_priv *priv = qp->priv;
+	struct hfi_eq *eq = ibcq_to_rvtcq(qp->ibqp.send_cq)->hw_send;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	u8 op_req = hfi_wr_rc_opcode[wr->wr.opcode];
 	u32 md_opts = 0;
@@ -464,6 +470,7 @@ int hfi_format_rc_rdma_atomic(struct rvt_qp *qp, struct ib_atomic_wr *wr,
 	if (swqe && nslots <= 0)
 		kfree(swqe);
 	else {
+		hfi_eq_pending_inc(eq);
 		++priv->outstanding_cnt;
 		++priv->outstanding_rd_cnt;
 	}
@@ -485,6 +492,7 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	struct ib_sge *sge = wr->wr.sg_list;
 	struct rvt_mregion *mr;
 	struct hfi2_qp_priv *priv = qp->priv;
+	struct hfi_eq *eq = ibcq_to_rvtcq(qp->ibqp.send_cq)->hw_send;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	u8 op_req = hfi_wr_rc_opcode[wr->wr.opcode];
 	u32 md_opts = 0;
@@ -578,6 +586,7 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 	if (swqe && nslots <= 0)
 		kfree(swqe);
 	else {
+		hfi_eq_pending_inc(eq);
 		++priv->outstanding_cnt;
 		if (wr->wr.opcode == IB_WR_RDMA_READ)
 			++priv->outstanding_rd_cnt;

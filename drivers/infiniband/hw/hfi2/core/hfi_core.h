@@ -203,6 +203,7 @@ struct hfi_ibeq {
 	u64 hw_armed;
 	u64 hw_disarmed;
 	struct list_head hw_cq;
+	struct list_head qp_ll;
 };
 
 /**

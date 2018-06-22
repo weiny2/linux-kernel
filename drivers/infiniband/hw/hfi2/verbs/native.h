@@ -66,6 +66,8 @@
 #define INVALID_KEY_IDX	0xffffff00
 #define IS_INVALID_KEY(key) (RESET_LKEY(key) == INVALID_KEY_IDX)
 
+#define RECV_CQ_FREE	(0x1<<30)
+#define SEND_CQ_FREE	(0x1<<29)
 #define IOVEC_VALID	0x80
 #define NATIVE_NI	PTL_MATCHING_PHYSICAL
 #define NATIVE_AUTH_IDX	0
@@ -278,6 +280,7 @@ int hfi2_native_recv(struct rvt_qp *qp, struct ib_recv_wr *wr,
 		     struct ib_recv_wr **bad_wr);
 int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 			 struct ib_recv_wr **bad_wr);
+int hfi2_resize_cq(struct ib_cq *cq, int cqe, struct ib_udata *udata);
 int hfi2_poll_cq(struct ib_cq *cq, int ne, struct ib_wc *wc);
 int hfi2_req_notify_cq(struct ib_cq *cq, enum ib_cq_notify_flags flags);
 int hfi2_destroy_srq(struct ib_srq *ibsrq);

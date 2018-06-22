@@ -247,6 +247,8 @@ struct hfi_ibeq *hfi_ibeq_alloc(struct hfi_ctx *ctx,
 		kfree(ibeq);
 		ibeq = ERR_PTR(ret);
 	}
+	INIT_LIST_HEAD(&ibeq->hw_cq);
+	INIT_LIST_HEAD(&ibeq->qp_ll);
 	return ibeq;
 }
 

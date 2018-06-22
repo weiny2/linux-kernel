@@ -646,6 +646,43 @@ err:
 	return ret;
 }
 
+static inline
+int hfi_format_qp_update_recv_eq(struct rvt_qp *qp, u64 user_ptr,
+				 union hfi_rx_cq_update_command *cmd)
+{
+	struct ib_qp *ibqp = &qp->ibqp;
+	union ptentry_verbs qp_state, qp_mask;
+	struct hfi2_qp_priv *priv = qp->priv;
+
+	qp_state.val[1] = 0;
+	qp_state.eq_handle = priv->recv_eq->eq.idx;
+	qp_mask.val[0] = 0;
+	qp_mask.val[1] = 0;
+	qp_mask.val[2] = 0;
+	qp_mask.val[3] = 0;
+	qp_mask.eq_handle = ~0x0;
+
+	cmd->state_verbs.flit0.p0        = 0;
+	cmd->state_verbs.flit0.p1	 = qp_state.val[1];
+	cmd->state_verbs.flit0.c.ptl_idx = 0;
+	cmd->state_verbs.flit0.c.qp_num  = ibqp->qp_num;
+	cmd->state_verbs.flit0.d.ni      = NATIVE_NI;
+	cmd->state_verbs.flit0.d.ct_handle = PTL_CT_NONE;
+	cmd->state_verbs.flit0.d.ncc     = HFI_GEN_CC;
+	cmd->state_verbs.flit0.d.command = QP_UPDATE;
+	cmd->state_verbs.flit0.d.cmd_len = 3;
+	cmd->state_verbs.flit1.e.cmd_pid = priv->rq_ctx->pid;
+	cmd->state_verbs.flit1.p2        = 0;
+	cmd->state_verbs.flit1.p3        = 0;
+	cmd->state_verbs.flit1.user_ptr  = user_ptr;
+	cmd->command[8]	 = qp_mask.val[0];
+	cmd->command[9]	 = qp_mask.val[1];
+	cmd->command[10] = qp_mask.val[2];
+	cmd->command[11] = qp_mask.val[3];
+
+	return 2;
+}
+
 /*
  * Format a QP_WRITE RX command to update QP_STATE table.
  * Most inputs for the QP_STATE entry come from the passed in RQ and QP.
@@ -734,6 +771,7 @@ void hfi2_native_reset_qp(struct rvt_qp *qp)
 	struct ib_qp *ibqp = &qp->ibqp;
 	struct hfi_rq *rq = qp->r_rq.hw_rq;
 	struct hfi_ibcontext *ctx;
+	struct hfi2_qp_priv *priv = qp->priv;
 
 	if (!rq)
 		return;
@@ -743,6 +781,12 @@ void hfi2_native_reset_qp(struct rvt_qp *qp)
 	ret = hfi_set_qp_state(ctx->rx_cmdq, qp, 0, 0, VERBS_OK, false);
 	/* TODO */
 	WARN_ON(ret != 0);
+
+	if (!list_empty(&priv->send_qp_ll))
+		list_del(&priv->send_qp_ll);
+
+	if (!list_empty(&priv->recv_qp_ll))
+		list_del(&priv->recv_qp_ll);
 
 	if (!ibqp->srq)
 		hfi_deinit_hw_rq(ctx, rq);
@@ -917,6 +961,9 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 					      (struct hfi_ibeq **)&cq->hw_send);
 			if (ret != 0)
 				goto qp_write_err;
+			if (list_empty(&priv->send_qp_ll))
+				list_add_tail(&((struct hfi_ibeq *)cq->hw_send)->qp_ll,
+					      &priv->send_qp_ll);
 		}
 
 		/* create recv EQ if first use of CQ */
@@ -928,6 +975,9 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 						      &priv->recv_eq);
 				if (ret != 0)
 					goto qp_write_err;
+				if (list_empty(&priv->recv_qp_ll))
+					list_add_tail(&((struct hfi_ibeq *)priv->recv_eq)->qp_ll,
+						      &priv->recv_qp_ll);
 			}
 		}
 
@@ -1577,6 +1627,13 @@ int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc,
 	return signal;
 }
 
+static inline
+void hfi2_destroy_eq(struct rvt_cq *cq, struct hfi_ibeq *ibeq)
+{
+	list_del(&ibeq->hw_cq);
+	hfi_eq_free((struct hfi_eq *)ibeq);
+}
+
 int hfi2_fence(struct hfi_ibcontext *ctx, struct rvt_qp *qp, u32 *fence_value)
 {
 	struct rvt_cq *cq = ibcq_to_rvtcq(qp->ibqp.recv_cq);
@@ -1590,6 +1647,7 @@ int hfi2_fence(struct hfi_ibcontext *ctx, struct rvt_qp *qp, u32 *fence_value)
 start:
 	spin_lock_irqsave(&cq->lock, flags);
 
+start_has_lock:
 	if (*fence_value == 0)
 		goto exit;
 
@@ -1600,6 +1658,10 @@ start:
 				spin_unlock_irqrestore(&cq->lock, flags);
 				return ret;
 			} else if (ret == HFI_EQ_EMPTY) {
+				if (unlikely(ibeq->eq.events_pending.counter >= RECV_CQ_FREE)) {
+					hfi2_destroy_eq(cq, ibeq);
+					goto start_has_lock;
+				}
 				if (!list_is_last(&ibeq->hw_cq, &cq->hw_cq))
 					break;
 				spin_unlock_irqrestore(&cq->lock, flags);
@@ -1621,6 +1683,10 @@ start:
 			case NON_PTL_EVENT_VERBS_TX:
 				hfi2_process_tx_eq(ctx, (union initiator_EQEntry *)eqe,
 						   NULL);
+				if (unlikely(ibeq->eq.events_pending.counter == SEND_CQ_FREE)) {
+					hfi2_destroy_eq(cq, ibeq);
+					goto start_has_lock;
+				}
 				break;
 			default:
 				pr_err("Unknown event kind %d\n", kind);
@@ -1669,6 +1735,128 @@ int hfi2_poll_cq_qp(struct hfi_ibcontext *ctx, struct rvt_cq *cq,
 	return 0;
 }
 
+static inline
+void hfi2_update_qp_send_eq(struct rvt_qp *qp, struct hfi_eq *eq)
+{
+	struct hfi2_qp_priv *priv = qp->priv;
+	int i;
+
+	if (qp->ibqp.qp_type != IB_QPT_UD)
+		for (i = 0; i < qp->s_size; i++) {
+			priv->cmd[i].dma.flit0.b.eq_handle = eq->idx;
+			priv->cmd[i].dma.flit1.e.ipid = eq->ctx->pid;
+		}
+}
+
+int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
+{
+	struct hfi_ibcontext *ctx = obj_to_ibctx(ibcq);
+	struct rvt_cq *cq = ibcq_to_rvtcq(ibcq);
+	struct hfi2_qp_priv *priv;
+	struct hfi_ibeq *ibeq, *new_ibeq, *next, *first_new = NULL;
+	struct opa_ev_assign eq_alloc = {0};
+	int ret, nslots;
+	unsigned long flags;
+	uint64_t done;
+	union hfi_rx_cq_update_command cmd;
+
+	ret = rvt_resize_cq(ibcq, cqe, udata);
+	if (ret || !ctx || !ctx->supports_native || list_empty(&cq->hw_cq))
+		return ret;
+
+	spin_lock_irqsave(&cq->lock, flags);
+
+	/* This loop will allocate a new EQ, with the new CQ size, for every
+	 * existing EQ assoicated with the IB CQ being resized. The existing
+	 * EQs can either be send or recieve EQs. Send EQs loop through every QP
+	 * assiocated with the EQ updating the QPs prepopulated command buffer
+	 * EQ_HANDLE + IPID field. Recieve EQs loop through every QP assiocated
+	 * with the EQ updating QP state in the HFI with the new EQ_HANDLE. The
+	 * new EQ is appended linked list of EQs assoicated with the IB CQ and
+	 * the loop is broken when the first new EQ is encountered.
+	 */
+	list_for_each_entry_safe(ibeq, next, &cq->hw_cq, hw_cq) {
+		if (ibeq == first_new)
+			break;
+
+		eq_alloc.ni = NATIVE_NI;
+		eq_alloc.count = adjust_cqe(cq->ibcq.cqe);
+		new_ibeq = hfi_ibeq_alloc(ibeq->eq.ctx, &eq_alloc);
+		if (IS_ERR(ibeq)) {
+			ret = PTR_ERR(ibeq);
+			return ret;
+		}
+		if (!first_new)
+			first_new = new_ibeq;
+		new_ibeq->qp_ll = ibeq->qp_ll;
+
+		if (ibeq == cq->hw_send) {
+			list_for_each_entry(priv, &ibeq->qp_ll, send_qp_ll)
+				spin_lock_irqsave(&priv->owner->s_lock, flags);
+
+			/* events_pending field is overloaded, when counter
+			 * reaches SEND_CQ_FREE the old EQ can be destroyed
+			 * either below or when events are consumed.
+			 */
+			atomic_add(SEND_CQ_FREE,
+				   &ibeq->eq.events_pending);
+			cq->hw_send = new_ibeq;
+
+			list_for_each_entry(priv, &ibeq->qp_ll, send_qp_ll) {
+				hfi2_update_qp_send_eq(priv->owner, &ibeq->eq);
+				spin_unlock_irqrestore(&priv->owner->s_lock,
+						       flags);
+			}
+
+			if (ibeq->eq.events_pending.counter == SEND_CQ_FREE) {
+				hfi2_destroy_eq(cq, ibeq);
+			}
+		} else {
+			list_for_each_entry(priv, &ibeq->qp_ll, send_qp_ll) {
+				priv->recv_eq = ibeq;
+				ctx = obj_to_ibctx(&priv->owner->ibqp);
+
+				nslots = hfi_format_qp_update_recv_eq(priv->owner,
+								     (u64)&done,
+								     &cmd);
+				spin_lock_irqsave(&ctx->rx_cmdq->lock, flags);
+				do {
+					ret = hfi_rx_command(ctx->rx_cmdq,
+							     (u64 *)&cmd,
+							     nslots);
+				} while (ret == -EAGAIN);
+				spin_unlock_irqrestore(&ctx->rx_cmdq->lock,
+						       flags);
+				if (unlikely(ret)) {
+					spin_unlock_irqrestore(&cq->lock,
+							       flags);
+					return ret;
+				}
+
+				ret = hfi_eq_poll_cmd_complete(priv->rq_ctx,
+							       &done);
+				if (unlikely(ret)) {
+					spin_unlock_irqrestore(&cq->lock,
+							       flags);
+					return ret;
+				}
+			}
+			/* event_pending field is overload, when coutner is >=
+			 * RECV_CQ_FREE and EQ has been fully drained the EQ can
+			 * be destroyed.
+			 */
+			atomic_add(RECV_CQ_FREE+cqe,
+				   &ibeq->eq.events_pending);
+		}
+
+		list_add_tail(&new_ibeq->hw_cq, &cq->hw_cq);
+	}
+
+	spin_unlock_irqrestore(&cq->lock, flags);
+
+	return 0;
+}
+
 int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(ibcq);
@@ -1709,6 +1897,7 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 
 	spin_lock_irqsave(&cq->lock, flags);
 
+start:
 	list_for_each_entry(ibeq, &cq->hw_cq, hw_cq) {
 		while (i < ne) {
 			ret = hfi_eq_peek_nth(&ibeq->eq, &eqe, 0, &dropped);
@@ -1716,6 +1905,10 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 				spin_unlock_irqrestore(&cq->lock, flags);
 				return ret;
 			} else if (ret == HFI_EQ_EMPTY) {
+				if (unlikely(ibeq->eq.events_pending.counter >= RECV_CQ_FREE)) {
+					hfi2_destroy_eq(cq, ibeq);
+					goto start;
+				}
 				if (!list_is_last(&ibeq->hw_cq, &cq->hw_cq))
 					break;
 				spin_unlock_irqrestore(&cq->lock, flags);
@@ -1732,6 +1925,10 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 				i += hfi2_process_tx_eq(ctx,
 							(union initiator_EQEntry *)eqe,
 							(wc + i));
+				if (unlikely(ibeq->eq.events_pending.counter == SEND_CQ_FREE)) {
+					hfi2_destroy_eq(cq, ibeq);
+					goto start;
+				}
 				break;
 			default:
 				pr_err("Unknown event kind %d\n", kind);
@@ -1827,6 +2024,7 @@ int hfi2_destroy_cq(struct ib_cq *ibcq)
 	spin_lock_irqsave(&rcq->lock, flags);
 	if (!list_empty(&rcq->hw_cq)) {
 		list_for_each_entry_safe(ibeq, next, &rcq->hw_cq, hw_cq) {
+			// TODO - Should we ensure no QPs are attached?
 			if (ibeq->eq.ctx->type == HFI_CTX_TYPE_KERNEL)
 				hfi_eq_free((struct hfi_eq *)ibeq);
 			else

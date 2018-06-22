@@ -338,6 +338,11 @@ union hfi_rx_cq_command {
 	struct hfi_rx_cq_list_verbs	list_verbs;
 } __aligned(64);
 
+union hfi_rx_cq_update_command {
+	struct hfi_rx_cq_state_verbs	state_verbs;
+	u64				command[16];
+} __aligned(64);
+
 /* Format an RX CMDQ command for a 64B STATE UPDATE operation */
 static inline
 int hfi_format_rx_update64(struct hfi_ctx *ctx, u8 ni,
