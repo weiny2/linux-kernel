@@ -15,6 +15,7 @@
 #include <asm/cache.h>
 #include <asm/apic.h>
 #include <asm/uv/uv.h>
+#include <asm/rar.h>
 
 #include "mm_internal.h"
 
@@ -348,7 +349,7 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 * from one thread in a process to another thread in the same
 		 * process. No TLB flush required.
 		 */
-		if (!was_lazy)
+		if (!cpu_feature_enabled(X86_FEATURE_RAR) && !was_lazy)
 			return;
 
 		/*
@@ -359,8 +360,9 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 */
 		smp_mb();
 		next_tlb_gen = atomic64_read(&next->context.tlb_gen);
-		if (this_cpu_read(cpu_tlbstate.ctxs[prev_asid].tlb_gen) ==
-				next_tlb_gen)
+		if (!cpu_feature_enabled(X86_FEATURE_RAR) &&
+		    (this_cpu_read(cpu_tlbstate.ctxs[prev_asid].tlb_gen) ==
+				next_tlb_gen))
 			return;
 
 		/*
@@ -794,8 +796,22 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 		local_irq_enable();
 	}
 
-	if (cpumask_any_but(mm_cpumask(mm), cpu) < nr_cpu_ids)
-		flush_tlb_others(mm_cpumask(mm), info);
+	if (cpumask_any_but(mm_cpumask(mm), cpu) < nr_cpu_ids) {
+		if (cpu_feature_enabled(X86_FEATURE_RAR)) {
+			count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
+
+			if (static_cpu_has(X86_FEATURE_PCID)) {
+				u32 asid = this_cpu_read(cpu_tlbstate.loaded_mm_asid);
+
+				rar_flush_tlb_others(mm_cpumask(mm), kern_pcid(asid), info);
+				rar_flush_tlb_others(mm_cpumask(mm), user_pcid(asid), info);
+			} else {
+				rar_flush_tlb_others(mm_cpumask(mm), 0, info);
+			}
+		} else {
+			flush_tlb_others(mm_cpumask(mm), info);
+		}
+	}
 
 	put_flush_tlb_info();
 	put_cpu();
@@ -811,6 +827,25 @@ static void do_flush_tlb_all(void *info)
 void flush_tlb_all(void)
 {
 	count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
+
+	if (static_cpu_has(X86_FEATURE_RAR)) {
+		unsigned long flags;
+
+		struct flush_tlb_info info = {
+			.mm = NULL,
+			.start = 0UL,
+			.end = TLB_FLUSH_ALL,
+		};
+
+		preempt_disable();
+		rar_flush_tlb_others(cpu_online_mask, 0, &info);
+		local_irq_save(flags);
+		do_flush_tlb_all(NULL);
+		local_irq_restore(flags);
+		preempt_enable();
+		return;
+	}
+
 	on_each_cpu(do_flush_tlb_all, NULL, 1);
 }
 
@@ -826,6 +861,30 @@ static void do_kernel_range_flush(void *info)
 
 void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 {
+	if (cpu_feature_enabled(X86_FEATURE_RAR)) {
+		struct flush_tlb_info info;
+		unsigned long flags;
+
+		info.mm = NULL;
+		info.start = start;
+		info.end = end;
+
+		preempt_disable();
+
+		rar_flush_tlb_others(cpu_online_mask, 0, &info);
+
+		local_irq_save(flags);
+		if (end == TLB_FLUSH_ALL ||
+		    (end - start) > tlb_single_page_flush_ceiling << PAGE_SHIFT)
+			do_flush_tlb_all(NULL);
+		else
+			do_kernel_range_flush(&info);
+		local_irq_restore(flags);
+
+		preempt_enable();
+		return;
+	}
+
 	/* Balance as user space task's flush, a bit conservative */
 	if (end == TLB_FLUSH_ALL ||
 	    (end - start) > tlb_single_page_flush_ceiling << PAGE_SHIFT) {
@@ -866,8 +925,14 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 		local_irq_enable();
 	}
 
-	if (cpumask_any_but(&batch->cpumask, cpu) < nr_cpu_ids)
-		flush_tlb_others(&batch->cpumask, &full_flush_tlb_info);
+	if (cpumask_any_but(&batch->cpumask, cpu) < nr_cpu_ids) {
+		if (cpu_feature_enabled(X86_FEATURE_RAR)) {
+			count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
+			rar_flush_tlb_others(&batch->cpumask, 0, &full_flush_tlb_info);
+		} else {
+			flush_tlb_others(&batch->cpumask, &full_flush_tlb_info);
+		}
+	}
 
 	cpumask_clear(&batch->cpumask);
 
