@@ -51,18 +51,18 @@
 /*
  * Intel(R) Omni-Path Gen2 HFI PCIe Driver
  */
-#ifndef _PEND_CQ_H
-#define _PEND_CQ_H
+#ifndef _PEND_CMDQ_H
+#define _PEND_CMDQ_H
 
 struct hfi_pt_alloc_eager_args;
 
 /**
  * hfi_pend_queue - Privileged command queue information
- * @event: Wait queue for kthread handling privileged CQ commands
+ * @event: Wait queue for kthread handling privileged CMDQ commands
  * @pending: Pending linked list of struct hfi_pend_cmd
  * @lock: spinlock to safely handle list add/remove
  * @cache: kmem_cache to allocate hfi_pend_cmd structs
- * @thread: thread to handle privileged CQ writes
+ * @thread: thread to handle privileged CMDQ writes
  * @dd: Back pointer to device data
  */
 struct hfi_pend_queue {
@@ -75,38 +75,38 @@ struct hfi_pend_queue {
 	struct hfi_devdata *dd;
 };
 
-int hfi_pend_cq_info_alloc(struct hfi_devdata *dd, struct hfi_pend_queue *pq,
-			   char *name);
-void hfi_pend_cq_info_free(struct hfi_pend_queue *pq);
+int hfi_pend_cmdq_info_alloc(struct hfi_devdata *dd, struct hfi_pend_queue *pq,
+			     char *name);
+void hfi_pend_cmdq_info_free(struct hfi_pend_queue *pq);
 
 /**
- * _hfi_pend_cq_queue - queue a CQ write
+ * _hfi_pend_cmd_queue - queue a CMDQ write
  * @pq: pending queue pointer
- * @cq: the CQ to write into
- * @eq: EQ to check before writing CQ command
+ * @cmdq: the CMDQ to write into
+ * @eq: EQ to check before writing CMDQ command
  * @slots: pointer to the slot data
  * @cmd_slots: number of slots
- * @wait: optionally wait until the CQ command has been written
+ * @wait: optionally wait until the CMDQ command has been written
  * @gfp: gfp flags passed by caller to use for allocating cache object
  */
-int _hfi_pend_cq_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cq,
-		       struct hfi_eq *eq, void *slots, int cmd_slots,
-		       bool wait, gfp_t gfp);
+int _hfi_pend_cmd_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cmdq,
+			struct hfi_eq *eq, void *slots, int cmd_slots,
+			bool wait, gfp_t gfp);
 
-#define hfi_pend_cq_queue_wait(pq, cq, eq, slots, cmd_slots) \
-	_hfi_pend_cq_queue(pq, cq, eq, slots, cmd_slots, true, GFP_KERNEL)
+#define hfi_pend_cmd_queue_wait(pq, cmdq, eq, slots, cmd_slots) \
+	_hfi_pend_cmd_queue(pq, cmdq, eq, slots, cmd_slots, true, GFP_KERNEL)
 
-#define hfi_pend_cq_queue(pq, cq, eq, slots, cmd_slots, gfp) \
-	_hfi_pend_cq_queue(pq, cq, eq, slots, cmd_slots, false, gfp)
+#define hfi_pend_cmd_queue(pq, cmdq, eq, slots, cmd_slots, gfp) \
+	_hfi_pend_cmd_queue(pq, cmdq, eq, slots, cmd_slots, false, gfp)
 
 int hfi_pt_update_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
-			  struct hfi_cmdq *rx_cq, u16 eager_head);
+			  struct hfi_cmdq *rx_cmdq, u16 eager_head);
 
 int hfi_pt_disable_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
-			   struct hfi_cmdq *rx_cq, u8 ni, u32 pt_idx);
+			   struct hfi_cmdq *rx_cmdq, u8 ni, u32 pt_idx);
 
 int hfi_pt_alloc_eager_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
-			       struct hfi_cmdq *rx_cq,
+			       struct hfi_cmdq *rx_cmdq,
 			       struct hfi_pt_alloc_eager_args *args);
 
 #endif

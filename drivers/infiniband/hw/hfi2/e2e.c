@@ -504,11 +504,11 @@ static int hfi_put_e2e_ctrl(struct hfi_devdata *dd, int slid, int dlid,
 	e2e_cmd.flit1.e.max_dist = 1024;
 
 	/* Queue it to be written, don't wait for completion */
-	rc = hfi_pend_cq_queue(&dd->pend_cq,
-			       &dd->priv_tx_cq,
-			       &dd->e2e_eq,
-			       &e2e_cmd.command,
-			       cmd_slots, GFP_KERNEL);
+	rc = hfi_pend_cmd_queue(&dd->pend_cmdq,
+				&dd->priv_tx_cq,
+				&dd->e2e_eq,
+				&e2e_cmd.command,
+				cmd_slots, GFP_KERNEL);
 
 	if (rc)
 		goto done;

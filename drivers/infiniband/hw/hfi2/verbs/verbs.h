@@ -229,7 +229,7 @@ struct hfi2_ibtx {
 	struct hfi_ctx *ctx;
 	struct hfi_cmdq cmdq_tx;
 	struct hfi_cmdq cmdq_rx;
-	struct hfi_pend_queue pend_cq;
+	struct hfi_pend_queue pend_cmdq;
 	struct hfi_eq send_eq;
 };
 
@@ -237,7 +237,7 @@ struct hfi2_ibrcv {
 	struct hfi2_ibport *ibp;
 	struct hfi_ctx *ctx;
 	struct hfi_cmdq *cmdq_rx;
-	struct hfi_pend_queue *pend_cq;
+	struct hfi_pend_queue *pend_cmdq;
 	struct hfi_eq eq;
 	u32 rhq_update_mask;
 	u16 egr_last_idx;

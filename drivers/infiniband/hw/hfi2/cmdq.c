@@ -401,8 +401,8 @@ int hfi_pt_update_lower(struct hfi_ctx *ctx, u8 ni, u32 pt_idx,
 					  HFI_GEN_CC,
 					  &cmd);
 
-	rc = hfi_pend_cq_queue(&dd->pend_cq, &dd->priv_rx_cq, NULL,
-			       (u64 *)&cmd, cmd_slots, GFP_KERNEL);
+	rc = hfi_pend_cmd_queue(&dd->pend_cmdq, &dd->priv_rx_cq, NULL,
+				(u64 *)&cmd, cmd_slots, GFP_KERNEL);
 
 	return rc;
 }

@@ -726,10 +726,10 @@ int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 				    ncc, &cmd);
 
 	/* Queue CMDQ write, wait for completion */
-	ret = hfi_pend_cq_queue_wait(&dd->pend_cq, &dd->priv_rx_cq, NULL, &cmd,
-				     slots);
+	ret = hfi_pend_cmd_queue_wait(&dd->pend_cmdq, &dd->priv_rx_cq, NULL,
+				      &cmd, slots);
 	if (ret) {
-		dd_dev_err(dd, "%s: hfi_pend_cq_queue_wait failed %d\n",
+		dd_dev_err(dd, "%s: hfi_pend_cmd_queue_wait failed %d\n",
 			   __func__, ret);
 		eq_desc_base[eq_idx].val[0] = 0; /* clear valid */
 		idr_remove(&ctx->eq_used, eq_idx);
@@ -916,10 +916,10 @@ int hfi_eq_release(struct hfi_ctx *ctx, u16 eq_idx, u64 user_data)
 				    &cmd);
 
 	/* Queue write, wait for completion */
-	ret = hfi_pend_cq_queue_wait(&dd->pend_cq, &dd->priv_rx_cq, NULL, &cmd,
-				     slots);
+	ret = hfi_pend_cmd_queue_wait(&dd->pend_cmdq, &dd->priv_rx_cq, NULL,
+				      &cmd, slots);
 	if (ret)
-		dd_dev_err(dd, "%s: hfi_pend_cq_queue_wait failed %d\n",
+		dd_dev_err(dd, "%s: hfi_pend_cmd_queue_wait failed %d\n",
 			   __func__, ret);
 
 idr_end:
@@ -1216,10 +1216,10 @@ static void hfi_ib_cq_isr(struct hfi_eq_mgmt *eqm)
 						    &cmd);
 
 			/* Queue write, no wait */
-			ret = hfi_pend_cq_queue(&dd->pend_cq, &dd->priv_rx_cq,
-						NULL, &cmd, slots, GFP_ATOMIC);
+			ret = hfi_pend_cmd_queue(&dd->pend_cmdq, &dd->priv_rx_cq,
+						 NULL, &cmd, slots, GFP_ATOMIC);
 			if (ret) {
-				dd_dev_err(dd, "%s: hfi_pend_cq_queue failed %d\n",
+				dd_dev_err(dd, "%s: hfi_pend_cmd_queue failed %d\n",
 					   __func__, ret);
 			}
 
@@ -1305,10 +1305,10 @@ static int hfi_eq_arm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm,
 				    user_data, &cmd);
 
 	/* Queue write, wait for completion */
-	ret = hfi_pend_cq_queue_wait(&dd->pend_cq, &dd->priv_rx_cq, NULL, &cmd,
-				     slots);
+	ret = hfi_pend_cmd_queue_wait(&dd->pend_cmdq, &dd->priv_rx_cq, NULL,
+				      &cmd, slots);
 	if (ret) {
-		dd_dev_err(dd, "%s: hfi_pend_cq_queue_wait failed %d\n",
+		dd_dev_err(dd, "%s: hfi_pend_cmd_queue_wait failed %d\n",
 			   __func__, ret);
 		return ret;
 	}
@@ -1349,13 +1349,13 @@ static int hfi_eq_disarm(struct hfi_ctx *ctx, struct hfi_eq_mgmt *eqm,
 
 	/* Queue write, wait for completion */
 	if (wait)
-		ret = hfi_pend_cq_queue_wait(&dd->pend_cq, &dd->priv_rx_cq,
-					     NULL, &cmd, slots);
+		ret = hfi_pend_cmd_queue_wait(&dd->pend_cmdq, &dd->priv_rx_cq,
+					      NULL, &cmd, slots);
 	else
-		ret = hfi_pend_cq_queue(&dd->pend_cq, &dd->priv_rx_cq,
-					NULL, &cmd, slots, GFP_ATOMIC);
+		ret = hfi_pend_cmd_queue(&dd->pend_cmdq, &dd->priv_rx_cq,
+					 NULL, &cmd, slots, GFP_ATOMIC);
 	if (ret) {
-		dd_dev_err(dd, "%s: hfi_pend_cq_queue_wait failed %d\n",
+		dd_dev_err(dd, "%s: hfi_pend_cmd_queue_wait failed %d\n",
 			   __func__, ret);
 		return ret;
 	}
@@ -1462,11 +1462,11 @@ int hfi_ib_eq_arm(struct hfi_ctx *ctx, struct ib_cq *ibcq,
 				    &cmd);
 
 	/* Queue write, no wait */
-	ret = hfi_pend_cq_queue(&ctx->devdata->pend_cq,
-				&ctx->devdata->priv_rx_cq,
-				NULL, &cmd, slots, GFP_KERNEL);
+	ret = hfi_pend_cmd_queue(&ctx->devdata->pend_cmdq,
+				 &ctx->devdata->priv_rx_cq,
+				 NULL, &cmd, slots, GFP_KERNEL);
 	if (ret) {
-		dd_dev_err(ctx->devdata, "%s: hfi_pend_cq_queue failed %d\n",
+		dd_dev_err(ctx->devdata, "%s: hfi_pend_cmd_queue failed %d\n",
 			   __func__, ret);
 	}
 
@@ -2017,11 +2017,11 @@ int hfi_ib_eq_add(struct hfi_ctx *ctx, struct ib_cq *cq, u64 disarm_done,
 					    &cmd);
 
 		/* Queue write, no wait */
-		ret = hfi_pend_cq_queue(&ctx->devdata->pend_cq,
-					&ctx->devdata->priv_rx_cq,
-					NULL, &cmd, slots, GFP_KERNEL);
+		ret = hfi_pend_cmd_queue(&ctx->devdata->pend_cmdq,
+					 &ctx->devdata->priv_rx_cq,
+					 NULL, &cmd, slots, GFP_KERNEL);
 		if (ret) {
-			dd_dev_err(ctx->devdata, "%s: hfi_pend_cq_queue failed %d\n",
+			dd_dev_err(ctx->devdata, "%s: hfi_pend_cmd_queue failed %d\n",
 				   __func__, ret);
 		}
 

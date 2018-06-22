@@ -254,7 +254,7 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 {
 	struct hfi2_ibtx *ibtx = qp_priv->s_ctx;
 	struct rvt_qp *qp = qp_priv->owner;
-	struct hfi_pend_queue *pq = &ibtx->pend_cq;
+	struct hfi_pend_queue *pq = &ibtx->pend_cmdq;
 	unsigned long flags;
 	u32 length = 0;
 	u64 start = 0;
@@ -267,7 +267,7 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 	cmd_slots  = _HFI_CMD_SLOTS(cmd_length);
 
 	spin_lock_irqsave(&pq->lock, flags);
-	/* only issue PIO if the pend_cq is empty and we have required slots */
+	/* only issue PIO if the pend_cmdq is empty and has required slots */
 	if (!(list_empty(&pq->pending) &&
 	      hfi_queue_ready(&ibtx->cmdq_tx, cmd_slots, NULL))) {
 		spin_unlock_irqrestore(&pq->lock, flags);
@@ -651,11 +651,11 @@ int hfi2_send_ack(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 					  use_16b ? HDR_16B : HDR_EXT,
 					  dma_cmd, &cmd);
 	/* Queue write, don't wait. */
-	ret = hfi_pend_cq_queue(&ibtx->pend_cq, &ibtx->cmdq_tx, &ibtx->send_eq,
-				&cmd, slots, GFP_KERNEL);
+	ret = hfi_pend_cmd_queue(&ibtx->pend_cmdq, &ibtx->cmdq_tx,
+				 &ibtx->send_eq, &cmd, slots, GFP_KERNEL);
 	if (ret) {
 		dd_dev_err(ibp->ibd->dd,
-			   "%s: hfi_pend_cq_queue failed %d\n",
+			   "%s: hfi_pend_cmd_queue failed %d\n",
 			   __func__, ret);
 		goto err;
 	}
@@ -877,11 +877,11 @@ int hfi2_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 	}
 
 	/* Write command, don't wait. */
-	ret = hfi_pend_cq_queue(&ibtx->pend_cq, &ibtx->cmdq_tx,
-				&ibtx->send_eq, cmd_ptr, slots, gfp);
+	ret = hfi_pend_cmd_queue(&ibtx->pend_cmdq, &ibtx->cmdq_tx,
+				 &ibtx->send_eq, cmd_ptr, slots, gfp);
 	if (ret) {
 		dd_dev_err(ibp->ibd->dd,
-			   "%s: hfi_pend_cq_queue failed %d\n",
+			   "%s: hfi_pend_cmd_queue failed %d\n",
 			   __func__, ret);
 		goto err;
 	}
@@ -947,7 +947,7 @@ void hfi2_rcv_advance(struct hfi2_ibrcv *rcv, u64 *rhf_entry)
 		int ret;
 
 		/* Tell HW re-enable PT and update eager buffer */
-		ret = hfi_pt_update_pending(rcv->pend_cq, rcv->ctx,
+		ret = hfi_pt_update_pending(rcv->pend_cmdq, rcv->ctx,
 					    rcv->cmdq_rx,
 					    rcv->egr_last_idx);
 		if (ret < 0) {
@@ -995,7 +995,7 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 	rcv->ibp = ibp;
 	rcv->ctx = ctx;
 	/* Receive context needs RX CMDQ for managing RX resources */
-	rcv->pend_cq = &ibp->port_tx[cmdq_idx].pend_cq;
+	rcv->pend_cmdq = &ibp->port_tx[cmdq_idx].pend_cmdq;
 	rcv->cmdq_rx = &ibp->port_tx[cmdq_idx].cmdq_rx;
 
 	/*
@@ -1042,7 +1042,7 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 
 	pt_alloc.eq_handle = &rcv->eq;
 	pt_alloc.eager_order = HFI_IB_EAGER_COUNT_ORDER;
-	ret = hfi_pt_alloc_eager_pending(rcv->pend_cq, rcv->ctx, rcv->cmdq_rx,
+	ret = hfi_pt_alloc_eager_pending(rcv->pend_cmdq, rcv->ctx, rcv->cmdq_rx,
 					 &pt_alloc);
 	if (ret < 0)
 		goto init_err;
@@ -1067,9 +1067,9 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 					       (u64)&done,
 					       i, HFI_GEN_CC, &rx_cmd);
 
-		ret = hfi_pend_cq_queue(rcv->pend_cq, rcv->cmdq_rx,
-					HFI_EQ_ZERO(rcv->ctx, 0), &rx_cmd,
-					n_slots, GFP_KERNEL);
+		ret = hfi_pend_cmd_queue(rcv->pend_cmdq, rcv->cmdq_rx,
+					 HFI_EQ_ZERO(rcv->ctx, 0), &rx_cmd,
+					 n_slots, GFP_KERNEL);
 		if (ret < 0)
 			goto init_err;
 
@@ -1127,7 +1127,7 @@ void hfi2_rcv_uninit(struct hfi2_ibrcv *rcv)
 	hfi2_rcv_stop(rcv);
 
 	/* disable PT so EQ buffer and RX buffers can be released */
-	ret = hfi_pt_disable_pending(rcv->pend_cq, rcv->ctx, rcv->cmdq_rx,
+	ret = hfi_pt_disable_pending(rcv->pend_cmdq, rcv->ctx, rcv->cmdq_rx,
 				     HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER);
 	if (ret < 0)
 		dev_err(rcv->ibp->dev, "unexpected PT disable error %d\n", ret);
@@ -1319,17 +1319,16 @@ static int hfi2_ibtx_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 		goto tx_map_err;
 
 	snprintf(name, sizeof(name), "ib%d", idx);
-	ret = hfi_pend_cq_info_alloc(ibp->ibd->dd, &ibtx->pend_cq,
-				     name);
+	ret = hfi_pend_cmdq_info_alloc(ibp->ibd->dd, &ibtx->pend_cmdq, name);
 	if (ret < 0)
-		goto pend_cq_err;
+		goto pend_cmdq_err;
 
 	/* set Send Context pointer last to mark send context as enabled */
 	ibtx->ctx = ctx;
 	ibtx->ibp = ibp;
 	return 0;
 
-pend_cq_err:
+pend_cmdq_err:
 	hfi_cmdq_unmap(&ibtx->cmdq_tx, &ibtx->cmdq_rx);
 tx_map_err:
 	hfi_cmdq_release(ctx, cmdq_idx);
@@ -1346,7 +1345,7 @@ static void hfi2_ibtx_uninit(struct hfi2_ibtx *ibtx)
 	if (!ibtx->ctx)
 		return;
 
-	hfi_pend_cq_info_free(&ibtx->pend_cq);
+	hfi_pend_cmdq_info_free(&ibtx->pend_cmdq);
 	hfi_cmdq_unmap(&ibtx->cmdq_tx, &ibtx->cmdq_rx);
 	hfi_cmdq_release(ibtx->ctx, cmdq_idx);
 	/* eq_free last as CMDQ release (above) may generate events */
@@ -1473,11 +1472,13 @@ void hfi_send_cnp(struct hfi2_ibport *ibp, struct rvt_qp *qp, u8 sl, bool grh,
 				      ibp->port_num, sl,
 				      ibp->ppd->lid, true, 0, dma_cmd);
 	/* Queue write, don't wait. */
-	ret = hfi_pend_cq_queue(&ibtx->pend_cq, &ibtx->cmdq_tx, &ibtx->send_eq,
-				qp_priv->s_hdr, slots, GFP_KERNEL);
+	ret = hfi_pend_cmd_queue(&ibtx->pend_cmdq, &ibtx->cmdq_tx,
+				 &ibtx->send_eq, qp_priv->s_hdr, slots,
+				 GFP_KERNEL);
 	if (ret) {
 		dd_dev_warn(ibp->ibd->dd,
-			    "%s: hfi_pend_cq_queue failed %d\n", __func__, ret);
+			    "%s: hfi_pend_cmd_queue failed %d\n",
+			    __func__, ret);
 		return;
 	}
 }

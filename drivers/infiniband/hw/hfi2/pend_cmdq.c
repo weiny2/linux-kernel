@@ -55,15 +55,15 @@
 #include <linux/kthread.h>
 #include <linux/sched/signal.h>
 #include "hfi2.h"
-#include "pend_cq.h"
+#include "pend_cmdq.h"
 #include "hfi_kclient.h"
 #include "hfi_tx_bypass.h"
 
 /* FXRTODO: Delete or clean up before upstreaming */
 static void hfi_dump_pend_cmd(struct hfi_devdata *dd, struct hfi_pend_cmd *cmd)
 {
-	dd_dev_info(dd, "Pending command: %p, CQ: %p, EQ: %p\n", cmd,
-		    cmd->cq, cmd->eq);
+	dd_dev_info(dd, "Pending command: %p, CMDQ: %p, EQ: %p\n", cmd,
+		    cmd->cmdq, cmd->eq);
 	dd_dev_info(dd, "slot_ptr %p, cmd_slots %d, ret %d, wait %s\n",
 		    cmd->slot_ptr, cmd->cmd_slots, cmd->ret,
 		    cmd->wait ? "true" : "false");
@@ -72,13 +72,13 @@ static void hfi_dump_pend_cmd(struct hfi_devdata *dd, struct hfi_pend_cmd *cmd)
 }
 
 /* FXRTODO: Delete or clean up and move to the right place before upstreaming */
-static void hfi_dump_cq(struct hfi_devdata *dd, struct hfi_cmdq *cq)
+static void hfi_dump_cmdq(struct hfi_devdata *dd, struct hfi_cmdq *cmdq)
 {
-	dd_dev_info(dd, "CQ: %p, cmdq_idx %u\n", cq, cq->cmdq_idx);
+	dd_dev_info(dd, "CMDQ: %p, cmdq_idx %u\n", cmdq, cmdq->cmdq_idx);
 	dd_dev_info(dd, "base %p, size %lu, head_addr %p, slot_idx %u\n",
-		    cq->base, cq->size, cq->head_addr, cq->slot_idx);
+		    cmdq->base, cmdq->size, cmdq->head_addr, cmdq->slot_idx);
 	dd_dev_info(dd, "sw_head_idx %u, slots_avail %u, slots_total %u.\n",
-		    cq->sw_head_idx, cq->slots_avail, cq->slots_total);
+		    cmdq->sw_head_idx, cmdq->slots_avail, cmdq->slots_total);
 }
 
 /* FXRTODO: Delete or clean up and move to the right place before upstreaming */
@@ -90,10 +90,10 @@ static void hfi_dump_eq(struct hfi_devdata *dd, struct hfi_eq *eq)
 	dd_dev_info(dd, "idx %u, head_addr %p\n", eq->idx, eq->head_addr);
 }
 
-static void hfi_write_pending_cq_cmd(struct hfi_pend_cmd *cmd,
-				     struct hfi_devdata *dd)
+static void hfi_write_pending_cmd(struct hfi_pend_cmd *cmd,
+				  struct hfi_devdata *dd)
 {
-	struct hfi_cmdq *cq = cmd->cq;
+	struct hfi_cmdq *cmdq = cmd->cmdq;
 	unsigned long timeout;
 
 	timeout = jiffies + msecs_to_jiffies(HFI_PRIV_CMDQ_TIMEOUT_MS);
@@ -104,7 +104,7 @@ static void hfi_write_pending_cq_cmd(struct hfi_pend_cmd *cmd,
 	 * TX EQ events.
 	 */
 	/* Busy wait until enough slots are available */
-	while (!hfi_queue_ready(cmd->cq, cmd->cmd_slots, cmd->eq)) {
+	while (!hfi_queue_ready(cmdq, cmd->cmd_slots, cmd->eq)) {
 		if (time_after(jiffies, timeout))
 			goto timeout;
 
@@ -115,9 +115,9 @@ static void hfi_write_pending_cq_cmd(struct hfi_pend_cmd *cmd,
 		hfi_eq_pending_inc(cmd->eq);
 
 	if (cmd->cmd_slots == 1)
-		_hfi_command(cq, cmd->slot_ptr, cmd->cq->slots_total);
+		_hfi_command(cmdq, cmd->slot_ptr, cmdq->slots_total);
 	else if (cmd->cmd_slots == 2)
-		_hfi_command2(cq, cmd->slot_ptr, cmd->cq->slots_total);
+		_hfi_command2(cmdq, cmd->slot_ptr, cmdq->slots_total);
 
 	cmd->ret = 0;
 
@@ -125,14 +125,14 @@ static void hfi_write_pending_cq_cmd(struct hfi_pend_cmd *cmd,
 timeout:
 
 	dd_dev_warn(dd,
-		    "Timeout waiting for pend CQ %p slots: %d total: %d\n",
-		    cq, cmd->cmd_slots, cmd->cq->slots_total);
+		    "Timeout waiting for pend CMDQ %p slots: %d total: %d\n",
+		    cmdq, cmd->cmd_slots, cmdq->slots_total);
 
-	hfi_dump_cq(dd, cmd->cq);
+	hfi_dump_cmdq(dd, cmd->cmdq);
 	hfi_dump_pend_cmd(dd, cmd);
 
 	if (cmd->eq) {
-		dd_dev_warn(dd, "CQ %p EQ %p %d %d\n", cq, cmd->eq,
+		dd_dev_warn(dd, "CMDQ %p EQ %p %d %d\n", cmdq, cmd->eq,
 			    atomic_read(&cmd->eq->events_pending),
 			    cmd->eq->count);
 		hfi_dump_eq(dd, cmd->eq);
@@ -142,25 +142,25 @@ timeout:
 }
 
 static inline
-int hfi_pend_cq_direct(struct hfi_devdata *dd, struct hfi_cmdq *cq,
-		       struct hfi_eq *eq, void *cmd, int cmd_slots)
+int hfi_pend_cmd_direct(struct hfi_devdata *dd, struct hfi_cmdq *cmdq,
+			struct hfi_eq *eq, void *cmd, int nslots)
 {
 	struct hfi_pend_cmd tmp;
 
-	tmp.cq = cq;
-	tmp.cmd_slots = cmd_slots;
+	tmp.cmdq = cmdq;
+	tmp.cmd_slots = nslots;
 	tmp.slot_ptr = cmd;
 	tmp.wait = false;
 	tmp.eq = eq;
 
-	hfi_write_pending_cq_cmd(&tmp, dd);
+	hfi_write_pending_cmd(&tmp, dd);
 
 	return tmp.ret;
 }
 
-int _hfi_pend_cq_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cq,
-		       struct hfi_eq *eq, void *cmd, int cmd_slots,
-		       bool wait, gfp_t gfp)
+int _hfi_pend_cmd_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cmdq,
+			struct hfi_eq *eq, void *cmd, int nslots,
+			bool wait, gfp_t gfp)
 {
 	struct hfi_pend_cmd *p;
 	bool always_direct = false; /* FXRTODO: Add ability to tweak this */
@@ -170,8 +170,8 @@ int _hfi_pend_cq_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cq,
 	spin_lock_irqsave(&pq->lock, flags);
 	/* Optimization for empty list case */
 	if (always_direct ||
-	    (list_empty(&pq->pending) && hfi_queue_ready(cq, cmd_slots, eq))) {
-		ret = hfi_pend_cq_direct(pq->dd, cq, eq, cmd, cmd_slots);
+	    (list_empty(&pq->pending) && hfi_queue_ready(cmdq, nslots, eq))) {
+		ret = hfi_pend_cmd_direct(pq->dd, cmdq, eq, cmd, nslots);
 		spin_unlock_irqrestore(&pq->lock, flags);
 		return ret;
 	}
@@ -184,25 +184,25 @@ int _hfi_pend_cq_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cq,
 	}
 
 	p->ret = 0;
-	p->cq = cq;
-	p->cmd_slots = cmd_slots;
+	p->cmdq = cmdq;
+	p->cmd_slots = nslots;
 	p->slot_ptr = cmd;
 	p->wait = wait;
 	p->eq = eq;
 
 	/* Asynch case needs to copy the data to the p struct */
 	if (!wait) {
-		size_t nbytes = cmd_slots * 64;
+		size_t nbytes = nslots * 64;
 
-		if (nbytes > HFI_MAX_PEND_CQ_CMD_LEN_BYTES) {
+		if (nbytes > HFI_MAX_PEND_CMD_LEN_BYTES) {
 			dd_dev_err(pq->dd, "%s: %d size %ld > %ld\n", __func__,
 				   __LINE__, nbytes,
-				   (size_t)HFI_MAX_PEND_CQ_CMD_LEN_BYTES);
+				   (size_t)HFI_MAX_PEND_CMD_LEN_BYTES);
 			kmem_cache_free(pq->cache, p);
 			return -EINVAL;
 		}
 
-		memcpy(p->slots, cmd, cmd_slots * 64);
+		memcpy(p->slots, cmd, nslots * 64);
 		p->slot_ptr = &p->slots[0];
 	} else {
 		init_completion(&p->completion);
@@ -212,14 +212,14 @@ int _hfi_pend_cq_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cq,
 	list_add_tail(&p->list, &pq->pending);
 	spin_unlock_irqrestore(&pq->lock, flags);
 
-	/* To sync with rmb in hfi_pend_cq_thread */
+	/* To sync with rmb in hfi_pend_cmdq_thread */
 	wmb();
 	wake_up_interruptible(&pq->event);
 
 	if (wait) {
 		wait_for_completion(&p->completion);
 
-		/* To sync with wmb in hfi_pend_cq_thread */
+		/* To sync with wmb in hfi_pend_cmdq_thread */
 		rmb();
 
 		ret = p->ret;
@@ -232,8 +232,8 @@ int _hfi_pend_cq_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cq,
 	return ret;
 }
 
-/* Kernel thread handling privileged CQ writes */
-static int hfi_pend_cq_thread(void *data)
+/* Kernel thread handling privileged CMDQ writes */
+static int hfi_pend_cmdq_thread(void *data)
 {
 	struct hfi_pend_queue *pq = data;
 	struct hfi_pend_cmd *p, *next;
@@ -244,13 +244,13 @@ static int hfi_pend_cq_thread(void *data)
 	while (!kthread_should_stop()) {
 		wait_event_interruptible(pq->event,
 					 !list_empty(&pq->pending));
-		/* To sync with wmb in _hfi_pend_cq_queue */
+		/* To sync with wmb in _hfi_pend_cmd_queue */
 		rmb();
 		spin_lock_irqsave(&pq->lock, flags);
 		list_for_each_entry_safe(p, next, &pq->pending, list) {
 			spin_unlock_irqrestore(&pq->lock, flags);
 
-			hfi_write_pending_cq_cmd(p, pq->dd);
+			hfi_write_pending_cmd(p, pq->dd);
 
 			/*
 			 * Delete the list entry only after writing the pending
@@ -266,7 +266,7 @@ static int hfi_pend_cq_thread(void *data)
 			cond_resched();
 
 			if (p->wait) {
-				/* To sync with rmb in _hfi_pend_cq_queue */
+				/* To sync with rmb in _hfi_pend_cmd_queue */
 				wmb();
 				complete(&p->completion);
 			} else {
@@ -291,7 +291,7 @@ static int hfi_pend_cq_thread(void *data)
 
 		p->ret = -EINTR;
 
-		/* To sync with rmb in _hfi_pend_cq_queue */
+		/* To sync with rmb in _hfi_pend_cmd_queue */
 		wmb();
 
 		complete(&p->completion);
@@ -301,7 +301,7 @@ static int hfi_pend_cq_thread(void *data)
 	return 0;
 }
 
-static void hfi_stop_pend_cq_thread(struct hfi_pend_queue *pq)
+static void hfi_stop_pend_cmdq_thread(struct hfi_pend_queue *pq)
 {
 	int ret;
 
@@ -319,26 +319,26 @@ static void hfi_stop_pend_cq_thread(struct hfi_pend_queue *pq)
 	pq->thread = NULL;
 }
 
-int hfi_pend_cq_info_alloc(struct hfi_devdata *dd, struct hfi_pend_queue *pq,
-			   char *name)
+int hfi_pend_cmdq_info_alloc(struct hfi_devdata *dd, struct hfi_pend_queue *pq,
+			     char *name)
 {
 	init_waitqueue_head(&pq->event);
 	INIT_LIST_HEAD(&pq->pending);
 	spin_lock_init(&pq->lock);
 
-	pq->thread = kthread_run(hfi_pend_cq_thread, pq,
+	pq->thread = kthread_run(hfi_pend_cmdq_thread, pq,
 				 "hfi2_cmdq%d-%s", dd->unit, name);
 	if (IS_ERR(pq->thread)) {
 		int ret = PTR_ERR(pq->thread);
 
-		dd_dev_err(dd, "Unable to create priv cq kthread: %d\n", ret);
+		dd_dev_err(dd, "Unable to create priv cmdq kthread: %d\n", ret);
 		return ret;
 	}
 
 	pq->cache = KMEM_CACHE(hfi_pend_cmd, 0);
 	if (!pq->cache) {
-		dd_dev_err(dd, "Unable to create priv cq cache\n");
-		hfi_stop_pend_cq_thread(pq);
+		dd_dev_err(dd, "Unable to create priv cmdq cache\n");
+		hfi_stop_pend_cmdq_thread(pq);
 		return -ENOMEM;
 	}
 
@@ -347,17 +347,17 @@ int hfi_pend_cq_info_alloc(struct hfi_devdata *dd, struct hfi_pend_queue *pq,
 	return 0;
 }
 
-void hfi_pend_cq_info_free(struct hfi_pend_queue *pq)
+void hfi_pend_cmdq_info_free(struct hfi_pend_queue *pq)
 {
 	/* The thread will clean up the list and notify callers */
-	hfi_stop_pend_cq_thread(pq);
+	hfi_stop_pend_cmdq_thread(pq);
 
 	kmem_cache_destroy(pq->cache);
 }
 
 static inline
 int hfi_pt_write_cmd_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
-			     struct hfi_cmdq *rx_cq, enum rx_cq_cmd cq_cmd,
+			     struct hfi_cmdq *rx_cmdq, enum rx_cq_cmd cmdq_cmd,
 			     u8 ni, u32 pt_idx, u64 *val, u64 user_data)
 {
 	union hfi_rx_cq_command cmd;
@@ -374,27 +374,27 @@ int hfi_pt_write_cmd_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
 	cmd_slots = hfi_format_rx_write64(ctx,
 					  ni,
 					  pt_idx,
-					  cq_cmd,
+					  cmdq_cmd,
 					  HFI_CT_NONE,	/* Not used */
 					  val,		/* payload[0-3] */
 					  user_data,
 					  HFI_GEN_CC,
 					  &cmd);
 	eq = HFI_EQ_ZERO(ctx, 0);
-	return hfi_pend_cq_queue_wait(pq, rx_cq, eq, &cmd, cmd_slots);
+	return hfi_pend_cmd_queue_wait(pq, rx_cmdq, eq, &cmd, cmd_slots);
 }
 
 static inline
 int hfi_pt_issue_cmd_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
-			     struct hfi_cmdq *rx_cq, enum rx_cq_cmd cq_cmd,
+			     struct hfi_cmdq *rx_cmdq, enum rx_cq_cmd cmdq_cmd,
 			     u8 ni, u32 pt_idx, u64 *val)
 {
 	int rc;
 	u64 done = 0;
 
 	/* Issue the PT_WRITE command via the RX CMDQ */
-	rc = hfi_pt_write_cmd_pending(pq, ctx, rx_cq, cq_cmd, ni, pt_idx, val,
-				      (u64)&done);
+	rc = hfi_pt_write_cmd_pending(pq, ctx, rx_cmdq, cmdq_cmd, ni, pt_idx,
+				      val, (u64)&done);
 
 	if (rc < 0)
 		return -EIO;
@@ -406,14 +406,14 @@ int hfi_pt_issue_cmd_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
 }
 
 int hfi_pt_update_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
-			  struct hfi_cmdq *rx_cq, u16 eager_head)
+			  struct hfi_cmdq *rx_cmdq, u16 eager_head)
 {
 	union ptentry_fp0_bc1_et0 ptentry;
 	int rc;
 
 	if (HFI_CTX_INVALID(ctx))
 		return -ENODEV;
-	if (!rx_cq)
+	if (!rx_cmdq)
 		return -EINVAL;
 
 	/* Initialize the PT entry */
@@ -426,7 +426,7 @@ int hfi_pt_update_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
 	/* Mask for just the PT entry EagerHead */
 	ptentry.val[3] = PTENTRY_FP0_BC1_ET0_EAGER_HEAD_MASK;
 
-	rc = hfi_pt_issue_cmd_pending(pq, ctx, rx_cq, PT_UPDATE_LOWER,
+	rc = hfi_pt_issue_cmd_pending(pq, ctx, rx_cmdq, PT_UPDATE_LOWER,
 				      HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER,
 				      &ptentry.val[0]);
 	if (rc < 0)
@@ -436,14 +436,14 @@ int hfi_pt_update_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
 }
 
 int hfi_pt_disable_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
-			   struct hfi_cmdq *rx_cq, u8 ni, u32 pt_idx)
+			   struct hfi_cmdq *rx_cmdq, u8 ni, u32 pt_idx)
 {
 	union ptentry_fp0 ptentry;
 	int rc;
 
 	if (HFI_CTX_INVALID(ctx))
 		return -ENODEV;
-	if (ni >= HFI_NUM_NIS || !rx_cq)
+	if (ni >= HFI_NUM_NIS || !rx_cmdq)
 		return -EINVAL;
 	if (pt_idx == HFI_PT_ANY && pt_idx >= HFI_NUM_PT_ENTRIES)
 		return -EINVAL;
@@ -460,7 +460,7 @@ int hfi_pt_disable_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
 	ptentry.val[2] = PTENTRY_FP0_ENABLE_MASK;
 
 	/* Issue the PT_UPDATE_LOWER command via the RX CMDQ */
-	rc = hfi_pt_issue_cmd_pending(pq, ctx, rx_cq, PT_UPDATE_LOWER, ni,
+	rc = hfi_pt_issue_cmd_pending(pq, ctx, rx_cmdq, PT_UPDATE_LOWER, ni,
 				      pt_idx, &ptentry.val[0]);
 
 	if (rc < 0)
@@ -470,7 +470,7 @@ int hfi_pt_disable_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
 }
 
 int hfi_pt_alloc_eager_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
-			       struct hfi_cmdq *rx_cq,
+			       struct hfi_cmdq *rx_cmdq,
 			       struct hfi_pt_alloc_eager_args *args)
 {
 	union ptentry_fp0_bc1_et0 ptentry;
@@ -483,7 +483,7 @@ int hfi_pt_alloc_eager_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
 	ptentry.val[2] = ~0ULL;
 	ptentry.val[3] = ~0ULL;
 
-	rc = hfi_pt_issue_cmd_pending(pq, ctx, rx_cq, PT_UPDATE_LOWER_PRIV,
+	rc = hfi_pt_issue_cmd_pending(pq, ctx, rx_cmdq, PT_UPDATE_LOWER_PRIV,
 				      HFI_NI_BYPASS, HFI_PT_BYPASS_EAGER,
 				      &ptentry.val[0]);
 	if (rc < 0)

@@ -110,7 +110,7 @@
 #include "platform.h"
 #include "counters.h"
 #include "trace.h"
-#include "pend_cq.h"
+#include "pend_cmdq.h"
 #include "chip/fxr_perfmon_defs.h"
 
 #define HFI_DRIVER_RESET_RETRIES 10
@@ -3094,7 +3094,7 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 			dd_dev_warn(dd, "hfi_ctx_cleanup returned %d\n",
 				    ret);
 	}
-	hfi_pend_cq_info_free(&dd->pend_cq);
+	hfi_pend_cmdq_info_free(&dd->pend_cmdq);
 	hfi_cleanup_interrupts(dd);
 	hfi_at_exit(dd);
 
@@ -4001,7 +4001,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	/* early init dd->hfi_dev_dbg */
 	hfi_dbg_dev_early_init(dd);
 
-	hfi_pend_cq_info_alloc(dd, &dd->pend_cq, "sys");
+	hfi_pend_cmdq_info_alloc(dd, &dd->pend_cmdq, "sys");
 
 	/* per port init */
 	dd->num_pports = HFI_NUM_PPORTS;

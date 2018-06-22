@@ -135,11 +135,11 @@ static int hfi_write_dlid_reloc_cmd(struct hfi_ctx *ctx,
 		dlid_reloc_cmd.a.cmd_length = num_entries + 1;
 
 		/* Queue it to be written, wait for completion */
-		rc = hfi_pend_cq_queue_wait(&dd->pend_cq,
-					    &dd->priv_tx_cq,
-					    NULL,
-					    &dlid_reloc_cmd.command,
-					    cmd_slots);
+		rc = hfi_pend_cmd_queue_wait(&dd->pend_cmdq,
+					     &dd->priv_tx_cq,
+					     NULL,
+					     &dlid_reloc_cmd.command,
+					     cmd_slots);
 		if (rc < 0) {
 			dd_dev_err(dd,
 				   "DLID relocation table write failed for entry %d\n",

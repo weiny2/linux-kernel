@@ -175,9 +175,10 @@ static int diagpkt_xmit(struct hfi_devdata *dd, void *buf,
 					  &cmd);
 
 	/* Queue write, don't wait. */
-	rc = hfi_pend_cq_queue(diag->pend_cq, tx, eq, &cmd, slots, GFP_KERNEL);
+	rc = hfi_pend_cmd_queue(diag->pend_cmdq, tx, eq, &cmd, slots,
+				GFP_KERNEL);
 	if (rc) {
-		dd_dev_err(dd, "%s: hfi_pend_cq_queue_wait failed %d\n",
+		dd_dev_err(dd, "%s: hfi_pend_cmd_queue_wait failed %d\n",
 			   __func__, rc);
 		goto unlock;
 	}
@@ -349,7 +350,7 @@ int hfi2_diag_init(struct hfi_devdata *dd)
 	/* Reuse verbs context and command queue for diag */
 	diag->cmdq_tx = &ibtx->cmdq_tx;
 	diag->cmdq_rx = &ibtx->cmdq_rx;
-	diag->pend_cq = &ibtx->pend_cq;
+	diag->pend_cmdq = &ibtx->pend_cmdq;
 
 	spin_lock_init(&diag->cmdq_tx_lock);
 

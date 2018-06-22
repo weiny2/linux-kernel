@@ -67,7 +67,7 @@
 #include "verbs/mad.h"
 #include "firmware.h"
 #include "platform.h"
-#include "pend_cq.h"
+#include "pend_cmdq.h"
 #include "qsfp.h"
 #include "link.h"
 
@@ -444,7 +444,7 @@ struct hfi1_snoop_data {
  * @cmdq_rx: Pointer to RX Command Queue
  * @eq_tx: Event queue used for tracking sent packets
  * @cmdq_tx_lock: Lock to prevent multiple writers
- * @pend_cq: Pending CQ queueing struct. Shared with verbs
+ * @pend_cmdq: Pending CMDQ queueing struct. Shared with verbs
  */
 struct hfi2_diagpkt_data {
 	struct hfi_ctx *ctx;
@@ -453,7 +453,7 @@ struct hfi2_diagpkt_data {
 	struct hfi_eq eq_tx;
 	/* Prevents multiple writers */
 	spinlock_t cmdq_tx_lock;
-	struct hfi_pend_queue *pend_cq;
+	struct hfi_pend_queue *pend_cmdq;
 };
 
 /* snoop mode_flag values */
@@ -634,16 +634,16 @@ struct bw_arb_cache {
 
 /*
  * Max number of u64 per queued command data. Currently set to the number of
- * bytes in two slots, since that is all that we handle in the pending CQ write.
+ * bytes in two slots, since that is all we handle in the pending CMDQ write.
  */
-#define HFI_MAX_PEND_CQ_CMD_LEN 16
-#define HFI_MAX_PEND_CQ_CMD_LEN_BYTES (HFI_MAX_PEND_CQ_CMD_LEN * sizeof(u64))
+#define HFI_MAX_PEND_CMD_LEN 16
+#define HFI_MAX_PEND_CMD_LEN_BYTES (HFI_MAX_PEND_CMD_LEN * sizeof(u64))
 
 /*
  * hfi_pend_cmd - Privileged command pending information
  * @completion: Completion to signal when done
  * @list: Links us to the list
- * @cq: Pointer to command queue to which the command will be written
+ * @cmdq: Pointer to command queue to which the command will be written
  * @eq: Optional pointer to EQ to check before writing
  * @slot_ptr: Pointer to data
  * @cmd_slots: Number of slots for this command
@@ -654,13 +654,13 @@ struct bw_arb_cache {
 struct hfi_pend_cmd {
 	struct completion completion;
 	struct list_head list;
-	struct hfi_cmdq *cq;
+	struct hfi_cmdq *cmdq;
 	struct hfi_eq *eq;
 	u64 *slot_ptr;
 	int cmd_slots;
 	int ret;
 	bool wait;
-	u64 slots[HFI_MAX_PEND_CQ_CMD_LEN];
+	u64 slots[HFI_MAX_PEND_CMD_LEN];
 };
 
 /*
@@ -1152,7 +1152,7 @@ struct hfi_devdata {
 	/* per HFI symlinks to above */
 	struct dentry *hfi_dev_link;
 #endif
-	struct hfi_pend_queue pend_cq;
+	struct hfi_pend_queue pend_cmdq;
 	struct hfi2_netdev *vnic;
 
 	/* hardware ID */
