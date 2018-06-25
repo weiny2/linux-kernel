@@ -73,7 +73,7 @@
 #include "trace.h"
 #include "qsfp.h"
 
-#define WAIT_TILL_8051_LINKUP 10000
+#define WAIT_TILL_8051_LINKUP 1000000
 
 /* TODO: delete all module parameters when possible */
 bool quick_linkup; /* skip VerifyCap and Config* state. */
