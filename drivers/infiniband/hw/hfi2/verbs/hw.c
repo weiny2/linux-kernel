@@ -1309,17 +1309,6 @@ static int hfi2_ibtx_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 	if (ret < 0)
 		goto tx_eq_err;
 
-	if (ibp->ibd->dd->emulation) {
-		struct task_struct *send_task;
-		/* FXRTODO: Need to destroy this kthread during uninit */
-		/* kthread create and wait for TX events! */
-		send_task = kthread_run(hfi2_send_wait, ibtx, "hfi2_ibsend");
-		if (IS_ERR(send_task)) {
-			ret = PTR_ERR(send_task);
-			goto tx_eq_err;
-		}
-	}
-
 	/* Obtain a pair of command queues for this send context. */
 	ret = hfi_cmdq_assign(ctx, NULL, &cmdq_idx);
 	if (ret)
@@ -1388,6 +1377,16 @@ int hfi2_ctx_init_port(struct hfi2_ibport *ibp)
 		ret = hfi2_rcv_qp_init(ibp, i);
 		if (ret)
 			goto ctx_init_err;
+	}
+
+	for (i = 0; i < ibd->num_send_cmdqs; i++) {
+		if (ibp->ibd->dd->emulation) {
+			struct task_struct *send_task;
+			/* FXRTODO: Need to destroy this kthread during uninit */
+			/* kthread create and wait for TX events! */
+			send_task = kthread_run(hfi2_send_wait, &ibp->port_tx[i], "hfi2_ibsend");
+			BUG_ON(IS_ERR(send_task));
+		}
 	}
 
 	return 0;
