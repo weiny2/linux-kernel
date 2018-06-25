@@ -586,25 +586,18 @@ int hfi_ctx_cleanup(struct hfi_ctx *ctx)
 	}
 
 	/* stop pasid translation, but not for ZEBU: HSD 1209735086 */
-	if (!dd->emulation)
-		hfi_at_clear_pasid(ctx);
+	hfi_at_clear_pasid(ctx);
 
 	/* disable default Bypass PID if used */
 	hfi_ctx_clear_bypass(ctx);
 
-	/*
-	 * Dont allow PID reuse for emulation. Skip the free so a new
-	 * PID gets allocated each time
-	 */
-	if (!dd->emulation) {
-		/* release assigned PID */
-		hfi_pid_free(dd, ptl_pid);
+	/* release assigned PID */
+	hfi_pid_free(dd, ptl_pid);
 
-		if (ctx->pid_count == 0) {
-			dd_dev_info(dd, "release PID singleton [%u]\n",
-				    ptl_pid);
-			__hfi_ctx_unreserve(dd, ptl_pid, 1);
-		}
+	if (ctx->pid_count == 0) {
+		dd_dev_info(dd, "release PID singleton [%u]\n",
+			    ptl_pid);
+		__hfi_ctx_unreserve(dd, ptl_pid, 1);
 	}
 	/* clear last */
 	ctx->pid = HFI_PID_NONE;
