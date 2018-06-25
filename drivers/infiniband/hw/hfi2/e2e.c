@@ -396,15 +396,18 @@ int hfi_e2e_start(struct hfi_ctx *ctx)
 	if (ctx->pid != HFI_PID_SYSTEM)
 		return -EPERM;
 
-	rc = hfi_e2e_eq_assign(ctx);
-	if (rc)
-		return rc;
-
 	dd->eq_zero_thread = kthread_run(hfi_eq_zero_thread, ctx,
 					 "hfi_eq_zero%d", dd->unit);
 	if (IS_ERR(dd->eq_zero_thread)) {
 		rc = PTR_ERR(dd->eq_zero_thread);
-		hfi_e2e_eq_release(ctx);
+		return rc;
+	}
+
+	rc = hfi_e2e_eq_assign(ctx);
+	if (rc) {
+		kthread_stop(dd->eq_zero_thread);
+		dd->eq_zero_thread = NULL;
+		return rc;
 	}
 
 	return rc;
