@@ -3497,17 +3497,19 @@ static void hfi_zebu_hack_vl_credits(struct hfi_pportdata *ppd)
 	 * logging what is actually set. FXRTODO: Remove this.
 	 */
 	hfi_set_up_vl15(ppd, 3, 272);
-	hfi_set_vau(ppd, 3);
+	hfi_set_vau(ppd, 2);
 	hfi_set_global_limit(ppd, 2048);
 	hfi_set_vl_dedicated(ppd, 15, 104);
 	hfi_set_vl_dedicated(ppd, 0, 198);
 	hfi_set_vl_dedicated(ppd, 1, 198);
+	hfi_set_vl_dedicated(ppd, 2, 198);
 	hfi_set_vl_dedicated(ppd, 3, 198);
 	hfi_set_vl_dedicated(ppd, 4, 198);
 	hfi_set_vl_dedicated(ppd, 5, 198);
 	hfi_set_vl_dedicated(ppd, 6, 198);
 	hfi_set_vl_shared(ppd, 0, 756);
 	hfi_set_vl_shared(ppd, 1, 756);
+	hfi_set_vl_shared(ppd, 2, 756);
 	hfi_set_vl_shared(ppd, 3, 756);
 	hfi_set_vl_shared(ppd, 4, 756);
 	hfi_set_vl_shared(ppd, 5, 756);
@@ -3979,9 +3981,7 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		no_interrupts = true;
 
 	if (dd->emulation) {
-		loopback = 4;
 		opafm_disable = true;
-		no_mnh = true;
 	}
 
 	if (no_interrupts)
