@@ -2021,8 +2021,10 @@ int hfi2_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 			/* wait completion to turn off interrupt */
 			ret = hfi_eq_poll_cmd_complete(ibeq->eq.ctx,
 						       &ibeq->hw_disarmed);
-			if (ret)
+			if (unlikely(ret)) {
+				spin_unlock_irqrestore(&cq->lock, lock_flags);
 				return ret;
+			}
 		}
 		ibeq->hw_armed = 0;
 		ibeq->hw_disarmed = 0;

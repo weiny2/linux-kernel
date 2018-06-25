@@ -1468,7 +1468,7 @@ int hfi_ib_eq_arm(struct hfi_ctx *ctx, struct ib_cq *ibcq,
 	/* Queue write, no wait */
 	ret = hfi_pend_cmd_queue(&ctx->devdata->pend_cmdq,
 				 &ctx->devdata->priv_cmdq.rx,
-				 NULL, &cmd, slots, GFP_KERNEL);
+				 NULL, &cmd, slots, GFP_ATOMIC);
 	if (ret) {
 		dd_dev_err(ctx->devdata, "%s: hfi_pend_cmd_queue failed %d\n",
 			   __func__, ret);

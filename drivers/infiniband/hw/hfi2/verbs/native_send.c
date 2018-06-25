@@ -126,7 +126,7 @@ void *mr_sge_addr(struct rvt_mregion *mr, struct ib_sge *sge)
 /* Convert Send WR into state needed for send completion and hardware IOVEC */
 static
 struct hfi_swqe *hfi_prepare_swqe(struct rvt_qp *qp, struct ib_send_wr *wr,
-				  bool signal, int acc)
+				  bool signal, int acc, gfp_t gfp)
 {
 	int ret, i;
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
@@ -135,7 +135,7 @@ struct hfi_swqe *hfi_prepare_swqe(struct rvt_qp *qp, struct ib_send_wr *wr,
 	struct rvt_mregion *mr;
 	struct hfi2_qp_priv *qp_priv = (struct hfi2_qp_priv *)qp->priv;
 
-	swqe = kmalloc(sizeof(*swqe) + wr->num_sge * sizeof(*iov), GFP_KERNEL);
+	swqe = kmalloc(sizeof(*swqe) + wr->num_sge * sizeof(*iov), gfp);
 	if (!swqe)
 		return ERR_PTR(-ENOMEM);
 	iov = swqe->iov;
@@ -174,7 +174,7 @@ err:
 static
 int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 		       bool signal, bool in_line, bool solicit,
-		       union hfi_tx_cq_command *cmd)
+		       union hfi_tx_cq_command *cmd, gfp_t gfp)
 {
 	int nslots;
 	struct rvt_ah *ah = ibah_to_rvtah(wr->ah);
@@ -195,7 +195,7 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 
 	if (wr->wr.num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
-		swqe = hfi_prepare_swqe(qp, &wr->wr, signal, 0);
+		swqe = hfi_prepare_swqe(qp, &wr->wr, signal, 0, gfp);
 		if (IS_ERR(swqe))
 			return PTR_ERR(swqe);
 		length = swqe->length;
@@ -295,7 +295,7 @@ int hfi_format_ud_send(struct rvt_qp *qp, struct ib_ud_wr *wr,
 static
 int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 		       bool signal, bool in_line, bool solicit,
-		       union hfi_tx_cq_command *cmd)
+		       union hfi_tx_cq_command *cmd, gfp_t gfp)
 {
 	int nslots;
 	struct ib_sge *sge = wr->sg_list;
@@ -317,7 +317,7 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 
 	if (wr->num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
-		swqe = hfi_prepare_swqe(qp, wr, signal, 0);
+		swqe = hfi_prepare_swqe(qp, wr, signal, 0, gfp);
 		if (IS_ERR(swqe))
 			return PTR_ERR(swqe);
 		length = swqe->length;
@@ -398,17 +398,17 @@ int hfi_format_rc_send(struct rvt_qp *qp, struct ib_send_wr *wr,
 static inline
 int hfi_format_send_wr(struct rvt_qp *qp, struct ib_send_wr *wr,
 		       bool signal, bool in_line, bool solicit,
-		       union hfi_tx_cq_command *cmd)
+		       union hfi_tx_cq_command *cmd, gfp_t gfp)
 {
 	int nslots;
 
 	if (qp->ibqp.qp_type == IB_QPT_RC ||
 	    qp->ibqp.qp_type == IB_QPT_UC)
 		nslots = hfi_format_rc_send(qp, wr, signal, in_line, solicit,
-					    cmd);
+					    cmd, gfp);
 	else if (qp->ibqp.qp_type == IB_QPT_UD)
 		nslots = hfi_format_ud_send(qp, ud_wr(wr), signal, in_line,
-					    solicit, cmd);
+					    solicit, cmd, gfp);
 	else
 		nslots = -EINVAL;
 
@@ -486,7 +486,7 @@ int hfi_format_rc_rdma_atomic(struct rvt_qp *qp, struct ib_atomic_wr *wr,
 static
 int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 		       bool signal, bool in_line, bool solicit,
-		       union hfi_tx_cq_command *cmd)
+		       union hfi_tx_cq_command *cmd, gfp_t gfp)
 {
 	int nslots;
 	struct ib_sge *sge = wr->wr.sg_list;
@@ -511,7 +511,7 @@ int hfi_format_rc_rdma(struct rvt_qp *qp, struct ib_rdma_wr *wr,
 		      IB_ACCESS_LOCAL_WRITE : 0;
 	if (wr->wr.num_sge > 1) {
 		/* validate SG list and build IOVEC array if multiple SGEs */
-		swqe = hfi_prepare_swqe(qp, &wr->wr, signal, acc);
+		swqe = hfi_prepare_swqe(qp, &wr->wr, signal, acc, gfp);
 		if (IS_ERR(swqe))
 			return PTR_ERR(swqe);
 		length = swqe->length;
@@ -746,6 +746,11 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 	int ret, nslots = 0;
 	bool signal, solicit, in_line;
 	unsigned long flags;
+	/*
+	 * Using ATOMIC because some ULPs may call post_send in atomic context
+	 * and so are not allowed to sleep.
+	 */
+	gfp_t gfp = GFP_ATOMIC;
 
 	signal = !(qp->s_flags & RVT_S_SIGNAL_REQ_WR) ||
 		 (wr->send_flags & IB_SEND_SIGNALED);
@@ -768,13 +773,13 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 	case IB_WR_SEND_WITH_IMM:
 	case IB_WR_SEND_WITH_INV:
 		nslots = hfi_format_send_wr(qp, wr, signal, in_line,
-					    solicit, cmd);
+					    solicit, cmd, gfp);
 		break;
 	case IB_WR_RDMA_WRITE:
 	case IB_WR_RDMA_WRITE_WITH_IMM:
 	case IB_WR_RDMA_READ:
 		nslots = hfi_format_rc_rdma(qp, rdma_wr(wr), signal, in_line,
-					    solicit, cmd);
+					    solicit, cmd, gfp);
 		break;
 	case IB_WR_ATOMIC_CMP_AND_SWP:
 	case IB_WR_ATOMIC_FETCH_AND_ADD:
