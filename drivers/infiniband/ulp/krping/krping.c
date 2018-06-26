@@ -997,8 +997,8 @@ static void wlat_test(struct krping_cb *cb)
 {
 	int ccnt, scnt, rcnt;
 	int iters=cb->count;
-	volatile char *poll_buf = (char *) cb->rdma_buf;
-	char *buf = (char *)cb->rdma_buf;
+	volatile char *poll_buf = (char *) cb->start_buf;
+	char *buf = (char *)cb->start_buf;
 	struct timeval start_tv, stop_tv;
 	cycles_t *post_cycles_start, *post_cycles_stop;
 	cycles_t *poll_cycles_start, *poll_cycles_stop;
