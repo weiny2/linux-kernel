@@ -53,9 +53,10 @@
 
 #include "hfi_cmdq.h"
 
+#define RKEY_OFFSET			0x1000
 #define RKEY_IGNORE_BITS		0xffffffff00000000ull
 #define RKEY_PID(rkey)			_hfi_extract(rkey, 20, 0xfff00000)
-#define RKEY_LIST_HANDLE(rkey)		_hfi_extract(rkey, 8, 0x000fff00)
+#define RKEY_LIST_HANDLE(rkey)		(_hfi_extract(rkey, 8, 0x000fff00)+RKEY_OFFSET)
 #define RKEY_SALT(rkey)			_hfi_extract(rkey, 0, 0x000000ff)
 #define RKEY_MATCH_BITS(rkey, pd)	((RKEY_SALT(rkey) << 24) | \
 					 ((pd) & 0xffffff))

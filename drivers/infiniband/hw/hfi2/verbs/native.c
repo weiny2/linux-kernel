@@ -455,7 +455,7 @@ static struct hfi_ctx *hfi2_add_hw_context(struct hfi_ibcontext *ctx)
 	ctx->ops->ctx_init(ctx->ibuc.device, hw_ctx);
 	attach.pid = HFI_PID_ANY;
 	attach.le_me_count = HFI_LE_ME_MAX_COUNT - 1;
-	attach.unexpected_count = RKEY_PER_PID;
+	attach.unexpected_count = RKEY_PER_PID + RKEY_OFFSET;
 	ret = hfi_ctx_attach(hw_ctx, &attach);
 	if (ret < 0)
 		goto err_attach;
