@@ -37,6 +37,7 @@
 #include "chip/fxr_at_csrs.h"
 #include "chip/fxr_at_defs.h"
 #include "chip/fxr_at_iommu_defs.h"
+#include "chip/fxr_pcim_structs_defs.h"
 #include "hfi2.h"
 #include "debugfs.h"
 #include "at.h"
@@ -58,6 +59,22 @@ MODULE_PARM_DESC(user_page_promo, "user page promotion");
 static bool kernel_page_promo = true;
 module_param(kernel_page_promo, bool, 0444);
 MODULE_PARM_DESC(kernel_page_promo, "kernel page promotion");
+
+static bool no_qi_access;
+module_param(no_qi_access, bool, 0444);
+MODULE_PARM_DESC(no_qi_access, "Do not ask device to access QI memory during AT initialization");
+
+static bool at_use_interrupt_flag;
+module_param(at_use_interrupt_flag, bool, 0444);
+MODULE_PARM_DESC(at_use_interrupt_flag, "Poll interrupt status instead of status write for AT completions");
+
+static bool force_qi_done;
+module_param(force_qi_done, bool, 0444);
+MODULE_PARM_DESC(force_qi_done, "Set QI done state in the driver after timeout");
+
+static bool skip_at_enable;
+module_param(skip_at_enable, bool, 0444);
+MODULE_PARM_DESC(skip_at_enable, "Do not enable address translation");
 
 /* AT interrupt handling. Most stuff are MSI-like. */
 enum faulttype {
@@ -282,6 +299,9 @@ static int qi_submit_sync(struct qi_desc *desc, struct hfi_at *at)
 	struct qi_desc *hw, wait_desc;
 	int wait_index, index;
 	unsigned long flags;
+	unsigned long timeout;
+#define MAX_QI_TRIES 3
+	int qi_tries = 0;
 
 	if (!qi)
 		return 0;
@@ -290,6 +310,8 @@ static int qi_submit_sync(struct qi_desc *desc, struct hfi_at *at)
 
 restart:
 	rc = 0;
+	if (qi_tries >= MAX_QI_TRIES)
+		goto qi_timeout;
 
 	raw_spin_lock_irqsave(&qi->q_lock, flags);
 	while (qi->free_cnt < 3) {
@@ -321,6 +343,8 @@ restart:
 	 */
 	writel(qi->free_head << AT_IQ_SHIFT, at->reg + AT_IQT_REG);
 
+	timeout = jiffies + msecs_to_jiffies(10);
+
 	while (qi->desc_status[wait_index] != QI_DONE) {
 		/*
 		 * We will leave the interrupts disabled, to prevent interrupt
@@ -336,6 +360,10 @@ restart:
 		raw_spin_unlock(&qi->q_lock);
 		cpu_relax();
 		raw_spin_lock(&qi->q_lock);
+
+		if (force_qi_done && time_after(jiffies, timeout) &&
+		    readl(at->reg + AT_IQT_REG) == readl(at->reg + AT_IQH_REG))
+			qi->desc_status[wait_index] = QI_DONE;
 	}
 
 	qi->desc_status[index] = QI_DONE;
@@ -343,9 +371,15 @@ restart:
 	reclaim_free_desc(qi);
 	raw_spin_unlock_irqrestore(&qi->q_lock, flags);
 
-	if (rc == -EAGAIN)
+	if (rc == -EAGAIN) {
+		qi_tries++;
 		goto restart;
+	}
 
+	return rc;
+
+qi_timeout:
+	dd_dev_err(at->dd, "%s: qi wait timed out!\n", at->name);
 	return rc;
 }
 
@@ -1183,6 +1217,11 @@ int hfi_at_setup_irq(struct hfi_devdata *dd)
 		me->dd = dd;
 		me->intr_src = irq;
 
+		if (!dd->num_irq_entries) {
+			me->arg = me;	/* mark as in use */
+			continue;
+		}
+
 		dd_dev_info(dd, "request for msix IRQ %d:%d\n",
 			    irq, pci_irq_vector(dd->pdev, irq));
 		ret = request_threaded_irq(pci_irq_vector(dd->pdev, irq),
@@ -1260,11 +1299,12 @@ static void free_at(struct hfi_at *at)
 	kfree(at);
 }
 
+int at_calculate_agaw(struct hfi_at *at);
 static int alloc_at(struct hfi_devdata *dd)
 {
 	struct hfi_at *at;
 	u32 ver, sts;
-	int err;
+	int err, agaw;
 
 	at = kzalloc(sizeof(*at), GFP_KERNEL);
 	if (!at)
@@ -1289,6 +1329,15 @@ static int alloc_at(struct hfi_devdata *dd)
 		    AT_VER_MAJOR(ver), AT_VER_MINOR(ver),
 		    (unsigned long long)at->cap,
 		    (unsigned long long)at->ecap);
+
+	/* TODO: Do we need agaw? seems like it is only for SLPTPTR */
+	agaw = at_calculate_agaw(at);
+	if (agaw < 0) {
+		dd_dev_err(dd, "Cannot get a valid agaw for %s\n",
+			   at->name);
+		goto error;
+	}
+	at->agaw = agaw;
 
 	sts = readl(at->reg + AT_GSTS_REG);
 	if (sts & AT_GSTS_IRES)
@@ -1398,6 +1447,11 @@ static void qi_flush_context(struct hfi_at *at, u16 did, u16 sid, u8 fm,
 			| QI_CC_GRAN(type) | QI_CC_TYPE;
 	desc.high = 0;
 
+	dd_dev_info(at->dd, "%s: about to submit qi sync\n", at->name);
+
+	if (no_qi_access)
+		return;
+
 	qi_submit_sync(&desc, at);
 }
 
@@ -1419,6 +1473,9 @@ static void qi_flush_iotlb(struct hfi_at *at, u16 did, u64 addr,
 		| QI_IOTLB_GRAN(type) | QI_IOTLB_TYPE;
 	desc.high = QI_IOTLB_ADDR(addr) | QI_IOTLB_IH(ih)
 		| QI_IOTLB_AM(size_order);
+
+	if (no_qi_access)
+		return;
 
 	qi_submit_sync(&desc, at);
 }
@@ -1474,6 +1531,10 @@ static void at_enable_translation(struct hfi_at *at)
 	u32 sts;
 	unsigned long flags;
 
+	/* FPGA does not currently support ZBR coming out of this AT enable */
+	if (skip_at_enable || no_qi_access)
+		return;
+
 	raw_spin_lock_irqsave(&at->register_lock, flags);
 	at->gcmd |= AT_GCMD_TE;
 	writel(at->gcmd, at->reg + AT_GCMD_REG);
@@ -1483,6 +1544,25 @@ static void at_enable_translation(struct hfi_at *at)
 		   readl, (sts & AT_GSTS_TES), sts);
 
 	raw_spin_unlock_irqrestore(&at->register_lock, flags);
+}
+
+static void at_enable_faults(struct hfi_at *at)
+{
+	/*
+	 * These values are taken directly from the HAS.
+	 * Remaining bits, including those in feuaddr, fedata,
+	 * ieuaddr, iedata, peuaddr, and pedata registers
+	 * are unimportant and should be set to 0 by convention.
+	 */
+	writel(AT_FEADDR_MA, at->reg + AT_FEADDR_REG);
+	writel(AT_IEADDR_MA, at->reg + AT_IEADDR_REG);
+	writel(AT_PEADDR_MA, at->reg + AT_PEADDR_REG);
+	writel(0x0, at->reg + AT_FEUADDR_REG);
+	writel(0x0, at->reg + AT_FEDATA_REG);
+	writel(0x0, at->reg + AT_IEUADDR_REG);
+	writel(0x0, at->reg + AT_IEDATA_REG);
+	writel(0x0, at->reg + AT_PEUADDR_REG);
+	writel(0x0, at->reg + AT_FEDATA_REG);
 }
 
 static void at_disable_translation(struct hfi_at *at)
@@ -1715,6 +1795,12 @@ static inline void context_set_translation_type(struct context_entry *context,
 	context->lo |= (value & 3) << 2;
 }
 
+static inline void context_set_address_width(struct context_entry *context,
+					     unsigned long value)
+{
+	context->hi |= value & 7;
+}
+
 static inline void context_set_domain_id(struct context_entry *context,
 					 unsigned long value)
 {
@@ -1751,6 +1837,9 @@ static int at_setup_device_context(struct hfi_at *at)
 
 	context_clear_entry(context);
 	context_set_domain_id(context, at->seq_id);
+
+	/* TODO: we don't need to set second level page table */
+	context_set_address_width(context, at->agaw);
 
 	context_set_translation_type(context, AT_CONTEXT_TT_DEV_IOTLB);
 	context_set_fault_enable(context);
@@ -2212,6 +2301,9 @@ static void hfi_flush_pasid_dev(struct hfi_at_svm *svm, int pasid)
 	desc.low = QI_PC_TYPE | QI_PC_DID(svm->did) |
 		   QI_PC_PASID_SEL | QI_PC_PASID(pasid);
 
+	if (no_qi_access)
+		return;
+
 	qi_submit_sync(&desc, svm->at);
 }
 
@@ -2657,6 +2749,30 @@ int hfi_at_is_pasid_valid(struct device *dev, int pasid)
 	return ret;
 }
 
+static inline int width_to_agaw(int width)
+{
+	return DIV_ROUND_UP(width - 30, LEVEL_STRIDE);
+}
+
+static int __at_calculate_agaw(struct hfi_at *at, int max_gaw)
+{
+	unsigned long sagaw;
+	int agaw = -1;
+
+	sagaw = cap_sagaw(at->cap);
+	for (agaw = width_to_agaw(max_gaw); agaw >= 0; agaw--) {
+		if (test_bit(agaw, &sagaw))
+			break;
+	}
+
+	return agaw;
+}
+
+int at_calculate_agaw(struct hfi_at *at)
+{
+	return __at_calculate_agaw(at, DEFAULT_ADDRESS_WIDTH);
+}
+
 static void at_cleanup(struct hfi_at *at)
 {
 	disable_at_context(at);
@@ -2732,6 +2848,9 @@ hfi_at_init(struct hfi_devdata *dd)
 	 */
 	at_flush_write_buffer(at);
 	at_set_root_entry(at);
+	/* TODO: should translations be enabled after enabling PRQ */
+	at_enable_translation(at);
+	at_enable_faults(at);
 	qi_flush_context(at, 0, 0, 0, AT_CCMD_GLOBAL_INVL);
 	qi_flush_iotlb(at, 0, 0, 0, AT_TLB_GLOBAL_FLUSH);
 
@@ -2743,7 +2862,7 @@ hfi_at_init(struct hfi_devdata *dd)
 	if (ret)
 		goto free_at;
 
-	at_enable_translation(at);
+	dd_dev_info(dd, "AT: PRQ enabled\n");
 
 	/*
 	 * we always have to disable PMRs or DMA may fail on

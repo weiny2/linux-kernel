@@ -204,6 +204,18 @@
 /* FECTL_REG */
 #define AT_FECTL_IM		(((u32)1) << 31)
 
+/* FEADDR_REG */
+/* TODO: Review this value */
+#define AT_FEADDR_MA		(((u32)1) << 2)
+
+/* IEADDR_REG */
+/* TODO: Review this value */
+#define AT_IEADDR_MA		(((u32)2) << 2)
+
+/* PEADDR_REG */
+/* TODO: Review this value */
+#define AT_PEADDR_MA		(((u32)3) << 2)
+
 /* FSTS_REG */
 #define AT_FSTS_PPF		((u32)2)
 #define AT_FSTS_PFO		((u32)1)
