@@ -1420,7 +1420,7 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 
 	/* Setup WC */
 	if (IS_NON_IOVEC_SWQE(swqe))
-		wc->wr_id = qp_priv->wc[NON_IOVEC_SWQE_CIDX(swqe, rvtqp)].ib_wc.wr_id;
+		wc->wr_id = qp_priv->wc[cidx % rvtqp->s_size].ib_wc.wr_id;
 	else
 		wc->wr_id = swqe->wr_id;
 
