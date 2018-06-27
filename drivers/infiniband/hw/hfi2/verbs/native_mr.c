@@ -119,7 +119,7 @@ int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region)
 	mr->lkey = lkey;
 	mr->rkey = rkey;
 	mr->access_flags = acc_flags;
-	mr->lkey_published = 1;
+	mr->lkey_published = (bool)lkey_mr;
 	/* TODO - review locking of lkey_mr[] */
 	ctx->lkey_mr[LKEY_INDEX(lkey)] = lkey_mr;
 
@@ -164,13 +164,13 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 		ret = hfi2_push_key(&ctx->lkey_ks, RESET_LKEY(mr->lkey));
 		/* If this fails we've somehow leaked an LKEY, but is freed */
 		WARN_ON(ret != 0);
-	}
 
-	/*
-	 * Mark MR free, note there is some delay before rdmavt frees
-	 * the MR completely, as it waits for refcount to reach 0.
-	 */
-	mr->lkey_published = 0;
+		/*
+		 * Mark MR free, note there is some delay before rdmavt frees
+		 * the MR completely, as it waits for refcount to reach 0.
+		 */
+		mr->lkey_published = 0;
+	}
 	return 0;
 }
 
