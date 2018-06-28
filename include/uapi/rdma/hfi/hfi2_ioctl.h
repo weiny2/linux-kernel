@@ -223,6 +223,7 @@ enum {
 enum {
 	HFI2_JOB_ATTACH_MODE,
 	HFI2_JOB_ATTACH_COOKIE,
+	HFI2_JOB_ATTACH_RESP,
 };
 
 /* Attributes for DLID assign */

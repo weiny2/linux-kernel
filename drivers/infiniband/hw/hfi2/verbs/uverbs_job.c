@@ -61,119 +61,137 @@
 static LIST_HEAD(ib_ujob_objects);
 static DECLARE_RWSEM(hfi_job_sem);
 
-bool hfi_job_init(struct hfi_ctx *ctx, u16 res_mode, u64 cookie)
+static bool hfi_job_search(struct hfi_job_res *res, int res_mode, u64 cookie)
 {
-	bool inherit = false;
+	bool found = false;
 	struct hfi_ctx *tmp_ctx;
 	struct ib_ujob_object *tmp_obj;
 	u16 sid = task_session_vnr(current);
 
-	ctx->res.dlid_base = HFI_LID_NONE;
-	ctx->res.pid_base = HFI_PID_NONE;
-
-	/* search job_list for PID reservation to inherit */
-	/* TODO - may need to implement reference count */
+	/* search job_list for matching PID reservation */
 	down_read(&hfi_job_sem);
 	list_for_each_entry(tmp_obj, &ib_ujob_objects, obj_list) {
 		tmp_ctx = tmp_obj->uobject.object;
-		if (res_mode != tmp_obj->job_res_mode) {
-			/* unsupported mode to inherit Job reservation */
+		if (res_mode != tmp_obj->job_res_mode)
 			continue;
-		}
 
 		if ((res_mode == HFI_JOB_RES_SESSION) &&
 		    (sid == tmp_obj->sid))
-			inherit = true;
+			found = true;
 		else if ((res_mode == HFI_JOB_RES_USER_COOKIE) &&
-			 (HFI_JOB_MAKE_COOKIE(ctx->ptl_uid, cookie) ==
+			 (HFI_JOB_MAKE_COOKIE(HFI_DEFAULT_PTL_UID, cookie) ==
 			  tmp_obj->job_res_cookie))
-			inherit = true;
+			found = true;
 		else
-			inherit = false;
+			found = false;
 
-		if (inherit) {
-			ctx->res.dlid_base = tmp_ctx->res.dlid_base;
-			ctx->res.lid_offset = tmp_ctx->res.lid_offset;
-			ctx->res.lid_count = tmp_ctx->res.lid_count;
-			ctx->res.pid_base = tmp_ctx->res.pid_base;
-			ctx->res.pid_count = tmp_ctx->res.pid_count;
-			ctx->res.pid_total = tmp_ctx->res.pid_total;
-			ctx->mode = tmp_ctx->res.mode;
-			memcpy(ctx->res.auth_uid, tmp_ctx->res.auth_uid,
-			       sizeof(ctx->res.auth_uid));
-			ctx->res.auth_mask = tmp_ctx->res.auth_mask;
-			/*
-			 * If auth UIDs are set by the resource manager, we
-			 * replace the default UID (ctx->ptl_uid) with the
-			 * first UID from this set.
-			 */
-			if (ctx->res.auth_mask)
-				ctx->ptl_uid = ctx->res.auth_uid[0];
-			pr_info("joined PID group [%u - %u] tag (%u) UID %d\n",
-				tmp_ctx->res.pid_base,
-				tmp_ctx->res.pid_base +
-				tmp_ctx->res.pid_count - 1,
-				sid, ctx->ptl_uid);
+		if (found) {
+			/* TODO - may need to implement reference count */
+			res->dlid_base = tmp_ctx->res.dlid_base;
+			res->lid_offset = tmp_ctx->res.lid_offset;
+			res->lid_count = tmp_ctx->res.lid_count;
+			res->pid_base = tmp_ctx->res.pid_base;
+			res->pid_count = tmp_ctx->res.pid_count;
+			res->pid_total = tmp_ctx->res.pid_total;
+			res->mode = tmp_ctx->res.mode;
+			memcpy(res->auth_uid, tmp_ctx->res.auth_uid,
+			       sizeof(res->auth_uid));
+			res->auth_mask = tmp_ctx->res.auth_mask;
 			break;
 		}
 	}
 	up_read(&hfi_job_sem);
+	return found;
+}
+
+bool hfi_job_init(struct hfi_ctx *ctx, u16 res_mode, u64 cookie)
+{
+	bool inherit;
+
+	ctx->res.dlid_base = HFI_LID_NONE;
+	ctx->res.pid_base = HFI_PID_NONE;
+
+	/* search for PID reservation and update ctx->res on match */
+	inherit =  hfi_job_search(&ctx->res, res_mode, cookie);
+	if (inherit) {
+		/*
+		 * If auth UIDs are set by the resource manager, we
+		 * replace the default UID (ctx->ptl_uid) with the
+		 * first UID from this set.
+		 */
+		if (ctx->res.auth_mask)
+			ctx->ptl_uid = ctx->res.auth_uid[0];
+		/* add virtualized modes, returned to caller in CTX_ATTACH */
+		ctx->mode |= ctx->res.mode;
+
+		pr_info("joined PID group [%u - %u] mode (%u) UID %d\n",
+			ctx->res.pid_base,
+			ctx->res.pid_base +
+			ctx->res.pid_count - 1,
+			res_mode, ctx->ptl_uid);
+	}
 	return inherit;
 }
 
-int hfi_job_attach(struct hfi_ibcontext *uc, int mode, u64 cookie)
+int hfi_job_info(struct hfi_ibcontext *uc, struct hfi_job_info *job_info)
 {
+	struct hfi_job_res job_res;
+	bool found;
+
+	found = hfi_job_search(&job_res, uc->job_res_mode, uc->job_res_cookie);
+	if (found) {
+		job_info->dlid_base = job_res.dlid_base;
+		job_info->lid_offset = job_res.lid_offset;
+		job_info->lid_count = job_res.lid_count;
+		job_info->pid_base = job_res.pid_base;
+		job_info->pid_count = job_res.pid_count;
+		job_info->pid_total = job_res.pid_total;
+		job_info->pid_mode = job_res.mode;
+		memcpy(job_info->auth_uid, job_res.auth_uid,
+		       sizeof(job_info->auth_uid));
+	}
+	return 0;
+}
+
+int hfi_job_attach(struct hfi_ibcontext *uc, int mode, u64 cookie,
+		   struct hfi_job_info *job_info)
+{
+	struct hfi_job_res job_res;
+	bool found;
+
 	/*
 	 * Only allow JOB_RES_USER_COOKIE for manual job_attach.
 	 * Set conditions to find job reservation during ctx_attach.
 	 */
 	switch (mode) {
 	case HFI_JOB_RES_USER_COOKIE:
+		/*
+		 * Error if no corresponding job reservation, otherwise this
+		 * might allow the user to 'escape' existing job reservations
+		 */
+		found = hfi_job_search(&job_res, mode, cookie);
+		if (!found)
+			return -EACCES;
+
 		uc->job_res_mode = mode;
 		uc->job_res_cookie = cookie;
+
+		/* optionally return the reservation information */
+		if (job_info) {
+			job_info->dlid_base = job_res.dlid_base;
+			job_info->lid_offset = job_res.lid_offset;
+			job_info->lid_count = job_res.lid_count;
+			job_info->pid_base = job_res.pid_base;
+			job_info->pid_count = job_res.pid_count;
+			job_info->pid_total = job_res.pid_total;
+			job_info->pid_mode = job_res.mode;
+			memcpy(job_info->auth_uid, job_res.auth_uid,
+			       sizeof(job_info->auth_uid));
+		}
 		return 0;
 	default:
 		return -EINVAL;
 	}
-}
-
-int hfi_job_info(struct hfi_job_info *job_info)
-{
-	struct hfi_ctx *tmp_ctx;
-	struct ib_ujob_object *tmp_obj;
-	u16 res_mode;
-
-	/*
-	 * search job_list for PID reservation to inherit
-	 * TODO - may need to implement reference count
-	 */
-	down_read(&hfi_job_sem);
-	list_for_each_entry(tmp_obj, &ib_ujob_objects, obj_list) {
-		tmp_ctx = tmp_obj->uobject.object;
-		res_mode = tmp_obj->job_res_mode;
-		if (res_mode != HFI_JOB_RES_SESSION) {
-			/*
-			 * not one of supported modes to inherit Portals
-			 * reservation
-			 */
-			continue;
-		}
-
-		if ((res_mode == HFI_JOB_RES_SESSION) &&
-		    (task_session_vnr(current) == tmp_obj->sid)) {
-			job_info->dlid_base = tmp_ctx->res.dlid_base;
-			job_info->lid_offset = tmp_ctx->res.lid_offset;
-			job_info->lid_count = tmp_ctx->res.lid_count;
-			job_info->pid_base = tmp_ctx->res.pid_base;
-			job_info->pid_count = tmp_ctx->res.pid_count;
-			job_info->pid_total = tmp_ctx->res.pid_total;
-			job_info->pid_mode = tmp_ctx->res.mode;
-			memcpy(job_info->auth_uid, tmp_ctx->res.auth_uid,
-			       sizeof(job_info->auth_uid));
-		}
-	}
-	up_read(&hfi_job_sem);
-	return 0;
 }
 
 int hfi_job_setup(struct hfi_ctx *ctx, struct hfi_job_setup_args *job_setup)
@@ -339,6 +357,8 @@ int hfi2_job_attach_handler(struct ib_device *ib_dev,
 			    struct uverbs_attr_bundle *attrs)
 {
 	struct hfi_ibcontext *uc = (struct hfi_ibcontext *)file->ucontext;
+	struct hfi_job_info job_info = {0};
+	const struct uverbs_attr *uattr;
 	u16 mode;
 	u64 cookie;
 	int ret;
@@ -347,16 +367,27 @@ int hfi2_job_attach_handler(struct ib_device *ib_dev,
 	ret += uverbs_copy_from(&cookie, attrs, HFI2_JOB_ATTACH_COOKIE);
 	if (ret)
 		return ret;
-	return hfi_job_attach(uc, mode, cookie);
+
+	ret = hfi_job_attach(uc, mode, cookie, &job_info);
+	if (ret)
+		return ret;
+
+	/* user can optionally ask for returning the job_info */
+	uattr = uverbs_attr_get(attrs, HFI2_JOB_ATTACH_RESP);
+	if (!IS_ERR(uattr))
+		ret = uverbs_copy_to(attrs, HFI2_JOB_ATTACH_RESP,
+				     &job_info, sizeof(job_info));
+	return ret;
 }
 
 int hfi2_job_info_handler(struct ib_device *ib_dev,
 			  struct ib_uverbs_file *file,
 			  struct uverbs_attr_bundle *attrs)
 {
+	struct hfi_ibcontext *uc = (struct hfi_ibcontext *)file->ucontext;
 	struct hfi_job_info job_info = {0};
 
-	hfi_job_info(&job_info);
+	hfi_job_info(uc, &job_info);
 
 	return uverbs_copy_to(attrs, HFI2_JOB_INFO_RESP,
 			      &job_info, sizeof(job_info));
@@ -517,7 +548,10 @@ DECLARE_UVERBS_METHOD(hfi2_job_attach, HFI2_JOB_ATTACH,
 				u16, UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
 		      &UVERBS_ATTR_PTR_IN(
 				HFI2_JOB_ATTACH_COOKIE,
-				u64, UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
+				u64, UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_JOB_ATTACH_RESP,
+				struct hfi_job_info));
 
 DECLARE_UVERBS_OBJECT(hfi2_object_job,
 		      UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_JOB,
