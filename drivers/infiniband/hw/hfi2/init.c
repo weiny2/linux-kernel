@@ -133,6 +133,7 @@ static int hfi_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	ret = hfi_snoop_add(dd);
 	if (ret)
 		goto err_snoop;
+
 	ret = hfi2_diag_init(dd);
 	if (ret)
 		goto err_diag;

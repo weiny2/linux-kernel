@@ -1416,9 +1416,19 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 	write_csr(ppd->dd, CRK_CRK8051_CFG_LOCAL_PORT_NO,
 		       ppd->pnum & CRK_CRK8051_CFG_LOCAL_PORT_NO_VAL_MASK);
 
-	/* z=1 in the next call: AU of 0 is not supported by the hardware */
-	ret = write_vc_local_fabric(ppd, ppd->vau, 1, ppd->vcu, ppd->vl15_init,
-				    ppd->port_crc_mode_enabled);
+	if (dd->emulation) {
+		ret = write_vc_local_fabric(ppd, ppd->vau, 0, ppd->vcu,
+					    ppd->vl15_init,
+					    ppd->port_crc_mode_enabled);
+	} else {
+		/*
+		 * FXRTODO: Remove this when Simics model is fixed to support
+		 * vAU of 0. JIRA: STL-33783
+		 */
+		ret = write_vc_local_fabric(ppd, ppd->vau, 1, ppd->vcu,
+					    ppd->vl15_init,
+					    ppd->port_crc_mode_enabled);
+	}
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
@@ -1508,6 +1518,7 @@ int hfi2_wait_logical_linkstate(struct hfi_pportdata *ppd, u32 state,
 			return -ETIMEDOUT;
 		}
 		msleep(20);
+		schedule();
 	}
 
 	dd_dev_info(ppd->dd,
@@ -1809,6 +1820,20 @@ static void get_linkup_link_widths(struct hfi_pportdata *ppd)
 #endif
 }
 
+static void adjust_lcb_for_ckts_firmware(struct hfi_pportdata *ppd)
+{
+	struct hfi_devdata *dd = ppd->dd;
+
+	write_csr(dd, OC_LCB_CFG_TX_FIFOS_RESET, 0x1);
+	write_csr(dd, OC_LCB_CFG_LN_RE_ENABLE, 0x3);
+	write_csr(dd, OC_LCB_CFG_LN_TEST_TIME_TO_PASS, 0xfff);
+	write_csr(dd, OC_LCB_CFG_LN_DEGRADE, 0x2730);
+	write_csr(dd, OC_LCB_CFG_CNT_FOR_SKIP_STALL, 0x1113);
+	write_csr(dd, OC_LCB_CFG_LINK_PARTNER_GEN, 0x1);
+	write_csr(dd, OC_LCB_CFG_REPLAY_PROTOCOL, 0x4401);
+	write_csr(dd, OC_LCB_CFG_TX_FIFOS_RESET, 0x0);
+}
+
 /*
  * Handle a verify capabilities interrupt from MNH/8051.
  *
@@ -1843,10 +1868,10 @@ static void handle_verify_cap(struct work_struct *work)
 	hfi_set_link_state(ppd, HLS_VERIFY_CAP);
 #if 0 /* WFR legacy */
 	lcb_shutdown(ppd, 0);
-	adjust_lcb_for_fpga_serdes(dd);
 
 	read_vc_remote_phy(dd, &power_management, &continious);
 #endif
+
 	read_vc_remote_fabric(
 		ppd,
 		&vau,
@@ -1879,17 +1904,22 @@ static void handle_verify_cap(struct work_struct *work)
 		     (u32)remote_max_rate, (u32)link_widths);
 	ppd_dev_info(ppd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
 		     (u32)device_id, (u32)device_rev);
-	/*
-	 * The peer vAU value just read is the peer receiver value.  HFI does
-	 * not support a transmit vAU of 0 (AU == 8).  We advertised that
-	 * with Z=1 in the fabric capabilities sent to the peer.  The peer
-	 * will see our Z=1, and, if it advertised a vAU of 0, will move its
-	 * receive to vAU of 1 (AU == 16).  Do the same here.  We do not care
-	 * about the peer Z value - our sent vAU is 3 (hardwired) and is not
-	 * subject to the Z value exception.
-	 */
-	if (vau == 0)
-		vau = 1;
+
+	if (!ppd->dd->emulation) {
+		/* FXRTODO: Remove this when Simics model is updated to support
+		 * vAU of 0. JIRA ID: STL-33783
+		 *
+		 * The peer vAU value just read is the peer receiver value. HFI
+		 * does not support a transmit vAU of 0 (AU == 8). We advertised
+		 * that with Z=1 in the fabric capabilities sent to the peer.
+		 * The peer will see our Z=1, and, if it advertised a vAU of 0,
+		 * will move its receive to vAU of 1 (AU == 16). Do the same
+		 * here. We do not care about the peer Z value - our sent vAU is
+		 * 3 (hardwired) and is not subject to the Z value exception.
+		 */
+		if (vau == 0)
+			vau = 1;
+	}
 	hfi_set_up_vl15(ppd, vau, vl15buf);
 
 	/* set up the LCB CRC mode */
@@ -2486,6 +2516,8 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 	 */
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
+		if (ppd->dd->icode == ICODE_ZEBU_EMULATION)
+			adjust_lcb_for_ckts_firmware(ppd);
 		hfi_start_link(ppd);
 		if (opafm_disable) {
 			ret = hfi2_wait_logical_linkstate(

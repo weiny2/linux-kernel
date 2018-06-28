@@ -3568,7 +3568,15 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 
 		/* Initialize credit management variables */
 		/* assign link credit variables */
-		ppd->vau = HFI_CM_VAU;
+		if (dd->emulation) {
+			ppd->vau = HFI_CM_VAU;
+		} else {
+			/*
+			 * FXRTODO: Remove when Simics model updates to have
+			 * vAU = 2 JIRA: STL-33783
+			 */
+			ppd->vau = 3;
+		}
 		ppd->link_credits = HFI_RCV_BUFFER_SIZE /
 				   hfi_vau_to_au(ppd->vau);
 		ppd->vcu = hfi_cu_to_vcu(HFI_CM_CU);

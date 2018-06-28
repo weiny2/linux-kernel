@@ -280,11 +280,12 @@ enum {
 #define HFI_VL15BUF_MASK	0x0fff
 #define HFI_CRC_SIZES_SHIFT 20
 #define HFI_CRC_SIZES_MASK	0x7
+
 /*
- * Virtual Allocation Unit, defined as AU = 8*2^vAU, 64 bytes, AU is fixed
- * at 64 bytes for all generation one devices
+ * Virtual Allocation Unit, defined as AU = 8*2^vAU, 32 bytes, AU is fixed
+ * at 32 bytes for all generation two devices
  */
-#define HFI_CM_VAU 3
+#define HFI_CM_VAU 2
 #define HFI_CM_CU  1
 /* in Bytes
  * FXRTODO: Until we have a register to read this value from
