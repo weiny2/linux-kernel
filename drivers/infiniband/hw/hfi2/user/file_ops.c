@@ -201,9 +201,6 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	/* default Portals UID */
 	ud->ctx.ptl_uid = current_uid().val;
 
-	/* inherit SID-based job reservation if present */
-	hfi_job_init(ud, HFI_JOB_RES_SESSION, 0);
-
 	return 0;
 }
 
@@ -251,10 +248,7 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct hfi_cmdq_update_args cmdq_update;
 	struct hfi_cmdq_release_args cmdq_release;
 	struct hfi_event_args event_args;
-	struct hfi_dlid_assign_args dlid_assign = {0};
 	struct hfi_ctxt_attach_args ctxt_attach;
-	struct hfi_job_info job_info;
-	struct hfi_job_setup_args job_setup;
 	struct hfi_sl_pair slp;
 	struct hfi_hw_limit hwl;
 	struct opa_ctx_assign ctx_assign = { 0 };
@@ -271,8 +265,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	struct opa_core_ops *ops;
 	ssize_t toff, tlen;
 	u16 tmp_cmdq_idx;
-	u64 *dlid_ptr_user;
-	u32 dlid_count;
 
 	if (count < sizeof(cmd)) {
 		ret = -EINVAL;
@@ -316,12 +308,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 		break;
 	case HFI_CMD_CTXT_DETACH:
 		break;
-	case HFI_CMD_DLID_ASSIGN:
-		copy_in = sizeof(dlid_assign);
-		copy_ptr = &dlid_assign;
-	case HFI_CMD_DLID_RELEASE:
-		need_admin = 1;
-		break;
 
 	case HFI_CMD_CT_ASSIGN:
 	case HFI_CMD_EQ_ASSIGN:
@@ -345,15 +331,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_PT_UPDATE_LOWER:
 		copy_in = sizeof(pt_update_lower);
 		copy_ptr = &pt_update_lower;
-		break;
-	case HFI_CMD_JOB_INFO:
-		copy_out = sizeof(job_info);
-		copy_ptr = &job_info;
-		break;
-	case HFI_CMD_JOB_SETUP:
-		copy_in = sizeof(job_setup);
-		copy_ptr = &job_setup;
-		need_admin = 1;
 		break;
 	case HFI_CMD_E2E_CONN:
 		break;
@@ -547,43 +524,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 					   pt_update_lower.val,
 					   pt_update_lower.user_data);
 		break;
-	case HFI_CMD_DLID_ASSIGN:
-		/* must be called after JOB_SETUP and match total LIDs */
-		if (dlid_assign.count != ud->ctx.lid_count) {
-			ret = -EINVAL;
-			break;
-		}
-
-		dlid_ptr_user = dlid_assign.dlid_entries_ptr;
-		dlid_count = dlid_assign.count;
-
-		dlid_assign.count = ALIGN(dlid_count, 4);
-		dlid_assign.dlid_entries_ptr =
-			kcalloc(dlid_assign.count, sizeof(u64), GFP_KERNEL);
-
-		if (ZERO_OR_NULL_PTR(dlid_assign.dlid_entries_ptr)) {
-			ret = -ENOMEM;
-			goto err_cmd;
-		}
-
-		/*
-		 * Number of entries must be 32B aligned. Remaining entries
-		 * are zeroed.
-		 */
-		if (copy_from_user(dlid_assign.dlid_entries_ptr,
-				   (void __user *)dlid_ptr_user,
-				sizeof(u64) * dlid_count)) {
-			kfree(dlid_assign.dlid_entries_ptr);
-			ret = -EFAULT;
-			goto err_cmd;
-		}
-
-		ret = ops->dlid_assign(&ud->ctx, &dlid_assign);
-		kfree(dlid_assign.dlid_entries_ptr);
-		break;
-	case HFI_CMD_DLID_RELEASE:
-		ret = ops->dlid_release(&ud->ctx);
-		break;
 	case HFI_CMD_CTXT_ATTACH:
 		ctx_assign.pid = ctxt_attach.pid;
 		ctx_assign.flags = ctxt_attach.flags;
@@ -626,15 +566,6 @@ static ssize_t hfi_write(struct file *fp, const char __user *data, size_t count,
 	case HFI_CMD_CTXT_DETACH:
 		/* release our assigned PID */
 		ops->ctx_release(&ud->ctx);
-		break;
-	case HFI_CMD_JOB_INFO:
-		ret = hfi_job_info(ud, &job_info);
-		break;
-	case HFI_CMD_JOB_SETUP:
-		ret = hfi_job_setup(ud, &job_setup);
-		if (ret)
-			break;
-		job_setup.pid_base = ud->ctx.pid_base;
 		break;
 	case HFI_CMD_E2E_CONN:
 		ret = hfi_e2e_conn(ud->uc, user_data);
@@ -816,8 +747,6 @@ static int hfi_user_cleanup(struct hfi_userdata *ud)
 	rc = ops->ctx_release(&ud->ctx);
 	if (rc)
 		pr_warn("%s: Could not release ctx\n", __func__);
-	/* release any held PID reservations */
-	hfi_job_free(ud);
 
 	return 0;
 }

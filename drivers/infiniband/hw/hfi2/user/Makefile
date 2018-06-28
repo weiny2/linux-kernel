@@ -8,4 +8,3 @@ obj-m += hfi2_user.o
 hfi2_user-y :=
 hfi2_user-y += device.o
 hfi2_user-y += file_ops.o
-hfi2_user-y += job.o

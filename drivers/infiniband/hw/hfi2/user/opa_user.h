@@ -62,14 +62,6 @@
 #define HFI_MMAP_PSB_TOKEN(type, ptl_ctxt, size)  \
 	HFI_MMAP_TOKEN((type), ptl_ctxt, 0, size)
 
-/*
- * For TPID_CAM.UID, use first value from resource manager (if set).
- * This value is inherited during open() and returned to the user as
- * their default UID.
- */
-#define TPID_UID(ctx) \
-	(((ctx)->auth_mask & 0x1) ? (ctx)->auth_uid[0] : (ctx)->ptl_uid)
-
 /* List of vma pointers to zap on release */
 struct hfi_vma {
 	struct vm_area_struct *vma;
@@ -84,20 +76,11 @@ struct hfi_userdata {
 	pid_t sid;
 	/* Per PID Portals State */
 	struct hfi_ctx ctx;
-	u16 job_res_mode;
-	u64 job_res_cookie;
-	struct list_head job_list;
 	/* List of vma's to zap on release */
 	struct list_head vma_head;
 	/* Lock for updating above fields */
 	struct mutex lock;
 };
-
-bool hfi_job_init(struct hfi_userdata *ud, u16 res_mode, u64 cookie);
-int hfi_job_info(struct hfi_userdata *ud, struct hfi_job_info *job_info);
-int hfi_job_setup(struct hfi_userdata *ud,
-		  struct hfi_job_setup_args *job_setup);
-void hfi_job_free(struct hfi_userdata *ud);
 
 /* printk wrappers (pr_warn, etc) can also be used for general debugging. */
 #undef pr_fmt
