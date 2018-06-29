@@ -58,6 +58,15 @@
 #include "chip/fxr_tx_ci_cid_csrs_defs.h"
 
 /*
+ * For writing TPID_CAM.UID, policy is to use first UID value provided
+ * from resource manager.   This value is inherited by the application during
+ * CTX_ATTACH and returned to the user as their default UID.
+ * Future work could allow multiple TPID_CAM entries per job reservation, but
+ * we only allow one today.
+ */
+#define TPID_UID(ctx)	((ctx)->auth_uid[0])
+
+/*
  * When added to the 8 Bytes required for the DLID relocation command,
  * this value is used to maximize the number of command slots used
  * for each individual DLID relocation table update while complying
@@ -265,6 +274,13 @@ int hfi_ctx_set_allowed_uids(struct hfi_ctx *ctx, u32 *auth_uid,
 		}
 	}
 
+	/* policy is that first UID must be set if UIDs are supplied */
+	if (ctx->auth_mask && !ctx->auth_uid[0]) {
+		ctx->auth_mask = 0;
+		memset(&ctx->auth_uid, 0, sizeof(ctx->auth_uid));
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -273,6 +289,10 @@ int hfi_ctx_set_virtual_pid_range(struct hfi_ctx *ctx)
 	struct hfi_devdata *dd = ctx->devdata;
 	struct hfi_ctx *tpid_ctx;
 	int tpid_idx, i, ret = 0;
+
+	/* RM must have set at least one UID in order to program VTPID */
+	if (!ctx->auth_mask)
+		return -EINVAL;
 
 	/* Find if we have available TPID_CAM entry, first verify is unique */
 	idr_preload(GFP_KERNEL);

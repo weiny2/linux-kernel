@@ -79,7 +79,7 @@ void hfi_ctx_init(struct hfi_ctx *ctx, struct hfi_devdata *dd)
 	ctx->pid = HFI_PID_NONE;
 	ctx->pid_count = 0;
 	/* UID=0 reserved for kernel clients */
-	ctx->ptl_uid = 0;
+	ctx->ptl_uid = HFI_DEFAULT_PTL_UID;
 	idr_init(&ctx->ct_used);
 	idr_init(&ctx->eq_used);
 	idr_init(&ctx->ec_used);

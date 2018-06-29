@@ -198,8 +198,6 @@ static int hfi_open(struct inode *inode, struct file *fp)
 	/* initialize hfi_ctx */
 	ud->uc->ops->ctx_init(hi->ibdev, &ud->ctx);
 	ud->ctx.type = HFI_CTX_TYPE_USER;
-	/* default Portals UID */
-	ud->ctx.ptl_uid = current_uid().val;
 
 	return 0;
 }

@@ -148,6 +148,12 @@ enum {
 #define HFI_TPID_ENTRIES	16
 #define HFI_DLID_TABLE_SIZE	(64 * 1024)
 
+/*
+ * Default protection domain is set of user processes (using kernel UID),
+ * as such PTL_UID=0 is always reserved for kernel clients.
+ */
+#define HFI_DEFAULT_PTL_UID	__kuid_val(current_uid())
+
 #define IS_PID_BYPASS(ctx) \
 	(((ctx)->mode & HFI_CTX_MODE_USE_BYPASS) && \
 	 ((ctx)->pid >= HFI_PID_BYPASS_BASE) && \
@@ -156,14 +162,6 @@ enum {
 #define IS_PID_VIRTUALIZED(ctx) \
 	((ctx)->mode & (HFI_CTX_MODE_VTPID_MATCHING | \
 			HFI_CTX_MODE_VTPID_NONMATCHING))
-
-/*
- * For TPID_CAM.UID, use first value from resource manager (if set).
- * This value is inherited during open() and returned to the user as
- * their default UID.
- */
-#define TPID_UID(ctx) \
-	(((ctx)->auth_mask & 0x1) ? (ctx)->auth_uid[0] : (ctx)->ptl_uid)
 
 /* FXRTODO: based on 16bit (9B) LID */
 #define HFI_MULTICAST_LID_BASE	0xC000

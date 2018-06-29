@@ -103,10 +103,12 @@ bool hfi_job_init(struct hfi_ctx *ctx, u16 res_mode, u64 cookie)
 			       sizeof(ctx->auth_uid));
 			ctx->auth_mask = tmp_ctx->auth_mask;
 			/*
-			 * replace default UID (used for TPID_CAM if
-			 * PIDs virtualized)
+			 * If auth UIDs are set by the resource manager, we
+			 * replace the default UID (ctx->ptl_uid) with the
+			 * first UID from this set.
 			 */
-			ctx->ptl_uid = TPID_UID(ctx);
+			if (ctx->auth_mask)
+				ctx->ptl_uid = ctx->auth_uid[0];
 			pr_info("joined PID group [%u - %u] tag (%u) UID %d\n",
 				tmp_ctx->pid_base,
 				tmp_ctx->pid_base + tmp_ctx->pid_count - 1,
@@ -223,9 +225,9 @@ int hfi_job_setup(struct hfi_ctx *ctx, struct hfi_job_setup_args *job_setup)
 	obj->job_res_cookie = job_setup->res_cookie;
 	obj->sid = task_session_vnr(current);
 
-	pr_info("created PID group [%u - %u] UID [%u] tag (%u:%u,%u)\n",
+	pr_info("created PID group [%u - %u] UID [%u] tag (%u:%u)\n",
 		ctx->pid_base, ctx->pid_base + ctx->pid_count - 1,
-		TPID_UID(ctx), obj->job_res_mode, obj->sid, ctx->pid);
+		ctx->auth_uid[0], obj->job_res_mode, obj->sid);
 done:
 	return ret;
 #endif

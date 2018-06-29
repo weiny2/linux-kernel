@@ -88,18 +88,23 @@ union ptentry_fp0_bc1 {
 	union ptentry_fp0_bc1_et1 et1;
 };
 
+/*
+ * Validate user-supplied @auth_table against state that may have been
+ * preset by the the resource manager (RM) and is stored in @ctx.
+ * If the @auth_table requested driver to assign the UID, then the table
+ * is updated with the appropriate default UID, which should be from the
+ * set provided by RM if any were preset.
+ * On success, @auth_table must contain valid values as driver will
+ * write them into the CMDQ configuration register.
+ */
 static int hfi_cmdq_validate_tuples(struct hfi_ctx *ctx,
 				    struct hfi_auth_tuple *auth_table)
 {
 	int i, j;
-	u32 auth_uid, default_uid;
+	u32 auth_uid;
 	u32 last_job_uid = HFI_UID_ANY;
 
-	/* validate auth_tuples */
 	for (i = 0; i < HFI_NUM_AUTH_TUPLES; i++) {
-		auth_uid = auth_table[i].uid;
-		default_uid = ctx->ptl_uid;
-
 		/*
 		 * If bypass PID, SRANK must be RANK_ANY to note that the
 		 * UID field contains a KDETH job_key;
@@ -108,32 +113,42 @@ static int hfi_cmdq_validate_tuples(struct hfi_ctx *ctx,
 			auth_table[i].srank = PTL_RANK_ANY;
 			auth_table[i].uid = HFI_JKEY_MASK_SMASK |
 					    hfi_generate_jkey();
-			default_uid = auth_table[i].uid;
-			auth_uid = default_uid;
-		} else {
-			if (auth_table[i].srank == PTL_RANK_ANY) {
-				/* If not bypass PID, RANK_ANY is invalid */
-				return -EINVAL;
-			}
 
-			/* user may request to let driver select UID */
-			if (auth_uid == HFI_UID_ANY || auth_uid == 0) {
-				auth_table[i].uid = default_uid;
-				auth_uid = default_uid;
-			}
+			/*
+			 * RM isn't expected to correctly form KDETH JKEYs,
+			 * so always continue
+			 */
+			continue;
 		}
 
-		/* if job_launcher didn't set UIDs, this must match default */
-		if (ctx->auth_mask == 0) {
-			if (auth_uid != default_uid)
+		/* RANK_ANY is invalid for native protocol */
+		if (auth_table[i].srank == PTL_RANK_ANY)
+			return -EINVAL;
+
+		/* user may request to let driver select UID */
+		if (auth_table[i].uid == HFI_UID_ANY ||
+		    auth_table[i].uid == 0) {
+			/* set to appropriate default UID and continue */
+			if (ctx->auth_uid[0])
+				auth_table[i].uid = ctx->auth_uid[0];
+			else
+				auth_table[i].uid = HFI_DEFAULT_PTL_UID;
+			continue;
+		}
+
+		/* if RM didn't set UIDs, require default */
+		if (!ctx->auth_mask) {
+			if (auth_table[i].uid != HFI_DEFAULT_PTL_UID)
 				return -EINVAL;
 			continue;
 		}
 
 		/*
-		 * else look for match in job_launcher set UIDs,
-		 * but try to short-circuit this search.
+		 * Else look for match in RM assigned UIDs, but try to
+		 * short-circuit this search.  It is an error if user-supplied
+		 * UID is not present in the set assigned by RM.
 		 */
+		auth_uid = auth_table[i].uid;
 		if (auth_uid == last_job_uid)
 			continue;
 		for (j = 0; j < HFI_NUM_AUTH_TUPLES; j++) {

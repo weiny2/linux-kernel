@@ -78,7 +78,6 @@ static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
 
 	hfi_ctx_init(ctx, dd);
 	ctx->type = HFI_CTX_TYPE_USER;
-	ctx->ptl_uid = current_uid().val;
 
 	/* inherit a configured job reservation if present */
 	hfi_job_init(ctx, uc->job_res_mode, uc->job_res_cookie);
