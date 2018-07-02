@@ -129,7 +129,11 @@ static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
 	resp.pid_base = ctx->pid_base;
 	resp.pid_count = ctx->pid_count;
 	resp.pid_mode = ctx->mode;
-	resp.uid = ctx->ptl_uid;
+	if (IS_PID_BYPASS(ctx))
+		/* For PSM, return JKEY to the user */
+		resp.uid = hfi_generate_jkey();
+	else
+		resp.uid = ctx->ptl_uid;
 
 	obj = container_of(uattr->obj_attr.uobject, typeof(*obj), uobject);
 	obj->verbs_file = uc->ibuc.ufile;

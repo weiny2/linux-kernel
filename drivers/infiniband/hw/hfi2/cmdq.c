@@ -68,9 +68,9 @@
  *    key generated is less than 64, we turn on bit 15 to
  *    push it to 32K and up.
  */
-static inline u16 generate_jkey(kuid_t uid)
+u16 hfi_generate_jkey(void)
 {
-	u16 jkey = from_kuid(current_user_ns(), uid) & HFI_JKEY_MASK;
+	u16 jkey = from_kuid(current_user_ns(), current_uid()) & HFI_JKEY_MASK;
 
 	if (capable(CAP_SYS_ADMIN))
 		jkey &= HFI_ADMIN_JKEY_RANGE - 1;
@@ -107,7 +107,7 @@ static int hfi_cmdq_validate_tuples(struct hfi_ctx *ctx,
 		if (IS_PID_BYPASS(ctx)) {
 			auth_table[i].srank = PTL_RANK_ANY;
 			auth_table[i].uid = HFI_JKEY_MASK_SMASK |
-					generate_jkey(current_uid());
+					    hfi_generate_jkey();
 			default_uid = auth_table[i].uid;
 			auth_uid = default_uid;
 		} else {

@@ -1341,6 +1341,7 @@ int hfi_rsm_set_rule(struct hfi_devdata *dd, struct hfi_rsm_rule *rule,
 		     struct hfi_ctx *rx_ctx[], u16 num_contexts);
 int hfi_vnic_init(struct hfi_devdata *dd);
 void hfi_vnic_uninit(struct hfi_devdata *dd);
+u16 hfi_generate_jkey(void);
 
 static inline struct hfi_pportdata *to_hfi_ppd(const struct hfi_devdata *dd,
 					       u8 port)
