@@ -2422,6 +2422,15 @@ out_unlock:
 	return ret;
 }
 
+static int vfio_cache_inv_fn(struct device *dev, void *data)
+{
+	struct domain_capsule *dc = (struct domain_capsule *)data;
+	struct iommu_cache_invalidate_info *cache_inv_info =
+		(struct iommu_cache_invalidate_info *) dc->data;
+
+	return iommu_cache_invalidate(dc->domain, dev, cache_inv_info);
+}
+
 static long vfio_iommu_type1_ioctl(void *iommu_data,
 				   unsigned int cmd, unsigned long arg)
 {
@@ -2627,6 +2636,45 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 		default:
 			return -EINVAL;
 		}
+	} else if (cmd == VFIO_IOMMU_CACHE_INVALIDATE) {
+		struct vfio_iommu_type1_cache_invalidate cache_inv;
+		u32 version;
+		int info_size;
+		void *cache_info;
+		int ret;
+
+		minsz = offsetofend(struct vfio_iommu_type1_cache_invalidate,
+				    flags);
+
+		if (copy_from_user(&cache_inv, (void __user *)arg, minsz))
+			return -EFAULT;
+
+		if (cache_inv.argsz < minsz || cache_inv.flags)
+			return -EINVAL;
+
+		/* Get the version of struct iommu_cache_invalidate_info */
+		if (copy_from_user(&version,
+			(void __user *) (arg + minsz), sizeof(version)))
+			return -EFAULT;
+
+		info_size = iommu_uapi_get_data_size(
+					IOMMU_UAPI_CACHE_INVAL, version);
+
+		cache_info = kzalloc(info_size, GFP_KERNEL);
+		if (!cache_info)
+			return -ENOMEM;
+
+		if (copy_from_user(cache_info,
+			(void __user *) (arg + minsz), info_size)) {
+			kfree(cache_info);
+			return -EFAULT;
+		}
+
+		mutex_lock(&iommu->lock);
+		ret = vfio_iommu_for_each_dev(iommu, vfio_cache_inv_fn,
+					    cache_info);
+		mutex_unlock(&iommu->lock);
+		return ret;
 	}
 
 	return -ENOTTY;
