@@ -360,8 +360,24 @@ restart:
 		cpu_relax();
 		raw_spin_lock(&qi->q_lock);
 
-		if (force_qi_done && time_after(jiffies, timeout) &&
-		    readl(at->reg + AT_IQT_REG) == readl(at->reg + AT_IQH_REG))
+		/*
+		 * FXRTODO: Due to HSD 2202697307 QI status writes are not working
+		 * As a workaround, QI status writes can be completed if head == tail
+		 * Wait for a small delay to allow the hardware to complete any pending
+		 * TLB flushes. No idea if 100 usecs is enough but this seems to work
+		 * okay as a workaround based on initial testing with HFI level tests.
+		 */
+		if (force_qi_done &&
+		    readl(at->reg + AT_IQT_REG) == readl(at->reg + AT_IQH_REG)) {
+			qi->desc_status[wait_index] = QI_DONE;
+			udelay(100);
+		}
+		/*
+		 * FXRTODO: Due to HSD 2202697307 QI status writes are not working
+		 * In case head != tail after a timeout complete QI invalidation
+		 * to avoid hanging the driver
+		 */
+		if (force_qi_done && time_after(jiffies, timeout))
 			qi->desc_status[wait_index] = QI_DONE;
 	}
 
