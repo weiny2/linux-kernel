@@ -173,6 +173,10 @@ bool no_verbs;
 module_param_named(no_verbs, no_verbs, bool, 0444);
 MODULE_PARM_DESC(no_verbs, "Set to false to load driver without verbs support");
 
+bool pid_reuse = true;
+module_param_named(pid_reuse, pid_reuse, bool, 0444);
+MODULE_PARM_DESC(pid_reuse, "Set to false to disallow pid reuse");
+
 DEFINE_SPINLOCK(hfi2_unit_lock);
 static struct idr hfi2_unit_table;
 static void hfi_cmdq_head_config(struct hfi_devdata *dd, u16 cmdq_idx,

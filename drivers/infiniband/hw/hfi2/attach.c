@@ -592,20 +592,36 @@ int hfi_ctx_cleanup(struct hfi_ctx *ctx)
 		ctx->ptl_state_base = NULL;
 	}
 
-	/* stop pasid translation, but not for ZEBU: HSD 1209735086 */
-	hfi_at_clear_pasid(ctx);
+	/*
+	 * TODO: skip freeing the PID/PASID to workaround
+	 * HW bugs e.g. HSD 2204311855
+	 */
+	if (pid_reuse)
+		/* stop pasid translation, but not for ZEBU: HSD 1209735086 */
+		hfi_at_clear_pasid(ctx);
 
 	/* disable default Bypass PID if used */
 	hfi_ctx_clear_bypass(ctx);
 
-	/* release assigned PID */
-	hfi_pid_free(dd, ptl_pid);
+	/*
+	 * TODO: skip freeing the PID/PASID to workaround
+	 * HW bugs e.g. HSD 2204311855
+	 * If we need to keep this long-term, we might want to do something
+	 * more elegant, like still call hfi_pid_free() and just leave the PID
+	 * marked as reserved. So we might want this hidden inside
+	 * __hfi_ctx_unreserve as there are multiple calls to it.
+	 */
+	if (pid_reuse) {
+		/* release assigned PID */
+		hfi_pid_free(dd, ptl_pid);
 
-	if (ctx->pid_count == 0) {
-		dd_dev_info(dd, "release PID singleton [%u]\n",
-			    ptl_pid);
-		__hfi_ctx_unreserve(dd, ptl_pid, 1);
+		if (ctx->pid_count == 0) {
+			dd_dev_info(dd, "release PID singleton [%u]\n",
+				    ptl_pid);
+			__hfi_ctx_unreserve(dd, ptl_pid, 1);
+		}
 	}
+
 	/* clear last */
 	ctx->pid = HFI_PID_NONE;
 

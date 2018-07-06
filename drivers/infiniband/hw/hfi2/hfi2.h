@@ -1612,6 +1612,7 @@ extern bool no_pe_fw;
 extern bool simics;
 extern bool opafm_disable;
 extern bool no_interrupts;
+extern bool pid_reuse;
 
 static inline u64 read_csr(const struct hfi_devdata *dd, u32 offset)
 {
