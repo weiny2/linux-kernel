@@ -285,6 +285,9 @@ int hfi2_job_setup_handler(struct ib_device *ib_dev,
 	u16 pid_base;
 	int ret;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
@@ -388,6 +391,9 @@ int hfi2_dlid_assign_handler(struct ib_device *ib_dev,
 	u64 *dlid_ptr_user;
 	int ret;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
 	uattr = uverbs_attr_get(attrs, HFI2_DLID_ASSIGN_CTX_IDX);
 	if (unlikely(IS_ERR(uattr)))
 		return PTR_ERR(uattr);
@@ -439,6 +445,9 @@ int hfi2_dlid_release_handler(struct ib_device *ib_dev,
 #ifdef CONFIG_HFI2_STLNP
 	struct hfi_ctx *ctx;
 	const struct uverbs_attr *uattr;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
 
 	uattr = uverbs_attr_get(attrs, HFI2_DLID_RELEASE_CTX_IDX);
 	if (unlikely(IS_ERR(uattr)))
