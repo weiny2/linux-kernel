@@ -869,7 +869,7 @@ static void gntdev_put_pages(struct gntdev_copy_batch *batch)
 	unsigned int i;
 
 	for (i = 0; i < batch->nr_pages; i++)
-		put_page(batch->pages[i]);
+		put_user_page(batch->pages[i]);
 	batch->nr_pages = 0;
 }
 

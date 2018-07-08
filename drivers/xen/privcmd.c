@@ -618,7 +618,7 @@ static void unlock_pages(struct page *pages[], unsigned int nr_pages)
 
 	for (i = 0; i < nr_pages; i++) {
 		if (pages[i])
-			put_page(pages[i]);
+			put_user_page(pages[i]);
 	}
 }
 
