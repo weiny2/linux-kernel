@@ -39,7 +39,7 @@ static void tee_shm_release(struct tee_shm *shm)
 				"unregister shm %p failed: %d", shm, rc);
 
 		for (n = 0; n < shm->num_pages; n++)
-			put_page(shm->pages[n]);
+			put_user_page(shm->pages[n]);
 
 		kfree(shm->pages);
 	}
@@ -322,7 +322,7 @@ err:
 		}
 		if (shm->pages) {
 			for (n = 0; n < shm->num_pages; n++)
-				put_page(shm->pages[n]);
+				put_user_page(shm->pages[n]);
 			kfree(shm->pages);
 		}
 	}
