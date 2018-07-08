@@ -295,7 +295,7 @@ exit:
 	if (pages) {
 		for (i = 0; i < num_pages; i++)
 			if (pages[i])
-				put_page(pages[i]);
+				put_user_page(pages[i]);
 	}
 
 	kfree(sg_list_unaligned);
