@@ -532,7 +532,7 @@ static int genwqe_free_user_pages(struct page **page_list,
 		if (page_list[i] != NULL) {
 			if (dirty)
 				set_page_dirty_lock(page_list[i]);
-			put_page(page_list[i]);
+			put_user_page(page_list[i]);
 		}
 	}
 	return 0;
