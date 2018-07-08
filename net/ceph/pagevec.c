@@ -45,13 +45,11 @@ EXPORT_SYMBOL(ceph_get_direct_page_vector);
 
 void ceph_put_page_vector(struct page **pages, int num_pages, bool dirty)
 {
-	int i;
+	if (dirty)
+		put_user_pages_dirty_lock(pages, num_pages);
+	else
+		put_user_pages(pages, num_pages);
 
-	for (i = 0; i < num_pages; i++) {
-		if (dirty)
-			set_page_dirty_lock(pages[i]);
-		put_page(pages[i]);
-	}
 	kvfree(pages);
 }
 EXPORT_SYMBOL(ceph_put_page_vector);
