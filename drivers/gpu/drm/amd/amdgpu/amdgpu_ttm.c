@@ -793,7 +793,7 @@ int amdgpu_ttm_tt_get_user_pages(struct ttm_tt *ttm, struct page **pages)
 	return 0;
 
 release_pages:
-	release_pages(pages, pinned);
+	put_user_pages(pages, pinned);
 	up_read(&mm->mmap_sem);
 	return r;
 }
@@ -813,7 +813,7 @@ void amdgpu_ttm_tt_set_user_pages(struct ttm_tt *ttm, struct page **pages)
 	gtt->last_set_pages = atomic_read(&gtt->mmu_invalidations);
 	for (i = 0; i < ttm->num_pages; ++i) {
 		if (ttm->pages[i])
-			put_page(ttm->pages[i]);
+			put_user_page(ttm->pages[i]);
 
 		ttm->pages[i] = pages ? pages[i] : NULL;
 	}
