@@ -117,7 +117,7 @@ static int scif_destroy_pinned_pages(struct scif_pinned_pages *pin)
 		if (pin->pages[j] && !kernel) {
 			if (writeable)
 				SetPageDirty(pin->pages[j]);
-			put_page(pin->pages[j]);
+			put_user_page(pin->pages[j]);
 		}
 	}
 
@@ -1387,7 +1387,7 @@ retry:
 				/* Roll back any pinned pages */
 				for (i = 0; i < pinned_pages->nr_pages; i++) {
 					if (pinned_pages->pages[i])
-						put_page(
+						put_user_page(
 						pinned_pages->pages[i]);
 				}
 				prot &= ~SCIF_PROT_WRITE;
