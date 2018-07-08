@@ -338,7 +338,7 @@ static int put_pfn(unsigned long pfn, int prot)
 		struct page *page = pfn_to_page(pfn);
 		if (prot & IOMMU_WRITE)
 			SetPageDirty(page);
-		put_page(page);
+		put_user_page(page);
 		return 1;
 	}
 	return 0;
@@ -372,7 +372,7 @@ static int vaddr_get_pfn(struct mm_struct *mm, unsigned long vaddr,
 		 */
 		if (ret > 0 && vma_is_fsdax(vmas[0])) {
 			ret = -EOPNOTSUPP;
-			put_page(page[0]);
+			put_user_page(page[0]);
 		}
 	}
 	up_read(&mm->mmap_sem);
