@@ -189,8 +189,9 @@ via_free_sg_info(struct pci_dev *pdev, drm_via_sg_info_t *vsg)
 		for (i = 0; i < vsg->num_pages; ++i) {
 			if (NULL != (page = vsg->pages[i])) {
 				if (!PageReserved(page) && (DMA_FROM_DEVICE == vsg->direction))
-					SetPageDirty(page);
-				put_page(page);
+					put_user_pages_dirty(&page, 1);
+				else
+					put_user_page(page);
 			}
 		}
 		/* fall through */
