@@ -658,6 +658,10 @@ static int lst_test_add_ioctl(struct lstio_test_args *args)
 		}
 	}
 
+	memset(batch_name, 0, LST_NAME_SIZE);
+	memset(src_name, 0, LST_NAME_SIZE);
+	memset(dst_name, 0, LST_NAME_SIZE);
+
 	rc = -EFAULT;
 	if (copy_from_user(batch_name, args->lstio_tes_bat_name,
 			   args->lstio_tes_bat_nmlen) ||

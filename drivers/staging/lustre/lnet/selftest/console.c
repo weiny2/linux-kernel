@@ -199,7 +199,7 @@ lstcon_group_alloc(char *name, struct lstcon_group **grpp)
 	struct lstcon_group *grp;
 	int i;
 
-	grp = kmalloc(offsetof(struct lstcon_group,
+	grp = kzalloc(offsetof(struct lstcon_group,
 			       grp_ndl_hash[LST_NODE_HASHSIZE]),
 		      GFP_KERNEL);
 	if (!grp)
