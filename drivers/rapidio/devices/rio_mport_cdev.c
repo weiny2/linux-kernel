@@ -579,7 +579,7 @@ static void dma_req_free(struct kref *ref)
 	sg_free_table(&req->sgt);
 	if (req->page_list) {
 		for (i = 0; i < req->nr_pages; i++)
-			put_page(req->page_list[i]);
+			put_user_page(req->page_list[i]);
 		kfree(req->page_list);
 	}
 
@@ -947,7 +947,7 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 err_pg:
 	if (!req->page_list) {
 		for (i = 0; i < nr_pages; i++)
-			put_page(page_list[i]);
+			put_user_page(page_list[i]);
 		kfree(page_list);
 	}
 err_req:
