@@ -640,7 +640,7 @@ static void qp_release_pages(struct page **pages,
 		if (dirty)
 			set_page_dirty(pages[i]);
 
-		put_page(pages[i]);
+		put_user_page(pages[i]);
 		pages[i] = NULL;
 	}
 }
