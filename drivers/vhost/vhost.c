@@ -1708,7 +1708,7 @@ static int set_bit_to_user(int nr, void __user *addr)
 	set_bit(bit, base);
 	kunmap_atomic(base);
 	set_page_dirty_lock(page);
-	put_page(page);
+	put_user_page(page);
 	return 0;
 }
 

@@ -323,11 +323,11 @@ static void vhost_scsi_release_cmd(struct se_cmd *se_cmd)
 
 	if (tv_cmd->tvc_sgl_count) {
 		for (i = 0; i < tv_cmd->tvc_sgl_count; i++)
-			put_page(sg_page(&tv_cmd->tvc_sgl[i]));
+			put_user_page(sg_page(&tv_cmd->tvc_sgl[i]));
 	}
 	if (tv_cmd->tvc_prot_sgl_count) {
 		for (i = 0; i < tv_cmd->tvc_prot_sgl_count; i++)
-			put_page(sg_page(&tv_cmd->tvc_prot_sgl[i]));
+			put_user_page(sg_page(&tv_cmd->tvc_prot_sgl[i]));
 	}
 
 	vhost_scsi_put_inflight(tv_cmd->inflight);
@@ -675,7 +675,7 @@ vhost_scsi_iov_to_sgl(struct vhost_scsi_cmd *cmd, bool write,
 			while (p < sg) {
 				struct page *page = sg_page(p++);
 				if (page)
-					put_page(page);
+					put_user_page(page);
 			}
 			return ret;
 		}
