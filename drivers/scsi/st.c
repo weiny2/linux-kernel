@@ -4900,7 +4900,7 @@ static int sgl_map_user_pages(struct st_buffer *STbp,
 	unsigned long end = (uaddr + count + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	unsigned long start = uaddr >> PAGE_SHIFT;
 	const int nr_pages = end - start;
-	int res, i, j;
+	int res, i;
 	struct page **pages;
 	struct rq_map_data *mdata = &STbp->map_data;
 
@@ -4941,8 +4941,7 @@ static int sgl_map_user_pages(struct st_buffer *STbp,
 	return nr_pages;
  out_unmap:
 	if (res > 0) {
-		for (j=0; j < res; j++)
-			put_page(pages[j]);
+		put_user_pages(pages, res);
 		res = 0;
 	}
 	kfree(pages);
@@ -4959,12 +4958,13 @@ static int sgl_unmap_user_pages(struct st_buffer *STbp,
 	for (i=0; i < nr_pages; i++) {
 		struct page *page = STbp->mapped_pages[i];
 
-		if (dirtied)
-			SetPageDirty(page);
 		/* FIXME: cache flush missing for rw==READ
 		 * FIXME: call the correct reference counting function
 		 */
-		put_page(page);
+		if (dirtied)
+			put_user_pages_dirty(&page, 1);
+		else
+			put_user_page(page);
 	}
 	kfree(STbp->mapped_pages);
 	STbp->mapped_pages = NULL;
