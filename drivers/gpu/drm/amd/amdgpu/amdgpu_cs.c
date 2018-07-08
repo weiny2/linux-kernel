@@ -637,7 +637,7 @@ static int amdgpu_cs_parser_bos(struct amdgpu_cs_parser *p,
 				/* We acquired a page array, but somebody
 				 * invalidated it. Free it and try again
 				 */
-				release_pages(e->user_pages,
+				put_user_pages(e->user_pages,
 					      bo->tbo.ttm->num_pages);
 				kvfree(e->user_pages);
 				e->user_pages = NULL;
@@ -764,7 +764,7 @@ error_free_pages:
 		if (!e->user_pages)
 			continue;
 
-		release_pages(e->user_pages, e->tv.bo->ttm->num_pages);
+		put_user_pages(e->user_pages, e->tv.bo->ttm->num_pages);
 		kvfree(e->user_pages);
 	}
 

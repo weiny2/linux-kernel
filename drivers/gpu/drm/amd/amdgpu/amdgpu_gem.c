@@ -349,7 +349,7 @@ int amdgpu_gem_userptr_ioctl(struct drm_device *dev, void *data,
 	return 0;
 
 free_pages:
-	release_pages(bo->tbo.ttm->pages, bo->tbo.ttm->num_pages);
+	put_user_pages(bo->tbo.ttm->pages, bo->tbo.ttm->num_pages);
 
 release_object:
 	drm_gem_object_put_unlocked(gobj);
