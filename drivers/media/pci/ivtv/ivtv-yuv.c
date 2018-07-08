@@ -82,7 +82,7 @@ static int ivtv_yuv_prep_user_dma(struct ivtv *itv, struct ivtv_user_dma *dma,
 
 			if (uv_pages >= 0) {
 				for (i = 0; i < uv_pages; i++)
-					put_page(dma->map[y_pages + i]);
+					put_user_page(dma->map[y_pages + i]);
 				rc = -EFAULT;
 			} else {
 				rc = uv_pages;
@@ -94,7 +94,7 @@ static int ivtv_yuv_prep_user_dma(struct ivtv *itv, struct ivtv_user_dma *dma,
 		}
 		if (y_pages >= 0) {
 			for (i = 0; i < y_pages; i++)
-				put_page(dma->map[i]);
+				put_user_page(dma->map[i]);
 			/*
 			 * Inherit the -EFAULT from rc's
 			 * initialization, but allow it to be
@@ -113,7 +113,7 @@ static int ivtv_yuv_prep_user_dma(struct ivtv *itv, struct ivtv_user_dma *dma,
 	if (ivtv_udma_fill_sg_list (dma, &uv_dma, ivtv_udma_fill_sg_list (dma, &y_dma, 0)) < 0) {
 		IVTV_DEBUG_WARN("could not allocate bounce buffers for highmem userspace buffers\n");
 		for (i = 0; i < dma->page_count; i++) {
-			put_page(dma->map[i]);
+			put_user_page(dma->map[i]);
 		}
 		dma->page_count = 0;
 		return -ENOMEM;

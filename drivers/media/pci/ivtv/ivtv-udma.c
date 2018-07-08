@@ -120,7 +120,7 @@ int ivtv_udma_setup(struct ivtv *itv, unsigned long ivtv_dest_addr,
 			   err, user_dma.page_count);
 		if (err >= 0) {
 			for (i = 0; i < err; i++)
-				put_page(dma->map[i]);
+				put_user_page(dma->map[i]);
 			return -EINVAL;
 		}
 		return err;
@@ -131,7 +131,7 @@ int ivtv_udma_setup(struct ivtv *itv, unsigned long ivtv_dest_addr,
 	/* Fill SG List with new values */
 	if (ivtv_udma_fill_sg_list(dma, &user_dma, 0) < 0) {
 		for (i = 0; i < dma->page_count; i++) {
-			put_page(dma->map[i]);
+			put_user_page(dma->map[i]);
 		}
 		dma->page_count = 0;
 		return -ENOMEM;
@@ -171,7 +171,7 @@ void ivtv_udma_unmap(struct ivtv *itv)
 
 	/* Release User Pages */
 	for (i = 0; i < dma->page_count; i++) {
-		put_page(dma->map[i]);
+		put_user_page(dma->map[i]);
 	}
 	dma->page_count = 0;
 }
