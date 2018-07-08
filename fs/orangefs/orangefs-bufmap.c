@@ -171,7 +171,7 @@ orangefs_bufmap_unmap(struct orangefs_bufmap *bufmap)
 	int i;
 
 	for (i = 0; i < bufmap->page_count; i++)
-		put_page(bufmap->page_array[i]);
+		put_user_page(bufmap->page_array[i]);
 }
 
 static void
@@ -280,7 +280,7 @@ orangefs_bufmap_map(struct orangefs_bufmap *bufmap,
 
 		for (i = 0; i < ret; i++) {
 			SetPageError(bufmap->page_array[i]);
-			put_page(bufmap->page_array[i]);
+			put_user_page(bufmap->page_array[i]);
 		}
 		return -ENOMEM;
 	}
