@@ -549,7 +549,7 @@ static void fuse_release_user_pages(struct fuse_req *req, bool should_dirty)
 		struct page *page = req->pages[i];
 		if (should_dirty)
 			set_page_dirty_lock(page);
-		put_page(page);
+		put_user_page(page);
 	}
 }
 
