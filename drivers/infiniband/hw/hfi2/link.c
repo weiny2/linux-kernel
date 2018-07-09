@@ -1402,19 +1402,9 @@ static int set_local_link_attributes(struct hfi_pportdata *ppd)
 	write_csr(dd, CRK_CRK8051_CFG_LOCAL_PORT_NO,
 		  ppd->pnum & CRK_CRK8051_CFG_LOCAL_PORT_NO_VAL_MASK);
 
-	if (dd->emulation) {
-		ret = write_vc_local_fabric(ppd, ppd->vau, 0, ppd->vcu,
-					    ppd->vl15_init,
-					    ppd->port_crc_mode_enabled);
-	} else {
-		/*
-		 * FXRTODO: Remove this when Simics model is fixed to support
-		 * vAU of 0. JIRA: STL-33783
-		 */
-		ret = write_vc_local_fabric(ppd, ppd->vau, 1, ppd->vcu,
-					    ppd->vl15_init,
-					    ppd->port_crc_mode_enabled);
-	}
+	ret = write_vc_local_fabric(ppd, ppd->vau, 0, ppd->vcu,
+				    ppd->vl15_init,
+				    ppd->port_crc_mode_enabled);
 	if (ret != HCMD_SUCCESS)
 		goto set_local_link_attributes_fail;
 
@@ -1891,21 +1881,6 @@ static void handle_verify_cap(struct work_struct *work)
 	ppd_dev_info(ppd, "Peer Device ID: 0x%04x, Revision 0x%02x\n",
 		     (u32)device_id, (u32)device_rev);
 
-	if (!ppd->dd->emulation) {
-		/* FXRTODO: Remove this when Simics model is updated to support
-		 * vAU of 0. JIRA ID: STL-33783
-		 *
-		 * The peer vAU value just read is the peer receiver value. HFI
-		 * does not support a transmit vAU of 0 (AU == 8). We advertised
-		 * that with Z=1 in the fabric capabilities sent to the peer.
-		 * The peer will see our Z=1, and, if it advertised a vAU of 0,
-		 * will move its receive to vAU of 1 (AU == 16). Do the same
-		 * here. We do not care about the peer Z value - our sent vAU is
-		 * 3 (hardwired) and is not subject to the Z value exception.
-		 */
-		if (vau == 0)
-			vau = 1;
-	}
 	hfi_set_up_vl15(ppd, vau, vl15buf);
 
 	/* set up the LCB CRC mode */

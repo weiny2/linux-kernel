@@ -705,6 +705,7 @@ static void init_csrs(struct hfi_devdata *dd)
 	u64 bth_qp = 0;
 	u64 pcim_itr = 0;
 	u64 reg, cfg_ctl;
+	u64 mps;
 	void *zbr_ptr = NULL;
 
 	if (dd->emulation) {
@@ -719,6 +720,26 @@ static void init_csrs(struct hfi_devdata *dd)
 		dd_dev_info(dd, "Maximizing side-band timeout: 0x%llx\n",
 			    read_csr(dd, (HFI_PCIM_CSRS + 0x000000000040)));
 		msleep(100);
+	}
+
+	/* Maximum Payload Size(MPS) depends on PCIM cfg and defaults to 128B:
+	 *
+	 * HFI_PCIM_CFG_CTL.max_payload_128 = 1
+	 * FXR_TXDMA_CFG_MAX_PCIE_REQ_SIZE.pcie_mtu = 0
+	 * FXR_RXDMA_CFG_MISC_CTRL.pcie_mtu = 0
+	 *
+	 * MPS value in PCIM needs to be used to configure the MPS value in
+	 * TXDMA and RXDMA. MPS value is promoted to 256B when
+	 * HFI_PCIM_CFG_CTL.max_payload_128 is 0.
+	 */
+	reg = read_csr(dd, HFI_PCIM_CFG_CTL);
+	if (!(reg & HFI_PCIM_CFG_CTL_MAX_PAYLOAD_128_SMASK)) {
+		mps = read_csr(dd, FXR_TXDMA_CFG_MAX_PCIE_REQ_SIZE);
+		mps |= FXR_TXDMA_CFG_MAX_PCIE_REQ_SIZE_PCIE_MTU_SMASK;
+		write_csr(dd, FXR_TXDMA_CFG_MAX_PCIE_REQ_SIZE, mps);
+		mps = read_csr(dd, FXR_RXDMA_CFG_MISC_CTRL);
+		mps |= FXR_RXDMA_CFG_MISC_CTRL_PCIE_MTU_SMASK;
+		write_csr(dd, FXR_RXDMA_CFG_MISC_CTRL, mps);
 	}
 
 	/* enable logging PMON counter overflow */
@@ -742,9 +763,9 @@ static void init_csrs(struct hfi_devdata *dd)
 		   FXR_RXHP_CFG_NPTL_BTH_QP_KDETH_QP_SHIFT;
 	write_csr(dd, FXR_RXHP_CFG_NPTL_BTH_QP, kdeth_qp);
 
-	bth_qp = (FXR_TXCID_CFG_SENDBTHQP_SEND_BTH_QP_MASK &
+	bth_qp = (FXR_TXCID_CFG_SENDBTHQP_SENDBTHQP_MASK &
 		 hfi2_kdeth_qp) <<
-		 FXR_TXCID_CFG_SENDBTHQP_SEND_BTH_QP_SHIFT;
+		 FXR_TXCID_CFG_SENDBTHQP_SENDBTHQP_SHIFT;
 	write_csr(dd, FXR_TXCID_CFG_SENDBTHQP, bth_qp);
 
 	if (loopback == LOOPBACK_HFI) {
@@ -3753,15 +3774,7 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 
 		/* Initialize credit management variables */
 		/* assign link credit variables */
-		if (dd->emulation) {
-			ppd->vau = HFI_CM_VAU;
-		} else {
-			/*
-			 * FXRTODO: Remove when Simics model updates to have
-			 * vAU = 2 JIRA: STL-33783
-			 */
-			ppd->vau = 3;
-		}
+		ppd->vau = HFI_CM_VAU;
 		ppd->link_credits = HFI_RCV_BUFFER_SIZE /
 				   hfi_vau_to_au(ppd->vau);
 		ppd->vcu = hfi_cu_to_vcu(HFI_CM_CU);
@@ -3998,13 +4011,13 @@ static int hfi_driver_reset(struct hfi_devdata *dd)
 
 	dd_dev_info(dd, "Resetting HFI with DRIVER_RESET\n");
 
-	reg = HFI_PCIM_CFG_DRIVER_RESET_SMASK;
-	write_csr(dd, HFI_PCIM_CFG, reg);
+	reg = HFI_PCIM_CFG_CTL_DRIVER_RESET_SMASK;
+	write_csr(dd, HFI_PCIM_CFG_CTL, reg);
 
 	for (i = 0; i < HFI_DRIVER_RESET_RETRIES; i++) {
-		reg = read_csr(dd, HFI_PCIM_CFG);
+		reg = read_csr(dd, HFI_PCIM_CFG_CTL);
 
-		if (!(reg & HFI_PCIM_CFG_DRIVER_RESET_SMASK))
+		if (!(reg & HFI_PCIM_CFG_CTL_DRIVER_RESET_SMASK))
 			break;
 		msleep(20);
 	}
@@ -4556,12 +4569,10 @@ void hfi_cmdq_disable(struct hfi_devdata *dd, u16 cmdq_idx)
 	      FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_CQ_SHIFT;
 	tx |= FXR_TXCIC_CFG_DRAIN_RESET_RESET_SMASK;
 	tx |= FXR_TXCIC_CFG_DRAIN_RESET_DRAIN_SMASK;
-	tx |= FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK;
 	rx = (FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_CQ_MASK & cmdq_idx) <<
 		     FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_CQ_SHIFT;
 	rx |= FXR_RXCIC_CFG_CQ_DRAIN_RESET_RESET_SMASK;
 	rx |= FXR_RXCIC_CFG_CQ_DRAIN_RESET_DRAIN_SMASK;
-	rx |= FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK;
 
 retry_reset:
 	if (tx & FXR_TXCIC_CFG_DRAIN_RESET_RESET_SMASK)
@@ -4573,9 +4584,10 @@ retry_reset:
 	/* wait for completion, if timeout log a message */
 	for (time = 0; time < timeout; time++) {
 		mdelay(1);
-		if (tx & FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK)
+		if (time == 0 || (tx & FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK))
 			tx = read_csr(dd, FXR_TXCIC_CFG_DRAIN_RESET);
-		if (rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK)
+		if (time == 0 ||
+		    (rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK))
 			rx = read_csr(dd, FXR_RXCIC_CFG_CQ_DRAIN_RESET);
 		if (!(tx & FXR_TXCIC_CFG_DRAIN_RESET_BUSY_SMASK) &&
 		    !(rx & FXR_RXCIC_CFG_CQ_DRAIN_RESET_BUSY_SMASK))
