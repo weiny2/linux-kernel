@@ -104,6 +104,8 @@ static ssize_t __iter_get_bvecs(struct iov_iter *iter, size_t maxsize,
 				.bv_page = pages[idx],
 				.bv_len = min_t(int, bytes, PAGE_SIZE - start),
 				.bv_offset = start,
+				.bv_needs_put_user_page =
+					needs_put_user_page(iter)
 			};
 
 			bvecs[bvec_idx] = bv;
@@ -165,7 +167,7 @@ static void put_bvecs(struct bio_vec *bvecs, int num_bvecs, bool should_dirty)
 		if (bvecs[i].bv_page) {
 			if (should_dirty)
 				set_page_dirty_lock(bvecs[i].bv_page);
-			put_page(bvecs[i].bv_page);
+			put_bvec_page(&bvecs[i]);
 		}
 	}
 	kvfree(bvecs);
