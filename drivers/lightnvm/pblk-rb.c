@@ -560,6 +560,7 @@ unsigned int pblk_rb_read_to_bio(struct pblk_rb *rb, struct nvm_rq *rqd,
 	unsigned int pad = 0, to_read = nr_entries;
 	unsigned int i;
 	int flags;
+	bool needs_put_user_page = false;
 
 	if (count < nr_entries) {
 		pad = nr_entries - count;
@@ -596,8 +597,8 @@ try:
 			return NVM_IO_ERR;
 		}
 
-		if (bio_add_pc_page(q, bio, page, rb->seg_size, 0) !=
-								rb->seg_size) {
+		if (bio_add_pc_page(q, bio, page, rb->seg_size, 0,
+				    needs_put_user_page) != rb->seg_size) {
 			pblk_err(pblk, "could not add page to write bio\n");
 			flags &= ~PBLK_WRITTEN_DATA;
 			flags |= PBLK_SUBMITTED_ENTRY;

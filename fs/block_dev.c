@@ -264,7 +264,7 @@ __blkdev_direct_IO_simple(struct kiocb *iocb, struct iov_iter *iter,
 	bio_for_each_segment_all(bvec, &bio, i, iter_all) {
 		if (should_dirty && !PageCompound(bvec->bv_page))
 			set_page_dirty_lock(bvec->bv_page);
-		put_page(bvec->bv_page);
+		put_bvec_page(bvec);
 	}
 
 	if (unlikely(bio.bi_status))
@@ -341,7 +341,7 @@ static void blkdev_bio_end_io(struct bio *bio)
 		struct bvec_iter_all iter_all;
 
 		bio_for_each_segment_all(bvec, bio, i, iter_all)
-			put_page(bvec->bv_page);
+			put_bvec_page(bvec);
 		bio_put(bio);
 	}
 }

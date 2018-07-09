@@ -653,7 +653,8 @@ EXPORT_SYMBOL(bio_clone_fast);
  *	@bio: destination bio
  *	@page: page to add
  *	@len: vec entry length
- *	@offset: vec entry offset
+ *      @offset: vec entry offset
+ *      @needs_put_user_page: if the page was pinned via get_user_pages*()
  *
  *	Attempt to add a page to the bio_vec maplist. This can fail for a
  *	number of reasons, such as the bio being full or target block device
@@ -663,7 +664,8 @@ EXPORT_SYMBOL(bio_clone_fast);
  *	This should only be used by REQ_PC bios.
  */
 int bio_add_pc_page(struct request_queue *q, struct bio *bio, struct page
-		    *page, unsigned int len, unsigned int offset)
+		    *page, unsigned int len, unsigned int offset,
+		    bool needs_put_user_page)
 {
 	int retried_segments = 0;
 	struct bio_vec *bvec;
@@ -711,6 +713,7 @@ int bio_add_pc_page(struct request_queue *q, struct bio *bio, struct page
 	bvec->bv_page = page;
 	bvec->bv_len = len;
 	bvec->bv_offset = offset;
+	bvec->bv_needs_put_user_page = needs_put_user_page;
 	bio->bi_vcnt++;
 	bio->bi_phys_segments++;
 	bio->bi_iter.bi_size += len;
@@ -740,6 +743,7 @@ int bio_add_pc_page(struct request_queue *q, struct bio *bio, struct page
 	bvec->bv_page = NULL;
 	bvec->bv_len = 0;
 	bvec->bv_offset = 0;
+	bvec->bv_needs_put_user_page = false;
 	bio->bi_vcnt--;
 	bio->bi_iter.bi_size -= len;
 	blk_recount_segments(q, bio);
@@ -808,6 +812,7 @@ void __bio_add_page(struct bio *bio, struct page *page,
 	bv->bv_page = page;
 	bv->bv_offset = off;
 	bv->bv_len = len;
+	bv->bv_needs_put_user_page = false;
 
 	bio->bi_iter.bi_size += len;
 	bio->bi_vcnt++;
@@ -834,7 +839,31 @@ int bio_add_page(struct bio *bio, struct page *page,
 	}
 	return len;
 }
-EXPORT_SYMBOL(bio_add_page);
+EXPORT_SYMBOL_GPL(bio_add_page);
+
+bool needs_put_user_page(struct iov_iter *iter)
+{
+	return (iter->type != ITER_PIPE);
+}
+EXPORT_SYMBOL_GPL(needs_put_user_page);
+
+void put_iov_iter_page(struct iov_iter *iter, struct page *page)
+{
+	if (needs_put_user_page(iter))
+		put_user_page(page);
+	else
+		put_page(page);
+}
+EXPORT_SYMBOL_GPL(put_iov_iter_page);
+
+void put_bvec_page(struct bio_vec *bvec)
+{
+	if (bvec->bv_needs_put_user_page)
+		put_user_page(bvec->bv_page);
+	else
+		put_page(bvec->bv_page);
+}
+EXPORT_SYMBOL_GPL(put_bvec_page);
 
 static int __bio_iov_bvec_add_pages(struct bio *bio, struct iov_iter *iter)
 {
@@ -1242,6 +1271,7 @@ struct bio *bio_copy_user_iov(struct request_queue *q,
 	int nr_pages;
 	unsigned int len = iter->count;
 	unsigned int offset = map_data ? offset_in_page(map_data->offset) : 0;
+	bool needs_put_user_page = false;
 
 	bmd = bio_alloc_map_data(iter, gfp_mask);
 	if (!bmd)
@@ -1295,7 +1325,8 @@ struct bio *bio_copy_user_iov(struct request_queue *q,
 			}
 		}
 
-		if (bio_add_pc_page(q, bio, page, bytes, offset) < bytes)
+		if (bio_add_pc_page(q, bio, page, bytes, offset,
+				    needs_put_user_page) < bytes)
 			break;
 
 		len -= bytes;
@@ -1387,7 +1418,8 @@ struct bio *bio_map_user_iov(struct request_queue *q,
 				if (n > bytes)
 					n = bytes;
 
-				if (!bio_add_pc_page(q, bio, page, n, offs))
+				if (!bio_add_pc_page(q, bio, page, n, offs,
+						     needs_put_user_page(iter)))
 					break;
 
 				/*
@@ -1395,7 +1427,7 @@ struct bio *bio_map_user_iov(struct request_queue *q,
 				 * drop page reference if needed
 				 */
 				if (bio->bi_vcnt == prev_bi_vcnt)
-					put_page(page);
+					put_iov_iter_page(iter, page);
 
 				added += n;
 				bytes -= n;
@@ -1407,7 +1439,7 @@ struct bio *bio_map_user_iov(struct request_queue *q,
 		 * release the pages we didn't map into the bio, if any
 		 */
 		while (j < npages)
-			put_page(pages[j++]);
+			put_iov_iter_page(iter, pages[j++]);
 		kvfree(pages);
 		/* couldn't stuff something into bio? */
 		if (bytes)
@@ -1427,7 +1459,7 @@ struct bio *bio_map_user_iov(struct request_queue *q,
 
  out_unmap:
 	bio_for_each_segment_all(bvec, bio, j, iter_all) {
-		put_page(bvec->bv_page);
+		put_bvec_page(bvec);
 	}
 	bio_put(bio);
 	return ERR_PTR(ret);
@@ -1446,7 +1478,7 @@ static void __bio_unmap_user(struct bio *bio)
 		if (bio_data_dir(bio) == READ)
 			set_page_dirty_lock(bvec->bv_page);
 
-		put_page(bvec->bv_page);
+		put_bvec_page(bvec);
 	}
 
 	bio_put(bio);
@@ -1491,6 +1523,7 @@ struct bio *bio_map_kern(struct request_queue *q, void *data, unsigned int len,
 	const int nr_pages = end - start;
 	int offset, i;
 	struct bio *bio;
+	bool needs_put_user_page = false;
 
 	bio = bio_kmalloc(gfp_mask, nr_pages);
 	if (!bio)
@@ -1507,7 +1540,7 @@ struct bio *bio_map_kern(struct request_queue *q, void *data, unsigned int len,
 			bytes = len;
 
 		if (bio_add_pc_page(q, bio, virt_to_page(data), bytes,
-				    offset) < bytes) {
+				    offset, needs_put_user_page) < bytes) {
 			/* we don't support partial mappings */
 			bio_put(bio);
 			return ERR_PTR(-EINVAL);
@@ -1564,6 +1597,7 @@ struct bio *bio_copy_kern(struct request_queue *q, void *data, unsigned int len,
 	struct bio *bio;
 	void *p = data;
 	int nr_pages = 0;
+	bool needs_put_user_page = false;
 
 	/*
 	 * Overflow, abort
@@ -1590,7 +1624,8 @@ struct bio *bio_copy_kern(struct request_queue *q, void *data, unsigned int len,
 		if (!reading)
 			memcpy(page_address(page), p, bytes);
 
-		if (bio_add_pc_page(q, bio, page, bytes, 0) < bytes)
+		if (bio_add_pc_page(q, bio, page, bytes, 0,
+				    needs_put_user_page) < bytes)
 			break;
 
 		len -= bytes;

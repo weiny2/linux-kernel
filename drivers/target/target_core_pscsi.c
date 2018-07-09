@@ -868,6 +868,7 @@ pscsi_map_sg(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 			PAGE_SIZE - 1) >> PAGE_SHIFT;
 	int nr_vecs = 0, rc;
 	int rw = (cmd->data_direction == DMA_TO_DEVICE);
+	bool needs_put_user_page = false;
 
 	BUG_ON(!cmd->data_length);
 
@@ -916,7 +917,8 @@ new_bio:
 				page, len, off);
 
 			rc = bio_add_pc_page(pdv->pdv_sd->request_queue,
-					bio, page, bytes, off);
+					     bio, page, bytes, off,
+					     needs_put_user_page);
 			pr_debug("PSCSI: bio->bi_vcnt: %d nr_vecs: %d\n",
 				bio_segments(bio), nr_vecs);
 			if (rc != bytes) {

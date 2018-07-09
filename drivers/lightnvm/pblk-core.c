@@ -340,11 +340,13 @@ int pblk_bio_add_pages(struct pblk *pblk, struct bio *bio, gfp_t flags,
 	struct request_queue *q = pblk->dev->q;
 	struct page *page;
 	int i, ret;
+	bool needs_put_user_page = false;
 
 	for (i = 0; i < nr_pages; i++) {
 		page = mempool_alloc(&pblk->page_bio_pool, flags);
 
-		ret = bio_add_pc_page(q, bio, page, PBLK_EXPOSED_PAGE_SIZE, 0);
+		ret = bio_add_pc_page(q, bio, page, PBLK_EXPOSED_PAGE_SIZE,
+				      0, needs_put_user_page);
 		if (ret != PBLK_EXPOSED_PAGE_SIZE) {
 			pblk_err(pblk, "could not add page to bio\n");
 			mempool_free(page, &pblk->page_bio_pool);
@@ -588,6 +590,7 @@ struct bio *pblk_bio_map_addr(struct pblk *pblk, void *data,
 	struct page *page;
 	struct bio *bio;
 	int i, ret;
+	bool needs_put_user_page = false;
 
 	if (alloc_type == PBLK_KMALLOC_META)
 		return bio_map_kern(dev->q, kaddr, len, gfp_mask);
@@ -605,7 +608,8 @@ struct bio *pblk_bio_map_addr(struct pblk *pblk, void *data,
 			goto out;
 		}
 
-		ret = bio_add_pc_page(dev->q, bio, page, PAGE_SIZE, 0);
+		ret = bio_add_pc_page(dev->q, bio, page, PAGE_SIZE, 0,
+				      needs_put_user_page);
 		if (ret != PAGE_SIZE) {
 			pblk_err(pblk, "could not add page to bio\n");
 			bio_put(bio);

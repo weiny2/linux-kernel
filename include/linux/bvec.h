@@ -32,6 +32,7 @@ struct bio_vec {
 	struct page	*bv_page;
 	unsigned int	bv_len;
 	unsigned int	bv_offset;
+	bool		bv_needs_put_user_page;
 };
 
 struct bvec_iter {
