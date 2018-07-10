@@ -224,6 +224,7 @@ struct hfi2_qp_priv {
 	struct hfi_ibeq *recv_eq;
 	struct list_head send_qp_ll;
 	struct list_head recv_qp_ll;
+	spinlock_t s_lock;
 };
 
 struct hfi2_ibtx {

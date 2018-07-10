@@ -142,7 +142,7 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	ibeq = cq->hw_send;
 
 	/* Lock QP  */
-	spin_lock(&qp->s_lock);
+	spin_lock(&priv->s_lock);
 	qp->s_flags |= RVT_S_WAIT_RNR;
 	/* Calculate number of outstanding commands */
 	limit = priv->current_cidx % qp->s_size;
@@ -158,7 +158,7 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 			ret = hfi_eq_peek_nth(&ibeq->eq, &eq_p, i,
 					      &dropped);
 			if (ret < 0) {
-				spin_unlock(&qp->s_lock);
+				spin_unlock(&priv->s_lock);
 				spin_unlock_irqrestore(&cq->lock, flags);
 				return ret;
 			} else if (ret == HFI_EQ_EMPTY) {
@@ -208,7 +208,7 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 			priv->fc_eidx = (cidx + 1) % (qp->s_size * 2);
 		}
 	}
-	spin_unlock(&qp->s_lock);
+	spin_unlock(&priv->s_lock);
 	spin_unlock_irqrestore(&cq->lock, flags);
 
 	/* Signal target to exit flow control */
@@ -275,7 +275,6 @@ int hfi2_exit_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ctx->ibuc.device);
 	struct hfi2_ibport *ibp = ibd->pport;
 	struct hfi2_qp_priv *priv;
-	unsigned long flags;
 
 	rcu_read_lock();
 	qp = rvt_lookup_qpn(&ibd->rdi, &ibp->rvp, qp_num);
@@ -289,7 +288,7 @@ int hfi2_exit_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 		return 0;
 
 	/* Lock QP  */
-	spin_lock_irqsave(&qp->s_lock, flags);
+	spin_lock(&priv->s_lock);
 
 	cidx = priv->fc_cidx;
 	/* Retransmit commands */
@@ -315,7 +314,7 @@ int hfi2_exit_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	spin_unlock(&ctx->flow_ctl_lock);
 
 	/* Unlock QP  */
-	spin_unlock_irqrestore(&qp->s_lock, flags);
+	spin_unlock(&priv->s_lock);
 	qp->s_flags &= ~RVT_S_WAIT_RNR;
 	return 0;
 }
@@ -416,7 +415,7 @@ int hfi2_handle_pid_exchange(struct hfi_ibcontext *ctx, uint64_t *eq)
 	qp_priv->pidex_hdr_type = SYNC_EQ_OPCODE(teq->hdr_data);
 	qp_priv->tpid = SYNC_EQ_IPID(teq->hdr_data);
 
-	spin_lock(&qp->s_lock);
+	spin_lock(&qp_priv->s_lock);
 	/* Check State */
 	if (qp_priv->state == QP_STATE_RTS)
 		goto exit;
@@ -430,7 +429,7 @@ int hfi2_handle_pid_exchange(struct hfi_ibcontext *ctx, uint64_t *eq)
 	}
 
 exit:
-	spin_unlock(&qp->s_lock);
+	spin_unlock(&qp_priv->s_lock);
 
 	return ret;
 }

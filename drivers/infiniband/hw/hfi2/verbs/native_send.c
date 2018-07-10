@@ -605,7 +605,7 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 	unsigned long flags;
 
 	spin_lock_irqsave(&cq->lock, flags);
-	spin_lock(&qp->s_lock);
+	spin_lock(&qp_priv->s_lock);
 	/* TX events, have to be ordered so use internal buffer */
 	wc = &qp_priv->wc[qp_priv->current_cidx % qp->s_size].ib_wc;
 
@@ -633,7 +633,7 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 		break;
 	default:
 		pr_warn("mb opcode %d not valid", mb_opcode);
-		spin_unlock(&qp->s_lock);
+		spin_unlock(&qp_priv->s_lock);
 		spin_unlock_irqrestore(&cq->lock, flags);
 		return -EINVAL;
 	}
@@ -647,7 +647,7 @@ int hfi2_generate_wc(struct rvt_qp *qp, struct ib_send_wr *wr,
 
 	qp_priv->current_cidx =
 		(qp_priv->current_cidx + 1) % (qp->s_size * 2);
-	spin_unlock(&qp->s_lock);
+	spin_unlock(&qp_priv->s_lock);
 	if (hfi_ib_cq_armed(qp->ibqp.send_cq) &&
 	    (cq->notify == IB_CQ_NEXT_COMP || cq->notify == IB_CQ_SOLICITED)) {
 		/*
@@ -759,7 +759,7 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 			return ret;
 	}
 
-	spin_lock_irqsave(&qp->s_lock, flags);
+	spin_lock(&qp_priv->s_lock);
 	if (unlikely(IS_FLOW_CTL(ctx->tx_qp_flow_ctl, qp->ibqp.qp_num)))
 		goto flow_ctl;
 	cmd = &qp_priv->cmd[qp_priv->current_cidx % qp->s_size];
@@ -782,11 +782,11 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 						   in_line, solicit, cmd);
 		break;
 	case IB_WR_LOCAL_INV:
-		spin_unlock_irqrestore(&qp->s_lock, flags);
+		spin_unlock(&qp_priv->s_lock);
 		nslots = hfi2_do_local_inv(qp, wr, signal);
 		return nslots;
 	case IB_WR_REG_MR:
-		spin_unlock_irqrestore(&qp->s_lock, flags);
+		spin_unlock(&qp_priv->s_lock);
 		nslots = hfi2_do_reg_mr(qp, reg_wr(wr), signal);
 		return nslots;
 	default:
@@ -795,11 +795,11 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 	}
 
 	if (nslots <= 0) {
-		spin_unlock_irqrestore(&qp->s_lock, flags);
+		spin_unlock(&qp_priv->s_lock);
 		return nslots;
 	}
 	qp_priv->current_cidx = (qp_priv->current_cidx + 1) % (qp->s_size * 2);
-	spin_unlock_irqrestore(&qp->s_lock, flags);
+	spin_unlock(&qp_priv->s_lock);
 
 retry:
 	spin_lock_irqsave(&ctx->cmdq->tx.lock, flags);
@@ -813,7 +813,7 @@ retry:
 	}
 	return ret;
 flow_ctl:
-	spin_unlock_irqrestore(&qp->s_lock, flags);
+	spin_unlock(&qp_priv->s_lock);
 	return -EBUSY;
 }
 
@@ -821,9 +821,9 @@ static
 int hfi2_flush_wr(struct rvt_qp *qp, struct ib_send_wr *wr,
 		  struct ib_send_wr **bad_wr)
 {
-	unsigned long flags;
+	struct hfi2_qp_priv *qp_priv = (struct hfi2_qp_priv *)qp->priv;
 
-	spin_lock_irqsave(&qp->s_lock, flags);
+	spin_lock(&qp_priv->s_lock);
 
 	do {
 		struct ib_wc wc;
@@ -837,7 +837,7 @@ int hfi2_flush_wr(struct rvt_qp *qp, struct ib_send_wr *wr,
 		rvt_cq_enter(ibcq_to_rvtcq(ibqp->send_cq), &wc, 1);
 	} while ((wr = wr->next));
 
-	spin_unlock_irqrestore(&qp->s_lock, flags);
+	spin_unlock(&qp_priv->s_lock);
 
 	return 0;
 }

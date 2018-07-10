@@ -1413,18 +1413,10 @@ int hfi2_native_srq_recv(struct rvt_srq *srq, struct ib_recv_wr *wr,
 	return ret;
 }
 
-/*
- * TX EQ handler
- *   IN:  EQ->user_ptr is a struct hfi_swqe
- *   OUT: Returns 1 if user completion signaled, else 0
- * TODO - can consider future optimization to use WR_ID here for
- * user_ptr for the non-IOVEC case (if we steal a HDR_DATA bit).
- * But it is very likely we need the hfi_swqe data structure for
- * implementing initiator event ordering later.
- */
 static
-int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
-		       struct ib_wc *wc)
+int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, struct hfi_ibeq *ibeq,
+		       union initiator_EQEntry *eq, struct ib_wc *wc,
+		       bool *qp_error, unsigned long *flags)
 {
 	struct hfi_swqe *swqe = (struct hfi_swqe *)eq->user_ptr;
 	struct ib_qp *ibqp;
@@ -1438,7 +1430,7 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 	int src_qpn = EXTRACT_MB_SRC_QP(eq->match_bits);
 	struct hfi2_ibdev *ibd = to_hfi_ibd(ctx->ibuc.device);
 	struct hfi2_ibport *ibp = ibd->pport;
-	unsigned long flags;
+	*qp_error = false;
 
 	if (IS_NON_IOVEC_SWQE(swqe)) {
 		rcu_read_lock();
@@ -1460,7 +1452,7 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
        /* Check Ordering */
 	if (eq->fail_type != PTL_NI_PT_DISABLED &&
 	    mb_opcode != MB_OC_QP_RESET) {
-		spin_lock_irqsave(&rvtqp->s_lock, flags);
+		spin_lock(&qp_priv->s_lock);
 		if (wc && (cidx % rvtqp->s_size) == qp_priv->current_eidx) {
 			qp_priv->current_eidx = ((qp_priv->current_eidx + 1) %
 						 rvtqp->s_size);
@@ -1483,7 +1475,7 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 		if (eq->opcode >= PTL_RC_RDMA_RD)
 			--qp_priv->outstanding_rd_cnt;
 		--qp_priv->outstanding_cnt;
-		spin_unlock_irqrestore(&rvtqp->s_lock, flags);
+		spin_unlock(&qp_priv->s_lock);
 	}
 	if (!signal)
 		goto done;
@@ -1529,7 +1521,7 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 	} else if (unlikely(rvtqp->state >= IB_QPS_SQE)) {
 		wc->status = IB_WC_WR_FLUSH_ERR;
 	} else if (unlikely(wc->vendor_err == PTL_NI_PT_DISABLED)) {
-		spin_lock_irqsave(&rvtqp->s_lock, flags);
+		spin_lock(&qp_priv->s_lock);
 		/*
 		 * Update command index flow control state - indicate to RNR
 		 * thread this event has been consumed
@@ -1551,7 +1543,7 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 					    rvtqp)) {
 			qp_priv->fc_eidx = (cidx + 1) % (rvtqp->s_size * 2);
 		}
-		spin_unlock_irqrestore(&rvtqp->s_lock, flags);
+		spin_unlock(&qp_priv->s_lock);
 
 		/*
 		 * Update match bits - indicate to RNR thread this event has
@@ -1563,19 +1555,7 @@ int hfi2_process_tx_eq(struct hfi_ibcontext *ctx, union initiator_EQEntry *eq,
 		signal = false;
 		suppress_free = true;
 	} else if (unlikely(wc->vendor_err != VERBS_OK)) {
-		struct ib_qp_attr attr = {0};
-
-		switch (ibqp->qp_type) {
-		case IB_QPT_RC:
-			attr.qp_state = IB_QPS_ERR;
-			/* QP_STATE updated in ib_modify_qp */
-			break;
-		default:
-			attr.qp_state = IB_QPS_SQE;
-			break;
-		}
-
-		ib_modify_qp(ibqp, &attr, IB_QP_STATE);
+		*qp_error = true;
 	}
 
 done:
@@ -1583,12 +1563,29 @@ done:
 		/* else we are only freeing IOVEC array */
 		kfree(swqe);
 	}
+
+	hfi_eq_advance(&ibeq->eq, (u64 *)eq);
+
+	/* Error handling - Continued must drop cq->lock */
+	if (unlikely(*qp_error)) {
+		struct ib_qp_attr attr = {0};
+		if (ibqp->qp_type == IB_QPT_RC)
+			attr.qp_state = IB_QPS_ERR;
+		else
+			attr.qp_state = IB_QPS_SQE;
+		spin_unlock_irqrestore(&cq->lock, *flags);
+		ib_modify_qp(ibqp, &attr, IB_QP_STATE);
+		spin_lock_irqsave(&cq->lock, *flags);
+	}
+
 	return signal && in_order;
 }
 
 static
-int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc,
-		       struct rvt_cq *cq)
+int hfi2_process_rx_eq(struct hfi_ibeq *ibeq,
+		       union target_EQEntry *eq, struct ib_wc *wc,
+		       struct rvt_cq *cq, bool *qp_error,
+		       unsigned long *flags)
 {
 	struct hfi_rq_wc *hfi_wc = (struct hfi_rq_wc *)eq->user_ptr;
 	u8 mb_opcode = EXTRACT_MB_OPCODE(eq->match_bits);
@@ -1598,7 +1595,8 @@ int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc,
 	int qp_num;
 	struct hfi2_ibdev *ibd;
 	struct hfi2_ibport *ibp;
-	int ret, signal;
+	int ret, signal = 1;
+	*qp_error = false;
 
 	if (hfi_wc->is_qp) {
 		qp = hfi_wc->qp;
@@ -1628,12 +1626,18 @@ int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc,
 	pt.phys.val = eq->initiator_id;
 	wc->slid = pt.phys.slid;
 	wc->dlid_path_bits = EXTRACT_UD_DLID(eq->roffset);
-
-	/* TODO - port error handling from user provider */
-	WARN_ON(mb_opcode);
-	signal = 1;
-
 	WARN_ON(!wc->qp);
+
+	/* Error handling */
+	if (unlikely(mb_opcode == MB_OC_QP_RESET))
+		signal = 0;
+	else if (unlikely(qp->state == IB_QPS_ERR))
+		wc->status = IB_WC_WR_FLUSH_ERR;
+	else if (unlikely(wc->vendor_err && wc->vendor_err != MR_IN_USE))
+		*qp_error = true;
+
+	/* TODO - check for send /w invalidate that failed */
+
 	/* Reuse List Entry */
 	ret = hfi2_push_key(&rq->ded_me_ks, hfi_wc->list_handle);
 	if (ret != 0) {
@@ -1641,9 +1645,19 @@ int hfi2_process_rx_eq(union target_EQEntry *eq, struct ib_wc *wc,
 				    hfi_wc->list_handle);
 		WARN_ON(ret != 0);
 	}
-
-	/* Free hfi_rq_wc */
 	kfree(hfi_wc);
+
+	hfi_eq_advance(&ibeq->eq, (u64 *)eq);
+
+	/* Error handling - Continued must drop cq->lock */
+	if (unlikely(*qp_error)) {
+		struct ib_qp_attr attr = {0};
+		attr.qp_state = IB_QPS_ERR;
+		spin_unlock_irqrestore(&cq->lock, *flags);
+		ib_modify_qp(&qp->ibqp, &attr, IB_QP_STATE);
+		spin_lock_irqsave(&cq->lock, *flags);
+	}
+
 	return signal;
 }
 
@@ -1661,8 +1675,9 @@ int hfi2_fence(struct hfi_ibcontext *ctx, struct rvt_qp *qp, u32 *fence_value)
 	u64 *eqe = NULL;
 	int kind, ret;
 	bool dropped;
-	unsigned long flags;
 	struct ib_wc wc;
+	unsigned long flags;
+	bool qp_error;
 
 start:
 	spin_lock_irqsave(&cq->lock, flags);
@@ -1692,23 +1707,27 @@ start_has_lock:
 
 			switch (kind) {
 			case NON_PTL_EVENT_VERBS_RX:
-				ret = hfi2_process_rx_eq((union target_EQEntry *)eqe,
-							 &wc, cq);
-				hfi_eq_advance(&ibeq->eq, eqe);
-				if (ret < 0) {
+				ret = hfi2_process_rx_eq(ibeq,
+							 (union target_EQEntry *)eqe,
+							 &wc, cq, &qp_error,
+							 &flags);
+				if (unlikely(ret < 0)) {
 					spin_unlock_irqrestore(&cq->lock, flags);
 					return ret;
 				}
+				spin_unlock_irqrestore(&cq->lock, flags);
 				rvt_cq_enter(ibcq_to_rvtcq(qp->ibqp.send_cq), &wc, 1);
-				break;
+				goto start;
 			case NON_PTL_EVENT_VERBS_TX:
-				hfi2_process_tx_eq(ctx, (union initiator_EQEntry *)eqe,
-						   NULL);
-				hfi_eq_advance(&ibeq->eq, eqe);
+				hfi2_process_tx_eq(ctx, ibeq,
+						   (union initiator_EQEntry *)eqe,
+						   NULL, &qp_error, &flags);
 				if (unlikely(ibeq->eq.events_pending.counter == SEND_CQ_FREE)) {
 					hfi2_destroy_eq(cq, ibeq);
 					goto start_has_lock;
 				}
+				if (unlikely(qp_error))
+					goto start_has_lock;
 				break;
 			default:
 				pr_err("Unknown event kind %d\n", kind);
@@ -1812,7 +1831,7 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 
 		if (ibeq == cq->hw_send) {
 			list_for_each_entry(priv, &ibeq->qp_ll, send_qp_ll)
-				spin_lock_irqsave(&priv->owner->s_lock, flags);
+				spin_lock(&priv->s_lock);
 
 			/* events_pending field is overloaded, when counter
 			 * reaches SEND_CQ_FREE the old EQ can be destroyed
@@ -1824,8 +1843,7 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 
 			list_for_each_entry(priv, &ibeq->qp_ll, send_qp_ll) {
 				hfi2_update_qp_send_eq(priv->owner, &ibeq->eq);
-				spin_unlock_irqrestore(&priv->owner->s_lock,
-						       flags);
+				spin_unlock(&priv->s_lock);
 			}
 
 			if (ibeq->eq.events_pending.counter == SEND_CQ_FREE)
@@ -1885,13 +1903,14 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 	u64 *eqe = NULL;
 	int kind, ret, i = 0;
 	struct rvt_cq_wc *rvt_wc;
-	bool dropped;
+	bool dropped, qp_error;
 	unsigned long flags;
 	u32 head, tail;
 
 	if (!ctx || !ctx->supports_native || list_empty(&cq->hw_cq))
 		return rvt_poll_cq(ibcq, ne, wc);
 
+start:
 	while (i < ne) {
 		spin_lock_irqsave(&cq->lock, flags);
 		if (!list_empty(&cq->poll_qp)) {
@@ -1917,7 +1936,7 @@ int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
 
 	spin_lock_irqsave(&cq->lock, flags);
 
-start:
+start_poll:
 	list_for_each_entry(ibeq, &cq->hw_cq, hw_cq) {
 		while (i < ne) {
 			ret = hfi_eq_peek_nth(&ibeq->eq, &eqe, 0, &dropped);
@@ -1927,7 +1946,7 @@ start:
 			} else if (ret == HFI_EQ_EMPTY) {
 				if (unlikely(ibeq->eq.events_pending.counter >= RECV_CQ_FREE)) {
 					hfi2_destroy_eq(cq, ibeq);
-					goto start;
+					goto start_poll;
 				}
 				if (!list_is_last(&ibeq->hw_cq, &cq->hw_cq))
 					break;
@@ -1938,17 +1957,26 @@ start:
 
 			switch (kind) {
 			case NON_PTL_EVENT_VERBS_RX:
-				i += hfi2_process_rx_eq((union target_EQEntry *)eqe,
-							(wc + i), cq);
-				hfi_eq_advance(&ibeq->eq, eqe);
+				i += hfi2_process_rx_eq(ibeq,
+							(union target_EQEntry *)eqe,
+							(wc + i), cq, &qp_error,
+							&flags);
+				if (unlikely(qp_error)) {
+					spin_unlock_irqrestore(&cq->lock, flags);
+					goto start;
+				}
 				break;
 			case NON_PTL_EVENT_VERBS_TX:
-				i += hfi2_process_tx_eq(ctx,
+				i += hfi2_process_tx_eq(ctx, ibeq,
 							(union initiator_EQEntry *)eqe,
-							(wc + i));
-				hfi_eq_advance(&ibeq->eq, eqe);
+							(wc + i), &qp_error,
+							&flags);
 				if (unlikely(ibeq->eq.events_pending.counter == SEND_CQ_FREE)) {
 					hfi2_destroy_eq(cq, ibeq);
+					goto start_poll;
+				}
+				if (unlikely(qp_error)) {
+					spin_unlock_irqrestore(&cq->lock, flags);
 					goto start;
 				}
 				break;

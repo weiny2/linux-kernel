@@ -311,6 +311,7 @@ void *qp_priv_alloc(struct rvt_dev_info *rdi, struct rvt_qp *qp)
 	INIT_LIST_HEAD(&priv->poll_qp);
 	INIT_LIST_HEAD(&priv->send_qp_ll);
 	INIT_LIST_HEAD(&priv->recv_qp_ll);
+	spin_lock_init(&priv->s_lock);
 	init_completion(&priv->pid_xchg_comp);
 	notify_qp_reset(qp);
 	return priv;
