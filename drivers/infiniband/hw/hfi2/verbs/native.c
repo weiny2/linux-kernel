@@ -911,16 +911,12 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 
 		/* Malloc retransmit command / backpressure state */
 		if (!priv->cmd) {
-			priv->cmd = kmalloc_array(
-					sizeof(union hfi_tx_cq_command),
-					rvtqp->s_size, GFP_KERNEL);
+			priv->cmd = vmalloc(sizeof(union hfi_tx_cq_command) * rvtqp->s_size);
 			if (!priv->cmd)
 				goto qp_write_err;
 		}
 		if (!priv->wc) {
-			priv->wc = kcalloc(rvtqp->s_size,
-					   sizeof(struct hfi_tx_wc),
-					   GFP_KERNEL);
+			priv->wc = vzalloc(rvtqp->s_size * sizeof(struct hfi_tx_wc));
 			if (!priv->wc)
 				goto qp_write_err;
 		}

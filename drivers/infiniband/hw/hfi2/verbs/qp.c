@@ -322,8 +322,8 @@ void qp_priv_free(struct rvt_dev_info *rdi, struct rvt_qp *qp)
 	struct hfi2_qp_priv *priv = qp->priv;
 
 	kfree(priv->s_hdr);
-	kfree(priv->cmd);
-	kfree(priv->wc);
+	vfree(priv->cmd);
+	vfree(priv->wc);
 	kfree(priv);
 }
 
