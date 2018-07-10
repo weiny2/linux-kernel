@@ -100,6 +100,7 @@ void hfi_set_eq(struct hfi_ctx *ctx, struct hfi_eq *eq,
 	eq->idx = eq_assign->ev_idx;
 	eq->head_addr = head_addr;
 	eq->ctx = ctx;
+	eq->events_pending.counter = 0;
 }
 
 /*

@@ -974,10 +974,10 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 					      (struct hfi_ibeq **)&cq->hw_send);
 			if (ret != 0)
 				goto qp_write_err;
-			if (list_empty(&priv->send_qp_ll))
-				list_add_tail(&((struct hfi_ibeq *)cq->hw_send)->qp_ll,
-					      &priv->send_qp_ll);
 		}
+		if (cq && list_empty(&priv->send_qp_ll))
+			list_add_tail(&priv->send_qp_ll,
+				      &((struct hfi_ibeq *)cq->hw_send)->qp_ll);
 
 		/* create recv EQ if first use of CQ */
 		cq = ibcq_to_rvtcq(ibqp->recv_cq);
@@ -988,10 +988,10 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 						      &priv->recv_eq);
 				if (ret != 0)
 					goto qp_write_err;
-				if (list_empty(&priv->recv_qp_ll))
-					list_add_tail(&((struct hfi_ibeq *)priv->recv_eq)->qp_ll,
-						      &priv->recv_qp_ll);
 			}
+			if (list_empty(&priv->recv_qp_ll))
+				list_add_tail(&priv->recv_qp_ll,
+					      &((struct hfi_ibeq *)priv->recv_eq)->qp_ll);
 		}
 
 		/* store pkey for native_post_send */
@@ -1694,6 +1694,7 @@ start_has_lock:
 			case NON_PTL_EVENT_VERBS_RX:
 				ret = hfi2_process_rx_eq((union target_EQEntry *)eqe,
 							 &wc, cq);
+				hfi_eq_advance(&ibeq->eq, eqe);
 				if (ret < 0) {
 					spin_unlock_irqrestore(&cq->lock, flags);
 					return ret;
@@ -1703,6 +1704,7 @@ start_has_lock:
 			case NON_PTL_EVENT_VERBS_TX:
 				hfi2_process_tx_eq(ctx, (union initiator_EQEntry *)eqe,
 						   NULL);
+				hfi_eq_advance(&ibeq->eq, eqe);
 				if (unlikely(ibeq->eq.events_pending.counter == SEND_CQ_FREE)) {
 					hfi2_destroy_eq(cq, ibeq);
 					goto start_has_lock;
@@ -1714,8 +1716,6 @@ start_has_lock:
 				hfi_eq_advance(&ibeq->eq, eqe);
 				return -EINVAL;
 			}
-			hfi_eq_advance(&ibeq->eq, eqe);
-
 			if (*fence_value == 0)
 				goto exit;
 		}
@@ -1828,12 +1828,11 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 						       flags);
 			}
 
-			if (ibeq->eq.events_pending.counter == SEND_CQ_FREE) {
+			if (ibeq->eq.events_pending.counter == SEND_CQ_FREE)
 				hfi2_destroy_eq(cq, ibeq);
-			}
 		} else {
-			list_for_each_entry(priv, &ibeq->qp_ll, send_qp_ll) {
-				priv->recv_eq = ibeq;
+			list_for_each_entry(priv, &ibeq->qp_ll, recv_qp_ll) {
+				priv->recv_eq = new_ibeq;
 				ctx = obj_to_ibctx(&priv->owner->ibqp);
 
 				nslots = hfi_format_qp_update_recv_eq(priv->owner,
@@ -1869,6 +1868,7 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 				   &ibeq->eq.events_pending);
 		}
 
+		INIT_LIST_HEAD(&ibeq->qp_ll);
 		list_add_tail(&new_ibeq->hw_cq, &cq->hw_cq);
 	}
 
@@ -1940,11 +1940,13 @@ start:
 			case NON_PTL_EVENT_VERBS_RX:
 				i += hfi2_process_rx_eq((union target_EQEntry *)eqe,
 							(wc + i), cq);
+				hfi_eq_advance(&ibeq->eq, eqe);
 				break;
 			case NON_PTL_EVENT_VERBS_TX:
 				i += hfi2_process_tx_eq(ctx,
 							(union initiator_EQEntry *)eqe,
 							(wc + i));
+				hfi_eq_advance(&ibeq->eq, eqe);
 				if (unlikely(ibeq->eq.events_pending.counter == SEND_CQ_FREE)) {
 					hfi2_destroy_eq(cq, ibeq);
 					goto start;
@@ -1956,7 +1958,6 @@ start:
 				spin_unlock_irqrestore(&cq->lock, flags);
 				return -EINVAL;
 			}
-			hfi_eq_advance(&ibeq->eq, eqe);
 		}
 	}
 
@@ -2044,7 +2045,11 @@ int hfi2_destroy_cq(struct ib_cq *ibcq)
 	spin_lock_irqsave(&rcq->lock, flags);
 	if (!list_empty(&rcq->hw_cq)) {
 		list_for_each_entry_safe(ibeq, next, &rcq->hw_cq, hw_cq) {
-			// TODO - Should we ensure no QPs are attached?
+			if (!list_empty(&ibeq->qp_ll)) {
+				spin_unlock_irqrestore(&rcq->lock, flags);
+				return -EINVAL;
+			}
+			list_del(&ibeq->hw_cq);
 			if (ibeq->eq.ctx->type == HFI_CTX_TYPE_KERNEL)
 				hfi_eq_free((struct hfi_eq *)ibeq);
 			else
