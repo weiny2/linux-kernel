@@ -4177,10 +4177,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)dd->pdev->revision);
 
-	if (dd->emulation) {
-		opafm_disable = true;
-	}
-
 	if (no_interrupts)
 		no_verbs = true;
 
