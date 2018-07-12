@@ -504,7 +504,7 @@ static inline unsigned long level_size(int level)
 
 static inline void at_clear_pte_present(struct at_pte *pte)
 {
-	pte->val |= ~AT_PTE_PRESENT;
+	pte->val &= ~AT_PTE_PRESENT;
 }
 
 static inline void at_clear_pte(struct at_pte *pte)
@@ -1167,6 +1167,9 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 				dd_dev_err(at->dd, "kernel cpt mode: prq received\n");
 				goto bad_req;
 			}
+
+			/* TODO: check invalid kernel address here,
+			   and remove the canonical address adjustment */
 		}
 
 		svm->stats->prq++;
