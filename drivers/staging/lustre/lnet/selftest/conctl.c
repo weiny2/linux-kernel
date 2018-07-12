@@ -593,7 +593,7 @@ lst_stat_query_ioctl(struct lstio_stat_args *args)
 		if (args->lstio_sta_nmlen <= 0 ||
 		    args->lstio_sta_nmlen > LST_NAME_SIZE)
 			return -EINVAL;
-
+		memset(name, 0, LST_NAME_SIZE + 1);
 		rc = copy_from_user(name, args->lstio_sta_namep,
 				    args->lstio_sta_nmlen);
 		if (!rc)
