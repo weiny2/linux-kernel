@@ -2831,17 +2831,20 @@ hfi_at_init(struct hfi_devdata *dd)
 
 	at = dd->at;
 	if (!ecap_ecs(at->ecap)) {
+		ret = -EINVAL;
 		dd_dev_err(dd, "AT: extended capability not supported\n");
 		goto free_at;
 	}
 
 	if (translation_status(at)) {
+		ret = -EBUSY;
 		dd_dev_err(dd, "AT: translation already enabled.\n");
 		goto free_at;
 	}
 
 	if (cpu_feature_enabled(X86_FEATURE_LA57)) {
 		if (!cap_5lp_support(at->cap)) {
+			ret = -EINVAL;
 			dd_dev_err(dd, "AT: 5-level page tbl not supported\n");
 			goto free_at;
 		}
@@ -2855,6 +2858,7 @@ hfi_at_init(struct hfi_devdata *dd)
 		goto free_at;
 
 	if (!ecap_dev_iotlb_support(at->ecap)) {
+		ret = -EINVAL;
 		dd_dev_err(dd, "AT: DEVTLB not supported\n");
 		goto free_at;
 	}
@@ -2864,6 +2868,7 @@ hfi_at_init(struct hfi_devdata *dd)
 		goto free_at;
 
 	if (!ecap_pasid(at->ecap)) {
+		ret = -EINVAL;
 		dd_dev_err(dd, "AT: pasid not supported.\n");
 		goto free_at;
 	}
@@ -2885,6 +2890,7 @@ hfi_at_init(struct hfi_devdata *dd)
 	qi_flush_iotlb(at, 0, 0, 0, AT_TLB_GLOBAL_FLUSH);
 
 	if (!ecap_prs(at->ecap)) {
+		ret = -EINVAL;
 		dd_dev_err(dd, "AT: page-request not supported.\n");
 		goto free_at;
 	}
