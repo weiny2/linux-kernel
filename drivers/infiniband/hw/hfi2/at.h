@@ -536,6 +536,7 @@ struct hfi_at {
 	dma_addr_t pasid_table_dma;
 	struct idr pasid_idr;
 	struct idr pasid_stats_idr;
+	struct mutex pasid_mutex;
 	u32 pasid_max;
 
 	/* mm for system pasid */

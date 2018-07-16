@@ -99,9 +99,6 @@ static const char * const at_remap_fault_reasons[] = {
 	"PCE for translation request specifies blocking"
 };
 
-/* protect pasid idr code */
-static DEFINE_MUTEX(pasid_mutex);
-
 static void hfi_at_stats_cleanup(struct hfi_at *at);
 static void hfi_flush_svm_range(struct hfi_at_svm *svm, unsigned long address,
 				unsigned long pages, int ih, int gl);
@@ -1377,6 +1374,7 @@ static int alloc_at(struct hfi_devdata *dd)
 	if (sts & AT_GSTS_QIES)
 		at->gcmd |= AT_GCMD_QIE;
 
+	mutex_init(&at->pasid_mutex);
 	raw_spin_lock_init(&at->register_lock);
 	dd->at = at;
 
@@ -2160,9 +2158,9 @@ void hfi_at_dereg_range(struct hfi_ctx *ctx, void *vaddr, u32 size)
 	struct hfi_at *at = ctx->devdata->at;
 	struct hfi_at_svm *svm;
 
-	mutex_lock(&pasid_mutex);
+	mutex_lock(&at->pasid_mutex);
 	svm = idr_find(&at->pasid_idr, ctx->pasid);
-	mutex_unlock(&pasid_mutex);
+	mutex_unlock(&at->pasid_mutex);
 	if (!svm)
 		return;
 
@@ -2181,9 +2179,9 @@ int hfi_at_reg_range(struct hfi_ctx *ctx, void *vaddr, u32 size,
 	unsigned long pageaddr;
 	unsigned long nrpages;
 
-	mutex_lock(&pasid_mutex);
+	mutex_lock(&at->pasid_mutex);
 	svm = idr_find(&at->pasid_idr, ctx->pasid);
-	mutex_unlock(&pasid_mutex);
+	mutex_unlock(&at->pasid_mutex);
 	if (!svm || !svm->pgd)
 		return -EINVAL;
 
@@ -2374,12 +2372,12 @@ static void hfi_at_stats_cleanup(struct hfi_at *at)
 	struct hfi_at_stats *stats;
 	int i;
 
-	mutex_lock(&pasid_mutex);
+	mutex_lock(&at->pasid_mutex);
 	idr_for_each_entry(&at->pasid_stats_idr, stats, i) {
 		idr_remove(&at->pasid_stats_idr, i);
 		kfree(stats);
 	}
-	mutex_unlock(&pasid_mutex);
+	mutex_unlock(&at->pasid_mutex);
 }
 
 static int hfi_at_stats_show(struct seq_file *s, void *unused)
@@ -2389,12 +2387,12 @@ static int hfi_at_stats_show(struct seq_file *s, void *unused)
 	int i;
 
 	seq_puts(s, "pasid: prq duplicate fail pre_reg pre_reg_fail\n");
-	mutex_lock(&pasid_mutex);
+	mutex_lock(&at->pasid_mutex);
 	idr_for_each_entry(&at->pasid_stats_idr, stats, i)
 		seq_printf(s, "%d: %llu %llu %llu %llu %llu\n",
 			   stats->pasid, stats->prq, stats->prq_dup,
 			   stats->prq_fail, stats->preg, stats->preg_fail);
-	mutex_unlock(&pasid_mutex);
+	mutex_unlock(&at->pasid_mutex);
 
 	return 0;
 }
@@ -2406,7 +2404,7 @@ static ssize_t hfi_at_stats_write(struct file *file, const char __user *buf,
 	struct hfi_at_stats *stats;
 	int i;
 
-	mutex_lock(&pasid_mutex);
+	mutex_lock(&at->pasid_mutex);
 	idr_for_each_entry(&at->pasid_stats_idr, stats, i) {
 		stats->preg = 0;
 		stats->preg_fail = 0;
@@ -2414,7 +2412,7 @@ static ssize_t hfi_at_stats_write(struct file *file, const char __user *buf,
 		stats->prq_dup = 0;
 		stats->prq_fail = 0;
 	}
-	mutex_unlock(&pasid_mutex);
+	mutex_unlock(&at->pasid_mutex);
 
 	return count;
 }
@@ -2565,7 +2563,7 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 		use_spt = force_user_spt;
 	}
 
-	mutex_lock(&pasid_mutex);
+	mutex_lock(&at->pasid_mutex);
 	if (pasid && !(flags & SVM_FLAG_PRIVATE_PASID)) {
 		int i;
 
@@ -2678,7 +2676,7 @@ static int hfi_svm_bind_mm(struct device *dev, int *pasid, int flags)
 	*pasid = svm->pasid;
 	ret = 0;
  out:
-	mutex_unlock(&pasid_mutex);
+	mutex_unlock(&at->pasid_mutex);
 	if (mm)
 		mmput(mm);
 	return ret;
@@ -2690,11 +2688,11 @@ static int hfi_svm_unbind_mm(struct device *dev, int pasid)
 	struct hfi_at_svm *svm;
 	int ret = -EINVAL;
 
-	mutex_lock(&pasid_mutex);
 	at = hfi_svm_device_to_at(dev);
 	if (!at || !at->pasid_table)
-		goto out;
+		return ret;
 
+	mutex_lock(&at->pasid_mutex);
 	svm = idr_find(&at->pasid_idr, pasid);
 	if (!svm)
 		goto out;
@@ -2745,7 +2743,7 @@ static int hfi_svm_unbind_mm(struct device *dev, int pasid)
 		kfree(svm);
 	}
  out:
-	mutex_unlock(&pasid_mutex);
+	mutex_unlock(&at->pasid_mutex);
 
 	return ret;
 }
@@ -2756,11 +2754,11 @@ int hfi_at_is_pasid_valid(struct device *dev, int pasid)
 	struct hfi_at_svm *svm;
 	int ret = -EINVAL;
 
-	mutex_lock(&pasid_mutex);
 	at = hfi_svm_device_to_at(dev);
 	if (!at || !at->pasid_table)
-		goto out;
+		return ret;
 
+	mutex_lock(&at->pasid_mutex);
 	svm = idr_find(&at->pasid_idr, pasid);
 	if (!svm)
 		goto out;
@@ -2774,7 +2772,7 @@ int hfi_at_is_pasid_valid(struct device *dev, int pasid)
 		ret = 0;
 
  out:
-	mutex_unlock(&pasid_mutex);
+	mutex_unlock(&at->pasid_mutex);
 
 	return ret;
 }
