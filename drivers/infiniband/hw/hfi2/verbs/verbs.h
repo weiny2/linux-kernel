@@ -206,8 +206,8 @@ struct hfi2_qp_priv {
 	u32 lpsn;
 	u32 outstanding_cnt;
 	u32 outstanding_rd_cnt;
-	union hfi_tx_cq_command *cmd;
-	struct hfi_tx_wc        *wc;
+	struct hfi_pend_cmd *cmd;
+	struct hfi_tx_wc *wc;
 	int current_cidx;
 	int current_eidx;
 	int fc_cidx;

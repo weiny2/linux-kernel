@@ -371,6 +371,12 @@ void hfi2_native_dealloc_ucontext(struct hfi_ibcontext *ctx)
 {
 	int i;
 
+	if (ctx->pend_cmdq) {
+		hfi_pend_cmdq_info_free(ctx->pend_cmdq);
+		kfree(ctx->pend_cmdq);
+		ctx->pend_cmdq = NULL;
+	}
+
 	if (ctx->cmdq) {
 		hfi_cmdq_unmap(ctx->cmdq);
 		hfi_cmdq_release(ctx->cmdq);
@@ -424,6 +430,7 @@ static int hfi2_add_cmdq(struct hfi_ibcontext *ctx)
 {
 	int ret;
 	struct hfi_cmdq_pair *cmdq;
+	struct hfi_pend_queue *pend_cmdq = NULL;
 
 	/* TODO - only support single command queue now */
 	if (ctx->cmdq)
@@ -443,10 +450,22 @@ static int hfi2_add_cmdq(struct hfi_ibcontext *ctx)
 	if (ret < 0)
 		goto err;
 
+	pend_cmdq = kzalloc(sizeof(*pend_cmdq), GFP_KERNEL);
+	if (!pend_cmdq) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	ret = hfi_pend_cmdq_info_alloc(ctx->priv, pend_cmdq, "ibnt");
+	if (ret < 0)
+		goto err;
+	ctx->pend_cmdq = pend_cmdq;
+
 	pr_info("native: Got CMDQ index %d\n", cmdq->idx);
 	return 0;
 
 err:
+	kfree(pend_cmdq);
 	if (ctx->cmdq) {
 		hfi_cmdq_release(ctx->cmdq);
 		ctx->cmdq = NULL;
@@ -918,12 +937,12 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 
 		/* Malloc retransmit command / backpressure state */
 		if (!priv->cmd) {
-			priv->cmd = vmalloc(sizeof(union hfi_tx_cq_command) * rvtqp->s_size);
+			priv->cmd = vmalloc(rvtqp->s_size * sizeof(*priv->cmd));
 			if (!priv->cmd)
 				goto qp_write_err;
 		}
 		if (!priv->wc) {
-			priv->wc = vzalloc(rvtqp->s_size * sizeof(struct hfi_tx_wc));
+			priv->wc = vzalloc(rvtqp->s_size * sizeof(*priv->wc));
 			if (!priv->wc)
 				goto qp_write_err;
 		}
@@ -1026,17 +1045,19 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		if (ibqp->qp_type != IB_QPT_UD) {
 			struct rdma_ah_attr *ah_attr = &rvtqp->remote_ah_attr;
 			struct hfi_eq *eq = ibcq_to_rvtcq(ibqp->send_cq)->hw_send;
+			union hfi_tx_cq_command *cmd;
 
 			/* loop and preformat qp->cmd with connection state */
-			for (i = 0; i < rvtqp->s_size; i++)
+			for (i = 0; i < rvtqp->s_size; i++) {
+				cmd = (union hfi_tx_cq_command *)&priv->cmd[i].slots;
 				hfi_preformat_rc(eq->ctx,
 						 rdma_ah_get_dlid(ah_attr),
 						 NATIVE_RC, ah_attr->sl,
 						 priv->pkey,
 						 rdma_ah_get_path_bits(ah_attr),
 						 NATIVE_AUTH_IDX, eq,
-						 ibqp->qp_num,
-						 &priv->cmd[i]);
+						 ibqp->qp_num, cmd);
+			}
 		}
 	} else if ((attr_mask & IB_QP_STATE) &&
 		   (attr->qp_state == IB_QPS_SQD) &&

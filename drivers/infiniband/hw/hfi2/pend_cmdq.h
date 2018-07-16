@@ -54,6 +54,7 @@
 #ifndef _PEND_CMDQ_H
 #define _PEND_CMDQ_H
 
+struct hfi_pend_cmd;
 struct hfi_pt_alloc_eager_args;
 
 /**
@@ -86,18 +87,23 @@ void hfi_pend_cmdq_info_free(struct hfi_pend_queue *pq);
  * @eq: EQ to check before writing CMDQ command
  * @slots: pointer to the slot data
  * @cmd_slots: number of slots
+ * @obj: pend_cmd cache object provided by caller
  * @wait: optionally wait until the CMDQ command has been written
  * @gfp: gfp flags passed by caller to use for allocating cache object
  */
 int _hfi_pend_cmd_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cmdq,
 			struct hfi_eq *eq, void *slots, int cmd_slots,
-			bool wait, gfp_t gfp);
+			struct hfi_pend_cmd *pcmd, bool wait, gfp_t gfp);
+
+#define hfi_pend_cmd_queue_obj(pq, cmdq, eq, slots, cmd_slots, pcmd) \
+	_hfi_pend_cmd_queue(pq, cmdq, eq, slots, cmd_slots, pcmd, false, 0)
 
 #define hfi_pend_cmd_queue_wait(pq, cmdq, eq, slots, cmd_slots) \
-	_hfi_pend_cmd_queue(pq, cmdq, eq, slots, cmd_slots, true, GFP_KERNEL)
+	_hfi_pend_cmd_queue(pq, cmdq, eq, slots, cmd_slots, NULL, true, \
+			    GFP_KERNEL)
 
 #define hfi_pend_cmd_queue(pq, cmdq, eq, slots, cmd_slots, gfp) \
-	_hfi_pend_cmd_queue(pq, cmdq, eq, slots, cmd_slots, false, gfp)
+	_hfi_pend_cmd_queue(pq, cmdq, eq, slots, cmd_slots, NULL, false, gfp)
 
 int hfi_pt_update_pending(struct hfi_pend_queue *pq, struct hfi_ctx *ctx,
 			  struct hfi_cmdq *rx_cmdq, u16 eager_head);

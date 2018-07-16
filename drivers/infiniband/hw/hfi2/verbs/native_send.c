@@ -741,11 +741,10 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(&qp->ibqp);
 	struct hfi2_qp_priv *qp_priv = (struct hfi2_qp_priv *)qp->priv;
+	struct hfi_pend_cmd *pcmd;
 	union hfi_tx_cq_command *cmd;
-	int retries = 10;
 	int ret, nslots = 0;
 	bool signal, solicit, in_line;
-	unsigned long flags;
 	/*
 	 * Using ATOMIC because some ULPs may call post_send in atomic context
 	 * and so are not allowed to sleep.
@@ -767,7 +766,8 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 	spin_lock(&qp_priv->s_lock);
 	if (unlikely(IS_FLOW_CTL(ctx->tx_qp_flow_ctl, qp->ibqp.qp_num)))
 		goto flow_ctl;
-	cmd = &qp_priv->cmd[qp_priv->current_cidx % qp->s_size];
+	pcmd = &qp_priv->cmd[qp_priv->current_cidx % qp->s_size];
+	cmd = (union hfi_tx_cq_command *)pcmd->slots;
 	switch (wr->opcode) {
 	case IB_WR_SEND:
 	case IB_WR_SEND_WITH_IMM:
@@ -788,12 +788,10 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 		break;
 	case IB_WR_LOCAL_INV:
 		spin_unlock(&qp_priv->s_lock);
-		nslots = hfi2_do_local_inv(qp, wr, signal);
-		return nslots;
+		return hfi2_do_local_inv(qp, wr, signal);
 	case IB_WR_REG_MR:
 		spin_unlock(&qp_priv->s_lock);
-		nslots = hfi2_do_reg_mr(qp, reg_wr(wr), signal);
-		return nslots;
+		return hfi2_do_reg_mr(qp, reg_wr(wr), signal);
 	default:
 		nslots = -EINVAL;
 		break;
@@ -806,16 +804,16 @@ int hfi2_do_tx_work(struct rvt_qp *qp, struct ib_send_wr *wr)
 	qp_priv->current_cidx = (qp_priv->current_cidx + 1) % (qp->s_size * 2);
 	spin_unlock(&qp_priv->s_lock);
 
-retry:
-	spin_lock_irqsave(&ctx->cmdq->tx.lock, flags);
-	ret = hfi_tx_command(&ctx->cmdq->tx, (u64 *)cmd, nslots);
-	spin_unlock_irqrestore(&ctx->cmdq->tx.lock, flags);
-	if (ret == -EAGAIN && retries) {
-		/* TODO */
-		msleep(2000);
-		retries--;
-		goto retry;
-	}
+	/*
+ 	 * Write or queue the TX command.  CMDQ is tested for space and
+ 	 * the command is queued to deferred list when no slots.  This could
+	 * also test if space in TX EQ, but we currently use eq.events_pending
+	 * to implement when to destroy EQs after IB_CQ resizing.  Hooking into
+	 * TX EQ flow control could be used in future to avoid EQ overflow (and
+	`* potentially IB_CQ overflow).
+ 	 */
+	ret = hfi_pend_cmd_queue_obj(ctx->pend_cmdq, &ctx->cmdq->tx, NULL,
+				     cmd, nslots, pcmd);
 	return ret;
 flow_ctl:
 	spin_unlock(&qp_priv->s_lock);

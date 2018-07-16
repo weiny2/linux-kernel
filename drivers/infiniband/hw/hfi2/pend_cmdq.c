@@ -160,9 +160,8 @@ int hfi_pend_cmd_direct(struct hfi_devdata *dd, struct hfi_cmdq *cmdq,
 
 int _hfi_pend_cmd_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cmdq,
 			struct hfi_eq *eq, void *cmd, int nslots,
-			bool wait, gfp_t gfp)
+			struct hfi_pend_cmd *p, bool wait, gfp_t gfp)
 {
-	struct hfi_pend_cmd *p;
 	bool always_direct = false; /* FXRTODO: Add ability to tweak this */
 	unsigned long flags;
 	int ret;
@@ -177,36 +176,46 @@ int _hfi_pend_cmd_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cmdq,
 	}
 	spin_unlock_irqrestore(&pq->lock, flags);
 
-	p = kmem_cache_alloc(pq->cache, gfp);
-	if (ZERO_OR_NULL_PTR(p)) {
-		dd_dev_err(pq->dd, "Unable to allocate from kmem cache\n");
-		return -ENOMEM;
+	if (!p) {
+		p = kmem_cache_alloc(pq->cache, gfp);
+		if (ZERO_OR_NULL_PTR(p)) {
+			dd_dev_err(pq->dd, "Unable to allocate from kmem cache\n");
+			return -ENOMEM;
+		}
+
+		/* Asynch case needs to copy the data to the p struct */
+		if (!wait) {
+			size_t nbytes = nslots * 64;
+
+			if (nbytes > HFI_MAX_PEND_CMD_LEN_BYTES) {
+				dd_dev_err(pq->dd,
+					   "%s: %d size %ld > %ld\n", __func__,
+					   __LINE__, nbytes,
+					   (size_t)HFI_MAX_PEND_CMD_LEN_BYTES);
+				kmem_cache_free(pq->cache, p);
+				return -EINVAL;
+			}
+
+			memcpy(p->slots, cmd, nslots * 64);
+			p->slot_ptr = &p->slots[0];
+		} else {
+			init_completion(&p->completion);
+			p->slot_ptr = cmd;
+		}
+		p->needs_free = true;
+	} else {
+		if (WARN_ON(cmd != &p->slots[0]))
+			return -EINVAL;
+		p->slot_ptr = cmd;
+		if (wait)
+			init_completion(&p->completion);
 	}
 
 	p->ret = 0;
 	p->cmdq = cmdq;
 	p->cmd_slots = nslots;
-	p->slot_ptr = cmd;
 	p->wait = wait;
 	p->eq = eq;
-
-	/* Asynch case needs to copy the data to the p struct */
-	if (!wait) {
-		size_t nbytes = nslots * 64;
-
-		if (nbytes > HFI_MAX_PEND_CMD_LEN_BYTES) {
-			dd_dev_err(pq->dd, "%s: %d size %ld > %ld\n", __func__,
-				   __LINE__, nbytes,
-				   (size_t)HFI_MAX_PEND_CMD_LEN_BYTES);
-			kmem_cache_free(pq->cache, p);
-			return -EINVAL;
-		}
-
-		memcpy(p->slots, cmd, nslots * 64);
-		p->slot_ptr = &p->slots[0];
-	} else {
-		init_completion(&p->completion);
-	}
 
 	spin_lock_irqsave(&pq->lock, flags);
 	list_add_tail(&p->list, &pq->pending);
@@ -223,8 +232,8 @@ int _hfi_pend_cmd_queue(struct hfi_pend_queue *pq, struct hfi_cmdq *cmdq,
 		rmb();
 
 		ret = p->ret;
-
-		kmem_cache_free(pq->cache, p);
+		if (p->needs_free)
+			kmem_cache_free(pq->cache, p);
 	} else {
 		ret = 0;
 	}
@@ -269,7 +278,7 @@ static int hfi_pend_cmdq_thread(void *data)
 				/* To sync with rmb in _hfi_pend_cmd_queue */
 				wmb();
 				complete(&p->completion);
-			} else {
+			} else if (p->needs_free) {
 				kmem_cache_free(pq->cache, p);
 			}
 
@@ -285,7 +294,8 @@ static int hfi_pend_cmdq_thread(void *data)
 
 		/* If nobody is waiting, wake nobody up */
 		if (!p->wait) {
-			kmem_cache_free(pq->cache, p);
+			if (p->needs_free)
+				kmem_cache_free(pq->cache, p);
 			continue;
 		}
 

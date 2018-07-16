@@ -96,6 +96,7 @@ typedef union host_rx_uh_rts_get_le	hfi_uh_t;
 struct hfi_devdata;
 struct hfi_ctx;
 struct hfi_cmdq;
+struct hfi_pend_queue;
 
 struct hfi_ks {
 	struct mutex lock;
@@ -120,6 +121,7 @@ struct hfi_ks {
  * @job_res_cookie: cookie for lookup of job reservation
  * @hw_ctx: assigned HW contexts
  * @cmdq: Command Queues (TX and RX)
+ * @pend_cmdq: Pending CMDQ state for @cmdq
  * @ctx_lock: lock for adding/removing resources
  * @rkey_ks: RKEYs stack
  * @lkey_ks: LKEYs stack
@@ -139,6 +141,7 @@ struct hfi_ibcontext {
 	u64 job_res_cookie;
 	struct hfi_ctx	*hw_ctx[HFI_MAX_IB_HW_CONTEXTS];
 	struct hfi_cmdq_pair *cmdq;
+	struct hfi_pend_queue *pend_cmdq;
 	struct mutex	ctx_lock;
 	struct hfi_ks	rkey_ks;
 	struct hfi_ks	lkey_ks;

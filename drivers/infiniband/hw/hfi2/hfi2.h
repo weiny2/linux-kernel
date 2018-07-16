@@ -726,6 +726,7 @@ struct bw_arb_cache {
  * @cmd_slots: Number of slots for this command
  * @ret: Return code to waiter
  * @wait: Boolean flag to indicate caller will wait
+ * @needs_free: Boolean to indicate this is cache object needing to be freed
  * @slots: Slot data storage area if the caller is asynchronous
  */
 struct hfi_pend_cmd {
@@ -737,6 +738,7 @@ struct hfi_pend_cmd {
 	int cmd_slots;
 	int ret;
 	bool wait;
+	bool needs_free;
 	u64 slots[HFI_MAX_PEND_CMD_LEN];
 };
 

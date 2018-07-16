@@ -213,9 +213,8 @@ int hfi2_enter_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 
 	/* Signal target to exit flow control */
 	nslots = BUILD_SYNC_EQ_CMD(qp, RNR_RX_EXIT, &cmd);
-	hfi_tx_command(&ctx->cmdq->tx, (u64 *)&cmd, nslots);
-
-	return 0;
+	return hfi_pend_cmd_queue(ctx->pend_cmdq, &ctx->cmdq->tx, NULL,
+				  &cmd, nslots, GFP_ATOMIC);
 }
 
 static
@@ -256,12 +255,13 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	ret = hfi_set_qp_state(&ctx->cmdq->rx, qp,
 			       rdma_ah_get_dlid(&qp->remote_ah_attr),
 			       PTL_PID_ANY, VERBS_OK, false);
+	if (ret)
+		return ret;
 
 	/* Signal initiator to exit flow control */
 	nslots = BUILD_SYNC_EQ_CMD(qp, RNR_TX_EXIT, &cmd);
-	hfi_tx_command(&ctx->cmdq->tx, (u64 *)&cmd, nslots);
-
-	return ret;
+	return hfi_pend_cmd_queue(ctx->pend_cmdq, &ctx->cmdq->tx, NULL,
+				  &cmd, nslots, GFP_ATOMIC);
 }
 
 static
@@ -269,6 +269,7 @@ int hfi2_exit_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 {
 	union target_EQEntry *teq = (union target_EQEntry *)eq;
 	int qp_num = EXTRACT_HD_DST_QP(teq->hdr_data);
+	struct hfi_pend_cmd *pcmd;
 	union hfi_tx_cq_command *cmd;
 	int nslots, cidx;
 	struct rvt_qp *qp;
@@ -294,15 +295,14 @@ int hfi2_exit_tx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	/* Retransmit commands */
 	do {
 		int ret = 0;
-		unsigned long flags;
 
 		CLR_QP_FC_SEEN(priv, cidx, qp);
-		cmd = &priv->cmd[cidx % qp->s_size];
+		pcmd = &priv->cmd[cidx % qp->s_size];
+		cmd = (union hfi_tx_cq_command *)pcmd->slots;
 		nslots = ((cmd->buff_put.flit0.a.cmd_length - 1) / 8) + 1;
 
-		spin_lock_irqsave(&ctx->cmdq->tx.lock, flags);
-		ret = hfi_tx_command(&ctx->cmdq->tx, (u64 *)cmd, nslots);
-		spin_unlock_irqrestore(&ctx->cmdq->tx.lock, flags);
+		ret = hfi_pend_cmd_queue_obj(ctx->pend_cmdq, &ctx->cmdq->tx,
+					     NULL, cmd, nslots, pcmd);
 		hfi_eq_pending_inc((struct hfi_eq *)
 				   ibcq_to_rvtcq(qp->ibqp.send_cq)->hw_send);
 		cidx = (cidx + 1) % (qp->s_size * 2);
@@ -340,9 +340,8 @@ int hfi2_enter_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	qp->r_flags |= RVT_S_WAIT_RNR;
 	/* Signal initiator to enter flow control */
 	nslots = BUILD_SYNC_EQ_CMD(qp, RNR_TX_ENTER, &cmd);
-	hfi_tx_command(&ctx->cmdq->tx, (u64 *)&cmd, nslots);
-
-	return 0;
+	return hfi_pend_cmd_queue(ctx->pend_cmdq, &ctx->cmdq->tx, NULL,
+				  &cmd, nslots, GFP_ATOMIC);
 }
 
 static
@@ -374,8 +373,9 @@ int hfi2_update_qp_sync(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
 				return ret;
 
 			nslots = BUILD_SYNC_EQ_CMD(qp, PID_SYNC, &cmd);
-			ret = hfi_tx_command(&ctx->cmdq->tx, (u64 *)&cmd,
-					     nslots);
+			ret = hfi_pend_cmd_queue(ctx->pend_cmdq, &ctx->cmdq->tx,
+						 NULL, &cmd, nslots,
+						 GFP_ATOMIC);
 		}
 	}
 
@@ -535,7 +535,8 @@ int hfi2_qp_exchange_pid(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
 
 	/* Send IPID to target */
 	nslots = BUILD_SYNC_EQ_CMD(qp, PID_EXCHANGE, &cmd);
-	ret = hfi_tx_command(&ctx->cmdq->tx, (u64 *)&cmd, nslots);
+	ret = hfi_pend_cmd_queue(ctx->pend_cmdq, &ctx->cmdq->tx, NULL,
+				 &cmd, nslots, GFP_KERNEL);
 	if (ret < 0)
 		return ret;
 
