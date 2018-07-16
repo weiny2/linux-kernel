@@ -71,6 +71,7 @@ void _hfi_update_verb_flit0_rc(union tx_cq_base_put_flit0 *flit0,
 				hfi_rc_t rc,
 				hfi_user_ptr_t user_ptr,
 				hfi_md_options_t md_options,
+				hfi_eq_handle_t eq_handle,
 				hfi_ct_handle_t ct_handle,
 				hfi_size_t remote_offset,
 				hfi_tx_handle_t tx_handle)
@@ -82,6 +83,7 @@ void _hfi_update_verb_flit0_rc(union tx_cq_base_put_flit0 *flit0,
 	flit0->b.md_handle 	= tx_handle;
 	flit0->b.ct_handle	= ct_handle;
 	flit0->b.md_options 	= md_options;
+	flit0->b.eq_handle	= eq_handle->idx; /* resize_cq requires */
 	flit0->c	 	= user_ptr;
 	flit0->d.remote_offset 	= remote_offset;
 }
@@ -139,6 +141,7 @@ int hfi_update_buff_rc(struct hfi_ctx *ctx,
 		       hfi_match_bits_t match_bits,
 		       hfi_hdr_data_t hdr_data,
 		       hfi_md_options_t md_options,
+		       hfi_eq_handle_t eq_handle,
 		       hfi_ct_handle_t ct_handle,
 		       hfi_size_t remote_offset,
 		       hfi_tx_handle_t tx_handle,
@@ -154,7 +157,7 @@ int hfi_update_buff_rc(struct hfi_ctx *ctx,
 
 	_hfi_update_verb_flit0_rc(&command->flit0, cmd, cmd_length,
 				  force_frag, rc, user_ptr,
-				  md_options, ct_handle,
+				  md_options, eq_handle, ct_handle,
 				  remote_offset, tx_handle);
 
 	_hfi_update_put_flit_e1(&command->flit1.e, length);
@@ -242,6 +245,7 @@ int hfi_format_buff_rc_send(struct hfi_ctx *ctx,
 			    u32 dst_qp,
 			    u32 imm,
 			    hfi_md_options_t md_options,
+			    hfi_eq_handle_t eq_handle,
 			    hfi_ct_handle_t ct_handle,
 			    hfi_tx_handle_t tx_handle,
 			    hfi_op_req_t op,
@@ -254,7 +258,7 @@ int hfi_format_buff_rc_send(struct hfi_ctx *ctx,
 	return hfi_update_buff_rc(ctx, start, length,
 				  force_frag, rc,
 				  user_ptr, match_bits, hdr_data,
-				  md_options, ct_handle,
+				  md_options, eq_handle, ct_handle,
 				  (hfi_size_t)0, tx_handle, op, src_qp,
 				  command);
 }
@@ -270,6 +274,7 @@ int hfi_format_buff_rc_rdma_atomic(struct hfi_ctx *ctx,
 			    u32 imm,
 			    u32 rkey,
 			    hfi_md_options_t md_options,
+			    hfi_eq_handle_t eq_handle,
 			    hfi_ct_handle_t ct_handle,
 			    hfi_size_t remote_offset,
 			    hfi_tx_handle_t tx_handle,
@@ -290,7 +295,7 @@ int hfi_format_buff_rc_rdma_atomic(struct hfi_ctx *ctx,
 
 	_hfi_update_verb_flit0_rc(&command->flit0, cmd, cmd_length,
 				  force_frag, rc, user_ptr,
-				  md_options, ct_handle,
+				  md_options, eq_handle, ct_handle,
 				  remote_offset, tx_handle);
 
 	_hfi_update_put_flit_e2((union tx_cq_e2*)&command->flit1.e, 8);
@@ -323,6 +328,7 @@ int hfi_format_buff_rc_rdma(struct hfi_ctx *ctx,
 			    u32 imm,
 			    u32 rkey,
 			    hfi_md_options_t md_options,
+			    hfi_eq_handle_t eq_handle,
 			    hfi_ct_handle_t ct_handle,
 			    hfi_size_t remote_offset,
 			    hfi_tx_handle_t tx_handle,
@@ -336,7 +342,7 @@ int hfi_format_buff_rc_rdma(struct hfi_ctx *ctx,
 	return hfi_update_buff_rc(ctx, start, length,
 				  force_frag, rc,
 				  user_ptr, match_bits, hdr_data,
-				  md_options, ct_handle,
+				  md_options, eq_handle, ct_handle,
 				  remote_offset, tx_handle, op, src_qp,
 				  command);
 }
@@ -538,6 +544,7 @@ int hfi_update_dma_rc(struct hfi_ctx *ctx,
 		      hfi_match_bits_t match_bits,
 		      hfi_hdr_data_t hdr_data,
 		      hfi_md_options_t md_options,
+		      hfi_eq_handle_t eq_handle,
 		      hfi_ct_handle_t ct_handle,
 		      hfi_size_t remote_offset,
 		      hfi_tx_handle_t tx_handle,
@@ -554,7 +561,7 @@ int hfi_update_dma_rc(struct hfi_ctx *ctx,
 
 	_hfi_update_verb_flit0_rc(&command->flit0, cmd, cmd_length,
 				  force_frag, rc, user_ptr,
-				  md_options, ct_handle,
+				  md_options, eq_handle, ct_handle,
 				  remote_offset, tx_handle);
 
 	_hfi_update_put_flit_e1(&command->flit1.e, length);
@@ -610,6 +617,7 @@ int hfi_format_dma_rc_send(struct hfi_ctx *ctx,
 			   u32 dst_qp,
 			   u32 imm,
 			   hfi_md_options_t md_options,
+			   hfi_eq_handle_t eq_handle,
 			   hfi_ct_handle_t ct_handle,
 			   hfi_tx_handle_t tx_handle,
 			   hfi_op_req_t op_req,
@@ -621,7 +629,7 @@ int hfi_format_dma_rc_send(struct hfi_ctx *ctx,
 
 	return hfi_update_dma_rc(ctx, start, length, force_frag,
 				 rc, user_ptr, match_bits,
-				 hdr_data, md_options,
+				 hdr_data, md_options, eq_handle,
 				 ct_handle, (hfi_size_t)0, tx_handle,
 				 op_req, src_qp, command);
 }
@@ -637,6 +645,7 @@ int hfi_format_dma_rc_rdma(struct hfi_ctx *ctx,
 			   u32 imm,
 			   u32 rkey,
 			   hfi_md_options_t md_options,
+			   hfi_eq_handle_t eq_handle,
 			   hfi_ct_handle_t ct_handle,
 			   hfi_size_t remote_offset,
 			   hfi_tx_handle_t tx_handle,
@@ -649,7 +658,7 @@ int hfi_format_dma_rc_rdma(struct hfi_ctx *ctx,
 
 	return hfi_update_dma_rc(ctx, start, length, force_frag,
 				 rc, user_ptr, match_bits,
-				 hdr_data, md_options,
+				 hdr_data, md_options, eq_handle,
 				 ct_handle, remote_offset, tx_handle,
 				 op_req, dst_qp, command);
 }
@@ -714,6 +723,7 @@ int hfi_update_dma_iovec_rc(struct hfi_ctx *ctx,
 			    hfi_match_bits_t match_bits,
 			    hfi_hdr_data_t hdr_data,
 			    hfi_md_options_t md_options,
+			    hfi_eq_handle_t eq_handle,
 			    hfi_ct_handle_t ct_handle,
 			    hfi_size_t remote_offset,
 			    hfi_tx_handle_t tx_handle,
@@ -734,7 +744,7 @@ int hfi_update_dma_iovec_rc(struct hfi_ctx *ctx,
 
 	_hfi_update_verb_flit0_rc(&command->flit0, cmd, cmd_length,
 				  force_frag, rc, user_ptr,
-				  md_options, ct_handle,
+				  md_options, eq_handle, ct_handle,
 				  remote_offset, tx_handle);
 
 	_hfi_update_put_flit_e1(&command->flit1.e, length);
@@ -794,6 +804,7 @@ int hfi_format_dma_iovec_rc_send(struct hfi_ctx *ctx,
 				 u32 dst_qp,
 				 u32 imm,
 				 hfi_md_options_t md_options,
+				 hfi_eq_handle_t eq_handle,
 				 hfi_ct_handle_t ct_handle,
 				 hfi_tx_handle_t tx_handle,
 				 hfi_op_req_t op_req,
@@ -806,7 +817,7 @@ int hfi_format_dma_iovec_rc_send(struct hfi_ctx *ctx,
 
 	return hfi_update_dma_iovec_rc(ctx, start, length, force_frag,
 				       rc, user_ptr, match_bits,
-				       hdr_data, md_options,
+				       hdr_data, md_options, eq_handle,
 				       ct_handle, (hfi_size_t)0, tx_handle,
 				       op_req, iov_count, iov_offset, src_qp,
 				       command);
@@ -823,6 +834,7 @@ int hfi_format_dma_iovec_rc_rdma(struct hfi_ctx *ctx,
 			      u32 imm,
 			      u32 rkey,
 			      hfi_md_options_t md_options,
+			      hfi_eq_handle_t eq_handle,
 			      hfi_ct_handle_t ct_handle,
 			      hfi_size_t remote_offset,
 			      hfi_tx_handle_t tx_handle,
@@ -836,7 +848,7 @@ int hfi_format_dma_iovec_rc_rdma(struct hfi_ctx *ctx,
 
 	return hfi_update_dma_iovec_rc(ctx, start, length, force_frag,
 				       rc, user_ptr, match_bits,
-				       hdr_data, md_options,
+				       hdr_data, md_options, eq_handle,
 				       ct_handle, remote_offset, tx_handle,
 				       op_req, iov_count, iov_offset, src_qp,
 				       command);

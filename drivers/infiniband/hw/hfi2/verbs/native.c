@@ -1777,19 +1777,6 @@ int hfi2_poll_cq_qp(struct hfi_ibcontext *ctx, struct rvt_cq *cq,
 	return 0;
 }
 
-static inline
-void hfi2_update_qp_send_eq(struct rvt_qp *qp, struct hfi_eq *eq)
-{
-	struct hfi2_qp_priv *priv = qp->priv;
-	int i;
-
-	if (qp->ibqp.qp_type != IB_QPT_UD)
-		for (i = 0; i < qp->s_size; i++) {
-			priv->cmd[i].dma.flit0.b.eq_handle = eq->idx;
-			priv->cmd[i].dma.flit1.e.ipid = eq->ctx->pid;
-		}
-}
-
 int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 {
 	struct hfi_ibcontext *ctx = obj_to_ibctx(ibcq);
@@ -1844,10 +1831,8 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 				   &ibeq->eq.events_pending);
 			cq->hw_send = new_ibeq;
 
-			list_for_each_entry(priv, &ibeq->qp_ll, send_qp_ll) {
-				hfi2_update_qp_send_eq(priv->owner, &ibeq->eq);
+			list_for_each_entry(priv, &ibeq->qp_ll, send_qp_ll)
 				spin_unlock(&priv->s_lock);
-			}
 
 			if (ibeq->eq.events_pending.counter == SEND_CQ_FREE)
 				hfi2_destroy_eq(cq, ibeq);
