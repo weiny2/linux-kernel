@@ -242,14 +242,14 @@ struct hfi_ibeq *hfi_ibeq_alloc(struct hfi_ctx *ctx,
 	ibeq = kmalloc(sizeof(*ibeq), GFP_KERNEL);
 	if (!ibeq)
 		return ERR_PTR(-ENOMEM);
+	INIT_LIST_HEAD(&ibeq->hw_cq);
+	INIT_LIST_HEAD(&ibeq->qp_ll);
 
 	ret = _hfi_eq_alloc_mode(ctx, eq_alloc, &ibeq->eq, 0);
 	if (ret) {
 		kfree(ibeq);
 		ibeq = ERR_PTR(ret);
 	}
-	INIT_LIST_HEAD(&ibeq->hw_cq);
-	INIT_LIST_HEAD(&ibeq->qp_ll);
 	return ibeq;
 }
 

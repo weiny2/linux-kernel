@@ -217,7 +217,7 @@ arm_err:
 	spin_lock_irqsave(&cq->lock, flags);
 	list_del(&ibeq->hw_cq);
 	spin_unlock_irqrestore(&cq->lock, flags);
-	hfi_eq_free((struct hfi_eq *)&ibeq);
+	hfi_eq_free((struct hfi_eq *)ibeq);
 	return ret;
 }
 
@@ -235,15 +235,18 @@ int hfi2_create_qp_sync(struct hfi_ibcontext *ctx, struct hfi_ctx *hw_ctx)
 
 	attr.cqe = 0x10000;
 	attr.comp_vector = 0;
+	attr.flags = 0;
 	ibcq = ib_create_cq(ctx->ibuc.device, hfi2_qp_sync_comp_handler, NULL,
 			    &ctx->ibuc, &attr);
-	if (!ibcq)
-		return -ENOMEM;
+	if (IS_ERR(ibcq)) {
+		ret = PTR_ERR(ibcq);
+		goto err_create_cq;
+	}
 	ret = hfi_ib_eq_setup(hw_ctx, ibcq_to_rvtcq(ibcq), NULL);
-	if (ret != 0)
+	if (ret)
 		goto err_sync_cq;
 	ret = ib_req_notify_cq(ibcq, IB_CQ_NEXT_COMP);
-	if (ret < 0)
+	if (ret)
 		goto err_sync_cq;
 	ctx->sync_cq = ibcq_to_rvtcq(ibcq);
 
@@ -251,6 +254,9 @@ int hfi2_create_qp_sync(struct hfi_ibcontext *ctx, struct hfi_ctx *hw_ctx)
 
 err_sync_cq:
 	ib_destroy_cq(ibcq);
+err_create_cq:
+	kfree(ctx->tx_qp_flow_ctl);
+	ctx->tx_qp_flow_ctl = NULL;
 
 	return ret;
 }
@@ -511,9 +517,10 @@ int hfi2_add_initial_hw_ctx(struct hfi_ibcontext *ctx)
 			if (IS_ERR(hw_ctx)) {
 				ret = PTR_ERR(hw_ctx);
 			} else {
-				/* create QP Sync  */
 				ret = hfi2_add_cmdq(ctx);
-				ret = hfi2_create_qp_sync(ctx, hw_ctx);
+				if (!ret)
+					/* create QP Sync  */
+					ret = hfi2_create_qp_sync(ctx, hw_ctx);
 			}
 		}
 		mutex_unlock(&ctx->ctx_lock);
@@ -1790,7 +1797,7 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 	struct hfi2_qp_priv *priv;
 	struct hfi_ibeq *ibeq, *new_ibeq, *next, *first_new = NULL;
 	struct opa_ev_assign eq_alloc = {0};
-	int ret, nslots;
+	int ret = 0, nslots;
 	unsigned long flags;
 	uint64_t done;
 	union hfi_rx_cq_update_command cmd;
@@ -1819,7 +1826,7 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 		new_ibeq = hfi_ibeq_alloc(ibeq->eq.ctx, &eq_alloc);
 		if (IS_ERR(ibeq)) {
 			ret = PTR_ERR(ibeq);
-			return ret;
+			break;
 		}
 		if (!first_new)
 			first_new = new_ibeq;
@@ -1852,27 +1859,20 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 				nslots = hfi_format_qp_update_recv_eq(priv->owner,
 								     (u64)&done,
 								     &cmd);
-				spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
+				spin_lock(&ctx->cmdq->rx.lock);
 				do {
 					ret = hfi_rx_command(&ctx->cmdq->rx,
 							     (u64 *)&cmd,
 							     nslots);
 				} while (ret == -EAGAIN);
-				spin_unlock_irqrestore(&ctx->cmdq->rx.lock,
-						       flags);
-				if (unlikely(ret)) {
-					spin_unlock_irqrestore(&cq->lock,
-							       flags);
-					return ret;
-				}
+				spin_unlock(&ctx->cmdq->rx.lock);
+				if (unlikely(ret))
+					goto exit;
 
 				ret = hfi_eq_poll_cmd_complete(priv->rq_ctx,
 							       &done);
-				if (unlikely(ret)) {
-					spin_unlock_irqrestore(&cq->lock,
-							       flags);
-					return ret;
-				}
+				if (unlikely(ret))
+					goto exit;
 			}
 			/* event_pending field is overload, when coutner is >=
 			 * RECV_CQ_FREE and EQ has been fully drained the EQ can
@@ -1886,9 +1886,10 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 		list_add_tail(&new_ibeq->hw_cq, &cq->hw_cq);
 	}
 
+exit:
 	spin_unlock_irqrestore(&cq->lock, flags);
 
-	return 0;
+	return ret;
 }
 
 int hfi2_poll_cq(struct ib_cq *ibcq, int ne, struct ib_wc *wc)
