@@ -2037,12 +2037,156 @@ static void hfi_handle_8051_host_msg(struct hfi_pportdata *ppd, u64 msg)
 		ppd_dev_warn(ppd, "Unhandled host message 0x%llx\n", msg);
 }
 
+/* CRK8051_DBG_ERR_INFO_SET_BY_8051.ERROR - error flags */
+#define SPICO_ROM_FAILED		BIT(0)
+#define UNKNOWN_FRAME			BIT(1)
+#define TARGET_BER_NOT_MET		BIT(2)
+#define FAILED_SERDES_INTERNAL_LOOPBACK	BIT(3)
+#define FAILED_SERDES_INIT		BIT(4)
+#define FAILED_LNI_POLLING		BIT(5)
+#define FAILED_LNI_DEBOUNCE		BIT(6)
+#define FAILED_LNI_ESTBCOMM		BIT(7)
+#define FAILED_LNI_OPTEQ		BIT(8)
+#define FAILED_LNI_VERIFY_CAP1		BIT(9)
+#define FAILED_LNI_VERIFY_CAP2		BIT(10)
+#define FAILED_LNI_CONFIGLT		BIT(11)
+#define HOST_HANDSHAKE_TIMEOUT		BIT(12)
+#define EXTERNAL_DEVICE_REQ_TIMEOUT	BIT(13)
+
+/* str must be a string constant */
+#define FLAG_ENTRY(str, extra, flag) {flag, str, extra}
+#define FLAG_ENTRY0(str, flag) {flag, str, 0}
+
+struct flag_table {
+	u64 flag;	/* the flag */
+	char *str;	/* description string */
+	u16 extra;	/* extra information */
+	u16 unused0;
+	u32 unused1;
+};
+
+/*
+ * OC8051 Information Error flags
+ *
+ * Flags in CRK8051_DBG_ERR_INFO_SET_BY_8051.ERROR field.
+ */
+static struct flag_table oc8051_info_err_flags[] = {
+	FLAG_ENTRY0("Spico ROM check failed",  SPICO_ROM_FAILED),
+	FLAG_ENTRY0("Unknown frame received",  UNKNOWN_FRAME),
+	FLAG_ENTRY0("Target BER not met",      TARGET_BER_NOT_MET),
+	FLAG_ENTRY0("Serdes internal loopback failure",
+		    FAILED_SERDES_INTERNAL_LOOPBACK),
+	FLAG_ENTRY0("Failed SerDes init",      FAILED_SERDES_INIT),
+	FLAG_ENTRY0("Failed LNI(Polling)",     FAILED_LNI_POLLING),
+	FLAG_ENTRY0("Failed LNI(Debounce)",    FAILED_LNI_DEBOUNCE),
+	FLAG_ENTRY0("Failed LNI(EstbComm)",    FAILED_LNI_ESTBCOMM),
+	FLAG_ENTRY0("Failed LNI(OptEq)",       FAILED_LNI_OPTEQ),
+	FLAG_ENTRY0("Failed LNI(VerifyCap_1)", FAILED_LNI_VERIFY_CAP1),
+	FLAG_ENTRY0("Failed LNI(VerifyCap_2)", FAILED_LNI_VERIFY_CAP2),
+	FLAG_ENTRY0("Failed LNI(ConfigLT)",    FAILED_LNI_CONFIGLT),
+	FLAG_ENTRY0("Host Handshake Timeout",  HOST_HANDSHAKE_TIMEOUT),
+	FLAG_ENTRY0("External Device Request Timeout",
+		    EXTERNAL_DEVICE_REQ_TIMEOUT),
+};
+
+static int append_str(char *buf, char **curp, int *lenp, const char *s)
+{
+	char *p = *curp;
+	int len = *lenp;
+	int result = 0; /* success */
+	char c;
+
+	/* add a comma, if first in the buffer */
+	if (p != buf) {
+		if (len == 0) {
+			result = 1; /* out of room */
+			goto done;
+		}
+		*p++ = ',';
+		len--;
+	}
+
+	/* copy the string */
+	while ((c = *s++) != 0) {
+		if (len == 0) {
+			result = 1; /* out of room */
+			goto done;
+		}
+		*p++ = c;
+		len--;
+	}
+
+done:
+	/* write return values */
+	*curp = p;
+	*lenp = len;
+
+	return result;
+}
+
+/*
+ * Using the given flag table, print a comma separated string into
+ * the buffer.  End in '*' if the buffer is too short.
+ */
+static char *flag_string(char *buf, int buf_len, u64 flags,
+			 struct flag_table *table, int table_size)
+{
+	char extra[32];
+	char *p = buf;
+	int len = buf_len;
+	int no_room = 0;
+	int i;
+
+	/* make sure there is at least 2 so we can form "*" */
+	if (len < 2)
+		return "";
+
+	len--;	/* leave room for a nul */
+	for (i = 0; i < table_size; i++) {
+		if (flags & table[i].flag) {
+			no_room = append_str(buf, &p, &len, table[i].str);
+			if (no_room)
+				break;
+			flags &= ~table[i].flag;
+		}
+	}
+
+	/* any undocumented bits left? */
+	if (!no_room && flags) {
+		snprintf(extra, sizeof(extra), "bits 0x%llx", flags);
+		no_room = append_str(buf, &p, &len, extra);
+	}
+
+	/* add * if ran out of room */
+	if (no_room) {
+		/* may need to back up to add space for a '*' */
+		if (len == 0)
+			--p;
+		*p++ = '*';
+	}
+
+	/* add final nul - space already allocated above */
+	*p = 0;
+	return buf;
+}
+
+static char *oc8051_info_err_string(char *buf, int buf_len, u64 flags)
+{
+	return flag_string(buf, buf_len, flags, oc8051_info_err_flags,
+		ARRAY_SIZE(oc8051_info_err_flags));
+}
+
 static void hfi_handle_8051_err(struct hfi_pportdata *ppd, u64 err)
 {
+	char buf[96];
+
 	ppd->dd->stats.sps_errints++;
 	/* FXRTODO: Implement this */
 	if (err & FAILED_LNI) {
-		ppd_dev_dbg(ppd, "FAILED_LNI\n");
+		dd_dev_info(ppd->dd, "Failed LNI: Link error: %s\n",
+			    oc8051_info_err_string(buf, sizeof(buf),
+			    err & FAILED_LNI));
+		queue_work(ppd->hfi_wq, &ppd->link_down_work);
 		err &= ~FAILED_LNI;
 	}
 
