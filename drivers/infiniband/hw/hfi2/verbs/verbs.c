@@ -506,6 +506,7 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 #endif
 	strncpy(ibdev->node_desc, init_utsname()->nodename,
 		sizeof(ibdev->node_desc));
+	ibdev->node_desc[IB_DEVICE_NODE_DESC_MAX - 1] = '\0';
 	ibdev->node_guid = ibd->node_guid;
 	/*
 	 * The system image GUID is supposed to be the same for all

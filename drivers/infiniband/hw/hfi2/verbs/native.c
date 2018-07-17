@@ -540,7 +540,7 @@ void hfi_deinit_hw_rq(struct hfi_ibcontext *ctx, struct hfi_rq *rq)
 {
 	int ret = 0;
 	u32 list_handle;
-	u64 result[2];
+	u64 result[2] = {0};
 	struct hfi_rq_wc *hfi_wc;
 	unsigned long flags;
 
@@ -900,7 +900,7 @@ int hfi2_native_modify_kern_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 	struct hfi2_qp_priv *priv = rvtqp->priv;
 	struct hfi_ibcontext *ctx = obj_to_ibctx(ibqp);
 	struct rvt_cq *cq;
-	u64 result[2];
+	u64 result[2] = {0};
 	int i, ret;
 
 	if (attr_mask & IB_QP_STATE &&

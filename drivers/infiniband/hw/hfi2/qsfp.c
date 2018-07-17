@@ -372,10 +372,10 @@ static int hfi_i2c_bus_read(struct hfi_devdata *dd, struct hfi_i2c_bus *bus,
 		 * Return a prefilled / zeroed buffer instead of calling the
 		 * i2c_transfer() function
 		 */
-		u8 cable_info[127];
-		u8 i = 0;
+		u8 cable_info[256];
+		int i = 0;
 
-		for (i = 0; i < 127; i++)
+		for (i = 0; i < 256; i++)
 			cable_info[i] = i;
 
 		dd_dev_dbg(dd, "address offset: 0x%x, length: 0x%x\n",

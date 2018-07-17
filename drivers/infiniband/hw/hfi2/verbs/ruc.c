@@ -58,7 +58,7 @@
 /*
  * Translate ib_wr_opcode into ib_wc_opcode.
  */
-const enum ib_wc_opcode ib_hfi2_wc_opcode[] = {
+const enum ib_wc_opcode ib_hfi2_wc_opcode[IB_WR_RESERVED10 + 1] = {
 	[IB_WR_RDMA_WRITE] = IB_WC_RDMA_WRITE,
 	[IB_WR_RDMA_WRITE_WITH_IMM] = IB_WC_RDMA_WRITE,
 	[IB_WR_SEND] = IB_WC_SEND,

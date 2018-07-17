@@ -1183,13 +1183,15 @@ static void hfi_ib_cq_isr(struct hfi_eq_mgmt *eqm)
 	int ret, slots;
 	struct hfi_ibeq *ibeq;
 
+	if (!cq || !ibcq)
+		return;
 	/*
 	 * TODO - this use of cq is unsafe until we hook into
 	 * destroy_cq.  It needs to call hfi_eq_unlink().
 	 */
 
 	/* schedule work item to notify user space */
-	if (cq && ibcq->comp_handler && (cq->notify & IB_CQ_SOLICITED_MASK)) {
+	if (ibcq->comp_handler && (cq->notify & IB_CQ_SOLICITED_MASK)) {
 		spin_lock(&cq->rdi->n_cqs_lock);
 		if (likely(cq->rdi->worker)) {
 			cq->notify = RVT_CQ_NONE;

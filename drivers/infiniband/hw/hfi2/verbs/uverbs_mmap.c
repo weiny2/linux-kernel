@@ -149,7 +149,7 @@ static inline int is_valid_mmap(u64 token)
 
 int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 {
-	struct hfi_devdata *dd = hfi_dd_from_ibdev(context->device);
+	struct hfi_devdata *dd;
 	struct hfi_ctx *ctx;
 	unsigned long flags, pfn;
 	void *remap_addr, *kvaddr = NULL;
@@ -163,8 +163,9 @@ int hfi2_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	struct hfi_ibcontext *hfi_context = container_of(context,
 							 struct hfi_ibcontext,
 							 ibuc);
-	if (!hfi_context)
+	if (!context || !hfi_context)
 		return -EINVAL;
+	dd = hfi_dd_from_ibdev(context->device);
 
 	if (!is_valid_mmap(token))
 		return -EACCES;

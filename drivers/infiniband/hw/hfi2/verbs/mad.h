@@ -235,12 +235,13 @@ struct opa_port_status_req {
 	__be32 vl_select_mask;
 };
 
-struct opa_port_status_rsp {
-	__u8 port_num;
-	__u8 reserved[3];
-	__be32  vl_select_mask;
+struct opa_port_bubble_cntrs {
+	__be64 port_xmit_wasted_bw;
+	__be64 port_xmit_wait_data;
+	__be64 port_rcv_bubble;
+};
 
-	/* Data counters */
+struct opa_port_perf_ctrs {
 	__be64 port_xmit_data;
 	__be64 port_rcv_data;
 	__be64 port_xmit_pkts;
@@ -248,15 +249,21 @@ struct opa_port_status_rsp {
 	__be64 port_multicast_xmit_pkts;
 	__be64 port_multicast_rcv_pkts;
 	__be64 port_xmit_wait;
-	__be64 sw_port_congestion;
-	__be64 port_rcv_fecn;
-	__be64 port_rcv_becn;
-	__be64 port_xmit_time_cong;
-	__be64 port_xmit_wasted_bw;
-	__be64 port_xmit_wait_data;
-	__be64 port_rcv_bubble;
-	__be64 port_mark_fecn;
-	/* Error counters */
+};
+
+struct opa_port_perf_ctrs_ltps {
+	__be64 port_xmit_data;
+	__be64 port_rcv_data;
+	__be64 port_xmit_pkts;
+	__be64 port_rcv_pkts;
+	__be64 port_multicast_xmit_pkts;
+	__be64 port_multicast_rcv_pkts;
+	__be64 port_xmit_reliable_ltps;
+	__be64 port_rcv_reliable_ltps;
+	__be64 port_xmit_wait;
+};
+
+struct opa_port_ecntrs {
 	__be64 port_rcv_constraint_errors;
 	__be64 port_rcv_switch_relay_errors;
 	__be64 port_xmit_discards;
@@ -266,6 +273,46 @@ struct opa_port_status_rsp {
 	__be64 port_rcv_errors;
 	__be64 excessive_buffer_overruns;
 	__be64 fm_config_errors;
+};
+
+struct opa_port_cong_cntrs {
+	__be64 port_rcv_fecn;
+	__be64 port_rcv_becn;
+};
+
+struct opa_port_vlctrs {
+	__be64 port_vl_xmit_data;
+	__be64 port_vl_rcv_data;
+	__be64 port_vl_xmit_pkts;
+	__be64 port_vl_rcv_pkts;
+	__be64 port_vl_xmit_wait;
+};
+
+struct opa_port_vl_cong_ctrs {
+	__be64 port_vl_rcv_fecn;
+	__be64 port_vl_rcv_becn;
+};
+
+struct opa_port_vl_bubble_ctrs {
+	__be64 port_vl_xmit_wasted_bw;
+	__be64 port_vl_xmit_wait_data;
+	__be64 port_vl_rcv_bubble;
+};
+
+struct opa_port_status_rsp {
+	__u8 port_num;
+	__u8 reserved[3];
+	__be32  vl_select_mask;
+
+	/* Data counters */
+	struct opa_port_perf_ctrs perf_ctrs;
+	__be64 sw_port_congestion;
+	struct opa_port_cong_cntrs cong_cntrs;
+	__be64 port_xmit_time_cong;
+	struct opa_port_bubble_cntrs bubble_cntrs;
+	__be64 port_mark_fecn;
+	/* Error counters */
+	struct opa_port_ecntrs ecntrs;
 	__be32 link_error_recovery;
 	__be32 link_downed;
 	u8 uncorrectable_errors;
@@ -274,18 +321,11 @@ struct opa_port_status_rsp {
 	u8 res2[6];
 	struct _vls_pctrs {
 		/* per-VL Data counters */
-		__be64 port_vl_xmit_data;
-		__be64 port_vl_rcv_data;
-		__be64 port_vl_xmit_pkts;
-		__be64 port_vl_rcv_pkts;
-		__be64 port_vl_xmit_wait;
+		struct opa_port_vlctrs vlctrs;
 		__be64 sw_port_vl_congestion;
-		__be64 port_vl_rcv_fecn;
-		__be64 port_vl_rcv_becn;
+		struct opa_port_vl_cong_ctrs vl_cong_ctrs;
 		__be64 port_xmit_time_cong;
-		__be64 port_vl_xmit_wasted_bw;
-		__be64 port_vl_xmit_wait_data;
-		__be64 port_vl_rcv_bubble;
+		struct opa_port_vl_bubble_ctrs vl_bubble_ctrs;
 		__be64 port_vl_mark_fecn;
 		__be64 port_vl_xmit_discards;
 	} vls[0]; /* real array size defined by # bits set in vl_select_mask */
@@ -339,20 +379,11 @@ struct opa_port_data_counters_msg {
 		__be32 link_quality_indicator; /* 29res, 3bit */
 
 		/* Data counters */
-		__be64 port_xmit_data;
-		__be64 port_rcv_data;
-		__be64 port_xmit_pkts;
-		__be64 port_rcv_pkts;
-		__be64 port_multicast_xmit_pkts;
-		__be64 port_multicast_rcv_pkts;
-		__be64 port_xmit_wait;
+		struct opa_port_perf_ctrs perf_ctrs;
 		__be64 sw_port_congestion;
-		__be64 port_rcv_fecn;
-		__be64 port_rcv_becn;
+		struct opa_port_cong_cntrs cong_cntrs;
 		__be64 port_xmit_time_cong;
-		__be64 port_xmit_wasted_bw;
-		__be64 port_xmit_wait_data;
-		__be64 port_rcv_bubble;
+		struct opa_port_bubble_cntrs bubble_cntrs;
 		__be64 port_mark_fecn;
 
 		__be64 port_error_counter_summary;
@@ -360,18 +391,11 @@ struct opa_port_data_counters_msg {
 
 		struct _vls_dctrs {
 			/* per-VL Data counters */
-			__be64 port_vl_xmit_data;
-			__be64 port_vl_rcv_data;
-			__be64 port_vl_xmit_pkts;
-			__be64 port_vl_rcv_pkts;
-			__be64 port_vl_xmit_wait;
+			struct opa_port_vlctrs vlctrs;
 			__be64 sw_port_vl_congestion;
-			__be64 port_vl_rcv_fecn;
-			__be64 port_vl_rcv_becn;
+			struct opa_port_vl_cong_ctrs vl_cong_ctrs;
 			__be64 port_xmit_time_cong;
-			__be64 port_vl_xmit_wasted_bw;
-			__be64 port_vl_xmit_wait_data;
-			__be64 port_vl_rcv_bubble;
+			struct opa_port_vl_bubble_ctrs vl_bubble_ctrs;
 			__be64 port_vl_mark_fecn;
 		} vls[0];
 		/* array size defined by #bits set in vl_select_mask*/
@@ -391,15 +415,7 @@ struct opa_port_error_counters64_msg {
 	struct _port_ectrs {
 		u8 port_number;
 		u8 reserved2[7];
-		__be64 port_rcv_constraint_errors;
-		__be64 port_rcv_switch_relay_errors;
-		__be64 port_xmit_discards;
-		__be64 port_xmit_constraint_errors;
-		__be64 port_rcv_remote_physical_errors;
-		__be64 local_link_integrity_errors;
-		__be64 port_rcv_errors;
-		__be64 excessive_buffer_overruns;
-		__be64 fm_config_errors;
+		struct opa_port_ecntrs ecntrs;
 		__be32 link_error_recovery;
 		__be32 link_downed;
 		u8 uncorrectable_errors;
@@ -412,22 +428,14 @@ struct opa_port_error_counters64_msg {
 };
 
 struct _port_ectrs_cpu {
-		u8 port_number;
-		u8 reserved2[7];
-		u64 port_rcv_constraint_errors;
-		u64 port_rcv_switch_relay_errors;
-		u64 port_xmit_discards;
-		u64 port_xmit_constraint_errors;
-		u64 port_rcv_remote_physical_errors;
-		u64 local_link_integrity_errors;
-		u64 port_rcv_errors;
-		u64 excessive_buffer_overruns;
-		u64 fm_config_errors;
-		u32 link_error_recovery;
-		u32 link_downed;
-		u8 uncorrectable_errors;
-		u8 reserved3[7];
-	};
+	u8 port_number;
+	u8 reserved2[7];
+	struct opa_port_ecntrs ecntrs;
+	u32 link_error_recovery;
+	u32 link_downed;
+	u8 uncorrectable_errors;
+	u8 reserved3[7];
+};
 
 struct opa_port_error_info_msg {
 	__be64 port_select_mask[4];
@@ -510,30 +518,14 @@ struct opa_frequent_counters_rsp {
 	struct _port_fcntrs {
 		u8 link_quality_indicator;
 		u8 reserved[7];
-		__be64 port_xmit_data;
-		__be64 port_rcv_data;
-		__be64 port_xmit_pkts;
-		__be64 port_rcv_pkts;
-		__be64 port_multicast_xmit_pkts;
-		__be64 port_multicast_rcv_pkts;
-		__be64 port_xmit_reliable_ltps;
-		__be64 port_rcv_reliable_ltps;
-		__be64 port_xmit_wait;
+		struct opa_port_perf_ctrs_ltps perf_ctrs;
 		__be64 port_xmit_time_cong;
-		__be64 port_xmit_wasted_bw;
-		__be64 port_xmit_wait_data;
-		__be64 port_rcv_bubble;
+		struct opa_port_bubble_cntrs bubble_cntrs;
 		__be64 infrequent_counter_summary;
 		struct _vl_fcntrs {
-			__be64 port_vl_xmit_data;
-			__be64 port_vl_rcv_data;
-			__be64 port_vl_xmit_pkts;
-			__be64 port_vl_rcv_pkts;
-			__be64 port_vl_xmit_wait;
+			struct opa_port_vlctrs vlctrs;
 			__be64 port_vl_xmit_time_cong;
-			__be64 port_vl_xmit_wasted_bw;
-			__be64 port_vl_xmit_wait_data;
-			__be64 port_vl_rcv_bubble;
+			struct opa_port_vl_bubble_ctrs vl_bubble_ctrs;
 		} vls[0];
 
 	} port[1];
@@ -550,18 +542,9 @@ struct opa_infrequent_counters_rsp {
 	__be32 vl_select_mask;
 	__be32 reserved;
 	struct _port_ifcntrs {
-		__be64 port_rcv_constraint_errors;
-		__be64 port_rcv_switch_relay_errors;
-		__be64 port_xmit_discards;
-		__be64 port_xmit_constraint_errors;
-		__be64 port_rcv_remote_physical_errors;
-		__be64 local_link_integrity_errors;
-		__be64 port_rcv_errors;
-		__be64 excessive_buffer_overruns;
-		__be64 fm_config_errors;
+		struct opa_port_ecntrs ecntrs;
 		__be64 sw_port_congestion;
-		__be64 port_rcv_fecn;
-		__be64 port_rcv_becn;
+		struct opa_port_cong_cntrs cong_cntrs;
 		__be64 port_mark_fecn;
 		__be32 link_error_recovery;
 		__be32 link_downed;
@@ -570,8 +553,7 @@ struct opa_infrequent_counters_rsp {
 		struct _vl_ifcntrs {
 			__be64 port_vl_xmit_discards;
 			__be64 Swport_vl_congestion;
-			__be64 port_vl_rcv_fecn;
-			__be64 port_vl_rcv_becn;
+			struct opa_port_vl_cong_ctrs vl_cong_ctrs;
 			__be64 port_vl_mark_fecn;
 		} vls[0];
 	} port[1];
@@ -596,52 +578,24 @@ struct opa_all_counters_rsp {
 	u8 link_quality_indicator;
 	u8 reserved2[7];
 	__be64 node_clocks;
-	__be64 port_xmit_data;
-	__be64 port_rcv_data;
-	__be64 port_xmit_pkts;
-	__be64 port_rcv_pkts;
-	__be64 port_multicast_xmit_pkts;
-	__be64 port_multicast_rcv_pkts;
-	__be64 port_xmit_reliable_ltps;
-	__be64 port_rcv_reliable_ltps;
-	__be64 port_xmit_wait;
+	struct opa_port_perf_ctrs_ltps perf_ctrs;
 	__be64 port_xmit_time_cong;
-	__be64 port_xmit_wasted_bw;
-	__be64 port_xmit_wait_data;
-	__be64 port_rcv_bubble;
-
-	__be64 port_rcv_constraint_errors;
-	__be64 port_rcv_switch_relay_errors;
-	__be64 port_xmit_discards;
-	__be64 port_xmit_constraint_errors;
-	__be64 port_rcv_remote_physical_errors;
-	__be64 local_link_integrity_errors;
-	__be64 port_rcv_errors;
-	__be64 excessive_buffer_overruns;
-	__be64 fm_config_errors;
+	struct opa_port_bubble_cntrs bubble_cntrs;
+	struct opa_port_ecntrs ecntrs;
 	__be64 sw_port_congestion;
-	__be64 port_rcv_fecn;
-	__be64 port_rcv_becn;
+	struct opa_port_cong_cntrs cong_cntrs;
 	__be64 port_mark_fecn;
 	__be32 link_error_recovery;
 	__be32 link_downed;
 	u8 uncorrectable_errors;
 	u8 reserved3[7];
 	struct _vl_all_cntrs {
-		__be64 port_vl_xmit_data;
-		__be64 port_vl_rcv_data;
-		__be64 port_vl_xmit_pkts;
-		__be64 port_vl_rcv_pkts;
-		__be64 port_vl_xmit_wait;
+		struct opa_port_vlctrs vlctrs;
 		__be64 port_vl_xmit_time_cong;
-		__be64 port_vl_xmit_wasted_bw;
-		__be64 port_vl_xmit_wait_data;
-		__be64 port_vl_rcv_bubble;
-
+		struct opa_port_vl_bubble_ctrs vl_bubble_ctrs;
 		__be64 port_vl_xmit_discards;
 		__be64 Swport_vl_congestion;
-		__be64 port_vl_rcv_fecn;
-		__be64 port_vl_rcv_becn;
+		struct opa_port_vl_cong_ctrs vl_cong_ctrs;
 		__be64 port_vl_mark_fecn;
 	} vls[0];
 };

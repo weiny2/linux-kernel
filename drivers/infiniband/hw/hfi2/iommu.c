@@ -1338,7 +1338,7 @@ static int alloc_at(struct hfi_devdata *dd)
 		return -ENOMEM;
 
 	at->seq_id = dd->unit;
-	sprintf(at->name, "hfi-at-%d", dd->unit);
+	snprintf(at->name, sizeof(at->name), "hfi-at-%d", dd->unit);
 	at->dd = dd;
 	at->reg = dd->kregbase + 0x1681000 - dd->wc_off;
 
@@ -2116,7 +2116,7 @@ static void hfi_at_unmap(struct hfi_at_svm *svm,
 			 int ih, int gl)
 {
 	unsigned long flags;
-	unsigned long start_pfn, last_pfn, nrpages;
+	unsigned long start_pfn = 0, last_pfn = 0, nrpages;
 
 	spin_lock_irqsave(&svm->lock, flags);
 
@@ -2453,7 +2453,7 @@ static void hfi_at_svm_dbg_init(struct hfi_at_svm *svm)
 	if (!svm->pgd)
 		return;
 
-	sprintf(svm->pasid_str, "%d", svm->pasid);
+	snprintf(svm->pasid_str, sizeof(svm->pasid_str), "%d", svm->pasid);
 	svm->dbg = debugfs_create_dir(svm->pasid_str, svm->at->hfi_at_dbg);
 	debugfs_create_file("page_tbl", 0444, svm->dbg, svm,
 			    &hfi_at_page_tbl_ops);

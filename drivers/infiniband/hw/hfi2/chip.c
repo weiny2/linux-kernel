@@ -3648,7 +3648,7 @@ irqreturn_t hfi_irq_becn_handler(int irq, void *dev_id)
 	struct hfi_pportdata *ppd;
 	u64 becn_incr = 0;
 	u8 port, sl, sc, vl;
-	u64 becn_mask;
+	u32 becn_mask;
 
 	struct hfi_irq_entry *me = dev_id;
 	struct hfi_devdata *dd = me->dd;
@@ -3657,12 +3657,12 @@ irqreturn_t hfi_irq_becn_handler(int irq, void *dev_id)
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
-		becn_mask = read_csr(ppd->dd, FXR_FPC_STS_BECN_SC_RCVD);
+		becn_mask = (u32)read_csr(ppd->dd, FXR_FPC_STS_BECN_SC_RCVD);
 		/*
 		 * reset the sc mask
 		 */
 		write_csr(ppd->dd, FXR_FPC_STS_BECN_SC_RCVD, becn_mask);
-		ppd_dev_dbg(ppd, "becn_mask is 0x%llx\n", becn_mask);
+		ppd_dev_dbg(ppd, "becn_mask is 0x%x\n", becn_mask);
 		for_each_set_bit(sc, (unsigned long *)&becn_mask,
 				 8 * sizeof(becn_mask)) {
 			vl = ppd->sc_to_vlr[sc];

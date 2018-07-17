@@ -576,7 +576,7 @@ void prescan_rxq(struct hfi2_ibrcv *rcv)
 	packet->ibp = rcv->ibp;
 
 	/* loop until an invalid event is found */
-	while (hfi_eq_peek_nth(&rcv->eq, &rhf_entry, n++, &dropped)) {
+	while (hfi_eq_peek_nth(&rcv->eq, &rhf_entry, n++, &dropped) > 0) {
 		packet->hdr = rhf_get_hdr(packet, rhf_entry);
 		hdr = packet->hdr;
 		packet->rhf = *rhf_entry;
