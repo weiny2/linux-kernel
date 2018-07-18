@@ -61,6 +61,15 @@
 #define HFI_MMAP_PSB_TOKEN(type, ptl_ctxt, size)  \
 	HFI_MMAP_TOKEN((type), ptl_ctxt, 0, size)
 
+/*
+ * ABI of each HFI2 object must be incremented when user<->kernel ABI
+ * is changed in a way that is not backwards compatible
+ */
+#define HFI2_OBJECT_DEVICE_ABI_VERSION	1
+#define HFI2_OBJECT_CMDQ_ABI_VERSION	1
+#define HFI2_OBJECT_CTX_ABI_VERSION	1
+#define HFI2_OBJECT_JOB_ABI_VERSION	1
+
 extern const struct uverbs_object_def hfi2_object_device;
 extern const struct uverbs_object_def hfi2_object_ctx;
 extern const struct uverbs_object_def hfi2_object_cmdq;

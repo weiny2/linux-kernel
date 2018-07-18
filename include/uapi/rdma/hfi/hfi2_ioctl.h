@@ -128,7 +128,7 @@ enum {
 
 /* Actions for device object*/
 enum {
-	HFI2_DEV_RESERVED_COMPAT, /* TODO - placeholder for query/compat */
+	HFI2_DEV_GET_ABI_INFO,
 	HFI2_DEV_E2E_CONNECT,
 	HFI2_DEV_CHK_SL_PAIR,
 	HFI2_DEV_GET_HW_LIMITS,
@@ -151,6 +151,12 @@ enum {
 	HFI2_DLID_ASSIGN,
 	HFI2_DLID_RELEASE,
 	HFI2_JOB_ATTACH,
+};
+
+/* Attributes for GET ABI info */
+enum {
+	HFI2_ABI_INFO_OBJECT_ID,
+	HFI2_ABI_INFO_VERSION,
 };
 
 /* Attributes for GET SL info */

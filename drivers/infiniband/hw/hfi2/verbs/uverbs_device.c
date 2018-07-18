@@ -56,6 +56,38 @@
 #include "timesync.h"
 #include <rdma/uverbs_ioctl.h>
 
+static int hfi2_abi_info_handler(struct ib_device *ib_dev,
+				 struct ib_uverbs_file *file,
+				 struct uverbs_attr_bundle *attrs)
+{
+	u32 object_id;
+	u64 ver;
+	int ret;
+
+	ret = uverbs_copy_from(&object_id, attrs, HFI2_ABI_INFO_OBJECT_ID);
+	if (ret)
+		return ret;
+
+	switch (object_id) {
+	case HFI2_OBJECT_DEVICE:
+		ver = HFI2_OBJECT_DEVICE_ABI_VERSION;
+		break;
+	case HFI2_OBJECT_CMDQ:
+		ver = HFI2_OBJECT_CMDQ_ABI_VERSION;
+		break;
+	case HFI2_OBJECT_CTX:
+		ver = HFI2_OBJECT_CTX_ABI_VERSION;
+		break;
+	case HFI2_OBJECT_JOB:
+		ver = HFI2_OBJECT_JOB_ABI_VERSION;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return uverbs_copy_to(attrs, HFI2_ABI_INFO_VERSION, &ver, sizeof(ver));
+}
+
 static int hfi_e2e_conn(struct hfi_ibcontext *uc,
 			struct hfi_e2e_conn_args __user *e2e_args)
 {
@@ -231,6 +263,15 @@ static int hfi2_ts_get_fm_handler(struct ib_device *ib_dev,
 	return 0;
 }
 
+DECLARE_UVERBS_METHOD(hfi2_abi_info, HFI2_DEV_GET_ABI_INFO,
+		      hfi2_abi_info_handler,
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_ABI_INFO_OBJECT_ID, u32,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_ABI_INFO_VERSION, u64,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
+
 DECLARE_UVERBS_METHOD(hfi2_e2e_connect, HFI2_DEV_E2E_CONNECT,
 		      hfi2_e2e_connect_handler,
 		      &UVERBS_ATTR_PTR_IN(
@@ -313,6 +354,7 @@ DECLARE_UVERBS_OBJECT(hfi2_object_device,
 		      UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_DEVICE,
 					     HFI2_OBJECTS),
 		      NULL,
+		      &hfi2_abi_info,
 		      &hfi2_e2e_connect,
 		      &hfi2_check_sl_pair,
 		      &hfi2_get_sl_info,
