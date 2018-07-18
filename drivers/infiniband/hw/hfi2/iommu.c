@@ -848,6 +848,19 @@ static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 
 	spin_lock_irqsave(&svm->lock, flags);
 
+	/* Get pte entry in spt */
+	pte = pfn_to_at_pte(svm, req->addr, &level, user);
+	if (!pte) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	/* Check if pte entry is already present */
+	if (at_pte_present(pte)) {
+		svm->stats->prq_dup++;
+		goto out;
+	}
+
 	/* TODO: is iova alignment guaranteed? */
 	dir = req->wr_req ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
 	iova = pci_map_page(dd->pdev, page, 0, PAGE_SIZE, dir);
@@ -857,13 +870,6 @@ static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 	}
 
 	phys_pfn = iova_to_at_pfn(iova);
-	pte = pfn_to_at_pte(svm, req->addr, &level, user);
-	if (!pte) {
-		pci_unmap_page(dd->pdev, iova, PAGE_SIZE, dir);
-		ret = -ENOMEM;
-		goto out;
-	}
-
 	prot = AT_PTE_ACCESSED | AT_PTE_PRESENT;
 	if (req->wr_req)
 		prot |= AT_PTE_WRITE | AT_PTE_DIRTY;
@@ -872,13 +878,9 @@ static int hfi_at_map(struct hfi_at_svm *svm, struct page_req_dsc *req,
 
 	pteval = ((phys_addr_t)phys_pfn << AT_PAGE_SHIFT) | prot;
 	if (cmpxchg64_local(&pte->val, 0ULL, pteval)) {
-		u64 tmp = pteval & ~(AT_PTE_WRITE | AT_PTE_DIRTY);
-
-		/* allow upgrade of access privilege */
-		if (cmpxchg64_local(&pte->val, tmp, pteval) != tmp) {
-			pr_debug("Mapping already set\n");
-			svm->stats->prq_dup++;
-		}
+		pci_unmap_page(dd->pdev, iova, PAGE_SIZE, dir);
+		ret = -EFAULT;
+		goto out;
 	}
 	__at_flush_cache(svm->at, pte, sizeof(*pte));
 
@@ -913,7 +915,20 @@ static int hfi_at_map_promo(struct hfi_at_svm *svm, struct page_req_dsc *req,
 
 	pteval = get_cpt_entry(pgd_ref, address, &level);
 	if (!pteval) {
-		ret = -EAGAIN;
+		ret = user ? -EFAULT : -EAGAIN;
+		goto out;
+	}
+
+	/* Get pte entry in spt */
+	pte = pfn_to_at_pte(svm, req->addr, &level, user);
+	if (!pte) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	/* Check if pte entry is already present */
+	if (at_pte_present(pte)) {
+		svm->stats->prq_dup++;
 		goto out;
 	}
 
@@ -926,7 +941,7 @@ static int hfi_at_map_promo(struct hfi_at_svm *svm, struct page_req_dsc *req,
 	/* TODO: is iova alignment guaranteed? */
 	phys_address = pteval & ~((promo - 1) | AT_PTE_EXEC_DIS);
 	page = pfn_to_page(phys_address >> PAGE_SHIFT);
-	dir = req->wr_req ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
+	dir = (pteval & AT_PTE_WRITE) ? DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
 	iova = pci_map_page(dd->pdev, page, 0, promo, dir);
 	if (unlikely(pci_dma_mapping_error(dd->pdev, iova))) {
 		ret = -ENOSPC;
@@ -934,24 +949,12 @@ static int hfi_at_map_promo(struct hfi_at_svm *svm, struct page_req_dsc *req,
 	}
 
 	phys_pfn = iova_to_at_pfn(iova);
-	pte = pfn_to_at_pte(svm, req->addr, &level, user);
-	if (!pte) {
-		pci_unmap_page(dd->pdev, iova, promo, dir);
-		ret = -ENOMEM;
-		goto out;
-	}
-
 	pteval = ((phys_addr_t)phys_pfn << AT_PAGE_SHIFT) |
 		 (pteval & ((promo - 1) | AT_PTE_EXEC_DIS));
 	if (cmpxchg64_local(&pte->val, 0ULL, pteval)) {
-		u64 tmp = pteval & ~(AT_PTE_WRITE | AT_PTE_DIRTY);
-
-		/* TODO: seems like page promotion will have issues here */
-		/* allow upgrade of access privilege */
-		if (cmpxchg64_local(&pte->val, tmp, pteval) != tmp) {
-			pr_debug("Mapping already set\n");
-			svm->stats->prq_dup++;
-		}
+		pci_unmap_page(dd->pdev, iova, promo, dir);
+		ret = -EFAULT;
+		goto out;
 	}
 	__at_flush_cache(svm->at, pte, sizeof(*pte));
 	at_dump_pagetable((pgd_t *)svm->pgd, address, "SPT");
@@ -1023,6 +1026,7 @@ static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
 
 	if (svm->mm) {
 		int wr;
+		struct vm_area_struct *vma;
 
 		/* If address is not canonical, return invalid response */
 		if (!is_canonical_address(address))
@@ -1049,13 +1053,15 @@ static int handle_at_spt_page_fault(struct hfi_at_svm *svm,
 		wr = req->wr_req ? FOLL_WRITE | FOLL_FORCE : 0,
 		ret = get_user_pages_remote(svm->tsk, svm->mm,
 					    address & PAGE_MASK, 1,
-					    wr, &page, NULL, NULL);
+					    wr, &page, &vma, NULL);
 		if (ret != 1) {
 			dd_dev_err(svm->at->dd, "gup error %d addr 0x%llx\n",
 				   ret, address);
 			ret = -ENOMEM;
 			goto unlock;
 		}
+		if (vma->vm_flags & VM_WRITE)
+			req->wr_req = true;
 
 		ret = hfi_at_map(svm, req, page, true);
 		put_page(page);
@@ -1065,8 +1071,10 @@ unlock:
 		mmput(svm->mm);
 	} else {
 		address = make_canonical_address(address);
+		req->addr = address >> AT_PAGE_SHIFT;
+
 		if (kernel_page_promo) {
-			req->addr = address >> AT_PAGE_SHIFT;
+			/* use permission from cpt */
 			ret = hfi_at_map_promo(svm, req, false);
 
 			/* TODO: revisit later, needed for some vmalloc pages */
@@ -1075,6 +1083,8 @@ unlock:
 				return ret;
 		}
 
+		/* kernel page is always read-write */
+		req->wr_req = true;
 		if (is_vmalloc_addr((void *)address))
 			page = vmalloc_to_page((void *)address);
 		else
@@ -1153,8 +1163,10 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 		 * TODO: fix the borrowed page table problem
 		 */
 		if (!svm->mm) {
-			if (likely(!svm->pgd))
+			if (likely(!svm->pgd)) {
+				dd_dev_err(at->dd, "kernel cpt mode: prq received\n");
 				goto bad_req;
+			}
 		}
 
 		svm->stats->prq++;
