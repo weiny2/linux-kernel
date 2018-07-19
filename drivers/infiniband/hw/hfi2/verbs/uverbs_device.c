@@ -52,6 +52,7 @@
  */
 #include "uverbs_obj.h"
 #include "hfi2.h"
+#include "verbs/verbs.h"
 #include "timesync.h"
 #include <rdma/uverbs_ioctl.h>
 
@@ -116,6 +117,40 @@ static int hfi2_check_sl_pair_handler(struct ib_device *ib_dev,
 	if (ret)
 		return ret;
 	return hfi_check_sl_pair((struct hfi_ibcontext *)file->ucontext, &slp);
+}
+
+static int hfi2_get_sl_info_handler(struct ib_device *ib_dev,
+				    struct ib_uverbs_file *file,
+				    struct uverbs_attr_bundle *attrs)
+{
+	struct hfi_ibcontext *hfi_context = container_of(file->ucontext,
+							 struct hfi_ibcontext,
+							 ibuc);
+	struct hfi_sl_pair slp;
+	u16 mtu;
+	bool is_pair = false;
+	int ret;
+
+	ret = uverbs_copy_from(&slp.sl1, attrs, HFI2_SL_INFO_REQ_SL);
+	if (ret)
+		return ret;
+	ret = uverbs_copy_from(&slp.sl2, attrs, HFI2_SL_INFO_RESP_SL);
+	if (ret)
+		return ret;
+
+	if (slp.sl1 >= OPA_MAX_SLS || slp.sl2 >= OPA_MAX_SLS)
+		return -EINVAL;
+
+	slp.port = 1;
+	mtu = mtu_from_sl(to_hfi_ibp(ib_dev, slp.port), slp.sl1);
+	if (slp.sl1 != slp.sl2)
+		is_pair = hfi_check_sl_pair(hfi_context, &slp) == 0;
+
+	ret = uverbs_copy_to(attrs, HFI2_SL_INFO_MTU, &mtu, sizeof(mtu));
+	if (!ret)
+		ret = uverbs_copy_to(attrs, HFI2_SL_INFO_IS_PAIR, &is_pair,
+				     sizeof(is_pair));
+	return ret;
 }
 
 static int hfi2_get_hw_limits_handler(struct ib_device *ib_dev,
@@ -210,6 +245,21 @@ DECLARE_UVERBS_METHOD(hfi2_check_sl_pair, HFI2_DEV_CHK_SL_PAIR,
 				struct hfi_sl_pair,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
 
+DECLARE_UVERBS_METHOD(hfi2_get_sl_info, HFI2_DEV_GET_SL_INFO,
+		      hfi2_get_sl_info_handler,
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_SL_INFO_REQ_SL, u8,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_IN(
+				HFI2_SL_INFO_RESP_SL, u8,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_SL_INFO_IS_PAIR, bool,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
+		      &UVERBS_ATTR_PTR_OUT(
+				HFI2_SL_INFO_MTU, u16,
+				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
+
 DECLARE_UVERBS_METHOD(hfi2_get_hw_limits, HFI2_DEV_GET_HW_LIMITS,
 		      hfi2_get_hw_limits_handler,
 		      &UVERBS_ATTR_PTR_OUT(
@@ -265,6 +315,7 @@ DECLARE_UVERBS_OBJECT(hfi2_object_device,
 		      NULL,
 		      &hfi2_e2e_connect,
 		      &hfi2_check_sl_pair,
+		      &hfi2_get_sl_info,
 		      &hfi2_get_hw_limits,
 		      &hfi2_ts_get_master,
 		      &hfi2_ts_get_fm);

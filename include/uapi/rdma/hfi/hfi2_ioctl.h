@@ -134,6 +134,7 @@ enum {
 	HFI2_DEV_GET_HW_LIMITS,
 	HFI2_DEV_TS_GET_MASTER,
 	HFI2_DEV_TS_GET_FM,
+	HFI2_DEV_GET_SL_INFO,
 };
 
 /* Actions for cmdq */
@@ -150,6 +151,14 @@ enum {
 	HFI2_DLID_ASSIGN,
 	HFI2_DLID_RELEASE,
 	HFI2_JOB_ATTACH,
+};
+
+/* Attributes for GET SL info */
+enum {
+	HFI2_SL_INFO_REQ_SL,
+	HFI2_SL_INFO_RESP_SL,
+	HFI2_SL_INFO_IS_PAIR,
+	HFI2_SL_INFO_MTU,
 };
 
 /* Attributes for ctx attach */

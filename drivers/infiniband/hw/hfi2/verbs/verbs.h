@@ -393,6 +393,7 @@ void stop_send_queue(struct rvt_qp *qp);
 void quiesce_qp(struct rvt_qp *qp);
 void notify_qp_reset(struct rvt_qp *qp);
 int mtu_to_path_mtu(u32 mtu);
+u16 mtu_from_sl(struct hfi2_ibport *ibp, u8 sl);
 u32 mtu_from_qp(struct rvt_dev_info *rdi, struct rvt_qp *qp, u32 pmtu);
 int get_pmtu_from_attr(struct rvt_dev_info *rdi, struct rvt_qp *qp,
 		       struct ib_qp_attr *attr);

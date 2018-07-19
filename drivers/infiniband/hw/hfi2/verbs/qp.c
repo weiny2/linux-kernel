@@ -442,6 +442,19 @@ int mtu_to_path_mtu(u32 mtu)
 	return opa_mtu_to_enum_safe(mtu, OPA_MTU_0);
 }
 
+u16 mtu_from_sl(struct hfi2_ibport *ibp, u8 sl)
+{
+	struct hfi_pportdata *ppd = ibp->ppd;
+	u8 sc, vl;
+	u16 mtu = 0;
+
+	sc = ppd->sl_to_sc[sl];
+	vl = ppd->sc_to_vlt[sc];
+	if (vl < ppd->vls_supported)
+		mtu = ppd->vl_mtu[vl];
+	return mtu;
+}
+
 /*
  * Takes the MTU returned from get_pmtu_from_attr() and returns (in bytes)
  * the smaller of that MTU or the VL-specific MTU.
@@ -450,18 +463,17 @@ u32 mtu_from_qp(struct rvt_dev_info *rdi, struct rvt_qp *qp, u32 pmtu)
 {
 	struct ib_device *ibdev = &rdi->ibdev;
 	struct hfi2_ibport *ibp;
-	struct hfi_pportdata *ppd;
-	u8 sc, vl;
+	u8 sl;
 	u16 mtu;
 
 	ibp = to_hfi_ibp(ibdev, qp->port_num);
-	ppd = ibp->ppd;
+	sl = rdma_ah_get_sl(&qp->remote_ah_attr);
 
-	sc = ppd->sl_to_sc[rdma_ah_get_sl(&qp->remote_ah_attr)];
-	vl = ppd->sc_to_vlt[sc];
-	mtu = opa_enum_to_mtu(pmtu);
-	if (vl < ppd->vls_supported)
-		mtu = min_t(u16, mtu, ppd->vl_mtu[vl]);
+	mtu = mtu_from_sl(ibp, sl);
+	if (mtu)
+		mtu = min_t(u16, mtu, opa_enum_to_mtu(pmtu));
+	else
+		mtu = opa_enum_to_mtu(pmtu);
 	/* here we may further restrict due to software limitations */
 	mtu = min_t(u16, mtu, HFI_VERBS_MAX_MTU);
 	return mtu;
