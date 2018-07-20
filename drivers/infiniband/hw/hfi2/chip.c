@@ -59,6 +59,8 @@
 #include <linux/bitops.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
+#include <linux/jiffies.h>
+#include <linux/signal.h>
 #include "chip/fxr_top_defs.h"
 #include "chip/fxr_fast_path_defs.h"
 #include "chip/fxr_tx_ci_cic_csrs_defs.h"
@@ -177,6 +179,10 @@ bool pid_reuse = true;
 module_param_named(pid_reuse, pid_reuse, bool, 0444);
 MODULE_PARM_DESC(pid_reuse, "Set to false to disallow pid reuse");
 
+bool lni_debug = false;
+module_param_named(lni_debug, lni_debug, bool, 0444);
+MODULE_PARM_DESC(lni_debug, "Disabled by default. Set to enable the Link trace manager");
+
 DEFINE_SPINLOCK(hfi2_unit_lock);
 static struct idr hfi2_unit_table;
 static void hfi_cmdq_head_config(struct hfi_devdata *dd, u16 cmdq_idx,
@@ -199,6 +205,127 @@ struct hfi_devdata *hfi_get_unit_dd(int unit)
 	dd = idr_find(&hfi2_unit_table, unit);
 	spin_unlock_irqrestore(&hfi2_unit_lock, flags);
 	return dd;
+}
+
+enum phy_port_states {
+	POLLING_ACTIVE				= 0x20,
+	POLLING_QUIET				= 0x21,
+	DISABLED				= 0x30,
+	CONFIG_PHY_DEBOUNCE			= 0x40,
+	CONFIG_PHY_EST_COMM_TXRX_HUNT		= 0x41,
+	CONFIG_PHY_EST_COMM_TX_HUNT		= 0x42,
+	CONFIG_PHY_EST_COMM_LOCAL_COMPLETE	= 0x43,
+	CONFIG_PHY_OPT_EQ_OPTIMIZING		= 0x44,
+	CONFIG_PHY_OPT_EQ_LOCAL_COMPLETE	= 0x45,
+	CONFIG_PHY_VERIFY_CAP_EXCHANGE		= 0x46,
+	CONFIG_PHY_VERIFY_CAP_LOCAL_COMPLETE	= 0x47,
+	CONFIG_LT_CONFIGURE			= 0x48,
+	CONFIG_LT_LINK_TRANSFER_ACTIVE		= 0x49,
+	CONFIG_PHY				= 0x4A,
+	CONFIG_PCS				= 0x4B,
+	CONFIG_SYNC				= 0x4C,
+	LINKUP					= 0x50,
+	GANGED					= 0x80,
+	OFFLINE_QUIET				= 0x90,
+	OFFLINE_PLANNED_DOWN_INFORM		= 0x91,
+	OFFLINE_READY_TO_QUIET_LT		= 0x92,
+	OFFLINE_REPORT_FAILURE			= 0x93,
+	OFFLINE_READY_TO_QUIET_BCC		= 0x94,
+	PHY_TEST				= 0xB0,
+	INTERNAL_LOOPBACK			= 0xE1
+};
+
+static const char * const port_state_strs[] = {
+	[POLLING_ACTIVE] = "Poll / Active",
+	[POLLING_QUIET]  = "Polling Quiet",
+	[DISABLED] = "Disabled",
+	[CONFIG_PHY_DEBOUNCE] = "Cfg / Cfg Debounce",
+	[CONFIG_PHY_EST_COMM_TXRX_HUNT] = "Cfg Est Comm / TxRx Hunt",
+	[CONFIG_PHY_EST_COMM_TX_HUNT] = "Cfg Est Comm Tx Hunt",
+	[CONFIG_PHY_EST_COMM_LOCAL_COMPLETE] = "Cfg Est Comm Local Complete",
+	[CONFIG_PHY_OPT_EQ_OPTIMIZING] = "Cfg Opt EQ / Optimizing",
+	[CONFIG_PHY_OPT_EQ_LOCAL_COMPLETE] = "Cfg Opt EQ Local Complete",
+	[CONFIG_PHY_VERIFY_CAP_EXCHANGE] = "Verify Cap / Exchange",
+	[CONFIG_PHY_VERIFY_CAP_LOCAL_COMPLETE] = "Verify Cap Local Complete",
+	[CONFIG_LT_CONFIGURE] = "Cfg LT / Configure",
+	[CONFIG_LT_LINK_TRANSFER_ACTIVE] = "Cfg LT Link xfer Active",
+	[CONFIG_PHY] = "Cfg Phy",
+	[CONFIG_PCS] = "Cfg Pcs",
+	[CONFIG_SYNC] = "Cfg Sync",
+	[LINKUP] = "LinkUp",
+	[GANGED] = "Ganged",
+	[OFFLINE_QUIET] = "Offline / Quiet",
+	[OFFLINE_PLANNED_DOWN_INFORM] = "Offline Planned Dwn Inform",
+	[OFFLINE_READY_TO_QUIET_LT] = "Offline Rdy to Quiet LT",
+	[OFFLINE_REPORT_FAILURE] = "Offline Report Failure",
+	[OFFLINE_READY_TO_QUIET_BCC] = "Offline Rdy to Quiet BCC",
+	[PHY_TEST] = "Phy test",
+	[INTERNAL_LOOPBACK] = "Internal Loopback"
+};
+
+static void hfi_get_time_info(unsigned long *cur, unsigned long *prev,
+			      unsigned long *delta)
+{
+	*prev = *cur;
+	*cur = jiffies_to_msecs(jiffies);
+	*delta = *cur - *prev;
+}
+
+static int hfi_dbg_link_mgr(void *data)
+{
+	struct hfi_devdata *dd = (struct hfi_devdata *)data;
+	unsigned long cur_time_ms = jiffies_to_msecs(jiffies);
+	unsigned long prev_time_ms = cur_time_ms;
+	unsigned long delta = 0;
+	u64 crk_sts_cur_state = 0;
+	u64 crk_dbg_sfr_map_1 = 0, reg = 0;
+	u64 port_state_smask = CRK_CRK8051_STS_CUR_STATE_PORT_SMASK;
+	u64 crk_code_addr_smask = CRK_CRK8051_DBG_CODE_TRACING_ADDR_VAL_SMASK;
+	u64 crk_sfr_tmp1_smask = CRK_CRK8051_DBG_SFR_MAP_1_TMP01_SMASK;
+	u64 crk_sfr_tmp2_smask = CRK_CRK8051_DBG_SFR_MAP_1_TMP02_SMASK;
+	u64 crk_sfr_tmp8_smask = CRK_CRK8051_DBG_SFR_MAP_1_TMP08_SMASK;
+	int idx = 0, array_idx;
+
+	dd_dev_err(dd, "%s:  Idx Time(ms) Delta(ms)       Info\n",
+		   __func__);
+
+	/* Handle a SIGINT sent using kill(1) to the pid of this thread */
+	allow_signal(SIGINT);
+	while (!kthread_should_stop()) {
+		reg = read_csr(dd, CRK_CRK8051_STS_CUR_STATE);
+		/* Just compare bits 0:7 for OPA Mode PHY State */
+		if ((reg ^ crk_sts_cur_state) & (port_state_smask)) {
+			crk_sts_cur_state = reg;
+			array_idx = crk_sts_cur_state & port_state_smask;
+			hfi_get_time_info(&cur_time_ms, &prev_time_ms,
+					  &delta);
+			reg = read_csr(dd, CRK_CRK8051_DBG_CODE_TRACING_ADDR);
+			dd_dev_dbg(dd,
+			    "%s: %4d  %6ld    %6ld    phy: %s, 8051 code addr: 0x%llx\n",
+			    __func__, idx++, cur_time_ms, delta,
+			    (port_state_strs[array_idx]),
+			    (reg & crk_code_addr_smask));
+		}
+
+		reg = read_csr(dd, CRK_CRK8051_DBG_SFR_MAP_1);
+		if ((reg ^ crk_dbg_sfr_map_1) & crk_sfr_tmp8_smask) {
+			crk_dbg_sfr_map_1 = reg;
+			hfi_get_time_info(&cur_time_ms, &prev_time_ms,
+					  &delta);
+			reg = read_csr(dd, CRK_CRK8051_DBG_CODE_TRACING_ADDR);
+			dd_dev_dbg(dd,
+			    "%s: %4d  %6ld    %6ld    tmp1: 0x%2x tmp2: 0x%2x tmp8: 0x%2x 8051 code addr 0x%llx\n",
+			    __func__, idx++, cur_time_ms, delta,
+			    (u8)(crk_dbg_sfr_map_1 & crk_sfr_tmp1_smask),
+			    (u8)(crk_dbg_sfr_map_1 & crk_sfr_tmp2_smask),
+			    (u8)(crk_dbg_sfr_map_1 & crk_sfr_tmp8_smask),
+			    (reg & crk_code_addr_smask));
+		}
+		usleep_range(10, 20);
+		schedule();
+	}
+	dd_dev_dbg(dd, "%s: Exiting link manager\n", __func__);
+	return 0;
 }
 
 int neigh_is_hfi(struct hfi_pportdata *ppd)
@@ -3055,7 +3182,10 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 	 * hfi2_ib_remove().
 	 */
 	hfi_vnic_uninit(dd);
-
+	if (dd->hfi2_link_mgr) {
+		kthread_stop(dd->hfi2_link_mgr);
+		dd->hfi2_link_mgr = NULL;
+	}
 	/* unregister from opa_core and IB first, before clear any portdata */
 	hfi_pport_uninit(dd);
 
@@ -3735,6 +3865,14 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 		dd_dev_err(dd, "can't load firmware on 8051s");
 		goto err;
 	}
+
+	if (lni_debug) {
+		dd->hfi2_link_mgr = kthread_run(hfi_dbg_link_mgr, dd,
+						"hfi2_link_mgr_%d", dd->unit);
+		if (IS_ERR(dd->hfi2_link_mgr))
+			dd_dev_err(dd, "Unable to create link_mgr\n");
+	}
+
 err:
 	/* On error, cleanup is done by caller in hfi_pci_dd_free() */
 	return ret;

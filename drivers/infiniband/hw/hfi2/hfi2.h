@@ -1161,6 +1161,8 @@ struct hfi_devdata {
 
 	/* driver stats */
 	struct hfi2_ib_stats stats;
+	/* link manager thread */
+	struct task_struct *hfi2_link_mgr;
 };
 
 /*
