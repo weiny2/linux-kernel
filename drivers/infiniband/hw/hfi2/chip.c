@@ -286,8 +286,8 @@ static int hfi_dbg_link_mgr(void *data)
 	u64 crk_sfr_tmp8_smask = CRK_CRK8051_DBG_SFR_MAP_1_TMP08_SMASK;
 	int idx = 0, array_idx;
 
-	dd_dev_err(dd, "%s:  Idx Time(ms) Delta(ms)       Info\n",
-		   __func__);
+	dd_dev_info(dd, "%s:  Idx Time(ms) Delta(ms)       Info\n",
+		    __func__);
 
 	/* Handle a SIGINT sent using kill(1) to the pid of this thread */
 	allow_signal(SIGINT);
@@ -300,7 +300,7 @@ static int hfi_dbg_link_mgr(void *data)
 			hfi_get_time_info(&cur_time_ms, &prev_time_ms,
 					  &delta);
 			reg = read_csr(dd, CRK_CRK8051_DBG_CODE_TRACING_ADDR);
-			dd_dev_dbg(dd,
+			dd_dev_info(dd,
 			    "%s: %4d  %6ld    %6ld    phy: %s, 8051 code addr: 0x%llx\n",
 			    __func__, idx++, cur_time_ms, delta,
 			    (port_state_strs[array_idx]),
@@ -313,7 +313,7 @@ static int hfi_dbg_link_mgr(void *data)
 			hfi_get_time_info(&cur_time_ms, &prev_time_ms,
 					  &delta);
 			reg = read_csr(dd, CRK_CRK8051_DBG_CODE_TRACING_ADDR);
-			dd_dev_dbg(dd,
+			dd_dev_info(dd,
 			    "%s: %4d  %6ld    %6ld    tmp1: 0x%2x tmp2: 0x%2x tmp8: 0x%2x 8051 code addr 0x%llx\n",
 			    __func__, idx++, cur_time_ms, delta,
 			    (u8)(crk_dbg_sfr_map_1 & crk_sfr_tmp1_smask),
@@ -324,7 +324,7 @@ static int hfi_dbg_link_mgr(void *data)
 		usleep_range(10, 20);
 		schedule();
 	}
-	dd_dev_dbg(dd, "%s: Exiting link manager\n", __func__);
+	dd_dev_info(dd, "%s: Exiting link manager\n", __func__);
 	return 0;
 }
 
