@@ -48,7 +48,7 @@ endif
 # The desired version number comes from the most recent tag starting with "v"
 VERSION := $(shell if [ -e $(TOP_SRC)/.git ] ; then git describe --tags $(GIT_EXTRA_FLAGS) --abbrev=0 --match="*fxr_v*" | sed -e 's/^fxr_v//' -e 's/-/_/'; else echo "version" ; fi)
 ifeq (,$(VERSION))
-VERSION := 0
+VERSION := 0.99
 endif
 # The desired release number comes the git describe following the version which
 # is the number of commits since the version tag was planted suffixed by the g<commitid>
@@ -98,20 +98,20 @@ krping:
 
 # these targets assume you have write permission to $(KBUILD)
 prep:
-	install -m=644 $(KBUILD)/arch/x86/configs/hfi2-stlnp.config $(KBUILD)/.config
-	install -m=644 $(PWD)/build/Module-simics-symvers $(KBUILD)/Module.symvers
+	install --mode=644 $(KBUILD)/arch/x86/configs/hfi2-stlnp.config $(KBUILD)/.config
+	install --mode=644 $(PWD)/build/Module-simics-symvers $(KBUILD)/Module.symvers
 	$(MAKE) -C $(KBUILD) modules_prepare
 prep-zebu:
-	install -m=644 $(KBUILD)/arch/x86/configs/hfi2-stlnp.config $(KBUILD)/.config
-	install -m=644 $(PWD)/build/Module-zebu-symvers $(KBUILD)/Module.symvers
+	install --mode=644 $(KBUILD)/arch/x86/configs/hfi2-stlnp.config $(KBUILD)/.config
+	install --mode=644 $(PWD)/build/Module-zebu-symvers $(KBUILD)/Module.symvers
 	$(MAKE) -C $(KBUILD) modules_prepare
 prep-verbs:
-	install -m=644 $(KBUILD)/arch/x86/configs/hfi2.config $(KBUILD)/.config
-	install -m=644 $(PWD)/build/Module-simics-symvers $(KBUILD)/Module.symvers
+	install --mode=644 $(KBUILD)/arch/x86/configs/hfi2.config $(KBUILD)/.config
+	install --mode=644 $(PWD)/build/Module-simics-symvers $(KBUILD)/Module.symvers
 	$(MAKE) -C $(KBUILD) modules_prepare
 prep-debug:
-	install -m=644 $(KBUILD)/arch/x86/configs/hfi2-stlnp-debug.config $(KBUILD)/.config
-	install -m=644 $(PWD)/build/Module-simics-debug-symvers $(KBUILD)/Module.symvers
+	install --mode=644 $(KBUILD)/arch/x86/configs/hfi2-stlnp-debug.config $(KBUILD)/.config
+	install --mode=644 $(PWD)/build/Module-simics-debug-symvers $(KBUILD)/Module.symvers
 	$(MAKE) -C $(KBUILD) modules_prepare
 
 clean:
@@ -161,7 +161,7 @@ install:
 	-install user/hfi2_user.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	-install kfi/kfi.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
 	-install krping/rdma_krping.ko $(RPM_BUILD_ROOT)/lib/modules/$(KVER)/updates
-	install -m=644 build/80-hfi2.rules $(RPM_BUILD_ROOT)/usr/lib/udev/rules.d/
+	install --mode=644 build/80-hfi2.rules $(RPM_BUILD_ROOT)/usr/lib/udev/rules.d/
 	install build/$(NAME).rc $(RPM_BUILD_ROOT)/etc/init.d/$(NAME)
 
 # these targets used by rpm specfile to package hfi2 + rdmavt
@@ -170,6 +170,9 @@ driver-ifs: hfi2-ifs rdmavt
 
 rpm: dist
 	mkdir -p rpmbuild/SOURCES
+	mkdir -p rpmbuild/BUILD
+	mkdir -p rpmbuild/SRPMS
+	mkdir -p rpmbuild/RPMS
 	mv hfi2-$(VERSION).tgz rpmbuild/SOURCES
 	rpmbuild -ba \
 		--define "_topdir ${PWD}/rpmbuild" \
