@@ -284,7 +284,7 @@ static int hfi_dbg_link_mgr(void *data)
 	u64 crk_sfr_tmp1_smask = CRK_CRK8051_DBG_SFR_MAP_1_TMP01_SMASK;
 	u64 crk_sfr_tmp2_smask = CRK_CRK8051_DBG_SFR_MAP_1_TMP02_SMASK;
 	u64 crk_sfr_tmp8_smask = CRK_CRK8051_DBG_SFR_MAP_1_TMP08_SMASK;
-	int idx = 0, array_idx;
+	u64 idx = 0, array_idx;
 
 	dd_dev_info(dd, "%s:  Idx Time(ms) Delta(ms)       Info\n",
 		    __func__);
@@ -301,7 +301,7 @@ static int hfi_dbg_link_mgr(void *data)
 					  &delta);
 			reg = read_csr(dd, CRK_CRK8051_DBG_CODE_TRACING_ADDR);
 			dd_dev_info(dd,
-			    "%s: %4d  %6ld    %6ld    phy: %s, 8051 code addr: 0x%llx\n",
+			    "%s: %4llu  %6lu    %6lu    phy: %s, 8051 code addr: 0x%llx\n",
 			    __func__, idx++, cur_time_ms, delta,
 			    (port_state_strs[array_idx]),
 			    (reg & crk_code_addr_smask));
@@ -314,7 +314,7 @@ static int hfi_dbg_link_mgr(void *data)
 					  &delta);
 			reg = read_csr(dd, CRK_CRK8051_DBG_CODE_TRACING_ADDR);
 			dd_dev_info(dd,
-			    "%s: %4d  %6ld    %6ld    tmp1: 0x%2x tmp2: 0x%2x tmp8: 0x%2x 8051 code addr 0x%llx\n",
+			    "%s: %4llu  %6lu    %6lu    tmp1: 0x%2x tmp2: 0x%2x tmp8: 0x%2x 8051 code addr 0x%llx\n",
 			    __func__, idx++, cur_time_ms, delta,
 			    (u8)(crk_dbg_sfr_map_1 & crk_sfr_tmp1_smask),
 			    (u8)(crk_dbg_sfr_map_1 & crk_sfr_tmp2_smask),
