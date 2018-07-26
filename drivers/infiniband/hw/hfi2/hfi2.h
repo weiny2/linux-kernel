@@ -193,7 +193,7 @@ enum {
 #define HFI_PRIV_CMDQ_TIMEOUT_MS		5000
 
 /* use this MTU size if none other is given */
-#define HFI_DEFAULT_ACTIVE_MTU	10240
+#define HFI_DEFAULT_ACTIVE_MTU	8192
 // TODO: Fix for ZEBU/FPGA #define HFI_DEFAULT_ACTIVE_MTU	(zebu ? 4096 : 10240)
 /* use this MTU size as the default maximum */
 #define HFI_DEFAULT_MAX_MTU	10240

@@ -424,6 +424,26 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 			  PKEY_DISABLE_SMASK);
 }
 
+static void hfi_set_txotr_pkt_cfg_mtu(const struct hfi_devdata *dd, u16 mtu)
+{
+	u64 reg = 0;
+	int i = 0;
+	u8 mtu_id = opa_mtu_to_enum(mtu);
+
+	if (mtu_id == INVALID_MTU_ENC) {
+		dd_dev_warn(dd, "Invalid mtu for txotr %d\n", mtu);
+		return;
+	}
+
+	for (i = 0; i < HFI_MAX_TC; i++)
+		reg |= (mtu_id << (i * 4));
+
+	dd_dev_dbg(dd, "Setting txotr ptk cfg mtu to %d\n",
+		   txotr_enum_to_mtu(mtu_id));
+
+	write_csr(dd, FXR_TXOTR_PKT_CFG_MTU, reg);
+}
+
 static void hfi_set_rfs(const struct hfi_devdata *dd, u16 mtu)
 {
 	u64 reg = 0;
@@ -471,6 +491,28 @@ static u16 hfi_get_smallest_mtu(const struct hfi_devdata *dd)
 	return smallest_mtu;
 }
 
+static u16 hfi_get_largest_mtu(const struct hfi_devdata *dd)
+{
+	int i, port;
+	u16 largest_mtu = OPA_MTU_0;
+
+	for (port = 1; port <= dd->num_pports; port++) {
+		struct hfi_pportdata *ppd = to_hfi_ppd(dd, port);
+
+		/* Only check data VLs */
+		for (i = 0; i < HFI_NUM_DATA_VLS; i++) {
+			u16 vl_mtu = ppd->vl_mtu[i];
+
+			if (vl_mtu && vl_mtu > largest_mtu)
+				largest_mtu = vl_mtu;
+		}
+	}
+
+	dd_dev_dbg(dd, "Found largest MTU %u\n", largest_mtu);
+
+	return largest_mtu;
+}
+
 static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 {
 	u64 vlmtu = 0;
@@ -483,6 +525,7 @@ static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 	}
 
 	hfi_set_rfs(dd, mtu);
+	hfi_set_txotr_pkt_cfg_mtu(dd, mtu);
 
 	for (i = 0; i < HFI_NUM_DATA_VLS; i++)
 		vlmtu |= (u64)mtu_id << (i * 4);
@@ -493,8 +536,8 @@ static void hfi_init_tx_otr_mtu(const struct hfi_devdata *dd, u16 mtu)
 		for (i = 0; i < HFI_NUM_DATA_VLS; i++)
 			ppd->vl_mtu[i] = mtu;
 
-		write_csr(ppd->dd, FXR_TP_CFG_VL_MTU, vlmtu);
 	}
+	write_csr(dd, FXR_TP_CFG_VL_MTU, vlmtu);
 }
 
 static void hfi_set_small_headers(const struct hfi_pportdata *ppd)
@@ -535,7 +578,7 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 		   FXR_TXOTR_PKT_CFG_VALID_TC_DLID_TC_VALID_P0_SHIFT;
 	write_csr(dd, FXR_TXOTR_PKT_CFG_VALID_TC_DLID, tc_slid);
 
-	hfi_init_tx_otr_mtu(dd, HFI_DEFAULT_MAX_MTU);
+	hfi_init_tx_otr_mtu(dd, HFI_DEFAULT_ACTIVE_MTU);
 
 	if (dd->emulation) {
 		/* FXRTODO: Why is this emulation specific? */
@@ -907,7 +950,7 @@ static void hfi_set_send_length(struct hfi_pportdata *ppd)
 {
 	u64 tp;
 	u64 fpc;
-	u16 smallest_mtu;
+	u16 smallest_mtu, largest_mtu;
 	u8 vl0 = opa_mtu_to_enum(ppd->vl_mtu[0]);
 	u8 vl1 = opa_mtu_to_enum(ppd->vl_mtu[1]);
 	u8 vl2 = opa_mtu_to_enum(ppd->vl_mtu[2]);
@@ -1022,6 +1065,14 @@ static void hfi_set_send_length(struct hfi_pportdata *ppd)
 	smallest_mtu = hfi_get_smallest_mtu(ppd->dd);
 
 	hfi_set_rfs(ppd->dd, smallest_mtu);
+
+	/*
+	 * Find the largest MTU from any valid data VL on any port for
+	 * this HFI. This MTU is used to fail single packet DMA commands
+	 * and so it has to be >= all SL/VL MTUs using the TC
+	 */
+	largest_mtu = hfi_get_largest_mtu(ppd->dd);
+	hfi_set_txotr_pkt_cfg_mtu(ppd->dd, largest_mtu);
 }
 
 void hfi_cfg_reset_pmon_cntrs(struct hfi_devdata *dd)

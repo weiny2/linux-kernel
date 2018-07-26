@@ -845,6 +845,17 @@ struct opa_aggregate {
 #define HFI_IB_CC_CCS_PC_SL_BASED 0x01
 #define OPA_CC_LOG_TYPE_HFI	2
 
+enum {
+	OPA_TC_MTU_0,
+	OPA_TC_MTU_384,
+	OPA_TC_MTU_640,
+	OPA_TC_MTU_1152,
+	OPA_TC_MTU_2176,
+	OPA_TC_MTU_4224,
+	OPA_TC_MTU_8320,
+	OPA_TC_MTU_10368
+};
+
 /*
  * lqpn: local qp cn entry
  * rqpn: remote qp that is connected to the local qp
@@ -982,6 +993,21 @@ static inline u8 opa_mtu_to_enum(u16 mtu)
 	case  8192: return OPA_MTU_8192;
 	case 10240: return OPA_MTU_10240;
 	default: return INVALID_MTU_ENC;
+	}
+}
+
+static inline u16 txotr_enum_to_mtu(u8 enum_val)
+{
+	switch (enum_val) {
+	case OPA_TC_MTU_0:	return 0;
+	case OPA_TC_MTU_384:	return 384;
+	case OPA_TC_MTU_640:	return 640;
+	case OPA_TC_MTU_1152:	return 1152;
+	case OPA_TC_MTU_2176:	return 2176;
+	case OPA_TC_MTU_4224:	return 4224;
+	case OPA_TC_MTU_8320:	return 8320;
+	case OPA_TC_MTU_10368:	return 10368;
+	default:		return INVALID_MTU;
 	}
 }
 
