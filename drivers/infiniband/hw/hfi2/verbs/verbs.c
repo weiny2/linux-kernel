@@ -628,7 +628,8 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 		ibd->ibkc = hfi2_alloc_ucontext(ibdev, NULL);
 		if (IS_ERR(ibd->ibkc)) {
 			ret = PTR_ERR(ibd->ibkc);
-			goto err;
+			ibd->ibkc = NULL;
+			return ret;
 		}
 	}
 #endif
@@ -665,7 +666,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 err_reg:
 	dd_dev_err(ibd->dd, "Failed to register with RDMAVT: %d\n", ret);
 	hfi2_dealloc_ucontext(ibd->ibkc);
-err:
 	ibd->ibkc = NULL;
 	return ret;
 }

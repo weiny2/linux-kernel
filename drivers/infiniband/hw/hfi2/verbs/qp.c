@@ -145,7 +145,9 @@ void hfi2_modify_qp(struct rvt_qp *qp, struct ib_qp_attr *attr,
 		    int attr_mask, struct ib_udata *udata)
 {
 	struct hfi2_ibdev *ibd = to_hfi_ibd(qp->ibqp.device);
+#ifdef CONFIG_HFI2_STLNP
 	int ret;
+#endif
 
 	if (attr_mask & IB_QP_AV)
 		qp_set_16b(qp);
