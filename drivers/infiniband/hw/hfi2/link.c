@@ -119,6 +119,17 @@ static void read_vc_remote_fabric(struct hfi_pportdata *ppd, u8 *vau, u8 *z,
 	*crc_sizes = (frame >> HFI_CRC_SIZES_SHIFT) & HFI_CRC_SIZES_MASK;
 }
 
+static int write_vc_local_phy(struct hfi_pportdata *ppd, u8 power_management,
+			      u8 continuous)
+{
+	u32 frame;
+
+	frame = continuous << CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT
+		| power_management << POWER_MANAGEMENT_SHIFT;
+	return load_8051_config(ppd, VERIFY_CAP_LOCAL_PHY,
+				GENERAL_CONFIG, frame);
+}
+
 static int write_vc_local_fabric(struct hfi_pportdata *ppd, u8 vau, u8 z,
 				 u8 vcu, u16 vl15buf, u8 crc_sizes)
 {
@@ -1356,49 +1367,86 @@ static u16 opa_to_vc_link_widths(u16 opa_widths)
 	return result;
 }
 
+static int read_tx_settings(struct hfi_pportdata *ppd,
+			    u8 *enable_lane_tx,
+			    u8 *tx_polarity_inversion,
+			    u8 *rx_polarity_inversion,
+			    u8 *max_rate)
+{
+	u32 frame = 0;
+	int ret;
+
+	ret = hfi2_read_8051_config(ppd, TX_SETTINGS, GENERAL_CONFIG, &frame);
+	*enable_lane_tx = (frame >> ENABLE_LANE_TX_SHIFT)
+				& ENABLE_LANE_TX_MASK;
+	*tx_polarity_inversion = (frame >> TX_POLARITY_INVERSION_SHIFT)
+				& TX_POLARITY_INVERSION_MASK;
+	*rx_polarity_inversion = (frame >> RX_POLARITY_INVERSION_SHIFT)
+				& RX_POLARITY_INVERSION_MASK;
+	*max_rate = (frame >> MAX_RATE_SHIFT) & MAX_RATE_MASK;
+	return ret;
+}
+
+static int write_tx_settings(struct hfi_pportdata *ppd,
+			     u8 enable_lane_tx,
+			     u8 tx_polarity_inversion,
+			     u8 rx_polarity_inversion,
+			     u8 max_rate)
+{
+	u32 frame;
+
+	/* no need to mask, all variable sizes match field widths */
+	frame = enable_lane_tx << ENABLE_LANE_TX_SHIFT
+		| tx_polarity_inversion << TX_POLARITY_INVERSION_SHIFT
+		| rx_polarity_inversion << RX_POLARITY_INVERSION_SHIFT
+		| max_rate << MAX_RATE_SHIFT;
+	return load_8051_config(ppd, TX_SETTINGS, GENERAL_CONFIG, frame);
+}
+
 /*
  * Set link attributes before moving to polling.
  */
 static int set_local_link_attributes(struct hfi_pportdata *ppd)
 {
 	struct hfi_devdata *dd = ppd->dd;
-#if 0 /* WFR legacy */
 	u8 enable_lane_tx;
 	u8 tx_polarity_inversion;
 	u8 rx_polarity_inversion;
 	u8 local_tx_rate;
-#endif
 	int ret;
 
-#if 0 /* WFR legacy */
-	/* reset our fabric serdes to clear any lingering problems */
-	fabric_serdes_reset(dd);
-
-	/* set the local tx rate - need to read-modify-write */
-	ret = read_tx_settings(
-		dd, &enable_lane_tx, &tx_polarity_inversion,
-		&rx_polarity_inversion, &local_tx_rate);
-	if (ret)
-		goto set_local_link_attributes_fail;
-
-	/* set the tx rate to all enabled */
-	local_tx_rate = ppd->link_speed_enabled;
-
-	enable_lane_tx = 0xF; /* enable all four lanes */
-	ret = write_tx_settings(dd, enable_lane_tx, tx_polarity_inversion,
-				rx_polarity_inversion, local_tx_rate);
-	if (ret != HCMD_SUCCESS)
-		goto set_local_link_attributes_fail;
-
 	/*
-	 * DC supports continuous updates.
+	 * FXRTODO: Simics reports as silicon, so change conditional to !simics
+	 * when STL-43011 is fixed.
 	 */
-	ret = write_vc_local_phy(dd,
-				 0 /* no power management */,
-				 1 /* continuous updates */);
-	if (ret != HCMD_SUCCESS)
-		goto set_local_link_attributes_fail;
-#endif
+	if (dd->emulation) {
+		/* set the local tx rate - need to read-modify-write */
+		ret = read_tx_settings(
+			ppd, &enable_lane_tx, &tx_polarity_inversion,
+			&rx_polarity_inversion, &local_tx_rate);
+		if (ret)
+			goto set_local_link_attributes_fail;
+
+		/* set the tx rate to all enabled */
+		local_tx_rate = ppd->link_speed_enabled;
+
+		enable_lane_tx = 0xF; /* enable all four lanes */
+		ret = write_tx_settings(ppd, enable_lane_tx,
+					tx_polarity_inversion,
+					rx_polarity_inversion, local_tx_rate);
+		if (ret != HCMD_SUCCESS)
+			goto set_local_link_attributes_fail;
+
+		/*
+		 * DC supports continuous updates.
+		 */
+		ret = write_vc_local_phy(ppd,
+					 0 /* no power management */,
+					 1 /* continuous updates */);
+		if (ret != HCMD_SUCCESS)
+			goto set_local_link_attributes_fail;
+	}
+
 	write_csr(dd, CRK_CRK8051_CFG_LOCAL_PORT_NO,
 		  ppd->pnum & CRK_CRK8051_CFG_LOCAL_PORT_NO_VAL_MASK);
 
@@ -1575,13 +1623,6 @@ static void handle_sma_message(struct work_struct *work)
 			    __func__, msg);
 		break;
 	}
-}
-
-static inline void add_rcvctrl(struct hfi_devdata *dd, u64 add)
-{
-#if 0 /* WFR legacy */
-	adjust_rcvctrl(dd, add, 0);
-#endif
 }
 
 static void handle_quick_linkup(struct hfi_pportdata *ppd)
@@ -2748,9 +2789,7 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 			}
 		}
 
-#if 0 /* where OPA_LINKDOWN_REASON_NONE is defined? */
 		ppd->offline_disabled_reason = OPA_LINKDOWN_REASON_NONE;
-#endif
 		/*
 		 * If an error occurred on do_quick_linkup(),
 		 * go back to offline. The caller may reschedule another
@@ -2797,10 +2836,10 @@ int hfi_set_link_state(struct hfi_pportdata *ppd, u32 state)
 			if (ppd->linkinit_reason >= OPA_LINKINIT_REASON_CLEAR)
 				ppd->linkinit_reason =
 					OPA_LINKINIT_REASON_LINKUP;
-			/* enable the port */
-#if 0 /* where RCV_CTRL_RCV_PORT_ENABLE_SMASK is defined */
-			add_rcvctrl(dd, RCV_CTRL_RCV_PORT_ENABLE_SMASK);
-#endif
+			/*
+			 * FXRTODO: enable the port if required for FXR
+			 * (see WFR for example in this location)
+			 */
 			handle_linkup_change(ppd, 1);
 			ppd->host_link_state = HLS_UP_INIT;
 		}
@@ -2901,7 +2940,6 @@ int hfi_start_link(struct hfi_pportdata *ppd)
 	 * bit error rate. Needs to be done before starting the link.
 	 */
 	tune_serdes(ppd);
-#if 0 /* WFR legacy */
 	if (!ppd->link_enabled) {
 		dd_dev_info(ppd->dd,
 			    "%s: stopping link start because link is disabled\n",
@@ -2923,18 +2961,8 @@ int hfi_start_link(struct hfi_pportdata *ppd)
 	 */
 	hfi_clear_full_mgmt_pkey(ppd);
 
-	if (qsfp_mod_present(ppd) || loopback == LOOPBACK_SERDES ||
-	    loopback == LOOPBACK_LCB ||
-	    ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR)
-#endif
-		return hfi_set_link_state(ppd, HLS_DN_POLL);
+	return hfi_set_link_state(ppd, HLS_DN_POLL);
 
-#if 0 /* WFR legacy */
-	dd_dev_info(ppd->dd,
-		    "%s: stopping link start because no cable is present\n",
-		    __func__);
-	return -EAGAIN;
-#endif
 }
 
 /*

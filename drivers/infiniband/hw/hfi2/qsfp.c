@@ -53,8 +53,6 @@
 #include "hfi2.h"
 #include "link.h"
 
-static const u8 test_qsfp = 1;
-
 static int hfi_handle_qsfp_error_conditions(struct hfi_pportdata *ppd,
 					    u8 *qsfp_interrupt_status)
 {
@@ -364,7 +362,7 @@ static int hfi_i2c_bus_read(struct hfi_devdata *dd, struct hfi_i2c_bus *bus,
 		return -EINVAL;
 	}
 
-	if (test_qsfp) {
+	if (!dd->emulation) {
 		/*
 		 * FXRTODO: Remove this section once i2c and qsfp registers
 		 * are implemented in simics or hw is available
@@ -408,7 +406,7 @@ static int hfi_i2c_write(struct hfi_pportdata *ppd, u32 target, int i2c_addr,
 	u8 slave_addr;
 	int offset_size;
 
-	if (test_qsfp) {
+	if (!dd->emulation) {
 		/*
 		 * FXRTODO: Rempove this section once i2c and qsfp registers are
 		 * implemented on simics or hw is available
@@ -686,19 +684,13 @@ int hfi_get_qsfp_power_class(u8 power_byte)
 
 int hfi_qsfp_mod_present(struct hfi_pportdata *ppd)
 {
-#if 0
 	u64 reg;
+
+	if (!ppd->dd->emulation)
+		return true;
 
 	reg = read_csr(ppd->dd, FXR_ASIC_QSFP_IN);
 	return !(reg & QSFP_HFI_MODPRST_N);
-#endif
-	if (test_qsfp) {
-		/*
-		 * FXRTODO: Returning true for Simics
-		 * Remove this once hw is available
-		 */
-		return true;
-	}
 }
 
 /*
@@ -736,7 +728,7 @@ int hfi_get_cable_info(struct hfi_devdata *dd, u32 port_num, u32 addr,
 		goto set_zeroes;
 	}
 
-	if (test_qsfp) {
+	if (!dd->emulation) {
 		/*
 		 * FXRTODO: Remove the line to set the cache_valid variable to
 		 * 1 and to clear the cache below once HW is available

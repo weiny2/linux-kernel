@@ -1080,19 +1080,17 @@ void tune_serdes(struct hfi_pportdata *ppd)
 	ppd->driver_link_ready = 0;
 	ppd->offline_disabled_reason = HFI_ODR_MASK(OPA_LINKDOWN_REASON_NONE);
 
+	/* The link defaults to enabled */
+	ppd->link_enabled = 1;
+
+	if (hfi_qsfp_mod_present(ppd))
+		hfi_refresh_qsfp_cache(ppd, &ppd->qsfp_info);
+
 	/*
-	 * Skip the tuning for testing (loopback != none) and
-	 * simulations
+	 * FXRTODO: Skip until silicon is available
 	 */
-	if (loopback != LOOPBACK_NONE ||
-	    ppd->dd->icode == ICODE_FUNCTIONAL_SIMULATOR) {
-		ppd->driver_link_ready = 1;
-		if (hfi_qsfp_mod_present(ppd)) {
-			/* TODO: Do we need locking here? */
-			hfi_refresh_qsfp_cache(ppd, &ppd->qsfp_info);
-		}
-		return;
-	}
+	ppd->driver_link_ready = 1;
+	return;
 
 	switch (ppd->port_type) {
 	case PORT_TYPE_DISCONNECTED:
@@ -1470,9 +1468,6 @@ int hfi_bringup_serdes(struct hfi_pportdata *ppd)
 		hfi_wait_for_qsfp_init(ppd);
 		hfi_set_qsfp_int_n(ppd, 1);
 	}
-
-	/* The link defaults to enabled */
-	ppd->link_enabled = 1;
 
 	try_start_link(ppd);
 	return 0;

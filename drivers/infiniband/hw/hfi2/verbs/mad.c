@@ -81,9 +81,6 @@ struct trap_node {
 	u8 repress;
 };
 
-/* FXRTODO: Remove this global variable once hw is available */
-static const u8 test_qsfp = 1;
-
 static int smp_length_check(u32 data_size, u32 request_len)
 {
 	if (unlikely(request_len < data_size))
@@ -1321,12 +1318,6 @@ static int __subn_get_opa_cable_info(struct opa_smp *smp, u32 am, u8 *data,
 	}
 
 	ret = hfi_get_cable_info(dd, port, addr, len, data);
-
-	if (test_qsfp) {
-		/* FXRTODO: Remove this section once hw is available */
-		dd_dev_info(dd, "%s: ret: 0x%x addr: 0x%x, len:0x%x\n",
-			    __func__, ret, addr, len);
-	}
 
 	if (ret == -ENODEV) {
 		smp->status |= IB_SMP_UNSUP_METH_ATTR;

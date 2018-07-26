@@ -222,6 +222,30 @@
 #define LOAD_DATA_DATA_SHIFT  0x0
 #define LOAD_DATA_DATA_MASK   0xffffffffull
 
+/* READ_DATA 8051 command shifts and fields */
+#define READ_DATA_FIELD_ID_SHIFT 40
+#define READ_DATA_FIELD_ID_MASK 0xffull
+#define READ_DATA_LANE_ID_SHIFT 32
+#define READ_DATA_LANE_ID_MASK 0xffull
+#define READ_DATA_DATA_SHIFT   0x0
+#define READ_DATA_DATA_MASK   0xffffffffull
+
+/* TX settings fields */
+#define ENABLE_LANE_TX_SHIFT		0
+#define ENABLE_LANE_TX_MASK		0xff
+#define TX_POLARITY_INVERSION_SHIFT	8
+#define TX_POLARITY_INVERSION_MASK	0xff
+#define RX_POLARITY_INVERSION_SHIFT	16
+#define RX_POLARITY_INVERSION_MASK	0xff
+#define MAX_RATE_SHIFT			24
+#define MAX_RATE_MASK			0xff
+
+/* verify capability PHY fields */
+#define CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT	0x4
+#define CONTINIOUS_REMOTE_UPDATE_SUPPORT_MASK	0x1
+#define POWER_MANAGEMENT_SHIFT			0x0
+#define POWER_MANAGEMENT_MASK			0xf
+
 /* verify capability local link width fields */
 #define LINK_WIDTH_SHIFT 0		/* also for remote link width */
 #define LOCAL_LINK_WIDTH_MASK 0xffff
