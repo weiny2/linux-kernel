@@ -1005,6 +1005,18 @@ static int write_vc_local_link_width(struct hfi_pportdata *ppd,
 				GENERAL_CONFIG, frame);
 }
 
+static void read_vc_remote_phy(struct hfi_devdata *dd, u8 *power_management,
+			       u8 *continuous)
+{
+	u32 frame;
+
+	hfi2_read_8051_config(dd->pport, VERIFY_CAP_REMOTE_PHY, GENERAL_CONFIG, &frame);
+	*power_management = (frame >> POWER_MANAGEMENT_SHIFT)
+					& POWER_MANAGEMENT_MASK;
+	*continuous = (frame >> CONTINIOUS_REMOTE_UPDATE_SUPPORT_SHIFT)
+					& CONTINIOUS_REMOTE_UPDATE_SUPPORT_MASK;
+}
+
 static void read_vc_remote_link_width(struct hfi_pportdata *ppd,
 				      u8 *remote_tx_rate,
 				      u16 *link_widths)
@@ -1780,6 +1792,60 @@ static u16 link_width_to_bits(struct hfi_pportdata *ppd, u16 width)
 }
 
 /*
+ * Do a population count on the bottom nibble.
+ */
+static const u8 bit_counts[16] = {
+	0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+};
+
+static inline u8 nibble_to_count(u8 nibble)
+{
+	return bit_counts[nibble & 0xf];
+}
+
+static void read_local_lni(struct hfi_devdata *dd, u8 *enable_lane_rx)
+{
+	u32 frame;
+
+	hfi2_read_8051_config(dd->pport, LOCAL_LNI_INFO, GENERAL_CONFIG, &frame);
+	*enable_lane_rx = (frame >> ENABLE_LANE_RX_SHIFT) & ENABLE_LANE_RX_MASK;
+}
+
+/*
+ * Read the active lane information from the 8051 registers and return
+ * their widths.
+ *
+ * Active lane information is found in these 8051 registers:
+ *	enable_lane_tx
+ *	enable_lane_rx
+ */
+static void get_link_widths(struct hfi_devdata *dd, u16 *tx_width,
+			    u16 *rx_width)
+{
+	u16 tx, rx;
+	u8 enable_lane_rx;
+	u8 enable_lane_tx;
+	u8 tx_polarity_inversion;
+	u8 rx_polarity_inversion;
+	u8 max_rate;
+
+	/* read the active lanes */
+	read_tx_settings(dd->pport, &enable_lane_tx, &tx_polarity_inversion,
+			 &rx_polarity_inversion, &max_rate);
+	read_local_lni(dd, &enable_lane_rx);
+
+	/* convert to counts */
+	tx = nibble_to_count(enable_lane_tx);
+	rx = nibble_to_count(enable_lane_rx);
+
+	dd_dev_info(dd,
+		    "Fabric active lanes (width): tx 0x%x (%d), rx 0x%x (%d)\n",
+		    enable_lane_tx, tx, enable_lane_rx, rx);
+	*tx_width = link_width_to_bits(dd->pport, tx);
+	*rx_width = link_width_to_bits(dd->pport, rx);
+}
+
+/*
  * Read verify_cap_local_fm_link_width[1] to obtain the link widths.
  * Valid after the end of VerifyCap and during LinkUp.  Does not change
  * after link up.  I.e. look elsewhere for downgrade information.
@@ -1860,34 +1926,37 @@ static void handle_verify_cap(struct work_struct *work)
 {
 	struct hfi_pportdata *ppd = container_of(work, struct hfi_pportdata,
 								link_vc_work);
+	u8 power_management;
+	u8 continuous;
 	u8 vcu;
 	u8 vau;
 	u8 z;
 	u16 vl15buf;
-	u16 device_id;
 	u16 crc_mask;
 	u16 crc_val;
+	u16 device_id;
+	u16 active_tx, active_rx;
 	u8 device_rev;
 	u8 partner_supported_crc;
-#if 0 /* WFR legacy */
 	struct hfi_devdata *dd = ppd->dd;
-#endif
 	u16 link_widths;
 	u8 remote_max_rate;
 	u8 rate;
-	u32 _8051_port = read_physical_state(ppd);
 
+	/* FXRTODO: When do we remove this? */
+	u32 _8051_port = read_physical_state(ppd);
 	if (_8051_port != PLS_CONFIGPHY_VERIFYCAP) {
 		ppd_dev_info(ppd, "False interrupt on %s(): 0x%x. Ignore.",
 			     __func__, _8051_port);
 		return;
 	}
-	hfi_set_link_state(ppd, HLS_VERIFY_CAP);
-#if 0 /* WFR legacy */
-	lcb_shutdown(ppd, 0);
 
-	read_vc_remote_phy(dd, &power_management, &continious);
-#endif
+	hfi_set_link_state(ppd, HLS_VERIFY_CAP);
+	if (dd->emulation)
+		read_vc_remote_phy(dd, &power_management, &continuous);
+
+	if (ppd->dd->icode == ICODE_ZEBU_EMULATION)
+		adjust_lcb_for_ckts_firmware(ppd);
 
 	read_vc_remote_fabric(
 		ppd,
@@ -1900,14 +1969,15 @@ static void handle_verify_cap(struct work_struct *work)
 	read_vc_remote_link_width(ppd, &remote_max_rate, &link_widths);
 	read_remote_device_id(ppd, &device_id, &device_rev);
 
-#if 0
-	/* print the active widths */
-	get_link_widths(dd, &active_tx, &active_rx);
-	ppd_dev_info(
-		ppd,
-		"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
-		(int)power_management, (int)continious);
-#endif
+	if (dd->emulation) {
+		/* print the active widths */
+		get_link_widths(dd, &active_tx, &active_rx);
+		ppd_dev_info(
+			ppd,
+			"Peer PHY: power management 0x%x, continuous updates 0x%x\n",
+			(int)power_management, (int)continuous);
+	}
+
 	ppd_dev_info(
 		ppd,
 		"Peer Fabric: vAU %d, Z %d, vCU %d, vl15 credits 0x%x, CRC sizes 0x%x\n",
@@ -2000,31 +2070,6 @@ static void handle_verify_cap(struct work_struct *work)
 
 	/* set up the remote credit return table */
 	hfi_assign_remote_cm_au_table(ppd, vcu);
-
-#if 0
-	/*
-	 * The LCB is reset on entry to handle_verify_cap(), so this must
-	 * be applied on every link up.
-	 *
-	 * Adjust LCB error kill enable to kill the link if
-	 * these RBUF errors are seen:
-	 *	REPLAY_BUF_MBE_SMASK
-	 *	FLIT_INPUT_BUF_MBE_SMASK
-	 */
-	if (is_a0(dd)) {			/* fixed in B0 */
-		reg = read_csr(dd, DC_LCB_CFG_LINK_KILL_EN);
-		reg |= DC_LCB_CFG_LINK_KILL_EN_REPLAY_BUF_MBE_SMASK
-			| DC_LCB_CFG_LINK_KILL_EN_FLIT_INPUT_BUF_MBE_SMASK;
-		write_csr(dd, DC_LCB_CFG_LINK_KILL_EN, reg);
-	}
-
-	/* pull LCB fifos out of reset - all fifo clocks must be stable */
-	write_csr(dd, DC_LCB_CFG_TX_FIFOS_RESET, 0);
-
-	/* give 8051 access to the LCB CSRs */
-	write_csr(dd, DC_LCB_ERR_EN, 0); /* mask LCB errors */
-	set_8051_lcb_access(dd);
-#endif
 
 	/* tell the 8051 to go to LinkUp */
 	hfi_set_link_state(ppd, HLS_GOING_UP);

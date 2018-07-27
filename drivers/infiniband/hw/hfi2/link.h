@@ -267,6 +267,10 @@
 #define REMOTE_DEVICE_ID_SHIFT 8
 #define REMOTE_DEVICE_ID_MASK 0xffff
 
+/* local LNI link width fields */
+#define ENABLE_LANE_RX_SHIFT 16
+#define ENABLE_LANE_RX_MASK  0xff
+
 /* verify capability remote link width fields */
 #define REMOTE_TX_RATE_SHIFT 16
 #define REMOTE_TX_RATE_MASK 0xff
