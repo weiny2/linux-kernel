@@ -478,4 +478,5 @@ void process_rcv_qp_work(struct hfi2_ib_packet *packet);
 void hfi2_restart_rc(struct rvt_qp *qp, u32 psn, int wait);
 
 void hfi_verbs_dbg_init(struct hfi_devdata *dd);
+int hfi2_add_keys(struct hfi_ibcontext *ctx, struct hfi_ctx *hw_ctx);
 #endif

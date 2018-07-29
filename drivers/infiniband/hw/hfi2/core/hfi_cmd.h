@@ -361,6 +361,7 @@ struct hfi_pt_update_lower_args {
 #define HFI_CTX_FLAG_SET_VIRTUAL_PIDS  0x2
 #define HFI_CTX_FLAG_ASYNC_ERROR       0x4
 #define HFI_CTX_FLAG_USE_BYPASS        0x8
+#define HFI_CTX_FLAG_ALLOCATE_RKEYS   0x10
 
 /* Mode bits for hfi_ctx.mode (set during CTXT_ATTACH) */
 #define HFI_CTX_MODE_LID_VIRTUALIZED   0x1

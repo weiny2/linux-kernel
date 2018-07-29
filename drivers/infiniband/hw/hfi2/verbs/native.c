@@ -262,7 +262,7 @@ err_create_cq:
 }
 
 /* Append new set of keys to LKEY and RKEY stacks */
-static int hfi2_add_keys(struct hfi_ibcontext *ctx, struct hfi_ctx *hw_ctx)
+int hfi2_add_keys(struct hfi_ibcontext *ctx, struct hfi_ctx *hw_ctx)
 {
 	int i;
 	u32 key_idx, extra_keys, *new_keys;
@@ -392,6 +392,8 @@ void hfi2_native_dealloc_ucontext(struct hfi_ibcontext *ctx)
 		ctx->tx_qp_flow_ctl = NULL;
 	}
 	hfi2_free_all_keys(ctx);
+	if (ctx->is_user)
+		return;
 	for (i = 0; i < ctx->num_ctx; i++) {
 		hfi2_remove_hw_context(ctx->hw_ctx[i]);
 		ctx->hw_ctx[i] = NULL;
@@ -1811,7 +1813,8 @@ int hfi2_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 	union hfi_rx_cq_update_command cmd;
 
 	ret = rvt_resize_cq(ibcq, cqe, udata);
-	if (ret || !ctx || !ctx->supports_native || list_empty(&cq->hw_cq))
+	if (ret || !ctx || ctx->is_user || !ctx->supports_native ||
+	    list_empty(&cq->hw_cq))
 		return ret;
 
 	spin_lock_irqsave(&cq->lock, flags);
