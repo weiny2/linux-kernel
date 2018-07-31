@@ -2657,7 +2657,6 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 	int ret = 0;
 	u8 port;
 	struct hfi_pportdata *ppd;
-	struct task_struct *task;
 
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
@@ -2677,10 +2676,9 @@ int hfi2_pport_link_init(struct hfi_devdata *dd)
 		INIT_DELAYED_WORK(&ppd->start_link_work, handle_start_link);
 
 		if (ppd->dd->emulation) {
-			/* FXRTODO: Need to destroy kthread during uninit */
-			task = kthread_run(hfi2_8051_task, dd, "hfi2_8051");
-			if (IS_ERR(task)) {
-				ret = PTR_ERR(task);
+			dd->task_8051 = kthread_run(hfi2_8051_task, dd, "hfi2_8051");
+			if (IS_ERR(dd->task_8051)) {
+				ret = PTR_ERR(dd->task_8051);
 				goto _return;
 			}
 		}

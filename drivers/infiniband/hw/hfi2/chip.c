@@ -3270,6 +3270,10 @@ void hfi_pci_dd_free(struct hfi_devdata *dd)
 		kthread_stop(dd->hfi2_link_mgr);
 		dd->hfi2_link_mgr = NULL;
 	}
+	if (dd->task_8051) {
+		kthread_stop(dd->task_8051);
+		dd->task_8051 = NULL;
+	}
 	/* unregister from opa_core and IB first, before clear any portdata */
 	hfi_pport_uninit(dd);
 

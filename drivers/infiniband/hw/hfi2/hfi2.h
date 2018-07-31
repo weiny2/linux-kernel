@@ -1264,6 +1264,7 @@ struct hfi_devdata {
 	struct hfi2_ib_stats stats;
 	/* link manager thread */
 	struct task_struct *hfi2_link_mgr;
+	struct task_struct *task_8051;
 };
 
 /*
