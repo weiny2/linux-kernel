@@ -359,6 +359,90 @@ enum {
 	FXR_TXOTR_PKT_CFG_OPB_FIFO_ARB_MCTC_BWMETER_LEAK_FRACTION_MASK
 
 /*
+ * Structure from Table titled: Receive HI Arbitrator(RX HIARB)
+ * #%%#Cache Address Structures#%%#PTE Cache Address
+ * (Struct - pte_cache_addr_t) - 22 bits
+ * from File : 380_Block_Interfaces
+ */
+union pte_cache_addr {
+	struct {
+		/* [11:0] target process ID/ */
+		uint64_t        tpid                           : 12;
+		/* [19:12] Portals Table Index */
+		uint64_t        ptindex                        : 8;
+		/* [21:20] network interface */
+		uint64_t        ni                             : 2;
+		uint64_t	reserved_23_22		       : 2;
+		uint64_t	qp_tag			       : 1;
+		} __attribute__ ((__packed__));
+	u64 val;
+};
+
+/*
+ * Structure from Table titled: Event Queue Cache Address
+ * (Struct - eq_cache_addr_t) - 25 bits from File : 380_Block_Interfaces
+ */
+union eq_cache_addr {
+	struct {
+		/* [10:0] EQ Handle */
+		uint64_t        eqh                            : 11;
+		/* [12:11] network interface */
+		uint64_t        ni                             : 2;
+		/* [24:13] process ID */
+		uint64_t        pid                            : 12;
+		} __attribute__ ((__packed__));
+	u64 val;
+};
+
+/*
+ * Structure from Table titled: Triggered Op Cache Address
+ * Struct - trig_op_cache_addr_t) - 28 bits from File : 380_Block_Interfaces
+ */
+union trig_op_cache_addr {
+	struct {
+		/* [15:0] trigger handle */
+		uint64_t        trig_handle                    : 16;
+		/* [27:16] process ID */
+		uint64_t        pid                            : 12;
+		} __attribute__ ((__packed__));
+	u64 val;
+};
+
+/*
+ * Structure from Table titled: PSC Cache Address
+ * (Struct - psc_cache_addr_t) - 29 bits from File : 380_Block_Interfaces
+ */
+union psc_cache_addr {
+	struct {
+		/* [15:0] list pointer */
+		uint64_t        handle                         : 16;
+		/* [27:16] process id */
+		uint64_t        pid                            : 12;
+		/* [28:28] expected/unexpected */
+		uint64_t        unexpected                     : 1;
+		} __attribute__ ((__packed__));
+	u64 val;
+};
+
+/*
+ * Structure from Table titled: Packet Sequence Number Cache Address
+ * (Struct - psn_cache_addr_t) - 29 bits from File : 380_Block_Interfaces
+ */
+union psn_cache_addr {
+	struct {
+		/* [23:0] local id (dlid for otr, slid for e2e) */
+		uint64_t        lid                            : 24;
+		/* [25:24] slid[1:0] for otr, dlid[1:0] for e2e */
+		uint64_t        this_end_lid                   : 2;
+		/* [27:26] traffic class */
+		uint64_t        tc                             : 2;
+		/* [33:28] pkey index */
+		uint64_t        pkey_idx                       : 6;
+		} __attribute__ ((__packed__));
+	u64 val;
+};
+
+/*
  * per driver stats, either not device nor port-specific,
  * or summed over all of the devices and ports.
  * If memebers are added or deleted, hfi2_statnames[] in debugfs.c

@@ -61,9 +61,9 @@
 #include <rdma/ib_verbs.h>
 #include <rdma/opa_smi.h>
 #include "hfi_cmd.h"
-#include "fxr_sw_structs.h"
-#include "fxr_sw_structs_defs.h"
-#include "fxr_sw_defs.h"
+#include "../chip/fxr_sw_structs.h"
+#include "../chip/fxr_sw_structs_defs.h"
+#include "../chip/fxr_sw_defs.h"
 
 /* FXR identifies with this PCI ID */
 #define PCI_VENDOR_ID_INTEL       0x8086
