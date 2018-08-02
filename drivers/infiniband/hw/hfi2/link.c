@@ -802,14 +802,7 @@ static void handle_link_down(struct work_struct *work)
 
 	reset_neighbor_info(ppd);
 
-	/*
-	 * If there is no cable attached, turn the DC off. Otherwise,
-	 * start the link bring up.
-	 */
-	if (!hfi_qsfp_mod_present(ppd))
-		oc_shutdown(ppd);
-	else
-		hfi_start_link(ppd);
+	hfi_start_link(ppd);
 }
 
 static void set_logical_state(struct hfi_pportdata *ppd, u32 chip_lstate)
