@@ -443,6 +443,22 @@ union psn_cache_addr {
 };
 
 /*
+ * Structure from Table titled: Counting Event Cache Address
+ * (Struct - ct_cache_addr_t) - 25 bits from File : 380_Block_Interfaces
+ */
+union ct_cache_addr {
+	struct {
+		/* [10:0] CT Handle */
+		uint64_t        cth                            : 11;
+		/* [12:11] network interface */
+		uint64_t        ni                             : 2;
+		/* [24:13] process ID */
+		uint64_t        pid                            : 12;
+	} __attribute__ ((__packed__));
+	uint64_t val;
+};
+
+/*
  * per driver stats, either not device nor port-specific,
  * or summed over all of the devices and ports.
  * If memebers are added or deleted, hfi2_statnames[] in debugfs.c

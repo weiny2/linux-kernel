@@ -4357,10 +4357,12 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 	u64 eq = 0;
 	u64 trig = 0;
 	u64 me_le_uh = 0;
+	u64 ct_cache = 0;
 	union pte_cache_addr pte_cache_tag;
 	union eq_cache_addr eq_cache_tag;
 	union trig_op_cache_addr trig_op_cache_tag;
 	union psc_cache_addr me_le_uh_cache_tag;
+	union ct_cache_addr ct_cache_tag;
 	int time;
 	int cache_inval_timeout = dd->emulation ?
 		HFI_CACHE_INVALIDATION_TIMEOUT_MS_ZEBU :
@@ -4447,6 +4449,23 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 
 	write_csr(dd, FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL, me_le_uh);
 
+	/* invalidate ct cache */
+	ct_cache = (FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_CMD_MASK &
+			FXR_CACHE_CMD_INVALIDATE) <<
+			FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_CMD_SHIFT;
+	ct_cache_tag.val = 0;
+	ct_cache_tag.pid = ptl_pid;
+	ct_cache |= (FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_ADDRESS_MASK &
+			ct_cache_tag.val) <<
+			FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_ADDRESS_SHIFT;
+	ct_cache_tag.val = -1;
+	ct_cache_tag.pid = 0;
+	ct_cache |= (FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_MASK_ADDRESS_MASK &
+			ct_cache_tag.val) <<
+			FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_MASK_ADDRESS_SHIFT;
+	ct_cache |= FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_BUSY_SMASK;
+	write_csr(dd, FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL, ct_cache);
+
 	/* wait for completion, if timeout log a message */
 	for (time = 0; time < HFI_CACHE_INVALIDATION_TIMEOUT_MS; time++) {
 		mdelay(1);
@@ -4461,6 +4480,9 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 		if (me_le_uh & FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_BUSY_SMASK)
 			me_le_uh = read_csr(dd,
 					    FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL);
+		if (ct_cache & FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_BUSY_SMASK)
+			ct_cache = read_csr(dd,
+					    FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL);
 		if (!(pte & FXR_RXHP_CFG_PTE_CACHE_ACCESS_CTL_BUSY_SMASK) &&
 		    !(eq & FXR_RXET_CFG_EQ_DESC_CACHE_ACCESS_CTL_BUSY_SMASK) &&
 		    !(trig &
@@ -4481,6 +4503,9 @@ void hfi_pcb_reset(struct hfi_devdata *dd, u16 ptl_pid)
 				   cache_inval_timeout);
 		if (me_le_uh & FXR_RXHP_CFG_PSC_CACHE_ACCESS_CTL_BUSY_SMASK)
 			dd_dev_err(dd, "ME/LE/UH cache invalidation not done after %dms\n",
+				   cache_inval_timeout);
+		if (ct_cache & FXR_RXDMA_CFG_CT_CACHE_ACCESS_CTL_BUSY_SMASK)
+			dd_dev_err(dd, "CT cache invalidation not done after %dms\n",
 				   cache_inval_timeout);
 	}
 
