@@ -95,6 +95,7 @@ struct hfi_devdata *hfi_alloc_devdata(struct pci_dev *pdev)
 	}
 
 	dd->pport = (struct hfi_pportdata *)(dd + 1);
+	dd->num_pports = HFI_NUM_PPORTS;
 	return dd;
 }
 

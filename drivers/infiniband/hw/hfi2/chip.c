@@ -4200,7 +4200,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 	hfi_pend_cmdq_info_alloc(dd, &dd->pend_cmdq, "sys");
 
 	/* per port init */
-	dd->num_pports = HFI_NUM_PPORTS;
 	ret = hfi_pport_init(dd);
 	if (ret)
 		goto err_post_alloc;
