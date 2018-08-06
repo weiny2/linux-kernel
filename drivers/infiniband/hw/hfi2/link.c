@@ -2024,19 +2024,21 @@ static void handle_verify_cap(struct work_struct *work)
 
 	ppd->link_speed_active = 0;	/* invalid value */
 	/* actual rate is highest bit of the ANDed rates */
-	rate = 0;
-	switch (remote_max_rate) {
-	default:
-		ppd_dev_err(ppd, "invalid remote max rate %d, set up to 50G",
-			    remote_max_rate);
-		/* fall through */
-	case 0: /* 50G */
-		rate |= OPA_LINK_SPEED_50G; /* fall through */
-	case 1: /* 25G */
-		rate |= OPA_LINK_SPEED_25G | OPA_LINK_SPEED_12_5G;
-		break;
-	}
-	rate &= ppd->link_speed_enabled;
+
+	/*
+	 * TODO: Replace conditional with
+	 * if (simics)
+	 * 	rate = ppd->link_speed_enabled;
+	 * else
+	 * 	rate = remote_max_rate & ppd->link_speed_enabled;
+	 * when STL-43011 is fixed and allows distinguishing Simics from
+	 * silicon
+	 */
+	if (ppd->dd->emulation)
+		rate = remote_max_rate & ppd->link_speed_enabled;
+	else
+		rate = ppd->link_speed_enabled;
+
 	if (rate & OPA_LINK_SPEED_50G) {
 		ppd->link_speed_active = OPA_LINK_SPEED_50G;
 	} else if (rate & OPA_LINK_SPEED_25G) {
