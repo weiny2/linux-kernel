@@ -275,7 +275,7 @@
 #define STS_FM_VERSION_PATCH_MASK  0xff
 
 /* timeouts */
-#define TIMEOUT_8051_START 5000         /* 8051 start timeout, in ms */
+#define TIMEOUT_8051_START 50000        /* 8051 start timeout, in ms */
 #define CRK8051_COMMAND_TIMEOUT 20000	/* 8051 command timeout, in ms */
 
 /* valid values for the loopback module parameter */
