@@ -4165,17 +4165,6 @@ struct hfi_devdata *hfi_pci_dd_init(struct pci_dev *pdev,
 		dd->icode < ARRAY_SIZE(inames) ? inames[dd->icode] : "unknown",
 		(int)dd->pdev->revision);
 
-	/*
-	 * Workaround for https://hsdes.intel.com/appstore/article/#/2202720924.
-	 * MSI-X interrupts are not currently supported on FPGA emulation
-	 *
-	 * Workaround for https://sid-jira.pdx.intel.com/browse/STL-36858.
-	 * Do not load PE firmware until backdoor mechanism is in place or
-	 * FPGAs can handle firmware download from /lib/firmware.
-	 */
-	if (dd->icode == ICODE_FPGA_EMULATION)
-		no_interrupts = true;
-
 	if (dd->emulation) {
 		opafm_disable = true;
 	}
