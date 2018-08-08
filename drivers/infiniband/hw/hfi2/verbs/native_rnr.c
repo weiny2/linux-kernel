@@ -252,7 +252,7 @@ int hfi2_exit_rx_flow_ctl(struct hfi_ibcontext *ctx, u64 *eq)
 	       qp->r_flags & RVT_S_WAIT_RNR)
 		mdelay(5);
 
-	ret = hfi_set_qp_state(ctx, qp,
+	ret = hfi_set_qp_state(&ctx->cmdq->rx, qp,
 			       rdma_ah_get_dlid(&qp->remote_ah_attr),
 			       PTL_PID_ANY, VERBS_OK, false);
 	if (ret)
@@ -366,7 +366,8 @@ int hfi2_update_qp_sync(struct hfi_ibcontext *ctx, struct rvt_qp *qp)
 			// TODO - If QP using SRQ + in RTR deliver
 			// IBV_EVENT_COMM_EST
 		} else if (qp_priv->pidex_hdr_type == PID_EXCHANGE) {
-			ret = hfi_set_qp_state(ctx, qp, dlid,
+			ret = hfi_set_qp_state(&ctx->cmdq->rx,
+					       qp, dlid,
 					       qp_priv->tpid, VERBS_OK, false);
 			if (ret < 0)
 				return ret;

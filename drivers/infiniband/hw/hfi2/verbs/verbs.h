@@ -476,8 +476,6 @@ void hfi_send_cnp(struct hfi2_ibport *ibp, struct rvt_qp *qp, u8 sl,
 		  bool grh, bool use_16b);
 void process_rcv_qp_work(struct hfi2_ib_packet *packet);
 void hfi2_restart_rc(struct rvt_qp *qp, u32 psn, int wait);
-int hfi_user_set_qp_state(struct rvt_qp *qp, u16 eq_idx, u32 slid, u16 ipid,
-			  u8 state, bool failed, u64 user_ptr);
 
 void hfi_verbs_dbg_init(struct hfi_devdata *dd);
 #endif

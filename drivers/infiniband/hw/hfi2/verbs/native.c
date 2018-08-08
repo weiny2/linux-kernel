@@ -725,8 +725,7 @@ int hfi_format_qp_update_recv_eq(struct rvt_qp *qp, u64 user_ptr,
  * Most inputs for the QP_STATE entry come from the passed in RQ and QP.
  * If caller passes slid = zero, this formats command to clear the entry.
  */
-static
-int hfi_format_qp_write(struct rvt_qp *qp, u16 eq_idx,
+int hfi_format_qp_write(struct rvt_qp *qp,
 			u32 slid, u16 ipid, u64 user_ptr, u8 state, bool failed,
 			union hfi_rx_cq_command *cmd)
 {
@@ -734,6 +733,7 @@ int hfi_format_qp_write(struct rvt_qp *qp, u16 eq_idx,
 	struct hfi2_qp_priv *qp_priv = qp->priv;
 	union ptentry_verbs qp_state;
 	u32 pd_handle;
+	struct hfi_ibeq *eq = qp_priv->recv_eq;
 
 	pd_handle = to_pd_handle(ibqp->pd);
 	/* setup qp state */
@@ -751,7 +751,7 @@ int hfi_format_qp_write(struct rvt_qp *qp, u16 eq_idx,
 		qp_state.recvq_root = qp_priv->recvq_root;
 		qp_state.tpid = qp_priv->rq_ctx->pid;
 		qp_state.ipid = ipid;
-		qp_state.eq_handle = eq_idx;
+		qp_state.eq_handle = eq ? eq->eq.idx : 0;
 		qp_state.failed = failed;
 		qp_state.ud = (ibqp->qp_type == IB_QPT_UD);
 		qp_state.qp = 1;
@@ -765,7 +765,7 @@ int hfi_format_qp_write(struct rvt_qp *qp, u16 eq_idx,
 	cmd->state_verbs.flit0.c.qp_num  = ibqp->qp_num;
 	cmd->state_verbs.flit0.d.ni      = NATIVE_NI;
 	cmd->state_verbs.flit0.d.ct_handle = PTL_CT_NONE;
-	cmd->state_verbs.flit0.d.ncc     = user_ptr ? HFI_GEN_CC : HFI_NCC;
+	cmd->state_verbs.flit0.d.ncc     = HFI_GEN_CC;
 	cmd->state_verbs.flit0.d.command = QP_WRITE;
 	cmd->state_verbs.flit0.d.cmd_len = (sizeof(cmd->state_verbs) >> 5) - 1;
 	cmd->state_verbs.flit1.e.cmd_pid = qp_priv->rq_ctx->pid;
@@ -776,50 +776,21 @@ int hfi_format_qp_write(struct rvt_qp *qp, u16 eq_idx,
 	return 1;
 }
 
-int hfi_user_set_qp_state(struct rvt_qp *qp, u16 eq_idx, u32 slid, u16 ipid,
-			  u8 state, bool failed, u64 user_ptr)
-{
-	struct hfi2_qp_priv *qp_priv = qp->priv;
-	struct hfi2_ibtx *ibtx = qp_priv->s_ctx;
-	int ret, nslots;
-	union hfi_rx_cq_command rx_cmd;
-
-	nslots = hfi_format_qp_write(qp, eq_idx, slid, ipid,
-				     user_ptr, state, failed, &rx_cmd);
-	ret = hfi_pend_cmd_queue(&ibtx->pend_cmdq, &ibtx->cmdq.rx,
-				 NULL, &rx_cmd, nslots, GFP_KERNEL);
-	return ret;
-}
-
-int hfi_set_qp_state(struct hfi_ibcontext *ctx,
+int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq,
 		     struct rvt_qp *qp, u32 slid, u16 ipid,
 		     u8 state, bool failed)
 {
 	struct hfi2_qp_priv *qp_priv = qp->priv;
-	struct hfi_ibeq *eq = qp_priv->recv_eq;
-	struct hfi_cmdq *rx_cmdq;
 	int ret, nslots;
-	u64 user_ptr = 0;
+	u64 done = 0;
 	unsigned long flags;
 	union hfi_rx_cq_command rx_cmd;
 
 	if (!qp_priv->rq_ctx)
 		return 0;
 
-	if (ctx->is_user) {
-#if 0
-		user_ptr = HFI_SET_USER_PTR_QPN(qp->ibqp.qpnum);
-#endif
-		ret = hfi_user_set_qp_state(qp, PTL_EQ_NONE,
-					    slid, ipid, state,
-					    failed, user_ptr);
-		return ret;
-	}
-
-	nslots = hfi_format_qp_write(qp, eq ? eq->eq.idx : 0,
-				     slid, ipid, (u64)&user_ptr,
+	nslots = hfi_format_qp_write(qp, slid, ipid, (u64)&done,
 				     state, failed, &rx_cmd);
-	rx_cmdq = &ctx->cmdq->rx;
 	spin_lock_irqsave(&rx_cmdq->lock, flags);
 	do {
 		ret = hfi_rx_command(rx_cmdq, (u64 *)&rx_cmd, nslots);
@@ -827,7 +798,7 @@ int hfi_set_qp_state(struct hfi_ibcontext *ctx,
 	spin_unlock_irqrestore(&rx_cmdq->lock, flags);
 	/* If no error, process completion of above RX command */
 	if (!ret)
-		ret = hfi_eq_poll_cmd_complete(qp_priv->rq_ctx, &user_ptr);
+		ret = hfi_eq_poll_cmd_complete(qp_priv->rq_ctx, &done);
 	return ret;
 }
 
@@ -844,7 +815,7 @@ void hfi2_native_reset_qp(struct rvt_qp *qp)
 
 	/* Clear the QPN to PID mapping */
 	ctx = obj_to_ibctx(ibqp);
-	ret = hfi_set_qp_state(ctx, qp, 0, 0, VERBS_OK, false);
+	ret = hfi_set_qp_state(&ctx->cmdq->rx, qp, 0, 0, VERBS_OK, false);
 	/* TODO */
 	WARN_ON(ret != 0);
 
@@ -1189,9 +1160,10 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 	struct ib_qp *ibqp = &rvtqp->ibqp;
 	struct hfi2_qp_priv *qp_priv = rvtqp->priv;
 	struct hfi_ibcontext *ctx = obj_to_ibctx(ibqp);
+	struct hfi_cmdq *rx_cmdq = NULL;
 	int ret = 0;
 
-	/* verify kernel QP supports native verbs */
+	/* kernel and user QPs use different RX CMDQ */
 	if (!udata) {
 		if (ibqp->qp_type == IB_QPT_SMI || ibqp->qp_type == IB_QPT_GSI)
 			return 0;
@@ -1201,15 +1173,18 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 
 		if (!ctx || !ctx->supports_native)
 			return 0;
-		if (ctx->is_user)
-			return -EINVAL;
+		rx_cmdq = ctx->cmdq ? &ctx->cmdq->rx : NULL;
 	}
+#if 0
+	else
+		rx_cmdq = &ibp->cmdq_rx;
+#endif
 
-	if (qp_priv->tpid &&
+	if (rx_cmdq && qp_priv->tpid &&
 	    attr_mask & IB_QP_STATE &&
 	    (attr->qp_state == IB_QPS_ERR ||
 	     attr->qp_state == IB_QPS_RESET)) {
-		ret = hfi_set_qp_state(ctx, rvtqp,
+		ret = hfi_set_qp_state(rx_cmdq, rvtqp,
 				       rdma_ah_get_dlid(&rvtqp->remote_ah_attr),
 				       qp_priv->tpid, UNCORRECTABLE, true);
 		if (ret)
@@ -1221,23 +1196,25 @@ int hfi2_native_modify_qp(struct rvt_qp *rvtqp, struct ib_qp_attr *attr,
 		ret = hfi2_native_modify_kern_qp(rvtqp, attr, attr_mask);
 		if (ret)
 			return ret;
+		/* For kernel QPs entering INIT, CMDQ created above */
+		rx_cmdq = ctx->cmdq ? &ctx->cmdq->rx : NULL;
 	}
 
 	if ((ibqp->qp_type == IB_QPT_RC || ibqp->qp_type == IB_QPT_UC) &&
-	    attr_mask & IB_QP_STATE &&
+	    rx_cmdq && attr_mask & IB_QP_STATE &&
 	    attr->qp_state == IB_QPS_INIT) {
 		/* Initialize QP to accept PID exchange */
 		/* TODO - limit to IPID=0 */
-		ret = hfi_set_qp_state(ctx, rvtqp, PTL_LID_ANY,
+		ret = hfi_set_qp_state(rx_cmdq, rvtqp, PTL_LID_ANY,
 				       PTL_PID_ANY, VERBS_OK, false);
-	} else if (!udata && attr_mask & IB_QP_STATE &&
+	} else if (rx_cmdq && attr_mask & IB_QP_STATE &&
 		   attr->qp_state == IB_QPS_RTR) {
 		/*
 		 * Associate QP with hardware context and mark QP enabled.
 		 * Per IBTA, QPs can process incoming messages at RTR.
 		 */
 		if (ibqp->qp_type == IB_QPT_UD)
-			ret = hfi_set_qp_state(ctx, rvtqp, PTL_LID_ANY,
+			ret = hfi_set_qp_state(rx_cmdq, rvtqp, PTL_LID_ANY,
 					       PTL_PID_ANY, VERBS_OK, false);
 		else if (ibqp->qp_type == IB_QPT_RC ||
 			 ibqp->qp_type == IB_QPT_UC)

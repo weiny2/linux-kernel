@@ -286,7 +286,7 @@ int hfi2_poll_cq(struct ib_cq *cq, int ne, struct ib_wc *wc);
 int hfi2_req_notify_cq(struct ib_cq *cq, enum ib_cq_notify_flags flags);
 int hfi2_destroy_srq(struct ib_srq *ibsrq);
 void hfi2_qp_sync_comp_handler(struct ib_cq *cq, void *cq_context);
-int hfi_set_qp_state(struct hfi_ibcontext *ctx,
+int hfi_set_qp_state(struct hfi_cmdq *rx_cmdq,
 		     struct rvt_qp *qp, u32 slid, u16 ipid,
 		     u8 state, bool failed);
 int hfi2_fence(struct hfi_ibcontext *ctx, struct rvt_qp *qp, u32 *fence_value);

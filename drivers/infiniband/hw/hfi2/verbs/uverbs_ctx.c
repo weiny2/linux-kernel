@@ -492,82 +492,6 @@ int hfi2_at_prefetch_handler(struct ib_device *ib_dev,
 	return hfi_at_prefetch(ctx, &atpf_args);
 }
 
-int hfi2_set_qp_state_handler(struct ib_device *ib_dev,
-			      struct ib_uverbs_file *file,
-			      struct uverbs_attr_bundle *attrs)
-{
-	const struct uverbs_attr *uattr;
-	struct ib_qp *ibqp;
-	struct rvt_qp *qp;
-	struct hfi2_qp_priv *qp_priv;
-	struct hfi_ctx *hw_ctx;
-	u32 slid = PTL_LID_ANY;
-	u16 eq_idx, recvq_root, tpid = PTL_PID_ANY;
-	u64 user_ptr;
-	int ret;
-
-	uattr = uverbs_attr_get(attrs, HFI2_SET_QP_CTX_IDX);
-	if (unlikely(IS_ERR(uattr)))
-		return PTR_ERR(uattr);
-	hw_ctx = uattr->obj_attr.uobject->object;
-	if (unlikely(!hw_ctx))
-		return -ENOENT;
-
-	uattr = uverbs_attr_get(attrs, HFI2_SET_QP_IDX);
-	if (unlikely(IS_ERR(uattr)))
-		return PTR_ERR(uattr);
-	ibqp = uattr->obj_attr.uobject->object;
-	if (unlikely(!ibqp))
-		return -ENOENT;
-
-	ret = uverbs_copy_from(&user_ptr, attrs,
-			       HFI2_SET_QP_USER_PTR);
-	if (ret)
-		return ret;
-	/*
-	 * If no user_ptr provided, then we are only being asked
-	 * to update the QP's associated receive context and return.
-	 * Subsequent MODIFY_QP calls will then be able to issue the
-	 * early QP_WRITE commands and initiate PID exchange.
-	 * TODO - might be another way to do this?
-	 */
-	if (!user_ptr) {
-		qp_priv->rq_ctx = hw_ctx;
-		return 0;
-	}
-
-	ret = uverbs_copy_from(&eq_idx, attrs,
-			       HFI2_SET_QP_RECV_EQ_IDX);
-	if (ret)
-		return ret;
-	if (!eq_idx)
-		return -EINVAL;
-
-	ret = uverbs_copy_from(&recvq_root, attrs,
-			       HFI2_SET_QP_RECVQ_ROOT);
-	if (ret)
-		return ret;
-
-	qp = ibqp_to_rvtqp(ibqp);
-	qp_priv = qp->priv;
-	if (ibqp->qp_type != IB_QPT_UD) {
-		ret = uverbs_copy_from(&tpid, attrs,
-				       HFI2_SET_QP_TPID);
-		if (ret)
-			return ret;
-		if (!tpid)
-			return -EINVAL;
-		slid = rdma_ah_get_dlid(&qp->remote_ah_attr);
-	}
-	qp_priv->rq_ctx = hw_ctx;
-	qp_priv->tpid = tpid;
-	qp_priv->recvq_root = recvq_root;
-
-	/* Update RECVQ_EQ, RECVQ_ROOT, and TPID in hardware QP table */
-	return hfi_user_set_qp_state(qp, eq_idx, slid, qp_priv->tpid,
-				     VERBS_OK, false, user_ptr);
-}
-
 DECLARE_UVERBS_METHOD(hfi2_ctx_attach, HFI2_CTX_ATTACH,
 		      hfi2_ctx_attach_handler,
 		      &UVERBS_ATTR_IDR(
@@ -653,32 +577,6 @@ DECLARE_UVERBS_METHOD(hfi2_at_prefetch, HFI2_AT_PREFETCH,
 		      &UVERBS_ATTR_PTR_IN(
 				HFI2_AT_PREFETCH_FLAGS, uint32_t,
 				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
-
-DECLARE_UVERBS_METHOD(hfi2_set_qp_state, HFI2_CTX_SET_QP,
-		      hfi2_set_qp_state_handler,
-		      &UVERBS_ATTR_IDR(
-				HFI2_SET_QP_IDX, UVERBS_OBJECT_QP,
-				UVERBS_ACCESS_WRITE,
-				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-		      &UVERBS_ATTR_IDR(
-				HFI2_SET_QP_CTX_IDX,
-				UVERBS_CREATE_NS_INDEX(HFI2_OBJECT_CTX,
-						       HFI2_OBJECTS),
-				UVERBS_ACCESS_READ,
-				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-		      &UVERBS_ATTR_PTR_IN(
-				HFI2_SET_QP_RECV_EQ_IDX, u16,
-				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-		      &UVERBS_ATTR_PTR_IN(
-				HFI2_SET_QP_RECVQ_ROOT, u16,
-				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-		      &UVERBS_ATTR_PTR_IN(
-				HFI2_SET_QP_TPID, u16,
-				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)),
-		      &UVERBS_ATTR_PTR_IN(
-				HFI2_SET_QP_USER_PTR, u64,
-				UA_FLAGS(UVERBS_ATTR_SPEC_F_MANDATORY)));
-
 /*
  * Destroy order for hfi ctx is 1 so that the cmdqs are destroyed before
  * the ctx
@@ -692,5 +590,4 @@ DECLARE_UVERBS_OBJECT(hfi2_object_ctx,
 		      &hfi2_ctx_detach,
 		      &hfi2_ctx_event_cmd,
 		      &hfi2_pt_update_lower,
-		      &hfi2_at_prefetch,
-		      &hfi2_set_qp_state);
+		      &hfi2_at_prefetch);
