@@ -762,7 +762,7 @@ int hfi_eq_zero_assign(struct hfi_ctx *ctx)
 		if (!eq_assign.base)
 			return -ENOMEM;
 
-		if ((ctx->pid == HFI_PID_SYSTEM) && !ni)
+		if (!no_interrupts && (ctx->pid == HFI_PID_SYSTEM) && !ni)
 			/*
 			 * system PID EQ 0 needs to handle
 			 * E2E connect/destroy events
