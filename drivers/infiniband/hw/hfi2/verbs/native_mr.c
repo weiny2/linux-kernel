@@ -168,7 +168,6 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 	unsigned long flags;
 	int ret;
 	u64 done = 0;
-	struct hfi2_ibport *ibp;
 
 	/* Check LKEY */
 	if (!ctx || LKEY_INDEX(mr->lkey) >= ctx->lkey_ks.num_keys)
@@ -191,8 +190,9 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 			ret = hfi_eq_poll_cmd_complete(rkey_ctx, &done);
 			WARN_ON(ret != 0);
 		} else {
-			ibp = to_hfi_ibp(ctx->ibuc.device, 1);
 			hfi_process_t pt;
+			struct hfi2_ibport *ibp = to_hfi_ibp(ctx->ibuc.device,
+							     1);
 			int tx_idx = rkey_ctx->pid &
 				     (ibp->ibd->num_send_cmdqs - 1);
 			struct hfi2_ibtx *ibtx = &ibp->port_tx[tx_idx];
@@ -232,7 +232,7 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 	int ret;
 	u32 me_options, pd_handle;
 	u64 done = 0;
-	int *donep = &done;
+	u64 donep = (u64)&done;
 	unsigned long flags;
 	struct hfi_cmdq *rx_cmdq;
 	struct hfi2_ibtx *ibtx;
@@ -270,7 +270,7 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 
 		ibtx = &ibp->port_tx[tx_idx];
 		rx_cmdq = &ibtx->cmdq.rx;
-		donep = 0xC000000000000000;
+		donep = (u64)0xC000000000000000;
 	}
 	if ((mr->segs_per_map == mr->max_segs) &&
 	    mr->map[0]->segs[0].length < mr->length) {
