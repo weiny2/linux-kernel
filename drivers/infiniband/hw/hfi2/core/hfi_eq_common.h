@@ -328,10 +328,11 @@ static inline
 int hfi_eq_poll_cmd_complete(struct hfi_ctx *ctx, u64 *done)
 {
 	int ret;
+	unsigned long flags;
 
-	spin_lock(&ctx->eq_lock);
+	spin_lock_irqsave(&ctx->eq_lock, flags);
 	ret = _hfi_eq_poll_cmd_complete(ctx, done);
-	spin_unlock(&ctx->eq_lock);
+	spin_unlock_irqrestore(&ctx->eq_lock, flags);
 	return ret;
 }
 
