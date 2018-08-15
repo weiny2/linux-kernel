@@ -107,7 +107,7 @@
 #define HFI_FRAG_SUCCESS \
 	FXR_TXOTR_PKT_CFG_FRAG_ENG_AUTHENTICATION_SUCCESSFUL_SMASK
 #define HFI_FPE_DATA_MEM_ACCESS_VALID \
-	FXR_TXOTR_PKT_DBG_FPE_DATA_MEM_ACCESS_VALID_SMASK
+	FXR_TXOTR_PKT_CFG_FPE_DATA_MEM_ACCESS_VALID_SMASK
 
 /* the file itself */
 struct firmware_file {
@@ -151,20 +151,20 @@ static void hfi_write_bufpe_prog_mem(struct hfi_devdata *dd, u8 *data,
 {
 	u64 pl = 0;
 
-	pl = (FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_PAYLOAD0_DATA_MASK &
+	pl = (FXR_TXOTR_MSG_CFG_BPE_PROG_MEM_PAYLOAD0_DATA_MASK &
 	      *(u32 *)&data[off]) <<
-	      FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_PAYLOAD0_DATA_SHIFT;
+	      FXR_TXOTR_MSG_CFG_BPE_PROG_MEM_PAYLOAD0_DATA_SHIFT;
 
-	mem &= ~(FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_ACCESS_ADDRESS_SMASK |
-		 FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_ACCESS_VALID_SMASK);
+	mem &= ~(FXR_TXOTR_MSG_CFG_BPE_PROG_MEM_ACCESS_ADDRESS_SMASK |
+		 FXR_TXOTR_MSG_CFG_BPE_PROG_MEM_ACCESS_VALID_SMASK);
 	/* FXRTODO: check if ADDRESS_MASK needs to be updated */
-	mem |= ((FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_ACCESS_ADDRESS_MASK &
+	mem |= ((FXR_TXOTR_MSG_CFG_BPE_PROG_MEM_ACCESS_ADDRESS_MASK &
 		(off >> 2)) <<
-		FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_ACCESS_ADDRESS_SHIFT) |
-		FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_ACCESS_VALID_SMASK;
+		FXR_TXOTR_MSG_CFG_BPE_PROG_MEM_ACCESS_ADDRESS_SHIFT) |
+		FXR_TXOTR_MSG_CFG_BPE_PROG_MEM_ACCESS_VALID_SMASK;
 
-	write_csr(dd, FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_PAYLOAD0, pl);
-	write_csr(dd, FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_ACCESS, mem);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_BPE_PROG_MEM_PAYLOAD0, pl);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_BPE_PROG_MEM_ACCESS, mem);
 	/* FXRTODO: uncomment after valid field checking is
 	 * implemented
 	 */
@@ -194,16 +194,16 @@ static void hfi_write_bufpe_data_mem(struct hfi_devdata *dd, u8 *data,
 	else
 		pl = *(u64 *)&data[off];
 
-	mem &= ~(FXR_TXOTR_MSG_DBG_BPE_DATA_MEM_ACCESS_ADDRESS_SMASK |
-		 FXR_TXOTR_MSG_DBG_BPE_DATA_MEM_ACCESS_VALID_SMASK);
+	mem &= ~(FXR_TXOTR_MSG_CFG_BPE_DATA_MEM_ACCESS_ADDRESS_SMASK |
+		 FXR_TXOTR_MSG_CFG_BPE_DATA_MEM_ACCESS_VALID_SMASK);
 	/* FXRTODO: check if ADDRESS_MASK needs to be updated */
-	mem |= ((FXR_TXOTR_MSG_DBG_BPE_DATA_MEM_ACCESS_ADDRESS_MASK &
+	mem |= ((FXR_TXOTR_MSG_CFG_BPE_DATA_MEM_ACCESS_ADDRESS_MASK &
 		(off >> 3)) <<
-		FXR_TXOTR_MSG_DBG_BPE_DATA_MEM_ACCESS_ADDRESS_SHIFT) |
-		FXR_TXOTR_MSG_DBG_BPE_DATA_MEM_ACCESS_VALID_SMASK;
+		FXR_TXOTR_MSG_CFG_BPE_DATA_MEM_ACCESS_ADDRESS_SHIFT) |
+		FXR_TXOTR_MSG_CFG_BPE_DATA_MEM_ACCESS_VALID_SMASK;
 
-	write_csr(dd, FXR_TXOTR_MSG_DBG_BPE_DATA_MEM_PAYLOAD0, pl);
-	write_csr(dd, FXR_TXOTR_MSG_DBG_BPE_DATA_MEM_ACCESS, mem);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_BPE_DATA_MEM_PAYLOAD0, pl);
+	write_csr(dd, FXR_TXOTR_MSG_CFG_BPE_DATA_MEM_ACCESS, mem);
 	/* FXRTODO: uncomment after valid field checking is
 	 * implemented
 	 */
@@ -227,20 +227,20 @@ static void hfi_write_fragpe_prog_mem(struct hfi_devdata *dd, u8 *data,
 {
 	u64 pl = 0;
 
-	pl = (FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_PAYLOAD0_DATA_MASK &
+	pl = (FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_PAYLOAD0_DATA_MASK &
 	      *(u32 *)&data[off]) <<
-	      FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_PAYLOAD0_DATA_SHIFT;
+	      FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_PAYLOAD0_DATA_SHIFT;
 
-	mem &= ~(FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_ADDRESS_SMASK |
-		 FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_VALID_SMASK);
+	mem &= ~(FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS_ADDRESS_SMASK |
+		 FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS_VALID_SMASK);
 	/* FXRTODO: check if ADDRESS_MASK needs to be updated */
-	mem |= ((FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_ADDRESS_MASK &
+	mem |= ((FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS_ADDRESS_MASK &
 		(off >> 2)) <<
-		FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_ADDRESS_SHIFT) |
-		FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_VALID_SMASK;
+		FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS_ADDRESS_SHIFT) |
+		FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS_VALID_SMASK;
 
-	write_csr(dd, FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_PAYLOAD0, pl);
-	write_csr(dd, FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS, mem);
+	write_csr(dd, FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_PAYLOAD0, pl);
+	write_csr(dd, FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS, mem);
 	/* FXRTODO: uncomment after valid field checking is implemented */
 	/*count = 0;
 	 *do {
@@ -267,16 +267,16 @@ static void hfi_write_fragpe_data_mem(struct hfi_devdata *dd, u8 *data, u32 off,
 	else
 		pl = *(u64 *)&data[off];
 
-	mem &= ~(FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_ADDRESS_SMASK |
-		 FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_VALID_SMASK);
+	mem &= ~(FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS_ADDRESS_SMASK |
+		 FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS_VALID_SMASK);
 	/* FXRTODO: check if ADDRESS_MASK needs to be updated */
-	mem |= ((FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_ADDRESS_MASK &
+	mem |= ((FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS_ADDRESS_MASK &
 		(off >> 3)) <<
-		FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_ADDRESS_SHIFT) |
-		FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS_VALID_SMASK;
+		FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS_ADDRESS_SHIFT) |
+		FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS_VALID_SMASK;
 
-	write_csr(dd, FXR_TXOTR_PKT_DBG_FPE_DATA_MEM_PAYLOAD0, pl);
-	write_csr(dd, FXR_TXOTR_PKT_DBG_FPE_DATA_MEM_ACCESS, mem);
+	write_csr(dd, FXR_TXOTR_PKT_CFG_FPE_DATA_MEM_PAYLOAD0, pl);
+	write_csr(dd, FXR_TXOTR_PKT_CFG_FPE_DATA_MEM_ACCESS, mem);
 	/* FXRTODO: uncomment after valid field checking is
 	 * implemented
 	 */
@@ -1104,7 +1104,7 @@ static int write_bufpe_prog_mem(struct hfi_devdata *dd, u8 *data, u32 len)
 	u32 offset;
 	u64 mem = 0;
 
-	mem = read_csr(dd, FXR_TXOTR_MSG_DBG_BPE_PROG_MEM_ACCESS);
+	mem = read_csr(dd, FXR_TXOTR_MSG_CFG_BPE_PROG_MEM_ACCESS);
 
 	for (offset = 0; offset < len; offset += 4)
 		hfi_write_bufpe_prog_mem(dd, data, offset, mem);
@@ -1117,7 +1117,7 @@ static int write_bufpe_data_mem(struct hfi_devdata *dd, u8 *data, u32 len)
 	u32 offset;
 	u64 mem = 0;
 
-	mem = read_csr(dd, FXR_TXOTR_MSG_DBG_BPE_DATA_MEM_ACCESS);
+	mem = read_csr(dd, FXR_TXOTR_MSG_CFG_BPE_DATA_MEM_ACCESS);
 	for (offset = 0; offset < len; offset += 8)
 		hfi_write_bufpe_data_mem(dd, data, offset, mem, len);
 
@@ -1129,7 +1129,7 @@ static int write_fragpe_prog_mem(struct hfi_devdata *dd, u8 *data, u32 len)
 	u32 offset;
 	u64 mem = 0;
 
-	mem = read_csr(dd, FXR_TXOTR_PKT_DBG_FPE_PROG_MEM_ACCESS);
+	mem = read_csr(dd, FXR_TXOTR_PKT_CFG_FPE_PROG_MEM_ACCESS);
 
 	for (offset = 0; offset < len; offset += 4)
 		hfi_write_fragpe_prog_mem(dd, data, offset, mem);
@@ -1142,7 +1142,7 @@ static int write_fragpe_data_mem(struct hfi_devdata *dd, u8 *data, u32 len)
 	u32 offset;
 	u64 mem = 0;
 
-	mem = read_csr(dd, FXR_TXOTR_PKT_DBG_FPE_DATA_MEM_ACCESS);
+	mem = read_csr(dd, FXR_TXOTR_PKT_CFG_FPE_DATA_MEM_ACCESS);
 
 	for (offset = 0; offset < len; offset += 8)
 		hfi_write_fragpe_data_mem(dd, data, offset, mem, len);
@@ -1369,7 +1369,7 @@ authenticate_hdrpe(struct hfi_devdata *dd)
 	u64 authentication_complete_smask =
 		FXR_RXHP_CFG_HDR_PE_AUTHENTICATION_COMPLETE_SMASK;
 	u64 authentication_success_smask =
-		FXR_RXHP_CFG_HDR_PE_AUTHENTICATION_SUCCESS_SMASK;
+		FXR_RXHP_CFG_HDR_PE_AUTHENTICATION_SUCCESSFUL_SMASK;
 	u64 pe_enable_smask =
 		FXR_RXHP_CFG_HDR_PE_PE_ENABLE_SMASK;
 
