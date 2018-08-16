@@ -179,6 +179,18 @@ bool pid_reuse = true;
 module_param_named(pid_reuse, pid_reuse, bool, 0444);
 MODULE_PARM_DESC(pid_reuse, "Set to false to disallow pid reuse");
 
+/*
+ * This module parameter works around a few RTL bugs exposed in Zebu and FPGA.
+ * Here are the HSDs tracking those bugs:
+ *  https://hsdes.intel.com/resource/2203684917
+ *  https://hsdes.intel.com/resource/2203684936
+ *  https://hsdes.intel.com/resource/2203684938
+ */
+/* FXRTODO: Remove this once Silicon is stable */
+bool check_pkeys = true;
+module_param_named(check_pkeys, check_pkeys, bool, 0444);
+MODULE_PARM_DESC(check_pkeys, "Set to true to allow Pkey checks");
+
 bool lni_debug = false;
 module_param_named(lni_debug, lni_debug, bool, 0444);
 MODULE_PARM_DESC(lni_debug, "Disabled by default. Set to enable the Link trace manager");
@@ -419,7 +431,7 @@ static void hfi_init_rx_e2e_csrs(const struct hfi_devdata *dd)
 	write_csr(dd, FXR_RXE2E_CFG_VALID_TC_SLID, tc_slid);
 
 	/* FXRTODO: Disable Pkey checks since DV has not validated it */
-	if (dd->emulation)
+	if (!check_pkeys)
 		write_csr(dd, FXR_RXE2E_CFG_PTL_PKEY_CHECK_DISABLE,
 			  PKEY_DISABLE_SMASK);
 }
@@ -580,7 +592,7 @@ static void hfi_init_tx_otr_csrs(const struct hfi_devdata *dd)
 
 	hfi_init_tx_otr_mtu(dd, HFI_DEFAULT_ACTIVE_MTU);
 
-	if (dd->emulation) {
+	if (!check_pkeys) {
 		/* FXRTODO: Why is this emulation specific? */
 		write_csr(dd, FXR_TXOTR_MSG_CFG_RENDEZVOUS_RC, 0x0);
 		/* FXRTODO: Disable Pkey checks since DV has not validated it */
@@ -1278,8 +1290,8 @@ void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 	/* Enable input/output LM checking */
 	hfi_cfg_lm_pkey_check(ppd, enable);
 
-	/* Always disable PTL_PKEY check in ZEBU and FPGA until validated */
-	if (ppd->dd->emulation)
+	/* Allow PTL_PKEY check disable until validated */
+	if (!check_pkeys)
 		hfi_cfg_ptl_pkey_check(ppd, 0);
 	else
 		hfi_cfg_ptl_pkey_check(ppd, enable);
@@ -1290,7 +1302,7 @@ void hfi_cfg_pkey_check(struct hfi_pportdata *ppd, u8 enable)
 static void hfi_set_ptl_pkey_entry(struct hfi_devdata *dd, u16 pkey, u8 id)
 {
 	/* Disable on ZEBU for now until known-working */
-	if (dd->emulation)
+	if (!check_pkeys)
 		return;
 
 	write_csr(dd, FXR_TXOTR_PKT_CFG_PTL_PKEY_TABLE + 8 * id, pkey);
