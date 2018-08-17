@@ -93,12 +93,6 @@ static int hfi2_ctx_attach_handler(struct ib_device *ib_dev,
 	ctx_assign.trig_op_count = cmd.trig_op_count;
 
 	ret = hfi_ctx_attach(ctx, &ctx_assign);
-
-	if (ctx_assign.flags & HFI_CTX_FLAG_ALLOCATE_RKEYS) {
-		uc->lkey_only = false;
-		uc->hw_ctx[uc->num_ctx++] = ctx;
-		hfi2_add_keys(uc, ctx);
-	}
 	if (ret)
 		goto err_attach;
 

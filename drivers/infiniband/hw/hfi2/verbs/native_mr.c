@@ -77,25 +77,6 @@ hfi2_rkey_to_hw_ctx(struct hfi_ibcontext *ctx, uint32_t rkey)
 	return hw_ctx;
 }
 
-static int hfi2_user_rkey_write(struct hfi2_ibtx *ibtx, hfi_ni_t ni,
-				const void *logical_addr, const void *start,
-				hfi_size_t length, hfi_process_t match_id,
-				hfi_id_t id, u32 pd, u32 rkey,
-				hfi_me_options_t me_options, u64 user_ptr,
-				u8 valid)
-{
-	union hfi_rx_cq_command cmd __aligned(64);
-	int slots, rc;
-
-	slots = hfi_format_rkey_write(ni, logical_addr, start, length, match_id,
-				      id, pd, rkey, me_options, HFI_CT_NONE,
-				      user_ptr,  HFI_GEN_CC, valid, &cmd);
-		/* Queue write, don't wait. */
-	rc = hfi_pend_cmd_queue(&ibtx->pend_cmdq, &ibtx->cmdq.rx, NULL, &cmd,
-				slots, GFP_KERNEL);
-	return rc;
-}
-
 int hfi2_alloc_lkey(struct rvt_mregion *mr, int acc_flags, bool dma_region)
 {
 	struct hfi_ibcontext *ctx = NULL;
@@ -168,7 +149,6 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 	unsigned long flags;
 	int ret;
 	u64 done = 0;
-	struct hfi2_ibport *ibp;
 
 	/* Check LKEY */
 	if (!ctx || LKEY_INDEX(mr->lkey) >= ctx->lkey_ks.num_keys)
@@ -181,26 +161,14 @@ int hfi2_free_lkey(struct rvt_mregion *mr)
 		ret = hfi2_push_key(&ctx->rkey_ks, mr->rkey);
 		/* If this fails we've somehow leaked an RKEY, but is freed */
 		WARN_ON(ret != 0);
-		if (!ctx->is_user) {
-			spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
-			ret = hfi_rkey_invalidate(&ctx->cmdq->rx, mr->rkey,
-						  (u64)&done);
-			spin_unlock_irqrestore(&ctx->cmdq->rx.lock, flags);
-			WARN_ON(ret != 0);
 
-			ret = hfi_eq_poll_cmd_complete(rkey_ctx, &done);
-			WARN_ON(ret != 0);
-		} else {
-			ibp = to_hfi_ibp(ctx->ibuc.device, 1);
-			hfi_process_t pt;
-			int tx_idx = rkey_ctx->pid &
-				     (ibp->ibd->num_send_cmdqs - 1);
-			struct hfi2_ibtx *ibtx = &ibp->port_tx[tx_idx];
-			u64  donep = 0xC000000000000000;
+		spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
+		ret = hfi_rkey_invalidate(&ctx->cmdq->rx, mr->rkey, (u64)&done);
+		spin_unlock_irqrestore(&ctx->cmdq->rx.lock, flags);
+		WARN_ON(ret != 0);
 
-			hfi2_user_rkey_write(ibtx, 0, 0, 0, 0, pt, 0, 0,
-					     mr->rkey, 0, donep, 0);
-		}
+		ret = hfi_eq_poll_cmd_complete(rkey_ctx, &done);
+		WARN_ON(ret != 0);
 	}
 
 	/* We skip free of the reserved LKEY for kernel DMA */
@@ -232,13 +200,9 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 	int ret;
 	u32 me_options, pd_handle;
 	u64 done = 0;
-	int *donep = &done;
 	unsigned long flags;
-	struct hfi_cmdq *rx_cmdq;
-	struct hfi2_ibtx *ibtx;
 
-	if (!ctx || (!ctx->supports_native && !ctx->is_user) ||
-	    ctx->lkey_only || IS_INVALID_KEY(mr->rkey))
+	if (!ctx || !ctx->supports_native || IS_INVALID_KEY(mr->rkey))
 		return 0;
 
 	/* for fast MR, wait until the work request */
@@ -263,15 +227,7 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 	rkey_ctx = hfi2_rkey_to_hw_ctx(ctx, mr->rkey);
 	if (!rkey_ctx)
 		return -EINVAL;
-	rx_cmdq = &ctx->cmdq->rx;
-	if (ctx->is_user) {
-		struct hfi2_ibport *ibp = to_hfi_ibp(ctx->ibuc.device, 1);
-		int tx_idx = rkey_ctx->pid & (ibp->ibd->num_send_cmdqs - 1);
 
-		ibtx = &ibp->port_tx[tx_idx];
-		rx_cmdq = &ibtx->cmdq.rx;
-		donep = 0xC000000000000000;
-	}
 	if ((mr->segs_per_map == mr->max_segs) &&
 	    mr->map[0]->segs[0].length < mr->length) {
 		int length = 0;
@@ -291,46 +247,28 @@ int hfi2_native_reg_mr(struct rvt_mregion *mr)
 				n = 0;
 			}
 		}
-		spin_lock_irqsave(&rx_cmdq->lock, flags);
-		if (!ctx->is_user) {
-			ret = hfi_rkey_write(rx_cmdq, NATIVE_NI,
-					     (const void *)mr->iova,
-					     (struct hfi_iovec *)mr->map[0],
-					     mr->length, pt, rkey_ctx->ptl_uid,
-					     pd_handle, mr->rkey, me_options,
-					     HFI_CT_NONE, (u64)donep);
-			ret = hfi_eq_poll_cmd_complete(rkey_ctx, &done);
-		} else {
-			ret = hfi2_user_rkey_write(ibtx, NATIVE_NI,
-						   (const void *)mr->iova,
-						   (void *)mr->map[0],
-						   mr->length, pt,
-						   rkey_ctx->ptl_uid, pd_handle,
-						   mr->rkey, me_options,
-						   (u64)donep, 1);
-		}
+		spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
+		ret = hfi_rkey_write(&ctx->cmdq->rx, NATIVE_NI,
+				     (const void *)mr->iova,
+				     (struct hfi_iovec *)mr->map[0], mr->length,
+				     pt, rkey_ctx->ptl_uid,
+				     pd_handle, mr->rkey, me_options,
+				     HFI_CT_NONE, (u64)&done);
 	} else {
 		WARN_ON(mr->map[0]->segs[0].length < mr->length);
-		spin_lock_irqsave(&rx_cmdq->lock, flags);
-		if (!ctx->is_user) {
-			ret = hfi_rkey_write(rx_cmdq, NATIVE_NI,
-					     (const void *)mr->iova,
-					     mr->map[0]->segs[0].vaddr,
-					     mr->length, pt, rkey_ctx->ptl_uid,
-					     pd_handle, mr->rkey, me_options,
-					     HFI_CT_NONE, (u64)donep);
-			ret = hfi_eq_poll_cmd_complete(rkey_ctx, &done);
-		} else {
-			ret = hfi2_user_rkey_write(ibtx, NATIVE_NI,
-						   (const void *)mr->iova,
-						   mr->map[0]->segs[0].vaddr,
-						   mr->length, pt,
-						   rkey_ctx->ptl_uid, pd_handle,
-						   mr->rkey, me_options,
-						   (u64)donep, 1);
-		}
+		spin_lock_irqsave(&ctx->cmdq->rx.lock, flags);
+		ret = hfi_rkey_write(&ctx->cmdq->rx, NATIVE_NI,
+				     (const void *)mr->iova,
+				     mr->map[0]->segs[0].vaddr,
+				     mr->length, pt, rkey_ctx->ptl_uid,
+				     pd_handle, mr->rkey, me_options,
+				     HFI_CT_NONE, (u64)&done);
 	}
-	spin_unlock_irqrestore(&rx_cmdq->lock, flags);
+	spin_unlock_irqrestore(&ctx->cmdq->rx.lock, flags);
+	if (ret)
+		return ret;
+
+	ret = hfi_eq_poll_cmd_complete(rkey_ctx, &done);
 	return ret;
 }
 
