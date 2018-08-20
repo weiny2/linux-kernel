@@ -707,8 +707,7 @@ int hfi_eq_assign(struct hfi_ctx *ctx, struct opa_ev_assign *eq_assign)
 	eq_desc.sz = eq_assign->jumbo;
 	eq_desc.start = (eq_assign->base >> PAGE_SHIFT);
 	eq_desc.ni = eq_assign->ni;
-	/* Disable all interrupts for event queues to workaround 1407227170 */
-	if (!dd->emulation) {
+	if (!no_interrupts) {
 		eq_desc.irq = irq_idx;
 		eq_desc.i = (eq_assign->mode & OPA_EV_MODE_BLOCKING);
 	}

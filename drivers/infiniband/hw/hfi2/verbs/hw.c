@@ -922,7 +922,7 @@ int _hfi2_rcv_wait(struct hfi2_ibrcv *rcv, u64 **rhf_entry)
 	int rc;
 	bool dropped = false;
 
-	rc = hfi_eq_wait_irq(&rcv->eq, rcv->eq.ctx->devdata->emulation ? 1 : -1,
+	rc = hfi_eq_wait_irq(&rcv->eq, -1,
 			     rhf_entry, &dropped);
 	if (rc == -ETIME || rc == -ERESTARTSYS) {
 		/* timeout or wait interrupted, not abnormal */
@@ -1274,19 +1274,6 @@ void hfi2_ctx_uninit(struct hfi2_ibdev *ibd)
 	hfi_ctx_cleanup(&ibd->sm_ctx);
 }
 
-static int hfi2_send_wait(void *data)
-{
-	struct hfi2_ibtx *ibtx = data;
-
-	allow_signal(SIGINT);
-	while (!kthread_should_stop()) {
-		hfi2_send_event(&ibtx->send_eq, data);
-		msleep(20);
-		schedule();
-	}
-	return 0;
-}
-
 static int hfi2_ibtx_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 			  struct hfi2_ibtx *ibtx, int idx)
 {
@@ -1373,17 +1360,6 @@ int hfi2_ctx_init_port(struct hfi2_ibport *ibp)
 		if (ret)
 			goto ctx_init_err;
 	}
-
-	for (i = 0; i < ibd->num_send_cmdqs; i++) {
-		if (ibp->ibd->dd->emulation) {
-			struct task_struct *send_task;
-			/* FXRTODO: Need to destroy this kthread during uninit */
-			/* kthread create and wait for TX events! */
-			send_task = kthread_run(hfi2_send_wait, &ibp->port_tx[i], "hfi2_ibsend");
-			BUG_ON(IS_ERR(send_task));
-		}
-	}
-
 	return 0;
 
 ctx_init_err:

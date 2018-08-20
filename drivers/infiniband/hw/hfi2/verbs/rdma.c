@@ -736,12 +736,6 @@ int hfi2_rcv_wait(void *data)
 
 			/* mark RHF entry as processed */
 			hfi2_rcv_advance(rcv, rhf_entry);
-		} else {
-			if (ibp->ppd->dd->emulation) {
-				cpu_relax();
-				schedule();
-				msleep(20);
-			}
 		}
 		/* Process any pending acks when there are no events pending */
 		if (pkt.numpkt && !hfi_eq_wait_condition(&rcv->eq)) {
