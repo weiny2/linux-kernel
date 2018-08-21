@@ -196,7 +196,6 @@ int hfi_job_attach(struct hfi_ibcontext *uc, int mode, u64 cookie,
 
 int hfi_job_setup(struct hfi_ctx *ctx, struct hfi_job_setup_args *job_setup)
 {
-#ifdef CONFIG_HFI2_STLNP
 	struct ib_ujob_object *obj;
 	int ret;
 	u16 pid_base;
@@ -249,8 +248,6 @@ int hfi_job_setup(struct hfi_ctx *ctx, struct hfi_job_setup_args *job_setup)
 		ctx->res.auth_uid[0], obj->job_res_mode, obj->sid);
 done:
 	return ret;
-#endif
-	return 0;
 }
 
 /*
@@ -264,7 +261,6 @@ done:
  */
 void hfi_job_free(struct hfi_ctx *ctx)
 {
-#ifdef CONFIG_HFI2_STLNP
 	struct ib_ujob_object *obj;
 
 	obj = container_of(ctx->uobject, typeof(*obj), uobject);
@@ -288,7 +284,6 @@ void hfi_job_free(struct hfi_ctx *ctx)
 		ctx->res.pid_count = 0;
 		ctx->res.dlid_base = HFI_LID_NONE;
 	}
-#endif
 }
 
 int hfi2_job_setup_handler(struct ib_device *ib_dev,
@@ -415,7 +410,6 @@ int hfi2_dlid_assign_handler(struct ib_device *ib_dev,
 			     struct ib_uverbs_file *file,
 			     struct uverbs_attr_bundle *attrs)
 {
-#ifdef CONFIG_HFI2_STLNP
 	struct hfi_ctx *ctx;
 	struct hfi_dlid_assign_args dlid_assign;
 	const struct uverbs_attr *uattr;
@@ -466,15 +460,12 @@ int hfi2_dlid_assign_handler(struct ib_device *ib_dev,
 	kfree(dlid_assign.dlid_entries_ptr);
 
 	return ret;
-#endif
-	return 0;
 }
 
 int hfi2_dlid_release_handler(struct ib_device *ib_dev,
 			      struct ib_uverbs_file *file,
 			      struct uverbs_attr_bundle *attrs)
 {
-#ifdef CONFIG_HFI2_STLNP
 	struct hfi_ctx *ctx;
 	const struct uverbs_attr *uattr;
 
@@ -492,8 +483,6 @@ int hfi2_dlid_release_handler(struct ib_device *ib_dev,
 	}
 
 	return hfi_dlid_release(ctx);
-#endif
-	return 0;
 }
 
 DECLARE_UVERBS_METHOD(hfi2_job_setup, HFI2_JOB_SETUP,

@@ -92,7 +92,6 @@ static int hfi_e2e_conn(struct hfi_ibcontext *uc,
 			struct hfi_e2e_conn_args __user *e2e_args)
 {
 	int num_conn = 0;
-#ifdef CONFIG_HFI2_STLNP
 	struct hfi_e2e_conn e2e_conn;
 	struct hfi_e2e_conn_args e2e;
 	int i;
@@ -115,7 +114,6 @@ static int hfi_e2e_conn(struct hfi_ibcontext *uc,
 		if (!e2e_conn.conn_status)
 			num_conn++;
 	}
-#endif
 
 	/* Inform user space about the number of connections established */
 	if (copy_to_user(&e2e_args->num_conn, &num_conn, sizeof(num_conn)))
@@ -201,7 +199,6 @@ static int hfi2_ts_get_master_handler(struct ib_device *ib_dev,
 				      struct ib_uverbs_file *file,
 				      struct uverbs_attr_bundle *attrs)
 {
-#ifdef CONFIG_HFI2_STLNP
 	struct hfi_ts_master_regs master_ts;
 	int ret;
 
@@ -222,15 +219,12 @@ static int hfi2_ts_get_master_handler(struct ib_device *ib_dev,
 	ret += uverbs_copy_to(attrs, HFI2_GET_TS_MASTER_TIMESTAMP,
 			      &master_ts.timestamp, sizeof(uint64_t));
 	return ret;
-#endif
-	return 0;
 }
 
 static int hfi2_ts_get_fm_handler(struct ib_device *ib_dev,
 				  struct ib_uverbs_file *file,
 				  struct uverbs_attr_bundle *attrs)
 {
-#ifdef CONFIG_HFI2_STLNP
 	struct hfi_ts_fm_data fm_data;
 	int ret;
 
@@ -259,8 +253,6 @@ static int hfi2_ts_get_fm_handler(struct ib_device *ib_dev,
 	ret += uverbs_copy_to(attrs, HFI2_GET_TS_FM_IS_ACTIVE_MASTER,
 			      &fm_data.is_active_master, sizeof(uint8_t));
 	return ret;
-#endif
-	return 0;
 }
 
 DECLARE_UVERBS_METHOD(hfi2_abi_info, HFI2_DEV_GET_ABI_INFO,

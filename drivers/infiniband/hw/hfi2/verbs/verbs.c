@@ -78,6 +78,7 @@ static bool enable_lkey_callbacks = true;
 module_param(enable_lkey_callbacks, bool, 0444);
 MODULE_PARM_DESC(enable_lkey_callbacks, "Enable self-managed MR KEYs");
 
+#ifdef CONFIG_HFI2_STLNP
 DECLARE_UVERBS_OBJECT_TREE(hfi2_uverbs_objects,
 			   &hfi2_object_device,
 			   &hfi2_object_ctx,
@@ -88,6 +89,13 @@ static inline const struct uverbs_object_tree_def *hfi2_get_objects(void)
 {
 	return &hfi2_uverbs_objects;
 }
+
+#else
+static inline const struct uverbs_object_tree_def *hfi2_get_objects(void)
+{
+	return NULL;
+}
+#endif
 
 static void hfi2_uninit_port(struct hfi2_ibport *ibp);
 
@@ -497,13 +505,19 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	struct ib_device *ibdev = &ibd->rdi.ibdev;
 	struct hfi2_ibport *ibp;
 	int i, ret;
+	const struct uverbs_object_tree_def *hfi2_root[2];
+	int nobjects = 0;
 
-#if IS_ENABLED(CONFIG_INFINIBAND_EXP_USER_ACCESS)
-	const struct uverbs_object_tree_def *hfi2_root[] = {
-		uverbs_default_get_objects(),
-		hfi2_get_objects()
-	};
-#endif
+	/* below is NULL if uverbs ioctl() interface disabled */
+	hfi2_root[0] = uverbs_default_get_objects();
+	if (hfi2_root[0]) {
+		nobjects++;
+		/* below is NULL if HFI2_STLNP is disabled */
+		hfi2_root[1] = hfi2_get_objects();
+		if (hfi2_root[1])
+			nobjects++;
+	}
+
 	strncpy(ibdev->node_desc, init_utsname()->nodename,
 		sizeof(ibdev->node_desc));
 	ibdev->node_desc[IB_DEVICE_NODE_DESC_MAX - 1] = '\0';
@@ -547,6 +561,7 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 		ibd->rdi.driver_f.native_recv = hfi2_native_recv;
 		ibd->rdi.driver_f.native_srq_recv = hfi2_native_srq_recv;
 	}
+	ibd->rdi.driver_f.mmap = hfi2_mmap;
 #endif
 
 	/* add optional sysfs files under /sys/class/infiniband/hfi2_0/ */
@@ -559,7 +574,6 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibd->rdi.driver_f.get_pci_dev = get_pci_dev;
 
 	ibd->rdi.driver_f.query_port_state = hfi2_query_port;
-	ibd->rdi.driver_f.mmap = hfi2_mmap;
 #if 0
 	/* for query_guid, query_port, and modify_port */
 	ibd->rdi.driver_f.get_guid_be = hfi1_get_guid_be;
@@ -655,10 +669,8 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	for (i = 0; i < ibd->num_pports; i++, ibp++)
 		rvt_init_port(&ibd->rdi, &ibp->rvp, i, ibp->ppd->pkeys);
 
-#if IS_ENABLED(CONFIG_INFINIBAND_EXP_USER_ACCESS)
-	/* Extended verbs root */
-	ibd->rdi.ibdev.specs_root = uverbs_alloc_spec_tree(2, hfi2_root);
-#endif
+	/* Set extended verbs root */
+	ibd->rdi.ibdev.specs_root = uverbs_alloc_spec_tree(nobjects, hfi2_root);
 	ret = rvt_register_device(&ibd->rdi, RDMA_DRIVER_HFI2);
 	if (ret)
 		goto err_reg;
