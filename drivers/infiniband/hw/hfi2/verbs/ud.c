@@ -497,7 +497,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 			goto bail;
 		}
 		wqe = rvt_get_swqe_ptr(qp, qp->s_last);
-		hfi2_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
+		rvt_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
 		goto done;
 	}
 
@@ -551,7 +551,7 @@ int hfi2_make_ud_req(struct rvt_qp *qp)
 			spin_unlock_irqrestore(&qp->s_lock, flags);
 			ud_loopback(qp, wqe);
 			spin_lock_irqsave(&qp->s_lock, flags);
-			hfi2_send_complete(qp, wqe, IB_WC_SUCCESS);
+			rvt_send_complete(qp, wqe, IB_WC_SUCCESS);
 			goto done;
 		}
 	}

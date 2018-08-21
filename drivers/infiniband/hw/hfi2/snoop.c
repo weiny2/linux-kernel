@@ -1246,9 +1246,7 @@ static int snoop_send_wqe(struct hfi2_ibport *ibp, struct hfi2_qp_priv *priv,
 			} else if (!qp->s_len && qp->s_wqe) {
 				/* !s_len means this is last packet in WQE */
 				spin_lock_irqsave(&qp->s_lock, flags);
-				hfi2_send_complete(
-					qp, qp->s_wqe,
-					IB_WC_SUCCESS);
+				rvt_send_complete(qp, qp->s_wqe, IB_WC_SUCCESS);
 				spin_unlock_irqrestore(&qp->s_lock, flags);
 			}
 			return 0;

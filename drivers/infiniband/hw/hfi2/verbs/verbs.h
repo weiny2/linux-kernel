@@ -424,8 +424,6 @@ void hfi2_do_send_from_rvt(struct rvt_qp *qp);
 void hfi2_do_work(struct work_struct *work);
 void hfi2_schedule_send_no_lock(struct rvt_qp *qp);
 void hfi2_schedule_send(struct rvt_qp *qp);
-void hfi2_send_complete(struct rvt_qp *qp, struct rvt_swqe *wqe,
-			enum ib_wc_status status);
 void hfi2_rc_send_complete(struct rvt_qp *qp, u32 opcode, u32 bth2);
 int hfi2_make_uc_req(struct rvt_qp *qp);
 int hfi2_make_ud_req(struct rvt_qp *qp);

@@ -497,7 +497,7 @@ static int hfi2_verbs_send(struct rvt_qp *qp, bool allow_sleep)
 send_err:
 	if (qp->s_wqe) {
 		spin_lock_irqsave(&qp->s_lock, flags);
-		hfi2_send_complete(qp, qp->s_wqe, wc_stat);
+		rvt_send_complete(qp, qp->s_wqe, wc_stat);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	}
 	return ret;
@@ -585,42 +585,6 @@ void hfi2_do_work(struct work_struct *work)
 
 	priv = container_of(wait, struct hfi2_qp_priv, s_iowait);
 	hfi2_do_send(priv->owner, true);
-}
-
-/*
- * This should be called with s_lock held.
- */
-void hfi2_send_complete(struct rvt_qp *qp, struct rvt_swqe *wqe,
-			enum ib_wc_status status)
-{
-	u32 old_last, last;
-
-	if (!(ib_rvt_state_ops[qp->state] & RVT_PROCESS_OR_FLUSH_SEND))
-		return;
-	last = qp->s_last;
-	old_last = last;
-	if (++last >= qp->s_size)
-		last = 0;
-	qp->s_last = last;
-	/* See post_send() */
-	barrier();
-	rvt_put_swqe(wqe);
-	if (qp->ibqp.qp_type == IB_QPT_UD ||
-	    qp->ibqp.qp_type == IB_QPT_SMI ||
-	    qp->ibqp.qp_type == IB_QPT_GSI)
-		atomic_dec(&ibah_to_rvtah(wqe->ud_wr.ah)->refcount);
-
-	rvt_qp_swqe_complete(qp, wqe,
-			     ib_hfi2_wc_opcode[wqe->wr.opcode],
-			     status);
-	if (qp->s_acked == old_last)
-		qp->s_acked = last;
-	if (qp->s_cur == old_last)
-		qp->s_cur = last;
-	if (qp->s_tail == old_last)
-		qp->s_tail = last;
-	if (qp->state == IB_QPS_SQD && last == qp->s_cur)
-		qp->s_draining = 0;
 }
 
 /**

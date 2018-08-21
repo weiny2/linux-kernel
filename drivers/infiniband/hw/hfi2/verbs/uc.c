@@ -91,7 +91,7 @@ int hfi2_make_uc_req(struct rvt_qp *qp)
 			goto bail;
 		}
 		wqe = rvt_get_swqe_ptr(qp, qp->s_last);
-		hfi2_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
+		rvt_send_complete(qp, wqe, IB_WC_WR_FLUSH_ERR);
 		goto done;
 	}
 
@@ -142,7 +142,7 @@ int hfi2_make_uc_req(struct rvt_qp *qp)
 					qp, wqe->wr.ex.invalidate_rkey);
 				local_ops = 1;
 			}
-			hfi2_send_complete(qp, wqe, err ? IB_WC_LOC_PROT_ERR
+			rvt_send_complete(qp, wqe, err ? IB_WC_LOC_PROT_ERR
 							: IB_WC_SUCCESS);
 			if (local_ops)
 				atomic_dec(&qp->local_ops_pending);

@@ -304,7 +304,7 @@ send_wqe_pio(struct hfi2_ibport *ibp, struct hfi2_qp_priv *qp_priv,
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	} else if (!qp->s_len) {
 		spin_lock_irqsave(&qp->s_lock, flags);
-		hfi2_send_complete(qp, qp->s_wqe, IB_WC_SUCCESS);
+		rvt_send_complete(qp, qp->s_wqe, IB_WC_SUCCESS);
 		spin_unlock_irqrestore(&qp->s_lock, flags);
 	}
 
@@ -396,7 +396,7 @@ next_event:
 #endif
 		/* if final UD/UC packet, call send_complete */
 		if (!wqe_dma->remaining_bytes)
-			hfi2_send_complete(qp, wqe, pkt_errors ?
+			rvt_send_complete(qp, wqe, pkt_errors ?
 					   IB_WC_FATAL_ERR : IB_WC_SUCCESS);
 	}
 	spin_unlock(&qp->s_lock);

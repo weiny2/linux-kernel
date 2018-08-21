@@ -358,7 +358,7 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 			goto bail;
 		}
 		wqe = rvt_get_swqe_ptr(qp, qp->s_last);
-		hfi2_send_complete(qp, wqe, qp->s_last != qp->s_acked ?
+		rvt_send_complete(qp, wqe, qp->s_last != qp->s_acked ?
 			IB_WC_SUCCESS : IB_WC_WR_FLUSH_ERR);
 		/* will get called again */
 		goto done;
@@ -426,9 +426,9 @@ int hfi2_make_rc_req(struct rvt_qp *qp)
 						wqe->wr.ex.invalidate_rkey);
 					local_ops = 1;
 				}
-				hfi2_send_complete(qp, wqe,
-						   err ? IB_WC_LOC_PROT_ERR
-						       : IB_WC_SUCCESS);
+				rvt_send_complete(qp, wqe,
+						  err ? IB_WC_LOC_PROT_ERR
+						      : IB_WC_SUCCESS);
 				if (local_ops)
 					atomic_dec(&qp->local_ops_pending);
 				qp->s_hdrwords = 0;
@@ -1071,7 +1071,7 @@ void hfi2_restart_rc(struct rvt_qp *qp, u32 psn, int wait)
 			hfi2_migrate_qp(qp);
 			qp->s_retry = qp->s_retry_cnt;
 		} else if (qp->s_last == qp->s_acked) {
-			hfi2_send_complete(qp, wqe, IB_WC_RETRY_EXC_ERR);
+			rvt_send_complete(qp, wqe, IB_WC_RETRY_EXC_ERR);
 			rvt_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 			return;
 		} else { /* need to handle delayed completion */
@@ -1213,7 +1213,7 @@ static inline void update_last_psn(struct rvt_qp *qp, u32 psn)
 
 /*
  * Generate a SWQE completion.
- * This is similar to hfi2_send_complete but has to check to be sure
+ * This is similar to rvt_send_complete but has to check to be sure
  * that the SGEs are not being referenced if the SWQE is being resent.
  */
 static struct rvt_swqe *do_rc_completion(struct rvt_qp *qp,
@@ -1482,7 +1482,7 @@ static int do_rc_ack(struct rvt_qp *qp, u32 aeth, u32 psn, int opcode,
 			ibp->rvp.n_other_naks++;
 class_b:
 			if (qp->s_last == qp->s_acked) {
-				hfi2_send_complete(qp, wqe, status);
+				rvt_send_complete(qp, wqe, status);
 				rvt_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 			}
 			break;
@@ -1726,7 +1726,7 @@ ack_len_err:
 	status = IB_WC_LOC_LEN_ERR;
 ack_err:
 	if (qp->s_last == qp->s_acked) {
-		hfi2_send_complete(qp, wqe, status);
+		rvt_send_complete(qp, wqe, status);
 		rvt_error_qp(qp, IB_WC_WR_FLUSH_ERR);
 	}
 ack_done:

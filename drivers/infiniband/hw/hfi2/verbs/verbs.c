@@ -657,6 +657,9 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	/* post send table */
 	ibd->rdi.post_parms = hfi2_post_parms;
 
+	/* opcode translation table */
+	ibd->rdi.wc_opcode = ib_hfi2_wc_opcode;
+
 	/* completion queue */
 	snprintf(ibd->rdi.dparms.cq_name, sizeof(ibd->rdi.dparms.cq_name),
 		 "hfi2_cq%d", ibd->dd->unit);
