@@ -20,6 +20,8 @@ static int handle_get_status(u64 arg2)
 
 	if (cet->shstk_size)
 		features |= GNU_PROPERTY_X86_FEATURE_1_SHSTK;
+	if (cet->ibt_enabled)
+		features |= GNU_PROPERTY_X86_FEATURE_1_IBT;
 
 	buf[0] = (u64)features;
 	buf[1] = (u64)cet->shstk_base;
@@ -60,7 +62,8 @@ int prctl_cet(int option, u64 arg2)
 	if (option == ARCH_X86_CET_STATUS)
 		return handle_get_status(arg2);
 
-	if (!static_cpu_has(X86_FEATURE_SHSTK))
+	if (!static_cpu_has(X86_FEATURE_SHSTK) &&
+	    !static_cpu_has(X86_FEATURE_IBT))
 		return -EINVAL;
 
 	cet = &current->thread.cet;
@@ -71,6 +74,8 @@ int prctl_cet(int option, u64 arg2)
 			return -EPERM;
 		if (arg2 & GNU_PROPERTY_X86_FEATURE_1_SHSTK)
 			cet_disable_free_shstk(current);
+		if (arg2 & GNU_PROPERTY_X86_FEATURE_1_IBT)
+			cet_disable_ibt();
 
 		return 0;
 
