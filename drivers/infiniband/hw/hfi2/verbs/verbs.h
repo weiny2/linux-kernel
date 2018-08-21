@@ -430,8 +430,6 @@ void hfi2_rc_send_complete(struct rvt_qp *qp, u32 opcode, u32 bth2);
 int hfi2_make_uc_req(struct rvt_qp *qp);
 int hfi2_make_ud_req(struct rvt_qp *qp);
 int hfi2_make_rc_req(struct rvt_qp *qp);
-void hfi2_copy_sge(struct rvt_sge_state *ss, void *data, u32 length,
-		   bool release, bool copy_last);
 int hfi2_process_mad(struct ib_device *ibdev, int mad_flags, u8 port,
 		     const struct ib_wc *in_wc, const struct ib_grh *in_grh,
 		     const struct ib_mad_hdr *in_mad, size_t in_mad_size,

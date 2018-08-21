@@ -157,54 +157,6 @@ static const opcode_handler opcode_handler_tbl[256] = {
 	[CNP_OPCODE]				      = &hfi2_cnp_rcv
 };
 
-/**
- * hfi2_copy_sge - copy data to SGE memory
- * @ss: the SGE state
- * @data: the data to copy
- * @length: the length of the data
- * @copy_last: do a separate copy of the last 8 bytes
- */
-void hfi2_copy_sge(struct rvt_sge_state *ss, void *data, u32 length,
-		   bool release, bool copy_last)
-{
-	struct rvt_sge *sge = &ss->sge;
-	int in_last = 0;
-	int i;
-
-	if (copy_last) {
-		if (length > 8) {
-			length -= 8;
-		} else {
-			copy_last = false;
-			in_last = true;
-		}
-	}
-
-again:
-	while (length) {
-		u32 len = rvt_get_sge_length(sge, length);
-
-		WARN_ON_ONCE(len == 0);
-		if (in_last) {
-			/* enforce byte transer ordering */
-			for (i = 0; i < len; i++)
-				((u8 *)sge->vaddr)[i] = ((u8 *)data)[i];
-		} else {
-			memcpy(sge->vaddr, data, len);
-		}
-		rvt_update_sge(ss, len, release);
-		data += len;
-		length -= len;
-	}
-
-	if (copy_last) {
-		copy_last = false;
-		in_last = true;
-		length = 8;
-		goto again;
-	}
-}
-
 /*
  * Make sure the QP is ready and able to accept the given opcode.
  */

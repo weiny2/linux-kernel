@@ -595,6 +595,7 @@ static int hfi2_register_device(struct hfi2_ibdev *ibd, const char *name)
 	ibd->rdi.dparms.core_cap_flags = RDMA_CORE_PORT_INTEL_OPA |
 					 RDMA_CORE_CAP_OPA_AH;
 	ibd->rdi.dparms.max_mad_size = OPA_MGMT_MAD_SIZE;
+	ibd->rdi.dparms.sge_copy_mode = RVT_SGE_COPY_MEMCPY;
 
 	/* queue pair parameters */
 	ibd->rdi.dparms.qp_table_size = hfi2_qp_table_size;

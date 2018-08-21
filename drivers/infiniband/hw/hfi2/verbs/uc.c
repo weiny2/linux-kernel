@@ -418,7 +418,7 @@ send_first:
 		qp->r_rcv_len += pmtu;
 		if (unlikely(qp->r_rcv_len > qp->r_len))
 			goto rewind;
-		hfi2_copy_sge(&qp->r_sge, data, pmtu, false, false);
+		rvt_copy_sge(qp, &qp->r_sge, data, pmtu, false, false);
 		break;
 
 	case OP(SEND_LAST_WITH_IMMEDIATE):
@@ -441,7 +441,7 @@ send_last:
 		if (unlikely(wc.byte_len > qp->r_len))
 			goto rewind;
 		wc.opcode = IB_WC_RECV;
-		hfi2_copy_sge(&qp->r_sge, data, tlen, false, false);
+		rvt_copy_sge(qp, &qp->r_sge, data, tlen, false, false);
 		rvt_put_ss(&qp->s_rdma_read_sge);
 last_imm:
 		wc.wr_id = qp->r_wr_id;
@@ -515,7 +515,7 @@ rdma_first:
 		qp->r_rcv_len += pmtu;
 		if (unlikely(qp->r_rcv_len > qp->r_len))
 			goto drop;
-		hfi2_copy_sge(&qp->r_sge, data, pmtu, true, false);
+		rvt_copy_sge(qp, &qp->r_sge, data, pmtu, true, false);
 		break;
 
 	case OP(RDMA_WRITE_LAST_WITH_IMMEDIATE):
@@ -542,7 +542,7 @@ rdma_last_imm:
 		}
 		wc.byte_len = qp->r_len;
 		wc.opcode = IB_WC_RECV_RDMA_WITH_IMM;
-		hfi2_copy_sge(&qp->r_sge, data, tlen, true, false);
+		rvt_copy_sge(qp, &qp->r_sge, data, tlen, true, false);
 		rvt_put_ss(&qp->r_sge);
 		goto last_imm;
 
@@ -556,7 +556,7 @@ rdma_last:
 		tlen -= (hdrsize + extra_bytes);
 		if (unlikely(tlen + qp->r_rcv_len != qp->r_len))
 			goto drop;
-		hfi2_copy_sge(&qp->r_sge, data, tlen, true, false);
+		rvt_copy_sge(qp, &qp->r_sge, data, tlen, true, false);
 		rvt_put_ss(&qp->r_sge);
 		break;
 

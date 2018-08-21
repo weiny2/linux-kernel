@@ -215,7 +215,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 		}
 
 		hfi2_make_grh(ibp, &grh, &grd, 0, 0);
-		hfi2_copy_sge(&qp->r_sge, &grh, sizeof(grh), true, false);
+		rvt_copy_sge(qp, &qp->r_sge, &grh, sizeof(grh), true, false);
 		wc.wc_flags |= IB_WC_GRH;
 	} else {
 		rvt_skip_sge(&qp->r_sge, sizeof(struct ib_grh), true);
@@ -232,7 +232,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 		if (len > sge->sge_length)
 			len = sge->sge_length;
 		WARN_ON_ONCE(len == 0);
-		hfi2_copy_sge(&qp->r_sge, sge->vaddr, len, true, false);
+		rvt_copy_sge(qp, &qp->r_sge, sge->vaddr, len, true, false);
 		sge->vaddr += len;
 		sge->length -= len;
 		sge->sge_length -= len;
@@ -862,8 +862,8 @@ void hfi2_ud_rcv(struct hfi2_ib_packet *packet)
 		goto drop;
 	}
 	if (has_grh) {
-		hfi2_copy_sge(&qp->r_sge, packet->grh,
-			      sizeof(struct ib_grh), true, false);
+		rvt_copy_sge(qp, &qp->r_sge, packet->grh,
+			     sizeof(struct ib_grh), true, false);
 		wc.wc_flags |= IB_WC_GRH;
 	} else if (is_16b) {
 		struct ib_grh ext_grh;
@@ -874,14 +874,14 @@ void hfi2_ud_rcv(struct hfi2_ib_packet *packet)
 		 * out when creating 16B, add back the GRH here.
 		 */
 		hfi2_make_ext_grh(ibp, &ext_grh, slid, dlid);
-		hfi2_copy_sge(&qp->r_sge, &ext_grh, sizeof(ext_grh),
-			      true, false);
+		rvt_copy_sge(qp, &qp->r_sge, &ext_grh, sizeof(ext_grh),
+			     true, false);
 		wc.wc_flags |= IB_WC_GRH;
 	} else {
 		rvt_skip_sge(&qp->r_sge, sizeof(struct ib_grh), true);
 	}
-	hfi2_copy_sge(&qp->r_sge, data,
-		      wc.byte_len - sizeof(struct ib_grh), true, false);
+	rvt_copy_sge(qp, &qp->r_sge, data,
+		     wc.byte_len - sizeof(struct ib_grh), true, false);
 	rvt_put_ss(&qp->r_sge);
 	if (!test_and_clear_bit(RVT_R_WRID_VALID, &qp->r_aflags))
 		return;
