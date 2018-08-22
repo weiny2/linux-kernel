@@ -168,7 +168,7 @@ static void ud_loopback(struct rvt_qp *sqp, struct rvt_swqe *swqe)
 	} else {
 		int ret;
 
-		ret = hfi2_get_rwqe(qp, 0);
+		ret = rvt_get_rwqe(qp, false);
 		if (ret < 0) {
 			rvt_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
 			goto bail_unlock;
@@ -845,7 +845,7 @@ void hfi2_ud_rcv(struct hfi2_ib_packet *packet)
 	} else {
 		int ret;
 
-		ret = hfi2_get_rwqe(qp, 0);
+		ret = rvt_get_rwqe(qp, false);
 		if (ret < 0) {
 			rvt_rc_error(qp, IB_WC_LOC_QP_OP_ERR);
 			return;

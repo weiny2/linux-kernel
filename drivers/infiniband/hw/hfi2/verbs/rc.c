@@ -2109,7 +2109,7 @@ void hfi2_rc_rcv(struct hfi2_ib_packet *packet)
 			goto rnr_nak;
 		}
 #endif
-		ret = hfi2_get_rwqe(qp, 0);
+		ret = rvt_get_rwqe(qp, false);
 		if (ret < 0)
 			goto nack_op_err;
 		if (!ret)
@@ -2141,7 +2141,7 @@ send_middle:
 		}
 #endif
 		/* consume RWQE */
-		ret = hfi2_get_rwqe(qp, 1);
+		ret = rvt_get_rwqe(qp, true);
 		if (ret < 0)
 			goto nack_op_err;
 		if (!ret)
@@ -2158,7 +2158,7 @@ send_middle:
 			goto rnr_nak;
 		}
 #endif
-		ret = hfi2_get_rwqe(qp, 0);
+		ret = rvt_get_rwqe(qp, false);
 		if (ret < 0)
 			goto nack_op_err;
 		if (!ret)
@@ -2276,7 +2276,7 @@ send_last:
 			goto rnr_nak;
 		}
 #endif
-		ret = hfi2_get_rwqe(qp, 1);
+		ret = rvt_get_rwqe(qp, true);
 		if (ret < 0)
 			goto nack_op_err;
 		if (!ret) {

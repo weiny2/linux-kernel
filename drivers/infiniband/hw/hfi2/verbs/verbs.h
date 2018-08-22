@@ -417,7 +417,6 @@ void hfi2_ud_rcv(struct hfi2_ib_packet *packet);
 void hfi2_ib_rcv(struct hfi2_ib_packet *packet);
 int hfi2_rcv_wait(void *data);
 int hfi2_lookup_pkey_idx(struct hfi2_ibport *ibp, u16 pkey);
-int hfi2_get_rwqe(struct rvt_qp *qp, int wr_id_only);
 void hfi2_migrate_qp(struct rvt_qp *qp);
 void hfi2_make_ruc_header(struct rvt_qp *qp, struct ib_other_headers *ohdr,
 			  u32 bth0, u32 bth2, bool is_middle);
