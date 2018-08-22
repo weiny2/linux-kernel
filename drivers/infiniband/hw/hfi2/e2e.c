@@ -224,8 +224,6 @@ static int hfi_eq_zero_thread(void *data)
 	struct hfi_ptcdata *ptc;
 	struct ida *cache_rx;
 	struct idr *cache_tx;
-	u32 tx_timeout = dd->emulation ?
-		HFI_TX_TIMEOUT_MS_ZEBU : HFI_TX_TIMEOUT_MS;
 
 	allow_signal(SIGINT);
 

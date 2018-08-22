@@ -174,8 +174,7 @@ enum {
 // TODO: Fix for ZEBU/FPGA #define HFI_DEFAULT_MAX_LID_SUPP	(zebu ? 0xbfff : 0x103ff)
 
 /* TX timeout for E2E control messages */
-#define HFI_TX_TIMEOUT_MS	100
-#define HFI_TX_TIMEOUT_MS_ZEBU	1000
+#define HFI_TX_TIMEOUT_MS	1000
 
 /* per-VL status clear, in ms */
 #define HFI_VL_STATUS_CLEAR_TIMEOUT	5000
