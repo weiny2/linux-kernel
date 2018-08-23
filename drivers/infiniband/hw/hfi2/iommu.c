@@ -1702,6 +1702,8 @@ static inline struct context_entry *at_context_addr(struct hfi_at *at,
 	*entry = phy_addr | 1;
 	__at_flush_cache(at, entry, sizeof(*entry));
 
+	dd_dev_info(at->dd, "%s: root table entry: %llx\n", at->name, *entry);
+
 	return &context[devfn];
 }
 
@@ -1914,6 +1916,10 @@ static int at_setup_device_context(struct hfi_at *at)
 			 PCI_DEVID(at->bus, at->devfn),
 			 AT_CCMD_MASK_NOBIT,
 			 AT_CCMD_DEVICE_INVL);
+
+	dd_dev_info(at->dd, "%s: ext ctx: %llx %llx %llx %llx\n", at->name,
+		context[1].hi, context[1].lo,
+		context[0].hi, context[0].lo);
 
 	return 0;
 }
