@@ -897,7 +897,7 @@ static int hfi_psn_init(struct hfi_pportdata *port, u32 max_lid)
 		for (j = 0; j < HFI_MAX_PKEYS; j++) {
 			u32 psn_off = (4 * j + i) * 8;
 
-			tc->psn_base[j] = vzalloc_node(psn_size, dd->node);
+			tc->psn_base[j] = hfi_zalloc(dd, psn_size);
 			if (!tc->psn_base[j]) {
 				rc = -ENOMEM;
 				goto done;
@@ -936,7 +936,7 @@ void hfi_psn_uninit(struct hfi_pportdata *port)
 				hfi_at_dereg_range(&dd->priv_ctx,
 						   tc->psn_base[j],
 						   tc->psn_size);
-				vfree(tc->psn_base[j]);
+				hfi_free(tc->psn_base[j], tc->psn_size);
 				tc->psn_base[j] = NULL;
 				write_csr(dd, off_tx + psn_off, 0);
 				write_csr(dd, off_rx + psn_off, 0);

@@ -1033,7 +1033,7 @@ int hfi2_rcv_init(struct hfi2_ibport *ibp, struct hfi_ctx *ctx,
 		goto init_err;
 
 	rcv->egr_last_idx = 0;
-	rcv->egr_base = vzalloc_node(HFI_IB_EAGER_BUFSIZE, ctx->devdata->node);
+	rcv->egr_base = hfi_zalloc(ctx->devdata, HFI_IB_EAGER_BUFSIZE);
 	if (!rcv->egr_base)
 		goto init_err;
 
@@ -1137,7 +1137,7 @@ void hfi2_rcv_uninit(struct hfi2_ibrcv *rcv)
 	if (rcv->egr_base) {
 		hfi_at_dereg_range(rcv->ctx, rcv->egr_base,
 				   HFI_IB_EAGER_BUFSIZE);
-		vfree(rcv->egr_base);
+		hfi_free(rcv->egr_base, HFI_IB_EAGER_BUFSIZE);
 		rcv->egr_base = NULL;
 	}
 	rcv->ctx = NULL;

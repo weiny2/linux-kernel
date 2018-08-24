@@ -769,7 +769,7 @@ static void hfi2_uninit_port(struct hfi2_ibport *ibp)
 static int hfi_qp_state_alloc(struct hfi_devdata *dd)
 {
 	dd->max_qp = HFI2_MAX_QPS << HFI2_QPN_QOS_SHIFT;
-	dd->qp_state_base = vzalloc(dd->max_qp * FXR_PTE_SIZE);
+	dd->qp_state_base = hfi_zalloc(dd, dd->max_qp * FXR_PTE_SIZE);
 	if (!dd->qp_state_base)
 		return -ENOMEM;
 
@@ -789,7 +789,7 @@ static void hfi_qp_state_free(struct hfi_devdata *dd)
 
 	hfi_at_dereg_range(&dd->priv_ctx, dd->qp_state_base,
 			   dd->max_qp * FXR_PTE_SIZE);
-	vfree(dd->qp_state_base);
+	hfi_free(dd->qp_state_base, dd->max_qp * FXR_PTE_SIZE);
 	dd->qp_state_base = 0;
 }
 

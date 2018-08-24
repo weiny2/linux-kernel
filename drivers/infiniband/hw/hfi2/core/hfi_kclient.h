@@ -202,14 +202,13 @@ int _hfi_eq_alloc_mode(struct hfi_ctx *ctx,
 
 	eq_alloc->user_data = (u64)&done;
 	width = eq_alloc->jumbo ? HFI_EQ_ENTRY_LOG2_JUMBO : HFI_EQ_ENTRY_LOG2;
-	eq_alloc->base = (u64)vzalloc_node(eq_alloc->count << width,
-				ctx->devdata->node);
+	eq_alloc->base = (u64)hfi_zalloc(ctx->devdata, eq_alloc->count << width);
 	if (!eq_alloc->base)
 		return -ENOMEM;
 	eq_alloc->mode = mode;
 	rc = ctx->ops->ev_assign(ctx, eq_alloc);
 	if (rc < 0) {
-		vfree((void *)eq_alloc->base);
+		hfi_free((void *)eq_alloc->base, eq_alloc->count << width);
 		return rc;
 	}
 	eq_head_array = ctx->eq_head_addr;
@@ -284,7 +283,7 @@ void _hfi_eq_free(struct hfi_eq *eq)
 	hfi_eq_poll_cmd_complete_timeout(ctx, &done);
 
 	hfi_at_dereg_range(ctx, eq->base, eq->count << eq->width);
-	vfree(eq->base);
+	hfi_free(eq->base, eq->count << eq->width);
 	eq->base = NULL;
 }
 

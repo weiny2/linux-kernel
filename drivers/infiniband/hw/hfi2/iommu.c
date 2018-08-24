@@ -1161,7 +1161,8 @@ static irqreturn_t prq_event_thread(int irq, void *d)
 		 */
 		if (!svm->mm) {
 			if (likely(!svm->pgd)) {
-				dd_dev_err(at->dd, "kernel cpt mode: prq received\n");
+				dd_dev_err(at->dd, "kernel cpt mode: prq received: addr %llx, W? %d\n",
+					   address, req->wr_req);
 				goto bad_req;
 			}
 

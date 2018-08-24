@@ -301,9 +301,8 @@ int hfi_ctx_attach(struct hfi_ctx *ctx, struct opa_ctx_assign *ctx_assign)
 	le_me_off = HFI_PSB_FIXED_TOTAL_MEM + trig_op_size;
 	psb_size = le_me_off + le_me_size + unexp_size;
 
-	/* vmalloc Portals State memory, will store in PCB */
-	/* FXRTODO: replace vmalloc_user with vmalloc_user_node */
-	ctx->ptl_state_base = vmalloc_user(psb_size);
+	/* Allocate Portals State memory, will store in PCB */
+	ctx->ptl_state_base = hfi_zalloc_user(psb_size);
 	if (!ctx->ptl_state_base) {
 		ret = -ENOMEM;
 		goto err_vmalloc;
@@ -423,7 +422,7 @@ err_kern_ctx:
 err_le_me:
 	hfi_at_dereg_range(&dd->priv_ctx, ctx->ptl_state_base,
 			   ctx->ptl_state_size);
-	vfree(ctx->ptl_state_base);
+	hfi_free(ctx->ptl_state_base, ctx->ptl_state_size);
 err_vmalloc:
 	hfi_at_clear_pasid(ctx);
 err_pasid:
@@ -587,7 +586,7 @@ int hfi_ctx_cleanup(struct hfi_ctx *ctx)
 	if (ctx->ptl_state_base) {
 		hfi_at_dereg_range(&dd->priv_ctx, ctx->ptl_state_base,
 				   ctx->ptl_state_size);
-		vfree(ctx->ptl_state_base);
+		hfi_free(ctx->ptl_state_base, ctx->ptl_state_size);
 		ctx->ptl_state_base = NULL;
 	}
 
@@ -669,7 +668,7 @@ int hfi_alloc_spill_area(struct hfi_devdata *dd)
 	int i;
 	u64 size = TRIGGER_OPS_SPILL_SIZE;
 
-	ptr = vmalloc_node(size * 5, dd->node);
+	ptr = hfi_zalloc(dd, size * 5);
 
 	if (!ptr)
 		return -ENOMEM;
@@ -695,5 +694,5 @@ void hfi_free_spill_area(struct hfi_devdata *dd)
 
 	hfi_at_dereg_range(&dd->priv_ctx, dd->trig_op_spill_area,
 			   TRIGGER_OPS_SPILL_SIZE * 5);
-	vfree(dd->trig_op_spill_area);
+	hfi_free(dd->trig_op_spill_area, TRIGGER_OPS_SPILL_SIZE * 5);
 }

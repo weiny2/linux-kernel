@@ -1073,7 +1073,7 @@ static void hfi2_free_rx_bufs(struct hfi2_ctx_info *ctx_i)
 			hfi_at_dereg_range(&ctx_i->ctx,
 					   ctx_i->buf[i],
 					   HFI2_NET_EAGER_SIZE);
-			vfree(ctx_i->buf[i]);
+			hfi_free(ctx_i->buf[i], HFI2_NET_EAGER_SIZE);
 			ctx_i->buf[i] = NULL;
 		}
 	}
@@ -1085,8 +1085,8 @@ static int hfi2_alloc_rx_bufs(struct hfi2_ctx_info *ctx_i)
 	int i, rc = 0;
 
 	for (i = 0; i < HFI2_NET_NUM_RX_BUFS; i++) {
-		ctx_i->buf[i] = vzalloc_node(HFI2_NET_EAGER_SIZE,
-					     ctx_i->ctx.devdata->node);
+		ctx_i->buf[i] = hfi_zalloc(ctx_i->ctx.devdata,
+					   HFI2_NET_EAGER_SIZE);
 		if (!ctx_i->buf[i]) {
 			rc = -ENOMEM;
 			goto err1;

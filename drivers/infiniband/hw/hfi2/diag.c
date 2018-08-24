@@ -234,7 +234,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp, struct hfi_devdata *dd)
 	}
 
 	/* allocate a buffer and copy the data in */
-	tmpbuf = vmalloc(dp->len);
+	tmpbuf = hfi_zalloc(dd, dp->len);
 	if (!tmpbuf) {
 		ret = -ENOMEM;
 		goto bail;
@@ -276,7 +276,7 @@ static ssize_t diagpkt_send(struct diag_pkt *dp, struct hfi_devdata *dd)
 	ret = diagpkt_xmit(dd, tmpbuf, dp, sc, l2);
 free:
 	hfi_at_dereg_range(diag->ctx, tmpbuf, dp->len);
-	vfree(tmpbuf);
+	hfi_free(tmpbuf, dp->len);
 bail:
 	if (ret < 0 && dd)
 		dd_dev_err(dd, "%s %d err %ld\n", __func__, __LINE__, ret);

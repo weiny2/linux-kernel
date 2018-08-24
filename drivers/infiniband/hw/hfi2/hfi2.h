@@ -1462,6 +1462,47 @@ static inline u8 hfi_parity(u16 val)
 	return m;
 }
 
+static inline void *__hfi_alloc__(struct hfi_devdata *dd, size_t size, bool user)
+{
+	int order;
+	size_t align = ALIGN(size, PAGE_SIZE);
+
+	if (!align)
+		return NULL;
+
+	order = get_order(align);
+	if (order < MAX_ORDER) {
+		struct page *page;
+
+		page = user ? alloc_pages(GFP_KERNEL | __GFP_ZERO, order) :
+			      alloc_pages_node(dd->node,
+					GFP_KERNEL | __GFP_ZERO, order);
+
+		if (page)
+			return page_address(page);
+	}
+
+	return user ? vmalloc_user(align) : vzalloc_node(align, dd->node);
+}
+
+static inline void *hfi_zalloc_user(size_t size)
+{
+	return __hfi_alloc__(NULL, size, true);
+}
+
+static inline void *hfi_zalloc(struct hfi_devdata *dd, size_t size)
+{
+	return __hfi_alloc__(dd, size, false);
+}
+
+static inline void hfi_free(void *addr, size_t size)
+{
+	if (is_vmalloc_addr(addr))
+		vfree(addr);
+	else
+		free_pages((unsigned long)addr, get_order(ALIGN(size, PAGE_SIZE)));
+}
+
 /*
  * ingress_pkey_matches_entry - return true if the pkey matches ent (ent
  * being an entry from the ingress partition key table), return false
