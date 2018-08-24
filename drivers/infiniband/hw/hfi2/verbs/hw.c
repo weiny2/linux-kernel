@@ -1320,7 +1320,7 @@ tx_map_err:
 tx_cmdq_err:
 	_hfi_eq_free(&ibtx->send_eq);
 tx_eq_err:
-	return 0;
+	return ret;
 }
 
 static void hfi2_ibtx_uninit(struct hfi2_ibtx *ibtx)
