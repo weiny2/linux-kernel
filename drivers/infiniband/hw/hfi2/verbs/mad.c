@@ -57,7 +57,9 @@
 #include "mad.h"
 #include "packet.h"
 #include "trace.h"
+#ifdef CONFIG_HFI2_STLNP
 #include "timesync.h"
+#endif
 #include "../link.h"
 #include "../hfi2.h"
 #include "chip/fxr_linkmux_fpc_defs.h"
@@ -1579,6 +1581,7 @@ static int __subn_get_opa_sl_pairs(struct opa_smp *smp, u32 am, u8 *data,
 	return reply(ibh);
 }
 
+#ifdef CONFIG_HFI2_STLNP
 /*
  * Send Timesync E2E data to FM.
  */
@@ -1626,6 +1629,7 @@ static int __subn_get_opa_ts_e2e(struct opa_smp *smp, u32 am, u8 *data,
 	mutex_unlock(&ppd->timesync_mutex);
 	return reply(ibh);
 }
+#endif
 
 static int subn_get_opa_sma(__be16 attr_id, struct opa_smp *smp, u32 am,
 			    u8 *data, struct ib_device *ibdev, u8 port,
@@ -1712,10 +1716,12 @@ static int subn_get_opa_sma(__be16 attr_id, struct opa_smp *smp, u32 am,
 		ret = __subn_get_opa_sl_pairs(smp, am, data, ibdev, port,
 					      resp_len, max_len);
 		break;
+#ifdef CONFIG_HFI2_STLNP
 	case OPA_ATTRIB_TS_E2E_PROPAGATION_DELAY:
 		ret = __subn_get_opa_ts_e2e(smp, am, data, ibdev, port,
 					    resp_len, max_len);
 		break;
+#endif
 	case IB_SMP_ATTR_SM_INFO:
 		if (ibp->rvp.port_cap_flags & IB_PORT_SM_DISABLED)
 			return IB_MAD_RESULT_SUCCESS | IB_MAD_RESULT_CONSUMED;
@@ -2753,6 +2759,7 @@ done:
 				       max_len);
 }
 
+#ifdef CONFIG_HFI2_STLNP
 /*
  * Receive Timesync E2E data from FM.
  */
@@ -2775,7 +2782,6 @@ static int __subn_set_opa_ts_e2e(struct opa_smp *smp, u32 am, u8 *data,
 	ppd->periodicity = be16_to_cpu(ts->periodicity);
 	ppd->current_clock_id = (ts->bits & OPA_E2E_CLOCK_ID_MASK) >> 5;
 
-#ifdef CONFIG_HFI2_STLNP
 	if (ts->bits & OPA_E2E_USE_OFFSET_MASK) {
 		hfi_use_fabric_time_offset(ppd);
 	} else {
@@ -2785,13 +2791,13 @@ static int __subn_set_opa_ts_e2e(struct opa_smp *smp, u32 am, u8 *data,
 		ppd->report_fabric_time = 1; /* Probably unneeded */
 		hfi_compute_fabric_time_offset(ppd);
 	}
-#endif
 
 	mutex_unlock(&ppd->timesync_mutex);
 
 	return __subn_get_opa_ts_e2e(smp, am, data, ibdev, port, resp_len,
 				     max_len);
 }
+#endif
 
 static int __subn_set_opa_led_info(struct opa_smp *smp, u32 am, u8 *data,
 				   struct ib_device *ibdev, u8 port,
@@ -2876,10 +2882,12 @@ static int subn_set_opa_sma(__be16 attr_id, struct opa_smp *smp, u32 am,
 		ret = __subn_set_opa_sl_pairs(smp, am, data, ibdev, port,
 					      resp_len, max_len);
 		break;
+#ifdef CONFIG_HFI2_STLNP
 	case OPA_ATTRIB_TS_E2E_PROPAGATION_DELAY:
 		ret = __subn_set_opa_ts_e2e(smp, am, data, ibdev, port,
 					    resp_len, max_len);
 		break;
+#endif
 	case IB_SMP_ATTR_LED_INFO:
 		ret = __subn_set_opa_led_info(smp, am, data, ibdev, port,
 					      resp_len, max_len);
