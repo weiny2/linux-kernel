@@ -3950,7 +3950,7 @@ static int hfi_pport_init(struct hfi_devdata *dd)
 
 	ret = hfi2_load_firmware(dd);
 	if (ret) {
-		dd_dev_err(dd, "can't load firmware on 8051s");
+		dd_dev_err(dd, "Firmware load failed\n");
 		goto err;
 	}
 

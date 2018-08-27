@@ -1509,21 +1509,21 @@ int hfi2_load_firmware(struct hfi_devdata *dd)
 	dd->fw_load = true;
 	ret = firmware_init(dd, FW_8051);
 	if (ret) {
-		dd_dev_err(dd, "can't init 8051 firmware");
+		dd_dev_err(dd, "Couldn't acquire 8051 firmware\n");
 		return ret;
 	}
 	for (port = 1; port <= dd->num_pports; port++) {
 		ppd = to_hfi_ppd(dd, port);
 		ret = _load_firmware(ppd, FW_8051);
 		if (ret) {
-			ppd_dev_err(ppd, "can't load 8051 firmware");
+			ppd_dev_err(ppd, "8051 firmware load failed\n");
 			return ret;
 		}
 	}
 
 	ppd = to_hfi_ppd(dd, 1);
 	read_misc_status(ppd, &ver_major, &ver_minor, &ver_patch);
-	dd_dev_info(dd, "8051 firmware version %d.%d.%d\n",
+	dd_dev_info(dd, "8051 firmware version: %d.%d.%d\n",
 		    (int)ver_major, (int)ver_minor, (int)ver_patch);
 	dd->crk8051_ver = crk8051_ver(ver_major, ver_minor, ver_patch);
 	mutex_lock(&ppd->crk8051_mutex);
@@ -1551,29 +1551,29 @@ skip_8051:
 		dd->fw_load = true;
 		ret = firmware_init(dd, fw);
 		if (ret) {
-			dd_dev_err(dd, "can't init PE firmware");
+			dd_dev_err(dd, "Couldn't acquire PE firmware\n");
 			return ret;
 		}
 		ret = load_pe_fw(dd, fw);
 		if (ret) {
-			dd_dev_err(dd, "can't load PE firmware");
+			dd_dev_err(dd, "PE firmware load failed\n");
 			return ret;
 		}
 	}
 skip_pe_fw_load:
 	ret = authenticate_hdrpe(dd);
 	if (ret) {
-		dd_dev_err(dd, "can't authenticate hdrpe");
+		dd_dev_err(dd, "HdrPE firmware authentication failed\n");
 		return ret;
 	}
 	ret = authenticate_bufpe(dd);
 	if (ret) {
-		dd_dev_err(dd, "can't authenticate bufpe");
+		dd_dev_err(dd, "BufPE firmware authentication failed\n");
 		return ret;
 	}
 	ret = authenticate_fragpe(dd);
 	if (ret) {
-		dd_dev_err(dd, "can't authenticate fragpe");
+		dd_dev_err(dd, "FragPE firmware authentication failed\n");
 		return ret;
 	}
 	return 0;
