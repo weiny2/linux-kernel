@@ -897,3 +897,10 @@ bool arch_cow_mapping(vm_flags_t vm_flags)
 	return (vm_flags & VM_SHSTK);
 }
 #endif
+
+#ifdef CONFIG_ARCH_HAS_SHSTK
+bool arch_shadow_stack_mapping(vm_flags_t vm_flags)
+{
+	return (vm_flags & VM_SHSTK);
+}
+#endif
