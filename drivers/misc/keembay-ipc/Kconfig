@@ -1,0 +1,5 @@
+config KEEMBAY_IPC
+	tristate "Support for KeemBay IPC"
+	help
+	  KeemBay IPC enables communication between KeemBay CPU Sub-System
+	  (CSS) and KeemBay Media Sub-System (MSS).
