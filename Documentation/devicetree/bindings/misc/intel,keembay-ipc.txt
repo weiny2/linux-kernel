@@ -1,0 +1,13 @@
+Intel Keem Bay IPC
+-----------------------------------------------------
+This binding defines the IPC used on the Intel Keem Bay platform.
+
+Required properties:
+- compatible : "intel,keembay-ipc"
+- memory-region: Reference to the reserved memory region used for IPC buffers.
+
+Example:
+	ipc {
+		compatible = "intel,keembay-ipc";
+		memory-region = <&css_ipc_reserved>, <&mss_ipc_reserved>;
+	};
