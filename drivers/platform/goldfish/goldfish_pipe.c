@@ -288,14 +288,12 @@ static int pin_user_pages(unsigned long first_page,
 static void release_user_pages(struct page **pages, int pages_count,
 			       int is_write, s32 consumed_size)
 {
-	int i;
-
-	for (i = 0; i < pages_count; i++) {
-		if (!is_write && consumed_size > 0)
-			set_page_dirty(pages[i]);
-		put_page(pages[i]);
-	}
+	if (!is_write && consumed_size > 0)
+		put_user_pages_dirty(pages, pages_count);
+	else
+		put_user_pages(pages, pages_count);
 }
+
 
 /* Populate the call parameters, merging adjacent pages together */
 static void populate_rw_params(struct page **pages,
