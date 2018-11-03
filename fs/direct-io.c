@@ -492,7 +492,7 @@ static inline void dio_bio_submit(struct dio *dio, struct dio_submit *sdio)
 static inline void dio_cleanup(struct dio *dio, struct dio_submit *sdio)
 {
 	while (sdio->head < sdio->tail)
-		put_page(dio->pages[sdio->head++]);
+		put_user_page(dio->pages[sdio->head++]);
 }
 
 /*
@@ -559,7 +559,7 @@ static blk_status_t dio_bio_complete(struct dio *dio, struct bio *bio)
 			if (dio->op == REQ_OP_READ && !PageCompound(page) &&
 					dio->should_dirty)
 				set_page_dirty_lock(page);
-			put_page(page);
+			put_user_page(page);
 		}
 		bio_put(bio);
 	}
@@ -1003,7 +1003,7 @@ static int do_direct_IO(struct dio *dio, struct dio_submit *sdio,
 
 				ret = get_more_blocks(dio, sdio, map_bh);
 				if (ret) {
-					put_page(page);
+					put_user_page(page);
 					goto out;
 				}
 				if (!buffer_mapped(map_bh))
@@ -1048,7 +1048,7 @@ do_holes:
 
 				/* AKPM: eargh, -ENOTBLK is a hack */
 				if (dio->op == REQ_OP_WRITE) {
-					put_page(page);
+					put_user_page(page);
 					return -ENOTBLK;
 				}
 
@@ -1061,7 +1061,7 @@ do_holes:
 				if (sdio->block_in_file >=
 						i_size_aligned >> blkbits) {
 					/* We hit eof */
-					put_page(page);
+					put_user_page(page);
 					goto out;
 				}
 				zero_user(page, from, 1 << blkbits);
@@ -1101,7 +1101,7 @@ do_holes:
 						  sdio->next_block_for_io,
 						  map_bh);
 			if (ret) {
-				put_page(page);
+				put_user_page(page);
 				goto out;
 			}
 			sdio->next_block_for_io += this_chunk_blocks;
@@ -1117,7 +1117,7 @@ next_block:
 		}
 
 		/* Drop the ref which was taken in get_user_pages() */
-		put_page(page);
+		put_user_page(page);
 	}
 out:
 	return ret;
