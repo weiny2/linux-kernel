@@ -264,6 +264,10 @@ __blkdev_direct_IO_simple(struct kiocb *iocb, struct iov_iter *iter,
 	bio_for_each_segment_all(bvec, &bio, i, iter_all) {
 		if (should_dirty && !PageCompound(bvec->bv_page))
 			set_page_dirty_lock(bvec->bv_page);
+
+		/* TODO: fix bvec and iovec cases, instead of this hack */
+		bvec->bv_needs_put_user_page = 1;
+
 		put_bvec_page(bvec);
 	}
 
