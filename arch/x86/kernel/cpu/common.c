@@ -469,6 +469,19 @@ static __init int setup_disable_pku(char *arg)
 __setup("nopku", setup_disable_pku);
 #endif /* CONFIG_X86_64 */
 
+#ifdef CONFIG_X86_INTEL_RAR
+static __init int setup_disable_rar(char *s)
+{
+	if (!boot_cpu_has(X86_FEATURE_RAR))
+		return 1;
+
+	setup_clear_cpu_cap(X86_FEATURE_RAR);
+	pr_info("x86: 'norar' specified, disabling\n");
+	return 1;
+}
+__setup("norar", setup_disable_rar);
+#endif
+
 /*
  * Some CPU features depend on higher CPUID levels, which may not always
  * be available due to CPUID level capping or broken virtualization
@@ -878,6 +891,19 @@ static void init_cqm(struct cpuinfo_x86 *c)
 	}
 }
 
+static void init_rar(struct cpuinfo_x86 *c)
+{
+	u64 msr;
+
+	if (!cpu_has(c, X86_FEATURE_CORE_CAPABILITIES))
+		return;
+
+	rdmsrl(MSR_IA32_CORE_CAPABILITIES, msr);
+
+	if (msr & CORE_CAP_RAR)
+		set_cpu_cap(c, X86_FEATURE_RAR);
+}
+
 void get_cpu_cap(struct cpuinfo_x86 *c)
 {
 	u32 eax, ebx, ecx, edx;
@@ -946,6 +972,7 @@ void get_cpu_cap(struct cpuinfo_x86 *c)
 	init_scattered_cpuid_features(c);
 	init_speculation_control(c);
 	init_cqm(c);
+	init_rar(c);
 
 	/*
 	 * Clear/Set all flags overridden by options, after probe.
