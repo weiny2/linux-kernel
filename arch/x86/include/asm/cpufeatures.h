@@ -374,6 +374,7 @@
  * Extended auxiliary flags: Linux defined - For features scattered in various
  * CPUID levels and sub-leaves like CPUID level 7 and sub-leaf 1, etc., word 19.
  */
+#define X86_FEATURE_RAR			(19*32+ 1) /* Intel Remote Action Request */
 
 /*
  * BUG word(s)
