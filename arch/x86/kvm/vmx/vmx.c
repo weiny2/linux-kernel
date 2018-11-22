@@ -44,6 +44,7 @@
 #include <asm/spec-ctrl.h>
 #include <asm/virtext.h>
 #include <asm/vmx.h>
+#include <asm/cet.h>
 
 #include "capabilities.h"
 #include "cpuid.h"
@@ -2467,7 +2468,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	      VM_EXIT_LOAD_IA32_EFER |
 	      VM_EXIT_CLEAR_BNDCFGS |
 	      VM_EXIT_PT_CONCEAL_PIP |
-	      VM_EXIT_CLEAR_IA32_RTIT_CTL;
+	      VM_EXIT_CLEAR_IA32_RTIT_CTL |
+	      VM_EXIT_LOAD_HOST_CET_STATE;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_EXIT_CTLS,
 				&_vmexit_control) < 0)
 		return -EIO;
@@ -2491,7 +2493,8 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	      VM_ENTRY_LOAD_IA32_EFER |
 	      VM_ENTRY_LOAD_BNDCFGS |
 	      VM_ENTRY_PT_CONCEAL_PIP |
-	      VM_ENTRY_LOAD_IA32_RTIT_CTL;
+	      VM_ENTRY_LOAD_IA32_RTIT_CTL |
+	      VM_ENTRY_LOAD_GUEST_CET_STATE;
 	if (adjust_vmx_controls(min, opt, MSR_IA32_VMX_ENTRY_CTLS,
 				&_vmentry_control) < 0)
 		return -EIO;
@@ -3045,6 +3048,25 @@ void vmx_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
 		vmcs_writel(GUEST_CR3, guest_cr3);
 }
 
+bool is_cet_bit_allowed(struct kvm_vcpu *vcpu)
+{
+	u64 kvm_xss = kvm_supported_xss();
+	unsigned long cr0;
+	bool cet_allowed;
+
+	cr0 = kvm_read_cr0(vcpu);
+
+	/* Right now, only user-mode CET is supported.*/
+	cet_allowed = (kvm_xss & XFEATURE_MASK_CET_USER) &&
+		      (guest_cpuid_has(vcpu, X86_FEATURE_SHSTK) ||
+		      guest_cpuid_has(vcpu, X86_FEATURE_IBT));
+
+	if ((cr0 & X86_CR0_WP) && cet_allowed)
+		return true;
+
+	return false;
+}
+
 int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
@@ -3084,6 +3106,9 @@ int vmx_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 		if (!nested_vmx_allowed(vcpu) || is_smm(vcpu))
 			return 1;
 	}
+
+	if ((cr4 & X86_CR4_CET) && !is_cet_bit_allowed(vcpu))
+		return 1;
 
 	if (vmx->nested.vmxon && !nested_cr4_valid(vcpu, cr4))
 		return 1;
@@ -3944,6 +3969,12 @@ void vmx_set_constant_host_state(struct vcpu_vmx *vmx)
 
 	if (cpu_has_load_ia32_efer())
 		vmcs_write64(HOST_IA32_EFER, host_efer);
+
+	if (cpu_has_load_host_cet_states_ctrl()) {
+		vmcs_writel(HOST_S_CET, 0);
+		vmcs_writel(HOST_INTR_SSP_TABLE, 0);
+		vmcs_writel(HOST_SSP, 0);
+	}
 }
 
 void set_cr4_guest_host_mask(struct vcpu_vmx *vmx)
@@ -6510,7 +6541,9 @@ bool __vmx_vcpu_run(struct vcpu_vmx *vmx, unsigned long *regs, bool launched);
 static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	u64 kvm_xss = kvm_supported_xss();
 	unsigned long cr3, cr4;
+	bool cet_allowed;
 
 	/* Record the guest's net vcpu time for enforced NMI injections. */
 	if (unlikely(!enable_vnmi &&
@@ -6543,6 +6576,25 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 		vmcs_writel(HOST_CR3, cr3);
 		vmx->loaded_vmcs->host_state.cr3 = cr3;
 	}
+
+	/* Right now, only user-mode CET is supported.*/
+	cet_allowed = (kvm_xss & XFEATURE_MASK_CET_USER) &&
+		      (guest_cpuid_has(vcpu, X86_FEATURE_SHSTK) ||
+		      guest_cpuid_has(vcpu, X86_FEATURE_IBT));
+
+	if (cpu_has_load_guest_cet_states_ctrl() && cet_allowed)
+		vmcs_set_bits(VM_ENTRY_CONTROLS,
+			      VM_ENTRY_LOAD_GUEST_CET_STATE);
+	else
+		vmcs_clear_bits(VM_ENTRY_CONTROLS,
+				VM_ENTRY_LOAD_GUEST_CET_STATE);
+
+	if (cpu_has_load_host_cet_states_ctrl() && cet_allowed)
+		vmcs_set_bits(VM_EXIT_CONTROLS,
+			      VM_EXIT_LOAD_HOST_CET_STATE);
+	else
+		vmcs_clear_bits(VM_EXIT_CONTROLS,
+				VM_EXIT_LOAD_HOST_CET_STATE);
 
 	cr4 = cr4_read_shadow();
 	if (unlikely(cr4 != vmx->loaded_vmcs->host_state.cr4)) {
