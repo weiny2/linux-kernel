@@ -27,6 +27,8 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
 
 int cpuid_query_maxphyaddr(struct kvm_vcpu *vcpu);
 
+u64 kvm_supported_xss(void);
+
 static inline int cpuid_maxphyaddr(struct kvm_vcpu *vcpu)
 {
 	return vcpu->arch.maxphyaddr;
