@@ -106,6 +106,9 @@
 						 * TSX Async Abort (TAA) vulnerabilities.
 						 */
 
+#define MSR_IA32_CORE_CAPABILITIES	0x000000cf
+#define CORE_CAP_RAR			(1UL << 1)
+
 #define MSR_IA32_FLUSH_CMD		0x0000010b
 #define L1D_FLUSH			BIT(0)	/*
 						 * Writeback and invalidate the
