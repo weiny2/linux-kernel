@@ -248,6 +248,7 @@ static void __init fpu__init_system_ctx_switch(void)
  */
 static void __init fpu__init_parse_early_param(void)
 {
+	u64 xstate_mask;
 	char arg[32];
 	char *argptr = arg;
 	int bit;
@@ -279,6 +280,20 @@ static void __init fpu__init_parse_early_param(void)
 	    bit >= 0 &&
 	    bit < NCAPINTS * 32)
 		setup_clear_cpu_cap(bit);
+
+	xfeatures_mask_all = fpu__get_supported_xfeatures_mask();
+
+	if (cmdline_find_option(boot_command_line, "xstate.enable", arg,
+				sizeof(arg)) &&
+	    !kstrtoull(arg, 16, &xstate_mask) &&
+	    (xstate_mask &= XFEATURE_MASK_BLOBS))
+		xfeatures_mask_all |= xstate_mask;
+
+	if (cmdline_find_option(boot_command_line, "xstate.disable", arg,
+				sizeof(arg)) &&
+	    !kstrtoull(arg, 16, &xstate_mask) &&
+	    (xstate_mask &= XFEATURE_MASK_BLOBS))
+		xfeatures_mask_all &= ~xstate_mask;
 }
 
 /*
