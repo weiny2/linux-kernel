@@ -367,6 +367,9 @@
 #define X86_FEATURE_TSX_FORCE_ABORT	(18*32+13) /* "" TSX_FORCE_ABORT */
 #define X86_FEATURE_PCONFIG		(18*32+18) /* Intel PCONFIG */
 #define X86_FEATURE_IBT			(18*32+20) /* Indirect Branch Tracking */
+#define X86_FEATURE_AMX_INT8		(18*32+22) /* Intel AMX INT8 Support */
+#define X86_FEATURE_AMX_TILE		(18*32+24) /* Intel AMX TILE (two dimensional registers) Support */
+#define X86_FEATURE_AMX_BF16		(18*32+25) /* Intel AMX BF16 Support */
 #define X86_FEATURE_SPEC_CTRL		(18*32+26) /* "" Speculation Control (IBRS + IBPB) */
 #define X86_FEATURE_INTEL_STIBP		(18*32+27) /* "" Single Thread Indirect Branch Predictors */
 #define X86_FEATURE_FLUSH_L1D		(18*32+28) /* Flush L1D cache */
