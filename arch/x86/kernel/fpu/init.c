@@ -227,10 +227,19 @@ static void __init fpu__init_system_xstate_size_legacy(void)
  * This must be called after fpu__init_parse_early_param() is called and
  * xfeatures_mask is enumerated.
  */
+static u64 xstate_enable;
+static u64 xstate_disable;
+
 u64 __init fpu__get_supported_xfeatures_mask(void)
 {
-	return XFEATURE_MASK_USER_SUPPORTED |
+	u64 mask;
+
+	mask = XFEATURE_MASK_USER_SUPPORTED |
 	       XFEATURE_MASK_SUPERVISOR_SUPPORTED;
+	mask |= xstate_enable;
+	mask &= ~xstate_disable;
+
+	return mask;
 }
 
 /* Legacy code to initialize eager fpu mode. */
@@ -250,6 +259,7 @@ static void __init fpu__init_parse_early_param(void)
 {
 	char arg[32];
 	char *argptr = arg;
+	u64 mask;
 	int bit;
 
 #ifdef CONFIG_X86_32
@@ -279,6 +289,22 @@ static void __init fpu__init_parse_early_param(void)
 	    bit >= 0 &&
 	    bit < NCAPINTS * 32)
 		setup_clear_cpu_cap(bit);
+
+	if (cmdline_find_option(boot_command_line, "xstate.enable", arg,
+				sizeof(arg)) &&
+	    !kstrtoull(arg, 16, &mask) &&
+	    (mask &= XFEATURE_MASK_BLOBS))
+		xstate_enable = mask;
+	else
+		xstate_enable = 0;
+
+	if (cmdline_find_option(boot_command_line, "xstate.disable", arg,
+				sizeof(arg)) &&
+	    !kstrtoull(arg, 16, &mask) &&
+	    (mask &= XFEATURE_MASK_BLOBS))
+		xstate_disable = mask;
+	else
+		xstate_disable = 0;
 }
 
 /*
