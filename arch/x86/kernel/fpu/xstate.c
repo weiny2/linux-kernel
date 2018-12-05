@@ -197,6 +197,19 @@ static bool xfeature_is_supervisor(int xfeature_nr)
 	return ecx & 1;
 }
 
+static int xfeature_supports_firstuse_detection(int xfeature_nr)
+{
+	u32 eax, ebx, ecx, edx;
+
+	/*
+	 * If state component 'i' supports the first-use detection,
+	 * also known as xfeature disabling (XFD),
+	 * ECX[2] return 1; otherwise, 0.
+	 */
+	cpuid_count(XSTATE_CPUID, xfeature_nr, &eax, &ebx, &ecx, &edx);
+	return !!(ecx & 4);
+}
+
 /*
  * When executing XSAVEOPT (or other optimized XSAVE instructions), if
  * a processor implementation detects that an FPU state component is still
@@ -408,6 +421,7 @@ static void __init print_xstate_features(void)
 	print_xstate_feature(XFEATURE_MASK_PASID);
 	print_xstate_feature(XFEATURE_MASK_CET_USER);
 	print_xstate_feature(XFEATURE_MASK_CET_KERNEL);
+	print_xstate_feature(XFEATURE_MASK_BLOBS & xfeatures_mask);
 }
 
 /*
@@ -960,17 +974,21 @@ void __init fpu__init_system_xstate(void)
 	}
 
 	xfeatures_mask_all &= fpu__get_supported_xfeatures_mask();
-	xstate_area_mask = xfeatures_mask_all;
-	/*
-	 * We don't support any feature, the state of which saved in the
-	 * expanded area.
-	 *
-	 * When enabling any feature saved in the expanded area, make sure
-	 * that the first-use detection to be available for it. Otherwise,
-	 * the area saving the feature's state needs to be pre-allocated,
-	 * by setting the relevant bits in xstate_area_mask.
-	 */
-	xstate_exp_area_mask = 0;
+	xstate_area_mask = xfeatures_mask_all & ~XFEATURE_MASK_BLOBS;
+
+	for (i = XFEATURE_BLOB_BEGIN; i <= XFEATURE_BLOB_END; i++) {
+		u64 mask;
+
+		if (!xfeature_enabled(i))
+			continue;
+
+		mask = BIT_ULL(i);
+
+		if (xfeature_supports_firstuse_detection(i))
+			xstate_exp_area_mask |= mask;
+		else
+			xstate_area_mask |= mask;
+	}
 
 	/* Enable xstate instructions to be able to continue with initialization: */
 	fpu__init_cpu_xstate();
