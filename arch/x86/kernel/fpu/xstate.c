@@ -39,9 +39,14 @@ static const char *xfeature_names[] =
 	"Processor Trace (unused)"	,
 	"Protection Keys User registers",
 	"PASID state",
-	"unknown xstate feature"	,
 	"Control-flow User registers"	,
 	"Control-flow Kernel registers"	,
+	"Reserved Component (13)"	,
+	"Reserved Component (14)"	,
+	"Reserved Component (15)"	,
+	"Reserved Component (16)"	,
+	"AMX TILE config"		,
+	"AMX TILE data"			,
 	"unknown xstate feature"	,
 };
 
@@ -63,7 +68,9 @@ static struct xfeature_capflag_info xfeature_capflags[] __initdata = {
 	{ XFEATURE_PKRU,			X86_FEATURE_PKU },
 	{ XFEATURE_PASID,			X86_FEATURE_ENQCMD },
 	{ XFEATURE_CET_USER,			X86_FEATURE_SHSTK },
-	{ XFEATURE_CET_KERNEL,			X86_FEATURE_SHSTK }
+	{ XFEATURE_CET_KERNEL,			X86_FEATURE_SHSTK },
+	{ XFEATURE_XTILE_CFG,			X86_FEATURE_AMX_TILE },
+	{ XFEATURE_XTILE_DATA,			X86_FEATURE_AMX_TILE }
 };
 
 /*
