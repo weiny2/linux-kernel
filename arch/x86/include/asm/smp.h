@@ -59,6 +59,9 @@ struct smp_ops {
 
 	void (*send_call_func_ipi)(const struct cpumask *mask);
 	void (*send_call_func_single_ipi)(int cpu);
+
+	void (*send_rar_ipi)(const struct cpumask *mask);
+	void (*send_rar_single_ipi)(int cpu);
 };
 
 /* Globals due to paravirt */
@@ -127,6 +130,16 @@ static inline void arch_send_call_function_ipi_mask(const struct cpumask *mask)
 	smp_ops.send_call_func_ipi(mask);
 }
 
+static inline void arch_send_rar_single_ipi(int cpu)
+{
+	smp_ops.send_rar_single_ipi(cpu);
+}
+
+static inline void arch_send_rar_ipi_mask(const struct cpumask *mask)
+{
+	smp_ops.send_rar_ipi(mask);
+}
+
 void cpu_disable_common(void);
 void native_smp_prepare_boot_cpu(void);
 void native_smp_prepare_cpus(unsigned int max_cpus);
@@ -146,6 +159,9 @@ int wbinvd_on_all_cpus(void);
 void native_smp_send_reschedule(int cpu);
 void native_send_call_func_ipi(const struct cpumask *mask);
 void native_send_call_func_single_ipi(int cpu);
+void native_send_rar_ipi(const struct cpumask *mask);
+void native_send_rar_single_ipi(int cpu);
+
 void x86_idle_thread_init(unsigned int cpu, struct task_struct *idle);
 
 void smp_store_boot_cpu_info(void);
