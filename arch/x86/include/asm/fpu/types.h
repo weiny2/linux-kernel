@@ -161,6 +161,9 @@ struct reg_256_bit {
 struct reg_512_bit {
 	u8	regbytes[512/8];
 };
+struct reg_1024_byte {
+	u8	regbytes[1024];
+};
 
 /*
  * State component 2:
@@ -246,6 +249,14 @@ struct pkru_state {
 } __packed;
 
 /*
+ * State component 10 is supervisor state used for context-switching the
+ * PASID state.
+ */
+struct ia32_pasid_state {
+	u64 pasid;
+} __packed;
+
+/*
  * State component 11 is Control-flow Enforcement user states
  */
 struct cet_user_state {
@@ -263,11 +274,18 @@ struct cet_kernel_state {
 };
 
 /*
- * State component 10 is supervisor state used for context-switching the
- * PASID state.
+ * State component 17: 64-byte AMX tile control register.
  */
-struct ia32_pasid_state {
-	u64 pasid;
+struct xtile_cfg {
+	u64				tcfg[8];
+} __packed;
+
+/*
+ * State component 18: eight 1KB tile registers, TMM0-7.
+ * Each register represents 16 64-byte rows of the matrix data.
+ */
+struct xtile_data {
+	struct reg_1024_byte		tmm[8];
 } __packed;
 
 struct xstate_header {
