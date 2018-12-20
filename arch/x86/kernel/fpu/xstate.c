@@ -421,6 +421,8 @@ static void __init print_xstate_feature(u64 xstate_mask)
  */
 static void __init print_xstate_features(void)
 {
+	u64 mask;
+
 	print_xstate_feature(XFEATURE_MASK_FP);
 	print_xstate_feature(XFEATURE_MASK_SSE);
 	print_xstate_feature(XFEATURE_MASK_YMM);
@@ -433,7 +435,19 @@ static void __init print_xstate_features(void)
 	print_xstate_feature(XFEATURE_MASK_PASID);
 	print_xstate_feature(XFEATURE_MASK_CET_USER);
 	print_xstate_feature(XFEATURE_MASK_CET_KERNEL);
-	print_xstate_feature(XFEATURE_MASK_BLOBS & xfeatures_mask);
+
+	/*
+	 * The feature bits of XTILE_DATA and XTILE_CONFIG
+	 * are in the BLOB regions. Excludes the feature bits
+	 * when printing the supported features from the BLOB
+	 * features.
+	 */
+	print_xstate_feature(XFEATURE_MASK_XTILE_CFG);
+	print_xstate_feature(XFEATURE_MASK_XTILE_DATA);
+	mask = xfeatures_mask_all & XFEATURE_MASK_BLOBS;
+	mask &= ~XFEATURE_MASK_XTILE;
+	if (mask)
+		print_xstate_feature(mask);
 }
 
 /*
@@ -721,6 +735,8 @@ static void check_xstate_against_struct(int nr)
 	XCHECK_SZ(sz, nr, XFEATURE_PASID,     struct ia32_pasid_state);
 	XCHECK_SZ(sz, nr, XFEATURE_CET_USER,   struct cet_user_state);
 	XCHECK_SZ(sz, nr, XFEATURE_CET_KERNEL, struct cet_kernel_state);
+	XCHECK_SZ(sz, nr, XFEATURE_XTILE_CFG,  struct xtile_cfg);
+	XCHECK_SZ(sz, nr, XFEATURE_XTILE_DATA, struct xtile_data);
 
 	/*
 	 * Make *SURE* to add any feature numbers in below if
