@@ -427,6 +427,8 @@ static void __init print_xstate_features(void)
 	print_xstate_feature(XFEATURE_MASK_PASID);
 	print_xstate_feature(XFEATURE_MASK_CET_USER);
 	print_xstate_feature(XFEATURE_MASK_CET_KERNEL);
+	print_xstate_feature(XFEATURE_MASK_XTILE_CFG);
+	print_xstate_feature(XFEATURE_MASK_XTILE_DATA);
 }
 
 /*
@@ -679,6 +681,8 @@ static void check_xstate_against_struct(int nr)
 	XCHECK_SZ(sz, nr, XFEATURE_PASID,     struct ia32_pasid_state);
 	XCHECK_SZ(sz, nr, XFEATURE_CET_USER,   struct cet_user_state);
 	XCHECK_SZ(sz, nr, XFEATURE_CET_KERNEL, struct cet_kernel_state);
+	XCHECK_SZ(sz, nr, XFEATURE_XTILE_CFG,  struct xtile_cfg);
+	XCHECK_SZ(sz, nr, XFEATURE_XTILE_DATA, struct xtile_data);
 
 	/*
 	 * Make *SURE* to add any feature numbers in below if
