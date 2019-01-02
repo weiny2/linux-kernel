@@ -995,7 +995,7 @@ do_device_not_available(struct pt_regs *regs, long error_code)
 
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
 
-	if (!handle_xfd_trap(&current->thread.fpu))
+	if (!xfirstuse_trap(&current->thread.fpu))
 		return;
 
 #ifdef CONFIG_MATH_EMULATION

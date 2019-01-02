@@ -210,9 +210,7 @@ int fpu__copy(struct task_struct *dst, struct task_struct *src)
 
 	fpregs_unlock();
 
-	/* The child task takes the default XFD configuration */
-	if (static_cpu_has(X86_FEATURE_XFD))
-		dst_fpu->xfd_cfg = xfeatures_disable_mask;
+	xfirstuse_init(dst_fpu);
 
 	set_tsk_thread_flag(dst, TIF_NEED_FPU_LOAD);
 
@@ -473,29 +471,30 @@ int fpu__exception_code(struct fpu *fpu, int trap_nr)
 	return 0;
 }
 
-int handle_xfd_trap(struct fpu *fpu)
+int xfirstuse_trap(struct fpu *fpu)
 {
 	u64 event;
 
 	/*
-	 * Check the condition of whether XFD is available and
-	 * configured in the system. If not, return nonzero, implying
-	 * the trap not handled yet.
+	 * Check the condition whether the first-use detection is
+	 * running. If not, return with nonzero, implying the trap
+	 * not handled yet.
 	 */
-	if (!static_cpu_has(X86_FEATURE_XFD) || !xfeatures_disable_mask)
+	if (!xfirstuse_availability())
 		return 1;
 
 	rdmsrl_safe(MSR_IA32_XFD_ERR, &event);
 	/*
 	 * This should not happen because the kernel writes the
-	 * mask value in the first place. With a trap, the following
-	 * code resets the relevant feature bits incrementally. So,
-	 * the trap record bit should be a subset of the mask value.
+	 * first-use mask value in the first place. With a trap, the
+	 * the following code resets the relevant feature bits
+	 * incrementally. So, this trap record bit value should be a
+	 * subset of the first-use mask.
 	 */
-	WARN_ON(!(event & xfeatures_disable_mask));
+	WARN_ON(!(event & xfeatures_firstuse_mask));
 	/*
-	 * When the current trap has nothing to do with XFD, return
-	 * with nonzero, implying the trap not handled.
+	 * If the faulting feature is empty, return with nonzero, implying
+	 * implying the trap not handled yet.
 	 */
 	if (!event)
 		return 1;
@@ -504,8 +503,8 @@ int handle_xfd_trap(struct fpu *fpu)
 	 * No special handling right now, except for updating both
 	 * software and hardware bit values.
 	 */
-	fpu->xfd_cfg &= ~event;
-	xfd_set_bits(fpu->xfd_cfg);
+	fpu->firstuse_bv |= event;
+	xfd_set_bits(xfd_get_cfg(fpu));
 
 	/* Clear the trap record. */
 	wrmsrl_safe(MSR_IA32_XFD_ERR, 0);
