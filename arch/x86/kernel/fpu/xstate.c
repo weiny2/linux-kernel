@@ -75,6 +75,15 @@ static unsigned int xstate_sizes[XFEATURE_MAX]   = { [ 0 ... XFEATURE_MAX - 1] =
 static unsigned int xstate_comp_offsets[XFEATURE_MAX] = { [ 0 ... XFEATURE_MAX - 1] = -1};
 
 /*
+ * Mask of xfeature disabling: a combination of xfeatures that the
+ * kernel wants to select and the hardware supports for disabling.
+ *
+ * It serves as the default bit value for the XFD configuration of
+ * all the tasks.
+ */
+u64 xfeatures_disable_mask __read_mostly;
+
+/*
  * The XSAVE area of kernel can be in standard or compacted format;
  * it is always in standard format for user mode. This is the user
  * mode standard format size used for signal and ptrace frames.
@@ -135,6 +144,18 @@ static bool xfeature_is_supervisor(int xfeature_nr)
 static bool xfeature_is_user(int xfeature_nr)
 {
 	return !xfeature_is_supervisor(xfeature_nr);
+}
+
+static int xfeature_supports_disabling(int xfeature_nr)
+{
+	u32 eax, ebx, ecx, edx;
+
+	/*
+	 * If state component 'i' supports the xfeature disabling,
+	 * ECX[2] return 1; otherwise, 0.
+	 */
+	cpuid_count(XSTATE_CPUID, xfeature_nr, &eax, &ebx, &ecx, &edx);
+	return !!(ecx & 4);
 }
 
 /*
@@ -246,6 +267,9 @@ void fpu__init_cpu_xstate(void)
 	 */
 	if (boot_cpu_has(X86_FEATURE_XSAVES))
 		wrmsrl(MSR_IA32_XSS, xfeatures_mask_supervisor());
+
+	if (boot_cpu_has(X86_FEATURE_XFD) && xfeatures_disable_mask)
+		xfd_set_bits(xfeatures_disable_mask);
 }
 
 static int xfeature_enabled(enum xfeature xfeature)
@@ -771,6 +795,17 @@ void __init fpu__init_system_xstate(void)
 	cpuid_count(XSTATE_CPUID, 1, &eax, &ebx, &ecx, &edx);
 	xfeatures_mask_all |= ecx + ((u64)edx << 32);
 
+	/*
+	 * The kernel can select which feature to be disabled at first.
+	 * When userspace uses the disabled xfeature, a trap happens.
+	 * The kernel may enable the xfeature once making the system
+	 * ready for it.
+	 *
+	 * Select no xfeature at the moment as the support is not fully
+	 * ready yet.
+	 */
+	xfeatures_disable_mask = 0;
+
 	if ((xfeatures_mask_user() & XFEATURE_MASK_FPSSE) != XFEATURE_MASK_FPSSE) {
 		/*
 		 * This indicates that something really unexpected happened
@@ -789,6 +824,7 @@ void __init fpu__init_system_xstate(void)
 	for (i = 0; i < ARRAY_SIZE(xfeature_capflags); i++) {
 		short cpu_cap = xfeature_capflags[i].cpu_cap;
 		int idx = xfeature_capflags[i].xfeature_idx;
+		u64 mask = ~BIT_ULL(idx);
 
 		if (cpu_cap == X86_FEATURE_SHSTK) {
 			/*
@@ -797,10 +833,13 @@ void __init fpu__init_system_xstate(void)
 			 */
 			if (!boot_cpu_has(X86_FEATURE_SHSTK) &&
 			    !boot_cpu_has(X86_FEATURE_IBT))
-				xfeatures_mask_all &= ~BIT_ULL(idx);
+				xfeatures_mask_all &= mask;
 		} else if ((cpu_cap == -1) || !boot_cpu_has(cpu_cap)) {
-			xfeatures_mask_all &= ~BIT_ULL(idx);
+			xfeatures_mask_all &= mask;
 		}
+
+		if (!xfeature_supports_disabling(idx))
+			xfeatures_disable_mask &= mask;
 	}
 
 	xfeatures_mask_all &= fpu__get_supported_xfeatures_mask();
@@ -850,6 +889,9 @@ void fpu__resume_cpu(void)
 	 */
 	if (boot_cpu_has(X86_FEATURE_XSAVES))
 		wrmsrl(MSR_IA32_XSS, xfeatures_mask_supervisor());
+
+	if (boot_cpu_has(X86_FEATURE_XFD))
+		xfd_set_bits(current->thread.fpu.xfd_cfg);
 }
 
 static inline struct xregs_state *__xsave_state(struct fpu *fpu,

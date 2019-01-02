@@ -605,9 +605,24 @@ static inline void switch_fpu_prepare(struct fpu *old_fpu, int cpu)
  * Misc helper functions:
  */
 
+static inline void xfd_set_bits(u64 value)
+{
+	wrmsrl_safe(MSR_IA32_XFD, value);
+}
+
+static inline u64 xfd_get_bits(void)
+{
+	u64 value;
+
+	rdmsrl_safe(MSR_IA32_XFD, &value);
+	return value;
+}
+
 /*
  * Load PKRU from the FPU context if available. Delay loading of the
  * complete FPU state until the return to userland.
+ *
+ * Also, update the XFD configuration when needed.
  */
 static inline void switch_fpu_finish(struct fpu *new_fpu)
 {
@@ -618,6 +633,18 @@ static inline void switch_fpu_finish(struct fpu *new_fpu)
 		return;
 
 	set_thread_flag(TIF_NEED_FPU_LOAD);
+
+	if (static_cpu_has(X86_FEATURE_XFD)) {
+		u64 prev_xfd_cfg = xfd_get_bits();
+
+		/*
+		 * Reading and writing the XFD configuration is
+		 * expensive, as it goes through MSR. So, this
+		 * implementation needs to be optimized.
+		 */
+		if (unlikely(prev_xfd_cfg != new_fpu->xfd_cfg))
+			xfd_set_bits(new_fpu->xfd_cfg);
+	}
 
 	if (!cpu_feature_enabled(X86_FEATURE_OSPKE))
 		return;
@@ -662,5 +689,7 @@ static inline void xsetbv(u32 index, u64 value)
 }
 
 void fpu__clear_pasid(struct task_struct *task);
+
+int handle_xfd_trap(struct fpu *fpu);
 
 #endif /* _ASM_X86_FPU_INTERNAL_H */
