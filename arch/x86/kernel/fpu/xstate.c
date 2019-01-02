@@ -72,6 +72,15 @@ static unsigned int xstate_comp_offsets[XFEATURE_MAX] = { [ 0 ... XFEATURE_MAX -
 static unsigned int xstate_supervisor_only_offsets[XFEATURE_MAX] = { [ 0 ... XFEATURE_MAX - 1] = -1};
 
 /*
+ * Mask of xfeature disabling: a combination of xfeatures that the
+ * kernel wants to select and the hardware supports for disabling.
+ *
+ * It serves as the default bit value for the XFD configuration of
+ * all the tasks.
+ */
+u64 xfeatures_disable_mask __read_mostly;
+
+/*
  * The XSAVE area of kernel can be in standard or compacted format;
  * it is always in standard format for user mode. This is the user
  * mode standard format size used for signal and ptrace frames.
@@ -242,6 +251,9 @@ void fpu__init_cpu_xstate(void)
 	 */
 	if (boot_cpu_has(X86_FEATURE_XSAVES))
 		wrmsrl(MSR_IA32_XSS, xfeatures_mask_supervisor());
+
+	if (boot_cpu_has(X86_FEATURE_XFD) && xfeatures_disable_mask)
+		xfd_set_bits(xfeatures_disable_mask);
 }
 
 static bool xfeature_enabled(enum xfeature xfeature)
@@ -794,6 +806,16 @@ void __init fpu__init_system_xstate(void)
 	cpuid_count(XSTATE_CPUID, 1, &eax, &ebx, &ecx, &edx);
 	xfeatures_mask_all |= ecx + ((u64)edx << 32);
 
+	/*
+	 * The kernel can select which feature to be disabled at first.
+	 * When userspace executes any instruction from the disabled
+	 * feature, a trap happens. The kernel may enable the feature.
+	 *
+	 * Select none at the moment as this feature disabling support is
+	 * not fully ready yet.
+	 */
+	xfeatures_disable_mask = 0;
+
 	if ((xfeatures_mask_user() & XFEATURE_MASK_FPSSE) != XFEATURE_MASK_FPSSE) {
 		/*
 		 * This indicates that something really unexpected happened
@@ -872,6 +894,9 @@ void fpu__resume_cpu(void)
 	 */
 	if (boot_cpu_has(X86_FEATURE_XSAVES))
 		wrmsrl(MSR_IA32_XSS, xfeatures_mask_supervisor());
+
+	if (boot_cpu_has(X86_FEATURE_XFD))
+		xfd_set_bits(current->thread.fpu.xfd_cfg);
 }
 
 static inline struct xregs_state *__xsave_state(struct fpu *fpu,
