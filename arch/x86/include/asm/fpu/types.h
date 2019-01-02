@@ -332,21 +332,23 @@ struct fpu {
 	unsigned long			avx512_timestamp;
 
 	/*
-	 * @xfd_cfg:
+	 * @firstuse_bv:
 	 *
-	 * When the xfeature disabling (XFD) is available, setting a
-	 * feature bit in the MSR disables the correspondent xfeature and
-	 * a subsequent exception happens when userspace uses the xfeature
-	 * for the first time.
+	 * Record the first-use detection status for the monitored xfeatures.
 	 *
-	 * Record the hardware XFD configuration for each to prepare the
-	 * FPU context switching.
+	 * Implication of each bit value is following:
+	 *	If a bit is zero, the first-use is not detected, or the
+	 *	correspondent xfeature is not being monitored.
+	 *	If a bit is nonzero, the first-use of the correspondent
+	 *	xfeature was detected.
 	 *
-	 * The implication of each xfeature bit is the same as in the MSR:
-	 *	When set, a trap happens whenever userspace uses the xfeature
-	 *	If cleared, no trap.
+	 * We can use this bit value as an operand for XSAVE and XRSTOR
+	 * family instructions for saving and restoring the xstates
+	 * dynamically. Note that this bit value is not for the hardware
+	 * configuration directly. A helper function, xfd_get_cfg(),
+	 * converts it for that.
 	 */
-	u64	xfd_cfg;
+	u64	firstuse_bv;
 
 	/*
 	 * @state:
