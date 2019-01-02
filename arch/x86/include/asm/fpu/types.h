@@ -332,6 +332,23 @@ struct fpu {
 	unsigned long			avx512_timestamp;
 
 	/*
+	 * @xfd_cfg:
+	 *
+	 * When the xfeature disabling (XFD) is available, setting a
+	 * feature bit in the MSR disables the correspondent xfeature and
+	 * a subsequent exception happens when userspace uses the xfeature
+	 * for the first time.
+	 *
+	 * Record the hardware XFD configuration for each to prepare the
+	 * FPU context switching.
+	 *
+	 * The implication of each xfeature bit is the same as in the MSR:
+	 *	When set, a trap happens whenever userspace uses the xfeature
+	 *	If cleared, no trap.
+	 */
+	u64	xfd_cfg;
+
+	/*
 	 * @state:
 	 *
 	 * In-memory copy of all FPU registers that we save/restore
