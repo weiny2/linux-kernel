@@ -75,13 +75,16 @@ static unsigned int xstate_sizes[XFEATURE_MAX]   = { [ 0 ... XFEATURE_MAX - 1] =
 static unsigned int xstate_comp_offsets[XFEATURE_MAX] = { [ 0 ... XFEATURE_MAX - 1] = -1};
 
 /*
- * Mask of xfeature disabling: a combination of xfeatures that the
- * kernel wants to select and the hardware supports for disabling.
+ * Mask for the first-use detection: a combination of feature bit
+ * values that the kernel wants to select and the hardware supports
+ * for the first-use detection.
  *
- * It serves as the default bit value for the XFD configuration of
- * all the tasks.
+ * It is the default bit value for the hardware configuration, while
+ * the first-use detection status in FPU context has zero by default.
+ * It also helps to determine whether the first-use detection runs
+ * in the system or not.
  */
-u64 xfeatures_disable_mask __read_mostly;
+u64 xfeatures_firstuse_mask __read_mostly;
 
 /*
  * The XSAVE area of kernel can be in standard or compacted format;
@@ -146,12 +149,13 @@ static bool xfeature_is_user(int xfeature_nr)
 	return !xfeature_is_supervisor(xfeature_nr);
 }
 
-static int xfeature_supports_disabling(int xfeature_nr)
+static int xfeature_supports_firstuse_detection(int xfeature_nr)
 {
 	u32 eax, ebx, ecx, edx;
 
 	/*
-	 * If state component 'i' supports the xfeature disabling,
+	 * If state component 'i' supports the first-use detection,
+	 * also known as xfeature disabling (XFD),
 	 * ECX[2] return 1; otherwise, 0.
 	 */
 	cpuid_count(XSTATE_CPUID, xfeature_nr, &eax, &ebx, &ecx, &edx);
@@ -268,8 +272,8 @@ void fpu__init_cpu_xstate(void)
 	if (boot_cpu_has(X86_FEATURE_XSAVES))
 		wrmsrl(MSR_IA32_XSS, xfeatures_mask_supervisor());
 
-	if (boot_cpu_has(X86_FEATURE_XFD) && xfeatures_disable_mask)
-		xfd_set_bits(xfeatures_disable_mask);
+	if (xfirstuse_availability())
+		xfd_set_bits(xfeatures_firstuse_mask);
 }
 
 static int xfeature_enabled(enum xfeature xfeature)
@@ -796,15 +800,11 @@ void __init fpu__init_system_xstate(void)
 	xfeatures_mask_all |= ecx + ((u64)edx << 32);
 
 	/*
-	 * The kernel can select which feature to be disabled at first.
-	 * When userspace uses the disabled xfeature, a trap happens.
-	 * The kernel may enable the xfeature once making the system
-	 * ready for it.
-	 *
-	 * Select no xfeature at the moment as the support is not fully
-	 * ready yet.
+	 * The kernel can select which feature to be monitored for its first
+	 * usage. Select no xfeature at the moment as the support is not
+	 * fully ready yet.
 	 */
-	xfeatures_disable_mask = 0;
+	xfeatures_firstuse_mask = 0;
 
 	if ((xfeatures_mask_user() & XFEATURE_MASK_FPSSE) != XFEATURE_MASK_FPSSE) {
 		/*
@@ -838,8 +838,8 @@ void __init fpu__init_system_xstate(void)
 			xfeatures_mask_all &= mask;
 		}
 
-		if (!xfeature_supports_disabling(idx))
-			xfeatures_disable_mask &= mask;
+		if (!xfeature_supports_firstuse_detection(idx))
+			xfeatures_firstuse_mask &= mask;
 	}
 
 	xfeatures_mask_all &= fpu__get_supported_xfeatures_mask();
@@ -891,7 +891,7 @@ void fpu__resume_cpu(void)
 		wrmsrl(MSR_IA32_XSS, xfeatures_mask_supervisor());
 
 	if (boot_cpu_has(X86_FEATURE_XFD))
-		xfd_set_bits(current->thread.fpu.xfd_cfg);
+		xfd_set_bits(xfd_get_cfg(&current->thread.fpu));
 }
 
 static inline struct xregs_state *__xsave_state(struct fpu *fpu,

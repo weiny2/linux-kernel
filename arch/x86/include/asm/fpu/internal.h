@@ -605,6 +605,10 @@ static inline void switch_fpu_prepare(struct fpu *old_fpu, int cpu)
  * Misc helper functions:
  */
 
+/*
+ * The first-use detection helpers:
+ */
+
 static inline void xfd_set_bits(u64 value)
 {
 	wrmsrl_safe(MSR_IA32_XFD, value);
@@ -619,12 +623,68 @@ static inline u64 xfd_get_bits(void)
 }
 
 /*
+ * Convert first-use status to hardware configuration bit value
+ */
+static inline u64 xfd_get_cfg(struct fpu *fpu)
+{
+	/*
+	 * In the first-use bit value of each FPU context, a bit is on
+	 * when the first-use detection happens. The superset of this is
+	 * the combination of what the kernel chooses, and the hardware
+	 * supports in the XFD.
+	 *
+	 * If an xfeature is being monitor but not detected for its first-
+	 * use, set the feature bit in the XFD configuration bit value.
+	 * If not monitored, the task's first-use status bit is always
+	 * zero. So, make the following conversion:
+	 */
+	return xfeatures_firstuse_mask ^ fpu->firstuse_bv;
+}
+
+static inline bool xfirstuse_availability(void)
+{
+	/*
+	 * Check the condition of whether the XFD is available and
+	 * configured in the system.
+	 */
+	if (static_cpu_has(X86_FEATURE_XFD) && xfeatures_firstuse_mask)
+		return true;
+	return false;
+}
+
+/*
+ * Initialize the status for detecting the first-use of xfeatures.
+ */
+static inline void xfirstuse_init(struct fpu *fpu)
+{
+	if (!xfirstuse_availability())
+		return;
+
+	fpu->firstuse_bv = 0;
+}
+
+/*
+ * Compare the first-use status in the two FPU contexts and perform
+ * updating hardware configuration for the first-use detection.
+ */
+static inline void xfirstuse_switch(struct fpu *prev, struct fpu *next)
+{
+	if (!xfirstuse_availability())
+		return;
+
+	if (unlikely(prev->firstuse_bv != next->firstuse_bv))
+		xfd_set_bits(xfd_get_cfg(next));
+}
+
+int xfirstuse_trap(struct fpu *fpu);
+
+/*
  * Load PKRU from the FPU context if available. Delay loading of the
  * complete FPU state until the return to userland.
  *
  * Also, update the XFD configuration when needed.
  */
-static inline void switch_fpu_finish(struct fpu *new_fpu)
+static inline void switch_fpu_finish(struct fpu *old_fpu, struct fpu *new_fpu)
 {
 	u32 pkru_val = init_pkru_value;
 	struct pkru_state *pk;
@@ -634,17 +694,7 @@ static inline void switch_fpu_finish(struct fpu *new_fpu)
 
 	set_thread_flag(TIF_NEED_FPU_LOAD);
 
-	if (static_cpu_has(X86_FEATURE_XFD)) {
-		u64 prev_xfd_cfg = xfd_get_bits();
-
-		/*
-		 * Reading and writing the XFD configuration is
-		 * expensive, as it goes through MSR. So, this
-		 * implementation needs to be optimized.
-		 */
-		if (unlikely(prev_xfd_cfg != new_fpu->xfd_cfg))
-			xfd_set_bits(new_fpu->xfd_cfg);
-	}
+	xfirstuse_switch(old_fpu, new_fpu);
 
 	if (!cpu_feature_enabled(X86_FEATURE_OSPKE))
 		return;
@@ -689,7 +739,5 @@ static inline void xsetbv(u32 index, u64 value)
 }
 
 void fpu__clear_pasid(struct task_struct *task);
-
-int handle_xfd_trap(struct fpu *fpu);
 
 #endif /* _ASM_X86_FPU_INTERNAL_H */
