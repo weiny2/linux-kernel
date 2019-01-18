@@ -1950,6 +1950,19 @@ config X86_INTEL_TSX_MODE_AUTO
 	  side channel attacks- equals the tsx=auto command line parameter.
 endchoice
 
+config X86_INTEL_RAR
+	bool "Intel Remote Action Request (RAR)"
+	depends on CPU_SUP_INTEL && X86_64_SMP
+	help
+	  RAR is an inter-processor broadcast facility that can be
+	  used to replace TLB-flush IPIs.  To start an RAR, the
+	  initiator CPU creates a payload and then sends a command to
+	  the APIC.  The receiving CPUs automatically perform the
+	  task specified in the payload without the operating system's
+	  involement.
+
+	  If unsure, say N.
+
 config EFI
 	bool "EFI runtime service support"
 	depends on ACPI
