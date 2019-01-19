@@ -14,6 +14,13 @@ config X86_VERBOSE_BOOTUP
 	  (e.g. bzImage) of the boot. If you disable this you will still
 	  see errors. Disable this if you want silent bootup.
 
+config X86_SLE_SUPPORT
+	bool "Enable various workarounds in order to boot in SLE environment"
+	default n
+	---help---
+	  Enables workarounds in head_64.S, apic, rtc and printk in order to
+	  enable and speed up boot in the SLE environment.
+
 config EARLY_PRINTK
 	bool "Early printk" if EXPERT
 	default y

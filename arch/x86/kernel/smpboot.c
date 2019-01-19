@@ -1214,6 +1214,10 @@ void arch_disable_smp_support(void)
  */
 static __init void disable_smp(void)
 {
+#ifdef x86_CONFIG_SLE_HACKS
+	pr_info("Emulation Hack:enable lapic timer\n");
+	x86_init.timers.setup_percpu_clockev();
+#endif
 	pr_info("SMP disabled\n");
 
 	disable_ioapic_support();
