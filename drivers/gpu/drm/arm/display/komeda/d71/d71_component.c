@@ -9,11 +9,237 @@
 #include "d71_dev.h"
 #include "komeda_kms.h"
 #include "malidp_io.h"
+#include "komeda_framebuffer.h"
+
+static void get_resources_id(u32 hw_id, u32 *pipe_id, u32 *comp_id)
+{
+	u32 id = BLOCK_INFO_BLK_ID(hw_id);
+	u32 pipe = id;
+
+	switch (BLOCK_INFO_BLK_TYPE(hw_id)) {
+	case D71_BLK_TYPE_LPU_WB_LAYER:
+		id = KOMEDA_COMPONENT_WB_LAYER;
+		break;
+	case D71_BLK_TYPE_CU_SPLITTER:
+		id = KOMEDA_COMPONENT_SPLITTER;
+		break;
+	case D71_BLK_TYPE_CU_SCALER:
+		pipe = id / D71_PIPELINE_MAX_SCALERS;
+		id %= D71_PIPELINE_MAX_SCALERS;
+		id += KOMEDA_COMPONENT_SCALER0;
+		break;
+	case D71_BLK_TYPE_CU:
+		id += KOMEDA_COMPONENT_COMPIZ0;
+		break;
+	case D71_BLK_TYPE_LPU_LAYER:
+		pipe = id / D71_PIPELINE_MAX_LAYERS;
+		id %= D71_PIPELINE_MAX_LAYERS;
+		id += KOMEDA_COMPONENT_LAYER0;
+		break;
+	case D71_BLK_TYPE_DOU_IPS:
+		id += KOMEDA_COMPONENT_IPS0;
+		break;
+	case D71_BLK_TYPE_CU_MERGER:
+		id = KOMEDA_COMPONENT_MERGER;
+		break;
+	case D71_BLK_TYPE_DOU:
+		id = KOMEDA_COMPONENT_TIMING_CTRLR;
+		break;
+	default:
+		id = 0xFFFFFFFF;
+	}
+
+	if (comp_id)
+		*comp_id = id;
+
+	if (pipe_id)
+		*pipe_id = pipe;
+}
+
+static u32 get_valid_inputs(struct block_header *blk)
+{
+	u32 valid_inputs = 0, comp_id;
+	int i;
+
+	for (i = 0; i < PIPELINE_INFO_N_VALID_INPUTS(blk->pipeline_info); i++) {
+		get_resources_id(blk->input_ids[i], NULL, &comp_id);
+		if (comp_id == 0xFFFFFFFF)
+			continue;
+		valid_inputs |= BIT(comp_id);
+	}
+
+	return valid_inputs;
+}
+
+static u32 to_rot_ctrl(u32 rot)
+{
+	u32 lr_ctrl = 0;
+
+	switch (rot & DRM_MODE_ROTATE_MASK) {
+	case DRM_MODE_ROTATE_0:
+		lr_ctrl |= L_ROT(L_ROT_R0);
+		break;
+	case DRM_MODE_ROTATE_90:
+		lr_ctrl |= L_ROT(L_ROT_R90);
+		break;
+	case DRM_MODE_ROTATE_180:
+		lr_ctrl |= L_ROT(L_ROT_R180);
+		break;
+	case DRM_MODE_ROTATE_270:
+		lr_ctrl |= L_ROT(L_ROT_R270);
+		break;
+	}
+
+	if (rot & DRM_MODE_REFLECT_X)
+		lr_ctrl |= L_HFLIP;
+	if (rot & DRM_MODE_REFLECT_Y)
+		lr_ctrl |= L_VFLIP;
+
+	return lr_ctrl;
+}
+
+static void d71_layer_disable(struct komeda_component *c)
+{
+	malidp_write32_mask(c->reg, BLK_CONTROL, L_EN, 0);
+}
+
+static void d71_layer_update(struct komeda_component *c,
+			     struct komeda_component_state *state)
+{
+	struct komeda_layer_state *st = to_layer_st(state);
+	struct drm_plane_state *plane_st = state->plane->state;
+	struct drm_framebuffer *fb = plane_st->fb;
+	struct komeda_fb *kfb = to_kfb(fb);
+	u32 __iomem *reg = c->reg;
+	u32 ctrl_mask = L_EN | L_ROT(L_ROT_R270) | L_HFLIP | L_VFLIP | L_TBU_EN;
+	u32 ctrl = L_EN | to_rot_ctrl(st->rot);
+	int i;
+
+	for (i = 0; i < fb->format->num_planes; i++) {
+		malidp_write32(reg,
+			       BLK_P0_PTR_LOW + i * LAYER_PER_PLANE_REGS * 4,
+			       lower_32_bits(st->addr[i]));
+		malidp_write32(reg,
+			       BLK_P0_PTR_HIGH + i * LAYER_PER_PLANE_REGS * 4,
+			       upper_32_bits(st->addr[i]));
+		if (i >= 2)
+			break;
+
+		malidp_write32(reg,
+			       BLK_P0_STRIDE + i * LAYER_PER_PLANE_REGS * 4,
+			       fb->pitches[i] & 0xFFFF);
+	}
+
+	malidp_write32(reg, LAYER_FMT, kfb->format_caps->hw_id);
+	malidp_write32(reg, BLK_IN_SIZE, HV_SIZE(st->hsize, st->vsize));
+
+	malidp_write32_mask(reg, BLK_CONTROL, ctrl_mask, ctrl);
+}
+
+static void d71_layer_dump(struct komeda_component *c, struct seq_file *sf)
+{
+	u32 v[15], i;
+	bool rich, rgb2rgb;
+	char *prefix;
+
+	get_values_from_reg(c->reg, LAYER_INFO, 1, &v[14]);
+	if (v[14] & 0x1) {
+		rich = true;
+		prefix = "LR_";
+	} else {
+		rich = false;
+		prefix = "LS_";
+	}
+
+	rgb2rgb = !!(v[14] & L_INFO_CM);
+
+	dump_block_header(sf, c->reg);
+
+	seq_printf(sf, "%sLAYER_INFO:\t\t0x%X\n", prefix, v[14]);
+
+	get_values_from_reg(c->reg, 0xD0, 1, v);
+	seq_printf(sf, "%sCONTROL:\t\t0x%X\n", prefix, v[0]);
+	if (rich) {
+		get_values_from_reg(c->reg, 0xD4, 1, v);
+		seq_printf(sf, "LR_RICH_CONTROL:\t0x%X\n", v[0]);
+	}
+	get_values_from_reg(c->reg, 0xD8, 4, v);
+	seq_printf(sf, "%sFORMAT:\t\t0x%X\n", prefix, v[0]);
+	seq_printf(sf, "%sIT_COEFFTAB:\t\t0x%X\n", prefix, v[1]);
+	seq_printf(sf, "%sIN_SIZE:\t\t0x%X\n", prefix, v[2]);
+	seq_printf(sf, "%sPALPHA:\t\t0x%X\n", prefix, v[3]);
+
+	get_values_from_reg(c->reg, 0x100, 3, v);
+	seq_printf(sf, "%sP0_PTR_LOW:\t\t0x%X\n", prefix, v[0]);
+	seq_printf(sf, "%sP0_PTR_HIGH:\t\t0x%X\n", prefix, v[1]);
+	seq_printf(sf, "%sP0_STRIDE:\t\t0x%X\n", prefix, v[2]);
+
+	get_values_from_reg(c->reg, 0x110, 2, v);
+	seq_printf(sf, "%sP1_PTR_LOW:\t\t0x%X\n", prefix, v[0]);
+	seq_printf(sf, "%sP1_PTR_HIGH:\t\t0x%X\n", prefix, v[1]);
+	if (rich) {
+		get_values_from_reg(c->reg, 0x118, 1, v);
+		seq_printf(sf, "LR_P1_STRIDE:\t\t0x%X\n", v[0]);
+
+		get_values_from_reg(c->reg, 0x120, 2, v);
+		seq_printf(sf, "LR_P2_PTR_LOW:\t\t0x%X\n", v[0]);
+		seq_printf(sf, "LR_P2_PTR_HIGH:\t\t0x%X\n", v[1]);
+
+		get_values_from_reg(c->reg, 0x130, 12, v);
+		for (i = 0; i < 12; i++)
+			seq_printf(sf, "LR_YUV_RGB_COEFF%u:\t0x%X\n", i, v[i]);
+	}
+
+	if (rgb2rgb) {
+		get_values_from_reg(c->reg, LAYER_RGB_RGB_COEFF0, 12, v);
+		for (i = 0; i < 12; i++)
+			seq_printf(sf, "LS_RGB_RGB_COEFF%u:\t0x%X\n", i, v[i]);
+	}
+
+	get_values_from_reg(c->reg, 0x160, 3, v);
+	seq_printf(sf, "%sAD_CONTROL:\t\t0x%X\n", prefix, v[0]);
+	seq_printf(sf, "%sAD_H_CROP:\t\t0x%X\n", prefix, v[1]);
+	seq_printf(sf, "%sAD_V_CROP:\t\t0x%X\n", prefix, v[2]);
+}
+
+static struct komeda_component_funcs d71_layer_funcs = {
+	.update		= d71_layer_update,
+	.disable	= d71_layer_disable,
+};
 
 static int d71_layer_init(struct d71_dev *d71,
 			  struct block_header *blk, u32 __iomem *reg)
 {
-	DRM_DEBUG("Detect D71_Layer.\n");
+	struct komeda_component *c;
+	struct komeda_layer *layer;
+	u32 pipe_id, layer_id, layer_info;
+
+	get_resources_id(blk->block_info, &pipe_id, &layer_id);
+	c = komeda_component_add(&d71->pipes[pipe_id]->base, sizeof(*layer),
+				 layer_id,
+				 BLOCK_INFO_INPUT_ID(blk->block_info),
+				 &d71_layer_funcs, 0,
+				 get_valid_inputs(blk),
+				 1, reg, "LPU%d_LAYER%d", pipe_id, layer_id);
+	if (IS_ERR(c)) {
+		DRM_ERROR("Failed to add layer component\n");
+		return PTR_ERR(c);
+	}
+
+	layer = to_layer(c);
+	layer_info = malidp_read32(reg, LAYER_INFO);
+
+	if (layer_info & L_INFO_RF)
+		layer->layer_type = KOMEDA_FMT_RICH_LAYER;
+	else
+		layer->layer_type = KOMEDA_FMT_SIMPLE_LAYER;
+
+	set_range(&layer->hsize_in, 4, d71->max_line_size);
+	set_range(&layer->vsize_in, 4, d71->max_vsize);
+
+	malidp_write32(reg, LAYER_PALPHA, D71_PALPHA_DEF_MAP);
+
+	layer->supported_rots = DRM_MODE_ROTATE_MASK | DRM_MODE_REFLECT_MASK;
 
 	return 0;
 }
