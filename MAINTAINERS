@@ -6535,6 +6535,16 @@ M:	Frank Haverkamp <haver@linux.ibm.com>
 S:	Supported
 F:	drivers/misc/genwqe/
 
+GET_USER_PAGES
+M:	Dan Williams <dan.j.williams@intel.com>
+M:	Jan Kara <jack@suse.cz>
+M:	Jérôme Glisse <jglisse@redhat.com>
+M:	John Hubbard <jhubbard@nvidia.com>
+L:	linux-mm@kvack.org
+S:	Maintained
+F:	mm/gup.c
+F:	Documentation/vm/get_user_pages.rst
+
 GET_MAINTAINER SCRIPT
 M:	Joe Perches <joe@perches.com>
 S:	Maintained
