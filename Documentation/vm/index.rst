@@ -32,6 +32,7 @@ descriptions of data structures and algorithms.
    balance
    cleancache
    frontswap
+   get_user_pages
    highmem
    hmm
    hwpoison
