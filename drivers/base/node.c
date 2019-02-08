@@ -101,6 +101,10 @@ static const struct attribute_group *node_access_node_groups[] = {
 	NULL,
 };
 
+#define TERMINAL_NODE -1
+static int node_migration[MAX_NUMNODES] = {[0 ...  MAX_NUMNODES - 1] = TERMINAL_NODE};
+static DEFINE_SPINLOCK(node_migration_lock);
+
 static void node_remove_accesses(struct node *node)
 {
 	struct node_access_nodes *c, *cnext;
@@ -530,6 +534,74 @@ static ssize_t node_read_distance(struct device *dev,
 }
 static DEVICE_ATTR(distance, S_IRUGO, node_read_distance, NULL);
 
+static ssize_t migration_path_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	return sprintf(buf, "%d\n", node_migration[dev->id]);
+}
+
+static ssize_t migration_path_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	int i, err, nid = dev->id;
+	nodemask_t visited = NODE_MASK_NONE;
+	long next;
+
+	err = kstrtol(buf, 0, &next);
+	if (err)
+		return -EINVAL;
+
+	if (next < 0) {
+		spin_lock(&node_migration_lock);
+		WRITE_ONCE(node_migration[nid], TERMINAL_NODE);
+		spin_unlock(&node_migration_lock);
+		return count;
+	}
+	if (next >= MAX_NUMNODES || !node_online(next))
+		return -EINVAL;
+
+	/*
+	 * Follow the entire migration path from 'nid' through the point where
+	 * we hit a TERMINAL_NODE.
+	 *
+	 * Don't allow loops migration cycles in the path.
+	 */
+	node_set(nid, visited);
+	spin_lock(&node_migration_lock);
+	for (i = next; node_migration[i] != TERMINAL_NODE;
+	     i = node_migration[i]) {
+		/* Fail if we have visited this node already */
+		if (node_test_and_set(i, visited)) {
+			spin_unlock(&node_migration_lock);
+			return -EINVAL;
+		}
+	}
+	WRITE_ONCE(node_migration[nid], next);
+	spin_unlock(&node_migration_lock);
+
+	return count;
+}
+static DEVICE_ATTR_RW(migration_path);
+
+/**
+ * next_migration_node() - Get the next node in the migration path
+ * @current_node: The starting node to lookup the next node
+ *
+ * @returns: node id for next memory node in the migration path hierarchy from
+ * 	     @current_node; -1 if @current_node is terminal or its migration
+ * 	     node is not online.
+ */
+int next_migration_node(int current_node)
+{
+	int nid = READ_ONCE(node_migration[current_node]);
+
+	if (nid >= 0 && node_online(nid))
+		return nid;
+	return TERMINAL_NODE;
+}
+
 static struct attribute *node_dev_attrs[] = {
 	&dev_attr_cpumap.attr,
 	&dev_attr_cpulist.attr,
@@ -537,6 +609,7 @@ static struct attribute *node_dev_attrs[] = {
 	&dev_attr_numastat.attr,
 	&dev_attr_distance.attr,
 	&dev_attr_vmstat.attr,
+	&dev_attr_migration_path.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(node_dev);
