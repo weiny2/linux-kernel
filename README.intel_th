@@ -1,0 +1,13 @@
+# Intel Trace Hub
+# Contains support for Tiger Lake, Tiger Lake PCH-H, Emmitsburg, Alder Lake.
+# Classification: IC
+# SDL contact: Kai Svahn <kai.svahn@intel.com>
+# IP owner: Marcus Winston <marcus.winston@intel.com>
+# Maintained by Alexander Shishkin <alexander.shishkin@linux.intel.com>
+# Authorized use contact: Alexander Shishkin <alexander.shishkin@linux.intel.com>
+# Config options: CONFIG_STM*=m CONFIG_INTEL_TH*=m
+# Supplementary tool: https://git-amr-1.devtools.intel.com/gerrit/gitweb?p=linux-npk-npktool.git;tflink=projects.linux-npk/scm.npktool
+# Intel-Next branch: intel_th-for-intel-next
+# Public subset: intel_th-pub
+# Fixes subset: intel_th-fixes
+
