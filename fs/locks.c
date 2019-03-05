@@ -191,6 +191,8 @@ static int target_leasetype(struct file_lock *fl)
 		return F_UNLCK;
 	if (fl->fl_flags & FL_DOWNGRADE_PENDING)
 		return F_RDLCK;
+	if (fl->fl_flags & FL_LAYOUT)
+		return F_LAYOUT;
 	return fl->fl_type;
 }
 
@@ -611,7 +613,8 @@ static const struct lock_manager_operations lease_manager_ops = {
 /*
  * Initialize a lease, use the default lock manager operations
  */
-static int lease_init(struct file *filp, long type, struct file_lock *fl)
+static int lease_init(struct file *filp, long type, unsigned int flags,
+		      struct file_lock *fl)
 {
 	if (assign_type(fl, type) != 0)
 		return -EINVAL;
@@ -621,6 +624,8 @@ static int lease_init(struct file *filp, long type, struct file_lock *fl)
 
 	fl->fl_file = filp;
 	fl->fl_flags = FL_LEASE;
+	if (flags & FL_LAYOUT)
+		fl->fl_flags |= FL_LAYOUT;
 	fl->fl_start = 0;
 	fl->fl_end = OFFSET_MAX;
 	fl->fl_ops = NULL;
@@ -629,7 +634,8 @@ static int lease_init(struct file *filp, long type, struct file_lock *fl)
 }
 
 /* Allocate a file_lock initialised to this type of lease */
-static struct file_lock *lease_alloc(struct file *filp, long type)
+static struct file_lock *lease_alloc(struct file *filp, long type,
+				     unsigned int flags)
 {
 	struct file_lock *fl = locks_alloc_lock();
 	int error = -ENOMEM;
@@ -637,7 +643,7 @@ static struct file_lock *lease_alloc(struct file *filp, long type)
 	if (fl == NULL)
 		return ERR_PTR(error);
 
-	error = lease_init(filp, type, fl);
+	error = lease_init(filp, type, flags, fl);
 	if (error) {
 		locks_free_lock(fl);
 		return ERR_PTR(error);
@@ -1583,7 +1589,7 @@ int __break_lease(struct inode *inode, unsigned int mode, unsigned int type)
 	int want_write = (mode & O_ACCMODE) != O_RDONLY;
 	LIST_HEAD(dispose);
 
-	new_fl = lease_alloc(NULL, want_write ? F_WRLCK : F_RDLCK);
+	new_fl = lease_alloc(NULL, want_write ? F_WRLCK : F_RDLCK, 0);
 	if (IS_ERR(new_fl))
 		return PTR_ERR(new_fl);
 	new_fl->fl_flags = type;
@@ -1719,6 +1725,8 @@ EXPORT_SYMBOL(lease_get_mtime);
  *	%F_WRLCK to indicate an exclusive lease is held.
  *
  *	%F_UNLCK to indicate no lease is held.
+ *
+ *	%F_LAYOUT to indicate a layout lease is held.
  *
  *	(if a lease break is pending):
  *
@@ -2022,8 +2030,44 @@ static int do_fcntl_add_lease(unsigned int fd, struct file *filp, long arg)
 	struct file_lock *fl;
 	struct fasync_struct *new;
 	int error;
+	unsigned int flags = 0;
 
-	fl = lease_alloc(filp, arg);
+	/*
+	 * NOTE on F_LAYOUT lease
+	 *
+	 * LAYOUT lease types are intended to be taken on files the user will
+	 * be pinning in memory for some indeterminate amount of time.  While
+	 * we don't know what user space is going to do with the file, the
+	 * layout lease F_RDLCK guarantees that the holder will be notified
+	 * that the physical file layout is about to be changed, and that it
+	 * needs to release any resources it has over the range of this lease,
+	 * drop the lease and then request it again to wait for the kernel to
+	 * finish whatever it is doing on that range.
+	 *
+	 * Somewhat counterintuitivly, the layout lease F_RDLCK also allows the
+	 * holder to modify the physical layout of the file. This is because an
+	 * operation from the lease holder that would modify the layout is done
+	 * via the filesystem taking a F_WRLCK on the holders behalf.  While
+	 * that lease holder does not get notification that a change will
+	 * occur, it will block until all other F_RDLCK leases have been
+	 * released by their holders before going ahead.
+	 *
+	 * If there is a F_WRLCK lease held on the file, then a F_RDLCK holder
+	 * will fail any operation that may modify the physical layout of the
+	 * file.  F_WRLCK provides exclusive physical modification access to
+	 * the holder, guaranteeing nothing else will change the layout of the
+	 * file while it holds the lease.
+	 *
+	 * The F_WRLCK holder can change the physical layout of the file if it
+	 * so desires, this will block while F_RDLCK holders are notified and
+	 * release their leases before the modification will take place.
+	 */
+	if (arg == F_LAYOUT) {
+		arg = F_RDLCK;
+		flags = FL_LAYOUT;
+	}
+
+	fl = lease_alloc(filp, arg, flags);
 	if (IS_ERR(fl))
 		return PTR_ERR(fl);
 
