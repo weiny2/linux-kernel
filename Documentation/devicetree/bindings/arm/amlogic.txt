@@ -110,10 +110,7 @@ Board compatible values (alphabetically, grouped by SoC):
 
   - "amlogic,u200" (Meson g12a s905d2)
   - "amediatech,x96-max" (Meson g12a s905x2)
-<<<<<<< HEAD
-=======
   - "seirobotics,sei510" (Meson g12a s905x2)
->>>>>>> linux-next/akpm-base
 
 Amlogic Meson Firmware registers Interface
 ------------------------------------------

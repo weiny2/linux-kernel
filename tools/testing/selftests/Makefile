@@ -50,11 +50,7 @@ TARGETS += sysctl
 ifneq (1, $(quicktest))
 TARGETS += timers
 endif
-<<<<<<< HEAD
-TARGETS += tmpfs
-=======
 TARGETS += tpm2
->>>>>>> linux-next/akpm-base
 TARGETS += user
 TARGETS += vm
 TARGETS += x86

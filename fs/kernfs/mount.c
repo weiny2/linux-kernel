@@ -21,19 +21,6 @@
 #include "kernfs-internal.h"
 
 struct kmem_cache *kernfs_node_cache, *kernfs_iattrs_cache;
-<<<<<<< HEAD
-
-static int kernfs_sop_remount_fs(struct super_block *sb, int *flags, char *data)
-{
-	struct kernfs_root *root = kernfs_info(sb)->root;
-	struct kernfs_syscall_ops *scops = root->syscall_ops;
-
-	if (scops && scops->remount_fs)
-		return scops->remount_fs(root, flags, data);
-	return 0;
-}
-=======
->>>>>>> linux-next/akpm-base
 
 static int kernfs_sop_show_options(struct seq_file *sf, struct dentry *dentry)
 {

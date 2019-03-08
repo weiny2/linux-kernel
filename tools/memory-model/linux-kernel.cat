@@ -33,11 +33,7 @@ let mb = ([M] ; fencerel(Mb) ; [M]) |
 	([M] ; po? ; [LKW] ; fencerel(After-spinlock) ; [M]) |
 	([M] ; po ; [UL] ; (co | po) ; [LKW] ;
 		fencerel(After-unlock-lock) ; [M])
-<<<<<<< HEAD
-let gp = po ; [Sync-rcu] ; po?
-=======
 let gp = po ; [Sync-rcu | Sync-srcu] ; po?
->>>>>>> linux-next/akpm-base
 
 let strong-fence = mb | gp
 

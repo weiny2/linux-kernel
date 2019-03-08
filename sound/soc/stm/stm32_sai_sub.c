@@ -913,11 +913,7 @@ static int stm32_sai_configure_clock(struct snd_soc_dai *cpu_dai,
 				     struct snd_pcm_hw_params *params)
 {
 	struct stm32_sai_sub_data *sai = snd_soc_dai_get_drvdata(cpu_dai);
-<<<<<<< HEAD
-	int div = 0;
-=======
 	int div = 0, cr1 = 0;
->>>>>>> linux-next/akpm-base
 	int sai_clk_rate, mclk_ratio, den;
 	unsigned int rate = params_rate(params);
 
@@ -962,14 +958,9 @@ static int stm32_sai_configure_clock(struct snd_soc_dai *cpu_dai,
 		} else {
 			if (sai->mclk_rate) {
 				mclk_ratio = sai->mclk_rate / rate;
-<<<<<<< HEAD
-				if ((mclk_ratio != 512) &&
-				    (mclk_ratio != 256)) {
-=======
 				if (mclk_ratio == 512) {
 					cr1 = SAI_XCR1_OSR;
 				} else if (mclk_ratio != 256) {
->>>>>>> linux-next/akpm-base
 					dev_err(cpu_dai->dev,
 						"Wrong mclk ratio %d\n",
 						mclk_ratio);

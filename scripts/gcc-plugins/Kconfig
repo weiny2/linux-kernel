@@ -67,15 +67,11 @@ config GCC_PLUGIN_LATENT_ENTROPY
 	   * https://pax.grsecurity.net/
 
 config GCC_PLUGIN_STRUCTLEAK
-<<<<<<< HEAD
-	bool "Force initialization of variables containing userspace addresses"
-=======
 	bool "Zero initialize stack variables"
 	# Currently STRUCTLEAK inserts initialization out of live scope of
 	# variables from KASAN point of view. This leads to KASAN false
 	# positive reports. Prohibit this combination for now.
 	depends on !KASAN_EXTRA
->>>>>>> linux-next/akpm-base
 	help
 	  While the kernel is built with warnings enabled for any missed
 	  stack variable initializations, this warning is silenced for

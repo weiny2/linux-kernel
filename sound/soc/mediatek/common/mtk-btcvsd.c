@@ -49,10 +49,7 @@ enum bt_sco_state {
 	BT_SCO_STATE_IDLE,
 	BT_SCO_STATE_RUNNING,
 	BT_SCO_STATE_ENDING,
-<<<<<<< HEAD
-=======
 	BT_SCO_STATE_LOOPBACK,
->>>>>>> linux-next/akpm-base
 };
 
 enum bt_sco_direct {
@@ -490,12 +487,8 @@ static irqreturn_t mtk_btcvsd_snd_irq_handler(int irq_id, void *dev)
 	if (bt->rx->state != BT_SCO_STATE_RUNNING &&
 	    bt->rx->state != BT_SCO_STATE_ENDING &&
 	    bt->tx->state != BT_SCO_STATE_RUNNING &&
-<<<<<<< HEAD
-	    bt->tx->state != BT_SCO_STATE_ENDING) {
-=======
 	    bt->tx->state != BT_SCO_STATE_ENDING &&
 	    bt->tx->state != BT_SCO_STATE_LOOPBACK) {
->>>>>>> linux-next/akpm-base
 		dev_warn(bt->dev, "%s(), in idle state: rx->state: %d, tx->state: %d\n",
 			 __func__, bt->rx->state, bt->tx->state);
 		goto irq_handler_exit;
@@ -521,8 +514,6 @@ static irqreturn_t mtk_btcvsd_snd_irq_handler(int irq_id, void *dev)
 	buf_cnt_tx = btsco_packet_info[packet_type][2];
 	buf_cnt_rx = btsco_packet_info[packet_type][3];
 
-<<<<<<< HEAD
-=======
 	if (bt->tx->state == BT_SCO_STATE_LOOPBACK) {
 		u8 *src, *dst;
 		unsigned long connsys_addr_rx, ap_addr_rx;
@@ -559,7 +550,6 @@ static irqreturn_t mtk_btcvsd_snd_irq_handler(int irq_id, void *dev)
 		bt->tx->rw_cnt++;
 	}
 
->>>>>>> linux-next/akpm-base
 	if (bt->rx->state == BT_SCO_STATE_RUNNING ||
 	    bt->rx->state == BT_SCO_STATE_ENDING) {
 		if (bt->rx->xrun) {
@@ -1115,8 +1105,6 @@ static int btcvsd_band_set(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-<<<<<<< HEAD
-=======
 static int btcvsd_loopback_get(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
 {
@@ -1144,7 +1132,6 @@ static int btcvsd_loopback_set(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
->>>>>>> linux-next/akpm-base
 static int btcvsd_tx_mute_get(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
@@ -1280,11 +1267,8 @@ static int btcvsd_tx_timestamp_get(struct snd_kcontrol *kcontrol,
 static const struct snd_kcontrol_new mtk_btcvsd_snd_controls[] = {
 	SOC_ENUM_EXT("BTCVSD Band", btcvsd_enum[0],
 		     btcvsd_band_get, btcvsd_band_set),
-<<<<<<< HEAD
-=======
 	SOC_SINGLE_BOOL_EXT("BTCVSD Loopback Switch", 0,
 			    btcvsd_loopback_get, btcvsd_loopback_set),
->>>>>>> linux-next/akpm-base
 	SOC_SINGLE_BOOL_EXT("BTCVSD Tx Mute Switch", 0,
 			    btcvsd_tx_mute_get, btcvsd_tx_mute_set),
 	SOC_SINGLE_BOOL_EXT("BTCVSD Tx Irq Received Switch", 0,
