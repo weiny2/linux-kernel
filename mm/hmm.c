@@ -761,7 +761,6 @@ static int hmm_vma_walk_pud(pud_t *pudp,
 {
 	struct hmm_vma_walk *hmm_vma_walk = walk->private;
 	struct hmm_range *range = hmm_vma_walk->range;
-	struct vm_area_struct *vma = walk->vma;
 	unsigned long addr = start, next;
 	pmd_t *pmdp;
 	pud_t pud;
@@ -807,7 +806,7 @@ again:
 		return 0;
 	}
 
-	split_huge_pud(vma, pudp, addr);
+	split_huge_pud(walk->vma, pudp, addr);
 	if (pud_none(*pudp))
 		goto again;
 
