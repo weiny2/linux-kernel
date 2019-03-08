@@ -648,4 +648,6 @@ static inline void xsetbv(u32 index, u64 value)
 		     : : "a" (eax), "d" (edx), "c" (index));
 }
 
+void fpu__clear_pasid(struct task_struct *task);
+
 #endif /* _ASM_X86_FPU_INTERNAL_H */
