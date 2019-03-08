@@ -33,7 +33,8 @@
 				       XFEATURE_MASK_BNDCSR)
 
 /* All currently supported supervisor features */
-#define SUPPORTED_XFEATURES_MASK_SUPERVISOR (XFEATURE_MASK_CET_USER)
+#define SUPPORTED_XFEATURES_MASK_SUPERVISOR (XFEATURE_MASK_CET_USER | \
+					     XFEATURE_MASK_PASID)
 
 /*
  * Unsupported supervisor features. When a supervisor feature in this mask is

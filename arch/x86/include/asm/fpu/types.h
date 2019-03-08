@@ -114,7 +114,7 @@ enum xfeature {
 	XFEATURE_Hi16_ZMM,
 	XFEATURE_PT_UNIMPLEMENTED_SO_FAR,
 	XFEATURE_PKRU,
-	XFEATURE_RESERVED,
+	XFEATURE_PASID,
 	XFEATURE_CET_USER,
 	XFEATURE_CET_KERNEL,
 
@@ -131,6 +131,7 @@ enum xfeature {
 #define XFEATURE_MASK_Hi16_ZMM		(1 << XFEATURE_Hi16_ZMM)
 #define XFEATURE_MASK_PT		(1 << XFEATURE_PT_UNIMPLEMENTED_SO_FAR)
 #define XFEATURE_MASK_PKRU		(1 << XFEATURE_PKRU)
+#define XFEATURE_MASK_PASID		(1 << XFEATURE_PASID)
 #define XFEATURE_MASK_CET_USER		(1 << XFEATURE_CET_USER)
 #define XFEATURE_MASK_CET_KERNEL	(1 << XFEATURE_CET_KERNEL)
 
@@ -250,6 +251,14 @@ struct cet_kernel_state {
 	u64 pl1_ssp;			/* privilege level 1 shadow stack */
 	u64 pl2_ssp;			/* privilege level 2 shadow stack */
 };
+
+/*
+ * State component 10 is supervisor state used for context-switching the
+ * PASID state.
+ */
+struct ia32_pasid_state {
+	u64 pasid;
+} __packed;
 
 struct xstate_header {
 	u64				xfeatures;
