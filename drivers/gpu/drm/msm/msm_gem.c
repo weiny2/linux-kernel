@@ -762,7 +762,7 @@ static void describe_fence(struct dma_fence *fence, const char *type,
 		struct seq_file *m)
 {
 	if (!dma_fence_is_signaled(fence))
-		seq_printf(m, "\t%9s: %s %s seq %u\n", type,
+		seq_printf(m, "\t%9s: %s %s seq %llu\n", type,
 				fence->ops->get_driver_name(fence),
 				fence->ops->get_timeline_name(fence),
 				fence->seqno);
@@ -1026,6 +1026,13 @@ static struct drm_gem_object *_msm_gem_new(struct drm_device *dev,
 		ret = drm_gem_object_init(dev, obj, size);
 		if (ret)
 			goto fail;
+		/*
+		 * Our buffers are kept pinned, so allocating them from the
+		 * MOVABLE zone is a really bad idea, and conflicts with CMA.
+		 * See comments above new_inode() why this is required _and_
+		 * expected if you're going to pin these pages.
+		 */
+		mapping_set_gfp_mask(obj->filp->f_mapping, GFP_HIGHUSER);
 	}
 
 	return obj;

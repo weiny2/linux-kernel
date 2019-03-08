@@ -105,6 +105,7 @@ static int stm32_sai_set_sync(struct stm32_sai_data *sai_client,
 	if (!pdev) {
 		dev_err(&sai_client->pdev->dev,
 			"Device not found for node %pOFn\n", np_provider);
+		of_node_put(np_provider);
 		return -ENODEV;
 	}
 
@@ -113,19 +114,33 @@ static int stm32_sai_set_sync(struct stm32_sai_data *sai_client,
 		dev_err(&sai_client->pdev->dev,
 			"SAI sync provider data not found\n");
 		ret = -EINVAL;
+<<<<<<< HEAD
 		goto out_put_dev;
+=======
+		goto error;
+>>>>>>> linux-next/akpm-base
 	}
 
 	/* Configure sync client */
 	ret = stm32_sai_sync_conf_client(sai_client, synci);
 	if (ret < 0)
+<<<<<<< HEAD
 		goto out_put_dev;
+=======
+		goto error;
+>>>>>>> linux-next/akpm-base
 
 	/* Configure sync provider */
 	ret = stm32_sai_sync_conf_provider(sai_provider, synco);
 
+<<<<<<< HEAD
 out_put_dev:
 	put_device(&pdev->dev);
+=======
+error:
+	put_device(&pdev->dev);
+	of_node_put(np_provider);
+>>>>>>> linux-next/akpm-base
 	return ret;
 }
 

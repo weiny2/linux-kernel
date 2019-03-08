@@ -169,8 +169,24 @@ static int imx_irqsteer_probe(struct platform_device *pdev)
 
 	raw_spin_lock_init(&data->lock);
 
+<<<<<<< HEAD
 	of_property_read_u32(np, "fsl,num-irqs", &irqs_num);
 	of_property_read_u32(np, "fsl,channel", &data->channel);
+=======
+	ret = of_property_read_u32(np, "fsl,num-irqs", &irqs_num);
+	if (ret)
+		return ret;
+	ret = of_property_read_u32(np, "fsl,channel", &data->channel);
+	if (ret)
+		return ret;
+
+	/*
+	 * There is one output irq for each group of 64 inputs.
+	 * One register bit map can represent 32 input interrupts.
+	 */
+	data->irq_count = DIV_ROUND_UP(irqs_num, 64);
+	data->reg_num = irqs_num / 32;
+>>>>>>> linux-next/akpm-base
 
 	/*
 	 * There is one output irq for each group of 64 inputs.
@@ -202,6 +218,7 @@ static int imx_irqsteer_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to create IRQ domain\n");
 		ret = -ENOMEM;
 		goto out;
+<<<<<<< HEAD
 	}
 
 	if (!data->irq_count || data->irq_count > CHAN_MAX_OUTPUT_INT) {
@@ -209,6 +226,15 @@ static int imx_irqsteer_probe(struct platform_device *pdev)
 		goto out;
 	}
 
+=======
+	}
+
+	if (!data->irq_count || data->irq_count > CHAN_MAX_OUTPUT_INT) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+>>>>>>> linux-next/akpm-base
 	for (i = 0; i < data->irq_count; i++) {
 		data->irq[i] = irq_of_parse_and_map(np, i);
 		if (!data->irq[i]) {

@@ -404,7 +404,8 @@ static void dpu_encoder_phys_cmd_tearcheck_config(
 		return;
 	}
 
-	tc_cfg.vsync_count = vsync_hz / (mode->vtotal * mode->vrefresh);
+	tc_cfg.vsync_count = vsync_hz /
+				(mode->vtotal * drm_mode_vrefresh(mode));
 
 	/* enable external TE after kickoff to avoid premature autorefresh */
 	tc_cfg.hw_vsync_mode = 0;
@@ -424,7 +425,7 @@ static void dpu_encoder_phys_cmd_tearcheck_config(
 	DPU_DEBUG_CMDENC(cmd_enc,
 		"tc %d vsync_clk_speed_hz %u vtotal %u vrefresh %u\n",
 		phys_enc->hw_pp->idx - PINGPONG_0, vsync_hz,
-		mode->vtotal, mode->vrefresh);
+		mode->vtotal, drm_mode_vrefresh(mode));
 	DPU_DEBUG_CMDENC(cmd_enc,
 		"tc %d enable %u start_pos %u rd_ptr_irq %u\n",
 		phys_enc->hw_pp->idx - PINGPONG_0, tc_enable, tc_cfg.start_pos,
@@ -594,8 +595,7 @@ static void dpu_encoder_phys_cmd_get_hw_resources(
 }
 
 static void dpu_encoder_phys_cmd_prepare_for_kickoff(
-		struct dpu_encoder_phys *phys_enc,
-		struct dpu_encoder_kickoff_params *params)
+		struct dpu_encoder_phys *phys_enc)
 {
 	struct dpu_encoder_phys_cmd *cmd_enc =
 			to_dpu_encoder_phys_cmd(phys_enc);
@@ -693,7 +693,7 @@ static int dpu_encoder_phys_cmd_wait_for_commit_done(
 
 	/* required for both controllers */
 	if (!rc && cmd_enc->serialize_wait4pp)
-		dpu_encoder_phys_cmd_prepare_for_kickoff(phys_enc, NULL);
+		dpu_encoder_phys_cmd_prepare_for_kickoff(phys_enc);
 
 	return rc;
 }
