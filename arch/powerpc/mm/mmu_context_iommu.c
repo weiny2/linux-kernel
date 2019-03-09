@@ -153,7 +153,7 @@ static long mm_iommu_do_alloc(struct mm_struct *mm, unsigned long ua,
 	if (ret != entries) {
 		/* free the reference taken */
 		for (i = 0; i < ret; i++)
-			put_page(mem->hpages[i]);
+			put_user_page(mem->hpages[i]);
 
 		vfree(mem->hpas);
 		kfree(mem);
@@ -236,7 +236,7 @@ static void mm_iommu_unpin(struct mm_iommu_table_group_mem_t *mem)
 		if (mem->hpas[i] & MM_IOMMU_TABLE_GROUP_PAGE_DIRTY)
 			SetPageDirty(page);
 
-		put_page(page);
+		put_user_page(page);
 		mem->hpas[i] = 0;
 	}
 }
