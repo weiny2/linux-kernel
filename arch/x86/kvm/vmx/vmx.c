@@ -1820,6 +1820,96 @@ static int vmx_get_msr_feature(struct kvm_msr_entry *msr)
 	}
 }
 
+#define CET_MSR_RSVD_BITS_1    0x3
+#define CET_MSR_RSVD_BITS_2   (0xF << 6)
+
+static bool cet_ssp_write_allowed(struct kvm_vcpu *vcpu, struct msr_data *msr)
+{
+	u64 data = msr->data;
+	u32 high_word = data >> 32;
+
+	if (is_64_bit_mode(vcpu)) {
+		if (data & CET_MSR_RSVD_BITS_1)
+			return false;
+	} else if (high_word) {
+		return false;
+	}
+
+	return true;
+}
+
+static bool cet_ctl_write_allowed(struct kvm_vcpu *vcpu, struct msr_data *msr)
+{
+	u64 data = msr->data;
+	u32 high_word = data >> 32;
+
+	if (data & CET_MSR_RSVD_BITS_2)
+		return false;
+
+	if (!is_64_bit_mode(vcpu) && high_word)
+		return false;
+
+	return true;
+}
+
+static bool cet_ssp_access_allowed(struct kvm_vcpu *vcpu, struct msr_data *msr)
+{
+	u64 kvm_xss;
+	u32 index = msr->index;
+
+	if (is_guest_mode(vcpu))
+		return false;
+
+	if (!boot_cpu_has(X86_FEATURE_SHSTK))
+		return false;
+
+	if (!msr->host_initiated &&
+	    !guest_cpuid_has(vcpu, X86_FEATURE_SHSTK))
+		return false;
+
+	if (index == MSR_IA32_INT_SSP_TAB)
+		return true;
+
+	kvm_xss = kvm_supported_xss();
+
+	if (index == MSR_IA32_PL3_SSP) {
+		if (!(kvm_xss & XFEATURE_MASK_CET_USER))
+			return false;
+	} else if (!(kvm_xss & XFEATURE_MASK_CET_KERNEL)) {
+		return false;
+	}
+
+	return true;
+}
+
+static bool cet_ctl_access_allowed(struct kvm_vcpu *vcpu, struct msr_data *msr)
+{
+	u64 kvm_xss;
+	u32 index = msr->index;
+
+	if (is_guest_mode(vcpu))
+		return false;
+
+	kvm_xss = kvm_supported_xss();
+
+	if (!boot_cpu_has(X86_FEATURE_SHSTK) &&
+	    !boot_cpu_has(X86_FEATURE_IBT))
+		return false;
+
+	if (!msr->host_initiated &&
+	    !guest_cpuid_has(vcpu, X86_FEATURE_SHSTK) &&
+	    !guest_cpuid_has(vcpu, X86_FEATURE_IBT))
+		return false;
+
+	if (index == MSR_IA32_U_CET) {
+		if (!(kvm_xss & XFEATURE_MASK_CET_USER))
+			return false;
+	} else if (!(kvm_xss & XFEATURE_MASK_CET_KERNEL)) {
+		return false;
+	}
+
+	return true;
+}
 /*
  * Reads an msr value (of 'msr_index') into 'pdata'.
  * Returns 0 on success, non-0 otherwise.
@@ -1951,6 +2041,26 @@ static int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			msr_info->data = vmx->pt_desc.guest.addr_b[index / 2];
 		else
 			msr_info->data = vmx->pt_desc.guest.addr_a[index / 2];
+		break;
+	case MSR_IA32_S_CET:
+		if (!cet_ctl_access_allowed(vcpu, msr_info))
+			return 1;
+		msr_info->data = vmcs_readl(GUEST_S_CET);
+		break;
+	case MSR_IA32_INT_SSP_TAB:
+		if (!cet_ssp_access_allowed(vcpu, msr_info))
+			return 1;
+		msr_info->data = vmcs_readl(GUEST_INTR_SSP_TABLE);
+		break;
+	case MSR_IA32_U_CET:
+		if (!cet_ctl_access_allowed(vcpu, msr_info))
+			return 1;
+		rdmsrl(MSR_IA32_U_CET, msr_info->data);
+		break;
+	case MSR_IA32_PL0_SSP ... MSR_IA32_PL3_SSP:
+		if (!cet_ssp_access_allowed(vcpu, msr_info))
+			return 1;
+		rdmsrl(msr_info->index, msr_info->data);
 		break;
 	case MSR_TSC_AUX:
 		if (!msr_info->host_initiated &&
@@ -2207,6 +2317,34 @@ static int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			vmx->pt_desc.guest.addr_b[index / 2] = data;
 		else
 			vmx->pt_desc.guest.addr_a[index / 2] = data;
+		break;
+	case MSR_IA32_S_CET:
+		if (!cet_ctl_access_allowed(vcpu, msr_info))
+			return 1;
+		if (!cet_ctl_write_allowed(vcpu, msr_info))
+			return 1;
+		vmcs_writel(GUEST_S_CET, data);
+		break;
+	case MSR_IA32_INT_SSP_TAB:
+		if (!cet_ctl_access_allowed(vcpu, msr_info))
+			return 1;
+		if (!is_64_bit_mode(vcpu))
+			return 1;
+		vmcs_writel(GUEST_INTR_SSP_TABLE, data);
+		break;
+	case MSR_IA32_U_CET:
+		if (!cet_ctl_access_allowed(vcpu, msr_info))
+			return 1;
+		if (!cet_ctl_write_allowed(vcpu, msr_info))
+			return 1;
+		wrmsrl(MSR_IA32_U_CET, data);
+		break;
+	case MSR_IA32_PL0_SSP ... MSR_IA32_PL3_SSP:
+		if (!cet_ssp_access_allowed(vcpu, msr_info))
+			return 1;
+		if (!cet_ssp_write_allowed(vcpu, msr_info))
+			return 1;
+		wrmsrl(msr_info->index, data);
 		break;
 	case MSR_TSC_AUX:
 		if (!msr_info->host_initiated &&
