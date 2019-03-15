@@ -334,19 +334,11 @@ static void cpa_flush_all(unsigned long cache)
 	on_each_cpu(__cpa_flush_all, (void *) cache, 1);
 }
 
-static void __cpa_flush_tlb(void *data)
-{
-	struct cpa_data *cpa = data;
-	unsigned int i;
-
-	for (i = 0; i < cpa->numpages; i++)
-		__flush_tlb_one_kernel(fix_addr(__cpa_addr(cpa, i)));
-}
-
 static void cpa_flush(struct cpa_data *data, int cache)
 {
 	struct cpa_data *cpa = data;
 	unsigned int i;
+	unsigned long start, end;
 
 	BUG_ON(irqs_disabled() && !early_boot_irqs_disabled);
 
@@ -355,10 +347,9 @@ static void cpa_flush(struct cpa_data *data, int cache)
 		return;
 	}
 
-	if (cpa->numpages <= tlb_single_page_flush_ceiling)
-		on_each_cpu(__cpa_flush_tlb, cpa, 1);
-	else
-		flush_tlb_all();
+	start = fix_addr(__cpa_addr(cpa, 0));
+	end = fix_addr(__cpa_addr(cpa, cpa->numpages));
+	flush_tlb_kernel_range(start, end);
 
 	if (!cache)
 		return;
