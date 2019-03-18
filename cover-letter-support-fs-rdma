@@ -1,0 +1,358 @@
+
+Changes from V1,000,002 == mmotm-rdmafsdax-b0-v3
+
+mmotm-rdmafsdax-b0-v4
+Add FOLL_PIN patches from John Hubbard
+Updates:
+	LAYOUT lease comment from Dave Chinner
+	commit messages on a couple of patches.
+	comments based on feedback from John Hubbard
+	vaddr_pin parameter order from John.
+	Fix kernel doc John
+	get rid of _dirty_lock on unpin
+
+mmotm-rdmafsdax-b0-v5
+	Split out mm_struct file pin tracking and move patches to the end of
+	the series.
+	Fix truncate failure of xfs when lease is held.
+	Fix 0-day issue
+	Do not allow exclusive leases to be released if pins exist
+
+
+RDMA/FS DAX truncate proposal V1,000,002   ;-)
+
+Pre-requisites
+==============
+	Based on mmotm tree.
+
+Based on the feedback from LSFmm, the LWN article, the RFC series since
+then, and a ton of scenarios I've worked in my mind and/or tested...[1]
+
+Solution summary
+================
+
+The real issue is that there is no use case for a user to have RDMA pinn'ed
+memory which is then truncated.  So really any solution we present which:
+
+A) Prevents file system corruption or data leaks
+...and...
+B) Informs the user that they did something wrong
+
+Should be an acceptable solution.
+
+Because this is slightly new behavior.  And because this is going to be
+specific to DAX (because of the lack of a page cache) we have made the user
+"opt in" to this behavior.
+
+The following patches implement the following solution.
+
+0) Registrations to Device DAX char devs are not affected
+
+1) The user has to opt in to allowing page pins on a file with an exclusive
+   layout lease.  Both exclusive and layout lease flags are user visible now.
+
+2) page pins will fail if the lease is not active when the file back page is
+   encountered.
+
+3) Any truncate or hole punch operation on a pinned DAX page will fail.
+
+4) The user has the option of holding the lease or releasing it.  If they
+   release it no other pin calls will work on the file.
+
+FIXME change this.
+
+5) Closing the file is ok.
+
+6) Unmapping the file is ok
+
+7) Pins against the files are tracked back to an owning file or an owning mm
+   depending on the internal subsystem needs.  With RDMA there is an owning
+   file which is related to the pined file.
+
+8) Only RDMA is currently supported
+
+9) Truncation of pages which are not actively pinned nor covered by a lease
+   will succeed.
+
+
+Reporting of pinned files in procfs
+===================================
+
+A number of alternatives were explored for how to report the file pins within
+procfs.  The following incorporates ideas from Jan Kara, Jason Gunthorpe, Dave
+Chinner, Dan Williams and myself.
+
+A new entry is added to procfs
+
+/proc/<pid>/file_pins
+
+For processes which have pinned DAX file memory file_pins reference come in 2
+flavors.  Those which are attached to another open file descriptor (For example
+what is done in the RDMA subsytem) and those which are attached to a process
+mm.
+
+For those which are attached to another open file descriptor (such as RDMA)
+the file pin references go through the 'struct file' associated with that pin.
+In RDMA this is the RDMA context struct file.
+
+The resulting output from proc fs is something like.
+
+$ cat /proc/<pid>/file_pins
+3: /dev/infiniband/uverbs0
+	/mnt/pmem/foo
+
+Where '3' is the file descriptor (and file path) of the rdma context within the
+process.  The paths of the files pinned using that context are then listed.
+
+RDMA contexts may have multiple MR each of which may have multiple files pinned
+within them.  So an output like the following is possible.
+
+$ cat /proc/<pid>/file_pins
+4: /dev/infiniband/uverbs0
+	/mnt/pmem/foo
+	/mnt/pmem/bar
+	/mnt/pmem/another
+	/mnt/pmem/one
+
+The actual memory regions associated with the file pins are not reported.
+
+For processes which are pinning memory which is not associated with a specific
+file descriptor memory pins are reported directly as paths to the file.
+
+$ cat /proc/<pid>/file_pins
+/mnt/pmem/foo
+
+Putting the above together if a process was using RDMA and another subsystem
+the output could be something like:
+
+
+$ cat /proc/<pid>/file_pins
+4: /dev/infiniband/uverbs0
+	/mnt/pmem/foo
+	/mnt/pmem/bar
+	/mnt/pmem/another
+	/mnt/pmem/one
+/mnt/pmem/foo
+/mnt/pmem/another
+/mnt/pmem/mm_mapped_file
+
+
+[1] https://lkml.org/lkml/2019/6/5/1046
+
+
+Background
+==========
+
+It should be noted that one solution for this problem is to use RDMA's On
+Demand Paging (ODP).  There are 2 big reasons this may not work.
+
+	1) The hardware being used for RDMA may not support ODP
+	2) ODP may be detrimental to the over all network (cluster or cloud)
+	   performance
+
+Therefore, in order to support RDMA to File system pages without On Demand
+Paging (ODP) a number of things need to be done.
+
+1) "longterm" GUP users need to inform other subsystems that they have taken a
+   pin on a page which may remain pinned for a very "long time".  The
+   definition of long time is debatable but it has been established that RDMAs
+   use of pages for, minutes, hours, or even days after the pin is the extreme
+   case which makes this problem most severe.
+
+2) Any page which is "controlled" by a file system needs to have special
+   handling.  The details of the handling depends on if the page is page cache
+   fronted or not.
+
+   2a) A page cache fronted page which has been pinned by GUP long term can use a
+   bounce buffer to allow the file system to write back snap shots of the page.
+   This is handled by the FS recognizing the GUP long term pin and making a copy
+   of the page to be written back.
+	NOTE: this patch set does not address this path.
+
+   2b) A FS "controlled" page which is not page cache fronted is either easier
+   to deal with or harder depending on the operation the filesystem is trying
+   to do.
+
+	2ba) [Hard case] If the FS operation _is_ a truncate or hole punch the
+	FS can no longer use the pages in question until the pin has been
+	removed.  This patch set presents a solution to this by introducing
+	some reasonable restrictions on user space applications.
+
+	2bb) [Easy case] If the FS operation is _not_ a truncate or hole punch
+	then there is nothing which need be done.  Data is Read or Written
+	directly to the page.  This is an easy case which would currently work
+	if not for GUP long term pins being disabled.  Therefore this patch set
+	need not change access to the file data but does allow for GUP pins
+	after 2ba above is dealt with.
+
+
+This patch series and presents a solution for problem 2ba)
+
+
+
+8< -------- Cut above here for cover letter ------------------- >8
+
+
+More notes below...
+
+Senarios
+========
+
+The following scenarios for user application behavior are presented to show how
+this feature is intended to be used.  Furthermore they can be used for a suite
+of tests.
+
+In the following "lease" == Exclusive layout lease.
+
+
+1) Registrations to Device DAX char devs shall not be affected
+
+2) Any application attempting to pin mmap'ed file memory without an exclusive
+   lease will be given an error through the respective pin call (in RDMA's case
+   this is ibv_reg_mr)
+
+3) An application which properly holds a exclusive lease can pin memory they
+   have mmap'ed from a file.
+
+	NOTE: An application with only a layout lease (non-exclusive) will fail
+	to pin.
+
+4) A truncate of an area of a file which has not been pin'ed will still fail
+	All of a file is leased as 1
+
+5) A truncate causes a lease (_non_-_exclusive_ lease) holder to be notified,
+   truncate succeeds after lease is broken.
+
+   	NOTE: This does not solve the RDMA problem (pins fail because lease is
+	non-exclusive).  This is just a test case for completeness.
+
+7) A process can extend a file while the exclusive lease is held.  Does not
+   require a lease break.
+
+8) A process which truncates it's own file (exclusive lease held) will get
+   EDEADLOCK rather than ETXTBSY
+
+
+
+
+New semantics / scenarios:
+==========================
+
+RDMA Process       : A, B
+RDMA Child Process : A1
+Truncating Process : C
+File               : F
+
+A can gup device dax
+
+A or B does not take lease
+	memory gups fail
+
+A or B takes lease
+	memory gups fail
+
+A or B takes exclusive lease
+	memory gups succeed
+
+
+A takes exclusive lease
+C can't break lease
+	C truncate fails with ETXTBSY
+
+A takes exclusive lease
+C can't break lease
+	hole punch fails with ETXTBSY
+
+
+A takes exclusive lease
+	A can pin
+B takes exclusive lease
+	B can pin
+C fails truncate ETXTBSY
+B removes gups and lease
+C fails truncate ETXTBSY
+A removes gups and lease
+C can truncate
+
+
+A takes exclusive lease
+C can't break lease
+	Truncation (> file size, or extended) works (no lease break needed)
+
+
+A takes exclusive lease
+A truncate fails with EDEADLOCK
+
+
+A takes exclusive lease
+A mmaps
+A _closes_ file
+A can pin memory on the mmap...
+	exclusive lease is maintained as long as mmap has a reference to the
+	file.  unmapping the range will drop the lease.
+
+
+A takes exclusive lease
+A pins memory
+A closes file
+	(Reference is maintained through mmap)
+C truncate hangs
+	procfs shows a file pin associated through the RDMA file object.
+
+
+Crazy RDMA forking scenario
+---------------------------
+
+proc A opens file
+	takes lease
+	reg memory (GUP pins)
+forks to proc B
+	B now has MR
+proc A releases lease (either manually or via close)
+	closes file
+	munmaps file
+Proc B still has mmap and open file descriptor
+	B close file
+	munmaps
+Proc B's only association with the original file is through the new file pin
+procfs association
+	When process B releases the MR (GUP release) this association will go
+	away.
+
+
+
+Scenarios which were considered but are not supported
+=====================================================
+
+A can "play nice" with C
+	A gups with a Layout lease
+	C truncates (lease break notifies A)
+	A releases pin/layout
+	C truncate works after pin drops
+
+	This was deemed to complicated to work out why A is getting notified
+	and the use case seems minimal.  So it is best to not notify A and if C
+	needs to truncate admins or users can detect this by using procfs and
+	react appropriately.
+
+Process taking a lease which is broken needs to retake it for a pin
+	A gups memory with a layout lease
+	C breaks lease for truncate (truncate fails)
+	A must retake lease to pin more
+
+	Same scenario as above.  Getting an exclusive lease can't be broken.  So
+	there is no need to try and support the breaking of a lease for this use
+	case.
+
+Truncation or hole punch can work if pages being removed are not actually pinned
+
+	This depends on if the lease is held or not.  Exclusive leases on
+	ranges of a file are not supported.  But if a process voluntarily
+	releases their exclusive lease then the pages which are not actually
+	pinned can be removed.
+
+Application refused to release the GUP pin, truncate hangs
+
+	Again there is no breaking of exclusive leases.  The use case for this
+	was not strong enough to warrant implementation.
+
