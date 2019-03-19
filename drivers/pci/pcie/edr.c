@@ -201,6 +201,7 @@ send_ost:
 int pci_acpi_add_edr_notifier(struct pci_dev *pdev)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
+	struct pci_host_bridge *host = pci_find_host_bridge(pdev->bus);
 	struct dpc_dev *dpc;
 	acpi_status astatus;
 	int status;
@@ -213,7 +214,8 @@ int pci_acpi_add_edr_notifier(struct pci_dev *pdev)
 	 * TODO: Remove dependency on ACPI FIRMWARE_FIRST bit to
 	 * determine ownership of DPC between firmware or OS.
 	 */
-	if (!pcie_aer_get_firmware_first(pdev) || pcie_ports_dpc_native)
+	if (!pcie_aer_get_firmware_first(pdev) || pcie_ports_dpc_native ||
+	    (host->native_dpc))
 		return -ENODEV;
 
 	if (!adev)
