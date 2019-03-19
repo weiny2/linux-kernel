@@ -195,6 +195,7 @@ send_ost:
 void pci_acpi_add_edr_notifier(struct pci_dev *pdev)
 {
 	struct acpi_device *adev = ACPI_COMPANION(&pdev->dev);
+	struct pci_host_bridge *host = pci_find_host_bridge(pdev->bus);
 	acpi_status astatus;
 
 	if (!adev) {
@@ -214,7 +215,8 @@ void pci_acpi_add_edr_notifier(struct pci_dev *pdev)
 	 * OS can use bit 7 of _OSC control field to negotiate control
 	 * over DPC Capability.
 	 */
-	if (!pcie_aer_get_firmware_first(pdev) || pcie_ports_dpc_native) {
+	if (!pcie_aer_get_firmware_first(pdev) || pcie_ports_dpc_native ||
+	    (host->native_dpc)) {
 		pci_dbg(pdev, "OS handles AER/DPC, so skip EDR init\n");
 		return;
 	}
