@@ -1,0 +1,85 @@
+Bindings for LEDs on CZ.NIC's Turris Omnia
+
+Required properties:
+ - compatible :		Should be "cznic,turris-omnia-leds"
+ - reg :		I2C slave address
+ - #address-cells :	Should be 1
+ - #size-cells :	Should be 0
+
+LED sub-node properties:
+ - reg :		Must be from 0x0 to 0xb, since there are 12 LEDs on this
+			controller.
+ - label :		(optional)
+   see Documentation/devicetree/bindings/leds/common.txt
+ - linux,default-trigger : (optional)
+   see Documentation/devicetree/bindings/leds/common.txt
+
+Example:
+
+	led-controller@2b {
+		compatible = "cznic,turris-omnia-leds";
+		reg = <0x2b>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		led@0 {
+			reg = <0x0>;
+			label = "userB";
+			linux,default-trigger = "heartbeat";
+		};
+
+		led@1 {
+			reg = <0x1>;
+			label = "userA";
+		};
+
+		led@2 {
+			reg = <0x2>;
+			label = "pci3";
+		};
+
+		led@3 {
+			reg = <0x3>;
+			label = "pci2";
+		};
+
+		led@4 {
+			reg = <0x4>;
+			label = "pci1";
+		};
+
+		led@5 {
+			reg = <0x5>;
+			label = "wan";
+		};
+
+		led@6 {
+			reg = <0x6>;
+			label = "lan4";
+		};
+
+		led@7 {
+			reg = <0x7>;
+			label = "lan3";
+		};
+
+		led@8 {
+			reg = <0x8>;
+			label = "lan2";
+		};
+
+		led@9 {
+			reg = <0x9>;
+			label = "lan1";
+		};
+
+		led@a {
+			reg = <0xa>;
+			label = "lan0";
+		};
+
+		led@b {
+			reg = <0xb>;
+			label = "power";
+		};
+	};
