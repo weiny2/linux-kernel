@@ -1391,6 +1391,50 @@ acpi_fwnode_device_get_match_data(const struct fwnode_handle *fwnode,
 	return acpi_device_get_match_data(dev);
 }
 
+static int acpi_fwnode_add_links(const struct fwnode_handle *fwnode,
+				 struct device *dev)
+{
+	struct fwnode_reference_args args;
+	struct acpi_device *adev;
+	struct device *nhi;
+	int ret;
+
+	if (!is_acpi_device_node(fwnode))
+		return 0;
+
+	/*
+	 * Create device links between USB4/Thunderbolt NHI and any
+	 * tunneled device (typically USB port or PCIe root/downstream
+	 * port) so that the NHI is the supplier. This makes sure
+	 * tunnels are established by the NHI (Thunderbolt driver)
+	 * before consumers get resumed.
+	 */
+	ret = __acpi_node_get_property_reference(fwnode, "usb4-host-interface",
+						 0, 0, &args);
+	if (ret)
+		return 0;
+
+	adev = to_acpi_device_node(args.fwnode);
+	if (WARN_ON(!adev))
+		return 0;
+
+	nhi = acpi_get_first_physical_node(adev);
+	if (!nhi) {
+		/*
+		 * This puts the device to wait list and the function is
+		 * called again when new devices are registered so we
+		 * can eventually finalize the link creation.
+		 */
+		return -ENODEV;
+	}
+
+	if (!device_link_add(dev, nhi, DL_FLAG_PM_RUNTIME))
+		return -EAGAIN;
+
+	dev_dbg(dev, "linked to USB4 NHI %s\n", dev_name(nhi));
+	return 0;
+}
+
 #define DECLARE_ACPI_FWNODE_OPS(ops) \
 	const struct fwnode_operations ops = {				\
 		.device_is_available = acpi_fwnode_device_is_available, \
@@ -1412,6 +1456,7 @@ acpi_fwnode_device_get_match_data(const struct fwnode_handle *fwnode,
 			acpi_graph_get_remote_endpoint,			\
 		.graph_get_port_parent = acpi_fwnode_get_parent,	\
 		.graph_parse_endpoint = acpi_fwnode_graph_parse_endpoint, \
+		.add_links = acpi_fwnode_add_links,			\
 	};								\
 	EXPORT_SYMBOL_GPL(ops)
 
