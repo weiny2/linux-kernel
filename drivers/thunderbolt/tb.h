@@ -881,4 +881,11 @@ int usb4_usb3_port_allocate_bandwidth(struct tb_port *port, int *upstream_bw,
 				      int *downstream_bw);
 int usb4_usb3_port_release_bandwidth(struct tb_port *port, int *upstream_bw,
 				     int *downstream_bw);
+
+#ifdef CONFIG_ACPI
+void tb_acpi_add_links(struct tb_nhi *nhi);
+#else
+static inline void tb_acpi_add_links(struct tb_nhi *nhi) { }
+#endif
+
 #endif
