@@ -1328,12 +1328,6 @@ static int __init stm_core_init(void)
 	INIT_LIST_HEAD(&stm_pdrv_head);
 	mutex_init(&stm_pdrv_mutex);
 
-	/*
-	 * So as to not confuse existing users with a requirement
-	 * to load yet another module, do it here.
-	 */
-	if (IS_ENABLED(CONFIG_STM_PROTO_BASIC))
-		(void)request_module_nowait("stm_p_basic");
 	stm_core_up++;
 
 	return 0;
@@ -1358,6 +1352,7 @@ static void __exit stm_core_exit(void)
 
 module_exit(stm_core_exit);
 
+MODULE_SOFTDEP("post: stm_p_basic");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("System Trace Module device class");
 MODULE_AUTHOR("Alexander Shishkin <alexander.shishkin@linux.intel.com>");
