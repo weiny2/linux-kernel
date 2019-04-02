@@ -1091,6 +1091,42 @@ static bool nhi_imr_valid(struct pci_dev *pdev)
 	return true;
 }
 
+static int pcie_port_add_links(struct device *dev, void *data)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct fwnode_reference_args args;
+	struct tb_nhi *nhi = data;
+	int ret;
+
+	if (!pci_is_pcie(pdev))
+		return 0;
+
+	if (pci_pcie_type(pdev) != PCI_EXP_TYPE_ROOT_PORT &&
+	    pci_pcie_type(pdev) != PCI_EXP_TYPE_DOWNSTREAM)
+		return 0;
+
+	/*
+	 * Check if the port has the optional usb4-host-interface
+	 * property.
+	 */
+	ret = fwnode_property_get_reference_args(dev_fwnode(dev),
+		"usb4-host-interface", NULL, NR_FWNODE_REFERENCE_ARGS,
+		0, &args);
+	if (!ret) {
+		/*
+		 * If it is referencing to this NHI add links between
+		 * the two now.
+		 */
+		if (args.fwnode == dev_fwnode(&nhi->pdev->dev)) {
+			device_link_add(&pdev->dev, &nhi->pdev->dev,
+					DL_FLAG_AUTOREMOVE_SUPPLIER |
+					DL_FLAG_PM_RUNTIME);
+		}
+	}
+
+	return 0;
+}
+
 static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct tb_nhi *nhi;
@@ -1151,6 +1187,9 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 
 	pci_set_master(pdev);
+
+	/* Find all PCIe ports with firmware linkage description */
+	bus_for_each_dev(&pci_bus_type, NULL, nhi, pcie_port_add_links);
 
 	if (nhi->ops && nhi->ops->init) {
 		res = nhi->ops->init(nhi);
