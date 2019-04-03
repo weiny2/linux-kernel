@@ -477,6 +477,42 @@ int bitmap_print_to_pagebuf(bool list, char *buf, const unsigned long *maskp,
 }
 EXPORT_SYMBOL(bitmap_print_to_pagebuf);
 
+/*
+ * Region 9-38:4/10 describes the following bitmap structure:
+ * 0	   9  12    18			38
+ * .........****......****......****......
+ *	    ^  ^     ^			 ^
+ *      start  off   grlen	       end
+ */
+struct region {
+	unsigned int start;
+	unsigned int off;
+	unsigned int grlen;
+	unsigned int end;
+};
+
+static int bitmap_set_region(const struct region *r,
+				unsigned long *bitmap, int nbits)
+{
+	unsigned int start;
+
+	if (r->end >= nbits)
+		return -ERANGE;
+
+	for (start = r->start; start <= r->end; start += r->grlen)
+		bitmap_set(bitmap, start, min(r->end - start + 1, r->off));
+
+	return 0;
+}
+
+static int bitmap_check_region(const struct region *r)
+{
+	if (r->start > r->end || r->grlen == 0 || r->off > r->grlen)
+		return -EINVAL;
+
+	return 0;
+}
+
 /**
  * __bitmap_parselist - convert list format ASCII string to bitmap
  * @buf: read nul-terminated user string from this buffer
@@ -507,10 +543,11 @@ static int __bitmap_parselist(const char *buf, unsigned int buflen,
 		int nmaskbits)
 {
 	unsigned int a, b, old_a, old_b;
-	unsigned int group_size, used_size, off;
+	unsigned int group_size, used_size;
 	int c, old_c, totaldigits, ndigits;
 	const char __user __force *ubuf = (const char __user __force *)buf;
-	int at_start, in_range, in_partial_range;
+	int at_start, in_range, in_partial_range, ret;
+	struct region r;
 
 	totaldigits = c = 0;
 	old_a = old_b = 0;
@@ -599,15 +636,20 @@ static int __bitmap_parselist(const char *buf, unsigned int buflen,
 		/* if no digit is after '-', it's wrong*/
 		if (at_start && in_range)
 			return -EINVAL;
-		if (!(a <= b) || group_size == 0 || !(used_size <= group_size))
-			return -EINVAL;
-		if (b >= nmaskbits)
-			return -ERANGE;
-		while (a <= b) {
-			off = min(b - a + 1, used_size);
-			bitmap_set(maskp, a, off);
-			a += group_size;
-		}
+
+		r.start = a;
+		r.off = used_size;
+		r.grlen = group_size;
+		r.end = b;
+
+		ret = bitmap_check_region(&r);
+		if (ret)
+			return ret;
+
+		ret = bitmap_set_region(&r, maskp, nmaskbits);
+		if (ret)
+			return ret;
+
 	} while (buflen && c == ',');
 	return 0;
 }
