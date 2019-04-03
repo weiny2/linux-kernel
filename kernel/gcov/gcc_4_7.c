@@ -159,7 +159,11 @@ void gcov_info_unlink(struct gcov_info *prev, struct gcov_info *info)
  */
 bool gcov_info_within_module(struct gcov_info *info, struct module *mod)
 {
+#ifdef CONFIG_MODULES
 	return within_module((unsigned long)info, mod);
+#else
+	return false;
+#endif
 }
 
 /* Symbolic links to be created for each profiling data file. */
