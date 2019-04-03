@@ -482,12 +482,12 @@ EXPORT_SYMBOL(bitmap_print_to_pagebuf);
  * 0	   9  12    18			38
  * .........****......****......****......
  *	    ^  ^     ^			 ^
- *      start  off   grlen	       end
+ *      start  off   group_len	       end
  */
 struct region {
 	unsigned int start;
 	unsigned int off;
-	unsigned int grlen;
+	unsigned int group_len;
 	unsigned int end;
 };
 
@@ -499,7 +499,7 @@ static int bitmap_set_region(const struct region *r,
 	if (r->end >= nbits)
 		return -ERANGE;
 
-	for (start = r->start; start <= r->end; start += r->grlen)
+	for (start = r->start; start <= r->end; start += r->group_len)
 		bitmap_set(bitmap, start, min(r->end - start + 1, r->off));
 
 	return 0;
@@ -507,7 +507,7 @@ static int bitmap_set_region(const struct region *r,
 
 static int bitmap_check_region(const struct region *r)
 {
-	if (r->start > r->end || r->grlen == 0 || r->off > r->grlen)
+	if (r->start > r->end || r->group_len == 0 || r->off > r->group_len)
 		return -EINVAL;
 
 	return 0;
@@ -639,7 +639,7 @@ static int __bitmap_parselist(const char *buf, unsigned int buflen,
 
 		r.start = a;
 		r.off = used_size;
-		r.grlen = group_size;
+		r.group_len = group_size;
 		r.end = b;
 
 		ret = bitmap_check_region(&r);
