@@ -614,10 +614,7 @@ static int __bitmap_parselist(const char *buf, unsigned int buflen,
 
 int bitmap_parselist(const char *bp, unsigned long *maskp, int nmaskbits)
 {
-	char *nl  = strchrnul(bp, '\n');
-	int len = nl - bp;
-
-	return __bitmap_parselist(bp, len, 0, maskp, nmaskbits);
+	return __bitmap_parselist(bp, UINT_MAX, 0, maskp, nmaskbits);
 }
 EXPORT_SYMBOL(bitmap_parselist);
 
