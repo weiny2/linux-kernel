@@ -13,109 +13,44 @@
 #include <asm/page.h>
 #include <asm/thread_info.h>
 
-#define PTE_INDX_MSK    0xffc
-#define PTE_INDX_SHIFT  10
-#define _PGDIR_SHIFT    22
-
-.macro tlbop_begin name, val0, val1, val2
-ENTRY(csky_\name)
-	mtcr    a3, ss2
-	mtcr    r6, ss3
-	mtcr    a2, ss4
-
-	RD_PGDR	r6
-	RD_MEH	a3
-#ifdef CONFIG_CPU_HAS_TLBI
-	tlbi.vaas a3
-	sync.is
-
-	btsti	a3, 31
-	bf	1f
-	RD_PGDR_K r6
-1:
-#else
-	bgeni	a2, 31
-	WR_MCIR	a2
-	bgeni	a2, 25
-	WR_MCIR	a2
-#endif
-	bclri   r6, 0
-	lrw	a2, PHYS_OFFSET
-	subu	r6, a2
-	bseti	r6, 31
-
-	mov     a2, a3
-	lsri    a2, _PGDIR_SHIFT
-	lsli    a2, 2
-	addu    r6, a2
-	ldw     r6, (r6)
-
-	lrw	a2, PHYS_OFFSET
-	subu	r6, a2
-	bseti	r6, 31
-
-	lsri    a3, PTE_INDX_SHIFT
-	lrw     a2, PTE_INDX_MSK
-	and     a3, a2
-	addu    r6, a3
-	ldw     a3, (r6)
-
-	movi	a2, (_PAGE_PRESENT | \val0)
-	and     a3, a2
-	cmpne   a3, a2
-	bt	\name
-
-	/* First read/write the page, just update the flags */
-	ldw     a3, (r6)
-	bgeni   a2, PAGE_VALID_BIT
-	bseti   a2, PAGE_ACCESSED_BIT
-	bseti   a2, \val1
-	bseti   a2, \val2
-	or      a3, a2
-	stw     a3, (r6)
-
-	/* Some cpu tlb-hardrefill bypass the cache */
-#ifdef CONFIG_CPU_NEED_TLBSYNC
-	movi	a2, 0x22
-	bseti	a2, 6
-	mtcr	r6, cr22
-	mtcr	a2, cr17
-	sync
-#endif
-
-	mfcr    a3, ss2
-	mfcr    r6, ss3
-	mfcr    a2, ss4
-	rte
-\name:
-	mfcr    a3, ss2
-	mfcr    r6, ss3
-	mfcr    a2, ss4
+.macro tlbop_begin
 	SAVE_ALL EPC_KEEP
+#ifdef CONFIG_CPU_HAS_TLBI
+	RD_MEH	a1
+	tlbi.vaas a1
+	sync.is
+#else
+	bgeni	a1, 31
+	WR_MCIR	a1
+	bgeni	a1, 25
+	WR_MCIR	a1
+#endif
 .endm
-.macro tlbop_end is_write
-	RD_MEH	a2
-	psrset  ee, ie
+
+.macro tlbop_end
 	mov     a0, sp
-	movi    a1, \is_write
+	RD_MEH	a1
+	psrset  ee, ie
 	jbsr    do_page_fault
-	movi    r11_sig, 0             /* r11 = 0, Not a syscall. */
 	jmpi    ret_from_exception
 .endm
 
 .text
 
-tlbop_begin tlbinvalidl, _PAGE_READ, PAGE_VALID_BIT, PAGE_ACCESSED_BIT
-tlbop_end 0
+ENTRY(csky_tlbinvalidl)
+	tlbop_begin
+	tlbop_end
 
-tlbop_begin tlbinvalids, _PAGE_WRITE, PAGE_DIRTY_BIT, PAGE_MODIFIED_BIT
-tlbop_end 1
+ENTRY(csky_tlbinvalids)
+	tlbop_begin
+	tlbop_end
 
-tlbop_begin tlbmodified, _PAGE_WRITE, PAGE_DIRTY_BIT, PAGE_MODIFIED_BIT
+ENTRY(csky_tlbmodified)
+	tlbop_begin
 #ifndef CONFIG_CPU_HAS_LDSTEX
-jbsr csky_cmpxchg_fixup
+	jbsr csky_cmpxchg_fixup
 #endif
-tlbop_end 1
+	tlbop_end
 
 ENTRY(csky_systemcall)
 	SAVE_ALL EPC_INCREASE
@@ -136,8 +71,9 @@ ENTRY(csky_systemcall)
 	bmaski  r10, THREAD_SHIFT
 	andn    r9, r10
 	ldw     r8, (r9, TINFO_FLAGS)
-	btsti   r8, TIF_SYSCALL_TRACE
-	bt      1f
+	ANDI_R3	r8, (_TIF_SYSCALL_TRACE | _TIF_SYSCALL_TRACEPOINT | _TIF_SYSCALL_AUDIT)
+	cmpnei	r8, 0
+	bt      csky_syscall_trace
 #if defined(__CSKYABIV2__)
 	subi    sp, 8
 	stw  	r5, (sp, 0x4)
@@ -150,10 +86,9 @@ ENTRY(csky_systemcall)
 	stw     a0, (sp, LSAVE_A0)      /* Save return value */
 	jmpi    ret_from_exception
 
-1:
-	movi	a0, 0                   /* enter system call */
-	mov	a1, sp                  /* sp = pt_regs pointer */
-	jbsr	syscall_trace
+csky_syscall_trace:
+	mov	a0, sp                  /* sp = pt_regs pointer */
+	jbsr	syscall_trace_enter
 	/* Prepare args before do system call */
 	ldw	a0, (sp, LSAVE_A0)
 	ldw	a1, (sp, LSAVE_A1)
@@ -173,9 +108,8 @@ ENTRY(csky_systemcall)
 #endif
 	stw	a0, (sp, LSAVE_A0)	/* Save return value */
 
-	movi    a0, 1                   /* leave system call */
-	mov     a1, sp                  /* right now, sp --> pt_regs */
-	jbsr    syscall_trace
+	mov     a0, sp                  /* right now, sp --> pt_regs */
+	jbsr    syscall_trace_exit
 	br	ret_from_exception
 
 ENTRY(ret_from_kernel_thread)
@@ -190,12 +124,11 @@ ENTRY(ret_from_fork)
 	bmaski	r10, THREAD_SHIFT
 	andn	r9, r10
 	ldw	r8, (r9, TINFO_FLAGS)
-	movi	r11_sig, 1
-	btsti	r8, TIF_SYSCALL_TRACE
+	ANDI_R3	r8, (_TIF_SYSCALL_TRACE | _TIF_SYSCALL_TRACEPOINT | _TIF_SYSCALL_AUDIT)
+	cmpnei	r8, 0
 	bf	3f
-	movi	a0, 1
-	mov	a1, sp			/* sp = pt_regs pointer */
-	jbsr	syscall_trace
+	mov	a0, sp			/* sp = pt_regs pointer */
+	jbsr	syscall_trace_exit
 3:
 	jbsr	ret_from_exception
 
@@ -225,12 +158,8 @@ exit_work:
 	/* If thread_info->flag is empty, RESTORE_ALL */
 	cmpnei	r8, 0
 	bf	1b
-	mov	a1, sp
 	mov	a0, r8
-	mov	a2, r11_sig		/* syscall? */
-	btsti	r8, TIF_SIGPENDING	/* delivering a signal? */
-	/* prevent further restarts(set r11 = 0) */
-	clrt	r11_sig
+	mov	a1, sp
 	jbsr	do_notify_resume	/* do signals */
 	br	resume_userspace
 
@@ -240,13 +169,11 @@ work_resched:
 	jmpi	schedule
 
 ENTRY(sys_rt_sigreturn)
-	movi	r11_sig, 0
 	jmpi	do_rt_sigreturn
 
 ENTRY(csky_trap)
 	SAVE_ALL EPC_KEEP
 	psrset	ee
-	movi	r11_sig, 0             /* r11 = 0, Not a syscall. */
 	mov	a0, sp                 /* Push Stack pointer arg */
 	jbsr	trap_c                 /* Call C-level trap handler */
 	jmpi	ret_from_exception
@@ -280,7 +207,6 @@ ENTRY(csky_get_tls)
 ENTRY(csky_irq)
 	SAVE_ALL EPC_KEEP
 	psrset	ee
-	movi	r11_sig, 0		/* r11 = 0, Not a syscall. */
 
 #ifdef CONFIG_PREEMPT
 	mov	r9, sp			/* Get current stack  pointer */

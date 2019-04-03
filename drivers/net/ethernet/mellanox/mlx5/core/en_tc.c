@@ -44,6 +44,7 @@
 #include <net/tc_act/tc_pedit.h>
 #include <net/tc_act/tc_csum.h>
 #include <net/arp.h>
+#include <net/ipv6_stubs.h>
 #include "en.h"
 #include "en_rep.h"
 #include "en_tc.h"
@@ -1827,6 +1828,7 @@ static int parse_cls_flower(struct mlx5e_priv *priv,
 
 struct pedit_headers {
 	struct ethhdr  eth;
+	struct vlan_hdr vlan;
 	struct iphdr   ip4;
 	struct ipv6hdr ip6;
 	struct tcphdr  tcp;
@@ -1884,6 +1886,7 @@ static struct mlx5_fields fields[] = {
 	OFFLOAD(SMAC_47_16, 4, eth.h_source[0], 0),
 	OFFLOAD(SMAC_15_0,  2, eth.h_source[4], 0),
 	OFFLOAD(ETHERTYPE,  2, eth.h_proto, 0),
+	OFFLOAD(FIRST_VID,  2, vlan.h_vlan_TCI, 0),
 
 	OFFLOAD(IP_TTL, 1, ip4.ttl,   0),
 	OFFLOAD(SIPV4,  4, ip4.saddr, 0),
@@ -2158,6 +2161,52 @@ static bool csum_offload_supported(struct mlx5e_priv *priv,
 	return true;
 }
 
+struct ip_ttl_word {
+	__u8	ttl;
+	__u8	protocol;
+	__sum16	check;
+};
+
+struct ipv6_hoplimit_word {
+	__be16	payload_len;
+	__u8	nexthdr;
+	__u8	hop_limit;
+};
+
+static bool is_action_keys_supported(const struct flow_action_entry *act)
+{
+	u32 mask, offset;
+	u8 htype;
+
+	htype = act->mangle.htype;
+	offset = act->mangle.offset;
+	mask = ~act->mangle.mask;
+	/* For IPv4 & IPv6 header check 4 byte word,
+	 * to determine that modified fields
+	 * are NOT ttl & hop_limit only.
+	 */
+	if (htype == FLOW_ACT_MANGLE_HDR_TYPE_IP4) {
+		struct ip_ttl_word *ttl_word =
+			(struct ip_ttl_word *)&mask;
+
+		if (offset != offsetof(struct iphdr, ttl) ||
+		    ttl_word->protocol ||
+		    ttl_word->check) {
+			return true;
+		}
+	} else if (htype == FLOW_ACT_MANGLE_HDR_TYPE_IP6) {
+		struct ipv6_hoplimit_word *hoplimit_word =
+			(struct ipv6_hoplimit_word *)&mask;
+
+		if (offset != offsetof(struct ipv6hdr, payload_len) ||
+		    hoplimit_word->payload_len ||
+		    hoplimit_word->nexthdr) {
+			return true;
+		}
+	}
+	return false;
+}
+
 static bool modify_header_match_supported(struct mlx5_flow_spec *spec,
 					  struct flow_action *flow_action,
 					  u32 actions,
@@ -2165,9 +2214,9 @@ static bool modify_header_match_supported(struct mlx5_flow_spec *spec,
 {
 	const struct flow_action_entry *act;
 	bool modify_ip_header;
-	u8 htype, ip_proto;
 	void *headers_v;
 	u16 ethertype;
+	u8 ip_proto;
 	int i;
 
 	if (actions & MLX5_FLOW_CONTEXT_ACTION_DECAP)
@@ -2187,9 +2236,7 @@ static bool modify_header_match_supported(struct mlx5_flow_spec *spec,
 		    act->id != FLOW_ACTION_ADD)
 			continue;
 
-		htype = act->mangle.htype;
-		if (htype == FLOW_ACT_MANGLE_HDR_TYPE_IP4 ||
-		    htype == FLOW_ACT_MANGLE_HDR_TYPE_IP6) {
+		if (is_action_keys_supported(act)) {
 			modify_ip_header = true;
 			break;
 		}
@@ -2247,6 +2294,35 @@ static bool same_hw_devs(struct mlx5e_priv *priv, struct mlx5e_priv *peer_priv)
 	return (fsystem_guid == psystem_guid);
 }
 
+static int add_vlan_rewrite_action(struct mlx5e_priv *priv, int namespace,
+				   const struct flow_action_entry *act,
+				   struct mlx5e_tc_flow_parse_attr *parse_attr,
+				   struct pedit_headers_action *hdrs,
+				   u32 *action, struct netlink_ext_ack *extack)
+{
+	u16 mask16 = VLAN_VID_MASK;
+	u16 val16 = act->vlan.vid & VLAN_VID_MASK;
+	const struct flow_action_entry pedit_act = {
+		.id = FLOW_ACTION_MANGLE,
+		.mangle.htype = FLOW_ACT_MANGLE_HDR_TYPE_ETH,
+		.mangle.offset = offsetof(struct vlan_ethhdr, h_vlan_TCI),
+		.mangle.mask = ~(u32)be16_to_cpu(*(__be16 *)&mask16),
+		.mangle.val = (u32)be16_to_cpu(*(__be16 *)&val16),
+	};
+	int err;
+
+	if (act->vlan.prio) {
+		NL_SET_ERR_MSG_MOD(extack, "Setting VLAN prio is not supported");
+		return -EOPNOTSUPP;
+	}
+
+	err = parse_tc_pedit_action(priv, &pedit_act, namespace, parse_attr,
+				    hdrs, NULL);
+	*action |= MLX5_FLOW_CONTEXT_ACTION_MOD_HDR;
+
+	return err;
+}
+
 static int parse_tc_nic_actions(struct mlx5e_priv *priv,
 				struct flow_action *flow_action,
 				struct mlx5e_tc_flow_parse_attr *parse_attr,
@@ -2281,6 +2357,15 @@ static int parse_tc_nic_actions(struct mlx5e_priv *priv,
 
 			action |= MLX5_FLOW_CONTEXT_ACTION_MOD_HDR |
 				  MLX5_FLOW_CONTEXT_ACTION_FWD_DEST;
+			break;
+		case FLOW_ACTION_VLAN_MANGLE:
+			err = add_vlan_rewrite_action(priv,
+						      MLX5_FLOW_NAMESPACE_KERNEL,
+						      act, parse_attr, hdrs,
+						      &action, extack);
+			if (err)
+				return err;
+
 			break;
 		case FLOW_ACTION_CSUM:
 			if (csum_offload_supported(priv, action,
@@ -2340,15 +2425,22 @@ static int parse_tc_nic_actions(struct mlx5e_priv *priv,
 	return 0;
 }
 
-static inline int cmp_encap_info(struct ip_tunnel_key *a,
-				 struct ip_tunnel_key *b)
+struct encap_key {
+	struct ip_tunnel_key *ip_tun_key;
+	int tunnel_type;
+};
+
+static inline int cmp_encap_info(struct encap_key *a,
+				 struct encap_key *b)
 {
-	return memcmp(a, b, sizeof(*a));
+	return memcmp(a->ip_tun_key, b->ip_tun_key, sizeof(*a->ip_tun_key)) ||
+	       a->tunnel_type != b->tunnel_type;
 }
 
-static inline int hash_encap_info(struct ip_tunnel_key *key)
+static inline int hash_encap_info(struct encap_key *key)
 {
-	return jhash(key, sizeof(*key), 0);
+	return jhash(key->ip_tun_key, sizeof(*key->ip_tun_key),
+		     key->tunnel_type);
 }
 
 
@@ -2379,7 +2471,7 @@ static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 	struct mlx5_esw_flow_attr *attr = flow->esw_attr;
 	struct mlx5e_tc_flow_parse_attr *parse_attr;
 	struct ip_tunnel_info *tun_info;
-	struct ip_tunnel_key *key;
+	struct encap_key key, e_key;
 	struct mlx5e_encap_entry *e;
 	unsigned short family;
 	uintptr_t hash_key;
@@ -2389,13 +2481,16 @@ static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 	parse_attr = attr->parse_attr;
 	tun_info = &parse_attr->tun_info[out_index];
 	family = ip_tunnel_info_af(tun_info);
-	key = &tun_info->key;
+	key.ip_tun_key = &tun_info->key;
+	key.tunnel_type = mlx5e_tc_tun_get_type(mirred_dev);
 
-	hash_key = hash_encap_info(key);
+	hash_key = hash_encap_info(&key);
 
 	hash_for_each_possible_rcu(esw->offloads.encap_tbl, e,
 				   encap_hlist, hash_key) {
-		if (!cmp_encap_info(&e->tun_info.key, key)) {
+		e_key.ip_tun_key = &e->tun_info.key;
+		e_key.tunnel_type = e->tunnel_type;
+		if (!cmp_encap_info(&e_key, &key)) {
 			found = true;
 			break;
 		}
@@ -2490,8 +2585,7 @@ static int parse_tc_vlan_action(struct mlx5e_priv *priv,
 		}
 		break;
 	default:
-		/* action is FLOW_ACT_VLAN_MANGLE */
-		return -EOPNOTSUPP;
+		return -EINVAL;
 	}
 
 	attr->total_vlan = vlan_idx + 1;
@@ -2625,7 +2719,27 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			break;
 		case FLOW_ACTION_VLAN_PUSH:
 		case FLOW_ACTION_VLAN_POP:
-			err = parse_tc_vlan_action(priv, act, attr, &action);
+			if (act->id == FLOW_ACTION_VLAN_PUSH &&
+			    (action & MLX5_FLOW_CONTEXT_ACTION_VLAN_POP)) {
+				/* Replace vlan pop+push with vlan modify */
+				action &= ~MLX5_FLOW_CONTEXT_ACTION_VLAN_POP;
+				err = add_vlan_rewrite_action(priv,
+							      MLX5_FLOW_NAMESPACE_FDB,
+							      act, parse_attr, hdrs,
+							      &action, extack);
+			} else {
+				err = parse_tc_vlan_action(priv, act, attr, &action);
+			}
+			if (err)
+				return err;
+
+			attr->split_count = attr->out_count;
+			break;
+		case FLOW_ACTION_VLAN_MANGLE:
+			err = add_vlan_rewrite_action(priv,
+						      MLX5_FLOW_NAMESPACE_FDB,
+						      act, parse_attr, hdrs,
+						      &action, extack);
 			if (err)
 				return err;
 
@@ -2657,7 +2771,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 
 	if (hdrs[TCA_PEDIT_KEY_EX_CMD_SET].pedits ||
 	    hdrs[TCA_PEDIT_KEY_EX_CMD_ADD].pedits) {
-		err = alloc_tc_pedit_action(priv, MLX5_FLOW_NAMESPACE_KERNEL,
+		err = alloc_tc_pedit_action(priv, MLX5_FLOW_NAMESPACE_FDB,
 					    parse_attr, hdrs, extack);
 		if (err)
 			return err;

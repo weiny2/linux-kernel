@@ -151,7 +151,7 @@ lpfc_sli4_wq_put(struct lpfc_queue *q, union lpfc_wqe128 *wqe)
 	/* sanity check on queue memory */
 	if (unlikely(!q))
 		return -ENOMEM;
-	temp_wqe = q->qe[q->host_index].wqe;
+	temp_wqe = lpfc_sli4_qe(q, q->host_index);
 
 	/* If the host has not yet processed the next entry then we are done */
 	idx = ((q->host_index + 1) % q->entry_count);
@@ -271,7 +271,7 @@ lpfc_sli4_mq_put(struct lpfc_queue *q, struct lpfc_mqe *mqe)
 	/* sanity check on queue memory */
 	if (unlikely(!q))
 		return -ENOMEM;
-	temp_mqe = q->qe[q->host_index].mqe;
+	temp_mqe = lpfc_sli4_qe(q, q->host_index);
 
 	/* If the host has not yet processed the next entry then we are done */
 	if (((q->host_index + 1) % q->entry_count) == q->hba_index)
@@ -331,7 +331,7 @@ lpfc_sli4_eq_get(struct lpfc_queue *q)
 	/* sanity check on queue memory */
 	if (unlikely(!q))
 		return NULL;
-	eqe = q->qe[q->host_index].eqe;
+	eqe = lpfc_sli4_qe(q, q->host_index);
 
 	/* If the next EQE is not valid then we are done */
 	if (bf_get_le32(lpfc_eqe_valid, eqe) != q->qe_valid)
@@ -355,7 +355,7 @@ lpfc_sli4_eq_get(struct lpfc_queue *q)
  * @q: The Event Queue to disable interrupts
  *
  **/
-inline void
+void
 lpfc_sli4_eq_clr_intr(struct lpfc_queue *q)
 {
 	struct lpfc_register doorbell;
@@ -374,7 +374,7 @@ lpfc_sli4_eq_clr_intr(struct lpfc_queue *q)
  * @q: The Event Queue to disable interrupts
  *
  **/
-inline void
+void
 lpfc_sli4_if6_eq_clr_intr(struct lpfc_queue *q)
 {
 	struct lpfc_register doorbell;
@@ -545,7 +545,7 @@ lpfc_sli4_cq_get(struct lpfc_queue *q)
 	/* sanity check on queue memory */
 	if (unlikely(!q))
 		return NULL;
-	cqe = q->qe[q->host_index].cqe;
+	cqe = lpfc_sli4_qe(q, q->host_index);
 
 	/* If the next CQE is not valid then we are done */
 	if (bf_get_le32(lpfc_cqe_valid, cqe) != q->qe_valid)
@@ -667,8 +667,8 @@ lpfc_sli4_rq_put(struct lpfc_queue *hq, struct lpfc_queue *dq,
 		return -ENOMEM;
 	hq_put_index = hq->host_index;
 	dq_put_index = dq->host_index;
-	temp_hrqe = hq->qe[hq_put_index].rqe;
-	temp_drqe = dq->qe[dq_put_index].rqe;
+	temp_hrqe = lpfc_sli4_qe(hq, hq_put_index);
+	temp_drqe = lpfc_sli4_qe(dq, dq_put_index);
 
 	if (hq->type != LPFC_HRQ || dq->type != LPFC_DRQ)
 		return -EINVAL;
@@ -2502,8 +2502,8 @@ lpfc_sli_def_mbox_cmpl(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 			} else {
 				ndlp->nlp_flag &= ~NLP_UNREG_INP;
 			}
+			pmb->ctx_ndlp = NULL;
 		}
-		pmb->ctx_ndlp = NULL;
 	}
 
 	/* Check security permission status on INIT_LINK mailbox command */
@@ -4487,7 +4487,9 @@ lpfc_sli_brdreset(struct lpfc_hba *phba)
 	}
 
 	/* Turn off parity checking and serr during the physical reset */
-	pci_read_config_word(phba->pcidev, PCI_COMMAND, &cfg_value);
+	if (pci_read_config_word(phba->pcidev, PCI_COMMAND, &cfg_value))
+		return -EIO;
+
 	pci_write_config_word(phba->pcidev, PCI_COMMAND,
 			      (cfg_value &
 			       ~(PCI_COMMAND_PARITY | PCI_COMMAND_SERR)));
@@ -4564,7 +4566,12 @@ lpfc_sli4_brdreset(struct lpfc_hba *phba)
 			"0389 Performing PCI function reset!\n");
 
 	/* Turn off parity checking and serr during the physical reset */
-	pci_read_config_word(phba->pcidev, PCI_COMMAND, &cfg_value);
+	if (pci_read_config_word(phba->pcidev, PCI_COMMAND, &cfg_value)) {
+		lpfc_printf_log(phba, KERN_INFO, LOG_INIT,
+				"3205 PCI read Config failed\n");
+		return -EIO;
+	}
+
 	pci_write_config_word(phba->pcidev, PCI_COMMAND, (cfg_value &
 			      ~(PCI_COMMAND_PARITY | PCI_COMMAND_SERR)));
 
@@ -5395,7 +5402,7 @@ lpfc_sli4_read_rev(struct lpfc_hba *phba, LPFC_MBOXQ_t *mboxq,
 }
 
 /**
- * lpfc_sli4_retrieve_pport_name - Retrieve SLI4 device physical port name
+ * lpfc_sli4_get_ctl_attr - Retrieve SLI4 device controller attributes
  * @phba: pointer to lpfc hba data structure.
  *
  * This routine retrieves SLI4 device physical port name this PCI function
@@ -5403,40 +5410,30 @@ lpfc_sli4_read_rev(struct lpfc_hba *phba, LPFC_MBOXQ_t *mboxq,
  *
  * Return codes
  *      0 - successful
- *      otherwise - failed to retrieve physical port name
+ *      otherwise - failed to retrieve controller attributes
  **/
 static int
-lpfc_sli4_retrieve_pport_name(struct lpfc_hba *phba)
+lpfc_sli4_get_ctl_attr(struct lpfc_hba *phba)
 {
 	LPFC_MBOXQ_t *mboxq;
 	struct lpfc_mbx_get_cntl_attributes *mbx_cntl_attr;
 	struct lpfc_controller_attribute *cntl_attr;
-	struct lpfc_mbx_get_port_name *get_port_name;
 	void *virtaddr = NULL;
 	uint32_t alloclen, reqlen;
 	uint32_t shdr_status, shdr_add_status;
 	union lpfc_sli4_cfg_shdr *shdr;
-	char cport_name = 0;
 	int rc;
-
-	/* We assume nothing at this point */
-	phba->sli4_hba.lnk_info.lnk_dv = LPFC_LNK_DAT_INVAL;
-	phba->sli4_hba.pport_name_sta = LPFC_SLI4_PPNAME_NON;
 
 	mboxq = (LPFC_MBOXQ_t *)mempool_alloc(phba->mbox_mem_pool, GFP_KERNEL);
 	if (!mboxq)
 		return -ENOMEM;
-	/* obtain link type and link number via READ_CONFIG */
-	phba->sli4_hba.lnk_info.lnk_dv = LPFC_LNK_DAT_INVAL;
-	lpfc_sli4_read_config(phba);
-	if (phba->sli4_hba.lnk_info.lnk_dv == LPFC_LNK_DAT_VAL)
-		goto retrieve_ppname;
 
-	/* obtain link type and link number via COMMON_GET_CNTL_ATTRIBUTES */
+	/* Send COMMON_GET_CNTL_ATTRIBUTES mbox cmd */
 	reqlen = sizeof(struct lpfc_mbx_get_cntl_attributes);
 	alloclen = lpfc_sli4_config(phba, mboxq, LPFC_MBOX_SUBSYSTEM_COMMON,
 			LPFC_MBOX_OPCODE_GET_CNTL_ATTRIBUTES, reqlen,
 			LPFC_SLI4_MBX_NEMBED);
+
 	if (alloclen < reqlen) {
 		lpfc_printf_log(phba, KERN_ERR, LOG_SLI,
 				"3084 Allocated DMA memory size (%d) is "
@@ -5462,16 +5459,71 @@ lpfc_sli4_retrieve_pport_name(struct lpfc_hba *phba)
 		rc = -ENXIO;
 		goto out_free_mboxq;
 	}
+
 	cntl_attr = &mbx_cntl_attr->cntl_attr;
 	phba->sli4_hba.lnk_info.lnk_dv = LPFC_LNK_DAT_VAL;
 	phba->sli4_hba.lnk_info.lnk_tp =
 		bf_get(lpfc_cntl_attr_lnk_type, cntl_attr);
 	phba->sli4_hba.lnk_info.lnk_no =
 		bf_get(lpfc_cntl_attr_lnk_numb, cntl_attr);
+
+	memset(phba->BIOSVersion, 0, sizeof(phba->BIOSVersion));
+	strlcat(phba->BIOSVersion, (char *)cntl_attr->bios_ver_str,
+		sizeof(phba->BIOSVersion));
+
 	lpfc_printf_log(phba, KERN_INFO, LOG_SLI,
-			"3086 lnk_type:%d, lnk_numb:%d\n",
+			"3086 lnk_type:%d, lnk_numb:%d, bios_ver:%s\n",
 			phba->sli4_hba.lnk_info.lnk_tp,
-			phba->sli4_hba.lnk_info.lnk_no);
+			phba->sli4_hba.lnk_info.lnk_no,
+			phba->BIOSVersion);
+out_free_mboxq:
+	if (rc != MBX_TIMEOUT) {
+		if (bf_get(lpfc_mqe_command, &mboxq->u.mqe) == MBX_SLI4_CONFIG)
+			lpfc_sli4_mbox_cmd_free(phba, mboxq);
+		else
+			mempool_free(mboxq, phba->mbox_mem_pool);
+	}
+	return rc;
+}
+
+/**
+ * lpfc_sli4_retrieve_pport_name - Retrieve SLI4 device physical port name
+ * @phba: pointer to lpfc hba data structure.
+ *
+ * This routine retrieves SLI4 device physical port name this PCI function
+ * is attached to.
+ *
+ * Return codes
+ *      0 - successful
+ *      otherwise - failed to retrieve physical port name
+ **/
+static int
+lpfc_sli4_retrieve_pport_name(struct lpfc_hba *phba)
+{
+	LPFC_MBOXQ_t *mboxq;
+	struct lpfc_mbx_get_port_name *get_port_name;
+	uint32_t shdr_status, shdr_add_status;
+	union lpfc_sli4_cfg_shdr *shdr;
+	char cport_name = 0;
+	int rc;
+
+	/* We assume nothing at this point */
+	phba->sli4_hba.lnk_info.lnk_dv = LPFC_LNK_DAT_INVAL;
+	phba->sli4_hba.pport_name_sta = LPFC_SLI4_PPNAME_NON;
+
+	mboxq = (LPFC_MBOXQ_t *)mempool_alloc(phba->mbox_mem_pool, GFP_KERNEL);
+	if (!mboxq)
+		return -ENOMEM;
+	/* obtain link type and link number via READ_CONFIG */
+	phba->sli4_hba.lnk_info.lnk_dv = LPFC_LNK_DAT_INVAL;
+	lpfc_sli4_read_config(phba);
+	if (phba->sli4_hba.lnk_info.lnk_dv == LPFC_LNK_DAT_VAL)
+		goto retrieve_ppname;
+
+	/* obtain link type and link number via COMMON_GET_CNTL_ATTRIBUTES */
+	rc = lpfc_sli4_get_ctl_attr(phba);
+	if (rc)
+		goto out_free_mboxq;
 
 retrieve_ppname:
 	lpfc_sli4_config(phba, mboxq, LPFC_MBOX_SUBSYSTEM_COMMON,
@@ -7250,6 +7302,12 @@ lpfc_sli4_hba_setup(struct lpfc_hba *phba)
 				"3080 Successful retrieving SLI4 device "
 				"physical port name: %s.\n", phba->Port);
 
+	rc = lpfc_sli4_get_ctl_attr(phba);
+	if (!rc)
+		lpfc_printf_log(phba, KERN_INFO, LOG_MBOX | LOG_SLI,
+				"8351 Successful retrieving SLI4 device "
+				"CTL ATTR\n");
+
 	/*
 	 * Evaluate the read rev and vpd data. Populate the driver
 	 * state with the results. If this routine fails, the failure
@@ -7652,12 +7710,6 @@ lpfc_sli4_hba_setup(struct lpfc_hba *phba)
 		phba->cfg_xri_rebalancing = 0;
 	}
 
-	/* Arm the CQs and then EQs on device */
-	lpfc_sli4_arm_cqeq_intr(phba);
-
-	/* Indicate device interrupt mode */
-	phba->sli4_hba.intr_enable = 1;
-
 	/* Allow asynchronous mailbox command to go through */
 	spin_lock_irq(&phba->hbalock);
 	phba->sli.sli_flag &= ~LPFC_SLI_ASYNC_MBX_BLK;
@@ -7725,6 +7777,12 @@ lpfc_sli4_hba_setup(struct lpfc_hba *phba)
 	if (bf_get(lpfc_conf_trunk_port3, &phba->sli4_hba))
 		phba->trunk_link.link3.state = LPFC_LINK_DOWN;
 	spin_unlock_irq(&phba->hbalock);
+
+	/* Arm the CQs and then EQs on device */
+	lpfc_sli4_arm_cqeq_intr(phba);
+
+	/* Indicate device interrupt mode */
+	phba->sli4_hba.intr_enable = 1;
 
 	if (!(phba->hba_flag & HBA_FCOE_MODE) &&
 	    (phba->hba_flag & LINK_DISABLED)) {
@@ -7820,8 +7878,9 @@ lpfc_sli4_mbox_completions_pending(struct lpfc_hba *phba)
 	mcq = phba->sli4_hba.mbx_cq;
 	idx = mcq->hba_index;
 	qe_valid = mcq->qe_valid;
-	while (bf_get_le32(lpfc_cqe_valid, mcq->qe[idx].cqe) == qe_valid) {
-		mcqe = (struct lpfc_mcqe *)mcq->qe[idx].cqe;
+	while (bf_get_le32(lpfc_cqe_valid,
+	       (struct lpfc_cqe *)lpfc_sli4_qe(mcq, idx)) == qe_valid) {
+		mcqe = (struct lpfc_mcqe *)(lpfc_sli4_qe(mcq, idx));
 		if (bf_get_le32(lpfc_trailer_completed, mcqe) &&
 		    (!bf_get_le32(lpfc_trailer_async, mcqe))) {
 			pending_completions = true;
@@ -8500,7 +8559,7 @@ lpfc_sli4_wait_bmbx_ready(struct lpfc_hba *phba, LPFC_MBOXQ_t *mboxq)
 		bmbx_reg.word0 = readl(phba->sli4_hba.BMBXregaddr);
 		db_ready = bf_get(lpfc_bmbx_rdy, &bmbx_reg);
 		if (!db_ready)
-			msleep(2);
+			mdelay(2);
 
 		if (time_after(jiffies, timeout))
 			return MBXERR_ERROR;
@@ -14019,7 +14078,7 @@ lpfc_sli4_nvmet_handle_rcqe(struct lpfc_hba *phba, struct lpfc_queue *cq,
 			return false;
 		}
 drop:
-		lpfc_in_buf_free(phba, &dma_buf->dbuf);
+		lpfc_rq_buf_free(phba, &dma_buf->hbuf);
 		break;
 	case FC_STATUS_INSUFF_BUF_FRM_DISC:
 		if (phba->nvmet_support) {
@@ -14410,6 +14469,9 @@ lpfc_sli4_queue_free(struct lpfc_queue *queue)
 	if (!queue)
 		return;
 
+	if (!list_empty(&queue->wq_list))
+		list_del(&queue->wq_list);
+
 	while (!list_empty(&queue->page_list)) {
 		list_remove_head(&queue->page_list, dmabuf, struct lpfc_dmabuf,
 				 list);
@@ -14425,9 +14487,6 @@ lpfc_sli4_queue_free(struct lpfc_queue *queue)
 	if (!list_empty(&queue->cpu_list))
 		list_del(&queue->cpu_list);
 
-	if (!list_empty(&queue->wq_list))
-		list_del(&queue->wq_list);
-
 	kfree(queue);
 	return;
 }
@@ -14438,6 +14497,7 @@ lpfc_sli4_queue_free(struct lpfc_queue *queue)
  * @page_size: The size of a queue page
  * @entry_size: The size of each queue entry for this queue.
  * @entry count: The number of entries that this queue will handle.
+ * @cpu: The cpu that will primarily utilize this queue.
  *
  * This function allocates a queue structure and the DMAable memory used for
  * the host resident queue. This function must be called before creating the
@@ -14445,28 +14505,26 @@ lpfc_sli4_queue_free(struct lpfc_queue *queue)
  **/
 struct lpfc_queue *
 lpfc_sli4_queue_alloc(struct lpfc_hba *phba, uint32_t page_size,
-		      uint32_t entry_size, uint32_t entry_count)
+		      uint32_t entry_size, uint32_t entry_count, int cpu)
 {
 	struct lpfc_queue *queue;
 	struct lpfc_dmabuf *dmabuf;
-	int x, total_qe_count;
-	void *dma_pointer;
 	uint32_t hw_page_size = phba->sli4_hba.pc_sli4_params.if_page_sz;
+	uint16_t x, pgcnt;
 
 	if (!phba->sli4_hba.pc_sli4_params.supported)
 		hw_page_size = page_size;
 
-	queue = kzalloc(sizeof(struct lpfc_queue) +
-			(sizeof(union sli4_qe) * entry_count), GFP_KERNEL);
-	if (!queue)
-		return NULL;
-	queue->page_count = (ALIGN(entry_size * entry_count,
-			hw_page_size))/hw_page_size;
+	pgcnt = ALIGN(entry_size * entry_count, hw_page_size) / hw_page_size;
 
 	/* If needed, Adjust page count to match the max the adapter supports */
-	if (phba->sli4_hba.pc_sli4_params.wqpcnt &&
-	    (queue->page_count > phba->sli4_hba.pc_sli4_params.wqpcnt))
-		queue->page_count = phba->sli4_hba.pc_sli4_params.wqpcnt;
+	if (pgcnt > phba->sli4_hba.pc_sli4_params.wqpcnt)
+		pgcnt = phba->sli4_hba.pc_sli4_params.wqpcnt;
+
+	queue = kzalloc_node(sizeof(*queue) + (sizeof(void *) * pgcnt),
+			     GFP_KERNEL, cpu_to_node(cpu));
+	if (!queue)
+		return NULL;
 
 	INIT_LIST_HEAD(&queue->list);
 	INIT_LIST_HEAD(&queue->wq_list);
@@ -14478,13 +14536,17 @@ lpfc_sli4_queue_alloc(struct lpfc_hba *phba, uint32_t page_size,
 	/* Set queue parameters now.  If the system cannot provide memory
 	 * resources, the free routine needs to know what was allocated.
 	 */
+	queue->page_count = pgcnt;
+	queue->q_pgs = (void **)&queue[1];
+	queue->entry_cnt_per_pg = hw_page_size / entry_size;
 	queue->entry_size = entry_size;
 	queue->entry_count = entry_count;
 	queue->page_size = hw_page_size;
 	queue->phba = phba;
 
-	for (x = 0, total_qe_count = 0; x < queue->page_count; x++) {
-		dmabuf = kzalloc(sizeof(struct lpfc_dmabuf), GFP_KERNEL);
+	for (x = 0; x < queue->page_count; x++) {
+		dmabuf = kzalloc_node(sizeof(*dmabuf), GFP_KERNEL,
+				      dev_to_node(&phba->pcidev->dev));
 		if (!dmabuf)
 			goto out_fail;
 		dmabuf->virt = dma_alloc_coherent(&phba->pcidev->dev,
@@ -14496,13 +14558,8 @@ lpfc_sli4_queue_alloc(struct lpfc_hba *phba, uint32_t page_size,
 		}
 		dmabuf->buffer_tag = x;
 		list_add_tail(&dmabuf->list, &queue->page_list);
-		/* initialize queue's entry array */
-		dma_pointer = dmabuf->virt;
-		for (; total_qe_count < entry_count &&
-		     dma_pointer < (hw_page_size + dmabuf->virt);
-		     total_qe_count++, dma_pointer += entry_size) {
-			queue->qe[total_qe_count].address = dma_pointer;
-		}
+		/* use lpfc_sli4_qe to index a paritcular entry in this page */
+		queue->q_pgs[x] = dmabuf->virt;
 	}
 	INIT_WORK(&queue->irqwork, lpfc_sli4_hba_process_cq);
 	INIT_WORK(&queue->spwork, lpfc_sli4_sp_process_cq);

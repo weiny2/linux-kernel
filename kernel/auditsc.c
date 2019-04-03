@@ -840,6 +840,13 @@ static inline void audit_proctitle_free(struct audit_context *context)
 	context->proctitle.len = 0;
 }
 
+static inline void audit_free_module(struct audit_context *context)
+{
+	if (context->type == AUDIT_KERN_MODULE) {
+		kfree(context->module.name);
+		context->module.name = NULL;
+	}
+}
 static inline void audit_free_names(struct audit_context *context)
 {
 	struct audit_names *n, *next;
@@ -923,6 +930,7 @@ int audit_alloc(struct task_struct *tsk)
 
 static inline void audit_free_context(struct audit_context *context)
 {
+	audit_free_module(context);
 	audit_free_names(context);
 	unroll_tree_refs(context, NULL, 0);
 	free_tree_refs(context);
@@ -1139,7 +1147,8 @@ out:
 	kfree(buf_head);
 }
 
-void audit_log_cap(struct audit_buffer *ab, char *prefix, kernel_cap_t *cap)
+static void audit_log_cap(struct audit_buffer *ab, char *prefix,
+			  kernel_cap_t *cap)
 {
 	int i;
 
@@ -1266,7 +1275,6 @@ static void show_special(struct audit_context *context, int *call_panic)
 		audit_log_format(ab, "name=");
 		if (context->module.name) {
 			audit_log_untrustedstring(ab, context->module.name);
-			kfree(context->module.name);
 		} else
 			audit_log_format(ab, "(null)");
 
@@ -1628,7 +1636,7 @@ void __audit_syscall_entry(int major, unsigned long a1, unsigned long a2,
 			return;
 	}
 
-	context->arch	    = syscall_get_arch();
+	context->arch	    = syscall_get_arch(current);
 	context->major      = major;
 	context->argv[0]    = a1;
 	context->argv[1]    = a2;
@@ -1697,6 +1705,7 @@ void __audit_syscall_exit(int success, long return_code)
 	context->in_syscall = 0;
 	context->prio = context->state == AUDIT_RECORD_CONTEXT ? ~0ULL : 0;
 
+	audit_free_module(context);
 	audit_free_names(context);
 	unroll_tree_refs(context, NULL, 0);
 	audit_free_aux(context);
@@ -1897,8 +1906,9 @@ static inline int audit_copy_fcaps(struct audit_names *name,
 }
 
 /* Copy inode data into an audit_names. */
-void audit_copy_inode(struct audit_names *name, const struct dentry *dentry,
-		      struct inode *inode, unsigned int flags)
+static void audit_copy_inode(struct audit_names *name,
+			     const struct dentry *dentry,
+			     struct inode *inode, unsigned int flags)
 {
 	name->ino   = inode->i_ino;
 	name->dev   = inode->i_sb->s_dev;
@@ -2580,7 +2590,7 @@ void audit_seccomp(unsigned long syscall, long signr, int code)
 		return;
 	audit_log_task(ab);
 	audit_log_format(ab, " sig=%ld arch=%x syscall=%ld compat=%d ip=0x%lx code=0x%x",
-			 signr, syscall_get_arch(), syscall,
+			 signr, syscall_get_arch(current), syscall,
 			 in_compat_syscall(), KSTK_EIP(current), code);
 	audit_log_end(ab);
 }

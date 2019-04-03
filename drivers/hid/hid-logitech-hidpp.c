@@ -847,7 +847,7 @@ static int hidpp_root_get_protocol_version(struct hidpp_device *hidpp)
 	if (ret == HIDPP_ERROR_INVALID_SUBID) {
 		hidpp->protocol_major = 1;
 		hidpp->protocol_minor = 0;
-		return 0;
+		goto print_version;
 	}
 
 	/* the device might not be connected */
@@ -865,18 +865,10 @@ static int hidpp_root_get_protocol_version(struct hidpp_device *hidpp)
 	hidpp->protocol_major = response.fap.params[0];
 	hidpp->protocol_minor = response.fap.params[1];
 
-	return ret;
-}
-
-static bool hidpp_is_connected(struct hidpp_device *hidpp)
-{
-	int ret;
-
-	ret = hidpp_root_get_protocol_version(hidpp);
-	if (!ret)
-		hid_dbg(hidpp->hid_dev, "HID++ %u.%u device connected.\n",
-			hidpp->protocol_major, hidpp->protocol_minor);
-	return ret == 0;
+print_version:
+	hid_info(hidpp->hid_dev, "HID++ %u.%u device connected.\n",
+		 hidpp->protocol_major, hidpp->protocol_minor);
+	return 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1012,7 +1004,11 @@ static int hidpp_map_battery_level(int capacity)
 {
 	if (capacity < 11)
 		return POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL;
-	else if (capacity < 31)
+	/*
+	 * The spec says this should be < 31 but some devices report 30
+	 * with brand new batteries and Windows reports 30 as "Good".
+	 */
+	else if (capacity < 30)
 		return POWER_SUPPLY_CAPACITY_LEVEL_LOW;
 	else if (capacity < 81)
 		return POWER_SUPPLY_CAPACITY_LEVEL_NORMAL;
@@ -2111,6 +2107,13 @@ static int hidpp_ff_init(struct hidpp_device *hidpp, u8 feature_index)
 		kfree(data);
 		return -ENOMEM;
 	}
+	data->wq = create_singlethread_workqueue("hidpp-ff-sendqueue");
+	if (!data->wq) {
+		kfree(data->effect_ids);
+		kfree(data);
+		return -ENOMEM;
+	}
+
 	data->hidpp = hidpp;
 	data->feature_index = feature_index;
 	data->version = version;
@@ -2155,7 +2158,6 @@ static int hidpp_ff_init(struct hidpp_device *hidpp, u8 feature_index)
 	/* ignore boost value at response.fap.params[2] */
 
 	/* init the hardware command queue */
-	data->wq = create_singlethread_workqueue("hidpp-ff-sendqueue");
 	atomic_set(&data->workqueue_size, 0);
 
 	/* initialize with zero autocenter to get wheel in usable state */
@@ -2608,8 +2610,9 @@ static int m560_raw_event(struct hid_device *hdev, u8 *data, int size)
 		input_report_rel(mydata->input, REL_Y, v);
 
 		v = hid_snto32(data[6], 8);
-		hidpp_scroll_counter_handle_scroll(
-				&hidpp->vertical_wheel_counter, v);
+		if (v != 0)
+			hidpp_scroll_counter_handle_scroll(
+					&hidpp->vertical_wheel_counter, v);
 
 		input_sync(mydata->input);
 	}
@@ -3128,13 +3131,11 @@ static void hidpp_connect_event(struct hidpp_device *hidpp)
 	/* the device is already connected, we can ask for its name and
 	 * protocol */
 	if (!hidpp->protocol_major) {
-		ret = !hidpp_is_connected(hidpp);
+		ret = hidpp_root_get_protocol_version(hidpp);
 		if (ret) {
 			hid_err(hdev, "Can not get the protocol version.\n");
 			return;
 		}
-		hid_info(hdev, "HID++ %u.%u device connected.\n",
-			 hidpp->protocol_major, hidpp->protocol_minor);
 	}
 
 	if (hidpp->name == hdev->name && hidpp->protocol_major >= 2) {
@@ -3282,7 +3283,7 @@ static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (hidpp->quirks & HIDPP_QUIRK_UNIFYING)
 		hidpp_unifying_init(hidpp);
 
-	connected = hidpp_is_connected(hidpp);
+	connected = hidpp_root_get_protocol_version(hidpp) == 0;
 	atomic_set(&hidpp->connected, connected);
 	if (!(hidpp->quirks & HIDPP_QUIRK_UNIFYING)) {
 		if (!connected) {
@@ -3290,9 +3291,6 @@ static int hidpp_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			hid_err(hdev, "Device not connected");
 			goto hid_hw_open_failed;
 		}
-
-		hid_info(hdev, "HID++ %u.%u device connected.\n",
-			 hidpp->protocol_major, hidpp->protocol_minor);
 
 		hidpp_overwrite_name(hdev);
 	}

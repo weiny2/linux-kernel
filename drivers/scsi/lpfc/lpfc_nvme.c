@@ -1106,13 +1106,16 @@ lpfc_nvme_io_cmd_wqe_cmpl(struct lpfc_hba *phba, struct lpfc_iocbq *pwqeIn,
 					 lpfc_ncmd, nCmd,
 					 lpfc_ncmd->cur_iocbq.sli4_xritag,
 					 bf_get(lpfc_wcqe_c_xb, wcqe));
+			/* fall through */
 		default:
 out_err:
 			lpfc_printf_vlog(vport, KERN_INFO, LOG_NVME_IOERR,
 					 "6072 NVME Completion Error: xri %x "
-					 "status x%x result x%x placed x%x\n",
+					 "status x%x result x%x [x%x] "
+					 "placed x%x\n",
 					 lpfc_ncmd->cur_iocbq.sli4_xritag,
 					 lpfc_ncmd->status, lpfc_ncmd->result,
+					 wcqe->parameter,
 					 wcqe->total_data_placed);
 			nCmd->transferred_length = 0;
 			nCmd->rcv_rsplen = 0;
@@ -2080,15 +2083,15 @@ lpfc_nvme_create_localport(struct lpfc_vport *vport)
 		lpfc_nvme_template.max_hw_queues =
 			phba->sli4_hba.num_present_cpu;
 
+	if (!IS_ENABLED(CONFIG_NVME_FC))
+		return ret;
+
 	/* localport is allocated from the stack, but the registration
 	 * call allocates heap memory as well as the private area.
 	 */
-#if (IS_ENABLED(CONFIG_NVME_FC))
+
 	ret = nvme_fc_register_localport(&nfcp_info, &lpfc_nvme_template,
 					 &vport->phba->pcidev->dev, &localport);
-#else
-	ret = -ENOMEM;
-#endif
 	if (!ret) {
 		lpfc_printf_vlog(vport, KERN_INFO, LOG_NVME | LOG_NVME_DISC,
 				 "6005 Successfully registered local "

@@ -447,20 +447,8 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 	if (IS_ERR(channel->base))
 		return PTR_ERR(channel->base);
 
-	/* call request_irq for OTG */
-	irq = platform_get_irq(pdev, 0);
-	if (irq >= 0) {
-		INIT_WORK(&channel->work, rcar_gen3_phy_usb2_work);
-		irq = devm_request_irq(dev, irq, rcar_gen3_phy_usb2_irq,
-				       IRQF_SHARED, dev_name(dev), channel);
-		if (irq < 0)
-			dev_err(dev, "No irq handler (%d)\n", irq);
-	}
-
 	channel->dr_mode = of_usb_get_dr_mode_by_phy(dev->of_node, 0);
-	if (channel->dr_mode != USB_DR_MODE_UNKNOWN) {
-		int ret;
-
+	if (channel->dr_mode == USB_DR_MODE_OTG) {
 		channel->is_otg_channel = true;
 		channel->uses_otg_pins = !of_property_read_bool(dev->of_node,
 							"renesas,no-otg-pins");
@@ -473,6 +461,19 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 		if (ret < 0) {
 			dev_err(dev, "Failed to register extcon\n");
 			return ret;
+		}
+	}
+
+	if (channel->is_otg_channel && channel->uses_otg_pins) {
+		/* call request_irq for OTG */
+		irq = platform_get_irq(pdev, 0);
+		if (irq >= 0) {
+			INIT_WORK(&channel->work, rcar_gen3_phy_usb2_work);
+			irq = devm_request_irq(dev, irq, rcar_gen3_phy_usb2_irq,
+					       IRQF_SHARED, dev_name(dev),
+					       channel);
+			if (irq < 0)
+				dev_err(dev, "No irq handler (%d)\n", irq);
 		}
 	}
 

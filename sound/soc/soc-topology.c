@@ -535,6 +535,8 @@ static void remove_dai(struct snd_soc_component *comp,
 		if (dai->driver == dai_drv)
 			dai->driver = NULL;
 
+	kfree(dai_drv->playback.stream_name);
+	kfree(dai_drv->capture.stream_name);
 	kfree(dai_drv->name);
 	list_del(&dobj->list);
 	kfree(dai_drv);
@@ -894,18 +896,19 @@ static int soc_tplg_dmixer_create(struct soc_tplg *tplg, unsigned int count,
 			continue;
 		}
 
+		/* create any TLV data */
+		soc_tplg_create_tlv(tplg, &kc, &mc->hdr);
+
 		/* pass control to driver for optional further init */
 		err = soc_tplg_init_kcontrol(tplg, &kc,
 			(struct snd_soc_tplg_ctl_hdr *) mc);
 		if (err < 0) {
 			dev_err(tplg->dev, "ASoC: failed to init %s\n",
 				mc->hdr.name);
+			soc_tplg_free_tlv(tplg, &kc);
 			kfree(sm);
 			continue;
 		}
-
-		/* create any TLV data */
-		soc_tplg_create_tlv(tplg, &kc, &mc->hdr);
 
 		/* register control here */
 		err = soc_tplg_add_kcontrol(tplg, &kc,
@@ -1324,18 +1327,19 @@ static struct snd_kcontrol_new *soc_tplg_dapm_widget_dmixer_create(
 			continue;
 		}
 
+		/* create any TLV data */
+		soc_tplg_create_tlv(tplg, &kc[i], &mc->hdr);
+
 		/* pass control to driver for optional further init */
 		err = soc_tplg_init_kcontrol(tplg, &kc[i],
 			(struct snd_soc_tplg_ctl_hdr *)mc);
 		if (err < 0) {
 			dev_err(tplg->dev, "ASoC: failed to init %s\n",
 				mc->hdr.name);
+			soc_tplg_free_tlv(tplg, &kc[i]);
 			kfree(sm);
 			continue;
 		}
-
-		/* create any TLV data */
-		soc_tplg_create_tlv(tplg, &kc[i], &mc->hdr);
 	}
 	return kc;
 
@@ -1806,6 +1810,9 @@ static int soc_tplg_dai_create(struct soc_tplg *tplg,
 	ret = soc_tplg_dai_load(tplg, dai_drv, pcm, NULL);
 	if (ret < 0) {
 		dev_err(tplg->comp->dev, "ASoC: DAI loading failed\n");
+		kfree(dai_drv->playback.stream_name);
+		kfree(dai_drv->capture.stream_name);
+		kfree(dai_drv->name);
 		kfree(dai_drv);
 		return ret;
 	}
@@ -1876,6 +1883,9 @@ static int soc_tplg_fe_link_create(struct soc_tplg *tplg,
 	ret = soc_tplg_dai_link_load(tplg, link, NULL);
 	if (ret < 0) {
 		dev_err(tplg->comp->dev, "ASoC: FE link loading failed\n");
+		kfree(link->name);
+		kfree(link->stream_name);
+		kfree(link->cpu_dai_name);
 		kfree(link);
 		return ret;
 	}

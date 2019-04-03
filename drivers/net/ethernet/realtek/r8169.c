@@ -5460,7 +5460,7 @@ static void rtl_hw_start_8168(struct rtl8169_private *tp)
 	tp->cp_cmd |= PktCntrDisable | INTT_1;
 	RTL_W16(tp, CPlusCmd, tp->cp_cmd);
 
-	RTL_W16(tp, IntrMitigate, 0x5151);
+	RTL_W16(tp, IntrMitigate, 0x5100);
 
 	/* Work around for RxFIFO overflow. */
 	if (tp->mac_version == RTL_GIGA_MAC_VER_11) {
@@ -6267,7 +6267,7 @@ static netdev_tx_t rtl8169_start_xmit(struct sk_buff *skb,
 		 */
 		smp_mb();
 		if (rtl_tx_slots_avail(tp, MAX_SKB_FRAGS))
-			netif_wake_queue(dev);
+			netif_start_queue(dev);
 	}
 
 	return NETDEV_TX_OK;
@@ -6426,6 +6426,7 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, u32 budget
 {
 	unsigned int cur_rx, rx_left;
 	unsigned int count;
+	LIST_HEAD(rx_list);
 
 	cur_rx = tp->cur_rx;
 
@@ -6501,7 +6502,7 @@ process_pkt:
 			if (skb->pkt_type == PACKET_MULTICAST)
 				dev->stats.multicast++;
 
-			napi_gro_receive(&tp->napi, skb);
+			list_add_tail(&skb->list, &rx_list);
 
 			u64_stats_update_begin(&tp->rx_stats.syncp);
 			tp->rx_stats.packets++;
@@ -6515,6 +6516,8 @@ release_descriptor:
 
 	count = cur_rx - tp->cur_rx;
 	tp->cur_rx = cur_rx;
+
+	netif_receive_skb_list(&rx_list);
 
 	return count;
 }

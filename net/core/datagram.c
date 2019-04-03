@@ -61,6 +61,8 @@
 #include <trace/events/skb.h>
 #include <net/busy_poll.h>
 
+#include "datagram.h"
+
 /*
  *	Is a socket 'connection oriented' ?
  */
@@ -279,7 +281,7 @@ struct sk_buff *__skb_try_recv_datagram(struct sock *sk, unsigned int flags,
 			break;
 
 		sk_busy_loop(sk, flags & MSG_DONTWAIT);
-	} while (!skb_queue_empty(&sk->sk_receive_queue));
+	} while (sk->sk_receive_queue.prev != *last);
 
 	error = -EAGAIN;
 
@@ -408,10 +410,10 @@ int skb_kill_datagram(struct sock *sk, struct sk_buff *skb, unsigned int flags)
 }
 EXPORT_SYMBOL(skb_kill_datagram);
 
-int __skb_datagram_iter(const struct sk_buff *skb, int offset,
-			struct iov_iter *to, int len, bool fault_short,
-			size_t (*cb)(const void *, size_t, void *, struct iov_iter *),
-			void *data)
+static int __skb_datagram_iter(const struct sk_buff *skb, int offset,
+			       struct iov_iter *to, int len, bool fault_short,
+			       size_t (*cb)(const void *, size_t, void *,
+					    struct iov_iter *), void *data)
 {
 	int start = skb_headlen(skb);
 	int i, copy = start - offset, start_off = offset, n;

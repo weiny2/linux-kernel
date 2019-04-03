@@ -1092,10 +1092,7 @@ struct btrfs_fs_info {
 
 	/* holds configuration and tracking. Protected by qgroup_lock */
 	struct rb_root qgroup_tree;
-	struct rb_root qgroup_op_tree;
 	spinlock_t qgroup_lock;
-	spinlock_t qgroup_op_lock;
-	atomic_t qgroup_op_seq;
 
 	/*
 	 * used to avoid frequently calling ulist_alloc()/ulist_free()
@@ -1539,6 +1536,21 @@ do {                                                                   \
 #define BTRFS_INODE_COMPRESS		(1 << 11)
 
 #define BTRFS_INODE_ROOT_ITEM_INIT	(1 << 31)
+
+#define BTRFS_INODE_FLAG_MASK						\
+	(BTRFS_INODE_NODATASUM |					\
+	 BTRFS_INODE_NODATACOW |					\
+	 BTRFS_INODE_READONLY |						\
+	 BTRFS_INODE_NOCOMPRESS |					\
+	 BTRFS_INODE_PREALLOC |						\
+	 BTRFS_INODE_SYNC |						\
+	 BTRFS_INODE_IMMUTABLE |					\
+	 BTRFS_INODE_APPEND |						\
+	 BTRFS_INODE_NODUMP |						\
+	 BTRFS_INODE_NOATIME |						\
+	 BTRFS_INODE_DIRSYNC |						\
+	 BTRFS_INODE_COMPRESS |						\
+	 BTRFS_INODE_ROOT_ITEM_INIT)
 
 struct btrfs_map_token {
 	const struct extent_buffer *eb;
@@ -2163,18 +2175,16 @@ static inline int btrfs_header_flag(const struct extent_buffer *eb, u64 flag)
 	return (btrfs_header_flags(eb) & flag) == flag;
 }
 
-static inline int btrfs_set_header_flag(struct extent_buffer *eb, u64 flag)
+static inline void btrfs_set_header_flag(struct extent_buffer *eb, u64 flag)
 {
 	u64 flags = btrfs_header_flags(eb);
 	btrfs_set_header_flags(eb, flags | flag);
-	return (flags & flag) == flag;
 }
 
-static inline int btrfs_clear_header_flag(struct extent_buffer *eb, u64 flag)
+static inline void btrfs_clear_header_flag(struct extent_buffer *eb, u64 flag)
 {
 	u64 flags = btrfs_header_flags(eb);
 	btrfs_set_header_flags(eb, flags & ~flag);
-	return (flags & flag) == flag;
 }
 
 static inline int btrfs_header_backref_rev(const struct extent_buffer *eb)
@@ -2445,13 +2455,12 @@ static inline int btrfs_super_csum_size(const struct btrfs_super_block *s)
  * this returns the address of the start of the last item,
  * which is the stop of the leaf data stack
  */
-static inline unsigned int leaf_data_end(const struct btrfs_fs_info *fs_info,
-					 const struct extent_buffer *leaf)
+static inline unsigned int leaf_data_end(const struct extent_buffer *leaf)
 {
 	u32 nr = btrfs_header_nritems(leaf);
 
 	if (nr == 0)
-		return BTRFS_LEAF_DATA_SIZE(fs_info);
+		return BTRFS_LEAF_DATA_SIZE(leaf->fs_info);
 	return btrfs_item_offset_nr(leaf, nr - 1);
 }
 
@@ -2711,8 +2720,7 @@ int btrfs_pin_extent(struct btrfs_fs_info *fs_info,
 		     u64 bytenr, u64 num, int reserved);
 int btrfs_pin_extent_for_log_replay(struct btrfs_fs_info *fs_info,
 				    u64 bytenr, u64 num_bytes);
-int btrfs_exclude_logged_extents(struct btrfs_fs_info *fs_info,
-				 struct extent_buffer *eb);
+int btrfs_exclude_logged_extents(struct extent_buffer *eb);
 int btrfs_cross_ref_exist(struct btrfs_root *root,
 			  u64 objectid, u64 offset, u64 bytenr);
 struct btrfs_block_group_cache *btrfs_lookup_block_group(
@@ -3015,8 +3023,7 @@ static inline int btrfs_next_item(struct btrfs_root *root, struct btrfs_path *p)
 {
 	return btrfs_next_old_item(root, p, 0);
 }
-int btrfs_leaf_free_space(struct btrfs_fs_info *fs_info,
-			  struct extent_buffer *leaf);
+int btrfs_leaf_free_space(struct extent_buffer *leaf);
 int __must_check btrfs_drop_snapshot(struct btrfs_root *root,
 				     struct btrfs_block_rsv *block_rsv,
 				     int update_ref, int for_reloc);

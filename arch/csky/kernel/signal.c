@@ -224,10 +224,11 @@ handle_signal(struct ksignal *ksig, struct pt_regs *regs)
  * that the kernel can handle, and then we build all the user-level signal
  * handling stack-frames in one go after that.
  */
-static void do_signal(struct pt_regs *regs, int syscall)
+static void do_signal(struct pt_regs *regs)
 {
 	unsigned int retval = 0, continue_addr = 0, restart_addr = 0;
 	struct ksignal ksig;
+	int syscall = (get_psr_vector(regs) == VEC_TRAP0) ? 1 : 0;
 
 	/*
 	 * We want the common case to go fast, which
@@ -249,7 +250,6 @@ static void do_signal(struct pt_regs *regs, int syscall)
 		restart_addr = continue_addr - 2;
 #endif
 		retval = regs->a0;
-
 		/*
 		 * Prepare for system call restart.  We do this here so that a
 		 * debugger will see the already changed.
@@ -333,10 +333,10 @@ no_signal:
 }
 
 asmlinkage void
-do_notify_resume(unsigned int thread_flags, struct pt_regs *regs, int syscall)
+do_notify_resume(unsigned int thread_flags, struct pt_regs *regs)
 {
 	if (thread_flags & _TIF_SIGPENDING)
-		do_signal(regs, syscall);
+		do_signal(regs);
 
 	if (thread_flags & _TIF_NOTIFY_RESUME) {
 		clear_thread_flag(TIF_NOTIFY_RESUME);

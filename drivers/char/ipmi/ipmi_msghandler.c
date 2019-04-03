@@ -632,7 +632,7 @@ static DEFINE_MUTEX(ipmidriver_mutex);
 
 static LIST_HEAD(ipmi_interfaces);
 static DEFINE_MUTEX(ipmi_interfaces_mutex);
-struct srcu_struct ipmi_interfaces_srcu;
+static struct srcu_struct ipmi_interfaces_srcu;
 
 /*
  * List of watchers that want to know when smi's are added and deleted.
@@ -1260,7 +1260,12 @@ EXPORT_SYMBOL(ipmi_get_smi_info);
 static void free_user(struct kref *ref)
 {
 	struct ipmi_user *user = container_of(ref, struct ipmi_user, refcount);
-	cleanup_srcu_struct(&user->release_barrier);
+
+	/*
+	 * Cleanup without waiting. This could be called in atomic context.
+	 * Refcount is zero: all read-sections should have been ended.
+	 */
+	cleanup_srcu_struct_quiesced(&user->release_barrier);
 	kfree(user);
 }
 

@@ -381,6 +381,10 @@ static int vb2_queue_or_prepare_buf(struct vb2_queue *q, struct media_device *md
 		return 0;
 
 	if (!(b->flags & V4L2_BUF_FLAG_REQUEST_FD)) {
+		if (q->requires_requests) {
+			dprintk(1, "%s: queue requires requests\n", opname);
+			return -EBADR;
+		}
 		if (q->uses_requests) {
 			dprintk(1, "%s: queue uses requests\n", opname);
 			return -EBUSY;
@@ -388,7 +392,7 @@ static int vb2_queue_or_prepare_buf(struct vb2_queue *q, struct media_device *md
 		return 0;
 	} else if (!q->supports_requests) {
 		dprintk(1, "%s: queue does not support requests\n", opname);
-		return -EACCES;
+		return -EBADR;
 	} else if (q->uses_qbuf) {
 		dprintk(1, "%s: queue does not use requests\n", opname);
 		return -EBUSY;
@@ -543,7 +547,6 @@ static void __fill_v4l2_buffer(struct vb2_buffer *vb, void *pb)
 		break;
 	case VB2_BUF_STATE_PREPARING:
 	case VB2_BUF_STATE_DEQUEUED:
-	case VB2_BUF_STATE_REQUEUEING:
 		/* nothing */
 		break;
 	}

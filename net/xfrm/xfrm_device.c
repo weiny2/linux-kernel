@@ -78,6 +78,7 @@ struct sk_buff *validate_xmit_xfrm(struct sk_buff *skb, netdev_features_t featur
 	}
 
 	if (!skb->next) {
+		esp_features |= skb->dev->gso_partial_features;
 		x->outer_mode->xmit(x, skb);
 
 		xo->flags |= XFRM_DEV_RESUME;
@@ -101,6 +102,8 @@ struct sk_buff *validate_xmit_xfrm(struct sk_buff *skb, netdev_features_t featur
 
 	do {
 		struct sk_buff *nskb = skb2->next;
+
+		esp_features |= skb->dev->gso_partial_features;
 		skb_mark_not_on_list(skb2);
 
 		xo = xfrm_offload(skb2);
@@ -247,7 +250,7 @@ void xfrm_dev_resume(struct sk_buff *skb)
 	unsigned long flags;
 
 	rcu_read_lock();
-	txq = netdev_pick_tx(dev, skb, NULL);
+	txq = netdev_core_pick_tx(dev, skb, NULL);
 
 	HARD_TX_LOCK(dev, txq, smp_processor_id());
 	if (!netif_xmit_frozen_or_stopped(txq))

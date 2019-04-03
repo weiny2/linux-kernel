@@ -1068,8 +1068,8 @@ struct f2fs_dev_info {
 	block_t start_blk;
 	block_t end_blk;
 #ifdef CONFIG_BLK_DEV_ZONED
-	unsigned int nr_blkz;			/* Total number of zones */
-	u8 *blkz_type;				/* Array of zones type */
+	unsigned int nr_blkz;		/* Total number of zones */
+	unsigned long *blkz_seq;	/* Bitmap indicating sequential zones */
 #endif
 };
 
@@ -1365,6 +1365,17 @@ static inline bool time_to_inject(struct f2fs_sb_info *sbi, int type)
 	return false;
 }
 #endif
+
+/*
+ * Test if the mounted volume is a multi-device volume.
+ *   - For a single regular disk volume, sbi->s_ndevs is 0.
+ *   - For a single zoned disk volume, sbi->s_ndevs is 1.
+ *   - For a multi-device volume, sbi->s_ndevs is always 2 or more.
+ */
+static inline bool f2fs_is_multi_device(struct f2fs_sb_info *sbi)
+{
+	return sbi->s_ndevs > 1;
+}
 
 /* For write statistics. Suppose sector size is 512 bytes,
  * and the return value is in kbytes. s is of struct f2fs_sb_info.
@@ -3531,16 +3542,12 @@ F2FS_FEATURE_FUNCS(lost_found, LOST_FOUND);
 F2FS_FEATURE_FUNCS(sb_chksum, SB_CHKSUM);
 
 #ifdef CONFIG_BLK_DEV_ZONED
-static inline int get_blkz_type(struct f2fs_sb_info *sbi,
-			struct block_device *bdev, block_t blkaddr)
+static inline bool f2fs_blkz_is_seq(struct f2fs_sb_info *sbi, int devi,
+				    block_t blkaddr)
 {
 	unsigned int zno = blkaddr >> sbi->log_blocks_per_blkz;
-	int i;
 
-	for (i = 0; i < sbi->s_ndevs; i++)
-		if (FDEV(i).bdev == bdev)
-			return FDEV(i).blkz_type[zno];
-	return -EINVAL;
+	return test_bit(zno, FDEV(devi).blkz_seq);
 }
 #endif
 
@@ -3549,9 +3556,23 @@ static inline bool f2fs_hw_should_discard(struct f2fs_sb_info *sbi)
 	return f2fs_sb_has_blkzoned(sbi);
 }
 
+static inline bool f2fs_bdev_support_discard(struct block_device *bdev)
+{
+	return blk_queue_discard(bdev_get_queue(bdev)) ||
+	       bdev_is_zoned(bdev);
+}
+
 static inline bool f2fs_hw_support_discard(struct f2fs_sb_info *sbi)
 {
-	return blk_queue_discard(bdev_get_queue(sbi->sb->s_bdev));
+	int i;
+
+	if (!f2fs_is_multi_device(sbi))
+		return f2fs_bdev_support_discard(sbi->sb->s_bdev);
+
+	for (i = 0; i < sbi->s_ndevs; i++)
+		if (f2fs_bdev_support_discard(FDEV(i).bdev))
+			return true;
+	return false;
 }
 
 static inline bool f2fs_realtime_discard_enable(struct f2fs_sb_info *sbi)
@@ -3615,7 +3636,7 @@ static inline bool f2fs_force_buffered_io(struct inode *inode,
 
 	if (f2fs_post_read_required(inode))
 		return true;
-	if (sbi->s_ndevs)
+	if (f2fs_is_multi_device(sbi))
 		return true;
 	/*
 	 * for blkzoned device, fallback direct IO to buffered IO, so

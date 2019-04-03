@@ -154,6 +154,8 @@ qla2x00_sysfs_read_nvram(struct file *filp, struct kobject *kobj,
 	struct scsi_qla_host *vha = shost_priv(dev_to_shost(container_of(kobj,
 	    struct device, kobj)));
 	struct qla_hw_data *ha = vha->hw;
+	uint32_t faddr;
+	struct active_regions active_regions = { };
 
 	if (!capable(CAP_SYS_ADMIN))
 		return 0;
@@ -164,11 +166,21 @@ qla2x00_sysfs_read_nvram(struct file *filp, struct kobject *kobj,
 		return -EAGAIN;
 	}
 
-	if (IS_NOCACHE_VPD_TYPE(ha))
-		ha->isp_ops->read_optrom(vha, ha->nvram, ha->flt_region_nvram << 2,
-		    ha->nvram_size);
+	if (!IS_NOCACHE_VPD_TYPE(ha)) {
+		mutex_unlock(&ha->optrom_mutex);
+		goto skip;
+	}
+
+	faddr = ha->flt_region_nvram;
+	if (IS_QLA28XX(ha)) {
+		if (active_regions.aux.vpd_nvram == QLA27XX_SECONDARY_IMAGE)
+			faddr = ha->flt_region_nvram_sec;
+	}
+	ha->isp_ops->read_optrom(vha, ha->nvram, faddr << 2, ha->nvram_size);
+
 	mutex_unlock(&ha->optrom_mutex);
 
+skip:
 	return memory_read_from_buffer(buf, count, &off, ha->nvram,
 					ha->nvram_size);
 }
@@ -223,9 +235,9 @@ qla2x00_sysfs_write_nvram(struct file *filp, struct kobject *kobj,
 	}
 
 	/* Write NVRAM. */
-	ha->isp_ops->write_nvram(vha, (uint8_t *)buf, ha->nvram_base, count);
-	ha->isp_ops->read_nvram(vha, (uint8_t *)ha->nvram, ha->nvram_base,
-	     count);
+	ha->isp_ops->write_nvram(vha, buf, ha->nvram_base, count);
+	ha->isp_ops->read_nvram(vha, ha->nvram, ha->nvram_base,
+	    count);
 	mutex_unlock(&ha->optrom_mutex);
 
 	ql_dbg(ql_dbg_user, vha, 0x7060,
@@ -427,7 +439,7 @@ qla2x00_sysfs_write_optrom_ctl(struct file *filp, struct kobject *kobj,
 			valid = 1;
 		else if (IS_QLA24XX_TYPE(ha) || IS_QLA25XX(ha)
 			|| IS_CNA_CAPABLE(ha) || IS_QLA2031(ha)
-			|| IS_QLA27XX(ha))
+			|| IS_QLA27XX(ha) || IS_QLA28XX(ha))
 			valid = 1;
 		if (!valid) {
 			ql_log(ql_log_warn, vha, 0x7065,
@@ -504,6 +516,7 @@ qla2x00_sysfs_read_vpd(struct file *filp, struct kobject *kobj,
 	    struct device, kobj)));
 	struct qla_hw_data *ha = vha->hw;
 	uint32_t faddr;
+	struct active_regions active_regions = { };
 
 	if (unlikely(pci_channel_offline(ha->pdev)))
 		return -EAGAIN;
@@ -511,22 +524,33 @@ qla2x00_sysfs_read_vpd(struct file *filp, struct kobject *kobj,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EINVAL;
 
-	if (IS_NOCACHE_VPD_TYPE(ha)) {
-		faddr = ha->flt_region_vpd << 2;
+	if (IS_NOCACHE_VPD_TYPE(ha))
+		goto skip;
 
-		if (IS_QLA27XX(ha) &&
-		    qla27xx_find_valid_image(vha) == QLA27XX_SECONDARY_IMAGE)
+	faddr = ha->flt_region_vpd << 2;
+
+	if (IS_QLA28XX(ha)) {
+		qla28xx_get_aux_images(vha, &active_regions);
+		if (active_regions.aux.vpd_nvram == QLA27XX_SECONDARY_IMAGE)
 			faddr = ha->flt_region_vpd_sec << 2;
 
-		mutex_lock(&ha->optrom_mutex);
-		if (qla2x00_chip_is_down(vha)) {
-			mutex_unlock(&ha->optrom_mutex);
-			return -EAGAIN;
-		}
-		ha->isp_ops->read_optrom(vha, ha->vpd, faddr,
-		    ha->vpd_size);
-		mutex_unlock(&ha->optrom_mutex);
+		ql_dbg(ql_dbg_init, vha, 0x7070,
+		    "Loading %s nvram image.\n",
+		    active_regions.aux.vpd_nvram == QLA27XX_PRIMARY_IMAGE ?
+		    "primary" : "secondary");
 	}
+
+	mutex_lock(&ha->optrom_mutex);
+	if (qla2x00_chip_is_down(vha)) {
+		mutex_unlock(&ha->optrom_mutex);
+		return -EAGAIN;
+	}
+
+	ha->isp_ops->read_optrom(vha, ha->vpd, faddr, ha->vpd_size);
+	mutex_unlock(&ha->optrom_mutex);
+
+	ha->isp_ops->read_optrom(vha, ha->vpd, faddr, ha->vpd_size);
+skip:
 	return memory_read_from_buffer(buf, count, &off, ha->vpd, ha->vpd_size);
 }
 
@@ -563,8 +587,8 @@ qla2x00_sysfs_write_vpd(struct file *filp, struct kobject *kobj,
 	}
 
 	/* Write NVRAM. */
-	ha->isp_ops->write_nvram(vha, (uint8_t *)buf, ha->vpd_base, count);
-	ha->isp_ops->read_nvram(vha, (uint8_t *)ha->vpd, ha->vpd_base, count);
+	ha->isp_ops->write_nvram(vha, buf, ha->vpd_base, count);
+	ha->isp_ops->read_nvram(vha, ha->vpd, ha->vpd_base, count);
 
 	/* Update flash version information for 4Gb & above. */
 	if (!IS_FWI2_CAPABLE(ha)) {
@@ -682,7 +706,7 @@ qla2x00_sysfs_write_reset(struct file *filp, struct kobject *kobj,
 		ql_log(ql_log_info, vha, 0x706f,
 		    "Issuing MPI reset.\n");
 
-		if (IS_QLA83XX(ha) || IS_QLA27XX(ha)) {
+		if (IS_QLA83XX(ha) || IS_QLA27XX(ha) || IS_QLA28XX(ha)) {
 			uint32_t idc_control;
 
 			qla83xx_idc_lock(vha, 0);
@@ -934,7 +958,7 @@ static struct bin_attribute sysfs_dcbx_tlv_attr = {
 static struct sysfs_entry {
 	char *name;
 	struct bin_attribute *attr;
-	int is4GBp_only;
+	int type;
 } bin_file_entries[] = {
 	{ "fw_dump", &sysfs_fw_dump_attr, },
 	{ "nvram", &sysfs_nvram_attr, },
@@ -957,11 +981,11 @@ qla2x00_alloc_sysfs_attr(scsi_qla_host_t *vha)
 	int ret;
 
 	for (iter = bin_file_entries; iter->name; iter++) {
-		if (iter->is4GBp_only && !IS_FWI2_CAPABLE(vha->hw))
+		if (iter->type && !IS_FWI2_CAPABLE(vha->hw))
 			continue;
-		if (iter->is4GBp_only == 2 && !IS_QLA25XX(vha->hw))
+		if (iter->type == 2 && !IS_QLA25XX(vha->hw))
 			continue;
-		if (iter->is4GBp_only == 3 && !(IS_CNA_CAPABLE(vha->hw)))
+		if (iter->type == 3 && !(IS_CNA_CAPABLE(vha->hw)))
 			continue;
 
 		ret = sysfs_create_bin_file(&host->shost_gendev.kobj,
@@ -985,13 +1009,14 @@ qla2x00_free_sysfs_attr(scsi_qla_host_t *vha, bool stop_beacon)
 	struct qla_hw_data *ha = vha->hw;
 
 	for (iter = bin_file_entries; iter->name; iter++) {
-		if (iter->is4GBp_only && !IS_FWI2_CAPABLE(ha))
+		if (iter->type && !IS_FWI2_CAPABLE(ha))
 			continue;
-		if (iter->is4GBp_only == 2 && !IS_QLA25XX(ha))
+		if (iter->type == 2 && !IS_QLA25XX(ha))
 			continue;
-		if (iter->is4GBp_only == 3 && !(IS_CNA_CAPABLE(vha->hw)))
+		if (iter->type == 3 && !(IS_CNA_CAPABLE(ha)))
 			continue;
-		if (iter->is4GBp_only == 0x27 && !IS_QLA27XX(vha->hw))
+		if (iter->type == 0x27 &&
+		    (!IS_QLA27XX(ha) || !IS_QLA28XX(ha)))
 			continue;
 
 		sysfs_remove_bin_file(&host->shost_gendev.kobj,
@@ -1336,7 +1361,8 @@ qla2x00_optrom_gold_fw_version_show(struct device *dev,
 	scsi_qla_host_t *vha = shost_priv(class_to_shost(dev));
 	struct qla_hw_data *ha = vha->hw;
 
-	if (!IS_QLA81XX(ha) && !IS_QLA83XX(ha) && !IS_QLA27XX(ha))
+	if (!IS_QLA81XX(ha) && !IS_QLA83XX(ha) &&
+	    !IS_QLA27XX(ha) && !IS_QLA28XX(ha))
 		return scnprintf(buf, PAGE_SIZE, "\n");
 
 	return scnprintf(buf, PAGE_SIZE, "%d.%02d.%02d (%d)\n",
@@ -1358,21 +1384,37 @@ qla24xx_84xx_fw_version_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	int rval = QLA_SUCCESS;
-	uint16_t status[2] = {0, 0};
+	uint16_t status[2] = { 0 };
 	scsi_qla_host_t *vha = shost_priv(class_to_shost(dev));
 	struct qla_hw_data *ha = vha->hw;
 
 	if (!IS_QLA84XX(ha))
 		return scnprintf(buf, PAGE_SIZE, "\n");
 
-	if (ha->cs84xx->op_fw_version == 0)
+	if (!ha->cs84xx->op_fw_version) {
 		rval = qla84xx_verify_chip(vha, status);
 
-	if ((rval == QLA_SUCCESS) && (status[0] == 0))
-		return scnprintf(buf, PAGE_SIZE, "%u\n",
-			(uint32_t)ha->cs84xx->op_fw_version);
+		if (!rval && !status[0])
+			return scnprintf(buf, PAGE_SIZE, "%u\n",
+			    (uint32_t)ha->cs84xx->op_fw_version);
+	}
 
 	return scnprintf(buf, PAGE_SIZE, "\n");
+}
+
+static ssize_t
+qla2x00_serdes_version_show(struct device *dev, struct device_attribute *attr,
+    char *buf)
+{
+	scsi_qla_host_t *vha = shost_priv(class_to_shost(dev));
+	struct qla_hw_data *ha = vha->hw;
+
+	if (!IS_QLA27XX(ha) && !IS_QLA28XX(ha))
+		return scnprintf(buf, PAGE_SIZE, "\n");
+
+	return scnprintf(buf, PAGE_SIZE, "%d.%02d.%02d\n",
+	    ha->serdes_version[0], ha->serdes_version[1],
+	    ha->serdes_version[2]);
 }
 
 static ssize_t
@@ -1383,7 +1425,7 @@ qla2x00_mpi_version_show(struct device *dev, struct device_attribute *attr,
 	struct qla_hw_data *ha = vha->hw;
 
 	if (!IS_QLA81XX(ha) && !IS_QLA8031(ha) && !IS_QLA8044(ha) &&
-	    !IS_QLA27XX(ha))
+	    !IS_QLA27XX(ha) && !IS_QLA28XX(ha))
 		return scnprintf(buf, PAGE_SIZE, "\n");
 
 	return scnprintf(buf, PAGE_SIZE, "%d.%02d.%02d (%x)\n",
@@ -1596,7 +1638,7 @@ qla2x00_pep_version_show(struct device *dev, struct device_attribute *attr,
 	scsi_qla_host_t *vha = shost_priv(class_to_shost(dev));
 	struct qla_hw_data *ha = vha->hw;
 
-	if (!IS_QLA27XX(ha))
+	if (!IS_QLA27XX(ha) && !IS_QLA28XX(ha))
 		return scnprintf(buf, PAGE_SIZE, "\n");
 
 	return scnprintf(buf, PAGE_SIZE, "%d.%02d.%02d\n",
@@ -1604,35 +1646,38 @@ qla2x00_pep_version_show(struct device *dev, struct device_attribute *attr,
 }
 
 static ssize_t
-qla2x00_min_link_speed_show(struct device *dev, struct device_attribute *attr,
-    char *buf)
+qla2x00_min_supported_speed_show(struct device *dev,
+    struct device_attribute *attr, char *buf)
 {
 	scsi_qla_host_t *vha = shost_priv(class_to_shost(dev));
 	struct qla_hw_data *ha = vha->hw;
 
-	if (!IS_QLA27XX(ha))
+	if (!IS_QLA27XX(ha) && !IS_QLA28XX(ha))
 		return scnprintf(buf, PAGE_SIZE, "\n");
 
 	return scnprintf(buf, PAGE_SIZE, "%s\n",
-	    ha->min_link_speed == 5 ? "32Gps" :
-	    ha->min_link_speed == 4 ? "16Gps" :
-	    ha->min_link_speed == 3 ? "8Gps" :
-	    ha->min_link_speed == 2 ? "4Gps" :
-	    ha->min_link_speed != 0 ? "unknown" : "");
+	    ha->min_supported_speed == 6 ? "64Gps" :
+	    ha->min_supported_speed == 5 ? "32Gps" :
+	    ha->min_supported_speed == 4 ? "16Gps" :
+	    ha->min_supported_speed == 3 ? "8Gps" :
+	    ha->min_supported_speed == 2 ? "4Gps" :
+	    ha->min_supported_speed != 0 ? "unknown" : "");
 }
 
 static ssize_t
-qla2x00_max_speed_sup_show(struct device *dev, struct device_attribute *attr,
-    char *buf)
+qla2x00_max_supported_speed_show(struct device *dev,
+    struct device_attribute *attr, char *buf)
 {
 	scsi_qla_host_t *vha = shost_priv(class_to_shost(dev));
 	struct qla_hw_data *ha = vha->hw;
 
-	if (!IS_QLA27XX(ha))
+	if (!IS_QLA27XX(ha) && !IS_QLA28XX(ha))
 		return scnprintf(buf, PAGE_SIZE, "\n");
 
 	return scnprintf(buf, PAGE_SIZE, "%s\n",
-	    ha->max_speed_sup ? "32Gps" : "16Gps");
+	    ha->max_supported_speed  == 2 ? "64Gps" :
+	    ha->max_supported_speed  == 1 ? "32Gps" :
+	    ha->max_supported_speed  == 0 ? "16Gps" : "unknown");
 }
 
 static ssize_t
@@ -1645,7 +1690,7 @@ qla2x00_port_speed_store(struct device *dev, struct device_attribute *attr,
 	int mode = QLA_SET_DATA_RATE_LR;
 	struct qla_hw_data *ha = vha->hw;
 
-	if (!IS_QLA27XX(vha->hw)) {
+	if (!IS_QLA27XX(ha) && !IS_QLA28XX(ha)) {
 		ql_log(ql_log_warn, vha, 0x70d8,
 		    "Speed setting not supported \n");
 		return -EINVAL;
@@ -2164,6 +2209,32 @@ qla2x00_dif_bundle_statistics_show(struct device *dev,
 	    ha->dif_bundle_dma_allocs, ha->pool.unusable.count);
 }
 
+static ssize_t
+qla2x00_fw_attr_show(struct device *dev,
+    struct device_attribute *attr, char *buf)
+{
+	scsi_qla_host_t *vha = shost_priv(class_to_shost(dev));
+	struct qla_hw_data *ha = vha->hw;
+
+	if (!IS_QLA27XX(ha) && !IS_QLA28XX(ha))
+		return scnprintf(buf, PAGE_SIZE, "\n");
+
+	return scnprintf(buf, PAGE_SIZE, "%llx\n",
+	    (uint64_t)ha->fw_attributes_ext[1] << 48 |
+	    (uint64_t)ha->fw_attributes_ext[0] << 32 |
+	    (uint64_t)ha->fw_attributes_h << 16 |
+	    (uint64_t)ha->fw_attributes);
+}
+
+static ssize_t
+qla2x00_port_no_show(struct device *dev, struct device_attribute *attr,
+    char *buf)
+{
+	scsi_qla_host_t *vha = shost_priv(class_to_shost(dev));
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", vha->hw->port_no);
+}
+
 static DEVICE_ATTR(driver_version, S_IRUGO, qla2x00_driver_version_show, NULL);
 static DEVICE_ATTR(fw_version, S_IRUGO, qla2x00_fw_version_show, NULL);
 static DEVICE_ATTR(serial_num, S_IRUGO, qla2x00_serial_num_show, NULL);
@@ -2192,6 +2263,7 @@ static DEVICE_ATTR(84xx_fw_version, S_IRUGO, qla24xx_84xx_fw_version_show,
 		   NULL);
 static DEVICE_ATTR(total_isp_aborts, S_IRUGO, qla2x00_total_isp_aborts_show,
 		   NULL);
+static DEVICE_ATTR(serdes_version, 0444, qla2x00_serdes_version_show, NULL);
 static DEVICE_ATTR(mpi_version, S_IRUGO, qla2x00_mpi_version_show, NULL);
 static DEVICE_ATTR(phy_version, S_IRUGO, qla2x00_phy_version_show, NULL);
 static DEVICE_ATTR(flash_block_size, S_IRUGO, qla2x00_flash_block_size_show,
@@ -2209,8 +2281,10 @@ static DEVICE_ATTR(allow_cna_fw_dump, S_IRUGO | S_IWUSR,
 		   qla2x00_allow_cna_fw_dump_show,
 		   qla2x00_allow_cna_fw_dump_store);
 static DEVICE_ATTR(pep_version, S_IRUGO, qla2x00_pep_version_show, NULL);
-static DEVICE_ATTR(min_link_speed, S_IRUGO, qla2x00_min_link_speed_show, NULL);
-static DEVICE_ATTR(max_speed_sup, S_IRUGO, qla2x00_max_speed_sup_show, NULL);
+static DEVICE_ATTR(min_supported_speed, 0444,
+		   qla2x00_min_supported_speed_show, NULL);
+static DEVICE_ATTR(max_supported_speed, 0444,
+		   qla2x00_max_supported_speed_show, NULL);
 static DEVICE_ATTR(zio_threshold, 0644,
     qla_zio_threshold_show,
     qla_zio_threshold_store);
@@ -2221,6 +2295,8 @@ static DEVICE_ATTR(dif_bundle_statistics, 0444,
     qla2x00_dif_bundle_statistics_show, NULL);
 static DEVICE_ATTR(port_speed, 0644, qla2x00_port_speed_show,
     qla2x00_port_speed_store);
+static DEVICE_ATTR(port_no, 0444, qla2x00_port_no_show, NULL);
+static DEVICE_ATTR(fw_attr, 0444, qla2x00_fw_attr_show, NULL);
 
 
 struct device_attribute *qla2x00_host_attrs[] = {
@@ -2242,6 +2318,7 @@ struct device_attribute *qla2x00_host_attrs[] = {
 	&dev_attr_optrom_fw_version,
 	&dev_attr_84xx_fw_version,
 	&dev_attr_total_isp_aborts,
+	&dev_attr_serdes_version,
 	&dev_attr_mpi_version,
 	&dev_attr_phy_version,
 	&dev_attr_flash_block_size,
@@ -2256,11 +2333,13 @@ struct device_attribute *qla2x00_host_attrs[] = {
 	&dev_attr_fw_dump_size,
 	&dev_attr_allow_cna_fw_dump,
 	&dev_attr_pep_version,
-	&dev_attr_min_link_speed,
-	&dev_attr_max_speed_sup,
+	&dev_attr_min_supported_speed,
+	&dev_attr_max_supported_speed,
 	&dev_attr_zio_threshold,
 	&dev_attr_dif_bundle_statistics,
 	&dev_attr_port_speed,
+	&dev_attr_port_no,
+	&dev_attr_fw_attr,
 	NULL, /* reserve for qlini_mode */
 	NULL, /* reserve for ql2xiniexchg */
 	NULL, /* reserve for ql2xexchoffld */
@@ -2296,16 +2375,15 @@ qla2x00_get_host_port_id(struct Scsi_Host *shost)
 static void
 qla2x00_get_host_speed(struct Scsi_Host *shost)
 {
-	struct qla_hw_data *ha = ((struct scsi_qla_host *)
-					(shost_priv(shost)))->hw;
-	u32 speed = FC_PORTSPEED_UNKNOWN;
+	scsi_qla_host_t *vha = shost_priv(shost);
+	u32 speed;
 
-	if (IS_QLAFX00(ha)) {
+	if (IS_QLAFX00(vha->hw)) {
 		qlafx00_get_host_speed(shost);
 		return;
 	}
 
-	switch (ha->link_data_rate) {
+	switch (vha->hw->link_data_rate) {
 	case PORT_SPEED_1GB:
 		speed = FC_PORTSPEED_1GBIT;
 		break;
@@ -2327,7 +2405,14 @@ qla2x00_get_host_speed(struct Scsi_Host *shost)
 	case PORT_SPEED_32GB:
 		speed = FC_PORTSPEED_32GBIT;
 		break;
+	case PORT_SPEED_64GB:
+		speed = FC_PORTSPEED_64GBIT;
+		break;
+	default:
+		speed = FC_PORTSPEED_UNKNOWN;
+		break;
 	}
+
 	fc_host_speed(shost) = speed;
 }
 
@@ -2335,7 +2420,7 @@ static void
 qla2x00_get_host_port_type(struct Scsi_Host *shost)
 {
 	scsi_qla_host_t *vha = shost_priv(shost);
-	uint32_t port_type = FC_PORTTYPE_UNKNOWN;
+	uint32_t port_type;
 
 	if (vha->vp_idx) {
 		fc_host_port_type(shost) = FC_PORTTYPE_NPIV;
@@ -2354,7 +2439,11 @@ qla2x00_get_host_port_type(struct Scsi_Host *shost)
 	case ISP_CFG_F:
 		port_type = FC_PORTTYPE_NPORT;
 		break;
+	default:
+		port_type = FC_PORTTYPE_UNKNOWN;
+		break;
 	}
+
 	fc_host_port_type(shost) = port_type;
 }
 
@@ -2416,13 +2505,10 @@ qla2x00_get_starget_port_id(struct scsi_target *starget)
 	fc_starget_port_id(starget) = port_id;
 }
 
-static void
+static inline void
 qla2x00_set_rport_loss_tmo(struct fc_rport *rport, uint32_t timeout)
 {
-	if (timeout)
-		rport->dev_loss_tmo = timeout;
-	else
-		rport->dev_loss_tmo = 1;
+	rport->dev_loss_tmo = timeout ? timeout : 1;
 }
 
 static void
@@ -2977,7 +3063,7 @@ void
 qla2x00_init_host_attr(scsi_qla_host_t *vha)
 {
 	struct qla_hw_data *ha = vha->hw;
-	u32 speed = FC_PORTSPEED_UNKNOWN;
+	u32 speeds = FC_PORTSPEED_UNKNOWN;
 
 	fc_host_dev_loss_tmo(vha->host) = ha->port_down_retry_count;
 	fc_host_node_name(vha->host) = wwn_to_u64(vha->node_name);
@@ -2988,25 +3074,45 @@ qla2x00_init_host_attr(scsi_qla_host_t *vha)
 	fc_host_npiv_vports_inuse(vha->host) = ha->cur_vport_count;
 
 	if (IS_CNA_CAPABLE(ha))
-		speed = FC_PORTSPEED_10GBIT;
-	else if (IS_QLA2031(ha))
-		speed = FC_PORTSPEED_16GBIT | FC_PORTSPEED_8GBIT |
-		    FC_PORTSPEED_4GBIT;
-	else if (IS_QLA25XX(ha))
-		speed = FC_PORTSPEED_8GBIT | FC_PORTSPEED_4GBIT |
-		    FC_PORTSPEED_2GBIT | FC_PORTSPEED_1GBIT;
+		speeds = FC_PORTSPEED_10GBIT;
+	else if (IS_QLA28XX(ha) || IS_QLA27XX(ha)) {
+		if (ha->max_supported_speed == 2) {
+			if (ha->min_supported_speed <= 6)
+				speeds |= FC_PORTSPEED_64GBIT;
+		}
+		if (ha->max_supported_speed == 2 ||
+		    ha->max_supported_speed == 1) {
+			if (ha->min_supported_speed <= 5)
+				speeds |= FC_PORTSPEED_32GBIT;
+		}
+		if (ha->max_supported_speed == 2 ||
+		    ha->max_supported_speed == 1 ||
+		    ha->max_supported_speed == 0) {
+			if (ha->min_supported_speed <= 4)
+				speeds |= FC_PORTSPEED_16GBIT;
+		}
+		if (ha->max_supported_speed == 1 ||
+		    ha->max_supported_speed == 0) {
+			if (ha->min_supported_speed <= 3)
+				speeds |= FC_PORTSPEED_8GBIT;
+		}
+		if (ha->max_supported_speed == 0) {
+			if (ha->min_supported_speed <= 2)
+				speeds |= FC_PORTSPEED_4GBIT;
+		}
+	} else if (IS_QLA2031(ha))
+		speeds = FC_PORTSPEED_16GBIT|FC_PORTSPEED_8GBIT|
+			FC_PORTSPEED_4GBIT;
+	else if (IS_QLA25XX(ha) || IS_QLAFX00(ha))
+		speeds = FC_PORTSPEED_8GBIT|FC_PORTSPEED_4GBIT|
+			FC_PORTSPEED_2GBIT|FC_PORTSPEED_1GBIT;
 	else if (IS_QLA24XX_TYPE(ha))
-		speed = FC_PORTSPEED_4GBIT | FC_PORTSPEED_2GBIT |
-		    FC_PORTSPEED_1GBIT;
+		speeds = FC_PORTSPEED_4GBIT|FC_PORTSPEED_2GBIT|
+			FC_PORTSPEED_1GBIT;
 	else if (IS_QLA23XX(ha))
-		speed = FC_PORTSPEED_2GBIT | FC_PORTSPEED_1GBIT;
-	else if (IS_QLAFX00(ha))
-		speed = FC_PORTSPEED_8GBIT | FC_PORTSPEED_4GBIT |
-		    FC_PORTSPEED_2GBIT | FC_PORTSPEED_1GBIT;
-	else if (IS_QLA27XX(ha))
-		speed = FC_PORTSPEED_32GBIT | FC_PORTSPEED_16GBIT |
-		    FC_PORTSPEED_8GBIT;
+		speeds = FC_PORTSPEED_2GBIT|FC_PORTSPEED_1GBIT;
 	else
-		speed = FC_PORTSPEED_1GBIT;
-	fc_host_supported_speeds(vha->host) = speed;
+		speeds = FC_PORTSPEED_1GBIT;
+
+	fc_host_supported_speeds(vha->host) = speeds;
 }

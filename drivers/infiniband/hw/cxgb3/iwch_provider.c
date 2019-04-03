@@ -95,7 +95,7 @@ static int iwch_destroy_cq(struct ib_cq *ib_cq)
 	pr_debug("%s ib_cq %p\n", __func__, ib_cq);
 	chp = to_iwch_cq(ib_cq);
 
-	remove_handle(chp->rhp, &chp->rhp->cqidr, chp->cq.cqid);
+	xa_erase_irq(&chp->rhp->cqs, chp->cq.cqid);
 	atomic_dec(&chp->refcnt);
 	wait_event(chp->wait, !atomic_read(&chp->refcnt));
 
@@ -164,7 +164,7 @@ static struct ib_cq *iwch_create_cq(struct ib_device *ibdev,
 	spin_lock_init(&chp->comp_handler_lock);
 	atomic_set(&chp->refcnt, 1);
 	init_waitqueue_head(&chp->wait);
-	if (insert_handle(rhp, &rhp->cqidr, chp, chp->cq.cqid)) {
+	if (xa_store_irq(&rhp->cqs, chp->cq.cqid, chp, GFP_KERNEL)) {
 		cxio_destroy_cq(&chp->rhp->rdev, &chp->cq);
 		kfree(chp);
 		return ERR_PTR(-ENOMEM);
@@ -421,7 +421,7 @@ static int iwch_dereg_mr(struct ib_mr *ib_mr)
 	cxio_dereg_mem(&rhp->rdev, mhp->attr.stag, mhp->attr.pbl_size,
 		       mhp->attr.pbl_addr);
 	iwch_free_pbl(mhp);
-	remove_handle(rhp, &rhp->mmidr, mmid);
+	xa_erase_irq(&rhp->mrs, mmid);
 	if (mhp->kva)
 		kfree((void *) (unsigned long) mhp->kva);
 	if (mhp->umem)
@@ -636,7 +636,7 @@ static struct ib_mw *iwch_alloc_mw(struct ib_pd *pd, enum ib_mw_type type,
 	mhp->attr.stag = stag;
 	mmid = (stag) >> 8;
 	mhp->ibmw.rkey = stag;
-	if (insert_handle(rhp, &rhp->mmidr, mhp, mmid)) {
+	if (xa_insert_irq(&rhp->mrs, mmid, mhp, GFP_KERNEL)) {
 		cxio_deallocate_window(&rhp->rdev, mhp->attr.stag);
 		kfree(mhp);
 		return ERR_PTR(-ENOMEM);
@@ -655,7 +655,7 @@ static int iwch_dealloc_mw(struct ib_mw *mw)
 	rhp = mhp->rhp;
 	mmid = (mw->rkey) >> 8;
 	cxio_deallocate_window(&rhp->rdev, mhp->attr.stag);
-	remove_handle(rhp, &rhp->mmidr, mmid);
+	xa_erase_irq(&rhp->mrs, mmid);
 	pr_debug("%s ib_mw %p mmid 0x%x ptr %p\n", __func__, mw, mmid, mhp);
 	kfree(mhp);
 	return 0;
@@ -701,7 +701,7 @@ static struct ib_mr *iwch_alloc_mr(struct ib_pd *pd,
 	mhp->attr.state = 1;
 	mmid = (stag) >> 8;
 	mhp->ibmr.rkey = mhp->ibmr.lkey = stag;
-	ret = insert_handle(rhp, &rhp->mmidr, mhp, mmid);
+	ret = xa_insert_irq(&rhp->mrs, mmid, mhp, GFP_KERNEL);
 	if (ret)
 		goto err3;
 
@@ -756,7 +756,7 @@ static int iwch_destroy_qp(struct ib_qp *ib_qp)
 	iwch_modify_qp(rhp, qhp, IWCH_QP_ATTR_NEXT_STATE, &attrs, 0);
 	wait_event(qhp->wait, !qhp->ep);
 
-	remove_handle(rhp, &rhp->qpidr, qhp->wq.qpid);
+	xa_erase_irq(&rhp->qps, qhp->wq.qpid);
 
 	atomic_dec(&qhp->refcnt);
 	wait_event(qhp->wait, !atomic_read(&qhp->refcnt));
@@ -872,7 +872,7 @@ static struct ib_qp *iwch_create_qp(struct ib_pd *pd,
 	init_waitqueue_head(&qhp->wait);
 	atomic_set(&qhp->refcnt, 1);
 
-	if (insert_handle(rhp, &rhp->qpidr, qhp, qhp->wq.qpid)) {
+	if (xa_store_irq(&rhp->qps, qhp->wq.qpid, qhp, GFP_KERNEL)) {
 		cxio_destroy_qp(&rhp->rdev, &qhp->wq,
 			ucontext ? &ucontext->uctx : &rhp->rdev.uctx);
 		kfree(qhp);

@@ -371,7 +371,7 @@ static inline int qdio_siga_input(struct qdio_q *q)
 static inline void qdio_sync_queues(struct qdio_q *q)
 {
 	/* PCI capable outbound queues will also be scanned so sync them too */
-	if (pci_out_supported(q))
+	if (pci_out_supported(q->irq_ptr))
 		qdio_siga_sync_all(q);
 	else
 		qdio_siga_sync_q(q);
@@ -718,7 +718,7 @@ static int get_outbound_buffer_frontier(struct qdio_q *q)
 
 	if (need_siga_sync(q))
 		if (((queue_type(q) != QDIO_IQDIO_QFMT) &&
-		    !pci_out_supported(q)) ||
+		    !pci_out_supported(q->irq_ptr)) ||
 		    (queue_type(q) == QDIO_IQDIO_QFMT &&
 		    multicast_outbound(q)))
 			qdio_siga_sync_q(q);
@@ -843,9 +843,9 @@ static void __qdio_outbound_processing(struct qdio_q *q)
 	if (qdio_outbound_q_moved(q))
 		qdio_kick_handler(q);
 
-	if (queue_type(q) == QDIO_ZFCP_QFMT)
-		if (!pci_out_supported(q) && !qdio_outbound_q_done(q))
-			goto sched;
+	if (queue_type(q) == QDIO_ZFCP_QFMT && !pci_out_supported(q->irq_ptr) &&
+	    !qdio_outbound_q_done(q))
+		goto sched;
 
 	if (q->u.out.pci_out_enabled)
 		return;
@@ -881,15 +881,15 @@ void qdio_outbound_timer(struct timer_list *t)
 	qdio_tasklet_schedule(q);
 }
 
-static inline void qdio_check_outbound_after_thinint(struct qdio_q *q)
+static inline void qdio_check_outbound_pci_queues(struct qdio_irq *irq)
 {
 	struct qdio_q *out;
 	int i;
 
-	if (!pci_out_supported(q))
+	if (!pci_out_supported(irq))
 		return;
 
-	for_each_output_queue(q->irq_ptr, out, i)
+	for_each_output_queue(irq, out, i)
 		if (!qdio_outbound_q_done(out))
 			qdio_tasklet_schedule(out);
 }
@@ -900,11 +900,8 @@ static void __tiqdio_inbound_processing(struct qdio_q *q)
 	if (need_siga_sync(q) && need_siga_sync_after_ai(q))
 		qdio_sync_queues(q);
 
-	/*
-	 * The interrupt could be caused by a PCI request. Check the
-	 * PCI capable outbound queues.
-	 */
-	qdio_check_outbound_after_thinint(q);
+	/* The interrupt could be caused by a PCI request: */
+	qdio_check_outbound_pci_queues(q->irq_ptr);
 
 	if (!qdio_inbound_q_moved(q))
 		return;
@@ -976,7 +973,7 @@ static void qdio_int_handler_pci(struct qdio_irq *irq_ptr)
 		}
 	}
 
-	if (!(irq_ptr->qib.ac & QIB_AC_OUTBOUND_PCI_SUPPORTED))
+	if (!pci_out_supported(irq_ptr))
 		return;
 
 	for_each_output_queue(irq_ptr, q, i) {
@@ -1686,8 +1683,7 @@ int qdio_get_next_buffers(struct ccw_device *cdev, int nr, int *bufnr,
 	if (need_siga_sync(q))
 		qdio_sync_queues(q);
 
-	/* check the PCI capable outbound queues. */
-	qdio_check_outbound_after_thinint(q);
+	qdio_check_outbound_pci_queues(irq_ptr);
 
 	if (!qdio_inbound_q_moved(q))
 		return 0;

@@ -1542,7 +1542,7 @@ static void phydm_set_csi_mask_reg(void *dm_void, u32 tone_idx_tmp,
 
 	if (tone_direction == FREQ_POSITIVE) {
 		if (tone_idx_tmp >= (tone_num - 1))
-			tone_idx_tmp = (tone_num - 1);
+			tone_idx_tmp = tone_num - 1;
 
 		byte_offset = (u8)(tone_idx_tmp >> 3);
 		bit_offset = (u8)(tone_idx_tmp & 0x7);
@@ -1767,7 +1767,7 @@ static u8 phydm_calculate_intf_distance(void *dm_void, u32 bw, u32 fc,
 		int_distance = (fc >= f_interference) ? (fc - f_interference) :
 							(f_interference - fc);
 		tone_idx_tmp =
-			(int_distance << 5); /* =10*(int_distance /0.3125) */
+			int_distance << 5; /* =10*(int_distance /0.3125) */
 		ODM_RT_TRACE(
 			dm, ODM_COMP_API,
 			"int_distance = ((%d MHz)) Mhz, tone_idx_tmp = ((%d.%d))\n",

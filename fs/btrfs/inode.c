@@ -73,17 +73,6 @@ struct kmem_cache *btrfs_trans_handle_cachep;
 struct kmem_cache *btrfs_path_cachep;
 struct kmem_cache *btrfs_free_space_cachep;
 
-#define S_SHIFT 12
-static const unsigned char btrfs_type_by_mode[S_IFMT >> S_SHIFT] = {
-	[S_IFREG >> S_SHIFT]	= BTRFS_FT_REG_FILE,
-	[S_IFDIR >> S_SHIFT]	= BTRFS_FT_DIR,
-	[S_IFCHR >> S_SHIFT]	= BTRFS_FT_CHRDEV,
-	[S_IFBLK >> S_SHIFT]	= BTRFS_FT_BLKDEV,
-	[S_IFIFO >> S_SHIFT]	= BTRFS_FT_FIFO,
-	[S_IFSOCK >> S_SHIFT]	= BTRFS_FT_SOCK,
-	[S_IFLNK >> S_SHIFT]	= BTRFS_FT_SYMLINK,
-};
-
 static int btrfs_setsize(struct inode *inode, struct iattr *attr);
 static int btrfs_truncate(struct inode *inode, bool skip_writeback);
 static int btrfs_finish_ordered_io(struct btrfs_ordered_extent *ordered_extent);
@@ -366,18 +355,24 @@ struct async_extent {
 	struct list_head list;
 };
 
-struct async_cow {
+struct async_chunk {
 	struct inode *inode;
-	struct btrfs_fs_info *fs_info;
 	struct page *locked_page;
 	u64 start;
 	u64 end;
 	unsigned int write_flags;
 	struct list_head extents;
 	struct btrfs_work work;
+	atomic_t *pending;
 };
 
-static noinline int add_async_extent(struct async_cow *cow,
+struct async_cow {
+	/* Number of chunks in flight; must be first in the structure */
+	atomic_t num_chunks;
+	struct async_chunk chunks[];
+};
+
+static noinline int add_async_extent(struct async_chunk *cow,
 				     u64 start, u64 ram_size,
 				     u64 compressed_size,
 				     struct page **pages,
@@ -444,14 +439,14 @@ static inline void inode_should_defrag(struct btrfs_inode *inode,
  * are written in the same order that the flusher thread sent them
  * down.
  */
-static noinline void compress_file_range(struct inode *inode,
-					struct page *locked_page,
-					u64 start, u64 end,
-					struct async_cow *async_cow,
-					int *num_added)
+static noinline void compress_file_range(struct async_chunk *async_chunk,
+					 int *num_added)
 {
+	struct inode *inode = async_chunk->inode;
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
 	u64 blocksize = fs_info->sectorsize;
+	u64 start = async_chunk->start;
+	u64 end = async_chunk->end;
 	u64 actual_end;
 	int ret = 0;
 	struct page **pages = NULL;
@@ -630,7 +625,7 @@ cont:
 			 * allocation on disk for these compressed pages, and
 			 * will submit them to the elevator.
 			 */
-			add_async_extent(async_cow, start, total_in,
+			add_async_extent(async_chunk, start, total_in,
 					total_compressed, pages, nr_pages,
 					compress_type);
 
@@ -670,14 +665,14 @@ cleanup_and_bail_uncompressed:
 	 * to our extent and set things up for the async work queue to run
 	 * cow_file_range to do the normal delalloc dance.
 	 */
-	if (page_offset(locked_page) >= start &&
-	    page_offset(locked_page) <= end)
-		__set_page_dirty_nobuffers(locked_page);
+	if (page_offset(async_chunk->locked_page) >= start &&
+	    page_offset(async_chunk->locked_page) <= end)
+		__set_page_dirty_nobuffers(async_chunk->locked_page);
 		/* unlocked later on in the async handlers */
 
 	if (redirty)
 		extent_range_redirty_for_io(inode, start, end);
-	add_async_extent(async_cow, start, end - start + 1, 0, NULL, 0,
+	add_async_extent(async_chunk, start, end - start + 1, 0, NULL, 0,
 			 BTRFS_COMPRESS_NONE);
 	*num_added += 1;
 
@@ -713,38 +708,34 @@ static void free_async_extent_pages(struct async_extent *async_extent)
  * queued.  We walk all the async extents created by compress_file_range
  * and send them down to the disk.
  */
-static noinline void submit_compressed_extents(struct async_cow *async_cow)
+static noinline void submit_compressed_extents(struct async_chunk *async_chunk)
 {
-	struct inode *inode = async_cow->inode;
+	struct inode *inode = async_chunk->inode;
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
 	struct async_extent *async_extent;
 	u64 alloc_hint = 0;
 	struct btrfs_key ins;
 	struct extent_map *em;
 	struct btrfs_root *root = BTRFS_I(inode)->root;
-	struct extent_io_tree *io_tree;
+	struct extent_io_tree *io_tree = &BTRFS_I(inode)->io_tree;
 	int ret = 0;
 
 again:
-	while (!list_empty(&async_cow->extents)) {
-		async_extent = list_entry(async_cow->extents.next,
+	while (!list_empty(&async_chunk->extents)) {
+		async_extent = list_entry(async_chunk->extents.next,
 					  struct async_extent, list);
 		list_del(&async_extent->list);
 
-		io_tree = &BTRFS_I(inode)->io_tree;
-
 retry:
+		lock_extent(io_tree, async_extent->start,
+			    async_extent->start + async_extent->ram_size - 1);
 		/* did the compression code fall back to uncompressed IO? */
 		if (!async_extent->pages) {
 			int page_started = 0;
 			unsigned long nr_written = 0;
 
-			lock_extent(io_tree, async_extent->start,
-					 async_extent->start +
-					 async_extent->ram_size - 1);
-
 			/* allocate blocks */
-			ret = cow_file_range(inode, async_cow->locked_page,
+			ret = cow_file_range(inode, async_chunk->locked_page,
 					     async_extent->start,
 					     async_extent->start +
 					     async_extent->ram_size - 1,
@@ -768,14 +759,11 @@ retry:
 						  async_extent->ram_size - 1,
 						  WB_SYNC_ALL);
 			else if (ret)
-				unlock_page(async_cow->locked_page);
+				unlock_page(async_chunk->locked_page);
 			kfree(async_extent);
 			cond_resched();
 			continue;
 		}
-
-		lock_extent(io_tree, async_extent->start,
-			    async_extent->start + async_extent->ram_size - 1);
 
 		ret = btrfs_reserve_extent(root, async_extent->ram_size,
 					   async_extent->compressed_size,
@@ -855,7 +843,7 @@ retry:
 				    ins.objectid,
 				    ins.offset, async_extent->pages,
 				    async_extent->nr_pages,
-				    async_cow->write_flags)) {
+				    async_chunk->write_flags)) {
 			struct page *p = async_extent->pages[0];
 			const u64 start = async_extent->start;
 			const u64 end = start + async_extent->ram_size - 1;
@@ -1132,16 +1120,15 @@ out_unlock:
  */
 static noinline void async_cow_start(struct btrfs_work *work)
 {
-	struct async_cow *async_cow;
+	struct async_chunk *async_chunk;
 	int num_added = 0;
-	async_cow = container_of(work, struct async_cow, work);
 
-	compress_file_range(async_cow->inode, async_cow->locked_page,
-			    async_cow->start, async_cow->end, async_cow,
-			    &num_added);
+	async_chunk = container_of(work, struct async_chunk, work);
+
+	compress_file_range(async_chunk, &num_added);
 	if (num_added == 0) {
-		btrfs_add_delayed_iput(async_cow->inode);
-		async_cow->inode = NULL;
+		btrfs_add_delayed_iput(async_chunk->inode);
+		async_chunk->inode = NULL;
 	}
 }
 
@@ -1150,14 +1137,12 @@ static noinline void async_cow_start(struct btrfs_work *work)
  */
 static noinline void async_cow_submit(struct btrfs_work *work)
 {
-	struct btrfs_fs_info *fs_info;
-	struct async_cow *async_cow;
+	struct async_chunk *async_chunk = container_of(work, struct async_chunk,
+						     work);
+	struct btrfs_fs_info *fs_info = btrfs_work_owner(work);
 	unsigned long nr_pages;
 
-	async_cow = container_of(work, struct async_cow, work);
-
-	fs_info = async_cow->fs_info;
-	nr_pages = (async_cow->end - async_cow->start + PAGE_SIZE) >>
+	nr_pages = (async_chunk->end - async_chunk->start + PAGE_SIZE) >>
 		PAGE_SHIFT;
 
 	/* atomic_sub_return implies a barrier */
@@ -1166,22 +1151,28 @@ static noinline void async_cow_submit(struct btrfs_work *work)
 		cond_wake_up_nomb(&fs_info->async_submit_wait);
 
 	/*
-	 * ->inode could be NULL if async_cow_start has failed to compress,
+	 * ->inode could be NULL if async_chunk_start has failed to compress,
 	 * in which case we don't have anything to submit, yet we need to
 	 * always adjust ->async_delalloc_pages as its paired with the init
 	 * happening in cow_file_range_async
 	 */
-	if (async_cow->inode)
-		submit_compressed_extents(async_cow);
+	if (async_chunk->inode)
+		submit_compressed_extents(async_chunk);
 }
 
 static noinline void async_cow_free(struct btrfs_work *work)
 {
-	struct async_cow *async_cow;
-	async_cow = container_of(work, struct async_cow, work);
-	if (async_cow->inode)
-		btrfs_add_delayed_iput(async_cow->inode);
-	kfree(async_cow);
+	struct async_chunk *async_chunk;
+
+	async_chunk = container_of(work, struct async_chunk, work);
+	if (async_chunk->inode)
+		btrfs_add_delayed_iput(async_chunk->inode);
+	/*
+	 * Since the pointer to 'pending' is at the beginning of the array of
+	 * async_chunk's, freeing it ensures the whole array has been freed.
+	 */
+	if (atomic_dec_and_test(async_chunk->pending))
+		kfree(async_chunk->pending);
 }
 
 static int cow_file_range_async(struct inode *inode, struct page *locked_page,
@@ -1190,45 +1181,69 @@ static int cow_file_range_async(struct inode *inode, struct page *locked_page,
 				unsigned int write_flags)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
-	struct async_cow *async_cow;
+	struct async_cow *ctx;
+	struct async_chunk *async_chunk;
 	unsigned long nr_pages;
 	u64 cur_end;
+	u64 num_chunks = DIV_ROUND_UP(end - start, SZ_512K);
+	int i;
+	bool should_compress;
 
-	clear_extent_bit(&BTRFS_I(inode)->io_tree, start, end, EXTENT_LOCKED,
-			 1, 0, NULL);
-	while (start < end) {
-		async_cow = kmalloc(sizeof(*async_cow), GFP_NOFS);
-		BUG_ON(!async_cow); /* -ENOMEM */
+	unlock_extent(&BTRFS_I(inode)->io_tree, start, end);
+
+	if (BTRFS_I(inode)->flags & BTRFS_INODE_NOCOMPRESS &&
+	    !btrfs_test_opt(fs_info, FORCE_COMPRESS)) {
+		num_chunks = 1;
+		should_compress = false;
+	} else {
+		should_compress = true;
+	}
+
+	ctx = kmalloc(struct_size(ctx, chunks, num_chunks), GFP_NOFS);
+	if (!ctx) {
+		unsigned clear_bits = EXTENT_LOCKED | EXTENT_DELALLOC |
+			EXTENT_DELALLOC_NEW | EXTENT_DEFRAG |
+			EXTENT_DO_ACCOUNTING;
+		unsigned long page_ops = PAGE_UNLOCK | PAGE_CLEAR_DIRTY |
+			PAGE_SET_WRITEBACK | PAGE_END_WRITEBACK |
+			PAGE_SET_ERROR;
+
+		extent_clear_unlock_delalloc(inode, start, end, 0, locked_page,
+					     clear_bits, page_ops);
+		return -ENOMEM;
+	}
+
+	async_chunk = ctx->chunks;
+	atomic_set(&ctx->num_chunks, num_chunks);
+
+	for (i = 0; i < num_chunks; i++) {
+		if (should_compress)
+			cur_end = min(end, start + SZ_512K - 1);
+		else
+			cur_end = end;
+
 		/*
 		 * igrab is called higher up in the call chain, take only the
 		 * lightweight reference for the callback lifetime
 		 */
 		ihold(inode);
-		async_cow->inode = inode;
-		async_cow->fs_info = fs_info;
-		async_cow->locked_page = locked_page;
-		async_cow->start = start;
-		async_cow->write_flags = write_flags;
+		async_chunk[i].pending = &ctx->num_chunks;
+		async_chunk[i].inode = inode;
+		async_chunk[i].start = start;
+		async_chunk[i].end = cur_end;
+		async_chunk[i].locked_page = locked_page;
+		async_chunk[i].write_flags = write_flags;
+		INIT_LIST_HEAD(&async_chunk[i].extents);
 
-		if (BTRFS_I(inode)->flags & BTRFS_INODE_NOCOMPRESS &&
-		    !btrfs_test_opt(fs_info, FORCE_COMPRESS))
-			cur_end = end;
-		else
-			cur_end = min(end, start + SZ_512K - 1);
-
-		async_cow->end = cur_end;
-		INIT_LIST_HEAD(&async_cow->extents);
-
-		btrfs_init_work(&async_cow->work,
+		btrfs_init_work(&async_chunk[i].work,
 				btrfs_delalloc_helper,
 				async_cow_start, async_cow_submit,
 				async_cow_free);
 
-		nr_pages = (cur_end - start + PAGE_SIZE) >>
-			PAGE_SHIFT;
+		nr_pages = DIV_ROUND_UP(cur_end - start, PAGE_SIZE);
 		atomic_add(nr_pages, &fs_info->async_delalloc_pages);
 
-		btrfs_queue_work(fs_info->delalloc_workers, &async_cow->work);
+		btrfs_queue_work(fs_info->delalloc_workers, &async_chunk[i].work);
 
 		*nr_written += nr_pages;
 		start = cur_end + 1;
@@ -1451,7 +1466,7 @@ next_slot:
 			extent_end = ALIGN(extent_end,
 					   fs_info->sectorsize);
 		} else {
-			BUG_ON(1);
+			BUG();
 		}
 out_check:
 		if (extent_end <= start) {
@@ -2075,11 +2090,21 @@ static void btrfs_writepage_fixup_worker(struct btrfs_work *work)
 	page = fixup->page;
 again:
 	lock_page(page);
-	if (!page->mapping || !PageDirty(page) || !PageChecked(page)) {
-		ClearPageChecked(page);
-		goto out_page;
-	}
 
+	/*
+	 * before we queued this fixup, we took a reference on the page.
+	 * page->mapping may go NULL, but it shouldn't be moved to a
+	 * different address space.
+	 */
+	if (!page->mapping || !PageDirty(page) || !PageChecked(page))
+		goto out_page;
+
+	/*
+	 * we keep the PageChecked() bit set until we're done with the
+	 * btrfs_start_ordered_extent() dance that we do below.  That
+	 * drops and retakes the page lock, so we don't want new
+	 * fixup workers queued for this page during the churn.
+	 */
 	inode = page->mapping->host;
 	page_start = page_offset(page);
 	page_end = page_offset(page) + PAGE_SIZE - 1;
@@ -2104,33 +2129,46 @@ again:
 
 	ret = btrfs_delalloc_reserve_space(inode, &data_reserved, page_start,
 					   PAGE_SIZE);
-	if (ret) {
-		mapping_set_error(page->mapping, ret);
-		end_extent_writepage(page, ret, page_start, page_end);
-		ClearPageChecked(page);
-		goto out;
-	 }
+	if (ret)
+		goto out_error;
 
 	ret = btrfs_set_extent_delalloc(inode, page_start, page_end, 0,
 					&cached_state, 0);
-	if (ret) {
-		mapping_set_error(page->mapping, ret);
-		end_extent_writepage(page, ret, page_start, page_end);
-		ClearPageChecked(page);
-		goto out;
-	}
+	if (ret)
+		goto out_error;
 
-	ClearPageChecked(page);
-	set_page_dirty(page);
 	btrfs_delalloc_release_extents(BTRFS_I(inode), PAGE_SIZE, false);
+
+	/*
+	 * everything went as planned, we're now the proud owners of a
+	 * Dirty page with delayed allocation bits set and space reserved
+	 * for our COW destination.
+	 *
+	 * The page was dirty when we started, nothing should have cleaned it.
+	 */
+	BUG_ON(!PageDirty(page));
+
 out:
 	unlock_extent_cached(&BTRFS_I(inode)->io_tree, page_start, page_end,
 			     &cached_state);
 out_page:
+	ClearPageChecked(page);
 	unlock_page(page);
 	put_page(page);
 	kfree(fixup);
 	extent_changeset_free(data_reserved);
+	return;
+
+out_error:
+	/*
+	 * We hit ENOSPC or other errors.  Update the mapping and page to
+	 * reflect the errors and clean the page.
+	 */
+	mapping_set_error(page->mapping, ret);
+	end_extent_writepage(page, ret, page_start, page_end);
+	clear_page_dirty_for_io(page);
+	SetPageError(page);
+	goto out;
 }
 
 /*
@@ -2154,6 +2192,13 @@ int btrfs_writepage_cow_fixup(struct page *page, u64 start, u64 end)
 	if (TestClearPagePrivate2(page))
 		return 0;
 
+	/*
+	 * PageChecked is set below when we create a fixup worker for this page,
+	 * don't try to create another one if we're already PageChecked()
+	 *
+	 * The extent_io writepage code will redirty the page if we send
+	 * back EAGAIN.
+	 */
 	if (PageChecked(page))
 		return -EAGAIN;
 
@@ -2167,7 +2212,8 @@ int btrfs_writepage_cow_fixup(struct page *page, u64 start, u64 end)
 			btrfs_writepage_fixup_worker, NULL, NULL);
 	fixup->page = page;
 	btrfs_queue_work(fs_info->fixup_workers, &fixup->work);
-	return -EBUSY;
+
+	return -EAGAIN;
 }
 
 static int insert_reserved_file_extent(struct btrfs_trans_handle *trans,
@@ -5448,12 +5494,14 @@ no_delete:
 }
 
 /*
- * this returns the key found in the dir entry in the location pointer.
+ * Return the key found in the dir entry in the location pointer, fill @type
+ * with BTRFS_FT_*, and return 0.
+ *
  * If no dir entries were found, returns -ENOENT.
  * If found a corrupted location in dir entry, returns -EUCLEAN.
  */
 static int btrfs_inode_by_name(struct inode *dir, struct dentry *dentry,
-			       struct btrfs_key *location)
+			       struct btrfs_key *location, u8 *type)
 {
 	const char *name = dentry->d_name.name;
 	int namelen = dentry->d_name.len;
@@ -5482,6 +5530,8 @@ static int btrfs_inode_by_name(struct inode *dir, struct dentry *dentry,
 			   __func__, name, btrfs_ino(BTRFS_I(dir)),
 			   location->objectid, location->type, location->offset);
 	}
+	if (!ret)
+		*type = btrfs_dir_type(path->nodes[0], di);
 out:
 	btrfs_free_path(path);
 	return ret;
@@ -5719,6 +5769,24 @@ static struct inode *new_simple_dir(struct super_block *s,
 	return inode;
 }
 
+static inline u8 btrfs_inode_type(struct inode *inode)
+{
+	/*
+	 * Compile-time asserts that generic FT_* types still match
+	 * BTRFS_FT_* types
+	 */
+	BUILD_BUG_ON(BTRFS_FT_UNKNOWN != FT_UNKNOWN);
+	BUILD_BUG_ON(BTRFS_FT_REG_FILE != FT_REG_FILE);
+	BUILD_BUG_ON(BTRFS_FT_DIR != FT_DIR);
+	BUILD_BUG_ON(BTRFS_FT_CHRDEV != FT_CHRDEV);
+	BUILD_BUG_ON(BTRFS_FT_BLKDEV != FT_BLKDEV);
+	BUILD_BUG_ON(BTRFS_FT_FIFO != FT_FIFO);
+	BUILD_BUG_ON(BTRFS_FT_SOCK != FT_SOCK);
+	BUILD_BUG_ON(BTRFS_FT_SYMLINK != FT_SYMLINK);
+
+	return fs_umode_to_ftype(inode->i_mode);
+}
+
 struct inode *btrfs_lookup_dentry(struct inode *dir, struct dentry *dentry)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(dir->i_sb);
@@ -5726,18 +5794,29 @@ struct inode *btrfs_lookup_dentry(struct inode *dir, struct dentry *dentry)
 	struct btrfs_root *root = BTRFS_I(dir)->root;
 	struct btrfs_root *sub_root = root;
 	struct btrfs_key location;
+	u8 di_type = 0;
 	int index;
 	int ret = 0;
 
 	if (dentry->d_name.len > BTRFS_NAME_LEN)
 		return ERR_PTR(-ENAMETOOLONG);
 
-	ret = btrfs_inode_by_name(dir, dentry, &location);
+	ret = btrfs_inode_by_name(dir, dentry, &location, &di_type);
 	if (ret < 0)
 		return ERR_PTR(ret);
 
 	if (location.type == BTRFS_INODE_ITEM_KEY) {
 		inode = btrfs_iget(dir->i_sb, &location, root, NULL);
+
+		/* Do extra check against inode mode with di_type */
+		if (btrfs_inode_type(inode) != di_type) {
+			btrfs_crit(fs_info,
+"inode mode mismatch with dir: inode mode=0%o btrfs type=%u dir type=%u",
+				  inode->i_mode, btrfs_inode_type(inode),
+				  di_type);
+			iput(inode);
+			return ERR_PTR(-EUCLEAN);
+		}
 		return inode;
 	}
 
@@ -5796,10 +5875,6 @@ static struct dentry *btrfs_lookup(struct inode *dir, struct dentry *dentry,
 		inode = NULL;
 	return d_splice_alias(inode, dentry);
 }
-
-unsigned char btrfs_filetype_table[] = {
-	DT_UNKNOWN, DT_REG, DT_DIR, DT_CHR, DT_BLK, DT_FIFO, DT_SOCK, DT_LNK
-};
 
 /*
  * All this infrastructure exists because dir_emit can fault, and we are holding
@@ -5939,7 +6014,7 @@ again:
 		name_ptr = (char *)(entry + 1);
 		read_extent_buffer(leaf, name_ptr, (unsigned long)(di + 1),
 				   name_len);
-		put_unaligned(btrfs_filetype_table[btrfs_dir_type(leaf, di)],
+		put_unaligned(fs_ftype_to_dtype(btrfs_dir_type(leaf, di)),
 				&entry->type);
 		btrfs_dir_item_key_to_cpu(leaf, di, &location);
 		put_unaligned(location.objectid, &entry->ino);
@@ -6340,11 +6415,6 @@ fail:
 		BTRFS_I(dir)->index_cnt--;
 	btrfs_free_path(path);
 	return ERR_PTR(ret);
-}
-
-static inline u8 btrfs_inode_type(struct inode *inode)
-{
-	return btrfs_type_by_mode[(inode->i_mode & S_IFMT) >> S_SHIFT];
 }
 
 /*
@@ -6864,6 +6934,14 @@ struct extent_map *btrfs_get_extent(struct btrfs_inode *inode,
 	extent_start = found_key.offset;
 	if (extent_type == BTRFS_FILE_EXTENT_REG ||
 	    extent_type == BTRFS_FILE_EXTENT_PREALLOC) {
+		/* Only regular file could have regular/prealloc extent */
+		if (!S_ISREG(inode->vfs_inode.i_mode)) {
+			ret = -EUCLEAN;
+			btrfs_crit(fs_info,
+		"regular/prealloc extent found for non-regular inode %llu",
+				   btrfs_ino(inode));
+			goto out;
+		}
 		extent_end = extent_start +
 		       btrfs_file_extent_num_bytes(leaf, item);
 
@@ -9182,10 +9260,11 @@ struct inode *btrfs_alloc_inode(struct super_block *sb)
 
 	inode = &ei->vfs_inode;
 	extent_map_tree_init(&ei->extent_tree);
-	extent_io_tree_init(&ei->io_tree, inode);
-	extent_io_tree_init(&ei->io_failure_tree, inode);
-	ei->io_tree.track_uptodate = 1;
-	ei->io_failure_tree.track_uptodate = 1;
+	extent_io_tree_init(fs_info, &ei->io_tree, IO_TREE_INODE_IO, inode);
+	extent_io_tree_init(fs_info, &ei->io_failure_tree,
+			    IO_TREE_INODE_IO_FAILURE, inode);
+	ei->io_tree.track_uptodate = true;
+	ei->io_failure_tree.track_uptodate = true;
 	atomic_set(&ei->sync_writers, 0);
 	mutex_init(&ei->log_mutex);
 	mutex_init(&ei->delalloc_mutex);
@@ -10193,7 +10272,6 @@ static int btrfs_symlink(struct inode *dir, struct dentry *dentry,
 
 	inode->i_op = &btrfs_symlink_inode_operations;
 	inode_nohighmem(inode);
-	inode->i_mapping->a_ops = &btrfs_aops;
 	inode_set_bytes(inode, name_len);
 	btrfs_i_size_write(BTRFS_I(inode), name_len);
 	err = btrfs_update_inode(trans, root, inode);

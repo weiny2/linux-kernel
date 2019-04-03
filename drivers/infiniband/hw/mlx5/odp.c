@@ -585,7 +585,7 @@ static int pagefault_mr(struct mlx5_ib_dev *dev, struct mlx5_ib_mr *mr,
 	struct ib_umem_odp *odp_mr = to_ib_umem_odp(mr->umem);
 	bool downgrade = flags & MLX5_PF_FLAGS_DOWNGRADE;
 	bool prefetch = flags & MLX5_PF_FLAGS_PREFETCH;
-	u64 access_mask = ODP_READ_ALLOWED_BIT;
+	u64 access_mask;
 	u64 start_idx, page_mask;
 	struct ib_umem_odp *odp;
 	size_t size;
@@ -607,6 +607,7 @@ next_mr:
 	page_shift = mr->umem->page_shift;
 	page_mask = ~(BIT(page_shift) - 1);
 	start_idx = (io_virt - (mr->mmkey.iova & page_mask)) >> page_shift;
+	access_mask = ODP_READ_ALLOWED_BIT;
 
 	if (prefetch && !downgrade && !mr->umem->writable) {
 		/* prefetch with write-access must
@@ -710,6 +711,15 @@ struct pf_frame {
 	int depth;
 };
 
+static bool mkey_is_eq(struct mlx5_core_mkey *mmkey, u32 key)
+{
+	if (!mmkey)
+		return false;
+	if (mmkey->type == MLX5_MKEY_MW)
+		return mlx5_base_mkey(mmkey->key) == mlx5_base_mkey(key);
+	return mmkey->key == key;
+}
+
 static int get_indirect_num_descs(struct mlx5_core_mkey *mmkey)
 {
 	struct mlx5_ib_mw *mw;
@@ -759,7 +769,7 @@ static int pagefault_single_data_segment(struct mlx5_ib_dev *dev,
 
 next_mr:
 	mmkey = __mlx5_mr_lookup(dev->mdev, mlx5_base_mkey(key));
-	if (!mmkey || mmkey->key != key) {
+	if (!mkey_is_eq(mmkey, key)) {
 		mlx5_ib_dbg(dev, "failed to find mkey %x\n", key);
 		ret = -EFAULT;
 		goto srcu_unlock;

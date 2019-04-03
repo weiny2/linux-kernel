@@ -2910,12 +2910,6 @@ static void delayed_ref_async_start(struct btrfs_work *work)
 		goto done;
 	}
 
-	/*
-	 * trans->sync means that when we call end_transaction, we won't
-	 * wait on delayed refs
-	 */
-	trans->sync = true;
-
 	/* Don't bother flushing if we got into a different transaction */
 	if (trans->transid > async->transid)
 		goto end;
@@ -6607,9 +6601,9 @@ out_lock:
 	return ret;
 }
 
-int btrfs_exclude_logged_extents(struct btrfs_fs_info *fs_info,
-				 struct extent_buffer *eb)
+int btrfs_exclude_logged_extents(struct extent_buffer *eb)
 {
+	struct btrfs_fs_info *fs_info = eb->fs_info;
 	struct btrfs_file_extent_item *item;
 	struct btrfs_key key;
 	int found_type;
@@ -8563,7 +8557,7 @@ btrfs_init_new_buffer(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 
 	btrfs_set_buffer_lockdep_class(root->root_key.objectid, buf, level);
 	btrfs_tree_lock(buf);
-	clean_tree_block(fs_info, buf);
+	btrfs_clean_tree_block(buf);
 	clear_bit(EXTENT_BUFFER_STALE, &buf->bflags);
 
 	btrfs_set_lock_blocking_write(buf);
@@ -9258,14 +9252,14 @@ static noinline int walk_up_proc(struct btrfs_trans_handle *trans,
 					     ret);
 			}
 		}
-		/* make block locked assertion in clean_tree_block happy */
+		/* make block locked assertion in btrfs_clean_tree_block happy */
 		if (!path->locks[level] &&
 		    btrfs_header_generation(eb) == trans->transid) {
 			btrfs_tree_lock(eb);
 			btrfs_set_lock_blocking_write(eb);
 			path->locks[level] = BTRFS_WRITE_LOCK_BLOCKING;
 		}
-		clean_tree_block(fs_info, eb);
+		btrfs_clean_tree_block(eb);
 	}
 
 	if (eb == root->node) {

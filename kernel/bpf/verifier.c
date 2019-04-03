@@ -377,7 +377,8 @@ static bool is_release_function(enum bpf_func_id func_id)
 static bool is_acquire_function(enum bpf_func_id func_id)
 {
 	return func_id == BPF_FUNC_sk_lookup_tcp ||
-		func_id == BPF_FUNC_sk_lookup_udp;
+		func_id == BPF_FUNC_sk_lookup_udp ||
+		func_id == BPF_FUNC_skc_lookup_tcp;
 }
 
 static bool is_ptr_cast_function(enum bpf_func_id func_id)
@@ -1897,8 +1898,9 @@ continue_func:
 		}
 		frame++;
 		if (frame >= MAX_CALL_FRAMES) {
-			WARN_ONCE(1, "verifier bug. Call stack is too deep\n");
-			return -EFAULT;
+			verbose(env, "the call stack of %d frames is too deep !\n",
+				frame);
+			return -E2BIG;
 		}
 		goto process_func;
 	}
@@ -2156,6 +2158,29 @@ static int check_xadd(struct bpf_verifier_env *env, int insn_idx, struct bpf_ins
 				BPF_SIZE(insn->code), BPF_WRITE, -1, true);
 }
 
+static int __check_stack_boundary(struct bpf_verifier_env *env, u32 regno,
+				  int off, int access_size,
+				  bool zero_size_allowed)
+{
+	struct bpf_reg_state *reg = reg_state(env, regno);
+
+	if (off >= 0 || off < -MAX_BPF_STACK || off + access_size > 0 ||
+	    access_size < 0 || (access_size == 0 && !zero_size_allowed)) {
+		if (tnum_is_const(reg->var_off)) {
+			verbose(env, "invalid stack type R%d off=%d access_size=%d\n",
+				regno, off, access_size);
+		} else {
+			char tn_buf[48];
+
+			tnum_strn(tn_buf, sizeof(tn_buf), reg->var_off);
+			verbose(env, "invalid stack type R%d var_off=%s access_size=%d\n",
+				regno, tn_buf, access_size);
+		}
+		return -EACCES;
+	}
+	return 0;
+}
+
 /* when register 'regno' is passed into function that will read 'access_size'
  * bytes from that pointer, make sure that it's within stack boundary
  * and all elements of stack are initialized.
@@ -2168,7 +2193,7 @@ static int check_stack_boundary(struct bpf_verifier_env *env, int regno,
 {
 	struct bpf_reg_state *reg = reg_state(env, regno);
 	struct bpf_func_state *state = func(env, reg);
-	int off, i, slot, spi;
+	int err, min_off, max_off, i, slot, spi;
 
 	if (reg->type != PTR_TO_STACK) {
 		/* Allow zero-byte read from NULL, regardless of pointer type */
@@ -2182,21 +2207,23 @@ static int check_stack_boundary(struct bpf_verifier_env *env, int regno,
 		return -EACCES;
 	}
 
-	/* Only allow fixed-offset stack reads */
-	if (!tnum_is_const(reg->var_off)) {
-		char tn_buf[48];
-
-		tnum_strn(tn_buf, sizeof(tn_buf), reg->var_off);
-		verbose(env, "invalid variable stack read R%d var_off=%s\n",
-			regno, tn_buf);
-		return -EACCES;
-	}
-	off = reg->off + reg->var_off.value;
-	if (off >= 0 || off < -MAX_BPF_STACK || off + access_size > 0 ||
-	    access_size < 0 || (access_size == 0 && !zero_size_allowed)) {
-		verbose(env, "invalid stack type R%d off=%d access_size=%d\n",
-			regno, off, access_size);
-		return -EACCES;
+	if (tnum_is_const(reg->var_off)) {
+		min_off = max_off = reg->var_off.value + reg->off;
+		err = __check_stack_boundary(env, regno, min_off, access_size,
+					     zero_size_allowed);
+		if (err)
+			return err;
+	} else {
+		min_off = reg->smin_value + reg->off;
+		max_off = reg->umax_value + reg->off;
+		err = __check_stack_boundary(env, regno, min_off, access_size,
+					     zero_size_allowed);
+		if (err)
+			return err;
+		err = __check_stack_boundary(env, regno, max_off, access_size,
+					     zero_size_allowed);
+		if (err)
+			return err;
 	}
 
 	if (meta && meta->raw_mode) {
@@ -2205,10 +2232,10 @@ static int check_stack_boundary(struct bpf_verifier_env *env, int regno,
 		return 0;
 	}
 
-	for (i = 0; i < access_size; i++) {
+	for (i = min_off; i < max_off + access_size; i++) {
 		u8 *stype;
 
-		slot = -(off + i) - 1;
+		slot = -i - 1;
 		spi = slot / BPF_REG_SIZE;
 		if (state->allocated_stack <= slot)
 			goto err;
@@ -2221,8 +2248,16 @@ static int check_stack_boundary(struct bpf_verifier_env *env, int regno,
 			goto mark;
 		}
 err:
-		verbose(env, "invalid indirect read from stack off %d+%d size %d\n",
-			off, i, access_size);
+		if (tnum_is_const(reg->var_off)) {
+			verbose(env, "invalid indirect read from stack off %d+%d size %d\n",
+				min_off, i - min_off, access_size);
+		} else {
+			char tn_buf[48];
+
+			tnum_strn(tn_buf, sizeof(tn_buf), reg->var_off);
+			verbose(env, "invalid indirect read from stack var_off %s+%d size %d\n",
+				tn_buf, i - min_off, access_size);
+		}
 		return -EACCES;
 mark:
 		/* reading any byte out of 8-byte 'spill_slot' will cause
@@ -2231,7 +2266,7 @@ mark:
 		mark_reg_read(env, &state->stack[spi].spilled_ptr,
 			      state->stack[spi].spilled_ptr.parent);
 	}
-	return update_stack_depth(env, state, off);
+	return update_stack_depth(env, state, min_off);
 }
 
 static int check_helper_mem_access(struct bpf_verifier_env *env, int regno,
@@ -3156,19 +3191,11 @@ static int check_helper_call(struct bpf_verifier_env *env, int func_id, int insn
 	} else if (fn->ret_type == RET_PTR_TO_SOCKET_OR_NULL) {
 		mark_reg_known_zero(env, regs, BPF_REG_0);
 		regs[BPF_REG_0].type = PTR_TO_SOCKET_OR_NULL;
-		if (is_acquire_function(func_id)) {
-			int id = acquire_reference_state(env, insn_idx);
-
-			if (id < 0)
-				return id;
-			/* For mark_ptr_or_null_reg() */
-			regs[BPF_REG_0].id = id;
-			/* For release_reference() */
-			regs[BPF_REG_0].ref_obj_id = id;
-		} else {
-			/* For mark_ptr_or_null_reg() */
-			regs[BPF_REG_0].id = ++env->id_gen;
-		}
+		regs[BPF_REG_0].id = ++env->id_gen;
+	} else if (fn->ret_type == RET_PTR_TO_SOCK_COMMON_OR_NULL) {
+		mark_reg_known_zero(env, regs, BPF_REG_0);
+		regs[BPF_REG_0].type = PTR_TO_SOCK_COMMON_OR_NULL;
+		regs[BPF_REG_0].id = ++env->id_gen;
 	} else if (fn->ret_type == RET_PTR_TO_TCP_SOCK_OR_NULL) {
 		mark_reg_known_zero(env, regs, BPF_REG_0);
 		regs[BPF_REG_0].type = PTR_TO_TCP_SOCK_OR_NULL;
@@ -3179,9 +3206,19 @@ static int check_helper_call(struct bpf_verifier_env *env, int func_id, int insn
 		return -EINVAL;
 	}
 
-	if (is_ptr_cast_function(func_id))
+	if (is_ptr_cast_function(func_id)) {
 		/* For release_reference() */
 		regs[BPF_REG_0].ref_obj_id = meta.ref_obj_id;
+	} else if (is_acquire_function(func_id)) {
+		int id = acquire_reference_state(env, insn_idx);
+
+		if (id < 0)
+			return id;
+		/* For mark_ptr_or_null_reg() */
+		regs[BPF_REG_0].id = id;
+		/* For release_reference() */
+		regs[BPF_REG_0].ref_obj_id = id;
+	}
 
 	do_refine_retval_range(regs, fn->ret_type, func_id, &meta);
 

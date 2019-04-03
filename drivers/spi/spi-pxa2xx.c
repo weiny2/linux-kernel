@@ -1333,6 +1333,9 @@ static int setup(struct spi_device *spi)
 			dev_warn(&spi->dev,
 				 "in setup: DMA burst size reduced to match bits_per_word\n");
 		}
+		dev_dbg(&spi->dev,
+			"in setup: DMA burst size set to %u\n",
+			chip->dma_burst_size);
 	}
 
 	switch (drv_data->ssp_type) {
@@ -1487,12 +1490,7 @@ static int pxa2xx_spi_get_port_id(struct acpi_device *adev)
 
 static bool pxa2xx_spi_idma_filter(struct dma_chan *chan, void *param)
 {
-	struct device *dev = param;
-
-	if (dev != chan->device->dev->parent)
-		return false;
-
-	return true;
+	return param == chan->device->dev;
 }
 
 #endif /* CONFIG_PCI */
@@ -1564,6 +1562,7 @@ pxa2xx_spi_init_pdata(struct platform_device *pdev)
 	pdata->is_slave = of_property_read_bool(pdev->dev.of_node, "spi-slave");
 	pdata->num_chipselect = 1;
 	pdata->enable_dma = true;
+	pdata->dma_burst_size = 1;
 
 	return pdata;
 }

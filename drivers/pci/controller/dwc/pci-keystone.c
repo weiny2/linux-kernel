@@ -661,7 +661,7 @@ static int ks_pcie_get_irq_controller_info(struct keystone_pcie *ks_pcie,
 			(legacy ? "legacy" : "MSI"), temp);
 
 	/*
-	 * support upto max_host_irqs. In dt from index 0 to 3 (legacy) or 0 to
+	 * support up to max_host_irqs. In DT from index 0 to 3 (legacy) or 0 to
 	 * 7 (MSI)
 	 */
 	for (temp = 0; temp < max_host_irqs; temp++) {

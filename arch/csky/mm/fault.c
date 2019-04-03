@@ -15,7 +15,6 @@
 #include <linux/smp.h>
 #include <linux/version.h>
 #include <linux/vt_kern.h>
-#include <linux/kernel.h>
 #include <linux/extable.h>
 #include <linux/uaccess.h>
 
@@ -43,7 +42,7 @@ int fixup_exception(struct pt_regs *regs)
  * and the problem, and then passes it off to one of the appropriate
  * routines.
  */
-asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long write,
+asmlinkage void do_page_fault(struct pt_regs *regs,
 			      unsigned long mmu_meh)
 {
 	struct vm_area_struct *vma = NULL;
@@ -51,6 +50,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long write,
 	struct mm_struct *mm = tsk->mm;
 	int si_code;
 	int fault;
+	unsigned int flags;
 	unsigned long address = mmu_meh & PAGE_MASK;
 
 	si_code = SEGV_MAPERR;
@@ -131,12 +131,16 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long write,
 good_area:
 	si_code = SEGV_ACCERR;
 
-	if (write) {
+	if (get_psr_vector(regs) != VEC_TLBINVALIDL) {
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
+
+		flags = FAULT_FLAG_WRITE;
 	} else {
 		if (!(vma->vm_flags & (VM_READ | VM_WRITE | VM_EXEC)))
 			goto bad_area;
+
+		flags = 0;
 	}
 
 	/*
@@ -144,7 +148,7 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	fault = handle_mm_fault(vma, address, write ? FAULT_FLAG_WRITE : 0);
+	fault = handle_mm_fault(vma, address, flags);
 	if (unlikely(fault & VM_FAULT_ERROR)) {
 		if (fault & VM_FAULT_OOM)
 			goto out_of_memory;
@@ -188,7 +192,7 @@ no_context:
 	bust_spinlocks(1);
 	pr_alert("Unable to handle kernel paging request at virtual "
 		 "address 0x%08lx, pc: 0x%08lx\n", address, regs->pc);
-	die_if_kernel("Oops", regs, write);
+	die_if_kernel("Oops", regs, regs->sr);
 
 out_of_memory:
 	/*

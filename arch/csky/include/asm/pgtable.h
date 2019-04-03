@@ -218,17 +218,15 @@ static inline pte_t pte_mkwrite(pte_t pte)
 
 static inline pte_t pte_mkdirty(pte_t pte)
 {
-	pte_val(pte) |= _PAGE_MODIFIED;
-	if (pte_val(pte) & _PAGE_WRITE)
-		pte_val(pte) |= _PAGE_DIRTY;
+	pte_val(pte) |= _PAGE_MODIFIED | _PAGE_DIRTY;
+
 	return pte;
 }
 
 static inline pte_t pte_mkyoung(pte_t pte)
 {
-	pte_val(pte) |= _PAGE_ACCESSED;
-	if (pte_val(pte) & _PAGE_READ)
-		pte_val(pte) |= _PAGE_VALID;
+	pte_val(pte) |= _PAGE_ACCESSED | _PAGE_VALID;
+
 	return pte;
 }
 

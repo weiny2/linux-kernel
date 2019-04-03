@@ -41,4 +41,9 @@ do { \
 
 void csky_alignment(struct pt_regs *regs);
 
+static inline unsigned long get_psr_vector(struct pt_regs *regs)
+{
+	return ((regs->sr >> 16) & 0xff);
+}
+
 #endif /* __ASM_CSKY_TRAPS_H */
