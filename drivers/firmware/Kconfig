@@ -166,6 +166,18 @@ config KEEMBAY_VPU_IPC
           on secure world monitor software to do the control of the VPU
           state.
 
+config KEEMBAY_VPU_IPC_TEST
+	tristate "Intel Keem Bay VPU IPC Driver test module"
+	depends on KEEMBAY_VPU_IPC
+	depends on HAVE_ARM_SMCCC
+	help
+	  This option enables a test module for Keem Bay VPU IPC driver.
+	  It depends on Keem Bay IPC driver and Keem Bay VPU IPC driver
+	  being present in the kernel already. This module will attempt
+	  to request the VPU to start, track the boot sequence, exercise
+	  some basic APIs of the Keem Bay VPU IPC driver, and finally
+	  shut down the VPU.
+
 config ISCSI_IBFT_FIND
 	bool "iSCSI Boot Firmware Table Attributes"
 	depends on X86 && ISCSI_IBFT
