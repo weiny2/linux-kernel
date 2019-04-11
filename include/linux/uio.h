@@ -94,6 +94,17 @@ static inline bool iov_iter_bvec_no_ref(const struct iov_iter *i)
 	return (i->type & ITER_BVEC_FLAG_NO_REF) != 0;
 }
 
+/**
+ * iov_iter_get_pages_use_gup - true if iov_iter_get_pages(i) use GUP
+ * @i: iter
+ * Returns: true if a call to iov_iter_get_pages*() with the iter provided in
+ *          argument would result in the use of get_user_pages*()
+ */
+static inline bool iov_iter_get_pages_use_gup(const struct iov_iter *i)
+{
+	return iov_iter_type(i) & (ITER_IOVEC | ITER_PIPE);
+}
+
 /*
  * Total number of bytes covered by an iovec.
  *
