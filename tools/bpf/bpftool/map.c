@@ -720,7 +720,7 @@ static int dump_map_elem(int fd, void *key, void *value,
 		jsonw_string_field(json_wtr, "error", strerror(lookup_errno));
 		jsonw_end_object(json_wtr);
 	} else {
-		if (errno == ENOENT)
+		if (lookup_errno == ENOENT)
 			print_entry_plain(map_info, key, NULL);
 		else
 			print_entry_error(map_info, key,
