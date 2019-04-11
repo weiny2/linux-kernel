@@ -24,7 +24,7 @@
 #define CLK_SET_RATE_PARENT	BIT(2) /* propagate rate change up one level */
 #define CLK_IGNORE_UNUSED	BIT(3) /* do not gate even if unused */
 				/* unused */
-#define CLK_IS_BASIC		BIT(5) /* Basic clk, can't do a to_clk_foo() */
+#define CLK_IS_BASIC		BIT(5) /* deprecated, don't use */
 #define CLK_GET_RATE_NOCACHE	BIT(6) /* do not use the cached clk rate */
 #define CLK_SET_RATE_NO_REPARENT BIT(7) /* don't re-parent on rate change */
 #define CLK_GET_ACCURACY_NOCACHE BIT(8) /* do not use the cached clk accuracy */
@@ -307,7 +307,6 @@ struct clk_fixed_rate {
 	struct		clk_hw hw;
 	unsigned long	fixed_rate;
 	unsigned long	fixed_accuracy;
-	u8		flags;
 };
 
 #define to_clk_fixed_rate(_hw) container_of(_hw, struct clk_fixed_rate, hw)
@@ -499,6 +498,8 @@ void clk_hw_unregister_divider(struct clk_hw *hw);
  *	register, and mask of mux bits are in higher 16-bit of this register.
  *	While setting the mux bits, higher 16-bit should also be updated to
  *	indicate changing mux bits.
+ * CLK_MUX_READ_ONLY - The mux registers can't be written, only read in the
+ * 	.get_parent clk_op.
  * CLK_MUX_ROUND_CLOSEST - Use the parent rate that is closest to the desired
  *	frequency.
  */
@@ -712,16 +713,19 @@ struct clk_hw *clk_hw_register_composite(struct device *dev, const char *name,
 		unsigned long flags);
 void clk_hw_unregister_composite(struct clk_hw *hw);
 
-/***
- * struct clk_gpio_gate - gpio gated clock
+/**
+ * struct clk_gpio - gpio gated clock
  *
  * @hw:		handle between common and hardware-specific interfaces
  * @gpiod:	gpio descriptor
  *
- * Clock with a gpio control for enabling and disabling the parent clock.
- * Implements .enable, .disable and .is_enabled
+ * Clock with a gpio control for enabling and disabling the parent clock
+ * or switching between two parents by asserting or deasserting the gpio.
+ *
+ * Implements .enable, .disable and .is_enabled or
+ * .get_parent, .set_parent and .determine_rate depending on which clk_ops
+ * is used.
  */
-
 struct clk_gpio {
 	struct clk_hw	hw;
 	struct gpio_desc *gpiod;
@@ -738,16 +742,6 @@ struct clk_hw *clk_hw_register_gpio_gate(struct device *dev, const char *name,
 		unsigned long flags);
 void clk_hw_unregister_gpio_gate(struct clk_hw *hw);
 
-/**
- * struct clk_gpio_mux - gpio controlled clock multiplexer
- *
- * @hw:		see struct clk_gpio
- * @gpiod:	gpio descriptor to select the parent of this clock multiplexer
- *
- * Clock with a gpio control for selecting the parent clock.
- * Implements .get_parent, .set_parent and .determine_rate
- */
-
 extern const struct clk_ops clk_gpio_mux_ops;
 struct clk *clk_register_gpio_mux(struct device *dev, const char *name,
 		const char * const *parent_names, u8 num_parents, struct gpio_desc *gpiod,
@@ -757,17 +751,6 @@ struct clk_hw *clk_hw_register_gpio_mux(struct device *dev, const char *name,
 		unsigned long flags);
 void clk_hw_unregister_gpio_mux(struct clk_hw *hw);
 
-/**
- * clk_register - allocate a new clock, register it and return an opaque cookie
- * @dev: device that is registering this clock
- * @hw: link to hardware-specific clock data
- *
- * clk_register is the primary interface for populating the clock tree with new
- * clock nodes.  It returns a pointer to the newly allocated struct clk which
- * cannot be dereferenced by driver code but may be used in conjuction with the
- * rest of the clock API.  In the event of an error clk_register will return an
- * error code; drivers must test for an error code after calling clk_register.
- */
 struct clk *clk_register(struct device *dev, struct clk_hw *hw);
 struct clk *devm_clk_register(struct device *dev, struct clk_hw *hw);
 
