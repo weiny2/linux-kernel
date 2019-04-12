@@ -768,7 +768,7 @@ static inline void put_flush_tlb_info(void)
 
 void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 				unsigned long end, unsigned int stride_shift,
-				bool freed_tables)
+				bool freed_tables, bool pmd_tlb_range)
 {
 	struct flush_tlb_info *info;
 	u64 new_tlb_gen;
@@ -797,7 +797,7 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 	}
 
 	if (cpumask_any_but(mm_cpumask(mm), cpu) < nr_cpu_ids) {
-		if (cpu_feature_enabled(X86_FEATURE_RAR)) {
+		if (cpu_feature_enabled(X86_FEATURE_RAR) && !pmd_tlb_range) {
 			count_vm_tlb_event(NR_TLB_REMOTE_FLUSH);
 
 			if (static_cpu_has(X86_FEATURE_PCID)) {
