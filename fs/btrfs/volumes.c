@@ -1941,10 +1941,9 @@ static void update_dev_time(const char *path_name)
 	filp_close(filp, NULL);
 }
 
-static int btrfs_rm_dev_item(struct btrfs_fs_info *fs_info,
-			     struct btrfs_device *device)
+static int btrfs_rm_dev_item(struct btrfs_device *device)
 {
-	struct btrfs_root *root = fs_info->chunk_root;
+	struct btrfs_root *root = device->fs_info->chunk_root;
 	int ret;
 	struct btrfs_path *path;
 	struct btrfs_key key;
@@ -2145,12 +2144,12 @@ int btrfs_rm_device(struct btrfs_fs_info *fs_info, const char *device_path,
 	 * counter although write_all_supers() is not locked out. This
 	 * could give a filesystem state which requires a degraded mount.
 	 */
-	ret = btrfs_rm_dev_item(fs_info, device);
+	ret = btrfs_rm_dev_item(device);
 	if (ret)
 		goto error_undo;
 
 	clear_bit(BTRFS_DEV_STATE_IN_FS_METADATA, &device->dev_state);
-	btrfs_scrub_cancel_dev(fs_info, device);
+	btrfs_scrub_cancel_dev(device);
 
 	/*
 	 * the device list mutex makes sure that we don't change
@@ -2259,9 +2258,9 @@ void btrfs_rm_dev_replace_remove_srcdev(struct btrfs_device *srcdev)
 		fs_devices->open_devices--;
 }
 
-void btrfs_rm_dev_replace_free_srcdev(struct btrfs_fs_info *fs_info,
-				      struct btrfs_device *srcdev)
+void btrfs_rm_dev_replace_free_srcdev(struct btrfs_device *srcdev)
 {
+	struct btrfs_fs_info *fs_info = srcdev->fs_info;
 	struct btrfs_fs_devices *fs_devices = srcdev->fs_devices;
 
 	if (test_bit(BTRFS_DEV_STATE_WRITEABLE, &srcdev->dev_state)) {
