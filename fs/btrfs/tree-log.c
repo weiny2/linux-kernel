@@ -139,7 +139,7 @@ static int start_log_trans(struct btrfs_trans_handle *trans,
 	mutex_lock(&root->log_mutex);
 
 	if (root->log_root) {
-		if (btrfs_need_log_full_commit(fs_info, trans)) {
+		if (btrfs_need_log_full_commit(trans)) {
 			ret = -EAGAIN;
 			goto out;
 		}
@@ -225,6 +225,17 @@ void btrfs_end_log_trans(struct btrfs_root *root)
 	}
 }
 
+static int btrfs_write_tree_block(struct extent_buffer *buf)
+{
+	return filemap_fdatawrite_range(buf->pages[0]->mapping, buf->start,
+					buf->start + buf->len - 1);
+}
+
+static void btrfs_wait_tree_block_writeback(struct extent_buffer *buf)
+{
+	filemap_fdatawait_range(buf->pages[0]->mapping,
+			        buf->start, buf->start + buf->len - 1);
+}
 
 /*
  * the walk control struct is used to pass state down the chain when
@@ -304,7 +315,7 @@ static int process_one_buffer(struct btrfs_root *log,
 
 	if (!ret && btrfs_buffer_uptodate(eb, gen, 0)) {
 		if (wc->pin && btrfs_header_level(eb) == 0)
-			ret = btrfs_exclude_logged_extents(fs_info, eb);
+			ret = btrfs_exclude_logged_extents(eb);
 		if (wc->write)
 			btrfs_write_tree_block(eb);
 		if (wc->wait)
@@ -2725,7 +2736,7 @@ static noinline int walk_down_log_tree(struct btrfs_trans_handle *trans,
 				if (trans) {
 					btrfs_tree_lock(next);
 					btrfs_set_lock_blocking_write(next);
-					clean_tree_block(fs_info, next);
+					btrfs_clean_tree_block(next);
 					btrfs_wait_tree_block_writeback(next);
 					btrfs_tree_unlock(next);
 				} else {
@@ -2809,7 +2820,7 @@ static noinline int walk_up_log_tree(struct btrfs_trans_handle *trans,
 				if (trans) {
 					btrfs_tree_lock(next);
 					btrfs_set_lock_blocking_write(next);
-					clean_tree_block(fs_info, next);
+					btrfs_clean_tree_block(next);
 					btrfs_wait_tree_block_writeback(next);
 					btrfs_tree_unlock(next);
 				} else {
@@ -2891,7 +2902,7 @@ static int walk_log_tree(struct btrfs_trans_handle *trans,
 			if (trans) {
 				btrfs_tree_lock(next);
 				btrfs_set_lock_blocking_write(next);
-				clean_tree_block(fs_info, next);
+				btrfs_clean_tree_block(next);
 				btrfs_wait_tree_block_writeback(next);
 				btrfs_tree_unlock(next);
 			} else {
@@ -3066,7 +3077,7 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 	}
 
 	/* bail out if we need to do a full commit */
-	if (btrfs_need_log_full_commit(fs_info, trans)) {
+	if (btrfs_need_log_full_commit(trans)) {
 		ret = -EAGAIN;
 		mutex_unlock(&root->log_mutex);
 		goto out;
@@ -3085,7 +3096,7 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 	if (ret) {
 		blk_finish_plug(&plug);
 		btrfs_abort_transaction(trans, ret);
-		btrfs_set_log_full_commit(fs_info, trans);
+		btrfs_set_log_full_commit(trans);
 		mutex_unlock(&root->log_mutex);
 		goto out;
 	}
@@ -3127,7 +3138,7 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 			list_del_init(&root_log_ctx.list);
 
 		blk_finish_plug(&plug);
-		btrfs_set_log_full_commit(fs_info, trans);
+		btrfs_set_log_full_commit(trans);
 
 		if (ret != -ENOSPC) {
 			btrfs_abort_transaction(trans, ret);
@@ -3173,7 +3184,7 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 	 * now that we've moved on to the tree of log tree roots,
 	 * check the full commit flag again
 	 */
-	if (btrfs_need_log_full_commit(fs_info, trans)) {
+	if (btrfs_need_log_full_commit(trans)) {
 		blk_finish_plug(&plug);
 		btrfs_wait_tree_log_extents(log, mark);
 		mutex_unlock(&log_root_tree->log_mutex);
@@ -3186,7 +3197,7 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 					 EXTENT_DIRTY | EXTENT_NEW);
 	blk_finish_plug(&plug);
 	if (ret) {
-		btrfs_set_log_full_commit(fs_info, trans);
+		btrfs_set_log_full_commit(trans);
 		btrfs_abort_transaction(trans, ret);
 		mutex_unlock(&log_root_tree->log_mutex);
 		goto out_wake_log_root;
@@ -3196,7 +3207,7 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 		ret = btrfs_wait_tree_log_extents(log_root_tree,
 						  EXTENT_NEW | EXTENT_DIRTY);
 	if (ret) {
-		btrfs_set_log_full_commit(fs_info, trans);
+		btrfs_set_log_full_commit(trans);
 		mutex_unlock(&log_root_tree->log_mutex);
 		goto out_wake_log_root;
 	}
@@ -3218,7 +3229,7 @@ int btrfs_sync_log(struct btrfs_trans_handle *trans,
 	 */
 	ret = write_all_supers(fs_info, 1);
 	if (ret) {
-		btrfs_set_log_full_commit(fs_info, trans);
+		btrfs_set_log_full_commit(trans);
 		btrfs_abort_transaction(trans, ret);
 		goto out_wake_log_root;
 	}
@@ -3422,7 +3433,7 @@ fail:
 out_unlock:
 	mutex_unlock(&dir->log_mutex);
 	if (ret == -ENOSPC) {
-		btrfs_set_log_full_commit(root->fs_info, trans);
+		btrfs_set_log_full_commit(trans);
 		ret = 0;
 	} else if (ret < 0)
 		btrfs_abort_transaction(trans, ret);
@@ -3438,7 +3449,6 @@ int btrfs_del_inode_ref_in_log(struct btrfs_trans_handle *trans,
 			       const char *name, int name_len,
 			       struct btrfs_inode *inode, u64 dirid)
 {
-	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct btrfs_root *log;
 	u64 index;
 	int ret;
@@ -3456,7 +3466,7 @@ int btrfs_del_inode_ref_in_log(struct btrfs_trans_handle *trans,
 				  dirid, &index);
 	mutex_unlock(&inode->log_mutex);
 	if (ret == -ENOSPC) {
-		btrfs_set_log_full_commit(fs_info, trans);
+		btrfs_set_log_full_commit(trans);
 		ret = 0;
 	} else if (ret < 0 && ret != -ENOENT)
 		btrfs_abort_transaction(trans, ret);
@@ -5442,7 +5452,7 @@ static bool btrfs_must_commit_transaction(struct btrfs_trans_handle *trans,
 		 * Make sure any commits to the log are forced to be full
 		 * commits.
 		 */
-		btrfs_set_log_full_commit(fs_info, trans);
+		btrfs_set_log_full_commit(trans);
 		ret = true;
 	}
 	mutex_unlock(&inode->log_mutex);
@@ -5995,7 +6005,7 @@ static int btrfs_log_inode_parent(struct btrfs_trans_handle *trans,
 end_trans:
 	dput(old_parent);
 	if (ret < 0) {
-		btrfs_set_log_full_commit(fs_info, trans);
+		btrfs_set_log_full_commit(trans);
 		ret = 1;
 	}
 
