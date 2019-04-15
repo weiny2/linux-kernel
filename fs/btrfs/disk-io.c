@@ -2641,10 +2641,16 @@ int open_ctree(struct super_block *sb,
 		goto fail;
 	}
 
-	ret = percpu_counter_init(&fs_info->dirty_metadata_bytes, 0, GFP_KERNEL);
+	ret = percpu_counter_init(&fs_info->odirect_bytes, 0, GFP_KERNEL);
 	if (ret) {
 		err = ret;
 		goto fail_srcu;
+	}
+
+	ret = percpu_counter_init(&fs_info->dirty_metadata_bytes, 0, GFP_KERNEL);
+	if (ret) {
+		err = ret;
+		goto fail_odirect_bytes;
 	}
 	fs_info->dirty_metadata_batch = PAGE_SIZE *
 					(1 + ilog2(nr_cpu_ids));
@@ -3344,6 +3350,8 @@ fail_delalloc_bytes:
 	percpu_counter_destroy(&fs_info->delalloc_bytes);
 fail_dirty_metadata_bytes:
 	percpu_counter_destroy(&fs_info->dirty_metadata_bytes);
+fail_odirect_bytes:
+	percpu_counter_destroy(&fs_info->odirect_bytes);
 fail_srcu:
 	cleanup_srcu_struct(&fs_info->subvol_srcu);
 fail:
@@ -4025,6 +4033,10 @@ void close_ctree(struct btrfs_fs_info *fs_info)
 		       percpu_counter_sum(&fs_info->delalloc_bytes));
 	}
 
+	if (percpu_counter_sum(&fs_info->odirect_bytes))
+		btrfs_info(fs_info, "at unmount odirect count %lld",
+			   percpu_counter_sum(&fs_info->odirect_bytes));
+
 	btrfs_sysfs_remove_mounted(fs_info);
 	btrfs_sysfs_remove_fsid(fs_info->fs_devices);
 
@@ -4056,6 +4068,7 @@ void close_ctree(struct btrfs_fs_info *fs_info)
 
 	percpu_counter_destroy(&fs_info->dirty_metadata_bytes);
 	percpu_counter_destroy(&fs_info->delalloc_bytes);
+	percpu_counter_destroy(&fs_info->odirect_bytes);
 	percpu_counter_destroy(&fs_info->dev_replace.bio_counter);
 	cleanup_srcu_struct(&fs_info->subvol_srcu);
 
