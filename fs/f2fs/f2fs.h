@@ -210,7 +210,8 @@ enum {
 	META_SSA,
 	META_MAX,
 	META_POR,
-	DATA_GENERIC,
+	DATA_GENERIC,		/* check range only */
+	DATA_GENERIC_ENHANCE,	/* strong check on range and segment bitmap */
 	META_GENERIC,
 };
 
@@ -2850,15 +2851,6 @@ static inline bool __is_valid_data_blkaddr(block_t blkaddr)
 {
 	if (blkaddr == NEW_ADDR || blkaddr == NULL_ADDR)
 		return false;
-	return true;
-}
-
-static inline bool is_valid_data_blkaddr(struct f2fs_sb_info *sbi,
-						block_t blkaddr)
-{
-	if (!__is_valid_data_blkaddr(blkaddr))
-		return false;
-	verify_blkaddr(sbi, blkaddr, DATA_GENERIC);
 	return true;
 }
 

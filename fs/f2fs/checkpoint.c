@@ -130,6 +130,28 @@ struct page *f2fs_get_tmp_page(struct f2fs_sb_info *sbi, pgoff_t index)
 	return __get_meta_page(sbi, index, false);
 }
 
+static bool __is_bitmap_valid(struct f2fs_sb_info *sbi, block_t blkaddr)
+{
+	struct seg_entry *se;
+	unsigned int segno, offset;
+	bool exist;
+
+	segno = GET_SEGNO(sbi, blkaddr);
+	offset = GET_BLKOFF_FROM_SEG0(sbi, blkaddr);
+	se = get_seg_entry(sbi, segno);
+
+	exist = f2fs_test_bit(offset, se->cur_valid_map);
+
+	if (!exist) {
+		f2fs_msg(sbi->sb, KERN_ERR, "Inconsistent error "
+			"blkaddr:%u, sit bitmap:%d", blkaddr, exist);
+		set_sbi_flag(sbi, SBI_NEED_FSCK);
+		WARN_ON(1);
+		return false;
+	}
+	return true;
+}
+
 bool f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
 					block_t blkaddr, int type)
 {
@@ -152,14 +174,22 @@ bool f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
 		break;
 	case META_POR:
 	case DATA_GENERIC:
+	case DATA_GENERIC_ENHANCE:
 		if (unlikely(blkaddr >= MAX_BLKADDR(sbi) ||
 			blkaddr < MAIN_BLKADDR(sbi))) {
-			if (type == DATA_GENERIC) {
+			if (type == DATA_GENERIC ||
+				type == DATA_GENERIC_ENHANCE) {
 				f2fs_msg(sbi->sb, KERN_WARNING,
 					"access invalid blkaddr:%u", blkaddr);
+				set_sbi_flag(sbi, SBI_NEED_FSCK);
 				WARN_ON(1);
 			}
 			return false;
+		} else {
+			if (type == DATA_GENERIC_ENHANCE) {
+				if (!__is_bitmap_valid(sbi, blkaddr))
+					return false;
+			}
 		}
 		break;
 	case META_GENERIC:
