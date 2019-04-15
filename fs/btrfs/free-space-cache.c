@@ -185,20 +185,19 @@ static int __create_free_space_inode(struct btrfs_root *root,
 	return 0;
 }
 
-int create_free_space_inode(struct btrfs_fs_info *fs_info,
-			    struct btrfs_trans_handle *trans,
+int create_free_space_inode(struct btrfs_trans_handle *trans,
 			    struct btrfs_block_group_cache *block_group,
 			    struct btrfs_path *path)
 {
 	int ret;
 	u64 ino;
 
-	ret = btrfs_find_free_objectid(fs_info->tree_root, &ino);
+	ret = btrfs_find_free_objectid(trans->fs_info->tree_root, &ino);
 	if (ret < 0)
 		return ret;
 
-	return __create_free_space_inode(fs_info->tree_root, trans, path, ino,
-					 block_group->key.objectid);
+	return __create_free_space_inode(trans->fs_info->tree_root, trans, path,
+					 ino, block_group->key.objectid);
 }
 
 int btrfs_check_trunc_cache_free_space(struct btrfs_fs_info *fs_info,
@@ -1370,11 +1369,11 @@ out_unlock:
 	goto out;
 }
 
-int btrfs_write_out_cache(struct btrfs_fs_info *fs_info,
-			  struct btrfs_trans_handle *trans,
+int btrfs_write_out_cache(struct btrfs_trans_handle *trans,
 			  struct btrfs_block_group_cache *block_group,
 			  struct btrfs_path *path)
 {
+	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_free_space_ctl *ctl = block_group->free_space_ctl;
 	struct inode *inode;
 	int ret = 0;
@@ -3366,10 +3365,6 @@ void btrfs_put_block_group_trimming(struct btrfs_block_group_cache *block_group)
 		em = lookup_extent_mapping(em_tree, block_group->key.objectid,
 					   1);
 		BUG_ON(!em); /* logic error, can't happen */
-		/*
-		 * remove_extent_mapping() will delete us from the pinned_chunks
-		 * list, which is protected by the chunk mutex.
-		 */
 		remove_extent_mapping(em_tree, em);
 		write_unlock(&em_tree->lock);
 		mutex_unlock(&fs_info->chunk_mutex);

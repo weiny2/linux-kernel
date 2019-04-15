@@ -27,6 +27,7 @@
 #include "math.h"
 #include "dev-replace.h"
 #include "sysfs.h"
+#include "tree-checker.h"
 
 const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES] = {
 	[BTRFS_RAID_RAID10] = {
@@ -184,8 +185,7 @@ void btrfs_describe_block_groups(u64 bg_flags, char *buf, u32 size_buf)
 out_overflow:;
 }
 
-static int init_first_rw_device(struct btrfs_trans_handle *trans,
-				struct btrfs_fs_info *fs_info);
+static int init_first_rw_device(struct btrfs_trans_handle *trans);
 static int btrfs_relocate_sys_chunks(struct btrfs_fs_info *fs_info);
 static void __btrfs_reset_dev_stats(struct btrfs_device *dev);
 static void btrfs_dev_stat_print_on_error(struct btrfs_device *dev);
@@ -318,7 +318,6 @@ static struct btrfs_fs_devices *alloc_fs_devices(const u8 *fsid,
 	mutex_init(&fs_devs->device_list_mutex);
 
 	INIT_LIST_HEAD(&fs_devs->devices);
-	INIT_LIST_HEAD(&fs_devs->resized_devices);
 	INIT_LIST_HEAD(&fs_devs->alloc_list);
 	INIT_LIST_HEAD(&fs_devs->fs_list);
 	if (fsid)
@@ -334,7 +333,9 @@ static struct btrfs_fs_devices *alloc_fs_devices(const u8 *fsid,
 
 void btrfs_free_device(struct btrfs_device *device)
 {
+	WARN_ON(!list_empty(&device->post_commit_list));
 	rcu_string_free(device->name);
+	extent_io_tree_release(&device->alloc_state);
 	bio_put(device->flush_bio);
 	kfree(device);
 }
@@ -402,7 +403,7 @@ static struct btrfs_device *__alloc_device(void)
 
 	INIT_LIST_HEAD(&dev->dev_list);
 	INIT_LIST_HEAD(&dev->dev_alloc_list);
-	INIT_LIST_HEAD(&dev->resized_list);
+	INIT_LIST_HEAD(&dev->post_commit_list);
 
 	spin_lock_init(&dev->io_lock);
 
@@ -411,29 +412,9 @@ static struct btrfs_device *__alloc_device(void)
 	btrfs_device_data_ordered_init(dev);
 	INIT_RADIX_TREE(&dev->reada_zones, GFP_NOFS & ~__GFP_DIRECT_RECLAIM);
 	INIT_RADIX_TREE(&dev->reada_extents, GFP_NOFS & ~__GFP_DIRECT_RECLAIM);
+	extent_io_tree_init(NULL, &dev->alloc_state, 0, NULL);
 
 	return dev;
-}
-
-/*
- * Find a device specified by @devid or @uuid in the list of @fs_devices, or
- * return NULL.
- *
- * If devid and uuid are both specified, the match must be exact, otherwise
- * only devid is used.
- */
-static struct btrfs_device *find_device(struct btrfs_fs_devices *fs_devices,
-		u64 devid, const u8 *uuid)
-{
-	struct btrfs_device *dev;
-
-	list_for_each_entry(dev, &fs_devices->devices, dev_list) {
-		if (dev->devid == devid &&
-		    (!uuid || !memcmp(dev->uuid, uuid, BTRFS_UUID_SIZE))) {
-			return dev;
-		}
-	}
-	return NULL;
 }
 
 static noinline struct btrfs_fs_devices *find_fsid(
@@ -734,6 +715,17 @@ static void pending_bios_fn(struct btrfs_work *work)
 	run_scheduled_bios(device);
 }
 
+static bool device_path_matched(const char *path, struct btrfs_device *device)
+{
+	int found;
+
+	rcu_read_lock();
+	found = strcmp(rcu_str_deref(device->name), path);
+	rcu_read_unlock();
+
+	return found == 0;
+}
+
 /*
  *  Search and remove all stale (devices which are not mounted) devices.
  *  When both inputs are NULL, it will search and release all stale devices.
@@ -741,52 +733,57 @@ static void pending_bios_fn(struct btrfs_work *work)
  *		matching this path only.
  *  skip_dev:	Optional. Will skip this device when searching for the stale
  *		devices.
+ *  Return:	0 for success or if @path is NULL.
+ * 		-EBUSY if @path is a mounted device.
+ * 		-ENOENT if @path does not match any device in the list.
  */
-static void btrfs_free_stale_devices(const char *path,
+static int btrfs_free_stale_devices(const char *path,
 				     struct btrfs_device *skip_device)
 {
 	struct btrfs_fs_devices *fs_devices, *tmp_fs_devices;
 	struct btrfs_device *device, *tmp_device;
+	int ret = 0;
+
+	if (path)
+		ret = -ENOENT;
 
 	list_for_each_entry_safe(fs_devices, tmp_fs_devices, &fs_uuids, fs_list) {
-		mutex_lock(&fs_devices->device_list_mutex);
-		if (fs_devices->opened) {
-			mutex_unlock(&fs_devices->device_list_mutex);
-			continue;
-		}
 
+		mutex_lock(&fs_devices->device_list_mutex);
 		list_for_each_entry_safe(device, tmp_device,
 					 &fs_devices->devices, dev_list) {
-			int not_found = 0;
-
 			if (skip_device && skip_device == device)
 				continue;
 			if (path && !device->name)
 				continue;
-
-			rcu_read_lock();
-			if (path)
-				not_found = strcmp(rcu_str_deref(device->name),
-						   path);
-			rcu_read_unlock();
-			if (not_found)
+			if (path && !device_path_matched(path, device))
 				continue;
+			if (fs_devices->opened) {
+				/* for an already deleted device return 0 */
+				if (path && ret != 0)
+					ret = -EBUSY;
+				break;
+			}
 
 			/* delete the stale device */
 			fs_devices->num_devices--;
 			list_del(&device->dev_list);
 			btrfs_free_device(device);
 
+			ret = 0;
 			if (fs_devices->num_devices == 0)
 				break;
 		}
 		mutex_unlock(&fs_devices->device_list_mutex);
+
 		if (fs_devices->num_devices == 0) {
 			btrfs_sysfs_remove_fsid(fs_devices);
 			list_del(&fs_devices->fs_list);
 			free_fs_devices(fs_devices);
 		}
 	}
+
+	return ret;
 }
 
 static int btrfs_open_one_device(struct btrfs_fs_devices *fs_devices,
@@ -968,8 +965,8 @@ static noinline struct btrfs_device *device_list_add(const char *path,
 		device = NULL;
 	} else {
 		mutex_lock(&fs_devices->device_list_mutex);
-		device = find_device(fs_devices, devid,
-				disk_super->dev_item.uuid);
+		device = btrfs_find_device(fs_devices, devid,
+				disk_super->dev_item.uuid, NULL, false);
 
 		/*
 		 * If this disk has been pulled into an fs devices created by
@@ -1134,7 +1131,6 @@ static struct btrfs_fs_devices *clone_fs_devices(struct btrfs_fs_devices *orig)
 	mutex_lock(&orig->device_list_mutex);
 	fs_devices->total_devices = orig->total_devices;
 
-	/* We have held the volume lock, it is safe to get the devices. */
 	list_for_each_entry(orig_dev, &orig->devices, dev_list) {
 		struct rcu_string *name;
 
@@ -1236,14 +1232,6 @@ again:
 	mutex_unlock(&uuid_mutex);
 }
 
-static void free_device_rcu(struct rcu_head *head)
-{
-	struct btrfs_device *device;
-
-	device = container_of(head, struct btrfs_device, rcu);
-	btrfs_free_device(device);
-}
-
 static void btrfs_close_bdev(struct btrfs_device *device)
 {
 	if (!device->bdev)
@@ -1291,7 +1279,8 @@ static void btrfs_close_one_device(struct btrfs_device *device)
 	list_replace_rcu(&device->dev_list, &new_device->dev_list);
 	new_device->fs_devices = device->fs_devices;
 
-	call_rcu(&device->rcu, free_device_rcu);
+	synchronize_rcu();
+	btrfs_free_device(device);
 }
 
 static int close_fs_devices(struct btrfs_fs_devices *fs_devices)
@@ -1451,6 +1440,17 @@ static int btrfs_read_disk_super(struct block_device *bdev, u64 bytenr,
 	return 0;
 }
 
+int btrfs_forget_devices(const char *path)
+{
+	int ret;
+
+	mutex_lock(&uuid_mutex);
+	ret = btrfs_free_stale_devices(strlen(path) ? path : NULL, NULL);
+	mutex_unlock(&uuid_mutex);
+
+	return ret;
+}
+
 /*
  * Look for a btrfs signature on a device. This may be called out of the mount path
  * and we are not allowed to call set_blocksize during the scan. The superblock
@@ -1500,58 +1500,29 @@ error_bdev_put:
 	return device;
 }
 
-static int contains_pending_extent(struct btrfs_transaction *transaction,
-				   struct btrfs_device *device,
-				   u64 *start, u64 len)
+/*
+ * Try to find a chunk that intersects [start, start + len] range and when one
+ * such is found, record the end of it in *start
+ */
+static bool contains_pending_extent(struct btrfs_device *device, u64 *start,
+				    u64 len)
 {
-	struct btrfs_fs_info *fs_info = device->fs_info;
-	struct extent_map *em;
-	struct list_head *search_list = &fs_info->pinned_chunks;
-	int ret = 0;
-	u64 physical_start = *start;
+	u64 physical_start, physical_end;
 
-	if (transaction)
-		search_list = &transaction->pending_chunks;
-again:
-	list_for_each_entry(em, search_list, list) {
-		struct map_lookup *map;
-		int i;
+	lockdep_assert_held(&device->fs_info->chunk_mutex);
 
-		map = em->map_lookup;
-		for (i = 0; i < map->num_stripes; i++) {
-			u64 end;
+	if (!find_first_extent_bit(&device->alloc_state, *start,
+				   &physical_start, &physical_end,
+				   CHUNK_ALLOCATED, NULL)) {
 
-			if (map->stripes[i].dev != device)
-				continue;
-			if (map->stripes[i].physical >= physical_start + len ||
-			    map->stripes[i].physical + em->orig_block_len <=
-			    physical_start)
-				continue;
-			/*
-			 * Make sure that while processing the pinned list we do
-			 * not override our *start with a lower value, because
-			 * we can have pinned chunks that fall within this
-			 * device hole and that have lower physical addresses
-			 * than the pending chunks we processed before. If we
-			 * do not take this special care we can end up getting
-			 * 2 pending chunks that start at the same physical
-			 * device offsets because the end offset of a pinned
-			 * chunk can be equal to the start offset of some
-			 * pending chunk.
-			 */
-			end = map->stripes[i].physical + em->orig_block_len;
-			if (end > *start) {
-				*start = end;
-				ret = 1;
-			}
+		if (in_range(physical_start, *start, len) ||
+		    in_range(*start, physical_start,
+			     physical_end - physical_start)) {
+			*start = physical_end + 1;
+			return true;
 		}
 	}
-	if (search_list != &fs_info->pinned_chunks) {
-		search_list = &fs_info->pinned_chunks;
-		goto again;
-	}
-
-	return ret;
+	return false;
 }
 
 
@@ -1576,8 +1547,7 @@ again:
  * But if we don't find suitable free space, it is used to store the size of
  * the max free space.
  */
-int find_free_dev_extent_start(struct btrfs_transaction *transaction,
-			       struct btrfs_device *device, u64 num_bytes,
+int find_free_dev_extent_start(struct btrfs_device *device, u64 num_bytes,
 			       u64 search_start, u64 *start, u64 *len)
 {
 	struct btrfs_fs_info *fs_info = device->fs_info;
@@ -1662,15 +1632,12 @@ again:
 			 * Have to check before we set max_hole_start, otherwise
 			 * we could end up sending back this offset anyway.
 			 */
-			if (contains_pending_extent(transaction, device,
-						    &search_start,
+			if (contains_pending_extent(device, &search_start,
 						    hole_size)) {
-				if (key.offset >= search_start) {
+				if (key.offset >= search_start)
 					hole_size = key.offset - search_start;
-				} else {
-					WARN_ON_ONCE(1);
+				else
 					hole_size = 0;
-				}
 			}
 
 			if (hole_size > max_hole_size) {
@@ -1711,8 +1678,7 @@ next:
 	if (search_end > search_start) {
 		hole_size = search_end - search_start;
 
-		if (contains_pending_extent(transaction, device, &search_start,
-					    hole_size)) {
+		if (contains_pending_extent(device, &search_start, hole_size)) {
 			btrfs_release_path(path);
 			goto again;
 		}
@@ -1737,13 +1703,11 @@ out:
 	return ret;
 }
 
-int find_free_dev_extent(struct btrfs_trans_handle *trans,
-			 struct btrfs_device *device, u64 num_bytes,
+int find_free_dev_extent(struct btrfs_device *device, u64 num_bytes,
 			 u64 *start, u64 *len)
 {
 	/* FIXME use last free of some kind */
-	return find_free_dev_extent_start(trans->transaction, device,
-					  num_bytes, 0, start, len);
+	return find_free_dev_extent_start(device, num_bytes, 0, start, len);
 }
 
 static int btrfs_free_dev_extent(struct btrfs_trans_handle *trans,
@@ -2237,7 +2201,8 @@ int btrfs_rm_device(struct btrfs_fs_info *fs_info, const char *device_path,
 		btrfs_scratch_superblocks(device->bdev, device->name->str);
 
 	btrfs_close_bdev(device);
-	call_rcu(&device->rcu, free_device_rcu);
+	synchronize_rcu();
+	btrfs_free_device(device);
 
 	if (cur_devices->open_devices == 0) {
 		while (fs_devices) {
@@ -2305,7 +2270,8 @@ void btrfs_rm_dev_replace_free_srcdev(struct btrfs_fs_info *fs_info,
 	}
 
 	btrfs_close_bdev(srcdev);
-	call_rcu(&srcdev->rcu, free_device_rcu);
+	synchronize_rcu();
+	btrfs_free_device(srcdev);
 
 	/* if this is no devs we rather delete the fs_devices */
 	if (!fs_devices->num_devices) {
@@ -2363,7 +2329,8 @@ void btrfs_destroy_dev_replace_tgtdev(struct btrfs_device *tgtdev)
 	btrfs_scratch_superblocks(tgtdev->bdev, tgtdev->name->str);
 
 	btrfs_close_bdev(tgtdev);
-	call_rcu(&tgtdev->rcu, free_device_rcu);
+	synchronize_rcu();
+	btrfs_free_device(tgtdev);
 }
 
 static struct btrfs_device *btrfs_find_device_by_path(
@@ -2385,11 +2352,11 @@ static struct btrfs_device *btrfs_find_device_by_path(
 	devid = btrfs_stack_device_id(&disk_super->dev_item);
 	dev_uuid = disk_super->dev_item.uuid;
 	if (btrfs_fs_incompat(fs_info, METADATA_UUID))
-		device = btrfs_find_device(fs_info, devid, dev_uuid,
-				disk_super->metadata_uuid);
+		device = btrfs_find_device(fs_info->fs_devices, devid, dev_uuid,
+					   disk_super->metadata_uuid, true);
 	else
-		device = btrfs_find_device(fs_info, devid,
-				dev_uuid, disk_super->fsid);
+		device = btrfs_find_device(fs_info->fs_devices, devid, dev_uuid,
+					   disk_super->fsid, true);
 
 	brelse(bh);
 	if (!device)
@@ -2398,50 +2365,38 @@ static struct btrfs_device *btrfs_find_device_by_path(
 	return device;
 }
 
-static struct btrfs_device *btrfs_find_device_missing_or_by_path(
-		struct btrfs_fs_info *fs_info, const char *device_path)
-{
-	struct btrfs_device *device = NULL;
-	if (strcmp(device_path, "missing") == 0) {
-		struct list_head *devices;
-		struct btrfs_device *tmp;
-
-		devices = &fs_info->fs_devices->devices;
-		list_for_each_entry(tmp, devices, dev_list) {
-			if (test_bit(BTRFS_DEV_STATE_IN_FS_METADATA,
-					&tmp->dev_state) && !tmp->bdev) {
-				device = tmp;
-				break;
-			}
-		}
-
-		if (!device)
-			return ERR_PTR(-ENOENT);
-	} else {
-		device = btrfs_find_device_by_path(fs_info, device_path);
-	}
-
-	return device;
-}
-
 /*
  * Lookup a device given by device id, or the path if the id is 0.
  */
 struct btrfs_device *btrfs_find_device_by_devspec(
-		struct btrfs_fs_info *fs_info, u64 devid, const char *devpath)
+		struct btrfs_fs_info *fs_info, u64 devid,
+		const char *device_path)
 {
 	struct btrfs_device *device;
 
 	if (devid) {
-		device = btrfs_find_device(fs_info, devid, NULL, NULL);
+		device = btrfs_find_device(fs_info->fs_devices, devid, NULL,
+					   NULL, true);
 		if (!device)
 			return ERR_PTR(-ENOENT);
-	} else {
-		if (!devpath || !devpath[0])
-			return ERR_PTR(-EINVAL);
-		device = btrfs_find_device_missing_or_by_path(fs_info, devpath);
+		return device;
 	}
-	return device;
+
+	if (!device_path || !device_path[0])
+		return ERR_PTR(-EINVAL);
+
+	if (strcmp(device_path, "missing") == 0) {
+		/* Find first missing device */
+		list_for_each_entry(device, &fs_info->fs_devices->devices,
+				    dev_list) {
+			if (test_bit(BTRFS_DEV_STATE_IN_FS_METADATA,
+				     &device->dev_state) && !device->bdev)
+				return device;
+		}
+		return ERR_PTR(-ENOENT);
+	}
+
+	return btrfs_find_device_by_path(fs_info, device_path);
 }
 
 /*
@@ -2510,9 +2465,9 @@ static int btrfs_prepare_sprout(struct btrfs_fs_info *fs_info)
 /*
  * Store the expected generation for seed devices in device items.
  */
-static int btrfs_finish_sprout(struct btrfs_trans_handle *trans,
-			       struct btrfs_fs_info *fs_info)
+static int btrfs_finish_sprout(struct btrfs_trans_handle *trans)
 {
+	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_root *root = fs_info->chunk_root;
 	struct btrfs_path *path;
 	struct extent_buffer *leaf;
@@ -2563,7 +2518,8 @@ next_slot:
 				   BTRFS_UUID_SIZE);
 		read_extent_buffer(leaf, fs_uuid, btrfs_device_fsid(dev_item),
 				   BTRFS_FSID_SIZE);
-		device = btrfs_find_device(fs_info, devid, dev_uuid, fs_uuid);
+		device = btrfs_find_device(fs_info->fs_devices, devid, dev_uuid,
+					   fs_uuid, true);
 		BUG_ON(!device); /* Logic error */
 
 		if (device->fs_devices->seeding) {
@@ -2711,7 +2667,7 @@ int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path
 
 	if (seeding_dev) {
 		mutex_lock(&fs_info->chunk_mutex);
-		ret = init_first_rw_device(trans, fs_info);
+		ret = init_first_rw_device(trans);
 		mutex_unlock(&fs_info->chunk_mutex);
 		if (ret) {
 			btrfs_abort_transaction(trans, ret);
@@ -2728,7 +2684,7 @@ int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path
 	if (seeding_dev) {
 		char fsid_buf[BTRFS_UUID_UNPARSED_SIZE];
 
-		ret = btrfs_finish_sprout(trans, fs_info);
+		ret = btrfs_finish_sprout(trans);
 		if (ret) {
 			btrfs_abort_transaction(trans, ret);
 			goto error_sysfs;
@@ -2886,9 +2842,9 @@ int btrfs_grow_device(struct btrfs_trans_handle *trans,
 	btrfs_device_set_total_bytes(device, new_size);
 	btrfs_device_set_disk_total_bytes(device, new_size);
 	btrfs_clear_space_info_full(device->fs_info);
-	if (list_empty(&device->resized_list))
-		list_add_tail(&device->resized_list,
-			      &fs_devices->resized_devices);
+	if (list_empty(&device->post_commit_list))
+		list_add_tail(&device->post_commit_list,
+			      &trans->transaction->dev_update_list);
 	mutex_unlock(&fs_info->chunk_mutex);
 
 	return btrfs_update_device(trans, device);
@@ -3607,10 +3563,10 @@ static int chunk_soft_convert_filter(u64 chunk_type,
 	return 0;
 }
 
-static int should_balance_chunk(struct btrfs_fs_info *fs_info,
-				struct extent_buffer *leaf,
+static int should_balance_chunk(struct extent_buffer *leaf,
 				struct btrfs_chunk *chunk, u64 chunk_offset)
 {
+	struct btrfs_fs_info *fs_info = leaf->fs_info;
 	struct btrfs_balance_control *bctl = fs_info->balance_ctl;
 	struct btrfs_balance_args *bargs = NULL;
 	u64 chunk_type = btrfs_chunk_type(leaf, chunk);
@@ -3790,8 +3746,7 @@ again:
 			spin_unlock(&fs_info->balance_lock);
 		}
 
-		ret = should_balance_chunk(fs_info, leaf, chunk,
-					   found_key.offset);
+		ret = should_balance_chunk(leaf, chunk, found_key.offset);
 
 		btrfs_release_path(path);
 		if (!ret) {
@@ -4667,8 +4622,7 @@ int btrfs_create_uuid_tree(struct btrfs_fs_info *fs_info)
 	if (IS_ERR(trans))
 		return PTR_ERR(trans);
 
-	uuid_root = btrfs_create_tree(trans, fs_info,
-				      BTRFS_UUID_TREE_OBJECTID);
+	uuid_root = btrfs_create_tree(trans, BTRFS_UUID_TREE_OBJECTID);
 	if (IS_ERR(uuid_root)) {
 		ret = PTR_ERR(uuid_root);
 		btrfs_abort_transaction(trans, ret);
@@ -4728,15 +4682,16 @@ int btrfs_shrink_device(struct btrfs_device *device, u64 new_size)
 	int slot;
 	int failed = 0;
 	bool retried = false;
-	bool checked_pending_chunks = false;
 	struct extent_buffer *l;
 	struct btrfs_key key;
 	struct btrfs_super_block *super_copy = fs_info->super_copy;
 	u64 old_total = btrfs_super_total_bytes(super_copy);
 	u64 old_size = btrfs_device_get_total_bytes(device);
 	u64 diff;
+	u64 start;
 
 	new_size = round_down(new_size, fs_info->sectorsize);
+	start = new_size;
 	diff = round_down(old_size - new_size, fs_info->sectorsize);
 
 	if (test_bit(BTRFS_DEV_STATE_REPLACE_TGT, &device->dev_state))
@@ -4748,6 +4703,12 @@ int btrfs_shrink_device(struct btrfs_device *device, u64 new_size)
 
 	path->reada = READA_BACK;
 
+	trans = btrfs_start_transaction(root, 0);
+	if (IS_ERR(trans)) {
+		btrfs_free_path(path);
+		return PTR_ERR(trans);
+	}
+
 	mutex_lock(&fs_info->chunk_mutex);
 
 	btrfs_device_set_total_bytes(device, new_size);
@@ -4755,7 +4716,21 @@ int btrfs_shrink_device(struct btrfs_device *device, u64 new_size)
 		device->fs_devices->total_rw_bytes -= diff;
 		atomic64_sub(diff, &fs_info->free_chunk_space);
 	}
-	mutex_unlock(&fs_info->chunk_mutex);
+
+	/*
+	 * Once the device's size has been set to the new size, ensure all
+	 * in-memory chunks are synced to disk so that the loop below sees them
+	 * and relocates them accordingly.
+	 */
+	if (contains_pending_extent(device, &start, diff)) {
+		mutex_unlock(&fs_info->chunk_mutex);
+		ret = btrfs_commit_transaction(trans);
+		if (ret)
+			goto done;
+	} else {
+		mutex_unlock(&fs_info->chunk_mutex);
+		btrfs_end_transaction(trans);
+	}
 
 again:
 	key.objectid = device->devid;
@@ -4846,40 +4821,10 @@ again:
 	}
 
 	mutex_lock(&fs_info->chunk_mutex);
-
-	/*
-	 * We checked in the above loop all device extents that were already in
-	 * the device tree. However before we have updated the device's
-	 * total_bytes to the new size, we might have had chunk allocations that
-	 * have not complete yet (new block groups attached to transaction
-	 * handles), and therefore their device extents were not yet in the
-	 * device tree and we missed them in the loop above. So if we have any
-	 * pending chunk using a device extent that overlaps the device range
-	 * that we can not use anymore, commit the current transaction and
-	 * repeat the search on the device tree - this way we guarantee we will
-	 * not have chunks using device extents that end beyond 'new_size'.
-	 */
-	if (!checked_pending_chunks) {
-		u64 start = new_size;
-		u64 len = old_size - new_size;
-
-		if (contains_pending_extent(trans->transaction, device,
-					    &start, len)) {
-			mutex_unlock(&fs_info->chunk_mutex);
-			checked_pending_chunks = true;
-			failed = 0;
-			retried = false;
-			ret = btrfs_commit_transaction(trans);
-			if (ret)
-				goto done;
-			goto again;
-		}
-	}
-
 	btrfs_device_set_disk_total_bytes(device, new_size);
-	if (list_empty(&device->resized_list))
-		list_add_tail(&device->resized_list,
-			      &fs_info->fs_devices->resized_devices);
+	if (list_empty(&device->post_commit_list))
+		list_add_tail(&device->post_commit_list,
+			      &trans->transaction->dev_update_list);
 
 	WARN_ON(diff > old_total);
 	btrfs_set_super_total_bytes(super_copy,
@@ -4963,15 +4908,6 @@ static void check_raid56_incompat_flag(struct btrfs_fs_info *info, u64 type)
 	btrfs_set_fs_incompat(info, RAID56);
 }
 
-#define BTRFS_MAX_DEVS(info) ((BTRFS_MAX_ITEM_SIZE(info)	\
-			- sizeof(struct btrfs_chunk))		\
-			/ sizeof(struct btrfs_stripe) + 1)
-
-#define BTRFS_MAX_DEVS_SYS_CHUNK ((BTRFS_SYSTEM_CHUNK_ARRAY_SIZE	\
-				- 2 * sizeof(struct btrfs_disk_key)	\
-				- 2 * sizeof(struct btrfs_chunk))	\
-				/ sizeof(struct btrfs_stripe) + 1)
-
 static int __btrfs_alloc_chunk(struct btrfs_trans_handle *trans,
 			       u64 start, u64 type)
 {
@@ -5044,7 +4980,7 @@ static int __btrfs_alloc_chunk(struct btrfs_trans_handle *trans,
 	} else {
 		btrfs_err(info, "invalid chunk type 0x%llx requested",
 		       type);
-		BUG_ON(1);
+		BUG();
 	}
 
 	/* We don't want a chunk larger than 10% of writable space */
@@ -5085,7 +5021,7 @@ static int __btrfs_alloc_chunk(struct btrfs_trans_handle *trans,
 		if (total_avail == 0)
 			continue;
 
-		ret = find_free_dev_extent(trans, device,
+		ret = find_free_dev_extent(device,
 					   max_stripe_size * dev_stripes,
 					   &dev_offset, &max_avail);
 		if (ret && ret != -ENOSPC)
@@ -5219,18 +5155,20 @@ static int __btrfs_alloc_chunk(struct btrfs_trans_handle *trans,
 		free_extent_map(em);
 		goto error;
 	}
-
-	list_add_tail(&em->list, &trans->transaction->pending_chunks);
-	refcount_inc(&em->refs);
 	write_unlock(&em_tree->lock);
 
 	ret = btrfs_make_block_group(trans, 0, type, start, chunk_size);
 	if (ret)
 		goto error_del_extent;
 
-	for (i = 0; i < map->num_stripes; i++)
-		btrfs_device_set_bytes_used(map->stripes[i].dev,
-				map->stripes[i].dev->bytes_used + stripe_size);
+	for (i = 0; i < map->num_stripes; i++) {
+		struct btrfs_device *dev = map->stripes[i].dev;
+
+		btrfs_device_set_bytes_used(dev, dev->bytes_used + stripe_size);
+		if (list_empty(&dev->post_commit_list))
+			list_add_tail(&dev->post_commit_list,
+				      &trans->transaction->dev_update_list);
+	}
 
 	atomic64_sub(stripe_size * map->num_stripes, &info->free_chunk_space);
 
@@ -5248,8 +5186,6 @@ error_del_extent:
 	/* One for our allocation */
 	free_extent_map(em);
 	/* One for the tree reference */
-	free_extent_map(em);
-	/* One for the pending_chunks list reference */
 	free_extent_map(em);
 error:
 	kfree(devices_info);
@@ -5370,9 +5306,9 @@ int btrfs_alloc_chunk(struct btrfs_trans_handle *trans, u64 type)
 	return __btrfs_alloc_chunk(trans, chunk_offset, type);
 }
 
-static noinline int init_first_rw_device(struct btrfs_trans_handle *trans,
-					 struct btrfs_fs_info *fs_info)
+static noinline int init_first_rw_device(struct btrfs_trans_handle *trans)
 {
+	struct btrfs_fs_info *fs_info = trans->fs_info;
 	u64 chunk_offset;
 	u64 sys_chunk_offset;
 	u64 alloc_profile;
@@ -6413,7 +6349,7 @@ static void btrfs_end_bio(struct bio *bio)
 				if (bio_op(bio) == REQ_OP_WRITE)
 					btrfs_dev_stat_inc_and_print(dev,
 						BTRFS_DEV_STAT_WRITE_ERRS);
-				else
+				else if (!(bio->bi_opf & REQ_RAHEAD))
 					btrfs_dev_stat_inc_and_print(dev,
 						BTRFS_DEV_STAT_READ_ERRS);
 				if (bio->bi_opf & REQ_PREFLUSH)
@@ -6616,21 +6552,36 @@ blk_status_t btrfs_map_bio(struct btrfs_fs_info *fs_info, struct bio *bio,
 	return BLK_STS_OK;
 }
 
-struct btrfs_device *btrfs_find_device(struct btrfs_fs_info *fs_info, u64 devid,
-				       u8 *uuid, u8 *fsid)
+/*
+ * Find a device specified by @devid or @uuid in the list of @fs_devices, or
+ * return NULL.
+ *
+ * If devid and uuid are both specified, the match must be exact, otherwise
+ * only devid is used.
+ *
+ * If @seed is true, traverse through the seed devices.
+ */
+struct btrfs_device *btrfs_find_device(struct btrfs_fs_devices *fs_devices,
+				       u64 devid, u8 *uuid, u8 *fsid,
+				       bool seed)
 {
 	struct btrfs_device *device;
-	struct btrfs_fs_devices *cur_devices;
 
-	cur_devices = fs_info->fs_devices;
-	while (cur_devices) {
+	while (fs_devices) {
 		if (!fsid ||
-		    !memcmp(cur_devices->metadata_uuid, fsid, BTRFS_FSID_SIZE)) {
-			device = find_device(cur_devices, devid, uuid);
-			if (device)
-				return device;
+		    !memcmp(fs_devices->metadata_uuid, fsid, BTRFS_FSID_SIZE)) {
+			list_for_each_entry(device, &fs_devices->devices,
+					    dev_list) {
+				if (device->devid == devid &&
+				    (!uuid || memcmp(device->uuid, uuid,
+						     BTRFS_UUID_SIZE) == 0))
+					return device;
+			}
 		}
-		cur_devices = cur_devices->seed;
+		if (seed)
+			fs_devices = fs_devices->seed;
+		else
+			return NULL;
 	}
 	return NULL;
 }
@@ -6705,99 +6656,6 @@ struct btrfs_device *btrfs_alloc_device(struct btrfs_fs_info *fs_info,
 	return dev;
 }
 
-/* Return -EIO if any error, otherwise return 0. */
-static int btrfs_check_chunk_valid(struct btrfs_fs_info *fs_info,
-				   struct extent_buffer *leaf,
-				   struct btrfs_chunk *chunk, u64 logical)
-{
-	u64 length;
-	u64 stripe_len;
-	u16 num_stripes;
-	u16 sub_stripes;
-	u64 type;
-	u64 features;
-	bool mixed = false;
-
-	length = btrfs_chunk_length(leaf, chunk);
-	stripe_len = btrfs_chunk_stripe_len(leaf, chunk);
-	num_stripes = btrfs_chunk_num_stripes(leaf, chunk);
-	sub_stripes = btrfs_chunk_sub_stripes(leaf, chunk);
-	type = btrfs_chunk_type(leaf, chunk);
-
-	if (!num_stripes) {
-		btrfs_err(fs_info, "invalid chunk num_stripes: %u",
-			  num_stripes);
-		return -EIO;
-	}
-	if (!IS_ALIGNED(logical, fs_info->sectorsize)) {
-		btrfs_err(fs_info, "invalid chunk logical %llu", logical);
-		return -EIO;
-	}
-	if (btrfs_chunk_sector_size(leaf, chunk) != fs_info->sectorsize) {
-		btrfs_err(fs_info, "invalid chunk sectorsize %u",
-			  btrfs_chunk_sector_size(leaf, chunk));
-		return -EIO;
-	}
-	if (!length || !IS_ALIGNED(length, fs_info->sectorsize)) {
-		btrfs_err(fs_info, "invalid chunk length %llu", length);
-		return -EIO;
-	}
-	if (!is_power_of_2(stripe_len) || stripe_len != BTRFS_STRIPE_LEN) {
-		btrfs_err(fs_info, "invalid chunk stripe length: %llu",
-			  stripe_len);
-		return -EIO;
-	}
-	if (~(BTRFS_BLOCK_GROUP_TYPE_MASK | BTRFS_BLOCK_GROUP_PROFILE_MASK) &
-	    type) {
-		btrfs_err(fs_info, "unrecognized chunk type: %llu",
-			  ~(BTRFS_BLOCK_GROUP_TYPE_MASK |
-			    BTRFS_BLOCK_GROUP_PROFILE_MASK) &
-			  btrfs_chunk_type(leaf, chunk));
-		return -EIO;
-	}
-
-	if ((type & BTRFS_BLOCK_GROUP_TYPE_MASK) == 0) {
-		btrfs_err(fs_info, "missing chunk type flag: 0x%llx", type);
-		return -EIO;
-	}
-
-	if ((type & BTRFS_BLOCK_GROUP_SYSTEM) &&
-	    (type & (BTRFS_BLOCK_GROUP_METADATA | BTRFS_BLOCK_GROUP_DATA))) {
-		btrfs_err(fs_info,
-			"system chunk with data or metadata type: 0x%llx", type);
-		return -EIO;
-	}
-
-	features = btrfs_super_incompat_flags(fs_info->super_copy);
-	if (features & BTRFS_FEATURE_INCOMPAT_MIXED_GROUPS)
-		mixed = true;
-
-	if (!mixed) {
-		if ((type & BTRFS_BLOCK_GROUP_METADATA) &&
-		    (type & BTRFS_BLOCK_GROUP_DATA)) {
-			btrfs_err(fs_info,
-			"mixed chunk type in non-mixed mode: 0x%llx", type);
-			return -EIO;
-		}
-	}
-
-	if ((type & BTRFS_BLOCK_GROUP_RAID10 && sub_stripes != 2) ||
-	    (type & BTRFS_BLOCK_GROUP_RAID1 && num_stripes < 1) ||
-	    (type & BTRFS_BLOCK_GROUP_RAID5 && num_stripes < 2) ||
-	    (type & BTRFS_BLOCK_GROUP_RAID6 && num_stripes < 3) ||
-	    (type & BTRFS_BLOCK_GROUP_DUP && num_stripes > 2) ||
-	    ((type & BTRFS_BLOCK_GROUP_PROFILE_MASK) == 0 &&
-	     num_stripes != 1)) {
-		btrfs_err(fs_info,
-			"invalid num_stripes:sub_stripes %u:%u for profile %llu",
-			num_stripes, sub_stripes,
-			type & BTRFS_BLOCK_GROUP_PROFILE_MASK);
-		return -EIO;
-	}
-
-	return 0;
-}
-
 static void btrfs_report_missing_device(struct btrfs_fs_info *fs_info,
 					u64 devid, u8 *uuid, bool error)
 {
@@ -6809,10 +6667,30 @@ static void btrfs_report_missing_device(struct btrfs_fs_info *fs_info,
 			      devid, uuid);
 }
 
-static int read_one_chunk(struct btrfs_fs_info *fs_info, struct btrfs_key *key,
-			  struct extent_buffer *leaf,
+static u64 calc_stripe_length(u64 type, u64 chunk_len, int num_stripes)
+{
+	int index = btrfs_bg_flags_to_raid_index(type);
+	int ncopies = btrfs_raid_array[index].ncopies;
+	int data_stripes;
+
+	switch (type & BTRFS_BLOCK_GROUP_PROFILE_MASK) {
+	case BTRFS_BLOCK_GROUP_RAID5:
+		data_stripes = num_stripes - 1;
+		break;
+	case BTRFS_BLOCK_GROUP_RAID6:
+		data_stripes = num_stripes - 2;
+		break;
+	default:
+		data_stripes = num_stripes / ncopies;
+		break;
+	}
+	return div_u64(chunk_len, data_stripes);
+}
+
+static int read_one_chunk(struct btrfs_key *key, struct extent_buffer *leaf,
 			  struct btrfs_chunk *chunk)
 {
+	struct btrfs_fs_info *fs_info = leaf->fs_info;
 	struct btrfs_mapping_tree *map_tree = &fs_info->mapping_tree;
 	struct map_lookup *map;
 	struct extent_map *em;
@@ -6828,9 +6706,15 @@ static int read_one_chunk(struct btrfs_fs_info *fs_info, struct btrfs_key *key,
 	length = btrfs_chunk_length(leaf, chunk);
 	num_stripes = btrfs_chunk_num_stripes(leaf, chunk);
 
-	ret = btrfs_check_chunk_valid(fs_info, leaf, chunk, logical);
-	if (ret)
-		return ret;
+	/*
+	 * Only need to verify chunk item if we're reading from sys chunk array,
+	 * as chunk item in tree block is already verified by tree-checker.
+	 */
+	if (leaf->start == BTRFS_SUPER_INFO_OFFSET) {
+		ret = btrfs_check_chunk_valid(leaf, chunk, logical);
+		if (ret)
+			return ret;
+	}
 
 	read_lock(&map_tree->map_tree.lock);
 	em = lookup_extent_mapping(&map_tree->map_tree, logical, 1);
@@ -6868,6 +6752,8 @@ static int read_one_chunk(struct btrfs_fs_info *fs_info, struct btrfs_key *key,
 	map->type = btrfs_chunk_type(leaf, chunk);
 	map->sub_stripes = btrfs_chunk_sub_stripes(leaf, chunk);
 	map->verified_stripes = 0;
+	em->orig_block_len = calc_stripe_length(map->type, em->len,
+						map->num_stripes);
 	for (i = 0; i < num_stripes; i++) {
 		map->stripes[i].physical =
 			btrfs_stripe_offset_nr(leaf, chunk, i);
@@ -6875,8 +6761,8 @@ static int read_one_chunk(struct btrfs_fs_info *fs_info, struct btrfs_key *key,
 		read_extent_buffer(leaf, uuid, (unsigned long)
 				   btrfs_stripe_dev_uuid_nr(chunk, i),
 				   BTRFS_UUID_SIZE);
-		map->stripes[i].dev = btrfs_find_device(fs_info, devid,
-							uuid, NULL);
+		map->stripes[i].dev = btrfs_find_device(fs_info->fs_devices,
+							devid, uuid, NULL, true);
 		if (!map->stripes[i].dev &&
 		    !btrfs_test_opt(fs_info, DEGRADED)) {
 			free_extent_map(em);
@@ -6992,10 +6878,10 @@ out:
 	return fs_devices;
 }
 
-static int read_one_dev(struct btrfs_fs_info *fs_info,
-			struct extent_buffer *leaf,
+static int read_one_dev(struct extent_buffer *leaf,
 			struct btrfs_dev_item *dev_item)
 {
+	struct btrfs_fs_info *fs_info = leaf->fs_info;
 	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
 	struct btrfs_device *device;
 	u64 devid;
@@ -7015,7 +6901,8 @@ static int read_one_dev(struct btrfs_fs_info *fs_info,
 			return PTR_ERR(fs_devices);
 	}
 
-	device = btrfs_find_device(fs_info, devid, dev_uuid, fs_uuid);
+	device = btrfs_find_device(fs_info->fs_devices, devid, dev_uuid,
+				   fs_uuid, true);
 	if (!device) {
 		if (!btrfs_test_opt(fs_info, DEGRADED)) {
 			btrfs_report_missing_device(fs_info, devid,
@@ -7183,7 +7070,7 @@ int btrfs_read_sys_array(struct btrfs_fs_info *fs_info)
 			if (cur_offset + len > array_size)
 				goto out_short_read;
 
-			ret = read_one_chunk(fs_info, &key, sb, chunk);
+			ret = read_one_chunk(&key, sb, chunk);
 			if (ret)
 				break;
 		} else {
@@ -7324,14 +7211,14 @@ int btrfs_read_chunk_tree(struct btrfs_fs_info *fs_info)
 			struct btrfs_dev_item *dev_item;
 			dev_item = btrfs_item_ptr(leaf, slot,
 						  struct btrfs_dev_item);
-			ret = read_one_dev(fs_info, leaf, dev_item);
+			ret = read_one_dev(leaf, dev_item);
 			if (ret)
 				goto error;
 			total_dev++;
 		} else if (found_key.type == BTRFS_CHUNK_ITEM_KEY) {
 			struct btrfs_chunk *chunk;
 			chunk = btrfs_item_ptr(leaf, slot, struct btrfs_chunk);
-			ret = read_one_chunk(fs_info, &found_key, leaf, chunk);
+			ret = read_one_chunk(&found_key, leaf, chunk);
 			if (ret)
 				goto error;
 		}
@@ -7520,9 +7407,9 @@ out:
 /*
  * called from commit_transaction. Writes all changed device stats to disk.
  */
-int btrfs_run_dev_stats(struct btrfs_trans_handle *trans,
-			struct btrfs_fs_info *fs_info)
+int btrfs_run_dev_stats(struct btrfs_trans_handle *trans)
 {
+	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
 	struct btrfs_device *device;
 	int stats_cnt;
@@ -7605,7 +7492,8 @@ int btrfs_get_dev_stats(struct btrfs_fs_info *fs_info,
 	int i;
 
 	mutex_lock(&fs_devices->device_list_mutex);
-	dev = btrfs_find_device(fs_info, stats->devid, NULL, NULL);
+	dev = btrfs_find_device(fs_info->fs_devices, stats->devid, NULL, NULL,
+				true);
 	mutex_unlock(&fs_devices->device_list_mutex);
 
 	if (!dev) {
@@ -7663,51 +7551,34 @@ void btrfs_scratch_superblocks(struct block_device *bdev, const char *device_pat
 }
 
 /*
- * Update the size of all devices, which is used for writing out the
- * super blocks.
+ * Update the size and bytes used for each device where it changed.  This is
+ * delayed since we would otherwise get errors while writing out the
+ * superblocks.
+ *
+ * Must be invoked during transaction commit.
  */
-void btrfs_update_commit_device_size(struct btrfs_fs_info *fs_info)
+void btrfs_commit_device_sizes(struct btrfs_transaction *trans)
 {
-	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
 	struct btrfs_device *curr, *next;
 
-	if (list_empty(&fs_devices->resized_devices))
+	ASSERT(trans->state == TRANS_STATE_COMMIT_DOING);
+
+	if (list_empty(&trans->dev_update_list))
 		return;
 
-	mutex_lock(&fs_devices->device_list_mutex);
-	mutex_lock(&fs_info->chunk_mutex);
-	list_for_each_entry_safe(curr, next, &fs_devices->resized_devices,
-				 resized_list) {
-		list_del_init(&curr->resized_list);
+	/*
+	 * We don't need the device_list_mutex here.  This list is owned by the
+	 * transaction and the transaction must complete before the device is
+	 * released.
+	 */
+	mutex_lock(&trans->fs_info->chunk_mutex);
+	list_for_each_entry_safe(curr, next, &trans->dev_update_list,
+				 post_commit_list) {
+		list_del_init(&curr->post_commit_list);
 		curr->commit_total_bytes = curr->disk_total_bytes;
+		curr->commit_bytes_used = curr->bytes_used;
 	}
-	mutex_unlock(&fs_info->chunk_mutex);
-	mutex_unlock(&fs_devices->device_list_mutex);
-}
-
-/* Must be invoked during the transaction commit */
-void btrfs_update_commit_device_bytes_used(struct btrfs_transaction *trans)
-{
-	struct btrfs_fs_info *fs_info = trans->fs_info;
-	struct extent_map *em;
-	struct map_lookup *map;
-	struct btrfs_device *dev;
-	int i;
-
-	if (list_empty(&trans->pending_chunks))
-		return;
-
-	/* In order to kick the device replace finish process */
-	mutex_lock(&fs_info->chunk_mutex);
-	list_for_each_entry(em, &trans->pending_chunks, list) {
-		map = em->map_lookup;
-
-		for (i = 0; i < map->num_stripes; i++) {
-			dev = map->stripes[i].dev;
-			dev->commit_bytes_used = dev->bytes_used;
-		}
-	}
-	mutex_unlock(&fs_info->chunk_mutex);
+	mutex_unlock(&trans->fs_info->chunk_mutex);
 }
 
 void btrfs_set_fs_info_ptr(struct btrfs_fs_info *fs_info)
@@ -7740,25 +7611,6 @@ int btrfs_bg_type_to_factor(u64 flags)
 }
 
 
-static u64 calc_stripe_length(u64 type, u64 chunk_len, int num_stripes)
-{
-	int index = btrfs_bg_flags_to_raid_index(type);
-	int ncopies = btrfs_raid_array[index].ncopies;
-	int data_stripes;
-
-	switch (type & BTRFS_BLOCK_GROUP_PROFILE_MASK) {
-	case BTRFS_BLOCK_GROUP_RAID5:
-		data_stripes = num_stripes - 1;
-		break;
-	case BTRFS_BLOCK_GROUP_RAID6:
-		data_stripes = num_stripes - 2;
-		break;
-	default:
-		data_stripes = num_stripes / ncopies;
-		break;
-	}
-	return div_u64(chunk_len, data_stripes);
-}
 
 static int verify_one_dev_extent(struct btrfs_fs_info *fs_info,
 				 u64 chunk_offset, u64 devid,
@@ -7819,7 +7671,7 @@ static int verify_one_dev_extent(struct btrfs_fs_info *fs_info,
 	}
 
 	/* Make sure no dev extent is beyond device bondary */
-	dev = btrfs_find_device(fs_info, devid, NULL, NULL);
+	dev = btrfs_find_device(fs_info->fs_devices, devid, NULL, NULL, true);
 	if (!dev) {
 		btrfs_err(fs_info, "failed to find devid %llu", devid);
 		ret = -EUCLEAN;
@@ -7828,7 +7680,8 @@ static int verify_one_dev_extent(struct btrfs_fs_info *fs_info,
 
 	/* It's possible this device is a dummy for seed device */
 	if (dev->disk_total_bytes == 0) {
-		dev = find_device(fs_info->fs_devices->seed, devid, NULL);
+		dev = btrfs_find_device(fs_info->fs_devices->seed, devid, NULL,
+					NULL, false);
 		if (!dev) {
 			btrfs_err(fs_info, "failed to find seed devid %llu",
 				  devid);

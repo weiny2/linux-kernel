@@ -444,14 +444,14 @@ static int run_test(test_func_t test_func, int bitmaps, u32 sectorsize,
 
 	fs_info = btrfs_alloc_dummy_fs_info(nodesize, sectorsize);
 	if (!fs_info) {
-		test_err("couldn't allocate dummy fs info");
+		test_std_err(TEST_ALLOC_FS_INFO);
 		ret = -ENOMEM;
 		goto out;
 	}
 
 	root = btrfs_alloc_dummy_root(fs_info);
 	if (IS_ERR(root)) {
-		test_err("couldn't allocate dummy root");
+		test_std_err(TEST_ALLOC_ROOT);
 		ret = PTR_ERR(root);
 		goto out;
 	}
@@ -463,7 +463,7 @@ static int run_test(test_func_t test_func, int bitmaps, u32 sectorsize,
 
 	root->node = alloc_test_extent_buffer(root->fs_info, nodesize);
 	if (!root->node) {
-		test_err("couldn't allocate dummy buffer");
+		test_std_err(TEST_ALLOC_EXTENT_BUFFER);
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -473,7 +473,7 @@ static int run_test(test_func_t test_func, int bitmaps, u32 sectorsize,
 
 	cache = btrfs_alloc_dummy_block_group(fs_info, 8 * alignment);
 	if (!cache) {
-		test_err("couldn't allocate dummy block group cache");
+		test_std_err(TEST_ALLOC_BLOCK_GROUP);
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -486,7 +486,7 @@ static int run_test(test_func_t test_func, int bitmaps, u32 sectorsize,
 
 	path = btrfs_alloc_path();
 	if (!path) {
-		test_err("couldn't allocate path");
+		test_std_err(TEST_ALLOC_ROOT);
 		ret = -ENOMEM;
 		goto out;
 	}
