@@ -88,10 +88,11 @@ static struct inode *__lookup_free_space_inode(struct btrfs_root *root,
 	return inode;
 }
 
-struct inode *lookup_free_space_inode(struct btrfs_fs_info *fs_info,
-				      struct btrfs_block_group_cache
-				      *block_group, struct btrfs_path *path)
+struct inode *lookup_free_space_inode(
+		struct btrfs_block_group_cache *block_group,
+		struct btrfs_path *path)
 {
+	struct btrfs_fs_info *fs_info = block_group->fs_info;
 	struct inode *inode = NULL;
 	u32 flags = BTRFS_INODE_NODATASUM | BTRFS_INODE_NODATACOW;
 
@@ -811,9 +812,9 @@ free_cache:
 	goto out;
 }
 
-int load_free_space_cache(struct btrfs_fs_info *fs_info,
-			  struct btrfs_block_group_cache *block_group)
+int load_free_space_cache(struct btrfs_block_group_cache *block_group)
 {
+	struct btrfs_fs_info *fs_info = block_group->fs_info;
 	struct btrfs_free_space_ctl *ctl = block_group->free_space_ctl;
 	struct inode *inode;
 	struct btrfs_path *path;
@@ -857,7 +858,7 @@ int load_free_space_cache(struct btrfs_fs_info *fs_info,
 	 * once created get their ->cached field set to BTRFS_CACHE_FINISHED so
 	 * we will never try to read their inode item while the fs is mounted.
 	 */
-	inode = lookup_free_space_inode(fs_info, block_group, path);
+	inode = lookup_free_space_inode(block_group, path);
 	if (IS_ERR(inode)) {
 		btrfs_free_path(path);
 		return 0;
@@ -1038,12 +1039,12 @@ fail:
 	return -1;
 }
 
-static noinline_for_stack int
-write_pinned_extent_entries(struct btrfs_fs_info *fs_info,
+static noinline_for_stack int write_pinned_extent_entries(
 			    struct btrfs_block_group_cache *block_group,
 			    struct btrfs_io_ctl *io_ctl,
 			    int *entries)
 {
+	struct btrfs_fs_info *fs_info = block_group->fs_info;
 	u64 start, extent_start, extent_end, len;
 	struct extent_io_tree *unpin = NULL;
 	int ret;
@@ -1234,7 +1235,6 @@ static int __btrfs_write_out_cache(struct btrfs_root *root, struct inode *inode,
 				   struct btrfs_io_ctl *io_ctl,
 				   struct btrfs_trans_handle *trans)
 {
-	struct btrfs_fs_info *fs_info = root->fs_info;
 	struct extent_state *cached_state = NULL;
 	LIST_HEAD(bitmap_list);
 	int entries = 0;
@@ -1292,8 +1292,7 @@ static int __btrfs_write_out_cache(struct btrfs_root *root, struct inode *inode,
 	 * If this changes while we are working we'll get added back to
 	 * the dirty list and redo it.  No locking needed
 	 */
-	ret = write_pinned_extent_entries(fs_info, block_group,
-					  io_ctl, &entries);
+	ret = write_pinned_extent_entries(block_group, io_ctl, &entries);
 	if (ret)
 		goto out_nospc_locked;
 
@@ -1385,7 +1384,7 @@ int btrfs_write_out_cache(struct btrfs_trans_handle *trans,
 	}
 	spin_unlock(&block_group->lock);
 
-	inode = lookup_free_space_inode(fs_info, block_group, path);
+	inode = lookup_free_space_inode(block_group, path);
 	if (IS_ERR(inode))
 		return 0;
 
@@ -3039,11 +3038,11 @@ setup_cluster_bitmap(struct btrfs_block_group_cache *block_group,
  * returns zero and sets up cluster if things worked out, otherwise
  * it returns -enospc
  */
-int btrfs_find_space_cluster(struct btrfs_fs_info *fs_info,
-			     struct btrfs_block_group_cache *block_group,
+int btrfs_find_space_cluster(struct btrfs_block_group_cache *block_group,
 			     struct btrfs_free_cluster *cluster,
 			     u64 offset, u64 bytes, u64 empty_size)
 {
+	struct btrfs_fs_info *fs_info = block_group->fs_info;
 	struct btrfs_free_space_ctl *ctl = block_group->free_space_ctl;
 	struct btrfs_free_space *entry, *tmp;
 	LIST_HEAD(bitmaps);

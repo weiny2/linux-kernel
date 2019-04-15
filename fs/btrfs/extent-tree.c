@@ -643,7 +643,7 @@ static int cache_block_group(struct btrfs_block_group_cache *cache,
 
 	if (btrfs_test_opt(fs_info, SPACE_CACHE)) {
 		mutex_lock(&caching_ctl->mutex);
-		ret = load_free_space_cache(fs_info, cache);
+		ret = load_free_space_cache(cache);
 
 		spin_lock(&cache->lock);
 		if (ret == 1) {
@@ -3341,10 +3341,10 @@ fail:
 
 }
 
-static struct btrfs_block_group_cache *
-next_block_group(struct btrfs_fs_info *fs_info,
-		 struct btrfs_block_group_cache *cache)
+static struct btrfs_block_group_cache *next_block_group(
+		struct btrfs_block_group_cache *cache)
 {
+	struct btrfs_fs_info *fs_info = cache->fs_info;
 	struct rb_node *node;
 
 	spin_lock(&fs_info->block_group_cache_lock);
@@ -3397,7 +3397,7 @@ static int cache_save_setup(struct btrfs_block_group_cache *block_group,
 	if (trans->aborted)
 		return 0;
 again:
-	inode = lookup_free_space_inode(fs_info, block_group, path);
+	inode = lookup_free_space_inode(block_group, path);
 	if (IS_ERR(inode) && PTR_ERR(inode) != -ENOENT) {
 		ret = PTR_ERR(inode);
 		btrfs_release_path(path);
@@ -6451,10 +6451,11 @@ static u64 first_logical_byte(struct btrfs_fs_info *fs_info, u64 search_start)
 	return bytenr;
 }
 
-static int pin_down_extent(struct btrfs_fs_info *fs_info,
-			   struct btrfs_block_group_cache *cache,
+static int pin_down_extent(struct btrfs_block_group_cache *cache,
 			   u64 bytenr, u64 num_bytes, int reserved)
 {
+	struct btrfs_fs_info *fs_info = cache->fs_info;
+
 	spin_lock(&cache->space_info->lock);
 	spin_lock(&cache->lock);
 	cache->pinned += num_bytes;
@@ -6486,7 +6487,7 @@ int btrfs_pin_extent(struct btrfs_fs_info *fs_info,
 	cache = btrfs_lookup_block_group(fs_info, bytenr);
 	BUG_ON(!cache); /* Logic error */
 
-	pin_down_extent(fs_info, cache, bytenr, num_bytes, reserved);
+	pin_down_extent(cache, bytenr, num_bytes, reserved);
 
 	btrfs_put_block_group(cache);
 	return 0;
@@ -6513,7 +6514,7 @@ int btrfs_pin_extent_for_log_replay(struct btrfs_fs_info *fs_info,
 	 */
 	cache_block_group(cache, 1);
 
-	pin_down_extent(fs_info, cache, bytenr, num_bytes, 0);
+	pin_down_extent(cache, bytenr, num_bytes, 0);
 
 	/* remove us from the free space cache (if we're there at all) */
 	ret = btrfs_remove_free_space(cache, bytenr, num_bytes);
@@ -7265,8 +7266,7 @@ void btrfs_free_tree_block(struct btrfs_trans_handle *trans,
 		cache = btrfs_lookup_block_group(fs_info, buf->start);
 
 		if (btrfs_header_flag(buf, BTRFS_HEADER_FLAG_WRITTEN)) {
-			pin_down_extent(fs_info, cache, buf->start,
-					buf->len, 1);
+			pin_down_extent(cache, buf->start, buf->len, 1);
 			btrfs_put_block_group(cache);
 			goto out;
 		}
@@ -7529,7 +7529,6 @@ static int find_free_extent_clustered(struct btrfs_block_group_cache *bg,
 		struct find_free_extent_ctl *ffe_ctl,
 		struct btrfs_block_group_cache **cluster_bg_ret)
 {
-	struct btrfs_fs_info *fs_info = bg->fs_info;
 	struct btrfs_block_group_cache *cluster_bg;
 	u64 aligned_cluster;
 	u64 offset;
@@ -7589,9 +7588,8 @@ refill_cluster:
 	aligned_cluster = max_t(u64,
 			ffe_ctl->empty_cluster + ffe_ctl->empty_size,
 			bg->full_stripe_len);
-	ret = btrfs_find_space_cluster(fs_info, bg, last_ptr,
-			ffe_ctl->search_start, ffe_ctl->num_bytes,
-			aligned_cluster);
+	ret = btrfs_find_space_cluster(bg, last_ptr, ffe_ctl->search_start,
+			ffe_ctl->num_bytes, aligned_cluster);
 	if (ret == 0) {
 		/* Now pull our allocation out of this cluster */
 		offset = btrfs_alloc_from_cluster(bg, last_ptr,
@@ -8241,7 +8239,7 @@ static int __btrfs_free_reserved_extent(struct btrfs_fs_info *fs_info,
 	}
 
 	if (pin)
-		pin_down_extent(fs_info, cache, start, len, 1);
+		pin_down_extent(cache, start, len, 1);
 	else {
 		if (btrfs_test_opt(fs_info, DISCARD))
 			ret = btrfs_discard_extent(fs_info, start, len, NULL);
@@ -10109,7 +10107,7 @@ void btrfs_put_block_group_cache(struct btrfs_fs_info *info)
 			if (block_group->iref)
 				break;
 			spin_unlock(&block_group->lock);
-			block_group = next_block_group(info, block_group);
+			block_group = next_block_group(block_group);
 		}
 		if (!block_group) {
 			if (last == 0)
@@ -10758,7 +10756,7 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 	 * get the inode first so any iput calls done for the io_list
 	 * aren't the final iput (no unlinks allowed now)
 	 */
-	inode = lookup_free_space_inode(fs_info, block_group, path);
+	inode = lookup_free_space_inode(block_group, path);
 
 	mutex_lock(&trans->transaction->cache_write_mutex);
 	/*
@@ -11355,7 +11353,7 @@ int btrfs_trim_fs(struct btrfs_fs_info *fs_info, struct fstrim_range *range)
 	int ret = 0;
 
 	cache = btrfs_lookup_first_block_group(fs_info, range->start);
-	for (; cache; cache = next_block_group(fs_info, cache)) {
+	for (; cache; cache = next_block_group(cache)) {
 		if (cache->key.objectid >= (range->start + range->len)) {
 			btrfs_put_block_group(cache);
 			break;
