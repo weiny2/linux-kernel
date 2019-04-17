@@ -780,6 +780,7 @@ struct fuse_copy_state {
 	unsigned len;
 	unsigned offset;
 	unsigned move_pages:1;
+	bool from_gup;
 };
 
 static void fuse_copy_init(struct fuse_copy_state *cs, int write,
@@ -800,13 +801,22 @@ static void fuse_copy_finish(struct fuse_copy_state *cs)
 			buf->len = PAGE_SIZE - cs->len;
 		cs->currbuf = NULL;
 	} else if (cs->pg) {
-		if (cs->write) {
-			flush_dcache_page(cs->pg);
-			set_page_dirty_lock(cs->pg);
+		if (cs->from_gup) {
+			if (cs->write) {
+				flush_dcache_page(cs->pg);
+				put_user_pages_dirty_lock(&cs->pg, 1);
+			} else
+				put_user_page(cs->pg);
+		} else {
+			if (cs->write) {
+				flush_dcache_page(cs->pg);
+				set_page_dirty_lock(cs->pg);
+			}
+			put_page(cs->pg);
 		}
-		put_page(cs->pg);
 	}
 	cs->pg = NULL;
+	cs->from_gup = false;
 }
 
 /*
@@ -834,6 +844,7 @@ static int fuse_copy_fill(struct fuse_copy_state *cs)
 			BUG_ON(!cs->nr_segs);
 			cs->currbuf = buf;
 			cs->pg = buf->page;
+			cs->from_gup = false;
 			cs->offset = buf->offset;
 			cs->len = buf->len;
 			cs->pipebufs++;
@@ -851,6 +862,7 @@ static int fuse_copy_fill(struct fuse_copy_state *cs)
 			buf->len = 0;
 
 			cs->currbuf = buf;
+			cs->from_gup = false;
 			cs->pg = page;
 			cs->offset = 0;
 			cs->len = PAGE_SIZE;
@@ -866,6 +878,7 @@ static int fuse_copy_fill(struct fuse_copy_state *cs)
 		cs->len = err;
 		cs->offset = off;
 		cs->pg = page;
+		cs->from_gup = iov_iter_get_pages_use_gup(cs->iter);
 		iov_iter_advance(cs->iter, err);
 	}
 
@@ -1000,6 +1013,7 @@ out_fallback_unlock:
 	unlock_page(newpage);
 out_fallback:
 	cs->pg = buf->page;
+	cs->from_gup = false;
 	cs->offset = buf->offset;
 
 	err = lock_request(cs->req);
