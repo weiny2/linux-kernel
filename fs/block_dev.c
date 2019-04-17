@@ -259,11 +259,25 @@ __blkdev_direct_IO_simple(struct kiocb *iocb, struct iov_iter *iter,
 	}
 	__set_current_state(TASK_RUNNING);
 
-	bio_for_each_segment_all(bvec, &bio, iter_all) {
-		if (should_dirty && !PageCompound(bvec->bv_page))
-			set_page_dirty_lock(bvec->bv_page);
-		if (!bio_flagged(&bio, BIO_NO_PAGE_REF))
-			put_page(bvec->bv_page);
+	if (iov_iter_get_pages_use_gup(iter)) {
+		/*
+		 * This should never happens ! An iter that use GUP will take
+		 * page reference and thus will need to call put_user_page().
+		 */
+		BUG_ON(bio_flagged(&bio, BIO_NO_PAGE_REF));
+		bio_for_each_segment_all(bvec, &bio, iter_all) {
+			if (should_dirty && !PageCompound(bvec->bv_page))
+				put_user_pages_dirty_lock(&bvec->bv_page, 1);
+			else
+				put_user_page(bvec->bv_page);
+		}
+	} else {
+		bio_for_each_segment_all(bvec, &bio, iter_all) {
+			if (should_dirty && !PageCompound(bvec->bv_page))
+				set_page_dirty_lock(bvec->bv_page);
+			if (!bio_flagged(&bio, BIO_NO_PAGE_REF))
+				put_page(bvec->bv_page);
+		}
 	}
 
 	if (unlikely(bio.bi_status))
@@ -301,7 +315,7 @@ static int blkdev_iopoll(struct kiocb *kiocb, bool wait)
 	return blk_poll(q, READ_ONCE(kiocb->ki_cookie), wait);
 }
 
-static void blkdev_bio_end_io(struct bio *bio)
+static void _blkdev_bio_end_io(struct bio *bio, bool from_gup)
 {
 	struct blkdev_dio *dio = bio->bi_private;
 	bool should_dirty = dio->should_dirty;
@@ -333,17 +347,22 @@ static void blkdev_bio_end_io(struct bio *bio)
 	}
 
 	if (should_dirty) {
-		bio_check_pages_dirty(bio, false);
+		bio_check_pages_dirty(bio, from_gup);
 	} else {
-		if (!bio_flagged(bio, BIO_NO_PAGE_REF)) {
-			struct bvec_iter_all iter_all;
-			struct bio_vec *bvec;
-
-			bio_for_each_segment_all(bvec, bio, iter_all)
-				put_page(bvec->bv_page);
-		}
+		if (!bio_flagged(bio, BIO_NO_PAGE_REF))
+			bio_release_pages(bio, from_gup);
 		bio_put(bio);
 	}
+}
+
+static void blkdev_bio_end_io(struct bio *bio)
+{
+	_blkdev_bio_end_io(bio, false);
+}
+
+static void blkdev_bio_from_gup_end_io(struct bio *bio)
+{
+	_blkdev_bio_end_io(bio, true);
 }
 
 static ssize_t
@@ -392,7 +411,9 @@ __blkdev_direct_IO(struct kiocb *iocb, struct iov_iter *iter, int nr_pages)
 		bio->bi_iter.bi_sector = pos >> 9;
 		bio->bi_write_hint = iocb->ki_hint;
 		bio->bi_private = dio;
-		bio->bi_end_io = blkdev_bio_end_io;
+		bio->bi_end_io = iov_iter_get_pages_use_gup(iter) ?
+				 blkdev_bio_from_gup_end_io :
+				 blkdev_bio_end_io;
 		bio->bi_ioprio = iocb->ki_ioprio;
 
 		ret = bio_iov_iter_get_pages(bio, iter);
