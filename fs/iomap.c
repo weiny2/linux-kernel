@@ -1569,7 +1569,7 @@ static inline void iomap_dio_set_error(struct iomap_dio *dio, int ret)
 	cmpxchg(&dio->error, 0, ret);
 }
 
-static void iomap_dio_bio_end_io(struct bio *bio)
+static void _iomap_dio_bio_end_io(struct bio *bio, bool from_gup)
 {
 	struct iomap_dio *dio = bio->bi_private;
 	bool should_dirty = (dio->flags & IOMAP_DIO_DIRTY);
@@ -1593,17 +1593,22 @@ static void iomap_dio_bio_end_io(struct bio *bio)
 	}
 
 	if (should_dirty) {
-		bio_check_pages_dirty(bio, false);
+		bio_check_pages_dirty(bio, from_gup);
 	} else {
-		if (!bio_flagged(bio, BIO_NO_PAGE_REF)) {
-			struct bvec_iter_all iter_all;
-			struct bio_vec *bvec;
-
-			bio_for_each_segment_all(bvec, bio, iter_all)
-				put_page(bvec->bv_page);
-		}
+		if (!bio_flagged(bio, BIO_NO_PAGE_REF))
+			bio_release_pages(bio, from_gup);
 		bio_put(bio);
 	}
+}
+
+static void iomap_dio_bio_end_io(struct bio *bio)
+{
+	_iomap_dio_bio_end_io(bio, false);
+}
+
+static void iomap_dio_gup_bio_end_io(struct bio *bio)
+{
+	_iomap_dio_bio_end_io(bio, true);
 }
 
 static void
@@ -1698,7 +1703,9 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 		bio->bi_write_hint = dio->iocb->ki_hint;
 		bio->bi_ioprio = dio->iocb->ki_ioprio;
 		bio->bi_private = dio;
-		bio->bi_end_io = iomap_dio_bio_end_io;
+		bio->bi_end_io = iov_iter_get_pages_use_gup(&iter) ?
+				 iomap_dio_gup_bio_end_io :
+				 iomap_dio_bio_end_io;
 
 		ret = bio_iov_iter_get_pages(bio, &iter);
 		if (unlikely(ret)) {
