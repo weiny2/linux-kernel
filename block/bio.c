@@ -855,13 +855,18 @@ static void bio_get_pages(struct bio *bio)
 		get_page(bvec->bv_page);
 }
 
-static void bio_release_pages(struct bio *bio)
+static void bio_release_pages(struct bio *bio, bool from_gup)
 {
-	struct bvec_iter_all iter_all;
 	struct bio_vec *bvec;
+	struct bvec_iter_all iter_all;
 
-	bio_for_each_segment_all(bvec, bio, iter_all)
-		put_page(bvec->bv_page);
+	if (from_gup) {
+		bio_for_each_segment_all(bvec, bio, iter_all)
+			put_user_page(bvec->bv_page);
+	} else {
+		bio_for_each_segment_all(bvec, bio, iter_all)
+			put_page(bvec->bv_page);
+	}
 }
 
 static int __bio_iov_bvec_add_pages(struct bio *bio, struct iov_iter *iter)
@@ -1674,6 +1679,7 @@ static void bio_dirty_fn(struct work_struct *work);
 
 static DECLARE_WORK(bio_dirty_work, bio_dirty_fn);
 static DEFINE_SPINLOCK(bio_dirty_lock);
+static struct bio *bio_gup_dirty_list;
 static struct bio *bio_dirty_list;
 
 /*
@@ -1693,12 +1699,40 @@ static void bio_dirty_fn(struct work_struct *work)
 
 		bio_set_pages_dirty(bio);
 		if (!bio_flagged(bio, BIO_NO_PAGE_REF))
-			bio_release_pages(bio);
+			bio_release_pages(bio, false);
+		bio_put(bio);
+	}
+
+	spin_lock_irq(&bio_dirty_lock);
+	next = bio_gup_dirty_list;
+	bio_gup_dirty_list = NULL;
+	spin_unlock_irq(&bio_dirty_lock);
+
+	while ((bio = next) != NULL) {
+		next = bio->bi_private;
+
+		bio_set_pages_dirty(bio);
+		if (!bio_flagged(bio, BIO_NO_PAGE_REF))
+			bio_release_pages(bio, true);
 		bio_put(bio);
 	}
 }
 
-void bio_check_pages_dirty(struct bio *bio)
+/**
+ * bio_check_pages_dirty() - queue up clean pages on workqueue to dirty them
+ * @bio: the bio struct containing the pages we should dirty
+ * @from_gup: did the pages in the bio came from GUP (get_user_pages*())
+ *
+ * This will go over all pages in the bio and if there is a non dirty page then
+ * the bio is added to a list of bio that need to get there page dirtied.
+ *
+ * We also need to know if the pages in the bio are coming from GUP or not as
+ * GUPed page need to be release through specific put_user_page(). Please see
+ * Documentation/vm/get_user_pages.rst for details on that. Rules of dumb is
+ * that if the bio has been populated with the help of iov_iter_get_pages*()
+ * then it might have GUPed pages (see iov_iter_get_pages_use_gup())
+ */
+void bio_check_pages_dirty(struct bio *bio, bool from_gup)
 {
 	struct bio_vec *bvec;
 	unsigned long flags;
@@ -1710,13 +1744,18 @@ void bio_check_pages_dirty(struct bio *bio)
 	}
 
 	if (!bio_flagged(bio, BIO_NO_PAGE_REF))
-		bio_release_pages(bio);
+		bio_release_pages(bio, from_gup);
 	bio_put(bio);
 	return;
 defer:
 	spin_lock_irqsave(&bio_dirty_lock, flags);
-	bio->bi_private = bio_dirty_list;
-	bio_dirty_list = bio;
+	if (from_gup) {
+		bio->bi_private = bio_gup_dirty_list;
+		bio_gup_dirty_list = bio;
+	} else {
+		bio->bi_private = bio_dirty_list;
+		bio_dirty_list = bio;
+	}
 	spin_unlock_irqrestore(&bio_dirty_lock, flags);
 	schedule_work(&bio_dirty_work);
 }
