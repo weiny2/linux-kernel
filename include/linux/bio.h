@@ -436,6 +436,7 @@ extern struct bio *bio_map_kern(struct request_queue *, void *, unsigned int,
 extern struct bio *bio_copy_kern(struct request_queue *, void *, unsigned int,
 				 gfp_t, int);
 extern void bio_set_pages_dirty(struct bio *bio);
+extern void bio_release_pages(struct bio *bio, bool from_gup);
 extern void bio_check_pages_dirty(struct bio *bio, bool from_gup);
 
 void generic_start_io_acct(struct request_queue *q, int op,

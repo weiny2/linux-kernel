@@ -855,7 +855,20 @@ static void bio_get_pages(struct bio *bio)
 		get_page(bvec->bv_page);
 }
 
-static void bio_release_pages(struct bio *bio, bool from_gup)
+/**
+ * bio_release_pages() - release all pages in a bio
+ * @bio: the bio struct containing the pages to release
+ * @from_gup: did the pages in the bio came from GUP (get_user_pages*())
+ *
+ * This will release page reference for all the pages in the bio.
+ *
+ * We also need to know if the pages in the bio are coming from GUP or not as
+ * GUPed page need to be release through specific put_user_page(). Please see
+ * Documentation/vm/get_user_pages.rst for details on that. Rules of dumb is
+ * that if the bio has been populated with the help of iov_iter_get_pages*()
+ * then it might have GUPed pages (see iov_iter_get_pages_use_gup())
+ */
+void bio_release_pages(struct bio *bio, bool from_gup)
 {
 	struct bio_vec *bvec;
 	struct bvec_iter_all iter_all;
@@ -868,6 +881,7 @@ static void bio_release_pages(struct bio *bio, bool from_gup)
 			put_page(bvec->bv_page);
 	}
 }
+EXPORT_SYMBOL_GPL(bio_release_pages);
 
 static int __bio_iov_bvec_add_pages(struct bio *bio, struct iov_iter *iter)
 {
