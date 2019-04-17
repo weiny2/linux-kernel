@@ -549,7 +549,8 @@ static blk_status_t dio_bio_complete(struct dio *dio, struct bio *bio)
 	}
 
 	if (dio->is_async && dio->op == REQ_OP_READ && dio->should_dirty) {
-		bio_check_pages_dirty(bio);	/* transfers ownership */
+		/* Transfers ownership. */
+		bio_check_pages_dirty(bio, false);
 	} else {
 		struct bvec_iter_all iter_all;
 

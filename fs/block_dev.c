@@ -333,7 +333,7 @@ static void blkdev_bio_end_io(struct bio *bio)
 	}
 
 	if (should_dirty) {
-		bio_check_pages_dirty(bio);
+		bio_check_pages_dirty(bio, false);
 	} else {
 		if (!bio_flagged(bio, BIO_NO_PAGE_REF)) {
 			struct bvec_iter_all iter_all;
