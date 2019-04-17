@@ -512,7 +512,10 @@ static ssize_t nfs_direct_read_schedule_iovec(struct nfs_direct_req *dreq,
 			pos += req_len;
 			dreq->bytes_left -= req_len;
 		}
-		nfs_direct_release_pages(pagevec, npages);
+		if (iov_iter_get_pages_use_gup(iter))
+			put_user_pages(pagevec, npages);
+		else
+			nfs_direct_release_pages(pagevec, npages);
 		kvfree(pagevec);
 		if (result < 0)
 			break;
@@ -935,7 +938,10 @@ static ssize_t nfs_direct_write_schedule_iovec(struct nfs_direct_req *dreq,
 			pos += req_len;
 			dreq->bytes_left -= req_len;
 		}
-		nfs_direct_release_pages(pagevec, npages);
+		if (iov_iter_get_pages_use_gup(iter))
+			put_user_pages(pagevec, npages);
+		else
+			nfs_direct_release_pages(pagevec, npages);
 		kvfree(pagevec);
 		if (result < 0)
 			break;
