@@ -543,15 +543,23 @@ void fuse_read_fill(struct fuse_req *req, struct file *file, loff_t pos,
 	req->out.args[0].size = count;
 }
 
-static void fuse_release_user_pages(struct fuse_req *req, bool should_dirty)
+static void fuse_release_user_pages(struct fuse_req *req, bool should_dirty,
+				    bool from_gup)
 {
 	unsigned i;
 
 	for (i = 0; i < req->num_pages; i++) {
 		struct page *page = req->pages[i];
-		if (should_dirty)
-			set_page_dirty_lock(page);
-		put_page(page);
+		if (from_gup) {
+			if (should_dirty)
+				put_user_pages_dirty_lock(&page, 1);
+			else
+				put_user_page(page);
+		} else {
+			if (should_dirty)
+				set_page_dirty_lock(page);
+			put_page(page);
+		}
 	}
 }
 
@@ -621,12 +629,13 @@ static void fuse_aio_complete(struct fuse_io_priv *io, int err, ssize_t pos)
 	kref_put(&io->refcnt, fuse_io_release);
 }
 
-static void fuse_aio_complete_req(struct fuse_conn *fc, struct fuse_req *req)
+static void _fuse_aio_complete_req(struct fuse_conn *fc, struct fuse_req *req,
+				   bool from_gup)
 {
 	struct fuse_io_priv *io = req->io;
 	ssize_t pos = -1;
 
-	fuse_release_user_pages(req, io->should_dirty);
+	fuse_release_user_pages(req, io->should_dirty, from_gup);
 
 	if (io->write) {
 		if (req->misc.write.in.size != req->misc.write.out.size)
@@ -641,8 +650,18 @@ static void fuse_aio_complete_req(struct fuse_conn *fc, struct fuse_req *req)
 	fuse_aio_complete(io, req->out.h.error, pos);
 }
 
+static void fuse_aio_from_gup_complete_req(struct fuse_conn *fc, struct fuse_req *req)
+{
+	_fuse_aio_complete_req(fc, req, true);
+}
+
+static void fuse_aio_complete_req(struct fuse_conn *fc, struct fuse_req *req)
+{
+	_fuse_aio_complete_req(fc, req, false);
+}
+
 static size_t fuse_async_req_send(struct fuse_conn *fc, struct fuse_req *req,
-		size_t num_bytes, struct fuse_io_priv *io)
+		size_t num_bytes, struct fuse_io_priv *io, bool from_gup)
 {
 	spin_lock(&io->lock);
 	kref_get(&io->refcnt);
@@ -651,7 +670,8 @@ static size_t fuse_async_req_send(struct fuse_conn *fc, struct fuse_req *req,
 	spin_unlock(&io->lock);
 
 	req->io = io;
-	req->end = fuse_aio_complete_req;
+	req->end = from_gup ? fuse_aio_from_gup_complete_req :
+		   fuse_aio_complete_req;
 
 	__fuse_get_request(req);
 	fuse_request_send_background(fc, req);
@@ -660,7 +680,8 @@ static size_t fuse_async_req_send(struct fuse_conn *fc, struct fuse_req *req,
 }
 
 static size_t fuse_send_read(struct fuse_req *req, struct fuse_io_priv *io,
-			     loff_t pos, size_t count, fl_owner_t owner)
+			     loff_t pos, size_t count, fl_owner_t owner,
+			     bool from_gup)
 {
 	struct file *file = io->iocb->ki_filp;
 	struct fuse_file *ff = file->private_data;
@@ -675,7 +696,7 @@ static size_t fuse_send_read(struct fuse_req *req, struct fuse_io_priv *io,
 	}
 
 	if (io->async)
-		return fuse_async_req_send(fc, req, count, io);
+		return fuse_async_req_send(fc, req, count, io, from_gup);
 
 	fuse_request_send(fc, req);
 	return req->out.args[0].size;
@@ -755,7 +776,7 @@ static int fuse_do_readpage(struct file *file, struct page *page)
 	req->page_descs[0].length = count;
 	init_sync_kiocb(&iocb, file);
 	io = (struct fuse_io_priv) FUSE_IO_PRIV_SYNC(&iocb);
-	num_read = fuse_send_read(req, &io, pos, count, NULL);
+	num_read = fuse_send_read(req, &io, pos, count, NULL, false);
 	err = req->out.h.error;
 
 	if (!err) {
@@ -976,7 +997,8 @@ static void fuse_write_fill(struct fuse_req *req, struct fuse_file *ff,
 }
 
 static size_t fuse_send_write(struct fuse_req *req, struct fuse_io_priv *io,
-			      loff_t pos, size_t count, fl_owner_t owner)
+			      loff_t pos, size_t count, fl_owner_t owner,
+			      bool from_gup)
 {
 	struct kiocb *iocb = io->iocb;
 	struct file *file = iocb->ki_filp;
@@ -996,7 +1018,7 @@ static size_t fuse_send_write(struct fuse_req *req, struct fuse_io_priv *io,
 	}
 
 	if (io->async)
-		return fuse_async_req_send(fc, req, count, io);
+		return fuse_async_req_send(fc, req, count, io, from_gup);
 
 	fuse_request_send(fc, req);
 	return req->misc.write.out.size;
@@ -1031,7 +1053,7 @@ static size_t fuse_send_write_pages(struct fuse_req *req, struct kiocb *iocb,
 	for (i = 0; i < req->num_pages; i++)
 		fuse_wait_on_page_writeback(inode, req->pages[i]->index);
 
-	res = fuse_send_write(req, &io, pos, count, NULL);
+	res = fuse_send_write(req, &io, pos, count, NULL, false);
 
 	offset = req->page_descs[0].offset;
 	count = res;
@@ -1351,6 +1373,7 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 	ssize_t res = 0;
 	struct fuse_req *req;
 	int err = 0;
+	bool from_gup = iov_iter_get_pages_use_gup(iter);
 
 	if (io->async)
 		req = fuse_get_req_for_background(fc, iov_iter_npages(iter,
@@ -1384,13 +1407,15 @@ ssize_t fuse_direct_io(struct fuse_io_priv *io, struct iov_iter *iter,
 				inarg = &req->misc.write.in;
 				inarg->write_flags |= FUSE_WRITE_KILL_PRIV;
 			}
-			nres = fuse_send_write(req, io, pos, nbytes, owner);
+			nres = fuse_send_write(req, io, pos, nbytes, owner,
+					       from_gup);
 		} else {
-			nres = fuse_send_read(req, io, pos, nbytes, owner);
+			nres = fuse_send_read(req, io, pos, nbytes, owner,
+					      from_gup);
 		}
 
 		if (!io->async)
-			fuse_release_user_pages(req, io->should_dirty);
+			fuse_release_user_pages(req, io->should_dirty, from_gup);
 		if (req->out.h.error) {
 			err = req->out.h.error;
 			break;
